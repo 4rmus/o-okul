@@ -4,7 +4,8 @@ import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { AnswerKeyRecord, ExamParticipantRecord, ExamRecord } from "@o-okul/shared-types";
 import request from "supertest";
-import { testLoginBody } from "../test-auth.js";
+import { resetInMemoryAuthUsers, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
+import { registerTestLoginIdentity, testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 import { AnswerKeyExcelImportService } from "../exam/answer-key-excel-import.service.js";
@@ -22,6 +23,7 @@ import {
   examRepositoryToken,
   type UpdateExamRepositoryInput,
 } from "../exam/exam.service.js";
+import { paymentPlanStoreToken, type PaymentPlanStore } from "../payment/payment-store.js";
 import { InMemorySupportTicketStore, supportTicketStoreToken } from "../support-ticket/support-ticket-store.js";
 
 describe("Capability access matrix", () => {
@@ -30,9 +32,61 @@ describe("Capability access matrix", () => {
   let tenantAdminToken: string;
   let assistantToken: string;
   let teacherToken: string;
+  let financeToken: string;
+  let financeTenantScopeToken: string;
+  let financeWithoutScopeToken: string;
+  let inScopePaymentPlanId: string;
+  let outOfScopePaymentPlanId: string;
   let answerKeys: FakeAnswerKeyRepository;
 
   beforeAll(async () => {
+    resetInMemoryAuthUsers();
+    upsertInMemoryAuthUser({
+      id: "user-finance-rbac",
+      email: "finance-rbac@example.test",
+      name: "Finance RBAC User",
+      password: "password",
+      tenantId: "tenant-a",
+      roles: ["FINANCE_STAFF"],
+      membership: {
+        id: "membership-finance-rbac",
+        staffRole: "FINANCE_STAFF",
+        hasTeacherPersona: false,
+        hasStudentPersona: false,
+        version: 1,
+        scopeMode: "CAMPUSES",
+        campusIds: ["campus-main"],
+      },
+    });
+    upsertInMemoryAuthUser({
+      id: "user-finance-tenant-scope",
+      email: "finance-tenant-scope@example.test",
+      name: "Finance Tenant Scope",
+      password: "password",
+      tenantId: "tenant-a",
+      roles: ["FINANCE_STAFF"],
+      membership: {
+        id: "membership-finance-tenant-scope",
+        staffRole: "FINANCE_STAFF",
+        hasTeacherPersona: false,
+        hasStudentPersona: false,
+        version: 1,
+        scopeMode: "TENANT",
+        campusIds: [],
+      },
+    });
+    upsertInMemoryAuthUser({
+      id: "user-finance-no-scope",
+      email: "finance-no-scope@example.test",
+      name: "Finance Without Scope",
+      password: "password",
+      tenantId: "tenant-a",
+      roles: ["FINANCE_STAFF"],
+    });
+    registerTestLoginIdentity("finance-rbac@example.test", { tenantSlug: "dna-egitim" });
+    registerTestLoginIdentity("finance-tenant-scope@example.test", { tenantSlug: "dna-egitim" });
+    registerTestLoginIdentity("finance-no-scope@example.test", { tenantSlug: "dna-egitim" });
+
     answerKeys = new FakeAnswerKeyRepository();
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
@@ -62,6 +116,32 @@ describe("Capability access matrix", () => {
       })
       .compile();
 
+    const paymentPlans = moduleRef.get<PaymentPlanStore>(paymentPlanStoreToken);
+    const inScopePlan = await paymentPlans.create({
+      plan: {
+        tenantId: "tenant-a",
+        studentId: "student-a",
+        campusId: "campus-main",
+        title: "Kampüs kapsamındaki plan",
+        totalAmount: 1000,
+        currency: "TRY",
+      },
+      installments: [],
+    });
+    const outOfScopePlan = await paymentPlans.create({
+      plan: {
+        tenantId: "tenant-a",
+        studentId: "student-a",
+        campusId: "campus-secondary",
+        title: "Kampüs dışındaki plan",
+        totalAmount: 1000,
+        currency: "TRY",
+      },
+      installments: [],
+    });
+    inScopePaymentPlanId = inScopePlan.id;
+    outOfScopePaymentPlanId = outOfScopePlan.id;
+
     app = moduleRef.createNestApplication();
     await app.init();
     server = app.getHttpServer() as Parameters<typeof request>[0];
@@ -69,10 +149,14 @@ describe("Capability access matrix", () => {
     tenantAdminToken = await login("admin-a@example.test");
     assistantToken = await login("assistant-a@example.test");
     teacherToken = await login("teacher-a@example.test");
+    financeToken = await login("finance-rbac@example.test");
+    financeTenantScopeToken = await login("finance-tenant-scope@example.test");
+    financeWithoutScopeToken = await login("finance-no-scope@example.test");
   });
 
   afterAll(async () => {
     await app.close();
+    resetInMemoryAuthUsers();
   });
 
   async function login(email: string): Promise<string> {
@@ -84,6 +168,72 @@ describe("Capability access matrix", () => {
     await request(server)
       .get("/payment-plans")
       .set("Authorization", `Bearer ${assistantToken}`)
+      .expect(403);
+  });
+
+  it("FINANCE_STAFF akademik, portal ve destek endpoint'lerine giremez; finans endpoint'ine girer", async () => {
+    for (const path of ["/students", "/teachers", "/exams", "/attendance", "/search?q=ayse", "/support-tickets"]) {
+      await request(server)
+        .get(path)
+        .set("Authorization", `Bearer ${financeToken}`)
+        .expect(403);
+    }
+
+    await request(server)
+      .patch("/support-tickets/support-ticket-a")
+      .set("Authorization", `Bearer ${financeToken}`)
+      .send({ status: "IN_PROGRESS" })
+      .expect(403);
+
+    await request(server)
+      .get("/payment-plans")
+      .set("Authorization", `Bearer ${financeToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: inScopePaymentPlanId, campusId: "campus-main" })]);
+      });
+  });
+
+  it("CAMPUSES scope'lu FINANCE_STAFF yalnız seçili kampüsün plan ve tahsilatını görür ya da değiştirir", async () => {
+    await request(server)
+      .get(`/payment-plans/${inScopePaymentPlanId}/transactions`)
+      .set("Authorization", `Bearer ${financeToken}`)
+      .expect(200);
+
+    await request(server)
+      .post(`/payment-plans/${inScopePaymentPlanId}/transactions`)
+      .set("Authorization", `Bearer ${financeToken}`)
+      .send({ amount: 1000, method: "CASH", paidAt: "2026-06-06T09:00:00.000Z" })
+      .expect(201);
+
+    await request(server)
+      .get(`/payment-plans/${outOfScopePaymentPlanId}/transactions`)
+      .set("Authorization", `Bearer ${financeToken}`)
+      .expect(404);
+
+    await request(server)
+      .delete(`/payment-plans/${outOfScopePaymentPlanId}`)
+      .set("Authorization", `Bearer ${financeToken}`)
+      .expect(404);
+  });
+
+  it("TENANT scope'lu FINANCE_STAFF tenant-genel finans planlarını görmeye devam eder", async () => {
+    await request(server)
+      .get("/payment-plans")
+      .set("Authorization", `Bearer ${financeTenantScopeToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(expect.arrayContaining([
+          expect.objectContaining({ id: inScopePaymentPlanId }),
+          expect.objectContaining({ id: outOfScopePaymentPlanId }),
+        ]));
+      });
+  });
+
+  it("scope bilgisi olmayan FINANCE_STAFF için tenant-genel finans erişimi açılmaz", async () => {
+    await request(server)
+      .get("/payment-plans")
+      .set("Authorization", `Bearer ${financeWithoutScopeToken}`)
       .expect(403);
   });
 

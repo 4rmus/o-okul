@@ -27,6 +27,7 @@ const queuePrefix = process.env.QUEUE_PREFIX ?? `raw-import-smoke-${Date.now()}`
 const s3Credentials = resolveS3Credentials();
 const runId = randomUUID();
 const tenantId = `tenant-raw-import-smoke-${runId}`;
+const tenantSlug = `raw-import-smoke-${runId}`;
 const userId = `user-raw-import-smoke-${runId}`;
 const membershipId = `membership-raw-import-smoke-${runId}`;
 const examId = `exam-smoke-${runId}`;
@@ -131,12 +132,12 @@ async function seedExam() {
       `INSERT INTO "Tenant" ("id", "name", "slug", "status", "updatedAt")
        VALUES ($1, $2, $3, 'ACTIVE', now())
        ON CONFLICT ("id") DO UPDATE SET "status" = 'ACTIVE', "updatedAt" = now()`,
-      [tenantId, "Raw Import Smoke Tenant", `raw-import-smoke-${runId}`],
+      [tenantId, "Raw Import Smoke Tenant", tenantSlug],
     );
     await client.query(
-      `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
-       VALUES ($1, $2, 'Raw Import Smoke Admin', $3, now())`,
-      [userId, smokeEmail, hashPassword(smokePassword)],
+      `INSERT INTO "User" ("id", "tenantId", "email", "emailNormalized", "loginName", "loginNameNormalized", "name", "passwordHash", "updatedAt")
+       VALUES ($1, $2, $3, lower(btrim($3)), $3, lower(btrim($3)), 'Raw Import Smoke Admin', $4, now())`,
+      [userId, tenantId, smokeEmail, hashPassword(smokePassword)],
     );
     await client.query(
       `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
@@ -197,7 +198,7 @@ async function login(baseUrl) {
   const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email: smokeEmail, password: smokePassword }),
+    body: JSON.stringify({ tenantSlug, loginName: smokeEmail, password: smokePassword }),
   });
   if (!response.ok) {
     throw new Error(`RAW_IMPORT_SMOKE_LOGIN_FAILED: ${response.status}`);

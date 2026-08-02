@@ -61,12 +61,12 @@ describe("excel-import worker job", () => {
     const db = new TenantDbAccess();
     const adapter: ExcelImportJobAdapter = {
       process() {
-        throw new Error("STUDENT_QUOTA_EXCEEDED");
+        throw new Error("ACTIVE_STUDENT_LIMIT_REACHED");
       },
     };
 
     await expect(processExcelImportJob(createExcelImportJob(), adapter))
-      .rejects.toThrow("STUDENT_QUOTA_EXCEEDED");
+      .rejects.toThrow("ACTIVE_STUDENT_LIMIT_REACHED");
     expect(db.writes).toHaveLength(0);
   });
 });

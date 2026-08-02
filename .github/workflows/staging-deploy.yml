@@ -339,6 +339,7 @@ jobs:
           tar -czf /tmp/o-okul-staging-compose.tgz \
             docker-compose.yml \
             docker-compose.release.yml \
+            docker-compose.rate-limit-shard.yml \
             docker-compose.traefik.yml \
             docker-compose.traefik-ip.yml \
             docker-compose.observability.yml \
@@ -490,6 +491,22 @@ jobs:
             -f docker-compose.release.yml \
             -f "$EDGE_COMPOSE_FILE" \
             pull web api worker queue-board
+
+          docker compose \
+            --env-file .env \
+            --env-file "$release_env_file" \
+            -f docker-compose.yml \
+            -f docker-compose.release.yml \
+            -f "$EDGE_COMPOSE_FILE" \
+            up -d postgres
+
+          docker compose \
+            --env-file .env \
+            --env-file "$release_env_file" \
+            -f docker-compose.yml \
+            -f docker-compose.release.yml \
+            -f "$EDGE_COMPOSE_FILE" \
+            exec -T postgres sh /docker-entrypoint-initdb.d/003_bootstrap_secret_delivery_worker_role.sh < /dev/null
 
           docker compose \
             --env-file .env \

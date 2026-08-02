@@ -302,12 +302,12 @@ const negativeCases = [
     "rate_limit_redis_smoke",
   ],
   [
-    "Rate limit ham nationalId reddedilir",
+    "Rate limit ham loginName reddedilir",
     {
       ...rateLimitRedisSmokePayload(),
       loginAttemptLimiter: {
         ...rateLimitRedisSmokePayload().loginAttemptLimiter,
-        nationalId: "10000000146",
+        loginName: "admin@school.test",
       },
     },
     "rate_limit_redis_smoke",
@@ -806,12 +806,12 @@ function rateLimitRedisSmokePayload() {
     },
     loginAttemptLimiter: {
       clientIpHash: "4".repeat(64),
-      nationalIdHash: "5".repeat(64),
+      loginNameHash: "5".repeat(64),
       attemptsSent: 6,
       lockStatusCode: 429,
       errorCode: "LOGIN_LOCKED",
       sharedAcrossInstances: true,
-      nationalIdAndIpScoped: true,
+      tenantAndLoginNameAndIpScoped: true,
       differentIpNotLocked: true,
     },
     commandsPassed: ["pnpm rate-limit:smoke", "pnpm rate-limit:check"],

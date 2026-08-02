@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import { assertSecretDeliveryEncryptionConfig } from "@o-okul/db";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module.js";
 import { assertPersistenceConfig } from "./config/persistence.js";
@@ -10,6 +11,7 @@ import { mountOpenApi } from "./openapi.js";
 async function bootstrap() {
   initApiSentry();
   assertPersistenceConfig();
+  assertSecretDeliveryEncryptionConfig();
   const app = await NestFactory.create(AppModule, {
     logger: new PinoNestLogger(apiLogger),
   });

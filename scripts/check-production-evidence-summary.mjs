@@ -302,6 +302,12 @@ const expectedTenantCompositeRelations = [
   "StudentEnrollment.class",
   "Student.class",
   "Student.responsibleTeacher",
+  "MembershipCampusScope.membership",
+  "MembershipCampusScope.campus",
+  "LicenseUsage.licenseTerm",
+  "Employee.accountUser",
+  "Teacher.employee",
+  "StudentContact.student",
 ];
 const expectedTenantFkInsertRejects = expectedTenantCompositeRelations.map((relation) => `${relation} cross tenant insert`);
 const expectedRlsWriteRejects = [

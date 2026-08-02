@@ -30,6 +30,26 @@ try {
   );
 
   runNegativeCheck(
+    "live onboarding missing email evidence endpoint negative",
+    {
+      NEXT_E2E_LIVE_ONBOARDING: "1",
+      LIVE_ONBOARDING_EVIDENCE_PATH: validEvidencePath,
+      LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT: "",
+    },
+    "LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT gerçek https URL olmalı.",
+  );
+
+  runNegativeCheck(
+    "live onboarding missing email evidence bearer negative",
+    {
+      NEXT_E2E_LIVE_ONBOARDING: "1",
+      LIVE_ONBOARDING_EVIDENCE_PATH: validEvidencePath,
+      LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN: "",
+    },
+    "LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN en az 16 karakter olmalı.",
+  );
+
+  runNegativeCheck(
     "live onboarding temp evidence path negative",
     {
       NEXT_E2E_LIVE_ONBOARDING: "1",
@@ -139,6 +159,8 @@ function runPreflight(env) {
       LIVE_ONBOARDING_ALLOW_EXAMPLE_EVIDENCE: "",
       NEXT_E2E_LIVE_ONBOARDING: "",
       LIVE_ONBOARDING_EVIDENCE_PATH: "",
+      LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT: "https://mail-evidence.staging.o-okul.test/messages/latest",
+      LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN: "live-onboarding-test-bearer-token",
       ...env,
     },
   });
@@ -170,6 +192,7 @@ function createValidEvidence() {
     firstAdmin: {
       email: "tenant.admin@staging.o-okul.com",
       name: "Canli UAT Admin",
+      nationalId: "10000000450",
       password: "Str0ngAdmin!2026",
     },
     generatedAt: new Date(Date.now() - 60_000).toISOString(),
@@ -180,6 +203,7 @@ function createValidEvidence() {
     },
     systemAdmin: {
       email: "system.admin@staging.o-okul.com",
+      loginName: "system.admin@staging.o-okul.com",
       password: "Str0ngSystem!2026",
     },
     tenant: {

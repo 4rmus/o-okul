@@ -32,6 +32,10 @@ import type {
   StudentImportRequest,
   StudentImportResult,
   StudentProfileUpdateRequest,
+  StudentPortalAccessRecord,
+  StudentPortalAccessUpdateRequest,
+  StudentPortalAccessUpdateResult,
+  StudentPortalInvitationIssueResponse,
   StudentTenantUpdateRequest,
   StudentUpdateRequest,
   TeacherAssignmentRecord,
@@ -54,6 +58,20 @@ const studentListQuerySchema = z.object({
   status: optionalStudentStatusQuerySchema,
 });
 type StudentListQuery = z.infer<typeof studentListQuerySchema>;
+const studentPortalAccessQuerySchema = z.object({
+  cursor: optionalTrimmedString,
+  direction: z.preprocess((value) => value === undefined || value === "" ? "next" : value, z.enum(["next", "previous"])),
+  limit: z.preprocess((value) => value === undefined || value === "" ? 20 : Number(value), z.number().int().min(1).max(50)),
+  q: optionalTrimmedString,
+}).strict().refine((query) => query.direction !== "previous" || Boolean(query.cursor), {
+  message: "STUDENT_PORTAL_CURSOR_REQUIRED",
+  path: ["cursor"],
+});
+type StudentPortalAccessQuery = z.infer<typeof studentPortalAccessQuerySchema>;
+const studentPortalAccessUpdateBodySchema = z.object({
+  expectedVersion: z.number().int().min(1),
+  status: z.enum(["ACTIVE", "SUSPENDED"]),
+}).strict() satisfies z.ZodType<StudentPortalAccessUpdateRequest>;
 const studentGuardianProvisionBodySchema = z.object({
   canOpenSupportTickets: z.boolean().optional(),
   canReceiveAnnouncements: z.boolean().optional(),
@@ -131,6 +149,14 @@ export class StudentController {
   @Roles("TEACHER")
   export(): Promise<StudentExportResult> {
     return this.imports.export(getRequestContext());
+  }
+
+  @Get("portal-access")
+  @RequireCapability("user:manage")
+  listPortalAccess(
+    @Query(zodQuery(studentPortalAccessQuerySchema)) query: StudentPortalAccessQuery,
+  ): Promise<StudentPortalAccessRecord[]> {
+    return this.students.listPortalAccess(getRequestContext(), query);
   }
 
   @Get(":id")
@@ -212,6 +238,21 @@ export class StudentController {
   @RequireCapability("student:manage")
   updateProfile(@Param("id") id: string, @Body(zodBody(studentProfileBodySchema)) body: StudentProfileInput): Promise<PublicStudentProfileRecord> {
     return this.students.updateProfile(getRequestContext(), id, body);
+  }
+
+  @Patch(":id/portal-access")
+  @RequireCapability("user:manage")
+  updatePortalAccess(
+    @Param("id") id: string,
+    @Body(zodBody(studentPortalAccessUpdateBodySchema)) body: StudentPortalAccessUpdateRequest,
+  ): Promise<StudentPortalAccessUpdateResult> {
+    return this.students.updatePortalAccess(getRequestContext(), id, body);
+  }
+
+  @Post(":id/portal-invitations")
+  @RequireCapability("user:manage")
+  issuePortalInvitation(@Param("id") id: string): Promise<StudentPortalInvitationIssueResponse> {
+    return this.students.issuePortalInvitation(getRequestContext(), id);
   }
 
   @Post(":id/enrollments/renew")

@@ -1,8 +1,11 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { encryptSecretDeliveryPayload } from "@o-okul/db";
+import type { CampusRecord, LicenseTermRecord, TenantOnboardingOwnerRecord } from "@o-okul/shared-types";
 import pg from "pg";
-import { hashPassword, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
+import { hashPasswordAsync, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withBypassRlsQuery } from "../db/tenant-query.js";
+import { buildTenantMembershipDualWriteRows } from "../identity-provisioning/tenant-membership-dual-write.js";
 import { encryptTcIdentity, hashTcIdentity } from "../student/tc-identity.js";
 import type { TenantUserRecord } from "../user-management/user-management-store.js";
 
@@ -28,6 +31,7 @@ export interface TenantStore {
   findForAdmin(id: string): Promise<TenantRecord | undefined>;
   create(input: CreateTenantInput): Promise<TenantRecord>;
   createWithFirstAdmin?(input: CreateTenantInput, firstAdmin: CreateTenantFirstAdminInput): Promise<TenantCreateWithAdminResult>;
+  createOnboarding?(input: CreateTenantInput, onboarding: CreateTenantOnboardingInput): Promise<TenantOnboardingStoreResult>;
   update(id: string, input: UpdateTenantInput): Promise<TenantRecord | undefined>;
   delete(id: string): Promise<TenantRecord | undefined>;
 }
@@ -51,6 +55,7 @@ const demoTenants: TenantRecord[] = [
 export class InMemoryTenantStore implements TenantStore {
   private readonly tenants = demoTenants.map((record) => ({ ...record }));
   private readonly firstAdmins: TenantUserRecord[] = [];
+  private readonly onboardingRequests = new Map<string, { requestHash: string; response: TenantOnboardingResult }>();
 
   async list(): Promise<TenantRecord[]> {
     return this.tenants.filter((tenant) => tenant.status !== "DELETED").map((tenant) => ({ ...tenant }));
@@ -92,6 +97,7 @@ export class InMemoryTenantStore implements TenantStore {
   }
 
   async createWithFirstAdmin(input: CreateTenantInput, firstAdmin: CreateTenantFirstAdminInput): Promise<TenantCreateWithAdminResult> {
+    const activation = await createFirstAdminActivation(input.slug, firstAdmin.email);
     const tenant = await this.create(input);
     const storedTenant = this.tenants.find((record) => record.id === tenant.id);
     if (storedTenant) {
@@ -100,7 +106,7 @@ export class InMemoryTenantStore implements TenantStore {
     tenant.activeSeatCount = 1;
     const now = new Date().toISOString();
     const admin: TenantUserRecord = {
-      id: randomUUID(),
+      id: activation.userId,
       email: firstAdmin.email.toLowerCase(),
       name: firstAdmin.name,
       tenantId: tenant.id,
@@ -115,11 +121,42 @@ export class InMemoryTenantStore implements TenantStore {
       name: admin.name,
       nationalIdHash: hashTcIdentity(firstAdmin.nationalId),
       mustChangePassword: true,
-      password: firstAdmin.phone,
+      passwordHash: activation.passwordHash,
       tenantId: admin.tenantId,
       roles: admin.roles,
     });
     return { tenant: { ...tenant, activeSeatCount: 1 }, admin: { ...admin } };
+  }
+
+  async createOnboarding(input: CreateTenantInput, onboarding: CreateTenantOnboardingInput): Promise<TenantOnboardingStoreResult> {
+    const idempotencyId = `${onboarding.licenseTerm.createdByPlatformAccountId}:${onboarding.idempotencyKey}`;
+    const previous = this.onboardingRequests.get(idempotencyId);
+    if (previous) {
+      if (previous.requestHash !== onboarding.requestHash) throw new Error("IDEMPOTENCY_KEY_BODY_MISMATCH");
+      return { result: structuredClone(previous.response), replayed: true };
+    }
+    const activation = await createFirstAdminActivation(input.slug, onboarding.firstOwner.email);
+    const tenant = await this.create({
+      ...input,
+      plan: onboarding.licenseTerm.planCode,
+      licenseStartsAt: onboarding.licenseTerm.startsAt,
+      licenseEndsAt: onboarding.licenseTerm.endsAt,
+      seatLimit: onboarding.licenseTerm.activeStudentLimit,
+    });
+    const owner = createInMemoryOwner(tenant, onboarding.firstOwner, activation);
+    const campuses = onboarding.campuses.map((campus, index) => ({
+      id: `campus-onboarding-${index + 1}-${tenant.id}`,
+      tenantId: tenant.id,
+      ...campus,
+    }));
+    const licenseTerm: LicenseTermRecord = {
+      id: `license-onboarding-${tenant.id}`,
+      tenantId: tenant.id,
+      ...onboarding.licenseTerm,
+    };
+    const response = { tenant: { ...tenant, activeSeatCount: 1 }, owner, campuses, licenseTerm };
+    this.onboardingRequests.set(idempotencyId, { requestHash: onboarding.requestHash, response });
+    return { result: structuredClone(response), replayed: false };
   }
 
   async update(id: string, input: UpdateTenantInput): Promise<TenantRecord | undefined> {
@@ -192,7 +229,6 @@ export class PostgresTenantStore implements TenantStore {
          FROM "Tenant" t
          LEFT JOIN "TenantMembership" m ON m."tenantId" = t."id"
          WHERE t."id" = $1 AND t."status" = 'ACTIVE'
-           AND (t."licenseEndsAt" IS NULL OR t."licenseEndsAt" >= now())
          GROUP BY t."id", t."name", t."slug", t."plan", t."licenseStartsAt", t."licenseEndsAt", t."institutionType", t."contactEmail", t."logoUrl", t."seatLimit", t."status"
          LIMIT 1`,
         [id],
@@ -221,7 +257,6 @@ export class PostgresTenantStore implements TenantStore {
          FROM "Tenant" t
          LEFT JOIN "TenantMembership" m ON m."tenantId" = t."id"
          WHERE lower(t."slug") = lower($1) AND t."status" = 'ACTIVE'
-           AND (t."licenseEndsAt" IS NULL OR t."licenseEndsAt" >= now())
          GROUP BY t."id", t."name", t."slug", t."plan", t."licenseStartsAt", t."licenseEndsAt", t."institutionType", t."contactEmail", t."logoUrl", t."seatLimit", t."status"
          LIMIT 1`,
         [slug],
@@ -284,16 +319,9 @@ export class PostgresTenantStore implements TenantStore {
   }
 
   async createWithFirstAdmin(input: CreateTenantInput, firstAdmin: CreateTenantFirstAdminInput): Promise<TenantCreateWithAdminResult> {
+    const activation = await createFirstAdminActivation(input.slug, firstAdmin.email);
     return withBypassRlsQuery(this.pool, async (client) => {
       const normalizedEmail = firstAdmin.email.toLowerCase();
-      const existingUser = await client.query<{ id: string }>(
-        `SELECT "id" FROM "User" WHERE lower("email") = lower($1) LIMIT 1`,
-        [normalizedEmail],
-      );
-      if (existingUser.rows[0]) {
-        throw tenantFirstAdminEmailAlreadyExists();
-      }
-
       const tenantResult = await client.query<TenantRow>(
         `INSERT INTO "Tenant" ("id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "institutionType", "contactEmail", "logoUrl", "seatLimit", "status", "updatedAt")
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
@@ -313,26 +341,50 @@ export class PostgresTenantStore implements TenantStore {
         ],
       );
       const tenant = mapTenantRow(tenantResult.rows[0]!);
-      const passwordHash = hashPassword(firstAdmin.phone, randomUUID());
       const nationalIdEncrypted = encryptTcIdentity(firstAdmin.nationalId);
       const nationalIdHash = hashTcIdentity(firstAdmin.nationalId);
       const createdUser = await client.query<{ id: string }>(
-        `INSERT INTO "User" ("id", "tenantId", "email", "nationalIdEncrypted", "nationalIdHash", "name", "passwordHash", "mustChangePassword", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, true, now())
-         ON CONFLICT ("email") DO NOTHING
+        `INSERT INTO "User" (
+           "id", "tenantId", "email", "emailNormalized", "loginName", "loginNameNormalized",
+           "nationalIdEncrypted", "nationalIdHash", "name", "passwordHash", "passwordHashVersion",
+           "accountStatus", "mustChangePassword", "updatedAt"
+         )
+         VALUES ($1, $2, $3, $3, $3, $3, $4, $5, $6, $7, 2, 'PENDING_ACTIVATION', true, now())
          RETURNING "id"`,
-        [randomUUID(), tenant.id, normalizedEmail, nationalIdEncrypted, nationalIdHash, firstAdmin.name, passwordHash],
+        [activation.userId, tenant.id, normalizedEmail, nationalIdEncrypted, nationalIdHash, firstAdmin.name, activation.passwordHash],
       );
       const userId = createdUser.rows[0]?.id;
       if (!userId) {
-        throw tenantFirstAdminEmailAlreadyExists();
+        throw new Error("USER_CREATE_FAILED");
       }
 
       await client.query(`DELETE FROM "TenantMembership" WHERE "tenantId" = $1 AND "userId" = $2`, [tenant.id, userId]);
+      const [membership] = buildTenantMembershipDualWriteRows(["TENANT_ADMIN"]);
       await client.query(
-        `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
-         VALUES ($1, $2, $3, 'TENANT_ADMIN', now())`,
-        [randomUUID(), tenant.id, userId],
+        `INSERT INTO "TenantMembership" (
+           "id", "tenantId", "userId", "role", "staffRole", "hasTeacherPersona", "hasStudentPersona",
+           "status", "version", "scopeMode", "updatedAt"
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', 1, 'TENANT', now())`,
+        [
+          randomUUID(),
+          tenant.id,
+          userId,
+          membership!.role,
+          membership!.staffRole,
+          membership!.hasTeacherPersona,
+          membership!.hasStudentPersona,
+        ],
+      );
+      await client.query(
+        `INSERT INTO "PasswordResetToken" ("id", "userId", "tokenHash", "status", "expiresAt", "updatedAt")
+         VALUES ($1, $2, $3, 'PENDING', $4, now())`,
+        [activation.resetId, userId, activation.tokenHash, activation.expiresAt],
+      );
+      await client.query(
+        `INSERT INTO "SecretDeliveryOutbox" (
+           "id", "tenantId", "purpose", "sourceId", "payloadEncrypted", "status", "availableAt", "expiresAt", "updatedAt"
+         ) VALUES ($1, $2, 'PASSWORD_RESET', $3, $4, 'PENDING', now(), $5, now())`,
+        [randomUUID(), tenant.id, activation.resetId, activation.payloadEncrypted, activation.expiresAt],
       );
       const adminResult = await client.query<TenantAdminRow>(
         `SELECT
@@ -355,6 +407,156 @@ export class PostgresTenantStore implements TenantStore {
         throw new Error("USER_MEMBERSHIP_CREATE_FAILED");
       }
       return { tenant: { ...tenant, activeSeatCount: 1 }, admin };
+    });
+  }
+
+  async createOnboarding(input: CreateTenantInput, onboarding: CreateTenantOnboardingInput): Promise<TenantOnboardingStoreResult> {
+    const activation = await createFirstAdminActivation(input.slug, onboarding.firstOwner.email);
+    return withBypassRlsQuery(this.pool, async (client) => {
+      const idempotencyInsert = await client.query<{ id: string }>(
+        `INSERT INTO "PlatformIdempotencyKey" (
+           "platformAccountId", "key", "operation", "requestHash", "status", "updatedAt"
+         ) VALUES ($1, $2, 'tenant.onboarding.create', $3, 'IN_PROGRESS', now())
+         ON CONFLICT ("platformAccountId", "key", "operation") DO NOTHING
+         RETURNING "id"`,
+        [onboarding.licenseTerm.createdByPlatformAccountId, onboarding.idempotencyKey, onboarding.requestHash],
+      );
+      if (!idempotencyInsert.rows[0]) {
+        const previous = await client.query<{ requestHash: string; status: string; responseBody: TenantOnboardingResult | null }>(
+          `SELECT "requestHash", "status", "responseBody"
+           FROM "PlatformIdempotencyKey"
+           WHERE "platformAccountId" = $1 AND "key" = $2 AND "operation" = 'tenant.onboarding.create'
+           FOR UPDATE`,
+          [onboarding.licenseTerm.createdByPlatformAccountId, onboarding.idempotencyKey],
+        );
+        const record = previous.rows[0];
+        if (!record || record.requestHash !== onboarding.requestHash) throw new Error("IDEMPOTENCY_KEY_BODY_MISMATCH");
+        if (record.status !== "COMPLETED" || !record.responseBody) throw new Error("IDEMPOTENCY_KEY_IN_PROGRESS");
+        return { result: record.responseBody, replayed: true };
+      }
+      const tenantId = input.id ?? randomUUID();
+      const ownerId = activation.userId;
+      const employeeId = randomUUID();
+      const normalizedEmail = onboarding.firstOwner.email.toLowerCase();
+      const term = onboarding.licenseTerm;
+      const tenantResult = await client.query<TenantRow>(
+        `INSERT INTO "Tenant" (
+           "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "institutionType",
+           "contactEmail", "logoUrl", "seatLimit", "status", "updatedAt"
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
+         RETURNING "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "institutionType",
+                   "contactEmail", "logoUrl", "seatLimit", 0::int AS "activeSeatCount", "status"`,
+        [
+          tenantId,
+          input.name,
+          input.slug,
+          term.planCode,
+          term.startsAt,
+          term.endsAt,
+          input.institutionType ?? null,
+          input.contactEmail ?? null,
+          input.logoUrl ?? null,
+          term.activeStudentLimit,
+          input.status ?? "ACTIVE",
+        ],
+      );
+      const tenant = mapTenantRow(tenantResult.rows[0]!);
+      const licenseResult = await client.query<LicenseTermRow>(
+        `INSERT INTO "LicenseTerm" (
+           "id", "tenantId", "planCode", "startsAt", "endsAt", "activeStudentLimit",
+           "createdByPlatformAccountId", "auditReference", "updatedAt"
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+         RETURNING "id", "tenantId", "planCode", "startsAt", "endsAt", "activeStudentLimit",
+                   "cancelledAt", "createdByPlatformAccountId", "auditReference"`,
+        [randomUUID(), tenant.id, term.planCode, term.startsAt, term.endsAt, term.activeStudentLimit, term.createdByPlatformAccountId, term.auditReference],
+      );
+      const campuses: CampusRecord[] = [];
+      for (const campus of onboarding.campuses) {
+        const campusResult = await client.query<CampusRow>(
+          `INSERT INTO "Campus" ("id", "tenantId", "name", "code", "unitType", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, now())
+           RETURNING "id", "tenantId", "name", "code", "unitType"`,
+          [randomUUID(), tenant.id, campus.name, campus.code ?? null, campus.unitType ?? null],
+        );
+        const row = campusResult.rows[0];
+        if (!row) throw new Error("CAMPUS_CREATE_FAILED");
+        campuses.push(mapCampusRow(row));
+      }
+      const nationalId = onboarding.firstOwner.nationalId;
+      await client.query(
+        `INSERT INTO "User" (
+           "id", "tenantId", "email", "emailNormalized", "loginName", "loginNameNormalized",
+           "nationalIdEncrypted", "nationalIdHash", "name", "passwordHash", "passwordHashVersion",
+           "accountStatus", "mustChangePassword", "updatedAt"
+         ) VALUES ($1, $2, $3, $3, $3, $3, $4, $5, $6, $7, 2, 'PENDING_ACTIVATION', true, now())`,
+        [
+          ownerId,
+          tenant.id,
+          normalizedEmail,
+          nationalId ? encryptTcIdentity(nationalId) : null,
+          nationalId ? hashTcIdentity(nationalId) : null,
+          onboarding.firstOwner.name,
+          activation.passwordHash,
+        ],
+      );
+      const ownerName = splitPersonName(onboarding.firstOwner.name);
+      await client.query(
+        `INSERT INTO "Employee" (
+           "id", "tenantId", "firstName", "lastName", "nationalIdEncrypted", "nationalIdHash",
+           "workEmail", "userId", "status", "employmentStartsAt", "updatedAt"
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ACTIVE', $9::date, now())`,
+        [
+          employeeId,
+          tenant.id,
+          ownerName.firstName,
+          ownerName.lastName,
+          nationalId ? encryptTcIdentity(nationalId) : null,
+          nationalId ? hashTcIdentity(nationalId) : null,
+          normalizedEmail,
+          ownerId,
+          term.startsAt.slice(0, 10),
+        ],
+      );
+      const [membership] = buildTenantMembershipDualWriteRows(["TENANT_OWNER"]);
+      await client.query(
+        `INSERT INTO "TenantMembership" (
+           "id", "tenantId", "userId", "role", "staffRole", "hasTeacherPersona", "hasStudentPersona",
+           "status", "version", "scopeMode", "updatedAt"
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', 1, 'TENANT', now())`,
+        [randomUUID(), tenant.id, ownerId, membership!.role, membership!.staffRole, false, false],
+      );
+      await client.query(
+        `INSERT INTO "PasswordResetToken" ("id", "userId", "tokenHash", "status", "expiresAt", "updatedAt")
+         VALUES ($1, $2, $3, 'PENDING', $4, now())`,
+        [activation.resetId, ownerId, activation.tokenHash, activation.expiresAt],
+      );
+      await client.query(
+        `INSERT INTO "SecretDeliveryOutbox" (
+           "id", "tenantId", "purpose", "sourceId", "payloadEncrypted", "status", "availableAt", "expiresAt", "updatedAt"
+         ) VALUES ($1, $2, 'PASSWORD_RESET', $3, $4, 'PENDING', now(), $5, now())`,
+        [randomUUID(), tenant.id, activation.resetId, activation.payloadEncrypted, activation.expiresAt],
+      );
+      await client.query(`SELECT o_okul_refresh_license_usage($1)`, [tenant.id]);
+      const licenseRow = licenseResult.rows[0];
+      if (!licenseRow) throw new Error("LICENSE_TERM_CREATE_FAILED");
+      const response: TenantOnboardingResult = {
+        tenant: { ...tenant, activeSeatCount: 1 },
+        campuses,
+        licenseTerm: mapLicenseTermRow(licenseRow),
+        owner: {
+          id: ownerId,
+          employeeId,
+          tenantId: tenant.id,
+          roles: ["TENANT_OWNER"],
+        },
+      };
+      await client.query(
+        `UPDATE "PlatformIdempotencyKey"
+         SET "status" = 'COMPLETED', "responseBody" = $4::jsonb, "completedAt" = now(), "updatedAt" = now()
+         WHERE "platformAccountId" = $1 AND "key" = $2 AND "operation" = 'tenant.onboarding.create' AND "requestHash" = $3`,
+        [onboarding.licenseTerm.createdByPlatformAccountId, onboarding.idempotencyKey, onboarding.requestHash, JSON.stringify(response)],
+      );
+      return { result: response, replayed: false };
     });
   }
 
@@ -449,12 +651,6 @@ export class PostgresTenantStore implements TenantStore {
   }
 }
 
-function tenantFirstAdminEmailAlreadyExists(): Error & { code: string } {
-  return Object.assign(new Error("TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS"), {
-    code: "TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS",
-  });
-}
-
 interface TenantRow {
   id: string;
   name: string;
@@ -498,12 +694,31 @@ export interface CreateTenantFirstAdminInput {
   email: string;
   name: string;
   nationalId: string;
-  phone: string;
 }
 
 export interface TenantCreateWithAdminResult {
   tenant: TenantRecord;
   admin: TenantUserRecord;
+}
+
+export interface CreateTenantOnboardingInput {
+  campuses: Array<Pick<CampusRecord, "name" | "code" | "unitType">>;
+  firstOwner: { email: string; name: string; nationalId?: string };
+  idempotencyKey: string;
+  requestHash: string;
+  licenseTerm: Omit<LicenseTermRecord, "id" | "tenantId" | "cancelledAt">;
+}
+
+export interface TenantOnboardingResult {
+  tenant: TenantRecord;
+  campuses: CampusRecord[];
+  licenseTerm: LicenseTermRecord;
+  owner: TenantOnboardingOwnerRecord;
+}
+
+export interface TenantOnboardingStoreResult {
+  result: TenantOnboardingResult;
+  replayed: boolean;
 }
 
 export type UpdateTenantInput = Partial<Omit<CreateTenantInput, "id">>;
@@ -553,12 +768,122 @@ function optionalNumber(value: number | string | null | undefined): number | und
 }
 
 function isUsableTenant(tenant: TenantRecord): boolean {
-  if (tenant.status !== "ACTIVE") return false;
-  return !tenant.licenseEndsAt || Date.parse(tenant.licenseEndsAt) >= Date.now();
+  return tenant.status === "ACTIVE";
 }
 
 function withoutUndefined<T extends object>(input: T): Partial<T> {
   return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) as Partial<T>;
+}
+
+interface FirstAdminActivation {
+  expiresAt: string;
+  passwordHash: string;
+  payloadEncrypted: string;
+  resetId: string;
+  tokenHash: string;
+  userId: string;
+}
+
+interface LicenseTermRow {
+  id: string;
+  tenantId: string;
+  planCode: string;
+  startsAt: Date | string;
+  endsAt: Date | string;
+  activeStudentLimit: number;
+  cancelledAt: Date | string | null;
+  createdByPlatformAccountId: string | null;
+  auditReference: string | null;
+}
+
+interface CampusRow {
+  id: string;
+  tenantId: string;
+  name: string;
+  code: string | null;
+  unitType: CampusRecord["unitType"] | null;
+}
+
+function mapLicenseTermRow(row: LicenseTermRow): LicenseTermRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    planCode: row.planCode,
+    startsAt: dateString(row.startsAt),
+    endsAt: dateString(row.endsAt),
+    activeStudentLimit: row.activeStudentLimit,
+    cancelledAt: row.cancelledAt ? dateString(row.cancelledAt) : undefined,
+    createdByPlatformAccountId: row.createdByPlatformAccountId ?? undefined,
+    auditReference: row.auditReference ?? undefined,
+  };
+}
+
+function mapCampusRow(row: CampusRow): CampusRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    name: row.name,
+    code: row.code ?? undefined,
+    unitType: row.unitType ?? undefined,
+  };
+}
+
+function splitPersonName(name: string): { firstName: string; lastName: string } {
+  const parts = name.trim().split(/\s+/);
+  return {
+    firstName: parts.slice(0, -1).join(" ") || parts[0] || "-",
+    lastName: parts.length > 1 ? parts.at(-1)! : "-",
+  };
+}
+
+function createInMemoryOwner(
+  tenant: TenantRecord,
+  input: CreateTenantOnboardingInput["firstOwner"],
+  activation: FirstAdminActivation,
+): TenantOnboardingOwnerRecord {
+  const normalizedEmail = input.email.toLowerCase();
+  upsertInMemoryAuthUser({
+    id: activation.userId,
+    email: normalizedEmail,
+    name: input.name,
+    nationalIdHash: input.nationalId ? hashTcIdentity(input.nationalId) : undefined,
+    mustChangePassword: true,
+    passwordHash: activation.passwordHash,
+    tenantId: tenant.id,
+    roles: ["TENANT_OWNER"],
+  });
+  return {
+    id: activation.userId,
+    employeeId: `employee-owner-${tenant.id}`,
+    tenantId: tenant.id,
+    roles: ["TENANT_OWNER"],
+  };
+}
+
+async function createFirstAdminActivation(tenantSlug: string, email: string): Promise<FirstAdminActivation> {
+  const resetToken = randomBytes(32).toString("base64url");
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1_000).toISOString();
+  const url = createFirstAdminActivationUrl(tenantSlug, resetToken);
+  return {
+    expiresAt,
+    passwordHash: await hashPasswordAsync(randomBytes(32).toString("base64url")),
+    payloadEncrypted: encryptSecretDeliveryPayload({
+      channel: "EMAIL",
+      to: email.toLowerCase(),
+      subject: "O-Okul hesap aktivasyonu",
+      body: `Hesabınızı 24 saat içinde etkinleştirmek için bağlantıyı açın: ${url.toString()}`,
+    }),
+    resetId: randomUUID(),
+    tokenHash: createHash("sha256").update(resetToken).digest("hex"),
+    userId: randomUUID(),
+  };
+}
+
+export function createFirstAdminActivationUrl(tenantSlug: string, token: string): URL {
+  const url = new URL("/parola-sifirla", process.env.WEB_URL ?? "http://localhost:3000");
+  url.searchParams.set("tenant", tenantSlug);
+  url.hash = new URLSearchParams({ token }).toString();
+  return url;
 }
 
 export function createTenantStore(): TenantStore {

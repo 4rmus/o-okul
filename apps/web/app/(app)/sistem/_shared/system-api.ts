@@ -16,13 +16,14 @@ export interface TenantRecord {
 
 export interface TenantCreateResponse {
   tenant: TenantRecord;
-  admin: {
+  owner: {
     id: string;
-    email: string;
-    name: string;
+    employeeId: string;
     tenantId: string;
     roles: string[];
   };
+  campuses: Array<{ id: string; tenantId: string; name: string; code?: string; unitType?: string }>;
+  licenseTerm: { id: string; tenantId: string; planCode: string; startsAt: string; endsAt: string; activeStudentLimit: number };
 }
 
 export function loadTenants(accessToken: string, listQuery: ListQueryState): Promise<ListResult<TenantRecord>> {
@@ -36,7 +37,7 @@ export function loadTenant(accessToken: string, id: string): Promise<TenantRecor
 export function createTenant(accessToken: string, input: TenantCreateFormPayload): Promise<TenantCreateResponse> {
   return apiRequest<TenantCreateResponse>(accessToken, `${apiBaseUrl}/tenants`, {
     body: JSON.stringify(input),
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "Idempotency-Key": crypto.randomUUID() },
     method: "POST",
   });
 }
@@ -46,11 +47,5 @@ export function updateTenant(accessToken: string, id: string, input: TenantFormP
     body: JSON.stringify(input),
     headers: { "content-type": "application/json" },
     method: "PATCH",
-  });
-}
-
-export function deleteTenant(accessToken: string, id: string): Promise<TenantRecord> {
-  return apiRequest<TenantRecord>(accessToken, `${apiBaseUrl}/tenants/${encodeURIComponent(id)}`, {
-    method: "DELETE",
   });
 }

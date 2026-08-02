@@ -2,10 +2,10 @@ import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
-import { loginAsSettled, registerTestLoginIdentity, testLoginBody } from "../test-auth.js";
+import { loginAsSettled } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
-import { upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
+import { createAdminMfaStepUpProof } from "../auth/totp-mfa.js";
 
 describe("Tenant user management", () => {
   let app: INestApplication;
@@ -61,15 +61,129 @@ describe("Tenant user management", () => {
       });
   });
 
+  it("kurum admin yalnız kendi tenant çalışan erişim projeksiyonunu listeler", async () => {
+    const tenantA = await login("admin-a@example.test");
+    const tenantB = await login("admin-b@example.test");
+
+    await request(server)
+      .get("/employees")
+      .query({ q: "Tenant A", sort: "lastName" })
+      .set("Authorization", `Bearer ${tenantA}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: "employee-admin-a", tenantId: "tenant-a" })]);
+        expect(JSON.stringify(body)).not.toContain("admin-b@example.test");
+      });
+
+    await request(server)
+      .get("/employees")
+      .set("Authorization", `Bearer ${tenantB}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: "employee-admin-b", tenantId: "tenant-b" })]);
+        expect(JSON.stringify(body)).not.toContain("admin-a@example.test");
+      });
+
+    await request(server)
+      .get("/employees")
+      .query({ page: "2" })
+      .set("Authorization", `Bearer ${tenantA}`)
+      .expect(422)
+      .expect(({ body }) => expect(body.error?.code).toBe("VALIDATION_FAILED"));
+
+    await request(server)
+      .get("/employees")
+      .query({ limit: "101" })
+      .set("Authorization", `Bearer ${tenantA}`)
+      .expect(422)
+      .expect(({ body }) => expect(body.error?.code).toBe("VALIDATION_FAILED"));
+  });
+
+  it("çalışan profilini hesaptan bağımsız oluşturur ve güvenli rol daveti üretir", async () => {
+    const tenantA = await login("admin-a@example.test");
+    const tenantB = await login("admin-b@example.test");
+    const created = await request(server)
+      .post("/employees")
+      .set("Authorization", `Bearer ${tenantA}`)
+      .send({
+        employeeNo: "A-NEW-1",
+        firstName: "Yeni",
+        lastName: "Çalışan",
+        workEmail: "yeni.calisan@example.test",
+        status: "ACTIVE",
+      })
+      .expect(201);
+
+    expect(created.body).toMatchObject({ tenantId: "tenant-a", status: "ACTIVE" });
+    expect(created.body).not.toHaveProperty("userId");
+    const employeeId = created.body.id as string;
+    await request(server)
+      .post(`/employees/${employeeId}/account-invitations`)
+      .set("Authorization", `Bearer ${tenantB}`)
+      .send({ email: "yeni.calisan@example.test", role: "OPERATIONS_STAFF" })
+      .expect(404);
+
+    await request(server)
+      .post(`/employees/${employeeId}/account-invitations`)
+      .set("Authorization", `Bearer ${tenantA}`)
+      .send({ email: "yeni.calisan@example.test", role: "OPERATIONS_STAFF" })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({ subjectType: "EMPLOYEE", subjectId: employeeId, role: "OPERATIONS_STAFF", status: "PENDING" });
+        expect(body).not.toHaveProperty("activationToken");
+        expect(body).not.toHaveProperty("tokenHash");
+      });
+
+    await request(server)
+      .post(`/employees/${employeeId}/account-invitations`)
+      .set("Authorization", `Bearer ${tenantA}`)
+      .send({ email: "yeni.calisan@example.test", role: "TENANT_ADMIN" })
+      .expect(403)
+      .expect(({ body }) => expect(body.error?.code).toBe("STEP_UP_MFA_REQUIRED"));
+
+    const adminCandidate = await request(server)
+      .post("/employees")
+      .set("Authorization", `Bearer ${tenantA}`)
+      .send({ firstName: "Yeni", lastName: "Admin", status: "ACTIVE" })
+      .expect(201);
+    const access = decodeAccessToken(tenantA);
+    const proof = createAdminMfaStepUpProof({
+      userId: access.sub,
+      sessionId: access.sessionId,
+      membershipVersion: access.membershipVersion,
+      purpose: "OWNER_ADMIN_CHANGE",
+    });
+    await request(server)
+      .post(`/employees/${adminCandidate.body.id as string}/account-invitations`)
+      .set("Authorization", `Bearer ${tenantA}`)
+      .set("X-Step-Up-Token", proof.stepUpToken)
+      .send({ email: "yeni.admin@example.test", role: "TENANT_ADMIN" })
+      .expect(201)
+      .expect(({ body }) => expect(body.role).toBe("TENANT_ADMIN"));
+  });
+
   it("öğretmen kullanıcı yönetimi yapamaz", async () => {
     const teacher = await login("teacher-a@example.test");
 
     await request(server).get("/tenant-users").set("Authorization", `Bearer ${teacher}`).expect(403);
+    await request(server).get("/employees").set("Authorization", `Bearer ${teacher}`).expect(403);
+    await request(server)
+      .patch("/tenant-memberships/membership-operations-a")
+      .set("Authorization", `Bearer ${teacher}`)
+      .send({
+        campusIds: [],
+        expectedVersion: 1,
+        hasTeacherPersona: false,
+        scopeMode: "TENANT",
+        staffRole: "TENANT_ADMIN",
+        status: "ACTIVE",
+      })
+      .expect(403);
   });
 
-  it("tenant admin kullanıcı oluşturur ve tenant içi rolleri günceller", async () => {
+  it("doğrudan tenant kullanıcı oluşturma yolunu emekliye ayırır", async () => {
     const tenantA = await login("admin-a@example.test");
-    const created = await request(server)
+    await request(server)
       .post("/tenant-users")
       .set("Authorization", `Bearer ${tenantA}`)
       .send({
@@ -79,31 +193,7 @@ describe("Tenant user management", () => {
         phone: "5551234567",
         roles: ["ASSISTANT_ADMIN"],
       })
-      .expect(201);
-
-    expect(created.body).toMatchObject({
-      email: "created-user-a@example.test",
-      name: "CREATED USER A",
-      tenantId: "tenant-a",
-      roles: ["ASSISTANT_ADMIN"],
-    });
-    expect(created.body).not.toHaveProperty("password");
-    expect(created.body).not.toHaveProperty("passwordHash");
-    expect(JSON.stringify(created.body)).not.toContain("5551234567");
-
-    const userId = (created.body as { id: string }).id;
-    await request(server)
-      .patch(`/tenant-users/${userId}/roles`)
-      .set("Authorization", `Bearer ${tenantA}`)
-      .send({ roles: ["TENANT_ADMIN"] })
-      .expect(200)
-      .expect(({ body }) => {
-        expect(body).toMatchObject({
-          id: userId,
-          tenantId: "tenant-a",
-          roles: ["TENANT_ADMIN"],
-        });
-      });
+      .expect(404);
 
     const tenantB = await login("admin-b@example.test");
     await request(server)
@@ -115,184 +205,43 @@ describe("Tenant user management", () => {
       });
   });
 
-  it("rol düşürülünce eski access token ve audit PII sızıntısı engellenir", async () => {
+  it("eski rol yazma yolunu emekliye ayırır ve mevcut session'ı değiştirmez", async () => {
     const tenantA = await login("admin-a@example.test");
-    const email = "revoked-admin-a@example.test";
-    const created = await request(server)
-      .post("/tenant-users")
-      .set("Authorization", `Bearer ${tenantA}`)
-      .send({
-        email,
-        name: "Revoked Admin A",
-        nationalId: "10000002058",
-        phone: "5551234567",
-        roles: ["TENANT_ADMIN"],
-      })
-      .expect(201);
-
-    const userId = (created.body as { id: string }).id;
-    registerTestLoginIdentity(email, {
-      nationalId: "10000002058",
-      password: "5551234567",
-      tenantSlug: "dna-egitim",
-    });
-    upsertInMemoryAuthUser({
-      id: userId,
-      email,
-      name: "Revoked Admin A",
-      password: "5551234567",
-      roles: ["TENANT_ADMIN"],
-      tenantId: "tenant-a",
-    });
-
-    const auditResponse = await request(server)
-      .get("/audit-logs")
-      .query({ entityId: userId, entityType: "User" })
-      .set("Authorization", `Bearer ${tenantA}`)
-      .expect(200);
-
-    expect(auditResponse.body).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        action: "user.membership_created",
-        diff: expect.objectContaining({ emailProvided: true, roles: ["TENANT_ADMIN"] }),
-      }),
-    ]));
-    expect(JSON.stringify(auditResponse.body)).not.toContain(email);
-
-    const elevatedToken = await login(email, "5551234567");
-    await request(server).get("/tenant-users").set("Authorization", `Bearer ${elevatedToken}`).expect(200);
-
     await request(server)
-      .patch(`/tenant-users/${userId}/roles`)
+      .patch("/tenant-users/user-operations-a/roles")
       .set("Authorization", `Bearer ${tenantA}`)
       .send({ roles: ["ASSISTANT_ADMIN"] })
-      .expect(200);
-
-    await request(server).get("/tenant-users").set("Authorization", `Bearer ${elevatedToken}`).expect(401);
-  });
-
-  it("koltuk limiti dolu tenantta yeni kullanıcı oluşturmaz", async () => {
-    const system = await login("system@example.test");
-    await request(server)
-      .post("/tenants")
-      .set("Authorization", `Bearer ${system}`)
-      .send({
-        id: "tenant-seat-users",
-        name: "Seat Users Tenant",
-        slug: "seat-users-tenant",
-        seatLimit: 1,
-        firstAdmin: {
-          name: "Seat Users Admin",
-          email: "seat-users-admin@example.test",
-          nationalId: "10000000450",
-          phone: "5551234567",
-        },
-      })
-      .expect(201);
-
-    registerTestLoginIdentity("seat-users-admin@example.test", {
-      nationalId: "10000000450",
-      password: "5551234567",
-      tenantSlug: "seat-users-tenant",
-    });
-    const admin = await login("seat-users-admin@example.test", "5551234567");
-    await request(server)
-      .post("/tenant-users")
-      .set("Authorization", `Bearer ${admin}`)
-      .send({
-        email: "seat-users-new@example.test",
-        name: "Seat Users New",
-        nationalId: "10000001372",
-        phone: "5550000011",
-        roles: ["ASSISTANT_ADMIN"],
-      })
-      .expect(400)
+      .expect(410)
       .expect(({ body }) => {
-        expect(JSON.stringify(body)).toContain("TENANT_SEAT_LIMIT_EXCEEDED");
+        expect(JSON.stringify(body)).toContain("TENANT_USER_ROLE_WRITE_RETIRED");
       });
+
+    await request(server).get("/tenant-users").set("Authorization", `Bearer ${tenantA}`).expect(200);
   });
 
-  it("tenant kullanıcı gövdelerini Zod ile doğrular", async () => {
+  it("eski rol yazma yolu gövdeden bağımsız 410 döner", async () => {
     const tenantA = await login("admin-a@example.test");
-    const invalidCreate = await request(server)
-      .post("/tenant-users")
-      .set("Authorization", `Bearer ${tenantA}`)
-      .send({
-        email: "gecersiz-email",
-        name: " ",
-        nationalId: "bad",
-        phone: "",
-        roles: [],
-      })
-      .expect(422);
-
-    expect(invalidCreate.body.error).toMatchObject({
-      code: "VALIDATION_FAILED",
-      details: {
-        fields: expect.arrayContaining([
-          expect.objectContaining({ path: "email" }),
-          expect.objectContaining({ path: "name" }),
-          expect.objectContaining({ path: "phone" }),
-          expect.objectContaining({ path: "roles" }),
-        ]),
-      },
-    });
-
-    const invalidRoles = await request(server)
+    await request(server)
       .patch("/tenant-users/user-tenant-a/roles")
       .set("Authorization", `Bearer ${tenantA}`)
       .send({ roles: ["UNKNOWN_ROLE"] })
-      .expect(422);
-
-    expect(invalidRoles.body.error).toMatchObject({
-      code: "VALIDATION_FAILED",
-      details: {
-        fields: [expect.objectContaining({ path: "roles.0" })],
-      },
-    });
+      .expect(410);
   });
 
-  it("tenant admin SYSTEM_ADMIN veya kişi rolü veremez ve kendi admin rolünü düşüremez", async () => {
+  it("eski rol yazma yolu kişi rolü için de kapalıdır", async () => {
     const tenantA = await login("admin-a@example.test");
-
-    await request(server)
-      .post("/tenant-users")
-      .set("Authorization", `Bearer ${tenantA}`)
-      .send({
-        email: "system-role-a@example.test",
-        name: "System Role",
-        nationalId: "10000000450",
-        phone: "5551234567",
-        roles: ["SYSTEM_ADMIN"],
-      })
-      .expect(422);
-
-    await request(server)
-      .post("/tenant-users")
-      .set("Authorization", `Bearer ${tenantA}`)
-      .send({
-        email: "subject-role-a@example.test",
-        name: "Subject Role",
-        nationalId: "10000001372",
-        phone: "5550000011",
-        roles: ["TEACHER"],
-      })
-      .expect(400)
-      .expect(({ body }) => {
-        expect(JSON.stringify(body)).toContain("TENANT_USER_SUBJECT_ROLE_FORBIDDEN");
-      });
 
     await request(server)
       .patch("/tenant-users/user-tenant-a/roles")
       .set("Authorization", `Bearer ${tenantA}`)
       .send({ roles: ["TEACHER"] })
-      .expect(400)
+      .expect(410)
       .expect(({ body }) => {
-        expect(JSON.stringify(body)).toContain("TENANT_USER_SUBJECT_ROLE_FORBIDDEN");
+        expect(JSON.stringify(body)).toContain("TENANT_USER_ROLE_WRITE_RETIRED");
       });
   });
 
-  it("admin kullanıcı şifresini kişinin telefonuna sıfırlar ve eski oturumları iptal eder", async () => {
+  it("admin telefon-parolası reset yolu emekliye ayrılmıştır", async () => {
     const tenantA = await login("admin-a@example.test");
     const teacherToken = await login("teacher-a@example.test");
 
@@ -301,30 +250,94 @@ describe("Tenant user management", () => {
     await request(server)
       .post("/tenant-users/teacher-tenant-a/reset-password")
       .set("Authorization", `Bearer ${tenantA}`)
-      .expect(200)
-      .expect(({ body }) => {
-        expect(body).toMatchObject({
-          userId: "teacher-tenant-a",
-          mustChangePassword: true,
-        });
-        expect(body.resetAt).toEqual(expect.any(String));
-        expect(JSON.stringify(body)).not.toContain("5550000010");
+      .expect(404);
+
+    await request(server).get("/me/profile").set("Authorization", `Bearer ${teacherToken}`).expect(200);
+  });
+
+  it("üyelik yazısını tenant, sürüm, owner ve kampüs kurallarıyla sınırlar", async () => {
+    const tenantA = await login("admin-a@example.test");
+    const tenantB = await login("admin-b@example.test");
+    const body = {
+      campusIds: ["campus-main"],
+      expectedVersion: 1,
+      hasTeacherPersona: true,
+      scopeMode: "CAMPUSES",
+      staffRole: "OPERATIONS_STAFF",
+      status: "ACTIVE",
+    };
+
+    await request(server)
+      .patch("/tenant-memberships/membership-operations-a")
+      .set("Authorization", `Bearer ${tenantA}`)
+      .send({ ...body, campusIds: [], scopeMode: "TENANT", staffRole: "TENANT_ADMIN" })
+      .expect(403)
+      .expect(({ body: responseBody }) => {
+        expect(JSON.stringify(responseBody)).toContain("STEP_UP_MFA_REQUIRED");
       });
 
-    await request(server).get("/me/profile").set("Authorization", `Bearer ${teacherToken}`).expect(401);
-
-    const resetLogin = await request(server)
-      .post("/auth/login")
-      .send(testLoginBody("teacher-a@example.test", "5550000010"))
-      .expect(200);
-    const resetToken = (resetLogin.body as { accessToken: string }).accessToken;
-    expect(resetLogin.body.session).toMatchObject({ mustChangePassword: true });
-
-    await request(server).get("/me/profile").set("Authorization", `Bearer ${resetToken}`).expect(423);
     await request(server)
-      .post("/me/password")
-      .set("Authorization", `Bearer ${resetToken}`)
-      .send({ currentPassword: "5550000010", newPassword: "password" })
-      .expect(200);
+      .patch("/tenant-memberships/membership-operations-a")
+      .set("Authorization", `Bearer ${tenantB}`)
+      .send(body)
+      .expect(404);
+
+    await request(server)
+      .patch("/tenant-memberships/membership-operations-a")
+      .set("Authorization", `Bearer ${tenantA}`)
+      .send({ ...body, campusIds: [] })
+      .expect(422);
+
+    await request(server)
+      .patch("/tenant-memberships/membership-operations-a")
+      .set("Authorization", `Bearer ${tenantA}`)
+      .send(body)
+      .expect(200)
+      .expect(({ body: responseBody }) => {
+        expect(responseBody).toMatchObject({
+          employee: {
+            id: "employee-operations-a",
+            accountStatus: "ACTIVE",
+            access: {
+              membershipId: "membership-operations-a",
+              staffRole: "OPERATIONS_STAFF",
+              hasTeacherPersona: true,
+              status: "ACTIVE",
+              version: 2,
+              scopeMode: "CAMPUSES",
+              campusIds: ["campus-main"],
+            },
+          },
+          sessionsRevoked: 0,
+        });
+      });
+
+    await request(server)
+      .patch("/tenant-memberships/membership-operations-a")
+      .set("Authorization", `Bearer ${tenantA}`)
+      .send(body)
+      .expect(409)
+      .expect(({ body: responseBody }) => {
+        expect(JSON.stringify(responseBody)).toContain("TENANT_MEMBERSHIP_VERSION_CONFLICT");
+      });
+
+    await request(server)
+      .patch("/tenant-memberships/membership-operations-a")
+      .set("Authorization", `Bearer ${tenantA}`)
+      .send({ ...body, expectedVersion: 2, staffRole: "TENANT_OWNER" })
+      .expect(403)
+      .expect(({ body: responseBody }) => {
+        expect(JSON.stringify(responseBody)).toContain("TENANT_OWNER_MANAGE_REQUIRED");
+      });
   });
 });
+
+function decodeAccessToken(token: string): { sub: string; sessionId: string; membershipVersion: number } {
+  const encoded = token.split(".")[0];
+  if (!encoded) throw new Error("TEST_ACCESS_TOKEN_PAYLOAD_MISSING");
+  return JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as {
+    sub: string;
+    sessionId: string;
+    membershipVersion: number;
+  };
+}

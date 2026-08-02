@@ -18,6 +18,7 @@ const loki = readFileSync("docker/loki/local-config.yaml", "utf8");
 const evidenceNginx = readFileSync("docker/evidence/nginx.conf", "utf8");
 const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
 const stagingDeployWorkflow = readFileSync(".github/workflows/staging-deploy.yml", "utf8");
+const secretDeliveryWorkerBootstrap = readFileSync("docker/postgres/init/003_bootstrap_secret_delivery_worker_role.sh", "utf8");
 
 const expectations = {
   "docker-compose.yml": [
@@ -61,9 +62,13 @@ const expectations = {
     "LOGIN_ATTEMPT_LIMITER_STORE: ${LOGIN_ATTEMPT_LIMITER_STORE:-redis}",
     "API_RATE_LIMIT_WINDOW_MS: ${API_RATE_LIMIT_WINDOW_MS:-60000}",
     "API_RATE_LIMIT_MAX: ${API_RATE_LIMIT_MAX:-300}",
+    "TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-${TRAEFIK_PROXY_IP:-172.31.255.2}/32}",
     "IDEMPOTENCY_STORE: ${IDEMPOTENCY_STORE:-postgres}",
     "ADMIN_MFA_MODE: ${ADMIN_MFA_MODE:-off}",
     "ADMIN_MFA_SECRET_ENCRYPTION_KEY: ${ADMIN_MFA_SECRET_ENCRYPTION_KEY:-}",
+    "SECRET_DELIVERY_ENCRYPTION_KEY: ${SECRET_DELIVERY_ENCRYPTION_KEY:-}",
+    "SECRET_DELIVERY_OUTBOX_DATABASE_URL: ${DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL:-}",
+    "SECRET_DELIVERY_WORKER_DB_PASSWORD: ${SECRET_DELIVERY_WORKER_DB_PASSWORD:-}",
     "ADMIN_MFA_RECOVERY_HASH_KEY: ${ADMIN_MFA_RECOVERY_HASH_KEY:-}",
     "ADMIN_MFA_CHALLENGE_SECRET: ${ADMIN_MFA_CHALLENGE_SECRET:-}",
     "ADMIN_MFA_ISSUER: ${ADMIN_MFA_ISSUER:-o-okul}",
@@ -80,6 +85,10 @@ const expectations = {
     "NODE_OPTIONS: ${WORKER_NODE_OPTIONS:---max-old-space-size=1536}",
     "--maxmemory",
     "frontend_net:",
+    "proxy_net:",
+    "internal: true",
+    "subnet: ${DOCKER_PROXY_SUBNET:-172.31.255.0/29}",
+    "ipv4_address: ${API_PROXY_IP:-172.31.255.3}",
     "backend_net:",
     "healthcheck:",
     "condition: service_healthy",
@@ -89,6 +98,10 @@ const expectations = {
     "traefik:v3.7.5",
     "--entrypoints.web.address=:80",
     "--entrypoints.websecure.address=:443",
+    "--entrypoints.web.forwardedheaders.insecure=false",
+    "--entrypoints.websecure.forwardedheaders.insecure=false",
+    "--entrypoints.web.forwardedheaders.trustedips=${TRAEFIK_TRUSTED_FORWARDER_CIDRS:-127.0.0.1/32}",
+    "ipv4_address: ${TRAEFIK_PROXY_IP:-172.31.255.2}",
     "--entrypoints.web.http.redirections.entrypoint.to=websecure",
     "--entrypoints.web.http.redirections.entrypoint.scheme=https",
     "--entrypoints.web.http.redirections.entrypoint.permanent=true",
@@ -111,6 +124,7 @@ const expectations = {
     "traefik.http.routers.api.service=api",
     "traefik.http.routers.api.tls.certresolver=letsencrypt",
     "traefik.http.routers.api.middlewares=api-security-headers",
+    "traefik.docker.network=${DOCKER_PROXY_NETWORK:-o-okul_proxy_net}",
     "traefik.http.middlewares.api-security-headers.headers.stsseconds=15552000",
     "traefik.http.middlewares.api-security-headers.headers.contenttypenosniff=true",
     "traefik.http.middlewares.api-security-headers.headers.framedeny=true",
@@ -124,6 +138,10 @@ const expectations = {
   ],
   "docker-compose.traefik-ip.yml": [
     "traefik:v3.7.5",
+    "--entrypoints.web.forwardedheaders.insecure=false",
+    "--entrypoints.websecure.forwardedheaders.insecure=false",
+    "--entrypoints.web.forwardedheaders.trustedips=${TRAEFIK_TRUSTED_FORWARDER_CIDRS:-127.0.0.1/32}",
+    "ipv4_address: ${TRAEFIK_PROXY_IP:-172.31.255.2}",
     "traefik.http.routers.web-ip.rule=Host(`${SERVER_DOMAIN:-127.0.0.1}`)",
     "traefik.http.routers.web-ip.service=web-ip",
     "traefik.http.routers.web-ip.tls=true",
@@ -154,6 +172,8 @@ const expectations = {
     "service: api",
     "image: ${API_IMAGE:-o-okul-api}",
     "ports: !reset []",
+    "ipv4_address: ${RATE_LIMIT_SMOKE_EGRESS_IP:-172.31.255.4}",
+    "traefik.docker.network=${DOCKER_PROXY_NETWORK:-o-okul_proxy_net}",
     "traefik.http.routers.api-rate-limit-shard-ip.rule=Host(`${SERVER_DOMAIN:-127.0.0.1}`) && PathPrefix(`/__rate-limit-shard`)",
     "traefik.http.routers.api-rate-limit-shard-ip.service=api-rate-limit-shard-ip",
     "traefik.http.routers.api-rate-limit-shard-ip.middlewares=api-rate-limit-shard-strip,api-rate-limit-shard-security-headers",
@@ -265,6 +285,7 @@ const expectations = {
     "docker-compose.observability.yml",
     "docker/evidence",
     "docker/postgres/init",
+    "003_bootstrap_secret_delivery_worker_role.sh",
     "scp -i ~/.ssh/staging_deploy_key",
     "GHCR_READ_TOKEN",
     "GHCR_READ_TOKEN: ${{ github.token }}",
@@ -319,6 +340,12 @@ const expectations = {
     "CMD [\"node\", \"apps/worker/dist/main.js\"]",
     "CMD [\"node\", \"apps/queue-board/dist/main.js\"]",
   ],
+  "docker/postgres/init/003_bootstrap_secret_delivery_worker_role.sh": [
+    "SECRET_DELIVERY_WORKER_DB_PASSWORD is required",
+    "CREATE ROLE secret_delivery_worker LOGIN",
+    "ALTER ROLE secret_delivery_worker PASSWORD",
+    "GRANT CONNECT ON DATABASE",
+  ],
 };
 
 const files = {
@@ -340,6 +367,7 @@ const files = {
   Dockerfile: dockerfile,
   ".github/workflows/ci.yml": workflow,
   ".github/workflows/staging-deploy.yml": stagingDeployWorkflow,
+  "docker/postgres/init/003_bootstrap_secret_delivery_worker_role.sh": secretDeliveryWorkerBootstrap,
 };
 
 const failures = [];

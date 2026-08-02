@@ -373,6 +373,12 @@ const expectedTenantCompositeRelations = [
   "StudentEnrollment.class",
   "Student.class",
   "Student.responsibleTeacher",
+  "MembershipCampusScope.membership",
+  "MembershipCampusScope.campus",
+  "LicenseUsage.licenseTerm",
+  "Employee.accountUser",
+  "Teacher.employee",
+  "StudentContact.student",
 ];
 const expectedTenantFkInsertRejects = expectedTenantCompositeRelations.map((relation) => `${relation} cross tenant insert`);
 const liveStatusGates = [
@@ -3364,8 +3370,8 @@ function requireSummaryRateLimit(report, failures) {
     requireObjectString(
       loginAttemptLimiter,
       failures,
-      "productionEvidenceSummary.summary.reports.rateLimit.loginAttemptLimiter.nationalIdHash",
-      "nationalIdHash",
+      "productionEvidenceSummary.summary.reports.rateLimit.loginAttemptLimiter.loginNameHash",
+      "loginNameHash",
     );
     requireObjectIntegerAtLeast(
       loginAttemptLimiter,
@@ -3397,8 +3403,8 @@ function requireSummaryRateLimit(report, failures) {
     requireObjectTrue(
       loginAttemptLimiter,
       failures,
-      "productionEvidenceSummary.summary.reports.rateLimit.loginAttemptLimiter.nationalIdAndIpScoped",
-      "nationalIdAndIpScoped",
+      "productionEvidenceSummary.summary.reports.rateLimit.loginAttemptLimiter.tenantAndLoginNameAndIpScoped",
+      "tenantAndLoginNameAndIpScoped",
     );
     requireObjectTrue(
       loginAttemptLimiter,

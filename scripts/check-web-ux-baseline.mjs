@@ -288,7 +288,8 @@ requireTokens("apps/web/e2e-next/a11y-next.spec.ts", [
   'await page.goto("/login")',
   'getByRole("form", { name: "Giriş formu" })',
   'loginForm.getByRole("textbox", { name: /E-posta/ })',
-  'loginForm.getByLabel("Kurum kodu")).toHaveCount(0)',
+  'loginForm.getByLabel("Kurum Kodu")).toBeVisible()',
+  'tenantLoginForm.getByLabel("Kurum Kodu")).toHaveCount(0)',
   'loginForm.getByLabel("Kullanıcı Adı")',
   'loginForm.getByLabel("Şifre", { exact: true })',
   'getByRole("button", { name: "Giriş yap" })',
@@ -334,6 +335,7 @@ requireTokens("apps/web/app/(auth)/login/page.tsx", [
 requireTokens("apps/web/app/(auth)/tenant-login-page.tsx", [
   'import { Button, Field, Input, SegmentedControl, Select } from "@o-okul/ui";',
   'aria-label="Giriş formu"',
+  '<Field label="Kurum Kodu">',
   '<Field label="Kullanıcı Adı">',
   '<Field label="Şifre">',
   '<Field label="Kurum">',
@@ -348,9 +350,10 @@ requireTokens("apps/web/e2e-next/login-selection-next.spec.ts", [
   'await page.goto("/login")',
   'page.getByLabel("Kullanıcı Adı")',
   'page.getByLabel("Şifre", { exact: true })',
+  'page.getByLabel("Kurum Kodu")',
   'status: "TENANT_SELECTION_REQUIRED"',
-  'page.getByLabel("Kurum")',
-  'expect(loginBody).not.toHaveProperty("tenantSlug")',
+  'page.getByRole("combobox", { name: "Kurum", exact: true })',
+  'expect(loginBody).toEqual({ tenantSlug: "dna-egitim", loginName: "admin-a@example.test", password: "password" })',
   'expect(selectionBody).toEqual({ selectionToken: "selection-token", tenantId: "tenant-b" })',
 ]);
 
@@ -458,16 +461,15 @@ requireNoTokens("apps/web/app/(app)/kurum/kurum-dashboard.tsx", [
 ]);
 
 requireTokens("apps/web/e2e-next/list-url-state-next.spec.ts", [
-  "kullanıcı rol taslağını kaydetmeden mutasyona göndermez ve kayıttan sonra temizler",
+  "legacy kullanıcı listesini salt okunur tutup canonical çalışan yönetimine yönlendirir",
   "kullanıcı ekranı davet tokenı göstermeden PII maskesini korur",
   "kurum kişi yönetimi ekranları mobil ve tablet operasyon sözleşmesini korur",
   'getByRole("region", { exact: true, name: "Kullanıcı operasyon özeti" })',
-  'adminRoles.locator(".next-role-grid--compact .uh-checkbox")).toHaveCount(2)',
-  'getByRole("checkbox", { name: /Kurum admin/ })',
-  'userDialog.locator(".next-role-fieldset .uh-checkbox")).toHaveCount(2)',
-  "Kullanıcının kurum yönetim kapsamını seç.",
   'getByLabel("Admin Kullanıcı rolleri", { exact: true })',
-  "Kaydedilmemiş rol değişikliği",
+  'adminRoles.getByRole("checkbox")).toHaveCount(0)',
+  "expect(captured.roleUpdates).toEqual([])",
+  'getByRole("button", { name: /rollerini kaydet/u })).toHaveCount(0)',
+  'getByRole("link", { name: "Çalışan erişimlerini yönet" })',
   'getByRole("button", { name: "Davet oluştur" })).toHaveCount(0)',
   'getByLabel("Son aktivasyon tokenı")).toHaveCount(0)',
   "activation-token-created-secret",
@@ -2364,32 +2366,29 @@ requireTokens("apps/web/app/(app)/kurum/veliler/guardians-page.tsx", [
 ]);
 
 requireTokens("apps/web/app/(app)/kurum/kullanicilar/users-page.tsx", [
-  "Checkbox,",
-  "RoleCheckboxGrid",
-  "roleDescriptions",
-  "toggleRoleSelection",
+  "StatusBadge,",
+  "tenantRoleLabel",
   'density="compact"',
-  "next-role-grid next-role-grid--compact",
-  "next-role-grid",
-  'className="next-role-fieldset__hint"',
-  "Tüm kurum operasyonları",
-  "Akademik ve destek işlemleri",
-  "Atanmış sınıf ve dersler",
-  "Öğrenci portalı",
-  "Veli portalı",
-  "Kullanıcının kurum yönetim kapsamını seç.",
-  'mobileLabel: "Kaydet"',
+  "next-role-checks",
+  "Legacy liste",
+  "Yazma kapalı",
+  "Çalışan erişimlerini yönet",
+  'href="/kurum/calisanlar"',
+  "Bu geçiş listesi yalnız mevcut hesapları gösterir.",
   'mobilePriority: "primary"',
   'mobilePriority: "secondary"',
-  "selectedRoles={getDraftRoles(user)}",
-  "selectedRoles={userForm.roles}",
-  "onToggle={(role) => toggleRole(user.id, role)}",
+  "maskEmail(user.email)",
 ]);
 
 requireNoTokens("apps/web/app/(app)/kurum/kullanicilar/users-page.tsx", [
   "<label key={role.value}>",
   'type="checkbox"',
   "current.roles.includes(role.value)",
+  "RoleCheckboxGrid",
+  "toggleRole(",
+  "saveRoles(",
+  "Kullanıcı ekle",
+  "TC + telefon girişi",
   '<div className="next-invitation-context" aria-label="Davet bağlamı">',
   "<span>Davet hedefi</span>",
 ]);
@@ -5226,8 +5225,8 @@ function validateRouteFamilySmokeContract() {
   const manifestRoutes = [...manifestSource.matchAll(/^\s*route\("([^"]+)"/gm)].map((match) => match[1]);
   const duplicateRoutes = manifestRoutes.filter((route, index) => manifestRoutes.indexOf(route) !== index);
   const fileSystemRoutes = collectRoutePageTemplates("apps/web/app").sort();
-  if (manifestRoutes.length !== 73) {
-    failures.push(`${path} route manifest must contain exactly 73 route tests; found ${manifestRoutes.length}.`);
+  if (manifestRoutes.length !== 78) {
+    failures.push(`${path} route manifest must contain exactly 78 route tests; found ${manifestRoutes.length}.`);
   }
   if (duplicateRoutes.length > 0) {
     failures.push(`${path} route manifest contains duplicate routes: ${[...new Set(duplicateRoutes)].join(", ")}.`);
@@ -5237,8 +5236,8 @@ function validateRouteFamilySmokeContract() {
   }
 
   const primaryTaskCount = manifestSource.match(/\{ role: "(?:button|form|link|region)", name: "[^"]+" \}/g)?.length ?? 0;
-  if (primaryTaskCount !== 73) {
-    failures.push(`${path} must give all 73 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
+  if (primaryTaskCount !== 78) {
+    failures.push(`${path} must give all 78 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
   }
 
   const viewportStart = source.indexOf("const routeViewports = [");

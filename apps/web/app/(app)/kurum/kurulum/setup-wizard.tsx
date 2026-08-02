@@ -1528,7 +1528,7 @@ function teacherImportFieldLabel(field: string) {
 }
 
 function studentImportErrorMessage(dryRun: StudentImportDryRunResult) {
-  const quotaError = dryRun.errors.find((error) => error.code === "STUDENT_QUOTA_EXCEEDED");
+  const quotaError = dryRun.errors.find((error) => error.code === "ACTIVE_STUDENT_LIMIT_REACHED");
   if (quotaError && dryRun.quota) {
     return `Öğrenci dosyası kota sınırını aşıyor. Sınır: ${dryRun.quota.limit}, mevcut: ${dryRun.quota.current}, dosyada: ${dryRun.quota.incoming}.`;
   }

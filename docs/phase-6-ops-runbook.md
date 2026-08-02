@@ -61,7 +61,8 @@ Kontroller:
   çalıştırılır; smoke çıktısı `RATE_LIMIT_SMOKE_EVIDENCE_FILE` altında `rate_limit_redis_smoke`
   artifact'i olarak saklanır ve `RATE_LIMIT_EVIDENCE_TARGET=file:///... pnpm rate-limit:check` ile
   doğrulanır. Artifact global API limiter ve login attempt limiter için Redis store, paylaşılan
-  pencere, `LOGIN_LOCKED`/`RATE_LIMITED` 429 ve T.C. kimlik hash'i + IP kapsamını göstermeli; ham IP/T.C. kimlik yerine
+  pencere, `LOGIN_LOCKED`/`RATE_LIMITED` 429 ve tenant + kullanıcı adı hash'i + IP kapsamını göstermeli; ham IP,
+  kurum kodu veya kullanıcı adı yerine
   SHA-256 hash, tam `commandsPassed=["pnpm rate-limit:smoke", "pnpm rate-limit:check"]` ve boş
   `gaps` listesi taşımalıdır.
   `RATE_LIMIT_EVIDENCE_TARGET`, `instances[].baseUrl` ve `evidenceReferences[]` userinfo/query/fragment
@@ -85,15 +86,25 @@ Kontroller:
   `https://<staging-host>/__rate-limit-shard/api/v1/__rate-limit-smoke`, ikinci login URL ise
   `https://<staging-host>/__rate-limit-shard/api/v1/auth/login` olmalıdır. Bu public TLS/first-gates
   kanıtı değildir; yalnız Redis limiter paylaşımını doğrular.
-  Traefik `X-Forwarded-For` değerini gerçek edge IP'sine sabitliyorsa, API limiter fazının login
-  limiter fazını kirletmemesi için `RATE_LIMIT_SMOKE_RESET_API_LIMIT_BEFORE_API=true`,
+  `TRAEFIK_PROXY_IP`, `API_PROXY_IP` ve `RATE_LIMIT_SMOKE_EGRESS_IP` aynı dar `proxy_net`
+  içinde farklı sabit IP'ler olmalı; `TRUSTED_PROXY_CIDRS` yalnız Traefik IP'sini `/32` ile
+  içerir. Traefik güvenilmeyen istemci `X-Forwarded-For`/`X-Real-IP` başlıklarını güven kaynağı
+  yapmaz; smoke da bu başlıkları göndermez. Komuttan önce `RATE_LIMIT_SMOKE_CLIENT_IP` ve
+  `RATE_LIMIT_LOGIN_SMOKE_CLIENT_IP` değerlerine smoke çalıştırıcısının gerçek dış IP'si girilir;
+  artifact'te yalnız hash'i kalır. API limiter fazının login limiter fazını kirletmemesi için
+  `RATE_LIMIT_SMOKE_RESET_API_LIMIT_BEFORE_API=true`,
   `RATE_LIMIT_SMOKE_RESET_API_LIMIT_BEFORE_LOGIN=true`,
   `RATE_LIMIT_SMOKE_API_LIMIT_RESET_IP=<edge-ip>` ve `REDIS_URL=redis://127.0.0.1:6379` kullanılır.
   Bu izolasyon yalnız API rate-limit Redis key'ini siler; login kilidi kanıtı yine iki API
   container arasında gerçek Redis paylaşımıyla üretilir.
-  `differentIpNotLocked` negatifi için `RATE_LIMIT_LOGIN_SMOKE_OTHER_IP_URL=http://127.0.0.1:3100/api/v1/auth/login`
-  kullanılabilir; bu lokal URL sadece farklı IP kapsamını ayırır, iki instance lock kanıtı HTTPS
-  Traefik URL'lerinden gelmeye devam eder.
+  `differentIpNotLocked` negatifi için smoke, sabit `RATE_LIMIT_SMOKE_EGRESS_IP` kullanan
+  `api-rate-limit-shard` container'ından sabit `API_PROXY_IP` adresine doğrudan istek yapar.
+  İsteklerden önce `docker network inspect`, çalışan `traefik`, `api` ve `api-rate-limit-shard`
+  container'larının bu üç sabit `proxy_net` IP'sine sahip olduğunu doğrular; artifact'e yalnız ikinci
+  çıkış IP'sinin hash'i yazılır. Bu gerçek ikinci ağ çıkışı, localhost veya sahte forwarded başlığıyla
+  elde edilen kanıtın yerini alır.
+  Login smoke ayrıca mevcut/aktif kurum kodunu `RATE_LIMIT_LOGIN_SMOKE_TENANT_SLUG` ile alır;
+  `RATE_LIMIT_LOGIN_SMOKE_LOGIN_NAME` verilmezse o koşuya özel, mevcut olmayan bir kullanıcı adı üretir.
 - Ödeme planı, taksit yazma, öğrenci import commit, öğrenci bireysel/toplu kayıt yenileme ve
   transfer, sınav create/publish/participant, parser config approval, optik template create/apply,
   cevap anahtarı create/import/publish, raw import upload/evaluation enqueue/quarantine resolve,
@@ -349,6 +360,153 @@ Minimum kanıt içeriği:
   içeremez; bu gevşetme yalnız template kontrolünde `IDENTITY_MIGRATION_ALLOW_EXAMPLE_EVIDENCE=1`
   ile açılır.
 
+## Account Management Migration Preflight
+
+Kanıt sözleşmesi: `docs/evidence-templates/account-management-preflight.example.json`.
+
+```sh
+ACCOUNT_MANAGEMENT_PREFLIGHT_TARGET=file:///path/to/account-management-preflight.json \
+pnpm account-management:preflight:check
+```
+
+Gerçek staging artifact üretimi:
+
+```sh
+STAGING_ENVIRONMENT=staging \
+DIRECT_DATABASE_URL="..." \
+ACCOUNT_MANAGEMENT_PREFLIGHT_OUTPUT=artifacts/staging/reports/account-management-preflight.json \
+ACCOUNT_MANAGEMENT_GUARDIAN_CLASSIFICATION=FIXTURE_ONLY \
+ACCOUNT_MANAGEMENT_GUARDIAN_EVIDENCE_REFERENCE="..." \
+pnpm account-management:preflight:generate
+```
+
+- Generator repeatable-read/read-only transaction kullanır ve yalnız sayısal envanter yazar.
+- Tenant içi case-insensitive e-posta çakışması, birden çok açık enrollment, geçersiz rol
+  kombinasyonu, orphan profil/membership veya doğrulanmamış guardian verisi `BLOCKED` üretir.
+- Öğretmen→Employee eksikleri backfill kapsamını sayar; additive migration'ı tek başına bloklamaz.
+- Guardian kaydı varsa `FIXTURE_ONLY` sınıflandırması ve gerçek veri sahibi/onay referansı zorunludur.
+- Artifact ham e-posta, telefon, T.C., ad, kullanıcı veya tenant ID içermez.
+
+### Account management dual-write geçişi
+
+- Runtime okuma otoritesi PR-4 kesimine kadar legacy `User.email` ve `TenantMembership.role`
+  alanlarında kalır.
+- Yeni tenant hesabı yazımları aynı transaction içinde `emailNormalized`, `loginName`,
+  `loginNameNormalized`, `passwordHashVersion` ve `accountStatus` alanlarını da doldurur.
+- E-posta global kimlik değildir. Aynı normalize e-posta farklı tenantlarda ayrı hesaplarda
+  kullanılabilir; tekillik yalnız `(tenantId, emailNormalized)` sınırında uygulanır.
+- Legacy çoklu rol satırları geçiş süresince korunur. Yalnız bir satır canonical `staffRole`,
+  `hasTeacherPersona` veya `hasStudentPersona` değerlerini taşır; diğer legacy satırlar shadow
+  alanlarında boş/false kalır. Guardian satırı PR-7'ye kadar legacy-only kalır.
+- Rol değişiminde canonical satır yeniden seçilir; `TenantMembership.version` ve
+  `User.membershipVersion` aynı transaction içinde artırılır. Böylece ilerideki session cutover
+  için sürüm monotonluğu korunur.
+- Rollback, yeni alanları okumayı açmadan legacy okuma yolunda kalmaktır; dual-write alanlarının
+  silinmesi veya eski rol satırlarının drop edilmesi bu dilimde yapılmaz.
+
+### Account management PR-4 backfill ve parity
+
+Kanıt sözleşmesi: `docs/evidence-templates/account-management-backfill.example.json`.
+
+Önce salt-okunur dry-run çalıştırılır:
+
+```sh
+STAGING_ENVIRONMENT=staging \
+DIRECT_DATABASE_URL="..." \
+ACCOUNT_MANAGEMENT_BACKFILL_MODE=DRY_RUN \
+ACCOUNT_MANAGEMENT_BACKFILL_OUTPUT=artifacts/staging/reports/account-management-backfill-dry-run.json \
+ACCOUNT_MANAGEMENT_OWNER_DECISIONS_TARGET=file:///secure/path/account-owner-decisions.json \
+pnpm account-management:backfill
+```
+
+`READY` artifact doğrulandıktan sonra aynı owner kararlarıyla kontrollü APPLY çalıştırılır:
+
+```sh
+STAGING_ENVIRONMENT=staging \
+DIRECT_DATABASE_URL="..." \
+ACCOUNT_MANAGEMENT_BACKFILL_MODE=APPLY \
+ACCOUNT_MANAGEMENT_BACKFILL_CONFIRM=apply-pr4-backfill \
+ACCOUNT_MANAGEMENT_BACKFILL_OUTPUT=artifacts/staging/reports/account-management-backfill.json \
+ACCOUNT_MANAGEMENT_OWNER_DECISIONS_TARGET=file:///secure/path/account-owner-decisions.json \
+pnpm account-management:backfill
+```
+
+- Owner karar dosyası yalnız `file://` kabul eder; her karar `tenantId`, aktif admin `userId` ve
+  gerçek `verificationReference` taşır. Bu dosya PII/kimlik içerdiği için evidence artifact'ına
+  veya repoya eklenmez.
+- Mevcut `TENANT_OWNER` korunur. Owner yoksa MFA/parola değişimiyle doğrulanmış ilk aktif admin
+  otomatik seçilir; bu kanıt da yoksa karar dosyası olmadan işlem `BLOCKED` olur.
+- APPLY serializable transaction ve advisory lock kullanır. User normalize alanları, tek canonical
+  membership/persona gölgesi, Teacher→Employee bağı ve SYSTEM_ADMIN için PlatformAccount/Session
+  gölgesi aynı transaction içinde tamamlanır.
+- Parity; login normalize alanları, membership/persona, aktif session membershipVersion/legacy rol,
+  platform hesap/oturum ve çalışan bağlarını sayısal olarak doğrular. Ham e-posta, telefon, T.C.,
+  ad, tenant veya kullanıcı ID artifact'a yazılmaz.
+- Runtime cutover yalnız `PASS` backfill artifact'ından sonra başlar. Login
+  `(tenantId, loginNameNormalized)` okur ve yalnız aktif hesap + aktif membership + aktif/geçerli
+  lisanslı tenant birleşimini kabul eder. T.C. kimlik login tanımlayıcısı değildir.
+- Auth sorgusu tek canonical `staffRole`/persona gölge satırını okur. PR-4 boyunca legacy session rol
+  sonucunu yalnız semantik parity doğrulamasından sonra korur; duplicate canonical satır, membership
+  version sapması veya canonical/legacy rol sapması `AUTH_MEMBERSHIP_PARITY_MISMATCH` ile fail-closed olur.
+- Access ve refresh doğrulaması güncel membership durumunu, sürümünü ve rol projeksiyonunu Postgres'ten
+  tekrar okur. Suspend/ended membership veya değişmiş sürüm/rol, session revoke başarısız olsa bile iki
+  token türünü de geçersiz kılar.
+- Login isteği artık tam olarak `tenantSlug + loginName + password` olduğu için web ve API aynı release
+  SHA'dan birlikte deploy edilmelidir. Yeni web eski API'ye veya eski web cutover API'ye açılmaz.
+- PR-4 rollback önceki web+API image çiftidir. Additive kolonlar ve legacy membership satırları yerinde
+  kalır; backfill tersine çevrilmez, global e-posta unique geri getirilmez ve canonical alanlar drop edilmez.
+  Rollback sonrasında yeniden cutover öncesi backfill checker ve aktif session legacy-role parity çalıştırılır.
+- Legacy rol satırları ile compatibility seçim cevabı, sıfır parity mismatch görülen 14 günlük gözlemden
+  önce kaldırılmaz. Exact-SHA staging login/access/refresh, çalışan image tag'leri ve rollback kanıtı olmadan
+  bu kesit yalnız local/statik kabul edilir.
+
+### Account management PR-5 LicenseTerm backfill ve runtime kesimi
+
+Kanıt sözleşmesi: `docs/evidence-templates/license-term-backfill.example.json`.
+
+Önce salt-okunur dry-run çalıştırılır:
+
+```sh
+STAGING_ENVIRONMENT=staging \
+DIRECT_DATABASE_URL="..." \
+LICENSE_TERM_BACKFILL_MODE=DRY_RUN \
+LICENSE_TERM_BACKFILL_OUTPUT=artifacts/staging/reports/license-term-backfill-dry-run.json \
+pnpm account-management:license-backfill
+```
+
+`READY` artifact doğrulandıktan sonra kontrollü APPLY çalıştırılır:
+
+```sh
+STAGING_ENVIRONMENT=staging \
+DIRECT_DATABASE_URL="..." \
+LICENSE_TERM_BACKFILL_MODE=APPLY \
+LICENSE_TERM_BACKFILL_CONFIRM=apply-pr5-license-term-backfill \
+LICENSE_TERM_BACKFILL_OUTPUT=artifacts/staging/reports/license-term-backfill.json \
+pnpm account-management:license-backfill
+```
+
+- Başlangıç/bitiş/kota snapshot'ı eksik veya geçersizse işlem tahmin üretmez ve `BLOCKED` olur.
+- APPLY serializable transaction ve advisory lock kullanır; yalnız hiç dönemi olmayan uygun tenantlar
+  için bir başlangıç `LicenseTerm` kaydı oluşturur.
+- Artifact yalnız sayısal toplamlar ve blocker kodları taşır; tenant/kullanıcı ID'si veya PII yazmaz.
+- Runtime kesimi yalnız `PASS` artifact'ından sonra açılır. ACTIVE normal, bitişten sonraki ilk 15 günlük
+  yarı-açık aralık READ_ONLY, 15-90. günler FROZEN ve 91. gün EXPIRED olur.
+- Login ve refresh yalnız ACTIVE/READ_ONLY durumda açılır. READ_ONLY yalnız GET/HEAD/OPTIONS kabul eder;
+  kanonik dönem eksikliği veya legacy ayna sapması fail-closed olur.
+- Yeni dönem `POST /api/v1/tenants/{id}/license-terms` ile eklenir. Eski tenant PATCH sözleşmesi plan,
+  lisans tarihi ve kota alanlarını artık kabul etmez; bu alanlar yalnız rollback aynasıdır.
+- Canonical aktif öğrenci; silinmemiş `Student.status=ACTIVE` ve tam bir açık
+  `StudentEnrollment.status=ACTIVE` kaydıdır. DB trigger'ı sınır aşımını transaction içinde
+  `ACTIVE_STUDENT_LIMIT_REACHED` ile reddeder, günlük `LicenseUsage.currentStudentCount` değerini
+  ve monotonik `peakStudentCount` değerini yeniler.
+- `20260801210000_enforce_active_student_license_usage` migration'ından önce account-management
+  preflight çıktısında `multipleOpenEnrollments.students=0` olmalıdır; aksi halde migration uygulanmaz.
+- Canonical `POST /api/v1/tenants` onboarding isteği `Idempotency-Key` ister ve tenant, kampüsler, ilk
+  `LicenseTerm`, ilk `TENANT_OWNER` Employee/membership kaydı ile aktivasyon outbox'ını tek transaction'da
+  oluşturur. `PlatformIdempotencyKey` aynı actor + key + gövdeyi replay eder; farklı gövdeyi reddeder.
+- Bu sözleşme local/statik veya staging artifact'ı birbirinden ayırır. Exact-SHA staging deploy, gerçek
+  backfill PASS, login/read-only/frozen smoke ve rollback kanıtı olmadan canlı capability sayılmaz.
+
 ## Financial Retention Evidence
 
 Kanıt sözleşmesi: `docs/evidence-templates/financial-retention.example.json`.
@@ -480,7 +638,7 @@ Minimum kanıt içeriği:
 
 - `commandsPassed` içinde `pnpm db:rls:check`, `pnpm db:rls:check:live`,
   `pnpm rls:load:smoke` ve `pnpm rls:live:check` bulunur.
-- `schema.tablesVerified` schema'dan türeyen 57 tenant tablosunu kapsar; `AnnouncementReceipt`,
+- `schema.tablesVerified` schema'dan türeyen 62 tenant tablosunu kapsar; `AnnouncementReceipt`,
   `BackupRestoreJob`, `HomeworkMaterialFile`, `SupportTicketAttachment` ve `AuditLog` bu listenin
   içinde görünmelidir.
 - `isolation.crossTenantReadRows=0`, `withCheckRejects` yanlış tenant yazım/referans negatiflerini
@@ -1014,6 +1172,8 @@ Live onboarding smoke preflight:
 ```sh
 NEXT_E2E_LIVE_ONBOARDING=1 \
 LIVE_ONBOARDING_EVIDENCE_PATH=artifacts/staging/live-onboarding-input.json \
+LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT=https://mail-evidence.staging.example/messages/latest \
+LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN=__SECRET__ \
 pnpm live:onboarding:evidence-check
 ```
 
@@ -1022,6 +1182,8 @@ Smoke komutu aynı preflight'ı tarayıcı açmadan önce otomatik çalıştır�
 ```sh
 NEXT_E2E_LIVE_ONBOARDING=1 \
 LIVE_ONBOARDING_EVIDENCE_PATH=artifacts/staging/live-onboarding-input.json \
+LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT=https://mail-evidence.staging.example/messages/latest \
+LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN=__SECRET__ \
 pnpm live:onboarding:smoke
 ```
 
@@ -1029,6 +1191,9 @@ pnpm live:onboarding:smoke
 adı/slug/plan/koltuk limitini ve opsiyonel kurulum alanlarını exact shape ile taşır. Gerçek staging
 kanıtında `generatedAt` 24 saatten eski olamaz; `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder değerler kabul edilmez;
 dosya lokal temp path (`/tmp`, `/var/tmp`), symlink dosya veya symlink parent zinciri altında olamaz.
+Smoke, ilk yöneticiye gerçekten ulaşan bağlantıyı bearer korumalı HTTPS inbox evidence endpoint'inden
+`recipient`, `purpose=PASSWORD_RESET` ve `createdAfter` ile poll eder; endpoint yalnız `{ "activationUrl": "..." }`
+döndürür ve URL tokenı hiçbir kalıcı evidence çıktısına yazılmaz.
 `pnpm live:onboarding:evidence-contract` bu negatifleri lokal CI'da tarayıcı açmadan korur.
 
 Live UI-worker/report smoke preflight:

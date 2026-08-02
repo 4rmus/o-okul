@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { isIP } from "node:net";
 
 const args = process.argv.slice(2);
 const contractIndex = args.indexOf("--contract");
@@ -51,11 +52,15 @@ function checkContract(file) {
     "WEB_URL",
     "DATABASE_URL",
     "DIRECT_DATABASE_URL",
+    "SECRET_DELIVERY_OUTBOX_DATABASE_URL",
+    "DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL",
+    "SECRET_DELIVERY_WORKER_DB_PASSWORD",
     "JWT_ACCESS_SECRET",
     "STUDENT_PII_ENCRYPTION_KEY",
     "STUDENT_PII_HASH_KEY",
     "ADMIN_MFA_MODE",
     "ADMIN_MFA_SECRET_ENCRYPTION_KEY",
+    "SECRET_DELIVERY_ENCRYPTION_KEY",
     "ADMIN_MFA_RECOVERY_HASH_KEY",
     "ADMIN_MFA_CHALLENGE_SECRET",
     "ADMIN_MFA_ISSUER",
@@ -68,6 +73,13 @@ function checkContract(file) {
     "API_RATE_LIMIT_STORE",
     "API_RATE_LIMIT_WINDOW_MS",
     "API_RATE_LIMIT_MAX",
+    "DOCKER_PROXY_SUBNET",
+    "DOCKER_PROXY_NETWORK",
+    "TRAEFIK_PROXY_IP",
+    "API_PROXY_IP",
+    "RATE_LIMIT_SMOKE_EGRESS_IP",
+    "TRUSTED_PROXY_CIDRS",
+    "TRAEFIK_TRUSTED_FORWARDER_CIDRS",
     "IDEMPOTENCY_STORE",
     "REPORT_PDF_RENDERER",
     "REPORT_PDF_RENDER_TIMEOUT_MS",
@@ -163,13 +175,25 @@ function checkProductionEnv(env) {
   requireHttpsUrl(env, failures, "WEB_URL");
   requireSet(env, failures, "DATABASE_URL");
   requireSet(env, failures, "DIRECT_DATABASE_URL");
+  requireSet(env, failures, "SECRET_DELIVERY_OUTBOX_DATABASE_URL");
+  requireSet(env, failures, "DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL");
   requireDatabaseUrlSafe(env, failures, "DATABASE_URL", ["app:app"], dbTunnelPort);
   requireDatabaseUrlSafe(env, failures, "DIRECT_DATABASE_URL", ["migration:migration"], dbTunnelPort);
+  requireDatabaseUrlSafe(env, failures, "SECRET_DELIVERY_OUTBOX_DATABASE_URL", ["secret_delivery_worker:secret_delivery_worker"], dbTunnelPort);
+  requireDatabaseUrlSafe(env, failures, "DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL", ["secret_delivery_worker:secret_delivery_worker"], dbTunnelPort);
+  requireDatabaseRole(env, failures, "SECRET_DELIVERY_OUTBOX_DATABASE_URL", "secret_delivery_worker");
+  requireDatabaseRole(env, failures, "DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL", "secret_delivery_worker");
+  requireDistinctDatabaseUrls(env, failures, "DATABASE_URL", "SECRET_DELIVERY_OUTBOX_DATABASE_URL");
+  requireDistinctDatabaseUrls(env, failures, "DATABASE_URL", "DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL");
+  requireSecret(env, failures, "SECRET_DELIVERY_WORKER_DB_PASSWORD");
+  requireDatabasePassword(env, failures, "SECRET_DELIVERY_OUTBOX_DATABASE_URL", "SECRET_DELIVERY_WORKER_DB_PASSWORD");
+  requireDatabasePassword(env, failures, "DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL", "SECRET_DELIVERY_WORKER_DB_PASSWORD");
   requireSecret(env, failures, "JWT_ACCESS_SECRET");
   requireSecret(env, failures, "STUDENT_PII_ENCRYPTION_KEY");
   requireSecret(env, failures, "STUDENT_PII_HASH_KEY");
-  requireOneOf(env, failures, "ADMIN_MFA_MODE", ["optional", "required"]);
+  requireEqual(env, failures, "ADMIN_MFA_MODE", "required");
   requireSecret(env, failures, "ADMIN_MFA_SECRET_ENCRYPTION_KEY");
+  requireSecret(env, failures, "SECRET_DELIVERY_ENCRYPTION_KEY");
   requireSecret(env, failures, "ADMIN_MFA_RECOVERY_HASH_KEY");
   requireSecret(env, failures, "ADMIN_MFA_CHALLENGE_SECRET");
   requireSet(env, failures, "ADMIN_MFA_ISSUER");
@@ -183,6 +207,11 @@ function checkProductionEnv(env) {
   if (env.ADMIN_MFA_CHALLENGE_SECRET && env.JWT_ACCESS_SECRET && env.ADMIN_MFA_CHALLENGE_SECRET === env.JWT_ACCESS_SECRET) {
     failures.push("ADMIN_MFA_CHALLENGE_SECRET ve JWT_ACCESS_SECRET farklı olmalı.");
   }
+  for (const key of ["STUDENT_PII_ENCRYPTION_KEY", "ADMIN_MFA_SECRET_ENCRYPTION_KEY"]) {
+    if (env.SECRET_DELIVERY_ENCRYPTION_KEY && env[key] && env.SECRET_DELIVERY_ENCRYPTION_KEY === env[key]) {
+      failures.push(`SECRET_DELIVERY_ENCRYPTION_KEY ve ${key} farklı olmalı.`);
+    }
+  }
   requireEqual(env, failures, "COOKIE_SECURE", "true");
   requireNotContains(env, failures, "COOKIE_DOMAIN", ["localhost", "127.0.0.1"]);
   requireNoPlaceholderValue(env, failures, "COOKIE_DOMAIN");
@@ -195,6 +224,9 @@ function checkProductionEnv(env) {
   requireEqual(env, failures, "API_RATE_LIMIT_STORE", "redis");
   requirePositiveInteger(env, failures, "API_RATE_LIMIT_WINDOW_MS");
   requirePositiveInteger(env, failures, "API_RATE_LIMIT_MAX");
+  requireTrustedProxyCidrs(env, failures, "TRUSTED_PROXY_CIDRS");
+  requireOptionalTrustedProxyCidrs(env, failures, "TRAEFIK_TRUSTED_FORWARDER_CIDRS");
+  requireTrustedProxyTopology(env, failures);
   requireEqual(env, failures, "IDEMPOTENCY_STORE", "postgres");
   requireEqual(env, failures, "REPORT_PDF_RENDERER", "worker");
   requirePositiveInteger(env, failures, "REPORT_PDF_RENDER_TIMEOUT_MS");
@@ -355,6 +387,34 @@ function requireDatabaseUrlSafe(env, failures, key, forbiddenCredentials, allowe
   requireNotContains(env, failures, key, ["localhost", "127.0.0.1", ...forbiddenCredentials]);
 }
 
+function requireDatabaseRole(env, failures, key, expectedRole) {
+  try {
+    const url = new URL(env[key] ?? "");
+    if (!["postgres:", "postgresql:"].includes(url.protocol) || decodeURIComponent(url.username) !== expectedRole) {
+      failures.push(`${key} ${expectedRole} rolünü kullanmalı.`);
+    }
+  } catch {
+    failures.push(`${key} geçerli bir PostgreSQL URL olmalı.`);
+  }
+}
+
+function requireDistinctDatabaseUrls(env, failures, primaryKey, dedicatedKey) {
+  if (env[primaryKey] && env[dedicatedKey] && env[primaryKey] === env[dedicatedKey]) {
+    failures.push(`${dedicatedKey} ${primaryKey} ile aynı olamaz.`);
+  }
+}
+
+function requireDatabasePassword(env, failures, databaseKey, passwordKey) {
+  try {
+    const password = decodeURIComponent(new URL(env[databaseKey] ?? "").password);
+    if (env[passwordKey] && password !== env[passwordKey]) {
+      failures.push(`${databaseKey} parolası ${passwordKey} ile eşleşmeli.`);
+    }
+  } catch {
+    // URL biçimi requireDatabaseRole tarafından raporlanır.
+  }
+}
+
 function isAllowedStagingEvidenceTunnelDatabaseUrl(value, port) {
   try {
     const url = new URL(value);
@@ -398,6 +458,82 @@ function requirePositiveInteger(env, failures, key) {
   if (!Number.isInteger(value) || value <= 0) {
     failures.push(`${key} pozitif tam sayı olmalı.`);
   }
+}
+
+function requireTrustedProxyCidrs(env, failures, key) {
+  const values = (env[key] ?? "").split(",").map((value) => value.trim()).filter(Boolean);
+  if (values.length === 0) {
+    failures.push(`${key} boş bırakılamaz.`);
+    return;
+  }
+
+  for (const value of values) {
+    const [address, rawPrefix, extra] = value.split("/");
+    const family = address ? isIP(address) : 0;
+    const maxPrefix = family === 4 ? 32 : family === 6 ? 128 : 0;
+    const prefix = Number(rawPrefix);
+    if (!family || !rawPrefix || extra || !Number.isInteger(prefix) || prefix !== maxPrefix) {
+      failures.push(`${key} yalnız sabit proxy IP'lerini /32 veya /128 ile içermeli.`);
+      return;
+    }
+  }
+}
+
+function requireOptionalTrustedProxyCidrs(env, failures, key) {
+  if (!(env[key] ?? "").trim()) return;
+  requireTrustedProxyCidrs(env, failures, key);
+}
+
+function requireTrustedProxyTopology(env, failures) {
+  const subnet = parseProxySubnet(env.DOCKER_PROXY_SUBNET);
+  if (!subnet) {
+    failures.push("DOCKER_PROXY_SUBNET kanonik bir IPv4 /29 ağı olmalı.");
+    return;
+  }
+  if (env.DOCKER_PROXY_NETWORK !== "o-okul_proxy_net") {
+    failures.push("DOCKER_PROXY_NETWORK o-okul_proxy_net olmalı.");
+  }
+
+  const traefik = requireProxyNetworkIp(env, failures, "TRAEFIK_PROXY_IP", subnet);
+  const api = requireProxyNetworkIp(env, failures, "API_PROXY_IP", subnet);
+  const rateLimitShard = requireProxyNetworkIp(env, failures, "RATE_LIMIT_SMOKE_EGRESS_IP", subnet);
+  const addresses = [traefik, api, rateLimitShard].filter(Boolean);
+  if (addresses.length === 3 && new Set(addresses.map((address) => address.value)).size !== addresses.length) {
+    failures.push("TRAEFIK_PROXY_IP, API_PROXY_IP ve RATE_LIMIT_SMOKE_EGRESS_IP birbirinden farklı olmalı.");
+  }
+  if (traefik && env.TRUSTED_PROXY_CIDRS !== `${traefik.raw}/32`) {
+    failures.push("TRUSTED_PROXY_CIDRS yalnız TRAEFIK_PROXY_IP/32 ile eşleşmeli.");
+  }
+}
+
+function parseProxySubnet(value) {
+  const [address, rawPrefix, extra] = (value ?? "").split("/");
+  const prefix = Number(rawPrefix);
+  const network = parseIpv4(address);
+  if (network === undefined || extra || !rawPrefix || !Number.isInteger(prefix) || prefix !== 29) {
+    return undefined;
+  }
+
+  const size = 2 ** (32 - prefix);
+  if (network % size !== 0) {
+    return undefined;
+  }
+  return { first: network, last: network + size - 1 };
+}
+
+function requireProxyNetworkIp(env, failures, key, subnet) {
+  const raw = (env[key] ?? "").trim();
+  const value = parseIpv4(raw);
+  if (value === undefined || value <= subnet.first || value >= subnet.last) {
+    failures.push(`${key} DOCKER_PROXY_SUBNET içindeki kullanılabilir sabit IPv4 adresi olmalı.`);
+    return undefined;
+  }
+  return { raw, value };
+}
+
+function parseIpv4(value) {
+  if (isIP(value) !== 4) return undefined;
+  return value.split(".").reduce((result, part) => result * 256 + Number(part), 0);
 }
 
 function requireNumberBetween(env, failures, key, min, max) {

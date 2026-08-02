@@ -14,6 +14,7 @@ import type {
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
+import { hasCapability } from "../rbac/role-capabilities.js";
 import { requiredText } from "../shared/required-text.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
 import { type CampusStore, campusStoreToken } from "../school/campus-store.js";
@@ -50,14 +51,17 @@ export class PaymentService {
   ) {}
 
   async list(context: RequestContext, filters: PaymentPlanListFilters = {}): Promise<PaymentPlanWithInstallmentsRecord[]> {
-    this.assertTenantAdmin(context);
+    this.assertFinanceManage(context);
     const resolvedFilters = resolvePaymentPlanFilters(filters);
+    const campusScopeFilters = this.financeCampusScopeFilters(context);
     if (resolvedFilters.studentId) {
       const student = await this.findStudentForTenant(context, resolvedFilters.studentId);
-      return filterTenantResources(context, await this.store.listByStudent(student.id, resolvedFilters)).filter((record) => !record.deletedAt);
+      return filterTenantResources(context, await this.store.listByStudent(student.id, { ...resolvedFilters, ...campusScopeFilters }))
+        .filter((record) => !record.deletedAt);
     }
 
-    return filterTenantResources(context, await this.store.list(resolvedFilters)).filter((record) => !record.deletedAt);
+    return filterTenantResources(context, await this.store.list({ ...resolvedFilters, ...campusScopeFilters }))
+      .filter((record) => !record.deletedAt);
   }
 
   async listCurrentGuardianStudent(
@@ -97,9 +101,10 @@ export class PaymentService {
   }
 
   private async createPaymentPlan(context: RequestContext, input: Partial<PaymentPlanCreateRequest>): Promise<PaymentPlanWithInstallmentsRecord> {
-    this.assertTenantAdmin(context);
+    this.assertFinanceManage(context);
     const student = await this.findStudentForTenant(context, requiredText(input.studentId, "PAYMENT_PLAN_STUDENT_REQUIRED"));
     const paymentContext = await this.resolvePaymentContext(student.tenantId, student, input);
+    this.assertPaymentCampusScope(context, paymentContext);
     const installments = resolveInstallments(input.installments);
     const record = await this.store.create({
       plan: {
@@ -153,7 +158,7 @@ export class PaymentService {
     installmentId: string,
     input: PaymentInstallmentUpdateRequest,
   ): Promise<PaymentPlanWithInstallmentsRecord> {
-    this.assertTenantAdmin(context);
+    this.assertFinanceManage(context);
     const existingPlan = await this.findPlanForTenant(context, planId);
     const existingInstallment = existingPlan.installments.find((installment) => installment.id === installmentId);
     if (!existingInstallment) {
@@ -197,7 +202,7 @@ export class PaymentService {
   }
 
   async listTransactions(context: RequestContext, planId: string): Promise<PaymentTransactionRecord[]> {
-    this.assertTenantAdmin(context);
+    this.assertFinanceManage(context);
     const plan = await this.findPlanForTenant(context, planId);
     return (await this.store.listTransactions(plan.id)).map(toPublicPaymentTransaction);
   }
@@ -220,7 +225,7 @@ export class PaymentService {
     planId: string,
     input: PaymentTransactionCreateRequest,
   ): Promise<PaymentTransactionRecord> {
-    this.assertTenantAdmin(context);
+    this.assertFinanceManage(context);
     const plan = await this.findPlanForTenant(context, planId);
     const installment = input.installmentId ? this.findPlanInstallment(plan, input.installmentId) : undefined;
     const record = await this.store.createTransaction({
@@ -274,7 +279,7 @@ export class PaymentService {
     transactionId: string,
     input: PaymentTransactionVoidRequest,
   ): Promise<PaymentTransactionRecord> {
-    this.assertTenantAdmin(context);
+    this.assertFinanceManage(context);
     const plan = await this.findPlanForTenant(context, planId);
     const existing = (await this.store.listTransactions(plan.id)).find((transaction) => transaction.id === transactionId);
     if (!existing) {
@@ -307,7 +312,7 @@ export class PaymentService {
   }
 
   private async cancelPaymentPlan(context: RequestContext, planId: string): Promise<PaymentPlanWithInstallmentsRecord> {
-    this.assertTenantAdmin(context);
+    this.assertFinanceManage(context);
     const plan = await this.findPlanForTenant(context, planId);
     const transactions = await this.store.listTransactions(plan.id);
     if (transactions.some((transaction) => !transaction.voidedAt)) {
@@ -439,7 +444,10 @@ export class PaymentService {
   }
 
   private async findPlanForTenant(context: RequestContext, planId: string) {
-    const plan = await this.store.findById(requiredText(planId, "PAYMENT_PLAN_ID_REQUIRED"));
+    const plan = await this.store.findById(
+      requiredText(planId, "PAYMENT_PLAN_ID_REQUIRED"),
+      this.financeCampusScopeFilters(context),
+    );
     if (!plan) {
       throw new NotFoundException("PAYMENT_PLAN_NOT_FOUND");
     }
@@ -448,9 +456,27 @@ export class PaymentService {
     return plan;
   }
 
-  private assertTenantAdmin(context: RequestContext): void {
-    if (!context.roles.includes("TENANT_ADMIN")) {
+  private assertFinanceManage(context: RequestContext): void {
+    if (!hasCapability(context, "finance:manage")) {
       throw new ForbiddenException("FORBIDDEN");
+    }
+  }
+
+  private financeCampusScopeFilters(context: RequestContext): Pick<StorePaymentPlanListFilters, "campusIds"> {
+    if (!context.roles.includes("FINANCE_STAFF")) return {};
+    if (!context.campusScope) throw new ForbiddenException("FINANCE_CAMPUS_SCOPE_MISSING");
+    if (context.campusScope.scopeMode === "TENANT") return {};
+    if (context.campusScope.scopeMode !== "CAMPUSES") throw new ForbiddenException("FINANCE_CAMPUS_SCOPE_INVALID");
+    return { campusIds: [...new Set(context.campusScope.campusIds)] };
+  }
+
+  private assertPaymentCampusScope(
+    context: RequestContext,
+    paymentContext: { campusId?: string },
+  ): void {
+    const { campusIds } = this.financeCampusScopeFilters(context);
+    if (campusIds && !campusIds.includes(paymentContext.campusId ?? "")) {
+      throw new ForbiddenException("FINANCE_CAMPUS_SCOPE_FORBIDDEN");
     }
   }
 

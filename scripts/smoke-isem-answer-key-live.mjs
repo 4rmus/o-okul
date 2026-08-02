@@ -11,6 +11,7 @@ const databaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:
 const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/o_okul";
 const runId = randomUUID();
 const tenantId = `tenant-isem-answer-key-smoke-${runId}`;
+const tenantSlug = `isem-answer-key-smoke-${runId}`;
 const userId = `user-isem-answer-key-smoke-${runId}`;
 const membershipId = `membership-isem-answer-key-smoke-${runId}`;
 const examId = `exam-isem-answer-key-smoke-${runId}`;
@@ -96,12 +97,12 @@ async function seedTenantAndExam() {
     await client.query(
       `INSERT INTO "Tenant" ("id", "name", "slug", "status", "seatLimit", "updatedAt")
        VALUES ($1, 'iSEM Answer Key Smoke Tenant', $2, 'ACTIVE', 200, now())`,
-      [tenantId, `isem-answer-key-smoke-${runId}`],
+      [tenantId, tenantSlug],
     );
     await client.query(
-      `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
-       VALUES ($1, $2, 'iSEM Answer Key Smoke Admin', $3, now())`,
-      [userId, smokeEmail, hashPassword(smokePassword)],
+      `INSERT INTO "User" ("id", "tenantId", "email", "emailNormalized", "loginName", "loginNameNormalized", "name", "passwordHash", "updatedAt")
+       VALUES ($1, $2, $3, lower(btrim($3)), $3, lower(btrim($3)), 'iSEM Answer Key Smoke Admin', $4, now())`,
+      [userId, tenantId, smokeEmail, hashPassword(smokePassword)],
     );
     await client.query(
       `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
@@ -127,7 +128,7 @@ async function login(baseUrl) {
   const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email: smokeEmail, password: smokePassword }),
+    body: JSON.stringify({ tenantSlug, loginName: smokeEmail, password: smokePassword }),
   });
   if (!response.ok) {
     throw new Error(`ISEM_ANSWER_KEY_LOGIN_FAILED: ${response.status} ${await response.text()}`);

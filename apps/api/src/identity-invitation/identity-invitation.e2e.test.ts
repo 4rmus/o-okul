@@ -5,6 +5,8 @@ import request from "supertest";
 import { loginAsSettled, registerTestLoginIdentity } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../app.module.js";
+import { upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
+import { hashTcIdentity } from "../student/tc-identity.js";
 import { IdentityInvitationService } from "./identity-invitation.service.js";
 
 describe("Identity invitations", () => {
@@ -120,7 +122,7 @@ describe("Identity invitations", () => {
 
     const accepted = await request(server)
       .post("/identity-invitations/accept")
-      .send({ token: activationToken, password: "password1" })
+      .send({ token: activationToken, password: "secure-password-123" })
       .expect(201);
 
     expect(accepted.body).toMatchObject({
@@ -185,11 +187,11 @@ describe("Identity invitations", () => {
     expect(newToken).not.toBe(oldToken);
     await request(server)
       .post("/identity-invitations/accept")
-      .send({ token: oldToken, password: "password1" })
+      .send({ token: oldToken, password: "secure-password-123" })
       .expect(404);
     await request(server)
       .post("/identity-invitations/accept")
-      .send({ token: newToken, password: "password1" })
+      .send({ token: newToken, password: "secure-password-123" })
       .expect(201);
   });
 
@@ -207,17 +209,26 @@ describe("Identity invitations", () => {
           name: "Seat Invitations Admin",
           email: "seat-invitations-admin@example.test",
           nationalId: "10000000450",
-          phone: "5551234567",
         },
       })
       .expect(201);
 
+    const activatedPassword = "seat-invitations-admin-password";
+    upsertInMemoryAuthUser({
+      id: "seat-invitations-admin-test",
+      email: "seat-invitations-admin@example.test",
+      name: "Seat Invitations Admin",
+      nationalIdHash: hashTcIdentity("10000000450"),
+      password: activatedPassword,
+      tenantId: "tenant-seat-invitations",
+      roles: ["TENANT_ADMIN"],
+      mustChangePassword: false,
+    });
     registerTestLoginIdentity("seat-invitations-admin@example.test", {
-      nationalId: "10000000450",
-      password: "5551234567",
+      password: activatedPassword,
       tenantSlug: "seat-invitations-tenant",
     });
-    const admin = await login("seat-invitations-admin@example.test", "5551234567");
+    const admin = await login("seat-invitations-admin@example.test", activatedPassword);
     const teacher = await request(server)
       .post("/teachers")
       .set("Authorization", `Bearer ${admin}`)
@@ -239,7 +250,7 @@ describe("Identity invitations", () => {
 
     await request(server)
       .post("/identity-invitations/accept")
-      .send({ token: activationToken, password: "password1" })
+      .send({ token: activationToken, password: "secure-password-123" })
       .expect(400)
       .expect(({ body }) => {
         expect(JSON.stringify(body)).toContain("TENANT_SEAT_LIMIT_EXCEEDED");

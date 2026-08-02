@@ -1625,7 +1625,7 @@ function formatStudentImportError(error: StudentImportDryRunResult["errors"][num
   if (error.code === "INVALID_DATE") return `${row}: tarih YYYY-AA-GG olmalı`;
   if (error.code === "INVALID_NATIONAL_ID") return `${row}: TC kimlik no geçersiz`;
   if (error.code === "INVALID_PHONE") return `${row}: telefon geçersiz`;
-  if (error.code === "STUDENT_QUOTA_EXCEEDED") return "Öğrenci kotası aşılır";
+  if (error.code === "ACTIVE_STUDENT_LIMIT_REACHED") return "Aktif öğrenci kotası aşılır";
   return `${row}: dosya satırı kontrol edilmeli`;
 }
 

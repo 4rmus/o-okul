@@ -8,13 +8,21 @@ import {
   createRedisConnectionOptions,
   createSmsBatchBullWorker,
 } from "./queue/bullmq-worker.js";
+import { assertSecretDeliveryEncryptionConfig } from "@o-okul/db";
 import { workerLogger } from "./observability/logging.js";
 import { flushWorkerSentry, initWorkerSentry } from "./observability/sentry.js";
+import {
+  assertSecretDeliveryOutboxDatabaseConfig,
+  createSecretDeliveryOutboxRunner,
+} from "./jobs/secret-delivery-outbox.js";
 
 initWorkerSentry();
+assertSecretDeliveryEncryptionConfig();
+assertSecretDeliveryOutboxDatabaseConfig();
 const connection = createRedisConnectionOptions();
 const workerOptions = process.env.QUEUE_PREFIX ? { prefix: process.env.QUEUE_PREFIX } : undefined;
 const queueNames = [
+  "secret-delivery-outbox",
   "announcement-delivery",
   "backup-restore",
   "exam-evaluation",
@@ -24,6 +32,7 @@ const queueNames = [
   "sms-batch",
 ];
 const workers = [
+  createSecretDeliveryOutboxRunner(),
   createAnnouncementDeliveryBullWorker({
     connection,
     workerOptions,

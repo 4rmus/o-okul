@@ -34,13 +34,17 @@ const routeCases = [
   route("/", "Her öğrencinin gelişimini sınavdan sınava görün.", "anonymous", { role: "region", name: "Her öğrencinin gelişimini sınavdan sınava görün." }),
   route("/k/[tenantSlug]/giris", "Giriş", "anonymous", { role: "form", name: "Giriş formu" }),
   route("/login", "Giriş", "anonymous", { role: "form", name: "Giriş formu" }),
+  route("/aktivasyon", "Hesabı etkinleştir", "anonymous", { role: "button", name: "Hesabı etkinleştir" }, { query: "token=activation-token" }),
   route("/parola-sifirla", "Yeni şifre", "anonymous", { role: "button", name: "Şifreyi yenile" }, { query: "token=reset-token" }),
   route("/parolami-unuttum", "Şifremi unuttum", "anonymous", { role: "button", name: "Yenileme bağlantısı gönder" }, { query: "tenant=dna-egitim" }),
   route("/sifre-degistir", "Şifre değiştir", "studentMustChangePassword", { role: "form", name: "Şifre değiştirme formu" }),
   route("/sistem/giris", "Giriş", "anonymous", { role: "form", name: "Giriş formu" }),
 
+  route("/hesap/oturumlar", "Oturumlar", "tenantAdmin", { role: "region", name: "Aktif hesap oturumları kaydırma alanı" }),
+
   route("/kurum", "Route Smoke Akademi", "assistantAdmin", { role: "region", name: "Kurum başarı görünümü" }),
   route("/kurum/akademik-takvim", "Akademik Takvim", "assistantAdmin", { role: "region", name: "Akademik yıl yönetimi" }),
+  route("/kurum/calisanlar", "Çalışanlar ve Yetkiler", "tenantAdmin", { role: "region", name: "Çalışan ve yetki görünümü" }),
   route("/kurum/canli-yayin", "Yayın Hazırlığı", "tenantAdmin", { role: "region", name: "Yayın öncesi kontroller" }),
   route("/kurum/denetim", "Denetim", "tenantAdmin", { role: "region", name: "Denetim kayıtları" }),
   route("/kurum/dersler", "Dersler", "assistantAdmin", { role: "region", name: "Ders yönetimi" }),
@@ -54,10 +58,12 @@ const routeCases = [
   route("/kurum/kampusler", "Kampüsler", "assistantAdmin", { role: "region", name: "Kampüs yönetimi" }),
   route("/kurum/kazanimlar", "Kazanımlar", "assistantAdmin", { role: "region", name: "Kazanım yönetimi" }),
   route("/kurum/kullanicilar", "Kullanıcılar", "tenantAdmin", { role: "region", name: "Kullanıcı ve rol yönetimi" }),
+  route("/kurum/lisans-donemleri", "Lisans Dönemleri", "tenantAdmin", { role: "region", name: "Lisans dönemleri" }),
   route("/kurum/kurulum", "Kurulum Sihirbazı", "assistantAdmin", { role: "region", name: "Kurulum formu" }),
   route("/kurum/kvkk", "KVKK", "tenantAdmin", { role: "region", name: "KVKK yönetimi" }),
   route("/kurum/materyaller", "Materyaller", "assistantAdmin", { role: "region", name: "Ödev kontrolü" }),
   route("/kurum/notlar", "Öğretmen Notları", "assistantAdmin", { role: "region", name: "Öğretmen notu yönetimi" }),
+  route("/kurum/ogrenci-portal-erisimi", "Öğrenci Portal Erişimi", "tenantAdmin", { role: "region", name: "Öğrenci portal erişimi" }),
   route("/kurum/ogrenciler", "Öğrenciler", "assistantAdmin", { role: "region", name: "Öğrenci yönetimi" }),
   route("/kurum/ogrenciler/[studentId]", "Ada Test", "assistantAdmin", { role: "region", name: "Öğrenci dashboard" }),
   route("/kurum/ogrenciler/[studentId]/sinavlar", "Ada Test", "assistantAdmin", { role: "region", name: "Öğrenci sınav detayları" }),
@@ -163,6 +169,49 @@ test.describe("UI route family smoke", () => {
   }
 });
 
+test("öğrenci portal erişimi eylemi expectedVersion gönderir ve sonucu yeniler", async ({ page }) => {
+  const unknownApiRequests: string[] = [];
+  const portalAccess = createPortalAccessMock();
+  await installRouteApiMocks(page, "tenantAdmin", unknownApiRequests, { portalAccess });
+  await page.addInitScript(() => {
+    document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
+  });
+  await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
+  page.on("dialog", (dialog) => void dialog.accept());
+
+  await page.goto("/kurum/ogrenci-portal-erisimi", { waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "Ada A: Portal erişimini askıya al" }).click();
+
+  await expect.poll(() => portalAccess.lastRequest).toEqual({ expectedVersion: 1, status: "SUSPENDED" });
+  await expect(page.getByText("Askıda", { exact: true })).toBeVisible();
+  expect(unknownApiRequests).toEqual([]);
+});
+
+test("öğrenci portal aktivasyon kodunu yalnız sonuç penceresinde gösterir", async ({ page }) => {
+  const unknownApiRequests: string[] = [];
+  const portalAccess = createPortalAccessMock();
+  portalAccess.record.accessState = "NOT_INVITED";
+  portalAccess.record.userId = undefined;
+  portalAccess.record.accountStatus = undefined;
+  portalAccess.record.membership = undefined;
+  portalAccess.record.activeSessionCount = 0;
+  await installRouteApiMocks(page, "tenantAdmin", unknownApiRequests, { portalAccess });
+  await page.addInitScript(() => {
+    document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
+  });
+  await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
+
+  await page.goto("/kurum/ogrenci-portal-erisimi", { waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "Ada A: Aktivasyon kodu üret" }).click();
+
+  await expect(page.getByRole("dialog", { name: "Öğrenci aktivasyon kodu" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "12 karakterlik kod" })).toHaveValue("ABCDEFGHJKL2");
+  expect(portalAccess.invitationIssued).toBe(true);
+  await page.getByRole("button", { name: "Tamam" }).click();
+  await expect(page.getByText("ABCDEFGHJKL2")).toHaveCount(0);
+  expect(unknownApiRequests).toEqual([]);
+});
+
 function route(
   routeTemplate: string,
   heading: string,
@@ -190,7 +239,7 @@ function assertRouteManifestParity(manifest: readonly RouteCase[]) {
   const fileSystemRoutes = collectPageRoutes(appDirectory).sort();
   const manifestRoutes = manifest.map((entry) => entry.routeTemplate).sort();
   const duplicates = manifestRoutes.filter((routeTemplate, index) => manifestRoutes.indexOf(routeTemplate) !== index);
-  if (manifest.length !== 73) throw new Error(`Route manifest must contain exactly 73 entries; found ${manifest.length}.`);
+  if (manifest.length !== 78) throw new Error(`Route manifest must contain exactly 78 entries; found ${manifest.length}.`);
   if (duplicates.length > 0) throw new Error(`Route manifest contains duplicates: ${[...new Set(duplicates)].join(", ")}`);
   if (JSON.stringify(manifestRoutes) !== JSON.stringify(fileSystemRoutes)) {
     throw new Error(`Route manifest does not match page.tsx inventory.\nmanifest=${manifestRoutes.join(",")}\nfilesystem=${fileSystemRoutes.join(",")}`);
@@ -211,7 +260,12 @@ function collectPageRoutes(directory: string, segments: string[] = []): string[]
   return routes;
 }
 
-async function installRouteApiMocks(page: Page, persona: Persona, unknownApiRequests: string[]) {
+async function installRouteApiMocks(
+  page: Page,
+  persona: Persona,
+  unknownApiRequests: string[],
+  options: { portalAccess?: ReturnType<typeof createPortalAccessMock> } = {},
+) {
   await page.route("**/health/ready", async (route) => {
     await fulfillJson(route, { dependencies: { postgres: "ok", redis: "ok" }, status: "ready" });
   });
@@ -235,6 +289,63 @@ async function installRouteApiMocks(page: Page, persona: Persona, unknownApiRequ
       }
       return;
     }
+    if (pathName === "/me/profile" && request.method() === "GET" && persona !== "anonymous") {
+      const session = createAuthResponse(persona).session;
+      await fulfillData(route, {
+        userId: session.userId,
+        tenantId: session.tenantId ?? null,
+        roles: session.roles,
+        mustChangePassword: "mustChangePassword" in session ? session.mustChangePassword : false,
+        subjectType: "subjectType" in session ? session.subjectType : undefined,
+        subjectId: "subjectId" in session ? session.subjectId : undefined,
+        capabilities: [],
+      });
+      return;
+    }
+
+    if (options.portalAccess && pathName === "/students/portal-access" && request.method() === "GET") {
+      await fulfillData(route, [options.portalAccess.record], { limit: 20 });
+      return;
+    }
+    if (options.portalAccess && pathName === "/students/student-a/portal-access" && request.method() === "PATCH") {
+      const body = request.postDataJSON() as { expectedVersion: number; status: "ACTIVE" | "SUSPENDED" };
+      const membership = options.portalAccess.record.membership;
+      if (!membership) throw new Error("PORTAL_ACCESS_MEMBERSHIP_FIXTURE_MISSING");
+      options.portalAccess.lastRequest = body;
+      membership.status = body.status;
+      membership.version += 1;
+      options.portalAccess.record.accountStatus = body.status === "ACTIVE" ? "ACTIVE" : "DISABLED";
+      options.portalAccess.record.accessState = body.status;
+      await fulfillData(route, {
+        studentId: options.portalAccess.record.studentId,
+        tenantId: options.portalAccess.record.tenantId,
+        userId: options.portalAccess.record.userId,
+        accountStatus: options.portalAccess.record.accountStatus,
+        membership,
+        sessionsRevoked: 1,
+      });
+      return;
+    }
+    if (options.portalAccess && pathName === "/students/student-a/portal-invitations" && request.method() === "POST") {
+      options.portalAccess.invitationIssued = true;
+      options.portalAccess.record.accessState = "INVITED";
+      options.portalAccess.record.invitation = {
+        id: "student-code-invitation",
+        kind: "STUDENT_CODE",
+        status: "PENDING",
+        expiresAt: "2026-08-02T12:00:00.000Z",
+      };
+      await fulfillData(route, {
+        invitationId: "student-code-invitation",
+        studentId: "student-a",
+        tenantSlug: "dna-egitim",
+        studentNo: "100",
+        activationCode: "ABCDEFGHJKL2",
+        activationUrl: "http://localhost:3000/aktivasyon#tenant=dna-egitim&student=100&code=ABCDEFGHJKL2",
+        expiresAt: "2026-08-02T12:00:00.000Z",
+      });
+      return;
+    }
 
     if (request.method() !== "GET") {
       unknownApiRequests.push(`${request.method()} ${pathName}${url.search}`);
@@ -253,7 +364,45 @@ async function installRouteApiMocks(page: Page, persona: Persona, unknownApiRequ
   });
 }
 
+function createPortalAccessMock() {
+  return {
+    invitationIssued: false,
+    lastRequest: undefined as { expectedVersion: number; status: "ACTIVE" | "SUSPENDED" } | undefined,
+    record: {
+      studentId: "student-a",
+      tenantId: "tenant-a",
+      studentNo: "100",
+      firstName: "Ada",
+      lastName: "A",
+      studentStatus: "ACTIVE" as const,
+      accessState: "ACTIVE" as "ACTIVE" | "SUSPENDED" | "INVITED" | "NOT_INVITED",
+      userId: "student-tenant-a" as string | undefined,
+      accountStatus: "ACTIVE" as string | undefined,
+      membership: { id: "membership-student-a", status: "ACTIVE" as "ACTIVE" | "SUSPENDED", version: 1 } as { id: string; status: "ACTIVE" | "SUSPENDED"; version: number } | undefined,
+      invitation: undefined as { id: string; kind: "STUDENT_CODE"; status: "PENDING"; expiresAt: string } | undefined,
+      activeSessionCount: 1,
+    },
+  };
+}
+
 function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFixtureResponse | undefined {
+  if (pathName === "/me/sessions") {
+    return {
+      data: [{
+        id: "session-tenantAdmin",
+        activePersona: "STAFF",
+        deviceLabel: "Chrome · macOS",
+        clientIpPrefix: "203.0.113.0/24",
+        roles: ["TENANT_ADMIN"],
+        status: "ACTIVE",
+        current: true,
+        expiresAt: "2026-08-31T12:00:00.000Z",
+        lastSeenAt: "2026-08-01T12:00:00.000Z",
+        createdAt: "2026-08-01T09:00:00.000Z",
+        updatedAt: "2026-08-01T12:00:00.000Z",
+      }],
+    };
+  }
   if (pathName === "/me/tenant") return { data: tenantFixture };
   if (pathName === "/me/institution-dashboard") {
     return {
@@ -322,6 +471,7 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
   }
   if (pathName === "/me/guardian/students") return { data: [studentFixture] };
   if (pathName === "/me/guardian/students/student-a/notification-preferences") return { data: guardianLinkFixture };
+  if (pathName === "/students/portal-access") return { data: [createPortalAccessMock().record], meta: { limit: 20 } };
 
   const portalArrayPaths = new Set([
     "/me/student/announcements",
@@ -365,6 +515,7 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
     "/campuses": [campusFixture],
     "/classes": [classFixture],
     "/courses": [courseFixture],
+    "/employees": [],
     "/exams": [],
     "/grade-level-course-templates": [],
     "/grade-levels": [gradeLevelFixture],
@@ -384,6 +535,7 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
     "/teacher-notes": [],
     "/teachers": [teacherFixture],
     "/tenant-users": [],
+    "/tenants/current/license-terms": [],
     "/tenants": [tenantFixture],
   };
   if (pathName in directArrays) {
@@ -508,7 +660,7 @@ const emptyProgressFixture = {
 
 interface ApiFixtureResponse {
   data: unknown;
-  meta?: { limit: number; page: number; total: number; totalPages: number };
+  meta?: { limit: number; nextCursor?: string; previousCursor?: string } | { limit: number; page: number; total: number; totalPages: number };
 }
 
 function listMeta(searchParams: URLSearchParams, total: number) {

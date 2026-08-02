@@ -27,6 +27,7 @@
     "@nestjs/platform-express": "^11.1.24",
     "@nestjs/swagger": "11.4.4",
     "@sentry/node": "10.57.0",
+    "@o-okul/db": "workspace:*",
     "@o-okul/notification-adapter": "workspace:*",
     "@o-okul/shared-types": "workspace:*",
     "@o-okul/sms-adapter": "workspace:*",

@@ -10,6 +10,10 @@ import type {
   PublicStudentProfileRecord,
   PublicStudentRecord,
   StudentProfileRecord,
+  StudentPortalAccessRecord,
+  StudentPortalAccessUpdateRequest,
+  StudentPortalAccessUpdateResult,
+  StudentPortalInvitationIssueResponse,
   StudentRecord as SharedStudentRecord,
   StudentStatus,
 } from "@o-okul/shared-types";
@@ -29,8 +33,11 @@ import {
 } from "../school/guardian-student-store.js";
 import { type GuardianRecord, type GuardianStore, guardianStoreToken } from "../school/guardian-store.js";
 import { IdentityInvitationService } from "../identity-invitation/identity-invitation.service.js";
+import { StudentPortalActivationService } from "../identity-invitation/student-portal-activation.service.js";
 import { IdentityProvisioningService } from "../identity-provisioning/identity-provisioning.service.js";
 import { IdempotencyService } from "../http/idempotency.js";
+import { withCursorListMeta } from "../listing/list-query.js";
+import { type LicenseTermStore, licenseTermStoreToken } from "../license/license-term-store.js";
 import { type ReportSnapshotStore, reportSnapshotStoreToken } from "../report/report-snapshot-store.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
 import { type CampusStore, campusStoreToken } from "../school/campus-store.js";
@@ -41,7 +48,7 @@ import {
   type TeacherAssignmentStore,
   teacherAssignmentStoreToken,
 } from "../school/teacher-assignment-store.js";
-import { type StudentProfileUpdate, type StudentStore, studentStoreToken } from "./student-store.js";
+import { type StudentPortalAccessQuery, type StudentProfileUpdate, type StudentStore, studentStoreToken } from "./student-store.js";
 import {
   type StudentEnrollmentStore,
   studentEnrollmentStoreToken,
@@ -53,7 +60,6 @@ export interface StudentRecord extends SharedStudentRecord {
 }
 
 const studentStatuses: StudentStatus[] = ["ACTIVE", "PASSIVE", "GRADUATED", "TRANSFERRED"];
-const terminalStudentStatuses: StudentStatus[] = ["GRADUATED", "TRANSFERRED"];
 const defaultStudentQuota = 200;
 
 export interface StudentQuotaPreview {
@@ -90,7 +96,7 @@ export type StudentBulkCreateInput = Pick<StudentRecord, "firstName" | "lastName
 
 @Injectable()
 export class StudentService {
-  private readonly maxStudentsPerTenant = Number.parseInt(process.env.STUDENT_QUOTA ?? "", 10) || defaultStudentQuota;
+  private readonly testStudentQuota = Number.parseInt(process.env.STUDENT_QUOTA ?? "", 10) || undefined;
 
   constructor(
     @Inject(studentStoreToken) private readonly store: StudentStore,
@@ -108,6 +114,8 @@ export class StudentService {
     @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() private readonly idempotency?: IdempotencyService,
     @Optional() private readonly identityProvisioning?: IdentityProvisioningService,
+    @Optional() @Inject(licenseTermStoreToken) private readonly licenseTerms?: LicenseTermStore,
+    @Optional() private readonly studentPortalActivations?: StudentPortalActivationService,
   ) {}
 
   async list(context: RequestContext): Promise<StudentRecord[]> {
@@ -118,6 +126,62 @@ export class StudentService {
 
     const assignments = filterTenantResources(context, await this.teacherAssignmentStore.listByTeacher(context.subjectId));
     return students.filter((student) => this.isTeacherScopedStudent(context.subjectId, student, assignments));
+  }
+
+  async listPortalAccess(context: RequestContext, query: StudentPortalAccessQuery): Promise<StudentPortalAccessRecord[]> {
+    if (!context.tenantId || context.bypassRls) throw new BadRequestException("TENANT_CONTEXT_REQUIRED");
+    try {
+      const page = await this.store.listPortalAccess(context.tenantId, query);
+      return withCursorListMeta(page.records, page.meta);
+    } catch (error) {
+      if (error instanceof Error && error.message === "STUDENT_PORTAL_CURSOR_INVALID") {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
+  }
+
+  async updatePortalAccess(
+    context: RequestContext,
+    id: string,
+    input: StudentPortalAccessUpdateRequest,
+  ): Promise<StudentPortalAccessUpdateResult> {
+    if (!context.tenantId || context.bypassRls) throw new BadRequestException("TENANT_CONTEXT_REQUIRED");
+    let updated: StudentPortalAccessUpdateResult | undefined;
+    try {
+      updated = await this.store.updatePortalAccess(context.tenantId, id, input);
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      if (code === "STUDENT_PORTAL_ACCOUNT_NOT_LINKED") throw new BadRequestException(code);
+      if (
+        code === "STUDENT_PORTAL_VERSION_CONFLICT" ||
+        code === "STUDENT_PORTAL_PROFILE_NOT_ACTIVE" ||
+        code === "STUDENT_PORTAL_MEMBERSHIP_ENDED"
+      ) {
+        throw new ConflictException(code);
+      }
+      throw error;
+    }
+    if (!updated) throw new NotFoundException("STUDENT_NOT_FOUND");
+    await this.auditLogs?.record({
+      tenantId: updated.tenantId,
+      actorUserId: context.userId,
+      entityType: "TenantMembership",
+      entityId: updated.membership.id,
+      action: "student.portal_access_updated",
+      diff: {
+        studentId: updated.studentId,
+        status: updated.membership.status,
+        version: updated.membership.version,
+        sessionsRevoked: updated.sessionsRevoked,
+      },
+    });
+    return updated;
+  }
+
+  issuePortalInvitation(context: RequestContext, id: string): Promise<StudentPortalInvitationIssueResponse> {
+    if (!this.studentPortalActivations) throw new Error("STUDENT_PORTAL_ACTIVATION_STORE_UNAVAILABLE");
+    return this.studentPortalActivations.issue(context, id);
   }
 
   async listForViewer(context: RequestContext): Promise<PublicStudentRecord[]> {
@@ -294,8 +358,9 @@ export class StudentService {
     if (input.studentNo && (await this.list(context)).some((student) => student.tenantId === tenantId && student.studentNo === input.studentNo?.trim())) {
       throw new ConflictException("STUDENT_NO_CONFLICT");
     }
-    if ((await this.list(context)).filter((student) => student.tenantId === tenantId).length >= this.maxStudentsPerTenant) {
-      throw new ConflictException("STUDENT_QUOTA_EXCEEDED");
+    const incomingActiveStudents = resolveStudentStatus(input.status) === "ACTIVE" && Boolean(input.classId) ? 1 : 0;
+    if ((await this.previewQuota(context, incomingActiveStudents)).wouldExceed) {
+      throw new ConflictException("ACTIVE_STUDENT_LIMIT_REACHED");
     }
     await this.assertStudentRelationTargets(context, tenantId, {
       classId: input.classId,
@@ -303,7 +368,7 @@ export class StudentService {
     });
     const profileUpdate = await this.resolveProfileUpdateForCreate(tenantId, input, new Set());
 
-    const student = await this.store.create({
+    const studentInput = {
       tenantId,
       studentNo: input.studentNo,
       firstName: input.firstName ?? "",
@@ -311,18 +376,25 @@ export class StudentService {
       classId: input.classId,
       responsibleTeacherId: input.responsibleTeacherId,
       status: resolveStudentStatus(input.status),
-    });
-    if (student.classId) {
+    };
+    let student: StudentRecord;
+    if (studentInput.classId) {
       const academicContext = await this.resolveCurrentAcademicContext(context);
-      await this.enrollmentStore.create({
-        tenantId: student.tenantId,
-        studentId: student.id,
-        classId: student.classId,
+      const enrollment = {
+        classId: studentInput.classId,
         ...academicContext,
         startsAt: todayDateString(),
-        status: student.status,
+        status: studentInput.status,
         reason: "CREATED",
-      });
+      };
+      if (this.store.createWithEnrollment) {
+        student = await this.store.createWithEnrollment(studentInput, enrollment);
+      } else {
+        student = await this.store.create(studentInput);
+        await this.enrollmentStore.create({ tenantId: student.tenantId, studentId: student.id, ...enrollment });
+      }
+    } else {
+      student = await this.store.create(studentInput);
     }
     if (profileUpdate) {
       await this.store.updateProfile(student.id, profileUpdate);
@@ -357,9 +429,9 @@ export class StudentService {
         parseGuardianProvisionInput(input.guardian, { lastName: input.lastName });
       }
     }
-    const quota = await this.previewQuota(context, inputs.length);
+    const quota = await this.previewQuota(context, inputs.filter((input) => Boolean(input.classId)).length);
     if (quota.wouldExceed) {
-      throw new ConflictException("STUDENT_QUOTA_EXCEEDED");
+      throw new ConflictException("ACTIVE_STUDENT_LIMIT_REACHED");
     }
 
     for (const input of inputs) {
@@ -377,26 +449,40 @@ export class StudentService {
       profileUpdates.push(await this.resolveProfileUpdateForCreate(tenantId, input, nationalIdHashes));
     }
 
-    const students = await this.store.createMany(inputs.map((input) => ({
-      tenantId,
-      studentNo: input.studentNo,
-      firstName: input.firstName,
-      lastName: input.lastName,
-      classId: input.classId,
-      status: "ACTIVE",
-    })));
     const academicContext = await this.resolveCurrentAcademicContext(context);
-    for (const student of students) {
-      if (!student.classId) continue;
-      await this.enrollmentStore.create({
-        tenantId: student.tenantId,
-        studentId: student.id,
-        classId: student.classId,
+    const createInputs = inputs.map((input) => ({
+      student: {
+        tenantId,
+        studentNo: input.studentNo,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        classId: input.classId,
+        status: "ACTIVE" as const,
+      },
+      enrollment: input.classId ? {
+        classId: input.classId,
         ...academicContext,
         startsAt: todayDateString(),
-        status: student.status,
+        status: "ACTIVE" as const,
         reason: "CREATED",
-      });
+      } : undefined,
+    }));
+    const students = this.store.createManyWithEnrollments
+      ? await this.store.createManyWithEnrollments(createInputs)
+      : await this.store.createMany(createInputs.map(({ student }) => student));
+    if (!this.store.createManyWithEnrollments) {
+      for (const student of students) {
+        if (!student.classId) continue;
+        await this.enrollmentStore.create({
+          tenantId: student.tenantId,
+          studentId: student.id,
+          classId: student.classId,
+          ...academicContext,
+          startsAt: todayDateString(),
+          status: student.status,
+          reason: "CREATED",
+        });
+      }
     }
     for (const [index, student] of students.entries()) {
       const profileUpdate = profileUpdates[index];
@@ -417,12 +503,25 @@ export class StudentService {
   }
 
   async previewQuota(context: RequestContext, incoming: number): Promise<StudentQuotaPreview> {
-    const current = (await this.list(context)).length;
+    const tenantId = context.tenantId;
+    if (!tenantId) throw new ForbiddenException("TENANT_CONTEXT_MISSING");
+    const students = (await this.list(context)).filter((student) => student.tenantId === tenantId && student.status === "ACTIVE");
+    const enrollments = await this.enrollmentStore.listByStudents(students.map((student) => student.id));
+    const openActiveByStudent = new Map<string, number>();
+    for (const enrollment of enrollments) {
+      if (enrollment.status !== "ACTIVE" || enrollment.endsAt) continue;
+      openActiveByStudent.set(enrollment.studentId, (openActiveByStudent.get(enrollment.studentId) ?? 0) + 1);
+    }
+    const current = students.filter((student) => openActiveByStudent.get(student.id) === 1).length;
+    const license = await this.licenseTerms?.resolveForTenant(tenantId);
+    const limit = process.env.NODE_ENV === "test" && this.testStudentQuota
+      ? this.testStudentQuota
+      : license?.term.activeStudentLimit ?? defaultStudentQuota;
     return {
-      limit: this.maxStudentsPerTenant,
+      limit,
       current,
       incoming,
-      wouldExceed: current + incoming > this.maxStudentsPerTenant,
+      wouldExceed: current + incoming > limit,
     };
   }
 
@@ -448,25 +547,73 @@ export class StudentService {
       classId: nextClassId,
       responsibleTeacherId: nextResponsibleTeacherId,
     });
-    const updated = await this.store.update(id, {
+    const studentUpdate = {
       firstName: input.firstName,
       lastName: input.lastName,
       classId: nextClassId,
       responsibleTeacherId: nextResponsibleTeacherId,
       status: nextStatus,
-    });
+    };
+    const effectiveClassId = input.classId !== undefined ? nextClassId : existing.classId;
+    const effectiveStatus = nextStatus ?? existing.status;
+    const classChanged = input.classId !== undefined && effectiveClassId !== existing.classId;
+    const activated = existing.status !== "ACTIVE" && effectiveStatus === "ACTIVE";
+    const deactivated = existing.status === "ACTIVE" && effectiveStatus !== "ACTIVE";
+    const enrollmentTransition = classChanged || activated || deactivated
+      ? {
+          closeActive: { endsAt: todayDateString(), status: deactivated ? effectiveStatus : undefined },
+          create: effectiveStatus === "ACTIVE" && effectiveClassId
+            ? {
+                classId: effectiveClassId,
+                ...(await this.resolveCurrentAcademicContext(context)),
+                startsAt: todayDateString(),
+                status: "ACTIVE" as const,
+                reason: classChanged ? "CLASS_CHANGED" : "REACTIVATED",
+              }
+            : undefined,
+          suspendPortalAccess: deactivated
+            ? { reason: `STUDENT_STATUS_${effectiveStatus}` }
+            : undefined,
+        }
+      : undefined;
+    const atomicResult = enrollmentTransition && this.store.updateWithEnrollmentTransition
+      ? await this.store.updateWithEnrollmentTransition(id, studentUpdate, enrollmentTransition)
+      : undefined;
+    const updated = atomicResult?.student ?? await this.store.update(id, studentUpdate);
     if (!updated) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
-    await this.recordEnrollmentIfClassChanged(context, previous, updated, input);
-    await this.closeEnrollmentForTerminalStatus(previous, updated);
+    if (!atomicResult && enrollmentTransition) {
+      await this.enrollmentStore.closeActiveForStudent(
+        updated.id,
+        enrollmentTransition.closeActive.endsAt,
+        enrollmentTransition.closeActive.status,
+      );
+      if (enrollmentTransition.create) {
+        await this.enrollmentStore.create({
+          tenantId: updated.tenantId,
+          studentId: updated.id,
+          ...enrollmentTransition.create,
+        });
+      }
+    }
     await this.auditLogs?.record({
       tenantId: updated.tenantId,
       actorUserId: context.userId,
       entityType: "Student",
       entityId: updated.id,
       action: "student.updated",
-      diff: { fieldsChanged: changedFields },
+      diff: {
+        fieldsChanged: changedFields,
+        ...(atomicResult?.portalAccess
+          ? {
+              portalAccessSuspended: true,
+              membershipSuspended: atomicResult.portalAccess.membershipSuspended,
+              sessionsRevoked: atomicResult.portalAccess.sessionsRevoked,
+              invitationsRevoked: atomicResult.portalAccess.invitationsRevoked,
+            }
+          : {}),
+      },
     });
     return toPublicStudentRecord(updated);
   }
@@ -498,24 +645,31 @@ export class StudentService {
     const academicContext = await this.resolveEnrollmentAcademicContext(context, input);
     const classId = input.classId !== undefined ? optionalText(input.classId) : existing.classId;
     await this.assertStudentRelationTargets(context, existing.tenantId, { classId });
-    const updated = await this.store.update(id, {
-      classId,
-      status: "ACTIVE",
-    });
+    const transition = {
+      closeActive: { endsAt: startsAt },
+      create: {
+        classId,
+        ...academicContext,
+        startsAt,
+        status: "ACTIVE" as const,
+        reason: "RENEWED",
+      },
+    };
+    const atomicResult = this.store.updateWithEnrollmentTransition
+      ? await this.store.updateWithEnrollmentTransition(id, { classId, status: "ACTIVE" }, transition)
+      : undefined;
+    const updated = atomicResult?.student ?? await this.store.update(id, { classId, status: "ACTIVE" });
     if (!updated) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
-
-    await this.enrollmentStore.closeActiveForStudent(updated.id, startsAt);
-    const enrollment = await this.enrollmentStore.create({
-      tenantId: updated.tenantId,
-      studentId: updated.id,
-      classId,
-      ...academicContext,
-      startsAt,
-      status: "ACTIVE",
-      reason: "RENEWED",
-    });
+    const enrollment = atomicResult?.enrollment ?? await (async () => {
+      await this.enrollmentStore.closeActiveForStudent(updated.id, startsAt);
+      return this.enrollmentStore.create({
+        tenantId: updated.tenantId,
+        studentId: updated.id,
+        ...transition.create,
+      });
+    })();
     await this.auditLogs?.record({
       tenantId: updated.tenantId,
       actorUserId: context.userId,
@@ -630,7 +784,20 @@ export class StudentService {
     const classId = input.classId !== undefined ? optionalText(input.classId) : undefined;
     await this.assertStudentRelationTargets(context, existing.tenantId, { classId });
     const nextStatus: StudentStatus = classId ? "ACTIVE" : "TRANSFERRED";
-    const updated = await this.store.update(id, {
+    const transition = {
+      closeActive: { endsAt: startsAt, status: classId ? undefined : "TRANSFERRED" as const },
+      create: classId ? {
+        classId,
+        ...academicContext,
+        startsAt,
+        status: "ACTIVE" as const,
+        reason: "TRANSFERRED",
+      } : undefined,
+    };
+    const atomicResult = this.store.updateWithEnrollmentTransition
+      ? await this.store.updateWithEnrollmentTransition(id, { classId: classId ?? "", status: nextStatus }, transition)
+      : undefined;
+    const updated = atomicResult?.student ?? await this.store.update(id, {
       classId: classId ?? "",
       status: nextStatus,
     });
@@ -638,7 +805,9 @@ export class StudentService {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
 
-    await this.enrollmentStore.closeActiveForStudent(updated.id, startsAt, classId ? undefined : "TRANSFERRED");
+    if (!atomicResult) {
+      await this.enrollmentStore.closeActiveForStudent(updated.id, startsAt, classId ? undefined : "TRANSFERRED");
+    }
     if (!classId) {
       await this.auditLogs?.record({
         tenantId: updated.tenantId,
@@ -651,14 +820,10 @@ export class StudentService {
       return null;
     }
 
-    const enrollment = await this.enrollmentStore.create({
+    const enrollment = atomicResult?.enrollment ?? await this.enrollmentStore.create({
       tenantId: updated.tenantId,
       studentId: updated.id,
-      classId,
-      ...academicContext,
-      startsAt,
-      status: "ACTIVE",
-      reason: "TRANSFERRED",
+      ...transition.create!,
     });
     await this.auditLogs?.record({
       tenantId: updated.tenantId,
@@ -672,18 +837,33 @@ export class StudentService {
   }
 
   async delete(context: RequestContext, id: string): Promise<void> {
-    await this.findOne(context, id);
-    const student = await this.store.softDelete(id, new Date().toISOString());
-    if (!student) {
+    const existing = await this.findOne(context, id);
+    if (!this.identityProvisioning) {
+      throw new Error("PROFILE_LIFECYCLE_STORE_UNAVAILABLE");
+    }
+    const deletedAt = new Date().toISOString();
+    const lifecycle = await this.identityProvisioning.deactivateProfile({
+      tenantId: existing.tenantId,
+      subjectType: "STUDENT",
+      subjectId: existing.id,
+      deletedAt,
+    });
+    if (!lifecycle) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
     await this.auditLogs?.record({
-      tenantId: student.tenantId,
+      tenantId: existing.tenantId,
       actorUserId: context.userId,
       entityType: "Student",
-      entityId: student.id,
+      entityId: existing.id,
       action: "student.deleted",
-      diff: { deletedAt: student.deletedAt },
+      diff: {
+        deletedAt,
+        accountAccessClosed: Boolean(lifecycle.userId),
+        roleRemoved: lifecycle.roleRemoved,
+        sessionsClosed: lifecycle.sessionsClosed,
+        invitationsRevoked: lifecycle.invitationsRevoked,
+      },
     });
   }
 
@@ -819,7 +999,7 @@ export class StudentService {
       canOpenSupportTickets: guardianInput.canOpenSupportTickets,
     });
 
-    const { invitationId, provisionedUserId } = await this.provisionOrInviteGuardianAccount(context, guardian, guardianInput);
+    const { invitationId } = await this.provisionOrInviteGuardianAccount(context, guardian, guardianInput);
 
     await this.auditLogs?.record({
       tenantId: student.tenantId,
@@ -831,7 +1011,6 @@ export class StudentService {
         guardianId: guardian.id,
         studentId: student.id,
         invitationId,
-        provisionedUserId,
       },
     });
   }
@@ -874,7 +1053,7 @@ export class StudentService {
     context: RequestContext,
     guardian: GuardianRecord,
     input: ReturnType<typeof parseGuardianProvisionInput>,
-  ): Promise<{ invitationId?: string; provisionedUserId?: string }> {
+  ): Promise<{ invitationId?: string }> {
     if (guardian.userId) return {};
 
     if (this.identityProvisioning) {
@@ -887,19 +1066,7 @@ export class StudentService {
         phone: guardian.phone,
         email: input.email,
       });
-      if (provisioning.status === "INVITED") return { invitationId: provisioning.invitationId };
-      if (provisioning.status !== "PROVISIONED" || !provisioning.userId) return {};
-
-      await this.guardianStore.bindUser(guardian.tenantId, guardian.id, provisioning.userId);
-      await this.auditLogs?.record({
-        tenantId: guardian.tenantId,
-        actorUserId: context.userId,
-        entityType: "Guardian",
-        entityId: guardian.id,
-        action: "guardian.account_auto_provisioned",
-        diff: { userId: provisioning.userId, mustChangePassword: true },
-      });
-      return { provisionedUserId: provisioning.userId };
+      return provisioning.status === "INVITED" ? { invitationId: provisioning.invitationId } : {};
     }
 
     if (!input.email) return {};
@@ -964,9 +1131,9 @@ export class StudentService {
     student: StudentRecord,
     input: StudentProfileInput & Pick<StudentRecord, "firstName" | "lastName">,
   ): Promise<void> {
-    if (!this.identityProvisioning || student.userId || !input.nationalId || !input.phone) return;
+    if (!this.identityProvisioning || student.userId || student.status !== "ACTIVE") return;
 
-    const provisioned = await this.identityProvisioning.provisionTenantSubject({
+    await this.identityProvisioning.provisionOrInvite(context, {
       tenantId: student.tenantId,
       subjectType: "STUDENT",
       subjectId: student.id,
@@ -974,17 +1141,6 @@ export class StudentService {
       nationalId: input.nationalId,
       phone: input.phone,
       email: input.email,
-    });
-    if (!provisioned) return;
-
-    await this.store.bindUser(student.tenantId, student.id, provisioned.userId);
-    await this.auditLogs?.record({
-      tenantId: student.tenantId,
-      actorUserId: context.userId,
-      entityType: "Student",
-      entityId: student.id,
-      action: "student.account_auto_provisioned",
-      diff: { userId: provisioned.userId, mustChangePassword: true },
     });
   }
 
@@ -1036,40 +1192,6 @@ export class StudentService {
         isAssignmentActive(assignment) &&
         (assignment.studentId === student.id || Boolean(student.classId && assignment.classId === student.classId)),
       );
-  }
-
-  private async recordEnrollmentIfClassChanged(
-    context: RequestContext,
-    existing: StudentRecord,
-    updated: StudentRecord,
-    input: Partial<StudentRecord>,
-  ): Promise<void> {
-    if (input.classId === undefined || existing.classId === updated.classId) {
-      return;
-    }
-
-    const changedAt = todayDateString();
-    const academicContext = await this.resolveCurrentAcademicContext(context);
-    await this.enrollmentStore.closeActiveForStudent(updated.id, changedAt);
-    if (updated.classId) {
-      await this.enrollmentStore.create({
-        tenantId: updated.tenantId,
-        studentId: updated.id,
-        classId: updated.classId,
-        ...academicContext,
-        startsAt: changedAt,
-        status: updated.status,
-        reason: "CLASS_CHANGED",
-      });
-    }
-  }
-
-  private async closeEnrollmentForTerminalStatus(existing: StudentRecord, updated: StudentRecord): Promise<void> {
-    if (existing.status === updated.status || !terminalStudentStatuses.includes(updated.status)) {
-      return;
-    }
-
-    await this.enrollmentStore.closeActiveForStudent(updated.id, todayDateString(), updated.status);
   }
 
   private async resolveCurrentAcademicContext(context: RequestContext): Promise<{ academicYearId?: string; termId?: string }> {

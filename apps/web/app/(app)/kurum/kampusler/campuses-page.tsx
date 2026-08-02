@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CampusRecord } from "@o-okul/shared-types";
-import { Button, CrudPage, EmptyState, Field, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@o-okul/ui";
+import { Button, CrudPage, EmptyState, Field, FormModal, Input, Select, type DataTableColumn, useConfirmDialog } from "@o-okul/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -20,6 +20,7 @@ import { OperationSummary, type OperationSummaryAction, type OperationSummaryBad
 const emptyForm: CampusFormState = {
   name: "",
   code: "",
+  unitType: "SCHOOL",
 };
 
 export function CampusesPage() {
@@ -123,6 +124,12 @@ export function CampusesPage() {
       render: (record) => record.code ?? "-",
     },
     {
+      key: "unitType",
+      header: "Birim tipi",
+      priority: "secondary",
+      render: (record) => campusUnitTypeLabel(record.unitType),
+    },
+    {
       key: "actions",
       align: "center",
       header: "İşlem",
@@ -151,7 +158,7 @@ export function CampusesPage() {
 
   function openEditForm(record: CampusRecord) {
     setEditingCampus(record);
-    setForm({ name: record.name, code: record.code ?? "" });
+    setForm({ name: record.name, code: record.code ?? "", unitType: record.unitType ?? "SCHOOL" });
     setError("");
     setIsFormOpen(true);
   }
@@ -270,6 +277,13 @@ export function CampusesPage() {
             onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
           />
         </Field>
+        <Field label="Birim tipi">
+          <Select value={form.unitType} onChange={(event) => setForm((current) => ({ ...current, unitType: event.target.value as CampusFormState["unitType"] }))}>
+            <option value="SCHOOL">Okul</option>
+            <option value="COURSE">Kurs</option>
+            <option value="MIXED">Karma</option>
+          </Select>
+        </Field>
       </FormModal>
       {confirmationDialog}
     </>
@@ -319,4 +333,11 @@ function formatCount(value: number) {
 
 function formatCampusSort(value: string) {
   return campusSortOptions.find((option) => option.value === value)?.label ?? "Varsayılan";
+}
+
+function campusUnitTypeLabel(value: CampusRecord["unitType"]) {
+  if (value === "SCHOOL") return "Okul";
+  if (value === "COURSE") return "Kurs";
+  if (value === "MIXED") return "Karma";
+  return "-";
 }

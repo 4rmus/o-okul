@@ -30,6 +30,8 @@ pnpm wal:archive:smoke
 pnpm restore:drill:check
 pnpm privacy:inventory:check
 pnpm identity-migration:check
+pnpm account-management:preflight:check
+pnpm account-management:backfill:check
 pnpm financial-retention:check
 pnpm upload-av:check
 pnpm inline-upload-content:check
@@ -53,6 +55,7 @@ pnpm sms:smoke
 pnpm notification:smoke
 pnpm sentry:smoke
 pnpm traefik:https:smoke
+pnpm db:account-management:check
 pnpm db:rls:check:live
 pnpm postgres-stores:smoke
 pnpm backup:restore:smoke
@@ -66,6 +69,13 @@ pnpm backup:restore:smoke
 - `PERSISTENCE_DRIVER=postgres` ayarlanır; tüm store'lar (sınıf, öğrenci, oturum, denetim kaydı, ödeme planı vb.)
   bu tek sürücüye bağlıdır ve production'da asla in-memory'ye düşmez. `apps/api` boot guard'ı
   (`assertPersistenceConfig`) production'da postgres dışı bir değerde veya `DATABASE_URL` eksikse başlatmayı durdurur.
+- Account PR-4 cutover öncesinde account-management backfill artifact'ı `PASS` olmalıdır. Tenant login
+  yalnız `tenantSlug + loginName + password` kullanır; Postgres auth okuması tek canonical membership/persona
+  satırını korunan legacy session rol sonucuyla doğrular. Duplicate canonical satır, rol/persona veya membership
+  version sapması, inactive membership/account ya da aktif/geçerli lisansı olmayan tenant fail-closed olur.
+- Access ve refresh doğrulaması aktif session'ı güncel Postgres membership sürümü ve rol projeksiyonuyla
+  karşılaştırır. Login request sözleşmesi değiştiği için web ve API aynı image çiftiyle ileri veya geri alınır;
+  legacy satırlar en az 14 günlük parity gözlem penceresi boyunca rollback verisi olarak korunur.
 
 ## Secret ve Erişim
 
@@ -74,6 +84,8 @@ pnpm backup:restore:smoke
 - `STUDENT_PII_ENCRYPTION_KEY` ve `STUDENT_PII_HASH_KEY` farklı, en az 32 karakterlik gerçek secret değerlerdir.
 - `ADMIN_MFA_MODE=optional|required` ayarlanır; `ADMIN_MFA_SECRET_ENCRYPTION_KEY`,
   `ADMIN_MFA_RECOVERY_HASH_KEY` ve `ADMIN_MFA_CHALLENGE_SECRET` gerçek, farklı secret değerlerdir.
+- `SECRET_DELIVERY_ENCRYPTION_KEY` en az 32 karakterlik gerçek ve diğer encryption key'lerinden
+  farklı bir secret'tır; API ile worker'a aynı değer verilir.
 - `pnpm prod:env:check` gerçek staging/prod env değerlerinde geçer.
 - Production kanıt zinciri `pnpm prod:evidence:check` ile tek komutta geçer.
 - Gerçek staging/prod env dosyalarında `*_ALLOW_EXAMPLE_EVIDENCE=1` bayrakları bulunmaz;
@@ -222,10 +234,10 @@ pnpm backup:restore:smoke
   beklenmeyen criterion ve invalid/non-empty gaps negatifleriyle korunur.
 - Canlı RLS kanıtı `RLS_LIVE_EVIDENCE_TARGET` ve `pnpm rls:live:check` ile doğrulanır; bu
   rapor `pnpm db:rls:check`, `pnpm db:rls:check:live` ve `pnpm rls:load:smoke` çıktılarını
-  tek JSON'da toplar. `schema.tablesVerified` schema'dan türeyen 57 tenant tablosunu,
+  tek JSON'da toplar. `schema.tablesVerified` schema'dan türeyen 62 tenant tablosunu,
   `isolation.crossTenantReadRows=0` çapraz-tenant okuma sonucunu, `withCheckRejects` yanlış
   tenant yazım/referans negatiflerini ve `loadSmoke.actualRps >= targetRps >= 200` sonucunu
-  kanıtlamalıdır. `tenantFkPreflight` bloğu 24 zorunlu tenant composite relation'ı exact listeler,
+  kanıtlamalıdır. `tenantFkPreflight` bloğu 29 zorunlu tenant composite relation'ı exact listeler,
   legacy allowlist'in 0 olduğunu, orphan/cross-tenant parent satırlarının 0 olduğunu ve her relation
   için cross-tenant insert negatifinin reddedildiğini kanıtlar; `migrationPreflightCommand`
   `pnpm tenant-db:check` içermelidir. `pnpm rls:load:smoke`, `RLS_LOAD_SMOKE_EVIDENCE_FILE` verildiğinde
@@ -446,9 +458,9 @@ pnpm backup:restore:smoke
   doğrulanır; gerçek staging koşusunda `pnpm rate-limit:smoke`, `RATE_LIMIT_SMOKE_EVIDENCE_FILE`
   içine `rate_limit_redis_smoke` artifact'i yazar ve iki API instance URL'i üzerinden global API
   limitinin `RATE_LIMITED` 429 + `Retry-After` döndürdüğünü, `/health` ve `/metrics` yollarının
-  hariç kaldığını, login brute-force kilidinin `LOGIN_LOCKED` 429 ile T.C. kimlik hash'i + IP boyutunda Redis'te
+  hariç kaldığını, login brute-force kilidinin `LOGIN_LOCKED` 429 ile tenant + kullanıcı adı hash'i + IP boyutunda Redis'te
   instance'lar arasında paylaşıldığını ve farklı IP'nin kilitlenmediğini kanıtlar. Smoke artifact'i
-  ham IP/T.C. kimlik yerine SHA-256 hash taşır; `checkedAt`, tam `commandsPassed=["pnpm rate-limit:smoke",
+  ham IP, kurum kodu veya kullanıcı adı yerine SHA-256 hash taşır; `checkedAt`, tam `commandsPassed=["pnpm rate-limit:smoke",
   "pnpm rate-limit:check"]` ve boş `gaps` listesi ortak smoke evidence sözleşmesiyle korunur.
   `RATE_LIMIT_EVIDENCE_TARGET`, `instances[].baseUrl` ve `evidenceReferences[]` userinfo/query/fragment
   taşıyamaz; kalıcı release kanıtında instance URL'leri `https://` olmalı ve iki farklı API instance
@@ -469,15 +481,22 @@ pnpm backup:restore:smoke
   `/__rate-limit-shard` prefix'ini strip ederek bu shard'a yönlendirir; smoke'ta birinci URL normal
   API route'u, ikinci URL `/__rate-limit-shard/api/v1/...` route'u olmalıdır. Bu yalnız rate-limit
   Redis paylaşım kanıtı içindir; first-gates public TLS/alert webhook kanıtı yerine geçmez.
-  Traefik'in güvenli `X-Forwarded-For` davranışı tüm smoke isteklerini aynı gerçek edge IP'sine
-  bağladığında, API limiter testi login limiter fazını kirletmesin diye
+  `TRAEFIK_PROXY_IP`, `API_PROXY_IP` ve `RATE_LIMIT_SMOKE_EGRESS_IP` dar `proxy_net` içinde
+  farklı sabit IP'lerdir; `TRUSTED_PROXY_CIDRS` yalnız Traefik IP'sini `/32` ile içerir.
+  Traefik güvenilmeyen istemci forwarded başlıklarını güven kaynağı yapmaz ve smoke bu başlıkları
+  göndermez. Smoke çalıştırıcısının gerçek dış IP'si `RATE_LIMIT_SMOKE_CLIENT_IP` ve
+  `RATE_LIMIT_LOGIN_SMOKE_CLIENT_IP` ile yalnız hash kanıtı için verilir. API limiter testi login
+  limiter fazını kirletmesin diye
   `RATE_LIMIT_SMOKE_RESET_API_LIMIT_BEFORE_API=true`,
   `RATE_LIMIT_SMOKE_RESET_API_LIMIT_BEFORE_LOGIN=true`,
   `RATE_LIMIT_SMOKE_API_LIMIT_RESET_IP=<edge-ip>` ve `REDIS_URL=redis://127.0.0.1:6379` verilebilir.
   Bu yalnız smoke API-limit key'ini siler; login limiter Redis key'lerini temizlemez.
-  Aynı durumda `differentIpNotLocked` negatifi için `RATE_LIMIT_LOGIN_SMOKE_OTHER_IP_URL`
-  doğrudan lokal API portunu gösterebilir; ana lock kanıtı yine iki HTTPS Traefik instance URL'iyle
-  üretilir, lokal URL yalnız farklı IP'nin kilitlenmediğini ayırmak içindir.
+  `differentIpNotLocked` negatifi, sabit `RATE_LIMIT_SMOKE_EGRESS_IP` kullanan
+  `api-rate-limit-shard` container'ının sabit `API_PROXY_IP` adresine doğrudan isteğiyle üretilir;
+  localhost veya sahte forwarded başlığı farklı IP kanıtı sayılmaz. Ana lock kanıtı yine iki HTTPS
+  Traefik instance URL'iyle üretilir.
+  Login smoke `RATE_LIMIT_LOGIN_SMOKE_TENANT_SLUG` ile mevcut/aktif bir kurum kodu gerektirir;
+  isteği `tenantSlug + loginName + password` sözleşmesiyle gönderir.
 - Ödeme planı, taksit yazma, öğrenci import commit, öğrenci bireysel/toplu kayıt yenileme ve
   transfer, sınav create/publish/participant, parser config approval, optik template create/apply,
   cevap anahtarı create/import/publish, raw import upload/evaluation enqueue/quarantine resolve,
@@ -920,11 +939,13 @@ pnpm backup:restore:smoke
   `example`, `.test`, `redacted`, `localhost`, `__SET` veya şablondaki açıklama cümleleri yalnız template
   kontrolünde `UAT_ALLOW_EXAMPLE_EVIDENCE=1` ile geçebilir.
 - Kurum açılışı ve ilk admin kurulum zinciri staging'de `pnpm live:onboarding:smoke` ile doğrulanır;
-  komut `NEXT_E2E_LIVE_ONBOARDING=1` ve `LIVE_ONBOARDING_EVIDENCE_PATH` kanıt JSON'u gerektirir.
+  komut `NEXT_E2E_LIVE_ONBOARDING=1`, `LIVE_ONBOARDING_EVIDENCE_PATH`, bearer korumalı
+  `LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT` ve `LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN` gerektirir.
   `pnpm live:onboarding:evidence-contract` bu preflight'ı tarayıcı açmadan doğrular; gerçek smoke
   başlamadan önce evidence JSON'unun exact system admin/first admin/tenant/onboarding shape'i,
   `generatedAt` değerinin 24 saatten eski olmadığı, placeholder/test değer taşımadığı, sistem admin ile ilk admin e-postalarının ayrık olduğu ve
   dosyanın lokal temp path, symlink dosya veya symlink parent zinciri altında olmadığı kontrol edilir.
+  İlk yönetici aktivasyon URL'si gerçek inbox evidence endpoint'inden poll edilir; URL/token evidence artifact'ına yazılmaz.
 - Tam sınav döngüsü staging/prod kanıtı `LIVE_EXAM_CYCLE_TARGET` ile `pnpm live:exam-cycle:check`
   üzerinden doğrulanır; iSEM cevap anahtarı, optik pipeline, raw import, report-generation ve
   mock'suz UI-worker/portal kanıtları aynı release candidate'a bağlanır. Rapor top-level 11

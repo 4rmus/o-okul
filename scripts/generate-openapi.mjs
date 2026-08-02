@@ -266,7 +266,13 @@ const portalReportProgressPaths = [
 ];
 const sharedTypeDriftContracts = [
   { interfaceName: "LoginRequest", method: "post", path: "/api/v1/auth/login", schemaPath: ["requestBody"] },
+  { interfaceName: "PersonaSwitchRequest", method: "post", path: "/api/v1/auth/persona/switch", schemaPath: ["requestBody"] },
+  { interfaceName: "StudentPortalActivationRequest", method: "post", path: "/api/v1/auth/activate", schemaPath: ["requestBody"] },
+  { interfaceName: "StudentPortalActivationResponse", method: "post", path: "/api/v1/auth/activate", schemaPath: ["responseData"] },
+  { interfaceName: "StudentPortalInvitationIssueResponse", method: "post", path: "/api/v1/students/{id}/portal-invitations", schemaPath: ["responseData"] },
   { interfaceName: "MeProfileResponse", method: "get", path: "/api/v1/me/profile", schemaPath: ["responseData"] },
+  { interfaceName: "MeSessionRecord", method: "get", path: "/api/v1/me/sessions", schemaPath: ["responseDataItem"] },
+  { interfaceName: "MeSessionRevokeAllResponse", method: "delete", path: "/api/v1/me/sessions", schemaPath: ["responseData"] },
   { interfaceName: "TenantRecord", method: "get", path: "/api/v1/tenants/{id}", schemaPath: ["responseData"] },
   { interfaceName: "TenantCreateRequest", method: "post", path: "/api/v1/tenants", schemaPath: ["requestBody"] },
   { interfaceName: "TenantUserRecord", method: "get", path: "/api/v1/tenant-users", schemaPath: ["responseDataItem"] },
@@ -377,16 +383,18 @@ const messageTemplateForbiddenDeep = [
 ];
 const messageTemplateRequired = ["id", "tenantId", "name", "channel", "body"];
 const messageTemplateChannels = ["SMS"];
-const identityInvitationSubjectTypes = ["GUARDIAN", "STUDENT", "TEACHER"];
-const identityInvitationStatuses = ["ACCEPTED", "PENDING"];
+const portalIdentityInvitationSubjectTypes = ["GUARDIAN", "STUDENT", "TEACHER"];
+const identityInvitationSubjectTypes = ["EMPLOYEE", ...portalIdentityInvitationSubjectTypes];
+const identityInvitationStatuses = ["ACCEPTED", "PENDING", "REVOKED"];
+const identityInvitationKinds = ["EMAIL_LINK", "STUDENT_CODE"];
 const identityInvitationRecordRequired = [
   "id",
   "tenantId",
   "subjectType",
   "subjectId",
-  "email",
   "name",
   "role",
+  "kind",
   "status",
   "expiresAt",
   "createdAt",
@@ -711,12 +719,8 @@ const tenantRecordForbiddenDeep = [
 const tenantAdminUpdateRequestProperties = [
   "contactEmail",
   "institutionType",
-  "licenseEndsAt",
-  "licenseStartsAt",
   "logoUrl",
   "name",
-  "plan",
-  "seatLimit",
   "slug",
   "status",
 ];
@@ -767,12 +771,13 @@ const tenantCreateResponseForbiddenDeep = [
   "token",
   "tokenHash",
 ];
+const licenseTermCreateRequestProperties = ["activeStudentLimit", "auditReference", "endsAt", "planCode", "startsAt"];
+const licenseTermRecordRequired = ["id", "tenantId", "planCode", "startsAt", "endsAt", "activeStudentLimit"];
 const tenantCreateFieldChecks = [
   { path: ["requestBody", "contactEmail"], format: "email" },
   { path: ["requestBody", "firstAdmin", "email"], format: "email" },
   { path: ["requestBody", "firstAdmin", "name"], minLength: 1 },
   { path: ["requestBody", "firstAdmin", "nationalId"], minLength: 11 },
-  { path: ["requestBody", "firstAdmin", "phone"], minLength: 1 },
   { path: ["requestBody", "licenseEndsAt"], format: "date-time" },
   { path: ["requestBody", "licenseStartsAt"], format: "date-time" },
   { path: ["requestBody", "name"], minLength: 1 },
@@ -791,40 +796,14 @@ const tenantCurrentProfileRequestForbidden = [
   "slug",
   "status",
 ];
-const tenantAssignableRoles = ["ASSISTANT_ADMIN", "GUARDIAN", "STUDENT", "TEACHER", "TENANT_ADMIN"];
-const tenantUserManagementRoles = ["ASSISTANT_ADMIN", "TENANT_ADMIN"];
+const tenantAssignableRoles = ["ASSISTANT_ADMIN", "FINANCE_STAFF", "GUARDIAN", "OPERATIONS_STAFF", "STUDENT", "TEACHER", "TENANT_ADMIN", "TENANT_OWNER"];
 const tenantUserRecordRequired = ["id", "name", "tenantId", "roles", "createdAt", "updatedAt"];
-const tenantUserPasswordResetRequired = ["userId", "resetAt", "mustChangePassword"];
 const tenantUserResponseForbiddenDeep = [
   "activationToken",
   "password",
   "passwordHash",
   "refreshToken",
   "refreshTokenHash",
-  "token",
-  "tokenHash",
-];
-const tenantUserCreateRequestForbidden = [
-  "activationToken",
-  "id",
-  "password",
-  "passwordHash",
-  "refreshToken",
-  "refreshTokenHash",
-  "tenantId",
-  "token",
-  "tokenHash",
-];
-const tenantUserRoleUpdateRequestForbidden = [
-  "activationToken",
-  "email",
-  "id",
-  "name",
-  "password",
-  "passwordHash",
-  "refreshToken",
-  "refreshTokenHash",
-  "tenantId",
   "token",
   "tokenHash",
 ];
@@ -1757,13 +1736,29 @@ const requiredOperationContracts = [
     path: "/api/v1/auth/login",
     requestBody: true,
     responseEnvelope: true,
-    requestRequired: ["nationalId", "password"],
+    requestRequired: ["tenantSlug", "loginName", "password"],
     responseDataOneOfRequired: [
       ["accessToken", "session"],
       ["challengeToken", "expiresAt", "methods", "status"],
       ["expiresAt", "selectionToken", "status", "tenants"],
     ],
     responseDataForbiddenDeep: authResponseForbiddenDeep,
+  },
+  {
+    method: "post",
+    path: "/api/v1/auth/activate",
+    requestBody: true,
+    responseEnvelope: true,
+    requestRequired: ["tenantSlug", "studentNo", "code", "password"],
+    requestForbidden: ["email", "invitationId", "nationalId", "tenantId", "token", "tokenHash", "userId"],
+    responseDataRequired: ["status", "acceptedAt", "loginName"],
+    responseDataForbiddenDeep: ["activationCode", "activationUrl", "email", "invitationId", "password", "tenantId", "token", "tokenHash", "userId"],
+    fieldChecks: [
+      { path: ["requestBody", "code"], minLength: 12, maxLength: 12 },
+      { path: ["requestBody", "password"], minLength: 15, maxLength: 128 },
+      { path: ["responseData", "status"], enum: ["ACCEPTED"] },
+      { path: ["responseData", "acceptedAt"], format: "date-time" },
+    ],
   },
   {
     method: "post",
@@ -1799,6 +1794,19 @@ const requiredOperationContracts = [
   },
   {
     method: "post",
+    path: "/api/v1/auth/persona/switch",
+    requestBody: true,
+    responseEnvelope: true,
+    requiredHeaders: ["X-CSRF-Token"],
+    requestRequired: ["activePersona"],
+    responseDataRequired: ["accessToken", "session"],
+    responseDataForbiddenDeep: authResponseForbiddenDeep,
+    fieldChecks: [
+      { path: ["requestBody", "activePersona"], enum: ["STAFF", "TEACHER", "STUDENT"] },
+    ],
+  },
+  {
+    method: "post",
     path: "/api/v1/auth/logout",
     requestBody: true,
     requestBodyRequired: false,
@@ -1807,11 +1815,31 @@ const requiredOperationContracts = [
     noResponseBody: true,
   },
   {
+    method: "get",
+    path: "/api/v1/me/sessions",
+    responseListEnvelope: true,
+    responseDataItemsRequired: ["id", "deviceLabel", "roles", "status", "current", "expiresAt", "lastSeenAt", "createdAt", "updatedAt"],
+    responseDataForbiddenDeep: ["refreshToken", "refreshTokenHash", "tokenFamilyId"],
+  },
+  {
+    method: "delete",
+    path: "/api/v1/me/sessions/{id}",
+    responseStatus: "204",
+    noResponseBody: true,
+  },
+  {
+    method: "delete",
+    path: "/api/v1/me/sessions",
+    responseEnvelope: true,
+    responseDataRequired: ["revokedCount"],
+  },
+  {
     method: "post",
     path: "/api/v1/auth/password-reset/request",
     requestBody: true,
     responseEnvelope: true,
-    requestRequired: ["nationalId", "tenantSlug"],
+    requestRequired: ["loginName", "tenantSlug"],
+    requestForbidden: ["nationalId"],
     responseDataRequired: ["status"],
     responseDataForbidden: ["resetToken", "expiresAt"],
     fieldChecks: [
@@ -1827,7 +1855,7 @@ const requiredOperationContracts = [
     responseDataRequired: ["resetAt"],
     responseDataForbidden: ["accessToken", "refreshToken"],
     fieldChecks: [
-      { path: ["requestBody", "password"], minLength: 8 },
+      { path: ["requestBody", "password"], minLength: 15, maxLength: 128 },
     ],
   },
   {
@@ -1869,6 +1897,21 @@ const requiredOperationContracts = [
     responseDataRequired: ["disabledAt"],
   },
   {
+    method: "post",
+    path: "/api/v1/auth/step-up",
+    requestBody: true,
+    responseEnvelope: true,
+    requestRequired: ["purpose"],
+    requestAnyOfRequired: [["totpCode"], ["recoveryCode"]],
+    requestForbidden: ["sessionId", "membershipVersion", "stepUpToken", "userId"],
+    responseDataRequired: ["purpose", "stepUpToken", "expiresAt"],
+    fieldChecks: [
+      { path: ["requestBody", "purpose"], enum: ["OWNER_ADMIN_CHANGE"] },
+      { path: ["responseData", "purpose"], enum: ["OWNER_ADMIN_CHANGE"] },
+      { path: ["responseData", "expiresAt"], format: "date-time" },
+    ],
+  },
+  {
     method: "get",
     path: "/api/v1/tenants",
     responseListEnvelope: true,
@@ -1907,19 +1950,32 @@ const requiredOperationContracts = [
     responseDataForbiddenDeep: tenantRecordForbiddenDeep,
     fieldChecks: [
       { path: ["requestBody", "contactEmail"], format: "email" },
-      { path: ["requestBody", "licenseEndsAt"], format: "date-time" },
-      { path: ["requestBody", "licenseStartsAt"], format: "date-time" },
-      { path: ["requestBody", "seatLimit"], minimum: 1 },
       ...tenantRecordFieldChecks,
+    ],
+  },
+  {
+    method: "post",
+    path: "/api/v1/tenants/{id}/license-terms",
+    requestBody: true,
+    responseEnvelope: true,
+    requestRequired: licenseTermCreateRequestProperties,
+    requestProperties: licenseTermCreateRequestProperties,
+    responseDataRequired: licenseTermRecordRequired,
+    fieldChecks: [
+      { path: ["requestBody", "activeStudentLimit"], minimum: 1 },
+      { path: ["requestBody", "auditReference"], minLength: 1 },
+      { path: ["requestBody", "endsAt"], format: "date-time" },
+      { path: ["requestBody", "planCode"], minLength: 1 },
+      { path: ["requestBody", "startsAt"], format: "date-time" },
+      { path: ["responseData", "activeStudentLimit"], minimum: 1 },
+      { path: ["responseData", "endsAt"], format: "date-time" },
+      { path: ["responseData", "startsAt"], format: "date-time" },
     ],
   },
   {
     method: "delete",
     path: "/api/v1/tenants/{id}",
-    responseEnvelope: true,
-    responseDataRequired: tenantRecordRequired,
-    responseDataForbiddenDeep: tenantRecordForbiddenDeep,
-    fieldChecks: tenantRecordFieldChecks,
+    responseStatus: "410",
   },
   {
     method: "get",
@@ -1930,49 +1986,9 @@ const requiredOperationContracts = [
     fieldChecks: tenantUserRecordListFieldChecks,
   },
   {
-    method: "post",
-    path: "/api/v1/tenant-users",
-    requestBody: true,
-    responseEnvelope: true,
-    requestRequired: ["email", "name", "nationalId", "phone", "roles"],
-    requestForbidden: tenantUserCreateRequestForbidden,
-    responseDataRequired: tenantUserRecordRequired,
-    responseDataForbiddenDeep: tenantUserResponseForbiddenDeep,
-    fieldChecks: [
-      { path: ["requestBody", "email"], format: "email" },
-      { path: ["requestBody", "name"], minLength: 1 },
-      { path: ["requestBody", "nationalId"], minLength: 11 },
-      { path: ["requestBody", "phone"], minLength: 1 },
-      { path: ["requestBody", "roles"], minItems: 1 },
-      { path: ["requestBody", "roles", "items"], enum: tenantUserManagementRoles },
-      ...tenantUserRecordFieldChecks,
-    ],
-  },
-  {
     method: "patch",
     path: "/api/v1/tenant-users/{userId}/roles",
-    requestBody: true,
-    responseEnvelope: true,
-    requestRequired: ["roles"],
-    requestForbidden: tenantUserRoleUpdateRequestForbidden,
-    responseDataRequired: tenantUserRecordRequired,
-    responseDataForbiddenDeep: tenantUserResponseForbiddenDeep,
-    fieldChecks: [
-      { path: ["requestBody", "roles"], minItems: 1 },
-      { path: ["requestBody", "roles", "items"], enum: tenantUserManagementRoles },
-      ...tenantUserRecordFieldChecks,
-    ],
-  },
-  {
-    method: "post",
-    path: "/api/v1/tenant-users/{userId}/reset-password",
-    responseEnvelope: true,
-    responseDataRequired: tenantUserPasswordResetRequired,
-    responseDataForbiddenDeep: tenantUserResponseForbiddenDeep,
-    fieldChecks: [
-      { path: ["responseData", "resetAt"], format: "date-time" },
-      { path: ["responseData", "mustChangePassword"], enum: [true] },
-    ],
+    responseStatus: "410",
   },
   {
     method: "post",
@@ -2470,6 +2486,18 @@ const requiredOperationContracts = [
     fieldChecks: [
       { path: ["requestBody", "status"], enum: studentStatuses },
       { path: ["responseData", "status"], enum: studentStatuses },
+    ],
+  },
+  {
+    method: "post",
+    path: "/api/v1/students/{id}/portal-invitations",
+    responseEnvelope: true,
+    responseDataRequired: ["invitationId", "studentId", "tenantSlug", "studentNo", "activationCode", "activationUrl", "expiresAt"],
+    responseDataForbiddenDeep: ["email", "password", "token", "tokenHash", "userId"],
+    fieldChecks: [
+      { path: ["responseData", "activationCode"], minLength: 12, maxLength: 12 },
+      { path: ["responseData", "activationUrl"], format: "uri" },
+      { path: ["responseData", "expiresAt"], format: "date-time" },
     ],
   },
   ...studentCorePaths.map((path) => ({
@@ -3587,6 +3615,50 @@ const requiredOperationContracts = [
     noResponseBody: true,
   },
   {
+    method: "post",
+    path: "/api/v1/employees",
+    requestBody: true,
+    responseEnvelope: true,
+    requestRequired: ["firstName", "lastName", "status"],
+    responseDataRequired: ["id", "tenantId", "firstName", "lastName", "status"],
+    fieldChecks: [
+      { path: ["requestBody", "status"], enum: ["ACTIVE", "PLANNED"] },
+    ],
+  },
+  {
+    method: "post",
+    path: "/api/v1/employees/{id}/account-invitations",
+    requestBody: true,
+    responseEnvelope: true,
+    requestRequired: ["email", "role"],
+    responseDataRequired: identityInvitationRecordRequired,
+    responseDataForbiddenDeep: identityInvitationResponseForbiddenDeep,
+    optionalHeaders: ["X-Step-Up-Token"],
+    fieldChecks: [
+      { path: ["requestBody", "email"], format: "email" },
+      { path: ["requestBody", "role"], enum: ["FINANCE_STAFF", "OPERATIONS_STAFF", "TENANT_ADMIN", "TENANT_OWNER"] },
+      { path: ["responseData", "subjectType"], enum: identityInvitationSubjectTypes },
+      { path: ["responseData", "role"], enum: tenantAssignableRoles },
+    ],
+  },
+  {
+    method: "patch",
+    path: "/api/v1/tenant-memberships/{id}",
+    requestBody: true,
+    responseEnvelope: true,
+    optionalHeaders: ["X-Step-Up-Token"],
+    requestRequired: ["campusIds", "expectedVersion", "hasTeacherPersona", "scopeMode", "status"],
+    requestForbidden: ["actorCanManageOwners", "stepUpToken", "stepUpVerified", "tenantId", "userId"],
+    responseDataRequired: ["employee", "sessionsRevoked"],
+    fieldChecks: [
+      { path: ["requestBody", "expectedVersion"], minimum: 1 },
+      { path: ["requestBody", "staffRole"], enum: ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF"] },
+      { path: ["requestBody", "status"], enum: ["ACTIVE", "SUSPENDED", "ENDED"] },
+      { path: ["requestBody", "scopeMode"], enum: ["TENANT", "CAMPUSES"] },
+      { path: ["requestBody", "campusIds"], maxItems: 20 },
+    ],
+  },
+  {
     method: "get",
     path: "/api/v1/identity-invitations",
     responseListEnvelope: true,
@@ -3594,7 +3666,8 @@ const requiredOperationContracts = [
     responseDataForbiddenDeep: identityInvitationResponseForbiddenDeep,
     fieldChecks: [
       { path: ["responseDataItem", "subjectType"], enum: identityInvitationSubjectTypes },
-      { path: ["responseDataItem", "role"], enum: identityInvitationSubjectTypes },
+      { path: ["responseDataItem", "role"], enum: tenantAssignableRoles },
+      { path: ["responseDataItem", "kind"], enum: identityInvitationKinds },
       { path: ["responseDataItem", "status"], enum: identityInvitationStatuses },
       { path: ["responseDataItem", "expiresAt"], format: "date-time" },
       { path: ["responseDataItem", "createdAt"], format: "date-time" },
@@ -3613,9 +3686,10 @@ const requiredOperationContracts = [
     fieldChecks: [
       { path: ["requestBody", "email"], format: "email" },
       { path: ["requestBody", "subjectId"], minLength: 1 },
-      { path: ["requestBody", "subjectType"], enum: identityInvitationSubjectTypes },
+      { path: ["requestBody", "subjectType"], enum: portalIdentityInvitationSubjectTypes },
       { path: ["responseData", "subjectType"], enum: identityInvitationSubjectTypes },
-      { path: ["responseData", "role"], enum: identityInvitationSubjectTypes },
+      { path: ["responseData", "role"], enum: tenantAssignableRoles },
+      { path: ["responseData", "kind"], enum: identityInvitationKinds },
       { path: ["responseData", "status"], enum: identityInvitationStatuses },
       { path: ["responseData", "expiresAt"], format: "date-time" },
     ],
@@ -3645,7 +3719,7 @@ const requiredOperationContracts = [
       "updatedAt",
     ],
     fieldChecks: [
-      { path: ["requestBody", "password"], minLength: 8 },
+      { path: ["requestBody", "password"], minLength: 15, maxLength: 128 },
       { path: ["requestBody", "token"], minLength: 1 },
       { path: ["responseData", "status"], enum: ["ACCEPTED"] },
       { path: ["responseData", "acceptedAt"], format: "date-time" },
@@ -3659,7 +3733,7 @@ const requiredOperationContracts = [
     responseDataForbiddenDeep: identityInvitationResponseForbiddenDeep,
     fieldChecks: [
       { path: ["responseData", "subjectType"], enum: identityInvitationSubjectTypes },
-      { path: ["responseData", "role"], enum: identityInvitationSubjectTypes },
+      { path: ["responseData", "role"], enum: tenantAssignableRoles },
       { path: ["responseData", "status"], enum: identityInvitationStatuses },
       { path: ["responseData", "expiresAt"], format: "date-time" },
     ],
@@ -3917,6 +3991,11 @@ function validateOpenApiDocument(document) {
         requireHeader(operation, header, failures, `${contract.method.toUpperCase()} ${contract.path}`);
       }
     }
+    if (contract.optionalHeaders) {
+      for (const header of contract.optionalHeaders) {
+        requireOptionalHeader(operation, header, failures, `${contract.method.toUpperCase()} ${contract.path}`);
+      }
+    }
     if (contract.queryParameters) {
       for (const query of contract.queryParameters) {
         requireQueryParameter(operation, query, failures, `${contract.method.toUpperCase()} ${contract.path}`);
@@ -4136,6 +4215,18 @@ function requireHeader(operation, header, failures, label) {
   }
 }
 
+function requireOptionalHeader(operation, header, failures, label) {
+  const found = (operation.parameters ?? []).some((parameter) =>
+    parameter?.in === "header" &&
+    typeof parameter.name === "string" &&
+    parameter.name.toLowerCase() === header.toLowerCase() &&
+    parameter.required === false,
+  );
+  if (!found) {
+    failures.push(`OpenAPI optional header eksik: ${label} ${header}`);
+  }
+}
+
 function requireQueryParameter(operation, query, failures, label) {
   const required = query.required ?? false;
   const found = (operation.parameters ?? []).some((parameter) =>
@@ -4217,6 +4308,9 @@ function validateFieldCheck(schema, check, failures, label) {
   }
   if (check.minLength !== undefined && schema.minLength !== check.minLength) {
     failures.push(`OpenAPI minLength beklenmiyor: ${label}=${schema.minLength}`);
+  }
+  if (check.maxLength !== undefined && schema.maxLength !== check.maxLength) {
+    failures.push(`OpenAPI maxLength beklenmiyor: ${label}=${schema.maxLength}`);
   }
   if (check.format !== undefined && schema.format !== check.format) {
     failures.push(`OpenAPI format beklenmiyor: ${label}=${schema.format}`);

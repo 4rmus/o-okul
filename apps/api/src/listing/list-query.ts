@@ -14,6 +14,12 @@ export interface ListMeta {
   totalPages: number;
 }
 
+export interface CursorListMeta {
+  limit: number;
+  nextCursor?: string;
+  previousCursor?: string;
+}
+
 export interface ListField<TRecord> {
   name: string;
   read(record: TRecord): string | number | undefined;
@@ -99,6 +105,14 @@ function withListMeta<TRecord>(records: TRecord[], meta: ListMeta): TRecord[] {
   return records;
 }
 
-export function readListMeta(records: unknown[]): ListMeta | undefined {
-  return (records as { [listMetaSymbol]?: ListMeta })[listMetaSymbol];
+export function withCursorListMeta<TRecord>(records: TRecord[], meta: CursorListMeta): TRecord[] {
+  Object.defineProperty(records, listMetaSymbol, {
+    enumerable: false,
+    value: meta,
+  });
+  return records;
+}
+
+export function readListMeta(records: unknown[]): ListMeta | CursorListMeta | undefined {
+  return (records as { [listMetaSymbol]?: ListMeta | CursorListMeta })[listMetaSymbol];
 }

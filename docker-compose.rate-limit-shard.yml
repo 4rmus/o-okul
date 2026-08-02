@@ -5,9 +5,14 @@ services:
       service: api
     image: ${API_IMAGE:-o-okul-api}
     ports: !reset []
+    networks:
+      frontend_net:
+      backend_net:
+      proxy_net:
+        ipv4_address: ${RATE_LIMIT_SMOKE_EGRESS_IP:-172.31.255.4}
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=${DOCKER_FRONTEND_NETWORK:-o-okul_frontend_net}"
+      - "traefik.docker.network=${DOCKER_PROXY_NETWORK:-o-okul_proxy_net}"
       - "traefik.http.routers.api-rate-limit-shard-ip.rule=Host(`${SERVER_DOMAIN:-127.0.0.1}`) && PathPrefix(`/__rate-limit-shard`)"
       - "traefik.http.routers.api-rate-limit-shard-ip.entrypoints=websecure"
       - "traefik.http.routers.api-rate-limit-shard-ip.priority=120"

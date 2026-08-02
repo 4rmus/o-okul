@@ -8,7 +8,7 @@ import { appBrand } from "../../../src/brand.js";
 
 export default function ForgotPasswordPage() {
   const [tenantSlug, setTenantSlug] = useState("");
-  const [nationalId, setNationalId] = useState("");
+  const [loginName, setLoginName] = useState("");
   const [status, setStatus] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const loginHref = tenantSlug ? `/k/${encodeURIComponent(tenantSlug)}/giris` : "/login";
@@ -22,7 +22,7 @@ export default function ForgotPasswordPage() {
     setStatus("");
     setIsSubmitting(true);
     try {
-      await requestPasswordReset({ tenantSlug: tenantSlug.trim(), nationalId: nationalId.trim() });
+      await requestPasswordReset({ tenantSlug: tenantSlug.trim(), loginName: loginName.trim() });
       setStatus("İsteğiniz alındı. Bilgiler eşleşiyor ve kayıtlı iletişim kanalı aktifse şifre yenileme adımları paylaşılır. Mesaj gelmezse kurum yöneticinizden şifrenizi sıfırlamasını isteyin.");
     } catch {
       setStatus("İstek şu anda tamamlanamadı. Lütfen biraz sonra tekrar deneyin.");
@@ -39,7 +39,7 @@ export default function ForgotPasswordPage() {
       </div>
       <form className="next-form" onSubmit={(event) => void handleSubmit(event)}>
         <h1 id="forgot-password-title">Şifremi unuttum</h1>
-        <p className="next-status-note">Kurum kodunuzu ve kullanıcı adınız olan TC kimlik numaranızı girin.</p>
+        <p className="next-status-note">Kurum kodunuzu ve kullanıcı adınızı girin.</p>
         <Field label="Kurum kodu">
           <Input
             name="tenantSlug"
@@ -51,11 +51,10 @@ export default function ForgotPasswordPage() {
         </Field>
         <Field label="Kullanıcı Adı">
           <Input
-            name="nationalId"
-            value={nationalId}
-            onChange={(event) => setNationalId(event.target.value)}
+            name="loginName"
+            value={loginName}
+            onChange={(event) => setLoginName(event.target.value)}
             autoComplete="username"
-            inputMode="numeric"
             required
           />
         </Field>

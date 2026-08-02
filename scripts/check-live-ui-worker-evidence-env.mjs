@@ -211,14 +211,18 @@ function validateEvidence(evidence, collectedFailures) {
   }
 
   requireObjectKeySet(evidence, collectedFailures, "liveUiWorkerEvidence", [
-    "email",
     "examId",
     "firstStudentId",
     "generatedAt",
+    "loginName",
     "password",
+    "tenantSlug",
   ], ["guardianPortal", "studentPortal"]);
   requireFreshGeneratedAt(evidence, collectedFailures, "generatedAt");
-  requireEmail(evidence, collectedFailures, "email", "email");
+  requireString(evidence, collectedFailures, "loginName", "loginName");
+  requireNonPlaceholderString(evidence, collectedFailures, "loginName", "loginName");
+  requireString(evidence, collectedFailures, "tenantSlug", "tenantSlug");
+  requireNonPlaceholderString(evidence, collectedFailures, "tenantSlug", "tenantSlug");
   requireSecret(evidence, collectedFailures, "password", "password");
   requireString(evidence, collectedFailures, "examId", "examId");
   requireNonPlaceholderString(evidence, collectedFailures, "examId", "examId");
@@ -235,8 +239,13 @@ function validatePortalCredentials(value, collectedFailures, label) {
     return;
   }
 
-  requireObjectKeySet(value, collectedFailures, label, ["email", "password"]);
-  requireEmail(value, collectedFailures, `${label}.email`, "email");
+  requireObjectKeySet(value, collectedFailures, label, ["loginName", "password"], ["tenantSlug"]);
+  requireString(value, collectedFailures, `${label}.loginName`, "loginName");
+  requireNonPlaceholderString(value, collectedFailures, `${label}.loginName`, "loginName");
+  if (Object.hasOwn(value, "tenantSlug")) {
+    requireString(value, collectedFailures, `${label}.tenantSlug`, "tenantSlug");
+    requireNonPlaceholderString(value, collectedFailures, `${label}.tenantSlug`, "tenantSlug");
+  }
   requireSecret(value, collectedFailures, `${label}.password`, "password");
 }
 

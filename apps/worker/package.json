@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1056.0",
+    "@o-okul/notification-adapter": "workspace:*",
     "@sentry/node": "10.57.0",
     "@o-okul/db": "workspace:*",
     "@o-okul/shared-types": "workspace:*",

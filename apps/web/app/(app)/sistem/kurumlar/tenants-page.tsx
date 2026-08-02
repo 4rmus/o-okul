@@ -15,7 +15,6 @@ import {
   StatusBadge,
   type DataTableColumn,
   type StatusBadgeProps,
-  useConfirmDialog,
 } from "@o-okul/ui";
 import { Plus } from "lucide-react";
 import { useAuth } from "../../../providers.js";
@@ -27,10 +26,9 @@ import {
   type TenantFormState,
 } from "../../../../src/form-validation.js";
 import { ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
-import { formatTurkishPhoneInput } from "../../../../src/phone-format.js";
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../../kurum/_shared/operation-summary.js";
 import { PageFrame } from "../../kurum/_shared/page-frame.js";
-import { createTenant, deleteTenant, loadTenants, type TenantRecord } from "../_shared/system-api.js";
+import { createTenant, loadTenants, type TenantRecord } from "../_shared/system-api.js";
 
 const emptyForm: TenantFormState = {
   name: "",
@@ -44,11 +42,16 @@ const emptyForm: TenantFormState = {
 
 const emptyCreateForm: TenantCreateFormState = {
   ...emptyForm,
-  firstAdmin: {
+  auditReference: "",
+  campus: {
+    code: "MRK",
+    name: "",
+    unitType: "SCHOOL",
+  },
+  firstOwner: {
     name: "",
     email: "",
     nationalId: "",
-    phone: "",
   },
 };
 
@@ -56,7 +59,6 @@ export function TenantsPage() {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const { confirm, confirmationDialog } = useConfirmDialog();
   const [listQuery, setListQuery] = useUrlListState(searchParams, { sortOptions: tenantSortOptions });
   const queryKey = ["next-tenants", listQuery];
   const listQueryKey = ["next-tenants"];
@@ -68,7 +70,6 @@ export function TenantsPage() {
   });
   const [form, setForm] = useState<TenantCreateFormState>(emptyCreateForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [deletingTenantId, setDeletingTenantId] = useState("");
   const [error, setError] = useState("");
   const rows = tenantsQuery.data?.data ?? [];
   const activeTenantCount = rows.filter((tenant) => tenant.status === "ACTIVE").length;
@@ -144,9 +145,6 @@ export function TenantsPage() {
           <Link href={`/sistem/kurumlar/${encodeURIComponent(tenant.id)}`} aria-label={`${tenant.name} detay`}>
             Detay
           </Link>
-          <Button variant="ghost" type="button" disabled={deletingTenantId === tenant.id} onClick={() => void handleDeleteTenant(tenant)} aria-label={`${tenant.name} sil`}>
-            Sil
-          </Button>
         </div>
       ),
       sticky: "right",
@@ -190,29 +188,6 @@ export function TenantsPage() {
       void queryClient.invalidateQueries({ queryKey: ["next-tenant", created.tenant.id] });
     } catch (createError) {
       setError(tenantCreateErrorMessage(createError));
-    }
-  }
-
-  async function handleDeleteTenant(tenant: TenantRecord) {
-    if (!auth) return;
-    const confirmed = await confirm({
-      confirmLabel: "Sil",
-      description: "Kurum listeden kaldırılır, kayıtlar korunur.",
-      message: `${tenant.name} kurumunu silmek istiyor musun?`,
-      title: "Kurumu sil",
-    });
-    if (!confirmed) return;
-
-    setError("");
-    setDeletingTenantId(tenant.id);
-    try {
-      await deleteTenant(auth.accessToken, tenant.id);
-      void queryClient.invalidateQueries({ queryKey: listQueryKey });
-      void queryClient.invalidateQueries({ queryKey: ["next-tenant", tenant.id] });
-    } catch {
-      setError("Kurum silinemedi.");
-    } finally {
-      setDeletingTenantId("");
     }
   }
 
@@ -261,7 +236,6 @@ export function TenantsPage() {
         submitLabel="Oluştur"
         title="Kurum oluştur"
       />
-      {confirmationDialog}
     </PageFrame>
   );
 }
@@ -316,14 +290,31 @@ function TenantFormModal({
       <Field label="Lisans bitiş">
         <Input type="date" value={form.licenseEndsAt ?? ""} onChange={(event) => onChange({ ...form, licenseEndsAt: event.target.value })} />
       </Field>
-      <Field label="Kullanıcı sınırı" description="Bu kurumda açılabilecek aktif kullanıcı sayısı. Boş bırakırsanız sınır uygulanmaz.">
+      <Field label="Aktif öğrenci limiti" description="Lisans döneminde aynı anda aktif olabilecek öğrenci sayısı.">
         <Input
           inputMode="numeric"
           min={1}
+          required
           type="number"
           value={form.seatLimit ?? ""}
           onChange={(event) => onChange({ ...form, seatLimit: event.target.value })}
         />
+      </Field>
+      <Field label="Sözleşme referansı">
+        <Input required value={form.auditReference} onChange={(event) => onChange({ ...form, auditReference: event.target.value })} />
+      </Field>
+      <Field label="İlk kampüs adı">
+        <Input required value={form.campus.name} onChange={(event) => onChange({ ...form, campus: { ...form.campus, name: event.target.value } })} />
+      </Field>
+      <Field label="Kampüs kodu">
+        <Input value={form.campus.code} onChange={(event) => onChange({ ...form, campus: { ...form.campus, code: event.target.value } })} />
+      </Field>
+      <Field label="Kampüs birim tipi">
+        <Select value={form.campus.unitType} onChange={(event) => onChange({ ...form, campus: { ...form.campus, unitType: event.target.value as TenantCreateFormState["campus"]["unitType"] } })}>
+          <option value="SCHOOL">Okul</option>
+          <option value="COURSE">Kurs</option>
+          <option value="MIXED">Karma</option>
+        </Select>
       </Field>
       <Field label="Durum">
         <Select value={form.status} onChange={(event) => onChange({ ...form, status: event.target.value as TenantFormState["status"] })}>
@@ -332,39 +323,30 @@ function TenantFormModal({
           <option value="TRIAL">Deneme</option>
         </Select>
       </Field>
-      <Field label="İlk yönetici ad soyad">
+      <Field label="İlk kurum sahibi ad soyad">
         <Input
           required
-          value={form.firstAdmin.name}
-          onChange={(event) => onChange({ ...form, firstAdmin: { ...form.firstAdmin, name: event.target.value } })}
+          value={form.firstOwner.name}
+          onChange={(event) => onChange({ ...form, firstOwner: { ...form.firstOwner, name: event.target.value } })}
         />
       </Field>
-      <Field label="İlk yönetici e-posta">
+      <Field label="İlk kurum sahibi e-posta">
         <Input
           required
           type="email"
-          value={form.firstAdmin.email}
-          onChange={(event) => onChange({ ...form, firstAdmin: { ...form.firstAdmin, email: event.target.value } })}
+          value={form.firstOwner.email}
+          onChange={(event) => onChange({ ...form, firstOwner: { ...form.firstOwner, email: event.target.value } })}
         />
       </Field>
-      <Field label="İlk yönetici TC kimlik no">
+      <Field label="Kurum sahibi TC kimlik no" description="İsteğe bağlıdır; hesap açmak için zorunlu değildir.">
         <Input
           inputMode="numeric"
           maxLength={11}
-          required
-          value={form.firstAdmin.nationalId}
-          onChange={(event) => onChange({ ...form, firstAdmin: { ...form.firstAdmin, nationalId: event.target.value } })}
+          value={form.firstOwner.nationalId}
+          onChange={(event) => onChange({ ...form, firstOwner: { ...form.firstOwner, nationalId: event.target.value } })}
         />
       </Field>
-      <Field label="İlk yönetici telefon">
-        <Input
-          inputMode="tel"
-          placeholder="+90 5xx xxx xx xx"
-          required
-          value={form.firstAdmin.phone}
-          onChange={(event) => onChange({ ...form, firstAdmin: { ...form.firstAdmin, phone: formatTurkishPhoneInput(event.target.value) } })}
-        />
-      </Field>
+      <p className="next-status-note">İlk yöneticiye 24 saat geçerli parola kurulum bağlantısı e-posta ile gönderilir.</p>
     </FormModal>
   );
 }

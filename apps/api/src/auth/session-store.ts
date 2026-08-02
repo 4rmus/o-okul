@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import pg from "pg";
+import type { ActivePersona } from "@o-okul/shared-types";
 
 export type SessionStatus = "ACTIVE" | "REVOKED" | "COMPROMISED";
 
@@ -8,9 +9,14 @@ export interface SessionRecord {
   id: string;
   userId: string;
   tenantId: string;
+  membershipId?: string;
+  activePersona?: ActivePersona;
   roles: string[];
   subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER";
   subjectId?: string;
+  deviceLabel?: string;
+  clientIpPrefix?: string;
+  lastSeenAt?: Date;
   tokenFamilyId: string;
   refreshTokenHash: string;
   status: SessionStatus;
@@ -23,9 +29,13 @@ export interface SessionRecord {
 export interface SessionIssueInput {
   userId: string;
   tenantId: string;
+  membershipId?: string;
+  activePersona?: ActivePersona;
   roles: string[];
   subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER";
   subjectId?: string;
+  deviceLabel?: string;
+  clientIpPrefix?: string;
   refreshToken: string;
   membershipVersion: number;
   expiresAt: Date;
@@ -33,12 +43,16 @@ export interface SessionIssueInput {
 
 export interface SessionStore {
   create(input: SessionIssueInput): Promise<SessionRecord>;
+  replace(sessionId: string, input: SessionIssueInput): Promise<SessionRecord>;
   findById(sessionId: string): Promise<SessionRecord | null>;
   findByRefreshToken(refreshToken: string): Promise<SessionRecord | null>;
-  updateRefreshToken(sessionId: string, refreshToken: string, expiresAt: Date): Promise<SessionRecord>;
+  listActiveByUser(userId: string, tenantId: string): Promise<SessionRecord[]>;
+  updateRefreshToken(sessionId: string, currentRefreshToken: string, nextRefreshToken: string, expiresAt: Date): Promise<SessionRecord>;
   markFamilyCompromised(tokenFamilyId: string): Promise<void>;
   findConsumedTokenFamily(refreshToken: string): Promise<string | null>;
   revoke(sessionId: string): Promise<void>;
+  revokeOwned(sessionId: string, userId: string, tenantId: string): Promise<boolean>;
+  revokeAllOwned(userId: string, tenantId: string): Promise<number>;
   revokeByMembership(userId: string, tenantId: string, membershipVersion: number): Promise<void>;
   revokeByUser(userId: string): Promise<void>;
   revokeByUserExcept(userId: string, activeSessionId: string): Promise<void>;
@@ -56,9 +70,14 @@ export class InMemorySessionStore implements SessionStore {
       id: randomUUID(),
       userId: input.userId,
       tenantId: input.tenantId,
+      membershipId: input.membershipId,
+      activePersona: input.activePersona,
       roles: [...input.roles],
       subjectType: input.subjectType,
       subjectId: input.subjectId,
+      deviceLabel: input.deviceLabel,
+      clientIpPrefix: input.clientIpPrefix,
+      lastSeenAt: now,
       tokenFamilyId: randomUUID(),
       refreshTokenHash: hashRefreshToken(input.refreshToken),
       status: "ACTIVE",
@@ -70,6 +89,16 @@ export class InMemorySessionStore implements SessionStore {
 
     this.sessions.set(session.id, session);
     return cloneSession(session);
+  }
+
+  async replace(sessionId: string, input: SessionIssueInput): Promise<SessionRecord> {
+    const current = this.requireSession(sessionId);
+    if (current.status !== "ACTIVE" || current.userId !== input.userId || current.tenantId !== input.tenantId) {
+      throw new Error("SESSION_REPLACE_CONFLICT");
+    }
+    const replacement = await this.create(input);
+    this.sessions.set(sessionId, { ...current, status: "REVOKED", updatedAt: new Date() });
+    return replacement;
   }
 
   async findById(sessionId: string): Promise<SessionRecord | null> {
@@ -86,13 +115,24 @@ export class InMemorySessionStore implements SessionStore {
     return null;
   }
 
-  async updateRefreshToken(sessionId: string, refreshToken: string, expiresAt: Date): Promise<SessionRecord> {
+  async listActiveByUser(userId: string, tenantId: string): Promise<SessionRecord[]> {
+    return [...this.sessions.values()]
+      .filter((session) => session.userId === userId && session.tenantId === tenantId && session.status === "ACTIVE" && session.expiresAt.getTime() > Date.now())
+      .sort((left, right) => (right.lastSeenAt ?? right.updatedAt).getTime() - (left.lastSeenAt ?? left.updatedAt).getTime())
+      .map((session) => cloneSession(session));
+  }
+
+  async updateRefreshToken(sessionId: string, currentRefreshToken: string, nextRefreshToken: string, expiresAt: Date): Promise<SessionRecord> {
     const session = this.requireSession(sessionId);
+    if (session.status !== "ACTIVE" || session.refreshTokenHash !== hashRefreshToken(currentRefreshToken)) {
+      throw new Error("REFRESH_TOKEN_ROTATION_CONFLICT");
+    }
     this.consumedRefreshTokens.set(session.refreshTokenHash, session.tokenFamilyId);
     const updated = {
       ...session,
-      refreshTokenHash: hashRefreshToken(refreshToken),
+      refreshTokenHash: hashRefreshToken(nextRefreshToken),
       expiresAt,
+      lastSeenAt: new Date(),
       updatedAt: new Date(),
     };
     this.sessions.set(sessionId, updated);
@@ -114,6 +154,24 @@ export class InMemorySessionStore implements SessionStore {
   async revoke(sessionId: string): Promise<void> {
     const session = this.requireSession(sessionId);
     this.sessions.set(sessionId, { ...session, status: "REVOKED", updatedAt: new Date() });
+  }
+
+  async revokeOwned(sessionId: string, userId: string, tenantId: string): Promise<boolean> {
+    const session = this.sessions.get(sessionId);
+    if (!session || session.userId !== userId || session.tenantId !== tenantId || session.status !== "ACTIVE") return false;
+    this.sessions.set(sessionId, { ...session, status: "REVOKED", updatedAt: new Date() });
+    return true;
+  }
+
+  async revokeAllOwned(userId: string, tenantId: string): Promise<number> {
+    let revokedCount = 0;
+    for (const [id, session] of this.sessions) {
+      if (session.userId === userId && session.tenantId === tenantId && session.status === "ACTIVE") {
+        this.sessions.set(id, { ...session, status: "REVOKED", updatedAt: new Date() });
+        revokedCount += 1;
+      }
+    }
+    return revokedCount;
   }
 
   async revokeByMembership(userId: string, tenantId: string, membershipVersion: number): Promise<void> {
@@ -158,32 +216,57 @@ export class PostgresSessionStore implements SessionStore {
 
   async create(input: SessionIssueInput): Promise<SessionRecord> {
     return this.withClient(async (client) => {
-      const result = await client.query<SessionRow>(
+      return this.insert(client, input);
+    });
+  }
+
+  async replace(sessionId: string, input: SessionIssueInput): Promise<SessionRecord> {
+    return this.withClient(async (client) => {
+      const revoked = await client.query(
+        `UPDATE "AuthSession"
+         SET "status" = 'REVOKED',
+             "updatedAt" = now()
+         WHERE "id" = $1
+           AND "userId" = $2
+           AND "tenantId" = $3
+           AND "status" = 'ACTIVE'
+         RETURNING "id"`,
+        [sessionId, input.userId, input.tenantId],
+      );
+      if (!revoked.rows[0]) throw new Error("SESSION_REPLACE_CONFLICT");
+      return this.insert(client, input);
+    });
+  }
+
+  private async insert(client: pg.PoolClient, input: SessionIssueInput): Promise<SessionRecord> {
+    const result = await client.query<SessionRow>(
         `INSERT INTO "AuthSession" (
-           "id", "userId", "tenantId", "roles", "subjectType", "subjectId",
+           "id", "userId", "tenantId", "membershipId", "activePersona", "roles", "subjectType", "subjectId",
+           "deviceLabel", "clientIpPrefix", "lastSeenAt",
            "tokenFamilyId", "refreshTokenHash", "status", "membershipVersion", "expiresAt", "updatedAt"
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ACTIVE', $9, $10, now())
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), $11, $12, 'ACTIVE', $13, $14, now())
          RETURNING *`,
         [
           randomUUID(),
           input.userId,
           input.tenantId,
+          input.membershipId ?? null,
+          input.activePersona ?? null,
           input.roles,
           input.subjectType ?? null,
           input.subjectId ?? null,
+          input.deviceLabel ?? null,
+          input.clientIpPrefix ?? null,
           randomUUID(),
           hashRefreshToken(input.refreshToken),
           input.membershipVersion,
           input.expiresAt,
         ],
-      );
-      const record = result.rows[0];
-      if (!record) {
-        throw new Error("SESSION_CREATE_FAILED");
-      }
-      return toSessionRecord(record);
-    });
+    );
+    const record = result.rows[0];
+    if (!record) throw new Error("SESSION_CREATE_FAILED");
+    return toSessionRecord(record);
   }
 
   async findById(sessionId: string): Promise<SessionRecord | null> {
@@ -205,37 +288,47 @@ export class PostgresSessionStore implements SessionStore {
     });
   }
 
-  async updateRefreshToken(sessionId: string, refreshToken: string, expiresAt: Date): Promise<SessionRecord> {
+  async listActiveByUser(userId: string, tenantId: string): Promise<SessionRecord[]> {
     return this.withClient(async (client) => {
-      const existing = await client.query<SessionRow>(`SELECT * FROM "AuthSession" WHERE "id" = $1 LIMIT 1`, [
-        sessionId,
-      ]);
-      const session = existing.rows[0];
-      if (!session) {
-        throw new Error("SESSION_NOT_FOUND");
-      }
-
-      await client.query(
-        `INSERT INTO "ConsumedRefreshToken" ("refreshTokenHash", "tokenFamilyId", "updatedAt")
-         VALUES ($1, $2, now())
-         ON CONFLICT ("refreshTokenHash") DO UPDATE
-         SET "tokenFamilyId" = EXCLUDED."tokenFamilyId",
-             "updatedAt" = now()`,
-        [session.refreshTokenHash, session.tokenFamilyId],
+      const result = await client.query<SessionRow>(
+        `SELECT * FROM "AuthSession"
+         WHERE "userId" = $1
+           AND "tenantId" = $2
+           AND "status" = 'ACTIVE'
+           AND "expiresAt" > now()
+         ORDER BY "lastSeenAt" DESC`,
+        [userId, tenantId],
       );
+      return result.rows.map(toSessionRecord);
+    });
+  }
 
+  async updateRefreshToken(sessionId: string, currentRefreshToken: string, nextRefreshToken: string, expiresAt: Date): Promise<SessionRecord> {
+    return this.withClient(async (client) => {
       const updated = await client.query<SessionRow>(
-        `UPDATE "AuthSession"
-         SET "refreshTokenHash" = $2,
-             "expiresAt" = $3,
-             "updatedAt" = now()
-         WHERE "id" = $1
-         RETURNING *`,
-        [sessionId, hashRefreshToken(refreshToken), expiresAt],
+        `WITH rotated AS (
+           UPDATE "AuthSession"
+           SET "refreshTokenHash" = $3,
+               "expiresAt" = $4,
+               "lastSeenAt" = now(),
+               "updatedAt" = now()
+           WHERE "id" = $1
+             AND "refreshTokenHash" = $2
+             AND "status" = 'ACTIVE'
+           RETURNING *
+         ), consumed AS (
+           INSERT INTO "ConsumedRefreshToken" ("refreshTokenHash", "tokenFamilyId", "updatedAt")
+           SELECT $2, "tokenFamilyId", now() FROM rotated
+           ON CONFLICT ("refreshTokenHash") DO UPDATE
+           SET "tokenFamilyId" = EXCLUDED."tokenFamilyId",
+               "updatedAt" = now()
+         )
+         SELECT * FROM rotated`,
+        [sessionId, hashRefreshToken(currentRefreshToken), hashRefreshToken(nextRefreshToken), expiresAt],
       );
       const record = updated.rows[0];
       if (!record) {
-        throw new Error("SESSION_NOT_FOUND");
+        throw new Error("REFRESH_TOKEN_ROTATION_CONFLICT");
       }
       return toSessionRecord(record);
     });
@@ -276,6 +369,39 @@ export class PostgresSessionStore implements SessionStore {
       if (!result.rows[0]) {
         throw new Error("SESSION_NOT_FOUND");
       }
+    });
+  }
+
+  async revokeOwned(sessionId: string, userId: string, tenantId: string): Promise<boolean> {
+    return this.withClient(async (client) => {
+      const result = await client.query(
+        `UPDATE "AuthSession"
+         SET "status" = 'REVOKED',
+             "updatedAt" = now()
+         WHERE "id" = $1
+           AND "userId" = $2
+           AND "tenantId" = $3
+           AND "status" = 'ACTIVE'
+         RETURNING "id"`,
+        [sessionId, userId, tenantId],
+      );
+      return Boolean(result.rows[0]);
+    });
+  }
+
+  async revokeAllOwned(userId: string, tenantId: string): Promise<number> {
+    return this.withClient(async (client) => {
+      const result = await client.query(
+        `UPDATE "AuthSession"
+         SET "status" = 'REVOKED',
+             "updatedAt" = now()
+         WHERE "userId" = $1
+           AND "tenantId" = $2
+           AND "status" = 'ACTIVE'
+         RETURNING "id"`,
+        [userId, tenantId],
+      );
+      return result.rowCount ?? result.rows.length;
     });
   }
 
@@ -347,9 +473,14 @@ interface SessionRow {
   id: string;
   userId: string;
   tenantId: string;
+  membershipId: string | null;
+  activePersona: ActivePersona | null;
   roles: string[];
   subjectType: "STUDENT" | "GUARDIAN" | "TEACHER" | null;
   subjectId: string | null;
+  deviceLabel: string | null;
+  clientIpPrefix: string | null;
+  lastSeenAt: Date;
   tokenFamilyId: string;
   refreshTokenHash: string;
   status: SessionStatus;
@@ -364,9 +495,14 @@ function toSessionRecord(row: SessionRow): SessionRecord {
     id: row.id,
     userId: row.userId,
     tenantId: row.tenantId,
+    membershipId: row.membershipId ?? undefined,
+    activePersona: row.activePersona ?? undefined,
     roles: row.roles,
     subjectType: row.subjectType ?? undefined,
     subjectId: row.subjectId ?? undefined,
+    deviceLabel: row.deviceLabel ?? undefined,
+    clientIpPrefix: row.clientIpPrefix ?? undefined,
+    lastSeenAt: row.lastSeenAt,
     tokenFamilyId: row.tokenFamilyId,
     refreshTokenHash: row.refreshTokenHash,
     status: row.status,

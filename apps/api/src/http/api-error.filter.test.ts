@@ -47,6 +47,23 @@ describe("ApiErrorFilter Sentry reporting", () => {
     expect(filter.reports).toEqual([]);
     expect(response.status).toHaveBeenCalledWith(400);
   });
+
+  it("bilinen DB quota ihlalini 409 olarak ve PII sızdırmadan döner", () => {
+    const response = createResponse();
+    const host = createHost(response, { method: "POST", path: "/api/v1/students" });
+    const filter = new TestApiErrorFilter();
+
+    filter.catch({ code: "P0001", message: "ACTIVE_STUDENT_LIMIT_REACHED", detail: "tenant-secret" }, host);
+
+    expect(filter.reports).toEqual([]);
+    expect(response.status).toHaveBeenCalledWith(409);
+    expect(response.json).toHaveBeenCalledWith({
+      error: {
+        code: "ACTIVE_STUDENT_LIMIT_REACHED",
+        message: "Çakışma oluştu.",
+      },
+    });
+  });
 });
 
 function createResponse() {

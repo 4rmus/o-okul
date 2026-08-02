@@ -155,14 +155,21 @@ async function main() {
     );
 
     const systemUser = await client.query<{ id: string }>(
-      `INSERT INTO "User" ("id", "tenantId", "email", "nationalIdEncrypted", "nationalIdHash", "name", "passwordHash", "updatedAt")
-       VALUES ('user-system', 'system', NULL, $1, $2, 'System Admin', $3, now())
+      `INSERT INTO "User" (
+         "id", "tenantId", "email", "loginName", "loginNameNormalized", "nationalIdEncrypted", "nationalIdHash",
+         "name", "passwordHash", "passwordHashVersion", "accountStatus", "updatedAt"
+       )
+       VALUES ('user-system', 'system', NULL, 'legacy-system-admin', 'legacy-system-admin', $1, $2, 'System Admin', $3, 1, 'ACTIVE', now())
        ON CONFLICT ("id") DO UPDATE
        SET "email" = NULL,
            "tenantId" = EXCLUDED."tenantId",
+           "loginName" = EXCLUDED."loginName",
+           "loginNameNormalized" = EXCLUDED."loginNameNormalized",
            "nationalIdEncrypted" = EXCLUDED."nationalIdEncrypted",
            "nationalIdHash" = EXCLUDED."nationalIdHash",
            "passwordHash" = EXCLUDED."passwordHash",
+           "passwordHashVersion" = EXCLUDED."passwordHashVersion",
+           "accountStatus" = EXCLUDED."accountStatus",
            "updatedAt" = now()
        RETURNING "id"`,
       [encryptTcIdentity(systemAdminNationalId), hashTcIdentity(systemAdminNationalId), demoPasswordHash],
@@ -201,23 +208,38 @@ async function main() {
 
     const demoAdminNationalId = demoLoginNationalIds.admin;
     const user = await client.query<{ id: string }>(
-      `INSERT INTO "User" ("id", "tenantId", "email", "nationalIdEncrypted", "nationalIdHash", "name", "passwordHash", "updatedAt")
-       VALUES ('user-demo-admin', $1, NULL, $2, $3, 'Demo Yönetici', $4, now())
+      `INSERT INTO "User" (
+         "id", "tenantId", "email", "loginName", "loginNameNormalized", "nationalIdEncrypted", "nationalIdHash",
+         "name", "passwordHash", "passwordHashVersion", "accountStatus", "updatedAt"
+       )
+       VALUES ('user-demo-admin', $1, NULL, 'demo-admin', 'demo-admin', $2, $3, 'Demo Yönetici', $4, 1, 'ACTIVE', now())
        ON CONFLICT ("id") DO UPDATE
        SET "tenantId" = EXCLUDED."tenantId",
            "email" = NULL,
+           "loginName" = EXCLUDED."loginName",
+           "loginNameNormalized" = EXCLUDED."loginNameNormalized",
            "nationalIdEncrypted" = EXCLUDED."nationalIdEncrypted",
            "nationalIdHash" = EXCLUDED."nationalIdHash",
            "passwordHash" = EXCLUDED."passwordHash",
+           "passwordHashVersion" = EXCLUDED."passwordHashVersion",
+           "accountStatus" = EXCLUDED."accountStatus",
            "updatedAt" = now()
        RETURNING "id"`,
       [tenantId, encryptTcIdentity(demoAdminNationalId), hashTcIdentity(demoAdminNationalId), demoPasswordHash],
     );
 
     await client.query(
-      `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
-       VALUES ('membership-demo-admin', $1, $2, 'TENANT_ADMIN', now())
-       ON CONFLICT ("tenantId", "userId", "role") DO UPDATE SET "updatedAt" = now()`,
+      `INSERT INTO "TenantMembership" (
+         "id", "tenantId", "userId", "role", "staffRole", "hasTeacherPersona", "hasStudentPersona",
+         "status", "version", "scopeMode", "updatedAt"
+       ) VALUES ('membership-demo-admin', $1, $2, 'TENANT_ADMIN', 'TENANT_ADMIN', false, false, 'ACTIVE', 1, 'TENANT', now())
+       ON CONFLICT ("tenantId", "userId", "role") DO UPDATE
+       SET "staffRole" = EXCLUDED."staffRole",
+           "hasTeacherPersona" = EXCLUDED."hasTeacherPersona",
+           "hasStudentPersona" = EXCLUDED."hasStudentPersona",
+           "status" = 'ACTIVE',
+           "scopeMode" = 'TENANT',
+           "updatedAt" = now()`,
       [tenant.rows[0]?.id, user.rows[0]?.id],
     );
 
@@ -334,23 +356,49 @@ async function seedDemoSubjectUsers(client: pg.PoolClient, tenantId: string, fix
 
   for (const account of accounts) {
     await client.query(
-      `INSERT INTO "User" ("id", "tenantId", "email", "nationalIdEncrypted", "nationalIdHash", "name", "passwordHash", "updatedAt")
-       VALUES ($1, $2, NULL, $3, $4, $5, $6, now())
+      `INSERT INTO "User" (
+         "id", "tenantId", "email", "loginName", "loginNameNormalized", "nationalIdEncrypted", "nationalIdHash",
+         "name", "passwordHash", "passwordHashVersion", "accountStatus", "updatedAt"
+       )
+       VALUES ($1, $2, NULL, $7, $7, $3, $4, $5, $6, 1, 'ACTIVE', now())
        ON CONFLICT ("id") DO UPDATE
        SET "tenantId" = EXCLUDED."tenantId",
            "email" = NULL,
+           "loginName" = EXCLUDED."loginName",
+           "loginNameNormalized" = EXCLUDED."loginNameNormalized",
            "nationalIdEncrypted" = EXCLUDED."nationalIdEncrypted",
            "nationalIdHash" = EXCLUDED."nationalIdHash",
            "name" = EXCLUDED."name",
            "passwordHash" = EXCLUDED."passwordHash",
+           "passwordHashVersion" = EXCLUDED."passwordHashVersion",
+           "accountStatus" = EXCLUDED."accountStatus",
            "updatedAt" = now()`,
-      [account.id, tenantId, encryptTcIdentity(account.nationalId), hashTcIdentity(account.nationalId), account.name, demoPasswordHash],
+      [
+        account.id,
+        tenantId,
+        encryptTcIdentity(account.nationalId),
+        hashTcIdentity(account.nationalId),
+        account.name,
+        demoPasswordHash,
+        account.id.replace(/^user-/, ""),
+      ],
     );
 
     await client.query(
-      `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
-       VALUES ($1, $2, $3, $4::"TenantRole", now())
-       ON CONFLICT ("tenantId", "userId", "role") DO UPDATE SET "updatedAt" = now()`,
+      `INSERT INTO "TenantMembership" (
+         "id", "tenantId", "userId", "role", "staffRole", "hasTeacherPersona", "hasStudentPersona",
+         "status", "version", "scopeMode", "updatedAt"
+       ) VALUES (
+         $1, $2, $3, $4::"TenantRole", NULL,
+         $4 = 'TEACHER', $4 = 'STUDENT', 'ACTIVE', 1, 'TENANT', now()
+       )
+       ON CONFLICT ("tenantId", "userId", "role") DO UPDATE
+       SET "staffRole" = NULL,
+           "hasTeacherPersona" = EXCLUDED."hasTeacherPersona",
+           "hasStudentPersona" = EXCLUDED."hasStudentPersona",
+           "status" = 'ACTIVE',
+           "scopeMode" = 'TENANT',
+           "updatedAt" = now()`,
       [`membership-${account.id}`, tenantId, account.id, account.role],
     );
   }

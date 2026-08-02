@@ -6,15 +6,23 @@ export type Role = TenantRoleName;
 
 const roleRank: Record<Role, number> = {
   SYSTEM_ADMIN: 5,
+  TENANT_OWNER: 4.5,
   TENANT_ADMIN: 4,
   ASSISTANT_ADMIN: 3.5,
+  OPERATIONS_STAFF: 3.5,
+  FINANCE_STAFF: 3.5,
   TEACHER: 3,
   STUDENT: 2,
   GUARDIAN: 1,
 };
 
 export function hasRole(userRoles: readonly string[], requiredRole: Role): boolean {
-  return userRoles.some((role) => isRole(role) && roleRank[role] >= roleRank[requiredRole]);
+  return userRoles.some((role) => (
+    isRole(role) && (
+      role === requiredRole ||
+      (role !== "FINANCE_STAFF" && roleRank[role] >= roleRank[requiredRole])
+    )
+  ));
 }
 
 export function assertRole(userRoles: readonly string[], requiredRole: Role): void {

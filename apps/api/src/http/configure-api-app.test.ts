@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { getAllowedCorsOrigins } from "./configure-api-app.js";
+import type { INestApplication } from "@nestjs/common";
+import { describe, expect, it, vi } from "vitest";
+import { configureApiApp, getAllowedCorsOrigins } from "./configure-api-app.js";
 
 describe("getAllowedCorsOrigins", () => {
   it("falls back to the local web origin when no env is configured", () => {
@@ -29,5 +30,32 @@ describe("getAllowedCorsOrigins", () => {
       "https://212.108.107.190",
       "http://212.108.107.190:3001",
     ]);
+  });
+
+  it("Express'e yalnız allowlist'teki proxy'leri tanıtır", () => {
+    const express = { disable: vi.fn(), set: vi.fn() };
+    const app = {
+      enableCors: vi.fn(),
+      getHttpAdapter: () => ({ getInstance: () => express }),
+      setGlobalPrefix: vi.fn(),
+      use: vi.fn(),
+      useGlobalInterceptors: vi.fn(),
+    } as unknown as INestApplication;
+
+    configureApiApp(app, { TRUSTED_PROXY_CIDRS: "172.30.0.2/32" });
+
+    const predicate = express.set.mock.calls.find(([setting]) => setting === "trust proxy")?.[1] as (address: string) => boolean;
+    expect(predicate("172.30.0.2")).toBe(true);
+    expect(predicate("172.30.0.3")).toBe(false);
+  });
+
+  it("trust proxy ayarı yapılamıyorsa uygulamayı başlatmaz", () => {
+    const app = {
+      getHttpAdapter: () => ({ getInstance: () => ({ disable: vi.fn() }) }),
+    } as unknown as INestApplication;
+
+    expect(() => configureApiApp(app, { TRUSTED_PROXY_CIDRS: "172.30.0.2/32" })).toThrow(
+      "EXPRESS_TRUST_PROXY_UNAVAILABLE",
+    );
   });
 });

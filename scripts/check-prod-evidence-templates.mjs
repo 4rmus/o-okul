@@ -38,6 +38,27 @@ const templateChecks = [
     { IDENTITY_MIGRATION_ALLOW_EXAMPLE_EVIDENCE: "1" },
   ],
   [
+    "Account management preflight template",
+    "ACCOUNT_MANAGEMENT_PREFLIGHT_TARGET",
+    "docs/evidence-templates/account-management-preflight.example.json",
+    "scripts/check-account-management-preflight.mjs",
+    { ACCOUNT_MANAGEMENT_PREFLIGHT_ALLOW_EXAMPLE: "1" },
+  ],
+  [
+    "Account management backfill template",
+    "ACCOUNT_MANAGEMENT_BACKFILL_TARGET",
+    "docs/evidence-templates/account-management-backfill.example.json",
+    "scripts/check-account-management-backfill.mjs",
+    { ACCOUNT_MANAGEMENT_BACKFILL_ALLOW_EXAMPLE: "1" },
+  ],
+  [
+    "LicenseTerm backfill template",
+    "LICENSE_TERM_BACKFILL_TARGET",
+    "docs/evidence-templates/license-term-backfill.example.json",
+    "scripts/check-license-term-backfill.mjs",
+    { LICENSE_TERM_BACKFILL_ALLOW_EXAMPLE: "1" },
+  ],
+  [
     "Financial retention template",
     "FINANCIAL_RETENTION_TARGET",
     "docs/evidence-templates/financial-retention.example.json",
@@ -374,6 +395,7 @@ runStagingEvidenceEnvNegativeCheck();
 runStagingFirstGatesFixtureCheck();
 runStagingFirstGatesTargetNegativeCheck();
 runStagingFirstGatesOutputDirNegativeCheck();
+runProdEnvValidCheck();
 runProdEnvHttpEvidenceTargetNegativeCheck();
 runProdEnvSecretEvidenceTargetNegativeCheck();
 runProdEnvLocalEvidenceTargetNegativeCheck();
@@ -390,6 +412,8 @@ runProdEvidenceTempFileEvidenceTargetNegativeCheck();
 runProdEvidenceSymlinkEvidenceTargetNegativeCheck();
 runProdEvidenceSymlinkParentEvidenceTargetNegativeCheck();
 runProdEnvTraefikOriginNegativeCheck();
+runProdEnvTrustedForwarderNegativeCheck();
+runProdEnvProxyTopologyNegativeCheck();
 runProdEnvMissingAlertWebhookTokenNegativeCheck();
 runProdEnvMissingSmsSmokeConfirmNegativeCheck();
 runProdEnvMissingSentrySmokeConfirmNegativeCheck();
@@ -1503,6 +1527,14 @@ runRateLimitNegativeCheck({
     fixture.evidenceReferences[0] = "https://user:secret@evidence.o-okul.com/rate-limit.json?token=secret#fragment";
   },
 });
+runRateLimitNegativeCheck({
+  label: "Rate limit missing egress hash reference negative",
+  path: "docs/evidence-templates/rate-limit.missing-egress-hash-reference.tmp.json",
+  expectedFailure: "evidenceReferences tam bir rate-limit-egress-ip: 64-hex hash referansı içermeli.",
+  mutate: (fixture) => {
+    fixture.evidenceReferences = fixture.evidenceReferences.filter((reference) => !reference.startsWith("rate-limit-egress-ip:"));
+  },
+});
 runRateLimitSecretTargetNegativeCheck();
 runRateLimitLocalArtifactTargetNegativeCheck();
 runRateLimitGeneratorLocalArtifactNegativeChecks();
@@ -1550,7 +1582,7 @@ runRlsLiveNegativeCheck({
 runRlsLiveNegativeCheck({
   label: "RLS live tenant FK missing relation negative",
   path: "docs/evidence-templates/rls-live.missing-tenant-fk-relation.tmp.json",
-  expectedFailure: "tenantFkPreflight.relationsVerified tam 23 relation icermeli.",
+  expectedFailure: "tenantFkPreflight.relationsVerified tam 29 relation icermeli.",
   mutate: (fixture) => {
     fixture.tenantFkPreflight.relationsVerified = fixture.tenantFkPreflight.relationsVerified.filter(
       (relation) => relation !== "Student.responsibleTeacher",
@@ -1576,7 +1608,7 @@ runRlsLiveNegativeCheck({
 runRlsLiveNegativeCheck({
   label: "RLS live extra table negative",
   path: "docs/evidence-templates/rls-live.extra-table.tmp.json",
-  expectedFailure: "schema.tablesVerified tam 57 tablo icermeli.",
+  expectedFailure: "schema.tablesVerified tam 62 tablo icermeli.",
   mutate: (fixture) => {
     fixture.schema.tablesVerified.push("UnexpectedTenantTable");
   },
@@ -2051,7 +2083,7 @@ runProductionSummaryNegativeCheck({
 runProductionSummaryNegativeCheck({
   label: "Production summary RLS tenant FK missing relation negative",
   path: "docs/evidence-templates/production-evidence-summary.rls-tenant-fk-missing-relation.tmp.json",
-  expectedFailure: "reports.rlsLive.tenantFkPreflight.relationsVerified tam 23 madde içermeli.",
+  expectedFailure: "reports.rlsLive.tenantFkPreflight.relationsVerified tam 29 madde içermeli.",
   mutate: (fixture) => {
     fixture.reports.rlsLive.tenantFkPreflight.relationsVerified = fixture.reports.rlsLive.tenantFkPreflight.relationsVerified.filter(
       (relation) => relation !== "Student.responsibleTeacher",
@@ -2802,7 +2834,7 @@ runGoLiveNegativeCheck({
   label: "Go-live linked summary RLS tenant FK missing relation negative",
   path: "docs/evidence-templates/go-live.linked-summary-rls-tenant-fk-missing-relation.tmp.json",
   expectedFailure:
-    "productionEvidenceSummary.summary.reports.rlsLive.tenantFkPreflight.relationsVerified tam 23 madde icermeli.",
+    "productionEvidenceSummary.summary.reports.rlsLive.tenantFkPreflight.relationsVerified tam 29 madde icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.rls-tenant-fk-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -7592,6 +7624,61 @@ function runProdEnvTraefikOriginNegativeCheck() {
   }
 }
 
+function runProdEnvValidCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-prod-env.mjs"], {
+    env: createValidProdEnvForNegativeCheck(),
+    encoding: "utf8",
+  });
+
+  if (result.status !== 0) {
+    console.error("Production evidence template kontrolü başarısız: geçerli prod env kontrolü kırıldı.");
+    console.error(result.stderr);
+    process.exit(1);
+  }
+}
+
+function runProdEnvTrustedForwarderNegativeCheck() {
+  const env = createValidProdEnvForNegativeCheck();
+  env.TRAEFIK_TRUSTED_FORWARDER_CIDRS = "0.0.0.0/0";
+
+  const result = spawnSync(process.execPath, ["scripts/check-prod-env.mjs"], {
+    env,
+    encoding: "utf8",
+  });
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: prod env geniş trusted forwarder negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+
+  if (!String(result.stderr).includes("TRAEFIK_TRUSTED_FORWARDER_CIDRS yalnız sabit proxy IP'lerini /32 veya /128 ile içermeli.")) {
+    console.error("Production evidence template kontrolü başarısız: prod env geniş trusted forwarder negative beklenen hata yok.");
+    console.error(result.stderr);
+    process.exit(1);
+  }
+}
+
+function runProdEnvProxyTopologyNegativeCheck() {
+  const env = createValidProdEnvForNegativeCheck();
+  env.TRUSTED_PROXY_CIDRS = "172.31.255.3/32";
+
+  const result = spawnSync(process.execPath, ["scripts/check-prod-env.mjs"], {
+    env,
+    encoding: "utf8",
+  });
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: prod env yanlış trusted proxy negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+
+  if (!String(result.stderr).includes("TRUSTED_PROXY_CIDRS yalnız TRAEFIK_PROXY_IP/32 ile eşleşmeli.")) {
+    console.error("Production evidence template kontrolü başarısız: prod env yanlış trusted proxy negative beklenen hata yok.");
+    console.error(result.stderr);
+    process.exit(1);
+  }
+}
+
 function runProdEnvMissingAlertWebhookTokenNegativeCheck() {
   const env = createValidProdEnvForNegativeCheck();
   delete env.ALERT_WEBHOOK_TOKEN;
@@ -7850,11 +7937,15 @@ function createValidProdEnvForNegativeCheck() {
     WEB_URL: "https://o-okul.com",
     DATABASE_URL: "postgresql://app_user:strong-password@db.o-okul.internal:5432/o_okul",
     DIRECT_DATABASE_URL: "postgresql://migration_user:strong-password@db.o-okul.internal:5432/o_okul",
+    SECRET_DELIVERY_OUTBOX_DATABASE_URL: "postgresql://secret_delivery_worker:secret-delivery-worker-db-password-123456789@db.o-okul.internal:5432/o_okul",
+    DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL: "postgresql://secret_delivery_worker:secret-delivery-worker-db-password-123456789@postgres:5432/o_okul",
+    SECRET_DELIVERY_WORKER_DB_PASSWORD: "secret-delivery-worker-db-password-123456789",
     JWT_ACCESS_SECRET: "access-secret-123456789012345678901234",
     STUDENT_PII_ENCRYPTION_KEY: "student-pii-encryption-123456789012",
     STUDENT_PII_HASH_KEY: "student-pii-hash-123456789012345678",
     ADMIN_MFA_MODE: "required",
     ADMIN_MFA_SECRET_ENCRYPTION_KEY: "admin-mfa-secret-encryption-1234567",
+    SECRET_DELIVERY_ENCRYPTION_KEY: "secret-delivery-encryption-123456789",
     ADMIN_MFA_RECOVERY_HASH_KEY: "admin-mfa-recovery-hash-12345678901",
     ADMIN_MFA_CHALLENGE_SECRET: "admin-mfa-challenge-secret-123456789",
     ADMIN_MFA_ISSUER: "o-okul",
@@ -7867,6 +7958,13 @@ function createValidProdEnvForNegativeCheck() {
     API_RATE_LIMIT_STORE: "redis",
     API_RATE_LIMIT_WINDOW_MS: "60000",
     API_RATE_LIMIT_MAX: "300",
+    DOCKER_PROXY_SUBNET: "172.31.255.0/29",
+    DOCKER_PROXY_NETWORK: "o-okul_proxy_net",
+    TRAEFIK_PROXY_IP: "172.31.255.2",
+    API_PROXY_IP: "172.31.255.3",
+    RATE_LIMIT_SMOKE_EGRESS_IP: "172.31.255.4",
+    TRUSTED_PROXY_CIDRS: "172.31.255.2/32",
+    TRAEFIK_TRUSTED_FORWARDER_CIDRS: "",
     IDEMPOTENCY_STORE: "postgres",
     REPORT_PDF_RENDERER: "worker",
     REPORT_PDF_RENDER_TIMEOUT_MS: "30000",
@@ -7952,6 +8050,7 @@ function createValidProdEnvForNegativeCheck() {
     "AUDIT_NULL_TENANT_EVIDENCE_TARGET",
     "RATE_LIMIT_EVIDENCE_TARGET",
     "RLS_LIVE_EVIDENCE_TARGET",
+    "PRODUCTION_EVIDENCE_SUMMARY_TARGET",
     "PILOT_EVIDENCE_TARGET",
     "GO_LIVE_EVIDENCE_TARGET",
     "LIVE_STATUS_EVIDENCE_TARGET",

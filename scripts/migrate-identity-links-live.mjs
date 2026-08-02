@@ -57,12 +57,22 @@ async function migrateSubject(subject) {
     const name = `${row.firstName} ${row.lastName}`.trim() || `${subject.role} ${row.id}`;
 
     await client.query(
-      `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
-       VALUES ($1, $2, $3, $4, now())
-       ON CONFLICT ("email") DO UPDATE
-       SET "name" = EXCLUDED."name",
+      `INSERT INTO "User" (
+         "id", "tenantId", "email", "emailNormalized", "loginName", "loginNameNormalized",
+         "name", "passwordHash", "passwordHashVersion", "accountStatus", "updatedAt"
+       )
+       VALUES ($1, $2, $3, $3, $3, $3, $4, $5, 1, 'DISABLED', now())
+       ON CONFLICT ("id") DO UPDATE
+       SET "tenantId" = EXCLUDED."tenantId",
+           "email" = EXCLUDED."email",
+           "emailNormalized" = EXCLUDED."emailNormalized",
+           "loginName" = EXCLUDED."loginName",
+           "loginNameNormalized" = EXCLUDED."loginNameNormalized",
+           "name" = EXCLUDED."name",
+           "passwordHashVersion" = EXCLUDED."passwordHashVersion",
+           "accountStatus" = EXCLUDED."accountStatus",
            "updatedAt" = now()`,
-      [userId, email, name, disabledPasswordHash],
+      [userId, row.tenantId, email, name, disabledPasswordHash],
     );
 
     await client.query(
@@ -77,17 +87,36 @@ async function migrateSubject(subject) {
   }
 
   await client.query(
-    `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
+    `INSERT INTO "TenantMembership" (
+       "id", "tenantId", "userId", "role", "staffRole", "hasTeacherPersona", "hasStudentPersona",
+       "status", "version", "scopeMode", "updatedAt"
+     )
      SELECT
        'membership-' || subject."userId" || '-' || lower($1),
        subject."tenantId",
        subject."userId",
        $1::"TenantRole",
+       NULL,
+       $1 = 'TEACHER',
+       $1 = 'STUDENT',
+       'ACTIVE',
+       account."membershipVersion",
+       'TENANT',
        now()
      FROM "${subject.table}" subject
+     JOIN "User" account
+       ON account."tenantId" = subject."tenantId"
+      AND account."id" = subject."userId"
      WHERE subject."deletedAt" IS NULL
        AND subject."userId" IS NOT NULL
-     ON CONFLICT ("tenantId", "userId", "role") DO UPDATE SET "updatedAt" = now()`,
+     ON CONFLICT ("tenantId", "userId", "role") DO UPDATE
+     SET "staffRole" = EXCLUDED."staffRole",
+         "hasTeacherPersona" = EXCLUDED."hasTeacherPersona",
+         "hasStudentPersona" = EXCLUDED."hasStudentPersona",
+         "status" = EXCLUDED."status",
+         "version" = EXCLUDED."version",
+         "scopeMode" = EXCLUDED."scopeMode",
+         "updatedAt" = now()`,
     [subject.role],
   );
 

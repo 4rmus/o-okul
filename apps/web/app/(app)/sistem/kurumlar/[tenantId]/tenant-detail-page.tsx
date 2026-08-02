@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
@@ -20,7 +20,6 @@ import {
   TabButton,
   Tabs,
   type StatusBadgeProps,
-  useConfirmDialog,
 } from "@o-okul/ui";
 import { useAuth } from "../../../../providers.js";
 import {
@@ -29,7 +28,7 @@ import {
   type TenantFormState,
 } from "../../../../../src/form-validation.js";
 import { PageFrame } from "../../../kurum/_shared/page-frame.js";
-import { deleteTenant, loadTenant, updateTenant, type TenantRecord } from "../../_shared/system-api.js";
+import { loadTenant, updateTenant, type TenantRecord } from "../../_shared/system-api.js";
 
 const emptyForm: TenantFormState = {
   name: "",
@@ -43,10 +42,8 @@ const emptyForm: TenantFormState = {
 
 export function TenantDetailPage() {
   const { tenantId } = useParams<{ tenantId: string }>();
-  const router = useRouter();
   const { auth } = useAuth();
   const queryClient = useQueryClient();
-  const { confirm, confirmationDialog } = useConfirmDialog();
   const tenantQuery = useQuery({
     queryKey: ["next-tenant", tenantId],
     queryFn: () => loadTenant(auth?.accessToken ?? "", tenantId),
@@ -95,27 +92,6 @@ export function TenantDetailPage() {
       setIsFormOpen(false);
     } catch {
       setError("Kurum güncellenemedi.");
-    }
-  }
-
-  async function handleDelete() {
-    if (!auth || !tenant) return;
-    const confirmed = await confirm({
-      confirmLabel: "Sil",
-      description: "Kurum listeden kaldırılır, kayıtlar korunur.",
-      message: `${tenant.name} kurumunu silmek istiyor musun?`,
-      title: "Kurumu sil",
-    });
-    if (!confirmed) return;
-
-    setError("");
-    try {
-      await deleteTenant(auth.accessToken, tenant.id);
-      void queryClient.invalidateQueries({ queryKey: ["next-tenants"] });
-      void queryClient.invalidateQueries({ queryKey: ["next-tenant", tenant.id] });
-      router.replace("/sistem/kurumlar");
-    } catch {
-      setError("Kurum silinemedi.");
     }
   }
 
@@ -206,10 +182,7 @@ export function TenantDetailPage() {
         <div aria-labelledby="tenant-detail-tab-management" id="tenant-detail-panel-management" role="tabpanel" tabIndex={0}>
           <Panel
             actions={
-              <>
-                <Button onClick={openEditForm}>Düzenle</Button>
-                <Button onClick={() => void handleDelete()} variant="danger">Sil</Button>
-              </>
+              <Button onClick={openEditForm}>Düzenle</Button>
             }
             aria-label="Kurum yönetimi"
             description="Kurum kimliği, lisans ve durum bilgisi yalnız sistem yöneticisi tarafından değiştirilir."
@@ -231,7 +204,6 @@ export function TenantDetailPage() {
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
       />
-      {confirmationDialog}
     </PageFrame>
   );
 }

@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "result": "PASS",
+  "environment": "staging",
+  "checkedAt": "2026-08-01T12:00:00.000Z",
+  "databaseReadOnly": true,
+  "checks": {
+    "foundation": {
+      "expectedTables": 7,
+      "presentTables": 7
+    },
+    "tenantEmailCollisions": {
+      "groups": 0,
+      "accounts": 0,
+      "tenantsAffected": 0
+    },
+    "multipleOpenEnrollments": {
+      "students": 0,
+      "enrollments": 0,
+      "tenantsAffected": 0
+    },
+    "invalidRoleCombinations": {
+      "accounts": 0,
+      "tenantsAffected": 0
+    },
+    "orphanProfileLinks": {
+      "profiles": 0,
+      "tenantsAffected": 0
+    },
+    "orphanSubjectMemberships": {
+      "accounts": 0,
+      "tenantsAffected": 0
+    },
+    "teacherEmployeeBackfill": {
+      "teachers": 12,
+      "missingEmployeeLinks": 12,
+      "tenantsAffected": 2
+    },
+    "guardianInventory": {
+      "guardians": 8,
+      "studentLinks": 12,
+      "linkedAccounts": 4,
+      "activeSessions": 0,
+      "pendingInvitations": 0,
+      "tenantsAffected": 2,
+      "classification": "FIXTURE_ONLY",
+      "classificationEvidenceReference": "ACCOUNT-MODEL-GUARDIAN-FIXTURE-APPROVAL-2026-08"
+    }
+  },
+  "blockers": [],
+  "gaps": []
+}

@@ -96,6 +96,7 @@ export class InMemoryTeacherStore implements TeacherStore {
     if (!record) return undefined;
 
     record.deletedAt = deletedAt;
+    record.userId = undefined;
     return record;
   }
 

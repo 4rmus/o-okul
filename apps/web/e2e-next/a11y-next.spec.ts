@@ -40,7 +40,7 @@ test.describe("Next erişilebilirlik smoke", () => {
     await page.goto("/login");
     await expect(page.getByRole("heading", { name: "Giriş" })).toBeVisible();
     const loginForm = page.getByRole("form", { name: "Giriş formu" });
-    await expect(loginForm.getByLabel("Kurum kodu")).toHaveCount(0);
+    await expect(loginForm.getByLabel("Kurum Kodu")).toBeVisible();
     await expect(loginForm.getByLabel("Kullanıcı Adı")).toBeVisible();
     await expect(loginForm.getByLabel("Şifre", { exact: true })).toBeVisible();
     await expect(loginForm.getByRole("textbox", { name: /E-posta/ })).toHaveCount(0);
@@ -49,7 +49,7 @@ test.describe("Next erişilebilirlik smoke", () => {
 
     await page.goto("/k/dna-egitim/giris");
     const tenantLoginForm = page.getByRole("form", { name: "Giriş formu" });
-    await expect(tenantLoginForm.getByLabel("Kurum kodu")).toHaveCount(0);
+    await expect(tenantLoginForm.getByLabel("Kurum Kodu")).toHaveCount(0);
     await expect(tenantLoginForm.getByLabel("Kullanıcı Adı")).toBeVisible();
     await expect(tenantLoginForm.getByLabel("Şifre", { exact: true })).toBeVisible();
     await expectNoHighImpactA11yViolations(page, "tenant-login");

@@ -57,6 +57,24 @@ describe("RequestContextMiddleware", () => {
     });
   });
 
+  it("kanonik kampüs scope'unu doğrulanmış tokendan request context'e taşır", async () => {
+    const middleware = createMiddleware({
+      roles: ["FINANCE_STAFF"],
+      tenantId: "tenant-a",
+      campusScope: { scopeMode: "CAMPUSES", campusIds: ["campus-main"] },
+    });
+    let captured;
+
+    await middleware.use(createRequest({ authorization: "Bearer finance-token" }), {} as never, () => {
+      captured = getRequestContext();
+    });
+
+    expect(captured).toMatchObject({
+      roles: ["FINANCE_STAFF"],
+      campusScope: { scopeMode: "CAMPUSES", campusIds: ["campus-main"] },
+    });
+  });
+
   it.each(["TEACHER", "STUDENT", "GUARDIAN"])("rejects %s tokens without subject binding", async (role) => {
     const middleware = createMiddleware({ roles: [role], tenantId: "tenant-a" });
 
@@ -116,14 +134,60 @@ describe("RequestContextMiddleware", () => {
       ),
     ).rejects.toThrow("TENANT_LICENSE_EXPIRED_READ_ONLY");
   });
+
+  it("rejects tenants before their license start on read and write methods", async () => {
+    const middleware = createMiddleware({
+      roles: ["TENANT_ADMIN"],
+      tenantId: "tenant-not-started",
+      licenseStartsAt: "2099-01-01T00:00:00.000Z",
+    });
+
+    await expect(
+      middleware.use(createRequest({ authorization: "Bearer tenant-token" }), {} as never, vi.fn()),
+    ).rejects.toThrow("TENANT_LICENSE_NOT_STARTED");
+  });
+
+  it.each([
+    ["FROZEN", "TENANT_LICENSE_FROZEN"],
+    ["EXPIRED", "TENANT_LICENSE_EXPIRED"],
+    ["CANCELLED", "TENANT_LICENSE_CANCELLED"],
+  ] as const)("%s lisans durumunda okumayı da reddeder", async (licenseState, errorCode) => {
+    const middleware = createMiddleware({ roles: ["TENANT_ADMIN"], tenantId: "tenant-closed", licenseState });
+    await expect(
+      middleware.use(createRequest({ authorization: "Bearer tenant-token" }), {} as never, vi.fn()),
+    ).rejects.toThrow(errorCode);
+  });
+
+  it("kanonik lisans dönemi yoksa fail-closed reddeder", async () => {
+    const middleware = createMiddleware({ roles: ["TENANT_ADMIN"], tenantId: "tenant-missing", licenseState: "MISSING" });
+    await expect(
+      middleware.use(createRequest({ authorization: "Bearer tenant-token" }), {} as never, vi.fn()),
+    ).rejects.toThrow("TENANT_LICENSE_TERM_MISSING");
+  });
+
+  it("legacy lisans aynası kanonik dönemle ayrışırsa fail-closed reddeder", async () => {
+    const middleware = createMiddleware({
+      roles: ["TENANT_ADMIN"],
+      tenantId: "tenant-drift",
+      licenseState: "ACTIVE",
+      mirrorParity: false,
+    });
+    await expect(
+      middleware.use(createRequest({ authorization: "Bearer tenant-token" }), {} as never, vi.fn()),
+    ).rejects.toThrow("TENANT_LICENSE_MIRROR_PARITY_MISMATCH");
+  });
 });
 
 function createMiddleware(input: {
   roles: string[];
   tenantId?: string;
   licenseEndsAt?: string;
+  licenseStartsAt?: string;
+  licenseState?: "SCHEDULED" | "ACTIVE" | "READ_ONLY" | "FROZEN" | "EXPIRED" | "CANCELLED" | "MISSING";
+  mirrorParity?: boolean;
   subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER";
   subjectId?: string;
+  campusScope?: { scopeMode: "TENANT" | "CAMPUSES"; campusIds: string[] };
 }) {
   return new RequestContextMiddleware(
     {
@@ -131,13 +195,34 @@ function createMiddleware(input: {
         sub: input.tenantId ? "user-tenant" : "user-system",
         tenantId: input.tenantId ?? "system",
         roles: input.roles,
+        campusScope: input.campusScope,
         subjectType: input.subjectType,
         subjectId: input.subjectId,
       }),
     } as never,
     { verifyPreviewToken: vi.fn() } as never,
     {
-      findForAdmin: async (tenantId: string) => ({ id: tenantId, status: "ACTIVE", licenseEndsAt: input.licenseEndsAt }),
+      findForAdmin: async (tenantId: string) => ({
+        id: tenantId,
+        status: "ACTIVE",
+        licenseEndsAt: input.licenseEndsAt,
+        licenseStartsAt: input.licenseStartsAt,
+      }),
+    } as never,
+    {
+      resolveForTenant: async (tenantId: string) => input.licenseState === "MISSING" ? undefined : ({
+        mirrorParity: input.mirrorParity ?? true,
+        state: input.licenseState
+          ?? (input.licenseStartsAt ? "SCHEDULED" : input.licenseEndsAt ? "READ_ONLY" : "ACTIVE"),
+        term: {
+          id: `license-${tenantId}`,
+          tenantId,
+          planCode: "PRO",
+          startsAt: input.licenseStartsAt ?? "2020-01-01T00:00:00.000Z",
+          endsAt: input.licenseEndsAt ?? "2099-01-01T00:00:00.000Z",
+          activeStudentLimit: 100,
+        },
+      }),
     } as never,
   );
 }

@@ -1,6 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { runWithRequestContext } from "../context/request-context.js";
-import { PostgresPaymentPlanStore } from "./payment-store.js";
+import { InMemoryPaymentPlanStore, PostgresPaymentPlanStore } from "./payment-store.js";
+
+describe("InMemoryPaymentPlanStore", () => {
+  it("kampüs listesi filtresinde kapsam dışındaki planı döndürmez", async () => {
+    const store = new InMemoryPaymentPlanStore();
+    const inScope = await store.create({
+      plan: { tenantId: "tenant-a", studentId: "student-a", campusId: "campus-main", title: "Kapsam içi", totalAmount: 1000, currency: "TRY" },
+      installments: [],
+    });
+    await store.create({
+      plan: { tenantId: "tenant-a", studentId: "student-a", campusId: "campus-secondary", title: "Kapsam dışı", totalAmount: 1000, currency: "TRY" },
+      installments: [],
+    });
+
+    await expect(store.list({ campusIds: ["campus-main"] })).resolves.toEqual([
+      expect.objectContaining({ id: inScope.id, campusId: "campus-main" }),
+    ]);
+  });
+});
 
 describe("PostgresPaymentPlanStore", () => {
   it("ödeme planı akademik bağlamını tenant-aware SQL ile yazar ve okur", async () => {
@@ -59,7 +77,7 @@ describe("PostgresPaymentPlanStore", () => {
     const result = await runWithRequestContext(
       { userId: "user-tenant-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false },
       async () => {
-        await store.list({ courseId: "course-math", termId: "term-2026-spring" });
+        await store.list({ campusIds: ["campus-main"], courseId: "course-math", termId: "term-2026-spring" });
         const created = await store.create({
           plan: {
             tenantId: "tenant-a",
@@ -88,9 +106,10 @@ describe("PostgresPaymentPlanStore", () => {
     const businessQueries = queries.filter((query) => !query.sql.includes("set_config") && !["BEGIN", "COMMIT", "ROLLBACK"].includes(query.sql));
     expect(queries.some((query) => query.values?.[0] === "tenant-a")).toBe(true);
     expect(businessQueries[0]?.sql).toContain('FROM "PaymentPlan"');
-    expect(businessQueries[0]?.sql).toContain('"courseId" = $1');
-    expect(businessQueries[0]?.sql).toContain('"termId" = $2');
-    expect(businessQueries[0]?.values).toEqual(["course-math", "term-2026-spring"]);
+    expect(businessQueries[0]?.sql).toContain('"campusId" = ANY($1::text[])');
+    expect(businessQueries[0]?.sql).toContain('"courseId" = $2');
+    expect(businessQueries[0]?.sql).toContain('"termId" = $3');
+    expect(businessQueries[0]?.values).toEqual([["campus-main"], "course-math", "term-2026-spring"]);
     expect(businessQueries[2]?.sql).toContain('INSERT INTO "PaymentPlan"');
     expect(businessQueries[2]?.values?.slice(1, 11)).toEqual([
       "tenant-a",

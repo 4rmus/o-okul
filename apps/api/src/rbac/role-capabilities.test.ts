@@ -32,6 +32,15 @@ describe("role capabilities", () => {
     expect(hasCapability(context, "user:manage")).toBe(false);
   });
 
+  it("FINANCE_STAFF yalnız finans capability'lerine sahiptir", () => {
+    const context = { roles: ["FINANCE_STAFF"], capabilities: capabilitiesForRoles(["FINANCE_STAFF"]) };
+
+    expect(hasCapability(context, "finance:manage")).toBe(true);
+    expect(hasCapability(context, "academic:manage")).toBe(false);
+    expect(hasCapability(context, "search:read")).toBe(false);
+    expect(hasCapability(context, "support:manage")).toBe(false);
+  });
+
   it("SYSTEM_ADMIN sistem ve audit yetkilerine sahiptir", () => {
     const context = { roles: ["SYSTEM_ADMIN"], capabilities: capabilitiesForRoles(["SYSTEM_ADMIN"]) };
 

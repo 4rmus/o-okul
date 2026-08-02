@@ -12,7 +12,7 @@ export interface CampusStore {
   list(): Promise<CampusRecord[]>;
   findById(id: string): Promise<CampusRecord | undefined>;
   create(input: Omit<CampusRecord, "id">): Promise<CampusRecord>;
-  update(id: string, input: Partial<Pick<CampusRecord, "name" | "code">>): Promise<CampusRecord | undefined>;
+  update(id: string, input: Partial<Pick<CampusRecord, "name" | "code" | "unitType">>): Promise<CampusRecord | undefined>;
   softDelete(id: string, deletedAt: string): Promise<CampusRecord | undefined>;
 }
 
@@ -43,12 +43,13 @@ export class InMemoryCampusStore implements CampusStore {
     return record;
   }
 
-  async update(id: string, input: Partial<Pick<CampusRecord, "name" | "code">>): Promise<CampusRecord | undefined> {
+  async update(id: string, input: Partial<Pick<CampusRecord, "name" | "code" | "unitType">>): Promise<CampusRecord | undefined> {
     const record = await this.findById(id);
     if (!record) return undefined;
 
     if (input.name !== undefined) record.name = input.name;
     if (input.code !== undefined) record.code = input.code;
+    if (input.unitType !== undefined) record.unitType = input.unitType;
     return record;
   }
 
@@ -81,10 +82,10 @@ export class PostgresCampusStore implements CampusStore {
   async create(input: Omit<CampusRecord, "id">): Promise<CampusRecord> {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<CampusRow>(
-        `INSERT INTO "Campus" ("id", "tenantId", "name", "code", "updatedAt")
-         VALUES ($1, $2, $3, $4, now())
+        `INSERT INTO "Campus" ("id", "tenantId", "name", "code", "unitType", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, now())
          RETURNING *`,
-        [randomUUID(), input.tenantId, input.name, input.code ?? null],
+        [randomUUID(), input.tenantId, input.name, input.code ?? null, input.unitType ?? null],
       );
       const record = result.rows[0];
       if (!record) {
@@ -94,7 +95,7 @@ export class PostgresCampusStore implements CampusStore {
     });
   }
 
-  async update(id: string, input: Partial<Pick<CampusRecord, "name" | "code">>): Promise<CampusRecord | undefined> {
+  async update(id: string, input: Partial<Pick<CampusRecord, "name" | "code" | "unitType">>): Promise<CampusRecord | undefined> {
     const existing = await this.findById(id);
     if (!existing) return undefined;
 
@@ -103,10 +104,11 @@ export class PostgresCampusStore implements CampusStore {
         `UPDATE "Campus"
          SET "name" = COALESCE($2, "name"),
              "code" = CASE WHEN $3 THEN $4 ELSE "code" END,
+             "unitType" = CASE WHEN $5 THEN $6 ELSE "unitType" END,
              "updatedAt" = now()
          WHERE "id" = $1
          RETURNING *`,
-        [id, input.name ?? null, input.code !== undefined, input.code ?? null],
+        [id, input.name ?? null, input.code !== undefined, input.code ?? null, input.unitType !== undefined, input.unitType ?? null],
       );
       return result.rows[0] ? toCampusRecord(result.rows[0]) : undefined;
     });
@@ -139,6 +141,7 @@ interface CampusRow {
   tenantId: string;
   name: string;
   code: string | null;
+  unitType: CampusRecord["unitType"] | null;
   deletedAt: Date | null;
 }
 
@@ -148,6 +151,7 @@ function toCampusRecord(record: CampusRow): CampusRecord {
     tenantId: record.tenantId,
     name: record.name,
     code: record.code ?? undefined,
+    unitType: record.unitType ?? undefined,
     deletedAt: record.deletedAt?.toISOString(),
   };
 }

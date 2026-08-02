@@ -25,6 +25,29 @@ describe("TokenService", () => {
     await expect(service.rotate(rotated.refreshToken)).rejects.toThrow("REFRESH_TOKEN_REUSE_DETECTED");
   });
 
+  it("paralel refresh rotasyonunda yalnız bir istek kazanır ve token ailesi kompromize olur", async () => {
+    const store = new InMemorySessionStore();
+    const service = new TokenService(store, "test-secret");
+    const issued = await service.issue({
+      sub: "user-1",
+      tenantId: "tenant-a",
+      roles: ["TENANT_ADMIN"],
+      membershipVersion: 1,
+    });
+
+    const results = await Promise.allSettled([
+      service.rotate(issued.refreshToken),
+      service.rotate(issued.refreshToken),
+    ]);
+    const fulfilled = results.filter((result): result is PromiseFulfilledResult<Awaited<ReturnType<TokenService["rotate"]>>> => result.status === "fulfilled");
+    const rejected = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]?.reason).toEqual(expect.objectContaining({ message: "REFRESH_TOKEN_REUSE_DETECTED" }));
+    await expect(service.rotate(fulfilled[0]!.value.refreshToken)).rejects.toThrow("REFRESH_TOKEN_REUSE_DETECTED");
+  });
+
   it("logout sonrası refresh token reddedilir", async () => {
     const store = new InMemorySessionStore();
     const service = new TokenService(store, "test-secret");
@@ -72,6 +95,58 @@ describe("TokenService", () => {
 
     expect(payload.subjectType).toBe("STUDENT");
     expect(payload.subjectId).toBe("student-a");
+  });
+
+  it("persona switch yeni session üretir, üyelik bağını korur ve eski session'ı kapatır", async () => {
+    const store = new InMemorySessionStore();
+    const service = new TokenService(store, "test-secret");
+    const issued = await service.issue({
+      sub: "dual-user-a",
+      tenantId: "tenant-a",
+      membershipId: "membership-a",
+      activePersona: "STAFF",
+      roles: ["OPERATIONS_STAFF"],
+      membershipVersion: 3,
+    });
+
+    const switched = await service.issueReplacing(issued.session.id, {
+      sub: "dual-user-a",
+      tenantId: "tenant-a",
+      membershipId: "membership-a",
+      activePersona: "TEACHER",
+      roles: ["TEACHER"],
+      membershipVersion: 3,
+      subjectType: "TEACHER",
+      subjectId: "teacher-a",
+    });
+
+    expect(switched.session.id).not.toBe(issued.session.id);
+    expect(service.verifyAccessToken(switched.accessToken)).toMatchObject({
+      membershipId: "membership-a",
+      activePersona: "TEACHER",
+      roles: ["TEACHER"],
+    });
+    await expect(store.findById(issued.session.id)).resolves.toMatchObject({ status: "REVOKED" });
+  });
+
+  it("cihaz bağlamını session kaydında tutar, access token içine koymaz", async () => {
+    const store = new InMemorySessionStore();
+    const service = new TokenService(store, "test-secret");
+    const issued = await service.issue({
+      sub: "user-1",
+      tenantId: "tenant-a",
+      roles: ["TENANT_ADMIN"],
+      membershipVersion: 1,
+      deviceLabel: "Safari · macOS",
+      clientIpPrefix: "203.0.113.0/24",
+    });
+
+    expect(issued.session).toMatchObject({
+      deviceLabel: "Safari · macOS",
+      clientIpPrefix: "203.0.113.0/24",
+    });
+    expect(service.verifyAccessToken(issued.accessToken)).not.toHaveProperty("deviceLabel");
+    expect(service.verifyAccessToken(issued.accessToken)).not.toHaveProperty("clientIpPrefix");
   });
 
   it("süresi geçmiş access token'ı reddeder", async () => {

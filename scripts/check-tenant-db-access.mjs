@@ -27,9 +27,13 @@ const bypassRlsFunctionAllowlist = new Map([
     "findForAdmin",
     "create",
     "createWithFirstAdmin",
+    "createOnboarding",
     "update",
     "delete",
   ])],
+  ["apps/api/src/license/license-term-store.ts", new Set(["create"])],
+  ["apps/api/src/identity-invitation/employee-account-activation-store.ts", new Set(["accept"])],
+  ["apps/api/src/identity-invitation/student-portal-activation-store.ts", new Set(["accept"])],
 ]);
 const tenantScopedTables = getTenantScopedTables();
 

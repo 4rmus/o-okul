@@ -1252,12 +1252,12 @@
       },
       "loginAttemptLimiter": {
         "clientIpHash": "e0f2f7e2cfd4f1e7a41db3f6b1a5369bd4dfb9fb8f77060f72a89f3ea2ed92d3",
-        "nationalIdHash": "8b9c7fd58536f6c82840e521a4fd26c7faeb3bf7ac93d77dfc41273512f34072",
+        "loginNameHash": "8b9c7fd58536f6c82840e521a4fd26c7faeb3bf7ac93d77dfc41273512f34072",
         "attemptsSent": 6,
         "lockStatusCode": 429,
         "errorCode": "LOGIN_LOCKED",
         "sharedAcrossInstances": true,
-        "nationalIdAndIpScoped": true,
+        "tenantAndLoginNameAndIpScoped": true,
         "differentIpNotLocked": true
       },
       "commandsPassed": [
@@ -1266,14 +1266,15 @@
       ],
       "evidenceReferences": [
         "artifacts/example/rate-limit/rate-limit-smoke.json",
-        "artifacts/example/rate-limit/redis-shared-window-observation.txt"
+        "artifacts/example/rate-limit/redis-shared-window-observation.txt",
+        "rate-limit-egress-ip:7b1d2a69c10e16c6827d8cfa31f2b5d80e56ed3f832f2e0f6b833f8f1d2d8e11"
       ]
     },
     "rlsLive": {
       "environment": "production",
       "checkedAt": "2026-05-31T11:30:00.000Z",
       "schema": {
-        "tenantScopedTables": 57,
+        "tenantScopedTables": 62,
         "derivedFromSchema": true,
         "staticCheckPassed": true,
         "liveCheckPassed": true,
@@ -1284,6 +1285,10 @@
           "User",
           "NotificationDeviceToken",
           "TenantMembership",
+          "MembershipCampusScope",
+          "LicenseTerm",
+          "LicenseUsage",
+          "Employee",
           "AuthSession",
           "IdempotencyKey",
           "IdentityInvitation",
@@ -1298,6 +1303,7 @@
           "Student",
           "StudentEnrollment",
           "Teacher",
+          "StudentContact",
           "TeacherAssignment",
           "Guardian",
           "GuardianStudent",
@@ -1341,7 +1347,7 @@
         "tenantAHash": "tenant-a-redacted",
         "tenantBHash": "tenant-b-redacted",
         "crossTenantReadRows": 0,
-        "crossTenantReadChecks": 57,
+        "crossTenantReadChecks": 62,
         "withCheckRejects": [
           "Student wrong tenant insert",
           "Homework wrong tenant insert",
@@ -1357,7 +1363,7 @@
         "auditBypassAction": "system.rls_bypass_requested"
       },
       "tenantFkPreflight": {
-        "requiredCompositeRelations": 23,
+        "requiredCompositeRelations": 29,
         "relationsVerified": [
           "AnnouncementReceipt.announcement",
           "AnnouncementDeliveryReport.announcement",
@@ -1381,7 +1387,13 @@
           "ReportSnapshot.class",
           "StudentEnrollment.class",
           "Student.class",
-          "Student.responsibleTeacher"
+          "Student.responsibleTeacher",
+          "MembershipCampusScope.membership",
+          "MembershipCampusScope.campus",
+          "LicenseUsage.licenseTerm",
+          "Employee.accountUser",
+          "Teacher.employee",
+          "StudentContact.student"
         ],
         "legacyAllowlistCount": 0,
         "orphanRows": 0,
@@ -1409,7 +1421,13 @@
           "ReportSnapshot.class cross tenant insert",
           "StudentEnrollment.class cross tenant insert",
           "Student.class cross tenant insert",
-          "Student.responsibleTeacher cross tenant insert"
+          "Student.responsibleTeacher cross tenant insert",
+          "MembershipCampusScope.membership cross tenant insert",
+          "MembershipCampusScope.campus cross tenant insert",
+          "LicenseUsage.licenseTerm cross tenant insert",
+          "Employee.accountUser cross tenant insert",
+          "Teacher.employee cross tenant insert",
+          "StudentContact.student cross tenant insert"
         ],
         "migrationPreflightCommand": "pnpm tenant-db:check"
       },

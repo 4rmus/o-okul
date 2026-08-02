@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "result": "PASS",
+  "mode": "APPLY",
+  "environment": "staging",
+  "checkedAt": "2026-08-01T12:00:00.000Z",
+  "databaseMutationApplied": true,
+  "checks": {
+    "eligibleTenants": 3,
+    "existingTermsBefore": 0,
+    "readyTenants": 3,
+    "plannedWrites": 3,
+    "missingSnapshots": 0,
+    "invalidSnapshots": 0,
+    "mirrorParityMismatches": 0,
+    "overlappingTerms": 0
+  },
+  "blockers": [],
+  "gaps": []
+}

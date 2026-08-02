@@ -3,7 +3,9 @@ import { join } from "node:path";
 
 const defaultSchemaPath = join(__dirname, "../prisma/schema.prisma");
 
-export const tenantScopedTableExceptions: string[] = [];
+// Global auth delivery infrastructure also serves system accounts. tenantId is
+// optional routing metadata; the encrypted payload is never tenant-queryable.
+export const tenantScopedTableExceptions: string[] = ["SecretDeliveryOutbox"];
 
 export function getTenantScopedTables(schemaPath = defaultSchemaPath): string[] {
   const schema = readFileSync(schemaPath, "utf8");

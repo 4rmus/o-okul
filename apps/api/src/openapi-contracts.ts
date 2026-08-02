@@ -10,18 +10,27 @@ interface OperationContract {
   rawResponseBody?: JsonSchema;
   rawResponseContentType?: string;
   listResponse?: boolean;
+  cursorListResponse?: boolean;
   noContent?: boolean;
   idempotent?: boolean;
   idempotencyRequired?: boolean;
   requiredHeaders?: Array<{ name: string; description?: string; schema?: JsonSchema }>;
+  optionalHeaders?: Array<{ name: string; description?: string; schema?: JsonSchema }>;
   queryParameters?: Array<{ name: string; description?: string; required?: boolean; schema?: JsonSchema }>;
+  retiredGoneCode?: string;
 }
 
 const jsonContentType = "application/json";
 
 const csrfHeaderContract = {
   name: "X-CSRF-Token",
-  description: "Required CSRF token matching the csrfToken cookie for refresh/logout.",
+  description: "Required CSRF token matching the csrfToken cookie for session-mutating auth operations.",
+  schema: stringSchema(),
+};
+
+const stepUpHeaderContract = {
+  name: "X-Step-Up-Token",
+  description: "Short-lived MFA proof. Required when the current or target staff role is TENANT_OWNER or TENANT_ADMIN.",
   schema: stringSchema(),
 };
 
@@ -31,6 +40,12 @@ const listMetaSchema = objectSchema({
   limit: integerSchema({ minimum: 0 }),
   totalPages: integerSchema({ minimum: 0 }),
 }, ["total", "page", "limit", "totalPages"]);
+
+const cursorListMetaSchema = objectSchema({
+  limit: integerSchema({ minimum: 1 }),
+  nextCursor: stringSchema(),
+  previousCursor: stringSchema(),
+}, ["limit"]);
 
 const healthStatusSchema = objectSchema({
   status: { type: "string", enum: ["ok"] },
@@ -48,6 +63,8 @@ const sessionSchema = objectSchema({
   id: stringSchema(),
   userId: stringSchema(),
   tenantId: stringSchema(),
+  membershipId: stringSchema(),
+  activePersona: { type: "string", enum: ["STAFF", "TEACHER", "STUDENT"] },
   roles: arraySchema(stringSchema(), { minItems: 1 }),
   membershipVersion: integerSchema({ minimum: 0 }),
   status: stringSchema(),
@@ -63,7 +80,37 @@ const meProfileResponseSchema = objectSchema({
   mustChangePassword: { type: "boolean" },
   subjectType: { type: "string", enum: ["STUDENT", "GUARDIAN", "TEACHER"] },
   subjectId: stringSchema(),
+  membershipId: stringSchema(),
+  activePersona: { type: "string", enum: ["STAFF", "TEACHER", "STUDENT"] },
+  availablePersonas: arraySchema({ type: "string", enum: ["STAFF", "TEACHER", "STUDENT"] }),
+  capabilities: arraySchema(stringSchema()),
+  membership: objectSchema({
+    id: stringSchema(),
+    version: integerSchema({ minimum: 1 }),
+  }, ["id", "version"]),
 }, ["userId", "tenantId", "roles"]);
+
+const personaSwitchRequestSchema = objectSchema({
+  activePersona: { type: "string", enum: ["STAFF", "TEACHER", "STUDENT"] },
+}, ["activePersona"]);
+
+const meSessionRecordSchema = objectSchema({
+  id: stringSchema(),
+  activePersona: { type: "string", enum: ["STAFF", "TEACHER", "STUDENT"] },
+  deviceLabel: stringSchema(),
+  clientIpPrefix: stringSchema(),
+  roles: arraySchema(stringSchema(), { minItems: 1 }),
+  status: { type: "string", enum: ["ACTIVE"] },
+  current: { type: "boolean" },
+  expiresAt: stringSchema({ format: "date-time" }),
+  lastSeenAt: stringSchema({ format: "date-time" }),
+  createdAt: stringSchema({ format: "date-time" }),
+  updatedAt: stringSchema({ format: "date-time" }),
+}, ["id", "deviceLabel", "roles", "status", "current", "expiresAt", "lastSeenAt", "createdAt", "updatedAt"]);
+
+const meSessionRevokeAllResponseSchema = objectSchema({
+  revokedCount: integerSchema({ minimum: 0 }),
+}, ["revokedCount"]);
 
 const tenantRecordSchema = objectSchema({
   id: stringSchema(),
@@ -79,6 +126,31 @@ const tenantRecordSchema = objectSchema({
   activeSeatCount: integerSchema({ minimum: 0 }),
   status: stringSchema(),
 }, ["id", "name", "slug", "plan", "status"]);
+
+const licenseTermSchema = objectSchema({
+  id: stringSchema(),
+  tenantId: stringSchema(),
+  planCode: stringSchema(),
+  startsAt: stringSchema({ format: "date-time" }),
+  endsAt: stringSchema({ format: "date-time" }),
+  activeStudentLimit: integerSchema({ minimum: 1 }),
+  cancelledAt: stringSchema({ format: "date-time" }),
+  createdByPlatformAccountId: stringSchema(),
+  auditReference: stringSchema(),
+}, ["id", "tenantId", "planCode", "startsAt", "endsAt", "activeStudentLimit"]);
+
+const licenseTermListSchema = objectSchema({
+  ...(licenseTermSchema.properties as Record<string, JsonSchema>),
+  state: { type: "string", enum: ["SCHEDULED", "ACTIVE", "READ_ONLY", "FROZEN", "EXPIRED", "CANCELLED"] },
+}, ["id", "tenantId", "planCode", "startsAt", "endsAt", "activeStudentLimit", "state"]);
+
+const licenseTermCreateRequestSchema = objectSchema({
+  planCode: stringSchema({ minLength: 1 }),
+  startsAt: stringSchema({ format: "date-time" }),
+  endsAt: stringSchema({ format: "date-time" }),
+  activeStudentLimit: integerSchema({ minimum: 1 }),
+  auditReference: stringSchema({ minLength: 1 }),
+}, ["planCode", "startsAt", "endsAt", "activeStudentLimit", "auditReference"]);
 
 const institutionDashboardClassSchema = objectSchema({
   classId: stringSchema(),
@@ -138,17 +210,31 @@ const tenantFirstAdminCreateRequestSchema = objectSchema({
   email: stringSchema({ format: "email" }),
   name: stringSchema({ minLength: 1 }),
   nationalId: stringSchema({ minLength: 11, maxLength: 11 }),
-  phone: stringSchema({ minLength: 1 }),
-}, ["email", "name", "nationalId", "phone"]);
+}, ["email", "name", "nationalId"]);
+
+const tenantFirstOwnerCreateRequestSchema = objectSchema({
+  email: stringSchema({ format: "email" }),
+  name: stringSchema({ minLength: 1 }),
+  nationalId: stringSchema({ minLength: 11, maxLength: 11 }),
+}, ["email", "name"]);
+
+const tenantCampusCreateRequestSchema = objectSchema({
+  code: stringSchema(),
+  name: stringSchema({ minLength: 1 }),
+  unitType: { type: "string", enum: ["SCHOOL", "COURSE", "MIXED"] },
+}, ["name"]);
 
 const tenantCreateRequestSchema = objectSchema({
   contactEmail: stringSchema({ format: "email" }),
+  campuses: arraySchema(tenantCampusCreateRequestSchema, { minItems: 1 }),
   firstAdmin: tenantFirstAdminCreateRequestSchema,
+  firstOwner: tenantFirstOwnerCreateRequestSchema,
   id: stringSchema(),
   institutionType: stringSchema(),
   licenseEndsAt: stringSchema({ format: "date-time" }),
   licenseStartsAt: stringSchema({ format: "date-time" }),
   logoUrl: stringSchema(),
+  licenseTerm: licenseTermCreateRequestSchema,
   name: stringSchema({ minLength: 1 }),
   plan: stringSchema(),
   seatLimit: integerSchema({ minimum: 1 }),
@@ -166,24 +252,15 @@ const tenantCurrentProfileUpdateRequestSchema = objectSchema({
 const tenantAdminUpdateRequestSchema = objectSchema({
   contactEmail: stringSchema({ format: "email" }),
   institutionType: stringSchema(),
-  licenseEndsAt: stringSchema({ format: "date-time" }),
-  licenseStartsAt: stringSchema({ format: "date-time" }),
   logoUrl: stringSchema(),
   name: stringSchema(),
-  plan: stringSchema(),
-  seatLimit: integerSchema({ minimum: 1 }),
   slug: stringSchema(),
   status: stringSchema(),
 });
 
 const tenantAssignableRoleSchema = {
   type: "string",
-  enum: ["TENANT_ADMIN", "ASSISTANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN"],
-};
-
-const tenantUserManagementRoleSchema = {
-  type: "string",
-  enum: ["TENANT_ADMIN", "ASSISTANT_ADMIN"],
+  enum: ["TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF", "TEACHER", "STUDENT", "GUARDIAN"],
 };
 
 const tenantUserRecordSchema = objectSchema({
@@ -196,6 +273,59 @@ const tenantUserRecordSchema = objectSchema({
   updatedAt: stringSchema({ format: "date-time" }),
 }, ["id", "name", "tenantId", "roles", "createdAt", "updatedAt"]);
 
+const employeeAccessSchema = objectSchema({
+  id: stringSchema(),
+  tenantId: stringSchema(),
+  employeeNo: stringSchema(),
+  firstName: stringSchema(),
+  lastName: stringSchema(),
+  workEmail: stringSchema({ format: "email" }),
+  status: stringSchema(),
+  employmentStartsAt: stringSchema({ format: "date-time" }),
+  employmentEndsAt: stringSchema({ format: "date-time" }),
+  userId: stringSchema(),
+  accountStatus: stringSchema(),
+  access: objectSchema({
+    membershipId: stringSchema(),
+    staffRole: { type: "string", enum: ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF"] },
+    hasTeacherPersona: { type: "boolean" },
+    status: stringSchema(),
+    version: integerSchema({ minimum: 0 }),
+    scopeMode: { type: "string", enum: ["TENANT", "CAMPUSES"] },
+    campusIds: arraySchema(stringSchema()),
+  }, ["membershipId", "hasTeacherPersona", "status", "version", "scopeMode", "campusIds"]),
+}, ["id", "tenantId", "firstName", "lastName", "status"]);
+
+const employeeCreateRequestSchema = objectSchema({
+  employeeNo: stringSchema(),
+  firstName: stringSchema({ minLength: 1 }),
+  lastName: stringSchema({ minLength: 1 }),
+  workEmail: stringSchema({ format: "email" }),
+  phone: stringSchema(),
+  employmentStartsAt: stringSchema({ format: "date" }),
+  status: { type: "string", enum: ["PLANNED", "ACTIVE"] },
+}, ["firstName", "lastName", "status"]);
+
+const employeeAccountInvitationRequestSchema = objectSchema({
+  email: stringSchema({ format: "email" }),
+  role: { type: "string", enum: ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF"] },
+}, ["email", "role"]);
+
+const tenantMembershipUpdateRequestSchema = objectSchema({
+  expectedVersion: integerSchema({ minimum: 1 }),
+  staffRole: { type: "string", enum: ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF"] },
+  hasTeacherPersona: { type: "boolean" },
+  status: { type: "string", enum: ["ACTIVE", "SUSPENDED", "ENDED"] },
+  scopeMode: { type: "string", enum: ["TENANT", "CAMPUSES"] },
+  campusIds: arraySchema(stringSchema(), { maxItems: 20 }),
+  endedReason: stringSchema(),
+}, ["expectedVersion", "hasTeacherPersona", "status", "scopeMode", "campusIds"]);
+
+const tenantMembershipUpdateResultSchema = objectSchema({
+  employee: employeeAccessSchema,
+  sessionsRevoked: integerSchema({ minimum: 0 }),
+}, ["employee", "sessionsRevoked"]);
+
 const tenantFirstAdminProvisionResultSchema = objectSchema({
   ...(tenantUserRecordSchema.properties as Record<string, JsonSchema>),
 }, ["id", "email", "name", "tenantId", "roles", "createdAt", "updatedAt"]);
@@ -205,23 +335,27 @@ const tenantCreateWithAdminResponseSchema = objectSchema({
   admin: tenantFirstAdminProvisionResultSchema,
 }, ["tenant", "admin"]);
 
-const tenantUserCreateRequestSchema = objectSchema({
-  email: stringSchema({ format: "email" }),
-  name: stringSchema({ minLength: 1 }),
-  nationalId: stringSchema({ minLength: 11, maxLength: 11 }),
-  phone: stringSchema({ minLength: 1 }),
-  roles: arraySchema(tenantUserManagementRoleSchema, { minItems: 1 }),
-}, ["email", "name", "nationalId", "phone", "roles"]);
+const tenantOnboardingOwnerSchema = objectSchema({
+  id: stringSchema(),
+  employeeId: stringSchema(),
+  tenantId: stringSchema(),
+  roles: arraySchema({ type: "string", enum: ["TENANT_OWNER"] }, { minItems: 1 }),
+}, ["id", "employeeId", "tenantId", "roles"]);
 
-const tenantUserRoleUpdateRequestSchema = objectSchema({
-  roles: arraySchema(tenantUserManagementRoleSchema, { minItems: 1 }),
-}, ["roles"]);
+const tenantOnboardingCampusSchema = objectSchema({
+  id: stringSchema(),
+  tenantId: stringSchema(),
+  code: stringSchema(),
+  name: stringSchema(),
+  unitType: { type: "string", enum: ["SCHOOL", "COURSE", "MIXED"] },
+}, ["id", "tenantId", "name"]);
 
-const tenantUserPasswordResetResponseSchema = objectSchema({
-  userId: stringSchema(),
-  resetAt: stringSchema({ format: "date-time" }),
-  mustChangePassword: { type: "boolean", enum: [true] },
-}, ["userId", "resetAt", "mustChangePassword"]);
+const tenantOnboardingResponseSchema = objectSchema({
+  tenant: tenantRecordSchema,
+  campuses: arraySchema(tenantOnboardingCampusSchema, { minItems: 1 }),
+  licenseTerm: licenseTermSchema,
+  owner: tenantOnboardingOwnerSchema,
+}, ["tenant", "campuses", "licenseTerm", "owner"]);
 
 const portalSubjectRoleSchema = {
   type: "string",
@@ -288,7 +422,7 @@ const passwordResetConfirmResponseSchema = objectSchema({
 
 const mePasswordChangeRequestSchema = objectSchema({
   currentPassword: stringSchema({ minLength: 1 }),
-  newPassword: stringSchema({ minLength: 8 }),
+  newPassword: stringSchema({ minLength: 15, maxLength: 128 }),
 }, ["currentPassword", "newPassword"]);
 
 const mePasswordChangeResponseSchema = objectSchema({
@@ -353,6 +487,23 @@ const totpDisableRequestSchema = objectSchema({
 const totpDisableResponseSchema = objectSchema({
   disabledAt: stringSchema({ format: "date-time" }),
 }, ["disabledAt"]);
+
+const mfaStepUpRequestSchema = objectSchema({
+  purpose: { type: "string", enum: ["OWNER_ADMIN_CHANGE"] },
+  totpCode: stringSchema(),
+  recoveryCode: stringSchema(),
+}, ["purpose"], {
+  anyOf: [
+    { required: ["totpCode"] },
+    { required: ["recoveryCode"] },
+  ],
+});
+
+const mfaStepUpResponseSchema = objectSchema({
+  purpose: { type: "string", enum: ["OWNER_ADMIN_CHANGE"] },
+  stepUpToken: stringSchema(),
+  expiresAt: stringSchema({ format: "date-time" }),
+}, ["purpose", "stepUpToken", "expiresAt"]);
 
 const notificationDeviceRegisterRequestSchema = objectSchema({
   platform: stringSchema(),
@@ -695,6 +846,21 @@ const namedSchoolReferenceCreateRequestSchema = objectSchema({
 const namedSchoolReferenceUpdateRequestSchema = objectSchema({
   code: stringSchema(),
   name: stringSchema(),
+});
+
+const campusRecordSchema = objectSchema({
+  ...(namedSchoolReferenceRecordSchema.properties as Record<string, JsonSchema>),
+  unitType: { type: "string", enum: ["SCHOOL", "COURSE", "MIXED"] },
+}, ["id", "tenantId", "name"]);
+
+const campusCreateRequestSchema = objectSchema({
+  ...(namedSchoolReferenceCreateRequestSchema.properties as Record<string, JsonSchema>),
+  unitType: { type: "string", enum: ["SCHOOL", "COURSE", "MIXED"] },
+}, ["name"]);
+
+const campusUpdateRequestSchema = objectSchema({
+  ...(namedSchoolReferenceUpdateRequestSchema.properties as Record<string, JsonSchema>),
+  unitType: { type: "string", enum: ["SCHOOL", "COURSE", "MIXED"] },
 });
 
 const alanRecordSchema = objectSchema({
@@ -1663,6 +1829,49 @@ const publicStudentProfileRecordSchema = objectSchema({
   photoKey: stringSchema(),
 }, ["id", "tenantId", "firstName", "lastName", "status"]);
 
+const studentPortalAccessRecordSchema = objectSchema({
+  studentId: stringSchema(),
+  tenantId: stringSchema(),
+  studentNo: stringSchema(),
+  firstName: stringSchema(),
+  lastName: stringSchema(),
+  studentStatus: studentStatusSchema,
+  accessState: { type: "string", enum: ["ACTIVE", "SUSPENDED", "INVITED", "NOT_INVITED", "INCONSISTENT"] },
+  userId: stringSchema(),
+  accountStatus: stringSchema(),
+  membership: objectSchema({
+    id: stringSchema(),
+    status: { type: "string", enum: ["ACTIVE", "SUSPENDED", "ENDED"] },
+    version: integerSchema({ minimum: 1 }),
+  }, ["id", "status", "version"]),
+  invitation: objectSchema({
+    id: stringSchema(),
+    kind: { type: "string", enum: ["EMAIL_LINK", "STUDENT_CODE"] },
+    status: { type: "string", enum: ["PENDING", "ACCEPTED", "REVOKED"] },
+    emailMasked: stringSchema(),
+    expiresAt: stringSchema({ format: "date-time" }),
+  }, ["id", "kind", "status", "expiresAt"]),
+  activeSessionCount: integerSchema({ minimum: 0 }),
+}, ["studentId", "tenantId", "firstName", "lastName", "studentStatus", "accessState", "activeSessionCount"]);
+
+const studentPortalAccessUpdateRequestSchema = objectSchema({
+  expectedVersion: integerSchema({ minimum: 1 }),
+  status: { type: "string", enum: ["ACTIVE", "SUSPENDED"] },
+}, ["expectedVersion", "status"]);
+
+const studentPortalAccessUpdateResultSchema = objectSchema({
+  studentId: stringSchema(),
+  tenantId: stringSchema(),
+  userId: stringSchema(),
+  accountStatus: stringSchema(),
+  membership: objectSchema({
+    id: stringSchema(),
+    status: { type: "string", enum: ["ACTIVE", "SUSPENDED"] },
+    version: integerSchema({ minimum: 1 }),
+  }, ["id", "status", "version"]),
+  sessionsRevoked: integerSchema({ minimum: 0 }),
+}, ["studentId", "tenantId", "userId", "accountStatus", "membership", "sessionsRevoked"]);
+
 const studentProfileUpdateRequestSchema = objectSchema({
   email: stringSchema({ format: "email" }),
   nationalId: stringSchema(),
@@ -2375,7 +2584,7 @@ const studentImportErrorSchema = objectSchema({
       "REQUIRED",
       "STUDENT_NATIONAL_ID_DUPLICATE",
       "STUDENT_NO_DUPLICATE",
-      "STUDENT_QUOTA_EXCEEDED",
+      "ACTIVE_STUDENT_LIMIT_REACHED",
     ],
   },
   value: stringSchema(),
@@ -2459,8 +2668,10 @@ const tenantDataExportPayloadSchema = objectSchema({
 
 const messageTemplateChannelSchema = { type: "string", enum: ["SMS"] };
 
-const identityInvitationSubjectTypeSchema = { type: "string", enum: ["TEACHER", "STUDENT", "GUARDIAN"] };
-const identityInvitationStatusSchema = { type: "string", enum: ["PENDING", "ACCEPTED"] };
+const identityInvitationSubjectTypeSchema = { type: "string", enum: ["TEACHER", "STUDENT", "GUARDIAN", "EMPLOYEE"] };
+const portalInvitationSubjectTypeSchema = { type: "string", enum: ["TEACHER", "STUDENT", "GUARDIAN"] };
+const identityInvitationStatusSchema = { type: "string", enum: ["PENDING", "ACCEPTED", "REVOKED"] };
+const identityInvitationKindSchema = { type: "string", enum: ["EMAIL_LINK", "STUDENT_CODE"] };
 
 const identityInvitationRecordSchema = objectSchema({
   id: stringSchema(),
@@ -2469,24 +2680,25 @@ const identityInvitationRecordSchema = objectSchema({
   subjectId: stringSchema(),
   email: stringSchema({ format: "email" }),
   name: stringSchema(),
-  role: identityInvitationSubjectTypeSchema,
+  role: tenantAssignableRoleSchema,
+  kind: identityInvitationKindSchema,
   status: identityInvitationStatusSchema,
   expiresAt: stringSchema({ format: "date-time" }),
   acceptedAt: stringSchema({ format: "date-time" }),
   createdAt: stringSchema({ format: "date-time" }),
   updatedAt: stringSchema({ format: "date-time" }),
-}, ["id", "tenantId", "subjectType", "subjectId", "email", "name", "role", "status", "expiresAt", "createdAt", "updatedAt"]);
+}, ["id", "tenantId", "subjectType", "subjectId", "name", "role", "kind", "status", "expiresAt", "createdAt", "updatedAt"]);
 
 const identityInvitationCreateRequestSchema = objectSchema({
   email: stringSchema({ format: "email" }),
   name: stringSchema(),
   subjectId: stringSchema({ minLength: 1 }),
-  subjectType: identityInvitationSubjectTypeSchema,
+  subjectType: portalInvitationSubjectTypeSchema,
 }, ["email", "subjectId", "subjectType"]);
 
 const identityInvitationAcceptRequestSchema = objectSchema({
   name: stringSchema(),
-  password: stringSchema({ minLength: 8 }),
+  password: stringSchema({ minLength: 15, maxLength: 128 }),
   token: stringSchema({ minLength: 1 }),
 }, ["password", "token"]);
 
@@ -2494,6 +2706,29 @@ const identityInvitationAcceptResponseSchema = objectSchema({
   status: { type: "string", enum: ["ACCEPTED"] },
   acceptedAt: stringSchema({ format: "date-time" }),
 }, ["status"]);
+
+const studentPortalInvitationIssueResponseSchema = objectSchema({
+  invitationId: stringSchema(),
+  studentId: stringSchema(),
+  tenantSlug: stringSchema(),
+  studentNo: stringSchema(),
+  activationCode: stringSchema({ minLength: 12, maxLength: 12 }),
+  activationUrl: stringSchema({ format: "uri" }),
+  expiresAt: stringSchema({ format: "date-time" }),
+}, ["invitationId", "studentId", "tenantSlug", "studentNo", "activationCode", "activationUrl", "expiresAt"]);
+
+const studentPortalActivationRequestSchema = objectSchema({
+  tenantSlug: stringSchema({ minLength: 1 }),
+  studentNo: stringSchema({ minLength: 1 }),
+  code: stringSchema({ minLength: 12, maxLength: 12, pattern: "^[A-HJ-NP-Z2-9]{12}$" }),
+  password: stringSchema({ minLength: 15, maxLength: 128 }),
+}, ["tenantSlug", "studentNo", "code", "password"]);
+
+const studentPortalActivationResponseSchema = objectSchema({
+  status: { type: "string", enum: ["ACCEPTED"] },
+  acceptedAt: stringSchema({ format: "date-time" }),
+  loginName: stringSchema(),
+}, ["status", "acceptedAt", "loginName"]);
 
 
 const messageTemplateRecordSchema = objectSchema({
@@ -2591,9 +2826,9 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/auth/login": {
     requestBody: objectSchema({
       tenantSlug: stringSchema(),
-      nationalId: stringSchema(),
+      loginName: stringSchema(),
       password: stringSchema(),
-    }, ["nationalId", "password"]),
+    }, ["tenantSlug", "loginName", "password"]),
     responseBody: {
       oneOf: [
         authResponseSchema,
@@ -2602,6 +2837,10 @@ const operationContracts: Record<string, OperationContract> = {
         tenantSelectionRequiredResponseSchema,
       ],
     },
+  },
+  "post /api/v1/auth/activate": {
+    requestBody: studentPortalActivationRequestSchema,
+    responseBody: studentPortalActivationResponseSchema,
   },
   "post /api/v1/auth/login/select": {
     requestBody: tenantSelectionRequestSchema,
@@ -2627,6 +2866,21 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: authResponseSchema,
     requiredHeaders: [csrfHeaderContract],
   },
+  "post /api/v1/auth/persona/switch": {
+    requestBody: personaSwitchRequestSchema,
+    responseBody: authResponseSchema,
+    requiredHeaders: [csrfHeaderContract],
+  },
+  "get /api/v1/me/sessions": {
+    responseBody: arraySchema(meSessionRecordSchema),
+    listResponse: true,
+  },
+  "delete /api/v1/me/sessions/{id}": {
+    noContent: true,
+  },
+  "delete /api/v1/me/sessions": {
+    responseBody: meSessionRevokeAllResponseSchema,
+  },
   "post /api/v1/auth/logout": {
     requestBody: refreshRequestSchema,
     requestBodyRequired: false,
@@ -2635,14 +2889,14 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "post /api/v1/auth/password-reset/request": {
     requestBody: objectSchema({
-      nationalId: stringSchema(),
+      loginName: stringSchema(),
       tenantSlug: stringSchema(),
-    }, ["nationalId", "tenantSlug"]),
+    }, ["loginName", "tenantSlug"]),
     responseBody: passwordResetAcceptedResponseSchema,
   },
   "post /api/v1/auth/password-reset/confirm": {
     requestBody: objectSchema({
-      password: stringSchema({ minLength: 8 }),
+      password: stringSchema({ minLength: 15, maxLength: 128 }),
       token: stringSchema(),
     }, ["password", "token"]),
     responseBody: passwordResetConfirmResponseSchema,
@@ -2661,6 +2915,10 @@ const operationContracts: Record<string, OperationContract> = {
     requestBody: totpDisableRequestSchema,
     responseBody: totpDisableResponseSchema,
   },
+  "post /api/v1/auth/step-up": {
+    requestBody: mfaStepUpRequestSchema,
+    responseBody: mfaStepUpResponseSchema,
+  },
   "get /api/v1/tenants": {
     responseBody: arraySchema(tenantRecordSchema),
     listResponse: true,
@@ -2669,35 +2927,62 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: tenantRecordSchema,
   },
   "post /api/v1/tenants": {
+    idempotent: true,
     requestBody: tenantCreateRequestSchema,
     responseBody: {
       oneOf: [
         tenantRecordSchema,
         tenantCreateWithAdminResponseSchema,
+        tenantOnboardingResponseSchema,
       ],
     },
+  },
+  "get /api/v1/tenants/current/license-terms": {
+    responseBody: arraySchema(licenseTermListSchema),
+    listResponse: true,
   },
   "patch /api/v1/tenants/{id}": {
     requestBody: tenantAdminUpdateRequestSchema,
     responseBody: tenantRecordSchema,
   },
+  "post /api/v1/tenants/{id}/license-terms": {
+    requestBody: licenseTermCreateRequestSchema,
+    responseBody: licenseTermSchema,
+  },
   "delete /api/v1/tenants/{id}": {
-    responseBody: tenantRecordSchema,
+    retiredGoneCode: "TENANT_HARD_DELETE_RETIRED",
   },
   "get /api/v1/tenant-users": {
     responseBody: arraySchema(tenantUserRecordSchema),
     listResponse: true,
   },
-  "post /api/v1/tenant-users": {
-    requestBody: tenantUserCreateRequestSchema,
-    responseBody: tenantUserRecordSchema,
+  "get /api/v1/employees": {
+    responseBody: arraySchema(employeeAccessSchema),
+    cursorListResponse: true,
+    queryParameters: [
+      { name: "cursor", description: "Opaque cursor returned by the previous response.", schema: stringSchema() },
+      { name: "direction", schema: { type: "string", enum: ["next", "previous"], default: "next" } },
+      { name: "limit", schema: integerSchema({ minimum: 1, maximum: 100, default: 50 }) },
+      { name: "q", description: "Case-insensitive employee name, employee number or work email search.", schema: stringSchema() },
+      { name: "sort", schema: { type: "string", enum: ["lastName", "-lastName", "firstName", "employeeNo"], default: "lastName" } },
+    ],
+  },
+  "post /api/v1/employees": {
+    requestBody: employeeCreateRequestSchema,
+    responseBody: employeeAccessSchema,
+  },
+  "post /api/v1/employees/{id}/account-invitations": {
+    requestBody: employeeAccountInvitationRequestSchema,
+    responseBody: identityInvitationRecordSchema,
+    optionalHeaders: [stepUpHeaderContract],
+  },
+  "patch /api/v1/tenant-memberships/{id}": {
+    requestBody: tenantMembershipUpdateRequestSchema,
+    responseBody: tenantMembershipUpdateResultSchema,
+    optionalHeaders: [stepUpHeaderContract],
   },
   "patch /api/v1/tenant-users/{userId}/roles": {
-    requestBody: tenantUserRoleUpdateRequestSchema,
-    responseBody: tenantUserRecordSchema,
-  },
-  "post /api/v1/tenant-users/{userId}/reset-password": {
-    responseBody: tenantUserPasswordResetResponseSchema,
+    retiredGoneCode: "TENANT_USER_ROLE_WRITE_RETIRED",
   },
   "post /api/v1/role-previews": {
     requestBody: rolePreviewStartRequestSchema,
@@ -3059,6 +3344,16 @@ const operationContracts: Record<string, OperationContract> = {
   "get /api/v1/students/export": {
     responseBody: studentExportResultSchema,
   },
+  "get /api/v1/students/portal-access": {
+    responseBody: arraySchema(studentPortalAccessRecordSchema),
+    cursorListResponse: true,
+    queryParameters: [
+      { name: "cursor", description: "Opaque cursor returned by the previous response.", schema: stringSchema() },
+      { name: "direction", schema: { type: "string", enum: ["next", "previous"], default: "next" } },
+      { name: "limit", schema: integerSchema({ minimum: 1, maximum: 50, default: 20 }) },
+      { name: "q", description: "Indexed name, student number or authorized email search.", schema: stringSchema() },
+    ],
+  },
   "get /api/v1/students": {
     responseBody: arraySchema(publicStudentRecordSchema),
     listResponse: true,
@@ -3074,6 +3369,13 @@ const operationContracts: Record<string, OperationContract> = {
   "patch /api/v1/students/{id}": {
     requestBody: studentUpdateRequestSchema,
     responseBody: publicStudentRecordSchema,
+  },
+  "patch /api/v1/students/{id}/portal-access": {
+    requestBody: studentPortalAccessUpdateRequestSchema,
+    responseBody: studentPortalAccessUpdateResultSchema,
+  },
+  "post /api/v1/students/{id}/portal-invitations": {
+    responseBody: studentPortalInvitationIssueResponseSchema,
   },
   "delete /api/v1/students/{id}": {
     noContent: true,
@@ -3268,19 +3570,19 @@ const operationContracts: Record<string, OperationContract> = {
     noContent: true,
   },
   "get /api/v1/campuses": {
-    responseBody: arraySchema(namedSchoolReferenceRecordSchema),
+    responseBody: arraySchema(campusRecordSchema),
     listResponse: true,
   },
   "post /api/v1/campuses": {
-    requestBody: namedSchoolReferenceCreateRequestSchema,
-    responseBody: namedSchoolReferenceRecordSchema,
+    requestBody: campusCreateRequestSchema,
+    responseBody: campusRecordSchema,
   },
   "get /api/v1/campuses/{id}": {
-    responseBody: namedSchoolReferenceRecordSchema,
+    responseBody: campusRecordSchema,
   },
   "patch /api/v1/campuses/{id}": {
-    requestBody: namedSchoolReferenceUpdateRequestSchema,
-    responseBody: namedSchoolReferenceRecordSchema,
+    requestBody: campusUpdateRequestSchema,
+    responseBody: campusRecordSchema,
   },
   "delete /api/v1/campuses/{id}": {
     noContent: true,
@@ -3867,7 +4169,13 @@ export function applyOpenApiContracts(document: OpenAPIObject): OpenAPIObject {
 
     if (contract.requiredHeaders) {
       for (const header of contract.requiredHeaders) {
-        upsertHeaderParameter(operation, header);
+        upsertHeaderParameter(operation, header, true);
+      }
+    }
+
+    if (contract.optionalHeaders) {
+      for (const header of contract.optionalHeaders) {
+        upsertHeaderParameter(operation, header, false);
       }
     }
 
@@ -3885,6 +4193,20 @@ export function applyOpenApiContracts(document: OpenAPIObject): OpenAPIObject {
       delete operation.responses["204"].content;
     }
 
+    if (contract.retiredGoneCode) {
+      operation.responses = {
+        "410": {
+          description: "This destructive operation has been retired.",
+          content: jsonContent(objectSchema({
+            error: objectSchema({
+              code: { type: "string", enum: [contract.retiredGoneCode] },
+              message: stringSchema(),
+            }, ["code", "message"]),
+          }, ["error"])),
+        },
+      };
+    }
+
     if (contract.rawResponseBody) {
       const successCode = operation.responses?.["201"] ? "201" : "200";
       operation.responses ??= {};
@@ -3899,7 +4221,13 @@ export function applyOpenApiContracts(document: OpenAPIObject): OpenAPIObject {
       operation.responses ??= {};
       operation.responses[successCode] = {
         description: operation.responses[successCode]?.description ?? "Successful response",
-        content: jsonContent(contract.listResponse ? listEnvelopedSchema(contract.responseBody) : envelopedSchema(contract.responseBody)),
+        content: jsonContent(
+          contract.cursorListResponse
+            ? cursorListEnvelopedSchema(contract.responseBody)
+            : contract.listResponse
+              ? listEnvelopedSchema(contract.responseBody)
+              : envelopedSchema(contract.responseBody),
+        ),
       };
     }
 
@@ -3941,6 +4269,7 @@ function idempotencyDescription(required: boolean): string {
 function upsertHeaderParameter(
   operation: Record<string, any>,
   header: { name: string; description?: string; schema?: JsonSchema },
+  required: boolean,
 ): void {
   operation.parameters ??= [];
   const existing = operation.parameters.find((parameter: any) =>
@@ -3953,7 +4282,7 @@ function upsertHeaderParameter(
   const normalized = {
     in: "header",
     name: header.name,
-    required: true,
+    required,
     schema: header.schema ?? stringSchema(),
     ...(header.description ? { description: header.description } : {}),
   };
@@ -4003,6 +4332,10 @@ function envelopedSchema(dataSchema: JsonSchema): JsonSchema {
 
 function listEnvelopedSchema(dataSchema: JsonSchema): JsonSchema {
   return objectSchema({ data: dataSchema, meta: listMetaSchema }, ["data", "meta"]);
+}
+
+function cursorListEnvelopedSchema(dataSchema: JsonSchema): JsonSchema {
+  return objectSchema({ data: dataSchema, meta: cursorListMetaSchema }, ["data", "meta"]);
 }
 
 function jsonContent(schema: JsonSchema, contentType = jsonContentType): JsonContent {

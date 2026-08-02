@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
 import { InMemoryTenantStore } from "./tenant-store.js";
 import { TenantService } from "./tenant.service.js";
+import { InMemoryLicenseTermStore } from "../license/license-term-store.js";
 
 describe("TenantService", () => {
   it("SystemAdmin tenant oluşturur ve listeler", async () => {
@@ -26,7 +27,7 @@ describe("TenantService", () => {
     await expect(service.list(systemContext)).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ id: "tenant-new" })]));
   });
 
-  it("tenant oluşturma, lisans güncelleme ve silmeyi audit log'a yazar", async () => {
+  it("tenant oluşturma, durum güncelleme ve silmeyi audit log'a yazar", async () => {
     const records: unknown[] = [];
     const auditLogs = {
       record: async (input: unknown) => {
@@ -42,9 +43,7 @@ describe("TenantService", () => {
       plan: "TRIAL",
     });
     await service.update(systemContext, "tenant-audit", {
-      plan: "PRO",
-      licenseEndsAt: "2030-01-01T00:00:00.000Z",
-      seatLimit: 120,
+      status: "SUSPENDED",
     });
     await service.delete(systemContext, "tenant-audit");
 
@@ -63,8 +62,7 @@ describe("TenantService", () => {
         entityId: "tenant-audit",
         action: "tenant.updated",
         diff: expect.objectContaining({
-          plan: "PRO",
-          seatLimit: 120,
+          status: "SUSPENDED",
         }),
       }),
       expect.objectContaining({
@@ -167,7 +165,6 @@ describe("TenantService", () => {
         name: "İlk Yönetici",
         email: "FIRST.ADMIN@example.test",
         nationalId: "10000000450",
-        phone: "5551234567",
       },
     });
 
@@ -180,6 +177,60 @@ describe("TenantService", () => {
         tenantId: "tenant-first-admin",
       }),
     });
+  });
+
+  it("SystemAdmin canonical onboarding ile lisans, kampüs ve ilk sahip çalışanını birlikte oluşturur", async () => {
+    const auditRecords: unknown[] = [];
+    const service = new TenantService(new InMemoryTenantStore(), { record: async (input: unknown) => { auditRecords.push(input); } } as never);
+
+    const result = await service.create(systemContext, {
+      id: "tenant-owner-onboarding",
+      name: "Sahipli Kurum",
+      slug: "sahipli-kurum",
+      campuses: [{ name: "Merkez Kampüs", code: "MRK", unitType: "SCHOOL" }],
+      licenseTerm: {
+        planCode: "PRO",
+        startsAt: "2026-08-01T00:00:00.000Z",
+        endsAt: "2027-08-01T00:00:00.000Z",
+        activeStudentLimit: 500,
+        auditReference: "contract-owner-1",
+      },
+      firstOwner: {
+        name: "İlk Sahip",
+        email: "OWNER@example.test",
+      },
+    }, "tenant-owner-onboarding-1");
+
+    expect(result).toMatchObject({
+      tenant: {
+        id: "tenant-owner-onboarding",
+        plan: "PRO",
+        licenseStartsAt: "2026-08-01T00:00:00.000Z",
+        licenseEndsAt: "2027-08-01T00:00:00.000Z",
+        seatLimit: 500,
+      },
+      campuses: [{ tenantId: "tenant-owner-onboarding", name: "Merkez Kampüs", code: "MRK", unitType: "SCHOOL" }],
+      licenseTerm: { tenantId: "tenant-owner-onboarding", planCode: "PRO", activeStudentLimit: 500 },
+      owner: {
+        tenantId: "tenant-owner-onboarding",
+        roles: ["TENANT_OWNER"],
+      },
+    });
+    await service.create(systemContext, {
+      id: "tenant-owner-onboarding",
+      name: "Sahipli Kurum",
+      slug: "sahipli-kurum",
+      campuses: [{ name: "Merkez Kampüs", code: "MRK", unitType: "SCHOOL" }],
+      licenseTerm: {
+        planCode: "PRO",
+        startsAt: "2026-08-01T00:00:00.000Z",
+        endsAt: "2027-08-01T00:00:00.000Z",
+        activeStudentLimit: 500,
+        auditReference: "contract-owner-1",
+      },
+      firstOwner: { name: "İlk Sahip", email: "OWNER@example.test" },
+    }, "tenant-owner-onboarding-1");
+    expect(auditRecords).toHaveLength(2);
   });
 
   it("ilk tenant admin audit kaydı raw e-posta yazmaz", async () => {
@@ -199,7 +250,6 @@ describe("TenantService", () => {
         name: "Audit Yönetici",
         email: "audit.admin@example.test",
         nationalId: "10000000450",
-        phone: "5551234567",
       },
     });
 
@@ -215,7 +265,7 @@ describe("TenantService", () => {
     expect(JSON.stringify(records)).not.toContain("audit.admin@example.test");
   });
 
-  it("SystemAdmin ilk tenant admini telefon parolasıyla oluşturur", async () => {
+  it("SystemAdmin ilk tenant admin yanıtında parola veya token döndürmez", async () => {
     const service = new TenantService(new InMemoryTenantStore());
 
     const result = await service.create(systemContext, {
@@ -226,7 +276,6 @@ describe("TenantService", () => {
         name: "Telefon Yönetici",
         email: "PHONE.ADMIN@example.test",
         nationalId: "10000000450",
-        phone: "5551234567",
       },
     });
 
@@ -259,37 +308,33 @@ describe("TenantService", () => {
         name: "Demo Admin",
         email: "demo-admin@example.test",
         nationalId: "10000000450",
-        phone: "5551234567",
       },
     })).rejects.toThrow("TENANT_SLUG_ALREADY_EXISTS");
-  });
-
-  it("ilk admin e-postası çakışmasını anlaşılır tenant hatasına çevirir", async () => {
-    const store = {
-      createWithFirstAdmin: async () => {
-        throw Object.assign(new Error("TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS"), {
-          code: "TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS",
-        });
-      },
-    };
-    const service = new TenantService(store as never);
-
-    await expect(service.create(systemContext, {
-      name: "Çakışan Admin Kurumu",
-      slug: "cakisan-admin-kurumu",
-      firstAdmin: {
-        name: "Demo Admin",
-        email: "demo-admin@example.test",
-        nationalId: "10000000450",
-        phone: "5551234567",
-      },
-    })).rejects.toThrow("TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS");
   });
 
   it("tenant admin kurum yönetimi yapamaz", async () => {
     const service = new TenantService(new InMemoryTenantStore());
 
     await expect(service.list(tenantAdminContext)).rejects.toThrow(BadRequestException);
+  });
+
+  it("tenant kendi lisans dönemlerini canonical durumuyla listeler", async () => {
+    const service = new TenantService(
+      new InMemoryTenantStore(),
+      undefined,
+      new InMemoryLicenseTermStore([{
+        id: "license-scheduled",
+        tenantId: "tenant-a",
+        planCode: "PRO",
+        startsAt: "2099-01-01T00:00:00.000Z",
+        endsAt: "2100-01-01T00:00:00.000Z",
+        activeStudentLimit: 500,
+      }]),
+    );
+
+    await expect(service.listCurrentLicenseTerms(tenantAdminContext)).resolves.toEqual([
+      expect.objectContaining({ id: "license-scheduled", tenantId: "tenant-a", state: "SCHEDULED" }),
+    ]);
   });
 
   it("geçersiz lisans tarihi reddedilir", async () => {

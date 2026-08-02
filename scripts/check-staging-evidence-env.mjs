@@ -54,16 +54,25 @@ const uiUxRedesignGeneratorKeys = [
 const smsProviderRuntimeKeys = ["NETGSM_USERCODE", "NETGSM_PASSWORD", "NETGSM_MSG_HEADER"];
 const smsSmokeKeys = ["SMS_SMOKE_TO", "SMS_SMOKE_BODY", "SMS_SMOKE_CONFIRM"];
 const runtimeRequiredKeys = ["S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"];
+const optionalRuntimeKeys = new Set(["TRAEFIK_TRUSTED_FORWARDER_CIDRS"]);
+const proxyNetworkKeys = [
+  "DOCKER_PROXY_SUBNET",
+  "DOCKER_PROXY_NETWORK",
+  "TRAEFIK_PROXY_IP",
+  "API_PROXY_IP",
+  "RATE_LIMIT_SMOKE_EGRESS_IP",
+];
 const smsEnabled = target.values.get("SMS_ENABLED") === "true";
 const prodEnvContractKeys = extractProdEnvContractKeys().filter((key) => smsEnabled || !smsSmokeKeys.includes(key));
 const requiredKeys = unique([
   ...prodEnvContractKeys,
   ...runtimeRequiredKeys,
+  ...proxyNetworkKeys,
   ...(smsEnabled ? smsProviderRuntimeKeys : []),
   ...uiUxRedesignGeneratorKeys,
 ]);
 const keysRequiredInSecret = requiredKeys.filter(
-  (key) => !summaryDefaultedSmokeKeys.has(key) && !workflowInjectedKeys.has(key),
+  (key) => !summaryDefaultedSmokeKeys.has(key) && !workflowInjectedKeys.has(key) && !optionalRuntimeKeys.has(key),
 );
 
 for (const key of keysRequiredInSecret) {
@@ -162,6 +171,7 @@ function checkWorkflowContract(output) {
     "STAGING_NEXT_PUBLIC_API_URL must be an https:// URL.",
     "STAGING_DEPLOY_DIR must be /root/o-okul.",
     "docker-compose.observability.yml",
+    "docker-compose.rate-limit-shard.yml",
     "validate_tag \"rollback_image_tag\"",
     "github-ci-evidence:",
     "needs: preflight",

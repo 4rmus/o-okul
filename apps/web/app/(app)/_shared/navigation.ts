@@ -128,7 +128,10 @@ export const institutionNavGroups: readonly InstitutionNavGroup[] = [
   {
     label: "Yönetim ve Kanıt",
     items: [
+      { href: "/kurum/calisanlar", icon: UserRoundCog, label: "Çalışanlar ve Yetkiler", requiredCapability: "user:manage" },
+      { href: "/kurum/ogrenci-portal-erisimi", icon: GraduationCap, label: "Öğrenci Portal Erişimi", requiredCapability: "user:manage" },
       { href: "/kurum/kullanicilar", icon: Users, label: "Kullanıcılar", requiredCapability: "user:manage" },
+      { href: "/kurum/lisans-donemleri", icon: ClipboardCheck, label: "Lisans Dönemleri", requiredCapability: "setup:manage" },
       { href: "/kurum/rol-onizleme", icon: ShieldCheck, label: "Rol Önizleme", requiredCapability: "role-preview:manage" },
       { href: "/kurum/yedek-restore", icon: Activity, label: "Yedekleme", requiredCapability: "operation:manage" },
       { href: "/kurum/kvkk", icon: ShieldCheck, label: "KVKK", requiredCapability: "privacy:manage" },
@@ -214,6 +217,8 @@ export const rolePortalNavGroups: readonly RolePortalNavGroup[] = [
 
 export const staticBreadcrumbLabels: Record<string, string> = {
   "/": "Ana Sayfa",
+  "/hesap": "Hesap",
+  "/hesap/oturumlar": "Oturumlar",
   "/sistem": "Sistem Özeti",
   "/kurum": "Kurum Özeti",
   "/ogretmen": "Öğretmen Portalı",

@@ -390,7 +390,7 @@ function requireRateLimitRedisSmoke(payload, failures, label, allowExampleEviden
   ]);
   requireStringArray(payload, failures, `${label}.evidenceReferences`, "evidenceReferences");
   requireEmptyArray(payload, failures, `${label}.gaps`, "gaps");
-  requireNoForbiddenKeys(payload, failures, label, ["clientIp", "loginClientIp", "otherLoginIp", "loginNationalId", "nationalId", "email"]);
+  requireNoForbiddenKeys(payload, failures, label, ["clientIp", "loginClientIp", "otherLoginIp", "loginName", "tenantSlug", "nationalId", "email"]);
 }
 
 function requireRateLimitConfig(config, failures, label) {
@@ -479,24 +479,24 @@ function requireRateLimitApiResult(apiRateLimit, config, failures, label) {
 function requireRateLimitLoginResult(loginAttemptLimiter, config, failures, label) {
   if (!requireObjectKeySet(loginAttemptLimiter, failures, label, "loginAttemptLimiter", [
     "clientIpHash",
-    "nationalIdHash",
+    "loginNameHash",
     "attemptsSent",
     "lockStatusCode",
     "errorCode",
     "sharedAcrossInstances",
-    "nationalIdAndIpScoped",
+    "tenantAndLoginNameAndIpScoped",
     "differentIpNotLocked",
   ])) {
     return;
   }
 
   requireSha256(loginAttemptLimiter, failures, `${label}.clientIpHash`, "clientIpHash");
-  requireSha256(loginAttemptLimiter, failures, `${label}.nationalIdHash`, "nationalIdHash");
+  requireSha256(loginAttemptLimiter, failures, `${label}.loginNameHash`, "loginNameHash");
   requireIntegerAtLeast(loginAttemptLimiter, failures, `${label}.attemptsSent`, "attemptsSent", 1);
   requireEqual(loginAttemptLimiter, failures, `${label}.lockStatusCode`, "lockStatusCode", 429);
   requireLiteral(loginAttemptLimiter, failures, `${label}.errorCode`, "errorCode", "LOGIN_LOCKED");
   requireEqual(loginAttemptLimiter, failures, `${label}.sharedAcrossInstances`, "sharedAcrossInstances", true);
-  requireEqual(loginAttemptLimiter, failures, `${label}.nationalIdAndIpScoped`, "nationalIdAndIpScoped", true);
+  requireEqual(loginAttemptLimiter, failures, `${label}.tenantAndLoginNameAndIpScoped`, "tenantAndLoginNameAndIpScoped", true);
   requireEqual(loginAttemptLimiter, failures, `${label}.differentIpNotLocked`, "differentIpNotLocked", true);
 
   if (Number.isInteger(config?.loginMaxAttempts) && loginAttemptLimiter.attemptsSent < config.loginMaxAttempts + 1) {

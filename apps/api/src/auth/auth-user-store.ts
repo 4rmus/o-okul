@@ -1,19 +1,29 @@
-import { randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes, randomUUID, scrypt, scryptSync, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
-import { type TenantQueryable, withBypassRlsQuery } from "../db/tenant-query.js";
+import { type TenantQueryable, withBypassRlsQuery, withExplicitTenantQuery } from "../db/tenant-query.js";
+import { buildTenantMembershipDualWriteRows } from "../identity-provisioning/tenant-membership-dual-write.js";
 import { hashTcIdentity } from "../student/tc-identity.js";
+import {
+  assertTenantMembershipParity,
+  type CanonicalMembershipProjection,
+  type CanonicalStaffRole,
+} from "./tenant-membership-projection.js";
 
 export interface AuthUser {
   id: string;
   tenantId: string;
   email?: string;
+  loginName?: string;
   phone?: string;
   nationalIdEncrypted?: string;
   nationalIdHash?: string;
   name: string;
   passwordHash: string;
   roles: string[];
+  membership?: CanonicalMembershipProjection;
+  authorizationSource?: "CANONICAL_PARITY" | "LEGACY";
   membershipVersion: number;
   mustChangePassword?: boolean;
   passwordChangedAt?: string;
@@ -26,12 +36,14 @@ export interface AuthUser {
 
 export interface AuthUserStore {
   findByEmail(email: string): Promise<AuthUser | undefined>;
+  findByTenantAndLoginName(tenantId: string, loginName: string): Promise<AuthUser | undefined>;
   findByTenantAndNationalIdHash(tenantId: string, nationalIdHash: string): Promise<AuthUser | undefined>;
   findByNationalIdHash(nationalIdHash: string): Promise<AuthUser[]>;
   findById(id: string): Promise<AuthUser | undefined>;
   listByTenant(tenantId: string): Promise<AuthUser[]>;
   createOrAttachTenantIdentity(input: CreateTenantIdentityUserInput): Promise<AuthUser>;
   updatePassword(id: string, passwordHash: string, input?: PasswordStateUpdate): Promise<AuthUser | undefined>;
+  rehashPassword(tenantId: string, id: string, currentPasswordHash: string, passwordHash: string): Promise<boolean>;
   enableTotp(input: {
     userId: string;
     secretEncrypted: string;
@@ -145,6 +157,7 @@ const demoUsers: AuthUser[] = [
   },
   {
     id: "user-system",
+    email: "system@example.test",
     nationalIdHash: demoNationalIdHashes.system,
     name: "System Admin",
     passwordHash: hashPassword("password"),
@@ -194,9 +207,23 @@ export function resetInMemoryAuthUsers(): void {
   inMemoryUsers.splice(0, inMemoryUsers.length, ...demoUsers.map(cloneRequiredUser));
 }
 
+export function removeInMemoryAuthUserRole(
+  tenantId: string,
+  userId: string,
+  role: string,
+): AuthUser | undefined {
+  const user = inMemoryUsers.find((candidate) => candidate.tenantId === tenantId && candidate.id === userId);
+  if (!user) return undefined;
+
+  user.roles = user.roles.filter((candidate) => candidate !== role);
+  user.membershipVersion += 1;
+  return cloneRequiredUser(user);
+}
+
 export function upsertInMemoryAuthUser(input: {
   id: string;
   email?: string;
+  loginName?: string;
   nationalIdEncrypted?: string;
   nationalIdHash?: string;
   name: string;
@@ -204,6 +231,7 @@ export function upsertInMemoryAuthUser(input: {
   passwordHash?: string;
   tenantId: string;
   roles: string[];
+  membership?: CanonicalMembershipProjection;
   mustChangePassword?: boolean;
   passwordChangedAt?: string;
   totpSecretEncrypted?: string;
@@ -212,17 +240,21 @@ export function upsertInMemoryAuthUser(input: {
   totpLastUsedCounter?: string;
 }): AuthUser {
   const email = input.email?.toLowerCase();
+  const loginName = input.loginName?.trim().toLowerCase();
   const existing = inMemoryUsers.find((candidate) => (
     (email && candidate.email?.toLowerCase() === email) ||
+    (loginName && candidate.tenantId === input.tenantId && candidate.loginName?.toLowerCase() === loginName) ||
     (input.nationalIdHash && candidate.tenantId === input.tenantId && candidate.nationalIdHash === input.nationalIdHash)
   ));
   if (existing) {
     existing.email = email ?? existing.email;
+    existing.loginName = loginName ?? existing.loginName;
     existing.nationalIdEncrypted = input.nationalIdEncrypted ?? existing.nationalIdEncrypted;
     existing.nationalIdHash = input.nationalIdHash ?? existing.nationalIdHash;
     existing.name = input.name;
     existing.tenantId = input.tenantId;
     existing.roles = [...input.roles];
+    existing.membership = input.membership ? cloneCanonicalMembership(input.membership) : existing.membership;
     existing.membershipVersion += 1;
     existing.mustChangePassword = input.mustChangePassword ?? existing.mustChangePassword;
     existing.passwordChangedAt = input.passwordChangedAt ?? existing.passwordChangedAt;
@@ -239,12 +271,14 @@ export function upsertInMemoryAuthUser(input: {
   const user: AuthUser = {
     id: input.id,
     email,
+    loginName,
     nationalIdEncrypted: input.nationalIdEncrypted,
     nationalIdHash: input.nationalIdHash,
     name: input.name,
     passwordHash: input.passwordHash ?? (input.password === undefined ? "" : hashPassword(input.password)),
     tenantId: input.tenantId,
     roles: [...input.roles],
+    membership: input.membership ? cloneCanonicalMembership(input.membership) : undefined,
     membershipVersion: 1,
     mustChangePassword: input.mustChangePassword,
     passwordChangedAt: input.passwordChangedAt,
@@ -263,6 +297,16 @@ export class InMemoryAuthUserStore implements AuthUserStore {
   async findByEmail(email: string): Promise<AuthUser | undefined> {
     const normalizedEmail = email.toLowerCase();
     return cloneUser(this.users.find((candidate) => candidate.email?.toLowerCase() === normalizedEmail));
+  }
+
+  async findByTenantAndLoginName(tenantId: string, loginName: string): Promise<AuthUser | undefined> {
+    const normalizedLoginName = loginName.trim().toLowerCase();
+    return cloneUser(this.users.find((candidate) => (
+      candidate.tenantId === tenantId && (
+        candidate.loginName?.trim().toLowerCase() === normalizedLoginName ||
+        candidate.email?.trim().toLowerCase() === normalizedLoginName
+      )
+    )));
   }
 
   async findByTenantAndNationalIdHash(tenantId: string, nationalIdHash: string): Promise<AuthUser | undefined> {
@@ -308,6 +352,13 @@ export class InMemoryAuthUserStore implements AuthUserStore {
     return cloneUser(user);
   }
 
+  async rehashPassword(tenantId: string, id: string, currentPasswordHash: string, passwordHash: string): Promise<boolean> {
+    const user = this.users.find((candidate) => candidate.tenantId === tenantId && candidate.id === id && candidate.passwordHash === currentPasswordHash);
+    if (!user) return false;
+    user.passwordHash = passwordHash;
+    return true;
+  }
+
   async enableTotp(input: {
     userId: string;
     secretEncrypted: string;
@@ -340,7 +391,7 @@ export class InMemoryAuthUserStore implements AuthUserStore {
 
   async markTotpCounterUsed(userId: string, counter: string): Promise<boolean> {
     const user = this.users.find((candidate) => candidate.id === userId);
-    if (!user || user.totpLastUsedCounter === counter) return false;
+    if (!user || !isNewerTotpCounter(counter, user.totpLastUsedCounter)) return false;
 
     user.totpLastUsedCounter = counter;
     return true;
@@ -388,6 +439,26 @@ export class PostgresAuthUserStore implements AuthUserStore {
     return result[0];
   }
 
+  async findByTenantAndLoginName(tenantId: string, loginName: string): Promise<AuthUser | undefined> {
+    const result = await this.queryAuthUsers(
+      `WHERE u."tenantId" = $1
+         AND (
+           u."loginNameNormalized" = lower(btrim($2))
+           OR u."emailNormalized" = lower(btrim($2))
+         )
+         AND m."tenantId" = $1
+         AND m."status" = 'ACTIVE'
+         AND u."accountStatus" IN ('ACTIVE', 'PENDING_ACTIVATION')
+         AND t."status" = 'ACTIVE'
+       GROUP BY u."id", u."tenantId", u."email", u."nationalIdEncrypted", u."nationalIdHash", u."name", u."passwordHash",
+                u."membershipVersion", u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
+                u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", m."tenantId"
+       LIMIT 1`,
+      [tenantId, loginName],
+    );
+    return result[0];
+  }
+
   async findByTenantAndNationalIdHash(tenantId: string, nationalIdHash: string): Promise<AuthUser | undefined> {
     const result = await this.queryAuthUsers(
       `WHERE u."tenantId" = $1
@@ -410,7 +481,6 @@ export class PostgresAuthUserStore implements AuthUserStore {
          AND u."nationalIdHash" = $1
          AND m."tenantId" = u."tenantId"
          AND t."status" = 'ACTIVE'
-         AND (t."licenseEndsAt" IS NULL OR t."licenseEndsAt" >= now())
        GROUP BY u."id", u."tenantId", u."email", u."nationalIdEncrypted", u."nationalIdHash", u."name", u."passwordHash",
                 u."membershipVersion", u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
                 u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", m."tenantId"
@@ -451,8 +521,13 @@ export class PostgresAuthUserStore implements AuthUserStore {
       const update = await client.query(
         `UPDATE "User"
          SET "email" = $2,
+             "emailNormalized" = lower(btrim($2)),
+             "loginName" = lower(btrim($2)),
+             "loginNameNormalized" = lower(btrim($2)),
              "name" = $3,
              "passwordHash" = '',
+             "passwordHashVersion" = 1,
+             "accountStatus" = 'DISABLED',
              "nationalIdEncrypted" = NULL,
              "nationalIdHash" = NULL,
              "mustChangePassword" = false,
@@ -473,37 +548,76 @@ export class PostgresAuthUserStore implements AuthUserStore {
 
   async createOrAttachTenantIdentity(input: CreateTenantIdentityUserInput): Promise<AuthUser> {
     const userId = await withBypassRlsQuery(this.pool, async (client) => {
+      const normalizedEmail = input.email?.trim().toLowerCase() ?? null;
       const created = await client.query<{ id: string }>(
         `INSERT INTO "User" (
-           "id", "tenantId", "email", "nationalIdEncrypted", "nationalIdHash", "name",
-           "passwordHash", "mustChangePassword", "updatedAt"
+           "id", "tenantId", "email", "emailNormalized", "loginName", "loginNameNormalized",
+           "nationalIdEncrypted", "nationalIdHash", "name", "passwordHash", "passwordHashVersion",
+           "accountStatus", "mustChangePassword", "updatedAt"
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+         VALUES ($1, $2, $3, $3, $3, $3, $4, $5, $6, $7, $8, $9, $10, now())
          ON CONFLICT ("tenantId", "nationalIdHash") DO UPDATE
          SET "name" = EXCLUDED."name",
              "email" = COALESCE("User"."email", EXCLUDED."email"),
+             "emailNormalized" = COALESCE("User"."emailNormalized", EXCLUDED."emailNormalized"),
+             "loginName" = COALESCE("User"."loginName", EXCLUDED."loginName"),
+             "loginNameNormalized" = COALESCE("User"."loginNameNormalized", EXCLUDED."loginNameNormalized"),
              "updatedAt" = now()
          RETURNING "id"`,
         [
           randomUUID(),
           input.tenantId,
-          input.email?.toLowerCase() ?? null,
+          normalizedEmail,
           input.nationalIdEncrypted,
           input.nationalIdHash,
           input.name,
           input.passwordHash,
+          passwordHashVersionOf(input.passwordHash),
+          input.mustChangePassword ? "PENDING_ACTIVATION" : "ACTIVE",
           input.mustChangePassword,
         ],
       );
       const id = created.rows[0]?.id;
       if (!id) throw new Error("USER_CREATE_FAILED");
 
-      for (const role of input.roles) {
+      const existingMemberships = await client.query<{ role: string; version: number }>(
+        `SELECT "role"::text AS role, "version"
+         FROM "TenantMembership"
+         WHERE "tenantId" = $1 AND "userId" = $2
+         FOR UPDATE`,
+        [input.tenantId, id],
+      );
+      const roles = [...new Set([...existingMemberships.rows.map((row) => row.role), ...input.roles])];
+      const membershipVersion = existingMemberships.rows.length > 0
+        ? Math.max(...existingMemberships.rows.map((row) => row.version)) + 1
+        : 1;
+      const memberships = buildTenantMembershipDualWriteRows(roles);
+      await client.query(`DELETE FROM "TenantMembership" WHERE "tenantId" = $1 AND "userId" = $2`, [input.tenantId, id]);
+      for (const membership of memberships) {
         await client.query(
-          `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
-           VALUES ($1, $2, $3, $4, now())
-           ON CONFLICT ("tenantId", "userId", "role") DO NOTHING`,
-          [randomUUID(), input.tenantId, id, role],
+          `INSERT INTO "TenantMembership" (
+             "id", "tenantId", "userId", "role", "staffRole", "hasTeacherPersona", "hasStudentPersona",
+             "status", "version", "scopeMode", "updatedAt"
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', $8, 'TENANT', now())`,
+          [
+            randomUUID(),
+            input.tenantId,
+            id,
+            membership.role,
+            membership.staffRole,
+            membership.hasTeacherPersona,
+            membership.hasStudentPersona,
+            membershipVersion,
+          ],
+        );
+      }
+      if (existingMemberships.rows.length > 0) {
+        await client.query(
+          `UPDATE "User"
+           SET "membershipVersion" = "membershipVersion" + 1,
+               "updatedAt" = now()
+           WHERE "tenantId" = $1 AND "id" = $2`,
+          [input.tenantId, id],
         );
       }
       return id;
@@ -560,13 +674,18 @@ export class PostgresAuthUserStore implements AuthUserStore {
   }
 
   async markTotpCounterUsed(userId: string, counter: string): Promise<boolean> {
+    if (!isValidTotpCounter(counter)) return false;
     return withBypassRlsQuery(this.pool, async (client) => {
       const update = await client.query(
         `UPDATE "User"
          SET "totpLastUsedCounter" = $2,
              "updatedAt" = now()
          WHERE "id" = $1
-           AND "totpLastUsedCounter" IS DISTINCT FROM $2
+           AND CASE
+             WHEN "totpLastUsedCounter" IS NULL THEN true
+             WHEN "totpLastUsedCounter" ~ '^[0-9]+$' THEN $2::bigint > "totpLastUsedCounter"::bigint
+             ELSE false
+           END
          RETURNING "id"`,
         [userId, counter],
       );
@@ -594,17 +713,39 @@ export class PostgresAuthUserStore implements AuthUserStore {
       const update = await client.query(
         `UPDATE "User"
          SET "passwordHash" = $2,
+             "passwordHashVersion" = $5,
+             "accountStatus" = CASE
+               WHEN "accountStatus" = 'PENDING_ACTIVATION' THEN 'ACTIVE'
+               ELSE "accountStatus"
+             END,
              "mustChangePassword" = COALESCE($3, "mustChangePassword"),
              "passwordChangedAt" = COALESCE($4::timestamptz, "passwordChangedAt"),
              "membershipVersion" = "membershipVersion" + 1,
              "updatedAt" = now()
          WHERE "id" = $1
          RETURNING "id"`,
-        [id, passwordHash, input.mustChangePassword ?? null, input.passwordChangedAt ?? null],
+        [id, passwordHash, input.mustChangePassword ?? null, input.passwordChangedAt ?? null, passwordHashVersionOf(passwordHash)],
       );
       return Boolean(update.rows[0]);
     });
     return updated ? this.findById(id) : undefined;
+  }
+
+  async rehashPassword(tenantId: string, id: string, currentPasswordHash: string, passwordHash: string): Promise<boolean> {
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const update = await client.query(
+        `UPDATE "User"
+         SET "passwordHash" = $4,
+             "passwordHashVersion" = $5,
+             "updatedAt" = now()
+         WHERE "tenantId" = $1
+           AND "id" = $2
+           AND "passwordHash" = $3
+         RETURNING "id"`,
+        [tenantId, id, currentPasswordHash, passwordHash, passwordHashVersionOf(passwordHash)],
+      );
+      return Boolean(update.rows[0]);
+    });
   }
 
   private async queryAuthUsers(whereSql: string, values: unknown[]): Promise<AuthUser[]> {
@@ -626,10 +767,28 @@ export class PostgresAuthUserStore implements AuthUserStore {
            u."totpEnabledAt",
            u."totpRecoveryCodeHashes",
            u."totpLastUsedCounter",
-           m."tenantId",
-           array_agg(m."role"::text ORDER BY m."role"::text) AS roles
+           array_agg(DISTINCT m."role"::text ORDER BY m."role"::text) AS roles,
+           max(m."id") FILTER (
+             WHERE m."staffRole" IS NOT NULL OR m."hasTeacherPersona" OR m."hasStudentPersona"
+           ) AS "canonicalMembershipId",
+           count(DISTINCT m."id") FILTER (
+             WHERE m."staffRole" IS NOT NULL OR m."hasTeacherPersona" OR m."hasStudentPersona"
+           )::int AS "canonicalMembershipCount",
+           max(m."staffRole"::text) AS "canonicalStaffRole",
+           bool_or(m."hasTeacherPersona") AS "canonicalHasTeacherPersona",
+           bool_or(m."hasStudentPersona") AS "canonicalHasStudentPersona",
+           max(m."version") FILTER (
+             WHERE m."staffRole" IS NOT NULL OR m."hasTeacherPersona" OR m."hasStudentPersona"
+           ) AS "canonicalMembershipVersion",
+           max(m."scopeMode") FILTER (
+             WHERE m."staffRole" IS NOT NULL OR m."hasTeacherPersona" OR m."hasStudentPersona"
+           ) AS "canonicalScopeMode",
+           COALESCE(array_agg(DISTINCT scope."campusId") FILTER (
+             WHERE m."staffRole" IS NOT NULL OR m."hasTeacherPersona" OR m."hasStudentPersona"
+           ), ARRAY[]::text[]) AS "canonicalCampusIds"
          FROM "User" u
-         JOIN "TenantMembership" m ON m."userId" = u."id"
+         JOIN "TenantMembership" m ON m."userId" = u."id" AND m."tenantId" = u."tenantId" AND m."status" = 'ACTIVE'
+         LEFT JOIN "MembershipCampusScope" scope ON scope."tenantId" = m."tenantId" AND scope."membershipId" = m."id"
          JOIN "Tenant" t ON t."id" = m."tenantId"
          LEFT JOIN "Teacher" te ON te."tenantId" = u."tenantId" AND te."userId" = u."id" AND te."deletedAt" IS NULL
          LEFT JOIN "Student" st ON st."tenantId" = u."tenantId" AND st."userId" = u."id" AND st."deletedAt" IS NULL
@@ -642,12 +801,36 @@ export class PostgresAuthUserStore implements AuthUserStore {
   }
 }
 
+function isNewerTotpCounter(counter: string, lastUsedCounter: string | undefined): boolean {
+  if (!isValidTotpCounter(counter)) return false;
+  if (lastUsedCounter === undefined) return true;
+  if (!isValidTotpCounter(lastUsedCounter)) return false;
+  return BigInt(counter) > BigInt(lastUsedCounter);
+}
+
+function isValidTotpCounter(value: string): boolean {
+  if (!/^\d+$/.test(value)) return false;
+  try {
+    return BigInt(value) <= 9_223_372_036_854_775_807n;
+  } catch {
+    return false;
+  }
+}
+
 export function createAuthUserStore(): AuthUserStore {
   return resolvePersistenceDriver(process.env.AUTH_USER_STORE) === "postgres" ? new PostgresAuthUserStore() : new InMemoryAuthUserStore();
 }
 
 export function hashPassword(password: string, salt = "demo-auth-salt"): string {
   return `scrypt:${salt}:${scryptSync(password, salt, 32).toString("base64url")}`;
+}
+
+const scryptAsync = promisify(scrypt);
+
+export async function hashPasswordAsync(password: string): Promise<string> {
+  const salt = randomBytes(16).toString("base64url");
+  const derivedKey = await scryptAsync(password, salt, 32) as Buffer;
+  return `scrypt:v2:${salt}:${derivedKey.toString("base64url")}`;
 }
 
 export function verifyPassword(password: string, passwordHash: string): boolean {
@@ -659,6 +842,25 @@ export function verifyPassword(password: string, passwordHash: string): boolean 
   const actualBuffer = scryptSync(password, salt, 32);
   const expectedBuffer = Buffer.from(expected, "base64url");
   return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
+}
+
+export async function verifyPasswordAsync(password: string, passwordHash: string): Promise<boolean> {
+  const parts = passwordHash.split(":");
+  const versioned = parts.length === 4 && parts[0] === "scrypt" && parts[1] === "v2";
+  const legacy = parts.length === 3 && parts[0] === "scrypt";
+  if (!versioned && !legacy) return false;
+
+  const salt = versioned ? parts[2] : parts[1];
+  const expected = versioned ? parts[3] : parts[2];
+  if (!salt || !expected) return false;
+
+  const actualBuffer = await scryptAsync(password, salt, 32) as Buffer;
+  const expectedBuffer = Buffer.from(expected, "base64url");
+  return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
+}
+
+export function passwordHashNeedsRehash(passwordHash: string): boolean {
+  return !passwordHash.startsWith("scrypt:v2:");
 }
 
 interface AuthUserRow {
@@ -678,9 +880,19 @@ interface AuthUserRow {
   totpRecoveryCodeHashes: string[] | null;
   totpLastUsedCounter: string | null;
   roles: string[];
+  canonicalMembershipId: string | null;
+  canonicalMembershipCount: number;
+  canonicalStaffRole: CanonicalStaffRole | null;
+  canonicalHasTeacherPersona: boolean | null;
+  canonicalHasStudentPersona: boolean | null;
+  canonicalMembershipVersion: number | null;
+  canonicalScopeMode?: "TENANT" | "CAMPUSES" | null;
+  canonicalCampusIds?: string[] | null;
 }
 
 function toAuthUser(row: AuthUserRow): AuthUser {
+  const membership = toCanonicalMembership(row);
+  const roles = membership ? assertTenantMembershipParity(row.roles, membership) : row.roles;
   return {
     id: row.id,
     email: row.email ?? undefined,
@@ -690,7 +902,9 @@ function toAuthUser(row: AuthUserRow): AuthUser {
     name: row.name,
     passwordHash: row.passwordHash,
     tenantId: row.tenantId ?? "system",
-    roles: row.roles,
+    roles,
+    membership,
+    authorizationSource: membership ? "CANONICAL_PARITY" : "LEGACY",
     membershipVersion: row.membershipVersion,
     mustChangePassword: row.mustChangePassword,
     passwordChangedAt: row.passwordChangedAt ? new Date(row.passwordChangedAt).toISOString() : undefined,
@@ -702,9 +916,51 @@ function toAuthUser(row: AuthUserRow): AuthUser {
 }
 
 function cloneRequiredUser(user: AuthUser): AuthUser {
-  return { ...user, roles: [...user.roles], totpRecoveryCodeHashes: [...(user.totpRecoveryCodeHashes ?? [])] };
+  return {
+    ...user,
+    roles: [...user.roles],
+    membership: user.membership ? cloneCanonicalMembership(user.membership) : undefined,
+    totpRecoveryCodeHashes: [...(user.totpRecoveryCodeHashes ?? [])],
+  };
 }
 
 function cloneUser(user: AuthUser | undefined): AuthUser | undefined {
   return user ? cloneRequiredUser(user) : undefined;
+}
+
+function passwordHashVersionOf(passwordHash: string): number {
+  return passwordHash.startsWith("scrypt:v2:") ? 2 : 1;
+}
+
+function toCanonicalMembership(row: AuthUserRow): CanonicalMembershipProjection | undefined {
+  const canonicalMembershipCount = Number(row.canonicalMembershipCount ?? 0);
+  if (canonicalMembershipCount === 0) return undefined;
+  if (
+    canonicalMembershipCount !== 1 ||
+    !row.canonicalMembershipId ||
+    row.canonicalMembershipVersion === null ||
+    row.canonicalMembershipVersion === undefined ||
+    row.canonicalMembershipVersion !== row.membershipVersion
+  ) {
+    throw new Error("AUTH_MEMBERSHIP_PARITY_MISMATCH");
+  }
+  const scopeMode = row.canonicalScopeMode === "TENANT" || row.canonicalScopeMode === "CAMPUSES"
+    ? row.canonicalScopeMode
+    : undefined;
+  return {
+    id: row.canonicalMembershipId,
+    staffRole: row.canonicalStaffRole ?? null,
+    hasTeacherPersona: row.canonicalHasTeacherPersona === true,
+    hasStudentPersona: row.canonicalHasStudentPersona === true,
+    version: row.canonicalMembershipVersion,
+    scopeMode,
+    campusIds: scopeMode ? [...(row.canonicalCampusIds ?? [])] : undefined,
+  };
+}
+
+function cloneCanonicalMembership(membership: CanonicalMembershipProjection): CanonicalMembershipProjection {
+  return {
+    ...membership,
+    campusIds: membership.campusIds ? [...membership.campusIds] : undefined,
+  };
 }

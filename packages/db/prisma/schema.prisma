@@ -8,11 +8,21 @@ datasource db {
 
 enum TenantRole {
   SYSTEM_ADMIN
+  TENANT_OWNER
   TENANT_ADMIN
   ASSISTANT_ADMIN
+  OPERATIONS_STAFF
+  FINANCE_STAFF
   TEACHER
   STUDENT
   GUARDIAN
+}
+
+enum StaffRole {
+  TENANT_OWNER
+  TENANT_ADMIN
+  OPERATIONS_STAFF
+  FINANCE_STAFF
 }
 
 model Tenant {
@@ -86,6 +96,65 @@ model Tenant {
   supportTicketComments SupportTicketComment[]
   notificationDeviceTokens NotificationDeviceToken[]
   auditLogs   AuditLog[]
+  licenseTerms LicenseTerm[]
+  licenseUsages LicenseUsage[]
+  employees Employee[]
+  studentContacts StudentContact[]
+  membershipCampusScopes MembershipCampusScope[]
+}
+
+model PlatformAccount {
+  id                    String   @id @default(uuid())
+  loginName             String
+  loginNameNormalized   String   @unique
+  email                 String?
+  emailNormalized       String?  @unique
+  name                  String
+  passwordHash          String
+  passwordHashVersion   Int      @default(2)
+  status                String   @default("PENDING_ACTIVATION")
+  totpSecretEncrypted   String?
+  totpEnabledAt         DateTime? @db.Timestamptz(6)
+  createdAt             DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  sessions              PlatformSession[]
+  createdLicenseTerms   LicenseTerm[]
+  idempotencyKeys       PlatformIdempotencyKey[]
+
+  @@index([status])
+}
+
+model PlatformIdempotencyKey {
+  id                String   @id @default(uuid())
+  platformAccountId String
+  key               String
+  operation         String
+  requestHash       String
+  status            String   @default("IN_PROGRESS")
+  responseBody      Json?
+  completedAt       DateTime? @db.Timestamptz(6)
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  platformAccount   PlatformAccount @relation(fields: [platformAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([platformAccountId, key, operation])
+  @@index([status, createdAt])
+}
+
+model PlatformSession {
+  id                 String   @id @default(uuid())
+  platformAccountId  String
+  tokenFamilyId      String
+  refreshTokenHash   String   @unique
+  status             String   @default("ACTIVE")
+  expiresAt          DateTime @db.Timestamptz(6)
+  createdAt          DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  platformAccount    PlatformAccount @relation(fields: [platformAccountId], references: [id], onDelete: Cascade)
+
+  @@index([platformAccountId, status])
+  @@index([tokenFamilyId])
+  @@index([expiresAt])
 }
 
 model DevelopmentCriterion {
@@ -147,11 +216,16 @@ model DevelopmentScore {
 model User {
   id          String             @id @default(uuid())
   tenantId    String?
-  email       String?            @unique
+  email       String?
+  emailNormalized String?
+  loginName String?
+  loginNameNormalized String?
   nationalIdEncrypted String?
   nationalIdHash String?
   name        String
   passwordHash String
+  passwordHashVersion Int        @default(1)
+  accountStatus String            @default("ACTIVE")
   membershipVersion Int       @default(1)
   mustChangePassword Boolean     @default(false)
   passwordChangedAt DateTime?    @db.Timestamptz(6)
@@ -169,12 +243,15 @@ model User {
   studentProfile Student?       @relation("StudentAccountUser")
   teacherProfile Teacher?       @relation("TeacherAccountUser")
   guardianProfile Guardian?     @relation("GuardianAccountUser")
+  employeeProfile Employee?     @relation("EmployeeAccountUser")
   createdStudents Student[]      @relation("StudentCreatedBy")
   updatedStudents Student[]      @relation("StudentUpdatedBy")
   checkedHomework Homework[]      @relation("HomeworkCheckedBy")
 
   @@unique([tenantId, id])
   @@unique([tenantId, nationalIdHash])
+  @@unique([tenantId, loginNameNormalized])
+  @@unique([tenantId, emailNormalized])
   @@index([tenantId])
 }
 
@@ -204,22 +281,124 @@ model TenantMembership {
   tenantId  String
   userId    String
   role      TenantRole
+  staffRole StaffRole?
+  hasTeacherPersona Boolean @default(false)
+  hasStudentPersona Boolean @default(false)
+  status    String     @default("ACTIVE")
+  version   Int        @default(1)
+  startsAt  DateTime   @default(now()) @db.Timestamptz(6)
+  endsAt    DateTime?  @db.Timestamptz(6)
+  endedReason String?
+  scopeMode String      @default("TENANT")
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user      User       @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
+  campusScopes MembershipCampusScope[]
+  authSessions AuthSession[]
 
+  @@unique([tenantId, id])
   @@unique([tenantId, userId, role])
+  @@index([tenantId, userId, status])
   @@index([tenantId, role])
+}
+
+model MembershipCampusScope {
+  id            String   @id @default(uuid())
+  tenantId      String
+  membershipId  String
+  campusId      String
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  membership    TenantMembership @relation(fields: [tenantId, membershipId], references: [tenantId, id], onDelete: Cascade)
+  campus        Campus   @relation(fields: [tenantId, campusId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, membershipId, campusId])
+  @@index([tenantId, campusId])
+}
+
+model LicenseTerm {
+  id                         String   @id @default(uuid())
+  tenantId                   String
+  planCode                   String
+  startsAt                   DateTime @db.Timestamptz(6)
+  endsAt                     DateTime @db.Timestamptz(6)
+  activeStudentLimit         Int
+  cancelledAt                DateTime? @db.Timestamptz(6)
+  createdByPlatformAccountId String?
+  auditReference             String?
+  createdAt                  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt                  DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  tenant                     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdByPlatformAccount   PlatformAccount? @relation(fields: [createdByPlatformAccountId], references: [id], onDelete: Restrict)
+  usages                     LicenseUsage[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, startsAt, endsAt])
+  @@index([createdByPlatformAccountId])
+}
+
+model LicenseUsage {
+  id                      String   @id @default(uuid())
+  tenantId                String
+  licenseTermId           String?
+  usageDate               DateTime @db.Date
+  activeStudentCount      Int      @default(0)
+  peakActiveStudentCount  Int      @default(0)
+  reconciledAt            DateTime? @db.Timestamptz(6)
+  createdAt               DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  tenant                  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  licenseTerm             LicenseTerm? @relation(fields: [tenantId, licenseTermId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, usageDate])
+  @@index([tenantId, licenseTermId, usageDate])
+}
+
+model Employee {
+  id                    String   @id @default(uuid())
+  tenantId              String
+  employeeNo            String?
+  firstName             String
+  lastName              String
+  nationalIdEncrypted   String?
+  nationalIdHash        String?
+  workEmail             String?
+  phone                 String?
+  userId                String?
+  status                String   @default("PLANNED")
+  employmentStartsAt    DateTime? @db.Date
+  employmentEndsAt      DateTime? @db.Date
+  endedReason           String?
+  deletedAt             DateTime? @db.Timestamptz(6)
+  createdAt             DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  accountUser           User?    @relation("EmployeeAccountUser", fields: [tenantId, userId], references: [tenantId, id], onDelete: NoAction)
+  teacherProfile        Teacher?
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, employeeNo])
+  @@unique([tenantId, userId])
+  @@unique([tenantId, nationalIdHash])
+  @@index([tenantId, status, deletedAt])
+  @@index([tenantId, workEmail])
 }
 
 model AuthSession {
   id                String   @id @default(uuid())
   userId            String
   tenantId          String
+  membershipId      String?
+  activePersona     String?
   roles             String[]
   subjectType       String?
   subjectId         String?
+  deviceLabel       String?
+  clientIpPrefix    String?
+  lastSeenAt        DateTime @default(now()) @db.Timestamptz(6)
   tokenFamilyId     String
   refreshTokenHash  String   @unique
   status            String   @default("ACTIVE")
@@ -229,8 +408,10 @@ model AuthSession {
   updatedAt         DateTime @updatedAt
   tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user              User     @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
+  membership        TenantMembership? @relation(fields: [tenantId, membershipId], references: [tenantId, id], onDelete: Cascade)
 
   @@index([tenantId, userId, status])
+  @@index([tenantId, membershipId, status])
   @@index([tokenFamilyId])
   @@index([expiresAt])
 }
@@ -258,11 +439,14 @@ model IdentityInvitation {
   tenantId     String
   subjectType  String
   subjectId    String
-  email        String
+  email        String?
   name         String
   role         TenantRole
+  kind         String   @default("EMAIL_LINK")
   tokenHash    String   @unique
   status       String   @default("PENDING")
+  failedAttempts Int    @default(0)
+  maxAttempts  Int      @default(5)
   expiresAt    DateTime
   acceptedAt   DateTime?
   acceptedUserId String?
@@ -272,6 +456,7 @@ model IdentityInvitation {
 
   @@index([tenantId, subjectType, subjectId, status])
   @@index([tenantId, email])
+  @@index([tenantId, subjectId, kind, status, expiresAt], map: "IdentityInvitation_student_code_lookup_idx")
 }
 
 /// Global auth altyapı tablosu: token aile takibi User üzerinden yapılır ve
@@ -299,6 +484,29 @@ model PasswordResetToken {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
+}
+
+/// Global auth delivery infrastructure. The recipient, link, and token-bearing
+/// message exist only inside payloadEncrypted and are erased after terminal delivery.
+model SecretDeliveryOutbox {
+  id               String   @id @default(uuid())
+  tenantId         String?
+  purpose          String
+  sourceId         String
+  payloadEncrypted String?
+  status           String   @default("PENDING")
+  attempts         Int      @default(0)
+  availableAt      DateTime @default(now()) @db.Timestamptz(6)
+  expiresAt        DateTime @db.Timestamptz(6)
+  claimedAt        DateTime? @db.Timestamptz(6)
+  deliveredAt      DateTime? @db.Timestamptz(6)
+  lastErrorCode    String?
+  createdAt        DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([status, availableAt])
+  @@index([tenantId, purpose, createdAt])
+  @@index([purpose, sourceId, status])
 }
 
 model Class {
@@ -381,6 +589,7 @@ model Campus {
   tenantId  String
   name      String
   code      String?
+  unitType  String?
   deletedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -389,6 +598,7 @@ model Campus {
   supportTickets SupportTicket[]
   reportSnapshots ReportSnapshot[]
   paymentPlans PaymentPlan[]
+  membershipScopes MembershipCampusScope[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -527,6 +737,7 @@ model Student {
   paymentPlans PaymentPlan[]
   teacherAssignments TeacherAssignment[]
   enrollments StudentEnrollment[]
+  contacts StudentContact[]
 
   @@index([tenantId, deletedAt])
   @@index([tenantId, status, deletedAt])
@@ -574,11 +785,13 @@ model Teacher {
   nationalIdHash String?
   phone     String?
   userId    String?   @unique
+  employeeId String?  @unique
   deletedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   accountUser User?   @relation("TeacherAccountUser", fields: [tenantId, userId], references: [tenantId, id], onDelete: NoAction)
+  employee Employee?  @relation(fields: [tenantId, employeeId], references: [tenantId, id], onDelete: NoAction)
   scheduleLessons ScheduleLesson[]
   studySessions StudySession[]
   teacherNotes TeacherNote[]
@@ -588,8 +801,37 @@ model Teacher {
 
   @@unique([tenantId, id])
   @@unique([tenantId, userId])
+  @@unique([tenantId, employeeId])
   @@unique([tenantId, nationalIdHash])
   @@index([tenantId, deletedAt])
+}
+
+model StudentContact {
+  id                       String   @id @default(uuid())
+  tenantId                 String
+  studentId                String
+  firstName                String
+  lastName                 String
+  relationType             String
+  phoneEncrypted           String?
+  phoneHash                String?
+  emailEncrypted           String?
+  emailHash                String?
+  canReceiveSms            Boolean  @default(false)
+  canReceiveAnnouncements  Boolean  @default(false)
+  canReceiveFinance        Boolean  @default(false)
+  consentSource            String?
+  consentRecordedAt        DateTime? @db.Timestamptz(6)
+  deletedAt                DateTime? @db.Timestamptz(6)
+  createdAt                DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  tenant                   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  student                  Student  @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, studentId, deletedAt])
+  @@index([tenantId, phoneHash])
+  @@index([tenantId, emailHash])
 }
 
 model TeacherAssignment {

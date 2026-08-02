@@ -1,6 +1,9 @@
 import { QueryClient } from "@tanstack/react-query";
 import type {
   AuthResponse,
+  ActivePersona,
+  IdentityInvitationAcceptRequest,
+  IdentityInvitationAcceptResponse,
   LoginRequest,
   LoginResponse,
   MePasswordChangeRequest,
@@ -11,14 +14,16 @@ import type {
   PasswordResetConfirmRequest,
   PasswordResetConfirmResponse,
   PasswordResetRequest,
+  StudentPortalActivationRequest,
+  StudentPortalActivationResponse,
   TenantSelectionRequiredResponse,
 } from "@o-okul/shared-types";
 
 declare const process: { env: Record<string, string | undefined> };
 
-interface ApiEnvelope<T> {
+interface ApiEnvelope<T, TMeta = ListMeta> {
   data: T;
-  meta?: ListMeta;
+  meta?: TMeta;
 }
 
 export interface ListMeta {
@@ -31,6 +36,17 @@ export interface ListMeta {
 export interface ListResult<TItem> {
   data: TItem[];
   meta: ListMeta;
+}
+
+export interface CursorListMeta {
+  limit: number;
+  nextCursor?: string;
+  previousCursor?: string;
+}
+
+export interface CursorListResult<TItem> {
+  data: TItem[];
+  meta: CursorListMeta;
 }
 
 export class ApiRequestError extends Error {
@@ -129,6 +145,26 @@ export async function confirmPasswordReset(input: PasswordResetConfirmRequest): 
   return readData<PasswordResetConfirmResponse>(response);
 }
 
+export async function acceptIdentityInvitation(input: IdentityInvitationAcceptRequest): Promise<IdentityInvitationAcceptResponse> {
+  const response = await fetch(`${apiBaseUrl}/identity-invitations/accept`, {
+    body: JSON.stringify(input),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+  if (!response.ok) throw new Error("IDENTITY_INVITATION_ACCEPT_FAILED");
+  return readData<IdentityInvitationAcceptResponse>(response);
+}
+
+export async function activateStudentPortal(input: StudentPortalActivationRequest): Promise<StudentPortalActivationResponse> {
+  const response = await fetch(`${apiBaseUrl}/auth/activate`, {
+    body: JSON.stringify(input),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+  if (!response.ok) throw new Error("STUDENT_PORTAL_ACTIVATION_FAILED");
+  return readData<StudentPortalActivationResponse>(response);
+}
+
 export async function verifyMfa(challengeToken: string, input: { totpCode?: string; recoveryCode?: string }): Promise<AuthResponse> {
   const response = await fetch(`${apiBaseUrl}/auth/totp/verify`, {
     body: JSON.stringify({
@@ -190,6 +226,17 @@ export async function refreshSession(): Promise<AuthResponse> {
     refreshPromise = null;
   });
   return refreshPromise;
+}
+
+export async function switchPersona(accessToken: string, activePersona: ActivePersona): Promise<AuthResponse> {
+  const response = await authenticatedFetch(accessToken, `${apiBaseUrl}/auth/persona/switch`, {
+    body: JSON.stringify({ activePersona }),
+    credentials: "include",
+    headers: { "content-type": "application/json", "x-csrf-token": readCookie("csrfToken") },
+    method: "POST",
+  });
+  if (!response.ok) throw new Error("PERSONA_SWITCH_FAILED");
+  return rememberAuth(await readData<AuthResponse>(response));
 }
 
 async function refreshSessionRequest(): Promise<AuthResponse> {
@@ -263,6 +310,23 @@ export async function apiListRequest<TItem>(
   };
 }
 
+export async function apiCursorListRequest<TItem>(
+  accessToken: string,
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+): Promise<CursorListResult<TItem>> {
+  const response = await authenticatedFetch(accessToken, input, init);
+  if (!response.ok) {
+    throw new ApiRequestError("API_CURSOR_LIST_REQUEST_FAILED", response.status, await readErrorCode(response));
+  }
+
+  const envelope = await readEnvelope<TItem[], CursorListMeta>(response);
+  return {
+    data: envelope.data,
+    meta: envelope.meta ?? { limit: envelope.data.length },
+  };
+}
+
 export async function checkHealth(): Promise<"ok" | "limited"> {
   const [healthResponse, readyResponse] = await Promise.all([
     fetch(`${apiUrl}/health`),
@@ -330,8 +394,8 @@ export function apiErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
-async function readEnvelope<T>(response: Response): Promise<ApiEnvelope<T>> {
-  return (await response.json()) as ApiEnvelope<T>;
+async function readEnvelope<T, TMeta = ListMeta>(response: Response): Promise<ApiEnvelope<T, TMeta>> {
+  return (await response.json()) as ApiEnvelope<T, TMeta>;
 }
 
 async function readErrorCode(response: Response): Promise<string | undefined> {

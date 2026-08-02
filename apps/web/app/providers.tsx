@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { AuthResponse, LoginRequest, MePasswordChangeRequest } from "@o-okul/shared-types";
+import type { ActivePersona, AuthResponse, LoginRequest, MePasswordChangeRequest } from "@o-okul/shared-types";
 import {
   changePassword as requestChangePassword,
   confirmMfaEnrollment as requestConfirmMfaEnrollment,
@@ -17,6 +17,7 @@ import {
   queryClient,
   refreshSession,
   selectTenant as requestSelectTenant,
+  switchPersona as requestSwitchPersona,
   verifyMfa as requestVerifyMfa,
 } from "../src/api-client.js";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -30,6 +31,7 @@ interface AuthStore {
   confirmMfaEnrollment(setupToken: string, totpCode: string): Promise<void>;
   verifyMfa(challengeToken: string, input: { totpCode?: string; recoveryCode?: string }): Promise<void>;
   logout(): Promise<void>;
+  switchPersona(activePersona: ActivePersona): Promise<void>;
 }
 
 const AuthContext = createContext<AuthStore | null>(null);
@@ -71,6 +73,12 @@ export function Providers({ children }: { children: ReactNode }) {
         if (!auth) throw new Error("AUTH_REQUIRED");
         await requestChangePassword(auth.accessToken, input);
         setAuth(await refreshSession());
+      },
+      async switchPersona(activePersona) {
+        if (!auth) throw new Error("AUTH_REQUIRED");
+        const nextAuth = await requestSwitchPersona(auth.accessToken, activePersona);
+        queryClient.clear();
+        setAuth(nextAuth);
       },
       async logout() {
         await requestLogout().catch(() => undefined);

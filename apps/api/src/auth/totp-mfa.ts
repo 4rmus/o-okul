@@ -8,9 +8,11 @@ const tokenStepSeconds = 30;
 const tokenWindow = 1;
 const loginChallengeTtlSeconds = 5 * 60;
 const setupChallengeTtlSeconds = 10 * 60;
+const stepUpTtlSeconds = 5 * 60;
 
 export type AdminMfaMode = "off" | "optional" | "required";
-export type AdminMfaTokenType = "admin-mfa-login" | "admin-mfa-setup";
+export type AdminMfaTokenType = "admin-mfa-login" | "admin-mfa-setup" | "admin-mfa-step-up";
+export type AdminMfaStepUpPurpose = "OWNER_ADMIN_CHANGE";
 type AuthenticatorOptionOverrides = {
   epoch?: number;
   step?: number;
@@ -38,19 +40,35 @@ export interface AdminMfaTokenPayload {
   type: AdminMfaTokenType;
   userId: string;
   exp: number;
+  challengeId?: string;
   secret?: string;
   recoveryCodeHashes?: string[];
   membershipVersion?: number;
+  sessionId?: string;
+  purpose?: AdminMfaStepUpPurpose;
+}
+
+export interface AdminMfaStepUpBinding {
+  userId: string;
+  sessionId: string;
+  membershipVersion: number;
+  purpose: AdminMfaStepUpPurpose;
+}
+
+export interface AdminMfaStepUpProof {
+  stepUpToken: string;
+  expiresAt: string;
 }
 
 export function resolveAdminMfaMode(): AdminMfaMode {
   const value = process.env.ADMIN_MFA_MODE?.trim().toLowerCase();
+  if (isProductionLikeEnvironment()) return "required";
   if (value === "required" || value === "optional" || value === "off") return value;
   return "off";
 }
 
 export function isAdminMfaRole(roles: readonly string[]): boolean {
-  return roles.includes("SYSTEM_ADMIN") || roles.includes("TENANT_ADMIN");
+  return roles.some((role) => ["SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF"].includes(role));
 }
 
 export function createLoginMfaChallenge(userId: string, now = Date.now()): LoginMfaChallenge {
@@ -60,11 +78,36 @@ export function createLoginMfaChallenge(userId: string, now = Date.now()): Login
     challengeToken: signAdminMfaToken({
       type: "admin-mfa-login",
       userId,
+      challengeId: randomBytes(16).toString("base64url"),
       exp: Math.floor(expiresAtMs / 1000),
     }),
     expiresAt: new Date(expiresAtMs).toISOString(),
     methods: ["totp", "recovery_code"],
   };
+}
+
+export function createAdminMfaStepUpProof(binding: AdminMfaStepUpBinding, now = Date.now()): AdminMfaStepUpProof {
+  const expiresAtMs = now + stepUpTtlSeconds * 1000;
+  return {
+    stepUpToken: signAdminMfaToken({
+      type: "admin-mfa-step-up",
+      ...binding,
+      exp: Math.floor(expiresAtMs / 1000),
+    }),
+    expiresAt: new Date(expiresAtMs).toISOString(),
+  };
+}
+
+export function verifyAdminMfaStepUpProof(token: string, expected: AdminMfaStepUpBinding): void {
+  const payload = verifyAdminMfaToken(token, "admin-mfa-step-up");
+  if (
+    payload.userId !== expected.userId ||
+    payload.sessionId !== expected.sessionId ||
+    payload.membershipVersion !== expected.membershipVersion ||
+    payload.purpose !== expected.purpose
+  ) {
+    throw new Error("ADMIN_MFA_STEP_UP_CONTEXT_INVALID");
+  }
 }
 
 export function createTotpEnrollmentDraft(
@@ -149,7 +192,7 @@ export function resolveTotpCounter(secret: string, token: string, now = Date.now
   if (!normalized) return null;
 
   const currentCounter = Math.floor(now / (tokenStepSeconds * 1000));
-  for (let offset = -tokenWindow; offset <= tokenWindow; offset += 1) {
+  for (let offset = tokenWindow; offset >= -tokenWindow; offset -= 1) {
     const counter = currentCounter + offset;
     const valid = withAuthenticatorOptions({
       epoch: counter * tokenStepSeconds * 1000,
@@ -210,12 +253,12 @@ function withAuthenticatorOptions<T>(options: AuthenticatorOptionOverrides, call
 function getChallengeSecret(): Buffer {
   const value = process.env.ADMIN_MFA_CHALLENGE_SECRET;
   if (!value) {
-    if (process.env.NODE_ENV === "production") {
+    if (isProductionLikeEnvironment()) {
       throw new Error("ADMIN_MFA_CHALLENGE_SECRET_REQUIRED");
     }
     return Buffer.from(process.env.JWT_ACCESS_SECRET ?? defaultTestChallengeSecret);
   }
-  if (process.env.NODE_ENV === "production" && value === process.env.JWT_ACCESS_SECRET) {
+  if (isProductionLikeEnvironment() && value === process.env.JWT_ACCESS_SECRET) {
     throw new Error("ADMIN_MFA_CHALLENGE_SECRET_MUST_DIFFER");
   }
   return Buffer.from(value);
@@ -224,7 +267,7 @@ function getChallengeSecret(): Buffer {
 function keyFromEnv(name: string, fallback: string): Buffer {
   const value = process.env[name];
   if (!value) {
-    if (process.env.NODE_ENV === "production") {
+    if (isProductionLikeEnvironment()) {
       throw new Error(`${name}_REQUIRED`);
     }
     return Buffer.from(fallback);
@@ -235,6 +278,10 @@ function keyFromEnv(name: string, fallback: string): Buffer {
     throw new Error(`${name}_INVALID_LENGTH`);
   }
   return key;
+}
+
+function isProductionLikeEnvironment(): boolean {
+  return process.env.NODE_ENV === "production" || process.env.NODE_ENV === "staging";
 }
 
 function decodeKey(value: string): Buffer {

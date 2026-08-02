@@ -7,6 +7,7 @@ const allowExampleEvidence = process.env.RATE_LIMIT_ALLOW_EXAMPLE_EVIDENCE === "
 
 const requiredCommands = ["pnpm rate-limit:smoke", "pnpm rate-limit:check"];
 const expectedExcludedPaths = ["/health", "/metrics"];
+const egressIpReferencePattern = /^rate-limit-egress-ip:[a-f0-9]{64}$/;
 const rateLimitTopLevelKeys = [
   "generatedAt",
   "result",
@@ -46,12 +47,12 @@ const apiRateLimitKeys = [
 ];
 const loginAttemptLimiterKeys = [
   "clientIpHash",
-  "nationalIdHash",
+  "loginNameHash",
   "attemptsSent",
   "lockStatusCode",
   "errorCode",
   "sharedAcrossInstances",
-  "nationalIdAndIpScoped",
+  "tenantAndLoginNameAndIpScoped",
   "differentIpNotLocked",
 ];
 
@@ -310,12 +311,12 @@ function requireLoginAttemptLimiter(loginAttemptLimiter, config, failures) {
 
   requireObjectKeySet(loginAttemptLimiter, loginAttemptLimiterKeys, failures, "loginAttemptLimiter");
   requireObjectString(loginAttemptLimiter, failures, "loginAttemptLimiter.clientIpHash", "clientIpHash");
-  requireObjectString(loginAttemptLimiter, failures, "loginAttemptLimiter.nationalIdHash", "nationalIdHash");
+  requireObjectString(loginAttemptLimiter, failures, "loginAttemptLimiter.loginNameHash", "loginNameHash");
   requireObjectIntegerAtLeast(loginAttemptLimiter, failures, "loginAttemptLimiter.attemptsSent", "attemptsSent", 1);
   requireObjectEqual(loginAttemptLimiter, failures, "loginAttemptLimiter.lockStatusCode", "lockStatusCode", 429);
   requireObjectEqual(loginAttemptLimiter, failures, "loginAttemptLimiter.errorCode", "errorCode", "LOGIN_LOCKED");
   requireObjectTrue(loginAttemptLimiter, failures, "loginAttemptLimiter.sharedAcrossInstances", "sharedAcrossInstances");
-  requireObjectTrue(loginAttemptLimiter, failures, "loginAttemptLimiter.nationalIdAndIpScoped", "nationalIdAndIpScoped");
+  requireObjectTrue(loginAttemptLimiter, failures, "loginAttemptLimiter.tenantAndLoginNameAndIpScoped", "tenantAndLoginNameAndIpScoped");
   requireObjectTrue(loginAttemptLimiter, failures, "loginAttemptLimiter.differentIpNotLocked", "differentIpNotLocked");
 
   if (Number.isInteger(config?.loginMaxAttempts) && Number.isInteger(loginAttemptLimiter.attemptsSent)) {
@@ -356,6 +357,10 @@ function requireEvidenceReferences(references, failures) {
     if (hasSecretBearingEvidenceReference(value)) {
       failures.push(`evidenceReferences.${index} userinfo, query veya fragment tasimamali.`);
     }
+  }
+
+  if (references.filter((value) => typeof value === "string" && egressIpReferencePattern.test(value)).length !== 1) {
+    failures.push("evidenceReferences tam bir rate-limit-egress-ip: 64-hex hash referansı içermeli.");
   }
 }
 
