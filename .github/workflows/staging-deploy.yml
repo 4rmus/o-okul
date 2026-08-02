@@ -512,26 +512,22 @@ jobs:
             -f "$EDGE_COMPOSE_FILE" \
             exec -T postgres sh /docker-entrypoint-initdb.d/003_bootstrap_secret_delivery_worker_role.sh < /dev/null
 
-          docker compose \
-            --env-file .env \
-            --env-file "$release_env_file" \
-            -f docker-compose.yml \
-            -f docker-compose.release.yml \
-            -f "$EDGE_COMPOSE_FILE" \
-            run --rm -T api sh -lc 'cd packages/db && ./node_modules/.bin/prisma migrate deploy --config prisma.config.ts' < /dev/null
+          backend_compose=(
+            docker compose
+            --env-file .env
+            --env-file "$release_env_file"
+            -f docker-compose.yml
+            -f docker-compose.release.yml
+          )
+
+          "${backend_compose[@]}" run --rm -T api sh -lc 'cd packages/db && ./node_modules/.bin/prisma migrate deploy --config prisma.config.ts' < /dev/null
 
           mkdir -p artifacts/staging/reports
 
           # Account management preflight before legacy access cutover. Legacy login remains
           # authoritative until the additive migration is followed by a PASS parity artifact.
           # Account management backfill and parity gate before app start; any ambiguity blocks boot.
-          docker compose \
-            --env-file .env \
-            --env-file "$release_env_file" \
-            -f docker-compose.yml \
-            -f docker-compose.release.yml \
-            -f "$EDGE_COMPOSE_FILE" \
-            run --rm -T \
+          "${backend_compose[@]}" run --rm -T \
             -v "$PWD/scripts:/app/scripts:ro" \
             -v "$PWD/artifacts:/app/artifacts" \
             -e STAGING_ENVIRONMENT=staging \
@@ -540,13 +536,7 @@ jobs:
             -e ACCOUNT_MANAGEMENT_PREFLIGHT_OUTPUT=artifacts/staging/reports/account-management-preflight.json \
             api node scripts/generate-account-management-preflight.mjs < /dev/null
 
-          docker compose \
-            --env-file .env \
-            --env-file "$release_env_file" \
-            -f docker-compose.yml \
-            -f docker-compose.release.yml \
-            -f "$EDGE_COMPOSE_FILE" \
-            run --rm -T \
+          "${backend_compose[@]}" run --rm -T \
             -v "$PWD/scripts:/app/scripts:ro" \
             -v "$PWD/artifacts:/app/artifacts" \
             -e STAGING_ENVIRONMENT=staging \

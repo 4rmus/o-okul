@@ -1145,6 +1145,8 @@ const expectations = {
     "prune_old_release_images",
     "require_disk_space_mb 2048",
     "timeout 20m docker compose",
+    "backend_compose=(",
+    "\"${backend_compose[@]}\" run --rm -T",
     "004_bootstrap_required_extensions.sh",
     "003_bootstrap_secret_delivery_worker_role.sh",
     "actions: read",

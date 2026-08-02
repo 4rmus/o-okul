@@ -165,6 +165,7 @@ pnpm backup:restore:smoke
   `.github/workflows/ci.yml` run'ından GitHub CI evidence artifact'ini deploy öncesi üretip doğrular,
   ardından web/api/worker/queue-board imajlarını GHCR'a push eder. Staging VPS'te
   migration öncesi gerekli `btree_gist` eklentisini Postgres yönetici rolüyle idempotent kurar,
+  migration/preflight/backfill tek-seferlik container'larını edge compose ve sabit proxy IP olmadan çalıştırır,
   `docker-compose.release.yml` override'ı ile imajları çeker, migration çalıştırır, Traefik'li stack'i
   ayağa kaldırır ve `web`, `api`, `worker`, `queue-board` servislerinin çalışan image tag'ini deploy
   `IMAGE_TAG` değeriyle birebir karşılaştırır. Otomatik deploy yalnız image activation, migration,

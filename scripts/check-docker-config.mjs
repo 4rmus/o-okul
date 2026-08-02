@@ -298,6 +298,8 @@ const expectations = {
     "prune_old_release_images",
     "require_disk_space_mb 2048",
     "timeout 20m docker compose",
+    "backend_compose=(",
+    "\"${backend_compose[@]}\" run --rm -T",
     "cd packages/db && ./node_modules/.bin/prisma migrate deploy --config prisma.config.ts",
     "ACCOUNT_MANAGEMENT_PREFLIGHT_OUTPUT=artifacts/staging/reports/account-management-preflight.json",
     "ACCOUNT_MANAGEMENT_BACKFILL_MODE=APPLY",
