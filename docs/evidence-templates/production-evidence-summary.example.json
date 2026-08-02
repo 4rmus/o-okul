@@ -47,6 +47,16 @@
       "status": "PASS"
     },
     {
+      "label": "Secret delivery outbox staging smoke",
+      "script": "scripts/smoke-secret-delivery-outbox-staging.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "Secret delivery outbox evidence",
+      "script": "scripts/check-secret-delivery-outbox-evidence.mjs",
+      "status": "PASS"
+    },
+    {
       "label": "Deployment rollback evidence",
       "script": "scripts/check-deployment-rollback-evidence.mjs",
       "status": "PASS"
@@ -279,6 +289,53 @@
       },
       "commandsPassed": [
         "pnpm report-generation:perf"
+      ],
+      "gaps": []
+    },
+    "secretDeliveryOutbox": {
+      "schemaVersion": 1,
+      "result": "PASS",
+      "check": "secret_delivery_outbox_staging_smoke",
+      "environment": "production",
+      "generatedAt": "2026-06-15T09:40:00.000Z",
+      "releaseImageTag": "1111111111111111111111111111111111111111",
+      "notBefore": "2026-06-15T09:39:00.000Z",
+      "outboxRecordHash": "5f4dcc3b5aa765d61d8327deb882cf99d0f2d2d2d2d2d2d2d2d2d2d2d2d2d2d2",
+      "purpose": "IDENTITY_INVITATION",
+      "retry": {
+        "attempts": 2,
+        "retried": true
+      },
+      "terminalStatus": "DELIVERED",
+      "payloadCleared": true,
+      "deliveredAt": "2026-06-15T09:39:30.000Z",
+      "updatedAt": "2026-06-15T09:39:30.000Z",
+      "separateRolePrivilege": {
+        "role": "secret_delivery_worker",
+        "result": "PASS",
+        "outboxTable": {
+          "select": true,
+          "update": true,
+          "insert": false,
+          "delete": false,
+          "truncate": false
+        },
+        "otherTables": {
+          "userSelect": false
+        },
+        "publicSchema": {
+          "create": false,
+          "owner": false
+        },
+        "elevatedCapabilities": {
+          "superuser": false,
+          "createRole": false,
+          "createDb": false,
+          "bypassRls": false
+        }
+      },
+      "commandsPassed": [
+        "pnpm secret-delivery-outbox:staging:smoke"
       ],
       "gaps": []
     }

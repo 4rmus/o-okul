@@ -453,6 +453,41 @@ pnpm account-management:backfill
   token türünü de geçersiz kılar.
 - Login isteği artık tam olarak `tenantSlug + loginName + password` olduğu için web ve API aynı release
   SHA'dan birlikte deploy edilmelidir. Yeni web eski API'ye veya eski web cutover API'ye açılmaz.
+
+### Staging deploy legacy erişim gate'i
+
+Staging workflow additive migration'dan sonra uygulama servislerini başlatmadan önce sırasıyla
+read-only preflight ve `APPLY` backfill/parity çalıştırır. İki artifact hosttaki
+`artifacts/staging/reports/` altında kalır; scriptler yalnız sayısal sonuç yazar. Owner otomatik
+seçilemiyorsa workflow `BLOCKED` olur ve eski servisler yerinde kalır. Karar gerektiren owner
+dosyası private mount ile ayrıca, kontrollü olarak uygulanmalıdır; bunu artifact veya repo içine
+koymayın.
+
+### Secret delivery outbox staging smoke
+
+`SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID`, en az iki deneme görmüş, son 24 saat içinde güncellenmiş ve
+yalnız `DELIVERED` durumuna ulaşmış staging smoke kaydını işaret eder. Tam kanıt koşusu ayrıca cutover
+sonrası üretilmiş `SECRET_DELIVERY_OUTBOX_NOT_BEFORE` ile güncel `IMAGE_TAG`'i
+`SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG` olarak verir; iki terminal zaman da `notBefore` sonrasında
+olmalıdır. Source ID artifact'a yazılmaz.
+
+```sh
+SECRET_DELIVERY_OUTBOX_NOT_BEFORE="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" \
+SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG="$IMAGE_TAG" \
+SECRET_DELIVERY_OUTBOX_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/secret-delivery-outbox.json \
+pnpm secret-delivery-outbox:staging:smoke
+
+SECRET_DELIVERY_OUTBOX_EVIDENCE_TARGET=file://$PWD/artifacts/staging/smoke/secret-delivery-outbox.json \
+SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG="$IMAGE_TAG" \
+pnpm secret-delivery-outbox:evidence:check
+```
+
+Artifact yalnız `outboxRecordHash`, `purpose`, retry sayısı, teslim/güncelleme zamanı, terminal durum,
+`payloadCleared`, PII-safe `releaseImageTag`/`notBefore` ve `secret_delivery_worker` minimum yetki sonucunu içerir. User `SELECT`, public schema
+`CREATE`/owner ve yükseltilmiş rol yetkileri false olmalıdır. Recipient, token, URL, source ID ve encrypted
+payload taşınması fail-closed reddedilir. Bu ayrı DB rolü ve delivery-state kanıtıdır; gerçek inbox/provider
+teslimatı ile KVKK/DPA kanıtı ayrı live gate olarak kalır. Template kontrolü veya local script geçişi bunların
+yerine geçmez.
 - PR-4 rollback önceki web+API image çiftidir. Additive kolonlar ve legacy membership satırları yerinde
   kalır; backfill tersine çevrilmez, global e-posta unique geri getirilmez ve canonical alanlar drop edilmez.
   Rollback sonrasında yeniden cutover öncesi backfill checker ve aktif session legacy-role parity çalıştırılır.

@@ -285,6 +285,7 @@ const expectations = {
     "docker-compose.observability.yml",
     "docker/evidence",
     "docker/postgres/init",
+    "scripts",
     "003_bootstrap_secret_delivery_worker_role.sh",
     "scp -i ~/.ssh/staging_deploy_key",
     "GHCR_READ_TOKEN",
@@ -297,6 +298,11 @@ const expectations = {
     "require_disk_space_mb 2048",
     "timeout 20m docker compose",
     "cd packages/db && ./node_modules/.bin/prisma migrate deploy --config prisma.config.ts",
+    "ACCOUNT_MANAGEMENT_PREFLIGHT_OUTPUT=artifacts/staging/reports/account-management-preflight.json",
+    "ACCOUNT_MANAGEMENT_BACKFILL_MODE=APPLY",
+    "ACCOUNT_MANAGEMENT_BACKFILL_CONFIRM=apply-pr4-backfill",
+    "ACCOUNT_MANAGEMENT_BACKFILL_OUTPUT=artifacts/staging/reports/account-management-backfill.json",
+    "Run secret delivery outbox staging smoke",
     "mv \"$release_env_file\" .env.release",
     "require_running_image web \"${IMAGE_PREFIX}/web:${IMAGE_TAG}\"",
     "require_running_image api \"${IMAGE_PREFIX}/api:${IMAGE_TAG}\"",
@@ -424,6 +430,14 @@ if (logLevelOccurrences < 2) {
 const sentryDsnOccurrences = compose.match(/SENTRY_DSN: \${SENTRY_DSN:-}/g)?.length ?? 0;
 if (sentryDsnOccurrences < 2) {
   failures.push("docker-compose.yml eksik: SENTRY_DSN api ve worker içinde olmalı");
+}
+
+const workerBlock = compose.match(/\n  worker:\n([\s\S]*?)(?=\n  [a-z][\w-]*:\n|\nvolumes:|\nnetworks:|$)/)?.[1] ?? "";
+if (workerBlock.includes("DIRECT_DATABASE_URL:")) {
+  failures.push("docker-compose.yml worker migration DIRECT_DATABASE_URL almamalı");
+}
+if (!workerBlock.includes("SECRET_DELIVERY_OUTBOX_DATABASE_URL: ${DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL:-}")) {
+  failures.push("docker-compose.yml worker dedicated SECRET_DELIVERY_OUTBOX_DATABASE_URL almalı");
 }
 
 if (failures.length > 0) {

@@ -5,6 +5,7 @@ export interface NotificationMessage {
   to: string;
   subject?: string;
   body: string;
+  idempotencyKey?: string;
 }
 
 export interface NotificationSendResult {
@@ -113,6 +114,7 @@ export class HttpNotificationAdapter implements NotificationAdapter {
           to: message.to,
           ...(message.subject ? { subject: message.subject } : {}),
           body: message.body,
+          ...(message.idempotencyKey ? { idempotencyKey: message.idempotencyKey } : {}),
         })),
       }),
     });

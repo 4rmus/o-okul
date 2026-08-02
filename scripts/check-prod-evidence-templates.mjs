@@ -17,6 +17,13 @@ import { pathToFileURL } from "node:url";
 
 const templateChecks = [
   [
+    "Secret delivery outbox staging template",
+    "SECRET_DELIVERY_OUTBOX_EVIDENCE_TARGET",
+    "docs/evidence-templates/secret-delivery-outbox-staging.example.json",
+    "scripts/check-secret-delivery-outbox-evidence.mjs",
+    { SECRET_DELIVERY_OUTBOX_ALLOW_EXAMPLE_EVIDENCE: "1" },
+  ],
+  [
     "Restore drill template",
     "RESTORE_DRILL_TARGET",
     "docs/evidence-templates/restore-drill.example.json",
@@ -1916,7 +1923,7 @@ runProductionSummarySymlinkParentTargetNegativeCheck();
 runProductionSummaryNegativeCheck({
   label: "Production summary extra check negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-check.tmp.json",
-  expectedFailure: "checks tam 28 madde içermeli.",
+  expectedFailure: "checks tam 30 madde içermeli.",
   mutate: (fixture) => {
     fixture.checks.push({
       label: "Beklenmeyen production check",
@@ -1968,7 +1975,7 @@ runProductionSummaryNegativeCheck({
 runProductionSummaryNegativeCheck({
   label: "Production summary extra smoke evidence negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-smoke-evidence.tmp.json",
-  expectedFailure: "smokeEvidence tam 7 alan içermeli.",
+  expectedFailure: "smokeEvidence tam 8 alan içermeli.",
   mutate: (fixture) => {
     fixture.smokeEvidence.unexpectedSmoke = { ...fixture.smokeEvidence.alertWebhook };
   },
@@ -2472,7 +2479,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live extra checksPassed negative",
   path: "docs/evidence-templates/go-live.extra-checks-passed.tmp.json",
-  expectedFailure: "productionEvidenceSummary.checksPassed tam 28 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.checksPassed tam 30 madde icermeli.",
   mutate: (fixture) => {
     fixture.productionEvidenceSummary.checksPassed.push("Beklenmeyen production check");
   },
@@ -2538,7 +2545,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked duplicate summary check negative",
   path: "docs/evidence-templates/go-live.linked-duplicate-summary-check.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary.checks tam 28 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary.checks tam 30 madde icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.duplicate-check-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -2577,7 +2584,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked extra summary smoke negative",
   path: "docs/evidence-templates/go-live.linked-extra-summary-smoke.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary.smokeEvidence tam 7 alan icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary.smokeEvidence tam 8 alan icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.extra-smoke-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -6062,6 +6069,7 @@ function runStagingReleaseArtifactsBundleCheck() {
       alertWebhook: "alert-webhook.json",
       walArchive: "wal-archive.json",
       reportGeneration: "report-generation.json",
+      secretDeliveryOutbox: "secret-delivery-outbox.json",
     })) {
       writeFileSync(`${smokeDir}/${file}`, `${JSON.stringify(summary.smokeEvidence[key], null, 2)}\n`);
     }

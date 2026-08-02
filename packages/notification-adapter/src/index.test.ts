@@ -138,6 +138,22 @@ describe("HttpNotificationAdapter", () => {
     });
   });
 
+  it("mesaj bazlı idempotency anahtarını HTTP sağlayıcıya iletir", async () => {
+    const calls: Array<{ init: { body: string } }> = [];
+    const adapter = new HttpNotificationAdapter({
+      endpoint: "https://notify.example/send",
+      fetch: async (_input, init) => {
+        calls.push({ init });
+        return { ok: true, status: 200, async text() { return JSON.stringify({ results: [{ status: "sent" }] }); } };
+      },
+    });
+
+    await adapter.sendBatch([{ channel: "EMAIL", to: "recipient", body: "message", idempotencyKey: "secret-delivery:outbox-1" }]);
+    expect(JSON.parse(calls[0]?.init.body ?? "{}")).toEqual({
+      messages: [{ channel: "EMAIL", to: "recipient", body: "message", idempotencyKey: "secret-delivery:outbox-1" }],
+    });
+  });
+
   it("HTTP hata durumunda tüm mesajları başarısız işaretler", async () => {
     const adapter = new HttpNotificationAdapter({
       endpoint: "https://notify.example/send",

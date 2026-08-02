@@ -1,14 +1,15 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
-const artifactRoot = "artifacts/live-onboarding-evidence-contract";
-const validEvidencePath = join(artifactRoot, "valid-live-onboarding.json");
+const privateInputRoot = resolve(process.cwd(), "..", `.o-okul-live-onboarding-contract-${process.pid}`);
+const validEvidencePath = join(privateInputRoot, "valid-live-onboarding.json");
+const repositoryArtifactPath = "artifacts/live-onboarding-evidence-contract.json";
 const failures = [];
 
-await rm(artifactRoot, { force: true, recursive: true });
-await mkdir(artifactRoot, { recursive: true });
+await rm(privateInputRoot, { force: true, recursive: true });
+await mkdir(privateInputRoot, { recursive: true, mode: 0o700 });
 
 try {
   writeJson(validEvidencePath, createValidEvidence());
@@ -58,8 +59,18 @@ try {
     "LIVE_ONBOARDING_EVIDENCE_PATH lokal temp path olmamalı.",
   );
 
-  const symlinkRealPath = join(artifactRoot, "symlink-real.json");
-  const symlinkPath = join(artifactRoot, "symlink-live-onboarding.json");
+  writeJson(repositoryArtifactPath, createValidEvidence());
+  runNegativeCheck(
+    "live onboarding repository artifact path negative",
+    {
+      NEXT_E2E_LIVE_ONBOARDING: "1",
+      LIVE_ONBOARDING_EVIDENCE_PATH: repositoryArtifactPath,
+    },
+    "LIVE_ONBOARDING_EVIDENCE_PATH repo, artifacts veya evidence mount dışında private dosya olmalı.",
+  );
+
+  const symlinkRealPath = join(privateInputRoot, "symlink-real.json");
+  const symlinkPath = join(privateInputRoot, "symlink-live-onboarding.json");
   writeJson(symlinkRealPath, createValidEvidence());
   symlinkSync(symlinkRealPath, symlinkPath);
   runNegativeCheck(
@@ -68,11 +79,11 @@ try {
       NEXT_E2E_LIVE_ONBOARDING: "1",
       LIVE_ONBOARDING_EVIDENCE_PATH: symlinkPath,
     },
-    "LIVE_ONBOARDING_EVIDENCE_PATH symlink olmayan file artifact olmalı.",
+    "LIVE_ONBOARDING_EVIDENCE_PATH symlink olmayan normal dosya olmalı.",
   );
 
-  const realDirectory = join(artifactRoot, "real-dir");
-  const symlinkDirectory = join(artifactRoot, "symlink-dir");
+  const realDirectory = join(privateInputRoot, "real-dir");
+  const symlinkDirectory = join(privateInputRoot, "symlink-dir");
   const realNestedDirectory = join(realDirectory, "nested");
   mkdirSync(realNestedDirectory, { recursive: true });
   writeJson(join(realNestedDirectory, "live-onboarding.json"), createValidEvidence());
@@ -86,7 +97,7 @@ try {
     "LIVE_ONBOARDING_EVIDENCE_PATH parent dizini symlink olmayan dizin olmalı.",
   );
 
-  const missingFieldPath = join(artifactRoot, "missing-field.json");
+  const missingFieldPath = join(privateInputRoot, "missing-field.json");
   const missingField = createValidEvidence();
   delete missingField.firstAdmin.password;
   writeJson(missingFieldPath, missingField);
@@ -99,7 +110,7 @@ try {
     "firstAdmin.password alanı zorunlu.",
   );
 
-  const stalePath = join(artifactRoot, "stale.json");
+  const stalePath = join(privateInputRoot, "stale.json");
   const stale = createValidEvidence();
   stale.generatedAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
   writeJson(stalePath, stale);
@@ -112,7 +123,7 @@ try {
     "generatedAt 24 saat sınırından eski",
   );
 
-  const placeholderPath = join(artifactRoot, "placeholder.json");
+  const placeholderPath = join(privateInputRoot, "placeholder.json");
   const placeholder = createValidEvidence();
   placeholder.firstAdmin.email = "tenant-admin@example.com";
   writeJson(placeholderPath, placeholder);
@@ -125,7 +136,7 @@ try {
     "firstAdmin.email production kanıtı için örnek/placeholder/redacted değer olmamalı.",
   );
 
-  const extraFieldPath = join(artifactRoot, "extra-field.json");
+  const extraFieldPath = join(privateInputRoot, "extra-field.json");
   const extraField = createValidEvidence();
   extraField.tenant.unexpected = true;
   writeJson(extraFieldPath, extraField);
@@ -138,7 +149,8 @@ try {
     "tenant.unexpected beklenmeyen alan.",
   );
 } finally {
-  await rm(artifactRoot, { force: true, recursive: true });
+  await rm(privateInputRoot, { force: true, recursive: true });
+  rmSync(repositoryArtifactPath, { force: true });
   rmSync("/tmp/live-onboarding-evidence-negative.json", { force: true });
 }
 
@@ -179,6 +191,7 @@ function runNegativeCheck(label, env, expectedMessage) {
 
 function writeJson(path, value) {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  chmodSync(path, 0o600);
   if (!existsSync(path)) {
     failures.push(`${path} yazılamadı.`);
   } else {

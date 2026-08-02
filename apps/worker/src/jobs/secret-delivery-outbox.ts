@@ -1,5 +1,6 @@
 import { createTenantPgPool, decryptSecretDeliveryPayload, type TenantQueryable } from "@o-okul/db";
 import { createNotificationAdapterFromEnv, type NotificationAdapter } from "@o-okul/notification-adapter";
+import { randomUUID } from "node:crypto";
 import { workerLogger } from "../observability/logging.js";
 
 export interface SecretDeliveryOutboxRecord {
@@ -7,12 +8,13 @@ export interface SecretDeliveryOutboxRecord {
   purpose: "IDENTITY_INVITATION" | "PASSWORD_RESET";
   payloadEncrypted: string;
   attempts: number;
+  claimToken: string;
 }
 
 export interface SecretDeliveryOutboxStore {
   claimNext(now: Date): Promise<SecretDeliveryOutboxRecord | undefined>;
-  markDelivered(id: string, deliveredAt: Date): Promise<void>;
-  markFailed(id: string, input: { attempts: number; errorCode: string; now: Date }): Promise<void>;
+  markDelivered(id: string, claimToken: string, deliveredAt: Date): Promise<void>;
+  markFailed(id: string, input: { attempts: number; claimToken: string; errorCode: string; now: Date }): Promise<void>;
 }
 
 export class PostgresSecretDeliveryOutboxStore implements SecretDeliveryOutboxStore {
@@ -20,12 +22,14 @@ export class PostgresSecretDeliveryOutboxStore implements SecretDeliveryOutboxSt
 
   async claimNext(now: Date): Promise<SecretDeliveryOutboxRecord | undefined> {
     const staleBefore = new Date(now.getTime() - 5 * 60 * 1000);
+    const claimToken = randomUUID();
     const result = await this.pool.query<SecretDeliveryOutboxRow>(
       `WITH expired AS (
          UPDATE "SecretDeliveryOutbox"
          SET "status" = 'EXPIRED',
              "payloadEncrypted" = NULL,
              "claimedAt" = NULL,
+             "claimToken" = NULL,
              "lastErrorCode" = NULL,
              "updatedAt" = $1
          WHERE "payloadEncrypted" IS NOT NULL
@@ -48,30 +52,32 @@ export class PostgresSecretDeliveryOutboxStore implements SecretDeliveryOutboxSt
        SET "status" = 'PROCESSING',
            "attempts" = outbox."attempts" + 1,
            "claimedAt" = $1,
+           "claimToken" = $3,
            "updatedAt" = $1
        FROM candidate
        WHERE outbox."id" = candidate."id"
-       RETURNING outbox."id", outbox."purpose", outbox."payloadEncrypted", outbox."attempts"`,
-      [now, staleBefore],
+       RETURNING outbox."id", outbox."purpose", outbox."payloadEncrypted", outbox."attempts", outbox."claimToken"`,
+      [now, staleBefore, claimToken],
     );
     return result.rows[0] ? toRecord(result.rows[0]) : undefined;
   }
 
-  async markDelivered(id: string, deliveredAt: Date): Promise<void> {
+  async markDelivered(id: string, claimToken: string, deliveredAt: Date): Promise<void> {
     await this.pool.query(
       `UPDATE "SecretDeliveryOutbox"
        SET "status" = 'DELIVERED',
            "payloadEncrypted" = NULL,
            "claimedAt" = NULL,
-           "deliveredAt" = $2,
+           "claimToken" = NULL,
+           "deliveredAt" = $3,
            "lastErrorCode" = NULL,
-           "updatedAt" = $2
-       WHERE "id" = $1 AND "status" = 'PROCESSING'`,
-      [id, deliveredAt],
+           "updatedAt" = $3
+       WHERE "id" = $1 AND "status" = 'PROCESSING' AND "claimToken" = $2`,
+      [id, claimToken, deliveredAt],
     );
   }
 
-  async markFailed(id: string, input: { attempts: number; errorCode: string; now: Date }): Promise<void> {
+  async markFailed(id: string, input: { attempts: number; claimToken: string; errorCode: string; now: Date }): Promise<void> {
     const terminal = input.attempts >= 5;
     const availableAt = new Date(input.now.getTime() + Math.min(60, 2 ** input.attempts) * 1000);
     await this.pool.query(
@@ -79,11 +85,12 @@ export class PostgresSecretDeliveryOutboxStore implements SecretDeliveryOutboxSt
        SET "status" = $2,
            "payloadEncrypted" = CASE WHEN $2 = 'FAILED' THEN NULL ELSE "payloadEncrypted" END,
            "claimedAt" = NULL,
+           "claimToken" = NULL,
            "availableAt" = $3,
            "lastErrorCode" = $4,
            "updatedAt" = $5
-       WHERE "id" = $1 AND "status" = 'PROCESSING'`,
-      [id, terminal ? "FAILED" : "PENDING", availableAt, input.errorCode.slice(0, 120), input.now],
+       WHERE "id" = $1 AND "status" = 'PROCESSING' AND "claimToken" = $6`,
+      [id, terminal ? "FAILED" : "PENDING", availableAt, input.errorCode, input.now, input.claimToken],
     );
   }
 }
@@ -99,19 +106,21 @@ export async function processNextSecretDelivery(
 
   try {
     const payload = decryptSecretDeliveryPayload(record.payloadEncrypted, env);
-    const [result] = await adapter.sendBatch([payload]);
+    const [result] = await adapter.sendBatch([{ ...payload, idempotencyKey: `secret-delivery:${record.id}` }]);
     if (result?.status !== "sent") {
       await store.markFailed(record.id, {
         attempts: record.attempts,
-        errorCode: result?.errorCode ?? "SECRET_DELIVERY_PROVIDER_FAILED",
+        claimToken: record.claimToken,
+        errorCode: safeProviderErrorCode(result?.errorCode),
         now,
       });
       return true;
     }
-    await store.markDelivered(record.id, now);
+    await store.markDelivered(record.id, record.claimToken, now);
   } catch (error) {
     await store.markFailed(record.id, {
       attempts: record.attempts,
+      claimToken: record.claimToken,
       errorCode: safeErrorCode(error),
       now,
     });
@@ -166,6 +175,7 @@ interface SecretDeliveryOutboxRow {
   purpose: "IDENTITY_INVITATION" | "PASSWORD_RESET";
   payloadEncrypted: string;
   attempts: number;
+  claimToken: string;
 }
 
 function toRecord(row: SecretDeliveryOutboxRow): SecretDeliveryOutboxRecord {
@@ -173,9 +183,29 @@ function toRecord(row: SecretDeliveryOutboxRow): SecretDeliveryOutboxRecord {
 }
 
 function safeErrorCode(error: unknown): string {
-  const message = error instanceof Error ? error.message : "SECRET_DELIVERY_FAILED";
-  return /^[A-Z0-9_:-]{1,120}$/.test(message) ? message : "SECRET_DELIVERY_FAILED";
+  return error instanceof Error && error.message === "NOTIFICATION_HTTP_RESPONSE_INVALID"
+    ? "NOTIFICATION_HTTP_RESPONSE_INVALID"
+    : "SECRET_DELIVERY_FAILED";
 }
+
+function safeProviderErrorCode(errorCode: string | undefined): string {
+  return providerErrorCodes.has(errorCode ?? "") ? errorCode! : "SECRET_DELIVERY_PROVIDER_FAILED";
+}
+
+const providerErrorCodes = new Set([
+  "DEVICE_TOKEN_INVALID",
+  "NOTIFICATION_HTTP_400",
+  "NOTIFICATION_HTTP_401",
+  "NOTIFICATION_HTTP_403",
+  "NOTIFICATION_HTTP_408",
+  "NOTIFICATION_HTTP_409",
+  "NOTIFICATION_HTTP_429",
+  "NOTIFICATION_HTTP_500",
+  "NOTIFICATION_HTTP_502",
+  "NOTIFICATION_HTTP_503",
+  "NOTIFICATION_HTTP_504",
+  "NOTIFICATION_PROVIDER_FAILED",
+]);
 
 function resolveSecretDeliveryOutboxDatabaseUrl(env: NodeJS.ProcessEnv = process.env): string {
   const dedicatedUrl = env.SECRET_DELIVERY_OUTBOX_DATABASE_URL;

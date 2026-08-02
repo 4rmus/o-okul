@@ -344,7 +344,8 @@ jobs:
             docker-compose.traefik-ip.yml \
             docker-compose.observability.yml \
             docker/evidence \
-            docker/postgres/init
+            docker/postgres/init \
+            scripts
 
           ssh -i ~/.ssh/staging_deploy_key \
             -o StrictHostKeyChecking=accept-new \
@@ -515,6 +516,41 @@ jobs:
             -f docker-compose.release.yml \
             -f "$EDGE_COMPOSE_FILE" \
             run --rm -T api sh -lc 'cd packages/db && ./node_modules/.bin/prisma migrate deploy --config prisma.config.ts' < /dev/null
+
+          mkdir -p artifacts/staging/reports
+
+          # Account management preflight before legacy access cutover. Legacy login remains
+          # authoritative until the additive migration is followed by a PASS parity artifact.
+          # Account management backfill and parity gate before app start; any ambiguity blocks boot.
+          docker compose \
+            --env-file .env \
+            --env-file "$release_env_file" \
+            -f docker-compose.yml \
+            -f docker-compose.release.yml \
+            -f "$EDGE_COMPOSE_FILE" \
+            run --rm -T \
+            -v "$PWD/scripts:/app/scripts:ro" \
+            -v "$PWD/artifacts:/app/artifacts" \
+            -e STAGING_ENVIRONMENT=staging \
+            -e ACCOUNT_MANAGEMENT_GUARDIAN_CLASSIFICATION \
+            -e ACCOUNT_MANAGEMENT_GUARDIAN_EVIDENCE_REFERENCE \
+            -e ACCOUNT_MANAGEMENT_PREFLIGHT_OUTPUT=artifacts/staging/reports/account-management-preflight.json \
+            api node scripts/generate-account-management-preflight.mjs < /dev/null
+
+          docker compose \
+            --env-file .env \
+            --env-file "$release_env_file" \
+            -f docker-compose.yml \
+            -f docker-compose.release.yml \
+            -f "$EDGE_COMPOSE_FILE" \
+            run --rm -T \
+            -v "$PWD/scripts:/app/scripts:ro" \
+            -v "$PWD/artifacts:/app/artifacts" \
+            -e STAGING_ENVIRONMENT=staging \
+            -e ACCOUNT_MANAGEMENT_BACKFILL_MODE=APPLY \
+            -e ACCOUNT_MANAGEMENT_BACKFILL_CONFIRM=apply-pr4-backfill \
+            -e ACCOUNT_MANAGEMENT_BACKFILL_OUTPUT=artifacts/staging/reports/account-management-backfill.json \
+            api node scripts/backfill-account-management.mjs < /dev/null
 
           docker compose \
             --env-file .env \
@@ -714,6 +750,27 @@ jobs:
             --output-dir artifacts/staging/first-gates
           STAGING_FIRST_GATES_TARGET="file://$PWD/artifacts/staging/first-gates/first-gates-manifest.json" \
             pnpm staging:first-gates:check
+
+      - name: Run secret delivery outbox staging smoke
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}
+        shell: bash
+        env:
+          IMAGE_TAG: ${{ needs.build-images.outputs.image-tag }}
+        run: |
+          pnpm staging:evidence-env:check -- --env-file .staging-evidence.env --require-secret-delivery-outbox-smoke
+          outbox_not_before="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+          SECRET_DELIVERY_OUTBOX_SMOKE_EVIDENCE_FILE="artifacts/staging/smoke/secret-delivery-outbox.json" \
+          SECRET_DELIVERY_OUTBOX_NOT_BEFORE="$outbox_not_before" \
+          SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG="$IMAGE_TAG" \
+            node --env-file=.staging-evidence.env scripts/smoke-secret-delivery-outbox-staging.mjs
+          SECRET_DELIVERY_OUTBOX_EVIDENCE_TARGET="file://$PWD/artifacts/staging/smoke/secret-delivery-outbox.json" \
+          SECRET_DELIVERY_OUTBOX_NOT_BEFORE="$outbox_not_before" \
+          SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG="$IMAGE_TAG" \
+            node --env-file=.staging-evidence.env scripts/check-secret-delivery-outbox-evidence.mjs
+          {
+            printf '%s\n' "SECRET_DELIVERY_OUTBOX_NOT_BEFORE=$outbox_not_before"
+            printf '%s\n' "SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG=$IMAGE_TAG"
+          } >> .staging-evidence.env
 
       - name: Run staging-scoped evidence chain
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}

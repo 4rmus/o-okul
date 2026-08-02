@@ -159,7 +159,6 @@ services:
       LOG_ENABLED: ${LOG_ENABLED:-true}
       PERSISTENCE_DRIVER: ${PERSISTENCE_DRIVER:-postgres}
       DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://app:app@postgres:5432/o_okul}
-      DIRECT_DATABASE_URL: ${DOCKER_DIRECT_DATABASE_URL:-postgresql://migration:migration@postgres:5432/o_okul}
       SECRET_DELIVERY_OUTBOX_DATABASE_URL: ${DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL:-}
       REDIS_URL: ${DOCKER_REDIS_URL:-redis://redis:6379}
       QUEUE_PREFIX: ${QUEUE_PREFIX}

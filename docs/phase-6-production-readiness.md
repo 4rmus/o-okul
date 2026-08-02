@@ -76,6 +76,9 @@ pnpm backup:restore:smoke
 - Access ve refresh doğrulaması aktif session'ı güncel Postgres membership sürümü ve rol projeksiyonuyla
   karşılaştırır. Login request sözleşmesi değiştiği için web ve API aynı image çiftiyle ileri veya geri alınır;
   legacy satırlar en az 14 günlük parity gözlem penceresi boyunca rollback verisi olarak korunur.
+- Staging deploy sırası additive migration → read-only account preflight → transaction içi
+  account backfill/parity `PASS` gate → uygulama servislerini başlatma şeklindedir. Preflight veya
+  backfill `BLOCKED` ise legacy tenant erişimini kesecek yeni image başlatılmaz.
 
 ## Secret ve Erişim
 
@@ -86,6 +89,11 @@ pnpm backup:restore:smoke
   `ADMIN_MFA_RECOVERY_HASH_KEY` ve `ADMIN_MFA_CHALLENGE_SECRET` gerçek, farklı secret değerlerdir.
 - `SECRET_DELIVERY_ENCRYPTION_KEY` en az 32 karakterlik gerçek ve diğer encryption key'lerinden
   farklı bir secret'tır; API ile worker'a aynı değer verilir.
+- Worker'a `DIRECT_DATABASE_URL` verilmez. `SECRET_DELIVERY_OUTBOX_DATABASE_URL` yalnız
+  `secret_delivery_worker` rolünü kullanır; bu rolün parolası app ve migration DSN parolalarından
+  farklıdır ve yalnız `SecretDeliveryOutbox` için `SELECT`/`UPDATE` yetkisine sahiptir.
+- Canlı onboarding girdisi, repo/artifacts/evidence mount dışında symlink olmayan private `0600`
+  dosyada tutulur. Bu dosya credentials içerdiğinden release artifact'ı değildir.
 - `pnpm prod:env:check` gerçek staging/prod env değerlerinde geçer.
 - Production kanıt zinciri `pnpm prod:evidence:check` ile tek komutta geçer.
 - Gerçek staging/prod env dosyalarında `*_ALLOW_EXAMPLE_EVIDENCE=1` bayrakları bulunmaz;
@@ -101,6 +109,13 @@ pnpm backup:restore:smoke
   `pnpm prod:evidence:templates:check` tüm standalone evidence checker target'larının da
   `http://` protokolünü, placeholder/test `https://` host'larını, lokal temp `file://`
   path'lerini ve symlink file artifact'lerini reddettiğini negatif testle korur.
+- `pnpm secret-delivery-outbox:staging:smoke`, yalnız hash, purpose, retry, son 24 saatteki
+  `DELIVERED`/payload-cleared durumu, cutover sonrası `notBefore` zamanı, PII-safe `releaseImageTag`
+  ve ayrı rolün minimum yetki sonucunu taşıyan artifact üretir. Tam kanıt workflow'u bu iki release
+  bağını yeni `IMAGE_TAG` ile verir; eski bir terminal kayıt yeni release kanıtı olamaz.
+  Recipient, token, URL, source ID veya şifreli payload artifact'a yazılamaz; ardından
+  `pnpm secret-delivery-outbox:evidence:check` ile doğrulanır. Bu DB rolü/delivery-state kanıtı,
+  gerçek inbox-provider teslimatı ile KVKK/DPA kanıtının yerine geçmez; bunlar ayrı live gate'tir.
 - Ortak smoke evidence preflight/writer, `*_SMOKE_EVIDENCE_FILE`/`SMOKE_EVIDENCE_FILE`
   çıktılarının lokal temp path (`/tmp`, `/var/tmp`) altında veya symlink file/parent directory
   üzerinden yazılmasını reddeder; writer ayrıca payload'u yazmadan önce smoke tipine özgü schema ile

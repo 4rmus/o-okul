@@ -1,5 +1,5 @@
 import { lstat, readFile } from "node:fs/promises";
-import { dirname, parse, resolve } from "node:path";
+import { dirname, parse, relative, resolve } from "node:path";
 
 const enabled = process.env.NEXT_E2E_LIVE_ONBOARDING;
 const evidencePath = process.env.LIVE_ONBOARDING_EVIDENCE_PATH;
@@ -7,6 +7,7 @@ const emailEvidenceEndpoint = process.env.LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOIN
 const emailEvidenceBearerToken = process.env.LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN;
 const allowExampleEvidence = process.env.LIVE_ONBOARDING_ALLOW_EXAMPLE_EVIDENCE === "1";
 const liveEvidenceMaxAgeMs = 24 * 60 * 60 * 1000;
+const repositoryRoot = resolve(process.cwd());
 
 const failures = [];
 
@@ -50,6 +51,11 @@ async function validateEvidencePath(filePath, collectedFailures) {
     return;
   }
 
+  if (isRepositoryOrEvidenceMountPath(filePath)) {
+    collectedFailures.push("LIVE_ONBOARDING_EVIDENCE_PATH repo, artifacts veya evidence mount dışında private dosya olmalı.");
+    return;
+  }
+
   await assertParentPathAllowed(dirname(filePath), collectedFailures);
   if (collectedFailures.length > 0) return;
 
@@ -62,8 +68,21 @@ async function validateEvidencePath(filePath, collectedFailures) {
   }
 
   if (stat.isSymbolicLink() || !stat.isFile()) {
-    collectedFailures.push("LIVE_ONBOARDING_EVIDENCE_PATH symlink olmayan file artifact olmalı.");
+    collectedFailures.push("LIVE_ONBOARDING_EVIDENCE_PATH symlink olmayan normal dosya olmalı.");
+    return;
   }
+
+  if ((stat.mode & 0o777) !== 0o600) {
+    collectedFailures.push("LIVE_ONBOARDING_EVIDENCE_PATH private regular 0600 dosya olmalı.");
+  }
+}
+
+function isRepositoryOrEvidenceMountPath(filePath) {
+  const paths = [repositoryRoot, resolve(repositoryRoot, "artifacts"), resolve(repositoryRoot, "docker/evidence")];
+  return paths.some((candidate) => {
+    const fromCandidate = relative(candidate, filePath);
+    return fromCandidate === "" || (!fromCandidate.startsWith("..") && !fromCandidate.includes(".."));
+  });
 }
 
 async function assertParentPathAllowed(parentPath, collectedFailures) {

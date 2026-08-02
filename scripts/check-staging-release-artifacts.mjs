@@ -20,6 +20,7 @@ const smokeArtifacts = new Map([
   ["alertWebhook", { file: "alert-webhook.json", check: "alert_webhook_smoke" }],
   ["walArchive", { file: "wal-archive.json", check: "wal_archive_smoke" }],
   ["reportGeneration", { file: "report-generation.json", check: "report_generation_smoke" }],
+  ["secretDeliveryOutbox", { file: "secret-delivery-outbox.json", check: "secret_delivery_outbox_staging_smoke" }],
 ]);
 const firstGateSummaryKeys = new Map([
   ["Traefik HTTPS smoke", "traefikHttps"],

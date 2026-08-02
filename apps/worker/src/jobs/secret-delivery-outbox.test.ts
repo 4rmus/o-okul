@@ -49,12 +49,13 @@ describe("secret delivery outbox", () => {
       subject: "Aktivasyon",
       body: "secret-link",
     }, env);
-    const store = fakeStore({ id: "outbox-1", purpose: "IDENTITY_INVITATION", payloadEncrypted, attempts: 1 });
+    const store = fakeStore({ id: "outbox-1", purpose: "IDENTITY_INVITATION", payloadEncrypted, attempts: 1, claimToken: "unused" });
     const sendBatch = vi.fn(async () => [{ channel: "EMAIL" as const, to: "user@example.test", status: "sent" as const }]);
 
     await expect(processNextSecretDelivery(store, { sendBatch }, env, new Date("2026-08-01T12:00:00.000Z"))).resolves.toBe(true);
     expect(sendBatch).toHaveBeenCalledWith([expect.objectContaining({ body: "secret-link" })]);
-    expect(store.markDelivered).toHaveBeenCalledWith("outbox-1", new Date("2026-08-01T12:00:00.000Z"));
+    expect(sendBatch).toHaveBeenCalledWith([expect.objectContaining({ idempotencyKey: "secret-delivery:outbox-1" })]);
+    expect(store.markDelivered).toHaveBeenCalledWith("outbox-1", "claim-1", new Date("2026-08-01T12:00:00.000Z"));
     expect(store.markFailed).not.toHaveBeenCalled();
   });
 
@@ -65,11 +66,11 @@ describe("secret delivery outbox", () => {
       subject: "Reset",
       body: "secret-reset-link",
     }, env);
-    const store = fakeStore({ id: "outbox-2", purpose: "PASSWORD_RESET", payloadEncrypted, attempts: 2 });
+    const store = fakeStore({ id: "outbox-2", purpose: "PASSWORD_RESET", payloadEncrypted, attempts: 2, claimToken: "unused" });
     const adapter = { sendBatch: vi.fn(async () => [{ channel: "EMAIL" as const, to: "user@example.test", status: "failed" as const, errorCode: "HTTP_503" }]) };
 
     await processNextSecretDelivery(store, adapter, env, new Date("2026-08-01T12:00:00.000Z"));
-    expect(store.markFailed).toHaveBeenCalledWith("outbox-2", expect.objectContaining({ attempts: 2, errorCode: "HTTP_503" }));
+    expect(store.markFailed).toHaveBeenCalledWith("outbox-2", expect.objectContaining({ attempts: 2, claimToken: "claim-1", errorCode: "SECRET_DELIVERY_PROVIDER_FAILED" }));
     expect(JSON.stringify(vi.mocked(store.markFailed).mock.calls)).not.toContain("user@example.test");
     expect(JSON.stringify(vi.mocked(store.markFailed).mock.calls)).not.toContain("secret-reset-link");
   });
@@ -89,11 +90,30 @@ describe("secret delivery outbox", () => {
     expect(queries[0]).toContain(`"status" = 'EXPIRED'`);
     expect(queries[0]).toContain(`"payloadEncrypted" = NULL`);
   });
+
+  it("completion sorgusunu yalnız claim sahibine sınırlar", async () => {
+    const queries: Array<{ sql: string; values: unknown[] | undefined }> = [];
+    const pool = {
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        return { rows: [] as T[] };
+      },
+    };
+    const store = new PostgresSecretDeliveryOutboxStore(pool);
+
+    await store.markDelivered("outbox-3", "claim-current", new Date("2026-08-01T12:00:00.000Z"));
+    await store.markFailed("outbox-3", { attempts: 1, claimToken: "claim-current", errorCode: "NOTIFICATION_HTTP_503", now: new Date("2026-08-01T12:00:00.000Z") });
+
+    expect(queries[0]?.sql).toContain(`"claimToken" = $2`);
+    expect(queries[0]?.values).toEqual(["outbox-3", "claim-current", expect.any(Date)]);
+    expect(queries[1]?.sql).toContain(`"claimToken" = $6`);
+    expect(queries[1]?.values).toEqual(["outbox-3", "PENDING", expect.any(Date), "NOTIFICATION_HTTP_503", expect.any(Date), "claim-current"]);
+  });
 });
 
 function fakeStore(record: Awaited<ReturnType<SecretDeliveryOutboxStore["claimNext"]>>): SecretDeliveryOutboxStore {
   return {
-    claimNext: vi.fn(async () => record),
+    claimNext: vi.fn(async () => record ? { ...record, claimToken: "claim-1" } : undefined),
     markDelivered: vi.fn(async () => undefined),
     markFailed: vi.fn(async () => undefined),
   };

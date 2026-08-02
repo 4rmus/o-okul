@@ -7,6 +7,7 @@ const env = readEnvFile(envFile);
 
 const databaseUrl = env.DATABASE_URL;
 const directDatabaseUrl = env.DIRECT_DATABASE_URL || databaseUrl;
+const secretDeliveryOutboxDatabaseUrl = env.SECRET_DELIVERY_OUTBOX_DATABASE_URL;
 const redisUrl = env.REDIS_URL || "redis://127.0.0.1:6379";
 
 if (!databaseUrl) fail("DATABASE_URL is required.");
@@ -20,6 +21,7 @@ appendFileSync(
     `STAGING_EVIDENCE_POSTGRES_TUNNEL_PORT=${postgresPort}`,
     `DATABASE_URL=${rewriteUrl(databaseUrl, postgresPort)}`,
     `DIRECT_DATABASE_URL=${rewriteUrl(directDatabaseUrl, postgresPort)}`,
+    ...(secretDeliveryOutboxDatabaseUrl ? [`SECRET_DELIVERY_OUTBOX_DATABASE_URL=${rewriteUrl(secretDeliveryOutboxDatabaseUrl, postgresPort)}`] : []),
     `REDIS_URL=${rewriteUrl(redisUrl, redisPort)}`,
     "",
   ].join("\n"),

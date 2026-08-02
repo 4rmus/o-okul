@@ -112,6 +112,8 @@
     "restore:drill:generate": "node scripts/generate-restore-drill-evidence.mjs",
     "notification:smoke": "pnpm --filter @o-okul/notification-adapter build && node scripts/smoke-notification-provider.mjs",
     "security:audit:check": "node scripts/check-security-audit-evidence.mjs",
+    "secret-delivery-outbox:evidence:check": "node scripts/check-secret-delivery-outbox-evidence.mjs",
+    "secret-delivery-outbox:staging:smoke": "node scripts/smoke-secret-delivery-outbox-staging.mjs",
     "security:audit:generate": "node scripts/generate-security-audit-evidence.mjs",
     "sms:smoke": "pnpm --filter @o-okul/sms-adapter build && node scripts/smoke-sms-provider.mjs",
     "smoke:evidence:check": "node scripts/check-smoke-evidence-contract.mjs",

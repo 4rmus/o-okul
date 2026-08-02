@@ -185,9 +185,15 @@ function checkProductionEnv(env) {
   requireDatabaseRole(env, failures, "DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL", "secret_delivery_worker");
   requireDistinctDatabaseUrls(env, failures, "DATABASE_URL", "SECRET_DELIVERY_OUTBOX_DATABASE_URL");
   requireDistinctDatabaseUrls(env, failures, "DATABASE_URL", "DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL");
+  requireDistinctDatabaseUrls(env, failures, "DIRECT_DATABASE_URL", "SECRET_DELIVERY_OUTBOX_DATABASE_URL");
+  requireDistinctDatabaseUrls(env, failures, "DIRECT_DATABASE_URL", "DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL");
   requireSecret(env, failures, "SECRET_DELIVERY_WORKER_DB_PASSWORD");
   requireDatabasePassword(env, failures, "SECRET_DELIVERY_OUTBOX_DATABASE_URL", "SECRET_DELIVERY_WORKER_DB_PASSWORD");
   requireDatabasePassword(env, failures, "DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL", "SECRET_DELIVERY_WORKER_DB_PASSWORD");
+  requireDistinctDatabasePassword(env, failures, "SECRET_DELIVERY_OUTBOX_DATABASE_URL", "DATABASE_URL");
+  requireDistinctDatabasePassword(env, failures, "SECRET_DELIVERY_OUTBOX_DATABASE_URL", "DIRECT_DATABASE_URL");
+  requireDistinctDatabasePassword(env, failures, "DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL", "DATABASE_URL");
+  requireDistinctDatabasePassword(env, failures, "DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL", "DIRECT_DATABASE_URL");
   requireSecret(env, failures, "JWT_ACCESS_SECRET");
   requireSecret(env, failures, "STUDENT_PII_ENCRYPTION_KEY");
   requireSecret(env, failures, "STUDENT_PII_HASH_KEY");
@@ -412,6 +418,18 @@ function requireDatabasePassword(env, failures, databaseKey, passwordKey) {
     }
   } catch {
     // URL biçimi requireDatabaseRole tarafından raporlanır.
+  }
+}
+
+function requireDistinctDatabasePassword(env, failures, dedicatedKey, primaryKey) {
+  try {
+    const dedicatedPassword = decodeURIComponent(new URL(env[dedicatedKey] ?? "").password);
+    const primaryPassword = decodeURIComponent(new URL(env[primaryKey] ?? "").password);
+    if (dedicatedPassword && primaryPassword && dedicatedPassword === primaryPassword) {
+      failures.push(`${dedicatedKey} parolası ${primaryKey} parolasından farklı olmalı.`);
+    }
+  } catch {
+    // URL biçimi ilgili database URL kontrolünde raporlanır.
   }
 }
 

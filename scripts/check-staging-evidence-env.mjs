@@ -8,6 +8,7 @@ const workflowPath = process.env.STAGING_DEPLOY_WORKFLOW_PATH ?? ".github/workfl
 
 const args = process.argv.slice(2);
 const envFile = readArgValue("--env-file");
+const requireSecretDeliveryOutboxSmoke = args.includes("--require-secret-delivery-outbox-smoke");
 const targetPath = envFile ?? templatePath;
 const target = parseEnvFile(targetPath);
 const failures = [];
@@ -54,6 +55,7 @@ const uiUxRedesignGeneratorKeys = [
 const smsProviderRuntimeKeys = ["NETGSM_USERCODE", "NETGSM_PASSWORD", "NETGSM_MSG_HEADER"];
 const smsSmokeKeys = ["SMS_SMOKE_TO", "SMS_SMOKE_BODY", "SMS_SMOKE_CONFIRM"];
 const runtimeRequiredKeys = ["S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"];
+const fullEvidenceRequiredKeys = requireSecretDeliveryOutboxSmoke ? ["SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID"] : [];
 const optionalRuntimeKeys = new Set(["TRAEFIK_TRUSTED_FORWARDER_CIDRS"]);
 const proxyNetworkKeys = [
   "DOCKER_PROXY_SUBNET",
@@ -67,6 +69,7 @@ const prodEnvContractKeys = extractProdEnvContractKeys().filter((key) => smsEnab
 const requiredKeys = unique([
   ...prodEnvContractKeys,
   ...runtimeRequiredKeys,
+  ...fullEvidenceRequiredKeys,
   ...proxyNetworkKeys,
   ...(smsEnabled ? smsProviderRuntimeKeys : []),
   ...uiUxRedesignGeneratorKeys,
@@ -207,6 +210,12 @@ function checkWorkflowContract(output) {
     "require_running_image api \"${IMAGE_PREFIX}/api:${IMAGE_TAG}\"",
     "require_running_image worker \"${IMAGE_PREFIX}/worker:${IMAGE_TAG}\"",
     "require_running_image queue-board \"${IMAGE_PREFIX}/queue-board:${IMAGE_TAG}\"",
+    "Account management preflight before legacy access cutover",
+    "ACCOUNT_MANAGEMENT_PREFLIGHT_OUTPUT=artifacts/staging/reports/account-management-preflight.json",
+    "Account management backfill and parity gate before app start",
+    "ACCOUNT_MANAGEMENT_BACKFILL_MODE=APPLY",
+    "ACCOUNT_MANAGEMENT_BACKFILL_CONFIRM=apply-pr4-backfill",
+    "ACCOUNT_MANAGEMENT_BACKFILL_OUTPUT=artifacts/staging/reports/account-management-backfill.json",
     "echo \"UI_UX_REDESIGN_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/ui-ux-redesign.json\"",
     "echo \"SENTRY_RELEASE=$IMAGE_TAG\"",
     "echo \"ROLLBACK_IMAGE_TAG=$ROLLBACK_IMAGE_TAG\"",
@@ -283,6 +292,14 @@ function checkWorkflowContract(output) {
     "Append full UI/UX release evidence metadata",
     "echo \"UI_UX_REDESIGN_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/ui-ux-redesign.json\"",
     "Run first staging evidence gates",
+    "Run secret delivery outbox staging smoke",
+    "outbox_not_before=\"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)\"",
+    "SECRET_DELIVERY_OUTBOX_NOT_BEFORE=\"$outbox_not_before\"",
+    "SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG=\"$IMAGE_TAG\"",
+    "node --env-file=.staging-evidence.env scripts/smoke-secret-delivery-outbox-staging.mjs",
+    "node --env-file=.staging-evidence.env scripts/check-secret-delivery-outbox-evidence.mjs",
+    "printf '%s\\n' \"SECRET_DELIVERY_OUTBOX_NOT_BEFORE=$outbox_not_before\"",
+    "printf '%s\\n' \"SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG=$IMAGE_TAG\"",
     "Run staging-scoped evidence chain",
     "PRODUCTION_EVIDENCE_ALLOW_STAGING_UI_UX: \"1\"",
     "Check staging release artifact bundle",

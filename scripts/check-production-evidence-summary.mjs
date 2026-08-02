@@ -26,6 +26,8 @@ const requiredChecks = new Map([
   ["Alert webhook", "scripts/smoke-alert-webhook.mjs"],
   ["WAL archive target", "scripts/smoke-wal-archive-target.mjs"],
   ["Report generation smoke", "scripts/smoke-report-generation-live.mjs"],
+  ["Secret delivery outbox staging smoke", "scripts/smoke-secret-delivery-outbox-staging.mjs"],
+  ["Secret delivery outbox evidence", "scripts/check-secret-delivery-outbox-evidence.mjs"],
   ["Deployment rollback evidence", "scripts/check-deployment-rollback-evidence.mjs"],
   ["GitHub CI evidence", "scripts/check-github-ci-evidence.mjs"],
   ["Restore drill evidence", "scripts/check-restore-drill-evidence.mjs"],
@@ -56,6 +58,7 @@ const requiredSmokeEvidence = new Map([
   ["alertWebhook", "alert_webhook_smoke"],
   ["walArchive", "wal_archive_smoke"],
   ["reportGeneration", "report_generation_smoke"],
+  ["secretDeliveryOutbox", "secret_delivery_outbox_staging_smoke"],
 ]);
 
 const requiredReports = {
@@ -573,6 +576,7 @@ function requireSmokeEvidence(summary, failures) {
         allowExampleEvidence,
       }),
     );
+    if (key === "secretDeliveryOutbox") requireSecretDeliveryOutboxSmoke(value[key], failures);
     if (value[key]) {
       requireObjectEqual(value[key], failures, `smokeEvidence.${key}.environment`, "environment", "production");
       if (key === "traefikHttps") {
@@ -580,6 +584,47 @@ function requireSmokeEvidence(summary, failures) {
       }
       requireDateNotAfter(value[key], failures, `smokeEvidence.${key}.generatedAt`, "generatedAt", summary, "generatedAt");
     }
+  }
+}
+
+function requireSecretDeliveryOutboxSmoke(value, failures) {
+  const label = "smokeEvidence.secretDeliveryOutbox";
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    failures.push(`${label} nesnesi zorunlu.`);
+    return;
+  }
+  requireExpectedObjectKeys(value, [
+    "schemaVersion", "result", "check", "environment", "generatedAt", "releaseImageTag", "notBefore", "outboxRecordHash", "purpose", "retry",
+    "terminalStatus", "payloadCleared", "deliveredAt", "updatedAt", "separateRolePrivilege", "commandsPassed", "gaps",
+  ], failures, label);
+  if (value.schemaVersion !== 1) failures.push(`${label}.schemaVersion 1 olmalı.`);
+  if (value.terminalStatus !== "DELIVERED") failures.push(`${label}.terminalStatus DELIVERED olmalı.`);
+  if (value.payloadCleared !== true) failures.push(`${label}.payloadCleared true olmalı.`);
+  if (typeof value.releaseImageTag !== "string" || !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(value.releaseImageTag)) failures.push(`${label}.releaseImageTag güvenli IMAGE_TAG olmalı.`);
+  requireObjectDate(value, failures, label, "notBefore");
+  if (Date.parse(value.notBefore) > Date.parse(value.generatedAt) || Date.parse(value.generatedAt) - Date.parse(value.notBefore) > 15 * 60 * 1000) {
+    failures.push(`${label}.notBefore generatedAt öncesindeki son 15 dakika içinde olmalı.`);
+  }
+  if (typeof value.outboxRecordHash !== "string" || !/^[a-f0-9]{64}$/.test(value.outboxRecordHash)) failures.push(`${label}.outboxRecordHash SHA-256 hex olmalı.`);
+  if (!['IDENTITY_INVITATION', 'PASSWORD_RESET'].includes(value.purpose)) failures.push(`${label}.purpose geçersiz.`);
+  requireObjectDate(value, failures, label, "deliveredAt");
+  requireObjectDate(value, failures, label, "updatedAt");
+  if (Date.parse(value.deliveredAt) < Date.parse(value.notBefore) || Date.parse(value.updatedAt) < Date.parse(value.notBefore)) {
+    failures.push(`${label}.deliveredAt ve updatedAt notBefore zamanından önce olamaz.`);
+  }
+  if (!allowExampleEvidence && [value.deliveredAt, value.updatedAt].some((timestamp) => Date.now() - Date.parse(timestamp) > 24 * 60 * 60 * 1000)) {
+    failures.push(`${label}.deliveredAt ve updatedAt 24 saatten eski olamaz.`);
+  }
+  const retry = requireObject(value, failures, `${label}.retry`, "retry");
+  if (retry && (!Number.isSafeInteger(retry.attempts) || retry.attempts < 2 || retry.retried !== true)) failures.push(`${label}.retry retry edilmiş en az iki deneme olmalı.`);
+  const privilege = requireObject(value, failures, `${label}.separateRolePrivilege`, "separateRolePrivilege");
+  if (!privilege) return;
+  if (privilege.role !== "secret_delivery_worker" || privilege.result !== "PASS") failures.push(`${label}.separateRolePrivilege ayrı worker rolü PASS olmalı.`);
+  if (privilege.outboxTable?.select !== true || privilege.outboxTable?.update !== true || privilege.outboxTable?.insert !== false || privilege.outboxTable?.delete !== false || privilege.outboxTable?.truncate !== false || privilege.otherTables?.userSelect !== false || privilege.publicSchema?.create !== false || privilege.publicSchema?.owner !== false || Object.values(privilege.elevatedCapabilities ?? {}).some((value) => value !== false)) {
+    failures.push(`${label}.separateRolePrivilege least-privilege sonucu geçersiz.`);
+  }
+  if (JSON.stringify(value).toLowerCase().match(/https?:\/\/|[\w.+-]+@[\w.-]+\.[a-z]{2,}|recipient|token|payloadencrypted|sourceid/)) {
+    failures.push(`${label} recipient, token, URL veya payload taşımamalı.`);
   }
 }
 

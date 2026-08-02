@@ -499,6 +499,7 @@ model SecretDeliveryOutbox {
   availableAt      DateTime @default(now()) @db.Timestamptz(6)
   expiresAt        DateTime @db.Timestamptz(6)
   claimedAt        DateTime? @db.Timestamptz(6)
+  claimToken       String?
   deliveredAt      DateTime? @db.Timestamptz(6)
   lastErrorCode    String?
   createdAt        DateTime @default(now()) @db.Timestamptz(6)
