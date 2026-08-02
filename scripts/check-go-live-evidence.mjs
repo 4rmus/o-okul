@@ -21,7 +21,6 @@ const requiredEvidenceCheckScripts = new Map([
   ["Alert webhook", "scripts/smoke-alert-webhook.mjs"],
   ["WAL archive target", "scripts/smoke-wal-archive-target.mjs"],
   ["Report generation smoke", "scripts/smoke-report-generation-live.mjs"],
-  ["Secret delivery outbox staging smoke", "scripts/smoke-secret-delivery-outbox-staging.mjs"],
   ["Secret delivery outbox evidence", "scripts/check-secret-delivery-outbox-evidence.mjs"],
   ["Deployment rollback evidence", "scripts/check-deployment-rollback-evidence.mjs"],
   ["GitHub CI evidence", "scripts/check-github-ci-evidence.mjs"],
@@ -1117,7 +1116,7 @@ function requireSummarySmokeEvidence(summary, failures, goLiveReport) {
   if (secretDeliveryOutbox && (typeof secretDeliveryOutbox.releaseImageTag !== "string" || !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(secretDeliveryOutbox.releaseImageTag))) {
     failures.push("productionEvidenceSummary.summary.smokeEvidence.secretDeliveryOutbox.releaseImageTag güvenli IMAGE_TAG olmalı.");
   }
-  if (secretDeliveryOutbox && (Date.parse(secretDeliveryOutbox.notBefore) > Date.parse(secretDeliveryOutbox.generatedAt) || Date.parse(secretDeliveryOutbox.generatedAt) - Date.parse(secretDeliveryOutbox.notBefore) > 15 * 60 * 1000 || Date.parse(secretDeliveryOutbox.deliveredAt) < Date.parse(secretDeliveryOutbox.notBefore) || Date.parse(secretDeliveryOutbox.updatedAt) < Date.parse(secretDeliveryOutbox.notBefore))) {
+  if (secretDeliveryOutbox && (Date.parse(secretDeliveryOutbox.notBefore) > Date.parse(secretDeliveryOutbox.generatedAt) || Date.parse(secretDeliveryOutbox.generatedAt) - Date.parse(secretDeliveryOutbox.notBefore) > 24 * 60 * 60 * 1000 || Date.parse(secretDeliveryOutbox.deliveredAt) < Date.parse(secretDeliveryOutbox.notBefore) || Date.parse(secretDeliveryOutbox.updatedAt) < Date.parse(secretDeliveryOutbox.notBefore))) {
     failures.push("productionEvidenceSummary.summary.smokeEvidence.secretDeliveryOutbox cutover sonrası notBefore bağı geçersiz.");
   }
 }

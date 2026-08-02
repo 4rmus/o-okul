@@ -111,11 +111,15 @@ pnpm backup:restore:smoke
   path'lerini ve symlink file artifact'lerini reddettiğini negatif testle korur.
 - `pnpm secret-delivery-outbox:staging:smoke`, yalnız hash, purpose, retry, son 24 saatteki
   `DELIVERED`/payload-cleared durumu, cutover sonrası `notBefore` zamanı, PII-safe `releaseImageTag`
-  ve ayrı rolün minimum yetki sonucunu taşıyan artifact üretir. Tam kanıt workflow'u bu iki release
-  bağını yeni `IMAGE_TAG` ile verir; eski bir terminal kayıt yeni release kanıtı olamaz.
+  ve ayrı rolün minimum yetki sonucunu taşıyan artifact üretir. Deploy sonrası oluşan sanitized cutover
+  artifact'i, ayrı verify-only workflow tarafından önce dört running service tag'iyle eşleştirilir; eski
+  bir terminal kayıt veya tag drift'i yeni release kanıtı olamaz.
   Recipient, token, URL, source ID veya şifreli payload artifact'a yazılamaz; ardından
   `pnpm secret-delivery-outbox:evidence:check` ile doğrulanır. Bu DB rolü/delivery-state kanıtı,
   gerçek inbox-provider teslimatı ile KVKK/DPA kanıtının yerine geçmez; bunlar ayrı live gate'tir.
+  Staging verify summary'sinde bu smoke `environment=staging` kalır ve yalnız
+  `PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX=1` ile kabul edilir; production/go-live zinciri bu
+  istisnayı kullanamaz.
 - Ortak smoke evidence preflight/writer, `*_SMOKE_EVIDENCE_FILE`/`SMOKE_EVIDENCE_FILE`
   çıktılarının lokal temp path (`/tmp`, `/var/tmp`) altında veya symlink file/parent directory
   üzerinden yazılmasını reddeder; writer ayrıca payload'u yazmadan önce smoke tipine özgü schema ile
@@ -164,8 +168,8 @@ pnpm backup:restore:smoke
   ayağa kaldırır ve `web`, `api`, `worker`, `queue-board` servislerinin çalışan image tag'ini deploy
   `IMAGE_TAG` değeriyle birebir karşılaştırır. Otomatik deploy yalnız image activation, migration,
   health ve first-gates sonucuyla yeşil/kırmızı olur; `prod:evidence:check --summary-file` ve
-  `staging:release-artifacts:check` yalnız manuel `workflow_dispatch` çalışmasında `full_evidence=true`
-  verildiğinde promotion/full evidence kapısı olarak koşar.
+  `staging:release-artifacts:check` verify-only workflow'unda, seçilen deploy cutover/tag bağı doğrulandıktan
+  sonra promotion/full evidence kapısı olarak koşar.
 - GitHub `staging` environment hazır olmadan deploy tetiklenmez; `pnpm staging:github-env:check`
   environment varlığını, `STAGING_DEPLOY_DIR=/root/o-okul`, `STAGING_NEXT_PUBLIC_API_URL`, opsiyonel
   `STAGING_EDGE_MODE` değerlerini ve required secret isimlerini secret değerlerini yazdırmadan doğrular.
@@ -851,9 +855,11 @@ pnpm backup:restore:smoke
   hedefi olmadan Canlı Durum satırlarını `PASS` yapmaz.
 - Full staging evidence artifact seti indirildikten sonra:
   `STAGING_RELEASE_ARTIFACTS_TARGET=/path/to/artifacts/staging pnpm staging:release-artifacts:check`
-  komutu `reports/*.json`, first-gates manifest'i, tek `release-summary-*.json` dosyası ve
-  `smoke/*.json` ham kanıtlarının, `smoke/report-generation.json` dahil, mevcut checker'lardan geçtiğini ve summary içindeki gömülü
-  kanıtlarla eşleştiğini doğrular; `release-summary-<tag>.json` dosya adındaki tag summary içindeki
+  komutu `reports/deployment-cutover.json`, diğer `reports/*.json`, first-gates manifest'i, tek
+  `release-summary-*.json` dosyası ve `smoke/*.json` ham kanıtlarının, `smoke/report-generation.json`
+  dahil, mevcut checker'lardan geçtiğini doğrular. Cutover SHA/repository/tag/zamanı summary ile outbox
+  smoke'a bağlanır; verify artifact publish edilmeden dört çalışan servis tag'i yeniden kontrol edilir.
+  `release-summary-<tag>.json` dosya adındaki tag summary içindeki
   `reports.deploymentRollback.releaseCandidate` image tag'iyle eşleşmelidir; bundle yalnız beklenen
   root, `reports/`, `smoke/` ve `first-gates/` dosyalarını içerebilir; beklenmeyen raw JSON/log dosyası
   kalırsa kontrol kırılır; bundle symlink içeremez, beklenen artifact'ler symlink olmayan dosya/dizin

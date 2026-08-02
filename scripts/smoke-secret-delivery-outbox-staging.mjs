@@ -1,20 +1,20 @@
 import { createHash } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import pg from "pg";
 import { validateSmokeEvidenceOutputTarget } from "./smoke-evidence.mjs";
 
 const databaseUrl = process.env.SECRET_DELIVERY_OUTBOX_DATABASE_URL;
-const sourceId = process.env.SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID;
+const sourceFile = process.env.SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_FILE;
 const evidenceFile = process.env.SECRET_DELIVERY_OUTBOX_SMOKE_EVIDENCE_FILE;
 const notBefore = process.env.SECRET_DELIVERY_OUTBOX_NOT_BEFORE;
 const releaseImageTag = process.env.SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG;
 const environment = process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV;
 
 if (!databaseUrl) fail(["SECRET_DELIVERY_OUTBOX_DATABASE_URL boş bırakılamaz."]);
-if (!sourceId) fail(["SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID boş bırakılamaz."]);
+if (!sourceFile) fail(["SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_FILE boş bırakılamaz."]);
 if (!evidenceFile) fail(["SECRET_DELIVERY_OUTBOX_SMOKE_EVIDENCE_FILE boş bırakılamaz."]);
-if (!notBefore || !isRecentCutoverTimestamp(notBefore)) fail(["SECRET_DELIVERY_OUTBOX_NOT_BEFORE cutover sonrası son 15 dakika içinde bir ISO zaman olmalı."]);
+if (!notBefore || !isRecentCutoverTimestamp(notBefore)) fail(["SECRET_DELIVERY_OUTBOX_NOT_BEFORE cutover sonrası son 24 saat içinde bir ISO zaman olmalı."]);
 if (!isReleaseImageTag(releaseImageTag)) fail(["SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG güvenli IMAGE_TAG değeri olmalı."]);
 if (!['staging', 'production'].includes(environment)) fail(["STAGING_ENVIRONMENT veya NODE_ENV staging/production olmalı."]);
 
@@ -29,6 +29,7 @@ if (!['postgres:', 'postgresql:'].includes(database.protocol) || decodeURICompon
 }
 
 await validateSmokeEvidenceOutputTarget(evidenceFile);
+const sourceId = await readPrivateSourceId(sourceFile);
 const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
 
 try {
@@ -127,7 +128,17 @@ function isFreshTimestamp(value) {
 
 function isRecentCutoverTimestamp(value) {
   const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) && timestamp <= Date.now() + 5 * 60 * 1000 && Date.now() - timestamp <= 15 * 60 * 1000;
+  return Number.isFinite(timestamp) && timestamp <= Date.now() + 5 * 60 * 1000 && Date.now() - timestamp <= 24 * 60 * 60 * 1000;
+}
+
+async function readPrivateSourceId(file) {
+  const stat = await lstat(file).catch(() => fail(["SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_FILE symlink olmayan private regular dosya olmalı."]));
+  if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o777) !== 0o600) {
+    fail(["SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_FILE symlink olmayan 0600 regular dosya olmalı."]);
+  }
+  const value = (await readFile(file, "utf8")).trim();
+  if (!/^[A-Za-z0-9_-]{16,128}$/.test(value)) fail(["Private outbox source dosyası geçerli opaque source ID içermeli."]);
+  return value;
 }
 
 function isReleaseImageTag(value) {

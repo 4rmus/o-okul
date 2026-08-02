@@ -17,6 +17,13 @@ import { pathToFileURL } from "node:url";
 
 const templateChecks = [
   [
+    "Deployment cutover template",
+    "DEPLOYMENT_CUTOVER_EVIDENCE_TARGET",
+    "docs/evidence-templates/deployment-cutover.example.json",
+    "scripts/check-deployment-cutover-evidence.mjs",
+    { DEPLOYMENT_CUTOVER_ALLOW_EXAMPLE_EVIDENCE: "1" },
+  ],
+  [
     "Secret delivery outbox staging template",
     "SECRET_DELIVERY_OUTBOX_EVIDENCE_TARGET",
     "docs/evidence-templates/secret-delivery-outbox-staging.example.json",
@@ -291,7 +298,7 @@ function runEvidenceTargetProtocolNegativeChecks() {
       console.error(`Production evidence template kontrolü başarısız: ${label} HTTP target negative beklenen şekilde kırılmadı.`);
       process.exit(1);
     }
-    if (!output.includes("file:// veya https://")) {
+    if (!output.includes(label === "Deployment cutover template" ? "yalnız file://" : "file:// veya https://")) {
       console.error(`Production evidence template kontrolü başarısız: ${label} HTTP target negative beklenen hata yok.`);
       console.error(output);
       process.exit(1);
@@ -317,7 +324,7 @@ function runEvidenceTargetPlaceholderHostNegativeChecks() {
       );
       process.exit(1);
     }
-    if (!output.includes("gercek https host") && !output.includes("gerçek https host") && !output.includes("file:// veya https://")) {
+    if (!output.includes("gercek https host") && !output.includes("gerçek https host") && !output.includes(label === "Deployment cutover template" ? "yalnız file://" : "file:// veya https://")) {
       console.error(
         `Production evidence template kontrolü başarısız: ${label} placeholder host target negative beklenen hata yok.`,
       );
@@ -346,7 +353,7 @@ function runEvidenceTargetTempFileNegativeChecks() {
         );
         process.exit(1);
       }
-      if (!output.includes("lokal temp path") && !output.includes("file:// veya https://")) {
+      if (!output.includes("lokal temp path") && !output.includes(label === "Deployment cutover template" ? "yalnız file://" : "file:// veya https://")) {
         console.error(
           `Production evidence template kontrolü başarısız: ${label} ${tempRoot} temp file target negative beklenen hata yok.`,
         );
@@ -1920,10 +1927,11 @@ runDeploymentRollbackSymlinkParentTargetNegativeCheck();
 runProductionSummaryHttpTargetNegativeCheck();
 runProductionSummarySecretUrlTargetNegativeCheck();
 runProductionSummarySymlinkParentTargetNegativeCheck();
+runStagingOutboxProductionSummaryModeChecks();
 runProductionSummaryNegativeCheck({
   label: "Production summary extra check negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-check.tmp.json",
-  expectedFailure: "checks tam 30 madde içermeli.",
+  expectedFailure: "checks tam 29 madde içermeli.",
   mutate: (fixture) => {
     fixture.checks.push({
       label: "Beklenmeyen production check",
@@ -2479,7 +2487,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live extra checksPassed negative",
   path: "docs/evidence-templates/go-live.extra-checks-passed.tmp.json",
-  expectedFailure: "productionEvidenceSummary.checksPassed tam 30 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.checksPassed tam 29 madde icermeli.",
   mutate: (fixture) => {
     fixture.productionEvidenceSummary.checksPassed.push("Beklenmeyen production check");
   },
@@ -2545,7 +2553,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked duplicate summary check negative",
   path: "docs/evidence-templates/go-live.linked-duplicate-summary-check.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary.checks tam 30 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary.checks tam 29 madde icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.duplicate-check-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -3212,6 +3220,48 @@ function runProductionSummaryNegativeCheck({ label, path, expectedFailure, mutat
       unlinkSync(path);
     } catch {
       // Ignore cleanup errors; the negative-check failure above is the actionable signal.
+    }
+  }
+}
+
+function runStagingOutboxProductionSummaryModeChecks() {
+  const path = "docs/evidence-templates/production-evidence-summary.staging-outbox.tmp.json";
+  const fixture = structuredClone(productionSummaryFixture);
+  fixture.smokeEvidence.secretDeliveryOutbox.environment = "staging";
+  writeFileSync(path, `${JSON.stringify(fixture, null, 2)}\n`);
+
+  try {
+    const baseEnv = {
+      ...process.env,
+      PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE: "1",
+      PRODUCTION_EVIDENCE_SUMMARY_TARGET: pathToFileURL(path).href,
+    };
+    const rejected = spawnSync(process.execPath, ["scripts/check-production-evidence-summary.mjs"], {
+      env: baseEnv,
+      encoding: "utf8",
+    });
+    const rejectedOutput = `${rejected.stdout ?? ""}${rejected.stderr ?? ""}`;
+    if (rejected.status === 0 || !rejectedOutput.includes("smokeEvidence.secretDeliveryOutbox.environment production olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: staging outbox summary flag olmadan kırılmalı.");
+      console.error(rejectedOutput);
+      process.exit(1);
+    }
+
+    const accepted = spawnSync(process.execPath, ["scripts/check-production-evidence-summary.mjs"], {
+      env: { ...baseEnv, PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX: "1" },
+      encoding: "utf8",
+    });
+    if (accepted.status !== 0) {
+      console.error("Production evidence template kontrolü başarısız: explicit staging outbox summary modu geçmeli.");
+      console.error(accepted.stdout);
+      console.error(accepted.stderr);
+      process.exit(accepted.status ?? 1);
+    }
+  } finally {
+    try {
+      unlinkSync(path);
+    } catch {
+      // Ignore cleanup errors; the contract result above is the actionable signal.
     }
   }
 }
@@ -5579,22 +5629,39 @@ function runStagingEvidenceEnvNegativeCheck() {
       process.exit(1);
     }
 
+    const legacySourcePath = "docs/evidence-templates/staging-evidence.legacy-outbox-source.tmp.env";
+    writeFileSync(
+      legacySourcePath,
+      `${readFileSync("docs/evidence-templates/staging-evidence.env.example", "utf8")}\nSECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID=legacy-source-id\n`,
+    );
+    const legacySourceResult = spawnSync(
+      process.execPath,
+      ["scripts/check-staging-evidence-env.mjs", "--env-file", legacySourcePath],
+      { encoding: "utf8" },
+    );
+    const legacySourceOutput = `${legacySourceResult.stdout ?? ""}${legacySourceResult.stderr ?? ""}`;
+    if (legacySourceResult.status === 0 || !legacySourceOutput.includes("SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID içermemeli")) {
+      console.error("Production evidence template kontrolü başarısız: legacy outbox source staging secret negative kırılmadı.");
+      console.error(legacySourceOutput);
+      process.exit(1);
+    }
+
     const workflow = readFileSync(".github/workflows/staging-deploy.yml", "utf8");
     const cleanupBlock = `      - name: Cleanup staging evidence env
         if: always()
         shell: bash
         run: rm -f .staging-evidence.env`;
     const uploadBlock = `      - uses: actions/upload-artifact@v4
-        if: \${{ always() && (github.event_name != 'workflow_dispatch' || inputs.full_evidence != true) }}
+        if: \${{ success() }}
         with:
-          name: staging-activation-evidence-\${{ needs.build-images.outputs.image-tag }}
-          path: artifacts/staging
-          if-no-files-found: ignore
+          name: staging-deployment-cutover-\${{ github.run_id }}
+          path: artifacts/staging/reports/deployment-cutover.json
+          if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
-        if: \${{ always() && github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}
+        if: \${{ always() }}
         with:
-          name: staging-production-evidence-\${{ needs.build-images.outputs.image-tag }}
+          name: staging-activation-evidence-\${{ needs.build-images.outputs.image-tag }}
           path: artifacts/staging
           if-no-files-found: ignore`;
     const expectedSequence = `${cleanupBlock}\n\n${uploadBlock}`;
@@ -5626,6 +5693,7 @@ function runStagingEvidenceEnvNegativeCheck() {
       "docs/evidence-templates/staging-evidence.missing-audit-null-tenant.tmp.env",
       "docs/evidence-templates/staging-evidence.missing-ui-worker-result.tmp.env",
       "docs/evidence-templates/staging-evidence.defaulted-smoke.tmp.env",
+      "docs/evidence-templates/staging-evidence.legacy-outbox-source.tmp.env",
       workflowPath,
     ]) {
       try {
@@ -6078,6 +6146,21 @@ function runStagingReleaseArtifactsBundleCheck() {
       `${reportsDir}/github-ci.json`,
       `${JSON.stringify({ result: "PASS", ...summary.reports.githubCi, gaps: [] }, null, 2)}\n`,
     );
+    const cutover = normalizeDateStrings(
+      JSON.parse(readFileSync("docs/evidence-templates/deployment-cutover.example.json", "utf8")),
+      evidenceTime,
+    );
+    cutover.sourceSha = summary.reports.githubCi.commitSha;
+    cutover.releaseImageTag = summary.smokeEvidence.secretDeliveryOutbox.releaseImageTag;
+    cutover.repository = summary.reports.githubCi.repository;
+    cutover.cutoverAt = summary.smokeEvidence.secretDeliveryOutbox.notBefore;
+    cutover.serviceImages = Object.fromEntries(
+      Object.keys(cutover.serviceImages).map((service) => [
+        service,
+        `ghcr.io/${cutover.repository}/${service}:${cutover.releaseImageTag}`,
+      ]),
+    );
+    writeFileSync(`${reportsDir}/deployment-cutover.json`, `${JSON.stringify(cutover, null, 2)}\n`);
 
     const firstGatePayloads = {
       "traefik-https.json": {
@@ -6151,6 +6234,34 @@ function runStagingReleaseArtifactsBundleCheck() {
       console.error(positive.stdout);
       console.error(positive.stderr);
       process.exit(positive.status ?? 1);
+    }
+
+    const deploymentCutoverPath = `${reportsDir}/deployment-cutover.json`;
+    const originalDeploymentCutover = readFileSync(deploymentCutoverPath, "utf8");
+    try {
+      const mismatchedDeploymentCutover = JSON.parse(originalDeploymentCutover);
+      mismatchedDeploymentCutover.sourceSha = "2".repeat(40);
+      writeFileSync(deploymentCutoverPath, `${JSON.stringify(mismatchedDeploymentCutover, null, 2)}\n`);
+      const cutoverBindingNegative = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
+        env: {
+          ...process.env,
+          STAGING_RELEASE_ARTIFACTS_TARGET: root,
+          STAGING_RELEASE_ARTIFACTS_ALLOW_EXAMPLE_EVIDENCE: "1",
+        },
+        encoding: "utf8",
+      });
+      const cutoverBindingOutput = `${cutoverBindingNegative.stdout ?? ""}${cutoverBindingNegative.stderr ?? ""}`;
+      if (cutoverBindingNegative.status === 0) {
+        console.error("Production evidence template kontrolü başarısız: staging release cutover SHA binding negative kırılmadı.");
+        process.exit(1);
+      }
+      if (!cutoverBindingOutput.includes("reports/deployment-cutover.json.sourceSha, summary.reports.uiUxRedesign.sourceCommitSha ve summary.reports.githubCi.commitSha aynı SHA olmalı.")) {
+        console.error("Production evidence template kontrolü başarısız: staging release cutover SHA binding beklenen hata yok.");
+        console.error(cutoverBindingOutput);
+        process.exit(1);
+      }
+    } finally {
+      writeFileSync(deploymentCutoverPath, originalDeploymentCutover);
     }
 
     const originalSummary = readFileSync(releaseSummaryPath, "utf8");

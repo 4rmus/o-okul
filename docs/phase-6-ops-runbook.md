@@ -465,21 +465,20 @@ koymayın.
 
 ### Secret delivery outbox staging smoke
 
-`SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID`, en az iki deneme görmüş, son 24 saat içinde güncellenmiş ve
-yalnız `DELIVERED` durumuna ulaşmış staging smoke kaydını işaret eder. Tam kanıt koşusu ayrıca cutover
-sonrası üretilmiş `SECRET_DELIVERY_OUTBOX_NOT_BEFORE` ile güncel `IMAGE_TAG`'i
-`SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG` olarak verir; iki terminal zaman da `notBefore` sonrasında
-olmalıdır. Source ID artifact'a yazılmaz.
+Staging deploy, exact dört servis tag'i ve first-gates sonrası PII-safe `deployment-cutover.json` artifact'i
+üretir. Operatör, retry edilmiş `DELIVERED` source ID'yi GitHub input/secret/log/artifact'a koymadan yalnız
+`$(dirname "$STAGING_DEPLOY_DIR")/o-okul-private/secret-delivery-outbox/<releaseImageTag>/source-id`
+yoluna koyar. Sibling private root ve tag dizini `0700`, regular dosya `0600`, aynı remote kullanıcı sahibi
+olmalıdır; symlink kabul edilmez. Verify-only dispatch yalnız `deploy_run_id` alır, önce indirilen cutover
+artifact'i ve güncel dört container tag'ini doğrular; drift varsa source okunmadan kırılır. Workflow source
+dosyasını ve geçici helper'ları her sonuçta siler; runner/SSH kesintisinde on-call sahibi 24 saat içinde aynı
+yoldaki dosyayı silmeli ve source değeri olmadan incident/audit referansını kaydetmelidir. Yeni verify için
+yeni source kaydı gerekir.
 
 ```sh
-SECRET_DELIVERY_OUTBOX_NOT_BEFORE="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" \
-SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG="$IMAGE_TAG" \
-SECRET_DELIVERY_OUTBOX_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/secret-delivery-outbox.json \
-pnpm secret-delivery-outbox:staging:smoke
-
-SECRET_DELIVERY_OUTBOX_EVIDENCE_TARGET=file://$PWD/artifacts/staging/smoke/secret-delivery-outbox.json \
-SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG="$IMAGE_TAG" \
-pnpm secret-delivery-outbox:evidence:check
+GitHub Actions’tan **Staging Outbox Verify** workflow’unu yalnız deploy run ID ile çalıştırın. Workflow
+cutover artifact'inden `notBefore` ve image tag'ini alır; source dosyası worker image içindeki read-only mount
+ile okunur.
 ```
 
 Artifact yalnız `outboxRecordHash`, `purpose`, retry sayısı, teslim/güncelleme zamanı, terminal durum,
@@ -963,12 +962,17 @@ Beklenen akış:
   komutuyla manifest'i, iki artifact'i, artifact ortamlarının manifest ortamıyla eşleştiğini ve manifest
   zamanının artifact `generatedAt`/`checkedAt` zamanlarından önce olmadığını tekrar doğrular; manifest target lokal temp path, `artifacts/local/**`, symlink dosya veya symlink parent directory olamaz. Artifact upload adımı `if: always()` ile çalışır ve
   full production evidence zinciri sonradan düşse bile üretilen first-gates artifact'lerini saklar.
-- Manuel `workflow_dispatch` çalışmasında `full_evidence=true` verilirse GitHub runner doğrulanmış
+- Full production evidence, **Staging Outbox Verify** workflow'unda seçilen deploy run'ın cutover artifact'i
+  ve dört çalışan servis tag'i doğrulandıktan sonra çalışır; `full_evidence` staging deploy input'u kaldırılmıştır.
+  Verify workflow sanitize edilmiş outbox artifact'ini toplar ve ardından GitHub runner doğrulanmış
   production evidence env sözleşmesiyle
   `pnpm prod:evidence:check -- --summary-file artifacts/staging/release-summary-<tag>.json`
-  komutunu çalıştırır. Bu komut release summary dosyasını yazdıktan sonra aynı summary'yi
+  komutunu çalıştırır. Yalnız bu staging verify akışı `PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX=1`
+  ile outbox smoke'un `environment=staging` kaydını kabul eder; production/go-live çalışmaları bu
+  istisnayı taşımaz. Bu komut release summary dosyasını yazdıktan sonra aynı summary'yi
   `scripts/check-production-evidence-summary.mjs` ile doğrular ve `artifacts/staging`
-  klasörünü artifact olarak saklar. `--summary-file`, sibling `reports/` ve `smoke/` output
+  klasörünü artifact olarak saklar. Aynı source SHA, GitHub CI ve UI/UX artifact'i ile
+  `pnpm ui-ux-professionalization:completion:check` full-evidence modu da çalışır. `--summary-file`, sibling `reports/` ve `smoke/` output
   layout'u lokal temp path veya symlink file/directory üzerinden yazılamaz; birleşik kapı bunu
   evidence check'leri başlamadan önce reddeder. Birleşik kapı ayrıca `*_SMOKE_EVIDENCE_FILE`
   raw smoke target'larını provider/HTTP/DB smoke'ları başlamadan önce production artifact girdisi
@@ -984,13 +988,14 @@ Beklenen akış:
   adımıyla `.staging-evidence.env` secret dosyasını workspace'ten siler. Otomatik staging deploy
   bu full evidence adımını koşmaz; eksik go-live artifact'leri otomatik deploy sonucunu hatalı
   biçimde failed yapmaz ve yalnız `staging-activation-evidence-<tag>` artifact'ini yayımlar.
-  `staging-production-evidence-<tag>` adı yalnız manuel `full_evidence=true` zincirine ayrılmıştır.
-- Full evidence zinciri PASS olduktan sonra workflow aynı job içinde
+- Full evidence zinciri PASS olduktan sonra **Staging Outbox Verify** workflow'u
   `STAGING_RELEASE_ARTIFACTS_TARGET=$PWD/artifacts/staging pnpm staging:release-artifacts:check`
-  komutunu çalıştırır. Bu kontrol indirilecek `staging-production-evidence-<tag>` artifact setinde
-  `reports/*.json`, `first-gates/first-gates-manifest.json`, tek `release-summary-*.json`
-  ve `smoke/*.json` ham kanıt dosyalarının mevcut olduğunu, mevcut checker'larla geçtiklerini ve
-  release summary içindeki gömülü kanıtlarla birebir eşleştiklerini doğrular. `release-summary-<tag>.json`
+  komutunu çalıştırır. Bu kontrol indirilecek
+  `staging-outbox-verify-<deploy-run-id>-<verify-run-id>` artifact setinde `reports/deployment-cutover.json`,
+  diğer `reports/*.json`, `first-gates/first-gates-manifest.json`, tek `release-summary-*.json` ve
+  `smoke/*.json` ham kanıt dosyalarının mevcut olduğunu doğrular. Cutover SHA/repository/tag/zamanı release
+  summary ve outbox smoke ile birebir eşleşmelidir; publish öncesinde dört çalışan image tag'i tekrar
+  denetlenir. `release-summary-<tag>.json`
   dosya adındaki tag, summary içindeki `reports.deploymentRollback.releaseCandidate` image tag'iyle
   eşleşmelidir. Bundle yalnız beklenen root, `reports/`, `smoke/` ve `first-gates/` dosyalarını
   içerebilir; beklenmeyen raw JSON/log dosyası kalırsa kontrol kırılır. Bundle symlink içeremez;

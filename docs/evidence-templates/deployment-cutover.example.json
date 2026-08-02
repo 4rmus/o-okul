@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "result": "PASS",
+  "check": "staging_deployment_cutover",
+  "environment": "staging",
+  "generatedAt": "2026-08-02T12:00:00.000Z",
+  "deployRunId": "1234567890",
+  "repository": "example/o-okul",
+  "sourceSha": "1111111111111111111111111111111111111111",
+  "releaseImageTag": "1111111111111111111111111111111111111111",
+  "cutoverAt": "2026-08-02T11:59:00.000Z",
+  "serviceImages": {
+    "api": "ghcr.io/example/o-okul/api:1111111111111111111111111111111111111111",
+    "queue-board": "ghcr.io/example/o-okul/queue-board:1111111111111111111111111111111111111111",
+    "web": "ghcr.io/example/o-okul/web:1111111111111111111111111111111111111111",
+    "worker": "ghcr.io/example/o-okul/worker:1111111111111111111111111111111111111111"
+  }
+}

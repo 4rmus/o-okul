@@ -149,8 +149,8 @@ function requireCutoverNotBefore(value, generatedAt, failures) {
     failures.push("notBefore geçerli ISO tarih olmalı.");
     return;
   }
-  if (Number.isFinite(generatedTimestamp) && (timestamp > generatedTimestamp || generatedTimestamp - timestamp > 15 * 60 * 1000)) {
-    failures.push("notBefore generatedAt öncesindeki son 15 dakika içinde olmalı.");
+  if (Number.isFinite(generatedTimestamp) && (timestamp > generatedTimestamp || generatedTimestamp - timestamp > 24 * 60 * 60 * 1000)) {
+    failures.push("notBefore generatedAt öncesindeki son 24 saat içinde olmalı.");
   }
 }
 

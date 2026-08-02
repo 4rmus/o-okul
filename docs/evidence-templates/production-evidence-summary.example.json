@@ -47,11 +47,6 @@
       "status": "PASS"
     },
     {
-      "label": "Secret delivery outbox staging smoke",
-      "script": "scripts/smoke-secret-delivery-outbox-staging.mjs",
-      "status": "PASS"
-    },
-    {
       "label": "Secret delivery outbox evidence",
       "script": "scripts/check-secret-delivery-outbox-evidence.mjs",
       "status": "PASS"

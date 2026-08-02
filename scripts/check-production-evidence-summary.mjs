@@ -8,6 +8,7 @@ import { validateUiUxRedesignBindings } from "./ui-ux-redesign-evidence-bindings
 const target = process.env.PRODUCTION_EVIDENCE_SUMMARY_TARGET ?? process.argv[2];
 const allowExampleEvidence = process.env.PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE === "1";
 const allowStagingUiUx = process.env.PRODUCTION_EVIDENCE_ALLOW_STAGING_UI_UX === "1";
+const allowStagingOutbox = process.env.PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX === "1";
 const trustedUiUxEvidenceHosts = (process.env.UI_UX_REDESIGN_ALLOWED_EVIDENCE_HOSTS ?? "")
   .split(",")
   .map((host) => host.trim())
@@ -26,7 +27,6 @@ const requiredChecks = new Map([
   ["Alert webhook", "scripts/smoke-alert-webhook.mjs"],
   ["WAL archive target", "scripts/smoke-wal-archive-target.mjs"],
   ["Report generation smoke", "scripts/smoke-report-generation-live.mjs"],
-  ["Secret delivery outbox staging smoke", "scripts/smoke-secret-delivery-outbox-staging.mjs"],
   ["Secret delivery outbox evidence", "scripts/check-secret-delivery-outbox-evidence.mjs"],
   ["Deployment rollback evidence", "scripts/check-deployment-rollback-evidence.mjs"],
   ["GitHub CI evidence", "scripts/check-github-ci-evidence.mjs"],
@@ -578,7 +578,13 @@ function requireSmokeEvidence(summary, failures) {
     );
     if (key === "secretDeliveryOutbox") requireSecretDeliveryOutboxSmoke(value[key], failures);
     if (value[key]) {
-      requireObjectEqual(value[key], failures, `smokeEvidence.${key}.environment`, "environment", "production");
+      if (key === "secretDeliveryOutbox" && allowStagingOutbox) {
+        if (!["staging", "production"].includes(value[key].environment)) {
+          failures.push("smokeEvidence.secretDeliveryOutbox.environment staging veya production olmalı.");
+        }
+      } else {
+        requireObjectEqual(value[key], failures, `smokeEvidence.${key}.environment`, "environment", "production");
+      }
       if (key === "traefikHttps") {
         requireMatchingUrlOrigin(value[key], failures, "smokeEvidence.traefikHttps.url", "url", summary, "webUrl", "webUrl");
       }
@@ -602,8 +608,8 @@ function requireSecretDeliveryOutboxSmoke(value, failures) {
   if (value.payloadCleared !== true) failures.push(`${label}.payloadCleared true olmalı.`);
   if (typeof value.releaseImageTag !== "string" || !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(value.releaseImageTag)) failures.push(`${label}.releaseImageTag güvenli IMAGE_TAG olmalı.`);
   requireObjectDate(value, failures, label, "notBefore");
-  if (Date.parse(value.notBefore) > Date.parse(value.generatedAt) || Date.parse(value.generatedAt) - Date.parse(value.notBefore) > 15 * 60 * 1000) {
-    failures.push(`${label}.notBefore generatedAt öncesindeki son 15 dakika içinde olmalı.`);
+  if (Date.parse(value.notBefore) > Date.parse(value.generatedAt) || Date.parse(value.generatedAt) - Date.parse(value.notBefore) > 24 * 60 * 60 * 1000) {
+    failures.push(`${label}.notBefore generatedAt öncesindeki son 24 saat içinde olmalı.`);
   }
   if (typeof value.outboxRecordHash !== "string" || !/^[a-f0-9]{64}$/.test(value.outboxRecordHash)) failures.push(`${label}.outboxRecordHash SHA-256 hex olmalı.`);
   if (!['IDENTITY_INVITATION', 'PASSWORD_RESET'].includes(value.purpose)) failures.push(`${label}.purpose geçersiz.`);
