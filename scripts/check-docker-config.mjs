@@ -19,6 +19,7 @@ const evidenceNginx = readFileSync("docker/evidence/nginx.conf", "utf8");
 const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
 const stagingDeployWorkflow = readFileSync(".github/workflows/staging-deploy.yml", "utf8");
 const secretDeliveryWorkerBootstrap = readFileSync("docker/postgres/init/003_bootstrap_secret_delivery_worker_role.sh", "utf8");
+const requiredExtensionsBootstrap = readFileSync("docker/postgres/init/004_bootstrap_required_extensions.sh", "utf8");
 
 const expectations = {
   "docker-compose.yml": [
@@ -286,6 +287,7 @@ const expectations = {
     "docker/postgres/init",
     "scripts",
     "003_bootstrap_secret_delivery_worker_role.sh",
+    "004_bootstrap_required_extensions.sh",
     "scp -i ~/.ssh/staging_deploy_key",
     "GHCR_READ_TOKEN",
     "GHCR_READ_TOKEN: ${{ github.token }}",
@@ -341,6 +343,11 @@ const expectations = {
     "ALTER ROLE secret_delivery_worker PASSWORD",
     "GRANT CONNECT ON DATABASE",
   ],
+  "docker/postgres/init/004_bootstrap_required_extensions.sh": [
+    "--username \"${POSTGRES_USER}\"",
+    "--dbname \"${POSTGRES_DB}\"",
+    "CREATE EXTENSION IF NOT EXISTS btree_gist",
+  ],
 };
 
 const files = {
@@ -363,6 +370,7 @@ const files = {
   ".github/workflows/ci.yml": workflow,
   ".github/workflows/staging-deploy.yml": stagingDeployWorkflow,
   "docker/postgres/init/003_bootstrap_secret_delivery_worker_role.sh": secretDeliveryWorkerBootstrap,
+  "docker/postgres/init/004_bootstrap_required_extensions.sh": requiredExtensionsBootstrap,
 };
 
 const failures = [];

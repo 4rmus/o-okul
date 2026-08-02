@@ -262,6 +262,10 @@ const files = {
     "docker/postgres/init/003_bootstrap_secret_delivery_worker_role.sh",
     "utf8",
   ),
+  "docker/postgres/init/004_bootstrap_required_extensions.sh": readFileSync(
+    "docker/postgres/init/004_bootstrap_required_extensions.sh",
+    "utf8",
+  ),
   ".github/workflows/staging-deploy.yml": readFileSync(".github/workflows/staging-deploy.yml", "utf8"),
   ".github/workflows/staging-outbox-verify.yml": readFileSync(".github/workflows/staging-outbox-verify.yml", "utf8"),
   "package.json": readFileSync("package.json", "utf8"),
@@ -1159,6 +1163,7 @@ const expectations = {
     "prune_old_release_images",
     "require_disk_space_mb 2048",
     "timeout 20m docker compose",
+    "004_bootstrap_required_extensions.sh",
     "003_bootstrap_secret_delivery_worker_role.sh",
     "actions: read",
     "test -s .staging-evidence.env",
@@ -1755,6 +1760,11 @@ const expectations = {
     "SECRET_DELIVERY_WORKER_DB_PASSWORD is required",
     "CREATE ROLE secret_delivery_worker LOGIN",
     "ALTER ROLE secret_delivery_worker PASSWORD",
+  ],
+  "docker/postgres/init/004_bootstrap_required_extensions.sh": [
+    "--username \"${POSTGRES_USER}\"",
+    "--dbname \"${POSTGRES_DB}\"",
+    "CREATE EXTENSION IF NOT EXISTS btree_gist",
   ],
   "apps/api/src/tenant/tenant.controller.ts": ["TENANT_HARD_DELETE_RETIRED", "GoneException"],
   "apps/api/src/tenant/tenant-store.ts": [

@@ -502,6 +502,14 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.release.yml \
             -f "$EDGE_COMPOSE_FILE" \
+            exec -T postgres sh /docker-entrypoint-initdb.d/004_bootstrap_required_extensions.sh < /dev/null
+
+          docker compose \
+            --env-file .env \
+            --env-file "$release_env_file" \
+            -f docker-compose.yml \
+            -f docker-compose.release.yml \
+            -f "$EDGE_COMPOSE_FILE" \
             exec -T postgres sh /docker-entrypoint-initdb.d/003_bootstrap_secret_delivery_worker_role.sh < /dev/null
 
           docker compose \
