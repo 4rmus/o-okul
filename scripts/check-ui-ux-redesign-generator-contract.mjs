@@ -157,7 +157,7 @@ function expectBlankPngFailure() {
   const artifactPath = join(artifactRoot, "dashboard-320.png");
   const original = readFileSync(artifactPath);
   try {
-    writeFileSync(artifactPath, minimalPng(320, 900, true));
+    writeFileSync(artifactPath, minimalPng(320, 1, true));
     const result = runGenerator(envPath, join(root, "reports", "blank-png.json"));
     if (result.status === 0) failContract("boş PNG artifact generator senaryosunu kırmalı.", result);
     assertMessages(result, "blank PNG", ["PNG kanıtı boş/şeffaf pixel verisi içeremez"]);
@@ -167,18 +167,18 @@ function expectBlankPngFailure() {
 }
 
 function expectTransparentPngFailure() {
-  expectPngFailure("transparent-png", minimalPng(320, 900, "transparent"), "tamamen şeffaf PNG artifact generator senaryosunu kırmalı.");
+  expectPngFailure("transparent-png", minimalPng(320, 1, "transparent"), "tamamen şeffaf PNG artifact generator senaryosunu kırmalı.");
 }
 
 function expectSolidPngFailure() {
-  expectPngFailure("solid-png", minimalPng(320, 900, "solid"), "tek renk PNG artifact generator senaryosunu kırmalı.");
+  expectPngFailure("solid-png", minimalPng(320, 1, "solid"), "tek renk PNG artifact generator senaryosunu kırmalı.");
 }
 
 function expectUnsupportedPngFailure() {
   const artifactPath = join(artifactRoot, "dashboard-320.png");
   const original = readFileSync(artifactPath);
   try {
-    writeFileSync(artifactPath, unsupported16BitPng(320, 900));
+    writeFileSync(artifactPath, unsupported16BitPng(320, 1));
     const result = runGenerator(envPath, join(root, "reports", "unsupported-png.json"));
     if (result.status === 0) failContract("16-bit PNG artifact generator senaryosunu kırmalı.", result);
     assertMessages(result, "unsupported PNG", ["PNG renk tipi veya bit derinliği geçersiz"]);
@@ -380,7 +380,7 @@ function createEvidenceArtifacts() {
   }
   for (const surface of ["dashboard", "optik", "rapor", "portal"]) {
     for (const width of [320, 375, 414, 768, 1024, 1440]) {
-      writeFileSync(join(artifactRoot, `${surface}-${width}.png`), minimalPng(width, 900));
+      writeFileSync(join(artifactRoot, `${surface}-${width}.png`), minimalPng(width, 1));
     }
   }
   const reviewedPngSha256 = ["dashboard", "optik", "rapor", "portal"].flatMap((surface) =>
