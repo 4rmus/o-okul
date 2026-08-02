@@ -342,6 +342,8 @@ function checkOutboxVerifyWorkflowContract(output) {
     "require_running_image queue-board",
     "o-okul-private/secret-delivery-outbox",
     "SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_FILE=/run/outbox-source/source-id",
+    "Upload sanitized Phase B outbox evidence",
+    "staging-outbox-smoke-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}",
     "PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX=1",
     "pnpm staging:evidence-env:check -- --mode full --env-file .staging-evidence.env",
     "Bind verified UI/UX completion to full evidence",

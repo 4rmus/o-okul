@@ -494,6 +494,10 @@ Artifact yalnız `outboxRecordHash`, `purpose`, retry sayısı, teslim/güncelle
 payload taşınması fail-closed reddedilir. Bu ayrı DB rolü ve delivery-state kanıtıdır; gerçek inbox/provider
 teslimatı ile KVKK/DPA kanıtı ayrı live gate olarak kalır. Template kontrolü veya local script geçişi bunların
 yerine geçmez.
+Sanitize edilmiş Phase B sonucu doğrulamadan hemen sonra
+`staging-outbox-smoke-<deploy-run-id>-<verify-run-id>` adıyla ayrıca upload edilir. Sonraki full production
+evidence kapısı kırmızı olsa bile bu dar artifact korunur; `staging-outbox-verify-*` full release bundle'ı
+yine yalnız tüm full-evidence ve release-artifact kapıları geçtiğinde yayımlanır.
 - PR-4 rollback önceki web+API image çiftidir. Additive kolonlar ve legacy membership satırları yerinde
   kalır; backfill tersine çevrilmez, global e-posta unique geri getirilmez ve canonical alanlar drop edilmez.
   Rollback sonrasında yeniden cutover öncesi backfill checker ve aktif session legacy-role parity çalıştırılır.

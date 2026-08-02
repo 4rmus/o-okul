@@ -232,6 +232,13 @@ jobs:
           SECRET_DELIVERY_OUTBOX_EVIDENCE_TARGET="file://$PWD/artifacts/secret-delivery-outbox.json" SECRET_DELIVERY_OUTBOX_NOT_BEFORE="$CUTOVER_AT" SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG="$CUTOVER_RELEASE_IMAGE_TAG" \
             node scripts/check-secret-delivery-outbox-evidence.mjs
 
+      - name: Upload sanitized Phase B outbox evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-outbox-smoke-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}
+          path: artifacts/secret-delivery-outbox.json
+          if-no-files-found: error
+
       - name: Run configured production evidence aggregation
         shell: bash
         env:
