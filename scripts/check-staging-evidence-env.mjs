@@ -262,10 +262,13 @@ function checkWorkflowContract(output) {
 
   requireWorkflowOrder(output, workflow, "preflight staging env check order", [
     "Check staging evidence env before deploy",
+    "FULL_EVIDENCE: ${{ inputs.full_evidence }}",
     "trap 'rm -f .staging-evidence.env' EXIT",
     "base64 -d > .staging-evidence.env",
     "test -s .staging-evidence.env",
     "pnpm staging:evidence-env:check -- --env-file .staging-evidence.env",
+    "if [ \"$GITHUB_EVENT_NAME\" = \"workflow_dispatch\" ] && [ \"${FULL_EVIDENCE:-false}\" = \"true\" ]; then",
+    "pnpm staging:evidence-env:check -- --env-file .staging-evidence.env --require-secret-delivery-outbox-smoke",
   ]);
   requireWorkflowOrder(output, workflow, "GitHub CI evidence artifact order", [
     "Generate GitHub CI evidence before deploy",

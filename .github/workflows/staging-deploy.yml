@@ -154,6 +154,7 @@ jobs:
         shell: bash
         env:
           STAGING_EVIDENCE_ENV_B64: ${{ secrets.STAGING_EVIDENCE_ENV_B64 }}
+          FULL_EVIDENCE: ${{ inputs.full_evidence }}
         run: |
           set -euo pipefail
           trap 'rm -f .staging-evidence.env' EXIT
@@ -161,6 +162,9 @@ jobs:
           printf '%s' "$STAGING_EVIDENCE_ENV_B64" | base64 -d > .staging-evidence.env
           test -s .staging-evidence.env
           pnpm staging:evidence-env:check -- --env-file .staging-evidence.env
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "${FULL_EVIDENCE:-false}" = "true" ]; then
+            pnpm staging:evidence-env:check -- --env-file .staging-evidence.env --require-secret-delivery-outbox-smoke
+          fi
 
   github-ci-evidence:
     needs: preflight
