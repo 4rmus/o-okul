@@ -198,6 +198,9 @@ pnpm backup:restore:smoke
   UI/UX redesign release candidate ve GitHub run referansları staging workflow'un `GITHUB_REPOSITORY`
   slug'ıyla aynı olmalıdır; bu hatta gerçek repo slug `4rmus/o-okul` olduğu için image prefix
   `ghcr.io/4rmus/o-okul` olmalıdır.
+  Verify-only workflow host `.env` dosyasında `ADMIN_MFA_MODE=required` değerini doğrular ve full
+  evidence env içindeki aynı alanı bu doğrulanmış runtime politikasına bağlar; eski `optional` secret
+  kopyası Phase B'yi yanlış negatifte bırakamaz.
   `pnpm staging:evidence-env:secret:set` varsayılan olarak aynı tam doğrulamayı çalıştırır;
   yalnız normal cutover secret senkronu için açıkça `--mode activation` verilebilir. Helper repo/temp/symlink
   dosyalarını reddeder ve `STAGING_EVIDENCE_ENV_B64` değerini GitHub environment secret'a stdin üzerinden yazar.
