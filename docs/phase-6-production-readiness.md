@@ -196,8 +196,9 @@ pnpm backup:restore:smoke
   UI/UX redesign release candidate ve GitHub run referansları staging workflow'un `GITHUB_REPOSITORY`
   slug'ıyla aynı olmalıdır; bu hatta gerçek repo slug `4rmus/o-okul` olduğu için image prefix
   `ghcr.io/4rmus/o-okul` olmalıdır.
-  `pnpm staging:evidence-env:secret:set` aynı doğrulamayı çalıştırır, repo/temp/symlink dosyalarını
-  reddeder ve `STAGING_EVIDENCE_ENV_B64` değerini GitHub environment secret'a stdin üzerinden yazar.
+  `pnpm staging:evidence-env:secret:set` varsayılan olarak aynı tam doğrulamayı çalıştırır;
+  yalnız normal cutover secret senkronu için açıkça `--mode activation` verilebilir. Helper repo/temp/symlink
+  dosyalarını reddeder ve `STAGING_EVIDENCE_ENV_B64` değerini GitHub environment secret'a stdin üzerinden yazar.
   `pnpm staging:ghcr-read-token:secret:set` GHCR read token dosyasını aynı şekilde repo/temp/symlink
   dışı ve `chmod 600` zorunlu tutarak `GHCR_READ_TOKEN` secret'ına stdin üzerinden yazar.
 - Production kanıt şablonları `pnpm prod:evidence:templates:check` ile repo içinde doğrulanır.

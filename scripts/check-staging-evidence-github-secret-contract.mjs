@@ -28,6 +28,7 @@ writeFakeGh();
 
 try {
   expectSetPass();
+  expectActivationSetPass();
   expectDryRunDoesNotCallGh();
   expectGhFailureDoesNotLeakOutput();
   expectFailure(
@@ -35,6 +36,9 @@ try {
     ["--repo", "owner/repo", "--environment", "staging", "--gh-bin", fakeGhPath],
     ["--env-file için özel staging evidence env dosyası gerekli."],
   );
+  expectFailure("invalid validation mode", ["--repo", "owner/repo", "--env-file", validEnvPath, "--mode", "invalid"], [
+    "--mode yalnız activation veya full olabilir.",
+  ]);
   expectFailure("loose file mode", ["--repo", "owner/repo", "--env-file", looseModeEnvFile()], [
     "chmod 600",
   ]);
@@ -53,6 +57,30 @@ try {
 } finally {
   rmSync(root, { recursive: true, force: true });
   rmSync(repoPath, { recursive: true, force: true });
+}
+
+function expectActivationSetPass() {
+  const captureDir = resetCapture("activation-pass");
+  const activationEnvPath = join(root, "staging-activation.env");
+  writeFileSync(activationEnvPath, readFileSync(validEnvPath, "utf8").replace("ADMIN_MFA_MODE=required", "ADMIN_MFA_MODE=optional"));
+  chmodSync(activationEnvPath, 0o600);
+  const result = runHelper([
+    "--repo",
+    "owner/repo",
+    "--environment",
+    "staging",
+    "--mode",
+    "activation",
+    "--env-file",
+    activationEnvPath,
+  ], {
+    FAKE_GH_CAPTURE_DIR: captureDir,
+    FAKE_GH_SCENARIO: "pass",
+  });
+  if (result.status !== 0) {
+    failContract("activation secret set senaryosu geçmeli.", result);
+  }
+  assertNoSecretLeak(result, "activation secret set");
 }
 
 console.log("Staging evidence GitHub secret contract kontrolü geçti.");
