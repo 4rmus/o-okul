@@ -504,6 +504,9 @@ Sanitize edilmiş Phase B sonucu doğrulamadan hemen sonra
 `staging-outbox-smoke-<deploy-run-id>-<verify-run-id>` adıyla ayrıca upload edilir. Sonraki full production
 evidence kapısı kırmızı olsa bile bu dar artifact korunur; `staging-outbox-verify-*` full release bundle'ı
 yine yalnız tüm full-evidence ve release-artifact kapıları geçtiğinde yayımlanır.
+Full aggregation, private env dosyasındaki UI/UX GitHub run referansını seçilen deploy'un indirilen
+`github-ci.json` artifact'indeki exact run URL'sine çalışma anında bağlar; secret içeriğini loglamaz ve
+env dosyasını `0600` modunda tutar. Böylece eski bir template run URL'si yeni cutover kanıtına karışamaz.
 - PR-4 rollback önceki web+API image çiftidir. Additive kolonlar ve legacy membership satırları yerinde
   kalır; backfill tersine çevrilmez, global e-posta unique geri getirilmez ve canonical alanlar drop edilmez.
   Rollback sonrasında yeniden cutover öncesi backfill checker ve aktif session legacy-role parity çalıştırılır.

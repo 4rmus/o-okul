@@ -299,10 +299,37 @@ jobs:
           set -euo pipefail
           trap 'rm -f -- .staging-evidence.env' EXIT
           printf '%s' "$STAGING_EVIDENCE_ENV_B64" | base64 -d > .staging-evidence.env
+          chmod 600 .staging-evidence.env
           sed -i 's/^ADMIN_MFA_MODE=.*/ADMIN_MFA_MODE=required/' .staging-evidence.env
           grep -Fxq 'ADMIN_MFA_MODE=required' .staging-evidence.env
           pnpm staging:evidence-env:check -- --mode full --env-file .staging-evidence.env
           node scripts/append-staging-evidence-tunnel-env.mjs --env-file .staging-evidence.env --postgres-port 15432 --redis-port 16379
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+
+          const envPath = ".staging-evidence.env";
+          const githubCi = JSON.parse(readFileSync("artifacts/staging/reports/github-ci.json", "utf8"));
+          const repository = process.env.CUTOVER_REPOSITORY;
+          const runId = String(githubCi.workflow?.runId ?? "");
+          const expectedRunUrl = `https://github.com/${repository}/actions/runs/${runId}`;
+          if (githubCi.repository !== repository || !/^\d+$/.test(runId) || githubCi.workflow?.runUrl !== expectedRunUrl) {
+            throw new Error("Cutover GitHub CI evidence run URL/repository bağı geçersiz.");
+          }
+
+          const source = readFileSync(envPath, "utf8");
+          const key = "UI_UX_REDESIGN_STAGING_EVIDENCE_REFERENCES";
+          const lines = source.split("\n");
+          const matches = lines.flatMap((line, index) => line.startsWith(`${key}=`) ? [index] : []);
+          if (matches.length !== 1) throw new Error(`${key} tam olarak bir kez tanımlanmalı.`);
+          const index = matches[0];
+          const references = lines[index].slice(key.length + 1).split(",");
+          if (references.length !== 4 || !references[0] || !references[2] || !references[3]) {
+            throw new Error(`${key} summary, GitHub run, UAT ve privacy sırasını korumalı.`);
+          }
+          references[1] = `run:${githubCi.workflow.runUrl}`;
+          lines[index] = `${key}=${references.join(",")}`;
+          writeFileSync(envPath, lines.join("\n"), { mode: 0o600 });
+          NODE
           mkdir -p artifacts/staging/smoke artifacts/staging/reports
           cp artifacts/secret-delivery-outbox.json artifacts/staging/smoke/secret-delivery-outbox.json
           cp artifacts/cutover/deployment-cutover.json artifacts/staging/reports/deployment-cutover.json
