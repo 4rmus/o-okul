@@ -11,11 +11,6 @@ on:
         description: "Last known-good image tag for rollback evidence."
         required: true
         type: string
-      full_evidence:
-        description: "Run the full production evidence chain after first staging gates."
-        required: false
-        default: false
-        type: boolean
   workflow_run:
     workflows:
       - CI
@@ -160,7 +155,7 @@ jobs:
 
           printf '%s' "$STAGING_EVIDENCE_ENV_B64" | base64 -d > .staging-evidence.env
           test -s .staging-evidence.env
-          pnpm staging:evidence-env:check -- --env-file .staging-evidence.env
+          pnpm staging:evidence-env:check -- --mode activation --env-file .staging-evidence.env
 
   github-ci-evidence:
     needs: preflight
@@ -339,11 +334,13 @@ jobs:
           tar -czf /tmp/o-okul-staging-compose.tgz \
             docker-compose.yml \
             docker-compose.release.yml \
+            docker-compose.rate-limit-shard.yml \
             docker-compose.traefik.yml \
             docker-compose.traefik-ip.yml \
             docker-compose.observability.yml \
             docker/evidence \
-            docker/postgres/init
+            docker/postgres/init \
+            scripts
 
           ssh -i ~/.ssh/staging_deploy_key \
             -o StrictHostKeyChecking=accept-new \
@@ -497,7 +494,57 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.release.yml \
             -f "$EDGE_COMPOSE_FILE" \
-            run --rm -T api sh -lc 'cd packages/db && ./node_modules/.bin/prisma migrate deploy --config prisma.config.ts' < /dev/null
+            up -d postgres
+
+          docker compose \
+            --env-file .env \
+            --env-file "$release_env_file" \
+            -f docker-compose.yml \
+            -f docker-compose.release.yml \
+            -f "$EDGE_COMPOSE_FILE" \
+            exec -T postgres sh /docker-entrypoint-initdb.d/004_bootstrap_required_extensions.sh < /dev/null
+
+          docker compose \
+            --env-file .env \
+            --env-file "$release_env_file" \
+            -f docker-compose.yml \
+            -f docker-compose.release.yml \
+            -f "$EDGE_COMPOSE_FILE" \
+            exec -T postgres sh /docker-entrypoint-initdb.d/003_bootstrap_secret_delivery_worker_role.sh < /dev/null
+
+          backend_compose=(
+            env API_PROXY_IP="${PRE_CUTOVER_API_PROXY_IP:-172.31.255.6}"
+            docker compose
+            --env-file .env
+            --env-file "$release_env_file"
+            -f docker-compose.yml
+            -f docker-compose.release.yml
+          )
+
+          "${backend_compose[@]}" run --rm --no-deps -T api sh -lc 'cd packages/db && ./node_modules/.bin/prisma migrate deploy --config prisma.config.ts' < /dev/null
+
+          mkdir -p artifacts/staging/reports
+
+          # Account management preflight before legacy access cutover. Legacy login remains
+          # authoritative until the additive migration is followed by a PASS parity artifact.
+          # Account management backfill and parity gate before app start; any ambiguity blocks boot.
+          "${backend_compose[@]}" run --rm --no-deps -T \
+            -v "$PWD/scripts:/app/scripts:ro" \
+            -v "$PWD/artifacts:/app/artifacts" \
+            -e STAGING_ENVIRONMENT=staging \
+            -e ACCOUNT_MANAGEMENT_GUARDIAN_CLASSIFICATION \
+            -e ACCOUNT_MANAGEMENT_GUARDIAN_EVIDENCE_REFERENCE \
+            -e ACCOUNT_MANAGEMENT_PREFLIGHT_OUTPUT=artifacts/staging/reports/account-management-preflight.json \
+            api node scripts/generate-account-management-preflight.mjs < /dev/null
+
+          "${backend_compose[@]}" run --rm --no-deps -T \
+            -v "$PWD/scripts:/app/scripts:ro" \
+            -v "$PWD/artifacts:/app/artifacts" \
+            -e STAGING_ENVIRONMENT=staging \
+            -e ACCOUNT_MANAGEMENT_BACKFILL_MODE=APPLY \
+            -e ACCOUNT_MANAGEMENT_BACKFILL_CONFIRM=apply-pr4-backfill \
+            -e ACCOUNT_MANAGEMENT_BACKFILL_OUTPUT=artifacts/staging/reports/account-management-backfill.json \
+            api node scripts/backfill-account-management.mjs < /dev/null
 
           docker compose \
             --env-file .env \
@@ -606,63 +653,12 @@ jobs:
           test -s .staging-evidence.env
 
       - name: Check staging evidence env
-        run: pnpm staging:evidence-env:check -- --env-file .staging-evidence.env
-
-      - name: Configure SSH for evidence tunnels
-        shell: bash
-        env:
-          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
-        run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          printf '%s\n' "$STAGING_SSH_PRIVATE_KEY" > ~/.ssh/staging_deploy_key
-          chmod 600 ~/.ssh/staging_deploy_key
-
-      - name: Open staging data tunnels
-        shell: bash
-        env:
-          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
-          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
-        run: |
-          set -euo pipefail
-          ssh -i ~/.ssh/staging_deploy_key \
-            -fN \
-            -o ExitOnForwardFailure=yes \
-            -o StrictHostKeyChecking=accept-new \
-            -L 127.0.0.1:15432:127.0.0.1:5432 \
-            -L 127.0.0.1:16379:127.0.0.1:6379 \
-            "$STAGING_SSH_USER@$STAGING_SSH_HOST"
-
-          node scripts/append-staging-evidence-tunnel-env.mjs \
-            --env-file .staging-evidence.env \
-            --postgres-port 15432 \
-            --redis-port 16379
+        run: pnpm staging:evidence-env:check -- --mode activation --env-file .staging-evidence.env
 
       - name: Check pre-deploy GitHub CI evidence
         shell: bash
         run: |
           GITHUB_CI_EVIDENCE_TARGET="file://$PWD/artifacts/staging/reports/github-ci.json" pnpm github-ci:check
-
-      - name: Generate UI/UX redesign evidence
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}
-        shell: bash
-        env:
-          IMAGE_PREFIX: ${{ needs.build-images.outputs.image-prefix }}
-          IMAGE_TAG: ${{ needs.build-images.outputs.image-tag }}
-          SOURCE_COMMIT_SHA: ${{ needs.build-images.outputs.deploy-sha }}
-          GITHUB_TOKEN: ${{ github.token }}
-          GITHUB_CI_EVIDENCE_TARGET: file://${{ github.workspace }}/artifacts/staging/reports/github-ci.json
-          UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES: "1"
-        run: |
-          if [ "$IMAGE_TAG" != "$SOURCE_COMMIT_SHA" ]; then
-            echo "UI/UX release evidence requires the deployed image tag to equal the source commit SHA." >&2
-            exit 1
-          fi
-          UI_UX_REDESIGN_EVIDENCE_OUTPUT="artifacts/staging/reports/ui-ux-redesign.json" \
-          UI_UX_REDESIGN_RELEASE_CANDIDATE="${IMAGE_PREFIX}/api:${IMAGE_TAG}" \
-          UI_UX_REDESIGN_SOURCE_COMMIT_SHA="$SOURCE_COMMIT_SHA" \
-          UI_UX_REDESIGN_CHECKED_AT="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" \
-            pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env --environment staging
 
       - name: Bind local UI/UX completion to verified source
         shell: bash
@@ -684,11 +680,6 @@ jobs:
             echo "PRODUCTION_EVIDENCE_SUMMARY_TARGET=file://$PWD/artifacts/staging/release-summary-${IMAGE_TAG}.json"
           } >> .staging-evidence.env
 
-      - name: Append full UI/UX release evidence metadata
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}
-        shell: bash
-        run: echo "UI_UX_REDESIGN_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/ui-ux-redesign.json" >> .staging-evidence.env
-
       - name: Run first staging evidence gates
         shell: bash
         run: |
@@ -698,38 +689,14 @@ jobs:
           STAGING_FIRST_GATES_TARGET="file://$PWD/artifacts/staging/first-gates/first-gates-manifest.json" \
             pnpm staging:first-gates:check
 
-      - name: Run staging-scoped evidence chain
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}
+      - name: Generate deployment cutover artifact
         shell: bash
         env:
-          IMAGE_TAG: ${{ needs.build-images.outputs.image-tag }}
-          GITHUB_TOKEN: ${{ github.token }}
-          UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES: "1"
-          PRODUCTION_EVIDENCE_ALLOW_STAGING_UI_UX: "1"
-        run: |
-          mkdir -p artifacts/staging
-          pnpm prod:evidence:check -- \
-            --env-file .staging-evidence.env \
-            --summary-file "artifacts/staging/release-summary-${IMAGE_TAG}.json"
-
-      - name: Check staging release artifact bundle
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}
-        shell: bash
-        run: |
-          STAGING_RELEASE_ARTIFACTS_TARGET="$PWD/artifacts/staging" \
-            pnpm staging:release-artifacts:check
-
-      - name: Bind live UI/UX completion to full evidence
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}
-        shell: bash
-        env:
-          GITHUB_CI_EVIDENCE_TARGET: file://${{ github.workspace }}/artifacts/staging/reports/github-ci.json
-          GITHUB_TOKEN: ${{ github.token }}
-          UI_UX_REDESIGN_EVIDENCE_TARGET: file://${{ github.workspace }}/artifacts/staging/reports/ui-ux-redesign.json
-          UI_UX_PROFESSIONALIZATION_SOURCE_SHA: ${{ needs.build-images.outputs.deploy-sha }}
-          UI_UX_PROFESSIONALIZATION_FULL_EVIDENCE: "1"
-          UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES: "1"
-        run: pnpm ui-ux-professionalization:completion:check
+          DEPLOYMENT_CUTOVER_EVIDENCE_FILE: artifacts/staging/reports/deployment-cutover.json
+          DEPLOYMENT_CUTOVER_SOURCE_SHA: ${{ needs.build-images.outputs.deploy-sha }}
+          DEPLOYMENT_CUTOVER_RELEASE_IMAGE_TAG: ${{ needs.build-images.outputs.image-tag }}
+          DEPLOYMENT_CUTOVER_IMAGE_PREFIX: ${{ needs.build-images.outputs.image-prefix }}
+        run: node scripts/generate-deployment-cutover-evidence.mjs
 
       - name: Cleanup staging evidence env
         if: always()
@@ -737,15 +704,15 @@ jobs:
         run: rm -f .staging-evidence.env
 
       - uses: actions/upload-artifact@v4
-        if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.full_evidence != true) }}
+        if: ${{ success() }}
         with:
-          name: staging-activation-evidence-${{ needs.build-images.outputs.image-tag }}
-          path: artifacts/staging
-          if-no-files-found: ignore
+          name: staging-deployment-cutover-${{ github.run_id }}
+          path: artifacts/staging/reports/deployment-cutover.json
+          if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
-        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}
+        if: ${{ always() }}
         with:
-          name: staging-production-evidence-${{ needs.build-images.outputs.image-tag }}
+          name: staging-activation-evidence-${{ needs.build-images.outputs.image-tag }}
           path: artifacts/staging
           if-no-files-found: ignore

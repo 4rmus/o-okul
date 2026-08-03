@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "result": "PASS",
+  "mode": "APPLY",
+  "environment": "staging",
+  "checkedAt": "2026-08-01T12:00:00.000Z",
+  "databaseMutationApplied": true,
+  "checks": {
+    "foundation": {
+      "expectedTables": 7,
+      "presentTables": 7
+    },
+    "preconditions": {
+      "emailCollisionGroups": 0,
+      "plannedLoginCollisionGroups": 0,
+      "invalidRoleAccounts": 0,
+      "orphanProfileLinks": 0,
+      "orphanSubjectMemberships": 0,
+      "employeeAmbiguousMatches": 0,
+      "platformLoginCollisionGroups": 0,
+      "platformEmailCollisionGroups": 0
+    },
+    "owners": {
+      "activeTenants": 3,
+      "existingOwners": 1,
+      "automaticallyVerified": 1,
+      "decisionBacked": 1,
+      "missing": 0
+    },
+    "tenantAccounts": {
+      "total": 120,
+      "ready": 120,
+      "plannedWrites": 110
+    },
+    "platformAccounts": {
+      "sourceAccounts": 2,
+      "readyAccounts": 2,
+      "sourceSessions": 3,
+      "readySessions": 3
+    },
+    "memberships": {
+      "canonicalAccounts": 118,
+      "readyAccounts": 118
+    },
+    "employees": {
+      "teachers": 24,
+      "linkedTeachers": 24
+    },
+    "sessions": {
+      "activeSessions": 9,
+      "membershipVersionMatches": 9,
+      "legacyRoleMatches": 9
+    }
+  },
+  "blockers": [],
+  "gaps": []
+}

@@ -36,7 +36,7 @@ test.describe("auth state görsel sözleşmesi", () => {
     await expect(page.getByLabel("Kullanıcı Adı")).toBeDisabled();
     await expect(page.getByLabel("Şifre", { exact: true })).toBeDisabled();
     await expectNoHorizontalOverflow(page, "mfa-challenge-320");
-    expect(loginBody).toEqual({ nationalId: "10000000146", password: "password" });
+    expect(loginBody).toEqual({ tenantSlug: "dna-egitim", loginName: "admin-a@example.test", password: "password" });
   });
 
   test("auth state MFA kurulumunu recovery kodları ve tek ana aksiyonla gösterir", async ({ page }) => {
@@ -97,7 +97,7 @@ test.describe("auth state görsel sözleşmesi", () => {
     await page.getByRole("button", { name: "Doğrula", exact: true }).click();
 
     await expect(page).toHaveURL(/\/kurum$/, { timeout: 15_000 });
-    expect(loginBody).toEqual({ nationalId: "10000000146", password: "password", tenantSlug: "dna-egitim" });
+    expect(loginBody).toEqual({ loginName: "admin-a@example.test", password: "password", tenantSlug: "dna-egitim" });
     expect(verifyBody).toEqual({ challengeToken: "challenge-token", totpCode: "123456" });
   });
 
@@ -158,12 +158,12 @@ test.describe("auth state görsel sözleşmesi", () => {
       });
     });
 
-    await submitCredentials(page);
+    await submitCredentials(page, "system@example.test");
     await page.getByLabel("Doğrulama kodu").fill("654321");
     await page.getByRole("button", { name: "Etkinleştir ve giriş yap" }).click();
 
     await expect(page).toHaveURL(/\/sistem$/, { timeout: 15_000 });
-    expect(loginBody).toEqual({ nationalId: "10000000146", password: "password", tenantSlug: "system" });
+    expect(loginBody).toEqual({ loginName: "system@example.test", password: "password", tenantSlug: "system" });
     expect(enrollmentBody).toEqual({ setupToken: "setup-token", totpCode: "654321" });
   });
 });
@@ -193,8 +193,10 @@ async function prepareAuthPage(
   await expect(page.getByRole("form", { name: "Giriş formu" })).toBeVisible();
 }
 
-async function submitCredentials(page: Page) {
-  await page.getByLabel("Kullanıcı Adı").fill("10000000146");
+async function submitCredentials(page: Page, loginName = "admin-a@example.test") {
+  const tenantSlug = page.getByLabel("Kurum Kodu");
+  if (await tenantSlug.isVisible()) await tenantSlug.fill("dna-egitim");
+  await page.getByLabel("Kullanıcı Adı").fill(loginName);
   await page.getByLabel("Şifre", { exact: true }).fill("password");
   await page.getByRole("button", { name: "Giriş yap" }).click();
 }

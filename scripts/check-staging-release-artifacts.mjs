@@ -20,6 +20,7 @@ const smokeArtifacts = new Map([
   ["alertWebhook", { file: "alert-webhook.json", check: "alert_webhook_smoke" }],
   ["walArchive", { file: "wal-archive.json", check: "wal_archive_smoke" }],
   ["reportGeneration", { file: "report-generation.json", check: "report_generation_smoke" }],
+  ["secretDeliveryOutbox", { file: "secret-delivery-outbox.json", check: "secret_delivery_outbox_staging_smoke" }],
 ]);
 const firstGateSummaryKeys = new Map([
   ["Traefik HTTPS smoke", "traefikHttps"],
@@ -211,6 +212,12 @@ const reportArtifacts = new Map([
     },
   ],
 ]);
+const deploymentCutoverArtifact = {
+  file: "deployment-cutover.json",
+  script: "scripts/check-deployment-cutover-evidence.mjs",
+  targetEnv: "DEPLOYMENT_CUTOVER_EVIDENCE_TARGET",
+  allowEnv: "DEPLOYMENT_CUTOVER_ALLOW_EXAMPLE_EVIDENCE",
+};
 const githubCiSummaryKeys = [
   "environment",
   "checkedAt",
@@ -265,6 +272,14 @@ const missingArtifactRemediation = new Map([
       command: "GITHUB_CI_EVIDENCE_OUTPUT=artifacts/staging/reports/github-ci.json corepack pnpm github-ci:generate",
       prerequisite: "GitHub Actions workflow run for the release commit with required jobs passing.",
       blocker: "A local/static CI fixture is not a release CI artifact.",
+    },
+  ],
+  [
+    "reports/deployment-cutover.json",
+    {
+      command: "Staging Outbox Verify selected deploy_run_id artifact'ini indirir ve scripts/check-deployment-cutover-evidence.mjs ile doğrular.",
+      prerequisite: "Başarılı Staging Deploy run'ı ve cutover artifact'i aynı source SHA/tag ile mevcut olmalı.",
+      blocker: "Cutover artifact olmadan outbox smoke yeni release'e bağlanamaz.",
     },
   ],
   [
@@ -455,6 +470,15 @@ const missingArtifactHandoff = new Map([
     },
   ],
   [
+    "reports/deployment-cutover.json",
+    {
+      phase: "Faz 5 - Staging cutover bağı",
+      ownerAgent: "ops_release_engineer",
+      evidenceGate: "deployment-cutover:evidence-check",
+      nextActionKind: "selected_staging_deploy_artifact",
+    },
+  ],
+  [
     "reports/kvkk-inventory.json",
     {
       phase: "Faz 4 - KVKK/PII kanıtı",
@@ -631,6 +655,7 @@ requireNoSymlinks(artifactsDir, failures);
 requireNoForbiddenArtifactFiles(artifactsDir, failures);
 
 const githubCiFile = resolve(artifactsDir, "reports", "github-ci.json");
+const deploymentCutoverFile = resolve(artifactsDir, "reports", deploymentCutoverArtifact.file);
 const firstGatesManifestFile = resolve(artifactsDir, "first-gates", "first-gates-manifest.json");
 const releaseSummaryFiles = existsSync(artifactsDir)
   ? readdirSync(artifactsDir)
@@ -643,6 +668,7 @@ requireFile(firstGatesManifestFile, failures, "first-gates/first-gates-manifest.
 for (const { file } of reportArtifacts.values()) {
   requireFile(resolve(artifactsDir, "reports", file), failures, `reports/${file}`);
 }
+requireFile(deploymentCutoverFile, failures, `reports/${deploymentCutoverArtifact.file}`);
 if (releaseSummaryFiles.length !== 1) {
   failures.push(`artifactsDir tam 1 release-summary-*.json içermeli; bulundu: ${releaseSummaryFiles.length}.`);
 }
@@ -659,16 +685,21 @@ if (failures.length === 0) {
       ...(allowExampleEvidence ? { [allowEnv]: "1" } : {}),
     });
   }
+  runChecker(deploymentCutoverArtifact.script, {
+    [deploymentCutoverArtifact.targetEnv]: pathToFileURL(deploymentCutoverFile).href,
+    ...(allowExampleEvidence ? { [deploymentCutoverArtifact.allowEnv]: "1" } : {}),
+  });
   runChecker("scripts/check-staging-first-gates-evidence.mjs", {
     STAGING_FIRST_GATES_TARGET: pathToFileURL(firstGatesManifestFile).href,
   });
   runChecker("scripts/check-production-evidence-summary.mjs", {
     PRODUCTION_EVIDENCE_SUMMARY_TARGET: pathToFileURL(releaseSummaryFiles[0]).href,
+    PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX: "1",
     ...(allowExampleEvidence ? { PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE: "1" } : {}),
   });
 }
 
-const reportFailures = failures.length === 0 ? validateArtifactBundle(releaseSummaryFiles[0], githubCiFile, firstGatesManifestFile) : failures;
+const reportFailures = failures.length === 0 ? validateArtifactBundle(releaseSummaryFiles[0], githubCiFile, deploymentCutoverFile, firstGatesManifestFile) : failures;
 if (reportFailures.length > 0) {
   fail(reportFailures);
 }
@@ -677,22 +708,53 @@ console.log(
   `Staging release artifact bundle kontrolü geçti: ${releaseSummaryFiles[0].replace(`${process.cwd()}/`, "")}`,
 );
 
-function validateArtifactBundle(summaryFile, githubCiFilePath, manifestFilePath) {
+function validateArtifactBundle(summaryFile, githubCiFilePath, deploymentCutoverFilePath, manifestFilePath) {
   const output = [];
   const summary = readJsonFile(summaryFile, "release summary", output);
   const githubCi = readJsonFile(githubCiFilePath, "github-ci", output);
+  const deploymentCutover = readJsonFile(deploymentCutoverFilePath, "deployment cutover", output);
   const firstGatesManifest = readJsonFile(manifestFilePath, "first-gates manifest", output);
-  if (!summary || !githubCi || !firstGatesManifest) return output;
+  if (!summary || !githubCi || !deploymentCutover || !firstGatesManifest) return output;
 
   requireDateNotAfter(firstGatesManifest, output, "first-gates.generatedAt", "generatedAt", summary, "summary.generatedAt", "generatedAt");
   requireReleaseSummaryFileNameMatchesSummary(summaryFile, summary, output);
   requireGithubCiMatchesSummary(summary, githubCi, output);
   requireReleaseSourceBinding(summary, output);
+  requireDeploymentCutoverMatchesSummary(summary, deploymentCutover, output);
   requireReportFilesMatchSummary(summary, artifactsDir, output);
   requireSmokeFilesMatchSummary(summary, dirname(summaryFile), output);
   requireFirstGatesMatchSummary(summary, firstGatesManifest, manifestFilePath, output);
 
   return output;
+}
+
+function requireDeploymentCutoverMatchesSummary(summary, cutover, output) {
+  const outbox = summary?.smokeEvidence?.secretDeliveryOutbox;
+  const uiUxSourceSha = summary?.reports?.uiUxRedesign?.sourceCommitSha;
+  const githubCiSourceSha = summary?.reports?.githubCi?.commitSha;
+  const githubCiRepository = summary?.reports?.githubCi?.repository;
+
+  if (
+    typeof cutover?.sourceSha !== "string" ||
+    typeof uiUxSourceSha !== "string" ||
+    typeof githubCiSourceSha !== "string" ||
+    cutover.sourceSha.toLowerCase() !== uiUxSourceSha.toLowerCase() ||
+    cutover.sourceSha.toLowerCase() !== githubCiSourceSha.toLowerCase()
+  ) {
+    output.push("reports/deployment-cutover.json.sourceSha, summary.reports.uiUxRedesign.sourceCommitSha ve summary.reports.githubCi.commitSha aynı SHA olmalı.");
+  }
+  if (cutover?.repository !== githubCiRepository) {
+    output.push("reports/deployment-cutover.json.repository summary.reports.githubCi.repository ile eşleşmeli.");
+  }
+  if (cutover?.releaseImageTag !== outbox?.releaseImageTag) {
+    output.push("reports/deployment-cutover.json.releaseImageTag summary.smokeEvidence.secretDeliveryOutbox.releaseImageTag ile eşleşmeli.");
+  }
+  if (cutover?.cutoverAt !== outbox?.notBefore) {
+    output.push("reports/deployment-cutover.json.cutoverAt summary.smokeEvidence.secretDeliveryOutbox.notBefore ile eşleşmeli.");
+  }
+  if (Date.parse(cutover?.generatedAt) > Date.parse(outbox?.generatedAt)) {
+    output.push("reports/deployment-cutover.json.generatedAt summary.smokeEvidence.secretDeliveryOutbox.generatedAt tarihinden sonra olamaz.");
+  }
 }
 
 function requireReleaseSummaryFileNameMatchesSummary(summaryFile, summary, output) {
@@ -971,7 +1033,7 @@ function requireExpectedArtifactEntries(rootDir, summaryFile, output) {
 
   requireExactDirectoryEntries(
     resolve(rootDir, "reports"),
-    new Set([...reportArtifacts.values()].map(({ file }) => file)),
+    new Set([...reportArtifacts.values()].map(({ file }) => file).concat(deploymentCutoverArtifact.file)),
     output,
   );
   requireExactDirectoryEntries(
@@ -993,7 +1055,7 @@ function requireExpectedArtifactEntriesWithoutSummary(rootDir, output) {
   requireExactDirectoryEntries(rootDir, new Set(["first-gates", "reports", "smoke"]), output);
   requireExactDirectoryEntries(
     resolve(rootDir, "reports"),
-    new Set([...reportArtifacts.values()].map(({ file }) => file)),
+    new Set([...reportArtifacts.values()].map(({ file }) => file).concat(deploymentCutoverArtifact.file)),
     output,
   );
   requireExactDirectoryEntries(
@@ -1177,7 +1239,7 @@ function buildGapReport(messages) {
     artifactsDir: artifactsDir ? formatPathForReport(artifactsDir) : undefined,
     requiredSummaryFilePattern: "release-summary-*.json",
     foundReleaseSummaryCount: countReleaseSummaryFiles(),
-    requiredReports: [...reportArtifacts.values()].map(({ file, script, targetEnv }) => ({
+    requiredReports: [...reportArtifacts.values(), deploymentCutoverArtifact].map(({ file, script, targetEnv }) => ({
       path: `reports/${file}`,
       script,
       targetEnv,

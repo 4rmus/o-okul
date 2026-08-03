@@ -7,18 +7,10 @@ const optionalText = () => z.string().trim();
 const optionalNationalId = optionalText().refine((value) => !value || /^\d{11}$/.test(value), {
   message: "TC Kimlik No 11 rakam olmalıdır.",
 });
-const requiredNationalId = requiredText("TC kimlik no").refine((value) => /^\d{11}$/.test(value), {
-  message: "TC Kimlik No 11 rakam olmalıdır.",
-});
-
 const optionalEmail = optionalText().refine((value) => !value || z.string().email().safeParse(value).success, {
   message: "E-posta geçerli olmalıdır.",
 });
 const requiredEmail = (fieldName: string) => requiredText(fieldName).email("E-posta geçerli olmalıdır.");
-const requiredTurkishMobilePhone = (fieldName: string) => requiredText(fieldName).refine(isTurkishMobilePhone, {
-  message: "Telefon geçerli bir Türkiye cep telefonu olmalıdır.",
-});
-
 const optionalDate = optionalText().refine((value) => !value || isCalendarDateString(value), {
   message: "Doğum tarihi geçerli olmalıdır.",
 });
@@ -42,6 +34,7 @@ export const classFormSchema = z.object({
 export const campusFormSchema = z.object({
   name: requiredText("Kampüs adı"),
   code: optionalText(),
+  unitType: z.enum(["SCHOOL", "COURSE", "MIXED"]),
 });
 
 export const gradeLevelFormSchema = z.object({
@@ -110,9 +103,13 @@ export const examParticipantFormSchema = z.object({
   bookletType: optionalText(),
 });
 
-export const tenantFormSchema = z.object({
+export const tenantUpdateFormSchema = z.object({
   name: requiredText("Kurum adı"),
   slug: requiredText("Slug"),
+  status: z.enum(["ACTIVE", "SUSPENDED", "TRIAL"]),
+});
+
+export const tenantFormSchema = tenantUpdateFormSchema.extend({
   plan: z.enum(["TRIAL", "PRO", "ENTERPRISE"]),
   licenseStartsAt: optionalDate,
   licenseEndsAt: optionalDate,
@@ -128,7 +125,6 @@ export const tenantFormSchema = z.object({
     }
     return parsed;
   }),
-  status: z.enum(["ACTIVE", "SUSPENDED", "TRIAL"]),
 }).superRefine((value, context) => {
   if (value.licenseStartsAt && value.licenseEndsAt && Date.parse(value.licenseStartsAt) >= Date.parse(value.licenseEndsAt)) {
     context.addIssue({
@@ -140,18 +136,47 @@ export const tenantFormSchema = z.object({
 });
 
 export const tenantCreateFormSchema = tenantFormSchema.and(z.object({
-  firstAdmin: z.object({
-    name: requiredText("Admin ad soyad"),
-    email: requiredEmail("Admin e-posta"),
-    nationalId: requiredNationalId,
-    phone: requiredTurkishMobilePhone("Admin telefon"),
-  }).transform((value) => ({
-    email: value.email,
-    name: value.name,
-    nationalId: value.nationalId,
-    phone: value.phone,
-  })),
+  auditReference: requiredText("Sözleşme referansı"),
+  campus: z.object({
+    code: optionalText(),
+    name: requiredText("Kampüs adı"),
+    unitType: z.enum(["SCHOOL", "COURSE", "MIXED"]),
+  }),
+  firstOwner: z.object({
+    name: requiredText("Kurum sahibi ad soyad"),
+    email: requiredEmail("Kurum sahibi e-posta"),
+    nationalId: optionalNationalId,
+  }),
+})).superRefine((value, context) => {
+  if (!value.licenseStartsAt) context.addIssue({ code: "custom", path: ["licenseStartsAt"], message: "Lisans başlangıcı zorunludur." });
+  if (!value.licenseEndsAt) context.addIssue({ code: "custom", path: ["licenseEndsAt"], message: "Lisans bitişi zorunludur." });
+  if (!value.seatLimit) context.addIssue({ code: "custom", path: ["seatLimit"], message: "Aktif öğrenci limiti zorunludur." });
+}).transform((value) => ({
+  name: value.name,
+  slug: value.slug,
+  status: value.status,
+  campuses: [{
+    name: value.campus.name,
+    ...(value.campus.code ? { code: value.campus.code } : {}),
+    unitType: value.campus.unitType,
+  }],
+  firstOwner: {
+    email: value.firstOwner.email,
+    name: value.firstOwner.name,
+    ...(value.firstOwner.nationalId ? { nationalId: value.firstOwner.nationalId } : {}),
+  },
+  licenseTerm: {
+    planCode: value.plan,
+    startsAt: calendarDateToIso(value.licenseStartsAt),
+    endsAt: calendarDateToIso(value.licenseEndsAt),
+    activeStudentLimit: value.seatLimit!,
+    auditReference: value.auditReference,
+  },
 }));
+
+function calendarDateToIso(value: string) {
+  return new Date(`${value}T00:00:00.000Z`).toISOString();
+}
 
 export const scheduleLessonFormSchema = z.object({
   classId: requiredText("Sınıf"),
@@ -321,14 +346,6 @@ export const homeworkMaterialFormSchema = z.object({
 
 export const userRolesSchema = z.array(z.enum(["TENANT_ADMIN", "ASSISTANT_ADMIN"])).min(1, "En az bir rol seçilmelidir.");
 
-export const tenantUserFormSchema = z.object({
-  email: requiredText("E-posta").email("E-posta geçerli olmalıdır."),
-  name: requiredText("Ad Soyad"),
-  nationalId: requiredNationalId,
-  phone: requiredText("Telefon"),
-  roles: userRolesSchema,
-});
-
 export const identityInvitationFormSchema = z.object({
   subjectType: z.enum(portalSubjectRoles),
   subjectId: requiredText("Kişi"),
@@ -442,7 +459,8 @@ export type ExamWithClassFormPayload = z.output<typeof examWithClassFormSchema>;
 export type ExamParticipantFormState = z.input<typeof examParticipantFormSchema>;
 export type ExamParticipantFormPayload = z.output<typeof examParticipantFormSchema>;
 export type TenantFormState = z.input<typeof tenantFormSchema>;
-export type TenantFormPayload = z.output<typeof tenantFormSchema>;
+export type TenantUpdateFormState = z.input<typeof tenantUpdateFormSchema>;
+export type TenantFormPayload = z.output<typeof tenantUpdateFormSchema>;
 export type TenantCreateFormState = z.input<typeof tenantCreateFormSchema>;
 export type TenantCreateFormPayload = z.output<typeof tenantCreateFormSchema>;
 export type ScheduleLessonFormState = z.input<typeof scheduleLessonFormSchema>;
@@ -466,8 +484,6 @@ export type SupportTicketFormPayload = z.output<typeof supportTicketFormSchema>;
 export type HomeworkMaterialFormState = z.input<typeof homeworkMaterialFormSchema>;
 export type HomeworkMaterialFormPayload = z.output<typeof homeworkMaterialFormSchema>;
 export type UserRolesPayload = z.output<typeof userRolesSchema>;
-export type TenantUserFormState = z.input<typeof tenantUserFormSchema>;
-export type TenantUserFormPayload = z.output<typeof tenantUserFormSchema>;
 export type IdentityInvitationFormState = z.input<typeof identityInvitationFormSchema>;
 export type IdentityInvitationFormPayload = z.output<typeof identityInvitationFormSchema>;
 export type ParserConfigSuggestionFormPayload = z.output<typeof parserConfigSuggestionFormSchema>;
@@ -497,17 +513,4 @@ function isIsoDateTimeString(value: string): boolean {
 function isCalendarDateString(value: string): boolean {
   const parsed = new Date(`${value}T00:00:00.000Z`);
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
-
-function isTurkishMobilePhone(value: string): boolean {
-  let digits = value.replace(/\D/g, "");
-  if (digits.startsWith("0090")) {
-    digits = digits.slice(4);
-  } else if (digits.startsWith("90") && digits.length === 12) {
-    digits = digits.slice(2);
-  }
-  if (digits.startsWith("0") && digits.length === 11) {
-    digits = digits.slice(1);
-  }
-  return /^5\d{9}$/.test(digits);
 }

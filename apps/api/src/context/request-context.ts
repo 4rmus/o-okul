@@ -1,10 +1,18 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import type { ActivePersona } from "@o-okul/shared-types";
 
 export interface RequestContext {
   userId: string;
   sessionId?: string;
   tenantId: string | null;
+  membershipId?: string;
+  activePersona?: ActivePersona;
+  membershipVersion?: number;
   tenantAccessMode?: "active" | "read_only";
+  campusScope?: {
+    scopeMode: "TENANT" | "CAMPUSES";
+    campusIds: string[];
+  };
   roles: string[];
   capabilities?: string[];
   bypassRls: boolean;

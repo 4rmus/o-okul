@@ -17,6 +17,20 @@ import { pathToFileURL } from "node:url";
 
 const templateChecks = [
   [
+    "Deployment cutover template",
+    "DEPLOYMENT_CUTOVER_EVIDENCE_TARGET",
+    "docs/evidence-templates/deployment-cutover.example.json",
+    "scripts/check-deployment-cutover-evidence.mjs",
+    { DEPLOYMENT_CUTOVER_ALLOW_EXAMPLE_EVIDENCE: "1" },
+  ],
+  [
+    "Secret delivery outbox staging template",
+    "SECRET_DELIVERY_OUTBOX_EVIDENCE_TARGET",
+    "docs/evidence-templates/secret-delivery-outbox-staging.example.json",
+    "scripts/check-secret-delivery-outbox-evidence.mjs",
+    { SECRET_DELIVERY_OUTBOX_ALLOW_EXAMPLE_EVIDENCE: "1" },
+  ],
+  [
     "Restore drill template",
     "RESTORE_DRILL_TARGET",
     "docs/evidence-templates/restore-drill.example.json",
@@ -36,6 +50,27 @@ const templateChecks = [
     "docs/evidence-templates/identity-migration.example.json",
     "scripts/check-identity-migration-evidence.mjs",
     { IDENTITY_MIGRATION_ALLOW_EXAMPLE_EVIDENCE: "1" },
+  ],
+  [
+    "Account management preflight template",
+    "ACCOUNT_MANAGEMENT_PREFLIGHT_TARGET",
+    "docs/evidence-templates/account-management-preflight.example.json",
+    "scripts/check-account-management-preflight.mjs",
+    { ACCOUNT_MANAGEMENT_PREFLIGHT_ALLOW_EXAMPLE: "1" },
+  ],
+  [
+    "Account management backfill template",
+    "ACCOUNT_MANAGEMENT_BACKFILL_TARGET",
+    "docs/evidence-templates/account-management-backfill.example.json",
+    "scripts/check-account-management-backfill.mjs",
+    { ACCOUNT_MANAGEMENT_BACKFILL_ALLOW_EXAMPLE: "1" },
+  ],
+  [
+    "LicenseTerm backfill template",
+    "LICENSE_TERM_BACKFILL_TARGET",
+    "docs/evidence-templates/license-term-backfill.example.json",
+    "scripts/check-license-term-backfill.mjs",
+    { LICENSE_TERM_BACKFILL_ALLOW_EXAMPLE: "1" },
   ],
   [
     "Financial retention template",
@@ -263,7 +298,7 @@ function runEvidenceTargetProtocolNegativeChecks() {
       console.error(`Production evidence template kontrolü başarısız: ${label} HTTP target negative beklenen şekilde kırılmadı.`);
       process.exit(1);
     }
-    if (!output.includes("file:// veya https://")) {
+    if (!output.includes(label === "Deployment cutover template" ? "yalnız file://" : "file:// veya https://")) {
       console.error(`Production evidence template kontrolü başarısız: ${label} HTTP target negative beklenen hata yok.`);
       console.error(output);
       process.exit(1);
@@ -289,7 +324,7 @@ function runEvidenceTargetPlaceholderHostNegativeChecks() {
       );
       process.exit(1);
     }
-    if (!output.includes("gercek https host") && !output.includes("gerçek https host") && !output.includes("file:// veya https://")) {
+    if (!output.includes("gercek https host") && !output.includes("gerçek https host") && !output.includes(label === "Deployment cutover template" ? "yalnız file://" : "file:// veya https://")) {
       console.error(
         `Production evidence template kontrolü başarısız: ${label} placeholder host target negative beklenen hata yok.`,
       );
@@ -318,7 +353,7 @@ function runEvidenceTargetTempFileNegativeChecks() {
         );
         process.exit(1);
       }
-      if (!output.includes("lokal temp path") && !output.includes("file:// veya https://")) {
+      if (!output.includes("lokal temp path") && !output.includes(label === "Deployment cutover template" ? "yalnız file://" : "file:// veya https://")) {
         console.error(
           `Production evidence template kontrolü başarısız: ${label} ${tempRoot} temp file target negative beklenen hata yok.`,
         );
@@ -374,6 +409,7 @@ runStagingEvidenceEnvNegativeCheck();
 runStagingFirstGatesFixtureCheck();
 runStagingFirstGatesTargetNegativeCheck();
 runStagingFirstGatesOutputDirNegativeCheck();
+runProdEnvValidCheck();
 runProdEnvHttpEvidenceTargetNegativeCheck();
 runProdEnvSecretEvidenceTargetNegativeCheck();
 runProdEnvLocalEvidenceTargetNegativeCheck();
@@ -390,6 +426,8 @@ runProdEvidenceTempFileEvidenceTargetNegativeCheck();
 runProdEvidenceSymlinkEvidenceTargetNegativeCheck();
 runProdEvidenceSymlinkParentEvidenceTargetNegativeCheck();
 runProdEnvTraefikOriginNegativeCheck();
+runProdEnvTrustedForwarderNegativeCheck();
+runProdEnvProxyTopologyNegativeCheck();
 runProdEnvMissingAlertWebhookTokenNegativeCheck();
 runProdEnvMissingSmsSmokeConfirmNegativeCheck();
 runProdEnvMissingSentrySmokeConfirmNegativeCheck();
@@ -1503,6 +1541,14 @@ runRateLimitNegativeCheck({
     fixture.evidenceReferences[0] = "https://user:secret@evidence.o-okul.com/rate-limit.json?token=secret#fragment";
   },
 });
+runRateLimitNegativeCheck({
+  label: "Rate limit missing egress hash reference negative",
+  path: "docs/evidence-templates/rate-limit.missing-egress-hash-reference.tmp.json",
+  expectedFailure: "evidenceReferences tam bir rate-limit-egress-ip: 64-hex hash referansı içermeli.",
+  mutate: (fixture) => {
+    fixture.evidenceReferences = fixture.evidenceReferences.filter((reference) => !reference.startsWith("rate-limit-egress-ip:"));
+  },
+});
 runRateLimitSecretTargetNegativeCheck();
 runRateLimitLocalArtifactTargetNegativeCheck();
 runRateLimitGeneratorLocalArtifactNegativeChecks();
@@ -1550,7 +1596,7 @@ runRlsLiveNegativeCheck({
 runRlsLiveNegativeCheck({
   label: "RLS live tenant FK missing relation negative",
   path: "docs/evidence-templates/rls-live.missing-tenant-fk-relation.tmp.json",
-  expectedFailure: "tenantFkPreflight.relationsVerified tam 23 relation icermeli.",
+  expectedFailure: "tenantFkPreflight.relationsVerified tam 29 relation icermeli.",
   mutate: (fixture) => {
     fixture.tenantFkPreflight.relationsVerified = fixture.tenantFkPreflight.relationsVerified.filter(
       (relation) => relation !== "Student.responsibleTeacher",
@@ -1576,7 +1622,7 @@ runRlsLiveNegativeCheck({
 runRlsLiveNegativeCheck({
   label: "RLS live extra table negative",
   path: "docs/evidence-templates/rls-live.extra-table.tmp.json",
-  expectedFailure: "schema.tablesVerified tam 57 tablo icermeli.",
+  expectedFailure: "schema.tablesVerified tam 62 tablo icermeli.",
   mutate: (fixture) => {
     fixture.schema.tablesVerified.push("UnexpectedTenantTable");
   },
@@ -1881,10 +1927,11 @@ runDeploymentRollbackSymlinkParentTargetNegativeCheck();
 runProductionSummaryHttpTargetNegativeCheck();
 runProductionSummarySecretUrlTargetNegativeCheck();
 runProductionSummarySymlinkParentTargetNegativeCheck();
+runStagingOutboxProductionSummaryModeChecks();
 runProductionSummaryNegativeCheck({
   label: "Production summary extra check negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-check.tmp.json",
-  expectedFailure: "checks tam 28 madde içermeli.",
+  expectedFailure: "checks tam 29 madde içermeli.",
   mutate: (fixture) => {
     fixture.checks.push({
       label: "Beklenmeyen production check",
@@ -1936,7 +1983,7 @@ runProductionSummaryNegativeCheck({
 runProductionSummaryNegativeCheck({
   label: "Production summary extra smoke evidence negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-smoke-evidence.tmp.json",
-  expectedFailure: "smokeEvidence tam 7 alan içermeli.",
+  expectedFailure: "smokeEvidence tam 8 alan içermeli.",
   mutate: (fixture) => {
     fixture.smokeEvidence.unexpectedSmoke = { ...fixture.smokeEvidence.alertWebhook };
   },
@@ -2051,7 +2098,7 @@ runProductionSummaryNegativeCheck({
 runProductionSummaryNegativeCheck({
   label: "Production summary RLS tenant FK missing relation negative",
   path: "docs/evidence-templates/production-evidence-summary.rls-tenant-fk-missing-relation.tmp.json",
-  expectedFailure: "reports.rlsLive.tenantFkPreflight.relationsVerified tam 23 madde içermeli.",
+  expectedFailure: "reports.rlsLive.tenantFkPreflight.relationsVerified tam 29 madde içermeli.",
   mutate: (fixture) => {
     fixture.reports.rlsLive.tenantFkPreflight.relationsVerified = fixture.reports.rlsLive.tenantFkPreflight.relationsVerified.filter(
       (relation) => relation !== "Student.responsibleTeacher",
@@ -2440,7 +2487,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live extra checksPassed negative",
   path: "docs/evidence-templates/go-live.extra-checks-passed.tmp.json",
-  expectedFailure: "productionEvidenceSummary.checksPassed tam 28 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.checksPassed tam 29 madde icermeli.",
   mutate: (fixture) => {
     fixture.productionEvidenceSummary.checksPassed.push("Beklenmeyen production check");
   },
@@ -2506,7 +2553,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked duplicate summary check negative",
   path: "docs/evidence-templates/go-live.linked-duplicate-summary-check.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary.checks tam 28 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary.checks tam 29 madde icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.duplicate-check-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -2545,7 +2592,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked extra summary smoke negative",
   path: "docs/evidence-templates/go-live.linked-extra-summary-smoke.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary.smokeEvidence tam 7 alan icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary.smokeEvidence tam 8 alan icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.extra-smoke-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -2802,7 +2849,7 @@ runGoLiveNegativeCheck({
   label: "Go-live linked summary RLS tenant FK missing relation negative",
   path: "docs/evidence-templates/go-live.linked-summary-rls-tenant-fk-missing-relation.tmp.json",
   expectedFailure:
-    "productionEvidenceSummary.summary.reports.rlsLive.tenantFkPreflight.relationsVerified tam 23 madde icermeli.",
+    "productionEvidenceSummary.summary.reports.rlsLive.tenantFkPreflight.relationsVerified tam 29 madde icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.rls-tenant-fk-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -3173,6 +3220,48 @@ function runProductionSummaryNegativeCheck({ label, path, expectedFailure, mutat
       unlinkSync(path);
     } catch {
       // Ignore cleanup errors; the negative-check failure above is the actionable signal.
+    }
+  }
+}
+
+function runStagingOutboxProductionSummaryModeChecks() {
+  const path = "docs/evidence-templates/production-evidence-summary.staging-outbox.tmp.json";
+  const fixture = structuredClone(productionSummaryFixture);
+  fixture.smokeEvidence.secretDeliveryOutbox.environment = "staging";
+  writeFileSync(path, `${JSON.stringify(fixture, null, 2)}\n`);
+
+  try {
+    const baseEnv = {
+      ...process.env,
+      PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE: "1",
+      PRODUCTION_EVIDENCE_SUMMARY_TARGET: pathToFileURL(path).href,
+    };
+    const rejected = spawnSync(process.execPath, ["scripts/check-production-evidence-summary.mjs"], {
+      env: baseEnv,
+      encoding: "utf8",
+    });
+    const rejectedOutput = `${rejected.stdout ?? ""}${rejected.stderr ?? ""}`;
+    if (rejected.status === 0 || !rejectedOutput.includes("smokeEvidence.secretDeliveryOutbox.environment production olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: staging outbox summary flag olmadan kırılmalı.");
+      console.error(rejectedOutput);
+      process.exit(1);
+    }
+
+    const accepted = spawnSync(process.execPath, ["scripts/check-production-evidence-summary.mjs"], {
+      env: { ...baseEnv, PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX: "1" },
+      encoding: "utf8",
+    });
+    if (accepted.status !== 0) {
+      console.error("Production evidence template kontrolü başarısız: explicit staging outbox summary modu geçmeli.");
+      console.error(accepted.stdout);
+      console.error(accepted.stderr);
+      process.exit(accepted.status ?? 1);
+    }
+  } finally {
+    try {
+      unlinkSync(path);
+    } catch {
+      // Ignore cleanup errors; the contract result above is the actionable signal.
     }
   }
 }
@@ -5450,6 +5539,9 @@ function runGoLiveLinkedLiveStatusSymlinkParentTargetNegativeCheck() {
 
 function runStagingEvidenceEnvNegativeCheck() {
   const path = "docs/evidence-templates/staging-evidence.empty-required.tmp.env";
+  const activationPath = "docs/evidence-templates/staging-evidence.activation.tmp.env";
+  const activationLegacySourcePath = "docs/evidence-templates/staging-evidence.activation-legacy-source.tmp.env";
+  const activationOriginMismatchPath = "docs/evidence-templates/staging-evidence.activation-origin-mismatch.tmp.env";
   const workflowPath = "docs/evidence-templates/staging-deploy.bad-order.tmp.yml";
   const contents = readFileSync("docs/evidence-templates/staging-evidence.env.example", "utf8").replace(
     /^S3_ACCESS_KEY_ID=.*$/m,
@@ -5458,6 +5550,73 @@ function runStagingEvidenceEnvNegativeCheck() {
   writeFileSync(path, contents);
 
   try {
+    const activationContents = [
+      "NODE_ENV=production",
+      "SENTRY_ENVIRONMENT=staging",
+      "WEB_URL=https://staging.o-okul.com",
+      "TRAEFIK_HTTPS_SMOKE_URL=https://staging.o-okul.com/health",
+      "ALERT_WEBHOOK_URL=https://alerts.o-okul.com/staging",
+      "ALERT_WEBHOOK_TOKEN=activation-alert-token-12345678901234567890",
+      "",
+    ].join("\n");
+    writeFileSync(activationPath, activationContents);
+
+    const activationResult = spawnSync(
+      process.execPath,
+      ["scripts/check-staging-evidence-env.mjs", "--mode", "activation", "--env-file", activationPath],
+      { encoding: "utf8" },
+    );
+    const activationOutput = `${activationResult.stdout ?? ""}${activationResult.stderr ?? ""}`;
+    if (activationResult.status !== 0 || !activationOutput.includes("Staging activation env değer kontrolü geçti.")) {
+      console.error("Production evidence template kontrolü başarısız: activation env minimal sözleşmesi geçmedi.");
+      console.error(activationOutput);
+      process.exit(1);
+    }
+
+    writeFileSync(activationOriginMismatchPath, activationContents.replace("WEB_URL=https://staging.o-okul.com", "WEB_URL=https://other.o-okul.com"));
+    const activationOriginMismatchResult = spawnSync(
+      process.execPath,
+      ["scripts/check-staging-evidence-env.mjs", "--mode", "activation", "--env-file", activationOriginMismatchPath],
+      { encoding: "utf8" },
+    );
+    const activationOriginMismatchOutput = `${activationOriginMismatchResult.stdout ?? ""}${activationOriginMismatchResult.stderr ?? ""}`;
+    if (
+      activationOriginMismatchResult.status === 0 ||
+      !activationOriginMismatchOutput.includes("TRAEFIK_HTTPS_SMOKE_URL activation için WEB_URL origin'iyle eşleşmeli.")
+    ) {
+      console.error("Production evidence template kontrolü başarısız: activation env Traefik/Web origin negative kırılmadı.");
+      console.error(activationOriginMismatchOutput);
+      process.exit(1);
+    }
+
+    const activationFullResult = spawnSync(
+      process.execPath,
+      ["scripts/check-staging-evidence-env.mjs", "--mode", "full", "--env-file", activationPath],
+      { encoding: "utf8" },
+    );
+    const activationFullOutput = `${activationFullResult.stdout ?? ""}${activationFullResult.stderr ?? ""}`;
+    if (activationFullResult.status === 0 || !activationFullOutput.includes("SECRET_DELIVERY_OUTBOX_DATABASE_URL")) {
+      console.error("Production evidence template kontrolü başarısız: full env sözleşmesi activation anahtarlarına düşürüldü.");
+      console.error(activationFullOutput);
+      process.exit(1);
+    }
+
+    writeFileSync(activationLegacySourcePath, `${activationContents}SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID=legacy-source-id\n`);
+    const activationLegacySourceResult = spawnSync(
+      process.execPath,
+      ["scripts/check-staging-evidence-env.mjs", "--mode", "activation", "--env-file", activationLegacySourcePath],
+      { encoding: "utf8" },
+    );
+    const activationLegacySourceOutput = `${activationLegacySourceResult.stdout ?? ""}${activationLegacySourceResult.stderr ?? ""}`;
+    if (
+      activationLegacySourceResult.status === 0 ||
+      !activationLegacySourceOutput.includes("SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID içermemeli")
+    ) {
+      console.error("Production evidence template kontrolü başarısız: activation env legacy outbox source negative kırılmadı.");
+      console.error(activationLegacySourceOutput);
+      process.exit(1);
+    }
+
     const result = spawnSync(process.execPath, ["scripts/check-staging-evidence-env.mjs", "--env-file", path], {
       encoding: "utf8",
     });
@@ -5540,22 +5699,39 @@ function runStagingEvidenceEnvNegativeCheck() {
       process.exit(1);
     }
 
+    const legacySourcePath = "docs/evidence-templates/staging-evidence.legacy-outbox-source.tmp.env";
+    writeFileSync(
+      legacySourcePath,
+      `${readFileSync("docs/evidence-templates/staging-evidence.env.example", "utf8")}\nSECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID=legacy-source-id\n`,
+    );
+    const legacySourceResult = spawnSync(
+      process.execPath,
+      ["scripts/check-staging-evidence-env.mjs", "--env-file", legacySourcePath],
+      { encoding: "utf8" },
+    );
+    const legacySourceOutput = `${legacySourceResult.stdout ?? ""}${legacySourceResult.stderr ?? ""}`;
+    if (legacySourceResult.status === 0 || !legacySourceOutput.includes("SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID içermemeli")) {
+      console.error("Production evidence template kontrolü başarısız: legacy outbox source staging secret negative kırılmadı.");
+      console.error(legacySourceOutput);
+      process.exit(1);
+    }
+
     const workflow = readFileSync(".github/workflows/staging-deploy.yml", "utf8");
     const cleanupBlock = `      - name: Cleanup staging evidence env
         if: always()
         shell: bash
         run: rm -f .staging-evidence.env`;
     const uploadBlock = `      - uses: actions/upload-artifact@v4
-        if: \${{ always() && (github.event_name != 'workflow_dispatch' || inputs.full_evidence != true) }}
+        if: \${{ success() }}
         with:
-          name: staging-activation-evidence-\${{ needs.build-images.outputs.image-tag }}
-          path: artifacts/staging
-          if-no-files-found: ignore
+          name: staging-deployment-cutover-\${{ github.run_id }}
+          path: artifacts/staging/reports/deployment-cutover.json
+          if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
-        if: \${{ always() && github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}
+        if: \${{ always() }}
         with:
-          name: staging-production-evidence-\${{ needs.build-images.outputs.image-tag }}
+          name: staging-activation-evidence-\${{ needs.build-images.outputs.image-tag }}
           path: artifacts/staging
           if-no-files-found: ignore`;
     const expectedSequence = `${cleanupBlock}\n\n${uploadBlock}`;
@@ -5584,9 +5760,13 @@ function runStagingEvidenceEnvNegativeCheck() {
   } finally {
     for (const cleanupPath of [
       path,
+      activationPath,
+      activationLegacySourcePath,
+      activationOriginMismatchPath,
       "docs/evidence-templates/staging-evidence.missing-audit-null-tenant.tmp.env",
       "docs/evidence-templates/staging-evidence.missing-ui-worker-result.tmp.env",
       "docs/evidence-templates/staging-evidence.defaulted-smoke.tmp.env",
+      "docs/evidence-templates/staging-evidence.legacy-outbox-source.tmp.env",
       workflowPath,
     ]) {
       try {
@@ -6030,6 +6210,7 @@ function runStagingReleaseArtifactsBundleCheck() {
       alertWebhook: "alert-webhook.json",
       walArchive: "wal-archive.json",
       reportGeneration: "report-generation.json",
+      secretDeliveryOutbox: "secret-delivery-outbox.json",
     })) {
       writeFileSync(`${smokeDir}/${file}`, `${JSON.stringify(summary.smokeEvidence[key], null, 2)}\n`);
     }
@@ -6038,6 +6219,21 @@ function runStagingReleaseArtifactsBundleCheck() {
       `${reportsDir}/github-ci.json`,
       `${JSON.stringify({ result: "PASS", ...summary.reports.githubCi, gaps: [] }, null, 2)}\n`,
     );
+    const cutover = normalizeDateStrings(
+      JSON.parse(readFileSync("docs/evidence-templates/deployment-cutover.example.json", "utf8")),
+      evidenceTime,
+    );
+    cutover.sourceSha = summary.reports.githubCi.commitSha;
+    cutover.releaseImageTag = summary.smokeEvidence.secretDeliveryOutbox.releaseImageTag;
+    cutover.repository = summary.reports.githubCi.repository;
+    cutover.cutoverAt = summary.smokeEvidence.secretDeliveryOutbox.notBefore;
+    cutover.serviceImages = Object.fromEntries(
+      Object.keys(cutover.serviceImages).map((service) => [
+        service,
+        `ghcr.io/${cutover.repository}/${service}:${cutover.releaseImageTag}`,
+      ]),
+    );
+    writeFileSync(`${reportsDir}/deployment-cutover.json`, `${JSON.stringify(cutover, null, 2)}\n`);
 
     const firstGatePayloads = {
       "traefik-https.json": {
@@ -6111,6 +6307,34 @@ function runStagingReleaseArtifactsBundleCheck() {
       console.error(positive.stdout);
       console.error(positive.stderr);
       process.exit(positive.status ?? 1);
+    }
+
+    const deploymentCutoverPath = `${reportsDir}/deployment-cutover.json`;
+    const originalDeploymentCutover = readFileSync(deploymentCutoverPath, "utf8");
+    try {
+      const mismatchedDeploymentCutover = JSON.parse(originalDeploymentCutover);
+      mismatchedDeploymentCutover.sourceSha = "2".repeat(40);
+      writeFileSync(deploymentCutoverPath, `${JSON.stringify(mismatchedDeploymentCutover, null, 2)}\n`);
+      const cutoverBindingNegative = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
+        env: {
+          ...process.env,
+          STAGING_RELEASE_ARTIFACTS_TARGET: root,
+          STAGING_RELEASE_ARTIFACTS_ALLOW_EXAMPLE_EVIDENCE: "1",
+        },
+        encoding: "utf8",
+      });
+      const cutoverBindingOutput = `${cutoverBindingNegative.stdout ?? ""}${cutoverBindingNegative.stderr ?? ""}`;
+      if (cutoverBindingNegative.status === 0) {
+        console.error("Production evidence template kontrolü başarısız: staging release cutover SHA binding negative kırılmadı.");
+        process.exit(1);
+      }
+      if (!cutoverBindingOutput.includes("reports/deployment-cutover.json.sourceSha, summary.reports.uiUxRedesign.sourceCommitSha ve summary.reports.githubCi.commitSha aynı SHA olmalı.")) {
+        console.error("Production evidence template kontrolü başarısız: staging release cutover SHA binding beklenen hata yok.");
+        console.error(cutoverBindingOutput);
+        process.exit(1);
+      }
+    } finally {
+      writeFileSync(deploymentCutoverPath, originalDeploymentCutover);
     }
 
     const originalSummary = readFileSync(releaseSummaryPath, "utf8");
@@ -7592,6 +7816,61 @@ function runProdEnvTraefikOriginNegativeCheck() {
   }
 }
 
+function runProdEnvValidCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-prod-env.mjs"], {
+    env: createValidProdEnvForNegativeCheck(),
+    encoding: "utf8",
+  });
+
+  if (result.status !== 0) {
+    console.error("Production evidence template kontrolü başarısız: geçerli prod env kontrolü kırıldı.");
+    console.error(result.stderr);
+    process.exit(1);
+  }
+}
+
+function runProdEnvTrustedForwarderNegativeCheck() {
+  const env = createValidProdEnvForNegativeCheck();
+  env.TRAEFIK_TRUSTED_FORWARDER_CIDRS = "0.0.0.0/0";
+
+  const result = spawnSync(process.execPath, ["scripts/check-prod-env.mjs"], {
+    env,
+    encoding: "utf8",
+  });
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: prod env geniş trusted forwarder negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+
+  if (!String(result.stderr).includes("TRAEFIK_TRUSTED_FORWARDER_CIDRS yalnız sabit proxy IP'lerini /32 veya /128 ile içermeli.")) {
+    console.error("Production evidence template kontrolü başarısız: prod env geniş trusted forwarder negative beklenen hata yok.");
+    console.error(result.stderr);
+    process.exit(1);
+  }
+}
+
+function runProdEnvProxyTopologyNegativeCheck() {
+  const env = createValidProdEnvForNegativeCheck();
+  env.TRUSTED_PROXY_CIDRS = "172.31.255.3/32";
+
+  const result = spawnSync(process.execPath, ["scripts/check-prod-env.mjs"], {
+    env,
+    encoding: "utf8",
+  });
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: prod env yanlış trusted proxy negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+
+  if (!String(result.stderr).includes("TRUSTED_PROXY_CIDRS yalnız TRAEFIK_PROXY_IP/32 ile eşleşmeli.")) {
+    console.error("Production evidence template kontrolü başarısız: prod env yanlış trusted proxy negative beklenen hata yok.");
+    console.error(result.stderr);
+    process.exit(1);
+  }
+}
+
 function runProdEnvMissingAlertWebhookTokenNegativeCheck() {
   const env = createValidProdEnvForNegativeCheck();
   delete env.ALERT_WEBHOOK_TOKEN;
@@ -7850,11 +8129,15 @@ function createValidProdEnvForNegativeCheck() {
     WEB_URL: "https://o-okul.com",
     DATABASE_URL: "postgresql://app_user:strong-password@db.o-okul.internal:5432/o_okul",
     DIRECT_DATABASE_URL: "postgresql://migration_user:strong-password@db.o-okul.internal:5432/o_okul",
+    SECRET_DELIVERY_OUTBOX_DATABASE_URL: "postgresql://secret_delivery_worker:secret-delivery-worker-db-password-123456789@db.o-okul.internal:5432/o_okul",
+    DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL: "postgresql://secret_delivery_worker:secret-delivery-worker-db-password-123456789@postgres:5432/o_okul",
+    SECRET_DELIVERY_WORKER_DB_PASSWORD: "secret-delivery-worker-db-password-123456789",
     JWT_ACCESS_SECRET: "access-secret-123456789012345678901234",
     STUDENT_PII_ENCRYPTION_KEY: "student-pii-encryption-123456789012",
     STUDENT_PII_HASH_KEY: "student-pii-hash-123456789012345678",
     ADMIN_MFA_MODE: "required",
     ADMIN_MFA_SECRET_ENCRYPTION_KEY: "admin-mfa-secret-encryption-1234567",
+    SECRET_DELIVERY_ENCRYPTION_KEY: "secret-delivery-encryption-123456789",
     ADMIN_MFA_RECOVERY_HASH_KEY: "admin-mfa-recovery-hash-12345678901",
     ADMIN_MFA_CHALLENGE_SECRET: "admin-mfa-challenge-secret-123456789",
     ADMIN_MFA_ISSUER: "o-okul",
@@ -7867,6 +8150,13 @@ function createValidProdEnvForNegativeCheck() {
     API_RATE_LIMIT_STORE: "redis",
     API_RATE_LIMIT_WINDOW_MS: "60000",
     API_RATE_LIMIT_MAX: "300",
+    DOCKER_PROXY_SUBNET: "172.31.255.0/29",
+    DOCKER_PROXY_NETWORK: "o-okul_proxy_net",
+    TRAEFIK_PROXY_IP: "172.31.255.2",
+    API_PROXY_IP: "172.31.255.3",
+    RATE_LIMIT_SMOKE_EGRESS_IP: "172.31.255.4",
+    TRUSTED_PROXY_CIDRS: "172.31.255.2/32",
+    TRAEFIK_TRUSTED_FORWARDER_CIDRS: "",
     IDEMPOTENCY_STORE: "postgres",
     REPORT_PDF_RENDERER: "worker",
     REPORT_PDF_RENDER_TIMEOUT_MS: "30000",
@@ -7952,6 +8242,7 @@ function createValidProdEnvForNegativeCheck() {
     "AUDIT_NULL_TENANT_EVIDENCE_TARGET",
     "RATE_LIMIT_EVIDENCE_TARGET",
     "RLS_LIVE_EVIDENCE_TARGET",
+    "PRODUCTION_EVIDENCE_SUMMARY_TARGET",
     "PILOT_EVIDENCE_TARGET",
     "GO_LIVE_EVIDENCE_TARGET",
     "LIVE_STATUS_EVIDENCE_TARGET",

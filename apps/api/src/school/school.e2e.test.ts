@@ -772,7 +772,7 @@ describe("School management API", () => {
     expect(created.body).not.toHaveProperty("userId");
     expect(created.body).not.toHaveProperty("nationalIdEncrypted");
     expect(created.body).not.toHaveProperty("nationalIdHash");
-    expect(created.body.provisioning).toBe("PROVISIONED");
+    expect(created.body.provisioning).toBe("SKIPPED");
     expect(created.body.phone).toBe("5550000010");
 
     await request(server)
@@ -906,7 +906,7 @@ describe("School management API", () => {
       .expect(201);
     expect(created.body.phone).toBe("5000000010");
     expect(created.body.matched).toBe(false);
-    expect(created.body.provisioning).toBe("PROVISIONED");
+    expect(created.body.provisioning).toBe("SKIPPED");
     expect(created.body).not.toHaveProperty("nationalIdEncrypted");
     expect(created.body).not.toHaveProperty("nationalIdHash");
 
@@ -1566,7 +1566,7 @@ describe("School management API", () => {
       });
   });
 
-  it("öğretmen import commit tek öğretmen ve sınıf/ders atamaları oluşturur", async () => {
+  it("öğretmen import commit telefonla hesap açmadan tek öğretmen ve sınıf/ders atamaları oluşturur", async () => {
     const fileBase64 = createCsvBase64([
       "ad;soyad;brans;tc;telefon;atanacak_sinif;ders",
       "Nehir;Import;Matematik;10000001518;5550000013;8-A;Matematik",
@@ -1597,11 +1597,8 @@ describe("School management API", () => {
 
     await request(server)
       .post("/auth/login")
-      .send({ tenantSlug: "dna-egitim", nationalId: "10000001518", password: "5550000013" })
-      .expect(200)
-      .expect(({ body }) => {
-        expect(body.session).toMatchObject({ mustChangePassword: true });
-      });
+      .send({ tenantSlug: "dna-egitim", loginName: "10000001518", password: "5550000013" })
+      .expect(401);
 
     await request(server)
       .post("/teachers/imports")
@@ -1797,9 +1794,7 @@ describe("School management API", () => {
       .expect(({ body }) => {
         expect(body).toEqual([
           expect.objectContaining({ studentId, classId: "class-a", academicYearId: "academic-year-2026", termId: "term-2026-spring", reason: "CREATED", endsAt: expect.any(String) }),
-          expect.objectContaining({ studentId, classId: nextClassId, academicYearId: "academic-year-2026", termId: "term-2026-spring", reason: "CLASS_CHANGED" }),
         ]);
-        expect(body[1].endsAt).toBeUndefined();
       });
 
     await request(server)
@@ -1827,7 +1822,6 @@ describe("School management API", () => {
       .expect(({ body }) => {
         expect(body).toEqual([
           expect.objectContaining({ studentId, classId: "class-a", reason: "CREATED", endsAt: expect.any(String) }),
-          expect.objectContaining({ studentId, classId: nextClassId, reason: "CLASS_CHANGED", status: "GRADUATED", endsAt: expect.any(String) }),
         ]);
       });
 
@@ -2099,13 +2093,13 @@ describe("School management API", () => {
     await request(server)
       .post("/students")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ firstName: "Yeni", lastName: "Ogrenci" })
+      .send({ firstName: "Yeni", lastName: "Ogrenci", classId: "class-a" })
       .expect(201);
 
     await request(server)
       .post("/students")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ firstName: "Fazla", lastName: "Ogrenci" })
+      .send({ firstName: "Fazla", lastName: "Ogrenci", classId: "class-a" })
       .expect(409);
   });
 

@@ -1,8 +1,11 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, GoneException, Headers, Param, Patch, Post, Query } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
+import type { LicenseTermRecord } from "../license/license-term-store.js";
+import type { LicenseTermListRecord } from "@o-okul/shared-types";
+import { licenseTermCreateBodySchema, type LicenseTermCreateBody } from "../license/license-validation.js";
 import type { TenantRecord } from "./tenant-store.js";
 import { TenantService, type TenantCreateResponse } from "./tenant.service.js";
 import {
@@ -28,12 +31,19 @@ export class TenantController {
     return this.tenants.findOne(getRequestContext(), id);
   }
 
+  @Get("current/license-terms")
+  @RequireCapability("setup:manage")
+  listCurrentLicenseTerms(): Promise<LicenseTermListRecord[]> {
+    return this.tenants.listCurrentLicenseTerms(getRequestContext());
+  }
+
   @Post()
   @RequireCapability("tenant:manage")
   create(
     @Body(zodBody(tenantCreateBodySchema)) body: TenantCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<TenantCreateResponse> {
-    return this.tenants.create(getRequestContext(), body);
+    return this.tenants.create(getRequestContext(), body, idempotencyKey);
   }
 
   @Patch(":id")
@@ -45,10 +55,19 @@ export class TenantController {
     return this.tenants.update(getRequestContext(), id, body);
   }
 
+  @Post(":id/license-terms")
+  @RequireCapability("tenant:manage")
+  createLicenseTerm(
+    @Param("id") id: string,
+    @Body(zodBody(licenseTermCreateBodySchema)) body: LicenseTermCreateBody,
+  ): Promise<LicenseTermRecord> {
+    return this.tenants.createLicenseTerm(getRequestContext(), id, body);
+  }
+
   @Delete(":id")
   @RequireCapability("tenant:manage")
-  delete(@Param("id") id: string): Promise<TenantRecord> {
-    return this.tenants.delete(getRequestContext(), id);
+  delete(@Param("id") _id: string): never {
+    throw new GoneException("TENANT_HARD_DELETE_RETIRED");
   }
 }
 

@@ -8,6 +8,7 @@ const envFileArg = readArgValue("--env-file");
 const environmentName = readArgValue("--environment") ?? process.env.STAGING_GITHUB_ENVIRONMENT ?? "staging";
 const ghBin = readArgValue("--gh-bin") ?? process.env.GH_BIN ?? defaultGhBin();
 const repo = readArgValue("--repo") ?? process.env.GITHUB_REPOSITORY ?? inferRepoFromRemote();
+const validationMode = readArgValue("--mode") ?? "full";
 const dryRun = hasFlag("--dry-run");
 
 if (hasFlag("--help")) {
@@ -26,6 +27,9 @@ if (!repo) {
 if (environmentName.trim() === "") {
   failures.push("--environment boş olamaz.");
 }
+if (!new Set(["activation", "full"]).has(validationMode)) {
+  failures.push("--mode yalnız activation veya full olabilir.");
+}
 
 if (failures.length > 0) {
   fail(failures);
@@ -38,7 +42,7 @@ if (failures.length > 0) {
   fail(failures);
 }
 
-runEvidenceEnvCheck(envFile);
+runEvidenceEnvCheck(envFile, validationMode);
 
 const encodedEnv = readFileSync(envFile).toString("base64");
 if (encodedEnv.trim() === "") {
@@ -133,8 +137,8 @@ function isInside(targetPath, parentPath) {
   return relativePath === "" || (!!relativePath && !relativePath.startsWith("..") && !isAbsolute(relativePath));
 }
 
-function runEvidenceEnvCheck(file) {
-  const result = spawnSync(process.execPath, ["scripts/check-staging-evidence-env.mjs", "--env-file", file], {
+function runEvidenceEnvCheck(file, mode) {
+  const result = spawnSync(process.execPath, ["scripts/check-staging-evidence-env.mjs", "--mode", mode, "--env-file", file], {
     cwd: process.cwd(),
     env: process.env,
     stdio: "inherit",
@@ -185,6 +189,7 @@ Options:
   --env-file      Gerçek staging evidence env dosyası. Repo ve temp dizinleri reddedilir.
   --repo          GitHub repo: owner/name.
   --environment   GitHub environment adı. Varsayılan: staging.
+  --mode          Env doğrulama seviyesi: full (varsayılan) veya activation.
   --gh-bin        gh binary yolu. Varsayılan: /opt/homebrew/bin/gh veya gh.
   --dry-run       Dosya güvenliğini ve env sözleşmesini doğrular, secret yazmaz.
 

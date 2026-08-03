@@ -1,18 +1,22 @@
-import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
-import type { TenantCreateResponse } from "@o-okul/shared-types";
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import type { LicenseTermListRecord, TenantCreateResponse } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
-import { optionalTurkishMobilePhone } from "../auth/phone-normalize.js";
+import { hashIdempotencyRequest } from "../http/idempotency.js";
 import type { RequestContext } from "../context/request-context.js";
 import { isSystemAdmin } from "../rbac/roles.js";
 import { requiredText } from "../shared/required-text.js";
-import { encryptTcIdentity, hashTcIdentity, normalizeTcIdentity } from "../student/tc-identity.js";
 import {
-  type TenantUserRecord,
-  type UserManagementStore,
-  userManagementStoreToken,
-} from "../user-management/user-management-store.js";
+  type LicenseTermRecord,
+  type LicenseTermStore,
+  licenseTermStoreToken,
+} from "../license/license-term-store.js";
+import { licenseTermCreateBodySchema, type LicenseTermCreateBody } from "../license/license-validation.js";
+import { resolveLicenseState } from "../license/license-state.js";
+import { normalizeTcIdentity } from "../student/tc-identity.js";
+import type { TenantUserRecord } from "../user-management/user-management-store.js";
 import {
   type CreateTenantInput,
+  type CreateTenantOnboardingInput,
   type TenantRecord,
   type TenantStore,
   tenantStoreToken,
@@ -32,13 +36,15 @@ export interface TenantWriteBody {
   seatLimit?: number;
   status?: string;
   firstAdmin?: TenantFirstAdminBody;
+  firstOwner?: TenantFirstAdminBody;
+  campuses?: CreateTenantOnboardingInput["campuses"];
+  licenseTerm?: LicenseTermCreateBody;
 }
 
 export interface TenantFirstAdminBody {
   name?: string;
   email?: string;
   nationalId?: string;
-  phone?: string;
 }
 
 export type { TenantCreateResponse };
@@ -48,7 +54,7 @@ export class TenantService {
   constructor(
     @Inject(tenantStoreToken) private readonly tenants: TenantStore,
     @Optional() private readonly auditLogs?: AuditLogService,
-    @Optional() @Inject(userManagementStoreToken) private readonly users?: UserManagementStore,
+    @Optional() @Inject(licenseTermStoreToken) private readonly licenseTerms?: LicenseTermStore,
   ) {}
 
   async list(context: RequestContext): Promise<TenantRecord[]> {
@@ -74,37 +80,39 @@ export class TenantService {
     return tenant;
   }
 
-  async create(context: RequestContext, body: TenantWriteBody): Promise<TenantCreateResponse> {
+  async listCurrentLicenseTerms(context: RequestContext): Promise<LicenseTermListRecord[]> {
+    const tenantId = requireTenantId(context);
+    if (!this.licenseTerms?.listForTenant) throw new BadRequestException("LICENSE_TERM_STORE_REQUIRED");
+    return (await this.licenseTerms.listForTenant(tenantId)).map((term) => ({
+      ...term,
+      state: resolveLicenseState(term),
+    }));
+  }
+
+  async create(context: RequestContext, body: TenantWriteBody, idempotencyKey?: string): Promise<TenantCreateResponse> {
     this.assertSystemAdmin(context);
     const tenantInput = parseCreateTenant(body);
+    const onboarding = parseTenantOnboarding(body, context.userId, idempotencyKey);
+    if (onboarding) {
+      if (!this.tenants.createOnboarding) throw new BadRequestException("TENANT_ATOMIC_ONBOARDING_REQUIRED");
+      const stored = await createTenantOrThrow(() => this.tenants.createOnboarding!(tenantInput, onboarding));
+      if (!stored.replayed) {
+        await this.recordTenantCreated(context, stored.result.tenant);
+        await this.recordFirstOwnerCreated(context, stored.result.tenant.id, stored.result.owner);
+      }
+      return stored.result;
+    }
     const firstAdmin = parseFirstAdmin(body.firstAdmin);
-    const users = this.users;
-    if (firstAdmin && this.tenants.createWithFirstAdmin) {
+    if (firstAdmin) {
+      if (!this.tenants.createWithFirstAdmin) throw new BadRequestException("TENANT_ATOMIC_ONBOARDING_REQUIRED");
       const result = await createTenantOrThrow(() => this.tenants.createWithFirstAdmin!(tenantInput, firstAdmin));
       await this.recordTenantCreated(context, result.tenant);
       await this.recordFirstAdminCreated(context, result.tenant.id, result.admin);
       return result;
     }
-    if (firstAdmin && !users) {
-      throw new BadRequestException("TENANT_USER_STORE_REQUIRED");
-    }
     const tenant = await createTenantOrThrow(() => this.tenants.create(tenantInput));
     await this.recordTenantCreated(context, tenant);
-    if (!firstAdmin) return tenant;
-    if (!users) {
-      throw new BadRequestException("TENANT_USER_STORE_REQUIRED");
-    }
-    const admin = await users.createOrAttachTenantUser({
-      tenantId: tenant.id,
-      email: firstAdmin.email,
-      name: firstAdmin.name,
-      nationalIdEncrypted: encryptTcIdentity(firstAdmin.nationalId),
-      nationalIdHash: hashTcIdentity(firstAdmin.nationalId),
-      password: firstAdmin.phone,
-      roles: ["TENANT_ADMIN"],
-    });
-    await this.recordFirstAdminCreated(context, tenant.id, admin);
-    return { tenant, admin };
+    return tenant;
   }
 
   async update(context: RequestContext, id: string, body: TenantWriteBody): Promise<TenantRecord> {
@@ -174,6 +182,45 @@ export class TenantService {
     return deletedTenant;
   }
 
+  async createLicenseTerm(context: RequestContext, tenantId: string, body: LicenseTermCreateBody): Promise<LicenseTermRecord> {
+    this.assertSystemAdmin(context);
+    if (!this.licenseTerms) throw new BadRequestException("LICENSE_TERM_STORE_REQUIRED");
+    if (!await this.tenants.findForAdmin(tenantId)) throw new NotFoundException("TENANT_NOT_FOUND");
+    let term: LicenseTermRecord;
+    try {
+      term = await this.licenseTerms.create({
+        tenantId,
+        planCode: body.planCode,
+        startsAt: body.startsAt,
+        endsAt: body.endsAt,
+        activeStudentLimit: body.activeStudentLimit,
+        createdByPlatformAccountId: context.userId,
+        auditReference: body.auditReference,
+      });
+    } catch (error) {
+      if (isPostgresConstraintError(error, "23P01") || (error instanceof Error && error.message === "LICENSE_TERM_OVERLAP")) {
+        throw new BadRequestException("LICENSE_TERM_OVERLAP");
+      }
+      if (isPostgresConstraintError(error, "23503")) throw new BadRequestException("LICENSE_TERM_PLATFORM_ACCOUNT_REQUIRED");
+      throw error;
+    }
+    await this.auditLogs?.record({
+      tenantId,
+      actorUserId: context.userId,
+      entityType: "LicenseTerm",
+      entityId: term.id,
+      action: "license_term.created",
+      diff: {
+        planCode: term.planCode,
+        startsAt: term.startsAt,
+        endsAt: term.endsAt,
+        activeStudentLimit: term.activeStudentLimit,
+        auditReference: term.auditReference,
+      },
+    });
+    return term;
+  }
+
   private assertSystemAdmin(context: RequestContext): void {
     if (!isSystemAdmin(context.roles)) {
       throw new BadRequestException("SYSTEM_ADMIN_CONTEXT_REQUIRED");
@@ -210,6 +257,25 @@ export class TenantService {
     });
   }
 
+  private async recordFirstOwnerCreated(
+    context: RequestContext,
+    tenantId: string,
+    owner: { id: string; employeeId: string; roles: ["TENANT_OWNER"] },
+  ): Promise<void> {
+    await this.auditLogs?.record({
+      tenantId,
+      actorUserId: context.userId,
+      entityType: "Employee",
+      entityId: owner.employeeId,
+      action: "tenant.first_owner_invited",
+      diff: { accountId: owner.id, emailProvided: true, roles: owner.roles },
+    });
+  }
+
+}
+
+function isPostgresConstraintError(error: unknown, code: string): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
 function parseCreateTenant(body: TenantWriteBody): CreateTenantInput {
@@ -232,13 +298,9 @@ function parseUpdateTenant(body: TenantWriteBody): UpdateTenantInput {
   return {
     name: optionalText(body.name),
     slug: optionalText(body.slug),
-    plan: optionalText(body.plan),
-    licenseStartsAt: optionalDate(body.licenseStartsAt, "TENANT_LICENSE_START_INVALID"),
-    licenseEndsAt: optionalDate(body.licenseEndsAt, "TENANT_LICENSE_END_INVALID"),
     institutionType: optionalText(body.institutionType),
     contactEmail: optionalEmail(body.contactEmail, "TENANT_CONTACT_EMAIL_INVALID"),
     logoUrl: optionalUrl(body.logoUrl, "TENANT_LOGO_URL_INVALID"),
-    seatLimit: optionalPositiveInt(body.seatLimit, "TENANT_SEAT_LIMIT_INVALID"),
     status: optionalText(body.status),
   };
 }
@@ -257,7 +319,6 @@ function parseFirstAdmin(body: TenantFirstAdminBody | undefined):
       name: string;
       email: string;
       nationalId: string;
-      phone: string;
     }
   | undefined {
   if (!body) return undefined;
@@ -265,15 +326,55 @@ function parseFirstAdmin(body: TenantFirstAdminBody | undefined):
     requiredText(body.nationalId, "TENANT_FIRST_ADMIN_NATIONAL_ID_REQUIRED"),
     "TENANT_FIRST_ADMIN_NATIONAL_ID_INVALID",
   );
-  const phone = optionalTurkishMobilePhone(body.phone, "TENANT_FIRST_ADMIN_PHONE_INVALID");
-  if (!phone) {
-    throw new BadRequestException("TENANT_FIRST_ADMIN_PHONE_REQUIRED");
-  }
   return {
     name: requiredText(body.name, "TENANT_FIRST_ADMIN_NAME_REQUIRED"),
     email: requiredEmail(body.email, "TENANT_FIRST_ADMIN_EMAIL_REQUIRED"),
     nationalId,
-    phone,
+  };
+}
+
+function parseTenantOnboarding(
+  body: TenantWriteBody,
+  platformAccountId: string,
+  idempotencyKey: string | undefined,
+): CreateTenantOnboardingInput | undefined {
+  const hasAny = Boolean(body.firstOwner || body.campuses || body.licenseTerm);
+  if (!hasAny) return undefined;
+  if (!body.firstOwner || !body.campuses?.length || !body.licenseTerm) {
+    throw new BadRequestException("TENANT_ONBOARDING_FIELDS_REQUIRED");
+  }
+  const parsedTerm = licenseTermCreateBodySchema.safeParse(body.licenseTerm);
+  if (!parsedTerm.success) throw new BadRequestException("TENANT_LICENSE_TERM_INVALID");
+  const normalizedIdempotencyKey = idempotencyKey?.trim();
+  if (!normalizedIdempotencyKey) throw new BadRequestException("IDEMPOTENCY_KEY_REQUIRED");
+  if (normalizedIdempotencyKey.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(normalizedIdempotencyKey)) {
+    throw new BadRequestException("IDEMPOTENCY_KEY_INVALID");
+  }
+  const owner = parseFirstOwner(body.firstOwner);
+  return {
+    campuses: body.campuses.map((campus) => ({
+      name: requiredText(campus.name, "TENANT_CAMPUS_NAME_REQUIRED"),
+      code: optionalText(campus.code),
+      unitType: campus.unitType,
+    })),
+    firstOwner: owner,
+    idempotencyKey: normalizedIdempotencyKey,
+    requestHash: hashIdempotencyRequest("tenant.onboarding.create", body),
+    licenseTerm: {
+      ...parsedTerm.data,
+      createdByPlatformAccountId: platformAccountId,
+    },
+  };
+}
+
+function parseFirstOwner(body: TenantFirstAdminBody): CreateTenantOnboardingInput["firstOwner"] {
+  const nationalId = optionalText(body.nationalId);
+  return {
+    name: requiredText(body.name, "TENANT_FIRST_OWNER_NAME_REQUIRED"),
+    email: requiredEmail(body.email, "TENANT_FIRST_OWNER_EMAIL_REQUIRED"),
+    nationalId: nationalId
+      ? normalizeTcIdentity(nationalId, "TENANT_FIRST_OWNER_NATIONAL_ID_INVALID")
+      : undefined,
   };
 }
 
@@ -347,8 +448,8 @@ async function createTenantOrThrow<T>(createTenant: () => Promise<T>): Promise<T
     if (isUniqueConstraintError(error, "Tenant_slug_key")) {
       throw new BadRequestException("TENANT_SLUG_ALREADY_EXISTS");
     }
-    if (isTenantFirstAdminEmailAlreadyExists(error)) {
-      throw new BadRequestException("TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS");
+    if (error instanceof Error && ["IDEMPOTENCY_KEY_BODY_MISMATCH", "IDEMPOTENCY_KEY_IN_PROGRESS"].includes(error.message)) {
+      throw new ConflictException(error.message);
     }
     throw error;
   }
@@ -358,13 +459,6 @@ function isUniqueConstraintError(error: unknown, constraint: string): boolean {
   if (!error || typeof error !== "object") return false;
   const candidate = error as { code?: unknown; constraint?: unknown };
   return candidate.code === "23505" && candidate.constraint === constraint;
-}
-
-function isTenantFirstAdminEmailAlreadyExists(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const candidate = error as { code?: unknown; message?: unknown };
-  return candidate.code === "TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS" ||
-    candidate.message === "TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS";
 }
 
 function requireTenantId(context: RequestContext): string {

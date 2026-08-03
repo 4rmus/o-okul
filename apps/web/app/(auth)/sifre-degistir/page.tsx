@@ -30,6 +30,10 @@ export default function ChangePasswordPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    if (newPassword.length < 15 || newPassword.length > 128) {
+      setError("Yeni şifre 15-128 karakter olmalıdır.");
+      return;
+    }
     if (newPassword !== newPasswordAgain) {
       setError("Yeni şifreler aynı olmalı.");
       return;
@@ -67,6 +71,8 @@ export default function ChangePasswordPage() {
             value={newPassword}
             onChange={(event) => setNewPassword(event.target.value)}
             autoComplete="new-password"
+            minLength={15}
+            maxLength={128}
           />
         </Field>
         <Field label="Yeni şifre tekrar">
@@ -75,6 +81,8 @@ export default function ChangePasswordPage() {
             value={newPasswordAgain}
             onChange={(event) => setNewPasswordAgain(event.target.value)}
             autoComplete="new-password"
+            minLength={15}
+            maxLength={128}
           />
         </Field>
         {error ? <p className="next-form-error">{error}</p> : null}
@@ -97,7 +105,7 @@ export default function ChangePasswordPage() {
 function getAuthHomePath(auth: AuthResponse) {
   const { roles, subjectType } = auth.session;
   if (roles.includes("SYSTEM_ADMIN")) return "/sistem";
-  if (roles.includes("TENANT_ADMIN") || roles.includes("ASSISTANT_ADMIN")) return "/kurum";
+  if (roles.some((role) => ["TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF"].includes(role))) return "/kurum";
   if (roles.includes("TEACHER") && subjectType === "TEACHER") return "/ogretmen";
   if (roles.includes("STUDENT") && subjectType === "STUDENT") return "/ogrenci";
   if (roles.includes("GUARDIAN") && subjectType === "GUARDIAN") return "/veli";

@@ -21,6 +21,7 @@ const requiredEvidenceCheckScripts = new Map([
   ["Alert webhook", "scripts/smoke-alert-webhook.mjs"],
   ["WAL archive target", "scripts/smoke-wal-archive-target.mjs"],
   ["Report generation smoke", "scripts/smoke-report-generation-live.mjs"],
+  ["Secret delivery outbox evidence", "scripts/check-secret-delivery-outbox-evidence.mjs"],
   ["Deployment rollback evidence", "scripts/check-deployment-rollback-evidence.mjs"],
   ["GitHub CI evidence", "scripts/check-github-ci-evidence.mjs"],
   ["Restore drill evidence", "scripts/check-restore-drill-evidence.mjs"],
@@ -125,6 +126,7 @@ const summarySmokeEvidenceKeys = [
   "alertWebhook",
   "walArchive",
   "reportGeneration",
+  "secretDeliveryOutbox",
 ];
 const summaryReportKeys = [
   "restoreDrill",
@@ -373,6 +375,12 @@ const expectedTenantCompositeRelations = [
   "StudentEnrollment.class",
   "Student.class",
   "Student.responsibleTeacher",
+  "MembershipCampusScope.membership",
+  "MembershipCampusScope.campus",
+  "LicenseUsage.licenseTerm",
+  "Employee.accountUser",
+  "Teacher.employee",
+  "StudentContact.student",
 ];
 const expectedTenantFkInsertRejects = expectedTenantCompositeRelations.map((relation) => `${relation} cross tenant insert`);
 const liveStatusGates = [
@@ -1099,6 +1107,17 @@ function requireSummarySmokeEvidence(summary, failures, goLiveReport) {
       failures.push("productionEvidenceSummary.summary.smokeEvidence.reportGeneration.commandsPassed tek pnpm report-generation:perf komutu icermeli.");
     }
     requireEmptyArray(reportGeneration, failures, "gaps", "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.gaps");
+  }
+
+  const secretDeliveryOutbox = requireSmokeCheck(value, failures, "secretDeliveryOutbox", "secret_delivery_outbox_staging_smoke", summary, goLiveReport);
+  if (secretDeliveryOutbox && (secretDeliveryOutbox.terminalStatus !== "DELIVERED" || secretDeliveryOutbox.payloadCleared !== true)) {
+    failures.push("productionEvidenceSummary.summary.smokeEvidence.secretDeliveryOutbox DELIVERED ve payloadCleared true olmalı.");
+  }
+  if (secretDeliveryOutbox && (typeof secretDeliveryOutbox.releaseImageTag !== "string" || !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(secretDeliveryOutbox.releaseImageTag))) {
+    failures.push("productionEvidenceSummary.summary.smokeEvidence.secretDeliveryOutbox.releaseImageTag güvenli IMAGE_TAG olmalı.");
+  }
+  if (secretDeliveryOutbox && (Date.parse(secretDeliveryOutbox.notBefore) > Date.parse(secretDeliveryOutbox.generatedAt) || Date.parse(secretDeliveryOutbox.generatedAt) - Date.parse(secretDeliveryOutbox.notBefore) > 24 * 60 * 60 * 1000 || Date.parse(secretDeliveryOutbox.deliveredAt) < Date.parse(secretDeliveryOutbox.notBefore) || Date.parse(secretDeliveryOutbox.updatedAt) < Date.parse(secretDeliveryOutbox.notBefore))) {
+    failures.push("productionEvidenceSummary.summary.smokeEvidence.secretDeliveryOutbox cutover sonrası notBefore bağı geçersiz.");
   }
 }
 
@@ -3364,8 +3383,8 @@ function requireSummaryRateLimit(report, failures) {
     requireObjectString(
       loginAttemptLimiter,
       failures,
-      "productionEvidenceSummary.summary.reports.rateLimit.loginAttemptLimiter.nationalIdHash",
-      "nationalIdHash",
+      "productionEvidenceSummary.summary.reports.rateLimit.loginAttemptLimiter.loginNameHash",
+      "loginNameHash",
     );
     requireObjectIntegerAtLeast(
       loginAttemptLimiter,
@@ -3397,8 +3416,8 @@ function requireSummaryRateLimit(report, failures) {
     requireObjectTrue(
       loginAttemptLimiter,
       failures,
-      "productionEvidenceSummary.summary.reports.rateLimit.loginAttemptLimiter.nationalIdAndIpScoped",
-      "nationalIdAndIpScoped",
+      "productionEvidenceSummary.summary.reports.rateLimit.loginAttemptLimiter.tenantAndLoginNameAndIpScoped",
+      "tenantAndLoginNameAndIpScoped",
     );
     requireObjectTrue(
       loginAttemptLimiter,

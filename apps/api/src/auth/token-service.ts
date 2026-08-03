@@ -1,9 +1,16 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import type { SessionRecord, SessionStore } from "./session-store.js";
+import type { ActivePersona } from "@o-okul/shared-types";
+import type { SessionIssueInput, SessionRecord, SessionStore } from "./session-store.js";
 
 export interface AccessTokenPayload {
   sub: string;
   tenantId: string;
+  membershipId?: string;
+  activePersona?: ActivePersona;
+  campusScope?: {
+    scopeMode: "TENANT" | "CAMPUSES";
+    campusIds: string[];
+  };
   roles: string[];
   sessionId: string;
   membershipVersion: number;
@@ -21,6 +28,9 @@ export interface TokenPair {
   mustChangePassword?: boolean;
 }
 
+type TokenIssueInput = Omit<AccessTokenPayload, "sessionId" | "iat" | "exp"> &
+  Pick<SessionIssueInput, "deviceLabel" | "clientIpPrefix">;
+
 export class TokenService {
   private readonly accessTokenTtlMs: number;
   private readonly refreshTokenTtlMs: number;
@@ -34,22 +44,41 @@ export class TokenService {
     this.refreshTokenTtlMs = options.refreshTokenTtlMs ?? resolveRefreshTokenTtlMs();
   }
 
-  async issue(input: Omit<AccessTokenPayload, "sessionId" | "iat" | "exp">): Promise<TokenPair> {
+  async issue(input: TokenIssueInput): Promise<TokenPair> {
+    return this.issueSession(input);
+  }
+
+  async issueReplacing(sessionId: string, input: TokenIssueInput): Promise<TokenPair> {
+    return this.issueSession(input, sessionId);
+  }
+
+  private async issueSession(
+    input: TokenIssueInput,
+    replacedSessionId?: string,
+  ): Promise<TokenPair> {
+    const { deviceLabel, clientIpPrefix, ...accessInput } = input;
     const refreshToken = createRefreshToken();
     const expiresAt = new Date(Date.now() + this.refreshTokenTtlMs);
-    const session = await this.store.create({
+    const sessionInput = {
       userId: input.sub,
       tenantId: input.tenantId,
+      membershipId: input.membershipId,
+      activePersona: input.activePersona,
       roles: input.roles,
       subjectType: input.subjectType,
       subjectId: input.subjectId,
+      deviceLabel,
+      clientIpPrefix,
       refreshToken,
       membershipVersion: input.membershipVersion,
       expiresAt,
-    });
+    };
+    const session = replacedSessionId
+      ? await this.store.replace(replacedSessionId, sessionInput)
+      : await this.store.create(sessionInput);
 
     return {
-      accessToken: this.signAccessToken({ ...input, sessionId: session.id }),
+      accessToken: this.signAccessToken({ ...accessInput, sessionId: session.id }),
       refreshToken,
       session,
     };
@@ -75,12 +104,28 @@ export class TokenService {
     }
 
     const nextRefreshToken = createRefreshToken();
-    const updated = await this.store.updateRefreshToken(session.id, nextRefreshToken, new Date(Date.now() + this.refreshTokenTtlMs));
+    let updated: SessionRecord;
+    try {
+      updated = await this.store.updateRefreshToken(
+        session.id,
+        refreshToken,
+        nextRefreshToken,
+        new Date(Date.now() + this.refreshTokenTtlMs),
+      );
+    } catch (error) {
+      if (error instanceof Error && error.message === "REFRESH_TOKEN_ROTATION_CONFLICT") {
+        await this.store.markFamilyCompromised(session.tokenFamilyId);
+        throw new Error("REFRESH_TOKEN_REUSE_DETECTED");
+      }
+      throw error;
+    }
 
     return {
       accessToken: this.signAccessToken({
         sub: updated.userId,
         tenantId: updated.tenantId,
+        membershipId: updated.membershipId,
+        activePersona: updated.activePersona,
         roles: updated.roles,
         sessionId: updated.id,
         membershipVersion: updated.membershipVersion,

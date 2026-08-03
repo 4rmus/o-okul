@@ -3,6 +3,7 @@ import type { NextFunction, Request, Response } from "express";
 import { HttpException, HttpStatus } from "@nestjs/common";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { SocketRedisCommandClient, type RedisCommandClient } from "../auth/login-attempt-limiter.js";
+import { resolveClientIp } from "./trusted-proxy.js";
 
 export interface RateLimitStore {
   increment(key: string, windowMs: number): Promise<number>;
@@ -110,7 +111,7 @@ export function isApiRateLimitEnabled(env = process.env): boolean {
 }
 
 export function rateLimitKey(request: Request, env = process.env): string {
-  const ip = readClientIp(request);
+  const ip = resolveClientIp(request);
   const prefix = env.API_RATE_LIMIT_KEY_PREFIX || env.QUEUE_PREFIX || "o_okul";
   const digest = createHash("sha256").update(ip).digest("hex");
   return `${prefix}:api-rate-limit:${digest}`;
@@ -120,17 +121,6 @@ function shouldSkipRateLimit(request: Request): boolean {
   if (request.method === "OPTIONS") return true;
   const path = request.path || request.url || "/";
   return excludedPathPrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
-}
-
-function readClientIp(request: Request): string {
-  const forwardedFor = request.headers["x-forwarded-for"];
-  const firstForwarded = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
-  const forwardedIp = firstForwarded?.split(",")[0]?.trim();
-  if (forwardedIp) return forwardedIp;
-
-  const realIp = request.headers["x-real-ip"];
-  if (Array.isArray(realIp)) return realIp[0] ?? "unknown";
-  return realIp?.trim() || request.ip || request.socket.remoteAddress || "unknown";
 }
 
 function readPositiveInteger(value: string | undefined, fallback: number): number {

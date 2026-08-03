@@ -35,6 +35,12 @@ const requiredCompositeRelations = new Set([
   "StudentEnrollment.class",
   "Student.class",
   "Student.responsibleTeacher",
+  "MembershipCampusScope.membership",
+  "MembershipCampusScope.campus",
+  "LicenseUsage.licenseTerm",
+  "Employee.accountUser",
+  "Teacher.employee",
+  "StudentContact.student",
 ]);
 
 const schema = readFileSync(schemaPath, "utf8");

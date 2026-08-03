@@ -206,15 +206,15 @@ try {
 
   const placeholderPath = join(artifactRoot, "private", "placeholder.json");
   const placeholder = createValidEvidence();
-  placeholder.email = "report-admin@example.com";
+  placeholder.loginName = "report-admin@example.com";
   writeJson(placeholderPath, placeholder);
   runNegativeCheck(
-    "live UI-worker placeholder email negative",
+    "live UI-worker placeholder login name negative",
     {
       NEXT_E2E_LIVE_UI_WORKER: "1",
       LIVE_UI_WORKER_EVIDENCE_PATH: placeholderPath,
     },
-    "email production kanıtı için örnek/placeholder/redacted değer olmamalı.",
+    "loginName production kanıtı için örnek/placeholder/redacted değer olmamalı.",
   );
 
   const extraFieldPath = join(artifactRoot, "private", "extra-field.json");
@@ -394,19 +394,20 @@ function writeJson(path, value, mode = path.includes(`${artifactRoot}/private/`)
 
 function createValidEvidence() {
   return {
-    email: "report.admin@staging.o-okul.com",
     examId: "exam-report-smoke-20260614",
     firstStudentId: "student-report-smoke-20260614-00001",
     generatedAt: new Date(Date.now() - 60_000).toISOString(),
     guardianPortal: {
-      email: "guardian.portal@staging.o-okul.com",
+      loginName: "guardian.portal@staging.o-okul.com",
       password: "Str0ngGuardian!2026",
     },
+    loginName: "report.admin@staging.o-okul.com",
     password: "Str0ngReport!2026",
     studentPortal: {
-      email: "student.portal@staging.o-okul.com",
+      loginName: "student.portal@staging.o-okul.com",
       password: "Str0ngStudent!2026",
     },
+    tenantSlug: "staging-school",
   };
 }
 

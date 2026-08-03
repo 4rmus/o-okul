@@ -47,12 +47,14 @@ const teacherAssignmentRoleSchema = z.enum(["CLASS_TEACHER", "BRANCH_TEACHER", "
 
 export const campusCreateBodySchema = z.object({
   code: optionalTrimmedString,
+  unitType: z.enum(["SCHOOL", "COURSE", "MIXED"]).optional(),
   name: requiredUppercaseString,
   tenantId: optionalNonEmptyString,
 }).strict() satisfies z.ZodType<CampusCreateRequest>;
 
 export const campusUpdateBodySchema = z.object({
   code: optionalTrimmedString,
+  unitType: z.enum(["SCHOOL", "COURSE", "MIXED"]).optional(),
   name: optionalNonEmptyUppercaseString,
 }).strict() satisfies z.ZodType<CampusUpdateRequest>;
 

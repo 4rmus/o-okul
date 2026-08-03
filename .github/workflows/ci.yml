@@ -69,3 +69,62 @@ jobs:
           path: apps/web/test-results
           if-no-files-found: ignore
           retention-days: 7
+
+  account-management-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: o_okul
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d o_okul"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://app:app@localhost:5432/o_okul
+      DIRECT_DATABASE_URL: postgresql://migration:migration@localhost:5432/o_okul
+      EMPLOYEE_ACTIVATION_POSTGRES_TEST_URL: postgresql://app:app@localhost:5432/o_okul
+      EMPLOYEE_ACTIVATION_POSTGRES_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/o_okul
+      STUDENT_LICENSE_POSTGRES_TEST_URL: postgresql://app:app@localhost:5432/o_okul
+      STUDENT_LICENSE_POSTGRES_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/o_okul
+      ACCOUNT_MANAGEMENT_POSTGRES_REQUIRED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.0
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+      - name: Bootstrap database roles
+        env:
+          PGPASSWORD: postgres
+        run: psql --host localhost --username postgres --dbname o_okul --set ON_ERROR_STOP=1 --file docker/postgres/init/001_roles.sql
+      - name: Bootstrap required extensions
+        env:
+          PGPASSWORD: postgres
+        run: >-
+          psql --host localhost --username postgres --dbname o_okul --set ON_ERROR_STOP=1
+          --command "CREATE EXTENSION IF NOT EXISTS pg_trgm"
+          --command "CREATE EXTENSION IF NOT EXISTS btree_gist"
+      - name: Apply database migrations
+        run: pnpm --filter @o-okul/db exec prisma migrate deploy --config prisma.config.ts
+      - name: Verify account-management PostgreSQL concurrency
+        run: >-
+          pnpm --filter @o-okul/api exec vitest run --no-file-parallelism --reporter=verbose
+          src/identity-invitation/employee-account-activation-store.postgres.test.ts
+          src/student/student-license-concurrency.postgres.test.ts

@@ -3,7 +3,7 @@
   "environment": "staging",
   "checkedAt": "2026-05-31T11:30:00.000Z",
   "schema": {
-    "tenantScopedTables": 57,
+    "tenantScopedTables": 62,
     "derivedFromSchema": true,
     "staticCheckPassed": true,
     "liveCheckPassed": true,
@@ -14,6 +14,10 @@
       "User",
       "NotificationDeviceToken",
       "TenantMembership",
+      "MembershipCampusScope",
+      "LicenseTerm",
+      "LicenseUsage",
+      "Employee",
       "AuthSession",
       "IdempotencyKey",
       "IdentityInvitation",
@@ -28,6 +32,7 @@
       "Student",
       "StudentEnrollment",
       "Teacher",
+      "StudentContact",
       "TeacherAssignment",
       "Guardian",
       "GuardianStudent",
@@ -71,7 +76,7 @@
     "tenantAHash": "tenant-a-redacted",
     "tenantBHash": "tenant-b-redacted",
     "crossTenantReadRows": 0,
-    "crossTenantReadChecks": 57,
+    "crossTenantReadChecks": 62,
     "withCheckRejects": [
       "Student wrong tenant insert",
       "Homework wrong tenant insert",
@@ -87,7 +92,7 @@
     "auditBypassAction": "system.rls_bypass_requested"
   },
   "tenantFkPreflight": {
-    "requiredCompositeRelations": 23,
+    "requiredCompositeRelations": 29,
     "relationsVerified": [
       "AnnouncementReceipt.announcement",
       "AnnouncementDeliveryReport.announcement",
@@ -111,7 +116,13 @@
       "ReportSnapshot.class",
       "StudentEnrollment.class",
       "Student.class",
-      "Student.responsibleTeacher"
+      "Student.responsibleTeacher",
+      "MembershipCampusScope.membership",
+      "MembershipCampusScope.campus",
+      "LicenseUsage.licenseTerm",
+      "Employee.accountUser",
+      "Teacher.employee",
+      "StudentContact.student"
     ],
     "legacyAllowlistCount": 0,
     "orphanRows": 0,
@@ -139,7 +150,13 @@
       "ReportSnapshot.class cross tenant insert",
       "StudentEnrollment.class cross tenant insert",
       "Student.class cross tenant insert",
-      "Student.responsibleTeacher cross tenant insert"
+      "Student.responsibleTeacher cross tenant insert",
+      "MembershipCampusScope.membership cross tenant insert",
+      "MembershipCampusScope.campus cross tenant insert",
+      "LicenseUsage.licenseTerm cross tenant insert",
+      "Employee.accountUser cross tenant insert",
+      "Teacher.employee cross tenant insert",
+      "StudentContact.student cross tenant insert"
     ],
     "migrationPreflightCommand": "pnpm tenant-db:check"
   },

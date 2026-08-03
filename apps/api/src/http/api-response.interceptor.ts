@@ -1,7 +1,7 @@
 import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from "@nestjs/common";
 import type { Request } from "express";
 import { map, Observable } from "rxjs";
-import type { ApiItemResponse, ApiListResponse } from "@o-okul/shared-types";
+import type { ApiCursorListResponse, ApiItemResponse, ApiListResponse } from "@o-okul/shared-types";
 import { readListMeta } from "../listing/list-query.js";
 
 @Injectable()
@@ -29,10 +29,7 @@ function envelope(body: unknown): unknown {
       limit: body.length,
       totalPages: body.length === 0 ? 0 : 1,
     };
-    return {
-      data: body,
-      meta,
-    } satisfies ApiListResponse<unknown>;
+    return { data: body, meta } as ApiListResponse<unknown> | ApiCursorListResponse<unknown>;
   }
 
   return { data: body } satisfies ApiItemResponse<unknown>;

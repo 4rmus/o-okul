@@ -128,7 +128,7 @@ Son kontrol: 2026-05-30
 
 ### DEC-20260531-01 — Veli-öğrenci bağlama
 
-Durum: Onaylı
+Durum: DEC-20260801-01 ile güncellendi
 Karar: Veli-öğrenci bağlantısını kurum yöneticisi kurar ve kaldırır; teacher rolü bağlantıları
 okuyabilir, yazamaz. Telefon doğrulama ve veli self-service eşleştirme v1 kapsamı dışındadır.
 Kaynak: Veli portalı ürün kararı.
@@ -254,7 +254,7 @@ Son kontrol: 2026-06-23
 
 ### DEC-20260627-01 — Production v1 modernizasyon kapsam kilidi
 
-Durum: Onaylı
+Durum: Hesap ve guardian kapsamı DEC-20260801-01 ile güncellendi
 Karar: Per-tenant `User`, TC/telefon ile giriş, zorunlu
 şifre değişimi, akademik taksonomi (`Alan`, `GradeLevelCourse`, `Class.alanId`) ve PII kolon
 düşürmeleri ayrı migration dalgaları olarak uygulanır. Bu dilimde veli finans/duyuru/destek
@@ -354,6 +354,45 @@ Kanıt: `apps/worker/src/jobs/postgres-report-generation-adapter.ts`,
 Etkilenen ADR: ADR-0002
 Açık soru: Gerçek staging/prod KVKK envanteri ve pilot aydınlatma metni onayı ayrıca gereklidir.
 Son kontrol: 2026-07-13
+
+### DEC-20260801-01 — Kurum, hesap, lisans ve erişim modeli
+
+Durum: Onaylı; additive migration ve tenant bazlı cutover bekliyor
+Karar: Sözleşmeli müşteri veri izolasyonu ve lisans sınırı olan tek `Tenant`, şubeler tenant
+altındaki `Campus` olarak kalır. Fiyatlama aktif öğrenci kotasına dayanır; çalışan hesapları ücretli
+koltuk değildir. Yıllık veya çok yıllık lisans dönemleri geriye dönük değiştirilmez: yeni
+`LicenseTerm` segmentleri eklenir. Dönem öncesinde giriş kapalı, dönem sonunda 14 gün salt-okunur,
+15-90. günlerde dondurulmuş saklama ve 91. günde legal hold/retention kontrolüne bağlı imha süreci
+uygulanır. Normal API tenant graph'ını fiziksel silemez.
+
+Tenant hesabı, çalışan/öğrenci profili, tenant üyeliği ve session birbirinden ayrılır. Giriş
+`kurum kodu + kurum içi kullanıcı kimliği` ile yapılır; T.C. kimlik numarası ve telefon kullanıcı adı,
+ilk parola veya reset parolası olamaz. Aynı kişi farklı tenantlarda ayrı hesap kullanır. Çalışan aynı
+zamanda öğretmense tek hesapla, capability birleşimi olmadan `STAFF` ve `TEACHER` personaları
+arasında geçiş yapar. Öğrenci personası çalışan hesabıyla birleşmez.
+
+Yetkilendirme altı sabit paket ve kapsam üzerinden yürür: `TENANT_OWNER`, `TENANT_ADMIN`,
+`OPERATIONS_STAFF`, `FINANCE_STAFF`, `TEACHER`, `STUDENT`. Rank karşılaştırması yerine exact
+capability ve tenant/campus/öğretmen ataması kapsamı kullanılır. `SYSTEM_ADMIN` tenant rolü
+olmaktan çıkarılıp ayrı control plane hesabına taşınır; tenant verisine süreli, MFA'lı ve auditli
+breakglass dışında erişemez.
+
+Öğrenci profili zorunlu, portal hesabı opsiyoneldir. `GUARDIAN` rolü, hesabı, session'ı ve portalı
+emekliye ayrılacaktır; yeni hedef yalnız login yetkisi olmayan `StudentContact` kaydıdır. Mevcut
+guardian runtime, fixture ve UAT sözleşmeleri additive model, veri envanteri, doğrulanmış yedek,
+veri sahibi onayı ve gözlem süresi tamamlanmadan kaldırılmaz. Bu karar DEC-20260531-01'in tamamının
+ve DEC-20260627-01'in TC/telefon girişi ile guardian kapsamının yerine geçer; ikinci karardaki
+akademik taksonomi ve SMS varsayımları değişmez.
+Kaynak: Ürün sahibinin onayladığı kurum ve hesap yönetimi mimarisi.
+Kanıt: `docs/account-management-architecture-plan.md`, `packages/db/prisma/schema.prisma`,
+`packages/shared-types/src/role-capabilities.ts`,
+`apps/api/src/identity-provisioning/profile-lifecycle-store.ts`,
+`packages/db/prisma/migrations/20260801190000_add_account_management_foundation/migration.sql`,
+`docs/product-journeys-v1.md`.
+Etkilenen ADR: ADR-0001, ADR-0002
+Açık soru: Yok. Runtime geçişi DEC'te tanımlanan güvenlik ve geri dönüş kapılarıyla PR-1–PR-8
+dilimlerinde yapılacaktır; bu karar tek başına staging veya production capability kanıtı değildir.
+Son kontrol: 2026-08-01
 
 ## Faz Öncesi Onay Gerektirenler
 

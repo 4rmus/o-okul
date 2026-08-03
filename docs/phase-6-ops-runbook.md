@@ -61,7 +61,8 @@ Kontroller:
   çalıştırılır; smoke çıktısı `RATE_LIMIT_SMOKE_EVIDENCE_FILE` altında `rate_limit_redis_smoke`
   artifact'i olarak saklanır ve `RATE_LIMIT_EVIDENCE_TARGET=file:///... pnpm rate-limit:check` ile
   doğrulanır. Artifact global API limiter ve login attempt limiter için Redis store, paylaşılan
-  pencere, `LOGIN_LOCKED`/`RATE_LIMITED` 429 ve T.C. kimlik hash'i + IP kapsamını göstermeli; ham IP/T.C. kimlik yerine
+  pencere, `LOGIN_LOCKED`/`RATE_LIMITED` 429 ve tenant + kullanıcı adı hash'i + IP kapsamını göstermeli; ham IP,
+  kurum kodu veya kullanıcı adı yerine
   SHA-256 hash, tam `commandsPassed=["pnpm rate-limit:smoke", "pnpm rate-limit:check"]` ve boş
   `gaps` listesi taşımalıdır.
   `RATE_LIMIT_EVIDENCE_TARGET`, `instances[].baseUrl` ve `evidenceReferences[]` userinfo/query/fragment
@@ -85,15 +86,25 @@ Kontroller:
   `https://<staging-host>/__rate-limit-shard/api/v1/__rate-limit-smoke`, ikinci login URL ise
   `https://<staging-host>/__rate-limit-shard/api/v1/auth/login` olmalıdır. Bu public TLS/first-gates
   kanıtı değildir; yalnız Redis limiter paylaşımını doğrular.
-  Traefik `X-Forwarded-For` değerini gerçek edge IP'sine sabitliyorsa, API limiter fazının login
-  limiter fazını kirletmemesi için `RATE_LIMIT_SMOKE_RESET_API_LIMIT_BEFORE_API=true`,
+  `TRAEFIK_PROXY_IP`, `API_PROXY_IP` ve `RATE_LIMIT_SMOKE_EGRESS_IP` aynı dar `proxy_net`
+  içinde farklı sabit IP'ler olmalı; `TRUSTED_PROXY_CIDRS` yalnız Traefik IP'sini `/32` ile
+  içerir. Traefik güvenilmeyen istemci `X-Forwarded-For`/`X-Real-IP` başlıklarını güven kaynağı
+  yapmaz; smoke da bu başlıkları göndermez. Komuttan önce `RATE_LIMIT_SMOKE_CLIENT_IP` ve
+  `RATE_LIMIT_LOGIN_SMOKE_CLIENT_IP` değerlerine smoke çalıştırıcısının gerçek dış IP'si girilir;
+  artifact'te yalnız hash'i kalır. API limiter fazının login limiter fazını kirletmemesi için
+  `RATE_LIMIT_SMOKE_RESET_API_LIMIT_BEFORE_API=true`,
   `RATE_LIMIT_SMOKE_RESET_API_LIMIT_BEFORE_LOGIN=true`,
   `RATE_LIMIT_SMOKE_API_LIMIT_RESET_IP=<edge-ip>` ve `REDIS_URL=redis://127.0.0.1:6379` kullanılır.
   Bu izolasyon yalnız API rate-limit Redis key'ini siler; login kilidi kanıtı yine iki API
   container arasında gerçek Redis paylaşımıyla üretilir.
-  `differentIpNotLocked` negatifi için `RATE_LIMIT_LOGIN_SMOKE_OTHER_IP_URL=http://127.0.0.1:3100/api/v1/auth/login`
-  kullanılabilir; bu lokal URL sadece farklı IP kapsamını ayırır, iki instance lock kanıtı HTTPS
-  Traefik URL'lerinden gelmeye devam eder.
+  `differentIpNotLocked` negatifi için smoke, sabit `RATE_LIMIT_SMOKE_EGRESS_IP` kullanan
+  `api-rate-limit-shard` container'ından sabit `API_PROXY_IP` adresine doğrudan istek yapar.
+  İsteklerden önce `docker network inspect`, çalışan `traefik`, `api` ve `api-rate-limit-shard`
+  container'larının bu üç sabit `proxy_net` IP'sine sahip olduğunu doğrular; artifact'e yalnız ikinci
+  çıkış IP'sinin hash'i yazılır. Bu gerçek ikinci ağ çıkışı, localhost veya sahte forwarded başlığıyla
+  elde edilen kanıtın yerini alır.
+  Login smoke ayrıca mevcut/aktif kurum kodunu `RATE_LIMIT_LOGIN_SMOKE_TENANT_SLUG` ile alır;
+  `RATE_LIMIT_LOGIN_SMOKE_LOGIN_NAME` verilmezse o koşuya özel, mevcut olmayan bir kullanıcı adı üretir.
 - Ödeme planı, taksit yazma, öğrenci import commit, öğrenci bireysel/toplu kayıt yenileme ve
   transfer, sınav create/publish/participant, parser config approval, optik template create/apply,
   cevap anahtarı create/import/publish, raw import upload/evaluation enqueue/quarantine resolve,
@@ -349,6 +360,209 @@ Minimum kanıt içeriği:
   içeremez; bu gevşetme yalnız template kontrolünde `IDENTITY_MIGRATION_ALLOW_EXAMPLE_EVIDENCE=1`
   ile açılır.
 
+## Account Management Migration Preflight
+
+Kanıt sözleşmesi: `docs/evidence-templates/account-management-preflight.example.json`.
+
+```sh
+ACCOUNT_MANAGEMENT_PREFLIGHT_TARGET=file:///path/to/account-management-preflight.json \
+pnpm account-management:preflight:check
+```
+
+Gerçek staging artifact üretimi:
+
+```sh
+STAGING_ENVIRONMENT=staging \
+DIRECT_DATABASE_URL="..." \
+ACCOUNT_MANAGEMENT_PREFLIGHT_OUTPUT=artifacts/staging/reports/account-management-preflight.json \
+ACCOUNT_MANAGEMENT_GUARDIAN_CLASSIFICATION=FIXTURE_ONLY \
+ACCOUNT_MANAGEMENT_GUARDIAN_EVIDENCE_REFERENCE="..." \
+pnpm account-management:preflight:generate
+```
+
+- Generator repeatable-read/read-only transaction kullanır ve yalnız sayısal envanter yazar.
+- Tenant içi case-insensitive e-posta çakışması, birden çok açık enrollment, geçersiz rol
+  kombinasyonu, orphan profil/membership veya doğrulanmamış guardian verisi `BLOCKED` üretir.
+- `system` tenant'ındaki yalnız `SYSTEM_ADMIN` üyeliği control-plane backfill kaynağıdır;
+  başka tenant'taki veya başka rolle birleşmiş `SYSTEM_ADMIN` üyeliği `BLOCKED` üretir.
+- Öğretmen→Employee eksikleri backfill kapsamını sayar; additive migration'ı tek başına bloklamaz.
+- Guardian kaydı varsa `FIXTURE_ONLY` sınıflandırması ve gerçek veri sahibi/onay referansı zorunludur.
+- Artifact ham e-posta, telefon, T.C., ad, kullanıcı veya tenant ID içermez.
+
+### Account management dual-write geçişi
+
+- Runtime okuma otoritesi PR-4 kesimine kadar legacy `User.email` ve `TenantMembership.role`
+  alanlarında kalır.
+- Yeni tenant hesabı yazımları aynı transaction içinde `emailNormalized`, `loginName`,
+  `loginNameNormalized`, `passwordHashVersion` ve `accountStatus` alanlarını da doldurur.
+- E-posta global kimlik değildir. Aynı normalize e-posta farklı tenantlarda ayrı hesaplarda
+  kullanılabilir; tekillik yalnız `(tenantId, emailNormalized)` sınırında uygulanır.
+- Legacy çoklu rol satırları geçiş süresince korunur. Yalnız bir satır canonical `staffRole`,
+  `hasTeacherPersona` veya `hasStudentPersona` değerlerini taşır; diğer legacy satırlar shadow
+  alanlarında boş/false kalır. Guardian satırı PR-7'ye kadar legacy-only kalır.
+- Rol değişiminde canonical satır yeniden seçilir; `TenantMembership.version` ve
+  `User.membershipVersion` aynı transaction içinde artırılır. Böylece ilerideki session cutover
+  için sürüm monotonluğu korunur.
+- Rollback, yeni alanları okumayı açmadan legacy okuma yolunda kalmaktır; dual-write alanlarının
+  silinmesi veya eski rol satırlarının drop edilmesi bu dilimde yapılmaz.
+
+### Account management PR-4 backfill ve parity
+
+Kanıt sözleşmesi: `docs/evidence-templates/account-management-backfill.example.json`.
+
+Önce salt-okunur dry-run çalıştırılır:
+
+```sh
+STAGING_ENVIRONMENT=staging \
+DIRECT_DATABASE_URL="..." \
+ACCOUNT_MANAGEMENT_BACKFILL_MODE=DRY_RUN \
+ACCOUNT_MANAGEMENT_BACKFILL_OUTPUT=artifacts/staging/reports/account-management-backfill-dry-run.json \
+ACCOUNT_MANAGEMENT_OWNER_DECISIONS_TARGET=file:///secure/path/account-owner-decisions.json \
+pnpm account-management:backfill
+```
+
+`READY` artifact doğrulandıktan sonra aynı owner kararlarıyla kontrollü APPLY çalıştırılır:
+
+```sh
+STAGING_ENVIRONMENT=staging \
+DIRECT_DATABASE_URL="..." \
+ACCOUNT_MANAGEMENT_BACKFILL_MODE=APPLY \
+ACCOUNT_MANAGEMENT_BACKFILL_CONFIRM=apply-pr4-backfill \
+ACCOUNT_MANAGEMENT_BACKFILL_OUTPUT=artifacts/staging/reports/account-management-backfill.json \
+ACCOUNT_MANAGEMENT_OWNER_DECISIONS_TARGET=file:///secure/path/account-owner-decisions.json \
+pnpm account-management:backfill
+```
+
+- Owner karar dosyası yalnız `file://` kabul eder; her karar `tenantId`, aktif admin `userId` ve
+  gerçek `verificationReference` taşır. Bu dosya PII/kimlik içerdiği için evidence artifact'ına
+  veya repoya eklenmez.
+- Mevcut `TENANT_OWNER` korunur. Owner yoksa MFA/parola değişimiyle doğrulanmış ilk aktif admin
+  otomatik seçilir; bu kanıt da yoksa karar dosyası olmadan işlem `BLOCKED` olur.
+- APPLY serializable transaction ve advisory lock kullanır. User normalize alanları, tek canonical
+  membership/persona gölgesi, Teacher→Employee bağı ve SYSTEM_ADMIN için PlatformAccount/Session
+  gölgesi aynı transaction içinde tamamlanır.
+- Parity; login normalize alanları, membership/persona, aktif session membershipVersion/legacy rol,
+  platform hesap/oturum ve çalışan bağlarını sayısal olarak doğrular. Ham e-posta, telefon, T.C.,
+  ad, tenant veya kullanıcı ID artifact'a yazılmaz.
+- Runtime cutover yalnız `PASS` backfill artifact'ından sonra başlar. Login
+  `(tenantId, loginNameNormalized)` okur ve yalnız aktif hesap + aktif membership + aktif/geçerli
+  lisanslı tenant birleşimini kabul eder. T.C. kimlik login tanımlayıcısı değildir.
+- Auth sorgusu tek canonical `staffRole`/persona gölge satırını okur. PR-4 boyunca legacy session rol
+  sonucunu yalnız semantik parity doğrulamasından sonra korur; duplicate canonical satır, membership
+  version sapması veya canonical/legacy rol sapması `AUTH_MEMBERSHIP_PARITY_MISMATCH` ile fail-closed olur.
+- Access ve refresh doğrulaması güncel membership durumunu, sürümünü ve rol projeksiyonunu Postgres'ten
+  tekrar okur. Suspend/ended membership veya değişmiş sürüm/rol, session revoke başarısız olsa bile iki
+  token türünü de geçersiz kılar.
+- Login isteği artık tam olarak `tenantSlug + loginName + password` olduğu için web ve API aynı release
+  SHA'dan birlikte deploy edilmelidir. Yeni web eski API'ye veya eski web cutover API'ye açılmaz.
+
+### Staging deploy legacy erişim gate'i
+
+Staging workflow additive migration'dan sonra uygulama servislerini başlatmadan önce sırasıyla
+read-only preflight ve `APPLY` backfill/parity çalıştırır. İki artifact hosttaki
+`artifacts/staging/reports/` altında kalır; scriptler yalnız sayısal sonuç yazar. Owner otomatik
+seçilemiyorsa workflow `BLOCKED` olur ve eski servisler yerinde kalır. Karar gerektiren owner
+dosyası private mount ile ayrıca, kontrollü olarak uygulanmalıdır; bunu artifact veya repo içine
+koymayın.
+
+### Secret delivery outbox staging smoke
+
+Staging deploy, exact dört servis tag'i ve first-gates sonrası PII-safe `deployment-cutover.json` artifact'i
+üretir. Operatör, retry edilmiş `DELIVERED` source ID'yi GitHub input/secret/log/artifact'a koymadan yalnız
+`$(dirname "$STAGING_DEPLOY_DIR")/o-okul-private/secret-delivery-outbox/<releaseImageTag>/source-id`
+yoluna koyar. Sibling private root ve tag dizini `0700`, regular dosya `0600`, aynı remote kullanıcı sahibi
+olmalıdır; symlink kabul edilmez. Verify-only dispatch yalnız `deploy_run_id` alır, önce indirilen cutover
+artifact'i ve güncel dört container tag'ini doğrular. Eksik private source veya image drift'i, bağımlılık
+kurulumundan ve data tunnel açılmasından önce açık bir preflight hatasıyla durur. Geçerli source dizini
+preflight sırasında run-scope `.claims/<releaseImageTag>/<verifyRunId>` yoluna atomik taşınır; başka verify
+run'ı aynı girdiyi okuyamaz. Workflow claimed source dosyasını ve geçici helper'ları her sonuçta siler;
+smoke container image'ını cutover worker SHA'sına sabitler ve çalışan worker image'ını smoke öncesi/sonrası
+yeniden doğrular. Cutover artifact'i source-SHA checkout sırasında korunur ve full aggregation'a aynı dosya
+taşınır. Boş dizin temizliği idempotent, source/helper dosya silme hatası fail-closed'dur. Runner/SSH kesintisinde on-call sahibi 24 saat içinde aynı
+yoldaki dosyayı silmeli ve source değeri olmadan incident/audit referansını kaydetmelidir. Yeni verify için
+yeni source kaydı gerekir.
+
+```sh
+GitHub Actions’tan **Staging Outbox Verify** workflow’unu yalnız deploy run ID ile çalıştırın. Workflow
+cutover artifact'inden `notBefore` ve image tag'ini alır; source dosyası worker image içindeki read-only mount
+ile okunur.
+```
+
+Workflow default branch'e alınmadan önce aynı-repo draft PR doğrulaması gerekiyorsa staging environment
+`STAGING_OUTBOX_DEPLOY_RUN_ID` değişkeni başarılı deploy run ID'sine ayarlanır ve PR'a
+`staging-outbox-verify` etiketi eklenir. `pull_request:labeled` yolu da run metadata ve cutover artifact
+bağını aynı kontrollerle doğrular ve PR head SHA ile cutover source SHA eşleşmiyorsa durur; fork PR'larda
+staging secret'ları kullanılmaz.
+
+Artifact yalnız `outboxRecordHash`, `purpose`, retry sayısı, teslim/güncelleme zamanı, terminal durum,
+`payloadCleared`, PII-safe `releaseImageTag`/`notBefore` ve `secret_delivery_worker` minimum yetki sonucunu içerir. User `SELECT`, public schema
+`CREATE`/owner ve yükseltilmiş rol yetkileri false olmalıdır. Recipient, token, URL, source ID ve encrypted
+payload taşınması fail-closed reddedilir. Bu ayrı DB rolü ve delivery-state kanıtıdır; gerçek inbox/provider
+teslimatı ile KVKK/DPA kanıtı ayrı live gate olarak kalır. Template kontrolü veya local script geçişi bunların
+yerine geçmez.
+Sanitize edilmiş Phase B sonucu doğrulamadan hemen sonra
+`staging-outbox-smoke-<deploy-run-id>-<verify-run-id>` adıyla ayrıca upload edilir. Sonraki full production
+evidence kapısı Phase B'nin sonucu değildir: workflow varsayılan olarak yalnız Phase B'yi çalıştırır.
+`full_evidence=true` açıkça seçilirse ayrı full production evidence aggregation da koşar;
+`staging-outbox-verify-*` full release bundle'ı yine yalnız tüm full-evidence ve release-artifact kapıları
+geçtiğinde yayımlanır. PR label yolu yalnız Phase B kapsamındadır.
+Full aggregation, private env dosyasındaki UI/UX GitHub run referansını seçilen deploy'un indirilen
+`github-ci.json` artifact'indeki exact run URL'sine çalışma anında bağlar; secret içeriğini loglamaz ve
+env dosyasını `0600` modunda tutar. Böylece eski bir template run URL'si yeni cutover kanıtına karışamaz.
+- PR-4 rollback önceki web+API image çiftidir. Additive kolonlar ve legacy membership satırları yerinde
+  kalır; backfill tersine çevrilmez, global e-posta unique geri getirilmez ve canonical alanlar drop edilmez.
+  Rollback sonrasında yeniden cutover öncesi backfill checker ve aktif session legacy-role parity çalıştırılır.
+- Legacy rol satırları ile compatibility seçim cevabı, sıfır parity mismatch görülen 14 günlük gözlemden
+  önce kaldırılmaz. Exact-SHA staging login/access/refresh, çalışan image tag'leri ve rollback kanıtı olmadan
+  bu kesit yalnız local/statik kabul edilir.
+
+### Account management PR-5 LicenseTerm backfill ve runtime kesimi
+
+Kanıt sözleşmesi: `docs/evidence-templates/license-term-backfill.example.json`.
+
+Önce salt-okunur dry-run çalıştırılır:
+
+```sh
+STAGING_ENVIRONMENT=staging \
+DIRECT_DATABASE_URL="..." \
+LICENSE_TERM_BACKFILL_MODE=DRY_RUN \
+LICENSE_TERM_BACKFILL_OUTPUT=artifacts/staging/reports/license-term-backfill-dry-run.json \
+pnpm account-management:license-backfill
+```
+
+`READY` artifact doğrulandıktan sonra kontrollü APPLY çalıştırılır:
+
+```sh
+STAGING_ENVIRONMENT=staging \
+DIRECT_DATABASE_URL="..." \
+LICENSE_TERM_BACKFILL_MODE=APPLY \
+LICENSE_TERM_BACKFILL_CONFIRM=apply-pr5-license-term-backfill \
+LICENSE_TERM_BACKFILL_OUTPUT=artifacts/staging/reports/license-term-backfill.json \
+pnpm account-management:license-backfill
+```
+
+- Başlangıç/bitiş/kota snapshot'ı eksik veya geçersizse işlem tahmin üretmez ve `BLOCKED` olur.
+- APPLY serializable transaction ve advisory lock kullanır; yalnız hiç dönemi olmayan uygun tenantlar
+  için bir başlangıç `LicenseTerm` kaydı oluşturur.
+- Artifact yalnız sayısal toplamlar ve blocker kodları taşır; tenant/kullanıcı ID'si veya PII yazmaz.
+- Runtime kesimi yalnız `PASS` artifact'ından sonra açılır. ACTIVE normal, bitişten sonraki ilk 15 günlük
+  yarı-açık aralık READ_ONLY, 15-90. günler FROZEN ve 91. gün EXPIRED olur.
+- Login ve refresh yalnız ACTIVE/READ_ONLY durumda açılır. READ_ONLY yalnız GET/HEAD/OPTIONS kabul eder;
+  kanonik dönem eksikliği veya legacy ayna sapması fail-closed olur.
+- Yeni dönem `POST /api/v1/tenants/{id}/license-terms` ile eklenir. Eski tenant PATCH sözleşmesi plan,
+  lisans tarihi ve kota alanlarını artık kabul etmez; bu alanlar yalnız rollback aynasıdır.
+- Canonical aktif öğrenci; silinmemiş `Student.status=ACTIVE` ve tam bir açık
+  `StudentEnrollment.status=ACTIVE` kaydıdır. DB trigger'ı sınır aşımını transaction içinde
+  `ACTIVE_STUDENT_LIMIT_REACHED` ile reddeder, günlük `LicenseUsage.currentStudentCount` değerini
+  ve monotonik `peakStudentCount` değerini yeniler.
+- `20260801210000_enforce_active_student_license_usage` migration'ından önce account-management
+  preflight çıktısında `multipleOpenEnrollments.students=0` olmalıdır; aksi halde migration uygulanmaz.
+- Canonical `POST /api/v1/tenants` onboarding isteği `Idempotency-Key` ister ve tenant, kampüsler, ilk
+  `LicenseTerm`, ilk `TENANT_OWNER` Employee/membership kaydı ile aktivasyon outbox'ını tek transaction'da
+  oluşturur. `PlatformIdempotencyKey` aynı actor + key + gövdeyi replay eder; farklı gövdeyi reddeder.
+- Bu sözleşme local/statik veya staging artifact'ı birbirinden ayırır. Exact-SHA staging deploy, gerçek
+  backfill PASS, login/read-only/frozen smoke ve rollback kanıtı olmadan canlı capability sayılmaz.
+
 ## Financial Retention Evidence
 
 Kanıt sözleşmesi: `docs/evidence-templates/financial-retention.example.json`.
@@ -480,7 +694,7 @@ Minimum kanıt içeriği:
 
 - `commandsPassed` içinde `pnpm db:rls:check`, `pnpm db:rls:check:live`,
   `pnpm rls:load:smoke` ve `pnpm rls:live:check` bulunur.
-- `schema.tablesVerified` schema'dan türeyen 57 tenant tablosunu kapsar; `AnnouncementReceipt`,
+- `schema.tablesVerified` schema'dan türeyen 62 tenant tablosunu kapsar; `AnnouncementReceipt`,
   `BackupRestoreJob`, `HomeworkMaterialFile`, `SupportTicketAttachment` ve `AuditLog` bu listenin
   içinde görünmelidir.
 - `isolation.crossTenantReadRows=0`, `withCheckRejects` yanlış tenant yazım/referans negatiflerini
@@ -681,10 +895,11 @@ Beklenen akış:
   bittiğinde otomatik çalışır.
 - Workflow önce dispatch input'larını, Docker tag biçimini, `STAGING_NEXT_PUBLIC_API_URL=https://...`
   değerini, `STAGING_EDGE_MODE=domain|ip` değerini ve gerekli staging secret/var varlığını doğrular.
-- Workflow `STAGING_EVIDENCE_ENV_B64` içeriğini decode eder, boş dosyayı reddeder ve
-  `pnpm staging:evidence-env:check -- --env-file .staging-evidence.env` ile gerçek env içeriğini
-  deploy başlamadan önce doğrular; zorunlu anahtarlar eksik veya boş değerli olamaz. Preflight
-  shell'i `.staging-evidence.env` dosyasını exit trap'i ile siler. Bu secret env dosyası
+- Workflow `STAGING_EVIDENCE_ENV_B64` içeriğini decode eder, boş dosyayı reddeder ve normal cutover için
+  `pnpm staging:evidence-env:check -- --mode activation --env-file .staging-evidence.env` ile yalnız
+  first-gates girdilerini (web origin'iyle bağlı HTTPS smoke dahil) doğrular. Tam DB/proxy/outbox production-evidence sözleşmesi, deploydan sonra
+  **Staging Outbox Verify** içindeki `--mode full` kontrolünde zorunludur; eksik anahtarlar full kanıtı
+  fail-closed durdurur. Preflight shell'i `.staging-evidence.env` dosyasını exit trap'i ile siler. Bu secret env dosyası
   `REPORT_GENERATION_SMOKE_EVIDENCE_FILE` veya diğer raw smoke evidence path'lerini içermez;
   `prod:evidence:check --summary-file` bunları `artifacts/staging/smoke/*.json` altında üretir.
 - Workflow aynı commit'in başarılı `.github/workflows/ci.yml` run'ını GitHub API'dan okuyup
@@ -716,8 +931,9 @@ Beklenen akış:
   `IMAGE_TAG` değeriyle birebir karşılaştırılır; container eksikse, running değilse veya healthcheck
   `healthy` değilse deploy kırmızıya düşer. `evidence` servisi `artifacts/staging/reports` altındaki doğrulanmış JSON kanıtlarını
   `/evidence/*.json` olarak salt-okunur sunar; eksik kanıt dosyası bilinçli olarak 404 döner.
-- GitHub runner, `STAGING_EVIDENCE_ENV_B64` içeriğini evidence job'da yeniden decode edip
-  `pnpm staging:evidence-env:check` ile tekrar doğrular.
+- GitHub runner, `STAGING_EVIDENCE_ENV_B64` içeriğini normal evidence job'da yeniden decode edip
+  `pnpm staging:evidence-env:check -- --mode activation` ile tekrar doğrular; verify-only job aynı
+  dosyayı `--mode full` ile doğrular.
 - Evidence job, deployment-region artifact üretmez; v1 go-live zinciri region evidence target'ı
   beklemez.
 - GitHub runner, deploy öncesi üretilmiş `staging-github-ci-evidence-<sha>` artifact'ini
@@ -770,12 +986,17 @@ Beklenen akış:
   komutuyla manifest'i, iki artifact'i, artifact ortamlarının manifest ortamıyla eşleştiğini ve manifest
   zamanının artifact `generatedAt`/`checkedAt` zamanlarından önce olmadığını tekrar doğrular; manifest target lokal temp path, `artifacts/local/**`, symlink dosya veya symlink parent directory olamaz. Artifact upload adımı `if: always()` ile çalışır ve
   full production evidence zinciri sonradan düşse bile üretilen first-gates artifact'lerini saklar.
-- Manuel `workflow_dispatch` çalışmasında `full_evidence=true` verilirse GitHub runner doğrulanmış
+- Full production evidence, **Staging Outbox Verify** workflow'unda seçilen deploy run'ın cutover artifact'i
+  ve dört çalışan servis tag'i doğrulandıktan sonra çalışır; `full_evidence` staging deploy input'u kaldırılmıştır.
+  Verify workflow sanitize edilmiş outbox artifact'ini toplar ve ardından GitHub runner doğrulanmış
   production evidence env sözleşmesiyle
   `pnpm prod:evidence:check -- --summary-file artifacts/staging/release-summary-<tag>.json`
-  komutunu çalıştırır. Bu komut release summary dosyasını yazdıktan sonra aynı summary'yi
+  komutunu çalıştırır. Yalnız bu staging verify akışı `PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX=1`
+  ile outbox smoke'un `environment=staging` kaydını kabul eder; production/go-live çalışmaları bu
+  istisnayı taşımaz. Bu komut release summary dosyasını yazdıktan sonra aynı summary'yi
   `scripts/check-production-evidence-summary.mjs` ile doğrular ve `artifacts/staging`
-  klasörünü artifact olarak saklar. `--summary-file`, sibling `reports/` ve `smoke/` output
+  klasörünü artifact olarak saklar. Aynı source SHA, GitHub CI ve UI/UX artifact'i ile
+  `pnpm ui-ux-professionalization:completion:check` full-evidence modu da çalışır. `--summary-file`, sibling `reports/` ve `smoke/` output
   layout'u lokal temp path veya symlink file/directory üzerinden yazılamaz; birleşik kapı bunu
   evidence check'leri başlamadan önce reddeder. Birleşik kapı ayrıca `*_SMOKE_EVIDENCE_FILE`
   raw smoke target'larını provider/HTTP/DB smoke'ları başlamadan önce production artifact girdisi
@@ -791,13 +1012,14 @@ Beklenen akış:
   adımıyla `.staging-evidence.env` secret dosyasını workspace'ten siler. Otomatik staging deploy
   bu full evidence adımını koşmaz; eksik go-live artifact'leri otomatik deploy sonucunu hatalı
   biçimde failed yapmaz ve yalnız `staging-activation-evidence-<tag>` artifact'ini yayımlar.
-  `staging-production-evidence-<tag>` adı yalnız manuel `full_evidence=true` zincirine ayrılmıştır.
-- Full evidence zinciri PASS olduktan sonra workflow aynı job içinde
+- Full evidence zinciri PASS olduktan sonra **Staging Outbox Verify** workflow'u
   `STAGING_RELEASE_ARTIFACTS_TARGET=$PWD/artifacts/staging pnpm staging:release-artifacts:check`
-  komutunu çalıştırır. Bu kontrol indirilecek `staging-production-evidence-<tag>` artifact setinde
-  `reports/*.json`, `first-gates/first-gates-manifest.json`, tek `release-summary-*.json`
-  ve `smoke/*.json` ham kanıt dosyalarının mevcut olduğunu, mevcut checker'larla geçtiklerini ve
-  release summary içindeki gömülü kanıtlarla birebir eşleştiklerini doğrular. `release-summary-<tag>.json`
+  komutunu çalıştırır. Bu kontrol indirilecek
+  `staging-outbox-verify-<deploy-run-id>-<verify-run-id>` artifact setinde `reports/deployment-cutover.json`,
+  diğer `reports/*.json`, `first-gates/first-gates-manifest.json`, tek `release-summary-*.json` ve
+  `smoke/*.json` ham kanıt dosyalarının mevcut olduğunu doğrular. Cutover SHA/repository/tag/zamanı release
+  summary ve outbox smoke ile birebir eşleşmelidir; publish öncesinde dört çalışan image tag'i tekrar
+  denetlenir. `release-summary-<tag>.json`
   dosya adındaki tag, summary içindeki `reports.deploymentRollback.releaseCandidate` image tag'iyle
   eşleşmelidir. Bundle yalnız beklenen root, `reports/`, `smoke/` ve `first-gates/` dosyalarını
   içerebilir; beklenmeyen raw JSON/log dosyası kalırsa kontrol kırılır. Bundle symlink içeremez;
@@ -846,9 +1068,10 @@ Beklenen akış:
   `releaseEvidence=false` ve `canPromote=false` taşır; `staging:release-artifacts:check`
   yine non-zero kalır. Gap raporu production summary, live-status, pilot veya go-live kanıtı
   değildir ve bundle dizininin içine yazılamaz.
-- `pnpm staging:evidence-env:check`, workflow içindeki kritik evidence sırasını da korur:
-  GitHub CI artifact üretimi/download, env decode/check, metadata append, first-gates, production
-  evidence, release bundle check, cleanup ve upload adımları bu sırada kalmalıdır.
+- `pnpm staging:evidence-env:check`, workflow içindeki kritik evidence sırasını da korur: normal deploy'da
+  GitHub CI artifact üretimi/download, activation env decode/check, metadata append, first-gates, cutover,
+  cleanup ve upload; verify-only workflow'unda full env, production evidence ve release bundle check adımları
+  bu sırada kalmalıdır.
 - Release summary artifact'i ayrıca
   `PRODUCTION_EVIDENCE_SUMMARY_TARGET=file:///path/to/release-summary.json pnpm prod:evidence:summary:check`
   ile tek başına doğrulanır; bu target yalnız `file://` artifact yolu veya `https://` URL olabilir,
@@ -1014,6 +1237,8 @@ Live onboarding smoke preflight:
 ```sh
 NEXT_E2E_LIVE_ONBOARDING=1 \
 LIVE_ONBOARDING_EVIDENCE_PATH=artifacts/staging/live-onboarding-input.json \
+LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT=https://mail-evidence.staging.example/messages/latest \
+LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN=__SECRET__ \
 pnpm live:onboarding:evidence-check
 ```
 
@@ -1022,6 +1247,8 @@ Smoke komutu aynı preflight'ı tarayıcı açmadan önce otomatik çalıştır�
 ```sh
 NEXT_E2E_LIVE_ONBOARDING=1 \
 LIVE_ONBOARDING_EVIDENCE_PATH=artifacts/staging/live-onboarding-input.json \
+LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT=https://mail-evidence.staging.example/messages/latest \
+LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN=__SECRET__ \
 pnpm live:onboarding:smoke
 ```
 
@@ -1029,6 +1256,9 @@ pnpm live:onboarding:smoke
 adı/slug/plan/koltuk limitini ve opsiyonel kurulum alanlarını exact shape ile taşır. Gerçek staging
 kanıtında `generatedAt` 24 saatten eski olamaz; `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder değerler kabul edilmez;
 dosya lokal temp path (`/tmp`, `/var/tmp`), symlink dosya veya symlink parent zinciri altında olamaz.
+Smoke, ilk yöneticiye gerçekten ulaşan bağlantıyı bearer korumalı HTTPS inbox evidence endpoint'inden
+`recipient`, `purpose=PASSWORD_RESET` ve `createdAfter` ile poll eder; endpoint yalnız `{ "activationUrl": "..." }`
+döndürür ve URL tokenı hiçbir kalıcı evidence çıktısına yazılmaz.
 `pnpm live:onboarding:evidence-contract` bu negatifleri lokal CI'da tarayıcı açmadan korur.
 
 Live UI-worker/report smoke preflight:

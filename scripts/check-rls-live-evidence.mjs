@@ -31,6 +31,12 @@ const requiredTenantCompositeRelations = [
   "StudentEnrollment.class",
   "Student.class",
   "Student.responsibleTeacher",
+  "MembershipCampusScope.membership",
+  "MembershipCampusScope.campus",
+  "LicenseUsage.licenseTerm",
+  "Employee.accountUser",
+  "Teacher.employee",
+  "StudentContact.student",
 ];
 const requiredTenantFkInsertRejects = requiredTenantCompositeRelations.map((relation) => `${relation} cross tenant insert`);
 const rlsLiveTopLevelKeys = [

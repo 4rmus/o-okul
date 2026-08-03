@@ -10,6 +10,7 @@ import { HealthModule } from "./health/health.module.js";
 import { HomeworkModule } from "./homework/homework.module.js";
 import { IdentityInvitationModule } from "./identity-invitation/identity-invitation.module.js";
 import { HttpInfrastructureModule } from "./http/http-infrastructure.module.js";
+import { LicensePersistenceModule } from "./license/license-persistence.module.js";
 import { MessageTemplateModule } from "./message-template/message-template.module.js";
 import { MeModule } from "./me/me.module.js";
 import { MetricsMiddleware } from "./metrics/metrics.middleware.js";
@@ -47,6 +48,7 @@ import { UserManagementModule } from "./user-management/user-management.module.j
     HomeworkModule,
     HttpInfrastructureModule,
     IdentityInvitationModule,
+    LicensePersistenceModule,
     MeModule,
     MessageTemplateModule,
     MetricsModule,

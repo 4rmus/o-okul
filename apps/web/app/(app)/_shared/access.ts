@@ -13,7 +13,7 @@ type SessionLike = {
 };
 
 export function hasInstitutionAccess(roles: readonly string[]) {
-  return roles.includes("TENANT_ADMIN") || roles.includes("ASSISTANT_ADMIN");
+  return roles.some((role) => ["TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF"].includes(role));
 }
 
 export function hasSystemAccess(roles: readonly string[]) {

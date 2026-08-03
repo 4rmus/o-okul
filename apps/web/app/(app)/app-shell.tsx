@@ -4,9 +4,9 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode }
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Building2, ChevronDown, LogOut, Menu, Search, UserRound, X, type LucideIcon } from "lucide-react";
+import { Building2, ChevronDown, LogOut, Menu, Search, ShieldCheck, UserRound, X, type LucideIcon } from "lucide-react";
 import { Button, Dialog, Field, Input, Panel, StatusBadge, type StatusBadgeProps } from "@o-okul/ui";
-import { isTenantRoleName, tenantRoleLabel, type GlobalSearchResultRecord, type NotificationDeviceTokenRecord, type Session, type TenantRecord } from "@o-okul/shared-types";
+import { isTenantRoleName, tenantRoleLabel, type ActivePersona, type GlobalSearchResultRecord, type MeProfileResponse, type NotificationDeviceTokenRecord, type Session, type TenantRecord } from "@o-okul/shared-types";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../src/api-client.js";
 import { appBrand } from "../../src/brand.js";
 import { useAuth } from "../providers.js";
@@ -70,11 +70,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { auth, isBootstrapping, logout } = useAuth();
+  const { auth, isBootstrapping, logout, switchPersona } = useAuth();
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
   const [expandedSidebarGroups, setExpandedSidebarGroups] = useState<Record<string, boolean>>({});
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [isPersonaSwitching, setIsPersonaSwitching] = useState(false);
+  const [personaSwitchError, setPersonaSwitchError] = useState("");
   const commandOpenerRef = useRef<HTMLButtonElement | null>(null);
   const mobileNavTriggerRef = useRef<HTMLButtonElement | null>(null);
   const mobileNavCloseRef = useRef<HTMLButtonElement | null>(null);
@@ -104,7 +106,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     enabled: Boolean(auth && hasInstitutionAccess(auth.session.roles) && !isRolePreviewRoute),
     refetchOnWindowFocus: false,
   });
+  const profileQuery = useQuery({
+    queryKey: ["next-shell-profile", auth?.session.userId ?? "anonymous", auth?.session.id ?? "none"],
+    queryFn: () => apiRequest<MeProfileResponse>(auth?.accessToken ?? "", `${apiBaseUrl}/me/profile`),
+    enabled: Boolean(auth && !isRolePreviewRoute),
+    refetchOnWindowFocus: false,
+  });
   const tenantBrand = safeTenantBrand(tenantBrandQuery.data);
+  const personaSwitchTarget = resolvePersonaSwitchTarget(profileQuery.data);
   const isAuthorizedPath = auth ? canAccessPath(auth.session, pathname, searchParams) : false;
 
   useEffect(() => {
@@ -200,6 +209,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   async function handleLogout() {
     await logout();
     router.replace(loginPathFor(pathname));
+  }
+
+  async function handlePersonaSwitch() {
+    if (!personaSwitchTarget || isPersonaSwitching) return;
+    setIsPersonaSwitching(true);
+    setPersonaSwitchError("");
+    try {
+      await switchPersona(personaSwitchTarget);
+      closeMobileNav();
+    } catch {
+      setPersonaSwitchError("Çalışma alanı değiştirilemedi. Tekrar deneyin.");
+    } finally {
+      setIsPersonaSwitching(false);
+    }
   }
 
   function isActive(href: string) {
@@ -350,6 +373,16 @@ export function AppShell({ children }: { children: ReactNode }) {
                 />
               ))
             : null}
+          {personaSwitchTarget ? (
+            <Button variant="secondary" type="button" disabled={isPersonaSwitching} onClick={() => void handlePersonaSwitch()}>
+              {personaSwitchLabel(personaSwitchTarget, isPersonaSwitching)}
+            </Button>
+          ) : null}
+          {personaSwitchError ? <p className="next-status-note" role="alert">{personaSwitchError}</p> : null}
+          <Link className="next-sidebar-link" href="/hesap/oturumlar" aria-current={navCurrent("/hesap/oturumlar")}>
+            <ShieldCheck className="next-sidebar-link-icon" size={16} aria-hidden="true" />
+            <span>Oturumlar</span>
+          </Link>
           <Button variant="ghost" className="next-sidebar-logout" type="button" onClick={() => void handleLogout()}>
             Çıkış
           </Button>
@@ -373,6 +406,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         <DesktopTopBar
           canUseShellSearch={canUseShellSearch}
           onLogout={() => void handleLogout()}
+          onPersonaSwitch={personaSwitchTarget ? () => void handlePersonaSwitch() : undefined}
+          personaSwitchLabel={personaSwitchTarget ? personaSwitchLabel(personaSwitchTarget, isPersonaSwitching) : undefined}
+          personaSwitching={isPersonaSwitching}
           onSearch={openCommandSearch}
           session={auth.session}
           tenantBrand={tenantBrand}
@@ -397,12 +433,18 @@ export function AppShell({ children }: { children: ReactNode }) {
 function DesktopTopBar({
   canUseShellSearch,
   onLogout,
+  onPersonaSwitch,
+  personaSwitchLabel,
+  personaSwitching,
   onSearch,
   session,
   tenantBrand,
 }: {
   canUseShellSearch: boolean;
   onLogout(): void;
+  onPersonaSwitch?: () => void;
+  personaSwitchLabel?: string;
+  personaSwitching: boolean;
   onSearch(value: string): void;
   session: Session;
   tenantBrand?: ShellTenantBrand;
@@ -423,6 +465,11 @@ function DesktopTopBar({
       <div className="next-desktop-topbar__account">
         <UserRound size={16} aria-hidden="true" />
         <span>{roleLabel}</span>
+        {onPersonaSwitch && personaSwitchLabel ? (
+          <Button type="button" variant="secondary" disabled={personaSwitching} onClick={onPersonaSwitch}>
+            {personaSwitchLabel}
+          </Button>
+        ) : null}
         <Button type="button" variant="secondary" onClick={onLogout}>
           <LogOut size={16} aria-hidden="true" />
           Çıkış
@@ -430,6 +477,18 @@ function DesktopTopBar({
       </div>
     </header>
   );
+}
+
+function resolvePersonaSwitchTarget(profile: MeProfileResponse | undefined): ActivePersona | undefined {
+  if (!profile?.activePersona || !profile.availablePersonas?.includes("STAFF") || !profile.availablePersonas.includes("TEACHER")) {
+    return undefined;
+  }
+  return profile.activePersona === "STAFF" ? "TEACHER" : "STAFF";
+}
+
+function personaSwitchLabel(target: ActivePersona, pending: boolean) {
+  if (pending) return "Çalışma alanı değiştiriliyor";
+  return target === "TEACHER" ? "Öğretmen alanına geç" : "Kurum alanına geç";
 }
 
 function ShellBrand({ tenantBrand }: { tenantBrand?: ShellTenantBrand }) {
@@ -816,6 +875,9 @@ function getPushStatusTone(status: string, activeDeviceCount: number, isSaving: 
 type AppSession = NonNullable<ReturnType<typeof useAuth>["auth"]>["session"];
 
 function canAccessPath(session: AppSession, pathname: string, searchParams?: Pick<URLSearchParams, "get">) {
+  if (pathname.startsWith("/hesap")) {
+    return true;
+  }
   if (pathname.startsWith("/sistem")) {
     return hasSystemAccess(session.roles);
   }

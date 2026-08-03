@@ -124,7 +124,7 @@ describe("API auth + tenant isolation", () => {
     await login("system@example.test");
     const resetRequest = await request(server)
       .post("/auth/password-reset/request")
-      .send({ tenantSlug: "system", nationalId: "10000000214" })
+      .send({ tenantSlug: "system", loginName: "system@example.test" })
       .expect(200);
 
     expect(resetRequest.body).toEqual({ status: "ACCEPTED" });
@@ -132,7 +132,7 @@ describe("API auth + tenant isolation", () => {
     expect(JSON.stringify(resetRequest.body)).not.toContain("expiresAt");
     await request(server)
       .post("/auth/password-reset/request")
-      .send({ tenantSlug: "missing", nationalId: "10000000214" })
+      .send({ tenantSlug: "missing", loginName: "system@example.test" })
       .expect(200)
       .expect({ status: "ACCEPTED" });
   });
@@ -878,7 +878,7 @@ describe("API auth + tenant isolation", () => {
       totalRows: 1,
       validRows: [{ row: 2, firstName: "ECE", lastName: "IMPORT" }],
       errors: [],
-      quota: { limit: 2, current: 1, incoming: 1, wouldExceed: false },
+      quota: { limit: 2, current: 1, incoming: 0, wouldExceed: false },
       wouldImport: true,
     });
 
@@ -1211,9 +1211,9 @@ describe("API auth + tenant isolation", () => {
   it("student Excel dry-run kota aşımını kayıt yazmadan raporlar", async () => {
     const issued = await login("admin-a@example.test");
     const fileBase64 = await createStudentWorkbookBase64([
-      ["Ece", "Import"],
-      ["Deniz", "Import"],
-    ]);
+      ["Ece", "Import", "8-A"],
+      ["Deniz", "Import", "8-A"],
+    ], ["ad", "soyad", "sinif"]);
 
     const response = await request(server)
       .post("/students/imports/dry-run")
@@ -1228,7 +1228,7 @@ describe("API auth + tenant isolation", () => {
         { row: 2, firstName: "ECE", lastName: "IMPORT" },
         { row: 3, firstName: "DENİZ", lastName: "IMPORT" },
       ],
-      errors: [{ row: 0, field: "quota", code: "STUDENT_QUOTA_EXCEEDED" }],
+      errors: [{ row: 0, field: "quota", code: "ACTIVE_STUDENT_LIMIT_REACHED" }],
       quota: { limit: 2, current: 1, incoming: 2, wouldExceed: true },
       wouldImport: false,
     });
@@ -1331,7 +1331,7 @@ describe("API auth + tenant isolation", () => {
     await request(server)
       .post("/students/imports")
       .set("Authorization", `Bearer ${issued.accessToken}`)
-      .send({ fileBase64: await createStudentWorkbookBase64([["Fazla", "Import"]]) })
+      .send({ fileBase64: await createStudentWorkbookBase64([["Fazla", "Import", "8-A"]], ["ad", "soyad", "sinif"]) })
       .expect(409);
 
     students = await request(server).get("/students").set("Authorization", `Bearer ${issued.accessToken}`).expect(200);
@@ -1353,13 +1353,19 @@ describe("API auth + tenant isolation", () => {
     await request(server)
       .post("/students")
       .set("Authorization", `Bearer ${issued.accessToken}`)
-      .send({ firstName: "Yeni", lastName: "Ogrenci" })
+      .send({ firstName: "Yeni", lastName: "Ogrenci", classId: "class-b" })
       .expect(201);
 
     await request(server)
       .post("/students")
       .set("Authorization", `Bearer ${issued.accessToken}`)
-      .send({ firstName: "Fazla", lastName: "Ogrenci" })
+      .send({ firstName: "İkinci", lastName: "Ogrenci", classId: "class-b" })
+      .expect(201);
+
+    await request(server)
+      .post("/students")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ firstName: "Fazla", lastName: "Ogrenci", classId: "class-b" })
       .expect(409);
   });
 

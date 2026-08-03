@@ -6,10 +6,14 @@ import type {
 } from "./format-analyzer.js";
 import type { PortalSubjectRoleName, TenantAssignableRoleName } from "./role-capabilities.js";
 
+export type ActivePersona = "STAFF" | "TEACHER" | "STUDENT";
+
 export interface Session {
   id: string;
   userId: string;
   tenantId: string;
+  membershipId?: string;
+  activePersona?: ActivePersona;
   roles: string[];
   membershipVersion: number;
   status: string;
@@ -24,8 +28,8 @@ export interface AuthResponse {
 }
 
 export interface LoginRequest {
-  tenantSlug?: string;
-  nationalId: string;
+  tenantSlug: string;
+  loginName: string;
   password: string;
 }
 
@@ -62,9 +66,13 @@ export type LoginResponse = AuthResponse | MfaChallengeResponse | MfaEnrollmentR
 
 export type AuthRefreshRequest = Record<string, never>;
 
+export interface PersonaSwitchRequest {
+  activePersona: ActivePersona;
+}
+
 export interface PasswordResetRequest {
   tenantSlug: string;
-  nationalId: string;
+  loginName: string;
 }
 
 export interface PasswordResetAcceptedResponse {
@@ -87,6 +95,24 @@ export interface MePasswordChangeRequest {
 
 export interface MePasswordChangeResponse {
   changedAt: string;
+}
+
+export interface MeSessionRecord {
+  id: string;
+  activePersona?: ActivePersona;
+  deviceLabel: string;
+  clientIpPrefix?: string;
+  roles: string[];
+  status: "ACTIVE";
+  current: boolean;
+  expiresAt: string;
+  lastSeenAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MeSessionRevokeAllResponse {
+  revokedCount: number;
 }
 
 export interface TotpChallengeVerifyRequest {
@@ -131,6 +157,20 @@ export interface TotpDisableResponse {
   disabledAt: string;
 }
 
+export type MfaStepUpPurpose = "OWNER_ADMIN_CHANGE";
+
+export interface MfaStepUpRequest {
+  purpose: MfaStepUpPurpose;
+  totpCode?: string;
+  recoveryCode?: string;
+}
+
+export interface MfaStepUpResponse {
+  purpose: MfaStepUpPurpose;
+  stepUpToken: string;
+  expiresAt: string;
+}
+
 export interface MeProfileResponse {
   userId: string;
   tenantId: string | null;
@@ -138,6 +178,14 @@ export interface MeProfileResponse {
   mustChangePassword?: boolean;
   subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER";
   subjectId?: string;
+  membershipId?: string;
+  activePersona?: ActivePersona;
+  availablePersonas?: ActivePersona[];
+  capabilities?: string[];
+  membership?: {
+    id: string;
+    version: number;
+  };
 }
 
 export interface TenantRecord {
@@ -155,6 +203,32 @@ export interface TenantRecord {
   status: string;
 }
 
+export type LicenseState = "SCHEDULED" | "ACTIVE" | "READ_ONLY" | "FROZEN" | "EXPIRED" | "CANCELLED";
+
+export interface LicenseTermRecord {
+  id: string;
+  tenantId: string;
+  planCode: string;
+  startsAt: string;
+  endsAt: string;
+  activeStudentLimit: number;
+  cancelledAt?: string;
+  createdByPlatformAccountId?: string;
+  auditReference?: string;
+}
+
+export interface LicenseTermListRecord extends LicenseTermRecord {
+  state: LicenseState;
+}
+
+export interface LicenseTermCreateRequest {
+  planCode: string;
+  startsAt: string;
+  endsAt: string;
+  activeStudentLimit: number;
+  auditReference: string;
+}
+
 export interface TenantCurrentProfileUpdateRequest {
   contactEmail?: string;
   institutionType?: string;
@@ -166,17 +240,38 @@ export interface TenantFirstAdminCreateRequest {
   email: string;
   name: string;
   nationalId: string;
-  phone: string;
+}
+
+export interface TenantFirstOwnerCreateRequest {
+  email: string;
+  name: string;
+  nationalId?: string;
+}
+
+export interface TenantCampusCreateRequest {
+  code?: string;
+  name: string;
+  unitType?: "SCHOOL" | "COURSE" | "MIXED";
+}
+
+export interface TenantOnboardingOwnerRecord {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  roles: ["TENANT_OWNER"];
 }
 
 export interface TenantCreateRequest {
+  campuses?: TenantCampusCreateRequest[];
   contactEmail?: string;
   firstAdmin?: TenantFirstAdminCreateRequest;
+  firstOwner?: TenantFirstOwnerCreateRequest;
   id?: string;
   institutionType?: string;
   licenseEndsAt?: string;
   licenseStartsAt?: string;
   logoUrl?: string;
+  licenseTerm?: LicenseTermCreateRequest;
   name: string;
   plan?: string;
   seatLimit?: number;
@@ -187,12 +282,8 @@ export interface TenantCreateRequest {
 export interface TenantAdminUpdateRequest {
   contactEmail?: string;
   institutionType?: string;
-  licenseEndsAt?: string;
-  licenseStartsAt?: string;
   logoUrl?: string;
   name?: string;
-  plan?: string;
-  seatLimit?: number;
   slug?: string;
   status?: string;
 }
@@ -207,22 +298,76 @@ export interface TenantUserRecord {
   updatedAt: string;
 }
 
-export interface TenantUserCreateRequest {
-  email: string;
-  name: string;
-  nationalId: string;
-  phone: string;
-  roles: TenantAssignableRoleName[];
-}
-
 export interface TenantUserRoleUpdateRequest {
   roles: TenantAssignableRoleName[];
 }
 
-export interface TenantUserPasswordResetResponse {
-  userId: string;
-  resetAt: string;
-  mustChangePassword: true;
+export interface EmployeeAccessRecord {
+  id: string;
+  tenantId: string;
+  employeeNo?: string;
+  firstName: string;
+  lastName: string;
+  workEmail?: string;
+  status: string;
+  employmentStartsAt?: string;
+  employmentEndsAt?: string;
+  userId?: string;
+  accountStatus?: string;
+  access?: {
+    membershipId: string;
+    staffRole?: "TENANT_OWNER" | "TENANT_ADMIN" | "OPERATIONS_STAFF" | "FINANCE_STAFF";
+    hasTeacherPersona: boolean;
+    status: string;
+    version: number;
+    scopeMode: "TENANT" | "CAMPUSES";
+    campusIds: string[];
+  };
+}
+
+export type EmployeeAccessSort = "lastName" | "-lastName" | "firstName" | "employeeNo";
+
+export interface EmployeeAccessListQuery {
+  cursor?: string;
+  direction: "next" | "previous";
+  limit: number;
+  q?: string;
+  sort: EmployeeAccessSort;
+}
+
+export type EmployeeStaffRole = "TENANT_OWNER" | "TENANT_ADMIN" | "OPERATIONS_STAFF" | "FINANCE_STAFF";
+export type EmployeeInvitationRole = EmployeeStaffRole;
+export type TenantMembershipLifecycleStatus = "ACTIVE" | "SUSPENDED" | "ENDED";
+export type TenantMembershipScopeMode = "TENANT" | "CAMPUSES";
+
+export interface EmployeeCreateRequest {
+  employeeNo?: string;
+  firstName: string;
+  lastName: string;
+  workEmail?: string;
+  phone?: string;
+  employmentStartsAt?: string;
+  status: "PLANNED" | "ACTIVE";
+}
+
+export interface EmployeeAccountInvitationRequest {
+  email: string;
+  role: EmployeeInvitationRole;
+}
+
+export interface TenantMembershipUpdateRequest {
+  expectedVersion: number;
+  staffRole?: EmployeeStaffRole;
+  hasTeacherPersona: boolean;
+  status: TenantMembershipLifecycleStatus;
+  scopeMode: TenantMembershipScopeMode;
+  campusIds: string[];
+  endedReason?: string;
+}
+
+export interface TenantMembershipUpdateResult {
+  employee: EmployeeAccessRecord;
+  sessionsRevoked: number;
 }
 
 export type TenantFirstAdminProvisionResult = TenantUserRecord;
@@ -232,6 +377,12 @@ export type TenantCreateResponse =
   | {
       tenant: TenantRecord;
       admin: TenantFirstAdminProvisionResult;
+    }
+  | {
+      tenant: TenantRecord;
+      campuses: CampusRecord[];
+      licenseTerm: LicenseTermRecord;
+      owner: TenantOnboardingOwnerRecord;
     };
 
 export interface RolePreviewStartRequest {
@@ -326,17 +477,20 @@ export interface CampusRecord {
   tenantId: string;
   name: string;
   code?: string;
+  unitType?: "SCHOOL" | "COURSE" | "MIXED";
 }
 
 export interface CampusCreateRequest {
   tenantId?: string;
   name: string;
   code?: string;
+  unitType?: "SCHOOL" | "COURSE" | "MIXED";
 }
 
 export interface CampusUpdateRequest {
   name?: string;
   code?: string;
+  unitType?: "SCHOOL" | "COURSE" | "MIXED";
 }
 
 export interface GradeLevelRecord {
@@ -700,6 +854,51 @@ export type PublicStudentRecord = Omit<StudentRecord, "userId">;
 
 export type StudentStatus = "ACTIVE" | "PASSIVE" | "GRADUATED" | "TRANSFERRED";
 
+export type StudentPortalAccessState = "ACTIVE" | "SUSPENDED" | "INVITED" | "NOT_INVITED" | "INCONSISTENT";
+
+export interface StudentPortalAccessRecord {
+  studentId: string;
+  tenantId: string;
+  studentNo?: string;
+  firstName: string;
+  lastName: string;
+  studentStatus: StudentStatus;
+  accessState: StudentPortalAccessState;
+  userId?: string;
+  accountStatus?: string;
+  membership?: {
+    id: string;
+    status: "ACTIVE" | "SUSPENDED" | "ENDED";
+    version: number;
+  };
+  invitation?: {
+    id: string;
+    kind: "EMAIL_LINK" | "STUDENT_CODE";
+    status: "PENDING" | "ACCEPTED" | "REVOKED";
+    emailMasked?: string;
+    expiresAt: string;
+  };
+  activeSessionCount: number;
+}
+
+export interface StudentPortalAccessUpdateRequest {
+  status: "ACTIVE" | "SUSPENDED";
+  expectedVersion: number;
+}
+
+export interface StudentPortalAccessUpdateResult {
+  studentId: string;
+  tenantId: string;
+  userId: string;
+  accountStatus: string;
+  membership: {
+    id: string;
+    status: "ACTIVE" | "SUSPENDED";
+    version: number;
+  };
+  sessionsRevoked: number;
+}
+
 export interface StudentGuardianProvisionRequest {
   firstName?: string;
   lastName?: string;
@@ -779,7 +978,7 @@ export interface StudentImportError {
     | "REQUIRED"
     | "STUDENT_NATIONAL_ID_DUPLICATE"
     | "STUDENT_NO_DUPLICATE"
-    | "STUDENT_QUOTA_EXCEEDED";
+    | "ACTIVE_STUDENT_LIMIT_REACHED";
   value?: string;
 }
 
@@ -1165,6 +1364,12 @@ export interface ApiListMeta {
   totalPages: number;
 }
 
+export interface ApiCursorListMeta {
+  limit: number;
+  nextCursor?: string;
+  previousCursor?: string;
+}
+
 export interface ApiItemResponse<TItem> {
   data: TItem;
 }
@@ -1174,17 +1379,23 @@ export interface ApiListResponse<TItem> {
   meta: ApiListMeta;
 }
 
-export type IdentityInvitationSubjectType = "TEACHER" | "STUDENT" | "GUARDIAN";
-export type IdentityInvitationStatus = "PENDING" | "ACCEPTED";
+export interface ApiCursorListResponse<TItem> {
+  data: TItem[];
+  meta: ApiCursorListMeta;
+}
+
+export type IdentityInvitationSubjectType = "TEACHER" | "STUDENT" | "GUARDIAN" | "EMPLOYEE";
+export type IdentityInvitationStatus = "PENDING" | "ACCEPTED" | "REVOKED";
 
 export interface IdentityInvitationRecord {
   id: string;
   tenantId: string;
   subjectType: IdentityInvitationSubjectType;
   subjectId: string;
-  email: string;
+  email?: string;
   name: string;
-  role: IdentityInvitationSubjectType;
+  role: TenantAssignableRoleName;
+  kind: "EMAIL_LINK" | "STUDENT_CODE";
   status: IdentityInvitationStatus;
   expiresAt: string;
   acceptedAt?: string;
@@ -1196,7 +1407,7 @@ export interface IdentityInvitationCreateRequest {
   email: string;
   name?: string;
   subjectId: string;
-  subjectType: IdentityInvitationSubjectType;
+  subjectType: Exclude<IdentityInvitationSubjectType, "EMPLOYEE">;
 }
 
 export interface IdentityInvitationAcceptRequest {
@@ -1211,6 +1422,29 @@ export type IdentityInvitationResendResponse = IdentityInvitationRecord;
 export interface IdentityInvitationAcceptResponse {
   status: "ACCEPTED";
   acceptedAt?: string;
+}
+
+export interface StudentPortalInvitationIssueResponse {
+  invitationId: string;
+  studentId: string;
+  tenantSlug: string;
+  studentNo: string;
+  activationCode: string;
+  activationUrl: string;
+  expiresAt: string;
+}
+
+export interface StudentPortalActivationRequest {
+  tenantSlug: string;
+  studentNo: string;
+  code: string;
+  password: string;
+}
+
+export interface StudentPortalActivationResponse {
+  status: "ACCEPTED";
+  acceptedAt: string;
+  loginName: string;
 }
 
 export interface MessageTemplateRecord {

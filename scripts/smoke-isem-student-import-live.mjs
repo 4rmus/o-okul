@@ -11,6 +11,7 @@ const databaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:
 const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/o_okul";
 const runId = randomUUID();
 const tenantId = `tenant-isem-student-smoke-${runId}`;
+const tenantSlug = `isem-student-smoke-${runId}`;
 const userId = `user-isem-student-smoke-${runId}`;
 const membershipId = `membership-isem-student-smoke-${runId}`;
 const classAId = `class-isem-student-smoke-a-${runId}`;
@@ -78,12 +79,12 @@ async function seedTenant() {
     await client.query(
       `INSERT INTO "Tenant" ("id", "name", "slug", "status", "seatLimit", "updatedAt")
        VALUES ($1, 'iSEM Student Smoke Tenant', $2, 'ACTIVE', 200, now())`,
-      [tenantId, `isem-student-smoke-${runId}`],
+      [tenantId, tenantSlug],
     );
     await client.query(
-      `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
-       VALUES ($1, $2, 'iSEM Student Smoke Admin', $3, now())`,
-      [userId, smokeEmail, hashPassword(smokePassword)],
+      `INSERT INTO "User" ("id", "tenantId", "email", "emailNormalized", "loginName", "loginNameNormalized", "name", "passwordHash", "updatedAt")
+       VALUES ($1, $2, $3, lower(btrim($3)), $3, lower(btrim($3)), 'iSEM Student Smoke Admin', $4, now())`,
+      [userId, tenantId, smokeEmail, hashPassword(smokePassword)],
     );
     await client.query(
       `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
@@ -111,7 +112,7 @@ async function login(baseUrl) {
   const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email: smokeEmail, password: smokePassword }),
+    body: JSON.stringify({ tenantSlug, loginName: smokeEmail, password: smokePassword }),
   });
   if (!response.ok) {
     throw new Error(`ISEM_STUDENT_IMPORT_LOGIN_FAILED: ${response.status} ${await response.text()}`);

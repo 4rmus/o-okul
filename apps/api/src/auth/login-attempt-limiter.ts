@@ -113,6 +113,10 @@ export function loginAttemptKey(identifier: string, ip = "unknown"): string {
   return createHash("sha256").update(material).digest("hex");
 }
 
+export function mfaAttemptKey(userId: string, purpose: string): string {
+  return createHash("sha256").update(`mfa:${purpose}:${userId}`).digest("hex");
+}
+
 function failureKey(key: string): string {
   return `auth:login-attempt:${key}:failures`;
 }

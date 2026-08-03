@@ -1,10 +1,13 @@
 import { lstat, readFile } from "node:fs/promises";
-import { dirname, parse, resolve } from "node:path";
+import { dirname, parse, relative, resolve } from "node:path";
 
 const enabled = process.env.NEXT_E2E_LIVE_ONBOARDING;
 const evidencePath = process.env.LIVE_ONBOARDING_EVIDENCE_PATH;
+const emailEvidenceEndpoint = process.env.LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT;
+const emailEvidenceBearerToken = process.env.LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN;
 const allowExampleEvidence = process.env.LIVE_ONBOARDING_ALLOW_EXAMPLE_EVIDENCE === "1";
 const liveEvidenceMaxAgeMs = 24 * 60 * 60 * 1000;
+const repositoryRoot = resolve(process.cwd());
 
 const failures = [];
 
@@ -14,6 +17,14 @@ if (enabled !== "1") {
 
 if (!evidencePath) {
   failures.push("LIVE_ONBOARDING_EVIDENCE_PATH boş bırakılamaz.");
+}
+
+if (!isHttpsUrl(emailEvidenceEndpoint)) {
+  failures.push("LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT gerçek https URL olmalı.");
+}
+
+if (!emailEvidenceBearerToken || emailEvidenceBearerToken.length < 16) {
+  failures.push("LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN en az 16 karakter olmalı.");
 }
 
 if (failures.length === 0) {
@@ -40,6 +51,11 @@ async function validateEvidencePath(filePath, collectedFailures) {
     return;
   }
 
+  if (isRepositoryOrEvidenceMountPath(filePath)) {
+    collectedFailures.push("LIVE_ONBOARDING_EVIDENCE_PATH repo, artifacts veya evidence mount dışında private dosya olmalı.");
+    return;
+  }
+
   await assertParentPathAllowed(dirname(filePath), collectedFailures);
   if (collectedFailures.length > 0) return;
 
@@ -52,8 +68,21 @@ async function validateEvidencePath(filePath, collectedFailures) {
   }
 
   if (stat.isSymbolicLink() || !stat.isFile()) {
-    collectedFailures.push("LIVE_ONBOARDING_EVIDENCE_PATH symlink olmayan file artifact olmalı.");
+    collectedFailures.push("LIVE_ONBOARDING_EVIDENCE_PATH symlink olmayan normal dosya olmalı.");
+    return;
   }
+
+  if ((stat.mode & 0o777) !== 0o600) {
+    collectedFailures.push("LIVE_ONBOARDING_EVIDENCE_PATH private regular 0600 dosya olmalı.");
+  }
+}
+
+function isRepositoryOrEvidenceMountPath(filePath) {
+  const paths = [repositoryRoot, resolve(repositoryRoot, "artifacts"), resolve(repositoryRoot, "docker/evidence")];
+  return paths.some((candidate) => {
+    const fromCandidate = relative(candidate, filePath);
+    return fromCandidate === "" || (!fromCandidate.startsWith("..") && !fromCandidate.includes(".."));
+  });
 }
 
 async function assertParentPathAllowed(parentPath, collectedFailures) {
@@ -89,6 +118,15 @@ function isLocalTempPath(filePath) {
   );
 }
 
+function isHttpsUrl(value) {
+  if (!value) return false;
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function parseJson(value, collectedFailures) {
   try {
     return JSON.parse(value);
@@ -117,8 +155,8 @@ function validateEvidence(evidence, collectedFailures) {
     collectedFailures.push("appendRunId boolean olmalı.");
   }
 
-  validatePrincipal(evidence.systemAdmin, collectedFailures, "systemAdmin", { requireName: false });
-  validatePrincipal(evidence.firstAdmin, collectedFailures, "firstAdmin", { requireName: true });
+  validatePrincipal(evidence.systemAdmin, collectedFailures, "systemAdmin", { kind: "systemAdmin" });
+  validatePrincipal(evidence.firstAdmin, collectedFailures, "firstAdmin", { kind: "firstAdmin" });
   validateTenant(evidence.tenant, collectedFailures);
   validateOnboarding(evidence.onboarding, collectedFailures);
 
@@ -129,14 +167,26 @@ function validateEvidence(evidence, collectedFailures) {
   }
 }
 
-function validatePrincipal(value, collectedFailures, label, { requireName }) {
+function validatePrincipal(value, collectedFailures, label, { kind }) {
   if (!isObjectRecord(value)) {
     collectedFailures.push(`${label} nesnesi zorunlu.`);
     return;
   }
 
-  requireObjectKeySet(value, collectedFailures, label, requireName ? ["email", "name", "password"] : ["email", "password"]);
+  const requireName = kind === "firstAdmin";
+  requireObjectKeySet(
+    value,
+    collectedFailures,
+    label,
+    requireName ? ["email", "name", "nationalId", "password"] : ["email", "loginName", "password"],
+  );
   requireEmail(value, collectedFailures, `${label}.email`, "email");
+  if (kind === "systemAdmin") {
+    requireString(value, collectedFailures, `${label}.loginName`, "loginName");
+    requireNonPlaceholderString(value, collectedFailures, `${label}.loginName`, "loginName");
+  } else if (typeof value.nationalId !== "string" || !/^\d{11}$/.test(value.nationalId)) {
+    collectedFailures.push(`${label}.nationalId 11 rakam olmalı.`);
+  }
   requireSecret(value, collectedFailures, `${label}.password`, "password");
   if (requireName) {
     requireString(value, collectedFailures, `${label}.name`, "name");

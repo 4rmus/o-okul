@@ -30,6 +30,7 @@ export interface CreatePaymentTransactionStoreInput {
 
 export interface PaymentPlanListFilters {
   campusId?: string;
+  campusIds?: string[];
   gradeLevelId?: string;
   classId?: string;
   courseId?: string;
@@ -39,7 +40,7 @@ export interface PaymentPlanListFilters {
 export interface PaymentPlanStore {
   list(filters?: PaymentPlanListFilters): Promise<PaymentPlanWithInstallmentsRecord[]>;
   listByStudent(studentId: string, filters?: PaymentPlanListFilters): Promise<PaymentPlanWithInstallmentsRecord[]>;
-  findById(id: string): Promise<PaymentPlanWithInstallmentsRecord | undefined>;
+  findById(id: string, filters?: PaymentPlanListFilters): Promise<PaymentPlanWithInstallmentsRecord | undefined>;
   create(input: CreatePaymentPlanStoreInput): Promise<PaymentPlanWithInstallmentsRecord>;
   cancelPlan(planId: string, deletedAt: string): Promise<PaymentPlanWithInstallmentsRecord | undefined>;
   updateInstallment(
@@ -127,8 +128,8 @@ export class InMemoryPaymentPlanStore implements PaymentPlanStore {
     return this.withInstallments(filterPaymentPlans(this.plans.filter((record) => record.studentId === studentId && !record.deletedAt), filters));
   }
 
-  async findById(id: string): Promise<PaymentPlanWithInstallmentsRecord | undefined> {
-    const plan = this.plans.find((record) => record.id === id && !record.deletedAt);
+  async findById(id: string, filters: PaymentPlanListFilters = {}): Promise<PaymentPlanWithInstallmentsRecord | undefined> {
+    const plan = filterPaymentPlans(this.plans.filter((record) => record.id === id && !record.deletedAt), filters)[0];
     return plan ? this.withInstallments([plan]).then((records) => records[0]) : undefined;
   }
 
@@ -241,9 +242,9 @@ export class PostgresPaymentPlanStore implements PaymentPlanStore {
     });
   }
 
-  async findById(id: string): Promise<PaymentPlanWithInstallmentsRecord | undefined> {
+  async findById(id: string, filters: PaymentPlanListFilters = {}): Promise<PaymentPlanWithInstallmentsRecord | undefined> {
     return withTenantQuery(this.pool, async (client) => {
-      const plans = await selectPlans(client, { id });
+      const plans = await selectPlans(client, { ...filters, id });
       const records = await withInstallments(client, plans);
       return records[0];
     });
@@ -511,7 +512,7 @@ interface PaymentPlanQueryFilters extends PaymentPlanListFilters {
 
 async function selectPlans(client: Queryable, filtersInput: PaymentPlanQueryFilters = {}): Promise<PaymentPlanRecord[]> {
   const filters = [`"deletedAt" IS NULL`];
-  const values: string[] = [];
+  const values: unknown[] = [];
 
   if (filtersInput.studentId) {
     values.push(filtersInput.studentId);
@@ -520,6 +521,11 @@ async function selectPlans(client: Queryable, filtersInput: PaymentPlanQueryFilt
   if (filtersInput.id) {
     values.push(filtersInput.id);
     filters.push(`"id" = $${values.length}`);
+  }
+  if (filtersInput.campusIds) {
+    if (filtersInput.campusIds.length === 0) return [];
+    values.push(filtersInput.campusIds);
+    filters.push(`"campusId" = ANY($${values.length}::text[])`);
   }
   for (const field of ["campusId", "gradeLevelId", "classId", "courseId", "termId"] as const) {
     const value = filtersInput[field];
@@ -587,6 +593,7 @@ function toPaymentPlanRecord(row: PaymentPlanRow): PaymentPlanRecord {
 function filterPaymentPlans(plans: PaymentPlanRecord[], filters: PaymentPlanListFilters): PaymentPlanRecord[] {
   return plans
     .filter((plan) => !filters.campusId || plan.campusId === filters.campusId)
+    .filter((plan) => !filters.campusIds || filters.campusIds.includes(plan.campusId ?? ""))
     .filter((plan) => !filters.gradeLevelId || plan.gradeLevelId === filters.gradeLevelId)
     .filter((plan) => !filters.classId || plan.classId === filters.classId)
     .filter((plan) => !filters.courseId || plan.courseId === filters.courseId)

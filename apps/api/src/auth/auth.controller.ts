@@ -8,10 +8,13 @@ import type {
   LoginRequest,
   LoginResponse,
   MfaEnrollmentRequiredResponse,
+  MfaStepUpRequest,
+  MfaStepUpResponse,
   PasswordResetAcceptedResponse,
   PasswordResetConfirmRequest,
   PasswordResetConfirmResponse,
   PasswordResetRequest,
+  PersonaSwitchRequest,
   Session,
   TenantSelectionRequest,
   TenantSelectionRequiredResponse,
@@ -25,28 +28,36 @@ import type {
   TotpStatusResponse,
 } from "@o-okul/shared-types";
 import { getRequestContext } from "../context/request-context.js";
+import { resolveClientIp } from "../http/trusted-proxy.js";
 import { optionalTrimmedString, requiredTrimmedString, zodBody } from "../http/zod-validation.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { AuthService } from "./auth.service.js";
+import { passwordMaxLength, passwordMinLength, passwordPolicyViolation } from "./password-policy.js";
+import { sessionClientContext } from "./session-client-context.js";
 import type { LoginMfaChallenge } from "./totp-mfa.js";
 import { resolveRefreshTokenTtlMs, type TokenPair } from "./token-service.js";
 
 const loginBodySchema = z.object({
-  tenantSlug: optionalTrimmedString,
-  nationalId: requiredTrimmedString,
+  tenantSlug: requiredTrimmedString,
+  loginName: requiredTrimmedString,
   password: requiredTrimmedString,
-}) satisfies z.ZodType<LoginRequest>;
+}).strict() satisfies z.ZodType<LoginRequest>;
 const tenantSelectionBodySchema = z.object({
   selectionToken: requiredTrimmedString,
   tenantId: requiredTrimmedString,
 }).strict() satisfies z.ZodType<TenantSelectionRequest>;
 const refreshBodySchema = z.preprocess((value) => value ?? {}, z.object({}).strict()) satisfies z.ZodType<AuthRefreshRequest>;
+const personaSwitchBodySchema = z.object({
+  activePersona: z.enum(["STAFF", "TEACHER", "STUDENT"]),
+}).strict() satisfies z.ZodType<PersonaSwitchRequest>;
 const passwordResetRequestBodySchema = z.object({
   tenantSlug: requiredTrimmedString,
-  nationalId: requiredTrimmedString,
+  loginName: requiredTrimmedString,
 }).strict() satisfies z.ZodType<PasswordResetRequest>;
 const passwordResetConfirmBodySchema = z.object({
-  password: z.string().min(8),
+  password: z.string().min(passwordMinLength).max(passwordMaxLength).refine((value) => !passwordPolicyViolation(value), {
+    message: "PASSWORD_COMMON_REJECTED",
+  }),
   token: requiredTrimmedString,
 }).strict() satisfies z.ZodType<PasswordResetConfirmRequest>;
 const totpChallengeVerifyBodySchema = z.object({
@@ -69,6 +80,14 @@ const totpDisableBodySchema = z.object({
   message: "TOTP kodu veya recovery code zorunlu.",
   path: ["totpCode"],
 }) satisfies z.ZodType<TotpDisableRequest>;
+const mfaStepUpBodySchema = z.object({
+  purpose: z.enum(["OWNER_ADMIN_CHANGE"]),
+  totpCode: optionalTrimmedString,
+  recoveryCode: optionalTrimmedString,
+}).strict().refine((value) => Boolean(value.totpCode || value.recoveryCode), {
+  message: "TOTP kodu veya recovery code zorunlu.",
+  path: ["totpCode"],
+}) satisfies z.ZodType<MfaStepUpRequest>;
 
 type RefreshBody = AuthRefreshRequest;
 
@@ -98,7 +117,8 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<LoginResponse> {
-    const result = await this.auth.login(body, resolveClientIp(request));
+    const clientIp = resolveClientIp(request);
+    const result = await this.auth.login(body, clientIp, sessionClientContext(request.header("user-agent"), clientIp));
     if (isLoginMfaChallenge(result) || isMfaEnrollmentRequired(result) || isTenantSelectionRequired(result)) {
       return result;
     }
@@ -112,9 +132,10 @@ export class AuthController {
   @HttpCode(200)
   async selectTenant(
     @Body(zodBody(tenantSelectionBodySchema)) body: TenantSelectionRequest,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<LoginResponse> {
-    const result = await this.auth.selectTenant(body);
+    const result = await this.auth.selectTenant(body, requestSessionClientContext(request));
     if (isLoginMfaChallenge(result) || isMfaEnrollmentRequired(result)) {
       return result;
     }
@@ -128,12 +149,13 @@ export class AuthController {
   @HttpCode(200)
   async verifyTotpChallenge(
     @Body(zodBody(totpChallengeVerifyBodySchema)) body: TotpChallengeVerifyRequest,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<AuthResponse> {
     const tokenPair = await this.auth.verifyTotpChallenge(body.challengeToken, {
       totpCode: body.totpCode,
       recoveryCode: body.recoveryCode,
-    });
+    }, requestSessionClientContext(request));
     response.cookie(refreshCookieName, tokenPair.refreshToken, refreshCookieOptions);
     response.cookie(csrfCookieName, createCsrfToken(), csrfCookieOptions);
     return toAuthResponse(tokenPair);
@@ -143,9 +165,10 @@ export class AuthController {
   @HttpCode(200)
   async confirmRequiredTotpEnrollment(
     @Body(zodBody(totpEnrollmentConfirmBodySchema)) body: TotpEnrollmentConfirmRequest,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<AuthResponse> {
-    const tokenPair = await this.auth.confirmRequiredTotpEnrollment(body.setupToken, body.totpCode);
+    const tokenPair = await this.auth.confirmRequiredTotpEnrollment(body.setupToken, body.totpCode, requestSessionClientContext(request));
     response.cookie(refreshCookieName, tokenPair.refreshToken, refreshCookieOptions);
     response.cookie(csrfCookieName, createCsrfToken(), csrfCookieOptions);
     return toAuthResponse(tokenPair);
@@ -161,6 +184,23 @@ export class AuthController {
   ): Promise<AuthResponse> {
     assertCsrfToken(cookieHeader, csrfHeader);
     const tokenPair = await this.auth.refresh(readRefreshCookie(cookieHeader));
+    response.cookie(refreshCookieName, tokenPair.refreshToken, refreshCookieOptions);
+    response.cookie(csrfCookieName, createCsrfToken(), csrfCookieOptions);
+    return toAuthResponse(tokenPair);
+  }
+
+  @Post("persona/switch")
+  @HttpCode(200)
+  @Roles("TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF", "TEACHER", "STUDENT")
+  async switchPersona(
+    @Body(zodBody(personaSwitchBodySchema)) body: PersonaSwitchRequest,
+    @Headers("cookie") cookieHeader: string | undefined,
+    @Headers("x-csrf-token") csrfHeader: string | undefined,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<AuthResponse> {
+    assertCsrfToken(cookieHeader, csrfHeader);
+    const tokenPair = await this.auth.switchPersona(getRequestContext(), body.activePersona, requestSessionClientContext(request));
     response.cookie(refreshCookieName, tokenPair.refreshToken, refreshCookieOptions);
     response.cookie(csrfCookieName, createCsrfToken(), csrfCookieOptions);
     return toAuthResponse(tokenPair);
@@ -228,6 +268,16 @@ export class AuthController {
       recoveryCode: body.recoveryCode,
     });
   }
+
+  @Post("step-up")
+  @HttpCode(200)
+  @Roles("SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF")
+  createMfaStepUp(@Body(zodBody(mfaStepUpBodySchema)) body: MfaStepUpRequest): Promise<MfaStepUpResponse> {
+    return this.auth.createMfaStepUp(getRequestContext(), body.purpose, {
+      totpCode: body.totpCode,
+      recoveryCode: body.recoveryCode,
+    });
+  }
 }
 
 function readRefreshCookie(cookieHeader: string | undefined): string {
@@ -266,6 +316,8 @@ function toPublicSession(session: TokenPair["session"], mustChangePassword = fal
     id: session.id,
     userId: session.userId,
     tenantId: session.tenantId,
+    ...(session.membershipId ? { membershipId: session.membershipId } : {}),
+    ...(session.activePersona ? { activePersona: session.activePersona } : {}),
     roles: [...session.roles],
     membershipVersion: session.membershipVersion,
     status: session.status,
@@ -287,13 +339,6 @@ function isTenantSelectionRequired(value: unknown): value is TenantSelectionRequ
   return Boolean(value && typeof value === "object" && "status" in value && value.status === "TENANT_SELECTION_REQUIRED");
 }
 
-function resolveClientIp(request: Request): string {
-  const forwardedFor = request.headers["x-forwarded-for"];
-  const firstForwarded = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
-  const forwardedIp = firstForwarded?.split(",")[0]?.trim();
-  if (forwardedIp) return forwardedIp;
-
-  const realIp = request.headers["x-real-ip"];
-  if (Array.isArray(realIp)) return realIp[0] ?? "unknown";
-  return realIp?.trim() || request.ip || request.socket.remoteAddress || "unknown";
+function requestSessionClientContext(request: Request) {
+  return sessionClientContext(request.header("user-agent"), resolveClientIp(request));
 }

@@ -170,12 +170,18 @@ async function seedFixtures() {
     );
 
     await adminClient.query(
-      `INSERT INTO "User" ("id", "tenantId", "email", "name", "passwordHash", "updatedAt")
+      `INSERT INTO "User" (
+         "id", "tenantId", "email", "emailNormalized", "loginName", "loginNameNormalized", "name", "passwordHash", "updatedAt"
+       )
        VALUES
-         ($1, $2, 'rls-a@example.test', 'RLS User A', 'hash-a', now()),
-         ($3, $4, 'rls-b@example.test', 'RLS User B', 'hash-b', now())
-       ON CONFLICT ("email") DO UPDATE
+         ($1, $2, 'rls-a@example.test', 'rls-a@example.test', 'rls-a@example.test', 'rls-a@example.test', 'RLS User A', 'hash-a', now()),
+         ($3, $4, 'rls-b@example.test', 'rls-b@example.test', 'rls-b@example.test', 'rls-b@example.test', 'RLS User B', 'hash-b', now())
+       ON CONFLICT ("id") DO UPDATE
        SET "tenantId" = EXCLUDED."tenantId",
+           "email" = EXCLUDED."email",
+           "emailNormalized" = EXCLUDED."emailNormalized",
+           "loginName" = EXCLUDED."loginName",
+           "loginNameNormalized" = EXCLUDED."loginNameNormalized",
            "updatedAt" = now()`,
       [ids.userA, ids.tenantA, ids.userB, ids.tenantB],
     );
@@ -864,6 +870,26 @@ async function assertTenantAOnlyReadsTenantA(table) {
   });
 }
 
+async function assertAppCannotDeleteTenant() {
+  const privilege = await appClient.query(
+    `SELECT has_table_privilege(current_user, '"Tenant"', 'DELETE') AS "canDelete"`,
+  );
+  if (privilege.rows[0]?.canDelete !== false) {
+    throw new Error("app rolü Tenant üzerinde DELETE yetkisine sahip.");
+  }
+
+  await withAppTransaction(async () => {
+    try {
+      await appClient.query(`DELETE FROM "Tenant" WHERE false`);
+    } catch (error) {
+      if (error?.code === "42501") return;
+      throw error;
+    }
+
+    throw new Error("app rolü Tenant DELETE sorgusunu çalıştırabildi.");
+  });
+}
+
 async function assertWithCheckBlocksWrongTenantWrite() {
   await withAppTransaction(async () => {
     await setTenantContext(appClient, ids.tenantA);
@@ -1020,6 +1046,7 @@ try {
   for (const table of tenantReadTables) {
     await assertTenantAOnlyReadsTenantA(table);
   }
+  await assertAppCannotDeleteTenant();
   await assertWithCheckBlocksWrongTenantWrite();
   await assertWithCheckBlocksWrongTenantHomeworkWrite();
   await assertWithCheckBlocksWrongTenantAnnouncementWrite();

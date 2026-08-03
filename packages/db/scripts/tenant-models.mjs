@@ -10,7 +10,7 @@ const defaultSchemaPath = join(__dirname, "../prisma/schema.prisma");
 // auth/denetim altyapısıdır: global User kimliğine (User.tenantId NULL olabilen
 // sistem kullanıcıları dahil) bağlandıkları için tenant policy uygulanamaz.
 // Bu listeye ekleme, tenantId taşıdığı halde RLS dışı bırakılacak model içindir.
-export const tenantScopedTableExceptions = [];
+export const tenantScopedTableExceptions = ["SecretDeliveryOutbox"];
 
 export function getTenantScopedTables(schemaPath = defaultSchemaPath) {
   const schema = readFileSync(schemaPath, "utf8");

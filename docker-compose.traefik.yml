@@ -7,6 +7,10 @@ services:
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.forwardedheaders.insecure=false"
+      - "--entrypoints.websecure.forwardedheaders.insecure=false"
+      - "--entrypoints.web.forwardedheaders.trustedips=${TRAEFIK_TRUSTED_FORWARDER_CIDRS:-127.0.0.1/32}"
+      - "--entrypoints.websecure.forwardedheaders.trustedips=${TRAEFIK_TRUSTED_FORWARDER_CIDRS:-127.0.0.1/32}"
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
       - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
@@ -20,7 +24,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik_letsencrypt:/letsencrypt
     networks:
-      - frontend_net
+      frontend_net:
+      proxy_net:
+        ipv4_address: ${TRAEFIK_PROXY_IP:-172.31.255.2}
     depends_on:
       api:
         condition: service_healthy
@@ -49,7 +55,7 @@ services:
   api:
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=${DOCKER_FRONTEND_NETWORK:-o-okul_frontend_net}"
+      - "traefik.docker.network=${DOCKER_PROXY_NETWORK:-o-okul_proxy_net}"
       - "traefik.http.routers.api.rule=Host(`${DOMAIN}`) && (PathPrefix(`/api`) || PathPrefix(`/health`))"
       - "traefik.http.routers.api.entrypoints=websecure"
       - "traefik.http.routers.api.priority=100"

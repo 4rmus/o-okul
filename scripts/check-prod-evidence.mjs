@@ -41,6 +41,7 @@ const smokeEvidenceFileDefaults = {
   ALERT_WEBHOOK_SMOKE_EVIDENCE_FILE: "alert-webhook.json",
   WAL_ARCHIVE_SMOKE_EVIDENCE_FILE: "wal-archive.json",
   REPORT_GENERATION_SMOKE_EVIDENCE_FILE: "report-generation.json",
+  SECRET_DELIVERY_OUTBOX_SMOKE_EVIDENCE_FILE: "secret-delivery-outbox.json",
 };
 
 if (summaryOutputFile) {
@@ -56,6 +57,7 @@ const checks = [
   ["Alert webhook", "scripts/smoke-alert-webhook.mjs"],
   ["WAL archive target", "scripts/smoke-wal-archive-target.mjs"],
   ["Report generation smoke", "scripts/smoke-report-generation-live.mjs"],
+  ["Secret delivery outbox evidence", "scripts/check-secret-delivery-outbox-evidence.mjs"],
   ["Deployment rollback evidence", "scripts/check-deployment-rollback-evidence.mjs"],
   ["GitHub CI evidence", "scripts/check-github-ci-evidence.mjs"],
   ["Restore drill evidence", "scripts/check-restore-drill-evidence.mjs"],
@@ -213,6 +215,7 @@ function writeSummary(file) {
     alertWebhook: readSmokeEvidence("ALERT_WEBHOOK_SMOKE_EVIDENCE_FILE", "alert_webhook_smoke"),
     walArchive: readSmokeEvidence("WAL_ARCHIVE_SMOKE_EVIDENCE_FILE", "wal_archive_smoke"),
     reportGeneration: readSmokeEvidence("REPORT_GENERATION_SMOKE_EVIDENCE_FILE", "report_generation_smoke"),
+    secretDeliveryOutbox: readSmokeEvidence("SECRET_DELIVERY_OUTBOX_SMOKE_EVIDENCE_FILE", "secret_delivery_outbox_staging_smoke"),
   };
   const reports = {
     restoreDrill: readJsonTarget(env.RESTORE_DRILL_TARGET),
@@ -529,6 +532,7 @@ function applySmokeEvidenceDefaults(file) {
   for (const [key, fileName] of Object.entries(smokeEvidenceFileDefaults)) {
     env[key] ||= join(directory, fileName);
   }
+  env.SECRET_DELIVERY_OUTBOX_EVIDENCE_TARGET ||= pathToFileURL(resolve(env.SECRET_DELIVERY_OUTBOX_SMOKE_EVIDENCE_FILE)).href;
 }
 
 function validateSummaryOutputFile(file) {

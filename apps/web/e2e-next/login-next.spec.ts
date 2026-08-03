@@ -412,7 +412,7 @@ type IdentityInvitationFixture = {
   email: string;
   name: string;
   role: string;
-  status: "PENDING" | "ACCEPTED";
+  status: "PENDING" | "ACCEPTED" | "REVOKED";
   expiresAt: string;
   createdAt: string;
   updatedAt: string;
@@ -3966,26 +3966,11 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(userList.getByText("admin-a@example.test")).toHaveCount(0);
   await expect(heading(page, { name: "Davetler" })).toHaveCount(0);
 
-  await page.getByLabel("Admin A rolleri").getByRole("checkbox", { name: /Yardımcı yönetici/ }).check();
-  await page.getByRole("button", { name: "Admin A rollerini kaydet" }).click();
-  expect(rolePatchCount).toBe(1);
-
-  await page.getByRole("button", { name: "Kullanıcı ekle" }).click();
-  const userDialog = page.getByRole("dialog");
-  await userDialog.getByLabel("E-posta").fill("merve@example.test");
-  await userDialog.getByLabel("Telefon").fill("5551234567");
-  await userDialog.getByLabel("Ad Soyad").fill("Merve Rehber");
-  await userDialog.getByLabel("TC kimlik no").fill("10000001204");
-  await userDialog.getByLabel("Yardımcı yönetici").uncheck();
-  await page.getByRole("button", { name: "Ekle", exact: true }).click();
-  await expect(page.getByText("En az bir rol seçilmelidir.")).toBeVisible();
-  await userDialog.getByLabel("Yardımcı yönetici").check();
-  await page.getByRole("button", { name: "Ekle", exact: true }).click();
-  await expect(page.getByText("Merve Rehber")).toBeVisible();
-  await userList.getByLabel("Ara").fill("Merve");
-  await expect(userList.getByText("Merve Rehber")).toBeVisible();
-  await expect(userList.getByText("Admin A")).toBeHidden();
-  await userList.getByLabel("Ara").fill("");
+  await expect(page.getByLabel("Admin A rolleri").getByRole("checkbox")).toHaveCount(0);
+  await expect(userList.getByText("Legacy liste")).toBeVisible();
+  await expect(userList.getByText("Yazma kapalı")).toBeVisible();
+  await expect(userList.getByRole("link", { name: "Çalışan erişimlerini yönet" })).toHaveAttribute("href", "/kurum/calisanlar");
+  expect(rolePatchCount).toBe(0);
 
   await expandSidebarGroup(page, "Akademik");
   await clickSidebarLink(page, "Kampüsler", /\/kurum\/kampusler$/);
@@ -5065,7 +5050,7 @@ test("ilk girişte zorunlu şifre değişimi ekranına yönlendirir", async ({ p
 
   await page.route("**/api/v1/me/password", async (route) => {
     const body = route.request().postDataJSON() as { currentPassword?: string; newPassword?: string };
-    expect(body).toMatchObject({ currentPassword: "5551234567", newPassword: "YeniSifre123" });
+    expect(body).toMatchObject({ currentPassword: "5551234567", newPassword: "YeniSifre123456" });
     passwordChanged = true;
     auth = {
       ...auth,
@@ -5117,15 +5102,16 @@ test("ilk girişte zorunlu şifre değişimi ekranına yönlendirir", async ({ p
   });
 
   await page.goto("/login");
-  await page.getByLabel("Kullanıcı Adı").fill("10000000146");
+  await page.getByLabel("Kurum Kodu").fill("dna-egitim");
+  await page.getByLabel("Kullanıcı Adı").fill("student-a@example.test");
   await page.locator('input[name="password"]').fill("5551234567");
   await page.getByRole("button", { name: "Giriş yap" }).click();
 
   await expect(page).toHaveURL(/\/sifre-degistir$/, { timeout: 15_000 });
   await expect(heading(page, { level: 1, name: "Şifre değiştir" })).toBeVisible();
   await page.getByLabel("Mevcut şifre").fill("5551234567");
-  await page.getByLabel("Yeni şifre", { exact: true }).fill("YeniSifre123");
-  await page.getByLabel("Yeni şifre tekrar").fill("YeniSifre123");
+  await page.getByLabel("Yeni şifre", { exact: true }).fill("YeniSifre123456");
+  await page.getByLabel("Yeni şifre tekrar").fill("YeniSifre123456");
   await page.getByRole("button", { name: "Kaydet" }).click();
 
   await expect(page).toHaveURL(/\/ogrenci$/, { timeout: 15_000 });
@@ -5468,7 +5454,7 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
 
     if (path === "/tenants" && request.method() === "POST") {
       const body = request.postDataJSON() as typeof tenants[number] & {
-        firstAdmin: { name: string; email: string; nationalId: string; phone: string };
+        firstAdmin: { name: string; email: string; nationalId: string };
       };
       tenantCreateCount += 1;
       const id = tenantCreateCount === 1 ? "tenant-created" : `tenant-created-${tenantCreateCount}`;
@@ -5530,19 +5516,6 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
       return;
     }
 
-    if (path.startsWith("/tenants/") && request.method() === "DELETE") {
-      const id = decodeURIComponent(path.replace("/tenants/", ""));
-      const deleted = { ...(tenants.find((candidate) => candidate.id === id) ?? tenants[0]!), status: "DELETED" };
-      tenants = tenants.filter((tenant) => tenant.id !== id);
-      await route.fulfill({
-        contentType: "application/json",
-        headers: corsHeaders,
-        status: 200,
-        body: JSON.stringify(envelope(deleted)),
-      });
-      return;
-    }
-
     await route.fulfill({
       contentType: "application/json",
       headers: corsHeaders,
@@ -5577,7 +5550,6 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
   await createDialog.getByLabel("İlk yönetici ad soyad").pressSequentially("Yeni Yönetici");
   await createDialog.getByLabel("İlk yönetici e-posta").fill("first.admin@example.test");
   await createDialog.getByLabel("İlk yönetici TC kimlik no").fill("10000000450");
-  await createDialog.getByLabel("İlk yönetici telefon").fill("5551234567");
   await expect(createDialog.getByLabel("Kurum adı")).toHaveValue("Yeni Kurum");
   await expect(createDialog.getByLabel("Kurum kodu")).toHaveValue("yeni-kurum");
   await expect(createDialog.getByLabel("Kullanıcı sınırı")).toHaveValue("50");
@@ -5587,16 +5559,13 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
   await expect(page.getByText("1 / 50")).toBeVisible();
 
   await page.getByRole("button", { name: "Kurum oluştur" }).click();
-  await createDialog.getByLabel("Kurum adı").fill("Telefonlu Kurum");
-  await createDialog.getByLabel("Kurum kodu").fill("telefonlu-kurum");
-  await createDialog.getByLabel("İlk yönetici ad soyad").fill("Telefonlu Yönetici");
+  await createDialog.getByLabel("Kurum adı").fill("Davetli Kurum");
+  await createDialog.getByLabel("Kurum kodu").fill("davetli-kurum");
+  await createDialog.getByLabel("İlk yönetici ad soyad").fill("Davetli Yönetici");
   await createDialog.getByLabel("İlk yönetici e-posta").fill("phone.admin@example.test");
   await createDialog.getByLabel("İlk yönetici TC kimlik no").fill("10000001372");
-  await createDialog.getByLabel("İlk yönetici telefon").fill("5550000011");
   await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
-  await page.getByRole("row", { name: /Telefonlu Kurum/ }).getByRole("button", { name: "Sil" }).click();
-  await confirmDeleteDialog(page, "Kurumu sil", "Telefonlu Kurum kurumunu silmek istiyor musun?");
-  await expect(page.getByRole("row", { name: /Telefonlu Kurum/ })).toHaveCount(0);
+  await expect(page.getByRole("row", { name: /Davetli Kurum/ }).getByRole("button", { name: "Sil" })).toHaveCount(0);
 
   await page.getByRole("row", { name: /Yeni Kurum/ }).getByRole("link", { name: "Detay" }).click();
   await expect(page).toHaveURL(/\/sistem\/kurumlar\/tenant-created$/);
@@ -6448,7 +6417,7 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
 
 async function loginAs(page: Page, email: string, password = "password") {
   await page.goto(email === "system@example.test" ? "/sistem/giris" : "/k/dna-egitim/giris");
-  await page.getByLabel("Kullanıcı Adı").fill(loginNationalIdByEmail[email] ?? loginNationalIdByEmail["admin-a@example.test"]!);
+  await page.getByLabel("Kullanıcı Adı").fill(email);
   await page.locator('input[name="password"]').fill(password);
   await page.getByRole("button", { name: "Giriş yap" }).click();
   const homeUrlByEmail: Record<string, RegExp> = {
@@ -6461,19 +6430,8 @@ async function loginAs(page: Page, email: string, password = "password") {
   await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
 }
 
-const loginNationalIdByEmail: Record<string, string> = {
-  "admin-a@example.test": "10000000146",
-  "system@example.test": "10000000214",
-  "assistant@example.test": "10000000382",
-  "first.admin@example.test": "10000000450",
-  "student-a@example.test": "10000000528",
-  "teacher-a@example.test": "10000000696",
-  "guardian-a@example.test": "10000000764",
-};
-
-function loginEmailFromRequest(body: { email?: string; nationalId?: string }) {
-  if (body.email) return body.email;
-  return Object.entries(loginNationalIdByEmail).find(([, nationalId]) => nationalId === body.nationalId)?.[0] ?? "admin-a@example.test";
+function loginEmailFromRequest(body: { email?: string; loginName?: string }) {
+  return body.loginName ?? body.email ?? "admin-a@example.test";
 }
 
 type TestAuthSession = {

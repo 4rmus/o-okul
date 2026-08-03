@@ -17,15 +17,16 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
-    setToken(searchParams.get("token")?.trim() ?? "");
-    setTenantSlug(searchParams.get("tenant")?.trim() ?? "");
-    if (searchParams.has("token")) {
+    const fragmentParams = new URLSearchParams(window.location.hash.slice(1));
+    setToken(fragmentParams.get("token")?.trim() || searchParams.get("token")?.trim() || "");
+    setTenantSlug(fragmentParams.get("tenant")?.trim() || searchParams.get("tenant")?.trim() || "");
+    if (window.location.hash || searchParams.has("token")) {
       searchParams.delete("token");
       const query = searchParams.toString();
       window.history.replaceState(
         window.history.state,
         "",
-        `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+        `${window.location.pathname}${query ? `?${query}` : ""}`,
       );
     }
   }, []);
@@ -38,8 +39,8 @@ export default function ResetPasswordPage() {
       setError("Şifre yenileme bağlantısı geçersiz.");
       return;
     }
-    if (password.length < 8) {
-      setError("Yeni şifre en az 8 karakter olmalıdır.");
+    if (password.length < 15 || password.length > 128) {
+      setError("Yeni şifre 15-128 karakter olmalıdır.");
       return;
     }
     if (password !== passwordAgain) {
@@ -80,7 +81,8 @@ export default function ResetPasswordPage() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete="new-password"
-                minLength={8}
+                minLength={15}
+                maxLength={128}
                 required
               />
             </Field>
@@ -91,7 +93,8 @@ export default function ResetPasswordPage() {
                 value={passwordAgain}
                 onChange={(event) => setPasswordAgain(event.target.value)}
                 autoComplete="new-password"
-                minLength={8}
+                minLength={15}
+                maxLength={128}
                 required
               />
             </Field>

@@ -28,6 +28,7 @@ writeFakeGh();
 
 try {
   expectSetPass();
+  expectActivationSetPass();
   expectDryRunDoesNotCallGh();
   expectGhFailureDoesNotLeakOutput();
   expectFailure(
@@ -35,6 +36,9 @@ try {
     ["--repo", "owner/repo", "--environment", "staging", "--gh-bin", fakeGhPath],
     ["--env-file için özel staging evidence env dosyası gerekli."],
   );
+  expectFailure("invalid validation mode", ["--repo", "owner/repo", "--env-file", validEnvPath, "--mode", "invalid"], [
+    "--mode yalnız activation veya full olabilir.",
+  ]);
   expectFailure("loose file mode", ["--repo", "owner/repo", "--env-file", looseModeEnvFile()], [
     "chmod 600",
   ]);
@@ -53,6 +57,30 @@ try {
 } finally {
   rmSync(root, { recursive: true, force: true });
   rmSync(repoPath, { recursive: true, force: true });
+}
+
+function expectActivationSetPass() {
+  const captureDir = resetCapture("activation-pass");
+  const activationEnvPath = join(root, "staging-activation.env");
+  writeFileSync(activationEnvPath, readFileSync(validEnvPath, "utf8").replace("ADMIN_MFA_MODE=required", "ADMIN_MFA_MODE=optional"));
+  chmodSync(activationEnvPath, 0o600);
+  const result = runHelper([
+    "--repo",
+    "owner/repo",
+    "--environment",
+    "staging",
+    "--mode",
+    "activation",
+    "--env-file",
+    activationEnvPath,
+  ], {
+    FAKE_GH_CAPTURE_DIR: captureDir,
+    FAKE_GH_SCENARIO: "pass",
+  });
+  if (result.status !== 0) {
+    failContract("activation secret set senaryosu geçmeli.", result);
+  }
+  assertNoSecretLeak(result, "activation secret set");
 }
 
 console.log("Staging evidence GitHub secret contract kontrolü geçti.");
@@ -229,13 +257,19 @@ function buildValidEnvFile() {
     ["__SET_STAGING_WEB_HOST__", "staging.o-okul.com"],
     ["__SET_APP_DB_PASSWORD__", "contractAppDbPasswordValue001"],
     ["__SET_MIGRATION_DB_PASSWORD__", "contractMigrationDbPasswordValue001"],
+    ["__SET_SECRET_DELIVERY_WORKER_DB_PASSWORD__", "contractSecretDeliveryWorkerDbPassword0001"],
     ["__SET_STAGING_DB_HOST__", "db.staging.o-okul.internal"],
     ["__SET_REAL_ACCESS_SECRET__", "contractAccessSecretValue000000000001"],
     ["__SET_REAL_STUDENT_PII_ENCRYPTION_KEY__", "contractStudentPiiEncryption00000003"],
     ["__SET_REAL_STUDENT_PII_HASH_KEY__", "contractStudentPiiHashValue000000004"],
     ["__SET_REAL_ADMIN_MFA_SECRET_ENCRYPTION_KEY__", "contractAdminMfaEncryption000000005"],
+    ["__SET_REAL_SECRET_DELIVERY_ENCRYPTION_KEY__", "contractSecretDeliveryEncryption0000008"],
     ["__SET_REAL_ADMIN_MFA_RECOVERY_HASH_KEY__", "contractAdminMfaRecoveryHash000000006"],
     ["__SET_REAL_ADMIN_MFA_CHALLENGE_SECRET__", "contractAdminMfaChallenge00000000007"],
+    ["__SET_STAGING_PROXY_SUBNET__", "172.31.255.0/29"],
+    ["__SET_STAGING_TRAEFIK_PROXY_IP__", "172.31.255.2"],
+    ["__SET_STAGING_API_PROXY_IP__", "172.31.255.3"],
+    ["__SET_STAGING_RATE_LIMIT_SMOKE_EGRESS_IP__", "172.31.255.4"],
     ["__SET_STAGING_COOKIE_DOMAIN__", "staging.o-okul.com"],
     ["__SET_QUEUE_BOARD_USER__", "queue-board-admin"],
     ["__SET_QUEUE_BOARD_PASSWORD__", "contractQueueBoardPassword0000000008"],

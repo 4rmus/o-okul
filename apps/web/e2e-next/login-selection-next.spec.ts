@@ -8,7 +8,7 @@ const corsHeaders = {
   "access-control-allow-origin": appOrigin,
 };
 
-test("genel login birden cok okulda secim adimina gecer", async ({ page }) => {
+test("genel login kurum kodu ve kullanıcı adı taşır; eski seçim cevabını güvenle işler", async ({ page }) => {
   let loginBody: Record<string, unknown> | undefined;
   let selectionBody: Record<string, unknown> | undefined;
 
@@ -79,17 +79,18 @@ test("genel login birden cok okulda secim adimina gecer", async ({ page }) => {
   });
 
   await page.goto("/login");
-  await page.getByLabel("Kullanıcı Adı").fill("10000000146");
+  await page.getByLabel("Kurum Kodu").fill("dna-egitim");
+  await page.getByLabel("Kullanıcı Adı").fill("admin-a@example.test");
   await page.getByLabel("Şifre", { exact: true }).fill("password");
   await page.getByRole("button", { name: "Giriş yap" }).click();
 
-  await expect(page.getByLabel("Kurum")).toBeVisible();
-  await page.getByLabel("Kurum").selectOption("tenant-b");
+  const tenantSelection = page.getByRole("combobox", { name: "Kurum", exact: true });
+  await expect(tenantSelection).toBeVisible();
+  await tenantSelection.selectOption("tenant-b");
   await page.getByRole("button", { name: "Devam et" }).click();
 
   await expect(page).toHaveURL(/\/kurum$/, { timeout: 15_000 });
-  expect(loginBody).toMatchObject({ nationalId: "10000000146", password: "password" });
-  expect(loginBody).not.toHaveProperty("tenantSlug");
+  expect(loginBody).toEqual({ tenantSlug: "dna-egitim", loginName: "admin-a@example.test", password: "password" });
   expect(selectionBody).toEqual({ selectionToken: "selection-token", tenantId: "tenant-b" });
 });
 

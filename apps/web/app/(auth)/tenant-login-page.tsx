@@ -18,7 +18,8 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
   const router = useRouter();
   const { auth, confirmMfaEnrollment, isBootstrapping, login, selectTenant, verifyMfa } = useAuth();
   const lockedTenantSlug = initialTenantSlug?.trim() ?? "";
-  const [nationalId, setNationalId] = useState("");
+  const [tenantSlug, setTenantSlug] = useState(lockedTenantSlug);
+  const [loginName, setLoginName] = useState("");
   const [password, setPassword] = useState("");
   const [pendingTenantSelection, setPendingTenantSelection] = useState<TenantSelectionRequiredResponse | null>(null);
   const [selectedTenantId, setSelectedTenantId] = useState("");
@@ -40,7 +41,8 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
     setError("");
     setIsSubmitting(true);
     const formData = new FormData(event.currentTarget);
-    const formNationalId = String(formData.get("nationalId") ?? "").trim();
+    const formTenantSlug = String(formData.get("tenantSlug") ?? lockedTenantSlug).trim();
+    const formLoginName = String(formData.get("loginName") ?? "").trim();
     const formPassword = String(formData.get("password") ?? "");
 
     try {
@@ -52,8 +54,8 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
         await selectTenant(pendingTenantSelection.selectionToken, selectedTenantId);
       } else {
         await login({
-          ...(lockedTenantSlug ? { tenantSlug: lockedTenantSlug } : {}),
-          nationalId: formNationalId,
+          tenantSlug: lockedTenantSlug || formTenantSlug,
+          loginName: formLoginName,
           password: formPassword,
         });
       }
@@ -101,14 +103,26 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
       </div>
       <form className="next-form" aria-label="Giriş formu" onSubmit={(event) => void handleSubmit(event)}>
         <h1 id="login-title">Giriş</h1>
+        {!lockedTenantSlug ? (
+          <Field label="Kurum Kodu">
+            <Input
+              name="tenantSlug"
+              type="text"
+              value={tenantSlug}
+              onChange={(event) => setTenantSlug(event.target.value)}
+              autoComplete="organization"
+              disabled={Boolean(pendingMfa || pendingEnrollment || pendingTenantSelection)}
+              required
+            />
+          </Field>
+        ) : null}
         <Field label="Kullanıcı Adı">
           <Input
-            name="nationalId"
+            name="loginName"
             type="text"
-            value={nationalId}
-            onChange={(event) => setNationalId(event.target.value)}
+            value={loginName}
+            onChange={(event) => setLoginName(event.target.value)}
             autoComplete="username"
-            inputMode="numeric"
             disabled={Boolean(pendingMfa || pendingEnrollment || pendingTenantSelection)}
             required
           />
@@ -233,7 +247,7 @@ function getAuthHomePath(auth: AuthResponse) {
   if (auth.session.mustChangePassword) return "/sifre-degistir";
   const { roles, subjectType } = auth.session;
   if (roles.includes("SYSTEM_ADMIN")) return "/sistem";
-  if (roles.includes("TENANT_ADMIN") || roles.includes("ASSISTANT_ADMIN")) return "/kurum";
+  if (roles.some((role) => ["TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF"].includes(role))) return "/kurum";
   if (roles.includes("TEACHER") && subjectType === "TEACHER") return "/ogretmen";
   if (roles.includes("STUDENT") && subjectType === "STUDENT") return "/ogrenci";
   if (roles.includes("GUARDIAN") && subjectType === "GUARDIAN") return "/veli";

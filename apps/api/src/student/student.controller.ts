@@ -4,7 +4,6 @@ import { z } from "zod";
 import { applyListQuery } from "../listing/list-query.js";
 import { optionalDateString, optionalTrimmedString, optionalUppercaseString, requiredTrimmedString, requiredUppercaseString, zodBody, zodQuery } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
-import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { GuardianService } from "../guardian/guardian.service.js";
 import { TeacherService } from "../teacher/teacher.service.js";
@@ -32,6 +31,10 @@ import type {
   StudentImportRequest,
   StudentImportResult,
   StudentProfileUpdateRequest,
+  StudentPortalAccessRecord,
+  StudentPortalAccessUpdateRequest,
+  StudentPortalAccessUpdateResult,
+  StudentPortalInvitationIssueResponse,
   StudentTenantUpdateRequest,
   StudentUpdateRequest,
   TeacherAssignmentRecord,
@@ -54,6 +57,20 @@ const studentListQuerySchema = z.object({
   status: optionalStudentStatusQuerySchema,
 });
 type StudentListQuery = z.infer<typeof studentListQuerySchema>;
+const studentPortalAccessQuerySchema = z.object({
+  cursor: optionalTrimmedString,
+  direction: z.preprocess((value) => value === undefined || value === "" ? "next" : value, z.enum(["next", "previous"])),
+  limit: z.preprocess((value) => value === undefined || value === "" ? 20 : Number(value), z.number().int().min(1).max(50)),
+  q: optionalTrimmedString,
+}).strict().refine((query) => query.direction !== "previous" || Boolean(query.cursor), {
+  message: "STUDENT_PORTAL_CURSOR_REQUIRED",
+  path: ["cursor"],
+});
+type StudentPortalAccessQuery = z.infer<typeof studentPortalAccessQuerySchema>;
+const studentPortalAccessUpdateBodySchema = z.object({
+  expectedVersion: z.number().int().min(1),
+  status: z.enum(["ACTIVE", "SUSPENDED"]),
+}).strict() satisfies z.ZodType<StudentPortalAccessUpdateRequest>;
 const studentGuardianProvisionBodySchema = z.object({
   canOpenSupportTickets: z.boolean().optional(),
   canReceiveAnnouncements: z.boolean().optional(),
@@ -121,51 +138,62 @@ export class StudentController {
   ) {}
 
   @Get()
-  @Roles("TEACHER")
+  @RequireCapability("student:list")
   async list(@Query(zodQuery(studentListQuerySchema)) query: StudentListQuery): Promise<PublicStudentRecord[]> {
     const records = await this.filterStudents(await this.students.listForViewer(getRequestContext()), query);
     return applyListQuery(records, query, studentListFields);
   }
 
   @Get("export")
-  @Roles("TEACHER")
+  @RequireCapability("student:list")
   export(): Promise<StudentExportResult> {
     return this.imports.export(getRequestContext());
   }
 
+  @Get("portal-access")
+  @RequireCapability("user:manage")
+  listPortalAccess(
+    @Query(zodQuery(studentPortalAccessQuerySchema)) query: StudentPortalAccessQuery,
+  ): Promise<StudentPortalAccessRecord[]> {
+    return this.students.listPortalAccess(getRequestContext(), query);
+  }
+
   @Get(":id")
-  @Roles("GUARDIAN")
+  @RequireCapability("student:read")
   findOne(@Param("id") id: string): Promise<PublicStudentRecord> {
     return this.students.findOneForViewer(getRequestContext(), id);
   }
 
   @Get(":id/profile")
-  @Roles("GUARDIAN")
+  @RequireCapability("student:read")
   profile(@Param("id") id: string): Promise<PublicStudentProfileRecord> {
     return this.students.findProfileForViewer(getRequestContext(), id);
   }
 
   @Get(":id/enrollments")
-  @Roles("TEACHER")
+  @RequireCapability("student:read")
   enrollments(@Param("id") id: string): Promise<StudentEnrollmentRecord[]> {
     return this.students.listEnrollments(getRequestContext(), id);
   }
 
   @Get(":id/guardians")
-  @Roles("TEACHER")
-  guardians(@Param("id") id: string): Promise<GuardianRecord[]> {
+  @RequireCapability("student:read")
+  async guardians(@Param("id") id: string): Promise<GuardianRecord[]> {
+    await this.students.findOneForViewer(getRequestContext(), id);
     return this.guardianService.listStudentGuardians(getRequestContext(), id);
   }
 
   @Get(":id/guardian-links")
-  @Roles("TEACHER")
-  guardianLinks(@Param("id") id: string): Promise<GuardianStudentRecord[]> {
+  @RequireCapability("student:read")
+  async guardianLinks(@Param("id") id: string): Promise<GuardianStudentRecord[]> {
+    await this.students.findOneForViewer(getRequestContext(), id);
     return this.guardianService.listStudentGuardianLinks(getRequestContext(), id);
   }
 
   @Get(":id/teacher-assignments")
-  @Roles("TEACHER")
-  teacherAssignments(@Param("id") id: string): Promise<TeacherAssignmentRecord[]> {
+  @RequireCapability("student:read")
+  async teacherAssignments(@Param("id") id: string): Promise<TeacherAssignmentRecord[]> {
+    await this.students.findOneForViewer(getRequestContext(), id);
     return this.teacherService.listStudentTeacherAssignments(getRequestContext(), id);
   }
 
@@ -214,6 +242,21 @@ export class StudentController {
     return this.students.updateProfile(getRequestContext(), id, body);
   }
 
+  @Patch(":id/portal-access")
+  @RequireCapability("user:manage")
+  updatePortalAccess(
+    @Param("id") id: string,
+    @Body(zodBody(studentPortalAccessUpdateBodySchema)) body: StudentPortalAccessUpdateRequest,
+  ): Promise<StudentPortalAccessUpdateResult> {
+    return this.students.updatePortalAccess(getRequestContext(), id, body);
+  }
+
+  @Post(":id/portal-invitations")
+  @RequireCapability("user:manage")
+  issuePortalInvitation(@Param("id") id: string): Promise<StudentPortalInvitationIssueResponse> {
+    return this.students.issuePortalInvitation(getRequestContext(), id);
+  }
+
   @Post(":id/enrollments/renew")
   @RequireCapability("student:manage")
   renewEnrollment(
@@ -248,7 +291,7 @@ export class StudentController {
   }
 
   @Patch(":id/tenant")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("tenant:manage")
   updateTenant(@Param("id") id: string, @Body(zodBody(studentTenantUpdateBodySchema)) body: StudentTenantUpdateRequest): Promise<PublicStudentRecord> {
     return this.students.updateTenant(getRequestContext(), id, body.tenantId);
   }

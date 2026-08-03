@@ -18,6 +18,7 @@
       "Alert webhook",
       "WAL archive target",
       "Report generation smoke",
+      "Secret delivery outbox evidence",
       "Deployment rollback evidence",
       "GitHub CI evidence",
       "Restore drill evidence",

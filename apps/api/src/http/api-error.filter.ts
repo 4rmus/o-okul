@@ -16,7 +16,12 @@ export class ApiErrorFilter implements ExceptionFilter {
     const http = host.switchToHttp();
     const response = http.getResponse<Response>();
     const request = http.getRequest<Request>();
-    const status = exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
+    const databaseBusinessCode = knownDatabaseBusinessCode(exception);
+    const status = exception instanceof HttpException
+      ? exception.getStatus()
+      : databaseBusinessCode
+        ? HttpStatus.CONFLICT
+        : HttpStatus.INTERNAL_SERVER_ERROR;
 
     if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
       this.reportException(exception, {
@@ -26,7 +31,7 @@ export class ApiErrorFilter implements ExceptionFilter {
       });
     }
 
-    response.status(status).json(toErrorBody(exception, status));
+    response.status(status).json(toErrorBody(exception, status, databaseBusinessCode));
   }
 
   protected reportException(exception: unknown, metadata: ApiExceptionMetadata): void {
@@ -34,7 +39,7 @@ export class ApiErrorFilter implements ExceptionFilter {
   }
 }
 
-function toErrorBody(exception: unknown, status: number): ErrorBody {
+function toErrorBody(exception: unknown, status: number, databaseBusinessCode?: string): ErrorBody {
   if (exception instanceof HttpException) {
     const response = exception.getResponse();
     if (hasErrorEnvelope(response)) {
@@ -50,12 +55,25 @@ function toErrorBody(exception: unknown, status: number): ErrorBody {
     };
   }
 
+  if (databaseBusinessCode) {
+    return { error: { code: databaseBusinessCode, message: messageForStatus(status) } };
+  }
+
   return {
     error: {
       code: "INTERNAL_SERVER_ERROR",
       message: "Beklenmeyen bir hata oluştu.",
     },
   };
+}
+
+function knownDatabaseBusinessCode(exception: unknown): string | undefined {
+  if (!exception || typeof exception !== "object") return undefined;
+  const candidate = exception as { code?: unknown; message?: unknown };
+  if (candidate.code === "P0001" && candidate.message === "ACTIVE_STUDENT_LIMIT_REACHED") {
+    return candidate.message;
+  }
+  return undefined;
 }
 
 function hasErrorEnvelope(value: unknown): value is ErrorBody {

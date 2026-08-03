@@ -94,7 +94,8 @@ test("Next eşzamanlı 401 yanıtlarında tek refresh çağrısı yapar", async 
 
   await page.goto("/kurum");
   await expect(page).toHaveURL(/\/login$/);
-  await page.getByLabel("Kullanıcı Adı").fill("10000000146");
+  await page.getByLabel("Kurum Kodu").fill("dna-egitim");
+  await page.getByLabel("Kullanıcı Adı").fill("admin-a@example.test");
   await page.locator('input[name="password"]').fill("password");
   await page.getByRole("button", { name: "Giriş yap" }).click();
 

@@ -1,49 +1,34 @@
-import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
-import { authUserStoreToken, hashPassword, type AuthUserStore } from "../auth/auth-user-store.js";
-import { optionalTurkishMobilePhone } from "../auth/phone-normalize.js";
 import { authSessionStoreToken, type SessionStore } from "../auth/session-store.js";
-import { encryptTcIdentity, hashTcIdentity, normalizeTcIdentity } from "../student/tc-identity.js";
-import { isTenantAssignableRoleName, type TenantAssignableRoleName } from "@o-okul/shared-types";
+import { verifyAdminMfaStepUpProof } from "../auth/totp-mfa.js";
+import { withCursorListMeta } from "../listing/list-query.js";
 import {
-  assertTenantSeatCapacity,
-  isTenantSeatLimitExceededError,
-  tenantSeatLimitExceededCode,
-} from "../tenant/tenant-seat-limit.js";
-import { type TenantStore, tenantStoreToken } from "../tenant/tenant-store.js";
+  hasCapabilityForRoles,
+  isTenantAssignableRoleName,
+  type EmployeeAccessRecord,
+  type EmployeeAccessListQuery,
+  type EmployeeCreateRequest,
+  type TenantAssignableRoleName,
+  type TenantMembershipUpdateRequest,
+  type TenantMembershipUpdateResult,
+} from "@o-okul/shared-types";
 import {
-  type CreateTenantUserInput,
   type TenantUserRecord,
   type UserManagementStore,
   userManagementStoreToken,
 } from "./user-management-store.js";
 
-export interface CreateTenantUserBody {
-  email?: string;
-  name?: string;
-  nationalId?: string;
-  phone?: string;
-  roles?: string[];
-}
-
 export interface SetTenantUserRolesBody {
   roles?: string[];
-}
-
-export interface TenantUserPasswordResetResult {
-  userId: string;
-  resetAt: string;
-  mustChangePassword: true;
 }
 
 @Injectable()
 export class UserManagementService {
   constructor(
     @Inject(userManagementStoreToken) private readonly store: UserManagementStore,
-    @Inject(authUserStoreToken) private readonly users: AuthUserStore,
     @Inject(authSessionStoreToken) private readonly sessions: SessionStore,
-    @Inject(tenantStoreToken) private readonly tenants: TenantStore,
     @Optional() private readonly auditLogs?: AuditLogService,
   ) {}
 
@@ -52,62 +37,36 @@ export class UserManagementService {
     return this.store.listTenantUsers(tenantId);
   }
 
-  async create(context: RequestContext, body: CreateTenantUserBody): Promise<TenantUserRecord> {
-    const tenantId = this.requireTenantId(context);
-    const input = this.parseCreateInput(tenantId, body);
-    const existingUsers = await this.store.listTenantUsers(tenantId);
-    if (!existingUsers.some((user) => user.email?.toLowerCase() === input.email)) {
-      await this.assertTenantSeatAvailable(tenantId);
-    }
-
-    let record: TenantUserRecord;
+  async listEmployees(context: RequestContext, query: EmployeeAccessListQuery): Promise<EmployeeAccessRecord[]> {
     try {
-      record = await this.store.createOrAttachTenantUser(input);
+      const page = await this.store.listEmployeeAccessPage(this.requireTenantId(context), query);
+      return withCursorListMeta(page.records, page.meta);
     } catch (error) {
-      throwTenantSeatLimitBadRequest(error);
+      if (error instanceof Error && error.message === "EMPLOYEE_CURSOR_INVALID") {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
     }
-    await this.sessions.revokeByUser(record.id);
-    await this.auditLogs?.record({
-      tenantId,
-      actorUserId: context.userId,
-      entityType: "User",
-      entityId: record.id,
-      action: "user.membership_created",
-      diff: { emailProvided: true, roles: record.roles },
-    });
-    return record;
   }
 
-  async resetPassword(context: RequestContext, userId: string): Promise<TenantUserPasswordResetResult> {
+  async createEmployee(context: RequestContext, input: EmployeeCreateRequest): Promise<EmployeeAccessRecord> {
     const tenantId = this.requireTenantId(context);
-    const target = await this.store.findTenantUserPasswordResetTarget(tenantId, userId);
-    if (!target) {
-      throw new NotFoundException("USER_MEMBERSHIP_NOT_FOUND");
+    try {
+      const employee = await this.store.createEmployee(tenantId, input);
+      await this.auditLogs?.record({
+        tenantId,
+        actorUserId: context.userId,
+        entityType: "Employee",
+        entityId: employee.id,
+        action: "employee.created",
+        diff: { status: employee.status, employeeNoProvided: Boolean(employee.employeeNo), workEmailProvided: Boolean(employee.workEmail) },
+      });
+      return employee;
+    } catch (error) {
+      if (error instanceof Error && error.message === "EMPLOYEE_NO_CONFLICT") throw new ConflictException(error.message);
+      if (isUniqueViolation(error)) throw new ConflictException("EMPLOYEE_UNIQUE_CONFLICT");
+      throw error;
     }
-
-    const phone = optionalTurkishMobilePhone(target.phone, "USER_RESET_PHONE_INVALID");
-    if (!phone) {
-      throw new BadRequestException("USER_RESET_PHONE_REQUIRED");
-    }
-
-    const resetAt = new Date().toISOString();
-    const updated = await this.users.updatePassword(userId, hashPassword(phone, `reset-${userId}-${Date.now()}`), {
-      mustChangePassword: true,
-    });
-    if (!updated) {
-      throw new NotFoundException("USER_NOT_FOUND");
-    }
-
-    await this.sessions.revokeByUser(userId);
-    await this.auditLogs?.record({
-      tenantId,
-      actorUserId: context.userId,
-      entityType: "User",
-      entityId: userId,
-      action: "user.password_reset_to_phone",
-      diff: { passwordSource: "phone", subjectType: target.subjectType ?? null },
-    });
-    return { userId, resetAt, mustChangePassword: true };
   }
 
   async setRoles(context: RequestContext, userId: string, body: SetTenantUserRolesBody): Promise<TenantUserRecord> {
@@ -133,6 +92,55 @@ export class UserManagementService {
     return record;
   }
 
+  async updateMembership(
+    context: RequestContext,
+    membershipId: string,
+    input: TenantMembershipUpdateRequest,
+    stepUpToken?: string,
+  ): Promise<TenantMembershipUpdateResult> {
+    const tenantId = this.requireTenantId(context);
+    const stepUpVerified = this.verifyOwnerAdminStepUp(context, stepUpToken);
+    let result: TenantMembershipUpdateResult | undefined;
+    try {
+      result = await this.store.updateTenantMembership(tenantId, membershipId, {
+        ...input,
+        actorCanManageOwners: hasCapabilityForRoles(context.roles, "owner:manage", context.capabilities),
+        stepUpVerified,
+      });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      if (code === "TENANT_OWNER_MANAGE_REQUIRED" || code === "STEP_UP_MFA_REQUIRED") throw new ForbiddenException(code);
+      if (code === "TENANT_MEMBERSHIP_CAMPUS_NOT_FOUND") throw new BadRequestException(code);
+      if (
+        code === "TENANT_MEMBERSHIP_VERSION_CONFLICT" ||
+        code === "TENANT_MEMBERSHIP_ENDED" ||
+        code === "EMPLOYEE_PROFILE_NOT_ACTIVE" ||
+        code === "LAST_ACTIVE_TENANT_OWNER_REQUIRED"
+      ) {
+        throw new ConflictException(code);
+      }
+      throw error;
+    }
+    if (!result) throw new NotFoundException("TENANT_MEMBERSHIP_NOT_FOUND");
+    await this.auditLogs?.record({
+      tenantId,
+      actorUserId: context.userId,
+      entityType: "TenantMembership",
+      entityId: result.employee.access?.membershipId ?? membershipId,
+      action: "tenant_membership.updated",
+      diff: {
+        staffRole: result.employee.access?.staffRole ?? null,
+        hasTeacherPersona: result.employee.access?.hasTeacherPersona ?? false,
+        status: result.employee.access?.status,
+        scopeMode: result.employee.access?.scopeMode,
+        campusCount: result.employee.access?.campusIds.length ?? 0,
+        version: result.employee.access?.version,
+        sessionsRevoked: result.sessionsRevoked,
+      },
+    });
+    return result;
+  }
+
   private requireTenantId(context: RequestContext): string {
     if (!context.tenantId || context.bypassRls) {
       throw new BadRequestException("TENANT_CONTEXT_REQUIRED");
@@ -140,53 +148,28 @@ export class UserManagementService {
     return context.tenantId;
   }
 
-  private async assertTenantSeatAvailable(tenantId: string): Promise<void> {
-    const tenant = await this.tenants.findById(tenantId);
-    if (!tenant) {
-      throw new NotFoundException("TENANT_NOT_FOUND");
+  private verifyOwnerAdminStepUp(context: RequestContext, stepUpToken?: string): boolean {
+    if (!stepUpToken) return false;
+    if (!context.sessionId || context.membershipVersion === undefined) {
+      throw new ForbiddenException("STEP_UP_MFA_INVALID");
     }
     try {
-      assertTenantSeatCapacity(tenant);
-    } catch (error) {
-      throwTenantSeatLimitBadRequest(error);
+      verifyAdminMfaStepUpProof(stepUpToken, {
+        userId: context.userId,
+        sessionId: context.sessionId,
+        membershipVersion: context.membershipVersion,
+        purpose: "OWNER_ADMIN_CHANGE",
+      });
+      return true;
+    } catch {
+      throw new ForbiddenException("STEP_UP_MFA_INVALID");
     }
   }
 
-  private parseCreateInput(tenantId: string, body: CreateTenantUserBody): CreateTenantUserInput {
-    const email = body.email?.trim().toLowerCase();
-    const name = body.name?.trim();
-    const nationalIdInput = body.nationalId?.trim();
-    const phone = optionalTurkishMobilePhone(body.phone, "PHONE_INVALID");
-    if (!email || !email.includes("@")) {
-      throw new BadRequestException("EMAIL_REQUIRED");
-    }
-    if (!name) {
-      throw new BadRequestException("NAME_REQUIRED");
-    }
-    if (!nationalIdInput) {
-      throw new BadRequestException("NATIONAL_ID_REQUIRED");
-    }
-    if (!phone) {
-      throw new BadRequestException("PHONE_REQUIRED");
-    }
-    const nationalId = normalizeTcIdentity(nationalIdInput, "NATIONAL_ID_INVALID");
-    return {
-      tenantId,
-      email,
-      name,
-      nationalIdEncrypted: encryptTcIdentity(nationalId),
-      nationalIdHash: hashTcIdentity(nationalId),
-      password: phone,
-      roles: parseTenantRoles(body.roles),
-    };
-  }
 }
 
-function throwTenantSeatLimitBadRequest(error: unknown): never {
-  if (isTenantSeatLimitExceededError(error)) {
-    throw new BadRequestException(tenantSeatLimitExceededCode);
-  }
-  throw error;
+function isUniqueViolation(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "23505";
 }
 
 function parseTenantRoles(input: string[] | undefined): TenantAssignableRoleName[] {

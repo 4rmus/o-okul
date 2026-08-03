@@ -5,6 +5,7 @@ import {
   type IdentityInvitationCreateRequest,
 } from "@o-okul/shared-types";
 import { optionalUppercaseString, requiredTrimmedString } from "../http/zod-validation.js";
+import { passwordMaxLength, passwordMinLength, passwordPolicyViolation } from "../auth/password-policy.js";
 
 const invitationSubjectTypeSchema = z.enum(portalSubjectRoles);
 
@@ -17,7 +18,9 @@ export const identityInvitationCreateBodySchema = z.object({
 
 export const identityInvitationAcceptBodySchema = z.object({
   name: optionalUppercaseString,
-  password: z.string().min(8),
+  password: z.string().min(passwordMinLength).max(passwordMaxLength).refine((value) => !passwordPolicyViolation(value), {
+    message: "PASSWORD_COMMON_REJECTED",
+  }),
   token: requiredTrimmedString,
 }).strict() satisfies z.ZodType<IdentityInvitationAcceptRequest>;
 

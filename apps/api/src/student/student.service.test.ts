@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
 import { InMemoryGuardianStudentStore } from "../school/guardian-student-store.js";
 import { InMemoryGuardianStore } from "../school/guardian-store.js";
-import { InMemoryStudentStore } from "./student-store.js";
+import { InMemoryClassStore } from "../school/class-store.js";
+import { InMemoryStudentStore, type StudentStore } from "./student-store.js";
+import { InMemoryStudentEnrollmentStore } from "./student-enrollment-store.js";
 import { StudentService } from "./student.service.js";
 import { hashTcIdentity, normalizeTcIdentity } from "./tc-identity.js";
 
@@ -103,7 +105,7 @@ describe("StudentService", () => {
     });
   });
 
-  it("veli TC ve telefonuyla tenant hesabi baglar", async () => {
+  it("veli TC ve telefonu olsa da e-posta daveti üretir", async () => {
     const setup = createService();
 
     const student = await setup.service.create(adminContext, {
@@ -122,16 +124,16 @@ describe("StudentService", () => {
     const guardian = guardians.find((record) => record.phone === "5550000013");
     expect(guardian).toMatchObject({
       tenantId: "tenant-a",
-      userId: "guardian-user-test",
       nationalIdHash: expect.any(String),
     });
+    expect(guardian?.userId).toBeUndefined();
     await expect(setup.guardianStudentStore.listByStudent(student.id)).resolves.toEqual([
       expect.objectContaining({
         guardianId: guardian?.id,
         studentId: student.id,
       }),
     ]);
-    expect(setup.provisionedSubjects).toEqual([
+    expect(setup.invitations).toEqual([
       expect.objectContaining({
         tenantId: "tenant-a",
         subjectType: "GUARDIAN",
@@ -141,7 +143,7 @@ describe("StudentService", () => {
         email: "can@example.test",
       }),
     ]);
-    expect(setup.invitations).toEqual([]);
+    expect(setup.provisionedSubjects).toEqual([]);
   });
 
   it("öğrenci PII temizliğinde önce report snapshot kimliğini temizler ve yalnız sayım auditler", async () => {
@@ -182,16 +184,214 @@ describe("StudentService", () => {
     });
     expect(setup.auditRecords).toEqual([]);
   });
+
+  it("öğrenci silmeyi atomik profil lifecycle sınırına yönlendirir", async () => {
+    const setup = createService();
+
+    await expect(setup.service.delete(adminContext, "student-a")).resolves.toBeUndefined();
+
+    expect(setup.lifecycleCalls).toEqual([
+      expect.objectContaining({ tenantId: "tenant-a", subjectType: "STUDENT", subjectId: "student-a" }),
+    ]);
+    await expect(setup.studentStore.findById("student-a")).resolves.toBeUndefined();
+    expect(setup.auditRecords).toContainEqual(expect.objectContaining({
+      action: "student.deleted",
+      diff: expect.objectContaining({
+        accountAccessClosed: true,
+        roleRemoved: true,
+        sessionsClosed: true,
+      }),
+    }));
+  });
+
+  it("aktif öğrenci kotasında yalnız tek açık ACTIVE enrollment bulunan öğrencileri sayar", async () => {
+    const setup = createService({ activeStudentLimit: 1 });
+
+    await expect(setup.service.previewQuota(adminContext, 1)).resolves.toEqual({
+      limit: 1,
+      current: 1,
+      incoming: 1,
+      wouldExceed: true,
+    });
+    await expect(setup.service.create(adminContext, {
+      firstName: "Kotalı",
+      lastName: "Öğrenci",
+      classId: "class-a",
+    })).rejects.toThrow("ACTIVE_STUDENT_LIMIT_REACHED");
+  });
+
+  it("sınıfsız öğrenci açık enrollment oluşmadığı için aktif lisans kotasını tüketmez", async () => {
+    const setup = createService({ activeStudentLimit: 1 });
+    await expect(setup.service.create(adminContext, {
+      firstName: "Planlı",
+      lastName: "Öğrenci",
+    })).resolves.toMatchObject({ status: "ACTIVE", classId: undefined });
+  });
+
+  it("PASSIVE geçişinde kapasiteyi boşaltır ve ACTIVE dönüşünde açık enrollment oluşturur", async () => {
+    const setup = createService({ activeStudentLimit: 1 });
+
+    await setup.service.update(adminContext, "student-a", { status: "PASSIVE" });
+    await expect(setup.service.previewQuota(adminContext, 1)).resolves.toMatchObject({ current: 0, wouldExceed: false });
+
+    await setup.service.update(adminContext, "student-a", { status: "ACTIVE" });
+    await expect(setup.service.previewQuota(adminContext, 1)).resolves.toMatchObject({ current: 1, wouldExceed: true });
+    await expect(setup.enrollmentStore.listByStudent("student-a")).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ status: "ACTIVE", reason: "REACTIVATED" })]),
+    );
+  });
+
+  it("ACTIVE öğrenciyi pasifleştirirken portal askısını atomik store geçişine ekler ve PII'siz auditler", async () => {
+    const setup = createService();
+    const transitions: unknown[] = [];
+    const atomicStudentStore = setup.studentStore as InMemoryStudentStore & {
+      updateWithEnrollmentTransition: NonNullable<StudentStore["updateWithEnrollmentTransition"]>;
+    };
+    atomicStudentStore.updateWithEnrollmentTransition = async (id, input, transition) => {
+      transitions.push(transition);
+      const student = await setup.studentStore.update(id, input);
+      return student
+        ? {
+            student,
+            portalAccess: {
+              userId: student.userId,
+              membershipSuspended: true,
+              sessionsRevoked: 2,
+              invitationsRevoked: 1,
+            },
+          }
+        : undefined;
+    };
+
+    await setup.service.update(adminContext, "student-a", { status: "PASSIVE" });
+
+    expect(transitions).toEqual([
+      expect.objectContaining({
+        closeActive: expect.objectContaining({ status: "PASSIVE" }),
+        suspendPortalAccess: { reason: "STUDENT_STATUS_PASSIVE" },
+      }),
+    ]);
+    expect(setup.auditRecords).toContainEqual(expect.objectContaining({
+      action: "student.updated",
+      diff: expect.objectContaining({
+        portalAccessSuspended: true,
+        membershipSuspended: true,
+        sessionsRevoked: 2,
+        invitationsRevoked: 1,
+      }),
+    }));
+  });
+
+  it("kampüs kapsamlı operasyon çalışanına yalnız izinli kampüs öğrencilerini gösterir", async () => {
+    const setup = createService();
+    const secondaryClass = await setup.classStore.create({
+      tenantId: "tenant-a",
+      name: "8-B",
+      campusId: "campus-secondary",
+    });
+    const secondaryStudent = await setup.studentStore.create({
+      tenantId: "tenant-a",
+      firstName: "Bora",
+      lastName: "B",
+      classId: secondaryClass.id,
+      status: "ACTIVE",
+    });
+
+    await expect(setup.service.list(campusOperationsContext)).resolves.toEqual([
+      expect.objectContaining({ id: "student-a", classId: "class-a" }),
+    ]);
+    await expect(setup.service.findOneForViewer(campusOperationsContext, "student-a"))
+      .resolves.toMatchObject({ id: "student-a", classId: "class-a" });
+    await expect(setup.service.findOne(campusOperationsContext, secondaryStudent.id))
+      .rejects.toThrow("STUDENT_CAMPUS_SCOPE_FORBIDDEN");
+    await expect(setup.service.update(campusOperationsContext, secondaryStudent.id, { firstName: "Yetkisiz" }))
+      .rejects.toThrow("STUDENT_CAMPUS_SCOPE_FORBIDDEN");
+    await expect(setup.service.list(adminContext)).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "student-a" }),
+      expect.objectContaining({ id: secondaryStudent.id }),
+    ]));
+  });
+
+  it("kampüs kapsamlı operasyon çalışanının kapsam dışı veya sınıfsız öğrenci oluşturmasını reddeder", async () => {
+    const setup = createService();
+    const secondaryClass = await setup.classStore.create({
+      tenantId: "tenant-a",
+      name: "8-B",
+      campusId: "campus-secondary",
+    });
+
+    await expect(setup.service.create(campusOperationsContext, {
+      firstName: "Kapsam",
+      lastName: "Dışı",
+      classId: secondaryClass.id,
+    })).rejects.toThrow("STUDENT_CAMPUS_SCOPE_FORBIDDEN");
+    await expect(setup.service.create(campusOperationsContext, {
+      firstName: "Sınıfsız",
+      lastName: "Kayıt",
+    })).rejects.toThrow("STUDENT_CAMPUS_SCOPE_FORBIDDEN");
+  });
+
+  it("operasyon çalışanında kampüs scope yoksa fail-closed davranır", async () => {
+    const setup = createService();
+
+    await expect(setup.service.list({
+      ...campusOperationsContext,
+      campusScope: undefined,
+    })).rejects.toThrow("STUDENT_CAMPUS_SCOPE_MISSING");
+  });
+
+  it("öğrenci ve veli subject context'i tenant-genel öğrenci listesini alamaz", async () => {
+    const setup = createService();
+
+    await expect(setup.service.list({
+      ...adminContext,
+      roles: ["STUDENT"],
+      subjectType: "STUDENT",
+      subjectId: "student-a",
+    })).rejects.toThrow("STUDENT_LIST_SCOPE_FORBIDDEN");
+    await expect(setup.service.list({
+      ...adminContext,
+      roles: ["GUARDIAN"],
+      subjectType: "GUARDIAN",
+      subjectId: "guardian-a",
+    })).rejects.toThrow("STUDENT_LIST_SCOPE_FORBIDDEN");
+  });
+
+  it("portal erişim listesini izinli kampüs öğrenci kimlikleriyle sınırlar", async () => {
+    const setup = createService();
+    const secondaryClass = await setup.classStore.create({
+      tenantId: "tenant-a",
+      name: "8-B",
+      campusId: "campus-secondary",
+    });
+    await setup.studentStore.create({
+      tenantId: "tenant-a",
+      firstName: "Bora",
+      lastName: "B",
+      classId: secondaryClass.id,
+      status: "ACTIVE",
+    });
+
+    await expect(setup.service.listPortalAccess(campusOperationsContext, {
+      direction: "next",
+      limit: 20,
+    })).resolves.toEqual([
+      expect.objectContaining({ studentId: "student-a" }),
+    ]);
+  });
 });
 
-function createService(options: { failReportSnapshotPurge?: boolean } = {}) {
+function createService(options: { failReportSnapshotPurge?: boolean; activeStudentLimit?: number } = {}) {
   const studentStore = new InMemoryStudentStore();
+  const enrollmentStore = new InMemoryStudentEnrollmentStore();
+  const classStore = new InMemoryClassStore();
   const guardianStudentStore = new InMemoryGuardianStudentStore();
   const guardianStore = new InMemoryGuardianStore();
   const invitations: unknown[] = [];
   const auditRecords: unknown[] = [];
   const provisionedSubjects: unknown[] = [];
   const reportSnapshotPurgeCalls: Array<{ tenantId: string; studentId: string }> = [];
+  const lifecycleCalls: unknown[] = [];
   const identityInvitations = {
     create: async (_context: RequestContext, body: unknown) => {
       invitations.push(body);
@@ -200,19 +400,24 @@ function createService(options: { failReportSnapshotPurge?: boolean } = {}) {
   };
   const identityProvisioning = {
     provisionOrInvite: async (_context: RequestContext, input: { email?: string; nationalId?: string; phone?: string }) => {
-      if (input.nationalId && input.phone) {
-        provisionedSubjects.push(input);
-        return { status: "PROVISIONED", userId: "guardian-user-test", initialPassword: "5550000013" };
-      }
       if (input.email) {
         invitations.push(input);
         return { status: "INVITED", invitationId: "identity-invitation-test" };
       }
       return { status: "SKIPPED" };
     },
-    provisionTenantSubject: async (input: unknown) => {
-      provisionedSubjects.push(input);
-      return { userId: "guardian-user-test", initialPassword: "5550000013" };
+    deactivateProfile: async (input: { subjectId: string; deletedAt: string }) => {
+      lifecycleCalls.push(input);
+      const existing = await studentStore.findById(input.subjectId);
+      if (!existing) return undefined;
+      const userId = existing.userId;
+      await studentStore.softDelete(input.subjectId, input.deletedAt);
+      return {
+        userId,
+        roleRemoved: Boolean(userId),
+        sessionsClosed: true,
+        invitationsRevoked: 0,
+      };
     },
   };
   const auditLogs = {
@@ -227,6 +432,21 @@ function createService(options: { failReportSnapshotPurge?: boolean } = {}) {
       return 2;
     },
   };
+  const licenseTerms = options.activeStudentLimit === undefined ? undefined : {
+    resolveForTenant: async (tenantId: string) => ({
+      mirrorParity: true,
+      state: "ACTIVE" as const,
+      term: {
+        id: "license-test",
+        tenantId,
+        planCode: "PRO",
+        startsAt: "2026-01-01T00:00:00.000Z",
+        endsAt: "2027-01-01T00:00:00.000Z",
+        activeStudentLimit: options.activeStudentLimit!,
+      },
+    }),
+    create: async () => { throw new Error("unexpected"); },
+  };
 
   return {
     service: new StudentService(
@@ -234,10 +454,10 @@ function createService(options: { failReportSnapshotPurge?: boolean } = {}) {
       guardianStudentStore,
       guardianStore,
       {} as never,
+      enrollmentStore,
+      { listYears: async () => [], listTerms: async () => [] } as never,
       {} as never,
-      {} as never,
-      {} as never,
-      {} as never,
+      classStore,
       {} as never,
       {} as never,
       identityInvitations as never,
@@ -245,6 +465,7 @@ function createService(options: { failReportSnapshotPurge?: boolean } = {}) {
       auditLogs as never,
       undefined,
       identityProvisioning as never,
+      licenseTerms,
     ),
     guardianStore,
     guardianStudentStore,
@@ -252,7 +473,10 @@ function createService(options: { failReportSnapshotPurge?: boolean } = {}) {
     auditRecords,
     provisionedSubjects,
     reportSnapshotPurgeCalls,
+    lifecycleCalls,
     studentStore,
+    enrollmentStore,
+    classStore,
   };
 }
 
@@ -261,5 +485,14 @@ const adminContext: RequestContext = {
   tenantId: "tenant-a",
   roles: ["TENANT_ADMIN"],
   capabilities: ["student:*"],
+  bypassRls: false,
+};
+
+const campusOperationsContext: RequestContext = {
+  userId: "user-operations-a",
+  tenantId: "tenant-a",
+  roles: ["OPERATIONS_STAFF"],
+  capabilities: ["student:*"],
+  campusScope: { scopeMode: "CAMPUSES", campusIds: ["campus-main"] },
   bypassRls: false,
 };

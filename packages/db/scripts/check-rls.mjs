@@ -7,6 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const migrationsPath = join(__dirname, "../prisma/migrations");
 const sql = readdirSync(migrationsPath, { withFileTypes: true })
   .filter((entry) => entry.isDirectory())
+  .sort((left, right) => left.name.localeCompare(right.name))
   .map((entry) => readFileSync(join(migrationsPath, entry.name, "migration.sql"), "utf8"))
   .join("\n");
 
@@ -15,6 +16,17 @@ const tenantTables = getTenantScopedTables();
 const failures = [];
 if (tenantTables.length === 0) {
   failures.push("schema.prisma içinde tenantId taşıyan model bulunamadı");
+}
+const tenantDeleteGrantIndex = lastMatchIndex(
+  sql,
+  /GRANT\s+[^;]*(?:\bDELETE\b|\bALL(?:\s+PRIVILEGES)?\b)[^;]*\bON\b[^;]*(?:"Tenant"|ALL\s+TABLES)[^;]*\bTO\s+app\s*;/gi,
+);
+const tenantDeleteRevokeIndex = lastMatchIndex(
+  sql,
+  /REVOKE\s+(?:DELETE|ALL(?:\s+PRIVILEGES)?)\s+ON\s+(?:TABLE\s+)?"Tenant"\s+FROM\s+app\s*;/gi,
+);
+if (tenantDeleteRevokeIndex < tenantDeleteGrantIndex) {
+  failures.push("Tenant: app rolü için son DELETE yetki işlemi REVOKE olmalı");
 }
 
 const appGrantTables = new Set(
@@ -47,3 +59,11 @@ if (failures.length > 0) {
 }
 
 console.log(`RLS policy kontrolü geçti: ${tenantTables.length} tenant tablosu doğrulandı.`);
+
+function lastMatchIndex(source, pattern) {
+  let index = -1;
+  for (const match of source.matchAll(pattern)) {
+    index = match.index ?? index;
+  }
+  return index;
+}

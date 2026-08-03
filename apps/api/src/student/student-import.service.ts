@@ -73,7 +73,7 @@ export class StudentImportService {
 
   private async importOnce(context: RequestContext, input: StudentImportDryRunInput): Promise<StudentImportResult> {
     const { rows, errors, quota } = await this.readAndValidateRows(context, input.fileBase64);
-    const rowErrors = errors.filter((error) => error.code !== "STUDENT_QUOTA_EXCEEDED");
+    const rowErrors = errors.filter((error) => error.code !== "ACTIVE_STUDENT_LIMIT_REACHED");
 
     if (rowErrors.length > 0) {
       throw new BadRequestException({
@@ -82,7 +82,7 @@ export class StudentImportService {
       });
     }
     if (quota.wouldExceed) {
-      throw new ConflictException("STUDENT_QUOTA_EXCEEDED");
+      throw new ConflictException("ACTIVE_STUDENT_LIMIT_REACHED");
     }
 
     const students = await this.students.createMany(context, filterValidRows(rows, errors));
@@ -113,10 +113,11 @@ export class StudentImportService {
     }
     const rows = await this.readRows(fileBase64);
     const errors = await this.validateRows(context, rows);
-    const quota = await this.students.previewQuota(context, rows.length);
+    const incomingActiveStudents = filterValidRows(rows, errors).filter((row) => Boolean(row.classId)).length;
+    const quota = await this.students.previewQuota(context, incomingActiveStudents);
 
     if (quota.wouldExceed) {
-      errors.push({ row: 0, field: "quota", code: "STUDENT_QUOTA_EXCEEDED" });
+      errors.push({ row: 0, field: "quota", code: "ACTIVE_STUDENT_LIMIT_REACHED" });
     }
 
     return { rows, errors, quota };

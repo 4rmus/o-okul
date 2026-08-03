@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
+import { resetInMemoryAuthUsers } from "../auth/auth-user-store.js";
 import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
@@ -18,6 +19,7 @@ describe("BackupRestoreController", () => {
   let tenantAAccessToken: string;
 
   beforeAll(async () => {
+    resetInMemoryAuthUsers();
     producer = new FakeProducer();
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],

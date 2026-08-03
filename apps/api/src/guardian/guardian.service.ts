@@ -175,18 +175,33 @@ export class GuardianService {
   }
 
   async deleteGuardian(context: RequestContext, id: string): Promise<void> {
-    await this.findGuardian(context, id);
-    const record = await this.guardianStore.softDelete(id, new Date().toISOString());
-    if (!record) {
+    const existing = await this.findGuardian(context, id);
+    if (!this.identityProvisioning) {
+      throw new Error("PROFILE_LIFECYCLE_STORE_UNAVAILABLE");
+    }
+    const deletedAt = new Date().toISOString();
+    const lifecycle = await this.identityProvisioning.deactivateProfile({
+      tenantId: existing.tenantId,
+      subjectType: "GUARDIAN",
+      subjectId: existing.id,
+      deletedAt,
+    });
+    if (!lifecycle) {
       throw new NotFoundException("GUARDIAN_NOT_FOUND");
     }
     await this.auditLogs?.record({
-      tenantId: record.tenantId,
+      tenantId: existing.tenantId,
       actorUserId: context.userId,
       entityType: "Guardian",
-      entityId: record.id,
+      entityId: existing.id,
       action: "guardian.deleted",
-      diff: { deletedAt: record.deletedAt },
+      diff: {
+        deletedAt,
+        accountAccessClosed: Boolean(lifecycle.userId),
+        roleRemoved: lifecycle.roleRemoved,
+        sessionsClosed: lifecycle.sessionsClosed,
+        invitationsRevoked: lifecycle.invitationsRevoked,
+      },
     });
   }
 
@@ -520,20 +535,7 @@ export class GuardianService {
       phone: guardian.phone,
       email: input.email,
     });
-    if (provisioning.status !== "PROVISIONED" || !provisioning.userId) {
-      return { ...guardian, provisioning: provisioning.status };
-    }
-
-    const bound = await this.guardianStore.bindUser(guardian.tenantId, guardian.id, provisioning.userId);
-    await this.auditLogs?.record({
-      tenantId: guardian.tenantId,
-      actorUserId: context.userId,
-      entityType: "Guardian",
-      entityId: guardian.id,
-      action: "guardian.account_auto_provisioned",
-      diff: { userId: provisioning.userId, mustChangePassword: true },
-    });
-    return { ...(bound ?? guardian), provisioning: provisioning.status };
+    return { ...guardian, provisioning: provisioning.status };
   }
 }
 

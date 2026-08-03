@@ -21,6 +21,8 @@ export type {
   ExamEvaluationScoringInput,
 } from "./jobs/exam-evaluation-job.js";
 export { processExcelImportJob } from "./jobs/excel-import-job.js";
+export { createSecretDeliveryOutboxRunner, PostgresSecretDeliveryOutboxStore, processNextSecretDelivery } from "./jobs/secret-delivery-outbox.js";
+export type { SecretDeliveryOutboxRecord, SecretDeliveryOutboxStore } from "./jobs/secret-delivery-outbox.js";
 export { PostgresSmsBatchDeliveryReporter } from "./jobs/postgres-sms-batch-delivery-reporter.js";
 export { PostgresReportGenerationAdapter } from "./jobs/postgres-report-generation-adapter.js";
 export { createReportGenerationProcessor } from "./jobs/report-generation-processor.js";

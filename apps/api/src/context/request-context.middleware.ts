@@ -2,11 +2,12 @@ import { ForbiddenException, HttpException, Inject, Injectable, NestMiddleware }
 import type { NextFunction, Request, Response } from "express";
 import { AuthService } from "../auth/auth.service.js";
 import { missingBoundSubjectRole } from "../auth/subject-binding.js";
+import { licenseTermStoreToken, type LicenseTermStore } from "../license/license-term-store.js";
 import { setApiLogContext } from "../observability/log-context.js";
 import { capabilitiesForRoles } from "../rbac/role-capabilities.js";
 import { isSystemAdmin } from "../rbac/roles.js";
 import { RolePreviewService } from "../role-preview/role-preview.service.js";
-import { tenantStoreToken, type TenantRecord, type TenantStore } from "../tenant/tenant-store.js";
+import { tenantStoreToken, type TenantStore } from "../tenant/tenant-store.js";
 import { runWithRequestContext } from "./request-context.js";
 
 @Injectable()
@@ -15,6 +16,7 @@ export class RequestContextMiddleware implements NestMiddleware {
     private readonly auth: AuthService,
     private readonly rolePreviews: RolePreviewService,
     @Inject(tenantStoreToken) private readonly tenants: TenantStore,
+    @Inject(licenseTermStoreToken) private readonly licenseTerms: LicenseTermStore,
   ) {}
 
   async use(request: Request, _response: Response, next: NextFunction): Promise<void> {
@@ -50,7 +52,11 @@ export class RequestContextMiddleware implements NestMiddleware {
           userId: payload.sub,
           sessionId: payload.sessionId,
           tenantId,
+          membershipId: payload.membershipId,
+          activePersona: payload.activePersona,
+          membershipVersion: payload.membershipVersion,
           tenantAccessMode,
+          campusScope: payload.campusScope,
           roles: [preview.targetRole],
           capabilities: capabilitiesForRoles([preview.targetRole]),
           bypassRls: false,
@@ -75,7 +81,11 @@ export class RequestContextMiddleware implements NestMiddleware {
         userId: payload.sub,
         sessionId: payload.sessionId,
         tenantId,
+        membershipId: payload.membershipId,
+        activePersona: payload.activePersona,
+        membershipVersion: payload.membershipVersion,
         tenantAccessMode,
+        campusScope: payload.campusScope,
         roles: payload.roles,
         capabilities: capabilitiesForRoles(payload.roles),
         bypassRls: false,
@@ -93,15 +103,18 @@ export class RequestContextMiddleware implements NestMiddleware {
       throw new ForbiddenException("TENANT_INACTIVE_OR_EXPIRED");
     }
 
-    if (!isTenantLicenseExpired(tenant)) {
-      return "active";
+    const license = await this.licenseTerms.resolveForTenant(tenantId);
+    if (!license) throw new ForbiddenException("TENANT_LICENSE_TERM_MISSING");
+    if (!license.mirrorParity) throw new ForbiddenException("TENANT_LICENSE_MIRROR_PARITY_MISMATCH");
+    if (license.state === "ACTIVE") return "active";
+    if (license.state === "SCHEDULED") throw new ForbiddenException("TENANT_LICENSE_NOT_STARTED");
+    if (license.state === "READ_ONLY") {
+      if (!isReadOnlyMethod(method)) throw new ForbiddenException("TENANT_LICENSE_EXPIRED_READ_ONLY");
+      return "read_only";
     }
-
-    if (!isReadOnlyMethod(method)) {
-      throw new ForbiddenException("TENANT_LICENSE_EXPIRED_READ_ONLY");
-    }
-
-    return "read_only";
+    if (license.state === "FROZEN") throw new ForbiddenException("TENANT_LICENSE_FROZEN");
+    if (license.state === "CANCELLED") throw new ForbiddenException("TENANT_LICENSE_CANCELLED");
+    throw new ForbiddenException("TENANT_LICENSE_EXPIRED");
   }
 }
 
@@ -116,10 +129,4 @@ function isPasswordChangeAllowed(request: Request): boolean {
 function isReadOnlyMethod(method: string): boolean {
   const normalized = method.toUpperCase();
   return normalized === "GET" || normalized === "HEAD" || normalized === "OPTIONS";
-}
-
-function isTenantLicenseExpired(tenant: Pick<TenantRecord, "licenseEndsAt">): boolean {
-  if (!tenant.licenseEndsAt) return false;
-  const licenseEndsAt = Date.parse(tenant.licenseEndsAt);
-  return !Number.isFinite(licenseEndsAt) || licenseEndsAt < Date.now();
 }

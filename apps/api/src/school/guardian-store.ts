@@ -100,6 +100,7 @@ export class InMemoryGuardianStore implements GuardianStore {
     if (!record) return undefined;
 
     record.deletedAt = deletedAt;
+    record.userId = undefined;
     return record;
   }
 

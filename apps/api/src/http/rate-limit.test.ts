@@ -80,6 +80,14 @@ describe("API rate limit", () => {
     expect(key).not.toContain("203.0.113.12");
   });
 
+  it("raw forwarded headers yerine Express'in çözdüğü istemci IP'sini kullanır", () => {
+    const env = { API_RATE_LIMIT_KEY_PREFIX: "test" };
+    const first = rateLimitKey(createRequest({ ip: "10.0.0.9", forwardedFor: "198.51.100.10" }), env);
+    const second = rateLimitKey(createRequest({ ip: "10.0.0.9", forwardedFor: "198.51.100.11" }), env);
+
+    expect(first).toBe(second);
+  });
+
   it("maps Redis failures to a generic rate limiter error", async () => {
     const store = new RedisRateLimitStore({
       command: async () => {

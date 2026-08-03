@@ -6,15 +6,16 @@ import { expect, test, type Page } from "@playwright/test";
 interface LiveReportEvidence {
   examId: string;
   firstStudentId: string;
+  generatedAt: string;
   guardianPortal?: LiveReportPortalCredentials;
-  nationalId: string;
+  loginName: string;
   password: string;
   studentPortal?: LiveReportPortalCredentials;
   tenantSlug: string;
 }
 
 interface LiveReportPortalCredentials {
-  nationalId: string;
+  loginName: string;
   password: string;
   tenantSlug?: string;
 }
@@ -29,7 +30,7 @@ test.setTimeout(90_000);
 test("worker tarafından üretilen canlı rapor kurum UI içinde açılır", async ({ page }) => {
   const evidence = readEvidence(evidencePath);
 
-  await loginAs(page, evidence.tenantSlug, evidence.nationalId, evidence.password, /\/kurum(?:[/?#]|$)/);
+  await loginAs(page, evidence.tenantSlug, evidence.loginName, evidence.password, /\/kurum(?:[/?#]|$)/);
   await expect(page).toHaveURL(/\/kurum$/);
   await page.goto("/kurum/raporlar");
   await fillReportExamReference(page, evidence.examId);
@@ -48,7 +49,7 @@ test("worker tarafından üretilen canlı rapor kurum UI içinde açılır", asy
   let studentPortalViewed = false;
   if (evidence.studentPortal) {
     await logout(page);
-    await loginAs(page, evidence.studentPortal.tenantSlug ?? evidence.tenantSlug, evidence.studentPortal.nationalId, evidence.studentPortal.password, /\/ogrenci(?:[/?#]|$)/);
+    await loginAs(page, evidence.studentPortal.tenantSlug ?? evidence.tenantSlug, evidence.studentPortal.loginName, evidence.studentPortal.password, /\/ogrenci(?:[/?#]|$)/);
     await page.goto(`/ogrenci?examId=${encodeURIComponent(evidence.examId)}`);
     await expect(page.getByRole("heading", { name: "Öğrenci Portalı" })).toBeVisible();
     await openPortalKarneDetail(page);
@@ -58,7 +59,7 @@ test("worker tarafından üretilen canlı rapor kurum UI içinde açılır", asy
   let guardianPortalViewed = false;
   if (evidence.guardianPortal) {
     await logout(page);
-    await loginAs(page, evidence.guardianPortal.tenantSlug ?? evidence.tenantSlug, evidence.guardianPortal.nationalId, evidence.guardianPortal.password, /\/veli(?:[/?#]|$)/);
+    await loginAs(page, evidence.guardianPortal.tenantSlug ?? evidence.tenantSlug, evidence.guardianPortal.loginName, evidence.guardianPortal.password, /\/veli(?:[/?#]|$)/);
     await page.goto(`/veli?examId=${encodeURIComponent(evidence.examId)}`);
     await expect(page.getByRole("heading", { name: "Veli Portalı" })).toBeVisible();
     await openPortalKarneDetail(page);
@@ -84,9 +85,9 @@ test("worker tarafından üretilen canlı rapor kurum UI içinde açılır", asy
   });
 });
 
-async function loginAs(page: Page, tenantSlug: string, nationalId: string, password: string, expectedUrl: RegExp) {
+async function loginAs(page: Page, tenantSlug: string, loginName: string, password: string, expectedUrl: RegExp) {
   await page.goto(`/k/${encodeURIComponent(tenantSlug)}/giris`);
-  await page.locator('input[name="nationalId"]').fill(nationalId);
+  await page.locator('input[name="loginName"]').fill(loginName);
   await page.locator('input[name="password"]').fill(password);
   await Promise.all([
     page.waitForURL(expectedUrl),
@@ -141,7 +142,7 @@ function readEvidence(path: string | undefined): LiveReportEvidence {
   const parsed = JSON.parse(readFileSync(path, "utf8")) as Partial<LiveReportEvidence>;
   const failures: string[] = [];
   if (!parsed.tenantSlug) failures.push("tenantSlug");
-  if (!parsed.nationalId) failures.push("nationalId");
+  if (!parsed.loginName) failures.push("loginName");
   if (!parsed.password) failures.push("password");
   if (!parsed.examId) failures.push("examId");
   if (!parsed.firstStudentId) failures.push("firstStudentId");
@@ -161,7 +162,7 @@ function validatePortalCredentials(
   failures: string[],
 ) {
   if (!value) return;
-  if (!value.nationalId) failures.push(`${label}.nationalId`);
+  if (!value.loginName) failures.push(`${label}.loginName`);
   if (!value.password) failures.push(`${label}.password`);
 }
 

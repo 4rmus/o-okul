@@ -151,18 +151,33 @@ export class TeacherService {
   }
 
   async deleteTeacher(context: RequestContext, id: string): Promise<void> {
-    await this.findTeacher(context, id);
-    const record = await this.teacherStore.softDelete(id, new Date().toISOString());
-    if (!record) {
+    const existing = await this.findTeacher(context, id);
+    if (!this.identityProvisioning) {
+      throw new Error("PROFILE_LIFECYCLE_STORE_UNAVAILABLE");
+    }
+    const deletedAt = new Date().toISOString();
+    const lifecycle = await this.identityProvisioning.deactivateProfile({
+      tenantId: existing.tenantId,
+      subjectType: "TEACHER",
+      subjectId: existing.id,
+      deletedAt,
+    });
+    if (!lifecycle) {
       throw new NotFoundException("TEACHER_NOT_FOUND");
     }
     await this.auditLogs?.record({
-      tenantId: record.tenantId,
+      tenantId: existing.tenantId,
       actorUserId: context.userId,
       entityType: "Teacher",
-      entityId: record.id,
+      entityId: existing.id,
       action: "teacher.deleted",
-      diff: { deletedAt: record.deletedAt },
+      diff: {
+        deletedAt,
+        accountAccessClosed: Boolean(lifecycle.userId),
+        roleRemoved: lifecycle.roleRemoved,
+        sessionsClosed: lifecycle.sessionsClosed,
+        invitationsRevoked: lifecycle.invitationsRevoked,
+      },
     });
   }
 
@@ -393,20 +408,7 @@ export class TeacherService {
       phone: teacher.phone,
       email: input.email,
     });
-    if (provisioning.status !== "PROVISIONED" || !provisioning.userId) {
-      return { ...teacher, provisioning: provisioning.status };
-    }
-
-    const bound = await this.teacherStore.bindUser(teacher.tenantId, teacher.id, provisioning.userId);
-    await this.auditLogs?.record({
-      tenantId: teacher.tenantId,
-      actorUserId: context.userId,
-      entityType: "Teacher",
-      entityId: teacher.id,
-      action: "teacher.account_auto_provisioned",
-      diff: { userId: provisioning.userId, mustChangePassword: true },
-    });
-    return { ...(bound ?? teacher), provisioning: provisioning.status };
+    return { ...teacher, provisioning: provisioning.status };
   }
 
   private resolveTeacherAssignmentInput(

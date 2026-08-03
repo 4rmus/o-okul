@@ -81,46 +81,22 @@ test.describe("Liste URL state", () => {
     await expect.poll(() => new URL(page.url()).searchParams.get("usersPage")).toBe("1");
   });
 
-  test("kullanıcı rol taslağını kaydetmeden mutasyona göndermez ve kayıttan sonra temizler", async ({ page }) => {
+  test("legacy kullanıcı listesini salt okunur tutup canonical çalışan yönetimine yönlendirir", async ({ page }) => {
     const captured = createCapturedRequests();
     await openWithListMocks(page, captured, "/kurum/kullanicilar");
 
     const usersRegion = page.getByLabel("Kullanıcı ve rol yönetimi");
     const summary = usersRegion.getByRole("region", { exact: true, name: "Kullanıcı operasyon özeti" });
-    const saveButton = page.getByRole("button", { name: "Admin Kullanıcı rollerini kaydet" });
     const adminRoles = usersRegion.getByLabel("Admin Kullanıcı rolleri", { exact: true });
     await expect(summary).toContainText("Kullanıcı toplamı");
-    await expect(summary).toContainText("TC + telefon girişi");
-    await expect(summary).toContainText("Rol taslağı");
-    await expect(adminRoles.locator(".next-role-grid--compact .uh-checkbox")).toHaveCount(2);
-    await expect(adminRoles).toContainText("Tüm kurum operasyonları");
-    await expect(saveButton).toBeDisabled();
-
-    await adminRoles.getByRole("checkbox", { name: /Kurum admin/ }).check();
+    await expect(summary).toContainText("Yetki yönetimi");
+    await expect(summary).toContainText("Legacy liste");
+    await expect(summary).toContainText("Yazma kapalı");
+    await expect(adminRoles).toContainText("Öğretmen");
+    await expect(adminRoles.getByRole("checkbox")).toHaveCount(0);
     expect(captured.roleUpdates).toEqual([]);
-    await expect(summary).toContainText("Henüz kaydedilmemiş rol satırı");
-    await expect(summary).toContainText("1");
-    await expect(usersRegion.getByText("Kaydedilmemiş rol değişikliği")).toBeVisible();
-    await expect(saveButton).toBeEnabled();
-
-    await saveButton.click();
-    await expect.poll(() => captured.roleUpdates).toHaveLength(1);
-    expect(captured.roleUpdates[0]).toMatchObject({
-      authorization: "Bearer list-url-access-token",
-      body: { roles: ["TENANT_ADMIN"] },
-      userId: "tenant-user-a",
-    });
-    await expect(saveButton).toBeDisabled();
-    await expect(usersRegion.getByText("Kaydedilmemiş rol değişikliği")).toHaveCount(0);
-
-    await usersRegion.getByRole("button", { name: "Kullanıcı ekle" }).click();
-    const userDialog = page.getByRole("dialog", { name: "Kullanıcı ekle" });
-    await expect(userDialog.locator(".next-role-fieldset .uh-checkbox")).toHaveCount(2);
-    await expect(userDialog).toContainText("Kullanıcının kurum yönetim kapsamını seç.");
-    await expect(userDialog.getByRole("checkbox", { name: /Yardımcı yönetici/ })).toBeChecked();
-    await userDialog.getByLabel("Telefon").fill("5551234567");
-    await expect(userDialog.getByLabel("Telefon")).toHaveValue("+90 555 123 45 67");
-    await userDialog.getByRole("button", { name: "Vazgeç" }).click();
+    await expect(usersRegion.getByRole("button", { name: /rollerini kaydet/u })).toHaveCount(0);
+    await expect(usersRegion.getByRole("link", { name: "Çalışan erişimlerini yönet" })).toHaveAttribute("href", "/kurum/calisanlar");
 
     for (const value of ["12345678901", "+905551234567", "guardian-private@example.test"]) {
       await expect(page.locator("body")).not.toContainText(value);

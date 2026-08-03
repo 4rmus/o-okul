@@ -13,6 +13,9 @@ describe("PostgresSessionStore", () => {
       roles: ["TENANT_ADMIN"],
       subjectType: null,
       subjectId: null,
+      deviceLabel: "Chrome · Windows",
+      clientIpPrefix: "203.0.113.0/24",
+      lastSeenAt: now,
       tokenFamilyId: "family-a",
       refreshTokenHash: hashRefreshToken("refresh-old"),
       status: "ACTIVE",
@@ -32,13 +35,17 @@ describe("PostgresSessionStore", () => {
                 id: values?.[0],
                 userId: values?.[1],
                 tenantId: values?.[2],
-                roles: values?.[3],
-                subjectType: values?.[4],
-                subjectId: values?.[5],
-                tokenFamilyId: values?.[6],
-                refreshTokenHash: values?.[7],
-                membershipVersion: values?.[8],
-                expiresAt: values?.[9],
+                membershipId: values?.[3],
+                activePersona: values?.[4],
+                roles: values?.[5],
+                subjectType: values?.[6],
+                subjectId: values?.[7],
+                deviceLabel: values?.[8],
+                clientIpPrefix: values?.[9],
+                tokenFamilyId: values?.[10],
+                refreshTokenHash: values?.[11],
+                membershipVersion: values?.[12],
+                expiresAt: values?.[13],
               },
             ] as T[],
           };
@@ -46,15 +53,12 @@ describe("PostgresSessionStore", () => {
         if (sql.includes('SELECT * FROM "AuthSession" WHERE "refreshTokenHash"')) {
           return { rows: [currentSession] as T[] };
         }
-        if (sql.includes('SELECT * FROM "AuthSession" WHERE "id"')) {
-          return { rows: [currentSession] as T[] };
-        }
-        if (sql.includes('UPDATE "AuthSession"') && sql.includes('"refreshTokenHash" = $2')) {
+        if (sql.includes('WITH rotated AS')) {
           return {
             rows: [
               {
                 ...currentSession,
-                refreshTokenHash: values?.[1],
+                refreshTokenHash: values?.[2],
               },
             ] as T[],
           };
@@ -85,9 +89,12 @@ describe("PostgresSessionStore", () => {
       expiresAt: new Date("2026-07-01T12:00:00.000Z"),
     });
     await store.findByRefreshToken("refresh-old");
-    await store.updateRefreshToken("session-a", "refresh-next", new Date("2026-07-02T12:00:00.000Z"));
+    await store.listActiveByUser("user-tenant-a", "tenant-a");
+    await store.updateRefreshToken("session-a", "refresh-old", "refresh-next", new Date("2026-07-02T12:00:00.000Z"));
     await store.findConsumedTokenFamily("refresh-old");
     await store.revoke("session-a");
+    await store.revokeOwned("session-a", "user-tenant-a", "tenant-a");
+    await store.revokeAllOwned("user-tenant-a", "tenant-a");
     await store.revokeByMembership("user-tenant-a", "tenant-a", 2);
     await store.revokeByUser("user-tenant-a");
 
@@ -97,7 +104,11 @@ describe("PostgresSessionStore", () => {
       expect.any(String),
       "user-tenant-a",
       "tenant-a",
+      null,
+      null,
       ["TENANT_ADMIN"],
+      null,
+      null,
       null,
       null,
       expect.any(String),
@@ -105,15 +116,20 @@ describe("PostgresSessionStore", () => {
       1,
       new Date("2026-07-01T12:00:00.000Z"),
     ]);
-    const insertConsumed = queries.find((query) => query.sql.includes('INSERT INTO "ConsumedRefreshToken"'));
-    expect(insertConsumed?.values).toEqual([hashRefreshToken("refresh-old"), "family-a"]);
-    const updateRefresh = queries.find((query) => query.sql.includes('"refreshTokenHash" = $2'));
+    const updateRefresh = queries.find((query) => query.sql.includes("WITH rotated AS"));
+    expect(updateRefresh?.sql).toContain('AND "refreshTokenHash" = $2');
+    expect(updateRefresh?.sql).toContain("AND \"status\" = 'ACTIVE'");
+    expect(updateRefresh?.sql).toContain('INSERT INTO "ConsumedRefreshToken"');
     expect(updateRefresh?.values).toEqual([
       "session-a",
+      hashRefreshToken("refresh-old"),
       hashRefreshToken("refresh-next"),
       new Date("2026-07-02T12:00:00.000Z"),
     ]);
     const revokeByMembership = queries.find((query) => query.sql.includes('"membershipVersion" < $3'));
     expect(revokeByMembership?.values).toEqual(["user-tenant-a", "tenant-a", 2]);
+    const ownedQueries = queries.filter((query) => query.sql.includes('"userId" = $1') && query.sql.includes('"tenantId" = $2'));
+    expect(ownedQueries.length).toBeGreaterThanOrEqual(2);
+    expect(queries.some((query) => query.values?.join(":") === "session-a:user-tenant-a:tenant-a")).toBe(true);
   });
 });

@@ -4,6 +4,7 @@ import {
   LoginAttemptLimiter,
   RedisLoginAttemptLimiter,
   createLoginAttemptLimiter,
+  mfaAttemptKey,
   type RedisCommandClient,
   type RedisReply,
   loginAttemptKey,
@@ -85,6 +86,14 @@ describe("LoginAttemptLimiter", () => {
         LOGIN_ATTEMPT_LIMITER_STORE: "memory",
       } as NodeJS.ProcessEnv),
     ).toThrow('LOGIN_ATTEMPT_LIMITER_STORE must be "redis"');
+  });
+
+  it("MFA anahtarında ham kullanıcı kimliğini saklamaz ve amacı ayırır", () => {
+    const key = mfaAttemptKey("user-secret-value", "login");
+
+    expect(key).toMatch(/^[a-f0-9]{64}$/);
+    expect(key).not.toContain("user-secret-value");
+    expect(mfaAttemptKey("user-secret-value", "disable")).not.toBe(key);
   });
 });
 

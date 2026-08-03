@@ -10,6 +10,8 @@ import type {
   MeProfileResponse,
   MePasswordChangeRequest,
   MePasswordChangeResponse,
+  MeSessionRecord,
+  MeSessionRevokeAllResponse,
   ReportErrorBooklet,
   ReportStudentProgress,
   ReportStudentSnapshot,
@@ -70,12 +72,15 @@ import { TeacherNoteService } from "../teacher-note/teacher-note.service.js";
 import { TenantService } from "../tenant/tenant.service.js";
 import type { TenantRecord } from "../tenant/tenant-store.js";
 import { tenantCurrentProfileBodySchema, type TenantCurrentProfileBody } from "../tenant/tenant-validation.js";
+import { passwordMaxLength, passwordMinLength, passwordPolicyViolation } from "../auth/password-policy.js";
 import { MeInstitutionDashboardService } from "./me-institution-dashboard.service.js";
 import { MeReportIndexService } from "./me-report-index.service.js";
 
 const mePasswordChangeBodySchema = z.object({
   currentPassword: z.string().min(1),
-  newPassword: z.string().min(8),
+  newPassword: z.string().min(passwordMinLength).max(passwordMaxLength).refine((value) => !passwordPolicyViolation(value), {
+    message: "PASSWORD_COMMON_REJECTED",
+  }),
 }).strict() satisfies z.ZodType<MePasswordChangeRequest>;
 
 @Controller("me")
@@ -103,17 +108,9 @@ export class MeController {
   ) {}
 
   @Get("profile")
-  @Roles("TENANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN")
-  profile(): MeProfileResponse {
-    const context = getRequestContext();
-    return {
-      userId: context.userId,
-      tenantId: context.tenantId,
-      roles: context.roles,
-      mustChangePassword: context.mustChangePassword,
-      subjectType: context.subjectType,
-      subjectId: context.subjectId,
-    };
+  @Roles("SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF", "TEACHER", "STUDENT", "GUARDIAN")
+  profile(): Promise<MeProfileResponse> {
+    return this.auth.getCurrentProfile(getRequestContext());
   }
 
   @Post("password")
@@ -121,6 +118,26 @@ export class MeController {
   @Roles("TENANT_ADMIN", "ASSISTANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN")
   changePassword(@Body(zodBody(mePasswordChangeBodySchema)) body: MePasswordChangeRequest): Promise<MePasswordChangeResponse> {
     return this.auth.changeCurrentPassword(getRequestContext(), body.currentPassword, body.newPassword);
+  }
+
+  @Get("sessions")
+  @Roles("SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF", "TEACHER", "STUDENT", "GUARDIAN")
+  sessions(): Promise<MeSessionRecord[]> {
+    return this.auth.listCurrentSessions(getRequestContext());
+  }
+
+  @Delete("sessions/:id")
+  @HttpCode(204)
+  @Roles("SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF", "TEACHER", "STUDENT", "GUARDIAN")
+  revokeSession(@Param("id") sessionId: string): Promise<void> {
+    return this.auth.revokeCurrentSession(getRequestContext(), sessionId);
+  }
+
+  @Delete("sessions")
+  @HttpCode(200)
+  @Roles("SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF", "TEACHER", "STUDENT", "GUARDIAN")
+  revokeAllSessions(): Promise<MeSessionRevokeAllResponse> {
+    return this.auth.revokeAllCurrentSessions(getRequestContext());
   }
 
   @Get("tenant")

@@ -38,18 +38,19 @@
   },
   "loginAttemptLimiter": {
     "clientIpHash": "e0f2f7e2cfd4f1e7a41db3f6b1a5369bd4dfb9fb8f77060f72a89f3ea2ed92d3",
-    "nationalIdHash": "8b9c7fd58536f6c82840e521a4fd26c7faeb3bf7ac93d77dfc41273512f34072",
+    "loginNameHash": "8b9c7fd58536f6c82840e521a4fd26c7faeb3bf7ac93d77dfc41273512f34072",
     "attemptsSent": 6,
     "lockStatusCode": 429,
     "errorCode": "LOGIN_LOCKED",
     "sharedAcrossInstances": true,
-    "nationalIdAndIpScoped": true,
+    "tenantAndLoginNameAndIpScoped": true,
     "differentIpNotLocked": true
   },
   "commandsPassed": ["pnpm rate-limit:smoke", "pnpm rate-limit:check"],
   "evidenceReferences": [
     "artifacts/example/rate-limit/rate-limit-smoke.json",
-    "artifacts/example/rate-limit/redis-shared-window-observation.txt"
+    "artifacts/example/rate-limit/redis-shared-window-observation.txt",
+    "rate-limit-egress-ip:7b1d2a69c10e16c6827d8cfa31f2b5d80e56ed3f832f2e0f6b833f8f1d2d8e11"
   ],
   "gaps": []
 }

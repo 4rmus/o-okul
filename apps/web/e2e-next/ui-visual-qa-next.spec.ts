@@ -278,7 +278,10 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await page.getByRole("tab", { name: "Kurum yönetimi" }).click();
     await page.getByRole("button", { name: "Düzenle" }).click();
     const editDialog = page.getByRole("dialog", { name: "Kurum düzenle" });
-    await expect(editDialog.getByLabel("Plan")).toBeVisible();
+    await expect(editDialog.getByLabel("Plan")).toHaveCount(0);
+    await expect(editDialog.getByLabel("Lisans başlangıç")).toHaveCount(0);
+    await expect(editDialog.getByLabel("Lisans bitiş")).toHaveCount(0);
+    await expect(editDialog.getByLabel("Kullanıcı sınırı")).toHaveCount(0);
     await expect(editDialog.getByLabel("Durum")).toBeVisible();
     await expectUiStable(page, "faz9-system-tenant-detail", consoleErrors);
   });

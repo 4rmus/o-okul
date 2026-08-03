@@ -5,12 +5,18 @@ const templatePath = "docs/evidence-templates/staging-evidence.env.example";
 const prodEnvScriptPath = "scripts/check-prod-env.mjs";
 const prodEvidenceScriptPath = "scripts/check-prod-evidence.mjs";
 const workflowPath = process.env.STAGING_DEPLOY_WORKFLOW_PATH ?? ".github/workflows/staging-deploy.yml";
+const outboxVerifyWorkflowPath = ".github/workflows/staging-outbox-verify.yml";
 
 const args = process.argv.slice(2);
 const envFile = readArgValue("--env-file");
+const validationMode = readArgValue("--mode") ?? "full";
 const targetPath = envFile ?? templatePath;
 const target = parseEnvFile(targetPath);
 const failures = [];
+
+if (!new Set(["activation", "full"]).has(validationMode)) {
+  fail(["--mode yalnız activation veya full olabilir."]);
+}
 
 const summaryDefaultedSmokeKeys = new Map([
   ["TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE", "traefik-https.json"],
@@ -54,16 +60,37 @@ const uiUxRedesignGeneratorKeys = [
 const smsProviderRuntimeKeys = ["NETGSM_USERCODE", "NETGSM_PASSWORD", "NETGSM_MSG_HEADER"];
 const smsSmokeKeys = ["SMS_SMOKE_TO", "SMS_SMOKE_BODY", "SMS_SMOKE_CONFIRM"];
 const runtimeRequiredKeys = ["S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"];
+const forbiddenSecretKeys = new Map([
+  ["SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID", "verify-only workflow host-side private source-id dosyasını kullanır."],
+]);
+const optionalRuntimeKeys = new Set(["TRAEFIK_TRUSTED_FORWARDER_CIDRS"]);
+const proxyNetworkKeys = [
+  "DOCKER_PROXY_SUBNET",
+  "DOCKER_PROXY_NETWORK",
+  "TRAEFIK_PROXY_IP",
+  "API_PROXY_IP",
+  "RATE_LIMIT_SMOKE_EGRESS_IP",
+];
 const smsEnabled = target.values.get("SMS_ENABLED") === "true";
 const prodEnvContractKeys = extractProdEnvContractKeys().filter((key) => smsEnabled || !smsSmokeKeys.includes(key));
-const requiredKeys = unique([
+const fullRequiredKeys = unique([
   ...prodEnvContractKeys,
   ...runtimeRequiredKeys,
+  ...proxyNetworkKeys,
   ...(smsEnabled ? smsProviderRuntimeKeys : []),
   ...uiUxRedesignGeneratorKeys,
 ]);
+const activationRequiredKeys = [
+  "NODE_ENV",
+  "SENTRY_ENVIRONMENT",
+  "WEB_URL",
+  "TRAEFIK_HTTPS_SMOKE_URL",
+  "ALERT_WEBHOOK_URL",
+  "ALERT_WEBHOOK_TOKEN",
+];
+const requiredKeys = validationMode === "activation" ? activationRequiredKeys : fullRequiredKeys;
 const keysRequiredInSecret = requiredKeys.filter(
-  (key) => !summaryDefaultedSmokeKeys.has(key) && !workflowInjectedKeys.has(key),
+  (key) => !summaryDefaultedSmokeKeys.has(key) && !workflowInjectedKeys.has(key) && !optionalRuntimeKeys.has(key),
 );
 
 for (const key of keysRequiredInSecret) {
@@ -83,27 +110,47 @@ for (const key of [...summaryDefaultedSmokeKeys.keys(), ...workflowInjectedKeys]
   }
 }
 
+for (const [key, reason] of forbiddenSecretKeys) {
+  if (target.values.has(key)) {
+    failures.push(`${targetPath} ${key} içermemeli; ${reason}`);
+  }
+}
+
+if (args.includes("--require-secret-delivery-outbox-smoke")) {
+  failures.push("--require-secret-delivery-outbox-smoke kaldırıldı; source ID yalnız host-side private dosyadan okunur.");
+}
+
 for (const key of target.duplicateKeys) {
   failures.push(`${targetPath} tekrar eden env anahtarı içeriyor: ${key}`);
 }
 
 checkWorkflowContract(failures);
+checkOutboxVerifyWorkflowContract(failures);
 checkProdEvidenceDefaults(failures);
 checkTemplateRepositorySlugContract(failures);
 
 if (envFile) {
   checkNoPlaceholders(target, failures);
+  if (validationMode === "activation") {
+    checkActivationEnv(target.values, failures);
+  }
 }
 
 if (failures.length > 0) {
   fail(failures);
 }
 
-if (envFile) {
+if (envFile && validationMode === "full") {
   checkResolvedProductionEnv(target);
 }
 
-console.log(envFile ? "Staging evidence env değer kontrolü geçti." : "Staging evidence env sözleşme kontrolü geçti.");
+console.log(
+  envFile
+    ? validationMode === "activation"
+      ? "Staging activation env değer kontrolü geçti."
+      : "Staging evidence env değer kontrolü geçti."
+    : "Staging evidence env sözleşme kontrolü geçti.",
+);
 
 function readArgValue(name) {
   const index = args.indexOf(name);
@@ -157,11 +204,11 @@ function extractProdEnvContractKeys() {
 function checkWorkflowContract(output) {
   const workflow = readFileSync(workflowPath, "utf8");
   const requiredTokens = [
-    "full_evidence:",
     "Validate staging dispatch inputs and environment",
     "STAGING_NEXT_PUBLIC_API_URL must be an https:// URL.",
     "STAGING_DEPLOY_DIR must be /root/o-okul.",
     "docker-compose.observability.yml",
+    "docker-compose.rate-limit-shard.yml",
     "validate_tag \"rollback_image_tag\"",
     "github-ci-evidence:",
     "needs: preflight",
@@ -170,7 +217,7 @@ function checkWorkflowContract(output) {
     "STAGING_EVIDENCE_ENV_B64",
     "pnpm install --frozen-lockfile",
     "trap 'rm -f .staging-evidence.env' EXIT",
-    "pnpm staging:evidence-env:check -- --env-file .staging-evidence.env",
+    "pnpm staging:evidence-env:check -- --mode activation --env-file .staging-evidence.env",
     "base64 -d > .staging-evidence.env",
     "test -s .staging-evidence.env",
     "pnpm staging:evidence-env:check",
@@ -182,11 +229,6 @@ function checkWorkflowContract(output) {
     "path: artifacts/staging/reports",
     "path: artifacts/staging/reports/github-ci.json",
     "Check pre-deploy GitHub CI evidence",
-    "Generate UI/UX redesign evidence",
-    "Generate UI/UX redesign evidence\n        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}",
-    "UI_UX_REDESIGN_EVIDENCE_OUTPUT=\"artifacts/staging/reports/ui-ux-redesign.json\"",
-    "UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES: \"1\"",
-    "pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env",
     "Bind local UI/UX completion to verified source",
     "UI_UX_PROFESSIONALIZATION_SOURCE_SHA: ${{ needs.build-images.outputs.deploy-sha }}",
     "pnpm ui-ux-professionalization:completion:check -- --local-proof-only",
@@ -197,29 +239,26 @@ function checkWorkflowContract(output) {
     "require_running_image api \"${IMAGE_PREFIX}/api:${IMAGE_TAG}\"",
     "require_running_image worker \"${IMAGE_PREFIX}/worker:${IMAGE_TAG}\"",
     "require_running_image queue-board \"${IMAGE_PREFIX}/queue-board:${IMAGE_TAG}\"",
-    "echo \"UI_UX_REDESIGN_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/ui-ux-redesign.json\"",
+    "Account management preflight before legacy access cutover",
+    "ACCOUNT_MANAGEMENT_PREFLIGHT_OUTPUT=artifacts/staging/reports/account-management-preflight.json",
+    "Account management backfill and parity gate before app start",
+    "ACCOUNT_MANAGEMENT_BACKFILL_MODE=APPLY",
+    "ACCOUNT_MANAGEMENT_BACKFILL_CONFIRM=apply-pr4-backfill",
+    "ACCOUNT_MANAGEMENT_BACKFILL_OUTPUT=artifacts/staging/reports/account-management-backfill.json",
     "echo \"SENTRY_RELEASE=$IMAGE_TAG\"",
     "echo \"ROLLBACK_IMAGE_TAG=$ROLLBACK_IMAGE_TAG\"",
     "echo \"GITHUB_CI_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/github-ci.json\"",
     "echo \"PRODUCTION_EVIDENCE_SUMMARY_TARGET=file://$PWD/artifacts/staging/release-summary-${IMAGE_TAG}.json\"",
-    "Append full UI/UX release evidence metadata\n        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}",
+    "Generate deployment cutover artifact",
+    "DEPLOYMENT_CUTOVER_EVIDENCE_FILE: artifacts/staging/reports/deployment-cutover.json",
+    "node scripts/generate-deployment-cutover-evidence.mjs",
+    "staging-deployment-cutover-${{ github.run_id }}",
     ".ghcr_read_token",
     "GHCR read token file is missing.",
-    "if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}",
-    "pnpm prod:evidence:check --",
-    "--env-file .staging-evidence.env",
-    "--summary-file",
-    "Check staging release artifact bundle",
-    "STAGING_RELEASE_ARTIFACTS_TARGET=\"$PWD/artifacts/staging\"",
-    "pnpm staging:release-artifacts:check",
-    "Bind live UI/UX completion to full evidence",
-    "UI_UX_PROFESSIONALIZATION_FULL_EVIDENCE: \"1\"",
-    "run: pnpm ui-ux-professionalization:completion:check",
     "Cleanup staging evidence env",
     "run: rm -f .staging-evidence.env",
     "actions/upload-artifact@v4",
     "staging-activation-evidence-${{ needs.build-images.outputs.image-tag }}",
-    "staging-production-evidence-${{ needs.build-images.outputs.image-tag }}",
     "path: artifacts/staging",
   ];
 
@@ -227,10 +266,6 @@ function checkWorkflowContract(output) {
     if (!workflow.includes(token)) {
       output.push(`${workflowPath} beklenen staging evidence token'ını içermiyor: ${token}`);
     }
-  }
-
-  if (workflow.split('UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES: "1"').length - 1 !== 3) {
-    output.push(`${workflowPath} remote UI/UX referans doğrulamasını generate, production chain ve live completion adımlarına bağlamalı.`);
   }
 
   if (workflow.includes("pnpm run ci")) {
@@ -241,12 +276,19 @@ function checkWorkflowContract(output) {
     output.push(`${workflowPath} Playwright bağımlılığı kurmamalı; bu sorumluluk CI workflow'unda kalmalı.`);
   }
 
+  const evidenceJob = workflow.slice(workflow.indexOf("\n  evidence:"));
+  for (const token of ["Configure SSH for evidence tunnels", "Open staging data tunnels", "append-staging-evidence-tunnel-env.mjs"]) {
+    if (evidenceJob.includes(token)) {
+      output.push(`${workflowPath} normal activation evidence job'ında DB tunnel açmamalı: ${token}`);
+    }
+  }
+
   requireWorkflowOrder(output, workflow, "preflight staging env check order", [
     "Check staging evidence env before deploy",
     "trap 'rm -f .staging-evidence.env' EXIT",
     "base64 -d > .staging-evidence.env",
     "test -s .staging-evidence.env",
-    "pnpm staging:evidence-env:check -- --env-file .staging-evidence.env",
+    "pnpm staging:evidence-env:check -- --mode activation --env-file .staging-evidence.env",
   ]);
   requireWorkflowOrder(output, workflow, "GitHub CI evidence artifact order", [
     "Generate GitHub CI evidence before deploy",
@@ -262,30 +304,109 @@ function checkWorkflowContract(output) {
     "Decode staging evidence env",
     "base64 -d > .staging-evidence.env",
     "Check staging evidence env",
-    "pnpm staging:evidence-env:check -- --env-file .staging-evidence.env",
+    "pnpm staging:evidence-env:check -- --mode activation --env-file .staging-evidence.env",
     "Check pre-deploy GitHub CI evidence",
-    "Generate UI/UX redesign evidence",
-    "UI_UX_REDESIGN_EVIDENCE_OUTPUT=\"artifacts/staging/reports/ui-ux-redesign.json\"",
-    "pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env",
     "Bind local UI/UX completion to verified source",
     "pnpm ui-ux-professionalization:completion:check -- --local-proof-only",
     "Append release evidence metadata",
-    "Append full UI/UX release evidence metadata",
-    "echo \"UI_UX_REDESIGN_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/ui-ux-redesign.json\"",
     "Run first staging evidence gates",
-    "Run staging-scoped evidence chain",
-    "PRODUCTION_EVIDENCE_ALLOW_STAGING_UI_UX: \"1\"",
-    "Check staging release artifact bundle",
-    "STAGING_RELEASE_ARTIFACTS_TARGET=\"$PWD/artifacts/staging\"",
-    "pnpm staging:release-artifacts:check",
-    "Bind live UI/UX completion to full evidence",
-    "UI_UX_PROFESSIONALIZATION_FULL_EVIDENCE: \"1\"",
-    "run: pnpm ui-ux-professionalization:completion:check",
+    "Generate deployment cutover artifact",
+    "node scripts/generate-deployment-cutover-evidence.mjs",
     "Cleanup staging evidence env",
     "run: rm -f .staging-evidence.env",
+    "staging-deployment-cutover-${{ github.run_id }}",
     "staging-activation-evidence-${{ needs.build-images.outputs.image-tag }}",
-    "staging-production-evidence-${{ needs.build-images.outputs.image-tag }}",
     "path: artifacts/staging",
+  ]);
+}
+
+function checkOutboxVerifyWorkflowContract(output) {
+  const workflow = readFileSync(outboxVerifyWorkflowPath, "utf8");
+  for (const token of [
+    "name: Staging Outbox Verify",
+    "deploy_run_id:",
+    "full_evidence:",
+    "description: \"Also run the separate full production evidence aggregation.\"",
+    "if: ${{ inputs.full_evidence }}",
+    "if: ${{ success() && inputs.full_evidence }}",
+    "types: [labeled]",
+    "github.event.label.name == 'staging-outbox-verify'",
+    "vars.STAGING_OUTBOX_DEPLOY_RUN_ID",
+    "name: staging-deployment-cutover-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}",
+    "run-id: ${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}",
+    "scripts/check-deployment-cutover-evidence.mjs",
+    "Validate selected deployment run metadata",
+    ".github/workflows/staging-deploy.yml",
+    "Bind selected deployment run to cutover source",
+    "github.event.pull_request.head.sha",
+    "eventName === \"pull_request\"",
+    "clean: false",
+    "Validate staging verify environment",
+    "Preflight current images and private outbox source",
+    "Phase B private source missing for release",
+    "OUTBOX_SOURCE_CLAIM_DIR=/root/o-okul-private/secret-delivery-outbox/.claims/",
+    "mv -- \"$source_dir\" \"$SOURCE_CLAIM_DIR\"",
+    "[ \"$STAGING_DEPLOY_DIR\" = \"/root/o-okul\" ]",
+    "require_running_image web",
+    "require_running_image api",
+    "require_running_image worker",
+    "require_running_image queue-board",
+    "grep -Fxq 'ADMIN_MFA_MODE=required' .env",
+    "o-okul-private/secret-delivery-outbox",
+    "SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_FILE=/run/outbox-source/source-id",
+    "Upload sanitized Phase B outbox evidence",
+    "staging-outbox-smoke-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}",
+    "PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX=1",
+    "pnpm staging:evidence-env:check -- --mode full --env-file .staging-evidence.env",
+    "Bind verified UI/UX completion to full evidence",
+    "UI_UX_PROFESSIONALIZATION_FULL_EVIDENCE: \"1\"",
+    "run: pnpm ui-ux-professionalization:completion:check",
+    "-v \"$source_dir:/run/outbox-source:ro\"",
+    "WORKER_IMAGE=\"$expected_worker_image\" docker compose",
+    "require_running_worker_image",
+    "require_running_worker_image # post-smoke exact-image gate",
+    "rm -f -- \"$SOURCE_CLAIM_DIR/source-id\"",
+    "rmdir -- \"$SOURCE_CLAIM_DIR\" 2>/dev/null || true",
+    "Remove private outbox verification material",
+    "if: ${{ always() }}",
+    "Clean local verification secrets",
+    "STAGING_SSH_KEY_PATH=$RUNNER_TEMP/staging_deploy_key",
+    "trap 'rm -f -- .staging-evidence.env' EXIT",
+    "sed -i 's/^ADMIN_MFA_MODE=.*/ADMIN_MFA_MODE=required/' .staging-evidence.env",
+    "chmod 600 .staging-evidence.env",
+    "const expectedRunUrl = `https://github.com/${repository}/actions/runs/${runId}`;",
+    "references[1] = `run:${githubCi.workflow.runUrl}`;",
+    "Recheck exact images before publishing verification",
+    "staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}",
+    "scripts/smoke-secret-delivery-outbox-staging.mjs",
+    "scripts/check-secret-delivery-outbox-evidence.mjs",
+  ]) {
+    if (!workflow.includes(token)) output.push(`${outboxVerifyWorkflowPath} token eksik: ${token}`);
+  }
+  if (workflow.match(/SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID|inputs\.source|secrets\..*SOURCE/i)) {
+    output.push(`${outboxVerifyWorkflowPath} source ID GitHub input/secret olarak taşımamalı.`);
+  }
+  if (workflow.split("if: ${{ inputs.full_evidence }}").length - 1 !== 4) {
+    output.push(`${outboxVerifyWorkflowPath} full evidence adımları tam olarak dört explicit koşulla ayrılmalı.`);
+  }
+  requireWorkflowOrder(output, workflow, "outbox source claim ve cleanup sırası", [
+    "Bind selected deployment run to cutover source",
+    "clean: false",
+    "Validate staging verify environment",
+    "Configure SSH",
+    "Preflight current images and private outbox source",
+    "mv -- \"$source_dir\" \"$SOURCE_CLAIM_DIR\"",
+    "pnpm/action-setup@v4",
+    "pnpm install --frozen-lockfile",
+    "Open staging data tunnels for aggregate checks",
+    "Upload cutover-bound smoke helpers",
+    "Run private outbox smoke",
+    "WORKER_IMAGE=\"$expected_worker_image\" docker compose",
+    "require_running_worker_image # post-smoke exact-image gate",
+    "Upload sanitized Phase B outbox evidence",
+    "Remove private outbox verification material",
+    "rm -f -- \"$SOURCE_CLAIM_DIR/source-id\"",
+    "Clean local verification secrets",
   ]);
 }
 
@@ -361,6 +482,70 @@ function checkResolvedProductionEnv(target) {
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
+}
+
+function checkActivationEnv(env, output) {
+  if (env.get("NODE_ENV") !== "production") {
+    output.push("NODE_ENV activation için production olmalı.");
+  }
+  if (env.get("SENTRY_ENVIRONMENT") !== "staging") {
+    output.push("SENTRY_ENVIRONMENT activation için staging olmalı.");
+  }
+
+  const webUrl = checkActivationUrl(env.get("WEB_URL"), output, "WEB_URL");
+  const traefikUrl = checkActivationUrl(env.get("TRAEFIK_HTTPS_SMOKE_URL"), output, "TRAEFIK_HTTPS_SMOKE_URL");
+  checkActivationUrl(env.get("ALERT_WEBHOOK_URL"), output, "ALERT_WEBHOOK_URL");
+
+  if (webUrl && traefikUrl && webUrl.origin !== traefikUrl.origin) {
+    output.push("TRAEFIK_HTTPS_SMOKE_URL activation için WEB_URL origin'iyle eşleşmeli.");
+  }
+
+  const alertToken = String(env.get("ALERT_WEBHOOK_TOKEN") ?? "");
+  if (alertToken.length < 32) {
+    output.push("ALERT_WEBHOOK_TOKEN activation için en az 32 karakterlik gerçek bearer secret olmalı.");
+  }
+}
+
+function checkActivationUrl(value, output, key) {
+  let url;
+  try {
+    url = new URL(String(value ?? ""));
+  } catch {
+    output.push(`${key} activation için geçerli URL olmalı.`);
+    return undefined;
+  }
+
+  let valid = true;
+  if (url.protocol !== "https:") {
+    output.push(`${key} activation için https olmalı.`);
+    valid = false;
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    output.push(`${key} activation için userinfo, query veya fragment içeremez.`);
+    valid = false;
+  }
+  if (isPlaceholderOrLocalHost(url.hostname)) {
+    output.push(`${key} activation için gerçek bir host kullanmalı.`);
+    valid = false;
+  }
+  return valid ? url : undefined;
+}
+
+function isPlaceholderOrLocalHost(hostname) {
+  const normalized = hostname.toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized.endsWith(".localhost") ||
+    normalized === "127.0.0.1" ||
+    normalized.startsWith("127.") ||
+    normalized === "::1" ||
+    normalized === "0.0.0.0" ||
+    normalized.endsWith(".test") ||
+    normalized.endsWith(".example") ||
+    normalized.endsWith(".invalid") ||
+    normalized.includes("example") ||
+    normalized.includes("__set")
+  );
 }
 
 function unique(values) {

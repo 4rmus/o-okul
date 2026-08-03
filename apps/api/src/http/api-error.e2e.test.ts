@@ -94,7 +94,7 @@ describe("API error envelope", () => {
   it("auth login gövde validasyon hatalarını 422 alan listesiyle döner", async () => {
     const response = await request(server)
       .post("/auth/login")
-      .send({ tenantSlug: 123, nationalId: " ", password: 123 })
+      .send({ tenantSlug: 123, loginName: " ", password: 123 })
       .expect(422);
 
     expect(response.body).toMatchObject({
@@ -104,7 +104,7 @@ describe("API error envelope", () => {
         details: {
           fields: expect.arrayContaining([
             expect.objectContaining({ path: "tenantSlug" }),
-            expect.objectContaining({ path: "nationalId" }),
+            expect.objectContaining({ path: "loginName" }),
             expect.objectContaining({ path: "password" }),
           ]),
         },

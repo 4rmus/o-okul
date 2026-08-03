@@ -12,8 +12,8 @@ const corsHeaders = {
 interface CapturedSystemRequests {
   forbiddenTenantScopedPaths: string[];
   tenantCreates: Array<{ authorization: string | undefined; body: unknown }>;
-  tenantDeletes: Array<{ authorization: string | undefined; id: string }>;
   tenantLists: URLSearchParams[];
+  tenantUpdates: Array<{ authorization: string | undefined; body: unknown; id: string }>;
 }
 
 interface SystemTenantFixture {
@@ -52,51 +52,54 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     await expect.poll(() => new URL(page.url()).searchParams.get("page")).toBe("1");
   });
 
-  test("ilk admini TC telefonla oluşturur ve davet tokenı göstermez", async ({ page }) => {
+  test("ilk kurum sahibini telefonsuz oluşturur ve parola kurulum bağlantısının gönderileceğini açıklar", async ({ page }) => {
     const captured = createCapturedSystemRequests();
     await openWithSystemTenantMocks(page, captured, "/sistem/kurumlar");
 
     await page.getByRole("button", { name: "Kurum oluştur" }).click();
     const createDialog = page.getByRole("dialog", { name: "Kurum oluştur" });
-    await createDialog.getByLabel("Kurum adı").fill("Telefonlu Kurum");
-    await createDialog.getByLabel("Kurum kodu").fill("telefonlu-kurum");
+    await createDialog.getByLabel("Kurum adı").fill("Davetli Kurum");
+    await createDialog.getByLabel("Kurum kodu").fill("davetli-kurum");
     await createDialog.getByLabel("Plan").selectOption("PRO");
-    await createDialog.getByLabel("İlk yönetici ad soyad").fill("Telefonlu Yönetici");
-    await createDialog.getByLabel("İlk yönetici e-posta").fill("phone.admin@example.test");
-    await createDialog.getByLabel("İlk yönetici TC kimlik no").fill("10000001372");
-    await createDialog.getByLabel("İlk yönetici telefon").fill("5551234567");
-    await expect(createDialog.getByLabel("İlk yönetici telefon")).toHaveValue("+90 555 123 45 67");
+    await createDialog.getByLabel("Lisans başlangıç").fill("2026-08-01");
+    await createDialog.getByLabel("Lisans bitiş").fill("2027-08-01");
+    await createDialog.getByLabel("Aktif öğrenci limiti").fill("100");
+    await createDialog.getByLabel("Sözleşme referansı").fill("SOZ-001");
+    await createDialog.getByLabel("İlk kampüs adı").fill("Davetli Kampüs");
+    await createDialog.getByLabel("İlk kurum sahibi ad soyad").fill("Davetli Yönetici");
+    await createDialog.getByLabel("İlk kurum sahibi e-posta").fill("phone.admin@example.test");
+    await expect(createDialog).toContainText("24 saat geçerli parola kurulum bağlantısı");
     await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
 
     await expect.poll(() => captured.tenantCreates).toHaveLength(1);
     expect(captured.tenantCreates[0]).toMatchObject({
       authorization: "Bearer system-tenant-access-token",
       body: {
-        firstAdmin: {
+        campuses: [{ code: "MRK", name: "Davetli Kampüs", unitType: "SCHOOL" }],
+        firstOwner: {
           email: "phone.admin@example.test",
-          name: "Telefonlu Yönetici",
-          nationalId: "10000001372",
-          phone: "+90 555 123 45 67",
+          name: "Davetli Yönetici",
         },
-        name: "Telefonlu Kurum",
-        plan: "PRO",
-        slug: "telefonlu-kurum",
+        licenseTerm: {
+          activeStudentLimit: 100,
+          auditReference: "SOZ-001",
+          endsAt: "2027-08-01T00:00:00.000Z",
+          planCode: "PRO",
+          startsAt: "2026-08-01T00:00:00.000Z",
+        },
+        name: "Davetli Kurum",
+        slug: "davetli-kurum",
+        status: "ACTIVE",
       },
     });
 
     await expect(page.getByLabel("İlk admin aktivasyon tokenı")).toHaveCount(0);
-    await page.getByRole("row", { name: /Telefonlu Kurum/ }).getByRole("button", { name: "Sil" }).click();
-    const confirmDialog = page.getByRole("dialog", { name: "Kurumu sil" });
-    await expect(confirmDialog).toContainText("Telefonlu Kurum kurumunu silmek istiyor musun?");
-    await confirmDialog.getByRole("button", { name: "Sil" }).click();
-    await expect.poll(() => captured.tenantDeletes).toEqual([
-      { authorization: "Bearer system-tenant-access-token", id: "tenant-created-invited" },
-    ]);
+    await expect(page.getByRole("row", { name: /Davetli Kurum/ }).getByRole("button", { name: "Sil" })).toHaveCount(0);
     await expect(page.getByLabel("İlk admin aktivasyon tokenı")).toHaveCount(0);
     expect(captured.forbiddenTenantScopedPaths).toEqual([]);
   });
 
-  test("ilk admin e-postası çakışmasını açık gösterir", async ({ page }) => {
+  test("ilk kurum sahibi e-postası çakışmasını açık gösterir", async ({ page }) => {
     const captured = createCapturedSystemRequests();
     await openWithSystemTenantMocks(page, captured, "/sistem/kurumlar");
 
@@ -104,10 +107,13 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     const createDialog = page.getByRole("dialog", { name: "Kurum oluştur" });
     await createDialog.getByLabel("Kurum adı").fill("Demo Kurum");
     await createDialog.getByLabel("Kurum kodu").fill("demo");
-    await createDialog.getByLabel("İlk yönetici ad soyad").fill("Demo Yönetici");
-    await createDialog.getByLabel("İlk yönetici e-posta").fill("used.admin@example.test");
-    await createDialog.getByLabel("İlk yönetici TC kimlik no").fill("10000001372");
-    await createDialog.getByLabel("İlk yönetici telefon").fill("5551234567");
+    await createDialog.getByLabel("Lisans başlangıç").fill("2026-08-01");
+    await createDialog.getByLabel("Lisans bitiş").fill("2027-08-01");
+    await createDialog.getByLabel("Aktif öğrenci limiti").fill("100");
+    await createDialog.getByLabel("Sözleşme referansı").fill("SOZ-002");
+    await createDialog.getByLabel("İlk kampüs adı").fill("Demo Kampüs");
+    await createDialog.getByLabel("İlk kurum sahibi ad soyad").fill("Demo Yönetici");
+    await createDialog.getByLabel("İlk kurum sahibi e-posta").fill("used.admin@example.test");
     await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
 
     await expect(createDialog.getByText("Bu admin e-postası zaten kullanımda. Farklı bir e-posta gir.")).toBeVisible();
@@ -115,7 +121,30 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     expect(captured.forbiddenTenantScopedPaths).toEqual([]);
   });
 
-  test("geçersiz ilk admin TC ve telefonu API'ye göndermeden gösterir", async ({ page }) => {
+  test("kurum düzenleme yalnız strict PATCH alanlarını gönderir", async ({ page }) => {
+    const captured = createCapturedSystemRequests();
+    await openWithSystemTenantMocks(page, captured, "/sistem/kurumlar/tenant-faz9");
+
+    await page.getByRole("tab", { name: "Kurum yönetimi" }).click();
+    await page.getByRole("button", { name: "Düzenle" }).click();
+    const dialog = page.getByRole("dialog", { name: "Kurum düzenle" });
+    await dialog.getByLabel("Kurum adı").fill("Güncel Faz 9 Akademi");
+    await dialog.getByLabel("Durum").selectOption("SUSPENDED");
+    await dialog.getByRole("button", { name: "Kaydet", exact: true }).click();
+
+    await expect.poll(() => captured.tenantUpdates).toEqual([{
+      authorization: "Bearer system-tenant-access-token",
+      body: {
+        name: "Güncel Faz 9 Akademi",
+        slug: "faz9-akademi",
+        status: "SUSPENDED",
+      },
+      id: "tenant-faz9",
+    }]);
+    await expect(dialog).toBeHidden();
+  });
+
+  test("geçersiz ilk kurum sahibi TC kimliğini API'ye göndermeden gösterir", async ({ page }) => {
     const captured = createCapturedSystemRequests();
     await openWithSystemTenantMocks(page, captured, "/sistem/kurumlar");
 
@@ -123,20 +152,22 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     const createDialog = page.getByRole("dialog", { name: "Kurum oluştur" });
     await createDialog.getByLabel("Kurum adı").fill("Geçersiz Admin Kurumu");
     await createDialog.getByLabel("Kurum kodu").fill("gecersiz-admin-kurumu");
-    await createDialog.getByLabel("İlk yönetici ad soyad").fill("Geçersiz Yönetici");
-    await createDialog.getByLabel("İlk yönetici e-posta").fill("invalid-admin@example.test");
-    await createDialog.getByLabel("İlk yönetici TC kimlik no").fill("1111111111");
-    await createDialog.getByLabel("İlk yönetici telefon").fill("2121234567");
+    await createDialog.getByLabel("Lisans başlangıç").fill("2026-08-01");
+    await createDialog.getByLabel("Lisans bitiş").fill("2027-08-01");
+    await createDialog.getByLabel("Aktif öğrenci limiti").fill("100");
+    await createDialog.getByLabel("Sözleşme referansı").fill("SOZ-003");
+    await createDialog.getByLabel("İlk kampüs adı").fill("Geçersiz Kampüs");
+    await createDialog.getByLabel("İlk kurum sahibi ad soyad").fill("Geçersiz Yönetici");
+    await createDialog.getByLabel("İlk kurum sahibi e-posta").fill("invalid-admin@example.test");
+    await createDialog.getByLabel("Kurum sahibi TC kimlik no").fill("1111111111");
     await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
 
     await expect(createDialog.getByText("TC Kimlik No 11 rakam olmalıdır.")).toBeVisible();
     await expect.poll(() => captured.tenantCreates).toHaveLength(0);
 
-    await createDialog.getByLabel("İlk yönetici TC kimlik no").fill("11111111111");
+    await createDialog.getByLabel("Kurum sahibi TC kimlik no").fill("10000001372");
     await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
-
-    await expect(createDialog.getByText("Telefon geçerli bir Türkiye cep telefonu olmalıdır.")).toBeVisible();
-    await expect.poll(() => captured.tenantCreates).toHaveLength(0);
+    await expect.poll(() => captured.tenantCreates).toHaveLength(1);
     expect(captured.forbiddenTenantScopedPaths).toEqual([]);
   });
 
@@ -191,8 +222,8 @@ function createCapturedSystemRequests(): CapturedSystemRequests {
   return {
     forbiddenTenantScopedPaths: [],
     tenantCreates: [],
-    tenantDeletes: [],
     tenantLists: [],
+    tenantUpdates: [],
   };
 }
 
@@ -231,48 +262,50 @@ async function installSystemTenantApiMocks(page: Page, captured: CapturedSystemR
         authorization: route.request().headers().authorization,
         body,
       });
-      if (body.firstAdmin.email === "used.admin@example.test") {
+      if (body.firstOwner.email === "used.admin@example.test") {
         await fulfillError(route, "TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS", 422);
         return;
       }
       const tenant = {
         activeSeatCount: 1,
         id: "tenant-created-invited",
-        licenseEndsAt: body.licenseEndsAt || undefined,
-        licenseStartsAt: body.licenseStartsAt || undefined,
+        licenseEndsAt: body.licenseTerm.endsAt,
+        licenseStartsAt: body.licenseTerm.startsAt,
         name: body.name,
-        plan: body.plan,
-        seatLimit: body.seatLimit ? Number(body.seatLimit) : undefined,
+        plan: body.licenseTerm.planCode,
+        seatLimit: body.licenseTerm.activeStudentLimit,
         slug: body.slug,
         status: body.status,
       };
       tenants = [tenant, ...tenants];
       await fulfillData(route, {
         admin: {
-          email: String(body.firstAdmin.email).toLowerCase(),
+          email: String(body.firstOwner.email).toLowerCase(),
           id: "tenant-created-admin",
-          name: body.firstAdmin.name,
-          roles: ["TENANT_ADMIN"],
+          name: body.firstOwner.name,
+          roles: ["TENANT_OWNER"],
           tenantId: tenant.id,
         },
         tenant,
       });
       return;
     }
-    if (pathName.startsWith("/tenants/") && method === "DELETE") {
-      const id = decodeURIComponent(pathName.replace("/tenants/", ""));
-      captured.tenantDeletes.push({
-        authorization: route.request().headers().authorization,
-        id,
-      });
-      const deleted = tenants.find((tenant) => tenant.id === id) ?? tenants[0];
-      tenants = tenants.filter((tenant) => tenant.id !== id);
-      await fulfillData(route, { ...deleted, status: "DELETED" });
-      return;
-    }
     if (pathName.startsWith("/tenants/") && method === "GET") {
       const id = decodeURIComponent(pathName.replace("/tenants/", ""));
       await fulfillData(route, tenants.find((tenant) => tenant.id === id) ?? null);
+      return;
+    }
+    if (pathName.startsWith("/tenants/") && method === "PATCH") {
+      const id = decodeURIComponent(pathName.replace("/tenants/", ""));
+      const body = route.request().postDataJSON() as Partial<SystemTenantFixture>;
+      captured.tenantUpdates.push({
+        authorization: route.request().headers().authorization,
+        body,
+        id,
+      });
+      const tenant = tenants.find((item) => item.id === id);
+      if (tenant) Object.assign(tenant, body);
+      await fulfillData(route, tenant ?? null);
       return;
     }
 
