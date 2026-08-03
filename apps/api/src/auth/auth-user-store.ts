@@ -10,6 +10,7 @@ import {
   type CanonicalMembershipProjection,
   type CanonicalStaffRole,
 } from "./tenant-membership-projection.js";
+import type { PasswordResetTransaction } from "./password-reset-store.js";
 
 export interface AuthUser {
   id: string;
@@ -43,6 +44,7 @@ export interface AuthUserStore {
   listByTenant(tenantId: string): Promise<AuthUser[]>;
   createOrAttachTenantIdentity(input: CreateTenantIdentityUserInput): Promise<AuthUser>;
   updatePassword(id: string, passwordHash: string, input?: PasswordStateUpdate): Promise<AuthUser | undefined>;
+  updatePasswordForReset(id: string, passwordHash: string, input: PasswordStateUpdate, transaction: PasswordResetTransaction): Promise<boolean>;
   rehashPassword(tenantId: string, id: string, currentPasswordHash: string, passwordHash: string): Promise<boolean>;
   enableTotp(input: {
     userId: string;
@@ -350,6 +352,19 @@ export class InMemoryAuthUserStore implements AuthUserStore {
     user.passwordChangedAt = input.passwordChangedAt ?? user.passwordChangedAt;
     user.membershipVersion += 1;
     return cloneUser(user);
+  }
+
+  async updatePasswordForReset(id: string, passwordHash: string, input: PasswordStateUpdate, transaction: PasswordResetTransaction): Promise<boolean> {
+    const user = this.users.find((candidate) => candidate.id === id);
+    if (!user || transaction.kind !== "memory") return false;
+
+    transaction.stage(() => {
+      user.passwordHash = passwordHash;
+      user.mustChangePassword = input.mustChangePassword ?? user.mustChangePassword;
+      user.passwordChangedAt = input.passwordChangedAt ?? user.passwordChangedAt;
+      user.membershipVersion += 1;
+    });
+    return true;
   }
 
   async rehashPassword(tenantId: string, id: string, currentPasswordHash: string, passwordHash: string): Promise<boolean> {
@@ -729,6 +744,17 @@ export class PostgresAuthUserStore implements AuthUserStore {
       return Boolean(update.rows[0]);
     });
     return updated ? this.findById(id) : undefined;
+  }
+
+  async updatePasswordForReset(id: string, passwordHash: string, input: PasswordStateUpdate, transaction: PasswordResetTransaction): Promise<boolean> {
+    if (transaction.kind !== "postgres") return false;
+    return transaction.updateUserPassword({
+      userId: id,
+      passwordHash,
+      passwordHashVersion: passwordHashVersionOf(passwordHash),
+      mustChangePassword: input.mustChangePassword,
+      passwordChangedAt: input.passwordChangedAt,
+    });
   }
 
   async rehashPassword(tenantId: string, id: string, currentPasswordHash: string, passwordHash: string): Promise<boolean> {

@@ -17,6 +17,10 @@ const platformIdempotencyMigration = readFileSync(
   new URL("../prisma/migrations/20260801220000_add_platform_idempotency_key/migration.sql", import.meta.url),
   "utf8",
 );
+const platformIdempotencyGrantMigration = readFileSync(
+  new URL("../prisma/migrations/20260803233000_grant_platform_idempotency_key_app/migration.sql", import.meta.url),
+  "utf8",
+);
 const accountManagementListIndexesMigration = readFileSync(
   new URL("../prisma/migrations/20260801230000_add_account_management_list_indexes/migration.sql", import.meta.url),
   "utf8",
@@ -43,6 +47,14 @@ for (const token of [
   `FOREIGN KEY ("platformAccountId") REFERENCES "PlatformAccount"("id") ON DELETE CASCADE`,
 ]) {
   requireToken(platformIdempotencyMigration, token, token);
+}
+requireToken(
+  platformIdempotencyGrantMigration,
+  `GRANT SELECT, INSERT, UPDATE ON "PlatformIdempotencyKey" TO app;`,
+  "PlatformIdempotencyKey app runtime grant",
+);
+if (/GRANT\s+SELECT,\s*INSERT,\s*UPDATE,\s*DELETE\s+ON\s+"PlatformIdempotencyKey"\s+TO\s+app;/.test(platformIdempotencyGrantMigration)) {
+  failures.push("PlatformIdempotencyKey app rolüne DELETE verilmemeli.");
 }
 
 for (const table of tenantModels) {

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { SecretDeliveryOutboxInput } from "@o-okul/db";
 import { resolvePersistenceDriver } from "../config/persistence.js";
+import type { Queryable } from "../db/tenant-query.js";
 import pg from "pg";
 
 export type PasswordResetStatus = "PENDING" | "USED" | "REVOKED";
@@ -21,8 +22,27 @@ export interface PasswordResetStore {
   findPendingForUser(userId: string): Promise<PasswordResetRecord | undefined>;
   issue(input: PasswordResetIssueInput): Promise<PasswordResetRecord | undefined>;
   markUsed(id: string, usedAt: string): Promise<PasswordResetRecord | undefined>;
+  confirm<T>(
+    id: string,
+    usedAt: string,
+    operation: (transaction: PasswordResetTransaction) => Promise<T>,
+  ): Promise<T | undefined>;
   revokePendingForUser(userId: string): Promise<void>;
 }
+
+export type PasswordResetTransaction =
+  | { kind: "memory"; stage(operation: () => void): void }
+  | {
+      kind: "postgres";
+      updateUserPassword(input: {
+        userId: string;
+        passwordHash: string;
+        passwordHashVersion: number;
+        mustChangePassword?: boolean;
+        passwordChangedAt?: string;
+      }): Promise<boolean>;
+      revokeUserSessions(userId: string): Promise<void>;
+    };
 
 export interface PasswordResetIssueInput {
   userId: string;
@@ -36,6 +56,7 @@ export const passwordResetStoreToken = Symbol("PasswordResetStore");
 
 export class InMemoryPasswordResetStore implements PasswordResetStore {
   private readonly records: PasswordResetRecord[] = [];
+  private readonly confirming = new Set<string>();
 
   async issue(input: PasswordResetIssueInput): Promise<PasswordResetRecord | undefined> {
     const pending = this.records.find((record) => record.userId === input.userId && record.status === "PENDING");
@@ -69,6 +90,10 @@ export class InMemoryPasswordResetStore implements PasswordResetStore {
   }
 
   async markUsed(id: string, usedAt: string): Promise<PasswordResetRecord | undefined> {
+    return this.markUsedNow(id, usedAt);
+  }
+
+  private markUsedNow(id: string, usedAt: string): PasswordResetRecord | undefined {
     const record = this.records.find((candidate) => candidate.id === id);
     if (!record || record.status !== "PENDING") return undefined;
 
@@ -77,6 +102,28 @@ export class InMemoryPasswordResetStore implements PasswordResetStore {
     record.updatedAt = usedAt;
     this.revokePending(record.userId, usedAt);
     return { ...record };
+  }
+
+  async confirm<T>(
+    id: string,
+    usedAt: string,
+    operation: (transaction: PasswordResetTransaction) => Promise<T>,
+  ): Promise<T | undefined> {
+    const record = this.records.find((candidate) => candidate.id === id);
+    if (!record || record.status !== "PENDING" || Date.parse(record.expiresAt) <= Date.parse(usedAt) || this.confirming.has(id)) {
+      return undefined;
+    }
+
+    this.confirming.add(id);
+    const staged: Array<() => void> = [];
+    try {
+      const result = await operation({ kind: "memory", stage: (change) => staged.push(change) });
+      if (record.status !== "PENDING") return undefined;
+      for (const change of staged) change();
+      return this.markUsedNow(id, usedAt) ? result : undefined;
+    } finally {
+      this.confirming.delete(id);
+    }
   }
 
   async revokePendingForUser(userId: string): Promise<void> {
@@ -145,30 +192,55 @@ export class PostgresPasswordResetStore implements PasswordResetStore {
 
   async markUsed(id: string, usedAt: string): Promise<PasswordResetRecord | undefined> {
     return this.withClient(async (client) => {
-      const owner = await client.query<{ userId: string }>(
-        `SELECT "userId" FROM "PasswordResetToken" WHERE "id" = $1 LIMIT 1`,
-        [id],
-      );
-      const userId = owner.rows[0]?.userId;
-      if (!userId) return undefined;
-      await lockPasswordResetUser(client, userId);
-      const result = await client.query<PasswordResetRow>(
-        `WITH updated AS (
-           UPDATE "PasswordResetToken"
-           SET "status" = 'USED',
-               "usedAt" = $2,
-               "updatedAt" = now()
-           WHERE "id" = $1
-             AND "status" = 'PENDING'
-           RETURNING *
-         )
-         ${passwordResetSelect("updated")}`,
-        [id, usedAt],
-      );
-      if (!result.rows[0]) return undefined;
-      const siblingIds = await revokePendingForUser(client, userId, id);
-      await clearPasswordResetDeliveries(client, [id, ...siblingIds], usedAt);
-      return toPasswordResetRecord(result.rows[0]);
+      return markPasswordResetUsed(client, id, usedAt);
+    });
+  }
+
+  async confirm<T>(
+    id: string,
+    usedAt: string,
+    operation: (transaction: PasswordResetTransaction) => Promise<T>,
+  ): Promise<T | undefined> {
+    return this.withClient(async (client) => {
+      const consumed = await markPasswordResetUsed(client, id, usedAt);
+      if (!consumed) return undefined;
+      return operation({
+        kind: "postgres",
+        async updateUserPassword(input) {
+          const updated = await client.query(
+            `UPDATE "User"
+             SET "passwordHash" = $2,
+                 "passwordHashVersion" = $5,
+                 "accountStatus" = CASE
+                   WHEN "accountStatus" = 'PENDING_ACTIVATION' THEN 'ACTIVE'
+                   ELSE "accountStatus"
+                 END,
+                 "mustChangePassword" = COALESCE($3, "mustChangePassword"),
+                 "passwordChangedAt" = COALESCE($4::timestamptz, "passwordChangedAt"),
+                 "membershipVersion" = "membershipVersion" + 1,
+                 "updatedAt" = now()
+             WHERE "id" = $1
+             RETURNING "id"`,
+            [
+              input.userId,
+              input.passwordHash,
+              input.mustChangePassword ?? null,
+              input.passwordChangedAt ?? null,
+              input.passwordHashVersion,
+            ],
+          );
+          return Boolean(updated.rows[0]);
+        },
+        async revokeUserSessions(userId) {
+          await client.query(
+            `UPDATE "AuthSession"
+             SET "status" = 'REVOKED',
+                 "updatedAt" = now()
+             WHERE "userId" = $1`,
+            [userId],
+          );
+        },
+      });
     });
   }
 
@@ -184,6 +256,7 @@ export class PostgresPasswordResetStore implements PasswordResetStore {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      await client.query("SELECT set_config('app.bypass_rls', 'true', true)");
       const result = await callback(client);
       await client.query("COMMIT");
       return result;
@@ -194,6 +267,38 @@ export class PostgresPasswordResetStore implements PasswordResetStore {
       client.release();
     }
   }
+}
+
+async function markPasswordResetUsed(
+  client: Queryable,
+  id: string,
+  usedAt: string,
+): Promise<PasswordResetRecord | undefined> {
+  const owner = await client.query<{ userId: string }>(
+    `SELECT "userId" FROM "PasswordResetToken" WHERE "id" = $1 LIMIT 1`,
+    [id],
+  );
+  const userId = owner.rows[0]?.userId;
+  if (!userId) return undefined;
+  await lockPasswordResetUser(client, userId);
+  const result = await client.query<PasswordResetRow>(
+    `WITH updated AS (
+       UPDATE "PasswordResetToken"
+       SET "status" = 'USED',
+           "usedAt" = $2,
+           "updatedAt" = now()
+       WHERE "id" = $1
+         AND "status" = 'PENDING'
+         AND "expiresAt" > $2::timestamptz
+       RETURNING *
+     )
+     ${passwordResetSelect("updated")}`,
+    [id, usedAt],
+  );
+  if (!result.rows[0]) return undefined;
+  const siblingIds = await revokePendingForUser(client, userId, id);
+  await clearPasswordResetDeliveries(client, [id, ...siblingIds], usedAt);
+  return toPasswordResetRecord(result.rows[0]);
 }
 
 async function insertPasswordReset(client: pg.PoolClient, input: PasswordResetIssueInput): Promise<PasswordResetRecord> {
@@ -216,14 +321,14 @@ async function insertPasswordReset(client: pg.PoolClient, input: PasswordResetIs
   return record;
 }
 
-async function lockPasswordResetUser(client: pg.PoolClient, userId: string): Promise<void> {
+async function lockPasswordResetUser(client: Queryable, userId: string): Promise<void> {
   await client.query(
     `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
     [userId],
   );
 }
 
-async function revokePendingForUser(client: pg.PoolClient, userId: string, exceptId?: string): Promise<string[]> {
+async function revokePendingForUser(client: Queryable, userId: string, exceptId?: string): Promise<string[]> {
   const result = await client.query<{ id: string }>(
     `UPDATE "PasswordResetToken"
      SET "status" = 'REVOKED',
@@ -237,13 +342,14 @@ async function revokePendingForUser(client: pg.PoolClient, userId: string, excep
   return result.rows.map((row) => row.id);
 }
 
-async function clearPasswordResetDeliveries(client: pg.PoolClient, sourceIds: string[], now: string): Promise<void> {
+async function clearPasswordResetDeliveries(client: Queryable, sourceIds: string[], now: string): Promise<void> {
   if (sourceIds.length === 0) return;
   await client.query(
     `UPDATE "SecretDeliveryOutbox"
      SET "status" = 'EXPIRED',
          "payloadEncrypted" = NULL,
          "claimedAt" = NULL,
+         "claimToken" = NULL,
          "lastErrorCode" = NULL,
          "updatedAt" = $2
      WHERE "purpose" = 'PASSWORD_RESET'

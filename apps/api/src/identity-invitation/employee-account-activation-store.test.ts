@@ -73,6 +73,32 @@ describe("PostgresEmployeeAccountActivationStore", () => {
     expect(queries.some(({ sql }) => sql.includes('UPDATE "Employee"'))).toBe(false);
     expect(queries.at(-1)?.sql).toBe("COMMIT");
   });
+
+  it("mevcut kampüs kapsamlı hesabı aktivasyonda TENANT kapsamına yükseltmez", async () => {
+    const queries: RecordedQuery[] = [];
+    const store = new PostgresEmployeeAccountActivationStore(createPool(queries, {
+      existingUserId: "teacher-user-a",
+      memberships: [{
+        id: "membership-existing",
+        role: "TEACHER",
+        staffRole: null,
+        hasTeacherPersona: true,
+        hasStudentPersona: false,
+        version: 3,
+        scopeMode: "CAMPUSES",
+        campusIds: ["campus-main"],
+      }],
+    }));
+
+    await expect(store.accept(acceptInput())).resolves.toMatchObject({ status: "ACCEPTED" });
+
+    const membershipInserts = queries.filter(({ sql }) => sql.includes('INSERT INTO "TenantMembership"'));
+    expect(membershipInserts).toHaveLength(2);
+    expect(membershipInserts.every(({ values }) => values?.[7] === "CAMPUSES")).toBe(true);
+    const campusScopeInserts = queries.filter(({ sql }) => sql.includes('INSERT INTO "MembershipCampusScope"'));
+    expect(campusScopeInserts).toHaveLength(2);
+    expect(campusScopeInserts.every(({ values }) => values?.[3] === "campus-main")).toBe(true);
+  });
 });
 
 function acceptInput() {
@@ -164,8 +190,12 @@ interface RecordedQuery {
 }
 
 interface MembershipRow {
+  id?: string;
   role: string;
+  staffRole?: string | null;
   hasTeacherPersona: boolean;
   hasStudentPersona: boolean;
   version: number;
+  scopeMode?: string;
+  campusIds?: string[];
 }

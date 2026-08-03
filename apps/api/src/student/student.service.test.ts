@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
 import { InMemoryGuardianStudentStore } from "../school/guardian-student-store.js";
 import { InMemoryGuardianStore } from "../school/guardian-store.js";
+import { InMemoryClassStore } from "../school/class-store.js";
 import { InMemoryStudentStore, type StudentStore } from "./student-store.js";
 import { InMemoryStudentEnrollmentStore } from "./student-enrollment-store.js";
 import { StudentService } from "./student.service.js";
@@ -280,11 +281,110 @@ describe("StudentService", () => {
       }),
     }));
   });
+
+  it("kampüs kapsamlı operasyon çalışanına yalnız izinli kampüs öğrencilerini gösterir", async () => {
+    const setup = createService();
+    const secondaryClass = await setup.classStore.create({
+      tenantId: "tenant-a",
+      name: "8-B",
+      campusId: "campus-secondary",
+    });
+    const secondaryStudent = await setup.studentStore.create({
+      tenantId: "tenant-a",
+      firstName: "Bora",
+      lastName: "B",
+      classId: secondaryClass.id,
+      status: "ACTIVE",
+    });
+
+    await expect(setup.service.list(campusOperationsContext)).resolves.toEqual([
+      expect.objectContaining({ id: "student-a", classId: "class-a" }),
+    ]);
+    await expect(setup.service.findOneForViewer(campusOperationsContext, "student-a"))
+      .resolves.toMatchObject({ id: "student-a", classId: "class-a" });
+    await expect(setup.service.findOne(campusOperationsContext, secondaryStudent.id))
+      .rejects.toThrow("STUDENT_CAMPUS_SCOPE_FORBIDDEN");
+    await expect(setup.service.update(campusOperationsContext, secondaryStudent.id, { firstName: "Yetkisiz" }))
+      .rejects.toThrow("STUDENT_CAMPUS_SCOPE_FORBIDDEN");
+    await expect(setup.service.list(adminContext)).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "student-a" }),
+      expect.objectContaining({ id: secondaryStudent.id }),
+    ]));
+  });
+
+  it("kampüs kapsamlı operasyon çalışanının kapsam dışı veya sınıfsız öğrenci oluşturmasını reddeder", async () => {
+    const setup = createService();
+    const secondaryClass = await setup.classStore.create({
+      tenantId: "tenant-a",
+      name: "8-B",
+      campusId: "campus-secondary",
+    });
+
+    await expect(setup.service.create(campusOperationsContext, {
+      firstName: "Kapsam",
+      lastName: "Dışı",
+      classId: secondaryClass.id,
+    })).rejects.toThrow("STUDENT_CAMPUS_SCOPE_FORBIDDEN");
+    await expect(setup.service.create(campusOperationsContext, {
+      firstName: "Sınıfsız",
+      lastName: "Kayıt",
+    })).rejects.toThrow("STUDENT_CAMPUS_SCOPE_FORBIDDEN");
+  });
+
+  it("operasyon çalışanında kampüs scope yoksa fail-closed davranır", async () => {
+    const setup = createService();
+
+    await expect(setup.service.list({
+      ...campusOperationsContext,
+      campusScope: undefined,
+    })).rejects.toThrow("STUDENT_CAMPUS_SCOPE_MISSING");
+  });
+
+  it("öğrenci ve veli subject context'i tenant-genel öğrenci listesini alamaz", async () => {
+    const setup = createService();
+
+    await expect(setup.service.list({
+      ...adminContext,
+      roles: ["STUDENT"],
+      subjectType: "STUDENT",
+      subjectId: "student-a",
+    })).rejects.toThrow("STUDENT_LIST_SCOPE_FORBIDDEN");
+    await expect(setup.service.list({
+      ...adminContext,
+      roles: ["GUARDIAN"],
+      subjectType: "GUARDIAN",
+      subjectId: "guardian-a",
+    })).rejects.toThrow("STUDENT_LIST_SCOPE_FORBIDDEN");
+  });
+
+  it("portal erişim listesini izinli kampüs öğrenci kimlikleriyle sınırlar", async () => {
+    const setup = createService();
+    const secondaryClass = await setup.classStore.create({
+      tenantId: "tenant-a",
+      name: "8-B",
+      campusId: "campus-secondary",
+    });
+    await setup.studentStore.create({
+      tenantId: "tenant-a",
+      firstName: "Bora",
+      lastName: "B",
+      classId: secondaryClass.id,
+      status: "ACTIVE",
+    });
+
+    await expect(setup.service.listPortalAccess(campusOperationsContext, {
+      direction: "next",
+      limit: 20,
+    })).resolves.toEqual([
+      expect.objectContaining({ studentId: "student-a" }),
+    ]);
+  });
 });
 
 function createService(options: { failReportSnapshotPurge?: boolean; activeStudentLimit?: number } = {}) {
   const studentStore = new InMemoryStudentStore();
   const enrollmentStore = new InMemoryStudentEnrollmentStore();
+  const classStore = new InMemoryClassStore();
   const guardianStudentStore = new InMemoryGuardianStudentStore();
   const guardianStore = new InMemoryGuardianStore();
   const invitations: unknown[] = [];
@@ -357,7 +457,7 @@ function createService(options: { failReportSnapshotPurge?: boolean; activeStude
       enrollmentStore,
       { listYears: async () => [], listTerms: async () => [] } as never,
       {} as never,
-      {} as never,
+      classStore,
       {} as never,
       {} as never,
       identityInvitations as never,
@@ -376,6 +476,7 @@ function createService(options: { failReportSnapshotPurge?: boolean; activeStude
     lifecycleCalls,
     studentStore,
     enrollmentStore,
+    classStore,
   };
 }
 
@@ -384,5 +485,14 @@ const adminContext: RequestContext = {
   tenantId: "tenant-a",
   roles: ["TENANT_ADMIN"],
   capabilities: ["student:*"],
+  bypassRls: false,
+};
+
+const campusOperationsContext: RequestContext = {
+  userId: "user-operations-a",
+  tenantId: "tenant-a",
+  roles: ["OPERATIONS_STAFF"],
+  capabilities: ["student:*"],
+  campusScope: { scopeMode: "CAMPUSES", campusIds: ["campus-main"] },
   bypassRls: false,
 };

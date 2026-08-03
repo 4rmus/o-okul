@@ -16,7 +16,7 @@ export interface LicenseTermWindow {
 }
 
 const dayInMilliseconds = 24 * 60 * 60 * 1_000;
-const readOnlyDays = 15;
+const readOnlyDays = 14;
 const expiryDays = 91;
 
 export function resolveLicenseState(term: LicenseTermWindow, at = new Date()): LicenseState {

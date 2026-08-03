@@ -53,7 +53,18 @@ describe("role capabilities", () => {
     const context = { roles: ["TEACHER"], capabilities: capabilitiesForRoles(["TEACHER"]) };
 
     expect(hasCapability(context, "academic:manage")).toBe(false);
+    expect(hasCapability(context, "student:list")).toBe(true);
+    expect(hasCapability(context, "student:read")).toBe(true);
     expect(hasCapability(context, "student:manage")).toBe(false);
     expect(hasCapability(context, "finance:manage")).toBe(false);
+  });
+
+  it("öğrenci ve veli yalnız scope kontrollü öğrenci okuma capability'sini alır", () => {
+    expect(hasCapability({ roles: ["STUDENT"] }, "student:read")).toBe(true);
+    expect(hasCapability({ roles: ["GUARDIAN"] }, "student:read")).toBe(true);
+    expect(hasCapability({ roles: ["STUDENT"] }, "student:list")).toBe(false);
+    expect(hasCapability({ roles: ["GUARDIAN"] }, "student:list")).toBe(false);
+    expect(hasCapability({ roles: ["STUDENT"] }, "student:manage")).toBe(false);
+    expect(hasCapability({ roles: ["GUARDIAN"] }, "student:manage")).toBe(false);
   });
 });

@@ -136,9 +136,8 @@ export function SessionsPage() {
   }
 
   async function leaveApplication() {
-    const loginPath = auth?.session.roles.includes("SYSTEM_ADMIN") ? "/sistem-giris" : "/giris";
     await logout();
-    router.replace(loginPath);
+    router.replace("/login");
   }
 
   return (

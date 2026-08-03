@@ -111,11 +111,35 @@ export class PostgresProfileLifecycleStore implements ProfileLifecycleStore {
         return { roleRemoved: false, sessionsClosed: true, invitationsRevoked };
       }
 
-      const membership = await client.query(
-        `DELETE FROM "TenantMembership"
-         WHERE "tenantId" = $1 AND "userId" = $2 AND "role" = $3`,
-        [input.tenantId, row.userId, input.subjectType],
-      );
+      let rolesRemoved = 0;
+      if (input.subjectType === "TEACHER") {
+        const canonical = await client.query<{ id: string }>(
+          `UPDATE "TenantMembership"
+           SET "hasTeacherPersona" = false,
+               "version" = "version" + 1,
+               "updatedAt" = now()
+           WHERE "tenantId" = $1
+             AND "userId" = $2
+             AND "hasTeacherPersona" = true
+           RETURNING "id"`,
+          [input.tenantId, row.userId],
+        );
+        const legacy = await client.query<{ id: string }>(
+          `DELETE FROM "TenantMembership"
+           WHERE "tenantId" = $1 AND "userId" = $2 AND "role" = 'TEACHER'
+           RETURNING "id"`,
+          [input.tenantId, row.userId],
+        );
+        rolesRemoved = canonical.rows.length + legacy.rows.length;
+      } else {
+        const membership = await client.query<{ id: string }>(
+          `DELETE FROM "TenantMembership"
+           WHERE "tenantId" = $1 AND "userId" = $2 AND "role" = $3
+           RETURNING "id"`,
+          [input.tenantId, row.userId, input.subjectType],
+        );
+        rolesRemoved = membership.rows.length;
+      }
       await client.query(
         `UPDATE "User"
          SET "membershipVersion" = "membershipVersion" + 1,
@@ -144,7 +168,7 @@ export class PostgresProfileLifecycleStore implements ProfileLifecycleStore {
 
       return {
         userId: row.userId,
-        roleRemoved: Boolean(membership.rowCount),
+        roleRemoved: rolesRemoved > 0,
         sessionsClosed: true,
         invitationsRevoked,
       };
@@ -170,6 +194,7 @@ async function revokeInvitations(client: Queryable, input: DeactivateProfileInpu
        SET "status" = 'EXPIRED',
            "payloadEncrypted" = NULL,
            "claimedAt" = NULL,
+           "claimToken" = NULL,
            "lastErrorCode" = NULL,
            "updatedAt" = now()
        WHERE "purpose" = 'IDENTITY_INVITATION'

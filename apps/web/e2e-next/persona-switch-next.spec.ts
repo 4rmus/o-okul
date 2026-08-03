@@ -102,11 +102,9 @@ test("çift personalı çalışan staff ve teacher çalışma alanları arasınd
   await page.locator('input[name="password"]').fill("password");
   await page.getByRole("button", { name: "Giriş yap" }).click();
   await expect(page).toHaveURL(/\/kurum$/u);
-  await page.waitForTimeout(1_000);
-  expect(pageErrors).toEqual([]);
-  await expect(page.locator('header[aria-label="Üst gezinme"]')).toBeVisible({ timeout: 5_000 });
-
   const topBar = page.locator('header[aria-label="Üst gezinme"]');
+  await expect(topBar).toBeVisible({ timeout: 5_000 });
+  expect(pageErrors).toEqual([]);
   await topBar.getByRole("button", { name: "Öğretmen alanına geç" }).click();
   await expect(page).toHaveURL(/\/ogretmen$/u);
   expect(switchRequest).toEqual({

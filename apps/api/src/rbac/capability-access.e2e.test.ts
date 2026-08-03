@@ -35,6 +35,9 @@ describe("Capability access matrix", () => {
   let financeToken: string;
   let financeTenantScopeToken: string;
   let financeWithoutScopeToken: string;
+  let studentToken: string;
+  let guardianToken: string;
+  let systemToken: string;
   let inScopePaymentPlanId: string;
   let outOfScopePaymentPlanId: string;
   let answerKeys: FakeAnswerKeyRepository;
@@ -152,6 +155,9 @@ describe("Capability access matrix", () => {
     financeToken = await login("finance-rbac@example.test");
     financeTenantScopeToken = await login("finance-tenant-scope@example.test");
     financeWithoutScopeToken = await login("finance-no-scope@example.test");
+    studentToken = await login("student-a@example.test");
+    guardianToken = await login("guardian-a@example.test");
+    systemToken = await login("system@example.test");
   });
 
   afterAll(async () => {
@@ -192,6 +198,34 @@ describe("Capability access matrix", () => {
       .expect(({ body }) => {
         expect(body).toEqual([expect.objectContaining({ id: inScopePaymentPlanId, campusId: "campus-main" })]);
       });
+  });
+
+  it("öğrenci ve veli tenant-genel öğrenci listesi ile export alamaz", async () => {
+    for (const token of [studentToken, guardianToken]) {
+      await request(server)
+        .get("/students")
+        .set("Authorization", `Bearer ${token}`)
+        .expect(403);
+      await request(server)
+        .get("/students/export")
+        .set("Authorization", `Bearer ${token}`)
+        .expect(403);
+    }
+  });
+
+  it("öğrenci tenant taşımasını tenant admin ve break-glass sistem admin için fail-closed tutar", async () => {
+    await request(server)
+      .patch("/students/student-a/tenant")
+      .set("Authorization", `Bearer ${tenantAdminToken}`)
+      .send({ tenantId: "tenant-a" })
+      .expect(403);
+
+    await request(server)
+      .patch("/students/student-a/tenant")
+      .set("Authorization", `Bearer ${systemToken}`)
+      .set("X-RLS-Bypass-Reason", "SEC-1234 tenant correction")
+      .send({ tenantId: "tenant-a" })
+      .expect(403);
   });
 
   it("CAMPUSES scope'lu FINANCE_STAFF yalnız seçili kampüsün plan ve tahsilatını görür ya da değiştirir", async () => {

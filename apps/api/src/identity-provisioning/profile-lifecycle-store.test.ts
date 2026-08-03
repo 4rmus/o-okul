@@ -79,7 +79,8 @@ describe("ProfileLifecycleStore", () => {
       queries.push({ sql, values });
       if (sql.includes('SELECT "userId"')) return { rows: [{ userId: "teacher-user" }] as T[] };
       if (sql.includes('UPDATE "IdentityInvitation"')) return { rows: [{ id: "invite-a" }] as T[] };
-      if (sql.includes('DELETE FROM "TenantMembership"')) return { rows: [] as T[], rowCount: 1 };
+      if (sql.includes('UPDATE "TenantMembership"')) return { rows: [{ id: "membership-staff" }] as T[], rowCount: 1 };
+      if (sql.includes('DELETE FROM "TenantMembership"')) return { rows: [{ id: "membership-teacher" }] as T[], rowCount: 1 };
       if (sql.includes('UPDATE "AuthSession"')) return { rows: [] as T[], rowCount: 2 };
       return { rows: [] as T[], rowCount: 1 };
     });
@@ -99,12 +100,18 @@ describe("ProfileLifecycleStore", () => {
     });
     expect(queries[0]?.sql).toBe("BEGIN");
     expect(queries.some(({ sql }) => sql.includes('UPDATE "Teacher"') && sql.includes('"userId" = NULL'))).toBe(true);
-    expect(queries.some(({ sql }) => sql.includes('DELETE FROM "TenantMembership"'))).toBe(true);
+    expect(queries.some(({ sql }) => (
+      sql.includes('UPDATE "TenantMembership"') &&
+      sql.includes('"hasTeacherPersona" = false') &&
+      sql.includes('"version" = "version" + 1')
+    ))).toBe(true);
+    expect(queries.some(({ sql }) => sql.includes('DELETE FROM "TenantMembership"') && sql.includes("\"role\" = 'TEACHER'"))).toBe(true);
     expect(queries.some(({ sql }) => sql.includes('"membershipVersion" = "membershipVersion" + 1'))).toBe(true);
     expect(queries.some(({ sql }) => sql.includes('UPDATE "AuthSession"'))).toBe(true);
     expect(queries.some(({ sql }) => sql.includes('UPDATE "NotificationDeviceToken"'))).toBe(true);
     expect(queries.some(({ sql }) => sql.includes('UPDATE "IdentityInvitation"'))).toBe(true);
     expect(queries.some(({ sql }) => sql.includes('UPDATE "SecretDeliveryOutbox"') && sql.includes('"payloadEncrypted" = NULL'))).toBe(true);
+    expect(queries.some(({ sql }) => sql.includes('UPDATE "SecretDeliveryOutbox"') && sql.includes('"claimToken" = NULL'))).toBe(true);
     expect(queries.at(-1)?.sql).toBe("COMMIT");
   });
 

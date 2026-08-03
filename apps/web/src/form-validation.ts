@@ -103,9 +103,13 @@ export const examParticipantFormSchema = z.object({
   bookletType: optionalText(),
 });
 
-export const tenantFormSchema = z.object({
+export const tenantUpdateFormSchema = z.object({
   name: requiredText("Kurum adı"),
   slug: requiredText("Slug"),
+  status: z.enum(["ACTIVE", "SUSPENDED", "TRIAL"]),
+});
+
+export const tenantFormSchema = tenantUpdateFormSchema.extend({
   plan: z.enum(["TRIAL", "PRO", "ENTERPRISE"]),
   licenseStartsAt: optionalDate,
   licenseEndsAt: optionalDate,
@@ -121,7 +125,6 @@ export const tenantFormSchema = z.object({
     }
     return parsed;
   }),
-  status: z.enum(["ACTIVE", "SUSPENDED", "TRIAL"]),
 }).superRefine((value, context) => {
   if (value.licenseStartsAt && value.licenseEndsAt && Date.parse(value.licenseStartsAt) >= Date.parse(value.licenseEndsAt)) {
     context.addIssue({
@@ -456,7 +459,8 @@ export type ExamWithClassFormPayload = z.output<typeof examWithClassFormSchema>;
 export type ExamParticipantFormState = z.input<typeof examParticipantFormSchema>;
 export type ExamParticipantFormPayload = z.output<typeof examParticipantFormSchema>;
 export type TenantFormState = z.input<typeof tenantFormSchema>;
-export type TenantFormPayload = z.output<typeof tenantFormSchema>;
+export type TenantUpdateFormState = z.input<typeof tenantUpdateFormSchema>;
+export type TenantFormPayload = z.output<typeof tenantUpdateFormSchema>;
 export type TenantCreateFormState = z.input<typeof tenantCreateFormSchema>;
 export type TenantCreateFormPayload = z.output<typeof tenantCreateFormSchema>;
 export type ScheduleLessonFormState = z.input<typeof scheduleLessonFormSchema>;

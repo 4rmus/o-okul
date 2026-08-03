@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import pg from "pg";
 import type { ActivePersona } from "@o-okul/shared-types";
+import type { PasswordResetTransaction } from "./password-reset-store.js";
 
 export type SessionStatus = "ACTIVE" | "REVOKED" | "COMPROMISED";
 
@@ -54,7 +55,7 @@ export interface SessionStore {
   revokeOwned(sessionId: string, userId: string, tenantId: string): Promise<boolean>;
   revokeAllOwned(userId: string, tenantId: string): Promise<number>;
   revokeByMembership(userId: string, tenantId: string, membershipVersion: number): Promise<void>;
-  revokeByUser(userId: string): Promise<void>;
+  revokeByUser(userId: string, transaction?: PasswordResetTransaction): Promise<void>;
   revokeByUserExcept(userId: string, activeSessionId: string): Promise<void>;
 }
 
@@ -186,11 +187,18 @@ export class InMemorySessionStore implements SessionStore {
     }
   }
 
-  async revokeByUser(userId: string): Promise<void> {
-    for (const [id, session] of this.sessions) {
-      if (session.userId === userId) {
-        this.sessions.set(id, { ...session, status: "REVOKED", updatedAt: new Date() });
+  async revokeByUser(userId: string, transaction?: PasswordResetTransaction): Promise<void> {
+    const revoke = () => {
+      for (const [id, session] of this.sessions) {
+        if (session.userId === userId) {
+          this.sessions.set(id, { ...session, status: "REVOKED", updatedAt: new Date() });
+        }
       }
+    };
+    if (transaction?.kind === "memory") {
+      transaction.stage(revoke);
+    } else {
+      revoke();
     }
   }
 
@@ -419,16 +427,20 @@ export class PostgresSessionStore implements SessionStore {
     });
   }
 
-  async revokeByUser(userId: string): Promise<void> {
-    await this.withClient(async (client) => {
-      await client.query(
-        `UPDATE "AuthSession"
-         SET "status" = 'REVOKED',
-             "updatedAt" = now()
-         WHERE "userId" = $1`,
-        [userId],
-      );
-    });
+  async revokeByUser(userId: string, transaction?: PasswordResetTransaction): Promise<void> {
+    if (transaction?.kind === "postgres") {
+      await transaction.revokeUserSessions(userId);
+    } else {
+      await this.withClient(async (client) => {
+        await client.query(
+          `UPDATE "AuthSession"
+           SET "status" = 'REVOKED',
+               "updatedAt" = now()
+           WHERE "userId" = $1`,
+          [userId],
+        );
+      });
+    }
   }
 
   async revokeByUserExcept(userId: string, activeSessionId: string): Promise<void> {

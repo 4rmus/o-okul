@@ -105,6 +105,7 @@ describe("PostgresIdentityInvitationStore", () => {
 
     expect(queries.some((sql) => sql.includes(`"status" = 'REVOKED'`))).toBe(true);
     expect(queries.some((sql) => sql.includes(`"payloadEncrypted" = NULL`))).toBe(true);
+    expect(queries.some((sql) => sql.includes(`"claimToken" = NULL`))).toBe(true);
     expect(queries.at(-1)).toBe("COMMIT");
   });
 });

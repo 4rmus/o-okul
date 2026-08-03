@@ -119,7 +119,14 @@ export class StudentService {
   ) {}
 
   async list(context: RequestContext): Promise<StudentRecord[]> {
-    const students = filterTenantResources(context, await this.store.list()).filter((student) => !student.deletedAt);
+    if (context.subjectType === "STUDENT" || context.subjectType === "GUARDIAN") {
+      throw new ForbiddenException("STUDENT_LIST_SCOPE_FORBIDDEN");
+    }
+    this.assertCampusScopePresent(context);
+    const students = await this.filterCampusScopedStudents(
+      context,
+      filterTenantResources(context, await this.store.list()).filter((student) => !student.deletedAt),
+    );
     if (!isTeacherSubjectContext(context)) {
       return students;
     }
@@ -131,7 +138,10 @@ export class StudentService {
   async listPortalAccess(context: RequestContext, query: StudentPortalAccessQuery): Promise<StudentPortalAccessRecord[]> {
     if (!context.tenantId || context.bypassRls) throw new BadRequestException("TENANT_CONTEXT_REQUIRED");
     try {
-      const page = await this.store.listPortalAccess(context.tenantId, query);
+      const studentIds = this.isCampusRestricted(context)
+        ? (await this.list(context)).map((student) => student.id)
+        : undefined;
+      const page = await this.store.listPortalAccess(context.tenantId, { ...query, studentIds });
       return withCursorListMeta(page.records, page.meta);
     } catch (error) {
       if (error instanceof Error && error.message === "STUDENT_PORTAL_CURSOR_INVALID") {
@@ -147,6 +157,7 @@ export class StudentService {
     input: StudentPortalAccessUpdateRequest,
   ): Promise<StudentPortalAccessUpdateResult> {
     if (!context.tenantId || context.bypassRls) throw new BadRequestException("TENANT_CONTEXT_REQUIRED");
+    await this.assertPortalManagedStudentAccess(context, id);
     let updated: StudentPortalAccessUpdateResult | undefined;
     try {
       updated = await this.store.updatePortalAccess(context.tenantId, id, input);
@@ -179,8 +190,9 @@ export class StudentService {
     return updated;
   }
 
-  issuePortalInvitation(context: RequestContext, id: string): Promise<StudentPortalInvitationIssueResponse> {
+  async issuePortalInvitation(context: RequestContext, id: string): Promise<StudentPortalInvitationIssueResponse> {
     if (!this.studentPortalActivations) throw new Error("STUDENT_PORTAL_ACTIVATION_STORE_UNAVAILABLE");
+    await this.assertPortalManagedStudentAccess(context, id);
     return this.studentPortalActivations.issue(context, id);
   }
 
@@ -220,6 +232,7 @@ export class StudentService {
     }
 
     this.assertAccess(context, student);
+    await this.assertStudentCampusScope(context, student);
     return student;
   }
 
@@ -228,10 +241,15 @@ export class StudentService {
     if (!student) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
+    await this.assertStudentCampusScope(context, student);
 
     const guardianIds = (await this.guardianStudentStore.listByStudent(student.id)).map((link) => link.guardianId);
     if (isTeacherSubjectContext(context)) {
       await this.assertTeacherAssignmentScope(context, student);
+      return toPublicStudentRecord(student);
+    }
+    if (context.roles.includes("OPERATIONS_STAFF")) {
+      this.assertAccess(context, student);
       return toPublicStudentRecord(student);
     }
 
@@ -252,10 +270,16 @@ export class StudentService {
     if (!student) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
+    await this.assertStudentCampusScope(context, student);
 
     const guardianIds = (await this.guardianStudentStore.listByStudent(student.id)).map((link) => link.guardianId);
     if (isTeacherSubjectContext(context)) {
       await this.assertTeacherAssignmentScope(context, student);
+      await this.recordProfileView(context, student.id, student.tenantId);
+      return this.toStudentProfile(student);
+    }
+    if (context.roles.includes("OPERATIONS_STAFF")) {
+      this.assertAccess(context, student);
       await this.recordProfileView(context, student.id, student.tenantId);
       return this.toStudentProfile(student);
     }
@@ -352,6 +376,7 @@ export class StudentService {
     }
 
     this.assertAccess(context, { tenantId });
+    await this.assertCampusScopeAllowsClass(context, input.classId);
     if (input.guardian) {
       parseGuardianProvisionInput(input.guardian, { lastName: input.lastName });
     }
@@ -424,6 +449,7 @@ export class StudentService {
     }
 
     this.assertAccess(context, { tenantId });
+    await Promise.all(inputs.map((input) => this.assertCampusScopeAllowsClass(context, input.classId)));
     for (const input of inputs) {
       if (input.guardian) {
         parseGuardianProvisionInput(input.guardian, { lastName: input.lastName });
@@ -505,7 +531,8 @@ export class StudentService {
   async previewQuota(context: RequestContext, incoming: number): Promise<StudentQuotaPreview> {
     const tenantId = context.tenantId;
     if (!tenantId) throw new ForbiddenException("TENANT_CONTEXT_MISSING");
-    const students = (await this.list(context)).filter((student) => student.tenantId === tenantId && student.status === "ACTIVE");
+    const students = filterTenantResources(context, await this.store.list())
+      .filter((student) => !student.deletedAt && student.status === "ACTIVE");
     const enrollments = await this.enrollmentStore.listByStudents(students.map((student) => student.id));
     const openActiveByStudent = new Map<string, number>();
     for (const enrollment of enrollments) {
@@ -543,6 +570,7 @@ export class StudentService {
     const nextStatus = input.status !== undefined ? resolveStudentStatus(input.status) : undefined;
     const nextClassId = input.classId !== undefined ? optionalText(input.classId) : undefined;
     const nextResponsibleTeacherId = input.responsibleTeacherId !== undefined ? optionalText(input.responsibleTeacherId) : undefined;
+    if (input.classId !== undefined) await this.assertCampusScopeAllowsClass(context, nextClassId);
     await this.assertStudentRelationTargets(context, existing.tenantId, {
       classId: nextClassId,
       responsibleTeacherId: nextResponsibleTeacherId,
@@ -733,7 +761,10 @@ export class StudentService {
   }
 
   private async buildAutomaticClassMapping(context: RequestContext): Promise<Record<string, string>> {
-    const classes = filterTenantResources(context, await this.classStore.list()).filter((record) => !record.deletedAt);
+    const classes = this.filterCampusScopedClasses(
+      context,
+      filterTenantResources(context, await this.classStore.list()).filter((record) => !record.deletedAt),
+    );
     const gradeLevels = filterTenantResources(context, await this.gradeLevelStore.list()).filter((record) => !record.deletedAt);
     const gradeLevelById = new Map(gradeLevels.map((record) => [record.id, record]));
     const mapping: Record<string, string> = {};
@@ -929,6 +960,65 @@ export class StudentService {
     }
   }
 
+  private assertCampusScopePresent(context: RequestContext): void {
+    if (context.roles.includes("OPERATIONS_STAFF") && !context.campusScope) {
+      throw new ForbiddenException("STUDENT_CAMPUS_SCOPE_MISSING");
+    }
+  }
+
+  private async assertPortalManagedStudentAccess(context: RequestContext, id: string): Promise<void> {
+    const student = await this.store.findById(id);
+    if (!student || student.deletedAt || student.tenantId !== context.tenantId) {
+      throw new NotFoundException("STUDENT_NOT_FOUND");
+    }
+    await this.assertStudentCampusScope(context, student);
+  }
+
+  private isCampusRestricted(context: RequestContext): boolean {
+    this.assertCampusScopePresent(context);
+    return context.campusScope?.scopeMode === "CAMPUSES";
+  }
+
+  private filterCampusScopedClasses(context: RequestContext, classes: ClassRecord[]): ClassRecord[] {
+    if (!this.isCampusRestricted(context)) return classes;
+    const campusIds = new Set(context.campusScope!.campusIds);
+    return classes.filter((record) => Boolean(record.campusId && campusIds.has(record.campusId)));
+  }
+
+  private async filterCampusScopedStudents(context: RequestContext, students: StudentRecord[]): Promise<StudentRecord[]> {
+    if (!this.isCampusRestricted(context)) return students;
+    const allowedClassIds = new Set(
+      this.filterCampusScopedClasses(context, filterTenantResources(context, await this.classStore.list()))
+        .map((record) => record.id),
+    );
+    return students.filter((student) => Boolean(student.classId && allowedClassIds.has(student.classId)));
+  }
+
+  private async assertStudentCampusScope(context: RequestContext, student: Pick<StudentRecord, "classId" | "tenantId">): Promise<void> {
+    if (!this.isCampusRestricted(context)) return;
+    if (!student.classId) throw new ForbiddenException("STUDENT_CAMPUS_SCOPE_FORBIDDEN");
+    const schoolClass = await this.classStore.findById(student.classId);
+    if (!schoolClass || schoolClass.deletedAt || schoolClass.tenantId !== student.tenantId) {
+      throw new ForbiddenException("STUDENT_CAMPUS_SCOPE_FORBIDDEN");
+    }
+    const campusIds = new Set(context.campusScope!.campusIds);
+    if (!schoolClass.campusId || !campusIds.has(schoolClass.campusId)) {
+      throw new ForbiddenException("STUDENT_CAMPUS_SCOPE_FORBIDDEN");
+    }
+  }
+
+  private async assertCampusScopeAllowsClass(context: RequestContext, classId: string | undefined): Promise<void> {
+    if (!this.isCampusRestricted(context)) return;
+    if (!classId) throw new ForbiddenException("STUDENT_CAMPUS_SCOPE_FORBIDDEN");
+    const schoolClass = await this.classStore.findById(classId);
+    if (!schoolClass || schoolClass.deletedAt) throw new ForbiddenException("STUDENT_CAMPUS_SCOPE_FORBIDDEN");
+    this.assertAccess(context, schoolClass);
+    const campusIds = new Set(context.campusScope!.campusIds);
+    if (!schoolClass.campusId || !campusIds.has(schoolClass.campusId)) {
+      throw new ForbiddenException("STUDENT_CAMPUS_SCOPE_FORBIDDEN");
+    }
+  }
+
   private async assertStudentRelationTargets(
     context: RequestContext,
     tenantId: string,
@@ -940,6 +1030,7 @@ export class StudentService {
         throw new NotFoundException("CLASS_NOT_FOUND");
       }
       this.assertSameTenantRelationTarget(context, tenantId, schoolClass);
+      await this.assertCampusScopeAllowsClass(context, schoolClass.id);
     }
 
     if (input.responsibleTeacherId) {

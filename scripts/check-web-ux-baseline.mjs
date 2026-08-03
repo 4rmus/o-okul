@@ -254,7 +254,7 @@ if (webPackageJson.scripts?.a11y !== "playwright test -c playwright.next.config.
   failures.push("apps/web/package.json a11y script must run e2e-next/a11y-next.spec.ts.");
 }
 
-if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=1 e2e-next/ui-primitives-state-next.spec.ts e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts && pnpm ux-route-family-smoke") {
+if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=1 e2e-next/ui-primitives-state-next.spec.ts e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/employee-access-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts && pnpm ux-route-family-smoke") {
   failures.push("apps/web/package.json ux-contract script must run the primitive state, no-artifact DataTable, portal report, and report workspace specs.");
 }
 if (webPackageJson.scripts?.["ux-route-family-smoke"] !== "playwright test -c playwright.next.config.ts --workers=2 --update-snapshots=none e2e-next/ui-route-family-smoke-next.spec.ts") {
@@ -2890,8 +2890,8 @@ requireTokens("apps/web/app/(app)/sistem/kurumlar/[tenantId]/tenant-detail-page.
   "Önerilen işlem",
   "tenantRecommendedAction",
   "seatUsagePercent",
-  "Lisans tarihi kontrolü",
-  "Kullanıcı sınırı kontrolü",
+  "tenantUpdateFormSchema",
+  "Kurum kimliği ve durum bilgisi yalnız sistem yöneticisi tarafından değiştirilir.",
 ]);
 
 requireNoTokens("apps/web/app/(app)/sistem/kurumlar/[tenantId]/tenant-detail-page.tsx", [
@@ -2899,6 +2899,8 @@ requireNoTokens("apps/web/app/(app)/sistem/kurumlar/[tenantId]/tenant-detail-pag
   '<section className="next-system-summary-grid" aria-label="Kurum detayı">',
   '<div className="next-tenant-capacity-grid">',
   "<span>Lisans penceresi</span>",
+  "Lisans tarihi kontrolü",
+  "Kullanıcı sınırı kontrolü",
 ]);
 
 requireTokens("apps/web/app/(app)/sistem/system-reference-page.tsx", [

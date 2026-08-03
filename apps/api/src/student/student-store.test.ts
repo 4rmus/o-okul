@@ -96,7 +96,7 @@ describe("PostgresStudentStore", () => {
       nextCursor: Buffer.from("student-b").toString("base64url"),
     });
     const listQuery = queries.find((query) => query.sql.includes("WITH anchor AS"));
-    expect(listQuery?.values).toEqual(["tenant-a", "%ada%", null, 3]);
+    expect(listQuery?.values).toEqual(["tenant-a", "%ada%", null, 3, null]);
     expect(listQuery?.sql).toContain('u."tenantId" = s."tenantId"');
     expect(listQuery?.sql).toContain('invitation_row."subjectType" = \'STUDENT\'');
     expect(queries.some((query) => query.sql.includes("set_config('app.current_tenant_id'") && query.values?.[0] === "tenant-a")).toBe(true);

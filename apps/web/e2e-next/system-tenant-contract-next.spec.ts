@@ -13,6 +13,7 @@ interface CapturedSystemRequests {
   forbiddenTenantScopedPaths: string[];
   tenantCreates: Array<{ authorization: string | undefined; body: unknown }>;
   tenantLists: URLSearchParams[];
+  tenantUpdates: Array<{ authorization: string | undefined; body: unknown; id: string }>;
 }
 
 interface SystemTenantFixture {
@@ -120,6 +121,29 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     expect(captured.forbiddenTenantScopedPaths).toEqual([]);
   });
 
+  test("kurum düzenleme yalnız strict PATCH alanlarını gönderir", async ({ page }) => {
+    const captured = createCapturedSystemRequests();
+    await openWithSystemTenantMocks(page, captured, "/sistem/kurumlar/tenant-faz9");
+
+    await page.getByRole("tab", { name: "Kurum yönetimi" }).click();
+    await page.getByRole("button", { name: "Düzenle" }).click();
+    const dialog = page.getByRole("dialog", { name: "Kurum düzenle" });
+    await dialog.getByLabel("Kurum adı").fill("Güncel Faz 9 Akademi");
+    await dialog.getByLabel("Durum").selectOption("SUSPENDED");
+    await dialog.getByRole("button", { name: "Kaydet", exact: true }).click();
+
+    await expect.poll(() => captured.tenantUpdates).toEqual([{
+      authorization: "Bearer system-tenant-access-token",
+      body: {
+        name: "Güncel Faz 9 Akademi",
+        slug: "faz9-akademi",
+        status: "SUSPENDED",
+      },
+      id: "tenant-faz9",
+    }]);
+    await expect(dialog).toBeHidden();
+  });
+
   test("geçersiz ilk kurum sahibi TC kimliğini API'ye göndermeden gösterir", async ({ page }) => {
     const captured = createCapturedSystemRequests();
     await openWithSystemTenantMocks(page, captured, "/sistem/kurumlar");
@@ -199,6 +223,7 @@ function createCapturedSystemRequests(): CapturedSystemRequests {
     forbiddenTenantScopedPaths: [],
     tenantCreates: [],
     tenantLists: [],
+    tenantUpdates: [],
   };
 }
 
@@ -268,6 +293,19 @@ async function installSystemTenantApiMocks(page: Page, captured: CapturedSystemR
     if (pathName.startsWith("/tenants/") && method === "GET") {
       const id = decodeURIComponent(pathName.replace("/tenants/", ""));
       await fulfillData(route, tenants.find((tenant) => tenant.id === id) ?? null);
+      return;
+    }
+    if (pathName.startsWith("/tenants/") && method === "PATCH") {
+      const id = decodeURIComponent(pathName.replace("/tenants/", ""));
+      const body = route.request().postDataJSON() as Partial<SystemTenantFixture>;
+      captured.tenantUpdates.push({
+        authorization: route.request().headers().authorization,
+        body,
+        id,
+      });
+      const tenant = tenants.find((item) => item.id === id);
+      if (tenant) Object.assign(tenant, body);
+      await fulfillData(route, tenant ?? null);
       return;
     }
 

@@ -36,6 +36,7 @@ export interface StudentPortalAccessQuery {
   direction: "next" | "previous";
   limit: number;
   q?: string;
+  studentIds?: string[];
 }
 
 export interface StudentPortalAccessPage {
@@ -144,6 +145,7 @@ export class InMemoryStudentStore implements StudentStore {
     const normalizedQuery = query.q?.trim().toLocaleLowerCase("tr-TR");
     const records = this.students
       .filter((student) => student.tenantId === tenantId && !student.deletedAt)
+      .filter((student) => !query.studentIds || query.studentIds.includes(student.id))
       .filter((student) => !normalizedQuery || `${student.firstName} ${student.lastName} ${student.studentNo}`.toLocaleLowerCase("tr-TR").includes(normalizedQuery))
       .sort(compareStudentPortalRecords)
       .map((student) => toInMemoryStudentPortalAccessRecord(student, this.portalMemberships.get(student.id)));
@@ -318,8 +320,13 @@ export class PostgresStudentStore implements StudentStore {
       const cursorId = query.cursor ? decodeStudentPortalCursor(query.cursor) : undefined;
       if (cursorId) {
         const anchor = await client.query(
-          `SELECT 1 FROM "Student" WHERE "tenantId" = $1 AND "id" = $2 AND "deletedAt" IS NULL`,
-          [tenantId, cursorId],
+          `SELECT 1
+           FROM "Student"
+           WHERE "tenantId" = $1
+             AND "id" = $2
+             AND "deletedAt" IS NULL
+             AND ($3::text[] IS NULL OR "id" = ANY($3::text[]))`,
+          [tenantId, cursorId, query.studentIds ?? null],
         );
         if (!anchor.rows[0]) throw new Error("STUDENT_PORTAL_CURSOR_INVALID");
       }
@@ -405,6 +412,7 @@ export class PostgresStudentStore implements StudentStore {
          ) invitation ON true
          WHERE s."tenantId" = $1
            AND s."deletedAt" IS NULL
+           AND ($5::text[] IS NULL OR s."id" = ANY($5::text[]))
            AND ($2::text IS NULL OR s."id" IN (SELECT matched."id" FROM matching_students matched))
            AND (
              $3::text IS NULL
@@ -413,7 +421,7 @@ export class PostgresStudentStore implements StudentStore {
            )
          ORDER BY lower(s."lastName") ${order}, lower(s."firstName") ${order}, s."id" ${order}
          LIMIT $4`,
-        [tenantId, searchPattern(query.q), cursorId ?? null, query.limit + 1],
+        [tenantId, searchPattern(query.q), cursorId ?? null, query.limit + 1, query.studentIds ?? null],
       );
       const hasMore = result.rows.length > query.limit;
       const pageRows = result.rows.slice(0, query.limit);

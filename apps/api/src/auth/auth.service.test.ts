@@ -1110,6 +1110,11 @@ function createUserStoreMock(overrides: Partial<AuthUserStore>): AuthUserStore {
     listByTenant: vi.fn(async () => []),
     createOrAttachTenantIdentity: vi.fn(),
     updatePassword: vi.fn(),
+    updatePasswordForReset: vi.fn(async (id, passwordHash, input, transaction) => {
+      if (transaction.kind !== "memory" || !overrides.updatePassword) return false;
+      transaction.stage(() => { void overrides.updatePassword!(id, passwordHash, input); });
+      return true;
+    }),
     rehashPassword: vi.fn(async () => true),
     enableTotp: vi.fn(),
     disableTotp: vi.fn(),
@@ -1140,6 +1145,16 @@ function createMutableUserStore(user: AuthUser): AuthUserStore {
       user.passwordHash = passwordHash;
       user.membershipVersion += 1;
       return clone();
+    }),
+    updatePasswordForReset: vi.fn(async (_id, passwordHash, input, transaction) => {
+      if (transaction.kind !== "memory") return false;
+      transaction.stage(() => {
+        user.passwordHash = passwordHash;
+        user.mustChangePassword = input.mustChangePassword ?? user.mustChangePassword;
+        user.passwordChangedAt = input.passwordChangedAt ?? user.passwordChangedAt;
+        user.membershipVersion += 1;
+      });
+      return true;
     }),
     rehashPassword: vi.fn(async (tenantId, _id, currentPasswordHash, passwordHash) => {
       if (tenantId !== user.tenantId) return false;

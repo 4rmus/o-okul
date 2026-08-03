@@ -24,19 +24,15 @@ import {
 import { useAuth } from "../../../../providers.js";
 import {
   firstFormError,
-  tenantFormSchema,
-  type TenantFormState,
+  tenantUpdateFormSchema,
+  type TenantUpdateFormState,
 } from "../../../../../src/form-validation.js";
 import { PageFrame } from "../../../kurum/_shared/page-frame.js";
 import { loadTenant, updateTenant, type TenantRecord } from "../../_shared/system-api.js";
 
-const emptyForm: TenantFormState = {
+const emptyForm: TenantUpdateFormState = {
   name: "",
   slug: "",
-  plan: "TRIAL",
-  licenseStartsAt: "",
-  licenseEndsAt: "",
-  seatLimit: "",
   status: "ACTIVE",
 };
 
@@ -53,7 +49,7 @@ export function TenantDetailPage() {
   const tenant = tenantQuery.data ?? null;
   const licenseDays = tenant ? licenseDaysRemaining(tenant.licenseEndsAt) : null;
   const seatPercent = tenant ? seatUsagePercent(tenant) : null;
-  const [form, setForm] = useState<TenantFormState>(emptyForm);
+  const [form, setForm] = useState<TenantUpdateFormState>(emptyForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
   const [activeSection, setActiveSection] = useState<"license" | "management">("license");
@@ -79,7 +75,7 @@ export function TenantDetailPage() {
     if (!auth || !tenant) return;
 
     setError("");
-    const parsedForm = tenantFormSchema.safeParse(form);
+    const parsedForm = tenantUpdateFormSchema.safeParse(form);
     if (!parsedForm.success) {
       setError(firstFormError(parsedForm.error));
       return;
@@ -185,7 +181,7 @@ export function TenantDetailPage() {
               <Button onClick={openEditForm}>Düzenle</Button>
             }
             aria-label="Kurum yönetimi"
-            description="Kurum kimliği, lisans ve durum bilgisi yalnız sistem yöneticisi tarafından değiştirilir."
+            description="Kurum kimliği ve durum bilgisi yalnız sistem yöneticisi tarafından değiştirilir."
             title="Kurum yönetimi"
             tone="muted"
           />
@@ -198,7 +194,6 @@ export function TenantDetailPage() {
       ) : null}
       <TenantEditModal
         form={form}
-        activeSeatCount={tenant?.activeSeatCount ?? 0}
         onCancel={closeForm}
         onChange={setForm}
         onSubmit={(event) => void handleSubmit(event)}
@@ -209,26 +204,21 @@ export function TenantDetailPage() {
 }
 
 function TenantEditModal({
-  activeSeatCount,
   form,
   onCancel,
   onChange,
   onSubmit,
   open,
 }: {
-  activeSeatCount: number;
-  form: TenantFormState;
+  form: TenantUpdateFormState;
   onCancel(): void;
-  onChange(value: TenantFormState): void;
+  onChange(value: TenantUpdateFormState): void;
   onSubmit(event: FormEvent<HTMLFormElement>): void;
   open: boolean;
 }) {
-  const hasInvalidLicenseWindow = isLicenseWindowInvalid(form.licenseStartsAt, form.licenseEndsAt);
-  const hasSeatLimitBelowActiveCount = isSeatLimitBelowActiveCount(form.seatLimit, activeSeatCount);
-
   return (
     <FormModal
-      description="Kurum kimliği, lisans ve durum bilgisini güncelle."
+      description="Kurum kimliği ve durum bilgisini güncelle."
       onCancel={onCancel}
       onSubmit={onSubmit}
       open={open}
@@ -241,40 +231,8 @@ function TenantEditModal({
       <Field label="Kurum kodu" description="Giriş bağlantısında kullanılacak kısa ad. Örnek: yeni-kurum.">
         <Input required value={form.slug} onChange={(event) => onChange({ ...form, slug: event.target.value })} />
       </Field>
-      <Field label="Plan">
-        <Select value={form.plan} onChange={(event) => onChange({ ...form, plan: event.target.value as TenantFormState["plan"] })}>
-          <option value="TRIAL">Deneme</option>
-          <option value="PRO">Pro</option>
-          <option value="ENTERPRISE">Enterprise</option>
-        </Select>
-      </Field>
-      <Field label="Lisans başlangıç">
-        <Input type="date" value={form.licenseStartsAt ?? ""} onChange={(event) => onChange({ ...form, licenseStartsAt: event.target.value })} />
-      </Field>
-      <Field label="Lisans bitiş">
-        <Input type="date" value={form.licenseEndsAt ?? ""} onChange={(event) => onChange({ ...form, licenseEndsAt: event.target.value })} />
-      </Field>
-      {hasInvalidLicenseWindow ? (
-        <Alert tone="warning" title="Lisans tarihi kontrolü">
-          Lisans bitişi başlangıç tarihinden önce olamaz.
-        </Alert>
-      ) : null}
-      <Field label="Kullanıcı sınırı" description="Bu kurumda etkin olabilecek en fazla kullanıcı sayısı. Boş bırakırsanız sınırsız olur.">
-        <Input
-          inputMode="numeric"
-          min={1}
-          type="number"
-          value={form.seatLimit ?? ""}
-          onChange={(event) => onChange({ ...form, seatLimit: event.target.value })}
-        />
-      </Field>
-      {hasSeatLimitBelowActiveCount ? (
-        <Alert tone="warning" title="Kullanıcı sınırı kontrolü">
-          Bu kurumda {activeSeatCount} aktif kullanıcı var; sınır aktif kullanıcı sayısının altına inemez.
-        </Alert>
-      ) : null}
       <Field label="Durum">
-        <Select value={form.status} onChange={(event) => onChange({ ...form, status: event.target.value as TenantFormState["status"] })}>
+        <Select value={form.status} onChange={(event) => onChange({ ...form, status: event.target.value as TenantUpdateFormState["status"] })}>
           <option value="ACTIVE">Aktif</option>
           <option value="SUSPENDED">Askıda</option>
           <option value="TRIAL">Deneme</option>
@@ -284,20 +242,12 @@ function TenantEditModal({
   );
 }
 
-function toTenantForm(tenant: TenantRecord): TenantFormState {
+function toTenantForm(tenant: TenantRecord): TenantUpdateFormState {
   return {
     name: tenant.name,
     slug: tenant.slug,
-    plan: tenant.plan === "PRO" || tenant.plan === "ENTERPRISE" ? tenant.plan : "TRIAL",
-    licenseStartsAt: toDateInput(tenant.licenseStartsAt),
-    licenseEndsAt: toDateInput(tenant.licenseEndsAt),
-    seatLimit: tenant.seatLimit ? String(tenant.seatLimit) : "",
     status: tenant.status === "SUSPENDED" || tenant.status === "TRIAL" ? tenant.status : "ACTIVE",
   };
-}
-
-function toDateInput(value: string | undefined) {
-  return value ? value.slice(0, 10) : "";
 }
 
 function formatDate(value: string | undefined) {
@@ -352,17 +302,6 @@ function tenantRecommendedAction(tenant: TenantRecord) {
 
 function isSeatLimitExceeded(tenant: TenantRecord) {
   return Boolean(tenant.seatLimit && (tenant.activeSeatCount ?? 0) > tenant.seatLimit);
-}
-
-function isLicenseWindowInvalid(startsAt: string | undefined, endsAt: string | undefined) {
-  if (!startsAt || !endsAt) return false;
-  return new Date(endsAt).getTime() < new Date(startsAt).getTime();
-}
-
-function isSeatLimitBelowActiveCount(seatLimit: string | undefined, activeSeatCount: number) {
-  if (!seatLimit) return false;
-  const parsed = Number(seatLimit);
-  return Number.isFinite(parsed) && parsed > 0 && parsed < activeSeatCount;
 }
 
 function statusLabel(status: string) {

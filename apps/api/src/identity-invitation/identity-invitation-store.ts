@@ -301,6 +301,7 @@ async function clearInvitationDeliveries(client: Queryable, sourceId: string): P
      SET "status" = 'EXPIRED',
          "payloadEncrypted" = NULL,
          "claimedAt" = NULL,
+         "claimToken" = NULL,
          "lastErrorCode" = NULL,
          "updatedAt" = now()
      WHERE "purpose" = 'IDENTITY_INVITATION'

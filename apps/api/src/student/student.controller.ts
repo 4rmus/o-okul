@@ -4,7 +4,6 @@ import { z } from "zod";
 import { applyListQuery } from "../listing/list-query.js";
 import { optionalDateString, optionalTrimmedString, optionalUppercaseString, requiredTrimmedString, requiredUppercaseString, zodBody, zodQuery } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
-import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { GuardianService } from "../guardian/guardian.service.js";
 import { TeacherService } from "../teacher/teacher.service.js";
@@ -139,14 +138,14 @@ export class StudentController {
   ) {}
 
   @Get()
-  @Roles("TEACHER")
+  @RequireCapability("student:list")
   async list(@Query(zodQuery(studentListQuerySchema)) query: StudentListQuery): Promise<PublicStudentRecord[]> {
     const records = await this.filterStudents(await this.students.listForViewer(getRequestContext()), query);
     return applyListQuery(records, query, studentListFields);
   }
 
   @Get("export")
-  @Roles("TEACHER")
+  @RequireCapability("student:list")
   export(): Promise<StudentExportResult> {
     return this.imports.export(getRequestContext());
   }
@@ -160,38 +159,41 @@ export class StudentController {
   }
 
   @Get(":id")
-  @Roles("GUARDIAN")
+  @RequireCapability("student:read")
   findOne(@Param("id") id: string): Promise<PublicStudentRecord> {
     return this.students.findOneForViewer(getRequestContext(), id);
   }
 
   @Get(":id/profile")
-  @Roles("GUARDIAN")
+  @RequireCapability("student:read")
   profile(@Param("id") id: string): Promise<PublicStudentProfileRecord> {
     return this.students.findProfileForViewer(getRequestContext(), id);
   }
 
   @Get(":id/enrollments")
-  @Roles("TEACHER")
+  @RequireCapability("student:read")
   enrollments(@Param("id") id: string): Promise<StudentEnrollmentRecord[]> {
     return this.students.listEnrollments(getRequestContext(), id);
   }
 
   @Get(":id/guardians")
-  @Roles("TEACHER")
-  guardians(@Param("id") id: string): Promise<GuardianRecord[]> {
+  @RequireCapability("student:read")
+  async guardians(@Param("id") id: string): Promise<GuardianRecord[]> {
+    await this.students.findOneForViewer(getRequestContext(), id);
     return this.guardianService.listStudentGuardians(getRequestContext(), id);
   }
 
   @Get(":id/guardian-links")
-  @Roles("TEACHER")
-  guardianLinks(@Param("id") id: string): Promise<GuardianStudentRecord[]> {
+  @RequireCapability("student:read")
+  async guardianLinks(@Param("id") id: string): Promise<GuardianStudentRecord[]> {
+    await this.students.findOneForViewer(getRequestContext(), id);
     return this.guardianService.listStudentGuardianLinks(getRequestContext(), id);
   }
 
   @Get(":id/teacher-assignments")
-  @Roles("TEACHER")
-  teacherAssignments(@Param("id") id: string): Promise<TeacherAssignmentRecord[]> {
+  @RequireCapability("student:read")
+  async teacherAssignments(@Param("id") id: string): Promise<TeacherAssignmentRecord[]> {
+    await this.students.findOneForViewer(getRequestContext(), id);
     return this.teacherService.listStudentTeacherAssignments(getRequestContext(), id);
   }
 
@@ -289,7 +291,7 @@ export class StudentController {
   }
 
   @Patch(":id/tenant")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("tenant:manage")
   updateTenant(@Param("id") id: string, @Body(zodBody(studentTenantUpdateBodySchema)) body: StudentTenantUpdateRequest): Promise<PublicStudentRecord> {
     return this.students.updateTenant(getRequestContext(), id, body.tenantId);
   }

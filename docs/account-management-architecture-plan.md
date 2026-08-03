@@ -1,7 +1,7 @@
 # O-Okul Kurum, Kullanıcı ve Hesap Yönetimi Mimarisi
 
-**Durum:** Önerilen, ürün kararları netleştirilmiş mimari plan  
-**Tarih:** 1 Ağustos 2026  
+**Durum:** Önerilen, ürün kararları netleştirilmiş mimari plan
+**Tarih:** 1 Ağustos 2026
 **Kapsam:** Özel okul ve özel öğretim kurslarına yıllık veya çok yıllık kiralanacak O-Okul için kurum, çalışan, öğretmen, öğrenci, hesap, lisans ve erişim yönetimi
 
 ## 1. Mimari karar özeti
@@ -380,7 +380,7 @@ kanıtı alındıktan sonra ayrı ve geri alınabilir bir değişiklik olarak ya
 
 - Üç guardian UAT emekliye ayrılır; çalışan lifecycle/persona, kampüs negatif erişim, opsiyonel öğrenci aktivasyonu, lisans yenileme/kota ve offboarding senaryoları eklenir. Canonical sayı 21'den 23'e çıkar.
 - Journey, UAT generator/checker, evidence templates, rollback ve production plan aynı değişiklik zincirinde güncellenir.
-- Önce synthetic 10k öğrenci tenant yük testi, ardından 7 günlük kontrollü pilot yapılır.
+- Önce synthetic 10k öğrenci tenant yük testi, ardından en az 14 günlük kontrollü pilot yapılır.
 - Local/CI PASS, staging exact-SHA aktivasyonu ve production/pilot kanıtı ayrı raporlanır.
 
 Rollback, additive migration ve tenant bazlı cutover flag'i üzerinden yapılacak. Guardian fixture temizliği ve eski kolon/table drop işlemleri irreversible eşik kabul edilecek; bu eşikten önce doğrulanmış backup restore denemesi bulunacak.

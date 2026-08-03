@@ -656,19 +656,20 @@ export class AuthService {
     if (reset.status !== "PENDING") throw new BadRequestException("PASSWORD_RESET_NOT_PENDING");
     if (Date.parse(reset.expiresAt) <= Date.now()) throw new BadRequestException("PASSWORD_RESET_EXPIRED");
 
-    const resetAt = new Date().toISOString();
-    const consumedReset = await this.passwordResets.markUsed(reset.id, resetAt);
-    if (!consumedReset) throw new BadRequestException("PASSWORD_RESET_NOT_PENDING");
-
     const existingUser = await this.users.findById(reset.userId);
     if (!existingUser) throw new NotFoundException("USER_NOT_FOUND");
-    const user = await this.users.updatePassword(reset.userId, await hashPasswordAsync(password), {
-      mustChangePassword: false,
-      passwordChangedAt: resetAt,
+    const resetAt = new Date().toISOString();
+    const passwordHash = await hashPasswordAsync(password);
+    const user = await this.passwordResets.confirm(reset.id, resetAt, async (transaction) => {
+      const updated = await this.users.updatePasswordForReset(reset.userId, passwordHash, {
+        mustChangePassword: false,
+        passwordChangedAt: resetAt,
+      }, transaction);
+      if (!updated) throw new NotFoundException("USER_NOT_FOUND");
+      await this.sessions.revokeByUser(existingUser.id, transaction);
+      return existingUser;
     });
-    if (!user) throw new NotFoundException("USER_NOT_FOUND");
-
-    await this.sessions.revokeByUser(user.id);
+    if (!user) throw new BadRequestException("PASSWORD_RESET_NOT_PENDING");
     await this.auditLogs?.record({
       tenantId: user.tenantId === "system" ? undefined : user.tenantId,
       actorUserId: user.id,

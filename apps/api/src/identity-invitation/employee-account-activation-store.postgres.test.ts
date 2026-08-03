@@ -4,6 +4,12 @@ import { PostgresEmployeeAccountActivationStore } from "./employee-account-activ
 
 const appDatabaseUrl = process.env.EMPLOYEE_ACTIVATION_POSTGRES_TEST_URL;
 const adminDatabaseUrl = process.env.EMPLOYEE_ACTIVATION_POSTGRES_ADMIN_URL;
+const postgresRequired = process.env.ACCOUNT_MANAGEMENT_POSTGRES_REQUIRED === "1";
+
+if (postgresRequired && (!appDatabaseUrl || !adminDatabaseUrl)) {
+  throw new Error("EMPLOYEE_ACTIVATION_POSTGRES_URLS_REQUIRED");
+}
+
 const describePostgres = appDatabaseUrl && adminDatabaseUrl ? describe : describe.skip;
 
 describePostgres("PostgresEmployeeAccountActivationStore integration", () => {
@@ -95,7 +101,13 @@ describePostgres("PostgresEmployeeAccountActivationStore integration", () => {
 
 async function cleanupFixtures(pool: pg.Pool): Promise<void> {
   await pool.query(
-    `DELETE FROM "SecretDeliveryOutbox" WHERE "sourceId" LIKE 'employee-activation-invitation-%'`,
+    `DELETE FROM "SecretDeliveryOutbox"
+     WHERE "sourceId" = ANY($1::text[])`,
+    [[
+      "employee-activation-invitation-a-1",
+      "employee-activation-invitation-a-2",
+      "employee-activation-invitation-b-1",
+    ]],
   );
   await pool.query(
     `DELETE FROM "Tenant" WHERE "id" IN ('employee-activation-tenant-a', 'employee-activation-tenant-b')`,
@@ -103,8 +115,8 @@ async function cleanupFixtures(pool: pg.Pool): Promise<void> {
 }
 
 async function seedTenant(pool: pg.Pool, tenantId: string, slug: string, seatLimit: number): Promise<void> {
-  const startsAt = "2026-01-01T00:00:00.000Z";
-  const endsAt = "2027-01-01T00:00:00.000Z";
+  const startsAt = new Date(Date.now() - 86_400_000).toISOString();
+  const endsAt = new Date(Date.now() + 86_400_000).toISOString();
   await pool.query(
     `INSERT INTO "Tenant" (
        "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", "status", "updatedAt"

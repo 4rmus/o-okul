@@ -210,6 +210,7 @@ export class PostgresEmployeeAccountActivationStore implements EmployeeAccountAc
       const membershipVersion = memberships.length > 0
         ? Math.max(...memberships.map((membership) => membership.version)) + 1
         : 1;
+      const membershipScope = resolveMembershipScope(memberships);
       const hasTeacherPersona = memberships.some((membership) => (
         membership.hasTeacherPersona || membership.role === "TEACHER"
       ));
@@ -217,9 +218,29 @@ export class PostgresEmployeeAccountActivationStore implements EmployeeAccountAc
         `DELETE FROM "TenantMembership" WHERE "tenantId" = $1 AND "userId" = $2`,
         [invitation.tenantId, userId],
       );
-      await insertMembership(client, invitation.tenantId, userId, invitation.role, invitation.role, hasTeacherPersona, membershipVersion);
+      const canonicalMembershipId = await insertMembership(
+        client,
+        invitation.tenantId,
+        userId,
+        invitation.role,
+        invitation.role,
+        hasTeacherPersona,
+        membershipVersion,
+        membershipScope.scopeMode,
+      );
+      await insertMembershipCampusScopes(client, invitation.tenantId, canonicalMembershipId, membershipScope.campusIds);
       if (hasTeacherPersona) {
-        await insertMembership(client, invitation.tenantId, userId, "TEACHER", null, false, membershipVersion);
+        const teacherMembershipId = await insertMembership(
+          client,
+          invitation.tenantId,
+          userId,
+          "TEACHER",
+          null,
+          false,
+          membershipVersion,
+          membershipScope.scopeMode,
+        );
+        await insertMembershipCampusScopes(client, invitation.tenantId, teacherMembershipId, membershipScope.campusIds);
       }
       if (memberships.length > 0) {
         await client.query(
@@ -286,9 +307,17 @@ async function findUserIdByEmail(client: Queryable, tenantId: string, email: str
 
 async function findMemberships(client: Queryable, tenantId: string, userId: string): Promise<EmployeeMembershipRow[]> {
   const result = await client.query<EmployeeMembershipRow>(
-    `SELECT "role"::text, "hasTeacherPersona", "hasStudentPersona", "version"
-     FROM "TenantMembership"
-     WHERE "tenantId" = $1 AND "userId" = $2
+    `SELECT m."id", m."role"::text, m."staffRole"::text, m."hasTeacherPersona", m."hasStudentPersona",
+            m."version", m."scopeMode",
+            ARRAY(
+              SELECT scope."campusId"
+              FROM "MembershipCampusScope" scope
+              WHERE scope."tenantId" = m."tenantId" AND scope."membershipId" = m."id"
+              ORDER BY scope."campusId"
+            ) AS "campusIds"
+     FROM "TenantMembership" m
+     WHERE m."tenantId" = $1 AND m."userId" = $2
+     ORDER BY (m."staffRole" IS NOT NULL OR m."hasTeacherPersona" OR m."hasStudentPersona") DESC, m."startsAt" ASC
      FOR UPDATE`,
     [tenantId, userId],
   );
@@ -330,14 +359,43 @@ async function insertMembership(
   staffRole: EmployeeInvitationRole | null,
   hasTeacherPersona: boolean,
   version: number,
-): Promise<void> {
+  scopeMode: "TENANT" | "CAMPUSES",
+): Promise<string> {
+  const membershipId = randomUUID();
   await client.query(
     `INSERT INTO "TenantMembership" (
        "id", "tenantId", "userId", "role", "staffRole", "hasTeacherPersona", "hasStudentPersona",
        "status", "version", "scopeMode", "updatedAt"
-     ) VALUES ($1, $2, $3, $4, $5, $6, false, 'ACTIVE', $7, 'TENANT', now())`,
-    [randomUUID(), tenantId, userId, role, staffRole, hasTeacherPersona, version],
+     ) VALUES ($1, $2, $3, $4, $5, $6, false, 'ACTIVE', $7, $8, now())`,
+    [membershipId, tenantId, userId, role, staffRole, hasTeacherPersona, version, scopeMode],
   );
+  return membershipId;
+}
+
+async function insertMembershipCampusScopes(
+  client: Queryable,
+  tenantId: string,
+  membershipId: string,
+  campusIds: readonly string[],
+): Promise<void> {
+  for (const campusId of campusIds) {
+    await client.query(
+      `INSERT INTO "MembershipCampusScope" ("id", "tenantId", "membershipId", "campusId")
+       VALUES ($1, $2, $3, $4)`,
+      [randomUUID(), tenantId, membershipId, campusId],
+    );
+  }
+}
+
+function resolveMembershipScope(memberships: readonly EmployeeMembershipRow[]): {
+  scopeMode: "TENANT" | "CAMPUSES";
+  campusIds: string[];
+} {
+  const canonical = memberships.find((membership) => (
+    Boolean(membership.staffRole) || membership.hasTeacherPersona || membership.hasStudentPersona
+  )) ?? memberships[0];
+  if (canonical?.scopeMode !== "CAMPUSES") return { scopeMode: "TENANT", campusIds: [] };
+  return { scopeMode: "CAMPUSES", campusIds: [...new Set(canonical.campusIds ?? [])].sort() };
 }
 
 async function revokeInvitation(client: Queryable, invitationId: string): Promise<void> {
@@ -434,10 +492,14 @@ interface EmployeeActivationProfileRow {
 }
 
 interface EmployeeMembershipRow {
+  id?: string;
   role: string;
+  staffRole?: string | null;
   hasTeacherPersona: boolean;
   hasStudentPersona: boolean;
   version: number;
+  scopeMode?: string;
+  campusIds?: string[];
 }
 
 const defaultEmployeeAccountLimit = 2_000;
