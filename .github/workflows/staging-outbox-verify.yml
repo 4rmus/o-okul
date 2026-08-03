@@ -89,41 +89,21 @@ jobs:
 
       - name: Bind selected deployment run to cutover source
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          node --input-type=module - "$RUNNER_TEMP/staging-deploy-run.json" "$CUTOVER_SOURCE_SHA" <<'NODE'
+          node --input-type=module - "$RUNNER_TEMP/staging-deploy-run.json" "$CUTOVER_SOURCE_SHA" "$EVENT_NAME" "$PR_HEAD_SHA" <<'NODE'
           import { readFileSync } from "node:fs";
-          const [file, cutoverSourceSha] = process.argv.slice(2);
+          const [file, cutoverSourceSha, eventName, pullRequestHeadSha] = process.argv.slice(2);
           const run = JSON.parse(readFileSync(file, "utf8"));
           if (run?.head_sha?.toLowerCase() !== cutoverSourceSha.toLowerCase()) process.exit(1);
+          if (eventName === "pull_request" && pullRequestHeadSha?.toLowerCase() !== cutoverSourceSha.toLowerCase()) process.exit(1);
           NODE
 
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.CUTOVER_SOURCE_SHA }}
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.5.0
-          run_install: false
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - run: pnpm install --frozen-lockfile
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: staging-github-ci-evidence-${{ env.CUTOVER_SOURCE_SHA }}
-          run-id: ${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}
-          github-token: ${{ github.token }}
-          path: artifacts/staging/reports
-
-      - name: Validate cutover-bound GitHub CI evidence
-        shell: bash
-        run: GITHUB_CI_EVIDENCE_TARGET="file://$PWD/artifacts/staging/reports/github-ci.json" pnpm github-ci:check
 
       - name: Validate staging verify environment
         shell: bash
@@ -151,6 +131,79 @@ jobs:
           : > "$STAGING_KNOWN_HOSTS_PATH"
           chmod 600 "$STAGING_KNOWN_HOSTS_PATH"
 
+      - name: Preflight current images and private outbox source
+        shell: bash
+        env:
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+            "STAGING_EDGE_MODE='$STAGING_EDGE_MODE' RELEASE_IMAGE_TAG='$CUTOVER_RELEASE_IMAGE_TAG' REPOSITORY='$CUTOVER_REPOSITORY' CUTOVER_AT='$CUTOVER_AT' bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd /root/o-okul
+          case "$STAGING_EDGE_MODE" in
+            domain) EDGE_COMPOSE_FILE="docker-compose.traefik.yml" ;;
+            ip) EDGE_COMPOSE_FILE="docker-compose.traefik-ip.yml" ;;
+            *) exit 1 ;;
+          esac
+          [[ "$RELEASE_IMAGE_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]
+          [[ "$REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
+          grep -Fxq 'ADMIN_MFA_MODE=required' .env
+          expected_prefix="ghcr.io/$REPOSITORY"
+          require_running_image() {
+            local service="$1" expected="$2" id image state health
+            id="$(docker compose --env-file .env --env-file .env.release -f docker-compose.yml -f docker-compose.release.yml -f "$EDGE_COMPOSE_FILE" ps -q "$service")"
+            [ -n "$id" ]
+            image="$(docker inspect -f '{{.Config.Image}}' "$id")"
+            state="$(docker inspect -f '{{.State.Status}}' "$id")"
+            health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$id")"
+            [ "$image" = "$expected" ] && [ "$state" = running ] && { [ -z "$health" ] || [ "$health" = healthy ]; }
+          }
+          require_running_image web "$expected_prefix/web:$RELEASE_IMAGE_TAG"
+          require_running_image api "$expected_prefix/api:$RELEASE_IMAGE_TAG"
+          require_running_image worker "$expected_prefix/worker:$RELEASE_IMAGE_TAG"
+          require_running_image queue-board "$expected_prefix/queue-board:$RELEASE_IMAGE_TAG"
+          private_root=/root/o-okul-private/secret-delivery-outbox
+          source_dir="$private_root/$RELEASE_IMAGE_TAG"
+          source_file="$source_dir/source-id"
+          if [ ! -f "$source_file" ]; then
+            echo "Phase B private source missing for release $RELEASE_IMAGE_TAG; provision a fresh post-cutover retry delivery source before verify." >&2
+            exit 1
+          fi
+          for path in "$private_root" "$source_dir"; do
+            [ -d "$path" ] && [ ! -L "$path" ] && [ "$(stat -c %a "$path")" = 700 ] && [ "$(stat -c %u "$path")" = "$(id -u)" ]
+          done
+          [ ! -L "$source_file" ] && [ "$(stat -c %a "$source_file")" = 600 ] && [ "$(stat -c %u "$source_file")" = "$(id -u)" ]
+          cutover_epoch="$(date -d "$CUTOVER_AT" +%s)"
+          source_mtime="$(stat -c %Y "$source_file")"
+          [ "$source_mtime" -ge "$((cutover_epoch - 60))" ]
+          REMOTE
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.0
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: staging-github-ci-evidence-${{ env.CUTOVER_SOURCE_SHA }}
+          run-id: ${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: artifacts/staging/reports
+
+      - name: Validate cutover-bound GitHub CI evidence
+        shell: bash
+        run: GITHUB_CI_EVIDENCE_TARGET="file://$PWD/artifacts/staging/reports/github-ci.json" pnpm github-ci:check
+
       - name: Open staging data tunnels for aggregate checks
         shell: bash
         env:
@@ -173,7 +226,7 @@ jobs:
           scp -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new scripts/smoke-secret-delivery-outbox-staging.mjs scripts/smoke-evidence.mjs "$STAGING_SSH_USER@$STAGING_SSH_HOST:$verify_helpers/"
           ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" "chmod 600 '$verify_helpers/'*.mjs"
 
-      - name: Verify current images and run private outbox smoke
+      - name: Run private outbox smoke
         shell: bash
         env:
           STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
@@ -192,31 +245,9 @@ jobs:
           esac
           [[ "$RELEASE_IMAGE_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]
           [[ "$REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
-          grep -Fxq 'ADMIN_MFA_MODE=required' .env
-          expected_prefix="ghcr.io/$REPOSITORY"
-          require_running_image() {
-            local service="$1" expected="$2" id image state health
-            id="$(docker compose --env-file .env --env-file .env.release -f docker-compose.yml -f docker-compose.release.yml -f "$EDGE_COMPOSE_FILE" ps -q "$service")"
-            [ -n "$id" ]
-            image="$(docker inspect -f '{{.Config.Image}}' "$id")"
-            state="$(docker inspect -f '{{.State.Status}}' "$id")"
-            health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$id")"
-            [ "$image" = "$expected" ] && [ "$state" = running ] && { [ -z "$health" ] || [ "$health" = healthy ]; }
-          }
-          require_running_image web "$expected_prefix/web:$RELEASE_IMAGE_TAG"
-          require_running_image api "$expected_prefix/api:$RELEASE_IMAGE_TAG"
-          require_running_image worker "$expected_prefix/worker:$RELEASE_IMAGE_TAG"
-          require_running_image queue-board "$expected_prefix/queue-board:$RELEASE_IMAGE_TAG"
           private_root="$(dirname "$STAGING_DEPLOY_DIR")/o-okul-private/secret-delivery-outbox"
           source_dir="$private_root/$RELEASE_IMAGE_TAG"
           source_file="$source_dir/source-id"
-          for path in "$private_root" "$source_dir"; do
-            [ -d "$path" ] && [ ! -L "$path" ] && [ "$(stat -c %a "$path")" = 700 ] && [ "$(stat -c %u "$path")" = "$(id -u)" ]
-          done
-          [ -f "$source_file" ] && [ ! -L "$source_file" ] && [ "$(stat -c %a "$source_file")" = 600 ] && [ "$(stat -c %u "$source_file")" = "$(id -u)" ]
-          cutover_epoch="$(date -d "$CUTOVER_AT" +%s)"
-          source_mtime="$(stat -c %Y "$source_file")"
-          [ "$source_mtime" -ge "$((cutover_epoch - 60))" ]
           mkdir -p artifacts/staging/smoke
           docker compose --env-file .env --env-file .env.release -f docker-compose.yml -f docker-compose.release.yml -f "$EDGE_COMPOSE_FILE" run --rm -T \
             -v "$OUTBOX_VERIFY_HELPERS_DIR:/app/scripts:ro" -v "$PWD/artifacts:/app/artifacts" -v "$source_dir:/run/outbox-source:ro" \
@@ -339,7 +370,7 @@ jobs:
           helper_contract="$OUTBOX_VERIFY_HELPERS_DIR/smoke-evidence.mjs"
           helper_run_dir="$(dirname "$OUTBOX_VERIFY_HELPERS_DIR")"
           ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
-            "rm -f -- '$source_file' '$helper_smoke' '$helper_contract' && rmdir -- '$source_dir' '$OUTBOX_VERIFY_HELPERS_DIR' && { rmdir -- '$source_root' 2>/dev/null || true; } && { rmdir -- '$helper_run_dir' 2>/dev/null || true; }"
+            "rm -f -- '$source_file' '$helper_smoke' '$helper_contract'; rmdir -- '$source_dir' 2>/dev/null || true; rmdir -- '$OUTBOX_VERIFY_HELPERS_DIR' 2>/dev/null || true; rmdir -- '$source_root' 2>/dev/null || true; rmdir -- '$helper_run_dir' 2>/dev/null || true"
 
       - uses: actions/upload-artifact@v4
         if: ${{ success() }}

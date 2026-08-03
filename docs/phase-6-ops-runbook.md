@@ -472,8 +472,9 @@ Staging deploy, exact dört servis tag'i ve first-gates sonrası PII-safe `deplo
 `$(dirname "$STAGING_DEPLOY_DIR")/o-okul-private/secret-delivery-outbox/<releaseImageTag>/source-id`
 yoluna koyar. Sibling private root ve tag dizini `0700`, regular dosya `0600`, aynı remote kullanıcı sahibi
 olmalıdır; symlink kabul edilmez. Verify-only dispatch yalnız `deploy_run_id` alır, önce indirilen cutover
-artifact'i ve güncel dört container tag'ini doğrular; drift varsa source okunmadan kırılır. Workflow source
-dosyasını ve geçici helper'ları her sonuçta siler; runner/SSH kesintisinde on-call sahibi 24 saat içinde aynı
+artifact'i ve güncel dört container tag'ini doğrular. Eksik private source veya image drift'i, bağımlılık
+kurulumundan ve data tunnel açılmasından önce açık bir preflight hatasıyla durur. Workflow source
+dosyasını ve geçici helper'ları her sonuçta idempotent olarak siler; runner/SSH kesintisinde on-call sahibi 24 saat içinde aynı
 yoldaki dosyayı silmeli ve source değeri olmadan incident/audit referansını kaydetmelidir. Yeni verify için
 yeni source kaydı gerekir.
 
@@ -486,7 +487,8 @@ ile okunur.
 Workflow default branch'e alınmadan önce aynı-repo draft PR doğrulaması gerekiyorsa staging environment
 `STAGING_OUTBOX_DEPLOY_RUN_ID` değişkeni başarılı deploy run ID'sine ayarlanır ve PR'a
 `staging-outbox-verify` etiketi eklenir. `pull_request:labeled` yolu da run metadata ve cutover artifact
-bağını aynı kontrollerle doğrular; fork PR'larda staging secret'ları kullanılmaz.
+bağını aynı kontrollerle doğrular ve PR head SHA ile cutover source SHA eşleşmiyorsa durur; fork PR'larda
+staging secret'ları kullanılmaz.
 
 Artifact yalnız `outboxRecordHash`, `purpose`, retry sayısı, teslim/güncelleme zamanı, terminal durum,
 `payloadCleared`, PII-safe `releaseImageTag`/`notBefore` ve `secret_delivery_worker` minimum yetki sonucunu içerir. User `SELECT`, public schema
