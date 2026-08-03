@@ -473,8 +473,11 @@ Staging deploy, exact dört servis tag'i ve first-gates sonrası PII-safe `deplo
 yoluna koyar. Sibling private root ve tag dizini `0700`, regular dosya `0600`, aynı remote kullanıcı sahibi
 olmalıdır; symlink kabul edilmez. Verify-only dispatch yalnız `deploy_run_id` alır, önce indirilen cutover
 artifact'i ve güncel dört container tag'ini doğrular. Eksik private source veya image drift'i, bağımlılık
-kurulumundan ve data tunnel açılmasından önce açık bir preflight hatasıyla durur. Workflow source
-dosyasını ve geçici helper'ları her sonuçta idempotent olarak siler; runner/SSH kesintisinde on-call sahibi 24 saat içinde aynı
+kurulumundan ve data tunnel açılmasından önce açık bir preflight hatasıyla durur. Geçerli source dizini
+preflight sırasında run-scope `.claims/<releaseImageTag>/<verifyRunId>` yoluna atomik taşınır; başka verify
+run'ı aynı girdiyi okuyamaz. Workflow claimed source dosyasını ve geçici helper'ları her sonuçta siler;
+smoke container image'ını cutover worker SHA'sına sabitler ve çalışan worker image'ını smoke öncesi/sonrası
+yeniden doğrular. Boş dizin temizliği idempotent, source/helper dosya silme hatası fail-closed'dur. Runner/SSH kesintisinde on-call sahibi 24 saat içinde aynı
 yoldaki dosyayı silmeli ve source değeri olmadan incident/audit referansını kaydetmelidir. Yeni verify için
 yeni source kaydı gerekir.
 

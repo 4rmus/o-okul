@@ -339,6 +339,8 @@ function checkOutboxVerifyWorkflowContract(output) {
     "Validate staging verify environment",
     "Preflight current images and private outbox source",
     "Phase B private source missing for release",
+    "OUTBOX_SOURCE_CLAIM_DIR=/root/o-okul-private/secret-delivery-outbox/.claims/",
+    "mv -- \"$source_dir\" \"$SOURCE_CLAIM_DIR\"",
     "[ \"$STAGING_DEPLOY_DIR\" = \"/root/o-okul\" ]",
     "require_running_image web",
     "require_running_image api",
@@ -355,8 +357,11 @@ function checkOutboxVerifyWorkflowContract(output) {
     "UI_UX_PROFESSIONALIZATION_FULL_EVIDENCE: \"1\"",
     "run: pnpm ui-ux-professionalization:completion:check",
     "-v \"$source_dir:/run/outbox-source:ro\"",
-    "rm -f -- '$source_file'",
-    "rmdir -- '$source_dir' 2>/dev/null || true",
+    "WORKER_IMAGE=\"$expected_worker_image\" docker compose",
+    "require_running_worker_image",
+    "require_running_worker_image # post-smoke exact-image gate",
+    "rm -f -- \"$SOURCE_CLAIM_DIR/source-id\"",
+    "rmdir -- \"$SOURCE_CLAIM_DIR\" 2>/dev/null || true",
     "Remove private outbox verification material",
     "if: ${{ always() }}",
     "Clean local verification secrets",
@@ -373,6 +378,24 @@ function checkOutboxVerifyWorkflowContract(output) {
   if (workflow.match(/SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID|inputs\.source|secrets\..*SOURCE/i)) {
     output.push(`${outboxVerifyWorkflowPath} source ID GitHub input/secret olarak taşımamalı.`);
   }
+  requireWorkflowOrder(output, workflow, "outbox source claim ve cleanup sırası", [
+    "Bind selected deployment run to cutover source",
+    "Validate staging verify environment",
+    "Configure SSH",
+    "Preflight current images and private outbox source",
+    "mv -- \"$source_dir\" \"$SOURCE_CLAIM_DIR\"",
+    "pnpm/action-setup@v4",
+    "pnpm install --frozen-lockfile",
+    "Open staging data tunnels for aggregate checks",
+    "Upload cutover-bound smoke helpers",
+    "Run private outbox smoke",
+    "WORKER_IMAGE=\"$expected_worker_image\" docker compose",
+    "require_running_worker_image # post-smoke exact-image gate",
+    "Upload sanitized Phase B outbox evidence",
+    "Remove private outbox verification material",
+    "rm -f -- \"$SOURCE_CLAIM_DIR/source-id\"",
+    "Clean local verification secrets",
+  ]);
 }
 
 function checkProdEvidenceDefaults(output) {

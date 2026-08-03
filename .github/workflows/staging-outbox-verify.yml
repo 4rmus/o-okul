@@ -119,6 +119,7 @@ jobs:
           esac
           echo "STAGING_SSH_KEY_PATH=$RUNNER_TEMP/staging_deploy_key" >> "$GITHUB_ENV"
           echo "STAGING_KNOWN_HOSTS_PATH=$RUNNER_TEMP/staging_known_hosts" >> "$GITHUB_ENV"
+          echo "OUTBOX_SOURCE_CLAIM_DIR=/root/o-okul-private/secret-delivery-outbox/.claims/$CUTOVER_RELEASE_IMAGE_TAG/${{ github.run_id }}" >> "$GITHUB_ENV"
 
       - name: Configure SSH
         shell: bash
@@ -139,7 +140,7 @@ jobs:
         run: |
           set -euo pipefail
           ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
-            "STAGING_EDGE_MODE='$STAGING_EDGE_MODE' RELEASE_IMAGE_TAG='$CUTOVER_RELEASE_IMAGE_TAG' REPOSITORY='$CUTOVER_REPOSITORY' CUTOVER_AT='$CUTOVER_AT' bash -se" <<'REMOTE'
+            "STAGING_EDGE_MODE='$STAGING_EDGE_MODE' RELEASE_IMAGE_TAG='$CUTOVER_RELEASE_IMAGE_TAG' REPOSITORY='$CUTOVER_REPOSITORY' CUTOVER_AT='$CUTOVER_AT' SOURCE_CLAIM_DIR='$OUTBOX_SOURCE_CLAIM_DIR' bash -se" <<'REMOTE'
           set -euo pipefail
           cd /root/o-okul
           case "$STAGING_EDGE_MODE" in
@@ -171,9 +172,16 @@ jobs:
             echo "Phase B private source missing for release $RELEASE_IMAGE_TAG; provision a fresh post-cutover retry delivery source before verify." >&2
             exit 1
           fi
-          for path in "$private_root" "$source_dir"; do
-            [ -d "$path" ] && [ ! -L "$path" ] && [ "$(stat -c %a "$path")" = 700 ] && [ "$(stat -c %u "$path")" = "$(id -u)" ]
-          done
+          [ -d "$private_root" ] && [ ! -L "$private_root" ]
+          [ -d "$source_dir" ] && [ ! -L "$source_dir" ]
+          claim_parent="$(dirname "$SOURCE_CLAIM_DIR")"
+          install -d -m 700 "$private_root/.claims" "$claim_parent"
+          [ ! -e "$SOURCE_CLAIM_DIR" ]
+          mv -- "$source_dir" "$SOURCE_CLAIM_DIR"
+          source_dir="$SOURCE_CLAIM_DIR"
+          source_file="$source_dir/source-id"
+          [ "$(stat -c %a "$private_root")" = 700 ] && [ "$(stat -c %u "$private_root")" = "$(id -u)" ]
+          [ "$(stat -c %a "$source_dir")" = 700 ] && [ "$(stat -c %u "$source_dir")" = "$(id -u)" ]
           [ ! -L "$source_file" ] && [ "$(stat -c %a "$source_file")" = 600 ] && [ "$(stat -c %u "$source_file")" = "$(id -u)" ]
           cutover_epoch="$(date -d "$CUTOVER_AT" +%s)"
           source_mtime="$(stat -c %Y "$source_file")"
@@ -234,7 +242,7 @@ jobs:
         run: |
           set -euo pipefail
           ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
-            "STAGING_EDGE_MODE='$STAGING_EDGE_MODE' RELEASE_IMAGE_TAG='$CUTOVER_RELEASE_IMAGE_TAG' REPOSITORY='$CUTOVER_REPOSITORY' CUTOVER_AT='$CUTOVER_AT' OUTBOX_VERIFY_HELPERS_DIR='$OUTBOX_VERIFY_HELPERS_DIR' bash -se" <<'REMOTE'
+            "STAGING_EDGE_MODE='$STAGING_EDGE_MODE' RELEASE_IMAGE_TAG='$CUTOVER_RELEASE_IMAGE_TAG' REPOSITORY='$CUTOVER_REPOSITORY' CUTOVER_AT='$CUTOVER_AT' OUTBOX_VERIFY_HELPERS_DIR='$OUTBOX_VERIFY_HELPERS_DIR' OUTBOX_SOURCE_CLAIM_DIR='$OUTBOX_SOURCE_CLAIM_DIR' bash -se" <<'REMOTE'
           set -euo pipefail
           STAGING_DEPLOY_DIR=/root/o-okul
           cd "$STAGING_DEPLOY_DIR"
@@ -245,16 +253,27 @@ jobs:
           esac
           [[ "$RELEASE_IMAGE_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]
           [[ "$REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
-          private_root="$(dirname "$STAGING_DEPLOY_DIR")/o-okul-private/secret-delivery-outbox"
-          source_dir="$private_root/$RELEASE_IMAGE_TAG"
+          expected_worker_image="ghcr.io/$REPOSITORY/worker:$RELEASE_IMAGE_TAG"
+          require_running_worker_image() {
+            local id image state health
+            id="$(docker compose --env-file .env --env-file .env.release -f docker-compose.yml -f docker-compose.release.yml -f "$EDGE_COMPOSE_FILE" ps -q worker)"
+            [ -n "$id" ]
+            image="$(docker inspect -f '{{.Config.Image}}' "$id")"
+            state="$(docker inspect -f '{{.State.Status}}' "$id")"
+            health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$id")"
+            [ "$image" = "$expected_worker_image" ] && [ "$state" = running ] && { [ -z "$health" ] || [ "$health" = healthy ]; }
+          }
+          require_running_worker_image
+          source_dir="$OUTBOX_SOURCE_CLAIM_DIR"
           source_file="$source_dir/source-id"
           mkdir -p artifacts/staging/smoke
-          docker compose --env-file .env --env-file .env.release -f docker-compose.yml -f docker-compose.release.yml -f "$EDGE_COMPOSE_FILE" run --rm -T \
+          WORKER_IMAGE="$expected_worker_image" docker compose --env-file .env --env-file .env.release -f docker-compose.yml -f docker-compose.release.yml -f "$EDGE_COMPOSE_FILE" run --rm -T \
             -v "$OUTBOX_VERIFY_HELPERS_DIR:/app/scripts:ro" -v "$PWD/artifacts:/app/artifacts" -v "$source_dir:/run/outbox-source:ro" \
             -e STAGING_ENVIRONMENT=staging -e SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_FILE=/run/outbox-source/source-id \
             -e SECRET_DELIVERY_OUTBOX_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/secret-delivery-outbox.json \
             -e SECRET_DELIVERY_OUTBOX_NOT_BEFORE="$CUTOVER_AT" -e SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG="$RELEASE_IMAGE_TAG" \
             worker node scripts/smoke-secret-delivery-outbox-staging.mjs < /dev/null
+          require_running_worker_image # post-smoke exact-image gate
           REMOTE
           scp -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST:/root/o-okul/artifacts/staging/smoke/secret-delivery-outbox.json" artifacts/secret-delivery-outbox.json
 
@@ -361,16 +380,23 @@ jobs:
         run: |
           set -euo pipefail
           [[ "${CUTOVER_RELEASE_IMAGE_TAG:-}" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] || exit 0
-          [ -n "${OUTBOX_VERIFY_HELPERS_DIR:-}" ] || exit 0
           [ -s "${STAGING_SSH_KEY_PATH:-}" ] || exit 0
-          source_file="/root/o-okul-private/secret-delivery-outbox/$CUTOVER_RELEASE_IMAGE_TAG/source-id"
-          source_dir="$(dirname "$source_file")"
-          source_root="$(dirname "$source_dir")"
-          helper_smoke="$OUTBOX_VERIFY_HELPERS_DIR/smoke-secret-delivery-outbox-staging.mjs"
-          helper_contract="$OUTBOX_VERIFY_HELPERS_DIR/smoke-evidence.mjs"
-          helper_run_dir="$(dirname "$OUTBOX_VERIFY_HELPERS_DIR")"
+          [ -n "${OUTBOX_SOURCE_CLAIM_DIR:-}" ] || exit 0
+          expected_claim_dir="/root/o-okul-private/secret-delivery-outbox/.claims/$CUTOVER_RELEASE_IMAGE_TAG/$GITHUB_RUN_ID"
+          [ "$OUTBOX_SOURCE_CLAIM_DIR" = "$expected_claim_dir" ]
           ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
-            "rm -f -- '$source_file' '$helper_smoke' '$helper_contract'; rmdir -- '$source_dir' 2>/dev/null || true; rmdir -- '$OUTBOX_VERIFY_HELPERS_DIR' 2>/dev/null || true; rmdir -- '$source_root' 2>/dev/null || true; rmdir -- '$helper_run_dir' 2>/dev/null || true"
+            "SOURCE_CLAIM_DIR='$OUTBOX_SOURCE_CLAIM_DIR' HELPERS_DIR='${OUTBOX_VERIFY_HELPERS_DIR:-}' bash -se" <<'REMOTE'
+          set -euo pipefail
+          rm -f -- "$SOURCE_CLAIM_DIR/source-id"
+          rmdir -- "$SOURCE_CLAIM_DIR" 2>/dev/null || true
+          rmdir -- "$(dirname "$SOURCE_CLAIM_DIR")" 2>/dev/null || true
+          rmdir -- "$(dirname "$(dirname "$SOURCE_CLAIM_DIR")")" 2>/dev/null || true
+          if [ -n "$HELPERS_DIR" ]; then
+            rm -f -- "$HELPERS_DIR/smoke-secret-delivery-outbox-staging.mjs" "$HELPERS_DIR/smoke-evidence.mjs"
+            rmdir -- "$HELPERS_DIR" 2>/dev/null || true
+            rmdir -- "$(dirname "$HELPERS_DIR")" 2>/dev/null || true
+          fi
+          REMOTE
 
       - uses: actions/upload-artifact@v4
         if: ${{ success() }}
