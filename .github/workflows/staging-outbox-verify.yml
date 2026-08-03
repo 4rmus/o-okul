@@ -104,6 +104,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.CUTOVER_SOURCE_SHA }}
+          clean: false
 
       - name: Validate staging verify environment
         shell: bash

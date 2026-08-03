@@ -477,7 +477,8 @@ kurulumundan ve data tunnel açılmasından önce açık bir preflight hatasıyl
 preflight sırasında run-scope `.claims/<releaseImageTag>/<verifyRunId>` yoluna atomik taşınır; başka verify
 run'ı aynı girdiyi okuyamaz. Workflow claimed source dosyasını ve geçici helper'ları her sonuçta siler;
 smoke container image'ını cutover worker SHA'sına sabitler ve çalışan worker image'ını smoke öncesi/sonrası
-yeniden doğrular. Boş dizin temizliği idempotent, source/helper dosya silme hatası fail-closed'dur. Runner/SSH kesintisinde on-call sahibi 24 saat içinde aynı
+yeniden doğrular. Cutover artifact'i source-SHA checkout sırasında korunur ve full aggregation'a aynı dosya
+taşınır. Boş dizin temizliği idempotent, source/helper dosya silme hatası fail-closed'dur. Runner/SSH kesintisinde on-call sahibi 24 saat içinde aynı
 yoldaki dosyayı silmeli ve source değeri olmadan incident/audit referansını kaydetmelidir. Yeni verify için
 yeni source kaydı gerekir.
 

@@ -336,6 +336,7 @@ function checkOutboxVerifyWorkflowContract(output) {
     "Bind selected deployment run to cutover source",
     "github.event.pull_request.head.sha",
     "eventName === \"pull_request\"",
+    "clean: false",
     "Validate staging verify environment",
     "Preflight current images and private outbox source",
     "Phase B private source missing for release",
@@ -380,6 +381,7 @@ function checkOutboxVerifyWorkflowContract(output) {
   }
   requireWorkflowOrder(output, workflow, "outbox source claim ve cleanup sırası", [
     "Bind selected deployment run to cutover source",
+    "clean: false",
     "Validate staging verify environment",
     "Configure SSH",
     "Preflight current images and private outbox source",

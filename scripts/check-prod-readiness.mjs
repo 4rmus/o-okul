@@ -1191,6 +1191,7 @@ const expectations = {
     "Bind selected deployment run to cutover source",
     "github.event.pull_request.head.sha",
     "eventName === \"pull_request\"",
+    "clean: false",
     "Validate staging verify environment",
     "Preflight current images and private outbox source",
     "Phase B private source missing for release",
