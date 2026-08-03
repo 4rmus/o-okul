@@ -7,6 +7,11 @@ on:
         description: "Staging Deploy run ID whose cutover artifact will be verified."
         required: true
         type: string
+      full_evidence:
+        description: "Also run the separate full production evidence aggregation."
+        required: false
+        default: false
+        type: boolean
   pull_request:
     types: [labeled]
 
@@ -214,6 +219,7 @@ jobs:
         run: GITHUB_CI_EVIDENCE_TARGET="file://$PWD/artifacts/staging/reports/github-ci.json" pnpm github-ci:check
 
       - name: Open staging data tunnels for aggregate checks
+        if: ${{ inputs.full_evidence }}
         shell: bash
         env:
           STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
@@ -292,6 +298,7 @@ jobs:
           if-no-files-found: error
 
       - name: Run configured production evidence aggregation
+        if: ${{ inputs.full_evidence }}
         shell: bash
         env:
           STAGING_EVIDENCE_ENV_B64: ${{ secrets.STAGING_EVIDENCE_ENV_B64 }}
@@ -353,6 +360,7 @@ jobs:
             pnpm prod:evidence:check -- --env-file .staging-evidence.env --summary-file "artifacts/staging/release-summary-$CUTOVER_RELEASE_IMAGE_TAG.json"
 
       - name: Bind verified UI/UX completion to full evidence
+        if: ${{ inputs.full_evidence }}
         shell: bash
         env:
           GITHUB_CI_EVIDENCE_TARGET: file://${{ github.workspace }}/artifacts/staging/reports/github-ci.json
@@ -364,6 +372,7 @@ jobs:
         run: pnpm ui-ux-professionalization:completion:check
 
       - name: Check verified staging release artifact bundle
+        if: ${{ inputs.full_evidence }}
         shell: bash
         run: STAGING_RELEASE_ARTIFACTS_TARGET="$PWD/artifacts/staging" pnpm staging:release-artifacts:check
 
@@ -427,7 +436,7 @@ jobs:
           REMOTE
 
       - uses: actions/upload-artifact@v4
-        if: ${{ success() }}
+        if: ${{ success() && inputs.full_evidence }}
         with:
           name: staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}
           path: artifacts/staging

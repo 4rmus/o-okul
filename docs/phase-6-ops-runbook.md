@@ -502,8 +502,10 @@ teslimatı ile KVKK/DPA kanıtı ayrı live gate olarak kalır. Template kontrol
 yerine geçmez.
 Sanitize edilmiş Phase B sonucu doğrulamadan hemen sonra
 `staging-outbox-smoke-<deploy-run-id>-<verify-run-id>` adıyla ayrıca upload edilir. Sonraki full production
-evidence kapısı kırmızı olsa bile bu dar artifact korunur; `staging-outbox-verify-*` full release bundle'ı
-yine yalnız tüm full-evidence ve release-artifact kapıları geçtiğinde yayımlanır.
+evidence kapısı Phase B'nin sonucu değildir: workflow varsayılan olarak yalnız Phase B'yi çalıştırır.
+`full_evidence=true` açıkça seçilirse ayrı full production evidence aggregation da koşar;
+`staging-outbox-verify-*` full release bundle'ı yine yalnız tüm full-evidence ve release-artifact kapıları
+geçtiğinde yayımlanır. PR label yolu yalnız Phase B kapsamındadır.
 Full aggregation, private env dosyasındaki UI/UX GitHub run referansını seçilen deploy'un indirilen
 `github-ci.json` artifact'indeki exact run URL'sine çalışma anında bağlar; secret içeriğini loglamaz ve
 env dosyasını `0600` modunda tutar. Böylece eski bir template run URL'si yeni cutover kanıtına karışamaz.

@@ -1183,6 +1183,8 @@ const expectations = {
   ".github/workflows/staging-outbox-verify.yml": [
     "workflow_dispatch:",
     "deploy_run_id:",
+    "full_evidence:",
+    "description: \"Also run the separate full production evidence aggregation.\"",
     "concurrency:",
     "actions: read",
     "Validate selected deployment run metadata",
@@ -1221,6 +1223,7 @@ const expectations = {
     "UI_UX_PROFESSIONALIZATION_FULL_EVIDENCE: \"1\"",
     "run: pnpm ui-ux-professionalization:completion:check",
     "Run configured production evidence aggregation",
+    "if: ${{ inputs.full_evidence }}",
     "trap 'rm -f -- .staging-evidence.env' EXIT",
     "sed -i 's/^ADMIN_MFA_MODE=.*/ADMIN_MFA_MODE=required/' .staging-evidence.env",
     "chmod 600 .staging-evidence.env",
@@ -1235,6 +1238,7 @@ const expectations = {
     "rmdir -- \"$SOURCE_CLAIM_DIR\" 2>/dev/null || true",
     "Clean local verification secrets",
     "staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}",
+    "if: ${{ success() && inputs.full_evidence }}",
   ],
   "docker/alloy/config.alloy": ["loki.source.docker", "loki.write", "http://loki:3100/loki/api/v1/push"],
   "docker/prometheus/rules/api-alerts.yml": [

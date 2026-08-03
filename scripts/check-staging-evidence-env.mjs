@@ -325,6 +325,10 @@ function checkOutboxVerifyWorkflowContract(output) {
   for (const token of [
     "name: Staging Outbox Verify",
     "deploy_run_id:",
+    "full_evidence:",
+    "description: \"Also run the separate full production evidence aggregation.\"",
+    "if: ${{ inputs.full_evidence }}",
+    "if: ${{ success() && inputs.full_evidence }}",
     "types: [labeled]",
     "github.event.label.name == 'staging-outbox-verify'",
     "vars.STAGING_OUTBOX_DEPLOY_RUN_ID",
@@ -381,6 +385,9 @@ function checkOutboxVerifyWorkflowContract(output) {
   }
   if (workflow.match(/SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID|inputs\.source|secrets\..*SOURCE/i)) {
     output.push(`${outboxVerifyWorkflowPath} source ID GitHub input/secret olarak taşımamalı.`);
+  }
+  if (workflow.split("if: ${{ inputs.full_evidence }}").length - 1 !== 4) {
+    output.push(`${outboxVerifyWorkflowPath} full evidence adımları tam olarak dört explicit koşulla ayrılmalı.`);
   }
   requireWorkflowOrder(output, workflow, "outbox source claim ve cleanup sırası", [
     "Bind selected deployment run to cutover source",
