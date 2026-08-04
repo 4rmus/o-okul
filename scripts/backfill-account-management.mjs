@@ -453,10 +453,27 @@ async function collectReadiness(queryable, owners) {
       (SELECT count(*)::int FROM "AuthSession" session JOIN legacy_session_roles expected
         ON expected."tenantId" = session."tenantId" AND expected."userId" = session."userId"
         WHERE session."status" = 'ACTIVE' AND session."membershipVersion" = expected."membershipVersion") AS "sessionVersionMatches",
-      (SELECT count(*)::int FROM "AuthSession" session JOIN legacy_session_roles expected
-        ON expected."tenantId" = session."tenantId" AND expected."userId" = session."userId"
-        WHERE session."status" = 'ACTIVE'
-          AND ARRAY(SELECT DISTINCT role FROM unnest(session.roles) role ORDER BY role) = expected.roles) AS "sessionLegacyRoleMatches"`,
+      (SELECT count(*)::int
+       FROM "AuthSession" session
+       LEFT JOIN legacy_session_roles legacy
+         ON legacy."tenantId" = session."tenantId" AND legacy."userId" = session."userId"
+       LEFT JOIN expected_memberships canonical
+         ON canonical."tenantId" = session."tenantId" AND canonical."userId" = session."userId"
+        AND canonical."id" = session."membershipId"
+       WHERE session."status" = 'ACTIVE'
+         AND (
+           (session."membershipId" IS NULL AND session."activePersona" IS NULL
+             AND ARRAY(SELECT DISTINCT role FROM unnest(session.roles) role ORDER BY role) = legacy.roles)
+           OR
+           (session."membershipId" = canonical."id" AND (
+             (session."activePersona" = 'STAFF' AND canonical.staff_role IS NOT NULL
+               AND ARRAY(SELECT DISTINCT role FROM unnest(session.roles) role ORDER BY role) = ARRAY[canonical.staff_role])
+             OR (session."activePersona" = 'TEACHER' AND canonical.has_teacher
+               AND ARRAY(SELECT DISTINCT role FROM unnest(session.roles) role ORDER BY role) = ARRAY['TEACHER']::text[])
+             OR (session."activePersona" = 'STUDENT' AND canonical.has_student
+               AND ARRAY(SELECT DISTINCT role FROM unnest(session.roles) role ORDER BY role) = ARRAY['STUDENT']::text[])
+           ))
+         )) AS "sessionLegacyRoleMatches"`,
     [ownerTenantIds, ownerUserIds],
   );
   const row = numberRow(result.rows[0]);
