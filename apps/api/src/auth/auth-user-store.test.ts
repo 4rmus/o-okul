@@ -85,7 +85,7 @@ describe("auth user store", () => {
           async query<T>(sql: string, values?: unknown[]) {
             queries.push({ sql, values });
             if (sql.includes('UPDATE "User"')) {
-              return { rows: [{ id: "user-a" }] as T[] };
+              return { rows: [{ id: "user-a", tenantId: "tenant-a", membershipVersion: 7 }] as T[] };
             }
             if (sql.includes('FROM "User" u')) {
               return {
@@ -179,6 +179,13 @@ describe("auth user store", () => {
     const counterUpdate = queries.find((query) => query.sql.includes('"totpLastUsedCounter" = $2'));
     expect(counterUpdate?.sql).toContain('$2::bigint > "totpLastUsedCounter"::bigint');
     expect(counterUpdate?.sql).not.toContain('IS DISTINCT FROM $2');
+    const totpMembershipUpdates = queries.filter((query) => query.sql.includes('UPDATE "TenantMembership"'));
+    expect(totpMembershipUpdates).toHaveLength(2);
+    expect(totpMembershipUpdates.every((query) => query.sql.includes('"version" = $3'))).toBe(true);
+    expect(totpMembershipUpdates.map((query) => query.values)).toEqual([
+      ["tenant-a", "user-a", 7],
+      ["tenant-a", "user-a", 7],
+    ]);
     expect(queries.some((query) => query.sql === "COMMIT")).toBe(true);
   });
 

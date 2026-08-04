@@ -5,10 +5,12 @@ import Link from "next/link";
 import { Button, Field, Input } from "@o-okul/ui";
 import { acceptIdentityInvitation, activateStudentPortal } from "../../../src/api-client.js";
 import { appBrand } from "../../../src/brand.js";
+import { browserTenantSlug } from "../../../src/tenant-host.js";
 
 export default function ActivationPage() {
   const [token, setToken] = useState("");
   const [tenantSlug, setTenantSlug] = useState("");
+  const [hostTenantSlug, setHostTenantSlug] = useState("");
   const [studentNo, setStudentNo] = useState("");
   const [activationCode, setActivationCode] = useState("");
   const [isEmployeeInvitation, setIsEmployeeInvitation] = useState(false);
@@ -23,9 +25,11 @@ export default function ActivationPage() {
     const searchParams = new URLSearchParams(window.location.search);
     const fragmentParams = new URLSearchParams(window.location.hash.slice(1));
     const invitationToken = fragmentParams.get("token")?.trim() || searchParams.get("token")?.trim() || "";
+    const fromHost = browserTenantSlug() ?? "";
     setToken(invitationToken);
     setIsEmployeeInvitation(Boolean(invitationToken));
-    setTenantSlug((fragmentParams.get("tenant") ?? searchParams.get("tenant"))?.trim() ?? "");
+    setHostTenantSlug(fromHost);
+    setTenantSlug(fromHost || (fragmentParams.get("tenant") ?? searchParams.get("tenant"))?.trim() || "");
     setStudentNo((fragmentParams.get("student") ?? searchParams.get("student"))?.trim() ?? "");
     setActivationCode((fragmentParams.get("code") ?? searchParams.get("code"))?.trim().toUpperCase() ?? "");
     if (window.location.hash || ["token", "tenant", "student", "code"].some((name) => searchParams.has(name))) {
@@ -46,7 +50,7 @@ export default function ActivationPage() {
       return;
     }
     if (!isEmployeeInvitation && (!tenantSlug.trim() || !studentNo.trim() || !/^[A-HJ-NP-Z2-9]{12}$/.test(activationCode))) {
-      setError("Kurum kodu, öğrenci numarası ve 12 karakterlik aktivasyon kodunu kontrol edin.");
+      setError("Kurum adresi, öğrenci numarası ve 12 karakterlik aktivasyon kodunu kontrol edin.");
       return;
     }
     if (password.length < 15 || password.length > 128) {
@@ -64,7 +68,7 @@ export default function ActivationPage() {
         await acceptIdentityInvitation({ token, password });
       } else {
         const accepted = await activateStudentPortal({
-          tenantSlug: tenantSlug.trim(),
+          ...(!hostTenantSlug ? { tenantSlug: tenantSlug.trim() } : {}),
           studentNo: studentNo.trim(),
           code: activationCode,
           password,
@@ -94,21 +98,23 @@ export default function ActivationPage() {
             <p className="next-status-note" role="status">
               Hesabınız etkinleştirildi. {loginName ? `Öğrenci numaranız (${loginName}) ile giriş yapabilirsiniz.` : "Kurum kodunuzla giriş yapabilirsiniz."}
             </p>
-            <Link className="uh-button uh-button--primary uh-button--md" href="/login">Giriş yap</Link>
+            <Link className="uh-button uh-button--primary uh-button--md" href={hostTenantSlug ? "/giris" : "/login"}>Giriş yap</Link>
           </>
         ) : (
           <>
             {!isEmployeeInvitation ? (
               <>
-                <Field label="Kurum kodu">
-                  <Input
-                    name="tenantSlug"
-                    value={tenantSlug}
-                    onChange={(event) => setTenantSlug(event.target.value)}
-                    autoComplete="organization"
-                    required
-                  />
-                </Field>
+                {!hostTenantSlug ? (
+                  <Field label="Kurum kodu">
+                    <Input
+                      name="tenantSlug"
+                      value={tenantSlug}
+                      onChange={(event) => setTenantSlug(event.target.value)}
+                      autoComplete="organization"
+                      required
+                    />
+                  </Field>
+                ) : null}
                 <Field label="Öğrenci numarası">
                   <Input
                     name="studentNo"
@@ -168,7 +174,7 @@ export default function ActivationPage() {
         <p className="next-section-eyebrow">Tek kullanımlık davet</p>
         <h2>Bağlantı ve kod 24 saat geçerlidir.</h2>
         <p>Şifrenizi yalnız bu ekranda belirleyin. Süresi dolan, kullanılan veya deneme limiti dolan kod yeniden kullanılamaz.</p>
-        <Link className="next-auth-link" href="/login">Girişe dön</Link>
+        <Link className="next-auth-link" href={hostTenantSlug ? "/giris" : "/login"}>Girişe dön</Link>
       </aside>
     </section>
   );

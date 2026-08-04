@@ -25,5 +25,5 @@ datacenter seçimi bu yüzden dağıtım kararının parçasıdır.
 - `frontend_net` ve `backend_net` ayrılır; web doğrudan DB/Redis/MinIO görmez.
 - Her servis healthcheck üretir.
 - Staging ve prod ortamları ayrı override dosyaları veya ayrı VPS ile ayrılır.
-- Traefik v3.7.5 ACME HTTP-01, entrypoint ve Docker label sözdizimi resmi dokümanla doğrulandı;
-  canlı HTTPS kanıtı staging domain gerektirir.
+- Traefik v3.7.5 ACME Cloudflare DNS-01, wildcard domain, entrypoint ve Docker label sözdizimi
+  doğrulandı; canlı HTTPS kanıtı ayrı staging deployment ve `*.staging.o-okul.com` DNS'i gerektirir.

@@ -13,6 +13,7 @@ import {
 import { licenseTermCreateBodySchema, type LicenseTermCreateBody } from "../license/license-validation.js";
 import { resolveLicenseState } from "../license/license-state.js";
 import { normalizeTcIdentity } from "../student/tc-identity.js";
+import { assertValidTenantSlug, TenantHostError } from "../http/tenant-host.js";
 import type { TenantUserRecord } from "../user-management/user-management-store.js";
 import {
   type CreateTenantInput,
@@ -282,7 +283,7 @@ function parseCreateTenant(body: TenantWriteBody): CreateTenantInput {
   return {
     id: optionalText(body.id),
     name: requiredText(body.name, "TENANT_NAME_REQUIRED"),
-    slug: requiredText(body.slug, "TENANT_SLUG_REQUIRED"),
+    slug: validTenantSlug(requiredText(body.slug, "TENANT_SLUG_REQUIRED")),
     plan: optionalText(body.plan) ?? "TRIAL",
     licenseStartsAt: optionalDate(body.licenseStartsAt, "TENANT_LICENSE_START_INVALID"),
     licenseEndsAt: optionalDate(body.licenseEndsAt, "TENANT_LICENSE_END_INVALID"),
@@ -297,12 +298,20 @@ function parseCreateTenant(body: TenantWriteBody): CreateTenantInput {
 function parseUpdateTenant(body: TenantWriteBody): UpdateTenantInput {
   return {
     name: optionalText(body.name),
-    slug: optionalText(body.slug),
     institutionType: optionalText(body.institutionType),
     contactEmail: optionalEmail(body.contactEmail, "TENANT_CONTACT_EMAIL_INVALID"),
     logoUrl: optionalUrl(body.logoUrl, "TENANT_LOGO_URL_INVALID"),
     status: optionalText(body.status),
   };
+}
+
+function validTenantSlug(slug: string): string {
+  try {
+    return assertValidTenantSlug(slug);
+  } catch (error) {
+    if (error instanceof TenantHostError) throw new BadRequestException(error.message);
+    throw error;
+  }
 }
 
 function parseCurrentTenantProfileUpdate(body: TenantWriteBody): UpdateTenantInput {

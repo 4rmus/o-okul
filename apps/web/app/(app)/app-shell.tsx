@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Building2, ChevronDown, LogOut, Menu, Search, ShieldCheck, UserRound, X, type LucideIcon } from "lucide-react";
 import { Button, Dialog, Field, Input, Panel, StatusBadge, type StatusBadgeProps } from "@o-okul/ui";
 import { isTenantRoleName, tenantRoleLabel, type ActivePersona, type GlobalSearchResultRecord, type MeProfileResponse, type NotificationDeviceTokenRecord, type Session, type TenantRecord } from "@o-okul/shared-types";
-import { apiBaseUrl, apiListRequest, apiRequest } from "../../src/api-client.js";
+import { apiBaseUrl, apiListRequest, apiRequest, withQueryParams } from "../../src/api-client.js";
 import { appBrand } from "../../src/brand.js";
 import { useAuth } from "../providers.js";
 import { readRolePreviewToken } from "./portals/_shared/portal-shell.js";
@@ -1033,10 +1033,8 @@ function filterCommandItems(items: CommandPaletteItem[], query: string) {
 
 async function searchEntities(accessToken: string, query: string): Promise<EntitySearchResult[]> {
   try {
-    const url = new URL(`${apiBaseUrl}/search`);
-    url.searchParams.set("q", query);
-    url.searchParams.set("limit", String(entitySearchLimit));
-    const results = (await apiListRequest<GlobalSearchResultRecord>(accessToken, url.toString())).data;
+    const url = withQueryParams(`${apiBaseUrl}/search`, { limit: String(entitySearchLimit), q: query });
+    const results = (await apiListRequest<GlobalSearchResultRecord>(accessToken, url)).data;
     return results.map((result) => ({
       group: searchResultGroupLabel(result.type),
       href: result.href,

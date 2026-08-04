@@ -2,7 +2,7 @@ import { randomBytes, randomUUID, scrypt, scryptSync, timingSafeEqual } from "no
 import { promisify } from "node:util";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
-import { type TenantQueryable, withBypassRlsQuery, withExplicitTenantQuery } from "../db/tenant-query.js";
+import { type Queryable, type TenantQueryable, withBypassRlsQuery, withExplicitTenantQuery } from "../db/tenant-query.js";
 import { buildTenantMembershipDualWriteRows } from "../identity-provisioning/tenant-membership-dual-write.js";
 import { hashTcIdentity } from "../student/tc-identity.js";
 import {
@@ -650,7 +650,7 @@ export class PostgresAuthUserStore implements AuthUserStore {
     lastUsedCounter?: string;
   }): Promise<AuthUser | undefined> {
     const updated = await withBypassRlsQuery(this.pool, async (client) => {
-      const update = await client.query(
+      const update = await client.query<{ id: string; membershipVersion: number; tenantId: string | null }>(
         `UPDATE "User"
          SET "totpSecretEncrypted" = $2,
              "totpEnabledAt" = $3::timestamptz,
@@ -661,17 +661,20 @@ export class PostgresAuthUserStore implements AuthUserStore {
          WHERE "id" = $1
            AND "totpSecretEncrypted" IS NULL
            AND "totpEnabledAt" IS NULL
-         RETURNING "id"`,
+         RETURNING "id", "tenantId", "membershipVersion"`,
         [input.userId, input.secretEncrypted, input.enabledAt, input.recoveryCodeHashes, input.lastUsedCounter ?? null],
       );
-      return Boolean(update.rows[0]);
+      const user = update.rows[0];
+      if (!user) return false;
+      await syncActiveMembershipVersions(client, user);
+      return true;
     });
     return updated ? this.findById(input.userId) : undefined;
   }
 
   async disableTotp(userId: string): Promise<AuthUser | undefined> {
     const updated = await withBypassRlsQuery(this.pool, async (client) => {
-      const update = await client.query(
+      const update = await client.query<{ id: string; membershipVersion: number; tenantId: string | null }>(
         `UPDATE "User"
          SET "totpSecretEncrypted" = NULL,
              "totpEnabledAt" = NULL,
@@ -680,10 +683,13 @@ export class PostgresAuthUserStore implements AuthUserStore {
              "membershipVersion" = "membershipVersion" + 1,
              "updatedAt" = now()
          WHERE "id" = $1
-         RETURNING "id"`,
+         RETURNING "id", "tenantId", "membershipVersion"`,
         [userId],
       );
-      return Boolean(update.rows[0]);
+      const user = update.rows[0];
+      if (!user) return false;
+      await syncActiveMembershipVersions(client, user);
+      return true;
     });
     return updated ? this.findById(userId) : undefined;
   }
@@ -825,6 +831,22 @@ export class PostgresAuthUserStore implements AuthUserStore {
       return result.rows.map(toAuthUser);
     });
   }
+}
+
+async function syncActiveMembershipVersions(
+  client: Queryable,
+  user: { id: string; membershipVersion: number; tenantId: string | null },
+): Promise<void> {
+  if (!user.tenantId) return;
+  await client.query(
+    `UPDATE "TenantMembership"
+     SET "version" = $3,
+         "updatedAt" = now()
+     WHERE "tenantId" = $1
+       AND "userId" = $2
+       AND "status" = 'ACTIVE'`,
+    [user.tenantId, user.id, user.membershipVersion],
+  );
 }
 
 function isNewerTotpCounter(counter: string, lastUsedCounter: string | undefined): boolean {

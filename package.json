@@ -140,6 +140,7 @@
     "ui-ux-professionalization:completion:check": "node scripts/check-ui-ux-professionalization-completion.mjs",
     "test:e2e:next": "pnpm --filter @o-okul/web next:e2e",
     "tenant-db:check": "node scripts/check-tenant-db-access.mjs",
+    "tenant-subdomain:preflight": "node scripts/check-tenant-subdomain-preflight.mjs",
     "traefik:https:smoke": "node scripts/smoke-traefik-https.mjs",
     "ui-ux-redesign:evidence-collect": "node scripts/collect-ui-ux-redesign-evidence.mjs",
     "ui-ux-redesign:evidence-check": "node scripts/check-ui-ux-redesign-evidence.mjs",

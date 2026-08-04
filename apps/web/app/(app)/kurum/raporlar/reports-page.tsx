@@ -41,7 +41,7 @@ import {
 import { Download, Eye, RefreshCw } from "lucide-react";
 import { KarneSheet } from "../../_shared/karne-sheet.js";
 import { useAuth } from "../../../providers.js";
-import { ApiRequestError, apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest } from "../../../../src/api-client.js";
+import { ApiRequestError, apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, withQueryParams } from "../../../../src/api-client.js";
 import { firstFormError, reportQueryFormSchema } from "../../../../src/form-validation.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { formatCourseName, formatOutcomeCode, shortCourseName } from "../../_shared/academic-labels.js";
@@ -680,16 +680,11 @@ async function loadReportData(
   filters: typeof emptyFilters,
   signal: AbortSignal,
 ): Promise<ReportData> {
-  const snapshotsUrl = new URL(`${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots`);
-  if (filters.campusId) snapshotsUrl.searchParams.set("campusId", filters.campusId);
-  if (filters.gradeLevelId) snapshotsUrl.searchParams.set("gradeLevelId", filters.gradeLevelId);
-  if (filters.classId) snapshotsUrl.searchParams.set("classId", filters.classId);
-  if (filters.courseId) snapshotsUrl.searchParams.set("courseId", filters.courseId);
-  if (filters.termId) snapshotsUrl.searchParams.set("termId", filters.termId);
+  const snapshotsUrl = withQueryParams(`${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots`, filters);
   const [snapshots, participants] = await Promise.all([
     apiRequest<ReportSnapshotRecord[]>(
       accessToken,
-      snapshotsUrl.toString(),
+      snapshotsUrl,
       { signal },
     ),
     apiRequestOrEmpty(() => loadExamParticipants(accessToken, examId, signal)),
@@ -764,17 +759,15 @@ async function loadReportStudents(
     return loadStudentsByIds(accessToken, reportStudentIds(input.participants, input.snapshot), signal);
   }
 
-  const studentsUrl = new URL(`${apiBaseUrl}/students`);
-  studentsUrl.searchParams.set("classId", input.classId);
-  const students = await apiListRequest<StudentRecord>(accessToken, studentsUrl.toString(), { signal });
+  const studentsUrl = withQueryParams(`${apiBaseUrl}/students`, { classId: input.classId });
+  const students = await apiListRequest<StudentRecord>(accessToken, studentsUrl, { signal });
   return students.data;
 }
 
 async function loadStudentsByIds(accessToken: string, studentIds: string[], signal: AbortSignal) {
   const chunks = chunk(studentIds, 200);
   const responses = await Promise.all(chunks.map(async (ids) => {
-    const url = new URL(`${apiBaseUrl}/students`);
-    url.searchParams.set("ids", ids.join(","));
+    const url = withQueryParams(`${apiBaseUrl}/students`, { ids: ids.join(",") });
     return apiRequestOrEmpty(async () => (await apiListRequest<StudentRecord>(accessToken, url, { signal })).data);
   }));
   return responses.flat();

@@ -65,7 +65,9 @@ pnpm backup:restore:smoke
 
 - Staging ve prod ayrı VPS veya ayrı compose override ile çalışır.
 - `NODE_ENV=production` kullanılır.
-- `COOKIE_SECURE=true` ve production domain'e uygun `COOKIE_DOMAIN` ayarlanır.
+- `COOKIE_SECURE=true` kullanılır; refresh ve CSRF cookie'lerinde `Domain` verilmez ve cookie'ler
+  kurum hostuna özel kalır. `DOMAIN`, Cloudflare DNS-01 secret dosyası ve
+  `LEGACY_TENANT_LOGIN_CUTOFF_AT` production cutover öncesi doğrulanır.
 - `PERSISTENCE_DRIVER=postgres` ayarlanır; tüm store'lar (sınıf, öğrenci, oturum, denetim kaydı, ödeme planı vb.)
   bu tek sürücüye bağlıdır ve production'da asla in-memory'ye düşmez. `apps/api` boot guard'ı
   (`assertPersistenceConfig`) production'da postgres dışı bir değerde veya `DATABASE_URL` eksikse başlatmayı durdurur.
@@ -570,7 +572,9 @@ pnpm backup:restore:smoke
 - Traefik v3.7.5 ACME/entrypoint/Docker label compose config'i
   `docker compose -f docker-compose.yml -f docker-compose.traefik.yml config` ile geçer.
 - Traefik edge kuralı port 80 isteklerini kalıcı olarak `websecure` HTTPS entrypoint'ine yönlendirir;
-  HTTP-01 challenge `web` entrypoint'i üzerinde kalır.
+  wildcard sertifika Cloudflare DNS-01 challenge ile alınır. Zone-kapsamlı token yalnız
+  `CF_DNS_API_TOKEN_FILE` ile gösterilen, repo dışındaki `0600` izinli host dosyasından Docker
+  secret olarak Traefik'e bağlanır.
 - Web ve API router'ları Traefik headers middleware ile HSTS, `nosniff`, `DENY` frame policy,
   `no-referrer` ve dar Permissions-Policy başlıklarını edge'de de üretir.
 - Yerel imaj kanıtı: `docker run --rm traefik:v3.7.5 version` çıktısı `Version: 3.7.5`
@@ -582,7 +586,8 @@ pnpm backup:restore:smoke
 - Staging kanıt dosyası için `TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE=artifacts/staging/traefik-https.json`
   verilir; dosya URL, beklenen/gerçek HTTP status, HSTS, `checkedAt`, tek
   `commandsPassed=["pnpm traefik:https:smoke"]` ve boş `gaps` listesini secret içermeden yazar.
-- `DOMAIN` ve `ACME_EMAIL` gerçek staging/prod değerleridir.
+- `DOMAIN` ve `ACME_EMAIL` gerçek staging/prod değerleridir. Staging için `DOMAIN=staging.o-okul.com`
+  kullanılır; staging ve production ayrı VPS veya ayrı compose deployment olarak tutulur.
 - Domain alınana kadar bu single-node cihazda `docker-compose.traefik-ip.yml` kullanılır:
   `SERVER_DOMAIN=<sunucu-public-ip>` ile web ve API aynı IP origin'i üstünden self-signed TLS ile
   servis edilir. Bu mod `TRAEFIK_HTTPS_SMOKE_ALLOW_INSECURE_TLS=true` ile yalnız teşhis koşusu

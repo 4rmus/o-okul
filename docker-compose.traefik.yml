@@ -16,7 +16,12 @@ services:
       - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
       - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
-      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare"
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge.resolvers=1.1.1.1:53,1.0.0.1:53"
+    environment:
+      CF_DNS_API_TOKEN_FILE: /run/secrets/cloudflare_dns_api_token
+    secrets:
+      - cloudflare_dns_api_token
     ports:
       - "80:80"
       - "443:443"
@@ -37,11 +42,13 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${DOCKER_FRONTEND_NETWORK:-o-okul_frontend_net}"
-      - "traefik.http.routers.web.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.web.rule=Host(`${DOMAIN}`) || Host(`sistem.${DOMAIN}`) || Host(`*.${DOMAIN}`)"
       - "traefik.http.routers.web.entrypoints=websecure"
       - "traefik.http.routers.web.priority=10"
       - "traefik.http.routers.web.service=web"
       - "traefik.http.routers.web.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.web.tls.domains[0].main=${DOMAIN}"
+      - "traefik.http.routers.web.tls.domains[0].sans=*.${DOMAIN}"
       - "traefik.http.routers.web.middlewares=web-security-headers"
       - "traefik.http.middlewares.web-security-headers.headers.stsseconds=15552000"
       - "traefik.http.middlewares.web-security-headers.headers.stsincludesubdomains=true"
@@ -51,12 +58,17 @@ services:
       - "traefik.http.middlewares.web-security-headers.headers.permissionspolicy=camera=(), microphone=(), geolocation=()"
       - "traefik.http.middlewares.web-security-headers.headers.contentsecuritypolicy=default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' wss:; worker-src 'self' blob:; manifest-src 'self'; media-src 'self' blob:"
       - "traefik.http.services.web.loadbalancer.server.port=3001"
+      - "traefik.http.routers.reserved-hosts.rule=Host(`www.${DOMAIN}`) || Host(`api.${DOMAIN}`) || Host(`admin.${DOMAIN}`) || Host(`ops.${DOMAIN}`) || Host(`evidence.${DOMAIN}`) || Host(`status.${DOMAIN}`) || Host(`staging.${DOMAIN}`) || Host(`mail.${DOMAIN}`) || Host(`support.${DOMAIN}`) || Host(`cdn.${DOMAIN}`) || Host(`assets.${DOMAIN}`)"
+      - "traefik.http.routers.reserved-hosts.entrypoints=websecure"
+      - "traefik.http.routers.reserved-hosts.priority=200"
+      - "traefik.http.routers.reserved-hosts.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.reserved-hosts.service=noop@internal"
 
   api:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${DOCKER_PROXY_NETWORK:-o-okul_proxy_net}"
-      - "traefik.http.routers.api.rule=Host(`${DOMAIN}`) && (PathPrefix(`/api`) || PathPrefix(`/health`))"
+      - "traefik.http.routers.api.rule=(Host(`${DOMAIN}`) || Host(`sistem.${DOMAIN}`) || Host(`*.${DOMAIN}`)) && (PathPrefix(`/api`) || PathPrefix(`/health`))"
       - "traefik.http.routers.api.entrypoints=websecure"
       - "traefik.http.routers.api.priority=100"
       - "traefik.http.routers.api.service=api"
@@ -92,3 +104,7 @@ services:
 
 volumes:
   traefik_letsencrypt:
+
+secrets:
+  cloudflare_dns_api_token:
+    file: ${CF_DNS_API_TOKEN_FILE:-./secrets/cloudflare_dns_api_token}

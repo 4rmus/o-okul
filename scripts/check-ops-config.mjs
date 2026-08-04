@@ -594,7 +594,7 @@ const expectations = {
     "1280x800 landing fold viewport",
     "Sentetik hero asset render dışı",
   ],
-  "docs/ADR-0002-deployment.md": ["Traefik TLS", "ACME HTTP-01", "canlı HTTPS kanıtı staging domain"],
+  "docs/ADR-0002-deployment.md": ["Traefik TLS", "ACME Cloudflare DNS-01", "*.staging.o-okul.com"],
   "docs/evidence-templates/deployment-region.example.json": ["datacenterCountryCode", "TR", "servicesVerified"],
   "docs/evidence-templates/deployment-rollback.example.json": [
     "failureInjected",

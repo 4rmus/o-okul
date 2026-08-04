@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { getRequestContext } from "./request-context.js";
 import { RequestContextMiddleware } from "./request-context.middleware.js";
 
 describe("RequestContextMiddleware", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   it("does not enable RLS bypass for SYSTEM_ADMIN by default", async () => {
     const middleware = createMiddleware({ roles: ["SYSTEM_ADMIN"] });
     let captured;
@@ -55,6 +57,32 @@ describe("RequestContextMiddleware", () => {
       roles: ["TENANT_ADMIN"],
       bypassRls: false,
     });
+  });
+
+  it("token tenantı ile kurum hostu ayrışırsa reddeder", async () => {
+    vi.stubEnv("DOMAIN", "o-okul.com");
+    vi.stubEnv("LEGACY_TENANT_LOGIN_CUTOFF_AT", "2099-01-01T00:00:00.000Z");
+    const middleware = createMiddleware({ roles: ["TENANT_ADMIN"], tenantId: "tenant-a", tenantSlug: "dna-egitim" });
+
+    await expect(middleware.use(
+      createRequest({ authorization: "Bearer tenant-token", host: "demo-kurum-b.o-okul.com" }),
+      {} as never,
+      vi.fn(),
+    )).rejects.toThrow("TENANT_HOST_MISMATCH");
+  });
+
+  it("token tenantı doğru kurum hostunda request context kurar", async () => {
+    vi.stubEnv("DOMAIN", "o-okul.com");
+    const middleware = createMiddleware({ roles: ["TENANT_ADMIN"], tenantId: "tenant-a", tenantSlug: "dna-egitim" });
+    let captured;
+
+    await middleware.use(
+      createRequest({ authorization: "Bearer tenant-token", host: "dna-egitim.o-okul.com" }),
+      {} as never,
+      () => { captured = getRequestContext(); },
+    );
+
+    expect(captured).toMatchObject({ tenantId: "tenant-a" });
   });
 
   it("kanonik kampüs scope'unu doğrulanmış tokendan request context'e taşır", async () => {
@@ -188,6 +216,7 @@ function createMiddleware(input: {
   subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER";
   subjectId?: string;
   campusScope?: { scopeMode: "TENANT" | "CAMPUSES"; campusIds: string[] };
+  tenantSlug?: string;
 }) {
   return new RequestContextMiddleware(
     {
@@ -204,6 +233,7 @@ function createMiddleware(input: {
     {
       findForAdmin: async (tenantId: string) => ({
         id: tenantId,
+        slug: input.tenantSlug ?? "dna-egitim",
         status: "ACTIVE",
         licenseEndsAt: input.licenseEndsAt,
         licenseStartsAt: input.licenseStartsAt,
@@ -227,15 +257,17 @@ function createMiddleware(input: {
   );
 }
 
-function createRequest(input: { authorization: string; rlsBypassReason?: string; method?: string }) {
+function createRequest(input: { authorization: string; rlsBypassReason?: string; method?: string; host?: string }) {
   return {
     header(name: string) {
       const normalized = name.toLowerCase();
       if (normalized === "authorization") return input.authorization;
       if (normalized === "x-rls-bypass-reason") return input.rlsBypassReason;
+      if (normalized === "host") return input.host;
       return undefined;
     },
     method: input.method ?? "GET",
+    socket: { remoteAddress: "203.0.113.10" },
     path: "/api/v1/students",
     url: "/api/v1/students",
   } as never;

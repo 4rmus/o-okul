@@ -17,6 +17,7 @@ import type {
   StudentPortalActivationRequest,
   StudentPortalActivationResponse,
   TenantSelectionRequiredResponse,
+  TenantLoginContextResponse,
 } from "@o-okul/shared-types";
 
 declare const process: { env: Record<string, string | undefined> };
@@ -77,8 +78,20 @@ export class TenantSelectionRequiredError extends Error {
   }
 }
 
-export const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3100";
-export const apiBaseUrl = `${apiUrl}/api/v1`;
+export const apiUrl = "";
+export const apiBaseUrl = "/api/v1";
+
+export function withQueryParams(path: string, values: object): string {
+  const separator = path.indexOf("?");
+  const pathname = separator >= 0 ? path.slice(0, separator) : path;
+  const rawQuery = separator >= 0 ? path.slice(separator + 1) : "";
+  const query = new URLSearchParams(rawQuery);
+  for (const [key, value] of Object.entries(values)) {
+    if (typeof value === "string" && value) query.set(key, value);
+  }
+  const suffix = query.toString();
+  return suffix ? `${pathname}?${suffix}` : pathname;
+}
 
 let activeAuth: AuthResponse | null = null;
 let refreshPromise: Promise<AuthResponse> | null = null;
@@ -115,6 +128,12 @@ export async function login(body: LoginRequest): Promise<AuthResponse> {
   }
 
   return rememberAuth(result);
+}
+
+export async function getTenantLoginContext(): Promise<TenantLoginContextResponse> {
+  const response = await fetch(`${apiBaseUrl}/auth/tenant-context`, { credentials: "same-origin" });
+  if (!response.ok) throw new Error("TENANT_HOST_UNKNOWN");
+  return readData<TenantLoginContextResponse>(response);
 }
 
 export async function changePassword(accessToken: string, input: MePasswordChangeRequest): Promise<MePasswordChangeResponse> {

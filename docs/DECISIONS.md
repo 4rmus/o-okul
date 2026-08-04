@@ -29,10 +29,10 @@ Karar: VPS/self-hosted Docker Compose; TR datacenter gereksinimi.
 Kaynak: Kullanıcı görüşmesi.
 Kanıt: `docs/ADR-0002-deployment.md`, `pnpm docker:check`.
 Etkilenen ADR: ADR-0002
-Açık soru: Yok. Traefik v3.7.5 imajına geçildi; v2->v3 geçiş rehberindeki kademeli Docker
-label/routing uyumluluğu ve ACME HTTP-01/entrypoint kullanımı resmi Traefik dokümantasyonu ile
-doğrulandı. Compose config kontrolü geçti; canlı HTTPS kanıtı staging domain bekliyor.
-Son kontrol: 2026-06-13
+Açık soru: Yok. Traefik v3.7.5 imajına geçildi; Docker label/routing uyumluluğu ve ACME Cloudflare
+DNS-01 wildcard yapılandırması doğrulandı. Compose config kontrolü geçti; canlı HTTPS kanıtı ayrı
+staging deployment ve `*.staging.o-okul.com` DNS'i bekliyor.
+Son kontrol: 2026-08-04
 
 ### DEC-20260529-03 — Geliştirme modeli
 
@@ -393,6 +393,25 @@ Etkilenen ADR: ADR-0001, ADR-0002
 Açık soru: Yok. Runtime geçişi DEC'te tanımlanan güvenlik ve geri dönüş kapılarıyla PR-1–PR-8
 dilimlerinde yapılacaktır; bu karar tek başına staging veya production capability kanıtı değildir.
 Son kontrol: 2026-08-01
+
+### DEC-20260804-01 — Kurum subdomaini tenant giriş bağlamıdır
+
+Durum: Onaylı; staging wildcard DNS/TLS ve runtime cutover kanıtı bekliyor
+Karar: Her kurum tek paylaşımlı uygulama ve veritabanı üzerinde `{tenantSlug}.o-okul.com`
+adresinde çalışır. Kurum hostu login, parola sıfırlama, aktivasyon ve oturum isteklerinde tenant
+bağlamını belirler; token/session tenantı host tenantıyla eşleşmek zorundadır. Öğrenci numarası,
+personel numarası ve doğrulanmış e-posta tenant-local login kimlikleridir. `Tenant.slug` oluşturma
+sonrasında değiştirilemez. Cookie'ler host-only kalır; tenant başına deployment, global login
+tekilliği, kampüs subdomaini ve özel kurum domaini v1 kapsamı dışındadır. Eski `/k/{slug}/giris`
+yolu production aktivasyonundan sonra 30 gün yönlendirilir ve sonra emekliye ayrılır. Wildcard TLS
+Cloudflare DNS-01 ile, zone-kapsamlı dar yetkili secret kullanılarak yönetilir.
+Kaynak: Ürün sahibinin onayladığı kurum subdomaini ve hibrit giriş planı.
+Kanıt: `docs/tenant-subdomain-login-architecture-plan.md`, `apps/api/src/http/tenant-host.ts`,
+`docker-compose.traefik.yml`, auth/web host izolasyonu testleri.
+Etkilenen ADR: ADR-0001, ADR-0002
+Açık soru: Yok. Yerel/static PASS gerçek DNS, wildcard sertifika, staging deploy veya canlı cutover
+kanıtı değildir.
+Son kontrol: 2026-08-04
 
 ## Faz Öncesi Onay Gerektirenler
 

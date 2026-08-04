@@ -448,8 +448,8 @@ test.describe("Governance evidence sözleşmesi", () => {
     });
     const healthTrustPanel = page.getByLabel("Sistem sağlığı doğrulama durumu");
     await expectEvidenceScopes(healthTrustPanel, {
-      "Kanıt kapsamı: Yerel/statik": 1,
-      "Kanıt kapsamı: Yapılandırılmış API": 1,
+      "Kanıt kapsamı: Yerel/statik": 0,
+      "Kanıt kapsamı: Yapılandırılmış API": 2,
       "Kanıt kapsamı: Staging/prod": 1,
     });
     const healthSummary = page.getByRole("region", { exact: true, name: "Sistem sağlığı özeti" });
@@ -477,8 +477,8 @@ test.describe("Governance evidence sözleşmesi", () => {
     });
     const observabilityTrustPanel = page.getByLabel("Sistem izleme doğrulama durumu");
     await expectEvidenceScopes(observabilityTrustPanel, {
-      "Kanıt kapsamı: Yerel/statik": 1,
-      "Kanıt kapsamı: Yapılandırılmış API": 1,
+      "Kanıt kapsamı: Yerel/statik": 0,
+      "Kanıt kapsamı: Yapılandırılmış API": 2,
       "Kanıt kapsamı: Canlı kanıt": 1,
       "Kanıt kapsamı: Staging/prod": 1,
     });

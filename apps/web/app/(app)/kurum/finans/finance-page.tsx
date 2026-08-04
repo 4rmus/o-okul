@@ -20,7 +20,7 @@ import type {
 import { Button, CrudPage, DataTable, Dialog, EmptyState, Field, FilterBar, FormModal, Input, Select, StatusBadge, type DataTableColumn } from "@o-okul/ui";
 import { Banknote, CheckCircle2, Pencil, Receipt, RotateCcw, TriangleAlert } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiListRequest, apiRequest, type ListMeta } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiListRequest, apiRequest, withQueryParams, type ListMeta } from "../../../../src/api-client.js";
 import { buildListUrl, initialListQuery, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
@@ -698,14 +698,8 @@ const paymentSortOptions = [
 ];
 
 async function loadPaymentPlans(accessToken: string, listQuery: ListQueryState, filters: FinanceFilters) {
-  const url = new URL(buildListUrl(`${apiBaseUrl}/payment-plans`, listQuery));
-  if (filters.studentId) url.searchParams.set("studentId", filters.studentId);
-  if (filters.campusId) url.searchParams.set("campusId", filters.campusId);
-  if (filters.gradeLevelId) url.searchParams.set("gradeLevelId", filters.gradeLevelId);
-  if (filters.classId) url.searchParams.set("classId", filters.classId);
-  if (filters.courseId) url.searchParams.set("courseId", filters.courseId);
-  if (filters.termId) url.searchParams.set("termId", filters.termId);
-  return apiListRequest<PaymentPlanWithInstallmentsRecord>(accessToken, url.toString());
+  const url = withQueryParams(buildListUrl(`${apiBaseUrl}/payment-plans`, listQuery), filters);
+  return apiListRequest<PaymentPlanWithInstallmentsRecord>(accessToken, url);
 }
 
 async function loadReferences(accessToken: string): Promise<FinanceReferences> {

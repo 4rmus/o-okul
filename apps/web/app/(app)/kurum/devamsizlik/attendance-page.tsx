@@ -28,7 +28,7 @@ import {
   type DataTableColumn,
 } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiListRequest, apiRequest } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiListRequest, apiRequest, withQueryParams } from "../../../../src/api-client.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
@@ -340,8 +340,7 @@ async function upsertDailyAttendance(accessToken: string, input: AttendanceDaily
 }
 
 async function loadAttendance(accessToken: string, listQuery: ListQueryState, classId: string) {
-  const url = new URL(buildListUrl(`${apiBaseUrl}/attendance`, listQuery));
-  if (classId) url.searchParams.set("classId", classId);
+  const url = withQueryParams(buildListUrl(`${apiBaseUrl}/attendance`, listQuery), { classId });
   return apiListRequest<AttendanceRecord>(accessToken, url);
 }
 

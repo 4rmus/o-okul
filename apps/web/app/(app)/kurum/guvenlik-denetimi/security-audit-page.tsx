@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { AuditLogListItemRecord } from "@o-okul/shared-types";
 import { DataTable, Panel, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiListRequest } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiListRequest, withQueryParams } from "../../../../src/api-client.js";
 import { EvidenceTrustPanel, OperationDecisionNotice, ReferenceBadge } from "../_shared/evidence-panels.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
@@ -420,9 +420,7 @@ function buildSecuritySummaryActions(securityEvents: AuditLogListItemRecord[]): 
 }
 
 async function loadSecurityEvents(accessToken: string) {
-  const url = new URL(`${apiBaseUrl}/audit-logs/safe-list`);
-  url.searchParams.set("sort", "-createdAt");
-  url.searchParams.set("limit", "20");
+  const url = withQueryParams(`${apiBaseUrl}/audit-logs/safe-list`, { limit: "20", sort: "-createdAt" });
   const auditLogs = await apiListRequest<AuditLogListItemRecord>(accessToken, url);
   return auditLogs.data.filter(isSecurityEvent).slice(0, 5);
 }

@@ -11180,3 +11180,9 @@ a {
   }
   /* RAW-COLOR-ALLOWLIST receipt-print END */
 }
+.next-brand-logo {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  object-fit: contain;
+}
