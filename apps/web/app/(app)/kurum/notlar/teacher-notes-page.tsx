@@ -19,7 +19,7 @@ import {
 } from "@o-okul/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch, withQueryParams } from "../../../../src/api-client.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
 import {
   firstFormError,
@@ -417,8 +417,7 @@ const emptyReferences: TeacherNoteReferences = {
 };
 
 async function loadNotes(accessToken: string, listQuery: ListQueryState, classId: string) {
-  const url = new URL(buildListUrl(`${apiBaseUrl}/teacher-notes`, listQuery));
-  if (classId) url.searchParams.set("classId", classId);
+  const url = withQueryParams(buildListUrl(`${apiBaseUrl}/teacher-notes`, listQuery), { classId });
   return apiListRequest<TeacherNoteRecord>(accessToken, url);
 }
 

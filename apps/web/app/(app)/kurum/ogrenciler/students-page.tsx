@@ -26,7 +26,7 @@ import type {
 } from "@o-okul/shared-types";
 import { Download, Eye, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { ApiRequestError, apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { ApiRequestError, apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch, withQueryParams } from "../../../../src/api-client.js";
 import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import {
   firstFormError,
@@ -1329,13 +1329,7 @@ async function loadStudents(accessToken: string, listQuery: ListQueryState, filt
 }
 
 function buildStudentListUrl(baseUrl: string, state: ListQueryState, filters: StudentListFilters): string {
-  const url = new URL(buildListUrl(baseUrl, state));
-  if (filters.classId) url.searchParams.set("classId", filters.classId);
-  if (filters.level) url.searchParams.set("level", filters.level);
-  if (filters.responsibleTeacherId) url.searchParams.set("responsibleTeacherId", filters.responsibleTeacherId);
-  if (filters.status) url.searchParams.set("status", filters.status);
-  if (filters.guardianLinked) url.searchParams.set("guardianLinked", filters.guardianLinked);
-  return url.toString();
+  return withQueryParams(buildListUrl(baseUrl, state), filters);
 }
 
 async function loadStudentReferences(accessToken: string): Promise<StudentReferences> {

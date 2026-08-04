@@ -33,7 +33,7 @@ import type {
 } from "@o-okul/shared-types";
 import { CheckCircle2, CirclePlay, Download, Eye, Plus, Upload } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, type ListMeta } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, withQueryParams, type ListMeta } from "../../../../src/api-client.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
 import {
   firstFormError,
@@ -832,13 +832,8 @@ async function loadSupportTicketData(
 }
 
 async function loadSupportTickets(accessToken: string, listQuery: ListQueryState, filters: SupportFilters) {
-  const url = new URL(buildListUrl(`${apiBaseUrl}/support-tickets`, listQuery));
-  if (filters.campusId) url.searchParams.set("campusId", filters.campusId);
-  if (filters.gradeLevelId) url.searchParams.set("gradeLevelId", filters.gradeLevelId);
-  if (filters.classId) url.searchParams.set("classId", filters.classId);
-  if (filters.courseId) url.searchParams.set("courseId", filters.courseId);
-  if (filters.termId) url.searchParams.set("termId", filters.termId);
-  return apiListRequest<SupportTicketRecord>(accessToken, url.toString());
+  const url = withQueryParams(buildListUrl(`${apiBaseUrl}/support-tickets`, listQuery), filters);
+  return apiListRequest<SupportTicketRecord>(accessToken, url);
 }
 
 async function loadSupportTicketReferences(accessToken: string): Promise<SupportTicketReferences> {

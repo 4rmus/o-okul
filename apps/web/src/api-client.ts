@@ -81,6 +81,17 @@ export class TenantSelectionRequiredError extends Error {
 export const apiUrl = "";
 export const apiBaseUrl = "/api/v1";
 
+export function withQueryParams(path: string, values: object): string {
+  const separator = path.indexOf("?");
+  const pathname = separator >= 0 ? path.slice(0, separator) : path;
+  const rawQuery = separator >= 0 ? path.slice(separator + 1) : "";
+  const query = new URLSearchParams(rawQuery);
+  for (const [key, value] of Object.entries(values)) {
+    if (typeof value === "string" && value) query.set(key, value);
+  }
+  const suffix = query.toString();
+  return suffix ? `${pathname}?${suffix}` : pathname;
+}
 
 let activeAuth: AuthResponse | null = null;
 let refreshPromise: Promise<AuthResponse> | null = null;
