@@ -2698,6 +2698,8 @@ const expectations = {
     "pg_advisory_xact_lock",
     "PlatformAccount",
     "PlatformSession",
+    `session."membershipId" = canonical."id"`,
+    `session."activePersona" = 'STAFF'`,
     "scripts/check-account-management-backfill.mjs",
   ],
   "scripts/check-account-management-backfill.mjs": [
