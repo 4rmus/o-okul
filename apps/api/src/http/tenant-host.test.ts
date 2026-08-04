@@ -14,7 +14,7 @@ describe("tenant host", () => {
     expect(resolveTenantSlugFromRequest(request("sistem.o-okul.com"), undefined, env)).toBe("system");
   });
 
-  it.each(["a.b.o-okul.com", "admin.o-okul.com", "üni.o-okul.com", "attacker.test"])("%s hostunu reddeder", (host) => {
+  it.each(["a.b.o-okul.com", "admin.o-okul.com", "üni.o-okul.com", "xn--niversite-p9a.o-okul.com", "attacker.test"])("%s hostunu reddeder", (host) => {
     expect(() => resolveTenantHostContext(request(host), env)).toThrow(/TENANT_HOST_/);
   });
 
@@ -53,6 +53,7 @@ describe("tenant host", () => {
   it("yalnız DNS-safe ve ayrılmamış slug kabul eder", () => {
     expect(assertValidTenantSlug("dna-egitim")).toBe("dna-egitim");
     expect(() => assertValidTenantSlug("admin")).toThrow("TENANT_HOST_RESERVED");
+    expect(() => assertValidTenantSlug("xn--niversite-p9a")).toThrow("TENANT_SLUG_INVALID");
     expect(() => assertValidTenantSlug("ab")).toThrow("TENANT_SLUG_INVALID");
   });
 });

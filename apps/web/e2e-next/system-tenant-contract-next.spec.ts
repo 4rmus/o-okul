@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { tenantLoginOrigin, webHostContext } from "../src/tenant-host.js";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 
@@ -29,6 +30,11 @@ interface SystemTenantFixture {
 }
 
 test.describe("Sistem tenant yönetimi sözleşmesi", () => {
+  test("punycode kurum kodunu web trust boundary'sinde reddeder", () => {
+    expect(webHostContext("xn--niversite-p9a.o-okul.com", "o-okul.com")).toEqual({ kind: "invalid" });
+    expect(() => tenantLoginOrigin("xn--niversite-p9a", "o-okul.com")).toThrow("TENANT_SLUG_INVALID");
+  });
+
   test("kurum operasyon özeti URL state ve tenant kapsamını korur", async ({ page }) => {
     const captured = createCapturedSystemRequests();
     await openWithSystemTenantMocks(page, captured, "/sistem/kurumlar?page=2&limit=20&q=faz&sort=-name");

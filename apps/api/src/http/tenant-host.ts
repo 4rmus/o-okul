@@ -17,7 +17,7 @@ export const reservedTenantSlugs = new Set([
   "assets",
 ]);
 
-export const tenantSlugPattern = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/;
+export const tenantSlugPattern = /^(?!xn--)[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/;
 
 export type TenantHostContext =
   | { kind: "legacy" }

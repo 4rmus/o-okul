@@ -2,7 +2,7 @@ export const reservedTenantSlugs = new Set([
   "www", "sistem", "system", "api", "admin", "ops", "evidence", "status", "staging", "mail", "support", "cdn", "assets",
 ]);
 
-const tenantSlugPattern = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/;
+const tenantSlugPattern = /^(?!xn--)[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/;
 
 export type WebHostContext =
   | { kind: "legacy" }
