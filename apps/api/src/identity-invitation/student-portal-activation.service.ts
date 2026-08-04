@@ -9,6 +9,7 @@ import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { licenseTermStoreToken, type LicenseTermStore } from "../license/license-term-store.js";
 import { tenantStoreToken, type TenantStore } from "../tenant/tenant-store.js";
+import { tenantWebUrl } from "../http/tenant-origin.js";
 import {
   hashStudentPortalActivationCode,
   normalizeStudentPortalActivationCode,
@@ -57,7 +58,7 @@ export class StudentPortalActivationService {
     }
     if (!invitation) throw new NotFoundException("STUDENT_NOT_FOUND");
 
-    const activationUrl = new URL("/aktivasyon", process.env.WEB_URL ?? "http://localhost:3000");
+    const activationUrl = tenantWebUrl("/aktivasyon", invitation.tenantSlug);
     const activationFragment = new URLSearchParams({
       tenant: invitation.tenantSlug,
       student: invitation.studentNo,
@@ -88,7 +89,7 @@ export class StudentPortalActivationService {
     };
   }
 
-  async accept(input: StudentPortalActivationRequest): Promise<StudentPortalActivationResponse> {
+  async accept(input: StudentPortalActivationRequest & { tenantSlug: string }): Promise<StudentPortalActivationResponse> {
     const tenantSlug = input.tenantSlug.trim().toLowerCase();
     if (this.tenants && this.licenseTerms) {
       const tenant = await this.tenants.findBySlug(tenantSlug);

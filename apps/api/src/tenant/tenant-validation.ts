@@ -60,7 +60,6 @@ const tenantAdminUpdateWritableFields = {
   institutionType: optionalTrimmedString,
   logoUrl: optionalTenantUrlSchema,
   name: optionalUppercaseString,
-  slug: optionalTrimmedString,
   status: optionalTrimmedString,
 };
 

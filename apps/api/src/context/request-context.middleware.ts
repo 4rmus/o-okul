@@ -8,6 +8,7 @@ import { capabilitiesForRoles } from "../rbac/role-capabilities.js";
 import { isSystemAdmin } from "../rbac/roles.js";
 import { RolePreviewService } from "../role-preview/role-preview.service.js";
 import { tenantStoreToken, type TenantStore } from "../tenant/tenant-store.js";
+import { assertSessionTenantMatchesHost, TenantHostError } from "../http/tenant-host.js";
 import { runWithRequestContext } from "./request-context.js";
 
 @Injectable()
@@ -34,6 +35,13 @@ export class RequestContextMiddleware implements NestMiddleware {
       throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
     }
     const tenantId = payload.tenantId === "system" ? null : payload.tenantId;
+    const tenant = tenantId ? await this.requireActiveTenant(tenantId) : undefined;
+    try {
+      assertSessionTenantMatchesHost(request, { tenantId: payload.tenantId, tenantSlug: tenant?.slug });
+    } catch (error) {
+      if (error instanceof TenantHostError) throw new HttpException(error.message, error.status);
+      throw error;
+    }
     const tenantAccessMode = tenantId ? await this.resolveTenantAccessMode(tenantId, request.method) : "active";
 
     const previewToken = request.header("x-role-preview-token");
@@ -97,12 +105,15 @@ export class RequestContextMiddleware implements NestMiddleware {
     );
   }
 
-  private async resolveTenantAccessMode(tenantId: string, method: string): Promise<"active" | "read_only"> {
+  private async requireActiveTenant(tenantId: string) {
     const tenant = await this.tenants.findForAdmin(tenantId);
     if (!tenant || tenant.status !== "ACTIVE") {
       throw new ForbiddenException("TENANT_INACTIVE_OR_EXPIRED");
     }
+    return tenant;
+  }
 
+  private async resolveTenantAccessMode(tenantId: string, method: string): Promise<"active" | "read_only"> {
     const license = await this.licenseTerms.resolveForTenant(tenantId);
     if (!license) throw new ForbiddenException("TENANT_LICENSE_TERM_MISSING");
     if (!license.mirrorParity) throw new ForbiddenException("TENANT_LICENSE_MIRROR_PARITY_MISMATCH");

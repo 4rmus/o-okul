@@ -7,6 +7,7 @@ import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withBypassRlsQuery } from "../db/tenant-query.js";
 import { buildTenantMembershipDualWriteRows } from "../identity-provisioning/tenant-membership-dual-write.js";
 import { encryptTcIdentity, hashTcIdentity } from "../student/tc-identity.js";
+import { tenantWebUrl } from "../http/tenant-origin.js";
 import type { TenantUserRecord } from "../user-management/user-management-store.js";
 
 export interface TenantRecord {
@@ -574,15 +575,14 @@ export class PostgresTenantStore implements TenantStore {
       const result = await client.query<TenantRow>(
         `UPDATE "Tenant"
          SET "name" = $2,
-             "slug" = $3,
-             "plan" = $4,
-             "licenseStartsAt" = $5,
-             "licenseEndsAt" = $6,
-             "institutionType" = $7,
-             "contactEmail" = $8,
-             "logoUrl" = $9,
-             "seatLimit" = $10,
-             "status" = $11,
+             "plan" = $3,
+             "licenseStartsAt" = $4,
+             "licenseEndsAt" = $5,
+             "institutionType" = $6,
+             "contactEmail" = $7,
+             "logoUrl" = $8,
+             "seatLimit" = $9,
+             "status" = $10,
              "updatedAt" = now()
          WHERE "id" = $1
          RETURNING
@@ -605,7 +605,6 @@ export class PostgresTenantStore implements TenantStore {
         [
           id,
           next.name,
-          next.slug,
           next.plan,
           next.licenseStartsAt ?? null,
           next.licenseEndsAt ?? null,
@@ -721,7 +720,7 @@ export interface TenantOnboardingStoreResult {
   replayed: boolean;
 }
 
-export type UpdateTenantInput = Partial<Omit<CreateTenantInput, "id">>;
+export type UpdateTenantInput = Partial<Omit<CreateTenantInput, "id" | "slug">>;
 
 function mapTenantRow(row: TenantRow): TenantRecord {
   return {
@@ -880,8 +879,8 @@ async function createFirstAdminActivation(tenantSlug: string, email: string): Pr
 }
 
 export function createFirstAdminActivationUrl(tenantSlug: string, token: string): URL {
-  const url = new URL("/parola-sifirla", process.env.WEB_URL ?? "http://localhost:3000");
-  url.searchParams.set("tenant", tenantSlug);
+  const url = tenantWebUrl("/parola-sifirla", tenantSlug);
+  if (url.hostname === "localhost" || url.hostname === "127.0.0.1") url.searchParams.set("tenant", tenantSlug);
   url.hash = new URLSearchParams({ token }).toString();
   return url;
 }

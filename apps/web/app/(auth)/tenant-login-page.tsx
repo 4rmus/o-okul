@@ -4,17 +4,18 @@ import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, LockKeyhole, ScanLine } from "lucide-react";
-import type { AuthResponse, MfaChallengeResponse, MfaEnrollmentRequiredResponse, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
+import type { AuthResponse, MfaChallengeResponse, MfaEnrollmentRequiredResponse, TenantLoginContextResponse, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
 import { Button, Field, Input, SegmentedControl, Select } from "@o-okul/ui";
 import { useAuth } from "../providers.js";
 import { appBrand } from "../../src/brand.js";
-import { MfaEnrollmentRequiredError, MfaRequiredError, TenantSelectionRequiredError } from "../../src/api-client.js";
+import { getTenantLoginContext, MfaEnrollmentRequiredError, MfaRequiredError, TenantSelectionRequiredError } from "../../src/api-client.js";
 
 interface TenantLoginPageProps {
   tenantSlug?: string;
+  canonicalHost?: boolean;
 }
 
-export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPageProps) {
+export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost = false }: TenantLoginPageProps) {
   const router = useRouter();
   const { auth, confirmMfaEnrollment, isBootstrapping, login, selectTenant, verifyMfa } = useAuth();
   const lockedTenantSlug = initialTenantSlug?.trim() ?? "";
@@ -29,12 +30,18 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
   const [mfaCode, setMfaCode] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [tenantContext, setTenantContext] = useState<TenantLoginContextResponse | null>(null);
 
   useEffect(() => {
     if (!isBootstrapping && auth) {
       router.replace(getAuthHomePath(auth));
     }
   }, [auth, isBootstrapping, router]);
+
+  useEffect(() => {
+    if (!canonicalHost) return;
+    getTenantLoginContext().then(setTenantContext).catch(() => setError("Kurum adresi doğrulanamadı."));
+  }, [canonicalHost]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -54,7 +61,7 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
         await selectTenant(pendingTenantSelection.selectionToken, selectedTenantId);
       } else {
         await login({
-          tenantSlug: lockedTenantSlug || formTenantSlug,
+          ...(!canonicalHost ? { tenantSlug: lockedTenantSlug || formTenantSlug } : {}),
           loginName: formLoginName,
           password: formPassword,
         });
@@ -98,8 +105,8 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
   return (
     <section className="next-auth-panel" aria-labelledby="login-title">
       <div className="next-brand">
-        <span className="next-brand-mark">{appBrand.mark}</span>
-        <span>{appBrand.name}</span>
+        {tenantContext?.logoUrl ? <img className="next-brand-logo" src={tenantContext.logoUrl} alt="" width="32" height="32" /> : <span className="next-brand-mark">{appBrand.mark}</span>}
+        <span>{tenantContext?.name ?? appBrand.name}</span>
       </div>
       <form className="next-form" aria-label="Giriş formu" onSubmit={(event) => void handleSubmit(event)}>
         <h1 id="login-title">Giriş</h1>
@@ -116,7 +123,7 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
             />
           </Field>
         ) : null}
-        <Field label="Kullanıcı Adı">
+        <Field label="Kullanıcı adı veya e-posta">
           <Input
             name="loginName"
             type="text"
@@ -139,12 +146,14 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
           />
         </Field>
         {!pendingMfa && !pendingEnrollment && !pendingTenantSelection ? (
-          <Link
-            className="next-auth-link"
-            href={lockedTenantSlug ? `/parolami-unuttum?tenant=${encodeURIComponent(lockedTenantSlug)}` : "/parolami-unuttum"}
-          >
-            Şifremi unuttum
-          </Link>
+          <>
+            <Link
+              className="next-auth-link"
+              href={canonicalHost ? "/parolami-unuttum" : lockedTenantSlug ? `/parolami-unuttum?tenant=${encodeURIComponent(lockedTenantSlug)}` : "/parolami-unuttum"}
+            >
+              Şifremi unuttum
+            </Link>
+          </>
         ) : null}
         {pendingTenantSelection ? (
           <div className="next-form-section">

@@ -336,7 +336,7 @@ requireTokens("apps/web/app/(auth)/tenant-login-page.tsx", [
   'import { Button, Field, Input, SegmentedControl, Select } from "@o-okul/ui";',
   'aria-label="Giriş formu"',
   '<Field label="Kurum Kodu">',
-  '<Field label="Kullanıcı Adı">',
+  '<Field label="Kullanıcı adı veya e-posta">',
   '<Field label="Şifre">',
   '<Field label="Kurum">',
   '<Select value={selectedTenantId}',
@@ -5227,8 +5227,8 @@ function validateRouteFamilySmokeContract() {
   const manifestRoutes = [...manifestSource.matchAll(/^\s*route\("([^"]+)"/gm)].map((match) => match[1]);
   const duplicateRoutes = manifestRoutes.filter((route, index) => manifestRoutes.indexOf(route) !== index);
   const fileSystemRoutes = collectRoutePageTemplates("apps/web/app").sort();
-  if (manifestRoutes.length !== 78) {
-    failures.push(`${path} route manifest must contain exactly 78 route tests; found ${manifestRoutes.length}.`);
+  if (manifestRoutes.length !== 79) {
+    failures.push(`${path} route manifest must contain exactly 79 route tests; found ${manifestRoutes.length}.`);
   }
   if (duplicateRoutes.length > 0) {
     failures.push(`${path} route manifest contains duplicate routes: ${[...new Set(duplicateRoutes)].join(", ")}.`);
@@ -5238,8 +5238,8 @@ function validateRouteFamilySmokeContract() {
   }
 
   const primaryTaskCount = manifestSource.match(/\{ role: "(?:button|form|link|region)", name: "[^"]+" \}/g)?.length ?? 0;
-  if (primaryTaskCount !== 78) {
-    failures.push(`${path} must give all 78 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
+  if (primaryTaskCount !== 79) {
+    failures.push(`${path} must give all 79 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
   }
 
   const viewportStart = source.indexOf("const routeViewports = [");

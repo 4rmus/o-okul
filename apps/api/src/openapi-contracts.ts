@@ -385,6 +385,12 @@ const authResponseSchema = objectSchema({
   session: sessionSchema,
 }, ["accessToken", "session"]);
 
+const tenantLoginContextResponseSchema = objectSchema({
+  slug: stringSchema(),
+  name: stringSchema(),
+  logoUrl: stringSchema({ format: "uri" }),
+}, ["slug", "name"]);
+
 const mfaChallengeResponseSchema = objectSchema({
   status: { type: "string", enum: ["MFA_REQUIRED"] },
   challengeToken: stringSchema(),
@@ -2722,7 +2728,7 @@ const studentPortalActivationRequestSchema = objectSchema({
   studentNo: stringSchema({ minLength: 1 }),
   code: stringSchema({ minLength: 12, maxLength: 12, pattern: "^[A-HJ-NP-Z2-9]{12}$" }),
   password: stringSchema({ minLength: 15, maxLength: 128 }),
-}, ["tenantSlug", "studentNo", "code", "password"]);
+}, ["studentNo", "code", "password"]);
 
 const studentPortalActivationResponseSchema = objectSchema({
   status: { type: "string", enum: ["ACCEPTED"] },
@@ -2828,7 +2834,7 @@ const operationContracts: Record<string, OperationContract> = {
       tenantSlug: stringSchema(),
       loginName: stringSchema(),
       password: stringSchema(),
-    }, ["tenantSlug", "loginName", "password"]),
+    }, ["loginName", "password"]),
     responseBody: {
       oneOf: [
         authResponseSchema,
@@ -2837,6 +2843,9 @@ const operationContracts: Record<string, OperationContract> = {
         tenantSelectionRequiredResponseSchema,
       ],
     },
+  },
+  "get /api/v1/auth/tenant-context": {
+    responseBody: tenantLoginContextResponseSchema,
   },
   "post /api/v1/auth/activate": {
     requestBody: studentPortalActivationRequestSchema,
@@ -2891,7 +2900,7 @@ const operationContracts: Record<string, OperationContract> = {
     requestBody: objectSchema({
       loginName: stringSchema(),
       tenantSlug: stringSchema(),
-    }, ["loginName", "tenantSlug"]),
+    }, ["loginName"]),
     responseBody: passwordResetAcceptedResponseSchema,
   },
   "post /api/v1/auth/password-reset/confirm": {

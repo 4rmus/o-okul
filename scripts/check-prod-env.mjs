@@ -64,7 +64,9 @@ function checkContract(file) {
     "ADMIN_MFA_RECOVERY_HASH_KEY",
     "ADMIN_MFA_CHALLENGE_SECRET",
     "ADMIN_MFA_ISSUER",
-    "COOKIE_DOMAIN",
+    "DOMAIN",
+    "CF_DNS_API_TOKEN_FILE",
+    "LEGACY_TENANT_LOGIN_CUTOFF_AT",
     "COOKIE_SECURE",
     "LOG_LEVEL",
     "LOG_ENABLED",
@@ -219,8 +221,15 @@ function checkProductionEnv(env) {
     }
   }
   requireEqual(env, failures, "COOKIE_SECURE", "true");
-  requireNotContains(env, failures, "COOKIE_DOMAIN", ["localhost", "127.0.0.1"]);
-  requireNoPlaceholderValue(env, failures, "COOKIE_DOMAIN");
+  requireSet(env, failures, "DOMAIN");
+  requireNotContains(env, failures, "DOMAIN", ["localhost", "127.0.0.1"]);
+  requireNoPlaceholderValue(env, failures, "DOMAIN");
+  requireSet(env, failures, "CF_DNS_API_TOKEN_FILE");
+  requireNoPlaceholderValue(env, failures, "CF_DNS_API_TOKEN_FILE");
+  requireSet(env, failures, "LEGACY_TENANT_LOGIN_CUTOFF_AT");
+  if (!Number.isFinite(Date.parse(env.LEGACY_TENANT_LOGIN_CUTOFF_AT ?? ""))) {
+    failures.push("LEGACY_TENANT_LOGIN_CUTOFF_AT geçerli UTC ISO-8601 tarih olmalı.");
+  }
   requireHttpsUrl(env, failures, "TRAEFIK_HTTPS_SMOKE_URL");
   requireMatchingUrlOrigin(env, failures, "TRAEFIK_HTTPS_SMOKE_URL", "WEB_URL");
   requireOneOf(env, failures, "LOG_LEVEL", ["info", "warn", "error"]);

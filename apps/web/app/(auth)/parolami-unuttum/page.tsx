@@ -5,16 +5,20 @@ import Link from "next/link";
 import { Button, Field, Input } from "@o-okul/ui";
 import { requestPasswordReset } from "../../../src/api-client.js";
 import { appBrand } from "../../../src/brand.js";
+import { browserTenantSlug } from "../../../src/tenant-host.js";
 
 export default function ForgotPasswordPage() {
   const [tenantSlug, setTenantSlug] = useState("");
+  const [hostTenantSlug, setHostTenantSlug] = useState("");
   const [loginName, setLoginName] = useState("");
   const [status, setStatus] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const loginHref = tenantSlug ? `/k/${encodeURIComponent(tenantSlug)}/giris` : "/login";
+  const loginHref = hostTenantSlug ? "/giris" : tenantSlug ? `/k/${encodeURIComponent(tenantSlug)}/giris` : "/login";
 
   useEffect(() => {
-    setTenantSlug(new URLSearchParams(window.location.search).get("tenant")?.trim() ?? "");
+    const fromHost = browserTenantSlug() ?? "";
+    setHostTenantSlug(fromHost);
+    setTenantSlug(fromHost || new URLSearchParams(window.location.search).get("tenant")?.trim() || "");
   }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -22,7 +26,10 @@ export default function ForgotPasswordPage() {
     setStatus("");
     setIsSubmitting(true);
     try {
-      await requestPasswordReset({ tenantSlug: tenantSlug.trim(), loginName: loginName.trim() });
+      await requestPasswordReset({
+        ...(!hostTenantSlug ? { tenantSlug: tenantSlug.trim() } : {}),
+        loginName: loginName.trim(),
+      });
       setStatus("İsteğiniz alındı. Bilgiler eşleşiyor ve kayıtlı iletişim kanalı aktifse şifre yenileme adımları paylaşılır. Mesaj gelmezse kurum yöneticinizden şifrenizi sıfırlamasını isteyin.");
     } catch {
       setStatus("İstek şu anda tamamlanamadı. Lütfen biraz sonra tekrar deneyin.");
@@ -39,17 +46,19 @@ export default function ForgotPasswordPage() {
       </div>
       <form className="next-form" onSubmit={(event) => void handleSubmit(event)}>
         <h1 id="forgot-password-title">Şifremi unuttum</h1>
-        <p className="next-status-note">Kurum kodunuzu ve kullanıcı adınızı girin.</p>
-        <Field label="Kurum kodu">
-          <Input
-            name="tenantSlug"
-            value={tenantSlug}
-            onChange={(event) => setTenantSlug(event.target.value)}
-            autoComplete="organization"
-            required
-          />
-        </Field>
-        <Field label="Kullanıcı Adı">
+        <p className="next-status-note">Kullanıcı adınızı veya doğrulanmış e-postanızı girin.</p>
+        {!hostTenantSlug ? (
+          <Field label="Kurum kodu">
+            <Input
+              name="tenantSlug"
+              value={tenantSlug}
+              onChange={(event) => setTenantSlug(event.target.value)}
+              autoComplete="organization"
+              required
+            />
+          </Field>
+        ) : null}
+        <Field label="Kullanıcı adı veya e-posta">
           <Input
             name="loginName"
             value={loginName}
@@ -67,7 +76,7 @@ export default function ForgotPasswordPage() {
       <aside className="next-auth-context" aria-label="Şifre yenileme güven bilgisi">
         <p className="next-section-eyebrow">{tenantSlug ? "Kurum hesabı" : "Güvenli şifre yenileme"}</p>
         <h2>Bu ekran hesabın bulunup bulunmadığını göstermez.</h2>
-        <p>Kurum kodu sizi doğru hesaba yönlendirir. Güvenliğiniz için hesabın ve mesaj teslimatının durumu burada açıklanmaz.</p>
+        <p>Kurum adresi sizi doğru hesaba yönlendirir. Güvenliğiniz için hesabın ve mesaj teslimatının durumu burada açıklanmaz.</p>
       </aside>
     </section>
   );

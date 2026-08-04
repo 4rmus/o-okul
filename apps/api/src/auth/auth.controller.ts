@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { Body, Controller, ForbiddenException, Get, Headers, HttpCode, Post, Req, Res } from "@nestjs/common";
+import { Body, Controller, ForbiddenException, Get, Headers, HttpCode, HttpException, Post, Req, Res } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { z } from "zod";
 import type {
@@ -18,6 +18,7 @@ import type {
   Session,
   TenantSelectionRequest,
   TenantSelectionRequiredResponse,
+  TenantLoginContextResponse,
   TotpChallengeVerifyRequest,
   TotpDisableRequest,
   TotpDisableResponse,
@@ -29,6 +30,7 @@ import type {
 } from "@o-okul/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { resolveClientIp } from "../http/trusted-proxy.js";
+import { assertSessionTenantMatchesHost, resolveTenantSlugFromRequest, TenantHostError } from "../http/tenant-host.js";
 import { optionalTrimmedString, requiredTrimmedString, zodBody } from "../http/zod-validation.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { AuthService } from "./auth.service.js";
@@ -38,7 +40,7 @@ import type { LoginMfaChallenge } from "./totp-mfa.js";
 import { resolveRefreshTokenTtlMs, type TokenPair } from "./token-service.js";
 
 const loginBodySchema = z.object({
-  tenantSlug: requiredTrimmedString,
+  tenantSlug: optionalTrimmedString,
   loginName: requiredTrimmedString,
   password: requiredTrimmedString,
 }).strict() satisfies z.ZodType<LoginRequest>;
@@ -51,7 +53,7 @@ const personaSwitchBodySchema = z.object({
   activePersona: z.enum(["STAFF", "TEACHER", "STUDENT"]),
 }).strict() satisfies z.ZodType<PersonaSwitchRequest>;
 const passwordResetRequestBodySchema = z.object({
-  tenantSlug: requiredTrimmedString,
+  tenantSlug: optionalTrimmedString,
   loginName: requiredTrimmedString,
 }).strict() satisfies z.ZodType<PasswordResetRequest>;
 const passwordResetConfirmBodySchema = z.object({
@@ -118,14 +120,23 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<LoginResponse> {
     const clientIp = resolveClientIp(request);
-    const result = await this.auth.login(body, clientIp, sessionClientContext(request.header("user-agent"), clientIp));
+    const result = await this.auth.login({
+      ...body,
+      tenantSlug: tenantSlugForRequest(request, body.tenantSlug),
+    }, clientIp, sessionClientContext(request.header("user-agent"), clientIp));
     if (isLoginMfaChallenge(result) || isMfaEnrollmentRequired(result) || isTenantSelectionRequired(result)) {
       return result;
     }
 
+    await this.assertIssuedSessionHost(request, result);
     response.cookie(refreshCookieName, result.refreshToken, refreshCookieOptions);
     response.cookie(csrfCookieName, createCsrfToken(), csrfCookieOptions);
     return toAuthResponse(result);
+  }
+
+  @Get("tenant-context")
+  tenantContext(@Req() request: Request): Promise<TenantLoginContextResponse> {
+    return this.auth.tenantLoginContext(tenantSlugForRequest(request, undefined));
   }
 
   @Post("login/select")
@@ -140,6 +151,7 @@ export class AuthController {
       return result;
     }
 
+    await this.assertIssuedSessionHost(request, result);
     response.cookie(refreshCookieName, result.refreshToken, refreshCookieOptions);
     response.cookie(csrfCookieName, createCsrfToken(), csrfCookieOptions);
     return toAuthResponse(result);
@@ -156,6 +168,7 @@ export class AuthController {
       totpCode: body.totpCode,
       recoveryCode: body.recoveryCode,
     }, requestSessionClientContext(request));
+    await this.assertIssuedSessionHost(request, tokenPair);
     response.cookie(refreshCookieName, tokenPair.refreshToken, refreshCookieOptions);
     response.cookie(csrfCookieName, createCsrfToken(), csrfCookieOptions);
     return toAuthResponse(tokenPair);
@@ -169,6 +182,7 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<AuthResponse> {
     const tokenPair = await this.auth.confirmRequiredTotpEnrollment(body.setupToken, body.totpCode, requestSessionClientContext(request));
+    await this.assertIssuedSessionHost(request, tokenPair);
     response.cookie(refreshCookieName, tokenPair.refreshToken, refreshCookieOptions);
     response.cookie(csrfCookieName, createCsrfToken(), csrfCookieOptions);
     return toAuthResponse(tokenPair);
@@ -180,10 +194,12 @@ export class AuthController {
     @Body(zodBody(refreshBodySchema)) _body: RefreshBody,
     @Headers("cookie") cookieHeader: string | undefined,
     @Headers("x-csrf-token") csrfHeader: string | undefined,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<AuthResponse> {
     assertCsrfToken(cookieHeader, csrfHeader);
     const tokenPair = await this.auth.refresh(readRefreshCookie(cookieHeader));
+    await this.assertIssuedSessionHost(request, tokenPair);
     response.cookie(refreshCookieName, tokenPair.refreshToken, refreshCookieOptions);
     response.cookie(csrfCookieName, createCsrfToken(), csrfCookieOptions);
     return toAuthResponse(tokenPair);
@@ -224,8 +240,12 @@ export class AuthController {
   @HttpCode(200)
   async requestPasswordReset(
     @Body(zodBody(passwordResetRequestBodySchema)) body: PasswordResetRequest,
+    @Req() request: Request,
   ): Promise<PasswordResetAcceptedResponse> {
-    await this.auth.requestPasswordReset(body);
+    await this.auth.requestPasswordReset({
+      ...body,
+      tenantSlug: tenantSlugForRequest(request, body.tenantSlug),
+    });
     return { status: "ACCEPTED" };
   }
 
@@ -277,6 +297,26 @@ export class AuthController {
       totpCode: body.totpCode,
       recoveryCode: body.recoveryCode,
     });
+  }
+
+  private async assertIssuedSessionHost(request: Request, tokenPair: TokenPair): Promise<void> {
+    const tenantSlug = await this.auth.tenantSlugForTenantId(tokenPair.session.tenantId);
+    try {
+      assertSessionTenantMatchesHost(request, { tenantId: tokenPair.session.tenantId, tenantSlug });
+    } catch (error) {
+      await this.auth.logout(tokenPair.refreshToken);
+      if (error instanceof TenantHostError) throw new HttpException(error.message, error.status);
+      throw error;
+    }
+  }
+}
+
+function tenantSlugForRequest(request: Request, supplied: string | undefined): string {
+  try {
+    return resolveTenantSlugFromRequest(request, supplied);
+  } catch (error) {
+    if (error instanceof TenantHostError) throw new HttpException(error.message, error.status);
+    throw error;
   }
 }
 

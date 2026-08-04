@@ -156,6 +156,8 @@ export type {
   LearningOutcomeCreateRequest,
   LearningOutcomeUpdateRequest,
   LoginRequest,
+  TenantLoginContextResponse,
+  TenantHostErrorCode,
   LoginResponse,
   MePasswordChangeRequest,
   MePasswordChangeResponse,

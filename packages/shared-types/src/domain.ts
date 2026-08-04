@@ -28,10 +28,24 @@ export interface AuthResponse {
 }
 
 export interface LoginRequest {
-  tenantSlug: string;
+  /** @deprecated Tenant subdomaini kullanılır; yalnız geçiş root akışında gönderilir. */
+  tenantSlug?: string;
   loginName: string;
   password: string;
 }
+
+export interface TenantLoginContextResponse {
+  slug: string;
+  name: string;
+  logoUrl?: string;
+}
+
+export type TenantHostErrorCode =
+  | "TENANT_HOST_UNKNOWN"
+  | "TENANT_HOST_RESERVED"
+  | "TENANT_HOST_MISMATCH"
+  | "TENANT_HOST_REQUIRED"
+  | "LEGACY_TENANT_LOGIN_RETIRED";
 
 export interface TenantSelectionOption {
   tenantId: string;
@@ -71,7 +85,8 @@ export interface PersonaSwitchRequest {
 }
 
 export interface PasswordResetRequest {
-  tenantSlug: string;
+  /** @deprecated Tenant subdomaini kullanılır; yalnız geçiş root akışında gönderilir. */
+  tenantSlug?: string;
   loginName: string;
 }
 
@@ -1435,7 +1450,8 @@ export interface StudentPortalInvitationIssueResponse {
 }
 
 export interface StudentPortalActivationRequest {
-  tenantSlug: string;
+  /** @deprecated Tenant subdomaini kullanılır; yalnız geçiş root akışında gönderilir. */
+  tenantSlug?: string;
   studentNo: string;
   code: string;
   password: string;

@@ -11,6 +11,7 @@
     "instrumentation-client.ts",
     "sentry.server.config.ts",
     "sentry.edge.config.ts",
+    "proxy.ts",
     "app/**/*.ts",
     "app/**/*.tsx",
     "src/**/*.ts",

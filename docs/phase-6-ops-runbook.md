@@ -798,6 +798,10 @@ Gerekli GitHub `staging` environment secret/var değerleri:
 - Domain/IP edge geçişi sırasında `docker-compose.traefik.yml` ve `docker-compose.traefik-ip.yml`
   birlikte config edilebilir; router'lar explicit `service=` label taşıdığı için Traefik service
   ambiguity üretmemelidir. Bu config doğrulaması first-gates yerine geçmez.
+- Domain edge aktivasyonundan önce staging hostunda
+  `$STAGING_DEPLOY_DIR/secrets/cloudflare_dns_api_token` dosyası root sahibi, parent dizini `0700`
+  ve dosya `0600` olacak şekilde oluşturulur. Token yalnız `o-okul.com` zone DNS read/write
+  yetkisine sahip olmalı; değer GitHub loguna, evidence env'e veya artifact'e yazılmaz.
 
 `STAGING_EVIDENCE_ENV_B64` içeriği `docs/evidence-templates/staging-evidence.env.example`
 sözleşmesinden üretilir. Gerçek değerlerle doldurulan özel env dosyası GitHub secret'a yazılmadan önce
@@ -913,6 +917,8 @@ Beklenen akış:
   `docker-compose.traefik-ip.yml`, `docker-compose.observability.yml`, `docker/evidence` ve
   `docker/postgres/init` içeriğini SSH üzerinden staging deploy dizinine kopyalar; staging host'un
   repo clone yetkisine ihtiyacı yoktur.
+- Domain edge deploy'u `CF_DNS_API_TOKEN_FILE=./secrets/cloudflare_dns_api_token` değerini kullanır;
+  workflow compose bundle'ına tokenı eklemez ve staging hostundaki secret dosyasını değiştirmez.
 - Yeni release bilgisi önce `.env.release.next` dosyasına `WEB_IMAGE`, `API_IMAGE`, `WORKER_IMAGE`,
   `QUEUE_BOARD_IMAGE`, `SENTRY_RELEASE` ve `ROLLBACK_IMAGE_TAG` alanlarıyla yazılır. Otomatik
   deploy'da rollback tag'i sunucudaki mevcut `.env.release` içindeki `SENTRY_RELEASE` değerinden

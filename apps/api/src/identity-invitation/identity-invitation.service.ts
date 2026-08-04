@@ -23,6 +23,7 @@ import {
   tenantSeatLimitExceededCode,
 } from "../tenant/tenant-seat-limit.js";
 import { type TenantStore, tenantStoreToken } from "../tenant/tenant-store.js";
+import { tenantWebUrl } from "../http/tenant-origin.js";
 import {
   type TenantUserRecord,
   type UserManagementStore,
@@ -83,6 +84,7 @@ export class IdentityInvitationService {
 
     const token = createActivationToken();
     const expiresAt = nextExpiry();
+    const tenantSlug = await this.requireTenantSlug(tenantId);
     const invitation = await this.invitations.create({
       tenantId,
       subjectType,
@@ -92,7 +94,7 @@ export class IdentityInvitationService {
       role: subjectType,
       tokenHash: hashActivationToken(token),
       expiresAt,
-      delivery: createInvitationDelivery(tenantId, email, token, expiresAt),
+      delivery: createInvitationDelivery(tenantId, tenantSlug, email, token, expiresAt),
     });
     await this.auditLogs?.record({
       tenantId,
@@ -125,6 +127,7 @@ export class IdentityInvitationService {
     const email = input.email.trim().toLowerCase();
     const token = createActivationToken();
     const expiresAt = nextExpiry();
+    const tenantSlug = await this.requireTenantSlug(tenantId);
     const invitation = await this.invitations.create({
       tenantId,
       subjectType: "EMPLOYEE",
@@ -134,7 +137,7 @@ export class IdentityInvitationService {
       role: input.role,
       tokenHash: hashActivationToken(token),
       expiresAt,
-      delivery: createInvitationDelivery(tenantId, email, token, expiresAt),
+      delivery: createInvitationDelivery(tenantId, tenantSlug, email, token, expiresAt),
     });
     await this.auditLogs?.record({
       tenantId,
@@ -181,10 +184,11 @@ export class IdentityInvitationService {
 
     const token = createActivationToken();
     const expiresAt = nextExpiry();
+    const tenantSlug = await this.requireTenantSlug(tenantId);
     const invitation = await this.invitations.resend(tenantId, id, {
       tokenHash: hashActivationToken(token),
       expiresAt,
-      delivery: createInvitationDelivery(tenantId, existing.email, token, expiresAt),
+      delivery: createInvitationDelivery(tenantId, tenantSlug, existing.email, token, expiresAt),
     });
     if (!invitation) throw new NotFoundException("IDENTITY_INVITATION_NOT_FOUND");
     await this.auditLogs?.record({
@@ -285,6 +289,12 @@ export class IdentityInvitationService {
     return context.tenantId;
   }
 
+  private async requireTenantSlug(tenantId: string): Promise<string> {
+    const tenant = await this.tenants.findById(tenantId);
+    if (!tenant) throw new NotFoundException("TENANT_NOT_FOUND");
+    return tenant.slug;
+  }
+
   private async assertTenantSeatAvailable(tenantId: string): Promise<void> {
     const tenant = await this.tenants.findById(tenantId);
     if (!tenant) {
@@ -371,8 +381,8 @@ function nextExpiry(): string {
   return expiresAt.toISOString();
 }
 
-function createInvitationDelivery(tenantId: string, email: string, token: string, expiresAt: string): SecretDeliveryOutboxInput {
-  const url = createInvitationDeliveryUrl(token);
+function createInvitationDelivery(tenantId: string, tenantSlug: string, email: string, token: string, expiresAt: string): SecretDeliveryOutboxInput {
+  const url = createInvitationDeliveryUrl(token, tenantSlug);
   return {
     tenantId,
     purpose: "IDENTITY_INVITATION",
@@ -386,8 +396,10 @@ function createInvitationDelivery(tenantId: string, email: string, token: string
   };
 }
 
-export function createInvitationDeliveryUrl(token: string): URL {
-  const url = new URL("/aktivasyon", process.env.WEB_URL ?? "http://localhost:3000");
+export function createInvitationDeliveryUrl(token: string, tenantSlug?: string): URL {
+  const url = tenantSlug
+    ? tenantWebUrl("/aktivasyon", tenantSlug)
+    : new URL("/aktivasyon", process.env.WEB_URL ?? "http://localhost:3000");
   url.hash = new URLSearchParams({ token }).toString();
   return url;
 }

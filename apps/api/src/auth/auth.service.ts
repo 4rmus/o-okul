@@ -1,11 +1,12 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { BadRequestException, HttpException, HttpStatus, Inject, Injectable, NotFoundException, Optional, UnauthorizedException } from "@nestjs/common";
 import { encryptSecretDeliveryPayload } from "@o-okul/db";
-import type { ActivePersona, MeProfileResponse, MeSessionRecord, MeSessionRevokeAllResponse, MfaEnrollmentRequiredResponse, MfaStepUpPurpose, MfaStepUpResponse, SelfPurgeResult, TenantSelectionOption, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
+import type { ActivePersona, MeProfileResponse, MeSessionRecord, MeSessionRevokeAllResponse, MfaEnrollmentRequiredResponse, MfaStepUpPurpose, MfaStepUpResponse, SelfPurgeResult, TenantLoginContextResponse, TenantSelectionOption, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { licenseTermStoreToken, type LicenseTermStore } from "../license/license-term-store.js";
 import { tenantStoreToken, type TenantStore } from "../tenant/tenant-store.js";
+import { tenantWebUrl } from "../http/tenant-origin.js";
 import { IdentityResolver } from "./identity-resolver.js";
 import {
   createLoginAttemptLimiter,
@@ -609,6 +610,18 @@ export class AuthService {
     }
   }
 
+  async tenantSlugForTenantId(tenantId: string): Promise<string | undefined> {
+    if (tenantId === "system") return "system";
+    return (await this.tenants?.findById(tenantId))?.slug;
+  }
+
+  async tenantLoginContext(tenantSlug: string): Promise<TenantLoginContextResponse> {
+    if (tenantSlug === "system") return { slug: "system", name: "O-Okul Sistem Yönetimi" };
+    const tenant = await this.tenants?.findBySlug(tenantSlug);
+    if (!tenant || tenant.status !== "ACTIVE") throw new NotFoundException("TENANT_HOST_UNKNOWN");
+    return { slug: tenant.slug, name: tenant.name, logoUrl: tenant.logoUrl };
+  }
+
   async requestPasswordReset(input: PasswordResetRequestInput): Promise<PasswordResetRequestResult> {
     const tenantSlug = input.tenantSlug.trim().toLowerCase();
     const loginName = input.loginName.trim().toLowerCase();
@@ -629,7 +642,7 @@ export class AuthService {
           channel: "EMAIL",
           to: user.email,
           subject: "O-Okul parola sıfırlama",
-          body: `Parolanızı 30 dakika içinde yenilemek için bağlantıyı açın: ${createPasswordResetUrl(resetToken)}`,
+          body: `Parolanızı 30 dakika içinde yenilemek için bağlantıyı açın: ${createPasswordResetUrl(resetToken, tenantSlug)}`,
         }),
         expiresAt,
       },
@@ -932,8 +945,10 @@ function nextResetExpiry(): string {
   return expiresAt.toISOString();
 }
 
-export function createPasswordResetUrl(token: string): string {
-  const url = new URL("/parola-sifirla", process.env.WEB_URL ?? "http://localhost:3000");
+export function createPasswordResetUrl(token: string, tenantSlug?: string): string {
+  const url = tenantSlug
+    ? tenantWebUrl("/parola-sifirla", tenantSlug)
+    : new URL("/parola-sifirla", process.env.WEB_URL ?? "http://localhost:3000");
   url.hash = new URLSearchParams({ token }).toString();
   return url.toString();
 }

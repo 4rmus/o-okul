@@ -33,6 +33,7 @@ interface PrimaryTask {
 const routeCases = [
   route("/", "Her öğrencinin gelişimini sınavdan sınava görün.", "anonymous", { role: "region", name: "Her öğrencinin gelişimini sınavdan sınava görün." }),
   route("/k/[tenantSlug]/giris", "Giriş", "anonymous", { role: "form", name: "Giriş formu" }),
+  route("/giris", "Giriş", "anonymous", { role: "form", name: "Giriş formu" }),
   route("/login", "Giriş", "anonymous", { role: "form", name: "Giriş formu" }),
   route("/aktivasyon", "Hesabı etkinleştir", "anonymous", { role: "button", name: "Hesabı etkinleştir" }, { query: "token=activation-token" }),
   route("/parola-sifirla", "Yeni şifre", "anonymous", { role: "button", name: "Şifreyi yenile" }, { query: "token=reset-token" }),
@@ -239,7 +240,7 @@ function assertRouteManifestParity(manifest: readonly RouteCase[]) {
   const fileSystemRoutes = collectPageRoutes(appDirectory).sort();
   const manifestRoutes = manifest.map((entry) => entry.routeTemplate).sort();
   const duplicates = manifestRoutes.filter((routeTemplate, index) => manifestRoutes.indexOf(routeTemplate) !== index);
-  if (manifest.length !== 78) throw new Error(`Route manifest must contain exactly 78 entries; found ${manifest.length}.`);
+  if (manifest.length !== 79) throw new Error(`Route manifest must contain exactly 79 entries; found ${manifest.length}.`);
   if (duplicates.length > 0) throw new Error(`Route manifest contains duplicates: ${[...new Set(duplicates)].join(", ")}`);
   if (JSON.stringify(manifestRoutes) !== JSON.stringify(fileSystemRoutes)) {
     throw new Error(`Route manifest does not match page.tsx inventory.\nmanifest=${manifestRoutes.join(",")}\nfilesystem=${fileSystemRoutes.join(",")}`);
