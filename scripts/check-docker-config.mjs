@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 
 const compose = readFileSync("docker-compose.yml", "utf8");
 const releaseCompose = readFileSync("docker-compose.release.yml", "utf8");
+const productionCompose = readFileSync("docker-compose.production.yml", "utf8");
 const rateLimitShardCompose = readFileSync("docker-compose.rate-limit-shard.yml", "utf8");
 const observability = readFileSync("docker-compose.observability.yml", "utf8");
 const externalMonitoring = readFileSync("docker-compose.external-monitoring.yml", "utf8");
@@ -170,6 +171,23 @@ const expectations = {
     "image: ${WORKER_IMAGE:?WORKER_IMAGE is required}",
     "image: ${QUEUE_BOARD_IMAGE:?QUEUE_BOARD_IMAGE is required}",
     "pull_policy: always",
+  ],
+  "docker-compose.production.yml": [
+    "PRODUCTION_WEB_HOST_PORT:-3011",
+    "PRODUCTION_API_HOST_PORT:-3110",
+    "PRODUCTION_QUEUE_BOARD_HOST_PORT:-3210",
+    "PRODUCTION_EVIDENCE_HOST_PORT:-3310",
+    "PRODUCTION_POSTGRES_HOST_PORT:-55432",
+    "PRODUCTION_REDIS_HOST_PORT:-56379",
+    "PRODUCTION_API_PROXY_IP:-172.31.255.5",
+    "traefik.http.routers.prod-web.priority=5",
+    "traefik.http.routers.prod-api.priority=90",
+    "traefik.http.routers.prod-evidence.priority=105",
+    "traefik.http.routers.prod-reserved-hosts.rule=Host(`www.${DOMAIN}`)",
+    "./artifacts/production/reports:/usr/share/nginx/html:ro",
+    "profiles: [\"local-storage\"]",
+    "name: o-okul_frontend_net",
+    "name: o-okul_proxy_net",
   ],
   "docker-compose.rate-limit-shard.yml": [
     "api-rate-limit-shard:",
@@ -359,6 +377,7 @@ const expectations = {
 const files = {
   "docker-compose.yml": compose,
   "docker-compose.release.yml": releaseCompose,
+  "docker-compose.production.yml": productionCompose,
   "docker-compose.rate-limit-shard.yml": rateLimitShardCompose,
   "docker-compose.observability.yml": observability,
   "docker-compose.external-monitoring.yml": externalMonitoring,
@@ -387,6 +406,14 @@ for (const [file, tokens] of Object.entries(expectations)) {
       failures.push(`${file} eksik: ${token}`);
     }
   }
+}
+
+if (productionCompose.includes("staging.${DOMAIN}")) {
+  failures.push("docker-compose.production.yml production reserved-host kuralı staging domainini kapsamamalı");
+}
+
+if (/traefik\.http\.routers\.(web|api|evidence)\./.test(productionCompose)) {
+  failures.push("docker-compose.production.yml router adları staging ile çakışmamalı");
 }
 
 const dockerfileLines = dockerfile.split(/\r?\n/).map((line) => line.trim());
