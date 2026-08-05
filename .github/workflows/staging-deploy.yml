@@ -669,6 +669,17 @@ jobs:
           printf '%s' "$STAGING_EVIDENCE_ENV_B64" | base64 -d > .staging-evidence.env
           test -s .staging-evidence.env
 
+      - name: Rebind staging activation origin
+        shell: bash
+        env:
+          STAGING_NEXT_PUBLIC_API_URL: ${{ vars.STAGING_NEXT_PUBLIC_API_URL }}
+        run: |
+          public_origin=$(node -p 'new URL(process.argv[1]).origin' "$STAGING_NEXT_PUBLIC_API_URL")
+          sed -i -E \
+            -e "s#^(APP_URL|API_URL|WEB_URL)=.*#\\1=$public_origin#" \
+            -e "s#^TRAEFIK_HTTPS_SMOKE_URL=.*#TRAEFIK_HTTPS_SMOKE_URL=$public_origin/health#" \
+            .staging-evidence.env
+
       - name: Check staging evidence env
         run: pnpm staging:evidence-env:check -- --mode activation --env-file .staging-evidence.env
 

@@ -983,6 +983,12 @@ Beklenen akış:
 - Staging host ayağa kalktıktan sonra evidence job ilk dış gate'leri tam release evidence zincirinden
   önce ayrı artifact seti olarak üretir:
   `pnpm staging:first-gates:smoke -- --env-file .staging-evidence.env --output-dir artifacts/staging/first-gates`.
+  Job, private evidence env dosyasındaki `APP_URL`, `API_URL`, `WEB_URL` ve
+  `TRAEFIK_HTTPS_SMOKE_URL` alanlarını önce deploy preflight'ında doğrulanan
+  `STAGING_NEXT_PUBLIC_API_URL` origin'ine bağlar; böylece kaldırılmış veya reserved bir host
+  stale secret içinde kalsa bile activation smoke gerçek deploy origin'ini sınar. Diğer secret ve
+  full-evidence target değerleri değiştirilmez; private env kaynağı ayrıca kontrollü biçimde
+  güncel tutulmalıdır.
   Bu komut Traefik HTTPS ve alert webhook smoke dosyalarını yazar, her dosyayı
   ortak smoke evidence sözleşmesiyle doğrular ve `first-gates-manifest.json` manifest'i üretir.
   Output dizini lokal temp path (`/tmp`, `/var/tmp`) veya `artifacts/local/**` altında olamaz ve yalnız
