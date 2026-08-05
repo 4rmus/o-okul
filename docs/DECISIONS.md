@@ -113,17 +113,18 @@ Karar: Gerçek SMS sağlayıcısı seçilene kadar `SMS_PROVIDER=noop` yalnız l
 SMS adapter ile başlamaz. İlk gerçek sağlayıcı implementasyonu Netgsm REST v2 olarak eklendi;
 canlı gönderim için `SMS_PROVIDER=netgsm`, `NETGSM_USERCODE`, `NETGSM_PASSWORD` ve
 `NETGSM_MSG_HEADER` secret değerleri gerekir.
-E-posta/push tarafında `NOTIFICATION_PROVIDER=noop` yalnız lokal/test kullanım içindir; production
+E-posta/push adapter tarafında `NOTIFICATION_PROVIDER=noop` yalnız lokal/test kullanım içindir; production
 env kontrolü `NOTIFICATION_PROVIDER=http`, gerçek HTTPS endpoint, Bearer token ve
-`pnpm notification:smoke` sonucunu zorunlu tutar.
+`pnpm notification:smoke` sonucunu zorunlu tutar. İlk production release gerçek e-posta gönderimini
+kapsar; push sağlayıcısı ve cihaz hedefi sonraki release'e bırakılır ve o zamana kadar fail-closed kalır.
 Kaynak: Ürün iletişim kapsamı ve Netgsm resmi REST v2 SMS dokümanı.
 Kanıt: `packages/sms-adapter/src/index.ts`, `apps/worker/src/jobs/sms-batch-processor.ts`,
 `packages/notification-adapter/src/index.ts`, `docker-compose.yml`, `.env.example`,
 `pnpm sms:smoke`, `pnpm notification:smoke`.
 Etkilenen ADR: Yok
 Açık soru: Netgsm test credential/canlı hesap doğrulaması hâlâ `OPEN-20260529-04` altında bekliyor;
-smoke komutu hazır, gerçek sağlayıcıda `SMS_SMOKE_CONFIRM=send` ister. E-posta/push için
-staging HTTP provider credential'ı ve `NOTIFICATION_SMOKE_CONFIRM=send` sonucu bekliyor.
+smoke komutu hazır, gerçek sağlayıcıda `SMS_SMOKE_CONFIRM=send` ister. E-posta için staging HTTP
+provider credential'ı ve `NOTIFICATION_SMOKE_CONFIRM=send` sonucu gerekir; push ayrı karardır.
 Son kontrol: 2026-05-30
 
 ### DEC-20260531-01 — Veli-öğrenci bağlama

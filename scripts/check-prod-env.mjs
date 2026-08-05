@@ -280,8 +280,9 @@ function checkProductionEnv(env) {
   requireEqual(env, failures, "NOTIFICATION_REPLY_TO_EMAIL", "destek@o-okul.com");
   requireSet(env, failures, "NOTIFICATION_SMOKE_EMAIL_TO");
   requireNoPlaceholderValue(env, failures, "NOTIFICATION_SMOKE_EMAIL_TO");
-  requireSet(env, failures, "NOTIFICATION_SMOKE_PUSH_TO");
-  requireNoPlaceholderValue(env, failures, "NOTIFICATION_SMOKE_PUSH_TO");
+  if ((env.NOTIFICATION_SMOKE_PUSH_TO ?? "").trim()) {
+    failures.push("NOTIFICATION_SMOKE_PUSH_TO e-posta-only release kapsamında boş olmalı.");
+  }
   requireSet(env, failures, "NOTIFICATION_SMOKE_SUBJECT");
   requireNoPlaceholderValue(env, failures, "NOTIFICATION_SMOKE_SUBJECT");
   requireSet(env, failures, "NOTIFICATION_SMOKE_BODY");

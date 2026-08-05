@@ -1,0 +1,36 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "o-okul-notification-gateway",
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-08-05",
+  "routes": [
+    {
+      "pattern": "notify.o-okul.com",
+      "custom_domain": true
+    }
+  ],
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "allowed_sender_addresses": ["bildirim@o-okul.com"]
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "IDEMPOTENCY",
+        "class_name": "NotificationIdempotency"
+      }
+    ]
+  },
+  "exports": {
+    "NotificationIdempotency": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

@@ -63,7 +63,7 @@ const runtimeRequiredKeys = ["S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"];
 const forbiddenSecretKeys = new Map([
   ["SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID", "verify-only workflow host-side private source-id dosyasını kullanır."],
 ]);
-const optionalRuntimeKeys = new Set(["TRAEFIK_TRUSTED_FORWARDER_CIDRS"]);
+const optionalRuntimeKeys = new Set(["TRAEFIK_TRUSTED_FORWARDER_CIDRS", "NOTIFICATION_SMOKE_PUSH_TO"]);
 const proxyNetworkKeys = [
   "DOCKER_PROXY_SUBNET",
   "DOCKER_PROXY_NETWORK",
