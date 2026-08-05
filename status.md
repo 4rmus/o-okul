@@ -1,8 +1,13 @@
 # O-Okul Durum
 
-Son güncelleme: 2026-07-13
-Repo başlangıç snapshotı: `main` / `d8c197d6`
-Kanıt düzeyi: yerel repo; staging ve production bu çalışmada yeniden doğrulanmadı
+Son güncelleme: 2026-08-05
+İnceleme snapshotı: `agent/tenant-subdomain-login` / `6f9c9cbce`; `origin/main` üç commit ileride
+Kanıt düzeyi: kirli yerel çalışma ağacı; production teknik aktivasyonu canlı doğrulandı, tam go-live kanıtı tamamlanmadı
+
+5 Ağustos 2026 ürün kararları: giriş kurum subdomaini + tenant-local kimliktir; guardian ürün
+kapsamından çıkarılacaktır; hukuk/KVKK incelemesi bu fazda repo uygulamasını ve pilot hazırlığını
+bloklamaz ancak production purge/go-live için hukuk kanıtı sayılmaz. Kapasite tenant başına 2.000
+aktif çalışan hesabı runtime üst sınırı ve 1.000 çalışan yük kabul hedefi olarak netleştirilmiştir.
 
 Bu dosya tamamlanan işleri, açık işleri ve release kanıt seviyesini tek yerde tutar. Tarihsel
 planlar ve faz günlükleri kaldırılmıştır; güncel ürün kapsamı ve release sözleşmeleri aşağıdaki
@@ -40,6 +45,24 @@ ortam ve tarih içeren kalıcı evidence ile yükseltilir.
   sınırlar. Netgsm upstream idempotency anahtarı sunmadığı için provider çağrısı sonrası process
   çökmesi bakımından davranış `at-least-once` olarak kabul edilir; `exactly-once` iddiası yoktur.
 
+## Production Teknik Aktivasyonu — 2026-08-05
+
+- Mevcut sunucu kullanıldı; yeni VPS kurulmadı. `DOMAIN`, uygulama URL'leri, CORS ve Sentry ortam adı
+  `o-okul.com` / `production` olarak aktive edildi.
+- Web, API, worker ve queue-board aynı image SHA ile çalışıyor:
+  `3e460783b35436dbd33dbc534ce57e2139d40f3f`. `/login`, `/health` ve `/health/ready` apex üzerinde
+  `200`; wildcard host üzerinde `/health` ve `/health/ready` `200`, `/login` beklenen `307 /giris`.
+- Cloudflare authoritative DNS üzerinde `*.o-okul.com A 212.108.107.190`, `DNS only`, TTL `Auto`
+  kaydedildi. 1.1.1.1 ve 8.8.8.8 ilk sorguda aynı IP'yi döndürdü.
+- Traefik/Let's Encrypt origin sertifikası `o-okul.com` ve `*.o-okul.com` SAN'larını içeriyor;
+  geçerlilik sonu 3 Kasım 2026. API router'ın redundant ACME isteği giderildi.
+- Kesim öncesi env, compose, ACME ve PostgreSQL yedeği
+  `/root/o-okul-cutover-backups/20260805T161400Z` altında; checksum ve `pg_restore --list` kontrolü geçti.
+- Bu teknik aktivasyon go-live onayı değildir. `pnpm prod:env:check` canlı sunucuda hâlâ `FAIL`:
+  notification provider/inbox smoke, güvenli harici S3, Sentry, WAL/off-host backup, pull edilebilir image
+  rollback hedefi, restore tatbikatı, alerting/external monitoring, RLS/MFA/UAT/pilot ve go-live evidence
+  hedefleri tamamlanmalıdır.
+
 ## Silinen Tarihsel Kayıtlar
 
 - Kök plan ve `claudedocs` altındaki tarihsel tasarım/uygulama planları.
@@ -59,17 +82,28 @@ Korunan aktif sözleşmeler:
 
 ## Açık İşler
 
-Repo içi zorunlu kod işi kalmadığında bu bölüm yalnız dış ortam kanıtlarını taşır:
+Güncel sıralama `docs/account-management-architecture-plan.md` bölüm 6 içindedir:
 
-1. Güncel HEAD için GitHub CI sonucu.
-2. Aynı SHA/image etiketinin staging hostta aktif olduğunun doğrulanması.
-3. Staging first-gates, gerçek provider smoke, observability ve artifact paketi.
-4. Production approval/cutover, rollback-restore kanıtı, pilot ve go-live kararı.
+1. P0: iSEM producer/checker sayımları ve UI-worker credential sözleşmesini tekleştirme.
+2. P0: rank tabanlı RBAC ile legacy system-admin tenant erişimini exact capability/control-plane modeline kesme.
+3. P1: StudentContact, guardian emekliliği, offboarding/import/cursor ve outbox grant revoke dilimleri.
+4. Canlı SHA için CI parity; uygulamanın ürettiği davet/reset e-postası için gerçek provider/inbox ve MFA;
+   rol bazlı UAT; pull edilebilir image rollback/restore; izleme, pilot ve go-live.
 
-Bu maddeler erişim bilgisi ve gerçek dış hedefler olmadan yerelde üretilemez. Şablon veya statik
-checker sonucu canlı kanıt yerine kullanılamaz.
+Guardian fiziksel silme, grant revoke, production deploy veya go-live; ilgili teknik güvenlik kapıları
+ve gerçek ortam kanıtı olmadan yapılamaz. Workspace mailbox/alias testi tamamlanmıştır; exact-SHA
+uygulama-provider teslim testi yerine geçmez. Şablon veya statik checker sonucu canlı kanıt yerine kullanılamaz.
 
 ## Doğrulama
+
+2026-08-05 plan kontrolü:
+
+- `pnpm agents:check`, `pnpm product-journeys:check`, `pnpm prod:plan:check`: `PASS`.
+- API ve web typecheck: `PASS`.
+- `pnpm prod:evidence:templates:check`: örnek/template sözleşmesi `PASS`; canlı kanıt değildir.
+- Production domain/DNS/TLS ve temel endpoint kontrolleri canlı `PASS`; `pnpm prod:env:check` canlı `FAIL`.
+- Tam `pnpm run ci`, uygulama-provider inbox, restore, UAT, pilot ve production evidence gate'leri çalıştırılmadı.
+- Çalışma ağacında kullanıcıya ait support/notification/UI değişiklikleri korunmuştur.
 
 2026-07-13 yerel sonuçları:
 
