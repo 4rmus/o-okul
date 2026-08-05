@@ -37,6 +37,12 @@ test.describe("Next erişilebilirlik smoke", () => {
     await expect(page.getByRole("heading", { name: "Her öğrencinin gelişimini sınavdan sınava görün." })).toBeVisible();
     await expectNoHighImpactA11yViolations(page, "landing");
 
+    await page.goto("/iletisim");
+    await expect(page.getByRole("heading", { name: "İletişim ve Destek" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "o-okul desteğine e-posta gönder" })).toHaveAttribute("href", /mailto:destek@o-okul\.com/);
+    await expect(page.getByRole("link", { name: "KVKK başvurusu gönder" })).toHaveAttribute("href", /mailto:kvkk@o-okul\.com/);
+    await expectNoHighImpactA11yViolations(page, "iletisim");
+
     await page.goto("/login");
     await expect(page.getByRole("heading", { name: "Giriş" })).toBeVisible();
     const loginForm = page.getByRole("form", { name: "Giriş formu" });

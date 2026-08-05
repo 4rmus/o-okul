@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, ForbiddenException, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, ForbiddenException, Get, Headers, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { z } from "zod";
 import type {
   DevelopmentTrendItem,
@@ -34,6 +34,9 @@ import type {
   NotificationDeviceTokenRecord,
   PublicNotificationDeviceTokenRecord,
   PublicPortalSupportTicketRecord,
+  PortalSupportTicketCommentCreateResponse,
+  PublicPortalSupportTicketCommentRecord,
+  SupportTicketCommentRecord,
 } from "@o-okul/shared-types";
 import { AnnouncementService } from "../announcement/announcement.service.js";
 import { AttendanceService } from "../attendance/attendance.service.js";
@@ -66,6 +69,8 @@ import {
   type PortalSupportTicketCreateBody,
   type TeacherPortalSupportTicketCreateBody,
   portalSupportTicketCreateBodySchema,
+  supportTicketCommentCreateBodySchema,
+  type SupportTicketCommentCreateBody,
   teacherPortalSupportTicketCreateBodySchema,
 } from "../support-ticket/support-ticket-validation.js";
 import { TeacherNoteService } from "../teacher-note/teacher-note.service.js";
@@ -269,6 +274,25 @@ export class MeController {
     return toPublicPortalSupportTicketResponse(await this.supportTickets.createCurrentStudent(getRequestContext(), body));
   }
 
+  @Get("student/support-tickets/:ticketId/comments")
+  @Roles("STUDENT")
+  async studentSupportTicketComments(@Param("ticketId") ticketId: string): Promise<PublicPortalSupportTicketCommentRecord[]> {
+    const result = await this.supportTickets.listCurrentStudentComments(getRequestContext(), ticketId);
+    return result.comments.map((comment) => toPublicPortalSupportTicketCommentResponse(comment, result.ticket));
+  }
+
+  @Post("student/support-tickets/:ticketId/comments")
+  @Roles("STUDENT")
+  async addStudentSupportTicketComment(
+    @Param("ticketId") ticketId: string,
+    @Body(zodBody(supportTicketCommentCreateBodySchema)) body: SupportTicketCommentCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<PortalSupportTicketCommentCreateResponse> {
+    return toPublicPortalSupportTicketCommentCreateResponse(
+      await this.supportTickets.addCurrentStudentComment(getRequestContext(), ticketId, body, idempotencyKey),
+    );
+  }
+
   @Get("student/reports")
   @Roles("STUDENT")
   async studentReportIndex(): Promise<PortalReportIndexItem[]> {
@@ -448,6 +472,25 @@ export class MeController {
     @Body(zodBody(teacherPortalSupportTicketCreateBodySchema)) body: TeacherPortalSupportTicketCreateBody,
   ): Promise<PublicPortalSupportTicketRecord> {
     return toPublicPortalSupportTicketResponse(await this.supportTickets.createCurrentTeacher(getRequestContext(), body));
+  }
+
+  @Get("teacher/support-tickets/:ticketId/comments")
+  @Roles("TEACHER")
+  async teacherSupportTicketComments(@Param("ticketId") ticketId: string): Promise<PublicPortalSupportTicketCommentRecord[]> {
+    const result = await this.supportTickets.listCurrentTeacherComments(getRequestContext(), ticketId);
+    return result.comments.map((comment) => toPublicPortalSupportTicketCommentResponse(comment, result.ticket));
+  }
+
+  @Post("teacher/support-tickets/:ticketId/comments")
+  @Roles("TEACHER")
+  async addTeacherSupportTicketComment(
+    @Param("ticketId") ticketId: string,
+    @Body(zodBody(supportTicketCommentCreateBodySchema)) body: SupportTicketCommentCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<PortalSupportTicketCommentCreateResponse> {
+    return toPublicPortalSupportTicketCommentCreateResponse(
+      await this.supportTickets.addCurrentTeacherComment(getRequestContext(), ticketId, body, idempotencyKey),
+    );
   }
 
   @Get("teacher/students")
@@ -742,6 +785,28 @@ function toPublicNotificationDeviceResponse(record: NotificationDeviceTokenRecor
 function toPublicPortalSupportTicketResponse(record: SupportTicketRecord): PublicPortalSupportTicketRecord {
   const { requesterId: _requesterId, ...response } = record;
   return response;
+}
+
+function toPublicPortalSupportTicketCommentResponse(
+  comment: SupportTicketCommentRecord,
+  ticket: SupportTicketRecord,
+): PublicPortalSupportTicketCommentRecord {
+  return {
+    id: comment.id,
+    ticketId: comment.ticketId,
+    author: comment.authorId === ticket.requesterId ? "REQUESTER" : "INSTITUTION",
+    body: comment.body,
+    createdAt: comment.createdAt,
+  };
+}
+
+function toPublicPortalSupportTicketCommentCreateResponse(
+  result: Awaited<ReturnType<SupportTicketService["addCurrentStudentComment"]>>,
+): PortalSupportTicketCommentCreateResponse {
+  return {
+    ticket: toPublicPortalSupportTicketResponse(result.ticket),
+    comment: toPublicPortalSupportTicketCommentResponse(result.comment, result.ticket),
+  };
 }
 
 function assertGuardianContext(context: RequestContext): void {

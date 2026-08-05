@@ -5,6 +5,11 @@ import {
   HttpNotificationAdapter,
 } from "./index.js";
 
+const httpIdentity = {
+  fromEmail: "bildirim@o-okul.com",
+  replyToEmail: "destek@o-okul.com",
+};
+
 describe("createNoopNotificationAdapter", () => {
   it("lokalde e-posta ve push sonucunu başarılı döndürür", async () => {
     const adapter = createNoopNotificationAdapter();
@@ -60,12 +65,29 @@ describe("createNotificationAdapterFromEnv", () => {
       NOTIFICATION_PROVIDER: "http",
     })).toThrow("NOTIFICATION_HTTP_ENDPOINT_MISSING");
   });
+
+  it("HTTP sağlayıcı gönderici ve yanıt adreslerini zorunlu tutar", () => {
+    expect(() => createNotificationAdapterFromEnv({
+      NODE_ENV: "production",
+      NOTIFICATION_PROVIDER: "http",
+      NOTIFICATION_HTTP_ENDPOINT: "https://notify.example/send",
+    })).toThrow("NOTIFICATION_FROM_EMAIL_MISSING");
+
+    expect(() => createNotificationAdapterFromEnv({
+      NODE_ENV: "production",
+      NOTIFICATION_PROVIDER: "http",
+      NOTIFICATION_HTTP_ENDPOINT: "https://notify.example/send",
+      NOTIFICATION_FROM_EMAIL: "gecersiz",
+      NOTIFICATION_REPLY_TO_EMAIL: "destek@o-okul.com",
+    })).toThrow("NOTIFICATION_FROM_EMAIL_INVALID");
+  });
 });
 
 describe("HttpNotificationAdapter", () => {
   it("HTTP sağlayıcıya Bearer token ve mesaj listesi ile gönderir", async () => {
     const calls: Array<{ input: string; init: { body: string; headers: Record<string, string>; method: "POST" } }> = [];
     const adapter = new HttpNotificationAdapter({
+      ...httpIdentity,
       bearerToken: "secret-token",
       endpoint: "https://notify.example/send",
       fetch: async (input, init) => {
@@ -126,6 +148,8 @@ describe("HttpNotificationAdapter", () => {
         {
           channel: "EMAIL",
           to: "veli@example.test",
+          from: "bildirim@o-okul.com",
+          replyTo: "destek@o-okul.com",
           subject: "Duyuru",
           body: "Toplantı var",
         },
@@ -141,6 +165,7 @@ describe("HttpNotificationAdapter", () => {
   it("mesaj bazlı idempotency anahtarını HTTP sağlayıcıya iletir", async () => {
     const calls: Array<{ init: { body: string } }> = [];
     const adapter = new HttpNotificationAdapter({
+      ...httpIdentity,
       endpoint: "https://notify.example/send",
       fetch: async (_input, init) => {
         calls.push({ init });
@@ -150,12 +175,13 @@ describe("HttpNotificationAdapter", () => {
 
     await adapter.sendBatch([{ channel: "EMAIL", to: "recipient", body: "message", idempotencyKey: "secret-delivery:outbox-1" }]);
     expect(JSON.parse(calls[0]?.init.body ?? "{}")).toEqual({
-      messages: [{ channel: "EMAIL", to: "recipient", body: "message", idempotencyKey: "secret-delivery:outbox-1" }],
+      messages: [{ channel: "EMAIL", to: "recipient", from: "bildirim@o-okul.com", replyTo: "destek@o-okul.com", body: "message", idempotencyKey: "secret-delivery:outbox-1" }],
     });
   });
 
   it("HTTP hata durumunda tüm mesajları başarısız işaretler", async () => {
     const adapter = new HttpNotificationAdapter({
+      ...httpIdentity,
       endpoint: "https://notify.example/send",
       fetch: async () => ({
         ok: false,
@@ -177,6 +203,7 @@ describe("HttpNotificationAdapter", () => {
 
   it("sağlayıcı hata kodunu HTTP hata sonucunda korur", async () => {
     const adapter = new HttpNotificationAdapter({
+      ...httpIdentity,
       endpoint: "https://notify.example/send",
       fetch: async () => ({
         ok: false,
@@ -196,6 +223,7 @@ describe("HttpNotificationAdapter", () => {
 
   it("geçersiz JSON cevabını reddeder", async () => {
     const adapter = new HttpNotificationAdapter({
+      ...httpIdentity,
       endpoint: "https://notify.example/send",
       fetch: async () => ({
         ok: true,
@@ -212,6 +240,7 @@ describe("HttpNotificationAdapter", () => {
 
   it("eksik sonuç listesini reddeder", async () => {
     const adapter = new HttpNotificationAdapter({
+      ...httpIdentity,
       endpoint: "https://notify.example/send",
       fetch: async () => ({
         ok: true,

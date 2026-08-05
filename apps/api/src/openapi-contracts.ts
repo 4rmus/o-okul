@@ -1499,6 +1499,24 @@ const supportTicketCommentRecordSchema = objectSchema({
   createdAt: stringSchema({ format: "date-time" }),
 }, ["id", "tenantId", "ticketId", "body", "createdAt"]);
 
+const portalSupportTicketCommentRecordSchema = objectSchema({
+  id: stringSchema(),
+  ticketId: stringSchema(),
+  author: { type: "string", enum: ["REQUESTER", "INSTITUTION"] },
+  body: stringSchema(),
+  createdAt: stringSchema({ format: "date-time" }),
+}, ["id", "ticketId", "author", "body", "createdAt"]);
+
+const portalSupportTicketCommentCreateResponseSchema = objectSchema({
+  ticket: portalSupportTicketRecordSchema,
+  comment: portalSupportTicketCommentRecordSchema,
+}, ["ticket", "comment"]);
+
+const portalStudentSupportTicketCommentCreateResponseSchema = objectSchema({
+  ticket: portalStudentSupportTicketRecordSchema,
+  comment: portalSupportTicketCommentRecordSchema,
+}, ["ticket", "comment"]);
+
 const auditLogRecordSchema = objectSchema({
   id: stringSchema(),
   tenantId: stringSchema(),
@@ -3867,6 +3885,26 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/me/teacher/support-tickets": {
     requestBody: teacherPortalSupportTicketCreateRequestSchema,
     responseBody: portalSupportTicketRecordSchema,
+  },
+  "get /api/v1/me/student/support-tickets/{ticketId}/comments": {
+    responseBody: arraySchema(portalSupportTicketCommentRecordSchema),
+    listResponse: true,
+  },
+  "post /api/v1/me/student/support-tickets/{ticketId}/comments": {
+    idempotent: true,
+    idempotencyRequired: true,
+    requestBody: supportTicketCommentCreateRequestSchema,
+    responseBody: portalStudentSupportTicketCommentCreateResponseSchema,
+  },
+  "get /api/v1/me/teacher/support-tickets/{ticketId}/comments": {
+    responseBody: arraySchema(portalSupportTicketCommentRecordSchema),
+    listResponse: true,
+  },
+  "post /api/v1/me/teacher/support-tickets/{ticketId}/comments": {
+    idempotent: true,
+    idempotencyRequired: true,
+    requestBody: supportTicketCommentCreateRequestSchema,
+    responseBody: portalSupportTicketCommentCreateResponseSchema,
   },
   "post /api/v1/support-tickets/{id}/attachments": {
     idempotent: true,

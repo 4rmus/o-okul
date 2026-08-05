@@ -425,6 +425,8 @@ export default function HomePage() {
           <a href="#raporlama">Başarı takibi</a>
           <a href="#roller">Kullanıcı ekranları</a>
           <a href="#guven">Yetki ve kayıtlar</a>
+          <Link href="/iletisim">İletişim</Link>
+          <Link href="/iletisim#kvkk">KVKK başvurusu</Link>
           <Link href="/login">Giriş</Link>
         </nav>
         <p className="next-marketing-footer__copyright">© 2026 {appBrand.name}</p>

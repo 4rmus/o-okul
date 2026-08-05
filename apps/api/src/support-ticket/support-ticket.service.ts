@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type {
   SupportTicketAttachmentDownloadResult,
   SupportTicketAttachmentRecord as SharedSupportTicketAttachmentRecord,
@@ -61,6 +61,20 @@ export interface CreateSupportTicketAttachmentInput {
 export interface CreateSupportTicketCommentInput {
   body?: string;
 }
+
+export interface PortalSupportTicketCommentResult {
+  ticket: SupportTicketRecord;
+  comment: SupportTicketCommentRecord;
+}
+
+export interface PortalSupportTicketCommentsResult {
+  ticket: SupportTicketRecord;
+  comments: SupportTicketCommentRecord[];
+}
+
+type PortalCommentOperation =
+  | "portal-support-ticket.student-comment.create"
+  | "portal-support-ticket.teacher-comment.create";
 
 export interface SupportTicketListFilters {
   campusId?: string;
@@ -165,6 +179,21 @@ export class SupportTicketService {
     return this.create(context, { ...input, tenantId: student.tenantId, studentId: student.id });
   }
 
+  async listCurrentStudentComments(context: RequestContext, ticketId: string): Promise<PortalSupportTicketCommentsResult> {
+    const student = await this.findCurrentStudent(context);
+    return this.listPortalComments(context, ticketId, student.id);
+  }
+
+  async addCurrentStudentComment(
+    context: RequestContext,
+    ticketId: string,
+    input: CreateSupportTicketCommentInput,
+    idempotencyKey?: string,
+  ): Promise<PortalSupportTicketCommentResult> {
+    const student = await this.findCurrentStudent(context);
+    return this.addPortalComment(context, ticketId, student.id, input, idempotencyKey, "portal-support-ticket.student-comment.create");
+  }
+
   async listCurrentGuardianStudent(context: RequestContext, studentId: string): Promise<SupportTicketRecord[]> {
     const student = await this.findGuardianSupportStudent(context, studentId);
     return (await this.list(context)).filter((ticket) => ticket.requesterId === context.userId && ticket.studentId === student.id);
@@ -191,6 +220,21 @@ export class SupportTicketService {
     this.assertTeacherContext(context);
     await this.assertTeacherTicketScope(context, input);
     return this.create(context, input);
+  }
+
+  async listCurrentTeacherComments(context: RequestContext, ticketId: string): Promise<PortalSupportTicketCommentsResult> {
+    this.assertTeacherContext(context);
+    return this.listPortalComments(context, ticketId, undefined, true);
+  }
+
+  async addCurrentTeacherComment(
+    context: RequestContext,
+    ticketId: string,
+    input: CreateSupportTicketCommentInput,
+    idempotencyKey?: string,
+  ): Promise<PortalSupportTicketCommentResult> {
+    this.assertTeacherContext(context);
+    return this.addPortalComment(context, ticketId, undefined, input, idempotencyKey, "portal-support-ticket.teacher-comment.create", true);
   }
 
   async update(
@@ -399,6 +443,87 @@ export class SupportTicketService {
       diff: { ticketId: ticket.id, bodyLength: body.length },
     });
     return comment;
+  }
+
+  private async listPortalComments(
+    context: RequestContext,
+    ticketId: string,
+    studentId?: string,
+    teacherScoped = false,
+  ): Promise<PortalSupportTicketCommentsResult> {
+    const ticket = await this.findPortalTicket(context, ticketId, studentId);
+    if (teacherScoped) await this.assertTeacherTicketScope(context, ticket);
+    const comments = filterTenantResources(context, await this.store.listComments(ticketId)).filter((comment) => !comment.deletedAt);
+    return { ticket, comments };
+  }
+
+  private async addPortalComment(
+    context: RequestContext,
+    ticketId: string,
+    studentId: string | undefined,
+    input: CreateSupportTicketCommentInput,
+    idempotencyKey: string | undefined,
+    operation: PortalCommentOperation,
+    teacherScoped = false,
+  ): Promise<PortalSupportTicketCommentResult> {
+    const key = requiredText(idempotencyKey, "IDEMPOTENCY_KEY_REQUIRED");
+    const run = () => this.addPortalCommentOnce(context, ticketId, studentId, input, teacherScoped);
+    const request = { ticketId, body: input.body };
+    const descriptor = operation === "portal-support-ticket.student-comment.create"
+      ? { key, operation: "portal-support-ticket.student-comment.create", request }
+      : { key, operation: "portal-support-ticket.teacher-comment.create", request };
+    return this.idempotency
+      ? this.idempotency.run(context, descriptor, run)
+      : run();
+  }
+
+  private async addPortalCommentOnce(
+    context: RequestContext,
+    ticketId: string,
+    studentId: string | undefined,
+    input: CreateSupportTicketCommentInput,
+    teacherScoped: boolean,
+  ): Promise<PortalSupportTicketCommentResult> {
+    const ticket = await this.findPortalTicket(context, ticketId, studentId);
+    if (teacherScoped) await this.assertTeacherTicketScope(context, ticket);
+    if (ticket.status === "CLOSED") throw new ConflictException("SUPPORT_TICKET_CLOSED");
+    const body = requiredText(input.body, "SUPPORT_TICKET_COMMENT_BODY_REQUIRED");
+    const result = await this.store.createPortalComment({
+      tenantId: ticket.tenantId,
+      ticketId: ticket.id,
+      authorId: context.userId,
+      body,
+      createdAt: new Date().toISOString(),
+    });
+    if (!result) throw new ConflictException("SUPPORT_TICKET_CLOSED");
+    await this.auditLogs?.record({
+      tenantId: result.comment.tenantId,
+      actorUserId: context.userId,
+      entityType: "SupportTicketComment",
+      entityId: result.comment.id,
+      action: "support_ticket_comment.created",
+      diff: {
+        ticketId: ticket.id,
+        bodyLength: body.length,
+        beforeStatus: ticket.status,
+        afterStatus: result.ticket.status,
+      },
+    });
+    return result;
+  }
+
+  private async findPortalTicket(
+    context: RequestContext,
+    ticketId: string,
+    studentId?: string,
+  ): Promise<SupportTicketRecord> {
+    const ticket = await this.store.findById(ticketId);
+    if (!ticket || ticket.deletedAt) throw new NotFoundException("SUPPORT_TICKET_NOT_FOUND");
+    this.assertAccess(context, ticket);
+    if (ticket.requesterId !== context.userId || (studentId !== undefined && ticket.studentId !== studentId)) {
+      throw new NotFoundException("SUPPORT_TICKET_NOT_FOUND");
+    }
+    return ticket;
   }
 
   private resolveTenantId(context: RequestContext, tenantId: string | undefined): string {

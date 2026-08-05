@@ -972,8 +972,11 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
         ) : null}
         {view === "overview" || view === "support" ? <div id="portal-teacher-support">
           <SupportTicketsPanel
+            accessToken={auth?.accessToken}
+            commentsPath="me/teacher/support-tickets"
             readOnly={isRolePreview}
             tickets={data?.supportTickets ?? []}
+            onTicketChange={() => query.refetch()}
             onCreate={(input) =>
               auth && !isRolePreview
                 ? createPortalSupportTicket(auth.accessToken, "me/teacher/support-tickets", {

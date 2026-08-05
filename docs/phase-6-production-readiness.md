@@ -379,7 +379,8 @@ pnpm backup:restore:smoke
   Ham telefon, maskesiz recipient veya `placeholder`/`test-message-id`/`sms-provider-message-*`
   gibi sahte provider id'leri production evidence ve go-live summary içinde kabul edilmez.
 - E-posta/push provider production'da `NOTIFICATION_PROVIDER=http` ile çalışır; HTTPS endpoint,
-  Bearer token, `NOTIFICATION_SMOKE_SUBJECT`, `NOTIFICATION_SMOKE_BODY` ve
+  Bearer token, `NOTIFICATION_FROM_EMAIL=bildirim@o-okul.com`,
+  `NOTIFICATION_REPLY_TO_EMAIL=destek@o-okul.com`, `NOTIFICATION_SMOKE_SUBJECT`, `NOTIFICATION_SMOKE_BODY` ve
   `pnpm notification:smoke` sonucu kanıt zincirinde zorunludur.
 - Notification provider smoke kanıtı `NOTIFICATION_PROVIDER_SMOKE_EVIDENCE_FILE` ile masked
   recipient ve kanal listesi olarak yazılır; artifact `checkedAt`, tek

@@ -440,6 +440,14 @@ const portalSupportTicketStudentPaths = [
 const portalSupportTicketTeacherPaths = [
   "/api/v1/me/teacher/support-tickets",
 ];
+const portalSupportTicketStudentCommentPaths = [
+  "/api/v1/me/student/support-tickets/{ticketId}/comments",
+];
+const portalSupportTicketTeacherCommentPaths = [
+  "/api/v1/me/teacher/support-tickets/{ticketId}/comments",
+];
+const portalSupportTicketCommentRequired = ["id", "ticketId", "author", "body", "createdAt"];
+const portalSupportTicketCommentForbiddenDeep = [...portalSupportTicketForbiddenDeep, "authorId", "tenantId"];
 const teacherRecordRequired = ["id", "tenantId", "firstName", "lastName"];
 const teacherResponseForbidden = [
   "downloadUrl",
@@ -1622,6 +1630,31 @@ const requiredOperationContracts = [
       { path: ["responseDataItem", "priority"], enum: supportTicketPriorities },
       { path: ["responseDataItem", "status"], enum: supportTicketStatuses },
       { path: ["responseDataItem", "createdAt"], format: "date-time" },
+    ],
+  })),
+  ...[...portalSupportTicketStudentCommentPaths, ...portalSupportTicketTeacherCommentPaths].map((path) => ({
+    method: "get",
+    path,
+    responseListEnvelope: true,
+    responseDataItemsRequired: portalSupportTicketCommentRequired,
+    responseDataForbiddenDeep: portalSupportTicketCommentForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseDataItem", "author"], enum: ["REQUESTER", "INSTITUTION"] },
+      { path: ["responseDataItem", "createdAt"], format: "date-time" },
+    ],
+  })),
+  ...[...portalSupportTicketStudentCommentPaths, ...portalSupportTicketTeacherCommentPaths].map((path) => ({
+    method: "post",
+    path,
+    requestBody: true,
+    responseEnvelope: true,
+    requestRequired: ["body"],
+    requestForbidden: ["author", "authorId", "createdAt", "id", "tenantId", "ticketId"],
+    responseDataRequired: ["ticket", "comment"],
+    responseDataForbiddenDeep: portalSupportTicketCommentForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseData", "comment", "author"], enum: ["REQUESTER", "INSTITUTION"] },
+      { path: ["responseData", "comment", "createdAt"], format: "date-time" },
     ],
   })),
   ...portalSupportTicketTeacherPaths.map((path) => ({

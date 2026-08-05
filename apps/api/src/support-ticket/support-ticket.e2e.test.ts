@@ -329,6 +329,107 @@ describe("Support ticket API", () => {
       .expect(200);
   });
 
+  it("öğrenci talebinde konuşmayı güvenli biçimde listeler, idempotent yanıtlar ve durum kurallarını uygular", async () => {
+    const created = await request(server)
+      .post("/me/student/support-tickets")
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .send({ subject: "Konuşma testi", message: "İlk mesaj", priority: "NORMAL" })
+      .expect(201);
+    const ticketId = created.body.id as string;
+
+    await request(server)
+      .post(`/support-tickets/${ticketId}/comments`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", `institution-comment-${ticketId}`)
+      .send({ body: "Kurum yanıtı" })
+      .expect(201);
+
+    const listed = await request(server)
+      .get(`/me/student/support-tickets/${ticketId}/comments`)
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .expect(200);
+    expect(listed.body).toEqual([
+      expect.objectContaining({ ticketId, author: "INSTITUTION", body: "Kurum yanıtı" }),
+    ]);
+    expectPortalCommentResponseIsPublic(listed.body);
+
+    await request(server)
+      .post(`/me/student/support-tickets/${ticketId}/comments`)
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .send({ body: "Anahtarsız yanıt" })
+      .expect(400);
+
+    const idempotencyKey = `student-comment-${ticketId}`;
+    const firstReply = await request(server)
+      .post(`/me/student/support-tickets/${ticketId}/comments`)
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .set("Idempotency-Key", idempotencyKey)
+      .send({ body: "Öğrenci yanıtı" })
+      .expect(201);
+    const repeatedReply = await request(server)
+      .post(`/me/student/support-tickets/${ticketId}/comments`)
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .set("Idempotency-Key", idempotencyKey)
+      .send({ body: "Öğrenci yanıtı" })
+      .expect(201);
+    expect(repeatedReply.body).toEqual(firstReply.body);
+    expect(firstReply.body).toMatchObject({
+      ticket: { id: ticketId, status: "OPEN" },
+      comment: { ticketId, author: "REQUESTER", body: "Öğrenci yanıtı" },
+    });
+    expectPortalCommentResponseIsPublic(firstReply.body);
+
+    await request(server)
+      .patch(`/support-tickets/${ticketId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ status: "RESOLVED" })
+      .expect(200);
+    await request(server)
+      .post(`/me/student/support-tickets/${ticketId}/comments`)
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .set("Idempotency-Key", `student-reopen-${ticketId}`)
+      .send({ body: "Sorun sürüyor" })
+      .expect(201)
+      .expect(({ body }) => expect(body.ticket.status).toBe("IN_PROGRESS"));
+
+    await request(server)
+      .patch(`/support-tickets/${ticketId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ status: "CLOSED" })
+      .expect(200);
+    await request(server)
+      .post(`/me/student/support-tickets/${ticketId}/comments`)
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .set("Idempotency-Key", `student-closed-${ticketId}`)
+      .send({ body: "Kapalı talep yanıtı" })
+      .expect(409);
+
+    await request(server)
+      .get(`/me/teacher/support-tickets/${ticketId}/comments`)
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(404);
+  });
+
+  it("öğretmen yalnız kendi talebine metin yanıtı ekler", async () => {
+    const teacherTicket = await request(server)
+      .post("/me/teacher/support-tickets")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({ subject: "Öğretmen konuşması", message: "Öğretmen mesajı" })
+      .expect(201);
+    await request(server)
+      .post(`/me/teacher/support-tickets/${teacherTicket.body.id}/comments`)
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .set("Idempotency-Key", `teacher-comment-${teacherTicket.body.id}`)
+      .send({ body: "Öğretmen yanıtı" })
+      .expect(201)
+      .expect(({ body }) => expect(body.comment.author).toBe("REQUESTER"));
+
+    await request(server)
+      .get(`/me/student/support-tickets/${teacherTicket.body.id}/comments`)
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .expect(404);
+  });
+
   it("tenant A başka tenant destek talebini okuyamaz", async () => {
     await request(server)
       .get("/support-tickets/support-ticket-b")
@@ -761,5 +862,13 @@ function expectPortalSupportTicketResponseIsPublic(body: unknown): void {
     "downloadUrl",
   ]) {
     expect(serialized).not.toContain(forbidden);
+  }
+}
+
+function expectPortalCommentResponseIsPublic(body: unknown): void {
+  const records = Array.isArray(body) ? body : [(body as { comment: unknown }).comment];
+  for (const record of records) {
+    expect(record).not.toHaveProperty("authorId");
+    expect(record).not.toHaveProperty("tenantId");
   }
 }

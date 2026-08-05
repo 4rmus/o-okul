@@ -1903,6 +1903,21 @@ export interface SupportTicketCommentRecord {
   createdAt: string;
 }
 
+export type PortalSupportTicketCommentAuthor = "REQUESTER" | "INSTITUTION";
+
+export interface PublicPortalSupportTicketCommentRecord {
+  id: string;
+  ticketId: string;
+  author: PortalSupportTicketCommentAuthor;
+  body: string;
+  createdAt: string;
+}
+
+export interface PortalSupportTicketCommentCreateResponse {
+  ticket: PublicPortalSupportTicketRecord;
+  comment: PublicPortalSupportTicketCommentRecord;
+}
+
 export interface AuditLogRecord {
   id: string;
   tenantId?: string;

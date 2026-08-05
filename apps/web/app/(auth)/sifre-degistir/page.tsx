@@ -6,6 +6,7 @@ import { Button, Field, Input } from "@o-okul/ui";
 import type { AuthResponse } from "@o-okul/shared-types";
 import { appBrand } from "../../../src/brand.js";
 import { useAuth } from "../../providers.js";
+import { ContactSupportLink } from "../contact-support-link.js";
 
 export default function ChangePasswordPage() {
   const router = useRouter();
@@ -92,6 +93,7 @@ export default function ChangePasswordPage() {
         <Button type="button" variant="secondary" onClick={() => void logout()} disabled={isSubmitting}>
           Çıkış yap
         </Button>
+        <ContactSupportLink />
       </form>
       <aside className="next-auth-context" aria-label="Zorunlu şifre değişikliği güven bilgisi">
         <p className="next-section-eyebrow">Doğrulanmış oturum</p>

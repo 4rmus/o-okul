@@ -6,6 +6,7 @@ import { Button, Field, Input } from "@o-okul/ui";
 import { requestPasswordReset } from "../../../src/api-client.js";
 import { appBrand } from "../../../src/brand.js";
 import { browserTenantSlug } from "../../../src/tenant-host.js";
+import { ContactSupportLink } from "../contact-support-link.js";
 
 export default function ForgotPasswordPage() {
   const [tenantSlug, setTenantSlug] = useState("");
@@ -72,6 +73,7 @@ export default function ForgotPasswordPage() {
           Yenileme bağlantısı gönder
         </Button>
         <Link className="next-auth-link" href={loginHref}>Girişe dön</Link>
+        <ContactSupportLink />
       </form>
       <aside className="next-auth-context" aria-label="Şifre yenileme güven bilgisi">
         <p className="next-section-eyebrow">{tenantSlug ? "Kurum hesabı" : "Güvenli şifre yenileme"}</p>

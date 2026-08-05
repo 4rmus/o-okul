@@ -1,7 +1,7 @@
 # O-Okul Kurum, Kullanıcı ve Hesap Yönetimi Mimarisi
 
-**Durum:** Önerilen, ürün kararları netleştirilmiş mimari plan
-**Tarih:** 1 Ağustos 2026
+**Durum:** Onaylı kararların kontrollü uygulama ve kapanış planı; P0/P1 açıkları devam ediyor
+**Tarih:** 1 Ağustos 2026; son kontrol 5 Ağustos 2026
 **Kapsam:** Özel okul ve özel öğretim kurslarına yıllık veya çok yıllık kiralanacak O-Okul için kurum, çalışan, öğretmen, öğrenci, hesap, lisans ve erişim yönetimi
 
 ## 1. Mimari karar özeti
@@ -20,10 +20,10 @@ Kilitlenen ürün kararları:
 - Yetkiler özel rol oluşturucu yerine sabit paket + tenant/kampüs/atama kapsamı ile verilecek.
 - Lisans bitiminde 14 gün salt-okunur, 15-90. günler arası dondurulmuş saklama, 91. günde kontrollü imha süreci uygulanacak.
 - Kurum açılışı imzalı sözleşme sonrasında platform yöneticisi tarafından yapılacak; self-service satın alma kapsam dışı kalacak.
-- Giriş `kurum kodu + kurum içi kullanıcı kimliği` ile olacak; T.C. kimlik numarası kullanıcı adı olmayacak.
+- Güncel kanonik giriş, `DEC-20260804-01` ve 5 Ağustos 2026 ürün sahibi teyidi uyarınca kurum subdomaini + tenant-local kullanıcı kimliğidir. Global kullanıcı adı kapsam dışıdır. T.C. kimlik numarası kullanıcı adı olmayacak.
 - T.C. kimlik numarası yalnız belgelenmiş MEB/import ihtiyacında, opsiyonel ve korumalı tutulacak.
-- İlk kapasite hedefi kurum başına 10.000 öğrenci, 1.000 çalışan ve 20 kampüs olacak.
-- Mevcut guardian verisinin tamamının test verisi olduğu teyit edildi; yine de silme öncesi otomatik envanter, yedek makbuzu ve veri sahibi onayı zorunlu olacak.
+- İlk yük kabul hedefi tenant başına 10.000 öğrenci, 1.000 çalışan ve 20 kampüs olacak. Runtime güvenlik sınırı tenant başına 2.000 aktif çalışan hesabıdır. Bir subdomain bir tenant'a bağlandığı için bu sınırlar pratikte kurum subdomaini başına uygulanır; personel hesapları ücretli koltuk değildir.
+- Guardian ürün kapsamından çıkarılacaktır. Mevcut guardian verisinin tamamının test verisi olduğu teyit edildi; yine de fiziksel silme öncesi otomatik envanter, yedek/restore makbuzu ve 14 günlük gözlem zorunlu olacak. Gerçek müşteri verisi görülürse işlem durur.
 
 ### Pazar ve mevzuat dayanağı
 
@@ -441,3 +441,75 @@ Staging kapanışı ayrıca canlı e-posta aktivasyon/reset teslimatı, gerçek 
 - Guardian verisinin test verisi olduğu teyidi migration öncesi teknik envanter ve yazılı veri sahibi onayıyla yeniden doğrulanır.
 - 90 günlük ticari saklama varsayılandır; kanuni saklama ve legal hold veri sınıfı bazında kurum/veri sorumlusu ve hukuk danışmanı tarafından ayrıca onaylanır.
 - Ponytail kullanılmayacaktır.
+
+## 6. Güncel kalan iş ve kapanış planı
+
+Bu bölüm 5 Ağustos 2026 repo incelemesinin son halidir. Önceki PR ilerleme notlarını silmez;
+kalan işi karar, repo uygulaması ve gerçek ortam kanıtı olarak ayırır. Yerel veya template `PASS`,
+exact-SHA staging, production, pilot ya da go-live kanıtı değildir.
+
+### P0 - Yeni cutover öncesi
+
+1. **Sınav evidence sözleşmesini tekleştir.** iSEM smoke üreticisi, ortak smoke checker,
+   live-exam-cycle checker, template ve production plan aynı fixture sayımlarını istemelidir.
+   Üreticinin yazdığı UI-worker credential dosyası `loginName`, `tenantSlug`, `generatedAt` ve portal
+   login alanlarıyla preflight ve Playwright sözleşmesini doğrudan geçmelidir.
+   - UAT: `UAT-KURUM-05`, `UAT-KURUM-06`
+   - Sahip: `exam_reporting_engineer`; doğrulama: `qa_verification_engineer`
+   - Kabul: Üreticinin yazdığı gerçek artifact ek dönüşüm olmadan bütün checker'ları geçer; fixture
+     sayıları kod, template ve planda birebir aynıdır.
+   - Doğrulama: `pnpm prod:evidence:templates:check`, `pnpm live:ui-worker:evidence-contract`,
+     disposable Postgres/Redis/S3 üzerinde `pnpm isem-optical-pipeline:smoke`,
+     `pnpm live:ui-worker:smoke`, `pnpm live:ui-worker:result-check`, `pnpm live:exam-cycle:check`.
+
+2. **Rank tabanlı RBAC ve legacy system-admin erişimini kapat.** `roleRank`/geniş `@Roles`
+   kullanımları route ailesi bazında exact capability + active persona + tenant/campus/assignment
+   kapsamına taşınır. `SYSTEM_ADMIN` tenant rolünden ayrı PlatformAccount/PlatformSession ve süreli,
+   MFA'lı, gerekçeli breakglass akışına kesilir.
+   - UAT: `UAT-SYS-01`, `UAT-SYS-04`, `UAT-TEACHER-03`
+   - Sahip: `backend_api_engineer` ve auth diliminde `auth_session_engineer`; güvenlik incelemesi:
+     `tenant_security_reviewer`
+   - Kabul: STAFF capability'si TEACHER personasına ve tersi yönde sızmaz; scope dışı erişim 403/404;
+     normal system-admin oturumu tenant verisine doğrudan giremez.
+   - Doğrulama: `pnpm --filter @o-okul/api exec vitest run src/rbac src/auth src/tenant`,
+     `pnpm db:rls:check`, `pnpm web:token-storage:check`, `pnpm admin-mfa:check`.
+
+### P1 - Ürün ve pilot kapanışı
+
+3. **StudentContact ve guardian geçişi:** Guardian'ın ürün kapsamından çıkarılması ürün sahibi tarafından
+   onaylandı. Önce hesapsız StudentContact API/UX/import ve izin modeli açılır. Guardian üretimi ancak
+   fixture envanteri, doğrulanmış yedek/restore makbuzu ve 14 günlük gözlemden sonra durdurulur. Gerçek
+   müşteri verisi görülürse işlem hard-stop olur.
+4. **Kalan hesap operasyonları:** Control-plane runtime, offboarding/purge worker, öğrenci ve legacy
+   kullanıcı listelerinde cursor/SQL arama, staging-table toplu import ve auditli çalışan-limit artırma
+   ayrı geri alınabilir dilimlerdir.
+5. **Outbox yetki kesimi:** Gerçek staging provider teslimi, retry, expiry ve payload temizleme kanıtından
+   sonra `app` rolünün SecretDeliveryOutbox grant'leri ayrı migration ile geri alınır.
+6. **UAT kanıtını güçlendir:** Her scenario exact source SHA, environment, run id, zaman aralığı ve
+   artifact digest'ine bağlanır. UAT-KURUM-06 web/PDF/Excel içerik eşitliğini yalnız indirme boolean'ı
+   ile değil aynı snapshot alanlarının karşılaştırmasıyla kanıtlar.
+7. **Canlı kapanış:** Canlı image SHA `3e460783b35436dbd33dbc534ce57e2139d40f3f` ile production
+   alan adı ve wildcard DNS/TLS 5 Ağustos 2026'da aktive edildi. Kalan zincir: aynı SHA için CI kanıtı ->
+   uygulamanın ürettiği davet/reset e-postasının gerçek inbox teslimi + MFA -> rol bazlı UAT -> pull edilebilir
+   image rollback + restore tatbikatı -> en az 14 günlük pilot -> go-live. Daha önce doğrulanan Workspace
+   mailbox/alias teslimatı bu uygulama-provider kanıtından ayrıdır.
+
+### Manuel işler ve onaylar
+
+| ID | Manuel iş veya onay | Sahip | Blokladığı eşik |
+|---|---|---|---|
+| MAN-01 | **KAPALI:** Subdomain + tenant-local login seçildi; global kullanıcı adı kapsam dışı. | Ürün sahibi | — |
+| MAN-02 | **ÜRÜN ONAYI KAPALI:** Guardian kaldırılacak. Fiziksel silme için fixture envanteri, doğrulanmış backup/restore makbuzu ve 14 günlük gözlem hâlâ zorunlu. | Ürün/veri sahibi + ops | Guardian fiziksel temizliği |
+| MAN-03 | **BU FAZ İÇİN RİSK KABULÜ:** Hukuk/KVKK incelemesi repo uygulamasını ve pilot hazırlığını bloklamaz. Bu kayıt hukuk onayı sayılmaz; production purge/go-live öncesi yeniden ele alınır. | Ürün sahibi; sonra veri sorumlusu + hukuk | Production purge/go-live |
+| MAN-04 | **KAPALI:** Tenant başına 2.000 aktif çalışan hesabı runtime üst sınırı; 1.000 çalışan yük kabul hedefidir. Personel hesabı ücretli koltuk değildir. | Ürün sahibi | — |
+| MAN-05 | **DNS/TLS KAPALI:** `*.o-okul.com` Cloudflare'da `DNS only` olarak `212.108.107.190` adresine yönlendirildi; Traefik origin sertifikası `o-okul.com` + `*.o-okul.com` için üretildi ve dış HTTPS/health testi geçti. Otomatik yenilemeyi gerçek yenileme olayında gözleme ve legacy 30 günlük yönlendirme başlangıcı açık. | Ops/release sahibi | Sertifika yenileme ve legacy kapanışı |
+| MAN-06A | **TARİHSEL OLARAK KAPALI:** Workspace mailbox/alias dış gönderim ve alım testi yapıldı; exact-SHA uygulama testi yerine geçmez. | Messaging + tenant sahibi | — |
+| MAN-06B | Uygulamanın gerçek notification provider üzerinden ürettiği davet/reset e-postasının test inbox teslim makbuzu; admin MFA enrollment/recovery kabulü. | Messaging + tenant sahibi | Onboarding/go-live |
+| MAN-07 | Canlı image SHA `3e460783b35436dbd33dbc534ce57e2139d40f3f`; domain-cutover rollback yedeği `/root/o-okul-cutover-backups/20260805T161400Z`. `.env.release` içindeki `6f9c9cb...` rollback image'ları sunucuda yok; pull edilebilir bilinen-iyi image hedefi, pilot kurum ve nihai go/no-go imzası açık. | Release captain + ürün sahibi | Production go-live |
+
+### En küçük güvenli ilk PR
+
+İlk PR yalnız P0 listesinin ilk evidence maddesini düzeltir: iSEM fixture sayımları ve UI-worker credential
+şekli producer/checker/template/plan boyunca teklenir ve doğrudan entegrasyon testi eklenir. DB şeması,
+guardian runtime'ı, RBAC veya provider mutation bu PR'a girmez. Mevcut kirli support/notification
+değişiklikleri önce ayrı bir branch/PR üzerinde korunmadan bu dilime başlanmaz.

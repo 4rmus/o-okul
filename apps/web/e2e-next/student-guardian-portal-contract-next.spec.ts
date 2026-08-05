@@ -129,6 +129,19 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
     await expect.poll(() => mutationRequests).toEqual([]);
   });
 
+  test("öğrenci destek konuşmasına yalnız metin yanıtı ekler", async ({ page }) => {
+    const mutationRequests: string[] = [];
+    await openStudentPortal(page, { height: 844, width: 390 }, { mutationRequests, withReport: false });
+
+    const conversation = page.getByRole("region", { name: "Destek konuşması" });
+    await expect(conversation).toContainText("Kurum yanıtı");
+    await conversation.getByLabel("Yanıtınız").fill("Teşekkür ederim.");
+    await conversation.getByRole("button", { name: "Yanıt gönder" }).click();
+    await expect(conversation).toContainText("Teşekkür ederim.");
+    await expect.poll(() => mutationRequests).toContain("POST /me/student/support-tickets/ticket-a/comments");
+    await expect(conversation.locator('input[type="file"]')).toHaveCount(0);
+  });
+
   test("öğrenci ve veli portalları examId yokken demo rapor endpointine gitmez", async ({ page }) => {
     const studentPaths: string[] = [];
     await openStudentPortal(page, { height: 844, width: 390 }, { requestedPaths: studentPaths, withReport: false });
@@ -151,7 +164,7 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       { context: "Duyurular", label: "Duyurular", path: "/ogrenci/duyurular", panel: () => page.getByRole("region", { exact: true, name: "Duyurular" }) },
       { context: "Devamsızlık", label: "Devamsızlık", path: "/ogrenci/devamsizlik", panel: () => page.getByRole("region", { exact: true, name: "Devamsızlık" }) },
       { context: "Profil ve kayıt bilgileri", label: "Profil", path: "/ogrenci/profil", panel: () => page.getByRole("region", { exact: true, name: "Profil" }) },
-      { context: "Destek talepleri", label: "Destek", path: "/ogrenci/destek", panel: () => page.getByRole("region", { exact: true, name: "Destek talepleri" }) },
+      { context: "Destek talepleri", label: "Kurum Desteği", path: "/ogrenci/destek", panel: () => page.getByRole("region", { exact: true, name: "Destek talepleri" }) },
     ];
 
     for (const routeCase of routeCases) {
@@ -313,7 +326,7 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       { context: "Ödevler", label: "Ödevler", path: "/veli/odevler", panel: () => page.getByRole("region", { exact: true, name: "Ödevler" }) },
       { context: "Duyurular", label: "Duyurular", path: "/veli/duyurular", panel: () => page.getByRole("region", { exact: true, name: "Duyurular" }) },
       { context: "Bildirim tercihleri", label: "Bildirimler", path: "/veli/bildirimler", panel: () => page.getByRole("region", { exact: true, name: "Bildirim tercihleri" }) },
-      { context: "Destek talepleri", label: "Destek", path: "/veli/destek", panel: () => page.getByRole("region", { exact: true, name: "Destek talepleri" }) },
+      { context: "Destek talepleri", label: "Kurum Desteği", path: "/veli/destek", panel: () => page.getByRole("region", { exact: true, name: "Destek talepleri" }) },
     ];
 
     for (const routeCase of routeCases) {
@@ -433,13 +446,17 @@ async function expectPortalSupportPanel(page: Page, options: { formVisible: bool
   await expect(support.locator(".uh-status-badge", { hasText: "Normal" })).toBeVisible();
   await expect(support.locator(".uh-status-badge", { hasText: "Açık" })).toBeVisible();
   if (options.formVisible) {
-    await expect(support.getByLabel("Konu")).toBeVisible();
-    await expect(support.getByLabel("Mesaj")).toBeVisible();
-    await expect(support.getByLabel("Öncelik")).toBeVisible();
+    await expect(support.getByLabel("Konu", { exact: true })).toBeVisible();
+    await expect(support.getByLabel("Mesaj", { exact: true })).toBeVisible();
+    await expect(support.getByRole("combobox", { name: /Öncelik/ })).toBeVisible();
+    const conversation = support.getByRole("region", { name: "Destek konuşması" });
+    await expect(conversation).toContainText("Siz");
+    await expect(conversation).toContainText("Kurum");
+    await expect(conversation.getByLabel("Yanıtınız")).toBeVisible();
   } else {
-    await expect(support.getByLabel("Konu")).toHaveCount(0);
-    await expect(support.getByLabel("Mesaj")).toHaveCount(0);
-    await expect(support.getByLabel("Öncelik")).toHaveCount(0);
+    await expect(support.getByLabel("Konu", { exact: true })).toHaveCount(0);
+    await expect(support.getByLabel("Mesaj", { exact: true })).toHaveCount(0);
+    await expect(support.getByRole("combobox", { name: /Öncelik/ })).toHaveCount(0);
   }
 }
 
@@ -512,7 +529,7 @@ async function installStudentApiMocks(
     if (method !== "GET" && method !== "OPTIONS" && pathName !== "/auth/refresh") {
       options.mutationRequests?.push(`${method} ${pathName}`);
     }
-    await fulfillData(route, studentApiResponse(pathName, options.mode ?? "student", options.withReport !== false));
+    await fulfillData(route, studentApiResponse(pathName, options.mode ?? "student", options.withReport !== false, method));
   });
 }
 
@@ -546,7 +563,7 @@ async function installGuardianApiMocks(
   });
 }
 
-function studentApiResponse(pathName: string, mode: "student" | "role-preview", withReport: boolean): unknown {
+function studentApiResponse(pathName: string, mode: "student" | "role-preview", withReport: boolean, method = "GET"): unknown {
   if (pathName === "/auth/refresh") return createStudentAuthResponse(mode);
   if (pathName === "/me/tenant") return createTenantResponse();
   if (pathName === "/me/notification-devices") return [];
@@ -557,6 +574,15 @@ function studentApiResponse(pathName: string, mode: "student" | "role-preview", 
   if (pathName === "/me/student/announcements") return createAnnouncements();
   if (pathName === "/me/student/homework/material-assignments") return createHomeworkAssignments("student-a");
   if (pathName === "/me/student/support-tickets") return createSupportTickets();
+  if (pathName === "/me/student/support-tickets/ticket-a/comments") {
+    if (method === "POST") {
+      return {
+        ticket: createSupportTickets()[0],
+        comment: { author: "REQUESTER", body: "Teşekkür ederim.", createdAt: "2026-06-17T10:10:00.000Z", id: "comment-requester", ticketId: "ticket-a" },
+      };
+    }
+    return [{ author: "INSTITUTION", body: "Kurum yanıtı", createdAt: "2026-06-17T10:00:00.000Z", id: "comment-institution", ticketId: "ticket-a" }];
+  }
   if (pathName === "/me/student/attendance") return createAttendance("student-a");
   if (pathName === "/me/student/attendance/summary") return createAttendanceSummary("student-a");
   if (pathName === "/me/student/teacher-notes") return createTeacherNotes("student-a");
@@ -749,7 +775,7 @@ function createHomeworkAssignments(studentId: "student-a" | "student-b") {
 }
 
 function createSupportTickets() {
-  return [{ id: "ticket-a", priority: "NORMAL", status: "OPEN", subject: "Portal destek talebi", tenantId: "tenant-portal-contract" }];
+  return [{ createdAt: "2026-06-17T09:00:00.000Z", id: "ticket-a", message: "İlk destek mesajı", priority: "NORMAL", status: "OPEN", subject: "Portal destek talebi", tenantId: "tenant-portal-contract" }];
 }
 
 function createAttendance(studentId: string) {

@@ -312,8 +312,11 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
             </div> : null}
             {view === "overview" || view === "support" ? <div id="portal-support">
               <SupportTicketsPanel
+                accessToken={auth?.accessToken}
+                commentsPath="me/student/support-tickets"
                 readOnly={isRolePreview}
                 tickets={data?.supportTickets ?? []}
+                onTicketChange={() => query.refetch()}
                 onCreate={(input) =>
                   auth && !isRolePreview ? createPortalSupportTicket(auth.accessToken, "me/student/support-tickets", input).then(() => query.refetch()) : undefined
                 }

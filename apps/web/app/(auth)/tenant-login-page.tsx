@@ -9,6 +9,7 @@ import { Button, Field, Input, SegmentedControl, Select } from "@o-okul/ui";
 import { useAuth } from "../providers.js";
 import { appBrand } from "../../src/brand.js";
 import { getTenantLoginContext, MfaEnrollmentRequiredError, MfaRequiredError, TenantSelectionRequiredError } from "../../src/api-client.js";
+import { ContactSupportLink } from "./contact-support-link.js";
 
 interface TenantLoginPageProps {
   tenantSlug?: string;
@@ -153,6 +154,7 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
             >
               Şifremi unuttum
             </Link>
+            <ContactSupportLink />
           </>
         ) : null}
         {pendingTenantSelection ? (
