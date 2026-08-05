@@ -25,7 +25,9 @@ export interface NotificationAdapterEnvironment {
   NOTIFICATION_ALLOW_NOOP_IN_PRODUCTION?: string;
   NOTIFICATION_HTTP_BEARER_TOKEN?: string;
   NOTIFICATION_HTTP_ENDPOINT?: string;
+  NOTIFICATION_FROM_EMAIL?: string;
   NOTIFICATION_PROVIDER?: string;
+  NOTIFICATION_REPLY_TO_EMAIL?: string;
 }
 
 export function createNotificationAdapterFromEnv(env: NotificationAdapterEnvironment): NotificationAdapter {
@@ -59,6 +61,8 @@ export interface HttpNotificationAdapterOptions {
   bearerToken?: string;
   endpoint: string;
   fetch?: NotificationFetch;
+  fromEmail: string;
+  replyToEmail: string;
 }
 
 interface NotificationFetchResponse {
@@ -93,9 +97,13 @@ export class HttpNotificationAdapter implements NotificationAdapter {
   private readonly bearerToken?: string;
   private readonly endpoint: string;
   private readonly fetchImpl: NotificationFetch;
+  private readonly fromEmail: string;
+  private readonly replyToEmail: string;
 
   constructor(options: HttpNotificationAdapterOptions) {
     this.endpoint = requiredConfig(options.endpoint, "NOTIFICATION_HTTP_ENDPOINT_MISSING");
+    this.fromEmail = requiredEmail(options.fromEmail, "NOTIFICATION_FROM_EMAIL_MISSING", "NOTIFICATION_FROM_EMAIL_INVALID");
+    this.replyToEmail = requiredEmail(options.replyToEmail, "NOTIFICATION_REPLY_TO_EMAIL_MISSING", "NOTIFICATION_REPLY_TO_EMAIL_INVALID");
     this.bearerToken = optionalConfig(options.bearerToken);
     this.fetchImpl = options.fetch ?? fetch;
   }
@@ -112,6 +120,7 @@ export class HttpNotificationAdapter implements NotificationAdapter {
         messages: messages.map((message) => ({
           channel: message.channel,
           to: message.to,
+          ...(message.channel === "EMAIL" ? { from: this.fromEmail, replyTo: this.replyToEmail } : {}),
           ...(message.subject ? { subject: message.subject } : {}),
           body: message.body,
           ...(message.idempotencyKey ? { idempotencyKey: message.idempotencyKey } : {}),
@@ -144,6 +153,8 @@ export function createHttpNotificationAdapterFromEnv(env: NotificationAdapterEnv
   return new HttpNotificationAdapter({
     bearerToken: env.NOTIFICATION_HTTP_BEARER_TOKEN,
     endpoint: env.NOTIFICATION_HTTP_ENDPOINT ?? "",
+    fromEmail: env.NOTIFICATION_FROM_EMAIL ?? "",
+    replyToEmail: env.NOTIFICATION_REPLY_TO_EMAIL ?? "",
   });
 }
 
@@ -189,4 +200,12 @@ function requiredConfig(value: string | undefined, errorCode: string): string {
 function optionalConfig(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed || undefined;
+}
+
+function requiredEmail(value: string | undefined, missingCode: string, invalidCode: string): string {
+  const email = requiredConfig(value, missingCode);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error(invalidCode);
+  }
+  return email;
 }

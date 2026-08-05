@@ -43,6 +43,11 @@ if (failed) {
   fail(`Notification provider smoke başarısız: ${failed.channel} ${failed.errorCode ?? "UNKNOWN"}`);
 }
 
+const missingProviderMessageId = results.find((result) => !result.providerMessageId?.trim());
+if (missingProviderMessageId) {
+  fail(`Notification provider smoke başarısız: ${missingProviderMessageId.channel} provider message ID döndürmedi.`);
+}
+
 await writeSmokeEvidence(evidenceFile, {
   result: "PASS",
   check: "notification_provider_smoke",

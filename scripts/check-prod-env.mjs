@@ -101,6 +101,8 @@ function checkContract(file) {
     "NOTIFICATION_ALLOW_NOOP_IN_PRODUCTION",
     "NOTIFICATION_HTTP_ENDPOINT",
     "NOTIFICATION_HTTP_BEARER_TOKEN",
+    "NOTIFICATION_FROM_EMAIL",
+    "NOTIFICATION_REPLY_TO_EMAIL",
     "NOTIFICATION_SMOKE_EMAIL_TO",
     "NOTIFICATION_SMOKE_PUSH_TO",
     "NOTIFICATION_SMOKE_SUBJECT",
@@ -274,6 +276,8 @@ function checkProductionEnv(env) {
   requireEqual(env, failures, "NOTIFICATION_ALLOW_NOOP_IN_PRODUCTION", "false");
   requireHttpsUrl(env, failures, "NOTIFICATION_HTTP_ENDPOINT");
   requireSecret(env, failures, "NOTIFICATION_HTTP_BEARER_TOKEN");
+  requireEqual(env, failures, "NOTIFICATION_FROM_EMAIL", "bildirim@o-okul.com");
+  requireEqual(env, failures, "NOTIFICATION_REPLY_TO_EMAIL", "destek@o-okul.com");
   requireSet(env, failures, "NOTIFICATION_SMOKE_EMAIL_TO");
   requireNoPlaceholderValue(env, failures, "NOTIFICATION_SMOKE_EMAIL_TO");
   requireSet(env, failures, "NOTIFICATION_SMOKE_PUSH_TO");

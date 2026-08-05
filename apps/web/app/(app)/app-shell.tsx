@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode }
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Building2, ChevronDown, LogOut, Menu, Search, ShieldCheck, UserRound, X, type LucideIcon } from "lucide-react";
+import { Building2, ChevronDown, LifeBuoy, LogOut, Menu, Search, ShieldCheck, UserRound, X, type LucideIcon } from "lucide-react";
 import { Button, Dialog, Field, Input, Panel, StatusBadge, type StatusBadgeProps } from "@o-okul/ui";
 import { isTenantRoleName, tenantRoleLabel, type ActivePersona, type GlobalSearchResultRecord, type MeProfileResponse, type NotificationDeviceTokenRecord, type Session, type TenantRecord } from "@o-okul/shared-types";
 import { apiBaseUrl, apiListRequest, apiRequest, withQueryParams } from "../../src/api-client.js";
@@ -382,6 +382,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link className="next-sidebar-link" href="/hesap/oturumlar" aria-current={navCurrent("/hesap/oturumlar")}>
             <ShieldCheck className="next-sidebar-link-icon" size={16} aria-hidden="true" />
             <span>Oturumlar</span>
+          </Link>
+          <Link className="next-sidebar-link" href="/iletisim#destek">
+            <LifeBuoy className="next-sidebar-link-icon" size={16} aria-hidden="true" />
+            <span>o-okul desteği</span>
           </Link>
           <Button variant="ghost" className="next-sidebar-logout" type="button" onClick={() => void handleLogout()}>
             Çıkış

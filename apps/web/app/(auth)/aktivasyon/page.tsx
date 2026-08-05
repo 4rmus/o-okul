@@ -6,6 +6,7 @@ import { Button, Field, Input } from "@o-okul/ui";
 import { acceptIdentityInvitation, activateStudentPortal } from "../../../src/api-client.js";
 import { appBrand } from "../../../src/brand.js";
 import { browserTenantSlug } from "../../../src/tenant-host.js";
+import { ContactSupportLink } from "../contact-support-link.js";
 
 export default function ActivationPage() {
   const [token, setToken] = useState("");
@@ -175,6 +176,7 @@ export default function ActivationPage() {
         <h2>Bağlantı ve kod 24 saat geçerlidir.</h2>
         <p>Şifrenizi yalnız bu ekranda belirleyin. Süresi dolan, kullanılan veya deneme limiti dolan kod yeniden kullanılamaz.</p>
         <Link className="next-auth-link" href={hostTenantSlug ? "/giris" : "/login"}>Girişe dön</Link>
+        <ContactSupportLink />
       </aside>
     </section>
   );

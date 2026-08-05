@@ -6,6 +6,7 @@ import { Button, Field, Input } from "@o-okul/ui";
 import { confirmPasswordReset } from "../../../src/api-client.js";
 import { appBrand } from "../../../src/brand.js";
 import { browserTenantSlug } from "../../../src/tenant-host.js";
+import { ContactSupportLink } from "../contact-support-link.js";
 
 export default function ResetPasswordPage() {
   const [token, setToken] = useState("");
@@ -114,6 +115,7 @@ export default function ResetPasswordPage() {
         <h2>Tek kullanımlık bağlantıyı yalnız bu ekranda kullanın.</h2>
         <p>Şifre yenilendiğinde diğer oturumlar kapatılır. Bağlantı geçersizse giriş ekranına dönüp yeniden istek oluşturun.</p>
         <Link className="next-auth-link" href={loginHref}>Girişe dön</Link>
+        <ContactSupportLink />
       </aside>
     </section>
   );

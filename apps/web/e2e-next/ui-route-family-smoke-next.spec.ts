@@ -35,6 +35,7 @@ const routeCases = [
   route("/k/[tenantSlug]/giris", "Giriş", "anonymous", { role: "form", name: "Giriş formu" }),
   route("/giris", "Giriş", "anonymous", { role: "form", name: "Giriş formu" }),
   route("/login", "Giriş", "anonymous", { role: "form", name: "Giriş formu" }),
+  route("/iletisim", "İletişim ve Destek", "anonymous", { role: "link", name: "o-okul desteğine e-posta gönder" }),
   route("/aktivasyon", "Hesabı etkinleştir", "anonymous", { role: "button", name: "Hesabı etkinleştir" }, { query: "token=activation-token" }),
   route("/parola-sifirla", "Yeni şifre", "anonymous", { role: "button", name: "Şifreyi yenile" }, { query: "token=reset-token" }),
   route("/parolami-unuttum", "Şifremi unuttum", "anonymous", { role: "button", name: "Yenileme bağlantısı gönder" }, { query: "tenant=dna-egitim" }),
@@ -49,7 +50,7 @@ const routeCases = [
   route("/kurum/canli-yayin", "Yayın Hazırlığı", "tenantAdmin", { role: "region", name: "Yayın öncesi kontroller" }),
   route("/kurum/denetim", "Denetim", "tenantAdmin", { role: "region", name: "Denetim kayıtları" }),
   route("/kurum/dersler", "Dersler", "assistantAdmin", { role: "region", name: "Ders yönetimi" }),
-  route("/kurum/destek", "Destek", "assistantAdmin", { role: "region", name: "Destek bildirimi yönetimi" }),
+  route("/kurum/destek", "Kurum Desteği", "assistantAdmin", { role: "region", name: "Destek bildirimi yönetimi" }),
   route("/kurum/devamsizlik", "Devamsızlık", "assistantAdmin", { role: "region", name: "Günlük sınıf yoklaması" }),
   route("/kurum/duyurular", "Duyurular", "assistantAdmin", { role: "region", name: "Duyuru yönetimi" }),
   route("/kurum/etutler", "Etütler", "assistantAdmin", { role: "region", name: "Etüt yönetimi" }),
@@ -240,7 +241,7 @@ function assertRouteManifestParity(manifest: readonly RouteCase[]) {
   const fileSystemRoutes = collectPageRoutes(appDirectory).sort();
   const manifestRoutes = manifest.map((entry) => entry.routeTemplate).sort();
   const duplicates = manifestRoutes.filter((routeTemplate, index) => manifestRoutes.indexOf(routeTemplate) !== index);
-  if (manifest.length !== 79) throw new Error(`Route manifest must contain exactly 79 entries; found ${manifest.length}.`);
+  if (manifest.length !== 80) throw new Error(`Route manifest must contain exactly 80 entries; found ${manifest.length}.`);
   if (duplicates.length > 0) throw new Error(`Route manifest contains duplicates: ${[...new Set(duplicates)].join(", ")}`);
   if (JSON.stringify(manifestRoutes) !== JSON.stringify(fileSystemRoutes)) {
     throw new Error(`Route manifest does not match page.tsx inventory.\nmanifest=${manifestRoutes.join(",")}\nfilesystem=${fileSystemRoutes.join(",")}`);

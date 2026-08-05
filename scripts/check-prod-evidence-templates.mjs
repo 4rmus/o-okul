@@ -8180,6 +8180,8 @@ function createValidProdEnvForNegativeCheck() {
     NOTIFICATION_ALLOW_NOOP_IN_PRODUCTION: "false",
     NOTIFICATION_HTTP_ENDPOINT: "https://notify.o-okul.com/send",
     NOTIFICATION_HTTP_BEARER_TOKEN: "notification-bearer-token-1234567890",
+    NOTIFICATION_FROM_EMAIL: "bildirim@o-okul.com",
+    NOTIFICATION_REPLY_TO_EMAIL: "destek@o-okul.com",
     NOTIFICATION_SMOKE_EMAIL_TO: "ops@o-okul.com",
     NOTIFICATION_SMOKE_PUSH_TO: "ops-device-token",
     NOTIFICATION_SMOKE_SUBJECT: "o-okul production notification smoke",

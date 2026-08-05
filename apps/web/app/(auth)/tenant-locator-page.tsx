@@ -6,6 +6,7 @@ import { Building2, ExternalLink } from "lucide-react";
 import { Button, Field, Input } from "@o-okul/ui";
 import { appBrand } from "../../src/brand.js";
 import { tenantLoginOrigin } from "../../src/tenant-host.js";
+import { ContactSupportLink } from "./contact-support-link.js";
 
 export function TenantLocatorPage({ domain }: { domain: string }) {
   const [value, setValue] = useState("");
@@ -46,6 +47,7 @@ export function TenantLocatorPage({ domain }: { domain: string }) {
         <Link className="next-auth-link" href={`https://sistem.${domain}/giris`}>
           Sistem yöneticisi girişi <ExternalLink size={14} aria-hidden="true" />
         </Link>
+        <ContactSupportLink />
       </form>
       <aside className="next-auth-context" aria-label="Kurum adresi bilgisi">
         <p className="next-section-eyebrow">Kuruma özel güvenli giriş</p>
