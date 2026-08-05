@@ -63,7 +63,7 @@ const runtimeRequiredKeys = ["S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"];
 const forbiddenSecretKeys = new Map([
   ["SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID", "verify-only workflow host-side private source-id dosyasını kullanır."],
 ]);
-const optionalRuntimeKeys = new Set(["TRAEFIK_TRUSTED_FORWARDER_CIDRS"]);
+const optionalRuntimeKeys = new Set(["TRAEFIK_TRUSTED_FORWARDER_CIDRS", "NOTIFICATION_SMOKE_PUSH_TO"]);
 const proxyNetworkKeys = [
   "DOCKER_PROXY_SUBNET",
   "DOCKER_PROXY_NETWORK",
@@ -245,6 +245,13 @@ function checkWorkflowContract(output) {
     "ACCOUNT_MANAGEMENT_BACKFILL_MODE=APPLY",
     "ACCOUNT_MANAGEMENT_BACKFILL_CONFIRM=apply-pr4-backfill",
     "ACCOUNT_MANAGEMENT_BACKFILL_OUTPUT=artifacts/staging/reports/account-management-backfill.json",
+    'owner_decisions_file="$(dirname "$STAGING_DEPLOY_DIR")/o-okul-private/account-management/$IMAGE_TAG/owner-decisions.json"',
+    '[ -L "$owner_decisions_file" ]',
+    'realpath -e "$owner_decisions_file"',
+    "stat -c '%a' \"$owner_decisions_file\"",
+    "stat -c '%u' \"$owner_decisions_file\"",
+    "Release-scoped account owner decisions must be a non-symlink 0600 file owned by the deploy user.",
+    "ACCOUNT_MANAGEMENT_OWNER_DECISIONS_TARGET=file:///run/private/account-management-owner-decisions.json",
     "echo \"SENTRY_RELEASE=$IMAGE_TAG\"",
     "echo \"ROLLBACK_IMAGE_TAG=$ROLLBACK_IMAGE_TAG\"",
     "echo \"GITHUB_CI_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/github-ci.json\"",

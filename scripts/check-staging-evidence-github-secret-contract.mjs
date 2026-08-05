@@ -281,7 +281,6 @@ function buildValidEnvFile() {
     ["https://__SET_NOTIFICATION_ENDPOINT__", "https://notify.staging.o-okul.com/hook"],
     ["__SET_NOTIFICATION_BEARER_TOKEN__", "contractNotificationBearer00000000009"],
     ["__SET_STAGING_EMAIL_TO__", "ops@o-okul.com"],
-    ["__SET_STAGING_PUSH_TO__", "push-target-staging-team"],
     ["https://__SET_S3_ENDPOINT__", "https://s3.staging.o-okul.com"],
     ["__SET_STAGING_BUCKET__", "o-okul-staging"],
     ["__SET_S3_ACCESS_KEY_ID__", "s3AccessKeyContractValue001"],

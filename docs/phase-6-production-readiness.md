@@ -168,6 +168,8 @@ pnpm backup:restore:smoke
   ardından web/api/worker/queue-board imajlarını GHCR'a push eder. Staging VPS'te
   migration öncesi gerekli `btree_gist` eklentisini Postgres yönetici rolüyle idempotent kurar,
   migration/preflight/backfill tek-seferlik container'larını edge compose ve sabit proxy IP olmadan çalıştırır,
+  release SHA'sına bağlı özel owner karar dosyası varsa yalnız deploy kullanıcısına ait `0600`,
+  normal ve symlink olmayan dosya olarak doğrulayıp backfill container'ına salt-okunur bağlar,
   `docker-compose.release.yml` override'ı ile imajları çeker, migration çalıştırır, Traefik'li stack'i
   ayağa kaldırır ve `web`, `api`, `worker`, `queue-board` servislerinin çalışan image tag'ini deploy
   `IMAGE_TAG` değeriyle birebir karşılaştırır. Otomatik deploy yalnız image activation, migration,
@@ -378,7 +380,7 @@ pnpm backup:restore:smoke
   alan seti, `checkedAt`, tek `commandsPassed=["pnpm sms:smoke"]` ve boş `gaps` listesi taşır.
   Ham telefon, maskesiz recipient veya `placeholder`/`test-message-id`/`sms-provider-message-*`
   gibi sahte provider id'leri production evidence ve go-live summary içinde kabul edilmez.
-- E-posta/push provider production'da `NOTIFICATION_PROVIDER=http` ile çalışır; HTTPS endpoint,
+- E-posta provider production'da `NOTIFICATION_PROVIDER=http` ile çalışır; HTTPS endpoint,
   Bearer token, `NOTIFICATION_FROM_EMAIL=bildirim@o-okul.com`,
   `NOTIFICATION_REPLY_TO_EMAIL=destek@o-okul.com`, `NOTIFICATION_SMOKE_SUBJECT`, `NOTIFICATION_SMOKE_BODY` ve
   `pnpm notification:smoke` sonucu kanıt zincirinde zorunludur.
@@ -386,8 +388,9 @@ pnpm backup:restore:smoke
   recipient ve kanal listesi olarak yazılır; artifact `checkedAt`, tek
   `commandsPassed=["pnpm notification:smoke"]` ve boş `gaps` listesi taşır. `NOTIFICATION_PROVIDER=noop`
   gerçek provider kanıtı sayılmaz ve smoke komutu tarafından reddedilir. Production env'de
-  `NOTIFICATION_SMOKE_EMAIL_TO` ve `NOTIFICATION_SMOKE_PUSH_TO` placeholder/test/example değer
-  içeremez; evidence ve go-live summary ham e-posta, telefon veya push endpoint'i taşıyamaz.
+  `NOTIFICATION_SMOKE_EMAIL_TO` placeholder/test/example değer içeremez. Bu release e-posta-only
+  olduğu için `NOTIFICATION_SMOKE_PUSH_TO` boş kalır; evidence ve go-live summary ham e-posta,
+  telefon veya push endpoint'i taşıyamaz.
 - `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN` ve `ALERT_WEBHOOK_URL` production'da gerçek HTTPS host
   olmalıdır; Sentry smoke için `SENTRY_SMOKE_CONFIRM=send` ve gerçek `SENTRY_SMOKE_MESSAGE`,
   alert webhook için `ALERT_WEBHOOK_TOKEN` en az 32 karakterlik gerçek bearer secret olmalıdır.
@@ -845,7 +848,7 @@ pnpm backup:restore:smoke
   izlenir; staging/prod UAT raporu `UAT-SYS-*`, `UAT-KURUM-*`, `UAT-TEACHER-*`, `UAT-STUDENT-*`
   ve `UAT-GUARDIAN-*` senaryolarını referanslar.
 - Tenant admin, öğretmen ve veli temel akışları staging'de test edilir.
-- Ham import, rapor üretimi, SMS provider, e-posta/push provider ve Traefik HTTPS smoke'ları çalıştırılır.
+- Ham import, rapor üretimi, SMS provider, e-posta provider ve Traefik HTTPS smoke'ları çalıştırılır.
 - Staging ortamında ilk dış gate'ler tek komutla arşivlenebilir:
   `pnpm staging:first-gates:smoke -- --env-file /path/to/staging-evidence.env --output-dir artifacts/staging/first-gates`
   Traefik HTTPS ve alert webhook smoke artifact'lerini yazar ve ortak smoke evidence

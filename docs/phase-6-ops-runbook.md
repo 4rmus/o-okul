@@ -436,6 +436,11 @@ pnpm account-management:backfill
 - Owner karar dosyası yalnız `file://` kabul eder; her karar `tenantId`, aktif admin `userId` ve
   gerçek `verificationReference` taşır. Bu dosya PII/kimlik içerdiği için evidence artifact'ına
   veya repoya eklenmez.
+- Otomatik deploy, release SHA'sına bağlı karar dosyasını
+  `/root/o-okul-private/account-management/<IMAGE_TAG>/owner-decisions.json` yolunda arar. Dosya
+  opsiyoneldir; varsa deploy kullanıcısına ait, `0600`, normal ve symlink olmayan dosya olmak
+  zorundadır ve yalnız backfill container'ına salt-okunur bağlanır. Dosya yoksa mevcut otomatik
+  owner seçimi çalışır; belirsiz tenant yine fail-closed `BLOCKED` kalır.
 - Mevcut `TENANT_OWNER` korunur. Owner yoksa MFA/parola değişimiyle doğrulanmış ilk aktif admin
   otomatik seçilir; bu kanıt da yoksa karar dosyası olmadan işlem `BLOCKED` olur.
 - APPLY serializable transaction ve advisory lock kullanır. User normalize alanları, tek canonical
@@ -1396,6 +1401,38 @@ Minimum kanıt içeriği:
   kontrolünde `PILOT_ALLOW_EXAMPLE_EVIDENCE=1` ile geçebilir.
 - `checkedAt` ve `pilotEndDate` gelecekte olamaz; pilot kapanış raporu `pilotEndDate` tamamlanmadan
   imzalanmış kabul edilmez.
+
+## Notification gateway
+
+Production e-posta çıkışı `infra/notification-gateway` altındaki bearer-korumalı Cloudflare
+Worker üzerinden yapılır. Cloudflare Email Service içinde `o-okul.com` sender domain'i aktif,
+`bildirim@o-okul.com` izinli sender ve `destek@o-okul.com` Reply-To olmalıdır. Google Workspace
+MX kayıtları korunur; Email Service yalnız `cf-bounce` MX/SPF/DKIM kayıtlarını ve domain DMARC
+kayıtlarını kullanır. Kök DMARC politikası bağımsız doğrulanıp korunur; mevcut production değeri
+`p=none` olarak izleme modundadır.
+
+```sh
+corepack pnpm notification-gateway:test
+cd infra/notification-gateway
+printf '%s' "$NOTIFICATION_HTTP_BEARER_TOKEN" | npx wrangler secret put NOTIFICATION_BEARER_TOKEN
+release_sha="$(git -C ../.. rev-parse HEAD)"
+npx wrangler deploy --var "RELEASE_SHA:$release_sha"
+test "$(curl -fsS https://notify.o-okul.com/health | jq -r .releaseSha)" = "$release_sha"
+```
+
+Wrangler'ın döndürdüğü Worker version ID ile `/health` exact SHA sonucu release kaydına birlikte
+eklenir. Aynı `idempotencyKey` için SQLite-backed Durable Object önce kalıcı teslim kaydı açar;
+provider sonucu belirsiz kalırsa aynı anahtar yeniden gönderilmez. Bu at-most-once davranışında
+operatör yeni davet/parola bağlantısı üreterek yeni bir teslim kaydı oluşturur. Kalıcı kayıtta
+alıcı veya mesaj gövdesi tutulmaz ve dedupe kaydı 30 gün sonra temizlenir.
+
+Runtime `.env` içinde `NOTIFICATION_PROVIDER=http`,
+`NOTIFICATION_HTTP_ENDPOINT=https://notify.o-okul.com`,
+`NOTIFICATION_ALLOW_NOOP_IN_PRODUCTION=false`, doğru From/Reply-To ve repo dışı gerçek bearer
+secret kullanılır. `pnpm notification:smoke` gerçek alıcıyla PASS olmadan provider kanıtı kapanmaz.
+Gateway PUSH mesajını gönderilmiş gibi işaretlemez; ayrı push sağlayıcısı kurulana kadar
+`NOTIFICATION_PUSH_NOT_CONFIGURED` ile fail-closed kalır ve production
+`NOTIFICATION_SMOKE_PUSH_TO` boş tutulur.
 
 ## Go-live Decision Evidence
 

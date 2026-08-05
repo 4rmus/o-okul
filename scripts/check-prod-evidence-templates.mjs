@@ -433,7 +433,7 @@ runProdEnvMissingSmsSmokeConfirmNegativeCheck();
 runProdEnvMissingSentrySmokeConfirmNegativeCheck();
 runProdEnvPlaceholderNetgsmPasswordNegativeCheck();
 runProdEnvPlaceholderNotificationEmailNegativeCheck();
-runProdEnvPlaceholderNotificationPushNegativeCheck();
+runProdEnvNotificationPushEnabledNegativeCheck();
 runProdEnvMissingS3SecretNegativeCheck();
 runAlertWebhookMissingTokenNegativeCheck();
 runAlertWebhookHttpUrlNegativeCheck();
@@ -7976,7 +7976,7 @@ function runProdEnvPlaceholderNotificationEmailNegativeCheck() {
   }
 }
 
-function runProdEnvPlaceholderNotificationPushNegativeCheck() {
+function runProdEnvNotificationPushEnabledNegativeCheck() {
   const env = createValidProdEnvForNegativeCheck();
   env.NOTIFICATION_SMOKE_PUSH_TO = "test-token-device";
 
@@ -7986,12 +7986,12 @@ function runProdEnvPlaceholderNotificationPushNegativeCheck() {
   });
 
   if (result.status === 0) {
-    console.error("Production evidence template kontrolü başarısız: prod env placeholder notification push negative beklenen şekilde kırılmadı.");
+    console.error("Production evidence template kontrolü başarısız: prod env enabled notification push negative beklenen şekilde kırılmadı.");
     process.exit(1);
   }
 
-  if (!String(result.stderr).includes("NOTIFICATION_SMOKE_PUSH_TO production için placeholder/test/example değer içermemeli.")) {
-    console.error("Production evidence template kontrolü başarısız: prod env placeholder notification push negative beklenen hata yok.");
+  if (!String(result.stderr).includes("NOTIFICATION_SMOKE_PUSH_TO e-posta-only release kapsamında boş olmalı.")) {
+    console.error("Production evidence template kontrolü başarısız: prod env enabled notification push negative beklenen hata yok.");
     console.error(result.stderr);
     process.exit(1);
   }
@@ -8183,7 +8183,7 @@ function createValidProdEnvForNegativeCheck() {
     NOTIFICATION_FROM_EMAIL: "bildirim@o-okul.com",
     NOTIFICATION_REPLY_TO_EMAIL: "destek@o-okul.com",
     NOTIFICATION_SMOKE_EMAIL_TO: "ops@o-okul.com",
-    NOTIFICATION_SMOKE_PUSH_TO: "ops-device-token",
+    NOTIFICATION_SMOKE_PUSH_TO: "",
     NOTIFICATION_SMOKE_SUBJECT: "o-okul production notification smoke",
     NOTIFICATION_SMOKE_BODY: "o-okul production notification smoke",
     NOTIFICATION_SMOKE_CONFIRM: "send",
