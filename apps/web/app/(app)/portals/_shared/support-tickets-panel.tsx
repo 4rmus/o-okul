@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   Button,
   DataTable,
@@ -13,7 +13,12 @@ import {
   type DataTableColumn,
   type StatusBadgeProps,
 } from "@o-okul/ui";
-import type { SupportTicketRecord } from "@o-okul/shared-types";
+import type {
+  PortalSupportTicketCommentCreateResponse,
+  PublicPortalSupportTicketCommentRecord,
+  SupportTicketRecord,
+} from "@o-okul/shared-types";
+import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
 import {
   firstFormError,
   supportTicketFormSchema,
@@ -36,16 +41,60 @@ const emptySupportTicketForm: SupportTicketFormState = {
 export function SupportTicketsPanel({
   tickets,
   onCreate,
+  accessToken,
+  commentsPath,
+  onTicketChange,
   readOnly = false,
   readOnlyMessage = "Yalnızca görüntüleme sırasında destek talebi açılamaz.",
 }: {
   tickets: SupportTicketRecord[];
   onCreate?: (input: SupportTicketFormPayload) => void | Promise<unknown>;
+  accessToken?: string;
+  commentsPath?: string;
+  onTicketChange?: () => void | Promise<unknown>;
   readOnly?: boolean;
   readOnlyMessage?: string;
 }) {
   const [form, setForm] = useState<SupportTicketFormState>(emptySupportTicketForm);
   const [error, setError] = useState("");
+  const [selectedTicketId, setSelectedTicketId] = useState(tickets[0]?.id ?? "");
+  const [comments, setComments] = useState<PublicPortalSupportTicketCommentRecord[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [reply, setReply] = useState("");
+  const [replyError, setReplyError] = useState("");
+  const [replySubmitting, setReplySubmitting] = useState(false);
+  const selectedTicket = tickets.find((ticket) => ticket.id === selectedTicketId) ?? tickets[0];
+
+  useEffect(() => {
+    if (!tickets.some((ticket) => ticket.id === selectedTicketId)) {
+      setSelectedTicketId(tickets[0]?.id ?? "");
+    }
+  }, [selectedTicketId, tickets]);
+
+  useEffect(() => {
+    if (readOnly || !accessToken || !commentsPath || !selectedTicket) {
+      setComments([]);
+      return;
+    }
+
+    let active = true;
+    setCommentsLoading(true);
+    setReplyError("");
+    void apiRequest<PublicPortalSupportTicketCommentRecord[]>(
+      accessToken,
+      `${apiBaseUrl}/${commentsPath}/${encodeURIComponent(selectedTicket.id)}/comments`,
+    ).then((records) => {
+      if (active) setComments(records);
+    }).catch(() => {
+      if (active) setReplyError("Konuşma yüklenemedi.");
+    }).finally(() => {
+      if (active) setCommentsLoading(false);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [accessToken, commentsPath, readOnly, selectedTicket]);
   const columns: Array<DataTableColumn<SupportTicketRecord>> = [
     {
       header: "Konu",
@@ -94,6 +143,32 @@ export function SupportTicketsPanel({
     }
   }
 
+  async function submitReply(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!accessToken || !commentsPath || !selectedTicket || !reply.trim()) return;
+
+    setReplyError("");
+    setReplySubmitting(true);
+    try {
+      const result = await apiRequest<PortalSupportTicketCommentCreateResponse>(
+        accessToken,
+        `${apiBaseUrl}/${commentsPath}/${encodeURIComponent(selectedTicket.id)}/comments`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+          body: JSON.stringify({ body: reply.trim() }),
+        },
+      );
+      setComments((current) => [...current, result.comment]);
+      setReply("");
+      await onTicketChange?.();
+    } catch {
+      setReplyError(selectedTicket.status === "CLOSED" ? "Bu talep kapandı. Yeni bir destek talebi açın." : "Yanıt gönderilemedi.");
+    } finally {
+      setReplySubmitting(false);
+    }
+  }
+
   return (
     <Panel
       aria-label="Destek talepleri"
@@ -132,6 +207,42 @@ export function SupportTicketsPanel({
         getRowKey={(ticket) => ticket.id}
         rows={tickets}
       />
+      {!readOnly && accessToken && commentsPath && tickets.length > 0 ? (
+        <section aria-label="Destek konuşması" className="next-portal-support-conversation">
+          <Field label="Görüntülenen talep">
+            <Select value={selectedTicket?.id ?? ""} onChange={(event) => setSelectedTicketId(event.target.value)}>
+              {tickets.map((ticket) => <option key={ticket.id} value={ticket.id}>{ticket.subject}</option>)}
+            </Select>
+          </Field>
+          {selectedTicket ? (
+            <div aria-live="polite" className="next-portal-support-thread">
+              <article className="next-portal-support-message" data-author="requester">
+                <strong>Siz</strong>
+                <p>{selectedTicket.message}</p>
+              </article>
+              {commentsLoading ? <p>Konuşma yükleniyor…</p> : comments.map((comment) => (
+                <article className="next-portal-support-message" data-author={comment.author.toLowerCase()} key={comment.id}>
+                  <strong>{comment.author === "REQUESTER" ? "Siz" : "Kurum"}</strong>
+                  <p>{comment.body}</p>
+                </article>
+              ))}
+            </div>
+          ) : null}
+          {selectedTicket?.status === "CLOSED" ? (
+            <p>Bu talep kapandı. Devam etmek için yeni bir destek talebi açın.</p>
+          ) : (
+            <form className="next-portal-support-reply" onSubmit={(event) => void submitReply(event)}>
+              <Field label="Yanıtınız" description="Yalnızca metin gönderin; öğrenci bilgisi, TCKN veya dosya paylaşmayın.">
+                <Textarea rows={4} value={reply} onChange={(event) => setReply(event.target.value)} />
+              </Field>
+              <Button disabled={replySubmitting || !reply.trim()} type="submit">
+                {replySubmitting ? "Gönderiliyor…" : "Yanıt gönder"}
+              </Button>
+            </form>
+          )}
+          {replyError ? <p className="next-form-error">{replyError}</p> : null}
+        </section>
+      ) : null}
     </Panel>
   );
 }

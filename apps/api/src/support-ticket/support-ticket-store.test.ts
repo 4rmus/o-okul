@@ -114,6 +114,13 @@ describe("PostgresSupportTicketStore", () => {
           body: "Kontrol ediyoruz.",
           createdAt: "2026-06-08T10:10:00.000Z",
         });
+        await store.createPortalComment({
+          tenantId: "tenant-a",
+          ticketId: "support-ticket-a",
+          authorId: "student-tenant-a",
+          body: "Sorun devam ediyor.",
+          createdAt: "2026-06-08T10:15:00.000Z",
+        });
       },
     );
 
@@ -165,6 +172,17 @@ describe("PostgresSupportTicketStore", () => {
       "user-tenant-a",
       "Kontrol ediyoruz.",
       "2026-06-08T10:10:00.000Z",
+    ]);
+    expect(businessQueries[9]?.sql).toContain("CASE WHEN \"status\" = 'RESOLVED' THEN 'IN_PROGRESS'");
+    expect(businessQueries[9]?.sql).toContain("\"status\" <> 'CLOSED'");
+    expect(businessQueries[9]?.values).toEqual(["support-ticket-a"]);
+    expect(businessQueries[10]?.sql).toContain('INSERT INTO "SupportTicketComment"');
+    expect(businessQueries[10]?.values?.slice(1)).toEqual([
+      "tenant-a",
+      "support-ticket-a",
+      "student-tenant-a",
+      "Sorun devam ediyor.",
+      "2026-06-08T10:15:00.000Z",
     ]);
   });
 

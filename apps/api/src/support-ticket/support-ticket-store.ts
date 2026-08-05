@@ -21,6 +21,12 @@ export interface SupportTicketStore {
   createAttachment(input: Omit<SupportTicketAttachmentRecord, "id">): Promise<SupportTicketAttachmentRecord>;
   listComments(ticketId: string): Promise<SupportTicketCommentRecord[]>;
   createComment(input: Omit<SupportTicketCommentRecord, "id">): Promise<SupportTicketCommentRecord>;
+  createPortalComment(input: Omit<SupportTicketCommentRecord, "id">): Promise<PortalCommentCreateResult | undefined>;
+}
+
+export interface PortalCommentCreateResult {
+  ticket: SupportTicketRecord;
+  comment: SupportTicketCommentRecord;
 }
 
 export const supportTicketStoreToken = Symbol("SupportTicketStore");
@@ -152,7 +158,9 @@ export class InMemorySupportTicketStore implements SupportTicketStore {
   }
 
   async listComments(ticketId: string): Promise<SupportTicketCommentRecord[]> {
-    return this.comments.filter((candidate) => candidate.ticketId === ticketId);
+    return this.comments
+      .filter((candidate) => candidate.ticketId === ticketId)
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   }
 
   async createComment(input: Omit<SupportTicketCommentRecord, "id">): Promise<SupportTicketCommentRecord> {
@@ -162,6 +170,13 @@ export class InMemorySupportTicketStore implements SupportTicketStore {
     };
     this.comments.push(record);
     return record;
+  }
+
+  async createPortalComment(input: Omit<SupportTicketCommentRecord, "id">): Promise<PortalCommentCreateResult | undefined> {
+    const ticket = await this.findById(input.ticketId);
+    if (!ticket || ticket.status === "CLOSED") return undefined;
+    if (ticket.status === "RESOLVED") ticket.status = "IN_PROGRESS";
+    return { ticket, comment: await this.createComment(input) };
   }
 }
 
@@ -325,6 +340,31 @@ export class PostgresSupportTicketStore implements SupportTicketStore {
         throw new Error("SUPPORT_TICKET_COMMENT_CREATE_FAILED");
       }
       return toSupportTicketCommentRecord(record);
+    });
+  }
+
+  async createPortalComment(input: Omit<SupportTicketCommentRecord, "id">): Promise<PortalCommentCreateResult | undefined> {
+    return withTenantQuery(this.pool, async (client) => {
+      const updated = await client.query<SupportTicketRow>(
+        `UPDATE "SupportTicket"
+         SET "status" = CASE WHEN "status" = 'RESOLVED' THEN 'IN_PROGRESS' ELSE "status" END,
+             "updatedAt" = now()
+         WHERE "id" = $1 AND "status" <> 'CLOSED'
+         RETURNING *`,
+        [input.ticketId],
+      );
+      const ticket = updated.rows[0];
+      if (!ticket) return undefined;
+
+      const inserted = await client.query<SupportTicketCommentRow>(
+        `INSERT INTO "SupportTicketComment" ("id", "tenantId", "ticketId", "authorId", "body", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, now())
+         RETURNING *`,
+        [randomUUID(), input.tenantId, input.ticketId, input.authorId ?? null, input.body, input.createdAt],
+      );
+      const comment = inserted.rows[0];
+      if (!comment) throw new Error("SUPPORT_TICKET_COMMENT_CREATE_FAILED");
+      return { ticket: toSupportTicketRecord(ticket), comment: toSupportTicketCommentRecord(comment) };
     });
   }
 }

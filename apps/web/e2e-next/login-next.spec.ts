@@ -4803,8 +4803,8 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   }
 
   await expandSidebarGroup(page, "İletişim");
-  await clickSidebarLink(page, "Destek", /\/kurum\/destek$/);
-  await expect(heading(page, { name: "Destek" })).toBeVisible();
+  await clickSidebarLink(page, "Kurum Desteği", /\/kurum\/destek$/);
+  await expect(heading(page, { name: "Kurum Desteği" })).toBeVisible();
   const supportList = page.getByLabel("Destek bildirimi yönetimi");
   await expect(page.getByRole("cell", { name: "Optik dosya okunmuyor", exact: true })).toBeVisible();
   await expect(page.getByLabel("Destek ek ve yorum listesi").getByText("Ek: hata-ekrani.txt")).toBeVisible();
@@ -5599,7 +5599,7 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
   await expect(page.getByRole("link", { name: "KVKK" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Yedekleme" })).toHaveCount(0);
   await expandSidebarGroup(page, "İletişim");
-  await expect(page.getByRole("link", { name: "Destek", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Kurum Desteği", exact: true })).toBeVisible();
   await expect(page.getByLabel("Bugün ilgilenmeniz gerekenler").getByRole("link", { name: /Geciken ödeme/ })).toHaveCount(0);
   await expect(page.getByLabel("Bugün ilgilenmeniz gerekenler").getByRole("link", { name: /Öğrenci destek talepleri/ })).toBeVisible();
   await page.keyboard.press("ControlOrMeta+K");

@@ -5252,6 +5252,41 @@ a {
   min-width: 0;
 }
 
+.next-portal-support-conversation,
+.next-portal-support-thread,
+.next-portal-support-reply {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.next-portal-support-conversation {
+  border-top: 1px solid var(--color-border-faint);
+  padding-top: 16px;
+}
+
+.next-portal-support-message {
+  max-width: min(82%, 640px);
+  border: 1px solid var(--color-border-faint);
+  border-radius: var(--radius);
+  background: var(--color-surface-muted);
+  padding: 12px;
+}
+
+.next-portal-support-message[data-author="requester"] {
+  justify-self: end;
+}
+
+.next-portal-support-message strong,
+.next-portal-support-message p {
+  margin: 0;
+}
+
+.next-portal-support-message strong {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
 .next-teacher-action-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));

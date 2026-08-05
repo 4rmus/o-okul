@@ -3,7 +3,7 @@ import { PageFrame } from "../_shared/page-frame.js";
 
 export default function InstitutionSupportTicketsPage() {
   return (
-    <PageFrame title="Destek">
+    <PageFrame title="Kurum Desteği">
       <SupportTicketsPage />
     </PageFrame>
   );

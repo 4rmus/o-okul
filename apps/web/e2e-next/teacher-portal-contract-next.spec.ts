@@ -241,7 +241,7 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
       { context: "Ödev kontrolü", label: "Ödev Kontrolü", path: "/ogretmen/odevler", panel: () => page.getByRole("region", { exact: true, name: "Öğretmen ödev kontrolü" }) },
       { context: "Sınav raporu", label: "Sınav Raporu", path: "/ogretmen/raporlar", panel: () => page.getByRole("region", { name: "Portal rapor özeti" }) },
       { context: "Duyurular", label: "Duyurular", path: "/ogretmen/duyurular", panel: () => page.getByRole("region", { exact: true, name: "Duyurular" }) },
-      { context: "Destek talepleri", label: "Destek", path: "/ogretmen/destek", panel: () => page.getByRole("region", { exact: true, name: "Destek talepleri" }) },
+      { context: "Destek talepleri", label: "Kurum Desteği", path: "/ogretmen/destek", panel: () => page.getByRole("region", { exact: true, name: "Destek talepleri" }) },
     ];
 
     for (const routeCase of routeCases) {
@@ -415,13 +415,13 @@ async function expectPortalSupportPanel(page: Page, options: { formVisible: bool
   await expect(support.locator(".uh-status-badge", { hasText: "Normal" })).toBeVisible();
   await expect(support.locator(".uh-status-badge", { hasText: "Açık" })).toBeVisible();
   if (options.formVisible) {
-    await expect(support.getByLabel("Konu")).toBeVisible();
-    await expect(support.getByLabel("Mesaj")).toBeVisible();
-    await expect(support.getByLabel("Öncelik")).toBeVisible();
+    await expect(support.getByLabel("Konu", { exact: true })).toBeVisible();
+    await expect(support.getByLabel("Mesaj", { exact: true })).toBeVisible();
+    await expect(support.getByRole("combobox", { name: /Öncelik/ })).toBeVisible();
   } else {
-    await expect(support.getByLabel("Konu")).toHaveCount(0);
-    await expect(support.getByLabel("Mesaj")).toHaveCount(0);
-    await expect(support.getByLabel("Öncelik")).toHaveCount(0);
+    await expect(support.getByLabel("Konu", { exact: true })).toHaveCount(0);
+    await expect(support.getByLabel("Mesaj", { exact: true })).toHaveCount(0);
+    await expect(support.getByRole("combobox", { name: /Öncelik/ })).toHaveCount(0);
   }
 }
 

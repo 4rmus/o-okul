@@ -116,7 +116,7 @@ export const institutionNavGroups: readonly InstitutionNavGroup[] = [
     items: [
       { href: "/kurum/duyurular", icon: Megaphone, label: "Duyurular", requiredCapability: "announcement:manage" },
       ...(isSmsEnabled ? [{ href: "/kurum/sablonlar", icon: MessageSquareText, label: "Mesaj Şablonları", requiredCapability: "announcement:manage" }] : []),
-      { href: "/kurum/destek", icon: LifeBuoy, label: "Destek", requiredCapability: "support:manage" },
+      { href: "/kurum/destek", icon: LifeBuoy, label: "Kurum Desteği", requiredCapability: "support:manage" },
     ],
   },
   {
@@ -181,7 +181,7 @@ export const rolePortalNavGroups: readonly RolePortalNavGroup[] = [
       { href: "/ogretmen/odevler", icon: NotebookTabs, label: "Ödev Kontrolü" },
       { href: "/ogretmen/raporlar", icon: BarChart3, label: "Sınav Raporu" },
       { href: "/ogretmen/duyurular", icon: Megaphone, label: "Duyurular" },
-      { href: "/ogretmen/destek", icon: LifeBuoy, label: "Destek" },
+      { href: "/ogretmen/destek", icon: LifeBuoy, label: "Kurum Desteği" },
     ],
   },
   {
@@ -195,7 +195,7 @@ export const rolePortalNavGroups: readonly RolePortalNavGroup[] = [
       { href: "/ogrenci/duyurular", icon: Megaphone, label: "Duyurular" },
       { href: "/ogrenci/devamsizlik", icon: ClipboardCheck, label: "Devamsızlık" },
       { href: "/ogrenci/profil", icon: GraduationCap, label: "Profil" },
-      { href: "/ogrenci/destek", icon: LifeBuoy, label: "Destek" },
+      { href: "/ogrenci/destek", icon: LifeBuoy, label: "Kurum Desteği" },
     ],
   },
   {
@@ -210,7 +210,7 @@ export const rolePortalNavGroups: readonly RolePortalNavGroup[] = [
       { href: "/veli/odevler", icon: NotebookTabs, label: "Ödevler" },
       { href: "/veli/duyurular", icon: Megaphone, label: "Duyurular" },
       { href: "/veli/bildirimler", icon: MessageSquareText, label: "Bildirimler" },
-      { href: "/veli/destek", icon: LifeBuoy, label: "Destek" },
+      { href: "/veli/destek", icon: LifeBuoy, label: "Kurum Desteği" },
     ],
   },
 ];
