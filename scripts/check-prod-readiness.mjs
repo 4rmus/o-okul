@@ -1847,6 +1847,8 @@ const expectations = {
     "REPORT_GENERATION_SMOKE_EVIDENCE_FILE",
     "REPORT_GENERATION_SMOKE_EVIDENCE_PATH",
     "REPORT_GENERATION_SMOKE_COMMAND",
+    "INSERT INTO \"User\" (\"id\", \"tenantId\", \"email\"",
+    "[userId, tenantId, smokeEmail, hashPassword(smokePassword)]",
     "validateSmokeEvidenceOutputTarget",
     "writeSmokeEvidence",
     "report_generation_smoke",
