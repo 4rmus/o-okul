@@ -521,6 +521,22 @@ jobs:
             -f docker-compose.release.yml
           )
 
+          owner_decisions_args=()
+          owner_decisions_file="$(dirname "$STAGING_DEPLOY_DIR")/o-okul-private/account-management/$IMAGE_TAG/owner-decisions.json"
+          if [ -e "$owner_decisions_file" ] || [ -L "$owner_decisions_file" ]; then
+            if [ ! -f "$owner_decisions_file" ] || [ -L "$owner_decisions_file" ] \
+              || [ "$(realpath -e "$owner_decisions_file")" != "$owner_decisions_file" ] \
+              || [ "$(stat -c '%a' "$owner_decisions_file")" != "600" ] \
+              || [ "$(stat -c '%u' "$owner_decisions_file")" != "$(id -u)" ]; then
+              echo "Release-scoped account owner decisions must be a non-symlink 0600 file owned by the deploy user." >&2
+              exit 1
+            fi
+            owner_decisions_args=(
+              -v "$owner_decisions_file:/run/private/account-management-owner-decisions.json:ro"
+              -e ACCOUNT_MANAGEMENT_OWNER_DECISIONS_TARGET=file:///run/private/account-management-owner-decisions.json
+            )
+          fi
+
           "${backend_compose[@]}" run --rm --no-deps -T api sh -lc 'cd packages/db && ./node_modules/.bin/prisma migrate deploy --config prisma.config.ts' < /dev/null
 
           mkdir -p artifacts/staging/reports
@@ -540,6 +556,7 @@ jobs:
           "${backend_compose[@]}" run --rm --no-deps -T \
             -v "$PWD/scripts:/app/scripts:ro" \
             -v "$PWD/artifacts:/app/artifacts" \
+            "${owner_decisions_args[@]}" \
             -e STAGING_ENVIRONMENT=staging \
             -e ACCOUNT_MANAGEMENT_BACKFILL_MODE=APPLY \
             -e ACCOUNT_MANAGEMENT_BACKFILL_CONFIRM=apply-pr4-backfill \

@@ -168,6 +168,8 @@ pnpm backup:restore:smoke
   ardından web/api/worker/queue-board imajlarını GHCR'a push eder. Staging VPS'te
   migration öncesi gerekli `btree_gist` eklentisini Postgres yönetici rolüyle idempotent kurar,
   migration/preflight/backfill tek-seferlik container'larını edge compose ve sabit proxy IP olmadan çalıştırır,
+  release SHA'sına bağlı özel owner karar dosyası varsa yalnız deploy kullanıcısına ait `0600`,
+  normal ve symlink olmayan dosya olarak doğrulayıp backfill container'ına salt-okunur bağlar,
   `docker-compose.release.yml` override'ı ile imajları çeker, migration çalıştırır, Traefik'li stack'i
   ayağa kaldırır ve `web`, `api`, `worker`, `queue-board` servislerinin çalışan image tag'ini deploy
   `IMAGE_TAG` değeriyle birebir karşılaştırır. Otomatik deploy yalnız image activation, migration,

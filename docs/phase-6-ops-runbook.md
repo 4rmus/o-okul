@@ -436,6 +436,11 @@ pnpm account-management:backfill
 - Owner karar dosyası yalnız `file://` kabul eder; her karar `tenantId`, aktif admin `userId` ve
   gerçek `verificationReference` taşır. Bu dosya PII/kimlik içerdiği için evidence artifact'ına
   veya repoya eklenmez.
+- Otomatik deploy, release SHA'sına bağlı karar dosyasını
+  `/root/o-okul-private/account-management/<IMAGE_TAG>/owner-decisions.json` yolunda arar. Dosya
+  opsiyoneldir; varsa deploy kullanıcısına ait, `0600`, normal ve symlink olmayan dosya olmak
+  zorundadır ve yalnız backfill container'ına salt-okunur bağlanır. Dosya yoksa mevcut otomatik
+  owner seçimi çalışır; belirsiz tenant yine fail-closed `BLOCKED` kalır.
 - Mevcut `TENANT_OWNER` korunur. Owner yoksa MFA/parola değişimiyle doğrulanmış ilk aktif admin
   otomatik seçilir; bu kanıt da yoksa karar dosyası olmadan işlem `BLOCKED` olur.
 - APPLY serializable transaction ve advisory lock kullanır. User normalize alanları, tek canonical
