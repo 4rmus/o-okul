@@ -1130,7 +1130,7 @@ const expectations = {
     "traefik.http.routers.web.service=web",
     "traefik.http.routers.web.tls.certresolver=letsencrypt",
     "traefik.http.routers.api.service=api",
-    "traefik.http.routers.api.tls.certresolver=letsencrypt",
+    "traefik.http.routers.api.tls=true",
   ],
   "docker-compose.traefik-ip.yml": [
     "traefik:v3.7.5",
