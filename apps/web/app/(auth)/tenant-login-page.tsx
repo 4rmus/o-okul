@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, LockKeyhole, ScanLine } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import type { AuthResponse, MfaChallengeResponse, MfaEnrollmentRequiredResponse, TenantLoginContextResponse, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
 import { Button, Field, Input, SegmentedControl, Select } from "@o-okul/ui";
 import { useAuth } from "../providers.js";
@@ -29,6 +30,7 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
   const [pendingEnrollment, setPendingEnrollment] = useState<MfaEnrollmentRequiredResponse | null>(null);
   const [mfaMethod, setMfaMethod] = useState<"totp" | "recovery_code">("totp");
   const [mfaCode, setMfaCode] = useState("");
+  const [mfaSecretCopyStatus, setMfaSecretCopyStatus] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tenantContext, setTenantContext] = useState<TenantLoginContextResponse | null>(null);
@@ -99,6 +101,17 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
     setPendingTenantSelection(null);
     setSelectedTenantId("");
     setError("");
+  }
+
+  async function copyMfaSecret() {
+    if (!pendingEnrollment) return;
+
+    try {
+      await navigator.clipboard.writeText(pendingEnrollment.secret);
+      setMfaSecretCopyStatus("Kurulum anahtarı kopyalandı.");
+    } catch {
+      setMfaSecretCopyStatus("Kurulum anahtarı kopyalanamadı.");
+    }
   }
 
   const isSubmitDisabled = isSubmitting || isBootstrapping || Boolean(pendingTenantSelection && !selectedTenantId);
@@ -204,11 +217,27 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
           </div>
         ) : null}
         {pendingEnrollment ? (
-          <div className="next-form-section" role="status">
+          <div className="next-form-section" role="status" aria-live="polite">
             <p>Yönetici hesabı için iki adımlı doğrulamayı etkinleştirin.</p>
+            <p className="next-mfa-enrollment-help">Doğrulama uygulamanızda yeni hesap ekleyin ve QR kodu tarayın.</p>
+            <div className="next-mfa-enrollment-qr">
+              <QRCodeSVG
+                value={pendingEnrollment.keyUri}
+                size={184}
+                level="M"
+                marginSize={4}
+                role="img"
+                aria-label="Doğrulama uygulaması kurulum QR kodu"
+              />
+            </div>
+            <p className="next-mfa-enrollment-help">QR kodunu tarayamıyorsanız aşağıdaki anahtarı elle girebilirsiniz.</p>
             <Field label="Kurulum anahtarı">
               <Input value={pendingEnrollment.secret} readOnly />
             </Field>
+            <Button type="button" variant="ghost" onClick={() => void copyMfaSecret()}>
+              Kurulum anahtarını kopyala
+            </Button>
+            {mfaSecretCopyStatus ? <p className="next-mfa-enrollment-help">{mfaSecretCopyStatus}</p> : null}
             <Field label="Doğrulama kodu">
               <Input
                 name="mfaEnrollmentCode"
@@ -222,7 +251,7 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
             </Field>
             <div>
               <p>Kurtarma kodlarını güvenli bir yere kaydedin:</p>
-              <code>{pendingEnrollment.recoveryCodes.join(" ")}</code>
+              <code className="next-mfa-recovery-codes">{pendingEnrollment.recoveryCodes.join(" ")}</code>
             </div>
           </div>
         ) : null}

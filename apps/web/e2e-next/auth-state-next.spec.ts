@@ -41,6 +41,17 @@ test.describe("auth state görsel sözleşmesi", () => {
 
   test("auth state MFA kurulumunu recovery kodları ve tek ana aksiyonla gösterir", async ({ page }) => {
     await page.setViewportSize({ height: 896, width: 414 });
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText(value: string) {
+            (window as typeof window & { __testMfaSecret?: string }).__testMfaSecret = value;
+            return Promise.resolve();
+          },
+        },
+      });
+    });
     await prepareAuthPage(page, {
       onLogin() {
         return {
@@ -58,7 +69,11 @@ test.describe("auth state görsel sözleşmesi", () => {
 
     const enrollment = page.getByRole("status");
     await expect(enrollment).toContainText("iki adımlı doğrulamayı etkinleştirin");
+    await expect(page.getByRole("img", { name: "Doğrulama uygulaması kurulum QR kodu" })).toBeVisible();
     await expect(page.getByLabel("Kurulum anahtarı")).toHaveValue("SETUPSECRET");
+    await page.getByRole("button", { name: "Kurulum anahtarını kopyala" }).click();
+    await expect(enrollment).toContainText("Kurulum anahtarı kopyalandı.");
+    expect(await page.evaluate(() => (window as typeof window & { __testMfaSecret?: string }).__testMfaSecret)).toBe("SETUPSECRET");
     await expect(page.getByLabel("Doğrulama kodu")).toBeVisible();
     await expect(enrollment).toContainText("recovery-a recovery-b");
     await expect(page.getByRole("button", { name: "Etkinleştir ve giriş yap" })).toBeVisible();
