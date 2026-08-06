@@ -5050,7 +5050,7 @@ test("ilk girişte zorunlu şifre değişimi ekranına yönlendirir", async ({ p
 
   await page.route("**/api/v1/me/password", async (route) => {
     const body = route.request().postDataJSON() as { currentPassword?: string; newPassword?: string };
-    expect(body).toMatchObject({ currentPassword: "5551234567", newPassword: "YeniSifre123456" });
+    expect(body).toMatchObject({ currentPassword: "5551234567", newPassword: "YeniAb12" });
     passwordChanged = true;
     auth = {
       ...auth,
@@ -5110,8 +5110,8 @@ test("ilk girişte zorunlu şifre değişimi ekranına yönlendirir", async ({ p
   await expect(page).toHaveURL(/\/sifre-degistir$/, { timeout: 15_000 });
   await expect(heading(page, { level: 1, name: "Şifre değiştir" })).toBeVisible();
   await page.getByLabel("Mevcut şifre").fill("5551234567");
-  await page.getByLabel("Yeni şifre", { exact: true }).fill("YeniSifre123456");
-  await page.getByLabel("Yeni şifre tekrar").fill("YeniSifre123456");
+  await page.getByLabel("Yeni şifre", { exact: true }).fill("YeniAb12");
+  await page.getByLabel("Yeni şifre tekrar").fill("YeniAb12");
   await page.getByRole("button", { name: "Kaydet" }).click();
 
   await expect(page).toHaveURL(/\/ogrenci$/, { timeout: 15_000 });

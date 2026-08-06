@@ -54,7 +54,7 @@ describe("IdentityInvitationService", () => {
       new InMemoryTenantStore(),
     );
 
-    await expect(service.accept({ token: "expired-token", password: "secure-password-123" })).rejects.toThrow(
+    await expect(service.accept({ token: "expired-token", password: "Secure-password-123" })).rejects.toThrow(
       "IDENTITY_INVITATION_EXPIRED",
     );
   });
@@ -143,7 +143,7 @@ describe("IdentityInvitationService", () => {
       employee.id,
       { email: "ada@example.test", role: "OPERATIONS_STAFF" },
     );
-    await service.accept({ token: issued.activationToken, password: "secure-password-123" });
+    await service.accept({ token: issued.activationToken, password: "Secure-password-123" });
 
     await expect(users.findEmployee("tenant-a", employee.id)).resolves.toMatchObject({
       userId: expect.any(String),

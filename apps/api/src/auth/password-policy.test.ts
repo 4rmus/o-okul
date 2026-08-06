@@ -2,14 +2,17 @@ import { describe, expect, it } from "vitest";
 import { passwordPolicyViolation } from "./password-policy.js";
 
 describe("password policy", () => {
-  it("15-128 karakteri composition zorunluluğu olmadan kabul eder", () => {
-    expect(passwordPolicyViolation("yalnızcauzunbirparola")).toBeUndefined();
-    expect(passwordPolicyViolation("x".repeat(128))).toBeUndefined();
+  it("8-128 karakter ile büyük ve küçük harf kombinasyonunu kabul eder", () => {
+    expect(passwordPolicyViolation("Guvenli8")).toBeUndefined();
+    expect(passwordPolicyViolation(`A${"x".repeat(127)}`)).toBeUndefined();
+    expect(passwordPolicyViolation("Şifreabc")).toBeUndefined();
   });
 
-  it("kısa, aşırı uzun ve yaygın parolaları reddeder", () => {
-    expect(passwordPolicyViolation("kısa")).toBe("PASSWORD_MIN_15_REQUIRED");
-    expect(passwordPolicyViolation("x".repeat(129))).toBe("PASSWORD_MAX_128_EXCEEDED");
+  it("kısa, aşırı uzun, tek harf boyutlu ve yaygın parolaları reddeder", () => {
+    expect(passwordPolicyViolation("Kisa123")).toBe("PASSWORD_MIN_8_REQUIRED");
+    expect(passwordPolicyViolation(`A${"x".repeat(128)}`)).toBe("PASSWORD_MAX_128_EXCEEDED");
+    expect(passwordPolicyViolation("kucuk123")).toBe("PASSWORD_UPPERCASE_REQUIRED");
+    expect(passwordPolicyViolation("BUYUK123")).toBe("PASSWORD_LOWERCASE_REQUIRED");
     expect(passwordPolicyViolation("PasswordPassword")).toBe("PASSWORD_COMMON_REJECTED");
   });
 });

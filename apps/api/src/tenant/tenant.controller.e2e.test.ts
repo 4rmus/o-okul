@@ -348,7 +348,7 @@ describe("TenantController", () => {
       })
       .expect(201);
 
-    const activatedPassword = "readonly-expired-admin-password";
+    const activatedPassword = "Readonly-expired-admin-password";
     upsertInMemoryAuthUser({
       id: "readonly-expired-admin-test",
       email: "readonly-expired-admin@example.test",

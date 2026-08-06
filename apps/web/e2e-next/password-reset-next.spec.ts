@@ -45,11 +45,11 @@ test("tek kullanımlık bağlantı yeni parolayı onaylar", async ({ page }) => 
   await page.goto("/parola-sifirla?tenant=dna-egitim#token=reset-token");
   await expect(page).toHaveURL(/\/parola-sifirla\?tenant=dna-egitim$/);
   expect(page.url()).not.toContain("reset-token");
-  await page.getByRole("textbox", { name: "Yeni şifre", exact: true }).fill("new-secure-password");
-  await page.getByRole("textbox", { name: "Yeni şifre tekrar" }).fill("new-secure-password");
+  await page.getByRole("textbox", { name: "Yeni şifre", exact: true }).fill("YeniAb12");
+  await page.getByRole("textbox", { name: "Yeni şifre tekrar" }).fill("YeniAb12");
   await page.getByRole("button", { name: "Şifreyi yenile" }).click();
 
   await expect(page.getByRole("status")).toContainText("Şifreniz yenilendi");
   await expect(page.getByRole("link", { name: "Giriş yap" })).toHaveAttribute("href", "/k/dna-egitim/giris");
-  expect(confirmBody).toEqual({ token: "reset-token", password: "new-secure-password" });
+  expect(confirmBody).toEqual({ token: "reset-token", password: "YeniAb12" });
 });

@@ -91,7 +91,7 @@ describe("Student portal activation", () => {
           tenantSlug: "dna-egitim",
           studentNo: "ACT-101",
           code: "222222222222",
-          password: "secure-password-123",
+          password: "Secure-password-123",
         })
         .expect(401);
     }
@@ -101,7 +101,7 @@ describe("Student portal activation", () => {
         tenantSlug: "dna-egitim",
         studentNo: "ACT-101",
         code: first.activationCode,
-        password: "secure-password-123",
+        password: "Secure-password-123",
       })
       .expect(401);
 
@@ -112,7 +112,7 @@ describe("Student portal activation", () => {
         tenantSlug: "dna-egitim",
         studentNo: "ACT-101",
         code: next.activationCode,
-        password: "secure-password-123",
+        password: "Secure-password-123",
       })
       .expect(200);
     expect(accepted.body.data).toMatchObject({ status: "ACCEPTED", loginName: "ACT-101" });
@@ -124,13 +124,13 @@ describe("Student portal activation", () => {
         tenantSlug: "dna-egitim",
         studentNo: "ACT-101",
         code: next.activationCode,
-        password: "secure-password-123",
+        password: "Secure-password-123",
       })
       .expect(401);
 
     await request(server)
       .post(`/${apiPrefix}/auth/login`)
-      .send({ tenantSlug: "dna-egitim", loginName: "ACT-101", password: "secure-password-123" })
+      .send({ tenantSlug: "dna-egitim", loginName: "ACT-101", password: "Secure-password-123" })
       .expect(200)
       .expect(({ body }) => {
         expect(body.data.session).toMatchObject({ tenantId: "tenant-a", roles: ["STUDENT"] });
