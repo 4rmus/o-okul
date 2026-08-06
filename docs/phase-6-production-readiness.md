@@ -746,12 +746,15 @@ pnpm backup:restore:smoke
   golden'larıyla korunur; genel ekran seti ve mevcut karne golden'ları topluca güncellenmez.
 - Kritik WCAG 2 A/AA axe ihlali 0 olmalıdır; repo kapısı `pnpm web:a11y:check` ile doğrulanır.
 - Yedek/restore paneli, serbest string backup hedefi ve `s3://` restore kanıt dosyasını API çağrısı yapılmadan reddeder; bu hedefli panel sözleşmesi `pnpm web:backup-restore-panel:check` ile doğrulanır.
-- GitHub CI ve staging image build job'ları `pnpm run ci` öncesi
+- GitHub CI `pnpm run ci` öncesi
   `pnpm --filter @o-okul/web exec playwright install --with-deps chromium` çalıştırır; bu
   şart `pnpm docker:check`, `pnpm ops:check` ve `pnpm prod:readiness:check` statik kapılarıyla korunur.
-- GitHub CI içindeki ayrı `ui-ux-rc` işi pull request, `main` push ve manuel koşularda Chromium ile
-  WebKit matrisini aynı commit üzerinde çalıştırır; UI/UX kanıtı `pnpm web:ux-rc:check` kaydı olmadan
-  yerel sözleşme PASS sayılmaz.
+  Turbo'nun `.turbo` çıktısı lockfile kapsamlı GitHub Actions cache'inden geri yüklenir; exact-SHA
+  `pnpm run ci` komutu ve release kanıtı değişmez.
+- GitHub CI içindeki ayrı `ui-ux-rc` işi manuel koşuda her zaman, pull request ve `main` push'ta ise
+  UI'yı etkileyen dosyalar değiştiğinde Chromium ile WebKit matrisini aynı commit üzerinde iki worker
+  ile çalıştırır. Değişiklik aralığı çözülemezse test fail-open çalışır; UI/UX kanıtı
+  `pnpm web:ux-rc:check` kaydı olmadan yerel sözleşme PASS sayılmaz.
 - Web UX baseline contract `pnpm web:ux-baseline:check` ile a11y spec kapsamını,
   320/375/414/768 responsive tabanını, 1024/1440 masaüstü kapsamını, landing server/no-query
   performans bütçesini ve Optik → Rapor → Portal iş akışı sözleşmesini sabitler.

@@ -205,6 +205,14 @@ function checkWorkflowContract(output) {
   const workflow = readFileSync(workflowPath, "utf8");
   const requiredTokens = [
     "Validate staging dispatch inputs and environment",
+    "Select current runtime-affecting deploy",
+    "newer CI-verified main SHA exists",
+    "associated PR range unavailable; fail-open",
+    "ASSOCIATED_PR_BASE_SHA",
+    "/actions/workflows/ci.yml/runs?branch=main&status=success",
+    "git merge-base --is-ancestor",
+    "no runtime-affecting files changed",
+    "if: needs.preflight.outputs.deploy-required == 'true'",
     "STAGING_NEXT_PUBLIC_API_URL must be an https:// URL.",
     "STAGING_DEPLOY_DIR must be /root/o-okul.",
     "docker-compose.observability.yml",
