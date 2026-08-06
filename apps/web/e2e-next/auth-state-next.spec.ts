@@ -46,7 +46,7 @@ test.describe("auth state görsel sözleşmesi", () => {
         configurable: true,
         value: {
           writeText(value: string) {
-            localStorage.setItem("test:mfa-secret", value);
+            (window as typeof window & { __testMfaSecret?: string }).__testMfaSecret = value;
             return Promise.resolve();
           },
         },
@@ -73,7 +73,7 @@ test.describe("auth state görsel sözleşmesi", () => {
     await expect(page.getByLabel("Kurulum anahtarı")).toHaveValue("SETUPSECRET");
     await page.getByRole("button", { name: "Kurulum anahtarını kopyala" }).click();
     await expect(enrollment).toContainText("Kurulum anahtarı kopyalandı.");
-    expect(await page.evaluate(() => localStorage.getItem("test:mfa-secret"))).toBe("SETUPSECRET");
+    expect(await page.evaluate(() => (window as typeof window & { __testMfaSecret?: string }).__testMfaSecret)).toBe("SETUPSECRET");
     await expect(page.getByLabel("Doğrulama kodu")).toBeVisible();
     await expect(enrollment).toContainText("recovery-a recovery-b");
     await expect(page.getByRole("button", { name: "Etkinleştir ve giriş yap" })).toBeVisible();
