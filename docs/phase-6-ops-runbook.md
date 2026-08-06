@@ -892,6 +892,12 @@ Workflow aynı branch için tek staging deploy'u sıraya alır, job timeout'lar�
 imaj build'leri buildx `type=gha` cache kullanır. Bu yüzden tekrar deploy'da bağımlılık ve layer
 cache'i korunur; evidence job'u yine ayrı artifact üretmeye devam eder.
 
+Otomatik `workflow_run` preflight'ı deploy SHA'sını uzak `main` ile karşılaştırır. Kuyrukta kendi CI'ı
+başarılı daha yeni bir `main` SHA'sı varsa eski run; GitHub'ın ilişkilendirdiği PR base aralığında yalnız
+doküman veya ajan metadata dosyaları değiştiyse runtime-etkisiz run, image build/SSH/evidence başlamadan
+başarılı biçimde atlanır. Daha yeni SHA'nın başarılı CI'ı veya PR değişiklik aralığı doğrulanamazsa seçim
+fail-open çalışır. Manuel `workflow_dispatch` bu filtreden etkilenmez ve her zaman deploy akışına girer.
+
 Linux runner için base64 değeri:
 
 ```sh
@@ -902,6 +908,8 @@ Beklenen akış:
 
 - Workflow elle `workflow_dispatch` ile çalıştırılabilir; ayrıca `main` üstündeki `CI` workflow'u başarılı
   bittiğinde otomatik çalışır.
+- Otomatik çalışmada, daha yeni CI-doğrulanmış `main` SHA'sı bulunmayan ve doğrulanabilir PR aralığında
+  runtime'ı etkileyen dosya değişikliği içeren release ilerler; diğerleri preflight özetinde gerekçesiyle atlanır.
 - Workflow önce dispatch input'larını, Docker tag biçimini, `STAGING_NEXT_PUBLIC_API_URL=https://...`
   değerini, `STAGING_EDGE_MODE=domain|ip` değerini ve gerekli staging secret/var varlığını doğrular.
 - Workflow `STAGING_EVIDENCE_ENV_B64` içeriğini decode eder, boş dosyayı reddeder ve normal cutover için

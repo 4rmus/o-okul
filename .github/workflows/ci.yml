@@ -29,6 +29,14 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
+      - name: Restore Turbo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @o-okul/web exec playwright install --with-deps chromium
       - run: pnpm run ci
@@ -46,24 +54,74 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect UI-affecting changes
+        id: ui-changes
+        shell: bash
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          required=true
+          reason="manual run"
+          if [ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]; then
+            if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+              base_sha="$PR_BASE_SHA"
+              head_sha="$PR_HEAD_SHA"
+            else
+              base_sha="$BEFORE_SHA"
+              head_sha="$CURRENT_SHA"
+            fi
+
+            changed_files="$RUNNER_TEMP/ui-ux-rc-changed-files.txt"
+            if [ -n "$base_sha" ] &&
+              [ "$base_sha" != "0000000000000000000000000000000000000000" ] &&
+              git diff --name-only "$base_sha" "$head_sha" > "$changed_files"
+            then
+              if grep -Eq '^(apps/web/|packages/ui/|packages/shared-types/|\.github/workflows/ci\.yml$|scripts/check-(web-ux-baseline|karne-visual-contract)\.mjs$|docs/ui-ux-professionalization-contract\.md$|design\.md$|tokens\.css$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|turbo\.json$|\.node-version$)' "$changed_files"; then
+                reason="UI-affecting files changed"
+              else
+                required=false
+                reason="no UI-affecting files changed"
+              fi
+            else
+              reason="change range unavailable; fail-open"
+            fi
+          fi
+
+          echo "required=$required" >> "$GITHUB_OUTPUT"
+          echo "### UI/UX RC selection" >> "$GITHUB_STEP_SUMMARY"
+          echo "- required: \`$required\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- reason: $reason" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: pnpm/action-setup@v4
+        if: steps.ui-changes.outputs.required == 'true'
         with:
           version: 11.5.0
           run_install: false
 
       - uses: actions/setup-node@v4
+        if: steps.ui-changes.outputs.required == 'true'
         with:
           node-version-file: .node-version
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @o-okul/web exec playwright install --with-deps chromium webkit
-      - run: pnpm web:ux-rc:check
+      - if: steps.ui-changes.outputs.required == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: steps.ui-changes.outputs.required == 'true'
+        run: pnpm --filter @o-okul/web exec playwright install --with-deps chromium webkit
+      - if: steps.ui-changes.outputs.required == 'true'
+        run: pnpm web:ux-rc:check
 
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: ${{ failure() && steps.ui-changes.outputs.required == 'true' }}
         with:
           name: ui-ux-rc-test-results-${{ github.sha }}
           path: apps/web/test-results

@@ -254,8 +254,11 @@ if (webPackageJson.scripts?.a11y !== "playwright test -c playwright.next.config.
   failures.push("apps/web/package.json a11y script must run e2e-next/a11y-next.spec.ts.");
 }
 
-if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=1 e2e-next/ui-primitives-state-next.spec.ts e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/employee-access-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts && pnpm ux-route-family-smoke") {
+if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=2 e2e-next/ui-primitives-state-next.spec.ts e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/employee-access-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts && pnpm ux-route-family-smoke") {
   failures.push("apps/web/package.json ux-contract script must run the primitive state, no-artifact DataTable, portal report, and report workspace specs.");
+}
+if (!webPackageJson.scripts?.["ux-rc"]?.includes("--workers=2")) {
+  failures.push("apps/web/package.json ux-rc script must keep the verified two-worker budget.");
 }
 if (webPackageJson.scripts?.["ux-route-family-smoke"] !== "playwright test -c playwright.next.config.ts --workers=2 --update-snapshots=none e2e-next/ui-route-family-smoke-next.spec.ts") {
   failures.push("apps/web/package.json ux-route-family-smoke script must run the 73-route smoke with two workers and snapshot updates disabled.");
@@ -5101,8 +5104,13 @@ requireTokens("apps/web/playwright.next.config.ts", [
 ]);
 
 requireTokens(".github/workflows/ci.yml", [
+  "Restore Turbo cache",
+  "path: .turbo",
   "pnpm --filter @o-okul/web exec playwright install --with-deps chromium",
   "ui-ux-rc:",
+  "Detect UI-affecting changes",
+  "no UI-affecting files changed",
+  "if: steps.ui-changes.outputs.required == 'true'",
   "pnpm --filter @o-okul/web exec playwright install --with-deps chromium webkit",
   "pnpm web:ux-rc:check",
 ]);
