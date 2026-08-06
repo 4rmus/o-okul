@@ -418,6 +418,12 @@ const tenantSelectionRequestSchema = objectSchema({
 
 const refreshRequestSchema = objectSchema({});
 
+const passwordInputSchema = stringSchema({
+  minLength: 8,
+  maxLength: 128,
+  description: "Must contain at least one uppercase and one lowercase letter.",
+});
+
 const passwordResetAcceptedResponseSchema = objectSchema({
   status: { type: "string", enum: ["ACCEPTED"] },
 }, ["status"]);
@@ -428,7 +434,7 @@ const passwordResetConfirmResponseSchema = objectSchema({
 
 const mePasswordChangeRequestSchema = objectSchema({
   currentPassword: stringSchema({ minLength: 1 }),
-  newPassword: stringSchema({ minLength: 15, maxLength: 128 }),
+  newPassword: passwordInputSchema,
 }, ["currentPassword", "newPassword"]);
 
 const mePasswordChangeResponseSchema = objectSchema({
@@ -2722,7 +2728,7 @@ const identityInvitationCreateRequestSchema = objectSchema({
 
 const identityInvitationAcceptRequestSchema = objectSchema({
   name: stringSchema(),
-  password: stringSchema({ minLength: 15, maxLength: 128 }),
+  password: passwordInputSchema,
   token: stringSchema({ minLength: 1 }),
 }, ["password", "token"]);
 
@@ -2745,7 +2751,7 @@ const studentPortalActivationRequestSchema = objectSchema({
   tenantSlug: stringSchema({ minLength: 1 }),
   studentNo: stringSchema({ minLength: 1 }),
   code: stringSchema({ minLength: 12, maxLength: 12, pattern: "^[A-HJ-NP-Z2-9]{12}$" }),
-  password: stringSchema({ minLength: 15, maxLength: 128 }),
+  password: passwordInputSchema,
 }, ["studentNo", "code", "password"]);
 
 const studentPortalActivationResponseSchema = objectSchema({
@@ -2923,7 +2929,7 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "post /api/v1/auth/password-reset/confirm": {
     requestBody: objectSchema({
-      password: stringSchema({ minLength: 15, maxLength: 128 }),
+      password: passwordInputSchema,
       token: stringSchema(),
     }, ["password", "token"]),
     responseBody: passwordResetConfirmResponseSchema,

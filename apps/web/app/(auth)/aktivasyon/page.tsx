@@ -54,8 +54,8 @@ export default function ActivationPage() {
       setError("Kurum adresi, öğrenci numarası ve 12 karakterlik aktivasyon kodunu kontrol edin.");
       return;
     }
-    if (password.length < 15 || password.length > 128) {
-      setError("Şifre 15-128 karakter olmalıdır.");
+    if (password.length < 8 || password.length > 128 || !/\p{Lu}/u.test(password) || !/\p{Ll}/u.test(password)) {
+      setError("Şifre 8-128 karakter olmalı, büyük ve küçük harf içermelidir.");
       return;
     }
     if (password !== passwordAgain) {
@@ -147,7 +147,7 @@ export default function ActivationPage() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete="new-password"
-                minLength={15}
+                minLength={8}
                 maxLength={128}
                 required
               />
@@ -159,7 +159,7 @@ export default function ActivationPage() {
                 value={passwordAgain}
                 onChange={(event) => setPasswordAgain(event.target.value)}
                 autoComplete="new-password"
-                minLength={15}
+                minLength={8}
                 maxLength={128}
                 required
               />

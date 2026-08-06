@@ -1788,7 +1788,7 @@ const requiredOperationContracts = [
     responseDataForbiddenDeep: ["activationCode", "activationUrl", "email", "invitationId", "password", "tenantId", "token", "tokenHash", "userId"],
     fieldChecks: [
       { path: ["requestBody", "code"], minLength: 12, maxLength: 12 },
-      { path: ["requestBody", "password"], minLength: 15, maxLength: 128 },
+      { path: ["requestBody", "password"], minLength: 8, maxLength: 128 },
       { path: ["responseData", "status"], enum: ["ACCEPTED"] },
       { path: ["responseData", "acceptedAt"], format: "date-time" },
     ],
@@ -1888,7 +1888,7 @@ const requiredOperationContracts = [
     responseDataRequired: ["resetAt"],
     responseDataForbidden: ["accessToken", "refreshToken"],
     fieldChecks: [
-      { path: ["requestBody", "password"], minLength: 15, maxLength: 128 },
+      { path: ["requestBody", "password"], minLength: 8, maxLength: 128 },
     ],
   },
   {
@@ -3752,7 +3752,7 @@ const requiredOperationContracts = [
       "updatedAt",
     ],
     fieldChecks: [
-      { path: ["requestBody", "password"], minLength: 15, maxLength: 128 },
+      { path: ["requestBody", "password"], minLength: 8, maxLength: 128 },
       { path: ["requestBody", "token"], minLength: 1 },
       { path: ["responseData", "status"], enum: ["ACCEPTED"] },
       { path: ["responseData", "acceptedAt"], format: "date-time" },

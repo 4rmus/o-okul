@@ -31,8 +31,8 @@ export default function ChangePasswordPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-    if (newPassword.length < 15 || newPassword.length > 128) {
-      setError("Yeni şifre 15-128 karakter olmalıdır.");
+    if (newPassword.length < 8 || newPassword.length > 128 || !/\p{Lu}/u.test(newPassword) || !/\p{Ll}/u.test(newPassword)) {
+      setError("Yeni şifre 8-128 karakter olmalı, büyük ve küçük harf içermelidir.");
       return;
     }
     if (newPassword !== newPasswordAgain) {
@@ -72,7 +72,7 @@ export default function ChangePasswordPage() {
             value={newPassword}
             onChange={(event) => setNewPassword(event.target.value)}
             autoComplete="new-password"
-            minLength={15}
+            minLength={8}
             maxLength={128}
           />
         </Field>
@@ -82,7 +82,7 @@ export default function ChangePasswordPage() {
             value={newPasswordAgain}
             onChange={(event) => setNewPasswordAgain(event.target.value)}
             autoComplete="new-password"
-            minLength={15}
+            minLength={8}
             maxLength={128}
           />
         </Field>

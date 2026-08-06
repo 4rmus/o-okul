@@ -14,12 +14,12 @@ test("tek kullanımlık davet bağlantısı URL'den silinir ve hesabı etkinleş
   await page.goto("/aktivasyon#token=activation-secret");
   await expect(page).toHaveURL(/\/aktivasyon$/);
   expect(page.url()).not.toContain("activation-secret");
-  await page.getByRole("textbox", { name: "Şifre", exact: true }).fill("secure-password-123");
-  await page.getByRole("textbox", { name: "Şifre tekrar" }).fill("secure-password-123");
+  await page.getByRole("textbox", { name: "Şifre", exact: true }).fill("YeniAb12");
+  await page.getByRole("textbox", { name: "Şifre tekrar" }).fill("YeniAb12");
   await page.getByRole("button", { name: "Hesabı etkinleştir" }).click();
 
   await expect(page.getByRole("status")).toContainText("Hesabınız etkinleştirildi");
-  expect(acceptBody).toEqual({ token: "activation-secret", password: "secure-password-123" });
+  expect(acceptBody).toEqual({ token: "activation-secret", password: "YeniAb12" });
 });
 
 test("öğrenci aktivasyon kodu URL'den silinir ve öğrenci numarasıyla hesabı etkinleştirir", async ({ page }) => {
@@ -39,8 +39,8 @@ test("öğrenci aktivasyon kodu URL'den silinir ve öğrenci numarasıyla hesab�
   await expect(page.getByRole("textbox", { name: "Kurum kodu" })).toHaveValue("okul-a");
   await expect(page.getByRole("textbox", { name: "Öğrenci numarası" })).toHaveValue("101");
   await expect(page.getByRole("textbox", { name: "Aktivasyon kodu" })).toHaveValue("ABCDEFGHJKL2");
-  await page.getByRole("textbox", { name: "Şifre", exact: true }).fill("secure-password-123");
-  await page.getByRole("textbox", { name: "Şifre tekrar" }).fill("secure-password-123");
+  await page.getByRole("textbox", { name: "Şifre", exact: true }).fill("YeniAb12");
+  await page.getByRole("textbox", { name: "Şifre tekrar" }).fill("YeniAb12");
   await page.getByRole("button", { name: "Hesabı etkinleştir" }).click();
 
   await expect(page.getByRole("status")).toContainText("Öğrenci numaranız (101)");
@@ -48,6 +48,6 @@ test("öğrenci aktivasyon kodu URL'den silinir ve öğrenci numarasıyla hesab�
     tenantSlug: "okul-a",
     studentNo: "101",
     code: "ABCDEFGHJKL2",
-    password: "secure-password-123",
+    password: "YeniAb12",
   });
 });

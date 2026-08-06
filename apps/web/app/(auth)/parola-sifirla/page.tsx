@@ -44,8 +44,8 @@ export default function ResetPasswordPage() {
       setError("Şifre yenileme bağlantısı geçersiz.");
       return;
     }
-    if (password.length < 15 || password.length > 128) {
-      setError("Yeni şifre 15-128 karakter olmalıdır.");
+    if (password.length < 8 || password.length > 128 || !/\p{Lu}/u.test(password) || !/\p{Ll}/u.test(password)) {
+      setError("Yeni şifre 8-128 karakter olmalı, büyük ve küçük harf içermelidir.");
       return;
     }
     if (password !== passwordAgain) {
@@ -86,7 +86,7 @@ export default function ResetPasswordPage() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete="new-password"
-                minLength={15}
+                minLength={8}
                 maxLength={128}
                 required
               />
@@ -98,7 +98,7 @@ export default function ResetPasswordPage() {
                 value={passwordAgain}
                 onChange={(event) => setPasswordAgain(event.target.value)}
                 autoComplete="new-password"
-                minLength={15}
+                minLength={8}
                 maxLength={128}
                 required
               />

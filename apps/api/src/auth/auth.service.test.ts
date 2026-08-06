@@ -638,17 +638,17 @@ describe("AuthService", () => {
     });
 
     const concurrentConfirms = await Promise.allSettled([
-      auth.confirmPasswordReset(resetToken, "new-secure-password"),
-      auth.confirmPasswordReset(resetToken, "new-secure-password"),
+      auth.confirmPasswordReset(resetToken, "New-secure-password"),
+      auth.confirmPasswordReset(resetToken, "New-secure-password"),
     ]);
     expect(concurrentConfirms.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     expect(concurrentConfirms.filter((result) => result.status === "rejected")).toHaveLength(1);
 
     await expect(auth.login(loginCredentials(user.email, "password", "system"))).rejects.toThrow("LOGIN_FAILED");
-    await expect(auth.confirmPasswordReset(resetToken, "another-secure-pass")).rejects.toThrow(
+    await expect(auth.confirmPasswordReset(resetToken, "Another-secure-pass")).rejects.toThrow(
       "PASSWORD_RESET_NOT_PENDING",
     );
-    await expect(auth.login(loginCredentials(user.email, "new-secure-password", "system"))).resolves.toMatchObject({
+    await expect(auth.login(loginCredentials(user.email, "New-secure-password", "system"))).resolves.toMatchObject({
       session: { userId: "user-db-a" },
     });
   });

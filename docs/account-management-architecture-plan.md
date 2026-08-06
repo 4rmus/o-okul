@@ -162,11 +162,11 @@ Sabit role paketleri:
 - Reset bağlantısı 30 dakika geçerli olacak; başarıda tüm session aileleri iptal edilecek.
 - Transactional outbox secret payload'u envelope-encrypted olacak, log/audit'e girmeyecek ve teslim/expiry sonrasında silinecek.
 - Parola:
-  - MFA'sız hesaplarda en az 15 karakter, en az 128 karakter kabulü;
-  - composition kuralı ve periyodik zorunlu değiştirme yok;
+  - En az 8, en fazla 128 karakter ve en az bir büyük ve bir küçük harf zorunluluğu;
+  - Bunun dışında composition kuralı ve periyodik zorunlu değiştirme yok;
   - yaygın/ele geçirilmiş parola blocklist'i, paste ve password manager desteği;
   - async, sürümlü ve rastgele salt'lı `scrypt`; mevcut hashler başarılı login sırasında kademeli rehash edilir.
-- Bu yaklaşım NIST'in güncel parola ilkeleriyle uyumlu kurulacak. Kaynak: [NIST SP 800-63B](https://pages.nist.gov/800-63-4/sp800-63b.html).
+- Sekiz karakter ve büyük/küçük harf zorunluluğu ürün tercihidir; NIST kompozisyon kuralı önermediği için tam uyum iddiası taşımaz. Kaynak: [NIST SP 800-63B](https://pages.nist.gov/800-63-4/sp800-63b.html).
 - MFA, `PlatformAccount`, `TENANT_OWNER`, `TENANT_ADMIN`, `OPERATIONS_STAFF` ve `FINANCE_STAFF` için aktivasyonun parçası olacak. Öğretmende önerilir, öğrencide zorunlu değildir.
 - Sahip/admin değişimi, MFA reseti, geniş PII export ve purge onayında step-up MFA uygulanacak.
 - Refresh rotation DB row lock/CAS ile yapılacak; aynı tokenla paralel N istekte tam bir başarı olmalı.

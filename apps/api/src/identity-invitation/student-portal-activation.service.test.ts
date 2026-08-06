@@ -59,7 +59,7 @@ describe("StudentPortalActivationService", () => {
       tenantSlug: " OKUL-A ",
       studentNo: " 101 ",
       code: "abcdefghjkl2",
-      password: "secure-password-123",
+      password: "Secure-password-123",
     })).resolves.toEqual({
       status: "ACCEPTED",
       acceptedAt: "2026-08-01T12:00:00.000Z",
@@ -98,7 +98,7 @@ describe("StudentPortalActivationService", () => {
       tenantSlug: "okul-a",
       studentNo: "101",
       code: "ABCDEFGHJKL2",
-      password: "secure-password-123",
+      password: "Secure-password-123",
     })).rejects.toThrow("STUDENT_PORTAL_ACTIVATION_INVALID");
     expect(store.accept).not.toHaveBeenCalled();
   });

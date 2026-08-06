@@ -122,7 +122,7 @@ describe("Identity invitations", () => {
 
     const accepted = await request(server)
       .post("/identity-invitations/accept")
-      .send({ token: activationToken, password: "secure-password-123" })
+      .send({ token: activationToken, password: "Secure-password-123" })
       .expect(201);
 
     expect(accepted.body).toMatchObject({
@@ -187,11 +187,11 @@ describe("Identity invitations", () => {
     expect(newToken).not.toBe(oldToken);
     await request(server)
       .post("/identity-invitations/accept")
-      .send({ token: oldToken, password: "secure-password-123" })
+      .send({ token: oldToken, password: "Secure-password-123" })
       .expect(404);
     await request(server)
       .post("/identity-invitations/accept")
-      .send({ token: newToken, password: "secure-password-123" })
+      .send({ token: newToken, password: "Secure-password-123" })
       .expect(201);
   });
 
@@ -213,7 +213,7 @@ describe("Identity invitations", () => {
       })
       .expect(201);
 
-    const activatedPassword = "seat-invitations-admin-password";
+    const activatedPassword = "Seat-invitations-admin-password";
     upsertInMemoryAuthUser({
       id: "seat-invitations-admin-test",
       email: "seat-invitations-admin@example.test",
@@ -250,7 +250,7 @@ describe("Identity invitations", () => {
 
     await request(server)
       .post("/identity-invitations/accept")
-      .send({ token: activationToken, password: "secure-password-123" })
+      .send({ token: activationToken, password: "Secure-password-123" })
       .expect(400)
       .expect(({ body }) => {
         expect(JSON.stringify(body)).toContain("TENANT_SEAT_LIMIT_EXCEEDED");
