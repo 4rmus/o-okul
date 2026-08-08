@@ -289,6 +289,7 @@ function writeSummary(file) {
         inventorySource: reports.kvkkInventory.inventorySource,
         dataSubjectCounts: reports.kvkkInventory.dataSubjectCounts,
         purgeCoverage: reports.kvkkInventory.purgeCoverage,
+        whatsappConsent: reports.kvkkInventory.whatsappConsent,
         auditActionsVerified: reports.kvkkInventory.auditActionsVerified,
         auditDiffRedactionVerified: reports.kvkkInventory.auditDiffRedactionVerified,
       },

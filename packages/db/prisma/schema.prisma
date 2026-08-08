@@ -100,6 +100,7 @@ model Tenant {
   licenseUsages LicenseUsage[]
   employees Employee[]
   studentContacts StudentContact[]
+  whatsappConsents WhatsAppConsent[]
   membershipCampusScopes MembershipCampusScope[]
 }
 
@@ -833,6 +834,25 @@ model StudentContact {
   @@index([tenantId, studentId, deletedAt])
   @@index([tenantId, phoneHash])
   @@index([tenantId, emailHash])
+}
+
+model WhatsAppConsent {
+  id                 String    @id @default(uuid())
+  tenantId           String
+  phoneHash          String
+  purpose            String
+  canReceiveWhatsapp Boolean @default(false)
+  noticeVersion      String
+  source             String
+  recordedAt         DateTime  @db.Timestamptz(6)
+  withdrawnAt        DateTime? @db.Timestamptz(6)
+  createdAt          DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+  tenant             Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, phoneHash, purpose])
+  @@index([tenantId, purpose, canReceiveWhatsapp, withdrawnAt])
 }
 
 model TeacherAssignment {

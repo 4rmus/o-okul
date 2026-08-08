@@ -8,8 +8,14 @@ const files = {
 };
 
 const failures = [];
+for (const token of ["DEC-20260808-01", "`WHATSAPP_ENABLED=false`", "WhatsApp alt kapsami `CONTRACT_READY_EXTERNAL_NOT_RUN`"]) {
+  if (!files.journeys.includes(token)) failures.push(`WhatsApp yolculuk sözleşmesi eksik: ${token}`);
+}
 const journeyMatrix = parseJourneyMatrix(files.journeys);
 const journeySkeleton = parseJourneySkeleton(files.journeys);
+if (journeyMatrix.statusById.get("UAT-KURUM-08") !== "PARTIAL") {
+  failures.push("UAT-KURUM-08 WhatsApp dış kanıtları tamamlanana kadar PARTIAL kalmalı.");
+}
 const moduleOwnershipIds = extractScenarioIds(sectionBody(files.journeys, "## Modul Sahipligi"));
 const checkerScenarios = parseCheckerScenarios(files.uatChecker);
 const templateScenarios = parseTemplateScenarios(files.uatTemplate);

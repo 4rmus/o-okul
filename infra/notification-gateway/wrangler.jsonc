@@ -9,6 +9,9 @@
       "custom_domain": true
     }
   ],
+  "vars": {
+    "WHATSAPP_ENABLED": "false"
+  },
   "send_email": [
     {
       "name": "EMAIL",

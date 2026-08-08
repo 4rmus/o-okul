@@ -1,12 +1,24 @@
-export type NotificationChannel = "EMAIL" | "PUSH";
+export type NotificationChannel = "EMAIL" | "PUSH" | "WHATSAPP";
 
-export interface NotificationMessage {
-  channel: NotificationChannel;
+interface NotificationMessageBase {
   to: string;
-  subject?: string;
-  body: string;
   idempotencyKey?: string;
 }
+
+export interface TextNotificationMessage extends NotificationMessageBase {
+  channel: "EMAIL" | "PUSH";
+  subject?: string;
+  body: string;
+}
+
+export interface WhatsAppNotificationMessage extends NotificationMessageBase {
+  channel: "WHATSAPP";
+  templateName: string;
+  languageCode: "tr";
+  idempotencyKey: string;
+}
+
+export type NotificationMessage = TextNotificationMessage | WhatsAppNotificationMessage;
 
 export interface NotificationSendResult {
   channel: NotificationChannel;
@@ -47,12 +59,14 @@ export function createNotificationAdapterFromEnv(env: NotificationAdapterEnviron
 export function createNoopNotificationAdapter(): NotificationAdapter {
   return {
     async sendBatch(messages) {
-      return messages.map((message, index) => ({
-        channel: message.channel,
-        to: message.to,
-        status: "sent",
-        providerMessageId: `noop-${index + 1}`,
-      }));
+      return messages.map((message, index) => message.channel === "WHATSAPP"
+        ? failedResult(message, "NOTIFICATION_WHATSAPP_DISABLED")
+        : {
+            channel: message.channel,
+            to: message.to,
+            status: "sent",
+            providerMessageId: `noop-${index + 1}`,
+          });
     },
   };
 }
@@ -117,14 +131,7 @@ export class HttpNotificationAdapter implements NotificationAdapter {
       method: "POST",
       headers: this.headers(),
       body: JSON.stringify({
-        messages: messages.map((message) => ({
-          channel: message.channel,
-          to: message.to,
-          ...(message.channel === "EMAIL" ? { from: this.fromEmail, replyTo: this.replyToEmail } : {}),
-          ...(message.subject ? { subject: message.subject } : {}),
-          body: message.body,
-          ...(message.idempotencyKey ? { idempotencyKey: message.idempotencyKey } : {}),
-        })),
+        messages: messages.map((message) => serializeHttpMessage(message, this.fromEmail, this.replyToEmail)),
       }),
     });
 
@@ -147,6 +154,27 @@ export class HttpNotificationAdapter implements NotificationAdapter {
       ...(this.bearerToken ? { authorization: `Bearer ${this.bearerToken}` } : {}),
     };
   }
+}
+
+function serializeHttpMessage(message: NotificationMessage, fromEmail: string, replyToEmail: string): Record<string, string> {
+  if (message.channel === "WHATSAPP") {
+    return {
+      channel: message.channel,
+      to: message.to,
+      templateName: message.templateName,
+      languageCode: message.languageCode,
+      idempotencyKey: message.idempotencyKey,
+    };
+  }
+
+  return {
+    channel: message.channel,
+    to: message.to,
+    ...(message.channel === "EMAIL" ? { from: fromEmail, replyTo: replyToEmail } : {}),
+    ...(message.subject ? { subject: message.subject } : {}),
+    body: message.body,
+    ...(message.idempotencyKey ? { idempotencyKey: message.idempotencyKey } : {}),
+  };
 }
 
 export function createHttpNotificationAdapterFromEnv(env: NotificationAdapterEnvironment): HttpNotificationAdapter {

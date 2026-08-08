@@ -183,6 +183,15 @@ const expectedKvkkAuditDiffActions = [
   "kvkk.guardian_pii_purged",
   "kvkk.user_pii_purged",
 ];
+const expectedWhatsappConsentStoredFields = [
+  "phoneHash",
+  "purpose",
+  "canReceiveWhatsapp",
+  "noticeVersion",
+  "source",
+  "recordedAt",
+  "withdrawnAt",
+];
 const summaryRequiredReportKeys = {
   restoreDrill: ["environment", "drillDate", "sourceBackup", "targetDatabase", "tableCounts"],
   deploymentRollback: [
@@ -216,6 +225,7 @@ const summaryRequiredReportKeys = {
     "inventorySource",
     "dataSubjectCounts",
     "purgeCoverage",
+    "whatsappConsent",
     "auditActionsVerified",
     "auditDiffRedactionVerified",
   ],
@@ -341,6 +351,7 @@ const requiredRlsWriteRejects = [
   "Homework wrong tenant insert",
   "Announcement wrong tenant insert",
   "MessageTemplate wrong tenant insert",
+  "WhatsAppConsent wrong tenant insert",
   "ExamResult foreign tenant RawImport",
   "ParsedAnswer foreign tenant RawImport",
   "ParsedAnswer cross exam mismatch",
@@ -2100,6 +2111,7 @@ function requireSummaryKvkkInventory(report, failures) {
   requireNonPlaceholderString(report, failures, "productionEvidenceSummary.summary.reports.kvkkInventory.inventorySource", "inventorySource");
   requireSummaryKvkkDataSubjectCounts(report, failures);
   requireSummaryKvkkPurgeCoverage(report, failures);
+  requireSummaryWhatsappConsent(report, failures);
   requireObjectStringList(
     report,
     failures,
@@ -2155,6 +2167,85 @@ function requireSummaryKvkkInventory(report, failures) {
   if (typeof redaction.command !== "string" || !redaction.command.includes("audit-log")) {
     failures.push("productionEvidenceSummary.summary.reports.kvkkInventory.auditDiffRedactionVerified.command audit-log doğrulama komutu içermeli.");
   }
+}
+
+function requireSummaryWhatsappConsent(report, failures) {
+  const whatsappConsent = requireNestedObject(
+    report,
+    failures,
+    "productionEvidenceSummary.summary.reports.kvkkInventory.whatsappConsent",
+    "whatsappConsent",
+  );
+  if (!whatsappConsent) return;
+
+  requireSummaryObjectKeySet(
+    whatsappConsent,
+    ["recordCount", "storedFields", "policy"],
+    failures,
+    "productionEvidenceSummary.summary.reports.kvkkInventory.whatsappConsent",
+  );
+  requireObjectEqual(
+    whatsappConsent,
+    failures,
+    "productionEvidenceSummary.summary.reports.kvkkInventory.whatsappConsent.recordCount",
+    "recordCount",
+    0,
+  );
+  requireExactStringSet(
+    whatsappConsent.storedFields,
+    failures,
+    "productionEvidenceSummary.summary.reports.kvkkInventory.whatsappConsent.storedFields",
+    expectedWhatsappConsentStoredFields,
+  );
+
+  const policy = requireNestedObject(
+    whatsappConsent,
+    failures,
+    "productionEvidenceSummary.summary.reports.kvkkInventory.whatsappConsent.policy",
+    "policy",
+  );
+  if (!policy) return;
+
+  requireSummaryObjectKeySet(
+    policy,
+    ["featureEnabled", "retentionPeriodDays", "disposalMethod", "purgeException", "explanation"],
+    failures,
+    "productionEvidenceSummary.summary.reports.kvkkInventory.whatsappConsent.policy",
+  );
+  requireObjectEqual(
+    policy,
+    failures,
+    "productionEvidenceSummary.summary.reports.kvkkInventory.whatsappConsent.policy.featureEnabled",
+    "featureEnabled",
+    false,
+  );
+  requireObjectEqual(
+    policy,
+    failures,
+    "productionEvidenceSummary.summary.reports.kvkkInventory.whatsappConsent.policy.retentionPeriodDays",
+    "retentionPeriodDays",
+    0,
+  );
+  requireObjectEqual(
+    policy,
+    failures,
+    "productionEvidenceSummary.summary.reports.kvkkInventory.whatsappConsent.policy.disposalMethod",
+    "disposalMethod",
+    "NO_RECORDS_WHILE_DISABLED",
+  );
+  requireObjectEqual(
+    policy,
+    failures,
+    "productionEvidenceSummary.summary.reports.kvkkInventory.whatsappConsent.policy.purgeException",
+    "purgeException",
+    false,
+  );
+  requireObjectString(
+    policy,
+    failures,
+    "productionEvidenceSummary.summary.reports.kvkkInventory.whatsappConsent.policy.explanation",
+    "explanation",
+  );
 }
 
 function requireSummaryKvkkDataSubjectCounts(report, failures) {

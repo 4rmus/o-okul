@@ -11,12 +11,15 @@ const kvkkInventoryTopLevelKeys = [
   "inventorySource",
   "dataSubjectCounts",
   "purgeCoverage",
+  "whatsappConsent",
   "auditActionsVerified",
   "auditDiffRedactionVerified",
   "gaps",
 ];
 const dataSubjectCountKeys = ["student", "teacher", "guardian", "user"];
 const purgeCoverageKeys = ["student", "teacher", "guardian", "user"];
+const whatsappConsentKeys = ["recordCount", "storedFields", "policy"];
+const whatsappConsentPolicyKeys = ["featureEnabled", "retentionPeriodDays", "disposalMethod", "purgeException", "explanation"];
 const auditDiffRedactionKeys = ["endpoint", "negativeControls", "actionsSampled", "command"];
 const expectedPurgeCoverage = {
   student: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "email", "photoKey"],
@@ -29,6 +32,15 @@ const expectedAuditActions = [
   "kvkk.teacher_pii_purged",
   "kvkk.guardian_pii_purged",
   "kvkk.user_pii_purged",
+];
+const expectedWhatsappConsentStoredFields = [
+  "phoneHash",
+  "purpose",
+  "canReceiveWhatsapp",
+  "noticeVersion",
+  "source",
+  "recordedAt",
+  "withdrawnAt",
 ];
 const expectedAuditDiffNegativeControls = [
   "body",
@@ -220,6 +232,7 @@ function validateReport(report) {
   requireString(report, failures, "inventorySource");
   requirePositiveTotal(report.dataSubjectCounts, failures);
   requirePurgeCoverage(report.purgeCoverage, failures);
+  requireWhatsappConsent(report.whatsappConsent, failures);
   requireExactStringSet(report.auditActionsVerified, failures, "auditActionsVerified", expectedAuditActions, "action");
   requireAuditDiffRedaction(report.auditDiffRedactionVerified, failures);
   requireEmptyArray(report, failures, "gaps");
@@ -288,6 +301,26 @@ function requirePurgeCoverage(coverage, failures) {
 
   for (const [subject, expectedFields] of Object.entries(expectedPurgeCoverage)) {
     requireExactStringSet(coverage[subject], failures, `purgeCoverage.${subject}`, expectedFields, "alan");
+  }
+}
+
+function requireWhatsappConsent(scope, failures) {
+  if (!requireObjectKeySet(scope, whatsappConsentKeys, failures, "whatsappConsent")) return;
+
+  if (scope.recordCount !== 0) failures.push("whatsappConsent.recordCount 0 olmalı.");
+  requireExactStringSet(scope.storedFields, failures, "whatsappConsent.storedFields", expectedWhatsappConsentStoredFields, "alan");
+
+  const policy = scope.policy;
+  if (!requireObjectKeySet(policy, whatsappConsentPolicyKeys, failures, "whatsappConsent.policy")) return;
+
+  if (policy.featureEnabled !== false) failures.push("whatsappConsent.policy.featureEnabled false olmalı.");
+  if (policy.retentionPeriodDays !== 0) failures.push("whatsappConsent.policy.retentionPeriodDays 0 olmalı.");
+  if (policy.disposalMethod !== "NO_RECORDS_WHILE_DISABLED") {
+    failures.push("whatsappConsent.policy.disposalMethod NO_RECORDS_WHILE_DISABLED olmalı.");
+  }
+  if (policy.purgeException !== false) failures.push("whatsappConsent.policy.purgeException false olmalı.");
+  if (typeof policy.explanation !== "string" || policy.explanation.trim() === "") {
+    failures.push("whatsappConsent.policy.explanation boş olmayan metin olmalı.");
   }
 }
 

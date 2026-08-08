@@ -93,6 +93,7 @@ function checkContract(file) {
     "NEXT_PUBLIC_SMS_ENABLED",
     "SMS_PROVIDER",
     "SMS_ALLOW_NOOP_IN_PRODUCTION",
+    "WHATSAPP_ENABLED",
     "SMS_SMOKE_TO",
     "SMS_SMOKE_BODY",
     "SMS_SMOKE_CONFIRM",
@@ -271,6 +272,7 @@ function checkProductionEnv(env) {
     requireEqual(env, failures, "SMS_PROVIDER", "noop");
     requireEqual(env, failures, "SMS_ALLOW_NOOP_IN_PRODUCTION", "false");
   }
+  requireEqual(env, failures, "WHATSAPP_ENABLED", "false");
 
   requireEqual(env, failures, "NOTIFICATION_PROVIDER", "http");
   requireEqual(env, failures, "NOTIFICATION_ALLOW_NOOP_IN_PRODUCTION", "false");

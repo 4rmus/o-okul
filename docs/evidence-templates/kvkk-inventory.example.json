@@ -15,6 +15,17 @@
     "guardian": ["firstName", "lastName", "phone"],
     "user": ["email", "name"]
   },
+  "whatsappConsent": {
+    "recordCount": 0,
+    "storedFields": ["phoneHash", "purpose", "canReceiveWhatsapp", "noticeVersion", "source", "recordedAt", "withdrawnAt"],
+    "policy": {
+      "featureEnabled": false,
+      "retentionPeriodDays": 0,
+      "disposalMethod": "NO_RECORDS_WHILE_DISABLED",
+      "purgeException": false,
+      "explanation": "WHATSAPP_ENABLED=false olduğu sürece runtime WhatsAppConsent kaydı yazılmaz."
+    }
+  },
   "auditActionsVerified": [
     "kvkk.student_pii_purged",
     "kvkk.teacher_pii_purged",

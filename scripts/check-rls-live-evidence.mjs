@@ -88,6 +88,7 @@ const requiredWriteRejects = [
   "Homework wrong tenant insert",
   "Announcement wrong tenant insert",
   "MessageTemplate wrong tenant insert",
+  "WhatsAppConsent wrong tenant insert",
   "ExamResult foreign tenant RawImport",
   "ParsedAnswer foreign tenant RawImport",
   "ParsedAnswer cross exam mismatch",

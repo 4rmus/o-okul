@@ -265,7 +265,7 @@ pnpm backup:restore:smoke
   beklenmeyen criterion ve invalid/non-empty gaps negatifleriyle korunur.
 - Canlı RLS kanıtı `RLS_LIVE_EVIDENCE_TARGET` ve `pnpm rls:live:check` ile doğrulanır; bu
   rapor `pnpm db:rls:check`, `pnpm db:rls:check:live` ve `pnpm rls:load:smoke` çıktılarını
-  tek JSON'da toplar. `schema.tablesVerified` schema'dan türeyen 62 tenant tablosunu,
+  tek JSON'da toplar. `schema.tablesVerified` schema'dan türeyen 63 tenant tablosunu,
   `isolation.crossTenantReadRows=0` çapraz-tenant okuma sonucunu, `withCheckRejects` yanlış
   tenant yazım/referans negatiflerini ve `loadSmoke.actualRps >= targetRps >= 200` sonucunu
   kanıtlamalıdır. `tenantFkPreflight` bloğu 29 zorunlu tenant composite relation'ı exact listeler,
@@ -380,6 +380,30 @@ pnpm backup:restore:smoke
   alan seti, `checkedAt`, tek `commandsPassed=["pnpm sms:smoke"]` ve boş `gaps` listesi taşır.
   Ham telefon, maskesiz recipient veya `placeholder`/`test-message-id`/`sms-provider-message-*`
   gibi sahte provider id'leri production evidence ve go-live summary içinde kabul edilmez.
+- WhatsApp `DEC-20260808-01` uyarınca bu release'te kapalıdır: staging/prod env içinde
+  `WHATSAPP_ENABLED=false` zorunludur ve production env kapısı başka değer kabul etmez. Repo içinde
+  ayrı ve varsayılan `false` RLS-korumalı `WhatsAppConsent` kaydı, utility-template Meta adaptörü ve
+  ham gövde imzası + kalıcı tekrar bastırma kullanan webhook temeli yerel/mock testlerle korunur.
+  KVKK envanter kanıtı bu kapalı dilimde `WhatsAppConsent.recordCount=0` ve
+  `policy.disposalMethod=NO_RECORDS_WHILE_DISABLED` zorunlu kılar; tabloya runtime kayıt yazılamaz.
+  Bu no-records kanıtı mevcut staging/prod release'ine WhatsApp capability kazandırmaz.
+  Meta API'nin kabul ettiği provider mesaj kimliği teslimat sayılmaz; webhook bu dilimde yalnız
+  doğrular, sunucu tarafındaki pilot numara-tenant eşlemesini uygular, güvenli durum özetini tekilleştirir
+  ve ACK döner. Duyuru/worker akışına bağlanmaz ve hiçbir teslimat durumunu değiştirmez.
+- WhatsApp'ın sonraki bir release'te açılması; kanal bazlı ve varsayılan `false` opt-in/opt-out ile
+  izin yönetimi ve geri çekme yüzeyi, gönderim anı yeniden kontrol/bastırma,
+  tenant-bound outbound mesaj kaydı ve webhook teslim uzlaştırması, WABA/telefon/template onayları, gerçek credential/deploy,
+  KVKK/DPA onayı ve PII-safe gerçek staging gönderim/teslim kanıtı olmadan yapılamaz. WhatsApp smoke
+  artifact'i bu dilimde yoktur. İlk outbound pilot yalnız Meta onaylı utility template içindeki portal
+  bağlantısıyla sınırlıdır; SMS kapalı, e-posta ve uygulama içi bildirim fallback'i açık kalır.
+- Aktivasyondan önce hukuk/veri koruma sahibi retention ve purge kararını onaylamalı, izin kaydının
+  veri sahibiyle bağı tanımlanmalı ve KVKK artifact'i için yeni bir sözleşme kabul edilmelidir;
+  mevcut `retentionPeriodDays=0` / `NO_RECORDS_WHILE_DISABLED` politikası açık runtime'a taşınamaz.
+- Açılış kanıtı; iznin amaç/sürüm/kaynak/zaman alanlarını, her gönderimde izin kontrolünü ve geri
+  çekme sonrası bekleyen işlerin bastırılmasını kapsar. Portal URL'si sabit ve kimlik doğrulamalıdır;
+  kimlik, telefon, magic-link tokenı veya sır URL/provider metadata/log/evidence içine yazılamaz.
+  Meta/BSP alt işleyenleri, işleme ülkeleri, telefon ve teslim metadata'sı, saklama/silme süresi ile
+  KVKK yurt dışı aktarım mekanizması hukuk/veri koruma sorumlusu tarafından onaylanmış olmalıdır.
 - E-posta provider production'da `NOTIFICATION_PROVIDER=http` ile çalışır; HTTPS endpoint,
   Bearer token, `NOTIFICATION_FROM_EMAIL=bildirim@o-okul.com`,
   `NOTIFICATION_REPLY_TO_EMAIL=destek@o-okul.com`, `NOTIFICATION_SMOKE_SUBJECT`, `NOTIFICATION_SMOKE_BODY` ve
@@ -769,7 +793,13 @@ pnpm backup:restore:smoke
   `nationalIdHash`, `phone`, `email`, `photoKey`; öğretmen için `firstName`, `lastName`,
   `nationalIdEncrypted`, `nationalIdHash`, `phone`; veli için `firstName`, `lastName`, `phone`;
   kullanıcı hesabı için `email`, `name` alanları doğrulanır.
-  Rapor top-level 9 alanı, dört `dataSubjectCounts` alanı, dört `purgeCoverage` subject'i,
+  `whatsappConsent` bloğu bu release'te `recordCount=0`, exact
+  `storedFields=[phoneHash,purpose,canReceiveWhatsapp,noticeVersion,source,recordedAt,withdrawnAt]`
+  ve exact policy (`featureEnabled=false`, `retentionPeriodDays=0`,
+  `disposalMethod=NO_RECORDS_WHILE_DISABLED`, `purgeException=false`, boş olmayan `explanation`)
+  taşır. Bu, özellik kapalıyken runtime kaydı olmadığını kanıtlar; capability veya sonraki
+  aktivasyonun retention/purge onayı değildir.
+  Rapor top-level 10 alanı, dört `dataSubjectCounts` alanı, dört `purgeCoverage` subject'i,
   subject field setleri, dört audit action seti, `/audit-logs` audit diff redaction bloğu ve boş `gaps` listesi
   `prod:evidence:templates:check` içindeki fazla alan/madde ve invalid/non-empty gaps negatifleriyle korunur.
   Audit diff negatif kontrolleri `body`, `contentBase64`, `fileBase64`, `fileName`, `objectKey`,

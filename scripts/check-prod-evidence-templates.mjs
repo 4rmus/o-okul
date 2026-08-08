@@ -431,6 +431,7 @@ runProdEnvProxyTopologyNegativeCheck();
 runProdEnvMissingAlertWebhookTokenNegativeCheck();
 runProdEnvMissingSmsSmokeConfirmNegativeCheck();
 runProdEnvMissingSentrySmokeConfirmNegativeCheck();
+runProdEnvWhatsappEnabledNegativeCheck();
 runProdEnvPlaceholderNetgsmPasswordNegativeCheck();
 runProdEnvPlaceholderNotificationEmailNegativeCheck();
 runProdEnvNotificationPushEnabledNegativeCheck();
@@ -754,9 +755,41 @@ runKvkkInventoryFixtureTargetNegativeCheck();
 runKvkkInventoryNegativeCheck({
   label: "KVKK inventory extra top-level key negative",
   path: "docs/evidence-templates/kvkk-inventory.extra-top-level.tmp.json",
-  expectedFailure: "kvkkInventory tam 9 alan içermeli.",
+  expectedFailure: "kvkkInventory tam 10 alan içermeli.",
   mutate: (fixture) => {
     fixture.unexpectedTopLevel = true;
+  },
+});
+runKvkkInventoryNegativeCheck({
+  label: "KVKK inventory missing WhatsApp consent negative",
+  path: "docs/evidence-templates/kvkk-inventory.missing-whatsapp-consent.tmp.json",
+  expectedFailure: "kvkkInventory tam 10 alan içermeli.",
+  mutate: (fixture) => {
+    delete fixture.whatsappConsent;
+  },
+});
+runKvkkInventoryNegativeCheck({
+  label: "KVKK inventory WhatsApp consent record count negative",
+  path: "docs/evidence-templates/kvkk-inventory.whatsapp-consent-record-count.tmp.json",
+  expectedFailure: "whatsappConsent.recordCount 0 olmalı.",
+  mutate: (fixture) => {
+    fixture.whatsappConsent.recordCount = 1;
+  },
+});
+runKvkkInventoryNegativeCheck({
+  label: "KVKK inventory WhatsApp consent stored field negative",
+  path: "docs/evidence-templates/kvkk-inventory.whatsapp-consent-stored-field.tmp.json",
+  expectedFailure: "whatsappConsent.storedFields tam 7 alan içermeli.",
+  mutate: (fixture) => {
+    fixture.whatsappConsent.storedFields = fixture.whatsappConsent.storedFields.filter((field) => field !== "withdrawnAt");
+  },
+});
+runKvkkInventoryNegativeCheck({
+  label: "KVKK inventory WhatsApp consent policy negative",
+  path: "docs/evidence-templates/kvkk-inventory.whatsapp-consent-policy.tmp.json",
+  expectedFailure: "whatsappConsent.policy.featureEnabled false olmalı.",
+  mutate: (fixture) => {
+    fixture.whatsappConsent.policy.featureEnabled = true;
   },
 });
 runKvkkInventoryNegativeCheck({
@@ -1622,7 +1655,7 @@ runRlsLiveNegativeCheck({
 runRlsLiveNegativeCheck({
   label: "RLS live extra table negative",
   path: "docs/evidence-templates/rls-live.extra-table.tmp.json",
-  expectedFailure: "schema.tablesVerified tam 62 tablo icermeli.",
+  expectedFailure: "schema.tablesVerified tam 63 tablo icermeli.",
   mutate: (fixture) => {
     fixture.schema.tablesVerified.push("UnexpectedTenantTable");
   },
@@ -2093,6 +2126,14 @@ runProductionSummaryNegativeCheck({
   mutate: (fixture) => {
     fixture.reports.kvkkInventory.auditDiffRedactionVerified.negativeControls =
       fixture.reports.kvkkInventory.auditDiffRedactionVerified.negativeControls.filter((item) => item !== "rawRow");
+  },
+});
+runProductionSummaryNegativeCheck({
+  label: "Production summary KVKK WhatsApp consent record count negative",
+  path: "docs/evidence-templates/production-evidence-summary.kvkk-whatsapp-consent-record-count.tmp.json",
+  expectedFailure: "reports.kvkkInventory.whatsappConsent.recordCount 0 olmalı.",
+  mutate: (fixture) => {
+    fixture.reports.kvkkInventory.whatsappConsent.recordCount = 1;
   },
 });
 runProductionSummaryNegativeCheck({
@@ -2841,6 +2882,20 @@ runGoLiveNegativeCheck({
     linkedSummary.reports.kvkkInventory.auditDiffRedactionVerified.negativeControls =
       linkedSummary.reports.kvkkInventory.auditDiffRedactionVerified.negativeControls.filter((item) => item !== "rawRow");
     fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.kvkk-raw-row-for-go-live.tmp.json";
+    writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
+    cleanupPaths.push(linkedPath);
+  },
+});
+runGoLiveNegativeCheck({
+  label: "Go-live linked summary KVKK WhatsApp consent policy negative",
+  path: "docs/evidence-templates/go-live.linked-summary-kvkk-whatsapp-consent-policy.tmp.json",
+  expectedFailure:
+    "productionEvidenceSummary.summary.reports.kvkkInventory.whatsappConsent.policy.retentionPeriodDays 0 olmali.",
+  mutate: (fixture, cleanupPaths) => {
+    const linkedPath = "docs/evidence-templates/production-evidence-summary.kvkk-whatsapp-consent-policy-for-go-live.tmp.json";
+    const linkedSummary = structuredClone(productionSummaryFixture);
+    linkedSummary.reports.kvkkInventory.whatsappConsent.policy.retentionPeriodDays = 30;
+    fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.kvkk-whatsapp-consent-policy-for-go-live.tmp.json";
     writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
     cleanupPaths.push(linkedPath);
   },
@@ -5542,6 +5597,7 @@ function runStagingEvidenceEnvNegativeCheck() {
   const activationPath = "docs/evidence-templates/staging-evidence.activation.tmp.env";
   const activationLegacySourcePath = "docs/evidence-templates/staging-evidence.activation-legacy-source.tmp.env";
   const activationOriginMismatchPath = "docs/evidence-templates/staging-evidence.activation-origin-mismatch.tmp.env";
+  const activationWhatsappPath = "docs/evidence-templates/staging-evidence.activation-whatsapp.tmp.env";
   const workflowPath = "docs/evidence-templates/staging-deploy.bad-order.tmp.yml";
   const contents = readFileSync("docs/evidence-templates/staging-evidence.env.example", "utf8").replace(
     /^S3_ACCESS_KEY_ID=.*$/m,
@@ -5553,6 +5609,7 @@ function runStagingEvidenceEnvNegativeCheck() {
     const activationContents = [
       "NODE_ENV=production",
       "SENTRY_ENVIRONMENT=staging",
+      "WHATSAPP_ENABLED=false",
       "WEB_URL=https://staging.o-okul.com",
       "TRAEFIK_HTTPS_SMOKE_URL=https://staging.o-okul.com/health",
       "ALERT_WEBHOOK_URL=https://alerts.o-okul.com/staging",
@@ -5570,6 +5627,38 @@ function runStagingEvidenceEnvNegativeCheck() {
     if (activationResult.status !== 0 || !activationOutput.includes("Staging activation env değer kontrolü geçti.")) {
       console.error("Production evidence template kontrolü başarısız: activation env minimal sözleşmesi geçmedi.");
       console.error(activationOutput);
+      process.exit(1);
+    }
+
+    writeFileSync(activationWhatsappPath, activationContents.replace("WHATSAPP_ENABLED=false", "WHATSAPP_ENABLED=true"));
+    const activationWhatsappEnabledResult = spawnSync(
+      process.execPath,
+      ["scripts/check-staging-evidence-env.mjs", "--mode", "activation", "--env-file", activationWhatsappPath],
+      { encoding: "utf8" },
+    );
+    const activationWhatsappEnabledOutput = `${activationWhatsappEnabledResult.stdout ?? ""}${activationWhatsappEnabledResult.stderr ?? ""}`;
+    if (
+      activationWhatsappEnabledResult.status === 0 ||
+      !activationWhatsappEnabledOutput.includes("WHATSAPP_ENABLED activation için false olmalı.")
+    ) {
+      console.error("Production evidence template kontrolü başarısız: activation env enabled WhatsApp negative kırılmadı.");
+      console.error(activationWhatsappEnabledOutput);
+      process.exit(1);
+    }
+
+    writeFileSync(activationWhatsappPath, activationContents.replace(/^WHATSAPP_ENABLED=.*\n/m, ""));
+    const activationWhatsappMissingResult = spawnSync(
+      process.execPath,
+      ["scripts/check-staging-evidence-env.mjs", "--mode", "activation", "--env-file", activationWhatsappPath],
+      { encoding: "utf8" },
+    );
+    const activationWhatsappMissingOutput = `${activationWhatsappMissingResult.stdout ?? ""}${activationWhatsappMissingResult.stderr ?? ""}`;
+    if (
+      activationWhatsappMissingResult.status === 0 ||
+      !activationWhatsappMissingOutput.includes("eksik env anahtarı: WHATSAPP_ENABLED")
+    ) {
+      console.error("Production evidence template kontrolü başarısız: activation env missing WhatsApp negative kırılmadı.");
+      console.error(activationWhatsappMissingOutput);
       process.exit(1);
     }
 
@@ -5763,6 +5852,7 @@ function runStagingEvidenceEnvNegativeCheck() {
       activationPath,
       activationLegacySourcePath,
       activationOriginMismatchPath,
+      activationWhatsappPath,
       "docs/evidence-templates/staging-evidence.missing-audit-null-tenant.tmp.env",
       "docs/evidence-templates/staging-evidence.missing-ui-worker-result.tmp.env",
       "docs/evidence-templates/staging-evidence.defaulted-smoke.tmp.env",
@@ -7934,6 +8024,40 @@ function runProdEnvMissingSentrySmokeConfirmNegativeCheck() {
   }
 }
 
+function runProdEnvWhatsappEnabledNegativeCheck() {
+  const env = createValidProdEnvForNegativeCheck();
+  env.WHATSAPP_ENABLED = "true";
+
+  const result = spawnSync(process.execPath, ["scripts/check-prod-env.mjs"], {
+    env,
+    encoding: "utf8",
+  });
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: prod env enabled WhatsApp negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+
+  if (!String(result.stderr).includes("WHATSAPP_ENABLED false olmalı.")) {
+    console.error("Production evidence template kontrolü başarısız: prod env enabled WhatsApp negative beklenen hata yok.");
+    console.error(result.stderr);
+    process.exit(1);
+  }
+
+  const missingEnv = createValidProdEnvForNegativeCheck();
+  delete missingEnv.WHATSAPP_ENABLED;
+  const missingResult = spawnSync(process.execPath, ["scripts/check-prod-env.mjs"], {
+    env: missingEnv,
+    encoding: "utf8",
+  });
+
+  if (missingResult.status === 0 || !String(missingResult.stderr).includes("WHATSAPP_ENABLED false olmalı.")) {
+    console.error("Production evidence template kontrolü başarısız: prod env missing WhatsApp negative kırılmadı.");
+    console.error(missingResult.stderr);
+    process.exit(1);
+  }
+}
+
 function runProdEnvPlaceholderNetgsmPasswordNegativeCheck() {
   const env = createValidProdEnvForNegativeCheck();
   env.NETGSM_PASSWORD = "__SET_NETGSM_PASSWORD__";
@@ -8170,6 +8294,7 @@ function createValidProdEnvForNegativeCheck() {
     NEXT_PUBLIC_SMS_ENABLED: "true",
     SMS_PROVIDER: "netgsm",
     SMS_ALLOW_NOOP_IN_PRODUCTION: "false",
+    WHATSAPP_ENABLED: "false",
     SMS_SMOKE_TO: "+905551112233",
     SMS_SMOKE_BODY: "o-okul production SMS smoke",
     SMS_SMOKE_CONFIRM: "send",
