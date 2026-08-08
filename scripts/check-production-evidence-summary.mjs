@@ -94,6 +94,7 @@ const requiredReports = {
     "inventorySource",
     "dataSubjectCounts",
     "purgeCoverage",
+    "whatsappConsent",
     "auditActionsVerified",
     "auditDiffRedactionVerified",
   ],
@@ -281,6 +282,15 @@ const expectedKvkkAuditDiffActions = [
   "kvkk.guardian_pii_purged",
   "kvkk.user_pii_purged",
 ];
+const expectedWhatsappConsentStoredFields = [
+  "phoneHash",
+  "purpose",
+  "canReceiveWhatsapp",
+  "noticeVersion",
+  "source",
+  "recordedAt",
+  "withdrawnAt",
+];
 const expectedTenantCompositeRelations = [
   "AnnouncementReceipt.announcement",
   "AnnouncementDeliveryReport.announcement",
@@ -318,6 +328,7 @@ const expectedRlsWriteRejects = [
   "Homework wrong tenant insert",
   "Announcement wrong tenant insert",
   "MessageTemplate wrong tenant insert",
+  "WhatsAppConsent wrong tenant insert",
   "ExamResult foreign tenant RawImport",
   "ParsedAnswer foreign tenant RawImport",
   "ParsedAnswer cross exam mismatch",
@@ -736,6 +747,8 @@ function requireReports(summary, failures) {
 }
 
 function requireKvkkInventoryReport(scope, failures) {
+  requireWhatsappConsent(scope, failures);
+
   const redaction = requireObject(scope, failures, "reports.kvkkInventory.auditDiffRedactionVerified", "auditDiffRedactionVerified");
   if (!redaction) return;
 
@@ -760,6 +773,48 @@ function requireKvkkInventoryReport(scope, failures) {
   );
   if (typeof redaction.command !== "string" || !redaction.command.includes("audit-log")) {
     failures.push("reports.kvkkInventory.auditDiffRedactionVerified.command audit-log doğrulama komutu içermeli.");
+  }
+}
+
+function requireWhatsappConsent(scope, failures) {
+  const whatsappConsent = requireObject(scope, failures, "reports.kvkkInventory.whatsappConsent", "whatsappConsent");
+  if (!whatsappConsent) return;
+
+  requireExpectedObjectKeys(
+    whatsappConsent,
+    ["recordCount", "storedFields", "policy"],
+    failures,
+    "reports.kvkkInventory.whatsappConsent",
+  );
+  requireObjectEqual(whatsappConsent, failures, "reports.kvkkInventory.whatsappConsent.recordCount", "recordCount", 0);
+  requireExactStringSet(
+    whatsappConsent.storedFields,
+    failures,
+    "reports.kvkkInventory.whatsappConsent.storedFields",
+    expectedWhatsappConsentStoredFields,
+  );
+
+  const policy = requireObject(whatsappConsent, failures, "reports.kvkkInventory.whatsappConsent.policy", "policy");
+  if (!policy) return;
+
+  requireExpectedObjectKeys(
+    policy,
+    ["featureEnabled", "retentionPeriodDays", "disposalMethod", "purgeException", "explanation"],
+    failures,
+    "reports.kvkkInventory.whatsappConsent.policy",
+  );
+  requireObjectEqual(policy, failures, "reports.kvkkInventory.whatsappConsent.policy.featureEnabled", "featureEnabled", false);
+  requireObjectEqual(policy, failures, "reports.kvkkInventory.whatsappConsent.policy.retentionPeriodDays", "retentionPeriodDays", 0);
+  requireObjectEqual(
+    policy,
+    failures,
+    "reports.kvkkInventory.whatsappConsent.policy.disposalMethod",
+    "disposalMethod",
+    "NO_RECORDS_WHILE_DISABLED",
+  );
+  requireObjectEqual(policy, failures, "reports.kvkkInventory.whatsappConsent.policy.purgeException", "purgeException", false);
+  if (typeof policy.explanation !== "string" || policy.explanation.trim() === "") {
+    failures.push("reports.kvkkInventory.whatsappConsent.policy.explanation boş olmayan metin olmalı.");
   }
 }
 

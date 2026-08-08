@@ -6,7 +6,9 @@ const paths = {
   kvkkTemplate: "docs/evidence-templates/kvkk-inventory.example.json",
   productionSummaryTemplate: "docs/evidence-templates/production-evidence-summary.example.json",
   goLiveChecker: "scripts/check-go-live-evidence.mjs",
+  rlsLive: "packages/db/scripts/check-rls-live.mjs",
   schema: "packages/db/prisma/schema.prisma",
+  whatsappConsentMigration: "packages/db/prisma/migrations/20260808150000_add_whatsapp_consent_foundation/migration.sql",
   apiLogging: "apps/api/src/observability/logging.ts",
   apiSentry: "apps/api/src/observability/sentry.ts",
   apiLoggingTest: "apps/api/src/observability/logging.test.ts",
@@ -39,6 +41,9 @@ requireTokens(paths.decisions, files.decisions, [
   "pnpm pii:contact-policy:check",
   "pnpm privacy:inventory:check",
   "Real staging/prod KVKK inventory",
+  "DEC-20260808-01",
+  "WhatsAppConsent",
+  "phoneHash",
 ], failures);
 
 requireTokens(paths.kvkkChecker, files.kvkkChecker, [
@@ -47,6 +52,9 @@ requireTokens(paths.kvkkChecker, files.kvkkChecker, [
   'teacher: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone"]',
   'guardian: ["firstName", "lastName", "phone"]',
   'user: ["email", "name"]',
+  "expectedWhatsappConsentStoredFields",
+  "requireWhatsappConsent(report.whatsappConsent, failures)",
+  "NO_RECORDS_WHILE_DISABLED",
   "requireExactStringSet(coverage[subject], failures, `purgeCoverage.${subject}`, expectedFields, \"alan\")",
   "kvkk.student_pii_purged",
   "kvkk.guardian_pii_purged",
@@ -58,6 +66,9 @@ requireTokens(paths.goLiveChecker, files.goLiveChecker, [
   'teacher: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone"]',
   'guardian: ["firstName", "lastName", "phone"]',
   'user: ["email", "name"]',
+  "expectedWhatsappConsentStoredFields",
+  "requireSummaryWhatsappConsent(report, failures)",
+  "NO_RECORDS_WHILE_DISABLED",
 ], failures);
 
 requirePurgeCoverage(paths.kvkkTemplate, kvkkTemplate.purgeCoverage, failures);
@@ -66,10 +77,17 @@ requirePurgeCoverage(
   productionSummaryTemplate.reports?.kvkkInventory?.purgeCoverage,
   failures,
 );
+requireWhatsAppConsentInventory(paths.kvkkTemplate, kvkkTemplate.whatsappConsent, failures);
+requireWhatsAppConsentInventory(
+  paths.productionSummaryTemplate,
+  productionSummaryTemplate.reports?.kvkkInventory?.whatsappConsent,
+  failures,
+);
 
 const studentModel = requirePrismaModel("Student", files.schema, failures);
 const guardianModel = requirePrismaModel("Guardian", files.schema, failures);
 const userModel = requirePrismaModel("User", files.schema, failures);
+const whatsappConsentModel = requirePrismaModel("WhatsAppConsent", files.schema, failures);
 
 if (studentModel) {
   requirePrismaField(paths.schema, "Student", studentModel, "phone", /(^|\n)\s+phone\s+String\?/m, failures);
@@ -85,6 +103,45 @@ if (guardianModel) {
 }
 if (userModel) {
   requirePrismaField(paths.schema, "User", userModel, "email", /(^|\n)\s+email\s+String/m, failures);
+}
+if (whatsappConsentModel) {
+  requirePrismaField(paths.schema, "WhatsAppConsent", whatsappConsentModel, "phoneHash", /(^|\n)\s+phoneHash\s+String/m, failures);
+  requirePrismaField(
+    paths.schema,
+    "WhatsAppConsent",
+    whatsappConsentModel,
+    "canReceiveWhatsapp",
+    /(^|\n)\s+canReceiveWhatsapp\s+Boolean\s+@default\(false\)/m,
+    failures,
+  );
+  if (/(^|\n)\s+(phone|phoneEncrypted|canReceiveSms)\s+/m.test(whatsappConsentModel)) {
+    failures.push(`${paths.schema} WhatsAppConsent ham telefon, şifreli telefon veya SMS izni taşımamalı.`);
+  }
+}
+
+requireTokens(paths.whatsappConsentMigration, files.whatsappConsentMigration, [
+  `"phoneHash" TEXT NOT NULL`,
+  `"canReceiveWhatsapp" BOOLEAN NOT NULL DEFAULT false`,
+  "WhatsAppConsent_phoneHash_check",
+  "WhatsAppConsent_state_check",
+  `AND ("withdrawnAt" IS NULL OR "withdrawnAt" >= "recordedAt")`,
+  `ALTER TABLE "WhatsAppConsent" FORCE ROW LEVEL SECURITY;`,
+], failures);
+if (/GuardianStudent|canReceiveSms/.test(files.whatsappConsentMigration)) {
+  failures.push(`${paths.whatsappConsentMigration} SMS veya Guardian izninden WhatsApp opt-in üretmemeli.`);
+}
+
+requireTokens(paths.rlsLive, files.rlsLive, [
+  "assertWhatsAppConsentTenantIsolationAndDefaultOff",
+  `if (table === "WhatsAppConsent") continue;`,
+  "RLS_TRANSACTION_FIXTURE",
+  "WhatsApp izin kayıtları tenant okuma izolasyonunu korumadı.",
+], failures);
+const seedFixturesSource = /async function seedFixtures\(\) \{([\s\S]*?)\n\}\n\nasync function assertTenantAOnlyReadsTenantA/.exec(files.rlsLive)?.[1];
+if (!seedFixturesSource) {
+  failures.push(`${paths.rlsLive} seedFixtures source could not be inspected.`);
+} else if (seedFixturesSource.includes(`INSERT INTO "WhatsAppConsent"`)) {
+  failures.push(`${paths.rlsLive} WhatsAppConsent fixtures must stay inside a rollback transaction.`);
 }
 
 requireTokens(paths.apiLogging, files.apiLogging, [
@@ -133,6 +190,10 @@ requireTokens(paths.readiness, files.readiness, [
   "User.email",
   "pnpm pii:contact-policy:check",
   "pnpm privacy:inventory:check",
+  "WhatsAppConsent",
+  "WhatsApp smoke",
+  "WhatsAppConsent.recordCount=0",
+  "NO_RECORDS_WHILE_DISABLED",
 ], failures);
 
 const scripts = packageJson.scripts ?? {};
@@ -171,6 +232,39 @@ function requirePurgeCoverage(path, coverage, output) {
   requireArrayIncludes(path, "purgeCoverage.teacher", coverage.teacher, ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone"], output);
   requireArrayIncludes(path, "purgeCoverage.guardian", coverage.guardian, ["firstName", "lastName", "phone"], output);
   requireArrayIncludes(path, "purgeCoverage.user", coverage.user, ["email", "name"], output);
+}
+
+function requireWhatsAppConsentInventory(path, inventory, output) {
+  if (!inventory || typeof inventory !== "object" || Array.isArray(inventory)) {
+    output.push(`${path} whatsappConsent object is required.`);
+    return;
+  }
+  if (inventory.recordCount !== 0) {
+    output.push(`${path} whatsappConsent.recordCount must be 0 while WhatsApp is disabled.`);
+  }
+  requireArrayIncludes(
+    path,
+    "whatsappConsent.storedFields",
+    inventory.storedFields,
+    ["phoneHash", "purpose", "canReceiveWhatsapp", "noticeVersion", "source", "recordedAt", "withdrawnAt"],
+    output,
+  );
+  if (inventory.storedFields?.length !== 7) {
+    output.push(`${path} whatsappConsent.storedFields must contain exactly 7 fields.`);
+  }
+
+  const policy = inventory.policy;
+  if (!policy || typeof policy !== "object" || Array.isArray(policy)) {
+    output.push(`${path} whatsappConsent.policy object is required.`);
+    return;
+  }
+  if (policy.featureEnabled !== false || policy.retentionPeriodDays !== 0
+    || policy.disposalMethod !== "NO_RECORDS_WHILE_DISABLED" || policy.purgeException !== false) {
+    output.push(`${path} whatsappConsent.policy must keep the disabled no-records contract.`);
+  }
+  if (typeof policy.explanation !== "string" || policy.explanation.trim() === "") {
+    output.push(`${path} whatsappConsent.policy.explanation must be non-empty.`);
+  }
 }
 
 function requireArrayIncludes(path, label, value, expected, output) {

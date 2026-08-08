@@ -32,6 +32,23 @@ describe("createNoopNotificationAdapter", () => {
       },
     ]);
   });
+
+  it("WhatsApp için sahte teslim üretmez", async () => {
+    const adapter = createNoopNotificationAdapter();
+
+    await expect(adapter.sendBatch([{
+      channel: "WHATSAPP",
+      to: "+905000000001",
+      templateName: "school_announcement_v1",
+      languageCode: "tr",
+      idempotencyKey: "whatsapp:test-1",
+    }])).resolves.toEqual([{
+      channel: "WHATSAPP",
+      to: "+905000000001",
+      status: "failed",
+      errorCode: "NOTIFICATION_WHATSAPP_DISABLED",
+    }]);
+  });
 });
 
 describe("createNotificationAdapterFromEnv", () => {
@@ -176,6 +193,54 @@ describe("HttpNotificationAdapter", () => {
     await adapter.sendBatch([{ channel: "EMAIL", to: "recipient", body: "message", idempotencyKey: "secret-delivery:outbox-1" }]);
     expect(JSON.parse(calls[0]?.init.body ?? "{}")).toEqual({
       messages: [{ channel: "EMAIL", to: "recipient", from: "bildirim@o-okul.com", replyTo: "destek@o-okul.com", body: "message", idempotencyKey: "secret-delivery:outbox-1" }],
+    });
+  });
+
+  it("WhatsApp utility şablonunu serbest mesaj gövdesi olmadan iletir", async () => {
+    const calls: Array<{ init: { body: string } }> = [];
+    const adapter = new HttpNotificationAdapter({
+      ...httpIdentity,
+      endpoint: "https://notify.example/send",
+      fetch: async (_input, init) => {
+        calls.push({ init });
+        return {
+          ok: true,
+          status: 200,
+          async text() {
+            return JSON.stringify({
+              results: [{
+                channel: "WHATSAPP",
+                to: "+905000000001",
+                status: "sent",
+                providerMessageId: "wamid.test-1",
+              }],
+            });
+          },
+        };
+      },
+    });
+
+    await expect(adapter.sendBatch([{
+      channel: "WHATSAPP",
+      to: "+905000000001",
+      templateName: "school_announcement_v1",
+      languageCode: "tr",
+      idempotencyKey: "whatsapp:test-1",
+    }])).resolves.toEqual([{
+      channel: "WHATSAPP",
+      to: "+905000000001",
+      status: "sent",
+      providerMessageId: "wamid.test-1",
+      errorCode: undefined,
+    }]);
+    expect(JSON.parse(calls[0]?.init.body ?? "{}")).toEqual({
+      messages: [{
+        channel: "WHATSAPP",
+        to: "+905000000001",
+        templateName: "school_announcement_v1",
+        languageCode: "tr",
+        idempotencyKey: "whatsapp:test-1",
+      }],
     });
   });
 

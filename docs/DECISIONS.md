@@ -414,6 +414,52 @@ Açık soru: Yok. Yerel/static PASS gerçek DNS, wildcard sertifika, staging dep
 kanıtı değildir.
 Son kontrol: 2026-08-04
 
+### DEC-20260808-01 — WhatsApp opsiyonel ve varsayılan kapalı bildirim kanalıdır
+
+Durum: Onaylı; yerel temel hazır, runtime/provider ve dış ortam kanıtı yok
+Karar: WhatsApp Cloud API opsiyonel bir bildirim kanalıdır ve `WHATSAPP_ENABLED=false` ile
+varsayılan kapalı kalır. İlk sürüm yalnız outbound gönderimdir; Meta onaylı utility template içinde
+PII içermeyen portal bağlantısı kullanılır. WhatsApp izni kanal bazlı opt-in/opt-out olarak tutulur,
+varsayılanı `false` olur ve mevcut `canReceiveSms` izni yeniden kullanılmaz. İzin yoksa veya kanal
+kapalıysa e-posta ve uygulama içi bildirim fallback'i korunur; SMS disabled kalır.
+
+MFA, login, davet ve parola sıfırlama; ham not, sınav sonucu, finans ve sağlık içeriği; medya
+gönderimi ve inbound destek bu kapsamın dışındadır. Repo içinde SMS izninden bağımsız, yalnız
+`phoneHash` ve amaç bazlı `WhatsAppConsent` kaydı; onaylı utility template kabul eden default-off
+Meta gateway adaptörü; ham gövde imzasını doğrulayıp güvenli durum özetini tekrar işlemeyen webhook
+temeli bulunur. Meta API'nin kabul ettiği mesaj kimliği teslim kanıtı değildir; webhook bu dilimde
+duyuru veya teslimat durumunu değiştirmez.
+
+WABA/telefon/template onayları, gerçek credential ve deploy, izin yönetimi/geri çekme yüzeyi,
+gönderim anı izin kontrolü, tenant-bound outbound mesaj kaydı ve webhook teslim uzlaştırması,
+KVKK/DPA onayı ve gerçek staging gönderim/teslim kanıtı tamamlanmadan capability açılamaz.
+Yerel/mock test ve static sözleşme kontrolleri WhatsApp capability veya teslimat kanıtı değildir.
+Bu kapalı temel sürümünde `WhatsAppConsent` runtime kaydı yazılmaz ve staging/production KVKK
+envanterinde kayıt sayısı sıfır olmak zorundadır. Veri sahibiyle silinebilir bağ, geri çekme ve
+yeniden onayı kaybetmeyen append-only izin geçmişi ile onaylı saklama/imha kararı eklenmeden bu
+tabloya gerçek izin kaydı yazılamaz.
+
+Kanal izni amaç, aydınlatma sürümü, kaynak, kayıt ve geri çekme zamanıyla tutulur; her gönderim
+anında yeniden doğrulanır ve geri çekme kuyruktaki bekleyen gönderileri bastırır. Geri çekme yolu
+inbound sohbet gerektirmeden web/uygulama yüzeyinden erişilebilir olur. Portal bağlantısı sabit ve
+kimlik doğrulamalı olur; URL, provider metadata, log veya evidence içinde öğrenci/tenant kimliği,
+telefon, magic-link tokenı veya sır taşıyamaz. Meta/BSP alt işleyenleri, işleme ülkeleri, telefon ve
+teslim metadata'sı veri envanteri, saklama/silme süresi ve yurt dışı aktarım mekanizması hukuk/veri
+koruma sorumlusu tarafından onaylanmadan `WHATSAPP_ENABLED=true` değişikliği kabul edilemez.
+
+İlk doğrulama için tek tenant ve O-Okul numarasıyla sınırlı pilot önerilir. Genel release öncesinde
+tenant-owned WABA/numara ile merkezi O-Okul topolojisi arasında kalite, izolasyon, operasyon ve veri
+işleme risklerini kapsayan ayrı karar kapısı zorunludur.
+Kaynak: Ürün sahibinin onayladığı WhatsApp entegrasyonu ilk güvenli dilimi.
+Kanıt: `.env.example`, `docs/evidence-templates/staging-evidence.env.example`,
+`scripts/check-prod-env.mjs`, `scripts/check-staging-evidence-env.mjs`,
+`packages/db/prisma/migrations/20260808150000_add_whatsapp_consent_foundation/migration.sql`,
+`packages/notification-adapter/src/index.test.ts`, `infra/notification-gateway/src/index.test.mjs`,
+`docs/product-journeys-v1.md`, `docs/phase-6-production-readiness.md`.
+Etkilenen ADR: Yok
+Açık soru: Provider ve genel release topolojisi pilot öncesi/sonrası ayrı kararla seçilecektir.
+Son kontrol: 2026-08-08
+
 ## Faz Öncesi Onay Gerektirenler
 
 | ID | Faz | Bloklar mı? | Soru | Beklenen kanıt |

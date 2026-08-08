@@ -33,12 +33,35 @@ const secretDeliveryWorkerMigration = readFileSync(
   new URL("../prisma/migrations/20260802020000_prepare_secret_delivery_worker_role/migration.sql", import.meta.url),
   "utf8",
 );
+const whatsappConsentMigration = readFileSync(
+  new URL("../prisma/migrations/20260808150000_add_whatsapp_consent_foundation/migration.sql", import.meta.url),
+  "utf8",
+);
 
 const failures = [];
 const tenantModels = ["LicenseTerm", "LicenseUsage", "Employee", "MembershipCampusScope", "StudentContact"];
 
-for (const model of ["PlatformAccount", "PlatformSession", "PlatformIdempotencyKey", ...tenantModels]) {
+for (const model of ["PlatformAccount", "PlatformSession", "PlatformIdempotencyKey", "WhatsAppConsent", ...tenantModels]) {
   requireToken(schema, `model ${model} {`, `schema model ${model}`);
+}
+
+for (const token of [
+  `CREATE TABLE "WhatsAppConsent"`,
+  `WhatsAppConsent_tenantId_phoneHash_purpose_key`,
+  `WhatsAppConsent_phoneHash_check`,
+  `WhatsAppConsent_purpose_check`,
+  `"canReceiveWhatsapp" BOOLEAN NOT NULL DEFAULT false`,
+  `WhatsAppConsent_state_check`,
+  `AND ("withdrawnAt" IS NULL OR "withdrawnAt" >= "recordedAt")`,
+  `ALTER TABLE "WhatsAppConsent" ENABLE ROW LEVEL SECURITY;`,
+  `ALTER TABLE "WhatsAppConsent" FORCE ROW LEVEL SECURITY;`,
+  `CREATE POLICY "WhatsAppConsent_tenant_isolation"`,
+  `GRANT SELECT, INSERT, UPDATE, DELETE ON "WhatsAppConsent" TO app;`,
+]) {
+  requireToken(whatsappConsentMigration, token, token);
+}
+if (/GuardianStudent|canReceiveSms/.test(whatsappConsentMigration)) {
+  failures.push("WhatsApp consent migration'ı GuardianStudent veya SMS iznini yeniden kullanmamalı.");
 }
 
 for (const token of [

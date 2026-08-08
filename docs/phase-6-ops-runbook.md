@@ -629,8 +629,14 @@ Minimum kanıt içeriği:
 - `purgeCoverage` öğrenci için `firstName`, `lastName`, `phone`, `email`; öğretmen için
   `firstName`, `lastName`; veli için `firstName`, `lastName`, `phone`; kullanıcı için `email`, `name`
   alan setlerini taşır.
+- `whatsappConsent` bu release'te exact `recordCount=0`, yedi alanlı
+  `storedFields=[phoneHash,purpose,canReceiveWhatsapp,noticeVersion,source,recordedAt,withdrawnAt]`
+  ve exact policy (`featureEnabled=false`, `retentionPeriodDays=0`,
+  `disposalMethod=NO_RECORDS_WHILE_DISABLED`, `purgeException=false`, boş olmayan `explanation`)
+  taşır. `WHATSAPP_ENABLED=false` iken tabloya runtime kayıt yazılamaz ve bu kanıt WhatsApp
+  capability veya teslimat kanıtı sayılmaz.
 - Audit action seti dört canonical KVKK purge action'ını içerir ve `gaps` boş olmalıdır.
-- Rapor top-level 9 alanı, dört count alanı, dört coverage subject'i, subject field setleri,
+- Rapor top-level 10 alanı, dört count alanı, dört coverage subject'i, subject field setleri,
   dört audit action seti, `/audit-logs` audit diff redaction bloğu ve boş `gaps` listesi
   template invalid/non-empty gaps negatifleriyle korunur.
 
@@ -699,7 +705,7 @@ Minimum kanıt içeriği:
 
 - `commandsPassed` içinde `pnpm db:rls:check`, `pnpm db:rls:check:live`,
   `pnpm rls:load:smoke` ve `pnpm rls:live:check` bulunur.
-- `schema.tablesVerified` schema'dan türeyen 62 tenant tablosunu kapsar; `AnnouncementReceipt`,
+- `schema.tablesVerified` schema'dan türeyen 63 tenant tablosunu kapsar; `AnnouncementReceipt`,
   `BackupRestoreJob`, `HomeworkMaterialFile`, `SupportTicketAttachment` ve `AuditLog` bu listenin
   içinde görünmelidir.
 - `isolation.crossTenantReadRows=0`, `withCheckRejects` yanlış tenant yazım/referans negatiflerini
@@ -1447,6 +1453,24 @@ secret kullanılır. `pnpm notification:smoke` gerçek alıcıyla PASS olmadan p
 Gateway PUSH mesajını gönderilmiş gibi işaretlemez; ayrı push sağlayıcısı kurulana kadar
 `NOTIFICATION_PUSH_NOT_CONFIGURED` ile fail-closed kalır ve production
 `NOTIFICATION_SMOKE_PUSH_TO` boş tutulur.
+
+Gateway içinde WhatsApp Meta Cloud API ve `/webhooks/whatsapp` temeli de bulunur; Wrangler
+varsayılanı `WHATSAPP_ENABLED=false` olduğu için gönderim provider'a gitmeden fail-closed olur ve
+webhook yolu capability sunmaz. Yerel testler yalnız utility template istek biçimini, ham request
+baytları üstünde `X-Hub-Signature-256` doğrulamasını, tek pilot numaranın sunucu taraflı tenant
+eşlemesini ve SQLite-backed Durable Object tekrar bastırmasını kanıtlar. Meta'nın döndürdüğü
+`messages[0].id` yalnız provider kabulüdür; teslimat değildir. Webhook bu aşamada duyuru/teslimat
+durumunu güncellemez ve ham payload, telefon ya da WhatsApp message ID saklamaz.
+
+Onaylı pilot diliminden önce `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`,
+`WHATSAPP_GRAPH_API_VERSION`, `WHATSAPP_UTILITY_TEMPLATE_NAME`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN`,
+`WHATSAPP_APP_SECRET` ve `WHATSAPP_PILOT_TENANT_ID` Worker secret/var değerleri kurulmaz;
+`WHATSAPP_ENABLED` açılmaz. İzin yönetimi ve geri çekme yüzeyi, worker gönderim anı yeniden kontrolü,
+tenant-bound outbound mesaj kaydı ve webhook teslim uzlaştırması tamamlanmadan yerel/mock PASS,
+provider smoke veya staging teslim kanıtı gibi raporlanamaz.
+Aktivasyon ayrıca hukuk/veri koruma sahibinin retention ve purge kararını, izin kaydının veri sahibiyle
+bağını ve açık runtime için yeni KVKK kanıt sözleşmesini gerektirir; mevcut no-records policy bloğu
+bu release'i WhatsApp-capable yapmaz ve açık runtime'a aynen taşınamaz.
 
 ## Go-live Decision Evidence
 

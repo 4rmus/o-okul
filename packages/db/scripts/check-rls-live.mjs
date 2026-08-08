@@ -128,6 +128,8 @@ const ids = {
   supportTicketAttachmentB: "00000000-0000-4000-8000-0000000000da",
   supportTicketCommentA: "00000000-0000-4000-8000-0000000000db",
   supportTicketCommentB: "00000000-0000-4000-8000-0000000000dc",
+  whatsappConsentA: "00000000-0000-4000-8000-000000000030a1",
+  whatsappConsentB: "00000000-0000-4000-8000-000000000030b1",
   auditLogA: "00000000-0000-4000-8000-000000000029a1",
   auditLogB: "00000000-0000-4000-8000-000000000029b1",
 };
@@ -962,6 +964,74 @@ async function assertWithCheckBlocksWrongTenantMessageTemplateWrite() {
   });
 }
 
+async function assertWithCheckBlocksWrongTenantWhatsAppConsentWrite() {
+  await withAppTransaction(async () => {
+    await setTenantContext(appClient, ids.tenantA);
+
+    try {
+      await appClient.query(
+        `INSERT INTO "WhatsAppConsent" (
+           "id", "tenantId", "phoneHash", "purpose", "canReceiveWhatsapp", "noticeVersion", "source", "recordedAt", "updatedAt"
+         )
+         VALUES ('00000000-0000-4000-8000-000000000030ff', $1, repeat('f', 64), 'UTILITY_ANNOUNCEMENT', true, 'wa-notice-v1', 'RLS_NEGATIVE', now(), now())`,
+        [ids.tenantB],
+      );
+    } catch {
+      return;
+    }
+
+    throw new Error("WITH CHECK yanlış tenant WhatsApp izin yazımını engellemedi.");
+  });
+}
+
+async function assertWhatsAppConsentTenantIsolationAndDefaultOff() {
+  await withAppTransaction(async () => {
+    await setTenantContext(appClient, ids.tenantA);
+    await appClient.query(
+      `INSERT INTO "WhatsAppConsent" (
+         "id", "tenantId", "phoneHash", "purpose", "canReceiveWhatsapp", "noticeVersion", "source", "recordedAt", "updatedAt"
+       )
+       VALUES ($1, $2, repeat('a', 64), 'UTILITY_ANNOUNCEMENT', true, 'wa-notice-v1', 'RLS_TRANSACTION_FIXTURE', now(), now())`,
+      [ids.whatsappConsentA, ids.tenantA],
+    );
+
+    await setTenantContext(appClient, ids.tenantB);
+    await appClient.query(
+      `INSERT INTO "WhatsAppConsent" (
+         "id", "tenantId", "phoneHash", "purpose", "canReceiveWhatsapp", "noticeVersion", "source", "recordedAt", "updatedAt"
+       )
+       VALUES ($1, $2, repeat('b', 64), 'UTILITY_ANNOUNCEMENT', true, 'wa-notice-v1', 'RLS_TRANSACTION_FIXTURE', now(), now())`,
+      [ids.whatsappConsentB, ids.tenantB],
+    );
+
+    await setTenantContext(appClient, ids.tenantA);
+    const inserted = await appClient.query(
+      `INSERT INTO "WhatsAppConsent" (
+         "id", "tenantId", "phoneHash", "purpose", "noticeVersion", "source", "recordedAt", "updatedAt"
+       )
+       VALUES ('00000000-0000-4000-8000-000000000030f0', $1, repeat('c', 64), 'UTILITY_ANNOUNCEMENT', 'wa-notice-v1', 'RLS_DEFAULT_OFF', now(), now())
+       RETURNING "canReceiveWhatsapp", "withdrawnAt"`,
+      [ids.tenantA],
+    );
+
+    if (inserted.rows[0]?.canReceiveWhatsapp !== false || inserted.rows[0]?.withdrawnAt !== null) {
+      throw new Error("WhatsApp izin kaydı varsayılan kapalı durumda oluşturulamadı.");
+    }
+
+    const own = await appClient.query(
+      `SELECT count(*)::int AS count FROM "WhatsAppConsent" WHERE "tenantId" = $1`,
+      [ids.tenantA],
+    );
+    const other = await appClient.query(
+      `SELECT count(*)::int AS count FROM "WhatsAppConsent" WHERE "tenantId" = $1`,
+      [ids.tenantB],
+    );
+    if (own.rows[0]?.count !== 2 || other.rows[0]?.count !== 0) {
+      throw new Error("WhatsApp izin kayıtları tenant okuma izolasyonunu korumadı.");
+    }
+  });
+}
+
 async function assertExamResultBlocksCrossTenantReferences() {
   await withAppTransaction(async () => {
     await setTenantContext(appClient, ids.tenantA);
@@ -1044,6 +1114,7 @@ try {
   appConnected = true;
   await seedFixtures();
   for (const table of tenantReadTables) {
+    if (table === "WhatsAppConsent") continue;
     await assertTenantAOnlyReadsTenantA(table);
   }
   await assertAppCannotDeleteTenant();
@@ -1051,6 +1122,8 @@ try {
   await assertWithCheckBlocksWrongTenantHomeworkWrite();
   await assertWithCheckBlocksWrongTenantAnnouncementWrite();
   await assertWithCheckBlocksWrongTenantMessageTemplateWrite();
+  await assertWhatsAppConsentTenantIsolationAndDefaultOff();
+  await assertWithCheckBlocksWrongTenantWhatsAppConsentWrite();
   await assertExamResultBlocksCrossTenantReferences();
   await assertParsedAnswerBlocksCrossTenantReferences();
   await assertParsedAnswerBlocksCrossExamReferences();

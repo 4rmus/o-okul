@@ -83,6 +83,7 @@ const fullRequiredKeys = unique([
 const activationRequiredKeys = [
   "NODE_ENV",
   "SENTRY_ENVIRONMENT",
+  "WHATSAPP_ENABLED",
   "WEB_URL",
   "TRAEFIK_HTTPS_SMOKE_URL",
   "ALERT_WEBHOOK_URL",
@@ -512,6 +513,9 @@ function checkActivationEnv(env, output) {
   }
   if (env.get("SENTRY_ENVIRONMENT") !== "staging") {
     output.push("SENTRY_ENVIRONMENT activation için staging olmalı.");
+  }
+  if (env.get("WHATSAPP_ENABLED") !== "false") {
+    output.push("WHATSAPP_ENABLED activation için false olmalı.");
   }
 
   const webUrl = checkActivationUrl(env.get("WEB_URL"), output, "WEB_URL");

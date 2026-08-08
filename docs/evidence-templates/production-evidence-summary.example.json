@@ -475,6 +475,25 @@
           "name"
         ]
       },
+      "whatsappConsent": {
+        "recordCount": 0,
+        "storedFields": [
+          "phoneHash",
+          "purpose",
+          "canReceiveWhatsapp",
+          "noticeVersion",
+          "source",
+          "recordedAt",
+          "withdrawnAt"
+        ],
+        "policy": {
+          "featureEnabled": false,
+          "retentionPeriodDays": 0,
+          "disposalMethod": "NO_RECORDS_WHILE_DISABLED",
+          "purgeException": false,
+          "explanation": "WHATSAPP_ENABLED=false olduğu sürece runtime WhatsAppConsent kaydı yazılmaz."
+        }
+      },
       "auditActionsVerified": [
         "kvkk.student_pii_purged",
         "kvkk.teacher_pii_purged",
@@ -1326,7 +1345,7 @@
       "environment": "production",
       "checkedAt": "2026-05-31T11:30:00.000Z",
       "schema": {
-        "tenantScopedTables": 62,
+        "tenantScopedTables": 63,
         "derivedFromSchema": true,
         "staticCheckPassed": true,
         "liveCheckPassed": true,
@@ -1356,6 +1375,7 @@
           "StudentEnrollment",
           "Teacher",
           "StudentContact",
+          "WhatsAppConsent",
           "TeacherAssignment",
           "Guardian",
           "GuardianStudent",
@@ -1399,12 +1419,13 @@
         "tenantAHash": "tenant-a-redacted",
         "tenantBHash": "tenant-b-redacted",
         "crossTenantReadRows": 0,
-        "crossTenantReadChecks": 62,
+        "crossTenantReadChecks": 63,
         "withCheckRejects": [
           "Student wrong tenant insert",
           "Homework wrong tenant insert",
           "Announcement wrong tenant insert",
           "MessageTemplate wrong tenant insert",
+          "WhatsAppConsent wrong tenant insert",
           "ExamResult foreign tenant RawImport",
           "ParsedAnswer foreign tenant RawImport",
           "ParsedAnswer cross exam mismatch",
