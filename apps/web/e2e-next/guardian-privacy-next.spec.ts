@@ -26,7 +26,7 @@ test.describe("Veli gizlilik ve izin UX'i", () => {
     const forbiddenBulkCalls = await openGuardianDetail(page, "TENANT_ADMIN", capturedLinks);
     await expect.poll(() => forbiddenBulkCalls).toEqual([]);
 
-    const summary = page.getByRole("region", { exact: true, name: "Veli detay operasyon özeti" });
+    const summary = page.getByRole("region", { exact: true, name: "Veli detay özeti" });
     await expect(summary).toContainText("Telefon");
     await expect(summary).toContainText("••• ••• ••22");
     await expect(summary).toContainText("Finans görünürlüğü");

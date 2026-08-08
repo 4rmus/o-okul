@@ -1,0 +1,592 @@
+@media screen {
+@media (min-width: 1024px) and (max-width: 1279px) {
+    :root {
+      --shell-sidebar-width: 13.75rem;
+    }
+
+    .next-sidebar {
+      padding-inline: var(--space-xs);
+    }
+  }
+
+  @media (max-width: 1023px) {
+    .next-app-shell {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .next-desktop-topbar {
+      display: none;
+    }
+
+    .next-mobile-topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr) 44px;
+      align-items: center;
+      gap: var(--space-2xs);
+      border-bottom: 1px solid var(--color-rule);
+      background: var(--color-paper-raised);
+      padding: var(--space-2xs) var(--space-xs);
+      box-shadow: none;
+    }
+
+    .next-mobile-topbar .next-brand {
+      justify-content: center;
+      min-width: 0;
+      margin: 0;
+    }
+
+    .next-mobile-nav-toggle,
+    .next-sidebar-close {
+      display: grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      padding: 0;
+    }
+
+    .next-marketing-steps {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .next-marketing-steps article:nth-child(even)::after {
+      display: none;
+    }
+
+    .next-sidebar {
+      position: fixed;
+      inset: 0 auto 0 0;
+      z-index: 70;
+      width: min(320px, calc(100vw - 32px));
+      min-height: 100svh;
+      max-height: none;
+      overflow: auto;
+      overscroll-behavior: contain;
+      padding: var(--space-sm);
+      transform: translateX(-104%);
+      transition: transform var(--dur-short) var(--ease-out);
+      visibility: hidden;
+      pointer-events: none;
+      box-shadow: var(--shadow-modal);
+    }
+
+    .next-sidebar[data-mobile-open="true"] {
+      transform: translateX(0);
+      visibility: visible;
+      pointer-events: auto;
+    }
+
+    .next-sidebar-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      display: none;
+      border: 0;
+      background: var(--color-overlay-token);
+    }
+
+    .next-sidebar[data-mobile-open="true"] + .next-sidebar-backdrop {
+      display: block;
+    }
+
+    .next-sidebar-header {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      margin: calc(var(--space-sm) * -1) calc(var(--space-sm) * -1) 0;
+      padding: var(--space-sm);
+      background: var(--color-paper-raised);
+    }
+
+    .next-sidebar-header .next-command-open {
+      display: none;
+    }
+
+    .next-sidebar-nav {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .next-workspace {
+      width: 100%;
+    }
+
+    .next-dashboard-overview-grid,
+    .next-portal-action-strip__grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .next-marketing-hero {
+      grid-template-columns: minmax(0, 1fr);
+      min-height: 0;
+    }
+
+    .next-marketing-outcome-grid {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: none;
+    }
+
+    .next-marketing-outcome-card:first-child {
+      grid-row: auto;
+    }
+
+    .next-marketing-hero h1 {
+      max-width: 18ch;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .next-auth-layout {
+      padding: var(--space-sm);
+    }
+
+    .next-auth-panel {
+      grid-template-columns: minmax(0, 1fr);
+      width: min(560px, 100%);
+    }
+
+    .next-auth-panel .next-form {
+      border-right: 0;
+      border-bottom: 1px solid var(--color-rule-faint);
+    }
+
+    .next-auth-context {
+      padding: var(--space-md);
+    }
+
+    .next-marketing-nav,
+    .next-marketing-hero,
+    .next-marketing-proof,
+    .next-marketing-section,
+    .next-marketing-trust,
+    .next-marketing-cta,
+    .next-marketing-footer {
+      width: min(100% - 32px, 1200px);
+    }
+
+    .next-marketing-hero {
+      padding-block: var(--space-lg) var(--space-xl);
+    }
+
+    .next-marketing-actions {
+      align-items: stretch;
+    }
+
+    .next-marketing-actions .uh-button,
+    .next-marketing-text-link {
+      width: 100%;
+    }
+
+    .next-marketing-actions .uh-button,
+    .next-marketing-cta .uh-button {
+      height: auto;
+      padding-block: var(--space-2xs);
+      white-space: nowrap;
+    }
+
+    .next-marketing-actions .uh-button__content,
+    .next-marketing-cta .uh-button__content {
+      white-space: nowrap;
+      text-align: center;
+    }
+  }
+
+  @media (max-width: 414px) {
+    .next-workspace {
+      padding: var(--space-xs);
+    }
+
+    .next-work-context {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .next-work-context > div:first-child {
+      grid-column: 1 / -1;
+    }
+
+    .next-work-context.next-report-work-context {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .next-work-context.next-report-work-context > div:first-child {
+      grid-column: auto;
+    }
+
+    .next-work-context.next-report-work-context dd {
+      overflow: visible;
+      text-overflow: clip;
+      white-space: normal;
+    }
+
+    .next-marketing-steps {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .next-page-frame__header h1,
+    .uh-crud-page__header h2 {
+      font-size: 1.5rem;
+    }
+
+    .next-dashboard-overview-grid,
+    .next-portal-action-strip__grid,
+    .next-portal-brief__grid.uh-metric-grid,
+    .next-portal-summary-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .uh-tabs,
+    .uh-segmented-control {
+      flex-wrap: nowrap;
+      max-width: 100%;
+      overflow-x: auto;
+      overscroll-behavior-inline: contain;
+      scrollbar-width: thin;
+    }
+
+    .uh-toolbar,
+    .uh-filter-bar,
+    .uh-pagination {
+      align-items: stretch;
+    }
+
+    .next-list-controls {
+      display: grid;
+    }
+
+    .next-list-controls .uh-field__message:empty {
+      display: none;
+      min-height: 0;
+    }
+
+    .next-list-controls[aria-label="Liste kontrolleri"] {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .next-list-controls[aria-label="Liste kontrolleri"] .next-list-search {
+      grid-column: 1 / -1;
+    }
+
+    .next-list-controls[aria-label="Liste kontrolleri"] .next-list-filter-details {
+      display: block;
+      grid-column: 1 / -1;
+      border: 1px solid var(--color-rule);
+      border-radius: var(--radius-control);
+      background: var(--color-paper);
+    }
+
+    .next-list-controls[aria-label="Liste kontrolleri"] .next-list-filter-details > summary {
+      display: flex;
+      min-height: 44px;
+      cursor: pointer;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-xs);
+      padding: var(--space-2xs) var(--space-xs);
+      color: var(--color-ink-secondary);
+      font-weight: 700;
+    }
+
+    .next-list-controls[aria-label="Liste kontrolleri"] .next-list-filter-details > summary small {
+      color: var(--color-ink-muted);
+      font-size: var(--text-xs);
+      font-weight: 500;
+      text-align: end;
+    }
+
+    .next-list-controls[aria-label="Liste kontrolleri"] .next-list-filter-details__content {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: var(--space-2xs);
+      border-top: 1px solid var(--color-rule-faint);
+      padding: var(--space-xs);
+    }
+
+    .next-list-controls[aria-label="Liste kontrolleri"] .next-list-filter-details:not([open]) > .next-list-filter-details__content {
+      display: none;
+    }
+
+    .next-list-controls[aria-label="Liste kontrolleri"] .next-list-filter-details__content .uh-field {
+      grid-column: span 2;
+    }
+
+    .next-list-controls[aria-label="Liste kontrolleri"] .next-list-filter-details__content > .next-list-status,
+    .next-list-controls[aria-label="Liste kontrolleri"] .next-list-filter-details__content > .uh-button {
+      width: 100%;
+      min-width: 0;
+      padding-inline: var(--space-3xs);
+    }
+
+    .next-list-controls[aria-label="Liste kontrolleri"] > .uh-button:not([aria-label]) {
+      grid-column: 1 / -1;
+    }
+
+    .next-list-controls:not([aria-label="Liste kontrolleri"]) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .next-list-controls .next-column-picker {
+      grid-column: 1 / -1;
+    }
+
+    .next-students-page .uh-crud-page__table-shell {
+      order: 2;
+    }
+
+    .next-students-page .uh-crud-page__summary {
+      order: 3;
+    }
+
+    .next-students-page,
+    .next-students-page .uh-crud-page__header,
+    .next-students-page .uh-crud-page__actions {
+      width: calc(100vw - 52px);
+      max-width: calc(100vw - 52px);
+      min-width: 0;
+    }
+
+    .next-students-page .next-list-controls[aria-label="Öğrenci filtreleri"] {
+      display: flex;
+      flex-wrap: nowrap;
+      width: 100%;
+      max-width: 100%;
+      overflow-x: auto;
+      overscroll-behavior-inline: contain;
+      scroll-snap-type: inline proximity;
+      scrollbar-width: thin;
+    }
+
+    .next-students-page .next-list-controls[aria-label="Öğrenci filtreleri"] .uh-field {
+      flex: 0 0 calc(((100% - var(--space-2xs)) / 2) + 5px);
+      min-width: 0;
+      scroll-snap-align: start;
+    }
+
+    .next-students-page .next-list-controls[aria-label="Öğrenci tablo görünümü"] {
+      display: flex;
+      flex-wrap: nowrap;
+      width: 100%;
+      max-width: 100%;
+      overflow-x: auto;
+      overscroll-behavior-inline: contain;
+      scroll-snap-type: inline proximity;
+      scrollbar-width: thin;
+    }
+
+    .next-students-page .next-list-controls[aria-label="Öğrenci tablo görünümü"] .next-column-picker {
+      flex: 0 0 calc(100% + 9px);
+      grid-column: auto;
+      scroll-snap-align: start;
+    }
+
+    .next-students-page .next-list-controls[aria-label="Öğrenci tablo görünümü"] .uh-field {
+      flex: 0 0 calc(100% + 9px);
+      scroll-snap-align: start;
+    }
+
+    .next-students-page .next-list-controls[aria-label="Toplu dönem geçişi"] {
+      display: flex;
+      flex-wrap: nowrap;
+      width: 100%;
+      max-width: 100%;
+      align-items: end;
+      overflow-x: auto;
+      overscroll-behavior-inline: contain;
+      scroll-snap-type: inline proximity;
+      scrollbar-width: thin;
+    }
+
+    .next-students-page .next-list-controls[aria-label="Toplu dönem geçişi"] > * {
+      flex: 0 0 calc(((100% - var(--space-2xs)) / 2) + 5px);
+      scroll-snap-align: start;
+    }
+
+    .next-students-page .next-list-controls[aria-label="Toplu dönem geçişi"] > .uh-button {
+      flex-basis: max-content;
+      min-width: max-content;
+      padding-inline: var(--space-2xs);
+      font-size: var(--text-xs);
+    }
+
+    .next-exam-next-step,
+    .next-optical-next-step {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .next-exam-next-step .uh-button,
+    .next-optical-next-step .uh-button {
+      width: 100%;
+    }
+
+    .next-auth-layout {
+      padding: 0;
+    }
+
+    .next-auth-panel {
+      min-height: 100svh;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    .next-auth-panel .next-brand,
+    .next-auth-panel .next-form,
+    .next-auth-context {
+      padding-inline: var(--space-sm);
+    }
+
+    .next-marketing-nav,
+    .next-marketing-hero,
+    .next-marketing-proof,
+    .next-marketing-section,
+    .next-marketing-trust,
+    .next-marketing-cta,
+    .next-marketing-footer {
+      width: min(100% - 24px, 1200px);
+    }
+
+    .next-marketing-workflow {
+      padding: var(--space-sm);
+    }
+
+    .next-marketing-cta {
+      padding-inline: var(--space-sm);
+    }
+
+    .next-marketing-cta .uh-button {
+      padding-inline: var(--space-xs);
+      white-space: nowrap;
+    }
+
+    .next-marketing-workflow header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .next-marketing-nav__statement {
+      display: none;
+    }
+
+  .next-marketing-nav {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .next-marketing-nav .next-brand {
+    min-width: max-content;
+    white-space: nowrap;
+  }
+}
+
+  @media (max-width: 320px) {
+    .next-optical-quarantine-panel > .uh-panel__body > .uh-button {
+      padding-inline: var(--space-2xs);
+    }
+
+    .next-mobile-topbar {
+      grid-template-columns: 44px minmax(0, 1fr) 44px;
+      padding-inline: var(--space-2xs);
+    }
+
+    .next-mobile-topbar .next-brand span:last-child {
+      overflow: visible;
+      overflow-wrap: anywhere;
+      font-size: var(--text-xs);
+      line-height: 1.05;
+      text-align: center;
+      white-space: normal;
+    }
+
+    .next-marketing-workflow li {
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .next-marketing-workflow li svg {
+      display: none;
+    }
+  }
+
+  .uh-data-table-scroll {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    border-radius: var(--radius-panel);
+  }
+
+  .uh-data-table-scroll:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  .uh-data-table {
+    display: table;
+    overflow: visible;
+  }
+
+  .next-portal-stack .uh-data-table,
+  .next-student-detail-panel .uh-data-table {
+    display: table;
+    overflow: visible;
+  }
+
+  .uh-crud-page__table-shell,
+  .next-portal-stack .uh-panel__body,
+  .next-student-detail-panel .uh-panel__body,
+  .next-grid-scroll {
+    overflow-x: visible;
+  }
+
+  .next-optical-form-preview {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .next-auth-link,
+  .next-onboarding-panel header span {
+    color: var(--color-accent-strong);
+  }
+
+  .uh-tab-button--selected,
+  .uh-tab-button[aria-selected="true"],
+  .uh-segmented-control button[aria-pressed="true"] {
+    border-color: var(--color-accent-strong);
+    color: var(--color-accent-strong);
+  }
+
+  @media (max-width: 414px) {
+    .next-list-controls[aria-label="Günlük yoklama kontrolleri"],
+    .next-list-controls[aria-label="Toplu dönem geçişi"] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .next-advanced-details .next-inline-form .uh-button,
+    .next-role-preview-card__body > .uh-button {
+      width: 100%;
+      min-width: 0;
+      padding-inline: var(--space-2xs);
+      font-size: var(--text-xs);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .uh-button,
+    .uh-action-card,
+    .uh-tab-button,
+    .uh-segmented-control button,
+    .uh-tooltip__content {
+      transition: none;
+    }
+
+    .uh-button__spinner,
+    .uh-spinner,
+    .uh-skeleton {
+      animation: none;
+    }
+  }
+}
+/* Hallmark redesign layer · END */

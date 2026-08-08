@@ -90,6 +90,7 @@ interface UatRollbackTableRow {
   key: string;
   label: string;
   scope: string;
+  technicalReference?: string;
   tone: StatusBadgeProps["tone"];
   value: string;
 }
@@ -102,7 +103,8 @@ export function UatRollbackPage() {
     detail: gate.detail,
     key: gate.title,
     label: gate.title,
-    scope: gate.command,
+    scope: "Yayın kontrolü",
+    technicalReference: gate.command,
     tone: gate.status.includes("gerekir") || gate.status.includes("zorunlu") ? "warning" : "info",
     value: gate.status,
   }));
@@ -117,24 +119,27 @@ export function UatRollbackPage() {
   const scenarioRows = buildUatRollbackRows(journeyScenarios, (scenario) => ({
     detail: "Bu kullanıcı yolculuğu kabul raporunda adım adım doğrulanır.",
     key: scenario,
-    label: scenario,
+    label: scenarioLabel(scenario),
     scope: personaScope(scenario),
+    technicalReference: scenario,
     tone: "warning",
     value: "Kabul kapsamı",
   }));
   const commandRows = buildUatRollbackRows(requiredCommands, (command) => ({
     detail: command.includes(":live") || command.includes("traefik") ? "Canlı veya deneme ortamı sonucu gerekir." : "Yayınlanacak sürüm için komut sonucu rapora eklenir.",
     key: command,
-    label: command,
+    label: commandLabel(command),
     scope: commandScope(command),
+    technicalReference: command,
     tone: command.includes(":live") || command.includes("traefik") ? "danger" : "warning",
     value: "Zorunlu",
   }));
   const rollbackRows = buildUatRollbackRows(rollbackFields, (field) => ({
     detail: rollbackFieldDetail(field),
     key: field,
-    label: field,
+    label: rollbackFieldLabel(field),
     scope: field === "defects boş" ? "Kabul sonucu" : "Geri dönüş paketi",
+    technicalReference: field,
     tone: "warning",
     value: "Zorunlu",
   }));
@@ -224,12 +229,12 @@ export function UatRollbackPage() {
         />
       </Panel>
       <Panel
-        aria-label="Zorunlu komutlar"
-        description="Yayınlanacak sürüm ve canlıya benzer ortam için çalıştırılması gereken teknik kontroller."
-        title="Zorunlu Komutlar"
+        aria-label="Yayın kontrolleri"
+        description="Yayınlanacak sürüm ve canlıya benzer ortam için tamamlanması gereken kontroller."
+        title="Yayın Kontrolleri"
       >
         <DataTable
-          caption="Yayın öncesi zorunlu komutlar"
+          caption="Yayın öncesi zorunlu kontroller"
           columns={uatRollbackTableColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -259,7 +264,17 @@ const uatRollbackTableColumns: Array<DataTableColumn<UatRollbackTableRow>> = [
     header: "Kanıt",
     mobilePriority: "primary",
     priority: "primary",
-    render: (row) => row.label,
+    render: (row) => (
+      <>
+        <span>{row.label}</span>
+        {row.technicalReference ? (
+          <details>
+            <summary>İleri ayrıntılar</summary>
+            <code>{row.technicalReference}</code>
+          </details>
+        ) : null}
+      </>
+    ),
     sticky: "left",
   },
   {
@@ -299,7 +314,7 @@ function buildUatRollbackSummaryItems(): OperationSummaryItem[] {
       key: "environment",
       label: "Kontrol ortamı",
       tone: "warning",
-      value: "Deneme/canlı",
+      value: "Deneme/canlı ortam",
     },
     {
       description: "Son çalışan sürüm ve geri yüklenebilir yedek",
@@ -327,7 +342,7 @@ function buildUatRollbackSummaryBadges(): OperationSummaryBadge[] {
     },
     {
       key: "release-evidence",
-      label: "Yayın raporu ayrı",
+      label: "Yayın doğrulaması ayrıca yapılır",
       tone: "warning",
     },
     {
@@ -402,6 +417,34 @@ function commandScope(command: string) {
   if (command.includes("prod:env")) return "Canlı ortam ayarları";
   if (command.includes("ci")) return "Yayınlanacak sürüm";
   return "Canlı ortam denemesi";
+}
+
+function scenarioLabel(scenario: (typeof journeyScenarios)[number]) {
+  const sequence = Number(scenario.split("-").at(-1));
+  if (scenario.includes("GUARDIAN")) return `Mevcut veli erişimi ${sequence}`;
+  return `${personaScope(scenario)} yolculuğu ${sequence}`;
+}
+
+function commandLabel(command: (typeof requiredCommands)[number]) {
+  if (command === "pnpm run ci") return "Kod ve test kontrolleri";
+  if (command.includes("prod:env")) return "Canlı ortam ayarları";
+  if (command.includes("db:rls")) return "Kurum verisi ayrımı";
+  if (command.includes("raw-import")) return "Optik dosya aktarımı";
+  if (command.includes("report-generation")) return "Rapor oluşturma";
+  if (command.includes("exam-cycle")) return "Canlı sınav süreci";
+  if (command.includes("queue")) return "Arka plan işlemleri";
+  if (command.includes("onboarding")) return "Kurum kurulum akışı";
+  if (command.includes("ui-worker")) return "Ekran ve hazırlama işlemleri";
+  if (command.includes("sms")) return "SMS gönderimi";
+  if (command.includes("notification")) return "Bildirim gönderimi";
+  return "Güvenli bağlantı";
+}
+
+function rollbackFieldLabel(field: (typeof rollbackFields)[number]) {
+  if (field === "releaseCandidate") return "Yayınlanacak sürüm";
+  if (field === "rollbackImageTag") return "Geri dönülecek sürüm";
+  if (field === "restoreBackupReference") return "Geri yüklenecek yedek";
+  return "Açık sorun yok";
 }
 
 function rollbackFieldDetail(field: string) {

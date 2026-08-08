@@ -286,7 +286,7 @@ export function ClassesPage() {
         aria-label="Sınıf yönetimi"
         columns={columns}
         density="compact"
-        description="Kurum sınıflarını aynı CRUD kalıbıyla yönet."
+        description="Kurum sınıflarını ortak liste düzeninde yönetin."
         emptyState={
           <EmptyState
             title="Henüz sınıf yok"
@@ -303,6 +303,7 @@ export function ClassesPage() {
           || (alanlarQuery.isError ? "Alanlar alınamadı." : undefined)
         }
         getRowKey={(record) => record.id}
+        hasActiveFilters={Boolean(listQuery.q.trim())}
         loading={classesQuery.isPending || campusesQuery.isPending || gradeLevelsQuery.isPending || alanlarQuery.isPending}
         rows={rows}
         summary={
@@ -448,17 +449,17 @@ async function deleteClass(accessToken: string, id: string) {
 
 function campusLabel(campusId: string | undefined, campusNames: Map<string, string>) {
   if (!campusId) return "-";
-  return campusNames.get(campusId) ?? campusId;
+  return campusNames.get(campusId) ?? "Kampüs bilgisi alınamadı";
 }
 
 function gradeLevelLabel(record: ClassRecord, gradeLevelNames: Map<string, string>) {
-  if (record.gradeLevelId) return gradeLevelNames.get(record.gradeLevelId) ?? record.gradeLevelId;
+  if (record.gradeLevelId) return gradeLevelNames.get(record.gradeLevelId) ?? "Seviye bilgisi alınamadı";
   return "-";
 }
 
 function alanLabel(alanId: string | undefined, alanNames: Map<string, string>) {
   if (!alanId) return "-";
-  return alanNames.get(alanId) ?? alanId;
+  return alanNames.get(alanId) ?? "Alan bilgisi alınamadı";
 }
 
 function formatCount(value: number) {

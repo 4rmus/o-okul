@@ -45,7 +45,7 @@ test.describe("Liste URL state", () => {
     const teacherSummary = teachersRegion.getByRole("region", { exact: true, name: "Öğretmen operasyon özeti" });
     await expect(teacherSummary).toContainText("Öğretmen toplamı");
     await expect(teacherSummary).toContainText("Portal hazır");
-    await expect(teacherSummary.getByLabel("Öğretmen operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    await expect(teacherSummary.getByLabel("Öğretmen operasyon özeti önerilen işlemler")).toBeVisible();
     await expect(teacherSummary).toContainText("Branş temizliği");
     await expect(teacherSummary).toContainText("Portal hesabı");
     await expect(teachersRegion.getByLabel("Ara")).toHaveValue("mat");
@@ -81,7 +81,7 @@ test.describe("Liste URL state", () => {
     await expect.poll(() => new URL(page.url()).searchParams.get("usersPage")).toBe("1");
   });
 
-  test("legacy kullanıcı listesini salt okunur tutup canonical çalışan yönetimine yönlendirir", async ({ page }) => {
+  test("mevcut kullanıcı listesini salt okunur tutup çalışan yönetimine yönlendirir", async ({ page }) => {
     const captured = createCapturedRequests();
     await openWithListMocks(page, captured, "/kurum/kullanicilar");
 
@@ -90,7 +90,7 @@ test.describe("Liste URL state", () => {
     const adminRoles = usersRegion.getByLabel("Admin Kullanıcı rolleri", { exact: true });
     await expect(summary).toContainText("Kullanıcı toplamı");
     await expect(summary).toContainText("Yetki yönetimi");
-    await expect(summary).toContainText("Legacy liste");
+    await expect(summary).toContainText("Mevcut hesaplar");
     await expect(summary).toContainText("Yazma kapalı");
     await expect(adminRoles).toContainText("Öğretmen");
     await expect(adminRoles.getByRole("checkbox")).toHaveCount(0);
@@ -133,7 +133,7 @@ test.describe("Liste URL state", () => {
     await expect(studentSummary).toContainText("Öğrenci toplamı");
     await expect(studentSummary).toContainText("Yoğun");
     await expect(studentSummary).toContainText("Veli: Bağlı");
-    await expect(studentSummary.getByLabel("Öğrenci operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    await expect(studentSummary.getByLabel("Öğrenci operasyon özeti önerilen işlemler")).toBeVisible();
     await expect(studentSummary).toContainText("Sınıf eşleştirme");
     await expect(studentSummary).toContainText("Toplu dönem geçişi");
     await expect(studentsRegion.getByLabel("Ara")).toHaveValue("ada");
@@ -171,7 +171,7 @@ test.describe("Liste URL state", () => {
     );
 
     const financeRegion = page.getByLabel("Finans yönetimi");
-    const financeSummary = financeRegion.getByRole("region", { exact: true, name: "Finans operasyon özeti" });
+    const financeSummary = financeRegion.getByRole("region", { exact: true, name: "Ödeme planları özeti" });
     const financeListControls = financeRegion.locator(".next-list-controls").last();
     const filters = financeRegion.getByLabel("Finans filtreleri");
     const installmentsTable = financeRegion.getByRole("table", { name: "Ödeme taksitleri" });
@@ -180,7 +180,7 @@ test.describe("Liste URL state", () => {
     await expect(financeSummary).toContainText("Geciken taksit");
     await expect(financeSummary).toContainText("Kurum finans görünümü");
     await expect(financeSummary).toContainText("6 filtre aktif");
-    await expect(financeSummary.getByLabel("Finans operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    await expect(financeSummary.getByLabel("Ödeme planları özeti önerilen işlemler")).toBeVisible();
     await expect(financeListControls.locator(".uh-field")).toHaveCount(3);
     await expect(filters).toHaveClass(/uh-filter-bar/);
     await expect(financeRegion.getByLabel("Ara")).toHaveValue("haziran");
@@ -192,6 +192,9 @@ test.describe("Liste URL state", () => {
     await expect(filters.getByLabel("Sınıf")).toHaveValue("class-11a");
     await expect(filters.getByLabel("Ders")).toHaveValue("course-math");
     await expect(filters.getByLabel("Dönem")).toHaveValue("term-2026-spring");
+    const workContext = page.getByLabel("Çalışma bilgileri");
+    await expect(workContext).toContainText("Merkez Kampüs");
+    await expect(workContext).toContainText("2. Donem");
     await expect(installmentsTable.locator('th[data-column-key="student"]')).toHaveAttribute("data-mobile-priority", "primary");
     await expect(installmentsTable.locator('th[data-column-key="context"]')).toHaveAttribute("data-mobile-priority", "hidden");
     await expect(installmentsTable.locator('th[data-column-key="actions"]')).toHaveAttribute("data-sticky", "right");
@@ -204,8 +207,8 @@ test.describe("Liste URL state", () => {
     await expect.poll(() => new URL(page.url()).searchParams.get("courseId")).toBeNull();
     await expect.poll(() => new URL(page.url()).searchParams.get("page")).toBe("1");
 
-    for (const value of ["student-a", "campus-a", "grade-11", "course-math"]) {
-      await expect(financeRegion).not.toContainText(value);
+    for (const value of ["student-a", "campus-a", "grade-11", "course-math", "term-2026-spring"]) {
+      await expect(page.locator("body")).not.toContainText(value);
     }
   });
 
@@ -218,14 +221,14 @@ test.describe("Liste URL state", () => {
     );
 
     const supportRegion = page.getByLabel("Destek bildirimi yönetimi");
-    const supportSummary = supportRegion.getByRole("region", { exact: true, name: "Destek operasyon özeti" });
+    const supportSummary = supportRegion.getByRole("region", { exact: true, name: "Destek bildirimleri özeti" });
     const filters = supportRegion.getByLabel("Destek filtreleri");
-    const supportTable = supportRegion.getByRole("table", { name: "Destek triage listesi" });
+    const supportTable = supportRegion.getByRole("table", { name: "Destek öncelik listesi" });
 
     await expect(supportSummary).toContainText("Açık");
-    await expect(supportSummary).toContainText("Triage kuyruğu");
+    await expect(supportSummary).toContainText("İlk inceleme");
     await expect(supportSummary).toContainText("5 aktif filtre");
-    await expect(supportSummary.getByLabel("Destek operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    await expect(supportSummary.getByLabel("Destek bildirimleri özeti önerilen işlemler")).toBeVisible();
     await expect(filters).toHaveClass(/uh-filter-bar/);
     await expect(supportRegion.getByLabel("Ara")).toHaveValue("optik");
     await expect(supportRegion.getByLabel("Sırala")).toHaveValue("-createdAt");
@@ -257,7 +260,7 @@ test.describe("Liste URL state", () => {
     await openWithListMocks(page, captured, "/kurum/duyurular?page=2&limit=20&q=sınav&sort=-publishedAt");
 
     const announcementsRegion = page.getByLabel("Duyuru yönetimi");
-    const announcementSummary = announcementsRegion.getByRole("region", { exact: true, name: "Duyuru operasyon özeti" });
+    const announcementSummary = announcementsRegion.getByRole("region", { exact: true, name: "Duyuru özeti" });
 
     await expect(announcementSummary).toContainText("Duyuru toplamı");
     if (smsEnabled) {
@@ -265,7 +268,7 @@ test.describe("Liste URL state", () => {
     } else {
       await expect(announcementSummary).not.toContainText("SMS");
     }
-    await expect(announcementSummary.getByLabel("Duyuru operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    await expect(announcementSummary.getByLabel("Duyuru özeti önerilen işlemler")).toBeVisible();
     await expect(announcementSummary).toContainText("Alıcı raporu");
     await expect(announcementsRegion.getByLabel("Ara")).toHaveValue("sınav");
     await expect(announcementsRegion.getByLabel("Sırala")).toHaveValue("-publishedAt");
@@ -276,8 +279,8 @@ test.describe("Liste URL state", () => {
 
     await announcementsRegion.getByRole("button", { name: "Duyuru ekle" }).click();
     const announcementDialog = page.getByRole("dialog", { name: "Duyuru ekle" });
-    await expect(announcementDialog.locator(".uh-field")).toHaveCount(8);
-    await expect(announcementDialog.locator(".uh-select")).toHaveCount(6);
+    await expect(announcementDialog.locator(".uh-field")).toHaveCount(2);
+    await expect(announcementDialog.locator(".uh-select")).toHaveCount(0);
     await expect(announcementDialog.locator(".uh-textarea")).toHaveCount(1);
     await expect(announcementDialog.getByRole("textbox", { name: /^Duyuru metni / })).toBeVisible();
     await announcementDialog.getByRole("button", { name: "Vazgeç" }).click();
@@ -296,11 +299,11 @@ test.describe("Liste URL state", () => {
     }
 
     const templatesRegion = page.getByLabel("Şablon yönetimi");
-    const templateSummary = templatesRegion.getByRole("region", { exact: true, name: "Şablon operasyon özeti" });
+    const templateSummary = templatesRegion.getByRole("region", { exact: true, name: "Şablon özeti" });
 
     await expect(templateSummary).toContainText("Şablon toplamı");
     await expect(templateSummary).toContainText("SMS hazır");
-    await expect(templateSummary.getByLabel("Şablon operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    await expect(templateSummary.getByLabel("Şablon özeti önerilen işlemler")).toBeVisible();
     await expect(templateSummary).toContainText("Alıcı kontrolü");
     await expect(page.getByLabel("Aktarım şablonları").getByRole("link", { name: "Öğretmen XLSX şablonu" })).toHaveAttribute("href", "/templates/ogretmen-aktarim-sablonu.xlsx");
     await expect(page.getByLabel("Aktarım şablonları").getByRole("link", { name: "Öğrenci XLSX şablonu" })).toHaveAttribute("href", "/templates/ogrenci-aktarim-sablonu.xlsx");
@@ -338,7 +341,7 @@ test.describe("Liste URL state", () => {
 
     await expect(materialSummary).toContainText("Kontrol bekleyen");
     await expect(materialSummary).toContainText("Materyal detayı");
-    await expect(materialSummary.getByLabel("Materyal operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    await expect(materialSummary.getByLabel("Materyal operasyon özeti önerilen işlemler")).toBeVisible();
     await expect(homeworkRegion.getByLabel("Ara")).toHaveValue("kesir");
     await expect(homeworkRegion.getByLabel("Sırala")).toHaveValue("-checkedAt");
     await expect(homeworkRegion.getByLabel("Göster")).toHaveValue("20");
@@ -387,7 +390,7 @@ test.describe("Liste URL state", () => {
     await expect(studentSummary).toContainText("Öğrenci toplamı");
     await expect(studentSummary).toContainText("Sınıf kapsamı");
     await expect(studentSummary).toContainText("Veli: Bağlı");
-    await expect(studentSummary.getByLabel("Öğrenci operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    await expect(studentSummary.getByLabel("Öğrenci operasyon özeti önerilen işlemler")).toBeVisible();
     await expect(studentSummary).toContainText("Sorumlu öğretmen");
     await expect(studentSummary).toContainText("Toplu dönem geçişi");
     await expect(filters.locator(".uh-field")).toHaveCount(5);
@@ -432,21 +435,21 @@ test.describe("Liste URL state", () => {
       await expect(studentSummary).toContainText("Toplu geçiş: manuel");
       await expect(studentSummary).toContainText("Sınıf eşleştirme");
       await expect(studentsRegion.getByRole("table", { name: "Öğrenci listesi" })).toBeVisible();
-      await expect(studentsRegion.getByRole("link", { name: "Ada öğrenci dashboard" })).toBeVisible();
+      await expect(studentsRegion.getByRole("link", { name: "Ada öğrenci özeti" })).toBeVisible();
       await expect(studentsRegion.getByRole("button", { name: "Ada düzenle" })).toBeVisible();
       await expect(studentsRegion.getByRole("button", { name: "Ada sil" })).toBeVisible();
       await expect(page.getByLabel("Öğrenci tablo görünümü").getByLabel("Görünüm")).toHaveValue("compact");
 
       await openWithListMocks(page, captured, "/kurum/veliler?page=1&limit=10&q=zeynep&sort=lastName");
       const guardiansRegion = page.getByLabel("Veli yönetimi");
-      const guardianSummary = guardiansRegion.getByRole("region", { exact: true, name: "Veli operasyon özeti" });
+      const guardianSummary = guardiansRegion.getByRole("region", { exact: true, name: "Veli kayıt özeti" });
       await expect(guardianSummary).toContainText("Maskeli iletişim");
-      await expect(guardianSummary).toContainText("Portal hazır");
-      await expect(guardianSummary).toContainText("PII modu");
+      await expect(guardianSummary).toContainText("Mevcut veli erişimi");
+      await expect(guardianSummary).toContainText("Kişisel bilgiler");
       await expect(guardianSummary).toContainText("Telefon varsayılan maskeli");
       await expect(guardianSummary).toContainText("İletişim temizliği");
-      await expect(guardianSummary).toContainText("Portal bağlantısı");
-      await expect(guardiansRegion.getByRole("table", { name: "Veli operasyon listesi" })).toBeVisible();
+      await expect(guardianSummary).toContainText("Veli erişimi");
+      await expect(guardiansRegion.getByRole("table", { name: "Veli kayıt listesi" })).toBeVisible();
       await expect(guardiansRegion.getByRole("link", { name: "Zeynep detay" })).toBeVisible();
       await expect(guardiansRegion.getByRole("button", { name: "Zeynep düzenle" })).toBeVisible();
       await expect(guardiansRegion.getByRole("button", { name: "Zeynep sil" })).toBeVisible();
@@ -494,14 +497,14 @@ test.describe("Liste URL state", () => {
 
       const yearsRegion = page.getByLabel("Akademik yıl yönetimi");
       const termsRegion = page.getByLabel("Akademik dönem yönetimi");
-      const yearSummary = yearsRegion.getByRole("region", { exact: true, name: "Akademik yıl operasyon özeti" });
-      const termSummary = termsRegion.getByRole("region", { exact: true, name: "Akademik dönem operasyon özeti" });
+      const yearSummary = yearsRegion.getByRole("region", { exact: true, name: "Akademik yıl özeti" });
+      const termSummary = termsRegion.getByRole("region", { exact: true, name: "Akademik dönem özeti" });
 
       await expect(yearsRegion.getByRole("heading", { name: "Akademik Takvim" })).toBeVisible();
       await expect(yearSummary).toContainText("Akademik yıl toplamı");
       await expect(yearSummary).toContainText("Aktif yıl kontrolü");
-      await expect(yearSummary).toContainText("Yıl listesi URL state");
-      await expect(yearSummary.getByLabel("Akademik yıl operasyon özeti aksiyon kuyruğu")).toBeVisible();
+      await expect(yearSummary).toContainText("Yıl listesi seçimi korunur");
+      await expect(yearSummary.getByLabel("Akademik yıl özeti önerilen işlemler")).toBeVisible();
       await expect(yearsRegion.getByRole("table", { name: "Akademik yıl takvimi" })).toBeVisible();
       await expect(yearsRegion.getByText("2025-2026")).toBeVisible();
       await expect(yearsRegion.getByRole("row", { name: /2025-2026/ }).getByText("Aktif", { exact: true })).toBeVisible();
@@ -522,7 +525,7 @@ test.describe("Liste URL state", () => {
       await expect(termSummary).toContainText("Dönem toplamı");
       await expect(termSummary).toContainText("Aktif dönem kontrolü");
       await expect(termSummary).toContainText("Dönem ekleme hazır");
-      await expect(termSummary.getByLabel("Akademik dönem operasyon özeti aksiyon kuyruğu")).toBeVisible();
+      await expect(termSummary.getByLabel("Akademik dönem özeti önerilen işlemler")).toBeVisible();
       await expect(termsRegion.getByRole("table", { name: "Akademik dönem takvimi" })).toBeVisible();
       await expect(termsRegion.getByText("2. Donem")).toBeVisible();
       await expect(termsRegion).toContainText("2025-2026");
@@ -620,7 +623,7 @@ test.describe("Liste URL state", () => {
 
         const region = page.getByLabel(screen.regionLabel);
         const summary = region.getByRole("region", { exact: true, name: screen.summaryName });
-        await expect(summary.getByLabel(`${screen.summaryName} aksiyon kuyruğu`)).toBeVisible();
+        await expect(summary.getByLabel(`${screen.summaryName} önerilen işlemler`)).toBeVisible();
         for (const actionText of screen.actionTexts) {
           await expect(summary).toContainText(actionText);
         }
@@ -668,12 +671,12 @@ test.describe("Liste URL state", () => {
     await openWithListMocks(page, captured, "/kurum/veliler?page=1&limit=10&q=zeynep&sort=lastName");
 
     const guardiansRegion = page.getByLabel("Veli yönetimi");
-    const guardianSummary = guardiansRegion.getByRole("region", { exact: true, name: "Veli operasyon özeti" });
-    await expect(guardianSummary).toContainText("PII modu");
+    const guardianSummary = guardiansRegion.getByRole("region", { exact: true, name: "Veli kayıt özeti" });
+    await expect(guardianSummary).toContainText("Kişisel bilgiler");
     await expect(guardianSummary).toContainText("Telefon varsayılan maskeli");
-    await expect(guardianSummary.getByLabel("Veli operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    await expect(guardianSummary.getByLabel("Veli kayıt özeti önerilen işlemler")).toBeVisible();
     await expect(guardianSummary).toContainText("İletişim temizliği");
-    await expect(guardianSummary).toContainText("Portal bağlantısı");
+    await expect(guardianSummary).toContainText("Veli erişimi");
     await expect(guardiansRegion.getByRole("heading", { name: "Veliler" })).toBeVisible();
     await expect(guardiansRegion.getByLabel("Ara")).toHaveAttribute("placeholder", "Ad veya soyad ara");
     await expect(guardiansRegion.getByLabel("Sırala")).not.toContainText("Telefon");
@@ -694,7 +697,7 @@ test.describe("Liste URL state", () => {
     await expect(studySummary).toContainText("Etüt toplamı");
     await expect(studySummary).toContainText("Kapasite kontrolü");
     await expect(studySummary).toContainText("Öğrenci ataması");
-    await expect(studySummary.getByLabel("Etüt operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    await expect(studySummary.getByLabel("Etüt operasyon özeti önerilen işlemler")).toBeVisible();
     await expect(studyRegion.getByLabel("Ara")).toHaveValue("kesir");
     await expect(studyRegion.getByLabel("Sırala")).toHaveValue("-startsAt");
     await expect(studyRegion.getByLabel("Göster")).toHaveValue("20");
@@ -729,7 +732,7 @@ test.describe("Liste URL state", () => {
     await expect(programSummary).toContainText("Program toplamı");
     await expect(programSummary).toContainText("Saat planı");
     await expect(programSummary).toContainText("Ders eşleşmesi");
-    await expect(programSummary.getByLabel("Ders programı operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    await expect(programSummary.getByLabel("Ders programı operasyon özeti önerilen işlemler")).toBeVisible();
     await expect(programRegion.getByLabel("Ara")).toHaveValue("geometri");
     await expect(programRegion.getByLabel("Sırala")).toHaveValue("startsAt");
     await expect(programRegion.getByLabel("Göster")).toHaveValue("20");
@@ -764,7 +767,7 @@ test.describe("Liste URL state", () => {
     await expect(outcomeSummary).toContainText("Kazanım toplamı");
     await expect(outcomeSummary).toContainText("Branş kapsamı");
     await expect(outcomeSummary).toContainText("Kod standardı");
-    await expect(outcomeSummary.getByLabel("Kazanım operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    await expect(outcomeSummary.getByLabel("Kazanım operasyon özeti önerilen işlemler")).toBeVisible();
     await expect(outcomeRegion.getByLabel("Ara")).toHaveValue("kesir");
     await expect(outcomeRegion.getByLabel("Sırala")).toHaveValue("-code");
     await expect(outcomeRegion.getByLabel("Göster")).toHaveValue("20");

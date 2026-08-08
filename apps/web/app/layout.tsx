@@ -23,7 +23,7 @@ export const metadata = {
   applicationName: appBrand.name,
   metadataBase: new URL(appBrand.siteUrl),
   description:
-    "Dershane ve özel öğretim kurumları için öğrenci gelişimi, sınav başarı takibi ve rol bazlı eğitim yönetimi.",
+    "TXT ve DAT optik verisini kontrol ederek Başarı % raporuna dönüştürmek ve öğrenci takibini sürdürmek isteyen eğitim kurumları için.",
   icons: {
     icon: "/icon.svg",
   },

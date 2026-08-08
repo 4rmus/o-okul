@@ -92,8 +92,8 @@ export function SystemHealthPage() {
           {
             label: "Kontrol edilen sistem",
             value: sourceLabel(apiUrl),
-            tone: sourceLabel(apiUrl) === "Lokal/dev" ? "warning" : "info",
-            scope: sourceLabel(apiUrl) === "Lokal/dev" ? "local-static" : "configured-api",
+            tone: sourceLabel(apiUrl) === "Bu bilgisayar" ? "warning" : "info",
+            scope: sourceLabel(apiUrl) === "Bu bilgisayar" ? "local-static" : "configured-api",
             detail: "Uygulama, bağlantılar ve temel kullanım bilgileri aynı sistemden okunur.",
           },
           {
@@ -126,23 +126,26 @@ export function SystemHealthPage() {
           rows={dependencyRows}
         />
       </Panel>
-      <Panel
-        aria-label="Teknik sistem kontrolleri"
-        description="Teknik bağlantı adreslerinin anlık yanıtları. Yayın onayı ayrıca verilir."
-        title="Teknik Kontroller"
-      >
-        {healthQuery.isPending ? <p>Durum alınıyor</p> : null}
-        {healthQuery.isError ? <p>Sağlık bilgisi alınamadı.</p> : null}
-        <DataTable
-          caption="Teknik sistem kontrol adresleri"
-          columns={endpointColumns}
-          density="compact"
-          description="Uygulama, bağlantı ve kullanım adreslerinin yanıtı."
-          getRowKey={(row) => row.key}
-          loading={healthQuery.isPending}
-          rows={endpointRows}
-        />
-      </Panel>
+      <details>
+        <summary>İleri ayrıntılar</summary>
+        <Panel
+          aria-label="Teknik sistem kontrolleri"
+          description="Bağlantı adresleri ve yanıt kodları. Yayın onayı ayrıca verilir."
+          title="Teknik Kontroller"
+        >
+          {healthQuery.isPending ? <p>Durum alınıyor</p> : null}
+          {healthQuery.isError ? <p>Sağlık bilgisi alınamadı.</p> : null}
+          <DataTable
+            caption="Teknik sistem kontrol adresleri"
+            columns={endpointColumns}
+            density="compact"
+            description="Uygulama, bağlantı ve kullanım adreslerinin teknik yanıtları."
+            getRowKey={(row) => row.key}
+            loading={healthQuery.isPending}
+            rows={endpointRows}
+          />
+        </Panel>
+      </details>
     </PageFrame>
   );
 }
@@ -205,14 +208,14 @@ function buildSystemHealthSummaryItems(health: SystemHealth | undefined): Operat
     {
       description: "Uygulamanın yanıt verme durumu",
       key: "api",
-      label: "API",
+      label: "Uygulama",
       tone: endpointSummaryTone(health?.health),
       value: healthState,
     },
     {
       description: "Veritabanı ve hızlı erişim bağlantıları",
       key: "ready",
-      label: "Hazırlık",
+      label: "Bağlantılar",
       tone: endpointSummaryTone(health?.ready),
       value: readyState,
     },
@@ -226,7 +229,7 @@ function buildSystemHealthSummaryItems(health: SystemHealth | undefined): Operat
     {
       description: "Sistemin işlediği toplam web isteği",
       key: "request-count",
-      label: "HTTP istek",
+      label: "Web istekleri",
       tone: requestCount === null || requestCount === undefined ? "default" : "info",
       value: formatCount(requestCount),
     },
@@ -238,7 +241,7 @@ function buildSystemHealthSummaryBadges(health: SystemHealth | undefined): Opera
     {
       key: "source",
       label: sourceLabel(apiUrl),
-      tone: sourceLabel(apiUrl) === "Lokal/dev" ? "warning" : "info",
+      tone: sourceLabel(apiUrl) === "Bu bilgisayar" ? "warning" : "info",
     },
     {
       key: "readiness",
@@ -289,21 +292,21 @@ function buildDependencyRows(health: SystemHealth | undefined): DependencyStatus
     {
       detail: "Ana veritabanı bağlantısı",
       key: "postgres",
-      label: "Postgres",
+      label: "Veritabanı",
       tone: dependencyTone(postgres),
       value: postgres,
     },
     {
-      detail: "Hızlı erişim ve kuyruk bağlantısı",
+      detail: "Hızlı erişim ve işlem bağlantısı",
       key: "redis",
-      label: "Redis",
+      label: "Hızlı erişim",
       tone: dependencyTone(redis),
       value: redis,
     },
     {
       detail: "Sistemin işlediği toplam web isteği",
       key: "request-count",
-      label: "HTTP istek sayacı",
+      label: "Web istekleri",
       tone: health?.metrics.ok ? "info" : health ? "warning" : "neutral",
       value: formatCount(health?.metrics.data?.requestCount),
     },
@@ -433,8 +436,8 @@ function endpointTone(endpoint: EndpointState<unknown> | undefined): StatusBadge
 }
 
 function endpointLabel(endpoint: EndpointState<unknown>) {
-  if (!endpoint.ok && endpoint.status === 0) return endpoint.error;
-  return endpoint.ok ? `${endpoint.status} tamam` : `${endpoint.status} ${endpoint.error}`;
+  if (!endpoint.ok && endpoint.status === 0) return "Bağlantı kurulamadı";
+  return endpoint.ok ? `${endpoint.status} tamam` : `${endpoint.status} bağlantı sorunu`;
 }
 
 function dependencyReadyCount(health: SystemHealth | undefined) {
@@ -468,5 +471,5 @@ function formatUptime(value: number | null | undefined) {
 }
 
 function sourceLabel(value: string) {
-  return /localhost|127\.0\.0\.1|0\.0\.0\.0/.test(value) ? "Lokal/dev" : "Yapılandırılmış API";
+  return /localhost|127\.0\.0\.1|0\.0\.0\.0/.test(value) ? "Bu bilgisayar" : "Bağlı sistem";
 }

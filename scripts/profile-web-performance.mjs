@@ -116,11 +116,12 @@ function validateBudgets() {
 
   const landingTokens = [
     "next-marketing-workflow",
-    'aria-label="Örnek öğrenci gelişimi akışı"',
-    "Sınavı sonuçlandırın",
-    "Gelişimi karşılaştırın",
-    "Desteği belirleyin",
-    "Birlikte takip edin",
+    'aria-label="Örnek optik işleme akışı"',
+    "Dosyayı alın",
+    "Eşleşmeleri kontrol edin",
+    "Sonucu doğrulayın",
+    "Raporu oluşturun",
+    "Takibi planlayın",
   ];
   for (const token of landingTokens) {
     if (!landingPageSource.includes(token)) {

@@ -53,7 +53,7 @@ export function TenantLocatorPage({ domain }: { domain: string }) {
         <p className="next-section-eyebrow">Kuruma özel güvenli giriş</p>
         <h2>Her kurum kendi adresinde çalışır.</h2>
         <p>Öğrenci veya personel numaranızı ve şifrenizi yalnız kurumunuzun giriş sayfasında kullanın.</p>
-        <ul><li><Building2 size={17} aria-hidden="true" />Kurum ve oturum bağlamı birlikte doğrulanır</li></ul>
+        <ul><li><Building2 size={17} aria-hidden="true" />Kurum adresi ve oturum birlikte doğrulanır</li></ul>
       </aside>
     </section>
   );

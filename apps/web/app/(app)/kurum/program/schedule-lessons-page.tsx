@@ -81,9 +81,9 @@ export function ScheduleLessonsPage() {
       value: formatCount(classCoverageCount),
     },
     {
-      description: "Ders ve dönem referansı olan kayıtlar",
+      description: "Ders ve dönem bilgileri eksiksiz olan kayıtlar",
       key: "context",
-      label: "Bağlam tamlığı",
+      label: "Ders ve dönem bilgileri",
       tone: courseLinkedCount === rows.length && termLinkedCount === rows.length && rows.length > 0 ? "success" : "info",
       value: `${formatCount(courseLinkedCount)}/${formatCount(rows.length)}`,
     },
@@ -110,7 +110,7 @@ export function ScheduleLessonsPage() {
       value: `${formatCount(rows.length)} kayıt`,
     },
     {
-      detail: "Ders adı sınav, yoklama ve rapor bağlamıyla eşleştirilir",
+      detail: "Ders adı sınav, yoklama ve raporlarda kullanılır",
       key: "course-context",
       label: "Ders eşleşmesi",
       status: courseLinkedCount === rows.length && rows.length > 0 ? "Hazır" : "Kontrol",
@@ -263,6 +263,7 @@ export function ScheduleLessonsPage() {
               : undefined)
         }
         getRowKey={(record) => record.id}
+        hasActiveFilters={Boolean(listQuery.q.trim())}
         loading={lessonsQuery.isPending || referenceQuery.isPending}
         rows={rows}
         summary={

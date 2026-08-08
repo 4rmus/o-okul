@@ -124,7 +124,7 @@ interface ImportQuarantineResolveBulkResponse {
 }
 
 const tabs: Array<{ id: OpticalTab; label: string }> = [
-  { id: "format", label: "1. Format" },
+  { id: "format", label: "1. Optik düzen" },
   { id: "upload", label: "2. Optik yükleme" },
   { id: "quarantine", label: "3. Eşleşmeyen satırlar" },
 ];
@@ -167,6 +167,7 @@ const opticalFormPreviewColumns: Array<DataTableColumn<OpticalFormPreviewRow>> =
 const opticalFormPresets: Array<{
   preset: ParserConfigPreset;
   name: string;
+  displayName: string;
   sourceType: string;
   rowLength: number;
   questionCount?: number;
@@ -175,6 +176,7 @@ const opticalFormPresets: Array<{
   {
     preset: "OPTIK_7108_LGS",
     name: "OPTİK FORM-7108",
+    displayName: "7108 LGS optik düzeni",
     sourceType: "TXT/DAT",
     rowLength: 171,
     questionCount: 90,
@@ -194,6 +196,7 @@ const opticalFormPresets: Array<{
   {
     preset: "OPTIK_129",
     name: "OPTİK FORM 129",
+    displayName: "129 optik düzeni",
     sourceType: "TXT/DAT",
     rowLength: 223,
     rows: [
@@ -210,6 +213,7 @@ const opticalFormPresets: Array<{
   {
     preset: "YANIT",
     name: "YANIT YAYINLARI",
+    displayName: "Yanıt Yayınları optik düzeni",
     sourceType: "TXT/DAT",
     rowLength: 233,
     rows: [
@@ -226,6 +230,7 @@ const opticalFormPresets: Array<{
   {
     preset: "OPTIK_840_LGS",
     name: "OPTİK 840 — LGS",
+    displayName: "840 LGS optik düzeni",
     sourceType: "TXT/DAT",
     rowLength: 280,
     questionCount: 90,
@@ -357,7 +362,7 @@ export function ParserConfigPage() {
   const selectedPresetForm = opticalFormPresets.find((form) => form.preset === selectedPreset) ?? opticalFormPresets[0]!;
   const selectedPresetVersion = createPresetParserVersion(selectedPresetForm);
   const selectedTemplate = templates.find((template) => template.id === selectedTemplateId);
-  const formatStatusLabel = savedConfig ? "Format hazır" : suggestion ? "Öneri hazır" : "Format bekliyor";
+  const formatStatusLabel = savedConfig ? "Optik düzen hazır" : suggestion ? "Düzen önerisi hazır" : "Optik düzen bekliyor";
   const formatStatusTone = savedConfig ? "success" : suggestion ? "info" : "neutral";
   const uploadStatusLabel = rawImportSummary
     ? "Kontrol tamamlandı"
@@ -370,7 +375,7 @@ export function ParserConfigPage() {
   const analysisStatusLabel = evaluationStatus?.status === "COMPLETED"
     ? "Tamamlandı"
     : evaluationJobs
-      ? "Kuyrukta"
+      ? "Hazırlanıyor"
       : rawImportSummary
         ? "Analiz bekliyor"
         : "Yükleme bekliyor";
@@ -471,7 +476,7 @@ export function ParserConfigPage() {
       setTemplateApplyVersion(approved.version);
       selectOpticalTab("upload", result.examId);
     } catch (suggestionError) {
-      setError(apiErrorMessage(suggestionError, "Optik dosya formatı kaydedilemedi."));
+      setError(apiErrorMessage(suggestionError, "Optik dosya düzeni kaydedilemedi."));
     }
   }
 
@@ -499,7 +504,7 @@ export function ParserConfigPage() {
       setTemplateApplyVersion(approved.version);
       selectOpticalTab("upload", result.examId);
     } catch (presetError) {
-      setError(apiErrorMessage(presetError, "TXT/DAT form yapısı seçilemedi."));
+      setError(apiErrorMessage(presetError, "Optik düzen seçilemedi."));
     }
   }
 
@@ -649,7 +654,7 @@ export function ParserConfigPage() {
     setError("");
     const rawImportId = (rawImport?.rawImport.id ?? quarantineRawImportId).trim();
     if (!examId.trim() || !rawImportId) {
-      setError("Sınav ve raw import ID zorunludur.");
+      setError("Sınav ve optik yükleme seçimi zorunludur.");
       return;
     }
     setIsRawImportChecking(true);
@@ -668,7 +673,7 @@ export function ParserConfigPage() {
     setError("");
     const rawImportId = (rawImport?.rawImport.id ?? quarantineRawImportId).trim();
     if (!examId.trim() || !rawImportId) {
-      setError("Sınav ve raw import ID zorunludur.");
+      setError("Sınav ve optik yükleme seçimi zorunludur.");
       return;
     }
     if (!rawImportSummary) {
@@ -691,7 +696,7 @@ export function ParserConfigPage() {
       setEvaluationStatus(status);
       selectOpticalTab("quarantine");
     } catch (evaluationError) {
-      setError(apiErrorMessage(evaluationError, "Analiz işleri kuyruğa alındı ancak tamamlanma sonucu alınamadı. Birazdan tekrar deneyin."));
+      setError(apiErrorMessage(evaluationError, "Analiz başlatıldı ancak tamamlanma sonucu alınamadı. Birazdan tekrar deneyin."));
     } finally {
       setIsEvaluationSubmitting(false);
     }
@@ -713,7 +718,7 @@ export function ParserConfigPage() {
       setQuarantineStudentOptions([]);
       setSelectedStudentByQuarantine({});
     } catch (lookupError) {
-      setError(apiErrorMessage(lookupError, "Karantina kayıtları alınamadı."));
+      setError(apiErrorMessage(lookupError, "İncelenecek kayıtlar alınamadı."));
     }
   }
 
@@ -755,7 +760,7 @@ export function ParserConfigPage() {
       });
       setQuarantines((current) => current.map((item) => (item.id === resolved.id ? resolved : item)));
     } catch (resolveError) {
-      setError(apiErrorMessage(resolveError, "Karantina kaydı çözülemedi."));
+      setError(apiErrorMessage(resolveError, "İncelenecek kayıt çözülemedi."));
     }
   }
 
@@ -771,7 +776,7 @@ export function ParserConfigPage() {
       }))
       .filter((item) => item.resolvedStudentId);
     if (!rawImportId || items.length === 0) {
-      setError("Bulk çözüm için öğrenci seçilmiş açık satır bulunamadı.");
+      setError("Toplu çözüm için öğrencisi seçilmiş açık satır bulunamadı.");
       return;
     }
 
@@ -786,17 +791,17 @@ export function ParserConfigPage() {
       setQuarantines((current) => current.map((item) => resolvedById.get(item.id) ?? item));
       const failedCount = response.results.filter((result) => result.status === "FAILED").length;
       if (failedCount > 0) {
-        setError(`${failedCount} karantina satırı çözülemedi.`);
+        setError(`${failedCount} incelenecek satır çözülemedi.`);
       }
     } catch (resolveError) {
-      setError(apiErrorMessage(resolveError, "Karantina satırları bulk çözülemedi."));
+      setError(apiErrorMessage(resolveError, "Seçili satırlar toplu olarak çözülemedi."));
     }
   }
 
   return (
     <PageFrame
       title="Optik İşlemleri"
-      subtitle="Cevap anahtarı hazır sınavı seç, optik formatı kaydet ve TXT/DAT yüklemesini tek akışta kontrol et."
+      subtitle="Cevap anahtarı hazır sınavı seç, optik düzeni belirle ve dosya yüklemesini tek akışta kontrol et."
     >
       <OpticalExamSelector
         examId={examId}
@@ -812,8 +817,8 @@ export function ParserConfigPage() {
       >
         <InfoGrid aria-label="Optik iş akışı" className="next-optical-workflow-strip" role="region">
           <InfoItem
-            description="Form şablonu ve parser sürümü"
-            label="Format"
+            description="Sınavda kullanılacak optik düzen"
+            label="Optik düzen"
             value={<StatusBadge tone={formatStatusTone}>{formatStatusLabel}</StatusBadge>}
           />
           <InfoItem
@@ -822,12 +827,12 @@ export function ParserConfigPage() {
             value={<StatusBadge tone={uploadStatusTone}>{uploadStatusLabel}</StatusBadge>}
           />
           <InfoItem
-            description="Queue ile tamamlanma ayrımı"
+            description="Hazırlama ve tamamlanma durumu"
             label="Analiz"
             value={<StatusBadge tone={analysisStatusTone}>{analysisStatusLabel}</StatusBadge>}
           />
           <InfoItem
-            description="Üretim ve çıktılar Raporlar ekranında"
+            description="Hazırlama ve çıktılar Raporlar ekranında"
             label="Çıktı"
             value={<StatusBadge tone={outputStatusTone}>{outputStatusLabel}</StatusBadge>}
           />
@@ -1033,41 +1038,54 @@ function OpticalFormatSetup({
   onVersionChange,
 }: OpticalFormatSetupProps) {
   return (
-    <section className="next-optical-format-grid" aria-label="Format seç ve ilerle">
+    <section className="next-optical-format-grid" aria-label="Optik düzeni seç ve ilerle">
       <Panel
         as="form"
-        aria-label="Format seç ve ilerle"
+        aria-label="Optik düzeni seç ve ilerle"
         className="next-optical-format-panel next-optical-format-panel--wide"
-        description="Kayıtlı TXT/DAT formu seçili sınav için kullanılacak. Sürüm form yapısından otomatik türetilir."
-        title="Format seç ve ilerle"
+        description="Sınavınıza uygun optik düzeni seçin. Seçiminiz yükleme adımında kullanılacak."
+        title="Optik düzeni seç"
         onSubmit={(event) => void onPresetSubmit(event)}
       >
-        <Field label="Kayıtlı TXT/DAT formu">
+        <Field label="Optik düzen">
           <Select
             value={selectedPreset}
             onChange={(event) => onPresetChange(event.target.value as ParserConfigPreset)}
           >
             {opticalFormPresets.map((form) => (
               <option key={form.preset} value={form.preset}>
-                {form.name}
+                {form.displayName}
               </option>
             ))}
           </Select>
         </Field>
         <InfoGrid className="next-optical-form-meta" aria-label="Seçili form özeti">
-          <InfoItem label="Kaynak" value={selectedPresetForm.sourceType} />
+          <InfoItem label="Seçili düzen" value={selectedPresetForm.displayName} />
+          <InfoItem label="Soru sayısı" value={formatPresetQuestionCount(selectedPresetForm, examType)} />
+        </InfoGrid>
+        <Button disabled={!examId} type="submit">
+          <CheckCircle2 size={17} aria-hidden="true" />
+          Seç ve ilerle
+        </Button>
+        {savedConfig ? <p>Optik düzen kaydedildi. Dosyanızı optik yükleme adımında yükleyebilirsiniz.</p> : null}
+      </Panel>
+
+      <details className="next-optical-format-panel next-optical-format-details next-advanced-details">
+        <summary>İleri ayrıntılar</summary>
+        <p>Dosya düzeni, alan konumları ve kurum şablonları destek amaçlı burada tutulur.</p>
+        <InfoGrid className="next-optical-form-meta" aria-label="Seçili düzenin teknik ayrıntıları">
+          <InfoItem label="Düzen kodu" value={selectedPreset} />
+          <InfoItem label="Dosya türü" value={selectedPresetForm.sourceType} />
           <InfoItem label="Satır uzunluğu" value={`${selectedPresetForm.rowLength} karakter`} />
-          <InfoItem label="Soru" value={formatPresetQuestionCount(selectedPresetForm, examType)} />
           <InfoItem label="Sürüm" value={selectedPresetVersion} />
         </InfoGrid>
         {selectedPreset !== "OPTIK_7108_LGS" ? (
-          <Alert tone="warning" title="Gerçek TXT/DAT örneği bekleniyor">
-            Bu preset referans görsel kolonlarından türetildi; gerçek üretici TXT/DAT dosyasıyla henüz doğrulanmadı.
-            Kullanıcı bunu bilerek seçiyor. Tablo fiziksel kolon kapasitesini, soru sayısı seçilen modda okunan
-            mantıksal cevapları gösterir.
+          <Alert tone="warning" title="Gerçek dosya örneği bekleniyor">
+            Bu düzen referans form görselindeki alan konumlarından hazırlanmıştır ve gerçek üretici dosyasıyla henüz doğrulanmamıştır.
+            Aşağıdaki tablo dosyadaki alan konumlarını gösterir; soru sayısı sınav türüne göre okunur.
           </Alert>
         ) : null}
-        {renderOpticalFormPreview(selectedPresetForm.rows)}
+        {renderOpticalFormPreview(selectedPresetForm.rows, "Seçili optik düzen alanları")}
         <InfoGrid aria-live="polite" className="next-parser-summary" role="status">
           {suggestion ? (
             <>
@@ -1077,18 +1095,9 @@ function OpticalFormatSetup({
               <InfoItem label="Soru tahmini" value={suggestion.fieldMapping.answers.estimatedQuestionCount} />
             </>
           ) : (
-            <InfoItem label="Format" value="Format seçimi bekliyor" />
+            <InfoItem label="Dosyadan tanıma" value="Henüz kullanılmadı" />
           )}
         </InfoGrid>
-        <Button disabled={!examId} type="submit">
-          <CheckCircle2 size={17} aria-hidden="true" />
-          Seç ve ilerle
-        </Button>
-        {savedConfig ? <p>{savedConfig.version} seçildi. Optik yükleme adımında bu sürüm kullanılacak.</p> : null}
-      </Panel>
-
-      <details className="next-optical-format-panel next-optical-format-details next-advanced-details">
-        <summary>Farklı dosya formatı ve kurum şablonları</summary>
         <form className="next-inline-form" onSubmit={(event) => void onSuggestionSubmit(event)}>
           <Field label="Dosyadan format tanı">
             <Input accept=".txt,.dat,text/plain" type="file" onChange={(event) => void onFileChange(event.target.files?.[0])} />
@@ -1124,7 +1133,9 @@ function OpticalFormatSetup({
             Sınava uygula
           </Button>
         </form>
-        {selectedTemplate ? renderOpticalFormPreview(createTemplatePreviewRows(selectedTemplate)) : null}
+        {selectedTemplate
+          ? renderOpticalFormPreview(createTemplatePreviewRows(selectedTemplate), "Kurum şablonu alanları")
+          : null}
         <div className="next-inline-form">
           <Field label="Yeni kurum formu adı">
             <Input value={templateName} onChange={(event) => onTemplateNameChange(event.target.value)} />
@@ -1177,6 +1188,9 @@ function OpticalUploadPanel({
 }: OpticalUploadPanelProps) {
   const uploadButtonLabel = isRawImportSubmitting ? "Yükleniyor" : isRawImportChecking ? "Kontrol ediliyor" : "Yükle ve kontrol et";
   const resultStatus = rawImportSummary ? "Kontrol tamamlandı" : rawImport ? "Kontrol bekleniyor" : "Dosya bekleniyor";
+  const selectedFormatName = opticalFormPresets.find(
+    (form) => createPresetParserVersion(form) === rawImportParserVersion,
+  )?.displayName ?? "İnceleniyor";
 
   return (
     <section className="next-optical-upload-grid" aria-label="Optik yükleme">
@@ -1184,13 +1198,13 @@ function OpticalUploadPanel({
         as="form"
         aria-label="Optik dosyayı yükle"
         className="next-optical-upload-panel"
-        description={`Seçili format sürümü: ${rawImportParserVersion}`}
+        description={`Seçili düzen: ${selectedFormatName}`}
         title="Optik dosyayı yükle"
         onSubmit={(event) => void onSubmit(event)}
       >
         <details className="next-advanced-details">
-          <summary>Gelişmiş format sürümü</summary>
-          <Field label="Teknik format sürümü">
+          <summary>İleri ayrıntılar</summary>
+          <Field label="Format kodu">
             <Input required value={rawImportParserVersion} onChange={(event) => onParserVersionChange(event.target.value)} />
           </Field>
         </details>
@@ -1207,18 +1221,18 @@ function OpticalUploadPanel({
         actions={<span className="next-reference-badge">{resultStatus}</span>}
         aria-label="Optik yükleme sonucu"
         className="next-optical-upload-panel next-optical-upload-panel--wide"
-        description="Yüklenen dosya kontrolü, güvenli teknik referanslar ve analiz başlatma durumu."
+        description="Yüklenen dosyanın kontrolü ve analiz durumu."
         title="Yükleme sonucu"
       >
         {rawImport ? (
           <>
             <p>{isRawImportChecking ? "Dosya alındı, satırlar kontrol ediliyor." : "Yüklenen optik dosya alındı."}</p>
             <details className="next-advanced-details">
-              <summary>Teknik yükleme bilgisi</summary>
-              <p>{formatEvidenceSafeReference(rawImport.rawImport.id, "Dosya ref")}</p>
-              <p>{formatEvidenceSafeReference(rawImport.parseJob.jobId, "Kuyruk ref")}</p>
+              <summary>İleri ayrıntılar</summary>
+              <p>{formatEvidenceSafeReference(rawImport.rawImport.id, "Dosya kaydı")}</p>
+              <p>{formatEvidenceSafeReference(rawImport.parseJob.jobId, "Hazırlama işlemi")}</p>
               <p>{formatEvidenceSafeReference(rawImport.rawImport.sha256, "Dosya izi")}</p>
-              <p>Ham id, kuyruk id ve dosya izi ekran görüntülerinde gösterilmez.</p>
+              <p>Destek kayıtları ekran görüntülerinde açık gösterilmez.</p>
             </details>
             <div className="next-optical-step-actions">
               <Button type="button" variant="secondary" onClick={() => void onRefreshSummary()} disabled={isRawImportChecking}>
@@ -1244,7 +1258,7 @@ function OpticalUploadPanel({
         ) : null}
         {evaluationJobs ? (
           <p aria-live="polite" role="status">
-            {evaluationJobs.queuedCount}/{evaluationJobs.matchedCount} analiz işi kuyruğa alındı.
+            {evaluationJobs.queuedCount}/{evaluationJobs.matchedCount} kayıt için analiz başlatıldı.
             {isEvaluationSubmitting ? " Sonuçlar bekleniyor." : ""}
           </p>
         ) : null}
@@ -1316,7 +1330,7 @@ function QuarantineResolutionPanel({
         key: "reason",
         mobilePriority: "primary",
         priority: "primary",
-        render: (record) => record.reason,
+        render: (record) => formatQuarantineReason(record.reason),
       },
       {
         header: "Durum",
@@ -1353,7 +1367,7 @@ function QuarantineResolutionPanel({
         priority: "primary",
         render: (record) =>
           record.status === "RESOLVED" ? (
-            record.evaluationJob ? formatEvidenceSafeReference(record.evaluationJob.jobId, "Kuyruk ref") : "Çözüldü"
+            record.evaluationJob ? formatEvidenceSafeReference(record.evaluationJob.jobId, "Hazırlama işlemi") : "Çözüldü"
           ) : (
             <Button size="icon" variant="ghost" type="button" onClick={() => void onResolve(record)} aria-label={`${record.rowNumber}. satırı çöz`}>
               <CheckCircle2 size={17} aria-hidden="true" />
@@ -1400,7 +1414,7 @@ function QuarantineResolutionPanel({
             Öğrencileri ara
           </Button>
         </form>
-        <div className="next-inline-form" role="group" aria-label="Bulk karantina çözümü">
+        <div className="next-inline-form" role="group" aria-label="Seçili kayıtları toplu çöz">
           <Button type="button" disabled={bulkResolvableCount === 0} onClick={() => void onResolveBulk()}>
             <CheckCircle2 size={17} aria-hidden="true" />
             Seçili satırları çöz
@@ -1446,7 +1460,7 @@ function OpticalReportPanel({
       description={`${reportMessage} Analiz, öğrenci sonuçları ve çıktılar Raporlar çalışma alanında yönetilir.`}
       title="Raporlara geçiş"
     >
-      <MetricGrid aria-label="Rapor üretim durumu" role="region">
+      <MetricGrid aria-label="Rapor hazırlama durumu" role="region">
         <MetricCard
           label="Analiz"
           tone={evaluationStatus?.status === "COMPLETED" ? "success" : "warning"}
@@ -1478,7 +1492,7 @@ function OpticalReportPanel({
 }
 
 function getReportReadinessMessage(evaluationStatus: RawImportEvaluationStatus | null): string {
-  if (evaluationStatus?.status !== "COMPLETED") return "Analiz tamamlanınca rapor üretilebilir.";
+  if (evaluationStatus?.status !== "COMPLETED") return "Analiz tamamlanınca rapor hazırlanabilir.";
   if (evaluationStatus.evaluatedCount <= 0) return "Rapor için değerlendirilmiş öğrenci yok.";
   return `${evaluationStatus.evaluatedCount} öğrenci için rapor hazır.`;
 }
@@ -1492,7 +1506,13 @@ function quarantineStatusTone(status: string): "danger" | "info" | "neutral" | "
 function formatQuarantineStatus(status: string): string {
   if (status === "RESOLVED") return "Çözüldü";
   if (status === "OPEN" || status === "PENDING") return "Bekliyor";
-  return status;
+  return "İnceleniyor";
+}
+
+function formatQuarantineReason(reason: string): string {
+  if (reason === "STUDENT_NOT_FOUND" || reason === "STUDENT_NOT_MATCHED") return "Öğrenciyle eşleşmedi";
+  if (reason === "ANSWER_PARSE_INVALID") return "Cevap satırı okunamadı";
+  return "İnceleme nedeni bilinmiyor";
 }
 
 async function suggestParserConfig(
@@ -1730,15 +1750,15 @@ function sleep(ms: number) {
 
 function formatQuarantineReasons(summary: RawImportParseSummary): string {
   return summary.quarantineReasons.length
-    ? summary.quarantineReasons.map((item) => `${item.reason}: ${item.count}`).join(", ")
+    ? summary.quarantineReasons.map((item) => `${formatQuarantineReason(item.reason)}: ${item.count}`).join(", ")
     : "-";
 }
 
-function renderOpticalFormPreview(rows: OpticalFormPreviewRow[]) {
+function renderOpticalFormPreview(rows: OpticalFormPreviewRow[], caption: string) {
   return (
     <div className="next-optical-form-preview">
       <DataTable
-        caption="Optik form alan önizlemesi"
+        caption={caption}
         columns={opticalFormPreviewColumns}
         density="compact"
         description="Bölüm alanlarının başlangıç ve bitiş konumları."

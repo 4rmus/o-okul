@@ -10,13 +10,6 @@ const corsHeaders = {
   "access-control-expose-headers": "content-disposition",
 };
 
-async function expandSidebarGroup(page: Page, name: string) {
-  const groupButton = page.getByRole("button", { name, exact: true });
-  if ((await groupButton.getAttribute("aria-expanded")) !== "true") {
-    await groupButton.click();
-  }
-}
-
 interface BackupRestoreJobFixture {
   checkedTables: string[];
   createdAt: string;
@@ -194,52 +187,57 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
   });
 
   await loginAsTenantAdmin(page);
-  await expandSidebarGroup(page, "Yönetim ve Kanıt");
+  const managementGroup = page.getByRole("button", { name: "Yönetim", exact: true });
+  if ((await managementGroup.getAttribute("aria-expanded")) !== "true") {
+    await managementGroup.click();
+  }
+  await page.getByRole("link", { name: "Operasyon ve kanıt" }).click();
+  await expect(page).toHaveURL(/\/kurum\/operasyon-ve-kanit$/);
   const backupLink = page.getByRole("link", { name: "Yedekleme" });
   await expect(backupLink).toHaveAttribute("href", "/kurum/yedek-restore");
   await backupLink.focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/kurum\/yedek-restore$/);
-  await expect(page.getByRole("heading", { name: "Yedek / Restore" })).toBeVisible();
-  await expect(page.getByLabel("Yedek restore güven durumu").getByText("Yedek Kanıt Gücü")).toBeVisible();
-  await expect(page.getByLabel("Yedek restore güven durumu").getByText("Maskeli")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Yedekleme ve Geri Yükleme" })).toBeVisible();
+  await expect(page.getByLabel("Yedekleme ve geri yükleme güven durumu").getByText("Yedekleme Güvence Durumu")).toBeVisible();
+  await expect(page.getByLabel("Yedekleme ve geri yükleme güven durumu").getByText("Maskeli")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Kurum Veri Yedeği" })).toBeVisible();
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Kurum verisini indir" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe("o-okul-tenant-a-2026-06-14.json");
   expect(tenantExportGetCount).toBe(1);
-  await expect(page.getByLabel("Panel restore drill işi").getByText("Panel İş Tetikleme")).toBeVisible();
+  await expect(page.getByLabel("Panel geri yükleme tatbikatı işi").getByText("Korumalı İş Başlatma")).toBeVisible();
 
-  await page.getByLabel("Panel restore drill işi").getByLabel("İş tipi").selectOption("BACKUP");
-  await page.getByLabel("Panel restore drill işi").getByLabel("Yedek hedefi").fill("offsite-backup");
-  await page.getByLabel("Panel restore drill işi").getByLabel("Onay metni").fill("YEDEK AL");
-  await page.getByLabel("Panel restore drill işi").getByRole("button", { name: "Yedek alma işi başlat" }).click();
+  await page.getByLabel("Panel geri yükleme tatbikatı işi").getByLabel("İş tipi").selectOption("BACKUP");
+  await page.getByLabel("Panel geri yükleme tatbikatı işi").getByLabel("Yedek hedefi").fill("offsite-backup");
+  await page.getByLabel("Panel geri yükleme tatbikatı işi").getByLabel("Onay metni").fill("YEDEK AL");
+  await page.getByLabel("Panel geri yükleme tatbikatı işi").getByRole("button", { name: "Yedek al" }).click();
   await expect(page.getByText("Yedek hedefi s3://bucket/prefix veya kalıcı file:// dizin olmalı.")).toBeVisible();
   expect(backupRestorePostCount).toBe(0);
 
-  await page.getByLabel("Panel restore drill işi").getByLabel("Yedek hedefi").fill("file:///mnt/backups/tenant-a");
-  await page.getByLabel("Panel restore drill işi").getByLabel("Onay metni").fill("YEDEK AL");
-  await page.getByLabel("Panel restore drill işi").getByRole("button", { name: "Yedek alma işi başlat" }).click();
-  await expect(page.getByLabel("Yedek restore işleri").getByRole("heading", { name: "Yedek alma" })).toBeVisible();
-  await expect(page.getByLabel("Yedek restore işleri").getByText("file://<redacted>")).toBeVisible();
-  await expect(page.getByLabel("Yedek restore işleri").getByText("file:///mnt/backups/tenant-a")).toHaveCount(0);
-  await expect(page.getByLabel("Yedek restore işleri").getByText("backup-restore-job-created_backup")).toHaveCount(0);
-  await expect(page.getByLabel("Yedek restore işleri").getByText("İş referansı maskeli")).toBeVisible();
+  await page.getByLabel("Panel geri yükleme tatbikatı işi").getByLabel("Yedek hedefi").fill("file:///mnt/backups/tenant-a");
+  await page.getByLabel("Panel geri yükleme tatbikatı işi").getByLabel("Onay metni").fill("YEDEK AL");
+  await page.getByLabel("Panel geri yükleme tatbikatı işi").getByRole("button", { name: "Yedek al" }).click();
+  await expect(page.getByLabel("Yedekleme ve geri yükleme işleri").getByRole("heading", { name: "Yedekleme" })).toBeVisible();
+  await expect(page.getByLabel("Yedekleme ve geri yükleme işleri").getByText("file://<redacted>")).toBeVisible();
+  await expect(page.getByLabel("Yedekleme ve geri yükleme işleri").getByText("file:///mnt/backups/tenant-a")).toHaveCount(0);
+  await expect(page.getByLabel("Yedekleme ve geri yükleme işleri").getByText("backup-restore-job-created_backup")).toHaveCount(0);
+  await expect(page.getByLabel("Yedekleme ve geri yükleme işleri").getByText("İş referansı maskeli")).toBeVisible();
   expect(backupRestorePostCount).toBe(1);
 
-  await page.getByLabel("Panel restore drill işi").getByLabel("İş tipi").selectOption("RESTORE_DRILL");
-  await page.getByLabel("Panel restore drill işi").getByLabel("Restore kanıt dosyası").fill("s3://o-okul-prod-backups/restore-drill.json");
-  await page.getByLabel("Panel restore drill işi").getByLabel("Onay metni").fill("RESTORE DRILL");
-  await page.getByLabel("Panel restore drill işi").getByRole("button", { name: "Restore drill işi başlat" }).click();
-  await expect(page.getByText("Restore kanıt dosyası file:// artifact yolu olmalı.")).toBeVisible();
+  await page.getByLabel("Panel geri yükleme tatbikatı işi").getByLabel("İş tipi").selectOption("RESTORE_DRILL");
+  await page.getByLabel("Panel geri yükleme tatbikatı işi").getByLabel("Geri yükleme kanıt dosyası").fill("s3://o-okul-prod-backups/restore-drill.json");
+  await page.getByLabel("Panel geri yükleme tatbikatı işi").getByLabel("Onay metni").fill("GERİ YÜKLEME TATBİKATI");
+  await page.getByLabel("Panel geri yükleme tatbikatı işi").getByRole("button", { name: "Geri yüklemeyi dene" }).click();
+  await expect(page.getByText("Geri yükleme kanıt dosyası kalıcı file:// yolunda olmalı.")).toBeVisible();
   expect(backupRestorePostCount).toBe(1);
 
-  await page.getByLabel("Panel restore drill işi").getByLabel("Restore kanıt dosyası").fill("file:///mnt/restore-drills/restore-drill.json");
-  await page.getByLabel("Panel restore drill işi").getByLabel("Onay metni").fill("RESTORE DRILL");
-  await page.getByLabel("Panel restore drill işi").getByRole("button", { name: "Restore drill işi başlat" }).click();
-  await expect(page.getByLabel("Yedek restore işleri").getByRole("heading", { name: "Restore drill" })).toBeVisible();
-  await expect(page.getByLabel("Yedek restore işleri").getByText("file:///mnt/restore-drills/restore-drill.json")).toHaveCount(0);
+  await page.getByLabel("Panel geri yükleme tatbikatı işi").getByLabel("Geri yükleme kanıt dosyası").fill("file:///mnt/restore-drills/restore-drill.json");
+  await page.getByLabel("Panel geri yükleme tatbikatı işi").getByLabel("Onay metni").fill("GERİ YÜKLEME TATBİKATI");
+  await page.getByLabel("Panel geri yükleme tatbikatı işi").getByRole("button", { name: "Geri yüklemeyi dene" }).click();
+  await expect(page.getByLabel("Yedekleme ve geri yükleme işleri").getByRole("heading", { name: "Geri yükleme tatbikatı" })).toBeVisible();
+  await expect(page.getByLabel("Yedekleme ve geri yükleme işleri").getByText("file:///mnt/restore-drills/restore-drill.json")).toHaveCount(0);
   expect(backupRestorePostCount).toBe(2);
 });
 

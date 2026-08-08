@@ -754,7 +754,7 @@ async function loadParticipants(accessToken: string, examId: string) {
 function examStatusLabel(status: string) {
   if (status === "PUBLISHED") return "Yayında";
   if (status === "DRAFT") return "Taslak";
-  return status;
+  return "Durum bilgisi alınamadı";
 }
 
 function examStatusTone(status: string): StatusBadgeProps["tone"] {
@@ -780,8 +780,8 @@ function formatExamAcademicContext(
   alanNameById: ReadonlyMap<string, string>,
 ) {
   const examType = exam.examType ? examTypeLabel(exam.examType) : "";
-  const gradeLevel = exam.gradeLevelId ? gradeLevelNameById.get(exam.gradeLevelId) ?? exam.gradeLevelId : "";
-  const alan = exam.alanId ? alanNameById.get(exam.alanId) ?? exam.alanId : "";
+  const gradeLevel = exam.gradeLevelId ? gradeLevelNameById.get(exam.gradeLevelId) ?? "Seviye bilgisi alınamadı" : "";
+  const alan = exam.alanId ? alanNameById.get(exam.alanId) ?? "Alan bilgisi alınamadı" : "";
   return [examType, gradeLevel, alan].filter(Boolean).join(" / ") || "-";
 }
 
@@ -811,7 +811,7 @@ function participantStatusLabel(status: string) {
   if (status === "REGISTERED") return "Kayıtlı";
   if (status === "ATTENDED") return "Katıldı";
   if (status === "ABSENT") return "Gelmedi";
-  return status;
+  return "Durum bilgisi alınamadı";
 }
 
 function participantStatusTone(status: string): StatusBadgeProps["tone"] {

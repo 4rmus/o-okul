@@ -361,6 +361,7 @@ export function LearningOutcomesPage() {
         emptyText="Kazanım kaydı yok"
         error={error || (outcomesQuery.isError ? "Kazanımlar alınamadı." : undefined)}
         getRowKey={(record) => record.id}
+        hasActiveFilters={Boolean(listQuery.q.trim())}
         loading={outcomesQuery.isPending}
         rows={rows}
         summary={
@@ -376,7 +377,7 @@ export function LearningOutcomesPage() {
         title="Kazanımlar"
       />
       <FormModal
-        description="CSV veya XLSX dosyası seçildiğinde önce dry-run yapılır; hata yoksa aktarım tamamlanır."
+        description="CSV veya XLSX dosyası seçildiğinde önce ön kontrol yapılır; hata yoksa aktarım tamamlanır."
         onCancel={closeImportModal}
         onSubmit={(event) => void handleCommitLearningOutcomeImport(event)}
         open={isImportOpen}

@@ -307,7 +307,7 @@ function portalActionAriaLabel(item: PortalActionItem) {
 
 function portalMetricDescription(item: PortalMetricItem) {
   if (item.label === "Başarı") return "Başarı % ana metrik";
-  if (item.label === "Net") return "Soru sayısı bağlamıyla okunur";
+  if (item.label === "Net") return "Soru sayısıyla birlikte okunur";
   if (item.label === "Soru") return "Sınav kapsamı";
   if (item.label.includes("Ödeme")) return "Finans görünürlüğü izin kapsamına bağlıdır";
   if (item.label === "Önizleme") return "Rol önizleme davranışı";

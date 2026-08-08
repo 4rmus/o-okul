@@ -193,7 +193,7 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
   return (
     <PageFrame
       title={studentName}
-      subtitle={mode === "exams" ? "Sınav detayları" : "Öğrenci dashboard"}
+      subtitle={mode === "exams" ? "Sınav detayları" : "Öğrenci özeti"}
       actions={
         <div className="next-student-detail-actions">
           <Link className="uh-button uh-button--secondary" href="/kurum/ogrenciler">
@@ -203,7 +203,7 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
           {mode === "exams" ? (
             <Link className="uh-button uh-button--secondary" href={studentDashboardHref}>
               <LayoutDashboard size={17} aria-hidden="true" />
-              Dashboard'a dön
+              Öğrenci özetine dön
             </Link>
           ) : (
             <Link className="uh-button" href={studentExamsHref}>
@@ -216,17 +216,17 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
     >
       {pageDataQuery.isPending ? (
         <Panel
-          aria-label={mode === "exams" ? "Öğrenci sınav detayları" : "Öğrenci dashboard"}
+          aria-label={mode === "exams" ? "Öğrenci sınav detayları" : "Öğrenci özeti"}
           className="next-detail-state-panel"
-          title={mode === "exams" ? "Öğrenci sınav detayları" : "Öğrenci dashboard"}
+          title={mode === "exams" ? "Öğrenci sınav detayları" : "Öğrenci özeti"}
         >
           <p>Yükleniyor...</p>
         </Panel>
       ) : pageDataQuery.isError ? (
         <Panel
-          aria-label={mode === "exams" ? "Öğrenci sınav detayları" : "Öğrenci dashboard"}
+          aria-label={mode === "exams" ? "Öğrenci sınav detayları" : "Öğrenci özeti"}
           className="next-detail-state-panel"
-          title={mode === "exams" ? "Öğrenci sınav detayları" : "Öğrenci dashboard"}
+          title={mode === "exams" ? "Öğrenci sınav detayları" : "Öğrenci özeti"}
           tone="danger"
         >
           <p className="uh-crud-page__error">Öğrenci detayı alınamadı.</p>
@@ -339,10 +339,10 @@ function StudentDashboard({
   });
 
   return (
-    <section className="next-detail-workspace next-student-growth-workspace" aria-label="Öğrenci dashboard">
+    <section className="next-detail-workspace next-student-growth-workspace" aria-label="Öğrenci özeti">
       <OperationSummary
         actions={studentDashboardSummaryActions}
-        ariaLabel="Öğrenci detay operasyon özeti"
+        ariaLabel="Öğrenci detay özeti"
         badges={studentDashboardSummaryBadges}
         items={studentDashboardSummaryItems}
       />
@@ -402,7 +402,7 @@ function StudentDashboard({
 
       <Panel
         aria-label="Öğrenci karar kartları"
-        description="Rapor, kayıt, veli ve takip odağı günlük operasyon kararları için özetlenir."
+        description="Raporlar, kayıtlar, veli bilgileri ve izlenecek konular tek yerde özetlenir."
         title="Karar alanları"
       >
         <div className="next-student-decision-grid">
@@ -504,7 +504,7 @@ function StudentDashboard({
         <Panel
           aria-label="Kayıt geçmişi"
           className="next-student-detail-panel next-student-detail-panel--wide"
-          description="Kayıt başlangıcı, durum ve akademik dönem geçmişi operasyon bağlamında listelenir."
+          description="Kayıt başlangıcı, durum ve akademik dönem geçmişi dönemlere göre listelenir."
           title="Kayıt geçmişi"
         >
           <StudentDetailRowsTable
@@ -773,7 +773,7 @@ function buildStudentDashboardSummaryBadges(
     },
     {
       key: "pii",
-      label: "PII maskeli",
+      label: "Kişisel bilgiler maskeli",
       tone: "success",
     },
   ];
@@ -921,7 +921,7 @@ function StudentExamDetails({
     <section className="next-detail-workspace" aria-label="Öğrenci sınav detayları">
       <OperationSummary
         actions={examSummaryActions}
-        ariaLabel="Öğrenci sınav operasyon özeti"
+        ariaLabel="Öğrenci sınav özeti"
         badges={examSummaryBadges}
         items={examSummaryItems}
       />
@@ -1071,7 +1071,7 @@ function buildStudentExamSummaryBadges(
     },
     {
       key: "snapshot",
-      label: selectedSnapshot ? "Snapshot seçili" : "Snapshot bekleniyor",
+      label: selectedSnapshot ? "Rapor sürümü seçili" : "Rapor sürümü bekleniyor",
       tone: selectedSnapshot ? "info" : "neutral",
     },
     {

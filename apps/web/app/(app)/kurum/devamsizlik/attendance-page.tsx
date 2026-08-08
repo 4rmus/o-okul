@@ -101,9 +101,9 @@ export function AttendancePage() {
       value: `${formatCount(presentCount)} / ${formatCount(excusedCount)}`,
     },
     {
-      description: "Sınıf, ders, dönem referansı",
+      description: "Sınıf, ders ve dönem bilgileri",
       key: "references",
-      label: "Bağlam",
+      label: "Seçim listeleri",
       value: `${references.classes.length}/${references.courses.length}/${references.terms.length}`,
     },
   ];
@@ -219,7 +219,7 @@ export function AttendancePage() {
     <>
       <Panel
         aria-label="Günlük sınıf yoklaması"
-        description="Sınıf ve tarihi seç, öğrenci durumlarını tek işlemle atomik olarak kaydet."
+        description="Sınıf ve tarihi seçin; öğrenci durumlarını tek seferde kaydedin."
         title="Günlük sınıf yoklaması"
       >
         <div className="next-list-controls" aria-label="Günlük yoklama kontrolleri">
@@ -282,6 +282,7 @@ export function AttendancePage() {
         error={attendanceQuery.isError ? "Devamsızlık kayıtları alınamadı." : referencesQuery.isError ? "Seçim listeleri alınamadı." : undefined}
         getRowKey={(record) => record.id}
         density="compact"
+        hasActiveFilters={Boolean(listQuery.q.trim())}
         loading={attendanceQuery.isPending || referencesQuery.isPending}
         rows={rows}
         summary={<OperationSummary ariaLabel="Devamsızlık operasyon özeti" badges={attendanceSummaryBadges} items={attendanceSummaryItems} />}

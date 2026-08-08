@@ -34,7 +34,7 @@ export function SmsDeliveryReportPanel({
       aria-label="SMS teslim raporu"
       className="next-sms-delivery-panel"
       title="Teslim raporu"
-      description="Kuyruk durumu, gönderim sonucu ve faturalandırılabilir segmentler."
+      description="Gönderim durumu ve teslim sonucu."
       actions={
         <Button type="button" variant="secondary" onClick={onRefresh}>
           Yenile
@@ -58,21 +58,21 @@ export function SmsDeliveryReportPanel({
                   {smsDeliveryStatusLabel(report.status)}
                 </StatusBadge>
               }
-              description="Kuyruk yaşam döngüsü"
+              description="Gönderim durumu"
             />
-            <MetricCard label="Alıcı" value={report.recipientCount} description="İş kuyruğuna alınan" />
-            <MetricCard label="Gönderilen" tone="success" value={report.sentCount} description="Provider kabulü" />
+            <MetricCard label="Alıcı" value={report.recipientCount} description="Gönderime hazırlanan" />
+            <MetricCard label="Gönderilen" tone="success" value={report.sentCount} description="Gönderim için kabul edilen" />
             <MetricCard
               label="Başarısız"
               tone={report.failedCount > 0 ? "danger" : "default"}
               value={report.failedCount}
               description={report.failedCount > 0 ? "Müdahale gerekli" : "Hata yok"}
             />
-            <MetricCard label="Segment" value={report.billableSegments} description="Faturalandırılabilir" />
+            <MetricCard label="Mesaj parçası" value={report.billableSegments} description="Hesaplanan mesaj parçası" />
           </MetricGrid>
           {report.providerErrorCode ? (
-            <Alert tone="danger" title="Provider hatası">
-              {report.providerErrorCode}
+            <Alert tone="danger" title="Gönderim sorunu">
+              Gönderim ayrıntısı için destek ekibine başvurun.
             </Alert>
           ) : null}
         </>
@@ -84,7 +84,7 @@ export function SmsDeliveryReportPanel({
 function smsDeliveryStatusLabel(status: SmsBatchDeliveryReportRecord["status"]) {
   if (status === "completed") return "Tamamlandı";
   if (status === "failed") return "Başarısız";
-  return "Kuyrukta";
+  return "Hazırlanıyor";
 }
 
 function smsDeliveryStatusTone(status: SmsBatchDeliveryReportRecord["status"]): StatusBadgeProps["tone"] {

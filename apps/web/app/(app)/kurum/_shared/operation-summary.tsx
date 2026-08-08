@@ -56,7 +56,7 @@ export function OperationSummary({ actions = [], ariaLabel, badges = [], items }
         </div>
       ) : null}
       {actions.length > 0 ? (
-        <div aria-label={`${ariaLabel} aksiyon kuyruğu`} className="next-operation-summary__actions" role="list">
+        <div aria-label={`${ariaLabel} önerilen işlemler`} className="next-operation-summary__actions" role="list">
           {actions.map((action) => (
             <ActionCard
               as="div"

@@ -279,6 +279,7 @@ export function StudySessionsPage() {
               : undefined)
         }
         getRowKey={(record) => record.id}
+        hasActiveFilters={Boolean(listQuery.q.trim())}
         loading={sessionsQuery.isPending || referenceQuery.isPending}
         rows={rows}
         summary={

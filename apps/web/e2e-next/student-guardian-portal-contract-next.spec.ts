@@ -25,14 +25,7 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       await openStudentPortal(page, viewport, { requestedPaths });
 
       await expect(page.getByRole("heading", { level: 1, name: "Öğrenci Portalı" })).toBeVisible();
-      const portalSummary = page.getByRole("region", { exact: true, name: "Portal özeti" });
-      await expectPortalSummaryMetrics(
-        portalSummary,
-        ["Toplam devamsızlık", "Geç kalma", "Not", "Ödev", "Başarı", "Net", "Soru", "Gelişim"],
-        rawPiiValues,
-      );
-      await expect(portalSummary).toContainText("Başarı % ana metrik");
-      await expect(portalSummary).toContainText("Soru sayısı bağlamıyla okunur");
+      await expect(page.getByRole("region", { exact: true, name: "Portal özeti" })).toHaveCount(0);
       const focus = page.getByRole("region", { exact: true, name: "Seçili öğrenci özeti" });
       await expect(focus).toContainText("Seçili Öğrenci");
       await expect(focus).toContainText("Öğrenci hesabı");
@@ -43,30 +36,30 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       await expect(focus).toContainText("30");
       await expect(focus).toContainText("Net");
       await expect(focus).toContainText("24,5");
-      const studentDailyScope = page.getByRole("region", { exact: true, name: "Günlük durum" }).getByLabel("Günlük durum için seçilen kişi veya sınıf");
+      const studentDailyBrief = page.getByRole("region", { exact: true, name: "Günlük durum" });
+      await expectPortalSummaryMetrics(
+        studentDailyBrief.getByRole("group", { exact: true, name: "Günlük durum özeti" }),
+        ["Duyuru", "Ödev", "Devamsızlık", "Son sınav"],
+        rawPiiValues,
+      );
+      const studentDailyScope = studentDailyBrief.getByLabel("Günlük durum için seçilen kişi veya sınıf");
       await expect(studentDailyScope).toContainText("Öğrenci");
-      await expect(studentDailyScope).toContainText("Ada Kaya");
+      await expect(studentDailyScope).toContainText("Kişisel görünüm");
       await expect(studentDailyScope).toContainText("Öğrenci hesabı");
+      await expect(studentDailyScope).not.toContainText("Ada Kaya");
       await expectNoPortalActionPiiLeak(studentDailyScope, rawPiiValues);
       const studentActions = page.getByRole("region", { name: "Öğrenci günlük aksiyonları" });
       await expect(studentActions).toContainText("Bugün yapılacaklar");
       await expect(studentActions).toContainText("Öncelikli işler");
-      await expect(studentActions).toContainText("6 iş");
-      await expect(studentActions).toContainText("2 öncelikli");
+      await expect(studentActions).toContainText("3 iş");
+      await expect(studentActions).toContainText("1 öncelikli");
       await expect(studentActions.getByRole("link", { name: /Duyuruları oku: 1 okunmamış/ })).toHaveAttribute("href", "/ogrenci/duyurular");
       await expect(studentActions.getByRole("link", { name: /Ödevi aç: 1 atama/ })).toHaveAttribute("href", "/ogrenci/odevler");
       await expect(studentActions.getByRole("link", { name: /Son sınavı incele: %81,7/ })).toHaveAttribute("href", "/ogrenci/raporlar");
-      await expect(studentActions.getByRole("link", { name: /Devamsızlığı kontrol et: 30 kayıt/ })).toHaveAttribute("href", "/ogrenci/devamsizlik");
-      await expect(studentActions.getByRole("link", { name: /Destek talebini takip et: 1 açık/ })).toHaveAttribute("href", "/ogrenci/destek");
-      await expect(studentActions.getByRole("link", { name: /Önizleme durumu: Canlı hesap/ })).toHaveAttribute("href", "/ogrenci/profil");
-      await expect(studentActions.getByRole("link")).toHaveCount(6);
       await expectPortalActionHrefs(studentActions, [
         "/ogrenci/duyurular",
         "/ogrenci/odevler",
         "/ogrenci/raporlar",
-        "/ogrenci/devamsizlik",
-        "/ogrenci/destek",
-        "/ogrenci/profil",
       ]);
       await expectNoPortalActionPiiLeak(studentActions, rawPiiValues);
       await expectAnchorsAttached(page, [
@@ -102,21 +95,19 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
 
     await expect(page).toHaveURL(/\/ogrenci\?rolePreview=1$/);
     expect(page.url()).not.toContain("preview-token");
-      await expect(page.getByLabel("Rol önizleme bilgisi")).toContainText("Yalnızca Görüntüleme");
-      await expect(page.getByRole("region", { exact: true, name: "Seçili öğrenci özeti" })).toContainText("Yalnızca görüntüleme");
-      await expect(page.getByLabel("Günlük durum için seçilen kişi veya sınıf")).toContainText("Yalnızca görüntüleme");
-      const studentPreviewActions = page.getByRole("region", { name: "Öğrenci günlük aksiyonları" });
+    await expect(page.getByLabel("Rol önizleme bilgisi")).toContainText("Yalnızca Görüntüleme");
+    await expect(page.getByRole("region", { exact: true, name: "Seçili öğrenci özeti" })).toContainText("Yalnızca görüntüleme");
+    await expect(page.getByLabel("Günlük durum için seçilen kişi veya sınıf")).toContainText("Yalnızca görüntüleme");
+    const studentPreviewActions = page.getByRole("region", { name: "Öğrenci günlük aksiyonları" });
     await expect(studentPreviewActions).toContainText("Önizleme durumu");
     await expect(studentPreviewActions).toContainText("Yalnızca görüntüleme");
     await expect(studentPreviewActions.getByRole("link", { name: /Önizleme durumu: Yalnızca görüntüleme/ })).toHaveAttribute("href", "/ogrenci?rolePreview=1");
     await expect(studentPreviewActions.getByRole("link", { name: /Duyuruları oku/ })).toHaveAttribute("href", "/ogrenci/duyurular?rolePreview=1");
+    await expect(studentPreviewActions.getByRole("link", { name: /Son sınavı incele/ })).toHaveAttribute("href", "/ogrenci/raporlar?rolePreview=1");
     await expectPortalActionHrefs(studentPreviewActions, [
       "/ogrenci?rolePreview=1",
       "/ogrenci/duyurular?rolePreview=1",
       "/ogrenci/raporlar?rolePreview=1",
-      "/ogrenci/odevler?rolePreview=1",
-      "/ogrenci/devamsizlik?rolePreview=1",
-      "/ogrenci/destek?rolePreview=1",
     ]);
     await expectStudentProfileAndHistoryPanels(page);
     await expectGuardianRelationsPanel(page);
@@ -164,7 +155,7 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       { context: "Duyurular", label: "Duyurular", path: "/ogrenci/duyurular", panel: () => page.getByRole("region", { exact: true, name: "Duyurular" }) },
       { context: "Devamsızlık", label: "Devamsızlık", path: "/ogrenci/devamsizlik", panel: () => page.getByRole("region", { exact: true, name: "Devamsızlık" }) },
       { context: "Profil ve kayıt bilgileri", label: "Profil", path: "/ogrenci/profil", panel: () => page.getByRole("region", { exact: true, name: "Profil" }) },
-      { context: "Destek talepleri", label: "Kurum Desteği", path: "/ogrenci/destek", panel: () => page.getByRole("region", { exact: true, name: "Destek talepleri" }) },
+      { context: "Destek talepleri", label: "Kurum içi destek", path: "/ogrenci/destek", panel: () => page.getByRole("region", { exact: true, name: "Destek talepleri" }) },
     ];
 
     for (const routeCase of routeCases) {
@@ -204,7 +195,7 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       await expect(focus).toContainText("Seçili Öğrenci");
       await expect(focus).toContainText("Veli görünümü");
       await expectStudentFocusMetrics(focus, 9);
-      await expect(focus).toContainText("Ödemeler");
+      await expect(focus).toContainText("Ödeme planları");
       await expect(focus).toContainText("Kapalı");
       const guardianDailyScope = page.getByRole("region", { exact: true, name: "Günlük durum" }).getByLabel("Günlük durum için seçilen kişi veya sınıf");
       await expect(guardianDailyScope).toContainText("Bağlı öğrenci");
@@ -322,11 +313,11 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
     const routeCases = [
       { context: "Bağlı öğrenci", label: "Öğrenci", path: "/veli/ogrenci", panel: () => page.getByRole("region", { exact: true, name: "Seçili öğrenci özeti" }) },
       { context: "Sınav raporu", label: "Sınav Raporu", path: "/veli/raporlar", panel: () => page.getByRole("region", { name: "Portal rapor özeti" }) },
-      { context: "Ödemeler", label: "Ödemeler", path: "/veli/odemeler", panel: () => page.getByRole("region", { exact: true, name: "Ödeme planları" }) },
+      { context: "Ödeme planları", label: "Ödeme planları", path: "/veli/odemeler", panel: () => page.getByRole("region", { exact: true, name: "Ödeme planları" }) },
       { context: "Ödevler", label: "Ödevler", path: "/veli/odevler", panel: () => page.getByRole("region", { exact: true, name: "Ödevler" }) },
       { context: "Duyurular", label: "Duyurular", path: "/veli/duyurular", panel: () => page.getByRole("region", { exact: true, name: "Duyurular" }) },
       { context: "Bildirim tercihleri", label: "Bildirimler", path: "/veli/bildirimler", panel: () => page.getByRole("region", { exact: true, name: "Bildirim tercihleri" }) },
-      { context: "Destek talepleri", label: "Kurum Desteği", path: "/veli/destek", panel: () => page.getByRole("region", { exact: true, name: "Destek talepleri" }) },
+      { context: "Destek talepleri", label: "Kurum içi destek", path: "/veli/destek", panel: () => page.getByRole("region", { exact: true, name: "Destek talepleri" }) },
     ];
 
     for (const routeCase of routeCases) {

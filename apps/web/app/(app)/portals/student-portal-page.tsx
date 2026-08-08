@@ -30,7 +30,6 @@ import { DevelopmentTrendPanel, type DevelopmentTrendItem } from "./_shared/deve
 import { HomeworkAssignmentsPanel } from "./_shared/homework-panels.js";
 import {
   AccessPanel,
-  MetricGrid,
   PortalActionStrip,
   PortalDailyBrief,
   PortalFrame,
@@ -103,8 +102,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
   const homeworkStatus = `${data?.homeworkAssignments.length ?? 0} atama`;
   const attendanceStatus = `${data?.attendanceSummary.total ?? 0} kayıt`;
   const supportStatus = openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok";
-  const profileSubtitle = data?.profile ? `${data.profile.firstName} ${data.profile.lastName}` : "Öğrenci özeti";
-  const portalSubtitle = studentPortalSubtitle(view, profileSubtitle);
+  const portalSubtitle = studentPortalSubtitle(view, "Öğrenci özeti");
   function selectReportExam(examId: string) {
     const nextSearchParams = new URLSearchParams(searchParams.toString());
     if (examId) nextSearchParams.set("examId", examId);
@@ -179,6 +177,12 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
       value: isRolePreview ? "Yalnızca görüntüleme" : "Canlı hesap",
     },
   ];
+  const studentPriorityKeys = isRolePreview
+    ? ["preview", "announcement", "report"]
+    : ["announcement", "homework", "report"];
+  const studentPriorityItems = studentPriorityKeys
+    .map((key) => studentActionItems.find((item) => item.key === key))
+    .filter((item): item is PortalActionItem => Boolean(item));
   return (
     <PortalFrame
       title="Öğrenci Portalı"
@@ -192,7 +196,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
             scope={{
               detail: isRolePreview ? "Yalnızca görüntüleme" : "Öğrenci hesabı",
               label: "Öğrenci",
-              value: profileSubtitle,
+              value: "Kişisel görünüm",
             }}
             items={[
               {
@@ -219,38 +223,11 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
                 detail: `${formatNumber(reportTotal?.net)} net / ${formatNumber(reportQuestionCount(reportTotal))} soru`,
                 tone: (reportSuccess ?? 0) >= 75 ? "success" : "info",
               },
-              {
-                label: "Destek",
-                value: openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok",
-                detail: "Öğrenci destek takibi",
-                tone: openSupportTickets > 0 ? "warning" : "success",
-              },
-              {
-                label: "Önizleme",
-                value: isRolePreview ? "Yalnızca görüntüleme" : "Canlı hesap",
-                detail: isRolePreview ? "İşlem düğmeleri kapalıdır" : "Okuma ve destek işlemleri açık",
-                tone: isRolePreview ? "neutral" : "info",
-              },
             ]}
           />
           <PortalActionStrip
             ariaLabel="Öğrenci günlük aksiyonları"
-            items={studentActionItems}
-            priorityKeys={isRolePreview
-              ? ["preview", "announcement", "report"]
-              : ["announcement", "homework", "report"]}
-          />
-          <MetricGrid
-            items={[
-              { label: "Toplam devamsızlık", value: data?.attendanceSummary.total ?? 0 },
-              { label: "Geç kalma", value: data?.attendanceSummary.late ?? 0 },
-              { label: "Not", value: data?.teacherNotes.length ?? 0 },
-              { label: "Ödev", value: data?.homeworkAssignments.length ?? 0 },
-              { label: "Başarı", value: formatPercentNumber(reportSuccessRate(reportTotal)) },
-              { label: "Net", value: formatNumber(reportTotal?.net) },
-              { label: "Soru", value: formatNumber(reportQuestionCount(reportTotal)) },
-              { label: "Gelişim", value: data?.developmentAssessments.length ?? 0 },
-            ]}
+            items={studentPriorityItems}
           />
         </>
       ) : null}

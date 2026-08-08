@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -20,6 +20,7 @@ import {
   Textarea,
   type DataTableColumn,
   type StatusBadgeProps,
+  useConfirmDialog,
 } from "@o-okul/ui";
 import type {
   AcademicTermRecord,
@@ -71,6 +72,7 @@ interface AnnouncementReportData {
 export function AnnouncementsPage() {
   const { auth } = useAuth();
   const queryClient = useQueryClient();
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const searchParams = useSearchParams();
   const [listQuery, setListQuery] = useUrlListState(searchParams, { sortOptions: announcementSortOptions });
   const queryKey = ["next-announcements", auth?.session.tenantId ?? "anonymous", listQuery];
@@ -93,8 +95,14 @@ export function AnnouncementsPage() {
   const [smsDeliveryReportJobId, setSmsDeliveryReportJobId] = useState("");
   const [smsStatus, setSmsStatus] = useState("");
   const [smsTemplateId, setSmsTemplateId] = useState("");
+  const [smsRecipientPreview, setSmsRecipientPreview] = useState<SmsBatchRecipientPreviewResult | null>(null);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [isPreviewingSms, setIsPreviewingSms] = useState(false);
+  const [isSendingSms, setIsSendingSms] = useState(false);
   const [error, setError] = useState("");
   const [smsError, setSmsError] = useState("");
+  const announcementCreateRequest = useRef<PendingIdempotentRequest | null>(null);
+  const smsCreateRequest = useRef<PendingIdempotentRequest | null>(null);
   const rows = announcementsQuery.data?.data ?? [];
   const selectedAnnouncement = rows.find((announcement) => announcement.id === selectedReportId);
   const messageTemplates = pageDataQuery.data?.messageTemplates ?? [];
@@ -182,6 +190,7 @@ export function AnnouncementsPage() {
     setSmsDeliveryReportJobId("");
     setSmsError("");
     setSmsStatus("");
+    setSmsRecipientPreview(null);
   }
 
   function closeRecipientReport() {
@@ -189,6 +198,7 @@ export function AnnouncementsPage() {
     setSmsDeliveryReportJobId("");
     setSmsError("");
     setSmsStatus("");
+    setSmsRecipientPreview(null);
   }
 
   function openCreateForm() {
@@ -213,17 +223,45 @@ export function AnnouncementsPage() {
       return;
     }
 
+    const confirmed = await confirm({
+      confirmLabel: "Yayınla",
+      confirmVariant: "primary",
+      description: "Duyuru hemen yayınlanacak. Son kontrolü yapın.",
+      message: (
+        <span>
+          <strong>Başlık:</strong> {parsedForm.data.title}<br />
+          <strong>Metin:</strong> {parsedForm.data.body}<br />
+          <strong>Hedef:</strong> Kurum geneli<br />
+          <strong>Kanal:</strong> Uygulama içi duyuru<br />
+          <strong>Zamanlama:</strong> Hemen<br />
+          <strong>Yayın yeri:</strong> Kurum ana sayfası ve kullanıcı duyuru ekranları
+        </span>
+      ),
+      title: "Duyuruyu yayınla",
+    });
+    if (!confirmed) return;
+
+    setIsPublishing(true);
     try {
-      await createAnnouncement(auth.accessToken, parsedForm.data);
+      const fingerprint = JSON.stringify(parsedForm.data);
+      const request = announcementCreateRequest.current?.fingerprint === fingerprint
+        ? announcementCreateRequest.current
+        : { fingerprint, key: crypto.randomUUID() };
+      announcementCreateRequest.current = request;
+      await createAnnouncement(auth.accessToken, parsedForm.data, request.key);
+      announcementCreateRequest.current = null;
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
     } catch (submitError) {
       setError(apiErrorMessage(submitError, "Duyuru yayınlanamadı."));
+    } finally {
+      setIsPublishing(false);
     }
   }
 
-  async function handleSendAnnouncementSms() {
+  async function handlePreviewAnnouncementSms() {
     if (!auth || !selectedAnnouncement) return;
+    if (isPreviewingSms) return;
 
     setSmsDeliveryReportJobId("");
     setSmsError("");
@@ -233,24 +271,73 @@ export function AnnouncementsPage() {
       return;
     }
 
+    setIsPreviewingSms(true);
     try {
       const preview = await previewSmsRecipients(auth.accessToken, {
         announcementId: selectedAnnouncement.id,
         studentStatus: "ACTIVE",
       });
       if (preview.recipients.length === 0) {
+        setSmsRecipientPreview(preview);
         setSmsStatus("SMS izni olan veli alıcısı bulunamadı.");
         return;
       }
+      setSmsRecipientPreview(preview);
+      setSmsStatus(`${preview.recipientCount} izinli veli alıcısı hazırlandı.`);
+    } catch (smsError) {
+      setSmsError(apiErrorMessage(smsError, "Duyuru SMS alıcıları getirilemedi."));
+    } finally {
+      setIsPreviewingSms(false);
+    }
+  }
 
-      const result = await createSmsBatch(auth.accessToken, {
+  async function handleSendAnnouncementSms() {
+    if (!auth || !selectedAnnouncement || !selectedSmsTemplate || !smsRecipientPreview || isSendingSms) return;
+    if (smsRecipientPreview.recipientCount === 0) {
+      setSmsError("SMS izni olan veli alıcısı bulunamadı.");
+      return;
+    }
+
+    const confirmed = await confirm({
+      confirmLabel: "SMS gönder",
+      confirmVariant: "primary",
+      description: "Mesaj seçili izinli veli alıcıları için gönderime hazırlanacak.",
+      message: (
+        <span>
+          <strong>Başlık:</strong> {selectedAnnouncement.title}<br />
+          <strong>Metin:</strong> {selectedSmsTemplate.body}<br />
+          <strong>Hedef:</strong> {audienceLabel(selectedAnnouncement.audience)} · {scopeLabel(selectedAnnouncement, { campusNames, gradeLevelNames, classNames, courseNames, termNames })}<br />
+          <strong>Kanal:</strong> SMS<br />
+          <strong>Zamanlama:</strong> Hemen<br />
+          <strong>İzinli alıcı:</strong> {smsRecipientPreview.recipientCount}
+        </span>
+      ),
+      title: "SMS gönderimini onayla",
+    });
+    if (!confirmed) return;
+
+    setSmsError("");
+    setSmsStatus("");
+    setIsSendingSms(true);
+    try {
+      const input = {
         templateId: selectedSmsTemplate.id,
-        recipients: preview.recipients.map((recipient) => ({ to: recipient.to })),
-      });
+        recipients: smsRecipientPreview.recipients.map((recipient) => ({ to: recipient.to })),
+        recipientScope: { announcementId: selectedAnnouncement.id, studentStatus: "ACTIVE" as const },
+      };
+      const fingerprint = JSON.stringify(input);
+      const request = smsCreateRequest.current?.fingerprint === fingerprint
+        ? smsCreateRequest.current
+        : { fingerprint, key: crypto.randomUUID() };
+      smsCreateRequest.current = request;
+      const result = await createSmsBatch(auth.accessToken, input, request.key);
+      smsCreateRequest.current = null;
       setSmsDeliveryReportJobId(result.jobId);
-      setSmsStatus(`${result.recipientCount} alıcı kuyruğa alındı.`);
+      setSmsStatus(`${result.recipientCount} alıcı için gönderim başlatıldı.`);
     } catch (smsError) {
       setSmsError(apiErrorMessage(smsError, "Duyuru SMS gönderimi başlatılamadı."));
+    } finally {
+      setIsSendingSms(false);
     }
   }
 
@@ -273,11 +360,11 @@ export function AnnouncementsPage() {
         }
         aria-label="Duyuru yönetimi"
         columns={columns}
-        description="Kurum ve öğretmen duyurularını aynı liste kalıbıyla yayınla."
+        description="Kurum genelindeki bilgilendirmeleri yayınlayın ve okunma durumunu izleyin."
         emptyState={
           <EmptyState
             title="Duyuru yok"
-            description="Kurum, sınıf veya öğretmen hedefli ilk duyuruyu yayınlayarak başla."
+            description="Kurum genelindeki ilk duyuruyu yayınlayarak başlayın."
             primaryAction={{ label: "Duyuru ekle", onClick: openCreateForm }}
           />
         }
@@ -285,19 +372,20 @@ export function AnnouncementsPage() {
         error={error || (announcementsQuery.isError ? apiErrorMessage(announcementsQuery.error, "Duyurular alınamadı.") : undefined)}
         getRowKey={(announcement) => announcement.id}
         density="compact"
+        hasActiveFilters={Boolean(listQuery.q.trim())}
         loading={announcementsQuery.isPending}
         rowClassName={(announcement) => (announcement.id === selectedReportId ? "next-announcement-row--selected" : undefined)}
         rows={rows}
         summary={
           <OperationSummary
             actions={announcementSummaryActions}
-            ariaLabel="Duyuru operasyon özeti"
+            ariaLabel="Duyuru özeti"
             badges={announcementSummaryBadges}
             items={announcementSummaryItems}
           />
         }
         tableCaption="Duyuru yönetimi"
-        tableDescription="Kurum, sınıf, öğretmen, öğrenci ve veli hedefli duyuru operasyonları."
+        tableDescription="Kurum duyuruları ve geçmiş hedef bilgileri."
         title="Duyurular"
       />
       {selectedReportId ? (
@@ -330,7 +418,12 @@ export function AnnouncementsPage() {
               <Field label="SMS şablonu">
                 <Select
                   value={selectedSmsTemplate?.id ?? ""}
-                  onChange={(event) => setSmsTemplateId(event.target.value)}
+                  onChange={(event) => {
+                    setSmsTemplateId(event.target.value);
+                    setSmsRecipientPreview(null);
+                    setSmsStatus("");
+                    setSmsError("");
+                  }}
                 >
                   {messageTemplates.map((template) => (
                     <option key={template.id} value={template.id}>
@@ -339,12 +432,35 @@ export function AnnouncementsPage() {
                   ))}
                 </Select>
               </Field>
-              <Button type="button" onClick={() => void handleSendAnnouncementSms()} disabled={!selectedSmsTemplate}>
+              <Field label="Mesaj uzunluğu" description="Bilgilendirme amaçlıdır; ücret veya SMS parça sayısı tahmini değildir.">
+                <span>{selectedSmsTemplate?.body.length ?? 0} karakter</span>
+              </Field>
+              <Panel
+                aria-label="Duyuru SMS önizleme"
+                title={selectedSmsTemplate?.name ?? "Şablon seçilmedi"}
+                description={smsRecipientPreview ? `${smsRecipientPreview.recipientCount} izinli veli alıcısı` : "Alıcı önizlemesi bekleniyor"}
+                tone="muted"
+              >
+                <p className="next-sms-message-preview">{selectedSmsTemplate?.body ?? "Gönderilecek mesaj metni burada görünür."}</p>
+              </Panel>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void handlePreviewAnnouncementSms()}
+                disabled={!selectedSmsTemplate || isPreviewingSms || isSendingSms}
+              >
+                {isPreviewingSms ? "Alıcılar getiriliyor..." : "Alıcıları önizle"}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void handleSendAnnouncementSms()}
+                disabled={!selectedSmsTemplate || !smsRecipientPreview || smsRecipientPreview.recipientCount === 0 || isPreviewingSms || isSendingSms}
+              >
                 <Send size={17} aria-hidden="true" />
-                SMS gönder
+                {isSendingSms ? "Gönderim hazırlanıyor..." : "SMS gönder"}
               </Button>
               {smsStatus ? (
-                <Alert tone="success" title="SMS kuyruğa alındı">
+                <Alert tone="success" title="SMS gönderimi başladı">
                   {smsStatus}
                 </Alert>
               ) : null}
@@ -367,11 +483,12 @@ export function AnnouncementsPage() {
         </Panel>
       ) : null}
       <FormModal
-        description="Başlık ve duyuru metni zorunludur."
+        description="Başlık ve duyuru metni zorunludur. Duyuru kurum genelinde yayımlanır."
         onCancel={closeForm}
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
         submitLabel="Yayınla"
+        submitting={isPublishing}
         title="Duyuru ekle"
       >
         <Field label="Başlık">
@@ -381,7 +498,7 @@ export function AnnouncementsPage() {
             onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
           />
         </Field>
-        <Field label="Duyuru metni" description="Veliler, öğrenciler veya öğretmenlerle paylaşılacak duyuru içeriği.">
+        <Field label="Duyuru metni" description={`Kurum kullanıcılarıyla paylaşılacak içerik · ${form.body.length} karakter`}>
           <Textarea
             required
             rows={5}
@@ -389,88 +506,17 @@ export function AnnouncementsPage() {
             onChange={(event) => setForm((current) => ({ ...current, body: event.target.value }))}
           />
         </Field>
-        <Field label="Hedef">
-          <Select
-            value={form.audience}
-            onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                audience: event.target.value as AnnouncementRecord["audience"],
-              }))
-            }
-          >
-            <option value="SCHOOL">Tüm okul</option>
-            <option value="TEACHERS">Öğretmenler</option>
-            <option value="STUDENTS">Öğrenciler</option>
-            <option value="GUARDIANS">Veliler</option>
-          </Select>
-        </Field>
-        <Field label="Kampüs">
-          <Select
-            value={form.campusId}
-            onChange={(event) => setForm((current) => ({ ...current, campusId: event.target.value }))}
-          >
-            <option value="">Tüm kampüsler</option>
-            {references.campuses.map((campus) => (
-              <option key={campus.id} value={campus.id}>
-                {campus.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Seviye">
-          <Select
-            value={form.gradeLevelId}
-            onChange={(event) => setForm((current) => ({ ...current, gradeLevelId: event.target.value }))}
-          >
-            <option value="">Tüm seviyeler</option>
-            {references.gradeLevels.map((gradeLevel) => (
-              <option key={gradeLevel.id} value={gradeLevel.id}>
-                {gradeLevel.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Sınıf">
-          <Select
-            value={form.classId}
-            onChange={(event) => setForm((current) => ({ ...current, classId: event.target.value }))}
-          >
-            <option value="">Tüm sınıflar</option>
-            {references.classes.map((schoolClass) => (
-              <option key={schoolClass.id} value={schoolClass.id}>
-                {schoolClass.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Ders">
-          <Select
-            value={form.courseId}
-            onChange={(event) => setForm((current) => ({ ...current, courseId: event.target.value }))}
-          >
-            <option value="">Tüm dersler</option>
-            {references.courses.map((course) => (
-              <option key={course.id} value={course.id}>
-                {formatCourseName(course.name)}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Dönem">
-          <Select
-            value={form.termId}
-            onChange={(event) => setForm((current) => ({ ...current, termId: event.target.value }))}
-          >
-            <option value="">Tüm dönemler</option>
-            {references.terms.map((term) => (
-              <option key={term.id} value={term.id}>
-                {term.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        <Panel
+          aria-label="Duyuru önizleme"
+          title={form.title.trim() || "Başlık girilmedi"}
+          description="Kurum geneli · Uygulama içi duyuru · Hemen"
+          tone="muted"
+        >
+          <p>{form.body.trim() || "Duyuru metni burada görünür."}</p>
+          <p>Kurum ana sayfasında ve kullanıcı duyuru ekranlarında görünür.</p>
+        </Panel>
       </FormModal>
+      {confirmationDialog}
     </>
   );
 }
@@ -486,10 +532,10 @@ async function loadAnnouncements(accessToken: string, listQuery: ListQueryState)
   return apiListRequest<AnnouncementRecord>(accessToken, buildListUrl(`${apiBaseUrl}/announcements`, listQuery));
 }
 
-async function createAnnouncement(accessToken: string, input: AnnouncementFormPayload) {
+async function createAnnouncement(accessToken: string, input: AnnouncementFormPayload, idempotencyKey: string) {
   return apiRequest<AnnouncementRecord>(accessToken, `${apiBaseUrl}/announcements`, {
     body: JSON.stringify(input),
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "Idempotency-Key": idempotencyKey },
     method: "POST",
   });
 }
@@ -511,11 +557,16 @@ async function previewSmsRecipients(
 
 async function createSmsBatch(
   accessToken: string,
-  input: { templateId: string; recipients: Array<{ to: string }> },
+  input: {
+    templateId: string;
+    recipients: Array<{ to: string }>;
+    recipientScope: { announcementId: string; studentStatus: "ACTIVE" };
+  },
+  idempotencyKey: string,
 ) {
   return apiRequest<SmsBatchQueueResult>(accessToken, `${apiBaseUrl}/sms-batches`, {
     body: JSON.stringify(input),
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "Idempotency-Key": idempotencyKey },
     method: "POST",
   });
 }
@@ -587,7 +638,7 @@ function buildAnnouncementSummaryItems({
 
   const items: OperationSummaryItem[] = [
     {
-      description: "URL state ile sayfalanan kayıt",
+      description: "Filtrelenmiş toplam duyuru",
       key: "total",
       label: "Duyuru toplamı",
       value: formatCount(listTotal),
@@ -643,7 +694,7 @@ function buildAnnouncementSummaryBadges({
     },
     {
       key: "references",
-      label: isReferenceLoading ? "Referanslar yükleniyor" : "Bağlam referansları hazır",
+      label: isReferenceLoading ? "Seçim listeleri yükleniyor" : "Seçim listeleri hazır",
       tone: isReferenceLoading ? "warning" : "success",
     },
   ];
@@ -692,8 +743,8 @@ function buildAnnouncementSummaryActions({
     {
       detail: smsUnavailable ? "Öğretmen hedefinde SMS kapalı" : selectedSmsTemplate ? selectedSmsTemplate.name : "Önce SMS şablonu oluşturulmalı",
       key: "sms-queue",
-      label: "SMS kuyruğu",
-      status: smsDeliveryReportJobId ? "Kuyrukta" : selectedSmsTemplate && !smsUnavailable ? "Hazır" : "Bekliyor",
+      label: "SMS gönderimi",
+      status: smsDeliveryReportJobId ? "Gönderim başladı" : selectedSmsTemplate && !smsUnavailable ? "Hazır" : "Bekliyor",
       tone: smsDeliveryReportJobId ? "warning" : selectedSmsTemplate && !smsUnavailable ? "success" : "neutral",
       value: smsStatus || (smsUnavailable ? "Uygun değil" : selectedSmsTemplate ? "Gönderilebilir" : "Şablon yok"),
     },
@@ -715,7 +766,7 @@ function buildAnnouncementSummaryActions({
 }
 
 function scopeLabel(
-  announcement: AnnouncementRecord,
+  announcement: Pick<AnnouncementRecord, "campusId" | "gradeLevelId" | "classId" | "courseId" | "termId">,
   lookups: {
     campusNames: Map<string, string>;
     gradeLevelNames: Map<string, string>;
@@ -826,6 +877,11 @@ interface SmsBatchRecipientPreviewRecord {
 interface SmsBatchRecipientPreviewResult {
   recipients: SmsBatchRecipientPreviewRecord[];
   recipientCount: number;
+}
+
+interface PendingIdempotentRequest {
+  fingerprint: string;
+  key: string;
 }
 
 function recipientTypeLabel(type: AnnouncementRecipientReport["recipients"][number]["recipientType"]) {

@@ -1,0 +1,251 @@
+/* Hallmark redesign layer · BEGIN */
+@media screen {
+/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V4 */
+  /* Hallmark · genre: editorial · landing: Narrative Workflow · app: Workbench · theme: Almanac · designed-as-app */
+  :root {
+    color-scheme: light;
+    --color-text: var(--color-ink);
+    --color-text-secondary: var(--color-ink-secondary);
+    --color-text-muted: var(--color-ink-muted);
+    --color-primary: var(--color-accent);
+    --color-primary-hover: var(--color-accent-hover);
+    --color-primary-strong: var(--color-accent-hover);
+    --color-primary-subtle: var(--color-accent-soft);
+    --color-success: var(--color-success-token);
+    --color-success-subtle: var(--color-success-soft-token);
+    --color-warning: var(--color-warning-token);
+    --color-warning-subtle: var(--color-warning-soft-token);
+    --color-info: var(--color-accent);
+    --color-info-subtle: var(--color-accent-soft);
+    --color-border: var(--color-rule);
+    --color-border-strong: var(--color-rule-strong);
+    --color-border-input: var(--color-rule-strong);
+    --color-border-faint: var(--color-rule-faint);
+    --color-surface: var(--color-paper-raised);
+    --color-surface-muted: var(--color-paper);
+    --color-surface-elevated: var(--color-paper-muted);
+    --color-bg: var(--color-paper);
+    --color-danger: var(--color-danger-token);
+    --color-danger-subtle: var(--color-danger-soft-token);
+    --color-overlay: var(--color-overlay-token);
+    --color-brand: var(--color-accent);
+    --color-focus-ring: var(--color-focus);
+    --radius: var(--radius-control);
+    --radius-lg: var(--radius-panel);
+    --shell-sidebar-width: 15.5rem;
+    --shadow-soft: none;
+    --shadow-card: none;
+    --shadow-card-hover: none;
+    --shadow-modal: 0 24px 58px var(--color-shadow-strong);
+    --focus-ring: 0 0 0 2px var(--color-paper), 0 0 0 4px var(--color-focus);
+    --transition-ui: var(--dur-short) var(--ease-out);
+    --chart-success: var(--color-success-token);
+    --chart-accent: var(--color-accent-secondary);
+    --chart-primary: var(--color-accent);
+    --chart-primary-soft: var(--color-accent-chart-soft);
+    --chart-warning: var(--color-warning-token);
+    --chart-danger: var(--color-danger-token);
+    --chart-neutral: var(--color-ink-muted);
+    --chart-grid: var(--color-chart-grid);
+    --chart-text: var(--color-ink-muted);
+    --chart-surface: var(--color-paper-raised);
+    color: var(--color-ink);
+    background: var(--color-paper);
+    font-family: var(--font-body);
+  }
+
+  html,
+  body {
+    overflow-x: clip;
+  }
+
+  body {
+    background: var(--color-paper);
+    font-family: var(--font-body);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  .next-brand {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-family: var(--font-display);
+    font-style: normal;
+    letter-spacing: -0.018em;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font-family: inherit;
+  }
+
+  table,
+  .uh-metric-card__value,
+  .next-operation-summary__item {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .uh-button {
+    position: relative;
+    min-height: 44px;
+    border-radius: var(--radius-control);
+    overflow: hidden;
+    white-space: nowrap;
+    transition: transform var(--dur-instant) var(--ease-standard);
+  }
+
+  .uh-button__content,
+  .uh-button__loading {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2xs);
+    white-space: nowrap;
+  }
+
+  .uh-button[data-state="loading"] .uh-button__content {
+    visibility: hidden;
+  }
+
+  .uh-button__loading {
+    position: absolute;
+    inset: 0;
+    padding-inline: inherit;
+  }
+
+  .uh-button__spinner {
+    width: 1em;
+    height: 1em;
+    flex: 0 0 auto;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: uh-button-spin 720ms linear infinite;
+  }
+
+  @keyframes uh-button-spin {
+    to {
+      transform: rotate(1turn);
+    }
+  }
+
+  .uh-button--primary {
+    border-color: var(--color-accent-strong);
+    background: var(--color-accent-strong);
+    color: var(--color-accent-ink);
+  }
+
+  .uh-button--primary:hover:not(:disabled) {
+    border-color: color-mix(in oklch, var(--color-accent-strong) 88%, var(--color-ink));
+    background: color-mix(in oklch, var(--color-accent-strong) 88%, var(--color-ink));
+  }
+
+  .uh-button--primary:focus-visible:not(:disabled) {
+    outline: 2px solid var(--color-paper);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px var(--color-focus);
+  }
+
+  .uh-button--secondary,
+  .uh-button--ghost {
+    background: var(--color-paper-raised);
+  }
+
+  .uh-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .uh-button--primary:disabled {
+    border-color: var(--color-rule-strong);
+    background: var(--color-paper-muted);
+    color: var(--color-ink-muted);
+  }
+
+  .uh-button:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  .next-class-search .next-class-search__clear.uh-button {
+    transform: translateY(-50%);
+  }
+
+  .uh-button:focus-visible,
+  .next-button:focus-visible,
+  .uh-input:focus-visible,
+  .uh-select:focus-visible,
+  .uh-textarea:focus-visible,
+  .uh-checkbox__input:focus-visible,
+  .next-form input:focus-visible,
+  .next-form select:focus-visible,
+  .next-form textarea:focus-visible,
+  .next-sidebar a:focus-visible,
+  .next-sidebar button:focus-visible {
+    outline-color: var(--color-focus);
+  }
+
+  .uh-input,
+  .uh-select,
+  .uh-textarea {
+    min-height: 44px;
+    border-color: var(--color-rule-strong);
+    background: var(--color-paper-raised);
+  }
+
+  .uh-input:disabled,
+  .uh-select:disabled,
+  .uh-textarea:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  .uh-field__message {
+    min-height: 1.25em;
+  }
+
+  .next-auth-panel [aria-label="Giriş formu"] .uh-field__message:empty {
+    display: none;
+    min-height: 0;
+  }
+
+  .next-auth-panel [aria-label="Giriş formu"] .uh-input {
+    min-height: 42px;
+  }
+
+  .uh-field__success {
+    color: var(--color-success-token);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .uh-field--invalid .uh-input,
+  .uh-field--invalid .uh-select,
+  .uh-field--invalid .uh-textarea,
+  .uh-input--invalid,
+  .uh-select--invalid,
+  .uh-textarea--invalid {
+    border-color: var(--color-danger-token);
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-danger-token) 15%, transparent);
+  }
+
+  .uh-checkbox {
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .uh-checkbox__input {
+    width: 20px;
+    height: 20px;
+  }
+
+  .uh-checkbox--invalid .uh-checkbox__input {
+    outline: 2px solid var(--color-danger-token);
+    outline-offset: 2px;
+  }
+}

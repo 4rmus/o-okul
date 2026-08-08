@@ -3,7 +3,7 @@ import { EmployeesPage } from "./employees-page.js";
 
 export default function Page() {
   return (
-    <PageFrame title="Çalışanlar ve Yetkiler" subtitle="Çalışan kaydı ile hesap ve tenant yetkisi bağını görüntüleyin.">
+    <PageFrame title="Çalışanlar ve Yetkiler" subtitle="Çalışan kaydı ile kurum hesabı ve yetki bağını görüntüleyin.">
       <EmployeesPage />
     </PageFrame>
   );

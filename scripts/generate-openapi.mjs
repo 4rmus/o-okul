@@ -1268,7 +1268,7 @@ const requiredOperationContracts = [
     requestBody: true,
     responseEnvelope: true,
     idempotencyHeader: true,
-    requestRequired: ["recipients", "templateId"],
+    requestRequired: ["recipientScope", "recipients", "templateId"],
     responseDataRequired: smsBatchQueueResultRequired,
     responseDataForbiddenDeep: smsBatchForbiddenDeep,
     fieldChecks: smsBatchQueueFieldChecks,

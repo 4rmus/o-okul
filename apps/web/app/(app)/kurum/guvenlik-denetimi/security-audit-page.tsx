@@ -14,8 +14,8 @@ const securityGates = [
     title: "Güvenlik denetimi",
     command: "SECURITY_AUDIT_TARGET=file://$PWD/docs/evidence-templates/security-audit.example.json pnpm security:audit:check",
     status: "Kanıt raporu gerekir",
-    evidenceState: "Release kararına yetmez",
-    scope: "Yerel/statik",
+    evidenceState: "Yayın kararı için yeterli değil",
+    scope: "Bu ekrandaki bilgi",
     tone: "warning",
     detail: "Deneme veya canlı ortam güvenlik raporu başarılı olmalı ve kritik bulgu içermemelidir.",
   },
@@ -23,8 +23,8 @@ const securityGates = [
     title: "Canlı ortam ayarları",
     command: "pnpm prod:env:check",
     status: "Canlı ortam gerekir",
-    evidenceState: "Deneme/canlı",
-    scope: "Deneme/canlı",
+    evidenceState: "Deneme/canlı ortam",
+    scope: "Deneme/canlı ortam",
     tone: "danger",
     detail: "Oturum, bağlantı, hizmet sağlayıcı ve diğer güvenlik ayarları doğrulanır.",
   },
@@ -41,20 +41,20 @@ const securityGates = [
     title: "Güvenli bağlantı",
     command: "pnpm traefik:https:smoke",
     status: "Deneme veya canlı adres gerekir",
-    evidenceState: "Deneme/canlı",
-    scope: "Deneme/canlı",
+    evidenceState: "Deneme/canlı ortam",
+    scope: "Deneme/canlı ortam",
     tone: "danger",
     detail: "Güvenli bağlantı ve tarayıcı güvenlik ayarları uçtan uca doğrulanır.",
   },
 ] as const;
 
 const securityHeaders = [
-  buildSecurityControl("Strict-Transport-Security", "Header gerekir", "Staging/prod", "HTTPS smoke ve production response header kanıtında doğrulanır.", "warning"),
-  buildSecurityControl("X-Content-Type-Options", "Header gerekir", "Staging/prod", "MIME sniffing koruması production response header kanıtında doğrulanır.", "warning"),
-  buildSecurityControl("X-Frame-Options", "Header gerekir", "Staging/prod", "Clickjacking koruması production response header kanıtında doğrulanır.", "warning"),
-  buildSecurityControl("Referrer-Policy", "Header gerekir", "Staging/prod", "Referrer sızıntı azaltımı production response header kanıtında doğrulanır.", "warning"),
-  buildSecurityControl("Permissions-Policy", "Header gerekir", "Staging/prod", "Tarayıcı yetki yüzeyi production response header kanıtında doğrulanır.", "warning"),
-  buildSecurityControl("Content-Security-Policy", "Header gerekir", "Staging/prod", "CSP politikası production response header kanıtında doğrulanır.", "warning"),
+  buildSecurityControl("Strict-Transport-Security", "Yanıt başlığı gerekir", "Deneme/canlı ortam", "HTTPS kontrolü ve canlı ortam yanıt başlığı kanıtında doğrulanır.", "warning"),
+  buildSecurityControl("X-Content-Type-Options", "Yanıt başlığı gerekir", "Deneme/canlı ortam", "İçerik türü algılama koruması canlı ortam yanıt başlığı kanıtında doğrulanır.", "warning"),
+  buildSecurityControl("X-Frame-Options", "Yanıt başlığı gerekir", "Deneme/canlı ortam", "Sayfanın izinsiz çerçevelenmesine karşı koruma canlı ortam yanıt başlığı kanıtında doğrulanır.", "warning"),
+  buildSecurityControl("Referrer-Policy", "Yanıt başlığı gerekir", "Deneme/canlı ortam", "Yönlendiren adres bilgisinin sızmasını azaltan ayar canlı ortam yanıt başlığı kanıtında doğrulanır.", "warning"),
+  buildSecurityControl("Permissions-Policy", "Yanıt başlığı gerekir", "Deneme/canlı ortam", "Tarayıcı yetki sınırları canlı ortam yanıt başlığı kanıtında doğrulanır.", "warning"),
+  buildSecurityControl("Content-Security-Policy", "Yanıt başlığı gerekir", "Deneme/canlı ortam", "İçerik güvenliği politikası canlı ortam yanıt başlığı kanıtında doğrulanır.", "warning"),
 ] as const;
 
 const authControls = [
@@ -378,7 +378,7 @@ function buildSecuritySummaryBadges(securityEvents: AuditLogListItemRecord[]): O
     },
     {
       key: "release",
-      label: "Canlı ortam kontrolü ayrı",
+      label: "Yayın doğrulaması ayrıca yapılır",
       tone: "warning",
     },
     {

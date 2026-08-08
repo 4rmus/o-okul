@@ -261,7 +261,7 @@ export function StudentsPage() {
       priority: "primary",
       render: (student) => (
         <span className="next-row-actions">
-          <Link href={`/kurum/ogrenciler/${encodeURIComponent(student.id)}`} aria-label={`${student.firstName} öğrenci dashboard`}>
+          <Link href={`/kurum/ogrenciler/${encodeURIComponent(student.id)}`} aria-label={`${student.firstName} öğrenci özeti`}>
             <Eye size={17} aria-hidden="true" />
           </Link>
           <Button size="icon" variant="ghost" type="button" onClick={() => openEditForm(student)} aria-label={`${student.firstName} düzenle`}>
@@ -817,6 +817,7 @@ export function StudentsPage() {
         emptyText="Öğrenci kaydı yok"
         error={error || (studentsQuery.isError ? "Öğrenciler alınamadı." : undefined)}
         getRowKey={(student) => student.id}
+        hasActiveFilters={Boolean(listQuery.q.trim()) || Object.values(filters).some(Boolean)}
         loading={studentsQuery.isPending}
         rows={rows}
         summary={
@@ -831,7 +832,7 @@ export function StudentsPage() {
         tableDescription="Sınıf ve kayıt durumu."
       />
       <FormModal
-        description="CSV veya XLSX dosyası seçildiğinde önce dry-run yapılır; hata yoksa aktarım tamamlanır."
+        description="CSV veya XLSX dosyası seçildiğinde önce ön kontrol yapılır; hata yoksa aktarım tamamlanır."
         onCancel={closeImportModal}
         onSubmit={(event) => void handleCommitStudentImport(event)}
         open={isImportOpen}
@@ -1342,7 +1343,7 @@ async function loadStudentReferences(accessToken: string): Promise<StudentRefere
 }
 
 function levelLabel(levelId: string, gradeLevels: GradeLevelRecord[]) {
-  return gradeLevels.find((gradeLevel) => gradeLevel.id === levelId)?.name ?? levelId;
+  return gradeLevels.find((gradeLevel) => gradeLevel.id === levelId)?.name ?? "Seviye bilgisi alınamadı";
 }
 
 async function loadStudentDetail(accessToken: string, id: string, reportExamId: string): Promise<StudentDetail> {
@@ -1678,7 +1679,7 @@ function formatStudentStatus(status: StudentRecord["status"]) {
     PASSIVE: "Pasif",
     TRANSFERRED: "Nakil",
   };
-  return labels[status] ?? status;
+  return labels[status] ?? "Durum bilgisi alınamadı";
 }
 
 interface StudentAcademicContextRecord {

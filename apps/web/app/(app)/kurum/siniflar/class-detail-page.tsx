@@ -219,7 +219,7 @@ export function ClassDetailPage({ classId }: { classId: string }) {
             {activeSection === "reports" ? <Panel
               actions={<StatusBadge tone={reportState.tone}>{reportState.label}</StatusBadge>}
               aria-label="Sınıf rapor bağlamı"
-              description="Sınav ve hazır snapshot seçimi sınıf sonuçlarını, başarı yüzdesini ve kazanım kırılımını besler."
+              description="Sınav ve hazır rapor sürümü seçimi sınıf sonuçlarını, başarı yüzdesini ve kazanım kırılımını besler."
               title="Rapor bağlamı"
             >
               <div className="next-detail-selects">

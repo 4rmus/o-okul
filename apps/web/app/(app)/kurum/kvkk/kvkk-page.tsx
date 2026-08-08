@@ -46,7 +46,7 @@ export function KvkkPage() {
     },
     {
       key: "pii",
-      header: "PII",
+      header: "Kişisel bilgi",
       mobilePriority: "primary",
       priority: "primary",
       render: (item) => <StatusBadge tone={piiSummaryTone(item)}>{piiSummary(item)}</StatusBadge>,
@@ -62,7 +62,7 @@ export function KvkkPage() {
           <Button size="icon" variant="ghost"
             type="button"
             onClick={() => void handlePurge(item)}
-            aria-label={`${item.displayRef} PII temizle`}
+            aria-label={`${item.displayRef} kişisel bilgileri temizle`}
             disabled={!item.purgeAvailable}
           >
             <ShieldCheck size={17} aria-hidden="true" />
@@ -75,10 +75,10 @@ export function KvkkPage() {
   async function handlePurge(item: KvkkInventoryRecord) {
     if (!auth) return;
     const confirmed = await confirm({
-      confirmLabel: "PII temizle",
-      description: "Bu işlem server tarafında uygulanır ve audit kaydı esas alınır; panel ham PII kanıtı göstermez.",
-      message: `${item.displayRef} için geri alınamaz PII temizleme işlemi başlatılsın mı?`,
-      title: "PII temizlemeyi onayla",
+      confirmLabel: "Bilgileri temizle",
+      description: "Bu işlem sunucuda uygulanır ve denetim kaydı esas alınır; panel kişisel bilgileri açık göstermez.",
+      message: `${item.displayRef} için geri alınamaz kişisel bilgi temizleme işlemi başlatılsın mı?`,
+      title: "Kişisel bilgileri temizlemeyi onayla",
     });
     if (!confirmed) return;
 
@@ -87,7 +87,7 @@ export function KvkkPage() {
       await purgeRecord(auth.accessToken, kindResource(item.kind), item.id);
       await queryClient.invalidateQueries({ queryKey: inventoryKey });
     } catch (purgeError) {
-      setError(apiErrorMessage(purgeError, "PII temizlenemedi."));
+      setError(apiErrorMessage(purgeError, "Kişisel bilgiler temizlenemedi."));
     }
   }
 
@@ -101,29 +101,29 @@ export function KvkkPage() {
       />
       <EvidenceTrustPanel
         ariaLabel="KVKK güven durumu"
-        title="PII İşlem Güvencesi"
-        description="KVKK ekranı ham kişisel veriyi kanıt metnine taşımadan kayıt türünü, riskini ve server kaynaklı temizleme aksiyonunu gösterir."
+        title="Kişisel Bilgi Güvencesi"
+        description="KVKK ekranı kişisel bilgileri açık göstermeden kayıt türünü, riskini ve sunucuda yürütülen temizleme işlemini gösterir."
         items={[
           {
             label: "İşlem türü",
-            value: "Onaylı purge",
+            value: "Onaylı temizleme",
             tone: "warning",
             scope: "server-audit",
-            detail: "Geri alınamaz PII temizleme işlemi dialog onayı olmadan POST edilmez.",
+            detail: "Geri alınamaz kişisel bilgi temizleme işlemi onay verilmeden başlatılmaz.",
           },
           {
             label: "Kanıt kaynağı",
-            value: "Server/audit",
+            value: "Sistem kaydı",
             tone: "info",
             scope: "server-audit",
-            detail: "Panel cache günceller; nihai doğruluk server sonucu ve audit kaydındadır.",
+            detail: "Panel görünümünü günceller; nihai doğruluk sunucu sonucu ve denetim kaydındadır.",
           },
           {
             label: "Ekran verisi",
-            value: "PII özeti",
+            value: "Kişisel bilgi özeti",
             tone: "success",
             scope: "ui-safe",
-            detail: "Telefon veya TC gibi ham değerler yerine veri kategorisi gösterilir.",
+            detail: "Telefon veya T.C. kimlik numarası gibi değerler yerine veri kategorisi gösterilir.",
           },
         ]}
       />
@@ -131,12 +131,12 @@ export function KvkkPage() {
         aria-label="KVKK yönetimi"
         columns={columns}
         density="compact"
-        description="Öğrenci, öğretmen ve veli PII temizleme işlemlerini tek ekrandan yönet."
+        description="Öğrenci, öğretmen ve veli kişisel bilgi temizleme işlemlerini tek ekrandan yönetin."
         emptyState={
           <EmptyState
             title="Temizlenecek kayıt yok"
-            description="Öğrenci, öğretmen veya veli kaydı oluştuğunda PII temizleme seçenekleri burada görünür."
-            hint="PII temizleme işlemleri geri alınamaz; kayıt oluşmadan aksiyon gösterilmez."
+            description="Öğrenci, öğretmen veya veli kaydı oluştuğunda kişisel bilgi temizleme seçenekleri burada görünür."
+            hint="Kişisel bilgi temizleme işlemleri geri alınamaz; kayıt oluşmadan işlem gösterilmez."
           />
         }
         emptyText="Temizlenecek kayıt yok"
@@ -149,8 +149,8 @@ export function KvkkPage() {
         getRowKey={(item) => `${item.kind}:${item.id}`}
         loading={isLoading}
         rows={rows}
-        tableCaption="KVKK PII temizleme kayıtları"
-        tableDescription="Kayıt türü ve PII kategorisi gösterilir; TC, telefon ve e-posta gibi ham değerler tabloya basılmaz."
+        tableCaption="KVKK kişisel bilgi temizleme kayıtları"
+        tableDescription="Kayıt türü ve kişisel bilgi kategorisi gösterilir; T.C. kimlik numarası, telefon ve e-posta gibi değerler açık gösterilmez."
         title="KVKK"
       />
       {confirmationDialog}
@@ -170,23 +170,23 @@ function buildKvkkSummaryItems(rows: KvkkInventoryRecord[], isLoading: boolean, 
     {
       description: "Ham değer yerine kategori bilgisi",
       key: "pii-scope",
-      label: "PII kapsamı",
+      label: "Kişisel bilgi kapsamı",
       tone: "success",
       value: "Kategori",
     },
     {
-      description: "Dialog onayı olmadan purge POST edilmez",
+      description: "Onay verilmeden temizleme başlatılmaz",
       key: "confirmation",
-      label: "Purge onayı",
+      label: "Temizleme onayı",
       tone: "warning",
       value: "Zorunlu",
     },
     {
-      description: "Nihai doğruluk server sonucu ve audit kaydındadır",
+      description: "Nihai doğruluk sunucu sonucu ve denetim kaydındadır",
       key: "authority",
       label: "Kanıt kaynağı",
       tone: "info",
-      value: "Server/audit",
+      value: "Sistem kaydı",
     },
   ];
 }
@@ -196,7 +196,7 @@ function buildKvkkSummaryBadges(rows: KvkkInventoryRecord[]): OperationSummaryBa
   return [
     {
       key: "pii-safe",
-      label: "PII ham gösterilmez",
+      label: "Kişisel bilgiler açık gösterilmez",
       tone: "success",
     },
     {
@@ -206,7 +206,7 @@ function buildKvkkSummaryBadges(rows: KvkkInventoryRecord[]): OperationSummaryBa
     },
     {
       key: "server-audit",
-      label: "Server/audit esas",
+      label: "Sistem kaydı esas",
       tone: "info",
     },
     {
@@ -225,26 +225,26 @@ function buildKvkkSummaryBadges(rows: KvkkInventoryRecord[]): OperationSummaryBa
 function buildKvkkSummaryActions(rows: KvkkInventoryRecord[]): OperationSummaryAction[] {
   return [
     {
-      detail: "POST yalnız dialog onayından sonra gönderilir",
+      detail: "Temizleme yalnız açık onaydan sonra başlatılır",
       key: "confirmed-purge",
-      label: "Purge akışı",
+      label: "Temizleme akışı",
       status: "Onay gerekir",
       tone: "warning",
-      value: "Server action",
+      value: "Sunucu işlemi",
     },
     {
-      detail: "Panel cache günceller; audit kaydı server tarafında esas alınır",
+      detail: "Panel görünümünü günceller; sunucudaki denetim kaydı esas alınır",
       key: "audit",
-      label: "Audit doğruluğu",
-      status: "Server/audit",
+      label: "Denetim doğruluğu",
+      status: "Sistem kaydı",
       tone: "info",
       value: "Nihai kaynak",
     },
     {
       detail: "Tablo ham TC, telefon veya e-posta yerine veri kategorisi gösterir",
       key: "ui-safe",
-      label: "UI görünümü",
-      status: "PII-safe",
+      label: "Ekran görünümü",
+      status: "Güvenli",
       tone: "success",
       value: `${rows.length.toLocaleString("tr-TR")} kayıt`,
     },

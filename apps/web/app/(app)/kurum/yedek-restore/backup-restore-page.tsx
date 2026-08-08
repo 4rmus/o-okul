@@ -11,34 +11,34 @@ import { OperationSummary, type OperationSummaryAction, type OperationSummaryBad
 
 const backupGates = [
   {
-    title: "Lokal restore smoke",
+    title: "Yerel geri yükleme kontrolü",
     command: "pnpm backup:restore:smoke",
-    status: "Repo kapısı",
-    detail: "Dump alınır, geçici veritabanına restore edilir ve kritik tablolar okunur.",
+    status: "Yerel kontrol",
+    detail: "Veritabanı dökümü alınır, geçici veritabanına geri yüklenir ve kritik tablolar okunur.",
   },
   {
-    title: "Kurum veri export",
+    title: "Kurum verisini dışa aktarma",
     command: "GET /api/v1/backup-restore-jobs/tenant-export",
-    status: "Panel indirir",
+    status: "Ekrandan indirilir",
     detail: "Kurumun kendi eklediği kayıtlar JSON olarak kullanıcının bilgisayarına indirilir.",
   },
   {
-    title: "Teknik off-host backup smoke",
+    title: "Sunucu dışı yedekleme kontrolü",
     command: "BACKUP_OFFSITE_TARGET=s3://o-okul-prod-backups/tenant-a pnpm backup:offsite:smoke",
-    status: "Ops hedefi gerekir",
-    detail: "Ops ortamında file veya S3 hedefinde yaz/oku/sil döngüsü hash ile doğrulanır.",
+    status: "Yedek hedefi gerekir",
+    detail: "Operasyon ortamında dosya veya S3 hedefindeki yazma, okuma ve silme döngüsü özet değeriyle doğrulanır.",
   },
   {
-    title: "WAL arşiv hedefi",
+    title: "Veritabanı işlem geçmişi arşivi",
     command: "WAL_ARCHIVE_TARGET=file:///mnt/wal pnpm wal:archive:smoke",
     status: "Hedef gerekir",
-    detail: "PITR için WAL arşiv hedefinin erişilebilirliği yaz/oku/sil smoke ile kanıtlanır.",
+    detail: "Belirli bir zamana dönüş için işlem geçmişi arşivinin erişilebilirliği yazma, okuma ve silme kontrolüyle doğrulanır.",
   },
   {
-    title: "Restore drill kanıtı",
+    title: "Geri yükleme tatbikatı kanıtı",
     command: "RESTORE_DRILL_TARGET=file://$PWD/docs/evidence-templates/restore-drill.example.json pnpm restore:drill:check",
     status: "Kanıt raporu gerekir",
-    detail: "Staging veya production restore denemesi JSON raporuyla doğrulanır.",
+    detail: "Deneme veya canlı ortam geri yükleme tatbikatı JSON raporuyla doğrulanır.",
   },
 ] as const;
 
@@ -78,12 +78,14 @@ interface BackupRestoreJobRow {
   status: string;
   statusTone: StatusBadgeProps["tone"];
   target: string;
+  technicalReference?: string;
 }
 
 interface BackupRestoreEvidenceRow {
   detail: string;
   key: string;
   label: string;
+  technicalReference?: string;
   tone: StatusBadgeProps["tone"];
   value: string;
 }
@@ -93,7 +95,7 @@ export function BackupRestorePage() {
   const queryClient = useQueryClient();
   const [operationType, setOperationType] = useState<BackupRestoreOperationType>("RESTORE_DRILL");
   const [targetReference, setTargetReference] = useState("");
-  const [reason, setReason] = useState("Aylık restore kanıtı");
+  const [reason, setReason] = useState("Aylık geri yükleme kanıtı");
   const [confirmationText, setConfirmationText] = useState("");
   const [error, setError] = useState("");
   const [exportError, setExportError] = useState("");
@@ -114,19 +116,19 @@ export function BackupRestorePage() {
   const restoreEvidenceRows = buildBackupRestoreEvidenceRows(
     restoreEvidenceFields,
     "Zorunlu alan",
-    "Restore drill JSON raporunda staging/prod bağlamıyla doğrulanır.",
+    "Geri yükleme tatbikatı JSON raporunda deneme/canlı ortam bağlamıyla doğrulanır.",
     "warning",
   );
   const criticalTableRows = buildBackupRestoreEvidenceRows(
     requiredTables,
-    "Restore smoke",
-    "Geçici restore veritabanında tablo varlığı ve sayımı okunur.",
+    "Geri yükleme kontrolü",
+    "Geçici geri yükleme veritabanında tablo varlığı ve sayımı okunur.",
     "info",
   );
   const createJobMutation = useMutation({
     mutationFn: () =>
       createBackupRestoreJob(auth?.accessToken ?? "", {
-        confirmationText,
+        confirmationText: confirmationTokenFor(operationType),
         operationType,
         reason,
         targetReference,
@@ -136,7 +138,7 @@ export function BackupRestorePage() {
       setError("");
       void queryClient.invalidateQueries({ queryKey });
     },
-    onError: (jobError) => setError(apiErrorMessage(jobError, "Yedek restore işi başlatılamadı. Onay metnini ve hedefi kontrol et.")),
+    onError: (jobError) => setError(apiErrorMessage(jobError, "Yedekleme veya geri yükleme işi başlatılamadı. Onay metnini ve hedefi kontrol edin.")),
   });
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -144,6 +146,10 @@ export function BackupRestorePage() {
     const targetError = validateTargetReference(operationType, targetReference);
     if (targetError) {
       setError(targetError);
+      return;
+    }
+    if (confirmationText.trim() !== confirmationDisplayFor(operationType)) {
+      setError(`Onay alanına ${confirmationDisplayFor(operationType)} yazın.`);
       return;
     }
     setError("");
@@ -167,47 +173,47 @@ export function BackupRestorePage() {
   return (
     <PageFrame
       actions={<ReferenceBadge />}
-      title="Yedek / Restore"
-      subtitle="Canlıya çıkmadan önce backup, restore ve PITR kanıt kapılarını izle."
+      title="Yedekleme ve Geri Yükleme"
+      subtitle="Yedekleme, geri yükleme ve belirli bir zamana dönüş kontrollerini tek yerde izleyin."
     >
       <OperationSummary
         actions={summaryActions}
-        ariaLabel="Yedek restore operasyon özeti"
+        ariaLabel="Yedekleme ve geri yükleme operasyon özeti"
         badges={summaryBadges}
         items={summaryItems}
       />
       <EvidenceTrustPanel
-        ariaLabel="Yedek restore güven durumu"
-        title="Yedek Kanıt Gücü"
-        description="Panel kullanıcıya kurum export'u ve korumalı iş takibi verir; restore drill PASS ve off-host/PITR doğrulaması ayrı ops kanıtıdır."
+        ariaLabel="Yedekleme ve geri yükleme güven durumu"
+        title="Yedekleme Güvence Durumu"
+        description="Kurum verisini dışa aktarabilir ve korumalı işlemleri izleyebilirsiniz. Geri yükleme, ayrı konumdaki yedek ve belirli bir zamana dönüş kontrolleri ayrıca doğrulanır."
         items={[
           {
-            label: "Panel export",
+            label: "Ekrandan dışa aktarım",
             value: "Kullanıcı yedeği",
             tone: "success",
             scope: "configured-api",
-            detail: "Kurum verisi JSON olarak indirilir; server-side restore kanıtı yerine geçmez.",
+            detail: "Kurum verisi JSON olarak indirilir; sunucu tarafındaki geri yükleme kanıtının yerine geçmez.",
           },
           {
             label: "İş geçmişi",
             value: "Maskeli",
             tone: "info",
             scope: "ui-safe",
-            detail: "Hedef path, bucket ve kuyruk id ekran görüntülerinde ham gösterilmez.",
+            detail: "Hedef konumu ve hazırlama işlemi kaydı ekran görüntülerinde açık gösterilmez.",
           },
           {
-            label: "Ops kanıtı",
-            value: "Staging/prod",
+            label: "Operasyon kanıtı",
+            value: "Deneme/canlı ortam",
             tone: "warning",
             scope: "staging-prod",
-            detail: "Restore drill, off-host backup ve WAL smoke kanıtları ayrıca tamamlanır.",
+            detail: "Geri yükleme, ayrı konumdaki yedek ve işlem geçmişi kontrolleri ayrıca tamamlanır.",
           },
         ]}
       />
       <OperationDecisionNotice
         decision="Karar: kurum kullanıcısı kendi eklediği veriyi bilgisayarına JSON yedek olarak indirir."
-        reason="Bu ilk model dış provider veya S3 şartı koymadan kurum verisinin sunucu dışına alınmasını sağlar; teknik backup/restore işleri ayrı kalır."
-        nextStep="Worker sonucu bu job kaydına PASS/failed olarak bağlar; restore drill hâlâ ops kanıtıdır ve teknik iş tetikleme yalnız çift onay ve audit log ile kullanılır."
+        reason="Kurum verisi ek bir hizmet zorunluluğu olmadan bilgisayara indirilebilir; sistem yedekleme ve geri yükleme işlemleri ayrı yürütülür."
+        nextStep="İşlem sonucu bu kayıtta Başarılı veya Başarısız olarak gösterilir. Geri yükleme tatbikatı yalnız çift onay ve işlem kaydıyla başlatılır."
       />
       <Panel
         actions={
@@ -224,10 +230,10 @@ export function BackupRestorePage() {
       </Panel>
       <Panel
         as="form"
-        aria-label="Panel restore drill işi"
+        aria-label="Panel geri yükleme tatbikatı işi"
         className="next-backup-job-panel"
-        description="Teknik yedek ve restore drill işleri hedef doğrulama, onay metni ve audit iziyle başlatılır."
-        title="Panel İş Tetikleme"
+        description="Yedekleme ve geri yükleme tatbikatı hedef doğrulama, onay metni ve işlem kaydıyla başlatılır."
+        title="Korumalı İş Başlatma"
         onSubmit={handleSubmit}
       >
         <Field label="İş tipi">
@@ -236,15 +242,15 @@ export function BackupRestorePage() {
             onChange={(event) => {
               const nextOperationType = event.target.value as BackupRestoreOperationType;
               setOperationType(nextOperationType);
-              setReason(nextOperationType === "BACKUP" ? "Panelden korumalı yedek alma" : "Aylık restore kanıtı");
+              setReason(nextOperationType === "BACKUP" ? "Panelden korumalı yedek alma" : "Aylık geri yükleme kanıtı");
               setConfirmationText("");
             }}
           >
-            <option value="RESTORE_DRILL">Restore drill</option>
+            <option value="RESTORE_DRILL">Geri yükleme tatbikatı</option>
             <option value="BACKUP">Yedek alma</option>
           </Select>
         </Field>
-        <Field label={operationType === "BACKUP" ? "Yedek hedefi" : "Restore kanıt dosyası"}>
+        <Field label={operationType === "BACKUP" ? "Yedek hedefi" : "Geri yükleme kanıt dosyası"}>
           <Input
             required
             value={targetReference}
@@ -263,43 +269,46 @@ export function BackupRestorePage() {
             required
             value={confirmationText}
             onChange={(event) => setConfirmationText(event.target.value)}
-            placeholder={confirmationFor(operationType)}
+            placeholder={confirmationDisplayFor(operationType)}
           />
+          <p>
+            Bu işlem için <strong>{confirmationDisplayFor(operationType)}</strong> ifadesini aynen yazın.
+          </p>
         </Field>
         {error ? <p className="next-form-error">{error}</p> : null}
         <Button disabled={createJobMutation.isPending} type="submit">
-          {operationType === "BACKUP" ? "Yedek alma işi başlat" : "Restore drill işi başlat"}
+          {operationType === "BACKUP" ? "Yedek al" : "Geri yüklemeyi dene"}
         </Button>
       </Panel>
       <Panel
-        aria-label="Yedek restore işleri"
-        description="Son panel işleri maskeli hedef ve maskeli kuyruk referansıyla listelenir."
+        aria-label="Yedekleme ve geri yükleme işleri"
+        description="Son panel işleri maskeli hedef ve hazırlama işlemi kaydıyla listelenir."
         title="Son İşler"
       >
         <DataTable
-          caption="Yedek restore işleri"
+          caption="Yedekleme ve geri yükleme işleri"
           columns={backupRestoreJobColumns}
           density="compact"
-          description="Yedek alma ve restore drill işlerinin PII güvenli operasyon durumu."
+          description="Yedek alma ve geri yükleme denemelerinin kişisel bilgileri açık göstermeyen işlem durumu."
           emptyText={
             <EmptyState
               title="Henüz panelden başlatılmış iş yok."
-              description="Çift onayla yedek alma veya restore drill işi başlatınca son durum burada görünür."
+              description="Çift onayla yedekleme veya geri yükleme tatbikatı başlatıldığında son durum burada görünür."
             />
           }
-          error={jobsQuery.isError ? apiErrorMessage(jobsQuery.error, "Yedek restore işleri alınamadı.") : undefined}
+          error={jobsQuery.isError ? apiErrorMessage(jobsQuery.error, "Yedekleme ve geri yükleme işleri alınamadı.") : undefined}
           getRowKey={(row) => row.id}
           loading={jobsQuery.isPending}
           rows={jobRows}
         />
       </Panel>
       <Panel
-        aria-label="Yedek restore kapıları"
-        description="Panel export, restore smoke, off-host backup, WAL ve restore drill release kapıları."
-        title="Kanıt Kapıları"
+        aria-label="Yedekleme ve geri yükleme doğrulamaları"
+        description="Dışa aktarım, geri yükleme, ayrı konumdaki yedek ve işlem geçmişi kontrolleri."
+        title="Doğrulama Adımları"
       >
         <DataTable
-          caption="Yedek restore kanıt kapıları"
+          caption="Yedekleme ve geri yükleme kanıtları"
           columns={backupRestoreEvidenceColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -307,12 +316,12 @@ export function BackupRestorePage() {
         />
       </Panel>
       <Panel
-        aria-label="Restore drill raporu"
-        description="Restore drill PASS çıktısında bulunması gereken zorunlu evidence alanları."
-        title="Restore Drill Raporu"
+        aria-label="Geri yükleme tatbikatı raporu"
+        description="Başarılı bir geri yükleme tatbikatında bulunması gereken zorunlu doğrulama alanları."
+        title="Geri Yükleme Tatbikatı Raporu"
       >
         <DataTable
-          caption="Restore drill rapor alanları"
+          caption="Geri yükleme tatbikatı rapor alanları"
           columns={backupRestoreEvidenceColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -320,12 +329,12 @@ export function BackupRestorePage() {
         />
       </Panel>
       <Panel
-        aria-label="Kritik restore tabloları"
-        description="Restore smoke sonrası okunması gereken kritik tenant, audit, rapor ve migration tabloları."
+        aria-label="Kritik geri yükleme tabloları"
+        description="Geri yükleme kontrolü sonrasında okunması gereken kritik kurum, işlem kaydı, rapor ve şema geçişi tabloları."
         title="Kritik Tablolar"
       >
         <DataTable
-          caption="Kritik restore tabloları"
+          caption="Kritik geri yükleme tabloları"
           columns={backupRestoreEvidenceColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -380,6 +389,12 @@ const backupRestoreJobColumns: Array<DataTableColumn<BackupRestoreJobRow>> = [
         <span>{row.evidence}</span>
         <br />
         <span>{row.checkedTables}</span>
+        {row.technicalReference ? (
+          <details>
+            <summary>İleri ayrıntılar</summary>
+            <code>{row.technicalReference}</code>
+          </details>
+        ) : null}
       </>
     ),
   },
@@ -398,7 +413,17 @@ const backupRestoreEvidenceColumns: Array<DataTableColumn<BackupRestoreEvidenceR
     header: "Kanıt",
     mobilePriority: "primary",
     priority: "primary",
-    render: (row) => row.label,
+    render: (row) => (
+      <>
+        <span>{row.label}</span>
+        {row.technicalReference ? (
+          <details>
+            <summary>İleri ayrıntılar</summary>
+            <code>{row.technicalReference}</code>
+          </details>
+        ) : null}
+      </>
+    ),
     sticky: "left",
   },
   {
@@ -421,7 +446,7 @@ function buildBackupRestoreSummaryItems(jobs: BackupRestoreJobRecord[], isLoadin
   const latestJob = jobs[0];
   return [
     {
-      description: "Panelden tenant export endpointi",
+      description: "Ekrandaki kurum verisi dışa aktarım bağlantısı",
       key: "tenant-export",
       label: "Kurum yedeği",
       tone: "success",
@@ -435,16 +460,16 @@ function buildBackupRestoreSummaryItems(jobs: BackupRestoreJobRecord[], isLoadin
       value: isLoading ? "Yükleniyor" : latestJob ? statusLabel(latestJob.status) : "Boş",
     },
     {
-      description: "Staging/prod restore drill evidence",
+      description: "Deneme/canlı ortam geri yükleme tatbikatı kanıtı",
       key: "restore-drill",
-      label: "Drill raporu",
+      label: "Tatbikat raporu",
       tone: "warning",
       value: "Kanıt gerekir",
     },
     {
-      description: "Off-host backup ve WAL hedefi",
+      description: "Sunucu dışı yedekleme ve veritabanı işlem geçmişi arşivi",
       key: "ops-evidence",
-      label: "Ops kanıtı",
+      label: "Operasyon kanıtı",
       tone: "warning",
       value: "Ayrı kapı",
     },
@@ -455,12 +480,12 @@ function buildBackupRestoreSummaryBadges(jobs: BackupRestoreJobRecord[]): Operat
   return [
     {
       key: "export",
-      label: "tenant-export-v1",
+      label: "Kurum verisi dışa aktarımı",
       tone: "success",
     },
     {
       key: "masking",
-      label: "PII maskeli",
+      label: "Kişisel bilgiler maskeli",
       tone: "info",
     },
     {
@@ -470,7 +495,7 @@ function buildBackupRestoreSummaryBadges(jobs: BackupRestoreJobRecord[]): Operat
     },
     {
       key: "release",
-      label: "Release kanıtı ayrı",
+      label: "Yayın doğrulaması ayrıca yapılır",
       tone: "warning",
     },
   ];
@@ -479,26 +504,26 @@ function buildBackupRestoreSummaryBadges(jobs: BackupRestoreJobRecord[]): Operat
 function buildBackupRestoreSummaryActions(jobs: BackupRestoreJobRecord[]): OperationSummaryAction[] {
   return [
     {
-      detail: "GET /api/v1/backup-restore-jobs/tenant-export",
+      detail: "Kurumun eklediği kayıtlar JSON dosyası olarak indirilir",
       key: "tenant-export",
-      label: "Kurum veri export",
-      status: "Panel indirir",
+      label: "Kurum verisini dışa aktarma",
+      status: "Ekrandan indirilir",
       tone: "success",
       value: "JSON yedek",
     },
     {
-      detail: "Hedef doğrulama, onay metni ve audit izi gerekir",
+      detail: "Hedef doğrulama, onay metni ve işlem kaydı gerekir",
       key: "protected-job",
       label: "Korumalı iş",
       status: "Çift onay",
       tone: "warning",
-      value: "Backup / drill",
+      value: "Yedekleme / tatbikat",
     },
     {
-      detail: "Off-host, WAL ve restore drill evidence release kapısında tamamlanır",
+      detail: "Sunucu dışı yedekleme, veritabanı işlem geçmişi ve geri yükleme tatbikatı kanıtı yayın doğrulamasında tamamlanır",
       key: "release-evidence",
-      label: "Release kanıtı",
-      status: "Staging/prod",
+      label: "Yayın doğrulaması",
+      status: "Deneme/canlı ortam",
       tone: "warning",
       value: "Ayrı kapı",
     },
@@ -507,22 +532,24 @@ function buildBackupRestoreSummaryActions(jobs: BackupRestoreJobRecord[]): Opera
 
 function buildBackupRestoreJobRows(jobs: BackupRestoreJobRecord[]): BackupRestoreJobRow[] {
   return jobs.map((job) => ({
-    checkedTables: job.checkedTables.length > 0 ? job.checkedTables.join(", ") : "-",
-    evidence: job.errorCode ? job.errorCode : job.result ?? "-",
+    checkedTables: job.checkedTables.length > 0 ? job.checkedTables.map(backupEvidenceLabel).join(", ") : "-",
+    evidence: jobEvidenceLabel(job),
     id: job.id,
     operation: operationLabel(job.operationType),
     reason: job.reason ?? "-",
     status: statusLabel(job.status),
     statusTone: statusTone(job.status),
     target: maskTargetReference(job.targetReference),
+    technicalReference: job.checkedTables.length > 0 ? job.checkedTables.join(", ") : undefined,
   }));
 }
 
 function buildBackupRestoreGateRows(): BackupRestoreEvidenceRow[] {
   return backupGates.map((gate) => ({
-    detail: `${gate.detail} ${gate.command}`,
+    detail: gate.detail,
     key: gate.title,
     label: gate.title,
+    technicalReference: gate.command,
     tone: gate.status.includes("gerekir") || gate.status.includes("zorunlu") ? "warning" : "info",
     value: gate.status,
   }));
@@ -537,10 +564,28 @@ function buildBackupRestoreEvidenceRows(
   return items.map((item) => ({
     detail,
     key: item,
-    label: item,
+    label: backupEvidenceLabel(item),
+    technicalReference: item,
     tone,
     value,
   }));
+}
+
+function backupEvidenceLabel(item: string) {
+  const labels: Record<string, string> = {
+    "result = PASS": "Sonuç: Başarılı",
+    "environment = staging veya production": "Kontrol ortamı: deneme veya canlı",
+    drillDate: "Tatbikat tarihi",
+    sourceBackup: "Kullanılan yedek",
+    targetDatabase: "Kontrol veritabanı",
+    tableCounts: "Kontrol edilen kayıt sayıları",
+    "errors boş": "Hata kaydı yok",
+    Tenant: "Kurum kayıtları",
+    AuditLog: "İşlem kayıtları",
+    ReportSnapshot: "Rapor sürümleri",
+    _prisma_migrations: "Veritabanı güncelleme kayıtları",
+  };
+  return labels[item] ?? item;
 }
 
 function loadBackupRestoreJobs(accessToken: string): Promise<BackupRestoreJobRecord[]> {
@@ -580,7 +625,11 @@ function readContentDispositionFileName(value: string | null): string | undefine
   return match?.[1];
 }
 
-function confirmationFor(operationType: BackupRestoreOperationType) {
+function confirmationDisplayFor(operationType: BackupRestoreOperationType) {
+  return operationType === "BACKUP" ? "YEDEK AL" : "GERİ YÜKLEME TATBİKATI";
+}
+
+function confirmationTokenFor(operationType: BackupRestoreOperationType) {
   return operationType === "BACKUP" ? "YEDEK AL" : "RESTORE DRILL";
 }
 
@@ -594,7 +643,7 @@ function validateTargetReference(operationType: BackupRestoreOperationType, targ
   } catch {
     return operationType === "BACKUP"
       ? "Yedek hedefi s3://bucket/prefix veya kalıcı file:// dizin olmalı."
-      : "Restore kanıt dosyası file:// artifact yolu olmalı.";
+      : "Geri yükleme kanıt dosyası kalıcı file:// yolunda olmalı.";
   }
 
   if (operationType === "BACKUP") {
@@ -606,8 +655,8 @@ function validateTargetReference(operationType: BackupRestoreOperationType, targ
     return isLocalTempOrRootFileUrl(url) ? "Yedek file:// hedefi root, /tmp veya /var/tmp altında olamaz." : "";
   }
 
-  if (url.protocol !== "file:") return "Restore kanıt dosyası file:// artifact yolu olmalı.";
-  return isLocalTempFileUrl(url) ? "Restore kanıt dosyası /tmp veya /var/tmp altında olamaz." : "";
+  if (url.protocol !== "file:") return "Geri yükleme kanıt dosyası kalıcı file:// yolunda olmalı.";
+  return isLocalTempFileUrl(url) ? "Geri yükleme kanıt dosyası /tmp veya /var/tmp altında olamaz." : "";
 }
 
 function isLocalTempOrRootFileUrl(url: URL): boolean {
@@ -634,11 +683,18 @@ function isLocalTempPath(path: string): boolean {
 }
 
 function operationLabel(operationType: BackupRestoreJobRecord["operationType"]) {
-  return operationType === "BACKUP" ? "Yedek alma" : "Restore drill";
+  return operationType === "BACKUP" ? "Yedekleme" : "Geri yükleme tatbikatı";
+}
+
+function jobEvidenceLabel(job: BackupRestoreJobRecord) {
+  if (job.errorCode) return "İşlem tamamlanamadı; destek ayrıntılarını kontrol edin.";
+  if (job.result === "PASS") return "Başarılı";
+  if (job.status === "failed") return "Başarısız";
+  return "-";
 }
 
 function statusLabel(status: BackupRestoreJobRecord["status"]) {
-  if (status === "queued") return "Kuyrukta";
+  if (status === "queued") return "Hazırlanıyor";
   if (status === "completed") return "Tamamlandı";
   return "Başarısız";
 }

@@ -10,27 +10,28 @@ const corsHeaders = {
 };
 
 test.describe("Rol önizleme UI sözleşmesi", () => {
-  test("portal kartları PII göstermeden kapsam ve route sözleşmesini korur", async ({ page }) => {
+  test("kişisel ekran kartları PII göstermeden kapsam ve route sözleşmesini korur", async ({ page }) => {
     const unexpectedMutations: string[] = [];
     await openRolePreview(page, { height: 844, width: 390 }, unexpectedMutations);
 
     await expect(page.getByRole("heading", { level: 1, name: "Rol Önizleme" })).toBeVisible();
     const rolePreviewMetrics = page.getByRole("region", { name: "Rol önizleme özeti" });
-    await expect(rolePreviewMetrics).toContainText("3 rol");
+    await expect(rolePreviewMetrics).toContainText("Kişiye göre");
+    await expect(rolePreviewMetrics).toContainText("mevcut veli erişimi");
     await expect(rolePreviewMetrics.locator(".uh-metric-card")).toHaveCount(3);
     await expect(page.locator(".next-role-preview-metrics")).toHaveCount(0);
     const operationSummary = page.getByRole("region", { exact: true, name: "Önizleme güvenlik özeti" });
     await expect(operationSummary).toContainText("Güvenlik");
     await expect(operationSummary).toContainText("Gizli");
-    await expect(operationSummary.getByLabel("Önizleme güvenlik özeti aksiyon kuyruğu")).toBeVisible();
+    await expect(operationSummary.getByLabel("Önizleme güvenlik özeti önerilen işlemler")).toBeVisible();
 
-    const portalCards = page.getByLabel("Rol portal kartları");
-    await expect(portalCards.getByRole("heading", { name: "Öğretmen Portalı" })).toBeVisible();
-    await expect(portalCards.getByRole("heading", { name: "Öğrenci Portalı" })).toBeVisible();
-    await expect(portalCards.getByRole("heading", { name: "Veli Portalı" })).toBeVisible();
+    const portalCards = page.getByLabel("Kişisel ekran kartları");
+    await expect(portalCards.getByRole("heading", { name: "Öğretmen ekranı" })).toBeVisible();
+    await expect(portalCards.getByRole("heading", { name: "Öğrenci ekranı" })).toBeVisible();
+    await expect(portalCards.getByRole("heading", { name: "Mevcut veli ekranı" })).toBeVisible();
     await expect(portalCards).toContainText("Öğretmen hesabı");
     await expect(portalCards).toContainText("Öğrenci hesabı");
-    await expect(portalCards).toContainText("Veli hesabı");
+    await expect(portalCards).toContainText("Mevcut veli hesabı");
     await expect(portalCards).toContainText("/ogretmen");
     await expect(portalCards).toContainText("/ogrenci");
     await expect(portalCards).toContainText("/veli");
@@ -42,9 +43,9 @@ test.describe("Rol önizleme UI sözleşmesi", () => {
     await expect(portalCards).toContainText("Kimliği gizlenmiş öğretmen kaydı");
     await expect(portalCards).toContainText("Kimliği gizlenmiş öğrenci kaydı");
     await expect(portalCards).toContainText("Kimliği gizlenmiş veli kaydı");
-    await expect(portalCards.getByRole("table", { name: "Öğretmen Portalı görülebilen bilgiler" })).toContainText("Yalnızca öğretmene atanmış öğrenci ve ders bilgileri");
-    await expect(portalCards.getByRole("table", { name: "Öğrenci Portalı görülebilen bilgiler" })).toContainText("Yalnızca öğrencinin kendi bilgileri");
-    await expect(portalCards.getByRole("table", { name: "Veli Portalı görülebilen bilgiler" })).toContainText("Yalnızca veliye bağlı öğrencilerin bilgileri");
+    await expect(portalCards.getByRole("table", { name: "Öğretmen ekranı görülebilen bilgiler" })).toContainText("Yalnızca öğretmene atanmış öğrenci ve ders bilgileri");
+    await expect(portalCards.getByRole("table", { name: "Öğrenci ekranı görülebilen bilgiler" })).toContainText("Yalnızca öğrencinin kendi bilgileri");
+    await expect(portalCards.getByRole("table", { name: "Mevcut veli ekranı görülebilen bilgiler" })).toContainText("Yalnızca veliye bağlı öğrencilerin bilgileri");
     await expectNoVisibleTextValues(page, "role-preview-cards", [
       "teacher-a",
       "student-a",
@@ -84,21 +85,21 @@ test.describe("Rol önizleme UI sözleşmesi", () => {
     await expect(roleViewPreview.getByRole("table", { name: "Rolün görebileceği alanlar" })).toBeVisible();
     await expect(roleViewPreview.getByRole("columnheader", { name: "Menü grubu" })).toBeVisible();
     await expect(roleViewPreview.getByRole("columnheader", { name: "Görünür öğe" })).toBeVisible();
-    await expect(roleViewPreview.getByText("Ödemeler")).toBeVisible();
+    await expect(roleViewPreview.getByText("Ödeme planları")).toBeVisible();
     await expect(roleViewPreview.getByText("Kullanıcılar")).toBeVisible();
     await roleSelect.selectOption("ASSISTANT_ADMIN");
     await expect(roleViewPreview.getByText("Öğrenciler")).toBeVisible();
-    await expect(roleViewPreview.getByText("Ödemeler")).toHaveCount(0);
+    await expect(roleViewPreview.getByText("Ödeme planları")).toHaveCount(0);
     await expect(roleViewPreview.getByText("Kullanıcılar")).toHaveCount(0);
     await roleSelect.selectOption("TEACHER");
-    await expect(roleViewPreview).toContainText("Öğretmen Portalı");
+    await expect(roleViewPreview).toContainText("Öğretmen ekranı");
     await expect(roleViewPreview).toContainText("/ogretmen");
     await expect(roleViewPreview).toContainText("Kurum sol menüsü görünmez");
     await roleSelect.selectOption("STUDENT");
-    await expect(roleViewPreview).toContainText("Öğrenci Portalı");
+    await expect(roleViewPreview).toContainText("Öğrenci ekranı");
     await expect(roleViewPreview).toContainText("/ogrenci");
     await roleSelect.selectOption("GUARDIAN");
-    await expect(roleViewPreview).toContainText("Veli Portalı");
+    await expect(roleViewPreview).toContainText("Mevcut veli ekranı");
     await expect(roleViewPreview).toContainText("/veli");
     expect(unexpectedMutations).toEqual([]);
 
@@ -121,7 +122,7 @@ test.describe("Rol önizleme UI sözleşmesi", () => {
       "Öğretmen ekranına geç",
       "/ogretmen?rolePreview=1",
     );
-    await expectNoVisibleTextValues(page, "role-preview-teacher-token", ["preview-token-teacher", "teacher-a", "teacher-preview-main"]);
+    await expectNoVisibleTextValues(page, "role-preview-teacher-token", ["TEACHER", "preview-token-teacher", "teacher-a", "teacher-preview-main"]);
     await expectPreviewTokensNotLeaked(page, "role-preview-teacher-token", ["preview-token-teacher"]);
 
     await startPreview(
@@ -134,7 +135,7 @@ test.describe("Rol önizleme UI sözleşmesi", () => {
       "Öğrenci ekranına geç",
       "/ogrenci?rolePreview=1",
     );
-    await expectNoVisibleTextValues(page, "role-preview-student-token", ["preview-token-student", "student-a", "student-preview-main"]);
+    await expectNoVisibleTextValues(page, "role-preview-student-token", ["STUDENT", "preview-token-student", "student-a", "student-preview-main"]);
     await expectPreviewTokensNotLeaked(page, "role-preview-student-token", ["preview-token-student"]);
 
     await startPreview(
@@ -143,11 +144,11 @@ test.describe("Rol önizleme UI sözleşmesi", () => {
       "GUARDIAN",
       "guardian-preview-main",
       "Veli kaydı doğrulandı",
-      "Veli ekranı: 1 bağlı öğrenci",
-      "Veli ekranına geç",
+      "Mevcut veli ekranı: 1 bağlı öğrenci",
+      "Mevcut veli ekranına geç",
       "/veli?rolePreview=1",
     );
-    await expectNoVisibleTextValues(page, "role-preview-guardian-token", ["preview-token-guardian", "guardian-a", "guardian-preview-main"]);
+    await expectNoVisibleTextValues(page, "role-preview-guardian-token", ["GUARDIAN", "preview-token-guardian", "guardian-a", "guardian-preview-main"]);
     await expectPreviewTokensNotLeaked(page, "role-preview-guardian-token", ["preview-token-guardian"]);
 
     expect(unexpectedMutations).toEqual([]);
@@ -165,7 +166,7 @@ test.describe("Rol önizleme UI sözleşmesi", () => {
     await openRolePreview(page, { height: 844, width: 390 }, unexpectedMutations, { roles: ["ASSISTANT_ADMIN"] });
     await expect(page).toHaveURL(/\/kurum$/);
     await expect(page.getByRole("region", { exact: true, name: "Önizleme güvenlik özeti" })).toHaveCount(0);
-    await expect(page.getByLabel("Rol portal kartları")).toHaveCount(0);
+    await expect(page.getByLabel("Kişisel ekran kartları")).toHaveCount(0);
     await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Rol Önizleme" })).toHaveCount(0);
     await page.getByRole("button", { name: "Komut paleti" }).click();
     const commandPalette = page.getByRole("dialog", { name: "Komut paleti" });
@@ -231,11 +232,12 @@ async function startPreview(
   const previewRequest = page.waitForRequest(
     (request) => request.method() === "POST" && new URL(request.url()).pathname === "/api/v1/role-previews",
   );
-  await page.getByLabel("Rol portal kartları").getByRole("button", { name: `${roleLabel} ekranını önizle` }).click();
+  const screenLabel = role === "GUARDIAN" ? "Mevcut veli ekranı" : `${roleLabel} ekranı`;
+  await page.getByLabel("Kişisel ekran kartları").getByRole("button", { name: `${screenLabel} önizle` }).click();
   expect((await previewRequest).postDataJSON()).toEqual({ targetRole: role, targetSubjectId: subjectId });
 
   const activePreview = page.getByLabel("Aktif rol önizleme kaydı");
-  await expect(activePreview).toContainText(`Seçili rol: ${role}`);
+  await expect(activePreview).toContainText(`Seçili rol: ${roleLabel}`);
   await expect(activePreview).toContainText(`Kişi kaydı: ${subjectPrivacyText}`);
   await expect(activePreview).toContainText("Erişim: Yalnızca görüntüleme");
   await expect(activePreview).toContainText("Kişi erişimi doğrulandı");

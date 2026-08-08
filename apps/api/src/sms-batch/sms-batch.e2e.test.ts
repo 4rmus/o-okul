@@ -62,8 +62,9 @@ describe("SmsBatch API", () => {
       .post("/sms-batches")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
+        recipientScope: { announcementId: "announcement-a", studentStatus: "ACTIVE" },
         templateId: "message-template-a",
-        recipients: [{ to: "5000000001" }, { to: "5000000002" }],
+        recipients: [{ to: "5000000001" }],
       })
       .expect(201);
 
@@ -75,12 +76,12 @@ describe("SmsBatch API", () => {
       entityId: "message-template-a",
       templateId: "message-template-a",
       messageBody: "Sayın veli, öğrencimizin deneme sınavı Pazartesi günü yapılacaktır.",
-      recipients: [{ to: "5000000001" }, { to: "5000000002" }],
+      recipients: [{ to: "5000000001" }],
     });
     expect(response.body).toEqual({
       tenantId: "tenant-a",
       templateId: "message-template-a",
-      recipientCount: 2,
+      recipientCount: 1,
       queueName: "sms-batch",
       jobId: `${producer.inputs[0]?.entityId}_${producer.inputs[0]?.contentHash}`,
       status: "queued",
@@ -94,7 +95,7 @@ describe("SmsBatch API", () => {
     expect(report.body).toMatchObject({
       tenantId: "tenant-a",
       templateId: "message-template-a",
-      recipientCount: 2,
+      recipientCount: 1,
       sentCount: 0,
       failedCount: 0,
       billableSegments: 0,
@@ -106,8 +107,9 @@ describe("SmsBatch API", () => {
   it("SMS batch kuyruğa almayı Idempotency-Key ile tekilleştirir", async () => {
     const key = "sms-batch-idempotency-a";
     const body = {
+      recipientScope: { announcementId: "announcement-a", studentStatus: "ACTIVE" },
       templateId: "message-template-a",
-      recipients: [{ to: "5000000001" }, { to: "5000000002" }],
+      recipients: [{ to: "5000000001" }],
     };
     const first = await request(server)
       .post("/sms-batches")
@@ -131,6 +133,7 @@ describe("SmsBatch API", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .set("Idempotency-Key", key)
       .send({
+        recipientScope: { announcementId: "announcement-a", studentStatus: "PASSIVE" },
         templateId: "message-template-a",
         recipients: [{ to: "5000000001" }],
       })
@@ -143,6 +146,7 @@ describe("SmsBatch API", () => {
       .post("/sms-batches")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
+        recipientScope: { announcementId: "announcement-a", studentStatus: "ACTIVE" },
         templateId: "message-template-b",
         recipients: [{ to: "5000000001" }],
       })
@@ -156,6 +160,7 @@ describe("SmsBatch API", () => {
       .post("/sms-batches")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
+        recipientScope: { announcementId: "announcement-a", studentStatus: "ACTIVE" },
         templateId: "message-template-a",
         recipients: [{ to: " " }],
       })
@@ -171,6 +176,79 @@ describe("SmsBatch API", () => {
     expect(producer.inputs).toHaveLength(0);
   });
 
+  it("recipientScope olmadan batch oluşturmaz", async () => {
+    const response = await request(server)
+      .post("/sms-batches")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        templateId: "message-template-a",
+        recipients: [{ to: "5000000001" }],
+      })
+      .expect(422);
+
+    expect(response.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "recipientScope" })],
+      },
+    });
+    expect(producer.inputs).toHaveLength(0);
+  });
+
+  it.each([
+    {
+      name: "başka tenant'a ait",
+      recipientScope: { studentStatus: "ACTIVE" },
+      recipient: "5000000002",
+    },
+    {
+      name: "seçili filtrenin dışında",
+      recipientScope: { classId: "class-b", studentStatus: "ACTIVE" },
+      recipient: "5000000001",
+    },
+  ])("$name alıcıyı queue öncesi reddeder", async ({ recipient, recipientScope }) => {
+    await request(server)
+      .post("/sms-batches")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ recipientScope, templateId: "message-template-a", recipients: [{ to: recipient }] })
+      .expect(400)
+      .expect((response) => {
+        expect(response.body.error.code).toBe("SMS_BATCH_RECIPIENT_NOT_ELIGIBLE");
+      });
+
+    expect(producer.inputs).toHaveLength(0);
+  });
+
+  it("gönderim öncesi kapatılan veli SMS iznini yeniden doğrular", async () => {
+    await request(server)
+      .patch("/guardians/guardian-a/students/student-a")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ canReceiveSms: false })
+      .expect(200);
+
+    try {
+      await request(server)
+        .post("/sms-batches")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({
+          recipientScope: { announcementId: "announcement-a", studentStatus: "ACTIVE" },
+          templateId: "message-template-a",
+          recipients: [{ to: "5000000001" }],
+        })
+        .expect(400)
+        .expect((response) => {
+          expect(response.body.error.code).toBe("SMS_BATCH_RECIPIENT_NOT_ELIGIBLE");
+        });
+      expect(producer.inputs).toHaveLength(0);
+    } finally {
+      await request(server)
+        .patch("/guardians/guardian-a/students/student-a")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ canReceiveSms: true })
+        .expect(200);
+    }
+  });
+
   it("SMS_ENABLED açık değilse batch ve önizleme SMS_DISABLED döner", async () => {
     process.env.SMS_ENABLED = "false";
 
@@ -178,6 +256,7 @@ describe("SmsBatch API", () => {
       .post("/sms-batches")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
+        recipientScope: { announcementId: "announcement-a", studentStatus: "ACTIVE" },
         templateId: "message-template-a",
         recipients: [{ to: "5000000001" }],
       })
@@ -237,6 +316,7 @@ describe("SmsBatch API", () => {
       .post("/sms-batches")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
       .send({
+        recipientScope: { announcementId: "announcement-a", studentStatus: "ACTIVE" },
         templateId: "message-template-a",
         recipients: [{ to: "5000000001" }],
       })

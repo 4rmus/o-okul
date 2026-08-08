@@ -43,6 +43,7 @@ import { KarneSheet } from "../../_shared/karne-sheet.js";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError, apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, withQueryParams } from "../../../../src/api-client.js";
 import { firstFormError, reportQueryFormSchema } from "../../../../src/form-validation.js";
+import { productTerms, type ProductReportStatus } from "../../../../src/product-terms.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { formatCourseName, formatOutcomeCode, shortCourseName } from "../../_shared/academic-labels.js";
 import { ClassCompareBar, PracticeScoreBar, TopicRadarChart } from "../../_shared/lazy-report-charts.js";
@@ -179,22 +180,22 @@ export function ReportsPage() {
   const snapshotExportReadiness = latestSnapshot
     ? isSnapshotReady
       ? "Excel/PDF hazır"
-      : "READY snapshot gerekli"
+      : "Hazır rapor sürümü gerekli"
     : "Hazır rapor yok";
   const selectedExamLabel = useMemo(() => formatSelectedExamLabel(loadedExamId || examId, exams), [examId, exams, loadedExamId]);
   const selectedExamExists = exams.some((exam) => exam.id === examId);
   const hasSelectedExam = Boolean(examId.trim());
-  const queryStatusLabel = loadedExamId ? "Sorgulandı" : hasSelectedExam ? "Sınav seçili" : "Sınav bekliyor";
+  const queryStatusLabel = loadedExamId ? "Rapor yüklendi" : hasSelectedExam ? "Sınav seçili" : "Sınav bekliyor";
   const queryStatusTone = loadedExamId ? "success" : hasSelectedExam ? "info" : "neutral";
   const productionStatusLabel = reportJobState === "queued"
-    ? "Kuyruğa alındı"
+    ? "Rapor hazırlanıyor"
     : reportJobState === "processing"
-      ? "İşleniyor"
+      ? "Rapor hazırlanıyor"
       : reportJobState === "completed"
-        ? "Tamamlandı"
+        ? "Rapor hazırlandı"
         : reportJobState === "error"
           ? "Hata"
-          : latestSnapshot ? formatSnapshotStatus(latestSnapshot.status) : "Snapshot yok";
+          : latestSnapshot ? formatSnapshotStatus(latestSnapshot.status) : "Rapor sürümü yok";
   const productionStatusTone = reportJobState === "completed"
     ? "success"
     : reportJobState === "error"
@@ -320,7 +321,7 @@ export function ReportsPage() {
     if (!auth || isReportLoading || isReportJobBusy) return;
 
     setError("");
-    setQueueMessage("Rapor üretimi kuyruğa alınıyor.");
+    setQueueMessage("Rapor hazırlanıyor.");
     setReportJobState("queued");
     const parsedForm = reportQueryFormSchema.safeParse({ examId });
     if (!parsedForm.success) {
@@ -337,10 +338,10 @@ export function ReportsPage() {
         ...filters,
       });
       if (selectionGeneration.current !== requestGeneration || examIdRef.current !== requestExamId) return;
-      setQueueMessage("Rapor üretimi kuyruğa alındı.");
+      setQueueMessage("Rapor hazırlanıyor.");
       selectReportTab("overview");
       setReportJobState("processing");
-      setQueueMessage("Rapor üretimi işleniyor.");
+      setQueueMessage("Rapor hazırlanıyor.");
       controller = new AbortController();
       reportJobAbortController.current = controller;
       await waitForReportGenerationJob(auth.accessToken, requestExamId, job.jobId, controller.signal);
@@ -349,7 +350,7 @@ export function ReportsPage() {
       if (controller.signal.aborted || selectionGeneration.current !== requestGeneration || examIdRef.current !== requestExamId) return;
       setReportData(data);
       setLoadedExamId(requestExamId);
-      setQueueMessage("Rapor üretimi tamamlandı.");
+      setQueueMessage("Rapor hazırlandı.");
       setReportJobState("completed");
       selectReportTab("overview");
     } catch (queueError) {
@@ -358,7 +359,7 @@ export function ReportsPage() {
       setQueueMessage("");
       setError(queueError instanceof ReportGenerationTimeoutError
         ? queueError.message
-        : apiErrorMessage(queueError, "Rapor üretimi tamamlanamadı."));
+        : apiErrorMessage(queueError, "Rapor hazırlanamadı."));
     } finally {
       if (controller && reportJobAbortController.current === controller) reportJobAbortController.current = null;
     }
@@ -425,7 +426,16 @@ export function ReportsPage() {
   return (
     <PageFrame
       title="Sınav Raporu"
-      subtitle="Raporu sorgula, üret ve Excel/PDF olarak dışa aktar."
+      subtitle="Raporu açın, gerekiyorsa yeniden hazırlayın ve Excel/PDF olarak indirin."
+      context={
+        <dl className="next-work-context next-report-work-context">
+          <div><dt>Sınav</dt><dd>{selectedExamLabel === "-" ? "Seçilmedi" : selectedExamLabel}</dd></div>
+          <div>
+            <dt>{productTerms.reportVersion}</dt>
+            <dd>{latestSnapshot ? formatSnapshotStatus(latestSnapshot.status) : "Henüz oluşturulmadı"}</dd>
+          </div>
+        </dl>
+      }
     >
       <section className="next-report-workspace" aria-label="Rapor çalışma alanı">
         <Panel
@@ -471,13 +481,13 @@ export function ReportsPage() {
                 <Button
                   disabled={!examId || isReportLoading}
                   loading={isReportJobBusy}
-                  loadingLabel="İşleniyor"
+                  loadingLabel="Hazırlanıyor"
                   type="button"
                   variant="secondary"
                   onClick={() => void enqueueReportGeneration()}
                 >
                   <RefreshCw size={17} aria-hidden="true" />
-                  {latestSnapshot ? "Yeniden üret" : "Rapor üret"}
+                  {latestSnapshot ? "Yeniden hazırla" : "Raporu hazırla"}
                 </Button>
               ) : null}
             </div>
@@ -520,7 +530,7 @@ export function ReportsPage() {
               </Field>
             </div>
           </details>
-          {referencesQuery.isError ? <p className="uh-crud-page__error" role="alert">Rapor referansları alınamadı.</p> : null}
+          {referencesQuery.isError ? <p className="uh-crud-page__error" role="alert">Rapor için gerekli bilgiler alınamadı.</p> : null}
           {error ? <p className="uh-crud-page__error" role="alert">{error}</p> : null}
           {queueMessage ? <p aria-live="polite" className="uh-crud-page__success" role="status">{queueMessage}</p> : null}
         </Panel>
@@ -531,7 +541,7 @@ export function ReportsPage() {
             <small>{snapshotContext}</small>
           </div>
           <div className="next-report-status-pills">
-            <span>Sorgu <StatusBadge tone={queryStatusTone}>{queryStatusLabel}</StatusBadge></span>
+            <span>Seçim <StatusBadge tone={queryStatusTone}>{queryStatusLabel}</StatusBadge></span>
             <span>Rapor <StatusBadge tone={productionStatusTone}>{productionStatusLabel}</StatusBadge></span>
             <span>Çıktı <StatusBadge tone={outputStatusTone}>{snapshotExportReadiness}</StatusBadge></span>
             <span>Karne <StatusBadge tone={karneStatusTone}>{karneStatusLabel}</StatusBadge></span>
@@ -539,8 +549,8 @@ export function ReportsPage() {
           <details className="next-report-meta-details">
             <summary>Rapor ayrıntıları</summary>
             <dl>
-              <div><dt>Snapshot</dt><dd>{formatSnapshotStatus(latestSnapshot?.status)}</dd></div>
-              <div><dt>Üretim zamanı</dt><dd>{snapshotGeneratedAt}</dd></div>
+              <div><dt>{productTerms.reportVersion}</dt><dd>{formatSnapshotStatus(latestSnapshot?.status)}</dd></div>
+              <div><dt>Hazırlanma zamanı</dt><dd>{snapshotGeneratedAt}</dd></div>
               <div><dt>Bağlam</dt><dd>{snapshotContext}</dd></div>
               <div><dt>Girdi</dt><dd>{snapshotInputRefs}</dd></div>
             </dl>
@@ -569,9 +579,9 @@ export function ReportsPage() {
           {!latestSnapshot && !isReportLoading ? (
             <EmptyState
               title="Hazır rapor yok"
-              description="Üstteki kontrol alanından sınavı ve kapsamı seçerek raporu getir veya üret."
+              description="Üstteki kontrol alanından sınavı ve kapsamı seçerek raporu açın veya hazırlayın."
               primaryAction={examId && !isReportJobBusy
-                ? { label: "Rapor üret", onClick: () => void enqueueReportGeneration() }
+                ? { label: "Raporu hazırla", onClick: () => void enqueueReportGeneration() }
                 : undefined}
             />
           ) : null}
@@ -623,7 +633,7 @@ export function ReportsPage() {
               className="next-report-output-panel"
               description={
                 <>
-                  Excel ve PDF çıktıları yalnız READY snapshot üzerinden alınır. Mevcut durum:{" "}
+                  Excel ve PDF çıktıları yalnız hazır rapor sürümünden alınır. Mevcut durum:{" "}
                   <StatusBadge tone={snapshotStatusTone(latestSnapshot.status)}>{formatSnapshotStatus(latestSnapshot.status)}</StatusBadge>
                 </>
               }
@@ -640,7 +650,7 @@ export function ReportsPage() {
                 </div>
                 <div>
                   <strong>Kurum PDF özeti</strong>
-                  <span>Nötr rapor şablonu ve seçili snapshot verisi.</span>
+                  <span>Nötr rapor şablonu ve seçili rapor sürümü verisi.</span>
                   <Button disabled={!isSnapshotReady} onClick={() => void exportReport("pdf-summary")}>
                     <Download size={17} aria-hidden="true" />
                     PDF indir
@@ -648,7 +658,7 @@ export function ReportsPage() {
                 </div>
                 <div>
                   <strong>Toplu Karneler</strong>
-                  <span>Snapshot içindeki tüm öğrencilerin iki sayfalık karneleri.</span>
+                  <span>Rapor sürümündeki tüm öğrencilerin iki sayfalık karneleri.</span>
                   <Button disabled={!isSnapshotReady} onClick={() => void exportReport("pdf-packet")}>
                     <Download size={17} aria-hidden="true" />
                     Toplu karneleri indir
@@ -922,7 +932,7 @@ function isAbortError(error: unknown) {
 
 class ReportGenerationTimeoutError extends Error {
   constructor() {
-    super("Rapor üretimi hâlâ işleniyor. Bir süre sonra sorguyu yenileyin.");
+    super("Rapor hâlâ hazırlanıyor. Bir süre sonra yeniden kontrol edin.");
   }
 }
 
@@ -960,11 +970,10 @@ function formatNumber(value: number | undefined) {
 }
 
 function formatSnapshotStatus(status: string | undefined) {
-  if (status === "READY") return "Hazır";
-  if (status === "STALE") return "Eski";
-  if (status === "PENDING") return "Bekliyor";
-  if (status === "FAILED") return "Hatalı";
-  return status ?? "Yok";
+  if (status && status in productTerms.reportStatus) {
+    return productTerms.reportStatus[status as ProductReportStatus];
+  }
+  return status ? "Durum bilgisi alınamadı" : "Yok";
 }
 
 function snapshotStatusTone(status: string | undefined) {
@@ -1035,9 +1044,9 @@ function formatSnapshotInputRefs(inputRefs: Record<string, unknown> | undefined)
 
   const resultKeys = Array.isArray(inputRefs.resultKeys) ? inputRefs.resultKeys.length : 0;
   const namedRefs = [
-    inputRefs.rawImportId ? "ham optik" : "",
+    inputRefs.rawImportId ? productTerms.rawImport.toLocaleLowerCase("tr-TR") : "",
     inputRefs.answerKeyId ? "cevap anahtarı" : "",
-    inputRefs.parserConfigId ? "parser" : "",
+    inputRefs.parserConfigId ? productTerms.parserConfig.toLocaleLowerCase("tr-TR") : "",
     inputRefs.staleReason ? "yenileme nedeni" : "",
   ].filter(Boolean);
   const parts = [
@@ -1045,7 +1054,7 @@ function formatSnapshotInputRefs(inputRefs: Record<string, unknown> | undefined)
     ...namedRefs,
   ].filter(Boolean);
 
-  return parts.length > 0 ? parts.join(" / ") : `${Object.keys(inputRefs).length} referans`;
+  return parts.length > 0 ? parts.join(" / ") : `${Object.keys(inputRefs).length} girdi`;
 }
 
 function toBranchRadar(snapshot: ReportSnapshotRecord | null) {
@@ -1140,8 +1149,8 @@ function ReportAnalyticsPanel({
         </div>
       </div>
       {!isSnapshotReady ? (
-        <Alert tone="warning" title="Snapshot çıktıya hazır değil">
-          Bu snapshot {formatSnapshotStatus(latestSnapshot.status)} durumunda. Analiz görüntülenebilir, Excel/PDF çıktı hazır olduğunda açılır.
+        <Alert tone="warning" title="Rapor sürümü çıktıya hazır değil">
+          Bu rapor sürümü {formatSnapshotStatus(latestSnapshot.status)} durumunda. Analiz görüntülenebilir, Excel/PDF çıktı hazır olduğunda açılır.
         </Alert>
       ) : null}
       <section className="next-report-summary-hero" aria-label="Rapor özeti">
@@ -1286,7 +1295,7 @@ function formatQuestionStatus(status: ReportStudentQuestionSummary["status"]) {
     CORRECT: "Doğru",
     WRONG: "Yanlış",
   };
-  return labels[status] ?? status;
+  return labels[status] ?? "Durum bilgisi alınamadı";
 }
 
 function StudentResultsTable({
@@ -1410,7 +1419,7 @@ function StudentResultsTable({
           emptyText={
             <EmptyState
               title="Öğrenci sonucu yok"
-              description="Bu snapshot içinde öğrenci sonucu veya katılımcı kaydı bulunamadı."
+              description="Bu rapor sürümünde öğrenci sonucu veya katılımcı kaydı bulunamadı."
             />
           }
           getRowKey={(row) => row.rowKey}

@@ -10,6 +10,19 @@ const tempDir = mkdtempSync(join(tmpdir(), "ui-ux-completion-contract-"));
 const artifactDir = resolve("artifacts/ui-ux-completion-contract");
 
 try {
+  expectFailure("missing status semantics", (ledger) => {
+    delete ledger.statusSemantics.deliveryStatus;
+  }, "statusSemantics deliveryStatus, localStatus ve liveStatus alanlarını taşımalı");
+  expectFailure("invalid delivery status", (ledger) => {
+    ledger.slices[1].deliveryStatus = "PROVEN";
+  }, "deliveryStatus geçersiz");
+  expectFailure("complete slice with open item", (ledger) => {
+    ledger.slices[1].openItems = ["Açık iş"];
+  }, "COMPLETE iken openItems boş olmalı");
+  expectFailure("partial slice without open item", (ledger) => {
+    ledger.slices[1].deliveryStatus = "PARTIAL";
+    ledger.slices[1].openItems = [];
+  }, "PARTIAL iken en az bir açık madde taşımalı");
   expectFailure("missing requirement evidence", (ledger) => {
     delete ledger.slices[0].requirementEvidence[ledger.slices[0].requirements[0]];
   }, "requirementEvidence anahtarları requirements ile birebir eşleşmeli");
@@ -27,7 +40,7 @@ try {
   }, "tam görsel spec kanıtı pnpm ui-ux-redesign:visual-qa komutuna bağlanmalı");
   expectFailure("non proven local status", (ledger) => {
     ledger.slices[0].localStatus = "IN_PROGRESS";
-  }, "localStatus tamamlanma ledger'ında PROVEN olmalı");
+  }, "localStatus yapısal kanıt bağında PROVEN olmalı");
 
   mkdirSync(artifactDir, { recursive: true });
   const report = JSON.parse(readFileSync("docs/evidence-templates/github-ci.example.json", "utf8"));
@@ -61,7 +74,7 @@ try {
     GITHUB_CI_EVIDENCE_TARGET: target,
     UI_UX_PROFESSIONALIZATION_SOURCE_SHA: "1111111111111111111111111111111111111111",
   };
-  expectSuccess(["--local-proof-only", ...liveArgs], proofEnv, "UI/UX yalnız yerel tamamlanma kanıtı doğrulandı");
+  expectSuccess(["--local-proof-only", ...liveArgs], proofEnv, "UI/UX yalnız yerel kanıt bağları doğrulandı");
   expectFailureRun(liveArgs, proofEnv, "yalnız tam staging evidence zinciri sonrasında");
   expectFailureRun(liveArgs, {
     ...proofEnv,

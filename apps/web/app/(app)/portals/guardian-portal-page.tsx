@@ -680,7 +680,7 @@ function guardianPortalSubtitle(view: GuardianPortalView, fallback: string) {
     homework: "Ödevler",
     notifications: "Bildirim tercihleri",
     overview: fallback,
-    payments: "Ödemeler",
+    payments: "Ödeme planları",
     reports: "Sınav raporu",
     student: "Bağlı öğrenci",
     support: "Destek talepleri",

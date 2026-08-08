@@ -103,7 +103,7 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
           <>
             <OperationSummary
               actions={guardianSummaryActions}
-              ariaLabel="Veli detay operasyon özeti"
+              ariaLabel="Veli detay özeti"
               badges={guardianSummaryBadges}
               items={guardianSummaryItems}
             />
@@ -271,7 +271,7 @@ function buildGuardianSummaryBadges(detail: GuardianDetailData): OperationSummar
   return [
     {
       key: "pii",
-      label: "PII maskeli",
+      label: "Kişisel bilgiler maskeli",
       tone: "success",
     },
     {

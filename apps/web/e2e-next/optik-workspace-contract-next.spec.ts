@@ -32,7 +32,7 @@ const hostileOptikReferences = [
 const newOpticalFormCases = [
   {
     preset: "OPTIK_129",
-    name: "OPTİK FORM 129",
+    name: "129 optik düzeni",
     rowLength: 223,
     questionCount: 120,
     rows: [
@@ -48,7 +48,7 @@ const newOpticalFormCases = [
   },
   {
     preset: "YANIT",
-    name: "YANIT YAYINLARI",
+    name: "Yanıt Yayınları optik düzeni",
     rowLength: 233,
     questionCount: 120,
     rows: [
@@ -64,7 +64,7 @@ const newOpticalFormCases = [
   },
   {
     preset: "OPTIK_840_LGS",
-    name: "OPTİK 840 — LGS",
+    name: "840 LGS optik düzeni",
     rowLength: 280,
     questionCount: 90,
     rows: [
@@ -95,13 +95,13 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-optik");
     await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBe("quarantine");
 
-    await page.getByRole("tab", { name: "1. Format" }).click();
-    await expect(page.getByRole("tab", { name: "1. Format" })).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("tab", { name: "1. Optik düzen" }).click();
+    await expect(page.getByRole("tab", { name: "1. Optik düzen" })).toHaveAttribute("aria-selected", "true");
     await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-optik");
     await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBeNull();
   });
 
-  test("yeni TXT/DAT presetleri soru sayısı, satır uzunluğu ve kolon önizlemesini korur", async ({ page }) => {
+  test("optik düzenleri ana bilgileri gösterir, destek ayrıntılarını kapalı tutar", async ({ page }) => {
     const suggestionBodies: Array<Record<string, unknown>> = [];
     const approvalBodies: Array<Record<string, unknown>> = [];
     page.on("request", (request) => {
@@ -117,26 +117,36 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
 
     await openWithOptikMocks(page, "/kurum/optik");
 
-    const presetSelect = page.getByRole("combobox", { name: "Kayıtlı TXT/DAT formu" });
+    const presetSelect = page.getByRole("combobox", { name: "Optik düzen" });
     const selectedFormSummary = page.getByLabel("Seçili form özeti");
-    const formPreviewTable = page.getByRole("table", { name: "Optik form alan önizlemesi" });
-    const unverifiedPresetAlert = page.getByRole("status").filter({ hasText: "Gerçek TXT/DAT örneği bekleniyor" });
+    const advancedDetails = page.locator("details.next-optical-format-details");
+    const technicalSummary = advancedDetails.getByLabel("Seçili düzenin teknik ayrıntıları");
+    const formPreviewTable = page.getByRole("table", { name: "Seçili optik düzen alanları" });
+    const unverifiedPresetAlert = page.getByRole("status").filter({ hasText: "Gerçek dosya örneği bekleniyor" });
 
+    await expect(selectedFormSummary.locator(".uh-info-item")).toHaveCount(2);
+    await expect(selectedFormSummary).toContainText("7108 LGS optik düzeni");
+    await expect(selectedFormSummary).toContainText("90 soru");
+    await expect(technicalSummary).toBeHidden();
+    await expect(formPreviewTable).toBeHidden();
     await expect(unverifiedPresetAlert).toHaveCount(0);
+    await advancedDetails.getByText("İleri ayrıntılar", { exact: true }).click();
+    await expect(technicalSummary).toBeVisible();
+    await expect(technicalSummary).toContainText("Düzen kodu");
+    await expect(technicalSummary).toContainText("Dosya türü");
+    await expect(technicalSummary).toContainText("Sürüm");
 
     for (const testCase of newOpticalFormCases) {
       await presetSelect.selectOption(testCase.preset);
       await expect(presetSelect).toHaveValue(testCase.preset);
       await expect(presetSelect.locator("option:checked")).toHaveText(testCase.name);
-      await expect(selectedFormSummary).toContainText(`${testCase.rowLength} karakter`);
+      await expect(selectedFormSummary).toContainText(testCase.name);
       await expect(selectedFormSummary).toContainText(`${testCase.questionCount} soru`);
+      await expect(technicalSummary).toContainText(`${testCase.rowLength} karakter`);
       await expect(unverifiedPresetAlert).toBeVisible();
-      await expect(unverifiedPresetAlert).toContainText("referans görsel kolonlarından türetildi");
-      await expect(unverifiedPresetAlert).toContainText("gerçek üretici TXT/DAT dosyasıyla henüz doğrulanmadı");
-      await expect(unverifiedPresetAlert).toContainText("Kullanıcı bunu bilerek seçiyor");
-      await expect(unverifiedPresetAlert).toContainText(
-        "Tablo fiziksel kolon kapasitesini, soru sayısı seçilen modda okunan mantıksal cevapları gösterir.",
-      );
+      await expect(unverifiedPresetAlert).toContainText("referans form görselindeki alan konumlarından hazırlanmıştır");
+      await expect(unverifiedPresetAlert).toContainText("gerçek üretici dosyasıyla henüz doğrulanmamıştır");
+      await expect(unverifiedPresetAlert).toContainText("Aşağıdaki tablo dosyadaki alan konumlarını gösterir");
       await expect(formPreviewTable.locator("tbody tr")).toHaveCount(testCase.rows.length);
 
       for (const [index, [section, start, end]] of testCase.rows.entries()) {
@@ -158,6 +168,12 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await expect.poll(() => suggestionBodies).toEqual([{ preset: "OPTIK_840_LGS" }]);
     await expect.poll(() => approvalBodies).toHaveLength(1);
     expect(approvalBodies[0]).toMatchObject({ version: "optik-840-lgs-v1" });
+
+    await page.getByRole("tab", { name: "1. Optik düzen" }).click();
+    await advancedDetails.getByText("İleri ayrıntılar", { exact: true }).click();
+    const parserSummary = advancedDetails.locator(".next-parser-summary");
+    await expect(parserSummary).toContainText("Ayraç");
+    await expect(parserSummary).toContainText("Güven");
   });
 
   test("mobilde optik akışı rapor çalışma alanına güvenli geçiş verir", async ({ page }) => {
@@ -185,24 +201,29 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     const workflowStrip = page.getByRole("region", { name: "Optik iş akışı" });
     await expect(workflowStrip).toHaveClass(/uh-info-grid/);
     await expect(workflowStrip.locator(".uh-info-item")).toHaveCount(4);
-    await expect(workflowStrip).toContainText("Format");
-    await expect(workflowStrip).toContainText("Format bekliyor");
+    await expect(workflowStrip).toContainText("Optik düzen");
+    await expect(workflowStrip).toContainText("Optik düzen bekliyor");
     await expect(workflowStrip).toContainText("Yükleme");
     await expect(workflowStrip).toContainText("Dosya bekliyor");
     await expect(workflowStrip).toContainText("Analiz");
     await expect(workflowStrip).toContainText("Yükleme bekliyor");
     await expect(workflowStrip).toContainText("Çıktı");
     await expect(workflowStrip).toContainText("Analiz bekliyor");
-    await expect(page.getByRole("tab", { name: "1. Format" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: "1. Optik düzen" })).toHaveAttribute("aria-selected", "true");
     const selectedFormSummary = page.getByLabel("Seçili form özeti");
     await expect(selectedFormSummary).toHaveClass(/uh-info-grid/);
-    await expect(selectedFormSummary.locator(".uh-info-item")).toHaveCount(4);
+    await expect(selectedFormSummary.locator(".uh-info-item")).toHaveCount(2);
+    await expect(selectedFormSummary).toContainText("7108 LGS optik düzeni");
     await expect(selectedFormSummary).toContainText("90 soru");
-    const parserSummary = page.locator(".next-parser-summary").first();
+    const advancedDetails = page.locator("details.next-optical-format-details");
+    await expect(advancedDetails.getByLabel("Seçili düzenin teknik ayrıntıları")).toBeHidden();
+    await advancedDetails.getByText("İleri ayrıntılar", { exact: true }).click();
+    const parserSummary = advancedDetails.locator(".next-parser-summary");
     await expect(parserSummary).toHaveClass(/uh-info-grid/);
     await expect(parserSummary.locator(".uh-info-item")).toHaveCount(1);
-    await expect(parserSummary).toContainText("Format seçimi bekliyor");
-    const formPreviewTable = page.getByRole("table", { name: "Optik form alan önizlemesi" });
+    await expect(parserSummary).toContainText("Dosyadan tanıma");
+    await expect(parserSummary).toContainText("Henüz kullanılmadı");
+    const formPreviewTable = page.getByRole("table", { name: "Seçili optik düzen alanları" });
     await expect(formPreviewTable.getByRole("columnheader", { name: "Bölüm" })).toBeVisible();
     await expect(formPreviewTable.locator('th[data-column-key="section"]')).toHaveAttribute("data-mobile-priority", "primary");
 
@@ -210,7 +231,7 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await expect(page.getByRole("tab", { name: /Cevap anahtarı/ })).toHaveCount(0);
     await page.getByRole("button", { name: "Seç ve ilerle" }).click();
     await expect(page.getByRole("tab", { name: "2. Optik yükleme" })).toHaveAttribute("aria-selected", "true");
-    await expect(workflowStrip).toContainText("Format hazır");
+    await expect(workflowStrip).toContainText("Optik düzen hazır");
     const uploadPanel = page.getByRole("tabpanel", { name: "2. Optik yükleme" });
     await uploadPanel.getByLabel("Optik cevap dosyası").setInputFiles({
       buffer: Buffer.from("optik cevap satiri"),
@@ -228,11 +249,11 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await expect(uploadSummary.locator(".uh-info-item")).toHaveCount(4);
     await expect(uploadSummary).toContainText("Eşleşmeyen");
     await expect(uploadResult.getByRole("status").filter({ hasText: "Eşleşmeyen" })).toBeVisible();
-    await uploadResult.getByText("Teknik yükleme bilgisi").click();
-    await expect(uploadResult).toContainText("Dosya ref: maskeli");
-    await expect(uploadResult).toContainText("Kuyruk ref: maskeli");
+    await uploadResult.getByText("İleri ayrıntılar").click();
+    await expect(uploadResult).toContainText("Dosya kaydı: maskeli");
+    await expect(uploadResult).toContainText("Hazırlama işlemi: maskeli");
     await expect(uploadResult).toContainText("Dosya izi: maskeli");
-    await expect(uploadResult).toContainText("Ham id, kuyruk id ve dosya izi ekran görüntülerinde gösterilmez.");
+    await expect(uploadResult).toContainText("Destek kayıtları ekran görüntülerinde açık gösterilmez.");
     for (const value of hostileOptikReferences) {
       await expect(page.locator("body")).not.toContainText(value);
     }
@@ -240,7 +261,7 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await uploadResult.getByRole("button", { name: "Analizi başlat" }).click();
     await expect(page.getByRole("tab", { name: "3. Eşleşmeyen satırlar" })).toHaveAttribute("aria-selected", "true");
     await page.getByRole("tab", { name: "2. Optik yükleme" }).click();
-    await expect(uploadResult.getByRole("status").filter({ hasText: "1/1 analiz işi kuyruğa alındı." })).toBeVisible();
+    await expect(uploadResult.getByRole("status").filter({ hasText: "1/1 kayıt için analiz başlatıldı." })).toBeVisible();
     await expect(uploadResult.getByRole("status").filter({ hasText: "1/1 analiz sonucu tamamlandı." })).toBeVisible();
     await expect(workflowStrip).toContainText("Tamamlandı");
     const reportHandoff = page.getByRole("region", { name: "Raporlara geçiş" });
@@ -255,7 +276,8 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await quarantinePanel.getByRole("button", { name: "Eşleşmeyen satırları getir" }).click();
     const quarantineTable = page.getByRole("table", { name: "Eşleşmeyen satır listesi" });
     await expect(quarantineTable).toContainText("7");
-    await expect(quarantineTable).toContainText("STUDENT_NOT_FOUND");
+    await expect(quarantineTable).toContainText("Öğrenciyle eşleşmedi");
+    await expect(quarantineTable).not.toContainText("STUDENT_NOT_FOUND");
     await expect(quarantineTable).toContainText("Bekliyor");
     for (const value of hostileOptikReferences) {
       await expect(page.locator("body")).not.toContainText(value);
@@ -270,7 +292,7 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     expect(studentSearchUrl.searchParams.get("limit")).toBe("10");
     expect(broadStudentRequests).toHaveLength(0);
     await expect(quarantineTable.locator('select[aria-label="7. satır öğrencisi"]')).toContainText("Ada Kaya");
-    const reportStatus = reportHandoff.getByRole("region", { name: "Rapor üretim durumu" });
+    const reportStatus = reportHandoff.getByRole("region", { name: "Rapor hazırlama durumu" });
     await expect(reportStatus).toHaveClass(/uh-metric-grid/);
     await expect(reportStatus.locator(".uh-metric-card")).toHaveCount(2);
     await expect(reportStatus).toContainText("Analiz");
@@ -290,7 +312,7 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     }
 
     await page.getByRole("combobox", { name: "Sınav seç" }).selectOption("exam-optik-second");
-    await expect(quarantineTable).not.toContainText("STUDENT_NOT_FOUND");
+    await expect(quarantineTable).not.toContainText("Öğrenciyle eşleşmedi");
     await expect(reportStatus).toContainText("Bekleniyor");
 
     await expectNoHorizontalOverflow(page, "optik-mobile");

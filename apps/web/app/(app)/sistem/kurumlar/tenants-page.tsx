@@ -216,6 +216,7 @@ export function TenantsPage() {
         emptyText="Kurum kaydı yok"
         error={!isFormOpen && error ? error : tenantsQuery.isError ? "Kurumlar alınamadı." : undefined}
         getRowKey={(tenant) => tenant.id}
+        hasActiveFilters={Boolean(listQuery.q.trim())}
         loading={tenantsQuery.isPending}
         rows={rows}
         summary={
@@ -391,7 +392,7 @@ function statusLabel(status: string) {
   if (status === "ACTIVE") return "Aktif";
   if (status === "SUSPENDED") return "Askıda";
   if (status === "TRIAL") return "Deneme";
-  return status;
+  return "Durum bilgisi alınamadı";
 }
 
 function statusTone(status: string): StatusBadgeProps["tone"] {
@@ -404,8 +405,8 @@ function statusTone(status: string): StatusBadgeProps["tone"] {
 function planLabel(plan: string) {
   if (plan === "ENTERPRISE") return "Enterprise";
   if (plan === "PRO") return "Pro";
-  if (plan === "TRIAL") return "Trial";
-  return plan;
+  if (plan === "TRIAL") return "Deneme";
+  return "Tanımsız plan";
 }
 
 function planTone(plan: string): StatusBadgeProps["tone"] {
@@ -420,7 +421,7 @@ function tenantCreateErrorMessage(error: unknown) {
     return "Bu kurum kodu zaten kullanımda. Farklı bir kurum kodu girin.";
   }
   if (error instanceof ApiRequestError && error.code === "TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS") {
-    return "Bu admin e-postası zaten kullanımda. Farklı bir e-posta gir.";
+    return "Bu yönetici e-postası zaten kullanımda. Farklı bir e-posta girin.";
   }
   return apiErrorMessage(error, "Kurum oluşturulamadı.");
 }

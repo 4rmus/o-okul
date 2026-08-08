@@ -9,6 +9,7 @@ import { Button, Dialog, Field, Input, Panel, StatusBadge, type StatusBadgeProps
 import { isTenantRoleName, tenantRoleLabel, type ActivePersona, type GlobalSearchResultRecord, type MeProfileResponse, type NotificationDeviceTokenRecord, type Session, type TenantRecord } from "@o-okul/shared-types";
 import { apiBaseUrl, apiListRequest, apiRequest, withQueryParams } from "../../src/api-client.js";
 import { appBrand } from "../../src/brand.js";
+import { productTerms } from "../../src/product-terms.js";
 import { useAuth } from "../providers.js";
 import { readRolePreviewToken } from "./portals/_shared/portal-shell.js";
 import {
@@ -66,6 +67,11 @@ interface ShellTenantBrand {
   name: string;
 }
 
+interface WorkContextOptions {
+  campuses: Array<{ id: string; name: string }>;
+  terms: Array<{ id: string; name: string }>;
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -89,6 +95,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     () => auth?.session && hasInstitutionAccess(auth.session.roles) ? getInstitutionNavGroups(auth.session.roles) : [],
     [auth],
   );
+  const institutionRailNavGroups = useMemo(
+    () => visibleInstitutionNavGroups
+      .map((group) => ({ ...group, items: group.items.filter((item) => !item.hiddenFromRail) }))
+      .filter((group) => group.items.length > 0),
+    [visibleInstitutionNavGroups],
+  );
   const visibleSystemNavGroups = useMemo(
     () => auth?.session && hasSystemAccess(auth.session.roles) ? systemNavGroups : [],
     [auth],
@@ -97,13 +109,28 @@ export function AppShell({ children }: { children: ReactNode }) {
     () => buildCommandItems(visibleInstitutionNavGroups, visibleSystemNavGroups, visiblePortalNavGroups, auth?.session.roles ?? []),
     [auth?.session.roles, visibleInstitutionNavGroups, visiblePortalNavGroups, visibleSystemNavGroups],
   );
-  const canUsePushDevices = auth?.session ? hasInstitutionAccess(auth.session.roles) || visiblePortalNavGroups.length > 0 : false;
+  const canUsePushDevices = auth?.session
+    ? isWebPushCapabilityEnabled() && (hasInstitutionAccess(auth.session.roles) || visiblePortalNavGroups.length > 0)
+    : false;
   const canUseShellSearch = auth?.session ? hasShellSearchAccess(auth.session) : false;
   const isRolePreviewRoute = hasRolePreviewAccess(searchParams);
+  const workContextCampusId = pathname.startsWith("/kurum") ? searchParams.get("campusId") ?? "" : "";
+  const workContextTermId = pathname.startsWith("/kurum") ? searchParams.get("termId") ?? "" : "";
   const tenantBrandQuery = useQuery({
     queryKey: ["next-shell-tenant-brand", auth?.session.tenantId ?? "anonymous"],
     queryFn: () => loadShellTenant(auth?.accessToken ?? ""),
     enabled: Boolean(auth && hasInstitutionAccess(auth.session.roles) && !isRolePreviewRoute),
+    refetchOnWindowFocus: false,
+  });
+  const workContextQuery = useQuery({
+    queryKey: ["next-shell-work-context", auth?.session.tenantId ?? "anonymous"],
+    queryFn: () => loadWorkContextOptions(auth?.accessToken ?? ""),
+    enabled: Boolean(
+      auth
+      && hasInstitutionAccess(auth.session.roles)
+      && !isRolePreviewRoute
+      && (workContextCampusId || workContextTermId)
+    ),
     refetchOnWindowFocus: false,
   });
   const profileQuery = useQuery({
@@ -335,7 +362,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
         <nav className="next-sidebar-nav" aria-label="Ana menü">
           {hasInstitutionAccess(auth.session.roles)
-            ? visibleInstitutionNavGroups.map((group) => (
+            ? institutionRailNavGroups.map((group) => (
                 <SidebarGroup
                   key={group.label}
                   expanded={Boolean(expandedSidebarGroups[`institution:${group.label}`]) || isGroupActive(group)}
@@ -418,6 +445,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           tenantBrand={tenantBrand}
         />
         <RouteBreadcrumb pathname={pathname} />
+        {pathname.startsWith("/kurum") ? (
+          <WorkContext
+            campusId={workContextCampusId}
+            campusName={workContextQuery.data?.campuses.find((campus) => campus.id === workContextCampusId)?.name}
+            termId={workContextTermId}
+            termName={workContextQuery.data?.terms.find((term) => term.id === workContextTermId)?.name}
+            tenantName={tenantBrand?.name}
+          />
+        ) : null}
         {children}
       </main>
       <CommandPalette
@@ -431,6 +467,43 @@ export function AppShell({ children }: { children: ReactNode }) {
         setQuery={setCommandQuery}
       />
     </div>
+  );
+}
+
+function WorkContext({
+  campusId,
+  campusName,
+  termId,
+  termName,
+  tenantName,
+}: {
+  campusId: string;
+  campusName?: string;
+  termId: string;
+  termName?: string;
+  tenantName?: string;
+}) {
+  const items = [
+    { label: productTerms.institution, value: tenantName ?? "Kurum çalışma alanı" },
+    {
+      label: productTerms.branch,
+      value: campusId ? campusName ?? "Seçilmedi" : productTerms.allBranches,
+    },
+    {
+      label: "Dönem",
+      value: termId ? termName ?? "Seçilmedi" : "Tüm dönemler",
+    },
+  ];
+
+  return (
+    <dl className="next-work-context" aria-label="Çalışma bilgileri">
+      {items.map((item) => (
+        <div key={item.label}>
+          <dt>{item.label}</dt>
+          <dd>{item.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -1059,6 +1132,14 @@ async function loadShellTenant(accessToken: string): Promise<TenantRecord | unde
   }
 }
 
+async function loadWorkContextOptions(accessToken: string): Promise<WorkContextOptions> {
+  const [campuses, terms] = await Promise.all([
+    apiListRequest<{ id: string; name: string }>(accessToken, `${apiBaseUrl}/campuses`),
+    apiListRequest<{ id: string; name: string }>(accessToken, `${apiBaseUrl}/academic-terms`),
+  ]);
+  return { campuses: campuses.data, terms: terms.data };
+}
+
 function searchResultGroupLabel(type: GlobalSearchResultRecord["type"]): string {
   if (type === "students") return "Öğrenci";
   if (type === "teachers") return "Öğretmen";
@@ -1093,8 +1174,14 @@ async function resolveWebPushToken(): Promise<string> {
 }
 
 function readWebPushPublicKey(): string {
-  const override = (window as Window & { __O_OKUL_WEB_PUSH_PUBLIC_KEY__?: string }).__O_OKUL_WEB_PUSH_PUBLIC_KEY__;
+  const override = typeof window === "undefined"
+    ? undefined
+    : (window as Window & { __O_OKUL_WEB_PUSH_PUBLIC_KEY__?: string }).__O_OKUL_WEB_PUSH_PUBLIC_KEY__;
   return override ?? process.env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY ?? "";
+}
+
+function isWebPushCapabilityEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_WEB_PUSH_ENABLED === "true" && Boolean(readWebPushPublicKey().trim());
 }
 
 function urlBase64ToUint8Array(value: string): ArrayBuffer {

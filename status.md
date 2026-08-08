@@ -1,7 +1,7 @@
 # O-Okul Durum
 
-Son güncelleme: 2026-08-05
-İnceleme snapshotı: `agent/tenant-subdomain-login` / `6f9c9cbce`; `origin/main` üç commit ileride
+Son güncelleme: 2026-08-08
+İnceleme snapshotı: `main` / `28b0f3501452`; `origin/main` ile eşit
 Kanıt düzeyi: kirli yerel çalışma ağacı; production teknik aktivasyonu canlı doğrulandı, tam go-live kanıtı tamamlanmadı
 
 5 Ağustos 2026 ürün kararları: giriş kurum subdomaini + tenant-local kimliktir; guardian ürün

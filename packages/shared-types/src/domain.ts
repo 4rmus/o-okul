@@ -1528,6 +1528,7 @@ export interface SmsBatchRecipientInput {
 }
 
 export interface SmsBatchCreateRequest {
+  recipientScope: SmsBatchRecipientPreviewRequest;
   templateId: string;
   recipients: SmsBatchRecipientInput[];
 }

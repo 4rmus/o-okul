@@ -46,15 +46,15 @@ export function AuditLogsPage() {
     {
       description: "Ham kanıt alanları panelde gösterilmez",
       key: "safe-display",
-      label: "PII güvenliği",
+      label: "Kişisel bilgi güvenliği",
       tone: "success",
-      value: "PII maskeli",
+      value: "Bilgiler maskeli",
     },
   ];
   const auditSummaryBadges: OperationSummaryBadge[] = [
-    { key: "source", label: "Server/audit kaynağı", tone: "info" },
+    { key: "source", label: "Kaynak: sistem kaydı", tone: "info" },
     { key: "mode", label: "Salt-okuma", tone: "neutral" },
-    { key: "pii", label: "PII ham gösterilmez", tone: "success" },
+    { key: "pii", label: "Kişisel bilgiler açık gösterilmez", tone: "success" },
     { key: "sort", label: `Sıralama: ${formatAuditSort(listQuery.sort)}`, tone: "neutral" },
   ];
   const columns: Array<DataTableColumn<AuditLogListItemRecord>> = [
@@ -63,7 +63,7 @@ export function AuditLogsPage() {
       header: "Olay",
       priority: "primary",
       render: (record) => (
-        <StatusBadge tone={auditCategoryTone(record.category)} title="Audit aksiyon etiketi">
+        <StatusBadge tone={auditCategoryTone(record.category)} title="Denetim işlem etiketi">
           {record.actionLabel}
         </StatusBadge>
       ),
@@ -102,7 +102,7 @@ export function AuditLogsPage() {
       aria-label="Denetim kayıtları"
       columns={columns}
       density="compact"
-      description="Kurum işlem izini salt-okunur izle; ham PII ve gizli kanıt değerleri panelde gösterilmez."
+      description="Kurum işlem izini yalnız görüntüleyin; kişisel bilgiler ve gizli kanıt değerleri panelde gösterilmez."
       emptyState={
         <EmptyState
           title="Denetim kaydı yok"
@@ -113,11 +113,12 @@ export function AuditLogsPage() {
       emptyText="Denetim kaydı yok"
       error={auditLogsQuery.isError ? apiErrorMessage(auditLogsQuery.error, "Denetim kayıtları alınamadı.") : undefined}
       getRowKey={(record) => record.id}
+      hasActiveFilters={Boolean(listQuery.q.trim())}
       loading={auditLogsQuery.isPending}
       rows={rows}
       summary={<OperationSummary ariaLabel="Denetim operasyon özeti" badges={auditSummaryBadges} items={auditSummaryItems} />}
       tableCaption="Denetim kayıtları"
-      tableDescription="Kurum içi işlem izi; aktör, kayıt türü ve zaman bilgisi PII göstermeden listelenir."
+      tableDescription="Kurum içi işlem izi; işlem yapan kişi, kayıt türü ve zaman bilgisi kişisel ayrıntıları açmadan listelenir."
       title="Denetim"
     />
   );

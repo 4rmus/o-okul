@@ -170,7 +170,7 @@ export function SupportTicketsPage() {
   ).length;
   const supportSummaryItems: OperationSummaryItem[] = [
     {
-      description: "Triage bekleyen bildirim",
+      description: "İlk inceleme bekleyen bildirim",
       key: "open",
       label: "Açık",
       tone: openTicketCount > 0 ? "warning" : "success",
@@ -205,7 +205,7 @@ export function SupportTicketsPage() {
     },
     {
       key: "references",
-      label: referencesQuery.isPending ? "Referanslar yükleniyor" : "Bağlam referansları hazır",
+      label: referencesQuery.isPending ? "Seçim listeleri yükleniyor" : "Seçim listeleri hazır",
       tone: referencesQuery.isPending ? "warning" : "success",
     },
   ];
@@ -268,7 +268,7 @@ export function SupportTicketsPage() {
     },
     {
       key: "context",
-      header: "Bağlam",
+      header: "Eğitim bilgileri",
       mobilePriority: "hidden",
       priority: "secondary",
       render: (ticket) => formatTicketContext(ticket, { campusNameById, classNameById, courseNameById, gradeLevelNameById, termNameById }),
@@ -277,7 +277,7 @@ export function SupportTicketsPage() {
       key: "actions",
       align: "center",
       header: "İşlem",
-      mobileLabel: "Triage",
+      mobileLabel: "İncele",
       mobilePriority: "primary",
       priority: "primary",
       render: (ticket) => (
@@ -564,7 +564,7 @@ export function SupportTicketsPage() {
         }
         aria-label="Destek bildirimi yönetimi"
         columns={columns}
-        description="Kurum destek bildirimlerini gerçek API çağrılarıyla izle."
+        description="Kurum içi destek bildirimlerini açın, takip edin ve yanıtlayın."
         emptyState={
           <EmptyState
             title="Destek bildirimi yok"
@@ -577,26 +577,27 @@ export function SupportTicketsPage() {
         error={error || (ticketsQuery.isError ? apiErrorMessage(ticketsQuery.error, "Destek bildirimleri alınamadı.") : undefined)}
         getRowKey={(ticket) => ticket.id}
         density="compact"
+        hasActiveFilters={Boolean(listQuery.q.trim()) || supportFilterKeys.some((key) => Boolean(filters[key]))}
         loading={ticketsQuery.isPending}
         rowClassName={(ticket) => (ticket.id === selectedTicketId ? "next-support-row--selected" : undefined)}
         rows={rows}
         summary={
           <OperationSummary
             actions={supportSummaryActions}
-            ariaLabel="Destek operasyon özeti"
+            ariaLabel="Destek bildirimleri özeti"
             badges={supportSummaryBadges}
             items={supportSummaryItems}
           />
         }
-        tableCaption="Destek triage listesi"
-        tableDescription="Bildirim konusu, öncelik, durum, eğitim bağlamı ve hızlı işlem aksiyonları."
+        tableCaption="Destek öncelik listesi"
+        tableDescription="Bildirim konusu, öncelik, durum, eğitim bilgileri ve hızlı işlemler."
         title="Destek"
       />
       <section className="next-support-detail-grid" aria-label="Destek bildirimi detayları">
         <Panel
           aria-label="Destek seçili bildirim detayı"
           className="next-support-selected-panel"
-          description="Seçili bildirimin bağlamı, ekleri ve yorum akışı."
+          description="Seçili bildirimin eğitim bilgileri, ekleri ve yorumları."
           title="Seçili Bildirim"
         >
           <Field label="Bildirim">
@@ -620,7 +621,7 @@ export function SupportTicketsPage() {
                 <StatusBadge tone={supportStatusTone(selectedTicket.status)}>{statusLabel(selectedTicket.status)}</StatusBadge>
               </div>
               <InfoGrid className="next-support-ticket-meta" aria-label="Seçili bildirim metrikleri" role="region">
-                <InfoItem label="Bağlam" value={selectedTicketContext} />
+                <InfoItem label="Eğitim bilgileri" value={selectedTicketContext} />
                 <InfoItem label="Ek" value={`${formatCount(selectedTicketAttachments.length)} ek`} />
                 <InfoItem label="Yorum" value={`${formatCount(selectedTicketComments.length)} yorum`} />
               </InfoGrid>
@@ -742,7 +743,7 @@ export function SupportTicketsPage() {
             value={form.campusId}
             onChange={(event) => setForm((current) => ({ ...current, campusId: event.target.value }))}
           >
-            <option value="">Bağlam yok</option>
+            <option value="">Seçilmedi</option>
             {campuses.map((campus) => (
               <option key={campus.id} value={campus.id}>
                 {campus.name}
@@ -755,7 +756,7 @@ export function SupportTicketsPage() {
             value={form.gradeLevelId}
             onChange={(event) => setForm((current) => ({ ...current, gradeLevelId: event.target.value }))}
           >
-            <option value="">Bağlam yok</option>
+            <option value="">Seçilmedi</option>
             {gradeLevels.map((level) => (
               <option key={level.id} value={level.id}>
                 {level.name}
@@ -768,7 +769,7 @@ export function SupportTicketsPage() {
             value={form.classId}
             onChange={(event) => setForm((current) => ({ ...current, classId: event.target.value }))}
           >
-            <option value="">Bağlam yok</option>
+            <option value="">Seçilmedi</option>
             {classes.map((klass) => (
               <option key={klass.id} value={klass.id}>
                 {klass.name}
@@ -781,7 +782,7 @@ export function SupportTicketsPage() {
             value={form.courseId}
             onChange={(event) => setForm((current) => ({ ...current, courseId: event.target.value }))}
           >
-            <option value="">Bağlam yok</option>
+            <option value="">Seçilmedi</option>
             {courses.map((course) => (
               <option key={course.id} value={course.id}>
                 {formatCourseName(course.name)}
@@ -794,7 +795,7 @@ export function SupportTicketsPage() {
             value={form.termId}
             onChange={(event) => setForm((current) => ({ ...current, termId: event.target.value }))}
           >
-            <option value="">Bağlam yok</option>
+            <option value="">Seçilmedi</option>
             {terms.map((term) => (
               <option key={term.id} value={term.id}>
                 {term.name}
@@ -976,9 +977,9 @@ function buildSupportSummaryActions({
 }): OperationSummaryAction[] {
   return [
     {
-      detail: "Açık bildirimler ilk triage sırasıdır",
+      detail: "Açık bildirimler ilk inceleme sırasıdır",
       key: "open-triage",
-      label: "Triage kuyruğu",
+      label: "İlk inceleme",
       status: openTicketCount > 0 ? "Açık" : "Temiz",
       tone: openTicketCount > 0 ? "warning" : "success",
       value: formatCount(openTicketCount),
@@ -1065,7 +1066,7 @@ function formatTicketContext(
     termNameById: Map<string, string>;
   },
 ) {
-  const fallback = "Bağlam doğrulanmadı";
+  const fallback = "Bilgi bulunamadı";
   const parts = [
     ticket.campusId ? (maps.campusNameById.get(ticket.campusId) ?? fallback) : "",
     ticket.gradeLevelId ? (maps.gradeLevelNameById.get(ticket.gradeLevelId) ?? fallback) : "",

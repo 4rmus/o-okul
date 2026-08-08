@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Button, DataTable, Field, MetricCard, MetricGrid, Panel, Select, StatusBadge, type DataTableColumn } from "@o-okul/ui";
 import {
+  isTenantRoleName,
   tenantAssignableRoles,
   tenantRoleLabel,
   type GuardianRecord,
@@ -25,7 +26,7 @@ type PreviewRole = TenantAssignableRoleName;
 
 const roleCards = [
   {
-    title: "Öğretmen Portalı",
+    title: "Öğretmen ekranı",
     route: "/ogretmen",
     account: "Öğretmen hesabı",
     scope: "Ders programı, atandığı öğrenciler, yoklama, not, ödev kontrolü ve raporlar",
@@ -35,7 +36,7 @@ const roleCards = [
     targetRole: "TEACHER",
   },
   {
-    title: "Öğrenci Portalı",
+    title: "Öğrenci ekranı",
     route: "/ogrenci",
     account: "Öğrenci hesabı",
     scope: "Profil, devamsızlık, duyuru, ödev, destek talebi, sınav raporu ve hata kitapçığı",
@@ -45,9 +46,9 @@ const roleCards = [
     targetRole: "STUDENT",
   },
   {
-    title: "Veli Portalı",
+    title: "Mevcut veli ekranı",
     route: "/veli",
-    account: "Veli hesabı",
+    account: "Mevcut veli hesabı",
     scope: "Bağlı öğrenci, ödeme görünümü, bildirim tercihleri, duyuru, destek ve raporlar",
     subjectScope: "Veli kişi kaydı",
     dataScope: "Yalnızca veliye bağlı öğrencilerin bilgileri",
@@ -58,8 +59,8 @@ const roleCards = [
 
 const accessRules = [
   "Kurum yöneticileri kişisel ekranları normal menüde görmez.",
-  "Kişisel ekranı açmak için ilgili öğretmen, öğrenci veya veli hesabı gerekir.",
-  "Veli yalnız bağlı öğrencinin verisini görür.",
+  "Kişisel ekranı açmak için ilgili öğretmen, öğrenci veya mevcut veli hesabı gerekir.",
+  "Mevcut veli erişimi yalnız bağlı öğrencinin bilgilerini gösterir.",
   "Öğretmen yalnız sorumlu olduğu öğrencileri ve ders programını görür.",
   "Öğrenci yalnız kendi bilgilerini görür.",
 ] as const;
@@ -73,8 +74,8 @@ const evidenceChecks = [
 const previewRoles = tenantAssignableRoles.map((role) => ({ label: tenantRoleLabel(role), value: role }));
 
 const rolePreviewMetrics = [
-  { description: "Öğretmen, öğrenci ve veli portalı", key: "portal", label: "Portal", tone: "info", value: "3 rol" },
-  { description: "İlgili öğretmen, öğrenci veya veli kaydı seçilir", key: "access", label: "Erişim", tone: "success", value: "Kişiye bağlı" },
+  { description: "Öğretmen, öğrenci ve mevcut veli erişimi", key: "portal", label: "Kişisel ekranlar", tone: "info", value: "Kişiye göre" },
+  { description: "İlgili öğretmen, öğrenci veya mevcut veli kaydı seçilir", key: "access", label: "Erişim", tone: "success", value: "Kişiye bağlı" },
   { description: "Her kullanıcı yalnız yetkili olduğu bilgileri görür", key: "scope", label: "Görülebilenler", tone: "default", value: "Sınırlı" },
 ] as const;
 
@@ -198,11 +199,11 @@ export function RolePreviewPage() {
   const previewScopeRows = buildRolePreviewScopeRows(previewSections);
   const rolePreviewSummaryItems: OperationSummaryItem[] = [
     {
-      description: "Öğretmen, öğrenci ve veli ekranları",
+      description: "Öğretmen, öğrenci ve mevcut veli erişimi",
       key: "portal-scope",
       label: "Kişisel ekranlar",
       tone: "info",
-      value: `${roleCards.length} rol`,
+      value: "Kişiye göre",
     },
     {
       description: "Önizleme sırasında hiçbir kayıt değiştirilemez",
@@ -296,7 +297,7 @@ export function RolePreviewPage() {
     <PageFrame
       actions={<ReferenceBadge />}
       title="Rol Önizleme"
-      subtitle="Öğretmen, öğrenci ve veli ekranlarını seçtiğiniz kişi adına güvenli biçimde görüntüleyin."
+      subtitle="Öğretmen, öğrenci ve mevcut veli erişimini seçtiğiniz kişi adına güvenli biçimde görüntüleyin."
     >
       <MetricGrid aria-label="Rol önizleme özeti" role="region">
         {rolePreviewMetrics.map((metric) => (
@@ -317,7 +318,7 @@ export function RolePreviewPage() {
       />
       <OperationDecisionNotice
         decision="Rol önizlemesi yalnızca görüntüleme için açılır."
-        reason="Yönetici seçtiği öğretmen, öğrenci veya veli ekranını sınırlı süreyle görür; hiçbir kaydı değiştiremez."
+        reason="Yönetici seçtiği öğretmen, öğrenci veya mevcut veli erişimini sınırlı süreyle görür; hiçbir kaydı değiştiremez."
         nextStep="Kişiyi seçin, önizlemeyi başlatın ve ilgili ekrana geçin."
       />
       {error ? <p className="next-form-error">{error}</p> : null}
@@ -337,15 +338,15 @@ export function RolePreviewPage() {
             <StatusBadge tone="info">Süreli</StatusBadge>
           </div>
           <div className="next-role-preview-session-grid">
-            <p>Seçili rol: {session.targetRole}</p>
+            <p>Seçili rol: {tenantRoleLabel(session.targetRole)}</p>
             <p>Kişi kaydı: {subjectPrivacyLabel(session.targetRole)}</p>
             <p>Erişim: Yalnızca görüntüleme</p>
             <p>Bitiş: {new Date(session.expiresAt).toLocaleString("tr-TR")}</p>
             {profile ? (
               <>
                 <p>Kişi erişimi doğrulandı</p>
-                <p>Kullanıcı görevi: {profile.roles.join(", ")}</p>
-                <p>Kişi türü: {profile.subjectType}</p>
+                <p>Kullanıcı görevi: {profile.roles.map((role) => isTenantRoleName(role) ? tenantRoleLabel(role) : "Tanımlı görev").join(", ")}</p>
+                <p>Kişi türü: {profile.subjectType ? tenantRoleLabel(profile.subjectType) : "Bekleniyor"}</p>
                 <p>Kişi kaydı: {profile.subjectId ? "Kimliği gizlenmiş kayıt" : "Bekleniyor"}</p>
               </>
             ) : null}
@@ -379,13 +380,13 @@ export function RolePreviewPage() {
           caption="Rolün görebileceği alanlar"
           columns={rolePreviewScopeColumns}
           density="compact"
-          description="Kurum yönetimi görevleri menüleri, öğretmen, öğrenci ve veli görevleri kendi ekranlarını gösterir."
+          description="Kurum yönetimi görevleri menüleri; öğretmen, öğrenci ve mevcut veli erişimi kişisel ekranları gösterir."
           emptyText="Bu rol için görülebilecek alan yok"
           getRowKey={(row) => row.id}
           rows={previewScopeRows}
         />
       </Panel>
-      <section className="next-role-preview-portal-grid" aria-label="Rol portal kartları" aria-busy={Boolean(pendingRole)}>
+      <section className="next-role-preview-portal-grid" aria-label="Kişisel ekran kartları" aria-busy={Boolean(pendingRole)}>
         <header className="next-role-preview-section-header">
           <h2>Kişisel Ekran Önizlemeleri</h2>
           <p>Önizlemeler sınırlı süreyle açılır, işlem kaydı tutulur ve hiçbir bilgi değiştirilemez.</p>
@@ -455,7 +456,7 @@ export function RolePreviewPage() {
                   >
                     {pendingRole === role.targetRole
                       ? "Önizleme hazırlanıyor"
-                      : `${role.title.replace(" Portalı", "")} ekranını önizle`}
+                      : `${role.title} önizle`}
                   </Button>
                 </div>
               </Panel>
@@ -526,7 +527,7 @@ async function loadPortalProbe(accessToken: string, session: RolePreviewSession)
   }
 
   const students = await apiRequest<Array<{ id: string }>>(accessToken, `${apiBaseUrl}/me/guardian/students`, init);
-  return { label: "Veli ekranı", value: `${students.length} bağlı öğrenci` };
+  return { label: "Mevcut veli ekranı", value: `${students.length} bağlı öğrenci` };
 }
 
 function subjectPrivacyLabel(role: RolePreviewSession["targetRole"]): string {
@@ -540,13 +541,13 @@ function subjectPrivacyLabel(role: RolePreviewSession["targetRole"]): string {
 
 function buildRolePreviewSections(role: PreviewRole) {
   if (role === "TEACHER") {
-    return [{ title: "Portal", items: ["Öğretmen Portalı", "/ogretmen", "Kurum sol menüsü görünmez"] }];
+    return [{ title: "Kişisel ekran", items: ["Öğretmen ekranı", "/ogretmen", "Kurum sol menüsü görünmez"] }];
   }
   if (role === "STUDENT") {
-    return [{ title: "Portal", items: ["Öğrenci Portalı", "/ogrenci", "Kurum sol menüsü görünmez"] }];
+    return [{ title: "Kişisel ekran", items: ["Öğrenci ekranı", "/ogrenci", "Kurum sol menüsü görünmez"] }];
   }
   if (role === "GUARDIAN") {
-    return [{ title: "Portal", items: ["Veli Portalı", "/veli", "Kurum sol menüsü görünmez"] }];
+    return [{ title: "Mevcut erişim", items: ["Mevcut veli ekranı", "/veli", "Kurum sol menüsü görünmez"] }];
   }
 
   return hasInstitutionAccess([role])
@@ -586,7 +587,7 @@ function buildPortalPreviewHref(session: RolePreviewSession): string {
 
 function portalPreviewLabel(role: RolePreviewSession["targetRole"]): string {
   const labels: Record<RolePreviewSession["targetRole"], string> = {
-    GUARDIAN: "Veli ekranına geç",
+    GUARDIAN: "Mevcut veli ekranına geç",
     STUDENT: "Öğrenci ekranına geç",
     TEACHER: "Öğretmen ekranına geç",
   };

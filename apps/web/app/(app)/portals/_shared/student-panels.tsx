@@ -42,7 +42,7 @@ export function StudentFocusPanel({
     { label: "Ödev", value: homeworkStatus },
     { label: "Devamsızlık", value: attendanceStatus },
     { label: "Destek", value: supportStatus },
-    ...(financeStatus ? [{ label: "Ödemeler", value: financeStatus }] : []),
+    ...(financeStatus ? [{ label: "Ödeme planları", value: financeStatus }] : []),
     { label: "Başarı %", value: successRate },
     { label: "Soru", value: questionCount },
     { label: "Net", value: net },
@@ -217,7 +217,7 @@ function studentFocusModeLabel(mode: "guardian" | "read-only" | "student") {
 
 function formatGuardianPermissions(link: GuardianStudentRecord) {
   const permissions = [
-    link.canViewFinance ? "Ödemeler" : undefined,
+    link.canViewFinance ? "Ödeme planları" : undefined,
     isSmsEnabled && link.canReceiveSms ? "SMS" : undefined,
     link.canReceiveAnnouncements ? "Duyuru" : undefined,
     link.canOpenSupportTickets ? "Destek" : undefined,

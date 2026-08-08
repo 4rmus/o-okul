@@ -10,12 +10,15 @@ const ledger = JSON.parse(readFileSync(ledgerPath, "utf8"));
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 const failures = [];
 const expectedIds = Array.from({ length: 7 }, (_, index) => `PR-${index}`);
+const deliveryStatuses = new Set(["COMPLETE", "PARTIAL", "NOT_STARTED"]);
 const liveStatuses = new Set(["NOT_REQUIRED", "PENDING_EXTERNAL_EVIDENCE", "PROVEN"]);
 const ciCommands = new Set((packageJson.scripts?.ci ?? "").split("&&").map((command) => command.trim()));
 
 if (ledger.schemaVersion !== 2) failures.push("schemaVersion 2 olmalı.");
 if (!existsSync(ledger.contract)) failures.push(`Sözleşme bulunamadı: ${ledger.contract}`);
 requireExternalProof(ledger.externalProof);
+requireStatusSemantics(ledger.statusSemantics);
+requireText(ledger.evidenceScope, "evidenceScope");
 if (!Array.isArray(ledger.slices)) failures.push("slices liste olmalı.");
 
 const slices = Array.isArray(ledger.slices) ? ledger.slices : [];
@@ -26,10 +29,12 @@ if (JSON.stringify(ids) !== JSON.stringify(expectedIds)) {
 
 for (const slice of slices) {
   requireText(slice.title, `${slice.id}.title`);
+  if (!deliveryStatuses.has(slice.deliveryStatus)) failures.push(`${slice.id}.deliveryStatus geçersiz: ${slice.deliveryStatus}`);
+  requireOpenItems(slice);
   requireList(slice.requirements, `${slice.id}.requirements`);
   requireList(slice.implementationPaths, `${slice.id}.implementationPaths`);
   requireList(slice.verificationCommands, `${slice.id}.verificationCommands`);
-  if (slice.localStatus !== "PROVEN") failures.push(`${slice.id}.localStatus tamamlanma ledger'ında PROVEN olmalı.`);
+  if (slice.localStatus !== "PROVEN") failures.push(`${slice.id}.localStatus yapısal kanıt bağında PROVEN olmalı.`);
   if (!liveStatuses.has(slice.liveStatus)) failures.push(`${slice.id}.liveStatus geçersiz: ${slice.liveStatus}`);
 
   for (const path of slice.implementationPaths ?? []) {
@@ -46,7 +51,7 @@ for (const slice of slices) {
 if (failures.length > 0) fail(failures);
 
 if (contractOnly) {
-  console.log(`UI/UX tamamlanma sözleşmesi doğrulandı: ${slices.length} dilim ve requirement-level CI kapsamı.`);
+  console.log(`UI/UX teslim kaydı sözleşmesi doğrulandı: ${slices.length} dilim ve yapısal kanıt bağı.`);
   process.exit(0);
 }
 
@@ -93,9 +98,35 @@ if (!localProofOnly && slices.some((slice) => slice.liveStatus === "PROVEN")) {
 
 console.log(
   localProofOnly
-    ? `UI/UX yalnız yerel tamamlanma kanıtı doğrulandı: ${slices.length} dilim, kaynak ${sourceSha}.`
-    : `UI/UX tamamlanma kanıtı doğrulandı: ${slices.length} dilim, kaynak ${sourceSha}.`,
+    ? `UI/UX yalnız yerel kanıt bağları doğrulandı: ${slices.length} dilim, kaynak ${sourceSha}.`
+    : `UI/UX teslim kaydı kanıt bağları doğrulandı: ${slices.length} dilim, kaynak ${sourceSha}.`,
 );
+
+function requireStatusSemantics(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    failures.push("statusSemantics nesnesi zorunlu.");
+    return;
+  }
+  const expectedKeys = ["deliveryStatus", "liveStatus", "localStatus"];
+  if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(expectedKeys)) {
+    failures.push("statusSemantics deliveryStatus, localStatus ve liveStatus alanlarını taşımalı.");
+    return;
+  }
+  for (const key of expectedKeys) requireText(value[key], `statusSemantics.${key}`);
+}
+
+function requireOpenItems(slice) {
+  if (!Array.isArray(slice.openItems) || slice.openItems.some((item) => typeof item !== "string" || !item.trim())) {
+    failures.push(`${slice.id}.openItems metin listesi olmalı.`);
+    return;
+  }
+  if (slice.deliveryStatus === "COMPLETE" && slice.openItems.length > 0) {
+    failures.push(`${slice.id} COMPLETE iken openItems boş olmalı.`);
+  }
+  if (slice.deliveryStatus !== "COMPLETE" && slice.openItems.length === 0) {
+    failures.push(`${slice.id} ${slice.deliveryStatus} iken en az bir açık madde taşımalı.`);
+  }
+}
 
 function requireExternalProof(value) {
   const expected = {
