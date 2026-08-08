@@ -17,13 +17,15 @@
   },
   "whatsappConsent": {
     "recordCount": 0,
-    "storedFields": ["phoneHash", "purpose", "canReceiveWhatsapp", "noticeVersion", "source", "recordedAt", "withdrawnAt"],
+    "eventRecordCount": 0,
+    "piiRelevantStoredFields": ["phoneHash", "purpose", "canReceiveWhatsapp", "version", "noticeVersion", "source", "recordedAt", "withdrawnAt"],
+    "piiRelevantEventStoredFields": ["whatsappConsentId", "studentContactId", "purpose", "sequence", "eventType", "noticeVersion", "source", "recordedAt", "commandKeyHash", "requestHash"],
     "policy": {
       "featureEnabled": false,
       "retentionPeriodDays": 0,
       "disposalMethod": "NO_RECORDS_WHILE_DISABLED",
       "purgeException": false,
-      "explanation": "WHATSAPP_ENABLED=false olduğu sürece runtime WhatsAppConsent kaydı yazılmaz."
+      "explanation": "WHATSAPP_ENABLED=false olduğu sürece runtime WhatsAppConsent veya WhatsAppConsentEvent kaydı yazılmaz."
     }
   },
   "auditActionsVerified": [

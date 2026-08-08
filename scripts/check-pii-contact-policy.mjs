@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { globSync, readFileSync } from "node:fs";
 
 const paths = {
   decisions: "docs/DECISIONS.md",
@@ -9,6 +9,8 @@ const paths = {
   rlsLive: "packages/db/scripts/check-rls-live.mjs",
   schema: "packages/db/prisma/schema.prisma",
   whatsappConsentMigration: "packages/db/prisma/migrations/20260808150000_add_whatsapp_consent_foundation/migration.sql",
+  whatsappConsentLifecycleMigration: "packages/db/prisma/migrations/20260808170000_add_whatsapp_consent_lifecycle/migration.sql",
+  whatsappConsentStore: "apps/api/src/whatsapp-consent/whatsapp-consent-store.ts",
   apiLogging: "apps/api/src/observability/logging.ts",
   apiSentry: "apps/api/src/observability/sentry.ts",
   apiLoggingTest: "apps/api/src/observability/logging.test.ts",
@@ -88,12 +90,19 @@ const studentModel = requirePrismaModel("Student", files.schema, failures);
 const guardianModel = requirePrismaModel("Guardian", files.schema, failures);
 const userModel = requirePrismaModel("User", files.schema, failures);
 const whatsappConsentModel = requirePrismaModel("WhatsAppConsent", files.schema, failures);
+const whatsappConsentEventModel = requirePrismaModel("WhatsAppConsentEvent", files.schema, failures);
 
 if (studentModel) {
   requirePrismaField(paths.schema, "Student", studentModel, "phone", /(^|\n)\s+phone\s+String\?/m, failures);
   requirePrismaField(paths.schema, "Student", studentModel, "email", /(^|\n)\s+email\s+String\?/m, failures);
   requirePrismaField(paths.schema, "Student", studentModel, "nationalIdEncrypted", /nationalIdEncrypted\s+String\?/m, failures);
   requirePrismaField(paths.schema, "Student", studentModel, "nationalIdHash", /nationalIdHash\s+String\?/m, failures);
+}
+if (whatsappConsentEventModel) {
+  requirePrismaField(paths.schema, "WhatsAppConsentEvent", whatsappConsentEventModel, "studentContactId", /(^|\n)\s+studentContactId\s+String/m, failures);
+  if (/(^|\n)\s+(phone|phoneHash|phoneEncrypted)\s+/m.test(whatsappConsentEventModel)) {
+    failures.push(`${paths.schema} WhatsAppConsentEvent ham telefon veya telefon hash'i kopyalamamalı.`);
+  }
 }
 if (guardianModel) {
   requirePrismaField(paths.schema, "Guardian", guardianModel, "phone", /(^|\n)\s+phone\s+String\?/m, failures);
@@ -130,18 +139,59 @@ requireTokens(paths.whatsappConsentMigration, files.whatsappConsentMigration, [
 if (/GuardianStudent|canReceiveSms/.test(files.whatsappConsentMigration)) {
   failures.push(`${paths.whatsappConsentMigration} SMS veya Guardian izninden WhatsApp opt-in üretmemeli.`);
 }
+requireTokens(paths.whatsappConsentLifecycleMigration, files.whatsappConsentLifecycleMigration, [
+  `CREATE TABLE "WhatsAppConsentEvent"`,
+  `FOREIGN KEY ("tenantId", "studentContactId")`,
+  `contact."phoneHash"`,
+  `WHATSAPP_CONSENT_CONTACT_INACTIVE_OR_PHONE_MISMATCH`,
+], failures);
+requireTokens(paths.whatsappConsentStore, files.whatsappConsentStore, [
+  `studentContactId: string`,
+  `commandKey: string`,
+  `createHash("sha256")`,
+  `o-okul:whatsapp-consent:command:v1`,
+  `o-okul:whatsapp-consent:request:v1`,
+  `FROM "StudentContact"`,
+  `AND "deletedAt" IS NULL`,
+  `AND "phoneHash" IS NOT NULL`,
+  `consent."phoneHash" = contact."phoneHash"`,
+  `latest_event."sequence" = consent."version"`,
+  `latest_contact."phoneHash" = consent."phoneHash"`,
+  `withTenantQuery(this.pool`,
+], failures);
+const recordDecisionInput = /interface RecordWhatsAppConsentDecisionInput \{([\s\S]*?)\n\}/.exec(files.whatsappConsentStore)?.[1] ?? "";
+if (/\b(?:phone|phoneHash|phoneEncrypted)\b/.test(recordDecisionInput)) {
+  failures.push(`${paths.whatsappConsentStore} recordDecision caller'dan telefon veya phoneHash kabul etmemeli.`);
+}
+if (/\b(?:commandKeyHash|requestHash)\b/.test(recordDecisionInput)) {
+  failures.push(`${paths.whatsappConsentStore} recordDecision caller'dan prehashed idempotency alanı kabul etmemeli.`);
+}
+
+for (const seedPath of globSync("packages/db/prisma/seed*.ts")) {
+  const seedSource = readFileSync(seedPath, "utf8");
+  if (/WhatsAppConsent(?:Event)?/.test(seedSource)) {
+    failures.push(`${seedPath} WhatsApp consent runtime/seed kaydı üretmemeli.`);
+  }
+}
+for (const runtimePath of globSync(["apps/api/src/**/*.ts", "apps/worker/src/**/*.ts"])) {
+  if (runtimePath === paths.whatsappConsentStore || runtimePath.endsWith("whatsapp-consent-store.test.ts")) continue;
+  const runtimeSource = readFileSync(runtimePath, "utf8");
+  if (/PostgresWhatsAppConsentStore|whatsapp-consent\/whatsapp-consent-store/.test(runtimeSource)) {
+    failures.push(`${runtimePath} WhatsApp consent store runtime wiring yapmamalı.`);
+  }
+}
 
 requireTokens(paths.rlsLive, files.rlsLive, [
   "assertWhatsAppConsentTenantIsolationAndDefaultOff",
-  `if (table === "WhatsAppConsent") continue;`,
-  "RLS_TRANSACTION_FIXTURE",
-  "WhatsApp izin kayıtları tenant okuma izolasyonunu korumadı.",
+  `"WhatsAppConsentEvent"`,
+  "Grant-withdraw-regrant immutable lifecycle/projection sonucu geçersiz.",
+  "WhatsApp projection/event cross-tenant read rowCount=0 olmadı.",
 ], failures);
 const seedFixturesSource = /async function seedFixtures\(\) \{([\s\S]*?)\n\}\n\nasync function assertTenantAOnlyReadsTenantA/.exec(files.rlsLive)?.[1];
 if (!seedFixturesSource) {
   failures.push(`${paths.rlsLive} seedFixtures source could not be inspected.`);
-} else if (seedFixturesSource.includes(`INSERT INTO "WhatsAppConsent"`)) {
-  failures.push(`${paths.rlsLive} WhatsAppConsent fixtures must stay inside a rollback transaction.`);
+} else if (seedFixturesSource.includes(`INSERT INTO "WhatsAppConsent"`) || seedFixturesSource.includes(`INSERT INTO "WhatsAppConsentEvent"`)) {
+  failures.push(`${paths.rlsLive} WhatsApp consent fixtures must stay inside a rollback transaction.`);
 }
 
 requireTokens(paths.apiLogging, files.apiLogging, [
@@ -193,6 +243,7 @@ requireTokens(paths.readiness, files.readiness, [
   "WhatsAppConsent",
   "WhatsApp smoke",
   "WhatsAppConsent.recordCount=0",
+  "WhatsAppConsentEvent.eventRecordCount=0",
   "NO_RECORDS_WHILE_DISABLED",
 ], failures);
 
@@ -242,15 +293,28 @@ function requireWhatsAppConsentInventory(path, inventory, output) {
   if (inventory.recordCount !== 0) {
     output.push(`${path} whatsappConsent.recordCount must be 0 while WhatsApp is disabled.`);
   }
+  if (inventory.eventRecordCount !== 0) {
+    output.push(`${path} whatsappConsent.eventRecordCount must be 0 while WhatsApp is disabled.`);
+  }
   requireArrayIncludes(
     path,
-    "whatsappConsent.storedFields",
-    inventory.storedFields,
-    ["phoneHash", "purpose", "canReceiveWhatsapp", "noticeVersion", "source", "recordedAt", "withdrawnAt"],
+    "whatsappConsent.piiRelevantStoredFields",
+    inventory.piiRelevantStoredFields,
+    ["phoneHash", "purpose", "canReceiveWhatsapp", "version", "noticeVersion", "source", "recordedAt", "withdrawnAt"],
     output,
   );
-  if (inventory.storedFields?.length !== 7) {
-    output.push(`${path} whatsappConsent.storedFields must contain exactly 7 fields.`);
+  if (inventory.piiRelevantStoredFields?.length !== 8) {
+    output.push(`${path} whatsappConsent.piiRelevantStoredFields must contain exactly 8 fields.`);
+  }
+  requireArrayIncludes(
+    path,
+    "whatsappConsent.piiRelevantEventStoredFields",
+    inventory.piiRelevantEventStoredFields,
+    ["whatsappConsentId", "studentContactId", "purpose", "sequence", "eventType", "noticeVersion", "source", "recordedAt", "commandKeyHash", "requestHash"],
+    output,
+  );
+  if (inventory.piiRelevantEventStoredFields?.length !== 10) {
+    output.push(`${path} whatsappConsent.piiRelevantEventStoredFields must contain exactly 10 fields.`);
   }
 
   const policy = inventory.policy;

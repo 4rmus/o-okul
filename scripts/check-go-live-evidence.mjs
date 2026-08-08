@@ -187,10 +187,23 @@ const expectedWhatsappConsentStoredFields = [
   "phoneHash",
   "purpose",
   "canReceiveWhatsapp",
+  "version",
   "noticeVersion",
   "source",
   "recordedAt",
   "withdrawnAt",
+];
+const expectedWhatsappConsentEventStoredFields = [
+  "whatsappConsentId",
+  "studentContactId",
+  "purpose",
+  "sequence",
+  "eventType",
+  "noticeVersion",
+  "source",
+  "recordedAt",
+  "commandKeyHash",
+  "requestHash",
 ];
 const summaryRequiredReportKeys = {
   restoreDrill: ["environment", "drillDate", "sourceBackup", "targetDatabase", "tableCounts"],
@@ -352,6 +365,13 @@ const requiredRlsWriteRejects = [
   "Announcement wrong tenant insert",
   "MessageTemplate wrong tenant insert",
   "WhatsAppConsent wrong tenant insert",
+  "WhatsAppConsentEvent cross tenant contact",
+  "WhatsAppConsentEvent update forbidden",
+  "WhatsAppConsentEvent delete forbidden",
+  "WhatsAppConsent direct update forbidden",
+  "WhatsAppConsent direct delete forbidden",
+  "WhatsAppConsent grant withdraw regrant",
+  "WhatsAppConsent sibling withdrawal",
   "ExamResult foreign tenant RawImport",
   "ParsedAnswer foreign tenant RawImport",
   "ParsedAnswer cross exam mismatch",
@@ -392,6 +412,8 @@ const expectedTenantCompositeRelations = [
   "Employee.accountUser",
   "Teacher.employee",
   "StudentContact.student",
+  "WhatsAppConsentEvent.whatsappConsent",
+  "WhatsAppConsentEvent.studentContact",
 ];
 const expectedTenantFkInsertRejects = expectedTenantCompositeRelations.map((relation) => `${relation} cross tenant insert`);
 const liveStatusGates = [
@@ -2180,7 +2202,7 @@ function requireSummaryWhatsappConsent(report, failures) {
 
   requireSummaryObjectKeySet(
     whatsappConsent,
-    ["recordCount", "storedFields", "policy"],
+    ["recordCount", "eventRecordCount", "piiRelevantStoredFields", "piiRelevantEventStoredFields", "policy"],
     failures,
     "productionEvidenceSummary.summary.reports.kvkkInventory.whatsappConsent",
   );
@@ -2191,11 +2213,24 @@ function requireSummaryWhatsappConsent(report, failures) {
     "recordCount",
     0,
   );
-  requireExactStringSet(
-    whatsappConsent.storedFields,
+  requireObjectEqual(
+    whatsappConsent,
     failures,
-    "productionEvidenceSummary.summary.reports.kvkkInventory.whatsappConsent.storedFields",
+    "productionEvidenceSummary.summary.reports.kvkkInventory.whatsappConsent.eventRecordCount",
+    "eventRecordCount",
+    0,
+  );
+  requireExactStringSet(
+    whatsappConsent.piiRelevantStoredFields,
+    failures,
+    "productionEvidenceSummary.summary.reports.kvkkInventory.whatsappConsent.piiRelevantStoredFields",
     expectedWhatsappConsentStoredFields,
+  );
+  requireExactStringSet(
+    whatsappConsent.piiRelevantEventStoredFields,
+    failures,
+    "productionEvidenceSummary.summary.reports.kvkkInventory.whatsappConsent.piiRelevantEventStoredFields",
+    expectedWhatsappConsentEventStoredFields,
   );
 
   const policy = requireNestedObject(

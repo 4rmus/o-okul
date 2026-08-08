@@ -777,11 +777,27 @@ runKvkkInventoryNegativeCheck({
   },
 });
 runKvkkInventoryNegativeCheck({
+  label: "KVKK inventory WhatsApp consent event record count negative",
+  path: "docs/evidence-templates/kvkk-inventory.whatsapp-consent-event-record-count.tmp.json",
+  expectedFailure: "whatsappConsent.eventRecordCount 0 olmalı.",
+  mutate: (fixture) => {
+    fixture.whatsappConsent.eventRecordCount = 1;
+  },
+});
+runKvkkInventoryNegativeCheck({
   label: "KVKK inventory WhatsApp consent stored field negative",
   path: "docs/evidence-templates/kvkk-inventory.whatsapp-consent-stored-field.tmp.json",
-  expectedFailure: "whatsappConsent.storedFields tam 7 alan içermeli.",
+  expectedFailure: "whatsappConsent.piiRelevantStoredFields tam 8 alan içermeli.",
   mutate: (fixture) => {
-    fixture.whatsappConsent.storedFields = fixture.whatsappConsent.storedFields.filter((field) => field !== "withdrawnAt");
+    fixture.whatsappConsent.piiRelevantStoredFields = fixture.whatsappConsent.piiRelevantStoredFields.filter((field) => field !== "withdrawnAt");
+  },
+});
+runKvkkInventoryNegativeCheck({
+  label: "KVKK inventory WhatsApp consent event stored field negative",
+  path: "docs/evidence-templates/kvkk-inventory.whatsapp-consent-event-stored-field.tmp.json",
+  expectedFailure: "whatsappConsent.piiRelevantEventStoredFields tam 10 alan içermeli.",
+  mutate: (fixture) => {
+    fixture.whatsappConsent.piiRelevantEventStoredFields = fixture.whatsappConsent.piiRelevantEventStoredFields.filter((field) => field !== "requestHash");
   },
 });
 runKvkkInventoryNegativeCheck({
@@ -1629,7 +1645,7 @@ runRlsLiveNegativeCheck({
 runRlsLiveNegativeCheck({
   label: "RLS live tenant FK missing relation negative",
   path: "docs/evidence-templates/rls-live.missing-tenant-fk-relation.tmp.json",
-  expectedFailure: "tenantFkPreflight.relationsVerified tam 29 relation icermeli.",
+  expectedFailure: "tenantFkPreflight.relationsVerified tam 31 relation icermeli.",
   mutate: (fixture) => {
     fixture.tenantFkPreflight.relationsVerified = fixture.tenantFkPreflight.relationsVerified.filter(
       (relation) => relation !== "Student.responsibleTeacher",
@@ -1655,7 +1671,7 @@ runRlsLiveNegativeCheck({
 runRlsLiveNegativeCheck({
   label: "RLS live extra table negative",
   path: "docs/evidence-templates/rls-live.extra-table.tmp.json",
-  expectedFailure: "schema.tablesVerified tam 63 tablo icermeli.",
+  expectedFailure: "schema.tablesVerified tam 64 tablo icermeli.",
   mutate: (fixture) => {
     fixture.schema.tablesVerified.push("UnexpectedTenantTable");
   },
@@ -2137,9 +2153,17 @@ runProductionSummaryNegativeCheck({
   },
 });
 runProductionSummaryNegativeCheck({
+  label: "Production summary KVKK WhatsApp consent event record count negative",
+  path: "docs/evidence-templates/production-evidence-summary.kvkk-whatsapp-consent-event-record-count.tmp.json",
+  expectedFailure: "reports.kvkkInventory.whatsappConsent.eventRecordCount 0 olmalı.",
+  mutate: (fixture) => {
+    fixture.reports.kvkkInventory.whatsappConsent.eventRecordCount = 1;
+  },
+});
+runProductionSummaryNegativeCheck({
   label: "Production summary RLS tenant FK missing relation negative",
   path: "docs/evidence-templates/production-evidence-summary.rls-tenant-fk-missing-relation.tmp.json",
-  expectedFailure: "reports.rlsLive.tenantFkPreflight.relationsVerified tam 29 madde içermeli.",
+  expectedFailure: "reports.rlsLive.tenantFkPreflight.relationsVerified tam 31 madde içermeli.",
   mutate: (fixture) => {
     fixture.reports.rlsLive.tenantFkPreflight.relationsVerified = fixture.reports.rlsLive.tenantFkPreflight.relationsVerified.filter(
       (relation) => relation !== "Student.responsibleTeacher",
@@ -2904,7 +2928,7 @@ runGoLiveNegativeCheck({
   label: "Go-live linked summary RLS tenant FK missing relation negative",
   path: "docs/evidence-templates/go-live.linked-summary-rls-tenant-fk-missing-relation.tmp.json",
   expectedFailure:
-    "productionEvidenceSummary.summary.reports.rlsLive.tenantFkPreflight.relationsVerified tam 29 madde icermeli.",
+    "productionEvidenceSummary.summary.reports.rlsLive.tenantFkPreflight.relationsVerified tam 31 madde icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.rls-tenant-fk-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);

@@ -37,6 +37,8 @@ const requiredTenantCompositeRelations = [
   "Employee.accountUser",
   "Teacher.employee",
   "StudentContact.student",
+  "WhatsAppConsentEvent.whatsappConsent",
+  "WhatsAppConsentEvent.studentContact",
 ];
 const requiredTenantFkInsertRejects = requiredTenantCompositeRelations.map((relation) => `${relation} cross tenant insert`);
 const rlsLiveTopLevelKeys = [
@@ -89,6 +91,13 @@ const requiredWriteRejects = [
   "Announcement wrong tenant insert",
   "MessageTemplate wrong tenant insert",
   "WhatsAppConsent wrong tenant insert",
+  "WhatsAppConsentEvent cross tenant contact",
+  "WhatsAppConsentEvent update forbidden",
+  "WhatsAppConsentEvent delete forbidden",
+  "WhatsAppConsent direct update forbidden",
+  "WhatsAppConsent direct delete forbidden",
+  "WhatsAppConsent grant withdraw regrant",
+  "WhatsAppConsent sibling withdrawal",
   "ExamResult foreign tenant RawImport",
   "ParsedAnswer foreign tenant RawImport",
   "ParsedAnswer cross exam mismatch",

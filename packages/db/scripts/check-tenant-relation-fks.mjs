@@ -41,6 +41,8 @@ const requiredCompositeRelations = new Set([
   "Employee.accountUser",
   "Teacher.employee",
   "StudentContact.student",
+  "WhatsAppConsentEvent.whatsappConsent",
+  "WhatsAppConsentEvent.studentContact",
 ]);
 
 const schema = readFileSync(schemaPath, "utf8");

@@ -286,10 +286,23 @@ const expectedWhatsappConsentStoredFields = [
   "phoneHash",
   "purpose",
   "canReceiveWhatsapp",
+  "version",
   "noticeVersion",
   "source",
   "recordedAt",
   "withdrawnAt",
+];
+const expectedWhatsappConsentEventStoredFields = [
+  "whatsappConsentId",
+  "studentContactId",
+  "purpose",
+  "sequence",
+  "eventType",
+  "noticeVersion",
+  "source",
+  "recordedAt",
+  "commandKeyHash",
+  "requestHash",
 ];
 const expectedTenantCompositeRelations = [
   "AnnouncementReceipt.announcement",
@@ -321,6 +334,8 @@ const expectedTenantCompositeRelations = [
   "Employee.accountUser",
   "Teacher.employee",
   "StudentContact.student",
+  "WhatsAppConsentEvent.whatsappConsent",
+  "WhatsAppConsentEvent.studentContact",
 ];
 const expectedTenantFkInsertRejects = expectedTenantCompositeRelations.map((relation) => `${relation} cross tenant insert`);
 const expectedRlsWriteRejects = [
@@ -329,6 +344,13 @@ const expectedRlsWriteRejects = [
   "Announcement wrong tenant insert",
   "MessageTemplate wrong tenant insert",
   "WhatsAppConsent wrong tenant insert",
+  "WhatsAppConsentEvent cross tenant contact",
+  "WhatsAppConsentEvent update forbidden",
+  "WhatsAppConsentEvent delete forbidden",
+  "WhatsAppConsent direct update forbidden",
+  "WhatsAppConsent direct delete forbidden",
+  "WhatsAppConsent grant withdraw regrant",
+  "WhatsAppConsent sibling withdrawal",
   "ExamResult foreign tenant RawImport",
   "ParsedAnswer foreign tenant RawImport",
   "ParsedAnswer cross exam mismatch",
@@ -782,16 +804,23 @@ function requireWhatsappConsent(scope, failures) {
 
   requireExpectedObjectKeys(
     whatsappConsent,
-    ["recordCount", "storedFields", "policy"],
+    ["recordCount", "eventRecordCount", "piiRelevantStoredFields", "piiRelevantEventStoredFields", "policy"],
     failures,
     "reports.kvkkInventory.whatsappConsent",
   );
   requireObjectEqual(whatsappConsent, failures, "reports.kvkkInventory.whatsappConsent.recordCount", "recordCount", 0);
+  requireObjectEqual(whatsappConsent, failures, "reports.kvkkInventory.whatsappConsent.eventRecordCount", "eventRecordCount", 0);
   requireExactStringSet(
-    whatsappConsent.storedFields,
+    whatsappConsent.piiRelevantStoredFields,
     failures,
-    "reports.kvkkInventory.whatsappConsent.storedFields",
+    "reports.kvkkInventory.whatsappConsent.piiRelevantStoredFields",
     expectedWhatsappConsentStoredFields,
+  );
+  requireExactStringSet(
+    whatsappConsent.piiRelevantEventStoredFields,
+    failures,
+    "reports.kvkkInventory.whatsappConsent.piiRelevantEventStoredFields",
+    expectedWhatsappConsentEventStoredFields,
   );
 
   const policy = requireObject(whatsappConsent, failures, "reports.kvkkInventory.whatsappConsent.policy", "policy");
