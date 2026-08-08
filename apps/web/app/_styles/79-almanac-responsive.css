@@ -206,18 +206,18 @@
       grid-column: 1 / -1;
     }
 
+    .next-work-context dd {
+      overflow: visible;
+      text-overflow: clip;
+      white-space: normal;
+    }
+
     .next-work-context.next-report-work-context {
       grid-template-columns: minmax(0, 1fr);
     }
 
     .next-work-context.next-report-work-context > div:first-child {
       grid-column: auto;
-    }
-
-    .next-work-context.next-report-work-context dd {
-      overflow: visible;
-      text-overflow: clip;
-      white-space: normal;
     }
 
     .next-marketing-steps {
