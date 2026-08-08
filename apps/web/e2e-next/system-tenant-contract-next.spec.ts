@@ -122,7 +122,7 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     await createDialog.getByLabel("İlk kurum sahibi e-posta").fill("used.admin@example.test");
     await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
 
-    await expect(createDialog.getByText("Bu admin e-postası zaten kullanımda. Farklı bir e-posta gir.")).toBeVisible();
+    await expect(createDialog.getByText("Bu yönetici e-postası zaten kullanımda. Farklı bir e-posta girin.")).toBeVisible();
     await expect.poll(() => captured.tenantCreates).toHaveLength(1);
     expect(captured.forbiddenTenantScopedPaths).toEqual([]);
   });
@@ -193,7 +193,7 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
         title: "Sistem İzleme",
       },
       {
-        items: ["tenant.created", "tenant.updated", "user.membership_created", "user.roles_updated"],
+        items: ["Kurum oluşturuldu.", "Kurum bilgileri güncellendi.", "Kullanıcı kuruma eklendi.", "Kullanıcı yetkileri güncellendi."],
         path: "/sistem/denetim",
         title: "Denetim",
       },

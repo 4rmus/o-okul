@@ -227,7 +227,7 @@ export function CoursesPage() {
         aria-label="Ders yönetimi"
         columns={columns}
         density="compact"
-        description="Kurum derslerini aynı CRUD kalıbıyla yönet."
+        description="Kurum derslerini ortak liste düzeninde yönetin."
         emptyState={
           <EmptyState
             title="Henüz ders yok"
@@ -239,6 +239,7 @@ export function CoursesPage() {
         emptyText="Ders kaydı yok"
         error={error || (coursesQuery.isError ? "Dersler alınamadı." : undefined)}
         getRowKey={(record) => record.id}
+        hasActiveFilters={Boolean(listQuery.q.trim())}
         loading={coursesQuery.isPending}
         rows={rows}
         summary={

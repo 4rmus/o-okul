@@ -103,7 +103,7 @@ test("Next eşzamanlı 401 yanıtlarında tek refresh çağrısı yapar", async 
   await expect(page.getByRole("heading", { name: "Tek Uç Akademi" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Kurum başarı görünümü" })).toContainText("1");
 
-  await page.getByRole("button", { name: "Akademik" }).click();
+  await page.getByRole("button", { name: "Öğrenci ve eğitim" }).click();
   await page.getByRole("link", { name: "Sınıflar" }).click();
   await expect(page.getByRole("region", { name: "Sınıf yönetimi" })).toBeVisible();
   await expect.poll(() => refreshCount).toBe(1);

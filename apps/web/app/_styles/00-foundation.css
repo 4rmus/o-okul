@@ -1,0 +1,72 @@
+:root {
+  --color-text: var(--color-ink);
+  --color-text-secondary: var(--color-ink-secondary);
+  --color-text-muted: var(--color-ink-muted);
+  --color-primary: var(--color-accent);
+  --color-primary-hover: var(--color-accent-hover);
+  --color-primary-subtle: var(--color-accent-soft);
+  --color-success: var(--color-success-token);
+  --color-success-subtle: var(--color-success-soft-token);
+  --color-warning: var(--color-warning-token);
+  --color-warning-subtle: var(--color-warning-soft-token);
+  --color-info: var(--color-accent);
+  --color-info-subtle: var(--color-accent-soft);
+  --color-border: var(--color-rule);
+  --color-border-strong: var(--color-rule-strong);
+  --color-border-input: var(--color-rule-strong);
+  --color-border-faint: var(--color-rule-faint);
+  --color-surface: var(--color-paper-raised);
+  --color-surface-muted: var(--color-paper);
+  --color-surface-elevated: var(--color-paper-muted);
+  --color-bg: var(--color-paper);
+  --color-danger: var(--color-danger-token);
+  --color-danger-subtle: var(--color-danger-soft-token);
+  --color-overlay: var(--color-overlay-token);
+  --space-2: var(--space-2xs);
+  --space-3: var(--space-2xs);
+  --radius: var(--radius-control);
+  --radius-lg: var(--radius-panel);
+  --shell-sidebar-width: 16rem;
+  --workspace-max-width: 1360px;
+  --shadow-soft: 0 10px 28px var(--color-shadow-soft);
+  --shadow-card: 0 1px 2px var(--color-shadow-soft), 0 10px 24px var(--color-shadow-soft);
+  --shadow-card-hover: 0 2px 4px var(--color-shadow-medium), 0 16px 30px var(--color-shadow-medium);
+  --shadow-modal: 0 24px 58px var(--color-shadow-strong);
+  --focus-ring: 0 0 0 3px color-mix(in oklch, var(--color-focus) 18%, transparent);
+  --transition-ui: var(--dur-short) var(--ease-out);
+  --chart-success: var(--color-success-token);
+  --chart-primary: var(--color-accent);
+  --chart-warning: var(--color-warning-token);
+  --chart-danger: var(--color-danger-token);
+  --chart-neutral: var(--color-ink-muted);
+
+  color: var(--color-text);
+  background: var(--color-bg);
+  font-family: var(--font-body);
+}
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.next-auth-layout,
+.next-app-shell {
+  min-height: 100vh;
+}
+
+.next-auth-layout {
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+}

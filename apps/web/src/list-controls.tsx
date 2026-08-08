@@ -92,6 +92,11 @@ export function ListControls({
   const total = meta?.total ?? 0;
   const canGoBack = page > 1;
   const canGoForward = totalPages > 0 && page < totalPages;
+  const activeFilterSummary = [
+    state.q.trim() ? "Arama aktif" : "",
+    state.sort ? "Sıralama seçili" : "",
+    state.limit !== initialListQuery.limit ? `${state.limit} kayıt` : "",
+  ].filter(Boolean).join(" · ") || "Sıralama ve sayfalama";
 
   return (
     <FilterBar className="next-list-controls" role="group" aria-label="Liste kontrolleri">
@@ -104,46 +109,56 @@ export function ListControls({
           onChange={(event) => onChange({ ...state, page: 1, q: event.target.value })}
         />
       </Field>
-      <Field label="Sırala">
-        <Select value={state.sort} onChange={(event) => onChange({ ...state, page: 1, sort: event.target.value })}>
-          <option value="">Varsayılan</option>
-          {sortOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      <Field label="Göster">
-        <Select
-          value={state.limit}
-          onChange={(event) => onChange({ ...state, page: 1, limit: Number(event.target.value) })}
-        >
-          <option value={5}>5</option>
-          <option value={10}>10</option>
-          <option value={20}>20</option>
-        </Select>
-      </Field>
-      <span className="next-list-status">{total} kayıt</span>
-      <Button
-        aria-label="Önceki sayfa"
-        disabled={!canGoBack}
-        onClick={() => onChange({ ...state, page: Math.max(1, page - 1) })}
-        variant="secondary"
-      >
-        <ChevronLeft size={17} aria-hidden="true" />
-      </Button>
-      <span className="next-list-status">
-        {page}/{Math.max(totalPages, 1)}
-      </span>
-      <Button
-        aria-label="Sonraki sayfa"
-        disabled={!canGoForward}
-        onClick={() => onChange({ ...state, page: page + 1 })}
-        variant="secondary"
-      >
-        <ChevronRight size={17} aria-hidden="true" />
-      </Button>
+      <details className="next-list-filter-details" open>
+        <summary>
+          <span>Filtreler</span>
+          <small>{activeFilterSummary}</small>
+        </summary>
+        <div className="next-list-filter-details__content">
+          <Field label="Sırala">
+            <Select value={state.sort} onChange={(event) => onChange({ ...state, page: 1, sort: event.target.value })}>
+              <option value="">Varsayılan</option>
+              {sortOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Göster">
+            <Select
+              value={state.limit}
+              onChange={(event) => onChange({ ...state, page: 1, limit: Number(event.target.value) })}
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+            </Select>
+          </Field>
+          <span className="next-list-status" aria-live="polite" aria-atomic="true">
+            {total} kayıt
+          </span>
+          <Button
+            aria-label="Önceki sayfa"
+            disabled={!canGoBack}
+            onClick={() => onChange({ ...state, page: Math.max(1, page - 1) })}
+            variant="secondary"
+          >
+            <ChevronLeft size={17} aria-hidden="true" />
+          </Button>
+          <span className="next-list-status">
+            {page}/{Math.max(totalPages, 1)}
+          </span>
+          <Button
+            aria-label="Sonraki sayfa"
+            disabled={!canGoForward}
+            onClick={() => onChange({ ...state, page: page + 1 })}
+            variant="secondary"
+          >
+            <ChevronRight size={17} aria-hidden="true" />
+          </Button>
+        </div>
+      </details>
       {children}
     </FilterBar>
   );
@@ -182,7 +197,7 @@ function normalizeListQuery(
   return {
     page: readPositiveInteger(String(state.page)) ?? defaultState.page,
     limit: readListLimit(String(state.limit)) ?? defaultState.limit,
-    q: state.q.trim(),
+    q: state.q,
     sort: sortValues.has(state.sort) ? state.sort : defaultState.sort,
   };
 }

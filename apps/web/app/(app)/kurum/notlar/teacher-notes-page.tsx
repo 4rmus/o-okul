@@ -287,6 +287,7 @@ export function TeacherNotesPage() {
         error={error || (notesQuery.isError ? "Öğretmen notları alınamadı." : referencesQuery.isError ? "Seçim listeleri alınamadı." : undefined)}
         getRowKey={(record) => record.id}
         density="compact"
+        hasActiveFilters={Boolean(listQuery.q.trim())}
         loading={notesQuery.isPending || referencesQuery.isPending}
         rows={rows}
         summary={<OperationSummary ariaLabel="Öğretmen notu operasyon özeti" badges={noteSummaryBadges} items={noteSummaryItems} />}

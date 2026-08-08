@@ -10,7 +10,7 @@ export type RoleCapability = `${string}:${string}`;
 export const tenantRoleLabels: Record<TenantRoleName, string> = {
   SYSTEM_ADMIN: "Sistem yöneticisi",
   TENANT_OWNER: "Kurum sahibi",
-  TENANT_ADMIN: "Kurum admin",
+  TENANT_ADMIN: "Kurum yöneticisi",
   ASSISTANT_ADMIN: "Yardımcı yönetici",
   OPERATIONS_STAFF: "Operasyon çalışanı",
   FINANCE_STAFF: "Finans çalışanı",

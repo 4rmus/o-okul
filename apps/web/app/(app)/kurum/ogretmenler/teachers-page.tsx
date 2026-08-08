@@ -404,6 +404,7 @@ export function TeachersPage() {
         emptyText="Öğretmen kaydı yok"
         error={error || (teachersQuery.isError ? "Öğretmenler alınamadı." : undefined)}
         getRowKey={(teacher) => teacher.id}
+        hasActiveFilters={Boolean(listQuery.q.trim())}
         loading={teachersQuery.isPending}
         rows={rows}
         summary={

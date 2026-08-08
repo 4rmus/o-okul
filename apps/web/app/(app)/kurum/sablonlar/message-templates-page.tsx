@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -96,6 +96,7 @@ export function MessageTemplatesPage() {
   const [isSendingSms, setIsSendingSms] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
+  const smsCreateRequest = useRef<PendingIdempotentRequest | null>(null);
   const rows = templatesQuery.data?.data ?? [];
   const references = referencesQuery.data ?? emptySmsReferences;
   const selectedSmsTemplate = useMemo(
@@ -107,7 +108,12 @@ export function MessageTemplatesPage() {
     () => recipientPreview?.recipients.map((recipient) => recipient.to) ?? [],
     [recipientPreview],
   );
-  const effectiveRecipients = parsedRecipients.length > 0 ? parsedRecipients : previewRecipientNumbers;
+  const hasInvalidManualRecipients = Boolean(
+    recipientPreview && parsedRecipients.some((recipient) => !previewRecipientNumbers.includes(recipient)),
+  );
+  const effectiveRecipients = recipientPreview && !hasInvalidManualRecipients
+    ? (parsedRecipients.length > 0 ? parsedRecipients : previewRecipientNumbers)
+    : [];
   const effectiveRecipientCount = effectiveRecipients.length;
   const deliveryReportQuery = useQuery({
     queryKey: ["next-sms-batch-report", auth?.session.tenantId ?? "anonymous", deliveryReportJobId],
@@ -236,6 +242,7 @@ export function MessageTemplatesPage() {
         ? await updateMessageTemplate(auth.accessToken, editingTemplate.id, parsedForm.data)
         : await createMessageTemplate(auth.accessToken, parsedForm.data);
       void savedTemplate;
+      invalidateSmsPreview();
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
     } catch (submitError) {
@@ -255,6 +262,7 @@ export function MessageTemplatesPage() {
     setError("");
     try {
       await deleteMessageTemplate(auth.accessToken, template.id);
+      invalidateSmsPreview();
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
     } catch (deleteError) {
       setError(apiErrorMessage(deleteError, "Şablon silinemedi."));
@@ -268,19 +276,54 @@ export function MessageTemplatesPage() {
 
     setSmsError("");
     setSendStatus("");
+    if (!recipientPreview) {
+      setSmsError("Önce izinli alıcıları getirin.");
+      return;
+    }
+    if (hasInvalidManualRecipients) {
+      setSmsError("Girdiğiniz numaralar izinli alıcı önizlemesinde bulunmuyor.");
+      return;
+    }
     if (effectiveRecipients.length === 0) {
-      setSmsError("En az bir alıcı girilmelidir.");
+      setSmsError("SMS izni olan veli alıcısı bulunamadı.");
       return;
     }
 
+    const confirmed = await confirm({
+      confirmLabel: "SMS gönder",
+      confirmVariant: "primary",
+      description: "Mesaj seçili alıcılar için gönderime hazırlanacak.",
+      message: (
+        <span>
+          <strong>Başlık:</strong> {selectedSmsTemplate.name}<br />
+          <strong>Metin:</strong> {selectedSmsTemplate.body}<br />
+          <strong>Hedef:</strong> {smsTargetLabel(smsForm, references)}<br />
+          <strong>Kanal:</strong> SMS<br />
+          <strong>Zamanlama:</strong> Hemen<br />
+          <strong>Alıcı:</strong> {effectiveRecipientCount}
+          {parsedRecipients.length === 0 && recipientPreview ? <><br /><strong>İzinli alıcı:</strong> {recipientPreview.recipientCount}</> : null}
+        </span>
+      ),
+      title: "SMS gönderimini onayla",
+    });
+    if (!confirmed) return;
+
     setIsSendingSms(true);
     try {
-      const result = await createSmsBatch(auth.accessToken, {
+      const input = {
         templateId: selectedSmsTemplate.id,
         recipients: effectiveRecipients.map((to) => ({ to })),
-      });
+        recipientScope: createRecipientScope(smsForm),
+      };
+      const fingerprint = JSON.stringify(input);
+      const request = smsCreateRequest.current?.fingerprint === fingerprint
+        ? smsCreateRequest.current
+        : { fingerprint, key: crypto.randomUUID() };
+      smsCreateRequest.current = request;
+      const result = await createSmsBatch(auth.accessToken, input, request.key);
+      smsCreateRequest.current = null;
       setDeliveryReportJobId(result.jobId);
-      setSendStatus(`${result.recipientCount} alıcı kuyruğa alındı.`);
+      setSendStatus(`${result.recipientCount} alıcı için gönderim başlatıldı.`);
     } catch (sendError) {
       setSmsError(apiErrorMessage(sendError, "SMS gönderimi başlatılamadı."));
     } finally {
@@ -296,15 +339,7 @@ export function MessageTemplatesPage() {
     setSendStatus("");
     setIsPreviewingSms(true);
     try {
-      const result = await previewSmsRecipients(auth.accessToken, {
-        announcementId: smsForm.announcementId || undefined,
-        campusId: smsForm.campusId || undefined,
-        classId: smsForm.classId || undefined,
-        courseId: smsForm.courseId || undefined,
-        gradeLevelId: smsForm.gradeLevelId || undefined,
-        studentStatus: smsForm.studentStatus,
-        termId: smsForm.termId || undefined,
-      });
+      const result = await previewSmsRecipients(auth.accessToken, createRecipientScope(smsForm));
       setRecipientPreview(result);
       setSendStatus(`${result.recipientCount} izinli veli alıcısı hazırlandı.`);
     } catch (previewError) {
@@ -325,6 +360,18 @@ export function MessageTemplatesPage() {
       gradeLevelId: announcement?.gradeLevelId ?? "",
       termId: announcement?.termId ?? "",
     }));
+    invalidateSmsPreview();
+  }
+
+  function updateSmsForm(patch: Partial<typeof emptySmsForm>) {
+    setSmsForm((current) => ({ ...current, ...patch }));
+    invalidateSmsPreview();
+  }
+
+  function invalidateSmsPreview() {
+    setRecipientPreview(null);
+    setSendStatus("");
+    setSmsError("");
   }
 
   return (
@@ -346,7 +393,7 @@ export function MessageTemplatesPage() {
         }
         aria-label="Şablon yönetimi"
         columns={columns}
-        description="SMS mesaj şablonlarını aynı CRUD kalıbıyla yönet."
+        description="SMS mesaj şablonlarını ortak liste düzeninde yönetin."
         emptyState={
           <EmptyState
             title="Şablon yok"
@@ -358,12 +405,13 @@ export function MessageTemplatesPage() {
       error={error || (templatesQuery.isError ? apiErrorMessage(templatesQuery.error, "Şablonlar alınamadı.") : undefined)}
       getRowKey={(template) => template.id}
       density="compact"
+      hasActiveFilters={Boolean(listQuery.q.trim())}
       loading={templatesQuery.isPending}
       rows={rows}
       summary={
         <OperationSummary
           actions={templateSummaryActions}
-          ariaLabel="Şablon operasyon özeti"
+          ariaLabel="Şablon özeti"
           badges={templateSummaryBadges}
           items={templateSummaryItems}
         />
@@ -400,6 +448,29 @@ export function MessageTemplatesPage() {
               tone={recipientPreview ? "info" : "default"}
             />
           </MetricGrid>
+          <Panel
+            aria-label="SMS içerik seçimi"
+            title="1. İçerik"
+            description={`${selectedSmsTemplate?.body.length ?? 0} karakter · Bilgilendirme amaçlıdır; ücret veya SMS parça sayısı tahmini değildir.`}
+            tone="muted"
+          >
+            <Field label="Şablon">
+              <Select
+                value={selectedSmsTemplate?.id ?? ""}
+                onChange={(event) => updateSmsForm({ templateId: event.target.value })}
+              >
+                {rows.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <p className="next-sms-message-preview">
+              {selectedSmsTemplate?.body ?? "Gönderilecek mesaj metni burada görünür."}
+            </p>
+          </Panel>
+          <p><strong>2. Hedef</strong></p>
           <FilterBar role="group" aria-label="SMS alıcı filtreleri">
             <Field label="Duyuru hedefi">
               <Select
@@ -417,7 +488,7 @@ export function MessageTemplatesPage() {
             <Field label="Kampüs">
               <Select
                 value={smsForm.campusId}
-                onChange={(event) => setSmsForm((current) => ({ ...current, campusId: event.target.value }))}
+                onChange={(event) => updateSmsForm({ campusId: event.target.value })}
               >
                 <option value="">Tüm kampüsler</option>
                 {references.campuses.map((campus) => (
@@ -430,7 +501,7 @@ export function MessageTemplatesPage() {
             <Field label="Seviye">
               <Select
                 value={smsForm.gradeLevelId}
-                onChange={(event) => setSmsForm((current) => ({ ...current, gradeLevelId: event.target.value }))}
+                onChange={(event) => updateSmsForm({ gradeLevelId: event.target.value })}
               >
                 <option value="">Tüm seviyeler</option>
                 {references.gradeLevels.map((gradeLevel) => (
@@ -443,7 +514,7 @@ export function MessageTemplatesPage() {
             <Field label="Sınıf">
               <Select
                 value={smsForm.classId}
-                onChange={(event) => setSmsForm((current) => ({ ...current, classId: event.target.value }))}
+                onChange={(event) => updateSmsForm({ classId: event.target.value })}
               >
                 <option value="">Tüm sınıflar</option>
                 {references.classes.map((schoolClass) => (
@@ -456,7 +527,7 @@ export function MessageTemplatesPage() {
             <Field label="Öğrenci durumu">
               <Select
                 value={smsForm.studentStatus}
-                onChange={(event) => setSmsForm((current) => ({ ...current, studentStatus: event.target.value as StudentStatus }))}
+                onChange={(event) => updateSmsForm({ studentStatus: event.target.value as StudentStatus })}
               >
                 <option value="ACTIVE">Aktif öğrenciler</option>
                 <option value="PASSIVE">Pasif öğrenciler</option>
@@ -465,7 +536,7 @@ export function MessageTemplatesPage() {
             <Field label="Ders">
               <Select
                 value={smsForm.courseId}
-                onChange={(event) => setSmsForm((current) => ({ ...current, courseId: event.target.value }))}
+                onChange={(event) => updateSmsForm({ courseId: event.target.value })}
               >
                 <option value="">Tüm dersler</option>
                 {references.courses.map((course) => (
@@ -478,7 +549,7 @@ export function MessageTemplatesPage() {
             <Field label="Dönem">
               <Select
                 value={smsForm.termId}
-                onChange={(event) => setSmsForm((current) => ({ ...current, termId: event.target.value }))}
+                onChange={(event) => updateSmsForm({ termId: event.target.value })}
               >
                 <option value="">Tüm dönemler</option>
                 {references.terms.map((term) => (
@@ -488,6 +559,19 @@ export function MessageTemplatesPage() {
                 ))}
               </Select>
             </Field>
+            <Field label="Alıcılar" description="İzinli alıcı önizlemesini daraltmak için satır başına bir GSM numarası girin. Önizleme dışında kalan numaralar gönderilemez.">
+              <Textarea
+                aria-label="SMS alıcıları"
+                placeholder="905000000001&#10;905000000002"
+                value={smsForm.recipients}
+                onChange={(event) => updateSmsForm({ recipients: event.target.value })}
+              />
+            </Field>
+            {hasInvalidManualRecipients ? (
+              <Alert tone="warning" title="Alıcı önizlemesini kontrol edin">
+                Girdiğiniz numaralardan en az biri izinli alıcı önizlemesinde bulunmuyor.
+              </Alert>
+            ) : null}
             <Button
               type="button"
               variant="secondary"
@@ -508,44 +592,24 @@ export function MessageTemplatesPage() {
                 caption="SMS alıcı önizleme"
                 columns={recipientPreviewColumns}
                 density="compact"
-                description="İlk kayıtlar PII açmadan kapsam doğrulaması için gösterilir; telefon numarası önizlemede açılmaz."
+                description="İlk kayıtlar kişisel bilgileri açmadan hedefi doğrulamak için gösterilir; telefon numarası maskeli kalır."
                 emptyText="Filtreye uygun SMS izni olan veli bulunamadı."
                 getRowKey={(recipient) => `${recipient.guardianId}-${recipient.studentIds.join("-")}`}
                 rows={recipientPreview.recipients.slice(0, 5)}
               />
             </Panel>
           ) : null}
-          <div className="next-sms-composer-grid">
-            <Field label="Şablon">
-              <Select
-                value={selectedSmsTemplate?.id ?? ""}
-                onChange={(event) => setSmsForm((current) => ({ ...current, templateId: event.target.value }))}
-              >
-                {rows.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Alıcılar" description="Manuel gönderim için satır başına bir GSM numarası girilir. Boş bırakılırsa son alıcı önizlemesi kullanılır.">
-              <Textarea
-                aria-label="SMS alıcıları"
-                placeholder="905000000001&#10;905000000002"
-                value={smsForm.recipients}
-                onChange={(event) => setSmsForm((current) => ({ ...current, recipients: event.target.value }))}
-              />
-            </Field>
-            <Panel
-              aria-label="SMS önizleme"
-              title={selectedSmsTemplate?.name ?? "Şablon seçilmedi"}
-              description={`${effectiveRecipientCount} alıcı`}
-            >
-              <p className="next-sms-message-preview">
-                {selectedSmsTemplate?.body ?? "Gönderilecek mesaj metni burada görünür."}
-              </p>
-            </Panel>
-          </div>
+          <Panel
+            aria-label="SMS önizleme"
+            title="3. Önizleme"
+            description={`${effectiveRecipientCount} alıcı · SMS · Hemen`}
+          >
+            <p><strong>{selectedSmsTemplate?.name ?? "Şablon seçilmedi"}</strong></p>
+            <p className="next-sms-message-preview">
+              {selectedSmsTemplate?.body ?? "Gönderilecek mesaj metni burada görünür."}
+            </p>
+            <p>{smsTargetLabel(smsForm, references)}</p>
+          </Panel>
           <Toolbar align="end" className="next-sms-workflow-actions">
             <Button type="submit" disabled={!selectedSmsTemplate || templatesQuery.isPending || isSendingSms || effectiveRecipientCount === 0}>
               <Send size={17} aria-hidden="true" />
@@ -589,7 +653,7 @@ export function MessageTemplatesPage() {
             onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
           />
         </Field>
-        <Field label="Mesaj metni" description="SMS gönderiminde kullanılacak kısa ve tekrar kullanılabilir metin.">
+        <Field label="Mesaj metni" description={`SMS gönderiminde kullanılacak kısa ve tekrar kullanılabilir metin · ${form.body.length} karakter`}>
           <Textarea
             required
             rows={5}
@@ -625,6 +689,11 @@ interface SmsBatchRecipientPreviewResult {
   recipientCount: number;
 }
 
+interface PendingIdempotentRequest {
+  fingerprint: string;
+  key: string;
+}
+
 const messageTemplateSortOptions = [
   { label: "Şablon A-Z", value: "name" },
   { label: "Şablon Z-A", value: "-name" },
@@ -645,7 +714,7 @@ function buildTemplateSummaryItems({
 }): OperationSummaryItem[] {
   const items: OperationSummaryItem[] = [
     {
-      description: "URL state ile sayfalanan şablon",
+      description: "Filtrelenmiş toplam şablon",
       key: "total",
       label: "Şablon toplamı",
       value: formatCount(listTotal),
@@ -705,7 +774,7 @@ function buildTemplateSummaryBadges({
     ...badges,
     {
       key: "references",
-      label: isReferenceLoading ? "SMS referansları yükleniyor" : "SMS referansları hazır",
+      label: isReferenceLoading ? "SMS seçim listeleri yükleniyor" : "SMS seçim listeleri hazır",
       tone: isReferenceLoading ? "warning" : "success",
     },
     {
@@ -753,8 +822,8 @@ function buildTemplateSummaryActions({
     {
       detail: sendStatus || (effectiveRecipientCount > 0 ? "Gönderim butonu hazır" : "Alıcı bekleniyor"),
       key: "queue",
-      label: "SMS kuyruğu",
-      status: deliveryReportJobId ? "Kuyrukta" : isSendingSms ? "Gönderiliyor" : effectiveRecipientCount > 0 ? "Hazır" : "Bekliyor",
+      label: "SMS gönderimi",
+      status: deliveryReportJobId ? "Gönderim başladı" : isSendingSms ? "Gönderiliyor" : effectiveRecipientCount > 0 ? "Hazır" : "Bekliyor",
       tone: deliveryReportJobId ? "warning" : effectiveRecipientCount > 0 ? "success" : "neutral",
       value: deliveryReportJobId ? "Teslim raporu açık" : `${formatCount(effectiveRecipientCount)} alıcı`,
     },
@@ -778,6 +847,20 @@ const emptySmsReferences = {
   gradeLevels: [] as GradeLevelRecord[],
   terms: [] as AcademicTermRecord[],
 };
+
+function smsTargetLabel(smsForm: typeof emptySmsForm, references: typeof emptySmsReferences) {
+  const announcement = references.announcements.find((record) => record.id === smsForm.announcementId);
+  const parts = [
+    announcement?.title,
+    references.campuses.find((record) => record.id === smsForm.campusId)?.name,
+    references.gradeLevels.find((record) => record.id === smsForm.gradeLevelId)?.name,
+    references.classes.find((record) => record.id === smsForm.classId)?.name,
+    references.courses.find((record) => record.id === smsForm.courseId)?.name,
+    references.terms.find((record) => record.id === smsForm.termId)?.name,
+    smsForm.studentStatus === "ACTIVE" ? "Aktif öğrenciler" : "Pasif öğrenciler",
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : "Tüm uygun veliler";
+}
 
 async function loadMessageTemplates(accessToken: string, listQuery: ListQueryState) {
   return apiListRequest<MessageTemplateRecord>(accessToken, buildListUrl(`${apiBaseUrl}/message-templates`, listQuery));
@@ -816,13 +899,30 @@ async function previewSmsRecipients(
 
 async function createSmsBatch(
   accessToken: string,
-  input: { templateId: string; recipients: Array<{ to: string }> },
+  input: {
+    templateId: string;
+    recipients: Array<{ to: string }>;
+    recipientScope: ReturnType<typeof createRecipientScope>;
+  },
+  idempotencyKey: string,
 ) {
   return apiRequest<SmsBatchQueueResult>(accessToken, `${apiBaseUrl}/sms-batches`, {
     body: JSON.stringify(input),
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "Idempotency-Key": idempotencyKey },
     method: "POST",
   });
+}
+
+function createRecipientScope(form: typeof emptySmsForm) {
+  return {
+    announcementId: form.announcementId || undefined,
+    campusId: form.campusId || undefined,
+    classId: form.classId || undefined,
+    courseId: form.courseId || undefined,
+    gradeLevelId: form.gradeLevelId || undefined,
+    studentStatus: form.studentStatus,
+    termId: form.termId || undefined,
+  };
 }
 
 async function loadSmsBatchDeliveryReport(accessToken: string, jobId: string) {

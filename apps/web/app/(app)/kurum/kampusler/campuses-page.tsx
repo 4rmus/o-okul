@@ -230,7 +230,7 @@ export function CampusesPage() {
         aria-label="Kampüs yönetimi"
         columns={columns}
         density="compact"
-        description="Kurum kampüslerini aynı CRUD kalıbıyla yönet."
+        description="Kampüsleri ortak liste düzeninde yönetin."
         emptyState={
           <EmptyState
             title="Henüz kampüs yok"
@@ -242,6 +242,7 @@ export function CampusesPage() {
         emptyText="Kampüs kaydı yok"
         error={error || (campusesQuery.isError ? "Kampüsler alınamadı." : undefined)}
         getRowKey={(record) => record.id}
+        hasActiveFilters={Boolean(listQuery.q.trim())}
         loading={campusesQuery.isPending}
         rows={rows}
         summary={

@@ -2782,22 +2782,6 @@ const messageTemplateUpdateRequestSchema = objectSchema({
   body: stringSchema({ minLength: 1 }),
 });
 
-const smsBatchCreateRequestSchema = objectSchema({
-  recipients: arraySchema(objectSchema({
-    to: stringSchema({ minLength: 1 }),
-  }, ["to"]), { minItems: 1 }),
-  templateId: stringSchema({ minLength: 1 }),
-}, ["recipients", "templateId"]);
-
-const smsBatchQueueResultSchema = objectSchema({
-  tenantId: stringSchema(),
-  templateId: stringSchema(),
-  recipientCount: integerSchema({ minimum: 0 }),
-  queueName: { type: "string", enum: ["sms-batch"] },
-  jobId: stringSchema(),
-  status: { type: "string", enum: ["queued"] },
-}, ["tenantId", "templateId", "recipientCount", "queueName", "jobId", "status"]);
-
 const smsBatchRecipientPreviewRequestSchema = objectSchema({
   announcementId: stringSchema(),
   campusId: stringSchema(),
@@ -2807,6 +2791,23 @@ const smsBatchRecipientPreviewRequestSchema = objectSchema({
   studentStatus: studentStatusSchema,
   termId: stringSchema(),
 });
+
+const smsBatchCreateRequestSchema = objectSchema({
+  recipientScope: smsBatchRecipientPreviewRequestSchema,
+  recipients: arraySchema(objectSchema({
+    to: stringSchema({ minLength: 1 }),
+  }, ["to"]), { minItems: 1 }),
+  templateId: stringSchema({ minLength: 1 }),
+}, ["recipientScope", "recipients", "templateId"]);
+
+const smsBatchQueueResultSchema = objectSchema({
+  tenantId: stringSchema(),
+  templateId: stringSchema(),
+  recipientCount: integerSchema({ minimum: 0 }),
+  queueName: { type: "string", enum: ["sms-batch"] },
+  jobId: stringSchema(),
+  status: { type: "string", enum: ["queued"] },
+}, ["tenantId", "templateId", "recipientCount", "queueName", "jobId", "status"]);
 
 const smsBatchRecipientPreviewRecordSchema = objectSchema({
   to: stringSchema({ minLength: 1 }),

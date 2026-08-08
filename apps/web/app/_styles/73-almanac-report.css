@@ -1,0 +1,53 @@
+@media screen {
+.next-karne-sheet {
+    color-scheme: light;
+    --color-text: var(--karne-app-text);
+    --color-text-secondary: var(--karne-app-text-secondary);
+    --color-text-muted: var(--karne-app-text-muted);
+    --color-primary: var(--karne-accent);
+    --color-primary-hover: var(--karne-app-primary-hover);
+    --color-primary-strong: var(--karne-app-primary-hover);
+    --color-primary-subtle: var(--karne-app-primary-subtle);
+    --color-success: var(--karne-success);
+    --color-success-subtle: var(--karne-app-success-subtle);
+    --color-warning: var(--karne-app-warning);
+    --color-warning-subtle: var(--karne-app-warning-subtle);
+    --color-info: var(--karne-app-info);
+    --color-info-subtle: var(--karne-app-info-subtle);
+    --color-border: var(--karne-app-border);
+    --color-border-strong: var(--karne-app-border-strong);
+    --color-border-input: var(--karne-outline);
+    --color-border-faint: var(--karne-app-border-faint);
+    --color-surface: var(--karne-surface);
+    --color-surface-muted: var(--karne-app-surface-muted);
+    --color-surface-elevated: var(--karne-app-surface-elevated);
+    --color-bg: var(--karne-app-bg);
+    --color-danger: var(--karne-danger);
+    --color-danger-subtle: var(--karne-app-danger-subtle);
+  }
+
+  .next-karne-sheet h2,
+  .next-karne-sheet h3,
+  .next-karne-sheet h4 {
+    font-family: inherit;
+    letter-spacing: 0;
+    min-width: auto;
+    overflow-wrap: normal;
+  }
+
+  .next-karne-sheet table {
+    font-variant-numeric: normal;
+  }
+
+  .next-karne-sheet .uh-metric-card__value {
+    font-variant-numeric: normal;
+  }
+
+  .next-karne-sheet .next-karne-block {
+    box-shadow: 0 1px 2px var(--karne-block-shadow);
+  }
+
+  .next-report-status-surface .uh-status-badge {
+    border-radius: var(--radius-pill);
+  }
+}

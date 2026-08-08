@@ -5,9 +5,10 @@ interface PageFrameProps {
   subtitle?: string;
   actions?: ReactNode;
   children: ReactNode;
+  context?: ReactNode;
 }
 
-export function PageFrame({ actions, children, subtitle, title }: PageFrameProps) {
+export function PageFrame({ actions, children, context, subtitle, title }: PageFrameProps) {
   return (
     <section className="next-page-frame">
       <header className="next-page-frame__header">
@@ -17,6 +18,7 @@ export function PageFrame({ actions, children, subtitle, title }: PageFrameProps
         </div>
         {actions ? <div className="next-page-frame__actions">{actions}</div> : null}
       </header>
+      {context ? <div className="next-page-frame__context" aria-label="Sayfa bilgileri">{context}</div> : null}
       <div className="next-page-frame__body">{children}</div>
     </section>
   );

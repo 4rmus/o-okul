@@ -52,8 +52,8 @@ test.describe("Portal rapor paneli sözleşmesi", () => {
     await expect(karneSummary).toBeVisible();
     await expect(karneSummary).toHaveClass(/next-portal-karne-sheet/);
     await expect(karneSummary).not.toHaveClass(/next-list-panel/);
-    const karneContext = karneSummary.getByRole("region", { exact: true, name: "Karne rapor bağlamı" });
-    const karneContextMetrics = karneContext.getByRole("group", { name: "Karne rapor bağlam metrikleri" });
+    const karneContext = karneSummary.getByRole("region", { exact: true, name: "Karne rapor bilgileri" });
+    const karneContextMetrics = karneContext.getByRole("group", { name: "Karne rapor ölçüleri" });
     await expect(karneContextMetrics).toHaveClass(/uh-info-grid/);
     await expect(karneContextMetrics.locator(".uh-info-item")).toHaveCount(7);
     await expect(karneContext).toContainText("Rapor bağlamı");

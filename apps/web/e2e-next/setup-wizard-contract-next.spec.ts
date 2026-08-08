@@ -95,11 +95,11 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
       mimeType: "text/csv",
       name: "ogrenci-ada-kaya-tckn-12345678901.csv",
     });
-    await expect(page.getByLabel("Öğretmen aktarım güven durumu")).toContainText("Sunucu dry-run bekliyor");
+    await expect(page.getByLabel("Öğretmen aktarım güven durumu")).toContainText("Sunucu ön kontrolü bekleniyor");
     await expect(setupForm).toContainText("XLSX dosyası seçildi");
     await expect(setupForm).toContainText("CSV dosyası seçildi");
     await expect(studentUploadStatus).toContainText("Yerel kontrol tamam");
-    await expect(studentUploadStatus).toContainText("Sunucu dry-run bekliyor");
+    await expect(studentUploadStatus).toContainText("Sunucu ön kontrolü bekleniyor");
     await expectNoVisibleTextValues(page, "setup-upload-filenames", hostileUploadValues);
     await expectDraftStorageDoesNotContain(page, "setup-upload-storage", hostileUploadValues);
     const storedDraft = await page.evaluate(() =>

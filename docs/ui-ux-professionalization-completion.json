@@ -6,24 +6,28 @@
     "command": "pnpm run ci",
     "workflow": ".github/workflows/ci.yml"
   },
+  "statusSemantics": {
+    "deliveryStatus": "Plan diliminin gerçek teslim durumudur; COMPLETE, PARTIAL veya NOT_STARTED olur.",
+    "localStatus": "Yalnız requirementEvidence dosya ve komut bağının yapısal olarak kanıtlandığını gösterir; teslim tamamlandı anlamına gelmez.",
+    "liveStatus": "Aynı kaynak SHA için gereken dış ortam kanıtının durumudur; yerel teslim durumunu yükseltmez."
+  },
+  "evidenceScope": "deliveryStatus mevcut çalışma ağacı ve hedefli yerel QA sonucudur; GitHub CI, staging, provider veya canlı ortam kanıtı değildir.",
   "slices": [
     {
       "id": "PR-0",
-      "title": "Tasarım ve kabul sözleşmesi",
-      "requirements": ["Ortak UI dili", "Persona ve route matrisi", "Makine-okunur kabul kapıları"],
-      "implementationPaths": ["docs/ui-ux-professionalization-contract.md", "design.md", "tokens.css", "packages/ui/src", "scripts/check-web-design-tokens.mjs", "scripts/check-web-ux-baseline.mjs"],
-      "verificationCommands": ["pnpm web:design-tokens:check", "pnpm web:ux-baseline:check", "pnpm web:a11y:check", "pnpm web:ux-contract:check", "pnpm ui-ux-professionalization:completion:contract"],
+      "title": "Tamamlanma kaydı tabanı (ürün planı dilimi değil)",
+      "deliveryStatus": "COMPLETE",
+      "openItems": [],
+      "requirements": ["Gerçek PR-1–PR-6 dilimleri", "Teslim ve kanıt durumlarının ayrılması"],
+      "implementationPaths": ["docs/ui-ux-professionalization-completion.json", "docs/ui-ux-professionalization-contract.md"],
+      "verificationCommands": ["pnpm ui-ux-professionalization:completion:contract"],
       "requirementEvidence": {
-        "Ortak UI dili": {
-          "paths": ["design.md", "tokens.css", "scripts/check-web-design-tokens.mjs", "scripts/check-web-ux-baseline.mjs", "apps/web/e2e-next/ui-primitives-state-next.spec.ts", "apps/web/e2e-next/ui-visual-qa-next.spec.ts"],
-          "commands": ["pnpm web:design-tokens:check", "pnpm web:ux-baseline:check", "pnpm web:ux-contract:check"]
+        "Gerçek PR-1–PR-6 dilimleri": {
+          "paths": ["docs/ui-ux-professionalization-completion.json", "docs/ui-ux-professionalization-contract.md"],
+          "commands": ["pnpm ui-ux-professionalization:completion:contract"]
         },
-        "Persona ve route matrisi": {
-          "paths": ["docs/ui-ux-professionalization-contract.md", "apps/web/e2e-next/ui-route-family-smoke-next.spec.ts", "apps/web/e2e-next/role-preview-contract-next.spec.ts", "apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts"],
-          "commands": ["pnpm web:ux-contract:check"]
-        },
-        "Makine-okunur kabul kapıları": {
-          "paths": ["scripts/check-ui-ux-professionalization-completion.mjs", "scripts/check-ui-ux-professionalization-completion-contract.mjs"],
+        "Teslim ve kanıt durumlarının ayrılması": {
+          "paths": ["docs/ui-ux-professionalization-completion.json", "docs/ui-ux-professionalization-contract.md"],
           "commands": ["pnpm ui-ux-professionalization:completion:contract"]
         }
       },
@@ -32,45 +36,51 @@
     },
     {
       "id": "PR-1",
-      "title": "Günlük sınıf yoklaması",
-      "requirements": ["Sınıf ve tarih bazlı tek atomik yazma", "Tarihsel öğrenci üyeliği", "Atanmış öğretmen kapsamı"],
-      "implementationPaths": ["apps/api/src/attendance", "apps/web/app/(app)/kurum/devamsizlik", "apps/web/app/(app)/portals/teacher-portal-page.tsx"],
-      "verificationCommands": ["pnpm test", "pnpm typecheck", "pnpm web:ux-contract:check"],
+      "title": "Ürün, içerik ve çalışma bağlamı sözleşmesi",
+      "deliveryStatus": "COMPLETE",
+      "openItems": [],
+      "evidenceNote": "Kanonik H1/CTA ve kullanıcı terimleri mevcut çalışma ağacında hizalıdır; bu durum CI veya canlı kanıt değildir.",
+      "requirements": ["Mevcut ve hedef persona ayrımı", "Kullanıcı terminolojisi", "Kapsam ve iddia sınırları"],
+      "implementationPaths": ["docs/product-journeys-v1.md", "docs/marketing-claims.md", "docs/llm-wiki/README.md", "docs/ui-ux-professionalization-contract.md", "apps/web/src/product-terms.ts", "apps/web/app/(app)/kurum/optik/parser-config-page.tsx", "apps/web/app/(app)/kurum/destek/support-tickets-page.tsx", "apps/web/app/(app)/kurum/ogretmenler/teacher-detail-page.tsx", "apps/web/app/(app)/kurum/veliler/guardians-page.tsx"],
+      "verificationCommands": ["pnpm ui-ux-professionalization:completion:contract", "pnpm web:ux-baseline:check", "pnpm web:ux-contract:check"],
       "requirementEvidence": {
-        "Sınıf ve tarih bazlı tek atomik yazma": {
-          "paths": ["apps/api/src/attendance/attendance.e2e.test.ts", "apps/api/src/attendance/attendance.service.test.ts"],
-          "commands": ["pnpm test"]
+        "Mevcut ve hedef persona ayrımı": {
+          "paths": ["docs/product-journeys-v1.md", "docs/ui-ux-professionalization-contract.md", "docs/llm-wiki/README.md"],
+          "commands": ["pnpm ui-ux-professionalization:completion:contract"]
         },
-        "Tarihsel öğrenci üyeliği": {
-          "paths": ["apps/api/src/attendance/attendance.service.test.ts", "apps/api/src/attendance/attendance-store.test.ts", "apps/web/e2e-next/data-table-mobile-contract-next.spec.ts"],
-          "commands": ["pnpm test", "pnpm web:ux-contract:check"]
+        "Kullanıcı terminolojisi": {
+          "paths": ["docs/marketing-claims.md", "apps/web/src/product-terms.ts", "apps/web/app/(app)/kurum/optik/parser-config-page.tsx", "apps/web/app/(app)/kurum/destek/support-tickets-page.tsx", "apps/web/app/(app)/kurum/ogretmenler/teacher-detail-page.tsx", "apps/web/app/(app)/kurum/veliler/guardians-page.tsx", "apps/web/e2e-next/app-context-next.spec.ts"],
+          "commands": ["pnpm web:ux-baseline:check", "pnpm web:ux-contract:check"]
         },
-        "Atanmış öğretmen kapsamı": {
-          "paths": ["apps/api/src/attendance/attendance.e2e.test.ts", "apps/api/src/school/assert-teacher-assigned.test.ts"],
-          "commands": ["pnpm test"]
+        "Kapsam ve iddia sınırları": {
+          "paths": ["docs/marketing-claims.md", "docs/product-journeys-v1.md", "apps/web/app/page.tsx"],
+          "commands": ["pnpm ui-ux-professionalization:completion:contract", "pnpm web:ux-baseline:check"]
         }
       },
       "localStatus": "PROVEN",
-      "liveStatus": "PENDING_EXTERNAL_EVIDENCE"
+      "liveStatus": "NOT_REQUIRED"
     },
     {
       "id": "PR-2",
-      "title": "Portal veri akışı ve rapor keşfi",
-      "requirements": ["Görünüme göre koşullu istekler", "Minimal READY rapor indeksi", "Öğrenci ve veli subject kapsamı"],
-      "implementationPaths": ["apps/api/src/me", "apps/web/app/(app)/portals"],
-      "verificationCommands": ["pnpm test", "pnpm typecheck", "pnpm web:ux-contract:check"],
+      "title": "Landing ve yönlendirmeli demo",
+      "deliveryStatus": "COMPLETE",
+      "openItems": [],
+      "evidenceNote": "Kanonik metin, tek beş adımlı akış ve marketing-context hedefli QA geçmiştir; geniş CI ve canlı ortam çalıştırılmamıştır.",
+      "requirements": ["Optik odaklı ana mesaj ve beş adımlı akış", "Hedef persona ve kapsam sınırı", "PII-safe yönlendirmeli demo"],
+      "implementationPaths": ["apps/web/app/page.tsx", "apps/web/app/iletisim/page.tsx", "apps/web/app/iletisim/demo-actions.tsx", "apps/web/app/layout.tsx", "apps/web/src/brand.ts", "apps/web/e2e-next/marketing-context-next.spec.ts"],
+      "verificationCommands": ["pnpm typecheck", "pnpm web:a11y:check", "pnpm web:ux-baseline:check", "pnpm web:ux-contract:check", "pnpm ui-ux-redesign:visual-qa"],
       "requirementEvidence": {
-        "Görünüme göre koşullu istekler": {
-          "paths": ["apps/web/e2e-next/portal-report-panel-next.spec.ts", "apps/web/e2e-next/teacher-portal-contract-next.spec.ts"],
-          "commands": ["pnpm web:ux-contract:check"]
+        "Optik odaklı ana mesaj ve beş adımlı akış": {
+          "paths": ["apps/web/app/page.tsx", "apps/web/e2e-next/marketing-context-next.spec.ts", "apps/web/e2e-next/ui-visual-qa-next.spec.ts"],
+          "commands": ["pnpm web:ux-baseline:check", "pnpm web:ux-contract:check", "pnpm ui-ux-redesign:visual-qa"]
         },
-        "Minimal READY rapor indeksi": {
-          "paths": ["apps/api/src/me/me-report-index.service.test.ts", "apps/api/src/me/me-report-index.e2e.test.ts"],
-          "commands": ["pnpm test"]
+        "Hedef persona ve kapsam sınırı": {
+          "paths": ["apps/web/app/page.tsx", "docs/marketing-claims.md", "apps/web/e2e-next/marketing-context-next.spec.ts"],
+          "commands": ["pnpm web:ux-baseline:check", "pnpm web:ux-contract:check"]
         },
-        "Öğrenci ve veli subject kapsamı": {
-          "paths": ["apps/api/src/me/me-access-matrix.e2e.test.ts", "apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts"],
-          "commands": ["pnpm test", "pnpm web:ux-contract:check"]
+        "PII-safe yönlendirmeli demo": {
+          "paths": ["apps/web/app/iletisim/page.tsx", "apps/web/app/iletisim/demo-actions.tsx", "apps/web/e2e-next/marketing-context-next.spec.ts"],
+          "commands": ["pnpm typecheck", "pnpm web:a11y:check", "pnpm web:ux-contract:check"]
         }
       },
       "localStatus": "PROVEN",
@@ -78,22 +88,25 @@
     },
     {
       "id": "PR-3",
-      "title": "Rapor üretim işi ve immutable snapshot",
-      "requirements": ["Queue işi ile snapshot durumunun ayrılması", "İdempotent üretim", "Tenant-kapsamlı erişim"],
-      "implementationPaths": ["apps/api/src/report", "apps/worker/src/jobs/report-generation-job.ts"],
-      "verificationCommands": ["pnpm test", "pnpm typecheck"],
+      "title": "Arama, boş durum ve kurulum akışı",
+      "deliveryStatus": "COMPLETE",
+      "openItems": [],
+      "evidenceNote": "App-context hedefli QA, gerçek tarayıcıda çok kelimeli arama ve editör kontrolleri geçmiştir; geniş CI çalıştırılmamıştır.",
+      "requirements": ["Arama metnini giriş sırasında koruma", "Yükleme, hata ve boş durum önceliği", "Beş adımlı sade kurulum"],
+      "implementationPaths": ["apps/web/src/list-controls.tsx", "packages/ui/src/components/crud-page.tsx", "apps/web/app/(app)/kurum/kurulum/_shared/wizard-steps.ts", "apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx", "apps/web/e2e-next/app-context-next.spec.ts", "apps/web/e2e-next/setup-wizard-contract-next.spec.ts"],
+      "verificationCommands": ["pnpm typecheck", "pnpm web:a11y:check", "pnpm web:ux-baseline:check", "pnpm web:ux-contract:check"],
       "requirementEvidence": {
-        "Queue işi ile snapshot durumunun ayrılması": {
-          "paths": ["apps/api/src/report/report-generation.service.test.ts", "apps/worker/src/jobs/report-generation-job.test.ts"],
-          "commands": ["pnpm test"]
+        "Arama metnini giriş sırasında koruma": {
+          "paths": ["apps/web/src/list-controls.tsx", "apps/web/e2e-next/app-context-next.spec.ts", "apps/web/e2e-next/list-url-state-next.spec.ts", "apps/web/e2e-next/login-next.spec.ts"],
+          "commands": ["pnpm typecheck", "pnpm web:ux-contract:check"]
         },
-        "İdempotent üretim": {
-          "paths": ["apps/worker/src/jobs/postgres-report-generation-adapter.test.ts", "apps/api/src/report/report-snapshot-store.test.ts"],
-          "commands": ["pnpm test"]
+        "Yükleme, hata ve boş durum önceliği": {
+          "paths": ["packages/ui/src/components/crud-page.tsx", "apps/web/e2e-next/app-context-next.spec.ts", "apps/web/e2e-next/ui-primitives-state-next.spec.ts"],
+          "commands": ["pnpm typecheck", "pnpm web:ux-contract:check"]
         },
-        "Tenant-kapsamlı erişim": {
-          "paths": ["apps/api/src/report/report-generation.controller.e2e.test.ts", "apps/api/src/report/report-generation.service.test.ts"],
-          "commands": ["pnpm test"]
+        "Beş adımlı sade kurulum": {
+          "paths": ["apps/web/app/(app)/kurum/kurulum/_shared/wizard-steps.ts", "apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx", "apps/web/e2e-next/setup-wizard-contract-next.spec.ts"],
+          "commands": ["pnpm web:a11y:check", "pnpm web:ux-baseline:check", "pnpm web:ux-contract:check"]
         }
       },
       "localStatus": "PROVEN",
@@ -101,22 +114,33 @@
     },
     {
       "id": "PR-4",
-      "title": "Sınıf bütünlüğü ve toplu sorgular",
-      "requirements": ["Sınıf liste ve detay bütünlüğü", "Tembel rapor yükleme", "N+1 sorguların kaldırılması"],
-      "implementationPaths": ["apps/web/app/(app)/kurum/siniflar", "apps/api/src/me/me.controller.ts"],
-      "verificationCommands": ["pnpm test", "pnpm web:ux-contract:check"],
+      "title": "Menü, çalışma bağlamı ve portallar",
+      "deliveryStatus": "COMPLETE",
+      "openItems": [],
+      "evidenceNote": "Menü, uzman indeks, sade portal özeti ve gerçek seçili kampüs/dönem adları hedefli yerel tarayıcı kanıtına sahiptir; bu sonuç CI veya canlı ortam kanıtı değildir.",
+      "requirements": ["Beş gruplu görev menüsü", "Uzman araçların yetkili indeksi", "Gerçek kampüs ve dönem adlarıyla çalışma bağlamı", "Öğretmen ve öğrenci karar özeti", "Web push fail-closed görünürlüğü"],
+      "implementationPaths": ["apps/web/app/(app)/_shared/navigation.ts", "apps/web/app/(app)/app-shell.tsx", "apps/web/app/(app)/kurum/operasyon-ve-kanit/page.tsx", "apps/web/app/(app)/portals/teacher-portal-page.tsx", "apps/web/app/(app)/portals/student-portal-page.tsx", "apps/web/e2e-next/app-context-next.spec.ts", "apps/web/e2e-next/list-url-state-next.spec.ts", "apps/web/e2e-next/ui-route-family-smoke-next.spec.ts"],
+      "verificationCommands": ["pnpm typecheck", "pnpm web:a11y:check", "pnpm web:ux-baseline:check", "pnpm web:ux-contract:check", "pnpm ui-ux-redesign:visual-qa"],
       "requirementEvidence": {
-        "Sınıf liste ve detay bütünlüğü": {
-          "paths": ["apps/web/app/(app)/kurum/siniflar/class-detail-page.tsx", "apps/web/e2e-next/ui-visual-qa-next.spec.ts"],
+        "Beş gruplu görev menüsü": {
+          "paths": ["apps/web/app/(app)/_shared/navigation.ts", "apps/web/app/(app)/app-shell.tsx", "apps/web/e2e-next/app-context-next.spec.ts"],
+          "commands": ["pnpm typecheck", "pnpm web:ux-baseline:check"]
+        },
+        "Uzman araçların yetkili indeksi": {
+          "paths": ["apps/web/app/(app)/_shared/navigation.ts", "apps/web/app/(app)/kurum/operasyon-ve-kanit/page.tsx", "apps/web/e2e-next/ui-route-family-smoke-next.spec.ts"],
+          "commands": ["pnpm web:ux-contract:check", "pnpm ui-ux-redesign:visual-qa"]
+        },
+        "Gerçek kampüs ve dönem adlarıyla çalışma bağlamı": {
+          "paths": ["apps/web/app/(app)/app-shell.tsx", "apps/web/e2e-next/list-url-state-next.spec.ts"],
           "commands": ["pnpm web:ux-contract:check"]
         },
-        "Tembel rapor yükleme": {
-          "paths": ["apps/web/app/(app)/kurum/siniflar/class-detail-page.tsx", "apps/web/e2e-next/data-table-mobile-contract-next.spec.ts"],
-          "commands": ["pnpm web:ux-contract:check"]
+        "Öğretmen ve öğrenci karar özeti": {
+          "paths": ["apps/web/app/(app)/portals/teacher-portal-page.tsx", "apps/web/app/(app)/portals/student-portal-page.tsx", "apps/web/e2e-next/teacher-portal-contract-next.spec.ts", "apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts"],
+          "commands": ["pnpm web:ux-contract:check", "pnpm ui-ux-redesign:visual-qa"]
         },
-        "N+1 sorguların kaldırılması": {
-          "paths": ["apps/api/src/me/me.controller.ts", "apps/web/e2e-next/teacher-portal-contract-next.spec.ts"],
-          "commands": ["pnpm test", "pnpm web:ux-contract:check"]
+        "Web push fail-closed görünürlüğü": {
+          "paths": ["apps/web/app/(app)/app-shell.tsx", "apps/web/e2e-next/app-context-next.spec.ts"],
+          "commands": ["pnpm typecheck", "pnpm web:a11y:check"]
         }
       },
       "localStatus": "PROVEN",
@@ -124,22 +148,33 @@
     },
     {
       "id": "PR-5",
-      "title": "Karne ve rapor çıktıları",
-      "requirements": ["Başarı yüzdesi ana metriği", "Dondurulmuş öğrenci kimliği", "Eksiksiz PDF ve Excel çıktısı"],
-      "implementationPaths": ["apps/worker/src/jobs/report-pdf-render-job.ts", "apps/web/app/(app)/kurum/raporlar", "packages/shared-types/src/domain.ts"],
-      "verificationCommands": ["pnpm test", "pnpm karne:visual-contract:check", "pnpm web:ux-contract:check"],
+      "title": "Duyuru yayını ve SMS güvenlik UX'i",
+      "deliveryStatus": "COMPLETE",
+      "openItems": [],
+      "evidenceNote": "Yeni duyurular alıcı gönderim işi oluşturmadan kurum genelinde yayınlanır ve kurum ana sayfasında görünür; açık final onayı korunur. SMS alıcı kapsamı gönderimden önce güncel kurum ve izin verileriyle sunucuda yeniden doğrulanır; ağ hatasındaki aynı işlem aynı anahtarla tekrarlanır. Harici sağlayıcı/canlı kanıt ayrı kalır.",
+      "requirements": ["Kurum geneli duyuru ve açık final onayı", "Kurum ana sayfasında son duyurular", "SMS alıcı önizlemesi ve sıfır alıcı engeli", "SMS alıcı kapsamı ve güvenli tekrar", "Bekleyen işlem ve kişisel veri güvenliği"],
+      "implementationPaths": ["apps/web/app/(app)/kurum/duyurular/announcements-page.tsx", "apps/web/app/(app)/kurum/kurum-dashboard.tsx", "apps/web/app/(app)/kurum/kurum-dashboard-data.ts", "apps/web/app/(app)/kurum/sablonlar/message-templates-page.tsx", "apps/api/src/sms-batch/sms-batch.service.ts", "apps/api/src/sms-batch/sms-batch.service.test.ts", "apps/api/src/sms-batch/sms-batch.e2e.test.ts", "packages/shared-types/src/domain.ts", "apps/web/e2e-next/data-table-mobile-contract-next.spec.ts", "apps/web/e2e-next/login-next.spec.ts"],
+      "verificationCommands": ["pnpm typecheck", "pnpm test", "pnpm openapi:generate", "pnpm web:a11y:check", "pnpm web:ux-baseline:check", "pnpm web:ux-contract:check"],
       "requirementEvidence": {
-        "Başarı yüzdesi ana metriği": {
-          "paths": ["apps/worker/src/jobs/report-pdf-render-job.test.ts", "apps/web/e2e-next/report-workspace-contract-next.spec.ts"],
-          "commands": ["pnpm test", "pnpm web:ux-contract:check"]
+        "Kurum geneli duyuru ve açık final onayı": {
+          "paths": ["apps/web/app/(app)/kurum/duyurular/announcements-page.tsx", "apps/web/e2e-next/login-next.spec.ts"],
+          "commands": ["pnpm typecheck", "pnpm web:ux-baseline:check"]
         },
-        "Dondurulmuş öğrenci kimliği": {
-          "paths": ["apps/worker/src/jobs/postgres-report-generation-adapter.test.ts", "apps/worker/src/jobs/report-generation-job.test.ts"],
-          "commands": ["pnpm test"]
+        "Kurum ana sayfasında son duyurular": {
+          "paths": ["apps/web/app/(app)/kurum/kurum-dashboard.tsx", "apps/web/app/(app)/kurum/kurum-dashboard-data.ts", "apps/web/e2e-next/login-next.spec.ts"],
+          "commands": ["pnpm typecheck", "pnpm web:ux-contract:check"]
         },
-        "Eksiksiz PDF ve Excel çıktısı": {
-          "paths": ["apps/api/src/report/report-generation.service.test.ts", "apps/worker/src/jobs/report-pdf-render-job.test.ts", "apps/web/e2e-next/ui-visual-qa-next.spec.ts", "scripts/check-karne-visual-contract.mjs", "scripts/compare-karne-visual-evidence.mjs", "apps/web/e2e-next/__screenshots__/ui-visual-qa-next.spec.ts/student-report-card-1024-darwin.png", "apps/web/e2e-next/__screenshots__/ui-visual-qa-next.spec.ts/student-report-card-1024-linux.png"],
-          "commands": ["pnpm test", "pnpm karne:visual-contract:check"]
+        "SMS alıcı önizlemesi ve sıfır alıcı engeli": {
+          "paths": ["apps/web/app/(app)/kurum/sablonlar/message-templates-page.tsx", "apps/web/e2e-next/data-table-mobile-contract-next.spec.ts"],
+          "commands": ["pnpm web:ux-baseline:check", "pnpm web:ux-contract:check"]
+        },
+        "SMS alıcı kapsamı ve güvenli tekrar": {
+          "paths": ["apps/api/src/sms-batch/sms-batch.service.ts", "apps/api/src/sms-batch/sms-batch.service.test.ts", "apps/api/src/sms-batch/sms-batch.e2e.test.ts", "packages/shared-types/src/domain.ts", "apps/web/app/(app)/kurum/duyurular/announcements-page.tsx", "apps/web/app/(app)/kurum/sablonlar/message-templates-page.tsx", "apps/web/e2e-next/data-table-mobile-contract-next.spec.ts"],
+          "commands": ["pnpm typecheck", "pnpm test", "pnpm openapi:generate", "pnpm web:ux-contract:check"]
+        },
+        "Bekleyen işlem ve kişisel veri güvenliği": {
+          "paths": ["apps/web/app/(app)/kurum/duyurular/announcements-page.tsx", "apps/web/app/(app)/kurum/sablonlar/message-templates-page.tsx", "apps/web/e2e-next/data-table-mobile-contract-next.spec.ts"],
+          "commands": ["pnpm typecheck", "pnpm web:a11y:check", "pnpm web:ux-contract:check"]
         }
       },
       "localStatus": "PROVEN",
@@ -147,26 +182,25 @@
     },
     {
       "id": "PR-6",
-      "title": "Tam yüzey tutarlılığı ve release kanıtı",
-      "requirements": ["Mobil ve erişilebilirlik sözleşmesi", "RBAC ve PII güvenliği", "CI, staging ve çalışan image kanıtı"],
-      "implementationPaths": ["apps/web/e2e-next", "scripts/check-web-design-tokens.mjs", "scripts/check-web-ux-baseline.mjs", "scripts/generate-ui-ux-redesign-evidence.mjs", ".github/workflows/staging-deploy.yml"],
-      "verificationCommands": ["pnpm test", "pnpm web:design-tokens:check", "pnpm web:a11y:check", "pnpm web:ux-baseline:check", "pnpm web:ux-contract:check", "pnpm ui-ux-redesign:visual-qa", "pnpm prod:evidence:templates:check"],
+      "title": "CSS ayrıştırma ve kapanış",
+      "deliveryStatus": "COMPLETE",
+      "openItems": [],
+      "evidenceNote": "Aktif Almanac stilleri kaynak sırası korunarak temel, shell, portal, rapor, pazarlama ve responsive ailelerine ayrıldı. Tasarım tokenı, erişilebilirlik, responsive, UX, görsel QA, karne ve performans kapıları bu ayrımı doğrular.",
+      "requirements": ["Mevcut monolit sınırının kaydı", "Mobil ve erişilebilirlik sözleşmesi"],
+      "implementationPaths": ["apps/web/app/globals.css", "apps/web/app/_styles/00-foundation.css", "apps/web/app/_styles/10-marketing-base.css", "apps/web/app/_styles/20-application-base.css", "apps/web/app/_styles/70-almanac-foundation.css", "apps/web/app/_styles/71-almanac-shell.css", "apps/web/app/_styles/72-almanac-portal.css", "apps/web/app/_styles/73-almanac-report.css", "apps/web/app/_styles/74-almanac-marketing.css", "apps/web/app/_styles/79-almanac-responsive.css", "scripts/read-css-with-local-imports.mjs", "scripts/check-web-design-tokens.mjs", "scripts/check-web-ux-baseline.mjs", "apps/web/e2e-next/a11y-next.spec.ts", "apps/web/e2e-next/ui-visual-qa-next.spec.ts", "scripts/check-karne-visual-contract.mjs"],
+      "verificationCommands": ["pnpm ui-ux-professionalization:completion:contract", "pnpm web:design-tokens:check", "pnpm web:a11y:check", "pnpm web:ux-baseline:check", "pnpm web:ux-contract:check", "pnpm ui-ux-redesign:visual-qa", "pnpm karne:visual-contract:check"],
       "requirementEvidence": {
+        "Mevcut monolit sınırının kaydı": {
+          "paths": ["apps/web/app/globals.css", "apps/web/app/_styles/00-foundation.css", "apps/web/app/_styles/10-marketing-base.css", "apps/web/app/_styles/20-application-base.css", "apps/web/app/_styles/70-almanac-foundation.css", "apps/web/app/_styles/71-almanac-shell.css", "apps/web/app/_styles/72-almanac-portal.css", "apps/web/app/_styles/73-almanac-report.css", "apps/web/app/_styles/74-almanac-marketing.css", "apps/web/app/_styles/79-almanac-responsive.css", "scripts/read-css-with-local-imports.mjs", "docs/ui-ux-professionalization-contract.md"],
+          "commands": ["pnpm ui-ux-professionalization:completion:contract", "pnpm web:design-tokens:check"]
+        },
         "Mobil ve erişilebilirlik sözleşmesi": {
-          "paths": ["apps/web/e2e-next/a11y-next.spec.ts", "apps/web/e2e-next/ui-primitives-state-next.spec.ts", "apps/web/e2e-next/ui-route-family-smoke-next.spec.ts", "apps/web/e2e-next/ui-visual-qa-next.spec.ts", "scripts/check-web-design-tokens.mjs", "scripts/check-web-ux-baseline.mjs"],
-          "commands": ["pnpm web:design-tokens:check", "pnpm web:a11y:check", "pnpm web:ux-baseline:check", "pnpm web:ux-contract:check", "pnpm ui-ux-redesign:visual-qa"]
-        },
-        "RBAC ve PII güvenliği": {
-          "paths": ["apps/api/src/me/me-access-matrix.e2e.test.ts", "apps/web/e2e-next/role-preview-contract-next.spec.ts", "apps/web/e2e-next/governance-evidence-contract-next.spec.ts"],
-          "commands": ["pnpm test", "pnpm web:ux-contract:check"]
-        },
-        "CI, staging ve çalışan image kanıtı": {
-          "paths": [".github/workflows/ci.yml", ".github/workflows/staging-deploy.yml", "scripts/check-prod-evidence.mjs"],
-          "commands": ["pnpm prod:evidence:templates:check"]
+          "paths": ["apps/web/e2e-next/a11y-next.spec.ts", "apps/web/e2e-next/ui-visual-qa-next.spec.ts", "scripts/check-web-ux-baseline.mjs", "scripts/check-karne-visual-contract.mjs"],
+          "commands": ["pnpm web:a11y:check", "pnpm web:ux-baseline:check", "pnpm web:ux-contract:check", "pnpm ui-ux-redesign:visual-qa", "pnpm karne:visual-contract:check"]
         }
       },
       "localStatus": "PROVEN",
-      "liveStatus": "PENDING_EXTERNAL_EVIDENCE"
+      "liveStatus": "NOT_REQUIRED"
     }
   ]
 }

@@ -92,7 +92,7 @@ export function EmployeesPage() {
     { key: "workEmail", header: "İş e-postası", priority: "secondary", render: (employee) => maskEmail(employee.workEmail) },
     {
       key: "role",
-      header: "Yetki / persona",
+      header: "Yetki / çalışma alanı",
       priority: "primary",
       render: (employee) => accessLabel(employee),
     },
@@ -142,7 +142,7 @@ export function EmployeesPage() {
               title={
                 ownerLocked
                   ? "Kurum sahibi erişimini yalnız başka bir kurum sahibi değiştirebilir."
-                  : endedLocked ? "Sonlandırılmış üyelik yeniden değiştirilemez." : undefined
+                  : endedLocked ? "Sonlandırılmış erişim yeniden değiştirilemez." : undefined
               }
               type="button"
               variant="ghost"
@@ -158,13 +158,13 @@ export function EmployeesPage() {
     {
       key: "employees",
       label: "Bu sayfadaki çalışan",
-      description: "Cursor sayfasındaki silinmemiş çalışan kayıtları",
+      description: "Bu sayfadaki silinmemiş çalışan kayıtları",
       value: formatCount(employees.length),
     },
     {
       key: "linked",
       label: "Hesap bağlı",
-      description: "Bu sayfadaki canonical üyelik projeksiyonu",
+      description: "Bu sayfadaki kurum üyeliği görünümü",
       value: formatCount(linkedCount),
       tone: linkedCount === employees.length ? "success" : "warning",
     },
@@ -216,7 +216,7 @@ export function EmployeesPage() {
     if (!auth || !invitingEmployee) return;
     const requiresStepUp = elevatedInvitationRole(invitationForm.role);
     if (requiresStepUp && !stepUpCode.trim()) {
-      setSubmitError("Owner veya admin daveti için MFA doğrulama kodunu girin.");
+      setSubmitError("Kurum sahibi veya yöneticisi daveti için iki aşamalı doğrulama kodunu girin.");
       return;
     }
     setIsSaving(true);
@@ -228,7 +228,7 @@ export function EmployeesPage() {
       await inviteEmployee(auth.accessToken, invitingEmployee.id, invitationForm, stepUpToken);
       setInvitingEmployee(null);
       setStepUpCode("");
-      setActionNotice("Hesap daveti teslimat kuyruğuna alındı. Aktivasyon bağlantısı 24 saat geçerlidir.");
+      setActionNotice("Hesap daveti gönderime alındı. Hesabı açma bağlantısı 24 saat geçerlidir.");
     } catch (error) {
       setSubmitError(employeeWriteErrorMessage(error));
     } finally {
@@ -257,7 +257,7 @@ export function EmployeesPage() {
     event.preventDefault();
     if (!auth || !editingEmployee?.access) return;
     if (!form.staffRole && !form.hasTeacherPersona) {
-      setSubmitError("En az bir çalışan rolü veya öğretmen personası seçin.");
+      setSubmitError("En az bir çalışan rolü veya öğretmen çalışma alanı seçin.");
       return;
     }
     if (form.scopeMode === "CAMPUSES" && form.campusIds.length === 0) {
@@ -280,7 +280,7 @@ export function EmployeesPage() {
     };
     const requiresStepUp = ownerAdminStepUpRequired(editingEmployee.access.staffRole, form.staffRole);
     if (requiresStepUp && !stepUpCode.trim()) {
-      setSubmitError("Owner veya admin değişikliği için MFA doğrulama kodunu girin.");
+      setSubmitError("Kurum sahibi veya yöneticisi değişikliği için iki aşamalı doğrulama kodunu girin.");
       return;
     }
     setIsSaving(true);
@@ -316,16 +316,17 @@ export function EmployeesPage() {
         aria-label="Çalışan ve yetki görünümü"
         columns={columns}
         density="compact"
-        description="Çalışan profili, hesap durumu ve canonical tenant üyeliğini birlikte yönetin."
+        description="Çalışan profili, hesap durumu ve kurumdaki erişimini birlikte yönetin."
         emptyState={<EmptyState title="Çalışan yok" description="Kurum için çalışan kaydı bulunamadı." />}
         emptyText="Çalışan kaydı yok"
         error={employeesQuery.isError ? "Çalışanlar alınamadı." : undefined}
         getRowKey={(employee) => employee.id}
+        hasActiveFilters={Boolean(listQuery.q?.trim())}
         loading={employeesQuery.isPending}
         rows={employees}
         summary={<OperationSummary ariaLabel="Çalışan erişim özeti" badges={badges} items={summaryItems} />}
         tableCaption="Kurum çalışanları ve yetkileri"
-        tableDescription="Çalışan, hesap, canonical rol/persona, yaşam döngüsü ve kampüs kapsamı."
+        tableDescription="Çalışan, hesap, rol, çalışma alanı, çalışma durumu ve kampüs kapsamı."
         title="Çalışanlar ve Yetkiler"
       />
       {actionNotice ? <p className="next-status-note" role="status">{actionNotice}</p> : null}
@@ -352,7 +353,7 @@ export function EmployeesPage() {
         </Field>
       </FormModal>
       <FormModal
-        description="Davet e-posta ile iletilir; parola veya aktivasyon sırrı bu ekranda gösterilmez. Owner ve admin başlangıç rolleri MFA doğrulaması ister."
+        description="Davet e-posta ile iletilir; parola veya hesap açma bilgisi bu ekranda gösterilmez. Kurum sahibi ve kurum yöneticisi davetleri iki aşamalı doğrulama ister."
         onCancel={() => { if (!isSaving) { setInvitingEmployee(null); setStepUpCode(""); setSubmitError(""); } }}
         onSubmit={(event) => void handleInviteEmployee(event)}
         open={Boolean(invitingEmployee)}
@@ -365,13 +366,13 @@ export function EmployeesPage() {
         <Field label="Başlangıç rolü">
           <Select value={invitationForm.role} onChange={(event) => setInvitationForm((current) => ({ ...current, role: event.target.value as EmployeeInvitationRole }))}>
             {canManageOwners ? <option value="TENANT_OWNER">Kurum sahibi</option> : null}
-            <option value="TENANT_ADMIN">Kurum admin</option>
+            <option value="TENANT_ADMIN">Kurum yöneticisi</option>
             <option value="OPERATIONS_STAFF">Operasyon çalışanı</option>
             <option value="FINANCE_STAFF">Finans çalışanı</option>
           </Select>
         </Field>
         {elevatedInvitationRole(invitationForm.role) ? (
-          <Field label="MFA doğrulama kodu" description="Authenticator uygulamasındaki 6 haneli kodu veya tek kullanımlık kurtarma kodunu girin.">
+          <Field label="İki aşamalı doğrulama kodu" description="Doğrulama uygulamasındaki 6 haneli kodu veya tek kullanımlık kurtarma kodunu girin.">
             <Input
               autoComplete="one-time-code"
               required
@@ -383,7 +384,7 @@ export function EmployeesPage() {
         ) : null}
       </FormModal>
       <FormModal
-        description="Rol, persona veya kapsam değişikliği açık oturumları kapatır. Sonlandırılan üyelik yeniden açılamaz."
+        description="Görev, çalışma alanı veya erişim kapsamı değişikliği açık oturumları kapatır. Sonlandırılan erişim yeniden açılamaz."
         onCancel={closeAccessForm}
         onSubmit={(event) => void handleSubmit(event)}
         open={Boolean(editingEmployee)}
@@ -392,22 +393,22 @@ export function EmployeesPage() {
         submitting={isSaving}
         title={editingEmployee ? `${editingEmployee.firstName} ${editingEmployee.lastName} erişimi` : "Çalışan erişimi"}
       >
-        <Field label="Çalışan rolü" description="Öğretmen-only hesap için rol seçmeyebilirsiniz.">
+        <Field label="Çalışan rolü" description="Yalnız öğretmen hesabı için rol seçmeyebilirsiniz.">
           <Select
             value={form.staffRole}
             onChange={(event) => setForm((current) => ({ ...current, staffRole: event.target.value as EmployeeAccessFormState["staffRole"] }))}
           >
             <option value="">Çalışan rolü yok</option>
             {canManageOwners ? <option value="TENANT_OWNER">Kurum sahibi</option> : null}
-            <option value="TENANT_ADMIN">Kurum admin</option>
+            <option value="TENANT_ADMIN">Kurum yöneticisi</option>
             <option value="OPERATIONS_STAFF">Operasyon çalışanı</option>
             <option value="FINANCE_STAFF">Finans çalışanı</option>
           </Select>
         </Field>
         <Checkbox
           checked={form.hasTeacherPersona}
-          description="Staff yetkileriyle birleşmez; öğretmen personasında ayrı erişim bağlamı kullanılır."
-          label="Öğretmen personası"
+          description="Kurum yetkileriyle birleşmez; öğretmen çalışma alanında ayrı erişim bağlamı kullanılır."
+          label="Öğretmen çalışma alanı"
           onChange={(event) => setForm((current) => ({ ...current, hasTeacherPersona: event.target.checked }))}
         />
         <Field label="Erişim durumu">
@@ -461,7 +462,7 @@ export function EmployeesPage() {
           </div>
         ) : null}
         {editingEmployee?.access && ownerAdminStepUpRequired(editingEmployee.access.staffRole, form.staffRole) ? (
-          <Field label="MFA doğrulama kodu" description="Authenticator uygulamasındaki 6 haneli kodu veya tek kullanımlık kurtarma kodunu girin.">
+          <Field label="İki aşamalı doğrulama kodu" description="Doğrulama uygulamasındaki 6 haneli kodu veya tek kullanımlık kurtarma kodunu girin.">
             <Input
               autoComplete="one-time-code"
               required
@@ -479,7 +480,7 @@ export function EmployeesPage() {
 function accessLabel(employee: EmployeeAccessRecord) {
   if (!employee.access) return "Hesap bağlı değil";
   const labels = employee.access.staffRole ? [tenantRoleLabel(employee.access.staffRole)] : [];
-  if (employee.access.hasTeacherPersona) labels.push("Öğretmen personası");
+  if (employee.access.hasTeacherPersona) labels.push("Öğretmen çalışma alanı");
   return labels.join(" + ") || "Yetki atanmamış";
 }
 
@@ -548,7 +549,7 @@ function EmployeeCursorControls({
           <option value={100}>100</option>
         </Select>
       </Field>
-      <span className="next-list-status">Cursor sayfası</span>
+      <span className="next-list-status">Kayıt sayfası</span>
       <Button
         aria-label="Önceki çalışanlar"
         disabled={!meta?.previousCursor}
@@ -707,7 +708,7 @@ function membershipErrorMessage(error: unknown) {
   if (error.code === "LAST_ACTIVE_TENANT_OWNER_REQUIRED") return "Kurumun son aktif sahibi kapatılamaz veya rolü düşürülemez.";
   if (error.code === "EMPLOYEE_PROFILE_NOT_ACTIVE") return "Aktif olmayan çalışan profiline erişim açılamaz.";
   if (error.code === "TENANT_MEMBERSHIP_CAMPUS_NOT_FOUND") return "Seçilen kampüslerden biri artık kullanılamıyor.";
-  if (error.code === "TENANT_MEMBERSHIP_ENDED") return "Sonlandırılmış üyelik yeniden değiştirilemez.";
+  if (error.code === "TENANT_MEMBERSHIP_ENDED") return "Sonlandırılmış erişim yeniden değiştirilemez.";
   const stepUpError = mfaStepUpErrorMessage(error);
   if (stepUpError) return stepUpError;
   return "Çalışan erişimi güncellenemedi.";
@@ -715,11 +716,11 @@ function membershipErrorMessage(error: unknown) {
 
 function mfaStepUpErrorMessage(error: unknown): string | undefined {
   if (!(error instanceof ApiRequestError)) return undefined;
-  if (error.code === "STEP_UP_MFA_REQUIRED") return "Owner veya admin işlemi için MFA doğrulaması zorunludur.";
-  if (error.code === "STEP_UP_MFA_INVALID") return "MFA doğrulaması artık geçerli değil. Yeni kodla tekrar deneyin.";
-  if (error.code === "MFA_NOT_ENABLED" || error.code === "ADMIN_MFA_DISABLED") return "Bu işlem için hesabınızda MFA etkin olmalıdır.";
+  if (error.code === "STEP_UP_MFA_REQUIRED") return "Kurum sahibi veya yöneticisi işlemi için iki aşamalı doğrulama zorunludur.";
+  if (error.code === "STEP_UP_MFA_INVALID") return "İki aşamalı doğrulamanın süresi doldu. Yeni kodla tekrar deneyin.";
+  if (error.code === "MFA_NOT_ENABLED" || error.code === "ADMIN_MFA_DISABLED") return "Bu işlem için hesabınızda iki aşamalı doğrulama açık olmalıdır.";
   if (error.code === "MFA_CODE_INVALID" || error.code === "MFA_RECOVERY_CODE_INVALID" || error.code === "MFA_CODE_REUSED") {
-    return "MFA kodu geçersiz veya daha önce kullanılmış. Yeni bir kod deneyin.";
+    return "Doğrulama kodu geçersiz veya daha önce kullanılmış. Yeni bir kod deneyin.";
   }
   return undefined;
 }

@@ -49,14 +49,14 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await openWithReportMocks(page, "/kurum/raporlar?examId=exam-report-ready", { height: 960, width: 1440 });
 
     await expect(page.getByRole("combobox", { name: "Sınav" })).toHaveValue("exam-report-ready");
-    await page.getByRole("button", { name: "Rapor üret" }).click();
-    await expect(page.getByRole("button", { name: "İşleniyor" })).toBeDisabled();
+    await page.getByRole("button", { name: "Raporu hazırla" }).click();
+    await expect(page.getByRole("button", { name: "Hazırlanıyor" })).toBeDisabled();
     await expect(page.getByRole("button", { name: "Raporu getir" })).toBeDisabled();
     await expect(page.getByRole("combobox", { name: "Sınav" })).toBeDisabled();
 
     await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
     await expect.poll(() => jobStatusRequests.length).toBeGreaterThanOrEqual(1);
-    await expect(page.getByText("Rapor üretimi tamamlandı.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Rapor hazırlandı.", { exact: true })).toBeVisible();
     await expect(page.getByRole("combobox", { name: "Sınav" })).toBeEnabled();
   });
 
@@ -86,7 +86,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
   test("genel rapor GET sürerken yeniden üret aksiyonunu kilitler", async ({ page }) => {
     await openWithReportMocks(page, "/kurum/raporlar?examId=exam-report-ready", { height: 960, width: 1440 });
     await page.getByRole("button", { name: "Raporu getir" }).click();
-    await expect(page.getByRole("button", { name: "Yeniden üret" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Yeniden hazırla" })).toBeEnabled();
 
     let releaseSnapshotRequest = () => {};
     const snapshotRequestGate = new Promise<void>((resolve) => {
@@ -98,9 +98,9 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     });
 
     await page.getByRole("button", { name: "Raporu getir" }).click();
-    await expect(page.getByRole("button", { name: "Yeniden üret" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Yeniden hazırla" })).toBeDisabled();
     releaseSnapshotRequest();
-    await expect(page.getByRole("button", { name: "Yeniden üret" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Yeniden hazırla" })).toBeEnabled();
   });
 
   test("sınav değişince eski snapshot bağlamını temizler ve yeni sınavı URL state içinde korur", async ({ page }) => {
@@ -318,7 +318,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
       await route.fallback();
     });
 
-    await page.getByRole("button", { name: "Rapor üret" }).click();
+    await page.getByRole("button", { name: "Raporu hazırla" }).click();
     await jobRequestStarted;
     await page.evaluate(() => window.history.forward());
     await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-report-general");
@@ -338,7 +338,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     expect(jobStatusRequests).toHaveLength(0);
     const workflowStrip = page.getByRole("region", { name: "Rapor iş akışı" });
     await expect(workflowStrip).toContainText("Genel Rapor Denemesi");
-    await expect(workflowStrip).not.toContainText("Rapor üretimi tamamlandı.");
+    await expect(workflowStrip).not.toContainText("Rapor hazırlandı.");
   });
 
   test("polling başladıktan sonraki popstate geç job sonucunu yeni seçime uygulamaz", async ({ page }) => {
@@ -387,7 +387,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
       response.request().method() === "POST"
       && new URL(response.url()).pathname === "/api/v1/exams/exam-report-ready/reports/generation-jobs",
     );
-    await page.getByRole("button", { name: "Rapor üret" }).click();
+    await page.getByRole("button", { name: "Raporu hazırla" }).click();
     expect((await jobPostResponse).status()).toBe(200);
     await pollingRequestStarted;
 
@@ -404,7 +404,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     expect(readySnapshotRequests).toHaveLength(0);
     const workflowStrip = page.getByRole("region", { name: "Rapor iş akışı" });
     await expect(workflowStrip).toContainText("Genel Rapor Denemesi");
-    await expect(workflowStrip).not.toContainText("Rapor üretimi tamamlandı.");
+    await expect(workflowStrip).not.toContainText("Rapor hazırlandı.");
     await expect(workflowStrip).not.toContainText("Excel/PDF hazır");
   });
 
@@ -536,10 +536,10 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     const workflowStrip = page.getByRole("region", { name: "Rapor iş akışı" });
     await expect(workflowStrip).toHaveClass(/next-report-status-surface/);
     await expect(workflowStrip.locator(".next-report-status-pills > span")).toHaveCount(4);
-    await expect(workflowStrip).toContainText("Sorgu");
-    await expect(workflowStrip).toContainText("Sorgulandı");
+    await expect(workflowStrip).toContainText("Seçim");
+    await expect(workflowStrip).toContainText("Rapor yüklendi");
     await expect(workflowStrip).toContainText("Rapor");
-    await expect(workflowStrip).toContainText("Hazır");
+    await expect(workflowStrip).toContainText("Rapor hazır");
     await expect(workflowStrip).toContainText("Çıktı");
     await expect(workflowStrip).toContainText("Excel/PDF hazır");
     await expect(workflowStrip).toContainText("Karne");
@@ -550,7 +550,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     const reportDetails = workflowStrip.locator(".next-report-meta-details");
     await reportDetails.getByText("Rapor ayrıntıları", { exact: true }).click();
     await expect(reportDetails).not.toContainText("exam-report-ready");
-    await expect(reportDetails).toContainText("Hazır");
+    await expect(reportDetails).toContainText("Rapor hazır");
     await expect(reportDetails).toContainText("17.06.2026");
     await expect(reportDetails).toContainText("Ana Kampüs");
     await expect(reportDetails).toContainText("8-A");
@@ -596,8 +596,8 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     const karneSheet = karnePanel.getByRole("region", { name: "Öğrenci karne özeti özet sayfası" });
     await expect(karneSheet).toHaveClass(/next-report-karne-sheet/);
     await expect(karneSheet).not.toHaveClass(/next-report-list/);
-    const karneContext = karneSheet.getByRole("region", { exact: true, name: "Karne rapor bağlamı" });
-    const karneContextMetrics = karneContext.getByRole("group", { name: "Karne rapor bağlam metrikleri" });
+    const karneContext = karneSheet.getByRole("region", { exact: true, name: "Karne rapor bilgileri" });
+    const karneContextMetrics = karneContext.getByRole("group", { name: "Karne rapor ölçüleri" });
     await expect(karneContextMetrics).toHaveClass(/uh-info-grid/);
     await expect(karneContextMetrics.locator(".uh-info-item")).toHaveCount(7);
     await expect(karneContext).toContainText("Rapor bağlamı");
@@ -644,7 +644,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await page.getByRole("tab", { name: "Çıktılar" }).click();
     const exportsRegion = page.getByRole("region", { name: "Rapor çıktıları" });
     await expect(exportsRegion).toHaveClass(/next-report-output-panel/);
-    await expect(exportsRegion).toContainText("Hazır");
+    await expect(exportsRegion).toContainText("Rapor hazır");
     await expect(exportsRegion.getByRole("button", { name: "Excel indir" })).toBeEnabled();
     await expect(exportsRegion.getByRole("button", { name: "PDF indir" })).toBeEnabled();
     await expect(exportsRegion.getByRole("button", { name: "Toplu karneleri indir" })).toBeEnabled();
@@ -667,8 +667,8 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     const workflowStrip = page.getByRole("region", { name: "Rapor iş akışı" });
     const exportButtons = ["Excel indir", "PDF indir", "Toplu karneleri indir", "Tekli karneyi indir"];
     for (const status of [
-      { label: "Bekliyor", tone: "warning" },
-      { label: "Hatalı", tone: "danger" },
+      { label: "Hazırlanıyor", tone: "warning" },
+      { label: "Oluşturulamadı", tone: "danger" },
     ] as const) {
       await page.getByRole("button", { name: "Raporu getir" }).click();
       const reportStatusBadge = workflowStrip
@@ -677,7 +677,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
         .locator(".uh-status-badge");
       await expect(reportStatusBadge).toHaveText(status.label);
       await expect(reportStatusBadge).toHaveClass(new RegExp(`uh-status-badge--${status.tone}`));
-      await expect(workflowStrip).toContainText("READY snapshot gerekli");
+      await expect(workflowStrip).toContainText("Hazır rapor sürümü gerekli");
 
       await page.getByRole("tab", { name: "Çıktılar" }).click();
       const exportsRegion = page.getByRole("region", { name: "Rapor çıktıları" });
@@ -699,9 +699,9 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     const workflowStrip = page.getByRole("region", { name: "Rapor iş akışı" });
     await expect(workflowStrip).toHaveClass(/next-report-status-surface/);
     await expect(workflowStrip.locator(".next-report-status-pills > span")).toHaveCount(4);
-    await expect(workflowStrip).toContainText("Sorgulandı");
-    await expect(workflowStrip).toContainText("Eski");
-    await expect(workflowStrip).toContainText("READY snapshot gerekli");
+    await expect(workflowStrip).toContainText("Rapor yüklendi");
+    await expect(workflowStrip).toContainText("Yeniden oluşturulmalı");
+    await expect(workflowStrip).toContainText("Hazır rapor sürümü gerekli");
     await expect(workflowStrip).toContainText("Öğrenci seç");
     await expect(workflowStrip).not.toContainText("exam-report-stale");
     await expect(workflowStrip).not.toContainText("snapshot-stale");
@@ -709,14 +709,14 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     const reportDetails = workflowStrip.locator(".next-report-meta-details");
     await reportDetails.getByText("Rapor ayrıntıları", { exact: true }).click();
     await expect(reportDetails).not.toContainText("exam-report-stale");
-    await expect(reportDetails).toContainText("Eski");
+    await expect(reportDetails).toContainText("Yeniden oluşturulmalı");
     await expect(reportDetails).toContainText("1 sonuç girdisi");
-    await expect(page.getByText("Snapshot çıktıya hazır değil")).toBeVisible();
+    await expect(page.getByText("Rapor sürümü çıktıya hazır değil")).toBeVisible();
 
     await page.getByRole("tab", { name: "Çıktılar" }).click();
     const exportsRegion = page.getByRole("region", { name: "Rapor çıktıları" });
     await expect(exportsRegion).toHaveClass(/next-report-output-panel/);
-    await expect(exportsRegion).toContainText("Eski");
+    await expect(exportsRegion).toContainText("Yeniden oluşturulmalı");
     await expect(exportsRegion.getByRole("button", { name: "Excel indir" })).toBeDisabled();
     await expect(exportsRegion.getByRole("button", { name: "PDF indir" })).toBeDisabled();
     await expect(exportsRegion.getByRole("button", { name: "Toplu karneleri indir" })).toBeDisabled();
@@ -724,7 +724,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
 
     await page.getByRole("tab", { name: "Karne" }).click();
     const karnePanel = page.getByRole("tabpanel", { name: "Karne" });
-    await expect(karnePanel).toContainText("Çıktı: READY snapshot gerekli");
+    await expect(karnePanel).toContainText("Çıktı: Hazır rapor sürümü gerekli");
 
     await expectNoHorizontalOverflow(page, "report-workspace-stale-mobile");
     await expectNoUnlabeledControls(page, "report-workspace-stale-mobile");
@@ -741,8 +741,8 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
 
     const karnePanel = page.getByRole("tabpanel", { name: "Karne" });
     const karneSheet = karnePanel.getByRole("region", { name: "Öğrenci karne özeti özet sayfası" });
-    const karneContext = karneSheet.getByRole("region", { exact: true, name: "Karne rapor bağlamı" });
-    const karneContextMetrics = karneContext.getByRole("group", { name: "Karne rapor bağlam metrikleri" });
+    const karneContext = karneSheet.getByRole("region", { exact: true, name: "Karne rapor bilgileri" });
+    const karneContextMetrics = karneContext.getByRole("group", { name: "Karne rapor ölçüleri" });
     await expect(karneContextMetrics).toHaveClass(/uh-info-grid/);
     await expect(karneContextMetrics.locator(".uh-info-item")).toHaveCount(7);
     await expect(karneContext).toContainText("Excel/PDF hazır");

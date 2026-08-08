@@ -62,7 +62,7 @@ export function TeacherDetailPage({ teacherId }: { teacherId: string }) {
             />
             <Panel
               aria-label="Öğretmen profil kartı"
-              description="Branş, portal ve görev kapsamı tek görünümde okunur; ham tenant veya kayıt anahtarı gösterilmez."
+              description="Branş, portal ve görev alanı tek görünümde okunur; teknik kurum veya kayıt bilgisi gösterilmez."
               title="Profil"
             >
               <InfoGrid className="next-teacher-profile-info" aria-label="Öğretmen profil özeti" role="region">
@@ -183,7 +183,7 @@ function buildTeacherSummaryBadges(detail: TeacherDetailData): OperationSummaryB
     },
     {
       key: "references",
-      label: missingReferenceCount > 0 ? `${formatCount(missingReferenceCount)} eşleşme kontrolü` : "Referanslar temiz",
+      label: missingReferenceCount > 0 ? `${formatCount(missingReferenceCount)} eşleşme kontrolü` : "Eşleşmeler hazır",
       tone: missingReferenceCount > 0 ? "warning" : "success",
     },
   ];

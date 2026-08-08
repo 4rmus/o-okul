@@ -100,6 +100,7 @@ interface LiveReleaseRow {
   key: string;
   label: string;
   scope: string;
+  technicalReference?: string;
   tone: StatusBadgeProps["tone"];
   value: string;
 }
@@ -112,7 +113,8 @@ export function LiveReleasePage() {
     detail: gate.detail,
     key: gate.title,
     label: gate.title,
-    scope: gate.command,
+    scope: "Yayın kontrolü",
+    technicalReference: gate.command,
     tone: releaseGateTone(gate.status),
     value: gate.status,
   }));
@@ -127,16 +129,18 @@ export function LiveReleasePage() {
   const summaryFieldRows = buildLiveReleaseRows(summaryFields, (field) => ({
     detail: "Canlı ortam doğrulama özetinde başarılı sonucu destekleyen alan.",
     key: field,
-    label: field,
+    label: summaryFieldLabel(field),
     scope: field.includes("reports.") ? "Rapor referansı" : "Özet alanı",
+    technicalReference: field,
     tone: "warning",
     value: "Zorunlu",
   }));
   const finalDecisionRows = buildLiveReleaseRows(finalDecisionFields, (field) => ({
     detail: finalDecisionDetail(field),
     key: field,
-    label: field,
+    label: finalDecisionLabel(field),
     scope: field.includes("approvals") || field.includes("goLiveDecision") ? "İmzalı karar" : "Canlıya geçiş paketi",
+    technicalReference: field,
     tone: "danger",
     value: "Zorunlu",
   }));
@@ -269,7 +273,17 @@ const liveReleaseColumns: Array<DataTableColumn<LiveReleaseRow>> = [
     header: "Kontrol",
     mobilePriority: "primary",
     priority: "primary",
-    render: (row) => row.label,
+    render: (row) => (
+      <>
+        <span>{row.label}</span>
+        {row.technicalReference ? (
+          <details>
+            <summary>İleri ayrıntılar</summary>
+            <code>{row.technicalReference}</code>
+          </details>
+        ) : null}
+      </>
+    ),
     sticky: "left",
   },
   {
@@ -436,6 +450,37 @@ function finalDecisionDetail(field: string) {
   if (field.includes("operations")) return "Uyarı kanalı ve sorumlular canlı izleme süresiyle birlikte belirlenir.";
   if (field.includes("approvals")) return "Ürün, teknik, operasyon ve veri koruma onayları birlikte gerekir.";
   return "Canlıya geçiş karar paketinde zorunlu alan olarak tutulur.";
+}
+
+function summaryFieldLabel(field: (typeof summaryFields)[number]) {
+  const labels: Record<(typeof summaryFields)[number], string> = {
+    "result = PASS": "Genel sonuç başarılı",
+    generatedAt: "Doğrulama zamanı",
+    nodeEnv: "Çalışma ortamı",
+    "appUrl / apiUrl / webUrl": "Uygulama ve hizmet adresleri",
+    "checks status = PASS": "Tüm kontroller başarılı",
+    "reports.uat.rollbackImageTag": "Kabul raporundaki geri dönüş sürümü",
+    "reports.uat.journeyScenariosVerified": "Doğrulanan kullanıcı yolculukları",
+    "reports.restoreDrill.sourceBackup": "Geri yüklemede kullanılan yedek",
+    "reports.deploymentRollback.rollbackImageTag": "Geri dönüşte kullanılacak sürüm",
+  };
+  return labels[field];
+}
+
+function finalDecisionLabel(field: (typeof finalDecisionFields)[number]) {
+  const labels: Record<(typeof finalDecisionFields)[number], string> = {
+    "productionEvidenceSummary.summaryTarget": "Doğrulama özeti dosyası",
+    "productionEvidenceSummary.result = PASS": "Doğrulama özeti başarılı",
+    "pilot.pilotDurationDays >= 14": "Pilot süresi en az 14 gün",
+    "pilot.criticalDefectsOpen = 0": "Açık kritik hata yok",
+    "pilot.goLiveDecision = APPROVED": "Pilot canlıya geçiş kararı onaylı",
+    "legal.dataProcessingAgreementSigned = true": "Veri işleme sözleşmesi imzalı",
+    "operations.alertChannelReady = true": "Uyarı kanalı hazır",
+    "cutover.monitoringWindowHours >= 24": "Geçiş sonrası izleme en az 24 saat",
+    "approvals: product / technical / operations / dataProtection": "Gerekli sorumlu onayları",
+    "goLiveDecision = APPROVED": "Son canlıya geçiş kararı onaylı",
+  };
+  return labels[field];
 }
 
 function externalEvidenceScope(item: string) {

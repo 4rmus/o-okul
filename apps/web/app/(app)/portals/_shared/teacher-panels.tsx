@@ -48,19 +48,19 @@ export function TeacherTodaySchedulePanel({
       header: "Sınıf",
       key: "class",
       priority: "primary",
-      render: (lesson) => (lesson.classId ? classNames.get(lesson.classId) ?? lesson.classId : "-"),
+      render: (lesson) => (lesson.classId ? classNames.get(lesson.classId) ?? "Sınıf bilgisi yok" : "-"),
     },
     {
       header: "Branş",
       key: "course",
       priority: "secondary",
-      render: (lesson) => (lesson.courseId ? courseNames.get(lesson.courseId) ?? lesson.courseId : "-"),
+      render: (lesson) => (lesson.courseId ? courseNames.get(lesson.courseId) ?? "Ders bilgisi yok" : "-"),
     },
     {
       header: "Dönem",
       key: "term",
       priority: "optional",
-      render: (lesson) => (lesson.termId ? termNames.get(lesson.termId) ?? lesson.termId : "-"),
+      render: (lesson) => (lesson.termId ? termNames.get(lesson.termId) ?? "Dönem bilgisi yok" : "-"),
     },
     {
       header: "Saat",
@@ -119,7 +119,7 @@ export function TeacherProfileSummaryPanel({
     ...schedule.map((lesson) => lesson.classId),
   ].filter((classId): classId is string => Boolean(classId));
   const classScope = formatUniqueLabels([
-    ...scopedClassIds.map((classId) => classNames.get(classId) ?? classId),
+    ...scopedClassIds.map((classId) => classNames.get(classId) ?? "Sınıf bilgisi yok"),
   ]);
   const organizationScope = formatUniqueLabels(
     scopedClassIds.map((classId) => {
@@ -133,8 +133,8 @@ export function TeacherProfileSummaryPanel({
       return organization === "-" ? undefined : organization;
     }),
   );
-  const courseScope = formatUniqueLabels(schedule.map((lesson) => (lesson.courseId ? courseNames.get(lesson.courseId) ?? lesson.courseId : undefined)));
-  const termScope = formatUniqueLabels(schedule.map((lesson) => (lesson.termId ? termNames.get(lesson.termId) ?? lesson.termId : undefined)));
+  const courseScope = formatUniqueLabels(schedule.map((lesson) => (lesson.courseId ? courseNames.get(lesson.courseId) ?? "Ders bilgisi yok" : undefined)));
+  const termScope = formatUniqueLabels(schedule.map((lesson) => (lesson.termId ? termNames.get(lesson.termId) ?? "Dönem bilgisi yok" : undefined)));
 
   return (
     <Panel
@@ -170,7 +170,7 @@ export function TeacherClassReportsPanel({
       header: "Sınıf",
       key: "class",
       priority: "primary",
-      render: (report) => report.className ?? report.classId ?? "-",
+      render: (report) => report.className ?? (report.classId ? "Sınıf bilgisi yok" : "-"),
       sticky: "left",
     },
     {
@@ -254,9 +254,9 @@ export function TeacherFocusPanel({
   termName?: string;
 }) {
   const studentName = selectedStudent ? `${selectedStudent.firstName} ${selectedStudent.lastName}` : "-";
-  const className = selectedClass?.name ?? selectedStudent?.classId ?? "-";
-  const campusName = selectedClass?.campusId ? campusNames.get(selectedClass.campusId) ?? selectedClass.campusId : "-";
-  const gradeLevelName = selectedClass?.gradeLevelId ? gradeLevelNames.get(selectedClass.gradeLevelId) ?? selectedClass.gradeLevelId : "-";
+  const className = selectedClass?.name ?? (selectedStudent?.classId ? "Sınıf bilgisi yok" : "-");
+  const campusName = selectedClass?.campusId ? campusNames.get(selectedClass.campusId) ?? "Kampüs bilgisi yok" : "-";
+  const gradeLevelName = selectedClass?.gradeLevelId ? gradeLevelNames.get(selectedClass.gradeLevelId) ?? "Seviye bilgisi yok" : "-";
   const modeLabel = mode === "read-only" ? "Yalnızca görüntüleme" : "İşlem yapılabilir";
   const supportTicketStatus = openSupportTicketCount > 0 ? `${openSupportTicketCount} açık` : "Açık talep yok";
 
@@ -304,8 +304,8 @@ function formatReportContext(
   termNames?: ReadonlyMap<string, string>,
 ) {
   const parts = [
-    context.courseId ? courseNames?.get(context.courseId) ?? context.courseId : undefined,
-    context.termId ? termNames?.get(context.termId) ?? context.termId : undefined,
+    context.courseId ? courseNames?.get(context.courseId) ?? "Ders bilgisi yok" : undefined,
+    context.termId ? termNames?.get(context.termId) ?? "Dönem bilgisi yok" : undefined,
   ].filter((part): part is string => Boolean(part));
   return parts.length > 0 ? parts.join(" / ") : "-";
 }

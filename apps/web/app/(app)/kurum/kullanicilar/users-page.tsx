@@ -76,7 +76,7 @@ export function UsersPage() {
       value: formatCount(usersQuery.data?.meta?.total ?? users.length),
     },
     {
-      description: "Yeni canonical çalışan yönetimi",
+      description: "Yeni çalışan ve yetki yönetimi",
       key: "managementSurface",
       label: "Yetki yönetimi",
       tone: "success",
@@ -86,7 +86,7 @@ export function UsersPage() {
   const userSummaryBadges: OperationSummaryBadge[] = [
     {
       key: "login",
-      label: "Legacy liste",
+      label: "Mevcut hesaplar",
       tone: "warning",
     },
     {
@@ -115,7 +115,7 @@ export function UsersPage() {
         aria-label="Kullanıcı ve rol yönetimi"
         columns={userColumns}
         density="compact"
-        description="Bu geçiş listesi yalnız mevcut hesapları gösterir. Rol, persona, kapsam ve erişim durumu Çalışanlar ve Yetkiler ekranından yönetilir."
+        description="Bu liste yalnız mevcut hesapları gösterir. Görev, çalışma alanı ve erişim Çalışanlar ve Yetkiler ekranından yönetilir."
         emptyState={
           <EmptyState
             title="Kullanıcı yok"
@@ -125,10 +125,11 @@ export function UsersPage() {
         emptyText="Kullanıcı kaydı yok"
         error={usersQuery.isError ? apiErrorMessage(usersQuery.error, "Kullanıcılar alınamadı.") : undefined}
         getRowKey={(user) => user.id}
+        hasActiveFilters={Boolean(userListQuery.q.trim())}
         loading={usersQuery.isPending}
         rows={users}
         tableCaption="Kurum kullanıcıları"
-        tableDescription="Panel kullanıcıları ve tenant rolleri."
+        tableDescription="Panel kullanıcıları ve kurum rolleri."
         summary={
           <OperationSummary ariaLabel="Kullanıcı operasyon özeti" badges={userSummaryBadges} items={userSummaryItems} />
         }

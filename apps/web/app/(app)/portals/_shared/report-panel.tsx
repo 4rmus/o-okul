@@ -76,7 +76,7 @@ export function ReportPanel({
         tone="warning"
       >
         <Alert tone="warning" title="Rapor bekleniyor">
-          Bu portal kapsamı için hazır rapor bulunamadı. Rapor üretildiğinde başarı, net ve soru bağlamı burada görünür.
+          Bu çalışma alanı için hazır rapor bulunamadı. Rapor hazırlandığında başarı, net ve soru bilgileri burada görünür.
         </Alert>
       </Panel>
     );
@@ -112,7 +112,7 @@ export function ReportPanel({
       >
         <MetricGrid aria-label="Portal rapor metrikleri" role="region">
           <MetricCard className="next-student-growth-primary-metric" label="Başarı %" value={formatPercentNumber(totalSuccessRate)} description="Ana karşılaştırma metriği" tone={successTone(totalSuccessRate)} />
-          <MetricCard label="Net" value={formatNetNumber(report.total.net)} description="Soru sayısı bağlamıyla okunur" />
+          <MetricCard label="Net" value={formatNetNumber(report.total.net)} description="Soru sayısıyla birlikte okunur" />
           <MetricCard label="Soru" value={formatNumber(totalQuestionCount)} description="Sınav kapsamı" />
           <MetricCard label={scoreView ? scoreViewLabel(scoreView) : isModernReport ? "Puan hesaplanamadı" : "Eski hesaplama"} value={formatNumber(score)} description={formatGeneratedAt(report.generatedAt)} tone="info" />
         </MetricGrid>

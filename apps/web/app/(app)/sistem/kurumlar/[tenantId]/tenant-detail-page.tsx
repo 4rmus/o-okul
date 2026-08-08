@@ -308,7 +308,7 @@ function statusLabel(status: string) {
   if (status === "ACTIVE") return "Aktif";
   if (status === "SUSPENDED") return "Askıda";
   if (status === "TRIAL") return "Deneme";
-  return status;
+  return "Durum bilgisi alınamadı";
 }
 
 function statusTone(status: string): StatusBadgeProps["tone"] {
@@ -328,8 +328,8 @@ function metricStatusTone(status: string): "danger" | "default" | "success" | "w
 function planLabel(plan: string) {
   if (plan === "ENTERPRISE") return "Enterprise";
   if (plan === "PRO") return "Pro";
-  if (plan === "TRIAL") return "Trial";
-  return plan;
+  if (plan === "TRIAL") return "Deneme";
+  return "Tanımsız plan";
 }
 
 function planTone(plan: string): StatusBadgeProps["tone"] {

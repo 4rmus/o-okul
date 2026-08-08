@@ -125,7 +125,7 @@ export function AcademicCalendarPage() {
     },
     {
       key: "url-state",
-      label: "Yıl listesi URL state",
+      label: "Yıl listesi seçimi korunur",
       tone: "info",
     },
   ];
@@ -198,7 +198,7 @@ export function AcademicCalendarPage() {
     },
     {
       key: "url-state",
-      label: "Dönem listesi URL state",
+      label: "Dönem listesi seçimi korunur",
       tone: "info",
     },
   ];
@@ -464,12 +464,13 @@ export function AcademicCalendarPage() {
         emptyText="Akademik yıl kaydı yok"
         error={error || (yearsQuery.isError ? "Akademik yıllar alınamadı." : undefined)}
         getRowKey={(record) => record.id}
+        hasActiveFilters={Boolean(yearListQuery.q.trim())}
         loading={yearsQuery.isPending}
         rows={years}
         summary={
           <OperationSummary
             actions={yearSummaryActions}
-            ariaLabel="Akademik yıl operasyon özeti"
+            ariaLabel="Akademik yıl özeti"
             badges={yearSummaryBadges}
             items={yearSummaryItems}
           />
@@ -508,12 +509,13 @@ export function AcademicCalendarPage() {
         emptyText="Dönem kaydı yok"
         error={termsQuery.isError ? "Akademik dönemler alınamadı." : undefined}
         getRowKey={(record) => record.id}
+        hasActiveFilters={Boolean(termListQuery.q.trim())}
         loading={termsQuery.isPending}
         rows={terms}
         summary={
           <OperationSummary
             actions={termSummaryActions}
-            ariaLabel="Akademik dönem operasyon özeti"
+            ariaLabel="Akademik dönem özeti"
             badges={termSummaryBadges}
             items={termSummaryItems}
           />
@@ -537,7 +539,7 @@ export function AcademicCalendarPage() {
             onChange={(event) => setYearForm((current) => ({ ...current, name: event.target.value }))}
           />
         </Field>
-        <Field label="Başlangıç" description="Yılın kurum operasyonlarında açılacağı tarih.">
+        <Field label="Başlangıç" description="Akademik yılın kurumda başlayacağı tarih.">
           <Input
             required
             type="date"

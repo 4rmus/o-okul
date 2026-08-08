@@ -109,7 +109,7 @@ export function StudentPortalAccessPage() {
       header: "Hesap / üyelik",
       priority: "secondary",
       render: (record) => record.membership
-        ? `${record.accountStatus ?? "-"} · ${record.membership.status} · v${record.membership.version}`
+        ? `${accountStatusLabel(record.accountStatus)} · ${membershipStatusLabel(record.membership.status)}`
         : record.invitation
           ? `${record.invitation.kind === "STUDENT_CODE" ? "Aktivasyon kodu üretildi" : record.invitation.emailMasked ?? "E-posta daveti"} · davet bekliyor`
           : "Bağlı değil",
@@ -168,14 +168,14 @@ export function StudentPortalAccessPage() {
   const summaryItems: OperationSummaryItem[] = [
     {
       key: "shown",
-      label: "Bu sayfa",
-      description: "Cursor ile getirilen öğrenci",
+      label: "Sayfadaki öğrenciler",
+      description: "Listelenen öğrenci sayısı",
       value: formatCount(records.length),
     },
     {
       key: "active",
       label: "Portal erişimi açık",
-      description: "Bu sayfadaki ACTIVE kayıtlar",
+      description: "Erişimi açık kayıtlar",
       value: formatCount(records.filter((record) => record.accessState === "ACTIVE").length),
       tone: "success",
     },
@@ -188,7 +188,7 @@ export function StudentPortalAccessPage() {
     },
   ];
   const badges: OperationSummaryBadge[] = [
-    { key: "cursor", label: "Cursor liste", tone: "info" },
+    { key: "cursor", label: "Sayfalı liste", tone: "info" },
     { key: "pii", label: "E-posta maskeli", tone: "neutral" },
   ];
 
@@ -224,7 +224,7 @@ export function StudentPortalAccessPage() {
                 </Select>
               </Field>
               <Button
-                aria-label="Önceki cursor sayfası"
+                aria-label="Önceki sayfa"
                 disabled={!meta?.previousCursor}
                 onClick={() => meta?.previousCursor && setQuery((current) => ({ ...current, cursor: meta.previousCursor, direction: "previous" }))}
                 type="button"
@@ -234,7 +234,7 @@ export function StudentPortalAccessPage() {
                 Önceki
               </Button>
               <Button
-                aria-label="Sonraki cursor sayfası"
+                aria-label="Sonraki sayfa"
                 disabled={!meta?.nextCursor}
                 onClick={() => meta?.nextCursor && setQuery((current) => ({ ...current, cursor: meta.nextCursor, direction: "next" }))}
                 type="button"
@@ -249,11 +249,12 @@ export function StudentPortalAccessPage() {
         aria-label="Öğrenci portal erişimi"
         columns={columns}
         density="compact"
-        description="Öğrenci kaydını portal daveti, tenant hesabı, canonical üyelik ve aktif session sayısıyla birlikte gösterir."
-        emptyState={<EmptyState title="Erişim kaydı yok" description="Arama ve tenant kapsamında öğrenci bulunamadı." />}
+        description="Öğrenci kaydını portal daveti, kurum hesabı, üyelik ve aktif oturum sayısıyla birlikte gösterir."
+        emptyState={<EmptyState title="Erişim kaydı yok" description="Arama ve kurum kapsamında öğrenci bulunamadı." />}
         emptyText="Öğrenci portal erişim kaydı yok"
         error={actionError || (accessQuery.isError ? "Öğrenci portal erişimleri alınamadı." : undefined)}
         getRowKey={(record) => record.studentId}
+        hasActiveFilters={Boolean(query.q.trim())}
         loading={accessQuery.isPending}
         rows={records}
         summary={<OperationSummary ariaLabel="Öğrenci portal erişim özeti" badges={badges} items={summaryItems} />}
@@ -317,6 +318,19 @@ function accessTone(state: StudentPortalAccessRecord["accessState"]): StatusBadg
   if (state === "ACTIVE") return "success";
   if (state === "INVITED" || state === "NOT_INVITED") return "warning";
   return "danger";
+}
+
+function accountStatusLabel(status: string | undefined) {
+  if (status === "ACTIVE") return "Hesap açık";
+  if (status === "PENDING_ACTIVATION") return "Etkinleştirme bekliyor";
+  if (status === "DISABLED") return "Hesap kapalı";
+  return "Hesap durumu bilinmiyor";
+}
+
+function membershipStatusLabel(status: "ACTIVE" | "SUSPENDED" | "ENDED") {
+  if (status === "ACTIVE") return "Üyelik aktif";
+  if (status === "SUSPENDED") return "Üyelik askıda";
+  return "Üyelik sona erdi";
 }
 
 function studentStatusLabel(status: StudentPortalAccessRecord["studentStatus"]) {

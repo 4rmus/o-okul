@@ -235,6 +235,7 @@ export function GradeLevelsPage() {
         emptyText="Seviye kaydı yok"
         error={error || (gradeLevelsQuery.isError ? "Seviyeler alınamadı." : undefined)}
         getRowKey={(record) => record.id}
+        hasActiveFilters={Boolean(listQuery.q.trim())}
         loading={gradeLevelsQuery.isPending}
         rows={rows}
         summary={

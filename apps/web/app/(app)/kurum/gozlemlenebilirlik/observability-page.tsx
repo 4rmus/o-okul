@@ -18,14 +18,14 @@ const observabilityGates = [
   {
     title: "Uyarı bildirim denemesi",
     command: "ALERT_WEBHOOK_URL=https://alerts.example.test pnpm alert:webhook:smoke",
-    status: "Webhook gerekir",
+    status: "Bildirim adresi gerekir",
     detail: "Uyarı kanalına kişisel veri içermeyen bir test bildirimi gönderilir ve başarılı yanıt beklenir.",
   },
   {
     title: "Hata izleme denemesi",
     command: "SENTRY_SMOKE_CONFIRM=send pnpm sentry:smoke",
-    status: "Sentry DSN gerekir",
-    detail: "Hata izleme hizmetine kişisel veri içermeyen bir test olayı gönderilir.",
+    status: "Hata izleme bağlantısı gerekir",
+    detail: "Hata izleme kanalına kişisel veri içermeyen bir test olayı gönderilir.",
   },
 ] as const;
 
@@ -38,17 +38,17 @@ const dashboardPanels = [
 ];
 
 const alertRules = [
-  "OOkulApiDown",
-  "OOkulReadinessFailing",
-  "OOkulApiHighErrorRate",
-  "OOkulApiSlowRequests",
+  "Uygulama yanıt vermiyor",
+  "Bağlantılar hazır değil",
+  "Bağlantı sorunu arttı",
+  "Yanıt süresi uzadı",
 ];
 
 const telemetryChecks = [
-  "prometheusScrapeOk",
-  "grafanaDashboardOk",
-  "lokiLogPanelOk",
-  "alertWebhookStatus 2xx",
+  "Sistem ölçümleri alınıyor",
+  "İzleme panosu açılıyor",
+  "Uygulama kayıtları görüntüleniyor",
+  "Uyarı bildirimi ulaşıyor",
 ];
 
 interface EndpointState<TData> {
@@ -108,6 +108,7 @@ export function ObservabilityPage() {
   const summaryBadges = buildObservabilitySummaryBadges(status);
   const summaryActions = buildObservabilitySummaryActions(status);
   const signalRows = buildObservabilitySignalRows(status);
+  const technicalEndpointRows = buildTechnicalEndpointRows(status);
   const dashboardRows = buildChecklistRows(dashboardPanels, "Ortam doğrulaması gerekir", "İzleme panosu ve uygulama kayıtları deneme veya canlı ortam raporuyla doğrulanır.", "warning");
   const alertRows = buildChecklistRows(alertRules, "Deneme gerekir", "Uyarı ve hata izleme kanalları kişisel veri içermeyen bir test olayıyla doğrulanır.", "warning");
   const telemetryRows = buildChecklistRows(telemetryChecks, "Doğrulama gerekir", "Bu teknik kontrol deneme veya canlı ortam raporunda tamamlanır.", "info");
@@ -140,8 +141,8 @@ export function ObservabilityPage() {
           {
             label: "Kontrol edilen sistem",
             value: sourceLabel(apiUrl),
-            tone: sourceLabel(apiUrl) === "Lokal/dev" ? "warning" : "info",
-            scope: sourceLabel(apiUrl) === "Lokal/dev" ? "local-static" : "configured-api",
+            tone: sourceLabel(apiUrl) === "Bu bilgisayar" ? "warning" : "info",
+            scope: sourceLabel(apiUrl) === "Bu bilgisayar" ? "local-static" : "configured-api",
             detail: "Uygulama, bağlantılar ve temel kullanım bilgileri aynı sistemden okunur.",
           },
           {
@@ -189,10 +190,9 @@ export function ObservabilityPage() {
           rows={signalRows}
         />
       </Panel>
-      <EvidenceGateSection title="Yayın Öncesi Kontroller" ariaLabel="Sistem izleme kontrolleri" gates={observabilityGates} />
       <Panel
         aria-label="İzleme panoları"
-        description="Grafana ve Loki üzerinde izlenmesi gereken temel sistem göstergeleri."
+        description="Temel sistem göstergeleri ve uygulama kayıtları."
         title="İzleme Panoları"
       >
         <DataTable
@@ -216,19 +216,36 @@ export function ObservabilityPage() {
           rows={alertRows}
         />
       </Panel>
-      <Panel
-        aria-label="Teknik izleme kontrolleri"
-        description="Sistem ölçümleri, izleme panoları, kayıtlar ve uyarı kanalları ortam raporuyla doğrulanır."
-        title="Teknik İzleme Kontrolleri"
-      >
-        <DataTable
-          caption="Teknik sistem izleme kontrolleri"
-          columns={checklistColumns}
-          density="compact"
-          getRowKey={(row) => row.key}
-          rows={telemetryRows}
-        />
-      </Panel>
+      <details>
+        <summary>İleri ayrıntılar</summary>
+        <EvidenceGateSection title="Yayın Öncesi Teknik Kontroller" ariaLabel="Sistem izleme teknik kontrolleri" gates={observabilityGates} />
+        <Panel
+          aria-label="Teknik bağlantı adresleri"
+          description="Bağlantı adresleri ve yanıt kodları."
+          title="Bağlantı Adresleri"
+        >
+          <DataTable
+            caption="Teknik bağlantı adresleri"
+            columns={signalColumns}
+            density="compact"
+            getRowKey={(row) => row.key}
+            rows={technicalEndpointRows}
+          />
+        </Panel>
+        <Panel
+          aria-label="Teknik izleme kontrolleri"
+          description="Sistem ölçümleri, izleme panoları, kayıtlar ve uyarı kanalları ortam raporuyla doğrulanır."
+          title="Teknik İzleme Kontrolleri"
+        >
+          <DataTable
+            caption="Teknik sistem izleme kontrolleri"
+            columns={checklistColumns}
+            density="compact"
+            getRowKey={(row) => row.key}
+            rows={telemetryRows}
+          />
+        </Panel>
+      </details>
     </PageFrame>
   );
 }
@@ -288,21 +305,21 @@ function buildObservabilitySummaryItems(status: ObservabilityStatus | undefined)
     {
       description: "Uygulamanın yanıt verme durumu",
       key: "api",
-      label: "API",
+      label: "Uygulama",
       tone: endpointSummaryTone(status?.health),
       value: endpointStatusText(status?.health, "Çalışıyor"),
     },
     {
       description: "Veritabanı ve hızlı erişim bağlantıları",
       key: "ready",
-      label: "Hazırlık",
+      label: "Bağlantılar",
       tone: endpointSummaryTone(status?.ready),
       value: endpointStatusText(status?.ready, "Hazır"),
     },
     {
       description: "Sistemin işlediği toplam web isteği",
       key: "request-count",
-      label: "HTTP istek",
+      label: "Web istekleri",
       tone: status?.metrics.ok ? "info" : status ? "warning" : "default",
       value: formatCount(status?.metrics.data?.requestCount),
     },
@@ -321,7 +338,7 @@ function buildObservabilitySummaryBadges(status: ObservabilityStatus | undefined
     {
       key: "source",
       label: sourceLabel(apiUrl),
-      tone: sourceLabel(apiUrl) === "Lokal/dev" ? "warning" : "info",
+      tone: sourceLabel(apiUrl) === "Bu bilgisayar" ? "warning" : "info",
     },
     {
       key: "endpoint",
@@ -375,23 +392,23 @@ function buildObservabilitySignalRows(status: ObservabilityStatus | undefined): 
     {
       detail: "Uygulamanın yanıt verdiğini kontrol eder",
       key: "health",
-      label: "/health",
+      label: "Uygulama",
       tone: endpointTone(status?.health),
-      value: status ? endpointLabel(status.health) : "Bekleniyor",
+      value: endpointStatusText(status?.health, "Çalışıyor"),
     },
     {
       detail: "Veritabanı ve hızlı erişim bağlantılarını kontrol eder",
       key: "ready",
-      label: "/health/ready",
+      label: "Bağlantılar",
       tone: endpointTone(status?.ready),
-      value: status ? endpointLabel(status.ready) : "Bekleniyor",
+      value: endpointStatusText(status?.ready, "Hazır"),
     },
     {
       detail: "Çalışma süresi ve istek sayısını verir",
       key: "metrics",
-      label: "/metrics",
+      label: "Kullanım bilgileri",
       tone: endpointTone(status?.metrics),
-      value: status ? endpointLabel(status.metrics) : "Bekleniyor",
+      value: endpointStatusText(status?.metrics, "Alınıyor"),
     },
     {
       detail: "Uygulamanın kesintisiz çalışma süresi",
@@ -403,16 +420,42 @@ function buildObservabilitySignalRows(status: ObservabilityStatus | undefined): 
     {
       detail: "Ana veritabanı bağlantısı",
       key: "postgres",
-      label: "Postgres",
+      label: "Veritabanı",
       tone: dependencyTone(dependencyLabel(status?.ready.data?.dependencies.postgres, status?.ready.ok)),
       value: dependencyLabel(status?.ready.data?.dependencies.postgres, status?.ready.ok),
     },
     {
-      detail: "Hızlı erişim ve kuyruk bağlantısı",
+      detail: "Hızlı erişim ve işlem bağlantısı",
       key: "redis",
-      label: "Redis",
+      label: "Hızlı erişim",
       tone: dependencyTone(dependencyLabel(status?.ready.data?.dependencies.redis, status?.ready.ok)),
       value: dependencyLabel(status?.ready.data?.dependencies.redis, status?.ready.ok),
+    },
+  ];
+}
+
+function buildTechnicalEndpointRows(status: ObservabilityStatus | undefined): ObservabilitySignalRow[] {
+  return [
+    {
+      detail: "Uygulamanın yanıt verdiğini kontrol eder",
+      key: "health-endpoint",
+      label: "/health",
+      tone: endpointTone(status?.health),
+      value: status ? endpointLabel(status.health) : "Bekleniyor",
+    },
+    {
+      detail: "Veritabanı ve hızlı erişim bağlantılarını kontrol eder",
+      key: "ready-endpoint",
+      label: "/health/ready",
+      tone: endpointTone(status?.ready),
+      value: status ? endpointLabel(status.ready) : "Bekleniyor",
+    },
+    {
+      detail: "Çalışma süresi ve istek sayısını verir",
+      key: "metrics-endpoint",
+      label: "/metrics",
+      tone: endpointTone(status?.metrics),
+      value: status ? endpointLabel(status.metrics) : "Bekleniyor",
     },
   ];
 }
@@ -543,8 +586,8 @@ function observabilityEndpointTone(status: ObservabilityStatus | undefined): Sta
 }
 
 function endpointLabel(endpoint: EndpointState<unknown>) {
-  if (!endpoint.ok && endpoint.status === 0) return endpoint.error;
-  return endpoint.ok ? `${endpoint.status} tamam` : `${endpoint.status} ${endpoint.error}`;
+  if (!endpoint.ok && endpoint.status === 0) return "Bağlantı kurulamadı";
+  return endpoint.ok ? `${endpoint.status} tamam` : `${endpoint.status} bağlantı sorunu`;
 }
 
 function dependencyLabel(value: "ok" | "down" | undefined, endpointOk: boolean | undefined) {
@@ -572,5 +615,5 @@ function formatUptime(value: number | null | undefined) {
 }
 
 function sourceLabel(value: string) {
-  return /localhost|127\.0\.0\.1|0\.0\.0\.0/.test(value) ? "Lokal/dev" : "Yapılandırılmış API";
+  return /localhost|127\.0\.0\.1|0\.0\.0\.0/.test(value) ? "Bu bilgisayar" : "Bağlı sistem";
 }

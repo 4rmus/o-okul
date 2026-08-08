@@ -4,7 +4,7 @@ Bu dosya, O-Okul üzerinde çalışan insanlar ve kod ajanları için hızlı y�
 Ayrıntılı geçmişi tekrar etmez; doğru kaynak sırasını, mimari sınırları ve güvenli değişiklik
 kurallarını gösterir.
 
-Son güncelleme: 2026-07-13
+Son güncelleme: 2026-08-08
 Güncel durum: [`status.md`](../../status.md)
 Son genel analiz: [`docs/application-analysis-2026-07-13.md`](../application-analysis-2026-07-13.md)
 
@@ -16,9 +16,10 @@ Bir çelişki olduğunda şu sıra kullanılır:
 2. `AGENTS.md` — repo çalışma, güvenlik ve doğrulama kuralları.
 3. `docs/DECISIONS.md` — onaylı ürün/mimari kararları.
 4. `docs/product-journeys-v1.md` — v1 kapsamı, persona ve UAT durumu.
-5. `status.md` — tarihli güncel repo/release özeti.
-6. `docs/phase-6-production-readiness.md` — staging/prod kanıt sözleşmesi.
-7. `docs/ui-ux-professionalization-contract.md` ve `docs/phase-b-list-query-contract.md` — aktif dar sözleşmeler.
+5. `docs/marketing-claims.md` — kullanıcı terimleri ve kanıtla sınırlı güvenli ürün iddiaları.
+6. `status.md` — tarihli güncel repo/release özeti.
+7. `docs/phase-6-production-readiness.md` — staging/prod kanıt sözleşmesi.
+8. `docs/ui-ux-professionalization-contract.md` ve `docs/phase-b-list-query-contract.md` — aktif dar sözleşmeler.
 
 `status.md` ve ilgili checker sonucu esas alınır.
 
@@ -26,9 +27,14 @@ Bir çelişki olduğunda şu sıra kullanılır:
 
 O-Okul; dershane ve özel öğretim kurumları için çok kiracılı yönetim SaaS'idir. V1 omurgası:
 
-`kurum kurulumu -> kişi ve akademik yapı -> TXT/DAT optik -> puanlama -> rapor/karne -> rol portalları -> finans ve iletişim`
+`kurum kurulumu -> kişi ve akademik yapı -> TXT/DAT optik -> puanlama -> rapor/karne -> kurum/öğretmen/öğrenci görünümü -> finans ve iletişim takibi`
 
-V1 dışında ödeme sağlayıcı, fatura ve makbuz entegrasyonu bulunur.
+V1'de ödeme sağlayıcı, online tahsilat, fatura ve makbuz entegrasyonu bulunmaz. Finans yüzeyi
+ödeme planı, alacak ve taksit takibidir.
+
+Kullanıcıya dönük metinde `tenant` yerine **kurum**, `tenantSlug/subdomain` yerine **kurumun O-Okul
+adresi**, `loginName` yerine **kurum içi kullanıcı adı** denir. Ayrıntılı sözlük ve güvenli iddia
+matrisi `docs/marketing-claims.md` içindedir.
 
 Kapsam değişikliği önce yeni bir DEC kaydı gerektirir.
 
@@ -74,12 +80,22 @@ flowchart TD
 Kanonik rol/capability kaynağı:
 `packages/shared-types/src/role-capabilities.ts`.
 
-- `SYSTEM_ADMIN`: platform ve tenant yönetimi.
-- `TENANT_ADMIN`: kurumun tüm yönetim capability'leri.
-- `ASSISTANT_ADMIN`: finans, güvenlik ve bazı yönetim yüzeyleri hariç operasyon.
+- `SYSTEM_ADMIN`: mevcut runtime'da sistem yüzeyini açar; hedefte tenant rolü değil ayrı,
+  varsayılan tenant erişimi olmayan control-plane hesabıdır.
+- `TENANT_OWNER`: kurum sahipliği, yetki, güvenlik ve audit yönetimi.
+- `TENANT_ADMIN`: kurumun yetkili yönetim alanı.
+- `ASSISTANT_ADMIN`: yalnız geçiş rolü; hedefte yeni edinim yapılmaz.
+- `OPERATIONS_STAFF`: kayıt, öğrenci, sınıf, sınav, yoklama ve duyuru operasyonu.
+- `FINANCE_STAFF`: ödeme planı ve taksit takibi; akademik sonuç erişimi yoktur.
 - `TEACHER`: atanmış eğitim kapsamı.
 - `STUDENT`: yalnız kendi subject verisi.
-- `GUARDIAN`: yalnız bağlı öğrenci ve izinli veriler.
+- `GUARDIAN`: yalnız bağlı öğrenci ve izinli veriler; mevcut runtime/UAT için geçiş desteklidir,
+  hedef ürün veya pazarlama personası değildir.
+
+Hedef müşteri personaları kurum sahibi, kurum yöneticisi, operasyon çalışanı, finans çalışanı,
+öğretmen ve öğrencidir. Hedef `StudentContact` yalnız hesapsız öğrenci iletişim kaydıdır; rol,
+session veya portal üretmez. Guardian runtime'ı envanter, yedek, veri sahibi onayı ve gözlem kapıları
+tamamlanmadan kaldırılmaz.
 
 Web'de bir linki gizlemek yetkilendirme değildir. Yeni route veya işlem şu yüzeylerde birlikte
 kontrol edilir:
@@ -103,18 +119,25 @@ kontrol edilir:
 - Access token tarayıcı memory'sinde; refresh token HttpOnly cookie'de kalmalı.
 - `localStorage` veya `sessionStorage` içine auth token yazılmamalı.
 - Portal rolü subject bağı olmadan token veya geniş tenant erişimi almamalı.
+- Kurum hostu tenant bağlamıdır; session tenant'ı host tenant'ıyla eşleşmeli ve cookie host-only
+  kalmalıdır. Global kullanıcı adı araması yapılmamalıdır.
+- `SYSTEM_ADMIN` tenant üyeliği gibi ele alınmamalı; hedef control-plane erişimi yalnız süreli,
+  MFA'lı ve auditli breakglass ile tenant verisine yaklaşmalıdır.
 
 ## 6. Ana iş akışları
 
 ### Kimlik ve ilk giriş
 
-1. Kurum/kişi oluşturulur veya import edilir.
-2. Identity provisioning tenant kapsamlı `User`, membership ve subject bağını kurar.
-3. Giriş kurum kodu + TC + parola ile yapılır.
-4. İlk parola telefon tabanlı geçici parola olabilir; `mustChangePassword` zorunludur.
+1. Kullanıcı kurumun `{tenantSlug}.o-okul.com` adresini açar; host tenant bağlamını belirler.
+2. Kurum/kişi oluşturulur veya import edilir; identity provisioning tenant kapsamlı `User`,
+   membership ve subject bağını kurar.
+3. Kanonik giriş isteği tenant-local `loginName + password` biçimindedir. Form kurum kodu istemez.
+4. Öğrenci numarası, personel numarası veya doğrulanmış e-posta tenant-local kullanıcı adı olabilir;
+   T.C. kimlik numarası ve telefon kullanıcı adı, ilk parola veya reset parolası olamaz.
 5. Admin MFA ayrıca TOTP/recovery code sözleşmesine bağlıdır.
 6. Zorunlu modda TOTP'siz admin yalnız kısa ömürlü enrollment yanıtı alır; doğrulama tamamlanınca
    normal session üretilir.
+7. Session tenant'ı host tenant'ıyla eşleşir; global login tekilliği v1 kapsamı dışındadır.
 
 ### Optik ve rapor
 
@@ -123,7 +146,8 @@ kontrol edilir:
 3. Parser config ile satırlar ayrıştırılır; sorunlu satırlar karantinaya gider.
 4. Worker deterministik scoring üretir.
 5. Rapor job'ı `ReportSnapshot` ve PDF/Excel çıktıları üretir.
-6. Kurum, öğrenci, öğretmen ve veli portalları yetki kapsamına göre okur.
+6. Kurum, öğrenci ve öğretmen yüzeyleri yetki kapsamına göre okur; mevcut veli portalı yalnız
+   geçiş runtime/UAT sözleşmesi olarak korunur.
 
 Karşılaştırmalarda ana metrik `Başarı %`; `Net` ve `Soru` bağlamdır. Rapor queue anahtarı istemciden
 alınmaz; API'de sınav/rapor/filtre kapsamı, worker snapshotında gerçek sonuç anahtarları ve
@@ -164,6 +188,8 @@ production evidence yerine geçmez.
 ### Web/UI
 
 - Mevcut App Router, shared UI ve role-aware shell desenlerini kullan.
+- Persona ve metin değişikliğinde `docs/product-journeys-v1.md` ile `docs/marketing-claims.md`
+  ayrımını koru; mevcut guardian route'unu hedef pazarlama personasına dönüştürme.
 - Token storage davranışını değiştirme.
 - Form ve tabloları mobil/a11y sözleşmesiyle doğrula.
 - En küçük doğrulama:
@@ -228,6 +254,9 @@ açık yazılır. Ana agent entegrasyon ve nihai doğrulamadan sorumludur.
 - Worker retry varken provider side effect'ini exactly-once sanmak.
 - Raporlarda farklı soru sayılarını ham net ile karşılaştırmak.
 - Dirty worktree'de bütün ağacı stage etmek.
+- Guardian geçiş UAT'sini yeni guardian ürün/pazarlama vaadi sanmak.
+- `SYSTEM_ADMIN` hedef control-plane sınırı tamamlanmadan kurum yöneticisi gibi anlatmak.
+- Ödeme planı/taksit takibini online ödeme, fatura veya makbuz entegrasyonu diye pazarlamak.
 
 ## 11. Başlangıç okuma listesi
 
@@ -235,9 +264,10 @@ açık yazılır. Ana agent entegrasyon ve nihai doğrulamadan sorumludur.
 2. [`status.md`](../../status.md)
 3. [`docs/DECISIONS.md`](../DECISIONS.md)
 4. [`docs/product-journeys-v1.md`](../product-journeys-v1.md)
-5. [`docs/codex-agent-architecture.md`](../codex-agent-architecture.md)
-6. [`docs/phase-6-production-readiness.md`](../phase-6-production-readiness.md)
-7. Değişecek modülün kodu ve yakın testleri
+5. [`docs/marketing-claims.md`](../marketing-claims.md)
+6. [`docs/codex-agent-architecture.md`](../codex-agent-architecture.md)
+7. [`docs/phase-6-production-readiness.md`](../phase-6-production-readiness.md)
+8. Değişecek modülün kodu ve yakın testleri
 
 Wiki güncellenirken geçmiş günlük buraya taşınmaz. Yeni kalıcı mimari kural eklenir; tarihli durum
 ve ilerleme `status.md` içinde tutulur.

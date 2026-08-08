@@ -31,7 +31,7 @@ describe("SmsBatchService", () => {
     process.env.SMS_ENABLED = originalSmsEnabled;
   });
 
-  it("SMS batch isteğini sms-batch queue job'una çevirir", async () => {
+  it("izinli önizleme alt kümesini sms-batch queue job'una çevirir", async () => {
     const templates = new FakeMessageTemplateService();
     const deliveryReports = new FakeSmsBatchDeliveryReportStore();
     const producer = new FakeProducer();
@@ -42,12 +42,16 @@ describe("SmsBatchService", () => {
       new FakeClassStore() as unknown as ClassStore,
       deliveryReports,
       new FakeGuardianStore() as unknown as GuardianStore,
-      new FakeGuardianStudentStore() as unknown as GuardianStudentStore,
+      new FakeGuardianStudentStore(true) as unknown as GuardianStudentStore,
       producer,
       new FakeScheduleStore() as unknown as ScheduleStore,
       new FakeStudentStore() as unknown as StudentStore,
       auditLogs as unknown as AuditLogService,
     );
+    await expect(service.previewRecipients(
+      { tenantId: "tenant-a", userId: "user-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      { studentStatus: "ACTIVE" },
+    )).resolves.toMatchObject({ recipientCount: 2 });
 
     const result = await service.enqueue(
       {
@@ -57,8 +61,9 @@ describe("SmsBatchService", () => {
         bypassRls: false,
       },
       {
+        recipientScope: { studentStatus: "ACTIVE" },
         templateId: "message-template-a",
-        recipients: [{ to: " 5000000001 " }, { to: "5000000002" }],
+        recipients: [{ to: " 5000000001 " }],
       },
     );
 
@@ -71,12 +76,12 @@ describe("SmsBatchService", () => {
       entityId: "message-template-a",
       templateId: "message-template-a",
       messageBody: "Sayın veli, öğrencimizin deneme sınavı Pazartesi günü yapılacaktır.",
-      recipients: [{ to: "5000000001" }, { to: "5000000002" }],
+      recipients: [{ to: "5000000001" }],
     });
     expect(result).toEqual({
       tenantId: "tenant-a",
       templateId: "message-template-a",
-      recipientCount: 2,
+      recipientCount: 1,
       queueName: "sms-batch",
       jobId: `${producer.inputs[0]?.entityId}_${producer.inputs[0]?.contentHash}`,
       status: "queued",
@@ -84,7 +89,7 @@ describe("SmsBatchService", () => {
     expect(deliveryReports.reports).toEqual([expect.objectContaining({
       tenantId: "tenant-a",
       templateId: "message-template-a",
-      recipientCount: 2,
+      recipientCount: 1,
       jobId: `${producer.inputs[0]?.entityId}_${producer.inputs[0]?.contentHash}`,
       status: "queued",
     })]);
@@ -96,7 +101,7 @@ describe("SmsBatchService", () => {
       action: "sms_batch.queued",
       diff: {
         templateId: "message-template-a",
-        recipientCount: 2,
+        recipientCount: 1,
         contentHash: producer.inputs[0]?.contentHash,
         jobId: `${producer.inputs[0]?.entityId}_${producer.inputs[0]?.contentHash}`,
       },
@@ -125,6 +130,7 @@ describe("SmsBatchService", () => {
         bypassRls: true,
       },
       {
+        recipientScope: {},
         templateId: "message-template-a",
         recipients: [{ to: "5000000001" }],
       },
@@ -155,6 +161,7 @@ describe("SmsBatchService", () => {
         bypassRls: false,
       },
       {
+        recipientScope: {},
         templateId: "message-template-a",
         recipients: [{ to: "5000000001" }],
       },
@@ -184,10 +191,60 @@ describe("SmsBatchService", () => {
         bypassRls: false,
       },
       {
+        recipientScope: {},
         templateId: "message-template-a",
         recipients: [{ to: " " }],
       },
     )).rejects.toThrow(BadRequestException);
+    expect(producer.inputs).toHaveLength(0);
+  });
+
+  it.each([
+    {
+      name: "SMS izni kapatılmış",
+      recipientScope: { studentStatus: "ACTIVE" as const },
+      recipient: "5000000002",
+      guardianStudentStore: new FakeGuardianStudentStore(),
+    },
+    {
+      name: "seçili duyuru filtresinin dışında",
+      recipientScope: { announcementId: "announcement-a", studentStatus: "ACTIVE" as const },
+      recipient: "5000000002",
+      guardianStudentStore: new FakeGuardianStudentStore(true),
+    },
+    {
+      name: "başka tenant'a ait",
+      recipientScope: { announcementId: "announcement-a", studentStatus: "ACTIVE" as const },
+      recipient: "5000000003",
+      guardianStudentStore: new FakeGuardianStudentStore(),
+    },
+  ])("$name alıcıyı queue öncesi reddeder", async ({ guardianStudentStore, recipient, recipientScope }) => {
+    const producer = new FakeProducer();
+    const service = new SmsBatchService(
+      new FakeMessageTemplateService() as unknown as MessageTemplateService,
+      new FakeAnnouncementStore() as unknown as AnnouncementStore,
+      new FakeClassStore() as unknown as ClassStore,
+      new FakeSmsBatchDeliveryReportStore(),
+      new FakeGuardianStore() as unknown as GuardianStore,
+      guardianStudentStore as unknown as GuardianStudentStore,
+      producer,
+      new FakeScheduleStore() as unknown as ScheduleStore,
+      new FakeStudentStore() as unknown as StudentStore,
+    );
+
+    await expect(service.enqueue(
+      {
+        tenantId: "tenant-a",
+        userId: "user-a",
+        roles: ["TENANT_ADMIN"],
+        bypassRls: false,
+      },
+      {
+        recipientScope,
+        templateId: "message-template-a",
+        recipients: [{ to: recipient }],
+      },
+    )).rejects.toThrow("SMS_BATCH_RECIPIENT_NOT_ELIGIBLE");
     expect(producer.inputs).toHaveLength(0);
   });
 
@@ -380,12 +437,15 @@ class FakeGuardianStore {
       { id: "guardian-a", tenantId: "tenant-a", firstName: "Ali", lastName: "Veli", phone: "5000000001" },
       { id: "guardian-no-phone", tenantId: "tenant-a", firstName: "Telefonsuz", lastName: "Veli" },
       { id: "guardian-b", tenantId: "tenant-a", firstName: "Banu", lastName: "Veli", phone: "5000000002" },
+      { id: "guardian-other", tenantId: "tenant-b", firstName: "Başka", lastName: "Veli", phone: "5000000003" },
     ];
     return guardians.find((guardian) => guardian.id === id);
   }
 }
 
 class FakeGuardianStudentStore {
+  constructor(private readonly guardianBSmsAllowed = false) {}
+
   async listByStudent(studentId: string) {
     const links = [
       {
@@ -414,7 +474,17 @@ class FakeGuardianStudentStore {
         guardianId: "guardian-b",
         studentId: "student-b",
         canViewFinance: true,
-        canReceiveSms: false,
+        canReceiveSms: this.guardianBSmsAllowed,
+        canReceiveAnnouncements: true,
+        canOpenSupportTickets: true,
+      },
+      {
+        id: "guardian-student-other",
+        tenantId: "tenant-a",
+        guardianId: "guardian-other",
+        studentId: "student-a",
+        canViewFinance: true,
+        canReceiveSms: true,
         canReceiveAnnouncements: true,
         canOpenSupportTickets: true,
       },

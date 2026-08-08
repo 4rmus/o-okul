@@ -10,7 +10,7 @@ export const appBrand = {
   notificationEmail: "bildirim@o-okul.com",
 } as const;
 
-export const appBrandTitle = `${appBrand.name} | Öğrenci Gelişimi ve Sınav Başarı Takibi`;
+export const appBrandTitle = "O-Okul | Optik Sınav Raporlama ve Kurum Takibi";
 export const appBrandHomeAriaLabel = `${appBrand.name} ana sayfa`;
 
 export const demoRequestHref = mailtoHref(appBrand.demoEmail, `Demo talebi - ${appBrand.name}`, `Merhaba,

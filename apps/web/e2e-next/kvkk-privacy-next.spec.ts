@@ -138,9 +138,9 @@ test("KVKK PII temizleme onay olmadan POST etmez", async ({ page }) => {
   activeEmail = "admin-a@example.test";
   await page.goto("/kurum/kvkk");
   await expect(page).toHaveURL(/\/kurum\/kvkk$/);
-  await expect(page.getByRole("region", { exact: true, name: "KVKK operasyon özeti" })).toContainText("Purge onayı");
-  await expect(page.getByLabel("KVKK güven durumu").getByText("PII İşlem Güvencesi")).toBeVisible();
-  const kvkkTable = page.getByLabel("KVKK yönetimi").getByRole("table", { name: "KVKK PII temizleme kayıtları" });
+  await expect(page.getByRole("region", { exact: true, name: "KVKK operasyon özeti" })).toContainText("Temizleme onayı");
+  await expect(page.getByLabel("KVKK güven durumu").getByText("Kişisel Bilgi Güvencesi")).toBeVisible();
+  const kvkkTable = page.getByLabel("KVKK yönetimi").getByRole("table", { name: "KVKK kişisel bilgi temizleme kayıtları" });
   await expect(kvkkTable.getByRole("cell", { exact: true, name: "Öğrenci kaydı 1" })).toBeVisible();
   await expect(kvkkTable.getByRole("cell", { name: "Ad, soyad, telefon" })).toBeVisible();
   for (const value of rawPiiValues) {
@@ -151,16 +151,16 @@ test("KVKK PII temizleme onay olmadan POST etmez", async ({ page }) => {
   await expectNoUnlabeledControls(page, "kvkk-inventory");
   await expectNoClippedVisibleText(page, "kvkk-inventory");
 
-  await page.getByLabel("Öğrenci kaydı 1 PII temizle").click();
-  await expect(page.getByRole("dialog", { name: "PII temizlemeyi onayla" })).toBeVisible();
+  await page.getByLabel("Öğrenci kaydı 1 kişisel bilgileri temizle").click();
+  await expect(page.getByRole("dialog", { name: "Kişisel bilgileri temizlemeyi onayla" })).toBeVisible();
   await expectNoUnlabeledControls(page, "kvkk-confirmation");
   await expectNoClippedVisibleText(page, "kvkk-confirmation");
   expect(purgePostCount).toBe(0);
   await page.getByRole("button", { name: "Vazgeç" }).click();
   expect(purgePostCount).toBe(0);
 
-  await page.getByLabel("Öğrenci kaydı 1 PII temizle").click();
-  await page.getByRole("dialog", { name: "PII temizlemeyi onayla" }).getByRole("button", { name: "PII temizle" }).click();
+  await page.getByLabel("Öğrenci kaydı 1 kişisel bilgileri temizle").click();
+  await page.getByRole("dialog", { name: "Kişisel bilgileri temizlemeyi onayla" }).getByRole("button", { name: "Bilgileri temizle" }).click();
   await expect(kvkkTable.getByRole("cell", { exact: true, name: "Öğrenci kaydı 1" })).toBeVisible();
   await expect(kvkkTable.getByRole("cell", { exact: true, name: "Temiz" })).toBeVisible();
   for (const value of rawPiiValues) {

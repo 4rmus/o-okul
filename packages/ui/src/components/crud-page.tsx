@@ -1,5 +1,6 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import { classNames } from "../class-names.js";
+import { Alert } from "./alert.js";
 import { DataTable, type DataTableColumn } from "./data-table.js";
 
 type CrudPageDensity = "comfortable" | "compact";
@@ -12,7 +13,9 @@ export interface CrudPageProps<TRow> extends Omit<HTMLAttributes<HTMLElement>, "
   emptyState?: ReactNode;
   emptyText?: ReactNode;
   error?: ReactNode;
+  filteredEmptyState?: ReactNode;
   getRowKey(row: TRow): string;
+  hasActiveFilters?: boolean;
   loading?: boolean;
   rowClassName?(row: TRow): string | undefined;
   rows: TRow[];
@@ -31,7 +34,9 @@ export function CrudPage<TRow>({
   emptyState,
   emptyText,
   error,
+  filteredEmptyState,
   getRowKey,
+  hasActiveFilters = false,
   loading = false,
   rowClassName,
   rows,
@@ -41,7 +46,15 @@ export function CrudPage<TRow>({
   title,
   ...props
 }: CrudPageProps<TRow>) {
-  const shouldRenderEmptyState = !error && !loading && rows.length === 0 && emptyState;
+  const resolvedEmptyState = hasActiveFilters
+    ? filteredEmptyState ?? (
+        <p className="uh-crud-page__empty" role="status">
+          Arama veya filtrelerle eşleşen kayıt bulunamadı.
+        </p>
+      )
+    : emptyState;
+  const shouldRenderEmptyState = !loading && !error && rows.length === 0 && resolvedEmptyState;
+  const shouldRenderTable = loading || (!error && !shouldRenderEmptyState);
 
   return (
     <section {...props} className={classNames("uh-crud-page", className)}>
@@ -55,14 +68,14 @@ export function CrudPage<TRow>({
         </header>
       ) : null}
       {summary ? <div className="uh-crud-page__summary">{summary}</div> : null}
-      {error ? (
-        <p className="uh-crud-page__error" role="alert">
+      {!loading && error ? (
+        <Alert className="uh-crud-page__error" tone="danger">
           {error}
-        </p>
+        </Alert>
       ) : null}
       {shouldRenderEmptyState ? (
-        emptyState
-      ) : (
+        resolvedEmptyState
+      ) : shouldRenderTable ? (
         <div className="uh-crud-page__table-shell">
           <DataTable<TRow>
             caption={tableCaption}
@@ -70,14 +83,13 @@ export function CrudPage<TRow>({
             density={density}
             description={tableDescription}
             emptyText={emptyText}
-            error={rows.length === 0 ? error : undefined}
             getRowKey={getRowKey}
             loading={loading}
             rowClassName={rowClassName}
-            rows={rows}
+            rows={loading ? [] : rows}
           />
         </div>
-      )}
+      ) : null}
     </section>
   );
 }

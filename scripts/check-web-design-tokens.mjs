@@ -1,10 +1,11 @@
 import { readFileSync, readdirSync } from "node:fs";
+import { readCssWithLocalImports } from "./read-css-with-local-imports.mjs";
 
 const files = {
   button: read("packages/ui/src/components/button.tsx"),
   charts: read("packages/ui/src/components/charts.tsx"),
   design: read("design.md"),
-  globals: read("apps/web/app/globals.css"),
+  globals: readCssWithLocalImports("apps/web/app/globals.css"),
   layout: read("apps/web/app/layout.tsx"),
   log: read(".hallmark/log.json"),
   package: read("package.json"),

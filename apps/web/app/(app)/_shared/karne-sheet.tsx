@@ -79,7 +79,7 @@ export function KarneSheet({
   const reportDate = formatKarneDate(report.examStartsAt ?? report.generatedAt);
   const participantLine = report.participantNo
     ? `ÖĞRENCİ NO : ${report.participantNo}${reportDate ? ` / ${reportDate}` : ""}`
-    : report.className ?? report.classId ?? "-";
+    : report.className ?? (report.classId ? "Sınıf bilgisi yok" : "-");
   const bookletLine = report.bookletType
     ? `${report.bookletType.toLocaleUpperCase("tr-TR")} KİTAPÇIĞI${reportDate ? ` / ${reportDate}` : ""}`
     : reportDate ? `TARİH : ${reportDate}` : reportLabel;
@@ -119,7 +119,7 @@ export function KarneSheet({
     { label: "Üretim", value: formatKarneDateTime(report.generatedAt) },
     { label: "Sınav", value: reportDate ?? "-" },
     { label: "Kitapçık", value: formatBookletContext(report.bookletType) },
-    ...(contextExtra ? [{ label: "Bağlam", value: contextExtra }] : []),
+    ...(contextExtra ? [{ label: "Açıklama", value: contextExtra }] : []),
     { label: "Soru", value: formatNumber(totalQuestionCount) },
     { label: "Çıktı", value: outputStatusLabel },
   ];
@@ -429,9 +429,9 @@ export function KarneSheet({
 
 function KarneContextStrip({ items }: { items: Array<{ label: string; value: string }> }) {
   return (
-    <section className="next-karne-context-strip" aria-label="Karne rapor bağlamı">
+    <section className="next-karne-context-strip" aria-label="Karne rapor bilgileri">
       <strong>Rapor bağlamı</strong>
-      <InfoGrid className="next-karne-context-strip__grid" aria-label="Karne rapor bağlam metrikleri" role="group">
+      <InfoGrid className="next-karne-context-strip__grid" aria-label="Karne rapor ölçüleri" role="group">
         {items.map((item) => (
           <InfoItem key={item.label} label={item.label} value={item.value || "-"} />
         ))}
@@ -553,9 +553,9 @@ function KarneReportHeader({
     <header className="next-karne-header">
       <div>
         <KarneHeading level={titleLevel}>{report.examTitle ?? "Sınav raporu"}</KarneHeading>
-        <p>{isAnalysisPage ? "DETAYLI DENEME ANALİZİ" : report.studentName ?? report.studentId}</p>
+        <p>{isAnalysisPage ? "DETAYLI DENEME ANALİZİ" : report.studentName || "Öğrenci adı bulunamadı"}</p>
         <span>{institutionName}</span>
-        <span>{isAnalysisPage ? report.studentName ?? report.studentId : participantLine}</span>
+        <span>{isAnalysisPage ? report.studentName || "Öğrenci adı bulunamadı" : participantLine}</span>
         <span>{bookletLine}</span>
       </div>
       <InstitutionBrand logoUrl={report.institutionLogoUrl} name={institutionName} />

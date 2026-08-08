@@ -24,12 +24,12 @@ test.describe("Öğrenci ilişki haritası", () => {
     const requestedPaths: string[] = [];
     await openStudentDetail(page, { width: 1280, height: 900 }, { auditLogRequests, requestedPaths });
 
-    const operationSummary = page.getByRole("region", { exact: true, name: "Öğrenci detay operasyon özeti" });
+    const operationSummary = page.getByRole("region", { exact: true, name: "Öğrenci detay özeti" });
     await expect(operationSummary).toContainText("Kayıt durumu");
     await expect(operationSummary).toContainText("Başarı %");
     await expect(operationSummary).toContainText("Net - / Soru -");
-    await expect(operationSummary).toContainText("PII maskeli");
-    await expect(operationSummary.getByLabel("Öğrenci detay operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    await expect(operationSummary).toContainText("Kişisel bilgiler maskeli");
+    await expect(operationSummary.getByLabel("Öğrenci detay özeti önerilen işlemler")).toBeVisible();
     const studentProfile = page.getByLabel("Öğrenci profil kartı");
     await expect(studentProfile).toContainText("Aktif");
     const studentProfileInfo = studentProfile.getByRole("region", { name: "Öğrenci profil özeti" });
@@ -86,7 +86,7 @@ test.describe("Öğrenci ilişki haritası", () => {
   test("mobilde liste görünümü taşmadan kalır", async ({ page }) => {
     await openStudentDetail(page, { width: 390, height: 844 });
 
-    await expect(page.getByRole("region", { exact: true, name: "Öğrenci detay operasyon özeti" })).toBeVisible();
+    await expect(page.getByRole("region", { exact: true, name: "Öğrenci detay özeti" })).toBeVisible();
     await expect(page.getByLabel("İlişki haritası liste görünümü")).toBeVisible();
     await expect(page.getByLabel("İlişki haritası liste görünümü")).toContainText("11-A");
     await expectNoHorizontalOverflow(page, "student-relationship-mobile");
@@ -94,12 +94,12 @@ test.describe("Öğrenci ilişki haritası", () => {
     await expectNoVisibleTextValues(page, "student-detail-pii-mobile", rawStudentDetailPiiValues);
   });
 
-  test("tablette ilişki dashboard taşmadan ve erişilebilir adlarla kalır", async ({ page }) => {
+  test("tablette öğrenci özeti taşmadan ve erişilebilir adlarla kalır", async ({ page }) => {
     await openStudentDetail(page, { width: 768, height: 1024 });
 
-    const studentDashboard = page.getByLabel("Öğrenci dashboard");
+    const studentDashboard = page.getByLabel("Öğrenci özeti");
     await expect(studentDashboard).toBeVisible();
-    await expect(studentDashboard.getByRole("region", { exact: true, name: "Öğrenci detay operasyon özeti" })).toBeVisible();
+    await expect(studentDashboard.getByRole("region", { exact: true, name: "Öğrenci detay özeti" })).toBeVisible();
     await expect(studentDashboard.getByRole("region", { name: "Öğrenci profil özeti" })).toHaveClass(/uh-info-grid/);
     await expect(page.getByRole("heading", { name: "İlişki haritası" })).toBeVisible();
     await expect(page.getByLabel("İlişki haritası liste görünümü")).toBeVisible();

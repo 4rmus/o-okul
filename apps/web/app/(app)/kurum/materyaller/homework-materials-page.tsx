@@ -492,6 +492,7 @@ export function HomeworkMaterialsPage() {
         error={query.isError ? "Ödev verisi alınamadı." : undefined}
         getRowKey={(homework) => homework.id}
         density="compact"
+        hasActiveFilters={Boolean(homeworkListQuery.q.trim())}
         loading={query.isPending}
         rows={data.homework}
         summary={
@@ -536,6 +537,7 @@ export function HomeworkMaterialsPage() {
         error={error || undefined}
         getRowKey={(material) => material.id}
         density="compact"
+        hasActiveFilters={Boolean(materialListQuery.q.trim())}
         loading={query.isPending}
         rowClassName={(material) => (material.id === selectedMaterialId ? "next-material-row--selected" : undefined)}
         rows={data.materials}

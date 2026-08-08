@@ -1,6 +1,7 @@
 # V1 Urun Yolculuklari ve UAT Matrisi
 
-Kaynak: `docs/DECISIONS.md` ve güncel kod/test sözleşmeleri.
+Kaynak: `docs/DECISIONS.md` ve güncel kod/test sözleşmeleri. Kullanıcıya dönük ürün dili ve
+pazarlama iddiaları için eş sözleşme `docs/marketing-claims.md` dosyasıdır.
 
 Bu dosya v1 icin hangi kurum tipi, hangi roller ve hangi gunluk islerin desteklendigini
 repo kanitiyla baglar. Staging/prod UAT raporu bu senaryo kimliklerini kullanir.
@@ -17,14 +18,50 @@ repo kanitiyla baglar. Staging/prod UAT raporu bu senaryo kimliklerini kullanir.
 ## Kapsam Karari
 
 V1 hedef kurum tipi: tek veya cok subeli dershane/ozel ogretim kurumu. V1 ana degeri
-`TXT/DAT optik -> guvenilir rapor/karne -> veli/ogrenci gorunumu -> odeme ve iletisim takibi`
-dongusudur.
+`TXT/DAT optik -> guvenilir rapor/karne -> kurum/ogretmen/ogrenci yetkili gorunumu -> odeme ve
+iletisim takibi` dongusudur.
 
 V1 kapsam disi maddeler:
 
 - Odeme saglayici, fatura ve makbuz entegrasyonu: `V1_OUT`; finans modulu alacak/taksit takibidir.
 
 Karar kaydi: `docs/DECISIONS.md` `DEC-20260613-01`.
+
+### Giris ve platform siniri
+
+- Kanonik kurum girisi `{tenantSlug}.o-okul.com` adresinde tenant-local `loginName + password`
+  sozlesmesidir. Kullaniciya "kurumun O-Okul adresi" ve "kurum ici kullanici adi" denir; formda
+  kurum kodu istenmez. T.C. kimlik numarasi ve telefon kullanici adi veya varsayilan parola olamaz.
+- Ogrenci numarasi, personel numarasi ve dogrulanmis e-posta ayni tenant icinde login kimligi
+  olabilir. Global kullanici adi, kampus subdomaini ve ozel kurum domaini v1 kapsam disidir.
+- `SYSTEM_ADMIN` hedefte tenant personası degil, ayri control-plane hesabidir. Tenant verisine
+  varsayilan erisimi yoktur; sureli, MFA'li ve auditli breakglass disinda kurum verisi acilmaz.
+
+Karar kayitlari: `DEC-20260801-01` ve `DEC-20260804-01`.
+
+## Mevcut Runtime ve Hedef Persona Ayrimi
+
+Mevcut gecis runtime'i `SYSTEM_ADMIN`, `TENANT_OWNER`, `TENANT_ADMIN`, `ASSISTANT_ADMIN`,
+`OPERATIONS_STAFF`, `FINANCE_STAFF`, `TEACHER`, `STUDENT` ve `GUARDIAN` rollerini tanir. Asagidaki
+yolculuk/UAT matrisi bu calisan yuzeylerin kanitini korur; hedef urun personasini genisletmez.
+
+Hedef urun ve pazarlama personalari:
+
+| Teknik rol | Kullaniciya donuk persona | Sinir |
+|---|---|---|
+| `TENANT_OWNER` | Kurum sahibi | Kurum, guvenlik ve yetki sahipligi; platform/lisans kosullarini degistiremez |
+| `TENANT_ADMIN` | Kurum yoneticisi | Kurumun yetkili yonetim ve operasyon alani |
+| `OPERATIONS_STAFF` | Operasyon calisani | Kayit, sinif, sinav, yoklama ve duyuru; finans ve guvenlik haric |
+| `FINANCE_STAFF` | Finans calisani | Odeme plani ve taksit takibi; akademik sonuc erisimi yok |
+| `TEACHER` | Ogretmen | Atanmis sinif, ders ve ogrenci kapsami |
+| `STUDENT` | Ogrenci | Yalniz kendi profil ve akademik verisi |
+
+`ASSISTANT_ADMIN` gecis roludur ve hedefte `OPERATIONS_STAFF` ile yer degistirir. `SYSTEM_ADMIN`
+platform operasyonudur; musteri personası veya kurum yoneticisi degildir. `GUARDIAN` mevcut
+route/session/UAT kapilari kaldirilana kadar gecis destekli runtime personasidir, yeni pazarlama
+personasi degildir. Hedefte login yetkisi olmayan `StudentContact` bulunur; bu kayit da persona
+sayilmaz. Guardian emekliligi ancak `DEC-20260801-01` envanter, yedek, onay ve gozlem kapilariyla
+tamamlanir.
 
 ## Modul Sahipligi
 
@@ -39,7 +76,7 @@ yolculuk matrisi, UAT senaryo iskeleti ve ilgili evidence checker/template gunce
 | Finans ve iletisim | `backend_api_engineer` + `messaging_integrations_engineer` | UAT-KURUM-07, UAT-KURUM-08 | Odeme/taksit takibi idempotenttir; duyuru, SMS disabled path, destek ve materyal akislari PII-safe evidence ile ayrilir. | Odeme saglayici, fatura, makbuz entegrasyonu |
 | Ogretmen portali | `frontend_ux_engineer` + `tenant_security_reviewer` | UAT-TEACHER-01, UAT-TEACHER-02, UAT-TEACHER-03 | Ogretmen yalniz kendi sinif/ogrenci kapsaminda okur/yazar; negatif erisim 403 ile kanitlanir. | Tenantlar arasi gorunum |
 | Ogrenci portali | `frontend_ux_engineer` + `tenant_security_reviewer` | UAT-STUDENT-01, UAT-STUDENT-02, UAT-STUDENT-03 | Ogrenci kendi profil, odev, devamsizlik, not, rapor, duyuru ve destek akisini kullanir; baska ogrenci verisi kapali kalir. | Ogrenci self-service kurum transferi |
-| Veli portali | `frontend_ux_engineer` + `tenant_security_reviewer` | UAT-GUARDIAN-01, UAT-GUARDIAN-02, UAT-GUARDIAN-03 | Veli sadece bagli ogrenci ve izinli finans/rapor verisini gorur; bagli olmayan ogrenci ve kapali finans izni 403 olur. | Veli self-service eslestirme |
+| Veli portali (gecis) | `frontend_ux_engineer` + `tenant_security_reviewer` | UAT-GUARDIAN-01, UAT-GUARDIAN-02, UAT-GUARDIAN-03 | Mevcut runtime'da veli sadece bagli ogrenci ve izinli finans/rapor verisini gorur; bagli olmayan ogrenci ve kapali finans izni 403 olur. | Yeni guardian edinimi, veli self-service eslestirme |
 | DB, RLS, PII ve evidence guardrail | `data_platform_engineer` + `privacy_governance_reviewer` | UAT-SYS-04, UAT-KURUM-02, UAT-KURUM-05, UAT-KURUM-06, UAT-KURUM-07, UAT-KURUM-08, UAT-TEACHER-03, UAT-STUDENT-03, UAT-GUARDIAN-03 | Tenant FK/RLS, audit redaction, bypass siniri, retention ve evidence hedefleri kod/test kapilarinda korunur. | Ham PII iceren evidence veya audit diff'i |
 
 ## Faz 1 Kabul Kriterleri
@@ -49,8 +86,14 @@ yolculuk matrisi, UAT senaryo iskeleti ve ilgili evidence checker/template gunce
 - Her UAT senaryosu en az bir modul sahipligi satirina baglidir.
 - `PASS`, `PARTIAL`, `CONTRACT_READY_EXTERNAL_NOT_RUN` ve `EXTERNAL_NOT_RUN` etiketleri local/statik kanit ile staging/prod kanitini karistirmaz.
 - Kapsam genislemesi gerekiyorsa once yeni DEC acilir; bu dosya tek basina kapsam genisletmez.
+- Hedef urun metni yalniz `docs/marketing-claims.md` icindeki guvenli ifadeleri kullanir; mevcut
+  guardian runtime/UAT kaniti yeni guardian pazarlama vaadi sayilmaz.
 
 ## Yolculuk Matrisi
+
+Bu matris mevcut runtime ve evidence borcunu gosterir. `GUARDIAN` satirlari gecis guvenligini
+korur; hedef persona veya yeni musteri vaadi olusturmaz. `SYSTEM_ADMIN` satirlari da mevcut
+operasyon yuzeyini belgeler; hedef control-plane ayriminin tamamlandigi anlamina gelmez.
 
 | Persona | Adim | Durum | Repo kaniti | UAT senaryosu | Backlog |
 |---|---|---|---|---|---|

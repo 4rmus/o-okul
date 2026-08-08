@@ -367,19 +367,20 @@ export function FinancePage() {
           <EmptyState
             title="Ödeme taksiti yok"
             description="Ödeme planları oluştuğunda bekleyen, geciken ve ödenen taksitler burada görünür."
-            hint="Finans sinyalleri dashboard karar kartlarına da yansır."
+            hint="Ödeme durumu özet kartlarında da görünür."
           />
         }
         emptyText="Ödeme taksiti yok"
         error={error || (plansQuery.isError ? "Ödeme planları alınamadı." : referencesQuery.isError ? "Seçim listeleri alınamadı." : undefined)}
         getRowKey={(row) => row.id}
         density="compact"
+        hasActiveFilters={Boolean(listQuery.q.trim()) || financeFilterKeys.some((key) => Boolean(filters[key]))}
         loading={plansQuery.isPending || referencesQuery.isPending}
         rows={rows}
         summary={
           <OperationSummary
             actions={financeSummaryActions}
-            ariaLabel="Finans operasyon özeti"
+            ariaLabel="Ödeme planları özeti"
             badges={financeSummaryBadges}
             items={financeSummaryItems}
           />

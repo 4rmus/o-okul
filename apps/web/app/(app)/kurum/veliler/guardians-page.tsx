@@ -72,16 +72,16 @@ export function GuardiansPage() {
       value: `${guardianPhoneReadyCount}/${rows.length}`,
     },
     {
-      description: "Portal kullanıcısı bağlı",
+      description: "Mevcut veli erişimi bağlı",
       key: "portal",
-      label: "Portal hazır",
+      label: "Mevcut veli erişimi",
       tone: guardianPortalReadyCount > 0 ? "success" : "default",
       value: `${guardianPortalReadyCount}/${rows.length}`,
     },
     {
-      description: "Liste, kanıt ve ekran görüntüsü güvenliği",
+      description: "Liste ve ekran görüntülerinde kişisel bilgiler korunur",
       key: "pii",
-      label: "PII modu",
+      label: "Kişisel bilgiler",
       tone: "success",
       value: "Maskeli",
     },
@@ -108,15 +108,15 @@ export function GuardiansPage() {
       value: `${guardianPhoneReadyCount}/${rows.length}`,
     },
     {
-      detail: "Veli portal hesabı bağlantısı",
+      detail: "Mevcut veli hesabı bağlantısı",
       key: "portal-link",
-      label: "Portal bağlantısı",
+      label: "Veli erişimi",
       status: guardianPortalReadyCount > 0 ? "Bağlı" : "Bekliyor",
       tone: guardianPortalReadyCount > 0 ? "success" : "neutral",
       value: `${guardianPortalReadyCount}/${rows.length}`,
     },
     {
-      detail: "URL state ile korunur",
+      detail: "Seçilen sıralama korunur",
       key: "sort-context",
       label: "Liste sırası",
       status: "Liste",
@@ -251,29 +251,30 @@ export function GuardiansPage() {
         aria-label="Veli yönetimi"
         columns={columns}
         density="compact"
-        description="Veli kayıtlarını öğrenci bağlantısı ve portal hazırlığı için yönet. Liste görünümünde iletişim PII maskelenir."
+        description="Veli kayıtlarını ve öğrenci bağlantılarını yönetin. İletişim bilgileri listede maskeli gösterilir."
         emptyState={
           <EmptyState
             title="Veli kaydı yok"
-            description="Öğrenci iletişimi ve portal hesabı için ilk veli kaydını oluştur."
-            hint="Veli eklendikten sonra öğrenci bağlantısı akışına geçebilirsin."
+            description="Henüz görüntülenecek veli kaydı yok."
+            hint="Yeni veli kaydı ekleyebilirsiniz."
             primaryAction={{ label: "Veli ekle", onClick: openCreateForm }}
           />
         }
         emptyText="Veli kaydı yok"
         error={error || (guardiansQuery.isError ? "Veliler alınamadı." : undefined)}
         getRowKey={(guardian) => guardian.id}
+        hasActiveFilters={Boolean(listQuery.q.trim())}
         loading={guardiansQuery.isPending}
         rows={rows}
         summary={
           <OperationSummary
             actions={guardianSummaryActions}
-            ariaLabel="Veli operasyon özeti"
+            ariaLabel="Veli kayıt özeti"
             badges={guardianSummaryBadges}
             items={guardianSummaryItems}
           />
         }
-        tableCaption="Veli operasyon listesi"
+        tableCaption="Veli kayıt listesi"
         tableDescription="Ad soyad, maskeli iletişim durumu ve veli aksiyonları."
         title="Veliler"
       />

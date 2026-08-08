@@ -47,7 +47,6 @@ import { AnnouncementsPanel } from "./_shared/announcements-panel.js";
 import { TeacherHomeworkPanel, TeacherMaterialAssignmentsPanel } from "./_shared/homework-panels.js";
 import {
   AccessPanel,
-  MetricGrid,
   PortalActionStrip,
   PortalDailyBrief,
   PortalFrame,
@@ -282,11 +281,12 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
   const selectedReportSuccess = reportSuccessRate(selectedReportTotal);
   const selectedCourseId = noteForm.courseId || materialForm.courseId || reportQuery.data?.reportContext?.courseId;
   const selectedTermId = noteForm.termId || materialForm.termId || reportQuery.data?.reportContext?.termId;
-  const selectedCourseName = selectedCourseId ? courseNameById.get(selectedCourseId) ?? selectedCourseId : undefined;
-  const selectedTermName = selectedTermId ? termNameById.get(selectedTermId) ?? selectedTermId : undefined;
+  const selectedCourseName = selectedCourseId ? courseNameById.get(selectedCourseId) : undefined;
+  const selectedTermName = selectedTermId ? termNameById.get(selectedTermId) : undefined;
   const uncheckedHomework = (data?.homework ?? []).filter((homework) => !homework.checkedAt).length;
   const openSupportTickets = (data?.supportTickets ?? []).filter(isOpenSupportTicket).length;
   const selectedStudentLabel = selectedStudent ? formatTeacherStudentLabel(selectedStudent, classNameById) : "Seçili öğrenci yok";
+  const selectedStudentContextLabel = selectedStudent ? "Öğrenci seçili" : "Öğrenci seçilmedi";
   const selectedMaterial = (data?.materials ?? []).find((material) => material.id === materialForm.materialId);
   const historyQuery = useQuery({
     queryKey: ["next-teacher-student-history", auth?.session.userId ?? "anonymous", selectedStudentId ?? "none", rolePreviewToken || "session"],
@@ -488,19 +488,19 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
       header: "Sınıf",
       key: "class",
       priority: "primary",
-      render: (lesson) => (lesson.classId ? classNameById.get(lesson.classId) ?? lesson.classId : "-"),
+      render: (lesson) => (lesson.classId ? classNameById.get(lesson.classId) ?? "Sınıf bilgisi yok" : "-"),
     },
     {
       header: "Branş",
       key: "course",
       priority: "secondary",
-      render: (lesson) => (lesson.courseId ? courseNameById.get(lesson.courseId) ?? lesson.courseId : "-"),
+      render: (lesson) => (lesson.courseId ? courseNameById.get(lesson.courseId) ?? "Ders bilgisi yok" : "-"),
     },
     {
       header: "Dönem",
       key: "term",
       priority: "optional",
-      render: (lesson) => (lesson.termId ? termNameById.get(lesson.termId) ?? lesson.termId : "-"),
+      render: (lesson) => (lesson.termId ? termNameById.get(lesson.termId) ?? "Dönem bilgisi yok" : "-"),
     },
     {
       header: "Başlangıç",
@@ -525,7 +525,7 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
       label: "Öğrenci seç",
       statusLabel: selectedStudent ? "Seçili" : "Bekliyor",
       tone: selectedStudent ? "info" : "neutral",
-      value: selectedStudentLabel,
+      value: selectedStudentContextLabel,
     },
     {
       actionLabel: isRolePreview ? "Yalnızca görüntüleme" : "Kaydet",
@@ -541,7 +541,7 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
     {
       actionLabel: isRolePreview ? "Yalnızca görüntüleme" : "Ekle",
       contextLabel: "Not",
-      detail: isRolePreview ? "Not formu kapalı" : selectedStudentLabel,
+      detail: isRolePreview ? "Not formu kapalı" : selectedStudentContextLabel,
       href: teacherPortalHref(isRolePreview ? "/ogretmen" : "/ogretmen/ogrenci-takibi", isRolePreview),
       key: "note",
       label: "Not ekle",
@@ -605,16 +605,22 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
       value: isRolePreview ? "Yalnızca görüntüleme" : "İşlem yapılabilir",
     },
   ];
+  const teacherPriorityKeys = isRolePreview
+    ? ["preview", "attendance", "report"]
+    : ["attendance", "note", "report"];
+  const teacherPriorityItems = teacherPriorityKeys
+    .map((key) => teacherActionItems.find((item) => item.key === key))
+    .filter((item): item is PortalActionItem => Boolean(item));
   const showOverview = view === "overview";
   const showStudentWorkspace = view === "overview" || view === "student" || view === "homework" || view === "reports" || view === "support";
   const showStudentTracking = view === "overview" || view === "student";
-  const portalSubtitle = teacherPortalSubtitle(view, data?.teacher ? `${data.teacher.firstName} ${data.teacher.lastName}` : "Ders programı");
+  const portalSubtitle = teacherPortalSubtitle(view, "Ders programı");
 
   return (
     <PortalFrame
       title="Öğretmen Portalı"
       subtitle={portalSubtitle}
-      context={teacherPortalContext(view, portalSubtitle, selectedStudentLabel, isRolePreview)}
+      context={teacherPortalContext(view, portalSubtitle, Boolean(selectedStudent), isRolePreview)}
     >
       {showOverview ? (
         <>
@@ -624,7 +630,7 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
             scope={{
               detail: selectedCourseName && selectedTermName ? `${selectedCourseName} / ${selectedTermName}` : "Ders bağlamı bekliyor",
               label: "Seçili öğrenci",
-              value: selectedStudentLabel,
+              value: selectedStudentContextLabel,
             }}
             items={[
               {
@@ -646,43 +652,16 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
                 tone: uncheckedHomework > 0 ? "warning" : "success",
               },
               {
-                label: "Destek",
-                value: openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok",
-                detail: "Öğretmen destek takibi",
-                tone: openSupportTickets > 0 ? "warning" : "success",
-              },
-              {
                 label: "Seçili başarı",
                 value: formatPercentNumber(selectedReportSuccess),
                 detail: `${formatNetNumber(selectedReportTotal?.net)} net / ${formatNetNumber(reportQuestionCount(selectedReportTotal))} soru`,
                 tone: (selectedReportSuccess ?? 0) >= 75 ? "success" : "info",
               },
-              {
-                label: "Önizleme",
-                value: isRolePreview ? "Yalnızca görüntüleme" : "İşlem yapılabilir",
-                detail: isRolePreview ? "Yoklama, not ve materyal kapalı" : "Yoklama, not ve materyal formları aktif",
-                tone: isRolePreview ? "neutral" : "info",
-              },
             ]}
           />
           <PortalActionStrip
             ariaLabel="Öğretmen günlük aksiyonları"
-            items={teacherActionItems}
-            priorityKeys={isRolePreview
-              ? ["preview", "attendance", "report"]
-              : ["attendance", "note", "report"]}
-          />
-          <MetricGrid
-            items={[
-              { label: "Ders", value: data?.schedule.length ?? 0 },
-              { label: "Öğrenci", value: students.length },
-              { label: "Yoklama", value: data?.attendance.length ?? 0 },
-              { label: "Ödev", value: data?.homework.length ?? 0 },
-              { label: "Başarı", value: formatPercentNumber(reportSuccessRate(selectedReportTotal)) },
-              { label: "Net", value: formatNetNumber(selectedReportTotal?.net) },
-              { label: "Soru", value: formatNetNumber(reportQuestionCount(selectedReportTotal)) },
-              { label: "Destek", value: data?.supportTickets.length ?? 0 },
-            ]}
+            items={teacherPriorityItems}
           />
         </>
       ) : null}
@@ -1316,7 +1295,7 @@ function toLocalDateKey(value: Date): string {
 
 function formatTeacherStudentLabel(student: StudentRecord, classNames: ReadonlyMap<string, string>) {
   const name = `${student.firstName} ${student.lastName}`;
-  const className = student.classId ? classNames.get(student.classId) ?? student.classId : undefined;
+  const className = student.classId ? classNames.get(student.classId) ?? "Sınıf bilgisi yok" : undefined;
   return className ? `${name} / ${className}` : name;
 }
 
@@ -1350,14 +1329,14 @@ function teacherPortalSubtitle(view: TeacherPortalView, fallback: string) {
   return subtitleByView[view];
 }
 
-function teacherPortalContext(view: TeacherPortalView, label: string, selectedStudentLabel: string, isRolePreview: boolean) {
+function teacherPortalContext(view: TeacherPortalView, label: string, hasSelectedStudent: boolean, isRolePreview: boolean) {
   const detailByView: Record<TeacherPortalView, string> = {
     announcements: "Öğretmen duyuruları ve okuma durumu",
     homework: "Ödev kontrolü ve materyal atamaları",
     overview: "Ders, öğrenci, ödev, rapor ve destek özeti",
-    reports: `${selectedStudentLabel} için başarı %, net ve soru bağlamı`,
+    reports: hasSelectedStudent ? "Seçili öğrenci için başarı %, net ve soru bağlamı" : "Başarı %, net ve soru bağlamı",
     schedule: "Bugünkü ders akışı ve program listesi",
-    student: `${selectedStudentLabel} için yoklama, not ve materyal işlemleri`,
+    student: hasSelectedStudent ? "Seçili öğrenci için yoklama, not ve materyal işlemleri" : "Yoklama, not ve materyal işlemleri",
     support: "Destek talepleri ve yanıt akışı",
   };
 

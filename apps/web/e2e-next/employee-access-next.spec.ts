@@ -9,7 +9,7 @@ const corsHeaders = {
   "access-control-allow-origin": webOrigin,
 };
 
-test("çalışan rolü, öğretmen personası ve kampüs kapsamını tek sürümlü işlemle günceller", async ({ page }) => {
+test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek sürümlü işlemle günceller", async ({ page }) => {
   let activeSession = false;
   let capturedUpdate: Record<string, unknown> | undefined;
   let capturedStepUp: Record<string, unknown> | undefined;
@@ -123,7 +123,7 @@ test("çalışan rolü, öğretmen personası ve kampüs kapsamını tek sürüm
   });
 
   await login(page);
-  const managementGroup = page.getByRole("button", { name: "Yönetim ve Kanıt", exact: true });
+  const managementGroup = page.getByRole("button", { name: "Yönetim", exact: true });
   if ((await managementGroup.getAttribute("aria-expanded")) !== "true") await managementGroup.click();
   await page.getByRole("link", { name: "Çalışanlar ve Yetkiler" }).click();
   await expect(page).toHaveURL(/\/kurum\/calisanlar$/u);
@@ -135,10 +135,10 @@ test("çalışan rolü, öğretmen personası ve kampüs kapsamını tek sürüm
   await page.getByRole("button", { name: "Ada Yılmaz erişimini düzenle" }).click();
   const dialog = page.getByRole("dialog", { name: "Ada Yılmaz erişimi" });
   await dialog.getByLabel("Çalışan rolü").selectOption("OPERATIONS_STAFF");
-  await dialog.getByLabel("Öğretmen personası").check();
+  await dialog.getByLabel("Öğretmen çalışma alanı").check();
   await dialog.getByLabel("Yetki kapsamı").selectOption("CAMPUSES");
   await dialog.getByLabel("Merkez Kampüs").check();
-  await dialog.getByLabel("MFA doğrulama kodu").fill("123456");
+  await dialog.getByLabel("İki aşamalı doğrulama kodu").fill("123456");
   await dialog.getByRole("button", { name: "Erişimi güncelle" }).click();
 
   await expect(dialog).toBeHidden();
@@ -152,14 +152,14 @@ test("çalışan rolü, öğretmen personası ve kampüs kapsamını tek sürüm
   });
   expect(capturedStepUp).toEqual({ purpose: "OWNER_ADMIN_CHANGE", totpCode: "123456" });
   expect(capturedStepUpHeader).toBe("step-up-proof");
-  await expect(page.getByRole("cell", { name: "Operasyon çalışanı + Öğretmen personası" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Operasyon çalışanı + Öğretmen çalışma alanı" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "1 kampüs" })).toBeVisible();
 
   await page.getByRole("button", { name: "Yeni Admin için hesap daveti gönder" }).click();
   const invitationDialog = page.getByRole("dialog", { name: "Yeni Admin hesap daveti" });
   await invitationDialog.getByLabel("İş e-postası").fill("yeni.admin@example.test");
   await invitationDialog.getByLabel("Başlangıç rolü").selectOption("TENANT_ADMIN");
-  await invitationDialog.getByLabel("MFA doğrulama kodu").fill("123456");
+  await invitationDialog.getByLabel("İki aşamalı doğrulama kodu").fill("123456");
   await invitationDialog.getByRole("button", { name: "Daveti gönder" }).click();
   await expect(invitationDialog).toBeHidden();
   expect(capturedInvitation).toEqual({ email: "yeni.admin@example.test", role: "TENANT_ADMIN" });

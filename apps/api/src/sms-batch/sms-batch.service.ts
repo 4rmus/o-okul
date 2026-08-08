@@ -30,6 +30,7 @@ export interface SmsBatchRecipientInput {
 }
 
 export interface CreateSmsBatchInput {
+  recipientScope: SmsBatchRecipientPreviewInput;
   templateId?: string;
   recipients?: SmsBatchRecipientInput[];
 }
@@ -230,6 +231,11 @@ export class SmsBatchService {
 
     const templateId = required(input.templateId, "SMS_BATCH_TEMPLATE_REQUIRED");
     const recipients = parseRecipients(input.recipients);
+    const eligibleRecipients = await this.previewRecipients(context, input.recipientScope);
+    const eligibleNumbers = new Set(eligibleRecipients.recipients.map((recipient) => recipient.to));
+    if (recipients.some((recipient) => !eligibleNumbers.has(recipient.to))) {
+      throw new BadRequestException("SMS_BATCH_RECIPIENT_NOT_ELIGIBLE");
+    }
     const template = await this.templates.findOne(context, templateId);
     const contentHash = createSmsBatchContentHash(template.body, recipients);
     const job = await this.producer.enqueue({

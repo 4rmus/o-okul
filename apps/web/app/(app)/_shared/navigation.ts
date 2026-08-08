@@ -25,8 +25,9 @@ import {
   Users,
 } from "lucide-react";
 
-type InstitutionNavigationItem = {
+export type InstitutionNavigationItem = {
   href: string;
+  hiddenFromRail?: boolean;
   icon: LucideIcon;
   label: string;
   requiredCapability?: string;
@@ -71,6 +72,17 @@ type RolePortalNavigationItem = {
 
 const institutionOperationEvidenceCapability = "operation:manage";
 
+export const institutionOperationEvidenceItems: readonly InstitutionNavigationItem[] = [
+  { href: "/kurum/yedek-restore", hiddenFromRail: true, icon: Activity, label: "Yedekleme", requiredCapability: "operation:manage" },
+  { href: "/kurum/kvkk", hiddenFromRail: true, icon: ShieldCheck, label: "KVKK", requiredCapability: "privacy:manage" },
+  { href: "/kurum/denetim", hiddenFromRail: true, icon: ClipboardList, label: "Denetim", requiredCapability: "audit:read" },
+  { href: "/kurum/sistem-sagligi", hiddenFromRail: true, icon: Activity, label: "Sistem Sağlığı", requiredCapability: institutionOperationEvidenceCapability },
+  { href: "/kurum/gozlemlenebilirlik", hiddenFromRail: true, icon: BarChart3, label: "Sistem İzleme", requiredCapability: institutionOperationEvidenceCapability },
+  { href: "/kurum/uat-rollback", hiddenFromRail: true, icon: ClipboardCheck, label: "Kabul ve Geri Dönüş", requiredCapability: institutionOperationEvidenceCapability },
+  { href: "/kurum/guvenlik-denetimi", hiddenFromRail: true, icon: ShieldCheck, label: "Güvenlik Denetimi", requiredCapability: institutionOperationEvidenceCapability },
+  { href: "/kurum/canli-yayin", hiddenFromRail: true, icon: Activity, label: "Yayın Hazırlığı", requiredCapability: institutionOperationEvidenceCapability },
+];
+
 export const institutionNavGroups: readonly InstitutionNavGroup[] = [
   {
     label: "Bugün",
@@ -80,16 +92,11 @@ export const institutionNavGroups: readonly InstitutionNavGroup[] = [
     ],
   },
   {
-    label: "Kişiler",
+    label: "Öğrenci ve eğitim",
     items: [
       { href: "/kurum/ogrenciler", icon: GraduationCap, label: "Öğrenciler", requiredCapability: "student:manage" },
-      { href: "/kurum/veliler", icon: Users, label: "Veliler", requiredCapability: "student:manage" },
+      { href: "/kurum/veliler", icon: Users, label: "Veli kayıtları", requiredCapability: "student:manage" },
       { href: "/kurum/ogretmenler", icon: UserRoundCog, label: "Öğretmenler", requiredCapability: "staff:manage" },
-    ],
-  },
-  {
-    label: "Akademik",
-    items: [
       { href: "/kurum/siniflar", icon: School, label: "Sınıflar", requiredCapability: "class:manage" },
       { href: "/kurum/seviyeler", icon: ClipboardList, label: "Seviyeler", requiredCapability: "class:manage" },
       { href: "/kurum/kampusler", icon: Building2, label: "Kampüsler", requiredCapability: "class:manage" },
@@ -103,7 +110,7 @@ export const institutionNavGroups: readonly InstitutionNavGroup[] = [
     ],
   },
   {
-    label: "Sınav ve Rapor",
+    label: "Sınav ve rapor",
     items: [
       { href: "/kurum/sinavlar", icon: FileText, label: "Sınavlar", requiredCapability: "academic:manage" },
       { href: "/kurum/kazanimlar", icon: ClipboardList, label: "Kazanımlar", requiredCapability: "academic:manage" },
@@ -116,31 +123,20 @@ export const institutionNavGroups: readonly InstitutionNavGroup[] = [
     items: [
       { href: "/kurum/duyurular", icon: Megaphone, label: "Duyurular", requiredCapability: "announcement:manage" },
       ...(isSmsEnabled ? [{ href: "/kurum/sablonlar", icon: MessageSquareText, label: "Mesaj Şablonları", requiredCapability: "announcement:manage" }] : []),
-      { href: "/kurum/destek", icon: LifeBuoy, label: "Kurum Desteği", requiredCapability: "support:manage" },
+      { href: "/kurum/destek", icon: LifeBuoy, label: "Kurum içi destek", requiredCapability: "support:manage" },
     ],
   },
   {
-    label: "Finans",
+    label: "Yönetim",
     items: [
-      { href: "/kurum/finans", icon: CreditCard, label: "Ödemeler", requiredCapability: "finance:manage" },
-    ],
-  },
-  {
-    label: "Yönetim ve Kanıt",
-    items: [
+      { href: "/kurum/finans", icon: CreditCard, label: "Ödeme planları", requiredCapability: "finance:manage" },
       { href: "/kurum/calisanlar", icon: UserRoundCog, label: "Çalışanlar ve Yetkiler", requiredCapability: "user:manage" },
       { href: "/kurum/ogrenci-portal-erisimi", icon: GraduationCap, label: "Öğrenci Portal Erişimi", requiredCapability: "user:manage" },
       { href: "/kurum/kullanicilar", icon: Users, label: "Kullanıcılar", requiredCapability: "user:manage" },
       { href: "/kurum/lisans-donemleri", icon: ClipboardCheck, label: "Lisans Dönemleri", requiredCapability: "setup:manage" },
       { href: "/kurum/rol-onizleme", icon: ShieldCheck, label: "Rol Önizleme", requiredCapability: "role-preview:manage" },
-      { href: "/kurum/yedek-restore", icon: Activity, label: "Yedekleme", requiredCapability: "operation:manage" },
-      { href: "/kurum/kvkk", icon: ShieldCheck, label: "KVKK", requiredCapability: "privacy:manage" },
-      { href: "/kurum/denetim", icon: ClipboardList, label: "Denetim", requiredCapability: "audit:read" },
-      { href: "/kurum/sistem-sagligi", icon: Activity, label: "Sistem Sağlığı", requiredCapability: institutionOperationEvidenceCapability },
-      { href: "/kurum/gozlemlenebilirlik", icon: BarChart3, label: "Sistem İzleme", requiredCapability: institutionOperationEvidenceCapability },
-      { href: "/kurum/uat-rollback", icon: ClipboardCheck, label: "Kabul ve Geri Dönüş", requiredCapability: institutionOperationEvidenceCapability },
-      { href: "/kurum/guvenlik-denetimi", icon: ShieldCheck, label: "Güvenlik Denetimi", requiredCapability: institutionOperationEvidenceCapability },
-      { href: "/kurum/canli-yayin", icon: Activity, label: "Yayın Hazırlığı", requiredCapability: institutionOperationEvidenceCapability },
+      { href: "/kurum/operasyon-ve-kanit", icon: ShieldCheck, label: "Operasyon ve kanıt", requiredCapability: institutionOperationEvidenceCapability },
+      ...institutionOperationEvidenceItems,
     ],
   },
 ];
@@ -181,7 +177,7 @@ export const rolePortalNavGroups: readonly RolePortalNavGroup[] = [
       { href: "/ogretmen/odevler", icon: NotebookTabs, label: "Ödev Kontrolü" },
       { href: "/ogretmen/raporlar", icon: BarChart3, label: "Sınav Raporu" },
       { href: "/ogretmen/duyurular", icon: Megaphone, label: "Duyurular" },
-      { href: "/ogretmen/destek", icon: LifeBuoy, label: "Kurum Desteği" },
+      { href: "/ogretmen/destek", icon: LifeBuoy, label: "Kurum içi destek" },
     ],
   },
   {
@@ -195,7 +191,7 @@ export const rolePortalNavGroups: readonly RolePortalNavGroup[] = [
       { href: "/ogrenci/duyurular", icon: Megaphone, label: "Duyurular" },
       { href: "/ogrenci/devamsizlik", icon: ClipboardCheck, label: "Devamsızlık" },
       { href: "/ogrenci/profil", icon: GraduationCap, label: "Profil" },
-      { href: "/ogrenci/destek", icon: LifeBuoy, label: "Kurum Desteği" },
+      { href: "/ogrenci/destek", icon: LifeBuoy, label: "Kurum içi destek" },
     ],
   },
   {
@@ -206,11 +202,11 @@ export const rolePortalNavGroups: readonly RolePortalNavGroup[] = [
       { href: "/veli", icon: LayoutDashboard, label: "Özet" },
       { href: "/veli/ogrenci", icon: GraduationCap, label: "Öğrenci" },
       { href: "/veli/raporlar", icon: BarChart3, label: "Sınav Raporu" },
-      { href: "/veli/odemeler", icon: CreditCard, label: "Ödemeler" },
+      { href: "/veli/odemeler", icon: CreditCard, label: "Ödeme planları" },
       { href: "/veli/odevler", icon: NotebookTabs, label: "Ödevler" },
       { href: "/veli/duyurular", icon: Megaphone, label: "Duyurular" },
       { href: "/veli/bildirimler", icon: MessageSquareText, label: "Bildirimler" },
-      { href: "/veli/destek", icon: LifeBuoy, label: "Kurum Desteği" },
+      { href: "/veli/destek", icon: LifeBuoy, label: "Kurum içi destek" },
     ],
   },
 ];
@@ -228,6 +224,7 @@ export const staticBreadcrumbLabels: Record<string, string> = {
   "/kurum/gozlemlenebilirlik": "Gözlem",
   "/kurum/sistem-sagligi": "Sağlık",
   "/kurum/sablonlar": "Mesaj Şablonları",
+  "/kurum/operasyon-ve-kanit": "Operasyon ve kanıt",
 };
 
 export const dynamicDetailParents: string[] = ["ogrenciler", "ogretmenler", "veliler", "siniflar", "duyurular"];

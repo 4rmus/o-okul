@@ -22,8 +22,9 @@ import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, queryClient } from "../../../../src/api-client.js";
 import { ImportTemplatePanel } from "../_shared/import-template-panel.js";
 import { PageFrame } from "../_shared/page-frame.js";
+import { setupFlowSteps, type SetupFlowStep } from "./_shared/wizard-steps.js";
 
-type StepId = "general" | "term" | "courses" | "classes" | "people";
+type StepId = SetupFlowStep["id"];
 type StageId = "7" | "8-LGS" | "10" | "11" | "12" | "TYT/AYT";
 type SetupImportFileExtension = "CSV" | "XLSX";
 type SetupUploadStatusState = "idle" | "ready" | "error";
@@ -80,38 +81,7 @@ interface TenantProfileRecord {
   name: string;
 }
 
-const steps: Array<{ id: StepId; kicker: string; title: string; description: string }> = [
-  {
-    id: "general",
-    kicker: "1. Adım",
-    title: "Kurum Genel Bilgileri",
-    description: "Kurum adı, türü ve marka bilgisi.",
-  },
-  {
-    id: "term",
-    kicker: "2. Adım",
-    title: "Akademik Dönem Ayarları",
-    description: "Yıl ve aktif dönem tarihleri.",
-  },
-  {
-    id: "classes",
-    kicker: "3. Adım",
-    title: "Sınıf ve Şubeler",
-    description: "Kademe ve sınıf sayısına göre şubeleri otomatik oluştur.",
-  },
-  {
-    id: "courses",
-    kicker: "4. Adım",
-    title: "Derslerin Oluşturulması",
-    description: "LGS ve TYT/AYT derslerini tıklayarak seç.",
-  },
-  {
-    id: "people",
-    kicker: "5. Adım",
-    title: "Kişi Yönetim Altyapısı",
-    description: "Öğretmen ve öğrenci veri giriş modeli.",
-  },
-];
+const steps = setupFlowSteps;
 
 const initialDraft: OnboardingDraft = {
   classes: {
@@ -555,7 +525,7 @@ export function SetupWizard() {
     <PageFrame title="Kurulum Sihirbazı" subtitle="Yeni kurumun ilk çalışma düzenini beş adımda hazırla.">
       <section className="next-onboarding-hero" aria-label="Kurulum karşılama">
         <div>
-          <span>{isFinished ? "Kurulum taslağı hazır" : "İlk giriş akışı"}</span>
+          <span>{isFinished ? "Temel kurum kayıtları oluşturuldu" : "İlk giriş akışı"}</span>
           <h2>{draft.general.institutionName || "Kurumunu birlikte hazırlayalım"}</h2>
           <p>Genel bilgilerden kişi yönetimine kadar temel kararları tek akışta toparla.</p>
         </div>
@@ -671,7 +641,20 @@ export function SetupWizard() {
           </dl>
           {isFinished ? (
             <div className="next-onboarding-done">
-              <strong>Kurulum taslağı tamamlandı.</strong>
+              <strong>Temel kurum kayıtları oluşturuldu; kalan kontroller aşağıda.</strong>
+              {steps.map((step) => step.readinessChecks.length > 0 ? (
+                <details key={step.id}>
+                  <summary>{step.title} kontrolleri</summary>
+                  <ul>
+                    {step.readinessChecks.map((check) => (
+                      <li key={check.id}>
+                        <Link href={check.href}>{check.title}</Link>
+                        {check.optional ? " (isteğe bağlı)" : null}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              ) : null)}
               <Link className="uh-button uh-button--secondary uh-button--md" href="/kurum">
                 Kurum paneline dön
               </Link>
@@ -1011,7 +994,7 @@ function PeopleStep({
         label="Öğrenci aktarım dosyası"
         description={describeSelectedUploadFileNotice(
           draft.people.studentImportFileName,
-          "Öğrenci ve opsiyonel veli bilgileri için XLSX veya CSV dosyası seçilebilir.",
+          "Öğrenci kayıtları ve dosyada varsa mevcut veli bağlantıları için XLSX veya CSV dosyası seçilebilir.",
         )}
         error={errors.studentImportFileName ?? errors["people.studentImportFileName"]}
       >
@@ -1200,7 +1183,7 @@ function validateSetupImportFile(
     status: {
       badge: "Yerel kontrol",
       detail: options.detail ?? "Ham dosya adı ve kişi bilgisi ekranda veya saklı taslakta gösterilmez.",
-      meta: `${extension} • ${formatUploadByteSize(file.size)} • ${options.suffix ?? "Sunucu dry-run bekliyor"}`,
+      meta: `${extension} • ${formatUploadByteSize(file.size)} • ${options.suffix ?? "Sunucu ön kontrolü bekleniyor"}`,
       state: "ready",
       title: "Yerel kontrol tamam",
       tone: "success",

@@ -5,7 +5,7 @@ export default function SistemDenetimPage() {
     <ReferenceSystemPage
       title="Denetim"
       subtitle="Platform genel denetim kayıtları için başlangıç referansı."
-      items={["tenant.created", "tenant.updated", "user.membership_created", "user.roles_updated"]}
+      items={["Kurum oluşturuldu.", "Kurum bilgileri güncellendi.", "Kullanıcı kuruma eklendi.", "Kullanıcı yetkileri güncellendi."]}
     />
   );
 }

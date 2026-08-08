@@ -29,7 +29,7 @@ export function LicenseTermsPage() {
       priority: "primary",
       render: (term) => <StatusBadge tone={stateTone(term.state)}>{stateLabel(term.state)}</StatusBadge>,
     },
-    { key: "auditReference", header: "Sözleşme ref.", priority: "optional", render: (term) => term.auditReference ?? "-" },
+    { key: "auditReference", header: "Sözleşme kaydı", priority: "optional", render: (term) => term.auditReference ?? "-" },
   ];
   const summaryItems: OperationSummaryItem[] = [
     { key: "total", label: "Dönem toplamı", description: "Yenilemeler dahil geçmiş", value: formatCount(terms.length) },
@@ -47,7 +47,7 @@ export function LicenseTermsPage() {
       value: current ? formatCount(current.activeStudentLimit) : "-",
     },
   ];
-  const badges: OperationSummaryBadge[] = [{ key: "authority", label: "Canonical LicenseTerm", tone: "info" }];
+  const badges: OperationSummaryBadge[] = [{ key: "authority", label: "Kurum lisans kaydı", tone: "info" }];
 
   return (
     <CrudPage
@@ -55,7 +55,7 @@ export function LicenseTermsPage() {
       columns={columns}
       density="compact"
       description="Dönemler eklemeli tutulur; geçmiş lisans kayıtları geriye dönük değiştirilmez."
-      emptyState={<EmptyState title="Lisans dönemi yok" description="Kurum için canonical lisans dönemi bulunamadı; sistem yöneticinizle iletişime geçin." />}
+      emptyState={<EmptyState title="Lisans dönemi yok" description="Kurum için lisans dönemi bulunamadı; sistem yöneticinizle iletişime geçin." />}
       emptyText="Lisans dönemi bulunamadı"
       error={termsQuery.isError ? "Lisans dönemleri alınamadı." : undefined}
       getRowKey={(term) => term.id}

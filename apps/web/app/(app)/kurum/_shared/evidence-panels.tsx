@@ -108,21 +108,21 @@ function evidenceTrustTierTone(tier: EvidenceTrustTier): EvidenceTrustTone {
 }
 
 const evidenceTrustScopeLabels: Record<EvidenceTrustScope, string> = {
-  "configured-api": "Yapılandırılmış API",
+  "configured-api": "Bağlı sistem",
   "live-required": "Canlı kanıt",
-  "local-static": "Yerel/statik",
-  "server-audit": "Sunucu/audit",
-  "staging-prod": "Staging/prod",
-  "ui-safe": "UI güvenli",
+  "local-static": "Bu ekrandaki bilgi",
+  "server-audit": "Sistem kaydı",
+  "staging-prod": "Deneme/canlı ortam",
+  "ui-safe": "Ekran güvenliği",
 };
 
 const evidenceTrustScopeDescriptions: Record<EvidenceTrustScope, string> = {
   "configured-api": "Ortam kaynağı görünür",
   "live-required": "Canlı kanıt gerekir",
-  "local-static": "Release kararına yetmez",
-  "server-audit": "Server sonucu esas",
-  "staging-prod": "Release kanıtı ayrı",
-  "ui-safe": "PII ham gösterilmez",
+  "local-static": "Yayın kararı için yeterli değil",
+  "server-audit": "Sunucu sonucu esas",
+  "staging-prod": "Yayın doğrulaması ayrıca yapılır",
+  "ui-safe": "Kişisel bilgiler açık gösterilmez",
 };
 
 export function EvidenceGateSection({ ariaLabel, gates, title }: EvidenceGateSectionProps) {

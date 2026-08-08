@@ -33,7 +33,7 @@ test.describe("auth state görsel sözleşmesi", () => {
     await expect(page.getByRole("button", { name: "Kurtarma kodu" })).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByLabel("Kurtarma kodu")).toBeVisible();
     await expect(page.getByRole("button", { name: "Doğrula", exact: true })).toBeVisible();
-    await expect(page.getByLabel("Kullanıcı Adı")).toBeDisabled();
+    await expect(page.getByLabel("Kullanıcı adı veya e-posta")).toBeDisabled();
     await expect(page.getByLabel("Şifre", { exact: true })).toBeDisabled();
     await expectNoHorizontalOverflow(page, "mfa-challenge-320");
     expect(loginBody).toEqual({ tenantSlug: "dna-egitim", loginName: "admin-a@example.test", password: "password" });
@@ -77,7 +77,7 @@ test.describe("auth state görsel sözleşmesi", () => {
     await expect(page.getByLabel("Doğrulama kodu")).toBeVisible();
     await expect(enrollment).toContainText("recovery-a recovery-b");
     await expect(page.getByRole("button", { name: "Etkinleştir ve giriş yap" })).toBeVisible();
-    await expect(page.getByLabel("Kullanıcı Adı")).toBeDisabled();
+    await expect(page.getByLabel("Kullanıcı adı veya e-posta")).toBeDisabled();
     await expect(page.getByLabel("Şifre", { exact: true })).toBeDisabled();
     await expectNoHorizontalOverflow(page, "mfa-enrollment-414");
   });
@@ -141,7 +141,7 @@ test.describe("auth state görsel sözleşmesi", () => {
       "Doğrulama kodu geçersiz.",
     );
     await expect(page).toHaveURL(/\/login$/);
-    await expect(page.getByLabel("Kullanıcı Adı")).toBeDisabled();
+    await expect(page.getByLabel("Kullanıcı adı veya e-posta")).toBeDisabled();
     await expect(page.getByLabel("Şifre", { exact: true })).toBeDisabled();
     expect(verifyBody).toEqual({ challengeToken: "challenge-token", totpCode: "000000" });
   });
@@ -211,7 +211,7 @@ async function prepareAuthPage(
 async function submitCredentials(page: Page, loginName = "admin-a@example.test") {
   const tenantSlug = page.getByLabel("Kurum Kodu");
   if (await tenantSlug.isVisible()) await tenantSlug.fill("dna-egitim");
-  await page.getByLabel("Kullanıcı Adı").fill(loginName);
+  await page.getByLabel("Kullanıcı adı veya e-posta").fill(loginName);
   await page.getByLabel("Şifre", { exact: true }).fill("password");
   await page.getByRole("button", { name: "Giriş yap" }).click();
 }

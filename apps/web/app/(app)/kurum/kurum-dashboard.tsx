@@ -10,7 +10,7 @@ import { ClassCompareBar } from "../_shared/lazy-report-charts.js";
 import { ReportChartPanel } from "../_shared/report-chart-panel.js";
 import { PageFrame } from "./_shared/page-frame.js";
 import { OperationSummary, type OperationSummaryItem } from "./_shared/operation-summary.js";
-import { useKurumDashboardDataQuery } from "./kurum-dashboard-data.js";
+import { useKurumAnnouncementsQuery, useKurumDashboardDataQuery } from "./kurum-dashboard-data.js";
 
 interface DashboardAttentionItem {
   description: string;
@@ -35,7 +35,9 @@ export function KurumDashboard() {
   const accessToken = auth?.accessToken ?? "";
   const tenantId = auth?.session.tenantId ?? "anonymous";
   const dashboardQuery = useKurumDashboardDataQuery(accessToken, tenantId, Boolean(auth));
+  const announcementsQuery = useKurumAnnouncementsQuery(accessToken, tenantId, Boolean(auth));
   const dashboard = dashboardQuery.data ?? emptyDashboard;
+  const announcements = announcementsQuery.data?.data ?? [];
   const latestExam = dashboard.latestExam;
   const latestReport = latestExam?.report;
   const attentionItems = buildAttentionItems(dashboard)
@@ -129,6 +131,36 @@ export function KurumDashboard() {
         ariaLabel="Kurum başarı görünümü"
         items={buildMetrics(dashboard, attentionTotal)}
       />
+
+      <Panel
+        actions={<Link href="/kurum/duyurular">Tüm duyuruları aç</Link>}
+        aria-label="Kurum duyuruları"
+        className="next-attention-panel"
+        description="Kurum genelinde yayımlanan son bilgilendirmeler."
+        title="Kurum duyuruları"
+      >
+        {announcementsQuery.isPending ? (
+          <LoadingState label="Duyurular yükleniyor…" />
+        ) : announcementsQuery.isError ? (
+          <p className="next-attention-empty">Duyurular şu anda alınamadı.</p>
+        ) : announcements.length > 0 ? (
+          <div className="next-attention-list">
+            {announcements.map((announcement) => (
+              <ActionCard
+                as="a"
+                className="next-attention-item"
+                detail={announcement.body}
+                href="/kurum/duyurular"
+                key={announcement.id}
+                label={announcement.title}
+                value={formatDate(announcement.publishedAt)}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="next-attention-empty">Henüz yayımlanmış duyuru yok.</p>
+        )}
+      </Panel>
 
       {dashboard.activeStudentCount === 0 && !isSetupDismissed ? (
         <Panel
