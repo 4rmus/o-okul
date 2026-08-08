@@ -477,21 +477,35 @@
       },
       "whatsappConsent": {
         "recordCount": 0,
-        "storedFields": [
+        "eventRecordCount": 0,
+        "piiRelevantStoredFields": [
           "phoneHash",
           "purpose",
           "canReceiveWhatsapp",
+          "version",
           "noticeVersion",
           "source",
           "recordedAt",
           "withdrawnAt"
+        ],
+        "piiRelevantEventStoredFields": [
+          "whatsappConsentId",
+          "studentContactId",
+          "purpose",
+          "sequence",
+          "eventType",
+          "noticeVersion",
+          "source",
+          "recordedAt",
+          "commandKeyHash",
+          "requestHash"
         ],
         "policy": {
           "featureEnabled": false,
           "retentionPeriodDays": 0,
           "disposalMethod": "NO_RECORDS_WHILE_DISABLED",
           "purgeException": false,
-          "explanation": "WHATSAPP_ENABLED=false olduğu sürece runtime WhatsAppConsent kaydı yazılmaz."
+          "explanation": "WHATSAPP_ENABLED=false olduğu sürece runtime WhatsAppConsent veya WhatsAppConsentEvent kaydı yazılmaz."
         }
       },
       "auditActionsVerified": [
@@ -1345,7 +1359,7 @@
       "environment": "production",
       "checkedAt": "2026-05-31T11:30:00.000Z",
       "schema": {
-        "tenantScopedTables": 63,
+        "tenantScopedTables": 64,
         "derivedFromSchema": true,
         "staticCheckPassed": true,
         "liveCheckPassed": true,
@@ -1376,6 +1390,7 @@
           "Teacher",
           "StudentContact",
           "WhatsAppConsent",
+          "WhatsAppConsentEvent",
           "TeacherAssignment",
           "Guardian",
           "GuardianStudent",
@@ -1419,13 +1434,20 @@
         "tenantAHash": "tenant-a-redacted",
         "tenantBHash": "tenant-b-redacted",
         "crossTenantReadRows": 0,
-        "crossTenantReadChecks": 63,
+        "crossTenantReadChecks": 64,
         "withCheckRejects": [
           "Student wrong tenant insert",
           "Homework wrong tenant insert",
           "Announcement wrong tenant insert",
           "MessageTemplate wrong tenant insert",
           "WhatsAppConsent wrong tenant insert",
+          "WhatsAppConsentEvent cross tenant contact",
+          "WhatsAppConsentEvent update forbidden",
+          "WhatsAppConsentEvent delete forbidden",
+          "WhatsAppConsent direct update forbidden",
+          "WhatsAppConsent direct delete forbidden",
+          "WhatsAppConsent grant withdraw regrant",
+          "WhatsAppConsent sibling withdrawal",
           "ExamResult foreign tenant RawImport",
           "ParsedAnswer foreign tenant RawImport",
           "ParsedAnswer cross exam mismatch",
@@ -1436,7 +1458,7 @@
         "auditBypassAction": "system.rls_bypass_requested"
       },
       "tenantFkPreflight": {
-        "requiredCompositeRelations": 29,
+        "requiredCompositeRelations": 31,
         "relationsVerified": [
           "AnnouncementReceipt.announcement",
           "AnnouncementDeliveryReport.announcement",
@@ -1466,7 +1488,9 @@
           "LicenseUsage.licenseTerm",
           "Employee.accountUser",
           "Teacher.employee",
-          "StudentContact.student"
+          "StudentContact.student",
+          "WhatsAppConsentEvent.whatsappConsent",
+          "WhatsAppConsentEvent.studentContact"
         ],
         "legacyAllowlistCount": 0,
         "orphanRows": 0,
@@ -1500,7 +1524,9 @@
           "LicenseUsage.licenseTerm cross tenant insert",
           "Employee.accountUser cross tenant insert",
           "Teacher.employee cross tenant insert",
-          "StudentContact.student cross tenant insert"
+          "StudentContact.student cross tenant insert",
+          "WhatsAppConsentEvent.whatsappConsent cross tenant insert",
+          "WhatsAppConsentEvent.studentContact cross tenant insert"
         ],
         "migrationPreflightCommand": "pnpm tenant-db:check"
       },

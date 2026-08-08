@@ -14,6 +14,10 @@ const sql = readdirSync(migrationsPath, { withFileTypes: true })
 const tenantTables = getTenantScopedTables();
 
 const failures = [];
+const restrictedPrivilegeProfiles = new Map([
+  ["WhatsAppConsent", new Set(["SELECT", "INSERT"])],
+  ["WhatsAppConsentEvent", new Set(["SELECT", "INSERT"])],
+]);
 if (tenantTables.length === 0) {
   failures.push("schema.prisma içinde tenantId taşıyan model bulunamadı");
 }
@@ -40,7 +44,7 @@ for (const table of tenantTables) {
   const enable = new RegExp(`ALTER TABLE\\s+"${escaped}"\\s+ENABLE ROW LEVEL SECURITY;`);
   const force = new RegExp(`ALTER TABLE\\s+"${escaped}"\\s+FORCE ROW LEVEL SECURITY;`);
   const policy = new RegExp(`CREATE POLICY\\s+"${escaped}_tenant_isolation"\\s+ON\\s+"${escaped}"([\\s\\S]*?);`, "m");
-  const policyBody = policy.exec(sql)?.[1] ?? "";
+  const policyBody = lastCapture(sql, policy);
 
   if (!enable.test(sql)) failures.push(`${table}: ENABLE ROW LEVEL SECURITY eksik`);
   if (!force.test(sql)) failures.push(`${table}: FORCE ROW LEVEL SECURITY eksik`);
@@ -49,7 +53,21 @@ for (const table of tenantTables) {
   }
   if (!policyBody.includes("app.current_tenant_id")) failures.push(`${table}: app.current_tenant_id kontrolü eksik`);
   if (!policyBody.includes("app.bypass_rls")) failures.push(`${table}: app.bypass_rls kontrolü eksik`);
-  if (!appGrantTables.has(table)) failures.push(`${table}: app rolü için SELECT/INSERT/UPDATE/DELETE yetkisi eksik`);
+  const restrictedPrivileges = restrictedPrivilegeProfiles.get(table);
+  if (restrictedPrivileges) {
+    const withCheckBody = /\bWITH CHECK\b([\s\S]*)/m.exec(policyBody)?.[1] ?? "";
+    if (withCheckBody.includes("app.bypass_rls")) {
+      failures.push(`${table}: INSERT WITH CHECK app.bypass_rls kabul etmemeli`);
+    }
+    for (const privilege of ["SELECT", "INSERT", "UPDATE", "DELETE"]) {
+      const hasPrivilege = hasEffectiveAppPrivilege(sql, table, privilege);
+      if (restrictedPrivileges.has(privilege) !== hasPrivilege) {
+        failures.push(`${table}: app rolü ${privilege} yetki profili geçersiz`);
+      }
+    }
+  } else if (!appGrantTables.has(table)) {
+    failures.push(`${table}: app rolü için SELECT/INSERT/UPDATE/DELETE yetkisi eksik`);
+  }
 }
 
 if (failures.length > 0) {
@@ -66,4 +84,36 @@ function lastMatchIndex(source, pattern) {
     index = match.index ?? index;
   }
   return index;
+}
+
+function lastCapture(source, pattern) {
+  let value = "";
+  for (const match of source.matchAll(new RegExp(pattern.source, `${pattern.flags.replace("g", "")}g`))) {
+    value = match[1] ?? value;
+  }
+  return value;
+}
+
+function hasEffectiveAppPrivilege(source, table, privilege) {
+  let granted = false;
+  for (const statement of source.split(";")) {
+    if (!statement.includes(`"${table}"`)) continue;
+
+    const grant = statement.match(/\bGRANT\s+([\s\S]*?)\s+ON\s+[\s\S]*?\bTO\s+app\b/i);
+    if (grant) {
+      const privileges = grant[1].toUpperCase();
+      if (/\bALL(?:\s+PRIVILEGES)?\b/.test(privileges) || new RegExp(`\\b${privilege}\\b`).test(privileges)) {
+        granted = true;
+      }
+    }
+
+    const revoke = statement.match(/\bREVOKE\s+([\s\S]*?)\s+ON\s+[\s\S]*?\bFROM\s+app\b/i);
+    if (revoke) {
+      const privileges = revoke[1].toUpperCase();
+      if (/\bALL(?:\s+PRIVILEGES)?\b/.test(privileges) || new RegExp(`\\b${privilege}\\b`).test(privileges)) {
+        granted = false;
+      }
+    }
+  }
+  return granted;
 }

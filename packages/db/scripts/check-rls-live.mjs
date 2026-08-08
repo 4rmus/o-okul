@@ -11,6 +11,7 @@ const appDatabaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localho
 const adminClient = new Client({ connectionString: adminDatabaseUrl });
 const appClient = new Client({ connectionString: appDatabaseUrl });
 const tenantReadTables = getTenantScopedTables();
+let crossTenantReadChecks = 0;
 
 const ids = {
   tenantA: "00000000-0000-4000-8000-0000000000a1",
@@ -19,6 +20,14 @@ const ids = {
   userB: "00000000-0000-4000-8000-0000000000b8",
   tenantMembershipA: "00000000-0000-4000-8000-000000000011a1",
   tenantMembershipB: "00000000-0000-4000-8000-000000000011b1",
+  membershipCampusScopeA: "00000000-0000-4000-8000-000000000011a2",
+  membershipCampusScopeB: "00000000-0000-4000-8000-000000000011b2",
+  licenseTermA: "00000000-0000-4000-8000-000000000011a3",
+  licenseTermB: "00000000-0000-4000-8000-000000000011b3",
+  licenseUsageA: "00000000-0000-4000-8000-000000000011a4",
+  licenseUsageB: "00000000-0000-4000-8000-000000000011b4",
+  employeeA: "00000000-0000-4000-8000-000000000011a5",
+  employeeB: "00000000-0000-4000-8000-000000000011b5",
   notificationDeviceA: "00000000-0000-4000-8000-000000000012a1",
   notificationDeviceB: "00000000-0000-4000-8000-000000000012b1",
   authSessionA: "00000000-0000-4000-8000-0000000000a0",
@@ -45,6 +54,8 @@ const ids = {
   classB: "00000000-0000-4000-8000-0000000000b2",
   studentA: "00000000-0000-4000-8000-0000000000a3",
   studentB: "00000000-0000-4000-8000-0000000000b3",
+  studentContactA: "00000000-0000-4000-8000-000000000011a6",
+  studentContactB: "00000000-0000-4000-8000-000000000011b6",
   studentEnrollmentA: "00000000-0000-4000-8000-0000000000f3",
   studentEnrollmentB: "00000000-0000-4000-8000-0000000000f4",
   attendanceA: "00000000-0000-4000-8000-0000000000e3",
@@ -130,6 +141,12 @@ const ids = {
   supportTicketCommentB: "00000000-0000-4000-8000-0000000000dc",
   whatsappConsentA: "00000000-0000-4000-8000-000000000030a1",
   whatsappConsentB: "00000000-0000-4000-8000-000000000030b1",
+  whatsappConsentReservationA: "00000000-0000-4000-8000-000000000030a3",
+  whatsappStudentSiblingA: "00000000-0000-4000-8000-000000000030a2",
+  whatsappContactA: "00000000-0000-4000-8000-000000000031a1",
+  whatsappContactSiblingA: "00000000-0000-4000-8000-000000000031a2",
+  whatsappContactChangedA: "00000000-0000-4000-8000-000000000031a3",
+  whatsappContactB: "00000000-0000-4000-8000-000000000031b1",
   auditLogA: "00000000-0000-4000-8000-000000000029a1",
   auditLogB: "00000000-0000-4000-8000-000000000029b1",
 };
@@ -198,6 +215,33 @@ async function seedFixtures() {
     );
 
     await adminClient.query(
+      `INSERT INTO "LicenseTerm" ("id", "tenantId", "planCode", "startsAt", "endsAt", "activeStudentLimit", "updatedAt")
+       VALUES
+         ($1, $2, 'RLS-PLAN-A', '2026-01-01', '2026-12-31', 100, now()),
+         ($3, $4, 'RLS-PLAN-B', '2026-01-01', '2026-12-31', 100, now())
+       ON CONFLICT ("id") DO NOTHING`,
+      [ids.licenseTermA, ids.tenantA, ids.licenseTermB, ids.tenantB],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "LicenseUsage" ("id", "tenantId", "licenseTermId", "usageDate", "activeStudentCount", "peakActiveStudentCount", "updatedAt")
+       VALUES
+         ($1, $2, $3, '2026-08-08', 1, 1, now()),
+         ($4, $5, $6, '2026-08-08', 1, 1, now())
+       ON CONFLICT ("id") DO NOTHING`,
+      [ids.licenseUsageA, ids.tenantA, ids.licenseTermA, ids.licenseUsageB, ids.tenantB, ids.licenseTermB],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "Employee" ("id", "tenantId", "employeeNo", "firstName", "lastName", "status", "updatedAt")
+       VALUES
+         ($1, $2, 'RLS-EMP-A', 'Ece', 'A', 'ACTIVE', now()),
+         ($3, $4, 'RLS-EMP-B', 'Efe', 'B', 'ACTIVE', now())
+       ON CONFLICT ("id") DO NOTHING`,
+      [ids.employeeA, ids.tenantA, ids.employeeB, ids.tenantB],
+    );
+
+    await adminClient.query(
       `INSERT INTO "NotificationDeviceToken" (
          "id", "tenantId", "userId", "subjectType", "subjectId", "provider", "token", "platform", "lastSeenAt", "updatedAt"
        )
@@ -210,11 +254,11 @@ async function seedFixtures() {
 
     await adminClient.query(
       `INSERT INTO "AuthSession" (
-         "id", "tenantId", "userId", "roles", "tokenFamilyId", "refreshTokenHash", "status", "membershipVersion", "updatedAt"
+         "id", "tenantId", "userId", "roles", "tokenFamilyId", "refreshTokenHash", "status", "membershipVersion", "expiresAt", "updatedAt"
        )
        VALUES
-         ($1, $2, $3, ARRAY['TENANT_ADMIN'], 'family-a', 'refresh-hash-a', 'ACTIVE', 1, now()),
-         ($4, $5, $6, ARRAY['TENANT_ADMIN'], 'family-b', 'refresh-hash-b', 'ACTIVE', 1, now())
+         ($1, $2, $3, ARRAY['TENANT_ADMIN'], 'family-a', 'refresh-hash-a', 'ACTIVE', 1, now() + interval '1 day', now()),
+         ($4, $5, $6, ARRAY['TENANT_ADMIN'], 'family-b', 'refresh-hash-b', 'ACTIVE', 1, now() + interval '1 day', now())
        ON CONFLICT ("id") DO NOTHING`,
       [ids.authSessionA, ids.tenantA, ids.userA, ids.authSessionB, ids.tenantB, ids.userB],
     );
@@ -248,6 +292,24 @@ async function seedFixtures() {
          ($3, $4, 'RLS Kampus B', 'RLS-CAMPUS-B', now())
        ON CONFLICT ("tenantId", "code") DO NOTHING`,
       [ids.campusA, ids.tenantA, ids.campusB, ids.tenantB],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "MembershipCampusScope" ("id", "tenantId", "membershipId", "campusId")
+       VALUES
+         ($1, $2, $3, $4),
+         ($5, $6, $7, $8)
+       ON CONFLICT ("id") DO NOTHING`,
+      [
+        ids.membershipCampusScopeA,
+        ids.tenantA,
+        ids.tenantMembershipA,
+        ids.campusA,
+        ids.membershipCampusScopeB,
+        ids.tenantB,
+        ids.tenantMembershipB,
+        ids.campusB,
+      ],
     );
 
     await adminClient.query(
@@ -327,6 +389,16 @@ async function seedFixtures() {
        VALUES ($1, $2, $3, 'Ada', 'A', 'A-001', now()), ($4, $5, $6, 'Bora', 'B', 'B-001', now())
        ON CONFLICT ("id") DO NOTHING`,
       [ids.studentA, ids.tenantA, ids.classA, ids.studentB, ids.tenantB, ids.classB],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "StudentContact" (
+         "id", "tenantId", "studentId", "firstName", "lastName", "relationType", "phoneHash", "updatedAt"
+       ) VALUES
+         ($1, $2, $3, 'Ada', 'RLS Veli', 'MOTHER', repeat('1', 64), now()),
+         ($4, $5, $6, 'Bora', 'RLS Veli', 'FATHER', repeat('2', 64), now())
+       ON CONFLICT ("id") DO NOTHING`,
+      [ids.studentContactA, ids.tenantA, ids.studentA, ids.studentContactB, ids.tenantB, ids.studentB],
     );
 
     await adminClient.query(
@@ -700,10 +772,10 @@ async function seedFixtures() {
     );
 
     await adminClient.query(
-      `INSERT INTO "ReportSnapshot" ("id", "tenantId", "examId", "reportType", "status", "inputRefs", "snapshotData", "updatedAt")
+      `INSERT INTO "ReportSnapshot" ("id", "tenantId", "examId", "reportType", "contentHash", "status", "inputRefs", "snapshotData", "updatedAt")
        VALUES
-         ($1, $2, $3, 'EXAM_SUMMARY', 'READY', '{"rawImportIds":["a"]}'::jsonb, '{"total":1}'::jsonb, now()),
-         ($4, $5, $6, 'EXAM_SUMMARY', 'READY', '{"rawImportIds":["b"]}'::jsonb, '{"total":1}'::jsonb, now())
+         ($1, $2, $3, 'EXAM_SUMMARY', 'rls-snapshot-a', 'READY', '{"rawImportIds":["a"]}'::jsonb, '{"total":1}'::jsonb, now()),
+         ($4, $5, $6, 'EXAM_SUMMARY', 'rls-snapshot-b', 'READY', '{"rawImportIds":["b"]}'::jsonb, '{"total":1}'::jsonb, now())
        ON CONFLICT ("id") DO NOTHING`,
       [ids.snapshotA, ids.tenantA, ids.examA, ids.snapshotB, ids.tenantB, ids.examB],
     );
@@ -869,6 +941,7 @@ async function assertTenantAOnlyReadsTenantA(table) {
     if (other.rows[0].count !== 0) {
       throw new Error(`Tenant A, Tenant B ${table} kaydını okuyabildi.`);
     }
+    crossTenantReadChecks += 1;
   });
 }
 
@@ -967,20 +1040,13 @@ async function assertWithCheckBlocksWrongTenantMessageTemplateWrite() {
 async function assertWithCheckBlocksWrongTenantWhatsAppConsentWrite() {
   await withAppTransaction(async () => {
     await setTenantContext(appClient, ids.tenantA);
-
-    try {
-      await appClient.query(
-        `INSERT INTO "WhatsAppConsent" (
-           "id", "tenantId", "phoneHash", "purpose", "canReceiveWhatsapp", "noticeVersion", "source", "recordedAt", "updatedAt"
-         )
-         VALUES ('00000000-0000-4000-8000-000000000030ff', $1, repeat('f', 64), 'UTILITY_ANNOUNCEMENT', true, 'wa-notice-v1', 'RLS_NEGATIVE', now(), now())`,
-        [ids.tenantB],
-      );
-    } catch {
-      return;
-    }
-
-    throw new Error("WITH CHECK yanlış tenant WhatsApp izin yazımını engellemedi.");
+    await expectSqlState(
+      `INSERT INTO "WhatsAppConsent" (
+         "id", "tenantId", "phoneHash", "purpose", "noticeVersion", "source", "recordedAt", "updatedAt"
+       ) VALUES ('00000000-0000-4000-8000-000000000030ff', $1, repeat('f', 64), 'UTILITY_ANNOUNCEMENT', 'UNRECORDED', 'UNRECORDED', now(), now())`,
+      [ids.tenantB],
+      "42501",
+    );
   });
 }
 
@@ -988,48 +1054,358 @@ async function assertWhatsAppConsentTenantIsolationAndDefaultOff() {
   await withAppTransaction(async () => {
     await setTenantContext(appClient, ids.tenantA);
     await appClient.query(
+      `INSERT INTO "Student" ("id", "tenantId", "classId", "firstName", "lastName", "studentNo", "updatedAt")
+       VALUES ($1, $2, $3, 'Ada', 'Kardeş', 'A-002', now())`,
+      [ids.whatsappStudentSiblingA, ids.tenantA, ids.classA],
+    );
+    await appClient.query(
+      `INSERT INTO "StudentContact" (
+         "id", "tenantId", "studentId", "firstName", "lastName", "relationType", "phoneHash", "updatedAt"
+       ) VALUES
+         ($1, $2, $3, 'Ada', 'Veli', 'MOTHER', repeat('a', 64), now()),
+         ($4, $2, $5, 'Ada', 'Kardeş Veli', 'FATHER', repeat('a', 64), now()),
+         ($6, $2, $3, 'Ada', 'Değişen Veli', 'OTHER', repeat('a', 64), now())`,
+      [
+        ids.whatsappContactA,
+        ids.tenantA,
+        ids.studentA,
+        ids.whatsappContactSiblingA,
+        ids.whatsappStudentSiblingA,
+        ids.whatsappContactChangedA,
+      ],
+    );
+
+    const inserted = await appClient.query(
       `INSERT INTO "WhatsAppConsent" (
-         "id", "tenantId", "phoneHash", "purpose", "canReceiveWhatsapp", "noticeVersion", "source", "recordedAt", "updatedAt"
-       )
-       VALUES ($1, $2, repeat('a', 64), 'UTILITY_ANNOUNCEMENT', true, 'wa-notice-v1', 'RLS_TRANSACTION_FIXTURE', now(), now())`,
+         "id", "tenantId", "phoneHash", "purpose", "noticeVersion", "source", "recordedAt", "updatedAt"
+       ) VALUES ($1, $2, repeat('a', 64), 'UTILITY_ANNOUNCEMENT', 'ignored', 'ignored', '2000-01-01', '2000-01-01')
+       RETURNING "canReceiveWhatsapp", "version", "noticeVersion", "source", "withdrawnAt"`,
       [ids.whatsappConsentA, ids.tenantA],
+    );
+    if (
+      inserted.rowCount !== 1
+      || inserted.rows[0]?.canReceiveWhatsapp !== false
+      || inserted.rows[0]?.version !== 0
+      || inserted.rows[0]?.noticeVersion !== "UNRECORDED"
+      || inserted.rows[0]?.source !== "UNRECORDED"
+      || inserted.rows[0]?.withdrawnAt !== null
+    ) {
+      throw new Error("WhatsApp projection varsayılan kapalı/version 0 durumda oluşturulamadı.");
+    }
+
+    await expectSqlState(
+      `INSERT INTO "WhatsAppConsent" (
+         "id", "tenantId", "phoneHash", "purpose", "canReceiveWhatsapp", "version", "noticeVersion", "source", "recordedAt", "updatedAt"
+       ) VALUES ('00000000-0000-4000-8000-000000000030f1', $1, repeat('f', 64), 'UTILITY_ANNOUNCEMENT', true, 1, 'v1', 'CONTACT_SELF_SERVICE', now(), now())`,
+      [ids.tenantA],
+      "23514",
+    );
+
+    const reservation = await appClient.query(
+      `INSERT INTO "WhatsAppConsent" (
+         "id", "tenantId", "phoneHash", "purpose", "noticeVersion", "source", "recordedAt", "updatedAt"
+       ) VALUES ($1, $2, repeat('f', 64), 'UTILITY_ANNOUNCEMENT', 'UNRECORDED', 'UNRECORDED', now(), now())
+       RETURNING "canReceiveWhatsapp", "version"`,
+      [ids.whatsappConsentReservationA, ids.tenantA],
+    );
+    const reservationEvidence = await appClient.query(
+      `SELECT
+         (SELECT count(*)::int FROM "WhatsAppConsent" WHERE "tenantId" = $1) AS "recordCount",
+         (SELECT count(*)::int FROM "WhatsAppConsentEvent" WHERE "tenantId" = $1 AND "whatsappConsentId" = $2) AS "eventCount"`,
+      [ids.tenantA, ids.whatsappConsentReservationA],
+    );
+    if (
+      reservation.rowCount !== 1
+      || reservation.rows[0]?.canReceiveWhatsapp !== false
+      || reservation.rows[0]?.version !== 0
+      || reservationEvidence.rows[0]?.recordCount !== 2
+      || reservationEvidence.rows[0]?.eventCount !== 0
+    ) {
+      throw new Error("Eventless WhatsApp reservation projection'ı inactive/version 0 veya recordCount kapsamında değil.");
+    }
+
+    const grant = await insertWhatsappConsentEvent({
+      contactId: ids.whatsappContactA,
+      eventType: "GRANTED",
+      command: "1",
+      request: "a",
+    });
+    if (grant.rowCount !== 1 || grant.rows[0]?.sequence !== 1) {
+      throw new Error("WhatsApp grant event sequence=1 olarak eklenemedi.");
+    }
+    const idempotent = await insertWhatsappConsentEvent({
+      contactId: ids.whatsappContactA,
+      eventType: "GRANTED",
+      command: "1",
+      request: "a",
+    });
+    if (idempotent.rowCount !== 0) throw new Error("WhatsApp aynı command/request tekrarını bastırmadı.");
+
+    await expectSqlState(
+      whatsappConsentEventSql(),
+      whatsappConsentEventValues({ contactId: ids.whatsappContactA, eventType: "GRANTED", command: "1", request: "b" }),
+      "23505",
+    );
+    await expectSqlState(
+      whatsappConsentEventSql(),
+      whatsappConsentEventValues({ contactId: ids.whatsappContactA, eventType: "WITHDRAWN", command: "1", request: "a" }),
+      "23505",
+    );
+    await expectSqlState(
+      whatsappConsentEventSql(),
+      whatsappConsentEventValues({ contactId: ids.whatsappContactSiblingA, eventType: "GRANTED", command: "1", request: "a" }),
+      "23505",
+    );
+    await expectSqlState(
+      whatsappConsentEventSql(),
+      whatsappConsentEventValues({
+        contactId: ids.whatsappContactA,
+        eventType: "GRANTED",
+        command: "1",
+        request: "a",
+        source: "TENANT_ADMIN_DOCUMENTED",
+      }),
+      "23505",
+    );
+
+    const withdrawal = await insertWhatsappConsentEvent({
+      contactId: ids.whatsappContactSiblingA,
+      eventType: "WITHDRAWN",
+      command: "2",
+      request: "b",
+    });
+    if (withdrawal.rowCount !== 1 || withdrawal.rows[0]?.sequence !== 2) {
+      throw new Error("Aynı telefonlu sibling withdrawal sequence=2 olarak eklenemedi.");
+    }
+    const withdrawn = await appClient.query(
+      `SELECT "canReceiveWhatsapp", "version", "withdrawnAt" IS NOT NULL AS withdrawn
+       FROM "WhatsAppConsent" WHERE "tenantId" = $1 AND "id" = $2`,
+      [ids.tenantA, ids.whatsappConsentA],
+    );
+    if (withdrawn.rowCount !== 1 || withdrawn.rows[0]?.canReceiveWhatsapp !== false || withdrawn.rows[0]?.version !== 2 || withdrawn.rows[0]?.withdrawn !== true) {
+      throw new Error("Sibling withdrawal ortak telefon projection'ını kapatmadı.");
+    }
+
+    const regrant = await insertWhatsappConsentEvent({
+      contactId: ids.whatsappContactA,
+      eventType: "GRANTED",
+      command: "3",
+      request: "c",
+    });
+    if (regrant.rowCount !== 1 || regrant.rows[0]?.sequence !== 3) {
+      throw new Error("WhatsApp re-grant sequence=3 olarak eklenemedi.");
+    }
+    const lifecycle = await appClient.query(
+      `SELECT count(*)::int AS count, array_agg("sequence" ORDER BY "sequence") AS sequences
+       FROM "WhatsAppConsentEvent" WHERE "tenantId" = $1 AND "whatsappConsentId" = $2`,
+      [ids.tenantA, ids.whatsappConsentA],
+    );
+    const current = await appClient.query(
+      `SELECT "canReceiveWhatsapp", "version", "withdrawnAt"
+       FROM "WhatsAppConsent" WHERE "tenantId" = $1 AND "id" = $2`,
+      [ids.tenantA, ids.whatsappConsentA],
+    );
+    if (
+      lifecycle.rowCount !== 1
+      || lifecycle.rows[0]?.count !== 3
+      || JSON.stringify(lifecycle.rows[0]?.sequences) !== "[1,2,3]"
+      || current.rows[0]?.canReceiveWhatsapp !== true
+      || current.rows[0]?.version !== 3
+      || current.rows[0]?.withdrawnAt !== null
+    ) {
+      throw new Error("Grant-withdraw-regrant immutable lifecycle/projection sonucu geçersiz.");
+    }
+
+    const activeLookupSql = `SELECT count(*)::int AS count
+      FROM "StudentContact" contact
+      JOIN "WhatsAppConsent" consent
+        ON consent."tenantId" = contact."tenantId" AND consent."phoneHash" = contact."phoneHash"
+      JOIN "WhatsAppConsentEvent" latest_event
+        ON latest_event."tenantId" = consent."tenantId"
+       AND latest_event."whatsappConsentId" = consent."id"
+       AND latest_event."sequence" = consent."version"
+      JOIN "StudentContact" latest_contact
+        ON latest_contact."tenantId" = latest_event."tenantId"
+       AND latest_contact."id" = latest_event."studentContactId"
+       AND latest_contact."deletedAt" IS NULL
+       AND latest_contact."phoneHash" = consent."phoneHash"
+      WHERE contact."tenantId" = $1 AND contact."id" = $2 AND contact."deletedAt" IS NULL`;
+    await appClient.query(
+      `UPDATE "StudentContact" SET "phoneHash" = repeat('d', 64), "updatedAt" = now()
+       WHERE "tenantId" = $1 AND "id" = $2`,
+      [ids.tenantA, ids.whatsappContactA],
+    );
+    const changedLatestContact = await appClient.query(activeLookupSql, [ids.tenantA, ids.whatsappContactSiblingA]);
+    if (changedLatestContact.rows[0]?.count !== 0) {
+      throw new Error("Latest event contact phoneHash değişince eski grant inactive olmadı.");
+    }
+    await appClient.query(
+      `UPDATE "StudentContact" SET "phoneHash" = repeat('a', 64), "deletedAt" = now(), "updatedAt" = now()
+       WHERE "tenantId" = $1 AND "id" = $2`,
+      [ids.tenantA, ids.whatsappContactA],
+    );
+    const deletedLatestContact = await appClient.query(activeLookupSql, [ids.tenantA, ids.whatsappContactSiblingA]);
+    if (deletedLatestContact.rows[0]?.count !== 0) {
+      throw new Error("Latest event contact silinince eski grant inactive olmadı.");
+    }
+    await appClient.query(
+      `UPDATE "StudentContact" SET "deletedAt" = NULL, "updatedAt" = now()
+       WHERE "tenantId" = $1 AND "id" = $2`,
+      [ids.tenantA, ids.whatsappContactA],
+    );
+
+    await appClient.query(
+      `UPDATE "StudentContact" SET "phoneHash" = repeat('d', 64), "updatedAt" = now()
+       WHERE "tenantId" = $1 AND "id" = $2`,
+      [ids.tenantA, ids.whatsappContactChangedA],
+    );
+    await expectSqlState(
+      whatsappConsentEventSql(),
+      whatsappConsentEventValues({ contactId: ids.whatsappContactChangedA, eventType: "WITHDRAWN", command: "4", request: "d" }),
+      "23503",
     );
 
     await setTenantContext(appClient, ids.tenantB);
     await appClient.query(
-      `INSERT INTO "WhatsAppConsent" (
-         "id", "tenantId", "phoneHash", "purpose", "canReceiveWhatsapp", "noticeVersion", "source", "recordedAt", "updatedAt"
-       )
-       VALUES ($1, $2, repeat('b', 64), 'UTILITY_ANNOUNCEMENT', true, 'wa-notice-v1', 'RLS_TRANSACTION_FIXTURE', now(), now())`,
-      [ids.whatsappConsentB, ids.tenantB],
+      `INSERT INTO "StudentContact" (
+         "id", "tenantId", "studentId", "firstName", "lastName", "relationType", "phoneHash", "updatedAt"
+       ) VALUES ($1, $2, $3, 'Bora', 'Veli', 'MOTHER', repeat('b', 64), now())`,
+      [ids.whatsappContactB, ids.tenantB, ids.studentB],
     );
-
-    await setTenantContext(appClient, ids.tenantA);
-    const inserted = await appClient.query(
+    await appClient.query(
       `INSERT INTO "WhatsAppConsent" (
          "id", "tenantId", "phoneHash", "purpose", "noticeVersion", "source", "recordedAt", "updatedAt"
-       )
-       VALUES ('00000000-0000-4000-8000-000000000030f0', $1, repeat('c', 64), 'UTILITY_ANNOUNCEMENT', 'wa-notice-v1', 'RLS_DEFAULT_OFF', now(), now())
-       RETURNING "canReceiveWhatsapp", "withdrawnAt"`,
-      [ids.tenantA],
+       ) VALUES ($1, $2, repeat('b', 64), 'UTILITY_ANNOUNCEMENT', 'UNRECORDED', 'UNRECORDED', now(), now())`,
+      [ids.whatsappConsentB, ids.tenantB],
     );
+    await insertWhatsappConsentEvent({ contactId: ids.whatsappContactB, eventType: "GRANTED", command: "5", request: "e", consentId: ids.whatsappConsentB, tenantId: ids.tenantB });
 
-    if (inserted.rows[0]?.canReceiveWhatsapp !== false || inserted.rows[0]?.withdrawnAt !== null) {
-      throw new Error("WhatsApp izin kaydı varsayılan kapalı durumda oluşturulamadı.");
-    }
-
-    const own = await appClient.query(
-      `SELECT count(*)::int AS count FROM "WhatsAppConsent" WHERE "tenantId" = $1`,
-      [ids.tenantA],
-    );
-    const other = await appClient.query(
+    await setTenantContext(appClient, ids.tenantA);
+    const crossTenantProjections = await appClient.query(
       `SELECT count(*)::int AS count FROM "WhatsAppConsent" WHERE "tenantId" = $1`,
       [ids.tenantB],
     );
-    if (own.rows[0]?.count !== 2 || other.rows[0]?.count !== 0) {
-      throw new Error("WhatsApp izin kayıtları tenant okuma izolasyonunu korumadı.");
+    const crossTenantEvents = await appClient.query(
+      `SELECT count(*)::int AS count FROM "WhatsAppConsentEvent" WHERE "tenantId" = $1`,
+      [ids.tenantB],
+    );
+    if (
+      crossTenantProjections.rowCount !== 1
+      || crossTenantProjections.rows[0]?.count !== 0
+      || crossTenantEvents.rowCount !== 1
+      || crossTenantEvents.rows[0]?.count !== 0
+    ) {
+      throw new Error("WhatsApp projection/event cross-tenant read rowCount=0 olmadı.");
     }
+    crossTenantReadChecks += 2;
+    await expectSqlState(
+      whatsappConsentEventSql(),
+      whatsappConsentEventValues({ contactId: ids.whatsappContactB, eventType: "WITHDRAWN", command: "6", request: "f" }),
+      "23503",
+    );
+
+    await expectSqlState(`UPDATE "WhatsAppConsentEvent" SET "noticeVersion" = 'mutated' WHERE false`, [], "42501");
+    await expectSqlState(`DELETE FROM "WhatsAppConsentEvent" WHERE false`, [], "42501");
+    await expectSqlState(`UPDATE "WhatsAppConsent" SET "canReceiveWhatsapp" = false WHERE false`, [], "42501");
+    await expectSqlState(`DELETE FROM "WhatsAppConsent" WHERE false`, [], "42501");
+
+    const privileges = await appClient.query(
+      `SELECT
+         has_table_privilege(current_user, '"WhatsAppConsent"', 'UPDATE') AS "parentUpdate",
+         has_table_privilege(current_user, '"WhatsAppConsent"', 'DELETE') AS "parentDelete",
+         has_table_privilege(current_user, '"WhatsAppConsent"', 'TRUNCATE') AS "parentTruncate",
+         has_table_privilege(current_user, '"WhatsAppConsent"', 'REFERENCES') AS "parentReferences",
+         has_table_privilege(current_user, '"WhatsAppConsent"', 'TRIGGER') AS "parentTrigger",
+         has_table_privilege(current_user, '"WhatsAppConsentEvent"', 'UPDATE') AS "eventUpdate",
+         has_table_privilege(current_user, '"WhatsAppConsentEvent"', 'DELETE') AS "eventDelete",
+         has_table_privilege(current_user, '"WhatsAppConsentEvent"', 'TRUNCATE') AS "eventTruncate",
+         has_table_privilege(current_user, '"WhatsAppConsentEvent"', 'REFERENCES') AS "eventReferences",
+         has_table_privilege(current_user, '"WhatsAppConsentEvent"', 'TRIGGER') AS "eventTrigger"`,
+    );
+    if (privileges.rowCount !== 1 || Object.values(privileges.rows[0] ?? {}).some(Boolean)) {
+      throw new Error("WhatsApp lifecycle restricted app privilege profili geçersiz.");
+    }
+
+    await appClient.query("SELECT set_config('app.bypass_rls', 'true', true)");
+    await appClient.query("SELECT set_config('app.current_tenant_id', '', true)");
+    await expectSqlState(
+      whatsappConsentEventSql(),
+      whatsappConsentEventValues({ contactId: ids.whatsappContactA, eventType: "WITHDRAWN", command: "7", request: "7" }),
+      "42501",
+    );
   });
+}
+
+async function assertWhatsAppConsentCatalogSecurity() {
+  const functionCatalog = await adminClient.query(
+    `SELECT owner.rolbypassrls AS "ownerBypassRls", proc.prosecdef AS "securityDefiner", proc.proconfig AS "config",
+            has_function_privilege('app', proc.oid, 'EXECUTE') AS "appExecute",
+            EXISTS (
+              SELECT 1
+              FROM aclexplode(COALESCE(proc.proacl, acldefault('f', proc.proowner))) acl
+              WHERE acl.grantee = 0 AND acl.privilege_type = 'EXECUTE'
+            ) AS "publicExecute"
+       FROM pg_proc proc
+       JOIN pg_namespace namespace ON namespace.oid = proc.pronamespace
+       JOIN pg_roles owner ON owner.oid = proc.proowner
+      WHERE namespace.nspname = 'public'
+        AND proc.proname = 'o_okul_record_whatsapp_consent_event'
+        AND pg_get_function_identity_arguments(proc.oid) = ''`,
+  );
+  if (
+    functionCatalog.rowCount !== 1
+    || functionCatalog.rows[0]?.ownerBypassRls !== false
+    || functionCatalog.rows[0]?.securityDefiner !== true
+    || JSON.stringify(functionCatalog.rows[0]?.config) !== '["search_path=pg_catalog"]'
+    || functionCatalog.rows[0]?.appExecute !== false
+    || functionCatalog.rows[0]?.publicExecute !== false
+  ) {
+    throw new Error("WhatsApp event security-definer function catalog profili geçersiz.");
+  }
+
+  const appCatalog = await appClient.query(
+    `SELECT has_schema_privilege(current_user, 'public', 'CREATE') AS "publicSchemaCreate"`,
+  );
+  if (appCatalog.rowCount !== 1 || appCatalog.rows[0]?.publicSchemaCreate !== false) {
+    throw new Error("app rolü public schema CREATE yetkisine sahip.");
+  }
+}
+
+function whatsappConsentEventSql() {
+  return `INSERT INTO "WhatsAppConsentEvent" (
+    "tenantId", "whatsappConsentId", "studentContactId", "purpose", "sequence",
+    "eventType", "noticeVersion", "source", "commandKeyHash", "requestHash"
+  ) VALUES ($1, $2, $3, 'UTILITY_ANNOUNCEMENT', 1, $4, 'wa-notice-v1', $5, repeat($6, 64), repeat($7, 64))
+  RETURNING "sequence"`;
+}
+
+function whatsappConsentEventValues({
+  contactId,
+  eventType,
+  command,
+  request,
+  source = "CONTACT_SELF_SERVICE",
+  consentId = ids.whatsappConsentA,
+  tenantId = ids.tenantA,
+}) {
+  return [tenantId, consentId, contactId, eventType, source, command, request];
+}
+
+function insertWhatsappConsentEvent(input) {
+  return appClient.query(whatsappConsentEventSql(), whatsappConsentEventValues(input));
+}
+
+async function expectSqlState(sql, values, expectedCode) {
+  await appClient.query("SAVEPOINT whatsapp_consent_negative");
+  try {
+    const result = await appClient.query(sql, values);
+    throw new Error(`Beklenen SQLSTATE ${expectedCode}; sorgu rowCount=${result.rowCount ?? "null"} ile çalıştı.`);
+  } catch (error) {
+    if (error?.code !== expectedCode) throw error;
+  } finally {
+    await appClient.query("ROLLBACK TO SAVEPOINT whatsapp_consent_negative");
+    await appClient.query("RELEASE SAVEPOINT whatsapp_consent_negative");
+  }
 }
 
 async function assertExamResultBlocksCrossTenantReferences() {
@@ -1114,7 +1490,7 @@ try {
   appConnected = true;
   await seedFixtures();
   for (const table of tenantReadTables) {
-    if (table === "WhatsAppConsent") continue;
+    if (["WhatsAppConsent", "WhatsAppConsentEvent"].includes(table)) continue;
     await assertTenantAOnlyReadsTenantA(table);
   }
   await assertAppCannotDeleteTenant();
@@ -1123,12 +1499,16 @@ try {
   await assertWithCheckBlocksWrongTenantAnnouncementWrite();
   await assertWithCheckBlocksWrongTenantMessageTemplateWrite();
   await assertWhatsAppConsentTenantIsolationAndDefaultOff();
+  await assertWhatsAppConsentCatalogSecurity();
   await assertWithCheckBlocksWrongTenantWhatsAppConsentWrite();
   await assertExamResultBlocksCrossTenantReferences();
   await assertParsedAnswerBlocksCrossTenantReferences();
   await assertParsedAnswerBlocksCrossExamReferences();
   await assertParsedAnswerBlocksDuplicateParsedRows();
-  console.log(`Canlı RLS kontrolü geçti: ${tenantReadTables.length} tenant tablosunda okuma/yazma izolasyonu doğrulandı.`);
+  if (crossTenantReadChecks !== tenantReadTables.length) {
+    throw new Error(`Cross-tenant read kontrol sayısı ${crossTenantReadChecks}; beklenen ${tenantReadTables.length}.`);
+  }
+  console.log(`Canlı RLS kontrolü geçti: ${crossTenantReadChecks} tenant tablosunda cross-tenant okuma izolasyonu doğrulandı.`);
 } catch (error) {
   if (error?.code === "ECONNREFUSED") {
     console.error("Canlı RLS kontrolü çalışmadı: localhost:5432 üzerinde Postgres'e bağlanılamadı.");

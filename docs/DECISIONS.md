@@ -424,8 +424,9 @@ varsayılanı `false` olur ve mevcut `canReceiveSms` izni yeniden kullanılmaz. 
 kapalıysa e-posta ve uygulama içi bildirim fallback'i korunur; SMS disabled kalır.
 
 MFA, login, davet ve parola sıfırlama; ham not, sınav sonucu, finans ve sağlık içeriği; medya
-gönderimi ve inbound destek bu kapsamın dışındadır. Repo içinde SMS izninden bağımsız, yalnız
-`phoneHash` ve amaç bazlı `WhatsAppConsent` kaydı; onaylı utility template kabul eden default-off
+gönderimi ve inbound destek bu kapsamın dışındadır. Repo içinde SMS izninden bağımsız, tenant +
+`phoneHash` + amaç bazlı `WhatsAppConsent` projection'ı; `StudentContact` veri sahibi bağı taşıyan
+append-only `WhatsAppConsentEvent` geçmişi; onaylı utility template kabul eden default-off
 Meta gateway adaptörü; ham gövde imzasını doğrulayıp güvenli durum özetini tekrar işlemeyen webhook
 temeli bulunur. Meta API'nin kabul ettiği mesaj kimliği teslim kanıtı değildir; webhook bu dilimde
 duyuru veya teslimat durumunu değiştirmez.
@@ -434,10 +435,16 @@ WABA/telefon/template onayları, gerçek credential ve deploy, izin yönetimi/ge
 gönderim anı izin kontrolü, tenant-bound outbound mesaj kaydı ve webhook teslim uzlaştırması,
 KVKK/DPA onayı ve gerçek staging gönderim/teslim kanıtı tamamlanmadan capability açılamaz.
 Yerel/mock test ve static sözleşme kontrolleri WhatsApp capability veya teslimat kanıtı değildir.
-Bu kapalı temel sürümünde `WhatsAppConsent` runtime kaydı yazılmaz ve staging/production KVKK
-envanterinde kayıt sayısı sıfır olmak zorundadır. Veri sahibiyle silinebilir bağ, geri çekme ve
-yeniden onayı kaybetmeyen append-only izin geçmişi ile onaylı saklama/imha kararı eklenmeden bu
-tabloya gerçek izin kaydı yazılamaz.
+Bu kapalı temel sürümünde `WhatsAppConsent` veya `WhatsAppConsentEvent` runtime kaydı yazılmaz ve
+staging/production KVKK envanterinde iki kayıt sayısı da sıfır olmak zorundadır. Yerel DB/store
+sözleşmesi aynı tenant içindeki aynı telefonlu kardeş kayıtlarını ortak izin kapsamında tutar;
+herhangi bir bağlı contact geri çektiğinde ortak projection kapanır. Grant/withdraw/re-grant
+append-only geçmişi, contact FK'sı, idempotency ve RLS/least-privilege kontrolleri yerel olarak
+hazırdır. Saklama/imha kararı, purge yolu ve kullanıcı yüzeyi olmadan gerçek izin kaydı yazılamaz.
+Doğrudan inactive/version 0 projection INSERT yalnız eventless telefon kapsamı rezervasyonudur;
+runtime bağlantısı olmayan bu P2 satır da `recordCount` hesabına girer. Aktivasyon öncesi
+`ContactIdentity` ile numara yeniden tahsisi doğrulaması, keyed phone HMAC ve anahtar rotasyonu ve
+gerçek staging DB'den salt sayım artifact'i üreten generator tamamlanmalıdır.
 
 Kanal izni amaç, aydınlatma sürümü, kaynak, kayıt ve geri çekme zamanıyla tutulur; her gönderim
 anında yeniden doğrulanır ve geri çekme kuyruktaki bekleyen gönderileri bastırır. Geri çekme yolu
@@ -454,6 +461,8 @@ Kaynak: Ürün sahibinin onayladığı WhatsApp entegrasyonu ilk güvenli dilimi
 Kanıt: `.env.example`, `docs/evidence-templates/staging-evidence.env.example`,
 `scripts/check-prod-env.mjs`, `scripts/check-staging-evidence-env.mjs`,
 `packages/db/prisma/migrations/20260808150000_add_whatsapp_consent_foundation/migration.sql`,
+`packages/db/prisma/migrations/20260808170000_add_whatsapp_consent_lifecycle/migration.sql`,
+`apps/api/src/whatsapp-consent/whatsapp-consent-store.test.ts`,
 `packages/notification-adapter/src/index.test.ts`, `infra/notification-gateway/src/index.test.mjs`,
 `docs/product-journeys-v1.md`, `docs/phase-6-production-readiness.md`.
 Etkilenen ADR: Yok

@@ -18,7 +18,7 @@ const kvkkInventoryTopLevelKeys = [
 ];
 const dataSubjectCountKeys = ["student", "teacher", "guardian", "user"];
 const purgeCoverageKeys = ["student", "teacher", "guardian", "user"];
-const whatsappConsentKeys = ["recordCount", "storedFields", "policy"];
+const whatsappConsentKeys = ["recordCount", "eventRecordCount", "piiRelevantStoredFields", "piiRelevantEventStoredFields", "policy"];
 const whatsappConsentPolicyKeys = ["featureEnabled", "retentionPeriodDays", "disposalMethod", "purgeException", "explanation"];
 const auditDiffRedactionKeys = ["endpoint", "negativeControls", "actionsSampled", "command"];
 const expectedPurgeCoverage = {
@@ -37,10 +37,23 @@ const expectedWhatsappConsentStoredFields = [
   "phoneHash",
   "purpose",
   "canReceiveWhatsapp",
+  "version",
   "noticeVersion",
   "source",
   "recordedAt",
   "withdrawnAt",
+];
+const expectedWhatsappConsentEventStoredFields = [
+  "whatsappConsentId",
+  "studentContactId",
+  "purpose",
+  "sequence",
+  "eventType",
+  "noticeVersion",
+  "source",
+  "recordedAt",
+  "commandKeyHash",
+  "requestHash",
 ];
 const expectedAuditDiffNegativeControls = [
   "body",
@@ -308,7 +321,9 @@ function requireWhatsappConsent(scope, failures) {
   if (!requireObjectKeySet(scope, whatsappConsentKeys, failures, "whatsappConsent")) return;
 
   if (scope.recordCount !== 0) failures.push("whatsappConsent.recordCount 0 olmalı.");
-  requireExactStringSet(scope.storedFields, failures, "whatsappConsent.storedFields", expectedWhatsappConsentStoredFields, "alan");
+  if (scope.eventRecordCount !== 0) failures.push("whatsappConsent.eventRecordCount 0 olmalı.");
+  requireExactStringSet(scope.piiRelevantStoredFields, failures, "whatsappConsent.piiRelevantStoredFields", expectedWhatsappConsentStoredFields, "alan");
+  requireExactStringSet(scope.piiRelevantEventStoredFields, failures, "whatsappConsent.piiRelevantEventStoredFields", expectedWhatsappConsentEventStoredFields, "alan");
 
   const policy = scope.policy;
   if (!requireObjectKeySet(policy, whatsappConsentPolicyKeys, failures, "whatsappConsent.policy")) return;

@@ -629,11 +629,13 @@ Minimum kanıt içeriği:
 - `purgeCoverage` öğrenci için `firstName`, `lastName`, `phone`, `email`; öğretmen için
   `firstName`, `lastName`; veli için `firstName`, `lastName`, `phone`; kullanıcı için `email`, `name`
   alan setlerini taşır.
-- `whatsappConsent` bu release'te exact `recordCount=0`, yedi alanlı
-  `storedFields=[phoneHash,purpose,canReceiveWhatsapp,noticeVersion,source,recordedAt,withdrawnAt]`
+- `whatsappConsent` bu release'te exact `recordCount=0`, `eventRecordCount=0`, sekiz alanlı
+  `piiRelevantStoredFields=[phoneHash,purpose,canReceiveWhatsapp,version,noticeVersion,source,recordedAt,withdrawnAt]`
+  ve on alanlı
+  `piiRelevantEventStoredFields=[whatsappConsentId,studentContactId,purpose,sequence,eventType,noticeVersion,source,recordedAt,commandKeyHash,requestHash]`
   ve exact policy (`featureEnabled=false`, `retentionPeriodDays=0`,
   `disposalMethod=NO_RECORDS_WHILE_DISABLED`, `purgeException=false`, boş olmayan `explanation`)
-  taşır. `WHATSAPP_ENABLED=false` iken tabloya runtime kayıt yazılamaz ve bu kanıt WhatsApp
+  taşır. `WHATSAPP_ENABLED=false` iken projection/event tablolarına runtime kayıt yazılamaz ve bu kanıt WhatsApp
   capability veya teslimat kanıtı sayılmaz.
 - Audit action seti dört canonical KVKK purge action'ını içerir ve `gaps` boş olmalıdır.
 - Rapor top-level 10 alanı, dört count alanı, dört coverage subject'i, subject field setleri,
@@ -705,7 +707,7 @@ Minimum kanıt içeriği:
 
 - `commandsPassed` içinde `pnpm db:rls:check`, `pnpm db:rls:check:live`,
   `pnpm rls:load:smoke` ve `pnpm rls:live:check` bulunur.
-- `schema.tablesVerified` schema'dan türeyen 63 tenant tablosunu kapsar; `AnnouncementReceipt`,
+- `schema.tablesVerified` schema'dan türeyen 64 tenant tablosunu kapsar; `AnnouncementReceipt`,
   `BackupRestoreJob`, `HomeworkMaterialFile`, `SupportTicketAttachment` ve `AuditLog` bu listenin
   içinde görünmelidir.
 - `isolation.crossTenantReadRows=0`, `withCheckRejects` yanlış tenant yazım/referans negatiflerini
@@ -1465,11 +1467,18 @@ durumunu güncellemez ve ham payload, telefon ya da WhatsApp message ID saklamaz
 Onaylı pilot diliminden önce `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`,
 `WHATSAPP_GRAPH_API_VERSION`, `WHATSAPP_UTILITY_TEMPLATE_NAME`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN`,
 `WHATSAPP_APP_SECRET` ve `WHATSAPP_PILOT_TENANT_ID` Worker secret/var değerleri kurulmaz;
-`WHATSAPP_ENABLED` açılmaz. İzin yönetimi ve geri çekme yüzeyi, worker gönderim anı yeniden kontrolü,
+`WHATSAPP_ENABLED` açılmaz. Tenant + telefon hash + amaç kapsamlı append-only lifecycle ve
+`StudentContact` veri sahibi FK'sı yerel DB/store düzeyinde hazırdır; aynı telefonlu kardeşlerden
+birinin geri çekmesi ortak projection'ı kapatır. İzin yönetimi ve geri çekme UI/API yüzeyi, retention
+ve purge kararı/yolu, worker gönderim anı yeniden kontrolü,
 tenant-bound outbound mesaj kaydı ve webhook teslim uzlaştırması tamamlanmadan yerel/mock PASS,
 provider smoke veya staging teslim kanıtı gibi raporlanamaz.
-Aktivasyon ayrıca hukuk/veri koruma sahibinin retention ve purge kararını, izin kaydının veri sahibiyle
-bağını ve açık runtime için yeni KVKK kanıt sözleşmesini gerektirir; mevcut no-records policy bloğu
+Doğrudan inactive/version 0 projection INSERT yalnız telefon kapsamı için eventless rezervasyon
+sözleşmesidir; bu P2 yolunun runtime bağlantısı yoktur ve satır `recordCount` içinde sayılır.
+Aktivasyon öncesi `ContactIdentity` ile numara yeniden tahsisi doğrulaması, keyed phone HMAC ve anahtar
+rotasyonu ile gerçek DB'den salt sayım artifact'i üreten staging generator ayrıca tamamlanmalıdır.
+Aktivasyon ayrıca hukuk/veri koruma sahibinin retention ve purge kararını ve açık runtime için yeni KVKK kanıt sözleşmesini
+gerektirir; mevcut no-records policy bloğu
 bu release'i WhatsApp-capable yapmaz ve açık runtime'a aynen taşınamaz.
 
 ## Go-live Decision Evidence

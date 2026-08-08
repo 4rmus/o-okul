@@ -101,6 +101,7 @@ model Tenant {
   employees Employee[]
   studentContacts StudentContact[]
   whatsappConsents WhatsAppConsent[]
+  whatsappConsentEvents WhatsAppConsentEvent[]
   membershipCampusScopes MembershipCampusScope[]
 }
 
@@ -829,6 +830,7 @@ model StudentContact {
   updatedAt                DateTime @default(now()) @updatedAt @db.Timestamptz(6)
   tenant                   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   student                  Student  @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade)
+  whatsappConsentEvents    WhatsAppConsentEvent[]
 
   @@unique([tenantId, id])
   @@index([tenantId, studentId, deletedAt])
@@ -842,6 +844,7 @@ model WhatsAppConsent {
   phoneHash          String
   purpose            String
   canReceiveWhatsapp Boolean @default(false)
+  version            Int       @default(0)
   noticeVersion      String
   source             String
   recordedAt         DateTime  @db.Timestamptz(6)
@@ -849,10 +852,36 @@ model WhatsAppConsent {
   createdAt          DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt          DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
   tenant             Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  events             WhatsAppConsentEvent[]
 
   @@unique([tenantId, id])
+  @@unique([tenantId, id, purpose])
   @@unique([tenantId, phoneHash, purpose])
   @@index([tenantId, purpose, canReceiveWhatsapp, withdrawnAt])
+}
+
+model WhatsAppConsentEvent {
+  id                 String   @id @default(uuid())
+  tenantId           String
+  whatsappConsentId  String
+  studentContactId   String
+  purpose            String
+  sequence           Int
+  eventType          String
+  noticeVersion      String
+  source             String
+  recordedAt         DateTime @default(now()) @db.Timestamptz(6)
+  commandKeyHash     String
+  requestHash        String
+  createdAt          DateTime @default(now()) @db.Timestamptz(6)
+  tenant             Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  whatsappConsent    WhatsAppConsent @relation(fields: [tenantId, whatsappConsentId, purpose], references: [tenantId, id, purpose], onDelete: Restrict)
+  studentContact     StudentContact  @relation(fields: [tenantId, studentContactId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, whatsappConsentId, sequence])
+  @@unique([tenantId, commandKeyHash])
+  @@index([tenantId, studentContactId, recordedAt])
 }
 
 model TeacherAssignment {
