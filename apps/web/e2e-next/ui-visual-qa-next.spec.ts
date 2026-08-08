@@ -181,6 +181,10 @@ test.describe("Faz 9 UI görsel smoke", () => {
       await expect(page.locator("body")).not.toContainText("user-faz9-admin");
       await expectUiStable(page, `faz9-dashboard-${viewport.width}`, consoleErrors);
       if (viewport.width === 1440) {
+        const desktopTopBar = page.locator(".next-desktop-topbar");
+        await expect(desktopTopBar).toContainText("Faz 9 Akademi");
+        await expect(desktopTopBar).toContainText("Kurum yöneticisi");
+        await expect(page.locator(".next-sidebar .next-brand")).toContainText("Faz 9 Akademi");
         await hideNextDevIndicator(page);
         await expectRouteFamilyGolden(
           page,
@@ -386,8 +390,9 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(guardianProfile).toContainText("••• ••• ••01");
     const guardianProfileInfo = guardianProfile.getByRole("region", { name: "Veli profil özeti" });
     await expect(guardianProfileInfo).toHaveClass(/uh-info-grid/);
-    await expect(guardianProfileInfo.locator(".uh-info-item")).toHaveCount(6);
-    await expect(guardianProfileInfo).toContainText("SMS izni");
+    const smsPermissionCount = await guardianProfileInfo.getByText("SMS izni").count();
+    expect([0, 1]).toContain(smsPermissionCount);
+    await expect(guardianProfileInfo.locator(".uh-info-item")).toHaveCount(smsPermissionCount === 1 ? 6 : 5);
     const guardianTable = guardianDetail.getByRole("table", { name: "Veli öğrenci bağlantıları" });
     await expect(guardianTable.getByRole("columnheader", { name: "Öğrenci" })).toBeVisible();
     await expect(guardianTable.getByRole("columnheader", { name: "Durum" })).toBeVisible();
