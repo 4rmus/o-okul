@@ -268,7 +268,7 @@ pnpm backup:restore:smoke
   tek JSON'da toplar. `schema.tablesVerified` schema'dan türeyen 64 tenant tablosunu,
   `isolation.crossTenantReadRows=0` çapraz-tenant okuma sonucunu, `withCheckRejects` yanlış
   tenant yazım/referans negatiflerini ve `loadSmoke.actualRps >= targetRps >= 200` sonucunu
-  kanıtlamalıdır. `tenantFkPreflight` bloğu 31 zorunlu tenant composite relation'ı exact listeler,
+  kanıtlamalıdır. `tenantFkPreflight` bloğu 32 zorunlu tenant composite relation'ı exact listeler,
   legacy allowlist'in 0 olduğunu, orphan/cross-tenant parent satırlarının 0 olduğunu ve her relation
   için cross-tenant insert negatifinin reddedildiğini kanıtlar; `migrationPreflightCommand`
   `pnpm tenant-db:check` içermelidir. `pnpm rls:load:smoke`, `RLS_LOAD_SMOKE_EVIDENCE_FILE` verildiğinde

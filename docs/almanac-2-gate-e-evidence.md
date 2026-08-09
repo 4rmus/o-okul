@@ -29,6 +29,13 @@ rotalar overview rollout çözümünü ve daily brief'i beklemez; görünmeyen �
 Ödev sayfasında kullanılmayan ders programı isteği de kaldırılmıştır. Bu daraltma yeni route, API,
 tablo veya mutation eklemez.
 
+Beşinci ürün dilimi `COM-01` uygulama içi duyuru composer akışıdır. İçerik, hedef kitle, kampüs,
+sınıf seviyesi, sınıf, ders, dönem ve sabit `IN_APP` kanal seçimi sayısal alıcı önizlemesine bağlanır.
+Önizleme kişi listesi veya iletişim bilgisi döndürmez. Beş dakika geçerli imzalı belirteç tenant,
+aktör, kanal ve kanonik hedef kapsamına bağlıdır; hedef değişince UI önizlemeyi geçersizleştirir.
+Yayın öncesi aynı kapsamın alıcıları sunucuda yeniden çözülür ve sıfır alıcıda yayın reddedilir.
+SMS/WhatsApp ve diğer sağlayıcı teslimleri ayrı komut ve kanıt sınırı olarak kalır.
+
 ## Güvenlik ve veri sınırı
 
 - Endpoint yalnız gerçek veya read-only preview `TEACHER` subject contextinde çalışır; tenant admin,
@@ -60,19 +67,29 @@ tablo veya mutation eklemez.
 - `TP-02` alt rotaları ders akışı, öğrenci takibi, ödev ve rapor dışındaki öğretmen datasetlerini
   indirmez. Ödev rotası read-only preview'da kontrol/mutation açmaz; preview tokenı tüm
   öğretmen-kapsamlı okumalarda korunur.
+- `COM-01` önizlemesi yalnız toplam ve öğrenci/veli/öğretmen sayılarını döndürür; alıcı adı,
+  alıcı/hesap kimliği, telefon, e-posta veya TCKN döndürmez. İmzalı belirteç başka tenant, aktör,
+  kanal veya hedef kapsamıyla kullanılamaz; süresi dolunca fail-closed reddedilir.
+- Kampüs kapsamlı operasyon personeli yalnız izinli kampüs hedefini önizleyebilir/yayınlayabilir.
+  Sınıf hedefi kampüs ve sınıf seviyesiyle kanonikleştirilir; kampüs/sınıf çelişkisi reddedilir.
+- Yayın `Idempotency-Key` sözleşmesini korur. Önizleme sonrası veli izin ilişkisi değişirse alıcı
+  parmak izi eskidiği için yayın `ANNOUNCEMENT_RECIPIENT_PREVIEW_STALE` ile reddedilir; provider
+  teslimi veya yeni kanal mutasyonu yapılmaz.
+- Devamsızlık eşiği duyurusu kalıcı `studentId` hedefiyle yalnız ilgili öğrencinin duyuru izni olan
+  velilerine açılır; aynı sınıftaki başka öğrenci ve veliler alıcı çözümüne girmez.
 
 ## Yerel kanıt
 
 - Teacher daily brief unit ve route E2E: 2 dosya, 5 test `PASS`.
 - API, web ve shared-types typecheck `PASS`.
-- OpenAPI: 237 path ve daily brief PII-negatif response contract `PASS`.
+- OpenAPI: 238 path ve daily brief/duyuru önizleme PII-negatif response contract `PASS`.
 - Öğretmen portalı browser sözleşmesi: 18 test `PASS`; rollout açık overview yalnız
   `/me/teacher/daily-brief` okur, flag kapalı akış korunur.
 - Dedicated `NEXT_E2E_PORT=43121` ile fresh production build üzerinden mobil/masaüstü sözleşme
   çalıştırılmıştır.
-- `NEXT_E2E_PORT=43167 pnpm run ci`: lint, typecheck, 1052 başarılı API testi (4 PostgreSQL/fixture
-  testi ortam bağımlılığı nedeniyle skip), 147 geniş UX, 90 route-family ve 32 görsel test, 84 rota,
-  production build, 237 OpenAPI path ve 45 idempotent operation ile `PASS`.
+- `NEXT_E2E_PORT=43177 pnpm run ci`: lint, typecheck, 1057 başarılı API testi (4 PostgreSQL/fixture
+  testi ortam bağımlılığı nedeniyle skip), 148 geniş UX, 90 route-family ve 32 görsel test, 84 rota,
+  production build, 238 OpenAPI path ve 45 idempotent operation ile `PASS`.
 - Student daily brief unit ve route E2E: 2 dosya, 7 test `PASS`; gerçek öğrenci ile read-only preview
   aggregate eşitliği doğrulanır.
 - Öğrenci/veli browser sözleşmesi: 27 test `PASS`; rollout açık overview yalnız
@@ -90,9 +107,15 @@ tablo veya mutation eklemez.
   dedicated `NEXT_E2E_PORT=43165` ile Chromium/WebKit `web:ux-rc` kapısı 68/68 test `PASS` olmuştur.
 - Source-bound Gate B measurement baseline yeniden üretildi ve 3 görev x 5 örnek checker'ı `PASS`
   oldu. Bu mocked görevler TP-02 alt rotalarını ölçmediği için TP-02 performans kanıtı sayılmaz.
+- `COM-01` API/tenant/RBAC/audit/store/attendance kapsamı: 6 dosyada 72 test `PASS`; PII içermeyen
+  sayısal önizleme, kampüs-dışı hedef reddi, token kapsam uyuşmazlığı, önizleme-yayın arası alıcı
+  ilişki değişikliği ve aynı sınıftaki ilgisiz veli negatifi kapsanır. 390 px composer sözleşmesi
+  hedef değişiminde publish kilidi, final onay, idempotency header ve tokenlı publish gövdesiyle
+  `PASS` olmuştur.
+- Chromium/WebKit `web:ux-rc` kapısı COM-01 dahil 70/70 test `PASS` olmuştur.
 
 Bu kanıt düzeyi `LOCAL_STATIC` ve mocked rollout kullanan tarayıcı yolu için `LOCAL_SYNTHETIC`tir.
-`TP-01`, `TP-02`, `SP-01` ve `SP-02` yerel dilimleri `LOCAL_SLICE_PASS` durumundadır.
+`TP-01`, `TP-02`, `SP-01`, `SP-02` ve `COM-01` yerel dilimleri `LOCAL_SLICE_PASS` durumundadır.
 
 ## Gate E durumu
 
@@ -104,6 +127,8 @@ dilimlerin kapsamı dışındadır.
 - Gerçek tenantta `web.student-portal-v2` activation/expiry/rollback: `EXTERNAL_NOT_RUN`
 - Gerçek öğretmen görev gözlemi ve ürün metriği: `EXTERNAL_NOT_RUN`
 - Gerçek öğrenci görev gözlemi ve ürün metriği: `EXTERNAL_NOT_RUN`
+- Gerçek kurum duyurusu alıcı önizleme/yayın UAT'ı: `EXTERNAL_NOT_RUN`
+- SMS/WhatsApp/e-posta/push provider teslimi: `EXTERNAL_NOT_RUN`
 - Staging/prod deploy veya provider mutation: `EXTERNAL_NOT_RUN`
 
 Bu dış kanıtlar tamamlanmadan Gate E `Pilot Ready`, production rollout veya kullanıcı başarısı

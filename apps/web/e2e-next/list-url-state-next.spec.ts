@@ -279,8 +279,8 @@ test.describe("Liste URL state", () => {
 
     await announcementsRegion.getByRole("button", { name: "Duyuru ekle" }).click();
     const announcementDialog = page.getByRole("dialog", { name: "Duyuru ekle" });
-    await expect(announcementDialog.locator(".uh-field")).toHaveCount(2);
-    await expect(announcementDialog.locator(".uh-select")).toHaveCount(0);
+    await expect(announcementDialog.locator(".uh-field")).toHaveCount(9);
+    await expect(announcementDialog.locator(".uh-select")).toHaveCount(7);
     await expect(announcementDialog.locator(".uh-textarea")).toHaveCount(1);
     await expect(announcementDialog.getByRole("textbox", { name: /^Duyuru metni / })).toBeVisible();
     await announcementDialog.getByRole("button", { name: "Vazgeç" }).click();

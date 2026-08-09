@@ -1458,10 +1458,11 @@
         "auditBypassAction": "system.rls_bypass_requested"
       },
       "tenantFkPreflight": {
-        "requiredCompositeRelations": 31,
+        "requiredCompositeRelations": 32,
         "relationsVerified": [
           "AnnouncementReceipt.announcement",
           "AnnouncementDeliveryReport.announcement",
+          "Announcement.student",
           "Homework.class",
           "ScheduleLesson.class",
           "StudySession.class",
@@ -1498,6 +1499,7 @@
         "crossTenantInsertRejects": [
           "AnnouncementReceipt.announcement cross tenant insert",
           "AnnouncementDeliveryReport.announcement cross tenant insert",
+          "Announcement.student cross tenant insert",
           "Homework.class cross tenant insert",
           "ScheduleLesson.class cross tenant insert",
           "StudySession.class cross tenant insert",

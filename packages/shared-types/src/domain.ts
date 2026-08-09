@@ -1321,13 +1321,41 @@ export interface HomeworkCheckStatusRequest {
 
 export type AnnouncementAudience = "SCHOOL" | "TEACHERS" | "STUDENTS" | "GUARDIANS";
 
+export type AnnouncementPublishChannel = "IN_APP";
+
+export interface AnnouncementRecipientPreviewRequest {
+  audience?: AnnouncementAudience;
+  campusId?: string;
+  channel: AnnouncementPublishChannel;
+  classId?: string;
+  courseId?: string;
+  gradeLevelId?: string;
+  termId?: string;
+}
+
+export interface AnnouncementRecipientPreviewResult {
+  audience: AnnouncementAudience;
+  channel: AnnouncementPublishChannel;
+  counts: {
+    guardians: number;
+    students: number;
+    teachers: number;
+  };
+  expiresAt: string;
+  previewToken: string;
+  recipientCount: number;
+  scope: Pick<AnnouncementRecipientPreviewRequest, "campusId" | "classId" | "courseId" | "gradeLevelId" | "termId">;
+}
+
 export interface AnnouncementCreateRequest {
   audience?: AnnouncementAudience;
   body: string;
   campusId?: string;
+  channel: AnnouncementPublishChannel;
   classId?: string;
   courseId?: string;
   gradeLevelId?: string;
+  recipientPreviewToken: string;
   tenantId?: string;
   termId?: string;
   title: string;
@@ -1344,6 +1372,7 @@ export interface AnnouncementRecord {
   classId?: string;
   courseId?: string;
   termId?: string;
+  studentId?: string;
   publishedAt: string;
   readAt?: string;
   deletedAt?: string;

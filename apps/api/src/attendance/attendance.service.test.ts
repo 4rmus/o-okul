@@ -9,7 +9,7 @@ import { InMemoryAttendanceStore } from "./attendance-store.js";
 import { AttendanceService } from "./attendance.service.js";
 
 describe("AttendanceService", () => {
-  it("devamsizlik esigi ilk kez asilinca veli duyurusu ve audit kaydi uretir", async () => {
+  it("devamsizlik esiginde yalniz ilgili ogrencinin velisine duyuru ve audit kaydi uretir", async () => {
     const announcements: unknown[] = [];
     const auditRecords: unknown[] = [];
     const service = new AttendanceService(
@@ -20,7 +20,7 @@ describe("AttendanceService", () => {
       new InMemoryGuardianStudentStore(),
       new InMemoryTeacherAssignmentStore(),
       {
-        create: async (_context: RequestContext, input: unknown) => {
+        createStudentGuardianAlert: async (_context: RequestContext, input: unknown) => {
           announcements.push(input);
           return { id: "announcement-threshold" };
         },
@@ -43,8 +43,7 @@ describe("AttendanceService", () => {
     expect(announcements).toEqual([
       expect.objectContaining({
         tenantId: "tenant-a",
-        audience: "GUARDIANS",
-        classId: "class-a",
+        studentId: "student-a",
         title: "Devamsızlık eşiği uyarısı",
       }),
     ]);

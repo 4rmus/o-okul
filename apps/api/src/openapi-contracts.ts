@@ -652,6 +652,33 @@ const announcementAudienceSchema = {
   enum: ["SCHOOL", "TEACHERS", "STUDENTS", "GUARDIANS"],
 };
 
+const announcementPublishChannelSchema = {
+  type: "string",
+  enum: ["IN_APP"],
+};
+
+const announcementTargetScopeSchema = objectSchema({
+  campusId: stringSchema(),
+  classId: stringSchema(),
+  courseId: stringSchema(),
+  gradeLevelId: stringSchema(),
+  termId: stringSchema(),
+});
+
+const announcementRecipientPreviewResultSchema = objectSchema({
+  audience: announcementAudienceSchema,
+  channel: announcementPublishChannelSchema,
+  counts: objectSchema({
+    guardians: integerSchema({ minimum: 0 }),
+    students: integerSchema({ minimum: 0 }),
+    teachers: integerSchema({ minimum: 0 }),
+  }, ["guardians", "students", "teachers"]),
+  expiresAt: stringSchema({ format: "date-time" }),
+  previewToken: stringSchema(),
+  recipientCount: integerSchema({ minimum: 0 }),
+  scope: announcementTargetScopeSchema,
+}, ["audience", "channel", "counts", "expiresAt", "previewToken", "recipientCount", "scope"]);
+
 const announcementDeliveryChannelSchema = {
   type: "string",
   enum: ["EMAIL", "PUSH"],
@@ -678,6 +705,7 @@ const announcementRecordSchema = objectSchema({
   classId: stringSchema(),
   courseId: stringSchema(),
   termId: stringSchema(),
+  studentId: stringSchema(),
   publishedAt: stringSchema({ format: "date-time" }),
   readAt: stringSchema({ format: "date-time" }),
   deletedAt: stringSchema({ format: "date-time" }),
@@ -3624,14 +3652,28 @@ const operationContracts: Record<string, OperationContract> = {
       audience: announcementAudienceSchema,
       body: stringSchema(),
       campusId: stringSchema(),
+      channel: announcementPublishChannelSchema,
       classId: stringSchema(),
       courseId: stringSchema(),
       gradeLevelId: stringSchema(),
+      recipientPreviewToken: stringSchema(),
       tenantId: stringSchema(),
       termId: stringSchema(),
       title: stringSchema(),
-    }, ["body", "title"]),
+    }, ["body", "channel", "recipientPreviewToken", "title"]),
     responseBody: announcementRecordSchema,
+  },
+  "post /api/v1/announcements/recipients/preview": {
+    requestBody: objectSchema({
+      audience: announcementAudienceSchema,
+      campusId: stringSchema(),
+      channel: announcementPublishChannelSchema,
+      classId: stringSchema(),
+      courseId: stringSchema(),
+      gradeLevelId: stringSchema(),
+      termId: stringSchema(),
+    }, ["channel"]),
+    responseBody: announcementRecipientPreviewResultSchema,
   },
   "post /api/v1/announcements/{id}/delivery-results": {
     idempotent: true,

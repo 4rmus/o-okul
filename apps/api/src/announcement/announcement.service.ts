@@ -1,5 +1,5 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
-import { createHash } from "node:crypto";
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional, ServiceUnavailableException } from "@nestjs/common";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import {
   createNotificationAdapterFromEnv,
   type NotificationAdapter,
@@ -15,7 +15,10 @@ import type {
   AnnouncementDeliveryResultRequest,
   AnnouncementDeliverySendRequest,
   AnnouncementDeliveryStatus,
+  AnnouncementPublishChannel,
   AnnouncementRecord as SharedAnnouncementRecord,
+  AnnouncementRecipientPreviewRequest,
+  AnnouncementRecipientPreviewResult,
   AnnouncementRecipientRecord,
   AnnouncementRecipientReport,
   ClassRecord,
@@ -60,6 +63,21 @@ export interface AnnouncementDeliveryQueueProducer {
 export const announcementDeliveryQueueProducerToken = Symbol("AnnouncementDeliveryQueueProducer");
 export const notificationAdapterToken = Symbol("NotificationAdapter");
 
+type AnnouncementTargetScope = AnnouncementRecipientPreviewResult["scope"];
+type AnnouncementPersistentTargetScope = AnnouncementTargetScope & Pick<Partial<AnnouncementRecord>, "studentId">;
+
+interface AnnouncementPreviewTokenPayload {
+  audience: AnnouncementAudience;
+  channel: AnnouncementPublishChannel;
+  contextBinding: string;
+  expiresAt: number;
+  recipientCount: number;
+  recipientFingerprint: string;
+  scope: AnnouncementTargetScope;
+}
+
+const announcementPreviewTtlMs = 5 * 60 * 1000;
+
 @Injectable()
 export class AnnouncementService {
   constructor(
@@ -85,7 +103,12 @@ export class AnnouncementService {
   ) {}
 
   async list(context: RequestContext): Promise<AnnouncementRecord[]> {
-    return filterTenantResources(context, await this.store.list()).filter((announcement) => !announcement.deletedAt);
+    const announcements = filterTenantResources(context, await this.store.list()).filter((announcement) => !announcement.deletedAt);
+    const visible = await Promise.all(announcements.map(async (announcement) => ({
+      announcement,
+      visible: await this.isInCampusScope(context, announcement, true),
+    })));
+    return visible.filter((candidate) => candidate.visible).map((candidate) => candidate.announcement);
   }
 
   async findOne(context: RequestContext, id: string): Promise<AnnouncementRecord> {
@@ -95,11 +118,15 @@ export class AnnouncementService {
     }
 
     this.assertAccess(context, announcement);
+    if (!await this.isInCampusScope(context, announcement, true)) {
+      throw new ForbiddenException("FORBIDDEN_CAMPUS_SCOPE");
+    }
     return announcement;
   }
 
   async recipientReport(context: RequestContext, id: string): Promise<AnnouncementRecipientReport> {
     const announcement = await this.findOne(context, id);
+    await this.assertManageScope(context, announcement);
     const recipients = await this.resolveRecipients(context, announcement);
     const receipts = await this.receiptStore.listByAnnouncement(announcement.tenantId, announcement.id);
     const readAtBySubject = new Map<string, string>();
@@ -127,6 +154,7 @@ export class AnnouncementService {
 
   async deliveryReports(context: RequestContext, id: string): Promise<AnnouncementDeliveryReportRecord[]> {
     const announcement = await this.findOne(context, id);
+    await this.assertManageScope(context, announcement);
     return this.deliveryReportStore.listByAnnouncement(announcement.tenantId, announcement.id);
   }
 
@@ -157,6 +185,7 @@ export class AnnouncementService {
     input: Partial<AnnouncementDeliveryResultRequest>,
   ): Promise<AnnouncementDeliveryQueueResult> {
     const announcement = await this.findOne(context, id);
+    await this.assertManageScope(context, announcement);
     const result = parseDeliveryResultInput(input);
     return this.enqueueDeliveryReport(context, announcement, result);
   }
@@ -192,6 +221,7 @@ export class AnnouncementService {
     input: Partial<AnnouncementDeliverySendRequest>,
   ): Promise<AnnouncementDeliveryQueueResult> {
     const announcement = await this.findOne(context, id);
+    await this.assertManageScope(context, announcement);
     const channel = resolveDeliveryChannel(input.channel);
     const messages = await this.resolveNotificationMessages(context, announcement, channel);
     const results = await this.notificationAdapter.sendBatch(messages);
@@ -281,11 +311,16 @@ export class AnnouncementService {
       throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
     }
 
-    const assignments = filterTenantResources(context, await this.teacherAssignmentStore.listByTeacher(context.subjectId));
+    const assignments = filterTenantResources(context, await this.teacherAssignmentStore.listByTeacher(context.subjectId))
+      .filter((assignment) => isTeacherAssignmentActive(assignment));
+    const classes = new Map(filterTenantResources(context, await this.classStore.list()).map((record) => [record.id, record]));
+    const students = new Map(filterTenantResources(context, await this.studentStore.list()).map((record) => [record.id, record]));
     const announcements = (await this.list(context)).filter((announcement) =>
       announcement.audience === "SCHOOL" || announcement.audience === "TEACHERS",
     );
-    return this.withReadStatus(context, announcements.filter((announcement) => this.matchesTeacherScope(announcement, assignments)));
+    return this.withReadStatus(context, announcements.filter((announcement) =>
+      this.matchesTeacherScope(announcement, assignments, classes, students),
+    ));
   }
 
   async markCurrentStudentRead(context: RequestContext, id: string): Promise<AnnouncementRecord> {
@@ -323,19 +358,149 @@ export class AnnouncementService {
     return this.createOnce(context, input);
   }
 
+  async createStudentGuardianAlert(
+    context: RequestContext,
+    input: { tenantId?: string; studentId: string; title: string; body: string },
+  ): Promise<AnnouncementRecord | undefined> {
+    const tenantId = this.resolveTenantId(context, input.tenantId);
+    const studentId = requiredText(input.studentId, "ANNOUNCEMENT_STUDENT_REQUIRED");
+    const student = await this.studentStore.findById(studentId);
+    if (!student || student.tenantId !== tenantId || student.deletedAt) {
+      throw new BadRequestException("ANNOUNCEMENT_STUDENT_INVALID");
+    }
+    this.assertAccess(context, student);
+    const targets: AnnouncementPersistentTargetScope = {
+      ...await this.resolveTargets(context, tenantId, { classId: student.classId }),
+      studentId,
+    };
+    const title = requiredText(input.title, "ANNOUNCEMENT_TITLE_REQUIRED");
+    const body = requiredText(input.body, "ANNOUNCEMENT_BODY_REQUIRED");
+    const announcement: AnnouncementRecord = {
+      id: "announcement-student-guardian-check",
+      tenantId,
+      title,
+      body,
+      audience: "GUARDIANS",
+      ...targets,
+      publishedAt: new Date().toISOString(),
+    };
+    const recipients = await this.resolveRecipients(context, announcement);
+    if (recipients.length === 0) return undefined;
+    return this.persistAnnouncement(context, {
+      audience: "GUARDIANS",
+      body,
+      channel: "IN_APP",
+      recipients,
+      targets,
+      tenantId,
+      title,
+    });
+  }
+
+  async previewRecipients(
+    context: RequestContext,
+    input: AnnouncementRecipientPreviewRequest,
+  ): Promise<AnnouncementRecipientPreviewResult> {
+    const tenantId = this.resolveTenantId(context, undefined);
+    const audience = resolveAudience(input.audience);
+    const channel = resolvePublishChannel(input.channel);
+    const scope = await this.resolveTargets(context, tenantId, input);
+    assertAudienceTargetCompatibility(audience, scope);
+    const recipients = await this.resolveRecipients(context, {
+      id: "announcement-preview",
+      tenantId,
+      title: "Preview",
+      body: "Preview",
+      audience,
+      ...scope,
+      publishedAt: new Date().toISOString(),
+    });
+    const expiresAt = Date.now() + announcementPreviewTtlMs;
+    return {
+      audience,
+      channel,
+      counts: {
+        guardians: recipients.filter((recipient) => recipient.recipientType === "GUARDIAN").length,
+        students: recipients.filter((recipient) => recipient.recipientType === "STUDENT").length,
+        teachers: recipients.filter((recipient) => recipient.recipientType === "TEACHER").length,
+      },
+      expiresAt: new Date(expiresAt).toISOString(),
+      previewToken: signAnnouncementPreviewToken({
+        audience,
+        channel,
+        contextBinding: announcementPreviewContextBinding(tenantId, context.userId),
+        expiresAt,
+        recipientCount: recipients.length,
+        recipientFingerprint: announcementRecipientFingerprint(recipients),
+        scope,
+      }),
+      recipientCount: recipients.length,
+      scope,
+    };
+  }
+
   private async createOnce(context: RequestContext, input: Partial<AnnouncementCreateRequest>): Promise<AnnouncementRecord> {
     const tenantId = this.resolveTenantId(context, input.tenantId);
     const title = requiredText(input.title, "ANNOUNCEMENT_TITLE_REQUIRED");
     const body = requiredText(input.body, "ANNOUNCEMENT_BODY_REQUIRED");
     const audience = resolveAudience(input.audience);
-    const targets = await this.resolveTargets(tenantId, input);
-
-    const record = await this.store.create({
+    const channel = resolvePublishChannel(input.channel);
+    const targets = await this.resolveTargets(context, tenantId, input);
+    assertAudienceTargetCompatibility(audience, targets);
+    const preview = verifyAnnouncementPreviewToken(input.recipientPreviewToken, {
+      audience,
+      channel,
+      contextBinding: announcementPreviewContextBinding(tenantId, context.userId),
+      scope: targets,
+    });
+    const recipients = await this.resolveRecipients(context, {
+      id: "announcement-publish-check",
       tenantId,
       title,
       body,
       audience,
       ...targets,
+      publishedAt: new Date().toISOString(),
+    });
+    if (preview.recipientCount === 0 && recipients.length === 0) {
+      throw new BadRequestException("ANNOUNCEMENT_RECIPIENTS_EMPTY");
+    }
+    if (
+      preview.recipientCount !== recipients.length ||
+      preview.recipientFingerprint !== announcementRecipientFingerprint(recipients)
+    ) {
+      throw new BadRequestException("ANNOUNCEMENT_RECIPIENT_PREVIEW_STALE");
+    }
+
+    return this.persistAnnouncement(context, {
+      audience,
+      body,
+      channel,
+      recipients,
+      targets,
+      tenantId,
+      title,
+    });
+  }
+
+  private async persistAnnouncement(
+    context: RequestContext,
+    input: {
+      audience: AnnouncementAudience;
+      body: string;
+      channel: AnnouncementPublishChannel;
+      recipients: AnnouncementRecipientRecord[];
+      targets: AnnouncementPersistentTargetScope;
+      tenantId: string;
+      title: string;
+    },
+  ): Promise<AnnouncementRecord> {
+    const record = await this.store.create({
+      tenantId: input.tenantId,
+      title: input.title,
+      body: input.body,
+      audience: input.audience,
+      ...input.targets,
       publishedAt: new Date().toISOString(),
     });
     await this.auditLogs?.record({
@@ -344,12 +509,19 @@ export class AnnouncementService {
       entityType: "Announcement",
       entityId: record.id,
       action: "announcement.created",
-      diff: { audience: record.audience, title: record.title, ...targets },
+      diff: {
+        audience: record.audience,
+        channel: input.channel,
+        recipientCount: input.recipients.length,
+        title: record.title,
+        ...input.targets,
+      },
     });
     return record;
   }
 
   private async resolveTargets(
+    context: RequestContext,
     tenantId: string,
     input: Partial<Pick<AnnouncementRecord, "campusId" | "gradeLevelId" | "classId" | "courseId" | "termId">>,
   ): Promise<Pick<Partial<AnnouncementRecord>, "campusId" | "gradeLevelId" | "classId" | "courseId" | "termId">> {
@@ -372,7 +544,15 @@ export class AnnouncementService {
     if (classId) {
       const schoolClass = await this.classStore.findById(classId);
       if (!schoolClass || schoolClass.tenantId !== tenantId || schoolClass.deletedAt) throw new BadRequestException("ANNOUNCEMENT_CLASS_INVALID");
+      if (targets.campusId && schoolClass.campusId && targets.campusId !== schoolClass.campusId) {
+        throw new BadRequestException("ANNOUNCEMENT_CLASS_CAMPUS_MISMATCH");
+      }
+      if (targets.gradeLevelId && schoolClass.gradeLevelId && targets.gradeLevelId !== schoolClass.gradeLevelId) {
+        throw new BadRequestException("ANNOUNCEMENT_CLASS_GRADE_LEVEL_MISMATCH");
+      }
       targets.classId = classId;
+      targets.campusId ??= schoolClass.campusId;
+      targets.gradeLevelId ??= schoolClass.gradeLevelId;
     }
 
     const courseId = optionalText(input.courseId);
@@ -387,6 +567,19 @@ export class AnnouncementService {
       const term = await this.academicCalendarStore.findTermById(termId);
       if (!term || term.tenantId !== tenantId || term.deletedAt) throw new BadRequestException("ANNOUNCEMENT_TERM_INVALID");
       targets.termId = termId;
+    }
+
+    const campusScope = context.campusScope;
+    if (campusScope?.scopeMode === "CAMPUSES") {
+      if (!targets.campusId && campusScope.campusIds.length === 1) {
+        targets.campusId = campusScope.campusIds[0];
+      }
+      if (!targets.campusId) {
+        throw new BadRequestException("ANNOUNCEMENT_CAMPUS_REQUIRED");
+      }
+      if (!campusScope.campusIds.includes(targets.campusId)) {
+        throw new ForbiddenException("FORBIDDEN_CAMPUS_SCOPE");
+      }
     }
 
     return targets;
@@ -467,10 +660,18 @@ export class AnnouncementService {
   }
 
   private async teacherRecipients(context: RequestContext, announcement: AnnouncementRecord): Promise<AnnouncementRecipientRecord[]> {
-    const assignments = filterTenantResources(context, await this.teacherAssignmentStore.list());
+    const assignments = filterTenantResources(context, await this.teacherAssignmentStore.list())
+      .filter((assignment) => isTeacherAssignmentActive(assignment));
+    const classes = new Map(filterTenantResources(context, await this.classStore.list()).map((record) => [record.id, record]));
+    const students = new Map(filterTenantResources(context, await this.studentStore.list()).map((record) => [record.id, record]));
     return filterTenantResources(context, await this.teacherStore.list())
       .filter((teacher) =>
-        this.matchesTeacherScope(announcement, assignments.filter((assignment) => assignment.teacherId === teacher.id)),
+        this.matchesTeacherScope(
+          announcement,
+          assignments.filter((assignment) => assignment.teacherId === teacher.id),
+          classes,
+          students,
+        ),
       )
       .map((teacher) => ({
         announcementId: announcement.id,
@@ -583,6 +784,7 @@ export class AnnouncementService {
     student: StudentRecord,
     schoolClass: (ClassRecord & { deletedAt?: string }) | undefined,
   ): boolean {
+    if (announcement.studentId) return announcement.studentId === student.id;
     if (announcement.classId && announcement.classId !== student.classId) return false;
     if (announcement.campusId && announcement.campusId !== schoolClass?.campusId) return false;
     if (announcement.gradeLevelId && announcement.gradeLevelId !== schoolClass?.gradeLevelId) return false;
@@ -592,17 +794,42 @@ export class AnnouncementService {
   private matchesTeacherScope(
     announcement: AnnouncementRecord,
     assignments: TeacherAssignmentRecord[],
+    classes: Map<string, ClassRecord & { deletedAt?: string }>,
+    students: Map<string, StudentRecord>,
   ): boolean {
-    if (!announcement.classId && !announcement.courseId && !announcement.termId) {
+    if (!announcement.campusId && !announcement.gradeLevelId && !announcement.classId && !announcement.courseId && !announcement.termId) {
       return true;
     }
 
     return assignments.some((assignment) => {
-      if (announcement.classId && announcement.classId !== assignment.classId) return false;
+      const assignmentClassId = assignment.classId ?? (assignment.studentId ? students.get(assignment.studentId)?.classId : undefined);
+      const assignmentClass = assignmentClassId ? classes.get(assignmentClassId) : undefined;
+      if (announcement.campusId && announcement.campusId !== assignmentClass?.campusId) return false;
+      if (announcement.gradeLevelId && announcement.gradeLevelId !== assignmentClass?.gradeLevelId) return false;
+      if (announcement.classId && announcement.classId !== assignmentClassId) return false;
       if (announcement.courseId && announcement.courseId !== assignment.courseId) return false;
-      if (announcement.termId && assignment.termId && announcement.termId !== assignment.termId) return false;
+      if (announcement.termId && announcement.termId !== assignment.termId) return false;
       return true;
     });
+  }
+
+  private async isInCampusScope(
+    context: RequestContext,
+    announcement: Pick<AnnouncementRecord, "campusId" | "classId">,
+    globalAllowed: boolean,
+  ): Promise<boolean> {
+    if (context.campusScope?.scopeMode !== "CAMPUSES") return true;
+    let campusId = announcement.campusId;
+    if (!campusId && announcement.classId) {
+      campusId = (await this.classStore.findById(announcement.classId))?.campusId;
+    }
+    return campusId ? context.campusScope.campusIds.includes(campusId) : globalAllowed;
+  }
+
+  private async assertManageScope(context: RequestContext, announcement: AnnouncementRecord): Promise<void> {
+    if (!await this.isInCampusScope(context, announcement, false)) {
+      throw new ForbiddenException("FORBIDDEN_CAMPUS_SCOPE");
+    }
   }
 
   private async findStudent(id: string): Promise<StudentRecord> {
@@ -724,4 +951,108 @@ function resolveAudience(value: AnnouncementAudience | undefined): AnnouncementA
     throw new BadRequestException("ANNOUNCEMENT_AUDIENCE_INVALID");
   }
   return value;
+}
+
+function resolvePublishChannel(value: AnnouncementPublishChannel | undefined): AnnouncementPublishChannel {
+  if (value !== "IN_APP") {
+    throw new BadRequestException("ANNOUNCEMENT_PUBLISH_CHANNEL_INVALID");
+  }
+  return value;
+}
+
+function signAnnouncementPreviewToken(payload: AnnouncementPreviewTokenPayload): string {
+  const encodedPayload = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+  const signature = createHmac("sha256", announcementPreviewSecret())
+    .update(`announcement-recipient-preview.${encodedPayload}`)
+    .digest("base64url");
+  return `${encodedPayload}.${signature}`;
+}
+
+function verifyAnnouncementPreviewToken(
+  token: string | undefined,
+  expected: Pick<AnnouncementPreviewTokenPayload, "audience" | "channel" | "contextBinding" | "scope">,
+): AnnouncementPreviewTokenPayload {
+  const [encodedPayload, providedSignature, extra] = token?.split(".") ?? [];
+  if (!encodedPayload || !providedSignature || extra) {
+    throw new ForbiddenException("ANNOUNCEMENT_PREVIEW_TOKEN_INVALID");
+  }
+  const expectedSignature = createHmac("sha256", announcementPreviewSecret())
+    .update(`announcement-recipient-preview.${encodedPayload}`)
+    .digest("base64url");
+  const providedBuffer = Buffer.from(providedSignature);
+  const expectedBuffer = Buffer.from(expectedSignature);
+  if (providedBuffer.length !== expectedBuffer.length || !timingSafeEqual(providedBuffer, expectedBuffer)) {
+    throw new ForbiddenException("ANNOUNCEMENT_PREVIEW_TOKEN_INVALID");
+  }
+
+  let payload: AnnouncementPreviewTokenPayload;
+  try {
+    payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as AnnouncementPreviewTokenPayload;
+  } catch {
+    throw new ForbiddenException("ANNOUNCEMENT_PREVIEW_TOKEN_INVALID");
+  }
+  if (
+    typeof payload.expiresAt !== "number" ||
+    payload.expiresAt <= Date.now() ||
+    payload.contextBinding !== expected.contextBinding ||
+    payload.audience !== expected.audience ||
+    payload.channel !== expected.channel ||
+    JSON.stringify(payload.scope) !== JSON.stringify(expected.scope)
+  ) {
+    throw new ForbiddenException("ANNOUNCEMENT_PREVIEW_TOKEN_INVALID");
+  }
+  if (
+    !Number.isInteger(payload.recipientCount) ||
+    payload.recipientCount < 0 ||
+    !/^[a-f0-9]{64}$/.test(payload.recipientFingerprint)
+  ) {
+    throw new ForbiddenException("ANNOUNCEMENT_PREVIEW_TOKEN_INVALID");
+  }
+  return payload;
+}
+
+function announcementPreviewContextBinding(tenantId: string, userId: string): string {
+  return createHmac("sha256", announcementPreviewSecret())
+    .update(`announcement-recipient-preview-context.${tenantId}.${userId}`)
+    .digest("base64url");
+}
+
+function announcementRecipientFingerprint(recipients: AnnouncementRecipientRecord[]): string {
+  const canonicalRecipients = recipients
+    .map((recipient) => [
+      recipient.recipientType,
+      recipient.subjectId,
+      recipient.userId ?? "",
+      recipient.relatedStudentId ?? "",
+    ].join("\0"))
+    .sort()
+    .join("\n");
+  return createHmac("sha256", announcementPreviewSecret())
+    .update(`announcement-recipient-preview-set.${canonicalRecipients}`)
+    .digest("hex");
+}
+
+function assertAudienceTargetCompatibility(audience: AnnouncementAudience, scope: AnnouncementPersistentTargetScope): void {
+  if (scope.studentId && audience !== "GUARDIANS") {
+    throw new BadRequestException("ANNOUNCEMENT_AUDIENCE_TARGET_INVALID");
+  }
+  if (audience !== "TEACHERS" && (scope.courseId || scope.termId)) {
+    throw new BadRequestException("ANNOUNCEMENT_AUDIENCE_TARGET_INVALID");
+  }
+}
+
+function isTeacherAssignmentActive(assignment: TeacherAssignmentRecord, now = new Date()): boolean {
+  const today = now.toISOString().slice(0, 10);
+  if (assignment.startsAt && assignment.startsAt > today) return false;
+  if (assignment.endsAt && assignment.endsAt < today) return false;
+  return true;
+}
+
+function announcementPreviewSecret(): string {
+  const secret = process.env.ANNOUNCEMENT_PREVIEW_SECRET?.trim() || process.env.JWT_ACCESS_SECRET?.trim();
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new ServiceUnavailableException("ANNOUNCEMENT_PREVIEW_SECRET_MISSING");
+  }
+  return "announcement-preview-test-secret";
 }

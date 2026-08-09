@@ -2427,6 +2427,38 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       return;
     }
 
+    if (path === "/announcements/recipients/preview" && request.method() === "POST") {
+      const body = request.postDataJSON() as {
+        audience?: AnnouncementFixture["audience"];
+        campusId?: string;
+        classId?: string;
+        courseId?: string;
+        gradeLevelId?: string;
+        termId?: string;
+      };
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope({
+          audience: body.audience ?? "SCHOOL",
+          channel: "IN_APP",
+          counts: { guardians: 1, students: 1, teachers: 1 },
+          expiresAt: "2026-06-09T09:05:00.000Z",
+          previewToken: "announcement-preview-token",
+          recipientCount: 3,
+          scope: {
+            ...(body.campusId ? { campusId: body.campusId } : {}),
+            ...(body.classId ? { classId: body.classId } : {}),
+            ...(body.courseId ? { courseId: body.courseId } : {}),
+            ...(body.gradeLevelId ? { gradeLevelId: body.gradeLevelId } : {}),
+            ...(body.termId ? { termId: body.termId } : {}),
+          },
+        })),
+      });
+      return;
+    }
+
     if (path === "/announcements" && request.method() === "POST") {
       announcementCreateIdempotencyKeys.push(request.headers()["idempotency-key"] ?? "");
       const body = request.postDataJSON() as Omit<AnnouncementFixture, "id" | "tenantId" | "publishedAt">;
@@ -4554,13 +4586,15 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("button", { name: "Duyuru ekle" }).click();
   await page.getByLabel("Başlık", { exact: true }).fill("   ");
   await page.getByLabel(/^Duyuru metni/).fill("Geçici metin");
-  await page.getByRole("button", { name: "Yayınla", exact: true }).click();
+  await page.getByRole("button", { name: "Alıcıları önizle", exact: true }).click();
   await expect(page.getByLabel("Duyuru yönetimi").getByText("Başlık zorunludur.")).toBeVisible();
   await page.getByLabel("Başlık", { exact: true }).fill(" Sınav hazırlığı ");
   await page.getByLabel(/^Duyuru metni/).fill(" Cuma deneme sınavı yapılacaktır. ");
+  await page.getByRole("button", { name: "Alıcıları önizle", exact: true }).click();
+  await expect(page.getByLabel("Duyuru önizleme")).toContainText("3 alıcı");
   await page.getByRole("button", { name: "Yayınla", exact: true }).click();
   const announcementConfirmDialog = page.getByRole("dialog", { name: "Duyuruyu yayınla" });
-  await expect(announcementConfirmDialog).toContainText("Kurum ana sayfası ve kullanıcı duyuru ekranları");
+  await expect(announcementConfirmDialog).toContainText("3 kişi");
   await announcementConfirmDialog.getByRole("button", { name: "Yayınla" }).click();
   await expect.poll(() => announcementCreateIdempotencyKeys).toHaveLength(1);
   expect(announcementCreateIdempotencyKeys[0]).toMatch(/^[0-9a-f-]{36}$/);

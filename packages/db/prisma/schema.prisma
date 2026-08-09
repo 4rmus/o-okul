@@ -741,6 +741,7 @@ model Student {
   teacherAssignments TeacherAssignment[]
   enrollments StudentEnrollment[]
   contacts StudentContact[]
+  announcements Announcement[]
 
   @@index([tenantId, deletedAt])
   @@index([tenantId, status, deletedAt])
@@ -1558,11 +1559,13 @@ model Announcement {
   classId     String?
   courseId    String?
   termId      String?
+  studentId   String?
   publishedAt DateTime  @default(now())
   deletedAt   DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  student     Student?  @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   deliveryReports AnnouncementDeliveryReport[]
   receipts    AnnouncementReceipt[]
 
@@ -1574,6 +1577,7 @@ model Announcement {
   @@index([tenantId, classId])
   @@index([tenantId, courseId])
   @@index([tenantId, termId])
+  @@index([tenantId, studentId])
 }
 
 model AnnouncementReceipt {

@@ -413,31 +413,27 @@ export class AttendanceService {
       return;
     }
 
-    let announcementId: string | undefined;
-    if (student.classId) {
-      const announcement = await this.announcements.create(context, {
-        tenantId: student.tenantId,
-        audience: "GUARDIANS",
-        classId: student.classId,
-        title: "Devamsızlık eşiği uyarısı",
-        body: "Sınıfınızda devamsızlık eşiğine ulaşan öğrenci bulunmaktadır. Lütfen veli panelinizden öğrencinizin devamsızlık özetini kontrol edin.",
-      });
-      announcementId = announcement.id;
-    }
+    const announcement = await this.announcements.createStudentGuardianAlert(context, {
+      tenantId: student.tenantId,
+      studentId: student.id,
+      title: "Devamsızlık eşiği uyarısı",
+      body: "Öğrenciniz devamsızlık eşiğine ulaşmıştır. Lütfen veli panelinizden devamsızlık özetini kontrol edin.",
+    });
+    const announcementId = announcement?.id;
 
     await this.auditLogs?.record({
       tenantId: student.tenantId,
       actorUserId: context.userId,
       entityType: "Attendance",
       entityId: student.id,
-      action: "attendance.threshold_warned",
+      action: announcementId ? "attendance.threshold_warned" : "attendance.threshold_reached",
       diff: {
         studentId: student.id,
         classId: student.classId,
         previousAbsenceCount,
         currentAbsenceCount,
         threshold: absenceWarningThreshold,
-        announcementId,
+        ...(announcementId ? { announcementId } : {}),
       },
     });
   }

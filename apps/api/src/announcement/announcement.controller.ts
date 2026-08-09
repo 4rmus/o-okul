@@ -3,11 +3,11 @@ import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
-import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import type {
   AnnouncementDeliveryQueueResult,
   AnnouncementDeliveryReportRecord,
+  AnnouncementRecipientPreviewResult,
   AnnouncementRecipientReport,
 } from "@o-okul/shared-types";
 import {
@@ -18,9 +18,11 @@ import {
   type AnnouncementCreateBody,
   type AnnouncementDeliveryResultBody,
   type AnnouncementDeliverySendBody,
+  type AnnouncementRecipientPreviewBody,
   announcementCreateBodySchema,
   announcementDeliveryResultBodySchema,
   announcementDeliverySendBodySchema,
+  announcementRecipientPreviewBodySchema,
 } from "./announcement-validation.js";
 
 @Controller("announcements")
@@ -29,15 +31,23 @@ export class AnnouncementController {
   constructor(private readonly announcements: AnnouncementService) {}
 
   @Get()
-  @Roles("TENANT_ADMIN", "TEACHER")
+  @RequireCapability("announcement:manage")
   async list(@Query() query: ListQuery): Promise<AnnouncementRecord[]> {
     return applyListQuery(await this.announcements.list(getRequestContext()), query, announcementListFields);
   }
 
   @Get(":id")
-  @Roles("TENANT_ADMIN", "TEACHER")
+  @RequireCapability("announcement:manage")
   findOne(@Param("id") id: string): Promise<AnnouncementRecord> {
     return this.announcements.findOne(getRequestContext(), id);
+  }
+
+  @Post("recipients/preview")
+  @RequireCapability("announcement:manage")
+  previewRecipients(
+    @Body(zodBody(announcementRecipientPreviewBodySchema)) body: AnnouncementRecipientPreviewBody,
+  ): Promise<AnnouncementRecipientPreviewResult> {
+    return this.announcements.previewRecipients(getRequestContext(), body);
   }
 
   @Get(":id/recipients")

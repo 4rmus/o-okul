@@ -759,6 +759,11 @@ describe("Audit log API", () => {
   });
 
   it("duyuru ve mesaj şablonu yazma işlemleri audit kaydı üretir", async () => {
+    const announcementPreview = await request(server)
+      .post("/announcements/recipients/preview")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ audience: "TEACHERS", channel: "IN_APP" })
+      .expect(201);
     const announcement = await request(server)
       .post("/announcements")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
@@ -766,6 +771,8 @@ describe("Audit log API", () => {
         title: "Ali Yilmaz audit duyurusu",
         body: "Audit akışı kontrol ediliyor.",
         audience: "TEACHERS",
+        channel: "IN_APP",
+        recipientPreviewToken: announcementPreview.body.previewToken,
       })
       .expect(201);
 
@@ -806,7 +813,7 @@ describe("Audit log API", () => {
         entityType: "Announcement",
         entityId: (announcement.body as { id: string }).id,
         action: "announcement.created",
-        diff: { audience: "TEACHERS", title: "[REDACTED]" },
+        diff: { audience: "TEACHERS", channel: "IN_APP", recipientCount: 2, title: "[REDACTED]" },
       }),
       expect.objectContaining({
         tenantId: "tenant-a",

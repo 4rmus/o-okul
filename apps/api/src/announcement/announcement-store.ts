@@ -82,8 +82,8 @@ export class PostgresAnnouncementStore implements AnnouncementStore {
   async create(input: Omit<AnnouncementRecord, "id">): Promise<AnnouncementRecord> {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<AnnouncementRow>(
-        `INSERT INTO "Announcement" ("id", "tenantId", "title", "body", "audience", "campusId", "gradeLevelId", "classId", "courseId", "termId", "publishedAt", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
+        `INSERT INTO "Announcement" ("id", "tenantId", "title", "body", "audience", "campusId", "gradeLevelId", "classId", "courseId", "termId", "studentId", "publishedAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
          RETURNING *`,
         [
           randomUUID(),
@@ -96,6 +96,7 @@ export class PostgresAnnouncementStore implements AnnouncementStore {
           input.classId ?? null,
           input.courseId ?? null,
           input.termId ?? null,
+          input.studentId ?? null,
           input.publishedAt,
         ],
       );
@@ -125,6 +126,7 @@ interface AnnouncementRow {
   classId: string | null;
   courseId: string | null;
   termId: string | null;
+  studentId: string | null;
   publishedAt: Date | string;
   deletedAt: Date | string | null;
 }
@@ -141,6 +143,7 @@ function toAnnouncementRecord(record: AnnouncementRow): AnnouncementRecord {
     classId: record.classId ?? undefined,
     courseId: record.courseId ?? undefined,
     termId: record.termId ?? undefined,
+    studentId: record.studentId ?? undefined,
     publishedAt: toIsoString(record.publishedAt),
     deletedAt: record.deletedAt ? toIsoString(record.deletedAt) : undefined,
   };
