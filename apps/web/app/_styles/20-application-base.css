@@ -3968,6 +3968,27 @@
   overflow-wrap: anywhere;
 }
 
+.next-exam-workspace-readiness {
+  display: grid;
+  gap: var(--space-2xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.next-exam-workspace-readiness li,
+.next-exam-workspace-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+}
+
+.next-exam-workspace-readiness li {
+  justify-content: space-between;
+  min-width: 0;
+}
+
 .next-optical-result-header {
   display: flex;
   align-items: center;

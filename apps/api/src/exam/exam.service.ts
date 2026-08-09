@@ -7,7 +7,16 @@ import {
   NotFoundException,
   Optional,
 } from "@nestjs/common";
-import type { AnswerKeyRecord, ExamParticipantRecord, ExamRecord, ExamType } from "@o-okul/shared-types";
+import {
+  canAccessExamWorkspace,
+  type AnswerKeyRecord,
+  ExamParticipantRecord,
+  ExamRecord,
+  ExamType,
+  ExamWorkspaceNextAction,
+  ExamWorkspaceReadModel,
+  ExamWorkspaceReadinessStep,
+} from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
@@ -217,6 +226,55 @@ export class ExamService {
     const tenantId = requireTenant(context);
     const id = requiredString(examId, "EXAM_ID_REQUIRED");
     return this.withAnswerKeySummary(tenantId, await this.requireExam(tenantId, id));
+  }
+
+  async workspace(context: RequestContext, examId: string | undefined): Promise<ExamWorkspaceReadModel> {
+    assertExamWorkspaceAccess(context);
+    const tenantId = requireTenant(context);
+    const id = requiredString(examId, "EXAM_ID_REQUIRED");
+    const [exam, participants] = await Promise.all([
+      this.withAnswerKeySummary(tenantId, await this.requireExam(tenantId, id)),
+      this.participants.list(tenantId, id),
+    ]);
+    const answerKeyReady = exam.answerKeySummary?.status !== undefined
+      && exam.answerKeySummary.status !== "MISSING";
+    const participantsReady = participants.length > 0;
+    const published = exam.status === "PUBLISHED";
+    const opticalReady = answerKeyReady && participantsReady && published;
+    const opticalBlocker = !answerKeyReady
+      ? "ANSWER_KEY_MISSING"
+      : !participantsReady
+        ? "PARTICIPANTS_MISSING"
+        : !published
+          ? "EXAM_NOT_PUBLISHED"
+          : undefined;
+    const readiness: ExamWorkspaceReadinessStep[] = [
+      { key: "EXAM", status: "READY" },
+      answerKeyReady
+        ? { key: "ANSWER_KEY", status: "READY" }
+        : { key: "ANSWER_KEY", status: "BLOCKED", blocker: "ANSWER_KEY_MISSING" },
+      participantsReady
+        ? { key: "PARTICIPANTS", status: "READY" }
+        : { key: "PARTICIPANTS", status: "BLOCKED", blocker: "PARTICIPANTS_MISSING" },
+      published
+        ? { key: "PUBLISHED", status: "READY" }
+        : { key: "PUBLISHED", status: "BLOCKED", blocker: "EXAM_NOT_PUBLISHED" },
+      opticalReady
+        ? { key: "OPTICAL_ENTRY", status: "READY" }
+        : { key: "OPTICAL_ENTRY", status: "BLOCKED", blocker: opticalBlocker },
+    ];
+
+    return {
+      exam,
+      participantSummary: {
+        total: participants.length,
+        registered: countParticipantStatus(participants, "REGISTERED"),
+        attended: countParticipantStatus(participants, "ATTENDED"),
+        absent: countParticipantStatus(participants, "ABSENT"),
+      },
+      readiness,
+      nextAction: resolveWorkspaceNextAction(answerKeyReady, participantsReady, published),
+    };
   }
 
   async update(context: RequestContext, examId: string | undefined, input: UpdateExamInput): Promise<ExamRecord> {
@@ -538,6 +596,16 @@ function requireTenant(context: RequestContext): string {
   return context.tenantId;
 }
 
+function assertExamWorkspaceAccess(context: RequestContext): void {
+  if (
+    !canAccessExamWorkspace(context.roles, context.activePersona)
+    || context.rolePreview
+    || context.campusScope?.scopeMode === "CAMPUSES"
+  ) {
+    throw new ForbiddenException("EXAM_WORKSPACE_SCOPE_FORBIDDEN");
+  }
+}
+
 function requiredString(value: string | undefined, errorCode: string): string {
   const trimmed = value?.trim();
   if (!trimmed) {
@@ -669,4 +737,19 @@ function isUniqueViolation(error: unknown): boolean {
     return false;
   }
   return error.message === "EXAM_PARTICIPANT_EXISTS" || "code" in error && error.code === "23505";
+}
+
+function countParticipantStatus(participants: ExamParticipantRecord[], status: string): number {
+  return participants.filter((participant) => participant.status === status).length;
+}
+
+function resolveWorkspaceNextAction(
+  answerKeyReady: boolean,
+  participantsReady: boolean,
+  published: boolean,
+): ExamWorkspaceNextAction {
+  if (!answerKeyReady) return "ADD_ANSWER_KEY";
+  if (!participantsReady) return "ADD_PARTICIPANTS";
+  if (!published) return "PUBLISH_EXAM";
+  return "OPEN_OPTICAL";
 }

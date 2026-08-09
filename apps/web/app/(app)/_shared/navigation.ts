@@ -142,6 +142,48 @@ export const institutionNavGroups: readonly InstitutionNavGroup[] = [
   },
 ];
 
+const institutionItemByHref = new Map(
+  institutionNavGroups.flatMap((group) => group.items).map((item) => [item.href, item]),
+);
+
+export const institutionNavGroupsV2: readonly InstitutionNavGroup[] = [
+  v2Group("Bugün", ["/kurum"]),
+  v2Group("Kişiler", [
+    "/kurum/ogrenciler",
+    "/kurum/veliler",
+    "/kurum/ogretmenler",
+    "/kurum/calisanlar",
+    "/kurum/ogrenci-portal-erisimi",
+    "/kurum/kullanicilar",
+  ]),
+  v2Group("Akademik", [
+    "/kurum/siniflar",
+    "/kurum/seviyeler",
+    "/kurum/kampusler",
+    "/kurum/dersler",
+    "/kurum/program",
+    "/kurum/etutler",
+    "/kurum/devamsizlik",
+    "/kurum/akademik-takvim",
+    "/kurum/materyaller",
+    "/kurum/notlar",
+  ]),
+  v2Group("Sınav", ["/kurum/sinavlar", "/kurum/kazanimlar", "/kurum/optik", "/kurum/raporlar"]),
+  v2Group("İletişim", ["/kurum/duyurular", "/kurum/sablonlar", "/kurum/destek"]),
+  v2Group("Finans", ["/kurum/finans", "/kurum/lisans-donemleri"]),
+  v2Group("Ayarlar", ["/kurum/kurulum", "/kurum/rol-onizleme", "/kurum/operasyon-ve-kanit"]),
+];
+
+function v2Group(label: string, hrefs: string[]): InstitutionNavGroup {
+  return {
+    label,
+    items: hrefs.flatMap((href) => {
+      const item = institutionItemByHref.get(href);
+      return item ? [item] : [];
+    }),
+  };
+}
+
 export const systemNavGroups: readonly SystemNavGroup[] = [
   {
     label: "Başlangıç",
@@ -228,4 +270,4 @@ export const staticBreadcrumbLabels: Record<string, string> = {
   "/kurum/operasyon-ve-kanit": "Operasyon ve kanıt",
 };
 
-export const dynamicDetailParents: string[] = ["ogrenciler", "ogretmenler", "veliler", "siniflar", "duyurular"];
+export const dynamicDetailParents: string[] = ["ogrenciler", "ogretmenler", "veliler", "siniflar", "sinavlar", "duyurular"];

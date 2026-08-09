@@ -2563,6 +2563,37 @@ export interface ExamParticipantRecord {
   updatedAt: string;
 }
 
+export type ExamWorkspaceReadinessKey =
+  | "EXAM"
+  | "ANSWER_KEY"
+  | "PARTICIPANTS"
+  | "PUBLISHED"
+  | "OPTICAL_ENTRY";
+
+export type ExamWorkspaceNextAction =
+  | "ADD_ANSWER_KEY"
+  | "ADD_PARTICIPANTS"
+  | "PUBLISH_EXAM"
+  | "OPEN_OPTICAL";
+
+export interface ExamWorkspaceReadinessStep {
+  key: ExamWorkspaceReadinessKey;
+  status: "READY" | "BLOCKED";
+  blocker?: "ANSWER_KEY_MISSING" | "PARTICIPANTS_MISSING" | "EXAM_NOT_PUBLISHED";
+}
+
+export interface ExamWorkspaceReadModel {
+  exam: ExamRecord;
+  participantSummary: {
+    total: number;
+    registered: number;
+    attended: number;
+    absent: number;
+  };
+  readiness: ExamWorkspaceReadinessStep[];
+  nextAction: ExamWorkspaceNextAction;
+}
+
 export interface OpticalFormTemplateRecord {
   id: string;
   tenantId: string;

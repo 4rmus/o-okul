@@ -2,8 +2,17 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AlanRecord, ClassRecord, ExamParticipantRecord, ExamRecord, GradeLevelRecord, StudentRecord } from "@o-okul/shared-types";
+import {
+  canAccessExamWorkspace,
+  type AlanRecord,
+  type ClassRecord,
+  type ExamParticipantRecord,
+  type ExamRecord,
+  type GradeLevelRecord,
+  type StudentRecord,
+} from "@o-okul/shared-types";
 import {
   Button,
   Checkbox,
@@ -24,6 +33,7 @@ import {
 import { ArrowRight, CheckCircle2, Pencil, Plus, ScanLine, Search, Trash2, Users, X } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError, apiBaseUrl, apiErrorMessage, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { featureRolloutQueryKey, isFeatureEnabled, loadFeatureRollouts } from "../../../../src/feature-rollouts.js";
 import {
   examWithClassFormSchema,
   firstFormError,
@@ -58,6 +68,7 @@ type CreateExamPayload = ExamWithClassFormPayload & {
 
 export function ExamsPage() {
   const { auth } = useAuth();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { confirm, confirmationDialog } = useConfirmDialog();
   const queryKey = ["next-exams", auth?.session.tenantId ?? "anonymous"];
@@ -73,13 +84,30 @@ export function ExamsPage() {
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
+  const featureRolloutsQuery = useQuery({
+    queryKey: featureRolloutQueryKey(
+      auth?.session.tenantId,
+      auth?.session.id,
+      auth?.session.activePersona,
+    ),
+    queryFn: () => loadFeatureRollouts(auth?.accessToken ?? ""),
+    enabled: Boolean(auth),
+    refetchOnWindowFocus: false,
+  });
+  const workspaceV2Enabled = Boolean(auth && canAccessExamWorkspace(
+    auth.session.roles,
+    auth.session.activePersona,
+  )) && featureRolloutsQuery.isSuccess
+    && !featureRolloutsQuery.isError
+    && isFeatureEnabled(featureRolloutsQuery.data, "web.exam-workspace-v2");
+  const requestedExamId = searchParams.get("examId") ?? "";
   const [form, setForm] = useState<ExamWithClassFormState>(emptyForm);
   const [editingExam, setEditingExam] = useState<ExamRecord | null>(null);
   const [classSearch, setClassSearch] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [answerKeyFileName, setAnswerKeyFileName] = useState("");
   const [answerKeyFileBase64, setAnswerKeyFileBase64] = useState("");
-  const [selectedExamId, setSelectedExamId] = useState("");
+  const [selectedExamId, setSelectedExamId] = useState(requestedExamId);
   const [error, setError] = useState("");
   const rows = examsQuery.data ?? [];
   const selectedExam = rows.find((exam) => exam.id === selectedExamId) ?? rows[0];
@@ -296,6 +324,12 @@ export function ExamsPage() {
   ];
 
   useEffect(() => {
+    if (requestedExamId && rows.some((exam) => exam.id === requestedExamId)) {
+      setSelectedExamId(requestedExamId);
+    }
+  }, [requestedExamId, rows]);
+
+  useEffect(() => {
     if (!participantsNotFound || !auth) return;
 
     setSelectedExamId("");
@@ -491,6 +525,17 @@ export function ExamsPage() {
                 {selectedExam.status === "PUBLISHED" ? "Rapor zinciri açık" : "Rapor için yayın bekliyor"}
               </StatusBadge>
             </div>
+            {workspaceV2Enabled ? (
+              <Link
+                className="uh-button uh-button--secondary uh-button--md"
+                href={`/kurum/sinavlar/${encodeURIComponent(selectedExam.id)}`}
+              >
+                <span className="uh-button__content">
+                  Salt okunur çalışma alanını aç
+                  <ArrowRight size={17} aria-hidden="true" />
+                </span>
+              </Link>
+            ) : null}
             <InfoGrid className="next-exam-selected-meta" aria-label="Seçili sınav metrikleri" role="region">
               <InfoItem label="Başlangıç" value={formatDateTime(selectedExam.startsAt)} />
               <InfoItem label="Katılımcı" value={`${formatCount(participants.length)} öğrenci`} />

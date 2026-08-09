@@ -1,10 +1,10 @@
 # O-Okul Durum
 
 Son güncelleme: 2026-08-10
-İnceleme snapshotı: `origin/main` / `af5dc5ad1572965709f0fc47f3bdf84a939e0626`; Gate A ve B değişiklikleri
+İnceleme snapshotı: `origin/main` / `af5dc5ad1572965709f0fc47f3bdf84a939e0626`; Gate A, B ve C değişiklikleri
 `agent/almanac-gate-a-local-20260809-2` izole yerel branch'indedir
-Kanıt düzeyi: Gate A ve Gate B `LOCAL_STATIC`; GitHub CI, staging, provider, deploy ve production bu değişiklik
-seti için yeniden doğrulanmadı
+Kanıt düzeyi: Gate A, Gate B ve Gate C `LOCAL_STATIC`; ölçüm baseline'ı `LOCAL_SYNTHETIC`.
+GitHub CI, staging, provider, deploy ve production bu değişiklik seti için yeniden doğrulanmadı
 
 5 Ağustos 2026 ürün kararları: giriş kurum subdomaini + tenant-local kimliktir; guardian ürün
 kapsamından çıkarılacaktır; hukuk/KVKK incelemesi bu fazda repo uygulamasını ve pilot hazırlığını
@@ -76,10 +76,34 @@ ortam ve tarih içeren kalıcı evidence ile yükseltilir.
   taşır. Serbest correlation/error alanı yoktur. Üç kritik görev için dedicated Next build, mocked API,
   görev başına beş örnek ve sıfır runtime hata içeren `LOCAL_SYNTHETIC` baseline kaydedildi.
 - **Açık geçiş borcu:** Legacy `SYSTEM_ADMIN` tenant-role/realm ayrımı ve üç salt sunum bileşeni
-  allowlist'i `PARTIAL`dır; `CP-01`/`UI-01` tamamlandı iddiası yoktur. Gate C başlatılmadı.
+  allowlist'i `PARTIAL`dır; `CP-01`/`UI-01` tamamlandı iddiası yoktur. Gate B kapanışında Gate C
+  henüz başlatılmamıştı; güncel Gate C durumu aşağıdadır.
 - **Sonuç:** Gate B hedefli kontroller, `pnpm run ci`, `git diff --check` ve iki bağımsız P0/P1
   incelemesi yerelde `PASS`. GitHub CI, gerçek kullanıcı gözlemi, analytics transportu, tenant flag
   aktivasyonu, staging, deploy ve production `EXTERNAL_NOT_RUN`.
+
+## Almanak 2.0 Gate C — İlk Dikey Dilim Yerel Kapanış (2026-08-10)
+
+- **Shell v2:** `web.shell-v2` yalnız sunucunun çözdüğü tenant/session/persona bağlamıyla kurum
+  navigasyonunu yedi iş grubuna ayırır. Bayrak kapalı, yanıt bozuk veya endpoint hatalıysa legacy shell
+  kullanılır; query/localStorage değeri rollout açamaz.
+- **Sınav çalışma alanı:** `GET /exams/:examId/workspace`, mevcut sınav ve katılımcı depolarından
+  salt okunur hazırlık özeti üretir. Yeni `/kurum/sinavlar/[examId]` route'u beş hazırlık adımı ve
+  mevcut optik/rapor geçişlerini gösterir; yeni yazma endpoint'i veya DB migrationı yoktur.
+- **Güvenlik:** Route `academic:manage` exact capability, tenant bağlamı ve açık admin rol/persona
+  sınırını birlikte uygular. Başka tenant 404 alır; öğretmen, öğrenci, veli, sistem, role-preview ve
+  kampüs kapsamlı çalışan reddedilir. Response öğrenci/katılımcı kimliği taşımaz.
+- **Rollback:** `web.exam-workspace-v2` kapalı veya rollout endpoint'i hatalıysa workspace API hiç
+  çağrılmaz ve aynı `examId` ile legacy sınav görünümüne dönülür. Compose yalnız server-side rollout
+  environment/JSON değerlerini API'ye geçirir; istemciye allowlist veya public env verilmez.
+- **Kapsam sınırı:** Gerçek tenant aktivasyonu yapılmadı. Önceden var olan kampüs kapsamlı rapor
+  erişim borcu bu salt okunur dilimde değiştirilmedi; kampüs kapsamlı pilot veya Gate D açılmadan önce
+  ayrı güvenlik diliminde kapanmalıdır.
+- **Sonuç:** Gate C hedefli API/Playwright, 82 route manifesti, 234 path OpenAPI, üç görev x beş örnek
+  measurement baseline, Docker/Compose ve izole portta tam `pnpm run ci` yerelde `PASS`.
+  Bağımsız güvenlik ve PR yeniden incelemelerinde açık P0/P1 kalmadı.
+  GitHub CI, gerçek tenant flag aktivasyonu, staging, deploy, RUM/UAT, pilot ve production
+  `EXTERNAL_NOT_RUN`.
 
 ## Production Teknik Aktivasyonu — 2026-08-05
 
@@ -131,6 +155,20 @@ ve gerçek ortam kanıtı olmadan yapılamaz. Workspace mailbox/alias testi tama
 uygulama-provider teslim testi yerine geçmez. Şablon veya statik checker sonucu canlı kanıt yerine kullanılamaz.
 
 ## Doğrulama
+
+2026-08-10 Gate C yerel sonuçları:
+
+- Workspace API: 1 dosya/26 test; tenant/role/persona/campus/PII negatifleri `PASS`.
+- Gate C Playwright: enabled, disabled, error, malformed, rol/persona ve legacy senaryoları;
+  320/414/768/1024/1440 görünüm,
+  sıfır mutation ve aynı-sınav rollback kontrolü `PASS`.
+- Web UX: 129 sözleşme, 84 route smoke ve 32 görsel test; route manifest 82 route/19 modül kararı
+  `PASS`.
+- Shared/API/web typecheck, Docker/Compose, OpenAPI 234 path, ölçüm baseline 3 görev x 5 örnek,
+  `NEXT_E2E_PORT=43127 pnpm run ci` ve `git diff --check`: `PASS` (`LOCAL_STATIC` /
+  `LOCAL_SYNTHETIC`).
+- GitHub Actions CI, gerçek tenant rollout, staging/production, deploy, RUM/UAT ve pilot:
+  `EXTERNAL_NOT_RUN`.
 
 2026-08-10 Gate B yerel sonuçları:
 

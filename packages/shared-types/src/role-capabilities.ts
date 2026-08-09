@@ -94,6 +94,18 @@ export function hasCapabilityForRoles(
   return capabilities.some((capability) => capability === required || matchesCapabilityWildcard(capability, required));
 }
 
+export function canAccessExamWorkspace(
+  roles: readonly string[],
+  activePersona?: "STAFF" | "TEACHER" | "STUDENT",
+): boolean {
+  const allowedRoles = ["TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN"];
+  const hasAllowedRole = roles.some((role) => allowedRoles.includes(role));
+  return hasAllowedRole && (
+    activePersona === "STAFF"
+    || (activePersona === undefined && roles.length === 1)
+  );
+}
+
 export function isTenantRoleName(role: string): role is TenantRoleName {
   return tenantRoles.includes(role as TenantRoleName);
 }

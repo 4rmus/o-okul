@@ -1,4 +1,8 @@
-import { hasCapabilityForRoles as sharedHasCapabilityForRoles, type ActivePersona } from "@o-okul/shared-types";
+import {
+  canAccessExamWorkspace,
+  hasCapabilityForRoles as sharedHasCapabilityForRoles,
+  type ActivePersona,
+} from "@o-okul/shared-types";
 import { institutionNavGroups } from "./navigation.js";
 
 type NavigationItem = {
@@ -25,8 +29,12 @@ export function hasSubjectPortalAccess(session: SessionLike, role: string, subje
   return session.roles.includes(role) && session.subjectType === subjectType;
 }
 
-export function getInstitutionNavGroups(roles: readonly string[], activePersona?: ActivePersona) {
-  return institutionNavGroups
+export function getInstitutionNavGroups(
+  roles: readonly string[],
+  activePersona?: ActivePersona,
+  groups = institutionNavGroups,
+) {
+  return groups
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => canAccessNavigationItem(roles, item, activePersona)),
@@ -36,6 +44,7 @@ export function getInstitutionNavGroups(roles: readonly string[], activePersona?
 
 export function canAccessInstitutionPath(roles: readonly string[], pathname: string, activePersona?: ActivePersona) {
   const normalizedPathname = normalizeInstitutionPath(pathname);
+  if (isExamWorkspacePath(normalizedPathname) && !canAccessExamWorkspace(roles, activePersona)) return false;
   const item = findInstitutionNavigationItem(normalizedPathname);
   if (!item) return false;
   if (item.href === "/kurum" && normalizedPathname !== "/kurum") return false;
@@ -44,6 +53,7 @@ export function canAccessInstitutionPath(roles: readonly string[], pathname: str
 
 export function canAccessHref(roles: readonly string[], href: string, activePersona?: ActivePersona) {
   const normalizedHref = normalizeInstitutionPath(href);
+  if (isExamWorkspacePath(normalizedHref) && !canAccessExamWorkspace(roles, activePersona)) return false;
   const item = findInstitutionNavigationItem(normalizedHref);
   if (!item) return false;
   if (item.href === "/kurum" && normalizedHref !== "/kurum") return false;
@@ -74,4 +84,8 @@ function findInstitutionNavigationItem(pathname: string) {
 
 function normalizeInstitutionPath(pathname: string) {
   return pathname.split(/[?#]/)[0] || "/";
+}
+
+function isExamWorkspacePath(pathname: string) {
+  return /^\/kurum\/sinavlar\/[^/]+\/?$/.test(pathname);
 }

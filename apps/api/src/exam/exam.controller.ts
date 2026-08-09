@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, UseGuards } from "@nestjs/common";
-import type { ExamParticipantRecord, ExamRecord } from "@o-okul/shared-types";
+import type { ExamParticipantRecord, ExamRecord, ExamWorkspaceReadModel } from "@o-okul/shared-types";
 import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
 import { optionalIsoDateTime, optionalTrimmedString, requiredTrimmedString, zodBody } from "../http/zod-validation.js";
@@ -73,6 +73,12 @@ export class ExamController {
   @Roles("TEACHER")
   get(@Param("examId") examId: string): Promise<ExamRecord> {
     return this.exams.get(getRequestContext(), examId);
+  }
+
+  @Get(":examId/workspace")
+  @RequireCapability("academic:manage")
+  workspace(@Param("examId") examId: string): Promise<ExamWorkspaceReadModel> {
+    return this.exams.workspace(getRequestContext(), examId);
   }
 
   @Patch(":examId")

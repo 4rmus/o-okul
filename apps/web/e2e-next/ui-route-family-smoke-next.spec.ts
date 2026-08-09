@@ -27,7 +27,7 @@ type Persona = "anonymous" | "assistantAdmin" | "guardian" | "student" | "studen
 
 interface RouteCase {
   architecture: RouteArchitecture;
-  feature?: "sms";
+  feature?: "exam-workspace" | "sms";
   heading: string;
   persona: Persona;
   primaryTask: PrimaryTask;
@@ -89,6 +89,7 @@ const routeCases = [
   route("/kurum/sablonlar", "Şablonlar", "assistantAdmin", { role: "region", name: "Şablon yönetimi" }, { feature: "sms" }),
   route("/kurum/seviyeler", "Seviyeler", "assistantAdmin", { role: "region", name: "Seviye yönetimi" }),
   route("/kurum/sinavlar", "Sınavlar", "assistantAdmin", { role: "region", name: "Sınav yönetimi" }),
+  route("/kurum/sinavlar/[examId]", "Gate C Denemesi", "assistantAdmin", { role: "region", name: "Salt okunur sınav çalışma alanı" }, { feature: "exam-workspace" }),
   route("/kurum/siniflar", "Sınıflar", "assistantAdmin", { role: "region", name: "Sınıf yönetimi" }),
   route("/kurum/siniflar/[classId]", "8-A", "assistantAdmin", { role: "region", name: "Sınıf detayı" }),
   route("/kurum/sistem-sagligi", "Sistem Sağlığı", "tenantAdmin", { role: "region", name: "Sistem bağlantıları ve kullanım durumu" }),
@@ -143,7 +144,11 @@ test.describe("UI route family smoke", () => {
     test(title, async ({ page }) => {
       test.setTimeout(120_000);
       const unknownApiRequests: string[] = [];
-      await installRouteApiMocks(page, routeCase.persona, unknownApiRequests);
+      await installRouteApiMocks(page, routeCase.persona, unknownApiRequests, {
+        featureRolloutKeys: routeCase.feature === "exam-workspace"
+          ? ["web.shell-v2", "web.exam-workspace-v2"]
+          : [],
+      });
       await page.addInitScript(() => {
         document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
       });
@@ -363,7 +368,7 @@ function assertRouteManifestParity(manifest: readonly RouteCase[]) {
   const fileSystemRoutes = collectPageRoutes(appDirectory).sort();
   const manifestRoutes = manifest.map((entry) => entry.routeTemplate).sort();
   const duplicates = manifestRoutes.filter((routeTemplate, index) => manifestRoutes.indexOf(routeTemplate) !== index);
-  if (manifest.length !== 81) throw new Error(`Route manifest must contain exactly 81 entries; found ${manifest.length}.`);
+  if (manifest.length !== 82) throw new Error(`Route manifest must contain exactly 82 entries; found ${manifest.length}.`);
   if (duplicates.length > 0) throw new Error(`Route manifest contains duplicates: ${[...new Set(duplicates)].join(", ")}`);
   if (JSON.stringify(manifestRoutes) !== JSON.stringify(fileSystemRoutes)) {
     throw new Error(`Route manifest does not match page.tsx inventory.\nmanifest=${manifestRoutes.join(",")}\nfilesystem=${fileSystemRoutes.join(",")}`);
@@ -391,7 +396,10 @@ async function installRouteApiMocks(
   page: Page,
   persona: Persona,
   unknownApiRequests: string[],
-  options: { portalAccess?: ReturnType<typeof createPortalAccessMock> } = {},
+  options: {
+    featureRolloutKeys?: Array<"web.shell-v2" | "web.exam-workspace-v2">;
+    portalAccess?: ReturnType<typeof createPortalAccessMock>;
+  } = {},
 ) {
   await page.route("**/health/ready", async (route) => {
     await fulfillJson(route, { dependencies: { postgres: "ok", redis: "ok" }, status: "ready" });
@@ -427,6 +435,10 @@ async function installRouteApiMocks(
         subjectId: "subjectId" in session ? session.subjectId : undefined,
         capabilities: [],
       });
+      return;
+    }
+    if (pathName === "/me/feature-rollouts" && request.method() === "GET" && persona !== "anonymous") {
+      await fulfillData(route, { enabledFeatureKeys: options.featureRolloutKeys ?? [] });
       return;
     }
 
@@ -531,6 +543,7 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
     };
   }
   if (pathName === "/me/tenant") return { data: tenantFixture };
+  if (pathName === "/exams/exam-demo-isem-lgs-1/workspace") return { data: examWorkspaceFixture };
   if (pathName === "/me/institution-dashboard") {
     return {
       data: {
@@ -714,6 +727,28 @@ const tenantFixture = {
   seatLimit: 10,
   slug: "dna-egitim",
   status: "ACTIVE",
+};
+const examWorkspaceFixture = {
+  exam: {
+    id: "exam-demo-isem-lgs-1",
+    tenantId: "tenant-faz9",
+    title: "Gate C Denemesi",
+    status: "PUBLISHED",
+    examType: "LGS",
+    startsAt: "2026-08-01T09:00:00.000Z",
+    answerKeySummary: { status: "PUBLISHED", version: "gate-c-v1", questionCount: 90, branchCount: 4 },
+    createdAt: "2026-08-01T08:00:00.000Z",
+    updatedAt: "2026-08-01T09:00:00.000Z",
+  },
+  participantSummary: { total: 21, registered: 0, attended: 21, absent: 0 },
+  readiness: [
+    { key: "EXAM", status: "READY" },
+    { key: "ANSWER_KEY", status: "READY" },
+    { key: "PARTICIPANTS", status: "READY" },
+    { key: "PUBLISHED", status: "READY" },
+    { key: "OPTICAL_ENTRY", status: "READY" },
+  ],
+  nextAction: "OPEN_OPTICAL",
 };
 const campusFixture = { id: "campus-main", name: "Ana Kampüs", tenantId: "tenant-faz9" };
 const gradeLevelFixture = { code: "8", id: "grade-8", name: "8. Sınıf", tenantId: "tenant-faz9" };

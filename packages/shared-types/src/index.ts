@@ -29,6 +29,7 @@ export {
   reportCourseSortOrder,
 } from "./report-course-labels.js";
 export {
+  canAccessExamWorkspace,
   capabilitiesForRoles,
   hasCapabilityForRoles,
   isPortalSubjectRoleName,
@@ -112,6 +113,10 @@ export type {
   ExamParticipantRecord,
   ExamParticipantStatus,
   ExamRecord,
+  ExamWorkspaceNextAction,
+  ExamWorkspaceReadModel,
+  ExamWorkspaceReadinessKey,
+  ExamWorkspaceReadinessStep,
   ExamScoreAverage,
   ExamScoreRanking,
   ExamScoreMetrics,

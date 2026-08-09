@@ -1984,6 +1984,22 @@ const examParticipantRecordSchema = objectSchema({
   updatedAt: stringSchema({ format: "date-time" }),
 }, ["id", "tenantId", "examId", "studentId", "status", "createdAt", "updatedAt"]);
 
+const examWorkspaceReadModelSchema = objectSchema({
+  exam: examRecordSchema,
+  participantSummary: objectSchema({
+    total: integerSchema({ minimum: 0 }),
+    registered: integerSchema({ minimum: 0 }),
+    attended: integerSchema({ minimum: 0 }),
+    absent: integerSchema({ minimum: 0 }),
+  }, ["total", "registered", "attended", "absent"]),
+  readiness: arraySchema(objectSchema({
+    key: { type: "string", enum: ["EXAM", "ANSWER_KEY", "PARTICIPANTS", "PUBLISHED", "OPTICAL_ENTRY"] },
+    status: { type: "string", enum: ["READY", "BLOCKED"] },
+    blocker: { type: "string", enum: ["ANSWER_KEY_MISSING", "PARTICIPANTS_MISSING", "EXAM_NOT_PUBLISHED"] },
+  }, ["key", "status"])),
+  nextAction: { type: "string", enum: ["ADD_ANSWER_KEY", "ADD_PARTICIPANTS", "PUBLISH_EXAM", "OPEN_OPTICAL"] },
+}, ["exam", "participantSummary", "readiness", "nextAction"]);
+
 const examParticipantCreateRequestSchema = objectSchema({
   bookletType: stringSchema(),
   participantNo: stringSchema(),
@@ -4070,6 +4086,9 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/exams/{examId}": {
     responseBody: examRecordSchema,
+  },
+  "get /api/v1/exams/{examId}/workspace": {
+    responseBody: examWorkspaceReadModelSchema,
   },
   "patch /api/v1/exams/{examId}": {
     requestBody: examCreateRequestSchema,
