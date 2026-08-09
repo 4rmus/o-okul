@@ -41,7 +41,7 @@
     "audit-null-tenant:check": "node scripts/check-audit-null-tenant-evidence.mjs",
     "financial-retention:check": "node scripts/check-financial-retention-evidence.mjs",
     "financial-retention:generate": "node scripts/generate-financial-retention-evidence.mjs",
-    "feature-rollout:check": "pnpm --filter @o-okul/shared-types build && pnpm --filter @o-okul/api exec vitest run --no-file-parallelism src/feature-rollout src/audit-log/audit-log.service.test.ts",
+    "feature-rollout:check": "pnpm --filter @o-okul/api^... build && pnpm --filter @o-okul/api exec vitest run --no-file-parallelism src/feature-rollout src/audit-log/audit-log.service.test.ts",
     "go-live:check": "node scripts/check-go-live-evidence.mjs",
     "github-ci:generate": "node scripts/generate-github-ci-evidence.mjs",
     "github-ci:check": "node scripts/check-github-ci-evidence.mjs",
