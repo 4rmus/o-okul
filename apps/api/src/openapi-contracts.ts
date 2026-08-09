@@ -1,4 +1,5 @@
 import type { OpenAPIObject } from "@nestjs/swagger";
+import { featureRolloutKeys } from "@o-okul/shared-types";
 
 type JsonSchema = Record<string, unknown>;
 type JsonContent = Record<string, { schema: JsonSchema }>;
@@ -89,6 +90,10 @@ const meProfileResponseSchema = objectSchema({
     version: integerSchema({ minimum: 1 }),
   }, ["id", "version"]),
 }, ["userId", "tenantId", "roles"]);
+
+const resolvedFeatureRolloutsSchema = objectSchema({
+  enabledFeatureKeys: arraySchema({ type: "string", enum: [...featureRolloutKeys] }),
+}, ["enabledFeatureKeys"]);
 
 const personaSwitchRequestSchema = objectSchema({
   activePersona: { type: "string", enum: ["STAFF", "TEACHER", "STUDENT"] },
@@ -205,6 +210,17 @@ const institutionDashboardSummarySchema = objectSchema({
   }, ["attendanceAlertCount", "openImportQuarantineCount", "openSupportTicketCount"]),
   latestExam: institutionDashboardExamSchema,
 }, ["generatedAt", "institution", "activeStudentCount", "attention"]);
+
+const setupReadinessSchema = objectSchema({
+  completedCount: integerSchema({ minimum: 0, maximum: 7 }),
+  percent: integerSchema({ minimum: 0, maximum: 100 }),
+  steps: arraySchema(objectSchema({
+    id: { type: "string", enum: ["campuses", "grade-levels", "classes", "courses", "teachers", "students", "learning-outcomes"] },
+    count: integerSchema({ minimum: 0 }),
+    isComplete: { type: "boolean" },
+  }, ["id", "count", "isComplete"]), { minItems: 7, maxItems: 7 }),
+  totalCount: integerSchema({ minimum: 7, maximum: 7 }),
+}, ["completedCount", "percent", "steps", "totalCount"]);
 
 const tenantFirstAdminCreateRequestSchema = objectSchema({
   email: stringSchema({ format: "email" }),
@@ -636,6 +652,33 @@ const announcementAudienceSchema = {
   enum: ["SCHOOL", "TEACHERS", "STUDENTS", "GUARDIANS"],
 };
 
+const announcementPublishChannelSchema = {
+  type: "string",
+  enum: ["IN_APP"],
+};
+
+const announcementTargetScopeSchema = objectSchema({
+  campusId: stringSchema(),
+  classId: stringSchema(),
+  courseId: stringSchema(),
+  gradeLevelId: stringSchema(),
+  termId: stringSchema(),
+});
+
+const announcementRecipientPreviewResultSchema = objectSchema({
+  audience: announcementAudienceSchema,
+  channel: announcementPublishChannelSchema,
+  counts: objectSchema({
+    guardians: integerSchema({ minimum: 0 }),
+    students: integerSchema({ minimum: 0 }),
+    teachers: integerSchema({ minimum: 0 }),
+  }, ["guardians", "students", "teachers"]),
+  expiresAt: stringSchema({ format: "date-time" }),
+  previewToken: stringSchema(),
+  recipientCount: integerSchema({ minimum: 0 }),
+  scope: announcementTargetScopeSchema,
+}, ["audience", "channel", "counts", "expiresAt", "previewToken", "recipientCount", "scope"]);
+
 const announcementDeliveryChannelSchema = {
   type: "string",
   enum: ["EMAIL", "PUSH"],
@@ -662,6 +705,7 @@ const announcementRecordSchema = objectSchema({
   classId: stringSchema(),
   courseId: stringSchema(),
   termId: stringSchema(),
+  studentId: stringSchema(),
   publishedAt: stringSchema({ format: "date-time" }),
   readAt: stringSchema({ format: "date-time" }),
   deletedAt: stringSchema({ format: "date-time" }),
@@ -1985,6 +2029,34 @@ const examParticipantCreateRequestSchema = objectSchema({
   studentId: stringSchema(),
 }, ["studentId"]);
 
+const examWorkspaceStepSchema = objectSchema({
+  id: { type: "string", enum: ["definition", "answer-key", "participants", "optical", "report"] },
+  label: stringSchema(),
+  state: { type: "string", enum: ["BLOCKED", "COMPLETE", "CURRENT"] },
+}, ["id", "label", "state"]);
+
+const examWorkspaceSchema = objectSchema({
+  exam: examRecordSchema,
+  participantSummary: objectSchema({
+    total: integerSchema({ minimum: 0 }),
+    registered: integerSchema({ minimum: 0 }),
+    attended: integerSchema({ minimum: 0 }),
+    absent: integerSchema({ minimum: 0 }),
+  }, ["total", "registered", "attended", "absent"]),
+  reportSummary: objectSchema({
+    total: integerSchema({ minimum: 0 }),
+    ready: integerSchema({ minimum: 0 }),
+    stale: integerSchema({ minimum: 0 }),
+    latestSnapshotId: stringSchema(),
+    latestGeneratedAt: stringSchema({ format: "date-time" }),
+  }, ["total", "ready", "stale"]),
+  readiness: objectSchema({
+    status: { type: "string", enum: ["ACTION_REQUIRED", "READY"] },
+    readyForOptical: { type: "boolean" },
+    steps: arraySchema(examWorkspaceStepSchema, { minItems: 5, maxItems: 5 }),
+  }, ["status", "readyForOptical", "steps"]),
+}, ["exam", "participantSummary", "reportSummary", "readiness"]);
+
 const parserConfigSuggestionLooseSchema = objectSchema({
   confidence: { type: "string", enum: ["low", "medium", "high"] },
   delimiter: { type: "string", enum: ["TAB", "COMMA", "PIPE", "FIXED"] },
@@ -2521,6 +2593,57 @@ const portalReportIndexItemSchema = objectSchema({
   latestGeneratedAt: stringSchema({ format: "date-time" }),
 }, ["examId", "title", "latestReadySnapshotId", "latestGeneratedAt"]);
 
+const teacherDailyBriefResponseSchema = objectSchema({
+  date: stringSchema({ format: "date" }),
+  todayLessonCount: integerSchema({ minimum: 0 }),
+  assignedStudentCount: integerSchema({ minimum: 0 }),
+  pendingAttendanceClassCount: integerSchema({ minimum: 0 }),
+  uncheckedHomeworkCount: integerSchema({ minimum: 0 }),
+  openSupportTicketCount: integerSchema({ minimum: 0 }),
+  nextLesson: objectSchema({
+    title: stringSchema(),
+    startsAt: stringSchema({ format: "date-time" }),
+    endsAt: stringSchema({ format: "date-time" }),
+  }, ["title", "startsAt", "endsAt"]),
+  latestReadyReport: portalReportIndexItemSchema,
+  actions: arraySchema(objectSchema({
+    id: { type: "string", enum: ["attendance", "homework", "report", "support"] },
+    count: integerSchema({ minimum: 0 }),
+  }, ["id", "count"]), { maxItems: 3 }),
+}, [
+  "date",
+  "todayLessonCount",
+  "assignedStudentCount",
+  "pendingAttendanceClassCount",
+  "uncheckedHomeworkCount",
+  "openSupportTicketCount",
+  "actions",
+]);
+
+const studentDailyBriefResponseSchema = objectSchema({
+  date: stringSchema({ format: "date" }),
+  unreadAnnouncementCount: integerSchema({ minimum: 0 }),
+  homeworkAssignmentCount: integerSchema({ minimum: 0 }),
+  attendanceRecordCount: integerSchema({ minimum: 0 }),
+  absenceCount: integerSchema({ minimum: 0 }),
+  lateCount: integerSchema({ minimum: 0 }),
+  openSupportTicketCount: integerSchema({ minimum: 0 }),
+  latestReadyReport: portalReportIndexItemSchema,
+  actions: arraySchema(objectSchema({
+    id: { type: "string", enum: ["announcement", "attendance", "homework", "report", "support"] },
+    count: integerSchema({ minimum: 0 }),
+  }, ["id", "count"]), { maxItems: 3 }),
+}, [
+  "date",
+  "unreadAnnouncementCount",
+  "homeworkAssignmentCount",
+  "attendanceRecordCount",
+  "absenceCount",
+  "lateCount",
+  "openSupportTicketCount",
+  "actions",
+]);
+
 const portalReportIndexPaths = [
   "/api/v1/me/student/reports",
   "/api/v1/me/teacher/reports",
@@ -3025,6 +3148,9 @@ const operationContracts: Record<string, OperationContract> = {
   "get /api/v1/me/profile": {
     responseBody: meProfileResponseSchema,
   },
+  "get /api/v1/me/feature-rollouts": {
+    responseBody: resolvedFeatureRolloutsSchema,
+  },
   "post /api/v1/me/password": {
     requestBody: mePasswordChangeRequestSchema,
     responseBody: mePasswordChangeResponseSchema,
@@ -3034,6 +3160,9 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/me/institution-dashboard": {
     responseBody: institutionDashboardSummarySchema,
+  },
+  "get /api/v1/me/setup-readiness": {
+    responseBody: setupReadinessSchema,
   },
   "patch /api/v1/me/tenant": {
     requestBody: tenantCurrentProfileUpdateRequestSchema,
@@ -3084,6 +3213,9 @@ const operationContracts: Record<string, OperationContract> = {
   "get /api/v1/me/student": {
     responseBody: publicStudentRecordSchema,
   },
+  "get /api/v1/me/student/daily-brief": {
+    responseBody: studentDailyBriefResponseSchema,
+  },
   "get /api/v1/me/student/profile": {
     responseBody: publicStudentProfileRecordSchema,
   },
@@ -3096,6 +3228,9 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/me/teacher": {
     responseBody: teacherRecordSchema,
+  },
+  "get /api/v1/me/teacher/daily-brief": {
+    responseBody: teacherDailyBriefResponseSchema,
   },
   "get /api/v1/me/teacher/lookups": {
     responseBody: teacherPortalLookupsResponseSchema,
@@ -3517,14 +3652,28 @@ const operationContracts: Record<string, OperationContract> = {
       audience: announcementAudienceSchema,
       body: stringSchema(),
       campusId: stringSchema(),
+      channel: announcementPublishChannelSchema,
       classId: stringSchema(),
       courseId: stringSchema(),
       gradeLevelId: stringSchema(),
+      recipientPreviewToken: stringSchema(),
       tenantId: stringSchema(),
       termId: stringSchema(),
       title: stringSchema(),
-    }, ["body", "title"]),
+    }, ["body", "channel", "recipientPreviewToken", "title"]),
     responseBody: announcementRecordSchema,
+  },
+  "post /api/v1/announcements/recipients/preview": {
+    requestBody: objectSchema({
+      audience: announcementAudienceSchema,
+      campusId: stringSchema(),
+      channel: announcementPublishChannelSchema,
+      classId: stringSchema(),
+      courseId: stringSchema(),
+      gradeLevelId: stringSchema(),
+      termId: stringSchema(),
+    }, ["channel"]),
+    responseBody: announcementRecipientPreviewResultSchema,
   },
   "post /api/v1/announcements/{id}/delivery-results": {
     idempotent: true,
@@ -4062,6 +4211,9 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/exams/{examId}": {
     responseBody: examRecordSchema,
+  },
+  "get /api/v1/exams/{examId}/workspace": {
+    responseBody: examWorkspaceSchema,
   },
   "patch /api/v1/exams/{examId}": {
     requestBody: examCreateRequestSchema,

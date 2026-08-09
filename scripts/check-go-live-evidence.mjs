@@ -385,6 +385,7 @@ const expectedRlsEvidenceReferenceFileNames = [
 const expectedTenantCompositeRelations = [
   "AnnouncementReceipt.announcement",
   "AnnouncementDeliveryReport.announcement",
+  "Announcement.student",
   "Homework.class",
   "ScheduleLesson.class",
   "StudySession.class",

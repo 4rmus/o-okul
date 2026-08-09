@@ -10,6 +10,7 @@ const expectedTenantTables = getTenantScopedTables();
 const requiredTenantCompositeRelations = [
   "AnnouncementReceipt.announcement",
   "AnnouncementDeliveryReport.announcement",
+  "Announcement.student",
   "Homework.class",
   "ScheduleLesson.class",
   "StudySession.class",

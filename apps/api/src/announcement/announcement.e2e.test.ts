@@ -3,7 +3,8 @@ import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { NotificationAdapter, NotificationMessage, NotificationSendResult } from "@o-okul/notification-adapter";
 import request from "supertest";
-import { testLoginBody } from "../test-auth.js";
+import { resetInMemoryAuthUsers, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
+import { registerTestLoginIdentity, testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 import type { ProducedJob, TenantQueueJobInput } from "../queue/job-producer.js";
@@ -22,8 +23,29 @@ describe("Announcement API", () => {
   let teacherAAccessToken: string;
   let studentAAccessToken: string;
   let guardianAAccessToken: string;
+  let campusOperationsAccessToken: string;
+  let outOfScopeClassId: string;
 
   beforeAll(async () => {
+    resetInMemoryAuthUsers();
+    upsertInMemoryAuthUser({
+      id: "user-campus-announcement",
+      email: "campus-announcement@example.test",
+      name: "Campus Announcement Operations",
+      password: "password",
+      tenantId: "tenant-a",
+      roles: ["OPERATIONS_STAFF"],
+      membership: {
+        id: "membership-campus-announcement",
+        staffRole: "OPERATIONS_STAFF",
+        hasTeacherPersona: false,
+        hasStudentPersona: false,
+        version: 1,
+        scopeMode: "CAMPUSES",
+        campusIds: ["campus-main"],
+      },
+    });
+    registerTestLoginIdentity("campus-announcement@example.test", { tenantSlug: "dna-egitim" });
     producer = new FakeProducer();
     notificationAdapter = new FakeNotificationAdapter();
     const moduleRef = await Test.createTestingModule({
@@ -62,6 +84,40 @@ describe("Announcement API", () => {
       .send(testLoginBody("guardian-a@example.test"))
       .expect(200);
     guardianAAccessToken = (guardianLogin.body as { accessToken: string }).accessToken;
+
+    const campusOperationsLogin = await request(server)
+      .post("/auth/login")
+      .send(testLoginBody("campus-announcement@example.test"))
+      .expect(200);
+    campusOperationsAccessToken = (campusOperationsLogin.body as { accessToken: string }).accessToken;
+
+    const outOfScopeCampus = await request(server)
+      .post("/campuses")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "Uzak Kampüs", code: "UZK" })
+      .expect(201);
+    const outOfScopeClass = await request(server)
+      .post("/classes")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "9-Z", campusId: outOfScopeCampus.body.id, section: "Z" })
+      .expect(201);
+    outOfScopeClassId = outOfScopeClass.body.id as string;
+
+    const expiredTeacher = await request(server)
+      .post("/teachers")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Süresi", lastName: "Dolmuş", branch: "Matematik" })
+      .expect(201);
+    await request(server)
+      .post(`/teachers/${expiredTeacher.body.id}/assignments`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        classId: "class-a",
+        endsAt: "2025-12-31",
+        role: "CLASS_TEACHER",
+        startsAt: "2025-01-01",
+      })
+      .expect(201);
   });
 
   beforeEach(() => {
@@ -73,7 +129,17 @@ describe("Announcement API", () => {
 
   afterAll(async () => {
     await app.close();
+    resetInMemoryAuthUsers();
   });
+
+  async function previewAnnouncement(input: Record<string, unknown>) {
+    const { audience, campusId, classId, courseId, gradeLevelId, termId } = input;
+    return request(server)
+      .post("/announcements/recipients/preview")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ audience, campusId, channel: "IN_APP", classId, courseId, gradeLevelId, termId })
+      .expect(201);
+  }
 
   it("tenant A sadece kendi duyurularını listeler", async () => {
     const response = await request(server)
@@ -96,17 +162,23 @@ describe("Announcement API", () => {
     ]);
   });
 
-  it("teacher tenant içindeki duyuruları okuyabilir", async () => {
-    const response = await request(server)
+  it("teacher generic yönetim rotalarını kullanamaz; yalnız scoped me rotasından okur", async () => {
+    await request(server)
       .get("/announcements/announcement-a")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
-      .expect(200);
+      .expect(403);
+    await request(server)
+      .get("/announcements")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(403);
 
-    expect(response.body).toMatchObject({
-      id: "announcement-a",
-      tenantId: "tenant-a",
-      title: "Veli toplantısı",
-    });
+    await request(server)
+      .get("/me/teacher/announcements")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: "announcement-a", tenantId: "tenant-a" })]);
+      });
   });
 
   it("tenant A başka tenant duyurusunu okuyamaz", async () => {
@@ -116,17 +188,81 @@ describe("Announcement API", () => {
       .expect(403);
   });
 
+  it("tenant admin alıcıları PII döndürmeden sayısal olarak önizler", async () => {
+    const response = await previewAnnouncement({ audience: "SCHOOL", classId: "class-a" });
+
+    expect(response.body).toMatchObject({
+      audience: "SCHOOL",
+      channel: "IN_APP",
+      counts: { guardians: 1, students: 1, teachers: 1 },
+      recipientCount: 3,
+      scope: { campusId: "campus-main", classId: "class-a", gradeLevelId: "grade-8" },
+    });
+    expect(response.body.previewToken).toEqual(expect.any(String));
+    expect(response.body.expiresAt).toEqual(expect.any(String));
+    expect(response.body).not.toHaveProperty("recipients");
+    expect(JSON.stringify(response.body)).not.toMatch(/Ada A|guardian-a|student-a|teacher-a/);
+    const tokenPayload = JSON.parse(Buffer.from(response.body.previewToken.split(".")[0], "base64url").toString("utf8"));
+    expect(JSON.stringify(tokenPayload)).not.toMatch(/tenant-a|user-tenant-a/);
+  });
+
+  it("kampüs kapsamlı operasyon personeli yalnız izinli kampüste önizleme yapar", async () => {
+    await request(server)
+      .post("/announcements/recipients/preview")
+      .set("Authorization", `Bearer ${campusOperationsAccessToken}`)
+      .send({ audience: "STUDENTS", channel: "IN_APP", classId: "class-a" })
+      .expect(201)
+      .expect(({ body }) => expect(body.scope).toMatchObject({ campusId: "campus-main", classId: "class-a" }));
+
+    await request(server)
+      .post("/announcements/recipients/preview")
+      .set("Authorization", `Bearer ${campusOperationsAccessToken}`)
+      .send({ audience: "STUDENTS", channel: "IN_APP", classId: outOfScopeClassId })
+      .expect(403);
+  });
+
+  it("önizleme belirtecini imza ve aktör bağlamı dışında reddeder", async () => {
+    const input = {
+      audience: "STUDENTS",
+      body: "Belirteç bağlamı doğrulanır.",
+      classId: "class-a",
+      title: "Belirteç doğrulaması",
+    };
+    const preview = await previewAnnouncement(input);
+    const publishBody = {
+      ...input,
+      channel: "IN_APP",
+      recipientPreviewToken: preview.body.previewToken,
+    };
+
+    await request(server)
+      .post("/announcements")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ ...publishBody, recipientPreviewToken: `${preview.body.previewToken}x` })
+      .expect(403);
+
+    await request(server)
+      .post("/announcements")
+      .set("Authorization", `Bearer ${campusOperationsAccessToken}`)
+      .send(publishBody)
+      .expect(403);
+  });
+
   it("tenant admin duyuru oluşturur", async () => {
+    const input = {
+      title: "Deneme sınavı bilgilendirme",
+      body: "Pazartesi günü genel deneme sınavı yapılacaktır.",
+      audience: "GUARDIANS",
+      classId: "class-a",
+    };
+    const preview = await previewAnnouncement(input);
     const response = await request(server)
       .post("/announcements")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
-        title: "Deneme sınavı bilgilendirme",
-        body: "Pazartesi günü genel deneme sınavı yapılacaktır.",
-        audience: "GUARDIANS",
-        classId: "class-a",
-        courseId: "course-math",
-        termId: "term-2026-spring",
+        ...input,
+        channel: "IN_APP",
+        recipientPreviewToken: preview.body.previewToken,
       })
       .expect(201);
 
@@ -136,19 +272,19 @@ describe("Announcement API", () => {
       body: "Pazartesi günü genel deneme sınavı yapılacaktır.",
       audience: "GUARDIANS",
       classId: "class-a",
-      courseId: "course-math",
-      termId: "term-2026-spring",
     });
     expect(typeof (response.body as { publishedAt?: unknown }).publishedAt).toBe("string");
   });
 
   it("tenant admin duyuru oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
-    const body = {
+    const input = {
       title: "Idempotent duyuru",
       body: "Aynı istek tekrarlandığında tek duyuru kalmalıdır.",
       audience: "STUDENTS",
       classId: "class-a",
     };
+    const preview = await previewAnnouncement(input);
+    const body = { ...input, channel: "IN_APP", recipientPreviewToken: preview.body.previewToken };
     const key = "announcement-create-idempotency-a";
 
     const first = await request(server)
@@ -570,6 +706,8 @@ describe("Announcement API", () => {
         tenantId: "tenant-b",
         title: "Gizli duyuru",
         body: "Başka tenant",
+        channel: "IN_APP",
+        recipientPreviewToken: "unused-preview-token",
       })
       .expect(403);
   });
@@ -578,7 +716,7 @@ describe("Announcement API", () => {
     const missingTitle = await request(server)
       .post("/announcements")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ body: "Eksik başlık" })
+      .send({ body: "Eksik başlık", channel: "IN_APP", recipientPreviewToken: "unused-preview-token" })
       .expect(422);
 
     expect(missingTitle.body.error).toMatchObject({
@@ -595,6 +733,8 @@ describe("Announcement API", () => {
         title: "Hatalı hedef",
         body: "Geçersiz hedef",
         audience: "UNKNOWN",
+        channel: "IN_APP",
+        recipientPreviewToken: "unused-preview-token",
       })
       .expect(422);
 
@@ -608,15 +748,87 @@ describe("Announcement API", () => {
 
   it("duyuru hedef referanslarını tenant içinde doğrular", async () => {
     await request(server)
-      .post("/announcements")
+      .post("/announcements/recipients/preview")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
-        title: "Başka tenant dersi",
-        body: "Tenant dışı hedef reddedilmeli.",
         audience: "STUDENTS",
+        channel: "IN_APP",
         courseId: "course-turkish",
       })
       .expect(400);
+
+    await request(server)
+      .post("/announcements/recipients/preview")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        audience: "GUARDIANS",
+        channel: "IN_APP",
+        classId: "class-a",
+        courseId: "course-math",
+      })
+      .expect(400)
+      .expect(({ body }) => expect(body.error?.code).toBe("ANNOUNCEMENT_AUDIENCE_TARGET_INVALID"));
+  });
+
+  it("yayın önizleme kapsamını ve yayın anındaki alıcıları yeniden doğrular", async () => {
+    const input = {
+      title: "Veli kapsamı",
+      body: "Yalnız önizlenen veli kapsamına yayınlanır.",
+      audience: "GUARDIANS" as const,
+      classId: "class-a",
+    };
+    const preview = await previewAnnouncement(input);
+    let zeroRecipientPreviewToken = "";
+
+    await request(server)
+      .post("/announcements")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        ...input,
+        classId: undefined,
+        channel: "IN_APP",
+        recipientPreviewToken: preview.body.previewToken,
+      })
+      .expect(403);
+
+    await request(server)
+      .patch("/guardians/guardian-a/students/student-a")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ canReceiveAnnouncements: false })
+      .expect(200);
+    try {
+      await request(server)
+        .post("/announcements")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({
+          ...input,
+          channel: "IN_APP",
+          recipientPreviewToken: preview.body.previewToken,
+        })
+        .expect(400)
+        .expect(({ body }) => expect(body.error?.code).toBe("ANNOUNCEMENT_RECIPIENT_PREVIEW_STALE"));
+      const zeroPreview = await previewAnnouncement(input);
+      expect(zeroPreview.body.recipientCount).toBe(0);
+      zeroRecipientPreviewToken = zeroPreview.body.previewToken;
+    } finally {
+      await request(server)
+        .patch("/guardians/guardian-a/students/student-a")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ canReceiveAnnouncements: true })
+        .expect(200);
+    }
+
+
+    await request(server)
+      .post("/announcements")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        ...input,
+        channel: "IN_APP",
+        recipientPreviewToken: zeroRecipientPreviewToken,
+      })
+      .expect(400)
+      .expect(({ body }) => expect(body.error?.code).toBe("ANNOUNCEMENT_RECIPIENT_PREVIEW_STALE"));
   });
 
   it("teacher duyuru oluşturamaz", async () => {

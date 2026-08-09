@@ -12,6 +12,7 @@ const requiredCompositeRelations = new Set([
   "Exam.linkedTytExam",
   "AnnouncementReceipt.announcement",
   "AnnouncementDeliveryReport.announcement",
+  "Announcement.student",
   "Homework.class",
   "ScheduleLesson.class",
   "StudySession.class",

@@ -24,6 +24,8 @@ import {
 } from "@o-okul/ui";
 import type {
   AcademicTermRecord,
+  AnnouncementRecipientPreviewRequest,
+  AnnouncementRecipientPreviewResult,
   AnnouncementRecipientRecord,
   AnnouncementRecipientReport,
   AnnouncementRecord,
@@ -97,6 +99,8 @@ export function AnnouncementsPage() {
   const [smsTemplateId, setSmsTemplateId] = useState("");
   const [smsRecipientPreview, setSmsRecipientPreview] = useState<SmsBatchRecipientPreviewResult | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isPreviewingRecipients, setIsPreviewingRecipients] = useState(false);
+  const [recipientPreview, setRecipientPreview] = useState<AnnouncementRecipientPreviewResult | null>(null);
   const [isPreviewingSms, setIsPreviewingSms] = useState(false);
   const [isSendingSms, setIsSendingSms] = useState(false);
   const [error, setError] = useState("");
@@ -204,12 +208,50 @@ export function AnnouncementsPage() {
   function openCreateForm() {
     setForm(emptyForm);
     setError("");
+    setRecipientPreview(null);
     setIsFormOpen(true);
   }
 
   function closeForm() {
     setIsFormOpen(false);
     setForm(emptyForm);
+    setRecipientPreview(null);
+  }
+
+  function updateAnnouncementTarget(
+    field: "audience" | "campusId" | "gradeLevelId" | "classId" | "courseId" | "termId",
+    value: string,
+  ) {
+    setForm((current) => field === "audience"
+      ? {
+          ...current,
+          audience: value as AnnouncementFormState["audience"],
+          courseId: value === "TEACHERS" ? current.courseId : "",
+          termId: value === "TEACHERS" ? current.termId : "",
+        }
+      : { ...current, [field]: value });
+    setRecipientPreview(null);
+    setError("");
+  }
+
+  async function handlePreviewRecipients() {
+    if (!auth || isPreviewingRecipients) return;
+    setError("");
+    const parsedForm = announcementFormSchema.safeParse(form);
+    if (!parsedForm.success) {
+      setError(firstFormError(parsedForm.error));
+      return;
+    }
+
+    setIsPreviewingRecipients(true);
+    try {
+      setRecipientPreview(await previewAnnouncementRecipients(auth.accessToken, parsedForm.data));
+    } catch (previewError) {
+      setRecipientPreview(null);
+      setError(apiErrorMessage(previewError, "Duyuru alıcıları önizlenemedi."));
+    } finally {
+      setIsPreviewingRecipients(false);
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -222,6 +264,10 @@ export function AnnouncementsPage() {
       setError(firstFormError(parsedForm.error));
       return;
     }
+    if (!recipientPreview || recipientPreview.recipientCount === 0) {
+      setError("Yayınlamadan önce en az bir alıcıyı önizleyin.");
+      return;
+    }
 
     const confirmed = await confirm({
       confirmLabel: "Yayınla",
@@ -231,8 +277,9 @@ export function AnnouncementsPage() {
         <span>
           <strong>Başlık:</strong> {parsedForm.data.title}<br />
           <strong>Metin:</strong> {parsedForm.data.body}<br />
-          <strong>Hedef:</strong> Kurum geneli<br />
+          <strong>Hedef:</strong> {audienceLabel(parsedForm.data.audience)} · {scopeLabel(recipientPreview.scope, { campusNames, gradeLevelNames, classNames, courseNames, termNames })}<br />
           <strong>Kanal:</strong> Uygulama içi duyuru<br />
+          <strong>Alıcı:</strong> {formatCount(recipientPreview.recipientCount)} kişi<br />
           <strong>Zamanlama:</strong> Hemen<br />
           <strong>Yayın yeri:</strong> Kurum ana sayfası ve kullanıcı duyuru ekranları
         </span>
@@ -243,12 +290,12 @@ export function AnnouncementsPage() {
 
     setIsPublishing(true);
     try {
-      const fingerprint = JSON.stringify(parsedForm.data);
+      const fingerprint = JSON.stringify({ ...parsedForm.data, previewToken: recipientPreview.previewToken });
       const request = announcementCreateRequest.current?.fingerprint === fingerprint
         ? announcementCreateRequest.current
         : { fingerprint, key: crypto.randomUUID() };
       announcementCreateRequest.current = request;
-      await createAnnouncement(auth.accessToken, parsedForm.data, request.key);
+      await createAnnouncement(auth.accessToken, parsedForm.data, recipientPreview.previewToken, request.key);
       announcementCreateRequest.current = null;
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
@@ -483,10 +530,11 @@ export function AnnouncementsPage() {
         </Panel>
       ) : null}
       <FormModal
-        description="Başlık ve duyuru metni zorunludur. Duyuru kurum genelinde yayımlanır."
+        description="İçeriği ve hedef kapsamını seçin, sayısal alıcı önizlemesini doğrulayın, ardından yayınlayın."
         onCancel={closeForm}
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
+        submitDisabled={!recipientPreview || recipientPreview.recipientCount === 0 || isPreviewingRecipients}
         submitLabel="Yayınla"
         submitting={isPublishing}
         title="Duyuru ekle"
@@ -506,14 +554,75 @@ export function AnnouncementsPage() {
             onChange={(event) => setForm((current) => ({ ...current, body: event.target.value }))}
           />
         </Field>
+        <Field label="Hedef kitle">
+          <Select value={form.audience} onChange={(event) => updateAnnouncementTarget("audience", event.target.value)}>
+            <option value="SCHOOL">Tüm okul</option>
+            <option value="TEACHERS">Öğretmenler</option>
+            <option value="STUDENTS">Öğrenciler</option>
+            <option value="GUARDIANS">Veliler</option>
+          </Select>
+        </Field>
+        <Field label="Kampüs" description="Boş bırakılırsa tüm yetkili kapsam kullanılır.">
+          <Select value={form.campusId} onChange={(event) => updateAnnouncementTarget("campusId", event.target.value)}>
+            <option value="">Tüm kampüsler</option>
+            {references.campuses.map((campus) => <option key={campus.id} value={campus.id}>{campus.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Sınıf seviyesi">
+          <Select value={form.gradeLevelId} onChange={(event) => updateAnnouncementTarget("gradeLevelId", event.target.value)}>
+            <option value="">Tüm seviyeler</option>
+            {references.gradeLevels.map((gradeLevel) => <option key={gradeLevel.id} value={gradeLevel.id}>{gradeLevel.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Sınıf">
+          <Select value={form.classId} onChange={(event) => updateAnnouncementTarget("classId", event.target.value)}>
+            <option value="">Tüm sınıflar</option>
+            {references.classes.map((schoolClass) => <option key={schoolClass.id} value={schoolClass.id}>{schoolClass.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Ders" description="Ders hedefi yalnız öğretmen duyurularında kullanılabilir.">
+          <Select disabled={form.audience !== "TEACHERS"} value={form.courseId} onChange={(event) => updateAnnouncementTarget("courseId", event.target.value)}>
+            <option value="">Tüm dersler</option>
+            {references.courses.map((course) => <option key={course.id} value={course.id}>{formatCourseName(course.name)}</option>)}
+          </Select>
+        </Field>
+        <Field label="Dönem" description="Dönem hedefi yalnız öğretmen duyurularında kullanılabilir.">
+          <Select disabled={form.audience !== "TEACHERS"} value={form.termId} onChange={(event) => updateAnnouncementTarget("termId", event.target.value)}>
+            <option value="">Tüm dönemler</option>
+            {references.terms.map((term) => <option key={term.id} value={term.id}>{term.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Kanal">
+          <Select disabled value="IN_APP">
+            <option value="IN_APP">Uygulama içi duyuru</option>
+          </Select>
+        </Field>
+        <Button
+          disabled={isPreviewingRecipients || isPublishing}
+          onClick={() => void handlePreviewRecipients()}
+          type="button"
+          variant="secondary"
+        >
+          {isPreviewingRecipients ? "Alıcılar hesaplanıyor..." : "Alıcıları önizle"}
+        </Button>
         <Panel
           aria-label="Duyuru önizleme"
           title={form.title.trim() || "Başlık girilmedi"}
-          description="Kurum geneli · Uygulama içi duyuru · Hemen"
+          description={recipientPreview
+            ? `${audienceLabel(recipientPreview.audience)} · ${scopeLabel(recipientPreview.scope, { campusNames, gradeLevelNames, classNames, courseNames, termNames })} · Uygulama içi · Hemen`
+            : "Hedef kapsam ve alıcı sayısı henüz doğrulanmadı"}
           tone="muted"
         >
           <p>{form.body.trim() || "Duyuru metni burada görünür."}</p>
-          <p>Kurum ana sayfasında ve kullanıcı duyuru ekranlarında görünür.</p>
+          {recipientPreview ? (
+            <p>
+              <strong>{formatCount(recipientPreview.recipientCount)} alıcı:</strong>{" "}
+              {formatCount(recipientPreview.counts.students)} öğrenci, {formatCount(recipientPreview.counts.guardians)} veli, {formatCount(recipientPreview.counts.teachers)} öğretmen.
+            </p>
+          ) : <p>Yayınlama için sayısal alıcı önizlemesi zorunludur.</p>}
+          {recipientPreview?.recipientCount === 0 ? (
+            <Alert tone="danger" title="Yayınlanamaz">Seçili kapsamda uygun alıcı bulunamadı.</Alert>
+          ) : null}
         </Panel>
       </FormModal>
       {confirmationDialog}
@@ -532,9 +641,31 @@ async function loadAnnouncements(accessToken: string, listQuery: ListQueryState)
   return apiListRequest<AnnouncementRecord>(accessToken, buildListUrl(`${apiBaseUrl}/announcements`, listQuery));
 }
 
-async function createAnnouncement(accessToken: string, input: AnnouncementFormPayload, idempotencyKey: string) {
+async function previewAnnouncementRecipients(accessToken: string, input: AnnouncementFormPayload) {
+  const request: AnnouncementRecipientPreviewRequest = {
+    audience: input.audience,
+    campusId: input.campusId,
+    channel: "IN_APP",
+    classId: input.classId,
+    courseId: input.courseId,
+    gradeLevelId: input.gradeLevelId,
+    termId: input.termId,
+  };
+  return apiRequest<AnnouncementRecipientPreviewResult>(accessToken, `${apiBaseUrl}/announcements/recipients/preview`, {
+    body: JSON.stringify(request),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+}
+
+async function createAnnouncement(
+  accessToken: string,
+  input: AnnouncementFormPayload,
+  recipientPreviewToken: string,
+  idempotencyKey: string,
+) {
   return apiRequest<AnnouncementRecord>(accessToken, `${apiBaseUrl}/announcements`, {
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, channel: "IN_APP", recipientPreviewToken }),
     headers: { "content-type": "application/json", "Idempotency-Key": idempotencyKey },
     method: "POST",
   });

@@ -262,7 +262,7 @@ if (!webPackageJson.scripts?.["ux-rc"]?.includes("--workers=2")) {
   failures.push("apps/web/package.json ux-rc script must keep the verified two-worker budget.");
 }
 if (webPackageJson.scripts?.["ux-route-family-smoke"] !== "playwright test -c playwright.next.config.ts --workers=2 --update-snapshots=none e2e-next/ui-route-family-smoke-next.spec.ts") {
-  failures.push("apps/web/package.json ux-route-family-smoke script must run the 73-route smoke with two workers and snapshot updates disabled.");
+  failures.push("apps/web/package.json ux-route-family-smoke script must run the route smoke with two workers and snapshot updates disabled.");
 }
 
 validateRouteFamilySmokeContract();
@@ -501,8 +501,8 @@ requireTokens("apps/web/e2e-next/list-url-state-next.spec.ts", [
   'getByRole("region", { exact: true, name: "Duyuru özeti" })',
   "Duyuru özeti önerilen işlemler",
   'getByRole("dialog", { name: "Duyuru ekle" })',
-  'announcementDialog.locator(".uh-field")).toHaveCount(2)',
-  'announcementDialog.locator(".uh-select")).toHaveCount(0)',
+  'announcementDialog.locator(".uh-field")).toHaveCount(9)',
+  'announcementDialog.locator(".uh-select")).toHaveCount(7)',
   'announcementDialog.locator(".uh-textarea")).toHaveCount(1)',
   'getByRole("textbox", { name: /^Duyuru metni / })',
   "captured.announcements",
@@ -1715,7 +1715,7 @@ requireTokens("apps/web/app/(app)/_shared/navigation.ts", [
 ]);
 
 requireTokens("apps/web/app/(app)/app-shell.tsx", [
-  "Button, Dialog, Field, Input, Panel, StatusBadge, type StatusBadgeProps",
+  "Button, ContextBar, Dialog, Field, Input, Panel, StatusBadge, type StatusBadgeProps",
   '<Field className="next-command-search" label="Komut ara">',
   'hasCapabilityForRoles(roles, "setup:manage") ? commandItem("/kurum/kurulum"',
   'actions={<StatusBadge tone={statusTone}>{statusLabel}</StatusBadge>}',
@@ -2959,8 +2959,10 @@ requireTokens("apps/web/app/(app)/kurum/duyurular/announcements-page.tsx", [
   '<Field label="Başlık">',
   '<Field label="Duyuru metni" description={`Kurum kullanıcılarıyla paylaşılacak içerik · ${form.body.length} karakter`}>',
   "rows={5}",
-  'description="Kurum geneli · Uygulama içi duyuru · Hemen"',
-  "Kurum ana sayfasında ve kullanıcı duyuru ekranlarında görünür.",
+  'submitDisabled={!recipientPreview || recipientPreview.recipientCount === 0 || isPreviewingRecipients}',
+  'aria-label="Duyuru önizleme"',
+  "Yayınlama için sayısal alıcı önizlemesi zorunludur.",
+  "previewAnnouncementRecipients",
   'tone="success"',
   'tone="warning"',
   'title="SMS gönderimi başladı"',
@@ -5240,8 +5242,8 @@ function validateRouteFamilySmokeContract() {
   const manifestRoutes = [...manifestSource.matchAll(/^\s*route\("([^"]+)"/gm)].map((match) => match[1]);
   const duplicateRoutes = manifestRoutes.filter((route, index) => manifestRoutes.indexOf(route) !== index);
   const fileSystemRoutes = collectRoutePageTemplates("apps/web/app").sort();
-  if (manifestRoutes.length !== 81) {
-    failures.push(`${path} route manifest must contain exactly 81 route tests; found ${manifestRoutes.length}.`);
+  if (manifestRoutes.length !== 84) {
+    failures.push(`${path} route manifest must contain exactly 84 route tests; found ${manifestRoutes.length}.`);
   }
   if (duplicateRoutes.length > 0) {
     failures.push(`${path} route manifest contains duplicate routes: ${[...new Set(duplicateRoutes)].join(", ")}.`);
@@ -5251,8 +5253,8 @@ function validateRouteFamilySmokeContract() {
   }
 
   const primaryTaskCount = manifestSource.match(/\{ role: "(?:button|form|link|region)", name: "[^"]+" \}/g)?.length ?? 0;
-  if (primaryTaskCount !== 81) {
-    failures.push(`${path} must give all 81 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
+  if (primaryTaskCount !== 84) {
+    failures.push(`${path} must give all 84 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
   }
 
   const viewportStart = source.indexOf("const routeViewports = [");

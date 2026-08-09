@@ -1214,9 +1214,9 @@ runLiveExamCycleNegativeCheck({
 runLiveExamCycleNegativeCheck({
   label: "Live exam cycle quarantine count exact negative",
   path: "docs/evidence-templates/live-exam-cycle.quarantine-count.tmp.json",
-  expectedFailure: "examCycle.quarantineCount 1 olmali.",
+  expectedFailure: "examCycle.quarantineCount 0 olmali.",
   mutate: (fixture) => {
-    fixture.examCycle.quarantineCount = 0;
+    fixture.examCycle.quarantineCount = 1;
   },
 });
 runLiveExamCycleNegativeCheck({
@@ -1645,7 +1645,7 @@ runRlsLiveNegativeCheck({
 runRlsLiveNegativeCheck({
   label: "RLS live tenant FK missing relation negative",
   path: "docs/evidence-templates/rls-live.missing-tenant-fk-relation.tmp.json",
-  expectedFailure: "tenantFkPreflight.relationsVerified tam 31 relation icermeli.",
+  expectedFailure: "tenantFkPreflight.relationsVerified tam 32 relation icermeli.",
   mutate: (fixture) => {
     fixture.tenantFkPreflight.relationsVerified = fixture.tenantFkPreflight.relationsVerified.filter(
       (relation) => relation !== "Student.responsibleTeacher",
@@ -2163,7 +2163,7 @@ runProductionSummaryNegativeCheck({
 runProductionSummaryNegativeCheck({
   label: "Production summary RLS tenant FK missing relation negative",
   path: "docs/evidence-templates/production-evidence-summary.rls-tenant-fk-missing-relation.tmp.json",
-  expectedFailure: "reports.rlsLive.tenantFkPreflight.relationsVerified tam 31 madde içermeli.",
+  expectedFailure: "reports.rlsLive.tenantFkPreflight.relationsVerified tam 32 madde içermeli.",
   mutate: (fixture) => {
     fixture.reports.rlsLive.tenantFkPreflight.relationsVerified = fixture.reports.rlsLive.tenantFkPreflight.relationsVerified.filter(
       (relation) => relation !== "Student.responsibleTeacher",
@@ -2928,7 +2928,7 @@ runGoLiveNegativeCheck({
   label: "Go-live linked summary RLS tenant FK missing relation negative",
   path: "docs/evidence-templates/go-live.linked-summary-rls-tenant-fk-missing-relation.tmp.json",
   expectedFailure:
-    "productionEvidenceSummary.summary.reports.rlsLive.tenantFkPreflight.relationsVerified tam 31 madde icermeli.",
+    "productionEvidenceSummary.summary.reports.rlsLive.tenantFkPreflight.relationsVerified tam 32 madde icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.rls-tenant-fk-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);

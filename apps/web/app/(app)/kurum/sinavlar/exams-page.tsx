@@ -2,8 +2,9 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AlanRecord, ClassRecord, ExamParticipantRecord, ExamRecord, GradeLevelRecord, StudentRecord } from "@o-okul/shared-types";
+import type { AlanRecord, ClassRecord, ExamParticipantRecord, ExamRecord, GradeLevelRecord, ResolvedFeatureRollouts, StudentRecord } from "@o-okul/shared-types";
 import {
   Button,
   Checkbox,
@@ -58,6 +59,7 @@ type CreateExamPayload = ExamWithClassFormPayload & {
 
 export function ExamsPage() {
   const { auth } = useAuth();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { confirm, confirmationDialog } = useConfirmDialog();
   const queryKey = ["next-exams", auth?.session.tenantId ?? "anonymous"];
@@ -79,8 +81,19 @@ export function ExamsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [answerKeyFileName, setAnswerKeyFileName] = useState("");
   const [answerKeyFileBase64, setAnswerKeyFileBase64] = useState("");
-  const [selectedExamId, setSelectedExamId] = useState("");
+  const [selectedExamId, setSelectedExamId] = useState(() => searchParams.get("examId") ?? "");
   const [error, setError] = useState("");
+  const featureRolloutsQuery = useQuery({
+    queryKey: ["next-feature-rollouts", auth?.session.tenantId ?? "anonymous", auth?.session.id ?? "none"],
+    queryFn: () => apiRequest<ResolvedFeatureRollouts>(auth?.accessToken ?? "", `${apiBaseUrl}/me/feature-rollouts`),
+    enabled: Boolean(auth),
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const enabledFeatureKeys = featureRolloutsQuery.data?.enabledFeatureKeys ?? [];
+  const examWorkspaceEnabled = enabledFeatureKeys.includes("web.shell-v2")
+    && enabledFeatureKeys.includes("web.ia-v2")
+    && enabledFeatureKeys.includes("web.exam-workspace-v2");
   const rows = examsQuery.data ?? [];
   const selectedExam = rows.find((exam) => exam.id === selectedExamId) ?? rows[0];
   const activeExamId = selectedExam?.id ?? "";
@@ -222,6 +235,15 @@ export function ExamsPage() {
       priority: "primary",
       render: (exam) => (
         <div className="next-row-actions">
+          {examWorkspaceEnabled ? (
+            <Link
+              aria-label={`${exam.title} çalışma alanını aç`}
+              href={`/kurum/sinavlar/${encodeURIComponent(exam.id)}`}
+              title="Çalışma alanı"
+            >
+              <ArrowRight size={17} aria-hidden="true" />
+            </Link>
+          ) : null}
           <button
             type="button"
             aria-pressed={activeExamId === exam.id}

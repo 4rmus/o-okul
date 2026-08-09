@@ -298,4 +298,126 @@ describe("Attendance API", () => {
       .send(body)
       .expect(403);
   });
+
+  it("devamsızlık eşiği duyurusunu yalnız ilgili öğrencinin izinli velisine açar", async () => {
+    const schoolClass = await request(server)
+      .post("/classes")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "Uyarı Sınıfı", section: "U" })
+      .expect(201);
+    const student = await request(server)
+      .post("/students")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Uyarı", lastName: "Öğrenci" })
+      .expect(201);
+    await request(server)
+      .post(`/students/${student.body.id}/enrollments/renew`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        academicYearId: "academic-year-2026",
+        termId: "term-2026-spring",
+        classId: schoolClass.body.id,
+        startsAt: "2026-06-20",
+      })
+      .expect(201);
+    const guardian = await request(server)
+      .post("/guardians")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Uyarı", lastName: "Veli" })
+      .expect(201);
+    await request(server)
+      .post(`/guardians/${guardian.body.id}/students`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ canReceiveAnnouncements: true, studentId: student.body.id })
+      .expect(201);
+    const peerStudent = await request(server)
+      .post("/students")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Aynı", lastName: "Sınıf" })
+      .expect(201);
+    await request(server)
+      .post(`/students/${peerStudent.body.id}/enrollments/renew`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        academicYearId: "academic-year-2026",
+        termId: "term-2026-spring",
+        classId: schoolClass.body.id,
+        startsAt: "2026-06-20",
+      })
+      .expect(201);
+    const peerGuardian = await request(server)
+      .post("/guardians")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Aynı", lastName: "Sınıf Velisi" })
+      .expect(201);
+    await request(server)
+      .post(`/guardians/${peerGuardian.body.id}/students`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ canReceiveAnnouncements: true, studentId: peerStudent.body.id })
+      .expect(201);
+
+    for (const date of ["2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25", "2026-06-26"]) {
+      const response = await request(server)
+        .put("/attendance/daily")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({
+          classId: schoolClass.body.id,
+          date,
+          entries: [
+            { studentId: student.body.id, status: "ABSENT" },
+            { studentId: peerStudent.body.id, status: "PRESENT" },
+          ],
+        });
+      expect(response.status, JSON.stringify(response.body)).toBe(200);
+    }
+
+    const announcements = await request(server)
+      .get("/announcements")
+      .query({ q: "Devamsızlık eşiği uyarısı" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([
+          expect.objectContaining({
+            audience: "GUARDIANS",
+            studentId: student.body.id,
+            title: "Devamsızlık eşiği uyarısı",
+          }),
+        ]);
+      });
+
+    const announcementId = (announcements.body as Array<{ id: string }>)[0]?.id;
+    expect(announcementId).toBeTruthy();
+    await request(server)
+      .get("/announcements")
+      .query({ q: "Devamsızlık eşiği uyarısı" })
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(403);
+    await request(server)
+      .get(`/announcements/${announcementId}`)
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(403);
+    await request(server)
+      .get("/me/teacher/announcements")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(JSON.stringify(body)).not.toContain(announcementId);
+      });
+    await request(server)
+      .get(`/announcements/${announcementId}/recipients`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          total: 1,
+          recipients: [expect.objectContaining({
+            recipientType: "GUARDIAN",
+            relatedStudentId: student.body.id,
+            subjectId: guardian.body.id,
+          })],
+        });
+        expect(JSON.stringify(body)).not.toContain(peerGuardian.body.id);
+      });
+  });
 });

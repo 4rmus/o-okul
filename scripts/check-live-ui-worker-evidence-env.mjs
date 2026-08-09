@@ -1,5 +1,8 @@
 import { lstat, readFile } from "node:fs/promises";
-import { dirname, parse, resolve } from "node:path";
+import { dirname, isAbsolute, parse, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const enabled = process.env.NEXT_E2E_LIVE_UI_WORKER;
 const baseUrl = process.env.NEXT_E2E_BASE_URL;
@@ -57,6 +60,10 @@ async function validateEvidencePath(filePath, collectedFailures) {
   }
   if (!hasPrivatePathSegment(filePath)) {
     collectedFailures.push("LIVE_UI_WORKER_EVIDENCE_PATH private runtime input dizini altında olmalı.");
+    return;
+  }
+  if (isInsideRepository(filePath)) {
+    collectedFailures.push("LIVE_UI_WORKER_EVIDENCE_PATH repository çalışma ağacının dışında olmalı.");
     return;
   }
 
@@ -154,6 +161,12 @@ function isLocalTempPath(filePath) {
 
 function hasPrivatePathSegment(filePath) {
   return filePath.split(/[\\/]+/).filter(Boolean).includes("private");
+}
+
+function isInsideRepository(filePath) {
+  const repositoryRelativePath = relative(repositoryRoot, filePath);
+  return repositoryRelativePath === ""
+    || (!repositoryRelativePath.startsWith(`..${sep}`) && repositoryRelativePath !== ".." && !isAbsolute(repositoryRelativePath));
 }
 
 function validateBaseUrl(value, collectedFailures) {

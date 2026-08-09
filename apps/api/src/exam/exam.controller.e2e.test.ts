@@ -454,6 +454,55 @@ describe("ExamController", () => {
     expect(list.body[0]).toMatchObject({ title: "Nisan Deneme", status: "DRAFT" });
   });
 
+  it("academic:read sınav çalışma alanını salt-okunur özetler ve tenant dışına kapatır", async () => {
+    const admin = await login("admin-a@example.test");
+    const created = await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send(examCreateBody("Çalışma Alanı Denemesi", { classIds: ["class-a"] }))
+      .expect(201);
+    await request(server)
+      .post(`/exams/${created.body.id}/publish`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .expect(201);
+
+    const teacher = await login("teacher-a@example.test");
+    const workspace = await request(server)
+      .get(`/exams/${created.body.id}/workspace`)
+      .set("Authorization", `Bearer ${teacher.accessToken}`)
+      .expect(200);
+
+    expect(workspace.body).toMatchObject({
+      exam: { id: created.body.id, tenantId: "tenant-a", status: "PUBLISHED" },
+      participantSummary: { total: 1, registered: 1, attended: 0, absent: 0 },
+      reportSummary: { total: 0, ready: 0, stale: 0 },
+      readiness: {
+        status: "ACTION_REQUIRED",
+        readyForOptical: true,
+        steps: [
+          { id: "definition", state: "COMPLETE" },
+          { id: "answer-key", state: "COMPLETE" },
+          { id: "participants", state: "COMPLETE" },
+          { id: "optical", state: "COMPLETE" },
+          { id: "report", state: "CURRENT" },
+        ],
+      },
+    });
+    expect(JSON.stringify(workspace.body)).not.toContain("student-a");
+
+    const crossTenant = await repository.create({ tenantId: "tenant-b", title: "Gizli Sınav" });
+    await request(server)
+      .get(`/exams/${crossTenant.id}/workspace`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .expect(404);
+
+    const student = await login("student-a@example.test");
+    await request(server)
+      .get(`/exams/${created.body.id}/workspace`)
+      .set("Authorization", `Bearer ${student.accessToken}`)
+      .expect(403);
+  });
+
   it("auth yoksa reddeder", async () => {
     await request(server).post("/exams").send({ title: "X" }).expect(401);
     await request(server).get("/exams").expect(401);

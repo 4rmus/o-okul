@@ -3,6 +3,7 @@ import { institutionNavGroups } from "./navigation.js";
 
 type NavigationItem = {
   href: string;
+  hiddenFromRail?: boolean;
   label: string;
   requiredCapability?: string;
 };
@@ -24,8 +25,11 @@ export function hasSubjectPortalAccess(session: SessionLike, role: string, subje
   return session.roles.includes(role) && session.subjectType === subjectType;
 }
 
-export function getInstitutionNavGroups(roles: readonly string[]) {
-  return institutionNavGroups
+export function getInstitutionNavGroups(
+  roles: readonly string[],
+  groups: readonly { label: string; items: readonly NavigationItem[] }[] = institutionNavGroups,
+) {
+  return groups
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => canAccessNavigationItem(roles, item)),

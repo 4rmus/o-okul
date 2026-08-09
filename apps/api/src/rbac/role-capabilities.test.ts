@@ -47,6 +47,7 @@ describe("role capabilities", () => {
     expect(hasCapability(context, "system:manage")).toBe(true);
     expect(hasCapability(context, "tenant:manage")).toBe(true);
     expect(hasCapability(context, "audit:read")).toBe(true);
+    expect(hasCapability(context, "search:read")).toBe(false);
   });
 
   it("TEACHER yönetim capability'lerini alamaz", () => {
@@ -57,7 +58,15 @@ describe("role capabilities", () => {
     expect(hasCapability(context, "student:read")).toBe(true);
     expect(hasCapability(context, "student:manage")).toBe(false);
     expect(hasCapability(context, "finance:manage")).toBe(false);
+    expect(hasCapability(context, "search:read")).toBe(true);
   });
+
+  it.each(["TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF"])(
+    "%s arama capability'sine sahiptir",
+    (role) => {
+      expect(hasCapability({ roles: [role] }, "search:read")).toBe(true);
+    },
+  );
 
   it("öğrenci ve veli yalnız scope kontrollü öğrenci okuma capability'sini alır", () => {
     expect(hasCapability({ roles: ["STUDENT"] }, "student:read")).toBe(true);
@@ -66,5 +75,7 @@ describe("role capabilities", () => {
     expect(hasCapability({ roles: ["GUARDIAN"] }, "student:list")).toBe(false);
     expect(hasCapability({ roles: ["STUDENT"] }, "student:manage")).toBe(false);
     expect(hasCapability({ roles: ["GUARDIAN"] }, "student:manage")).toBe(false);
+    expect(hasCapability({ roles: ["STUDENT"] }, "search:read")).toBe(false);
+    expect(hasCapability({ roles: ["GUARDIAN"] }, "search:read")).toBe(false);
   });
 });

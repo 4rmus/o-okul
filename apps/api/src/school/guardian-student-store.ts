@@ -13,6 +13,7 @@ export type GuardianStudentInput = Pick<GuardianStudentRecord, "tenantId" | "gua
 export interface GuardianStudentStore {
   listByGuardian(guardianId: string): Promise<GuardianStudentRecord[]>;
   listByStudent(studentId: string): Promise<GuardianStudentRecord[]>;
+  listByStudentIds(studentIds: string[]): Promise<GuardianStudentRecord[]>;
   create(input: GuardianStudentInput): Promise<GuardianStudentRecord>;
   update(guardianId: string, studentId: string, input: Partial<GuardianStudentInput>): Promise<GuardianStudentRecord | undefined>;
   delete(guardianId: string, studentId: string): Promise<boolean>;
@@ -52,6 +53,11 @@ export class InMemoryGuardianStudentStore implements GuardianStudentStore {
 
   async listByStudent(studentId: string): Promise<GuardianStudentRecord[]> {
     return this.links.filter((link) => link.studentId === studentId);
+  }
+
+  async listByStudentIds(studentIds: string[]): Promise<GuardianStudentRecord[]> {
+    const studentIdSet = new Set(studentIds);
+    return this.links.filter((link) => studentIdSet.has(link.studentId));
   }
 
   async create(input: GuardianStudentInput): Promise<GuardianStudentRecord> {
@@ -123,6 +129,19 @@ export class PostgresGuardianStudentStore implements GuardianStudentStore {
          FROM "GuardianStudent"
          WHERE "studentId" = $1`,
         [studentId],
+      );
+      return result.rows.map(toGuardianStudentRecord);
+    });
+  }
+
+  async listByStudentIds(studentIds: string[]): Promise<GuardianStudentRecord[]> {
+    if (studentIds.length === 0) return [];
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<GuardianStudentRow>(
+        `SELECT *
+         FROM "GuardianStudent"
+         WHERE "studentId" = ANY($1::text[])`,
+        [studentIds],
       );
       return result.rows.map(toGuardianStudentRecord);
     });

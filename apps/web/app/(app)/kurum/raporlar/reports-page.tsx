@@ -103,11 +103,11 @@ const reportWorkspaceTabs: Array<{ id: ReportWorkspaceTab; label: string }> = [
 
 const defaultReportWorkspaceTab: ReportWorkspaceTab = "overview";
 
-export function ReportsPage() {
+export function ReportsPage({ fixedExamId }: { fixedExamId?: string } = {}) {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const searchParamsKey = searchParams.toString();
-  const [examId, setExamId] = useState(() => searchParams.get("examId") ?? "");
+  const [examId, setExamId] = useState(() => fixedExamId ?? searchParams.get("examId") ?? "");
   const [loadedExamId, setLoadedExamId] = useState("");
   const [filters, setFilters] = useState(emptyFilters);
   const [reportData, setReportData] = useState<ReportData | null>(null);
@@ -236,7 +236,7 @@ export function ReportsPage() {
   useEffect(() => {
     const nextSearchParams = new URLSearchParams(window.location.search);
     const nextTab = readReportWorkspaceTab(nextSearchParams);
-    const nextExamId = nextSearchParams.get("examId") ?? "";
+    const nextExamId = fixedExamId ?? nextSearchParams.get("examId") ?? "";
     setActiveTab((current) => (current === nextTab ? current : nextTab));
     if (nextExamId !== examIdRef.current) {
       advanceSelectionGeneration();
@@ -250,7 +250,7 @@ export function ReportsPage() {
       setQueueMessage("");
       setReportJobState("idle");
     }
-  }, [searchParamsKey]);
+  }, [fixedExamId, searchParamsKey]);
 
   function selectReportTab(tab: ReportWorkspaceTab) {
     setActiveTab(tab);
@@ -449,7 +449,7 @@ export function ReportsPage() {
           <div className="next-report-control-row" aria-label="Rapor üst kontrolleri">
             <Field className="next-report-control-row__exam" label="Sınav">
               <Select
-                disabled={isReportLoading || isReportJobBusy}
+                disabled={Boolean(fixedExamId) || isReportLoading || isReportJobBusy}
                 required
                 value={examId}
                 onChange={(event) => selectReportExam(event.target.value)}

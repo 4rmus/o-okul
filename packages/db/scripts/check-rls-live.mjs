@@ -1019,6 +1019,18 @@ async function assertWithCheckBlocksWrongTenantAnnouncementWrite() {
   });
 }
 
+async function assertAnnouncementBlocksCrossTenantStudentReference() {
+  await withAppTransaction(async () => {
+    await setTenantContext(appClient, ids.tenantA);
+    await expectSqlState(
+      `INSERT INTO "Announcement" ("id", "tenantId", "title", "body", "audience", "studentId", "updatedAt")
+       VALUES ('00000000-0000-4000-8000-0000000000dd', $1, 'Tenant FK Duyuru', 'Tenant FK', 'GUARDIANS', $2, now())`,
+      [ids.tenantA, ids.studentB],
+      "23503",
+    );
+  });
+}
+
 async function assertWithCheckBlocksWrongTenantMessageTemplateWrite() {
   await withAppTransaction(async () => {
     await setTenantContext(appClient, ids.tenantA);
@@ -1497,6 +1509,7 @@ try {
   await assertWithCheckBlocksWrongTenantWrite();
   await assertWithCheckBlocksWrongTenantHomeworkWrite();
   await assertWithCheckBlocksWrongTenantAnnouncementWrite();
+  await assertAnnouncementBlocksCrossTenantStudentReference();
   await assertWithCheckBlocksWrongTenantMessageTemplateWrite();
   await assertWhatsAppConsentTenantIsolationAndDefaultOff();
   await assertWhatsAppConsentCatalogSecurity();

@@ -69,6 +69,10 @@ test("çift personalı çalışan staff ve teacher çalışma alanları arasınd
       await json(route, { id: "tenant-a", name: "DNA Eğitim", plan: "TRIAL", slug: "dna-egitim", status: "ACTIVE" });
       return;
     }
+    if (path === "/me/feature-rollouts") {
+      await json(route, { enabledFeatureKeys: [] });
+      return;
+    }
     if (path === "/me/institution-dashboard") {
       await json(route, {
         activeStudentCount: 0,

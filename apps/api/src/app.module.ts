@@ -6,6 +6,7 @@ import { AuthModule } from "./auth/auth.module.js";
 import { RequestContextMiddleware } from "./context/request-context.middleware.js";
 import { DevelopmentModule } from "./development/development.module.js";
 import { ExamModule } from "./exam/exam.module.js";
+import { FeatureRolloutModule } from "./feature-rollout/feature-rollout.module.js";
 import { HealthModule } from "./health/health.module.js";
 import { HomeworkModule } from "./homework/homework.module.js";
 import { IdentityInvitationModule } from "./identity-invitation/identity-invitation.module.js";
@@ -44,6 +45,7 @@ import { UserManagementModule } from "./user-management/user-management.module.j
     AttendanceModule,
     DevelopmentModule,
     ExamModule,
+    FeatureRolloutModule,
     HealthModule,
     HomeworkModule,
     HttpInfrastructureModule,

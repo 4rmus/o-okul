@@ -1,19 +1,23 @@
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { writeLiveUiWorkerEvidence } from "./live-ui-worker-evidence.mjs";
 
 const artifactRoot = "artifacts/live-ui-worker-evidence-contract";
-const validEvidencePath = join(artifactRoot, "private", "valid-live-ui-worker.json");
 const validResultEvidencePath = join(artifactRoot, "result", "live-ui-worker-result.json");
 const failures = [];
 
 await rm(artifactRoot, { force: true, recursive: true });
 await mkdir(artifactRoot, { recursive: true });
+const privateContractParent = resolve(process.cwd(), "..", "o-okul-private");
+await mkdir(privateContractParent, { recursive: true });
+const privateArtifactRoot = await mkdtemp(join(privateContractParent, "live-ui-worker-evidence-contract-"));
+const validEvidencePath = join(privateArtifactRoot, "private", "valid-live-ui-worker.json");
 
 try {
-  writeJson(validEvidencePath, createValidEvidence());
+  await writeLiveUiWorkerEvidence(validEvidencePath, createProducerEvidence());
   const positive = runPreflight({
     NEXT_E2E_LIVE_UI_WORKER: "1",
     LIVE_UI_WORKER_EVIDENCE_PATH: validEvidencePath,
@@ -79,6 +83,12 @@ try {
   );
 
   const publicEvidencePath = join(artifactRoot, "public-live-ui-worker.json");
+  await expectProducerFailure(
+    "live UI-worker producer public credential input path negative",
+    publicEvidencePath,
+    createProducerEvidence(),
+    "private runtime input dizini altında olmalı.",
+  );
   writeJson(publicEvidencePath, createValidEvidence());
   runNegativeCheck(
     "live UI-worker public credential input path negative",
@@ -89,8 +99,26 @@ try {
     "LIVE_UI_WORKER_EVIDENCE_PATH private runtime input dizini altında olmalı.",
   );
 
-  const permissiveEvidencePath = join(artifactRoot, "private", "permissive-live-ui-worker.json");
-  writeJson(permissiveEvidencePath, createValidEvidence(), 0o644);
+  const repositoryPrivateEvidencePath = join(artifactRoot, "private", "repo-internal-live-ui-worker.json");
+  await expectProducerFailure(
+    "live UI-worker producer repository-private credential input path negative",
+    repositoryPrivateEvidencePath,
+    createProducerEvidence(),
+    "repository çalışma ağacının dışında olmalı.",
+  );
+  writeJson(repositoryPrivateEvidencePath, createValidEvidence());
+  runNegativeCheck(
+    "live UI-worker repository-private credential input path negative",
+    {
+      NEXT_E2E_LIVE_UI_WORKER: "1",
+      LIVE_UI_WORKER_EVIDENCE_PATH: repositoryPrivateEvidencePath,
+    },
+    "LIVE_UI_WORKER_EVIDENCE_PATH repository çalışma ağacının dışında olmalı.",
+  );
+
+  const permissiveEvidencePath = join(privateArtifactRoot, "private", "permissive-live-ui-worker.json");
+  await writeLiveUiWorkerEvidence(permissiveEvidencePath, createProducerEvidence());
+  chmodSync(permissiveEvidencePath, 0o644);
   runNegativeCheck(
     "live UI-worker permissive credential input mode negative",
     {
@@ -121,8 +149,8 @@ try {
     "LIVE_UI_WORKER_RESULT_EVIDENCE_FILE için STAGING_ENVIRONMENT veya NODE_ENV staging/production olmalı.",
   );
 
-  const symlinkRealPath = join(artifactRoot, "private", "symlink-real.json");
-  const symlinkPath = join(artifactRoot, "private", "symlink-live-ui-worker.json");
+  const symlinkRealPath = join(privateArtifactRoot, "private", "symlink-real.json");
+  const symlinkPath = join(privateArtifactRoot, "private", "symlink-live-ui-worker.json");
   writeJson(symlinkRealPath, createValidEvidence());
   symlinkSync(symlinkRealPath, symlinkPath);
   runNegativeCheck(
@@ -151,8 +179,8 @@ try {
     "LIVE_UI_WORKER_RESULT_EVIDENCE_FILE symlink olmayan file artifact olmalı.",
   );
 
-  const realDirectory = join(artifactRoot, "real-dir");
-  const symlinkDirectory = join(artifactRoot, "symlink-dir");
+  const realDirectory = join(privateArtifactRoot, "real-dir");
+  const symlinkDirectory = join(privateArtifactRoot, "symlink-dir");
   const realNestedDirectory = join(realDirectory, "private", "nested");
   mkdirSync(realNestedDirectory, { recursive: true });
   writeJson(join(realNestedDirectory, "live-ui-worker.json"), createValidEvidence());
@@ -178,10 +206,10 @@ try {
     "LIVE_UI_WORKER_RESULT_EVIDENCE_FILE parent dizini symlink olmayan dizin olmalı.",
   );
 
-  const missingFieldPath = join(artifactRoot, "private", "missing-field.json");
-  const missingField = createValidEvidence();
+  const missingFieldPath = join(privateArtifactRoot, "private", "missing-field.json");
+  const missingField = createProducerEvidence();
   delete missingField.firstStudentId;
-  writeJson(missingFieldPath, missingField);
+  await writeLiveUiWorkerEvidence(missingFieldPath, missingField);
   runNegativeCheck(
     "live UI-worker missing required field negative",
     {
@@ -191,7 +219,7 @@ try {
     "liveUiWorkerEvidence.firstStudentId alanı zorunlu.",
   );
 
-  const stalePath = join(artifactRoot, "private", "stale.json");
+  const stalePath = join(privateArtifactRoot, "private", "stale.json");
   const stale = createValidEvidence();
   stale.generatedAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
   writeJson(stalePath, stale);
@@ -204,7 +232,7 @@ try {
     "generatedAt 24 saat sınırından eski",
   );
 
-  const placeholderPath = join(artifactRoot, "private", "placeholder.json");
+  const placeholderPath = join(privateArtifactRoot, "private", "placeholder.json");
   const placeholder = createValidEvidence();
   placeholder.loginName = "report-admin@example.com";
   writeJson(placeholderPath, placeholder);
@@ -217,10 +245,10 @@ try {
     "loginName production kanıtı için örnek/placeholder/redacted değer olmamalı.",
   );
 
-  const extraFieldPath = join(artifactRoot, "private", "extra-field.json");
-  const extraField = createValidEvidence();
+  const extraFieldPath = join(privateArtifactRoot, "private", "extra-field.json");
+  const extraField = createProducerEvidence();
   extraField.studentPortal.unexpected = true;
-  writeJson(extraFieldPath, extraField);
+  await writeLiveUiWorkerEvidence(extraFieldPath, extraField);
   runNegativeCheck(
     "live UI-worker extra field negative",
     {
@@ -315,6 +343,7 @@ try {
   );
 } finally {
   await rm(artifactRoot, { force: true, recursive: true });
+  await rm(privateArtifactRoot, { force: true, recursive: true });
   rmSync("/tmp/live-ui-worker-evidence-negative.json", { force: true });
   rmSync("/tmp/live-ui-worker-result-negative.json", { force: true });
 }
@@ -381,7 +410,18 @@ function runResultNegativeCheck(label, target, expectedMessage) {
   }
 }
 
-function writeJson(path, value, mode = path.includes(`${artifactRoot}/private/`) ? 0o600 : 0o644) {
+async function expectProducerFailure(label, target, payload, expectedMessage) {
+  try {
+    await writeLiveUiWorkerEvidence(target, payload);
+    failures.push(`${label}: producer başarısız olmalıydı.`);
+  } catch (error) {
+    if (!String(error).includes(expectedMessage)) {
+      failures.push(`${label}: beklenen hata yok: ${expectedMessage}`);
+    }
+  }
+}
+
+function writeJson(path, value, mode = path.split(/[\\/]+/).includes("private") ? 0o600 : 0o644) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8", mode });
   chmodSync(path, mode);
@@ -409,6 +449,12 @@ function createValidEvidence() {
     },
     tenantSlug: "staging-school",
   };
+}
+
+function createProducerEvidence() {
+  const evidence = createValidEvidence();
+  delete evidence.generatedAt;
+  return evidence;
 }
 
 function createValidResultEvidence() {

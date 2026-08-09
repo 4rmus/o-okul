@@ -164,6 +164,73 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expectNoClippedVisibleText(page, "duyuru-mobile");
   });
 
+  test("COM-01 duyuru composer hedef kanal önizleme ve yayın sözleşmesini mobilde korur", async ({ page }) => {
+    await openWithDataTableMocks(page, "/kurum/duyurular");
+    await page.getByRole("button", { name: "Duyuru ekle" }).click();
+    const dialog = page.getByRole("dialog", { name: "Duyuru ekle" });
+
+    await expect(dialog.getByRole("button", { name: "Yayınla" })).toBeDisabled();
+    await dialog.getByLabel("Başlık", { exact: true }).fill("Sınav bilgilendirmesi");
+    await dialog.getByLabel(/^Duyuru metni/).fill("Cuma günü deneme sınavı yapılacaktır.");
+    await dialog.getByLabel("Hedef kitle").selectOption("TEACHERS");
+    await dialog.getByLabel("Kampüs").selectOption("campus-main");
+    await dialog.getByLabel("Sınıf seviyesi").selectOption("grade-8");
+    await dialog.getByRole("combobox", { name: "Sınıf", exact: true }).selectOption({ label: "8-A" });
+    await dialog.getByLabel("Ders").selectOption("course-math");
+    await dialog.getByLabel("Dönem").selectOption("term-2026");
+    await expect(dialog.getByLabel("Kanal")).toHaveValue("IN_APP");
+    await expect(dialog.getByLabel("Kanal")).toBeDisabled();
+
+    const previewRequestPromise = page.waitForRequest(
+      (request) => request.method() === "POST" && new URL(request.url()).pathname === "/api/v1/announcements/recipients/preview",
+    );
+    await dialog.getByRole("button", { name: "Alıcıları önizle" }).click();
+    const previewRequest = await previewRequestPromise;
+    expect(JSON.parse(previewRequest.postData() ?? "{}")).toEqual({
+      audience: "TEACHERS",
+      campusId: "campus-main",
+      channel: "IN_APP",
+      classId: "class-8a",
+      courseId: "course-math",
+      gradeLevelId: "grade-8",
+      termId: "term-2026",
+    });
+    await expect(dialog.getByLabel("Duyuru önizleme")).toContainText("2 alıcı");
+    await expect(dialog.getByRole("button", { name: "Yayınla" })).toBeEnabled();
+
+    await dialog.getByRole("combobox", { name: "Sınıf", exact: true }).selectOption({ label: "Tüm sınıflar" });
+    await expect(dialog.getByRole("button", { name: "Yayınla" })).toBeDisabled();
+    await dialog.getByRole("combobox", { name: "Sınıf", exact: true }).selectOption({ label: "8-A" });
+    await dialog.getByRole("button", { name: "Alıcıları önizle" }).click();
+    await dialog.getByRole("button", { name: "Yayınla" }).click();
+
+    const confirmation = page.getByRole("dialog", { name: "Duyuruyu yayınla" });
+    await expect(confirmation).toContainText("2 kişi");
+    const publishRequestPromise = page.waitForRequest(
+      (request) => request.method() === "POST" && new URL(request.url()).pathname === "/api/v1/announcements",
+    );
+    await confirmation.getByRole("button", { name: "Yayınla" }).click();
+    const publishRequest = await publishRequestPromise;
+    expect(publishRequest.headers()["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(JSON.parse(publishRequest.postData() ?? "{}")).toEqual({
+      audience: "TEACHERS",
+      body: "Cuma günü deneme sınavı yapılacaktır.",
+      campusId: "campus-main",
+      channel: "IN_APP",
+      classId: "class-8a",
+      courseId: "course-math",
+      gradeLevelId: "grade-8",
+      recipientPreviewToken: "announcement-preview-token",
+      termId: "term-2026",
+      title: "Sınav bilgilendirmesi",
+    });
+
+    await expectNoVisibleTextValues(page, "com-01-mobile", ["announcement-preview-token", "student-a", "guardian-a"]);
+    await expectNoHorizontalOverflow(page, "com-01-mobile");
+    await expectNoUnlabeledControls(page, "com-01-mobile");
+    await expectNoClippedVisibleText(page, "com-01-mobile");
+  });
+
   test("şablon SMS çalışma alanı env kapısına uyar", async ({ page }) => {
     let smsBatchRequestCount = 0;
     page.on("request", (request) => {
@@ -1049,6 +1116,26 @@ function mockApiResponse(pathName: string, method: string, url: URL): { data: un
   if (pathName === "/me/tenant") return { data: createTenantResponse() };
   if (pathName === "/me/notification-devices") return { data: [] };
   if (pathName === "/announcements" && method === "GET") return listResponse(createAnnouncements());
+  if (pathName === "/announcements/recipients/preview" && method === "POST") {
+    return {
+      data: {
+        audience: "TEACHERS",
+        channel: "IN_APP",
+        counts: { guardians: 0, students: 0, teachers: 2 },
+        expiresAt: "2026-06-17T09:05:00.000Z",
+        previewToken: "announcement-preview-token",
+        recipientCount: 2,
+        scope: {
+          campusId: "campus-main",
+          classId: "class-8a",
+          courseId: "course-math",
+          gradeLevelId: "grade-8",
+          termId: "term-2026",
+        },
+      },
+    };
+  }
+  if (pathName === "/announcements" && method === "POST") return { data: createAnnouncements()[0] };
   if (pathName === "/announcements/announcement-a/recipients") return { data: createRecipientReport() };
   if (pathName === "/message-templates" && method === "GET") return listResponse(createMessageTemplates());
   if (pathName === "/sms-batches/recipients/preview" && method === "POST") return { data: createSmsRecipientPreview() };

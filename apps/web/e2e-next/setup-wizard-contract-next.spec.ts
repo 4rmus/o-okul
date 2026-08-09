@@ -30,6 +30,8 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await expect(page.getByRole("tablist", { name: "Adım ilerlemesi" }).locator(".uh-tab-button")).toHaveCount(5);
     await expect(page.getByLabel("Kurulum formu")).toBeVisible();
     await expect(page.getByLabel("Kurulum özeti")).toBeVisible();
+    await expect(page.getByLabel("Sunucu kurulum hazırlığı")).toContainText("100% hazır");
+    await expect(page.getByLabel("Sunucu kurulum hazırlığı")).toContainText("7 / 7 kayıt adımı hazır");
 
     const setupForm = page.getByLabel("Kurulum formu");
     await setupForm.getByLabel("Kurum adı").fill("");
@@ -292,6 +294,7 @@ function mockSetupApiResponse(
 ) {
   if (pathName === "/auth/refresh") return createAuthResponse(options.roles ?? ["TENANT_ADMIN"]);
   if (pathName === "/me/tenant") return createTenantResponse();
+  if (pathName === "/me/setup-readiness") return createSetupReadinessResponse();
   if (pathName === "/me/notification-devices") return [];
   if (method === "GET" && pathName === "/grade-levels") {
     if (options.emptyCourseTemplates) return [];
@@ -403,6 +406,16 @@ function mockSetupApiResponse(
     };
   }
   return [];
+}
+
+function createSetupReadinessResponse() {
+  const ids = ["campuses", "grade-levels", "classes", "courses", "teachers", "students", "learning-outcomes"];
+  return {
+    completedCount: 7,
+    percent: 100,
+    steps: ids.map((id) => ({ id, count: 1, isComplete: true })),
+    totalCount: 7,
+  };
 }
 
 function createAuthResponse(roles: string[]) {

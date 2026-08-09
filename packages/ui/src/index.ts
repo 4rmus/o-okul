@@ -3,6 +3,7 @@ export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from ".
 export { Input, type InputProps } from "./components/input.js";
 export { Dialog, type DialogProps } from "./components/dialog.js";
 export { ConfirmDialog, useConfirmDialog, type ConfirmDialogProps, type ConfirmDialogRequest } from "./components/confirm-dialog.js";
+export { ContextBar, type ContextBarItem, type ContextBarProps } from "./components/context-bar.js";
 export { LoadingState, type LoadingStateProps } from "./components/loading-state.js";
 export { EmptyState, type EmptyStateAction, type EmptyStateProps } from "./components/empty-state.js";
 export { ActionCard, type ActionCardProps } from "./components/action-card.js";
@@ -30,3 +31,9 @@ export {
   type TabsProps,
 } from "./components/tabs.js";
 export { Tooltip, type TooltipProps } from "./components/tooltip.js";
+export {
+  WorkflowStepper,
+  type WorkflowStep,
+  type WorkflowStepperProps,
+  type WorkflowStepState,
+} from "./components/workflow-stepper.js";

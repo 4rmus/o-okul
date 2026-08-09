@@ -1,5 +1,28 @@
 export type TenantId = string;
+export {
+  featureRolloutKeys,
+} from "./feature-rollout.js";
+export type {
+  FeatureRolloutCatalogItem,
+  FeatureRolloutKey,
+  ResolvedFeatureRollouts,
+} from "./feature-rollout.js";
 export { FormatAnalyzerService, getParserConfigPresetSuggestion } from "./format-analyzer.js";
+export {
+  assertProductEvent,
+  productEventCatalog,
+  productEventRouteFamilies,
+} from "./product-analytics.js";
+export type {
+  ProductEvent,
+  ProductEventName,
+  ProductEventOutcome,
+  ProductEventPersona,
+  ProductEventPropertyValue,
+  ProductEventRouteFamily,
+  ProductEventValidationContext,
+  TenantPseudonym,
+} from "./product-analytics.js";
 export {
   reportCourseMatchesScoreType,
   reportCourseShortName,
@@ -27,6 +50,9 @@ export type {
   AcademicYearUpdateRequest,
   AnnouncementAudience,
   AnnouncementCreateRequest,
+  AnnouncementPublishChannel,
+  AnnouncementRecipientPreviewRequest,
+  AnnouncementRecipientPreviewResult,
   AnnouncementDeliveryChannel,
   AnnouncementDeliveryQueueResult,
   AnnouncementDeliveryReportRecord,
@@ -97,6 +123,10 @@ export type {
   ExamScoreView,
   ExamStatus,
   ExamType,
+  ExamWorkspaceRecord,
+  ExamWorkspaceStep,
+  ExamWorkspaceStepId,
+  ExamWorkspaceStepState,
   EmployeeAccessRecord,
   EmployeeAccessListQuery,
   EmployeeAccessSort,
@@ -123,6 +153,8 @@ export type {
   InstitutionDashboardExamSummary,
   InstitutionDashboardReportSummary,
   InstitutionDashboardSummary,
+  SetupReadinessResponse,
+  SetupReadinessStepId,
   LearningOutcomeImportDryRunResult,
   LearningOutcomeImportError,
   LearningOutcomeImportPreviewRow,
@@ -295,6 +327,8 @@ export type {
   SupportTicketRecord,
   SupportTicketStatus,
   SupportTicketUpdateRequest,
+  StudentDailyBriefActionId,
+  StudentDailyBriefResponse,
   TeacherCreateRequest,
   TeacherAssignmentCreateRequest,
   TeacherAssignmentRecord,
@@ -310,6 +344,8 @@ export type {
   TeacherNoteUpdateRequest,
   TeacherNoteVisibility,
   TeacherPortalSupportTicketCreateRequest,
+  TeacherDailyBriefActionId,
+  TeacherDailyBriefResponse,
   TeacherPortalLookupsResponse,
   TeacherRecord,
   TeacherUpdateRequest,

@@ -22,6 +22,7 @@ import type {
   StudentEnrollmentRecord,
   StudentProfileRecord,
   TeacherPortalLookupsResponse,
+  TeacherDailyBriefResponse,
   TeacherRecord,
   AttendanceRecord,
   AttendanceSummaryRecord,
@@ -37,6 +38,8 @@ import type {
   PortalSupportTicketCommentCreateResponse,
   PublicPortalSupportTicketCommentRecord,
   SupportTicketCommentRecord,
+  SetupReadinessResponse,
+  StudentDailyBriefResponse,
 } from "@o-okul/shared-types";
 import { AnnouncementService } from "../announcement/announcement.service.js";
 import { AttendanceService } from "../attendance/attendance.service.js";
@@ -80,6 +83,9 @@ import { tenantCurrentProfileBodySchema, type TenantCurrentProfileBody } from ".
 import { passwordMaxLength, passwordMinLength, passwordPolicyViolation } from "../auth/password-policy.js";
 import { MeInstitutionDashboardService } from "./me-institution-dashboard.service.js";
 import { MeReportIndexService } from "./me-report-index.service.js";
+import { MeSetupReadinessService } from "./me-setup-readiness.service.js";
+import { MeStudentDailyBriefService } from "./me-student-daily-brief.service.js";
+import { MeTeacherDailyBriefService } from "./me-teacher-daily-brief.service.js";
 
 const mePasswordChangeBodySchema = z.object({
   currentPassword: z.string().min(1),
@@ -100,6 +106,9 @@ export class MeController {
     private readonly notificationDevices: NotificationDeviceService,
     private readonly payments: PaymentService,
     private readonly institutionDashboard: MeInstitutionDashboardService,
+    private readonly setupReadiness: MeSetupReadinessService,
+    private readonly studentDailyBrief: MeStudentDailyBriefService,
+    private readonly teacherDailyBrief: MeTeacherDailyBriefService,
     private readonly reportIndex: MeReportIndexService,
     private readonly reports: ReportGenerationService,
     private readonly guardians: GuardianService,
@@ -157,6 +166,13 @@ export class MeController {
     return this.institutionDashboard.get(getRequestContext());
   }
 
+  @Get("setup-readiness")
+  @Roles("TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF")
+  @RequireCapability("setup:manage")
+  setupReadinessSummary(): Promise<SetupReadinessResponse> {
+    return this.setupReadiness.get(getRequestContext());
+  }
+
   @Patch("tenant")
   @Roles("TENANT_ADMIN", "ASSISTANT_ADMIN")
   @RequireCapability("setup:manage")
@@ -190,6 +206,12 @@ export class MeController {
   @Roles("STUDENT")
   student(): Promise<StudentRecord> {
     return this.students.findCurrentStudent(getRequestContext());
+  }
+
+  @Get("student/daily-brief")
+  @Roles("STUDENT")
+  studentDailyBriefResponse(): Promise<StudentDailyBriefResponse> {
+    return this.studentDailyBrief.get(getRequestContext());
   }
 
   @Get("student/profile")
@@ -750,6 +772,12 @@ export class MeController {
   @Roles("TEACHER")
   async teacher(): Promise<TeacherRecord> {
     return toPublicTeacherResponse(await this.teachers.findCurrentTeacher(getRequestContext()));
+  }
+
+  @Get("teacher/daily-brief")
+  @Roles("TEACHER")
+  teacherDailyBriefResponse(@Query("date") date?: string): Promise<TeacherDailyBriefResponse> {
+    return this.teacherDailyBrief.get(getRequestContext(), date);
   }
 
   @Get("teacher/schedule")

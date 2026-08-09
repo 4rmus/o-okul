@@ -427,6 +427,44 @@ export interface TeacherPortalLookupsResponse {
   terms: AcademicTermRecord[];
 }
 
+export type TeacherDailyBriefActionId = "attendance" | "homework" | "report" | "support";
+
+export interface TeacherDailyBriefResponse {
+  date: string;
+  todayLessonCount: number;
+  assignedStudentCount: number;
+  pendingAttendanceClassCount: number;
+  uncheckedHomeworkCount: number;
+  openSupportTicketCount: number;
+  nextLesson?: {
+    title: string;
+    startsAt: string;
+    endsAt: string;
+  };
+  latestReadyReport?: PortalReportIndexItem;
+  actions: Array<{
+    id: TeacherDailyBriefActionId;
+    count: number;
+  }>;
+}
+
+export type StudentDailyBriefActionId = "announcement" | "attendance" | "homework" | "report" | "support";
+
+export interface StudentDailyBriefResponse {
+  date: string;
+  unreadAnnouncementCount: number;
+  homeworkAssignmentCount: number;
+  attendanceRecordCount: number;
+  absenceCount: number;
+  lateCount: number;
+  openSupportTicketCount: number;
+  latestReadyReport?: PortalReportIndexItem;
+  actions: Array<{
+    id: StudentDailyBriefActionId;
+    count: number;
+  }>;
+}
+
 export type KvkkInventoryKind = "student" | "teacher" | "guardian" | "user";
 
 export interface KvkkInventoryRecord {
@@ -1283,13 +1321,41 @@ export interface HomeworkCheckStatusRequest {
 
 export type AnnouncementAudience = "SCHOOL" | "TEACHERS" | "STUDENTS" | "GUARDIANS";
 
+export type AnnouncementPublishChannel = "IN_APP";
+
+export interface AnnouncementRecipientPreviewRequest {
+  audience?: AnnouncementAudience;
+  campusId?: string;
+  channel: AnnouncementPublishChannel;
+  classId?: string;
+  courseId?: string;
+  gradeLevelId?: string;
+  termId?: string;
+}
+
+export interface AnnouncementRecipientPreviewResult {
+  audience: AnnouncementAudience;
+  channel: AnnouncementPublishChannel;
+  counts: {
+    guardians: number;
+    students: number;
+    teachers: number;
+  };
+  expiresAt: string;
+  previewToken: string;
+  recipientCount: number;
+  scope: Pick<AnnouncementRecipientPreviewRequest, "campusId" | "classId" | "courseId" | "gradeLevelId" | "termId">;
+}
+
 export interface AnnouncementCreateRequest {
   audience?: AnnouncementAudience;
   body: string;
   campusId?: string;
+  channel: AnnouncementPublishChannel;
   classId?: string;
   courseId?: string;
   gradeLevelId?: string;
+  recipientPreviewToken: string;
   tenantId?: string;
   termId?: string;
   title: string;
@@ -1306,6 +1372,7 @@ export interface AnnouncementRecord {
   classId?: string;
   courseId?: string;
   termId?: string;
+  studentId?: string;
   publishedAt: string;
   readAt?: string;
   deletedAt?: string;
@@ -2349,6 +2416,26 @@ export interface InstitutionDashboardSummary {
   latestExam?: InstitutionDashboardExamSummary;
 }
 
+export type SetupReadinessStepId =
+  | "campuses"
+  | "grade-levels"
+  | "classes"
+  | "courses"
+  | "teachers"
+  | "students"
+  | "learning-outcomes";
+
+export interface SetupReadinessResponse {
+  completedCount: number;
+  percent: number;
+  steps: Array<{
+    id: SetupReadinessStepId;
+    count: number;
+    isComplete: boolean;
+  }>;
+  totalCount: number;
+}
+
 export interface ReportErrorBooklet {
   tenantId: string;
   examId: string;
@@ -2561,6 +2648,37 @@ export interface ExamParticipantRecord {
   status: ExamParticipantStatus | string;
   createdAt: string;
   updatedAt: string;
+}
+
+export type ExamWorkspaceStepId = "definition" | "answer-key" | "participants" | "optical" | "report";
+export type ExamWorkspaceStepState = "BLOCKED" | "COMPLETE" | "CURRENT";
+
+export interface ExamWorkspaceStep {
+  id: ExamWorkspaceStepId;
+  label: string;
+  state: ExamWorkspaceStepState;
+}
+
+export interface ExamWorkspaceRecord {
+  exam: ExamRecord;
+  participantSummary: {
+    total: number;
+    registered: number;
+    attended: number;
+    absent: number;
+  };
+  reportSummary: {
+    total: number;
+    ready: number;
+    stale: number;
+    latestSnapshotId?: string;
+    latestGeneratedAt?: string;
+  };
+  readiness: {
+    status: "ACTION_REQUIRED" | "READY";
+    readyForOptical: boolean;
+    steps: ExamWorkspaceStep[];
+  };
 }
 
 export interface OpticalFormTemplateRecord {

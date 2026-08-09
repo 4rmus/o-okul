@@ -24,12 +24,14 @@ import type {
   ReportSnapshotRecord,
   ReportStudentProgress,
   ReportStudentSnapshot,
+  ResolvedFeatureRollouts,
   ScheduleLessonRecord,
   StudentEnrollmentRecord,
   StudentRecord,
   SupportTicketRecord,
   TeacherNoteRecord,
   TeacherPortalLookupsResponse,
+  TeacherDailyBriefResponse,
   TeacherRecord,
 } from "@o-okul/shared-types";
 import { apiBaseUrl, apiRequest, authenticatedFetch, readData } from "../../../src/api-client.js";
@@ -66,9 +68,10 @@ import {
 } from "./_shared/teacher-panels.js";
 import { readReportExamId } from "../_shared/report-exam-selection.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
+import { TeacherDailyBriefPage } from "./teacher-daily-brief-page.js";
 
 interface TeacherPortalData {
-  teacher: TeacherRecord;
+  teacher?: TeacherRecord;
   announcements: AnnouncementRecord[];
   schedule: ScheduleLessonRecord[];
   students: StudentRecord[];
@@ -141,11 +144,34 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
   const requestedStudentId = readRequestedStudentId(searchParams);
   const isRolePreview = Boolean(rolePreviewToken);
   const canReadPortal = Boolean(auth && (auth.session.subjectType === "TEACHER" || isRolePreview));
+  const featureRolloutsQuery = useQuery({
+    queryKey: ["next-feature-rollouts", auth?.session.tenantId ?? "anonymous", auth?.session.id ?? "none"],
+    queryFn: () => readOnlyRequest<ResolvedFeatureRollouts>(auth?.accessToken ?? "", `${apiBaseUrl}/me/feature-rollouts`, rolePreviewToken),
+    enabled: Boolean(canReadPortal && view === "overview"),
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const teacherPortalV2Enabled = Boolean(
+    featureRolloutsQuery.isSuccess &&
+    featureRolloutsQuery.data.enabledFeatureKeys.includes("web.teacher-portal-v2"),
+  );
+  const useDailyBrief = view === "overview" && teacherPortalV2Enabled;
+  const rolloutResolved = view !== "overview" || featureRolloutsQuery.isSuccess || featureRolloutsQuery.isError;
   const queryKey = ["next-teacher-portal", auth?.session.userId ?? "anonymous", rolePreviewToken || "session", view, reportExamId];
   const query = useQuery({
     queryKey,
     queryFn: () => loadTeacherPortal(auth?.accessToken ?? "", rolePreviewToken, reportExamId, view),
-    enabled: canReadPortal,
+    enabled: Boolean(canReadPortal && rolloutResolved && !useDailyBrief),
+    refetchOnWindowFocus: false,
+  });
+  const dailyBriefQuery = useQuery({
+    queryKey: ["next-teacher-daily-brief", auth?.session.userId ?? "anonymous", rolePreviewToken || "session", todayInputValue()],
+    queryFn: () => readOnlyRequest<TeacherDailyBriefResponse>(
+      auth?.accessToken ?? "",
+      `${apiBaseUrl}/me/teacher/daily-brief?${new URLSearchParams({ date: todayInputValue() }).toString()}`,
+      rolePreviewToken,
+    ),
+    enabled: Boolean(canReadPortal && useDailyBrief),
     refetchOnWindowFocus: false,
   });
   const today = todayInputValue();
@@ -310,6 +336,33 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
 
   if (!canReadPortal) {
     return <AccessPanel title="Öğretmen Portalı" />;
+  }
+
+  if ((view === "overview" && featureRolloutsQuery.isPending) || (useDailyBrief && dailyBriefQuery.isPending)) {
+    return (
+      <PortalFrame title="Öğretmen Portalı" subtitle="Bugün">
+        <PortalStatePanel
+          state="loading"
+          title="Öğretmen günlük özeti hazırlanıyor"
+          description="Dersler ve bekleyen işler öğretmen kapsamınızda yükleniyor."
+        />
+      </PortalFrame>
+    );
+  }
+
+  if (useDailyBrief) {
+    if (dailyBriefQuery.isError || !dailyBriefQuery.data) {
+      return (
+        <PortalFrame title="Öğretmen Portalı" subtitle="Bugün">
+          <PortalStatePanel
+            state="error"
+            title="Öğretmen günlük özeti alınamadı"
+            description="Ayrıntı verileri açılmadan güvenli hata durumunda kalındı."
+          />
+        </PortalFrame>
+      );
+    }
+    return <TeacherDailyBriefPage brief={dailyBriefQuery.data} isRolePreview={isRolePreview} />;
   }
 
   if (query.isPending) {
@@ -1048,7 +1101,7 @@ async function loadTeacherPortal(
   const showStudent = showOverview || view === "student";
   const showReports = showOverview || view === "reports";
   const showHomework = showOverview || view === "homework";
-  const showSchedule = showOverview || view === "schedule" || showStudent || showHomework;
+  const showSchedule = showOverview || view === "schedule" || showStudent;
   const showAnnouncements = showOverview || view === "announcements";
   const showSupport = showOverview || view === "support";
   const showStudentWorkspace = showStudent || showReports || showHomework || showSupport;
@@ -1059,7 +1112,7 @@ async function loadTeacherPortal(
     ? requestedReportExamId
     : reportIndex[0]?.examId ?? "";
   const [teacher, announcements, schedule, students, attendance, homework, materials, materialAssignments, teacherNotes, supportTickets, snapshots, lookups] = await Promise.all([
-    readOnlyRequest<TeacherRecord>(accessToken, `${apiBaseUrl}/me/teacher`, rolePreviewToken),
+    showOverview ? readOnlyRequest<TeacherRecord>(accessToken, `${apiBaseUrl}/me/teacher`, rolePreviewToken) : Promise.resolve(undefined),
     showAnnouncements ? readOnlyRequest<AnnouncementRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/announcements`, rolePreviewToken) : Promise.resolve([]),
     showSchedule ? readOnlyRequest<ScheduleLessonRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/schedule`, rolePreviewToken) : Promise.resolve([]),
     showStudentWorkspace ? readOnlyRequest<StudentRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/students`, rolePreviewToken) : Promise.resolve([]),

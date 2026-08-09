@@ -376,6 +376,16 @@ describe("Capability access matrix", () => {
         expect(body).toMatchObject({ id: "support-ticket-a", status: "IN_PROGRESS", priority: "HIGH" });
       });
 
+    const announcementPreview = await request(server)
+      .post("/announcements/recipients/preview")
+      .set("Authorization", `Bearer ${assistantToken}`)
+      .send({
+        audience: "GUARDIANS",
+        channel: "IN_APP",
+        classId: "class-a",
+      })
+      .expect(201);
+
     await request(server)
       .post("/announcements")
       .set("Authorization", `Bearer ${assistantToken}`)
@@ -383,9 +393,9 @@ describe("Capability access matrix", () => {
         title: "Md.Yrd Duyuru",
         body: "Veli bilgilendirme duyurusu.",
         audience: "GUARDIANS",
+        channel: "IN_APP",
         classId: "class-a",
-        courseId: "course-math",
-        termId: "term-2026-spring",
+        recipientPreviewToken: announcementPreview.body.previewToken,
       })
       .expect(201);
 

@@ -1,9 +1,9 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "@playwright/test";
-import { CrudPage, type DataTableColumn } from "@o-okul/ui";
+import { ContextBar, CrudPage, WorkflowStepper, type DataTableColumn } from "@o-okul/ui";
 import { tenantRoleLabel } from "@o-okul/shared-types";
-import { institutionNavGroups, institutionOperationEvidenceItems } from "../app/(app)/_shared/navigation.js";
+import { institutionNavGroups, institutionNavGroupsV2, institutionOperationEvidenceItems } from "../app/(app)/_shared/navigation.js";
 import { buildListUrl } from "../src/list-controls.js";
 
 const columns: Array<DataTableColumn<{ id: string }>> = [
@@ -48,4 +48,43 @@ test("kurum rail ve ürün terimleri yeni bağlamı kullanır", () => {
   ]);
   expect(institutionOperationEvidenceItems.every((item) => item.hiddenFromRail)).toBe(true);
   expect(tenantRoleLabel("TENANT_ADMIN")).toBe("Kurum yöneticisi");
+});
+
+test("Shell v2 yedi alanı aynı route kaynağından üretir", () => {
+  expect(institutionNavGroupsV2.map((group) => group.label)).toEqual([
+    "Bugün",
+    "Kişiler",
+    "Akademik",
+    "Sınav",
+    "İletişim",
+    "Finans",
+    "Ayarlar",
+  ]);
+  const legacyHrefs = institutionNavGroups
+    .flatMap((group) => group.items)
+    .filter((item) => !item.hiddenFromRail)
+    .map((item) => item.href)
+    .sort();
+  const v2Hrefs = institutionNavGroupsV2.flatMap((group) => group.items).map((item) => item.href).sort();
+  expect(v2Hrefs).toEqual(legacyHrefs);
+  expect(new Set(v2Hrefs).size).toBe(v2Hrefs.length);
+});
+
+test("ContextBar ve WorkflowStepper erişilebilir sözleşmeyi korur", () => {
+  const context = renderToStaticMarkup(createElement(ContextBar, {
+    items: [{ label: "Sınav", value: "LGS Genel Deneme" }],
+    label: "Sınav bağlamı",
+  }));
+  const steps = renderToStaticMarkup(createElement(WorkflowStepper, {
+    steps: [
+      { id: "definition", label: "Sınav tanımı", state: "complete" },
+      { id: "report", label: "Rapor", state: "current" },
+    ],
+  }));
+
+  expect(context).toContain('aria-label="Sınav bağlamı"');
+  expect(context).toContain("LGS Genel Deneme");
+  expect(steps).toContain('aria-current="step"');
+  expect(steps).toContain("Tamamlandı");
+  expect(steps).toContain("Sıradaki");
 });

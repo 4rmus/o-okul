@@ -21,6 +21,7 @@ describe("PostgresAnnouncementStore", () => {
               classId: "class-a",
               courseId: "course-math",
               termId: "term-2026-spring",
+              studentId: "student-a",
               publishedAt: new Date("2026-06-08T09:00:00.000Z"),
               deletedAt: null,
             },
@@ -46,6 +47,7 @@ describe("PostgresAnnouncementStore", () => {
           classId: "class-a",
           courseId: "course-math",
           termId: "term-2026-spring",
+          studentId: "student-a",
           publishedAt: "2026-06-08T10:00:00.000Z",
         });
       },
@@ -68,6 +70,7 @@ describe("PostgresAnnouncementStore", () => {
       "class-a",
       "course-math",
       "term-2026-spring",
+      "student-a",
       "2026-06-08T10:00:00.000Z",
     ]);
   });
