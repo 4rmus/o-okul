@@ -8,12 +8,19 @@ describe("role capabilities", () => {
     expect(hasCapability(context, "finance:manage")).toBe(true);
     expect(hasCapability(context, "academic:manage")).toBe(true);
     expect(hasCapability(context, "audit:read")).toBe(true);
+    expect(hasCapability(context, "tenant-audit:read")).toBe(true);
     expect(hasCapability(context, "operation:manage")).toBe(true);
     expect(hasCapability(context, "privacy:manage")).toBe(true);
     expect(hasCapability(context, "role-preview:manage")).toBe(true);
     expect(hasCapability(context, "setup:manage")).toBe(true);
     expect(hasCapability(context, "support:manage")).toBe(true);
     expect(hasCapability(context, "user:manage")).toBe(true);
+  });
+
+  it("TENANT_OWNER tenant audit capability'sine sahiptir", () => {
+    const context = { roles: ["TENANT_OWNER"], capabilities: capabilitiesForRoles(["TENANT_OWNER"]) };
+
+    expect(hasCapability(context, "tenant-audit:read")).toBe(true);
   });
 
   it("ASSISTANT_ADMIN akademik ve destek yönetir ama finans ve kullanıcı yönetemez", () => {
@@ -47,6 +54,7 @@ describe("role capabilities", () => {
     expect(hasCapability(context, "system:manage")).toBe(true);
     expect(hasCapability(context, "tenant:manage")).toBe(true);
     expect(hasCapability(context, "audit:read")).toBe(true);
+    expect(hasCapability(context, "tenant-audit:read")).toBe(false);
   });
 
   it("TEACHER yönetim capability'lerini alamaz", () => {

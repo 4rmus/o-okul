@@ -1,8 +1,10 @@
 # O-Okul Durum
 
-Son güncelleme: 2026-08-08
-İnceleme snapshotı: `main` / `28b0f3501452`; `origin/main` ile eşit
-Kanıt düzeyi: kirli yerel çalışma ağacı; production teknik aktivasyonu canlı doğrulandı, tam go-live kanıtı tamamlanmadı
+Son güncelleme: 2026-08-09
+İnceleme snapshotı: `origin/main` / `af5dc5ad1572965709f0fc47f3bdf84a939e0626`; Gate A değişiklikleri
+`agent/almanac-gate-a-local-20260809-2` izole yerel branch'indedir
+Kanıt düzeyi: Gate A `LOCAL_STATIC`; GitHub CI, staging, provider, deploy ve production bu değişiklik
+seti için yeniden doğrulanmadı
 
 5 Ağustos 2026 ürün kararları: giriş kurum subdomaini + tenant-local kimliktir; guardian ürün
 kapsamından çıkarılacaktır; hukuk/KVKK incelemesi bu fazda repo uygulamasını ve pilot hazırlığını
@@ -45,6 +47,21 @@ ortam ve tarih içeren kalıcı evidence ile yükseltilir.
   sınırlar. Netgsm upstream idempotency anahtarı sunmadığı için provider çağrısı sonrası process
   çökmesi bakımından davranış `at-least-once` olarak kabul edilir; `exactly-once` iddiası yoktur.
 
+## Almanak 2.0 Gate A — Yerel Kapanış (2026-08-09)
+
+- **S-01:** iSEM producer, checker ve template'leri tek fixture sözleşmesinden `90 soru / 1 kitapçık /
+  21 katılımcı / 21 eşleşme / 0 karantina / 21 sonuç / 21 rapor` bekler. Producer'ın private
+  UI-worker girdisi `generatedAt`, `tenantSlug`, `loginName` ve portal login alanlarını doğrudan üretir.
+- **S-02:** `/audit-logs`, `/audit-logs/safe-list` ve `/audit-logs/student-summary` route ailesi
+  `tenant-audit:read` exact capability, aktif `STAFF` persona, tenant bağlamı ve normal RLS şartıyla
+  çalışır. Normal `SYSTEM_ADMIN`, personasız/teacher bağlamı ve RLS bypass 403 alır; tenant audit
+  okumaları için `listForAdmin` bypass yolu kaldırılmıştır.
+- **Kalan envanter:** `roleRank` ve 25 controller dosyasındaki 151 `@Roles` annotation hâlâ açıktır.
+  Bunlar Gate A'nın ilk exact-capability diliminin değil, sonraki route-family ve control-plane
+  kesimlerinin kapsamıdır; tam RBAC dönüşümü tamamlandı iddiası yoktur.
+- **Sonuç:** `pnpm run ci` ve Gate A hedefli kontrolleri aynı yerel diff üzerinde `PASS`.
+  GitHub CI, gerçek UI-worker oturumu, staging, provider, deploy ve production `EXTERNAL_NOT_RUN`.
+
 ## Production Teknik Aktivasyonu — 2026-08-05
 
 - Mevcut sunucu kullanıldı; yeni VPS kurulmadı. `DOMAIN`, uygulama URL'leri, CORS ve Sentry ortam adı
@@ -84,10 +101,10 @@ Korunan aktif sözleşmeler:
 
 Güncel sıralama `docs/account-management-architecture-plan.md` bölüm 6 içindedir:
 
-1. P0: iSEM producer/checker sayımları ve UI-worker credential sözleşmesini tekleştirme.
-2. P0: rank tabanlı RBAC ile legacy system-admin tenant erişimini exact capability/control-plane modeline kesme.
-3. P1: StudentContact, guardian emekliliği, offboarding/import/cursor ve outbox grant revoke dilimleri.
-4. Canlı SHA için CI parity; uygulamanın ürettiği davet/reset e-postası için gerçek provider/inbox ve MFA;
+1. P0: kalan 25 controller/151 `@Roles` envanterini route ailesi bazında exact capability + persona +
+   scope modeline kesme; ayrı platform auth realm ve süreli/MFA'lı breakglass akışını kurma.
+2. P1: StudentContact, guardian emekliliği, offboarding/import/cursor ve outbox grant revoke dilimleri.
+3. Canlı SHA için CI parity; uygulamanın ürettiği davet/reset e-postası için gerçek provider/inbox ve MFA;
    rol bazlı UAT; pull edilebilir image rollback/restore; izleme, pilot ve go-live.
 
 Guardian fiziksel silme, grant revoke, production deploy veya go-live; ilgili teknik güvenlik kapıları
@@ -95,6 +112,18 @@ ve gerçek ortam kanıtı olmadan yapılamaz. Workspace mailbox/alias testi tama
 uygulama-provider teslim testi yerine geçmez. Şablon veya statik checker sonucu canlı kanıt yerine kullanılamaz.
 
 ## Doğrulama
+
+2026-08-09 Gate A yerel sonuçları:
+
+- Disposable PostgreSQL/Redis/MinIO üzerinde gerçek iSEM optik producer smoke: `PASS`; 21 katılımcı,
+  21 eşleşme, 0 karantina, 21 sonuç ve 21 rapor.
+- Producer artifact'i, ortak evidence checker, live-exam-cycle checker, UI-worker input contract ve
+  bütün evidence template kontrolleri: `PASS` (`LOCAL_STATIC`).
+- RBAC hedefli `src/rbac src/auth src/tenant`: 20 dosya/156 test `PASS`; tenant RLS, token-storage,
+  API/shared/web typecheck ve audit negatif matrisleri `PASS`.
+- `pnpm run ci` ve `git diff --check`: `PASS` (`LOCAL_STATIC`; GitHub Actions CI değildir).
+- Gerçek UI-worker browser sonucu, GitHub CI, staging, provider, deploy ve production:
+  `EXTERNAL_NOT_RUN`.
 
 2026-08-05 plan kontrolü:
 

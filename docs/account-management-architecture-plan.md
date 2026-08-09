@@ -1,7 +1,7 @@
 # O-Okul Kurum, Kullanıcı ve Hesap Yönetimi Mimarisi
 
-**Durum:** Onaylı kararların kontrollü uygulama ve kapanış planı; P0/P1 açıkları devam ediyor
-**Tarih:** 1 Ağustos 2026; son kontrol 5 Ağustos 2026
+**Durum:** Onaylı kararların kontrollü uygulama ve kapanış planı; Gate A yerel/statik tamamlandı, kalan P0/P1 ve dış kanıtlar açık
+**Tarih:** 1 Ağustos 2026; son kontrol 9 Ağustos 2026
 **Kapsam:** Özel okul ve özel öğretim kurslarına yıllık veya çok yıllık kiralanacak O-Okul için kurum, çalışan, öğretmen, öğrenci, hesap, lisans ve erişim yönetimi
 
 ## 1. Mimari karar özeti
@@ -450,7 +450,7 @@ exact-SHA staging, production, pilot ya da go-live kanıtı değildir.
 
 ### P0 - Yeni cutover öncesi
 
-1. **Sınav evidence sözleşmesini tekleştir.** iSEM smoke üreticisi, ortak smoke checker,
+1. **Gate A yerel/statik tamamlandı; gerçek UI-worker ortam kanıtı açık.** iSEM smoke üreticisi, ortak smoke checker,
    live-exam-cycle checker, template ve production plan aynı fixture sayımlarını istemelidir.
    Üreticinin yazdığı UI-worker credential dosyası `loginName`, `tenantSlug`, `generatedAt` ve portal
    login alanlarıyla preflight ve Playwright sözleşmesini doğrudan geçmelidir.
@@ -461,8 +461,11 @@ exact-SHA staging, production, pilot ya da go-live kanıtı değildir.
    - Doğrulama: `pnpm prod:evidence:templates:check`, `pnpm live:ui-worker:evidence-contract`,
      disposable Postgres/Redis/S3 üzerinde `pnpm isem-optical-pipeline:smoke`,
      `pnpm live:ui-worker:smoke`, `pnpm live:ui-worker:result-check`, `pnpm live:exam-cycle:check`.
+   - 9 Ağustos yerel sonucu: producer/checker/template `90/1/21/21/0/21/21` ortak sözleşmesinde;
+     disposable producer smoke ve yerel artifact checker'ları `PASS`. Gerçek browser/UI-worker oturumu,
+     staging ve production `EXTERNAL_NOT_RUN`.
 
-2. **Rank tabanlı RBAC ve legacy system-admin erişimini kapat.** `roleRank`/geniş `@Roles`
+2. **Gate A ilk exact-capability dilimi tamamlandı; tam RBAC/control-plane kesimi açık.** `roleRank`/geniş `@Roles`
    kullanımları route ailesi bazında exact capability + active persona + tenant/campus/assignment
    kapsamına taşınır. `SYSTEM_ADMIN` tenant rolünden ayrı PlatformAccount/PlatformSession ve süreli,
    MFA'lı, gerekçeli breakglass akışına kesilir.
@@ -473,6 +476,9 @@ exact-SHA staging, production, pilot ya da go-live kanıtı değildir.
      normal system-admin oturumu tenant verisine doğrudan giremez.
    - Doğrulama: `pnpm --filter @o-okul/api exec vitest run src/rbac src/auth src/tenant`,
      `pnpm db:rls:check`, `pnpm web:token-storage:check`, `pnpm admin-mfa:check`.
+   - 9 Ağustos yerel sonucu: tenant audit route ailesi `tenant-audit:read`, aktif `STAFF`, tenant ve
+     normal RLS bağlamına kesildi; normal `SYSTEM_ADMIN` ve persona/scope negatifleri `PASS`.
+     `roleRank` ile 25 controller dosyasındaki 151 `@Roles` annotation sonraki dilimlere kalır.
 
 ### P1 - Ürün ve pilot kapanışı
 
@@ -509,7 +515,7 @@ exact-SHA staging, production, pilot ya da go-live kanıtı değildir.
 
 ### En küçük güvenli ilk PR
 
-İlk PR yalnız P0 listesinin ilk evidence maddesini düzeltir: iSEM fixture sayımları ve UI-worker credential
-şekli producer/checker/template/plan boyunca teklenir ve doğrudan entegrasyon testi eklenir. DB şeması,
-guardian runtime'ı, RBAC veya provider mutation bu PR'a girmez. Mevcut kirli support/notification
-değişiklikleri önce ayrı bir branch/PR üzerinde korunmadan bu dilime başlanmaz.
+En küçük güvenli ilk PR, S-01 evidence sözleşmesidir: iSEM fixture sayımları ve UI-worker credential
+şekli producer/checker/template boyunca teklenir. Gate A'nın bağımlı ikinci PR'ı yalnız tenant audit route
+ailesini exact capability/persona/RLS sınırına keser. DB şeması, guardian runtime'ı, tam RBAC dönüşümü veya
+provider mutation bu iki dilime girmez; dış ortam doğrulamaları ayrı release kanıtıdır.

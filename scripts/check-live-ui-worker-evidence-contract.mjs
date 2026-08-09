@@ -3,6 +3,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, wr
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { createLiveUiWorkerEvidence } from "./isem-optical-pipeline-contract.mjs";
 
 const artifactRoot = "artifacts/live-ui-worker-evidence-contract";
 const validEvidencePath = join(artifactRoot, "private", "valid-live-ui-worker.json");
@@ -393,7 +394,7 @@ function writeJson(path, value, mode = path.includes(`${artifactRoot}/private/`)
 }
 
 function createValidEvidence() {
-  return {
+  return createLiveUiWorkerEvidence({
     examId: "exam-report-smoke-20260614",
     firstStudentId: "student-report-smoke-20260614-00001",
     generatedAt: new Date(Date.now() - 60_000).toISOString(),
@@ -408,7 +409,7 @@ function createValidEvidence() {
       password: "Str0ngStudent!2026",
     },
     tenantSlug: "staging-school",
-  };
+  });
 }
 
 function createValidResultEvidence() {

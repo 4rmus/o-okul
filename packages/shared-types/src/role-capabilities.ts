@@ -24,7 +24,7 @@ export const roleCapabilities: Record<TenantRoleName, readonly RoleCapability[]>
   TENANT_OWNER: [
     "academic:*", "announcement:*", "attendance:*", "audit:*", "class:*", "finance:*", "note:*",
     "observability:*", "operation:*", "privacy:*", "role-preview:*", "security:*", "search:*", "setup:*",
-    "staff:*", "student:*", "support:*", "user:*", "owner:*",
+    "staff:*", "student:*", "support:*", "tenant-audit:read", "user:*", "owner:*",
   ],
   TENANT_ADMIN: [
     "academic:*",
@@ -44,6 +44,7 @@ export const roleCapabilities: Record<TenantRoleName, readonly RoleCapability[]>
     "staff:*",
     "student:*",
     "support:*",
+    "tenant-audit:read",
     "user:*",
   ],
   ASSISTANT_ADMIN: [

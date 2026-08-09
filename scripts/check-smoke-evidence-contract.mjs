@@ -373,7 +373,7 @@ const negativeCases = [
       ...isemOpticalPipeline,
       counts: {
         ...isemOpticalPipeline.counts,
-        quarantineCount: 0,
+        quarantineCount: 1,
       },
     },
     "isem_optical_pipeline_smoke",

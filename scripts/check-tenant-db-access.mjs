@@ -9,7 +9,6 @@ const ignoredFiles = new Set([
 ]);
 const rlsBypassHeaderAllowedFiles = new Set(["apps/api/src/context/rls-bypass.guard.ts"]);
 const bypassRlsFunctionAllowlist = new Map([
-  ["apps/api/src/audit-log/audit-log-store.ts", new Set(["listForAdmin"])],
   ["apps/api/src/auth/auth-user-store.ts", new Set([
     "purgePii",
     "createOrAttachTenantIdentity",

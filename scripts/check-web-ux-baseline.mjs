@@ -1706,12 +1706,16 @@ requireTokens("apps/web/app/(app)/_shared/navigation.ts", [
   '{ href: "/kurum/kurulum", icon: Settings, label: "Kurulum", requiredCapability: "setup:manage" }',
   'label: "Yönetim"',
   '{ href: "/kurum/operasyon-ve-kanit", icon: ShieldCheck, label: "Operasyon ve kanıt", requiredCapability: institutionOperationEvidenceCapability }',
-  '{ href: "/kurum/denetim", hiddenFromRail: true, icon: ClipboardList, label: "Denetim", requiredCapability: "audit:read" }',
+  '{ href: "/kurum/denetim", hiddenFromRail: true, icon: ClipboardList, label: "Denetim", requiredCapability: "tenant-audit:read" }',
   '{ href: "/kurum/kvkk", hiddenFromRail: true, icon: ShieldCheck, label: "KVKK", requiredCapability: "privacy:manage" }',
   '{ href: "/kurum/guvenlik-denetimi", hiddenFromRail: true, icon: ShieldCheck, label: "Güvenlik Denetimi", requiredCapability: institutionOperationEvidenceCapability }',
   '{ href: "/kurum/canli-yayin", hiddenFromRail: true, icon: Activity, label: "Yayın Hazırlığı", requiredCapability: institutionOperationEvidenceCapability }',
   '{ href: "/kurum/raporlar", icon: BarChart3, label: "Sınav Raporları", requiredCapability: "academic:manage" }',
   '"/kurum": "Kurum Özeti"',
+]);
+
+requireNoTokens("apps/web/app/(app)/_shared/navigation.ts", [
+  'requiredCapability: "audit:read"',
 ]);
 
 requireTokens("apps/web/app/(app)/app-shell.tsx", [

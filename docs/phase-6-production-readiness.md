@@ -1040,8 +1040,8 @@ pnpm backup:restore:smoke
   Bu referanslar `isem-optical-pipeline.json`/`.log` ve `live-ui-worker-result.json`/`live-ui-worker-report.json`
   artifact adlarına bağlanmalı; aynı kelimeleri taşıyan alakasız marker dosyaları veya `artifacts/local/**`
   local smoke çıktısı kalıcı staging/prod kanıtı gibi gösterilemez.
-  Aynı kontrol iSEM LGS fixture'ı için 90 soru, 254 katılımcı, 254 eşleşme, 0 quarantine,
-  254 sınav sonucu ve 254 rapor sonucunu exact sayıyla ister; `fileName`, `rawRow`,
+  Aynı kontrol iSEM LGS fixture'ı için 90 soru, 21 katılımcı, 21 eşleşme, 0 quarantine,
+  21 sınav sonucu ve 21 rapor sonucunu exact sayıyla ister; `fileName`, `rawRow`,
   `contentBase64`, `fileBase64`, ham `ornek-veriler/iSEM .txt` yolu, TCKN-benzeri 11 haneli
   değer, ham e-posta veya telefon evidence JSON'unda yer alamaz.
 - iSEM optik pipeline kanıtı `ISEM_OPTICAL_PIPELINE_TARGET` ile

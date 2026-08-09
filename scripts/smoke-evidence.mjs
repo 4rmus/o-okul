@@ -1,5 +1,6 @@
 import { lstat, mkdir, writeFile } from "node:fs/promises";
 import { dirname, parse, resolve } from "node:path";
+import { ISEM_OPTICAL_PIPELINE_FIXTURE } from "./isem-optical-pipeline-contract.mjs";
 
 export async function writeSmokeEvidence(filePath, payload) {
   if (!filePath) return;
@@ -610,17 +611,6 @@ function requireReportGenerationSmoke(payload, failures, label, allowExampleEvid
 }
 
 function requireIsemOpticalPipelineSmoke(payload, failures, label, allowExampleEvidence) {
-  const expectedIsemFixture = {
-    answerKeyQuestionCount: 90,
-    bookletVariantCount: 1,
-    studentCount: 21,
-    participantCount: 21,
-    matchedCount: 20,
-    quarantineCount: 1,
-    examResultCount: 20,
-    reportResultCount: 20,
-  };
-
   requireObjectKeySet(payload, failures, label, "isemOpticalPipelineSmoke", [
     "generatedAt",
     "result",
@@ -650,9 +640,15 @@ function requireIsemOpticalPipelineSmoke(payload, failures, label, allowExampleE
     failures,
     `${label}.answerKeyQuestionCount`,
     "answerKeyQuestionCount",
-    expectedIsemFixture.answerKeyQuestionCount,
+    ISEM_OPTICAL_PIPELINE_FIXTURE.answerKeyQuestionCount,
   );
-  requireEqual(payload, failures, `${label}.bookletVariantCount`, "bookletVariantCount", expectedIsemFixture.bookletVariantCount);
+  requireEqual(
+    payload,
+    failures,
+    `${label}.bookletVariantCount`,
+    "bookletVariantCount",
+    ISEM_OPTICAL_PIPELINE_FIXTURE.bookletVariantCount,
+  );
   requireIntegerAtLeast(payload, failures, `${label}.pipelineDurationMs`, "pipelineDurationMs", 0);
 
   const counts = payload.counts;
@@ -669,12 +665,36 @@ function requireIsemOpticalPipelineSmoke(payload, failures, label, allowExampleE
       "guardianLinkCount",
     ])
   ) {
-    requireEqual(counts, failures, `${label}.counts.studentCount`, "studentCount", expectedIsemFixture.studentCount);
-    requireEqual(counts, failures, `${label}.counts.participantCount`, "participantCount", expectedIsemFixture.participantCount);
-    requireEqual(counts, failures, `${label}.counts.matchedCount`, "matchedCount", expectedIsemFixture.matchedCount);
-    requireEqual(counts, failures, `${label}.counts.quarantineCount`, "quarantineCount", expectedIsemFixture.quarantineCount);
-    requireEqual(counts, failures, `${label}.counts.examResultCount`, "examResultCount", expectedIsemFixture.examResultCount);
-    requireEqual(counts, failures, `${label}.counts.reportResultCount`, "reportResultCount", expectedIsemFixture.reportResultCount);
+    requireEqual(counts, failures, `${label}.counts.studentCount`, "studentCount", ISEM_OPTICAL_PIPELINE_FIXTURE.studentCount);
+    requireEqual(
+      counts,
+      failures,
+      `${label}.counts.participantCount`,
+      "participantCount",
+      ISEM_OPTICAL_PIPELINE_FIXTURE.participantCount,
+    );
+    requireEqual(counts, failures, `${label}.counts.matchedCount`, "matchedCount", ISEM_OPTICAL_PIPELINE_FIXTURE.matchedCount);
+    requireEqual(
+      counts,
+      failures,
+      `${label}.counts.quarantineCount`,
+      "quarantineCount",
+      ISEM_OPTICAL_PIPELINE_FIXTURE.quarantineCount,
+    );
+    requireEqual(
+      counts,
+      failures,
+      `${label}.counts.examResultCount`,
+      "examResultCount",
+      ISEM_OPTICAL_PIPELINE_FIXTURE.examResultCount,
+    );
+    requireEqual(
+      counts,
+      failures,
+      `${label}.counts.reportResultCount`,
+      "reportResultCount",
+      ISEM_OPTICAL_PIPELINE_FIXTURE.reportResultCount,
+    );
     requireIntegerAtLeast(counts, failures, `${label}.counts.studentPortalUserLinkCount`, "studentPortalUserLinkCount", 1);
     requireIntegerAtLeast(counts, failures, `${label}.counts.guardianPortalUserLinkCount`, "guardianPortalUserLinkCount", 1);
     requireIntegerAtLeast(counts, failures, `${label}.counts.guardianLinkCount`, "guardianLinkCount", 1);

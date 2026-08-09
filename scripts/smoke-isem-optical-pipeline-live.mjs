@@ -25,6 +25,10 @@ import {
   createRedisConnectionOptions,
   createReportGenerationBullWorker,
 } from "../apps/worker/dist/queue/bullmq-worker.js";
+import {
+  createLiveUiWorkerEvidence,
+  ISEM_OPTICAL_PIPELINE_FIXTURE,
+} from "./isem-optical-pipeline-contract.mjs";
 import { validateSmokeEvidenceOutputTarget, writeSmokeEvidence } from "./smoke-evidence.mjs";
 
 const databaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/o_okul";
@@ -46,12 +50,15 @@ const parserConfigVersion = "optik-7108-lgs-v1";
 const answerKeyVersion = "isem-lgs-1-v1";
 const txtPath = "ornek-veriler/iSEM .txt";
 const answerKeyPath = "ornek-veriler/iSEM - LGS - 1 Detaylı Cevap Anahtarı.xlsx";
-const expectedRawRowCount = 21;
-const expectedMatchedCount = 21;
-const expectedQuarantineCount = 0;
-const expectedParticipantCount = 21;
+const expectedRawRowCount = ISEM_OPTICAL_PIPELINE_FIXTURE.participantCount;
+const expectedMatchedCount = ISEM_OPTICAL_PIPELINE_FIXTURE.matchedCount;
+const expectedQuarantineCount = ISEM_OPTICAL_PIPELINE_FIXTURE.quarantineCount;
+const expectedParticipantCount = ISEM_OPTICAL_PIPELINE_FIXTURE.participantCount;
 const expectedValidBookletCounts = { A: 12, B: 9 };
 const sampleStudentNos = ["102", "101"];
+const licensePlanCode = "TRIAL";
+const licenseStartsAt = new Date(Date.now() - 60_000).toISOString();
+const licenseEndsAt = new Date(Date.now() + 86_400_000).toISOString();
 const smokeEmailDomain = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_EMAIL_DOMAIN ?? "example.test";
 const smokeEmail = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_EMAIL ?? `isem-optical-smoke-${runId}@${smokeEmailDomain}`;
 const smokePassword = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD ?? "password";
@@ -166,7 +173,7 @@ try {
   }
   await waitForExamResultCount(expectedMatchedCount, 30_000);
 
-  const reportJob = await enqueueReportGeneration(baseUrl, token, rawImport.sha256, evaluation.answerKeyId);
+  const reportJob = await enqueueReportGeneration(baseUrl, token);
   const snapshot = await waitForSnapshot(expectedMatchedCount, 30_000);
   const evidence = await readPipelineEvidence(rawImport.id, evaluation.answerKeyId, snapshot.id);
   assertPipelineEvidence(evidence);
@@ -235,20 +242,21 @@ try {
     commandsPassed: [commandPassed],
     gaps: [],
   });
-  await writeUiWorkerEvidence(uiWorkerEvidencePath, {
-    email: smokeEmail,
+  await writeUiWorkerEvidence(uiWorkerEvidencePath, createLiveUiWorkerEvidence({
     examId,
     firstStudentId: studentId(sampleStudentNos[0]),
     guardianPortal: {
-      email: sampleGuardianEmail(sampleStudentNos[0]),
+      loginName: sampleGuardianEmail(sampleStudentNos[0]),
       password: smokePassword,
     },
+    loginName: smokeEmail,
     password: smokePassword,
     studentPortal: {
-      email: sampleStudentEmail(sampleStudentNos[0]),
+      loginName: sampleStudentEmail(sampleStudentNos[0]),
       password: smokePassword,
     },
-  });
+    tenantSlug,
+  }));
 
   console.log(
     `iSEM optical pipeline live smoke passed: tenantHash ${sha256(tenantId)}, examHash ${sha256(examId)}, rawImportHash ${sha256(rawImport.id)}, parseJobHash ${sha256(parseJob.jobId)}, evaluation jobs ${evaluation.queuedCount}, reportJobHash ${sha256(reportJob.jobId)}, snapshotHash ${sha256(snapshot.id)}, results ${evidence.examResultCount}, sampleScores ${formatSampleScores(evidence.sampleScores)}`,
@@ -271,9 +279,18 @@ async function seedPipelineInput(rows) {
     await client.query("BEGIN");
     await client.query("SELECT set_config('app.bypass_rls', 'true', true)");
     await client.query(
-      `INSERT INTO "Tenant" ("id", "name", "slug", "status", "seatLimit", "updatedAt")
-       VALUES ($1, 'iSEM Optical Smoke Tenant', $2, 'ACTIVE', 500, now())`,
-      [tenantId, tenantSlug],
+      `INSERT INTO "Tenant" (
+         "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "status", "seatLimit", "updatedAt"
+       )
+       VALUES ($1, 'iSEM Optical Smoke Tenant', $2, $3, $4, $5, 'ACTIVE', 500, now())`,
+      [tenantId, tenantSlug, licensePlanCode, licenseStartsAt, licenseEndsAt],
+    );
+    await client.query(
+      `INSERT INTO "LicenseTerm" (
+         "id", "tenantId", "planCode", "startsAt", "endsAt", "activeStudentLimit", "auditReference", "updatedAt"
+       )
+       VALUES ($1, $2, $3, $4, $5, 500, 'isem-optical-pipeline-smoke', now())`,
+      [`license-isem-optical-smoke-${runId}`, tenantId, licensePlanCode, licenseStartsAt, licenseEndsAt],
     );
     await client.query(
       `INSERT INTO "User" ("id", "tenantId", "email", "emailNormalized", "loginName", "loginNameNormalized", "name", "passwordHash", "updatedAt")
@@ -281,8 +298,10 @@ async function seedPipelineInput(rows) {
       [userId, tenantId, smokeEmail, hashPassword(smokePassword)],
     );
     await client.query(
-      `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
-       VALUES ($1, $2, $3, 'TENANT_ADMIN', now())`,
+      `INSERT INTO "TenantMembership" (
+         "id", "tenantId", "userId", "role", "staffRole", "status", "version", "scopeMode", "updatedAt"
+       )
+       VALUES ($1, $2, $3, 'TENANT_ADMIN', 'TENANT_ADMIN', 'ACTIVE', 1, 'TENANT', now())`,
       [membershipId, tenantId, userId],
     );
     await client.query(
@@ -368,12 +387,15 @@ async function seedExamScopedInput(rows) {
 async function seedSampleUsers(client) {
   for (const studentNo of sampleStudentNos) {
     await client.query(
-      `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
+      `INSERT INTO "User" (
+         "id", "tenantId", "email", "emailNormalized", "loginName", "loginNameNormalized", "name", "passwordHash", "updatedAt"
+       )
        VALUES
-         ($1, $2, $3, $4, now()),
-         ($5, $6, $7, $4, now())`,
+         ($1, $2, $3, lower(btrim($3)), $3, lower(btrim($3)), $4, $5, now()),
+         ($6, $2, $7, lower(btrim($7)), $7, lower(btrim($7)), $8, $5, now())`,
       [
         sampleStudentUserId(studentNo),
+        tenantId,
         sampleStudentEmail(studentNo),
         `iSEM Student ${studentNo}`,
         hashPassword(smokePassword),
@@ -383,10 +405,12 @@ async function seedSampleUsers(client) {
       ],
     );
     await client.query(
-      `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
+      `INSERT INTO "TenantMembership" (
+         "id", "tenantId", "userId", "role", "hasStudentPersona", "status", "version", "scopeMode", "updatedAt"
+       )
        VALUES
-         ($1, $2, $3, 'STUDENT', now()),
-         ($4, $2, $5, 'GUARDIAN', now())`,
+         ($1, $2, $3, 'STUDENT', true, 'ACTIVE', 1, 'TENANT', now()),
+         ($4, $2, $5, 'GUARDIAN', false, 'ACTIVE', 1, 'TENANT', now())`,
       [
         `membership-student-isem-${runId}-${studentNo}`,
         tenantId,
@@ -513,10 +537,9 @@ async function enqueueEvaluation(baseUrl, token, rawImportId) {
   return response.data ?? response;
 }
 
-async function enqueueReportGeneration(baseUrl, token, rawImportSha256, answerKeyId) {
+async function enqueueReportGeneration(baseUrl, token) {
   const response = await postJson(baseUrl, `/api/v1/exams/${examId}/reports/generation-jobs`, token, {
     reportType: "EXAM_RESULT_SUMMARY",
-    contentHash: `${rawImportSha256}-${answerKeyId}`,
   });
   const payload = response.data ?? response;
   if (payload.queueName !== "report-generation" || !payload.jobId) {

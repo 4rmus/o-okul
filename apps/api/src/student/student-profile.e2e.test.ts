@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
+import { resetInMemoryAuthUsers, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
 import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
@@ -15,6 +16,24 @@ describe("Student profile + TC API", () => {
   let teacherAAccessToken: string;
 
   beforeAll(async () => {
+    resetInMemoryAuthUsers();
+    upsertInMemoryAuthUser({
+      id: "user-tenant-a",
+      email: "admin-a@example.test",
+      name: "Tenant A Admin",
+      password: "password",
+      tenantId: "tenant-a",
+      roles: ["TENANT_ADMIN"],
+      membership: {
+        id: "membership-tenant-a-admin",
+        staffRole: "TENANT_ADMIN",
+        hasTeacherPersona: false,
+        hasStudentPersona: false,
+        version: 2,
+        scopeMode: "TENANT",
+        campusIds: [],
+      },
+    });
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -31,6 +50,7 @@ describe("Student profile + TC API", () => {
 
   afterAll(async () => {
     await app.close();
+    resetInMemoryAuthUsers();
   });
 
   async function login(email: string): Promise<string> {

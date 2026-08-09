@@ -1,7 +1,6 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable } from "@nestjs/common";
 import type { AuditLogCategory, AuditLogListItemRecord, StudentAuditSummaryRecord } from "@o-okul/shared-types";
 import type { RequestContext } from "../context/request-context.js";
-import { isSystemAdmin } from "../rbac/roles.js";
 import { auditLogStoreToken, type AuditLogStore } from "./audit-log-store.js";
 
 export interface AuditLogRecord {
@@ -30,16 +29,8 @@ export class AuditLogService {
   constructor(@Inject(auditLogStoreToken) private readonly store: AuditLogStore) {}
 
   async list(context: RequestContext, filters: AuditLogListFilters = {}): Promise<AuditLogRecord[]> {
-    let records: AuditLogRecord[];
-    if (isSystemAdmin(context.roles)) {
-      records = this.store.listForAdmin ? await this.store.listForAdmin() : await this.store.list();
-    } else {
-      records = await this.store.list();
-      if (!context.tenantId) {
-        throw new ForbiddenException("TENANT_CONTEXT_MISSING");
-      }
-      records = records.filter((record) => record.tenantId === context.tenantId);
-    }
+    const tenantId = requireTenantStaffAuditContext(context);
+    const records = (await this.store.list()).filter((record) => record.tenantId === tenantId);
 
     return filterAuditLogs(records, filters).map(sanitizeAuditLogRecord);
   }
@@ -57,6 +48,7 @@ export class AuditLogService {
   }
 
   async studentSummary(context: RequestContext, studentId: string | undefined, limit = 5): Promise<StudentAuditSummaryRecord[]> {
+    requireTenantStaffAuditContext(context);
     const normalizedStudentId = normalizeText(studentId);
     if (!normalizedStudentId) {
       throw new BadRequestException("AUDIT_STUDENT_ID_REQUIRED");
@@ -67,6 +59,18 @@ export class AuditLogService {
       .slice(0, Math.max(1, Math.min(limit, 20)))
       .map(toStudentAuditSummary);
   }
+}
+
+function requireTenantStaffAuditContext(context: RequestContext): string {
+  if (
+    context.activePersona !== "STAFF" ||
+    !context.tenantId ||
+    context.bypassRls ||
+    context.roles.includes("SYSTEM_ADMIN")
+  ) {
+    throw new ForbiddenException("TENANT_STAFF_AUDIT_CONTEXT_REQUIRED");
+  }
+  return context.tenantId;
 }
 
 function toAuditLogListItem(record: AuditLogRecord): AuditLogListItemRecord {

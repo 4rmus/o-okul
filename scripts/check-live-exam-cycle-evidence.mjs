@@ -1,6 +1,7 @@
 import { lstat, readFile } from "node:fs/promises";
 import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ISEM_OPTICAL_PIPELINE_FIXTURE } from "./isem-optical-pipeline-contract.mjs";
 
 const target = process.env.LIVE_EXAM_CYCLE_TARGET;
 const allowExampleEvidence = process.env.LIVE_EXAM_CYCLE_ALLOW_EXAMPLE_EVIDENCE === "1";
@@ -11,15 +12,6 @@ const requiredCommands = [
   "pnpm report-generation:smoke",
   "pnpm live:ui-worker:smoke",
 ];
-const expectedIsemFixture = {
-  answerKeyQuestionCount: 90,
-  bookletVariantCount: 1,
-  participantCount: 21,
-  matchedCount: 20,
-  quarantineCount: 1,
-  examResultCount: 20,
-  reportResultCount: 20,
-};
 const allowedEvidenceReferencePrefixes = ["artifact:", "run:", "log:", "url:", "https://", "file://", "s3://"];
 const isemOpticalPipelineEvidenceFileNames = new Set(["isem-optical-pipeline.json", "isem-optical-pipeline.log"]);
 const liveUiWorkerEvidenceFileNames = new Set(["live-ui-worker-result.json", "live-ui-worker-report.json"]);
@@ -255,13 +247,49 @@ function requireExamCycle(report, failures) {
     requireObjectNonPlaceholderString(value, failures, `examCycle.${key}`, key);
   }
 
-  requireObjectEqual(value, failures, "examCycle.answerKeyQuestionCount", "answerKeyQuestionCount", expectedIsemFixture.answerKeyQuestionCount);
-  requireObjectEqual(value, failures, "examCycle.bookletVariantCount", "bookletVariantCount", expectedIsemFixture.bookletVariantCount);
-  requireObjectEqual(value, failures, "examCycle.participantCount", "participantCount", expectedIsemFixture.participantCount);
-  requireObjectEqual(value, failures, "examCycle.matchedCount", "matchedCount", expectedIsemFixture.matchedCount);
-  requireObjectEqual(value, failures, "examCycle.quarantineCount", "quarantineCount", expectedIsemFixture.quarantineCount);
-  requireObjectEqual(value, failures, "examCycle.examResultCount", "examResultCount", expectedIsemFixture.examResultCount);
-  requireObjectEqual(value, failures, "examCycle.reportResultCount", "reportResultCount", expectedIsemFixture.reportResultCount);
+  requireObjectEqual(
+    value,
+    failures,
+    "examCycle.answerKeyQuestionCount",
+    "answerKeyQuestionCount",
+    ISEM_OPTICAL_PIPELINE_FIXTURE.answerKeyQuestionCount,
+  );
+  requireObjectEqual(
+    value,
+    failures,
+    "examCycle.bookletVariantCount",
+    "bookletVariantCount",
+    ISEM_OPTICAL_PIPELINE_FIXTURE.bookletVariantCount,
+  );
+  requireObjectEqual(
+    value,
+    failures,
+    "examCycle.participantCount",
+    "participantCount",
+    ISEM_OPTICAL_PIPELINE_FIXTURE.participantCount,
+  );
+  requireObjectEqual(value, failures, "examCycle.matchedCount", "matchedCount", ISEM_OPTICAL_PIPELINE_FIXTURE.matchedCount);
+  requireObjectEqual(
+    value,
+    failures,
+    "examCycle.quarantineCount",
+    "quarantineCount",
+    ISEM_OPTICAL_PIPELINE_FIXTURE.quarantineCount,
+  );
+  requireObjectEqual(
+    value,
+    failures,
+    "examCycle.examResultCount",
+    "examResultCount",
+    ISEM_OPTICAL_PIPELINE_FIXTURE.examResultCount,
+  );
+  requireObjectEqual(
+    value,
+    failures,
+    "examCycle.reportResultCount",
+    "reportResultCount",
+    ISEM_OPTICAL_PIPELINE_FIXTURE.reportResultCount,
+  );
   requireObjectIntegerAtLeast(value, failures, "examCycle.downloadedArtifacts", "downloadedArtifacts", 2);
 
   if (

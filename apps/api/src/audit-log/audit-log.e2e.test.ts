@@ -3,6 +3,7 @@ import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import ExcelJS from "exceljs";
 import request from "supertest";
+import { resetInMemoryAuthUsers, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
 import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
@@ -15,6 +16,24 @@ describe("Audit log API", () => {
   let systemAccessToken: string;
 
   beforeAll(async () => {
+    resetInMemoryAuthUsers();
+    upsertInMemoryAuthUser({
+      id: "user-tenant-a",
+      email: "admin-a@example.test",
+      name: "Tenant A Admin",
+      password: "password",
+      tenantId: "tenant-a",
+      roles: ["TENANT_ADMIN"],
+      membership: {
+        id: "membership-tenant-a-admin",
+        staffRole: "TENANT_ADMIN",
+        hasTeacherPersona: false,
+        hasStudentPersona: false,
+        version: 2,
+        scopeMode: "TENANT",
+        campusIds: [],
+      },
+    });
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -44,6 +63,7 @@ describe("Audit log API", () => {
 
   afterAll(async () => {
     await app.close();
+    resetInMemoryAuthUsers();
   });
 
   it("tenant admin sadece kendi tenant audit kayıtlarını listeler", async () => {
@@ -1019,25 +1039,30 @@ describe("Audit log API", () => {
     expect(JSON.stringify(response.body)).not.toContain("Privacy User");
   });
 
-  it("system admin audit kayıtlarını geniş görebilir", async () => {
-    const response = await request(server)
-      .get("/audit-logs")
-      .set("Authorization", `Bearer ${systemAccessToken}`)
-      .expect(200);
-
-    expect(response.body).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: "audit-log-a" }),
-      expect.objectContaining({ id: "audit-log-b" }),
-      expect.objectContaining({ id: "audit-log-system" }),
-      expect.objectContaining({ actorUserId: "user-system", action: "auth.login" }),
-    ]));
+  it("normal system admin tenant audit rota ailesine giremez", async () => {
+    for (const path of [
+      "/audit-logs",
+      "/audit-logs/safe-list",
+      "/audit-logs/student-summary?studentId=student-a",
+    ]) {
+      await request(server)
+        .get(path)
+        .set("Authorization", `Bearer ${systemAccessToken}`)
+        .expect(403);
+    }
   });
 
-  it("teacher audit kayıtlarını okuyamaz", async () => {
-    await request(server)
-      .get("/audit-logs")
-      .set("Authorization", `Bearer ${teacherAAccessToken}`)
-      .expect(403);
+  it("teacher audit rota ailesini okuyamaz", async () => {
+    for (const path of [
+      "/audit-logs",
+      "/audit-logs/safe-list",
+      "/audit-logs/student-summary?studentId=student-a",
+    ]) {
+      await request(server)
+        .get(path)
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .expect(403);
+    }
   });
 
   it("yetkisiz request audit endpointine erişemez", async () => {
