@@ -61,7 +61,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
   const featureRolloutsQuery = useQuery({
     queryKey: ["next-feature-rollouts", auth?.session.tenantId ?? "anonymous", auth?.session.id ?? "none"],
     queryFn: () => readOnlyRequest<ResolvedFeatureRollouts>(auth?.accessToken ?? "", `${apiBaseUrl}/me/feature-rollouts`, rolePreviewToken),
-    enabled: canReadPortal,
+    enabled: Boolean(canReadPortal && view === "overview"),
     refetchOnWindowFocus: false,
     retry: false,
   });
@@ -70,7 +70,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
     featureRolloutsQuery.data.enabledFeatureKeys.includes("web.student-portal-v2"),
   );
   const useDailyBrief = view === "overview" && studentPortalV2Enabled;
-  const rolloutResolved = featureRolloutsQuery.isSuccess || featureRolloutsQuery.isError;
+  const rolloutResolved = view !== "overview" || featureRolloutsQuery.isSuccess || featureRolloutsQuery.isError;
   const queryKey = ["next-student-portal", auth?.session.userId ?? "anonymous", rolePreviewToken || "session", view, reportExamId];
   const query = useQuery({
     queryKey,
@@ -93,7 +93,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
     return <AccessPanel title="Öğrenci Portalı" />;
   }
 
-  if (featureRolloutsQuery.isPending || (useDailyBrief && dailyBriefQuery.isPending)) {
+  if ((view === "overview" && featureRolloutsQuery.isPending) || (useDailyBrief && dailyBriefQuery.isPending)) {
     return (
       <PortalFrame title="Öğrenci Portalı" subtitle="Bugün">
         <PortalStatePanel
@@ -408,7 +408,9 @@ async function loadStudentPortal(
     : Promise.resolve(null);
 
   const [profile, guardians, guardianLinks, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, report, errorBooklet, progress, courses, terms] = await Promise.all([
-    readOnlyRequest<StudentProfileRecord>(accessToken, `${apiBaseUrl}/me/student/profile`, rolePreviewToken),
+    showProfile || showAttendance
+      ? readOnlyRequest<StudentProfileRecord>(accessToken, `${apiBaseUrl}/me/student/profile`, rolePreviewToken)
+      : Promise.resolve(undefined),
     showProfile ? readOnlyRequest<GuardianRecord[]>(accessToken, `${apiBaseUrl}/me/student/guardians`, rolePreviewToken) : Promise.resolve([]),
     showProfile ? readOnlyRequest<GuardianStudentRecord[]>(accessToken, `${apiBaseUrl}/me/student/guardian-links`, rolePreviewToken) : Promise.resolve([]),
     showProfile ? readOnlyRequest<StudentEnrollmentRecord[]>(accessToken, `${apiBaseUrl}/me/student/enrollments`, rolePreviewToken) : Promise.resolve([]),

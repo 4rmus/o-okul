@@ -152,6 +152,95 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
     expect(requestedPaths).not.toContain("/me/student/profile");
   });
 
+  const studentFeatureRouteCases = [
+    {
+      key: "reports",
+      panelName: "Portal rapor özeti",
+      path: "/ogrenci/raporlar?examId=exam-demo-isem-lgs-1",
+      requiredPaths: [
+        "/me/student/reports",
+        "/me/student/reports/exam-demo-isem-lgs-1/latest",
+        "/me/student/reports/exam-demo-isem-lgs-1/latest/error-booklet",
+        "/me/student/reports/exam-demo-isem-lgs-1/progress",
+        "/courses",
+        "/academic-terms",
+      ],
+    },
+    {
+      key: "homework",
+      panelName: "Ödevler",
+      path: "/ogrenci/odevler",
+      requiredPaths: ["/me/student/homework/material-assignments", "/courses", "/academic-terms"],
+    },
+    {
+      key: "attendance",
+      panelName: "Devamsızlık",
+      path: "/ogrenci/devamsizlik",
+      requiredPaths: [
+        "/me/student/profile",
+        "/me/student/attendance",
+        "/me/student/attendance/summary",
+        "/me/student/teacher-notes",
+        "/courses",
+        "/academic-terms",
+      ],
+    },
+    {
+      key: "support",
+      panelName: "Destek talepleri",
+      path: "/ogrenci/destek",
+      requiredPaths: ["/me/student/support-tickets", "/me/student/support-tickets/ticket-a/comments"],
+    },
+  ] as const;
+  for (const viewport of [
+    { height: 812, width: 320 },
+    { height: 896, width: 414 },
+  ]) {
+    for (const routeCase of studentFeatureRouteCases) {
+      test(`SP-02 ${routeCase.key} rotası ${viewport.width}px görünümde yalnız kendi verisini yükler`, async ({ page }) => {
+        const requestedPaths: string[] = [];
+        await openStudentPortal(page, viewport, {
+          path: routeCase.path,
+          requestedPaths,
+        });
+
+        await expect(page.getByRole("heading", { level: 1, name: "Öğrenci Portalı" })).toBeVisible();
+        await expect(page.getByRole("region", { exact: true, name: routeCase.panelName })).toBeVisible();
+        const featureDataPaths = requestedPaths.filter((path) =>
+          path.startsWith("/me/student/") || path === "/me/feature-rollouts" || path === "/courses" || path === "/academic-terms",
+        );
+        expect(featureDataPaths.sort()).toEqual([...routeCase.requiredPaths].sort());
+        for (const value of rawPiiValues) await expect(page.locator("body")).not.toContainText(value);
+        await expectNoHorizontalOverflow(page, `student-${routeCase.key}-${viewport.width}`);
+        await expectNoUnlabeledControls(page, `student-${routeCase.key}-${viewport.width}`);
+        await expectNoClippedVisibleText(page, `student-${routeCase.key}-${viewport.width}`);
+      });
+    }
+  }
+
+  test("SP-02 destek rotası rol önizlemesinde read-only kalır", async ({ page }) => {
+    const mutationRequests: string[] = [];
+    const previewTokenPaths: string[] = [];
+    const requestedPaths: string[] = [];
+    await openStudentPortal(page, { height: 812, width: 320 }, {
+      mode: "role-preview",
+      mutationRequests,
+      path: "/ogrenci/destek",
+      previewTokenPaths,
+      requestedPaths,
+    });
+
+    await expect(page).toHaveURL(/\/ogrenci\/destek\?rolePreview=1$/);
+    await expect(page.getByLabel("Rol önizleme bilgisi")).toContainText("Yalnızca Görüntüleme");
+    await expectPortalSupportPanel(page, { formVisible: false });
+    expect(previewTokenPaths).toContain("/me/student/support-tickets");
+    expect(previewTokenPaths).not.toContain("/me/feature-rollouts");
+    expect(previewTokenPaths.filter((path) => path.startsWith("/me/student/"))).toEqual(
+      requestedPaths.filter((path) => path.startsWith("/me/student/")),
+    );
+    await expect.poll(() => mutationRequests).toEqual([]);
+  });
+
   test("öğrenci rol önizlemesinde işlem yapılamaz", async ({ page }) => {
     const mutationRequests: string[] = [];
     await openStudentPortal(page, { height: 844, width: 390 }, { mode: "role-preview", mutationRequests });
@@ -517,7 +606,7 @@ async function expectPortalSupportPanel(page: Page, options: { formVisible: bool
 async function openStudentPortal(
   page: Page,
   viewport: { height: number; width: number },
-  options: { dailyBriefFailure?: boolean; mode?: "student" | "role-preview"; mutationRequests?: string[]; portalV2?: boolean; previewTokenPaths?: string[]; requestedPaths?: string[]; rolloutFailure?: boolean; withReport?: boolean } = {},
+  options: { dailyBriefFailure?: boolean; mode?: "student" | "role-preview"; mutationRequests?: string[]; path?: string; portalV2?: boolean; previewTokenPaths?: string[]; requestedPaths?: string[]; rolloutFailure?: boolean; withReport?: boolean } = {},
 ) {
   await page.setViewportSize(viewport);
   await installStudentApiMocks(page, options);
@@ -528,7 +617,15 @@ async function openStudentPortal(
     }
   }, options.mode ?? "student");
   await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
-  await page.goto(options.mode === "role-preview" ? "/ogrenci?rolePreview=1" : options.withReport === false ? "/ogrenci" : "/ogrenci?examId=exam-demo-isem-lgs-1");
+  const defaultPath = options.mode === "role-preview"
+    ? "/ogrenci?rolePreview=1"
+    : options.withReport === false ? "/ogrenci" : "/ogrenci?examId=exam-demo-isem-lgs-1";
+  const path = options.path
+    ? options.mode === "role-preview"
+      ? `${options.path}${options.path.includes("?") ? "&" : "?"}rolePreview=1`
+      : options.path
+    : defaultPath;
+  await page.goto(path);
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
 }
 
@@ -569,7 +666,7 @@ async function clickSidebarRoute(page: Page, groupName: string, linkName: string
 
 async function installStudentApiMocks(
   page: Page,
-  options: { dailyBriefFailure?: boolean; mode?: "student" | "role-preview"; mutationRequests?: string[]; portalV2?: boolean; previewTokenPaths?: string[]; requestedPaths?: string[]; rolloutFailure?: boolean; withReport?: boolean },
+  options: { dailyBriefFailure?: boolean; mode?: "student" | "role-preview"; mutationRequests?: string[]; path?: string; portalV2?: boolean; previewTokenPaths?: string[]; requestedPaths?: string[]; rolloutFailure?: boolean; withReport?: boolean },
 ) {
   await page.route("**/api/v1/**", async (route) => {
     if (route.request().method() === "OPTIONS") {
