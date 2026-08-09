@@ -339,6 +339,8 @@ export type {
   TeacherNoteUpdateRequest,
   TeacherNoteVisibility,
   TeacherPortalSupportTicketCreateRequest,
+  TeacherDailyBriefActionId,
+  TeacherDailyBriefResponse,
   TeacherPortalLookupsResponse,
   TeacherRecord,
   TeacherUpdateRequest,

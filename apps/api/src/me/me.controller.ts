@@ -22,6 +22,7 @@ import type {
   StudentEnrollmentRecord,
   StudentProfileRecord,
   TeacherPortalLookupsResponse,
+  TeacherDailyBriefResponse,
   TeacherRecord,
   AttendanceRecord,
   AttendanceSummaryRecord,
@@ -82,6 +83,7 @@ import { passwordMaxLength, passwordMinLength, passwordPolicyViolation } from ".
 import { MeInstitutionDashboardService } from "./me-institution-dashboard.service.js";
 import { MeReportIndexService } from "./me-report-index.service.js";
 import { MeSetupReadinessService } from "./me-setup-readiness.service.js";
+import { MeTeacherDailyBriefService } from "./me-teacher-daily-brief.service.js";
 
 const mePasswordChangeBodySchema = z.object({
   currentPassword: z.string().min(1),
@@ -103,6 +105,7 @@ export class MeController {
     private readonly payments: PaymentService,
     private readonly institutionDashboard: MeInstitutionDashboardService,
     private readonly setupReadiness: MeSetupReadinessService,
+    private readonly teacherDailyBrief: MeTeacherDailyBriefService,
     private readonly reportIndex: MeReportIndexService,
     private readonly reports: ReportGenerationService,
     private readonly guardians: GuardianService,
@@ -760,6 +763,12 @@ export class MeController {
   @Roles("TEACHER")
   async teacher(): Promise<TeacherRecord> {
     return toPublicTeacherResponse(await this.teachers.findCurrentTeacher(getRequestContext()));
+  }
+
+  @Get("teacher/daily-brief")
+  @Roles("TEACHER")
+  teacherDailyBriefResponse(@Query("date") date?: string): Promise<TeacherDailyBriefResponse> {
+    return this.teacherDailyBrief.get(getRequestContext(), date);
   }
 
   @Get("teacher/schedule")

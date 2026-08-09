@@ -183,6 +183,36 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
     });
   }
 
+  test("portal v2 rollout'u overview'da yalnız günlük brief read modelini yükler", async ({ page }) => {
+    const requestedPaths: string[] = [];
+    await openTeacherPortal(page, { height: 844, width: 390 }, { portalV2: true, requestedPaths });
+
+    await expect(page.getByRole("heading", { level: 1, name: "Öğretmen Portalı" })).toBeVisible();
+    const dailyBrief = page.getByRole("region", { exact: true, name: "Günlük ders akışı" });
+    await expect(dailyBrief).toContainText("Matematik");
+    await expect(dailyBrief).toContainText("Bekleyen işler");
+    const actions = page.getByRole("region", { name: "Öğretmen günlük aksiyonları" });
+    await expect(actions).toContainText("3 iş");
+    await expect(actions.getByRole("link", { name: /Yoklamayı tamamla: 1 sınıf/ })).toHaveAttribute("href", "/ogretmen/ogrenci-takibi");
+    await expect(actions.getByRole("link", { name: /Ödevleri kontrol et: 2 ödev/ })).toHaveAttribute("href", "/ogretmen/odevler");
+    await expect(actions.getByRole("link", { name: /Destek taleplerini takip et: 1 talep/ })).toHaveAttribute("href", "/ogretmen/destek");
+    await expect(page.getByRole("region", { name: "Öğrenci çalışma alanı" })).toHaveCount(0);
+    expect(requestedPaths).toContain("/me/teacher/daily-brief");
+    expect(requestedPaths.filter((path) => expectedTeacherScopedReadPaths.includes(path))).toEqual([]);
+    await expectNoHorizontalOverflow(page, "teacher-daily-brief-v2-390");
+    await expectNoUnlabeledControls(page, "teacher-daily-brief-v2-390");
+    await expectNoClippedVisibleText(page, "teacher-daily-brief-v2-390");
+  });
+
+  test("rollout çözümü hata verirse mevcut öğretmen portalına döner", async ({ page }) => {
+    const requestedPaths: string[] = [];
+    await openTeacherPortal(page, { height: 844, width: 390 }, { requestedPaths, rolloutFailure: true });
+
+    await expect(page.getByRole("region", { name: "Öğrenci çalışma alanı" })).toBeVisible();
+    expect(requestedPaths).toContain("/me/teacher/students");
+    expect(requestedPaths).not.toContain("/me/teacher/daily-brief");
+  });
+
   test("öğretmen rol önizlemesinde işlem yapılamaz", async ({ page }) => {
     const mutationRequests: string[] = [];
     await openTeacherPortal(page, { height: 844, width: 390 }, { mode: "role-preview", mutationRequests });
@@ -412,7 +442,7 @@ async function expectPortalSupportPanel(page: Page, options: { formVisible: bool
 async function openTeacherPortal(
   page: Page,
   viewport: { height: number; width: number },
-  options: { failMutationPath?: string; mode?: "teacher" | "role-preview"; mutationRequests?: string[]; requestedPaths?: string[] } = {},
+  options: { failMutationPath?: string; mode?: "teacher" | "role-preview"; mutationRequests?: string[]; portalV2?: boolean; requestedPaths?: string[]; rolloutFailure?: boolean } = {},
 ) {
   await page.setViewportSize(viewport);
   await page.clock.setFixedTime(new Date("2026-06-17T08:00:00.000Z"));
@@ -442,7 +472,7 @@ async function clickSidebarRoute(page: Page, groupName: string, linkName: string
 
 async function installTeacherApiMocks(
   page: Page,
-  options: { failMutationPath?: string; mode?: "teacher" | "role-preview"; mutationRequests?: string[]; requestedPaths?: string[] },
+  options: { failMutationPath?: string; mode?: "teacher" | "role-preview"; mutationRequests?: string[]; portalV2?: boolean; requestedPaths?: string[]; rolloutFailure?: boolean },
 ) {
   await page.route("**/api/v1/**", async (route) => {
     if (route.request().method() === "OPTIONS") {
@@ -454,6 +484,22 @@ async function installTeacherApiMocks(
     const url = new URL(route.request().url());
     const pathName = url.pathname.replace(/^\/api\/v1/, "");
     options.requestedPaths?.push(pathName);
+    if (method === "GET" && pathName === "/me/feature-rollouts") {
+      if (options.rolloutFailure) {
+        await route.fulfill({
+          body: JSON.stringify({ error: { code: "ROLLOUT_UNAVAILABLE" } }),
+          headers: { ...corsHeadersFor(route), "content-type": "application/json" },
+          status: 503,
+        });
+        return;
+      }
+      await fulfillData(route, { enabledFeatureKeys: options.portalV2 ? ["web.teacher-portal-v2"] : [] });
+      return;
+    }
+    if (method === "GET" && pathName === "/me/teacher/daily-brief") {
+      await fulfillData(route, createTeacherDailyBrief());
+      return;
+    }
     if (method !== "GET" && method !== "OPTIONS" && pathName !== "/auth/refresh") {
       options.mutationRequests?.push(`${method} ${pathName}`);
       if (pathName === options.failMutationPath) {
@@ -530,6 +576,33 @@ function createAuthResponse(mode: "teacher" | "role-preview") {
       tenantId: "tenant-teacher",
       userId: mode === "role-preview" ? "admin-a" : "teacher-math",
     },
+  };
+}
+
+function createTeacherDailyBrief() {
+  return {
+    actions: [
+      { id: "attendance", count: 1 },
+      { id: "homework", count: 2 },
+      { id: "support", count: 1 },
+    ],
+    assignedStudentCount: 2,
+    date: "2026-06-17",
+    latestReadyReport: {
+      examId: "exam-demo-isem-lgs-1",
+      latestGeneratedAt: "2026-06-17T10:00:00.000Z",
+      latestReadySnapshotId: "snapshot-ready",
+      title: "İSEM - LGS - 1",
+    },
+    nextLesson: {
+      endsAt: "2026-06-17T09:30:00.000Z",
+      startsAt: "2026-06-17T08:30:00.000Z",
+      title: "Matematik",
+    },
+    openSupportTicketCount: 1,
+    pendingAttendanceClassCount: 1,
+    todayLessonCount: 2,
+    uncheckedHomeworkCount: 2,
   };
 }
 

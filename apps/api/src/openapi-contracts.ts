@@ -2565,6 +2565,33 @@ const portalReportIndexItemSchema = objectSchema({
   latestGeneratedAt: stringSchema({ format: "date-time" }),
 }, ["examId", "title", "latestReadySnapshotId", "latestGeneratedAt"]);
 
+const teacherDailyBriefResponseSchema = objectSchema({
+  date: stringSchema({ format: "date" }),
+  todayLessonCount: integerSchema({ minimum: 0 }),
+  assignedStudentCount: integerSchema({ minimum: 0 }),
+  pendingAttendanceClassCount: integerSchema({ minimum: 0 }),
+  uncheckedHomeworkCount: integerSchema({ minimum: 0 }),
+  openSupportTicketCount: integerSchema({ minimum: 0 }),
+  nextLesson: objectSchema({
+    title: stringSchema(),
+    startsAt: stringSchema({ format: "date-time" }),
+    endsAt: stringSchema({ format: "date-time" }),
+  }, ["title", "startsAt", "endsAt"]),
+  latestReadyReport: portalReportIndexItemSchema,
+  actions: arraySchema(objectSchema({
+    id: { type: "string", enum: ["attendance", "homework", "report", "support"] },
+    count: integerSchema({ minimum: 0 }),
+  }, ["id", "count"]), { maxItems: 3 }),
+}, [
+  "date",
+  "todayLessonCount",
+  "assignedStudentCount",
+  "pendingAttendanceClassCount",
+  "uncheckedHomeworkCount",
+  "openSupportTicketCount",
+  "actions",
+]);
+
 const portalReportIndexPaths = [
   "/api/v1/me/student/reports",
   "/api/v1/me/teacher/reports",
@@ -3146,6 +3173,9 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/me/teacher": {
     responseBody: teacherRecordSchema,
+  },
+  "get /api/v1/me/teacher/daily-brief": {
+    responseBody: teacherDailyBriefResponseSchema,
   },
   "get /api/v1/me/teacher/lookups": {
     responseBody: teacherPortalLookupsResponseSchema,

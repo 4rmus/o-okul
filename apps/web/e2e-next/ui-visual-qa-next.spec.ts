@@ -1025,6 +1025,7 @@ async function installUiApiMocks(page: Page, options: UiMockOptions = {}) {
 
 function mockUiApiResponse(pathName: string, searchParams: URLSearchParams, authProfile: UiMockAuthProfile): { data: unknown; meta?: ListMeta } {
   if (pathName === "/auth/refresh") return { data: createAuthResponse(authProfile) };
+  if (pathName === "/me/feature-rollouts") return { data: { enabledFeatureKeys: [] } };
   if (pathName === "/me/tenant") return { data: createTenantResponse() };
   if (pathName === "/me/institution-dashboard") return { data: createInstitutionDashboardSummary() };
   if (pathName === "/tenants") return createListResponse(createSystemTenants(), searchParams);

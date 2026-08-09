@@ -3,14 +3,14 @@
   "result": "BASELINE_RECORDED",
   "evidenceLevel": "LOCAL_SYNTHETIC",
   "externalStatus": "EXTERNAL_NOT_RUN",
-  "generatedAt": "2026-08-09T12:58:35.767Z",
-  "baseCommitSha": "70a4b874d9ae3835e5781f0e37f2f958fdf303f5",
+  "generatedAt": "2026-08-09T14:13:51.364Z",
+  "baseCommitSha": "a6b40d3506abeb847df855b6a8502e4159642104",
   "sourceWorktreeDirty": true,
-  "sourceTreeSha256": "5dacc971e2c258c6ebdd149a816c228e936026790d376e86a755fcd50f62e582",
+  "sourceTreeSha256": "c76d405850ce61dadeefd23d2320f5a00be0211f6b2af0a03ce423b331e61385",
   "measurementRun": {
-    "runId": "09197b9c-52d7-4894-9ed8-dcebf4349468",
-    "startedAt": "2026-08-09T12:58:12.661Z",
-    "completedAt": "2026-08-09T12:58:35.767Z"
+    "runId": "867eb40e-b499-4cb2-bfa3-3b5b2a359ba1",
+    "startedAt": "2026-08-09T14:13:30.883Z",
+    "completedAt": "2026-08-09T14:13:51.364Z"
   },
   "environment": {
     "browser": "chromium",
@@ -43,45 +43,45 @@
       "routeTemplate": "/kurum/optik",
       "samples": [
         {
-          "cls": 0.008,
-          "fcpMs": 56,
-          "lcpMs": 56,
-          "ttfbMs": 1.5,
-          "durationMs": 191.453
-        },
-        {
-          "cls": 0.007,
-          "fcpMs": 60,
-          "lcpMs": 60,
-          "ttfbMs": 1.7,
-          "durationMs": 198.758
+          "cls": 0,
+          "fcpMs": 48,
+          "lcpMs": 68,
+          "ttfbMs": 1.4,
+          "durationMs": 198.008
         },
         {
           "cls": 0.007,
           "fcpMs": 56,
           "lcpMs": 56,
           "ttfbMs": 1.8,
-          "durationMs": 192.09
+          "durationMs": 192.445
         },
         {
-          "cls": 0.007,
+          "cls": 0.008,
           "fcpMs": 60,
           "lcpMs": 60,
-          "ttfbMs": 1.5,
-          "durationMs": 197.179
+          "ttfbMs": 1.3,
+          "durationMs": 197.259
         },
         {
           "cls": 0.007,
           "fcpMs": 56,
           "lcpMs": 56,
           "ttfbMs": 1.5,
-          "durationMs": 193.243
+          "durationMs": 196.561
+        },
+        {
+          "cls": 0.007,
+          "fcpMs": 56,
+          "lcpMs": 56,
+          "ttfbMs": 1.3,
+          "durationMs": 193.989
         }
       ],
       "summary": {
         "durationMs": {
-          "p50": 193.243,
-          "p95": 198.758
+          "p50": 196.561,
+          "p95": 198.008
         },
         "fcpMs": {
           "p50": 56,
@@ -89,14 +89,14 @@
         },
         "lcpMs": {
           "p50": 56,
-          "p95": 60
+          "p95": 68
         },
         "cls": {
           "p50": 0.007,
           "p95": 0.008
         },
         "ttfbMs": {
-          "p50": 1.5,
+          "p50": 1.4,
           "p95": 1.8
         }
       },
@@ -114,61 +114,61 @@
       "routeTemplate": "/kurum/raporlar",
       "samples": [
         {
-          "cls": 0.008,
+          "cls": 0.007,
           "fcpMs": 56,
           "lcpMs": 56,
           "ttfbMs": 1.6,
-          "durationMs": 196.464
+          "durationMs": 210.391
         },
         {
           "cls": 0.008,
           "fcpMs": 56,
           "lcpMs": 56,
-          "ttfbMs": 1.3,
-          "durationMs": 194.957
+          "ttfbMs": 1.8,
+          "durationMs": 195.435
+        },
+        {
+          "cls": 0.007,
+          "fcpMs": 56,
+          "lcpMs": 56,
+          "ttfbMs": 2,
+          "durationMs": 211.005
         },
         {
           "cls": 0.008,
           "fcpMs": 56,
           "lcpMs": 56,
-          "ttfbMs": 1.3,
-          "durationMs": 195.055
+          "ttfbMs": 1.8,
+          "durationMs": 195.06
         },
         {
           "cls": 0.008,
           "fcpMs": 56,
           "lcpMs": 56,
-          "ttfbMs": 1.4,
-          "durationMs": 194.215
-        },
-        {
-          "cls": 0.008,
-          "fcpMs": 60,
-          "lcpMs": 60,
-          "ttfbMs": 1.4,
-          "durationMs": 195.239
+          "ttfbMs": 1.2,
+          "durationMs": 194.506
         }
       ],
       "summary": {
         "durationMs": {
-          "p50": 195.055,
-          "p95": 196.464
+          "p50": 195.435,
+          "p95": 211.005
         },
         "fcpMs": {
           "p50": 56,
-          "p95": 60
+          "p95": 56
         },
         "lcpMs": {
           "p50": 56,
-          "p95": 60
+          "p95": 56
         },
         "cls": {
           "p50": 0.008,
           "p95": 0.008
         },
         "ttfbMs": {
-          "p50": 1.4,
-          "p95": 1.6
+          "p50": 1.8,
+          "p95": 2
         }
       },
       "taskId": "report_workspace_ready"
@@ -186,52 +186,52 @@
       "samples": [
         {
           "cls": 0.024,
-          "fcpMs": 56,
-          "lcpMs": 68,
+          "fcpMs": 52,
+          "lcpMs": 72,
           "ttfbMs": 1.2,
-          "durationMs": 197.433
-        },
-        {
-          "cls": 0.024,
-          "fcpMs": 52,
-          "lcpMs": 84,
-          "ttfbMs": 1.5,
-          "durationMs": 211.357
+          "durationMs": 195.395
         },
         {
           "cls": 0.024,
           "fcpMs": 52,
           "lcpMs": 68,
-          "ttfbMs": 1.3,
-          "durationMs": 195.467
+          "ttfbMs": 1.1,
+          "durationMs": 195.604
         },
         {
           "cls": 0.024,
           "fcpMs": 52,
           "lcpMs": 76,
-          "ttfbMs": 1.5,
-          "durationMs": 193.186
+          "ttfbMs": 1.4,
+          "durationMs": 191.882
+        },
+        {
+          "cls": 0.024,
+          "fcpMs": 56,
+          "lcpMs": 72,
+          "ttfbMs": 1.3,
+          "durationMs": 197.253
         },
         {
           "cls": 0.024,
           "fcpMs": 52,
           "lcpMs": 68,
-          "ttfbMs": 1.3,
-          "durationMs": 195.578
+          "ttfbMs": 1.5,
+          "durationMs": 196.174
         }
       ],
       "summary": {
         "durationMs": {
-          "p50": 195.578,
-          "p95": 211.357
+          "p50": 195.604,
+          "p95": 197.253
         },
         "fcpMs": {
           "p50": 52,
           "p95": 56
         },
         "lcpMs": {
-          "p50": 68,
-          "p95": 84
+          "p50": 72,
+          "p95": 76
         },
         "cls": {
           "p50": 0.024,

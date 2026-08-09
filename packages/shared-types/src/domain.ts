@@ -427,6 +427,27 @@ export interface TeacherPortalLookupsResponse {
   terms: AcademicTermRecord[];
 }
 
+export type TeacherDailyBriefActionId = "attendance" | "homework" | "report" | "support";
+
+export interface TeacherDailyBriefResponse {
+  date: string;
+  todayLessonCount: number;
+  assignedStudentCount: number;
+  pendingAttendanceClassCount: number;
+  uncheckedHomeworkCount: number;
+  openSupportTicketCount: number;
+  nextLesson?: {
+    title: string;
+    startsAt: string;
+    endsAt: string;
+  };
+  latestReadyReport?: PortalReportIndexItem;
+  actions: Array<{
+    id: TeacherDailyBriefActionId;
+    count: number;
+  }>;
+}
+
 export type KvkkInventoryKind = "student" | "teacher" | "guardian" | "user";
 
 export interface KvkkInventoryRecord {
