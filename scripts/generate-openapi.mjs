@@ -279,6 +279,7 @@ const sharedTypeDriftContracts = [
   { interfaceName: "StudentRecord", method: "get", path: "/api/v1/students/{id}", schemaPath: ["responseData"] },
   { interfaceName: "StudentCreateRequest", method: "post", path: "/api/v1/students", schemaPath: ["requestBody"] },
   { interfaceName: "StudentTenantUpdateRequest", method: "patch", path: "/api/v1/students/{id}/tenant", schemaPath: ["requestBody"] },
+  { interfaceName: "StudentDailyBriefResponse", method: "get", path: "/api/v1/me/student/daily-brief", schemaPath: ["responseData"] },
   { interfaceName: "TeacherDailyBriefResponse", method: "get", path: "/api/v1/me/teacher/daily-brief", schemaPath: ["responseData"] },
   { interfaceName: "GuardianRecord", method: "get", path: "/api/v1/guardians/{id}", schemaPath: ["responseData"] },
   { interfaceName: "GuardianStudentLinkRequest", method: "post", path: "/api/v1/guardians/{id}/students", schemaPath: ["requestBody"] },

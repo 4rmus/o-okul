@@ -2592,6 +2592,30 @@ const teacherDailyBriefResponseSchema = objectSchema({
   "actions",
 ]);
 
+const studentDailyBriefResponseSchema = objectSchema({
+  date: stringSchema({ format: "date" }),
+  unreadAnnouncementCount: integerSchema({ minimum: 0 }),
+  homeworkAssignmentCount: integerSchema({ minimum: 0 }),
+  attendanceRecordCount: integerSchema({ minimum: 0 }),
+  absenceCount: integerSchema({ minimum: 0 }),
+  lateCount: integerSchema({ minimum: 0 }),
+  openSupportTicketCount: integerSchema({ minimum: 0 }),
+  latestReadyReport: portalReportIndexItemSchema,
+  actions: arraySchema(objectSchema({
+    id: { type: "string", enum: ["announcement", "attendance", "homework", "report", "support"] },
+    count: integerSchema({ minimum: 0 }),
+  }, ["id", "count"]), { maxItems: 3 }),
+}, [
+  "date",
+  "unreadAnnouncementCount",
+  "homeworkAssignmentCount",
+  "attendanceRecordCount",
+  "absenceCount",
+  "lateCount",
+  "openSupportTicketCount",
+  "actions",
+]);
+
 const portalReportIndexPaths = [
   "/api/v1/me/student/reports",
   "/api/v1/me/teacher/reports",
@@ -3160,6 +3184,9 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/me/student": {
     responseBody: publicStudentRecordSchema,
+  },
+  "get /api/v1/me/student/daily-brief": {
+    responseBody: studentDailyBriefResponseSchema,
   },
   "get /api/v1/me/student/profile": {
     responseBody: publicStudentProfileRecordSchema,

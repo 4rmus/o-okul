@@ -89,6 +89,69 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
     });
   }
 
+  test("portal v2 rollout'u overview'da yalnız öğrenci günlük brief read modelini yükler", async ({ page }) => {
+    const requestedPaths: string[] = [];
+    await openStudentPortal(page, { height: 844, width: 390 }, { portalV2: true, requestedPaths });
+
+    await expect(page.getByRole("heading", { level: 1, name: "Öğrenci Portalı" })).toBeVisible();
+    const dailyBrief = page.getByRole("region", { exact: true, name: "Günlük durum" });
+    await expect(dailyBrief).toContainText("1 okunmamış");
+    await expect(dailyBrief).toContainText("1 atama");
+    await expect(dailyBrief).toContainText("30 kayıt");
+    await expect(dailyBrief).toContainText("İSEM - LGS - 1");
+    const actions = page.getByRole("region", { name: "Öğrenci günlük aksiyonları" });
+    await expect(actions).toContainText("3 iş");
+    await expect(actions.getByRole("link", { name: /Duyuruları oku: 1 okunmamış/ })).toHaveAttribute("href", "/ogrenci/duyurular");
+    await expect(actions.getByRole("link", { name: /Ödevi aç: 1 atama/ })).toHaveAttribute("href", "/ogrenci/odevler");
+    await expect(actions.getByRole("link", { name: /Son sınavı incele: Yeni sonuç/ })).toHaveAttribute("href", "/ogrenci/raporlar");
+    expect(requestedPaths).toContain("/me/student/daily-brief");
+    for (const path of [
+      "/me/student/profile",
+      "/me/student/announcements",
+      "/me/student/homework/material-assignments",
+      "/me/student/attendance/summary",
+      "/me/student/reports",
+      "/me/student/support-tickets",
+    ]) {
+      expect(requestedPaths).not.toContain(path);
+    }
+    await expectNoHorizontalOverflow(page, "student-daily-brief-v2-390");
+    await expectNoUnlabeledControls(page, "student-daily-brief-v2-390");
+    await expectNoClippedVisibleText(page, "student-daily-brief-v2-390");
+  });
+
+  test("portal v2 role preview tokenını rollout ve hedef öğrenci brief okumalarına taşır", async ({ page }) => {
+    const previewTokenPaths: string[] = [];
+    await openStudentPortal(page, { height: 844, width: 390 }, {
+      mode: "role-preview",
+      portalV2: true,
+      previewTokenPaths,
+    });
+
+    await expect(page).toHaveURL(/\/ogrenci\?rolePreview=1$/);
+    await expect(page.getByRole("region", { exact: true, name: "Günlük durum" })).toContainText("1 okunmamış");
+    expect(previewTokenPaths).toContain("/me/feature-rollouts");
+    expect(previewTokenPaths).toContain("/me/student/daily-brief");
+  });
+
+  test("rollout çözümü hata verirse mevcut öğrenci portalına döner", async ({ page }) => {
+    const requestedPaths: string[] = [];
+    await openStudentPortal(page, { height: 844, width: 390 }, { requestedPaths, rolloutFailure: true });
+
+    await expect(page.getByRole("region", { name: "Öğrenci portal çalışma alanı" })).toBeVisible();
+    expect(requestedPaths).toContain("/me/student/profile");
+    expect(requestedPaths).not.toContain("/me/student/daily-brief");
+  });
+
+  test("günlük brief hatasında ayrıntı verilerini açmadan güvenli hata gösterir", async ({ page }) => {
+    const requestedPaths: string[] = [];
+    await openStudentPortal(page, { height: 844, width: 390 }, { dailyBriefFailure: true, portalV2: true, requestedPaths });
+
+    await expect(page.getByRole("heading", { level: 2, name: "Öğrenci günlük özeti alınamadı" })).toBeVisible();
+    expect(requestedPaths).toContain("/me/student/daily-brief");
+    expect(requestedPaths).not.toContain("/me/student/profile");
+  });
+
   test("öğrenci rol önizlemesinde işlem yapılamaz", async ({ page }) => {
     const mutationRequests: string[] = [];
     await openStudentPortal(page, { height: 844, width: 390 }, { mode: "role-preview", mutationRequests });
@@ -454,7 +517,7 @@ async function expectPortalSupportPanel(page: Page, options: { formVisible: bool
 async function openStudentPortal(
   page: Page,
   viewport: { height: number; width: number },
-  options: { mode?: "student" | "role-preview"; mutationRequests?: string[]; requestedPaths?: string[]; withReport?: boolean } = {},
+  options: { dailyBriefFailure?: boolean; mode?: "student" | "role-preview"; mutationRequests?: string[]; portalV2?: boolean; previewTokenPaths?: string[]; requestedPaths?: string[]; rolloutFailure?: boolean; withReport?: boolean } = {},
 ) {
   await page.setViewportSize(viewport);
   await installStudentApiMocks(page, options);
@@ -506,7 +569,7 @@ async function clickSidebarRoute(page: Page, groupName: string, linkName: string
 
 async function installStudentApiMocks(
   page: Page,
-  options: { mode?: "student" | "role-preview"; mutationRequests?: string[]; requestedPaths?: string[]; withReport?: boolean },
+  options: { dailyBriefFailure?: boolean; mode?: "student" | "role-preview"; mutationRequests?: string[]; portalV2?: boolean; previewTokenPaths?: string[]; requestedPaths?: string[]; rolloutFailure?: boolean; withReport?: boolean },
 ) {
   await page.route("**/api/v1/**", async (route) => {
     if (route.request().method() === "OPTIONS") {
@@ -517,6 +580,33 @@ async function installStudentApiMocks(
     const method = route.request().method();
     const pathName = new URL(route.request().url()).pathname.replace(/^\/api\/v1/, "");
     options.requestedPaths?.push(pathName);
+    if (route.request().headers()["x-role-preview-token"] === "preview-token-student") {
+      options.previewTokenPaths?.push(pathName);
+    }
+    if (method === "GET" && pathName === "/me/feature-rollouts") {
+      if (options.rolloutFailure) {
+        await route.fulfill({
+          body: JSON.stringify({ error: { code: "ROLLOUT_UNAVAILABLE" } }),
+          headers: { ...corsHeadersFor(route), "content-type": "application/json" },
+          status: 503,
+        });
+        return;
+      }
+      await fulfillData(route, { enabledFeatureKeys: options.portalV2 ? ["web.student-portal-v2"] : [] });
+      return;
+    }
+    if (method === "GET" && pathName === "/me/student/daily-brief") {
+      if (options.dailyBriefFailure) {
+        await route.fulfill({
+          body: JSON.stringify({ error: { code: "DAILY_BRIEF_UNAVAILABLE" } }),
+          headers: { ...corsHeadersFor(route), "content-type": "application/json" },
+          status: 503,
+        });
+        return;
+      }
+      await fulfillData(route, createStudentDailyBrief());
+      return;
+    }
     if (method !== "GET" && method !== "OPTIONS" && pathName !== "/auth/refresh") {
       options.mutationRequests?.push(`${method} ${pathName}`);
     }
@@ -628,6 +718,24 @@ function createReportIndex() {
     startsAt: "2026-06-17T09:00:00.000Z",
     title: "İSEM - LGS - 1",
   }];
+}
+
+function createStudentDailyBrief() {
+  return {
+    absenceCount: 1,
+    actions: [
+      { id: "announcement", count: 1 },
+      { id: "homework", count: 1 },
+      { id: "report", count: 1 },
+    ],
+    attendanceRecordCount: 30,
+    date: "2026-06-17",
+    homeworkAssignmentCount: 1,
+    lateCount: 1,
+    latestReadyReport: createReportIndex()[0],
+    openSupportTicketCount: 1,
+    unreadAnnouncementCount: 1,
+  };
 }
 
 function createStudentAuthResponse(mode: "student" | "role-preview") {

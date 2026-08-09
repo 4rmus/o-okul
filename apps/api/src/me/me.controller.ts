@@ -39,6 +39,7 @@ import type {
   PublicPortalSupportTicketCommentRecord,
   SupportTicketCommentRecord,
   SetupReadinessResponse,
+  StudentDailyBriefResponse,
 } from "@o-okul/shared-types";
 import { AnnouncementService } from "../announcement/announcement.service.js";
 import { AttendanceService } from "../attendance/attendance.service.js";
@@ -83,6 +84,7 @@ import { passwordMaxLength, passwordMinLength, passwordPolicyViolation } from ".
 import { MeInstitutionDashboardService } from "./me-institution-dashboard.service.js";
 import { MeReportIndexService } from "./me-report-index.service.js";
 import { MeSetupReadinessService } from "./me-setup-readiness.service.js";
+import { MeStudentDailyBriefService } from "./me-student-daily-brief.service.js";
 import { MeTeacherDailyBriefService } from "./me-teacher-daily-brief.service.js";
 
 const mePasswordChangeBodySchema = z.object({
@@ -105,6 +107,7 @@ export class MeController {
     private readonly payments: PaymentService,
     private readonly institutionDashboard: MeInstitutionDashboardService,
     private readonly setupReadiness: MeSetupReadinessService,
+    private readonly studentDailyBrief: MeStudentDailyBriefService,
     private readonly teacherDailyBrief: MeTeacherDailyBriefService,
     private readonly reportIndex: MeReportIndexService,
     private readonly reports: ReportGenerationService,
@@ -203,6 +206,12 @@ export class MeController {
   @Roles("STUDENT")
   student(): Promise<StudentRecord> {
     return this.students.findCurrentStudent(getRequestContext());
+  }
+
+  @Get("student/daily-brief")
+  @Roles("STUDENT")
+  studentDailyBriefResponse(): Promise<StudentDailyBriefResponse> {
+    return this.studentDailyBrief.get(getRequestContext());
   }
 
   @Get("student/profile")

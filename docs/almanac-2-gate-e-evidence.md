@@ -1,8 +1,8 @@
 # Almanak 2.0 Gate E Yerel İlerleme Kanıtı
 
-## Seçilen dilim
+## Tamamlanan yerel dilimler
 
-Gate E içindeki ilk eksik ürün dilimi `TP-01` öğretmen günlük özetidir.
+Gate E içindeki ilk ürün dilimi `TP-01` öğretmen günlük özetidir.
 `GET /api/v1/me/teacher/daily-brief?date=YYYY-MM-DD` öğretmenin gün içi ders, yoklama, ödev, destek ve
 son hazır rapor durumunu tek read modelde toplar. Öğretmen portalı bu read modeli yalnız
 `web.teacher-portal-v2` tenant rollout'u açıkken overview yüzeyinde kullanır.
@@ -11,41 +11,69 @@ Flag yoksa, süresi dolmuşsa veya rollout çözümü hata verirse mevcut öğre
 Rollout açık overview ayrıntı listelerini indirmez; en fazla üç öncelikli aksiyon gösterir. Alt
 rotalar mevcut scoped endpointlerini kullanmaya devam eder.
 
+İkinci ürün dilimi `SP-01` öğrenci günlük özetidir. `GET /api/v1/me/student/daily-brief` öğrencinin
+okunmamış duyuru, ödev ataması, devamsızlık/geç kalma, açık destek ve son hazır rapor durumunu
+tek self-scoped read modelde toplar. Öğrenci portalı bu modeli yalnız `web.student-portal-v2`
+rollout'u açık overview yüzeyinde kullanır. Rollout yoksa veya çözüm hata verirse mevcut öğrenci
+portalı korunur; rollout açıkken ayrıntı listeleri indirilmez ve en fazla üç aksiyon gösterilir.
+
 ## Güvenlik ve veri sınırı
 
 - Endpoint yalnız gerçek veya read-only preview `TEACHER` subject contextinde çalışır; tenant admin,
   öğrenci ve system admin `403` alır.
 - Tenant query override'ı aktif request contextini değiştirmez; bypass context fail-closed reddedilir.
-- Altı mevcut tenant/assignment-aware servis birer kez ve paralel çağrılır; N+1 sorgu, yeni tablo,
-  migration veya yazma işlemi yoktur.
+- Altı mevcut tenant/assignment-aware servis birer kez ve paralel çağrılır; dinamik N+1 yoktur. Gerçek
+  Postgres sorgu bütçesi bu dilimde ölçülmemiştir; yeni tablo, migration veya yazma işlemi yoktur.
 - Yanıt kişi adı, öğrenci/öğretmen/tenant/requester kimliği, telefon, e-posta, TCKN, destek mesajı
   veya ödev içeriği taşımaz.
 - Tarih strict ISO günüdür; geçersiz takvim tarihi `400 DAILY_BRIEF_DATE_INVALID` döndürür.
 - Rollout default-off kalır; bu değişiklik hiçbir tenantı kendiliğinden aktive etmez.
 
+Öğrenci daily brief ek olarak:
+
+- Yalnız gerçek veya read-only preview `STUDENT` subject contextinde çalışır; öğretmen, tenant admin
+  ve system admin `403` alır. Tenant query override'ı self-scope'u değiştirmez; bypass fail-closed'dur.
+- Duyuru, yoklama özeti, ödev ataması, rapor indeksi ve destek servisleri aynı öğrenci contextiyle
+  birer kez ve paralel okunur. Read-only preview'da receipt ve requester kapsamı admin actor yerine
+  hedef öğrencinin tenant içindeki bağlı hesabına fail-closed bağlanır. Fan-out sabittir; gerçek
+  Postgres sorgu bütçesi bu dilimde ölçülmemiştir. Yeni sorgu katmanı, tablo, migration veya yazma
+  işlemi yoktur.
+- Yanıt öğrenci/tenant/requester kimliği, kişi adı, telefon, e-posta, TCKN, duyuru/destek metni veya
+  ödev notu taşımaz.
+- `web.student-portal-v2` default-off kalır; rollout çözümü hatasında eski portal açılır, daily brief
+  hatasında ayrıntı endpointleri çağrılmadan güvenli hata görünümü gösterilir.
+
 ## Yerel kanıt
 
-- Daily brief unit ve route E2E: 2 dosya, 5 test `PASS`.
+- Teacher daily brief unit ve route E2E: 2 dosya, 5 test `PASS`.
 - API, web ve shared-types typecheck `PASS`.
-- OpenAPI: 236 path ve daily brief PII-negatif response contract `PASS`.
+- OpenAPI: 237 path ve daily brief PII-negatif response contract `PASS`.
 - Öğretmen portalı browser sözleşmesi: 9 test `PASS`; rollout açık overview yalnız
   `/me/teacher/daily-brief` okur, flag kapalı akış korunur.
 - Dedicated `NEXT_E2E_PORT=43121` ile fresh production build üzerinden mobil/masaüstü sözleşme
   çalıştırılmıştır.
-- `NEXT_E2E_PORT=43125 pnpm run ci`: lint, typecheck, 1045 API testi, web sözleşmeleri, 84 rota,
-  production build, 236 OpenAPI path ve 45 idempotent operation ile `PASS`.
+- `NEXT_E2E_PORT=43139 pnpm run ci`: lint, typecheck, 1052 başarılı API testi (4 PostgreSQL/fixture
+  testi ortam bağımlılığı nedeniyle skip), 129 geniş UX ve 90 route-family testi, 84 rota, production
+  build, 237 OpenAPI path ve 45 idempotent operation ile `PASS`.
+- Student daily brief unit ve route E2E: 2 dosya, 7 test `PASS`; gerçek öğrenci ile read-only preview
+  aggregate eşitliği doğrulanır.
+- Öğrenci/veli browser sözleşmesi: 18 test `PASS`; rollout açık overview yalnız
+  `/me/student/daily-brief` okur, preview token rollout ve brief okumalarında korunur; rollout ve brief
+  hata durumları ile 390 px mobil sınır doğrulanır.
 
 Bu kanıt düzeyi `LOCAL_STATIC` ve mocked rollout kullanan tarayıcı yolu için `LOCAL_SYNTHETIC`tir.
-`TP-01` yerel dilimi `LOCAL_SLICE_PASS` durumundadır.
+`TP-01` ve `SP-01` yerel dilimleri `LOCAL_SLICE_PASS` durumundadır.
 
 ## Gate E durumu
 
-Gate E geneli henüz `PARTIAL`dır. Öğrenci daily brief (`SP-01`), portal/ops/control-plane staging
-UAT, provider teslimi, backup/restore ve rollback tatbikatı, external monitoring ve exact-SHA UAT
-artifact zinciri bu dilimin kapsamı dışındadır.
+Gate E geneli henüz `PARTIAL`dır. Öğretmen/öğrenci alt rota dilimleri (`TP-02`, `SP-02`),
+portal/ops/control-plane staging UAT, provider teslimi, backup/restore ve rollback tatbikatı,
+external monitoring ve exact-SHA UAT artifact zinciri bu dilimlerin kapsamı dışındadır.
 
 - Gerçek tenantta `web.teacher-portal-v2` activation/expiry/rollback: `EXTERNAL_NOT_RUN`
+- Gerçek tenantta `web.student-portal-v2` activation/expiry/rollback: `EXTERNAL_NOT_RUN`
 - Gerçek öğretmen görev gözlemi ve ürün metriği: `EXTERNAL_NOT_RUN`
+- Gerçek öğrenci görev gözlemi ve ürün metriği: `EXTERNAL_NOT_RUN`
 - Staging/prod deploy veya provider mutation: `EXTERNAL_NOT_RUN`
 
 Bu dış kanıtlar tamamlanmadan Gate E `Pilot Ready`, production rollout veya kullanıcı başarısı

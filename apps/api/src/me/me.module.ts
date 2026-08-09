@@ -24,6 +24,7 @@ import {
 } from "./me-institution-dashboard.store.js";
 import { MeReportIndexService } from "./me-report-index.service.js";
 import { MeSetupReadinessService } from "./me-setup-readiness.service.js";
+import { MeStudentDailyBriefService } from "./me-student-daily-brief.service.js";
 import { MeTeacherDailyBriefService } from "./me-teacher-daily-brief.service.js";
 
 @Module({
@@ -51,6 +52,7 @@ import { MeTeacherDailyBriefService } from "./me-teacher-daily-brief.service.js"
     MeInstitutionDashboardService,
     MeReportIndexService,
     MeSetupReadinessService,
+    MeStudentDailyBriefService,
     MeTeacherDailyBriefService,
     {
       provide: institutionDashboardStoreToken,

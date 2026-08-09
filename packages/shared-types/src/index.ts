@@ -324,6 +324,8 @@ export type {
   SupportTicketRecord,
   SupportTicketStatus,
   SupportTicketUpdateRequest,
+  StudentDailyBriefActionId,
+  StudentDailyBriefResponse,
   TeacherCreateRequest,
   TeacherAssignmentCreateRequest,
   TeacherAssignmentRecord,

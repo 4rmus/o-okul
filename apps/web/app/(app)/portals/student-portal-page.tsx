@@ -16,6 +16,8 @@ import type {
   ReportErrorBooklet,
   ReportStudentProgress,
   ReportStudentSnapshot,
+  ResolvedFeatureRollouts,
+  StudentDailyBriefResponse,
   StudentEnrollmentRecord,
   StudentProfileRecord,
   SupportTicketRecord,
@@ -42,6 +44,7 @@ import {
 import { ReportPanel } from "./_shared/report-panel.js";
 import { GuardianRelationsPanel, ProfilePanel, StudentFocusPanel, StudentHistoryPanel } from "./_shared/student-panels.js";
 import { SupportTicketsPanel } from "./_shared/support-tickets-panel.js";
+import { StudentDailyBriefPage } from "./student-daily-brief-page.js";
 import { readReportExamId } from "../_shared/report-exam-selection.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
 
@@ -55,16 +58,66 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
   const reportExamId = readReportExamId(searchParams, "");
   const isRolePreview = Boolean(rolePreviewToken);
   const canReadPortal = Boolean(auth && (auth.session.subjectType === "STUDENT" || isRolePreview));
+  const featureRolloutsQuery = useQuery({
+    queryKey: ["next-feature-rollouts", auth?.session.tenantId ?? "anonymous", auth?.session.id ?? "none"],
+    queryFn: () => readOnlyRequest<ResolvedFeatureRollouts>(auth?.accessToken ?? "", `${apiBaseUrl}/me/feature-rollouts`, rolePreviewToken),
+    enabled: canReadPortal,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const studentPortalV2Enabled = Boolean(
+    featureRolloutsQuery.isSuccess &&
+    featureRolloutsQuery.data.enabledFeatureKeys.includes("web.student-portal-v2"),
+  );
+  const useDailyBrief = view === "overview" && studentPortalV2Enabled;
+  const rolloutResolved = featureRolloutsQuery.isSuccess || featureRolloutsQuery.isError;
   const queryKey = ["next-student-portal", auth?.session.userId ?? "anonymous", rolePreviewToken || "session", view, reportExamId];
   const query = useQuery({
     queryKey,
     queryFn: () => loadStudentPortal(auth?.accessToken ?? "", rolePreviewToken, reportExamId, view),
-    enabled: canReadPortal,
+    enabled: Boolean(canReadPortal && rolloutResolved && !useDailyBrief),
+    refetchOnWindowFocus: false,
+  });
+  const dailyBriefQuery = useQuery({
+    queryKey: ["next-student-daily-brief", auth?.session.userId ?? "anonymous", rolePreviewToken || "session"],
+    queryFn: () => readOnlyRequest<StudentDailyBriefResponse>(
+      auth?.accessToken ?? "",
+      `${apiBaseUrl}/me/student/daily-brief`,
+      rolePreviewToken,
+    ),
+    enabled: Boolean(canReadPortal && useDailyBrief),
     refetchOnWindowFocus: false,
   });
 
   if (!canReadPortal) {
     return <AccessPanel title="Öğrenci Portalı" />;
+  }
+
+  if (featureRolloutsQuery.isPending || (useDailyBrief && dailyBriefQuery.isPending)) {
+    return (
+      <PortalFrame title="Öğrenci Portalı" subtitle="Bugün">
+        <PortalStatePanel
+          state="loading"
+          title="Öğrenci günlük özeti hazırlanıyor"
+          description="Duyuru, ödev, devamsızlık ve rapor durumu kişisel kapsamından yükleniyor."
+        />
+      </PortalFrame>
+    );
+  }
+
+  if (useDailyBrief) {
+    if (dailyBriefQuery.isError || !dailyBriefQuery.data) {
+      return (
+        <PortalFrame title="Öğrenci Portalı" subtitle="Bugün">
+          <PortalStatePanel
+            state="error"
+            title="Öğrenci günlük özeti alınamadı"
+            description="Ayrıntı verileri açılmadan güvenli hata durumunda kalındı."
+          />
+        </PortalFrame>
+      );
+    }
+    return <StudentDailyBriefPage brief={dailyBriefQuery.data} isRolePreview={isRolePreview} />;
   }
 
   if (query.isPending) {

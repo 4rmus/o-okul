@@ -138,6 +138,7 @@ async function installPortalApiMocks(page: Page) {
 
 function portalApiResponse(pathName: string): unknown {
   if (pathName === "/auth/refresh") return createAuthResponse();
+  if (pathName === "/me/feature-rollouts") return { enabledFeatureKeys: [] };
   if (pathName === "/me/tenant") return createTenantResponse();
   if (pathName === "/me/notification-devices") return [];
   if (pathName === "/me/student/profile") return createStudentProfile();

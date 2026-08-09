@@ -448,6 +448,23 @@ export interface TeacherDailyBriefResponse {
   }>;
 }
 
+export type StudentDailyBriefActionId = "announcement" | "attendance" | "homework" | "report" | "support";
+
+export interface StudentDailyBriefResponse {
+  date: string;
+  unreadAnnouncementCount: number;
+  homeworkAssignmentCount: number;
+  attendanceRecordCount: number;
+  absenceCount: number;
+  lateCount: number;
+  openSupportTicketCount: number;
+  latestReadyReport?: PortalReportIndexItem;
+  actions: Array<{
+    id: StudentDailyBriefActionId;
+    count: number;
+  }>;
+}
+
 export type KvkkInventoryKind = "student" | "teacher" | "guardian" | "user";
 
 export interface KvkkInventoryRecord {
