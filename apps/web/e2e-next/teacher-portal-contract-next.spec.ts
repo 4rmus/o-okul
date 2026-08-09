@@ -213,6 +213,101 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
     expect(requestedPaths).not.toContain("/me/teacher/daily-brief");
   });
 
+  const teacherFeatureRouteCases = [
+    {
+      key: "schedule",
+      panelName: "Ders programı",
+      path: "/ogretmen/ders-akisi",
+      requiredPaths: ["/me/teacher/schedule", "/me/teacher/lookups"],
+    },
+    {
+      key: "student",
+      panelName: "Öğrenci çalışma alanı",
+      path: "/ogretmen/ogrenci-takibi",
+      requiredPaths: [
+        "/me/teacher/schedule",
+        "/me/teacher/students",
+        "/me/teacher/attendance",
+        "/me/teacher/homework/materials",
+        "/me/teacher/homework/material-assignments",
+        "/me/teacher/teacher-notes",
+        "/me/teacher/lookups",
+        "/attendance/daily",
+        "/me/teacher/students/student-a/enrollments",
+      ],
+    },
+    {
+      key: "homework",
+      panelName: "Öğretmen ödev kontrolü",
+      path: "/ogretmen/odevler",
+      requiredPaths: [
+        "/me/teacher/students",
+        "/me/teacher/homework",
+        "/me/teacher/homework/materials",
+        "/me/teacher/homework/material-assignments",
+        "/me/teacher/lookups",
+      ],
+    },
+    {
+      key: "reports",
+      panelName: "Portal rapor özeti",
+      path: "/ogretmen/raporlar",
+      requiredPaths: [
+        "/me/teacher/students",
+        "/me/teacher/lookups",
+        "/me/teacher/reports",
+        "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots",
+        "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-ready/students/student-a",
+        "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-ready/students/student-a/error-booklet",
+        "/me/teacher/reports/exam-demo-isem-lgs-1/students/student-a/progress",
+      ],
+    },
+  ] as const;
+  for (const viewport of [
+    { height: 812, width: 320 },
+    { height: 896, width: 414 },
+  ]) {
+    for (const routeCase of teacherFeatureRouteCases) {
+      test(`TP-02 ${routeCase.key} rotası ${viewport.width}px görünümde yalnız kendi verisini yükler`, async ({ page }) => {
+        const requestedPaths: string[] = [];
+        await openTeacherPortal(page, viewport, { path: routeCase.path, requestedPaths });
+
+        await expect(page.getByRole("heading", { level: 1, name: "Öğretmen Portalı" })).toBeVisible();
+        await expect(page.getByRole("region", { exact: true, name: routeCase.panelName })).toBeVisible();
+        const featureDataPaths = requestedPaths.filter((path) =>
+          path === "/attendance/daily" || path === "/me/feature-rollouts" || path === "/me/teacher" || path.startsWith("/me/teacher/"),
+        );
+        expect(featureDataPaths.sort()).toEqual([...routeCase.requiredPaths].sort());
+        for (const value of rawInternalValues) await expect(page.locator("body")).not.toContainText(value);
+        await expectNoHorizontalOverflow(page, `teacher-${routeCase.key}-${viewport.width}`);
+        await expectNoUnlabeledControls(page, `teacher-${routeCase.key}-${viewport.width}`);
+        await expectNoClippedVisibleText(page, `teacher-${routeCase.key}-${viewport.width}`);
+      });
+    }
+  }
+
+  test("TP-02 ödev rotası rol önizlemesinde read-only kalır", async ({ page }) => {
+    const mutationRequests: string[] = [];
+    const previewTokenPaths: string[] = [];
+    const requestedPaths: string[] = [];
+    await openTeacherPortal(page, { height: 812, width: 320 }, {
+      mode: "role-preview",
+      mutationRequests,
+      path: "/ogretmen/odevler",
+      previewTokenPaths,
+      requestedPaths,
+    });
+
+    await expect(page).toHaveURL(/\/ogretmen\/odevler\?rolePreview=1$/);
+    await expect(page.getByLabel("Rol önizleme bilgisi")).toContainText("Yalnızca Görüntüleme");
+    await expectTeacherHomeworkPanels(page, { readOnly: true });
+    expect(previewTokenPaths).not.toContain("/me/feature-rollouts");
+    expect(previewTokenPaths.filter((path) => path === "/me/teacher" || path.startsWith("/me/teacher/"))).toEqual(
+      requestedPaths.filter((path) => path === "/me/teacher" || path.startsWith("/me/teacher/")),
+    );
+    await expect.poll(() => mutationRequests).toEqual([]);
+  });
+
   test("öğretmen rol önizlemesinde işlem yapılamaz", async ({ page }) => {
     const mutationRequests: string[] = [];
     await openTeacherPortal(page, { height: 844, width: 390 }, { mode: "role-preview", mutationRequests });
@@ -442,7 +537,7 @@ async function expectPortalSupportPanel(page: Page, options: { formVisible: bool
 async function openTeacherPortal(
   page: Page,
   viewport: { height: number; width: number },
-  options: { failMutationPath?: string; mode?: "teacher" | "role-preview"; mutationRequests?: string[]; portalV2?: boolean; requestedPaths?: string[]; rolloutFailure?: boolean } = {},
+  options: { failMutationPath?: string; mode?: "teacher" | "role-preview"; mutationRequests?: string[]; path?: string; portalV2?: boolean; previewTokenPaths?: string[]; requestedPaths?: string[]; rolloutFailure?: boolean } = {},
 ) {
   await page.setViewportSize(viewport);
   await page.clock.setFixedTime(new Date("2026-06-17T08:00:00.000Z"));
@@ -454,7 +549,13 @@ async function openTeacherPortal(
     }
   }, options.mode ?? "teacher");
   await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
-  await page.goto(options.mode === "role-preview" ? "/ogretmen?rolePreview=1" : "/ogretmen");
+  const defaultPath = options.mode === "role-preview" ? "/ogretmen?rolePreview=1" : "/ogretmen";
+  const path = options.path
+    ? options.mode === "role-preview"
+      ? `${options.path}${options.path.includes("?") ? "&" : "?"}rolePreview=1`
+      : options.path
+    : defaultPath;
+  await page.goto(path);
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
 }
 
@@ -472,7 +573,7 @@ async function clickSidebarRoute(page: Page, groupName: string, linkName: string
 
 async function installTeacherApiMocks(
   page: Page,
-  options: { failMutationPath?: string; mode?: "teacher" | "role-preview"; mutationRequests?: string[]; portalV2?: boolean; requestedPaths?: string[]; rolloutFailure?: boolean },
+  options: { failMutationPath?: string; mode?: "teacher" | "role-preview"; mutationRequests?: string[]; path?: string; portalV2?: boolean; previewTokenPaths?: string[]; requestedPaths?: string[]; rolloutFailure?: boolean },
 ) {
   await page.route("**/api/v1/**", async (route) => {
     if (route.request().method() === "OPTIONS") {
@@ -484,6 +585,9 @@ async function installTeacherApiMocks(
     const url = new URL(route.request().url());
     const pathName = url.pathname.replace(/^\/api\/v1/, "");
     options.requestedPaths?.push(pathName);
+    if (route.request().headers()["x-role-preview-token"] === "preview-token-teacher") {
+      options.previewTokenPaths?.push(pathName);
+    }
     if (method === "GET" && pathName === "/me/feature-rollouts") {
       if (options.rolloutFailure) {
         await route.fulfill({

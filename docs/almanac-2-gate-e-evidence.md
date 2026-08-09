@@ -23,6 +23,12 @@ yalnız görünür panelin mevcut self-scoped endpointlerini yükler. Alt rotala
 indirilmez. Devamsızlık sayfası görünür profil, yoklama özeti, öğretmen notu ve lookup bağlamını
 korur. Bu daraltma yeni route, API, tablo veya mutation eklemez.
 
+Dördüncü ürün dilimi `TP-02` öğretmen alt rotalarıdır. Ders akışı, öğrenci takibi, ödev kontrolü ve
+sınav raporu sayfaları yalnız görünür panelin mevcut öğretmen-kapsamlı endpointlerini yükler. Alt
+rotalar overview rollout çözümünü ve daily brief'i beklemez; görünmeyen öğretmen profilini indirmez.
+Ödev sayfasında kullanılmayan ders programı isteği de kaldırılmıştır. Bu daraltma yeni route, API,
+tablo veya mutation eklemez.
+
 ## Güvenlik ve veri sınırı
 
 - Endpoint yalnız gerçek veya read-only preview `TEACHER` subject contextinde çalışır; tenant admin,
@@ -51,18 +57,21 @@ korur. Bu daraltma yeni route, API, tablo veya mutation eklemez.
 - `SP-02` alt rotaları rapor, ödev, devamsızlık ve destek dışındaki öğrenci datasetlerini indirmez.
   Destek rotası read-only preview'da form ve mutation açmaz; preview tokenı self-scoped liste
   okumasında korunur.
+- `TP-02` alt rotaları ders akışı, öğrenci takibi, ödev ve rapor dışındaki öğretmen datasetlerini
+  indirmez. Ödev rotası read-only preview'da kontrol/mutation açmaz; preview tokenı tüm
+  öğretmen-kapsamlı okumalarda korunur.
 
 ## Yerel kanıt
 
 - Teacher daily brief unit ve route E2E: 2 dosya, 5 test `PASS`.
 - API, web ve shared-types typecheck `PASS`.
 - OpenAPI: 237 path ve daily brief PII-negatif response contract `PASS`.
-- Öğretmen portalı browser sözleşmesi: 9 test `PASS`; rollout açık overview yalnız
+- Öğretmen portalı browser sözleşmesi: 18 test `PASS`; rollout açık overview yalnız
   `/me/teacher/daily-brief` okur, flag kapalı akış korunur.
 - Dedicated `NEXT_E2E_PORT=43121` ile fresh production build üzerinden mobil/masaüstü sözleşme
   çalıştırılmıştır.
-- `NEXT_E2E_PORT=43155 pnpm run ci`: lint, typecheck, 1052 başarılı API testi (4 PostgreSQL/fixture
-  testi ortam bağımlılığı nedeniyle skip), 138 geniş UX, 90 route-family ve 32 görsel test, 84 rota,
+- `NEXT_E2E_PORT=43167 pnpm run ci`: lint, typecheck, 1052 başarılı API testi (4 PostgreSQL/fixture
+  testi ortam bağımlılığı nedeniyle skip), 147 geniş UX, 90 route-family ve 32 görsel test, 84 rota,
   production build, 237 OpenAPI path ve 45 idempotent operation ile `PASS`.
 - Student daily brief unit ve route E2E: 2 dosya, 7 test `PASS`; gerçek öğrenci ile read-only preview
   aggregate eşitliği doğrulanır.
@@ -73,16 +82,23 @@ korur. Bu daraltma yeni route, API, tablo veya mutation eklemez.
   taşma, etiketsiz kontrol, kırpılmış metin ve PII-negatif test ile destek read-only preview negatifi
   dahil 9 yeni test `PASS`. Rapor, ödev ve destek gereksiz profil/rollout okumaz; devamsızlık
   görünür profil bağlamını korur. Bu testler Chromium ve WebKit üzerinde çalışan `web:ux-rc`
-  kapısına dahil edilmiş ve kapı 52/52 test ile `PASS` olmuştur.
+  kapısına dahildir.
+- `TP-02` browser sözleşmesi: dört alt rota x 320/414 px olmak üzere 8 exact request-multiset,
+  yatay taşma, etiketsiz kontrol, kırpılmış metin ve iç kimlik sızıntısı negatifi ile ödev read-only
+  preview negatifi dahil 9 yeni test `PASS`. Ders akışı, öğrenci takibi, ödev ve rapor rotaları gereksiz
+  profil/rollout okumaz; ödev rotası gereksiz program verisini indirmez. Fresh production build ve
+  dedicated `NEXT_E2E_PORT=43165` ile Chromium/WebKit `web:ux-rc` kapısı 68/68 test `PASS` olmuştur.
+- Source-bound Gate B measurement baseline yeniden üretildi ve 3 görev x 5 örnek checker'ı `PASS`
+  oldu. Bu mocked görevler TP-02 alt rotalarını ölçmediği için TP-02 performans kanıtı sayılmaz.
 
 Bu kanıt düzeyi `LOCAL_STATIC` ve mocked rollout kullanan tarayıcı yolu için `LOCAL_SYNTHETIC`tir.
-`TP-01`, `SP-01` ve `SP-02` yerel dilimleri `LOCAL_SLICE_PASS` durumundadır.
+`TP-01`, `TP-02`, `SP-01` ve `SP-02` yerel dilimleri `LOCAL_SLICE_PASS` durumundadır.
 
 ## Gate E durumu
 
-Gate E geneli henüz `PARTIAL`dır. Öğretmen alt rota dilimi (`TP-02`),
-portal/ops/control-plane staging UAT, provider teslimi, backup/restore ve rollback tatbikatı,
-external monitoring ve exact-SHA UAT artifact zinciri bu dilimlerin kapsamı dışındadır.
+Gate E geneli henüz `PARTIAL`dır. Portal/ops/control-plane staging UAT, provider teslimi,
+backup/restore ve rollback tatbikatı, external monitoring ve exact-SHA UAT artifact zinciri bu
+dilimlerin kapsamı dışındadır.
 
 - Gerçek tenantta `web.teacher-portal-v2` activation/expiry/rollback: `EXTERNAL_NOT_RUN`
 - Gerçek tenantta `web.student-portal-v2` activation/expiry/rollback: `EXTERNAL_NOT_RUN`

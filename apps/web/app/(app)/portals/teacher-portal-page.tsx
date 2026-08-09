@@ -71,7 +71,7 @@ import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../
 import { TeacherDailyBriefPage } from "./teacher-daily-brief-page.js";
 
 interface TeacherPortalData {
-  teacher: TeacherRecord;
+  teacher?: TeacherRecord;
   announcements: AnnouncementRecord[];
   schedule: ScheduleLessonRecord[];
   students: StudentRecord[];
@@ -147,7 +147,7 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
   const featureRolloutsQuery = useQuery({
     queryKey: ["next-feature-rollouts", auth?.session.tenantId ?? "anonymous", auth?.session.id ?? "none"],
     queryFn: () => readOnlyRequest<ResolvedFeatureRollouts>(auth?.accessToken ?? "", `${apiBaseUrl}/me/feature-rollouts`, rolePreviewToken),
-    enabled: canReadPortal,
+    enabled: Boolean(canReadPortal && view === "overview"),
     refetchOnWindowFocus: false,
     retry: false,
   });
@@ -156,7 +156,7 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
     featureRolloutsQuery.data.enabledFeatureKeys.includes("web.teacher-portal-v2"),
   );
   const useDailyBrief = view === "overview" && teacherPortalV2Enabled;
-  const rolloutResolved = featureRolloutsQuery.isSuccess || featureRolloutsQuery.isError;
+  const rolloutResolved = view !== "overview" || featureRolloutsQuery.isSuccess || featureRolloutsQuery.isError;
   const queryKey = ["next-teacher-portal", auth?.session.userId ?? "anonymous", rolePreviewToken || "session", view, reportExamId];
   const query = useQuery({
     queryKey,
@@ -338,7 +338,7 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
     return <AccessPanel title="Öğretmen Portalı" />;
   }
 
-  if (featureRolloutsQuery.isPending || (useDailyBrief && dailyBriefQuery.isPending)) {
+  if ((view === "overview" && featureRolloutsQuery.isPending) || (useDailyBrief && dailyBriefQuery.isPending)) {
     return (
       <PortalFrame title="Öğretmen Portalı" subtitle="Bugün">
         <PortalStatePanel
@@ -1101,7 +1101,7 @@ async function loadTeacherPortal(
   const showStudent = showOverview || view === "student";
   const showReports = showOverview || view === "reports";
   const showHomework = showOverview || view === "homework";
-  const showSchedule = showOverview || view === "schedule" || showStudent || showHomework;
+  const showSchedule = showOverview || view === "schedule" || showStudent;
   const showAnnouncements = showOverview || view === "announcements";
   const showSupport = showOverview || view === "support";
   const showStudentWorkspace = showStudent || showReports || showHomework || showSupport;
@@ -1112,7 +1112,7 @@ async function loadTeacherPortal(
     ? requestedReportExamId
     : reportIndex[0]?.examId ?? "";
   const [teacher, announcements, schedule, students, attendance, homework, materials, materialAssignments, teacherNotes, supportTickets, snapshots, lookups] = await Promise.all([
-    readOnlyRequest<TeacherRecord>(accessToken, `${apiBaseUrl}/me/teacher`, rolePreviewToken),
+    showOverview ? readOnlyRequest<TeacherRecord>(accessToken, `${apiBaseUrl}/me/teacher`, rolePreviewToken) : Promise.resolve(undefined),
     showAnnouncements ? readOnlyRequest<AnnouncementRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/announcements`, rolePreviewToken) : Promise.resolve([]),
     showSchedule ? readOnlyRequest<ScheduleLessonRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/schedule`, rolePreviewToken) : Promise.resolve([]),
     showStudentWorkspace ? readOnlyRequest<StudentRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/students`, rolePreviewToken) : Promise.resolve([]),
