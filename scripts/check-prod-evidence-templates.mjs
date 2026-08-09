@@ -1214,9 +1214,9 @@ runLiveExamCycleNegativeCheck({
 runLiveExamCycleNegativeCheck({
   label: "Live exam cycle quarantine count exact negative",
   path: "docs/evidence-templates/live-exam-cycle.quarantine-count.tmp.json",
-  expectedFailure: "examCycle.quarantineCount 1 olmali.",
+  expectedFailure: "examCycle.quarantineCount 0 olmali.",
   mutate: (fixture) => {
-    fixture.examCycle.quarantineCount = 0;
+    fixture.examCycle.quarantineCount = 1;
   },
 });
 runLiveExamCycleNegativeCheck({

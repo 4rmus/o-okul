@@ -1302,7 +1302,7 @@ Live UI-worker/report smoke preflight:
 STAGING_ENVIRONMENT=staging \
 ISEM_OPTICAL_PIPELINE_SMOKE_EMAIL_DOMAIN=staging.o-okul.com \
 ISEM_OPTICAL_PIPELINE_SMOKE_EVIDENCE_FILE=artifacts/staging/isem-optical-pipeline.json \
-ISEM_OPTICAL_PIPELINE_UI_WORKER_EVIDENCE_FILE=artifacts/staging/private/live-ui-worker-input.json \
+ISEM_OPTICAL_PIPELINE_UI_WORKER_EVIDENCE_FILE=../o-okul-private/staging/private/live-ui-worker-input.json \
 pnpm isem-optical-pipeline:smoke
 ```
 
@@ -1324,7 +1324,7 @@ NEXT_E2E_BASE_URL=https://212.108.107.190 \
 NEXT_E2E_SKIP_WEB_SERVER=1 \
 NEXT_E2E_IGNORE_HTTPS_ERRORS=1 \
 NEXT_E2E_LIVE_UI_WORKER=1 \
-LIVE_UI_WORKER_EVIDENCE_PATH=artifacts/staging/private/live-ui-worker-input.json \
+LIVE_UI_WORKER_EVIDENCE_PATH=../o-okul-private/staging/private/live-ui-worker-input.json \
 LIVE_UI_WORKER_RESULT_EVIDENCE_FILE=artifacts/staging/live-ui-worker-result.json \
 pnpm live:ui-worker:evidence-check
 ```
@@ -1337,7 +1337,7 @@ NEXT_E2E_BASE_URL=https://212.108.107.190 \
 NEXT_E2E_SKIP_WEB_SERVER=1 \
 NEXT_E2E_IGNORE_HTTPS_ERRORS=1 \
 NEXT_E2E_LIVE_UI_WORKER=1 \
-LIVE_UI_WORKER_EVIDENCE_PATH=artifacts/staging/private/live-ui-worker-input.json \
+LIVE_UI_WORKER_EVIDENCE_PATH=../o-okul-private/staging/private/live-ui-worker-input.json \
 LIVE_UI_WORKER_RESULT_EVIDENCE_FILE=artifacts/staging/live-ui-worker-result.json \
 pnpm live:ui-worker:smoke
 ```
@@ -1356,8 +1356,9 @@ veya `artifacts/local/**` local smoke referansı PASS sayılmaz.
 
 `LIVE_UI_WORKER_EVIDENCE_PATH` JSON'u rapor admin credential'ını, `examId`, `firstStudentId` ve
 opsiyonel öğrenci/veli portal credential'larını exact shape ile taşır. Bu dosya kalıcı/public kanıt
-değil, sadece private runtime input'tur; path zincirinde `private` segmenti olmalı, dosya izni
-0600 olmalı, smoke üretirse 0600 modunda yazılır ve release bundle/production summary/public evidence template içine gömülmez.
+değil, sadece repository çalışma ağacının dışındaki private runtime input'tur; path zincirinde
+`private` segmenti olmalı, dosya izni 0600 olmalı, smoke üretirse 0600 modunda yazılır ve release
+bundle/production summary/public evidence template içine gömülmez.
 `NEXT_E2E_BASE_URL` gerçek `https://` staging/prod web origin'i olmalı, lokal/test/placeholder host
 olamaz; `NEXT_E2E_SKIP_WEB_SERVER=1` local Next dev server'in yanlışlıkla kanıt yerine geçmesini
 engeller. IP/self-signed staging hedeflerinde `NEXT_E2E_IGNORE_HTTPS_ERRORS=1` yalnız Playwright TLS

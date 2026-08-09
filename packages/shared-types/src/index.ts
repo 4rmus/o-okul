@@ -1,5 +1,28 @@
 export type TenantId = string;
+export {
+  featureRolloutKeys,
+} from "./feature-rollout.js";
+export type {
+  FeatureRolloutCatalogItem,
+  FeatureRolloutKey,
+  ResolvedFeatureRollouts,
+} from "./feature-rollout.js";
 export { FormatAnalyzerService, getParserConfigPresetSuggestion } from "./format-analyzer.js";
+export {
+  assertProductEvent,
+  productEventCatalog,
+  productEventRouteFamilies,
+} from "./product-analytics.js";
+export type {
+  ProductEvent,
+  ProductEventName,
+  ProductEventOutcome,
+  ProductEventPersona,
+  ProductEventPropertyValue,
+  ProductEventRouteFamily,
+  ProductEventValidationContext,
+  TenantPseudonym,
+} from "./product-analytics.js";
 export {
   reportCourseMatchesScoreType,
   reportCourseShortName,

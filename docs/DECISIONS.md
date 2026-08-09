@@ -469,6 +469,24 @@ Etkilenen ADR: Yok
 Açık soru: Provider ve genel release topolojisi pilot öncesi/sonrası ayrı kararla seçilecektir.
 Son kontrol: 2026-08-08
 
+### DEC-20260809-01 — Almanak 2.0 foundation sözleşmeleri
+
+Durum: Onaylı; Gate B yerel sözleşme ve default-off temel kapsamı
+Karar: Frontend route/feature sınırları, ortak async operation durumu, route manifest sahipliği,
+liste/cursor/URL state standardı, modüler monolit içi read model yaklaşımı, server-side default-off
+tenant rollout'u, PII-safe product analytics ve control-plane mantıksal ayrımı ADR-0003–0010 ile
+kanonik hale getirilir. Gate B hiçbir feature'ı tenant için açmaz; rollout config mutationı, analytics
+vendoru, Shell v2, Exam workspace ve fiziksel control-plane ayrımı sonraki dilimlerdir. Rollout audit'i
+bu ilk dilimde enabled exposure kaydıdır; runtime config değişikliği geçmişi değildir.
+Kaynak: O-Okul Almanak 2.0 planı ve kullanıcının Gate B ile devam onayı.
+Kanıt: `docs/ADR-0003-frontend-route-feature-boundaries.md` – `docs/ADR-0010-control-plane-logical-separation.md`;
+`pnpm web:architecture:check`; `pnpm route-manifest:check`; `pnpm feature-rollout:check`;
+`pnpm product-analytics-schema:check`.
+Etkilenen ADR: ADR-0003, ADR-0004, ADR-0005, ADR-0006, ADR-0007, ADR-0008, ADR-0009, ADR-0010
+Açık soru: Gerçek kullanıcı gözlemi, staging/prod rollout aktivasyonu ve analytics transportu dış
+ortam kanıtı olarak ayrıca yürütülecektir.
+Son kontrol: 2026-08-09
+
 ## Faz Öncesi Onay Gerektirenler
 
 | ID | Faz | Bloklar mı? | Soru | Beklenen kanıt |

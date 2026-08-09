@@ -1,9 +1,10 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
 import type { ClassRecord, GlobalSearchResultRecord, GlobalSearchType, GuardianRecord, PublicStudentRecord, TeacherRecord } from "@o-okul/shared-types";
 import type { RequestContext } from "../context/request-context.js";
 import { hasCapability } from "../rbac/role-capabilities.js";
 import { GuardianService } from "../guardian/guardian.service.js";
 import { SchoolService } from "../school/school.service.js";
+import { isAssignmentActive, shouldLimitToTeacherScope } from "../school/teacher-scope.js";
 import { StudentService } from "../student/student.service.js";
 import { TeacherService } from "../teacher/teacher.service.js";
 
@@ -11,6 +12,14 @@ interface SearchQuery {
   limit?: string;
   q: string;
   types?: string;
+}
+
+interface CampusSearchScope {
+  classIds: Set<string>;
+  classes: ClassRecord[];
+  studentIds: Set<string>;
+  students: PublicStudentRecord[];
+  teacherIds: Set<string>;
 }
 
 const defaultLimit = 10;
@@ -36,19 +45,20 @@ export class SearchService {
     const selectedTypes = parseTypes(query.types);
     const limit = parseLimit(query.limit);
     const canSearchPii = hasCapability(context, "student:manage");
+    const campusScope = await this.resolveCampusSearchScope(context);
     const results: GlobalSearchResultRecord[] = [];
 
     if (selectedTypes.includes("students")) {
-      results.push(...await this.searchStudents(context, query.q, searchText, canSearchPii));
+      results.push(...await this.searchStudents(context, query.q, searchText, canSearchPii, campusScope));
     }
     if (selectedTypes.includes("teachers")) {
-      results.push(...this.searchTeachers(context, await this.teachers.listTeachers(context), searchText));
+      results.push(...await this.searchTeachers(context, await this.teachers.listTeachers(context), searchText, campusScope));
     }
     if (selectedTypes.includes("guardians")) {
-      results.push(...this.searchGuardians(context, await this.guardians.listGuardians(context), searchText, query.q, canSearchPii));
+      results.push(...await this.searchGuardians(context, await this.guardians.listGuardians(context), searchText, query.q, canSearchPii, campusScope));
     }
     if (selectedTypes.includes("classes")) {
-      results.push(...this.searchClasses(context, await this.school.listClasses(context), searchText));
+      results.push(...this.searchClasses(context, await this.listClassesForViewer(context, campusScope), searchText));
     }
 
     return dedupeResults(results).slice(0, limit);
@@ -59,11 +69,14 @@ export class SearchService {
     rawQuery: string,
     searchText: string,
     canSearchPii: boolean,
+    campusScope: CampusSearchScope | undefined,
   ): Promise<GlobalSearchResultRecord[]> {
     const [students, classes, nationalIdMatch] = await Promise.all([
-      this.students.listForViewer(context),
-      this.school.listClasses(context),
-      canSearchPii ? this.students.findByNationalIdForViewer(context, rawQuery) : Promise.resolve(undefined),
+      campusScope?.students ?? this.students.listForViewer(context),
+      campusScope?.classes ?? this.school.listClasses(context),
+      canSearchPii && !campusScope
+        ? this.students.findByNationalIdForViewer(context, rawQuery)
+        : Promise.resolve(undefined),
     ]);
     const classNameById = new Map(classes.map((schoolClass) => [schoolClass.id, schoolClass.name]));
     const matches = students.filter((student) =>
@@ -83,16 +96,38 @@ export class SearchService {
     return matches.map((student) => toStudentResult(context, student, classNameById));
   }
 
-  private searchTeachers(context: RequestContext, teachers: TeacherRecord[], searchText: string): GlobalSearchResultRecord[] {
-    return teachers
-      .filter((teacher) =>
-        matchesText([
-          teacher.firstName,
-          teacher.lastName,
-          `${teacher.firstName} ${teacher.lastName}`,
-          teacher.branch,
-        ], searchText),
-      )
+  private async searchTeachers(
+    context: RequestContext,
+    teachers: TeacherRecord[],
+    searchText: string,
+    campusScope: CampusSearchScope | undefined,
+  ): Promise<GlobalSearchResultRecord[]> {
+    let visibleTeachers = shouldLimitToTeacherScope(context)
+      ? teachers.filter((teacher) => teacher.id === context.subjectId)
+      : teachers;
+
+    visibleTeachers = visibleTeachers.filter((teacher) =>
+      matchesText([
+        teacher.firstName,
+        teacher.lastName,
+        `${teacher.firstName} ${teacher.lastName}`,
+        teacher.branch,
+      ], searchText),
+    );
+    if (campusScope) {
+      const campusVisibility = await Promise.all(visibleTeachers.map(async (teacher) => {
+        if (campusScope.teacherIds.has(teacher.id)) return true;
+        const assignments = await this.teachers.listTeacherAssignments(context, teacher.id);
+        return assignments.some((assignment) =>
+          isAssignmentActive(assignment) &&
+          (Boolean(assignment.classId && campusScope.classIds.has(assignment.classId)) ||
+            Boolean(assignment.studentId && campusScope.studentIds.has(assignment.studentId))),
+        );
+      }));
+      visibleTeachers = visibleTeachers.filter((_teacher, index) => campusVisibility[index]);
+    }
+
+    return visibleTeachers
       .map((teacher) => ({
         href: institutionHref(context, `/kurum/ogretmenler/${encodeURIComponent(teacher.id)}`, "/ogretmen"),
         id: teacher.id,
@@ -102,16 +137,37 @@ export class SearchService {
       }));
   }
 
-  private searchGuardians(
+  private async listClassesForViewer(
+    context: RequestContext,
+    campusScope: CampusSearchScope | undefined,
+  ): Promise<ClassRecord[]> {
+    const classes = campusScope?.classes ?? await this.school.listClasses(context);
+    if (!shouldLimitToTeacherScope(context)) {
+      return classes;
+    }
+
+    const [students, assignments] = await Promise.all([
+      this.students.listForViewer(context),
+      this.teachers.listTeacherAssignments(context, context.subjectId),
+    ]);
+    const visibleClassIds = new Set([
+      ...students.map((student) => student.classId).filter((classId): classId is string => Boolean(classId)),
+      ...assignments.filter(isAssignmentActive).map((assignment) => assignment.classId).filter((classId): classId is string => Boolean(classId)),
+    ]);
+    return classes.filter((schoolClass) => visibleClassIds.has(schoolClass.id));
+  }
+
+  private async searchGuardians(
     context: RequestContext,
     guardians: GuardianRecord[],
     searchText: string,
     rawQuery: string,
     canSearchPii: boolean,
-  ): GlobalSearchResultRecord[] {
+    campusScope: CampusSearchScope | undefined,
+  ): Promise<GlobalSearchResultRecord[]> {
     const queryDigits = digitsOnly(rawQuery);
-    return guardians
-      .filter((guardian) =>
+    const visibleGuardians = await this.filterCampusScopedGuardians(context, guardians, campusScope);
+    return visibleGuardians.filter((guardian) =>
         matchesText([
           guardian.firstName,
           guardian.lastName,
@@ -126,6 +182,41 @@ export class SearchService {
         title: `${guardian.firstName} ${guardian.lastName}`,
         type: "guardians",
       }));
+  }
+
+  private async resolveCampusSearchScope(context: RequestContext): Promise<CampusSearchScope | undefined> {
+    if (context.roles.includes("OPERATIONS_STAFF") && !context.campusScope) {
+      throw new ForbiddenException("SEARCH_CAMPUS_SCOPE_MISSING");
+    }
+    if (context.campusScope?.scopeMode !== "CAMPUSES") return undefined;
+
+    const campusIds = new Set(context.campusScope.campusIds);
+    const [classes, students] = await Promise.all([
+      this.school.listClasses(context),
+      this.students.listForViewer(context),
+    ]);
+    const visibleClasses = classes.filter((schoolClass) =>
+      Boolean(schoolClass.campusId && campusIds.has(schoolClass.campusId)),
+    );
+    return {
+      classIds: new Set(visibleClasses.map((schoolClass) => schoolClass.id)),
+      classes: visibleClasses,
+      studentIds: new Set(students.map((student) => student.id)),
+      students,
+      teacherIds: new Set(
+        students.map((student) => student.responsibleTeacherId).filter((id): id is string => Boolean(id)),
+      ),
+    };
+  }
+
+  private async filterCampusScopedGuardians(
+    context: RequestContext,
+    guardians: GuardianRecord[],
+    campusScope: CampusSearchScope | undefined,
+  ): Promise<GuardianRecord[]> {
+    if (!campusScope) return guardians;
+    const visibleGuardianIds = await this.guardians.listGuardianIdsForStudents(context, [...campusScope.studentIds]);
+    return guardians.filter((guardian) => visibleGuardianIds.has(guardian.id));
   }
 
   private searchClasses(context: RequestContext, classes: ClassRecord[], searchText: string): GlobalSearchResultRecord[] {

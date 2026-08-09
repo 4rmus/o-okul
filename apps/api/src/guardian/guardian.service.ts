@@ -238,6 +238,11 @@ export class GuardianService {
     );
   }
 
+  async listGuardianIdsForStudents(context: RequestContext, studentIds: string[]): Promise<Set<string>> {
+    const links = filterTenantResources(context, await this.guardianStudentStore.listByStudentIds(studentIds));
+    return new Set(links.map((link) => link.guardianId));
+  }
+
   async listGuardianStudentDetails(context: RequestContext, guardianId: string): Promise<GuardianStudentDetailsResponse> {
     const guardian = await this.findGuardian(context, guardianId);
     const links = await filterGuardianStudentLinksByTeacherScope(

@@ -15,10 +15,10 @@ const expectedIsemFixture = {
   answerKeyQuestionCount: 90,
   bookletVariantCount: 1,
   participantCount: 21,
-  matchedCount: 20,
-  quarantineCount: 1,
-  examResultCount: 20,
-  reportResultCount: 20,
+  matchedCount: 21,
+  quarantineCount: 0,
+  examResultCount: 21,
+  reportResultCount: 21,
 };
 const allowedEvidenceReferencePrefixes = ["artifact:", "run:", "log:", "url:", "https://", "file://", "s3://"];
 const isemOpticalPipelineEvidenceFileNames = new Set(["isem-optical-pipeline.json", "isem-optical-pipeline.log"]);

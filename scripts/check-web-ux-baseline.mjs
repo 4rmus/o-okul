@@ -262,7 +262,7 @@ if (!webPackageJson.scripts?.["ux-rc"]?.includes("--workers=2")) {
   failures.push("apps/web/package.json ux-rc script must keep the verified two-worker budget.");
 }
 if (webPackageJson.scripts?.["ux-route-family-smoke"] !== "playwright test -c playwright.next.config.ts --workers=2 --update-snapshots=none e2e-next/ui-route-family-smoke-next.spec.ts") {
-  failures.push("apps/web/package.json ux-route-family-smoke script must run the 73-route smoke with two workers and snapshot updates disabled.");
+  failures.push("apps/web/package.json ux-route-family-smoke script must run the route smoke with two workers and snapshot updates disabled.");
 }
 
 validateRouteFamilySmokeContract();

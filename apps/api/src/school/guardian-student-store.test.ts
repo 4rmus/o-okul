@@ -32,6 +32,7 @@ describe("PostgresGuardianStudentStore", () => {
       async () => {
         await store.listByGuardian("guardian-a");
         await store.listByStudent("student-a");
+        await store.listByStudentIds(["student-a", "student-b"]);
         await store.create({
           tenantId: "tenant-a",
           guardianId: "guardian-a",
@@ -52,8 +53,10 @@ describe("PostgresGuardianStudentStore", () => {
     expect(businessQueries[0]?.values).toEqual(["guardian-a"]);
     expect(businessQueries[1]?.sql).toContain('FROM "GuardianStudent"');
     expect(businessQueries[1]?.values).toEqual(["student-a"]);
-    expect(businessQueries[2]?.sql).toContain('INSERT INTO "GuardianStudent"');
-    expect(businessQueries[2]?.values).toEqual([
+    expect(businessQueries[2]?.sql).toContain('"studentId" = ANY($1::text[])');
+    expect(businessQueries[2]?.values).toEqual([["student-a", "student-b"]]);
+    expect(businessQueries[3]?.sql).toContain('INSERT INTO "GuardianStudent"');
+    expect(businessQueries[3]?.values).toEqual([
       expect.any(String),
       "tenant-a",
       "guardian-a",
@@ -63,10 +66,10 @@ describe("PostgresGuardianStudentStore", () => {
       true,
       false,
     ]);
-    expect(businessQueries[3]?.sql).toContain('UPDATE "GuardianStudent"');
-    expect(businessQueries[3]?.values).toEqual(["guardian-a", "student-a", false, false, undefined, undefined]);
-    expect(businessQueries[4]?.sql).toContain('DELETE FROM "GuardianStudent"');
-    expect(businessQueries[4]?.values).toEqual(["guardian-a", "student-a"]);
+    expect(businessQueries[4]?.sql).toContain('UPDATE "GuardianStudent"');
+    expect(businessQueries[4]?.values).toEqual(["guardian-a", "student-a", false, false, undefined, undefined]);
+    expect(businessQueries[5]?.sql).toContain('DELETE FROM "GuardianStudent"');
+    expect(businessQueries[5]?.values).toEqual(["guardian-a", "student-a"]);
   });
 
   it("mevcut bağlantı tekrar istenirse mevcut kaydı döndürür", async () => {

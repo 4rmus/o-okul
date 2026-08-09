@@ -615,10 +615,13 @@ function requireIsemOpticalPipelineSmoke(payload, failures, label, allowExampleE
     bookletVariantCount: 1,
     studentCount: 21,
     participantCount: 21,
-    matchedCount: 20,
-    quarantineCount: 1,
-    examResultCount: 20,
-    reportResultCount: 20,
+    matchedCount: 21,
+    quarantineCount: 0,
+    examResultCount: 21,
+    reportResultCount: 21,
+    studentPortalUserLinkCount: 2,
+    guardianPortalUserLinkCount: 2,
+    guardianLinkCount: 2,
   };
 
   requireObjectKeySet(payload, failures, label, "isemOpticalPipelineSmoke", [
@@ -675,9 +678,9 @@ function requireIsemOpticalPipelineSmoke(payload, failures, label, allowExampleE
     requireEqual(counts, failures, `${label}.counts.quarantineCount`, "quarantineCount", expectedIsemFixture.quarantineCount);
     requireEqual(counts, failures, `${label}.counts.examResultCount`, "examResultCount", expectedIsemFixture.examResultCount);
     requireEqual(counts, failures, `${label}.counts.reportResultCount`, "reportResultCount", expectedIsemFixture.reportResultCount);
-    requireIntegerAtLeast(counts, failures, `${label}.counts.studentPortalUserLinkCount`, "studentPortalUserLinkCount", 1);
-    requireIntegerAtLeast(counts, failures, `${label}.counts.guardianPortalUserLinkCount`, "guardianPortalUserLinkCount", 1);
-    requireIntegerAtLeast(counts, failures, `${label}.counts.guardianLinkCount`, "guardianLinkCount", 1);
+    requireEqual(counts, failures, `${label}.counts.studentPortalUserLinkCount`, "studentPortalUserLinkCount", expectedIsemFixture.studentPortalUserLinkCount);
+    requireEqual(counts, failures, `${label}.counts.guardianPortalUserLinkCount`, "guardianPortalUserLinkCount", expectedIsemFixture.guardianPortalUserLinkCount);
+    requireEqual(counts, failures, `${label}.counts.guardianLinkCount`, "guardianLinkCount", expectedIsemFixture.guardianLinkCount);
 
     if (
       Number.isInteger(counts.participantCount) &&

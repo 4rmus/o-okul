@@ -1040,10 +1040,12 @@ pnpm backup:restore:smoke
   Bu referanslar `isem-optical-pipeline.json`/`.log` ve `live-ui-worker-result.json`/`live-ui-worker-report.json`
   artifact adlarına bağlanmalı; aynı kelimeleri taşıyan alakasız marker dosyaları veya `artifacts/local/**`
   local smoke çıktısı kalıcı staging/prod kanıtı gibi gösterilemez.
-  Aynı kontrol iSEM LGS fixture'ı için 90 soru, 254 katılımcı, 254 eşleşme, 0 quarantine,
-  254 sınav sonucu ve 254 rapor sonucunu exact sayıyla ister; `fileName`, `rawRow`,
+  Aynı kontrol iSEM LGS fixture'ı için 90 soru, 21 öğrenci/katılımcı/eşleşme/sınav sonucu/rapor sonucu,
+  0 quarantine, 2 öğrenci portal kullanıcı bağlantısı ve 2 veli portal kullanıcı/öğrenci bağlantısını exact sayıyla ister; `fileName`, `rawRow`,
   `contentBase64`, `fileBase64`, ham `ornek-veriler/iSEM .txt` yolu, TCKN-benzeri 11 haneli
   değer, ham e-posta veya telefon evidence JSON'unda yer alamaz.
+  Happy-path'teki 0 quarantine değeri tek başına `quarantinePathVerified` sayılmaz; smoke ayrıca
+  ayrı bir kontrollü eşleşmeyen satır üretir ve `STUDENT_NOT_FOUND` quarantine kaydını doğrular.
 - iSEM optik pipeline kanıtı `ISEM_OPTICAL_PIPELINE_TARGET` ile
   `pnpm isem-optical-pipeline:evidence-check` üzerinden doğrulanır ve birleşik
   `pnpm prod:evidence:check` zincirinde zorunlu release raporu olarak okunur. Bu kanıt gerçek iSEM TXT,
@@ -1055,8 +1057,9 @@ pnpm backup:restore:smoke
   veya parser/answer-key versiyonu taşıyamaz.
   Aynı smoke `ISEM_OPTICAL_PIPELINE_UI_WORKER_EVIDENCE_FILE` verildiğinde private
   `LIVE_UI_WORKER_EVIDENCE_PATH` girdisini de yazar; bu dosya gerçek credential içerdiği için
-  kalıcı/public kanıt değil yalnız private runtime input'tur, path zincirinde `private` segmenti
-  ve 0600 dosya izni ister; release bundle/production summary içine alınmaz. Gerçek staging koşusunda
+  kalıcı/public kanıt değil yalnız repository çalışma ağacının dışındaki private runtime input'tur;
+  path zincirinde `private` segmenti ve 0600 dosya izni ister, release bundle/production summary içine
+  alınmaz. Gerçek staging koşusunda
   `ISEM_OPTICAL_PIPELINE_SMOKE_EMAIL_DOMAIN` `.test` veya `example` içermeyen kurum kontrollü bir
   domain olmalıdır.
 - `prod:evidence:check --summary-file` çıktısı `reports/isem-optical-pipeline.json` dosyasını
@@ -1079,7 +1082,8 @@ pnpm backup:restore:smoke
   öğrenci id'si taşımaz; result yazılacaksa smoke preflight `STAGING_ENVIRONMENT` ya da `NODE_ENV`
   değerinin `staging/production` olmasını ister. `pnpm live:ui-worker:evidence-contract` bu preflight
   ve result negatiflerini lokal CI'da doğrular. Evidence JSON'u exact rapor admin credential, `examId`, `firstStudentId` ve opsiyonel
-  öğrenci/veli portal credential shape'i taşır; path zincirinde `private` segmenti, 0600 dosya izni,
+  öğrenci/veli portal credential shape'i taşır; repository çalışma ağacının dışında, path zincirinde
+  `private` segmenti, 0600 dosya izni,
   24 saatten eski olmayan `generatedAt`, placeholder/test olmayan değerler, lokal temp path dışı ve symlink olmayan dosya/parent zinciri zorunludur.
   Result artifact `generatedAt` değeri de 24 saatten eskiyse canlı kanıt olarak reddedilir.
   Result artifact tam sınav döngüsündeki mock'suz
