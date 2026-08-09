@@ -1,9 +1,9 @@
 # O-Okul Durum
 
-Son güncelleme: 2026-08-09
-İnceleme snapshotı: `origin/main` / `af5dc5ad1572965709f0fc47f3bdf84a939e0626`; Gate A değişiklikleri
+Son güncelleme: 2026-08-10
+İnceleme snapshotı: `origin/main` / `af5dc5ad1572965709f0fc47f3bdf84a939e0626`; Gate A ve B değişiklikleri
 `agent/almanac-gate-a-local-20260809-2` izole yerel branch'indedir
-Kanıt düzeyi: Gate A `LOCAL_STATIC`; GitHub CI, staging, provider, deploy ve production bu değişiklik
+Kanıt düzeyi: Gate A ve Gate B `LOCAL_STATIC`; GitHub CI, staging, provider, deploy ve production bu değişiklik
 seti için yeniden doğrulanmadı
 
 5 Ağustos 2026 ürün kararları: giriş kurum subdomaini + tenant-local kimliktir; guardian ürün
@@ -62,6 +62,25 @@ ortam ve tarih içeren kalıcı evidence ile yükseltilir.
 - **Sonuç:** `pnpm run ci` ve Gate A hedefli kontrolleri aynı yerel diff üzerinde `PASS`.
   GitHub CI, gerçek UI-worker oturumu, staging, provider, deploy ve production `EXTERNAL_NOT_RUN`.
 
+## Almanak 2.0 Gate B — Foundation Ready Yerel Kapanış (2026-08-10)
+
+- **Kararlar:** ADR-0003–ADR-0010 kabul edildi. Route/feature sınırı, workflow/list standardı,
+  default-off rollout, PII-safe analytics ve control-plane hedefi repo kararlarına bağlandı.
+- **Architecture/route:** TypeScript AST checker; dependency yönü, control-plane/tenant, portal/admin,
+  marketing/API, client/private-env, non-literal import ve symlink kaçışlarını fail-closed denetler.
+  Route manifest 81 aktif route ve 19 modül kararını dosya sistemi/persona/trust-boundary ile eşler.
+- **Rollout:** Dokuz anahtarlı katalog default-off'tur. Yalnız güvenilir request tenant bağlamı,
+  exact environment, başlangıç/bitiş süresi, exact capability ve başarılı audit enabled sonuç verir.
+  Hiçbir tenantta flag açılmadı; rollout RBAC/RLS yerine geçmez.
+- **Analytics/ölçüm:** Product event kataloğu exact alan/değer allowlist'i ve 30 PII negatif fixture
+  taşır. Serbest correlation/error alanı yoktur. Üç kritik görev için dedicated Next build, mocked API,
+  görev başına beş örnek ve sıfır runtime hata içeren `LOCAL_SYNTHETIC` baseline kaydedildi.
+- **Açık geçiş borcu:** Legacy `SYSTEM_ADMIN` tenant-role/realm ayrımı ve üç salt sunum bileşeni
+  allowlist'i `PARTIAL`dır; `CP-01`/`UI-01` tamamlandı iddiası yoktur. Gate C başlatılmadı.
+- **Sonuç:** Gate B hedefli kontroller, `pnpm run ci`, `git diff --check` ve iki bağımsız P0/P1
+  incelemesi yerelde `PASS`. GitHub CI, gerçek kullanıcı gözlemi, analytics transportu, tenant flag
+  aktivasyonu, staging, deploy ve production `EXTERNAL_NOT_RUN`.
+
 ## Production Teknik Aktivasyonu — 2026-08-05
 
 - Mevcut sunucu kullanıldı; yeni VPS kurulmadı. `DOMAIN`, uygulama URL'leri, CORS ve Sentry ortam adı
@@ -112,6 +131,18 @@ ve gerçek ortam kanıtı olmadan yapılamaz. Workspace mailbox/alias testi tama
 uygulama-provider teslim testi yerine geçmez. Şablon veya statik checker sonucu canlı kanıt yerine kullanılamaz.
 
 ## Doğrulama
+
+2026-08-10 Gate B yerel sonuçları:
+
+- Architecture, route manifest, feature rollout, product analytics ve measurement baseline
+  kontrolleri: `PASS`.
+- Rollout/audit/RBAC hedefi: 4 dosya/41 test; analytics: 2 pozitif/30 negatif fixture; route manifest:
+  81 route/19 modül kararı; measurement: 3 görev x 5 örnek ve 0 runtime hata `PASS`.
+- RLS: 64 tenant tablo/110 composite FK; web token storage, PII policy, UX baseline, API/shared/web
+  typecheck, OpenAPI 233 path ve tam `pnpm run ci`: `PASS` (`LOCAL_STATIC`).
+- İki bağımsız son inceleme: açık P0/P1 yok.
+- GitHub Actions CI, staging/production tenant rollout, gerçek RUM/kullanıcı gözlemi, analytics
+  transportu, deploy ve production: `EXTERNAL_NOT_RUN`.
 
 2026-08-09 Gate A yerel sonuçları:
 

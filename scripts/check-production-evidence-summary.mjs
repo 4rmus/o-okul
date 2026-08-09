@@ -155,6 +155,7 @@ const requiredReports = {
     "excelDownloaded",
     "studentPortalViewed",
     "guardianPortalViewed",
+    "sessionLogoutVerified",
     "commandsPassed",
     "gaps",
   ],

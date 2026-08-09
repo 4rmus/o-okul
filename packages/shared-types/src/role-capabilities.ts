@@ -22,7 +22,7 @@ export const tenantRoleLabels: Record<TenantRoleName, string> = {
 export const roleCapabilities: Record<TenantRoleName, readonly RoleCapability[]> = {
   SYSTEM_ADMIN: ["system:*", "tenant:*", "audit:*"],
   TENANT_OWNER: [
-    "academic:*", "announcement:*", "attendance:*", "audit:*", "class:*", "finance:*", "note:*",
+    "academic:*", "announcement:*", "attendance:*", "audit:*", "class:*", "feature-rollout:read", "finance:*", "note:*",
     "observability:*", "operation:*", "privacy:*", "role-preview:*", "security:*", "search:*", "setup:*",
     "staff:*", "student:*", "support:*", "tenant-audit:read", "user:*", "owner:*",
   ],
@@ -32,6 +32,7 @@ export const roleCapabilities: Record<TenantRoleName, readonly RoleCapability[]>
     "attendance:*",
     "audit:*",
     "class:*",
+    "feature-rollout:read",
     "finance:*",
     "note:*",
     "observability:*",
@@ -52,6 +53,7 @@ export const roleCapabilities: Record<TenantRoleName, readonly RoleCapability[]>
     "announcement:*",
     "attendance:*",
     "class:*",
+    "feature-rollout:read",
     "note:*",
     "search:*",
     "setup:manage",
@@ -60,13 +62,13 @@ export const roleCapabilities: Record<TenantRoleName, readonly RoleCapability[]>
     "support:*",
   ],
   OPERATIONS_STAFF: [
-    "academic:*", "announcement:*", "attendance:*", "class:*", "note:*", "search:*", "setup:manage",
+    "academic:*", "announcement:*", "attendance:*", "class:*", "feature-rollout:read", "note:*", "search:*", "setup:manage",
     "staff:*", "student:*", "support:*",
   ],
-  FINANCE_STAFF: ["finance:*"],
-  TEACHER: ["academic:read", "attendance:write-assigned", "homework:write-assigned", "note:write-assigned", "search:read", "student:list", "student:read"],
-  STUDENT: ["self:read", "student:read"],
-  GUARDIAN: ["student:read", "ward:read"],
+  FINANCE_STAFF: ["feature-rollout:read", "finance:*"],
+  TEACHER: ["academic:read", "attendance:write-assigned", "feature-rollout:read", "homework:write-assigned", "note:write-assigned", "search:read", "student:list", "student:read"],
+  STUDENT: ["feature-rollout:read", "self:read", "student:read"],
+  GUARDIAN: ["feature-rollout:read", "student:read", "ward:read"],
 };
 
 export function capabilitiesForRoles(roles: readonly string[]): RoleCapability[] {

@@ -12,6 +12,7 @@
   "excelDownloaded": true,
   "studentPortalViewed": true,
   "guardianPortalViewed": true,
+  "sessionLogoutVerified": true,
   "commandsPassed": ["pnpm live:ui-worker:smoke"],
   "gaps": []
 }

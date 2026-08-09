@@ -9,6 +9,18 @@ const artifactRoot = "artifacts/live-ui-worker-evidence-contract";
 const validEvidencePath = join(artifactRoot, "private", "valid-live-ui-worker.json");
 const validResultEvidencePath = join(artifactRoot, "result", "live-ui-worker-result.json");
 const failures = [];
+const liveUiWorkerSpecSource = readFileSync("apps/web/e2e-next/live-ui-worker-report-next.spec.ts", "utf8");
+for (const requiredSource of [
+  'response.request().method() === "POST"',
+  'new URL(response.url()).pathname.endsWith("/api/v1/auth/logout")',
+  "expect(logoutResponse.status()).toBe(204)",
+  'new URL("/api/v1/auth/refresh", logoutResponse.url()).toString()',
+  "expect(revokedRefreshResponse.status()).toBe(401)",
+]) {
+  if (!liveUiWorkerSpecSource.includes(requiredSource)) {
+    failures.push(`live UI-worker logout response gate eksik: ${requiredSource}`);
+  }
+}
 
 await rm(artifactRoot, { force: true, recursive: true });
 await mkdir(artifactRoot, { recursive: true });
@@ -218,6 +230,19 @@ try {
     "loginName production kanıtı için örnek/placeholder/redacted değer olmamalı.",
   );
 
+  const weakPasswordPath = join(artifactRoot, "private", "weak-password.json");
+  const weakPassword = createValidEvidence();
+  weakPassword.password = "password";
+  writeJson(weakPasswordPath, weakPassword);
+  runNegativeCheck(
+    "live UI-worker weak password negative",
+    {
+      NEXT_E2E_LIVE_UI_WORKER: "1",
+      LIVE_UI_WORKER_EVIDENCE_PATH: weakPasswordPath,
+    },
+    "password güçlü ve yaygın varsayılanlardan farklı olmalı.",
+  );
+
   const extraFieldPath = join(artifactRoot, "private", "extra-field.json");
   const extraField = createValidEvidence();
   extraField.studentPortal.unexpected = true;
@@ -303,6 +328,16 @@ try {
     "live UI-worker result portal negative",
     resultIncompletePortalPath,
     "liveUiWorkerResultEvidence.guardianPortalViewed true olmalı.",
+  );
+
+  const resultSessionLogoutPath = join(artifactRoot, "result-session-logout.json");
+  const resultSessionLogout = createValidResultEvidence();
+  resultSessionLogout.sessionLogoutVerified = false;
+  writeJson(resultSessionLogoutPath, resultSessionLogout);
+  runResultNegativeCheck(
+    "live UI-worker result session logout negative",
+    resultSessionLogoutPath,
+    "liveUiWorkerResultEvidence.sessionLogoutVerified true olmalı.",
   );
 
   const resultUnexpectedFieldPath = join(artifactRoot, "result-extra-field.json");
@@ -427,6 +462,7 @@ function createValidResultEvidence() {
     excelDownloaded: true,
     studentPortalViewed: true,
     guardianPortalViewed: true,
+    sessionLogoutVerified: true,
     commandsPassed: ["pnpm live:ui-worker:smoke"],
     gaps: [],
   };

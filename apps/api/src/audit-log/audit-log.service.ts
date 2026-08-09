@@ -253,6 +253,7 @@ const allowedAuditDiffKeys = new Set([
   "fieldspresent",
   "fieldspurged",
   "fieldsset",
+  "featurekeys",
   "grade",
   "level",
   "maskedfields",

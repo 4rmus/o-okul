@@ -2047,6 +2047,13 @@ const requiredOperationContracts = [
   },
   {
     method: "get",
+    path: "/api/v1/me/feature-rollouts",
+    responseEnvelope: true,
+    responseDataRequired: ["enabledFeatureKeys"],
+    responseDataForbiddenDeep: ["environment", "tenantId", "startsAt", "expiresAt", "reference"],
+  },
+  {
+    method: "get",
     path: "/api/v1/me/tenant",
     responseEnvelope: true,
     responseDataRequired: tenantRecordRequired,

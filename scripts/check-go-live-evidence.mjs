@@ -299,6 +299,7 @@ const summaryRequiredReportKeys = {
     "excelDownloaded",
     "studentPortalViewed",
     "guardianPortalViewed",
+    "sessionLogoutVerified",
     "commandsPassed",
     "gaps",
   ],
@@ -1623,7 +1624,7 @@ function requireSummaryReports(summary, failures, goLiveReport) {
       "productionEvidenceSummary.summary.reports.liveUiWorkerResult.downloadedArtifacts",
       ["xlsx", "pdf"],
     );
-    for (const key of ["karnePdfDownloaded", "excelDownloaded", "studentPortalViewed", "guardianPortalViewed"]) {
+    for (const key of ["karnePdfDownloaded", "excelDownloaded", "studentPortalViewed", "guardianPortalViewed", "sessionLogoutVerified"]) {
       requireObjectTrue(liveUiWorkerResult, failures, `productionEvidenceSummary.summary.reports.liveUiWorkerResult.${key}`, key);
     }
     requireExactStringSet(

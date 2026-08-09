@@ -822,6 +822,7 @@ const expectations = {
     "excelDownloaded",
     "studentPortalViewed",
     "guardianPortalViewed",
+    "sessionLogoutVerified",
     "pnpm live:ui-worker:smoke",
     "gaps",
   ],
@@ -1020,6 +1021,8 @@ const expectations = {
   ],
   "docs/phase-6-ops-runbook.md": [
     "PITR kabul kriteri",
+    "ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD",
+    "sessionLogoutVerified=true",
     "pnpm openapi:generate",
     "artifacts/openapi.json",
     "EXTERNAL_MONITORING_TARGET",

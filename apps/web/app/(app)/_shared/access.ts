@@ -1,10 +1,11 @@
-import { hasCapabilityForRoles as sharedHasCapabilityForRoles } from "@o-okul/shared-types";
+import { hasCapabilityForRoles as sharedHasCapabilityForRoles, type ActivePersona } from "@o-okul/shared-types";
 import { institutionNavGroups } from "./navigation.js";
 
 type NavigationItem = {
   href: string;
   label: string;
   requiredCapability?: string;
+  requiredPersona?: "STAFF";
 };
 
 type SessionLike = {
@@ -24,33 +25,40 @@ export function hasSubjectPortalAccess(session: SessionLike, role: string, subje
   return session.roles.includes(role) && session.subjectType === subjectType;
 }
 
-export function getInstitutionNavGroups(roles: readonly string[]) {
+export function getInstitutionNavGroups(roles: readonly string[], activePersona?: ActivePersona) {
   return institutionNavGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => canAccessNavigationItem(roles, item)),
+      items: group.items.filter((item) => canAccessNavigationItem(roles, item, activePersona)),
     }))
     .filter((group) => group.items.length > 0);
 }
 
-export function canAccessInstitutionPath(roles: readonly string[], pathname: string) {
+export function canAccessInstitutionPath(roles: readonly string[], pathname: string, activePersona?: ActivePersona) {
   const normalizedPathname = normalizeInstitutionPath(pathname);
   const item = findInstitutionNavigationItem(normalizedPathname);
   if (!item) return false;
   if (item.href === "/kurum" && normalizedPathname !== "/kurum") return false;
-  return canAccessNavigationItem(roles, item);
+  return canAccessNavigationItem(roles, item, activePersona);
 }
 
-export function canAccessHref(roles: readonly string[], href: string) {
+export function canAccessHref(roles: readonly string[], href: string, activePersona?: ActivePersona) {
   const normalizedHref = normalizeInstitutionPath(href);
   const item = findInstitutionNavigationItem(normalizedHref);
   if (!item) return false;
   if (item.href === "/kurum" && normalizedHref !== "/kurum") return false;
-  return canAccessNavigationItem(roles, item);
+  return canAccessNavigationItem(roles, item, activePersona);
 }
 
-export function canAccessNavigationItem(roles: readonly string[], item: NavigationItem) {
-  return !item.requiredCapability || hasCapabilityForRoles(roles, item.requiredCapability);
+export function canAccessNavigationItem(
+  roles: readonly string[],
+  item: NavigationItem,
+  activePersona?: ActivePersona,
+) {
+  return (
+    (!item.requiredCapability || hasCapabilityForRoles(roles, item.requiredCapability)) &&
+    (!item.requiredPersona || activePersona === item.requiredPersona)
+  );
 }
 
 export function hasCapabilityForRoles(roles: readonly string[], requiredCapability: string) {

@@ -92,7 +92,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     [auth],
   );
   const visibleInstitutionNavGroups = useMemo(
-    () => auth?.session && hasInstitutionAccess(auth.session.roles) ? getInstitutionNavGroups(auth.session.roles) : [],
+    () => auth?.session && hasInstitutionAccess(auth.session.roles)
+      ? getInstitutionNavGroups(auth.session.roles, auth.session.activePersona)
+      : [],
     [auth],
   );
   const institutionRailNavGroups = useMemo(
@@ -959,7 +961,7 @@ function canAccessPath(session: AppSession, pathname: string, searchParams?: Pic
     return hasSystemAccess(session.roles);
   }
   if (pathname.startsWith("/kurum")) {
-    return hasInstitutionAccess(session.roles) && canAccessInstitutionPath(session.roles, pathname);
+    return hasInstitutionAccess(session.roles) && canAccessInstitutionPath(session.roles, pathname, session.activePersona);
   }
   if (pathname.startsWith("/ogretmen")) {
     if (canAccessRolePreviewRoute(session, searchParams)) {

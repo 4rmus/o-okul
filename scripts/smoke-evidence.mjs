@@ -865,6 +865,7 @@ function requireLiveUiWorkerReportSmoke(payload, failures, label, allowExampleEv
     "excelDownloaded",
     "studentPortalViewed",
     "guardianPortalViewed",
+    "sessionLogoutVerified",
     "commandsPassed",
     "gaps",
   ]);
@@ -873,7 +874,7 @@ function requireLiveUiWorkerReportSmoke(payload, failures, label, allowExampleEv
   requireSha256(payload, failures, `${label}.firstStudentHash`, "firstStudentHash");
   requireLiteral(payload, failures, `${label}.reportStatus`, "reportStatus", "READY");
   requireExactStringList(payload.downloadedArtifacts, failures, `${label}.downloadedArtifacts`, ["xlsx", "pdf"]);
-  for (const key of ["karnePdfDownloaded", "excelDownloaded", "studentPortalViewed", "guardianPortalViewed"]) {
+  for (const key of ["karnePdfDownloaded", "excelDownloaded", "studentPortalViewed", "guardianPortalViewed", "sessionLogoutVerified"]) {
     requireEqual(payload, failures, `${label}.${key}`, key, true);
   }
   requireNoForbiddenKeys(payload, failures, label, ["email", "password", "tenantId", "userId", "examId", "firstStudentId", "guardianId"]);

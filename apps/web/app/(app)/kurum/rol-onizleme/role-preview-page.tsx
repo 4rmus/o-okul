@@ -551,7 +551,7 @@ function buildRolePreviewSections(role: PreviewRole) {
   }
 
   return hasInstitutionAccess([role])
-    ? getInstitutionNavGroups([role]).map((group) => ({
+    ? getInstitutionNavGroups([role], "STAFF").map((group) => ({
         title: group.label,
         items: group.items.map((item) => item.label),
       }))

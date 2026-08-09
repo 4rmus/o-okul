@@ -66,6 +66,8 @@ test("worker tarafından üretilen canlı rapor kurum UI içinde açılır", asy
     guardianPortalViewed = true;
   }
 
+  await logout(page);
+
   writeResultEvidence(resultEvidencePath, {
     result: "PASS",
     check: "live_ui_worker_report_smoke",
@@ -80,6 +82,7 @@ test("worker tarafından üretilen canlı rapor kurum UI içinde açılır", asy
     excelDownloaded: true,
     studentPortalViewed,
     guardianPortalViewed,
+    sessionLogoutVerified: true,
     commandsPassed: ["pnpm live:ui-worker:smoke"],
     gaps: [],
   });
@@ -96,7 +99,29 @@ async function loginAs(page: Page, tenantSlug: string, loginName: string, passwo
 }
 
 async function logout(page: Page) {
-  await page.getByRole("button", { name: "Çıkış" }).click();
+  const cookies = await page.context().cookies();
+  const refreshToken = cookies.find((cookie) => cookie.name === "refreshToken")?.value;
+  const csrfToken = cookies.find((cookie) => cookie.name === "csrfToken")?.value;
+  if (!refreshToken || !csrfToken) throw new Error("LIVE_UI_WORKER_SESSION_COOKIE_MISSING");
+  const [logoutResponse] = await Promise.all([
+    page.waitForResponse((response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname.endsWith("/api/v1/auth/logout")
+    ),
+    page.getByRole("button", { name: "Çıkış" }).click(),
+  ]);
+  expect(logoutResponse.status()).toBe(204);
+  const revokedRefreshResponse = await page.request.post(
+    new URL("/api/v1/auth/refresh", logoutResponse.url()).toString(),
+    {
+      data: {},
+      headers: {
+        cookie: `refreshToken=${refreshToken}; csrfToken=${csrfToken}`,
+        "x-csrf-token": csrfToken,
+      },
+    },
+  );
+  expect(revokedRefreshResponse.status()).toBe(401);
   await expect(page).toHaveURL(/\/login$/);
 }
 

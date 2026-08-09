@@ -17,6 +17,25 @@ const smokeChecks = [
 ];
 
 const failures = [];
+const isemProducerSource = readFileSync("scripts/smoke-isem-optical-pipeline-live.mjs", "utf8");
+for (const requiredSource of [
+  "verifyQuarantinePath(baseUrl, token, opticalRows[0])",
+  'summary.quarantineReasons[0]?.reason !== "STUDENT_NOT_FOUND"',
+  'quarantine.status !== "OPEN"',
+  'resolved.status !== "RESOLVED"',
+  '"idempotency-key": idempotencyKey',
+  "await waitForExamResultCountForExam(probeExamId, 1, 30_000)",
+  "await logoutSmokeSession(baseUrl, smokeSession)",
+  "await assertSmokeSessionRevoked()",
+  "ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD staging/production veya UI-worker çıktısı için açıkça verilmelidir.",
+]) {
+  if (!isemProducerSource.includes(requiredSource)) {
+    failures.push(`iSEM optical producer zorunlu gate eksik: ${requiredSource}`);
+  }
+}
+if (isemProducerSource.includes("quarantinePathVerified: evidence.quarantineCount === expectedQuarantineCount")) {
+  failures.push("iSEM optical producer karantina yolunu yalnız sıfır sayımından doğrulamamalı.");
+}
 
 if (!summary.smokeEvidence || typeof summary.smokeEvidence !== "object" || Array.isArray(summary.smokeEvidence)) {
   failures.push("production-evidence-summary.example.json smokeEvidence nesnesi zorunlu.");
@@ -632,6 +651,14 @@ const negativeCases = [
     "live_ui_worker_report_smoke",
   ],
   [
+    "Live UI-worker session logout eksigi reddedilir",
+    {
+      ...liveUiWorkerResultPayload(),
+      sessionLogoutVerified: false,
+    },
+    "live_ui_worker_report_smoke",
+  ],
+  [
     "Live UI-worker result eksik download reddedilir",
     {
       ...liveUiWorkerResultPayload(),
@@ -883,6 +910,7 @@ function liveUiWorkerResultPayload() {
     excelDownloaded: true,
     studentPortalViewed: true,
     guardianPortalViewed: true,
+    sessionLogoutVerified: true,
     commandsPassed: ["pnpm live:ui-worker:smoke"],
     gaps: [],
   };

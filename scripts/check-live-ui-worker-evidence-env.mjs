@@ -278,8 +278,17 @@ function requireSecret(scope, collectedFailures, label, key) {
   requireString(scope, collectedFailures, label, key);
   if (typeof scope[key] !== "string") return;
 
-  if (scope[key].length < 8) {
-    collectedFailures.push(`${label} en az 8 karakter olmalı.`);
+  if (scope[key].length < 16) {
+    collectedFailures.push(`${label} en az 16 karakter olmalı.`);
+  }
+  if (
+    !/[a-z]/.test(scope[key]) ||
+    !/[A-Z]/.test(scope[key]) ||
+    !/[0-9]/.test(scope[key]) ||
+    !/[^A-Za-z0-9]/.test(scope[key]) ||
+    /password|qwerty|12345678|admin123/i.test(scope[key])
+  ) {
+    collectedFailures.push(`${label} güçlü ve yaygın varsayılanlardan farklı olmalı.`);
   }
   requireNonPlaceholderString(scope, collectedFailures, label, key);
 }

@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
@@ -61,12 +61,12 @@ const licenseStartsAt = new Date(Date.now() - 60_000).toISOString();
 const licenseEndsAt = new Date(Date.now() + 86_400_000).toISOString();
 const smokeEmailDomain = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_EMAIL_DOMAIN ?? "example.test";
 const smokeEmail = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_EMAIL ?? `isem-optical-smoke-${runId}@${smokeEmailDomain}`;
-const smokePassword = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD ?? "password";
 const evidencePath = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_EVIDENCE_FILE ?? process.env.ISEM_OPTICAL_PIPELINE_SMOKE_EVIDENCE_PATH;
 const uiWorkerEvidencePath =
   process.env.ISEM_OPTICAL_PIPELINE_UI_WORKER_EVIDENCE_FILE ??
   process.env.ISEM_OPTICAL_PIPELINE_UI_WORKER_EVIDENCE_PATH;
 const environment = process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "unknown";
+const smokePassword = resolveSmokePassword(process.env.ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD);
 const commandPassed = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_COMMAND ?? "pnpm isem-optical-pipeline:smoke";
 const expectedScores = new Map([
   ["102", { correct: 79, wrong: 10, blank: 1, net: 75.6667 }],
@@ -121,6 +121,8 @@ const reportWorker = createReportGenerationBullWorker({
 let app;
 let rawImportProducer;
 let reportGenerationProducer;
+let baseUrl;
+let smokeSession;
 try {
   await waitUntilReady(parseWorker);
   await waitUntilReady(evaluationWorker);
@@ -132,8 +134,9 @@ try {
   rawImportProducer = app.get(rawImportQueueProducerToken);
   reportGenerationProducer = app.get(reportGenerationQueueProducerToken);
 
-  const baseUrl = await getBaseUrl(app);
-  const token = await login(baseUrl);
+  baseUrl = await getBaseUrl(app);
+  smokeSession = await login(baseUrl);
+  const token = smokeSession.accessToken;
   const answerKey = await createExamWithAnswerKey(baseUrl, token);
   await seedExamScopedInput(opticalRows);
   const rawImportPayload = await uploadRawImport(baseUrl, token, opticalContent);
@@ -177,7 +180,11 @@ try {
   const snapshot = await waitForSnapshot(expectedMatchedCount, 30_000);
   const evidence = await readPipelineEvidence(rawImport.id, evaluation.answerKeyId, snapshot.id);
   assertPipelineEvidence(evidence);
+  const quarantinePathVerified = await verifyQuarantinePath(baseUrl, token, opticalRows[0]);
   const pipelineDurationMs = Math.round(performance.now() - pipelineStartedAt);
+  await logoutSmokeSession(baseUrl, smokeSession);
+  await assertSmokeSessionRevoked();
+  smokeSession = undefined;
 
   await writeSmokeEvidence(evidencePath, {
     result: "PASS",
@@ -204,7 +211,7 @@ try {
       opticalImportCommitted: true,
       rawImportArchived: true,
       evaluationQueued: true,
-      quarantinePathVerified: evidence.quarantineCount === expectedQuarantineCount,
+      quarantinePathVerified,
       reportGenerated: true,
       reportReady: true,
     },
@@ -262,14 +269,21 @@ try {
     `iSEM optical pipeline live smoke passed: tenantHash ${sha256(tenantId)}, examHash ${sha256(examId)}, rawImportHash ${sha256(rawImport.id)}, parseJobHash ${sha256(parseJob.jobId)}, evaluation jobs ${evaluation.queuedCount}, reportJobHash ${sha256(reportJob.jobId)}, snapshotHash ${sha256(snapshot.id)}, results ${evidence.examResultCount}, sampleScores ${formatSampleScores(evidence.sampleScores)}`,
   );
 } finally {
-  await closeProducer(reportGenerationProducer);
-  await closeProducer(rawImportProducer);
-  if (app) {
-    await app.close();
+  try {
+    if (baseUrl && smokeSession) {
+      await logoutSmokeSession(baseUrl, smokeSession);
+      await assertSmokeSessionRevoked();
+    }
+  } finally {
+    await closeProducer(reportGenerationProducer);
+    await closeProducer(rawImportProducer);
+    if (app) {
+      await app.close();
+    }
+    await reportWorker.close();
+    await evaluationWorker.close();
+    await parseWorker.close();
   }
-  await reportWorker.close();
-  await evaluationWorker.close();
-  await parseWorker.close();
 }
 
 async function seedPipelineInput(rows) {
@@ -384,6 +398,53 @@ async function seedExamScopedInput(rows) {
   }
 }
 
+async function seedQuarantineProbeInput(row, probeExamId) {
+  const parserConfig = getParserConfigPresetSuggestion("OPTIK_7108_LGS");
+  const pool = new pg.Pool({ connectionString: directDatabaseUrl });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT set_config('app.bypass_rls', 'true', true)");
+    await client.query(
+      `INSERT INTO "ParserConfig" (
+         "id", "tenantId", "examId", "version", "encoding", "delimiter", "skipHeaderLines", "fieldMapping", "status", "updatedAt"
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, 'APPROVED', now())`,
+      [
+        `parser-isem-optical-quarantine-probe-${runId}`,
+        tenantId,
+        probeExamId,
+        parserConfigVersion,
+        parserConfig.encoding,
+        parserConfig.delimiter,
+        parserConfig.skipHeaderLines,
+        JSON.stringify(parserConfig.fieldMapping),
+      ],
+    );
+    await client.query(
+      `INSERT INTO "ExamParticipant" (
+         "id", "tenantId", "examId", "studentId", "participantNo", "bookletType", "status", "updatedAt"
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, 'REGISTERED', now())`,
+      [`participant-isem-optical-quarantine-probe-${runId}`, tenantId, probeExamId, studentId(row.studentNo), row.studentNo, row.bookletType],
+    );
+    await client.query(
+      `INSERT INTO "StudentEnrollment" (
+         "id", "tenantId", "studentId", "classId", "status", "startsAt", "reason", "updatedAt"
+       )
+       VALUES ($1, $2, $3, $4, 'ACTIVE', CURRENT_DATE, 'ISEM_QUARANTINE_PROBE', now())`,
+      [`student-enrollment-isem-optical-quarantine-probe-${runId}`, tenantId, studentId(row.studentNo), row.bookletType === "B" ? classBId : classAId],
+    );
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_SEED_FAILED: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    client.release();
+    await pool.end();
+  }
+}
+
 async function seedSampleUsers(client) {
   for (const studentNo of sampleStudentNos) {
     await client.query(
@@ -472,6 +533,26 @@ async function createExamWithAnswerKey(baseUrl, token) {
   return readCreatedAnswerKeyEvidence();
 }
 
+async function createQuarantineProbeExam(baseUrl, token) {
+  const response = await postJson(baseUrl, "/api/v1/exams", token, {
+    title: "iSEM LGS 1 Quarantine Probe Exam",
+    answerKey: {
+      version: answerKeyVersion,
+      fileBase64: answerKeyContent.toString("base64"),
+      scoringConfig: { wrongPenalty: 1 / 3 },
+    },
+  });
+  const payload = response.data ?? response;
+  if (
+    !payload.id ||
+    payload.title !== "iSEM LGS 1 Quarantine Probe Exam" ||
+    payload.answerKeySummary?.questionCount !== 90
+  ) {
+    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_EXAM_MISMATCH: ${JSON.stringify(payload)}`);
+  }
+  return payload.id;
+}
+
 async function readCreatedAnswerKeyEvidence() {
   const pool = new pg.Pool({ connectionString: directDatabaseUrl });
   const client = await pool.connect();
@@ -518,9 +599,13 @@ async function readCreatedAnswerKeyEvidence() {
 }
 
 async function uploadRawImport(baseUrl, token, content) {
-  const response = await postJson(baseUrl, `/api/v1/exams/${examId}/raw-imports`, token, {
+  return uploadRawImportForExam(baseUrl, token, examId, content, `isem-lgs-1-${runId}.txt`);
+}
+
+async function uploadRawImportForExam(baseUrl, token, targetExamId, content, fileName) {
+  const response = await postJson(baseUrl, `/api/v1/exams/${targetExamId}/raw-imports`, token, {
     sourceType: "OPTICAL_TXT",
-    fileName: `isem-lgs-1-${runId}.txt`,
+    fileName,
     fileBase64: Buffer.from(content, "utf8").toString("base64"),
     contentType: "text/plain",
     parserConfigVersion,
@@ -549,8 +634,12 @@ async function enqueueReportGeneration(baseUrl, token) {
 }
 
 async function waitForSummary(baseUrl, token, rawImportId, expectedRows, timeoutMs) {
+  return waitForSummaryForExam(baseUrl, token, examId, rawImportId, expectedRows, timeoutMs);
+}
+
+async function waitForSummaryForExam(baseUrl, token, targetExamId, rawImportId, expectedRows, timeoutMs) {
   return waitFor("ISEM_OPTICAL_PARSE_TIMEOUT", timeoutMs, async () => {
-    const response = await fetch(`${baseUrl}/api/v1/exams/${examId}/raw-imports/${rawImportId}/summary`, {
+    const response = await fetch(`${baseUrl}/api/v1/exams/${targetExamId}/raw-imports/${rawImportId}/summary`, {
       headers: { authorization: `Bearer ${token}` },
     });
     if (!response.ok) return undefined;
@@ -561,6 +650,10 @@ async function waitForSummary(baseUrl, token, rawImportId, expectedRows, timeout
 }
 
 async function waitForExamResultCount(expectedCount, timeoutMs) {
+  return waitForExamResultCountForExam(examId, expectedCount, timeoutMs);
+}
+
+async function waitForExamResultCountForExam(targetExamId, expectedCount, timeoutMs) {
   return waitFor("ISEM_OPTICAL_EVALUATION_TIMEOUT", timeoutMs, async () => {
     const pool = new pg.Pool({ connectionString: directDatabaseUrl });
     const client = await pool.connect();
@@ -573,7 +666,7 @@ async function waitForExamResultCount(expectedCount, timeoutMs) {
          WHERE "tenantId" = $1
            AND "examId" = $2
            AND "deletedAt" IS NULL`,
-        [tenantId, examId],
+        [tenantId, targetExamId],
       );
       await client.query("COMMIT");
       return result.rows[0]?.count === expectedCount ? result.rows[0] : undefined;
@@ -585,6 +678,85 @@ async function waitForExamResultCount(expectedCount, timeoutMs) {
       await pool.end();
     }
   });
+}
+
+async function verifyQuarantinePath(baseUrl, token, sourceRow) {
+  const probeExamId = await createQuarantineProbeExam(baseUrl, token);
+  await seedQuarantineProbeInput(sourceRow, probeExamId);
+  const probeLine = `${sourceRow.line.slice(0, 11)}9999${sourceRow.line.slice(15)}`;
+  const upload = await uploadRawImportForExam(
+    baseUrl,
+    token,
+    probeExamId,
+    `${probeLine}\n`,
+    `isem-lgs-1-quarantine-probe-${runId}.txt`,
+  );
+  const rawImportId = upload.rawImport.id;
+  const summary = await waitForSummaryForExam(baseUrl, token, probeExamId, rawImportId, 1, 20_000);
+  if (
+    summary.matchedCount !== 0 ||
+    summary.quarantinedCount !== 1 ||
+    summary.quarantineReasons.length !== 1 ||
+    summary.quarantineReasons[0]?.reason !== "STUDENT_NOT_FOUND" ||
+    summary.quarantineReasons[0]?.count !== 1
+  ) {
+    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_SUMMARY_MISMATCH: ${JSON.stringify(summary)}`);
+  }
+
+  const openQuarantines = await getJson(
+    baseUrl,
+    `/api/v1/exams/${probeExamId}/raw-imports/${rawImportId}/quarantines`,
+    token,
+  );
+  const openRecords = openQuarantines.data ?? openQuarantines;
+  const quarantine = Array.isArray(openRecords) ? openRecords[0] : undefined;
+  if (
+    openRecords.length !== 1 ||
+    !quarantine?.id ||
+    quarantine.tenantId !== tenantId ||
+    quarantine.examId !== probeExamId ||
+    quarantine.rawImportId !== rawImportId ||
+    quarantine.reason !== "STUDENT_NOT_FOUND" ||
+    quarantine.status !== "OPEN"
+  ) {
+    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_OPEN_MISMATCH: ${JSON.stringify(openRecords)}`);
+  }
+
+  const idempotencyKey = `isem-optical-quarantine-probe-${runId}`;
+  const resolvePath = `/api/v1/exams/${probeExamId}/raw-imports/${rawImportId}/quarantines/${quarantine.id}/resolve`;
+  const resolveBody = { resolvedStudentId: studentId(sourceRow.studentNo) };
+  const firstResolve = await postJson(baseUrl, resolvePath, token, resolveBody, { "idempotency-key": idempotencyKey });
+  const replayResolve = await postJson(baseUrl, resolvePath, token, resolveBody, { "idempotency-key": idempotencyKey });
+  const resolved = firstResolve.data ?? firstResolve;
+  const replayed = replayResolve.data ?? replayResolve;
+  if (
+    resolved.status !== "RESOLVED" ||
+    resolved.resolvedStudentId !== resolveBody.resolvedStudentId ||
+    resolved.evaluationJob?.status !== "queued" ||
+    resolved.evaluationJob?.tenantId !== tenantId ||
+    resolved.evaluationJob?.examId !== probeExamId ||
+    resolved.evaluationJob?.rawImportId !== rawImportId ||
+    replayed.evaluationJob?.jobId !== resolved.evaluationJob.jobId
+  ) {
+    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_RESOLVE_MISMATCH: ${JSON.stringify(resolved)}`);
+  }
+
+  await waitForExamResultCountForExam(probeExamId, 1, 30_000);
+  const resolvedQuarantines = await getJson(
+    baseUrl,
+    `/api/v1/exams/${probeExamId}/raw-imports/${rawImportId}/quarantines`,
+    token,
+  );
+  const resolvedRecords = resolvedQuarantines.data ?? resolvedQuarantines;
+  if (
+    !Array.isArray(resolvedRecords) ||
+    resolvedRecords.length !== 1 ||
+    resolvedRecords[0]?.status !== "RESOLVED" ||
+    resolvedRecords[0]?.resolvedStudentId !== resolveBody.resolvedStudentId
+  ) {
+    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_FINAL_MISMATCH: ${JSON.stringify(resolvedRecords)}`);
+  }
+  return true;
 }
 
 async function waitForSnapshot(expectedCount, timeoutMs) {
@@ -727,15 +899,84 @@ async function login(baseUrl) {
     throw new Error(`ISEM_OPTICAL_LOGIN_FAILED: ${response.status} ${await response.text()}`);
   }
   const body = await response.json();
-  return body.data?.accessToken ?? body.accessToken;
+  const setCookies = response.headers.getSetCookie();
+  const refreshCookie = readResponseCookie(setCookies, "refreshToken");
+  const csrfCookie = readResponseCookie(setCookies, "csrfToken");
+  const accessToken = body.data?.accessToken ?? body.accessToken;
+  if (!accessToken || !refreshCookie || !csrfCookie) {
+    throw new Error("ISEM_OPTICAL_LOGIN_SESSION_COOKIE_MISSING");
+  }
+  return {
+    accessToken,
+    cookieHeader: `${refreshCookie}; ${csrfCookie}`,
+    csrfToken: decodeURIComponent(csrfCookie.slice("csrfToken=".length)),
+  };
 }
 
-async function postJson(baseUrl, path, token, body) {
+async function logoutSmokeSession(baseUrl, session) {
+  const response = await fetch(`${baseUrl}/api/v1/auth/logout`, {
+    method: "POST",
+    headers: {
+      cookie: session.cookieHeader,
+      "content-type": "application/json",
+      "x-csrf-token": session.csrfToken,
+    },
+    body: JSON.stringify({}),
+  });
+  if (response.status !== 204) {
+    throw new Error(`ISEM_OPTICAL_LOGOUT_FAILED: ${response.status} ${await response.text()}`);
+  }
+}
+
+async function assertSmokeSessionRevoked() {
+  const pool = new pg.Pool({ connectionString: directDatabaseUrl });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT set_config('app.bypass_rls', 'true', true)");
+    const result = await client.query(
+      `SELECT count(*)::int AS "count"
+       FROM "AuthSession"
+       WHERE "tenantId" = $1
+         AND "userId" = $2
+         AND "status" = 'ACTIVE'`,
+      [tenantId, userId],
+    );
+    await client.query("COMMIT");
+    if (result.rows[0]?.count !== 0) {
+      throw new Error(`ISEM_OPTICAL_SESSION_CLEANUP_FAILED: ${result.rows[0]?.count}`);
+    }
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+    await pool.end();
+  }
+}
+
+function readResponseCookie(setCookies, name) {
+  const cookie = setCookies.find((value) => value.startsWith(`${name}=`));
+  return cookie?.split(";", 1)[0];
+}
+
+async function getJson(baseUrl, path, token) {
+  const response = await fetch(`${baseUrl}${path}`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error(`ISEM_OPTICAL_HTTP_FAILED: ${path} ${response.status} ${await response.text()}`);
+  }
+  return response.json();
+}
+
+async function postJson(baseUrl, path, token, body, extraHeaders = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
     method: "POST",
     headers: {
       authorization: `Bearer ${token}`,
       "content-type": "application/json",
+      ...extraHeaders,
     },
     body: JSON.stringify(body),
   });
@@ -861,6 +1102,29 @@ function sampleStudentEmail(studentNo) {
 
 function sampleGuardianEmail(studentNo) {
   return `isem-guardian-${studentNo}-${runId}@${smokeEmailDomain}`;
+}
+
+function resolveSmokePassword(configuredPassword) {
+  const liveEnvironment = ["staging", "production"].includes(environment.toLowerCase());
+  if ((liveEnvironment || uiWorkerEvidencePath) && !configuredPassword) {
+    throw new Error(
+      "ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD staging/production veya UI-worker çıktısı için açıkça verilmelidir.",
+    );
+  }
+  const password = configuredPassword ?? `Oo1!${randomBytes(24).toString("base64url")}`;
+  if (
+    password.length < 16 ||
+    !/[a-z]/.test(password) ||
+    !/[A-Z]/.test(password) ||
+    !/[0-9]/.test(password) ||
+    !/[^A-Za-z0-9]/.test(password) ||
+    /password|qwerty|12345678|admin123/i.test(password)
+  ) {
+    throw new Error(
+      "ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD en az 16 karakter, büyük/küçük harf, rakam ve sembol içeren güçlü bir secret olmalıdır.",
+    );
+  }
+  return password;
 }
 
 async function writeUiWorkerEvidence(filePath, payload) {

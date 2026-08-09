@@ -1299,8 +1299,10 @@ Live UI-worker/report smoke preflight:
 Önce iSEM optik smoke aynı run için private UI-worker input'unu üretebilir:
 
 ```sh
+: "${ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD:?staging secret gerekli}"
 STAGING_ENVIRONMENT=staging \
 ISEM_OPTICAL_PIPELINE_SMOKE_EMAIL_DOMAIN=staging.o-okul.com \
+ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD="$ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD" \
 ISEM_OPTICAL_PIPELINE_SMOKE_EVIDENCE_FILE=artifacts/staging/isem-optical-pipeline.json \
 ISEM_OPTICAL_PIPELINE_UI_WORKER_EVIDENCE_FILE=artifacts/staging/private/live-ui-worker-input.json \
 pnpm isem-optical-pipeline:smoke
@@ -1362,12 +1364,15 @@ değil, sadece private runtime input'tur; path zincirinde `private` segmenti olm
 olamaz; `NEXT_E2E_SKIP_WEB_SERVER=1` local Next dev server'in yanlışlıkla kanıt yerine geçmesini
 engeller. IP/self-signed staging hedeflerinde `NEXT_E2E_IGNORE_HTTPS_ERRORS=1` yalnız Playwright TLS
 toleransı için kullanılır.
-Gerçek staging kanıtında `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder
+Gerçek staging kanıtında `ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD` secret store'dan açıkça verilir;
+en az 16 karakter, büyük/küçük harf, rakam ve sembol içermeyen veya yaygın varsayılan parola olan
+değerler reddedilir. `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder
 değerler kabul edilmez; `generatedAt` 24 saatten eski olamaz; dosya lokal temp path (`/tmp`, `/var/tmp`), symlink dosya veya symlink parent
 zinciri altında olamaz.
 `LIVE_UI_WORKER_RESULT_EVIDENCE_FILE` ise secret içermez; Excel/PDF indirme ve portal görüntüleme
 sonucunu kalıcı staging artifact'i olarak yazar. `pnpm live:ui-worker:result-check` bu JSON'un
-`reportStatus=READY`, `xlsx/pdf` indirme, öğrenci/veli portal görünümü, hashli sınav/öğrenci
+`reportStatus=READY`, `xlsx/pdf` indirme, öğrenci/veli portal görünümü, bütün smoke oturumlarının
+çıkışla iptal edildiğini gösteren `sessionLogoutVerified=true`, hashli sınav/öğrenci
 referansları, boş `gaps`, 24 saatten eski olmayan `generatedAt`, `artifacts/local/**` dışında kalıcı target ve temp/symlink olmayan target sözleşmesini doğrular; tam sınav döngüsü
 kanıtında referans verilebilir. `prod:evidence:check --summary-file` aynı artifact'i
 `reports.liveUiWorkerResult` alanına taşır; production summary ve go-live linked summary bu rapor

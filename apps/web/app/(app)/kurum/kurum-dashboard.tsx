@@ -41,7 +41,7 @@ export function KurumDashboard() {
   const latestExam = dashboard.latestExam;
   const latestReport = latestExam?.report;
   const attentionItems = buildAttentionItems(dashboard)
-    .filter((item) => canAccessHref(auth?.session.roles ?? [], item.href))
+    .filter((item) => canAccessHref(auth?.session.roles ?? [], item.href, auth?.session.activePersona))
     .slice(0, 3);
   const attentionTotal = totalAttention(dashboard);
   const [isSetupDismissed, setIsSetupDismissed] = useState(false);

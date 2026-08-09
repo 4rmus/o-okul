@@ -31,6 +31,7 @@ export type InstitutionNavigationItem = {
   icon: LucideIcon;
   label: string;
   requiredCapability?: string;
+  requiredPersona?: "STAFF";
 };
 
 type InstitutionNavGroup = {
@@ -75,7 +76,7 @@ const institutionOperationEvidenceCapability = "operation:manage";
 export const institutionOperationEvidenceItems: readonly InstitutionNavigationItem[] = [
   { href: "/kurum/yedek-restore", hiddenFromRail: true, icon: Activity, label: "Yedekleme", requiredCapability: "operation:manage" },
   { href: "/kurum/kvkk", hiddenFromRail: true, icon: ShieldCheck, label: "KVKK", requiredCapability: "privacy:manage" },
-  { href: "/kurum/denetim", hiddenFromRail: true, icon: ClipboardList, label: "Denetim", requiredCapability: "tenant-audit:read" },
+  { href: "/kurum/denetim", hiddenFromRail: true, icon: ClipboardList, label: "Denetim", requiredCapability: "tenant-audit:read", requiredPersona: "STAFF" },
   { href: "/kurum/sistem-sagligi", hiddenFromRail: true, icon: Activity, label: "Sistem Sağlığı", requiredCapability: institutionOperationEvidenceCapability },
   { href: "/kurum/gozlemlenebilirlik", hiddenFromRail: true, icon: BarChart3, label: "Sistem İzleme", requiredCapability: institutionOperationEvidenceCapability },
   { href: "/kurum/uat-rollback", hiddenFromRail: true, icon: ClipboardCheck, label: "Kabul ve Geri Dönüş", requiredCapability: institutionOperationEvidenceCapability },

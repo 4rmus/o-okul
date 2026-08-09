@@ -393,6 +393,7 @@ function writeSummary(file) {
         excelDownloaded: reports.liveUiWorkerResult.excelDownloaded,
         studentPortalViewed: reports.liveUiWorkerResult.studentPortalViewed,
         guardianPortalViewed: reports.liveUiWorkerResult.guardianPortalViewed,
+        sessionLogoutVerified: reports.liveUiWorkerResult.sessionLogoutVerified,
         commandsPassed: reports.liveUiWorkerResult.commandsPassed,
         gaps: reports.liveUiWorkerResult.gaps,
       },

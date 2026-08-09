@@ -10,7 +10,9 @@ import { PageFrame } from "../_shared/page-frame.js";
 export default function OperationsAndEvidencePage() {
   const { auth } = useAuth();
   const items = auth
-    ? institutionOperationEvidenceItems.filter((item) => canAccessNavigationItem(auth.session.roles, item))
+    ? institutionOperationEvidenceItems.filter((item) =>
+        canAccessNavigationItem(auth.session.roles, item, auth.session.activePersona),
+      )
     : [];
 
   return (

@@ -1,8 +1,12 @@
 import { defineConfig } from "@playwright/test";
 
-const port = process.env.NEXT_E2E_PORT ?? "3001";
-const baseURL = process.env.NEXT_E2E_BASE_URL ?? `http://localhost:${port}`;
-const useWebServer = process.env.NEXT_E2E_SKIP_WEB_SERVER !== "1" && !process.env.NEXT_E2E_BASE_URL;
+const measurementMode = process.env.ALMANAC_MEASUREMENT_MODE === "1";
+const port = measurementMode ? "43119" : (process.env.NEXT_E2E_PORT ?? "3001");
+const baseURL = measurementMode ? `http://localhost:${port}` : (process.env.NEXT_E2E_BASE_URL ?? `http://localhost:${port}`);
+const useWebServer = measurementMode || (process.env.NEXT_E2E_SKIP_WEB_SERVER !== "1" && !process.env.NEXT_E2E_BASE_URL);
+const webServerCommand = measurementMode
+  ? "pnpm --filter @o-okul/shared-types build && pnpm --filter @o-okul/ui build && pnpm next:build && exec node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 43119"
+  : "pnpm --filter @o-okul/shared-types build && pnpm --filter @o-okul/ui build && if [ ! -f .next/BUILD_ID ]; then pnpm next:build; fi && exec node node_modules/next/dist/bin/next start --hostname 0.0.0.0 --port ${NEXT_E2E_PORT:-3001}";
 
 export default defineConfig({
   retries: process.env.CI ? 1 : 0,
@@ -15,12 +19,12 @@ export default defineConfig({
   ...(useWebServer
     ? {
         webServer: {
-          command: "pnpm --filter @o-okul/shared-types build && pnpm --filter @o-okul/ui build && if [ ! -f .next/BUILD_ID ]; then pnpm next:build; fi && exec node node_modules/next/dist/bin/next start --hostname 0.0.0.0 --port ${NEXT_E2E_PORT:-3001}",
+          command: webServerCommand,
           env: {
             ...process.env,
             NEXT_E2E_PORT: port,
           },
-          reuseExistingServer: !process.env.CI && !process.env.NEXT_E2E_PORT,
+          reuseExistingServer: measurementMode ? false : !process.env.CI && !process.env.NEXT_E2E_PORT,
           timeout: 120_000,
           url: `${baseURL}/login`,
         },

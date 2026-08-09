@@ -2,6 +2,22 @@ import { describe, expect, it } from "vitest";
 import { capabilitiesForRoles, hasCapability } from "./role-capabilities.js";
 
 describe("role capabilities", () => {
+  it("feature rollout okumasını tenant personalarına verir ama SYSTEM_ADMIN'e vermez", () => {
+    for (const role of [
+      "TENANT_OWNER",
+      "TENANT_ADMIN",
+      "ASSISTANT_ADMIN",
+      "OPERATIONS_STAFF",
+      "FINANCE_STAFF",
+      "TEACHER",
+      "STUDENT",
+      "GUARDIAN",
+    ]) {
+      expect(hasCapability({ roles: [role] }, "feature-rollout:read"), role).toBe(true);
+    }
+    expect(hasCapability({ roles: ["SYSTEM_ADMIN"] }, "feature-rollout:read")).toBe(false);
+  });
+
   it("TENANT_ADMIN finans ve akademik yönetim yetkilerine sahiptir", () => {
     const context = { roles: ["TENANT_ADMIN"], capabilities: capabilitiesForRoles(["TENANT_ADMIN"]) };
 
