@@ -2349,6 +2349,26 @@ export interface InstitutionDashboardSummary {
   latestExam?: InstitutionDashboardExamSummary;
 }
 
+export type SetupReadinessStepId =
+  | "campuses"
+  | "grade-levels"
+  | "classes"
+  | "courses"
+  | "teachers"
+  | "students"
+  | "learning-outcomes";
+
+export interface SetupReadinessResponse {
+  completedCount: number;
+  percent: number;
+  steps: Array<{
+    id: SetupReadinessStepId;
+    count: number;
+    isComplete: boolean;
+  }>;
+  totalCount: number;
+}
+
 export interface ReportErrorBooklet {
   tenantId: string;
   examId: string;

@@ -2060,6 +2060,13 @@ const requiredOperationContracts = [
     responseDataForbiddenDeep: tenantRecordForbiddenDeep,
   },
   {
+    method: "get",
+    path: "/api/v1/me/setup-readiness",
+    responseEnvelope: true,
+    responseDataRequired: ["completedCount", "percent", "steps", "totalCount"],
+    responseDataForbiddenDeep: ["tenantId", "firstName", "lastName", "email", "phone", "nationalId"],
+  },
+  {
     method: "patch",
     path: "/api/v1/me/tenant",
     requestBody: true,

@@ -37,6 +37,7 @@ import type {
   PortalSupportTicketCommentCreateResponse,
   PublicPortalSupportTicketCommentRecord,
   SupportTicketCommentRecord,
+  SetupReadinessResponse,
 } from "@o-okul/shared-types";
 import { AnnouncementService } from "../announcement/announcement.service.js";
 import { AttendanceService } from "../attendance/attendance.service.js";
@@ -80,6 +81,7 @@ import { tenantCurrentProfileBodySchema, type TenantCurrentProfileBody } from ".
 import { passwordMaxLength, passwordMinLength, passwordPolicyViolation } from "../auth/password-policy.js";
 import { MeInstitutionDashboardService } from "./me-institution-dashboard.service.js";
 import { MeReportIndexService } from "./me-report-index.service.js";
+import { MeSetupReadinessService } from "./me-setup-readiness.service.js";
 
 const mePasswordChangeBodySchema = z.object({
   currentPassword: z.string().min(1),
@@ -100,6 +102,7 @@ export class MeController {
     private readonly notificationDevices: NotificationDeviceService,
     private readonly payments: PaymentService,
     private readonly institutionDashboard: MeInstitutionDashboardService,
+    private readonly setupReadiness: MeSetupReadinessService,
     private readonly reportIndex: MeReportIndexService,
     private readonly reports: ReportGenerationService,
     private readonly guardians: GuardianService,
@@ -155,6 +158,13 @@ export class MeController {
   @Roles("TENANT_ADMIN", "ASSISTANT_ADMIN")
   institutionDashboardSummary(): Promise<InstitutionDashboardSummary> {
     return this.institutionDashboard.get(getRequestContext());
+  }
+
+  @Get("setup-readiness")
+  @Roles("TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF")
+  @RequireCapability("setup:manage")
+  setupReadinessSummary(): Promise<SetupReadinessResponse> {
+    return this.setupReadiness.get(getRequestContext());
   }
 
   @Patch("tenant")

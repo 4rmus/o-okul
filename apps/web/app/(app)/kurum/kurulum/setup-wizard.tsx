@@ -22,6 +22,7 @@ import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, queryClient } from "../../../../src/api-client.js";
 import { ImportTemplatePanel } from "../_shared/import-template-panel.js";
 import { PageFrame } from "../_shared/page-frame.js";
+import { useSetupProgress } from "./_shared/use-setup-progress.js";
 import { setupFlowSteps, type SetupFlowStep } from "./_shared/wizard-steps.js";
 
 type StepId = SetupFlowStep["id"];
@@ -204,6 +205,7 @@ const setupImportAllowedExtensions = new Set<SetupImportFileExtension>(["CSV", "
 export function SetupWizard() {
   const { auth } = useAuth();
   const tenantId = auth?.session.tenantId ?? "anonymous";
+  const setupReadinessQuery = useSetupProgress(auth?.accessToken ?? "", tenantId, Boolean(auth?.accessToken));
   const draftStorageKey = `uh_onboarding_${tenantId}_draft`;
   const completedCookieName = `uh_onboarding_${encodeURIComponent(tenantId)}_completed`;
   const [activeStepId, setActiveStepId] = useState<StepId>("general");
@@ -617,6 +619,18 @@ export function SetupWizard() {
 
         <Panel as="aside" className="next-onboarding-aside" aria-label="Kurulum özeti">
           <h2>Akış Özeti</h2>
+          <div aria-label="Sunucu kurulum hazırlığı">
+            <StatusBadge tone={setupReadinessQuery.data?.percent === 100 ? "success" : "info"}>
+              {setupReadinessQuery.isLoading
+                ? "Hazırlık doğrulanıyor"
+                : setupReadinessQuery.isError
+                  ? "Hazırlık doğrulanamadı"
+                  : `${setupReadinessQuery.data?.percent ?? 0}% hazır`}
+            </StatusBadge>
+            {setupReadinessQuery.data ? (
+              <p>{setupReadinessQuery.data.completedCount} / {setupReadinessQuery.data.totalCount} kayıt adımı hazır.</p>
+            ) : null}
+          </div>
           <dl>
             <div>
               <dt>Kurum</dt>

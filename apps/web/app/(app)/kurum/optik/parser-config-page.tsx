@@ -323,12 +323,12 @@ function formatUrlForReplaceState(url: URL) {
   return `${url.pathname}${query ? `?${query}` : ""}${url.hash}`;
 }
 
-export function ParserConfigPage() {
+export function ParserConfigPage({ fixedExamId }: { fixedExamId?: string } = {}) {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const searchParamsKey = searchParams.toString();
   const [activeTab, setActiveTab] = useState<OpticalTab>(() => readOpticalTab(searchParams));
-  const [examId, setExamId] = useState(() => searchParams.get("examId") ?? "");
+  const [examId, setExamId] = useState(() => fixedExamId ?? searchParams.get("examId") ?? "");
   const [exams, setExams] = useState<ExamRecord[]>([]);
   const [version, setVersion] = useState(defaultParserConfigVersion);
   const [fileName, setFileName] = useState("");
@@ -407,12 +407,12 @@ export function ParserConfigPage() {
 
   useEffect(() => {
     const nextTab = readOpticalTab(searchParams);
-    const nextExamId = searchParams.get("examId") ?? "";
+    const nextExamId = fixedExamId ?? searchParams.get("examId") ?? "";
     setActiveTab((current) => (current === nextTab ? current : nextTab));
     if (nextExamId) {
       setExamId((current) => (current === nextExamId ? current : nextExamId));
     }
-  }, [searchParams, searchParamsKey]);
+  }, [fixedExamId, searchParams, searchParamsKey]);
 
   function selectOpticalTab(tab: OpticalTab, nextExamId = examId) {
     setActiveTab(tab);
@@ -806,6 +806,7 @@ export function ParserConfigPage() {
       <OpticalExamSelector
         examId={examId}
         exams={exams}
+        locked={Boolean(fixedExamId)}
         selectedExam={selectedExam}
         onExamChange={selectOpticalExam}
       />
@@ -945,6 +946,7 @@ export function ParserConfigPage() {
 interface OpticalExamSelectorProps {
   examId: string;
   exams: ExamRecord[];
+  locked: boolean;
   selectedExam?: ExamRecord;
   onExamChange: (value: string) => void;
 }
@@ -952,6 +954,7 @@ interface OpticalExamSelectorProps {
 function OpticalExamSelector({
   examId,
   exams,
+  locked,
   selectedExam,
   onExamChange,
 }: OpticalExamSelectorProps) {
@@ -964,7 +967,7 @@ function OpticalExamSelector({
         title="Sınav seç"
       >
         <Field label="Sınav seç">
-          <Select value={examId} onChange={(event) => onExamChange(event.target.value)}>
+          <Select disabled={locked} value={examId} onChange={(event) => onExamChange(event.target.value)}>
             <option value="">Sınav seç</option>
             {exams.map((exam) => (
               <option key={exam.id} value={exam.id}>

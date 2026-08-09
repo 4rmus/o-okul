@@ -150,6 +150,8 @@ export type {
   InstitutionDashboardExamSummary,
   InstitutionDashboardReportSummary,
   InstitutionDashboardSummary,
+  SetupReadinessResponse,
+  SetupReadinessStepId,
   LearningOutcomeImportDryRunResult,
   LearningOutcomeImportError,
   LearningOutcomeImportPreviewRow,

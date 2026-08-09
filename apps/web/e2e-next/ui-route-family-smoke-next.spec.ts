@@ -91,6 +91,8 @@ const routeCases = [
   route("/kurum/seviyeler", "Seviyeler", "assistantAdmin", { role: "region", name: "Seviye yönetimi" }),
   route("/kurum/sinavlar", "Sınavlar", "assistantAdmin", { role: "region", name: "Sınav yönetimi" }),
   route("/kurum/sinavlar/[examId]", "LGS Hazırlık Denemesi", "assistantAdmin", { role: "region", name: "Sınav çalışma alanı" }),
+  route("/kurum/sinavlar/[examId]/optik", "Optik İşlemleri", "assistantAdmin", { role: "region", name: "Optik iş akışı" }),
+  route("/kurum/sinavlar/[examId]/raporlar", "Sınav Raporu", "assistantAdmin", { role: "region", name: "Rapor çalışma alanı" }),
   route("/kurum/siniflar", "Sınıflar", "assistantAdmin", { role: "region", name: "Sınıf yönetimi" }),
   route("/kurum/siniflar/[classId]", "8-A", "assistantAdmin", { role: "region", name: "Sınıf detayı" }),
   route("/kurum/sistem-sagligi", "Sistem Sağlığı", "tenantAdmin", { role: "region", name: "Sistem bağlantıları ve kullanım durumu" }),
@@ -223,6 +225,38 @@ test("Gate C flag kapalıyken Shell v1 ve eski sınav ekranına geri döner", as
   await expect(page.locator(".next-app-shell")).toHaveAttribute("data-shell-version", "1");
   await expect(page.getByRole("region", { name: "Sınav yönetimi", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "LGS Hazırlık Denemesi çalışma alanını aç" })).toHaveCount(0);
+  expect(unknownApiRequests).toEqual([]);
+});
+
+test("Gate D nested optik ve rapor route'ları sınav bağlamını kilitler", async ({ page }) => {
+  const unknownApiRequests: string[] = [];
+  await installRouteApiMocks(page, "assistantAdmin", unknownApiRequests);
+  await page.addInitScript(() => {
+    document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
+  });
+
+  await page.goto("/kurum/sinavlar/exam-demo-isem-lgs-1/optik", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("navigation", { name: "Sınav çalışma alanı bölümleri" }).getByRole("link", { name: "Optik" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("combobox", { name: "Sınav seç" })).toBeDisabled();
+
+  await page.getByRole("navigation", { name: "Sınav çalışma alanı bölümleri" }).getByRole("link", { name: "Raporlar" }).click();
+  await expect(page).toHaveURL("/kurum/sinavlar/exam-demo-isem-lgs-1/raporlar");
+  await expect(page.getByRole("combobox", { name: "Sınav" })).toBeDisabled();
+  expect(unknownApiRequests).toEqual([]);
+});
+
+test("Gate D flag kapalıyken nested optik ve rapor route'ları eski URL'lere döner", async ({ page }) => {
+  const unknownApiRequests: string[] = [];
+  await installRouteApiMocks(page, "assistantAdmin", unknownApiRequests, { featureKeys: [] });
+  await page.addInitScript(() => {
+    document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
+  });
+
+  await page.goto("/kurum/sinavlar/exam-demo-isem-lgs-1/optik", { waitUntil: "domcontentloaded" });
+  await expect(page).toHaveURL((url) => url.pathname === "/kurum/optik" && url.searchParams.get("examId") === "exam-demo-isem-lgs-1");
+
+  await page.goto("/kurum/sinavlar/exam-demo-isem-lgs-1/raporlar", { waitUntil: "domcontentloaded" });
+  await expect(page).toHaveURL((url) => url.pathname === "/kurum/raporlar" && url.searchParams.get("examId") === "exam-demo-isem-lgs-1");
   expect(unknownApiRequests).toEqual([]);
 });
 
@@ -389,7 +423,7 @@ function assertRouteManifestParity(manifest: readonly RouteCase[]) {
   const fileSystemRoutes = collectPageRoutes(appDirectory).sort();
   const manifestRoutes = manifest.map((entry) => entry.routeTemplate).sort();
   const duplicates = manifestRoutes.filter((routeTemplate, index) => manifestRoutes.indexOf(routeTemplate) !== index);
-  if (manifest.length !== 82) throw new Error(`Route manifest must contain exactly 82 entries; found ${manifest.length}.`);
+  if (manifest.length !== 84) throw new Error(`Route manifest must contain exactly 84 entries; found ${manifest.length}.`);
   if (duplicates.length > 0) throw new Error(`Route manifest contains duplicates: ${[...new Set(duplicates)].join(", ")}`);
   if (JSON.stringify(manifestRoutes) !== JSON.stringify(fileSystemRoutes)) {
     throw new Error(`Route manifest does not match page.tsx inventory.\nmanifest=${manifestRoutes.join(",")}\nfilesystem=${fileSystemRoutes.join(",")}`);
@@ -576,6 +610,17 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
     };
   }
   if (pathName === "/me/notification-devices") return { data: [] };
+  if (pathName === "/me/setup-readiness") {
+    const ids = ["campuses", "grade-levels", "classes", "courses", "teachers", "students", "learning-outcomes"];
+    return {
+      data: {
+        completedCount: 7,
+        percent: 100,
+        steps: ids.map((id) => ({ id, count: 1, isComplete: true })),
+        totalCount: 7,
+      },
+    };
+  }
   if (pathName === "/exams/exam-demo-isem-lgs-1/workspace") {
     return {
       data: {

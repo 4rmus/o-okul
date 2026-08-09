@@ -9,6 +9,7 @@ import { ContextBar, InfoGrid, InfoItem, Panel, StatusBadge, WorkflowStepper, ty
 import { apiBaseUrl, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";
 import { useAuth } from "../../../providers.js";
 import { PageFrame } from "../_shared/page-frame.js";
+import { ExamWorkspaceNavigation } from "./exam-workspace-route.js";
 
 const requiredFeatureKeys = ["web.shell-v2", "web.ia-v2", "web.exam-workspace-v2"] as const;
 
@@ -91,8 +92,8 @@ export function ExamWorkspacePage({ examId }: { examId: string }) {
       actions={(
         <div className="next-exam-workspace-actions">
           <Link className="uh-button uh-button--secondary uh-button--md" href={fallbackHref}>Sınav listesi</Link>
-          <Link className="uh-button uh-button--secondary uh-button--md" href={`/kurum/optik?examId=${encodeURIComponent(exam.id)}`}>Optik işlemleri</Link>
-          <Link className="uh-button uh-button--primary uh-button--md" href={`/kurum/raporlar?examId=${encodeURIComponent(exam.id)}`}>Raporlar</Link>
+          <Link className="uh-button uh-button--secondary uh-button--md" href={`/kurum/sinavlar/${encodeURIComponent(exam.id)}/optik`}>Optik işlemleri</Link>
+          <Link className="uh-button uh-button--primary uh-button--md" href={`/kurum/sinavlar/${encodeURIComponent(exam.id)}/raporlar`}>Raporlar</Link>
         </div>
       )}
       context={(
@@ -108,6 +109,7 @@ export function ExamWorkspacePage({ examId }: { examId: string }) {
       subtitle="Mevcut sınav, optik ve rapor akışının salt-okunur hazırlık özeti."
       title={exam.title}
     >
+      <ExamWorkspaceNavigation activeSection="overview" examId={exam.id} />
       <section aria-label="Sınav çalışma alanı" className="next-exam-workspace">
         <InfoGrid>
           <InfoItem label="Katılımcı" value={formatCount(workspace.participantSummary.total)} description={`${formatCount(workspace.participantSummary.attended)} katıldı`} />

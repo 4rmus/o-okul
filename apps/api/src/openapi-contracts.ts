@@ -211,6 +211,17 @@ const institutionDashboardSummarySchema = objectSchema({
   latestExam: institutionDashboardExamSchema,
 }, ["generatedAt", "institution", "activeStudentCount", "attention"]);
 
+const setupReadinessSchema = objectSchema({
+  completedCount: integerSchema({ minimum: 0, maximum: 7 }),
+  percent: integerSchema({ minimum: 0, maximum: 100 }),
+  steps: arraySchema(objectSchema({
+    id: { type: "string", enum: ["campuses", "grade-levels", "classes", "courses", "teachers", "students", "learning-outcomes"] },
+    count: integerSchema({ minimum: 0 }),
+    isComplete: { type: "boolean" },
+  }, ["id", "count", "isComplete"]), { minItems: 7, maxItems: 7 }),
+  totalCount: integerSchema({ minimum: 7, maximum: 7 }),
+}, ["completedCount", "percent", "steps", "totalCount"]);
+
 const tenantFirstAdminCreateRequestSchema = objectSchema({
   email: stringSchema({ format: "email" }),
   name: stringSchema({ minLength: 1 }),
@@ -3070,6 +3081,9 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/me/institution-dashboard": {
     responseBody: institutionDashboardSummarySchema,
+  },
+  "get /api/v1/me/setup-readiness": {
+    responseBody: setupReadinessSchema,
   },
   "patch /api/v1/me/tenant": {
     requestBody: tenantCurrentProfileUpdateRequestSchema,

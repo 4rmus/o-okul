@@ -23,6 +23,7 @@ import {
   institutionDashboardStoreToken,
 } from "./me-institution-dashboard.store.js";
 import { MeReportIndexService } from "./me-report-index.service.js";
+import { MeSetupReadinessService } from "./me-setup-readiness.service.js";
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { MeReportIndexService } from "./me-report-index.service.js";
   providers: [
     MeInstitutionDashboardService,
     MeReportIndexService,
+    MeSetupReadinessService,
     {
       provide: institutionDashboardStoreToken,
       useFactory: createInstitutionDashboardStore,

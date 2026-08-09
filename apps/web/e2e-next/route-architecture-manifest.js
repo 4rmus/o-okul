@@ -99,6 +99,12 @@ export function resolveRouteArchitecture(routeTemplate) {
   if (routeTemplate === "/kurum") {
     return architecture("TENANT_DASHBOARD", "shell", "TENANT");
   }
+  if (routeTemplate.startsWith("/kurum/sinavlar/[examId]/optik")) {
+    return architecture("MASTER_DETAIL", "optical", "TENANT");
+  }
+  if (routeTemplate.startsWith("/kurum/sinavlar/[examId]/raporlar")) {
+    return architecture("MASTER_DETAIL", "report", "TENANT");
+  }
   if (routeTemplate.startsWith("/kurum/")) {
     const segment = routeTemplate.split("/")[2];
     const rule = tenantModules[segment];
