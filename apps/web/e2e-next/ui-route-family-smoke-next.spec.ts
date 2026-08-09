@@ -16,6 +16,7 @@ const measurementTargets = new Map([
   ["/kurum/raporlar", "report_workspace_ready"],
   ["/ogrenci", "student_portal_ready"],
 ]);
+const gateCFeatureKeys = ["web.shell-v2", "web.ia-v2", "web.exam-workspace-v2"] as const;
 const routeViewports = [
   { height: 812, width: 320 },
   { height: 812, width: 375 },
@@ -89,6 +90,7 @@ const routeCases = [
   route("/kurum/sablonlar", "Şablonlar", "assistantAdmin", { role: "region", name: "Şablon yönetimi" }, { feature: "sms" }),
   route("/kurum/seviyeler", "Seviyeler", "assistantAdmin", { role: "region", name: "Seviye yönetimi" }),
   route("/kurum/sinavlar", "Sınavlar", "assistantAdmin", { role: "region", name: "Sınav yönetimi" }),
+  route("/kurum/sinavlar/[examId]", "LGS Hazırlık Denemesi", "assistantAdmin", { role: "region", name: "Sınav çalışma alanı" }),
   route("/kurum/siniflar", "Sınıflar", "assistantAdmin", { role: "region", name: "Sınıf yönetimi" }),
   route("/kurum/siniflar/[classId]", "8-A", "assistantAdmin", { role: "region", name: "Sınıf detayı" }),
   route("/kurum/sistem-sagligi", "Sistem Sağlığı", "tenantAdmin", { role: "region", name: "Sistem bağlantıları ve kullanım durumu" }),
@@ -189,6 +191,39 @@ test.describe("UI route family smoke", () => {
       }
     });
   }
+});
+
+test("Gate C internal tenant Shell v2 ve sınav çalışma alanını birlikte açar", async ({ page }) => {
+  const unknownApiRequests: string[] = [];
+  await installRouteApiMocks(page, "assistantAdmin", unknownApiRequests);
+  await page.addInitScript(() => {
+    document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
+  });
+
+  await page.goto("/kurum/sinavlar/exam-demo-isem-lgs-1", { waitUntil: "domcontentloaded" });
+
+  await expect(page.locator(".next-app-shell")).toHaveAttribute("data-shell-version", "2");
+  await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("button", { name: "Kişiler", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Sınav çalışma alanı" })).toBeVisible();
+  expect(unknownApiRequests).toEqual([]);
+});
+
+test("Gate C flag kapalıyken Shell v1 ve eski sınav ekranına geri döner", async ({ page }) => {
+  const unknownApiRequests: string[] = [];
+  await installRouteApiMocks(page, "assistantAdmin", unknownApiRequests, { featureKeys: [] });
+  await page.addInitScript(() => {
+    document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
+  });
+
+  await page.goto("/kurum/sinavlar/exam-demo-isem-lgs-1", { waitUntil: "domcontentloaded" });
+
+  await expect(page).toHaveURL((url) => (
+    url.pathname === "/kurum/sinavlar" && url.searchParams.get("examId") === "exam-demo-isem-lgs-1"
+  ));
+  await expect(page.locator(".next-app-shell")).toHaveAttribute("data-shell-version", "1");
+  await expect(page.getByRole("region", { name: "Sınav yönetimi", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "LGS Hazırlık Denemesi çalışma alanını aç" })).toHaveCount(0);
+  expect(unknownApiRequests).toEqual([]);
 });
 
 async function collectRouteMeasurement(
@@ -354,7 +389,7 @@ function assertRouteManifestParity(manifest: readonly RouteCase[]) {
   const fileSystemRoutes = collectPageRoutes(appDirectory).sort();
   const manifestRoutes = manifest.map((entry) => entry.routeTemplate).sort();
   const duplicates = manifestRoutes.filter((routeTemplate, index) => manifestRoutes.indexOf(routeTemplate) !== index);
-  if (manifest.length !== 81) throw new Error(`Route manifest must contain exactly 81 entries; found ${manifest.length}.`);
+  if (manifest.length !== 82) throw new Error(`Route manifest must contain exactly 82 entries; found ${manifest.length}.`);
   if (duplicates.length > 0) throw new Error(`Route manifest contains duplicates: ${[...new Set(duplicates)].join(", ")}`);
   if (JSON.stringify(manifestRoutes) !== JSON.stringify(fileSystemRoutes)) {
     throw new Error(`Route manifest does not match page.tsx inventory.\nmanifest=${manifestRoutes.join(",")}\nfilesystem=${fileSystemRoutes.join(",")}`);
@@ -382,7 +417,7 @@ async function installRouteApiMocks(
   page: Page,
   persona: Persona,
   unknownApiRequests: string[],
-  options: { portalAccess?: ReturnType<typeof createPortalAccessMock> } = {},
+  options: { featureKeys?: readonly string[]; portalAccess?: ReturnType<typeof createPortalAccessMock> } = {},
 ) {
   await page.route("**/health/ready", async (route) => {
     await fulfillJson(route, { dependencies: { postgres: "ok", redis: "ok" }, status: "ready" });
@@ -405,6 +440,10 @@ async function installRouteApiMocks(
       } else {
         await fulfillData(route, createAuthResponse(persona));
       }
+      return;
+    }
+    if (pathName === "/me/feature-rollouts" && request.method() === "GET" && persona !== "anonymous") {
+      await fulfillData(route, { enabledFeatureKeys: options.featureKeys ?? gateCFeatureKeys });
       return;
     }
     if (pathName === "/me/profile" && request.method() === "GET" && persona !== "anonymous") {
@@ -537,6 +576,32 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
     };
   }
   if (pathName === "/me/notification-devices") return { data: [] };
+  if (pathName === "/exams/exam-demo-isem-lgs-1/workspace") {
+    return {
+      data: {
+        exam: examFixture,
+        participantSummary: { absent: 0, attended: 21, registered: 0, total: 21 },
+        reportSummary: {
+          latestGeneratedAt: "2026-08-01T12:00:00.000Z",
+          latestSnapshotId: "snapshot-ready",
+          ready: 1,
+          stale: 0,
+          total: 1,
+        },
+        readiness: {
+          readyForOptical: true,
+          status: "READY",
+          steps: [
+            { id: "definition", label: "Sınav tanımı", state: "COMPLETE" },
+            { id: "answer-key", label: "Cevap anahtarı", state: "COMPLETE" },
+            { id: "participants", label: "Katılımcılar", state: "COMPLETE" },
+            { id: "optical", label: "Yayın ve optik", state: "COMPLETE" },
+            { id: "report", label: "Rapor", state: "COMPLETE" },
+          ],
+        },
+      },
+    };
+  }
   if (pathName === "/import-quarantines/summary") return { data: { openCount: 0 } };
   if (pathName === "/attendance/summary" || pathName === "/me/student/attendance/summary" || pathName === "/me/guardian/students/student-a/attendance/summary") {
     return { data: { absent: 0, excused: 0, late: 0, present: 0, studentId: "student-a", total: 0 } };
@@ -634,7 +699,7 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
     "/classes": [classFixture],
     "/courses": [courseFixture],
     "/employees": [],
-    "/exams": [],
+    "/exams": [examFixture],
     "/grade-level-course-templates": [],
     "/grade-levels": [gradeLevelFixture],
     "/guardians": [guardianFixture],
@@ -725,6 +790,17 @@ const classFixture = {
   name: "8-A",
   section: "A",
   tenantId: "tenant-faz9",
+};
+const examFixture = {
+  answerKeySummary: { branchCount: 6, questionCount: 90, status: "PUBLISHED", version: "answer-key-v1" },
+  createdAt: "2026-08-01T09:00:00.000Z",
+  examType: "LGS",
+  id: "exam-demo-isem-lgs-1",
+  startsAt: "2026-08-01T09:00:00.000Z",
+  status: "PUBLISHED",
+  tenantId: "tenant-faz9",
+  title: "LGS Hazırlık Denemesi",
+  updatedAt: "2026-08-01T12:00:00.000Z",
 };
 const studentFixture = {
   classId: "class-8a",

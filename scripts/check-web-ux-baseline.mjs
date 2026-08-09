@@ -1715,7 +1715,7 @@ requireTokens("apps/web/app/(app)/_shared/navigation.ts", [
 ]);
 
 requireTokens("apps/web/app/(app)/app-shell.tsx", [
-  "Button, Dialog, Field, Input, Panel, StatusBadge, type StatusBadgeProps",
+  "Button, ContextBar, Dialog, Field, Input, Panel, StatusBadge, type StatusBadgeProps",
   '<Field className="next-command-search" label="Komut ara">',
   'hasCapabilityForRoles(roles, "setup:manage") ? commandItem("/kurum/kurulum"',
   'actions={<StatusBadge tone={statusTone}>{statusLabel}</StatusBadge>}',
@@ -5240,8 +5240,8 @@ function validateRouteFamilySmokeContract() {
   const manifestRoutes = [...manifestSource.matchAll(/^\s*route\("([^"]+)"/gm)].map((match) => match[1]);
   const duplicateRoutes = manifestRoutes.filter((route, index) => manifestRoutes.indexOf(route) !== index);
   const fileSystemRoutes = collectRoutePageTemplates("apps/web/app").sort();
-  if (manifestRoutes.length !== 81) {
-    failures.push(`${path} route manifest must contain exactly 81 route tests; found ${manifestRoutes.length}.`);
+  if (manifestRoutes.length !== 82) {
+    failures.push(`${path} route manifest must contain exactly 82 route tests; found ${manifestRoutes.length}.`);
   }
   if (duplicateRoutes.length > 0) {
     failures.push(`${path} route manifest contains duplicate routes: ${[...new Set(duplicateRoutes)].join(", ")}.`);
@@ -5251,8 +5251,8 @@ function validateRouteFamilySmokeContract() {
   }
 
   const primaryTaskCount = manifestSource.match(/\{ role: "(?:button|form|link|region)", name: "[^"]+" \}/g)?.length ?? 0;
-  if (primaryTaskCount !== 81) {
-    failures.push(`${path} must give all 81 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
+  if (primaryTaskCount !== 82) {
+    failures.push(`${path} must give all 82 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
   }
 
   const viewportStart = source.indexOf("const routeViewports = [");

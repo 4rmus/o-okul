@@ -1990,6 +1990,34 @@ const examParticipantCreateRequestSchema = objectSchema({
   studentId: stringSchema(),
 }, ["studentId"]);
 
+const examWorkspaceStepSchema = objectSchema({
+  id: { type: "string", enum: ["definition", "answer-key", "participants", "optical", "report"] },
+  label: stringSchema(),
+  state: { type: "string", enum: ["BLOCKED", "COMPLETE", "CURRENT"] },
+}, ["id", "label", "state"]);
+
+const examWorkspaceSchema = objectSchema({
+  exam: examRecordSchema,
+  participantSummary: objectSchema({
+    total: integerSchema({ minimum: 0 }),
+    registered: integerSchema({ minimum: 0 }),
+    attended: integerSchema({ minimum: 0 }),
+    absent: integerSchema({ minimum: 0 }),
+  }, ["total", "registered", "attended", "absent"]),
+  reportSummary: objectSchema({
+    total: integerSchema({ minimum: 0 }),
+    ready: integerSchema({ minimum: 0 }),
+    stale: integerSchema({ minimum: 0 }),
+    latestSnapshotId: stringSchema(),
+    latestGeneratedAt: stringSchema({ format: "date-time" }),
+  }, ["total", "ready", "stale"]),
+  readiness: objectSchema({
+    status: { type: "string", enum: ["ACTION_REQUIRED", "READY"] },
+    readyForOptical: { type: "boolean" },
+    steps: arraySchema(examWorkspaceStepSchema, { minItems: 5, maxItems: 5 }),
+  }, ["status", "readyForOptical", "steps"]),
+}, ["exam", "participantSummary", "reportSummary", "readiness"]);
+
 const parserConfigSuggestionLooseSchema = objectSchema({
   confidence: { type: "string", enum: ["low", "medium", "high"] },
   delimiter: { type: "string", enum: ["TAB", "COMMA", "PIPE", "FIXED"] },
@@ -4070,6 +4098,9 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/exams/{examId}": {
     responseBody: examRecordSchema,
+  },
+  "get /api/v1/exams/{examId}/workspace": {
+    responseBody: examWorkspaceSchema,
   },
   "patch /api/v1/exams/{examId}": {
     requestBody: examCreateRequestSchema,

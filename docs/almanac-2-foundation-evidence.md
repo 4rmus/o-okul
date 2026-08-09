@@ -24,6 +24,9 @@ performansı PASS iddiası değildir. Artifact base commit'i, kaynak worktree du
 harness/config/collector/checker kaynak digest'ini ve tek kullanımlık run kimliğini taşır. Toplayıcı
 önce eski parçaları temizler ve farklı run parçalarını birleştirmez. Ölçüm modu dış base URL'leri
 yok sayar; `43119` portunda server reuse kapalı olarak temiz `.next` + fresh Next build çalıştırır.
+Checker ölçüm commit'inin güncel HEAD'in atası olmasını ve kaynak digest'inin birebir eşleşmesini
+zorunlu tutar; `sourceWorktreeDirty` ölçüm anının tarihsel bilgisidir. Böylece artifact'i commit etmek
+kanıtı kendi kendine geçersiz kılmaz.
 Yeniden üretim komutu:
 
 ```sh

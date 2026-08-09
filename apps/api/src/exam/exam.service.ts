@@ -7,7 +7,7 @@ import {
   NotFoundException,
   Optional,
 } from "@nestjs/common";
-import type { AnswerKeyRecord, ExamParticipantRecord, ExamRecord, ExamType } from "@o-okul/shared-types";
+import type { AnswerKeyRecord, ExamParticipantRecord, ExamRecord, ExamType, ExamWorkspaceRecord } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
@@ -217,6 +217,23 @@ export class ExamService {
     const tenantId = requireTenant(context);
     const id = requiredString(examId, "EXAM_ID_REQUIRED");
     return this.withAnswerKeySummary(tenantId, await this.requireExam(tenantId, id));
+  }
+
+  async workspace(context: RequestContext, examId: string | undefined): Promise<ExamWorkspaceRecord> {
+    const tenantId = requireTenant(context);
+    const id = requiredString(examId, "EXAM_ID_REQUIRED");
+    const exam = await this.requireExam(tenantId, id);
+    const [answerKeys, participants, snapshots] = await Promise.all([
+      this.answerKeys.list(tenantId, id),
+      this.participants.list(tenantId, id),
+      this.snapshots?.listByExam(tenantId, id) ?? Promise.resolve([]),
+    ]);
+
+    return buildExamWorkspace(
+      { ...exam, answerKeySummary: summarizeExamAnswerKeys(answerKeys) },
+      participants,
+      snapshots,
+    );
   }
 
   async update(context: RequestContext, examId: string | undefined, input: UpdateExamInput): Promise<ExamRecord> {
@@ -655,6 +672,56 @@ function summarizeExamAnswerKeys(answerKeys: AnswerKeyRecord[]): NonNullable<Exa
     questionCount: selected.questionCount,
     branchCount: selected.branches.length,
     updatedAt: selected.updatedAt,
+  };
+}
+
+export function buildExamWorkspace(
+  exam: ExamRecord,
+  participants: readonly ExamParticipantRecord[],
+  snapshots: readonly { id: string; status: string; generatedAt?: string; updatedAt: string }[],
+): ExamWorkspaceRecord {
+  const participantSummary = {
+    total: participants.length,
+    registered: participants.filter((participant) => participant.status === "REGISTERED").length,
+    attended: participants.filter((participant) => participant.status === "ATTENDED").length,
+    absent: participants.filter((participant) => participant.status === "ABSENT").length,
+  };
+  const answerKeyReady = Boolean(exam.answerKeySummary && exam.answerKeySummary.status !== "MISSING");
+  const participantsReady = participantSummary.total > 0;
+  const readyForOptical = exam.status === "PUBLISHED" && answerKeyReady && participantsReady;
+  const readySnapshots = snapshots.filter((snapshot) => snapshot.status === "READY");
+  const staleSnapshots = snapshots.filter((snapshot) => snapshot.status === "STALE");
+  const latestSnapshot = [...snapshots].sort((left, right) => (
+    Date.parse(right.generatedAt ?? right.updatedAt) - Date.parse(left.generatedAt ?? left.updatedAt)
+  ))[0];
+  const completed = [true, answerKeyReady, participantsReady, readyForOptical, readySnapshots.length > 0];
+  const firstIncomplete = completed.findIndex((value) => !value);
+  const stepDefinitions = [
+    { id: "definition", label: "Sınav tanımı" },
+    { id: "answer-key", label: "Cevap anahtarı" },
+    { id: "participants", label: "Katılımcılar" },
+    { id: "optical", label: "Yayın ve optik" },
+    { id: "report", label: "Rapor" },
+  ] as const;
+
+  return {
+    exam,
+    participantSummary,
+    reportSummary: {
+      total: snapshots.length,
+      ready: readySnapshots.length,
+      stale: staleSnapshots.length,
+      ...(latestSnapshot ? { latestSnapshotId: latestSnapshot.id } : {}),
+      ...(latestSnapshot?.generatedAt ? { latestGeneratedAt: latestSnapshot.generatedAt } : {}),
+    },
+    readiness: {
+      status: readySnapshots.length > 0 ? "READY" : "ACTION_REQUIRED",
+      readyForOptical,
+      steps: stepDefinitions.map((step, index) => ({
+        ...step,
+        state: completed[index] ? "COMPLETE" : index === firstIncomplete ? "CURRENT" : "BLOCKED",
+      })),
+    },
   };
 }
 

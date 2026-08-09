@@ -5,8 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Building2, ChevronDown, LifeBuoy, LogOut, Menu, Search, ShieldCheck, UserRound, X, type LucideIcon } from "lucide-react";
-import { Button, Dialog, Field, Input, Panel, StatusBadge, type StatusBadgeProps } from "@o-okul/ui";
-import { isTenantRoleName, tenantRoleLabel, type ActivePersona, type GlobalSearchResultRecord, type MeProfileResponse, type NotificationDeviceTokenRecord, type Session, type TenantRecord } from "@o-okul/shared-types";
+import { Button, ContextBar, Dialog, Field, Input, Panel, StatusBadge, type StatusBadgeProps } from "@o-okul/ui";
+import { isTenantRoleName, tenantRoleLabel, type ActivePersona, type GlobalSearchResultRecord, type MeProfileResponse, type NotificationDeviceTokenRecord, type ResolvedFeatureRollouts, type Session, type TenantRecord } from "@o-okul/shared-types";
 import { apiBaseUrl, apiListRequest, apiRequest, withQueryParams } from "../../src/api-client.js";
 import { appBrand } from "../../src/brand.js";
 import { productTerms } from "../../src/product-terms.js";
@@ -20,7 +20,7 @@ import {
   hasSubjectPortalAccess,
   hasSystemAccess,
 } from "./_shared/access.js";
-import { dynamicDetailParents, institutionNavGroups, rolePortalItems, rolePortalNavGroups, staticBreadcrumbLabels, systemNavGroups } from "./_shared/navigation.js";
+import { dynamicDetailParents, institutionNavGroups, institutionNavGroupsV2, rolePortalItems, rolePortalNavGroups, staticBreadcrumbLabels, systemNavGroups } from "./_shared/navigation.js";
 const allNavigationItems = [
   ...systemNavGroups.flatMap((group) => group.items),
   ...institutionNavGroups.flatMap((group) => group.items),
@@ -87,13 +87,26 @@ export function AppShell({ children }: { children: ReactNode }) {
   const mobileNavTriggerRef = useRef<HTMLButtonElement | null>(null);
   const mobileNavCloseRef = useRef<HTMLButtonElement | null>(null);
   const sidebarRef = useRef<HTMLElement | null>(null);
+  const isRolePreviewRoute = hasRolePreviewAccess(searchParams);
+  const featureRolloutsQuery = useQuery({
+    queryKey: ["next-feature-rollouts", auth?.session.tenantId ?? "anonymous", auth?.session.id ?? "none"],
+    queryFn: () => apiRequest<ResolvedFeatureRollouts>(auth?.accessToken ?? "", `${apiBaseUrl}/me/feature-rollouts`),
+    enabled: Boolean(auth && hasInstitutionAccess(auth.session.roles) && !isRolePreviewRoute),
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const enabledFeatureKeys = featureRolloutsQuery.data?.enabledFeatureKeys ?? [];
+  const shellV2Enabled = enabledFeatureKeys.includes("web.shell-v2") && enabledFeatureKeys.includes("web.ia-v2");
+  const institutionNavigationGroups = shellV2Enabled ? institutionNavGroupsV2 : institutionNavGroups;
   const visiblePortalNavGroups = useMemo(
     () => auth?.session ? rolePortalNavGroups.filter((group) => hasSubjectPortalAccess(auth.session, group.role, group.subjectType)) : [],
     [auth],
   );
   const visibleInstitutionNavGroups = useMemo(
-    () => auth?.session && hasInstitutionAccess(auth.session.roles) ? getInstitutionNavGroups(auth.session.roles) : [],
-    [auth],
+    () => auth?.session && hasInstitutionAccess(auth.session.roles)
+      ? getInstitutionNavGroups(auth.session.roles, institutionNavigationGroups)
+      : [],
+    [auth, institutionNavigationGroups],
   );
   const institutionRailNavGroups = useMemo(
     () => visibleInstitutionNavGroups
@@ -113,7 +126,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     ? isWebPushCapabilityEnabled() && (hasInstitutionAccess(auth.session.roles) || visiblePortalNavGroups.length > 0)
     : false;
   const canUseShellSearch = auth?.session ? hasShellSearchAccess(auth.session) : false;
-  const isRolePreviewRoute = hasRolePreviewAccess(searchParams);
   const workContextCampusId = pathname.startsWith("/kurum") ? searchParams.get("campusId") ?? "" : "";
   const workContextTermId = pathname.startsWith("/kurum") ? searchParams.get("termId") ?? "" : "";
   const tenantBrandQuery = useQuery({
@@ -323,7 +335,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="next-app-shell">
+    <div className="next-app-shell" data-shell-version={shellV2Enabled ? "2" : "1"}>
       <a className="next-skip-link" href="#next-content">
         İçeriğe geç
       </a>
@@ -495,16 +507,7 @@ function WorkContext({
     },
   ];
 
-  return (
-    <dl className="next-work-context" aria-label="Çalışma bilgileri">
-      {items.map((item) => (
-        <div key={item.label}>
-          <dt>{item.label}</dt>
-          <dd>{item.value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
+  return <ContextBar className="next-work-context" items={items} label="Çalışma bilgileri" />;
 }
 
 function DesktopTopBar({

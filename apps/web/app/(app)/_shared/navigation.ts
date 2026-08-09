@@ -141,6 +141,69 @@ export const institutionNavGroups: readonly InstitutionNavGroup[] = [
   },
 ];
 
+const institutionV2Areas = [
+  {
+    label: "Bugün",
+    hrefs: ["/kurum"],
+  },
+  {
+    label: "Kişiler",
+    hrefs: [
+      "/kurum/ogrenciler",
+      "/kurum/veliler",
+      "/kurum/ogretmenler",
+      "/kurum/calisanlar",
+      "/kurum/ogrenci-portal-erisimi",
+      "/kurum/kullanicilar",
+    ],
+  },
+  {
+    label: "Akademik",
+    hrefs: [
+      "/kurum/siniflar",
+      "/kurum/seviyeler",
+      "/kurum/kampusler",
+      "/kurum/dersler",
+      "/kurum/program",
+      "/kurum/etutler",
+      "/kurum/devamsizlik",
+      "/kurum/akademik-takvim",
+      "/kurum/materyaller",
+      "/kurum/notlar",
+    ],
+  },
+  {
+    label: "Sınav",
+    hrefs: ["/kurum/sinavlar", "/kurum/kazanimlar", "/kurum/optik", "/kurum/raporlar"],
+  },
+  {
+    label: "İletişim",
+    hrefs: ["/kurum/duyurular", "/kurum/sablonlar", "/kurum/destek"],
+  },
+  {
+    label: "Finans",
+    hrefs: ["/kurum/finans"],
+  },
+  {
+    label: "Ayarlar",
+    hrefs: ["/kurum/kurulum", "/kurum/lisans-donemleri", "/kurum/rol-onizleme", "/kurum/operasyon-ve-kanit"],
+  },
+] as const;
+
+const institutionRailItemByHref = new Map(
+  institutionNavGroups.flatMap((group) => group.items)
+    .filter((item) => !item.hiddenFromRail)
+    .map((item) => [item.href, item]),
+);
+
+export const institutionNavGroupsV2: readonly InstitutionNavGroup[] = institutionV2Areas.map((area) => ({
+  label: area.label,
+  items: area.hrefs.flatMap((href) => {
+    const item = institutionRailItemByHref.get(href);
+    return item ? [item] : [];
+  }),
+}));
+
 export const systemNavGroups: readonly SystemNavGroup[] = [
   {
     label: "Başlangıç",
@@ -227,4 +290,4 @@ export const staticBreadcrumbLabels: Record<string, string> = {
   "/kurum/operasyon-ve-kanit": "Operasyon ve kanıt",
 };
 
-export const dynamicDetailParents: string[] = ["ogrenciler", "ogretmenler", "veliler", "siniflar", "duyurular"];
+export const dynamicDetailParents: string[] = ["ogrenciler", "ogretmenler", "veliler", "siniflar", "sinavlar", "duyurular"];

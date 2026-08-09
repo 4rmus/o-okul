@@ -6,7 +6,6 @@ import {
   almanacFoundationSourceRoots,
   assertAlmanacFoundationSourceContract,
   almanacFoundationSourceDigest,
-  almanacFoundationSourceDirty,
 } from "./almanac-foundation-digest.mjs";
 
 const path = "docs/measurement-baselines/gate-b-local-synthetic.json";
@@ -56,8 +55,8 @@ if (artifact.evidenceLevel !== "LOCAL_SYNTHETIC") failures.push("evidenceLevel L
 if (artifact.externalStatus !== "EXTERNAL_NOT_RUN") failures.push("externalStatus EXTERNAL_NOT_RUN olmalı");
 const currentBaseCommitSha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 const runIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-if (artifact.baseCommitSha !== currentBaseCommitSha) failures.push("baseCommitSha güncel HEAD ile eşleşmiyor");
-if (artifact.sourceWorktreeDirty !== almanacFoundationSourceDirty()) failures.push("sourceWorktreeDirty güncel kaynak durumuyla eşleşmiyor");
+if (!isAncestorCommit(artifact.baseCommitSha, currentBaseCommitSha)) failures.push("baseCommitSha güncel HEAD'in atası değil");
+if (typeof artifact.sourceWorktreeDirty !== "boolean") failures.push("sourceWorktreeDirty boolean olmalı");
 if (artifact.sourceTreeSha256 !== almanacFoundationSourceDigest()) failures.push("sourceTreeSha256 güncel kaynakla eşleşmiyor");
 if (Number.isNaN(Date.parse(artifact.generatedAt))) failures.push("generatedAt geçersiz");
 const measurementRun = artifact.measurementRun ?? {};
@@ -151,4 +150,14 @@ function validateMeasurementRuntimeConfig(source) {
   if (!source.includes("rm -rf .next && pnpm next:build")) output.push("measurement temiz Next build zorlaması eksik");
   if (!source.includes("reuseExistingServer: measurementMode ? false")) output.push("measurement server reuse kapatılmamış");
   return output;
+}
+
+function isAncestorCommit(ancestor, current) {
+  if (typeof ancestor !== "string" || !/^[0-9a-f]{40}$/.test(ancestor)) return false;
+  try {
+    execFileSync("git", ["merge-base", "--is-ancestor", ancestor, current], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
 }

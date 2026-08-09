@@ -2563,6 +2563,37 @@ export interface ExamParticipantRecord {
   updatedAt: string;
 }
 
+export type ExamWorkspaceStepId = "definition" | "answer-key" | "participants" | "optical" | "report";
+export type ExamWorkspaceStepState = "BLOCKED" | "COMPLETE" | "CURRENT";
+
+export interface ExamWorkspaceStep {
+  id: ExamWorkspaceStepId;
+  label: string;
+  state: ExamWorkspaceStepState;
+}
+
+export interface ExamWorkspaceRecord {
+  exam: ExamRecord;
+  participantSummary: {
+    total: number;
+    registered: number;
+    attended: number;
+    absent: number;
+  };
+  reportSummary: {
+    total: number;
+    ready: number;
+    stale: number;
+    latestSnapshotId?: string;
+    latestGeneratedAt?: string;
+  };
+  readiness: {
+    status: "ACTION_REQUIRED" | "READY";
+    readyForOptical: boolean;
+    steps: ExamWorkspaceStep[];
+  };
+}
+
 export interface OpticalFormTemplateRecord {
   id: string;
   tenantId: string;

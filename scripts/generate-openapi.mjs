@@ -2170,6 +2170,27 @@ const requiredOperationContracts = [
     ],
   },
   {
+    method: "get",
+    path: "/api/v1/exams/{examId}/workspace",
+    responseEnvelope: true,
+    responseDataRequired: ["exam", "participantSummary", "reportSummary", "readiness"],
+    responseDataForbiddenDeep: [
+      "email",
+      "fileName",
+      "nationalId",
+      "participantNo",
+      "phone",
+      "rawRow",
+      "s3Key",
+      "sha256",
+      "studentId",
+    ],
+    fieldChecks: [
+      { path: ["responseData", "readiness", "status"], enum: ["ACTION_REQUIRED", "READY"] },
+      { path: ["responseData", "readiness", "steps", "items", "state"], enum: ["BLOCKED", "COMPLETE", "CURRENT"] },
+    ],
+  },
+  {
     method: "patch",
     path: "/api/v1/exams/{examId}",
     requestBody: true,
