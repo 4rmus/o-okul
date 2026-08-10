@@ -71,6 +71,9 @@ import { createS3RawImportArchiveStoreFromEnv } from "./s3-raw-import-archive-st
         put(input: Parameters<ReturnType<typeof createS3RawImportArchiveStoreFromEnv>["put"]>[0]) {
           return createS3RawImportArchiveStoreFromEnv().put(input);
         },
+        delete(s3Key: string) {
+          return createS3RawImportArchiveStoreFromEnv().delete(s3Key);
+        },
       }),
     },
     {

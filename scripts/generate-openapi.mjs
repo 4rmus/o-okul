@@ -2570,7 +2570,14 @@ const requiredOperationContracts = [
     method: "get",
     path,
     queryParameters: path === "/api/v1/students"
-      ? [{ name: "ids", type: "string" }]
+      ? [
+          { name: "ids", type: "string" },
+          { name: "page", type: "integer" },
+          { name: "limit", type: "integer" },
+          { name: "q", type: "string" },
+          { name: "sort", type: "string" },
+          { name: "guardianLinked", type: "boolean" },
+        ]
       : undefined,
     responseListEnvelope: true,
     responseDataItemsRequired: studentCoreRequired,
@@ -2672,6 +2679,23 @@ const requiredOperationContracts = [
       { path: ["responseData", "status"], enum: studentStatuses },
     ],
   })),
+  {
+    method: "get",
+    path: "/api/v1/students/{studentId}/overview",
+    responseEnvelope: true,
+    responseDataRequired: [
+      "profile", "enrollments", "attendance", "openHomeworkCount", "homeworkAssignments",
+      "teacherNoteCount", "teacherNotes", "contacts", "guardians", "guardianLinks",
+      "teacherAssignments", "teachers", "classes", "courses", "terms", "canViewFinance", "activity",
+    ],
+    responseDataForbiddenDeep: ["nationalIdEncrypted", "nationalIdHash", "phoneEncrypted", "phoneHash", "emailEncrypted", "emailHash", "token", "userId"],
+    fieldChecks: [
+      { path: ["responseData", "openHomeworkCount"], minimum: 0 },
+      { path: ["responseData", "teacherNoteCount"], minimum: 0 },
+      { path: ["responseData", "attendance", "total"], minimum: 0 },
+      { path: ["responseData", "canViewFinance"], type: "boolean" },
+    ],
+  },
   ...studentProfilePaths.map((path) => ({
     method: "patch",
     path,
@@ -2736,14 +2760,15 @@ const requiredOperationContracts = [
     path: "/api/v1/students/imports",
     requestBody: true,
     responseEnvelope: true,
-    idempotencyHeader: true,
+    requiredHeaders: ["Idempotency-Key"],
     requestRequired: ["fileBase64"],
     requestForbidden: studentImportRequestForbidden,
-    responseDataRequired: ["importedRows", "students"],
+    responseDataRequired: ["importedRows", "importedContacts", "students"],
     responseDataForbiddenDeep: studentCoreForbiddenDeep,
     fieldChecks: [
       { path: ["requestBody", "fileBase64"], minLength: 1 },
       { path: ["responseData", "importedRows"], minimum: 0 },
+      { path: ["responseData", "importedContacts"], minimum: 0 },
       { path: ["responseData", "students", "items", "status"], enum: studentStatuses },
     ],
   },

@@ -361,7 +361,7 @@ describe("Study Session API", () => {
         startsAt: "2026-06-02T15:00:00.000Z",
         endsAt: "2026-06-02T16:00:00.000Z",
       })
-      .expect(403);
+      .expect(404);
 
     await request(server)
       .post("/study-sessions")

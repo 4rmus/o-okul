@@ -113,7 +113,7 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
               title="Veli profili"
             >
               <InfoGrid className="next-guardian-profile-info" aria-label="Veli profil özeti" role="region">
-                <InfoItem label="Telefon" value={<RevealablePhone canReveal={canRevealPhone} value={detail.guardian.phone} />} />
+                <InfoItem label="Telefon" value={<RevealablePhone canReveal={canRevealPhone && Boolean(detail.guardian.phone)} value={detail.guardian.phone ?? detail.guardian.phoneMasked} />} />
                 <InfoItem label="Portal" value={detail.guardian.userId ? "Bağlı" : "Yok"} />
                 <InfoItem label="Öğrenci bağlantısı" value={`${formatCount(detail.links.length)} bağlantı`} />
                 <InfoItem label="Finans görünürlüğü" value={formatPermissionCount(detail.links, "canViewFinance")} />
@@ -241,7 +241,7 @@ function buildGuardianSummaryItems(detail: GuardianDetailData, options: { canRev
       key: "phone",
       label: "Telefon",
       tone: "info",
-      value: <RevealablePhone canReveal={options.canRevealPhone} value={detail.guardian.phone} />,
+      value: <RevealablePhone canReveal={options.canRevealPhone && Boolean(detail.guardian.phone)} value={detail.guardian.phone ?? detail.guardian.phoneMasked} />,
     },
     {
       description: `${formatCount(activeStudentCount)} aktif öğrenci`,

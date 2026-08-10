@@ -76,6 +76,28 @@ export function filterTenantResources<T extends TenantResource>(context: Request
   return resources.filter((resource) => resource.tenantId === context.tenantId);
 }
 
+export function requireTenantWideStaffContext(
+  context: RequestContext,
+  errorCode = "TENANT_WIDE_SCOPE_REQUIRED",
+): string {
+  if (!context.tenantId) {
+    throw new Error("TENANT_CONTEXT_MISSING");
+  }
+
+  if (context.bypassRls) {
+    throw new Error(errorCode);
+  }
+
+  if (
+    context.campusScope?.scopeMode === "CAMPUSES"
+    || (context.activePersona === "STAFF" && !context.campusScope)
+  ) {
+    throw new Error(errorCode);
+  }
+
+  return context.tenantId;
+}
+
 export function assertTeacherScopedStudentAccess(context: RequestContext, resource: TeacherScopedStudentResource): void {
   assertTenantResourceAccess(context, resource);
 

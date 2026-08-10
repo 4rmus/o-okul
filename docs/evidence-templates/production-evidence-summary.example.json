@@ -444,6 +444,7 @@
       "inventorySource": "production readonly inventory query",
       "dataSubjectCounts": {
         "student": 254,
+        "studentContact": 254,
         "teacher": 12,
         "guardian": 254,
         "user": 42
@@ -457,6 +458,20 @@
           "phone",
           "email",
           "photoKey"
+        ],
+        "studentContact": [
+          "firstName",
+          "lastName",
+          "relationType",
+          "phoneEncrypted",
+          "phoneHash",
+          "emailEncrypted",
+          "emailHash",
+          "canReceiveSms",
+          "canReceiveAnnouncements",
+          "canReceiveFinance",
+          "consentSource",
+          "consentRecordedAt"
         ],
         "teacher": [
           "firstName",
@@ -510,6 +525,7 @@
       },
       "auditActionsVerified": [
         "kvkk.student_pii_purged",
+        "kvkk.student_contact_pii_purged",
         "kvkk.teacher_pii_purged",
         "kvkk.guardian_pii_purged",
         "kvkk.user_pii_purged"
@@ -545,6 +561,7 @@
           "support_ticket.created",
           "support_ticket_comment.created",
           "kvkk.student_pii_purged",
+          "kvkk.student_contact_pii_purged",
           "kvkk.teacher_pii_purged",
           "kvkk.guardian_pii_purged",
           "kvkk.user_pii_purged"
@@ -813,6 +830,7 @@
     "isemOpticalPipeline": {
       "generatedAt": "2026-06-15T09:40:00.000Z",
       "environment": "production",
+      "fixtureId": "isem-lgs-1-approved-v1",
       "checkedAt": "2026-06-15T09:40:00.000Z",
       "parserConfigVersion": "optik-7108-lgs-v1",
       "answerKeyVersion": "isem-lgs-1-v1",
@@ -837,6 +855,18 @@
         "quarantinePathVerified": true,
         "reportGenerated": true,
         "reportReady": true
+      },
+      "quarantineProbe": {
+        "openCount": 1,
+        "resolvedCount": 1,
+        "examResultCount": 1,
+        "reportResultCount": 1,
+        "idempotentReplayVerified": true,
+        "studentReportVerified": true,
+        "excelExportVerified": true,
+        "pdfExportVerified": true,
+        "reportReady": true,
+        "reportJobQueued": true
       },
       "sampleScores": [
         {
@@ -863,8 +893,8 @@
         "answerKeyHash": "6666666666666666666666666666666666666666666666666666666666666666",
         "reportSnapshotHash": "7777777777777777777777777777777777777777777777777777777777777777",
         "firstStudentHash": "8888888888888888888888888888888888888888888888888888888888888888",
-        "opticalTxtSha256": "9999999999999999999999999999999999999999999999999999999999999999",
-        "answerKeyFileSha256": "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+        "opticalTxtSha256": "bd9c19c3c3206f0ee15907f65b1f8063c9841dad7ef210c7d8356acd0299b96d",
+        "answerKeyFileSha256": "182ec1b2669c25fe532ebc89818af51ab309cc631f0d6539ee0410493a580ddb",
         "parseJobHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "reportJobHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
       },

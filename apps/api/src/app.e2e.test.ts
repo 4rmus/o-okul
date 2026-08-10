@@ -1037,6 +1037,7 @@ describe("API auth + tenant isolation", () => {
       const imported = await request(server)
         .post("/students/imports")
         .set("Authorization", `Bearer ${issued.accessToken}`)
+        .set("Idempotency-Key", "student-import-guardian-a")
         .send({
           fileBase64: await createStudentWorkbookBase64(
             [[
@@ -1090,10 +1091,10 @@ describe("API auth + tenant isolation", () => {
         .expect(({ body }) => {
           expect(body).toEqual([
             expect.objectContaining({
-              canViewFinance: true,
-              canReceiveSms: true,
-              canReceiveAnnouncements: true,
-              canOpenSupportTickets: true,
+              canViewFinance: false,
+              canReceiveSms: false,
+              canReceiveAnnouncements: false,
+              canOpenSupportTickets: false,
             }),
           ]);
         });
@@ -1271,6 +1272,7 @@ describe("API auth + tenant isolation", () => {
     await request(server)
       .post("/students/imports")
       .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", "student-import-invalid-single-a")
       .send({ fileBase64: await createStudentWorkbookBase64([["Eksik", ""]]) })
       .expect(400);
 
@@ -1291,6 +1293,7 @@ describe("API auth + tenant isolation", () => {
     await request(server)
       .post("/students/imports")
       .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", "student-import-invalid-batch-a")
       .send({ fileBase64: await createStudentWorkbookBase64([["Ece", "Import"], ["Eksik", ""]]) })
       .expect(400);
 
@@ -1311,6 +1314,7 @@ describe("API auth + tenant isolation", () => {
     const imported = await request(server)
       .post("/students/imports")
       .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", "student-import-success-a")
       .send({ fileBase64: await createStudentWorkbookBase64([["320", "Ece", "Import", "8-A"]], ["okul_no", "ad", "soyad", "sinif"]) })
       .expect(201);
 
@@ -1331,6 +1335,7 @@ describe("API auth + tenant isolation", () => {
     await request(server)
       .post("/students/imports")
       .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", "student-import-quota-a")
       .send({ fileBase64: await createStudentWorkbookBase64([["Fazla", "Import", "8-A"]], ["ad", "soyad", "sinif"]) })
       .expect(409);
 

@@ -8,9 +8,11 @@ import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
+import { hasCapability } from "../rbac/role-capabilities.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { GuardianService } from "./guardian.service.js";
+import { toGuardianResponse } from "./guardian-response.js";
 import {
   guardianCreateBodySchema,
   guardianStudentLinkBodySchema,
@@ -30,13 +32,16 @@ export class GuardiansController {
   @Get()
   @Roles("TEACHER")
   async list(@Query() query: ListQuery): Promise<GuardianRecord[]> {
-    return applyListQuery(await this.guardians.listGuardians(getRequestContext()), query, guardianListFields).map(toGuardianResponse);
+    const context = getRequestContext();
+    const fields = hasCapability(context, "privacy:manage") ? guardianListFields : guardianPublicListFields;
+    return applyListQuery(await this.guardians.listGuardians(context), query, fields).map((record) => toGuardianResponse(record, context));
   }
 
   @Get(":id")
   @Roles("TEACHER")
   async findOne(@Param("id") id: string): Promise<GuardianRecord> {
-    return toGuardianResponse(await this.guardians.findGuardian(getRequestContext(), id));
+    const context = getRequestContext();
+    return toGuardianResponse(await this.guardians.findGuardian(context, id), context);
   }
 
   @Get(":id/students")
@@ -57,19 +62,22 @@ export class GuardiansController {
     @Body(zodBody(guardianCreateBodySchema)) body: GuardianCreateBody,
     @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<GuardianRecord> {
-    return toGuardianResponse(await this.guardians.createGuardian(getRequestContext(), body, idempotencyKey));
+    const context = getRequestContext();
+    return toGuardianResponse(await this.guardians.createGuardian(context, body, idempotencyKey), context);
   }
 
   @Patch(":id")
   @RequireCapability("student:manage")
   async update(@Param("id") id: string, @Body(zodBody(guardianUpdateBodySchema)) body: GuardianUpdateBody): Promise<GuardianRecord> {
-    return toGuardianResponse(await this.guardians.updateGuardian(getRequestContext(), id, body));
+    const context = getRequestContext();
+    return toGuardianResponse(await this.guardians.updateGuardian(context, id, body), context);
   }
 
   @Post(":id/purge-pii")
   @RequireCapability("privacy:manage")
   async purgePii(@Param("id") id: string): Promise<GuardianRecord> {
-    return toGuardianResponse(await this.guardians.purgeGuardianPii(getRequestContext(), id));
+    const context = getRequestContext();
+    return toGuardianResponse(await this.guardians.purgeGuardianPii(context, id), context);
   }
 
   @Post(":id/students")
@@ -112,10 +120,4 @@ const guardianListFields = [
   { name: "lastName", read: (record: GuardianRecord) => record.lastName },
   { name: "phone", read: (record: GuardianRecord) => record.phone },
 ];
-
-function toGuardianResponse(record: GuardianRecord): GuardianRecord {
-  const response = { ...record } as GuardianRecord & { nationalIdEncrypted?: string; nationalIdHash?: string };
-  delete response.nationalIdEncrypted;
-  delete response.nationalIdHash;
-  return response;
-}
+const guardianPublicListFields = guardianListFields.filter((field) => field.name !== "phone");

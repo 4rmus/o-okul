@@ -1,8 +1,8 @@
-import { PutObjectCommand, S3Client, type S3ClientConfig } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, PutObjectCommand, S3Client, type S3ClientConfig } from "@aws-sdk/client-s3";
 import type { RawImportArchiveStore } from "./raw-import-upload.service.js";
 
 export interface S3ClientLike {
-  send(command: PutObjectCommand): Promise<unknown>;
+  send(command: PutObjectCommand | DeleteObjectCommand): Promise<unknown>;
 }
 
 export interface S3RawImportArchiveStoreOptions {
@@ -45,6 +45,12 @@ export class S3RawImportArchiveStore implements RawImportArchiveStore {
         ContentType: input.contentType,
       }),
     );
+  }
+
+  async delete(s3Key: string): Promise<void> {
+    const key = s3Key.trim();
+    if (key.length === 0) throw new Error("RAW_IMPORT_ARCHIVE_KEY_MISSING");
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 }
 

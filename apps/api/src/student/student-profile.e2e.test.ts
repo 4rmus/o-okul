@@ -14,6 +14,7 @@ describe("Student profile + TC API", () => {
   let studentAAccessToken: string;
   let guardianAAccessToken: string;
   let teacherAAccessToken: string;
+  let campusOperationsAccessToken: string;
 
   beforeAll(async () => {
     resetInMemoryAuthUsers();
@@ -34,6 +35,23 @@ describe("Student profile + TC API", () => {
         campusIds: [],
       },
     });
+    upsertInMemoryAuthUser({
+      id: "user-operations-a",
+      email: "operations-a@example.test",
+      name: "Campus Operations",
+      password: "password",
+      tenantId: "tenant-a",
+      roles: ["OPERATIONS_STAFF"],
+      membership: {
+        id: "membership-operations-a",
+        staffRole: "OPERATIONS_STAFF",
+        hasTeacherPersona: false,
+        hasStudentPersona: false,
+        version: 1,
+        scopeMode: "CAMPUSES",
+        campusIds: ["campus-main"],
+      },
+    });
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -46,6 +64,7 @@ describe("Student profile + TC API", () => {
     studentAAccessToken = await login("student-a@example.test");
     guardianAAccessToken = await login("guardian-a@example.test");
     teacherAAccessToken = await login("teacher-a@example.test");
+    campusOperationsAccessToken = await login("operations-a@example.test");
   });
 
   afterAll(async () => {
@@ -54,7 +73,10 @@ describe("Student profile + TC API", () => {
   });
 
   async function login(email: string): Promise<string> {
-    const response = await request(server).post("/auth/login").send(testLoginBody(email)).expect(200);
+    const body = email === "operations-a@example.test"
+      ? { loginName: email, password: "password", tenantSlug: "dna-egitim" }
+      : testLoginBody(email);
+    const response = await request(server).post("/auth/login").send(body).expect(200);
     return (response.body as { accessToken: string }).accessToken;
   }
 
@@ -294,6 +316,10 @@ describe("Student profile + TC API", () => {
         expect(body.gradeLevelName).toBe("8. Sınıf");
         expect(body.section).toBe("A");
         expect(body.responsibleTeacherName).toBe("Ayse Ogretmen");
+        expect(body.phoneMasked).toBe("••• ••• ••67");
+        expect(body.emailMasked).toBe("ad••@•••.test");
+        expect(JSON.stringify(body)).not.toContain("5551234567");
+        expect(JSON.stringify(body)).not.toContain("ada@example.test");
       });
     await request(server)
       .get("/me/guardian/students/student-a/enrollments")
@@ -324,9 +350,71 @@ describe("Student profile + TC API", () => {
         expect(body.gradeLevelName).toBe("8. Sınıf");
         expect(body.section).toBe("A");
         expect(body.responsibleTeacherName).toBe("Ayse Ogretmen");
+        expect(body.phoneMasked).toBe("••• ••• ••67");
+        expect(body.emailMasked).toBe("ad••@•••.test");
         expect(JSON.stringify(body)).not.toContain("10000002362");
+        expect(JSON.stringify(body)).not.toContain("5551234567");
+        expect(JSON.stringify(body)).not.toContain("ada@example.test");
         expectStudentProfileResponseIsPublic(body);
       });
+  });
+
+  it("kampüs kapsamlı operasyon çalışanına başka kampüs sınıfı ve öğretmeni dönmez", async () => {
+    const campus = await request(server)
+      .post("/campuses")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "Uzak Kampüs", code: "UZK" })
+      .expect(201);
+    const schoolClass = await request(server)
+      .post("/classes")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "7-U", campusId: campus.body.id })
+      .expect(201);
+    const teacher = await request(server)
+      .post("/teachers")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Uzak", lastName: "Öğretmen", phone: "5550000088" })
+      .expect(201);
+    const assignment = await request(server)
+      .post(`/teachers/${teacher.body.id}/assignments`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ classId: schoolClass.body.id, role: "CLASS_TEACHER" })
+      .expect(201);
+
+    try {
+      await request(server)
+        .get("/campuses")
+        .set("Authorization", `Bearer ${campusOperationsAccessToken}`)
+        .expect(200)
+        .expect(({ body }) => {
+          expect(body).toEqual([expect.objectContaining({ id: "campus-main" })]);
+          expect(JSON.stringify(body)).not.toContain(campus.body.id);
+        });
+      await request(server)
+        .get("/classes")
+        .set("Authorization", `Bearer ${campusOperationsAccessToken}`)
+        .expect(200)
+        .expect(({ body }) => expect(JSON.stringify(body)).not.toContain(schoolClass.body.id));
+      await request(server)
+        .get("/teachers")
+        .set("Authorization", `Bearer ${campusOperationsAccessToken}`)
+        .expect(200)
+        .expect(({ body }) => {
+          expect(JSON.stringify(body)).not.toContain(teacher.body.id);
+          expect(JSON.stringify(body)).not.toContain("5550000088");
+        });
+      await request(server)
+        .get(`/teachers/${teacher.body.id}`)
+        .set("Authorization", `Bearer ${campusOperationsAccessToken}`)
+        .expect(403);
+    } finally {
+      await request(server)
+        .delete(`/teachers/${teacher.body.id}/assignments/${assignment.body.id}`)
+        .set("Authorization", `Bearer ${tenantAAccessToken}`);
+      await request(server).delete(`/teachers/${teacher.body.id}`).set("Authorization", `Bearer ${tenantAAccessToken}`);
+      await request(server).delete(`/classes/${schoolClass.body.id}`).set("Authorization", `Bearer ${tenantAAccessToken}`);
+      await request(server).delete(`/campuses/${campus.body.id}`).set("Authorization", `Bearer ${tenantAAccessToken}`);
+    }
   });
 
   it("profil görüntüleme audit kaydı ham TC içermez", async () => {

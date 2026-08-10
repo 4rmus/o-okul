@@ -27,6 +27,7 @@ import type {
 import { Download, Eye, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError, apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch, withQueryParams } from "../../../../src/api-client.js";
+import { featureRolloutQueryKey, isFeatureEnabled, loadFeatureRollouts } from "../../../../src/feature-rollouts.js";
 import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import {
   firstFormError,
@@ -122,10 +123,10 @@ const emptyForm: StudentFormState = {
   guardianFirstName: "",
   guardianLastName: "",
   guardianPhone: "",
-  guardianCanViewFinance: true,
-  guardianCanReceiveSms: true,
-  guardianCanReceiveAnnouncements: true,
-  guardianCanOpenSupportTickets: true,
+  guardianCanViewFinance: false,
+  guardianCanReceiveSms: false,
+  guardianCanReceiveAnnouncements: false,
+  guardianCanOpenSupportTickets: false,
 };
 
 const emptyFilters: StudentListFilters = {
@@ -152,6 +153,20 @@ const emptyBulkEnrollmentAction: BulkEnrollmentActionState = {
 export function StudentsPage() {
   const { auth } = useAuth();
   const canRevealPhone = hasCapabilityForRoles(auth?.session.roles ?? [], "privacy:manage");
+  const featureRolloutsQuery = useQuery({
+    queryKey: featureRolloutQueryKey(
+      auth?.session.tenantId,
+      auth?.session.id,
+      auth?.session.activePersona,
+    ),
+    queryFn: () => loadFeatureRollouts(auth?.accessToken ?? ""),
+    enabled: Boolean(auth?.accessToken),
+    refetchOnWindowFocus: false,
+  });
+  const guardianReadOnly = featureRolloutsQuery.isSuccess
+    && isFeatureEnabled(featureRolloutsQuery.data, "product.guardian-read-only");
+  const studentRegistryV2 = featureRolloutsQuery.isSuccess
+    && isFeatureEnabled(featureRolloutsQuery.data, "web.student-registry-v2");
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { confirm, confirmationDialog } = useConfirmDialog();
@@ -179,6 +194,7 @@ export function StudentsPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [importFileBase64, setImportFileBase64] = useState("");
   const [importFileLabel, setImportFileLabel] = useState("");
+  const [importIdempotencyKey, setImportIdempotencyKey] = useState("");
   const [importDryRun, setImportDryRun] = useState<StudentImportDryRunResult | null>(null);
   const [importError, setImportError] = useState("");
   const [enrollmentAction, setEnrollmentAction] = useState<EnrollmentActionState>(emptyEnrollmentAction);
@@ -398,6 +414,7 @@ export function StudentsPage() {
   function openImportModal() {
     setImportFileBase64("");
     setImportFileLabel("");
+    setImportIdempotencyKey("");
     setImportDryRun(null);
     setImportError("");
     setIsImportOpen(true);
@@ -407,6 +424,7 @@ export function StudentsPage() {
     setIsImportOpen(false);
     setImportFileBase64("");
     setImportFileLabel("");
+    setImportIdempotencyKey("");
     setImportDryRun(null);
     setImportError("");
   }
@@ -426,7 +444,7 @@ export function StudentsPage() {
     setIsSaving(true);
     try {
       const studentForm = parsedForm.data;
-      const guardianPayload = buildGuardianPayload(studentForm);
+      const guardianPayload = guardianReadOnly ? undefined : buildGuardianPayload(studentForm);
       const savedStudent = wasEditing
         ? await updateStudent(auth.accessToken, wasEditing.id, {
             firstName: studentForm.firstName,
@@ -571,6 +589,7 @@ export function StudentsPage() {
   async function handleStudentImportFile(file: File | undefined) {
     setImportFileBase64("");
     setImportFileLabel("");
+    setImportIdempotencyKey("");
     setImportDryRun(null);
     setImportError("");
     if (!auth || !file) return;
@@ -595,6 +614,7 @@ export function StudentsPage() {
       const dryRun = await dryRunStudentImport(auth.accessToken, fileBase64);
       setImportFileBase64(fileBase64);
       setImportFileLabel(`${extension} • ${formatByteSize(file.size)}`);
+      setImportIdempotencyKey(globalThis.crypto.randomUUID());
       setImportDryRun(dryRun);
     } catch {
       setImportError("Dosya kontrol edilemedi. Sınıf adlarını, zorunlu alanları ve dosya biçimini kontrol edin.");
@@ -606,7 +626,7 @@ export function StudentsPage() {
   async function handleCommitStudentImport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!auth || isImporting) return;
-    if (!importFileBase64 || !importDryRun) {
+    if (!importFileBase64 || !importDryRun || !importIdempotencyKey) {
       setImportError("Önce aktarım dosyası seçin.");
       return;
     }
@@ -618,7 +638,7 @@ export function StudentsPage() {
     setImportError("");
     setIsImporting(true);
     try {
-      await commitStudentImport(auth.accessToken, importFileBase64);
+      await commitStudentImport(auth.accessToken, importFileBase64, importIdempotencyKey);
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       void queryClient.invalidateQueries({ queryKey: ["next-student-detail"] });
       closeImportModal();
@@ -637,7 +657,7 @@ export function StudentsPage() {
             <ListControls
               meta={studentsQuery.data?.meta}
               onChange={setListQuery}
-              searchPlaceholder="Ad, okul no, TC veya veli ara"
+              searchPlaceholder="Ad, soyad veya okul no ara"
               sortOptions={studentSortOptions}
               state={listQuery}
             />
@@ -859,6 +879,7 @@ export function StudentsPage() {
             <InfoItem label="Satır" value={formatCount(importDryRun.totalRows)} />
             <InfoItem label="Geçerli" value={formatCount(importDryRun.validRows.length)} />
             <InfoItem label="Hesap" value={formatCount(importDryRun.validRows.filter((row) => row.accountPreview).length)} />
+            {studentRegistryV2 ? <InfoItem label="İletişim kişisi" value={formatCount(importDryRun.validRows.filter((row) => row.contact).length)} /> : null}
             <InfoItem label="Hata" value={formatCount(importDryRun.errors.length)} />
             <InfoItem label="Kota" value={`${importDryRun.quota.current}+${importDryRun.quota.incoming}/${importDryRun.quota.limit}`} />
           </InfoGrid>
@@ -870,6 +891,12 @@ export function StudentsPage() {
               Hesap CSV indir
             </Button>
           </div>
+        ) : null}
+        {guardianReadOnly ? (
+          <p className="next-field-hint">Yeni veli hesabı ve veli bağlantısı kapalıdır; aktarım dosyası veli alanı içermemelidir.</p>
+        ) : null}
+        {studentRegistryV2 ? (
+          <p className="next-field-hint">İletişim kişisi için contactFirstName, contactLastName, contactRelation, contactPhone ve contactEmail kolonlarını kullanabilirsin. İzinler varsayılan kapalıdır.</p>
         ) : null}
         {importDryRun && importDryRun.errors.length > 0 ? (
           <div className="next-form-guardians">
@@ -963,7 +990,7 @@ export function StudentsPage() {
         </Field>
         <Field
           label="Telefon"
-          description={detail?.profile.phone ? `Kayıtlı: ${maskPhoneNumber(detail.profile.phone)}` : undefined}
+          description={detail?.profile.phone || detail?.profile.phoneMasked ? `Kayıtlı: ${detail.profile.phone ? maskPhoneNumber(detail.profile.phone) : detail.profile.phoneMasked}` : undefined}
         >
           <Input
             inputMode="tel"
@@ -973,7 +1000,7 @@ export function StudentsPage() {
         </Field>
         <Field
           label="E-posta"
-          description={detail?.profile.email ? `Kayıtlı: ${maskEmail(detail.profile.email)}` : undefined}
+          description={detail?.profile.email || detail?.profile.emailMasked ? `Kayıtlı: ${detail.profile.email ? maskEmail(detail.profile.email) : detail.profile.emailMasked}` : undefined}
         >
           <Input
             type="email"
@@ -991,7 +1018,7 @@ export function StudentsPage() {
                   {detail.guardians.map((guardian) => (
                     <li key={guardian.id}>
                       <span>{guardian.firstName} {guardian.lastName}</span>
-                      <RevealablePhone canReveal={canRevealPhone} value={guardian.phone} />
+                      <RevealablePhone canReveal={canRevealPhone && Boolean(guardian.phone)} value={guardian.phone ?? guardian.phoneMasked} />
                     </li>
                   ))}
                 </ul>
@@ -1000,50 +1027,58 @@ export function StudentsPage() {
               )}
             </div>
           ) : null}
-          <Field label="Veli adı">
-            <Input
-              value={form.guardianFirstName}
-              onChange={(event) => setForm((current) => ({ ...current, guardianFirstName: event.target.value }))}
-            />
-          </Field>
-          <Field label="Veli soyadı">
-            <Input
-              value={form.guardianLastName}
-              onChange={(event) => setForm((current) => ({ ...current, guardianLastName: event.target.value }))}
-            />
-          </Field>
-          <Field label="Veli telefonu" description="Bağlı veli listelerinde telefon maskeli gösterilir.">
-            <Input
-              inputMode="tel"
-              value={form.guardianPhone}
-              onChange={(event) => setForm((current) => ({ ...current, guardianPhone: event.target.value }))}
-            />
-          </Field>
-          <fieldset className="next-permission-fieldset">
-            <legend>Veli izinleri</legend>
-            <Checkbox
-              checked={form.guardianCanViewFinance}
-              label="Finans görünürlüğü"
-              onChange={(event) => setForm((current) => ({ ...current, guardianCanViewFinance: event.target.checked }))}
-            />
-            {isSmsEnabled ? (
-              <Checkbox
-                checked={form.guardianCanReceiveSms}
-                label="SMS alabilir"
-                onChange={(event) => setForm((current) => ({ ...current, guardianCanReceiveSms: event.target.checked }))}
-              />
-            ) : null}
-            <Checkbox
-              checked={form.guardianCanReceiveAnnouncements}
-              label="Duyuru alabilir"
-              onChange={(event) => setForm((current) => ({ ...current, guardianCanReceiveAnnouncements: event.target.checked }))}
-            />
-            <Checkbox
-              checked={form.guardianCanOpenSupportTickets}
-              label="Destek talebi açabilir"
-              onChange={(event) => setForm((current) => ({ ...current, guardianCanOpenSupportTickets: event.target.checked }))}
-            />
-          </fieldset>
+          {guardianReadOnly ? (
+            <div className="next-form-guardians">
+              <span className="next-field-hint">Yeni veli hesabı ve bağlantısı bu kurumda salt okunur geçişe alınmıştır.</span>
+            </div>
+          ) : (
+            <>
+              <Field label="Veli adı">
+                <Input
+                  value={form.guardianFirstName}
+                  onChange={(event) => setForm((current) => ({ ...current, guardianFirstName: event.target.value }))}
+                />
+              </Field>
+              <Field label="Veli soyadı">
+                <Input
+                  value={form.guardianLastName}
+                  onChange={(event) => setForm((current) => ({ ...current, guardianLastName: event.target.value }))}
+                />
+              </Field>
+              <Field label="Veli telefonu" description="Bağlı veli listelerinde telefon maskeli gösterilir.">
+                <Input
+                  inputMode="tel"
+                  value={form.guardianPhone}
+                  onChange={(event) => setForm((current) => ({ ...current, guardianPhone: event.target.value }))}
+                />
+              </Field>
+              <fieldset className="next-permission-fieldset">
+                <legend>Veli izinleri</legend>
+                <Checkbox
+                  checked={form.guardianCanViewFinance}
+                  label="Finans görünürlüğü"
+                  onChange={(event) => setForm((current) => ({ ...current, guardianCanViewFinance: event.target.checked }))}
+                />
+                {isSmsEnabled ? (
+                  <Checkbox
+                    checked={form.guardianCanReceiveSms}
+                    label="SMS alabilir"
+                    onChange={(event) => setForm((current) => ({ ...current, guardianCanReceiveSms: event.target.checked }))}
+                  />
+                ) : null}
+                <Checkbox
+                  checked={form.guardianCanReceiveAnnouncements}
+                  label="Duyuru alabilir"
+                  onChange={(event) => setForm((current) => ({ ...current, guardianCanReceiveAnnouncements: event.target.checked }))}
+                />
+                <Checkbox
+                  checked={form.guardianCanOpenSupportTickets}
+                  label="Destek talebi açabilir"
+                  onChange={(event) => setForm((current) => ({ ...current, guardianCanOpenSupportTickets: event.target.checked }))}
+                />
+              </fieldset>
+            </>
+          )}
         </div>
         {editingStudent ? (
           <section className="next-form-section" aria-label="Kayıt işlemleri">
@@ -1501,10 +1536,10 @@ async function dryRunStudentImport(accessToken: string, fileBase64: string) {
   });
 }
 
-async function commitStudentImport(accessToken: string, fileBase64: string) {
+async function commitStudentImport(accessToken: string, fileBase64: string, idempotencyKey: string) {
   return apiRequest<StudentImportResult>(accessToken, `${apiBaseUrl}/students/imports`, {
     body: JSON.stringify({ fileBase64 }),
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "Idempotency-Key": idempotencyKey },
     method: "POST",
   });
 }
@@ -1620,15 +1655,24 @@ function formatStudentImportError(error: StudentImportDryRunResult["errors"][num
   if (error.code === "INVALID_DATE") return `${row}: tarih YYYY-AA-GG olmalı`;
   if (error.code === "INVALID_NATIONAL_ID") return `${row}: TC kimlik no geçersiz`;
   if (error.code === "INVALID_PHONE") return `${row}: telefon geçersiz`;
+  if (error.code === "INVALID_RELATION_TYPE") return `${row}: iletişim kişisi ilişki türü geçersiz`;
   if (error.code === "ACTIVE_STUDENT_LIMIT_REACHED") return "Aktif öğrenci kotası aşılır";
+  if (error.code === "STUDENT_IMPORT_PILOT_CORE_ONLY") return `${row}: pilot içe aktarımında hesap/iletişim alanı kullanılamaz`;
+  if (error.code === "STUDENT_CONTACT_IMPORT_REQUIRED") return `${row}: veli yerine öğrenci iletişim kişisi akışı kullanılmalı`;
   return `${row}: dosya satırı kontrol edilmeli`;
 }
 
 function studentImportFieldLabel(field: StudentImportDryRunResult["errors"][number]["field"]) {
   const labels: Record<StudentImportDryRunResult["errors"][number]["field"], string> = {
     className: "sınıf",
+    contactEmail: "iletişim kişisi e-posta",
+    contactFirstName: "iletişim kişisi adı",
+    contactLastName: "iletişim kişisi soyadı",
+    contactPhone: "iletişim kişisi telefonu",
+    contactRelation: "iletişim kişisi ilişkisi",
     email: "e-posta",
     firstName: "ad",
+    guardian: "iletişim kişisi",
     guardianNationalId: "veli TC kimlik no",
     guardianPhone: "veli telefonu",
     lastName: "soyad",

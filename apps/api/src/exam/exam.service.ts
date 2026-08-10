@@ -25,11 +25,13 @@ import { type AlanStore, alanStoreToken } from "../school/alan-store.js";
 import { assertTeacherAssigned } from "../school/assert-teacher-assigned.js";
 import { type ClassStore, classStoreToken } from "../school/class-store.js";
 import { type GradeLevelStore, gradeLevelStoreToken } from "../school/grade-level-store.js";
+import { isAssignmentActive } from "../school/teacher-scope.js";
 import {
   type TeacherAssignmentStore,
   teacherAssignmentStoreToken,
 } from "../school/teacher-assignment-store.js";
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
+import { requireTenantWideStaffContext } from "../tenant/tenant-access.js";
 import { AnswerKeyExcelImportService } from "./answer-key-excel-import.service.js";
 import { answerKeyRepositoryToken, type AnswerKeyRepository } from "./answer-key.service.js";
 
@@ -217,14 +219,23 @@ export class ExamService {
   }
 
   async list(context: RequestContext): Promise<ExamRecord[]> {
-    const tenantId = requireTenant(context);
+    const tenantId = requireExamReadTenant(context);
     const exams = await this.repository.list(tenantId);
-    return Promise.all(exams.map((exam) => this.withAnswerKeySummary(tenantId, exam)));
+    const allowedStudentIds = await this.teacherReadStudentIds(context, tenantId);
+    const visibleExams = allowedStudentIds
+      ? (await Promise.all(exams.map(async (exam) => ({
+        exam,
+        visible: (await this.participants.list(tenantId, exam.id))
+          .some((participant) => allowedStudentIds.has(participant.studentId)),
+      })))).filter(({ visible }) => visible).map(({ exam }) => exam)
+      : exams;
+    return Promise.all(visibleExams.map((exam) => this.withAnswerKeySummary(tenantId, exam)));
   }
 
   async get(context: RequestContext, examId: string | undefined): Promise<ExamRecord> {
-    const tenantId = requireTenant(context);
+    const tenantId = requireExamReadTenant(context);
     const id = requiredString(examId, "EXAM_ID_REQUIRED");
+    await this.assertTeacherExamRead(context, tenantId, id);
     return this.withAnswerKeySummary(tenantId, await this.requireExam(tenantId, id));
   }
 
@@ -480,10 +491,14 @@ export class ExamService {
   }
 
   async listParticipants(context: RequestContext, examId: string | undefined): Promise<ExamParticipantRecord[]> {
-    const tenantId = requireTenant(context);
+    const tenantId = requireExamReadTenant(context);
     const id = requiredString(examId, "EXAM_ID_REQUIRED");
     await this.requireExam(tenantId, id);
-    return this.participants.list(tenantId, id);
+    const records = await this.participants.list(tenantId, id);
+    const allowedStudentIds = await this.teacherReadStudentIds(context, tenantId);
+    return allowedStudentIds
+      ? records.filter((participant) => allowedStudentIds.has(participant.studentId))
+      : records;
   }
 
   async addParticipant(
@@ -587,13 +602,78 @@ export class ExamService {
       throw error;
     }
   }
+
+  private async assertTeacherExamRead(
+    context: RequestContext,
+    tenantId: string,
+    examId: string,
+  ): Promise<void> {
+    const allowedStudentIds = await this.teacherReadStudentIds(context, tenantId);
+    if (!allowedStudentIds) return;
+    const allowed = (await this.participants.list(tenantId, examId))
+      .some((participant) => allowedStudentIds.has(participant.studentId));
+    if (!allowed) throw new ForbiddenException("FORBIDDEN_TEACHER_ASSIGNMENT_SCOPE");
+  }
+
+  private async teacherReadStudentIds(
+    context: RequestContext,
+    tenantId: string,
+  ): Promise<Set<string> | undefined> {
+    if (!shouldLimitExamReadToTeacher(context)) return undefined;
+    if (context.subjectType !== "TEACHER" || !context.subjectId) {
+      throw new ForbiddenException("TEACHER_CONTEXT_REQUIRED");
+    }
+
+    const [students, assignments, classes] = await Promise.all([
+      this.students.list(),
+      this.teacherAssignments.listByTeacher(context.subjectId),
+      this.classes.list(),
+    ]);
+    const classCampusById = new Map(classes
+      .filter((record) => record.tenantId === tenantId && !record.deletedAt)
+      .map((record) => [record.id, record.campusId]));
+    const campusIds = context.campusScope?.scopeMode === "CAMPUSES"
+      ? new Set(context.campusScope.campusIds)
+      : undefined;
+    const activeAssignments = assignments.filter((assignment) => (
+      assignment.tenantId === tenantId && isAssignmentActive(assignment)
+    ));
+
+    return new Set(students.filter((student) => {
+      if (student.tenantId !== tenantId || student.deletedAt) return false;
+      if (campusIds && (!student.classId || !campusIds.has(classCampusById.get(student.classId) ?? ""))) {
+        return false;
+      }
+      return student.responsibleTeacherId === context.subjectId
+        || activeAssignments.some((assignment) => (
+          assignment.studentId === student.id
+          || Boolean(student.classId && assignment.classId === student.classId)
+        ));
+    }).map((student) => student.id));
+  }
 }
 
 function requireTenant(context: RequestContext): string {
-  if (!context.tenantId) {
-    throw new ForbiddenException("TENANT_CONTEXT_MISSING");
+  try {
+    return requireTenantWideStaffContext(context, "EXAM_CAMPUS_SCOPE_FORBIDDEN");
+  } catch (error) {
+    throw new ForbiddenException(error instanceof Error ? error.message : "EXAM_CAMPUS_SCOPE_FORBIDDEN");
   }
-  return context.tenantId;
+}
+
+function requireExamReadTenant(context: RequestContext): string {
+  if (shouldLimitExamReadToTeacher(context)) {
+    if (!context.tenantId) throw new ForbiddenException("TENANT_CONTEXT_MISSING");
+    return context.tenantId;
+  }
+  return requireTenant(context);
+}
+
+function shouldLimitExamReadToTeacher(context: RequestContext): boolean {
+  const hasAdminRole = context.roles.some((role) => (
+    role === "TENANT_OWNER" || role === "TENANT_ADMIN" || role === "ASSISTANT_ADMIN"
+  ));
+  return context.activePersona === "TEACHER" || (context.roles.includes("TEACHER") && !hasAdminRole);
 }
 
 function assertExamWorkspaceAccess(context: RequestContext): void {

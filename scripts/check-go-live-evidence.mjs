@@ -3,6 +3,7 @@ import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getTenantScopedTables } from "../packages/db/scripts/tenant-models.mjs";
 import { validateUiUxRedesignBindings } from "./ui-ux-redesign-evidence-bindings.mjs";
+import { ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST } from "./isem-optical-pipeline-contract.mjs";
 
 const target = process.env.GO_LIVE_EVIDENCE_TARGET;
 const allowExampleEvidence = process.env.GO_LIVE_ALLOW_EXAMPLE_EVIDENCE === "1";
@@ -179,6 +180,7 @@ const expectedKvkkAuditDiffActions = [
   "support_ticket.created",
   "support_ticket_comment.created",
   "kvkk.student_pii_purged",
+  "kvkk.student_contact_pii_purged",
   "kvkk.teacher_pii_purged",
   "kvkk.guardian_pii_purged",
   "kvkk.user_pii_purged",
@@ -272,6 +274,7 @@ const summaryRequiredReportKeys = {
   isemOpticalPipeline: [
     "generatedAt",
     "environment",
+    "fixtureId",
     "checkedAt",
     "parserConfigVersion",
     "answerKeyVersion",
@@ -279,6 +282,7 @@ const summaryRequiredReportKeys = {
     "bookletVariantCount",
     "counts",
     "pipeline",
+    "quarantineProbe",
     "sampleScores",
     "hashes",
     "thresholds",
@@ -1521,6 +1525,35 @@ function requireSummaryReports(summary, failures, goLiveReport) {
       "environment",
       "production",
     );
+    requireObjectEqual(
+      isemOpticalPipeline,
+      failures,
+      "productionEvidenceSummary.summary.reports.isemOpticalPipeline.fixtureId",
+      "fixtureId",
+      ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST.fixtureId,
+    );
+    const isemHashes = requireNestedObject(
+      isemOpticalPipeline,
+      failures,
+      "productionEvidenceSummary.summary.reports.isemOpticalPipeline.hashes",
+      "hashes",
+    );
+    if (isemHashes) {
+      requireObjectEqual(
+        isemHashes,
+        failures,
+        "productionEvidenceSummary.summary.reports.isemOpticalPipeline.hashes.opticalTxtSha256",
+        "opticalTxtSha256",
+        ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST.inputs.opticalTxt.sha256,
+      );
+      requireObjectEqual(
+        isemHashes,
+        failures,
+        "productionEvidenceSummary.summary.reports.isemOpticalPipeline.hashes.answerKeyFileSha256",
+        "answerKeyFileSha256",
+        ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST.inputs.answerKey.sha256,
+      );
+    }
     requireSummaryReportDateNotAfter(
       isemOpticalPipeline,
       failures,
@@ -1553,6 +1586,7 @@ function requireSummaryReports(summary, failures, goLiveReport) {
         "productionEvidenceSummary.summary.reports.isemOpticalPipeline.commandsPassed eksik: pnpm isem-optical-pipeline:smoke",
       );
     }
+    requireSummaryIsemQuarantineProbe(isemOpticalPipeline, failures);
   }
 
   const liveUiWorkerResult = requireNestedObject(
@@ -2140,11 +2174,12 @@ function requireSummaryKvkkInventory(report, failures) {
     failures,
     "productionEvidenceSummary.summary.reports.kvkkInventory.auditActionsVerified",
     "auditActionsVerified",
-    4,
+    5,
     false,
   );
   for (const action of [
     "kvkk.student_pii_purged",
+    "kvkk.student_contact_pii_purged",
     "kvkk.teacher_pii_purged",
     "kvkk.guardian_pii_purged",
     "kvkk.user_pii_purged",
@@ -2294,7 +2329,7 @@ function requireSummaryKvkkDataSubjectCounts(report, failures) {
   if (!counts) return;
 
   let total = 0;
-  for (const key of ["student", "teacher", "guardian", "user"]) {
+  for (const key of ["student", "studentContact", "teacher", "guardian", "user"]) {
     const value = counts[key];
     if (!Number.isInteger(value) || value < 0) {
       failures.push(`productionEvidenceSummary.summary.reports.kvkkInventory.dataSubjectCounts.${key} sifir veya daha buyuk tam sayi olmali.`);
@@ -2318,6 +2353,10 @@ function requireSummaryKvkkPurgeCoverage(report, failures) {
 
   for (const [subject, fields] of Object.entries({
     student: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "email", "photoKey"],
+    studentContact: [
+      "firstName", "lastName", "relationType", "phoneEncrypted", "phoneHash", "emailEncrypted", "emailHash",
+      "canReceiveSms", "canReceiveAnnouncements", "canReceiveFinance", "consentSource", "consentRecordedAt",
+    ],
     teacher: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone"],
     guardian: ["firstName", "lastName", "phone"],
     user: ["email", "name"],
@@ -2720,6 +2759,52 @@ function requireSummaryAdminMfa(report, failures) {
   }
 
   requireObjectStringList(report, failures, "productionEvidenceSummary.summary.reports.adminMfa.commandsPassed", "commandsPassed", 2, false);
+}
+
+function requireSummaryIsemQuarantineProbe(report, failures) {
+  const probe = requireNestedObject(
+    report,
+    failures,
+    "productionEvidenceSummary.summary.reports.isemOpticalPipeline.quarantineProbe",
+    "quarantineProbe",
+  );
+  if (!probe) return;
+  requireSummaryObjectKeySet(probe, [
+    "openCount",
+    "resolvedCount",
+    "examResultCount",
+    "reportResultCount",
+    "idempotentReplayVerified",
+    "studentReportVerified",
+    "excelExportVerified",
+    "pdfExportVerified",
+    "reportReady",
+    "reportJobQueued",
+  ], failures, "productionEvidenceSummary.summary.reports.isemOpticalPipeline.quarantineProbe");
+  for (const key of ["openCount", "resolvedCount", "examResultCount", "reportResultCount"]) {
+    requireObjectEqual(
+      probe,
+      failures,
+      `productionEvidenceSummary.summary.reports.isemOpticalPipeline.quarantineProbe.${key}`,
+      key,
+      1,
+    );
+  }
+  for (const key of [
+    "idempotentReplayVerified",
+    "studentReportVerified",
+    "excelExportVerified",
+    "pdfExportVerified",
+    "reportReady",
+    "reportJobQueued",
+  ]) {
+    requireObjectTrue(
+      probe,
+      failures,
+      `productionEvidenceSummary.summary.reports.isemOpticalPipeline.quarantineProbe.${key}`,
+      key,
+    );
+  }
 }
 
 function requireSummaryLiveExamCycle(report, failures) {

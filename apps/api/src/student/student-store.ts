@@ -4,6 +4,7 @@ import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type Queryable, type TenantQueryable, withExplicitTenantQuery, withTenantQuery } from "../db/tenant-query.js";
 import type { StudentRecord } from "./student.service.js";
 import type {
+  ApiListMeta,
   ApiCursorListMeta,
   StudentEnrollmentRecord,
   StudentPortalAccessRecord,
@@ -11,6 +12,7 @@ import type {
   StudentPortalAccessUpdateResult,
 } from "@o-okul/shared-types";
 import type { StudentEnrollmentInput } from "./student-enrollment-store.js";
+import type { StudentContactStoreInput } from "./student-contact-store.js";
 
 type StudentInput = Omit<StudentRecord, "id" | "status"> & Partial<Pick<StudentRecord, "status" | "studentNo">>;
 const studentNoStart = 100;
@@ -44,6 +46,27 @@ export interface StudentPortalAccessPage {
   meta: ApiCursorListMeta;
 }
 
+export interface StudentRegistryQuery {
+  page: number;
+  limit: number;
+  q?: string;
+  sort?: string;
+  ids?: string[];
+  classIds?: string[];
+  responsibleTeacherId?: string;
+  status?: StudentRecord["status"];
+  hasContact?: boolean;
+  campusIds?: string[];
+  teacherId?: string;
+  teacherStudentIds?: string[];
+  teacherClassIds?: string[];
+}
+
+export interface StudentRegistryPage {
+  records: StudentRecord[];
+  meta: ApiListMeta;
+}
+
 export interface StudentPortalSuspensionResult {
   userId?: string;
   membershipSuspended: boolean;
@@ -63,8 +86,16 @@ export interface StudentEnrollmentTransitionResult {
   portalAccess?: StudentPortalSuspensionResult;
 }
 
+export interface StudentBatchCreateInput {
+  student: StudentInput;
+  enrollment?: Omit<StudentEnrollmentInput, "tenantId" | "studentId">;
+  contact?: Omit<StudentContactStoreInput, "studentId">;
+}
+
 export interface StudentStore {
   list(): Promise<StudentRecord[]>;
+  listRegistryPage(tenantId: string, query: StudentRegistryQuery): Promise<StudentRegistryPage>;
+  listStudentNos(tenantId: string): Promise<string[]>;
   listPortalAccess(tenantId: string, query: StudentPortalAccessQuery): Promise<StudentPortalAccessPage>;
   updatePortalAccess(
     tenantId: string,
@@ -82,11 +113,9 @@ export interface StudentStore {
     enrollment: Omit<StudentEnrollmentInput, "tenantId" | "studentId">,
   ): Promise<StudentRecord>;
   createManyWithEnrollments?(
-    inputs: Array<{
-      student: StudentInput;
-      enrollment?: Omit<StudentEnrollmentInput, "tenantId" | "studentId">;
-    }>,
+    inputs: StudentBatchCreateInput[],
   ): Promise<StudentRecord[]>;
+  createManyWithEnrollmentsAndContacts?(inputs: StudentBatchCreateInput[]): Promise<StudentRecord[]>;
   updateWithEnrollmentTransition?(
     id: string,
     input: Partial<Pick<StudentRecord, "firstName" | "lastName" | "classId" | "responsibleTeacherId" | "status">>,
@@ -139,6 +168,33 @@ export class InMemoryStudentStore implements StudentStore {
 
   async list(): Promise<StudentRecord[]> {
     return this.students.filter((student) => !student.deletedAt);
+  }
+
+  async listRegistryPage(tenantId: string, query: StudentRegistryQuery): Promise<StudentRegistryPage> {
+    const normalizedQuery = query.q?.trim().toLocaleLowerCase("tr-TR");
+    const records = this.students
+      .filter((student) => student.tenantId === tenantId && !student.deletedAt)
+      .filter((student) => !query.ids || query.ids.includes(student.id))
+      .filter((student) => !query.classIds || Boolean(student.classId && query.classIds.includes(student.classId)))
+      .filter((student) => !query.responsibleTeacherId || student.responsibleTeacherId === query.responsibleTeacherId)
+      .filter((student) => !query.status || student.status === query.status)
+      .filter((student) => query.hasContact === undefined || query.hasContact === false)
+      .filter((student) => !query.teacherId || student.responsibleTeacherId === query.teacherId
+        || Boolean(query.teacherStudentIds?.includes(student.id))
+        || Boolean(student.classId && query.teacherClassIds?.includes(student.classId)))
+      .filter((student) => !normalizedQuery || `${student.firstName} ${student.lastName} ${student.studentNo ?? ""}`.toLocaleLowerCase("tr-TR").includes(normalizedQuery))
+      .sort(studentRegistryComparator(query.sort));
+    const start = (query.page - 1) * query.limit;
+    return {
+      records: records.slice(start, start + query.limit),
+      meta: studentRegistryMeta(records.length, query),
+    };
+  }
+
+  async listStudentNos(tenantId: string): Promise<string[]> {
+    return this.students
+      .filter((student) => student.tenantId === tenantId && !student.deletedAt && Boolean(student.studentNo))
+      .map((student) => student.studentNo!);
   }
 
   async listPortalAccess(tenantId: string, query: StudentPortalAccessQuery): Promise<StudentPortalAccessPage> {
@@ -312,6 +368,92 @@ export class PostgresStudentStore implements StudentStore {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<StudentRow>(`SELECT * FROM "Student" WHERE "deletedAt" IS NULL`);
       return result.rows.map(toStudentRecord);
+    });
+  }
+
+  async listRegistryPage(tenantId: string, query: StudentRegistryQuery): Promise<StudentRegistryPage> {
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const values: unknown[] = [tenantId];
+      const filters = [`student."tenantId" = $1`, `student."deletedAt" IS NULL`];
+      const addFilter = (sql: (parameter: string) => string, value: unknown) => {
+        values.push(value);
+        filters.push(sql(`$${values.length}`));
+      };
+
+      if (query.ids) addFilter((parameter) => `student."id" = ANY(${parameter}::text[])`, query.ids);
+      if (query.classIds) addFilter((parameter) => `student."classId" = ANY(${parameter}::text[])`, query.classIds);
+      if (query.responsibleTeacherId) addFilter((parameter) => `student."responsibleTeacherId" = ${parameter}`, query.responsibleTeacherId);
+      if (query.status) addFilter((parameter) => `student."status" = ${parameter}`, query.status);
+      if (query.campusIds) {
+        addFilter((parameter) => `EXISTS (
+          SELECT 1 FROM "Class" scoped_class
+          WHERE scoped_class."tenantId" = student."tenantId"
+            AND scoped_class."id" = student."classId"
+            AND scoped_class."deletedAt" IS NULL
+            AND scoped_class."campusId" = ANY(${parameter}::text[])
+        )`, query.campusIds);
+      }
+      if (query.teacherId) {
+        values.push(query.teacherId, query.teacherStudentIds ?? [], query.teacherClassIds ?? []);
+        const teacherParameter = `$${values.length - 2}`;
+        const studentsParameter = `$${values.length - 1}`;
+        const classesParameter = `$${values.length}`;
+        filters.push(`(
+          student."responsibleTeacherId" = ${teacherParameter}
+          OR student."id" = ANY(${studentsParameter}::text[])
+          OR student."classId" = ANY(${classesParameter}::text[])
+        )`);
+      }
+      if (query.hasContact !== undefined) {
+        filters.push(`${query.hasContact ? "" : "NOT "}EXISTS (
+          SELECT 1 FROM "StudentContact" contact
+          WHERE contact."tenantId" = student."tenantId"
+            AND contact."studentId" = student."id"
+            AND contact."deletedAt" IS NULL
+        )`);
+      }
+      const pattern = searchPattern(query.q);
+      if (pattern) {
+        addFilter((parameter) => `lower(
+          coalesce(student."firstName", '') || ' ' ||
+          coalesce(student."lastName", '') || ' ' ||
+          coalesce(student."studentNo", '')
+        ) LIKE ${parameter} ESCAPE '\\'`, pattern);
+      }
+
+      const where = filters.join(" AND ");
+      const totalResult = await client.query<{ total: number | string }>(
+        `SELECT COUNT(*)::int AS total FROM "Student" student WHERE ${where}`,
+        values,
+      );
+      const offset = (query.page - 1) * query.limit;
+      const result = await client.query<StudentRow>(
+        `SELECT student.*
+         FROM "Student" student
+         WHERE ${where}
+         ORDER BY ${studentRegistryOrder(query.sort)}, student."id" ASC
+         LIMIT ${query.limit} OFFSET ${offset}`,
+        values,
+      );
+      const total = Number(totalResult.rows[0]?.total ?? 0);
+      return {
+        records: result.rows.map(toStudentRecord),
+        meta: studentRegistryMeta(total, query),
+      };
+    });
+  }
+
+  async listStudentNos(tenantId: string): Promise<string[]> {
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const result = await client.query<{ studentNo: string }>(
+        `SELECT "studentNo"
+         FROM "Student"
+         WHERE "tenantId" = $1
+           AND "deletedAt" IS NULL
+           AND "studentNo" IS NOT NULL`,
+        [tenantId],
+      );
+      return result.rows.map((row) => row.studentNo);
     });
   }
 
@@ -624,10 +766,7 @@ export class PostgresStudentStore implements StudentStore {
   }
 
   async createManyWithEnrollments(
-    inputs: Array<{
-      student: StudentInput;
-      enrollment?: Omit<StudentEnrollmentInput, "tenantId" | "studentId">;
-    }>,
+    inputs: StudentBatchCreateInput[],
   ): Promise<StudentRecord[]> {
     if (inputs.length === 0) return [];
 
@@ -638,6 +777,20 @@ export class PostgresStudentStore implements StudentStore {
         if (input.enrollment) {
           await insertEnrollment(client, student, input.enrollment);
         }
+        created.push(student);
+      }
+      return created;
+    });
+  }
+
+  async createManyWithEnrollmentsAndContacts(inputs: StudentBatchCreateInput[]): Promise<StudentRecord[]> {
+    if (inputs.length === 0) return [];
+    return withTenantQuery(this.pool, async (client) => {
+      const created: StudentRecord[] = [];
+      for (const input of inputs) {
+        const student = await insertStudent(client, input.student);
+        if (input.enrollment) await insertEnrollment(client, student, input.enrollment);
+        if (input.contact) await insertStudentContact(client, { ...input.contact, studentId: student.id });
         created.push(student);
       }
       return created;
@@ -890,6 +1043,25 @@ async function insertEnrollment(
     createdAt: row.createdAt ? toIsoString(row.createdAt) : undefined,
     updatedAt: row.updatedAt ? toIsoString(row.updatedAt) : undefined,
   };
+}
+
+async function insertStudentContact(client: Queryable, input: StudentContactStoreInput): Promise<void> {
+  const result = await client.query<{ id: string }>(
+    `INSERT INTO "StudentContact" (
+       "id", "tenantId", "studentId", "firstName", "lastName", "relationType",
+       "phoneEncrypted", "phoneHash", "emailEncrypted", "emailHash",
+       "canReceiveSms", "canReceiveAnnouncements", "canReceiveFinance",
+       "consentSource", "consentRecordedAt", "updatedAt"
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,now())
+     RETURNING "id"`,
+    [
+      randomUUID(), input.tenantId, input.studentId, input.firstName, input.lastName, input.relationType,
+      input.phoneEncrypted ?? null, input.phoneHash ?? null, input.emailEncrypted ?? null, input.emailHash ?? null,
+      input.canReceiveSms, input.canReceiveAnnouncements, input.canReceiveFinance,
+      input.consentSource ?? null, input.consentRecordedAt ?? null,
+    ],
+  );
+  if (!result.rows[0]) throw new Error("STUDENT_CONTACT_CREATE_FAILED");
 }
 
 async function suspendStudentPortalAccess(
@@ -1312,6 +1484,47 @@ function decodeStudentPortalCursor(cursor: string): string {
 function searchPattern(value: string | undefined): string | null {
   const normalized = value?.trim().toLocaleLowerCase("tr-TR");
   return normalized ? `%${normalized.replace(/[\\%_]/g, "\\$&")}%` : null;
+}
+
+function studentRegistryMeta(total: number, query: Pick<StudentRegistryQuery, "page" | "limit">): ApiListMeta {
+  return {
+    total,
+    page: query.page,
+    limit: query.limit,
+    totalPages: total === 0 ? 0 : Math.ceil(total / query.limit),
+  };
+}
+
+function studentRegistryOrder(sort: string | undefined): string {
+  const orders: Record<string, string> = {
+    "studentNo": `student."studentNo" ASC NULLS LAST`,
+    "-studentNo": `student."studentNo" DESC NULLS LAST`,
+    "studentNo:asc": `student."studentNo" ASC NULLS LAST`,
+    "studentNo:desc": `student."studentNo" DESC NULLS LAST`,
+    "firstName": `lower(student."firstName") ASC`,
+    "-firstName": `lower(student."firstName") DESC`,
+    "firstName:asc": `lower(student."firstName") ASC`,
+    "firstName:desc": `lower(student."firstName") DESC`,
+    "lastName": `lower(student."lastName") ASC`,
+    "-lastName": `lower(student."lastName") DESC`,
+    "lastName:asc": `lower(student."lastName") ASC`,
+    "lastName:desc": `lower(student."lastName") DESC`,
+    "classId": `student."classId" ASC NULLS LAST`,
+    "-classId": `student."classId" DESC NULLS LAST`,
+    "status:asc": `student."status" ASC`,
+    "status:desc": `student."status" DESC`,
+  };
+  return orders[sort ?? "lastName"] ?? orders["lastName"]!;
+}
+
+function studentRegistryComparator(sort: string | undefined): (left: StudentRecord, right: StudentRecord) => number {
+  const raw = sort ?? "lastName";
+  const direction = raw.startsWith("-") || raw.endsWith(":desc") ? -1 : 1;
+  const field = raw.replace(/^-/, "").replace(/:(asc|desc)$/, "") as "studentNo" | "firstName" | "lastName" | "classId" | "status";
+  return (left, right) => direction * String(left[field] ?? "").localeCompare(String(right[field] ?? ""), "tr-TR", {
+    numeric: field === "studentNo",
+    sensitivity: "base",
+  }) || left.id.localeCompare(right.id);
 }
 
 function maskEmail(value: string): string {

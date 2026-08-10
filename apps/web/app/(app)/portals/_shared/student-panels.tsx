@@ -87,7 +87,7 @@ export function ProfilePanel({ profile }: { profile?: StudentProfileRecord }) {
         <InfoItem label="Şube" value={profile?.section ?? "-"} />
         <InfoItem label="Sorumlu öğretmen" value={profile?.responsibleTeacherName ?? "Öğretmen bilgisi yok"} />
         <InfoItem label="TC" value={profile?.nationalIdMasked ?? "-"} />
-        <InfoItem label="Telefon" value={profile?.phone ? maskPhoneNumber(profile.phone) : "-"} />
+        <InfoItem label="Telefon" value={profile?.phone ? maskPhoneNumber(profile.phone) : (profile?.phoneMasked ?? "-")} />
       </InfoGrid>
     </Panel>
   );

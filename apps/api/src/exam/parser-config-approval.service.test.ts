@@ -124,6 +124,10 @@ class FakeRepository implements ParserConfigRepository {
 
   constructor(private readonly error?: string) {}
 
+  async findApproved() {
+    return undefined;
+  }
+
   async saveApproved(input: ApprovedParserConfigInput) {
     this.inputs.push(input);
     if (this.error) {

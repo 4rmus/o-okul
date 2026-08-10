@@ -5,12 +5,14 @@
   "inventorySource": "staging readonly inventory query",
   "dataSubjectCounts": {
     "student": 12,
+    "studentContact": 10,
     "teacher": 3,
     "guardian": 10,
     "user": 4
   },
   "purgeCoverage": {
     "student": ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "email", "photoKey"],
+    "studentContact": ["firstName", "lastName", "relationType", "phoneEncrypted", "phoneHash", "emailEncrypted", "emailHash", "canReceiveSms", "canReceiveAnnouncements", "canReceiveFinance", "consentSource", "consentRecordedAt"],
     "teacher": ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone"],
     "guardian": ["firstName", "lastName", "phone"],
     "user": ["email", "name"]
@@ -30,6 +32,7 @@
   },
   "auditActionsVerified": [
     "kvkk.student_pii_purged",
+    "kvkk.student_contact_pii_purged",
     "kvkk.teacher_pii_purged",
     "kvkk.guardian_pii_purged",
     "kvkk.user_pii_purged"
@@ -65,6 +68,7 @@
       "support_ticket.created",
       "support_ticket_comment.created",
       "kvkk.student_pii_purged",
+      "kvkk.student_contact_pii_purged",
       "kvkk.teacher_pii_purged",
       "kvkk.guardian_pii_purged",
       "kvkk.user_pii_purged"

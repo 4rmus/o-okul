@@ -437,7 +437,7 @@ describe("ExamController", () => {
     await request(server)
       .post("/exams")
       .set("Authorization", `Bearer ${admin.accessToken}`)
-      .send(examCreateBody("Nisan Deneme"))
+      .send(examCreateBody("Nisan Deneme", { classIds: ["class-a"] }))
       .expect(201);
 
     const teacher = await login("teacher-a@example.test");
@@ -542,6 +542,30 @@ describe("ExamController", () => {
       campusScope: { scopeMode: "CAMPUSES", campusIds: ["campus-a"] },
       bypassRls: false,
     }, created.id)).rejects.toThrow("EXAM_WORKSPACE_SCOPE_FORBIDDEN");
+  });
+
+  it("öğretmen okumasını assignment ve campusScope kesişimiyle sınırlar", async () => {
+    const created = await repository.create({ tenantId: "tenant-a", title: "Kampüs Kapsamlı Deneme" });
+    await participants.create({
+      tenantId: "tenant-a",
+      examId: created.id,
+      studentId: "student-a",
+    });
+    const exams = app.get(ExamService);
+    const context = {
+      userId: "teacher-a",
+      tenantId: "tenant-a",
+      activePersona: "TEACHER" as const,
+      subjectType: "TEACHER" as const,
+      subjectId: "teacher-a",
+      roles: ["TEACHER"],
+      campusScope: { scopeMode: "CAMPUSES" as const, campusIds: ["campus-a"] },
+      bypassRls: false,
+    };
+
+    await expect(exams.list(context)).resolves.toEqual([]);
+    await expect(exams.listParticipants(context, created.id)).resolves.toEqual([]);
+    await expect(exams.get(context, created.id)).rejects.toThrow("FORBIDDEN_TEACHER_ASSIGNMENT_SCOPE");
   });
 
   it("workspace ortak rol-persona kuralını servis sınırında uygular", async () => {

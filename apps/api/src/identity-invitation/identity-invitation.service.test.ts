@@ -153,6 +153,90 @@ describe("IdentityInvitationService", () => {
     expect(issued.invitation).toMatchObject({ subjectType: "EMPLOYEE", role: "OPERATIONS_STAFF" });
   });
 
+  it("kampüs kapsamlı çalışan yeni hesap daveti üretemez", async () => {
+    const invitations = new InMemoryIdentityInvitationStore();
+    const users = new InMemoryUserManagementStore();
+    const employee = await users.createEmployee("tenant-a", {
+      firstName: "Dar",
+      lastName: "Kapsam",
+      status: "ACTIVE",
+    });
+    const service = new IdentityInvitationService(
+      invitations,
+      users,
+      new InMemoryStudentStore(),
+      new InMemoryGuardianStore(),
+      new InMemoryTeacherStore(),
+      new InMemoryTenantStore(),
+    );
+
+    await expect(service.createEmployeeInvitation(
+      {
+        tenantId: "tenant-a",
+        userId: "admin-a",
+        roles: ["TENANT_ADMIN"],
+        activePersona: "STAFF",
+        campusScope: { scopeMode: "CAMPUSES", campusIds: ["campus-main"] },
+        bypassRls: false,
+      },
+      employee.id,
+      { email: "dar@example.test", role: "OPERATIONS_STAFF" },
+    )).rejects.toThrow("EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
+    await expect(invitations.list("tenant-a")).resolves.toEqual([]);
+  });
+
+  it("guardian read-only rollout açıkken doğrudan guardian davetini üretmez", async () => {
+    const invitations = new InMemoryIdentityInvitationStore();
+    const resolve = vi.fn().mockResolvedValue({ enabledFeatureKeys: ["product.guardian-read-only"] });
+    const service = new IdentityInvitationService(
+      invitations,
+      new InMemoryUserManagementStore(),
+      new InMemoryStudentStore(),
+      new InMemoryGuardianStore(),
+      new InMemoryTeacherStore(),
+      new InMemoryTenantStore(),
+      undefined,
+      undefined,
+      { resolve } as never,
+    );
+
+    await expect(service.create(
+      { tenantId: "tenant-a", userId: "admin-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      { subjectType: "GUARDIAN", subjectId: "guardian-a", email: "guardian@example.test" },
+    )).rejects.toThrow("GUARDIAN_WRITE_READ_ONLY");
+    await expect(invitations.list("tenant-a")).resolves.toEqual([]);
+  });
+
+  it("eşzamanlı çalışan davetlerinde yalnız bir pending davet üretir", async () => {
+    const invitations = new InMemoryIdentityInvitationStore();
+    const users = new InMemoryUserManagementStore();
+    const employee = await users.createEmployee("tenant-a", {
+      firstName: "Eşzamanlı",
+      lastName: "Davet",
+      status: "ACTIVE",
+    });
+    const service = new IdentityInvitationService(
+      invitations,
+      users,
+      new InMemoryStudentStore(),
+      new InMemoryGuardianStore(),
+      new InMemoryTeacherStore(),
+      new InMemoryTenantStore(),
+    );
+    const invite = () => service.createEmployeeInvitation(
+      { tenantId: "tenant-a", userId: "admin-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      employee.id,
+      { email: "race@example.test", role: "OPERATIONS_STAFF" },
+    );
+
+    const outcomes = await Promise.allSettled(Array.from({ length: 20 }, invite));
+    expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome.status === "rejected")).toHaveLength(19);
+    await expect(invitations.list("tenant-a")).resolves.toEqual([
+      expect.objectContaining({ subjectId: employee.id, subjectType: "EMPLOYEE", status: "PENDING" }),
+    ]);
+  });
+
   it("owner/admin başlangıç davetini bağlı step-up kanıtı ve owner capability ile sınırlar", async () => {
     const invitations = new InMemoryIdentityInvitationStore();
     const users = new InMemoryUserManagementStore();

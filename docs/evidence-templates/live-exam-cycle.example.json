@@ -3,7 +3,7 @@
   "environment": "staging",
   "checkedAt": "2026-05-30",
   "tester": "qa-owner",
-  "releaseCandidate": "staging-2026-05-30",
+  "releaseCandidate": "ghcr.io/example/o-okul/api:1111111111111111111111111111111111111111",
   "appUrl": "https://staging.example.invalid",
   "apiUrl": "https://api.staging.example.invalid",
   "commandsPassed": [

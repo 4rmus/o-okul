@@ -4,6 +4,7 @@ import type { RequestContext } from "../context/request-context.js";
 import { authSessionStoreToken, type SessionStore } from "../auth/session-store.js";
 import { verifyAdminMfaStepUpProof } from "../auth/totp-mfa.js";
 import { withCursorListMeta } from "../listing/list-query.js";
+import { requireTenantWideStaffContext } from "../tenant/tenant-access.js";
 import {
   hasCapabilityForRoles,
   isTenantAssignableRoleName,
@@ -33,13 +34,13 @@ export class UserManagementService {
   ) {}
 
   async list(context: RequestContext): Promise<TenantUserRecord[]> {
-    const tenantId = this.requireTenantId(context);
+    const tenantId = this.requireTenantWideContext(context);
     return this.store.listTenantUsers(tenantId);
   }
 
   async listEmployees(context: RequestContext, query: EmployeeAccessListQuery): Promise<EmployeeAccessRecord[]> {
     try {
-      const page = await this.store.listEmployeeAccessPage(this.requireTenantId(context), query);
+      const page = await this.store.listEmployeeAccessPage(this.requireTenantWideContext(context), query);
       return withCursorListMeta(page.records, page.meta);
     } catch (error) {
       if (error instanceof Error && error.message === "EMPLOYEE_CURSOR_INVALID") {
@@ -50,7 +51,7 @@ export class UserManagementService {
   }
 
   async createEmployee(context: RequestContext, input: EmployeeCreateRequest): Promise<EmployeeAccessRecord> {
-    const tenantId = this.requireTenantId(context);
+    const tenantId = this.requireTenantWideContext(context);
     try {
       const employee = await this.store.createEmployee(tenantId, input);
       await this.auditLogs?.record({
@@ -70,7 +71,7 @@ export class UserManagementService {
   }
 
   async setRoles(context: RequestContext, userId: string, body: SetTenantUserRolesBody): Promise<TenantUserRecord> {
-    const tenantId = this.requireTenantId(context);
+    const tenantId = this.requireTenantWideContext(context);
     const nextRoles = parseTenantRoles(body.roles);
     if (context.userId === userId && !nextRoles.includes("TENANT_ADMIN")) {
       throw new BadRequestException("SELF_TENANT_ADMIN_ROLE_REQUIRED");
@@ -98,7 +99,7 @@ export class UserManagementService {
     input: TenantMembershipUpdateRequest,
     stepUpToken?: string,
   ): Promise<TenantMembershipUpdateResult> {
-    const tenantId = this.requireTenantId(context);
+    const tenantId = this.requireTenantWideContext(context);
     const stepUpVerified = this.verifyOwnerAdminStepUp(context, stepUpToken);
     let result: TenantMembershipUpdateResult | undefined;
     try {
@@ -146,6 +147,15 @@ export class UserManagementService {
       throw new BadRequestException("TENANT_CONTEXT_REQUIRED");
     }
     return context.tenantId;
+  }
+
+  private requireTenantWideContext(context: RequestContext): string {
+    this.requireTenantId(context);
+    try {
+      return requireTenantWideStaffContext(context, "EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
+    } catch (error) {
+      throw new ForbiddenException(error instanceof Error ? error.message : "EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
+    }
   }
 
   private verifyOwnerAdminStepUp(context: RequestContext, stepUpToken?: string): boolean {

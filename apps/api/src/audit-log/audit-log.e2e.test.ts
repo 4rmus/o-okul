@@ -579,6 +579,7 @@ describe("Audit log API", () => {
     const imported = await request(server)
       .post("/students/imports")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", "student-import-audit-a")
       .send({ fileBase64: await createStudentWorkbookBase64([["SakliImportAdi", "SakliImportSoyadi"]]) })
       .expect(201);
     const importedStudentId = (imported.body as { students: Array<{ id: string }> }).students[0]?.id;
@@ -970,9 +971,30 @@ describe("Audit log API", () => {
             "photoKey",
             "ReportSnapshot.displayName",
             "ReportSnapshot.studentNo",
+            "StudentContact.firstName",
+            "StudentContact.lastName",
+            "StudentContact.relationType",
+            "StudentContact.phoneEncrypted",
+            "StudentContact.phoneHash",
+            "StudentContact.emailEncrypted",
+            "StudentContact.emailHash",
+            "StudentContact.canReceiveSms",
+            "StudentContact.canReceiveAnnouncements",
+            "StudentContact.canReceiveFinance",
+            "StudentContact.consentSource",
+            "StudentContact.consentRecordedAt",
           ],
           reportSnapshotPurgeCount: expect.any(Number),
+          studentContactPurgeCount: expect.any(Number),
         },
+      }),
+      expect.objectContaining({
+        tenantId: "tenant-a",
+        actorUserId: "user-tenant-a",
+        entityType: "StudentContact",
+        entityId: studentId,
+        action: "kvkk.student_contact_pii_purged",
+        diff: { studentId, recordCount: expect.any(Number) },
       }),
       expect.objectContaining({
         tenantId: "tenant-a",

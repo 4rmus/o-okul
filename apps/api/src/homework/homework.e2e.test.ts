@@ -789,7 +789,7 @@ describe("Homework API", () => {
         title: "Gizli Ödev",
         dueAt: "2026-06-06T12:00:00.000Z",
       })
-      .expect(403);
+      .expect(404);
   });
 
   it("tenant A başka tenantId ile ödev oluşturamaz", async () => {
@@ -823,7 +823,7 @@ describe("Homework API", () => {
         classId: "class-b",
         materialId: "material-a",
       })
-      .expect(403);
+      .expect(404);
   });
 
   it("classId olmadan ödev oluşturmayı reddeder", async () => {
@@ -923,7 +923,7 @@ describe("Homework API", () => {
       .patch("/homework/homework-a")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({ classId: "class-b" })
-      .expect(403);
+      .expect(404);
   });
 
   it("tenant A tenant B ödev kaydına erişemez", async () => {

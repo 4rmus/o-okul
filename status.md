@@ -1,10 +1,11 @@
 # O-Okul Durum
 
 Son güncelleme: 2026-08-10
-İnceleme snapshotı: `origin/main` / `af5dc5ad1572965709f0fc47f3bdf84a939e0626`; Gate A, B ve C değişiklikleri
-`agent/almanac-gate-a-local-20260809-2` izole yerel branch'indedir
-Kanıt düzeyi: Gate A, Gate B ve Gate C `LOCAL_STATIC`; ölçüm baseline'ı `LOCAL_SYNTHETIC`.
-GitHub CI, staging, provider, deploy ve production bu değişiklik seti için yeniden doğrulanmadı
+İnceleme snapshotı: Gate C commit'i `5f852becb7c6f0a04ca96355e075d863a13838b7`; Gate D değişiklikleri
+`agent/almanac-gate-d-local-20260810` izole yerel branch'indedir
+Kanıt düzeyi: Gate A, Gate B ve Gate C `LOCAL_STATIC`; Gate D
+`LOCAL_STATIC_PASS_WITH_STAGING_PENDING`; ölçüm baseline'ı `LOCAL_SYNTHETIC`.
+GitHub CI, staging, provider, deploy ve production bu değişiklik seti için yeniden doğrulanmadı.
 
 5 Ağustos 2026 ürün kararları: giriş kurum subdomaini + tenant-local kimliktir; guardian ürün
 kapsamından çıkarılacaktır; hukuk/KVKK incelemesi bu fazda repo uygulamasını ve pilot hazırlığını
@@ -105,6 +106,30 @@ ortam ve tarih içeren kalıcı evidence ile yükseltilir.
   GitHub CI, gerçek tenant flag aktivasyonu, staging, deploy, RUM/UAT, pilot ve production
   `EXTERNAL_NOT_RUN`.
 
+## Almanak 2.0 Gate D — Çekirdek Ürün Yerel Kapanış (2026-08-10)
+
+- **Sınav/optik/rapor:** Ana iSEM fixture'ı 21 eşleşme/sonuç/rapor üretir. Ayrı gerçek karantina probe'u
+  `OPEN → resolve → idempotent replay → sonuç → aynı snapshot JSON/XLSX/PDF` zincirini doğrular;
+  go-live checker probe olmadan PASS vermez. Private fixture temiz checkout'ta staging secret'larından
+  geçici, hash-doğrulamalı input root'a alınır ve run sonunda temizlenir.
+- **Öğrenci:** Registry v2 server-side query kullanır; 10.001 kayıt sentetik bütçesi 500 ms altındadır.
+  Import commit idempotency anahtarı ister. Tek overview read model legacy 14 istek fanout'unu kaldırır.
+- **PII ve campus scope:** Öğrenci/guardian/öğretmen telefon ve e-postası API'de maskelenir. Öğretmen,
+  kampüs çalışanı, finans ve tenant sınırları sunucuda uygulanır; client maskesi yetki kontrolü değildir.
+- **StudentContact/guardian geçişi:** İletişim kişisi manuel ve import akışında şifreli saklanır, tüm
+  izinleri default-off'tur ve hesap/session/davet üretmez. Okuma privacy/self sınırındadır; create
+  zorunlu replay-safe idempotency anahtarı taşır ve öğrenci KVKK purge'u iletişim PII'sini anonimleştirir.
+  Guardian read-only rollout yeni yazma ve davet yollarını kapatır; fiziksel silme yapılmaz.
+- **Kurulum/IAM:** Server readiness, altı deep-link kurulum route'u, çalışan rol/kampüs tenant-wide
+  sınırı ve eşzamanlı PENDING çalışan daveti unique sözleşmesi hazırdır. Migration en yeni daveti
+  korur; eski kopyaları revoke eder ve teslimat payload'larını expire eder; migration kilidi index
+  kurulumu sırasındaki canlı yazma yarışını kapatır.
+- **Sonuç:** API `144/1076`, web UX `132`, route smoke `90`, route manifest `88/19`, görsel `32`,
+  OpenAPI `238`, idempotency `46`, RLS `64/110`, production evidence template ve güncel ölçüm baseline
+  yerelde `PASS`. `NEXT_E2E_PORT=43148 pnpm run ci` aynı çalışma ağacında `PASS`. GitHub CI, staging
+  UAT/10k p95/iSEM/UI-worker, rollout aktivasyonu, pilot, deploy ve production `EXTERNAL_NOT_RUN`;
+  bu nedenle genel Gate D `PARTIAL`dır.
+
 ## Production Teknik Aktivasyonu — 2026-08-05
 
 - Mevcut sunucu kullanıldı; yeni VPS kurulmadı. `DOMAIN`, uygulama URL'leri, CORS ve Sentry ortam adı
@@ -155,6 +180,18 @@ ve gerçek ortam kanıtı olmadan yapılamaz. Workspace mailbox/alias testi tama
 uygulama-provider teslim testi yerine geçmez. Şablon veya statik checker sonucu canlı kanıt yerine kullanılamaz.
 
 ## Doğrulama
+
+2026-08-10 Gate D yerel sonuçları:
+
+- API tam paket: 144 dosya/1076 test; DB/RLS: 64 tenant tablo/110 composite FK `PASS`.
+- Student registry/import/overview/PII, setup deep-link, IAM ve optik hedefli web/API kontrolleri;
+  10k sentetik registry bütçesi ve same-snapshot karantina export probe'u `PASS`.
+- Web UX 132, route smoke 90, görsel 32; route manifest 88 route/19 modül; OpenAPI 238 path;
+  idempotency 46 operasyon; production evidence/go-live template ve üç görev x beş örnek güncel
+  measurement baseline `PASS`.
+- Tam repo zinciri `NEXT_E2E_PORT=43148 pnpm run ci`: `PASS`.
+- GitHub Actions, staging migration/UAT/10k p95/iSEM/UI-worker, tenant rollout, pilot, deploy ve
+  production: `EXTERNAL_NOT_RUN`.
 
 2026-08-10 Gate C yerel sonuçları:
 

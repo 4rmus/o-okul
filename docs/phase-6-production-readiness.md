@@ -803,7 +803,8 @@ pnpm backup:restore:smoke
 - KVKK `purgeCoverage` içinde öğrenci için `firstName`, `lastName`, `nationalIdEncrypted`,
   `nationalIdHash`, `phone`, `email`, `photoKey`; öğretmen için `firstName`, `lastName`,
   `nationalIdEncrypted`, `nationalIdHash`, `phone`; veli için `firstName`, `lastName`, `phone`;
-  kullanıcı hesabı için `email`, `name` alanları doğrulanır.
+  kullanıcı hesabı için `email`, `name`; `StudentContact` için ad, ilişki, şifreli/hash iletişim,
+  izin ve consent alanlarının anonimleştirme/temizleme kapsamı doğrulanır.
   `whatsappConsent` bloğu bu release'te `recordCount=0`, exact
   `eventRecordCount=0`,
   `piiRelevantStoredFields=[phoneHash,purpose,canReceiveWhatsapp,version,noticeVersion,source,recordedAt,withdrawnAt]`,
@@ -812,8 +813,8 @@ pnpm backup:restore:smoke
   `disposalMethod=NO_RECORDS_WHILE_DISABLED`, `purgeException=false`, boş olmayan `explanation`)
   taşır. Bu, özellik kapalıyken runtime kaydı olmadığını kanıtlar; capability veya sonraki
   aktivasyonun retention/purge onayı değildir.
-  Rapor top-level 10 alanı, dört `dataSubjectCounts` alanı, dört `purgeCoverage` subject'i,
-  subject field setleri, dört audit action seti, `/audit-logs` audit diff redaction bloğu ve boş `gaps` listesi
+  Rapor top-level 10 alanı, beş `dataSubjectCounts` alanı, beş `purgeCoverage` subject'i,
+  subject field setleri, beş audit action seti, `/audit-logs` audit diff redaction bloğu ve boş `gaps` listesi
   `prod:evidence:templates:check` içindeki fazla alan/madde ve invalid/non-empty gaps negatifleriyle korunur.
   Audit diff negatif kontrolleri `body`, `contentBase64`, `fileBase64`, `fileName`, `objectKey`,
   `rawLine`, `rawRow`, `rawText`, `s3Key`, `sourceFileName`, `sourceFilePath`, kişi adı,

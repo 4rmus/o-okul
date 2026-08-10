@@ -624,9 +624,10 @@ KVKK_INVENTORY_TARGET=file:///path/to/kvkk-inventory.json pnpm privacy:inventory
 Minimum kanıt içeriği:
 
 - `environment=staging|production`, `result=PASS` ve geleceğe taşmayan `checkedAt`.
-- `dataSubjectCounts` öğrenci, öğretmen, veli ve kullanıcı sayımlarını içerir; toplam gerçek veri
+- `dataSubjectCounts` öğrenci, öğrenci iletişim kişisi, öğretmen, veli ve kullanıcı sayımlarını içerir; toplam gerçek veri
   doğrulaması için sıfırdan büyük olmalıdır.
-- `purgeCoverage` öğrenci için `firstName`, `lastName`, `phone`, `email`; öğretmen için
+- `purgeCoverage` öğrenci için `firstName`, `lastName`, `phone`, `email`; `StudentContact` için
+  ad, ilişki, şifreli/hash iletişim, izin ve consent alanları; öğretmen için
   `firstName`, `lastName`; veli için `firstName`, `lastName`, `phone`; kullanıcı için `email`, `name`
   alan setlerini taşır.
 - `whatsappConsent` bu release'te exact `recordCount=0`, `eventRecordCount=0`, sekiz alanlı
@@ -637,9 +638,9 @@ Minimum kanıt içeriği:
   `disposalMethod=NO_RECORDS_WHILE_DISABLED`, `purgeException=false`, boş olmayan `explanation`)
   taşır. `WHATSAPP_ENABLED=false` iken projection/event tablolarına runtime kayıt yazılamaz ve bu kanıt WhatsApp
   capability veya teslimat kanıtı sayılmaz.
-- Audit action seti dört canonical KVKK purge action'ını içerir ve `gaps` boş olmalıdır.
-- Rapor top-level 10 alanı, dört count alanı, dört coverage subject'i, subject field setleri,
-  dört audit action seti, `/audit-logs` audit diff redaction bloğu ve boş `gaps` listesi
+- Audit action seti beş canonical KVKK purge action'ını içerir ve `gaps` boş olmalıdır.
+- Rapor top-level 10 alanı, beş count alanı, beş coverage subject'i, subject field setleri,
+  beş audit action seti, `/audit-logs` audit diff redaction bloğu ve boş `gaps` listesi
   template invalid/non-empty gaps negatifleriyle korunur.
 
 ## Security Audit Evidence
@@ -1296,7 +1297,19 @@ döndürür ve URL tokenı hiçbir kalıcı evidence çıktısına yazılmaz.
 
 Live UI-worker/report smoke preflight:
 
-Önce iSEM optik smoke aynı run için private UI-worker input'unu üretebilir:
+Önce onaylı iki iSEM fixture dosyasını staging secret manager içinde base64 secret olarak tutun:
+`ISEM_OPTICAL_PIPELINE_TXT_BASE64` ve `ISEM_OPTICAL_PIPELINE_ANSWER_KEY_BASE64`. Bunları repoya,
+artifact'e veya loga yazmayın. Wrapper secret'ları temiz checkout'ta `0700` geçici dizine `0600`
+dosya olarak materialize eder, manifestteki fixture kimliği/SHA-256 ile doğrular, child smoke'a yalnız
+mutlak `ISEM_OPTICAL_PIPELINE_INPUT_ROOT` verir ve başarı/hata halinde geçici dizini temizler.
+Staging secret'larını ilk kez bağlarken altyapı başlatmadan preflight çalıştırın:
+
+```sh
+ISEM_OPTICAL_PIPELINE_PRIVATE_INPUTS_PREFLIGHT_ONLY=1 \
+node scripts/run-isem-optical-pipeline-private.mjs
+```
+
+Ardından iSEM optik smoke aynı run için private UI-worker input'unu üretebilir:
 
 ```sh
 : "${ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD:?staging secret gerekli}"

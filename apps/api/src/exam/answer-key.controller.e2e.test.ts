@@ -5,7 +5,7 @@ import ExcelJS from "exceljs";
 import request from "supertest";
 import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import type { AnswerKeyRecord } from "@o-okul/shared-types";
+import type { AnswerKeyRecord, ExamParticipantRecord, ExamRecord } from "@o-okul/shared-types";
 import { AppModule } from "../app.module.js";
 import { reportSnapshotStoreToken, type ReportSnapshotStore } from "../report/report-snapshot-store.js";
 import {
@@ -14,6 +14,15 @@ import {
   type AnswerKeyRepository,
   type SaveAnswerKeyInput,
 } from "./answer-key.service.js";
+import {
+  examParticipantRepositoryToken,
+  examRepositoryToken,
+  type CreateExamParticipantRepositoryInput,
+  type CreateExamRepositoryInput,
+  type ExamParticipantRepository,
+  type ExamRepository,
+  type UpdateExamRepositoryInput,
+} from "./exam.service.js";
 
 describe("AnswerKeyController", () => {
   let app: INestApplication;
@@ -29,6 +38,10 @@ describe("AnswerKeyController", () => {
       .useValue(repository)
       .overrideProvider(reportSnapshotStoreToken)
       .useValue(snapshots)
+      .overrideProvider(examRepositoryToken)
+      .useValue(new FakeExamRepository())
+      .overrideProvider(examParticipantRepositoryToken)
+      .useValue(new FakeExamParticipantRepository())
       .compile();
 
     app = moduleRef.createNestApplication();
@@ -463,6 +476,43 @@ class FakeAnswerKeyRepository implements AnswerKeyRepository {
     const record = this.records.find((item) => item.tenantId === tenantId && item.examId === examId && item.version === version);
     return record ? toRecord(record, true) : undefined;
   }
+}
+
+class FakeExamRepository implements ExamRepository {
+  private readonly record: ExamRecord = {
+    id: "exam-a",
+    tenantId: "tenant-a",
+    title: "Atanmış Öğretmen Sınavı",
+    status: "DRAFT",
+    createdAt: "2026-06-02T00:00:00.000Z",
+    updatedAt: "2026-06-02T00:00:00.000Z",
+  };
+
+  async create(_input: CreateExamRepositoryInput): Promise<ExamRecord> { return this.record; }
+  async list(tenantId: string): Promise<ExamRecord[]> { return tenantId === this.record.tenantId ? [this.record] : []; }
+  async findById(tenantId: string, examId: string): Promise<ExamRecord | undefined> {
+    return tenantId === this.record.tenantId && examId === this.record.id ? this.record : undefined;
+  }
+  async update(_tenantId: string, _examId: string, _input: UpdateExamRepositoryInput): Promise<ExamRecord | undefined> { return this.record; }
+  async publish(): Promise<ExamRecord | undefined> { return { ...this.record, status: "PUBLISHED" }; }
+  async delete(): Promise<ExamRecord | undefined> { return this.record; }
+}
+
+class FakeExamParticipantRepository implements ExamParticipantRepository {
+  private readonly record: ExamParticipantRecord = {
+    id: "participant-a",
+    tenantId: "tenant-a",
+    examId: "exam-a",
+    studentId: "student-a",
+    status: "REGISTERED",
+    createdAt: "2026-06-02T00:00:00.000Z",
+    updatedAt: "2026-06-02T00:00:00.000Z",
+  };
+
+  async list(tenantId: string, examId: string): Promise<ExamParticipantRecord[]> {
+    return tenantId === this.record.tenantId && examId === this.record.examId ? [this.record] : [];
+  }
+  async create(_input: CreateExamParticipantRepositoryInput): Promise<ExamParticipantRecord> { return this.record; }
 }
 
 class FakeReportSnapshotStore implements ReportSnapshotStore {

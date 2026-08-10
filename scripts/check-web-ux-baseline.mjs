@@ -1790,7 +1790,7 @@ requireTokens("apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx", [
   'studentImportFileName: ""',
   'teacherImportFileName: ""',
   "window.sessionStorage.removeItem(draftStorageKey)",
-  'writeCookie(completedCookieName, "true")',
+  'setupProgressQuery.data?.status === "READY"',
 ]);
 
 requireNoTokens("apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx", [
@@ -1809,6 +1809,7 @@ requireNoTokens("apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx", [
   "duplicateStudentNo.value",
   '{draft.people.teacherImportFileName || "Öğretmen Excel veya CSV dosyası seçilebilir."}',
   '{draft.people.studentImportFileName || "Öğrenci Excel veya CSV dosyası seçilebilir."}',
+  'writeCookie(completedCookieName, "true")',
 ]);
 
 requireTokens("apps/web/app/(app)/kurum/ogrenciler/students-page.tsx", [
@@ -1840,9 +1841,9 @@ requireTokens("apps/web/app/(app)/kurum/ogrenciler/students-page.tsx", [
   "Sorumlu öğretmen",
   "Toplu dönem geçişi",
   "Veli: ${formatGuardianLinkedFilter",
-  "<RevealablePhone canReveal={canRevealPhone} value={guardian.phone} />",
-  "maskPhoneNumber(detail.profile.phone)",
-  "maskEmail(detail.profile.email)",
+  "<RevealablePhone canReveal={canRevealPhone && Boolean(guardian.phone)} value={guardian.phone ?? guardian.phoneMasked} />",
+  "detail.profile.phone ? maskPhoneNumber(detail.profile.phone) : detail.profile.phoneMasked",
+  "detail.profile.email ? maskEmail(detail.profile.email) : detail.profile.emailMasked",
   '<InfoGrid className="next-student-360-summary" aria-label="Öğrenci 360 özeti" role="region">',
   '<InfoItem label="Başarı" value={formatPercentNumber(reportSuccessRate(detail?.report?.total))} />',
   '<InfoItem label="Soru" value={formatNumber(reportQuestionCount(detail?.report?.total))} />',
@@ -1868,6 +1869,7 @@ requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/students-page.tsx", [
   "?? sourceClassId",
   "next-form-list",
   "formatEnrollmentAcademicContext(record)",
+  "<RevealablePhone canReveal={canRevealPhone} value={guardian.phone} />",
   'record.classId ?? "Sınıfsız"',
   "record.academicYearId, record.termId",
 ]);
@@ -1917,7 +1919,7 @@ requireTokens("apps/web/app/(app)/kurum/ogrenciler/student-detail-page.tsx", [
   "buildEnrollmentRows",
   "buildHomeworkRows",
   "buildAuditRows",
-  'caption="İletişim ve veli kayıtları"',
+  'caption={studentRegistryV2 ? "Öğrenci iletişim kişisi kayıtları" : "İletişim ve veli kayıtları"}',
   'caption="Veli ilişki geçmişi"',
   'caption="Öğretmen ilişki kayıtları"',
   'caption="Kayıt geçmişi kayıtları"',
@@ -1925,6 +1927,8 @@ requireTokens("apps/web/app/(app)/kurum/ogrenciler/student-detail-page.tsx", [
   'hasCapabilityForRoles(auth?.session.roles ?? [], "finance:manage")',
   'options.canViewFinance',
   'apiRequest<PaymentPlanWithInstallmentsRecord[]>',
+  '/students/${encodeURIComponent(id)}/overview',
+  'enabled: Boolean(auth) && !featureRolloutsQuery.isPending',
   'reports/students/${encodeURIComponent(studentId)}/snapshots',
   "studentDashboardSummaryItems",
   "studentDashboardSummaryBadges",
@@ -2002,7 +2006,7 @@ requireTokens("apps/web/e2e-next/student-relationship-flow-next.spec.ts", [
   "expectNoUnlabeledControls",
   "expectNoVisibleTextValues",
   "rawStudentDetailPiiValues",
-  'getByRole("table", { name: "İletişim ve veli kayıtları" })',
+  'getByRole("table", { name: "Öğrenci iletişim kişisi kayıtları" })',
   'getByRole("table", { name: "Veli ilişki geçmişi" })',
   'getByRole("table", { name: "Öğretmen ilişki kayıtları" })',
   'expect(requestedPaths.some((path) => path.includes("/reports/students/student-a/snapshots"))).toBe(false)',
@@ -2013,9 +2017,9 @@ requireTokens("apps/web/e2e-next/student-relationship-flow-next.spec.ts", [
   '"ada@example.test"',
   '"+905551110001"',
   '"guardian-mother"',
-  "/audit-logs/student-summary",
-  'searchParams.get("studentId")',
-  'searchParams.get("limit")',
+  'path === "/students/student-a/overview"',
+  'path === "/students/student-a/profile"',
+  'path === "/students/student-a/guardian-links"',
   "Finans görünürlüğü: açık",
   "Finans görünürlüğü: kapalı",
   'not.toContainText("Ödeme görür")',
@@ -2060,7 +2064,7 @@ requireTokens("apps/web/app/(app)/kurum/veliler/guardian-detail-page.tsx", [
   "buildGuardianStudentColumns",
   "Veli profili",
   '<InfoGrid className="next-guardian-profile-info" aria-label="Veli profil özeti" role="region">',
-  '<InfoItem label="Telefon" value={<RevealablePhone canReveal={canRevealPhone} value={detail.guardian.phone} />} />',
+  '<InfoItem label="Telefon" value={<RevealablePhone canReveal={canRevealPhone && Boolean(detail.guardian.phone)} value={detail.guardian.phone ?? detail.guardian.phoneMasked} />} />',
   '<InfoItem label="Finans görünürlüğü" value={formatPermissionCount(detail.links, "canViewFinance")} />',
   "Öğrenci bağlantıları",
   "Portal",
@@ -4308,7 +4312,7 @@ requireTokens("apps/web/app/(app)/portals/_shared/student-panels.tsx", [
   'title="Profil"',
   '<InfoGrid className="next-portal-profile-info" aria-label="Portal öğrenci profil özeti" role="region">',
   '<InfoItem label="TC" value={profile?.nationalIdMasked ?? "-"} />',
-  '<InfoItem label="Telefon" value={profile?.phone ? maskPhoneNumber(profile.phone) : "-"} />',
+  '<InfoItem label="Telefon" value={profile?.phone ? maskPhoneNumber(profile.phone) : (profile?.phoneMasked ?? "-")} />',
   'aria-label="Veli ilişkileri"',
   'title="Veliler"',
   'caption="Veli ilişkileri"',
@@ -5246,8 +5250,8 @@ function validateRouteFamilySmokeContract() {
   const manifestRoutes = [...manifestSource.matchAll(/^\s*route\("([^"]+)"/gm)].map((match) => match[1]);
   const duplicateRoutes = manifestRoutes.filter((route, index) => manifestRoutes.indexOf(route) !== index);
   const fileSystemRoutes = collectRoutePageTemplates("apps/web/app").sort();
-  if (manifestRoutes.length !== 82) {
-    failures.push(`${path} route manifest must contain exactly 82 route tests; found ${manifestRoutes.length}.`);
+  if (manifestRoutes.length !== 88) {
+    failures.push(`${path} route manifest must contain exactly 88 route tests; found ${manifestRoutes.length}.`);
   }
   if (duplicateRoutes.length > 0) {
     failures.push(`${path} route manifest contains duplicate routes: ${[...new Set(duplicateRoutes)].join(", ")}.`);
@@ -5257,8 +5261,8 @@ function validateRouteFamilySmokeContract() {
   }
 
   const primaryTaskCount = manifestSource.match(/\{ role: "(?:button|form|link|region)", name: "[^"]+" \}/g)?.length ?? 0;
-  if (primaryTaskCount !== 82) {
-    failures.push(`${path} must give all 82 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
+  if (primaryTaskCount !== 88) {
+    failures.push(`${path} must give all 88 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
   }
 
   const viewportStart = source.indexOf("const routeViewports = [");

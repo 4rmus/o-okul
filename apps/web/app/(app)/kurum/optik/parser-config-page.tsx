@@ -9,6 +9,12 @@ import type {
   OpticalFormTemplateRecord,
   ParserConfigPreset,
   ParserConfigSuggestion,
+  RawImportEvaluationQueueResult,
+  RawImportEvaluationStatus,
+  RawImportParseSummary,
+  RawImportQuarantineRecord as ImportQuarantineRecord,
+  RawImportQuarantineResolveBulkResponse as ImportQuarantineResolveBulkResponse,
+  RawImportUploadResult,
   StudentRecord,
 } from "@o-okul/shared-types";
 import { CheckCircle2, FileText, Play, RefreshCw, Search, Upload, Wand2 } from "lucide-react";
@@ -45,82 +51,6 @@ interface SavedParserConfig {
   skipHeaderLines: number;
   fieldMapping: ParserConfigSuggestion["fieldMapping"];
   status: "APPROVED";
-}
-
-interface RawImportUploadResult {
-  rawImport: {
-    id: string;
-    examId: string;
-    fileName: string;
-    sha256: string;
-    parserConfigVersion: string;
-  };
-  parseJob: {
-    queueName: string;
-    jobId: string;
-    status: string;
-  };
-  status: "uploaded";
-}
-
-interface RawImportParseSummary {
-  tenantId: string;
-  examId: string;
-  rawImportId: string;
-  matchedCount: number;
-  quarantinedCount: number;
-  totalRows: number;
-  quarantineReasons: Array<{ reason: string; count: number }>;
-}
-
-interface RawImportEvaluationQueueResult {
-  tenantId: string;
-  examId: string;
-  rawImportId: string;
-  answerKeyId?: string;
-  rawImportSha256?: string;
-  matchedCount: number;
-  queuedCount: number;
-  queueName: "exam-evaluation";
-  jobs: Array<{ participantId: string; jobId: string; status: "queued" }>;
-}
-
-interface RawImportEvaluationStatus {
-  tenantId: string;
-  examId: string;
-  rawImportId: string;
-  answerKeyId?: string;
-  matchedCount: number;
-  evaluatedCount: number;
-  pendingCount: number;
-  status: "COMPLETED" | "RUNNING";
-}
-
-interface ImportQuarantineRecord {
-  id: string;
-  examId: string;
-  rawImportId: string;
-  rowNumber: number;
-  rawRow: Record<string, unknown>;
-  reason: string;
-  status: string;
-  resolvedStudentId?: string;
-  answerKeyId?: string;
-  rawImportSha256?: string;
-  evaluationJob?: {
-    queueName: "exam-evaluation";
-    jobId: string;
-    status: "queued";
-  };
-}
-
-interface ImportQuarantineResolveBulkResponse {
-  results: Array<{
-    errorCode?: string;
-    quarantine?: ImportQuarantineRecord;
-    quarantineId: string;
-    status: "RESOLVED" | "FAILED";
-  }>;
 }
 
 const tabs: Array<{ id: OpticalTab; label: string }> = [
@@ -1691,7 +1621,10 @@ async function resolveImportQuarantine(
     `${apiBaseUrl}/exams/${encodeURIComponent(input.examId)}/raw-imports/${encodeURIComponent(input.rawImportId)}/quarantines/${encodeURIComponent(input.quarantineId)}/resolve`,
     {
       body: JSON.stringify({ resolvedStudentId: input.resolvedStudentId }),
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": createClientIdempotencyKey("raw-import-quarantine"),
+      },
       method: "POST",
     },
   );

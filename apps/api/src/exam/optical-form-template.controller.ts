@@ -8,7 +8,6 @@ import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
 import { requiredTrimmedString, zodBody } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
-import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { OpticalFormTemplateService } from "./optical-form-template.service.js";
 import { parserConfigSuggestionSchema } from "./parser-config-validation.js";
@@ -33,7 +32,7 @@ export class OpticalFormTemplateController {
   constructor(private readonly templates: OpticalFormTemplateService) {}
 
   @Get()
-  @Roles("TENANT_ADMIN", "TEACHER")
+  @RequireCapability("academic:manage")
   list(): Promise<OpticalFormTemplateRecord[]> {
     return this.templates.list(getRequestContext());
   }

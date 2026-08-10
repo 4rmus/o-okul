@@ -3,6 +3,7 @@ import type {
   StudentBulkEnrollmentRequest,
   StudentBulkEnrollmentResult as SharedStudentBulkEnrollmentResult,
   StudentCreateRequest,
+  StudentContactCreateRequest,
   StudentEnrollmentActionRequest,
   StudentEnrollmentRecord,
   StudentGuardianProvisionRequest,
@@ -35,8 +36,11 @@ import { type GuardianRecord, type GuardianStore, guardianStoreToken } from "../
 import { IdentityInvitationService } from "../identity-invitation/identity-invitation.service.js";
 import { StudentPortalActivationService } from "../identity-invitation/student-portal-activation.service.js";
 import { IdentityProvisioningService } from "../identity-provisioning/identity-provisioning.service.js";
+import { GuardianWritePolicy } from "../guardian/guardian-write-policy.js";
 import { IdempotencyService } from "../http/idempotency.js";
-import { withCursorListMeta } from "../listing/list-query.js";
+import { withCursorListMeta, withListMeta } from "../listing/list-query.js";
+import { maskContactEmail, maskContactPhone } from "../privacy/contact-mask.js";
+import { hasCapability } from "../rbac/role-capabilities.js";
 import { type LicenseTermStore, licenseTermStoreToken } from "../license/license-term-store.js";
 import { type ReportSnapshotStore, reportSnapshotStoreToken } from "../report/report-snapshot-store.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
@@ -48,18 +52,23 @@ import {
   type TeacherAssignmentStore,
   teacherAssignmentStoreToken,
 } from "../school/teacher-assignment-store.js";
-import { type StudentPortalAccessQuery, type StudentProfileUpdate, type StudentStore, studentStoreToken } from "./student-store.js";
+import { type StudentPortalAccessQuery, type StudentProfileUpdate, type StudentRegistryQuery, type StudentStore, studentStoreToken } from "./student-store.js";
 import {
   type StudentEnrollmentStore,
   studentEnrollmentStoreToken,
 } from "./student-enrollment-store.js";
 import { decryptTcIdentity, encryptTcIdentity, hashTcIdentity, isValidTcIdentity, maskTcIdentity, normalizeTcIdentity } from "./tc-identity.js";
+import { buildStudentContactStorageInput } from "./student-contact-input.js";
+import { type StudentContactStore, type StudentContactStoreInput, studentContactStoreToken } from "./student-contact-store.js";
 
 export interface StudentRecord extends SharedStudentRecord {
   deletedAt?: string;
 }
 
 const studentStatuses: StudentStatus[] = ["ACTIVE", "PASSIVE", "GRADUATED", "TRANSFERRED"];
+const studentRegistrySorts = new Set([
+  "studentNo", "-studentNo", "firstName", "-firstName", "lastName", "-lastName", "classId", "-classId",
+]);
 const defaultStudentQuota = 200;
 
 export interface StudentQuotaPreview {
@@ -67,6 +76,19 @@ export interface StudentQuotaPreview {
   current: number;
   incoming: number;
   wouldExceed: boolean;
+}
+
+export interface StudentRegistryListInput {
+  page: number;
+  limit: number;
+  q?: string;
+  sort?: string;
+  ids?: string[];
+  classId?: string;
+  level?: string;
+  responsibleTeacherId?: string;
+  status?: StudentStatus;
+  hasContact?: boolean;
 }
 
 export interface StudentProfileInput {
@@ -92,6 +114,7 @@ export type StudentBulkCreateInput = Pick<StudentRecord, "firstName" | "lastName
   Partial<Pick<StudentRecord, "classId" | "studentNo">> &
   StudentProfileInput & {
     guardian?: StudentGuardianProvisionInput;
+    contact?: StudentContactCreateRequest;
   };
 
 @Injectable()
@@ -116,6 +139,8 @@ export class StudentService {
     @Optional() private readonly identityProvisioning?: IdentityProvisioningService,
     @Optional() @Inject(licenseTermStoreToken) private readonly licenseTerms?: LicenseTermStore,
     @Optional() private readonly studentPortalActivations?: StudentPortalActivationService,
+    @Optional() private readonly guardianWritePolicy?: GuardianWritePolicy,
+    @Optional() @Inject(studentContactStoreToken) private readonly studentContactStore?: StudentContactStore,
   ) {}
 
   async list(context: RequestContext): Promise<StudentRecord[]> {
@@ -200,6 +225,61 @@ export class StudentService {
     return (await this.list(context)).map(toPublicStudentRecord);
   }
 
+  async listRegistryPageForViewer(
+    context: RequestContext,
+    input: StudentRegistryListInput,
+  ): Promise<PublicStudentRecord[]> {
+    if (!context.tenantId || context.bypassRls) throw new ForbiddenException("TENANT_CONTEXT_MISSING");
+    if (context.subjectType === "STUDENT" || context.subjectType === "GUARDIAN") {
+      throw new ForbiddenException("STUDENT_LIST_SCOPE_FORBIDDEN");
+    }
+    this.assertCampusScopePresent(context);
+    if (!Number.isInteger(input.page) || input.page < 1) throw new BadRequestException("LIST_PAGE_INVALID");
+    if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100) {
+      throw new BadRequestException("LIST_LIMIT_INVALID");
+    }
+    if (input.q && input.q.length > 100) throw new BadRequestException("LIST_QUERY_INVALID");
+    if (input.sort && !studentRegistrySorts.has(input.sort)) throw new BadRequestException("LIST_SORT_INVALID");
+
+    const classes = filterTenantResources(context, await this.classStore.list()).filter((record) => !record.deletedAt);
+    const requestedClassIds = classes
+      .filter((record) => !input.classId || record.id === input.classId)
+      .filter((record) => !input.level || record.gradeLevelId === input.level)
+      .filter((record) => context.campusScope?.scopeMode !== "CAMPUSES"
+        || Boolean(record.campusId && context.campusScope.campusIds.includes(record.campusId)))
+      .map((record) => record.id);
+    const classFilterRequested = Boolean(input.classId || input.level || context.campusScope?.scopeMode === "CAMPUSES");
+    const registryQuery: StudentRegistryQuery = {
+      page: input.page,
+      limit: input.limit,
+      q: input.q,
+      sort: input.sort,
+      ids: input.ids,
+      classIds: classFilterRequested ? requestedClassIds : undefined,
+      responsibleTeacherId: input.responsibleTeacherId,
+      status: input.status,
+      hasContact: input.hasContact,
+    };
+
+    if (isTeacherSubjectContext(context)) {
+      const assignments = filterTenantResources(context, await this.teacherAssignmentStore.listByTeacher(context.subjectId))
+        .filter(isAssignmentActive);
+      registryQuery.teacherId = context.subjectId;
+      registryQuery.teacherStudentIds = assignments.flatMap((record) => record.studentId ? [record.studentId] : []);
+      registryQuery.teacherClassIds = assignments.flatMap((record) => record.classId ? [record.classId] : []);
+    }
+
+    const page = await this.store.listRegistryPage(context.tenantId, registryQuery);
+    return withListMeta(page.records.map(toPublicStudentRecord), page.meta);
+  }
+
+  async listStudentNosForImport(context: RequestContext): Promise<string[]> {
+    if (!context.tenantId || context.bypassRls) {
+      throw new ForbiddenException("TENANT_CONTEXT_MISSING");
+    }
+    return this.store.listStudentNos(context.tenantId);
+  }
+
   async listPiiPresence(context: RequestContext): Promise<StudentPiiPresenceRecord[]> {
     const students = await this.list(context);
     return Promise.all(students.map(async (student) => {
@@ -276,17 +356,17 @@ export class StudentService {
     if (isTeacherSubjectContext(context)) {
       await this.assertTeacherAssignmentScope(context, student);
       await this.recordProfileView(context, student.id, student.tenantId);
-      return this.toStudentProfile(student);
+      return this.toStudentProfile(student, this.canViewStudentContact(context, student.id));
     }
     if (context.roles.includes("OPERATIONS_STAFF")) {
       this.assertAccess(context, student);
       await this.recordProfileView(context, student.id, student.tenantId);
-      return this.toStudentProfile(student);
+      return this.toStudentProfile(student, this.canViewStudentContact(context, student.id));
     }
 
     this.assertSubjectAccess(context, { ...student, guardianIds });
     await this.recordProfileView(context, student.id, student.tenantId);
-    return this.toStudentProfile(student);
+    return this.toStudentProfile(student, this.canViewStudentContact(context, student.id));
   }
 
   async findCurrentStudentProfile(context: RequestContext): Promise<PublicStudentProfileRecord> {
@@ -339,7 +419,7 @@ export class StudentService {
         fieldsChanged: changedInputFields(input, ["nationalId", "phone", "email", "photoKey"]),
       },
     });
-    return this.toStudentProfile(updated);
+    return this.toStudentProfile(updated, this.canViewStudentContact(context, updated.id));
   }
 
   async listCurrentGuardianStudents(context: RequestContext): Promise<PublicStudentRecord[]> {
@@ -358,6 +438,9 @@ export class StudentService {
   }
 
   async create(context: RequestContext, input: StudentCreateInput, idempotencyKey?: string): Promise<StudentRecord> {
+    if (input.guardian) {
+      await this.assertGuardianProvisioningAllowed(context);
+    }
     if (idempotencyKey && this.idempotency) {
       return this.idempotency.run(
         context,
@@ -443,6 +526,9 @@ export class StudentService {
     context: RequestContext,
     inputs: StudentBulkCreateInput[],
   ): Promise<StudentRecord[]> {
+    if (inputs.some((input) => Boolean(input.guardian))) {
+      await this.assertGuardianProvisioningAllowed(context);
+    }
     const tenantId = context.tenantId;
     if (!tenantId) {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
@@ -492,10 +578,19 @@ export class StudentService {
         status: "ACTIVE" as const,
         reason: "CREATED",
       } : undefined,
+      contact: input.contact
+        ? omitStudentId(buildStudentContactStorageInput(tenantId, "pending", input.contact))
+        : undefined,
     }));
-    const students = this.store.createManyWithEnrollments
-      ? await this.store.createManyWithEnrollments(createInputs)
-      : await this.store.createMany(createInputs.map(({ student }) => student));
+    const includesContacts = createInputs.some((input) => Boolean(input.contact));
+    if (includesContacts && !this.store.createManyWithEnrollmentsAndContacts && !this.studentContactStore) {
+      throw new Error("STUDENT_CONTACT_STORE_UNAVAILABLE");
+    }
+    const students = includesContacts && this.store.createManyWithEnrollmentsAndContacts
+      ? await this.store.createManyWithEnrollmentsAndContacts(createInputs)
+      : this.store.createManyWithEnrollments
+        ? await this.store.createManyWithEnrollments(createInputs)
+        : await this.store.createMany(createInputs.map(({ student }) => student));
     if (!this.store.createManyWithEnrollments) {
       for (const student of students) {
         if (!student.classId) continue;
@@ -509,6 +604,31 @@ export class StudentService {
           reason: "CREATED",
         });
       }
+    }
+    if (includesContacts && !this.store.createManyWithEnrollmentsAndContacts) {
+      for (const [index, student] of students.entries()) {
+        const contact = inputs[index]?.contact;
+        if (!contact) continue;
+        await this.studentContactStore!.create(buildStudentContactStorageInput(tenantId, student.id, contact));
+      }
+    }
+    for (const [index, student] of students.entries()) {
+      const contact = inputs[index]?.contact;
+      if (!contact) continue;
+      await this.auditLogs?.record({
+        tenantId,
+        actorUserId: context.userId,
+        entityType: "StudentContact",
+        entityId: student.id,
+        action: "student_contact.imported",
+        diff: {
+          studentId: student.id,
+          relationType: contact.relationType,
+          hasPhone: Boolean(contact.phone),
+          hasEmail: Boolean(contact.email),
+          permissionsDefaultOff: true,
+        },
+      });
     }
     for (const [index, student] of students.entries()) {
       const profileUpdate = profileUpdates[index];
@@ -526,6 +646,10 @@ export class StudentService {
       await this.autoProvisionGuardian(context, student, guardian);
     }
     return students;
+  }
+
+  async assertGuardianProvisioningAllowed(context: RequestContext): Promise<void> {
+    await this.guardianWritePolicy?.assertWritable(context);
   }
 
   async previewQuota(context: RequestContext, incoming: number): Promise<StudentQuotaPreview> {
@@ -904,10 +1028,25 @@ export class StudentService {
       throw new Error("REPORT_SNAPSHOT_PURGE_UNAVAILABLE");
     }
     const reportSnapshotsPurged = await this.reportSnapshots.purgeStudentIdentity(student.tenantId, student.id);
+    if (!this.studentContactStore?.purgeByStudent) {
+      throw new Error("STUDENT_CONTACT_PURGE_UNAVAILABLE");
+    }
+    const studentContactsPurged = await this.studentContactStore.purgeByStudent(student.tenantId, student.id);
     const purged = await this.store.purgePii(id);
     if (!purged) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
+    await this.auditLogs?.record({
+      tenantId: purged.tenantId,
+      actorUserId: context.userId,
+      entityType: "StudentContact",
+      entityId: purged.id,
+      action: "kvkk.student_contact_pii_purged",
+      diff: {
+        studentId: purged.id,
+        recordCount: studentContactsPurged,
+      },
+    });
     await this.auditLogs?.record({
       tenantId: purged.tenantId,
       actorUserId: context.userId,
@@ -925,8 +1064,21 @@ export class StudentService {
           "photoKey",
           "ReportSnapshot.displayName",
           "ReportSnapshot.studentNo",
+          "StudentContact.firstName",
+          "StudentContact.lastName",
+          "StudentContact.relationType",
+          "StudentContact.phoneEncrypted",
+          "StudentContact.phoneHash",
+          "StudentContact.emailEncrypted",
+          "StudentContact.emailHash",
+          "StudentContact.canReceiveSms",
+          "StudentContact.canReceiveAnnouncements",
+          "StudentContact.canReceiveFinance",
+          "StudentContact.consentSource",
+          "StudentContact.consentRecordedAt",
         ],
         reportSnapshotPurgeCount: reportSnapshotsPurged,
+        studentContactPurgeCount: studentContactsPurged,
       },
     });
     return toPublicStudentRecord(purged);
@@ -1339,7 +1491,7 @@ export class StudentService {
     phone?: string;
     email?: string;
     photoKey?: string;
-  }): Promise<StudentProfileRecord> {
+  }, includeSensitiveContact: boolean): Promise<StudentProfileRecord> {
     const [schoolClass, teacher] = await Promise.all([
       student.classId ? this.classStore.findById(student.classId) : undefined,
       student.responsibleTeacherId ? this.teacherStore.findById(student.responsibleTeacherId) : undefined,
@@ -1354,7 +1506,12 @@ export class StudentService {
       gradeLevelName: gradeLevel?.tenantId === student.tenantId ? gradeLevel.name : undefined,
       section: schoolClass?.tenantId === student.tenantId ? schoolClass.section : undefined,
       responsibleTeacherName: teacher?.tenantId === student.tenantId ? `${teacher.firstName} ${teacher.lastName}` : undefined,
-    });
+    }, includeSensitiveContact);
+  }
+
+  private canViewStudentContact(context: RequestContext, studentId: string): boolean {
+    return hasCapability(context, "privacy:manage")
+      || (context.subjectType === "STUDENT" && context.subjectId === studentId);
   }
 
   private async withClassNames<TRecord extends { tenantId: string; classId?: string }>(
@@ -1437,6 +1594,11 @@ function toPublicStudentRecord(student: StudentRecord): PublicStudentRecord {
   };
 }
 
+function omitStudentId(input: StudentContactStoreInput): Omit<StudentContactStoreInput, "studentId"> {
+  const { studentId: _studentId, ...rest } = input;
+  return rest;
+}
+
 function toStudentProfile(student: {
   id: string;
   tenantId: string;
@@ -1449,7 +1611,7 @@ function toStudentProfile(student: {
   phone?: string;
   email?: string;
   photoKey?: string;
-}, labels: { campusName?: string; className?: string; gradeLevelName?: string; responsibleTeacherName?: string; section?: string } = {}): PublicStudentProfileRecord {
+}, labels: { campusName?: string; className?: string; gradeLevelName?: string; responsibleTeacherName?: string; section?: string } = {}, includeSensitiveContact = false): PublicStudentProfileRecord {
   return {
     id: student.id,
     tenantId: student.tenantId,
@@ -1464,8 +1626,10 @@ function toStudentProfile(student: {
     ...(labels.section ? { section: labels.section } : {}),
     ...(labels.responsibleTeacherName ? { responsibleTeacherName: labels.responsibleTeacherName } : {}),
     nationalIdMasked: student.nationalIdEncrypted ? maskTcIdentity(decryptTcIdentity(student.nationalIdEncrypted)) : undefined,
-    phone: student.phone,
-    email: student.email,
+    ...(student.phone ? { phoneMasked: maskContactPhone(student.phone) } : {}),
+    ...(student.email ? { emailMasked: maskContactEmail(student.email) } : {}),
+    ...(includeSensitiveContact && student.phone ? { phone: student.phone } : {}),
+    ...(includeSensitiveContact && student.email ? { email: student.email } : {}),
     photoKey: student.photoKey,
   };
 }

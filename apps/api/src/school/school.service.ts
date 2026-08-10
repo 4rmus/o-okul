@@ -101,18 +101,29 @@ export class SchoolService {
   ) {}
 
   async listClasses(context: RequestContext): Promise<ClassRecord[]> {
-    return this.list(context, await this.classStore.list());
+    const records = this.list(context, await this.classStore.list());
+    if (!this.isCampusRestricted(context)) return records;
+    const campusIds = new Set(context.campusScope!.campusIds);
+    return records.filter((record) => Boolean(record.campusId && campusIds.has(record.campusId)));
   }
 
   async listCampuses(context: RequestContext): Promise<CampusRecord[]> {
-    return this.list(context, await this.campusStore.list());
+    const records = this.list(context, await this.campusStore.list());
+    if (!this.isCampusRestricted(context)) return records;
+    const campusIds = new Set(context.campusScope!.campusIds);
+    return records.filter((record) => campusIds.has(record.id));
   }
 
   async findCampus(context: RequestContext, id: string): Promise<CampusRecord> {
-    return this.findRecord(context, await this.campusStore.findById(id), "CAMPUS_NOT_FOUND");
+    const record = this.findRecord(context, await this.campusStore.findById(id), "CAMPUS_NOT_FOUND");
+    this.assertCampusAllowed(context, record.id);
+    return record;
   }
 
   async createCampus(context: RequestContext, input: Partial<CampusRecord>): Promise<CampusRecord> {
+    if (this.isCampusRestricted(context)) {
+      throw new ForbiddenException("SCHOOL_CAMPUS_SCOPE_FORBIDDEN");
+    }
     const tenantId = this.resolveTenantId(context, input.tenantId);
     const record = await this.campusStore.create({
       tenantId,
@@ -456,7 +467,7 @@ export class SchoolService {
   }
 
   async findClass(context: RequestContext, id: string): Promise<ClassRecord> {
-    return this.find(context, await this.classStore.list(), id, "CLASS_NOT_FOUND");
+    return this.find(context, await this.listClasses(context), id, "CLASS_NOT_FOUND");
   }
 
   async createClass(context: RequestContext, input: Partial<ClassRecord>, idempotencyKey?: string): Promise<ClassRecord> {
@@ -476,6 +487,9 @@ export class SchoolService {
     const alanId = optionalText(input.alanId);
     const campusId = optionalText(input.campusId);
     const gradeLevelId = optionalText(input.gradeLevelId);
+    if (this.isCampusRestricted(context) && !campusId) {
+      throw new ForbiddenException("SCHOOL_CAMPUS_SCOPE_FORBIDDEN");
+    }
     if (campusId) {
       const campus = await this.findCampus(context, campusId);
       if (campus.tenantId !== tenantId) {
@@ -516,6 +530,9 @@ export class SchoolService {
     const alanId = input.alanId !== undefined ? optionalText(input.alanId) : undefined;
     const campusId = input.campusId !== undefined ? optionalText(input.campusId) : undefined;
     const gradeLevelId = input.gradeLevelId !== undefined ? optionalText(input.gradeLevelId) : undefined;
+    if (this.isCampusRestricted(context) && input.campusId !== undefined && !campusId) {
+      throw new ForbiddenException("SCHOOL_CAMPUS_SCOPE_FORBIDDEN");
+    }
     if (campusId) {
       await this.findCampus(context, campusId);
     }
@@ -714,6 +731,20 @@ export class SchoolService {
 
   private list<TRecord extends SchoolRecord>(context: RequestContext, records: TRecord[]): TRecord[] {
     return filterTenantResources(context, records).filter((record) => !record.deletedAt);
+  }
+
+  private isCampusRestricted(context: RequestContext): boolean {
+    if (context.roles.includes("OPERATIONS_STAFF") && !context.campusScope) {
+      throw new ForbiddenException("SCHOOL_CAMPUS_SCOPE_MISSING");
+    }
+    return context.campusScope?.scopeMode === "CAMPUSES";
+  }
+
+  private assertCampusAllowed(context: RequestContext, campusId: string): void {
+    if (!this.isCampusRestricted(context)) return;
+    if (!context.campusScope!.campusIds.includes(campusId)) {
+      throw new ForbiddenException("SCHOOL_CAMPUS_SCOPE_FORBIDDEN");
+    }
   }
 
   private find<TRecord extends SchoolRecord>(

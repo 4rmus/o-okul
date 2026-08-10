@@ -8,6 +8,7 @@ import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import { reportSnapshotStoreToken, type ReportSnapshotStore } from "../report/report-snapshot-store.js";
+import { requireTenantWideStaffContext } from "../tenant/tenant-access.js";
 
 export const parserConfigRepositoryToken = Symbol("ParserConfigRepository");
 
@@ -22,6 +23,7 @@ export interface ApprovedParserConfigInput {
 export interface SavedParserConfig extends ParserConfigRecord {}
 
 export interface ParserConfigRepository {
+  findApproved(tenantId: string, examId: string, version: string): Promise<SavedParserConfig | undefined>;
   saveApproved(input: ApprovedParserConfigInput): Promise<SavedParserConfig>;
 }
 
@@ -61,8 +63,11 @@ export class ParserConfigApprovalService {
     context: RequestContext,
     input: ParserConfigApprovalInput,
   ): Promise<SavedParserConfig> {
-    if (!context.tenantId) {
-      throw new ForbiddenException("TENANT_CONTEXT_MISSING");
+    let tenantId: string;
+    try {
+      tenantId = requireTenantWideStaffContext(context, "PARSER_CONFIG_CAMPUS_SCOPE_FORBIDDEN");
+    } catch (error) {
+      throw new ForbiddenException(error instanceof Error ? error.message : "PARSER_CONFIG_CAMPUS_SCOPE_FORBIDDEN");
     }
 
     const version = required(input.version, "PARSER_CONFIG_VERSION_REQUIRED");
@@ -71,14 +76,14 @@ export class ParserConfigApprovalService {
 
     try {
       const record = await this.repository.saveApproved({
-        tenantId: context.tenantId,
+        tenantId,
         examId,
         version,
         suggestion,
       });
-      await this.snapshots?.markStaleByExam(context.tenantId, examId, "parser_config.approved");
+      await this.snapshots?.markStaleByExam(tenantId, examId, "parser_config.approved");
       await this.auditLogs?.record({
-        tenantId: context.tenantId,
+        tenantId,
         actorUserId: context.userId,
         entityType: "ParserConfig",
         entityId: `${record.examId}:${record.version}`,

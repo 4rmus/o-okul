@@ -1,4 +1,4 @@
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { describe, expect, it } from "vitest";
 import {
   createS3ClientConfigFromEnv,
@@ -46,6 +46,23 @@ describe("S3RawImportArchiveStore", () => {
     await expect(store.put({ s3Key: "raw/import/a.dat", body: Buffer.alloc(0) }))
       .rejects.toThrow("RAW_IMPORT_ARCHIVE_BODY_EMPTY");
     expect(calls).toBe(0);
+  });
+
+  it("yarım kalan RawImport yazımı için S3 nesnesini siler", async () => {
+    const commands: Array<PutObjectCommand | DeleteObjectCommand> = [];
+    const store = new S3RawImportArchiveStore({
+      bucket: "raw-imports",
+      client: { async send(command) { commands.push(command); } },
+    });
+
+    await store.delete("raw-imports/tenant-a/exam-a/parser-v1/hash/source");
+
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toBeInstanceOf(DeleteObjectCommand);
+    expect(commands[0]?.input).toEqual({
+      Bucket: "raw-imports",
+      Key: "raw-imports/tenant-a/exam-a/parser-v1/hash/source",
+    });
   });
 
   it("env'den MinIO uyumlu S3 config üretir", () => {

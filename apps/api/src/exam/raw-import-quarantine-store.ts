@@ -11,7 +11,7 @@ export interface ImportQuarantineRecord {
   rowNumber: number;
   rawRow: Record<string, unknown>;
   reason: string;
-  status: string;
+  status: "OPEN" | "RESOLVED";
   resolvedStudentId?: string;
   resolvedParticipantId?: string;
   answerKeyId?: string;
@@ -31,6 +31,13 @@ export interface RawImportQuarantineStore {
     resolvedStudentId: string;
   }): Promise<ImportQuarantineRecord | undefined>;
   markResolved(input: {
+    tenantId: string;
+    examId: string;
+    rawImportId: string;
+    quarantineId: string;
+    resolvedStudentId: string;
+  }): Promise<ImportQuarantineRecord | undefined>;
+  reopen(input: {
     tenantId: string;
     examId: string;
     rawImportId: string;
@@ -162,6 +169,33 @@ export class PostgresRawImportQuarantineStore implements RawImportQuarantineStor
       return result.rows[0] ? toRecord(result.rows[0]) : undefined;
     });
   }
+
+  async reopen(input: {
+    tenantId: string;
+    examId: string;
+    rawImportId: string;
+    quarantineId: string;
+    resolvedStudentId: string;
+  }): Promise<ImportQuarantineRecord | undefined> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<ImportQuarantineRow>(
+        `UPDATE "ImportQuarantine"
+         SET "status" = 'OPEN',
+             "resolvedStudentId" = NULL,
+             "updatedAt" = now()
+         WHERE "tenantId" = $1
+           AND "examId" = $2
+           AND "rawImportId" = $3
+           AND "id" = $4
+           AND "status" = 'RESOLVED'
+           AND "resolvedStudentId" = $5
+           AND "deletedAt" IS NULL
+         RETURNING *`,
+        [input.tenantId, input.examId, input.rawImportId, input.quarantineId, input.resolvedStudentId],
+      );
+      return result.rows[0] ? toRecord(result.rows[0]) : undefined;
+    });
+  }
 }
 
 export function createRawImportQuarantineStore(): RawImportQuarantineStore {
@@ -194,7 +228,7 @@ function toRecord(row: ImportQuarantineRow): ImportQuarantineRecord {
     rowNumber: row.rowNumber,
     rawRow: parseJsonObject(row.rawRow),
     reason: row.reason,
-    status: row.status,
+    status: readStatus(row.status),
     ...(row.resolvedStudentId ? { resolvedStudentId: row.resolvedStudentId } : {}),
     ...(row.resolvedParticipantId ? { resolvedParticipantId: row.resolvedParticipantId } : {}),
     ...(row.answerKeyId ? { answerKeyId: row.answerKeyId } : {}),
@@ -210,6 +244,13 @@ function parseJsonObject(value: unknown): Record<string, unknown> {
     throw new Error("IMPORT_QUARANTINE_RAW_ROW_INVALID");
   }
   return parsed as Record<string, unknown>;
+}
+
+function readStatus(value: string): ImportQuarantineRecord["status"] {
+  if (value !== "OPEN" && value !== "RESOLVED") {
+    throw new Error("IMPORT_QUARANTINE_STATUS_INVALID");
+  }
+  return value;
 }
 
 function toIso(value: Date | string): string {

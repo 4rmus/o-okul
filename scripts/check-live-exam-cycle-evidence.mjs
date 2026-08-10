@@ -164,6 +164,9 @@ function requireAllowedEvidenceTargetUrl(url) {
   if (url.protocol === "file:" && isLocalTempEvidenceTargetUrl(url)) {
     fail(["LIVE_EXAM_CYCLE_TARGET production kaniti icin lokal temp path olmamali."]);
   }
+  if (url.protocol === "file:" && isLocalSmokeEvidenceTargetUrl(url)) {
+    fail(["LIVE_EXAM_CYCLE_TARGET production kaniti icin artifacts/local path olmamali."]);
+  }
 }
 
 function isPlaceholderEvidenceTargetHost(hostname) {
@@ -193,6 +196,11 @@ function isLocalTempEvidenceTargetUrl(url) {
   );
 }
 
+function isLocalSmokeEvidenceTargetUrl(url) {
+  const path = fileURLToPath(url).replace(/\\/g, "/").replace(/\/+$/g, "");
+  return path.endsWith("/artifacts/local") || path.includes("/artifacts/local/");
+}
+
 function parseJson(value) {
   try {
     return JSON.parse(value);
@@ -212,10 +220,12 @@ function validateReport(report) {
   requireOneOf(report, failures, "environment", ["staging", "production"]);
   requireDate(report, failures, "checkedAt");
   requireDateNotInFuture(report, failures, "checkedAt");
+  requireDateFresh(report, failures, "checkedAt");
   requireString(report, failures, "tester");
   requireNonPlaceholderString(report, failures, "tester");
   requireString(report, failures, "releaseCandidate");
   requireNonPlaceholderString(report, failures, "releaseCandidate");
+  requireExactReleaseSha(report, failures, "releaseCandidate");
   requireHttpsUrl(report, failures, "appUrl");
   requireHttpsUrl(report, failures, "apiUrl");
   requireExactStringSet(report.commandsPassed, failures, "commandsPassed", requiredCommands, "komut");
@@ -362,6 +372,31 @@ function requireDateNotInFuture(report, failures, key) {
   const clockSkewMs = 5 * 60 * 1000;
   if (timestamp > Date.now() + clockSkewMs) {
     failures.push(`${key} gelecekte olamaz.`);
+  }
+}
+
+function requireDateFresh(report, failures, key) {
+  if (allowExampleEvidence) return;
+  const value = report[key];
+  const timestamp = Date.parse(value);
+  if (typeof value !== "string" || Number.isNaN(timestamp)) return;
+
+  const configured = process.env.LIVE_EXAM_CYCLE_MAX_AGE_HOURS ?? "24";
+  const maxAgeHours = Number(configured);
+  if (!Number.isFinite(maxAgeHours) || maxAgeHours < 1 || maxAgeHours > 168) {
+    failures.push("LIVE_EXAM_CYCLE_MAX_AGE_HOURS 1 ile 168 arasinda olmali.");
+    return;
+  }
+  if (Date.now() - timestamp > maxAgeHours * 60 * 60 * 1000) {
+    failures.push(`${key} en fazla ${maxAgeHours} saatlik olmali.`);
+  }
+}
+
+function requireExactReleaseSha(report, failures, key) {
+  const value = report[key];
+  if (typeof value !== "string" || value.trim() === "") return;
+  if (!/(?:^|[:@])[a-f0-9]{40}(?:$|[^a-f0-9])/i.test(value)) {
+    failures.push(`${key} exact 40 haneli Git SHA icermeli.`);
   }
 }
 

@@ -99,20 +99,20 @@ describe("PostgresGuardianStudentStore", () => {
 
     expect(record.id).toBe("guardian-student-a");
     expect(record).toEqual(expect.objectContaining({
-      canViewFinance: true,
-      canReceiveSms: true,
-      canReceiveAnnouncements: true,
-      canOpenSupportTickets: true,
+      canViewFinance: false,
+      canReceiveSms: false,
+      canReceiveAnnouncements: false,
+      canOpenSupportTickets: false,
     }));
     expect(queries.find((query) => query.sql.includes('INSERT INTO "GuardianStudent"'))?.values).toEqual([
       expect.any(String),
       "tenant-a",
       "guardian-a",
       "student-a",
-      true,
-      true,
-      true,
-      true,
+      false,
+      false,
+      false,
+      false,
     ]);
     expect(queries.some((query) => query.sql.includes("ON CONFLICT"))).toBe(true);
     expect(queries.some((query) => query.sql.includes("LIMIT 1"))).toBe(true);

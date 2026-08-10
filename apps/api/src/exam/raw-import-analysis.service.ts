@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
+import { requireTenantWideStaffContext } from "../tenant/tenant-access.js";
 import {
   rawImportAnalysisStoreToken,
   type RawImportAnalysisStore,
@@ -161,10 +162,11 @@ export class RawImportAnalysisService {
 }
 
 function requireTenant(context: RequestContext): string {
-  if (!context.tenantId) {
-    throw new ForbiddenException("TENANT_CONTEXT_MISSING");
+  try {
+    return requireTenantWideStaffContext(context, "RAW_IMPORT_CAMPUS_SCOPE_FORBIDDEN");
+  } catch (error) {
+    throw new ForbiddenException(error instanceof Error ? error.message : "RAW_IMPORT_CAMPUS_SCOPE_FORBIDDEN");
   }
-  return context.tenantId;
 }
 
 function required(value: string | undefined, errorCode: string): string {

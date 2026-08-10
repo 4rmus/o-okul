@@ -1,6 +1,9 @@
 import { lstat, mkdir, writeFile } from "node:fs/promises";
 import { dirname, parse, resolve } from "node:path";
-import { ISEM_OPTICAL_PIPELINE_FIXTURE } from "./isem-optical-pipeline-contract.mjs";
+import {
+  ISEM_OPTICAL_PIPELINE_FIXTURE,
+  ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST,
+} from "./isem-optical-pipeline-contract.mjs";
 
 export async function writeSmokeEvidence(filePath, payload) {
   if (!filePath) return;
@@ -616,6 +619,7 @@ function requireIsemOpticalPipelineSmoke(payload, failures, label, allowExampleE
     "result",
     "check",
     "environment",
+    "fixtureId",
     "checkedAt",
     "parserConfigVersion",
     "answerKeyVersion",
@@ -623,6 +627,7 @@ function requireIsemOpticalPipelineSmoke(payload, failures, label, allowExampleE
     "bookletVariantCount",
     "counts",
     "pipeline",
+    "quarantineProbe",
     "sampleScores",
     "hashes",
     "thresholds",
@@ -631,6 +636,7 @@ function requireIsemOpticalPipelineSmoke(payload, failures, label, allowExampleE
     "gaps",
   ]);
   requireDateNotInFuture(payload, failures, `${label}.checkedAt`, "checkedAt", allowExampleEvidence);
+  requireEqual(payload, failures, `${label}.fixtureId`, "fixtureId", ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST.fixtureId);
   requireString(payload, failures, `${label}.parserConfigVersion`, "parserConfigVersion");
   requireNonPlaceholderString(payload, failures, `${label}.parserConfigVersion`, "parserConfigVersion", allowExampleEvidence);
   requireString(payload, failures, `${label}.answerKeyVersion`, "answerKeyVersion");
@@ -739,6 +745,36 @@ function requireIsemOpticalPipelineSmoke(payload, failures, label, allowExampleE
     }
   }
 
+  const quarantineProbe = payload.quarantineProbe;
+  if (
+    requireObjectKeySet(quarantineProbe, failures, `${label}.quarantineProbe`, "quarantineProbe", [
+      "openCount",
+      "resolvedCount",
+      "examResultCount",
+      "reportResultCount",
+      "idempotentReplayVerified",
+      "studentReportVerified",
+      "excelExportVerified",
+      "pdfExportVerified",
+      "reportReady",
+      "reportJobQueued",
+    ])
+  ) {
+    for (const key of ["openCount", "resolvedCount", "examResultCount", "reportResultCount"]) {
+      requireEqual(quarantineProbe, failures, `${label}.quarantineProbe.${key}`, key, 1);
+    }
+    for (const key of [
+      "idempotentReplayVerified",
+      "studentReportVerified",
+      "excelExportVerified",
+      "pdfExportVerified",
+      "reportReady",
+      "reportJobQueued",
+    ]) {
+      requireEqual(quarantineProbe, failures, `${label}.quarantineProbe.${key}`, key, true);
+    }
+  }
+
   requireIsemSampleScores(payload.sampleScores, failures, `${label}.sampleScores`);
 
   const hashes = payload.hashes;
@@ -774,6 +810,20 @@ function requireIsemOpticalPipelineSmoke(payload, failures, label, allowExampleE
     ]) {
       requireSha256(hashes, failures, `${label}.hashes.${key}`, key);
     }
+    requireEqual(
+      hashes,
+      failures,
+      `${label}.hashes.opticalTxtSha256`,
+      "opticalTxtSha256",
+      ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST.inputs.opticalTxt.sha256,
+    );
+    requireEqual(
+      hashes,
+      failures,
+      `${label}.hashes.answerKeyFileSha256`,
+      "answerKeyFileSha256",
+      ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST.inputs.answerKey.sha256,
+    );
   }
 
   const thresholds = payload.thresholds;

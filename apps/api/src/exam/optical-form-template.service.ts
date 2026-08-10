@@ -3,6 +3,7 @@ import type { OpticalFormTemplateRecord, ParserConfigSuggestion } from "@o-okul/
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
+import { requireTenantWideStaffContext } from "../tenant/tenant-access.js";
 import {
   parserConfigRepositoryToken,
   type ParserConfigRepository,
@@ -146,10 +147,11 @@ export class OpticalFormTemplateService {
 }
 
 function requireTenant(context: RequestContext): string {
-  if (!context.tenantId) {
-    throw new ForbiddenException("TENANT_CONTEXT_MISSING");
+  try {
+    return requireTenantWideStaffContext(context, "OPTICAL_TEMPLATE_CAMPUS_SCOPE_FORBIDDEN");
+  } catch (error) {
+    throw new ForbiddenException(error instanceof Error ? error.message : "OPTICAL_TEMPLATE_CAMPUS_SCOPE_FORBIDDEN");
   }
-  return context.tenantId;
 }
 
 function required(value: string | undefined, errorCode: string): string {

@@ -72,6 +72,12 @@ const routeCases = [
   route("/kurum/kullanicilar", "Kullanıcılar", "tenantAdmin", { role: "region", name: "Kullanıcı ve rol yönetimi" }),
   route("/kurum/lisans-donemleri", "Lisans Dönemleri", "tenantAdmin", { role: "region", name: "Lisans dönemleri" }),
   route("/kurum/kurulum", "Kurulum Sihirbazı", "assistantAdmin", { role: "region", name: "Kurulum formu" }),
+  route("/kurum/kurulum/genel", "Kurulum Sihirbazı", "assistantAdmin", { role: "region", name: "Kurulum formu" }),
+  route("/kurum/kurulum/donem", "Kurulum Sihirbazı", "assistantAdmin", { role: "region", name: "Kurulum formu" }),
+  route("/kurum/kurulum/siniflar", "Kurulum Sihirbazı", "assistantAdmin", { role: "region", name: "Kurulum formu" }),
+  route("/kurum/kurulum/dersler", "Kurulum Sihirbazı", "assistantAdmin", { role: "region", name: "Kurulum formu" }),
+  route("/kurum/kurulum/kisiler", "Kurulum Sihirbazı", "assistantAdmin", { role: "region", name: "Kurulum formu" }),
+  route("/kurum/kurulum/hazirlik", "Kurulum Sihirbazı", "assistantAdmin", { role: "region", name: "Kurulum formu" }),
   route("/kurum/kvkk", "KVKK", "tenantAdmin", { role: "region", name: "KVKK yönetimi" }),
   route("/kurum/materyaller", "Materyaller", "assistantAdmin", { role: "region", name: "Ödev kontrolü" }),
   route("/kurum/notlar", "Öğretmen Notları", "assistantAdmin", { role: "region", name: "Öğretmen notu yönetimi" }),
@@ -214,7 +220,9 @@ async function collectRouteMeasurement(
     if (message.type() === "error") runtimeErrors.push("console");
   });
   page.on("pageerror", () => runtimeErrors.push("pageerror"));
-  page.on("requestfailed", () => runtimeErrors.push("requestfailed"));
+  page.on("requestfailed", (request) => {
+    runtimeErrors.push(`requestfailed:${request.url()}:${request.failure()?.errorText ?? "unknown"}`);
+  });
   page.on("response", (response) => {
     if (response.status() >= 400) runtimeErrors.push(`http-${response.status()}`);
   });
@@ -368,7 +376,7 @@ function assertRouteManifestParity(manifest: readonly RouteCase[]) {
   const fileSystemRoutes = collectPageRoutes(appDirectory).sort();
   const manifestRoutes = manifest.map((entry) => entry.routeTemplate).sort();
   const duplicates = manifestRoutes.filter((routeTemplate, index) => manifestRoutes.indexOf(routeTemplate) !== index);
-  if (manifest.length !== 82) throw new Error(`Route manifest must contain exactly 82 entries; found ${manifest.length}.`);
+  if (manifest.length !== 88) throw new Error(`Route manifest must contain exactly 88 entries; found ${manifest.length}.`);
   if (duplicates.length > 0) throw new Error(`Route manifest contains duplicates: ${[...new Set(duplicates)].join(", ")}`);
   if (JSON.stringify(manifestRoutes) !== JSON.stringify(fileSystemRoutes)) {
     throw new Error(`Route manifest does not match page.tsx inventory.\nmanifest=${manifestRoutes.join(",")}\nfilesystem=${fileSystemRoutes.join(",")}`);

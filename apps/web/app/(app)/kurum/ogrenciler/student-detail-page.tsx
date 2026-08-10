@@ -1,9 +1,9 @@
 "use client";
 
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AcademicTermRecord,
   AttendanceSummaryRecord,
@@ -21,15 +21,18 @@ import type {
   ReportStudentSnapshot,
   StudentEnrollmentRecord,
   StudentAuditSummaryRecord,
+  StudentContactRecord,
+  StudentOverviewRecord,
   StudentProfileRecord,
   TeacherAssignmentRecord,
   TeacherNoteRecord,
   TeacherRecord,
 } from "@o-okul/shared-types";
 import { ArrowLeft, BarChart3, ChevronRight, LayoutDashboard } from "lucide-react";
-import { ActionCard, Alert, DataTable, Field, InfoGrid, InfoItem, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
+import { ActionCard, Alert, Button, DataTable, Field, InfoGrid, InfoItem, Input, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError, apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
+import { featureRolloutQueryKey, isFeatureEnabled, loadFeatureRollouts } from "../../../../src/feature-rollouts.js";
 import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
@@ -47,6 +50,7 @@ interface StudentBaseDetail {
   auditLogs: StudentAuditSummaryRecord[];
   classes: ClassRecord[];
   courses: CourseRecord[];
+  contacts: StudentContactRecord[];
   guardianLinks: GuardianStudentRecord[];
   profile: StudentProfileRecord;
   guardians: GuardianRecord[];
@@ -134,13 +138,22 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
   const requestedReportExamId = readReportExamId(searchParams);
   const canViewFinance = hasCapabilityForRoles(auth?.session.roles ?? [], "finance:manage");
   const canRevealPhone = hasCapabilityForRoles(auth?.session.roles ?? [], "privacy:manage");
+  const canManageStudent = hasCapabilityForRoles(auth?.session.roles ?? [], "student:manage");
+  const featureRolloutsQuery = useQuery({
+    queryKey: featureRolloutQueryKey(auth?.session.tenantId, auth?.session.id, auth?.session.activePersona),
+    queryFn: () => loadFeatureRollouts(auth?.accessToken ?? ""),
+    enabled: Boolean(auth?.accessToken),
+    refetchOnWindowFocus: false,
+  });
+  const studentRegistryV2 = featureRolloutsQuery.isSuccess
+    && isFeatureEnabled(featureRolloutsQuery.data, "web.student-registry-v2");
   const [selectedExamId, setSelectedExamId] = useState("");
   const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
 
   const pageDataQuery = useQuery({
-    queryKey: ["next-student-detail-page-data", auth?.session.tenantId ?? "anonymous", studentId, canViewFinance ? "finance" : "no-finance"],
-    queryFn: () => loadStudentDetailPageData(auth?.accessToken ?? "", studentId, { canViewFinance }),
-    enabled: Boolean(auth),
+    queryKey: ["next-student-detail-page-data", auth?.session.tenantId ?? "anonymous", studentId, canViewFinance ? "finance" : "no-finance", studentRegistryV2 ? "contacts-v2" : "legacy-contacts"],
+    queryFn: () => loadStudentDetailPageData(auth?.accessToken ?? "", studentId, { canViewFinance, studentRegistryV2 }),
+    enabled: Boolean(auth) && !featureRolloutsQuery.isPending,
     refetchOnWindowFocus: false,
   });
 
@@ -255,6 +268,7 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
         <StudentDashboard
           classNameById={classNameById}
           canRevealPhone={canRevealPhone}
+          canManageStudent={canManageStudent}
           canViewFinance={canViewFinance}
           courseNameById={courseNameById}
           detail={detail}
@@ -267,6 +281,7 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
           studentAuditLogs={studentAuditLogs}
           studentExamsHref={studentExamsHref}
           studentId={studentId}
+          studentRegistryV2={studentRegistryV2}
           termNameById={termNameById}
           teacherNameById={teacherNameById}
         />
@@ -278,6 +293,7 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
 function StudentDashboard({
   classNameById,
   canRevealPhone,
+  canManageStudent,
   canViewFinance,
   courseNameById,
   detail,
@@ -290,11 +306,13 @@ function StudentDashboard({
   studentAuditLogs,
   studentExamsHref,
   studentId,
+  studentRegistryV2,
   teacherNameById,
   termNameById,
 }: {
   classNameById: ReadonlyMap<string, string>;
   canRevealPhone: boolean;
+  canManageStudent: boolean;
   canViewFinance: boolean;
   courseNameById: ReadonlyMap<string, string>;
   detail: StudentBaseDetail;
@@ -307,6 +325,7 @@ function StudentDashboard({
   studentAuditLogs: StudentAuditSummaryRecord[];
   studentExamsHref: string;
   studentId: string;
+  studentRegistryV2: boolean;
   teacherNameById: ReadonlyMap<string, string>;
   termNameById: ReadonlyMap<string, string>;
 }) {
@@ -445,18 +464,13 @@ function StudentDashboard({
       </Panel>
 
       <div className="next-student-detail-grid">
-        <Panel
-          aria-label="İletişim ve veli"
-          className="next-student-detail-panel next-student-detail-panel--wide"
-          description="Öğrenci telefonu ve e-postası maskeli kalır; veli telefonu yetkili kullanıcı isterse açılıp gizlenebilir."
-          title="İletişim ve veli"
-        >
-          <StudentDetailRowsTable
-            caption="İletişim ve veli kayıtları"
-            emptyText="İletişim kaydı yok"
-            rows={buildContactRows(detail, { canRevealPhone })}
-          />
-        </Panel>
+        <StudentContactPanel
+          canManageStudent={canManageStudent}
+          canRevealPhone={canRevealPhone}
+          detail={detail}
+          studentId={studentId}
+          studentRegistryV2={studentRegistryV2}
+        />
 
         <Panel
           aria-label="İlişki geçmişi"
@@ -586,10 +600,103 @@ function StudentDetailRowsTable({
   );
 }
 
-function buildContactRows(detail: StudentBaseDetail, options: { canRevealPhone: boolean }): StudentDetailTableRow[] {
+function StudentContactPanel({
+  canManageStudent,
+  canRevealPhone,
+  detail,
+  studentId,
+  studentRegistryV2,
+}: {
+  canManageStudent: boolean;
+  canRevealPhone: boolean;
+  detail: StudentBaseDetail;
+  studentId: string;
+  studentRegistryV2: boolean;
+}) {
+  const { auth } = useAuth();
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState({ firstName: "", lastName: "", relationType: "OTHER", phone: "", email: "" });
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const pendingCreate = useRef<{ body: string; idempotencyKey: string } | null>(null);
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!auth || saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      const body = JSON.stringify({
+        firstName: form.firstName,
+        lastName: form.lastName,
+        relationType: form.relationType,
+        phone: form.phone || undefined,
+        email: form.email || undefined,
+      });
+      if (pendingCreate.current?.body !== body) {
+        pendingCreate.current = { body, idempotencyKey: crypto.randomUUID() };
+      }
+      await apiRequest<StudentContactRecord>(auth.accessToken, `${apiBaseUrl}/students/${encodeURIComponent(studentId)}/contacts`, {
+        body,
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": pendingCreate.current.idempotencyKey,
+        },
+        method: "POST",
+      });
+      pendingCreate.current = null;
+      setForm({ firstName: "", lastName: "", relationType: "OTHER", phone: "", email: "" });
+      await queryClient.invalidateQueries({ queryKey: ["next-student-detail-page-data"] });
+    } catch {
+      setError("İletişim kişisi kaydedilemedi.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Panel
+      aria-label={studentRegistryV2 ? "Öğrenci iletişim kişileri" : "İletişim ve veli"}
+      className="next-student-detail-panel next-student-detail-panel--wide"
+      description={studentRegistryV2
+        ? "İletişim kişileri portal hesabı veya oturum üretmez; telefon ve e-posta sunucuda maskelenir."
+        : "Öğrenci telefonu ve e-postası maskeli kalır; legacy veli telefonu yetkiye göre gösterilir."}
+      title={studentRegistryV2 ? "İletişim kişileri" : "İletişim ve veli"}
+    >
+      <StudentDetailRowsTable
+        caption={studentRegistryV2 ? "Öğrenci iletişim kişisi kayıtları" : "İletişim ve veli kayıtları"}
+        emptyText="İletişim kaydı yok"
+        rows={buildContactRows(detail, { canRevealPhone, studentRegistryV2 })}
+      />
+      {studentRegistryV2 && canManageStudent ? (
+        <form className="next-form-section" onSubmit={(event) => void submit(event)}>
+          <p className="next-form-section-title">İletişim kişisi ekle</p>
+          <div className="next-form-grid">
+            <Field label="Ad"><Input required value={form.firstName} onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))} /></Field>
+            <Field label="Soyad"><Input required value={form.lastName} onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))} /></Field>
+            <Field label="İlişki">
+              <Select value={form.relationType} onChange={(event) => setForm((current) => ({ ...current, relationType: event.target.value }))}>
+                <option value="MOTHER">Anne</option>
+                <option value="FATHER">Baba</option>
+                <option value="LEGAL_GUARDIAN">Yasal temsilci</option>
+                <option value="OTHER">Diğer</option>
+              </Select>
+            </Field>
+            <Field label="Telefon"><Input inputMode="tel" value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} /></Field>
+            <Field label="E-posta"><Input type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} /></Field>
+          </div>
+          {error ? <Alert tone="danger">{error}</Alert> : null}
+          <Button disabled={saving} type="submit">{saving ? "Kaydediliyor…" : "İletişim kişisi ekle"}</Button>
+        </form>
+      ) : null}
+    </Panel>
+  );
+}
+
+function buildContactRows(detail: StudentBaseDetail, options: { canRevealPhone: boolean; studentRegistryV2: boolean }): StudentDetailTableRow[] {
   return [
     {
-      detail: maskPhoneNumber(detail.profile.phone),
+      detail: detail.profile.phone ? maskPhoneNumber(detail.profile.phone) : (detail.profile.phoneMasked ?? "-"),
       id: "student-phone",
       meta: "Profil",
       primary: "Öğrenci telefonu",
@@ -597,22 +704,33 @@ function buildContactRows(detail: StudentBaseDetail, options: { canRevealPhone: 
       tone: "success",
     },
     {
-      detail: maskEmail(detail.profile.email),
+      detail: detail.profile.email ? maskEmail(detail.profile.email) : (detail.profile.emailMasked ?? "-"),
       id: "student-email",
       meta: "Profil",
       primary: "Öğrenci e-postası",
       status: "Maskeli",
       tone: "success",
     },
-    ...detail.guardians.map((guardian): StudentDetailTableRow => ({
-      detail: <RevealablePhone canReveal={options.canRevealPhone} value={guardian.phone} />,
+    ...(options.studentRegistryV2 ? detail.contacts.map((contact): StudentDetailTableRow => ({
+      detail: [contact.phoneMasked, contact.emailMasked].filter(Boolean).join(" · ") || "İletişim bilgisi yok",
+      id: `student-contact-${contact.id}`,
+      meta: formatStudentContactRelation(contact.relationType),
+      primary: `${contact.firstName} ${contact.lastName}`,
+      status: "İletişim kişisi",
+      tone: "info",
+    })) : detail.guardians.map((guardian): StudentDetailTableRow => ({
+      detail: <RevealablePhone canReveal={options.canRevealPhone && Boolean(guardian.phone)} value={guardian.phone ?? guardian.phoneMasked} />,
       id: `guardian-contact-${guardian.id}`,
       meta: "Veli iletişimi",
       primary: `${guardian.firstName} ${guardian.lastName}`,
       status: "Veli",
       tone: "info",
-    })),
+    }))),
   ];
+}
+
+function formatStudentContactRelation(relationType: StudentContactRecord["relationType"]): string {
+  return { MOTHER: "Anne", FATHER: "Baba", LEGAL_GUARDIAN: "Yasal temsilci", OTHER: "Diğer" }[relationType];
 }
 
 function buildGuardianRelationshipRows(
@@ -1173,7 +1291,7 @@ function formatQuestionStatus(status: ReportStudentQuestionSummary["status"]) {
 async function loadStudentDetailPageData(
   accessToken: string,
   id: string,
-  options: { canViewFinance: boolean },
+  options: { canViewFinance: boolean; studentRegistryV2: boolean },
 ): Promise<StudentDetailPageData> {
   const [detail, exams] = await Promise.all([
     loadStudentBaseDetail(accessToken, id, options),
@@ -1185,8 +1303,34 @@ async function loadStudentDetailPageData(
 async function loadStudentBaseDetail(
   accessToken: string,
   id: string,
-  options: { canViewFinance: boolean },
+  options: { canViewFinance: boolean; studentRegistryV2: boolean },
 ): Promise<StudentBaseDetail> {
+  if (options.studentRegistryV2) {
+    const overview = await apiRequest<StudentOverviewRecord>(
+      accessToken,
+      `${apiBaseUrl}/students/${encodeURIComponent(id)}/overview`,
+    );
+    const paymentPlans = options.canViewFinance && overview.canViewFinance
+      ? await apiRequest<PaymentPlanWithInstallmentsRecord[]>(accessToken, `${apiBaseUrl}/payment-plans?studentId=${encodeURIComponent(id)}`)
+      : [];
+    return {
+      attendanceSummary: overview.attendance,
+      auditLogs: overview.activity,
+      classes: overview.classes,
+      courses: overview.courses,
+      contacts: overview.contacts,
+      guardianLinks: overview.guardianLinks,
+      guardians: overview.guardians,
+      homeworkAssignments: overview.homeworkAssignments,
+      paymentPlans,
+      profile: overview.profile,
+      enrollments: overview.enrollments,
+      teacherAssignments: overview.teacherAssignments,
+      teachers: overview.teachers,
+      teacherNotes: overview.teacherNotes,
+      terms: overview.terms,
+    };
+  }
   const [
     attendanceSummary,
     auditLogs,
@@ -1201,6 +1345,7 @@ async function loadStudentBaseDetail(
     teacherNotes,
     classes,
     courses,
+    contacts,
     terms,
   ] = await Promise.all([
     apiRequestOrNull<AttendanceSummaryRecord>(accessToken, `${apiBaseUrl}/attendance/summary?studentId=${encodeURIComponent(id)}`),
@@ -1221,6 +1366,7 @@ async function loadStudentBaseDetail(
     apiRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/teacher-notes?studentId=${encodeURIComponent(id)}`),
     apiRequest<ClassRecord[]>(accessToken, `${apiBaseUrl}/classes`),
     apiRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`),
+    Promise.resolve([]),
     apiRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`),
   ]);
   return {
@@ -1228,6 +1374,7 @@ async function loadStudentBaseDetail(
     auditLogs: auditLogs ?? [],
     classes,
     courses,
+    contacts,
     guardianLinks,
     guardians,
     homeworkAssignments,

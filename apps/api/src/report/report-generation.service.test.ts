@@ -499,6 +499,8 @@ describe("ReportGenerationService", () => {
       tenantId: "tenant-a",
       userId: "teacher-tenant-a",
       roles: ["TEACHER"],
+      activePersona: "TEACHER",
+      campusScope: { scopeMode: "CAMPUSES", campusIds: ["campus-a"] },
       subjectType: "TEACHER",
       subjectId: "teacher-a",
       bypassRls: false,
@@ -536,6 +538,26 @@ describe("ReportGenerationService", () => {
       },
       "exam-a",
     )).rejects.toThrow(ForbiddenException);
+    expect(store.inputs).toHaveLength(0);
+  });
+
+  it("kampüs sınırlı personel tenant-geneli rapor kuyruğu ve snapshot listesini kullanamaz", async () => {
+    const producer = new FakeProducer();
+    const store = new FakeReportSnapshotStore([fakeSnapshot]);
+    const service = new ReportGenerationService(producer, store);
+    const context: RequestContext = {
+      ...adminContext(),
+      activePersona: "STAFF",
+      campusScope: { scopeMode: "CAMPUSES", campusIds: ["campus-a"] },
+    };
+
+    await expect(service.enqueueGeneration(context, {
+      examId: "exam-a",
+      reportType: examResultSummaryReportType,
+    })).rejects.toThrow(ForbiddenException);
+    await expect(service.listSnapshots(context, "exam-a")).rejects.toThrow(ForbiddenException);
+
+    expect(producer.inputs).toHaveLength(0);
     expect(store.inputs).toHaveLength(0);
   });
 

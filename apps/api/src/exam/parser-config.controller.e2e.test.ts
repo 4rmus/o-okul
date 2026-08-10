@@ -360,6 +360,10 @@ class FakeParserConfigRepository implements ParserConfigRepository {
   inputs: ApprovedParserConfigInput[] = [];
   conflict = false;
 
+  async findApproved() {
+    return undefined;
+  }
+
   async saveApproved(input: ApprovedParserConfigInput) {
     this.inputs.push(input);
     if (this.conflict) {

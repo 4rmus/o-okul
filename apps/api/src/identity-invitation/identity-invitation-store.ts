@@ -60,6 +60,17 @@ export class InMemoryIdentityInvitationStore implements IdentityInvitationStore 
   }
 
   async create(input: CreateIdentityInvitationInput): Promise<IdentityInvitationRecord> {
+    if (
+      input.subjectType === "EMPLOYEE"
+      && this.invitations.some((invitation) => (
+        invitation.tenantId === input.tenantId
+        && invitation.subjectType === "EMPLOYEE"
+        && invitation.subjectId === input.subjectId
+        && invitation.status === "PENDING"
+      ))
+    ) {
+      throw new Error("EMPLOYEE_INVITATION_ALREADY_PENDING");
+    }
     const now = new Date().toISOString();
     const invitation = {
       id: input.id ?? `identity-invitation-${this.invitations.length + 1}`,

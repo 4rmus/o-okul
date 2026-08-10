@@ -688,6 +688,30 @@ export interface AcademicTermUpdateRequest {
   isActive?: boolean;
 }
 
+export type SetupReadinessKey =
+  | "institution"
+  | "campus"
+  | "academic-year"
+  | "academic-term"
+  | "grade-level"
+  | "class"
+  | "course"
+  | "teacher"
+  | "student";
+
+export interface SetupReadinessStep {
+  key: SetupReadinessKey;
+  count: number;
+  ready: boolean;
+}
+
+export interface SetupReadinessReadModel {
+  status: "READY" | "ACTION_REQUIRED";
+  completedCount: number;
+  totalCount: number;
+  steps: SetupReadinessStep[];
+}
+
 export type IdentityProvisioningStatus = "PROVISIONED" | "INVITED" | "SKIPPED";
 
 export interface TeacherRecord {
@@ -697,6 +721,7 @@ export interface TeacherRecord {
   lastName: string;
   branch?: string;
   phone?: string;
+  phoneMasked?: string;
   userId?: string;
   provisioning?: IdentityProvisioningStatus;
 }
@@ -805,6 +830,7 @@ export interface GuardianRecord {
   firstName: string;
   lastName: string;
   phone?: string;
+  phoneMasked?: string;
   userId?: string;
   matched?: boolean;
   provisioning?: IdentityProvisioningStatus;
@@ -983,14 +1009,17 @@ export interface StudentImportRequest {
 
 export interface StudentImportError {
   row: number;
-  field: "className" | "email" | "firstName" | "guardianNationalId" | "guardianPhone" | "lastName" | "nationalId" | "phone" | "quota" | "studentNo";
+  field: "className" | "contactEmail" | "contactFirstName" | "contactLastName" | "contactPhone" | "contactRelation" | "email" | "firstName" | "guardian" | "guardianNationalId" | "guardianPhone" | "lastName" | "nationalId" | "phone" | "quota" | "studentNo";
   code:
     | "CLASS_NOT_FOUND"
     | "INVALID_DATE"
     | "INVALID_EMAIL"
     | "INVALID_NATIONAL_ID"
     | "INVALID_PHONE"
+    | "INVALID_RELATION_TYPE"
     | "REQUIRED"
+    | "STUDENT_CONTACT_IMPORT_REQUIRED"
+    | "STUDENT_IMPORT_PILOT_CORE_ONLY"
     | "STUDENT_NATIONAL_ID_DUPLICATE"
     | "STUDENT_NO_DUPLICATE"
     | "ACTIVE_STUDENT_LIMIT_REACHED";
@@ -1005,6 +1034,13 @@ export interface StudentImportPreviewRow {
   };
   classId?: string;
   className?: string;
+  contact?: {
+    firstName: string;
+    lastName: string;
+    relationType: StudentContactRelationType;
+    phoneMasked?: string;
+    emailMasked?: string;
+  };
   email?: string;
   firstName: string;
   guardian?: StudentGuardianProvisionRequest;
@@ -1028,6 +1064,7 @@ export interface StudentImportDryRunResult {
 
 export interface StudentImportResult {
   importedRows: number;
+  importedContacts: number;
   students: PublicStudentRecord[];
 }
 
@@ -1092,11 +1129,78 @@ export interface StudentProfileRecord extends StudentRecord {
   responsibleTeacherName?: string;
   nationalIdMasked?: string;
   phone?: string;
+  phoneMasked?: string;
   email?: string;
+  emailMasked?: string;
   photoKey?: string;
 }
 
 export type PublicStudentProfileRecord = Omit<StudentProfileRecord, "userId">;
+
+export type StudentContactRelationType = "MOTHER" | "FATHER" | "LEGAL_GUARDIAN" | "OTHER";
+
+export interface StudentContactRecord {
+  id: string;
+  tenantId: string;
+  studentId: string;
+  firstName: string;
+  lastName: string;
+  relationType: StudentContactRelationType;
+  phoneMasked?: string;
+  emailMasked?: string;
+  canReceiveSms: boolean;
+  canReceiveAnnouncements: boolean;
+  canReceiveFinance: boolean;
+  consentSource?: string;
+  consentRecordedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StudentOverviewLatestExamRecord {
+  examId: string;
+  snapshotId: string;
+  examTitle?: string;
+  generatedAt?: string;
+  total: ReportStudentScoreSummary;
+}
+
+export interface StudentOverviewRecord {
+  profile: PublicStudentProfileRecord;
+  activeEnrollment?: StudentEnrollmentRecord;
+  enrollments: StudentEnrollmentRecord[];
+  attendance: AttendanceSummaryRecord;
+  latestExam?: StudentOverviewLatestExamRecord;
+  openHomeworkCount: number;
+  homeworkAssignments: HomeworkMaterialAssignmentRecord[];
+  teacherNoteCount: number;
+  teacherNotes: TeacherNoteRecord[];
+  contacts: StudentContactRecord[];
+  guardians: GuardianRecord[];
+  guardianLinks: GuardianStudentRecord[];
+  teacherAssignments: TeacherAssignmentRecord[];
+  teachers: TeacherRecord[];
+  classes: ClassRecord[];
+  courses: CourseRecord[];
+  terms: AcademicTermRecord[];
+  canViewFinance: boolean;
+  activity: StudentAuditSummaryRecord[];
+}
+
+export interface StudentContactCreateRequest {
+  firstName: string;
+  lastName: string;
+  relationType: StudentContactRelationType;
+  phone?: string;
+  email?: string;
+  canReceiveSms?: boolean;
+  canReceiveAnnouncements?: boolean;
+  canReceiveFinance?: boolean;
+  consentSource?: string;
+  consentRecordedAt?: string;
+}
+
+export type StudentContactUpdateRequest = Partial<StudentContactCreateRequest>;
 
 export interface ScheduleLessonRecord {
   id: string;
@@ -2370,14 +2474,21 @@ export interface RawImportRecord {
   id: string;
   tenantId: string;
   examId: string;
+  sourceType: string;
+  fileName: string;
   sha256: string;
   s3Key: string;
   parserConfigVersion: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface RawImportParseJobRecord {
+  tenantId: string;
+  examId: string;
+  rawImportId: string;
   jobId: string;
-  queueName: string;
+  queueName: "excel-import";
+  status: "queued";
 }
 
 export interface RawImportUploadResult {
@@ -2466,7 +2577,7 @@ export interface RawImportQuarantineRecord {
   rowNumber: number;
   rawRow: Record<string, unknown>;
   reason: string;
-  status: "OPEN" | "RESOLVED" | string;
+  status: "OPEN" | "RESOLVED";
   resolvedStudentId?: string;
   resolvedParticipantId?: string;
   answerKeyId?: string;

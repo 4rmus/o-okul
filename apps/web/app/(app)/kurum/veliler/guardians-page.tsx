@@ -55,7 +55,7 @@ export function GuardiansPage() {
   const [error, setError] = useState("");
   const rows = guardiansQuery.data?.data ?? [];
   const canRevealPhone = hasCapabilityForRoles(auth?.session.roles ?? [], "privacy:manage");
-  const guardianPhoneReadyCount = rows.filter((guardian) => Boolean(guardian.phone)).length;
+  const guardianPhoneReadyCount = rows.filter((guardian) => Boolean(guardian.phone || guardian.phoneMasked)).length;
   const guardianPortalReadyCount = rows.filter((guardian) => Boolean(guardian.userId)).length;
   const guardianSummaryItems: OperationSummaryItem[] = [
     {
@@ -141,7 +141,7 @@ export function GuardiansPage() {
       key: "phone",
       header: "İletişim",
       priority: "secondary",
-      render: (guardian) => <RevealablePhone canReveal={canRevealPhone} value={guardian.phone} />,
+      render: (guardian) => <RevealablePhone canReveal={canRevealPhone && Boolean(guardian.phone)} value={guardian.phone ?? guardian.phoneMasked} />,
     },
     {
       key: "actions",
@@ -202,7 +202,10 @@ export function GuardiansPage() {
 
     try {
       const savedGuardian = editingGuardian
-        ? await updateGuardian(auth.accessToken, editingGuardian.id, parsedForm.data)
+        ? await updateGuardian(auth.accessToken, editingGuardian.id, {
+            ...parsedForm.data,
+            phone: parsedForm.data.phone || (editingGuardian.phoneMasked && !editingGuardian.phone ? undefined : parsedForm.data.phone),
+          })
         : await createGuardian(auth.accessToken, parsedForm.data);
       void savedGuardian;
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
@@ -333,7 +336,7 @@ async function createGuardian(accessToken: string, input: GuardianFormPayload) {
   });
 }
 
-async function updateGuardian(accessToken: string, id: string, input: GuardianFormPayload) {
+async function updateGuardian(accessToken: string, id: string, input: Omit<GuardianFormPayload, "phone"> & { phone?: string }) {
   return apiRequest<GuardianRecord>(accessToken, `${apiBaseUrl}/guardians/${encodeURIComponent(id)}`, {
     body: JSON.stringify(input),
     headers: { "content-type": "application/json" },

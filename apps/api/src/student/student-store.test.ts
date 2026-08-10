@@ -3,6 +3,91 @@ import { runWithRequestContext } from "../context/request-context.js";
 import { InMemoryStudentStore, PostgresStudentStore } from "./student-store.js";
 
 describe("PostgresStudentStore", () => {
+  it("10 bin kayıtlı sentetik registry'de yalnız istenen sunucu sayfasını 500 ms altında döndürür", async () => {
+    const store = new InMemoryStudentStore();
+    await store.createMany(Array.from({ length: 10_000 }, (_, index) => ({
+      tenantId: "tenant-a",
+      studentNo: String(1_000 + index),
+      firstName: `Öğrenci ${index}`,
+      lastName: `Soyad ${String(index).padStart(5, "0")}`,
+      status: "ACTIVE",
+    })));
+
+    const startedAt = performance.now();
+    const page = await store.listRegistryPage("tenant-a", {
+      page: 100,
+      limit: 50,
+      sort: "lastName",
+    });
+    const durationMs = performance.now() - startedAt;
+
+    expect(page.records).toHaveLength(50);
+    expect(page.meta).toEqual({ total: 10_001, page: 100, limit: 50, totalPages: 201 });
+    expect(durationMs).toBeLessThan(500);
+    expect(page.records.every((student) => student.tenantId === "tenant-a")).toBe(true);
+  });
+
+  it("v2 registry arama/filtre/sayfalamayı SQL içinde tenant ve contact scope ile uygular", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const pool = {
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        if (sql.includes("COUNT(*)::int AS total")) return { rows: [{ total: 2 }] as T[] };
+        if (sql.includes('SELECT student.*')) {
+          return { rows: [{
+            id: "student-a",
+            tenantId: "tenant-a",
+            studentNo: "100",
+            firstName: "Ada",
+            lastName: "A",
+            classId: "class-a",
+            responsibleTeacherId: "teacher-a",
+            status: "ACTIVE",
+            nationalIdEncrypted: null,
+            nationalIdHash: null,
+            phone: null,
+            email: null,
+            photoKey: null,
+            userId: null,
+            deletedAt: null,
+          }] as T[] };
+        }
+        return { rows: [] as T[] };
+      },
+    };
+    const store = new PostgresStudentStore(pool);
+
+    const page = await store.listRegistryPage("tenant-a", {
+      page: 2,
+      limit: 1,
+      q: "Ada",
+      sort: "-lastName",
+      classIds: ["class-a"],
+      hasContact: true,
+      teacherId: "teacher-a",
+      teacherStudentIds: ["student-a"],
+      teacherClassIds: ["class-a"],
+    });
+
+    expect(page).toEqual({
+      records: [expect.objectContaining({ id: "student-a", tenantId: "tenant-a" })],
+      meta: { total: 2, page: 2, limit: 1, totalPages: 2 },
+    });
+    const listQuery = queries.find((query) => query.sql.includes('SELECT student.*'));
+    expect(listQuery?.sql).toContain('FROM "StudentContact" contact');
+    expect(listQuery?.sql).toContain('student."tenantId" = $1');
+    expect(listQuery?.sql).toContain('ORDER BY lower(student."lastName") DESC');
+    expect(listQuery?.sql).toContain("LIMIT 1 OFFSET 1");
+    expect(listQuery?.values).toEqual([
+      "tenant-a",
+      ["class-a"],
+      "teacher-a",
+      ["student-a"],
+      ["class-a"],
+      "%ada%",
+    ]);
+  });
+
   it("portal erişimini tenant RLS, SQL arama ve cursor meta ile listeler; e-postayı maskeler", async () => {
     const queries: Array<{ sql: string; values?: unknown[] }> = [];
     const pool = {
@@ -243,6 +328,63 @@ describe("PostgresStudentStore", () => {
     expect(queries).toContain("ROLLBACK");
     expect(queries).not.toContain("COMMIT");
     expect(client.releaseCalled).toBe(true);
+  });
+
+  it("v2 importta öğrenci, enrollment ve StudentContact kaydını tek transactionda rollback yapar", async () => {
+    const queries: string[] = [];
+    const client = {
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push(sql);
+        if (sql.includes('candidate::text AS "studentNo"')) return { rows: [{ studentNo: "101" }] as T[] };
+        if (sql.includes('INSERT INTO "Student"')) {
+          return { rows: [{
+            id: String(values?.[0]), tenantId: "tenant-a", studentNo: "101", firstName: "Ada", lastName: "Kaya",
+            classId: "class-a", responsibleTeacherId: null, status: "ACTIVE", nationalIdEncrypted: null,
+            nationalIdHash: null, phone: null, email: null, photoKey: null, userId: null, deletedAt: null,
+          }] as T[] };
+        }
+        if (sql.includes('INSERT INTO "StudentEnrollment"')) {
+          return { rows: [{
+            id: "enrollment-a", tenantId: "tenant-a", studentId: String(values?.[2]), classId: "class-a",
+            academicYearId: null, termId: null, status: "ACTIVE", startsAt: "2026-08-10", endsAt: null,
+            reason: "CREATED", createdAt: new Date(), updatedAt: new Date(),
+          }] as T[] };
+        }
+        if (sql.includes('INSERT INTO "StudentContact"')) throw new Error("CONTACT_INSERT_FAILED");
+        return { rows: [] as T[] };
+      },
+      release() {},
+    };
+    const store = new PostgresStudentStore({
+      async query<T>() { return { rows: [] as T[] }; },
+      async connect() { return client; },
+    });
+
+    await runWithRequestContext(
+      { userId: "user-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      async () => {
+        await expect(store.createManyWithEnrollmentsAndContacts!([{
+          student: { tenantId: "tenant-a", firstName: "Ada", lastName: "Kaya", classId: "class-a" },
+          enrollment: { classId: "class-a", startsAt: "2026-08-10", status: "ACTIVE" },
+          contact: {
+            tenantId: "tenant-a",
+            firstName: "Fatma",
+            lastName: "Kaya",
+            relationType: "MOTHER",
+            canReceiveSms: false,
+            canReceiveAnnouncements: false,
+            canReceiveFinance: false,
+          },
+        }])).rejects.toThrow("CONTACT_INSERT_FAILED");
+      },
+    );
+
+    expect(queries).toContain("BEGIN");
+    expect(queries.some((sql) => sql.includes('INSERT INTO "Student"'))).toBe(true);
+    expect(queries.some((sql) => sql.includes('INSERT INTO "StudentEnrollment"'))).toBe(true);
+    expect(queries.some((sql) => sql.includes('INSERT INTO "StudentContact"'))).toBe(true);
+    expect(queries).toContain("ROLLBACK");
+    expect(queries).not.toContain("COMMIT");
   });
 
   it("enrollment kota reddinde öğrenci oluşturmayı aynı transaction içinde rollback yapar", async () => {

@@ -24,10 +24,15 @@ import {
   createExcelImportBullWorker,
   createRedisConnectionOptions,
   createReportGenerationBullWorker,
+  createReportPdfRenderBullWorker,
 } from "../apps/worker/dist/queue/bullmq-worker.js";
 import {
+  assertIsemOpticalReleaseInputProvisioning,
   createLiveUiWorkerEvidence,
   ISEM_OPTICAL_PIPELINE_FIXTURE,
+  ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST,
+  ISEM_OPTICAL_PIPELINE_RELEASE_COMMAND,
+  resolveApprovedIsemInputPath,
 } from "./isem-optical-pipeline-contract.mjs";
 import { validateSmokeEvidenceOutputTarget, writeSmokeEvidence } from "./smoke-evidence.mjs";
 
@@ -48,8 +53,24 @@ const classAId = `class-isem-optical-smoke-a-${runId}`;
 const classBId = `class-isem-optical-smoke-b-${runId}`;
 const parserConfigVersion = "optik-7108-lgs-v1";
 const answerKeyVersion = "isem-lgs-1-v1";
-const txtPath = "ornek-veriler/iSEM .txt";
-const answerKeyPath = "ornek-veriler/iSEM - LGS - 1 Detaylı Cevap Anahtarı.xlsx";
+const environment = process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "unknown";
+const inputRoot = process.env.ISEM_OPTICAL_PIPELINE_INPUT_ROOT;
+assertIsemOpticalReleaseInputProvisioning({
+  environment,
+  inputRoot,
+  wrapperActive: process.env.ISEM_OPTICAL_PIPELINE_PRIVATE_WRAPPER,
+});
+const inputOptions = inputRoot ? { inputRoot } : undefined;
+const txtPath = resolveApprovedIsemInputPath(
+  "opticalTxt",
+  process.env.ISEM_OPTICAL_PIPELINE_TXT_PATH,
+  inputOptions,
+);
+const answerKeyPath = resolveApprovedIsemInputPath(
+  "answerKey",
+  process.env.ISEM_OPTICAL_PIPELINE_ANSWER_KEY_PATH,
+  inputOptions,
+);
 const expectedRawRowCount = ISEM_OPTICAL_PIPELINE_FIXTURE.participantCount;
 const expectedMatchedCount = ISEM_OPTICAL_PIPELINE_FIXTURE.matchedCount;
 const expectedQuarantineCount = ISEM_OPTICAL_PIPELINE_FIXTURE.quarantineCount;
@@ -65,9 +86,10 @@ const evidencePath = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_EVIDENCE_FILE ?? pr
 const uiWorkerEvidencePath =
   process.env.ISEM_OPTICAL_PIPELINE_UI_WORKER_EVIDENCE_FILE ??
   process.env.ISEM_OPTICAL_PIPELINE_UI_WORKER_EVIDENCE_PATH;
-const environment = process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "unknown";
 const smokePassword = resolveSmokePassword(process.env.ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD);
-const commandPassed = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_COMMAND ?? "pnpm isem-optical-pipeline:smoke";
+const commandPassed = environment === "staging" || environment === "production"
+  ? ISEM_OPTICAL_PIPELINE_RELEASE_COMMAND
+  : process.env.ISEM_OPTICAL_PIPELINE_SMOKE_COMMAND ?? ISEM_OPTICAL_PIPELINE_RELEASE_COMMAND;
 const expectedScores = new Map([
   ["102", { correct: 79, wrong: 10, blank: 1, net: 75.6667 }],
   ["101", { correct: 44, wrong: 31, blank: 15, net: 33.6667 }],
@@ -98,6 +120,8 @@ await assertPort("MinIO/S3", s3Url.hostname, s3Port, "docker compose up -d minio
 
 const opticalContent = readFileSync(txtPath, "utf8");
 const answerKeyContent = readFileSync(answerKeyPath);
+assertApprovedInputHash("opticalTxt", opticalContent);
+assertApprovedInputHash("answerKey", answerKeyContent);
 const opticalRows = readOpticalRows(opticalContent);
 assertOpticalRows(opticalRows);
 
@@ -117,6 +141,10 @@ const reportWorker = createReportGenerationBullWorker({
   connection: redisConnection,
   workerOptions: { prefix: queuePrefix },
 });
+const reportPdfWorker = createReportPdfRenderBullWorker({
+  connection: redisConnection,
+  workerOptions: { prefix: queuePrefix },
+});
 
 let app;
 let rawImportProducer;
@@ -127,6 +155,7 @@ try {
   await waitUntilReady(parseWorker);
   await waitUntilReady(evaluationWorker);
   await waitUntilReady(reportWorker);
+  await waitUntilReady(reportPdfWorker);
 
   app = await NestFactory.create(AppModule, { logger: false });
   configureApiApp(app);
@@ -180,7 +209,7 @@ try {
   const snapshot = await waitForSnapshot(expectedMatchedCount, 30_000);
   const evidence = await readPipelineEvidence(rawImport.id, evaluation.answerKeyId, snapshot.id);
   assertPipelineEvidence(evidence);
-  const quarantinePathVerified = await verifyQuarantinePath(baseUrl, token, opticalRows[0]);
+  const quarantineProbe = await verifyQuarantinePath(baseUrl, token, opticalRows[0]);
   const pipelineDurationMs = Math.round(performance.now() - pipelineStartedAt);
   await logoutSmokeSession(baseUrl, smokeSession);
   await assertSmokeSessionRevoked();
@@ -190,6 +219,7 @@ try {
     result: "PASS",
     check: "isem_optical_pipeline_smoke",
     environment,
+    fixtureId: ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST.fixtureId,
     checkedAt: new Date().toISOString(),
     parserConfigVersion,
     answerKeyVersion,
@@ -211,10 +241,11 @@ try {
       opticalImportCommitted: true,
       rawImportArchived: true,
       evaluationQueued: true,
-      quarantinePathVerified,
+      quarantinePathVerified: quarantineProbe.reportReady,
       reportGenerated: true,
       reportReady: true,
     },
+    quarantineProbe,
     sampleScores: evidence.sampleScores.map((sample) => ({
       studentNoHash: sha256(sample.studentNo),
       correct: sample.correct,
@@ -280,9 +311,17 @@ try {
     if (app) {
       await app.close();
     }
+    await reportPdfWorker.close();
     await reportWorker.close();
     await evaluationWorker.close();
     await parseWorker.close();
+  }
+}
+
+function assertApprovedInputHash(inputKey, content) {
+  const expected = ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST.inputs[inputKey]?.sha256;
+  if (!expected || sha256(content) !== expected) {
+    throw new Error(`ISEM_OPTICAL_INPUT_HASH_MISMATCH:${inputKey}`);
   }
 }
 
@@ -623,9 +662,13 @@ async function enqueueEvaluation(baseUrl, token, rawImportId) {
 }
 
 async function enqueueReportGeneration(baseUrl, token) {
-  const response = await postJson(baseUrl, `/api/v1/exams/${examId}/reports/generation-jobs`, token, {
+  return enqueueReportGenerationForExam(baseUrl, token, examId);
+}
+
+async function enqueueReportGenerationForExam(baseUrl, token, targetExamId) {
+  const response = await postJson(baseUrl, `/api/v1/exams/${targetExamId}/reports/generation-jobs`, token, {
     reportType: "EXAM_RESULT_SUMMARY",
-  });
+  }, { "idempotency-key": `isem-optical-report-${targetExamId}-${runId}` });
   const payload = response.data ?? response;
   if (payload.queueName !== "report-generation" || !payload.jobId) {
     throw new Error(`ISEM_OPTICAL_REPORT_QUEUE_MISMATCH: ${JSON.stringify(payload)}`);
@@ -756,10 +799,59 @@ async function verifyQuarantinePath(baseUrl, token, sourceRow) {
   ) {
     throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_FINAL_MISMATCH: ${JSON.stringify(resolvedRecords)}`);
   }
-  return true;
+  const reportJob = await enqueueReportGenerationForExam(baseUrl, token, probeExamId);
+  const snapshot = await waitForSnapshotForExam(probeExamId, 1, 30_000);
+  const studentReportResponse = await getJson(
+    baseUrl,
+    `/api/v1/exams/${probeExamId}/reports/snapshots/${snapshot.id}/students/${resolveBody.resolvedStudentId}`,
+    token,
+  );
+  const studentReport = studentReportResponse.data ?? studentReportResponse;
+  const excelResponse = await getJson(
+    baseUrl,
+    `/api/v1/exams/${probeExamId}/reports/snapshots/${snapshot.id}/export.xlsx`,
+    token,
+  );
+  const excel = excelResponse.data ?? excelResponse;
+  const pdfResponse = await getJson(
+    baseUrl,
+    `/api/v1/exams/${probeExamId}/reports/snapshots/${snapshot.id}/students/${resolveBody.resolvedStudentId}/export.pdf`,
+    token,
+  );
+  const pdf = pdfResponse.data ?? pdfResponse;
+  if (
+    studentReport.examId !== probeExamId ||
+    studentReport.snapshotId !== snapshot.id ||
+    studentReport.studentId !== resolveBody.resolvedStudentId
+  ) {
+    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_STUDENT_REPORT_MISMATCH: ${JSON.stringify(studentReport)}`);
+  }
+  if (excel.rowCount !== 1 || !hasZipSignature(excel.fileBase64)) {
+    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_EXCEL_MISMATCH: ${JSON.stringify({ rowCount: excel.rowCount })}`);
+  }
+  if (!Number.isInteger(pdf.pageCount) || pdf.pageCount < 1 || !hasPdfSignature(pdf.fileBase64)) {
+    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_PDF_MISMATCH: ${JSON.stringify({ pageCount: pdf.pageCount })}`);
+  }
+
+  return {
+    openCount: 1,
+    resolvedCount: 1,
+    examResultCount: 1,
+    reportResultCount: snapshot.resultCount,
+    idempotentReplayVerified: replayed.evaluationJob?.jobId === resolved.evaluationJob.jobId,
+    studentReportVerified: true,
+    excelExportVerified: true,
+    pdfExportVerified: true,
+    reportReady: true,
+    reportJobQueued: reportJob.status === "queued",
+  };
 }
 
 async function waitForSnapshot(expectedCount, timeoutMs) {
+  return waitForSnapshotForExam(examId, expectedCount, timeoutMs);
+}
+
+async function waitForSnapshotForExam(targetExamId, expectedCount, timeoutMs) {
   return waitFor("ISEM_OPTICAL_REPORT_TIMEOUT", timeoutMs, async () => {
     const pool = new pg.Pool({ connectionString: directDatabaseUrl });
     const client = await pool.connect();
@@ -778,7 +870,7 @@ async function waitForSnapshot(expectedCount, timeoutMs) {
            AND "deletedAt" IS NULL
          ORDER BY "createdAt" DESC
          LIMIT 1`,
-        [tenantId, examId],
+        [tenantId, targetExamId],
       );
       await client.query("COMMIT");
       const row = result.rows[0];
@@ -791,6 +883,16 @@ async function waitForSnapshot(expectedCount, timeoutMs) {
       await pool.end();
     }
   });
+}
+
+function hasZipSignature(fileBase64) {
+  if (typeof fileBase64 !== "string" || fileBase64.length === 0) return false;
+  return Buffer.from(fileBase64, "base64").subarray(0, 2).toString("utf8") === "PK";
+}
+
+function hasPdfSignature(fileBase64) {
+  if (typeof fileBase64 !== "string" || fileBase64.length === 0) return false;
+  return Buffer.from(fileBase64, "base64").subarray(0, 5).toString("utf8") === "%PDF-";
 }
 
 async function readPipelineEvidence(rawImportId, answerKeyId, snapshotId) {

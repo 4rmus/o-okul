@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, GoneException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import {
   hasCapabilityForRoles,
   isPortalSubjectRoleName,
@@ -24,6 +24,8 @@ import {
 } from "../tenant/tenant-seat-limit.js";
 import { type TenantStore, tenantStoreToken } from "../tenant/tenant-store.js";
 import { tenantWebUrl } from "../http/tenant-origin.js";
+import { FeatureRolloutService } from "../feature-rollout/feature-rollout.service.js";
+import { requireTenantWideStaffContext } from "../tenant/tenant-access.js";
 import {
   type TenantUserRecord,
   type UserManagementStore,
@@ -62,6 +64,7 @@ export class IdentityInvitationService {
     @Optional()
     @Inject(employeeAccountActivationStoreToken)
     private readonly employeeActivations?: EmployeeAccountActivationStore,
+    @Optional() private readonly featureRollouts?: FeatureRolloutService,
   ) {}
 
   async list(context: RequestContext): Promise<IdentityInvitationRecord[]> {
@@ -72,6 +75,7 @@ export class IdentityInvitationService {
   async create(context: RequestContext, body: CreateIdentityInvitationBody): Promise<IdentityInvitationIssueResult> {
     const tenantId = this.requireTenantId(context);
     const subjectType = parseSubjectType(body.subjectType);
+    if (subjectType === "GUARDIAN") await this.assertGuardianInvitationWritable(context);
     const subjectId = body.subjectId?.trim();
     const email = body.email?.trim().toLowerCase();
     if (!subjectId) throw new BadRequestException("SUBJECT_ID_REQUIRED");
@@ -114,31 +118,49 @@ export class IdentityInvitationService {
     stepUpToken?: string,
   ): Promise<IdentityInvitationIssueResult> {
     const tenantId = this.requireTenantId(context);
+    try {
+      requireTenantWideStaffContext(context, "EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
+    } catch (error) {
+      throw new ForbiddenException(error instanceof Error ? error.message : "EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
+    }
     this.assertElevatedEmployeeInvitationAllowed(context, input.role, stepUpToken);
     const employee = await this.users.findEmployee(tenantId, employeeId);
     if (!employee) throw new NotFoundException("EMPLOYEE_NOT_FOUND");
     if (employee.status !== "ACTIVE") throw new BadRequestException("EMPLOYEE_INVITATION_REQUIRES_ACTIVE_PROFILE");
     if (employee.userId) throw new BadRequestException("EMPLOYEE_ALREADY_LINKED");
-    const pending = (await this.invitations.list(tenantId)).some((invitation) => (
+    const pending = (await this.invitations.list(tenantId)).find((invitation) => (
       invitation.subjectType === "EMPLOYEE" && invitation.subjectId === employeeId && invitation.status === "PENDING"
     ));
-    if (pending) throw new BadRequestException("EMPLOYEE_INVITATION_ALREADY_PENDING");
+    if (pending && Date.parse(pending.expiresAt) > Date.now()) {
+      throw new BadRequestException("EMPLOYEE_INVITATION_ALREADY_PENDING");
+    }
+    if (pending) {
+      await this.invitations.revokePendingForSubject(tenantId, "EMPLOYEE", employeeId);
+    }
 
     const email = input.email.trim().toLowerCase();
     const token = createActivationToken();
     const expiresAt = nextExpiry();
     const tenantSlug = await this.requireTenantSlug(tenantId);
-    const invitation = await this.invitations.create({
-      tenantId,
-      subjectType: "EMPLOYEE",
-      subjectId: employee.id,
-      email,
-      name: `${employee.firstName} ${employee.lastName}`,
-      role: input.role,
-      tokenHash: hashActivationToken(token),
-      expiresAt,
-      delivery: createInvitationDelivery(tenantId, tenantSlug, email, token, expiresAt),
-    });
+    let invitation: IdentityInvitationRecord;
+    try {
+      invitation = await this.invitations.create({
+        tenantId,
+        subjectType: "EMPLOYEE",
+        subjectId: employee.id,
+        email,
+        name: `${employee.firstName} ${employee.lastName}`,
+        role: input.role,
+        tokenHash: hashActivationToken(token),
+        expiresAt,
+        delivery: createInvitationDelivery(tenantId, tenantSlug, email, token, expiresAt),
+      });
+    } catch (error) {
+      if (isEmployeePendingInvitationConflict(error)) {
+        throw new BadRequestException("EMPLOYEE_INVITATION_ALREADY_PENDING");
+      }
+      throw error;
+    }
     await this.auditLogs?.record({
       tenantId,
       actorUserId: context.userId,
@@ -180,6 +202,7 @@ export class IdentityInvitationService {
     const existing = await this.invitations.findById(tenantId, id);
     if (!existing) throw new NotFoundException("IDENTITY_INVITATION_NOT_FOUND");
     if (existing.status !== "PENDING") throw new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
+    if (existing.subjectType === "GUARDIAN") await this.assertGuardianInvitationWritable(context);
     if (existing.kind !== "EMAIL_LINK" || !existing.email) throw new BadRequestException("IDENTITY_INVITATION_RESEND_UNSUPPORTED");
 
     const token = createActivationToken();
@@ -211,6 +234,14 @@ export class IdentityInvitationService {
 
     const invitation = await this.invitations.findByTokenHash(hashActivationToken(token));
     if (!invitation) throw new NotFoundException("IDENTITY_INVITATION_NOT_FOUND");
+    if (invitation.subjectType === "GUARDIAN") {
+      await this.assertGuardianInvitationWritable({
+        tenantId: invitation.tenantId,
+        userId: "guardian-invitation-accept",
+        roles: [],
+        bypassRls: false,
+      });
+    }
     if (invitation.subjectType === "EMPLOYEE" && this.employeeActivations) {
       const outcome = await this.employeeActivations.accept({
         tokenHash: hashActivationToken(token),
@@ -289,6 +320,14 @@ export class IdentityInvitationService {
     return context.tenantId;
   }
 
+  private async assertGuardianInvitationWritable(context: RequestContext): Promise<void> {
+    if (!this.featureRollouts) return;
+    const resolved = await this.featureRollouts.resolve(context);
+    if (resolved.enabledFeatureKeys.includes("product.guardian-read-only")) {
+      throw new GoneException("GUARDIAN_WRITE_READ_ONLY");
+    }
+  }
+
   private async requireTenantSlug(tenantId: string): Promise<string> {
     const tenant = await this.tenants.findById(tenantId);
     if (!tenant) throw new NotFoundException("TENANT_NOT_FOUND");
@@ -334,6 +373,11 @@ export class IdentityInvitationService {
       throw new BadRequestException("STUDENT_PORTAL_ACCESS_REQUIRES_ACTIVE_PROFILE");
     }
   }
+}
+
+function isEmployeePendingInvitationConflict(error: unknown): boolean {
+  if (error instanceof Error && error.message === "EMPLOYEE_INVITATION_ALREADY_PENDING") return true;
+  return typeof error === "object" && error !== null && "code" in error && error.code === "23505";
 }
 
 function requireAcceptedEmployeeActivation(outcome: EmployeeAccountActivationOutcome): IdentityInvitationRecord {

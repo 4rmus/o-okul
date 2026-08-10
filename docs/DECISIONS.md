@@ -223,6 +223,10 @@ operasyonel alan olarak saklanır. Guardian.email is not a persisted Guardian co
 hesap e-postası User.email ile temsil edilir. Bu alanlar log, Sentry event'i, audit diff'i, smoke
 kanıtı veya production evidence artifact'ine ham değer olarak yazılamaz; `SENTRY_SEND_DEFAULT_PII=false`
 ve redaction testleri bu sınırı korur.
+`StudentContact` ad, ilişki ve iletişim alanları ayrı veri sahibi kapsamıdır; telefon/e-posta
+şifreli ve anahtarlı hash olarak, izinler varsayılan kapalı tutulur. Öğrenci KVKK purge işleminde
+ilişki `OTHER` yapılır, adlar anonimleştirilir, iletişim/hash/izin/consent alanları temizlenir ve
+yalnız purge sayımı auditlenir.
 Kaynak: KVKK/PII güvenlik kararı.
 Kanıt: `apps/api/src/observability/logging.ts`, `apps/api/src/observability/sentry.ts`,
 `scripts/check-kvkk-inventory-evidence.mjs`, `scripts/check-pii-contact-policy.mjs`,
@@ -231,7 +235,7 @@ Kanıt: `apps/api/src/observability/logging.ts`, `apps/api/src/observability/sen
 Etkilenen ADR: Yok
 Açık soru: Real staging/prod KVKK inventory, KVKK aydınlatma metni/DPA ve hukuk veya veri koruma
 onayı üretim çıkışından önce ayrıca alınacak; repo kararı bu gerçek kanıtların yerine geçmez.
-Son kontrol: 2026-06-13
+Son kontrol: 2026-08-10
 
 ### DEC-20260623-01 — Karne soru detayı veri sınırı
 

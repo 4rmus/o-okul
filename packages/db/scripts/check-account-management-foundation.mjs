@@ -41,6 +41,10 @@ const whatsappConsentLifecycleMigration = readFileSync(
   new URL("../prisma/migrations/20260808170000_add_whatsapp_consent_lifecycle/migration.sql", import.meta.url),
   "utf8",
 );
+const employeePendingInvitationMigration = readFileSync(
+  new URL("../prisma/migrations/20260810114500_employee_pending_invitation_unique/migration.sql", import.meta.url),
+  "utf8",
+);
 
 const failures = [];
 const tenantModels = ["LicenseTerm", "LicenseUsage", "Employee", "MembershipCampusScope", "StudentContact"];
@@ -106,6 +110,14 @@ for (const token of [
 }
 if (/\b(?:UPDATE|DELETE)\s+ON\s+"WhatsAppConsent(?:Event)?"\s+TO\s+app/.test(whatsappConsentLifecycleMigration)) {
   failures.push("WhatsApp consent lifecycle tablolarına app UPDATE/DELETE verilmemeli.");
+}
+for (const token of [
+  `BEGIN;`,
+  `LOCK TABLE "IdentityInvitation" IN SHARE ROW EXCLUSIVE MODE;`,
+  `IdentityInvitation_one_pending_employee_key`,
+  `COMMIT;`,
+]) {
+  requireToken(employeePendingInvitationMigration, token, `employee pending invitation migration ${token}`);
 }
 if (/GuardianStudent|canReceiveSms/.test(whatsappConsentMigration)) {
   failures.push("WhatsApp consent migration'ı GuardianStudent veya SMS iznini yeniden kullanmamalı.");

@@ -25,6 +25,30 @@ const update = {
 };
 
 describe("UserManagementService step-up", () => {
+  it("kampüs kapsamlı çalışan IAM okuma ve yazılarını store'a ulaşmadan reddeder", async () => {
+    const store = {
+      createEmployee: vi.fn(),
+      listEmployeeAccessPage: vi.fn(),
+      listTenantUsers: vi.fn(),
+      updateTenantMembership: vi.fn(),
+    } as unknown as UserManagementStore;
+    const service = new UserManagementService(store, {} as SessionStore);
+    const campusContext: RequestContext = {
+      ...context,
+      activePersona: "STAFF",
+      campusScope: { scopeMode: "CAMPUSES", campusIds: ["campus-main"] },
+    };
+
+    await expect(service.list(campusContext)).rejects.toThrow("EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
+    await expect(service.listEmployees(campusContext, { direction: "next", limit: 50, sort: "lastName" })).rejects.toThrow("EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
+    await expect(service.createEmployee(campusContext, { firstName: "Ada", lastName: "Dar", status: "ACTIVE" })).rejects.toThrow("EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
+    await expect(service.updateMembership(campusContext, "membership-a", update)).rejects.toThrow("EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
+    expect(store.listTenantUsers).not.toHaveBeenCalled();
+    expect(store.listEmployeeAccessPage).not.toHaveBeenCalled();
+    expect(store.createEmployee).not.toHaveBeenCalled();
+    expect(store.updateTenantMembership).not.toHaveBeenCalled();
+  });
+
   it("bağlama uyan kanıtı store'a doğrulanmış olarak geçirir", async () => {
     const result = {
       employee: {

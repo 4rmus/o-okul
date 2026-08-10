@@ -1,12 +1,14 @@
 import { createHash } from "node:crypto";
-import { BadRequestException, ConflictException, Inject, Injectable, Optional, PayloadTooLargeException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, Optional, PayloadTooLargeException } from "@nestjs/common";
 import ExcelJS from "exceljs";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import { normalizeTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import { toTurkishUpperCase } from "../http/zod-validation.js";
-import { type ClassStore, classStoreToken } from "../school/class-store.js";
+import { FeatureRolloutService } from "../feature-rollout/feature-rollout.service.js";
+import { maskContactEmail, maskContactPhone } from "../privacy/contact-mask.js";
+import { SchoolService } from "../school/school.service.js";
 import { StudentService, type StudentGuardianProvisionInput, type StudentRecord } from "./student.service.js";
 import { maskTcIdentity, normalizeTcIdentity } from "./tc-identity.js";
 import type {
@@ -17,12 +19,19 @@ import type {
   StudentImportPreviewRow,
   StudentImportRequest,
   StudentImportResult,
+  StudentContactCreateRequest,
+  StudentContactRelationType,
 } from "@o-okul/shared-types";
 
 type StudentImportDryRunInput = Partial<StudentImportRequest>;
-type ParsedStudentImportRow = StudentImportPreviewRow & {
+interface ParsedStudentContact extends StudentContactCreateRequest {
+  invalidRelation?: string;
+}
+
+type ParsedStudentImportRow = Omit<StudentImportPreviewRow, "contact"> & {
   nationalId?: string;
   phone?: string;
+  contact?: ParsedStudentContact;
 };
 const maxStudentImportBytes = 5 * 1024 * 1024;
 
@@ -30,9 +39,10 @@ const maxStudentImportBytes = 5 * 1024 * 1024;
 export class StudentImportService {
   constructor(
     private readonly students: StudentService,
-    @Inject(classStoreToken) private readonly classes: ClassStore,
+    private readonly school: SchoolService,
     @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() private readonly idempotency?: IdempotencyService,
+    @Optional() private readonly featureRollouts?: FeatureRolloutService,
   ) {}
 
   async dryRun(context: RequestContext, input: StudentImportDryRunInput): Promise<StudentImportDryRunResult> {
@@ -57,6 +67,9 @@ export class StudentImportService {
     input: StudentImportDryRunInput,
     idempotencyKey?: string,
   ): Promise<StudentImportResult> {
+    if (!idempotencyKey) {
+      throw new BadRequestException("IDEMPOTENCY_KEY_REQUIRED");
+    }
     const idempotencyRequest = {
       fileSha256: input.fileBase64 ? createSha256(Buffer.from(input.fileBase64, "base64")) : undefined,
     };
@@ -100,6 +113,7 @@ export class StudentImportService {
     });
     return {
       importedRows: students.length,
+      importedContacts: rows.filter((row) => Boolean(row.contact)).length,
       students: students.map(toPublicImportedStudent),
     };
   }
@@ -112,7 +126,17 @@ export class StudentImportService {
       throw new BadRequestException("IMPORT_FILE_REQUIRED");
     }
     const rows = await this.readRows(fileBase64);
-    const errors = await this.validateRows(context, rows);
+    const rowPilotErrors: StudentImportError[] = [];
+    const registryV2Enabled = await this.isRegistryV2Enabled(context);
+    if (registryV2Enabled) {
+      for (const row of rows) {
+        rowPilotErrors.push(...errorsForCoreOnlyPilot(row));
+      }
+    }
+    if (!registryV2Enabled && rows.some((row) => Boolean(row.guardian))) {
+      await this.students.assertGuardianProvisioningAllowed(context);
+    }
+    const errors = [...rowPilotErrors, ...await this.validateRows(context, rows)];
     const incomingActiveStudents = filterValidRows(rows, errors).filter((row) => Boolean(row.classId)).length;
     const quota = await this.students.previewQuota(context, incomingActiveStudents);
 
@@ -127,7 +151,7 @@ export class StudentImportService {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Students");
     const students = await this.students.list(context);
-    const classes = (await this.classes.list()).filter((record) => record.tenantId === context.tenantId && !record.deletedAt);
+    const classes = await this.school.listClasses(context);
     const classById = new Map(classes.map((record) => [record.id, record]));
 
     worksheet.addRow(["okul_no", "ad", "soyad", "sinif"]);
@@ -219,6 +243,13 @@ export class StudentImportService {
       phone: findHeaderIndex(header, ["guardianPhone", "veliTelefon", "veliTel", "veliCep"]),
       nationalId: findHeaderIndex(header, ["guardianNationalId", "guardianTc", "veliTc", "veliTcKimlikNo", "veliTckn", "veliKimlikNo"]),
     };
+    const contactIndexes: ContactColumnIndexes = {
+      firstName: findHeaderIndex(header, ["contactFirstName", "iletisimKisiAdi", "iletişimKişiAdı"]),
+      lastName: findHeaderIndex(header, ["contactLastName", "iletisimKisiSoyadi", "iletişimKişiSoyadı"]),
+      relation: findHeaderIndex(header, ["contactRelation", "iletisimIliski", "iletişimİlişki"]),
+      phone: findHeaderIndex(header, ["contactPhone", "iletisimTelefon", "iletişimTelefon"]),
+      email: findHeaderIndex(header, ["contactEmail", "iletisimEposta", "iletişimEposta"]),
+    };
 
     for (const row of matrix.slice(headerRowIndex + 1)) {
       const studentNo = studentNoIndex === undefined ? "" : row.cells[studentNoIndex]?.trim() ?? "";
@@ -229,6 +260,7 @@ export class StudentImportService {
       const phone = readOptionalCell(row.cells, phoneIndex);
       const nationalId = readOptionalCell(row.cells, nationalIdIndex);
       const guardian = readGuardian(row.cells, guardianIndexes);
+      const contact = readContact(row.cells, contactIndexes);
       if (!studentNo && !firstName && !lastName) continue;
 
       rows.push({
@@ -241,6 +273,7 @@ export class StudentImportService {
         ...(phone ? { phone } : {}),
         ...(nationalId ? { nationalId } : {}),
         ...(guardian ? { guardian } : {}),
+        ...(contact ? { contact } : {}),
       });
     }
 
@@ -249,12 +282,10 @@ export class StudentImportService {
 
   private async validateRows(context: RequestContext, rows: ParsedStudentImportRow[]): Promise<StudentImportError[]> {
     const errors: StudentImportError[] = [];
-    const classes = (await this.classes.list()).filter((record) => record.tenantId === context.tenantId && !record.deletedAt);
+    const classes = await this.school.listClasses(context);
     const classByName = new Map(classes.map((record) => [this.normalizeValue(record.name), record]));
     const existingStudentNos = new Set(
-      (await this.students.list(context))
-        .map((student) => student.studentNo)
-        .filter((studentNo): studentNo is string => Boolean(studentNo))
+      (await this.students.listStudentNosForImport(context))
         .map((studentNo) => this.normalizeStudentNo(studentNo)),
     );
     const seenStudentNos = new Set<string>();
@@ -352,9 +383,34 @@ export class StudentImportService {
           errors.push({ row: row.row, field: "guardianPhone", code: "INVALID_PHONE" });
         }
       }
+      if (row.contact) {
+        if (!row.contact.firstName) errors.push({ row: row.row, field: "contactFirstName", code: "REQUIRED" });
+        if (!row.contact.lastName) errors.push({ row: row.row, field: "contactLastName", code: "REQUIRED" });
+        if (row.contact.invalidRelation) {
+          errors.push({ row: row.row, field: "contactRelation", code: "INVALID_RELATION_TYPE", value: row.contact.invalidRelation });
+        }
+        if (row.contact.phone) {
+          try {
+            row.contact.phone = normalizeTurkishMobilePhone(row.contact.phone, "STUDENT_CONTACT_PHONE_INVALID");
+          } catch {
+            errors.push({ row: row.row, field: "contactPhone", code: "INVALID_PHONE" });
+          }
+        }
+        if (row.contact.email) {
+          row.contact.email = row.contact.email.trim().toLowerCase();
+          if (!isEmailLike(row.contact.email)) {
+            errors.push({ row: row.row, field: "contactEmail", code: "INVALID_EMAIL" });
+          }
+        }
+      }
     }
 
     return errors;
+  }
+
+  private async isRegistryV2Enabled(context: RequestContext): Promise<boolean> {
+    if (!this.featureRollouts) return false;
+    return (await this.featureRollouts.resolve(context)).enabledFeatureKeys.includes("web.student-registry-v2");
   }
 
   private normalizeValue(value: string): string {
@@ -394,6 +450,15 @@ function toPublicImportedStudent(student: StudentRecord): PublicStudentRecord {
     responsibleTeacherId: student.responsibleTeacherId,
     status: student.status,
   };
+}
+
+function errorsForCoreOnlyPilot(row: ParsedStudentImportRow): StudentImportError[] {
+  const errors: StudentImportError[] = [];
+  if (row.nationalId) errors.push({ row: row.row, field: "nationalId", code: "STUDENT_IMPORT_PILOT_CORE_ONLY" });
+  if (row.phone) errors.push({ row: row.row, field: "phone", code: "STUDENT_IMPORT_PILOT_CORE_ONLY" });
+  if (row.email) errors.push({ row: row.row, field: "email", code: "STUDENT_IMPORT_PILOT_CORE_ONLY" });
+  if (row.guardian) errors.push({ row: row.row, field: "guardian", code: "STUDENT_CONTACT_IMPORT_REQUIRED" });
+  return errors;
 }
 
 function isXlsx(bytes: Buffer): boolean {
@@ -466,20 +531,39 @@ interface GuardianColumnIndexes {
   nationalId?: number;
 }
 
+interface ContactColumnIndexes {
+  firstName?: number;
+  lastName?: number;
+  relation?: number;
+  phone?: number;
+  email?: number;
+}
+
 function filterValidRows<T extends { row: number }>(rows: T[], errors: StudentImportError[]): T[] {
   const invalidRows = new Set(errors.filter((error) => error.row > 0).map((error) => error.row));
   return rows.filter((row) => !invalidRows.has(row.row));
 }
 
 function toPreviewRow(row: ParsedStudentImportRow): StudentImportPreviewRow {
-  const { nationalId: _nationalId, phone: _phone, ...previewRow } = row;
+  const { nationalId: _nationalId, phone: _phone, contact, ...previewRow } = row;
   if (previewRow.guardian?.nationalId) {
     previewRow.guardian = {
       ...previewRow.guardian,
       nationalId: maskTcIdentity(previewRow.guardian.nationalId),
     };
   }
-  return previewRow;
+  return {
+    ...previewRow,
+    ...(contact ? {
+      contact: {
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        relationType: contact.relationType,
+        ...(contact.phone ? { phoneMasked: maskContactPhone(contact.phone) } : {}),
+        ...(contact.email ? { emailMasked: maskContactEmail(contact.email) } : {}),
+      },
+    } : {}),
+  };
 }
 
 function maskedNationalIdValue(value: string): { value?: string } {
@@ -500,6 +584,45 @@ function readGuardian(cells: string[], indexes: GuardianColumnIndexes): StudentG
     nationalId: nationalId || undefined,
     phone: phone || undefined,
   };
+}
+
+function readContact(cells: string[], indexes: ContactColumnIndexes): ParsedStudentContact | undefined {
+  const firstName = toTurkishUpperCase(readOptionalCell(cells, indexes.firstName));
+  const lastName = toTurkishUpperCase(readOptionalCell(cells, indexes.lastName));
+  const relation = readOptionalCell(cells, indexes.relation);
+  const phone = readOptionalCell(cells, indexes.phone);
+  const email = readOptionalCell(cells, indexes.email);
+  if (!firstName && !lastName && !relation && !phone && !email) return undefined;
+  const relationType = parseContactRelation(relation);
+  return {
+    firstName,
+    lastName,
+    relationType: relationType ?? "OTHER",
+    ...(relation && !relationType ? { invalidRelation: relation } : {}),
+    ...(phone ? { phone } : {}),
+    ...(email ? { email } : {}),
+    canReceiveSms: false,
+    canReceiveAnnouncements: false,
+    canReceiveFinance: false,
+  };
+}
+
+function parseContactRelation(value: string): StudentContactRelationType | undefined {
+  if (!value) return "OTHER";
+  const normalized = value.trim().toLocaleUpperCase("tr-TR").replace(/[\s_-]+/g, "_");
+  const relations: Record<string, StudentContactRelationType> = {
+    MOTHER: "MOTHER",
+    ANNE: "MOTHER",
+    FATHER: "FATHER",
+    BABA: "FATHER",
+    LEGAL_GUARDIAN: "LEGAL_GUARDIAN",
+    YASAL_VELI: "LEGAL_GUARDIAN",
+    YASAL_VELİ: "LEGAL_GUARDIAN",
+    OTHER: "OTHER",
+    DIGER: "OTHER",
+    DİĞER: "OTHER",
+  };
+  return relations[normalized];
 }
 
 function readOptionalCell(cells: string[], index: number | undefined): string {

@@ -5,6 +5,7 @@ import type {
 } from "@o-okul/shared-types";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
+import { requireTenantWideStaffContext } from "../tenant/tenant-access.js";
 import {
   rawImportQuarantineStoreToken,
   type ImportQuarantineRecord,
@@ -155,16 +156,6 @@ export class RawImportQuarantineService {
       throw new NotFoundException("IMPORT_QUARANTINE_REPROCESS_INPUT_NOT_FOUND");
     }
 
-    const job = await this.producer.enqueue({
-      queueName: "exam-evaluation",
-      tenantId,
-      userId: context.userId,
-      entityId: record.id,
-      contentHash: `${record.rawImportSha256}-${record.answerKeyId}`,
-      participantId: record.resolvedParticipantId,
-      rawImportId: record.rawImportId,
-      answerKeyId: record.answerKeyId,
-    });
     const resolvedRecord = await this.store.markResolved({
       tenantId,
       examId: record.examId,
@@ -174,6 +165,29 @@ export class RawImportQuarantineService {
     });
     if (!resolvedRecord) {
       throw new NotFoundException("IMPORT_QUARANTINE_NOT_FOUND");
+    }
+
+    let job: Awaited<ReturnType<RawImportQueueProducer["enqueue"]>>;
+    try {
+      job = await this.producer.enqueue({
+        queueName: "exam-evaluation",
+        tenantId,
+        userId: context.userId,
+        entityId: record.id,
+        contentHash: `${record.rawImportSha256}-${record.answerKeyId}`,
+        participantId: record.resolvedParticipantId,
+        rawImportId: record.rawImportId,
+        answerKeyId: record.answerKeyId,
+      });
+    } catch (error) {
+      await this.store.reopen({
+        tenantId,
+        examId: record.examId,
+        rawImportId: record.rawImportId,
+        quarantineId: record.id,
+        resolvedStudentId: required(input.resolvedStudentId, "IMPORT_QUARANTINE_STUDENT_REQUIRED"),
+      });
+      throw error;
     }
 
     return {
@@ -196,10 +210,11 @@ export class RawImportQuarantineService {
 }
 
 function requireTenant(context: RequestContext): string {
-  if (!context.tenantId) {
-    throw new ForbiddenException("TENANT_CONTEXT_MISSING");
+  try {
+    return requireTenantWideStaffContext(context, "RAW_IMPORT_CAMPUS_SCOPE_FORBIDDEN");
+  } catch (error) {
+    throw new ForbiddenException(error instanceof Error ? error.message : "RAW_IMPORT_CAMPUS_SCOPE_FORBIDDEN");
   }
-  return context.tenantId;
 }
 
 function required(value: string | undefined, errorCode: string): string {

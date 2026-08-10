@@ -28,6 +28,8 @@ import {
   type RawImportRepository,
 } from "./raw-import-upload.service.js";
 import type { ProducedJob } from "../queue/job-producer.js";
+import { examRepositoryToken } from "./exam.service.js";
+import { parserConfigRepositoryToken } from "./parser-config-approval.service.js";
 
 describe("RawImportController", () => {
   let app: INestApplication;
@@ -52,6 +54,20 @@ describe("RawImportController", () => {
       .useValue(archiveStore)
       .overrideProvider(rawImportRepositoryToken)
       .useValue(repository)
+      .overrideProvider(examRepositoryToken)
+      .useValue({
+        findById: async (tenantId: string, examId: string) => tenantId === "tenant-a" && examId === "exam-a"
+          ? { id: examId, tenantId, title: "Sınav", status: "DRAFT" }
+          : undefined,
+      })
+      .overrideProvider(parserConfigRepositoryToken)
+      .useValue({
+        findApproved: async (tenantId: string, examId: string, version: string) => (
+          tenantId === "tenant-a" && examId === "exam-a" && version === "parser-v1"
+            ? { tenantId, examId, version, status: "APPROVED" }
+            : undefined
+        ),
+      })
       .overrideProvider(rawImportQueueProducerToken)
       .useValue(producer)
       .overrideProvider(rawImportQuarantineStoreToken)
@@ -67,6 +83,7 @@ describe("RawImportController", () => {
 
   beforeEach(() => {
     archiveStore.puts = [];
+    archiveStore.deletes = [];
     repository.creates = [];
     producer.inputs = [];
     producer.failNext = false;
@@ -566,7 +583,8 @@ describe("RawImportController", () => {
       .expect(500);
 
     expect(quarantineStore.records[0]?.status).toBe("OPEN");
-    expect(quarantineStore.markResolvedCalls).toHaveLength(0);
+    expect(quarantineStore.markResolvedCalls).toHaveLength(1);
+    expect(quarantineStore.reopenCalls).toHaveLength(1);
   });
 
   it("karantina çözme kaydı yoksa evaluation işi üretmez", async () => {
@@ -630,9 +648,14 @@ describe("RawImportController", () => {
 
 class FakeArchiveStore implements RawImportArchiveStore {
   puts: Array<{ s3Key: string; body: Buffer; contentType?: string }> = [];
+  deletes: string[] = [];
 
   async put(input: { s3Key: string; body: Buffer; contentType?: string }): Promise<void> {
     this.puts.push(input);
+  }
+
+  async delete(s3Key: string): Promise<void> {
+    this.deletes.push(s3Key);
   }
 }
 
@@ -688,6 +711,13 @@ class FakeQuarantineStore implements RawImportQuarantineStore {
     quarantineId: string;
     resolvedStudentId: string;
   }> = [];
+  reopenCalls: Array<{
+    tenantId: string;
+    examId: string;
+    rawImportId: string;
+    quarantineId: string;
+    resolvedStudentId: string;
+  }> = [];
 
   reset(): void {
     this.records = [createQuarantine()];
@@ -695,6 +725,7 @@ class FakeQuarantineStore implements RawImportQuarantineStore {
     this.lists = [];
     this.resolves = [];
     this.markResolvedCalls = [];
+    this.reopenCalls = [];
   }
 
   async countOpenByTenant(tenantId: string): Promise<number> {
@@ -746,9 +777,35 @@ class FakeQuarantineStore implements RawImportQuarantineStore {
       item.status === "OPEN"
     ));
     if (!record) return undefined;
-    const resolved = { ...record, status: "RESOLVED", resolvedStudentId: input.resolvedStudentId };
+    const resolved: ImportQuarantineRecord = {
+      ...record,
+      status: "RESOLVED",
+      resolvedStudentId: input.resolvedStudentId,
+    };
     this.records = this.records.map((item) => item.id === record.id ? resolved : item);
     return resolved;
+  }
+
+  async reopen(input: {
+    tenantId: string;
+    examId: string;
+    rawImportId: string;
+    quarantineId: string;
+    resolvedStudentId: string;
+  }): Promise<ImportQuarantineRecord | undefined> {
+    this.reopenCalls.push(input);
+    const record = this.records.find((item) => (
+      item.tenantId === input.tenantId &&
+      item.examId === input.examId &&
+      item.rawImportId === input.rawImportId &&
+      item.id === input.quarantineId &&
+      item.status === "RESOLVED" &&
+      item.resolvedStudentId === input.resolvedStudentId
+    ));
+    if (!record) return undefined;
+    const reopened: ImportQuarantineRecord = { ...record, status: "OPEN", resolvedStudentId: undefined };
+    this.records = this.records.map((item) => item.id === record.id ? reopened : item);
+    return reopened;
   }
 }
 

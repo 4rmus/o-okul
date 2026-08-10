@@ -57,6 +57,7 @@ import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { ReportGenerationService, type ReportSnapshotListFilters } from "../report/report-generation.service.js";
 import { GuardianService } from "../guardian/guardian.service.js";
+import { toGuardianResponse } from "../guardian/guardian-response.js";
 import { SchoolService } from "../school/school.service.js";
 import {
   guardianNotificationPreferenceBodySchema,
@@ -200,8 +201,9 @@ export class MeController {
 
   @Get("student/guardians")
   @Roles("STUDENT")
-  studentGuardians(): Promise<GuardianRecord[]> {
-    return this.guardians.listCurrentStudentGuardians(getRequestContext());
+  async studentGuardians(): Promise<GuardianRecord[]> {
+    const context = getRequestContext();
+    return (await this.guardians.listCurrentStudentGuardians(context)).map((record) => toGuardianResponse(record, context));
   }
 
   @Get("student/guardian-links")

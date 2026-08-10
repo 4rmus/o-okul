@@ -5,6 +5,7 @@ import { InMemoryGuardianStore } from "../school/guardian-store.js";
 import { InMemoryClassStore } from "../school/class-store.js";
 import { InMemoryStudentStore, type StudentStore } from "./student-store.js";
 import { InMemoryStudentEnrollmentStore } from "./student-enrollment-store.js";
+import { InMemoryStudentContactStore } from "./student-contact-store.js";
 import { StudentService } from "./student.service.js";
 import { hashTcIdentity, normalizeTcIdentity } from "./tc-identity.js";
 
@@ -148,6 +149,20 @@ describe("StudentService", () => {
 
   it("öğrenci PII temizliğinde önce report snapshot kimliğini temizler ve yalnız sayım auditler", async () => {
     const setup = createService();
+    await setup.studentContactStore.create({
+      tenantId: "tenant-a",
+      studentId: "student-a",
+      firstName: "Fatma",
+      lastName: "Veli",
+      relationType: "MOTHER",
+      phoneEncrypted: "encrypted-phone",
+      phoneHash: "phone-hash",
+      emailEncrypted: "encrypted-email",
+      emailHash: "email-hash",
+      canReceiveSms: false,
+      canReceiveAnnouncements: false,
+      canReceiveFinance: false,
+    });
 
     await expect(setup.service.purgePii(adminContext, "student-a")).resolves.toMatchObject({
       firstName: "Anonim",
@@ -155,6 +170,11 @@ describe("StudentService", () => {
     });
 
     expect(setup.reportSnapshotPurgeCalls).toEqual([{ tenantId: "tenant-a", studentId: "student-a" }]);
+    await expect(setup.studentContactStore.listByStudent("tenant-a", "student-a")).resolves.toEqual([]);
+    expect(setup.auditRecords).toContainEqual(expect.objectContaining({
+      action: "kvkk.student_contact_pii_purged",
+      diff: { studentId: "student-a", recordCount: 1 },
+    }));
     expect(setup.auditRecords).toContainEqual(expect.objectContaining({
       action: "kvkk.student_pii_purged",
       diff: {
@@ -168,8 +188,21 @@ describe("StudentService", () => {
           "photoKey",
           "ReportSnapshot.displayName",
           "ReportSnapshot.studentNo",
+          "StudentContact.firstName",
+          "StudentContact.lastName",
+          "StudentContact.relationType",
+          "StudentContact.phoneEncrypted",
+          "StudentContact.phoneHash",
+          "StudentContact.emailEncrypted",
+          "StudentContact.emailHash",
+          "StudentContact.canReceiveSms",
+          "StudentContact.canReceiveAnnouncements",
+          "StudentContact.canReceiveFinance",
+          "StudentContact.consentSource",
+          "StudentContact.consentRecordedAt",
         ],
         reportSnapshotPurgeCount: 2,
+        studentContactPurgeCount: 1,
       },
     }));
   });
@@ -387,6 +420,7 @@ function createService(options: { failReportSnapshotPurge?: boolean; activeStude
   const classStore = new InMemoryClassStore();
   const guardianStudentStore = new InMemoryGuardianStudentStore();
   const guardianStore = new InMemoryGuardianStore();
+  const studentContactStore = new InMemoryStudentContactStore();
   const invitations: unknown[] = [];
   const auditRecords: unknown[] = [];
   const provisionedSubjects: unknown[] = [];
@@ -466,6 +500,9 @@ function createService(options: { failReportSnapshotPurge?: boolean; activeStude
       undefined,
       identityProvisioning as never,
       licenseTerms,
+      undefined,
+      undefined,
+      studentContactStore,
     ),
     guardianStore,
     guardianStudentStore,
@@ -477,6 +514,7 @@ function createService(options: { failReportSnapshotPurge?: boolean; activeStude
     studentStore,
     enrollmentStore,
     classStore,
+    studentContactStore,
   };
 }
 

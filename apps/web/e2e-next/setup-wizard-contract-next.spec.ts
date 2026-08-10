@@ -18,6 +18,50 @@ const hostileUploadValues = [
 ] as const;
 
 test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
+  test("setup-v2 sunucu readiness sonucunu çerezden üstün tutar ve flag kapalıyken endpointi çağırmaz", async ({ page }) => {
+    const requestedPaths: string[] = [];
+    await openSetupWizard(page, { height: 844, width: 390 }, {
+      readiness: "incomplete",
+      requestedPaths,
+      roles: ["TENANT_ADMIN"],
+      setupV2: true,
+      spoofCompletedCookie: true,
+    });
+
+    await expect(page.getByLabel("Sunucu kurulum durumu")).toContainText("Aktif dönem");
+    await expect(page.getByLabel("Sunucu kurulum durumu")).toContainText("Eksik");
+    await expect(page.getByText("İlk giriş akışı")).toBeVisible();
+    expect(requestedPaths).toContain("GET /setup/readiness");
+
+    requestedPaths.length = 0;
+    await openSetupWizard(page, { height: 844, width: 390 }, {
+      requestedPaths,
+      roles: ["TENANT_ADMIN"],
+      setupV2: false,
+    });
+    await expect(page.getByLabel("Sunucu kurulum durumu")).toHaveCount(0);
+    expect(requestedPaths).not.toContain("GET /setup/readiness");
+  });
+
+  test("her kurulum adımı deep-link ve ileri geri navigasyonunu korur", async ({ page }) => {
+    await openSetupWizard(page, { height: 844, width: 390 }, {
+      readiness: "incomplete",
+      roles: ["TENANT_ADMIN"],
+      setupV2: true,
+    });
+
+    const tabs = page.getByRole("tablist", { name: "Adım ilerlemesi" });
+    await tabs.getByRole("tab", { name: /Akademik Dönem Ayarları/ }).click();
+    await expect(page).toHaveURL(/\/kurum\/kurulum\/donem$/);
+    await expect(page.getByRole("heading", { name: "Akademik Dönem Ayarları" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Geri" }).click();
+    await expect(page).toHaveURL(/\/kurum\/kurulum\/genel$/);
+    await page.goto(`${appOrigin}/kurum/kurulum/hazirlik`, { waitUntil: "domcontentloaded" });
+    await expect(page.getByLabel("Hazırlık kontrolü")).toContainText("Aktif dönem");
+    await expect(page.getByLabel("Hazırlık kontrolü")).toContainText("Eksik");
+  });
+
   test("mobilde profesyonel metrik, validation ve upload gizliliğini korur", async ({ page }) => {
     await openSetupWizard(page, { height: 844, width: 390 }, { roles: ["TENANT_ADMIN"] });
 
@@ -27,7 +71,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await expect(setupMetrics).toHaveClass(/uh-metric-grid/);
     await expect(setupMetrics.locator(".uh-metric-card")).toHaveCount(3);
     await expect(page.getByLabel("Adım ilerlemesi")).toBeVisible();
-    await expect(page.getByRole("tablist", { name: "Adım ilerlemesi" }).locator(".uh-tab-button")).toHaveCount(5);
+    await expect(page.getByRole("tablist", { name: "Adım ilerlemesi" }).locator(".uh-tab-button")).toHaveCount(6);
     await expect(page.getByLabel("Kurulum formu")).toBeVisible();
     await expect(page.getByLabel("Kurulum özeti")).toBeVisible();
 
@@ -250,7 +294,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
 async function openSetupWizard(
   page: Page,
   viewport: { height: number; width: number },
-  options: { emptyCourseTemplates?: boolean; roles?: string[]; studentDryRun?: "duplicate"; unexpectedMutations?: string[] } = {},
+  options: SetupMockOptions = {},
 ) {
   await page.setViewportSize(viewport);
   await installSetupApiMocks(page, options);
@@ -259,13 +303,20 @@ async function openSetupWizard(
     document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
   });
   await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
+  if (options.spoofCompletedCookie) {
+    await page.context().addCookies([{
+      name: "uh_onboarding_tenant-setup_completed",
+      url: appOrigin,
+      value: "true",
+    }]);
+  }
   await page.goto("/kurum/kurulum");
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
 }
 
 async function installSetupApiMocks(
   page: Page,
-  options: { emptyCourseTemplates?: boolean; roles?: string[]; studentDryRun?: "duplicate"; unexpectedMutations?: string[] } = {},
+  options: SetupMockOptions = {},
 ) {
   await page.unroute("**/api/v1/**").catch(() => undefined);
   await page.route("**/api/v1/**", async (route) => {
@@ -277,6 +328,7 @@ async function installSetupApiMocks(
     const request = route.request();
     const url = new URL(request.url());
     const pathName = url.pathname.replace(/^\/api\/v1/, "");
+    options.requestedPaths?.push(`${request.method()} ${pathName}`);
     if (request.method() !== "GET" && pathName !== "/auth/refresh") {
       options.unexpectedMutations?.push(`${request.method()} ${pathName}`);
     }
@@ -288,9 +340,13 @@ async function installSetupApiMocks(
 function mockSetupApiResponse(
   pathName: string,
   method: string,
-  options: { emptyCourseTemplates?: boolean; roles?: string[]; studentDryRun?: "duplicate" } = {},
+  options: SetupMockOptions = {},
 ) {
   if (pathName === "/auth/refresh") return createAuthResponse(options.roles ?? ["TENANT_ADMIN"]);
+  if (pathName === "/me/feature-rollouts") {
+    return { enabledFeatureKeys: options.setupV2 ? ["web.setup-v2"] : [] };
+  }
+  if (pathName === "/setup/readiness") return createSetupReadiness(options.readiness ?? "ready");
   if (pathName === "/me/tenant") return createTenantResponse();
   if (pathName === "/me/notification-devices") return [];
   if (method === "GET" && pathName === "/grade-levels") {
@@ -403,6 +459,43 @@ function mockSetupApiResponse(
     };
   }
   return [];
+}
+
+interface SetupMockOptions {
+  emptyCourseTemplates?: boolean;
+  readiness?: "ready" | "incomplete";
+  requestedPaths?: string[];
+  roles?: string[];
+  setupV2?: boolean;
+  spoofCompletedCookie?: boolean;
+  studentDryRun?: "duplicate";
+  unexpectedMutations?: string[];
+}
+
+function createSetupReadiness(state: "ready" | "incomplete") {
+  const keys = [
+    "institution",
+    "campus",
+    "academic-year",
+    "academic-term",
+    "grade-level",
+    "class",
+    "course",
+    "teacher",
+    "student",
+  ] as const;
+  const steps = keys.map((key) => ({
+    key,
+    count: state === "incomplete" && key === "academic-term" ? 0 : 1,
+    ready: !(state === "incomplete" && key === "academic-term"),
+  }));
+  const completedCount = steps.filter((step) => step.ready).length;
+  return {
+    status: completedCount === steps.length ? "READY" : "ACTION_REQUIRED",
+    completedCount,
+    totalCount: steps.length,
+    steps,
+  };
 }
 
 function createAuthResponse(roles: string[]) {
