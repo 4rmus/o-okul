@@ -48,6 +48,8 @@ const tenantId = `tenant-isem-optical-smoke-${runId}`;
 const tenantSlug = `isem-optical-smoke-${runId}`;
 const userId = `user-isem-optical-smoke-${runId}`;
 const membershipId = `membership-isem-optical-smoke-${runId}`;
+const ownerUserId = `user-isem-optical-smoke-owner-${runId}`;
+const ownerMembershipId = `membership-isem-optical-smoke-owner-${runId}`;
 let examId = `exam-isem-optical-smoke-${runId}`;
 const classAId = `class-isem-optical-smoke-a-${runId}`;
 const classBId = `class-isem-optical-smoke-b-${runId}`;
@@ -82,6 +84,7 @@ const licenseStartsAt = new Date(Date.now() - 60_000).toISOString();
 const licenseEndsAt = new Date(Date.now() + 86_400_000).toISOString();
 const smokeEmailDomain = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_EMAIL_DOMAIN ?? "example.test";
 const smokeEmail = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_EMAIL ?? `isem-optical-smoke-${runId}@${smokeEmailDomain}`;
+const ownerEmail = `isem-optical-smoke-owner-${runId}@${smokeEmailDomain}`;
 const evidencePath = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_EVIDENCE_FILE ?? process.env.ISEM_OPTICAL_PIPELINE_SMOKE_EVIDENCE_PATH;
 const uiWorkerEvidencePath =
   process.env.ISEM_OPTICAL_PIPELINE_UI_WORKER_EVIDENCE_FILE ??
@@ -351,11 +354,23 @@ async function seedPipelineInput(rows) {
       [userId, tenantId, smokeEmail, hashPassword(smokePassword)],
     );
     await client.query(
+      `INSERT INTO "User" ("id", "tenantId", "email", "emailNormalized", "loginName", "loginNameNormalized", "name", "passwordHash", "updatedAt")
+       VALUES ($1, $2, $3, lower(btrim($3)), $3, lower(btrim($3)), 'iSEM Optical Smoke Owner', $4, now())`,
+      [ownerUserId, tenantId, ownerEmail, hashPassword(randomBytes(32).toString("base64url"))],
+    );
+    await client.query(
       `INSERT INTO "TenantMembership" (
          "id", "tenantId", "userId", "role", "staffRole", "status", "version", "scopeMode", "updatedAt"
        )
        VALUES ($1, $2, $3, 'ASSISTANT_ADMIN', 'ASSISTANT_ADMIN', 'ACTIVE', 1, 'TENANT', now())`,
       [membershipId, tenantId, userId],
+    );
+    await client.query(
+      `INSERT INTO "TenantMembership" (
+         "id", "tenantId", "userId", "role", "staffRole", "status", "version", "scopeMode", "updatedAt"
+       )
+       VALUES ($1, $2, $3, 'TENANT_OWNER', 'TENANT_OWNER', 'ACTIVE', 1, 'TENANT', now())`,
+      [ownerMembershipId, tenantId, ownerUserId],
     );
     await client.query(
       `INSERT INTO "Class" ("id", "tenantId", "name", "updatedAt")

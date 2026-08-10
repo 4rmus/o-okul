@@ -4863,6 +4863,10 @@ function runIsemApprovedInputPathNegativeChecks() {
     console.error("Production evidence template kontrolü başarısız: iSEM smoke production MFA'dan bağımsız exam operator rolünü kullanmalı.");
     process.exit(1);
   }
+  if (!producer.includes("'TENANT_OWNER', 'TENANT_OWNER'") || !producer.includes("iSEM Optical Smoke Owner")) {
+    console.error("Production evidence template kontrolü başarısız: iSEM smoke tenant account-management owner sözleşmesi eksik.");
+    process.exit(1);
+  }
 
   runIsemPrivateWrapperFailureContractCheck();
 }
