@@ -4859,7 +4859,7 @@ function runIsemApprovedInputPathNegativeChecks() {
     console.error("Production evidence template kontrolü başarısız: staging/production iSEM producer wrapper kapısı eksik.");
     process.exit(1);
   }
-  if (!producer.includes("'ASSISTANT_ADMIN', 'ASSISTANT_ADMIN'")) {
+  if (!producer.includes("'ASSISTANT_ADMIN', 'OPERATIONS_STAFF'")) {
     console.error("Production evidence template kontrolü başarısız: iSEM smoke production MFA'dan bağımsız exam operator rolünü kullanmalı.");
     process.exit(1);
   }

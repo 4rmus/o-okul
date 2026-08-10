@@ -362,7 +362,7 @@ async function seedPipelineInput(rows) {
       `INSERT INTO "TenantMembership" (
          "id", "tenantId", "userId", "role", "staffRole", "status", "version", "scopeMode", "updatedAt"
        )
-       VALUES ($1, $2, $3, 'ASSISTANT_ADMIN', 'ASSISTANT_ADMIN', 'ACTIVE', 1, 'TENANT', now())`,
+       VALUES ($1, $2, $3, 'ASSISTANT_ADMIN', 'OPERATIONS_STAFF', 'ACTIVE', 1, 'TENANT', now())`,
       [membershipId, tenantId, userId],
     );
     await client.query(
