@@ -19,6 +19,10 @@ for (const requiredSource of [
   'new URL("/kurum/raporlar", page.url()).toString()',
   'new URL(`/ogrenci?examId=${encodeURIComponent(evidence.examId)}`, page.url()).toString()',
   'new URL(`/veli?examId=${encodeURIComponent(evidence.examId)}`, page.url()).toString()',
+  'getByRole("combobox", { name: "Sınav" }).selectOption(examId.trim())',
+  'getByRole("region", { name: "Rapor iş akışı" })).toContainText("Rapor hazır")',
+  'getByLabel("Üst gezinme").getByRole("button", { name: "Çıkış" }).click()',
+  'expect(page).toHaveURL(/\\/giris$/)',
 ]) {
   if (!liveUiWorkerSpecSource.includes(requiredSource)) {
     failures.push(`live UI-worker logout response gate eksik: ${requiredSource}`);

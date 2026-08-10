@@ -36,7 +36,7 @@ test("worker tarafından üretilen canlı rapor kurum UI içinde açılır", asy
   await fillReportExamReference(page, evidence.examId);
   await page.getByRole("button", { name: "Raporu getir" }).click();
 
-  await expect(page.getByLabel("Rapor özeti").getByText("READY")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Rapor iş akışı" })).toContainText("Rapor hazır");
   await page.getByRole("tab", { name: "Öğrenciler" }).click();
   await page.getByRole("button", { name: /karnesini aç/ }).first().click();
   await page.getByRole("tab", { name: "Karne" }).click();
@@ -108,7 +108,7 @@ async function logout(page: Page) {
       response.request().method() === "POST" &&
       new URL(response.url()).pathname.endsWith("/api/v1/auth/logout")
     ),
-    page.getByRole("button", { name: "Çıkış" }).click(),
+    page.getByLabel("Üst gezinme").getByRole("button", { name: "Çıkış" }).click(),
   ]);
   expect(logoutResponse.status()).toBe(204);
   const revokedRefreshResponse = await page.request.post(
@@ -122,15 +122,11 @@ async function logout(page: Page) {
     },
   );
   expect(revokedRefreshResponse.status()).toBe(401);
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(/\/giris$/);
 }
 
 async function fillReportExamReference(page: Page, examId: string) {
-  const manualExamReference = page.getByLabel("Manuel sınav referansı");
-  if (!(await manualExamReference.isVisible())) {
-    await page.getByText("Gelişmiş sınav referansı", { exact: true }).click();
-  }
-  await manualExamReference.fill(examId);
+  await page.getByLabel("Rapor kontrol alanı").getByRole("combobox", { name: "Sınav" }).selectOption(examId.trim());
 }
 
 async function expectReportDownload(
