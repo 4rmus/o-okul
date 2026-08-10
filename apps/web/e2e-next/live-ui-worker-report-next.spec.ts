@@ -32,7 +32,7 @@ test("worker tarafından üretilen canlı rapor kurum UI içinde açılır", asy
 
   await loginAs(page, evidence.tenantSlug, evidence.loginName, evidence.password, /\/kurum(?:[/?#]|$)/);
   await expect(page).toHaveURL(/\/kurum$/);
-  await page.goto("/kurum/raporlar");
+  await page.goto(new URL("/kurum/raporlar", page.url()).toString());
   await fillReportExamReference(page, evidence.examId);
   await page.getByRole("button", { name: "Raporu getir" }).click();
 
@@ -50,7 +50,7 @@ test("worker tarafından üretilen canlı rapor kurum UI içinde açılır", asy
   if (evidence.studentPortal) {
     await logout(page);
     await loginAs(page, evidence.studentPortal.tenantSlug ?? evidence.tenantSlug, evidence.studentPortal.loginName, evidence.studentPortal.password, /\/ogrenci(?:[/?#]|$)/);
-    await page.goto(`/ogrenci?examId=${encodeURIComponent(evidence.examId)}`);
+    await page.goto(new URL(`/ogrenci?examId=${encodeURIComponent(evidence.examId)}`, page.url()).toString());
     await expect(page.getByRole("heading", { name: "Öğrenci Portalı" })).toBeVisible();
     await openPortalKarneDetail(page);
     studentPortalViewed = true;
@@ -60,7 +60,7 @@ test("worker tarafından üretilen canlı rapor kurum UI içinde açılır", asy
   if (evidence.guardianPortal) {
     await logout(page);
     await loginAs(page, evidence.guardianPortal.tenantSlug ?? evidence.tenantSlug, evidence.guardianPortal.loginName, evidence.guardianPortal.password, /\/veli(?:[/?#]|$)/);
-    await page.goto(`/veli?examId=${encodeURIComponent(evidence.examId)}`);
+    await page.goto(new URL(`/veli?examId=${encodeURIComponent(evidence.examId)}`, page.url()).toString());
     await expect(page.getByRole("heading", { name: "Veli Portalı" })).toBeVisible();
     await openPortalKarneDetail(page);
     guardianPortalViewed = true;

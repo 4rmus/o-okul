@@ -1335,12 +1335,11 @@ kanıtı olarak kullanılmaz ve checker tarafından reddedilir.
 
 ```sh
 STAGING_ENVIRONMENT=staging \
-NEXT_E2E_BASE_URL=https://212.108.107.190 \
+NEXT_E2E_BASE_URL=https://o-okul.com \
 NEXT_E2E_SKIP_WEB_SERVER=1 \
-NEXT_E2E_IGNORE_HTTPS_ERRORS=1 \
 NEXT_E2E_LIVE_UI_WORKER=1 \
-LIVE_UI_WORKER_EVIDENCE_PATH=artifacts/staging/private/live-ui-worker-input.json \
-LIVE_UI_WORKER_RESULT_EVIDENCE_FILE=artifacts/staging/live-ui-worker-result.json \
+LIVE_UI_WORKER_EVIDENCE_PATH="$PWD/artifacts/staging/private/live-ui-worker-input.json" \
+LIVE_UI_WORKER_RESULT_EVIDENCE_FILE="$PWD/artifacts/staging/live-ui-worker-result.json" \
 pnpm live:ui-worker:evidence-check
 ```
 
@@ -1348,12 +1347,11 @@ Smoke komutu aynı preflight'ı tarayıcı açmadan önce otomatik çalıştır�
 
 ```sh
 STAGING_ENVIRONMENT=staging \
-NEXT_E2E_BASE_URL=https://212.108.107.190 \
+NEXT_E2E_BASE_URL=https://o-okul.com \
 NEXT_E2E_SKIP_WEB_SERVER=1 \
-NEXT_E2E_IGNORE_HTTPS_ERRORS=1 \
 NEXT_E2E_LIVE_UI_WORKER=1 \
-LIVE_UI_WORKER_EVIDENCE_PATH=artifacts/staging/private/live-ui-worker-input.json \
-LIVE_UI_WORKER_RESULT_EVIDENCE_FILE=artifacts/staging/live-ui-worker-result.json \
+LIVE_UI_WORKER_EVIDENCE_PATH="$PWD/artifacts/staging/private/live-ui-worker-input.json" \
+LIVE_UI_WORKER_RESULT_EVIDENCE_FILE="$PWD/artifacts/staging/live-ui-worker-result.json" \
 pnpm live:ui-worker:smoke
 ```
 
@@ -1375,8 +1373,8 @@ değil, sadece private runtime input'tur; path zincirinde `private` segmenti olm
 0600 olmalı, smoke üretirse 0600 modunda yazılır ve release bundle/production summary/public evidence template içine gömülmez.
 `NEXT_E2E_BASE_URL` gerçek `https://` staging/prod web origin'i olmalı, lokal/test/placeholder host
 olamaz; `NEXT_E2E_SKIP_WEB_SERVER=1` local Next dev server'in yanlışlıkla kanıt yerine geçmesini
-engeller. IP/self-signed staging hedeflerinde `NEXT_E2E_IGNORE_HTTPS_ERRORS=1` yalnız Playwright TLS
-toleransı için kullanılır.
+engeller. Giriş tenant alt alan adına yönlendirdiği için canlı smoke, girişten sonraki kurum ve portal
+route'larını o anki tenant origin'i üzerinde açar; apex `NEXT_E2E_BASE_URL` üzerine geri dönmez.
 Gerçek staging kanıtında `ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD` secret store'dan açıkça verilir;
 en az 16 karakter, büyük/küçük harf, rakam ve sembol içermeyen veya yaygın varsayılan parola olan
 değerler reddedilir. `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder

@@ -16,6 +16,9 @@ for (const requiredSource of [
   "expect(logoutResponse.status()).toBe(204)",
   'new URL("/api/v1/auth/refresh", logoutResponse.url()).toString()',
   "expect(revokedRefreshResponse.status()).toBe(401)",
+  'new URL("/kurum/raporlar", page.url()).toString()',
+  'new URL(`/ogrenci?examId=${encodeURIComponent(evidence.examId)}`, page.url()).toString()',
+  'new URL(`/veli?examId=${encodeURIComponent(evidence.examId)}`, page.url()).toString()',
 ]) {
   if (!liveUiWorkerSpecSource.includes(requiredSource)) {
     failures.push(`live UI-worker logout response gate eksik: ${requiredSource}`);
