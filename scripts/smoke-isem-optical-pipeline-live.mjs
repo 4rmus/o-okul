@@ -347,14 +347,14 @@ async function seedPipelineInput(rows) {
     );
     await client.query(
       `INSERT INTO "User" ("id", "tenantId", "email", "emailNormalized", "loginName", "loginNameNormalized", "name", "passwordHash", "updatedAt")
-       VALUES ($1, $2, $3, lower(btrim($3)), $3, lower(btrim($3)), 'iSEM Optical Smoke Admin', $4, now())`,
+       VALUES ($1, $2, $3, lower(btrim($3)), $3, lower(btrim($3)), 'iSEM Optical Smoke Operator', $4, now())`,
       [userId, tenantId, smokeEmail, hashPassword(smokePassword)],
     );
     await client.query(
       `INSERT INTO "TenantMembership" (
          "id", "tenantId", "userId", "role", "staffRole", "status", "version", "scopeMode", "updatedAt"
        )
-       VALUES ($1, $2, $3, 'TENANT_ADMIN', 'TENANT_ADMIN', 'ACTIVE', 1, 'TENANT', now())`,
+       VALUES ($1, $2, $3, 'ASSISTANT_ADMIN', 'ASSISTANT_ADMIN', 'ACTIVE', 1, 'TENANT', now())`,
       [membershipId, tenantId, userId],
     );
     await client.query(
