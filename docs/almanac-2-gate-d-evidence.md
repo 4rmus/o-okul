@@ -1,16 +1,19 @@
-# Almanak 2.0 Gate D Çekirdek Ürün Yerel Kanıtı
+# Almanak 2.0 Gate D Çekirdek Ürün Staging Kanıtı
 
 Tarih: 2026-08-10
 Branch: `agent/almanac-gate-d-local-20260810`
 Başlangıç commit'i: `5f852becb7c6f0a04ca96355e075d863a13838b7`
-Kanıt düzeyi: `LOCAL_STATIC` ve `LOCAL_SYNTHETIC`
-Dış durum: `EXTERNAL_NOT_RUN`
+Runtime commit'i: `65f01988328fbffca3a52a7c267b5119302f075c`
+Kanıt düzeyi: `LOCAL_STATIC`, `LOCAL_SYNTHETIC`, `GITHUB_CI`, `STAGING_DEPLOY`,
+`STAGING_DB_RUNTIME`, `STAGING_API_RUNTIME` ve `STAGING_LIVE_UI`
+Dış durum: UAT-KURUM-01 `EXTERNAL_EVIDENCE_REQUIRED`; pilot ve production `EXTERNAL_NOT_RUN`
 
 ## Sonuç
 
-Gate D'nin repo ve yerel çalışma ağacı kapsamı `LOCAL_STATIC_PASS_WITH_STAGING_PENDING` durumundadır.
-Gate D'nin “full staging pass” maddesi çalıştırılmadığı için genel gate sonucu `PARTIAL` kalır. Bu belge
-GitHub CI, staging, pilot, deploy veya production kanıtı değildir.
+Gate D'nin repo, GitHub CI, staging deploy, iSEM optik/rapor, canlı UI/PDF/XLSX, gerçek PostgreSQL 10k
+ve tenant rollout/rollback maddeleri `PASS` durumundadır. UAT-KURUM-01 için bearer-korumalı activation
+inbox evidence endpoint'i ve private system-admin girdisi staging'de sağlanmadığından genel gate sonucu
+`PARTIAL` kalır. Bu belge pilot, production veya go-live kanıtı değildir.
 
 ## Sınav, optik ve rapor
 
@@ -62,6 +65,28 @@ GitHub CI, staging, pilot, deploy veya production kanıtı değildir.
 - Yeni iki migration additive/forward-fix uyumludur: guardian izin varsayılanları default-off ve çalışan
   PENDING davet partial unique indexi. Guardian fiziksel silme yapılmamıştır.
 
+## GitHub ve staging doğrulama
+
+| Kontrol | Sonuç |
+| --- | --- |
+| iSEM producer exact CI | `87b7d9766c7299c44d3c6a119ffbb122ddcbbfc8`; Actions `31401323883 PASS` |
+| iSEM producer exact deploy | Actions `31402240519 PASS` |
+| Final UI-worker exact CI | `65f01988328fbffca3a52a7c267b5119302f075c`; Actions `31406897722 PASS` |
+| Final UI-worker exact deploy | Actions `31408010202 PASS`; web/API/worker/queue-board exact image, health `PASS` |
+| iSEM optik/rapor artifact'i | `/root/o-okul/artifacts/staging/isem-optical-pipeline.json`; SHA-256 `1ea6e772b6f242d5e9d72c3fb5cc0ecdfe58103222b20874ebcd9366d5b6719d` |
+| Canlı UI/PDF/XLSX/portal/logout | `/root/o-okul/artifacts/staging/live-ui-worker-result.json`; SHA-256 `9531c3bee54dacec83b99b7c07f308bee54c82c2ffd355bd31f448847220bb3b` |
+| Gerçek PostgreSQL 10k registry | `app` rolü + RLS, 10 warmup + 100 örnek; birleşik p95 `21,655 ms`, max `76,974 ms`, eşik `500 ms PASS`; yanlış tenant `0`; rollback sonrası tenant/öğrenci `0/0` |
+| 10k query-plan artifact'i | `/root/o-okul/artifacts/staging/student-registry-postgres-performance.json`; SHA-256 `4f1df5283837f34011426e2e8a398094f319e8cd09a1ea2f266063dc6ff71b86` |
+| Rollout ON/rollback | Disposable tenantta baseline `[]` → `web.setup-v2` + `web.student-registry-v2` → `[]`; gerçek endpoint `200`; audit `feature_rollout.exposed`; aktif doğrulama session'ı `0` |
+| Rollout artifact'i | `/root/o-okul/artifacts/staging/gate-d-feature-rollout.json`; SHA-256 `d061ff88d3eb05001af8877c34f171659c7d0c63f40f4d5cf81abd9f81181cd6` |
+
+iSEM producer `87b7d9766...` üzerinde çalıştı. Bu commit ile final `65f019883...` arasındaki kaynak farkı
+yalnız canlı Playwright akışı, onun checker'ı ve runbook'tur; producer/worker/API pipeline kodu değişmedi.
+Final Playwright kaydı `65f019883...` exact deploy üzerinde rapor hazır durumu, XLSX/PDF indirme, öğrenci ve
+veli portalı ile logout `204` + eski refresh `401` zincirini doğruladı. Dört public artifact `0644` ve
+remote/local hash eşitliğinde saklandı; private UI input, geçici fixture root'ları ve başarısız doğrulama
+session'ları temizlendi.
+
 ## Yerel doğrulama
 
 | Kontrol | Sonuç |
@@ -81,15 +106,15 @@ GitHub CI, staging, pilot, deploy veya production kanıtı değildir.
 | API/web typecheck ve diff whitespace | `PASS` |
 | Tam repo zinciri | `NEXT_E2E_PORT=43148 pnpm run ci PASS` |
 
-## Dış kanıt durumu
+## Açık dış kanıt
 
-Aşağıdakiler çalıştırılmadı ve PASS sayılmaz:
+- UAT-KURUM-01 çalıştırılmadı ve `PASS` sayılmaz. `https://notify.o-okul.com/health` `200` döner ve
+  notification gönderim endpoint'i gerçektir; ancak `/messages/latest` GET yüzeyi `405` döner.
+  Staging config/private alanda `LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT`, ona ait bearer ve private
+  system-admin onboarding girdisi yoktur. Sahte inbox veya DB token okuması canlı teslimat kanıtı
+  sayılmamıştır.
+- Gerçek kullanıcı RUM, pilot, production ve go-live Gate D staging kapanışının dışındadır ve
+  `EXTERNAL_NOT_RUN` kalır.
 
-- GitHub Actions exact-SHA CI
-- staging migration deploy ve gerçek 10k Postgres query-plan/p95 ölçümü
-- gerçek tenantta iki rollout anahtarının birlikte açılması ve rollback
-- staging UAT-KURUM-01 ile tam onboarding
-- staging iSEM optik/UI-worker ve web/PDF/XLSX parity kaydı
-- gerçek kullanıcı RUM, pilot, deploy, production ve go-live
-
-Gate D ancak bu staging maddeleri exact commit/image kanıtına bağlandığında `PASS` olabilir.
+Gate D ancak bearer-korumalı activation inbox evidence yüzeyi sağlanıp UAT-KURUM-01 exact runtime
+commit'inde `PASS` olduğunda kapanabilir. Sonraki gate'e geçilmemiştir.
