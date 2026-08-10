@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 interface LiveOnboardingEvidence {
   appendRunId?: boolean;
@@ -47,16 +47,7 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
   await page.locator('input[name="loginName"]').fill(evidence.systemAdmin.loginName);
   await page.locator('input[name="password"]').fill(evidence.systemAdmin.password);
   await page.getByRole("button", { name: "Giriş yap" }).click();
-
-  const enrollmentSecret = page.getByLabel("Kurulum anahtarı");
-  await Promise.race([
-    page.waitForURL(/\/sistem$/),
-    enrollmentSecret.waitFor({ state: "visible" }),
-  ]);
-  if (await enrollmentSecret.isVisible()) {
-    await page.getByLabel("Doğrulama kodu", { exact: true }).fill(createTotpCode(await enrollmentSecret.inputValue()));
-    await page.getByRole("button", { name: "Etkinleştir ve giriş yap" }).click();
-  }
+  await completeMfaEnrollmentIfRequired(page, /\/sistem$/);
 
   await expect(page).toHaveURL(/\/sistem$/);
   await page.getByRole("link", { name: "Kurumlar" }).click();
@@ -87,6 +78,7 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
   await page.locator('input[name="loginName"]').fill(firstAdminEmail);
   await page.locator('input[name="password"]').fill(evidence.firstAdmin.password);
   await page.getByRole("button", { name: "Giriş yap" }).click();
+  await completeMfaEnrollmentIfRequired(page, /\/kurum$/);
   await expect(page).toHaveURL(/\/kurum$/);
 
   await page.goto("/kurum/kurulum");
@@ -192,4 +184,16 @@ function createTotpCode(secret: string) {
   const offset = digest[digest.length - 1]! & 0x0f;
   const value = (digest.readUInt32BE(offset) & 0x7fff_ffff) % 1_000_000;
   return value.toString().padStart(6, "0");
+}
+
+async function completeMfaEnrollmentIfRequired(page: Page, destination: RegExp) {
+  const enrollmentSecret = page.getByLabel("Kurulum anahtarı");
+  await Promise.race([
+    page.waitForURL(destination),
+    enrollmentSecret.waitFor({ state: "visible" }),
+  ]);
+  if (!await enrollmentSecret.isVisible()) return;
+  await page.getByLabel("Doğrulama kodu", { exact: true }).fill(createTotpCode(await enrollmentSecret.inputValue()));
+  await page.getByRole("button", { name: "Etkinleştir ve giriş yap" }).click();
+  await expect(page).toHaveURL(destination);
 }
