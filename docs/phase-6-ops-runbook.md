@@ -1270,8 +1270,8 @@ Live onboarding smoke preflight:
 
 ```sh
 NEXT_E2E_LIVE_ONBOARDING=1 \
-LIVE_ONBOARDING_EVIDENCE_PATH=artifacts/staging/live-onboarding-input.json \
-LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT=https://mail-evidence.staging.example/messages/latest \
+LIVE_ONBOARDING_EVIDENCE_PATH=/root/o-okul-private/uat/live-onboarding-input.json \
+LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT=https://notify.o-okul.com/messages/latest \
 LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN=__SECRET__ \
 pnpm live:onboarding:evidence-check
 ```
@@ -1280,8 +1280,8 @@ Smoke komutu aynı preflight'ı tarayıcı açmadan önce otomatik çalıştır�
 
 ```sh
 NEXT_E2E_LIVE_ONBOARDING=1 \
-LIVE_ONBOARDING_EVIDENCE_PATH=artifacts/staging/live-onboarding-input.json \
-LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT=https://mail-evidence.staging.example/messages/latest \
+LIVE_ONBOARDING_EVIDENCE_PATH=/root/o-okul-private/uat/live-onboarding-input.json \
+LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT=https://notify.o-okul.com/messages/latest \
 LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN=__SECRET__ \
 pnpm live:onboarding:smoke
 ```
@@ -1291,7 +1291,8 @@ adı/slug/plan/koltuk limitini ve opsiyonel kurulum alanlarını exact shape ile
 kanıtında `generatedAt` 24 saatten eski olamaz; `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder değerler kabul edilmez;
 dosya lokal temp path (`/tmp`, `/var/tmp`), symlink dosya veya symlink parent zinciri altında olamaz.
 Smoke, ilk yöneticiye gerçekten ulaşan bağlantıyı bearer korumalı HTTPS inbox evidence endpoint'inden
-`recipient`, `purpose=PASSWORD_RESET` ve `createdAfter` ile poll eder; endpoint yalnız `{ "activationUrl": "..." }`
+PII'yi URL/loglara taşımayan JSON POST gövdesindeki `recipient`, `purpose=PASSWORD_RESET` ve
+`createdAfter` ile poll eder; endpoint yalnız `{ "activationUrl": "..." }`
 döndürür ve URL tokenı hiçbir kalıcı evidence çıktısına yazılmaz.
 `pnpm live:onboarding:evidence-contract` bu negatifleri lokal CI'da tarayıcı açmadan korur.
 
@@ -1453,10 +1454,17 @@ kayıtlarını kullanır. Kök DMARC politikası bağımsız doğrulanıp korunu
 corepack pnpm notification-gateway:test
 cd infra/notification-gateway
 printf '%s' "$NOTIFICATION_HTTP_BEARER_TOKEN" | npx wrangler secret put NOTIFICATION_BEARER_TOKEN
+printf '%s' "$LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN" | npx wrangler secret put LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN
+printf '%s' "$LIVE_ONBOARDING_EMAIL_EVIDENCE_HASH_KEY" | npx wrangler secret put LIVE_ONBOARDING_EMAIL_EVIDENCE_HASH_KEY
 release_sha="$(git -C ../.. rev-parse HEAD)"
 npx wrangler deploy --var "RELEASE_SHA:$release_sha"
 test "$(curl -fsS https://notify.o-okul.com/health | jq -r .releaseSha)" = "$release_sha"
 ```
+
+Canlı onboarding kanıt yüzeyi yalnız `@staging.o-okul.com` hesap aktivasyonlarını, Email Sending
+kabulünden sonra alıcının HMAC kimliği altında 15 dakika tutar. `POST /messages/latest` ayrı bearer
+ister; ham alıcı kalıcı anahtara, URL'ye veya yanıta yazılmaz ve normal parola sıfırlama/diğer alıcılar
+kaydedilmez. İki onboarding secret'ı repo veya runtime `.env` içine değil Wrangler secret store'a yazılır.
 
 Wrangler'ın döndürdüğü Worker version ID ile `/health` exact SHA sonucu release kaydına birlikte
 eklenir. Aynı `idempotencyKey` için SQLite-backed Durable Object önce kalıcı teslim kaydı açar;

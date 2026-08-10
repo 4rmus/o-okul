@@ -3,6 +3,7 @@ import test from "node:test";
 import worker, { NotificationIdempotency } from "./index.mjs";
 
 const token = "notification-bearer-token-for-tests";
+const evidenceToken = "live-onboarding-evidence-bearer-token-for-tests";
 
 test("reports the deployed release SHA without authentication", async () => {
   const response = await worker.fetch(new Request("https://notify.o-okul.com/health"), env());
@@ -46,6 +47,66 @@ test("sends a contract-compliant email", async () => {
       providerMessageId: "email-message-1",
     }],
   });
+});
+
+test("stores and returns only a recent staging activation after provider acceptance", async () => {
+  const objectNames = [];
+  const environment = env([], undefined, { objectNames });
+  const recipient = "tenant.admin+run@staging.o-okul.com";
+  const activationUrl = "https://uat-kurumu.o-okul.com/parola-sifirla#token=single-use-token";
+  const createdAfter = new Date(Date.now() - 1_000).toISOString();
+
+  const sendResponse = await worker.fetch(request({
+    messages: [{
+      channel: "EMAIL",
+      to: recipient,
+      subject: "O-Okul hesap aktivasyonu",
+      body: `Hesabınızı 24 saat içinde etkinleştirmek için bağlantıyı açın: ${activationUrl}`,
+      idempotencyKey: "onboarding-capture-1",
+    }],
+  }), environment);
+  const lookupResponse = await worker.fetch(evidenceRequest({ recipient, purpose: "PASSWORD_RESET", createdAfter }), environment);
+
+  assert.equal((await sendResponse.json()).results[0].status, "sent");
+  assert.equal(lookupResponse.status, 200);
+  assert.deepEqual(await lookupResponse.json(), { activationUrl });
+  assert.equal(objectNames.some((name) => name.includes(recipient)), false);
+  assert.equal(objectNames.some((name) => /^onboarding-evidence:[0-9a-f]{64}$/.test(name)), true);
+});
+
+test("keeps onboarding evidence bearer protected and out of the request URL", async () => {
+  const environment = env();
+  const recipient = "tenant.admin@staging.o-okul.com";
+  const query = { recipient, purpose: "PASSWORD_RESET", createdAfter: new Date().toISOString() };
+  const missingBearer = await worker.fetch(evidenceRequest(query, ""), environment);
+  const getResponse = await worker.fetch(new Request("https://notify.o-okul.com/messages/latest"), environment);
+  const wrongDomain = await worker.fetch(evidenceRequest({ ...query, recipient: "admin@outside.example.org" }), environment);
+
+  assert.equal(missingBearer.status, 401);
+  assert.equal(getResponse.status, 405);
+  assert.equal(getResponse.headers.get("allow"), "POST");
+  assert.equal(wrongDomain.status, 400);
+  assert.equal(evidenceRequest(query).url.includes(recipient), false);
+});
+
+test("does not retain ordinary reset mail or provider failures", async () => {
+  const recipient = "tenant.admin@staging.o-okul.com";
+  const createdAfter = new Date(Date.now() - 1_000).toISOString();
+  const environment = env([], async () => {
+    throw Object.assign(new Error("provider failed"), { code: "E_PROVIDER" });
+  });
+  const failedSend = await worker.fetch(request({
+    messages: [{
+      channel: "EMAIL",
+      to: recipient,
+      subject: "O-Okul hesap aktivasyonu",
+      body: "Hesabınızı açın: https://tenant.o-okul.com/parola-sifirla#token=must-not-store",
+    }],
+  }), environment);
+  const lookup = await worker.fetch(evidenceRequest({ recipient, purpose: "PASSWORD_RESET", createdAfter }), environment);
+
+  assert.equal((await failedSend.json()).results[0].status, "failed");
+  assert.equal(lookup.status, 404);
 });
 
 test("does not send the same idempotency key twice", async () => {
@@ -407,12 +468,29 @@ function request(payload) {
   });
 }
 
+function evidenceRequest(payload, bearerToken = evidenceToken) {
+  return new Request("https://notify.o-okul.com/messages/latest", {
+    method: "POST",
+    headers: {
+      ...(bearerToken ? { authorization: `Bearer ${bearerToken}` } : {}),
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
 function env(sent = [], emailSend, overrides = {}) {
   const instances = new Map();
   const storedEvents = overrides.storedEvents ?? [];
+  const objectNames = overrides.objectNames ?? [];
   const environment = {
     NOTIFICATION_BEARER_TOKEN: token,
     RELEASE_SHA: "a".repeat(40),
+    LIVE_ONBOARDING_EMAIL_EVIDENCE_ENABLED: "true",
+    LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN: evidenceToken,
+    LIVE_ONBOARDING_EMAIL_EVIDENCE_HASH_KEY: "evidence-hmac-key-for-tests-0000000000000001",
+    LIVE_ONBOARDING_EMAIL_EVIDENCE_RECIPIENT_DOMAIN: "staging.o-okul.com",
+    LIVE_ONBOARDING_EMAIL_EVIDENCE_ACTIVATION_DOMAIN: "o-okul.com",
     EMAIL: {
       async send(message) {
         if (emailSend) return emailSend(message);
@@ -423,8 +501,10 @@ function env(sent = [], emailSend, overrides = {}) {
     ...overrides,
   };
   delete environment.storedEvents;
+  delete environment.objectNames;
   environment.IDEMPOTENCY = {
     idFromName(name) {
+      objectNames.push(name);
       return name;
     },
     get(id) {

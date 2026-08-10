@@ -4,6 +4,8 @@ const MAX_MESSAGES = 25;
 const MAX_WEBHOOK_BYTES = 256 * 1024;
 const MAX_WEBHOOK_CHALLENGE_LENGTH = 200;
 const IDEMPOTENCY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const ONBOARDING_EVIDENCE_RETENTION_MS = 15 * 60 * 1000;
+const ONBOARDING_ACTIVATION_SUBJECT = "O-Okul hesap aktivasyonu";
 const WHATSAPP_STATUSES = new Set(["sent", "delivered", "read", "failed"]);
 const WHATSAPP_MESSAGE_KEYS = new Set(["channel", "to", "templateName", "languageCode", "idempotencyKey"]);
 
@@ -11,6 +13,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === "/webhooks/whatsapp") return whatsappWebhook(request, env, url);
+    if (url.pathname === "/messages/latest") return latestOnboardingEvidence(request, env);
     if (request.method === "GET" && url.pathname === "/health") {
       return json({ status: "ok", releaseSha: env.RELEASE_SHA ?? "unknown" }, 200);
     }
@@ -104,9 +107,11 @@ export class NotificationIdempotency {
   }
 
   async fetch(request) {
-    return new URL(request.url).pathname === "/webhook"
-      ? this.storeWebhookEvent(request)
-      : this.sendMessage(request);
+    const path = new URL(request.url).pathname;
+    if (path === "/webhook") return this.storeWebhookEvent(request);
+    if (path === "/onboarding-evidence/store") return this.storeOnboardingEvidence(request);
+    if (path === "/onboarding-evidence/latest") return this.latestOnboardingEvidence(request);
+    return this.sendMessage(request);
   }
 
   async sendMessage(request) {
@@ -171,6 +176,44 @@ export class NotificationIdempotency {
     return json({ duplicate }, 200);
   }
 
+  async storeOnboardingEvidence(request) {
+    let record;
+    try {
+      record = await request.json();
+    } catch {
+      return json({ errorCode: "ONBOARDING_EVIDENCE_INVALID" }, 400);
+    }
+    if (!isValidOnboardingEvidence(record)) {
+      return json({ errorCode: "ONBOARDING_EVIDENCE_INVALID" }, 400);
+    }
+
+    await this.state.blockConcurrencyWhile(async () => {
+      await this.state.storage.put("onboardingEvidence", record);
+      await this.state.storage.setAlarm(Date.now() + ONBOARDING_EVIDENCE_RETENTION_MS);
+    });
+    return json({ stored: true }, 200);
+  }
+
+  async latestOnboardingEvidence(request) {
+    let query;
+    try {
+      query = await request.json();
+    } catch {
+      return json({ errorCode: "ONBOARDING_EVIDENCE_INVALID" }, 400);
+    }
+    if (query?.purpose !== "PASSWORD_RESET" || !isIsoTimestamp(query?.createdAfter)) {
+      return json({ errorCode: "ONBOARDING_EVIDENCE_INVALID" }, 400);
+    }
+
+    const record = await this.state.storage.get("onboardingEvidence");
+    if (!isValidOnboardingEvidence(record)
+      || Date.parse(record.createdAt) < Date.parse(query.createdAfter)
+      || Date.now() - Date.parse(record.createdAt) > ONBOARDING_EVIDENCE_RETENTION_MS) {
+      return json({ errorCode: "ONBOARDING_EVIDENCE_NOT_FOUND" }, 404);
+    }
+    return json({ activationUrl: record.activationUrl }, 200);
+  }
+
   async alarm() {
     await this.state.storage.deleteAll();
   }
@@ -204,7 +247,119 @@ async function sendEmail(message, env) {
     text: message.body,
     ...(message.idempotencyKey ? { headers: { "X-O-Okul-Idempotency-Key": message.idempotencyKey } } : {}),
   });
+  await captureOnboardingEvidence(message, env);
   return { status: "sent", providerMessageId: sent.messageId };
+}
+
+async function latestOnboardingEvidence(request, env) {
+  if (env.LIVE_ONBOARDING_EMAIL_EVIDENCE_ENABLED !== "true") {
+    return json({ errorCode: "NOT_FOUND" }, 404);
+  }
+  if (request.method !== "POST") {
+    return json({ errorCode: "METHOD_NOT_ALLOWED" }, 405, { Allow: "POST" });
+  }
+  const authorization = request.headers.get("authorization") ?? "";
+  const expected = `Bearer ${env.LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN ?? ""}`;
+  if (!env.LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN || !(await secretsEqual(authorization, expected))) {
+    return json({ errorCode: "ONBOARDING_EVIDENCE_UNAUTHORIZED" }, 401);
+  }
+
+  let query;
+  try {
+    query = await request.json();
+  } catch {
+    return json({ errorCode: "ONBOARDING_EVIDENCE_INVALID" }, 400);
+  }
+  if (!hasExactKeys(query, ["createdAfter", "purpose", "recipient"])
+    || query.purpose !== "PASSWORD_RESET"
+    || !isIsoTimestamp(query.createdAfter)
+    || Date.parse(query.createdAfter) > Date.now()
+    || !isAllowedEvidenceRecipient(query.recipient, env)) {
+    return json({ errorCode: "ONBOARDING_EVIDENCE_INVALID" }, 400);
+  }
+
+  const recipientKey = await onboardingRecipientKey(query.recipient, env);
+  if (!recipientKey) return json({ errorCode: "ONBOARDING_EVIDENCE_NOT_CONFIGURED" }, 503);
+  const objectId = env.IDEMPOTENCY.idFromName(`onboarding-evidence:${recipientKey}`);
+  const response = await env.IDEMPOTENCY.get(objectId).fetch("https://idempotency.internal/onboarding-evidence/latest", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ createdAfter: query.createdAfter, purpose: query.purpose }),
+  });
+  if (response.status === 404) return json({ errorCode: "ONBOARDING_EVIDENCE_NOT_FOUND" }, 404);
+  if (!response.ok) return json({ errorCode: "ONBOARDING_EVIDENCE_LOOKUP_FAILED" }, 503);
+  const result = await response.json();
+  return isValidOnboardingEvidence({ ...result, createdAt: new Date().toISOString(), purpose: "PASSWORD_RESET" })
+    ? json({ activationUrl: result.activationUrl }, 200)
+    : json({ errorCode: "ONBOARDING_EVIDENCE_LOOKUP_FAILED" }, 503);
+}
+
+async function captureOnboardingEvidence(message, env) {
+  if (env.LIVE_ONBOARDING_EMAIL_EVIDENCE_ENABLED !== "true"
+    || message.channel !== "EMAIL"
+    || message.subject !== ONBOARDING_ACTIVATION_SUBJECT
+    || !isAllowedEvidenceRecipient(message.to, env)) return;
+
+  const activationUrl = extractActivationUrl(message.body, env);
+  const recipientKey = await onboardingRecipientKey(message.to, env);
+  if (!activationUrl || !recipientKey) throw providerError("EVIDENCE_STORAGE_FAILED");
+  const objectId = env.IDEMPOTENCY.idFromName(`onboarding-evidence:${recipientKey}`);
+  const response = await env.IDEMPOTENCY.get(objectId).fetch("https://idempotency.internal/onboarding-evidence/store", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ activationUrl, createdAt: new Date().toISOString(), purpose: "PASSWORD_RESET" }),
+  });
+  if (!response.ok) throw providerError("EVIDENCE_STORAGE_FAILED");
+}
+
+function extractActivationUrl(body, env) {
+  const candidate = typeof body === "string" ? body.match(/https:\/\/[^\s]+/)?.[0] : undefined;
+  if (!candidate) return undefined;
+  try {
+    const url = new URL(candidate);
+    const token = new URLSearchParams(url.hash.slice(1)).get("token");
+    const activationDomain = env.LIVE_ONBOARDING_EMAIL_EVIDENCE_ACTIVATION_DOMAIN?.trim().toLowerCase();
+    if (!activationDomain || (url.hostname !== activationDomain && !url.hostname.endsWith(`.${activationDomain}`))
+      || url.protocol !== "https:" || url.pathname !== "/parola-sifirla" || url.searchParams.has("token") || !token) {
+      return undefined;
+    }
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function isAllowedEvidenceRecipient(value, env) {
+  if (typeof value !== "string" || value.length < 3 || value.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    return false;
+  }
+  const allowedDomain = env.LIVE_ONBOARDING_EMAIL_EVIDENCE_RECIPIENT_DOMAIN?.trim().toLowerCase();
+  return Boolean(allowedDomain) && value.toLowerCase().endsWith(`@${allowedDomain}`);
+}
+
+async function onboardingRecipientKey(recipient, env) {
+  const secret = env.LIVE_ONBOARDING_EMAIL_EVIDENCE_HASH_KEY;
+  if (typeof secret !== "string" || secret.length < 32) return undefined;
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const digest = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(recipient.trim().toLowerCase()));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function isValidOnboardingEvidence(value) {
+  if (!hasExactKeys(value, ["activationUrl", "createdAt", "purpose"])
+    || value.purpose !== "PASSWORD_RESET" || !isIsoTimestamp(value.createdAt)) return false;
+  try {
+    const url = new URL(value.activationUrl);
+    return url.protocol === "https:" && url.pathname === "/parola-sifirla"
+      && !url.searchParams.has("token") && Boolean(new URLSearchParams(url.hash.slice(1)).get("token"));
+  } catch {
+    return false;
+  }
+}
+
+function hasExactKeys(value, expectedKeys) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    && JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...expectedKeys].sort());
 }
 
 async function sendWhatsapp(message, env) {

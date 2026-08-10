@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 
@@ -46,6 +47,16 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
   await page.locator('input[name="loginName"]').fill(evidence.systemAdmin.loginName);
   await page.locator('input[name="password"]').fill(evidence.systemAdmin.password);
   await page.getByRole("button", { name: "Giriş yap" }).click();
+
+  const enrollmentSecret = page.getByLabel("Kurulum anahtarı");
+  await Promise.race([
+    page.waitForURL(/\/sistem$/),
+    enrollmentSecret.waitFor({ state: "visible" }),
+  ]);
+  if (await enrollmentSecret.isVisible()) {
+    await page.getByLabel("Doğrulama kodu", { exact: true }).fill(createTotpCode(await enrollmentSecret.inputValue()));
+    await page.getByRole("button", { name: "Etkinleştir ve giriş yap" }).click();
+  }
 
   await expect(page).toHaveURL(/\/sistem$/);
   await page.getByRole("link", { name: "Kurumlar" }).click();
@@ -138,11 +149,11 @@ async function waitForActivationUrl(recipient: string, createdAfter: string): Pr
 
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
-    const url = new URL(endpoint);
-    url.searchParams.set("recipient", recipient);
-    url.searchParams.set("purpose", "PASSWORD_RESET");
-    url.searchParams.set("createdAfter", createdAfter);
-    const response = await fetch(url, { headers: { authorization: `Bearer ${bearerToken}` } });
+    const response = await fetch(endpoint, {
+      body: JSON.stringify({ recipient, purpose: "PASSWORD_RESET", createdAfter }),
+      headers: { authorization: `Bearer ${bearerToken}`, "content-type": "application/json" },
+      method: "POST",
+    });
     if (response.ok) {
       const body = await response.json() as { activationUrl?: unknown };
       if (typeof body.activationUrl === "string") return validateActivationUrl(body.activationUrl);
@@ -157,8 +168,28 @@ async function waitForActivationUrl(recipient: string, createdAfter: string): Pr
 function validateActivationUrl(value: string): string {
   const activationUrl = new URL(value);
   const baseUrl = new URL(process.env.NEXT_E2E_BASE_URL ?? "http://localhost:3001");
-  if (activationUrl.origin !== baseUrl.origin || activationUrl.pathname !== "/parola-sifirla" || !activationUrl.searchParams.get("token")) {
+  const fragmentToken = new URLSearchParams(activationUrl.hash.slice(1)).get("token");
+  const allowedHost = activationUrl.hostname === baseUrl.hostname || activationUrl.hostname.endsWith(`.${baseUrl.hostname}`);
+  if (activationUrl.protocol !== baseUrl.protocol || activationUrl.port !== baseUrl.port || !allowedHost
+    || activationUrl.pathname !== "/parola-sifirla" || activationUrl.searchParams.has("token") || !fragmentToken) {
     throw new Error("LIVE_ONBOARDING_ACTIVATION_URL_INVALID");
   }
   return activationUrl.toString();
+}
+
+function createTotpCode(secret: string) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = "";
+  for (const character of secret.replace(/=+$/g, "").toUpperCase()) {
+    const value = alphabet.indexOf(character);
+    if (value < 0) throw new Error("LIVE_ONBOARDING_MFA_SECRET_INVALID");
+    bits += value.toString(2).padStart(5, "0");
+  }
+  const key = Buffer.from(bits.match(/.{8}/g)?.map((byte) => Number.parseInt(byte, 2)) ?? []);
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30_000)));
+  const digest = createHmac("sha1", key).update(counter).digest();
+  const offset = digest[digest.length - 1]! & 0x0f;
+  const value = (digest.readUInt32BE(offset) & 0x7fff_ffff) % 1_000_000;
+  return value.toString().padStart(6, "0");
 }

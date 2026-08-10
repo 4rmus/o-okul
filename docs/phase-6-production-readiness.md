@@ -1031,6 +1031,9 @@ pnpm backup:restore:smoke
   `generatedAt` değerinin 24 saatten eski olmadığı, placeholder/test değer taşımadığı, sistem admin ile ilk admin e-postalarının ayrık olduğu ve
   dosyanın lokal temp path, symlink dosya veya symlink parent zinciri altında olmadığı kontrol edilir.
   İlk yönetici aktivasyon URL'si gerçek inbox evidence endpoint'inden poll edilir; URL/token evidence artifact'ına yazılmaz.
+  Evidence poll'u alıcı e-postasını URL/loglara taşımayan bearer-korumalı JSON POST kullanır. Notification
+  gateway yalnız `@staging.o-okul.com` hesap aktivasyonlarını Email Sending kabulünden sonra alıcı HMAC'i
+  altında 15 dakika saklar; diğer alıcılar ve normal parola sıfırlamaları bu geçici kayda girmez.
 - Tam sınav döngüsü staging/prod kanıtı `LIVE_EXAM_CYCLE_TARGET` ile `pnpm live:exam-cycle:check`
   üzerinden doğrulanır; iSEM cevap anahtarı, optik pipeline, raw import, report-generation ve
   mock'suz UI-worker/portal kanıtları aynı release candidate'a bağlanır. Rapor top-level 11
