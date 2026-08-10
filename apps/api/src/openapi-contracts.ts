@@ -29,12 +29,6 @@ const csrfHeaderContract = {
   schema: stringSchema(),
 };
 
-const stepUpHeaderContract = {
-  name: "X-Step-Up-Token",
-  description: "Short-lived MFA proof. Required when the current or target staff role is TENANT_OWNER or TENANT_ADMIN.",
-  schema: stringSchema(),
-};
-
 const listMetaSchema = objectSchema({
   total: integerSchema({ minimum: 0 }),
   page: integerSchema({ minimum: 1 }),
@@ -3135,12 +3129,10 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/employees/{id}/account-invitations": {
     requestBody: employeeAccountInvitationRequestSchema,
     responseBody: identityInvitationRecordSchema,
-    optionalHeaders: [stepUpHeaderContract],
   },
   "patch /api/v1/tenant-memberships/{id}": {
     requestBody: tenantMembershipUpdateRequestSchema,
     responseBody: tenantMembershipUpdateResultSchema,
-    optionalHeaders: [stepUpHeaderContract],
   },
   "patch /api/v1/tenant-users/{userId}/roles": {
     retiredGoneCode: "TENANT_USER_ROLE_WRITE_RETIRED",

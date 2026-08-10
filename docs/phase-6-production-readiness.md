@@ -213,8 +213,8 @@ pnpm backup:restore:smoke
 - Production kanıt şablonları `pnpm prod:evidence:templates:check` ile repo içinde doğrulanır.
 - KVKK, kimlik göçü, finansal saklama, upload AV, observability UAT ve security
   audit gerçek kanıtlarında `checkedAt` gelecekte olamaz.
-- Admin MFA raporu `ADMIN_MFA_EVIDENCE_TARGET` ile doğrulanır; SYSTEM_ADMIN/TENANT_ADMIN
-  hesaplarında password-only login auth session üretmez, TOTP ve recovery code reuse reddedilir.
+- Admin MFA raporu `ADMIN_MFA_EVIDENCE_TARGET` ile doğrulanır; yalnız SYSTEM_ADMIN
+  hesaplarında password-only login auth session üretmez, TOTP ve recovery code reuse reddedilir. Kurum hesapları MFA kapsamı dışındadır.
   Staging artifact'i üretmek için
   `STAGING_ENVIRONMENT=staging ADMIN_MFA_OUTPUT=artifacts/staging/reports/admin-mfa.json DIRECT_DATABASE_URL=... ADMIN_MFA_MODE=required ADMIN_MFA_SECRET_ENCRYPTION_KEY=... ADMIN_MFA_RECOVERY_HASH_KEY=... ADMIN_MFA_CHALLENGE_SECRET=... ADMIN_MFA_RECOVERY_CODES_PER_ENROLLMENT=8 ADMIN_MFA_PASSWORD_ONLY_LOGIN_BLOCKED=true ADMIN_MFA_TOTP_LOGIN_SUCCEEDED=true ADMIN_MFA_INVALID_TOTP_REJECTED=true ADMIN_MFA_TOTP_REUSE_REJECTED=true ADMIN_MFA_RECOVERY_CODE_LOGIN_SUCCEEDED=true ADMIN_MFA_RECOVERY_CODE_REUSE_REJECTED=true ADMIN_MFA_SESSIONS_REVOKED_ON_ENABLE=true ADMIN_MFA_SESSIONS_REVOKED_ON_DISABLE=true ADMIN_MFA_PASSWORD_ONLY_EVIDENCE_REFERENCE=... ADMIN_MFA_TOTP_SUCCESS_EVIDENCE_REFERENCE=... ADMIN_MFA_INVALID_TOTP_EVIDENCE_REFERENCE=... ADMIN_MFA_TOTP_REUSE_EVIDENCE_REFERENCE=... ADMIN_MFA_RECOVERY_SUCCESS_EVIDENCE_REFERENCE=... ADMIN_MFA_RECOVERY_REUSE_EVIDENCE_REFERENCE=... ADMIN_MFA_SESSIONS_REVOKED_ENABLE_EVIDENCE_REFERENCE=... ADMIN_MFA_SESSIONS_REVOKED_DISABLE_EVIDENCE_REFERENCE=... pnpm admin-mfa:generate`
   kullanılır; generator gerçek secret, DB enrollment sayımı ve login/recovery/session kanıt
@@ -759,7 +759,7 @@ pnpm backup:restore:smoke
   session'ları iptal eder. Rapor top-level 9 alanı ile `policy`, `enrollment`,
   `loginVerification` blok shape'leri ve boş `gaps` listesi template invalid/non-empty gaps negatifleriyle korunur.
   Staging/prod artifact üretimi `pnpm admin-mfa:generate` ile yapılır; komut aktif tenantlardaki
-  SYSTEM_ADMIN/TENANT_ADMIN hesaplarının tamamının TOTP enrollment'lı olmasını, en az bir recovery
+  SYSTEM_ADMIN hesaplarının tamamının TOTP enrollment'lı olmasını, en az bir recovery
   code hash'inin kalmasını, auth MFA unit testlerini ve API typecheck'i geçmeden JSON yazmaz.
 
 ## Web UX ve A11y

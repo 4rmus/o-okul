@@ -258,21 +258,21 @@ export class AuthController {
   }
 
   @Get("totp/status")
-  @Roles("SYSTEM_ADMIN", "TENANT_ADMIN")
+  @Roles("SYSTEM_ADMIN")
   totpStatus(): Promise<TotpStatusResponse> {
     return this.auth.getTotpStatus(getRequestContext());
   }
 
   @Post("totp/setup")
   @HttpCode(200)
-  @Roles("SYSTEM_ADMIN", "TENANT_ADMIN")
+  @Roles("SYSTEM_ADMIN")
   createTotpSetup(): Promise<TotpSetupResponse> {
     return this.auth.createTotpSetup(getRequestContext());
   }
 
   @Post("totp/confirm")
   @HttpCode(200)
-  @Roles("SYSTEM_ADMIN", "TENANT_ADMIN")
+  @Roles("SYSTEM_ADMIN")
   confirmTotpSetup(
     @Body(zodBody(totpSetupConfirmBodySchema)) body: TotpSetupConfirmRequest,
   ): Promise<TotpSetupConfirmResponse> {
@@ -281,7 +281,7 @@ export class AuthController {
 
   @Post("totp/disable")
   @HttpCode(200)
-  @Roles("SYSTEM_ADMIN", "TENANT_ADMIN")
+  @Roles("SYSTEM_ADMIN")
   disableTotp(@Body(zodBody(totpDisableBodySchema)) body: TotpDisableRequest): Promise<TotpDisableResponse> {
     return this.auth.disableTotp(getRequestContext(), {
       totpCode: body.totpCode,
@@ -291,7 +291,7 @@ export class AuthController {
 
   @Post("step-up")
   @HttpCode(200)
-  @Roles("SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF")
+  @Roles("SYSTEM_ADMIN")
   createMfaStepUp(@Body(zodBody(mfaStepUpBodySchema)) body: MfaStepUpRequest): Promise<MfaStepUpResponse> {
     return this.auth.createMfaStepUp(getRequestContext(), body.purpose, {
       totpCode: body.totpCode,

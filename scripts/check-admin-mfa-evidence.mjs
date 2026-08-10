@@ -27,8 +27,6 @@ const adminMfaPolicyKeys = [
 const adminMfaEnrollmentKeys = [
   "systemAdminsTotal",
   "systemAdminsEnrolled",
-  "tenantAdminsTotal",
-  "tenantAdminsEnrolled",
   "unenrolledRequiredAdmins",
   "recoveryCodesPerEnrollment",
 ];
@@ -200,10 +198,8 @@ function requirePolicy(policy, failures) {
   requireObjectKeySet(policy, adminMfaPolicyKeys, failures, "policy");
   requireOneOf(policy, failures, "policy.mode", ["optional", "required"], "mode");
   requireStringArray(policy.requiredRoles, failures, "policy.requiredRoles");
-  for (const role of ["SYSTEM_ADMIN", "TENANT_ADMIN"]) {
-    if (!policy.requiredRoles?.includes(role)) {
-      failures.push(`policy.requiredRoles eksik: ${role}`);
-    }
+  if (policy.requiredRoles?.length !== 1 || policy.requiredRoles[0] !== "SYSTEM_ADMIN") {
+    failures.push("policy.requiredRoles yalnız SYSTEM_ADMIN içermeli.");
   }
   requireObjectEqual(policy, failures, "policy.secretStorage", "secretStorage", "aes-256-gcm");
   requireObjectEqual(policy, failures, "policy.secretEncryptionKeyEnv", "secretEncryptionKeyEnv", "ADMIN_MFA_SECRET_ENCRYPTION_KEY");
@@ -227,9 +223,6 @@ function requireEnrollment(enrollment, failures) {
 
   if (enrollment.systemAdminsEnrolled > enrollment.systemAdminsTotal) {
     failures.push("enrollment.systemAdminsEnrolled toplamdan büyük olamaz.");
-  }
-  if (enrollment.tenantAdminsEnrolled > enrollment.tenantAdminsTotal) {
-    failures.push("enrollment.tenantAdminsEnrolled toplamdan büyük olamaz.");
   }
   if (enrollment.unenrolledRequiredAdmins !== 0) {
     failures.push("enrollment.unenrolledRequiredAdmins 0 olmalı.");

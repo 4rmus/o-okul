@@ -55,6 +55,11 @@ inbox evidence endpoint'i ve private system-admin girdisi staging'de sağlanmad�
   davet partial unique index ve servis sözleşmesiyle tekilleşir; migration eski kopyalarda en yeniyi
   korur, diğerlerini revoke eder ve bekleyen teslimat payload'larını expire eder. Transaction içindeki
   tablo kilidi, cleanup ile unique index kurulumu arasındaki canlı yazma yarışını kapatır.
+- Staging runtime kanıtından sonraki yerel politika deltası MFA'yı yalnız `SYSTEM_ADMIN` için zorunlu
+  tutar. Kurum sahibi, kurum yöneticisi ve alt kullanıcılar enrollment/challenge almaz; kurum çalışanı
+  daveti ve rol güncellemesi MFA kodu veya `X-Step-Up-Token` istemez. `owner:manage`, tenant kapsamı,
+  optimistic version ve son aktif sahip korumaları korunur. Bu delta `LOCAL_STATIC`tir ve henüz staging
+  runtime kanıtı değildir.
 
 ## Güvenlik ve veri sınırı
 

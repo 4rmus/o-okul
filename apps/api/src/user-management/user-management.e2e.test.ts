@@ -5,7 +5,6 @@ import request from "supertest";
 import { loginAsSettled } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
-import { createAdminMfaStepUpProof } from "../auth/totp-mfa.js";
 
 describe("Tenant user management", () => {
   let app: INestApplication;
@@ -23,6 +22,20 @@ describe("Tenant user management", () => {
 
   afterAll(async () => {
     await app.close();
+  });
+
+  it("kurum yöneticisini sistem adminine özel MFA uçlarından uzak tutar", async () => {
+    const tenantAdmin = await login("admin-a@example.test");
+
+    await request(server)
+      .get("/auth/totp/status")
+      .set("Authorization", `Bearer ${tenantAdmin}`)
+      .expect(403);
+    await request(server)
+      .post("/auth/step-up")
+      .set("Authorization", `Bearer ${tenantAdmin}`)
+      .send({ purpose: "OWNER_ADMIN_CHANGE", totpCode: "123456" })
+      .expect(403);
   });
 
   async function login(email: string, password = "password"): Promise<string> {
@@ -134,29 +147,14 @@ describe("Tenant user management", () => {
         expect(body).not.toHaveProperty("tokenHash");
       });
 
-    await request(server)
-      .post(`/employees/${employeeId}/account-invitations`)
-      .set("Authorization", `Bearer ${tenantA}`)
-      .send({ email: "yeni.calisan@example.test", role: "TENANT_ADMIN" })
-      .expect(403)
-      .expect(({ body }) => expect(body.error?.code).toBe("STEP_UP_MFA_REQUIRED"));
-
     const adminCandidate = await request(server)
       .post("/employees")
       .set("Authorization", `Bearer ${tenantA}`)
       .send({ firstName: "Yeni", lastName: "Admin", status: "ACTIVE" })
       .expect(201);
-    const access = decodeAccessToken(tenantA);
-    const proof = createAdminMfaStepUpProof({
-      userId: access.sub,
-      sessionId: access.sessionId,
-      membershipVersion: access.membershipVersion,
-      purpose: "OWNER_ADMIN_CHANGE",
-    });
     await request(server)
       .post(`/employees/${adminCandidate.body.id as string}/account-invitations`)
       .set("Authorization", `Bearer ${tenantA}`)
-      .set("X-Step-Up-Token", proof.stepUpToken)
       .send({ email: "yeni.admin@example.test", role: "TENANT_ADMIN" })
       .expect(201)
       .expect(({ body }) => expect(body.role).toBe("TENANT_ADMIN"));
@@ -269,15 +267,6 @@ describe("Tenant user management", () => {
 
     await request(server)
       .patch("/tenant-memberships/membership-operations-a")
-      .set("Authorization", `Bearer ${tenantA}`)
-      .send({ ...body, campusIds: [], scopeMode: "TENANT", staffRole: "TENANT_ADMIN" })
-      .expect(403)
-      .expect(({ body: responseBody }) => {
-        expect(JSON.stringify(responseBody)).toContain("STEP_UP_MFA_REQUIRED");
-      });
-
-    await request(server)
-      .patch("/tenant-memberships/membership-operations-a")
       .set("Authorization", `Bearer ${tenantB}`)
       .send(body)
       .expect(404);
@@ -329,15 +318,14 @@ describe("Tenant user management", () => {
       .expect(({ body: responseBody }) => {
         expect(JSON.stringify(responseBody)).toContain("TENANT_OWNER_MANAGE_REQUIRED");
       });
+
+    await request(server)
+      .patch("/tenant-memberships/membership-operations-a")
+      .set("Authorization", `Bearer ${tenantA}`)
+      .send({ ...body, campusIds: [], expectedVersion: 2, scopeMode: "TENANT", staffRole: "TENANT_ADMIN" })
+      .expect(200)
+      .expect(({ body: responseBody }) => {
+        expect(responseBody.employee.access).toMatchObject({ staffRole: "TENANT_ADMIN", version: 3 });
+      });
   });
 });
-
-function decodeAccessToken(token: string): { sub: string; sessionId: string; membershipVersion: number } {
-  const encoded = token.split(".")[0];
-  if (!encoded) throw new Error("TEST_ACCESS_TOKEN_PAYLOAD_MISSING");
-  return JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as {
-    sub: string;
-    sessionId: string;
-    membershipVersion: number;
-  };
-}

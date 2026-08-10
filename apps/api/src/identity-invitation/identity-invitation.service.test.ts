@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import { InMemoryGuardianStore } from "../school/guardian-store.js";
 import { InMemoryTeacherStore } from "../school/teacher-store.js";
 import { InMemorySessionStore } from "../auth/session-store.js";
-import { createAdminMfaStepUpProof } from "../auth/totp-mfa.js";
 import { InMemoryStudentStore } from "../student/student-store.js";
 import { InMemoryTenantStore } from "../tenant/tenant-store.js";
 import { InMemoryUserManagementStore } from "../user-management/user-management-store.js";
@@ -237,7 +236,7 @@ describe("IdentityInvitationService", () => {
     ]);
   });
 
-  it("owner/admin başlangıç davetini bağlı step-up kanıtı ve owner capability ile sınırlar", async () => {
+  it("owner/admin başlangıç davetini MFA istemeden owner capability ile sınırlar", async () => {
     const invitations = new InMemoryIdentityInvitationStore();
     const users = new InMemoryUserManagementStore();
     const adminEmployee = await users.createEmployee("tenant-a", {
@@ -261,40 +260,19 @@ describe("IdentityInvitationService", () => {
     const adminContext: RequestContext = {
       tenantId: "tenant-a",
       userId: "admin-a",
-      sessionId: "session-admin-a",
-      membershipVersion: 4,
       roles: ["TENANT_ADMIN"],
       bypassRls: false,
     };
-    const proof = createAdminMfaStepUpProof({
-      userId: adminContext.userId,
-      sessionId: adminContext.sessionId ?? "",
-      membershipVersion: adminContext.membershipVersion ?? 0,
-      purpose: "OWNER_ADMIN_CHANGE",
-    });
 
     await expect(service.createEmployeeInvitation(
       adminContext,
       adminEmployee.id,
       { email: "ada.admin@example.test", role: "TENANT_ADMIN" },
-    )).rejects.toThrow("STEP_UP_MFA_REQUIRED");
-    await expect(service.createEmployeeInvitation(
-      adminContext,
-      adminEmployee.id,
-      { email: "ada.admin@example.test", role: "TENANT_ADMIN" },
-      "forged-proof",
-    )).rejects.toThrow("STEP_UP_MFA_INVALID");
-    await expect(service.createEmployeeInvitation(
-      adminContext,
-      adminEmployee.id,
-      { email: "ada.admin@example.test", role: "TENANT_ADMIN" },
-      proof.stepUpToken,
     )).resolves.toMatchObject({ invitation: { role: "TENANT_ADMIN" } });
     await expect(service.createEmployeeInvitation(
       adminContext,
       ownerEmployee.id,
       { email: "oya.owner@example.test", role: "TENANT_OWNER" },
-      proof.stepUpToken,
     )).rejects.toThrow("TENANT_OWNER_MANAGE_REQUIRED");
   });
 

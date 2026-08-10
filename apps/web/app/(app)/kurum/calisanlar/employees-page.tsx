@@ -12,8 +12,6 @@ import type {
   EmployeeCreateRequest,
   EmployeeInvitationRole,
   EmployeeStaffRole,
-  MfaStepUpRequest,
-  MfaStepUpResponse,
   TenantMembershipLifecycleStatus,
   TenantMembershipScopeMode,
   TenantMembershipUpdateRequest,
@@ -74,7 +72,6 @@ export function EmployeesPage() {
   const [createForm, setCreateForm] = useState<EmployeeCreateRequest>(emptyEmployeeCreateForm);
   const [invitationForm, setInvitationForm] = useState<EmployeeAccountInvitationRequest>({ email: "", role: "OPERATIONS_STAFF" });
   const [form, setForm] = useState<EmployeeAccessFormState>(emptyAccessForm);
-  const [stepUpCode, setStepUpCode] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [actionNotice, setActionNotice] = useState("");
@@ -183,14 +180,12 @@ export function EmployeesPage() {
       status: employee.access.status === "SUSPENDED" ? "SUSPENDED" : employee.access.status === "ENDED" ? "ENDED" : "ACTIVE",
     });
     setSubmitError("");
-    setStepUpCode("");
   }
 
   function openInvitationForm(employee: EmployeeAccessRecord) {
     setInvitingEmployee(employee);
     setInvitationForm({ email: employee.workEmail ?? "", role: "OPERATIONS_STAFF" });
     setSubmitError("");
-    setStepUpCode("");
   }
 
   async function handleCreateEmployee(event: FormEvent<HTMLFormElement>) {
@@ -214,20 +209,11 @@ export function EmployeesPage() {
   async function handleInviteEmployee(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!auth || !invitingEmployee) return;
-    const requiresStepUp = elevatedInvitationRole(invitationForm.role);
-    if (requiresStepUp && !stepUpCode.trim()) {
-      setSubmitError("Kurum sahibi veya yöneticisi daveti için iki aşamalı doğrulama kodunu girin.");
-      return;
-    }
     setIsSaving(true);
     setSubmitError("");
     try {
-      const stepUpToken = requiresStepUp
-        ? (await createMfaStepUp(auth.accessToken, stepUpCode.trim())).stepUpToken
-        : undefined;
-      await inviteEmployee(auth.accessToken, invitingEmployee.id, invitationForm, stepUpToken);
+      await inviteEmployee(auth.accessToken, invitingEmployee.id, invitationForm);
       setInvitingEmployee(null);
-      setStepUpCode("");
       setActionNotice("Hesap daveti gönderime alındı. Hesabı açma bağlantısı 24 saat geçerlidir.");
     } catch (error) {
       setSubmitError(employeeWriteErrorMessage(error));
@@ -240,7 +226,6 @@ export function EmployeesPage() {
     if (isSaving) return;
     setEditingEmployee(null);
     setForm(emptyAccessForm);
-    setStepUpCode("");
     setSubmitError("");
   }
 
@@ -278,22 +263,13 @@ export function EmployeesPage() {
       ...(form.staffRole ? { staffRole: form.staffRole } : {}),
       ...(form.status === "ENDED" ? { endedReason: form.endedReason.trim() } : {}),
     };
-    const requiresStepUp = ownerAdminStepUpRequired(editingEmployee.access.staffRole, form.staffRole);
-    if (requiresStepUp && !stepUpCode.trim()) {
-      setSubmitError("Kurum sahibi veya yöneticisi değişikliği için iki aşamalı doğrulama kodunu girin.");
-      return;
-    }
     setIsSaving(true);
     setSubmitError("");
     try {
-      const stepUpToken = requiresStepUp
-        ? (await createMfaStepUp(auth.accessToken, stepUpCode.trim())).stepUpToken
-        : undefined;
-      await updateMembership(auth.accessToken, editingEmployee.access.membershipId, input, stepUpToken);
+      await updateMembership(auth.accessToken, editingEmployee.access.membershipId, input);
       await queryClient.invalidateQueries({ queryKey: ["employees", tenantId] });
       setEditingEmployee(null);
       setForm(emptyAccessForm);
-      setStepUpCode("");
       setSubmitError("");
     } catch (error) {
       setSubmitError(membershipErrorMessage(error));
@@ -353,8 +329,8 @@ export function EmployeesPage() {
         </Field>
       </FormModal>
       <FormModal
-        description="Davet e-posta ile iletilir; parola veya hesap açma bilgisi bu ekranda gösterilmez. Kurum sahibi ve kurum yöneticisi davetleri iki aşamalı doğrulama ister."
-        onCancel={() => { if (!isSaving) { setInvitingEmployee(null); setStepUpCode(""); setSubmitError(""); } }}
+        description="Davet e-posta ile iletilir; parola veya hesap açma bilgisi bu ekranda gösterilmez."
+        onCancel={() => { if (!isSaving) { setInvitingEmployee(null); setSubmitError(""); } }}
         onSubmit={(event) => void handleInviteEmployee(event)}
         open={Boolean(invitingEmployee)}
         submitError={submitError}
@@ -371,17 +347,6 @@ export function EmployeesPage() {
             <option value="FINANCE_STAFF">Finans çalışanı</option>
           </Select>
         </Field>
-        {elevatedInvitationRole(invitationForm.role) ? (
-          <Field label="İki aşamalı doğrulama kodu" description="Doğrulama uygulamasındaki 6 haneli kodu veya tek kullanımlık kurtarma kodunu girin.">
-            <Input
-              autoComplete="one-time-code"
-              required
-              type="password"
-              value={stepUpCode}
-              onChange={(event) => setStepUpCode(event.target.value)}
-            />
-          </Field>
-        ) : null}
       </FormModal>
       <FormModal
         description="Görev, çalışma alanı veya erişim kapsamı değişikliği açık oturumları kapatır. Sonlandırılan erişim yeniden açılamaz."
@@ -460,17 +425,6 @@ export function EmployeesPage() {
             {campusesQuery.isPending ? <p className="next-field-help">Kampüsler yükleniyor.</p> : null}
             {!campusesQuery.isPending && campuses.length === 0 ? <p className="next-field-help">Seçilebilir kampüs bulunamadı.</p> : null}
           </div>
-        ) : null}
-        {editingEmployee?.access && ownerAdminStepUpRequired(editingEmployee.access.staffRole, form.staffRole) ? (
-          <Field label="İki aşamalı doğrulama kodu" description="Doğrulama uygulamasındaki 6 haneli kodu veya tek kullanımlık kurtarma kodunu girin.">
-            <Input
-              autoComplete="one-time-code"
-              required
-              type="password"
-              value={stepUpCode}
-              onChange={(event) => setStepUpCode(event.target.value)}
-            />
-          </Field>
         ) : null}
       </FormModal>
     </>
@@ -644,14 +598,10 @@ function inviteEmployee(
   accessToken: string,
   employeeId: string,
   input: EmployeeAccountInvitationRequest,
-  stepUpToken?: string,
 ) {
   return apiRequest(accessToken, `${apiBaseUrl}/employees/${encodeURIComponent(employeeId)}/account-invitations`, {
     body: JSON.stringify(input),
-    headers: {
-      "content-type": "application/json",
-      ...(stepUpToken ? { "x-step-up-token": stepUpToken } : {}),
-    },
+    headers: { "content-type": "application/json" },
     method: "POST",
   });
 }
@@ -660,8 +610,6 @@ function employeeWriteErrorMessage(error: unknown) {
   if (error instanceof ApiRequestError && error.code === "EMPLOYEE_INVITATION_ALREADY_PENDING") return "Bu çalışan için zaten bekleyen bir davet var.";
   if (error instanceof ApiRequestError && error.code === "EMPLOYEE_UNIQUE_CONFLICT") return "Sicil numarası veya hesap bağı başka bir çalışan tarafından kullanılıyor.";
   if (error instanceof ApiRequestError && error.code === "TENANT_OWNER_MANAGE_REQUIRED") return "Kurum sahibi davetini yalnız başka bir kurum sahibi gönderebilir.";
-  const stepUpError = mfaStepUpErrorMessage(error);
-  if (stepUpError) return stepUpError;
   return "İşlem tamamlanamadı. Bilgileri kontrol edip tekrar deneyin.";
 }
 
@@ -669,33 +617,17 @@ async function loadCampuses(accessToken: string) {
   return apiListRequest<CampusRecord>(accessToken, `${apiBaseUrl}/campuses`);
 }
 
-async function createMfaStepUp(accessToken: string, code: string) {
-  const input: MfaStepUpRequest = {
-    purpose: "OWNER_ADMIN_CHANGE",
-    ...(/^\d{6}$/.test(code.replace(/\s/g, "")) ? { totpCode: code } : { recoveryCode: code }),
-  };
-  return apiRequest<MfaStepUpResponse>(accessToken, `${apiBaseUrl}/auth/step-up`, {
-    body: JSON.stringify(input),
-    headers: { "content-type": "application/json" },
-    method: "POST",
-  });
-}
-
 async function updateMembership(
   accessToken: string,
   membershipId: string,
   input: TenantMembershipUpdateRequest,
-  stepUpToken?: string,
 ) {
   return apiRequest<TenantMembershipUpdateResult>(
     accessToken,
     `${apiBaseUrl}/tenant-memberships/${encodeURIComponent(membershipId)}`,
     {
       body: JSON.stringify(input),
-      headers: {
-        "content-type": "application/json",
-        ...(stepUpToken ? { "x-step-up-token": stepUpToken } : {}),
-      },
+      headers: { "content-type": "application/json" },
       method: "PATCH",
     },
   );
@@ -709,28 +641,7 @@ function membershipErrorMessage(error: unknown) {
   if (error.code === "EMPLOYEE_PROFILE_NOT_ACTIVE") return "Aktif olmayan çalışan profiline erişim açılamaz.";
   if (error.code === "TENANT_MEMBERSHIP_CAMPUS_NOT_FOUND") return "Seçilen kampüslerden biri artık kullanılamıyor.";
   if (error.code === "TENANT_MEMBERSHIP_ENDED") return "Sonlandırılmış erişim yeniden değiştirilemez.";
-  const stepUpError = mfaStepUpErrorMessage(error);
-  if (stepUpError) return stepUpError;
   return "Çalışan erişimi güncellenemedi.";
-}
-
-function mfaStepUpErrorMessage(error: unknown): string | undefined {
-  if (!(error instanceof ApiRequestError)) return undefined;
-  if (error.code === "STEP_UP_MFA_REQUIRED") return "Kurum sahibi veya yöneticisi işlemi için iki aşamalı doğrulama zorunludur.";
-  if (error.code === "STEP_UP_MFA_INVALID") return "İki aşamalı doğrulamanın süresi doldu. Yeni kodla tekrar deneyin.";
-  if (error.code === "MFA_NOT_ENABLED" || error.code === "ADMIN_MFA_DISABLED") return "Bu işlem için hesabınızda iki aşamalı doğrulama açık olmalıdır.";
-  if (error.code === "MFA_CODE_INVALID" || error.code === "MFA_RECOVERY_CODE_INVALID" || error.code === "MFA_CODE_REUSED") {
-    return "Doğrulama kodu geçersiz veya daha önce kullanılmış. Yeni bir kod deneyin.";
-  }
-  return undefined;
-}
-
-function ownerAdminStepUpRequired(currentRole: EmployeeStaffRole | undefined, nextRole: EmployeeStaffRole | ""): boolean {
-  return currentRole === "TENANT_OWNER" || currentRole === "TENANT_ADMIN" || nextRole === "TENANT_OWNER" || nextRole === "TENANT_ADMIN";
-}
-
-function elevatedInvitationRole(role: EmployeeInvitationRole): boolean {
-  return role === "TENANT_OWNER" || role === "TENANT_ADMIN";
 }
 
 interface EmployeeAccessFormState {

@@ -167,8 +167,8 @@ Sabit role paketleri:
   - yaygın/ele geçirilmiş parola blocklist'i, paste ve password manager desteği;
   - async, sürümlü ve rastgele salt'lı `scrypt`; mevcut hashler başarılı login sırasında kademeli rehash edilir.
 - Sekiz karakter ve büyük/küçük harf zorunluluğu ürün tercihidir; NIST kompozisyon kuralı önermediği için tam uyum iddiası taşımaz. Kaynak: [NIST SP 800-63B](https://pages.nist.gov/800-63-4/sp800-63b.html).
-- MFA, `PlatformAccount`, `TENANT_OWNER`, `TENANT_ADMIN`, `OPERATIONS_STAFF` ve `FINANCE_STAFF` için aktivasyonun parçası olacak. Öğretmende önerilir, öğrencide zorunlu değildir.
-- Sahip/admin değişimi, MFA reseti, geniş PII export ve purge onayında step-up MFA uygulanacak.
+- MFA yalnız `SYSTEM_ADMIN` hesabının aktivasyon ve giriş politikasının parçasıdır. Kurum sahibi, kurum yöneticisi ve kurum alt kullanıcıları MFA kurmaz veya MFA challenge almaz.
+- Kurum sahibi/yöneticisi değişiklikleri MFA'ya değil `owner:manage`, tenant kapsamı, optimistic version ve son aktif sahip korumalarına dayanır.
 - Refresh rotation DB row lock/CAS ile yapılacak; aynı tokenla paralel N istekte tam bir başarı olmalı.
 - Session doğrulaması canlı account/membership durumu ve membership version kontrolü yapacak. Yetkilendirme doğruluğu Redis cache'e bağlanmayacak.
 - Proxy trust boundary sabitlenecek: Traefik gelen XFF'yi temizleyecek, API yalnız allowlist proxy'den gelen adresi kabul edecek. Login account+tenant ve güvenilir kaynak IP ile; MFA challenge ise challenge kimliğiyle ayrıca limitlenecek.
@@ -337,14 +337,10 @@ operasyon/finans rolleri açılmıştır. Çalışan yüzeyi profil oluşturma v
 migration uygulanmış izole PostgreSQL 17'de
 hesapsız profil, T.C.'siz hesap, canonical membership projeksiyonu ve cross-tenant negatif doğrulanmış; OpenAPI
 228 path üretmiştir. Bu staging/canlı teslimat kanıtı değildir.
-`POST /auth/step-up`, TOTP veya tek kullanımlık recovery code doğrulamasından sonra beş dakika geçerli,
-amaç-kullanıcı-session-membershipVersion bağlamlı imzalı kanıt üretir. `PATCH /tenant-memberships/:id`, mevcut
-veya hedef staff rolü `TENANT_OWNER | TENANT_ADMIN` olduğunda bu kanıtı transaction içindeki kilitli canonical
-üyelik satırına göre zorunlu tutar; terfi kadar rol düşürme, askıya alma ve kapsam değişimi de korunur. Kanıt
-başka oturumda, başka üyelik sürümünde veya başka amaçla kullanılamaz; token ve MFA kodu audit'e yazılmaz.
-`/kurum/calisanlar` hassas değişiklikte MFA/recovery kodunu ister, kısa ömürlü kanıtı yalnız takip eden üyelik
-yazısının `X-Step-Up-Token` başlığında kullanır. API testleri 133 dosya/926 senaryo, ilgili web Playwright akışı
-ve OpenAPI 229 path yerelde geçmiştir. Bu staging/canlı MFA kanıtı değildir.
+`POST /auth/step-up` ve TOTP yönetim uçları yalnız `SYSTEM_ADMIN` rolüne açıktır. `PATCH
+/tenant-memberships/:id` kurum rollerinde MFA istemez; tenant-geneli staff kapsamı, `owner:manage`, kilitli
+canonical üyelik satırı, optimistic version, son aktif sahip ve session iptali korumalarını sürdürür.
+`/kurum/calisanlar` MFA/recovery kodu toplamaz ve `X-Step-Up-Token` göndermez.
 Çalışan e-posta daveti kabulü daha sonra invitation kilidi, aktif lisans eşliği, Employee profili, tenant-local
 User, canonical/legacy membership satırları, Employee bağı ve şifreli outbox temizliğini tek PostgreSQL
 transaction'ında birleştirecek şekilde güçlendirilmiştir. Tenant satırı kullanıcı yazısından önce
@@ -353,10 +349,9 @@ transaction'ında birleştirecek şekilde güçlendirilmiştir. Tenant satırı 
 varsayılan 2.000 olarak uygulanmıştır; platform control-plane üzerinden auditli limit artırma yüzeyi henüz
 uygulanmamıştır. Paralel son çalışan hesap hakkı yarışı, replay, son-adım rollback'i, öğrenci hesabıyla birleşme
 reddi ve diğer tenantın değişmemesi 97 migration uygulanmış izole PostgreSQL 17'de uygulama rolüyle
-doğrulanmıştır. Bu atomik kabul kanıtından sonra `TENANT_ADMIN` başlangıç daveti bağlı step-up kanıtıyla,
-`TENANT_OWNER` başlangıç daveti ise ek olarak `owner:manage` capability'siyle açılmış; web formu MFA/recovery
-kodundan aldığı kısa ömürlü kanıtı yalnız davet isteğinin `X-Step-Up-Token` başlığında gönderecek şekilde
-güncellenmiştir. OpenAPI 229 path üretmiştir. Bu staging/canlı e-posta teslimatı veya MFA kanıtı değildir.
+doğrulanmıştır. Bu atomik kabul kanıtından sonra `TENANT_ADMIN` başlangıç daveti MFA gerektirmeden,
+`TENANT_OWNER` başlangıç daveti ise `owner:manage` capability'siyle açılmıştır. Web formu kurum hesabı için
+MFA/recovery kodu toplamaz. Bu staging/canlı e-posta teslimatı kanıtı değildir.
 `GET /employees` 2 Ağustos'ta SQL aramalı, tenant/filtre/sıra bağlı opaque cursor ve ileri/geri meta
 ile dönüştürüldü; eski `page` parametresi `422` döndürür ve `/kurum/calisanlar` yerel cursor denetimini
 kullanır. Staging-tablosu tabanlı toplu import henüz tamamlanmamıştır; öğrenci, geçiş `tenant-users` ve
@@ -397,7 +392,7 @@ Rollback, additive migration ve tenant bazlı cutover flag'i üzerinden yapılac
 - Suspend/terminate/rol düşürme sonrasında eski access ve refresh aynı anda reddedilir; revoke failure-injection testi bunu bozamaz.
 - Telefon yeni veya reset parola olarak kabul edilmez; activation expiry/replay ve raw-token leakage testleri geçer.
 - Forged XFF rate-limit anahtarını değiştiremez; MFA challenge beş başarısız denemeden sonra tüketilir.
-- Sahip/admin terfi ve rol düşürme işlemi step-up olmadan reddedilir; kanıt başka session veya membership sürümünde kullanılamaz.
+- Sahip/admin terfi ve rol düşürme işlemi kurum MFA'sı istemez; `owner:manage`, üyelik sürümü ve son aktif sahip kuralları geçerlidir.
 - Paralel refresh yarışında tam bir başarı vardır.
 - Lisans başlangıcından hemen önce erişim yok; başlangıç anında aktif; bitiş anında read-only; 15. günde frozen; 91. günde purge gate açılır.
 - Son öğrenci kapasitesi için paralel aktivasyonlarda limit aşılmaz; peak count doğru kalır.

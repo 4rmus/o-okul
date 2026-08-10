@@ -177,20 +177,21 @@ Açık soru: Pilot kurum farklı optik format veya fatura entegrasyonu isterse F
 kapısında ayrı DEC açılır.
 Son kontrol: 2026-06-13
 
-### DEC-20260613-02 — Admin MFA ikinci faktörü
+### DEC-20260613-02 — Sistem admini MFA ikinci faktörü
 
 Durum: Onaylı
-Karar: SYSTEM_ADMIN ve TENANT_ADMIN hesapları için ikinci faktör TOTP + tek kullanımlık recovery
-code olarak uygulanır. SMS OTP v1'de ikinci faktör olarak kullanılmaz; SIM-swap ve maliyet riski
+Karar: Yalnız SYSTEM_ADMIN hesapları için ikinci faktör TOTP + tek kullanımlık recovery code olarak
+uygulanır. Kurum sahibi, kurum yöneticisi ve kurum alt kullanıcıları MFA kapsamı dışındadır. SMS OTP
+v1'de ikinci faktör olarak kullanılmaz; SIM-swap ve maliyet riski
 nedeniyle reddedilir. TOTP secret'ları AES-GCM ile şifreli saklanır, recovery code'lar HMAC hash
 olarak tutulur ve MFA enable/disable işlemleri mevcut refresh session'ları iptal eder.
 Kaynak: Güvenlik ve ürün kararı.
 Kanıt: `apps/api/src/auth/totp-mfa.ts`, `apps/api/src/auth/auth.service.ts`,
 `docs/evidence-templates/admin-mfa.example.json`, `scripts/check-admin-mfa-evidence.mjs`.
 Etkilenen ADR: Yok
-Açık soru: Production'da `ADMIN_MFA_MODE=required` geçişi pilot kurum admin enrollment'ı tamamlandıktan
+Açık soru: Production'da `ADMIN_MFA_MODE=required` geçişi bütün SYSTEM_ADMIN enrollment'ları tamamlandıktan
 sonra ayrı go-live kararıyla yapılır; repo sözleşmesi staging için `optional` POC'yi kabul eder.
-Son kontrol: 2026-06-13
+Son kontrol: 2026-08-10
 
 ### DEC-20260613-04 — V1 karne görsel kabul eşiği
 

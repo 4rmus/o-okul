@@ -303,7 +303,7 @@ Minimum kanıt içeriği:
   kabul edilmez.
 - `ADMIN_MFA_SECRET_ENCRYPTION_KEY`, `ADMIN_MFA_RECOVERY_HASH_KEY` ve
   `ADMIN_MFA_CHALLENGE_SECRET` gerçek ve birbirinden/JWT secret'tan farklı secret değerlerdir.
-- SYSTEM_ADMIN ve TENANT_ADMIN hesapları TOTP enrollment kapsamındadır; recovery code sayısı
+- Yalnız SYSTEM_ADMIN hesapları TOTP enrollment kapsamındadır; kurum hesapları ve alt kullanıcıları MFA kapsamı dışındadır. Recovery code sayısı
   enrollment başına en az 8'dir.
 - Password-only admin login auth session üretmez; TOTP login başarılı, invalid TOTP reddedilmiş,
   TOTP reuse reddedilmiş, recovery code login başarılı ve recovery code reuse reddedilmiş olmalıdır.
@@ -313,7 +313,7 @@ Minimum kanıt içeriği:
   ve boş `gaps` listesi template invalid/non-empty gaps negatifleriyle korunur.
 - Gerçek kanıtta `evidenceReferences` placeholder, `.test`, localhost veya redacted değer içeremez;
   bu gevşetme yalnız template kontrolünde `ADMIN_MFA_ALLOW_EXAMPLE_EVIDENCE=1` ile açılır.
-- `pnpm admin-mfa:generate` aktif tenant DB'sinde SYSTEM_ADMIN/TENANT_ADMIN enrollment sayımlarını
+- `pnpm admin-mfa:generate` aktif tenant DB'sinde SYSTEM_ADMIN enrollment sayımlarını
   okur, bütün zorunlu adminler TOTP enrollment'lı değilse veya gerçek login/recovery/session log
   referansları verilmezse dosya yazmadan kırılır. Komut auth MFA testlerini ve API typecheck'i
   çalıştırır, ardından çıktıyı `pnpm admin-mfa:check` ile tekrar doğrular.
@@ -441,7 +441,7 @@ pnpm account-management:backfill
   opsiyoneldir; varsa deploy kullanıcısına ait, `0600`, normal ve symlink olmayan dosya olmak
   zorundadır ve yalnız backfill container'ına salt-okunur bağlanır. Dosya yoksa mevcut otomatik
   owner seçimi çalışır; belirsiz tenant yine fail-closed `BLOCKED` kalır.
-- Mevcut `TENANT_OWNER` korunur. Owner yoksa MFA/parola değişimiyle doğrulanmış ilk aktif admin
+- Mevcut `TENANT_OWNER` korunur. Owner yoksa parola sahipliğiyle doğrulanmış ilk aktif admin
   otomatik seçilir; bu kanıt da yoksa karar dosyası olmadan işlem `BLOCKED` olur.
 - APPLY serializable transaction ve advisory lock kullanır. User normalize alanları, tek canonical
   membership/persona gölgesi, Teacher→Employee bağı ve SYSTEM_ADMIN için PlatformAccount/Session

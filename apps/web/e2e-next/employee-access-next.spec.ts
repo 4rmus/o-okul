@@ -4,7 +4,7 @@ import type { EmployeeAccessRecord } from "@o-okul/shared-types";
 const webOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const corsHeaders = {
   "access-control-allow-credentials": "true",
-  "access-control-allow-headers": "authorization,content-type,x-csrf-token,x-step-up-token",
+  "access-control-allow-headers": "authorization,content-type,x-csrf-token",
   "access-control-allow-methods": "GET,PATCH,POST,OPTIONS",
   "access-control-allow-origin": webOrigin,
 };
@@ -12,10 +12,7 @@ const corsHeaders = {
 test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek sürümlü işlemle günceller", async ({ page }) => {
   let activeSession = false;
   let capturedUpdate: Record<string, unknown> | undefined;
-  let capturedStepUp: Record<string, unknown> | undefined;
-  let capturedStepUpHeader: string | undefined;
   let capturedInvitation: Record<string, unknown> | undefined;
-  let capturedInvitationStepUpHeader: string | undefined;
   const employeeRequests: URL[] = [];
   let employee = employeeFixture();
   const unlinkedEmployee = unlinkedEmployeeFixture();
@@ -38,14 +35,6 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
     activeSession = true;
     await json(route, authResponse());
   });
-  await page.route("**/auth/step-up", async (route) => {
-    capturedStepUp = route.request().postDataJSON() as Record<string, unknown>;
-    await json(route, {
-      purpose: "OWNER_ADMIN_CHANGE",
-      stepUpToken: "step-up-proof",
-      expiresAt: "2026-08-01T10:05:00.000Z",
-    });
-  });
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname.replace("/api/v1", "");
@@ -67,7 +56,7 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
     }
     if (path === "/employees/employee-unlinked-a/account-invitations" && request.method() === "POST") {
       capturedInvitation = request.postDataJSON() as Record<string, unknown>;
-      capturedInvitationStepUpHeader = request.headers()["x-step-up-token"];
+      expect(request.headers()).not.toHaveProperty("x-step-up-token");
       await json(route, {
         id: "invitation-admin-a",
         tenantId: "tenant-a",
@@ -90,7 +79,7 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
     }
     if (path === "/tenant-memberships/membership-employee-a" && request.method() === "PATCH") {
       capturedUpdate = request.postDataJSON() as Record<string, unknown>;
-      capturedStepUpHeader = request.headers()["x-step-up-token"];
+      expect(request.headers()).not.toHaveProperty("x-step-up-token");
       employee = {
         ...employee,
         access: {
@@ -138,7 +127,7 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
   await dialog.getByLabel("Öğretmen çalışma alanı").check();
   await dialog.getByLabel("Yetki kapsamı").selectOption("CAMPUSES");
   await dialog.getByLabel("Merkez Kampüs").check();
-  await dialog.getByLabel("İki aşamalı doğrulama kodu").fill("123456");
+  await expect(dialog.getByLabel("İki aşamalı doğrulama kodu")).toHaveCount(0);
   await dialog.getByRole("button", { name: "Erişimi güncelle" }).click();
 
   await expect(dialog).toBeHidden();
@@ -150,8 +139,6 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
     staffRole: "OPERATIONS_STAFF",
     status: "ACTIVE",
   });
-  expect(capturedStepUp).toEqual({ purpose: "OWNER_ADMIN_CHANGE", totpCode: "123456" });
-  expect(capturedStepUpHeader).toBe("step-up-proof");
   await expect(page.getByRole("cell", { name: "Operasyon çalışanı + Öğretmen çalışma alanı" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "1 kampüs" })).toBeVisible();
 
@@ -159,11 +146,10 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
   const invitationDialog = page.getByRole("dialog", { name: "Yeni Admin hesap daveti" });
   await invitationDialog.getByLabel("İş e-postası").fill("yeni.admin@example.test");
   await invitationDialog.getByLabel("Başlangıç rolü").selectOption("TENANT_ADMIN");
-  await invitationDialog.getByLabel("İki aşamalı doğrulama kodu").fill("123456");
+  await expect(invitationDialog.getByLabel("İki aşamalı doğrulama kodu")).toHaveCount(0);
   await invitationDialog.getByRole("button", { name: "Daveti gönder" }).click();
   await expect(invitationDialog).toBeHidden();
   expect(capturedInvitation).toEqual({ email: "yeni.admin@example.test", role: "TENANT_ADMIN" });
-  expect(capturedInvitationStepUpHeader).toBe("step-up-proof");
 });
 
 async function login(page: Page) {

@@ -2698,11 +2698,9 @@ function requireSummaryAdminMfa(report, failures) {
     requireObjectEqual(policy, failures, "productionEvidenceSummary.summary.reports.adminMfa.policy.recoveryCodeHashKeyEnv", "recoveryCodeHashKeyEnv", "ADMIN_MFA_RECOVERY_HASH_KEY");
     requireObjectEqual(policy, failures, "productionEvidenceSummary.summary.reports.adminMfa.policy.challengeSecretEnv", "challengeSecretEnv", "ADMIN_MFA_CHALLENGE_SECRET");
     requireObjectTrue(policy, failures, "productionEvidenceSummary.summary.reports.adminMfa.policy.smsOtpRejected", "smsOtpRejected");
-    requireObjectStringList(policy, failures, "productionEvidenceSummary.summary.reports.adminMfa.policy.requiredRoles", "requiredRoles", 2, false);
-    for (const role of ["SYSTEM_ADMIN", "TENANT_ADMIN"]) {
-      if (!policy.requiredRoles?.includes(role)) {
-        failures.push(`productionEvidenceSummary.summary.reports.adminMfa.policy.requiredRoles eksik: ${role}`);
-      }
+    requireObjectStringList(policy, failures, "productionEvidenceSummary.summary.reports.adminMfa.policy.requiredRoles", "requiredRoles", 1, false);
+    if (policy.requiredRoles?.length !== 1 || policy.requiredRoles[0] !== "SYSTEM_ADMIN") {
+      failures.push("productionEvidenceSummary.summary.reports.adminMfa.policy.requiredRoles yalnız SYSTEM_ADMIN içermeli.");
     }
     if (!["optional", "required"].includes(policy.mode)) {
       failures.push("productionEvidenceSummary.summary.reports.adminMfa.policy.mode optional veya required olmalı.");
@@ -2714,8 +2712,6 @@ function requireSummaryAdminMfa(report, failures) {
     for (const key of [
       "systemAdminsTotal",
       "systemAdminsEnrolled",
-      "tenantAdminsTotal",
-      "tenantAdminsEnrolled",
       "unenrolledRequiredAdmins",
       "recoveryCodesPerEnrollment",
     ]) {
@@ -2731,9 +2727,6 @@ function requireSummaryAdminMfa(report, failures) {
     );
     if (enrollment.systemAdminsEnrolled > enrollment.systemAdminsTotal) {
       failures.push("productionEvidenceSummary.summary.reports.adminMfa.enrollment.systemAdminsEnrolled toplamdan büyük olamaz.");
-    }
-    if (enrollment.tenantAdminsEnrolled > enrollment.tenantAdminsTotal) {
-      failures.push("productionEvidenceSummary.summary.reports.adminMfa.enrollment.tenantAdminsEnrolled toplamdan büyük olamaz.");
     }
   }
 

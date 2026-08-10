@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SessionStore } from "../auth/session-store.js";
-import { createAdminMfaStepUpProof } from "../auth/totp-mfa.js";
 import type { RequestContext } from "../context/request-context.js";
 import { readListMeta } from "../listing/list-query.js";
 import type { UserManagementStore } from "./user-management-store.js";
@@ -24,7 +23,7 @@ const update = {
   status: "ACTIVE" as const,
 };
 
-describe("UserManagementService step-up", () => {
+describe("UserManagementService", () => {
   it("kampüs kapsamlı çalışan IAM okuma ve yazılarını store'a ulaşmadan reddeder", async () => {
     const store = {
       createEmployee: vi.fn(),
@@ -49,7 +48,7 @@ describe("UserManagementService step-up", () => {
     expect(store.updateTenantMembership).not.toHaveBeenCalled();
   });
 
-  it("bağlama uyan kanıtı store'a doğrulanmış olarak geçirir", async () => {
+  it("kurum üyeliği değişikliğini MFA istemeden owner capability bilgisiyle store'a geçirir", async () => {
     const result = {
       employee: {
         id: "employee-a",
@@ -62,35 +61,10 @@ describe("UserManagementService step-up", () => {
     };
     const store = { updateTenantMembership: vi.fn(async () => result) } as unknown as UserManagementStore;
     const service = new UserManagementService(store, {} as SessionStore);
-    const proof = createAdminMfaStepUpProof({
-      userId: context.userId,
-      sessionId: context.sessionId ?? "",
-      membershipVersion: context.membershipVersion ?? 0,
-      purpose: "OWNER_ADMIN_CHANGE",
-    });
-
-    await expect(service.updateMembership(context, "membership-a", update, proof.stepUpToken)).resolves.toEqual(result);
+    await expect(service.updateMembership(context, "membership-a", update)).resolves.toEqual(result);
     expect(store.updateTenantMembership).toHaveBeenCalledWith("tenant-a", "membership-a", expect.objectContaining({
       actorCanManageOwners: true,
-      stepUpVerified: true,
     }));
-  });
-
-  it("başka oturuma bağlı veya bozuk kanıtı store'a ulaşmadan reddeder", async () => {
-    const store = { updateTenantMembership: vi.fn() } as unknown as UserManagementStore;
-    const service = new UserManagementService(store, {} as SessionStore);
-    const otherSessionProof = createAdminMfaStepUpProof({
-      userId: context.userId,
-      sessionId: "session-b",
-      membershipVersion: context.membershipVersion ?? 0,
-      purpose: "OWNER_ADMIN_CHANGE",
-    });
-
-    await expect(service.updateMembership(context, "membership-a", update, otherSessionProof.stepUpToken))
-      .rejects.toThrow("STEP_UP_MFA_INVALID");
-    await expect(service.updateMembership(context, "membership-a", update, "forged-token"))
-      .rejects.toThrow("STEP_UP_MFA_INVALID");
-    expect(store.updateTenantMembership).not.toHaveBeenCalled();
   });
 
   it("çalışan cursor sayfasını tenant bağlamıyla alır ve cursor metadatasını korur", async () => {

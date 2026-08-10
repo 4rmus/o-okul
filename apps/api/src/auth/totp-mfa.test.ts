@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createAdminMfaStepUpProof, createLoginMfaChallenge, resolveAdminMfaMode, verifyAdminMfaStepUpProof, verifyAdminMfaToken } from "./totp-mfa.js";
+import { createAdminMfaStepUpProof, createLoginMfaChallenge, isAdminMfaRole, resolveAdminMfaMode, verifyAdminMfaStepUpProof, verifyAdminMfaToken } from "./totp-mfa.js";
 
 const previousEnv = {
   ADMIN_MFA_CHALLENGE_SECRET: process.env.ADMIN_MFA_CHALLENGE_SECRET,
@@ -36,6 +36,12 @@ describe("Admin MFA TOTP helpers", () => {
     process.env.ADMIN_MFA_MODE = "optional";
 
     expect(resolveAdminMfaMode()).toBe("optional");
+  });
+
+  it("MFA kapsamını yalnız sistem admini rolüyle sınırlar", () => {
+    expect(isAdminMfaRole(["SYSTEM_ADMIN"])).toBe(true);
+    expect(isAdminMfaRole(["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF"])).toBe(false);
+    expect(isAdminMfaRole(["TEACHER", "STUDENT", "GUARDIAN"])).toBe(false);
   });
 
   it("production'da challenge secret JWT secret ile aynı olamaz", () => {

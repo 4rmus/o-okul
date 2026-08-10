@@ -3724,7 +3724,6 @@ const requiredOperationContracts = [
     requestRequired: ["email", "role"],
     responseDataRequired: identityInvitationRecordRequired,
     responseDataForbiddenDeep: identityInvitationResponseForbiddenDeep,
-    optionalHeaders: ["X-Step-Up-Token"],
     fieldChecks: [
       { path: ["requestBody", "email"], format: "email" },
       { path: ["requestBody", "role"], enum: ["FINANCE_STAFF", "OPERATIONS_STAFF", "TENANT_ADMIN", "TENANT_OWNER"] },
@@ -3737,7 +3736,6 @@ const requiredOperationContracts = [
     path: "/api/v1/tenant-memberships/{id}",
     requestBody: true,
     responseEnvelope: true,
-    optionalHeaders: ["X-Step-Up-Token"],
     requestRequired: ["campusIds", "expectedVersion", "hasTeacherPersona", "scopeMode", "status"],
     requestForbidden: ["actorCanManageOwners", "stepUpToken", "stepUpVerified", "tenantId", "userId"],
     responseDataRequired: ["employee", "sessionsRevoked"],

@@ -36,7 +36,7 @@ ortam ve tarih içeren kalıcı evidence ile yükseltilir.
 - Rapor üretim anahtarı istemciden kaldırıldı. API sınav/rapor/filtre kapsamını, worker ise gerçek
   sonuç anahtarları ile answer-key/parser/engine sürümlerini SHA-256 kimliğine katar. Aynı gerçek
   girdi aynı snapshotı, değişen sonuç içeriği veya sürümü yeni snapshotı üretir.
-- Zorunlu admin MFA için kısa ömürlü enrollment yanıtı ve doğrulama endpoint'i eklendi. Normal
+- Yalnız `SYSTEM_ADMIN` için zorunlu MFA kapsamında kısa ömürlü enrollment yanıtı ve doğrulama endpoint'i eklendi. Normal
   oturum TOTP doğrulamasından önce üretilmiyor; etkinleştirme atomik koşulla tekrar tüketime kapalı.
   Üyelik sürümü Prisma şeması ve migration ile kalıcılaştırıldı.
 - KVKK öğrenci/öğretmen envanteri, ham değerleri döndürmeden TCKN, telefon, e-posta ve fotoğraf
@@ -124,6 +124,10 @@ ortam ve tarih içeren kalıcı evidence ile yükseltilir.
   sınırı ve eşzamanlı PENDING çalışan daveti unique sözleşmesi hazırdır. Migration en yeni daveti
   korur; eski kopyaları revoke eder ve teslimat payload'larını expire eder; migration kilidi index
   kurulumu sırasındaki canlı yazma yarışını kapatır.
+- **MFA politika deltası (`LOCAL_STATIC`):** MFA yalnız `SYSTEM_ADMIN` için zorunludur. Kurum sahibi,
+  kurum yöneticisi ve alt kullanıcılar enrollment/challenge almaz; çalışan daveti ve rol değişimi MFA
+  kodu veya `X-Step-Up-Token` istemez. `owner:manage`, tenant kapsamı, üyelik sürümü ve son aktif sahip
+  korumaları devam eder. Bu delta henüz staging'e deploy edilmedi.
 - **Staging kanıtı:** Exact CI/deploy, iSEM 21 sonuç/rapor + gerçek karantina probe'u, canlı
   UI/PDF/XLSX/öğrenci/veli/logout, `app` rolü ve RLS altında 10k registry p95 `21,655 ms`, yanlış tenant
   `0`, disposable veri rollback'i ve iki rollout anahtarının gerçek endpointte `OFF → ON → OFF` zinciri

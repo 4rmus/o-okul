@@ -11,7 +11,6 @@ import { createHash, randomBytes } from "node:crypto";
 import { encryptSecretDeliveryPayload, type SecretDeliveryOutboxInput } from "@o-okul/db";
 import { passwordPolicyViolation } from "../auth/password-policy.js";
 import { hashPasswordAsync } from "../auth/auth-user-store.js";
-import { verifyAdminMfaStepUpProof } from "../auth/totp-mfa.js";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { type GuardianStore, guardianStoreToken } from "../school/guardian-store.js";
@@ -115,7 +114,6 @@ export class IdentityInvitationService {
     context: RequestContext,
     employeeId: string,
     input: { email: string; role: EmployeeInvitationRole },
-    stepUpToken?: string,
   ): Promise<IdentityInvitationIssueResult> {
     const tenantId = this.requireTenantId(context);
     try {
@@ -123,7 +121,7 @@ export class IdentityInvitationService {
     } catch (error) {
       throw new ForbiddenException(error instanceof Error ? error.message : "EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
     }
-    this.assertElevatedEmployeeInvitationAllowed(context, input.role, stepUpToken);
+    this.assertElevatedEmployeeInvitationAllowed(context, input.role);
     const employee = await this.users.findEmployee(tenantId, employeeId);
     if (!employee) throw new NotFoundException("EMPLOYEE_NOT_FOUND");
     if (employee.status !== "ACTIVE") throw new BadRequestException("EMPLOYEE_INVITATION_REQUIRES_ACTIVE_PROFILE");
@@ -175,25 +173,10 @@ export class IdentityInvitationService {
   private assertElevatedEmployeeInvitationAllowed(
     context: RequestContext,
     role: EmployeeInvitationRole,
-    stepUpToken?: string,
   ): void {
     if (role !== "TENANT_OWNER" && role !== "TENANT_ADMIN") return;
     if (role === "TENANT_OWNER" && !hasCapabilityForRoles(context.roles, "owner:manage", context.capabilities)) {
       throw new ForbiddenException("TENANT_OWNER_MANAGE_REQUIRED");
-    }
-    if (!stepUpToken) throw new ForbiddenException("STEP_UP_MFA_REQUIRED");
-    if (!context.sessionId || context.membershipVersion === undefined) {
-      throw new ForbiddenException("STEP_UP_MFA_INVALID");
-    }
-    try {
-      verifyAdminMfaStepUpProof(stepUpToken, {
-        userId: context.userId,
-        sessionId: context.sessionId,
-        membershipVersion: context.membershipVersion,
-        purpose: "OWNER_ADMIN_CHANGE",
-      });
-    } catch {
-      throw new ForbiddenException("STEP_UP_MFA_INVALID");
     }
   }
 

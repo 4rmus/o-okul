@@ -1082,7 +1082,7 @@ runAdminMfaNegativeCheck({
 runAdminMfaNegativeCheck({
   label: "Admin MFA extra enrollment field negative",
   path: "docs/evidence-templates/admin-mfa.extra-enrollment-field.tmp.json",
-  expectedFailure: "enrollment tam 6 alan içermeli.",
+  expectedFailure: "enrollment tam 4 alan içermeli.",
   mutate: (fixture) => {
     fixture.enrollment.unexpectedField = true;
   },

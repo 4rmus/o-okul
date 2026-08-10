@@ -2,7 +2,6 @@ import { BadRequestException, ConflictException, ForbiddenException, Inject, Inj
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { authSessionStoreToken, type SessionStore } from "../auth/session-store.js";
-import { verifyAdminMfaStepUpProof } from "../auth/totp-mfa.js";
 import { withCursorListMeta } from "../listing/list-query.js";
 import { requireTenantWideStaffContext } from "../tenant/tenant-access.js";
 import {
@@ -97,20 +96,17 @@ export class UserManagementService {
     context: RequestContext,
     membershipId: string,
     input: TenantMembershipUpdateRequest,
-    stepUpToken?: string,
   ): Promise<TenantMembershipUpdateResult> {
     const tenantId = this.requireTenantWideContext(context);
-    const stepUpVerified = this.verifyOwnerAdminStepUp(context, stepUpToken);
     let result: TenantMembershipUpdateResult | undefined;
     try {
       result = await this.store.updateTenantMembership(tenantId, membershipId, {
         ...input,
         actorCanManageOwners: hasCapabilityForRoles(context.roles, "owner:manage", context.capabilities),
-        stepUpVerified,
       });
     } catch (error) {
       const code = error instanceof Error ? error.message : "";
-      if (code === "TENANT_OWNER_MANAGE_REQUIRED" || code === "STEP_UP_MFA_REQUIRED") throw new ForbiddenException(code);
+      if (code === "TENANT_OWNER_MANAGE_REQUIRED") throw new ForbiddenException(code);
       if (code === "TENANT_MEMBERSHIP_CAMPUS_NOT_FOUND") throw new BadRequestException(code);
       if (
         code === "TENANT_MEMBERSHIP_VERSION_CONFLICT" ||
@@ -155,24 +151,6 @@ export class UserManagementService {
       return requireTenantWideStaffContext(context, "EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
     } catch (error) {
       throw new ForbiddenException(error instanceof Error ? error.message : "EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
-    }
-  }
-
-  private verifyOwnerAdminStepUp(context: RequestContext, stepUpToken?: string): boolean {
-    if (!stepUpToken) return false;
-    if (!context.sessionId || context.membershipVersion === undefined) {
-      throw new ForbiddenException("STEP_UP_MFA_INVALID");
-    }
-    try {
-      verifyAdminMfaStepUpProof(stepUpToken, {
-        userId: context.userId,
-        sessionId: context.sessionId,
-        membershipVersion: context.membershipVersion,
-        purpose: "OWNER_ADMIN_CHANGE",
-      });
-      return true;
-    } catch {
-      throw new ForbiddenException("STEP_UP_MFA_INVALID");
     }
   }
 

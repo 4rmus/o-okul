@@ -3613,7 +3613,7 @@ const expectations = {
     "outageDrill tam 6 alan içermeli.",
     "adminMfa tam 9 alan içermeli.",
     "policy tam 7 alan içermeli.",
-    "enrollment tam 6 alan içermeli.",
+    "enrollment tam 4 alan içermeli.",
     "loginVerification tam 8 alan içermeli.",
     "githubCi tam 12 alan icermeli.",
     "workflow tam 9 alan icermeli.",

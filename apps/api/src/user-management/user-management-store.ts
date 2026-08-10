@@ -58,7 +58,7 @@ export interface UserManagementStore {
   updateTenantMembership(
     tenantId: string,
     membershipId: string,
-    input: TenantMembershipUpdateRequest & { actorCanManageOwners: boolean; stepUpVerified: boolean },
+    input: TenantMembershipUpdateRequest & { actorCanManageOwners: boolean },
   ): Promise<TenantMembershipUpdateResult | undefined>;
 }
 
@@ -311,7 +311,7 @@ export class InMemoryUserManagementStore implements UserManagementStore {
   async updateTenantMembership(
     tenantId: string,
     membershipId: string,
-    input: TenantMembershipUpdateRequest & { actorCanManageOwners: boolean; stepUpVerified: boolean },
+    input: TenantMembershipUpdateRequest & { actorCanManageOwners: boolean },
   ): Promise<TenantMembershipUpdateResult | undefined> {
     const employee = this.employees.find((candidate) => (
       candidate.tenantId === tenantId && candidate.access?.membershipId === membershipId
@@ -321,9 +321,6 @@ export class InMemoryUserManagementStore implements UserManagementStore {
     if (employee.access.version !== input.expectedVersion) throw new Error("TENANT_MEMBERSHIP_VERSION_CONFLICT");
     if ((employee.access.staffRole === "TENANT_OWNER" || input.staffRole === "TENANT_OWNER") && !input.actorCanManageOwners) {
       throw new Error("TENANT_OWNER_MANAGE_REQUIRED");
-    }
-    if (requiresOwnerAdminStepUp(employee.access.staffRole, input.staffRole) && !input.stepUpVerified) {
-      throw new Error("STEP_UP_MFA_REQUIRED");
     }
     if (input.status === "ACTIVE" && employee.status !== "ACTIVE") {
       throw new Error("EMPLOYEE_PROFILE_NOT_ACTIVE");
@@ -692,7 +689,7 @@ export class PostgresUserManagementStore implements UserManagementStore {
   async updateTenantMembership(
     tenantId: string,
     membershipId: string,
-    input: TenantMembershipUpdateRequest & { actorCanManageOwners: boolean; stepUpVerified: boolean },
+    input: TenantMembershipUpdateRequest & { actorCanManageOwners: boolean },
   ): Promise<TenantMembershipUpdateResult | undefined> {
     return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
       const currentResult = await client.query<TenantMembershipLifecycleRow>(
@@ -731,9 +728,6 @@ export class PostgresUserManagementStore implements UserManagementStore {
       if (current.version !== input.expectedVersion) throw new Error("TENANT_MEMBERSHIP_VERSION_CONFLICT");
       if ((current.staffRole === "TENANT_OWNER" || input.staffRole === "TENANT_OWNER") && !input.actorCanManageOwners) {
         throw new Error("TENANT_OWNER_MANAGE_REQUIRED");
-      }
-      if (requiresOwnerAdminStepUp(current.staffRole, input.staffRole) && !input.stepUpVerified) {
-        throw new Error("STEP_UP_MFA_REQUIRED");
       }
       if (input.status === "ACTIVE" && current.employeeStatus !== "ACTIVE") {
         throw new Error("EMPLOYEE_PROFILE_NOT_ACTIVE");
@@ -1024,10 +1018,6 @@ export function createUserManagementStore(): UserManagementStore {
   return resolvePersistenceDriver(process.env.USER_MANAGEMENT_STORE ?? process.env.AUTH_USER_STORE) === "postgres"
     ? new PostgresUserManagementStore()
     : new InMemoryUserManagementStore();
-}
-
-function requiresOwnerAdminStepUp(currentRole: string | null | undefined, nextRole: string | undefined): boolean {
-  return currentRole === "TENANT_OWNER" || currentRole === "TENANT_ADMIN" || nextRole === "TENANT_OWNER" || nextRole === "TENANT_ADMIN";
 }
 
 type EmployeeSortDirection = "ASC" | "DESC";

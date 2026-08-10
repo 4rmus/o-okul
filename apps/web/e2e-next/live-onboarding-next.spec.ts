@@ -78,8 +78,8 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
   await page.locator('input[name="loginName"]').fill(firstAdminEmail);
   await page.locator('input[name="password"]').fill(evidence.firstAdmin.password);
   await page.getByRole("button", { name: "Giriş yap" }).click();
-  await completeMfaEnrollmentIfRequired(page, /\/kurum$/);
   await expect(page).toHaveURL(/\/kurum$/);
+  await expect(page.getByLabel("Kurulum anahtarı")).toHaveCount(0);
 
   await page.goto("/kurum/kurulum");
   await expect(page.getByRole("heading", { name: "Kurulum Sihirbazı" })).toBeVisible();
