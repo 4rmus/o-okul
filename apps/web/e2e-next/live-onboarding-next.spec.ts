@@ -106,20 +106,24 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
   await expect(page).toHaveURL(/\/kurum$/);
   await expect(page.getByLabel("Kurulum anahtarı")).toHaveCount(0);
 
-  await page.goto("/kurum/kurulum");
+  await page.getByRole("link", { name: "Kuruluma git" }).click();
+  await expect(page).toHaveURL(/\/kurum\/kurulum$/);
   await expect(page.getByRole("heading", { name: "Kurulum Sihirbazı" })).toBeVisible();
-  await page.getByLabel("Kurulum formu").getByLabel("Kurum adı").fill(onboardingInstitutionName);
+  const setupForm = page.getByLabel("Kurulum formu");
+  await setupForm.getByLabel("Kurum adı").fill(onboardingInstitutionName);
   const contactEmail = evidence.onboarding?.contactEmail ?? firstAdminEmail;
-  await page.getByLabel("Kurulum formu").getByLabel("İletişim e-postası").fill(contactEmail);
-  await page.getByRole("button", { name: "İleri" }).click();
-  await page.getByRole("button", { name: "İleri" }).click();
-  await page.getByRole("button", { name: "İleri" }).click();
-  await page.getByRole("button", { name: "İleri" }).click();
-  await page.getByLabel("Kurulum formu").getByLabel("Veri sorumlusu").fill(evidence.onboarding?.importOwner ?? "Canli UAT");
-  await page.getByRole("button", { name: "Kaydet ve bitir" }).click();
+  await setupForm.getByLabel("İletişim e-postası").fill(contactEmail);
+  await setupForm.getByRole("button", { name: "İleri", exact: true }).click();
+  await setupForm.getByRole("button", { name: "İleri", exact: true }).click();
+  await setupForm.getByRole("button", { name: "İleri", exact: true }).click();
+  await setupForm.getByRole("button", { name: "İleri", exact: true }).click();
+  await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
+  await setupForm.getByLabel("Veri sorumlusu").fill(evidence.onboarding?.importOwner ?? "Canli UAT");
+  await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
 
-  await expect(page.getByText("Kurulum taslağı tamamlandı.")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Kurum paneline dön" })).toBeVisible();
+  const setupSummary = setupForm.locator(".next-onboarding-success");
+  await expect(setupSummary).toContainText(/2 sınıf, [1-9]\d* ders/);
+  await expect(setupSummary).toContainText("1 akademik yıl, 1 dönem");
 });
 
 function readEvidence(path: string | undefined): LiveOnboardingEvidence {
