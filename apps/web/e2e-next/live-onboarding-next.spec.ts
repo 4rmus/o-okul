@@ -90,7 +90,7 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
   const tenantSearchResponse = await tenantSearchResponsePromise;
   expect(tenantSearchResponse.status()).toBe(200);
   await expect(page.getByRole("row", { name: new RegExp(escapeRegExp(tenantSlug)) })).toBeVisible();
-  await page.getByRole("button", { name: "Çıkış" }).click();
+  await page.getByLabel("Üst gezinme").getByRole("button", { name: "Çıkış" }).click();
 
   const activationUrl = await waitForActivationUrl(firstAdminEmail, runStartedAt);
   await page.goto(activationUrl);
