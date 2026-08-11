@@ -1,19 +1,19 @@
 # Almanak 2.0 Gate D Çekirdek Ürün Staging Kanıtı
 
-Tarih: 2026-08-10
+Tarih: 2026-08-12
 Branch: `agent/almanac-gate-d-local-20260810`
 Başlangıç commit'i: `5f852becb7c6f0a04ca96355e075d863a13838b7`
-Runtime commit'i: `65f01988328fbffca3a52a7c267b5119302f075c`
+Runtime commit'i: `bb2779bc1087a150b648407385e3cee1d0122692`
 Kanıt düzeyi: `LOCAL_STATIC`, `LOCAL_SYNTHETIC`, `GITHUB_CI`, `STAGING_DEPLOY`,
-`STAGING_DB_RUNTIME`, `STAGING_API_RUNTIME` ve `STAGING_LIVE_UI`
-Dış durum: UAT-KURUM-01 `EXTERNAL_EVIDENCE_REQUIRED`; pilot ve production `EXTERNAL_NOT_RUN`
+`STAGING_DB_RUNTIME`, `STAGING_API_RUNTIME`, `STAGING_LIVE_UI` ve `STAGING_PROVIDER_DELIVERY`
+Dış durum: UAT-SYS-02 ve UAT-KURUM-01 `PASS`; pilot ve production `EXTERNAL_NOT_RUN`
 
 ## Sonuç
 
-Gate D'nin repo, GitHub CI, staging deploy, iSEM optik/rapor, canlı UI/PDF/XLSX, gerçek PostgreSQL 10k
-ve tenant rollout/rollback maddeleri `PASS` durumundadır. UAT-KURUM-01 için bearer-korumalı activation
-inbox evidence endpoint'i ve private system-admin girdisi staging'de sağlanmadığından genel gate sonucu
-`PARTIAL` kalır. Bu belge pilot, production veya go-live kanıtı değildir.
+Gate D'nin repo, GitHub CI, staging deploy, iSEM optik/rapor, canlı UI/PDF/XLSX, gerçek PostgreSQL 10k,
+tenant rollout/rollback ve sıfırdan kurum onboarding maddeleri `PASS` durumundadır. UAT-SYS-02 ve
+UAT-KURUM-01 exact runtime üzerinde gerçek provider teslimiyle tamamlandı; Gate D kapandı. Bu belge
+pilot, production veya go-live kanıtı değildir.
 
 ## Sınav, optik ve rapor
 
@@ -55,11 +55,11 @@ inbox evidence endpoint'i ve private system-admin girdisi staging'de sağlanmad�
   davet partial unique index ve servis sözleşmesiyle tekilleşir; migration eski kopyalarda en yeniyi
   korur, diğerlerini revoke eder ve bekleyen teslimat payload'larını expire eder. Transaction içindeki
   tablo kilidi, cleanup ile unique index kurulumu arasındaki canlı yazma yarışını kapatır.
-- Staging runtime kanıtından sonraki yerel politika deltası MFA'yı yalnız `SYSTEM_ADMIN` için zorunlu
-  tutar. Kurum sahibi, kurum yöneticisi ve alt kullanıcılar enrollment/challenge almaz; kurum çalışanı
-  daveti ve rol güncellemesi MFA kodu veya `X-Step-Up-Token` istemez. `owner:manage`, tenant kapsamı,
-  optimistic version ve son aktif sahip korumaları korunur. Bu delta `LOCAL_STATIC`tir ve henüz staging
-  runtime kanıtı değildir.
+- MFA yalnız `SYSTEM_ADMIN` için zorunludur. Kurum sahibi, kurum yöneticisi ve alt kullanıcılar
+  enrollment/challenge almaz; kurum çalışanı daveti ve rol güncellemesi MFA kodu veya
+  `X-Step-Up-Token` istemez. Parola yenileme `User.membershipVersion` ile aktif
+  `TenantMembership.version` değerini aynı transaction içinde artırır. Bu politika final staging
+  runtime ve canlı tenant login akışında doğrulandı.
 
 ## Güvenlik ve veri sınırı
 
@@ -78,6 +78,10 @@ inbox evidence endpoint'i ve private system-admin girdisi staging'de sağlanmad�
 | iSEM producer exact deploy | Actions `31402240519 PASS` |
 | Final UI-worker exact CI | `65f01988328fbffca3a52a7c267b5119302f075c`; Actions `31406897722 PASS` |
 | Final UI-worker exact deploy | Actions `31408010202 PASS`; web/API/worker/queue-board exact image, health `PASS` |
+| Gate D final exact CI | `bb2779bc1087a150b648407385e3cee1d0122692`; Actions `31542604334 PASS` |
+| Gate D final exact deploy | Actions `31543523234 PASS`; web/API/worker/queue-board exact image, health `PASS`; rollback `ac5b82cad37f25ca243f80a0abfde6155c017e61` |
+| UAT-SYS-02 + UAT-KURUM-01 | Exact runtime üzerinde kurum/ilk owner, gerçek activation e-postası, parola yenileme, tenant login ve kurulum `PASS`; 1 kampüs, 2 sınıf, 6 ders, 1 akademik yıl, 1 dönem |
+| Provider/DB kapanışı | Gateway health release `27e26d43a731c170401de0a948af735a987cd71e`; outbox `DELIVERED`, attempts `1`, error `null`; owner/membership version parity `PASS` |
 | iSEM optik/rapor artifact'i | `/root/o-okul/artifacts/staging/isem-optical-pipeline.json`; SHA-256 `1ea6e772b6f242d5e9d72c3fb5cc0ecdfe58103222b20874ebcd9366d5b6719d` |
 | Canlı UI/PDF/XLSX/portal/logout | `/root/o-okul/artifacts/staging/live-ui-worker-result.json`; SHA-256 `9531c3bee54dacec83b99b7c07f308bee54c82c2ffd355bd31f448847220bb3b` |
 | Gerçek PostgreSQL 10k registry | `app` rolü + RLS, 10 warmup + 100 örnek; birleşik p95 `21,655 ms`, max `76,974 ms`, eşik `500 ms PASS`; yanlış tenant `0`; rollback sonrası tenant/öğrenci `0/0` |
@@ -92,11 +96,15 @@ veli portalı ile logout `204` + eski refresh `401` zincirini doğruladı. Dört
 remote/local hash eşitliğinde saklandı; private UI input, geçici fixture root'ları ve başarısız doğrulama
 session'ları temizlendi.
 
+Final onboarding kaydı `bb2779bc1...` exact deploy üzerinde çalıştı. Commit'teki test ile staging'de
+çalıştırılan dosyanın SHA-256 değeri eşitti. Önceki 11 sentetik tenantın hesapları devre dışı ve aktif
+oturumları sıfır bırakıldı; veri silinmedi. Yalnız final başarılı tenant owner hesabı aktif kaldı.
+
 ## Yerel doğrulama
 
 | Kontrol | Sonuç |
 | --- | --- |
-| API tam paket | `144 dosya / 1076 test PASS`; `2 dosya / 4 test skipped` |
+| API tam paket | `144 dosya / 1085 test PASS`; `2 dosya / 4 test skipped` |
 | DB/Prisma/RLS/FK | `64 tenant tablo / 110 composite FK PASS` |
 | StudentContact + purge + campus + guardian hedefli API | `88 test PASS`; 10k sentetik bütçe dahil |
 | Web UX sözleşmesi | `132 test PASS`; idempotent retry negatifi dahil |
@@ -109,17 +117,13 @@ session'ları temizlendi.
 | Private iSEM input materialization/hash preflight | `PASS` |
 | Measurement baseline | `3 görev x 5 örnek PASS`; `LOCAL_SYNTHETIC` |
 | API/web typecheck ve diff whitespace | `PASS` |
-| Tam repo zinciri | `NEXT_E2E_PORT=43148 pnpm run ci PASS` |
+| Tam repo zinciri | Exact GitHub CI `31542604334 PASS`; yerel test zinciri ve temiz production web build `PASS` |
 
 ## Açık dış kanıt
 
-- UAT-KURUM-01 çalıştırılmadı ve `PASS` sayılmaz. `https://notify.o-okul.com/health` `200` döner ve
-  notification gönderim endpoint'i gerçektir; ancak `/messages/latest` GET yüzeyi `405` döner.
-  Staging config/private alanda `LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT`, ona ait bearer ve private
-  system-admin onboarding girdisi yoktur. Sahte inbox veya DB token okuması canlı teslimat kanıtı
-  sayılmamıştır.
+- UAT-SYS-02 ve UAT-KURUM-01 bearer-korumalı activation evidence yüzeyi, private system-admin girdisi
+  ve gerçek provider teslimiyle exact runtime üzerinde `PASS` oldu.
 - Gerçek kullanıcı RUM, pilot, production ve go-live Gate D staging kapanışının dışındadır ve
   `EXTERNAL_NOT_RUN` kalır.
 
-Gate D ancak bearer-korumalı activation inbox evidence yüzeyi sağlanıp UAT-KURUM-01 exact runtime
-commit'inde `PASS` olduğunda kapanabilir. Sonraki gate'e geçilmemiştir.
+Gate D `PASS` ile kapandı. Sıradaki Gate E henüz başlatılmadı.

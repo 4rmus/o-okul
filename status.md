@@ -1,11 +1,11 @@
 # O-Okul Durum
 
-Son güncelleme: 2026-08-10
-İnceleme snapshotı: Gate D runtime commit'i `65f01988328fbffca3a52a7c267b5119302f075c`;
+Son güncelleme: 2026-08-12
+İnceleme snapshotı: Gate D runtime commit'i `bb2779bc1087a150b648407385e3cee1d0122692`;
 değişiklikler `agent/almanac-gate-d-local-20260810` izole branch'indedir
 Kanıt düzeyi: Gate A, Gate B ve Gate C `LOCAL_STATIC`; Gate D `GITHUB_CI`, `STAGING_DEPLOY`,
-`STAGING_DB_RUNTIME`, `STAGING_API_RUNTIME` ve `STAGING_LIVE_UI` kanıtı taşır.
-UAT-KURUM-01 `EXTERNAL_EVIDENCE_REQUIRED`; pilot ve production `EXTERNAL_NOT_RUN`.
+`STAGING_DB_RUNTIME`, `STAGING_API_RUNTIME`, `STAGING_LIVE_UI` ve `STAGING_PROVIDER_DELIVERY`
+kanıtı taşır. Gate D `PASS`; sıradaki Gate E henüz başlamadı. Pilot ve production `EXTERNAL_NOT_RUN`.
 
 5 Ağustos 2026 ürün kararları: giriş kurum subdomaini + tenant-local kimliktir; guardian ürün
 kapsamından çıkarılacaktır; hukuk/KVKK incelemesi bu fazda repo uygulamasını ve pilot hazırlığını
@@ -106,7 +106,7 @@ ortam ve tarih içeren kalıcı evidence ile yükseltilir.
   GitHub CI, gerçek tenant flag aktivasyonu, staging, deploy, RUM/UAT, pilot ve production
   `EXTERNAL_NOT_RUN`.
 
-## Almanak 2.0 Gate D — Çekirdek Ürün Staging Kapanış Adayı (2026-08-10)
+## Almanak 2.0 Gate D — Çekirdek Ürün Staging Kapanışı (2026-08-12)
 
 - **Sınav/optik/rapor:** Ana iSEM fixture'ı 21 eşleşme/sonuç/rapor üretir. Ayrı gerçek karantina probe'u
   `OPEN → resolve → idempotent replay → sonuç → aynı snapshot JSON/XLSX/PDF` zincirini doğrular;
@@ -124,19 +124,20 @@ ortam ve tarih içeren kalıcı evidence ile yükseltilir.
   sınırı ve eşzamanlı PENDING çalışan daveti unique sözleşmesi hazırdır. Migration en yeni daveti
   korur; eski kopyaları revoke eder ve teslimat payload'larını expire eder; migration kilidi index
   kurulumu sırasındaki canlı yazma yarışını kapatır.
-- **MFA politika deltası (`LOCAL_STATIC`):** MFA yalnız `SYSTEM_ADMIN` için zorunludur. Kurum sahibi,
+- **MFA politikası:** MFA yalnız `SYSTEM_ADMIN` için zorunludur. Kurum sahibi,
   kurum yöneticisi ve alt kullanıcılar enrollment/challenge almaz; çalışan daveti ve rol değişimi MFA
   kodu veya `X-Step-Up-Token` istemez. `owner:manage`, tenant kapsamı, üyelik sürümü ve son aktif sahip
-  korumaları devam eder. Bu delta henüz staging'e deploy edilmedi.
+  korumaları devam eder. Parola yenilemedeki user/membership sürüm eşliği staging login akışında
+  doğrulandı.
 - **Staging kanıtı:** Exact CI/deploy, iSEM 21 sonuç/rapor + gerçek karantina probe'u, canlı
   UI/PDF/XLSX/öğrenci/veli/logout, `app` rolü ve RLS altında 10k registry p95 `21,655 ms`, yanlış tenant
   `0`, disposable veri rollback'i ve iki rollout anahtarının gerçek endpointte `OFF → ON → OFF` zinciri
   `PASS`. Dört public artifact remote/local hash eşitliğiyle saklandı; aktif doğrulama session'ı `0`.
-- **Sonuç:** API `144/1076`, web UX `132`, route smoke `90`, route manifest `88/19`, görsel `32`,
+- **Sonuç:** API `144/1085`, web UX `132`, route smoke `90`, route manifest `88/19`, görsel `32`,
   OpenAPI `238`, idempotency `46`, RLS `64/110`, production evidence template, ölçüm baseline,
-  exact GitHub CI `31406897722` ve staging deploy `31408010202` `PASS`. Bearer-korumalı activation
-  inbox evidence endpoint'i ve private system-admin girdisi staging'de olmadığı için UAT-KURUM-01
-  `EXTERNAL_EVIDENCE_REQUIRED`; yalnız bu nedenle genel Gate D `PARTIAL`dır. Sonraki gate'e geçilmedi.
+  exact GitHub CI `31542604334` ve staging deploy `31543523234` `PASS`. UAT-SYS-02 ve
+  UAT-KURUM-01 gerçek activation e-postası, parola yenileme, tenant login ve kurulumla exact runtime
+  üzerinde `PASS`; genel Gate D kapandı. Sıradaki Gate E'ye geçilmedi.
 
 ## Production Teknik Aktivasyonu — 2026-08-05
 
@@ -189,19 +190,20 @@ uygulama-provider teslim testi yerine geçmez. Şablon veya statik checker sonuc
 
 ## Doğrulama
 
-2026-08-10 Gate D yerel + staging sonuçları:
+2026-08-12 Gate D final yerel + staging sonuçları:
 
-- API tam paket: 144 dosya/1076 test; DB/RLS: 64 tenant tablo/110 composite FK `PASS`.
+- API tam paket: 144 dosya/1085 test; DB/RLS: 64 tenant tablo/110 composite FK `PASS`.
 - Student registry/import/overview/PII, setup deep-link, IAM ve optik hedefli web/API kontrolleri;
   10k sentetik registry bütçesi ve same-snapshot karantina export probe'u `PASS`.
 - Web UX 132, route smoke 90, görsel 32; route manifest 88 route/19 modül; OpenAPI 238 path;
   idempotency 46 operasyon; production evidence/go-live template ve üç görev x beş örnek güncel
   measurement baseline `PASS`.
 - Tam repo zinciri `NEXT_E2E_PORT=43148 pnpm run ci`: `PASS`.
-- Exact GitHub CI/deploy, staging iSEM/UI/PDF/XLSX, gerçek PostgreSQL 10k p95 ve tenant rollout
+- Exact GitHub CI `31542604334`, deploy `31543523234`, staging iSEM/UI/PDF/XLSX, gerçek PostgreSQL 10k p95 ve tenant rollout
   rollback: `PASS`; public artifact hash'leri `docs/almanac-2-gate-d-evidence.md` içinde kayıtlıdır.
-- UAT-KURUM-01: bearer-korumalı activation inbox evidence endpoint'i ve private system-admin girdisi
-  eksik olduğu için `EXTERNAL_EVIDENCE_REQUIRED`. Pilot ve production `EXTERNAL_NOT_RUN`.
+- UAT-SYS-02/UAT-KURUM-01: gerçek provider delivery, activation, parola yenileme, tenant login ve
+  kurulum `PASS`; final DB sonucu 1 kampüs, 2 sınıf, 6 ders, 1 akademik yıl ve 1 dönemdir.
+- Gate D `PASS`; sıradaki Gate E. Pilot ve production `EXTERNAL_NOT_RUN`.
 
 2026-08-10 Gate C yerel sonuçları:
 
