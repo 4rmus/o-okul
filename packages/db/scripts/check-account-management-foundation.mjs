@@ -13,6 +13,10 @@ const licenseUsageMigration = readFileSync(
   new URL("../prisma/migrations/20260801210000_enforce_active_student_license_usage/migration.sql", import.meta.url),
   "utf8",
 );
+const gateDRuntimeGrantMigration = readFileSync(
+  new URL("../prisma/migrations/20260811222500_grant_gate_d_runtime_permissions/migration.sql", import.meta.url),
+  "utf8",
+);
 const platformIdempotencyMigration = readFileSync(
   new URL("../prisma/migrations/20260801220000_add_platform_idempotency_key/migration.sql", import.meta.url),
   "utf8",
@@ -177,6 +181,11 @@ for (const token of [
 ]) {
   requireToken(licenseUsageMigration, token, token);
 }
+requireToken(
+  gateDRuntimeGrantMigration,
+  `GRANT EXECUTE ON FUNCTION public.o_okul_refresh_license_usage(TEXT) TO app;`,
+  "license usage refresh app runtime grant",
+);
 
 for (const token of [
   `Student_portal_access_cursor_idx`,
@@ -205,6 +214,11 @@ for (const token of [
 if (/\bREVOKE\b/.test(secretDeliveryWorkerMigration)) {
   failures.push("Ayrı worker rolü hazırlık migration'ı app yetkilerini geri almamalı.");
 }
+requireToken(
+  gateDRuntimeGrantMigration,
+  `GRANT USAGE ON SCHEMA public TO secret_delivery_worker;`,
+  "secret delivery worker public schema usage grant",
+);
 
 if (/GRANT[\s\S]*?"PlatformAccount"[\s\S]*?TO app;/.test(migration)) {
   failures.push("PlatformAccount tenant app rolüne grant edilmemeli.");
