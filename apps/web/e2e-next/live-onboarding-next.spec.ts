@@ -89,7 +89,7 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
   await page.getByRole("textbox", { name: "Ara", exact: true }).fill(tenantSlug);
   const tenantSearchResponse = await tenantSearchResponsePromise;
   expect(tenantSearchResponse.status()).toBe(200);
-  await expect(page.getByRole("row", { name: new RegExp(escapeRegExp(tenantName)) })).toBeVisible();
+  await expect(page.getByRole("row", { name: new RegExp(escapeRegExp(tenantSlug)) })).toBeVisible();
   await page.getByRole("button", { name: "Çıkış" }).click();
 
   const activationUrl = await waitForActivationUrl(firstAdminEmail, runStartedAt);
