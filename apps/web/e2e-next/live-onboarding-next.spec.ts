@@ -80,6 +80,15 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
   const tenantCreateErrorCode = typeof tenantCreateBody?.error?.code === "string" ? tenantCreateBody.error.code : "UNKNOWN";
   expect(tenantCreateResponse.status(), `LIVE_ONBOARDING_TENANT_CREATE_FAILED:${tenantCreateErrorCode}`).toBe(201);
 
+  const tenantSearchResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === "GET"
+      && url.pathname === "/api/v1/tenants"
+      && url.searchParams.get("q") === tenantSlug;
+  });
+  await page.getByRole("textbox", { name: "Ara", exact: true }).fill(tenantSlug);
+  const tenantSearchResponse = await tenantSearchResponsePromise;
+  expect(tenantSearchResponse.status()).toBe(200);
   await expect(page.getByRole("row", { name: new RegExp(escapeRegExp(tenantName)) })).toBeVisible();
   await page.getByRole("button", { name: "Çıkış" }).click();
 
