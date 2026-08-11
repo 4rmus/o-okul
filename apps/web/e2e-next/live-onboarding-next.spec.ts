@@ -94,10 +94,10 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
 
   const activationUrl = await waitForActivationUrl(firstAdminEmail, runStartedAt);
   await page.goto(activationUrl);
-  await page.getByLabel("Şifre", { exact: true }).fill(evidence.firstAdmin.password);
-  await page.getByLabel("Şifre tekrar", { exact: true }).fill(evidence.firstAdmin.password);
-  await page.getByRole("button", { name: "Hesabı etkinleştir" }).click();
-  await expect(page.getByText("Hesabınız etkinleştirildi.")).toBeVisible();
+  await page.getByRole("textbox", { name: "Yeni şifre", exact: true }).fill(evidence.firstAdmin.password);
+  await page.getByRole("textbox", { name: "Yeni şifre tekrar" }).fill(evidence.firstAdmin.password);
+  await page.getByRole("button", { name: "Şifreyi yenile" }).click();
+  await expect(page.getByRole("status")).toContainText("Şifreniz yenilendi");
 
   await page.goto(`/k/${encodeURIComponent(tenantSlug)}/giris`);
   await page.locator('input[name="loginName"]').fill(firstAdminEmail);

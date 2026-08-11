@@ -60,14 +60,16 @@ describe("PostgresPasswordResetStore", () => {
     expect(queries.at(-1)).toBe("COMMIT");
   });
 
-  it("parola güncellemesi başarısızsa token ve session yazımlarını rollback eder", async () => {
+  it("parola resetinde membership sürümünü eşitler ve session hatasında transactionı rollback eder", async () => {
     const queries: string[] = [];
     const pool = poolWith(async <T>(sql: string) => {
       queries.push(sql);
       if (sql.includes('SELECT "userId" FROM "PasswordResetToken"')) return { rows: [{ userId: "user-a" }] as T[] };
       if (sql.includes("pg_advisory_xact_lock")) return { rows: [] as T[] };
       if (sql.includes("SET \"status\" = 'USED'")) return { rows: [resetRow()] as T[] };
-      if (sql.includes('SET "passwordHash" = $2')) return { rows: [{ id: "user-a" }] as T[] };
+      if (sql.includes('SET "passwordHash" = $2')) {
+        return { rows: [{ id: "user-a", tenantId: "tenant-a", membershipVersion: 2 }] as T[] };
+      }
       if (sql.includes('FROM "User" u')) return { rows: [authUserRow()] as T[] };
       if (sql.includes('UPDATE "AuthSession"')) throw new Error("SESSION_REVOKE_FAILED");
       return { rows: [] as T[] };
@@ -86,6 +88,7 @@ describe("PostgresPasswordResetStore", () => {
     })).rejects.toThrow("SESSION_REVOKE_FAILED");
 
     expect(queries.some((sql) => sql.includes('SET "passwordHash" = $2'))).toBe(true);
+    expect(queries.some((sql) => sql.includes('UPDATE "TenantMembership"'))).toBe(true);
     expect(queries.some((sql) => sql.includes('UPDATE "AuthSession"'))).toBe(true);
     expect(queries.at(-1)).toBe("ROLLBACK");
     expect(queries).not.toContain("COMMIT");
