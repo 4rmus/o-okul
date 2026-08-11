@@ -95,7 +95,8 @@ pnpm backup:restore:smoke
   `secret_delivery_worker` rolünü kullanır; bu rolün parolası app ve migration DSN parolalarından
   farklıdır ve yalnız `SecretDeliveryOutbox` için `SELECT`/`UPDATE` yetkisine sahiptir.
 - Canlı onboarding girdisi, repo/artifacts/evidence mount dışında symlink olmayan private `0600`
-  dosyada tutulur. Bu dosya credentials içerdiğinden release artifact'ı değildir.
+  dosyada tutulur. Dosyadaki sistem admin parolası ve Base32 TOTP anahtarı smoke öncesi bootstrap
+  edilmiş hesaba aittir; bu dosya credentials içerdiğinden release artifact'ı değildir.
 - `pnpm prod:env:check` gerçek staging/prod env değerlerinde geçer.
 - Production kanıt zinciri `pnpm prod:evidence:check` ile tek komutta geçer.
 - Gerçek staging/prod env dosyalarında `*_ALLOW_EXAMPLE_EVIDENCE=1` bayrakları bulunmaz;
@@ -1027,9 +1028,10 @@ pnpm backup:restore:smoke
   komut `NEXT_E2E_LIVE_ONBOARDING=1`, `LIVE_ONBOARDING_EVIDENCE_PATH`, bearer korumalı
   `LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT` ve `LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN` gerektirir.
   `pnpm live:onboarding:evidence-contract` bu preflight'ı tarayıcı açmadan doğrular; gerçek smoke
-  başlamadan önce evidence JSON'unun exact system admin/first admin/tenant/onboarding shape'i,
+  başlamadan önce evidence JSON'unun exact system admin (parola + Base32 TOTP anahtarı)/first admin/tenant/onboarding shape'i,
   `generatedAt` değerinin 24 saatten eski olmadığı, placeholder/test değer taşımadığı, sistem admin ile ilk admin e-postalarının ayrık olduğu ve
   dosyanın lokal temp path, symlink dosya veya symlink parent zinciri altında olmadığı kontrol edilir.
+  Sistem admin enrollment ekranı görürse smoke bilinen seed parolasıyla devam etmek yerine bootstrap gereksinimiyle fail-closed durur.
   İlk yönetici aktivasyon URL'si gerçek inbox evidence endpoint'inden poll edilir; URL/token evidence artifact'ına yazılmaz.
   Evidence poll'u alıcı e-postasını URL/loglara taşımayan bearer-korumalı JSON POST kullanır. Notification
   gateway yalnız `@staging.o-okul.com` hesap aktivasyonlarını Email Sending kabulünden sonra alıcı HMAC'i

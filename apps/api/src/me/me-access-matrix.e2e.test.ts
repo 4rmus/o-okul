@@ -17,6 +17,7 @@ import { TeacherService } from "../teacher/teacher.service.js";
 describe("Me access matrix", () => {
   let app: INestApplication;
   let server: Parameters<typeof request>[0];
+  let systemToken: string;
   let adminToken: string;
   let teacherToken: string;
   let studentToken: string;
@@ -31,6 +32,7 @@ describe("Me access matrix", () => {
     await app.init();
     server = app.getHttpServer() as Parameters<typeof request>[0];
 
+    systemToken = await login("system@example.test");
     adminToken = await login("admin-a@example.test");
     teacherToken = await login("teacher-a@example.test");
     studentToken = await login("student-a@example.test");
@@ -45,6 +47,19 @@ describe("Me access matrix", () => {
     const response = await request(server).post("/auth/login").send(testLoginBody(email)).expect(200);
     return (response.body as { accessToken: string }).accessToken;
   }
+
+  it("sistem yöneticisi kendi parolasını değiştirir ve eski parola geçersiz olur", async () => {
+    const newPassword = "SystemAdmin!GateD2026";
+
+    await request(server)
+      .post("/me/password")
+      .set("Authorization", `Bearer ${systemToken}`)
+      .send({ currentPassword: "password", newPassword })
+      .expect(200);
+
+    await request(server).post("/auth/login").send(testLoginBody("system@example.test", "password")).expect(401);
+    await request(server).post("/auth/login").send(testLoginBody("system@example.test", newPassword)).expect(200);
+  });
 
   it("öğrenci /me yüzeylerini yalnız öğrenci subject'i açar", async () => {
     const studentEndpoints = [

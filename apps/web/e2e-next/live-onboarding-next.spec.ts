@@ -18,6 +18,7 @@ interface LiveOnboardingEvidence {
   systemAdmin: {
     loginName: string;
     password: string;
+    totpSecret: string;
   };
   tenant: {
     name: string;
@@ -47,7 +48,7 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
   await page.locator('input[name="loginName"]').fill(evidence.systemAdmin.loginName);
   await page.locator('input[name="password"]').fill(evidence.systemAdmin.password);
   await page.getByRole("button", { name: "Giriş yap" }).click();
-  await completeMfaEnrollmentIfRequired(page, /\/sistem$/);
+  await completeSystemAdminMfa(page, /\/sistem$/, evidence.systemAdmin.totpSecret);
 
   await expect(page).toHaveURL(/\/sistem$/);
   await page.getByRole("link", { name: "Kurumlar" }).click();
@@ -106,6 +107,7 @@ function readEvidence(path: string | undefined): LiveOnboardingEvidence {
   const failures: string[] = [];
   if (!parsed.systemAdmin?.loginName) failures.push("systemAdmin.loginName");
   if (!parsed.systemAdmin?.password) failures.push("systemAdmin.password");
+  if (!parsed.systemAdmin?.totpSecret) failures.push("systemAdmin.totpSecret");
   if (!parsed.tenant?.name) failures.push("tenant.name");
   if (!parsed.tenant?.slug) failures.push("tenant.slug");
   if (!parsed.firstAdmin?.name) failures.push("firstAdmin.name");
@@ -186,14 +188,19 @@ function createTotpCode(secret: string) {
   return value.toString().padStart(6, "0");
 }
 
-async function completeMfaEnrollmentIfRequired(page: Page, destination: RegExp) {
-  const enrollmentSecret = page.getByLabel("Kurulum anahtarı");
+async function completeSystemAdminMfa(page: Page, destination: RegExp, totpSecret: string) {
+  const enrollmentButton = page.getByRole("button", { name: "Etkinleştir ve giriş yap", exact: true });
+  const challengeButton = page.getByRole("button", { name: "Doğrula", exact: true });
   await Promise.race([
     page.waitForURL(destination),
-    enrollmentSecret.waitFor({ state: "visible" }),
+    enrollmentButton.waitFor({ state: "visible" }),
+    challengeButton.waitFor({ state: "visible" }),
   ]);
-  if (!await enrollmentSecret.isVisible()) return;
-  await page.getByLabel("Doğrulama kodu", { exact: true }).fill(createTotpCode(await enrollmentSecret.inputValue()));
-  await page.getByRole("button", { name: "Etkinleştir ve giriş yap" }).click();
+  if (await enrollmentButton.isVisible()) {
+    throw new Error("LIVE_ONBOARDING_SYSTEM_ADMIN_MFA_BOOTSTRAP_REQUIRED");
+  }
+  if (!await challengeButton.isVisible()) return;
+  await page.locator('input[name="mfaCode"]').fill(createTotpCode(totpSecret));
+  await challengeButton.click();
   await expect(page).toHaveURL(destination);
 }

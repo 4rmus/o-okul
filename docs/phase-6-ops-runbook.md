@@ -1286,8 +1286,11 @@ LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN=__SECRET__ \
 pnpm live:onboarding:smoke
 ```
 
-`LIVE_ONBOARDING_EVIDENCE_PATH` JSON'u system admin ve ilk tenant admin credential'larını, tenant
-adı/slug/plan/koltuk limitini ve opsiyonel kurulum alanlarını exact shape ile taşır. Gerçek staging
+`LIVE_ONBOARDING_EVIDENCE_PATH` JSON'u system admin credential'ları ile Base32 `totpSecret` değerini,
+ilk tenant admin credential'larını, tenant adı/slug/plan/koltuk limitini ve opsiyonel kurulum alanlarını
+exact shape ile taşır. Sistem admin MFA kaydı ve bilinen seed parolasının private güçlü parolaya dönüşümü
+smoke öncesinde bir kez tamamlanmış olmalıdır; smoke enrollment ekranı görürse fail-closed durur.
+Parola ve TOTP anahtarı yalnız repo dışındaki `0600` private girdide tutulur, artifact veya loga yazılmaz. Gerçek staging
 kanıtında `generatedAt` 24 saatten eski olamaz; `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder değerler kabul edilmez;
 dosya lokal temp path (`/tmp`, `/var/tmp`), symlink dosya veya symlink parent zinciri altında olamaz.
 Smoke, ilk yöneticiye gerçekten ulaşan bağlantıyı bearer korumalı HTTPS inbox evidence endpoint'inden

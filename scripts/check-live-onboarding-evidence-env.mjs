@@ -178,12 +178,13 @@ function validatePrincipal(value, collectedFailures, label, { kind }) {
     value,
     collectedFailures,
     label,
-    requireName ? ["email", "name", "nationalId", "password"] : ["email", "loginName", "password"],
+    requireName ? ["email", "name", "nationalId", "password"] : ["email", "loginName", "password", "totpSecret"],
   );
   requireEmail(value, collectedFailures, `${label}.email`, "email");
   if (kind === "systemAdmin") {
     requireString(value, collectedFailures, `${label}.loginName`, "loginName");
     requireNonPlaceholderString(value, collectedFailures, `${label}.loginName`, "loginName");
+    requireTotpSecret(value, collectedFailures, `${label}.totpSecret`, "totpSecret");
   } else if (typeof value.nationalId !== "string" || !/^\d{11}$/.test(value.nationalId)) {
     collectedFailures.push(`${label}.nationalId 11 rakam olmalı.`);
   }
@@ -192,6 +193,16 @@ function validatePrincipal(value, collectedFailures, label, { kind }) {
     requireString(value, collectedFailures, `${label}.name`, "name");
     requireNonPlaceholderString(value, collectedFailures, `${label}.name`, "name");
   }
+}
+
+function requireTotpSecret(scope, collectedFailures, label, key) {
+  requireString(scope, collectedFailures, label, key);
+  if (typeof scope[key] !== "string") return;
+
+  if (!/^[A-Z2-7]{16,128}$/.test(scope[key])) {
+    collectedFailures.push(`${label} 16-128 karakter Base32 olmalı.`);
+  }
+  requireNonPlaceholderString(scope, collectedFailures, label, key);
 }
 
 function validateTenant(value, collectedFailures) {

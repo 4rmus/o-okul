@@ -12,6 +12,7 @@ await rm(privateInputRoot, { force: true, recursive: true });
 await mkdir(privateInputRoot, { recursive: true, mode: 0o700 });
 
 try {
+  mkdirSync("artifacts", { recursive: true });
   writeJson(validEvidencePath, createValidEvidence());
   const positive = runPreflight({
     NEXT_E2E_LIVE_ONBOARDING: "1",
@@ -148,6 +149,19 @@ try {
     },
     "tenant.unexpected beklenmeyen alan.",
   );
+
+  const invalidTotpSecretPath = join(privateInputRoot, "invalid-totp-secret.json");
+  const invalidTotpSecret = createValidEvidence();
+  invalidTotpSecret.systemAdmin.totpSecret = "not-a-base32-secret";
+  writeJson(invalidTotpSecretPath, invalidTotpSecret);
+  runNegativeCheck(
+    "live onboarding invalid system admin TOTP secret negative",
+    {
+      NEXT_E2E_LIVE_ONBOARDING: "1",
+      LIVE_ONBOARDING_EVIDENCE_PATH: invalidTotpSecretPath,
+    },
+    "systemAdmin.totpSecret 16-128 karakter Base32 olmalı.",
+  );
 } finally {
   await rm(privateInputRoot, { force: true, recursive: true });
   rmSync(repositoryArtifactPath, { force: true });
@@ -218,6 +232,7 @@ function createValidEvidence() {
       email: "system.admin@staging.o-okul.com",
       loginName: "system.admin@staging.o-okul.com",
       password: "Str0ngSystem!2026",
+      totpSecret: "JBSWY3DPEHPK3PXP",
     },
     tenant: {
       name: "UAT Kurumu",
