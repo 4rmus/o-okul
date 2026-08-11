@@ -1459,15 +1459,16 @@ cd infra/notification-gateway
 printf '%s' "$NOTIFICATION_HTTP_BEARER_TOKEN" | npx wrangler secret put NOTIFICATION_BEARER_TOKEN
 printf '%s' "$LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN" | npx wrangler secret put LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN
 printf '%s' "$LIVE_ONBOARDING_EMAIL_EVIDENCE_HASH_KEY" | npx wrangler secret put LIVE_ONBOARDING_EMAIL_EVIDENCE_HASH_KEY
+printf '%s' "$LIVE_ONBOARDING_EMAIL_EVIDENCE_RECIPIENT_BASE" | npx wrangler secret put LIVE_ONBOARDING_EMAIL_EVIDENCE_RECIPIENT_BASE
 release_sha="$(git -C ../.. rev-parse HEAD)"
 npx wrangler deploy --var "RELEASE_SHA:$release_sha"
 test "$(curl -fsS https://notify.o-okul.com/health | jq -r .releaseSha)" = "$release_sha"
 ```
 
-Canlı onboarding kanıt yüzeyi yalnız `@staging.o-okul.com` hesap aktivasyonlarını, Email Sending
-kabulünden sonra alıcının HMAC kimliği altında 15 dakika tutar. `POST /messages/latest` ayrı bearer
+Canlı onboarding kanıt yüzeyi yalnız repo dışında Wrangler secret olarak tanımlanan exact base alıcıyı
+ve onun `+run-id` alias'larını, Email Sending kabulünden sonra alıcının HMAC kimliği altında 15 dakika tutar. `POST /messages/latest` ayrı bearer
 ister; ham alıcı kalıcı anahtara, URL'ye veya yanıta yazılmaz ve normal parola sıfırlama/diğer alıcılar
-kaydedilmez. İki onboarding secret'ı repo veya runtime `.env` içine değil Wrangler secret store'a yazılır.
+kaydedilmez. Üç onboarding secret'ı repo veya runtime `.env` içine değil Wrangler secret store'a yazılır.
 
 Wrangler'ın döndürdüğü Worker version ID ile `/health` exact SHA sonucu release kaydına birlikte
 eklenir. Aynı `idempotencyKey` için SQLite-backed Durable Object önce kalıcı teslim kaydı açar;

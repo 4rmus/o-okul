@@ -49,10 +49,10 @@ test("sends a contract-compliant email", async () => {
   });
 });
 
-test("stores and returns only a recent staging activation after provider acceptance", async () => {
+test("stores and returns only a recent allowlisted activation after provider acceptance", async () => {
   const objectNames = [];
   const environment = env([], undefined, { objectNames });
-  const recipient = "tenant.admin+run@staging.o-okul.com";
+  const recipient = "tenant.admin+gate-d+run@example.com";
   const activationUrl = "https://uat-kurumu.o-okul.com/parola-sifirla#token=single-use-token";
   const createdAfter = new Date(Date.now() - 1_000).toISOString();
 
@@ -76,21 +76,23 @@ test("stores and returns only a recent staging activation after provider accepta
 
 test("keeps onboarding evidence bearer protected and out of the request URL", async () => {
   const environment = env();
-  const recipient = "tenant.admin@staging.o-okul.com";
+  const recipient = "tenant.admin+gate-d+run@example.com";
   const query = { recipient, purpose: "PASSWORD_RESET", createdAfter: new Date().toISOString() };
   const missingBearer = await worker.fetch(evidenceRequest(query, ""), environment);
   const getResponse = await worker.fetch(new Request("https://notify.o-okul.com/messages/latest"), environment);
   const wrongDomain = await worker.fetch(evidenceRequest({ ...query, recipient: "admin@outside.example.org" }), environment);
+  const wrongRecipient = await worker.fetch(evidenceRequest({ ...query, recipient: "other.admin@example.com" }), environment);
 
   assert.equal(missingBearer.status, 401);
   assert.equal(getResponse.status, 405);
   assert.equal(getResponse.headers.get("allow"), "POST");
   assert.equal(wrongDomain.status, 400);
+  assert.equal(wrongRecipient.status, 400);
   assert.equal(evidenceRequest(query).url.includes(recipient), false);
 });
 
 test("does not retain ordinary reset mail or provider failures", async () => {
-  const recipient = "tenant.admin@staging.o-okul.com";
+  const recipient = "tenant.admin+gate-d+run@example.com";
   const createdAfter = new Date(Date.now() - 1_000).toISOString();
   const environment = env([], async () => {
     throw Object.assign(new Error("provider failed"), { code: "E_PROVIDER" });
@@ -489,7 +491,7 @@ function env(sent = [], emailSend, overrides = {}) {
     LIVE_ONBOARDING_EMAIL_EVIDENCE_ENABLED: "true",
     LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN: evidenceToken,
     LIVE_ONBOARDING_EMAIL_EVIDENCE_HASH_KEY: "evidence-hmac-key-for-tests-0000000000000001",
-    LIVE_ONBOARDING_EMAIL_EVIDENCE_RECIPIENT_DOMAIN: "staging.o-okul.com",
+    LIVE_ONBOARDING_EMAIL_EVIDENCE_RECIPIENT_BASE: "tenant.admin+gate-d@example.com",
     LIVE_ONBOARDING_EMAIL_EVIDENCE_ACTIVATION_DOMAIN: "o-okul.com",
     EMAIL: {
       async send(message) {

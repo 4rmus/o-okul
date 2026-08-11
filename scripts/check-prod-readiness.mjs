@@ -1118,7 +1118,7 @@ const expectations = {
     `request.method !== "POST"`,
     "LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN",
     "LIVE_ONBOARDING_EMAIL_EVIDENCE_HASH_KEY",
-    "LIVE_ONBOARDING_EMAIL_EVIDENCE_RECIPIENT_DOMAIN",
+    "LIVE_ONBOARDING_EMAIL_EVIDENCE_RECIPIENT_BASE",
     "ONBOARDING_EVIDENCE_RETENTION_MS",
     "captureOnboardingEvidence",
     "onboardingRecipientKey",
@@ -1132,7 +1132,7 @@ const expectations = {
     "eventKeyHash",
   ],
   "infra/notification-gateway/src/index.test.mjs": [
-    "stores and returns only a recent staging activation after provider acceptance",
+    "stores and returns only a recent allowlisted activation after provider acceptance",
     "keeps onboarding evidence bearer protected and out of the request URL",
     "does not retain ordinary reset mail or provider failures",
     "fails closed for WhatsApp without calling Meta",
@@ -1144,7 +1144,6 @@ const expectations = {
   "infra/notification-gateway/wrangler.jsonc": [
     `"WHATSAPP_ENABLED": "false"`,
     `"LIVE_ONBOARDING_EMAIL_EVIDENCE_ENABLED": "true"`,
-    `"LIVE_ONBOARDING_EMAIL_EVIDENCE_RECIPIENT_DOMAIN": "staging.o-okul.com"`,
     `"LIVE_ONBOARDING_EMAIL_EVIDENCE_ACTIVATION_DOMAIN": "o-okul.com"`,
   ],
   "docker-compose.traefik.yml": [

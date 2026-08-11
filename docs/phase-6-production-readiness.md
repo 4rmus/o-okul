@@ -1034,8 +1034,9 @@ pnpm backup:restore:smoke
   Sistem admin enrollment ekranı görürse smoke bilinen seed parolasıyla devam etmek yerine bootstrap gereksinimiyle fail-closed durur.
   İlk yönetici aktivasyon URL'si gerçek inbox evidence endpoint'inden poll edilir; URL/token evidence artifact'ına yazılmaz.
   Evidence poll'u alıcı e-postasını URL/loglara taşımayan bearer-korumalı JSON POST kullanır. Notification
-  gateway yalnız `@staging.o-okul.com` hesap aktivasyonlarını Email Sending kabulünden sonra alıcı HMAC'i
-  altında 15 dakika saklar; diğer alıcılar ve normal parola sıfırlamaları bu geçici kayda girmez.
+  gateway yalnız repo dışında Wrangler secret olarak tanımlanan exact base alıcıyı ve onun `+run-id`
+  alias'larını Email Sending kabulünden sonra alıcı HMAC'i altında 15 dakika saklar; diğer alıcılar ve
+  normal parola sıfırlamaları bu geçici kayda girmez.
 - Tam sınav döngüsü staging/prod kanıtı `LIVE_EXAM_CYCLE_TARGET` ile `pnpm live:exam-cycle:check`
   üzerinden doğrulanır; iSEM cevap anahtarı, optik pipeline, raw import, report-generation ve
   mock'suz UI-worker/portal kanıtları aynı release candidate'a bağlanır. Rapor top-level 11

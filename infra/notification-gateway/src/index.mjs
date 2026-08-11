@@ -333,8 +333,16 @@ function isAllowedEvidenceRecipient(value, env) {
   if (typeof value !== "string" || value.length < 3 || value.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
     return false;
   }
-  const allowedDomain = env.LIVE_ONBOARDING_EMAIL_EVIDENCE_RECIPIENT_DOMAIN?.trim().toLowerCase();
-  return Boolean(allowedDomain) && value.toLowerCase().endsWith(`@${allowedDomain}`);
+  const recipient = value.trim().toLowerCase();
+  const allowedBase = env.LIVE_ONBOARDING_EMAIL_EVIDENCE_RECIPIENT_BASE?.trim().toLowerCase();
+  if (!allowedBase || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(allowedBase)) return false;
+
+  const recipientAt = recipient.lastIndexOf("@");
+  const allowedAt = allowedBase.lastIndexOf("@");
+  const recipientLocal = recipient.slice(0, recipientAt);
+  const allowedLocal = allowedBase.slice(0, allowedAt);
+  return recipient.slice(recipientAt + 1) === allowedBase.slice(allowedAt + 1)
+    && (recipientLocal === allowedLocal || recipientLocal.startsWith(`${allowedLocal}+`));
 }
 
 async function onboardingRecipientKey(recipient, env) {
