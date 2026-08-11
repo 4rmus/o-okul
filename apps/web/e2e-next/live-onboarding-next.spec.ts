@@ -43,6 +43,9 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
   const tenantSlug = appendRunId ? `${evidence.tenant.slug}-${runId}` : evidence.tenant.slug;
   const firstAdminEmail = appendRunId ? appendEmailRunId(evidence.firstAdmin.email, runId) : evidence.firstAdmin.email;
   const onboardingInstitutionName = evidence.onboarding?.institutionName ?? tenantName;
+  const licenseStartsAt = runStartedAt.slice(0, 10);
+  const licenseEndsAtDate = new Date(runStartedAt);
+  licenseEndsAtDate.setUTCFullYear(licenseEndsAtDate.getUTCFullYear() + 1);
 
   await page.goto("/sistem/giris");
   await page.locator('input[name="loginName"]').fill(evidence.systemAdmin.loginName);
@@ -59,11 +62,23 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
   await createDialog.getByLabel("Kurum adı").fill(tenantName);
   await createDialog.getByLabel("Kurum kodu").fill(tenantSlug);
   await createDialog.getByLabel("Plan").selectOption(evidence.tenant.plan ?? "TRIAL");
-  await createDialog.getByLabel("Kullanıcı sınırı").fill(String(evidence.tenant.seatLimit ?? 25));
-  await createDialog.getByLabel("İlk yönetici ad soyad").fill(evidence.firstAdmin.name);
-  await createDialog.getByLabel("İlk yönetici e-posta").fill(firstAdminEmail);
-  await createDialog.getByLabel("İlk yönetici TC kimlik no").fill(evidence.firstAdmin.nationalId);
+  await createDialog.getByLabel("Lisans başlangıç").fill(licenseStartsAt);
+  await createDialog.getByLabel("Lisans bitiş").fill(licenseEndsAtDate.toISOString().slice(0, 10));
+  await createDialog.getByLabel("Aktif öğrenci limiti").fill(String(evidence.tenant.seatLimit ?? 25));
+  await createDialog.getByLabel("Sözleşme referansı").fill(`gate-d-uat-${runId}`);
+  await createDialog.getByLabel("İlk kampüs adı").fill("Merkez Kampüs");
+  await createDialog.getByLabel("İlk kurum sahibi ad soyad").fill(evidence.firstAdmin.name);
+  await createDialog.getByLabel("İlk kurum sahibi e-posta").fill(firstAdminEmail);
+  await createDialog.getByLabel("Kurum sahibi TC kimlik no").fill(evidence.firstAdmin.nationalId);
+  const tenantCreateResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === "POST" && url.pathname === "/api/v1/tenants";
+  });
   await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
+  const tenantCreateResponse = await tenantCreateResponsePromise;
+  const tenantCreateBody = await tenantCreateResponse.json().catch(() => undefined) as { error?: { code?: unknown } } | undefined;
+  const tenantCreateErrorCode = typeof tenantCreateBody?.error?.code === "string" ? tenantCreateBody.error.code : "UNKNOWN";
+  expect(tenantCreateResponse.status(), `LIVE_ONBOARDING_TENANT_CREATE_FAILED:${tenantCreateErrorCode}`).toBe(201);
 
   await expect(page.getByRole("row", { name: new RegExp(escapeRegExp(tenantName)) })).toBeVisible();
   await page.getByRole("button", { name: "Çıkış" }).click();
