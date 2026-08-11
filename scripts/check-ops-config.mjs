@@ -2331,7 +2331,8 @@ const expectations = {
     `activationUrl.hostname.endsWith`,
     `activationUrl.searchParams.has("token")`,
     "Kaydet ve bitir",
-    "Kurulum taslağı tamamlandı.",
+    ".next-onboarding-success",
+    "1 akademik yıl, 1 dönem",
   ],
   "scripts/check-live-onboarding-evidence-env.mjs": [
     "NEXT_E2E_LIVE_ONBOARDING=1 olmalı.",
