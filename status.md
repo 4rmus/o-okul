@@ -6,8 +6,8 @@ Gate D kapanışı ve Gate E WAL dilimi `agent/gate-d-onboarding-closure-2026081
 Kanıt düzeyi: Gate A, Gate B ve Gate C `LOCAL_STATIC`; Gate D `GITHUB_CI`, `STAGING_DEPLOY`,
 `STAGING_DB_RUNTIME`, `STAGING_API_RUNTIME`, `STAGING_LIVE_UI` ve `STAGING_PROVIDER_DELIVERY`
 kanıtı taşır. Gate D `PASS`; Gate E WAL archive izin düzeltmesi `LOCAL_STATIC` ve
-`LOCAL_SYNTHETIC`, exact-SHA staging WAL kanıtı `EXTERNAL_NOT_RUN`. Pilot ve production
-`EXTERNAL_NOT_RUN`.
+`LOCAL_SYNTHETIC`, `GITHUB_CI`, `STAGING_DEPLOY` ve `STAGING_WAL_RUNTIME` kanıtı taşır.
+Gate E'nin geri kalanı açık; pilot ve production `EXTERNAL_NOT_RUN`.
 
 5 Ağustos 2026 ürün kararları: giriş kurum subdomaini + tenant-local kimliktir; guardian ürün
 kapsamından çıkarılacaktır; hukuk/KVKK incelemesi bu fazda repo uygulamasını ve pilot hazırlığını
@@ -207,7 +207,12 @@ uygulama-provider teslim testi yerine geçmez. Şablon veya statik checker sonuc
   kurulum `PASS`; final DB sonucu 1 kampüs, 2 sınıf, 6 ders, 1 akademik yıl ve 1 dönemdir.
 - Gate E WAL archive volume sahipliği disposable Docker projectte `postgres:postgres 0700`, gerçek
   `pg_switch_wal()` ve `pnpm wal:archive:smoke` ile `PASS`; `pnpm docker:check`, `pnpm ops:check` ve
-  `pnpm prod:evidence:templates:check` `PASS`. Exact-SHA staging/deploy kanıtı `EXTERNAL_NOT_RUN`.
+  `pnpm prod:evidence:templates:check` `PASS`. Runtime source SHA
+  `a6971afbf1dea8279053976b16172d2f3fe89128`; exact GitHub CI `31614951643` ve staging deploy
+  `31616330864` `PASS`. Staging initializer `Exited (0)`, volume `postgres:postgres 0700`, dört
+  uygulama imajı exact SHA, `/health` ve `/login` 200'dür. Gerçek `s3://o-okul-staging-evidence/wal/staging`
+  WAL marker yaz/oku/sil ve `pg_switch_wal()` kanıtı `PASS`; sanit edilmiş artifact SHA-256
+  `95a1ae7dd6adba45ab4f890137ab28aa2c1edd24779dfda8f7f581639280d020`.
 - Gate D `PASS`; Gate E kapanmadı. Pilot ve production `EXTERNAL_NOT_RUN`.
 
 2026-08-10 Gate C yerel sonuçları:
