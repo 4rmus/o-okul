@@ -255,6 +255,19 @@ services:
     networks:
       - frontend_net
 
+  postgres-wal-archive-init:
+    image: postgres:16-alpine
+    user: "0:0"
+    command:
+      - sh
+      - -ec
+      - |
+        chown postgres:postgres /var/lib/postgresql/wal-archive
+        chmod 700 /var/lib/postgresql/wal-archive
+    restart: "no"
+    volumes:
+      - postgres_wal_archive:/var/lib/postgresql/wal-archive
+
   postgres:
     cpus: ${POSTGRES_CPUS:-1.00}
     mem_limit: ${POSTGRES_MEM_LIMIT:-1536m}
@@ -299,6 +312,9 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    depends_on:
+      postgres-wal-archive-init:
+        condition: service_completed_successfully
     networks:
       - backend_net
 

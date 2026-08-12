@@ -1880,6 +1880,8 @@ Bu smoke hedef marker yaz/oku/sil adımına ek olarak çalışan Postgres üzeri
 tetikler ve `archive_mode=on|always`, `wal_level=replica|logical`, archive command hash'i,
 WAL dosya adı hash'i ve arşivlenen WAL dosyasının sha256 özetini kanıtlar. Compose `archive_mode`
 değişikliği canlı konteynere uygulanmadıysa Postgres servisi recreate edilmeden bu smoke PASS vermez.
+Docker named volume'u `root:root` oluşturursa `postgres-wal-archive-init` sahipliği `postgres`e ve
+modu `0700`e çeker; Postgres yalnız bu tek seferlik servis başarıyla tamamlandıktan sonra başlar.
 Artifact `checkedAt`, target özeti, marker sha256, `postgresWalArchive`, tek
 `commandsPassed=["pnpm wal:archive:smoke"]` ve boş `gaps` listesi taşır.
 
