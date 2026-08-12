@@ -184,6 +184,50 @@ describe("IdentityInvitationService", () => {
     await expect(invitations.list("tenant-a")).resolves.toEqual([]);
   });
 
+  it.each(["TENANT_ADMIN", "OPERATIONS_STAFF"])(
+    "kampüs kapsamlı %s genel davetleri listeleyemez, oluşturamaz veya tekrar gönderemez",
+    async (role) => {
+      const invitations = new InMemoryIdentityInvitationStore();
+      const list = vi.spyOn(invitations, "list");
+      const create = vi.spyOn(invitations, "create");
+      const findById = vi.spyOn(invitations, "findById");
+      const resend = vi.spyOn(invitations, "resend");
+      const service = new IdentityInvitationService(
+        invitations,
+        new InMemoryUserManagementStore(),
+        new InMemoryStudentStore(),
+        new InMemoryGuardianStore(),
+        new InMemoryTeacherStore(),
+        new InMemoryTenantStore(),
+      );
+      const context: RequestContext = {
+        tenantId: "tenant-a",
+        userId: "staff-a",
+        roles: [role],
+        activePersona: "STAFF",
+        campusScope: { scopeMode: "CAMPUSES", campusIds: ["campus-main"] },
+        bypassRls: false,
+      };
+
+      await expect(service.list(context)).rejects.toThrow("EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
+      for (const subjectType of ["TEACHER", "STUDENT", "GUARDIAN"] as const) {
+        await expect(service.create(context, {
+          subjectType,
+          subjectId: `${subjectType.toLowerCase()}-outside-campus`,
+          email: `${subjectType.toLowerCase()}@example.test`,
+        })).rejects.toThrow("EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
+      }
+      await expect(service.resend(context, "invitation-outside-campus")).rejects.toThrow(
+        "EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED",
+      );
+
+      expect(list).not.toHaveBeenCalled();
+      expect(create).not.toHaveBeenCalled();
+      expect(findById).not.toHaveBeenCalled();
+      expect(resend).not.toHaveBeenCalled();
+    },
+  );
+
   it("guardian read-only rollout açıkken doğrudan guardian davetini üretmez", async () => {
     const invitations = new InMemoryIdentityInvitationStore();
     const resolve = vi.fn().mockResolvedValue({ enabledFeatureKeys: ["product.guardian-read-only"] });

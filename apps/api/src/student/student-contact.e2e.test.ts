@@ -171,6 +171,12 @@ describe("StudentContact API", () => {
   });
 
   it("v2 öğrenci 360 özetini tek scope-kontrollü yanıtta ve PII sızdırmadan döndürür", async () => {
+    await request(server)
+      .patch("/teachers/teacher-a")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ nationalId: "10000001204", phone: "5550000010" })
+      .expect(200);
+
     const adminOverview = await request(server)
       .get("/students/student-a/overview")
       .set("Authorization", `Bearer ${adminToken}`)
@@ -183,10 +189,16 @@ describe("StudentContact API", () => {
       openHomeworkCount: expect.any(Number),
       teacherNoteCount: expect.any(Number),
       activity: expect.any(Array),
+      teachers: [expect.objectContaining({ id: "teacher-a", phoneMasked: "••• ••• ••10" })],
     });
-    expect(JSON.stringify(adminOverview.body)).not.toContain("nationalIdEncrypted");
-    expect(JSON.stringify(adminOverview.body)).not.toContain("phoneEncrypted");
-    expect(JSON.stringify(adminOverview.body)).not.toContain("emailEncrypted");
+    const serializedOverview = JSON.stringify(adminOverview.body);
+    const serializedTeachers = JSON.stringify(adminOverview.body.teachers);
+    expect(serializedOverview).not.toContain("nationalIdEncrypted");
+    expect(serializedOverview).not.toContain("nationalIdHash");
+    expect(serializedOverview).not.toContain("phoneEncrypted");
+    expect(serializedOverview).not.toContain("emailEncrypted");
+    expect(serializedTeachers).not.toContain("userId");
+    expect(serializedTeachers).not.toContain("5550000010");
 
     await request(server)
       .get("/students/student-a/overview")

@@ -36,6 +36,20 @@ for (const requiredSource of [
 if (isemProducerSource.includes("quarantinePathVerified: evidence.quarantineCount === expectedQuarantineCount")) {
   failures.push("iSEM optical producer karantina yolunu yalnız sıfır sayımından doğrulamamalı.");
 }
+for (const forbiddenSource of [
+  "${JSON.stringify(payload)}",
+  "${JSON.stringify(answerKey)}",
+  "${JSON.stringify(summary)}",
+  "${JSON.stringify(openRecords)}",
+  "${JSON.stringify(resolved)}",
+  "${JSON.stringify(resolvedRecords)}",
+  "${JSON.stringify(studentReport)}",
+  "${await response.text()}",
+]) {
+  if (isemProducerSource.includes(forbiddenSource)) {
+    failures.push(`iSEM optical producer ham hata gövdesi loglamamalı: ${forbiddenSource}`);
+  }
+}
 
 if (!summary.smokeEvidence || typeof summary.smokeEvidence !== "object" || Array.isArray(summary.smokeEvidence)) {
   failures.push("production-evidence-summary.example.json smokeEvidence nesnesi zorunlu.");

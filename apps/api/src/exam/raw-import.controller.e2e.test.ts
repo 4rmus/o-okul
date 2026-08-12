@@ -85,8 +85,7 @@ describe("RawImportController", () => {
     archiveStore.puts = [];
     archiveStore.deletes = [];
     repository.creates = [];
-    producer.inputs = [];
-    producer.failNext = false;
+    producer.reset();
     quarantineStore.reset();
     analysisStore.reset();
   });
@@ -487,7 +486,7 @@ describe("RawImportController", () => {
         participantId: "participant-a",
         answerKeyId: "answer-key-a",
         queueName: "exam-evaluation",
-        jobId: "quarantine-a_raw-sha-a-answer-key-a",
+        jobId: "quarantine-a_raw-sha-a-answer-key-a-participant-a",
         status: "queued",
       },
     });
@@ -497,7 +496,7 @@ describe("RawImportController", () => {
         tenantId: "tenant-a",
         userId: "user-tenant-a",
         entityId: "quarantine-a",
-        contentHash: "raw-sha-a-answer-key-a",
+        contentHash: "raw-sha-a-answer-key-a-participant-a",
         participantId: "participant-a",
         rawImportId: "raw-import-a",
         answerKeyId: "answer-key-a",
@@ -572,7 +571,7 @@ describe("RawImportController", () => {
     ]);
   });
 
-  it("karantina resolve enqueue patlarsa kaydı açık bırakır", async () => {
+  it("karantina resolve enqueue kabul edilmeden patlarsa retry ile çözer", async () => {
     const issued = await login("admin-a@example.test");
     producer.failNext = true;
 
@@ -583,8 +582,96 @@ describe("RawImportController", () => {
       .expect(500);
 
     expect(quarantineStore.records[0]?.status).toBe("OPEN");
-    expect(quarantineStore.markResolvedCalls).toHaveLength(1);
-    expect(quarantineStore.reopenCalls).toHaveLength(1);
+    expect(quarantineStore.markResolvedCalls).toHaveLength(0);
+
+    await request(server)
+      .post("/exams/exam-a/raw-imports/raw-import-a/quarantines/quarantine-a/resolve")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ resolvedStudentId: "student-a" })
+      .expect(201);
+
+    expect(quarantineStore.records[0]?.status).toBe("RESOLVED");
+    expect(producer.attempts).toHaveLength(2);
+    expect(producer.inputs).toHaveLength(1);
+    expect(producer.attempts.map((input) => `${input.entityId}_${input.contentHash}`)).toEqual([
+      "quarantine-a_raw-sha-a-answer-key-a-participant-a",
+      "quarantine-a_raw-sha-a-answer-key-a-participant-a",
+    ]);
+  });
+
+  it("queue kabulü belirsiz kalırsa aynı job id ile retry edip tek iş üretir", async () => {
+    const issued = await login("admin-a@example.test");
+    producer.failAfterAcceptNext = true;
+
+    await request(server)
+      .post("/exams/exam-a/raw-imports/raw-import-a/quarantines/quarantine-a/resolve")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ resolvedStudentId: "student-a" })
+      .expect(500);
+
+    expect(quarantineStore.records[0]?.status).toBe("OPEN");
+    expect(quarantineStore.markResolvedCalls).toHaveLength(0);
+
+    await request(server)
+      .post("/exams/exam-a/raw-imports/raw-import-a/quarantines/quarantine-a/resolve")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ resolvedStudentId: "student-a" })
+      .expect(201);
+
+    expect(quarantineStore.records[0]?.status).toBe("RESOLVED");
+    expect(producer.attempts).toHaveLength(2);
+    expect(producer.inputs).toHaveLength(1);
+    expect(producer.attempts.map((input) => `${input.entityId}_${input.contentHash}`)).toEqual([
+      "quarantine-a_raw-sha-a-answer-key-a-participant-a",
+      "quarantine-a_raw-sha-a-answer-key-a-participant-a",
+    ]);
+  });
+
+  it("queue kabulünden sonra DB güncellemesi başarısız olursa retry terminal durumu tamamlar", async () => {
+    const issued = await login("admin-a@example.test");
+    quarantineStore.failMarkResolvedNext = true;
+
+    await request(server)
+      .post("/exams/exam-a/raw-imports/raw-import-a/quarantines/quarantine-a/resolve")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ resolvedStudentId: "student-a" })
+      .expect(404);
+
+    expect(quarantineStore.records[0]?.status).toBe("OPEN");
+
+    await request(server)
+      .post("/exams/exam-a/raw-imports/raw-import-a/quarantines/quarantine-a/resolve")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ resolvedStudentId: "student-a" })
+      .expect(201);
+
+    expect(quarantineStore.records[0]?.status).toBe("RESOLVED");
+    expect(producer.attempts).toHaveLength(2);
+    expect(producer.inputs).toHaveLength(1);
+  });
+
+  it("eşzamanlı farklı öğrenci çözümlerinden yalnız claim sahibi için evaluation işi üretir", async () => {
+    const issued = await login("admin-a@example.test");
+    const endpoint = "/exams/exam-a/raw-imports/raw-import-a/quarantines/quarantine-a/resolve";
+
+    const responses = await Promise.all([
+      request(server)
+        .post(endpoint)
+        .set("Authorization", `Bearer ${issued.accessToken}`)
+        .send({ resolvedStudentId: "student-a" }),
+      request(server)
+        .post(endpoint)
+        .set("Authorization", `Bearer ${issued.accessToken}`)
+        .send({ resolvedStudentId: "student-b" }),
+    ]);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([201, 404]);
+    expect(producer.inputs).toHaveLength(1);
+    const winner = quarantineStore.records[0];
+    expect(winner).toEqual(expect.objectContaining({ status: "RESOLVED" }));
+    expect(producer.inputs[0]).toEqual(expect.objectContaining({
+      participantId: winner?.resolvedStudentId === "student-b" ? "participant-b" : "participant-a",
+    }));
   });
 
   it("karantina çözme kaydı yoksa evaluation işi üretmez", async () => {
@@ -670,13 +757,33 @@ class FakeRepository implements RawImportRepository {
 
 class FakeProducer implements RawImportQueueProducer {
   inputs: Array<Parameters<RawImportQueueProducer["enqueue"]>[0]> = [];
+  attempts: Array<Parameters<RawImportQueueProducer["enqueue"]>[0]> = [];
   failNext = false;
+  failAfterAcceptNext = false;
+  private readonly acceptedJobIds = new Set<string>();
+
+  reset(): void {
+    this.inputs = [];
+    this.attempts = [];
+    this.failNext = false;
+    this.failAfterAcceptNext = false;
+    this.acceptedJobIds.clear();
+  }
 
   async enqueue(input: Parameters<RawImportQueueProducer["enqueue"]>[0]): Promise<ProducedJob> {
-    this.inputs.push(input);
+    this.attempts.push(input);
     if (this.failNext) {
       this.failNext = false;
       throw new Error("QUEUE_DOWN");
+    }
+    const jobId = `${input.entityId}_${input.contentHash}`;
+    if (!this.acceptedJobIds.has(jobId)) {
+      this.acceptedJobIds.add(jobId);
+      this.inputs.push(input);
+    }
+    if (this.failAfterAcceptNext) {
+      this.failAfterAcceptNext = false;
+      throw new Error("QUEUE_ACK_LOST");
     }
     const { queueName: _queueName, ...payload } = input;
     return {
@@ -686,7 +793,7 @@ class FakeProducer implements RawImportQueueProducer {
       options: {
         attempts: 5,
         backoff: { type: "exponential", delay: 1000 },
-        jobId: `${input.entityId}_${input.contentHash}`,
+        jobId,
         removeOnFail: false,
       },
     };
@@ -711,13 +818,7 @@ class FakeQuarantineStore implements RawImportQuarantineStore {
     quarantineId: string;
     resolvedStudentId: string;
   }> = [];
-  reopenCalls: Array<{
-    tenantId: string;
-    examId: string;
-    rawImportId: string;
-    quarantineId: string;
-    resolvedStudentId: string;
-  }> = [];
+  failMarkResolvedNext = false;
 
   reset(): void {
     this.records = [createQuarantine()];
@@ -725,7 +826,7 @@ class FakeQuarantineStore implements RawImportQuarantineStore {
     this.lists = [];
     this.resolves = [];
     this.markResolvedCalls = [];
-    this.reopenCalls = [];
+    this.failMarkResolvedNext = false;
   }
 
   async countOpenByTenant(tenantId: string): Promise<number> {
@@ -755,10 +856,19 @@ class FakeQuarantineStore implements RawImportQuarantineStore {
       item.examId === input.examId &&
       item.rawImportId === input.rawImportId &&
       item.id === input.quarantineId &&
-      item.status === "OPEN"
+      item.status === "OPEN" &&
+      (!item.resolvedStudentId || item.resolvedStudentId === input.resolvedStudentId)
     ));
     if (!record) return undefined;
-    return record;
+    const claimed: ImportQuarantineRecord = {
+      ...record,
+      resolvedStudentId: input.resolvedStudentId,
+      ...(record.resolvedParticipantId
+        ? { resolvedParticipantId: input.resolvedStudentId === "student-b" ? "participant-b" : record.resolvedParticipantId }
+        : {}),
+    };
+    this.records = this.records.map((item) => item.id === record.id ? claimed : item);
+    return claimed;
   }
 
   async markResolved(input: {
@@ -769,12 +879,17 @@ class FakeQuarantineStore implements RawImportQuarantineStore {
     resolvedStudentId: string;
   }): Promise<ImportQuarantineRecord | undefined> {
     this.markResolvedCalls.push(input);
+    if (this.failMarkResolvedNext) {
+      this.failMarkResolvedNext = false;
+      return undefined;
+    }
     const record = this.records.find((item) => (
       item.tenantId === input.tenantId &&
       item.examId === input.examId &&
       item.rawImportId === input.rawImportId &&
       item.id === input.quarantineId &&
-      item.status === "OPEN"
+      item.status === "OPEN" &&
+      item.resolvedStudentId === input.resolvedStudentId
     ));
     if (!record) return undefined;
     const resolved: ImportQuarantineRecord = {
@@ -786,27 +901,6 @@ class FakeQuarantineStore implements RawImportQuarantineStore {
     return resolved;
   }
 
-  async reopen(input: {
-    tenantId: string;
-    examId: string;
-    rawImportId: string;
-    quarantineId: string;
-    resolvedStudentId: string;
-  }): Promise<ImportQuarantineRecord | undefined> {
-    this.reopenCalls.push(input);
-    const record = this.records.find((item) => (
-      item.tenantId === input.tenantId &&
-      item.examId === input.examId &&
-      item.rawImportId === input.rawImportId &&
-      item.id === input.quarantineId &&
-      item.status === "RESOLVED" &&
-      item.resolvedStudentId === input.resolvedStudentId
-    ));
-    if (!record) return undefined;
-    const reopened: ImportQuarantineRecord = { ...record, status: "OPEN", resolvedStudentId: undefined };
-    this.records = this.records.map((item) => item.id === record.id ? reopened : item);
-    return reopened;
-  }
 }
 
 class FakeAnalysisStore implements RawImportAnalysisStore {

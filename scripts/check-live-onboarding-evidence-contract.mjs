@@ -38,8 +38,26 @@ try {
       LIVE_ONBOARDING_EVIDENCE_PATH: validEvidencePath,
       LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT: "",
     },
-    "LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT gerçek https URL olmalı.",
+    "LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT tam olarak https://notify.staging.o-okul.com/messages/latest olmalı.",
   );
+
+  for (const endpoint of [
+    "https://notify.o-okul.com/messages/latest",
+    "https://other.staging.o-okul.com/messages/latest",
+    "https://notify.staging.o-okul.com/other",
+    "https://notify.staging.o-okul.com/messages/latest?recipient=admin",
+    "https://notify.staging.o-okul.com/messages/latest#token=forbidden",
+  ]) {
+    runNegativeCheck(
+      `live onboarding disallowed endpoint negative ${endpoint}`,
+      {
+        NEXT_E2E_LIVE_ONBOARDING: "1",
+        LIVE_ONBOARDING_EVIDENCE_PATH: validEvidencePath,
+        LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT: endpoint,
+      },
+      "LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT tam olarak https://notify.staging.o-okul.com/messages/latest olmalı.",
+    );
+  }
 
   runNegativeCheck(
     "live onboarding missing email evidence bearer negative",
@@ -185,7 +203,7 @@ function runPreflight(env) {
       LIVE_ONBOARDING_ALLOW_EXAMPLE_EVIDENCE: "",
       NEXT_E2E_LIVE_ONBOARDING: "",
       LIVE_ONBOARDING_EVIDENCE_PATH: "",
-      LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT: "https://mail-evidence.staging.o-okul.test/messages/latest",
+      LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT: "https://notify.staging.o-okul.com/messages/latest",
       LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN: "live-onboarding-test-bearer-token",
       ...env,
     },

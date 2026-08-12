@@ -5,6 +5,7 @@ import type {
   CourseRecord,
   StudentEnrollmentRecord,
   StudentOverviewRecord,
+  TeacherRecord,
 } from "@o-okul/shared-types";
 import { AttendanceService } from "../attendance/attendance.service.js";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
@@ -13,6 +14,7 @@ import { FeatureRolloutService } from "../feature-rollout/feature-rollout.servic
 import { GuardianService } from "../guardian/guardian.service.js";
 import { toGuardianResponse } from "../guardian/guardian-response.js";
 import { HomeworkService } from "../homework/homework.service.js";
+import { maskContactPhone } from "../privacy/contact-mask.js";
 import { hasCapability } from "../rbac/role-capabilities.js";
 import { ReportGenerationService } from "../report/report-generation.service.js";
 import { SchoolService } from "../school/school.service.js";
@@ -112,7 +114,7 @@ export class StudentOverviewService {
       guardians: guardians.map((record) => toGuardianResponse(record, context)),
       guardianLinks,
       teacherAssignments,
-      teachers: teachers.filter((record) => teacherIds.has(record.id)),
+      teachers: teachers.filter((record) => teacherIds.has(record.id)).map(toOverviewTeacherResponse),
       classes: filterReferences(classes, classIds),
       courses: filterReferences(courses, courseIds),
       terms: filterReferences(terms, termIds),
@@ -120,6 +122,16 @@ export class StudentOverviewService {
       activity,
     };
   }
+}
+
+function toOverviewTeacherResponse(record: TeacherRecord): TeacherRecord {
+  const response = { ...record } as TeacherRecord & { nationalIdEncrypted?: string; nationalIdHash?: string };
+  delete response.nationalIdEncrypted;
+  delete response.nationalIdHash;
+  delete response.userId;
+  if (record.phone) response.phoneMasked = maskContactPhone(record.phone);
+  delete response.phone;
+  return response;
 }
 
 function activeEnrollment(records: StudentEnrollmentRecord[]): StudentEnrollmentRecord | undefined {

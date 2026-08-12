@@ -7,6 +7,7 @@ const emailEvidenceEndpoint = process.env.LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOIN
 const emailEvidenceBearerToken = process.env.LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN;
 const allowExampleEvidence = process.env.LIVE_ONBOARDING_ALLOW_EXAMPLE_EVIDENCE === "1";
 const liveEvidenceMaxAgeMs = 24 * 60 * 60 * 1000;
+const allowedEmailEvidenceEndpoint = "https://notify.staging.o-okul.com/messages/latest";
 const repositoryRoot = resolve(process.cwd());
 
 const failures = [];
@@ -19,8 +20,8 @@ if (!evidencePath) {
   failures.push("LIVE_ONBOARDING_EVIDENCE_PATH boş bırakılamaz.");
 }
 
-if (!isHttpsUrl(emailEvidenceEndpoint)) {
-  failures.push("LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT gerçek https URL olmalı.");
+if (!isAllowedEmailEvidenceEndpoint(emailEvidenceEndpoint)) {
+  failures.push("LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT tam olarak https://notify.staging.o-okul.com/messages/latest olmalı.");
 }
 
 if (!emailEvidenceBearerToken || emailEvidenceBearerToken.length < 16) {
@@ -118,10 +119,10 @@ function isLocalTempPath(filePath) {
   );
 }
 
-function isHttpsUrl(value) {
+function isAllowedEmailEvidenceEndpoint(value) {
   if (!value) return false;
   try {
-    return new URL(value).protocol === "https:";
+    return new URL(value).toString() === allowedEmailEvidenceEndpoint;
   } catch {
     return false;
   }

@@ -11,8 +11,8 @@
   ],
   "vars": {
     "WHATSAPP_ENABLED": "false",
-    "LIVE_ONBOARDING_EMAIL_EVIDENCE_ENABLED": "true",
-    "LIVE_ONBOARDING_EMAIL_EVIDENCE_ACTIVATION_DOMAIN": "o-okul.com"
+    "LIVE_ONBOARDING_EMAIL_EVIDENCE_ENABLED": "false",
+    "LIVE_ONBOARDING_EMAIL_EVIDENCE_ENVIRONMENT": "production"
   },
   "send_email": [
     {

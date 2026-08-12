@@ -1050,6 +1050,11 @@ const expectations = {
     "LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN",
     "LIVE_ONBOARDING_EMAIL_EVIDENCE_HASH_KEY",
     "LIVE_ONBOARDING_EMAIL_EVIDENCE_RECIPIENT_BASE",
+    "LIVE_ONBOARDING_EMAIL_EVIDENCE_ENVIRONMENT",
+    "LIVE_ONBOARDING_EMAIL_EVIDENCE_HOST",
+    "LIVE_ONBOARDING_EMAIL_EVIDENCE_ACTIVATION_HOST",
+    "onboardingEvidenceEnabled",
+    `url.hostname !== evidenceHost(env)`,
     "ONBOARDING_EVIDENCE_RETENTION_MS",
     "captureOnboardingEvidence",
     "onboardingRecipientKey",
@@ -1065,6 +1070,7 @@ const expectations = {
   "infra/notification-gateway/src/index.test.mjs": [
     "stores and returns only a recent allowlisted activation after provider acceptance",
     "keeps onboarding evidence bearer protected and out of the request URL",
+    "keeps onboarding evidence unavailable on production and non-allowlisted hosts",
     "does not retain ordinary reset mail or provider failures",
     "fails closed for WhatsApp without calling Meta",
     "sends the exact Meta utility template once for an idempotency key",
@@ -1074,8 +1080,8 @@ const expectations = {
   ],
   "infra/notification-gateway/wrangler.jsonc": [
     `"WHATSAPP_ENABLED": "false"`,
-    `"LIVE_ONBOARDING_EMAIL_EVIDENCE_ENABLED": "true"`,
-    `"LIVE_ONBOARDING_EMAIL_EVIDENCE_ACTIVATION_DOMAIN": "o-okul.com"`,
+    `"LIVE_ONBOARDING_EMAIL_EVIDENCE_ENABLED": "false"`,
+    `"LIVE_ONBOARDING_EMAIL_EVIDENCE_ENVIRONMENT": "production"`,
   ],
   "docs/phase-6-production-readiness.md": [
     "pnpm prod:readiness:check",
@@ -2337,7 +2343,7 @@ const expectations = {
   "scripts/check-live-onboarding-evidence-env.mjs": [
     "NEXT_E2E_LIVE_ONBOARDING=1 olmalı.",
     "LIVE_ONBOARDING_EVIDENCE_PATH",
-    "LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT gerçek https URL olmalı.",
+    "LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT tam olarak https://notify.staging.o-okul.com/messages/latest olmalı.",
     "LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN en az 16 karakter olmalı.",
     "LIVE_ONBOARDING_ALLOW_EXAMPLE_EVIDENCE",
     "LIVE_ONBOARDING_EVIDENCE_PATH lokal temp path olmamalı.",

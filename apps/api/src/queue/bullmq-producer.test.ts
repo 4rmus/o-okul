@@ -146,6 +146,31 @@ describe("BullMQ tenant queue producer", () => {
     expect(queues[0]?.job?.retries).toEqual(["failed"]);
   });
 
+  it("failed kalmış exam-evaluation job'unu aynı job id retry'ında yeniden dener", async () => {
+    const queues: FakeQueue[] = [];
+    const producer = createBullTenantQueueProducer({
+      connection: { host: "127.0.0.1", port: 6379 },
+      createQueue: (name, options) => {
+        const queue = new FakeQueue(name, options, new FakeQueueJob("failed"));
+        queues.push(queue);
+        return queue;
+      },
+    });
+
+    await producer.enqueue({
+      queueName: "exam-evaluation",
+      tenantId: "tenant-a",
+      userId: "user-a",
+      entityId: "quarantine-a",
+      contentHash: "raw-sha-a-answer-key-a",
+      participantId: "participant-a",
+      rawImportId: "raw-import-a",
+      answerKeyId: "answer-key-a",
+    });
+
+    expect(queues[0]?.job?.retries).toEqual(["failed"]);
+  });
+
   it("sms-batch job'unu BullMQ add çağrısına şablon ve alıcılarla verir", async () => {
     const queues: FakeQueue[] = [];
     const producer = createBullTenantQueueProducer({

@@ -156,6 +156,17 @@ export class RawImportQuarantineService {
       throw new NotFoundException("IMPORT_QUARANTINE_REPROCESS_INPUT_NOT_FOUND");
     }
 
+    const job = await this.producer.enqueue({
+      queueName: "exam-evaluation",
+      tenantId,
+      userId: context.userId,
+      entityId: record.id,
+      contentHash: `${record.rawImportSha256}-${record.answerKeyId}-${record.resolvedParticipantId}`,
+      participantId: record.resolvedParticipantId,
+      rawImportId: record.rawImportId,
+      answerKeyId: record.answerKeyId,
+    });
+
     const resolvedRecord = await this.store.markResolved({
       tenantId,
       examId: record.examId,
@@ -165,29 +176,6 @@ export class RawImportQuarantineService {
     });
     if (!resolvedRecord) {
       throw new NotFoundException("IMPORT_QUARANTINE_NOT_FOUND");
-    }
-
-    let job: Awaited<ReturnType<RawImportQueueProducer["enqueue"]>>;
-    try {
-      job = await this.producer.enqueue({
-        queueName: "exam-evaluation",
-        tenantId,
-        userId: context.userId,
-        entityId: record.id,
-        contentHash: `${record.rawImportSha256}-${record.answerKeyId}`,
-        participantId: record.resolvedParticipantId,
-        rawImportId: record.rawImportId,
-        answerKeyId: record.answerKeyId,
-      });
-    } catch (error) {
-      await this.store.reopen({
-        tenantId,
-        examId: record.examId,
-        rawImportId: record.rawImportId,
-        quarantineId: record.id,
-        resolvedStudentId: required(input.resolvedStudentId, "IMPORT_QUARANTINE_STUDENT_REQUIRED"),
-      });
-      throw error;
     }
 
     return {

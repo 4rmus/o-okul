@@ -64,10 +64,27 @@ export class InMemoryStudentContactStore implements StudentContactStore {
   }
 
   async softDelete(tenantId: string, id: string): Promise<boolean> {
-    const record = await this.findById(tenantId, id);
+    const index = this.records.findIndex((record) => record.tenantId === tenantId && record.id === id && !record.deletedAt);
+    const record = this.records[index];
     if (!record) return false;
-    record.deletedAt = new Date().toISOString();
-    record.updatedAt = record.deletedAt;
+    const deletedAt = new Date().toISOString();
+    this.records[index] = {
+      ...record,
+      firstName: "Anonim",
+      lastName: "İletişim",
+      relationType: "OTHER",
+      phoneEncrypted: undefined,
+      phoneHash: undefined,
+      emailEncrypted: undefined,
+      emailHash: undefined,
+      canReceiveSms: false,
+      canReceiveAnnouncements: false,
+      canReceiveFinance: false,
+      consentSource: undefined,
+      consentRecordedAt: undefined,
+      deletedAt,
+      updatedAt: deletedAt,
+    };
     return true;
   }
 
@@ -156,7 +173,11 @@ export class PostgresStudentContactStore implements StudentContactStore {
   async softDelete(tenantId: string, id: string): Promise<boolean> {
     return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
       const result = await client.query(
-        `UPDATE "StudentContact" SET "deletedAt"=now(), "updatedAt"=now()
+        `UPDATE "StudentContact" SET
+           "firstName"='Anonim', "lastName"='İletişim', "relationType"='OTHER',
+           "phoneEncrypted"=NULL, "phoneHash"=NULL, "emailEncrypted"=NULL, "emailHash"=NULL,
+           "canReceiveSms"=false, "canReceiveAnnouncements"=false, "canReceiveFinance"=false,
+           "consentSource"=NULL, "consentRecordedAt"=NULL, "deletedAt"=now(), "updatedAt"=now()
          WHERE "tenantId"=$1 AND "id"=$2 AND "deletedAt" IS NULL RETURNING "id"`,
         [tenantId, id],
       );

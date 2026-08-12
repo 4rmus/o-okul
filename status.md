@@ -116,9 +116,11 @@ ortam ve tarih içeren kalıcı evidence ile yükseltilir.
   Import commit idempotency anahtarı ister. Tek overview read model legacy 14 istek fanout'unu kaldırır.
 - **PII ve campus scope:** Öğrenci/guardian/öğretmen telefon ve e-postası API'de maskelenir. Öğretmen,
   kampüs çalışanı, finans ve tenant sınırları sunucuda uygulanır; client maskesi yetki kontrolü değildir.
+  Kampüs kapsamlı personel tenant-geneli kimlik davetlerini listeleyemez, oluşturamaz veya yeniden gönderemez.
 - **StudentContact/guardian geçişi:** İletişim kişisi manuel ve import akışında şifreli saklanır, tüm
   izinleri default-off'tur ve hesap/session/davet üretmez. Okuma privacy/self sınırındadır; create
-  zorunlu replay-safe idempotency anahtarı taşır ve öğrenci KVKK purge'u iletişim PII'sini anonimleştirir.
+  zorunlu replay-safe idempotency anahtarı taşır; kişi silme ve öğrenci KVKK purge'u iletişim PII'sini,
+  hash'leri ve izin kanıtını anonimleştirir.
   Guardian read-only rollout yeni yazma ve davet yollarını kapatır; fiziksel silme yapılmaz.
 - **Kurulum/IAM:** Server readiness, altı deep-link kurulum route'u, çalışan rol/kampüs tenant-wide
   sınırı ve eşzamanlı PENDING çalışan daveti unique sözleşmesi hazırdır. Migration en yeni daveti

@@ -13,7 +13,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === "/webhooks/whatsapp") return whatsappWebhook(request, env, url);
-    if (url.pathname === "/messages/latest") return latestOnboardingEvidence(request, env);
+    if (url.pathname === "/messages/latest") return latestOnboardingEvidence(request, env, url);
     if (request.method === "GET" && url.pathname === "/health") {
       return json({ status: "ok", releaseSha: env.RELEASE_SHA ?? "unknown" }, 200);
     }
@@ -251,8 +251,8 @@ async function sendEmail(message, env) {
   return { status: "sent", providerMessageId: sent.messageId };
 }
 
-async function latestOnboardingEvidence(request, env) {
-  if (env.LIVE_ONBOARDING_EMAIL_EVIDENCE_ENABLED !== "true") {
+async function latestOnboardingEvidence(request, env, url) {
+  if (!onboardingEvidenceEnabled(env) || url.hostname !== evidenceHost(env)) {
     return json({ errorCode: "NOT_FOUND" }, 404);
   }
   if (request.method !== "POST") {
@@ -295,7 +295,7 @@ async function latestOnboardingEvidence(request, env) {
 }
 
 async function captureOnboardingEvidence(message, env) {
-  if (env.LIVE_ONBOARDING_EMAIL_EVIDENCE_ENABLED !== "true"
+  if (!onboardingEvidenceEnabled(env)
     || message.channel !== "EMAIL"
     || message.subject !== ONBOARDING_ACTIVATION_SUBJECT
     || !isAllowedEvidenceRecipient(message.to, env)) return;
@@ -318,8 +318,8 @@ function extractActivationUrl(body, env) {
   try {
     const url = new URL(candidate);
     const token = new URLSearchParams(url.hash.slice(1)).get("token");
-    const activationDomain = env.LIVE_ONBOARDING_EMAIL_EVIDENCE_ACTIVATION_DOMAIN?.trim().toLowerCase();
-    if (!activationDomain || (url.hostname !== activationDomain && !url.hostname.endsWith(`.${activationDomain}`))
+    const activationHost = env.LIVE_ONBOARDING_EMAIL_EVIDENCE_ACTIVATION_HOST?.trim().toLowerCase();
+    if (!activationHost || url.hostname !== activationHost
       || url.protocol !== "https:" || url.pathname !== "/parola-sifirla" || url.searchParams.has("token") || !token) {
       return undefined;
     }
@@ -327,6 +327,25 @@ function extractActivationUrl(body, env) {
   } catch {
     return undefined;
   }
+}
+
+function onboardingEvidenceEnabled(env) {
+  const host = evidenceHost(env);
+  const activationHost = evidenceActivationHost(env);
+  return env.LIVE_ONBOARDING_EMAIL_EVIDENCE_ENABLED === "true"
+    && env.LIVE_ONBOARDING_EMAIL_EVIDENCE_ENVIRONMENT === "staging"
+    && typeof host === "string"
+    && host.endsWith(".staging.o-okul.com")
+    && typeof activationHost === "string"
+    && activationHost.endsWith(".staging.o-okul.com");
+}
+
+function evidenceHost(env) {
+  return env.LIVE_ONBOARDING_EMAIL_EVIDENCE_HOST?.trim().toLowerCase();
+}
+
+function evidenceActivationHost(env) {
+  return env.LIVE_ONBOARDING_EMAIL_EVIDENCE_ACTIVATION_HOST?.trim().toLowerCase();
 }
 
 function isAllowedEvidenceRecipient(value, env) {

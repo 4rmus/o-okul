@@ -199,7 +199,7 @@ try {
     );
   }
   if (!evaluation.answerKeyId) {
-    throw new Error(`ISEM_OPTICAL_EVALUATION_ANSWER_KEY_MISSING: ${JSON.stringify(evaluation)}`);
+    throw new Error(`ISEM_OPTICAL_EVALUATION_ANSWER_KEY_MISSING: responseHash ${diagnosticHash(evaluation)}`);
   }
   if (evaluation.answerKeyId !== answerKey.id) {
     throw new Error(
@@ -398,7 +398,7 @@ async function seedPipelineInput(rows) {
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");
-    throw new Error(`ISEM_OPTICAL_DB_SEED_FAILED: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`ISEM_OPTICAL_DB_SEED_FAILED: errorHash ${diagnosticHash(errorMessage(error))}`);
   } finally {
     client.release();
     await pool.end();
@@ -445,7 +445,7 @@ async function seedExamScopedInput(rows) {
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");
-    throw new Error(`ISEM_OPTICAL_EXAM_SCOPED_DB_SEED_FAILED: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`ISEM_OPTICAL_EXAM_SCOPED_DB_SEED_FAILED: errorHash ${diagnosticHash(errorMessage(error))}`);
   } finally {
     client.release();
     await pool.end();
@@ -492,7 +492,7 @@ async function seedQuarantineProbeInput(row, probeExamId) {
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");
-    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_SEED_FAILED: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_SEED_FAILED: errorHash ${diagnosticHash(errorMessage(error))}`);
   } finally {
     client.release();
     await pool.end();
@@ -582,7 +582,7 @@ async function createExamWithAnswerKey(baseUrl, token) {
     payload.answerKeySummary?.questionCount !== 90 ||
     payload.answerKeySummary?.status !== "DRAFT"
   ) {
-    throw new Error(`ISEM_OPTICAL_EXAM_CREATE_ANSWER_KEY_MISMATCH: ${JSON.stringify(payload)}`);
+    throw new Error(`ISEM_OPTICAL_EXAM_CREATE_ANSWER_KEY_MISMATCH: responseHash ${diagnosticHash(payload)}`);
   }
   return readCreatedAnswerKeyEvidence();
 }
@@ -602,7 +602,7 @@ async function createQuarantineProbeExam(baseUrl, token) {
     payload.title !== "iSEM LGS 1 Quarantine Probe Exam" ||
     payload.answerKeySummary?.questionCount !== 90
   ) {
-    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_EXAM_MISMATCH: ${JSON.stringify(payload)}`);
+    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_EXAM_MISMATCH: responseHash ${diagnosticHash(payload)}`);
   }
   return payload.id;
 }
@@ -639,7 +639,7 @@ async function readCreatedAnswerKeyEvidence() {
       answerKey.bookletVariantCount !== 1 ||
       answerKey.hasBookletB !== true
     ) {
-      throw new Error(`ISEM_OPTICAL_CREATED_ANSWER_KEY_DB_MISMATCH: ${JSON.stringify(answerKey)}`);
+      throw new Error(`ISEM_OPTICAL_CREATED_ANSWER_KEY_DB_MISMATCH: responseHash ${diagnosticHash(answerKey)}`);
     }
     await client.query("COMMIT");
     return answerKey;
@@ -666,7 +666,7 @@ async function uploadRawImportForExam(baseUrl, token, targetExamId, content, fil
   });
   const payload = response.data ?? response;
   if (!payload.rawImport?.id || !payload.rawImport?.s3Key || !payload.parseJob?.jobId) {
-    throw new Error(`ISEM_OPTICAL_RAW_IMPORT_UPLOAD_MISMATCH: ${JSON.stringify(payload)}`);
+    throw new Error(`ISEM_OPTICAL_RAW_IMPORT_UPLOAD_MISMATCH: responseHash ${diagnosticHash(payload)}`);
   }
   return payload;
 }
@@ -686,7 +686,7 @@ async function enqueueReportGenerationForExam(baseUrl, token, targetExamId) {
   }, { "idempotency-key": `isem-optical-report-${targetExamId}-${runId}` });
   const payload = response.data ?? response;
   if (payload.queueName !== "report-generation" || !payload.jobId) {
-    throw new Error(`ISEM_OPTICAL_REPORT_QUEUE_MISMATCH: ${JSON.stringify(payload)}`);
+    throw new Error(`ISEM_OPTICAL_REPORT_QUEUE_MISMATCH: responseHash ${diagnosticHash(payload)}`);
   }
   return payload;
 }
@@ -758,7 +758,9 @@ async function verifyQuarantinePath(baseUrl, token, sourceRow) {
     summary.quarantineReasons[0]?.reason !== "STUDENT_NOT_FOUND" ||
     summary.quarantineReasons[0]?.count !== 1
   ) {
-    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_SUMMARY_MISMATCH: ${JSON.stringify(summary)}`);
+    throw new Error(
+      `ISEM_OPTICAL_QUARANTINE_PROBE_SUMMARY_MISMATCH: matched ${summary.matchedCount}, quarantined ${summary.quarantinedCount}, reasons ${summary.quarantineReasons.length}, responseHash ${diagnosticHash(summary)}`,
+    );
   }
 
   const openQuarantines = await getJson(
@@ -777,7 +779,7 @@ async function verifyQuarantinePath(baseUrl, token, sourceRow) {
     quarantine.reason !== "STUDENT_NOT_FOUND" ||
     quarantine.status !== "OPEN"
   ) {
-    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_OPEN_MISMATCH: ${JSON.stringify(openRecords)}`);
+    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_OPEN_MISMATCH: records ${Array.isArray(openRecords) ? openRecords.length : 0}, responseHash ${diagnosticHash(openRecords)}`);
   }
 
   const idempotencyKey = `isem-optical-quarantine-probe-${runId}`;
@@ -796,7 +798,7 @@ async function verifyQuarantinePath(baseUrl, token, sourceRow) {
     resolved.evaluationJob?.rawImportId !== rawImportId ||
     replayed.evaluationJob?.jobId !== resolved.evaluationJob.jobId
   ) {
-    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_RESOLVE_MISMATCH: ${JSON.stringify(resolved)}`);
+    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_RESOLVE_MISMATCH: responseHash ${diagnosticHash(resolved)}`);
   }
 
   await waitForExamResultCountForExam(probeExamId, 1, 30_000);
@@ -812,7 +814,7 @@ async function verifyQuarantinePath(baseUrl, token, sourceRow) {
     resolvedRecords[0]?.status !== "RESOLVED" ||
     resolvedRecords[0]?.resolvedStudentId !== resolveBody.resolvedStudentId
   ) {
-    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_FINAL_MISMATCH: ${JSON.stringify(resolvedRecords)}`);
+    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_FINAL_MISMATCH: records ${Array.isArray(resolvedRecords) ? resolvedRecords.length : 0}, responseHash ${diagnosticHash(resolvedRecords)}`);
   }
   const reportJob = await enqueueReportGenerationForExam(baseUrl, token, probeExamId);
   const snapshot = await waitForSnapshotForExam(probeExamId, 1, 30_000);
@@ -839,7 +841,7 @@ async function verifyQuarantinePath(baseUrl, token, sourceRow) {
     studentReport.snapshotId !== snapshot.id ||
     studentReport.studentId !== resolveBody.resolvedStudentId
   ) {
-    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_STUDENT_REPORT_MISMATCH: ${JSON.stringify(studentReport)}`);
+    throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_STUDENT_REPORT_MISMATCH: responseHash ${diagnosticHash(studentReport)}`);
   }
   if (excel.rowCount !== 1 || !hasZipSignature(excel.fileBase64)) {
     throw new Error(`ISEM_OPTICAL_QUARANTINE_PROBE_EXCEL_MISMATCH: ${JSON.stringify({ rowCount: excel.rowCount })}`);
@@ -1013,7 +1015,7 @@ async function login(baseUrl) {
     body: JSON.stringify({ tenantSlug, loginName: smokeEmail, password: smokePassword }),
   });
   if (!response.ok) {
-    throw new Error(`ISEM_OPTICAL_LOGIN_FAILED: ${response.status} ${await response.text()}`);
+    throw new Error(`ISEM_OPTICAL_LOGIN_FAILED: status ${response.status}, responseHash ${diagnosticHash(await response.text())}`);
   }
   const body = await response.json();
   const setCookies = response.headers.getSetCookie();
@@ -1041,7 +1043,7 @@ async function logoutSmokeSession(baseUrl, session) {
     body: JSON.stringify({}),
   });
   if (response.status !== 204) {
-    throw new Error(`ISEM_OPTICAL_LOGOUT_FAILED: ${response.status} ${await response.text()}`);
+    throw new Error(`ISEM_OPTICAL_LOGOUT_FAILED: status ${response.status}, responseHash ${diagnosticHash(await response.text())}`);
   }
 }
 
@@ -1082,7 +1084,7 @@ async function getJson(baseUrl, path, token) {
     headers: { authorization: `Bearer ${token}` },
   });
   if (!response.ok) {
-    throw new Error(`ISEM_OPTICAL_HTTP_FAILED: ${path} ${response.status} ${await response.text()}`);
+    throw new Error(`ISEM_OPTICAL_HTTP_FAILED: status ${response.status}, pathHash ${sha256(path)}, responseHash ${diagnosticHash(await response.text())}`);
   }
   return response.json();
 }
@@ -1098,7 +1100,7 @@ async function postJson(baseUrl, path, token, body, extraHeaders = {}) {
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new Error(`ISEM_OPTICAL_HTTP_FAILED: ${path} ${response.status} ${await response.text()}`);
+    throw new Error(`ISEM_OPTICAL_HTTP_FAILED: status ${response.status}, pathHash ${sha256(path)}, responseHash ${diagnosticHash(await response.text())}`);
   }
   return response.json();
 }
@@ -1263,6 +1265,14 @@ function assertPrivateRuntimeInputPath(filePath) {
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function diagnosticHash(value) {
+  return sha256(typeof value === "string" ? value : JSON.stringify(value));
+}
+
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function formatSampleScores(samples) {

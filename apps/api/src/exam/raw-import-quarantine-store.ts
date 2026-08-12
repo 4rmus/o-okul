@@ -37,13 +37,6 @@ export interface RawImportQuarantineStore {
     quarantineId: string;
     resolvedStudentId: string;
   }): Promise<ImportQuarantineRecord | undefined>;
-  reopen(input: {
-    tenantId: string;
-    examId: string;
-    rawImportId: string;
-    quarantineId: string;
-    resolvedStudentId: string;
-  }): Promise<ImportQuarantineRecord | undefined>;
 }
 
 export class PostgresRawImportQuarantineStore implements RawImportQuarantineStore {
@@ -89,13 +82,15 @@ export class PostgresRawImportQuarantineStore implements RawImportQuarantineStor
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<ImportQuarantineRow>(
         `WITH candidate AS (
-           SELECT *
-           FROM "ImportQuarantine"
+           UPDATE "ImportQuarantine"
+           SET "resolvedStudentId" = $5,
+               "updatedAt" = CASE WHEN "resolvedStudentId" IS NULL THEN now() ELSE "updatedAt" END
            WHERE "tenantId" = $1
              AND "examId" = $2
              AND "rawImportId" = $3
              AND "id" = $4
              AND "status" = 'OPEN'
+             AND ("resolvedStudentId" IS NULL OR "resolvedStudentId" = $5)
              AND "deletedAt" IS NULL
              AND EXISTS (
                SELECT 1
@@ -112,6 +107,30 @@ export class PostgresRawImportQuarantineStore implements RawImportQuarantineStor
                  AND se."status" = 'ACTIVE'
                  AND se."endsAt" IS NULL
              )
+             AND EXISTS (
+               SELECT 1
+               FROM "ExamParticipant" ep
+               WHERE ep."tenantId" = $1
+                 AND ep."examId" = $2
+                 AND ep."studentId" = $5
+                 AND ep."deletedAt" IS NULL
+             )
+             AND EXISTS (
+               SELECT 1
+               FROM "RawImport" ri
+               WHERE ri."tenantId" = $1
+                 AND ri."examId" = $2
+                 AND ri."id" = $3
+                 AND ri."deletedAt" IS NULL
+             )
+             AND EXISTS (
+               SELECT 1
+               FROM "AnswerKey" ak
+               WHERE ak."tenantId" = $1
+                 AND ak."examId" = $2
+                 AND ak."deletedAt" IS NULL
+             )
+           RETURNING *
          )
          SELECT
            candidate.*,
@@ -155,39 +174,12 @@ export class PostgresRawImportQuarantineStore implements RawImportQuarantineStor
       const result = await client.query<ImportQuarantineRow>(
         `UPDATE "ImportQuarantine"
          SET "status" = 'RESOLVED',
-             "resolvedStudentId" = $5,
              "updatedAt" = now()
          WHERE "tenantId" = $1
            AND "examId" = $2
            AND "rawImportId" = $3
            AND "id" = $4
            AND "status" = 'OPEN'
-           AND "deletedAt" IS NULL
-         RETURNING *`,
-        [input.tenantId, input.examId, input.rawImportId, input.quarantineId, input.resolvedStudentId],
-      );
-      return result.rows[0] ? toRecord(result.rows[0]) : undefined;
-    });
-  }
-
-  async reopen(input: {
-    tenantId: string;
-    examId: string;
-    rawImportId: string;
-    quarantineId: string;
-    resolvedStudentId: string;
-  }): Promise<ImportQuarantineRecord | undefined> {
-    return withTenantQuery(this.pool, async (client) => {
-      const result = await client.query<ImportQuarantineRow>(
-        `UPDATE "ImportQuarantine"
-         SET "status" = 'OPEN',
-             "resolvedStudentId" = NULL,
-             "updatedAt" = now()
-         WHERE "tenantId" = $1
-           AND "examId" = $2
-           AND "rawImportId" = $3
-           AND "id" = $4
-           AND "status" = 'RESOLVED'
            AND "resolvedStudentId" = $5
            AND "deletedAt" IS NULL
          RETURNING *`,
@@ -196,6 +188,7 @@ export class PostgresRawImportQuarantineStore implements RawImportQuarantineStor
       return result.rows[0] ? toRecord(result.rows[0]) : undefined;
     });
   }
+
 }
 
 export function createRawImportQuarantineStore(): RawImportQuarantineStore {

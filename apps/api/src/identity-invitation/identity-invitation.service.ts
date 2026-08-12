@@ -67,12 +67,12 @@ export class IdentityInvitationService {
   ) {}
 
   async list(context: RequestContext): Promise<IdentityInvitationRecord[]> {
-    const tenantId = this.requireTenantId(context);
+    const tenantId = this.requireTenantWideContext(context);
     return this.invitations.list(tenantId);
   }
 
   async create(context: RequestContext, body: CreateIdentityInvitationBody): Promise<IdentityInvitationIssueResult> {
-    const tenantId = this.requireTenantId(context);
+    const tenantId = this.requireTenantWideContext(context);
     const subjectType = parseSubjectType(body.subjectType);
     if (subjectType === "GUARDIAN") await this.assertGuardianInvitationWritable(context);
     const subjectId = body.subjectId?.trim();
@@ -115,12 +115,7 @@ export class IdentityInvitationService {
     employeeId: string,
     input: { email: string; role: EmployeeInvitationRole },
   ): Promise<IdentityInvitationIssueResult> {
-    const tenantId = this.requireTenantId(context);
-    try {
-      requireTenantWideStaffContext(context, "EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
-    } catch (error) {
-      throw new ForbiddenException(error instanceof Error ? error.message : "EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
-    }
+    const tenantId = this.requireTenantWideContext(context);
     this.assertElevatedEmployeeInvitationAllowed(context, input.role);
     const employee = await this.users.findEmployee(tenantId, employeeId);
     if (!employee) throw new NotFoundException("EMPLOYEE_NOT_FOUND");
@@ -181,7 +176,7 @@ export class IdentityInvitationService {
   }
 
   async resend(context: RequestContext, id: string): Promise<IdentityInvitationIssueResult> {
-    const tenantId = this.requireTenantId(context);
+    const tenantId = this.requireTenantWideContext(context);
     const existing = await this.invitations.findById(tenantId, id);
     if (!existing) throw new NotFoundException("IDENTITY_INVITATION_NOT_FOUND");
     if (existing.status !== "PENDING") throw new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
@@ -301,6 +296,15 @@ export class IdentityInvitationService {
       throw new BadRequestException("TENANT_CONTEXT_REQUIRED");
     }
     return context.tenantId;
+  }
+
+  private requireTenantWideContext(context: RequestContext): string {
+    this.requireTenantId(context);
+    try {
+      return requireTenantWideStaffContext(context, "EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
+    } catch (error) {
+      throw new ForbiddenException(error instanceof Error ? error.message : "EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
+    }
   }
 
   private async assertGuardianInvitationWritable(context: RequestContext): Promise<void> {

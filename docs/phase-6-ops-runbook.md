@@ -1271,7 +1271,7 @@ Live onboarding smoke preflight:
 ```sh
 NEXT_E2E_LIVE_ONBOARDING=1 \
 LIVE_ONBOARDING_EVIDENCE_PATH=/root/o-okul-private/uat/live-onboarding-input.json \
-LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT=https://notify.o-okul.com/messages/latest \
+LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT=https://notify.staging.o-okul.com/messages/latest \
 LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN=__SECRET__ \
 pnpm live:onboarding:evidence-check
 ```
@@ -1281,7 +1281,7 @@ Smoke komutu aynı preflight'ı tarayıcı açmadan önce otomatik çalıştır�
 ```sh
 NEXT_E2E_LIVE_ONBOARDING=1 \
 LIVE_ONBOARDING_EVIDENCE_PATH=/root/o-okul-private/uat/live-onboarding-input.json \
-LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT=https://notify.o-okul.com/messages/latest \
+LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT=https://notify.staging.o-okul.com/messages/latest \
 LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN=__SECRET__ \
 pnpm live:onboarding:smoke
 ```
@@ -1297,6 +1297,8 @@ Smoke, ilk yöneticiye gerçekten ulaşan bağlantıyı bearer korumalı HTTPS i
 PII'yi URL/loglara taşımayan JSON POST gövdesindeki `recipient`, `purpose=PASSWORD_RESET` ve
 `createdAfter` ile poll eder; endpoint yalnız `{ "activationUrl": "..." }`
 döndürür ve URL tokenı hiçbir kalıcı evidence çıktısına yazılmaz.
+Preflight endpoint'i tam olarak `https://notify.staging.o-okul.com/messages/latest` olmalıdır; production
+hostu, farklı path, query veya fragment kabul edilmez.
 `pnpm live:onboarding:evidence-contract` bu negatifleri lokal CI'da tarayıcı açmadan korur.
 
 Live UI-worker/report smoke preflight:
@@ -1457,18 +1459,22 @@ kayıtlarını kullanır. Kök DMARC politikası bağımsız doğrulanıp korunu
 corepack pnpm notification-gateway:test
 cd infra/notification-gateway
 printf '%s' "$NOTIFICATION_HTTP_BEARER_TOKEN" | npx wrangler secret put NOTIFICATION_BEARER_TOKEN
-printf '%s' "$LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN" | npx wrangler secret put LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN
-printf '%s' "$LIVE_ONBOARDING_EMAIL_EVIDENCE_HASH_KEY" | npx wrangler secret put LIVE_ONBOARDING_EMAIL_EVIDENCE_HASH_KEY
-printf '%s' "$LIVE_ONBOARDING_EMAIL_EVIDENCE_RECIPIENT_BASE" | npx wrangler secret put LIVE_ONBOARDING_EMAIL_EVIDENCE_RECIPIENT_BASE
 release_sha="$(git -C ../.. rev-parse HEAD)"
 npx wrangler deploy --var "RELEASE_SHA:$release_sha"
 test "$(curl -fsS https://notify.o-okul.com/health | jq -r .releaseSha)" = "$release_sha"
 ```
 
-Canlı onboarding kanıt yüzeyi yalnız repo dışında Wrangler secret olarak tanımlanan exact base alıcıyı
-ve onun `+run-id` alias'larını, Email Sending kabulünden sonra alıcının HMAC kimliği altında 15 dakika tutar. `POST /messages/latest` ayrı bearer
+Production Worker'da `LIVE_ONBOARDING_EMAIL_EVIDENCE_ENABLED=false` ve
+`LIVE_ONBOARDING_EMAIL_EVIDENCE_ENVIRONMENT=production` varsayılandır; `/messages/latest` production
+hostunda `404` döner ve aktivasyon tokenı tutulmaz. Kanıt yüzeyi yalnız ayrı staging Worker'da
+`LIVE_ONBOARDING_EMAIL_EVIDENCE_ENABLED=true`, `LIVE_ONBOARDING_EMAIL_EVIDENCE_ENVIRONMENT=staging`,
+`LIVE_ONBOARDING_EMAIL_EVIDENCE_HOST=notify.staging.o-okul.com` ve exact
+`LIVE_ONBOARDING_EMAIL_EVIDENCE_ACTIVATION_HOST=<tenant>.staging.o-okul.com` ile açılabilir.
+Staging Worker yalnız repo dışında Wrangler secret olarak tanımlanan exact base alıcıyı ve onun
+`+run-id` alias'larını, Email Sending kabulünden sonra alıcının HMAC kimliği altında 15 dakika tutar. `POST /messages/latest` ayrı bearer
 ister; ham alıcı kalıcı anahtara, URL'ye veya yanıta yazılmaz ve normal parola sıfırlama/diğer alıcılar
-kaydedilmez. Üç onboarding secret'ı repo veya runtime `.env` içine değil Wrangler secret store'a yazılır.
+kaydedilmez. Üç onboarding secret'ı yalnız staging Worker'ın Wrangler secret store'una yazılır; production
+Worker'a kurulmaz.
 
 Wrangler'ın döndürdüğü Worker version ID ile `/health` exact SHA sonucu release kaydına birlikte
 eklenir. Aynı `idempotencyKey` için SQLite-backed Durable Object önce kalıcı teslim kaydı açar;

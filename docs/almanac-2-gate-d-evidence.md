@@ -42,11 +42,13 @@ pilot, production veya go-live kanıtı değildir.
   14 istek önce çalışmaz.
 - Öğrenci ve guardian iletişimi API trust boundary'sinde maskelenir; privacy yetkisi olmayan öğretmen
   veya kampüs çalışanı browser cevabında ham telefon/e-posta almaz. Yetkisiz guardian araması ham
-  telefon alanını kullanmaz; kampüs kapsamlı çalışan overview'u güvenli alanlarla 200 döner.
+  telefon alanını kullanmaz; kampüs kapsamlı çalışan overview'u güvenli alanlarla 200 döner. Overview
+  içindeki öğretmen kaydı da ham telefon, kullanıcı kimliği veya TCKN şifre/hash alanı taşımaz.
 - `StudentContact` manuel ve import akışında şifreli/hash'li saklanır, izinleri default-off'tur ve hesap,
   membership, invitation veya session üretmez. Liste privacy yetkisi ya da öğrenci-self kapsamı ister;
-  create zorunlu ve replay-safe `Idempotency-Key` kullanır. Öğrenci KVKK purge'u iletişim PII'sini
-  anonimleştirip ayrı PII-safe audit sayımı üretir. V2 import legacy guardian kolonlarını reddeder.
+  create zorunlu ve replay-safe `Idempotency-Key` kullanır. Doğrudan kişi silme ve öğrenci KVKK purge'u
+  iletişim PII'sini, hash'leri ve izin kanıtını anonimleştirir; purge ayrıca PII-safe audit sayımı üretir.
+  V2 import legacy guardian kolonlarını reddeder.
 - `product.guardian-read-only` yeni guardian yazma/davet/provisioning yollarını kapatır. Mevcut
   `GuardianStudent` izin varsayılanları false'a taşınmıştır.
 - Kurulum readiness sunucu kayıtlarından hesaplanır. Genel, dönem, sınıflar, dersler, kişiler ve hazırlık
