@@ -724,7 +724,7 @@ pnpm backup:restore:smoke
 
 ## Observability
 
-- Prometheus `/metrics` endpoint'ini scrape eder.
+- Prometheus `/api/v1/metrics` endpoint'ini scrape eder.
 - API down, 5xx oranı, yavaş istek, readiness, queue failed-count ve queue metrics scrape
   alert'leri aktiftir.
 - `/metrics` içinde `o_okul_queue_jobs{queue,status}` ve

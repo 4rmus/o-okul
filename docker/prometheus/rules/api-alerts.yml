@@ -8,7 +8,7 @@ groups:
           severity: critical
         annotations:
           summary: API metrics endpoint unreachable
-          description: Prometheus cannot scrape the API /metrics endpoint.
+          description: Prometheus cannot scrape the API /api/v1/metrics endpoint.
 
       - alert: OOkulApiHighErrorRate
         expr: sum(rate(o_okul_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(o_okul_http_requests_total[5m])), 1) > 0.05
@@ -53,4 +53,4 @@ groups:
           severity: warning
         annotations:
           summary: Queue metrics scrape is failing
-          description: The API /metrics endpoint is reachable but cannot collect BullMQ queue counts.
+          description: The API /api/v1/metrics endpoint is reachable but cannot collect BullMQ queue counts.
