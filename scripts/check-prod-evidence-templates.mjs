@@ -3852,6 +3852,7 @@ function runObservabilityUatGeneratorLocalArtifactNegativeChecks() {
     OBSERVABILITY_UAT_PROMETHEUS_URL: "https://prometheus.o-okul.com",
     OBSERVABILITY_UAT_GRAFANA_URL: "https://grafana.o-okul.com",
     OBSERVABILITY_UAT_LOKI_URL: "https://loki.o-okul.com",
+    OBSERVABILITY_UAT_PRIVATE_LOOPBACK: "",
     OBSERVABILITY_UAT_DASHBOARD_PANELS_VERIFIED: "API up,Request rate,Average duration,Readiness failures,Docker logs",
     OBSERVABILITY_UAT_ALERTS_VERIFIED:
       "OOkulApiDown,OOkulReadinessFailing,OOkulApiHighErrorRate,OOkulApiSlowRequests",
@@ -3878,6 +3879,40 @@ function runObservabilityUatGeneratorLocalArtifactNegativeChecks() {
         OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET: pathToFileURL(resolve("artifacts/local/alert-webhook.json")).href,
       },
       expectedFailure: "OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET temp veya artifacts/local altında olmamalı.",
+    },
+    {
+      label: "Observability UAT loopback opt-in negative",
+      env: {
+        OBSERVABILITY_UAT_OUTPUT: "artifacts/staging/reports/observability-uat-loopback-opt-in-negative.json",
+        OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET: pathToFileURL(resolve("artifacts/staging/first-gates/alert-webhook.json")).href,
+        OBSERVABILITY_UAT_PROMETHEUS_URL: "http://127.0.0.1:9090",
+      },
+      expectedFailure: "staging loopback için OBSERVABILITY_UAT_PRIVATE_LOOPBACK=1 gerekli.",
+    },
+    {
+      label: "Observability UAT production loopback negative",
+      env: {
+        STAGING_ENVIRONMENT: "production",
+        OBSERVABILITY_UAT_OUTPUT: "artifacts/staging/reports/observability-uat-production-loopback-negative.json",
+        OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET: pathToFileURL(resolve("artifacts/staging/first-gates/alert-webhook.json")).href,
+        OBSERVABILITY_UAT_PRIVATE_LOOPBACK: "1",
+        OBSERVABILITY_UAT_PROMETHEUS_URL: "http://127.0.0.1:9090",
+        OBSERVABILITY_UAT_GRAFANA_URL: "http://127.0.0.1:3002",
+        OBSERVABILITY_UAT_LOKI_URL: "http://127.0.0.1:3101",
+      },
+      expectedFailure: "OBSERVABILITY_UAT_PRIVATE_LOOPBACK yalnız staging ortamında kullanılabilir.",
+    },
+    {
+      label: "Observability UAT wrong loopback port negative",
+      env: {
+        OBSERVABILITY_UAT_OUTPUT: "artifacts/staging/reports/observability-uat-loopback-port-negative.json",
+        OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET: pathToFileURL(resolve("artifacts/staging/first-gates/alert-webhook.json")).href,
+        OBSERVABILITY_UAT_PRIVATE_LOOPBACK: "1",
+        OBSERVABILITY_UAT_PROMETHEUS_URL: "http://127.0.0.1:9091",
+        OBSERVABILITY_UAT_GRAFANA_URL: "http://127.0.0.1:3002",
+        OBSERVABILITY_UAT_LOKI_URL: "http://127.0.0.1:3101",
+      },
+      expectedFailure: "OBSERVABILITY_UAT_PROMETHEUS_URL staging loopback modunda http://127.0.0.1:9090 olmalı.",
     },
   ];
 
