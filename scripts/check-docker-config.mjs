@@ -237,7 +237,7 @@ const expectations = {
     "alertmanager:9093",
     "/etc/prometheus/rules/*.yml",
     "job_name: o-okul-api",
-    "metrics_path: /metrics",
+    "metrics_path: /api/v1/metrics",
     "api:3100",
   ],
   "docker/alertmanager/alertmanager.yml": [

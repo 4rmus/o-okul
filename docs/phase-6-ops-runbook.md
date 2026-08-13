@@ -178,9 +178,10 @@ Artifact üretim komutu:
 ```sh
 STAGING_ENVIRONMENT=staging \
 OBSERVABILITY_UAT_OUTPUT=artifacts/staging/reports/observability-uat.json \
-OBSERVABILITY_UAT_PROMETHEUS_URL=https://... \
-OBSERVABILITY_UAT_GRAFANA_URL=https://... \
-OBSERVABILITY_UAT_LOKI_URL=https://... \
+OBSERVABILITY_UAT_PRIVATE_LOOPBACK=1 \
+OBSERVABILITY_UAT_PROMETHEUS_URL=http://127.0.0.1:9090 \
+OBSERVABILITY_UAT_GRAFANA_URL=http://127.0.0.1:3002 \
+OBSERVABILITY_UAT_LOKI_URL=http://127.0.0.1:3101 \
 OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET=file:///.../alert-webhook.json \
 OBSERVABILITY_UAT_DASHBOARD_PANELS_VERIFIED="API up,Request rate,Average duration,Readiness failures,Docker logs" \
 OBSERVABILITY_UAT_ALERTS_VERIFIED="OOkulApiDown,OOkulReadinessFailing,OOkulApiHighErrorRate,OOkulApiSlowRequests" \
@@ -206,13 +207,16 @@ Minimum kanıt içeriği:
   Loki `requestId` sorgusu ve alert delivery artifact'ini göstermelidir.
 - `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder değerler yalnız template
   kontrolünde `OBSERVABILITY_UAT_ALLOW_EXAMPLE_EVIDENCE=1` ile geçebilir.
-- `pnpm observability:uat:generate` gerçek HTTPS Prometheus/Grafana/Loki endpoint'leri,
+- `pnpm observability:uat:generate` gerçek HTTPS Prometheus/Grafana/Loki endpoint'leri veya yalnız
+  staging'de `OBSERVABILITY_UAT_PRIVATE_LOOPBACK=1` ile sabit loopback portlarını,
   alert webhook smoke artifact'i, exact-SHA firing/resolved chain artifact'i, exact dashboard/alert listeleri ve dört gerçek evidence reference
   olmadan dosya yazmadan kırılır. Komut Prometheus `/-/ready`, Grafana `/api/health`, Loki `/ready`
   ve alert webhook smoke JSON'unu doğrular, ardından çıktıyı `pnpm observability:uat:check` ile
   tekrar geçirir. `OBSERVABILITY_UAT_TARGET`, `OBSERVABILITY_UAT_OUTPUT` ve
   `OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET` ile `OBSERVABILITY_UAT_ALERT_CHAIN_TARGET` lokal temp path, `artifacts/local/**`,
   symlink file/parent veya userinfo/query/fragment taşıyan URL üzerinden kullanılamaz.
+- Loopback modu observability servislerini public ağa açmaz; production'da, farklı host/portta veya
+  açık bayrak olmadan HTTP endpoint kullanıldığında generator dosya yazmadan kırılır.
 
 ## External Monitoring Evidence
 

@@ -28,6 +28,7 @@ const environment = readOption("--environment") ?? process.env.STAGING_ENVIRONME
 const prometheusUrl = process.env.OBSERVABILITY_UAT_PROMETHEUS_URL?.trim();
 const grafanaUrl = process.env.OBSERVABILITY_UAT_GRAFANA_URL?.trim();
 const lokiUrl = process.env.OBSERVABILITY_UAT_LOKI_URL?.trim();
+const privateLoopbackMode = process.env.OBSERVABILITY_UAT_PRIVATE_LOOPBACK?.trim() ?? "";
 const alertWebhookTarget = process.env.OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET?.trim();
 const dashboardPanelsVerified = parseCommaList(process.env.OBSERVABILITY_UAT_DASHBOARD_PANELS_VERIFIED);
 const alertsVerified = parseCommaList(process.env.OBSERVABILITY_UAT_ALERTS_VERIFIED);
@@ -38,9 +39,15 @@ const alertChainTarget = process.env.OBSERVABILITY_UAT_ALERT_CHAIN_TARGET?.trim(
 const failures = [];
 requireValue(outputPath, "OBSERVABILITY_UAT_OUTPUT veya --output", failures);
 requireOneOf(environment, "environment", ["staging", "production"], failures);
-requireHttpsUrl(prometheusUrl, "OBSERVABILITY_UAT_PROMETHEUS_URL", failures);
-requireHttpsUrl(grafanaUrl, "OBSERVABILITY_UAT_GRAFANA_URL", failures);
-requireHttpsUrl(lokiUrl, "OBSERVABILITY_UAT_LOKI_URL", failures);
+if (privateLoopbackMode !== "" && privateLoopbackMode !== "1") {
+  failures.push("OBSERVABILITY_UAT_PRIVATE_LOOPBACK boş veya 1 olmalı.");
+}
+if (privateLoopbackMode === "1" && environment !== "staging") {
+  failures.push("OBSERVABILITY_UAT_PRIVATE_LOOPBACK yalnız staging ortamında kullanılabilir.");
+}
+requireObservabilityUrl(prometheusUrl, "OBSERVABILITY_UAT_PROMETHEUS_URL", "9090", failures);
+requireObservabilityUrl(grafanaUrl, "OBSERVABILITY_UAT_GRAFANA_URL", "3002", failures);
+requireObservabilityUrl(lokiUrl, "OBSERVABILITY_UAT_LOKI_URL", "3101", failures);
 requireEvidenceTarget(alertWebhookTarget, "OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET", failures);
 requireExactSet(dashboardPanelsVerified, requiredDashboardPanels, "OBSERVABILITY_UAT_DASHBOARD_PANELS_VERIFIED", failures);
 requireExactSet(alertsVerified, requiredAlerts, "OBSERVABILITY_UAT_ALERTS_VERIFIED", failures);
@@ -312,7 +319,7 @@ function requireExactSet(values, expectedValues, label, output) {
   }
 }
 
-function requireHttpsUrl(value, label, output) {
+function requireObservabilityUrl(value, label, loopbackPort, output) {
   if (typeof value !== "string" || value.trim() === "") {
     output.push(`${label} boş bırakılamaz.`);
     return;
@@ -322,15 +329,23 @@ function requireHttpsUrl(value, label, output) {
   try {
     url = new URL(value);
   } catch {
-    output.push(`${label} geçerli https URL olmalı.`);
+    output.push(`${label} geçerli URL olmalı.`);
+    return;
+  }
+
+  if (url.username || url.password || url.search || url.hash) {
+    output.push(`${label} userinfo, query veya fragment taşımamalı.`);
+  }
+
+  if (privateLoopbackMode === "1") {
+    if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || url.port !== loopbackPort || url.pathname !== "/") {
+      output.push(`${label} staging loopback modunda http://127.0.0.1:${loopbackPort} olmalı.`);
+    }
     return;
   }
 
   if (url.protocol !== "https:") {
-    output.push(`${label} https:// olmalı.`);
-  }
-  if (url.username || url.password || url.search || url.hash) {
-    output.push(`${label} userinfo, query veya fragment taşımamalı.`);
+    output.push(`${label} https:// olmalı; staging loopback için OBSERVABILITY_UAT_PRIVATE_LOOPBACK=1 gerekli.`);
   }
   if (hasPlaceholderToken(url.hostname)) {
     output.push(`${label} gerçek host olmalı; placeholder/example/test/localhost içeremez.`);

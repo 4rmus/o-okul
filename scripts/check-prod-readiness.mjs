@@ -608,7 +608,7 @@ const expectations = {
     "AuditLog partition check",
     "off-host",
     "WAL_ARCHIVE_SMOKE_EVIDENCE_FILE",
-    "Prometheus `/metrics`",
+    "Prometheus `/api/v1/metrics`",
     "Kritik WCAG 2 A/AA axe ihlali 0",
     "auth sonrası kurum dashboard 320/375/414/768/1024/1440 görsel matrisi",
     "1280x800 fold sözleşmesi",

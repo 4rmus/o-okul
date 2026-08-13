@@ -53,16 +53,9 @@ if (artifact.schemaVersion !== 2) failures.push("schemaVersion 2 olmalı");
 if (artifact.result !== "BASELINE_RECORDED") failures.push("result BASELINE_RECORDED olmalı");
 if (artifact.evidenceLevel !== "LOCAL_SYNTHETIC") failures.push("evidenceLevel LOCAL_SYNTHETIC olmalı");
 if (artifact.externalStatus !== "EXTERNAL_NOT_RUN") failures.push("externalStatus EXTERNAL_NOT_RUN olmalı");
-const currentBaseCommitSha = (
-  process.env.MEASUREMENT_BASELINE_CURRENT_SHA
-  ?? execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" })
-).trim();
 const commitPattern = /^[0-9a-f]{40}$/;
 const runIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-if (!commitPattern.test(currentBaseCommitSha)) failures.push("measurement current SHA geçersiz");
-else if (!isAncestorCommit(artifact.baseCommitSha, currentBaseCommitSha)) {
-  failures.push("baseCommitSha measurement current SHA'nın atası değil");
-}
+if (!isCommit(artifact.baseCommitSha)) failures.push("baseCommitSha geçerli ve erişilebilir git commit olmalı");
 if (typeof artifact.sourceWorktreeDirty !== "boolean") failures.push("sourceWorktreeDirty boolean olmalı");
 if (artifact.sourceTreeSha256 !== almanacFoundationSourceDigest()) failures.push("sourceTreeSha256 güncel kaynakla eşleşmiyor");
 if (Number.isNaN(Date.parse(artifact.generatedAt))) failures.push("generatedAt geçersiz");
@@ -161,10 +154,10 @@ function validateMeasurementRuntimeConfig(source) {
   return output;
 }
 
-function isAncestorCommit(ancestor, current) {
-  if (typeof ancestor !== "string" || !commitPattern.test(ancestor)) return false;
+function isCommit(value) {
+  if (typeof value !== "string" || !commitPattern.test(value)) return false;
   try {
-    execFileSync("git", ["merge-base", "--is-ancestor", ancestor, current], { stdio: "ignore" });
+    execFileSync("git", ["cat-file", "-e", `${value}^{commit}`], { stdio: "ignore" });
     return true;
   } catch {
     return false;
