@@ -69,7 +69,26 @@ export class TeacherService {
   ) {}
 
   async listTeachers(context: RequestContext): Promise<TeacherRecord[]> {
-    return filterTenantResources(context, await this.teacherStore.list()).filter((record) => !record.deletedAt);
+    const teachers = filterTenantResources(context, await this.teacherStore.list()).filter((record) => !record.deletedAt);
+    if (context.roles.includes("OPERATIONS_STAFF") && !context.campusScope) {
+      throw new ForbiddenException("TEACHER_CAMPUS_SCOPE_MISSING");
+    }
+    if (context.campusScope?.scopeMode !== "CAMPUSES") return teachers;
+
+    const allowedClassIds = new Set((await this.school.listClasses(context)).map((record) => record.id));
+    const students = filterTenantResources(context, await this.studentStore.list())
+      .filter((record) => Boolean(record.classId && allowedClassIds.has(record.classId)));
+    const allowedStudentIds = new Set(students.map((record) => record.id));
+    const teacherIds = new Set(students.map((record) => record.responsibleTeacherId).filter((id): id is string => Boolean(id)));
+    for (const assignment of filterTenantResources(context, await this.teacherAssignmentStore.list())) {
+      if (
+        (assignment.classId && allowedClassIds.has(assignment.classId))
+        || (assignment.studentId && allowedStudentIds.has(assignment.studentId))
+      ) {
+        teacherIds.add(assignment.teacherId);
+      }
+    }
+    return teachers.filter((record) => teacherIds.has(record.id));
   }
 
   async findTeacher(context: RequestContext, id: string): Promise<TeacherRecord> {
@@ -79,6 +98,15 @@ export class TeacherService {
     }
 
     assertTenantAccess(context, record);
+    if (context.roles.includes("OPERATIONS_STAFF") && !context.campusScope) {
+      throw new ForbiddenException("TEACHER_CAMPUS_SCOPE_MISSING");
+    }
+    if (
+      context.campusScope?.scopeMode === "CAMPUSES"
+      && !(await this.listTeachers(context)).some((candidate) => candidate.id === record.id)
+    ) {
+      throw new ForbiddenException("TEACHER_CAMPUS_SCOPE_FORBIDDEN");
+    }
     return record;
   }
 

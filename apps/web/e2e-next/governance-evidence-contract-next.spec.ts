@@ -32,6 +32,7 @@ const hostileAuditValues = [
 ] as const;
 
 interface GovernanceMockOptions {
+  activePersona?: "STAFF" | "TEACHER" | null;
   auditSafeListFailure?: boolean;
   roles?: string[];
   systemEndpoints?: "partial-metrics-failure";
@@ -248,7 +249,10 @@ test.describe("Governance evidence sözleşmesi", () => {
   });
 
   test("denetim route erişimi audit capability ile hizalıdır", async ({ page }) => {
-    await openWithGovernanceMocks(page, "/kurum/denetim", { height: 844, width: 390 }, { roles: ["TENANT_ADMIN"] });
+    await openWithGovernanceMocks(page, "/kurum/denetim", { height: 844, width: 390 }, {
+      activePersona: "STAFF",
+      roles: ["TENANT_ADMIN"],
+    });
     await expect(page).toHaveURL(/\/kurum\/denetim$/);
     await expect(page.getByRole("region", { exact: true, name: "Denetim operasyon özeti" })).toBeVisible();
     await page.getByRole("button", { name: "Komut paleti" }).click();
@@ -283,6 +287,23 @@ test.describe("Governance evidence sözleşmesi", () => {
     await expect(assistantCommandDialog.getByRole("link", { name: /KVKK/ })).toHaveCount(0);
     await assistantCommandDialog.getByRole("button", { name: "Kapat" }).click();
     expect(assistantAuditLogRequests).toHaveLength(0);
+  });
+
+  test("personasız legacy tenant admin denetim route'una fail-closed erişir", async ({ page }) => {
+    const auditLogRequests: string[] = [];
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (url.pathname === "/api/v1/audit-logs" || url.pathname === "/api/v1/audit-logs/safe-list") {
+        auditLogRequests.push(request.url());
+      }
+    });
+    await openWithGovernanceMocks(page, "/kurum/denetim", { height: 844, width: 390 }, {
+      activePersona: null,
+      roles: ["TENANT_ADMIN"],
+    });
+    await expect(page).toHaveURL(/\/kurum$/);
+    await expect(page.getByRole("table", { name: "Denetim kayıtları" })).toHaveCount(0);
+    expect(auditLogRequests).toHaveLength(0);
   });
 
   test("KVKK route erişimi privacy capability ile hizalıdır", async ({ page }) => {
@@ -630,7 +651,7 @@ async function installSystemEndpointMocks(page: Page, mode: "partial-metrics-fai
 }
 
 function mockGovernanceApiResponse(pathName: string, options: GovernanceMockOptions = {}): { data: unknown; meta?: ListMeta; status?: number } {
-  if (pathName === "/auth/refresh") return { data: createAuthResponse(options.roles) };
+  if (pathName === "/auth/refresh") return { data: createAuthResponse(options.roles, options.activePersona) };
   if (pathName === "/me/tenant") return { data: createTenantResponse() };
   if (pathName === "/me/institution-dashboard") return { data: createInstitutionDashboardResponse() };
   if (pathName === "/me/notification-devices") return { data: [] };
@@ -665,11 +686,12 @@ function createKvkkInventory() {
   ];
 }
 
-function createAuthResponse(roles = ["TENANT_ADMIN"]) {
+function createAuthResponse(roles = ["TENANT_ADMIN"], activePersona: "STAFF" | "TEACHER" | null = "STAFF") {
   return {
     accessToken: "governance-access-token",
     session: {
       id: "session-governance",
+      ...(activePersona ? { activePersona } : {}),
       membershipVersion: 1,
       roles,
       status: "ACTIVE",

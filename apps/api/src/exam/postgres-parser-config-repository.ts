@@ -12,6 +12,32 @@ import type {
 export class PostgresParserConfigRepository implements ParserConfigRepository {
   constructor(private readonly pool: TenantQueryable = new pg.Pool({ connectionString: process.env.DATABASE_URL })) {}
 
+  async findApproved(tenantId: string, examId: string, version: string): Promise<SavedParserConfig | undefined> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<ParserConfigRow>(
+        `SELECT
+           "tenantId",
+           "examId",
+           "templateId",
+           "version",
+           "encoding",
+           "delimiter",
+           "skipHeaderLines",
+           "fieldMapping",
+           "status"
+         FROM "ParserConfig"
+         WHERE "tenantId" = $1
+           AND "examId" = $2
+           AND "version" = $3
+           AND "status" = 'APPROVED'
+           AND "deletedAt" IS NULL
+         LIMIT 1`,
+        [tenantId, examId, version],
+      );
+      return result.rows[0] ? toSavedParserConfig(result.rows[0]) : undefined;
+    });
+  }
+
   async saveApproved(input: ApprovedParserConfigInput): Promise<SavedParserConfig> {
     return withTenantQuery(this.pool, async (client) => {
       const inserted = await client.query<ParserConfigRow>(

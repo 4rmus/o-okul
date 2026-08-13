@@ -303,7 +303,7 @@ Minimum kanıt içeriği:
   kabul edilmez.
 - `ADMIN_MFA_SECRET_ENCRYPTION_KEY`, `ADMIN_MFA_RECOVERY_HASH_KEY` ve
   `ADMIN_MFA_CHALLENGE_SECRET` gerçek ve birbirinden/JWT secret'tan farklı secret değerlerdir.
-- SYSTEM_ADMIN ve TENANT_ADMIN hesapları TOTP enrollment kapsamındadır; recovery code sayısı
+- Yalnız SYSTEM_ADMIN hesapları TOTP enrollment kapsamındadır; kurum hesapları ve alt kullanıcıları MFA kapsamı dışındadır. Recovery code sayısı
   enrollment başına en az 8'dir.
 - Password-only admin login auth session üretmez; TOTP login başarılı, invalid TOTP reddedilmiş,
   TOTP reuse reddedilmiş, recovery code login başarılı ve recovery code reuse reddedilmiş olmalıdır.
@@ -313,7 +313,7 @@ Minimum kanıt içeriği:
   ve boş `gaps` listesi template invalid/non-empty gaps negatifleriyle korunur.
 - Gerçek kanıtta `evidenceReferences` placeholder, `.test`, localhost veya redacted değer içeremez;
   bu gevşetme yalnız template kontrolünde `ADMIN_MFA_ALLOW_EXAMPLE_EVIDENCE=1` ile açılır.
-- `pnpm admin-mfa:generate` aktif tenant DB'sinde SYSTEM_ADMIN/TENANT_ADMIN enrollment sayımlarını
+- `pnpm admin-mfa:generate` aktif tenant DB'sinde SYSTEM_ADMIN enrollment sayımlarını
   okur, bütün zorunlu adminler TOTP enrollment'lı değilse veya gerçek login/recovery/session log
   referansları verilmezse dosya yazmadan kırılır. Komut auth MFA testlerini ve API typecheck'i
   çalıştırır, ardından çıktıyı `pnpm admin-mfa:check` ile tekrar doğrular.
@@ -441,7 +441,7 @@ pnpm account-management:backfill
   opsiyoneldir; varsa deploy kullanıcısına ait, `0600`, normal ve symlink olmayan dosya olmak
   zorundadır ve yalnız backfill container'ına salt-okunur bağlanır. Dosya yoksa mevcut otomatik
   owner seçimi çalışır; belirsiz tenant yine fail-closed `BLOCKED` kalır.
-- Mevcut `TENANT_OWNER` korunur. Owner yoksa MFA/parola değişimiyle doğrulanmış ilk aktif admin
+- Mevcut `TENANT_OWNER` korunur. Owner yoksa parola sahipliğiyle doğrulanmış ilk aktif admin
   otomatik seçilir; bu kanıt da yoksa karar dosyası olmadan işlem `BLOCKED` olur.
 - APPLY serializable transaction ve advisory lock kullanır. User normalize alanları, tek canonical
   membership/persona gölgesi, Teacher→Employee bağı ve SYSTEM_ADMIN için PlatformAccount/Session
@@ -624,9 +624,10 @@ KVKK_INVENTORY_TARGET=file:///path/to/kvkk-inventory.json pnpm privacy:inventory
 Minimum kanıt içeriği:
 
 - `environment=staging|production`, `result=PASS` ve geleceğe taşmayan `checkedAt`.
-- `dataSubjectCounts` öğrenci, öğretmen, veli ve kullanıcı sayımlarını içerir; toplam gerçek veri
+- `dataSubjectCounts` öğrenci, öğrenci iletişim kişisi, öğretmen, veli ve kullanıcı sayımlarını içerir; toplam gerçek veri
   doğrulaması için sıfırdan büyük olmalıdır.
-- `purgeCoverage` öğrenci için `firstName`, `lastName`, `phone`, `email`; öğretmen için
+- `purgeCoverage` öğrenci için `firstName`, `lastName`, `phone`, `email`; `StudentContact` için
+  ad, ilişki, şifreli/hash iletişim, izin ve consent alanları; öğretmen için
   `firstName`, `lastName`; veli için `firstName`, `lastName`, `phone`; kullanıcı için `email`, `name`
   alan setlerini taşır.
 - `whatsappConsent` bu release'te exact `recordCount=0`, `eventRecordCount=0`, sekiz alanlı
@@ -637,9 +638,9 @@ Minimum kanıt içeriği:
   `disposalMethod=NO_RECORDS_WHILE_DISABLED`, `purgeException=false`, boş olmayan `explanation`)
   taşır. `WHATSAPP_ENABLED=false` iken projection/event tablolarına runtime kayıt yazılamaz ve bu kanıt WhatsApp
   capability veya teslimat kanıtı sayılmaz.
-- Audit action seti dört canonical KVKK purge action'ını içerir ve `gaps` boş olmalıdır.
-- Rapor top-level 10 alanı, dört count alanı, dört coverage subject'i, subject field setleri,
-  dört audit action seti, `/audit-logs` audit diff redaction bloğu ve boş `gaps` listesi
+- Audit action seti beş canonical KVKK purge action'ını içerir ve `gaps` boş olmalıdır.
+- Rapor top-level 10 alanı, beş count alanı, beş coverage subject'i, subject field setleri,
+  beş audit action seti, `/audit-logs` audit diff redaction bloğu ve boş `gaps` listesi
   template invalid/non-empty gaps negatifleriyle korunur.
 
 ## Security Audit Evidence
@@ -1269,8 +1270,8 @@ Live onboarding smoke preflight:
 
 ```sh
 NEXT_E2E_LIVE_ONBOARDING=1 \
-LIVE_ONBOARDING_EVIDENCE_PATH=artifacts/staging/live-onboarding-input.json \
-LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT=https://mail-evidence.staging.example/messages/latest \
+LIVE_ONBOARDING_EVIDENCE_PATH=/root/o-okul-private/uat/live-onboarding-input.json \
+LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT=https://notify.staging.o-okul.com/messages/latest \
 LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN=__SECRET__ \
 pnpm live:onboarding:evidence-check
 ```
@@ -1279,28 +1280,48 @@ Smoke komutu aynı preflight'ı tarayıcı açmadan önce otomatik çalıştır�
 
 ```sh
 NEXT_E2E_LIVE_ONBOARDING=1 \
-LIVE_ONBOARDING_EVIDENCE_PATH=artifacts/staging/live-onboarding-input.json \
-LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT=https://mail-evidence.staging.example/messages/latest \
+LIVE_ONBOARDING_EVIDENCE_PATH=/root/o-okul-private/uat/live-onboarding-input.json \
+LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT=https://notify.staging.o-okul.com/messages/latest \
 LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN=__SECRET__ \
 pnpm live:onboarding:smoke
 ```
 
-`LIVE_ONBOARDING_EVIDENCE_PATH` JSON'u system admin ve ilk tenant admin credential'larını, tenant
-adı/slug/plan/koltuk limitini ve opsiyonel kurulum alanlarını exact shape ile taşır. Gerçek staging
+`LIVE_ONBOARDING_EVIDENCE_PATH` JSON'u system admin credential'ları ile Base32 `totpSecret` değerini,
+ilk tenant admin credential'larını, tenant adı/slug/plan/koltuk limitini ve opsiyonel kurulum alanlarını
+exact shape ile taşır. Sistem admin MFA kaydı ve bilinen seed parolasının private güçlü parolaya dönüşümü
+smoke öncesinde bir kez tamamlanmış olmalıdır; smoke enrollment ekranı görürse fail-closed durur.
+Parola ve TOTP anahtarı yalnız repo dışındaki `0600` private girdide tutulur, artifact veya loga yazılmaz. Gerçek staging
 kanıtında `generatedAt` 24 saatten eski olamaz; `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder değerler kabul edilmez;
 dosya lokal temp path (`/tmp`, `/var/tmp`), symlink dosya veya symlink parent zinciri altında olamaz.
 Smoke, ilk yöneticiye gerçekten ulaşan bağlantıyı bearer korumalı HTTPS inbox evidence endpoint'inden
-`recipient`, `purpose=PASSWORD_RESET` ve `createdAfter` ile poll eder; endpoint yalnız `{ "activationUrl": "..." }`
+PII'yi URL/loglara taşımayan JSON POST gövdesindeki `recipient`, `purpose=PASSWORD_RESET` ve
+`createdAfter` ile poll eder; endpoint yalnız `{ "activationUrl": "..." }`
 döndürür ve URL tokenı hiçbir kalıcı evidence çıktısına yazılmaz.
+Preflight endpoint'i tam olarak `https://notify.staging.o-okul.com/messages/latest` olmalıdır; production
+hostu, farklı path, query veya fragment kabul edilmez.
 `pnpm live:onboarding:evidence-contract` bu negatifleri lokal CI'da tarayıcı açmadan korur.
 
 Live UI-worker/report smoke preflight:
 
-Önce iSEM optik smoke aynı run için private UI-worker input'unu üretebilir:
+Önce onaylı iki iSEM fixture dosyasını staging secret manager içinde base64 secret olarak tutun:
+`ISEM_OPTICAL_PIPELINE_TXT_BASE64` ve `ISEM_OPTICAL_PIPELINE_ANSWER_KEY_BASE64`. Bunları repoya,
+artifact'e veya loga yazmayın. Wrapper secret'ları temiz checkout'ta `0700` geçici dizine `0600`
+dosya olarak materialize eder, manifestteki fixture kimliği/SHA-256 ile doğrular, child smoke'a yalnız
+mutlak `ISEM_OPTICAL_PIPELINE_INPUT_ROOT` verir ve başarı/hata halinde geçici dizini temizler.
+Staging secret'larını ilk kez bağlarken altyapı başlatmadan preflight çalıştırın:
 
 ```sh
+ISEM_OPTICAL_PIPELINE_PRIVATE_INPUTS_PREFLIGHT_ONLY=1 \
+node scripts/run-isem-optical-pipeline-private.mjs
+```
+
+Ardından iSEM optik smoke aynı run için private UI-worker input'unu üretebilir:
+
+```sh
+: "${ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD:?staging secret gerekli}"
 STAGING_ENVIRONMENT=staging \
 ISEM_OPTICAL_PIPELINE_SMOKE_EMAIL_DOMAIN=staging.o-okul.com \
+ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD="$ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD" \
 ISEM_OPTICAL_PIPELINE_SMOKE_EVIDENCE_FILE=artifacts/staging/isem-optical-pipeline.json \
 ISEM_OPTICAL_PIPELINE_UI_WORKER_EVIDENCE_FILE=artifacts/staging/private/live-ui-worker-input.json \
 pnpm isem-optical-pipeline:smoke
@@ -1320,12 +1341,11 @@ kanıtı olarak kullanılmaz ve checker tarafından reddedilir.
 
 ```sh
 STAGING_ENVIRONMENT=staging \
-NEXT_E2E_BASE_URL=https://212.108.107.190 \
+NEXT_E2E_BASE_URL=https://o-okul.com \
 NEXT_E2E_SKIP_WEB_SERVER=1 \
-NEXT_E2E_IGNORE_HTTPS_ERRORS=1 \
 NEXT_E2E_LIVE_UI_WORKER=1 \
-LIVE_UI_WORKER_EVIDENCE_PATH=artifacts/staging/private/live-ui-worker-input.json \
-LIVE_UI_WORKER_RESULT_EVIDENCE_FILE=artifacts/staging/live-ui-worker-result.json \
+LIVE_UI_WORKER_EVIDENCE_PATH="$PWD/artifacts/staging/private/live-ui-worker-input.json" \
+LIVE_UI_WORKER_RESULT_EVIDENCE_FILE="$PWD/artifacts/staging/live-ui-worker-result.json" \
 pnpm live:ui-worker:evidence-check
 ```
 
@@ -1333,12 +1353,11 @@ Smoke komutu aynı preflight'ı tarayıcı açmadan önce otomatik çalıştır�
 
 ```sh
 STAGING_ENVIRONMENT=staging \
-NEXT_E2E_BASE_URL=https://212.108.107.190 \
+NEXT_E2E_BASE_URL=https://o-okul.com \
 NEXT_E2E_SKIP_WEB_SERVER=1 \
-NEXT_E2E_IGNORE_HTTPS_ERRORS=1 \
 NEXT_E2E_LIVE_UI_WORKER=1 \
-LIVE_UI_WORKER_EVIDENCE_PATH=artifacts/staging/private/live-ui-worker-input.json \
-LIVE_UI_WORKER_RESULT_EVIDENCE_FILE=artifacts/staging/live-ui-worker-result.json \
+LIVE_UI_WORKER_EVIDENCE_PATH="$PWD/artifacts/staging/private/live-ui-worker-input.json" \
+LIVE_UI_WORKER_RESULT_EVIDENCE_FILE="$PWD/artifacts/staging/live-ui-worker-result.json" \
 pnpm live:ui-worker:smoke
 ```
 
@@ -1360,14 +1379,17 @@ değil, sadece private runtime input'tur; path zincirinde `private` segmenti olm
 0600 olmalı, smoke üretirse 0600 modunda yazılır ve release bundle/production summary/public evidence template içine gömülmez.
 `NEXT_E2E_BASE_URL` gerçek `https://` staging/prod web origin'i olmalı, lokal/test/placeholder host
 olamaz; `NEXT_E2E_SKIP_WEB_SERVER=1` local Next dev server'in yanlışlıkla kanıt yerine geçmesini
-engeller. IP/self-signed staging hedeflerinde `NEXT_E2E_IGNORE_HTTPS_ERRORS=1` yalnız Playwright TLS
-toleransı için kullanılır.
-Gerçek staging kanıtında `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder
+engeller. Giriş tenant alt alan adına yönlendirdiği için canlı smoke, girişten sonraki kurum ve portal
+route'larını o anki tenant origin'i üzerinde açar; apex `NEXT_E2E_BASE_URL` üzerine geri dönmez.
+Gerçek staging kanıtında `ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD` secret store'dan açıkça verilir;
+en az 16 karakter, büyük/küçük harf, rakam ve sembol içermeyen veya yaygın varsayılan parola olan
+değerler reddedilir. `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder
 değerler kabul edilmez; `generatedAt` 24 saatten eski olamaz; dosya lokal temp path (`/tmp`, `/var/tmp`), symlink dosya veya symlink parent
 zinciri altında olamaz.
 `LIVE_UI_WORKER_RESULT_EVIDENCE_FILE` ise secret içermez; Excel/PDF indirme ve portal görüntüleme
 sonucunu kalıcı staging artifact'i olarak yazar. `pnpm live:ui-worker:result-check` bu JSON'un
-`reportStatus=READY`, `xlsx/pdf` indirme, öğrenci/veli portal görünümü, hashli sınav/öğrenci
+`reportStatus=READY`, `xlsx/pdf` indirme, öğrenci/veli portal görünümü, bütün smoke oturumlarının
+çıkışla iptal edildiğini gösteren `sessionLogoutVerified=true`, hashli sınav/öğrenci
 referansları, boş `gaps`, 24 saatten eski olmayan `generatedAt`, `artifacts/local/**` dışında kalıcı target ve temp/symlink olmayan target sözleşmesini doğrular; tam sınav döngüsü
 kanıtında referans verilebilir. `prod:evidence:check --summary-file` aynı artifact'i
 `reports.liveUiWorkerResult` alanına taşır; production summary ve go-live linked summary bu rapor
@@ -1441,6 +1463,18 @@ release_sha="$(git -C ../.. rev-parse HEAD)"
 npx wrangler deploy --var "RELEASE_SHA:$release_sha"
 test "$(curl -fsS https://notify.o-okul.com/health | jq -r .releaseSha)" = "$release_sha"
 ```
+
+Production Worker'da `LIVE_ONBOARDING_EMAIL_EVIDENCE_ENABLED=false` ve
+`LIVE_ONBOARDING_EMAIL_EVIDENCE_ENVIRONMENT=production` varsayılandır; `/messages/latest` production
+hostunda `404` döner ve aktivasyon tokenı tutulmaz. Kanıt yüzeyi yalnız ayrı staging Worker'da
+`LIVE_ONBOARDING_EMAIL_EVIDENCE_ENABLED=true`, `LIVE_ONBOARDING_EMAIL_EVIDENCE_ENVIRONMENT=staging`,
+`LIVE_ONBOARDING_EMAIL_EVIDENCE_HOST=notify.staging.o-okul.com` ve exact
+`LIVE_ONBOARDING_EMAIL_EVIDENCE_ACTIVATION_HOST=<tenant>.staging.o-okul.com` ile açılabilir.
+Staging Worker yalnız repo dışında Wrangler secret olarak tanımlanan exact base alıcıyı ve onun
+`+run-id` alias'larını, Email Sending kabulünden sonra alıcının HMAC kimliği altında 15 dakika tutar. `POST /messages/latest` ayrı bearer
+ister; ham alıcı kalıcı anahtara, URL'ye veya yanıta yazılmaz ve normal parola sıfırlama/diğer alıcılar
+kaydedilmez. Üç onboarding secret'ı yalnız staging Worker'ın Wrangler secret store'una yazılır; production
+Worker'a kurulmaz.
 
 Wrangler'ın döndürdüğü Worker version ID ile `/health` exact SHA sonucu release kaydına birlikte
 eklenir. Aynı `idempotencyKey` için SQLite-backed Durable Object önce kalıcı teslim kaydı açar;

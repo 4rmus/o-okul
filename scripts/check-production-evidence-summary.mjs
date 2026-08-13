@@ -3,6 +3,7 @@ import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { getTenantScopedTables } from "../packages/db/scripts/tenant-models.mjs";
 import { validateSmokeEvidencePayload } from "./smoke-evidence.mjs";
+import { ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST } from "./isem-optical-pipeline-contract.mjs";
 import { validateUiUxRedesignBindings } from "./ui-ux-redesign-evidence-bindings.mjs";
 
 const target = process.env.PRODUCTION_EVIDENCE_SUMMARY_TARGET ?? process.argv[2];
@@ -128,6 +129,7 @@ const requiredReports = {
   isemOpticalPipeline: [
     "generatedAt",
     "environment",
+    "fixtureId",
     "checkedAt",
     "parserConfigVersion",
     "answerKeyVersion",
@@ -135,6 +137,7 @@ const requiredReports = {
     "bookletVariantCount",
     "counts",
     "pipeline",
+    "quarantineProbe",
     "sampleScores",
     "hashes",
     "thresholds",
@@ -155,6 +158,7 @@ const requiredReports = {
     "excelDownloaded",
     "studentPortalViewed",
     "guardianPortalViewed",
+    "sessionLogoutVerified",
     "commandsPassed",
     "gaps",
   ],
@@ -278,6 +282,7 @@ const expectedKvkkAuditDiffActions = [
   "support_ticket.created",
   "support_ticket_comment.created",
   "kvkk.student_pii_purged",
+  "kvkk.student_contact_pii_purged",
   "kvkk.teacher_pii_purged",
   "kvkk.guardian_pii_purged",
   "kvkk.user_pii_purged",
@@ -738,6 +743,7 @@ function requireReports(summary, failures) {
     "apiUrl",
   );
   requireIsemLiveExamCycleConsistency(reports, failures);
+  requireIsemQuarantineProbe(reports.isemOpticalPipeline, failures);
   requireMatchingString(
     reports.uat,
     failures,
@@ -766,6 +772,41 @@ function requireReports(summary, failures) {
     "sourceBackup",
   );
   requireExactStringSet(reports.uat?.commandsPassed, failures, "reports.uat.commandsPassed", expectedUatCommandsPassed);
+}
+
+function requireIsemQuarantineProbe(report, failures) {
+  const probe = requireObject(
+    report,
+    failures,
+    "reports.isemOpticalPipeline.quarantineProbe",
+    "quarantineProbe",
+  );
+  if (!probe) return;
+  requireExpectedObjectKeys(probe, [
+    "openCount",
+    "resolvedCount",
+    "examResultCount",
+    "reportResultCount",
+    "idempotentReplayVerified",
+    "studentReportVerified",
+    "excelExportVerified",
+    "pdfExportVerified",
+    "reportReady",
+    "reportJobQueued",
+  ], failures, "reports.isemOpticalPipeline.quarantineProbe");
+  for (const key of ["openCount", "resolvedCount", "examResultCount", "reportResultCount"]) {
+    requireObjectEqual(probe, failures, `reports.isemOpticalPipeline.quarantineProbe.${key}`, key, 1);
+  }
+  for (const key of [
+    "idempotentReplayVerified",
+    "studentReportVerified",
+    "excelExportVerified",
+    "pdfExportVerified",
+    "reportReady",
+    "reportJobQueued",
+  ]) {
+    requireObjectTrue(probe, failures, `reports.isemOpticalPipeline.quarantineProbe.${key}`, key);
+  }
 }
 
 function requireKvkkInventoryReport(scope, failures) {
@@ -1112,6 +1153,28 @@ function requireIsemLiveExamCycleConsistency(reports, failures) {
   if (!liveExamCycle || typeof liveExamCycle !== "object" || Array.isArray(liveExamCycle)) return;
   if (!isemOpticalPipeline || typeof isemOpticalPipeline !== "object" || Array.isArray(isemOpticalPipeline)) return;
   if (!isemCounts || typeof isemCounts !== "object" || Array.isArray(isemCounts)) return;
+
+  requireObjectEqual(
+    isemOpticalPipeline,
+    failures,
+    "reports.isemOpticalPipeline.fixtureId",
+    "fixtureId",
+    ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST.fixtureId,
+  );
+  requireObjectEqual(
+    isemOpticalPipeline.hashes ?? {},
+    failures,
+    "reports.isemOpticalPipeline.hashes.opticalTxtSha256",
+    "opticalTxtSha256",
+    ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST.inputs.opticalTxt.sha256,
+  );
+  requireObjectEqual(
+    isemOpticalPipeline.hashes ?? {},
+    failures,
+    "reports.isemOpticalPipeline.hashes.answerKeyFileSha256",
+    "answerKeyFileSha256",
+    ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST.inputs.answerKey.sha256,
+  );
 
   requireMatchingValue(
     liveExamCycle,

@@ -14,6 +14,7 @@ test.describe("auth state görsel sözleşmesi", () => {
     await page.setViewportSize({ height: 812, width: 320 });
     let loginBody: Record<string, unknown> | undefined;
     await prepareAuthPage(page, {
+      routePath: "/sistem/giris",
       onLogin(body) {
         loginBody = body;
         return {
@@ -25,7 +26,7 @@ test.describe("auth state görsel sözleşmesi", () => {
       },
     });
 
-    await submitCredentials(page);
+    await submitCredentials(page, "system@example.test");
 
     await expect(page.getByRole("group", { name: "Doğrulama yöntemi" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Doğrulama uygulaması" })).toHaveAttribute("aria-pressed", "true");
@@ -36,7 +37,7 @@ test.describe("auth state görsel sözleşmesi", () => {
     await expect(page.getByLabel("Kullanıcı adı veya e-posta")).toBeDisabled();
     await expect(page.getByLabel("Şifre", { exact: true })).toBeDisabled();
     await expectNoHorizontalOverflow(page, "mfa-challenge-320");
-    expect(loginBody).toEqual({ tenantSlug: "dna-egitim", loginName: "admin-a@example.test", password: "password" });
+    expect(loginBody).toEqual({ tenantSlug: "system", loginName: "system@example.test", password: "password" });
   });
 
   test("auth state MFA kurulumunu recovery kodları ve tek ana aksiyonla gösterir", async ({ page }) => {
@@ -53,6 +54,7 @@ test.describe("auth state görsel sözleşmesi", () => {
       });
     });
     await prepareAuthPage(page, {
+      routePath: "/sistem/giris",
       onLogin() {
         return {
           keyUri: "otpauth://totp/O-Okul:admin",
@@ -65,7 +67,7 @@ test.describe("auth state görsel sözleşmesi", () => {
       },
     });
 
-    await submitCredentials(page);
+    await submitCredentials(page, "system@example.test");
 
     const enrollment = page.getByRole("status");
     await expect(enrollment).toContainText("iki adımlı doğrulamayı etkinleştirin");
@@ -82,43 +84,27 @@ test.describe("auth state görsel sözleşmesi", () => {
     await expectNoHorizontalOverflow(page, "mfa-enrollment-414");
   });
 
-  test("auth state kurum kilidinde MFA payloadını doğrular ve kurum alanına yönlendirir", async ({ page }) => {
+  test("auth state kurum kilidinde MFA istemeden kurum alanına yönlendirir", async ({ page }) => {
     let loginBody: Record<string, unknown> | undefined;
-    let verifyBody: Record<string, unknown> | undefined;
     await prepareAuthPage(page, {
       routePath: "/k/dna-egitim/giris",
       onLogin(body) {
         loginBody = body;
-        return {
-          challengeToken: "challenge-token",
-          expiresAt: "2026-07-29T20:00:00.000Z",
-          methods: ["totp", "recovery_code"],
-          status: "MFA_REQUIRED",
-        };
+        return createAuthResponse("TENANT_ADMIN");
       },
-    });
-    await page.route("**/api/v1/auth/totp/verify", async (route) => {
-      verifyBody = route.request().postDataJSON() as Record<string, unknown>;
-      await route.fulfill({
-        body: JSON.stringify({ data: createAuthResponse("TENANT_ADMIN") }),
-        contentType: "application/json",
-        headers: { ...corsHeaders, "set-cookie": "csrfToken=csrf-token; Path=/; SameSite=Strict" },
-        status: 200,
-      });
     });
 
     await submitCredentials(page);
-    await page.getByLabel("Doğrulama kodu").fill("123456");
-    await page.getByRole("button", { name: "Doğrula", exact: true }).click();
 
     await expect(page).toHaveURL(/\/kurum$/, { timeout: 15_000 });
+    await expect(page.getByLabel("Doğrulama kodu")).toHaveCount(0);
     expect(loginBody).toEqual({ loginName: "admin-a@example.test", password: "password", tenantSlug: "dna-egitim" });
-    expect(verifyBody).toEqual({ challengeToken: "challenge-token", totpCode: "123456" });
   });
 
   test("auth state yanlış MFA kodunda güvenli hata gösterir ve kimlik alanlarını kilitli tutar", async ({ page }) => {
     let verifyBody: Record<string, unknown> | undefined;
     await prepareAuthPage(page, {
+      routePath: "/sistem/giris",
       onLogin() {
         return {
           challengeToken: "challenge-token",
@@ -133,14 +119,14 @@ test.describe("auth state görsel sözleşmesi", () => {
       await route.fulfill({ headers: corsHeaders, status: 401 });
     });
 
-    await submitCredentials(page);
+    await submitCredentials(page, "system@example.test");
     await page.getByLabel("Doğrulama kodu").fill("000000");
     await page.getByRole("button", { name: "Doğrula", exact: true }).click();
 
     await expect(page.getByRole("form", { name: "Giriş formu" }).getByRole("alert")).toHaveText(
       "Doğrulama kodu geçersiz.",
     );
-    await expect(page).toHaveURL(/\/login$/);
+    await expect(page).toHaveURL(/\/sistem\/giris$/);
     await expect(page.getByLabel("Kullanıcı adı veya e-posta")).toBeDisabled();
     await expect(page.getByLabel("Şifre", { exact: true })).toBeDisabled();
     expect(verifyBody).toEqual({ challengeToken: "challenge-token", totpCode: "000000" });

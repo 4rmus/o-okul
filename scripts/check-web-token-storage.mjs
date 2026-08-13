@@ -11,6 +11,10 @@ const allowedLocalStorageKeys = {
   },
 };
 const allowedStorageSnippets = {
+  "apps/web/e2e-next/gate-c-exam-workspace-next.spec.ts": [
+    'window.localStorage.setItem("web.exam-workspace-v2", "true")',
+    'window.localStorage.setItem("web.shell-v2", "true")',
+  ],
   "apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx": [
     "window.sessionStorage.removeItem(draftStorageKey)",
     "window.sessionStorage.getItem(key)",

@@ -2,18 +2,41 @@ import { describe, expect, it } from "vitest";
 import { capabilitiesForRoles, hasCapability } from "./role-capabilities.js";
 
 describe("role capabilities", () => {
+  it("feature rollout okumasını tenant personalarına verir ama SYSTEM_ADMIN'e vermez", () => {
+    for (const role of [
+      "TENANT_OWNER",
+      "TENANT_ADMIN",
+      "ASSISTANT_ADMIN",
+      "OPERATIONS_STAFF",
+      "FINANCE_STAFF",
+      "TEACHER",
+      "STUDENT",
+      "GUARDIAN",
+    ]) {
+      expect(hasCapability({ roles: [role] }, "feature-rollout:read"), role).toBe(true);
+    }
+    expect(hasCapability({ roles: ["SYSTEM_ADMIN"] }, "feature-rollout:read")).toBe(false);
+  });
+
   it("TENANT_ADMIN finans ve akademik yönetim yetkilerine sahiptir", () => {
     const context = { roles: ["TENANT_ADMIN"], capabilities: capabilitiesForRoles(["TENANT_ADMIN"]) };
 
     expect(hasCapability(context, "finance:manage")).toBe(true);
     expect(hasCapability(context, "academic:manage")).toBe(true);
     expect(hasCapability(context, "audit:read")).toBe(true);
+    expect(hasCapability(context, "tenant-audit:read")).toBe(true);
     expect(hasCapability(context, "operation:manage")).toBe(true);
     expect(hasCapability(context, "privacy:manage")).toBe(true);
     expect(hasCapability(context, "role-preview:manage")).toBe(true);
     expect(hasCapability(context, "setup:manage")).toBe(true);
     expect(hasCapability(context, "support:manage")).toBe(true);
     expect(hasCapability(context, "user:manage")).toBe(true);
+  });
+
+  it("TENANT_OWNER tenant audit capability'sine sahiptir", () => {
+    const context = { roles: ["TENANT_OWNER"], capabilities: capabilitiesForRoles(["TENANT_OWNER"]) };
+
+    expect(hasCapability(context, "tenant-audit:read")).toBe(true);
   });
 
   it("ASSISTANT_ADMIN akademik ve destek yönetir ama finans ve kullanıcı yönetemez", () => {
@@ -47,6 +70,7 @@ describe("role capabilities", () => {
     expect(hasCapability(context, "system:manage")).toBe(true);
     expect(hasCapability(context, "tenant:manage")).toBe(true);
     expect(hasCapability(context, "audit:read")).toBe(true);
+    expect(hasCapability(context, "tenant-audit:read")).toBe(false);
   });
 
   it("TEACHER yönetim capability'lerini alamaz", () => {

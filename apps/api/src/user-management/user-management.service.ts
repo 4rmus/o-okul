@@ -2,8 +2,8 @@ import { BadRequestException, ConflictException, ForbiddenException, Inject, Inj
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { authSessionStoreToken, type SessionStore } from "../auth/session-store.js";
-import { verifyAdminMfaStepUpProof } from "../auth/totp-mfa.js";
 import { withCursorListMeta } from "../listing/list-query.js";
+import { requireTenantWideStaffContext } from "../tenant/tenant-access.js";
 import {
   hasCapabilityForRoles,
   isTenantAssignableRoleName,
@@ -33,13 +33,13 @@ export class UserManagementService {
   ) {}
 
   async list(context: RequestContext): Promise<TenantUserRecord[]> {
-    const tenantId = this.requireTenantId(context);
+    const tenantId = this.requireTenantWideContext(context);
     return this.store.listTenantUsers(tenantId);
   }
 
   async listEmployees(context: RequestContext, query: EmployeeAccessListQuery): Promise<EmployeeAccessRecord[]> {
     try {
-      const page = await this.store.listEmployeeAccessPage(this.requireTenantId(context), query);
+      const page = await this.store.listEmployeeAccessPage(this.requireTenantWideContext(context), query);
       return withCursorListMeta(page.records, page.meta);
     } catch (error) {
       if (error instanceof Error && error.message === "EMPLOYEE_CURSOR_INVALID") {
@@ -50,7 +50,7 @@ export class UserManagementService {
   }
 
   async createEmployee(context: RequestContext, input: EmployeeCreateRequest): Promise<EmployeeAccessRecord> {
-    const tenantId = this.requireTenantId(context);
+    const tenantId = this.requireTenantWideContext(context);
     try {
       const employee = await this.store.createEmployee(tenantId, input);
       await this.auditLogs?.record({
@@ -70,7 +70,7 @@ export class UserManagementService {
   }
 
   async setRoles(context: RequestContext, userId: string, body: SetTenantUserRolesBody): Promise<TenantUserRecord> {
-    const tenantId = this.requireTenantId(context);
+    const tenantId = this.requireTenantWideContext(context);
     const nextRoles = parseTenantRoles(body.roles);
     if (context.userId === userId && !nextRoles.includes("TENANT_ADMIN")) {
       throw new BadRequestException("SELF_TENANT_ADMIN_ROLE_REQUIRED");
@@ -96,20 +96,17 @@ export class UserManagementService {
     context: RequestContext,
     membershipId: string,
     input: TenantMembershipUpdateRequest,
-    stepUpToken?: string,
   ): Promise<TenantMembershipUpdateResult> {
-    const tenantId = this.requireTenantId(context);
-    const stepUpVerified = this.verifyOwnerAdminStepUp(context, stepUpToken);
+    const tenantId = this.requireTenantWideContext(context);
     let result: TenantMembershipUpdateResult | undefined;
     try {
       result = await this.store.updateTenantMembership(tenantId, membershipId, {
         ...input,
         actorCanManageOwners: hasCapabilityForRoles(context.roles, "owner:manage", context.capabilities),
-        stepUpVerified,
       });
     } catch (error) {
       const code = error instanceof Error ? error.message : "";
-      if (code === "TENANT_OWNER_MANAGE_REQUIRED" || code === "STEP_UP_MFA_REQUIRED") throw new ForbiddenException(code);
+      if (code === "TENANT_OWNER_MANAGE_REQUIRED") throw new ForbiddenException(code);
       if (code === "TENANT_MEMBERSHIP_CAMPUS_NOT_FOUND") throw new BadRequestException(code);
       if (
         code === "TENANT_MEMBERSHIP_VERSION_CONFLICT" ||
@@ -148,21 +145,12 @@ export class UserManagementService {
     return context.tenantId;
   }
 
-  private verifyOwnerAdminStepUp(context: RequestContext, stepUpToken?: string): boolean {
-    if (!stepUpToken) return false;
-    if (!context.sessionId || context.membershipVersion === undefined) {
-      throw new ForbiddenException("STEP_UP_MFA_INVALID");
-    }
+  private requireTenantWideContext(context: RequestContext): string {
+    this.requireTenantId(context);
     try {
-      verifyAdminMfaStepUpProof(stepUpToken, {
-        userId: context.userId,
-        sessionId: context.sessionId,
-        membershipVersion: context.membershipVersion,
-        purpose: "OWNER_ADMIN_CHANGE",
-      });
-      return true;
-    } catch {
-      throw new ForbiddenException("STEP_UP_MFA_INVALID");
+      return requireTenantWideStaffContext(context, "EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
+    } catch (error) {
+      throw new ForbiddenException(error instanceof Error ? error.message : "EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
     }
   }
 

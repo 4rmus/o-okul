@@ -1,11 +1,35 @@
 export type TenantId = string;
+export {
+  featureRolloutKeys,
+} from "./feature-rollout.js";
+export type {
+  FeatureRolloutCatalogItem,
+  FeatureRolloutKey,
+  ResolvedFeatureRollouts,
+} from "./feature-rollout.js";
 export { FormatAnalyzerService, getParserConfigPresetSuggestion } from "./format-analyzer.js";
+export {
+  assertProductEvent,
+  productEventCatalog,
+  productEventRouteFamilies,
+} from "./product-analytics.js";
+export type {
+  ProductEvent,
+  ProductEventName,
+  ProductEventOutcome,
+  ProductEventPersona,
+  ProductEventPropertyValue,
+  ProductEventRouteFamily,
+  ProductEventValidationContext,
+  TenantPseudonym,
+} from "./product-analytics.js";
 export {
   reportCourseMatchesScoreType,
   reportCourseShortName,
   reportCourseSortOrder,
 } from "./report-course-labels.js";
 export {
+  canAccessExamWorkspace,
   capabilitiesForRoles,
   hasCapabilityForRoles,
   isPortalSubjectRoleName,
@@ -89,6 +113,10 @@ export type {
   ExamParticipantRecord,
   ExamParticipantStatus,
   ExamRecord,
+  ExamWorkspaceNextAction,
+  ExamWorkspaceReadModel,
+  ExamWorkspaceReadinessKey,
+  ExamWorkspaceReadinessStep,
   ExamScoreAverage,
   ExamScoreRanking,
   ExamScoreMetrics,
@@ -254,6 +282,9 @@ export type {
   ScheduleLessonUpdateRequest,
   SelfPurgeResult,
   Session,
+  SetupReadinessKey,
+  SetupReadinessReadModel,
+  SetupReadinessStep,
   SmsBatchCreateRequest,
   SmsBatchDeliveryReportRecord,
   SmsBatchQueueResult,
@@ -275,6 +306,12 @@ export type {
   StudentImportResult,
   StudentProfileUpdateRequest,
   StudentProfileRecord,
+  StudentContactCreateRequest,
+  StudentContactRecord,
+  StudentOverviewLatestExamRecord,
+  StudentOverviewRecord,
+  StudentContactRelationType,
+  StudentContactUpdateRequest,
   StudentRecord,
   StudentStatus,
   StudentTenantUpdateRequest,

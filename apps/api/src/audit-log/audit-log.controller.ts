@@ -18,13 +18,13 @@ export class AuditLogController {
   constructor(private readonly auditLogs: AuditLogService) {}
 
   @Get("safe-list")
-  @RequireCapability("audit:read")
+  @RequireCapability("tenant-audit:read")
   async safeList(@Query() query: ListQuery): Promise<AuditLogListItemRecord[]> {
     return applyListQuery(await this.auditLogs.safeList(getRequestContext()), query, auditLogSafeListFields);
   }
 
   @Get("student-summary")
-  @RequireCapability("audit:read")
+  @RequireCapability("tenant-audit:read")
   async studentSummary(
     @Query("studentId") studentId: string | undefined,
     @Query("limit") limit: string | undefined,
@@ -33,7 +33,7 @@ export class AuditLogController {
   }
 
   @Get()
-  @RequireCapability("audit:read")
+  @RequireCapability("tenant-audit:read")
   async list(@Query() query: AuditLogListQuery): Promise<AuditLogRecord[]> {
     return applyListQuery(await this.auditLogs.list(getRequestContext(), {
       entityId: query.entityId,

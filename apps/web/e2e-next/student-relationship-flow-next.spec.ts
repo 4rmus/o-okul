@@ -3,7 +3,7 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const corsHeaders = {
   "access-control-allow-credentials": "true",
-  "access-control-allow-headers": "authorization,content-type,x-csrf-token",
+  "access-control-allow-headers": "authorization,content-type,idempotency-key,x-csrf-token",
   "access-control-allow-methods": "DELETE,GET,PATCH,POST,OPTIONS",
   "access-control-allow-origin": appOrigin,
 };
@@ -66,16 +66,17 @@ test.describe("Öğrenci ilişki haritası", () => {
     await expect(auditSummary).not.toContainText("entityId");
     await expect(auditSummary).not.toContainText("actorUserId");
     await expect(auditSummary).not.toContainText("diff");
-    expect(auditLogRequests).toHaveLength(1);
-    expect(auditLogRequests[0]?.pathname).toBe("/api/v1/audit-logs/student-summary");
-    expect(auditLogRequests[0]?.searchParams.get("studentId")).toBe("student-a");
-    expect(auditLogRequests[0]?.searchParams.get("limit")).toBe("5");
+    expect(auditLogRequests).toHaveLength(0);
+    expect(requestedPaths.filter((path) => path === "/students/student-a/overview")).toHaveLength(1);
+    expect(requestedPaths.some((path) => path === "/students/student-a/profile")).toBe(false);
+    expect(requestedPaths.some((path) => path === "/students/student-a/guardian-links")).toBe(false);
+    expect(requestedPaths.some((path) => path === "/teachers")).toBe(false);
     expect(requestedPaths.some((path) => path.includes("/reports/students/student-a/snapshots"))).toBe(false);
     expect(requestedPaths.some((path) => path.includes("/reports/snapshots"))).toBe(false);
-    expect(requestedPaths.filter((path) => path === "/homework/material-assignments")).toHaveLength(1);
+    expect(requestedPaths.filter((path) => path === "/homework/material-assignments")).toHaveLength(0);
     expect(requestedPaths.some((path) => /^\/homework\/materials\/[^/]+\/assignments$/.test(path))).toBe(false);
-    const relationships = page.getByLabel("İletişim ve veli", { exact: true });
-    await expect(relationships.getByRole("table", { name: "İletişim ve veli kayıtları" })).toBeVisible();
+    const relationships = page.getByLabel("Öğrenci iletişim kişileri", { exact: true });
+    await expect(relationships.getByRole("table", { name: "Öğrenci iletişim kişisi kayıtları" })).toBeVisible();
     await expect(relationships).toContainText("••• ••• ••33");
     await expect(relationships).toContainText("ad••@•••.test");
     await expectNoVisibleTextValues(page, "student-detail-pii-desktop", rawStudentDetailPiiValues);
@@ -117,12 +118,38 @@ test.describe("Öğrenci ilişki haritası", () => {
     await expect(page.locator("body")).not.toContainText("Finans görünürlüğü");
     await expect(page.locator("body")).not.toContainText("bekleyen ödeme");
   });
+
+  test("iletişim kişisi retry isteği aynı idempotency anahtarını kullanır", async ({ page }) => {
+    const contactCreateRequests: Array<{ body: string; idempotencyKey: string }> = [];
+    await openStudentDetail(page, { width: 1280, height: 900 }, {
+      contactCreateRequests,
+      failFirstContactCreate: true,
+    });
+
+    const contacts = page.getByLabel("Öğrenci iletişim kişileri", { exact: true });
+    await contacts.getByLabel("Ad", { exact: true }).fill("Selin");
+    await contacts.getByLabel("Soyad", { exact: true }).fill("Kaya");
+    await contacts.getByRole("button", { name: "İletişim kişisi ekle" }).click();
+    await expect(contacts).toContainText("İletişim kişisi kaydedilemedi.");
+    await contacts.getByRole("button", { name: "İletişim kişisi ekle" }).click();
+
+    await expect.poll(() => contactCreateRequests).toHaveLength(2);
+    expect(contactCreateRequests[0]?.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
+    expect(contactCreateRequests[1]?.idempotencyKey).toBe(contactCreateRequests[0]?.idempotencyKey);
+    expect(contactCreateRequests[1]?.body).toBe(contactCreateRequests[0]?.body);
+  });
 });
 
 async function openStudentDetail(
   page: Page,
   viewport: { width: number; height: number },
-  options: { auditLogRequests?: URL[]; requestedPaths?: string[]; roles?: string[] } = {},
+  options: {
+    auditLogRequests?: URL[];
+    contactCreateRequests?: Array<{ body: string; idempotencyKey: string }>;
+    failFirstContactCreate?: boolean;
+    requestedPaths?: string[];
+    roles?: string[];
+  } = {},
 ) {
   await page.setViewportSize(viewport);
   await installStudentApiMocks(page, options);
@@ -138,7 +165,13 @@ async function openStudentDetail(
 
 async function installStudentApiMocks(
   page: Page,
-  options: { auditLogRequests?: URL[]; requestedPaths?: string[]; roles?: string[] } = {},
+  options: {
+    auditLogRequests?: URL[];
+    contactCreateRequests?: Array<{ body: string; idempotencyKey: string }>;
+    failFirstContactCreate?: boolean;
+    requestedPaths?: string[];
+    roles?: string[];
+  } = {},
 ) {
   await page.route("**/api/v1/**", async (route) => {
     if (route.request().method() === "OPTIONS") {
@@ -149,6 +182,20 @@ async function installStudentApiMocks(
     const url = new URL(route.request().url());
     const pathName = url.pathname.replace(/^\/api\/v1/, "");
     options.requestedPaths?.push(pathName);
+    if (pathName === "/students/student-a/contacts" && route.request().method() === "POST") {
+      options.contactCreateRequests?.push({
+        body: route.request().postData() ?? "",
+        idempotencyKey: route.request().headers()["idempotency-key"] ?? "",
+      });
+      if (options.failFirstContactCreate && options.contactCreateRequests?.length === 1) {
+        await route.fulfill({
+          body: JSON.stringify({ error: { code: "TEMPORARY_FAILURE", message: "Retry" } }),
+          headers: { ...corsHeadersFor(route), "content-type": "application/json" },
+          status: 503,
+        });
+        return;
+      }
+    }
     const response = mockApiResponse(pathName, url, options);
     await fulfillData(route, response.data, response.meta);
   });
@@ -162,6 +209,8 @@ function mockApiResponse(
   if (pathName === "/auth/refresh") return { data: createAuthResponse(options.roles) };
   if (pathName === "/me/tenant") return { data: createTenantResponse() };
   if (pathName === "/me/notification-devices") return { data: [] };
+  if (pathName === "/me/feature-rollouts") return { data: { enabledFeatureKeys: ["web.student-registry-v2"] } };
+  if (pathName === "/students/student-a/overview") return { data: createStudentOverview(options.roles) };
   if (pathName === "/students/student-a/profile") return { data: createStudentProfile() };
   if (pathName === "/students/student-a/guardian-links") return { data: createGuardianLinks() };
   if (pathName === "/students/student-a/guardians") return { data: createGuardians() };
@@ -228,14 +277,52 @@ function createTenantResponse() {
 function createStudentProfile() {
   return {
     classId: "class-11a",
-    email: "ada@example.test",
+    emailMasked: "ad••@•••.test",
     firstName: "Ada",
     id: "student-a",
     lastName: "Kaya",
-    phone: "+905551112233",
+    phoneMasked: "••• ••• ••33",
     status: "ACTIVE",
     studentNo: "1101",
     tenantId: "tenant-flow",
+  };
+}
+
+function createStudentOverview(roles = ["TENANT_ADMIN"]) {
+  const enrollments = createEnrollments();
+  return {
+    profile: createStudentProfile(),
+    activeEnrollment: enrollments[0],
+    enrollments,
+    attendance: { absent: 1, excused: 0, late: 1, present: 28, studentId: "student-a", total: 30 },
+    openHomeworkCount: 0,
+    homeworkAssignments: [],
+    teacherNoteCount: 0,
+    teacherNotes: [],
+    contacts: [{
+      id: "contact-mother",
+      tenantId: "tenant-flow",
+      studentId: "student-a",
+      firstName: "Ayşe",
+      lastName: "Yılmaz",
+      relationType: "MOTHER",
+      phoneMasked: "••• ••• ••33",
+      emailMasked: "ad••@•••.test",
+      canReceiveSms: false,
+      canReceiveAnnouncements: false,
+      canReceiveFinance: false,
+      createdAt: "2026-06-18T08:00:00.000Z",
+      updatedAt: "2026-06-18T08:00:00.000Z",
+    }],
+    guardians: createGuardians().map(({ phone: _phone, ...guardian }) => ({ ...guardian, phoneMasked: "••• ••• ••01" })),
+    guardianLinks: createGuardianLinks(),
+    teacherAssignments: createTeacherAssignments(),
+    teachers: createTeachers(),
+    classes: createClasses(),
+    courses: createCourses(),
+    terms: createAcademicTerms(),
+    canViewFinance: roles.includes("TENANT_ADMIN"),
+    activity: createAuditSummaries(),
   };
 }
 

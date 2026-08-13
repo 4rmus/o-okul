@@ -16,19 +16,24 @@ const kvkkInventoryTopLevelKeys = [
   "auditDiffRedactionVerified",
   "gaps",
 ];
-const dataSubjectCountKeys = ["student", "teacher", "guardian", "user"];
-const purgeCoverageKeys = ["student", "teacher", "guardian", "user"];
+const dataSubjectCountKeys = ["student", "studentContact", "teacher", "guardian", "user"];
+const purgeCoverageKeys = ["student", "studentContact", "teacher", "guardian", "user"];
 const whatsappConsentKeys = ["recordCount", "eventRecordCount", "piiRelevantStoredFields", "piiRelevantEventStoredFields", "policy"];
 const whatsappConsentPolicyKeys = ["featureEnabled", "retentionPeriodDays", "disposalMethod", "purgeException", "explanation"];
 const auditDiffRedactionKeys = ["endpoint", "negativeControls", "actionsSampled", "command"];
 const expectedPurgeCoverage = {
   student: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "email", "photoKey"],
+  studentContact: [
+    "firstName", "lastName", "relationType", "phoneEncrypted", "phoneHash", "emailEncrypted", "emailHash",
+    "canReceiveSms", "canReceiveAnnouncements", "canReceiveFinance", "consentSource", "consentRecordedAt",
+  ],
   teacher: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone"],
   guardian: ["firstName", "lastName", "phone"],
   user: ["email", "name"],
 };
 const expectedAuditActions = [
   "kvkk.student_pii_purged",
+  "kvkk.student_contact_pii_purged",
   "kvkk.teacher_pii_purged",
   "kvkk.guardian_pii_purged",
   "kvkk.user_pii_purged",
@@ -84,6 +89,7 @@ const expectedAuditDiffActions = [
   "support_ticket.created",
   "support_ticket_comment.created",
   "kvkk.student_pii_purged",
+  "kvkk.student_contact_pii_purged",
   "kvkk.teacher_pii_purged",
   "kvkk.guardian_pii_purged",
   "kvkk.user_pii_purged",

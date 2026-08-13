@@ -1,6 +1,7 @@
 import { lstat, readFile } from "node:fs/promises";
 import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ISEM_OPTICAL_PIPELINE_FIXTURE } from "./isem-optical-pipeline-contract.mjs";
 
 const target = process.env.LIVE_EXAM_CYCLE_TARGET;
 const allowExampleEvidence = process.env.LIVE_EXAM_CYCLE_ALLOW_EXAMPLE_EVIDENCE === "1";
@@ -11,15 +12,6 @@ const requiredCommands = [
   "pnpm report-generation:smoke",
   "pnpm live:ui-worker:smoke",
 ];
-const expectedIsemFixture = {
-  answerKeyQuestionCount: 90,
-  bookletVariantCount: 1,
-  participantCount: 21,
-  matchedCount: 20,
-  quarantineCount: 1,
-  examResultCount: 20,
-  reportResultCount: 20,
-};
 const allowedEvidenceReferencePrefixes = ["artifact:", "run:", "log:", "url:", "https://", "file://", "s3://"];
 const isemOpticalPipelineEvidenceFileNames = new Set(["isem-optical-pipeline.json", "isem-optical-pipeline.log"]);
 const liveUiWorkerEvidenceFileNames = new Set(["live-ui-worker-result.json", "live-ui-worker-report.json"]);
@@ -172,6 +164,9 @@ function requireAllowedEvidenceTargetUrl(url) {
   if (url.protocol === "file:" && isLocalTempEvidenceTargetUrl(url)) {
     fail(["LIVE_EXAM_CYCLE_TARGET production kaniti icin lokal temp path olmamali."]);
   }
+  if (url.protocol === "file:" && isLocalSmokeEvidenceTargetUrl(url)) {
+    fail(["LIVE_EXAM_CYCLE_TARGET production kaniti icin artifacts/local path olmamali."]);
+  }
 }
 
 function isPlaceholderEvidenceTargetHost(hostname) {
@@ -201,6 +196,11 @@ function isLocalTempEvidenceTargetUrl(url) {
   );
 }
 
+function isLocalSmokeEvidenceTargetUrl(url) {
+  const path = fileURLToPath(url).replace(/\\/g, "/").replace(/\/+$/g, "");
+  return path.endsWith("/artifacts/local") || path.includes("/artifacts/local/");
+}
+
 function parseJson(value) {
   try {
     return JSON.parse(value);
@@ -220,10 +220,12 @@ function validateReport(report) {
   requireOneOf(report, failures, "environment", ["staging", "production"]);
   requireDate(report, failures, "checkedAt");
   requireDateNotInFuture(report, failures, "checkedAt");
+  requireDateFresh(report, failures, "checkedAt");
   requireString(report, failures, "tester");
   requireNonPlaceholderString(report, failures, "tester");
   requireString(report, failures, "releaseCandidate");
   requireNonPlaceholderString(report, failures, "releaseCandidate");
+  requireExactReleaseSha(report, failures, "releaseCandidate");
   requireHttpsUrl(report, failures, "appUrl");
   requireHttpsUrl(report, failures, "apiUrl");
   requireExactStringSet(report.commandsPassed, failures, "commandsPassed", requiredCommands, "komut");
@@ -255,13 +257,49 @@ function requireExamCycle(report, failures) {
     requireObjectNonPlaceholderString(value, failures, `examCycle.${key}`, key);
   }
 
-  requireObjectEqual(value, failures, "examCycle.answerKeyQuestionCount", "answerKeyQuestionCount", expectedIsemFixture.answerKeyQuestionCount);
-  requireObjectEqual(value, failures, "examCycle.bookletVariantCount", "bookletVariantCount", expectedIsemFixture.bookletVariantCount);
-  requireObjectEqual(value, failures, "examCycle.participantCount", "participantCount", expectedIsemFixture.participantCount);
-  requireObjectEqual(value, failures, "examCycle.matchedCount", "matchedCount", expectedIsemFixture.matchedCount);
-  requireObjectEqual(value, failures, "examCycle.quarantineCount", "quarantineCount", expectedIsemFixture.quarantineCount);
-  requireObjectEqual(value, failures, "examCycle.examResultCount", "examResultCount", expectedIsemFixture.examResultCount);
-  requireObjectEqual(value, failures, "examCycle.reportResultCount", "reportResultCount", expectedIsemFixture.reportResultCount);
+  requireObjectEqual(
+    value,
+    failures,
+    "examCycle.answerKeyQuestionCount",
+    "answerKeyQuestionCount",
+    ISEM_OPTICAL_PIPELINE_FIXTURE.answerKeyQuestionCount,
+  );
+  requireObjectEqual(
+    value,
+    failures,
+    "examCycle.bookletVariantCount",
+    "bookletVariantCount",
+    ISEM_OPTICAL_PIPELINE_FIXTURE.bookletVariantCount,
+  );
+  requireObjectEqual(
+    value,
+    failures,
+    "examCycle.participantCount",
+    "participantCount",
+    ISEM_OPTICAL_PIPELINE_FIXTURE.participantCount,
+  );
+  requireObjectEqual(value, failures, "examCycle.matchedCount", "matchedCount", ISEM_OPTICAL_PIPELINE_FIXTURE.matchedCount);
+  requireObjectEqual(
+    value,
+    failures,
+    "examCycle.quarantineCount",
+    "quarantineCount",
+    ISEM_OPTICAL_PIPELINE_FIXTURE.quarantineCount,
+  );
+  requireObjectEqual(
+    value,
+    failures,
+    "examCycle.examResultCount",
+    "examResultCount",
+    ISEM_OPTICAL_PIPELINE_FIXTURE.examResultCount,
+  );
+  requireObjectEqual(
+    value,
+    failures,
+    "examCycle.reportResultCount",
+    "reportResultCount",
+    ISEM_OPTICAL_PIPELINE_FIXTURE.reportResultCount,
+  );
   requireObjectIntegerAtLeast(value, failures, "examCycle.downloadedArtifacts", "downloadedArtifacts", 2);
 
   if (
@@ -334,6 +372,31 @@ function requireDateNotInFuture(report, failures, key) {
   const clockSkewMs = 5 * 60 * 1000;
   if (timestamp > Date.now() + clockSkewMs) {
     failures.push(`${key} gelecekte olamaz.`);
+  }
+}
+
+function requireDateFresh(report, failures, key) {
+  if (allowExampleEvidence) return;
+  const value = report[key];
+  const timestamp = Date.parse(value);
+  if (typeof value !== "string" || Number.isNaN(timestamp)) return;
+
+  const configured = process.env.LIVE_EXAM_CYCLE_MAX_AGE_HOURS ?? "24";
+  const maxAgeHours = Number(configured);
+  if (!Number.isFinite(maxAgeHours) || maxAgeHours < 1 || maxAgeHours > 168) {
+    failures.push("LIVE_EXAM_CYCLE_MAX_AGE_HOURS 1 ile 168 arasinda olmali.");
+    return;
+  }
+  if (Date.now() - timestamp > maxAgeHours * 60 * 60 * 1000) {
+    failures.push(`${key} en fazla ${maxAgeHours} saatlik olmali.`);
+  }
+}
+
+function requireExactReleaseSha(report, failures, key) {
+  const value = report[key];
+  if (typeof value !== "string" || value.trim() === "") return;
+  if (!/(?:^|[:@])[a-f0-9]{40}(?:$|[^a-f0-9])/i.test(value)) {
+    failures.push(`${key} exact 40 haneli Git SHA icermeli.`);
   }
 }
 

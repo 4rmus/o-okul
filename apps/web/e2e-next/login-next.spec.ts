@@ -3140,7 +3140,14 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
             sha256: "abcdef1234567890",
             parserConfigVersion,
           },
-          parseJob: { queueName: "optical-parse", jobId: "parse-job-a", status: "queued" },
+          parseJob: {
+            tenantId: "tenant-a",
+            examId: "exam-a",
+            rawImportId: "raw-import-a",
+            queueName: "excel-import",
+            jobId: "parse-job-a",
+            status: "queued",
+          },
           status: "uploaded",
         })),
       });

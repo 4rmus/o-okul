@@ -177,20 +177,21 @@ Açık soru: Pilot kurum farklı optik format veya fatura entegrasyonu isterse F
 kapısında ayrı DEC açılır.
 Son kontrol: 2026-06-13
 
-### DEC-20260613-02 — Admin MFA ikinci faktörü
+### DEC-20260613-02 — Sistem admini MFA ikinci faktörü
 
 Durum: Onaylı
-Karar: SYSTEM_ADMIN ve TENANT_ADMIN hesapları için ikinci faktör TOTP + tek kullanımlık recovery
-code olarak uygulanır. SMS OTP v1'de ikinci faktör olarak kullanılmaz; SIM-swap ve maliyet riski
+Karar: Yalnız SYSTEM_ADMIN hesapları için ikinci faktör TOTP + tek kullanımlık recovery code olarak
+uygulanır. Kurum sahibi, kurum yöneticisi ve kurum alt kullanıcıları MFA kapsamı dışındadır. SMS OTP
+v1'de ikinci faktör olarak kullanılmaz; SIM-swap ve maliyet riski
 nedeniyle reddedilir. TOTP secret'ları AES-GCM ile şifreli saklanır, recovery code'lar HMAC hash
 olarak tutulur ve MFA enable/disable işlemleri mevcut refresh session'ları iptal eder.
 Kaynak: Güvenlik ve ürün kararı.
 Kanıt: `apps/api/src/auth/totp-mfa.ts`, `apps/api/src/auth/auth.service.ts`,
 `docs/evidence-templates/admin-mfa.example.json`, `scripts/check-admin-mfa-evidence.mjs`.
 Etkilenen ADR: Yok
-Açık soru: Production'da `ADMIN_MFA_MODE=required` geçişi pilot kurum admin enrollment'ı tamamlandıktan
+Açık soru: Production'da `ADMIN_MFA_MODE=required` geçişi bütün SYSTEM_ADMIN enrollment'ları tamamlandıktan
 sonra ayrı go-live kararıyla yapılır; repo sözleşmesi staging için `optional` POC'yi kabul eder.
-Son kontrol: 2026-06-13
+Son kontrol: 2026-08-10
 
 ### DEC-20260613-04 — V1 karne görsel kabul eşiği
 
@@ -223,6 +224,10 @@ operasyonel alan olarak saklanır. Guardian.email is not a persisted Guardian co
 hesap e-postası User.email ile temsil edilir. Bu alanlar log, Sentry event'i, audit diff'i, smoke
 kanıtı veya production evidence artifact'ine ham değer olarak yazılamaz; `SENTRY_SEND_DEFAULT_PII=false`
 ve redaction testleri bu sınırı korur.
+`StudentContact` ad, ilişki ve iletişim alanları ayrı veri sahibi kapsamıdır; telefon/e-posta
+şifreli ve anahtarlı hash olarak, izinler varsayılan kapalı tutulur. Öğrenci KVKK purge işleminde
+ilişki `OTHER` yapılır, adlar anonimleştirilir, iletişim/hash/izin/consent alanları temizlenir ve
+yalnız purge sayımı auditlenir.
 Kaynak: KVKK/PII güvenlik kararı.
 Kanıt: `apps/api/src/observability/logging.ts`, `apps/api/src/observability/sentry.ts`,
 `scripts/check-kvkk-inventory-evidence.mjs`, `scripts/check-pii-contact-policy.mjs`,
@@ -231,7 +236,7 @@ Kanıt: `apps/api/src/observability/logging.ts`, `apps/api/src/observability/sen
 Etkilenen ADR: Yok
 Açık soru: Real staging/prod KVKK inventory, KVKK aydınlatma metni/DPA ve hukuk veya veri koruma
 onayı üretim çıkışından önce ayrıca alınacak; repo kararı bu gerçek kanıtların yerine geçmez.
-Son kontrol: 2026-06-13
+Son kontrol: 2026-08-10
 
 ### DEC-20260623-01 — Karne soru detayı veri sınırı
 
@@ -468,6 +473,24 @@ Kanıt: `.env.example`, `docs/evidence-templates/staging-evidence.env.example`,
 Etkilenen ADR: Yok
 Açık soru: Provider ve genel release topolojisi pilot öncesi/sonrası ayrı kararla seçilecektir.
 Son kontrol: 2026-08-08
+
+### DEC-20260809-01 — Almanak 2.0 foundation sözleşmeleri
+
+Durum: Onaylı; Gate B yerel sözleşme ve default-off temel kapsamı
+Karar: Frontend route/feature sınırları, ortak async operation durumu, route manifest sahipliği,
+liste/cursor/URL state standardı, modüler monolit içi read model yaklaşımı, server-side default-off
+tenant rollout'u, PII-safe product analytics ve control-plane mantıksal ayrımı ADR-0003–0010 ile
+kanonik hale getirilir. Gate B hiçbir feature'ı tenant için açmaz; rollout config mutationı, analytics
+vendoru, Shell v2, Exam workspace ve fiziksel control-plane ayrımı sonraki dilimlerdir. Rollout audit'i
+bu ilk dilimde enabled exposure kaydıdır; runtime config değişikliği geçmişi değildir.
+Kaynak: O-Okul Almanak 2.0 planı ve kullanıcının Gate B ile devam onayı.
+Kanıt: `docs/ADR-0003-frontend-route-feature-boundaries.md` – `docs/ADR-0010-control-plane-logical-separation.md`;
+`pnpm web:architecture:check`; `pnpm route-manifest:check`; `pnpm feature-rollout:check`;
+`pnpm product-analytics-schema:check`.
+Etkilenen ADR: ADR-0003, ADR-0004, ADR-0005, ADR-0006, ADR-0007, ADR-0008, ADR-0009, ADR-0010
+Açık soru: Gerçek kullanıcı gözlemi, staging/prod rollout aktivasyonu ve analytics transportu dış
+ortam kanıtı olarak ayrıca yürütülecektir.
+Son kontrol: 2026-08-09
 
 ## Faz Öncesi Onay Gerektirenler
 

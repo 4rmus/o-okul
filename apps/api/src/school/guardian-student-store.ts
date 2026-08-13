@@ -245,10 +245,10 @@ function toGuardianStudentRecord(row: GuardianStudentRow): GuardianStudentRecord
     tenantId: row.tenantId,
     guardianId: row.guardianId,
     studentId: row.studentId,
-    canViewFinance: row.canViewFinance ?? true,
-    canReceiveSms: row.canReceiveSms ?? true,
-    canReceiveAnnouncements: row.canReceiveAnnouncements ?? true,
-    canOpenSupportTickets: row.canOpenSupportTickets ?? true,
+    canViewFinance: row.canViewFinance ?? false,
+    canReceiveSms: row.canReceiveSms ?? false,
+    canReceiveAnnouncements: row.canReceiveAnnouncements ?? false,
+    canOpenSupportTickets: row.canOpenSupportTickets ?? false,
     createdAt: row.createdAt ? toIsoString(row.createdAt) : undefined,
     updatedAt: row.updatedAt ? toIsoString(row.updatedAt) : undefined,
   };
@@ -259,10 +259,10 @@ function withGuardianStudentDefaults(input: GuardianStudentInput): Omit<Guardian
     tenantId: input.tenantId,
     guardianId: input.guardianId,
     studentId: input.studentId,
-    canViewFinance: input.canViewFinance ?? true,
-    canReceiveSms: input.canReceiveSms ?? true,
-    canReceiveAnnouncements: input.canReceiveAnnouncements ?? true,
-    canOpenSupportTickets: input.canOpenSupportTickets ?? true,
+    canViewFinance: input.canViewFinance ?? false,
+    canReceiveSms: input.canReceiveSms ?? false,
+    canReceiveAnnouncements: input.canReceiveAnnouncements ?? false,
+    canOpenSupportTickets: input.canOpenSupportTickets ?? false,
   };
 }
 

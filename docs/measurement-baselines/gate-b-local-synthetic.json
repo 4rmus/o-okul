@@ -1,0 +1,248 @@
+{
+  "schemaVersion": 2,
+  "result": "BASELINE_RECORDED",
+  "evidenceLevel": "LOCAL_SYNTHETIC",
+  "externalStatus": "EXTERNAL_NOT_RUN",
+  "generatedAt": "2026-08-10T17:45:20.036Z",
+  "baseCommitSha": "7e40e475d0bb61873b954f483d69a72b3c3578c1",
+  "sourceWorktreeDirty": true,
+  "sourceTreeSha256": "513a897e73af6fcd4fb13fa7606b729788a53bfe2434fa0b40d120d20b50a3fc",
+  "measurementRun": {
+    "runId": "8dde7ea3-3423-4873-81e4-14709c23c7b4",
+    "startedAt": "2026-08-10T17:45:00.381Z",
+    "completedAt": "2026-08-10T17:45:20.036Z"
+  },
+  "environment": {
+    "browser": "chromium",
+    "browserVersion": "148.0.7778.96",
+    "mockedApi": true,
+    "nextBuild": "DEDICATED",
+    "nodeVersion": "v24.15.0",
+    "os": "darwin",
+    "osArch": "arm64",
+    "retries": 0,
+    "sampleCount": 5,
+    "serverPort": 43119,
+    "serverReuse": false,
+    "viewport": {
+      "height": 900,
+      "width": 1440
+    },
+    "workers": 1
+  },
+  "tasks": [
+    {
+      "axeImpacts": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "errorCount": 0,
+      "mockedApi": true,
+      "routeTemplate": "/kurum/optik",
+      "samples": [
+        {
+          "cls": 0.006,
+          "fcpMs": 64,
+          "lcpMs": 64,
+          "ttfbMs": 1.7,
+          "durationMs": 202.397
+        },
+        {
+          "cls": 0.006,
+          "fcpMs": 64,
+          "lcpMs": 64,
+          "ttfbMs": 2.2,
+          "durationMs": 213.415
+        },
+        {
+          "cls": 0.006,
+          "fcpMs": 60,
+          "lcpMs": 60,
+          "ttfbMs": 1.5,
+          "durationMs": 197.031
+        },
+        {
+          "cls": 0.006,
+          "fcpMs": 60,
+          "lcpMs": 60,
+          "ttfbMs": 1.6,
+          "durationMs": 198.047
+        },
+        {
+          "cls": 0,
+          "fcpMs": 48,
+          "lcpMs": 72,
+          "ttfbMs": 1.9,
+          "durationMs": 199.923
+        }
+      ],
+      "summary": {
+        "durationMs": {
+          "p50": 199.923,
+          "p95": 213.415
+        },
+        "fcpMs": {
+          "p50": 60,
+          "p95": 64
+        },
+        "lcpMs": {
+          "p50": 64,
+          "p95": 72
+        },
+        "cls": {
+          "p50": 0.006,
+          "p95": 0.006
+        },
+        "ttfbMs": {
+          "p50": 1.7,
+          "p95": 2.2
+        }
+      },
+      "taskId": "optical_workbench_ready"
+    },
+    {
+      "axeImpacts": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "errorCount": 0,
+      "mockedApi": true,
+      "routeTemplate": "/kurum/raporlar",
+      "samples": [
+        {
+          "cls": 0.006,
+          "fcpMs": 60,
+          "lcpMs": 60,
+          "ttfbMs": 2.1,
+          "durationMs": 200.782
+        },
+        {
+          "cls": 0.006,
+          "fcpMs": 60,
+          "lcpMs": 60,
+          "ttfbMs": 1.8,
+          "durationMs": 196.693
+        },
+        {
+          "cls": 0.006,
+          "fcpMs": 60,
+          "lcpMs": 60,
+          "ttfbMs": 1.5,
+          "durationMs": 201.055
+        },
+        {
+          "cls": 0.006,
+          "fcpMs": 56,
+          "lcpMs": 56,
+          "ttfbMs": 1.3,
+          "durationMs": 195.9
+        },
+        {
+          "cls": 0.006,
+          "fcpMs": 60,
+          "lcpMs": 60,
+          "ttfbMs": 1.1,
+          "durationMs": 197.608
+        }
+      ],
+      "summary": {
+        "durationMs": {
+          "p50": 197.608,
+          "p95": 201.055
+        },
+        "fcpMs": {
+          "p50": 60,
+          "p95": 60
+        },
+        "lcpMs": {
+          "p50": 60,
+          "p95": 60
+        },
+        "cls": {
+          "p50": 0.006,
+          "p95": 0.006
+        },
+        "ttfbMs": {
+          "p50": 1.5,
+          "p95": 2.1
+        }
+      },
+      "taskId": "report_workspace_ready"
+    },
+    {
+      "axeImpacts": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 1,
+        "minor": 0
+      },
+      "errorCount": 0,
+      "mockedApi": true,
+      "routeTemplate": "/ogrenci",
+      "samples": [
+        {
+          "cls": 0.024,
+          "fcpMs": 60,
+          "lcpMs": 92,
+          "ttfbMs": 1.4,
+          "durationMs": 215.015
+        },
+        {
+          "cls": 0.024,
+          "fcpMs": 56,
+          "lcpMs": 72,
+          "ttfbMs": 1,
+          "durationMs": 199.38
+        },
+        {
+          "cls": 0.024,
+          "fcpMs": 56,
+          "lcpMs": 68,
+          "ttfbMs": 1.1,
+          "durationMs": 198.252
+        },
+        {
+          "cls": 0.024,
+          "fcpMs": 56,
+          "lcpMs": 72,
+          "ttfbMs": 1.5,
+          "durationMs": 196.063
+        },
+        {
+          "cls": 0.024,
+          "fcpMs": 56,
+          "lcpMs": 72,
+          "ttfbMs": 1,
+          "durationMs": 199.824
+        }
+      ],
+      "summary": {
+        "durationMs": {
+          "p50": 199.38,
+          "p95": 215.015
+        },
+        "fcpMs": {
+          "p50": 56,
+          "p95": 60
+        },
+        "lcpMs": {
+          "p50": 72,
+          "p95": 92
+        },
+        "cls": {
+          "p50": 0.024,
+          "p95": 0.024
+        },
+        "ttfbMs": {
+          "p50": 1.1,
+          "p95": 1.5
+        }
+      },
+      "taskId": "student_portal_ready"
+    }
+  ]
+}

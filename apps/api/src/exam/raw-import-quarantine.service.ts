@@ -5,6 +5,7 @@ import type {
 } from "@o-okul/shared-types";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
+import { requireTenantWideStaffContext } from "../tenant/tenant-access.js";
 import {
   rawImportQuarantineStoreToken,
   type ImportQuarantineRecord,
@@ -160,11 +161,12 @@ export class RawImportQuarantineService {
       tenantId,
       userId: context.userId,
       entityId: record.id,
-      contentHash: `${record.rawImportSha256}-${record.answerKeyId}`,
+      contentHash: `${record.rawImportSha256}-${record.answerKeyId}-${record.resolvedParticipantId}`,
       participantId: record.resolvedParticipantId,
       rawImportId: record.rawImportId,
       answerKeyId: record.answerKeyId,
     });
+
     const resolvedRecord = await this.store.markResolved({
       tenantId,
       examId: record.examId,
@@ -196,10 +198,11 @@ export class RawImportQuarantineService {
 }
 
 function requireTenant(context: RequestContext): string {
-  if (!context.tenantId) {
-    throw new ForbiddenException("TENANT_CONTEXT_MISSING");
+  try {
+    return requireTenantWideStaffContext(context, "RAW_IMPORT_CAMPUS_SCOPE_FORBIDDEN");
+  } catch (error) {
+    throw new ForbiddenException(error instanceof Error ? error.message : "RAW_IMPORT_CAMPUS_SCOPE_FORBIDDEN");
   }
-  return context.tenantId;
 }
 
 function required(value: string | undefined, errorCode: string): string {

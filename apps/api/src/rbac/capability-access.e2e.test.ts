@@ -288,7 +288,7 @@ describe("Capability access matrix", () => {
       .expect(403);
   });
 
-  it("TENANT_ADMIN menüdeki operasyon yetkili alanları açar", async () => {
+  it("legacy personasız TENANT_ADMIN tenant audit rotasında fail-closed kalır", async () => {
     await request(server)
       .get("/tenant-users")
       .set("Authorization", `Bearer ${tenantAdminToken}`)
@@ -297,7 +297,7 @@ describe("Capability access matrix", () => {
     await request(server)
       .get("/audit-logs")
       .set("Authorization", `Bearer ${tenantAdminToken}`)
-      .expect(200);
+      .expect(403);
 
     await request(server)
       .get("/backup-restore-jobs")

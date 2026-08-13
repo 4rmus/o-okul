@@ -244,6 +244,10 @@ class FakeTemplateStore implements OpticalFormTemplateStore {
 class FakeParserConfigRepository implements ParserConfigRepository {
   saves: Parameters<ParserConfigRepository["saveApproved"]>[0][] = [];
 
+  async findApproved(): Promise<SavedParserConfig | undefined> {
+    return undefined;
+  }
+
   async saveApproved(input: Parameters<ParserConfigRepository["saveApproved"]>[0]): Promise<SavedParserConfig> {
     this.saves.push(input);
     return {

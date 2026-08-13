@@ -7,6 +7,7 @@ const emailEvidenceEndpoint = process.env.LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOIN
 const emailEvidenceBearerToken = process.env.LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN;
 const allowExampleEvidence = process.env.LIVE_ONBOARDING_ALLOW_EXAMPLE_EVIDENCE === "1";
 const liveEvidenceMaxAgeMs = 24 * 60 * 60 * 1000;
+const allowedEmailEvidenceEndpoint = "https://notify.staging.o-okul.com/messages/latest";
 const repositoryRoot = resolve(process.cwd());
 
 const failures = [];
@@ -19,8 +20,8 @@ if (!evidencePath) {
   failures.push("LIVE_ONBOARDING_EVIDENCE_PATH boş bırakılamaz.");
 }
 
-if (!isHttpsUrl(emailEvidenceEndpoint)) {
-  failures.push("LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT gerçek https URL olmalı.");
+if (!isAllowedEmailEvidenceEndpoint(emailEvidenceEndpoint)) {
+  failures.push("LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT tam olarak https://notify.staging.o-okul.com/messages/latest olmalı.");
 }
 
 if (!emailEvidenceBearerToken || emailEvidenceBearerToken.length < 16) {
@@ -118,10 +119,10 @@ function isLocalTempPath(filePath) {
   );
 }
 
-function isHttpsUrl(value) {
+function isAllowedEmailEvidenceEndpoint(value) {
   if (!value) return false;
   try {
-    return new URL(value).protocol === "https:";
+    return new URL(value).toString() === allowedEmailEvidenceEndpoint;
   } catch {
     return false;
   }
@@ -178,12 +179,13 @@ function validatePrincipal(value, collectedFailures, label, { kind }) {
     value,
     collectedFailures,
     label,
-    requireName ? ["email", "name", "nationalId", "password"] : ["email", "loginName", "password"],
+    requireName ? ["email", "name", "nationalId", "password"] : ["email", "loginName", "password", "totpSecret"],
   );
   requireEmail(value, collectedFailures, `${label}.email`, "email");
   if (kind === "systemAdmin") {
     requireString(value, collectedFailures, `${label}.loginName`, "loginName");
     requireNonPlaceholderString(value, collectedFailures, `${label}.loginName`, "loginName");
+    requireTotpSecret(value, collectedFailures, `${label}.totpSecret`, "totpSecret");
   } else if (typeof value.nationalId !== "string" || !/^\d{11}$/.test(value.nationalId)) {
     collectedFailures.push(`${label}.nationalId 11 rakam olmalı.`);
   }
@@ -192,6 +194,16 @@ function validatePrincipal(value, collectedFailures, label, { kind }) {
     requireString(value, collectedFailures, `${label}.name`, "name");
     requireNonPlaceholderString(value, collectedFailures, `${label}.name`, "name");
   }
+}
+
+function requireTotpSecret(scope, collectedFailures, label, key) {
+  requireString(scope, collectedFailures, label, key);
+  if (typeof scope[key] !== "string") return;
+
+  if (!/^[A-Z2-7]{16,128}$/.test(scope[key])) {
+    collectedFailures.push(`${label} 16-128 karakter Base32 olmalı.`);
+  }
+  requireNonPlaceholderString(scope, collectedFailures, label, key);
 }
 
 function validateTenant(value, collectedFailures) {

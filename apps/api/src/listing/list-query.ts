@@ -97,7 +97,7 @@ function compareValues(left: string | number | undefined, right: string | number
   return String(left ?? "").localeCompare(String(right ?? ""), "tr-TR", { sensitivity: "base" });
 }
 
-function withListMeta<TRecord>(records: TRecord[], meta: ListMeta): TRecord[] {
+export function withListMeta<TRecord>(records: TRecord[], meta: ListMeta): TRecord[] {
   Object.defineProperty(records, listMetaSymbol, {
     enumerable: false,
     value: meta,

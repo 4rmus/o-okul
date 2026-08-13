@@ -1,8 +1,10 @@
-import { BadRequestException, ForbiddenException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import type { AuditLogService, CreateAuditLogInput } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import type { ExamRepository } from "./exam.service.js";
+import type { ParserConfigRepository } from "./parser-config-approval.service.js";
 import {
   createRawImportS3Key,
   RawImportUploadService,
@@ -22,6 +24,8 @@ describe("RawImportUploadService", () => {
       archiveStore,
       repository,
       parseQueue,
+      new FakeExamRepository(),
+      new FakeParserConfigRepository(),
       auditLogs as unknown as AuditLogService,
     );
     const body = Buffer.from("ogrenci_no\tcevaplar");
@@ -97,7 +101,7 @@ describe("RawImportUploadService", () => {
     const archiveStore = new FakeArchiveStore();
     const repository = new FakeRawImportRepository();
     const parseQueue = new FakeParseQueue();
-    const service = new RawImportUploadService(archiveStore, repository, parseQueue);
+    const service = createService(archiveStore, repository, parseQueue);
 
     await expect(service.upload(
       { ...createContext(), tenantId: null },
@@ -112,7 +116,7 @@ describe("RawImportUploadService", () => {
     const archiveStore = new FakeArchiveStore();
     const repository = new FakeRawImportRepository();
     const parseQueue = new FakeParseQueue();
-    const service = new RawImportUploadService(archiveStore, repository, parseQueue);
+    const service = createService(archiveStore, repository, parseQueue);
 
     await expect(service.upload(createContext(), {
       ...createInput(),
@@ -120,6 +124,71 @@ describe("RawImportUploadService", () => {
     })).rejects.toThrow(BadRequestException);
     expect(archiveStore.puts).toHaveLength(0);
     expect(repository.creates).toHaveLength(0);
+    expect(parseQueue.inputs).toHaveLength(0);
+  });
+
+  it("kampüs sınırlı personel için tenant-geneli optik yükleme başlatmaz", async () => {
+    const archiveStore = new FakeArchiveStore();
+    const repository = new FakeRawImportRepository();
+    const parseQueue = new FakeParseQueue();
+    const service = createService(archiveStore, repository, parseQueue);
+
+    await expect(service.upload({
+      ...createContext(),
+      activePersona: "STAFF",
+      campusScope: { scopeMode: "CAMPUSES", campusIds: ["campus-a"] },
+    }, createInput())).rejects.toThrow(ForbiddenException);
+
+    expect(archiveStore.puts).toHaveLength(0);
+    expect(repository.creates).toHaveLength(0);
+    expect(parseQueue.inputs).toHaveLength(0);
+  });
+
+  it("tenant sınavı bulunmadan dosyayı arşivlemez", async () => {
+    const archiveStore = new FakeArchiveStore();
+    const repository = new FakeRawImportRepository();
+    const parseQueue = new FakeParseQueue();
+    const service = createService(
+      archiveStore,
+      repository,
+      parseQueue,
+      new FakeExamRepository("another-exam"),
+    );
+
+    await expect(service.upload(createContext(), createInput())).rejects.toThrow(NotFoundException);
+    expect(archiveStore.puts).toHaveLength(0);
+    expect(repository.creates).toHaveLength(0);
+    expect(parseQueue.inputs).toHaveLength(0);
+  });
+
+  it("onaylı parser sürümü bulunmadan dosyayı arşivlemez", async () => {
+    const archiveStore = new FakeArchiveStore();
+    const repository = new FakeRawImportRepository();
+    const parseQueue = new FakeParseQueue();
+    const service = createService(
+      archiveStore,
+      repository,
+      parseQueue,
+      new FakeExamRepository(),
+      new FakeParserConfigRepository("another-parser"),
+    );
+
+    await expect(service.upload(createContext(), createInput())).rejects.toThrow(BadRequestException);
+    expect(archiveStore.puts).toHaveLength(0);
+    expect(repository.creates).toHaveLength(0);
+    expect(parseQueue.inputs).toHaveLength(0);
+  });
+
+  it("RawImport kaydı yazılamazsa arşiv nesnesini siler ve queue işi üretmez", async () => {
+    const archiveStore = new FakeArchiveStore();
+    const repository = new FakeRawImportRepository();
+    const parseQueue = new FakeParseQueue();
+    repository.failNext = true;
+    const service = createService(archiveStore, repository, parseQueue);
+
+    await expect(service.upload(createContext(), createInput())).rejects.toThrow("RAW_IMPORT_CREATE_FAILED");
+    expect(archiveStore.puts).toHaveLength(1);
+    expect(archiveStore.deletes).toEqual([archiveStore.puts[0]?.s3Key]);
     expect(parseQueue.inputs).toHaveLength(0);
   });
 
@@ -164,17 +233,27 @@ function createSha256(body: Buffer): string {
 
 class FakeArchiveStore implements RawImportArchiveStore {
   readonly puts: Array<{ s3Key: string; body: Buffer; contentType?: string }> = [];
+  readonly deletes: string[] = [];
 
   async put(input: { s3Key: string; body: Buffer; contentType?: string }): Promise<void> {
     this.puts.push(input);
+  }
+
+  async delete(s3Key: string): Promise<void> {
+    this.deletes.push(s3Key);
   }
 }
 
 class FakeRawImportRepository implements RawImportRepository {
   readonly creates: CreateRawImportInput[] = [];
+  failNext = false;
 
   async create(input: CreateRawImportInput) {
     this.creates.push(input);
+    if (this.failNext) {
+      this.failNext = false;
+      throw new Error("RAW_IMPORT_CREATE_FAILED");
+    }
     return { id: "raw-import-a", ...input };
   }
 }
@@ -199,6 +278,42 @@ class FakeParseQueue implements RawImportParseEnqueuer {
       status: "queued" as const,
     };
   }
+}
+
+class FakeExamRepository {
+  constructor(private readonly validExamId = "exam-a") {}
+
+  async findById(tenantId: string, examId: string) {
+    return tenantId === "tenant-a" && examId === this.validExamId
+      ? { id: examId, tenantId, title: "Sınav", status: "DRAFT", createdAt: "2026-06-06T09:00:00.000Z", updatedAt: "2026-06-06T09:00:00.000Z" }
+      : undefined;
+  }
+}
+
+class FakeParserConfigRepository {
+  constructor(private readonly validVersion = "parser-v1") {}
+
+  async findApproved(tenantId: string, examId: string, version: string) {
+    return tenantId === "tenant-a" && examId === "exam-a" && version === this.validVersion
+      ? { tenantId, examId, version, encoding: "UTF-8" as const, delimiter: "TAB" as const, skipHeaderLines: 0, fieldMapping: { studentNo: { kind: "delimited" as const, column: 0 }, bookletType: { kind: "delimited" as const, column: 1 }, answers: { kind: "delimited" as const, column: 2, estimatedQuestionCount: 90 } }, status: "APPROVED" as const }
+      : undefined;
+  }
+}
+
+function createService(
+  archiveStore: RawImportArchiveStore,
+  repository: RawImportRepository,
+  parseQueue: RawImportParseEnqueuer,
+  exams: Pick<ExamRepository, "findById"> = new FakeExamRepository(),
+  parserConfigs: Pick<ParserConfigRepository, "findApproved"> = new FakeParserConfigRepository(),
+) {
+  return new RawImportUploadService(
+    archiveStore,
+    repository,
+    parseQueue,
+    exams,
+    parserConfigs,
+  );
 }
 
 class FakeAuditLogService {

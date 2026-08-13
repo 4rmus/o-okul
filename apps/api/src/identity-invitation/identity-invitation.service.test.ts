@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import { InMemoryGuardianStore } from "../school/guardian-store.js";
 import { InMemoryTeacherStore } from "../school/teacher-store.js";
 import { InMemorySessionStore } from "../auth/session-store.js";
-import { createAdminMfaStepUpProof } from "../auth/totp-mfa.js";
 import { InMemoryStudentStore } from "../student/student-store.js";
 import { InMemoryTenantStore } from "../tenant/tenant-store.js";
 import { InMemoryUserManagementStore } from "../user-management/user-management-store.js";
@@ -153,7 +152,135 @@ describe("IdentityInvitationService", () => {
     expect(issued.invitation).toMatchObject({ subjectType: "EMPLOYEE", role: "OPERATIONS_STAFF" });
   });
 
-  it("owner/admin başlangıç davetini bağlı step-up kanıtı ve owner capability ile sınırlar", async () => {
+  it("kampüs kapsamlı çalışan yeni hesap daveti üretemez", async () => {
+    const invitations = new InMemoryIdentityInvitationStore();
+    const users = new InMemoryUserManagementStore();
+    const employee = await users.createEmployee("tenant-a", {
+      firstName: "Dar",
+      lastName: "Kapsam",
+      status: "ACTIVE",
+    });
+    const service = new IdentityInvitationService(
+      invitations,
+      users,
+      new InMemoryStudentStore(),
+      new InMemoryGuardianStore(),
+      new InMemoryTeacherStore(),
+      new InMemoryTenantStore(),
+    );
+
+    await expect(service.createEmployeeInvitation(
+      {
+        tenantId: "tenant-a",
+        userId: "admin-a",
+        roles: ["TENANT_ADMIN"],
+        activePersona: "STAFF",
+        campusScope: { scopeMode: "CAMPUSES", campusIds: ["campus-main"] },
+        bypassRls: false,
+      },
+      employee.id,
+      { email: "dar@example.test", role: "OPERATIONS_STAFF" },
+    )).rejects.toThrow("EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
+    await expect(invitations.list("tenant-a")).resolves.toEqual([]);
+  });
+
+  it.each(["TENANT_ADMIN", "OPERATIONS_STAFF"])(
+    "kampüs kapsamlı %s genel davetleri listeleyemez, oluşturamaz veya tekrar gönderemez",
+    async (role) => {
+      const invitations = new InMemoryIdentityInvitationStore();
+      const list = vi.spyOn(invitations, "list");
+      const create = vi.spyOn(invitations, "create");
+      const findById = vi.spyOn(invitations, "findById");
+      const resend = vi.spyOn(invitations, "resend");
+      const service = new IdentityInvitationService(
+        invitations,
+        new InMemoryUserManagementStore(),
+        new InMemoryStudentStore(),
+        new InMemoryGuardianStore(),
+        new InMemoryTeacherStore(),
+        new InMemoryTenantStore(),
+      );
+      const context: RequestContext = {
+        tenantId: "tenant-a",
+        userId: "staff-a",
+        roles: [role],
+        activePersona: "STAFF",
+        campusScope: { scopeMode: "CAMPUSES", campusIds: ["campus-main"] },
+        bypassRls: false,
+      };
+
+      await expect(service.list(context)).rejects.toThrow("EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
+      for (const subjectType of ["TEACHER", "STUDENT", "GUARDIAN"] as const) {
+        await expect(service.create(context, {
+          subjectType,
+          subjectId: `${subjectType.toLowerCase()}-outside-campus`,
+          email: `${subjectType.toLowerCase()}@example.test`,
+        })).rejects.toThrow("EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
+      }
+      await expect(service.resend(context, "invitation-outside-campus")).rejects.toThrow(
+        "EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED",
+      );
+
+      expect(list).not.toHaveBeenCalled();
+      expect(create).not.toHaveBeenCalled();
+      expect(findById).not.toHaveBeenCalled();
+      expect(resend).not.toHaveBeenCalled();
+    },
+  );
+
+  it("guardian read-only rollout açıkken doğrudan guardian davetini üretmez", async () => {
+    const invitations = new InMemoryIdentityInvitationStore();
+    const resolve = vi.fn().mockResolvedValue({ enabledFeatureKeys: ["product.guardian-read-only"] });
+    const service = new IdentityInvitationService(
+      invitations,
+      new InMemoryUserManagementStore(),
+      new InMemoryStudentStore(),
+      new InMemoryGuardianStore(),
+      new InMemoryTeacherStore(),
+      new InMemoryTenantStore(),
+      undefined,
+      undefined,
+      { resolve } as never,
+    );
+
+    await expect(service.create(
+      { tenantId: "tenant-a", userId: "admin-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      { subjectType: "GUARDIAN", subjectId: "guardian-a", email: "guardian@example.test" },
+    )).rejects.toThrow("GUARDIAN_WRITE_READ_ONLY");
+    await expect(invitations.list("tenant-a")).resolves.toEqual([]);
+  });
+
+  it("eşzamanlı çalışan davetlerinde yalnız bir pending davet üretir", async () => {
+    const invitations = new InMemoryIdentityInvitationStore();
+    const users = new InMemoryUserManagementStore();
+    const employee = await users.createEmployee("tenant-a", {
+      firstName: "Eşzamanlı",
+      lastName: "Davet",
+      status: "ACTIVE",
+    });
+    const service = new IdentityInvitationService(
+      invitations,
+      users,
+      new InMemoryStudentStore(),
+      new InMemoryGuardianStore(),
+      new InMemoryTeacherStore(),
+      new InMemoryTenantStore(),
+    );
+    const invite = () => service.createEmployeeInvitation(
+      { tenantId: "tenant-a", userId: "admin-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      employee.id,
+      { email: "race@example.test", role: "OPERATIONS_STAFF" },
+    );
+
+    const outcomes = await Promise.allSettled(Array.from({ length: 20 }, invite));
+    expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome.status === "rejected")).toHaveLength(19);
+    await expect(invitations.list("tenant-a")).resolves.toEqual([
+      expect.objectContaining({ subjectId: employee.id, subjectType: "EMPLOYEE", status: "PENDING" }),
+    ]);
+  });
+
+  it("owner/admin başlangıç davetini MFA istemeden owner capability ile sınırlar", async () => {
     const invitations = new InMemoryIdentityInvitationStore();
     const users = new InMemoryUserManagementStore();
     const adminEmployee = await users.createEmployee("tenant-a", {
@@ -177,40 +304,19 @@ describe("IdentityInvitationService", () => {
     const adminContext: RequestContext = {
       tenantId: "tenant-a",
       userId: "admin-a",
-      sessionId: "session-admin-a",
-      membershipVersion: 4,
       roles: ["TENANT_ADMIN"],
       bypassRls: false,
     };
-    const proof = createAdminMfaStepUpProof({
-      userId: adminContext.userId,
-      sessionId: adminContext.sessionId ?? "",
-      membershipVersion: adminContext.membershipVersion ?? 0,
-      purpose: "OWNER_ADMIN_CHANGE",
-    });
 
     await expect(service.createEmployeeInvitation(
       adminContext,
       adminEmployee.id,
       { email: "ada.admin@example.test", role: "TENANT_ADMIN" },
-    )).rejects.toThrow("STEP_UP_MFA_REQUIRED");
-    await expect(service.createEmployeeInvitation(
-      adminContext,
-      adminEmployee.id,
-      { email: "ada.admin@example.test", role: "TENANT_ADMIN" },
-      "forged-proof",
-    )).rejects.toThrow("STEP_UP_MFA_INVALID");
-    await expect(service.createEmployeeInvitation(
-      adminContext,
-      adminEmployee.id,
-      { email: "ada.admin@example.test", role: "TENANT_ADMIN" },
-      proof.stepUpToken,
     )).resolves.toMatchObject({ invitation: { role: "TENANT_ADMIN" } });
     await expect(service.createEmployeeInvitation(
       adminContext,
       ownerEmployee.id,
       { email: "oya.owner@example.test", role: "TENANT_OWNER" },
-      proof.stepUpToken,
     )).rejects.toThrow("TENANT_OWNER_MANAGE_REQUIRED");
   });
 

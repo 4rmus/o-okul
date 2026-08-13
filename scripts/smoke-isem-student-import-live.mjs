@@ -44,7 +44,9 @@ try {
   const dryRunData = dryRun.data ?? dryRun;
   assertDryRun(dryRunData);
 
-  const imported = await postJson(baseUrl, "/api/v1/students/imports", token, { fileBase64 });
+  const imported = await postJson(baseUrl, "/api/v1/students/imports", token, { fileBase64 }, {
+    "idempotency-key": `isem-student-import-${runId}`,
+  });
   const importData = imported.data ?? imported;
   if (importData.importedRows !== 19 || !Array.isArray(importData.students) || importData.students.length !== 19) {
     throw new Error("ISEM_STUDENT_IMPORT_IMPORTED_ROWS_MISMATCH");
@@ -121,12 +123,13 @@ async function login(baseUrl) {
   return body.data?.accessToken ?? body.accessToken;
 }
 
-async function postJson(baseUrl, path, token, body) {
+async function postJson(baseUrl, path, token, body, extraHeaders = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
     method: "POST",
     headers: {
       authorization: `Bearer ${token}`,
       "content-type": "application/json",
+      ...extraHeaders,
     },
     body: JSON.stringify(body),
   });

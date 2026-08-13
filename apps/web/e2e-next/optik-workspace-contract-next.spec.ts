@@ -4,7 +4,7 @@ const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 
 const corsHeaders = {
   "access-control-allow-credentials": "true",
-  "access-control-allow-headers": "authorization,content-type,x-csrf-token",
+  "access-control-allow-headers": "authorization,content-type,idempotency-key,x-csrf-token",
   "access-control-allow-methods": "DELETE,GET,PATCH,POST,OPTIONS",
   "access-control-allow-origin": appOrigin,
 };
@@ -104,7 +104,7 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
   test("optik düzenleri ana bilgileri gösterir, destek ayrıntılarını kapalı tutar", async ({ page }) => {
     const suggestionBodies: Array<Record<string, unknown>> = [];
     const approvalBodies: Array<Record<string, unknown>> = [];
-    page.on("request", (request) => {
+    page.on("request", async (request) => {
       if (request.method() !== "POST") return;
       const pathName = new URL(request.url()).pathname;
       if (pathName.endsWith("/parser-configs/suggestions")) {
@@ -180,9 +180,20 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     const broadStudentRequests: string[] = [];
     const studentDetailRequests: string[] = [];
     const studentSearchRequests: string[] = [];
-    page.on("request", (request) => {
-      if (request.method() !== "GET") return;
+    const quarantineResolveRequests: Array<{ body: unknown; idempotencyKey?: string }> = [];
+    page.on("request", async (request) => {
       const url = new URL(request.url());
+      if (
+        request.method() === "POST"
+        && url.pathname === `/api/v1/exams/exam-optik/raw-imports/${rawImportId}/quarantines/quarantine-visible-a/resolve`
+      ) {
+        quarantineResolveRequests.push({
+          body: request.postDataJSON(),
+          idempotencyKey: await request.headerValue("idempotency-key") ?? undefined,
+        });
+        return;
+      }
+      if (request.method() !== "GET") return;
       if (url.pathname.startsWith("/api/v1/students/")) {
         studentDetailRequests.push(url.toString());
         return;
@@ -292,6 +303,14 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     expect(studentSearchUrl.searchParams.get("limit")).toBe("10");
     expect(broadStudentRequests).toHaveLength(0);
     await expect(quarantineTable.locator('select[aria-label="7. satır öğrencisi"]')).toContainText("Ada Kaya");
+    await quarantineTable.locator('select[aria-label="7. satır öğrencisi"]').selectOption("student-a");
+    await quarantineTable.getByRole("button", { name: "7. satırı çöz" }).click();
+    await expect.poll(() => quarantineResolveRequests).toHaveLength(1);
+    expect(quarantineResolveRequests[0]).toMatchObject({
+      body: { resolvedStudentId: "student-a" },
+    });
+    expect(quarantineResolveRequests[0]?.idempotencyKey).toMatch(/^raw-import-quarantine-/);
+    await expect(quarantineTable).toContainText("Çözüldü");
     const reportStatus = reportHandoff.getByRole("region", { name: "Rapor hazırlama durumu" });
     await expect(reportStatus).toHaveClass(/uh-metric-grid/);
     await expect(reportStatus.locator(".uh-metric-card")).toHaveCount(2);
@@ -355,6 +374,17 @@ async function installOptikApiMocks(page: Page) {
     }
     if (route.request().method() === "POST" && pathName === `/exams/exam-optik/raw-imports/${rawImportId}/evaluation-jobs`) {
       await fulfillData(route, createRawImportEvaluationQueueResult());
+      return;
+    }
+    if (
+      route.request().method() === "POST"
+      && pathName === `/exams/exam-optik/raw-imports/${rawImportId}/quarantines/quarantine-visible-a/resolve`
+    ) {
+      await fulfillData(route, {
+        ...createImportQuarantines()[0],
+        resolvedStudentId: "student-a",
+        status: "RESOLVED",
+      });
       return;
     }
     if (route.request().method() === "POST" && pathName === "/exams/exam-optik/answer-keys/imports/dry-run") {
@@ -545,8 +575,18 @@ function createRawImportUploadResult() {
       id: rawImportId,
       parserConfigVersion: "optik-form-7108-v1",
       sha256: rawImportHash,
+      s3Key: "raw-imports/tenant-optik/exam-optik/optik-form-7108-v1/hash/source",
+      sourceType: "OPTICAL_ANSWER_TXT",
+      tenantId: "tenant-optik",
     },
-    parseJob: { jobId: rawParseJobId, queueName: "optical-parse", status: "queued" },
+    parseJob: {
+      examId: "exam-optik",
+      jobId: rawParseJobId,
+      queueName: "excel-import",
+      rawImportId,
+      status: "queued",
+      tenantId: "tenant-optik",
+    },
     status: "uploaded",
   };
 }
@@ -633,6 +673,8 @@ function createImportQuarantines() {
       rowNumber: 7,
       status: "OPEN",
       tenantId: "tenant-optik",
+      createdAt: "2026-06-10T09:00:00.000Z",
+      updatedAt: "2026-06-10T09:00:00.000Z",
     },
   ];
 }

@@ -166,6 +166,7 @@ describe("AuditLogService", () => {
       diff: {
         email: "veli@example.test",
         fieldsChanged: ["phone"],
+        featureKeys: ["web.shell-v2"],
         firstName: "Sakli",
         nested: {
           message: "Gizli destek metni",
@@ -188,6 +189,7 @@ describe("AuditLogService", () => {
     expect(created.diff).toEqual({
       email: "[REDACTED]",
       fieldsChanged: ["phone"],
+      featureKeys: ["web.shell-v2"],
       firstName: "[REDACTED]",
       nested: "[REDACTED]",
       path: "[REDACTED]",
@@ -202,9 +204,30 @@ describe("AuditLogService", () => {
     expect(JSON.stringify(listed)).not.toContain("Gizli destek metni");
     expect(JSON.stringify(listed)).not.toContain("Sakli");
   });
+
+  it.each([
+    ["personasız tenant admin", { ...tenantAdminContext, activePersona: undefined }],
+    ["öğretmen personası", { ...tenantAdminContext, activePersona: "TEACHER" as const }],
+    ["tenant bağlamı olmayan staff", { ...tenantAdminContext, tenantId: null }],
+    ["RLS bypass oturumu", { ...tenantAdminContext, bypassRls: true }],
+    ["legacy system admin", {
+      ...tenantAdminContext,
+      activePersona: undefined,
+      bypassRls: true,
+      roles: ["SYSTEM_ADMIN"],
+      tenantId: "system",
+    }],
+  ])("%s tenant audit kayıtlarını okuyamaz", async (_label, context) => {
+    const service = new AuditLogService(new FakeAuditLogStore([]));
+
+    await expect(service.list(context)).rejects.toThrow("TENANT_STAFF_AUDIT_CONTEXT_REQUIRED");
+    await expect(service.safeList(context)).rejects.toThrow("TENANT_STAFF_AUDIT_CONTEXT_REQUIRED");
+    await expect(service.studentSummary(context, "student-a")).rejects.toThrow("TENANT_STAFF_AUDIT_CONTEXT_REQUIRED");
+  });
 });
 
 const tenantAdminContext: RequestContext = {
+  activePersona: "STAFF",
   bypassRls: false,
   roles: ["TENANT_ADMIN"],
   tenantId: "tenant-a",

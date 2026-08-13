@@ -22,6 +22,7 @@ import type {
   ReportStudentScoreSummary,
   ReportStudentSnapshot,
   ReportStudentStatistics,
+  StudentOverviewLatestExamRecord,
 } from "@o-okul/shared-types";
 import {
   reportCourseMatchesScoreType,
@@ -40,7 +41,11 @@ import { examParticipantRepositoryToken, examRepositoryToken, type ExamParticipa
 import { type TeacherAssignmentStore, teacherAssignmentStoreToken } from "../school/teacher-assignment-store.js";
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
 import type { StudentRecord } from "../student/student.service.js";
-import { filterTenantResources, isTeacherSubjectContext } from "../tenant/tenant-access.js";
+import {
+  filterTenantResources,
+  isTeacherSubjectContext,
+  requireTenantWideStaffContext,
+} from "../tenant/tenant-access.js";
 import { tenantStoreToken, type TenantStore } from "../tenant/tenant-store.js";
 import { reportSnapshotStoreToken, type ReportSnapshotStore } from "./report-snapshot-store.js";
 
@@ -174,6 +179,7 @@ export class ReportGenerationService implements OnModuleDestroy {
     input: EnqueueReportGenerationInput,
     idempotencyKey?: string,
   ): Promise<ReportGenerationQueueResult> {
+    requireReportScope(context);
     if (idempotencyKey && this.idempotency) {
       return this.idempotency.run(
         context,
@@ -236,6 +242,7 @@ export class ReportGenerationService implements OnModuleDestroy {
     examId: string | undefined,
     jobId: string | undefined,
   ): Promise<ReportGenerationJobStatus> {
+    requireReportScope(context);
     if (!context.tenantId) {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
     }
@@ -273,6 +280,7 @@ export class ReportGenerationService implements OnModuleDestroy {
     examId: string | undefined,
     filters: ReportSnapshotListFilters = {},
   ): Promise<ReportSnapshotRecord[]> {
+    requireReportScope(context);
     if (!context.tenantId) {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
     }
@@ -287,6 +295,7 @@ export class ReportGenerationService implements OnModuleDestroy {
     examId: string | undefined,
     studentId: string | undefined,
   ): Promise<ReportSnapshotRecord[]> {
+    requireReportScope(context);
     if (!context.tenantId) {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
     }
@@ -314,11 +323,39 @@ export class ReportGenerationService implements OnModuleDestroy {
     return summaries.sort((left, right) => toTime(right.generatedAt ?? right.createdAt) - toTime(left.generatedAt ?? left.createdAt));
   }
 
+  async getLatestStudentOverview(
+    context: RequestContext,
+    studentId: string,
+  ): Promise<StudentOverviewLatestExamRecord | undefined> {
+    requireReportScope(context);
+    if (!context.tenantId) throw new ForbiddenException("TENANT_CONTEXT_MISSING");
+    const snapshots = await this.snapshots.listReadyByStudent(context.tenantId, studentId);
+    for (const snapshot of snapshots) {
+      if (!snapshot.snapshotData) continue;
+      if (isTeacherSubjectContext(context) && !(await this.canTeacherAccessStudentReport(context, studentId, snapshot))) {
+        continue;
+      }
+      const student = readRecords(snapshot.snapshotData.students)
+        .find((candidate) => readText(candidate.studentId) === studentId);
+      if (!student) continue;
+      const examTitle = readText(snapshot.snapshotData.examTitle);
+      return {
+        examId: snapshot.examId,
+        snapshotId: snapshot.id,
+        ...(examTitle ? { examTitle } : {}),
+        ...(snapshot.generatedAt ? { generatedAt: snapshot.generatedAt } : {}),
+        total: readScoreSummary(student.total),
+      };
+    }
+    return undefined;
+  }
+
   async exportSnapshotExcel(
     context: RequestContext,
     examId: string | undefined,
     snapshotId: string | undefined,
   ): Promise<ReportSnapshotExportResult> {
+    requireReportScope(context);
     if (!context.tenantId) {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
     }
@@ -341,6 +378,7 @@ export class ReportGenerationService implements OnModuleDestroy {
     examId: string | undefined,
     snapshotId: string | undefined,
   ): Promise<ReportSnapshotPdfResult> {
+    requireReportScope(context);
     if (!context.tenantId) {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
     }
@@ -373,6 +411,7 @@ export class ReportGenerationService implements OnModuleDestroy {
     examId: string | undefined,
     snapshotId: string | undefined,
   ): Promise<ReportSnapshotPdfResult> {
+    requireReportScope(context);
     const { resolvedExamId, resolvedSnapshotId, snapshot } = await this.requireReadySnapshot(
       context,
       examId,
@@ -397,6 +436,7 @@ export class ReportGenerationService implements OnModuleDestroy {
     snapshotId: string | undefined,
     studentId: string | undefined,
   ): Promise<ReportSnapshotPdfResult> {
+    requireReportScope(context);
     const resolvedStudentId = required(studentId, "REPORT_STUDENT_REQUIRED");
     const { resolvedExamId, resolvedSnapshotId, snapshot } = await this.requireReadySnapshot(
       context,
@@ -424,6 +464,7 @@ export class ReportGenerationService implements OnModuleDestroy {
     snapshotId: string | undefined,
     studentId: string | undefined,
   ): Promise<ReportStudentSnapshot> {
+    requireReportScope(context);
     if (!context.tenantId) {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
     }
@@ -529,6 +570,7 @@ export class ReportGenerationService implements OnModuleDestroy {
     examId: string | undefined,
     studentId: string | undefined,
   ): Promise<ReportStudentSnapshot> {
+    requireReportScope(context);
     const resolvedStudentId = required(studentId, "REPORT_STUDENT_REQUIRED");
     const snapshotId = await this.findLatestReadyStudentSnapshotId(context, examId, resolvedStudentId);
     return this.getStudentReport(context, examId, snapshotId, resolvedStudentId);
@@ -540,6 +582,7 @@ export class ReportGenerationService implements OnModuleDestroy {
     snapshotId: string | undefined,
     studentId: string | undefined,
   ): Promise<ReportErrorBooklet> {
+    requireReportScope(context);
     if (!context.tenantId) {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
     }
@@ -581,6 +624,7 @@ export class ReportGenerationService implements OnModuleDestroy {
     examId: string | undefined,
     studentId: string | undefined,
   ): Promise<ReportErrorBooklet> {
+    requireReportScope(context);
     const resolvedStudentId = required(studentId, "REPORT_STUDENT_REQUIRED");
     const snapshotId = await this.findLatestReadyStudentSnapshotId(context, examId, resolvedStudentId);
     return this.getStudentErrorBooklet(context, examId, snapshotId, resolvedStudentId);
@@ -592,6 +636,7 @@ export class ReportGenerationService implements OnModuleDestroy {
     studentId: string | undefined,
     options: ReportStudentProgressOptions = {},
   ): Promise<ReportStudentProgress> {
+    requireReportScope(context);
     if (!context.tenantId) {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
     }
@@ -841,6 +886,19 @@ export function createReportGenerationContentHash(input: {
       input.termId ?? null,
     ]))
     .digest("hex");
+}
+
+function requireReportScope(context: RequestContext): void {
+  if (isTeacherSubjectContext(context)) {
+    if (!context.tenantId) throw new ForbiddenException("TENANT_CONTEXT_MISSING");
+    return;
+  }
+
+  try {
+    requireTenantWideStaffContext(context, "REPORT_CAMPUS_SCOPE_FORBIDDEN");
+  } catch (error) {
+    throw new ForbiddenException(error instanceof Error ? error.message : "REPORT_CAMPUS_SCOPE_FORBIDDEN");
+  }
 }
 
 export function createReportGenerationJobStatusReader(): ReportGenerationJobStatusReader {

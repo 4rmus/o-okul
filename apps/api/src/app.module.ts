@@ -6,6 +6,7 @@ import { AuthModule } from "./auth/auth.module.js";
 import { RequestContextMiddleware } from "./context/request-context.middleware.js";
 import { DevelopmentModule } from "./development/development.module.js";
 import { ExamModule } from "./exam/exam.module.js";
+import { FeatureRolloutModule } from "./feature-rollout/feature-rollout.module.js";
 import { HealthModule } from "./health/health.module.js";
 import { HomeworkModule } from "./homework/homework.module.js";
 import { IdentityInvitationModule } from "./identity-invitation/identity-invitation.module.js";
@@ -26,8 +27,10 @@ import { RolePreviewModule } from "./role-preview/role-preview.module.js";
 import { SchoolModule } from "./school/school.module.js";
 import { SecurityHeadersMiddleware } from "./security/security-headers.middleware.js";
 import { SearchModule } from "./search/search.module.js";
+import { SetupModule } from "./setup/setup.module.js";
 import { SmsBatchModule } from "./sms-batch/sms-batch.module.js";
 import { StudentModule } from "./student/student.module.js";
+import { StudentOverviewModule } from "./student-overview/student-overview.module.js";
 import { SupportTicketModule } from "./support-ticket/support-ticket.module.js";
 import { TeacherNoteModule } from "./teacher-note/teacher-note.module.js";
 import { TenantModule } from "./tenant/tenant.module.js";
@@ -44,6 +47,7 @@ import { UserManagementModule } from "./user-management/user-management.module.j
     AttendanceModule,
     DevelopmentModule,
     ExamModule,
+    FeatureRolloutModule,
     HealthModule,
     HomeworkModule,
     HttpInfrastructureModule,
@@ -61,8 +65,10 @@ import { UserManagementModule } from "./user-management/user-management.module.j
     ScheduleModule,
     SchoolModule,
     SearchModule,
+    SetupModule,
     SmsBatchModule,
     StudentModule,
+    StudentOverviewModule,
     StudySessionModule,
     SupportTicketModule,
     TeacherNoteModule,

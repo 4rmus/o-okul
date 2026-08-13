@@ -75,7 +75,7 @@ try {
     checkedAt: new Date().toISOString(),
     policy: {
       mode: adminMfaMode,
-      requiredRoles: ["SYSTEM_ADMIN", "TENANT_ADMIN"],
+      requiredRoles: ["SYSTEM_ADMIN"],
       secretStorage: "aes-256-gcm",
       secretEncryptionKeyEnv: "ADMIN_MFA_SECRET_ENCRYPTION_KEY",
       recoveryCodeHashKeyEnv: "ADMIN_MFA_RECOVERY_HASH_KEY",
@@ -108,21 +108,15 @@ async function readEnrollment(pool) {
            AND u."totpSecretEncrypted" IS NOT NULL
            AND u."totpEnabledAt" IS NOT NULL
        )::int AS "systemAdminsEnrolled",
-       count(DISTINCT u."id") FILTER (WHERE m."role" = 'TENANT_ADMIN')::int AS "tenantAdminsTotal",
        count(DISTINCT u."id") FILTER (
-         WHERE m."role" = 'TENANT_ADMIN'
-           AND u."totpSecretEncrypted" IS NOT NULL
-           AND u."totpEnabledAt" IS NOT NULL
-       )::int AS "tenantAdminsEnrolled",
-       count(DISTINCT u."id") FILTER (
-         WHERE m."role" IN ('SYSTEM_ADMIN', 'TENANT_ADMIN')
+         WHERE m."role" = 'SYSTEM_ADMIN'
            AND (
              u."totpSecretEncrypted" IS NULL
              OR u."totpEnabledAt" IS NULL
            )
        )::int AS "unenrolledRequiredAdmins",
        min(cardinality(u."totpRecoveryCodeHashes")) FILTER (
-         WHERE m."role" IN ('SYSTEM_ADMIN', 'TENANT_ADMIN')
+         WHERE m."role" = 'SYSTEM_ADMIN'
            AND u."totpSecretEncrypted" IS NOT NULL
            AND u."totpEnabledAt" IS NOT NULL
        )::int AS "minimumRecoveryCodesRemaining"
@@ -130,14 +124,12 @@ async function readEnrollment(pool) {
      JOIN "User" u ON u."id" = m."userId"
      JOIN "Tenant" t ON t."id" = m."tenantId"
      WHERE t."status" = 'ACTIVE'
-       AND m."role" IN ('SYSTEM_ADMIN', 'TENANT_ADMIN')`,
+       AND m."role" = 'SYSTEM_ADMIN'`,
   );
   const row = result.rows[0] ?? {};
   const enrollment = {
     systemAdminsTotal: Number(row.systemAdminsTotal ?? 0),
     systemAdminsEnrolled: Number(row.systemAdminsEnrolled ?? 0),
-    tenantAdminsTotal: Number(row.tenantAdminsTotal ?? 0),
-    tenantAdminsEnrolled: Number(row.tenantAdminsEnrolled ?? 0),
     unenrolledRequiredAdmins: Number(row.unenrolledRequiredAdmins ?? 0),
     recoveryCodesPerEnrollment,
   };
@@ -151,14 +143,8 @@ async function readEnrollment(pool) {
   if (enrollment.systemAdminsTotal < 1) {
     fail(["enrollment.systemAdminsTotal staging/prod kanıtı için en az 1 olmalı."]);
   }
-  if (enrollment.tenantAdminsTotal < 1) {
-    fail(["enrollment.tenantAdminsTotal staging/prod kanıtı için en az 1 olmalı."]);
-  }
   if (enrollment.systemAdminsEnrolled !== enrollment.systemAdminsTotal) {
     fail([`SYSTEM_ADMIN MFA enrollment eksik: ${enrollment.systemAdminsEnrolled}/${enrollment.systemAdminsTotal}.`]);
-  }
-  if (enrollment.tenantAdminsEnrolled !== enrollment.tenantAdminsTotal) {
-    fail([`TENANT_ADMIN MFA enrollment eksik: ${enrollment.tenantAdminsEnrolled}/${enrollment.tenantAdminsTotal}.`]);
   }
   if (enrollment.unenrolledRequiredAdmins !== 0) {
     fail([`enrollment.unenrolledRequiredAdmins 0 olmalı: ${enrollment.unenrolledRequiredAdmins}.`]);

@@ -95,7 +95,8 @@ pnpm backup:restore:smoke
   `secret_delivery_worker` rolünü kullanır; bu rolün parolası app ve migration DSN parolalarından
   farklıdır ve yalnız `SecretDeliveryOutbox` için `SELECT`/`UPDATE` yetkisine sahiptir.
 - Canlı onboarding girdisi, repo/artifacts/evidence mount dışında symlink olmayan private `0600`
-  dosyada tutulur. Bu dosya credentials içerdiğinden release artifact'ı değildir.
+  dosyada tutulur. Dosyadaki sistem admin parolası ve Base32 TOTP anahtarı smoke öncesi bootstrap
+  edilmiş hesaba aittir; bu dosya credentials içerdiğinden release artifact'ı değildir.
 - `pnpm prod:env:check` gerçek staging/prod env değerlerinde geçer.
 - Production kanıt zinciri `pnpm prod:evidence:check` ile tek komutta geçer.
 - Gerçek staging/prod env dosyalarında `*_ALLOW_EXAMPLE_EVIDENCE=1` bayrakları bulunmaz;
@@ -213,8 +214,8 @@ pnpm backup:restore:smoke
 - Production kanıt şablonları `pnpm prod:evidence:templates:check` ile repo içinde doğrulanır.
 - KVKK, kimlik göçü, finansal saklama, upload AV, observability UAT ve security
   audit gerçek kanıtlarında `checkedAt` gelecekte olamaz.
-- Admin MFA raporu `ADMIN_MFA_EVIDENCE_TARGET` ile doğrulanır; SYSTEM_ADMIN/TENANT_ADMIN
-  hesaplarında password-only login auth session üretmez, TOTP ve recovery code reuse reddedilir.
+- Admin MFA raporu `ADMIN_MFA_EVIDENCE_TARGET` ile doğrulanır; yalnız SYSTEM_ADMIN
+  hesaplarında password-only login auth session üretmez, TOTP ve recovery code reuse reddedilir. Kurum hesapları MFA kapsamı dışındadır.
   Staging artifact'i üretmek için
   `STAGING_ENVIRONMENT=staging ADMIN_MFA_OUTPUT=artifacts/staging/reports/admin-mfa.json DIRECT_DATABASE_URL=... ADMIN_MFA_MODE=required ADMIN_MFA_SECRET_ENCRYPTION_KEY=... ADMIN_MFA_RECOVERY_HASH_KEY=... ADMIN_MFA_CHALLENGE_SECRET=... ADMIN_MFA_RECOVERY_CODES_PER_ENROLLMENT=8 ADMIN_MFA_PASSWORD_ONLY_LOGIN_BLOCKED=true ADMIN_MFA_TOTP_LOGIN_SUCCEEDED=true ADMIN_MFA_INVALID_TOTP_REJECTED=true ADMIN_MFA_TOTP_REUSE_REJECTED=true ADMIN_MFA_RECOVERY_CODE_LOGIN_SUCCEEDED=true ADMIN_MFA_RECOVERY_CODE_REUSE_REJECTED=true ADMIN_MFA_SESSIONS_REVOKED_ON_ENABLE=true ADMIN_MFA_SESSIONS_REVOKED_ON_DISABLE=true ADMIN_MFA_PASSWORD_ONLY_EVIDENCE_REFERENCE=... ADMIN_MFA_TOTP_SUCCESS_EVIDENCE_REFERENCE=... ADMIN_MFA_INVALID_TOTP_EVIDENCE_REFERENCE=... ADMIN_MFA_TOTP_REUSE_EVIDENCE_REFERENCE=... ADMIN_MFA_RECOVERY_SUCCESS_EVIDENCE_REFERENCE=... ADMIN_MFA_RECOVERY_REUSE_EVIDENCE_REFERENCE=... ADMIN_MFA_SESSIONS_REVOKED_ENABLE_EVIDENCE_REFERENCE=... ADMIN_MFA_SESSIONS_REVOKED_DISABLE_EVIDENCE_REFERENCE=... pnpm admin-mfa:generate`
   kullanılır; generator gerçek secret, DB enrollment sayımı ve login/recovery/session kanıt
@@ -759,7 +760,7 @@ pnpm backup:restore:smoke
   session'ları iptal eder. Rapor top-level 9 alanı ile `policy`, `enrollment`,
   `loginVerification` blok shape'leri ve boş `gaps` listesi template invalid/non-empty gaps negatifleriyle korunur.
   Staging/prod artifact üretimi `pnpm admin-mfa:generate` ile yapılır; komut aktif tenantlardaki
-  SYSTEM_ADMIN/TENANT_ADMIN hesaplarının tamamının TOTP enrollment'lı olmasını, en az bir recovery
+  SYSTEM_ADMIN hesaplarının tamamının TOTP enrollment'lı olmasını, en az bir recovery
   code hash'inin kalmasını, auth MFA unit testlerini ve API typecheck'i geçmeden JSON yazmaz.
 
 ## Web UX ve A11y
@@ -803,7 +804,8 @@ pnpm backup:restore:smoke
 - KVKK `purgeCoverage` içinde öğrenci için `firstName`, `lastName`, `nationalIdEncrypted`,
   `nationalIdHash`, `phone`, `email`, `photoKey`; öğretmen için `firstName`, `lastName`,
   `nationalIdEncrypted`, `nationalIdHash`, `phone`; veli için `firstName`, `lastName`, `phone`;
-  kullanıcı hesabı için `email`, `name` alanları doğrulanır.
+  kullanıcı hesabı için `email`, `name`; `StudentContact` için ad, ilişki, şifreli/hash iletişim,
+  izin ve consent alanlarının anonimleştirme/temizleme kapsamı doğrulanır.
   `whatsappConsent` bloğu bu release'te `recordCount=0`, exact
   `eventRecordCount=0`,
   `piiRelevantStoredFields=[phoneHash,purpose,canReceiveWhatsapp,version,noticeVersion,source,recordedAt,withdrawnAt]`,
@@ -812,8 +814,8 @@ pnpm backup:restore:smoke
   `disposalMethod=NO_RECORDS_WHILE_DISABLED`, `purgeException=false`, boş olmayan `explanation`)
   taşır. Bu, özellik kapalıyken runtime kaydı olmadığını kanıtlar; capability veya sonraki
   aktivasyonun retention/purge onayı değildir.
-  Rapor top-level 10 alanı, dört `dataSubjectCounts` alanı, dört `purgeCoverage` subject'i,
-  subject field setleri, dört audit action seti, `/audit-logs` audit diff redaction bloğu ve boş `gaps` listesi
+  Rapor top-level 10 alanı, beş `dataSubjectCounts` alanı, beş `purgeCoverage` subject'i,
+  subject field setleri, beş audit action seti, `/audit-logs` audit diff redaction bloğu ve boş `gaps` listesi
   `prod:evidence:templates:check` içindeki fazla alan/madde ve invalid/non-empty gaps negatifleriyle korunur.
   Audit diff negatif kontrolleri `body`, `contentBase64`, `fileBase64`, `fileName`, `objectKey`,
   `rawLine`, `rawRow`, `rawText`, `s3Key`, `sourceFileName`, `sourceFilePath`, kişi adı,
@@ -1026,10 +1028,15 @@ pnpm backup:restore:smoke
   komut `NEXT_E2E_LIVE_ONBOARDING=1`, `LIVE_ONBOARDING_EVIDENCE_PATH`, bearer korumalı
   `LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT` ve `LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN` gerektirir.
   `pnpm live:onboarding:evidence-contract` bu preflight'ı tarayıcı açmadan doğrular; gerçek smoke
-  başlamadan önce evidence JSON'unun exact system admin/first admin/tenant/onboarding shape'i,
+  başlamadan önce evidence JSON'unun exact system admin (parola + Base32 TOTP anahtarı)/first admin/tenant/onboarding shape'i,
   `generatedAt` değerinin 24 saatten eski olmadığı, placeholder/test değer taşımadığı, sistem admin ile ilk admin e-postalarının ayrık olduğu ve
   dosyanın lokal temp path, symlink dosya veya symlink parent zinciri altında olmadığı kontrol edilir.
+  Sistem admin enrollment ekranı görürse smoke bilinen seed parolasıyla devam etmek yerine bootstrap gereksinimiyle fail-closed durur.
   İlk yönetici aktivasyon URL'si gerçek inbox evidence endpoint'inden poll edilir; URL/token evidence artifact'ına yazılmaz.
+  Evidence poll'u alıcı e-postasını URL/loglara taşımayan bearer-korumalı JSON POST kullanır. Notification
+  gateway yalnız repo dışında Wrangler secret olarak tanımlanan exact base alıcıyı ve onun `+run-id`
+  alias'larını Email Sending kabulünden sonra alıcı HMAC'i altında 15 dakika saklar; diğer alıcılar ve
+  normal parola sıfırlamaları bu geçici kayda girmez.
 - Tam sınav döngüsü staging/prod kanıtı `LIVE_EXAM_CYCLE_TARGET` ile `pnpm live:exam-cycle:check`
   üzerinden doğrulanır; iSEM cevap anahtarı, optik pipeline, raw import, report-generation ve
   mock'suz UI-worker/portal kanıtları aynı release candidate'a bağlanır. Rapor top-level 11
@@ -1040,8 +1047,8 @@ pnpm backup:restore:smoke
   Bu referanslar `isem-optical-pipeline.json`/`.log` ve `live-ui-worker-result.json`/`live-ui-worker-report.json`
   artifact adlarına bağlanmalı; aynı kelimeleri taşıyan alakasız marker dosyaları veya `artifacts/local/**`
   local smoke çıktısı kalıcı staging/prod kanıtı gibi gösterilemez.
-  Aynı kontrol iSEM LGS fixture'ı için 90 soru, 254 katılımcı, 254 eşleşme, 0 quarantine,
-  254 sınav sonucu ve 254 rapor sonucunu exact sayıyla ister; `fileName`, `rawRow`,
+  Aynı kontrol iSEM LGS fixture'ı için 90 soru, 21 katılımcı, 21 eşleşme, 0 quarantine,
+  21 sınav sonucu ve 21 rapor sonucunu exact sayıyla ister; `fileName`, `rawRow`,
   `contentBase64`, `fileBase64`, ham `ornek-veriler/iSEM .txt` yolu, TCKN-benzeri 11 haneli
   değer, ham e-posta veya telefon evidence JSON'unda yer alamaz.
 - iSEM optik pipeline kanıtı `ISEM_OPTICAL_PIPELINE_TARGET` ile

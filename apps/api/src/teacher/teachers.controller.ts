@@ -9,6 +9,8 @@ import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
+import { hasCapability } from "../rbac/role-capabilities.js";
+import { maskContactPhone } from "../privacy/contact-mask.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import {
@@ -37,13 +39,15 @@ export class TeachersController {
   @Get()
   @Roles("TEACHER")
   async list(@Query() query: ListQuery): Promise<TeacherRecord[]> {
-    return applyListQuery(await this.teachers.listTeachers(getRequestContext()), query, teacherListFields).map(toTeacherResponse);
+    const context = getRequestContext();
+    return applyListQuery(await this.teachers.listTeachers(context), query, teacherListFields).map((record) => toTeacherResponse(record, context));
   }
 
   @Get(":id")
   @Roles("TEACHER")
   async findOne(@Param("id") id: string): Promise<TeacherRecord> {
-    return toTeacherResponse(await this.teachers.findTeacher(getRequestContext(), id));
+    const context = getRequestContext();
+    return toTeacherResponse(await this.teachers.findTeacher(context, id), context);
   }
 
   @Get(":id/assignments")
@@ -58,7 +62,8 @@ export class TeachersController {
     @Body(zodBody(teacherCreateBodySchema)) body: TeacherCreateBody,
     @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<TeacherRecord> {
-    return toTeacherResponse(await this.teachers.createTeacher(getRequestContext(), body, idempotencyKey));
+    const context = getRequestContext();
+    return toTeacherResponse(await this.teachers.createTeacher(context, body, idempotencyKey), context);
   }
 
   @Post("imports/dry-run")
@@ -76,7 +81,7 @@ export class TeachersController {
     const result = await this.imports.import(getRequestContext(), body, idempotencyKey);
     return {
       ...result,
-      teachers: result.teachers.map(toTeacherResponse),
+      teachers: result.teachers.map((record) => toTeacherResponse(record, getRequestContext())),
     };
   }
 
@@ -93,7 +98,8 @@ export class TeachersController {
   @Patch(":id")
   @RequireCapability("staff:manage")
   async update(@Param("id") id: string, @Body(zodBody(teacherUpdateBodySchema)) body: TeacherUpdateBody): Promise<TeacherRecord> {
-    return toTeacherResponse(await this.teachers.updateTeacher(getRequestContext(), id, body));
+    const context = getRequestContext();
+    return toTeacherResponse(await this.teachers.updateTeacher(context, id, body), context);
   }
 
   @Patch(":id/assignments/:assignmentId")
@@ -109,7 +115,8 @@ export class TeachersController {
   @Post(":id/purge-pii")
   @RequireCapability("privacy:manage")
   async purgePii(@Param("id") id: string): Promise<TeacherRecord> {
-    return toTeacherResponse(await this.teachers.purgeTeacherPii(getRequestContext(), id));
+    const context = getRequestContext();
+    return toTeacherResponse(await this.teachers.purgeTeacherPii(context, id), context);
   }
 
   @Delete(":id")
@@ -133,10 +140,12 @@ const teacherListFields = [
   { name: "branch", read: (record: TeacherRecord) => record.branch },
 ];
 
-function toTeacherResponse(record: TeacherRecord): TeacherRecord {
+function toTeacherResponse(record: TeacherRecord, context: ReturnType<typeof getRequestContext>): TeacherRecord {
   const response = { ...record } as TeacherRecord & { nationalIdEncrypted?: string; nationalIdHash?: string };
   delete response.nationalIdEncrypted;
   delete response.nationalIdHash;
   delete response.userId;
+  if (record.phone) response.phoneMasked = maskContactPhone(record.phone);
+  if (!hasCapability(context, "privacy:manage")) delete response.phone;
   return response;
 }

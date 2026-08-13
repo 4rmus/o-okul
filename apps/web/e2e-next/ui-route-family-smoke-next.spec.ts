@@ -1,12 +1,21 @@
-import { readdirSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { AxeBuilder } from "@axe-core/playwright";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { expectNoHorizontalOverflow } from "./helpers/horizontal-overflow.js";
+import { resolveRouteArchitecture, type RouteArchitecture } from "./route-architecture-manifest.js";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const appDirectory = fileURLToPath(new URL("../app", import.meta.url));
 const blockedA11yImpacts = new Set(["critical", "serious"]);
+const measurementMode = process.env.ALMANAC_MEASUREMENT_MODE === "1";
+const measurementPartsDirectory = fileURLToPath(new URL("../../../artifacts/almanac-foundation/measurement-parts/", import.meta.url));
+const measurementRunFile = measurementPartsDirectory + ".run.json";
+const measurementTargets = new Map([
+  ["/kurum/optik", "optical_workbench_ready"],
+  ["/kurum/raporlar", "report_workspace_ready"],
+  ["/ogrenci", "student_portal_ready"],
+]);
 const routeViewports = [
   { height: 812, width: 320 },
   { height: 812, width: 375 },
@@ -17,7 +26,8 @@ const routeViewports = [
 type Persona = "anonymous" | "assistantAdmin" | "guardian" | "student" | "studentMustChangePassword" | "systemAdmin" | "teacher" | "tenantAdmin";
 
 interface RouteCase {
-  feature?: "sms";
+  architecture: RouteArchitecture;
+  feature?: "exam-workspace" | "sms";
   heading: string;
   persona: Persona;
   primaryTask: PrimaryTask;
@@ -62,6 +72,12 @@ const routeCases = [
   route("/kurum/kullanicilar", "Kullanıcılar", "tenantAdmin", { role: "region", name: "Kullanıcı ve rol yönetimi" }),
   route("/kurum/lisans-donemleri", "Lisans Dönemleri", "tenantAdmin", { role: "region", name: "Lisans dönemleri" }),
   route("/kurum/kurulum", "Kurulum Sihirbazı", "assistantAdmin", { role: "region", name: "Kurulum formu" }),
+  route("/kurum/kurulum/genel", "Kurulum Sihirbazı", "assistantAdmin", { role: "region", name: "Kurulum formu" }),
+  route("/kurum/kurulum/donem", "Kurulum Sihirbazı", "assistantAdmin", { role: "region", name: "Kurulum formu" }),
+  route("/kurum/kurulum/siniflar", "Kurulum Sihirbazı", "assistantAdmin", { role: "region", name: "Kurulum formu" }),
+  route("/kurum/kurulum/dersler", "Kurulum Sihirbazı", "assistantAdmin", { role: "region", name: "Kurulum formu" }),
+  route("/kurum/kurulum/kisiler", "Kurulum Sihirbazı", "assistantAdmin", { role: "region", name: "Kurulum formu" }),
+  route("/kurum/kurulum/hazirlik", "Kurulum Sihirbazı", "assistantAdmin", { role: "region", name: "Kurulum formu" }),
   route("/kurum/kvkk", "KVKK", "tenantAdmin", { role: "region", name: "KVKK yönetimi" }),
   route("/kurum/materyaller", "Materyaller", "assistantAdmin", { role: "region", name: "Ödev kontrolü" }),
   route("/kurum/notlar", "Öğretmen Notları", "assistantAdmin", { role: "region", name: "Öğretmen notu yönetimi" }),
@@ -79,6 +95,7 @@ const routeCases = [
   route("/kurum/sablonlar", "Şablonlar", "assistantAdmin", { role: "region", name: "Şablon yönetimi" }, { feature: "sms" }),
   route("/kurum/seviyeler", "Seviyeler", "assistantAdmin", { role: "region", name: "Seviye yönetimi" }),
   route("/kurum/sinavlar", "Sınavlar", "assistantAdmin", { role: "region", name: "Sınav yönetimi" }),
+  route("/kurum/sinavlar/[examId]", "Gate C Denemesi", "assistantAdmin", { role: "region", name: "Salt okunur sınav çalışma alanı" }, { feature: "exam-workspace" }),
   route("/kurum/siniflar", "Sınıflar", "assistantAdmin", { role: "region", name: "Sınıf yönetimi" }),
   route("/kurum/siniflar/[classId]", "8-A", "assistantAdmin", { role: "region", name: "Sınıf detayı" }),
   route("/kurum/sistem-sagligi", "Sistem Sağlığı", "tenantAdmin", { role: "region", name: "Sistem bağlantıları ve kullanım durumu" }),
@@ -126,14 +143,27 @@ test.describe("UI route family smoke", () => {
   test.describe.configure({ mode: "parallel" });
 
   for (const routeCase of routeCases) {
-    test(`${routeCase.routeTemplate} dört zorunlu viewport'ta görev ve UX sözleşmesini korur`, async ({ page }) => {
+    const measurementTaskId = measurementTargets.get(routeCase.routeTemplate);
+    const title = measurementMode && measurementTaskId
+      ? routeCase.routeTemplate + " Gate B local synthetic ölçüm baseline'ı üretir"
+      : routeCase.routeTemplate + " dört zorunlu viewport'ta görev ve UX sözleşmesini korur";
+    test(title, async ({ page }) => {
       test.setTimeout(120_000);
       const unknownApiRequests: string[] = [];
-      await installRouteApiMocks(page, routeCase.persona, unknownApiRequests);
+      await installRouteApiMocks(page, routeCase.persona, unknownApiRequests, {
+        featureRolloutKeys: routeCase.feature === "exam-workspace"
+          ? ["web.shell-v2", "web.exam-workspace-v2"]
+          : [],
+      });
       await page.addInitScript(() => {
         document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
       });
       await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
+
+      if (measurementMode && measurementTaskId) {
+        await collectRouteMeasurement(page, routeCase, measurementTaskId, unknownApiRequests);
+        return;
+      }
 
       const resolvedPath = resolveRouteTemplate(routeCase.routeTemplate);
       for (const viewport of routeViewports) {
@@ -171,6 +201,110 @@ test.describe("UI route family smoke", () => {
     });
   }
 });
+
+async function collectRouteMeasurement(
+  page: Page,
+  routeCase: RouteCase,
+  taskId: string,
+  unknownApiRequests: string[],
+) {
+  const measurementRun = JSON.parse(readFileSync(measurementRunFile, "utf8")) as {
+    runId?: unknown;
+    startedAt?: unknown;
+  };
+  if (typeof measurementRun.runId !== "string" || typeof measurementRun.startedAt !== "string") {
+    throw new Error("ALMANAC_MEASUREMENT_RUN_INVALID");
+  }
+  const runtimeErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") runtimeErrors.push("console");
+  });
+  page.on("pageerror", () => runtimeErrors.push("pageerror"));
+  page.on("requestfailed", (request) => {
+    runtimeErrors.push(`requestfailed:${request.url()}:${request.failure()?.errorText ?? "unknown"}`);
+  });
+  page.on("response", (response) => {
+    if (response.status() >= 400) runtimeErrors.push(`http-${response.status()}`);
+  });
+  await page.setViewportSize({ height: 900, width: 1440 });
+  await page.addInitScript(() => {
+    const state = { cls: 0, lcpMs: 0 };
+    (window as typeof window & { __almanacMetrics?: typeof state }).__almanacMetrics = state;
+    new PerformanceObserver((list) => {
+      const latest = list.getEntries().at(-1);
+      if (latest) state.lcpMs = latest.startTime;
+    }).observe({ buffered: true, type: "largest-contentful-paint" });
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        const shift = entry as PerformanceEntry & { hadRecentInput?: boolean; value?: number };
+        if (!shift.hadRecentInput) state.cls += shift.value ?? 0;
+      }
+    }).observe({ buffered: true, type: "layout-shift" });
+  });
+
+  const targetPath = resolveRouteTemplate(routeCase.routeTemplate);
+  await openMeasuredRoute(page, routeCase, targetPath);
+  const samples = [];
+  for (let index = 0; index < 5; index += 1) {
+    unknownApiRequests.length = 0;
+    const startedAt = performance.now();
+    await openMeasuredRoute(page, routeCase, targetPath);
+    const durationMs = performance.now() - startedAt;
+    const browserMetrics = await page.evaluate(() => {
+      const navigation = performance.getEntriesByType("navigation").at(-1) as PerformanceNavigationTiming | undefined;
+      const fcp = performance.getEntriesByName("first-contentful-paint").at(-1);
+      const observed = (window as typeof window & { __almanacMetrics?: { cls: number; lcpMs: number } }).__almanacMetrics;
+      return {
+        cls: observed?.cls ?? 0,
+        fcpMs: fcp?.startTime ?? 0,
+        lcpMs: observed?.lcpMs ?? 0,
+        ttfbMs: navigation ? navigation.responseStart - navigation.requestStart : 0,
+      };
+    });
+    expect(unknownApiRequests).toEqual([]);
+    expect(runtimeErrors).toEqual([]);
+    samples.push({ ...browserMetrics, durationMs });
+  }
+
+  const axe = await new AxeBuilder({ page }).analyze();
+  const axeImpacts = { critical: 0, serious: 0, moderate: 0, minor: 0 };
+  for (const violation of axe.violations) {
+    if (violation.impact && violation.impact in axeImpacts) {
+      axeImpacts[violation.impact as keyof typeof axeImpacts] += 1;
+    }
+  }
+  mkdirSync(measurementPartsDirectory, { recursive: true });
+  writeFileSync(
+    measurementPartsDirectory + taskId + ".json",
+    JSON.stringify({
+      axeImpacts,
+      browserVersion: page.context().browser()?.version() ?? "unknown",
+      errorCount: runtimeErrors.length,
+      mockedApi: true,
+      measuredAt: new Date().toISOString(),
+      os: process.platform,
+      routeTemplate: routeCase.routeTemplate,
+      runId: measurementRun.runId,
+      serverPort: Number(new URL(page.url()).port),
+      samples,
+      taskId,
+      viewport: { height: 900, width: 1440 },
+    }, null, 2) + "\n",
+  );
+}
+
+async function openMeasuredRoute(page: Page, routeCase: RouteCase, targetPath: string) {
+  await page.goto(targetPath, { waitUntil: "domcontentloaded" });
+  const main = page.locator("main:visible");
+  await expect(main.getByRole("heading", { level: 1, name: routeCase.heading, exact: true })).toBeVisible();
+  await expect(main.getByRole(routeCase.primaryTask.role, {
+    name: routeCase.primaryTask.name,
+    exact: true,
+  })).toBeVisible();
+  await expectBusyStateToFinish(page, routeCase, { height: 900, width: 1440 });
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await page.waitForTimeout(100);
+}
 
 test("öğrenci portal erişimi eylemi expectedVersion gönderir ve sonucu yeniler", async ({ page }) => {
   const unknownApiRequests: string[] = [];
@@ -222,7 +356,7 @@ function route(
   primaryTask: PrimaryTask,
   options: Pick<RouteCase, "feature" | "query"> = {},
 ): RouteCase {
-  return { ...options, heading, persona, primaryTask, routeTemplate };
+  return { architecture: resolveRouteArchitecture(routeTemplate), ...options, heading, persona, primaryTask, routeTemplate };
 }
 
 function resolveRouteTemplate(routeTemplate: string) {
@@ -242,12 +376,15 @@ function assertRouteManifestParity(manifest: readonly RouteCase[]) {
   const fileSystemRoutes = collectPageRoutes(appDirectory).sort();
   const manifestRoutes = manifest.map((entry) => entry.routeTemplate).sort();
   const duplicates = manifestRoutes.filter((routeTemplate, index) => manifestRoutes.indexOf(routeTemplate) !== index);
-  if (manifest.length !== 81) throw new Error(`Route manifest must contain exactly 81 entries; found ${manifest.length}.`);
+  if (manifest.length !== 88) throw new Error(`Route manifest must contain exactly 88 entries; found ${manifest.length}.`);
   if (duplicates.length > 0) throw new Error(`Route manifest contains duplicates: ${[...new Set(duplicates)].join(", ")}`);
   if (JSON.stringify(manifestRoutes) !== JSON.stringify(fileSystemRoutes)) {
     throw new Error(`Route manifest does not match page.tsx inventory.\nmanifest=${manifestRoutes.join(",")}\nfilesystem=${fileSystemRoutes.join(",")}`);
   }
-  for (const entry of manifest) resolveRouteTemplate(entry.routeTemplate);
+  for (const entry of manifest) {
+    resolveRouteTemplate(entry.routeTemplate);
+    expect(entry.architecture).toEqual(resolveRouteArchitecture(entry.routeTemplate));
+  }
 }
 
 function collectPageRoutes(directory: string, segments: string[] = []): string[] {
@@ -267,7 +404,10 @@ async function installRouteApiMocks(
   page: Page,
   persona: Persona,
   unknownApiRequests: string[],
-  options: { portalAccess?: ReturnType<typeof createPortalAccessMock> } = {},
+  options: {
+    featureRolloutKeys?: Array<"web.shell-v2" | "web.exam-workspace-v2">;
+    portalAccess?: ReturnType<typeof createPortalAccessMock>;
+  } = {},
 ) {
   await page.route("**/health/ready", async (route) => {
     await fulfillJson(route, { dependencies: { postgres: "ok", redis: "ok" }, status: "ready" });
@@ -303,6 +443,10 @@ async function installRouteApiMocks(
         subjectId: "subjectId" in session ? session.subjectId : undefined,
         capabilities: [],
       });
+      return;
+    }
+    if (pathName === "/me/feature-rollouts" && request.method() === "GET" && persona !== "anonymous") {
+      await fulfillData(route, { enabledFeatureKeys: options.featureRolloutKeys ?? [] });
       return;
     }
 
@@ -407,6 +551,7 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
     };
   }
   if (pathName === "/me/tenant") return { data: tenantFixture };
+  if (pathName === "/exams/exam-demo-isem-lgs-1/workspace") return { data: examWorkspaceFixture };
   if (pathName === "/me/institution-dashboard") {
     return {
       data: {
@@ -566,7 +711,7 @@ function createAuthResponse(persona: Exclude<Persona, "anonymous">) {
     studentMustChangePassword: { mustChangePassword: true, roles: ["STUDENT"], subjectId: "student-a", subjectType: "STUDENT", userId: "user-student" },
     systemAdmin: { roles: ["SYSTEM_ADMIN"], userId: "user-system" },
     teacher: { roles: ["TEACHER"], subjectId: "teacher-math", subjectType: "TEACHER", userId: "user-teacher" },
-    tenantAdmin: { roles: ["TENANT_ADMIN"], userId: "user-tenant-admin" },
+    tenantAdmin: { activePersona: "STAFF", roles: ["TENANT_ADMIN"], userId: "user-tenant-admin" },
   } as const;
   const profile = profiles[persona];
   return {
@@ -590,6 +735,28 @@ const tenantFixture = {
   seatLimit: 10,
   slug: "dna-egitim",
   status: "ACTIVE",
+};
+const examWorkspaceFixture = {
+  exam: {
+    id: "exam-demo-isem-lgs-1",
+    tenantId: "tenant-faz9",
+    title: "Gate C Denemesi",
+    status: "PUBLISHED",
+    examType: "LGS",
+    startsAt: "2026-08-01T09:00:00.000Z",
+    answerKeySummary: { status: "PUBLISHED", version: "gate-c-v1", questionCount: 90, branchCount: 4 },
+    createdAt: "2026-08-01T08:00:00.000Z",
+    updatedAt: "2026-08-01T09:00:00.000Z",
+  },
+  participantSummary: { total: 21, registered: 0, attended: 21, absent: 0 },
+  readiness: [
+    { key: "EXAM", status: "READY" },
+    { key: "ANSWER_KEY", status: "READY" },
+    { key: "PARTICIPANTS", status: "READY" },
+    { key: "PUBLISHED", status: "READY" },
+    { key: "OPTICAL_ENTRY", status: "READY" },
+  ],
+  nextAction: "OPEN_OPTICAL",
 };
 const campusFixture = { id: "campus-main", name: "Ana Kampüs", tenantId: "tenant-faz9" };
 const gradeLevelFixture = { code: "8", id: "grade-8", name: "8. Sınıf", tenantId: "tenant-faz9" };
@@ -696,7 +863,7 @@ function corsHeadersFor(route: Route) {
 async function expectBusyStateToFinish(
   page: Page,
   routeCase: RouteCase,
-  viewport: (typeof routeViewports)[number],
+  viewport: { readonly height: number; readonly width: number },
 ) {
   await expect(page.locator('[aria-busy="true"]:visible, .uh-chart-loading:visible, .uh-loading-state:visible'), contractLabel(routeCase, viewport, "busy state")).toHaveCount(0, { timeout: 15_000 });
   await expect(page.getByText(/^(Yükleniyor|Hazırlanıyor)(?:…|\.\.\.)?$/).filter({ visible: true }), contractLabel(routeCase, viewport, "loading text")).toHaveCount(0, { timeout: 15_000 });
@@ -819,7 +986,7 @@ async function expectNoHighImpactA11yViolations(
 
 function contractLabel(
   routeCase: RouteCase,
-  viewport: (typeof routeViewports)[number],
+  viewport: { readonly height: number; readonly width: number },
   contract: string,
 ) {
   return `${routeCase.routeTemplate} ${viewport.width}x${viewport.height}: ${contract}`;

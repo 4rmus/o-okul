@@ -13,6 +13,7 @@ import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import { reportSnapshotStoreToken, type ReportSnapshotStore } from "../report/report-snapshot-store.js";
+import { requireTenantWideStaffContext } from "../tenant/tenant-access.js";
 
 export const answerKeyRepositoryToken = Symbol("AnswerKeyRepository");
 
@@ -158,7 +159,7 @@ export class AnswerKeyService {
   }
 
   async list(context: RequestContext, examId: string | undefined): Promise<AnswerKeyRecord[]> {
-    const tenantId = requireTenant(context);
+    const tenantId = requireReadTenant(context);
     return this.repository.list(tenantId, requiredString(examId, "ANSWER_KEY_EXAM_REQUIRED"));
   }
 
@@ -386,10 +387,22 @@ function optionalNumber(value: unknown): number | undefined {
 }
 
 function requireTenant(context: RequestContext): string {
-  if (!context.tenantId) {
-    throw new ForbiddenException("TENANT_CONTEXT_MISSING");
+  try {
+    return requireTenantWideStaffContext(context, "ANSWER_KEY_CAMPUS_SCOPE_FORBIDDEN");
+  } catch (error) {
+    throw new ForbiddenException(error instanceof Error ? error.message : "ANSWER_KEY_CAMPUS_SCOPE_FORBIDDEN");
   }
-  return context.tenantId;
+}
+
+function requireReadTenant(context: RequestContext): string {
+  const hasAdminRole = context.roles.some((role) => (
+    role === "TENANT_OWNER" || role === "TENANT_ADMIN" || role === "ASSISTANT_ADMIN"
+  ));
+  if (context.activePersona === "TEACHER" || (context.roles.includes("TEACHER") && !hasAdminRole)) {
+    if (!context.tenantId) throw new ForbiddenException("TENANT_CONTEXT_MISSING");
+    return context.tenantId;
+  }
+  return requireTenant(context);
 }
 
 function requiredString(value: string | undefined, errorCode: string): string {

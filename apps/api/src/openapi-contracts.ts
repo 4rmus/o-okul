@@ -1,4 +1,5 @@
 import type { OpenAPIObject } from "@nestjs/swagger";
+import { featureRolloutKeys } from "@o-okul/shared-types";
 
 type JsonSchema = Record<string, unknown>;
 type JsonContent = Record<string, { schema: JsonSchema }>;
@@ -25,12 +26,6 @@ const jsonContentType = "application/json";
 const csrfHeaderContract = {
   name: "X-CSRF-Token",
   description: "Required CSRF token matching the csrfToken cookie for session-mutating auth operations.",
-  schema: stringSchema(),
-};
-
-const stepUpHeaderContract = {
-  name: "X-Step-Up-Token",
-  description: "Short-lived MFA proof. Required when the current or target staff role is TENANT_OWNER or TENANT_ADMIN.",
   schema: stringSchema(),
 };
 
@@ -89,6 +84,10 @@ const meProfileResponseSchema = objectSchema({
     version: integerSchema({ minimum: 1 }),
   }, ["id", "version"]),
 }, ["userId", "tenantId", "roles"]);
+
+const resolvedFeatureRolloutsSchema = objectSchema({
+  enabledFeatureKeys: arraySchema({ type: "string", enum: [...featureRolloutKeys] }),
+}, ["enabledFeatureKeys"]);
 
 const personaSwitchRequestSchema = objectSchema({
   activePersona: { type: "string", enum: ["STAFF", "TEACHER", "STUDENT"] },
@@ -1019,6 +1018,20 @@ const academicTermUpdateRequestSchema = objectSchema({
   startsAt: stringSchema({ format: "date" }),
 });
 
+const setupReadinessReadModelSchema = objectSchema({
+  status: { type: "string", enum: ["READY", "ACTION_REQUIRED"] },
+  completedCount: integerSchema({ minimum: 0 }),
+  totalCount: integerSchema({ minimum: 1 }),
+  steps: arraySchema(objectSchema({
+    key: {
+      type: "string",
+      enum: ["institution", "campus", "academic-year", "academic-term", "grade-level", "class", "course", "teacher", "student"],
+    },
+    count: integerSchema({ minimum: 0 }),
+    ready: { type: "boolean" },
+  }, ["key", "count", "ready"])),
+}, ["status", "completedCount", "totalCount", "steps"]);
+
 const classRecordSchema = objectSchema({
   id: stringSchema(),
   tenantId: stringSchema(),
@@ -1101,6 +1114,7 @@ const teacherRecordSchema = objectSchema({
   lastName: stringSchema(),
   branch: stringSchema(),
   phone: stringSchema(),
+  phoneMasked: stringSchema(),
   provisioning: { type: "string", enum: ["PROVISIONED", "INVITED", "SKIPPED"] },
 }, ["id", "tenantId", "firstName", "lastName"]);
 
@@ -1730,6 +1744,7 @@ const guardianRecordSchema = objectSchema({
   firstName: stringSchema(),
   lastName: stringSchema(),
   phone: stringSchema(),
+  phoneMasked: stringSchema(),
   userId: stringSchema(),
   matched: { type: "boolean" },
   provisioning: { type: "string", enum: ["PROVISIONED", "INVITED", "SKIPPED"] },
@@ -1855,9 +1870,51 @@ const publicStudentProfileRecordSchema = objectSchema({
   responsibleTeacherName: stringSchema(),
   nationalIdMasked: stringSchema(),
   phone: stringSchema(),
+  phoneMasked: stringSchema(),
   email: stringSchema({ format: "email" }),
+  emailMasked: stringSchema(),
   photoKey: stringSchema(),
 }, ["id", "tenantId", "firstName", "lastName", "status"]);
+
+const studentContactRecordSchema = objectSchema({
+  id: stringSchema(),
+  tenantId: stringSchema(),
+  studentId: stringSchema(),
+  firstName: stringSchema(),
+  lastName: stringSchema(),
+  relationType: { type: "string", enum: ["MOTHER", "FATHER", "LEGAL_GUARDIAN", "OTHER"] },
+  phoneMasked: stringSchema(),
+  emailMasked: stringSchema(),
+  canReceiveSms: { type: "boolean" },
+  canReceiveAnnouncements: { type: "boolean" },
+  canReceiveFinance: { type: "boolean" },
+  consentSource: stringSchema(),
+  consentRecordedAt: stringSchema({ format: "date-time" }),
+  createdAt: stringSchema({ format: "date-time" }),
+  updatedAt: stringSchema({ format: "date-time" }),
+}, [
+  "id", "tenantId", "studentId", "firstName", "lastName", "relationType",
+  "canReceiveSms", "canReceiveAnnouncements", "canReceiveFinance", "createdAt", "updatedAt",
+]);
+
+const studentContactCreateRequestSchema = objectSchema({
+  firstName: stringSchema({ minLength: 1 }),
+  lastName: stringSchema({ minLength: 1 }),
+  relationType: { type: "string", enum: ["MOTHER", "FATHER", "LEGAL_GUARDIAN", "OTHER"] },
+  phone: stringSchema(),
+  email: stringSchema({ format: "email" }),
+  canReceiveSms: { type: "boolean" },
+  canReceiveAnnouncements: { type: "boolean" },
+  canReceiveFinance: { type: "boolean" },
+  consentSource: stringSchema(),
+  consentRecordedAt: stringSchema({ format: "date-time" }),
+}, ["firstName", "lastName", "relationType"]);
+
+const studentContactUpdateRequestSchema = {
+  ...studentContactCreateRequestSchema,
+  required: [],
+  minProperties: 1,
+};
 
 const studentPortalAccessRecordSchema = objectSchema({
   studentId: stringSchema(),
@@ -1978,6 +2035,22 @@ const examParticipantRecordSchema = objectSchema({
   createdAt: stringSchema({ format: "date-time" }),
   updatedAt: stringSchema({ format: "date-time" }),
 }, ["id", "tenantId", "examId", "studentId", "status", "createdAt", "updatedAt"]);
+
+const examWorkspaceReadModelSchema = objectSchema({
+  exam: examRecordSchema,
+  participantSummary: objectSchema({
+    total: integerSchema({ minimum: 0 }),
+    registered: integerSchema({ minimum: 0 }),
+    attended: integerSchema({ minimum: 0 }),
+    absent: integerSchema({ minimum: 0 }),
+  }, ["total", "registered", "attended", "absent"]),
+  readiness: arraySchema(objectSchema({
+    key: { type: "string", enum: ["EXAM", "ANSWER_KEY", "PARTICIPANTS", "PUBLISHED", "OPTICAL_ENTRY"] },
+    status: { type: "string", enum: ["READY", "BLOCKED"] },
+    blocker: { type: "string", enum: ["ANSWER_KEY_MISSING", "PARTICIPANTS_MISSING", "EXAM_NOT_PUBLISHED"] },
+  }, ["key", "status"])),
+  nextAction: { type: "string", enum: ["ADD_ANSWER_KEY", "ADD_PARTICIPANTS", "PUBLISH_EXAM", "OPEN_OPTICAL"] },
+}, ["exam", "participantSummary", "readiness", "nextAction"]);
 
 const examParticipantCreateRequestSchema = objectSchema({
   bookletType: stringSchema(),
@@ -2591,6 +2664,40 @@ const nullableStudentEnrollmentRecordSchema = {
   nullable: true,
 };
 
+const studentOverviewLatestExamRecordSchema = objectSchema({
+  examId: stringSchema(),
+  snapshotId: stringSchema(),
+  examTitle: stringSchema(),
+  generatedAt: stringSchema({ format: "date-time" }),
+  total: reportScoreSummarySchema,
+}, ["examId", "snapshotId", "total"]);
+
+const studentOverviewRecordSchema = objectSchema({
+  profile: publicStudentProfileRecordSchema,
+  activeEnrollment: studentEnrollmentRecordSchema,
+  enrollments: arraySchema(studentEnrollmentRecordSchema),
+  attendance: attendanceSummaryRecordSchema,
+  latestExam: studentOverviewLatestExamRecordSchema,
+  openHomeworkCount: integerSchema({ minimum: 0 }),
+  homeworkAssignments: arraySchema(homeworkMaterialAssignmentRecordSchema),
+  teacherNoteCount: integerSchema({ minimum: 0 }),
+  teacherNotes: arraySchema(teacherNoteRecordSchema),
+  contacts: arraySchema(studentContactRecordSchema),
+  guardians: arraySchema(guardianRecordSchema),
+  guardianLinks: arraySchema(guardianStudentRecordSchema),
+  teacherAssignments: arraySchema(teacherAssignmentRecordSchema),
+  teachers: arraySchema(teacherRecordSchema),
+  classes: arraySchema(classRecordSchema),
+  courses: arraySchema(namedSchoolReferenceRecordSchema),
+  terms: arraySchema(academicTermRecordSchema),
+  canViewFinance: { type: "boolean" },
+  activity: arraySchema(studentAuditSummaryRecordSchema),
+}, [
+  "profile", "enrollments", "attendance", "openHomeworkCount", "homeworkAssignments",
+  "teacherNoteCount", "teacherNotes", "contacts", "guardians", "guardianLinks",
+  "teacherAssignments", "teachers", "classes", "courses", "terms", "canViewFinance", "activity",
+]);
+
 const studentBulkEnrollmentResultSchema = objectSchema({
   updatedCount: integerSchema({ minimum: 0 }),
   enrollments: arraySchema(studentEnrollmentRecordSchema),
@@ -2602,7 +2709,10 @@ const studentImportRequestSchema = objectSchema({
 
 const studentImportErrorSchema = objectSchema({
   row: integerSchema({ minimum: 0 }),
-  field: { type: "string", enum: ["className", "email", "firstName", "guardianNationalId", "guardianPhone", "lastName", "nationalId", "phone", "quota", "studentNo"] },
+  field: { type: "string", enum: [
+    "className", "contactEmail", "contactFirstName", "contactLastName", "contactPhone", "contactRelation",
+    "email", "firstName", "guardian", "guardianNationalId", "guardianPhone", "lastName", "nationalId", "phone", "quota", "studentNo",
+  ] },
   code: {
     type: "string",
     enum: [
@@ -2611,7 +2721,10 @@ const studentImportErrorSchema = objectSchema({
       "INVALID_EMAIL",
       "INVALID_NATIONAL_ID",
       "INVALID_PHONE",
+      "INVALID_RELATION_TYPE",
       "REQUIRED",
+      "STUDENT_CONTACT_IMPORT_REQUIRED",
+      "STUDENT_IMPORT_PILOT_CORE_ONLY",
       "STUDENT_NATIONAL_ID_DUPLICATE",
       "STUDENT_NO_DUPLICATE",
       "ACTIVE_STUDENT_LIMIT_REACHED",
@@ -2628,6 +2741,13 @@ const studentImportPreviewRowSchema = objectSchema({
   row: integerSchema({ minimum: 1 }),
   classId: stringSchema(),
   className: stringSchema(),
+  contact: objectSchema({
+    firstName: stringSchema(),
+    lastName: stringSchema(),
+    relationType: { type: "string", enum: ["MOTHER", "FATHER", "LEGAL_GUARDIAN", "OTHER"] },
+    phoneMasked: stringSchema(),
+    emailMasked: stringSchema(),
+  }, ["firstName", "lastName", "relationType"]),
   email: stringSchema({ format: "email" }),
   firstName: stringSchema(),
   guardian: studentGuardianProvisionRequestSchema,
@@ -2653,8 +2773,9 @@ const studentImportDryRunResultSchema = objectSchema({
 
 const studentImportResultSchema = objectSchema({
   importedRows: integerSchema({ minimum: 0 }),
+  importedContacts: integerSchema({ minimum: 0 }),
   students: arraySchema(publicStudentRecordSchema),
-}, ["importedRows", "students"]);
+}, ["importedRows", "importedContacts", "students"]);
 
 const studentExportResultSchema = objectSchema({
   fileName: stringSchema(),
@@ -3008,12 +3129,10 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/employees/{id}/account-invitations": {
     requestBody: employeeAccountInvitationRequestSchema,
     responseBody: identityInvitationRecordSchema,
-    optionalHeaders: [stepUpHeaderContract],
   },
   "patch /api/v1/tenant-memberships/{id}": {
     requestBody: tenantMembershipUpdateRequestSchema,
     responseBody: tenantMembershipUpdateResultSchema,
-    optionalHeaders: [stepUpHeaderContract],
   },
   "patch /api/v1/tenant-users/{userId}/roles": {
     retiredGoneCode: "TENANT_USER_ROLE_WRITE_RETIRED",
@@ -3025,6 +3144,9 @@ const operationContracts: Record<string, OperationContract> = {
   "get /api/v1/me/profile": {
     responseBody: meProfileResponseSchema,
   },
+  "get /api/v1/me/feature-rollouts": {
+    responseBody: resolvedFeatureRolloutsSchema,
+  },
   "post /api/v1/me/password": {
     requestBody: mePasswordChangeRequestSchema,
     responseBody: mePasswordChangeResponseSchema,
@@ -3034,6 +3156,9 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/me/institution-dashboard": {
     responseBody: institutionDashboardSummarySchema,
+  },
+  "get /api/v1/setup/readiness": {
+    responseBody: setupReadinessReadModelSchema,
   },
   "patch /api/v1/me/tenant": {
     requestBody: tenantCurrentProfileUpdateRequestSchema,
@@ -3260,15 +3385,23 @@ const operationContracts: Record<string, OperationContract> = {
         id: stringSchema(),
         tenantId: stringSchema(),
         examId: stringSchema(),
+        sourceType: stringSchema(),
+        fileName: stringSchema(),
         sha256: stringSchema(),
         s3Key: stringSchema(),
         parserConfigVersion: stringSchema(),
-      }, ["id", "tenantId", "examId", "sha256", "s3Key", "parserConfigVersion"]),
+        metadata: looseObjectSchema(),
+      }, ["id", "tenantId", "examId", "sourceType", "fileName", "sha256", "s3Key", "parserConfigVersion"]),
       parseJob: objectSchema({
+        tenantId: stringSchema(),
+        examId: stringSchema(),
+        rawImportId: stringSchema(),
         jobId: stringSchema(),
-        queueName: stringSchema(),
-      }, ["jobId", "queueName"]),
-    }, ["rawImport", "parseJob"]),
+        queueName: { type: "string", enum: ["excel-import"] },
+        status: { type: "string", enum: ["queued"] },
+      }, ["tenantId", "examId", "rawImportId", "jobId", "queueName", "status"]),
+      status: { type: "string", enum: ["uploaded"] },
+    }, ["rawImport", "parseJob", "status"]),
   },
   "post /api/v1/exams/{examId}/raw-imports/{rawImportId}/evaluation-jobs": {
     idempotent: true,
@@ -3391,11 +3524,18 @@ const operationContracts: Record<string, OperationContract> = {
   "get /api/v1/students": {
     responseBody: arraySchema(publicStudentRecordSchema),
     listResponse: true,
-    queryParameters: [{
-      name: "ids",
-      description: "Comma-separated student ids to return.",
-      schema: stringSchema(),
-    }],
+    queryParameters: [
+      { name: "ids", description: "Comma-separated student ids to return.", schema: stringSchema() },
+      { name: "page", schema: integerSchema({ minimum: 1, default: 1 }) },
+      { name: "limit", schema: integerSchema({ minimum: 1, maximum: 100, default: 20 }) },
+      { name: "q", description: "Indexed first name, last name or student number search.", schema: stringSchema({ maxLength: 100 }) },
+      { name: "sort", schema: { type: "string", enum: ["studentNo", "-studentNo", "firstName", "-firstName", "lastName", "-lastName", "classId", "-classId"] } },
+      { name: "classId", schema: stringSchema() },
+      { name: "level", schema: stringSchema() },
+      { name: "responsibleTeacherId", schema: stringSchema() },
+      { name: "status", schema: studentStatusSchema },
+      { name: "guardianLinked", description: "Under student-registry-v2, filters by active StudentContact presence.", schema: { type: "boolean" } },
+    ],
   },
   "get /api/v1/students/{id}": {
     responseBody: publicStudentRecordSchema,
@@ -3433,6 +3573,9 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/students/{id}/profile": {
     responseBody: publicStudentProfileRecordSchema,
+  },
+  "get /api/v1/students/{studentId}/overview": {
+    responseBody: studentOverviewRecordSchema,
   },
   "patch /api/v1/students/{id}/profile": {
     requestBody: studentProfileUpdateRequestSchema,
@@ -4063,6 +4206,9 @@ const operationContracts: Record<string, OperationContract> = {
   "get /api/v1/exams/{examId}": {
     responseBody: examRecordSchema,
   },
+  "get /api/v1/exams/{examId}/workspace": {
+    responseBody: examWorkspaceReadModelSchema,
+  },
   "patch /api/v1/exams/{examId}": {
     requestBody: examCreateRequestSchema,
     responseBody: examRecordSchema,
@@ -4124,8 +4270,25 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "post /api/v1/students/imports": {
     idempotent: true,
+    idempotencyRequired: true,
     requestBody: studentImportRequestSchema,
     responseBody: studentImportResultSchema,
+  },
+  "get /api/v1/students/{studentId}/contacts": {
+    responseBody: arraySchema(studentContactRecordSchema),
+  },
+  "post /api/v1/students/{studentId}/contacts": {
+    idempotent: true,
+    idempotencyRequired: true,
+    requestBody: studentContactCreateRequestSchema,
+    responseBody: studentContactRecordSchema,
+  },
+  "patch /api/v1/students/{studentId}/contacts/{id}": {
+    requestBody: studentContactUpdateRequestSchema,
+    responseBody: studentContactRecordSchema,
+  },
+  "delete /api/v1/students/{studentId}/contacts/{id}": {
+    noContent: true,
   },
   "post /api/v1/students/imports/dry-run": {
     requestBody: studentImportRequestSchema,

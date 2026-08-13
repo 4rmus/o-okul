@@ -412,6 +412,41 @@ describe("School management API", () => {
       .expect(204);
   });
 
+  it("öğretmen rolüne öğretmen ve veli telefonu yalnız sunucu maskesiyle döner", async () => {
+    const teacher = await request(server)
+      .post("/teachers")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Gizli", lastName: "Ogretmen", phone: "5550000099" })
+      .expect(201);
+
+    try {
+      await request(server)
+        .get(`/teachers/${teacher.body.id}`)
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .expect(200)
+        .expect(({ body }) => {
+          expect(body.phoneMasked).toBe("••• ••• ••99");
+          expect(body).not.toHaveProperty("phone");
+          expect(JSON.stringify(body)).not.toContain("5550000099");
+        });
+
+      await request(server)
+        .get("/guardians")
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .expect(200)
+        .expect(({ body }) => {
+          expect(body).toEqual(expect.arrayContaining([
+            expect.objectContaining({ id: "guardian-a", phoneMasked: "••• ••• ••01" }),
+          ]));
+          expect(JSON.stringify(body)).not.toContain("5000000001");
+        });
+    } finally {
+      await request(server)
+        .delete(`/teachers/${teacher.body.id}`)
+        .set("Authorization", `Bearer ${tenantAAccessToken}`);
+    }
+  });
+
   it("class CRUD akışını tenant içinde tamamlar", async () => {
     const alan = await request(server)
       .post("/alanlar")
@@ -899,6 +934,12 @@ describe("School management API", () => {
   });
 
   it("guardian CRUD için bağımsız kayıtları yönetir", async () => {
+    await request(server)
+      .get("/guardians")
+      .query({ q: "0001" })
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(200, []);
+
     const created = await request(server)
       .post("/guardians")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
@@ -1166,9 +1207,9 @@ describe("School management API", () => {
       tenantId: "tenant-a",
       guardianId,
       studentId: "student-a",
-      canViewFinance: true,
-      canReceiveSms: true,
-      canReceiveAnnouncements: true,
+      canViewFinance: false,
+      canReceiveSms: false,
+      canReceiveAnnouncements: false,
       canOpenSupportTickets: false,
     }));
 

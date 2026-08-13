@@ -319,7 +319,7 @@ describe("Schedule API", () => {
         startsAt: "2026-06-01T11:00:00.000Z",
         endsAt: "2026-06-01T12:00:00.000Z",
       })
-      .expect(403);
+      .expect(404);
 
     await request(server)
       .post("/schedule-lessons")

@@ -1,8 +1,12 @@
 import { createHash } from "node:crypto";
-import { BadRequestException, ForbiddenException, Inject, Injectable, Optional } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import type { RawImportUploadResult } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
+import { requireTenantWideStaffContext } from "../tenant/tenant-access.js";
+import { examRepositoryToken, type ExamRepository } from "./exam.service.js";
+import { parserConfigRepositoryToken, type ParserConfigRepository } from "./parser-config-approval.service.js";
 import { RawImportQueueService, type RawImportParseJobResult } from "./raw-import-queue.service.js";
 
 export const rawImportArchiveStoreToken = Symbol("RawImportArchiveStore");
@@ -14,6 +18,7 @@ export interface RawImportArchiveStore {
     body: Buffer;
     contentType?: string;
   }): Promise<void>;
+  delete(s3Key: string): Promise<void>;
 }
 
 export interface RawImportRepository {
@@ -51,12 +56,6 @@ export interface RawImportUploadInput {
   parserConfigVersion?: string;
 }
 
-export interface RawImportUploadResult {
-  rawImport: CreatedRawImport;
-  parseJob: RawImportParseJobResult;
-  status: "uploaded";
-}
-
 interface NormalizedRawImportUpload {
   tenantId: string;
   examId: string;
@@ -78,6 +77,10 @@ export class RawImportUploadService {
     private readonly repository: RawImportRepository,
     @Inject(RawImportQueueService)
     private readonly parseQueue: RawImportParseEnqueuer,
+    @Inject(examRepositoryToken)
+    private readonly exams: Pick<ExamRepository, "findById">,
+    @Inject(parserConfigRepositoryToken)
+    private readonly parserConfigs: Pick<ParserConfigRepository, "findApproved">,
     @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
@@ -87,7 +90,9 @@ export class RawImportUploadService {
     input: RawImportUploadInput,
     idempotencyKey?: string,
   ): Promise<RawImportUploadResult> {
-    const normalized = normalizeUpload(context, input);
+    const tenantId = requireUploadScope(context);
+    const normalized = normalizeUpload(tenantId, input);
+    await this.assertUploadReady(normalized);
     const idempotencyRequest = {
       examId: normalized.examId,
       sourceType: normalized.sourceType,
@@ -112,25 +117,27 @@ export class RawImportUploadService {
     context: RequestContext,
     input: NormalizedRawImportUpload,
   ): Promise<RawImportUploadResult> {
-    if (!context.tenantId) {
-      throw new ForbiddenException("TENANT_CONTEXT_MISSING");
-    }
-
     await this.archiveStore.put({
       s3Key: input.s3Key,
       body: input.body,
       contentType: input.contentType,
     });
-    const rawImport = await this.repository.create({
-      tenantId: input.tenantId,
-      examId: input.examId,
-      sourceType: input.sourceType,
-      fileName: input.fileName,
-      s3Key: input.s3Key,
-      sha256: input.sha256,
-      parserConfigVersion: input.parserConfigVersion,
-      metadata: input.contentType ? { contentType: input.contentType } : undefined,
-    });
+    let rawImport: CreatedRawImport;
+    try {
+      rawImport = await this.repository.create({
+        tenantId: input.tenantId,
+        examId: input.examId,
+        sourceType: input.sourceType,
+        fileName: input.fileName,
+        s3Key: input.s3Key,
+        sha256: input.sha256,
+        parserConfigVersion: input.parserConfigVersion,
+        metadata: input.contentType ? { contentType: input.contentType } : undefined,
+      });
+    } catch (error) {
+      await this.archiveStore.delete(input.s3Key);
+      throw error;
+    }
     const parseJob = await this.parseQueue.enqueueParse(context, {
       examId: input.examId,
       rawImportId: rawImport.id,
@@ -159,13 +166,21 @@ export class RawImportUploadService {
       status: "uploaded",
     };
   }
+
+  private async assertUploadReady(input: NormalizedRawImportUpload): Promise<void> {
+    const exam = await this.exams.findById(input.tenantId, input.examId);
+    if (!exam) throw new NotFoundException("EXAM_NOT_FOUND");
+
+    const parserConfig = await this.parserConfigs.findApproved(
+      input.tenantId,
+      input.examId,
+      input.parserConfigVersion,
+    );
+    if (!parserConfig) throw new BadRequestException("PARSER_CONFIG_NOT_APPROVED");
+  }
 }
 
-function normalizeUpload(context: RequestContext, input: RawImportUploadInput): NormalizedRawImportUpload {
-  if (!context.tenantId) {
-    throw new ForbiddenException("TENANT_CONTEXT_MISSING");
-  }
-
+function normalizeUpload(tenantId: string, input: RawImportUploadInput): NormalizedRawImportUpload {
   const examId = required(input.examId, "RAW_IMPORT_EXAM_REQUIRED");
   const sourceType = required(input.sourceType, "RAW_IMPORT_SOURCE_TYPE_REQUIRED");
   const fileName = normalizeFileName(input.fileName);
@@ -176,7 +191,7 @@ function normalizeUpload(context: RequestContext, input: RawImportUploadInput): 
   const body = readBytes(input.bytes);
   const sha256 = createSha256(body);
   const s3Key = createRawImportS3Key({
-    tenantId: context.tenantId,
+    tenantId,
     examId,
     parserConfigVersion,
     sha256,
@@ -184,7 +199,7 @@ function normalizeUpload(context: RequestContext, input: RawImportUploadInput): 
   });
 
   return {
-    tenantId: context.tenantId,
+    tenantId,
     examId,
     sourceType,
     fileName,
@@ -194,6 +209,14 @@ function normalizeUpload(context: RequestContext, input: RawImportUploadInput): 
     sha256,
     s3Key,
   };
+}
+
+function requireUploadScope(context: RequestContext): string {
+  try {
+    return requireTenantWideStaffContext(context, "RAW_IMPORT_CAMPUS_SCOPE_FORBIDDEN");
+  } catch (error) {
+    throw new ForbiddenException(error instanceof Error ? error.message : "RAW_IMPORT_CAMPUS_SCOPE_FORBIDDEN");
+  }
 }
 
 export function createRawImportS3Key(input: {

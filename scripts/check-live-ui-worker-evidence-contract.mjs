@@ -3,11 +3,31 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, wr
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { createLiveUiWorkerEvidence } from "./isem-optical-pipeline-contract.mjs";
 
 const artifactRoot = "artifacts/live-ui-worker-evidence-contract";
 const validEvidencePath = join(artifactRoot, "private", "valid-live-ui-worker.json");
 const validResultEvidencePath = join(artifactRoot, "result", "live-ui-worker-result.json");
 const failures = [];
+const liveUiWorkerSpecSource = readFileSync("apps/web/e2e-next/live-ui-worker-report-next.spec.ts", "utf8");
+for (const requiredSource of [
+  'response.request().method() === "POST"',
+  'new URL(response.url()).pathname.endsWith("/api/v1/auth/logout")',
+  "expect(logoutResponse.status()).toBe(204)",
+  'new URL("/api/v1/auth/refresh", logoutResponse.url()).toString()',
+  "expect(revokedRefreshResponse.status()).toBe(401)",
+  'new URL("/kurum/raporlar", page.url()).toString()',
+  'new URL(`/ogrenci?examId=${encodeURIComponent(evidence.examId)}`, page.url()).toString()',
+  'new URL(`/veli?examId=${encodeURIComponent(evidence.examId)}`, page.url()).toString()',
+  'getByRole("combobox", { name: "Sınav" }).selectOption(examId.trim())',
+  'getByRole("region", { name: "Rapor iş akışı" })).toContainText("Rapor hazır")',
+  'getByLabel("Üst gezinme").getByRole("button", { name: "Çıkış" }).click()',
+  'expect(page).toHaveURL(/\\/giris$/)',
+]) {
+  if (!liveUiWorkerSpecSource.includes(requiredSource)) {
+    failures.push(`live UI-worker logout response gate eksik: ${requiredSource}`);
+  }
+}
 
 await rm(artifactRoot, { force: true, recursive: true });
 await mkdir(artifactRoot, { recursive: true });
@@ -217,6 +237,19 @@ try {
     "loginName production kanıtı için örnek/placeholder/redacted değer olmamalı.",
   );
 
+  const weakPasswordPath = join(artifactRoot, "private", "weak-password.json");
+  const weakPassword = createValidEvidence();
+  weakPassword.password = "password";
+  writeJson(weakPasswordPath, weakPassword);
+  runNegativeCheck(
+    "live UI-worker weak password negative",
+    {
+      NEXT_E2E_LIVE_UI_WORKER: "1",
+      LIVE_UI_WORKER_EVIDENCE_PATH: weakPasswordPath,
+    },
+    "password güçlü ve yaygın varsayılanlardan farklı olmalı.",
+  );
+
   const extraFieldPath = join(artifactRoot, "private", "extra-field.json");
   const extraField = createValidEvidence();
   extraField.studentPortal.unexpected = true;
@@ -302,6 +335,16 @@ try {
     "live UI-worker result portal negative",
     resultIncompletePortalPath,
     "liveUiWorkerResultEvidence.guardianPortalViewed true olmalı.",
+  );
+
+  const resultSessionLogoutPath = join(artifactRoot, "result-session-logout.json");
+  const resultSessionLogout = createValidResultEvidence();
+  resultSessionLogout.sessionLogoutVerified = false;
+  writeJson(resultSessionLogoutPath, resultSessionLogout);
+  runResultNegativeCheck(
+    "live UI-worker result session logout negative",
+    resultSessionLogoutPath,
+    "liveUiWorkerResultEvidence.sessionLogoutVerified true olmalı.",
   );
 
   const resultUnexpectedFieldPath = join(artifactRoot, "result-extra-field.json");
@@ -393,7 +436,7 @@ function writeJson(path, value, mode = path.includes(`${artifactRoot}/private/`)
 }
 
 function createValidEvidence() {
-  return {
+  return createLiveUiWorkerEvidence({
     examId: "exam-report-smoke-20260614",
     firstStudentId: "student-report-smoke-20260614-00001",
     generatedAt: new Date(Date.now() - 60_000).toISOString(),
@@ -408,7 +451,7 @@ function createValidEvidence() {
       password: "Str0ngStudent!2026",
     },
     tenantSlug: "staging-school",
-  };
+  });
 }
 
 function createValidResultEvidence() {
@@ -426,6 +469,7 @@ function createValidResultEvidence() {
     excelDownloaded: true,
     studentPortalViewed: true,
     guardianPortalViewed: true,
+    sessionLogoutVerified: true,
     commandsPassed: ["pnpm live:ui-worker:smoke"],
     gaps: [],
   };

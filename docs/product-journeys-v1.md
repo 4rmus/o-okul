@@ -99,10 +99,10 @@ operasyon yuzeyini belgeler; hedef control-plane ayriminin tamamlandigi anlamina
 |---|---|---|---|---|---|
 | SYSTEM_ADMIN | Ortam saglik, audit ve observability ekranlarini acar | PARTIAL | `apps/web/app/(app)/sistem/**`, `apps/api/src/metrics/metrics.e2e.test.ts`, `apps/api/src/audit-log/audit-log.e2e.test.ts` | UAT-SYS-01 | Faz 9 canli dashboard kaniti |
 | SYSTEM_ADMIN | Kurum listeler, arar, siralar ve sayfalar | PARTIAL | `apps/api/src/tenant/tenant.controller.e2e.test.ts`, `apps/web/e2e-next/login-next.spec.ts` | UAT-SYS-01 | Canli audit/observability dashboard kaniti UAT-SYS-01'i kapatir |
-| SYSTEM_ADMIN | Kurum + ilk admin olusturur | PARTIAL | `apps/api/src/tenant/tenant.service.test.ts`, `apps/api/src/tenant/tenant-store.test.ts`, `apps/web/e2e-next/login-next.spec.ts`, `apps/web/e2e-next/live-onboarding-next.spec.ts` | UAT-SYS-02 | Faz 7 `pnpm live:onboarding:smoke` staging kaniti |
+| SYSTEM_ADMIN | Kurum + ilk admin olusturur | PASS | `apps/api/src/tenant/tenant.service.test.ts`, `apps/api/src/tenant/tenant-store.test.ts`, `apps/web/e2e-next/login-next.spec.ts`, `apps/web/e2e-next/live-onboarding-next.spec.ts` | UAT-SYS-02 | Yok |
 | SYSTEM_ADMIN | Lisans, plan, koltuk ve status yonetir | PASS | `apps/api/src/tenant/tenant.controller.e2e.test.ts`, `apps/api/src/context/request-context.middleware.test.ts` | UAT-SYS-03 | Yok |
 | SYSTEM_ADMIN | Release kanitlarini ve rollback hedefini denetler | EXTERNAL_NOT_RUN | `docs/phase-6-production-readiness.md`, `scripts/check-prod-evidence.mjs`, `scripts/check-deployment-rollback-evidence.mjs`, `docs/evidence-templates/uat.example.json` | UAT-SYS-04 | Faz 9/Faz 10 staging kaniti |
-| TENANT_ADMIN/ASSISTANT_ADMIN | Kurulum sihirbazinda kampus, seviye, sinif, ders ve donem hazirlar | PARTIAL | `apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx`, `apps/api/src/school/school.e2e.test.ts`, `apps/web/e2e-next/live-onboarding-next.spec.ts` | UAT-KURUM-01 | Faz 7 `pnpm live:onboarding:smoke` staging kaniti |
+| TENANT_ADMIN/ASSISTANT_ADMIN | Kurulum sihirbazinda kampus, seviye, sinif, ders ve donem hazirlar | PASS | `apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx`, `apps/api/src/school/school.e2e.test.ts`, `apps/web/e2e-next/live-onboarding-next.spec.ts` | UAT-KURUM-01 | Yok |
 | TENANT_ADMIN/ASSISTANT_ADMIN | Ogrenci, veli ve ogretmen kayitlarini yonetir | PASS | `apps/api/src/school/school.e2e.test.ts`, `apps/api/src/student/student-profile.e2e.test.ts`, `apps/web/e2e-next/login-next.spec.ts` | UAT-KURUM-02 | Yok |
 | TENANT_ADMIN | Kullanici, rol ve kimlik davetlerini yonetir | PARTIAL | `apps/api/src/user-management/user-management.e2e.test.ts`, `apps/api/src/identity-invitation/identity-invitation.e2e.test.ts` | UAT-KURUM-03 | Saglayici e-posta teslim kaniti Faz 9 |
 | TENANT_ADMIN/ASSISTANT_ADMIN | Donem, program, etut ve gunluk sinif yoklamasi islemlerini yurutur | PASS | `apps/api/src/program/schedule.e2e.test.ts`, `apps/api/src/program/study-session.e2e.test.ts`, `apps/api/src/attendance/attendance.e2e.test.ts` | UAT-KURUM-04 | Yok |
@@ -125,10 +125,10 @@ operasyon yuzeyini belgeler; hedef control-plane ayriminin tamamlandigi anlamina
 | ID | Amaç | Minimum kanit | Durum |
 |---|---|---|---|
 | UAT-SYS-01 | Sistem admin sistem paneli, kurum listesi ve audit/observability ekranlarini acar | `pnpm --filter @o-okul/web test:e2e`, `pnpm observability:uat:check` | PARTIAL |
-| UAT-SYS-02 | Sistem admin kurum ve ilk admin olusturur; yeni admin login olur | `apps/api/src/tenant/tenant.service.test.ts`, `pnpm live:onboarding:smoke` | PARTIAL |
+| UAT-SYS-02 | Sistem admin kurum ve ilk admin olusturur; yeni admin login olur | `apps/api/src/tenant/tenant.service.test.ts`, `pnpm live:onboarding:smoke` | PASS |
 | UAT-SYS-03 | Lisansi biten tenant read-only kalir; yazma 403 doner | `apps/api/src/tenant/tenant.controller.e2e.test.ts` | PASS |
 | UAT-SYS-04 | Release, evidence ve rollback zinciri staging raporuyla gecilir | `pnpm prod:evidence:check`, `pnpm deployment:rollback:check`, `pnpm uat:check` | EXTERNAL_NOT_RUN |
-| UAT-KURUM-01 | Kurum admin sifir veriden kurulum sihirbazini tamamlar | `apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx`, `pnpm live:onboarding:smoke` | PARTIAL |
+| UAT-KURUM-01 | Kurum admin sifir veriden kurulum sihirbazini tamamlar | `apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx`, `pnpm live:onboarding:smoke` | PASS |
 | UAT-KURUM-02 | Kisi kaydi ve iliski yonetimi calisir | `pnpm --filter @o-okul/api exec vitest run src/school/school.e2e.test.ts src/student/student-profile.e2e.test.ts` | PASS |
 | UAT-KURUM-03 | Kullanici ve davet akisi calisir | `pnpm --filter @o-okul/api exec vitest run src/user-management/user-management.e2e.test.ts src/identity-invitation/identity-invitation.e2e.test.ts` | PARTIAL |
 | UAT-KURUM-04 | Donem, program, etut ve idempotent gunluk sinif yoklamasi calisir | `pnpm --filter @o-okul/api exec vitest run src/program src/attendance` | PASS |
@@ -185,7 +185,8 @@ operasyon yuzeyini belgeler; hedef control-plane ayriminin tamamlandigi anlamina
   Optik → Rapor → Portal iş akışıyla hazır. Sentetik hero asset render dışı tutulur; dosyalar
   açık silme onayı olmadan geri dönüş olanağı için korunur.
   `UAT-SYS-02` ve `UAT-KURUM-01` icin `apps/web/e2e-next/live-onboarding-next.spec.ts`
-  ve `pnpm live:onboarding:smoke` hazir; staging kanit kosusu bekliyor.
+  ve `pnpm live:onboarding:smoke` exact `bb2779bc1087a150b648407385e3cee1d0122692` staging
+  runtime üzerinde gerçek activation provider teslimiyle `PASS`.
 - Faz 9: `UAT-SYS-04`, saglayici smoke'lari, Traefik HTTPS, observability ve evidence zinciri.
 - Faz 10: Bu matristen tureyen rol bazli staging/prod UAT raporu, `pnpm pilot:check`
   ile dogrulanan pilot kurum kapanisi ve `pnpm go-live:check` ile final karar paketi.

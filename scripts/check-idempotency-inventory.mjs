@@ -40,6 +40,7 @@ const inventory = [
   entry("schedule-lesson.create", "POST", "/api/v1/schedule-lessons", "covered", "apps/api/src/program/schedule.controller.ts", "apps/api/src/program/schedule.service.ts", "apps/api/src/program/schedule.e2e.test.ts", ["@Post()", "@Headers(\"idempotency-key\")"], ["schedule-lesson-create-idempotency-a"]),
   entry("sms.batch.enqueue", "POST", "/api/v1/sms-batches", "covered", "apps/api/src/sms-batch/sms-batch.controller.ts", "apps/api/src/sms-batch/sms-batch.service.ts", "apps/api/src/sms-batch/sms-batch.e2e.test.ts", ["@Post()", "@Headers(\"idempotency-key\")"], ["sms-batch-idempotency-a"]),
   entry("student.create", "POST", "/api/v1/students", "covered", "apps/api/src/student/student.controller.ts", "apps/api/src/student/student.service.ts", "apps/api/src/app.e2e.test.ts", ["@Post()", "@Headers(\"idempotency-key\")"], ["student-create-idempotency-a"]),
+  entry("student.contact.create", "POST", "/api/v1/students/{studentId}/contacts", "covered", "apps/api/src/student/student-contact.controller.ts", "apps/api/src/student/student-contact.service.ts", "apps/api/src/student/student-contact.e2e.test.ts", ["@Post()", "@Headers(\"idempotency-key\")"], ["student-contact-create-idempotency-a"]),
   entry("student.enrollment.bulk-renew", "POST", "/api/v1/students/enrollments/bulk-renew", "covered", "apps/api/src/student/student.controller.ts", "apps/api/src/student/student.service.ts", "apps/api/src/school/school.e2e.test.ts", ["@Post(\"enrollments/bulk-renew\")", "@Headers(\"idempotency-key\")"], ["student-bulk-renew-"]),
   entry("student.enrollment.renew", "POST", "/api/v1/students/{id}/enrollments/renew", "covered", "apps/api/src/student/student.controller.ts", "apps/api/src/student/student.service.ts", "apps/api/src/school/school.e2e.test.ts", ["@Post(\":id/enrollments/renew\")", "@Headers(\"idempotency-key\")"], ["student-renew-"]),
   entry("student.enrollment.transfer", "POST", "/api/v1/students/{id}/enrollments/transfer", "covered", "apps/api/src/student/student.controller.ts", "apps/api/src/student/student.service.ts", "apps/api/src/school/school.e2e.test.ts", ["@Post(\":id/enrollments/transfer\")", "@Headers(\"idempotency-key\")"], ["student-transfer-"]),
@@ -152,7 +153,7 @@ function hasArtifactOpenApiHeader(item) {
   );
   return Boolean(
     header &&
-    header.required === false &&
+    typeof header.required === "boolean" &&
     header.schema?.maxLength === 128 &&
     String(header.description ?? "").includes("409"),
   );

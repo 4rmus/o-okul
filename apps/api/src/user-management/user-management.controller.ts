@@ -1,4 +1,4 @@
-import { Body, Controller, Get, GoneException, Headers, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, GoneException, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
 import { optionalTrimmedString, zodBody, zodQuery } from "../http/zod-validation.js";
@@ -76,9 +76,8 @@ export class EmployeeAccessController {
   async invite(
     @Param("id") id: string,
     @Body(zodBody(employeeAccountInvitationBodySchema)) body: EmployeeAccountInvitationBody,
-    @Headers("x-step-up-token") stepUpToken?: string,
   ): Promise<IdentityInvitationRecord> {
-    const issued = await this.invitations.createEmployeeInvitation(getRequestContext(), id, body, stepUpToken);
+    const issued = await this.invitations.createEmployeeInvitation(getRequestContext(), id, body);
     const { acceptedUserId: _acceptedUserId, ...record } = issued.invitation;
     return record;
   }
@@ -94,9 +93,8 @@ export class TenantMembershipController {
   update(
     @Param("id") id: string,
     @Body(zodBody(tenantMembershipUpdateBodySchema)) body: TenantMembershipUpdateBody,
-    @Headers("x-step-up-token") stepUpToken?: string,
   ): Promise<TenantMembershipUpdateResult> {
-    return this.users.updateMembership(getRequestContext(), id, body, stepUpToken);
+    return this.users.updateMembership(getRequestContext(), id, body);
   }
 }
 

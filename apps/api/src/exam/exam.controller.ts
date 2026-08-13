@@ -1,10 +1,9 @@
 import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, UseGuards } from "@nestjs/common";
-import type { ExamParticipantRecord, ExamRecord } from "@o-okul/shared-types";
+import type { ExamParticipantRecord, ExamRecord, ExamWorkspaceReadModel } from "@o-okul/shared-types";
 import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
 import { optionalIsoDateTime, optionalTrimmedString, requiredTrimmedString, zodBody } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
-import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { ExamService, type CreateExamParticipantInput } from "./exam.service.js";
 
@@ -64,15 +63,21 @@ export class ExamController {
   }
 
   @Get()
-  @Roles("TEACHER")
+  @RequireCapability("academic:read")
   list(): Promise<ExamRecord[]> {
     return this.exams.list(getRequestContext());
   }
 
   @Get(":examId")
-  @Roles("TEACHER")
+  @RequireCapability("academic:read")
   get(@Param("examId") examId: string): Promise<ExamRecord> {
     return this.exams.get(getRequestContext(), examId);
+  }
+
+  @Get(":examId/workspace")
+  @RequireCapability("academic:manage")
+  workspace(@Param("examId") examId: string): Promise<ExamWorkspaceReadModel> {
+    return this.exams.workspace(getRequestContext(), examId);
   }
 
   @Patch(":examId")
@@ -112,7 +117,7 @@ export class ExamController {
   }
 
   @Get(":examId/participants")
-  @Roles("TEACHER")
+  @RequireCapability("academic:read")
   participants(@Param("examId") examId: string): Promise<ExamParticipantRecord[]> {
     return this.exams.listParticipants(getRequestContext(), examId);
   }

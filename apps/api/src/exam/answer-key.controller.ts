@@ -4,7 +4,6 @@ import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
 import { optionalTrimmedString, requiredTrimmedString, zodBody } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
-import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import {
   AnswerKeyService,
@@ -15,6 +14,7 @@ import {
   type AnswerKeyExcelImportDryRunResult,
   type AnswerKeyExcelImportResult,
 } from "./answer-key-excel-import.service.js";
+import { ExamService } from "./exam.service.js";
 
 const answerChoiceSchema = z.preprocess(
   (value) => typeof value === "string" ? value.trim().toUpperCase() : value,
@@ -67,6 +67,7 @@ export class AnswerKeyController {
   constructor(
     private readonly answerKeys: AnswerKeyService,
     private readonly imports: AnswerKeyExcelImportService,
+    private readonly exams: ExamService,
   ) {}
 
   @Post()
@@ -87,9 +88,11 @@ export class AnswerKeyController {
   }
 
   @Get()
-  @Roles("TEACHER")
-  list(@Param("examId") examId: string): Promise<AnswerKeyRecord[]> {
-    return this.answerKeys.list(getRequestContext(), examId);
+  @RequireCapability("academic:read")
+  async list(@Param("examId") examId: string): Promise<AnswerKeyRecord[]> {
+    const context = getRequestContext();
+    await this.exams.get(context, examId);
+    return this.answerKeys.list(context, examId);
   }
 
   @Post("imports/dry-run")

@@ -15,8 +15,9 @@ export interface SetupReadinessCheck {
 
 export interface SetupFlowStep {
   description: string;
-  id: "general" | "term" | "classes" | "courses" | "people";
+  id: "general" | "term" | "classes" | "courses" | "people" | "readiness";
   kicker: string;
+  path: string;
   readinessChecks: readonly SetupReadinessCheck[];
   title: string;
 }
@@ -26,6 +27,7 @@ export type SetupWizardStep = SetupReadinessCheck;
 export const setupFlowSteps: readonly SetupFlowStep[] = [
   {
     id: "general",
+    path: "/kurum/kurulum/genel",
     kicker: "1. Adım",
     title: "Kurum Genel Bilgileri",
     description: "Kurum adı, türü ve marka bilgisi.",
@@ -35,6 +37,7 @@ export const setupFlowSteps: readonly SetupFlowStep[] = [
   },
   {
     id: "term",
+    path: "/kurum/kurulum/donem",
     kicker: "2. Adım",
     title: "Akademik Dönem Ayarları",
     description: "Yıl ve aktif dönem tarihleri.",
@@ -42,6 +45,7 @@ export const setupFlowSteps: readonly SetupFlowStep[] = [
   },
   {
     id: "classes",
+    path: "/kurum/kurulum/siniflar",
     kicker: "3. Adım",
     title: "Sınıf ve Şubeler",
     description: "Kademe ve sınıf sayısına göre şubeleri otomatik oluştur.",
@@ -52,6 +56,7 @@ export const setupFlowSteps: readonly SetupFlowStep[] = [
   },
   {
     id: "courses",
+    path: "/kurum/kurulum/dersler",
     kicker: "4. Adım",
     title: "Derslerin Oluşturulması",
     description: "LGS ve TYT/AYT derslerini tıklayarak seç.",
@@ -62,6 +67,7 @@ export const setupFlowSteps: readonly SetupFlowStep[] = [
   },
   {
     id: "people",
+    path: "/kurum/kurulum/kisiler",
     kicker: "5. Adım",
     title: "Kişi Yönetim Altyapısı",
     description: "Öğretmen ve öğrenci veri giriş modeli.",
@@ -69,6 +75,14 @@ export const setupFlowSteps: readonly SetupFlowStep[] = [
       { id: "teachers", title: "Öğretmen", description: "İlk öğretmen kaydını aç.", href: "/kurum/ogretmenler?new=1" },
       { id: "students", title: "Öğrenci", description: "İlk öğrenciyi ekleyerek çekirdek kurulumu tamamla.", href: "/kurum/ogrenciler?new=1" },
     ],
+  },
+  {
+    id: "readiness",
+    path: "/kurum/kurulum/hazirlik",
+    kicker: "6. Adım",
+    title: "Hazırlık Kontrolü",
+    description: "Sunucudaki gerçek kurum kayıtlarını doğrula ve eksik adımları gör.",
+    readinessChecks: [],
   },
 ] as const;
 

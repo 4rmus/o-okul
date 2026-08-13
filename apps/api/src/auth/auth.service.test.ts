@@ -783,7 +783,7 @@ describe("AuthService", () => {
     )).toThrow("JWT_ACCESS_SECRET_REQUIRED");
   });
 
-  it("admin MFA required iken TOTP kaydı olmayan admini tek kullanımlık enrollment ile içeri alır", async () => {
+  it("MFA required iken TOTP kaydı olmayan sistem adminini tek kullanımlık enrollment ile içeri alır", async () => {
     process.env.ADMIN_MFA_MODE = "required";
     const user: AuthUser = {
       id: "admin-mfa-required",
@@ -791,8 +791,8 @@ describe("AuthService", () => {
       nationalIdHash: hashTcIdentity("10000000146"),
       name: "Required MFA Admin",
       passwordHash: hashPassword("password", "test-salt"),
-      tenantId: "tenant-a",
-      roles: ["TENANT_ADMIN"],
+      tenantId: "system",
+      roles: ["SYSTEM_ADMIN"],
       membershipVersion: 1,
     };
     const users = createMutableUserStore(user);
@@ -806,7 +806,7 @@ describe("AuthService", () => {
       new InMemoryTenantStore(),
     );
 
-    const enrollment = await auth.login(loginCredentials(user.email ?? ""));
+    const enrollment = await auth.login(loginCredentials(user.email ?? "", "password", "system"));
     expect(enrollment).toMatchObject({ status: "MFA_ENROLLMENT_REQUIRED", recoveryCodes: expect.any(Array) });
     if (!("status" in enrollment) || enrollment.status !== "MFA_ENROLLMENT_REQUIRED") {
       throw new Error("MFA enrollment bekleniyordu.");
@@ -815,7 +815,7 @@ describe("AuthService", () => {
       enrollment.setupToken,
       createTotpCodeForTest(enrollment.secret),
     );
-    expect(issued.session.roles).toContain("TENANT_ADMIN");
+    expect(issued.session.roles).toContain("SYSTEM_ADMIN");
     await expect(auth.confirmRequiredTotpEnrollment(
       enrollment.setupToken,
       createTotpCodeForTest(enrollment.secret),
@@ -833,7 +833,55 @@ describe("AuthService", () => {
     )).rejects.toThrow("MFA_SETUP_TOKEN_INVALID");
   });
 
-  it("admin TOTP etkinleştikten sonra login'i MFA challenge'a böler ve TOTP reuse'u reddeder", async () => {
+  it.each([
+    "TENANT_OWNER",
+    "TENANT_ADMIN",
+    "OPERATIONS_STAFF",
+    "FINANCE_STAFF",
+    "TEACHER",
+    "STUDENT",
+    "GUARDIAN",
+  ])("MFA required iken %s rolünü enrollment veya challenge'a zorlamaz", async (role) => {
+    process.env.ADMIN_MFA_MODE = "required";
+    const user: AuthUser = {
+      id: `tenant-mfa-exempt-${role.toLowerCase()}`,
+      email: `${role.toLowerCase()}@example.test`,
+      nationalIdHash: hashTcIdentity("10000000146"),
+      name: "Tenant MFA Exempt",
+      passwordHash: hashPassword("password", "test-salt"),
+      tenantId: "tenant-a",
+      roles: [role],
+      membershipVersion: 1,
+      totpEnabledAt: "2026-08-01T00:00:00.000Z",
+      totpSecretEncrypted: "legacy-tenant-secret",
+    };
+    const auth = new AuthService(
+      createMutableUserStore(user),
+      new InMemorySessionStore(),
+      new InMemoryPasswordResetStore(),
+      { resolve: vi.fn(async () => (
+        role === "TEACHER" || role === "STUDENT" || role === "GUARDIAN"
+          ? { subjectType: role, subjectId: `${role.toLowerCase()}-a` }
+          : undefined
+      )) } as unknown as IdentityResolver,
+      undefined,
+      undefined,
+      new InMemoryTenantStore(),
+    );
+
+    const issued = await auth.login(loginCredentials(user.email ?? ""));
+    expect(issued).not.toHaveProperty("status");
+    if ("status" in issued) throw new Error("Kurum rolü için MFA beklenmiyordu.");
+    expect(issued.session.roles).toContain(role);
+    await expect(auth.createTotpSetup({
+      userId: user.id,
+      tenantId: user.tenantId,
+      roles: user.roles,
+      bypassRls: false,
+    })).rejects.toThrow("ADMIN_MFA_ADMIN_ROLE_REQUIRED");
+  });
+
+  it("sistem admini TOTP etkinleştikten sonra login'i MFA challenge'a böler ve TOTP reuse'u reddeder", async () => {
     process.env.ADMIN_MFA_MODE = "optional";
     const user: AuthUser = {
       id: "admin-mfa",
@@ -841,8 +889,8 @@ describe("AuthService", () => {
       nationalIdHash: hashTcIdentity("10000000146"),
       name: "MFA Admin",
       passwordHash: hashPassword("password", "test-salt"),
-      tenantId: "tenant-a",
-      roles: ["TENANT_ADMIN"],
+      tenantId: "system",
+      roles: ["SYSTEM_ADMIN"],
       membershipVersion: 1,
       totpRecoveryCodeHashes: [],
     };
@@ -871,7 +919,7 @@ describe("AuthService", () => {
       bypassRls: false,
     }, setup.setupToken, setupCode);
 
-    const challenge = await auth.login(loginCredentials(user.email ?? ""));
+    const challenge = await auth.login(loginCredentials(user.email ?? "", "password", "system"));
     expect(challenge).toMatchObject({ status: "MFA_REQUIRED", methods: ["totp", "recovery_code"] });
     if (!("status" in challenge) || challenge.status !== "MFA_REQUIRED") throw new Error("MFA challenge bekleniyordu.");
 
@@ -892,8 +940,8 @@ describe("AuthService", () => {
       nationalIdHash: hashTcIdentity("10000000972"),
       name: "MFA Limiter Admin",
       passwordHash: hashPassword("password", "test-salt"),
-      tenantId: "tenant-a",
-      roles: ["TENANT_ADMIN"],
+      tenantId: "system",
+      roles: ["SYSTEM_ADMIN"],
       membershipVersion: 1,
       totpRecoveryCodeHashes: [],
     };
@@ -910,14 +958,14 @@ describe("AuthService", () => {
     const context = { userId: user.id, tenantId: user.tenantId, roles: user.roles, bypassRls: false };
     const setup = await auth.createTotpSetup(context);
     await auth.confirmTotpSetup(context, setup.setupToken, createTotpCodeForTest(setup.secret));
-    const challenge = await auth.login(loginCredentials(user.email ?? ""));
+    const challenge = await auth.login(loginCredentials(user.email ?? "", "password", "system"));
     if (!("status" in challenge) || challenge.status !== "MFA_REQUIRED") throw new Error("MFA challenge bekleniyordu.");
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
       await expect(auth.verifyTotpChallenge(challenge.challengeToken, { totpCode: "invalid" })).rejects.toThrow("MFA_CODE_INVALID");
     }
 
-    const renewedChallenge = await auth.login(loginCredentials(user.email ?? ""));
+    const renewedChallenge = await auth.login(loginCredentials(user.email ?? "", "password", "system"));
     if (!("status" in renewedChallenge) || renewedChallenge.status !== "MFA_REQUIRED") {
       throw new Error("Yenilenen MFA challenge bekleniyordu.");
     }
@@ -938,8 +986,8 @@ describe("AuthService", () => {
       nationalIdHash: hashTcIdentity("10000000570"),
       name: "Sensitive MFA Admin",
       passwordHash: hashPassword("password", "test-salt"),
-      tenantId: "tenant-a",
-      roles: ["TENANT_ADMIN"],
+      tenantId: "system",
+      roles: ["SYSTEM_ADMIN"],
       membershipVersion: 1,
       totpRecoveryCodeHashes: [],
     };
@@ -990,8 +1038,8 @@ describe("AuthService", () => {
       nationalIdHash: hashTcIdentity("10000000382"),
       name: "Recovery Admin",
       passwordHash: hashPassword("password", "test-salt"),
-      tenantId: "tenant-a",
-      roles: ["TENANT_ADMIN"],
+      tenantId: "system",
+      roles: ["SYSTEM_ADMIN"],
       membershipVersion: 1,
       totpRecoveryCodeHashes: [],
     };
@@ -1013,7 +1061,7 @@ describe("AuthService", () => {
     };
     const setup = await auth.createTotpSetup(context);
     await auth.confirmTotpSetup(context, setup.setupToken, createTotpCodeForTest(setup.secret));
-    const challenge = await auth.login(loginCredentials(user.email ?? ""));
+    const challenge = await auth.login(loginCredentials(user.email ?? "", "password", "system"));
     if (!("status" in challenge) || challenge.status !== "MFA_REQUIRED") throw new Error("MFA challenge bekleniyordu.");
 
     await expect(auth.verifyTotpChallenge(challenge.challengeToken, { recoveryCode: setup.recoveryCodes[0] })).resolves.toMatchObject({
@@ -1032,8 +1080,8 @@ describe("AuthService", () => {
       nationalIdHash: hashTcIdentity("10000000146"),
       name: "Step-up Admin",
       passwordHash: hashPassword("password", "test-salt"),
-      tenantId: "tenant-a",
-      roles: ["TENANT_ADMIN"],
+      tenantId: "system",
+      roles: ["SYSTEM_ADMIN"],
       membershipVersion: 1,
       totpRecoveryCodeHashes: [],
     };
@@ -1050,7 +1098,7 @@ describe("AuthService", () => {
     const setupContext = { userId: user.id, tenantId: user.tenantId, roles: user.roles, bypassRls: false };
     const setup = await auth.createTotpSetup(setupContext);
     await auth.confirmTotpSetup(setupContext, setup.setupToken, createTotpCodeForTest(setup.secret));
-    const challenge = await auth.login(loginCredentials(user.email ?? ""));
+    const challenge = await auth.login(loginCredentials(user.email ?? "", "password", "system"));
     if (!("status" in challenge) || challenge.status !== "MFA_REQUIRED") throw new Error("MFA challenge bekleniyordu.");
     const issued = await auth.verifyTotpChallenge(challenge.challengeToken, {
       totpCode: createTotpCodeForTest(setup.secret, Date.now() + 30_000),

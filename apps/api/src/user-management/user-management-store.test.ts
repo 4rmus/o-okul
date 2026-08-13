@@ -381,7 +381,6 @@ describe("PostgresUserManagementStore", () => {
 
     await expect(store.updateTenantMembership("tenant-a", "membership-a", {
       actorCanManageOwners: false,
-      stepUpVerified: true,
       campusIds: ["campus-main"],
       expectedVersion: 4,
       hasTeacherPersona: true,
@@ -416,7 +415,6 @@ describe("PostgresUserManagementStore", () => {
 
     await expect(store.updateTenantMembership("tenant-a", "membership-a", {
       actorCanManageOwners: false,
-      stepUpVerified: true,
       campusIds: [],
       expectedVersion: 4,
       hasTeacherPersona: false,
@@ -433,7 +431,6 @@ describe("PostgresUserManagementStore", () => {
     const store = new InMemoryUserManagementStore();
     const promoted = await store.updateTenantMembership("tenant-a", "membership-admin-a", {
       actorCanManageOwners: true,
-      stepUpVerified: true,
       campusIds: [],
       expectedVersion: 1,
       hasTeacherPersona: false,
@@ -445,7 +442,6 @@ describe("PostgresUserManagementStore", () => {
 
     await expect(store.updateTenantMembership("tenant-a", "membership-admin-a", {
       actorCanManageOwners: true,
-      stepUpVerified: true,
       campusIds: [],
       expectedVersion: 2,
       hasTeacherPersona: false,
@@ -455,37 +451,34 @@ describe("PostgresUserManagementStore", () => {
     })).rejects.toThrow("LAST_ACTIVE_TENANT_OWNER_REQUIRED");
   });
 
-  it("owner/admin terfi ve yetki düşürme işlemlerini step-up kanıtı olmadan reddeder", async () => {
+  it("owner/admin rol değişikliklerini MFA istemeden uygular ve owner capability sınırını korur", async () => {
     const store = new InMemoryUserManagementStore();
 
     await expect(store.updateTenantMembership("tenant-a", "membership-operations-a", {
       actorCanManageOwners: false,
-      stepUpVerified: false,
       campusIds: [],
       expectedVersion: 1,
       hasTeacherPersona: false,
       scopeMode: "TENANT",
       staffRole: "TENANT_ADMIN",
       status: "ACTIVE",
-    })).rejects.toThrow("STEP_UP_MFA_REQUIRED");
+    })).resolves.toMatchObject({ employee: { access: { staffRole: "TENANT_ADMIN" } } });
 
     await expect(store.updateTenantMembership("tenant-a", "membership-admin-a", {
       actorCanManageOwners: false,
-      stepUpVerified: false,
       campusIds: [],
       expectedVersion: 1,
       hasTeacherPersona: false,
       scopeMode: "TENANT",
-      staffRole: "OPERATIONS_STAFF",
+      staffRole: "TENANT_OWNER",
       status: "ACTIVE",
-    })).rejects.toThrow("STEP_UP_MFA_REQUIRED");
+    })).rejects.toThrow("TENANT_OWNER_MANAGE_REQUIRED");
   });
 
   it("çalışan üyeliğini askıya alır, açar ve sonlandırdıktan sonra yeniden değiştirmez", async () => {
     const store = new InMemoryUserManagementStore();
     const suspended = await store.updateTenantMembership("tenant-a", "membership-operations-a", {
       actorCanManageOwners: false,
-      stepUpVerified: false,
       campusIds: [],
       expectedVersion: 1,
       hasTeacherPersona: false,
@@ -497,7 +490,6 @@ describe("PostgresUserManagementStore", () => {
 
     const activated = await store.updateTenantMembership("tenant-a", "membership-operations-a", {
       actorCanManageOwners: false,
-      stepUpVerified: false,
       campusIds: [],
       expectedVersion: 2,
       hasTeacherPersona: false,
@@ -509,7 +501,6 @@ describe("PostgresUserManagementStore", () => {
 
     const ended = await store.updateTenantMembership("tenant-a", "membership-operations-a", {
       actorCanManageOwners: false,
-      stepUpVerified: false,
       campusIds: [],
       endedReason: "İşten ayrıldı",
       expectedVersion: 3,
@@ -521,7 +512,6 @@ describe("PostgresUserManagementStore", () => {
     expect(ended).toMatchObject({ employee: { accountStatus: "DISABLED", access: { status: "ENDED", version: 4 } } });
     await expect(store.updateTenantMembership("tenant-a", "membership-operations-a", {
       actorCanManageOwners: false,
-      stepUpVerified: false,
       campusIds: [],
       expectedVersion: 4,
       hasTeacherPersona: false,
@@ -537,7 +527,6 @@ describe("PostgresUserManagementStore", () => {
 
     await store.updateTenantMembership("tenant-a", "membership-a", {
       actorCanManageOwners: false,
-      stepUpVerified: true,
       campusIds: ["campus-main"],
       expectedVersion: 4,
       hasTeacherPersona: true,

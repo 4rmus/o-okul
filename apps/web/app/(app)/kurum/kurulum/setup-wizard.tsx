@@ -20,8 +20,10 @@ import type {
 import { Button, Field, Input, MetricCard, MetricGrid, Panel, SegmentedControl, Select, StatusBadge, TabButton, Tabs } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, queryClient } from "../../../../src/api-client.js";
+import { featureRolloutQueryKey, isFeatureEnabled, loadFeatureRollouts } from "../../../../src/feature-rollouts.js";
 import { ImportTemplatePanel } from "../_shared/import-template-panel.js";
 import { PageFrame } from "../_shared/page-frame.js";
+import { useSetupProgress } from "./_shared/use-setup-progress.js";
 import { setupFlowSteps, type SetupFlowStep } from "./_shared/wizard-steps.js";
 
 type StepId = SetupFlowStep["id"];
@@ -201,15 +203,13 @@ const fallbackCourseOptions = fallbackCourseGroups.flatMap((group) => group.cour
 const setupImportMaxBytes = 5 * 1024 * 1024;
 const setupImportAllowedExtensions = new Set<SetupImportFileExtension>(["CSV", "XLSX"]);
 
-export function SetupWizard() {
+export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId }) {
   const { auth } = useAuth();
   const tenantId = auth?.session.tenantId ?? "anonymous";
   const draftStorageKey = `uh_onboarding_${tenantId}_draft`;
-  const completedCookieName = `uh_onboarding_${encodeURIComponent(tenantId)}_completed`;
-  const [activeStepId, setActiveStepId] = useState<StepId>("general");
+  const [activeStepId, setActiveStepId] = useState<StepId>(initialStep);
   const [draft, setDraft] = useState<OnboardingDraft>(initialDraft);
   const [errors, setErrors] = useState<StepErrors>({});
-  const [isFinished, setIsFinished] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [savedSummary, setSavedSummary] = useState("");
@@ -236,6 +236,23 @@ export function SetupWizard() {
     queryFn: () => loadCourseTemplateGroups(auth?.accessToken ?? ""),
     enabled: Boolean(auth?.accessToken),
   });
+  const featureRolloutsQuery = useQuery({
+    queryKey: featureRolloutQueryKey(
+      auth?.session.tenantId,
+      auth?.session.id,
+      auth?.session.activePersona,
+    ),
+    queryFn: () => loadFeatureRollouts(auth?.accessToken ?? ""),
+    enabled: Boolean(auth?.accessToken),
+    refetchOnWindowFocus: false,
+  });
+  const setupV2Enabled = featureRolloutsQuery.isSuccess
+    && isFeatureEnabled(featureRolloutsQuery.data, "web.setup-v2");
+  const setupProgressQuery = useSetupProgress(
+    auth?.accessToken ?? "",
+    tenantId,
+    Boolean(auth?.accessToken && setupV2Enabled),
+  );
   const courseGroups =
     courseTemplatesQuery.data && courseTemplatesQuery.data.length > 0 ? courseTemplatesQuery.data : fallbackCourseGroups;
   const allCourseOptions = useMemo(
@@ -251,12 +268,35 @@ export function SetupWizard() {
     () => new Map(steps.map((step) => [step.id, validateStep(step.id, draft, allCourseOptions)])),
     [allCourseOptions, draft],
   );
-  const completedStepCount = steps.filter((step) => Object.keys(stepValidation.get(step.id) ?? {}).length === 0).length;
-  const progressPercent = Math.round((completedStepCount / steps.length) * 100);
+  const draftCompletedStepCount = steps.filter((step) => Object.keys(stepValidation.get(step.id) ?? {}).length === 0).length;
+  const completedStepCount = setupV2Enabled && setupProgressQuery.data
+    ? setupProgressQuery.data.completedCount
+    : draftCompletedStepCount;
+  const progressStepCount = setupV2Enabled && setupProgressQuery.data
+    ? setupProgressQuery.data.totalCount
+    : steps.length;
+  const progressPercent = Math.round((completedStepCount / progressStepCount) * 100);
+  const isFinished = Boolean(setupV2Enabled && setupProgressQuery.data?.status === "READY");
   const selectedCourses = selectedCourseOptions(draft.courses.selectedCourseIds, allCourseOptions);
   const generatedClasses = generateClasses(draft.classes.classCounts);
   const courseCount = selectedCourses.length;
   const classCount = generatedClasses.length;
+
+  useEffect(() => {
+    setActiveStepId(initialStep);
+    setErrors({});
+  }, [initialStep]);
+
+  useEffect(() => {
+    function syncStepFromHistory() {
+      const step = steps.find((candidate) => candidate.path === window.location.pathname);
+      if (!step) return;
+      setActiveStepId(step.id);
+      setErrors({});
+    }
+    window.addEventListener("popstate", syncStepFromHistory);
+    return () => window.removeEventListener("popstate", syncStepFromHistory);
+  }, []);
 
   useEffect(() => {
     if (!auth || typeof window === "undefined") return;
@@ -266,9 +306,8 @@ export function SetupWizard() {
     } else {
       setDraft(initialDraft);
     }
-    setIsFinished(readCookie(completedCookieName) === "true");
     setLoadedDraftKey(draftStorageKey);
-  }, [auth, completedCookieName, draftStorageKey]);
+  }, [auth, draftStorageKey]);
 
   useEffect(() => {
     if (!auth || loadedDraftKey !== draftStorageKey || typeof window === "undefined") return;
@@ -309,6 +348,10 @@ export function SetupWizard() {
   function goToStep(stepId: StepId) {
     setActiveStepId(stepId);
     setErrors({});
+    const step = steps.find((candidate) => candidate.id === stepId);
+    if (step && window.location.pathname !== step.path) {
+      window.history.pushState(null, "", step.path);
+    }
   }
 
   function goNext() {
@@ -317,16 +360,14 @@ export function SetupWizard() {
     if (Object.keys(nextErrors).length > 0) return;
     const nextStep = steps[activeStepIndex + 1];
     if (nextStep) {
-      setActiveStepId(nextStep.id);
-      setErrors({});
+      goToStep(nextStep.id);
     }
   }
 
   function goBack() {
     const previousStep = steps[activeStepIndex - 1];
     if (!previousStep) return;
-    setActiveStepId(previousStep.id);
-    setErrors({});
+    goToStep(previousStep.id);
   }
 
   async function changeStudentImportFile(file: File | undefined) {
@@ -422,42 +463,42 @@ export function SetupWizard() {
       const firstInvalidStep = steps.find(
         (step) => Object.keys(validateStep(step.id, draft, allCourseOptions)).length > 0,
       );
-      if (firstInvalidStep) setActiveStepId(firstInvalidStep.id);
+      if (firstInvalidStep) goToStep(firstInvalidStep.id);
       setErrors(allErrors);
       return;
     }
     if (courseTemplatesQuery.isLoading) {
-      setActiveStepId("courses");
+      goToStep("courses");
       setSaveError("Ders şablonları yükleniyor. Lütfen birkaç saniye sonra tekrar deneyin.");
       return;
     }
     if (courseTemplateError) {
-      setActiveStepId("courses");
+      goToStep("courses");
       setSaveError(courseTemplateError);
       return;
     }
     if (studentImportUploadStatus.state === "error") {
-      setActiveStepId("people");
+      goToStep("people");
       setSaveError("Öğrenci aktarım dosyasını desteklenen tür ve boyutla yeniden seçin.");
       return;
     }
     if (teacherImportUploadStatus.state === "error") {
-      setActiveStepId("people");
+      goToStep("people");
       setSaveError("Öğretmen aktarım dosyasını desteklenen tür ve boyutla yeniden seçin.");
       return;
     }
     if (kazanimImportUploadStatus.state === "error") {
-      setActiveStepId("people");
+      goToStep("people");
       setSaveError("Kazanım aktarım dosyasını desteklenen tür ve boyutla yeniden seçin.");
       return;
     }
     if (draft.people.teacherModel === "excel" && !teacherImportFileBase64) {
-      setActiveStepId("people");
+      goToStep("people");
       setSaveError("Öğretmen aktarım dosyası seçilmelidir.");
       return;
     }
     if (draft.people.studentModel === "excel" && !studentImportFileBase64) {
-      setActiveStepId("people");
+      goToStep("people");
       setSaveError("Öğrenci aktarım dosyası seçilmelidir.");
       return;
     }
@@ -492,6 +533,12 @@ export function SetupWizard() {
         queryClient.invalidateQueries({ queryKey: ["next-current-tenant", tenantId] }),
         queryClient.invalidateQueries({ queryKey: ["next-user-subject-refs", tenantId] }),
       ]);
+      if (setupV2Enabled) {
+        const refreshedReadiness = await setupProgressQuery.refetch();
+        if (refreshedReadiness.isError) {
+          setSaveError("Kayıtlar kaydedildi ancak sunucu kurulum durumu doğrulanamadı. Sayfayı yenileyip tekrar kontrol edin.");
+        }
+      }
       const studentSummary =
         result.importedStudents > 0
           ? `${result.importedStudents} öğrenci ve dosyadaki veli bağlantıları işlendi`
@@ -510,7 +557,6 @@ export function SetupWizard() {
     } finally {
       setIsSaving(false);
     }
-    writeCookie(completedCookieName, "true");
     window.sessionStorage.removeItem(draftStorageKey);
     setKazanimImportFileBase64("");
     setStudentImportFileBase64("");
@@ -518,11 +564,10 @@ export function SetupWizard() {
     setKazanimImportUploadStatus(createIdleUploadStatus());
     setStudentImportUploadStatus(createIdleUploadStatus());
     setTeacherImportUploadStatus(createIdleUploadStatus());
-    setIsFinished(true);
   }
 
   return (
-    <PageFrame title="Kurulum Sihirbazı" subtitle="Yeni kurumun ilk çalışma düzenini beş adımda hazırla.">
+    <PageFrame title="Kurulum Sihirbazı" subtitle="Yeni kurumun ilk çalışma düzenini altı adımda hazırla.">
       <section className="next-onboarding-hero" aria-label="Kurulum karşılama">
         <div>
           <span>{isFinished ? "Temel kurum kayıtları oluşturuldu" : "İlk giriş akışı"}</span>
@@ -530,7 +575,7 @@ export function SetupWizard() {
           <p>Genel bilgilerden kişi yönetimine kadar temel kararları tek akışta toparla.</p>
         </div>
         <MetricGrid className="next-onboarding-metrics" aria-label="Kurulum operasyon metrikleri" role="region">
-          <MetricCard label="İlerleme" value={`${progressPercent}%`} description={`${completedStepCount} / ${steps.length} adım doğrulandı`} tone={progressPercent === 100 ? "success" : "info"} />
+          <MetricCard label="İlerleme" value={`${progressPercent}%`} description={`${completedStepCount} / ${progressStepCount} adım doğrulandı`} tone={progressPercent === 100 ? "success" : "info"} />
           <MetricCard label="Ders" value={courseCount} description="Seçili ders" />
           <MetricCard label="Sınıf" value={classCount} description="Oluşturulacak şube" />
         </MetricGrid>
@@ -597,11 +642,35 @@ export function SetupWizard() {
               updateDraft={updateDraft}
             />
           ) : null}
+          {activeStep.id === "readiness" ? (
+            <div className="next-onboarding-done" aria-label="Hazırlık kontrolü">
+              <strong>Sunucu doğrulaması</strong>
+              {!setupV2Enabled ? <span>Kurulum v2 bu kurum için henüz açılmadı.</span> : null}
+              {setupProgressQuery.isPending ? <span>Kurulum kayıtları doğrulanıyor…</span> : null}
+              {setupProgressQuery.isError ? <span>Kurulum durumu doğrulanamadı; tamamlandı kabul edilmiyor.</span> : null}
+              {setupProgressQuery.data ? (
+                <ul>
+                  {setupProgressQuery.data.steps.map((step) => (
+                    <li key={step.key}>
+                      <span>{setupReadinessLabel(step.key)}</span>
+                      <StatusBadge tone={step.ready ? "success" : "warning"}>
+                        {step.ready ? "Hazır" : "Eksik"}
+                      </StatusBadge>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
           <footer className="next-onboarding-actions">
             <Button variant="secondary" type="button" onClick={goBack} disabled={activeStepIndex === 0}>
               Geri
             </Button>
-            {activeStepIndex < steps.length - 1 ? (
+            {activeStep.id === "people" ? (
+              <Button type="button" onClick={() => void finishSetup()} disabled={isSaving}>
+                {isSaving ? "Kaydediliyor" : "Kaydet ve bitir"}
+              </Button>
+            ) : activeStepIndex < steps.length - 1 ? (
               <Button type="button" onClick={goNext}>
                 İleri
               </Button>
@@ -639,6 +708,27 @@ export function SetupWizard() {
               <dd>{dataModelLabel(draft.people.studentModel)}</dd>
             </div>
           </dl>
+          {setupV2Enabled ? (
+            <div className="next-onboarding-done" aria-label="Sunucu kurulum durumu">
+              <strong>Sunucu doğrulaması</strong>
+              {setupProgressQuery.isPending ? <span>Kurulum kayıtları doğrulanıyor…</span> : null}
+              {setupProgressQuery.isError ? (
+                <span>Kurulum durumu doğrulanamadı; tamamlandı kabul edilmiyor.</span>
+              ) : null}
+              {setupProgressQuery.data ? (
+                <ul>
+                  {setupProgressQuery.data.steps.map((step) => (
+                    <li key={step.key}>
+                      <span>{setupReadinessLabel(step.key)}</span>
+                      <StatusBadge tone={step.ready ? "success" : "warning"}>
+                        {step.ready ? "Hazır" : "Eksik"}
+                      </StatusBadge>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
           {isFinished ? (
             <div className="next-onboarding-done">
               <strong>Temel kurum kayıtları oluşturuldu; kalan kontroller aşağıda.</strong>
@@ -1066,6 +1156,7 @@ function validateStep(stepId: StepId, draft: OnboardingDraft, courseOptions: Set
   if (stepId === "term") return validateTerm(draft.term);
   if (stepId === "courses") return validateCourses(draft.courses, courseOptions);
   if (stepId === "classes") return validateClasses(draft.classes);
+  if (stepId === "readiness") return {};
   return validatePeople(draft.people);
 }
 
@@ -1777,14 +1868,6 @@ function isPeopleModel(value: unknown): value is OnboardingDraft["people"]["stud
   return value === "manual" || value === "excel";
 }
 
-function readCookie(name: string) {
-  const prefix = `${name}=`;
-  const match = document.cookie
-    .split("; ")
-    .find((cookie) => cookie.startsWith(prefix));
-  return match ? decodeURIComponent(match.slice(prefix.length)) : "";
-}
-
 function readDraftFromSession(key: string) {
   try {
     return window.sessionStorage.getItem(key) ?? "";
@@ -1801,6 +1884,17 @@ function writeDraftToSession(key: string, draft: OnboardingDraft) {
   }
 }
 
-function writeCookie(name: string, value: string): void {
-  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=31536000; samesite=lax`;
+function setupReadinessLabel(key: import("@o-okul/shared-types").SetupReadinessKey): string {
+  const labels: Record<import("@o-okul/shared-types").SetupReadinessKey, string> = {
+    institution: "Kurum profili",
+    campus: "Kampüs",
+    "academic-year": "Aktif akademik yıl",
+    "academic-term": "Aktif dönem",
+    "grade-level": "Seviye",
+    class: "Sınıf",
+    course: "Ders",
+    teacher: "Öğretmen",
+    student: "Öğrenci",
+  };
+  return labels[key];
 }

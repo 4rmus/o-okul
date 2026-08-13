@@ -207,7 +207,7 @@ export class PostgresPasswordResetStore implements PasswordResetStore {
       return operation({
         kind: "postgres",
         async updateUserPassword(input) {
-          const updated = await client.query(
+          const updated = await client.query<{ id: string; tenantId: string | null; membershipVersion: number }>(
             `UPDATE "User"
              SET "passwordHash" = $2,
                  "passwordHashVersion" = $5,
@@ -220,7 +220,7 @@ export class PostgresPasswordResetStore implements PasswordResetStore {
                  "membershipVersion" = "membershipVersion" + 1,
                  "updatedAt" = now()
              WHERE "id" = $1
-             RETURNING "id"`,
+             RETURNING "id", "tenantId", "membershipVersion"`,
             [
               input.userId,
               input.passwordHash,
@@ -229,7 +229,20 @@ export class PostgresPasswordResetStore implements PasswordResetStore {
               input.passwordHashVersion,
             ],
           );
-          return Boolean(updated.rows[0]);
+          const user = updated.rows[0];
+          if (!user) return false;
+          if (user.tenantId) {
+            await client.query(
+              `UPDATE "TenantMembership"
+               SET "version" = $3,
+                   "updatedAt" = now()
+               WHERE "tenantId" = $1
+                 AND "userId" = $2
+                 AND "status" = 'ACTIVE'`,
+              [user.tenantId, user.id, user.membershipVersion],
+            );
+          }
+          return true;
         },
         async revokeUserSessions(userId) {
           await client.query(

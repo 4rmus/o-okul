@@ -12,6 +12,7 @@ await rm(privateInputRoot, { force: true, recursive: true });
 await mkdir(privateInputRoot, { recursive: true, mode: 0o700 });
 
 try {
+  mkdirSync("artifacts", { recursive: true });
   writeJson(validEvidencePath, createValidEvidence());
   const positive = runPreflight({
     NEXT_E2E_LIVE_ONBOARDING: "1",
@@ -37,8 +38,26 @@ try {
       LIVE_ONBOARDING_EVIDENCE_PATH: validEvidencePath,
       LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT: "",
     },
-    "LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT gerçek https URL olmalı.",
+    "LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT tam olarak https://notify.staging.o-okul.com/messages/latest olmalı.",
   );
+
+  for (const endpoint of [
+    "https://notify.o-okul.com/messages/latest",
+    "https://other.staging.o-okul.com/messages/latest",
+    "https://notify.staging.o-okul.com/other",
+    "https://notify.staging.o-okul.com/messages/latest?recipient=admin",
+    "https://notify.staging.o-okul.com/messages/latest#token=forbidden",
+  ]) {
+    runNegativeCheck(
+      `live onboarding disallowed endpoint negative ${endpoint}`,
+      {
+        NEXT_E2E_LIVE_ONBOARDING: "1",
+        LIVE_ONBOARDING_EVIDENCE_PATH: validEvidencePath,
+        LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT: endpoint,
+      },
+      "LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT tam olarak https://notify.staging.o-okul.com/messages/latest olmalı.",
+    );
+  }
 
   runNegativeCheck(
     "live onboarding missing email evidence bearer negative",
@@ -148,6 +167,19 @@ try {
     },
     "tenant.unexpected beklenmeyen alan.",
   );
+
+  const invalidTotpSecretPath = join(privateInputRoot, "invalid-totp-secret.json");
+  const invalidTotpSecret = createValidEvidence();
+  invalidTotpSecret.systemAdmin.totpSecret = "not-a-base32-secret";
+  writeJson(invalidTotpSecretPath, invalidTotpSecret);
+  runNegativeCheck(
+    "live onboarding invalid system admin TOTP secret negative",
+    {
+      NEXT_E2E_LIVE_ONBOARDING: "1",
+      LIVE_ONBOARDING_EVIDENCE_PATH: invalidTotpSecretPath,
+    },
+    "systemAdmin.totpSecret 16-128 karakter Base32 olmalı.",
+  );
 } finally {
   await rm(privateInputRoot, { force: true, recursive: true });
   rmSync(repositoryArtifactPath, { force: true });
@@ -171,7 +203,7 @@ function runPreflight(env) {
       LIVE_ONBOARDING_ALLOW_EXAMPLE_EVIDENCE: "",
       NEXT_E2E_LIVE_ONBOARDING: "",
       LIVE_ONBOARDING_EVIDENCE_PATH: "",
-      LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT: "https://mail-evidence.staging.o-okul.test/messages/latest",
+      LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT: "https://notify.staging.o-okul.com/messages/latest",
       LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN: "live-onboarding-test-bearer-token",
       ...env,
     },
@@ -218,6 +250,7 @@ function createValidEvidence() {
       email: "system.admin@staging.o-okul.com",
       loginName: "system.admin@staging.o-okul.com",
       password: "Str0ngSystem!2026",
+      totpSecret: "JBSWY3DPEHPK3PXP",
     },
     tenant: {
       name: "UAT Kurumu",

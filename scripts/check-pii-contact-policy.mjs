@@ -51,6 +51,7 @@ requireTokens(paths.decisions, files.decisions, [
 requireTokens(paths.kvkkChecker, files.kvkkChecker, [
   "expectedPurgeCoverage",
   'student: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "email", "photoKey"]',
+  'studentContact: [',
   'teacher: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone"]',
   'guardian: ["firstName", "lastName", "phone"]',
   'user: ["email", "name"]',
@@ -59,12 +60,14 @@ requireTokens(paths.kvkkChecker, files.kvkkChecker, [
   "NO_RECORDS_WHILE_DISABLED",
   "requireExactStringSet(coverage[subject], failures, `purgeCoverage.${subject}`, expectedFields, \"alan\")",
   "kvkk.student_pii_purged",
+  "kvkk.student_contact_pii_purged",
   "kvkk.guardian_pii_purged",
   "kvkk.user_pii_purged",
 ], failures);
 
 requireTokens(paths.goLiveChecker, files.goLiveChecker, [
   'student: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "email", "photoKey"]',
+  'studentContact: [',
   'teacher: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone"]',
   'guardian: ["firstName", "lastName", "phone"]',
   'user: ["email", "name"]',
@@ -280,6 +283,10 @@ function requirePurgeCoverage(path, coverage, output) {
     return;
   }
   requireArrayIncludes(path, "purgeCoverage.student", coverage.student, ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "email", "photoKey"], output);
+  requireArrayIncludes(path, "purgeCoverage.studentContact", coverage.studentContact, [
+    "firstName", "lastName", "relationType", "phoneEncrypted", "phoneHash", "emailEncrypted", "emailHash",
+    "canReceiveSms", "canReceiveAnnouncements", "canReceiveFinance", "consentSource", "consentRecordedAt",
+  ], output);
   requireArrayIncludes(path, "purgeCoverage.teacher", coverage.teacher, ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone"], output);
   requireArrayIncludes(path, "purgeCoverage.guardian", coverage.guardian, ["firstName", "lastName", "phone"], output);
   requireArrayIncludes(path, "purgeCoverage.user", coverage.user, ["email", "name"], output);

@@ -10,7 +10,9 @@
     }
   ],
   "vars": {
-    "WHATSAPP_ENABLED": "false"
+    "WHATSAPP_ENABLED": "false",
+    "LIVE_ONBOARDING_EMAIL_EVIDENCE_ENABLED": "false",
+    "LIVE_ONBOARDING_EMAIL_EVIDENCE_ENVIRONMENT": "production"
   },
   "send_email": [
     {

@@ -20,6 +20,7 @@ import {
   type CreateExamRepositoryInput,
   type ExamParticipantRepository,
   type ExamRepository,
+  ExamService,
   type UpdateExamRepositoryInput,
 } from "./exam.service.js";
 
@@ -436,7 +437,7 @@ describe("ExamController", () => {
     await request(server)
       .post("/exams")
       .set("Authorization", `Bearer ${admin.accessToken}`)
-      .send(examCreateBody("Nisan Deneme"))
+      .send(examCreateBody("Nisan Deneme", { classIds: ["class-a"] }))
       .expect(201);
 
     const teacher = await login("teacher-a@example.test");
@@ -454,9 +455,148 @@ describe("ExamController", () => {
     expect(list.body[0]).toMatchObject({ title: "Nisan Deneme", status: "DRAFT" });
   });
 
+  it("TENANT_ADMIN salt okunur sınav workspace paritesini PII olmadan alır", async () => {
+    const issued = await login("admin-a@example.test");
+    const created = await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send(examCreateBody("Gate C Denemesi", { startsAt: "2026-03-15T09:00:00.000Z" }))
+      .expect(201);
+    const registered = await participants.create({
+      tenantId: "tenant-a",
+      examId: created.body.id,
+      studentId: "student-a",
+      participantNo: "PII-42",
+      bookletType: "A",
+    });
+    participants.participants.set(registered.id, { ...registered, status: "ATTENDED" });
+    await request(server)
+      .post(`/exams/${created.body.id}/publish`)
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(201);
+
+    const response = await request(server)
+      .get(`/exams/${created.body.id}/workspace`)
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      exam: {
+        id: created.body.id,
+        tenantId: "tenant-a",
+        title: "Gate C Denemesi",
+        status: "PUBLISHED",
+        answerKeySummary: { status: "DRAFT", questionCount: 1 },
+      },
+      participantSummary: { total: 1, registered: 0, attended: 1, absent: 0 },
+      nextAction: "OPEN_OPTICAL",
+      readiness: expect.arrayContaining([
+        { key: "ANSWER_KEY", status: "READY" },
+        { key: "PARTICIPANTS", status: "READY" },
+        { key: "PUBLISHED", status: "READY" },
+        { key: "OPTICAL_ENTRY", status: "READY" },
+      ]),
+    });
+    const serialized = JSON.stringify(response.body);
+    expect(serialized).not.toContain("student-a");
+    expect(serialized).not.toContain("PII-42");
+  });
+
+  it("workspace başka tenant sınavını 404 ile gizler", async () => {
+    const issued = await login("admin-a@example.test");
+    const otherTenantExam = await repository.create({ tenantId: "tenant-b", title: "Başka Kurum Gizli Sınav" });
+
+    const response = await request(server)
+      .get(`/exams/${otherTenantExam.id}/workspace`)
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(404);
+
+    expect(JSON.stringify(response.body)).not.toContain("Başka Kurum Gizli Sınav");
+  });
+
+  it("workspace portal, öğretmen ve sistem personalarını reddeder", async () => {
+    const created = await repository.create({ tenantId: "tenant-a", title: "Kapsamlı Deneme" });
+    for (const email of [
+      "teacher-a@example.test",
+      "student-a@example.test",
+      "guardian-a@example.test",
+      "system@example.test",
+    ]) {
+      const issued = await login(email);
+      await request(server)
+        .get(`/exams/${created.id}/workspace`)
+        .set("Authorization", `Bearer ${issued.accessToken}`)
+        .expect(403);
+    }
+  });
+
+  it("workspace kampüs kapsamlı çalışanı servis sınırında fail-closed reddeder", async () => {
+    const created = await repository.create({ tenantId: "tenant-a", title: "Kampüs Dışı Deneme" });
+    const exams = app.get(ExamService);
+
+    await expect(exams.workspace({
+      userId: "admin-a",
+      tenantId: "tenant-a",
+      activePersona: "STAFF",
+      roles: ["TENANT_ADMIN"],
+      campusScope: { scopeMode: "CAMPUSES", campusIds: ["campus-a"] },
+      bypassRls: false,
+    }, created.id)).rejects.toThrow("EXAM_WORKSPACE_SCOPE_FORBIDDEN");
+  });
+
+  it("öğretmen okumasını assignment ve campusScope kesişimiyle sınırlar", async () => {
+    const created = await repository.create({ tenantId: "tenant-a", title: "Kampüs Kapsamlı Deneme" });
+    await participants.create({
+      tenantId: "tenant-a",
+      examId: created.id,
+      studentId: "student-a",
+    });
+    const exams = app.get(ExamService);
+    const context = {
+      userId: "teacher-a",
+      tenantId: "tenant-a",
+      activePersona: "TEACHER" as const,
+      subjectType: "TEACHER" as const,
+      subjectId: "teacher-a",
+      roles: ["TEACHER"],
+      campusScope: { scopeMode: "CAMPUSES" as const, campusIds: ["campus-a"] },
+      bypassRls: false,
+    };
+
+    await expect(exams.list(context)).resolves.toEqual([]);
+    await expect(exams.listParticipants(context, created.id)).resolves.toEqual([]);
+    await expect(exams.get(context, created.id)).rejects.toThrow("FORBIDDEN_TEACHER_ASSIGNMENT_SCOPE");
+  });
+
+  it("workspace ortak rol-persona kuralını servis sınırında uygular", async () => {
+    const created = await repository.create({ tenantId: "tenant-a", title: "Persona Kapsamı Denemesi" });
+    const exams = app.get(ExamService);
+    const baseContext = {
+      userId: "staff-a",
+      tenantId: "tenant-a",
+      bypassRls: false,
+    };
+
+    await expect(exams.workspace({
+      ...baseContext,
+      activePersona: "STAFF",
+      roles: ["OPERATIONS_STAFF"],
+    }, created.id)).rejects.toThrow("EXAM_WORKSPACE_SCOPE_FORBIDDEN");
+    await expect(exams.workspace({
+      ...baseContext,
+      activePersona: "TEACHER",
+      roles: ["TENANT_ADMIN", "TEACHER"],
+    }, created.id)).rejects.toThrow("EXAM_WORKSPACE_SCOPE_FORBIDDEN");
+    await expect(exams.workspace({
+      ...baseContext,
+      roles: ["TENANT_ADMIN"],
+    }, created.id)).resolves.toMatchObject({ exam: { id: created.id } });
+  });
+
   it("auth yoksa reddeder", async () => {
     await request(server).post("/exams").send({ title: "X" }).expect(401);
     await request(server).get("/exams").expect(401);
+    await request(server).get(`/exams/${randomUUID()}/workspace`).expect(401);
   });
 
   it("olmayan sınav için 404 döner", async () => {

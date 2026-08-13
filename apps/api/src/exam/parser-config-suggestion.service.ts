@@ -12,6 +12,7 @@ import {
   type ParserConfigSuggestionResult as SharedParserConfigSuggestionResult,
 } from "@o-okul/shared-types";
 import type { RequestContext } from "../context/request-context.js";
+import { requireTenantWideStaffContext } from "../tenant/tenant-access.js";
 import { type ExamRepository, examRepositoryToken } from "./exam.service.js";
 
 export interface ParserConfigSuggestionInput extends ParserConfigSuggestionRequest {
@@ -33,8 +34,11 @@ export class ParserConfigSuggestionService {
     context: RequestContext,
     input: ParserConfigSuggestionInput,
   ): Promise<ParserConfigSuggestionResult> {
-    if (!context.tenantId) {
-      throw new ForbiddenException("TENANT_CONTEXT_MISSING");
+    let tenantId: string;
+    try {
+      tenantId = requireTenantWideStaffContext(context, "PARSER_CONFIG_CAMPUS_SCOPE_FORBIDDEN");
+    } catch (error) {
+      throw new ForbiddenException(error instanceof Error ? error.message : "PARSER_CONFIG_CAMPUS_SCOPE_FORBIDDEN");
     }
 
     const examId = required(input.examId, "PARSER_CONFIG_EXAM_REQUIRED");
@@ -42,7 +46,7 @@ export class ParserConfigSuggestionService {
       try {
         let examType: string | undefined;
         if (input.preset === "OPTIK_129" || input.preset === "YANIT") {
-          const exam = await this.exams.findById(context.tenantId, examId);
+          const exam = await this.exams.findById(tenantId, examId);
           if (!exam) {
             throw new NotFoundException("PARSER_CONFIG_EXAM_NOT_FOUND");
           }

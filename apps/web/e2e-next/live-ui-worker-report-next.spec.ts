@@ -32,11 +32,11 @@ test("worker tarafından üretilen canlı rapor kurum UI içinde açılır", asy
 
   await loginAs(page, evidence.tenantSlug, evidence.loginName, evidence.password, /\/kurum(?:[/?#]|$)/);
   await expect(page).toHaveURL(/\/kurum$/);
-  await page.goto("/kurum/raporlar");
+  await page.goto(new URL("/kurum/raporlar", page.url()).toString());
   await fillReportExamReference(page, evidence.examId);
   await page.getByRole("button", { name: "Raporu getir" }).click();
 
-  await expect(page.getByLabel("Rapor özeti").getByText("READY")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Rapor iş akışı" })).toContainText("Rapor hazır");
   await page.getByRole("tab", { name: "Öğrenciler" }).click();
   await page.getByRole("button", { name: /karnesini aç/ }).first().click();
   await page.getByRole("tab", { name: "Karne" }).click();
@@ -50,7 +50,7 @@ test("worker tarafından üretilen canlı rapor kurum UI içinde açılır", asy
   if (evidence.studentPortal) {
     await logout(page);
     await loginAs(page, evidence.studentPortal.tenantSlug ?? evidence.tenantSlug, evidence.studentPortal.loginName, evidence.studentPortal.password, /\/ogrenci(?:[/?#]|$)/);
-    await page.goto(`/ogrenci?examId=${encodeURIComponent(evidence.examId)}`);
+    await page.goto(new URL(`/ogrenci?examId=${encodeURIComponent(evidence.examId)}`, page.url()).toString());
     await expect(page.getByRole("heading", { name: "Öğrenci Portalı" })).toBeVisible();
     await openPortalKarneDetail(page);
     studentPortalViewed = true;
@@ -60,11 +60,13 @@ test("worker tarafından üretilen canlı rapor kurum UI içinde açılır", asy
   if (evidence.guardianPortal) {
     await logout(page);
     await loginAs(page, evidence.guardianPortal.tenantSlug ?? evidence.tenantSlug, evidence.guardianPortal.loginName, evidence.guardianPortal.password, /\/veli(?:[/?#]|$)/);
-    await page.goto(`/veli?examId=${encodeURIComponent(evidence.examId)}`);
+    await page.goto(new URL(`/veli?examId=${encodeURIComponent(evidence.examId)}`, page.url()).toString());
     await expect(page.getByRole("heading", { name: "Veli Portalı" })).toBeVisible();
     await openPortalKarneDetail(page);
     guardianPortalViewed = true;
   }
+
+  await logout(page);
 
   writeResultEvidence(resultEvidencePath, {
     result: "PASS",
@@ -80,6 +82,7 @@ test("worker tarafından üretilen canlı rapor kurum UI içinde açılır", asy
     excelDownloaded: true,
     studentPortalViewed,
     guardianPortalViewed,
+    sessionLogoutVerified: true,
     commandsPassed: ["pnpm live:ui-worker:smoke"],
     gaps: [],
   });
@@ -96,16 +99,34 @@ async function loginAs(page: Page, tenantSlug: string, loginName: string, passwo
 }
 
 async function logout(page: Page) {
-  await page.getByRole("button", { name: "Çıkış" }).click();
-  await expect(page).toHaveURL(/\/login$/);
+  const cookies = await page.context().cookies();
+  const refreshToken = cookies.find((cookie) => cookie.name === "refreshToken")?.value;
+  const csrfToken = cookies.find((cookie) => cookie.name === "csrfToken")?.value;
+  if (!refreshToken || !csrfToken) throw new Error("LIVE_UI_WORKER_SESSION_COOKIE_MISSING");
+  const [logoutResponse] = await Promise.all([
+    page.waitForResponse((response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname.endsWith("/api/v1/auth/logout")
+    ),
+    page.getByLabel("Üst gezinme").getByRole("button", { name: "Çıkış" }).click(),
+  ]);
+  expect(logoutResponse.status()).toBe(204);
+  const revokedRefreshResponse = await page.request.post(
+    new URL("/api/v1/auth/refresh", logoutResponse.url()).toString(),
+    {
+      data: {},
+      headers: {
+        cookie: `refreshToken=${refreshToken}; csrfToken=${csrfToken}`,
+        "x-csrf-token": csrfToken,
+      },
+    },
+  );
+  expect(revokedRefreshResponse.status()).toBe(401);
+  await expect(page).toHaveURL(/\/giris$/);
 }
 
 async function fillReportExamReference(page: Page, examId: string) {
-  const manualExamReference = page.getByLabel("Manuel sınav referansı");
-  if (!(await manualExamReference.isVisible())) {
-    await page.getByText("Gelişmiş sınav referansı", { exact: true }).click();
-  }
-  await manualExamReference.fill(examId);
+  await page.getByLabel("Rapor kontrol alanı").getByRole("combobox", { name: "Sınav" }).selectOption(examId.trim());
 }
 
 async function expectReportDownload(

@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AuditLogModule } from "../audit-log/audit-log.module.js";
+import { FeatureRolloutModule } from "../feature-rollout/feature-rollout.module.js";
 import { LicensePersistenceModule } from "../license/license-persistence.module.js";
 import { SchoolModule } from "../school/school.module.js";
 import { studentStoreToken } from "../student/student-store.js";
@@ -22,7 +23,7 @@ import {
 import { userManagementStoreToken } from "../user-management/user-management-store.js";
 
 @Module({
-  imports: [AuditLogModule, LicensePersistenceModule, SchoolModule, TenantPersistenceModule, UserManagementPersistenceModule],
+  imports: [AuditLogModule, FeatureRolloutModule, LicensePersistenceModule, SchoolModule, TenantPersistenceModule, UserManagementPersistenceModule],
   controllers: [IdentityInvitationController, StudentPortalActivationController],
   providers: [
     IdentityInvitationService,

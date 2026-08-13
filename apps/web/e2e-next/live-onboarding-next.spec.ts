@@ -1,5 +1,6 @@
+import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 interface LiveOnboardingEvidence {
   appendRunId?: boolean;
@@ -17,6 +18,7 @@ interface LiveOnboardingEvidence {
   systemAdmin: {
     loginName: string;
     password: string;
+    totpSecret: string;
   };
   tenant: {
     name: string;
@@ -41,11 +43,15 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
   const tenantSlug = appendRunId ? `${evidence.tenant.slug}-${runId}` : evidence.tenant.slug;
   const firstAdminEmail = appendRunId ? appendEmailRunId(evidence.firstAdmin.email, runId) : evidence.firstAdmin.email;
   const onboardingInstitutionName = evidence.onboarding?.institutionName ?? tenantName;
+  const licenseStartsAt = runStartedAt.slice(0, 10);
+  const licenseEndsAtDate = new Date(runStartedAt);
+  licenseEndsAtDate.setUTCFullYear(licenseEndsAtDate.getUTCFullYear() + 1);
 
   await page.goto("/sistem/giris");
   await page.locator('input[name="loginName"]').fill(evidence.systemAdmin.loginName);
   await page.locator('input[name="password"]').fill(evidence.systemAdmin.password);
   await page.getByRole("button", { name: "Giriş yap" }).click();
+  await completeSystemAdminMfa(page, /\/sistem$/, evidence.systemAdmin.totpSecret);
 
   await expect(page).toHaveURL(/\/sistem$/);
   await page.getByRole("link", { name: "Kurumlar" }).click();
@@ -56,42 +62,68 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
   await createDialog.getByLabel("Kurum adı").fill(tenantName);
   await createDialog.getByLabel("Kurum kodu").fill(tenantSlug);
   await createDialog.getByLabel("Plan").selectOption(evidence.tenant.plan ?? "TRIAL");
-  await createDialog.getByLabel("Kullanıcı sınırı").fill(String(evidence.tenant.seatLimit ?? 25));
-  await createDialog.getByLabel("İlk yönetici ad soyad").fill(evidence.firstAdmin.name);
-  await createDialog.getByLabel("İlk yönetici e-posta").fill(firstAdminEmail);
-  await createDialog.getByLabel("İlk yönetici TC kimlik no").fill(evidence.firstAdmin.nationalId);
+  await createDialog.getByLabel("Lisans başlangıç").fill(licenseStartsAt);
+  await createDialog.getByLabel("Lisans bitiş").fill(licenseEndsAtDate.toISOString().slice(0, 10));
+  await createDialog.getByLabel("Aktif öğrenci limiti").fill(String(evidence.tenant.seatLimit ?? 25));
+  await createDialog.getByLabel("Sözleşme referansı").fill(`gate-d-uat-${runId}`);
+  await createDialog.getByLabel("İlk kampüs adı").fill("Merkez Kampüs");
+  await createDialog.getByLabel("İlk kurum sahibi ad soyad").fill(evidence.firstAdmin.name);
+  await createDialog.getByLabel("İlk kurum sahibi e-posta").fill(firstAdminEmail);
+  await createDialog.getByLabel("Kurum sahibi TC kimlik no").fill(evidence.firstAdmin.nationalId);
+  const tenantCreateResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === "POST" && url.pathname === "/api/v1/tenants";
+  });
   await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
+  const tenantCreateResponse = await tenantCreateResponsePromise;
+  const tenantCreateBody = await tenantCreateResponse.json().catch(() => undefined) as { error?: { code?: unknown } } | undefined;
+  const tenantCreateErrorCode = typeof tenantCreateBody?.error?.code === "string" ? tenantCreateBody.error.code : "UNKNOWN";
+  expect(tenantCreateResponse.status(), `LIVE_ONBOARDING_TENANT_CREATE_FAILED:${tenantCreateErrorCode}`).toBe(201);
 
-  await expect(page.getByRole("row", { name: new RegExp(escapeRegExp(tenantName)) })).toBeVisible();
-  await page.getByRole("button", { name: "Çıkış" }).click();
+  const tenantSearchResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === "GET"
+      && url.pathname === "/api/v1/tenants"
+      && url.searchParams.get("q") === tenantSlug;
+  });
+  await page.getByRole("textbox", { name: "Ara", exact: true }).fill(tenantSlug);
+  const tenantSearchResponse = await tenantSearchResponsePromise;
+  expect(tenantSearchResponse.status()).toBe(200);
+  await expect(page.getByRole("row", { name: new RegExp(escapeRegExp(tenantSlug)) })).toBeVisible();
+  await page.getByLabel("Üst gezinme").getByRole("button", { name: "Çıkış" }).click();
 
   const activationUrl = await waitForActivationUrl(firstAdminEmail, runStartedAt);
   await page.goto(activationUrl);
-  await page.getByLabel("Şifre", { exact: true }).fill(evidence.firstAdmin.password);
-  await page.getByLabel("Şifre tekrar", { exact: true }).fill(evidence.firstAdmin.password);
-  await page.getByRole("button", { name: "Hesabı etkinleştir" }).click();
-  await expect(page.getByText("Hesabınız etkinleştirildi.")).toBeVisible();
+  await page.getByRole("textbox", { name: "Yeni şifre", exact: true }).fill(evidence.firstAdmin.password);
+  await page.getByRole("textbox", { name: "Yeni şifre tekrar" }).fill(evidence.firstAdmin.password);
+  await page.getByRole("button", { name: "Şifreyi yenile" }).click();
+  await expect(page.getByRole("status")).toContainText("Şifreniz yenilendi");
 
   await page.goto(`/k/${encodeURIComponent(tenantSlug)}/giris`);
   await page.locator('input[name="loginName"]').fill(firstAdminEmail);
   await page.locator('input[name="password"]').fill(evidence.firstAdmin.password);
   await page.getByRole("button", { name: "Giriş yap" }).click();
   await expect(page).toHaveURL(/\/kurum$/);
+  await expect(page.getByLabel("Kurulum anahtarı")).toHaveCount(0);
 
-  await page.goto("/kurum/kurulum");
+  await page.getByRole("link", { name: "Kuruluma git" }).click();
+  await expect(page).toHaveURL(/\/kurum\/kurulum$/);
   await expect(page.getByRole("heading", { name: "Kurulum Sihirbazı" })).toBeVisible();
-  await page.getByLabel("Kurulum formu").getByLabel("Kurum adı").fill(onboardingInstitutionName);
+  const setupForm = page.getByLabel("Kurulum formu");
+  await setupForm.getByLabel("Kurum adı").fill(onboardingInstitutionName);
   const contactEmail = evidence.onboarding?.contactEmail ?? firstAdminEmail;
-  await page.getByLabel("Kurulum formu").getByLabel("İletişim e-postası").fill(contactEmail);
-  await page.getByRole("button", { name: "İleri" }).click();
-  await page.getByRole("button", { name: "İleri" }).click();
-  await page.getByRole("button", { name: "İleri" }).click();
-  await page.getByRole("button", { name: "İleri" }).click();
-  await page.getByLabel("Kurulum formu").getByLabel("Veri sorumlusu").fill(evidence.onboarding?.importOwner ?? "Canli UAT");
-  await page.getByRole("button", { name: "Kaydet ve bitir" }).click();
+  await setupForm.getByLabel("İletişim e-postası").fill(contactEmail);
+  await setupForm.getByRole("button", { name: "İleri", exact: true }).click();
+  await setupForm.getByRole("button", { name: "İleri", exact: true }).click();
+  await setupForm.getByRole("button", { name: "İleri", exact: true }).click();
+  await setupForm.getByRole("button", { name: "İleri", exact: true }).click();
+  await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
+  await setupForm.getByLabel("Veri sorumlusu").fill(evidence.onboarding?.importOwner ?? "Canli UAT");
+  await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
 
-  await expect(page.getByText("Kurulum taslağı tamamlandı.")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Kurum paneline dön" })).toBeVisible();
+  const setupSummary = setupForm.locator(".next-onboarding-success");
+  await expect(setupSummary).toContainText(/2 sınıf, [1-9]\d* ders/);
+  await expect(setupSummary).toContainText("1 akademik yıl, 1 dönem");
 });
 
 function readEvidence(path: string | undefined): LiveOnboardingEvidence {
@@ -103,6 +135,7 @@ function readEvidence(path: string | undefined): LiveOnboardingEvidence {
   const failures: string[] = [];
   if (!parsed.systemAdmin?.loginName) failures.push("systemAdmin.loginName");
   if (!parsed.systemAdmin?.password) failures.push("systemAdmin.password");
+  if (!parsed.systemAdmin?.totpSecret) failures.push("systemAdmin.totpSecret");
   if (!parsed.tenant?.name) failures.push("tenant.name");
   if (!parsed.tenant?.slug) failures.push("tenant.slug");
   if (!parsed.firstAdmin?.name) failures.push("firstAdmin.name");
@@ -138,11 +171,11 @@ async function waitForActivationUrl(recipient: string, createdAfter: string): Pr
 
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
-    const url = new URL(endpoint);
-    url.searchParams.set("recipient", recipient);
-    url.searchParams.set("purpose", "PASSWORD_RESET");
-    url.searchParams.set("createdAfter", createdAfter);
-    const response = await fetch(url, { headers: { authorization: `Bearer ${bearerToken}` } });
+    const response = await fetch(endpoint, {
+      body: JSON.stringify({ recipient, purpose: "PASSWORD_RESET", createdAfter }),
+      headers: { authorization: `Bearer ${bearerToken}`, "content-type": "application/json" },
+      method: "POST",
+    });
     if (response.ok) {
       const body = await response.json() as { activationUrl?: unknown };
       if (typeof body.activationUrl === "string") return validateActivationUrl(body.activationUrl);
@@ -157,8 +190,45 @@ async function waitForActivationUrl(recipient: string, createdAfter: string): Pr
 function validateActivationUrl(value: string): string {
   const activationUrl = new URL(value);
   const baseUrl = new URL(process.env.NEXT_E2E_BASE_URL ?? "http://localhost:3001");
-  if (activationUrl.origin !== baseUrl.origin || activationUrl.pathname !== "/parola-sifirla" || !activationUrl.searchParams.get("token")) {
+  const fragmentToken = new URLSearchParams(activationUrl.hash.slice(1)).get("token");
+  const allowedHost = activationUrl.hostname === baseUrl.hostname || activationUrl.hostname.endsWith(`.${baseUrl.hostname}`);
+  if (activationUrl.protocol !== baseUrl.protocol || activationUrl.port !== baseUrl.port || !allowedHost
+    || activationUrl.pathname !== "/parola-sifirla" || activationUrl.searchParams.has("token") || !fragmentToken) {
     throw new Error("LIVE_ONBOARDING_ACTIVATION_URL_INVALID");
   }
   return activationUrl.toString();
+}
+
+function createTotpCode(secret: string) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = "";
+  for (const character of secret.replace(/=+$/g, "").toUpperCase()) {
+    const value = alphabet.indexOf(character);
+    if (value < 0) throw new Error("LIVE_ONBOARDING_MFA_SECRET_INVALID");
+    bits += value.toString(2).padStart(5, "0");
+  }
+  const key = Buffer.from(bits.match(/.{8}/g)?.map((byte) => Number.parseInt(byte, 2)) ?? []);
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30_000)));
+  const digest = createHmac("sha1", key).update(counter).digest();
+  const offset = digest[digest.length - 1]! & 0x0f;
+  const value = (digest.readUInt32BE(offset) & 0x7fff_ffff) % 1_000_000;
+  return value.toString().padStart(6, "0");
+}
+
+async function completeSystemAdminMfa(page: Page, destination: RegExp, totpSecret: string) {
+  const enrollmentButton = page.getByRole("button", { name: "Etkinleştir ve giriş yap", exact: true });
+  const challengeButton = page.getByRole("button", { name: "Doğrula", exact: true });
+  await Promise.race([
+    page.waitForURL(destination),
+    enrollmentButton.waitFor({ state: "visible" }),
+    challengeButton.waitFor({ state: "visible" }),
+  ]);
+  if (await enrollmentButton.isVisible()) {
+    throw new Error("LIVE_ONBOARDING_SYSTEM_ADMIN_MFA_BOOTSTRAP_REQUIRED");
+  }
+  if (!await challengeButton.isVisible()) return;
+  await page.locator('input[name="mfaCode"]').fill(createTotpCode(totpSecret));
+  await challengeButton.click();
+  await expect(page).toHaveURL(destination);
 }

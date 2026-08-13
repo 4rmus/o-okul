@@ -48,7 +48,7 @@ export function createBullTenantQueueProducer(
       const job = createTenantQueueJob(input);
       const queue = getQueue(job.queueName, queues, createQueue, queueOptions);
       const queueJob = await queue.add(job.name, job.payload, job.options);
-      if (job.queueName === "report-generation") {
+      if (job.queueName === "report-generation" || job.queueName === "exam-evaluation") {
         await retryFailedQueueJob(queueJob);
       }
       return job;

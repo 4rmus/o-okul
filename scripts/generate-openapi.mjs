@@ -2047,6 +2047,13 @@ const requiredOperationContracts = [
   },
   {
     method: "get",
+    path: "/api/v1/me/feature-rollouts",
+    responseEnvelope: true,
+    responseDataRequired: ["enabledFeatureKeys"],
+    responseDataForbiddenDeep: ["environment", "tenantId", "startsAt", "expiresAt", "reference"],
+  },
+  {
+    method: "get",
     path: "/api/v1/me/tenant",
     responseEnvelope: true,
     responseDataRequired: tenantRecordRequired,
@@ -2160,6 +2167,32 @@ const requiredOperationContracts = [
     fieldChecks: [
       { path: ["responseData", "status"], enum: examStatuses },
       { path: ["responseData", "examType"], enum: ["SCHOOL", "LGS", "TYT", "AYT", "KPSS"] },
+    ],
+  },
+  {
+    method: "get",
+    path: "/api/v1/exams/{examId}/workspace",
+    responseEnvelope: true,
+    responseDataRequired: ["exam", "participantSummary", "readiness", "nextAction"],
+    responseDataForbiddenDeep: [
+      "bookletType",
+      "participantNo",
+      "studentId",
+      "studentName",
+      "studentNo",
+      "email",
+      "phone",
+      "nationalId",
+      "rawRow",
+    ],
+    fieldChecks: [
+      { path: ["responseData", "participantSummary", "total"], minimum: 0 },
+      { path: ["responseData", "participantSummary", "registered"], minimum: 0 },
+      { path: ["responseData", "participantSummary", "attended"], minimum: 0 },
+      { path: ["responseData", "participantSummary", "absent"], minimum: 0 },
+      { path: ["responseData", "readiness", "items", "key"], enum: ["EXAM", "ANSWER_KEY", "PARTICIPANTS", "PUBLISHED", "OPTICAL_ENTRY"] },
+      { path: ["responseData", "readiness", "items", "status"], enum: ["READY", "BLOCKED"] },
+      { path: ["responseData", "nextAction"], enum: ["ADD_ANSWER_KEY", "ADD_PARTICIPANTS", "PUBLISH_EXAM", "OPEN_OPTICAL"] },
     ],
   },
   {
@@ -2537,7 +2570,14 @@ const requiredOperationContracts = [
     method: "get",
     path,
     queryParameters: path === "/api/v1/students"
-      ? [{ name: "ids", type: "string" }]
+      ? [
+          { name: "ids", type: "string" },
+          { name: "page", type: "integer" },
+          { name: "limit", type: "integer" },
+          { name: "q", type: "string" },
+          { name: "sort", type: "string" },
+          { name: "guardianLinked", type: "boolean" },
+        ]
       : undefined,
     responseListEnvelope: true,
     responseDataItemsRequired: studentCoreRequired,
@@ -2639,6 +2679,23 @@ const requiredOperationContracts = [
       { path: ["responseData", "status"], enum: studentStatuses },
     ],
   })),
+  {
+    method: "get",
+    path: "/api/v1/students/{studentId}/overview",
+    responseEnvelope: true,
+    responseDataRequired: [
+      "profile", "enrollments", "attendance", "openHomeworkCount", "homeworkAssignments",
+      "teacherNoteCount", "teacherNotes", "contacts", "guardians", "guardianLinks",
+      "teacherAssignments", "teachers", "classes", "courses", "terms", "canViewFinance", "activity",
+    ],
+    responseDataForbiddenDeep: ["nationalIdEncrypted", "nationalIdHash", "phoneEncrypted", "phoneHash", "emailEncrypted", "emailHash", "token", "userId"],
+    fieldChecks: [
+      { path: ["responseData", "openHomeworkCount"], minimum: 0 },
+      { path: ["responseData", "teacherNoteCount"], minimum: 0 },
+      { path: ["responseData", "attendance", "total"], minimum: 0 },
+      { path: ["responseData", "canViewFinance"], type: "boolean" },
+    ],
+  },
   ...studentProfilePaths.map((path) => ({
     method: "patch",
     path,
@@ -2703,14 +2760,15 @@ const requiredOperationContracts = [
     path: "/api/v1/students/imports",
     requestBody: true,
     responseEnvelope: true,
-    idempotencyHeader: true,
+    requiredHeaders: ["Idempotency-Key"],
     requestRequired: ["fileBase64"],
     requestForbidden: studentImportRequestForbidden,
-    responseDataRequired: ["importedRows", "students"],
+    responseDataRequired: ["importedRows", "importedContacts", "students"],
     responseDataForbiddenDeep: studentCoreForbiddenDeep,
     fieldChecks: [
       { path: ["requestBody", "fileBase64"], minLength: 1 },
       { path: ["responseData", "importedRows"], minimum: 0 },
+      { path: ["responseData", "importedContacts"], minimum: 0 },
       { path: ["responseData", "students", "items", "status"], enum: studentStatuses },
     ],
   },
@@ -3666,7 +3724,6 @@ const requiredOperationContracts = [
     requestRequired: ["email", "role"],
     responseDataRequired: identityInvitationRecordRequired,
     responseDataForbiddenDeep: identityInvitationResponseForbiddenDeep,
-    optionalHeaders: ["X-Step-Up-Token"],
     fieldChecks: [
       { path: ["requestBody", "email"], format: "email" },
       { path: ["requestBody", "role"], enum: ["FINANCE_STAFF", "OPERATIONS_STAFF", "TENANT_ADMIN", "TENANT_OWNER"] },
@@ -3679,7 +3736,6 @@ const requiredOperationContracts = [
     path: "/api/v1/tenant-memberships/{id}",
     requestBody: true,
     responseEnvelope: true,
-    optionalHeaders: ["X-Step-Up-Token"],
     requestRequired: ["campusIds", "expectedVersion", "hasTeacherPersona", "scopeMode", "status"],
     requestForbidden: ["actorCanManageOwners", "stepUpToken", "stepUpVerified", "tenantId", "userId"],
     responseDataRequired: ["employee", "sessionsRevoked"],

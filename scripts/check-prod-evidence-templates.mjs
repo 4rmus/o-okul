@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import {
   chmodSync,
@@ -8,12 +9,20 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  statSync,
   symlinkSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import {
+  assertIsemOpticalReleaseInputProvisioning,
+  ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST,
+  ISEM_OPTICAL_PIPELINE_RELEASE_COMMAND,
+  resolveApprovedIsemInputPath,
+} from "./isem-optical-pipeline-contract.mjs";
+import { runPrivateIsemOpticalPipeline } from "./run-isem-optical-pipeline-private.mjs";
 
 const templateChecks = [
   [
@@ -811,17 +820,33 @@ runKvkkInventoryNegativeCheck({
 runKvkkInventoryNegativeCheck({
   label: "KVKK inventory extra count field negative",
   path: "docs/evidence-templates/kvkk-inventory.extra-count-field.tmp.json",
-  expectedFailure: "dataSubjectCounts tam 4 alan içermeli.",
+  expectedFailure: "dataSubjectCounts tam 5 alan içermeli.",
   mutate: (fixture) => {
     fixture.dataSubjectCounts.unexpectedSubject = 1;
   },
 });
 runKvkkInventoryNegativeCheck({
+  label: "KVKK inventory missing student contact count negative",
+  path: "docs/evidence-templates/kvkk-inventory.missing-student-contact-count.tmp.json",
+  expectedFailure: "dataSubjectCounts tam 5 alan içermeli.",
+  mutate: (fixture) => {
+    delete fixture.dataSubjectCounts.studentContact;
+  },
+});
+runKvkkInventoryNegativeCheck({
   label: "KVKK inventory extra coverage subject negative",
   path: "docs/evidence-templates/kvkk-inventory.extra-coverage-subject.tmp.json",
-  expectedFailure: "purgeCoverage tam 4 subject içermeli.",
+  expectedFailure: "purgeCoverage tam 5 subject içermeli.",
   mutate: (fixture) => {
     fixture.purgeCoverage.unexpectedSubject = ["email"];
+  },
+});
+runKvkkInventoryNegativeCheck({
+  label: "KVKK inventory missing student contact coverage negative",
+  path: "docs/evidence-templates/kvkk-inventory.missing-student-contact-coverage.tmp.json",
+  expectedFailure: "purgeCoverage tam 5 subject içermeli.",
+  mutate: (fixture) => {
+    delete fixture.purgeCoverage.studentContact;
   },
 });
 runKvkkInventoryNegativeCheck({
@@ -835,7 +860,7 @@ runKvkkInventoryNegativeCheck({
 runKvkkInventoryNegativeCheck({
   label: "KVKK inventory extra audit action negative",
   path: "docs/evidence-templates/kvkk-inventory.extra-audit-action.tmp.json",
-  expectedFailure: "auditActionsVerified tam 4 action içermeli.",
+  expectedFailure: "auditActionsVerified tam 5 action içermeli.",
   mutate: (fixture) => {
     fixture.auditActionsVerified.push("kvkk.unexpected_pii_purged");
   },
@@ -1057,7 +1082,7 @@ runAdminMfaNegativeCheck({
 runAdminMfaNegativeCheck({
   label: "Admin MFA extra enrollment field negative",
   path: "docs/evidence-templates/admin-mfa.extra-enrollment-field.tmp.json",
-  expectedFailure: "enrollment tam 6 alan içermeli.",
+  expectedFailure: "enrollment tam 4 alan içermeli.",
   mutate: (fixture) => {
     fixture.enrollment.unexpectedField = true;
   },
@@ -1196,6 +1221,23 @@ runLiveExamCycleNegativeCheck({
   },
 });
 runLiveExamCycleNegativeCheck({
+  label: "Live exam cycle exact release SHA negative",
+  path: "docs/evidence-templates/live-exam-cycle.release-sha.tmp.json",
+  expectedFailure: "releaseCandidate exact 40 haneli Git SHA icermeli.",
+  mutate: (fixture) => {
+    fixture.releaseCandidate = "ghcr.io/example/o-okul/api:latest";
+  },
+});
+runLiveExamCycleNegativeCheck({
+  label: "Live exam cycle stale checkedAt negative",
+  path: "docs/evidence-templates/live-exam-cycle.stale.tmp.json",
+  expectedFailure: "checkedAt en fazla 24 saatlik olmali.",
+  allowExampleEvidence: false,
+  mutate: (fixture) => {
+    fixture.checkedAt = "2020-01-01T00:00:00.000Z";
+  },
+});
+runLiveExamCycleNegativeCheck({
   label: "Live exam cycle extra examCycle field negative",
   path: "docs/evidence-templates/live-exam-cycle.extra-exam-cycle-field.tmp.json",
   expectedFailure: "examCycle tam 27 alan icermeli.",
@@ -1214,9 +1256,9 @@ runLiveExamCycleNegativeCheck({
 runLiveExamCycleNegativeCheck({
   label: "Live exam cycle quarantine count exact negative",
   path: "docs/evidence-templates/live-exam-cycle.quarantine-count.tmp.json",
-  expectedFailure: "examCycle.quarantineCount 1 olmali.",
+  expectedFailure: "examCycle.quarantineCount 0 olmali.",
   mutate: (fixture) => {
-    fixture.examCycle.quarantineCount = 0;
+    fixture.examCycle.quarantineCount = 1;
   },
 });
 runLiveExamCycleNegativeCheck({
@@ -1328,7 +1370,21 @@ runLiveExamCycleNegativeCheck({
   },
 });
 runLiveExamCycleSymlinkParentTargetNegativeCheck();
+runLiveExamCycleLocalArtifactTargetNegativeCheck();
 runIsemOpticalPipelineLocalArtifactTargetNegativeCheck();
+runIsemOpticalPipelineEvidenceNegativeCheck({
+  label: "iSEM optical fixture id mismatch negative",
+  path: "docs/evidence-templates/isem-optical-pipeline.fixture-id-mismatch.tmp.json",
+  expectedFailure: "fixtureId isem-lgs-1-approved-v1 olmalı.",
+  mutate: (fixture) => { fixture.fixtureId = "synthetic-fixture"; },
+});
+runIsemOpticalPipelineEvidenceNegativeCheck({
+  label: "iSEM optical fixture hash mismatch negative",
+  path: "docs/evidence-templates/isem-optical-pipeline.hash-mismatch.tmp.json",
+  expectedFailure: "hashes.opticalTxtSha256 bd9c19c3c3206f0ee15907f65b1f8063c9841dad7ef210c7d8356acd0299b96d olmalı.",
+  mutate: (fixture) => { fixture.hashes.opticalTxtSha256 = "f".repeat(64); },
+});
+runIsemApprovedInputPathNegativeChecks();
 runInlineUploadMigrationNegativeCheck({
   label: "Inline upload migration extra top-level key negative",
   path: "docs/evidence-templates/inline-upload-content-migration.extra-top-level.tmp.json",
@@ -2234,6 +2290,22 @@ runProductionSummaryNegativeCheck({
     "reports.liveExamCycle.examCycle.parserConfigVersion reports.isemOpticalPipeline.parserConfigVersion ile eşleşmeli.",
   mutate: (fixture) => {
     fixture.reports.liveExamCycle.examCycle.parserConfigVersion = "optik-7108-lgs-v2";
+  },
+});
+runProductionSummaryNegativeCheck({
+  label: "Production summary iSEM quarantine report chain negative",
+  path: "docs/evidence-templates/production-evidence-summary.isem-quarantine-report-chain.tmp.json",
+  expectedFailure: "reports.isemOpticalPipeline.quarantineProbe.reportReady true olmalı.",
+  mutate: (fixture) => {
+    fixture.reports.isemOpticalPipeline.quarantineProbe.reportReady = false;
+  },
+});
+runProductionSummaryNegativeCheck({
+  label: "Production summary iSEM approved hash mismatch negative",
+  path: "docs/evidence-templates/production-evidence-summary.isem-approved-hash-mismatch.tmp.json",
+  expectedFailure: "reports.isemOpticalPipeline.hashes.opticalTxtSha256",
+  mutate: (fixture) => {
+    fixture.reports.isemOpticalPipeline.hashes.opticalTxtSha256 = "e".repeat(64);
   },
 });
 runProductionSummaryNegativeCheck({
@@ -4499,18 +4571,20 @@ function runRateLimitSymlinkParentTargetNegativeCheck() {
   });
 }
 
-function runLiveExamCycleNegativeCheck({ label, path, expectedFailure, mutate }) {
+function runLiveExamCycleNegativeCheck({ label, path, expectedFailure, mutate, allowExampleEvidence = true }) {
   const fixture = structuredClone(liveExamCycleFixture);
   mutate(fixture);
   writeFileSync(path, `${JSON.stringify(fixture, null, 2)}\n`);
 
   try {
+    const childEnv = {
+      ...process.env,
+      LIVE_EXAM_CYCLE_TARGET: pathToFileURL(path).href,
+    };
+    delete childEnv.LIVE_EXAM_CYCLE_ALLOW_EXAMPLE_EVIDENCE;
+    if (allowExampleEvidence) childEnv.LIVE_EXAM_CYCLE_ALLOW_EXAMPLE_EVIDENCE = "1";
     const result = spawnSync(process.execPath, ["scripts/check-live-exam-cycle-evidence.mjs"], {
-      env: {
-        ...process.env,
-        LIVE_EXAM_CYCLE_ALLOW_EXAMPLE_EVIDENCE: "1",
-        LIVE_EXAM_CYCLE_TARGET: pathToFileURL(path).href,
-      },
+      env: childEnv,
       encoding: "utf8",
     });
 
@@ -4530,6 +4604,32 @@ function runLiveExamCycleNegativeCheck({ label, path, expectedFailure, mutate })
     } catch {
       // Ignore cleanup errors; the negative-check failure above is the actionable signal.
     }
+  }
+}
+
+function runLiveExamCycleLocalArtifactTargetNegativeCheck() {
+  const directory = resolve("artifacts/local/live-exam-cycle-target-negative");
+  const path = join(directory, "live-exam-cycle.json");
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(path, `${JSON.stringify(liveExamCycleFixture, null, 2)}\n`);
+
+  try {
+    const result = spawnSync(process.execPath, ["scripts/check-live-exam-cycle-evidence.mjs"], {
+      env: {
+        ...process.env,
+        LIVE_EXAM_CYCLE_ALLOW_EXAMPLE_EVIDENCE: "1",
+        LIVE_EXAM_CYCLE_TARGET: pathToFileURL(path).href,
+      },
+      encoding: "utf8",
+    });
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0 || !output.includes("LIVE_EXAM_CYCLE_TARGET production kaniti icin artifacts/local path olmamali.")) {
+      console.error("Production evidence template kontrolü başarısız: live exam cycle local artifact target negative beklenen şekilde kırılmadı.");
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
 }
 
@@ -4590,6 +4690,274 @@ function runIsemOpticalPipelineLocalArtifactTargetNegativeCheck() {
     console.error(output);
     process.exit(1);
   }
+}
+
+function runIsemOpticalPipelineEvidenceNegativeCheck({ label, path, expectedFailure, mutate }) {
+  const fixture = JSON.parse(readFileSync("docs/evidence-templates/isem-optical-pipeline.example.json", "utf8"));
+  mutate(fixture);
+  writeFileSync(path, `${JSON.stringify(fixture, null, 2)}\n`);
+  try {
+    const result = spawnSync(process.execPath, ["scripts/check-isem-optical-pipeline-evidence.mjs"], {
+      env: {
+        ...process.env,
+        ISEM_OPTICAL_PIPELINE_ALLOW_EXAMPLE_EVIDENCE: "1",
+        ISEM_OPTICAL_PIPELINE_TARGET: pathToFileURL(path).href,
+      },
+      encoding: "utf8",
+    });
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0 || !output.includes(expectedFailure)) {
+      console.error(`Production evidence template kontrolü başarısız: ${label}`);
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    try { unlinkSync(path); } catch { /* noop */ }
+  }
+}
+
+function runIsemApprovedInputPathNegativeChecks() {
+  const inputRoot = "/secure/isem-inputs";
+  const approvedPath = `${inputRoot}/iSEM .txt`;
+  const regularDirectory = {
+    isDirectory: () => true,
+    isFile: () => false,
+    isSymbolicLink: () => false,
+  };
+  const regularFile = {
+    isDirectory: () => false,
+    isFile: () => true,
+    isSymbolicLink: () => false,
+  };
+  const regularLstat = (value) => value === inputRoot ? regularDirectory : regularFile;
+  const resolvedPath = resolveApprovedIsemInputPath("opticalTxt", approvedPath, {
+    inputRoot,
+    lstat: regularLstat,
+    realpath: (value) => value,
+  });
+  if (resolvedPath !== approvedPath) {
+    console.error("Production evidence template kontrolü başarısız: private iSEM input root positive çözülemedi.");
+    process.exit(1);
+  }
+  expectIsemInputPathFailure(
+    () => resolveApprovedIsemInputPath("opticalTxt", "/tmp/synthetic.txt", {
+      inputRoot,
+      lstat: regularLstat,
+      realpath: (value) => value,
+    }),
+    "ISEM_OPTICAL_INPUT_PATH_NOT_APPROVED:opticalTxt",
+  );
+  expectIsemInputPathFailure(
+    () => resolveApprovedIsemInputPath("opticalTxt", approvedPath, {
+      inputRoot: "relative/isem-inputs",
+      lstat: regularLstat,
+      realpath: (value) => value,
+    }),
+    "ISEM_OPTICAL_INPUT_ROOT_NOT_ABSOLUTE",
+  );
+  expectIsemInputPathFailure(
+    () => resolveApprovedIsemInputPath("opticalTxt", approvedPath, {
+      inputRoot,
+      lstat: (value) => value === inputRoot
+        ? { ...regularDirectory, isSymbolicLink: () => true }
+        : regularFile,
+      realpath: (value) => value,
+    }),
+    "ISEM_OPTICAL_INPUT_ROOT_NOT_REGULAR_DIRECTORY",
+  );
+  expectIsemInputPathFailure(
+    () => resolveApprovedIsemInputPath("opticalTxt", approvedPath, {
+      inputRoot,
+      lstat: regularLstat,
+      realpath: (value) => value === inputRoot ? "/mounted/isem-inputs" : value,
+    }),
+    "ISEM_OPTICAL_INPUT_ROOT_REALPATH_MISMATCH",
+  );
+  expectIsemInputPathFailure(
+    () => resolveApprovedIsemInputPath("opticalTxt", approvedPath, {
+      inputRoot,
+      lstat: (value) => value === inputRoot
+        ? regularDirectory
+        : { ...regularFile, isSymbolicLink: () => true },
+      realpath: (value) => value,
+    }),
+    "ISEM_OPTICAL_INPUT_NOT_REGULAR_FILE:opticalTxt",
+  );
+  expectIsemInputPathFailure(
+    () => resolveApprovedIsemInputPath("opticalTxt", approvedPath, {
+      inputRoot,
+      lstat: regularLstat,
+      realpath: (value) => value === inputRoot ? value : "/tmp/copied.txt",
+    }),
+    "ISEM_OPTICAL_INPUT_REALPATH_MISMATCH:opticalTxt",
+  );
+  expectIsemInputPathFailure(
+    () => assertIsemOpticalReleaseInputProvisioning({ environment: "staging" }),
+    "ISEM_OPTICAL_PRIVATE_WRAPPER_REQUIRED",
+  );
+  expectIsemInputPathFailure(
+    () => assertIsemOpticalReleaseInputProvisioning({
+      environment: "production",
+      wrapperActive: "1",
+    }),
+    "ISEM_OPTICAL_INPUT_ROOT_REQUIRED",
+  );
+  assertIsemOpticalReleaseInputProvisioning({ environment: "test" });
+
+  const expectedManifest = {
+    defaultInputRootRelativePath: "ornek-veriler",
+    opticalTxt: "iSEM .txt",
+    answerKey: "iSEM - LGS - 1 Detaylı Cevap Anahtarı.xlsx",
+  };
+  if (
+    ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST.defaultInputRootRelativePath !== expectedManifest.defaultInputRootRelativePath ||
+    ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST.inputs.opticalTxt?.relativePath !== expectedManifest.opticalTxt ||
+    ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST.inputs.answerKey?.relativePath !== expectedManifest.answerKey
+  ) {
+    console.error("Production evidence template kontrolü başarısız: private iSEM input manifest root sözleşmesi drift etti.");
+    process.exit(1);
+  }
+
+  const privateRunner = readFileSync("scripts/run-isem-optical-pipeline-private.mjs", "utf8");
+  const producer = readFileSync("scripts/smoke-isem-optical-pipeline-live.mjs", "utf8");
+  const opsRunbook = readFileSync("docs/phase-6-ops-runbook.md", "utf8");
+  const packageScripts = JSON.parse(readFileSync("package.json", "utf8")).scripts;
+  for (const requiredToken of [
+    "ISEM_OPTICAL_PIPELINE_TXT_BASE64",
+    "ISEM_OPTICAL_PIPELINE_ANSWER_KEY_BASE64",
+    "ISEM_OPTICAL_PIPELINE_INPUT_ROOT",
+    "ISEM_OPTICAL_PIPELINE_PRIVATE_WRAPPER",
+    "ISEM_OPTICAL_PIPELINE_PRIVATE_INPUTS_PREFLIGHT_ONLY",
+    "isem-optical-pipeline:smoke:producer",
+  ]) {
+    if (!privateRunner.includes(requiredToken)) {
+      console.error(`Production evidence template kontrolü başarısız: private iSEM provisioning sözleşmesi eksik (${requiredToken}).`);
+      process.exit(1);
+    }
+  }
+  for (const requiredRunbookToken of [
+    "ISEM_OPTICAL_PIPELINE_TXT_BASE64",
+    "ISEM_OPTICAL_PIPELINE_ANSWER_KEY_BASE64",
+    "ISEM_OPTICAL_PIPELINE_INPUT_ROOT",
+    "ISEM_OPTICAL_PIPELINE_PRIVATE_INPUTS_PREFLIGHT_ONLY",
+    ISEM_OPTICAL_PIPELINE_RELEASE_COMMAND,
+  ]) {
+    if (!opsRunbook.includes(requiredRunbookToken)) {
+      console.error(`Production evidence template kontrolü başarısız: private iSEM runbook sözleşmesi eksik (${requiredRunbookToken}).`);
+      process.exit(1);
+    }
+  }
+  if (!privateRunner.includes("rmSync(inputRoot, { force: true, recursive: true })")) {
+    console.error("Production evidence template kontrolü başarısız: private iSEM temp root cleanup sözleşmesi eksik.");
+    process.exit(1);
+  }
+  if (
+    packageScripts["isem-optical-pipeline:smoke"] !== "node scripts/run-isem-optical-pipeline-private.mjs" ||
+    !packageScripts["isem-optical-pipeline:smoke:producer"]?.includes("smoke-isem-optical-pipeline-live.mjs") ||
+    !producer.includes("assertIsemOpticalReleaseInputProvisioning")
+  ) {
+    console.error("Production evidence template kontrolü başarısız: staging/production iSEM producer wrapper kapısı eksik.");
+    process.exit(1);
+  }
+  if (!producer.includes("'ASSISTANT_ADMIN', 'OPERATIONS_STAFF'")) {
+    console.error("Production evidence template kontrolü başarısız: iSEM smoke production MFA'dan bağımsız exam operator rolünü kullanmalı.");
+    process.exit(1);
+  }
+  if (!producer.includes("'TENANT_OWNER', 'TENANT_OWNER'") || !producer.includes("iSEM Optical Smoke Owner")) {
+    console.error("Production evidence template kontrolü başarısız: iSEM smoke tenant account-management owner sözleşmesi eksik.");
+    process.exit(1);
+  }
+
+  runIsemPrivateWrapperFailureContractCheck();
+}
+
+function runIsemPrivateWrapperFailureContractCheck() {
+  const outerRoot = mkdtempSync(join("/tmp", "o-okul-isem-wrapper-contract-"));
+  const opticalContent = Buffer.from("synthetic optical input", "utf8");
+  const answerKeyContent = Buffer.from("synthetic answer key", "utf8");
+  const manifest = {
+    fixtureId: "synthetic-wrapper-contract",
+    inputs: {
+      opticalTxt: { relativePath: "optical.txt", sha256: sha256Buffer(opticalContent) },
+      answerKey: { relativePath: "answer-key.xlsx", sha256: sha256Buffer(answerKeyContent) },
+    },
+  };
+  let childEnv;
+  let materializedRoot;
+
+  try {
+    const status = runPrivateIsemOpticalPipeline({
+      env: {
+        ISEM_OPTICAL_PIPELINE_TXT_BASE64: opticalContent.toString("base64"),
+        ISEM_OPTICAL_PIPELINE_ANSWER_KEY_BASE64: answerKeyContent.toString("base64"),
+        ISEM_OPTICAL_PIPELINE_TXT_PATH: "/secret/optical.txt",
+        ISEM_OPTICAL_PIPELINE_ANSWER_KEY_PATH: "/secret/answer-key.xlsx",
+        STAGING_ENVIRONMENT: "staging",
+      },
+      inputManifest: manifest,
+      resolveInput: (_inputKey, target) => target,
+      spawn: (command, args, options) => {
+        childEnv = options.env;
+        materializedRoot = childEnv.ISEM_OPTICAL_PIPELINE_INPUT_ROOT;
+        if (command !== "pnpm" || args.join(" ") !== "isem-optical-pipeline:smoke:producer") {
+          throw new Error("ISEM_OPTICAL_PRIVATE_WRAPPER_CHILD_COMMAND_MISMATCH");
+        }
+        if ((statSync(materializedRoot).mode & 0o777) !== 0o700) {
+          throw new Error("ISEM_OPTICAL_PRIVATE_WRAPPER_ROOT_MODE_MISMATCH");
+        }
+        for (const input of Object.values(manifest.inputs)) {
+          if ((statSync(join(materializedRoot, input.relativePath)).mode & 0o777) !== 0o600) {
+            throw new Error("ISEM_OPTICAL_PRIVATE_WRAPPER_FILE_MODE_MISMATCH");
+          }
+        }
+        return { status: 23 };
+      },
+      temporaryRoot: outerRoot,
+      platform: "linux",
+      log: () => {},
+    });
+    if (status !== 23) throw new Error("ISEM_OPTICAL_PRIVATE_WRAPPER_FAILURE_NOT_PROPAGATED");
+    if (!materializedRoot || existsSync(materializedRoot)) {
+      throw new Error("ISEM_OPTICAL_PRIVATE_WRAPPER_FAILURE_CLEANUP_MISSING");
+    }
+    for (const forbiddenKey of [
+      "ISEM_OPTICAL_PIPELINE_TXT_BASE64",
+      "ISEM_OPTICAL_PIPELINE_ANSWER_KEY_BASE64",
+      "ISEM_OPTICAL_PIPELINE_TXT_PATH",
+      "ISEM_OPTICAL_PIPELINE_ANSWER_KEY_PATH",
+    ]) {
+      if (Object.hasOwn(childEnv, forbiddenKey)) {
+        throw new Error(`ISEM_OPTICAL_PRIVATE_WRAPPER_CHILD_SECRET_LEAK:${forbiddenKey}`);
+      }
+    }
+    if (
+      childEnv.ISEM_OPTICAL_PIPELINE_PRIVATE_WRAPPER !== "1" ||
+      childEnv.ISEM_OPTICAL_PIPELINE_SMOKE_COMMAND !== ISEM_OPTICAL_PIPELINE_RELEASE_COMMAND
+    ) {
+      throw new Error("ISEM_OPTICAL_PRIVATE_WRAPPER_CHILD_PROVENANCE_MISSING");
+    }
+  } catch (error) {
+    console.error(`Production evidence template kontrolü başarısız: ${String(error)}`);
+    process.exit(1);
+  } finally {
+    rmSync(outerRoot, { force: true, recursive: true });
+  }
+}
+
+function sha256Buffer(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function expectIsemInputPathFailure(callback, expectedMessage) {
+  try {
+    callback();
+  } catch (error) {
+    if (error instanceof Error && error.message === expectedMessage) return;
+    console.error(`Production evidence template kontrolü başarısız: beklenmeyen iSEM input path hatası: ${String(error)}`);
+    process.exit(1);
+  }
+  console.error(`Production evidence template kontrolü başarısız: iSEM input path negative kırılmadı (${expectedMessage}).`);
+  process.exit(1);
 }
 
 function runRlsLiveLocalArtifactTargetNegativeCheck() {

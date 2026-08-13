@@ -1,11 +1,13 @@
 import { BadRequestException, Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
 import { z } from "zod";
+import { FeatureRolloutService } from "../feature-rollout/feature-rollout.service.js";
 import { applyListQuery } from "../listing/list-query.js";
 import { optionalDateString, optionalTrimmedString, optionalUppercaseString, requiredTrimmedString, requiredUppercaseString, zodBody, zodQuery } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { GuardianService } from "../guardian/guardian.service.js";
+import { toGuardianResponse } from "../guardian/guardian-response.js";
 import { TeacherService } from "../teacher/teacher.service.js";
 import {
   StudentImportService,
@@ -135,11 +137,28 @@ export class StudentController {
     private readonly school: SchoolService,
     private readonly guardianService: GuardianService,
     private readonly teacherService: TeacherService,
+    private readonly featureRollouts: FeatureRolloutService,
   ) {}
 
   @Get()
   @RequireCapability("student:list")
   async list(@Query(zodQuery(studentListQuerySchema)) query: StudentListQuery): Promise<PublicStudentRecord[]> {
+    const context = getRequestContext();
+    const rollouts = await this.featureRollouts.resolve(context);
+    if (rollouts.enabledFeatureKeys.includes("web.student-registry-v2")) {
+      return this.students.listRegistryPageForViewer(context, {
+        page: positiveListInt(query.page, 1, "LIST_PAGE_INVALID"),
+        limit: positiveListInt(query.limit, 20, "LIST_LIMIT_INVALID"),
+        q: query.q,
+        sort: query.sort,
+        ids: parseStudentIds(query.ids),
+        classId: query.classId,
+        level: query.level,
+        responsibleTeacherId: query.responsibleTeacherId,
+        status: query.status,
+        hasContact: query.guardianLinked === undefined ? undefined : query.guardianLinked === "true",
+      });
+    }
     const records = await this.filterStudents(await this.students.listForViewer(getRequestContext()), query);
     return applyListQuery(records, query, studentListFields);
   }
@@ -179,8 +198,9 @@ export class StudentController {
   @Get(":id/guardians")
   @RequireCapability("student:read")
   async guardians(@Param("id") id: string): Promise<GuardianRecord[]> {
-    await this.students.findOneForViewer(getRequestContext(), id);
-    return this.guardianService.listStudentGuardians(getRequestContext(), id);
+    const context = getRequestContext();
+    await this.students.findOneForViewer(context, id);
+    return (await this.guardianService.listStudentGuardians(context, id)).map((record) => toGuardianResponse(record, context));
   }
 
   @Get(":id/guardian-links")
@@ -345,3 +365,17 @@ const studentListFields = [
   { name: "responsibleTeacherId", read: (record: PublicStudentRecord) => record.responsibleTeacherId },
   { name: "status", read: (record: PublicStudentRecord) => record.status },
 ];
+
+function parseStudentIds(value: string | undefined): string[] | undefined {
+  if (!value) return undefined;
+  const ids = [...new Set(value.split(",").map((id) => id.trim()).filter(Boolean))];
+  if (ids.length === 0 || ids.length > 200) throw new BadRequestException("STUDENT_IDS_INVALID");
+  return ids;
+}
+
+function positiveListInt(value: string | undefined, fallback: number, errorCode: string): number {
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) throw new BadRequestException(errorCode);
+  return parsed;
+}

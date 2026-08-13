@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, parse, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { ISEM_OPTICAL_PIPELINE_FIXTURE } from "./isem-optical-pipeline-contract.mjs";
 import { validateSmokeEvidencePayload } from "./smoke-evidence.mjs";
 
 const positionalArtifactsTarget = process.argv[2]?.startsWith("--") ? undefined : process.argv[2];
@@ -359,7 +360,7 @@ const missingArtifactRemediation = new Map([
     "reports/isem-optical-pipeline.json",
     {
       command: "ISEM_OPTICAL_PIPELINE_TARGET=file:///.../isem-optical-pipeline.json corepack pnpm isem-optical-pipeline:evidence-check",
-      prerequisite: "iSEM optical pipeline artifact with 254 expected results and no raw PII leakage.",
+      prerequisite: `iSEM optical pipeline artifact with ${ISEM_OPTICAL_PIPELINE_FIXTURE.examResultCount} expected results and no raw PII leakage.`,
       blocker: "The artifact must be present under reports/ and match the release summary.",
     },
   ],

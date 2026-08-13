@@ -67,21 +67,22 @@ describe("PostgresRawImportQuarantineStore", () => {
     ]);
   });
 
-  it("açık karantina için reprocess girdisini hazırlar", async () => {
+  it("açık karantinayı yalnız boş veya aynı öğrenci intent'i için atomik claim eder", async () => {
     const queries: Array<{ sql: string; values?: unknown[] }> = [];
     const store = new PostgresRawImportQuarantineStore({
       async query<T>(sql: string, values?: unknown[]) {
         queries.push({ sql, values });
-        if (!sql.includes('FROM "ImportQuarantine"')) {
-          return { rows: [] as T[] };
+        if (sql.includes('UPDATE "ImportQuarantine"')) {
+          return {
+            rows: [createRow({
+              resolvedStudentId: values?.[4] as string,
+              resolvedParticipantId: "participant-a",
+              answerKeyId: "answer-key-a",
+              rawImportSha256: "raw-sha-a",
+            })] as T[],
+          };
         }
-        return {
-          rows: [createRow({
-            resolvedParticipantId: "participant-a",
-            answerKeyId: "answer-key-a",
-            rawImportSha256: "raw-sha-a",
-          })] as T[],
-        };
+        return { rows: [] as T[] };
       },
     });
 
@@ -98,14 +99,19 @@ describe("PostgresRawImportQuarantineStore", () => {
 
     const businessQueries = queries.filter((query) => !query.sql.includes("set_config") && !["BEGIN", "COMMIT", "ROLLBACK"].includes(query.sql));
     expect(businessQueries).toHaveLength(1);
-    expect(businessQueries[0]?.sql).toContain('FROM "ImportQuarantine"');
+    expect(businessQueries[0]?.sql).toContain('UPDATE "ImportQuarantine"');
+    expect(businessQueries[0]?.sql).toContain('SET "resolvedStudentId" = $5');
     expect(businessQueries[0]?.sql).toContain('"status" = \'OPEN\'');
+    expect(businessQueries[0]?.sql).toContain('("resolvedStudentId" IS NULL OR "resolvedStudentId" = $5)');
     expect(businessQueries[0]?.sql).toContain('FROM "Student"');
     expect(businessQueries[0]?.sql).toContain('"Student"."tenantId" = $1');
     expect(businessQueries[0]?.sql).toContain('"Student"."id" = $5');
     expect(businessQueries[0]?.sql).toContain('FROM "StudentEnrollment" se');
     expect(businessQueries[0]?.sql).toContain('se."status" = \'ACTIVE\'');
     expect(businessQueries[0]?.sql).toContain('se."endsAt" IS NULL');
+    expect(businessQueries[0]?.sql).toContain('FROM "ExamParticipant" ep');
+    expect(businessQueries[0]?.sql).toContain('FROM "RawImport" ri');
+    expect(businessQueries[0]?.sql).toContain('FROM "AnswerKey" ak');
     expect(businessQueries[0]?.sql).toContain('INNER JOIN "ExamParticipant" ep');
     expect(businessQueries[0]?.sql).toContain('INNER JOIN "RawImport" ri');
     expect(businessQueries[0]?.sql).toContain('FROM "AnswerKey"');
@@ -120,26 +126,70 @@ describe("PostgresRawImportQuarantineStore", () => {
     expect(result).toEqual(expect.objectContaining({
       id: "quarantine-a",
       status: "OPEN",
+      resolvedStudentId: "student-a",
       resolvedParticipantId: "participant-a",
       answerKeyId: "answer-key-a",
       rawImportSha256: "raw-sha-a",
     }));
   });
 
-  it("enqueue sonrası açık karantinayı resolved yapar", async () => {
+  it.each([
+    ['FROM "ExamParticipant" ep', "participant"],
+    ['FROM "RawImport" ri', "raw import"],
+    ['FROM "AnswerKey" ak', "answer key"],
+  ])("eksik %s referansı intent claim etmez ve düzeltme başka öğrenciyle yapılabilir", async (requiredSql) => {
     const queries: Array<{ sql: string; values?: unknown[] }> = [];
     const store = new PostgresRawImportQuarantineStore({
       async query<T>(sql: string, values?: unknown[]) {
         queries.push({ sql, values });
-        if (!sql.includes('UPDATE "ImportQuarantine"')) {
-          return { rows: [] as T[] };
-        }
+        if (!sql.includes('UPDATE "ImportQuarantine"')) return { rows: [] as T[] };
+        if (values?.[4] === "student-a") return { rows: [] as T[] };
         return {
           rows: [createRow({
-            status: "RESOLVED",
-            resolvedStudentId: values?.[4] as string,
+            resolvedStudentId: "student-b",
+            resolvedParticipantId: "participant-b",
+            answerKeyId: "answer-key-a",
+            rawImportSha256: "raw-sha-a",
           })] as T[],
         };
+      },
+    });
+    const context = { userId: "user-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"] as ["TENANT_ADMIN"], bypassRls: false };
+    const baseInput = {
+      tenantId: "tenant-a",
+      examId: "exam-a",
+      rawImportId: "raw-import-a",
+      quarantineId: "quarantine-a",
+    };
+
+    const missingReference = await runWithRequestContext(context, () => store.resolve({
+      ...baseInput,
+      resolvedStudentId: "student-a",
+    }));
+    const corrected = await runWithRequestContext(context, () => store.resolve({
+      ...baseInput,
+      resolvedStudentId: "student-b",
+    }));
+
+    const claimQueries = queries.filter((query) => query.sql.includes('UPDATE "ImportQuarantine"'));
+    expect(claimQueries).toHaveLength(2);
+    expect(claimQueries[0]?.sql).toContain(requiredSql);
+    expect(claimQueries.map((query) => query.values?.[4])).toEqual(["student-a", "student-b"]);
+    expect(missingReference).toBeUndefined();
+    expect(corrected).toEqual(expect.objectContaining({
+      status: "OPEN",
+      resolvedStudentId: "student-b",
+      resolvedParticipantId: "participant-b",
+    }));
+  });
+
+  it("enqueue sonrası yalnız claim sahibi öğrencinin intent'ini resolved yapar", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const store = new PostgresRawImportQuarantineStore({
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        if (!sql.includes('UPDATE "ImportQuarantine"')) return { rows: [] as T[] };
+        return { rows: [createRow({ status: "RESOLVED", resolvedStudentId: values?.[4] as string })] as T[] };
       },
     });
 
@@ -154,25 +204,20 @@ describe("PostgresRawImportQuarantineStore", () => {
       }),
     );
 
-    const businessQueries = queries.filter((query) => !query.sql.includes("set_config") && !["BEGIN", "COMMIT", "ROLLBACK"].includes(query.sql));
-    expect(businessQueries).toHaveLength(1);
-    expect(businessQueries[0]?.sql).toContain('UPDATE "ImportQuarantine"');
-    expect(businessQueries[0]?.sql).toContain('"status" = \'RESOLVED\'');
-    expect(businessQueries[0]?.sql).toContain('"resolvedStudentId" = $5');
-    expect(businessQueries[0]?.sql).toContain('"status" = \'OPEN\'');
-    expect(businessQueries[0]?.values).toEqual([
+    const businessQuery = queries.find((query) => query.sql.includes('UPDATE "ImportQuarantine"'));
+    expect(businessQuery?.sql).toContain('"status" = \'RESOLVED\'');
+    expect(businessQuery?.sql).toContain('"status" = \'OPEN\'');
+    expect(businessQuery?.sql).toContain('"resolvedStudentId" = $5');
+    expect(businessQuery?.values).toEqual([
       "tenant-a",
       "exam-a",
       "raw-import-a",
       "quarantine-a",
       "student-a",
     ]);
-    expect(result).toEqual(expect.objectContaining({
-      id: "quarantine-a",
-      status: "RESOLVED",
-      resolvedStudentId: "student-a",
-    }));
+    expect(result).toEqual(expect.objectContaining({ status: "RESOLVED", resolvedStudentId: "student-a" }));
   });
+
 });
 
 function createRow(overrides: Partial<ImportQuarantineTestRow> = {}): ImportQuarantineTestRow {
