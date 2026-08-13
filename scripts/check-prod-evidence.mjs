@@ -323,6 +323,7 @@ function writeSummary(file) {
         lokiLogPanelOk: reports.observabilityUat.lokiLogPanelOk,
         alertWebhookStatus: reports.observabilityUat.alertWebhookStatus,
         alertsVerified: reports.observabilityUat.alertsVerified,
+        alertDelivery: reports.observabilityUat.alertDelivery,
         evidenceReferences: reports.observabilityUat.evidenceReferences,
       },
       externalMonitoring: {

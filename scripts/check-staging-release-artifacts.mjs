@@ -733,16 +733,19 @@ function requireDeploymentCutoverMatchesSummary(summary, cutover, output) {
   const outbox = summary?.smokeEvidence?.secretDeliveryOutbox;
   const uiUxSourceSha = summary?.reports?.uiUxRedesign?.sourceCommitSha;
   const githubCiSourceSha = summary?.reports?.githubCi?.commitSha;
+  const observabilitySourceSha = summary?.reports?.observabilityUat?.alertDelivery?.releaseCandidate;
   const githubCiRepository = summary?.reports?.githubCi?.repository;
 
   if (
     typeof cutover?.sourceSha !== "string" ||
     typeof uiUxSourceSha !== "string" ||
     typeof githubCiSourceSha !== "string" ||
+    typeof observabilitySourceSha !== "string" ||
     cutover.sourceSha.toLowerCase() !== uiUxSourceSha.toLowerCase() ||
-    cutover.sourceSha.toLowerCase() !== githubCiSourceSha.toLowerCase()
+    cutover.sourceSha.toLowerCase() !== githubCiSourceSha.toLowerCase() ||
+    cutover.sourceSha.toLowerCase() !== observabilitySourceSha.toLowerCase()
   ) {
-    output.push("reports/deployment-cutover.json.sourceSha, summary.reports.uiUxRedesign.sourceCommitSha ve summary.reports.githubCi.commitSha aynı SHA olmalı.");
+    output.push("reports/deployment-cutover.json.sourceSha, summary.reports.uiUxRedesign.sourceCommitSha, summary.reports.githubCi.commitSha ve observability alertDelivery.releaseCandidate aynı SHA olmalı.");
   }
   if (cutover?.repository !== githubCiRepository) {
     output.push("reports/deployment-cutover.json.repository summary.reports.githubCi.repository ile eşleşmeli.");

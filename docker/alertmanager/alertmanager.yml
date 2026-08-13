@@ -1,0 +1,19 @@
+route:
+  receiver: authenticated-webhook
+  group_by:
+    - alertname
+    - severity
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: authenticated-webhook
+    webhook_configs:
+      - send_resolved: true
+        max_alerts: 20
+        url_file: /run/secrets/alertmanager/webhook-url
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /run/secrets/alertmanager/webhook-token

@@ -399,7 +399,56 @@ jobs:
           STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
           STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
           STAGING_DEPLOY_DIR: ${{ vars.STAGING_DEPLOY_DIR }}
+          STAGING_EVIDENCE_ENV_B64: ${{ secrets.STAGING_EVIDENCE_ENV_B64 }}
         run: |
+          set -euo pipefail
+
+          alertmanager_secret_stage="$RUNNER_TEMP/alertmanager-secrets"
+          alertmanager_secret_archive="$RUNNER_TEMP/alertmanager-secrets.tgz"
+          keep_alertmanager_secret_archive=0
+          cleanup_upload() {
+            local status=$?
+            rm -rf "$alertmanager_secret_stage" /tmp/o-okul-staging-compose.tgz
+            if [ "$keep_alertmanager_secret_archive" -ne 1 ]; then
+              rm -f "$alertmanager_secret_archive"
+            fi
+            exit "$status"
+          }
+          trap cleanup_upload EXIT
+          install -d -m 700 "$alertmanager_secret_stage"
+          node - "$alertmanager_secret_stage" <<'NODE'
+          const { writeFileSync } = require("node:fs");
+          const outputDir = process.argv[2];
+          const contents = Buffer.from(process.env.STAGING_EVIDENCE_ENV_B64 ?? "", "base64").toString("utf8");
+          const values = new Map();
+          for (const line of contents.split(/\r?\n/)) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith("#")) continue;
+            const separator = trimmed.indexOf("=");
+            if (separator < 1) throw new Error("Invalid staging evidence env entry.");
+            const key = trimmed.slice(0, separator).trim();
+            const value = trimmed.slice(separator + 1).replace(/^["']|["']$/g, "");
+            if (values.has(key)) throw new Error(`Duplicate staging evidence env key: ${key}`);
+            values.set(key, value);
+          }
+          let url;
+          try {
+            url = new URL(values.get("ALERT_WEBHOOK_URL") ?? "");
+          } catch {
+            throw new Error("ALERT_WEBHOOK_URL must be a valid credential-free HTTPS URL.");
+          }
+          const token = values.get("ALERT_WEBHOOK_TOKEN") ?? "";
+          if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) {
+            throw new Error("ALERT_WEBHOOK_URL must be a credential-free HTTPS URL.");
+          }
+          if (token.length < 32 || /[\r\n]/.test(token)) {
+            throw new Error("ALERT_WEBHOOK_TOKEN must be a single-line secret of at least 32 characters.");
+          }
+          writeFileSync(`${outputDir}/webhook-url`, url.href, { mode: 0o600 });
+          writeFileSync(`${outputDir}/webhook-token`, token, { mode: 0o600 });
+          NODE
+          tar -C "$alertmanager_secret_stage" -czf "$alertmanager_secret_archive" webhook-url webhook-token
+
           tar -czf /tmp/o-okul-staging-compose.tgz \
             docker-compose.yml \
             docker-compose.release.yml \
@@ -407,8 +456,14 @@ jobs:
             docker-compose.traefik.yml \
             docker-compose.traefik-ip.yml \
             docker-compose.observability.yml \
+            docker/alertmanager \
+            docker/alloy \
             docker/evidence \
+            docker/grafana \
+            docker/loki \
             docker/postgres/init \
+            docker/prometheus \
+            docs/evidence-manifests \
             scripts
 
           ssh -i ~/.ssh/staging_deploy_key \
@@ -426,6 +481,8 @@ jobs:
             "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
             "tar -xzf '$STAGING_DEPLOY_DIR/compose.tgz' -C '$STAGING_DEPLOY_DIR' && rm -f '$STAGING_DEPLOY_DIR/compose.tgz'"
 
+          keep_alertmanager_secret_archive=1
+
       - name: Deploy compose stack
         id: deploy-stack
         shell: bash
@@ -441,6 +498,25 @@ jobs:
         run: |
           set -euo pipefail
 
+          alertmanager_secret_archive="$RUNNER_TEMP/alertmanager-secrets.tgz"
+          remote_secret_archive_uploaded=0
+          cleanup_deploy() {
+            local status=$?
+            rm -f "$alertmanager_secret_archive"
+            if [ "$remote_secret_archive_uploaded" -eq 1 ] \
+              && [ -n "${STAGING_SSH_HOST:-}" ] \
+              && [ -n "${STAGING_SSH_USER:-}" ] \
+              && [ -n "${STAGING_DEPLOY_DIR:-}" ]; then
+              ssh -i ~/.ssh/staging_deploy_key \
+                -o StrictHostKeyChecking=accept-new \
+                "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+                "rm -f '$STAGING_DEPLOY_DIR/.alertmanager-secrets.tgz' '$STAGING_DEPLOY_DIR/.ghcr_read_token'" \
+                >/dev/null 2>&1 || true
+            fi
+            exit "$status"
+          }
+          trap cleanup_deploy EXIT
+
           for key in \
             STAGING_SSH_HOST \
             STAGING_SSH_USER \
@@ -454,6 +530,20 @@ jobs:
               exit 1
             fi
           done
+
+          if [ ! -f "$alertmanager_secret_archive" ] \
+            || [ -L "$alertmanager_secret_archive" ] \
+            || [ ! -s "$alertmanager_secret_archive" ]; then
+            echo "Alertmanager secret archive is missing or unsafe." >&2
+            exit 1
+          fi
+
+          ssh -i ~/.ssh/staging_deploy_key \
+            -o StrictHostKeyChecking=accept-new \
+            "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+            "umask 077 && cat > '$STAGING_DEPLOY_DIR/.alertmanager-secrets.tgz'" \
+            < "$alertmanager_secret_archive"
+          remote_secret_archive_uploaded=1
 
           if [ -z "${ROLLBACK_IMAGE_TAG:-}" ]; then
             ROLLBACK_IMAGE_TAG="$(ssh -i ~/.ssh/staging_deploy_key \
@@ -482,6 +572,7 @@ jobs:
              IMAGE_PREFIX='$IMAGE_PREFIX' \
              IMAGE_TAG='$IMAGE_TAG' \
              ROLLBACK_IMAGE_TAG='$ROLLBACK_IMAGE_TAG' \
+             GITHUB_RUN_ID='$GITHUB_RUN_ID' \
              STAGING_EDGE_MODE='${STAGING_EDGE_MODE:-domain}' \
              bash -se" <<'REMOTE'
           set -euo pipefail
@@ -502,7 +593,32 @@ jobs:
 
           trap 'rm -f "$STAGING_DEPLOY_DIR/.ghcr_read_token"' EXIT
           cd "$STAGING_DEPLOY_DIR"
-          trap 'rm -f .ghcr_read_token .env.release.next' EXIT
+          trap 'rm -f .ghcr_read_token .env.release.next .alertmanager-secrets.tgz' EXIT
+
+          alertmanager_private_root="$(dirname "$STAGING_DEPLOY_DIR")/o-okul-private/alertmanager"
+          alertmanager_secrets_dir="$alertmanager_private_root/${IMAGE_TAG}-${GITHUB_RUN_ID}"
+          install -d -m 700 -o 0 -g 0 "$alertmanager_private_root"
+          install -d -m 700 -o 0 -g 0 "$alertmanager_secrets_dir"
+          if [ -L "$alertmanager_private_root" ] || [ -L "$alertmanager_secrets_dir" ] \
+            || [ "$(realpath -e "$alertmanager_private_root")" != "$alertmanager_private_root" ] \
+            || [ "$(realpath -e "$alertmanager_secrets_dir")" != "$alertmanager_secrets_dir" ]; then
+            echo "Alertmanager secret directories must not be symlinks." >&2
+            exit 1
+          fi
+          tar -xzf .alertmanager-secrets.tgz -C "$alertmanager_secrets_dir"
+          for secret_file in webhook-url webhook-token; do
+            secret_path="$alertmanager_secrets_dir/$secret_file"
+            if [ ! -f "$secret_path" ] || [ -L "$secret_path" ] || [ ! -s "$secret_path" ]; then
+              echo "Alertmanager secret file is missing or unsafe: $secret_file" >&2
+              exit 1
+            fi
+            chown 0:0 "$secret_path"
+            chmod 600 "$secret_path"
+            if [ "$(stat -c '%a:%u:%g' "$secret_path")" != "600:0:0" ]; then
+              echo "Alertmanager secret file ownership or mode is unsafe: $secret_file" >&2
+              exit 1
+            fi
+          done
 
           release_env_file=".env.release.next"
           cat > "$release_env_file" <<EOF
@@ -510,6 +626,7 @@ jobs:
           API_IMAGE=${IMAGE_PREFIX}/api:${IMAGE_TAG}
           WORKER_IMAGE=${IMAGE_PREFIX}/worker:${IMAGE_TAG}
           QUEUE_BOARD_IMAGE=${IMAGE_PREFIX}/queue-board:${IMAGE_TAG}
+          ALERTMANAGER_SECRETS_DIR=${alertmanager_secrets_dir}
           SENTRY_RELEASE=${IMAGE_TAG}
           ROLLBACK_IMAGE_TAG=${ROLLBACK_IMAGE_TAG}
           EOF
@@ -555,7 +672,17 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.release.yml \
             -f "$EDGE_COMPOSE_FILE" \
-            pull web api worker queue-board
+            -f docker-compose.observability.yml \
+            config --quiet
+
+          timeout 20m docker compose \
+            --env-file .env \
+            --env-file "$release_env_file" \
+            -f docker-compose.yml \
+            -f docker-compose.release.yml \
+            -f "$EDGE_COMPOSE_FILE" \
+            -f docker-compose.observability.yml \
+            pull web api worker queue-board alertmanager-secrets-init alertmanager prometheus loki alloy grafana
 
           docker compose \
             --env-file .env \
@@ -638,6 +765,7 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.release.yml \
             -f "$EDGE_COMPOSE_FILE" \
+            -f docker-compose.observability.yml \
             up -d --remove-orphans
 
           mv "$release_env_file" .env.release
@@ -648,6 +776,7 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.release.yml \
             -f "$EDGE_COMPOSE_FILE" \
+            -f docker-compose.observability.yml \
             ps
 
           require_running_image() {
@@ -666,6 +795,7 @@ jobs:
                 -f docker-compose.yml \
                 -f docker-compose.release.yml \
                 -f "$EDGE_COMPOSE_FILE" \
+                -f docker-compose.observability.yml \
                 ps -q "$service")"
               if [ -n "$container_id" ]; then
                 actual_image="$(docker inspect -f '{{.Config.Image}}' "$container_id")"
@@ -693,6 +823,43 @@ jobs:
           require_running_image api "${IMAGE_PREFIX}/api:${IMAGE_TAG}"
           require_running_image worker "${IMAGE_PREFIX}/worker:${IMAGE_TAG}"
           require_running_image queue-board "${IMAGE_PREFIX}/queue-board:${IMAGE_TAG}"
+          require_running_image alertmanager "prom/alertmanager:v0.28.1"
+          require_running_image prometheus "prom/prometheus:v2.55.1"
+          require_running_image loki "grafana/loki:3.4.2"
+          require_running_image alloy "grafana/alloy:v1.16.0"
+          require_running_image grafana "grafana/grafana:11.5.2"
+
+          prune_old_alertmanager_secret_dirs() {
+            local private_root="$1"
+            local current_dir="$2"
+            local candidate
+            local candidate_name
+
+            if [ "$(dirname "$current_dir")" != "$private_root" ] \
+              || [ "$(realpath -e "$private_root")" != "$private_root" ] \
+              || [ "$(realpath -e "$current_dir")" != "$current_dir" ]; then
+              echo "Alertmanager secret cleanup boundary is unsafe." >&2
+              exit 1
+            fi
+
+            while IFS= read -r -d '' candidate; do
+              if [ "$candidate" = "$current_dir" ]; then
+                continue
+              fi
+              candidate_name="$(basename "$candidate")"
+              if [ -L "$candidate" ] \
+                || [ "$(dirname "$candidate")" != "$private_root" ] \
+                || [ "$(realpath -e "$candidate")" != "$candidate" ] \
+                || ! [[ "$candidate_name" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}-[0-9]+$ ]]; then
+                echo "Skipping unrecognized Alertmanager secret directory: $candidate_name" >&2
+                continue
+              fi
+              find "$candidate" -xdev -depth -delete
+            done < <(find "$private_root" -mindepth 1 -maxdepth 1 -type d -print0)
+          }
+
+          # Cleanup runs only after Alertmanager is healthy and every runtime image check passes.
+          prune_old_alertmanager_secret_dirs "$alertmanager_private_root" "$alertmanager_secrets_dir"
           REMOTE
 
   evidence:

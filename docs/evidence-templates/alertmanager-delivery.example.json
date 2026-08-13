@@ -1,0 +1,13 @@
+{
+  "releaseCandidate": "0123456789abcdef0123456789abcdef01234567",
+  "alertName": "OOkulApiDown",
+  "receiver": "authenticated-webhook",
+  "firingStatus": "DELIVERED",
+  "firingAt": "2026-05-30T10:00:00.000Z",
+  "firingDeliveredAt": "2026-05-30T10:00:30.000Z",
+  "resolvedStatus": "DELIVERED",
+  "resolvedAt": "2026-05-30T10:02:00.000Z",
+  "resolvedDeliveredAt": "2026-05-30T10:02:30.000Z",
+  "failedNotificationDelta": 0,
+  "evidenceReference": "artifact:artifacts/example/observability/alertmanager-firing-resolved-delivery.json"
+}

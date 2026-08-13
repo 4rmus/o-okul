@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const templatePath = "docs/evidence-templates/staging-evidence.env.example";
 const prodEnvScriptPath = "scripts/check-prod-env.mjs";
@@ -220,6 +222,9 @@ function checkWorkflowContract(output) {
     "STAGING_NEXT_PUBLIC_API_URL must be an https:// URL.",
     "STAGING_DEPLOY_DIR must be /root/o-okul.",
     "docker-compose.observability.yml",
+    "docker/alertmanager",
+    "docker/prometheus",
+    "docs/evidence-manifests",
     "docker-compose.rate-limit-shard.yml",
     "validate_tag \"rollback_image_tag\"",
     "github-ci-evidence:",
@@ -263,6 +268,20 @@ function checkWorkflowContract(output) {
     "require_running_image api \"${IMAGE_PREFIX}/api:${IMAGE_TAG}\"",
     "require_running_image worker \"${IMAGE_PREFIX}/worker:${IMAGE_TAG}\"",
     "require_running_image queue-board \"${IMAGE_PREFIX}/queue-board:${IMAGE_TAG}\"",
+    "ALERTMANAGER_SECRETS_DIR=${alertmanager_secrets_dir}",
+    "Alertmanager secret file is missing or unsafe",
+    "umask 077 && cat > '$STAGING_DEPLOY_DIR/.alertmanager-secrets.tgz'",
+    "Alertmanager secret directories must not be symlinks.",
+    "chmod 600 \"$secret_path\"",
+    "stat -c '%a:%u:%g' \"$secret_path\"",
+    "-f docker-compose.observability.yml",
+    "config --quiet",
+    "pull web api worker queue-board alertmanager-secrets-init alertmanager prometheus loki alloy grafana",
+    "require_running_image alertmanager \"prom/alertmanager:v0.28.1\"",
+    "prune_old_alertmanager_secret_dirs()",
+    "find \"$private_root\" -mindepth 1 -maxdepth 1 -type d -print0",
+    "find \"$candidate\" -xdev -depth -delete",
+    "Cleanup runs only after Alertmanager is healthy and every runtime image check passes.",
     "Account management preflight before legacy access cutover",
     "ACCOUNT_MANAGEMENT_PREFLIGHT_OUTPUT=artifacts/staging/reports/account-management-preflight.json",
     "Account management backfill and parity gate before app start",
@@ -321,6 +340,46 @@ function checkWorkflowContract(output) {
     "test -s .staging-evidence.env",
     "pnpm staging:evidence-env:check -- --mode activation --env-file .staging-evidence.env",
   ]);
+  requireWorkflowOrder(output, workflow, "Alertmanager secret injection order", [
+    "alertmanager_secret_stage=\"$RUNNER_TEMP/alertmanager-secrets\"",
+    "Buffer.from(process.env.STAGING_EVIDENCE_ENV_B64 ?? \"\", \"base64\")",
+    "writeFileSync(`${outputDir}/webhook-url`",
+    "writeFileSync(`${outputDir}/webhook-token`",
+    "tar -C \"$alertmanager_secret_stage\"",
+    "docker/alertmanager",
+    "Alertmanager secret archive is missing or unsafe.",
+    "umask 077 && cat > '$STAGING_DEPLOY_DIR/.alertmanager-secrets.tgz'",
+    "remote_secret_archive_uploaded=1",
+    "install -d -m 700 -o 0 -g 0 \"$alertmanager_secrets_dir\"",
+    "chown 0:0 \"$secret_path\"",
+    "chmod 600 \"$secret_path\"",
+    "ALERTMANAGER_SECRETS_DIR=${alertmanager_secrets_dir}",
+    "config --quiet",
+    "pull web api worker queue-board alertmanager-secrets-init alertmanager prometheus loki alloy grafana",
+    "up -d --remove-orphans",
+    "require_running_image alertmanager \"prom/alertmanager:v0.28.1\"",
+    "require_running_image grafana \"grafana/grafana:11.5.2\"",
+    "Cleanup runs only after Alertmanager is healthy and every runtime image check passes.",
+    "prune_old_alertmanager_secret_dirs \"$alertmanager_private_root\" \"$alertmanager_secrets_dir\"",
+  ]);
+
+  for (const token of [
+    "catch {",
+    "ALERT_WEBHOOK_URL must be a valid credential-free HTTPS URL.",
+    "cleanup_deploy()",
+    "rm -f '$STAGING_DEPLOY_DIR/.alertmanager-secrets.tgz' '$STAGING_DEPLOY_DIR/.ghcr_read_token'",
+  ]) {
+    if (!workflow.includes(token)) {
+      output.push(`${workflowPath} Alertmanager secret hata yolu koruması eksik: ${token}`);
+    }
+  }
+  checkAlertmanagerUrlParserDoesNotLeak(output, workflow);
+
+  for (const unsafeToken of ["echo \"$ALERT_WEBHOOK_TOKEN\"", "ALERT_WEBHOOK_TOKEN=${ALERT_WEBHOOK_TOKEN}"]) {
+    if (workflow.includes(unsafeToken)) {
+      output.push(`${workflowPath} Alertmanager bearer secret'ını komut veya env çıktısına gömmemeli: ${unsafeToken}`);
+    }
+  }
   requireWorkflowOrder(output, workflow, "GitHub CI evidence artifact order", [
     "Generate GitHub CI evidence before deploy",
     "GITHUB_CI_EVIDENCE_OUTPUT=\"artifacts/staging/reports/github-ci.json\" pnpm github-ci:generate",
@@ -354,6 +413,40 @@ function checkWorkflowContract(output) {
     "staging-activation-evidence-${{ needs.build-images.outputs.image-tag }}",
     "path: artifacts/staging",
   ]);
+}
+
+function checkAlertmanagerUrlParserDoesNotLeak(output, workflow) {
+  const match = workflow.match(/node - \"\$alertmanager_secret_stage\" <<'NODE'\n([\s\S]*?)\n\s+NODE/);
+  if (!match) {
+    output.push(`${workflowPath} Alertmanager secret parser heredoc'u bulunamadı.`);
+    return;
+  }
+
+  const sentinel = "alert-secret-sentinel-should-not-leak";
+  const workDir = mkdtempSync(join(tmpdir(), "o-okul-alert-parser-"));
+  try {
+    const envText = `ALERT_WEBHOOK_URL=https://[${sentinel}\nALERT_WEBHOOK_TOKEN=${"x".repeat(32)}\n`;
+    const result = spawnSync(process.execPath, ["-", workDir], {
+      input: match[1],
+      env: {
+        ...process.env,
+        STAGING_EVIDENCE_ENV_B64: Buffer.from(envText).toString("base64"),
+      },
+      encoding: "utf8",
+    });
+    const logs = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      output.push(`${workflowPath} geçersiz Alertmanager URL girdisini reddetmeli.`);
+    }
+    if (logs.includes(sentinel)) {
+      output.push(`${workflowPath} geçersiz Alertmanager URL değerini loga sızdırmamalı.`);
+    }
+    if (!logs.includes("ALERT_WEBHOOK_URL must be a valid credential-free HTTPS URL.")) {
+      output.push(`${workflowPath} geçersiz Alertmanager URL için generic hata döndürmeli.`);
+    }
+  } finally {
+    rmSync(workDir, { recursive: true, force: true });
+  }
 }
 
 function checkOutboxVerifyWorkflowContract(output) {

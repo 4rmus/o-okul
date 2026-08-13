@@ -465,6 +465,7 @@ const auditNullTenantFixturePath = "docs/evidence-templates/audit-null-tenant.ex
 const kvkkInventoryFixturePath = "docs/evidence-templates/kvkk-inventory.example.json";
 const liveExamCycleFixturePath = "docs/evidence-templates/live-exam-cycle.example.json";
 const observabilityUatFixturePath = "docs/evidence-templates/observability-uat.example.json";
+const alertmanagerDeliveryFixturePath = "docs/evidence-templates/alertmanager-delivery.example.json";
 const rateLimitFixturePath = "docs/evidence-templates/rate-limit.example.json";
 const restoreDrillFixturePath = "docs/evidence-templates/restore-drill.example.json";
 const rlsLiveFixturePath = "docs/evidence-templates/rls-live.example.json";
@@ -918,7 +919,7 @@ runRestoreDrillSymlinkParentTargetNegativeCheck();
 runObservabilityUatNegativeCheck({
   label: "Observability UAT extra top-level key negative",
   path: "docs/evidence-templates/observability-uat.extra-top-level.tmp.json",
-  expectedFailure: "observabilityUat tam 11 alan içermeli.",
+  expectedFailure: "observabilityUat tam 12 alan içermeli.",
   mutate: (fixture) => {
     fixture.unexpectedTopLevel = true;
   },
@@ -937,6 +938,22 @@ runObservabilityUatNegativeCheck({
   expectedFailure: "alertsVerified tam 4 alert içermeli.",
   mutate: (fixture) => {
     fixture.alertsVerified.push("UnexpectedAlert");
+  },
+});
+runObservabilityUatNegativeCheck({
+  label: "Observability UAT missing resolved delivery negative",
+  path: "docs/evidence-templates/observability-uat.missing-resolved-delivery.tmp.json",
+  expectedFailure: "alertDelivery.resolvedStatus DELIVERED olmalı.",
+  mutate: (fixture) => {
+    fixture.alertDelivery.resolvedStatus = "MISSING";
+  },
+});
+runObservabilityUatNegativeCheck({
+  label: "Observability UAT release SHA negative",
+  path: "docs/evidence-templates/observability-uat.release-sha.tmp.json",
+  expectedFailure: "alertDelivery.releaseCandidate 40 karakterlik lowercase commit SHA olmalı.",
+  mutate: (fixture) => {
+    fixture.alertDelivery.releaseCandidate = "stale-sha";
   },
 });
 runObservabilityUatNegativeCheck({
@@ -2326,6 +2343,15 @@ runProductionSummaryNegativeCheck({
   },
 });
 runProductionSummaryNegativeCheck({
+  label: "Production summary observability SHA mismatch negative",
+  path: "docs/evidence-templates/production-evidence-summary.observability-sha-mismatch.tmp.json",
+  expectedFailure:
+    "reports.observabilityUat.alertDelivery.releaseCandidate reports.githubCi.commitSha ile eşleşmeli.",
+  mutate: (fixture) => {
+    fixture.reports.observabilityUat.alertDelivery.releaseCandidate = "2".repeat(40);
+  },
+});
+runProductionSummaryNegativeCheck({
   label: "Production summary UI/UX empty artifact manifest negative",
   path: "docs/evidence-templates/production-evidence-summary.ui-ux-empty-artifacts.tmp.json",
   expectedFailure: "reports.uiUxRedesign.artifacts boş olmayan schema v2 manifesti olmalı.",
@@ -2911,6 +2937,20 @@ runGoLiveNegativeCheck({
     const linkedSummary = structuredClone(productionSummaryFixture);
     linkedSummary.reports.githubCi.commitSha = "2".repeat(40);
     fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.release-sha-mismatch-for-go-live.tmp.json";
+    writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
+    cleanupPaths.push(linkedPath);
+  },
+});
+runGoLiveNegativeCheck({
+  label: "Go-live linked observability SHA mismatch negative",
+  path: "docs/evidence-templates/go-live.linked-observability-sha-mismatch.tmp.json",
+  expectedFailure:
+    "productionEvidenceSummary.summary.reports.observabilityUat.alertDelivery.releaseCandidate productionEvidenceSummary.summary.reports.githubCi.commitSha ile eslesmeli.",
+  mutate: (fixture, cleanupPaths) => {
+    const linkedPath = "docs/evidence-templates/production-evidence-summary.observability-sha-mismatch-for-go-live.tmp.json";
+    const linkedSummary = structuredClone(productionSummaryFixture);
+    linkedSummary.reports.observabilityUat.alertDelivery.releaseCandidate = "2".repeat(40);
+    fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.observability-sha-mismatch-for-go-live.tmp.json";
     writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
     cleanupPaths.push(linkedPath);
   },
@@ -3819,6 +3859,8 @@ function runObservabilityUatGeneratorLocalArtifactNegativeChecks() {
     OBSERVABILITY_UAT_GRAFANA_EVIDENCE_REFERENCE: "run:grafana-ready-2026-06-24",
     OBSERVABILITY_UAT_LOKI_EVIDENCE_REFERENCE: "run:loki-ready-2026-06-24",
     OBSERVABILITY_UAT_ALERT_WEBHOOK_EVIDENCE_REFERENCE: "run:alert-webhook-2026-06-24",
+    OBSERVABILITY_UAT_RELEASE_CANDIDATE: "0123456789abcdef0123456789abcdef01234567",
+    OBSERVABILITY_UAT_ALERT_CHAIN_TARGET: pathToFileURL(resolve(alertmanagerDeliveryFixturePath)).href,
   };
   const cases = [
     {
@@ -6813,7 +6855,7 @@ function runStagingReleaseArtifactsBundleCheck() {
         console.error("Production evidence template kontrolü başarısız: staging release cutover SHA binding negative kırılmadı.");
         process.exit(1);
       }
-      if (!cutoverBindingOutput.includes("reports/deployment-cutover.json.sourceSha, summary.reports.uiUxRedesign.sourceCommitSha ve summary.reports.githubCi.commitSha aynı SHA olmalı.")) {
+      if (!cutoverBindingOutput.includes("reports/deployment-cutover.json.sourceSha, summary.reports.uiUxRedesign.sourceCommitSha, summary.reports.githubCi.commitSha ve observability alertDelivery.releaseCandidate aynı SHA olmalı.")) {
         console.error("Production evidence template kontrolü başarısız: staging release cutover SHA binding beklenen hata yok.");
         console.error(cutoverBindingOutput);
         process.exit(1);

@@ -9,6 +9,7 @@ const traefik = readFileSync("docker-compose.traefik.yml", "utf8");
 const traefikIp = readFileSync("docker-compose.traefik-ip.yml", "utf8");
 const dockerfile = readFileSync("Dockerfile", "utf8");
 const alloy = readFileSync("docker/alloy/config.alloy", "utf8");
+const alertmanager = readFileSync("docker/alertmanager/alertmanager.yml", "utf8");
 const prometheus = readFileSync("docker/prometheus/prometheus.yml", "utf8");
 const prometheusAlerts = readFileSync("docker/prometheus/rules/api-alerts.yml", "utf8");
 const grafanaDatasources = readFileSync("docker/grafana/provisioning/datasources/datasources.yml", "utf8");
@@ -192,10 +193,21 @@ const expectations = {
     "traefik.http.services.api-rate-limit-shard-ip.loadbalancer.server.port=3100",
   ],
   "docker-compose.observability.yml": [
+    "alertmanager-secrets-init:",
+    "network_mode: none",
+    "alertmanager:",
     "prometheus:",
     "grafana:",
     "loki:",
     "alloy:",
+    "prom/alertmanager:v0.28.1",
+    "127.0.0.1:${ALERTMANAGER_HOST_PORT:-9093}:9093",
+    'test: ["CMD", "/bin/amtool", "--alertmanager.url=http://127.0.0.1:9093", "alert", "query"]',
+    "${ALERTMANAGER_SECRETS_DIR:?ALERTMANAGER_SECRETS_DIR is required}:/source:ro",
+    "alertmanager_secrets:/run/secrets/alertmanager:ro",
+    "condition: service_completed_successfully",
+    "GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?GRAFANA_ADMIN_USER is required}",
+    "GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}",
     "127.0.0.1:${PROMETHEUS_HOST_PORT:-9090}:9090",
     "127.0.0.1:${GRAFANA_HOST_PORT:-3002}:3000",
     "127.0.0.1:${LOKI_HOST_PORT:-3101}:3100",
@@ -221,10 +233,19 @@ const expectations = {
   ],
   "docker/prometheus/prometheus.yml": [
     "rule_files:",
+    "alerting:",
+    "alertmanager:9093",
     "/etc/prometheus/rules/*.yml",
     "job_name: o-okul-api",
     "metrics_path: /metrics",
     "api:3100",
+  ],
+  "docker/alertmanager/alertmanager.yml": [
+    "receiver: authenticated-webhook",
+    "url_file: /run/secrets/alertmanager/webhook-url",
+    "type: Bearer",
+    "credentials_file: /run/secrets/alertmanager/webhook-token",
+    "max_alerts: 20",
   ],
   "docker/prometheus/rules/api-alerts.yml": [
     "OOkulApiDown",
@@ -301,6 +322,9 @@ const expectations = {
     "STAGING_DEPLOY_DIR",
     "Upload compose bundle",
     "docker-compose.observability.yml",
+    "docker/alertmanager",
+    "docker/prometheus",
+    "docs/evidence-manifests",
     "docker/evidence",
     "docker/postgres/init",
     "scripts",
@@ -311,6 +335,20 @@ const expectations = {
     "GHCR_READ_TOKEN: ${{ github.token }}",
     "docker-compose.release.yml",
     "QUEUE_BOARD_IMAGE",
+    "ALERTMANAGER_SECRETS_DIR=${alertmanager_secrets_dir}",
+    "Alertmanager secret file is missing or unsafe",
+    "umask 077 && cat > '$STAGING_DEPLOY_DIR/.alertmanager-secrets.tgz'",
+    "Alertmanager secret directories must not be symlinks.",
+    "install -d -m 700 -o 0 -g 0 \"$alertmanager_secrets_dir\"",
+    "chown 0:0 \"$secret_path\"",
+    "chmod 600 \"$secret_path\"",
+    "stat -c '%a:%u:%g' \"$secret_path\"",
+    "-f docker-compose.observability.yml",
+    "require_running_image alertmanager \"prom/alertmanager:v0.28.1\"",
+    "prune_old_alertmanager_secret_dirs()",
+    "find \"$private_root\" -mindepth 1 -maxdepth 1 -type d -print0",
+    "find \"$candidate\" -xdev -depth -delete",
+    "Cleanup runs only after Alertmanager is healthy and every runtime image check passes.",
     ".env.release.next",
     "--env-file \"$release_env_file\"",
     "prune_old_release_images",
@@ -380,6 +418,7 @@ const files = {
   "docker-compose.traefik.yml": traefik,
   "docker-compose.traefik-ip.yml": traefikIp,
   "docker/alloy/config.alloy": alloy,
+  "docker/alertmanager/alertmanager.yml": alertmanager,
   "docker/prometheus/prometheus.yml": prometheus,
   "docker/prometheus/rules/api-alerts.yml": prometheusAlerts,
   "docker/grafana/provisioning/datasources/datasources.yml": grafanaDatasources,
@@ -395,6 +434,10 @@ const files = {
 };
 
 const failures = [];
+
+if (/^name:/m.test(observability)) {
+  failures.push("docker-compose.observability.yml ayrı bir Compose proje adı tanımlamamalı");
+}
 
 for (const [file, tokens] of Object.entries(expectations)) {
   for (const token of tokens) {

@@ -110,6 +110,7 @@ const requiredReports = {
     "lokiLogPanelOk",
     "alertWebhookStatus",
     "alertsVerified",
+    "alertDelivery",
     "evidenceReferences",
   ],
   externalMonitoring: ["environment", "checkedAt", "provider", "monitoringNode", "monitorsVerified", "outageDrill", "evidenceReferences"],
@@ -712,6 +713,15 @@ function requireReports(summary, failures) {
   requireAuditNullTenantReport(reports.auditNullTenant, failures);
   requireLiveUiWorkerResultReport(reports.liveUiWorkerResult, failures);
   requireUiUxRedesignReport(reports.uiUxRedesign, reports.deploymentRollback, reports.githubCi, failures);
+  requireMatchingString(
+    reports.observabilityUat?.alertDelivery,
+    failures,
+    "reports.observabilityUat.alertDelivery.releaseCandidate",
+    "releaseCandidate",
+    reports.githubCi,
+    "reports.githubCi.commitSha",
+    "commitSha",
+  );
   requireKvkkInventoryReport(reports.kvkkInventory, failures);
   requireUatJourneyScenarios(reports.uat, failures);
   requireObjectTrue(reports.uat, failures, "reports.uat.liveExamCyclePassed", "liveExamCyclePassed");

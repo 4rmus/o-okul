@@ -662,6 +662,19 @@
         "OOkulApiHighErrorRate",
         "OOkulApiSlowRequests"
       ],
+      "alertDelivery": {
+        "releaseCandidate": "1111111111111111111111111111111111111111",
+        "alertName": "OOkulApiDown",
+        "receiver": "authenticated-webhook",
+        "firingStatus": "DELIVERED",
+        "firingAt": "2026-05-30T10:00:00.000Z",
+        "firingDeliveredAt": "2026-05-30T10:00:30.000Z",
+        "resolvedStatus": "DELIVERED",
+        "resolvedAt": "2026-05-30T10:02:00.000Z",
+        "resolvedDeliveredAt": "2026-05-30T10:02:30.000Z",
+        "failedNotificationDelta": 0,
+        "evidenceReference": "artifacts/example/observability/alertmanager-firing-resolved-delivery.json"
+      },
       "evidenceReferences": [
         "artifacts/example/observability/prometheus-targets.png",
         "artifacts/example/observability/grafana-api-overview.png",
