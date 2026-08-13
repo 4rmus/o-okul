@@ -277,6 +277,7 @@ function checkWorkflowContract(output) {
     "-f docker-compose.observability.yml",
     "config --quiet",
     "pull web api worker queue-board alertmanager-secrets-init alertmanager prometheus loki alloy grafana",
+    "kill -s HUP prometheus",
     "require_running_image alertmanager \"prom/alertmanager:v0.28.1\"",
     "prune_old_alertmanager_secret_dirs()",
     "find \"$private_root\" -mindepth 1 -maxdepth 1 -type d -print0",

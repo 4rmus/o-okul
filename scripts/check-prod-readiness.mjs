@@ -1267,6 +1267,7 @@ const expectations = {
     "docker/prometheus",
     "docs/evidence-manifests",
     "pull web api worker queue-board alertmanager-secrets-init alertmanager prometheus loki alloy grafana",
+    "kill -s HUP prometheus",
     "require_running_image alertmanager \"prom/alertmanager:v0.28.1\"",
     "Cleanup runs only after Alertmanager is healthy and every runtime image check passes.",
     "find \"$candidate\" -xdev -depth -delete",
