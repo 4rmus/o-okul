@@ -2,14 +2,15 @@
 
 Son güncelleme: 2026-08-13
 İnceleme snapshotı: Gate D runtime commit'i `bb2779bc1087a150b648407385e3cee1d0122692`;
-Gate D kapanışı ve Gate E WAL dilimi `agent/gate-d-onboarding-closure-20260810` izole worktree'sindedir.
+Gate E WAL exact-SHA staging commit'i `b2b91d9ec160d43d119937336782127e7e77325d`.
 Kanıt düzeyi: Gate A, Gate B ve Gate C `LOCAL_STATIC`; Gate D `GITHUB_CI`, `STAGING_DEPLOY`,
 `STAGING_DB_RUNTIME`, `STAGING_API_RUNTIME`, `STAGING_LIVE_UI` ve `STAGING_PROVIDER_DELIVERY`
 kanıtı taşır. Gate D `PASS`; Gate E WAL archive izin düzeltmesi `LOCAL_STATIC` ve
 `LOCAL_SYNTHETIC`, `GITHUB_CI`, `STAGING_DEPLOY` ve `STAGING_WAL_RUNTIME` kanıtı taşır.
 Gate E'nin geri kalanı açık; pilot ve production `EXTERNAL_NOT_RUN`.
-Exact-SHA staging `pnpm wal:archive:smoke` otomasyonu repo düzeyinde `LOCAL_STATIC` hazırlanmıştır;
-yeni workflow run'ı çalıştırılmadığı için PII-safe WAL artifact'i `EXTERNAL_NOT_RUN` kalır.
+Exact-SHA staging `pnpm wal:archive:smoke`, main CI `31735017355` ve Staging Deploy
+`31735953577` üzerinde `PASS`; PII-safe activation artifact'i `9195500657`, digest'i
+`sha256:8b63ccf7c8fbc0d7309b789d0c5bbaf91c72c01300d5349beff0d47945709697`.
 Faz 6 repo davranışı `LOCAL_STATIC` / `LOCAL_SYNTHETIC` düzeyinde kapalıdır; WhatsApp dış kanıtı
 kullanıcı kararıyla sonraya bırakılmış ve capability kapalı tutulmuştur.
 
@@ -234,8 +235,16 @@ uygulama-provider teslim testi yerine geçmez. Şablon veya statik checker sonuc
   kurulum `PASS`; final DB sonucu 1 kampüs, 2 sınıf, 6 ders, 1 akademik yıl ve 1 dönemdir.
 - Gate E WAL archive volume sahipliği disposable Docker projectte `postgres:postgres 0700`, gerçek
   `pg_switch_wal()` ve `pnpm wal:archive:smoke` ile `PASS`; `pnpm docker:check`, `pnpm ops:check` ve
-  `pnpm prod:evidence:templates:check` `PASS`. Exact-SHA staging/deploy kanıtı `EXTERNAL_NOT_RUN`.
-- Gate D `PASS`; Gate E kapanmadı. Pilot ve production `EXTERNAL_NOT_RUN`.
+  `pnpm prod:evidence:templates:check` `PASS`.
+- Exact-SHA merge `b2b91d9ec160d43d119937336782127e7e77325d`: main CI `31735017355` üç işte,
+  Staging Deploy `31735953577` preflight/build/deploy/evidence zincirinde `PASS`. Web, API, worker
+  ve queue-board aynı SHA image tag'iyle çalışır; `/health`, `/health/ready` ve `/login` HTTP 200'dür.
+- WAL artifact `9195500657` repo validatoründen `environment=staging`, S3 hedefi,
+  `archiveMode=on`, `walLevel=replica`, geçerli marker/archive hash'leri ve `gaps=[]` ile `PASS`;
+  artifact digest'i `sha256:8b63ccf7c8fbc0d7309b789d0c5bbaf91c72c01300d5349beff0d47945709697`.
+  Canlı WAL dizini `postgres:postgres 0700`, yazılabilir ve doğrulama anında 10 arşiv dosyası taşır.
+- Gate D `PASS`; Gate E WAL dış kanıt dilimi kapandı. Gate E'nin geri kalanı açık; pilot ve
+  production `EXTERNAL_NOT_RUN`, Gate F başlatılmadı.
 
 2026-08-10 Gate C yerel sonuçları:
 
