@@ -661,6 +661,11 @@ pnpm backup:restore:smoke
 - Staging kanıt dosyası için `WAL_ARCHIVE_SMOKE_EVIDENCE_FILE=artifacts/staging/wal-archive.json`
   verilir; dosya hedef protokolünü, marker hash'ini, `postgresWalArchive`, `checkedAt`, tek
   `commandsPassed=["pnpm wal:archive:smoke"]` ve boş `gaps` listesini secret içermeden yazar.
+- Normal staging deploy'un evidence işi aynı komutu exact deploy SHA checkout'unda çalıştırır;
+  S3 marker döngüsü GitHub runner'da, `pg_switch_wal()` doğrulaması ise SSH Docker bağlantısıyla
+  deploy edilen staging Postgres üzerinde yürür ve çıktı `artifacts/staging/smoke/wal-archive.json`
+  olarak aynı activation artifact'ına eklenir. Workflow değişikliğinin lokal/statik kontrolü canlı
+  smoke kanıtı değildir; ilgili exact-SHA staging run'ı başarıyla tamamlanmadan Gate E kapanmaz.
 - Production env kontrolü `WAL_ARCHIVE_TARGET` için `s3://bucket/prefix`
   veya mount edilmiş `file://` hedefi ister; placeholder/test hedefleri reddedilir.
   Tekil smoke üreticileri `file://` hedefte root, lokal temp path veya symlink dizin/parent path

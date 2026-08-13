@@ -1885,6 +1885,12 @@ modu `0700`e çeker; Postgres yalnız bu tek seferlik servis başarıyla tamamla
 Artifact `checkedAt`, target özeti, marker sha256, `postgresWalArchive`, tek
 `commandsPassed=["pnpm wal:archive:smoke"]` ve boş `gaps` listesi taşır.
 
+Normal staging deploy evidence işi bu komutu `--env-file .staging-evidence.env` ile exact deploy
+SHA üzerinde otomatik çalıştırır. S3 yaz/oku/sil runner'da, Postgres WAL switch ve arşiv dosyası
+doğrulaması SSH Docker bağlantısıyla staging hostta yapılır; kanıt
+`artifacts/staging/smoke/wal-archive.json` olarak activation artifact'ına girer. Yerel workflow
+kontrolü veya başarılı deploy tek başına bu kanıtın yerine geçmez.
+
 ## AuditLog Null Tenant Kanıtı
 
 Amaç: `AuditLog.tenantId IS NULL` satırlarının açıklanabilir olduğunu ve bilinmeyen/null tenant

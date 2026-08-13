@@ -737,6 +737,7 @@ for (const [label, payload, expectedCheck, allowExampleEvidence = true] of negat
 
 await runSmokeEvidenceOutputNegativeChecks(failures);
 runFileTargetNegativeChecks(failures);
+checkWalArchiveEnvFileInput(failures);
 
 if (failures.length > 0) {
   console.error("Smoke evidence contract kontrolü başarısız:");
@@ -1084,6 +1085,31 @@ function fileTargetSmokeChecks() {
       symlinkError: "WAL_ARCHIVE_TARGET file:// hedefi symlink olmayan dizin olmalı.",
     },
   ];
+}
+
+function checkWalArchiveEnvFileInput(output) {
+  const root = resolve("artifacts/prod-evidence-template-check/wal-archive-env-file-contract");
+  const envFile = join(root, "staging-evidence.env");
+  rmSync(root, { recursive: true, force: true });
+  mkdirSync(root, { recursive: true });
+
+  try {
+    writeFileSync(envFile, "WAL_ARCHIVE_TARGET=https://wal.invalid/archive\n", "utf8");
+    const env = { ...process.env };
+    delete env.WAL_ARCHIVE_TARGET;
+    delete env.WAL_ARCHIVE_SMOKE_EVIDENCE_FILE;
+    delete env.SMOKE_EVIDENCE_FILE;
+    const result = spawnSync(process.execPath, ["scripts/smoke-wal-archive-target.mjs", "--env-file", envFile], {
+      env,
+      encoding: "utf8",
+    });
+    const message = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0 || !message.includes("WAL_ARCHIVE_TARGET yalnız file:// veya s3:// destekler.")) {
+      output.push("WAL archive smoke --env-file girdisini secret değeri yazdırmadan okumalı.");
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 }
 
 function expectSmokeFileTargetFailure(smoke, target, expectedMessage, label, output) {

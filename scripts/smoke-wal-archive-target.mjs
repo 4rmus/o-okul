@@ -6,6 +6,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { validateSmokeEvidenceOutputTarget, writeSmokeEvidence } from "./smoke-evidence.mjs";
 
+await loadEnvFile(readArgValue("--env-file"));
+
 const target = process.env.WAL_ARCHIVE_TARGET;
 const evidenceFile = process.env.WAL_ARCHIVE_SMOKE_EVIDENCE_FILE ?? process.env.SMOKE_EVIDENCE_FILE;
 const checkedAt = new Date().toISOString();
@@ -251,4 +253,44 @@ function isLocalTempOrRootPath(path) {
 function fail(message) {
   console.error(message);
   process.exit(1);
+}
+
+function readArgValue(name) {
+  const index = process.argv.indexOf(name);
+  if (index === -1) return undefined;
+
+  const value = process.argv[index + 1];
+  if (!value || value.startsWith("--")) {
+    fail(`${name} için dosya yolu gerekli.`);
+  }
+  return value;
+}
+
+async function loadEnvFile(file) {
+  if (!file) return;
+
+  const seen = new Set();
+  const contents = await readFile(file, "utf8");
+  for (const [index, line] of contents.split(/\r?\n/).entries()) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    const separator = trimmed.indexOf("=");
+    if (separator === -1) {
+      fail(`${file}:${index + 1} KEY=VALUE biçiminde olmalı.`);
+    }
+
+    const key = trimmed.slice(0, separator).trim();
+    if (!/^[A-Z0-9_]+$/.test(key)) {
+      fail(`${file}:${index + 1} geçersiz env anahtarı: ${key}`);
+    }
+    if (seen.has(key)) {
+      fail(`${file} tekrar eden env anahtarı içeriyor: ${key}`);
+    }
+    seen.add(key);
+
+    if (process.env[key] === undefined) {
+      process.env[key] = trimmed.slice(separator + 1).replace(/^["']|["']$/g, "");
+    }
+  }
 }
