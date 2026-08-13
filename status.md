@@ -2,10 +2,12 @@
 
 Son güncelleme: 2026-08-12
 İnceleme snapshotı: Gate D runtime commit'i `bb2779bc1087a150b648407385e3cee1d0122692`;
-değişiklikler `agent/almanac-gate-d-local-20260810` izole branch'indedir
+Gate D kapanışı ve Gate E WAL dilimi `agent/gate-d-onboarding-closure-20260810` izole worktree'sindedir.
 Kanıt düzeyi: Gate A, Gate B ve Gate C `LOCAL_STATIC`; Gate D `GITHUB_CI`, `STAGING_DEPLOY`,
 `STAGING_DB_RUNTIME`, `STAGING_API_RUNTIME`, `STAGING_LIVE_UI` ve `STAGING_PROVIDER_DELIVERY`
-kanıtı taşır. Gate D `PASS`; sıradaki Gate E henüz başlamadı. Pilot ve production `EXTERNAL_NOT_RUN`.
+kanıtı taşır. Gate D `PASS`; Gate E WAL archive izin düzeltmesi `LOCAL_STATIC` ve
+`LOCAL_SYNTHETIC`, exact-SHA staging WAL kanıtı `EXTERNAL_NOT_RUN`. Pilot ve production
+`EXTERNAL_NOT_RUN`.
 
 5 Ağustos 2026 ürün kararları: giriş kurum subdomaini + tenant-local kimliktir; guardian ürün
 kapsamından çıkarılacaktır; hukuk/KVKK incelemesi bu fazda repo uygulamasını ve pilot hazırlığını
@@ -139,7 +141,7 @@ ortam ve tarih içeren kalıcı evidence ile yükseltilir.
   OpenAPI `238`, idempotency `46`, RLS `64/110`, production evidence template, ölçüm baseline,
   exact GitHub CI `31542604334` ve staging deploy `31543523234` `PASS`. UAT-SYS-02 ve
   UAT-KURUM-01 gerçek activation e-postası, parola yenileme, tenant login ve kurulumla exact runtime
-  üzerinde `PASS`; genel Gate D kapandı. Sıradaki Gate E'ye geçilmedi.
+  üzerinde `PASS`; genel Gate D kapandı. Gate E yalnız WAL archive izin kök-neden dilimiyle başladı.
 
 ## Production Teknik Aktivasyonu — 2026-08-05
 
@@ -205,7 +207,10 @@ uygulama-provider teslim testi yerine geçmez. Şablon veya statik checker sonuc
   rollback: `PASS`; public artifact hash'leri `docs/almanac-2-gate-d-evidence.md` içinde kayıtlıdır.
 - UAT-SYS-02/UAT-KURUM-01: gerçek provider delivery, activation, parola yenileme, tenant login ve
   kurulum `PASS`; final DB sonucu 1 kampüs, 2 sınıf, 6 ders, 1 akademik yıl ve 1 dönemdir.
-- Gate D `PASS`; sıradaki Gate E. Pilot ve production `EXTERNAL_NOT_RUN`.
+- Gate E WAL archive volume sahipliği disposable Docker projectte `postgres:postgres 0700`, gerçek
+  `pg_switch_wal()` ve `pnpm wal:archive:smoke` ile `PASS`; `pnpm docker:check`, `pnpm ops:check` ve
+  `pnpm prod:evidence:templates:check` `PASS`. Exact-SHA staging/deploy kanıtı `EXTERNAL_NOT_RUN`.
+- Gate D `PASS`; Gate E kapanmadı. Pilot ve production `EXTERNAL_NOT_RUN`.
 
 2026-08-10 Gate C yerel sonuçları:
 

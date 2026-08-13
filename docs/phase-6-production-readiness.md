@@ -666,6 +666,8 @@ pnpm backup:restore:smoke
   Tekil smoke üreticileri `file://` hedefte root, lokal temp path veya symlink dizin/parent path
   kabul etmez; mount hedefi kalıcı, symlink olmayan dizin olmalıdır.
 - Günlük base backup lokal kalıcı backup path'ine, WAL arşivi ayrı kalıcı hedefe gider.
+  Compose, Docker'ın `root:root` oluşturabildiği WAL archive volume'unu tek seferlik
+  `postgres-wal-archive-init` servisiyle PostgreSQL kullanıcısına devretmeden Postgres'i başlatmaz.
   Compose `archive_mode` değişikliği çalışan Postgres konteynerine uygulanmadıysa Postgres servisi
   recreate edilmeden WAL smoke PASS vermez.
 - Panel/API/worker üzerinden tetiklenen backup işi yalnız `s3://bucket/prefix` veya kalıcı
