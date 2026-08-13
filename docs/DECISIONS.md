@@ -462,17 +462,25 @@ koruma sorumlusu tarafından onaylanmadan `WHATSAPP_ENABLED=true` değişikliği
 İlk doğrulama için tek tenant ve O-Okul numarasıyla sınırlı pilot önerilir. Genel release öncesinde
 tenant-owned WABA/numara ile merkezi O-Okul topolojisi arasında kalite, izolasyon, operasyon ve veri
 işleme risklerini kapsayan ayrı karar kapısı zorunludur.
+
+2026-08-12 ürün sahibi kararıyla WhatsApp dış ortam ve provider kanıtı Faz 6 repo kapanışından
+sonraya bırakılmıştır. Faz 6 yalnız duyuru ekranındaki salt-okunur default-off yaşam döngüsü
+görünümünü kapsar; bu görünüm izin grant/withdraw yüzeyi, runtime kaydı, gönderim capability'si
+veya teslimat kanıtı değildir. `WHATSAPP_ENABLED=false`, sıfır runtime kayıt kuralı ve yukarıdaki
+aktivasyon kapıları değişmeden kalır.
 Kaynak: Ürün sahibinin onayladığı WhatsApp entegrasyonu ilk güvenli dilimi.
 Kanıt: `.env.example`, `docs/evidence-templates/staging-evidence.env.example`,
 `scripts/check-prod-env.mjs`, `scripts/check-staging-evidence-env.mjs`,
 `packages/db/prisma/migrations/20260808150000_add_whatsapp_consent_foundation/migration.sql`,
 `packages/db/prisma/migrations/20260808170000_add_whatsapp_consent_lifecycle/migration.sql`,
 `apps/api/src/whatsapp-consent/whatsapp-consent-store.test.ts`,
+`apps/web/app/(app)/kurum/duyurular/announcements-page.tsx`,
+`apps/web/e2e-next/data-table-mobile-contract-next.spec.ts`,
 `packages/notification-adapter/src/index.test.ts`, `infra/notification-gateway/src/index.test.mjs`,
 `docs/product-journeys-v1.md`, `docs/phase-6-production-readiness.md`.
 Etkilenen ADR: Yok
 Açık soru: Provider ve genel release topolojisi pilot öncesi/sonrası ayrı kararla seçilecektir.
-Son kontrol: 2026-08-08
+Son kontrol: 2026-08-12
 
 ### DEC-20260809-01 — Almanak 2.0 foundation sözleşmeleri
 
