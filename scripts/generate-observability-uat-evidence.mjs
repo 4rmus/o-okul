@@ -32,6 +32,8 @@ const alertWebhookTarget = process.env.OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET?.t
 const dashboardPanelsVerified = parseCommaList(process.env.OBSERVABILITY_UAT_DASHBOARD_PANELS_VERIFIED);
 const alertsVerified = parseCommaList(process.env.OBSERVABILITY_UAT_ALERTS_VERIFIED);
 const evidenceReferences = evidenceReferenceEnvNames.map((name) => process.env[name]?.trim());
+const releaseCandidate = process.env.OBSERVABILITY_UAT_RELEASE_CANDIDATE?.trim();
+const alertChainTarget = process.env.OBSERVABILITY_UAT_ALERT_CHAIN_TARGET?.trim();
 
 const failures = [];
 requireValue(outputPath, "OBSERVABILITY_UAT_OUTPUT veya --output", failures);
@@ -45,6 +47,8 @@ requireExactSet(alertsVerified, requiredAlerts, "OBSERVABILITY_UAT_ALERTS_VERIFI
 for (const [index, reference] of evidenceReferences.entries()) {
   requireEvidenceReference(reference, evidenceReferenceEnvNames[index], failures);
 }
+requireSha(releaseCandidate, "OBSERVABILITY_UAT_RELEASE_CANDIDATE", failures);
+requireEvidenceTarget(alertChainTarget, "OBSERVABILITY_UAT_ALERT_CHAIN_TARGET", failures);
 if (failures.length > 0) fail(failures);
 
 const outputFile = resolve(outputPath);
@@ -54,6 +58,7 @@ await requireEndpointOk(new URL("/-/ready", ensureTrailingSlash(prometheusUrl)),
 await requireEndpointOk(new URL("/api/health", ensureTrailingSlash(grafanaUrl)), "Grafana");
 await requireEndpointOk(new URL("/ready", ensureTrailingSlash(lokiUrl)), "Loki");
 const alertWebhook = await readAlertWebhookEvidence(alertWebhookTarget);
+const alertDelivery = await readAlertDeliveryEvidence(alertChainTarget, releaseCandidate);
 
 const report = {
   result: "PASS",
@@ -65,6 +70,7 @@ const report = {
   alertWebhookStatus: alertWebhook.statusCode,
   dashboardPanelsVerified: requiredDashboardPanels,
   alertsVerified: requiredAlerts,
+  alertDelivery,
   evidenceReferences,
   gaps: [],
 };
@@ -125,6 +131,63 @@ async function readAlertWebhookEvidence(target) {
   return payload;
 }
 
+async function readAlertDeliveryEvidence(target, expectedReleaseCandidate) {
+  const payload = await readJsonEvidence(target, "OBSERVABILITY_UAT_ALERT_CHAIN_TARGET");
+  const output = [];
+  requireExactKeys(
+    payload,
+    [
+      "releaseCandidate",
+      "alertName",
+      "receiver",
+      "firingStatus",
+      "firingAt",
+      "firingDeliveredAt",
+      "resolvedStatus",
+      "resolvedAt",
+      "resolvedDeliveredAt",
+      "failedNotificationDelta",
+      "evidenceReference",
+    ],
+    "alertDelivery",
+    output,
+  );
+  requireEqual(payload?.releaseCandidate, "alertDelivery.releaseCandidate", expectedReleaseCandidate, output);
+  requireEqual(payload?.alertName, "alertDelivery.alertName", "OOkulApiDown", output);
+  requireEqual(payload?.receiver, "alertDelivery.receiver", "authenticated-webhook", output);
+  requireEqual(payload?.firingStatus, "alertDelivery.firingStatus", "DELIVERED", output);
+  requireEqual(payload?.resolvedStatus, "alertDelivery.resolvedStatus", "DELIVERED", output);
+  requireEqual(payload?.failedNotificationDelta, "alertDelivery.failedNotificationDelta", 0, output);
+  for (const key of ["firingAt", "firingDeliveredAt", "resolvedAt", "resolvedDeliveredAt"]) {
+    requireDate(payload?.[key], `alertDelivery.${key}`, output);
+  }
+  requireEvidenceReference(payload?.evidenceReference, "alertDelivery.evidenceReference", output);
+  requireDeliveryChronology(payload ?? {}, output);
+  if (output.length > 0) fail(output);
+  return payload;
+}
+
+async function readJsonEvidence(target, label) {
+  const url = new URL(target);
+  let text;
+  if (url.protocol === "file:") {
+    const filePath = fileURLToPath(url);
+    validateReadableEvidenceFile(filePath, label);
+    text = readFileSync(filePath, "utf8");
+  } else if (url.protocol === "https:") {
+    const response = await fetch(url);
+    if (!response.ok) fail([`${label} okunamadı: HTTP ${response.status}.`]);
+    text = await response.text();
+  } else {
+    fail([`${label} file:// veya https:// URL olmalı.`]);
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    fail([`${label} geçerli JSON olmalı.`]);
+  }
+}
+
 function runCheck(filePath) {
   const result = spawnSync("pnpm", ["observability:uat:check"], {
     env: {
@@ -182,9 +245,45 @@ function requireStatus(value, label, output) {
   }
 }
 
+function requireSha(value, label, output) {
+  if (typeof value !== "string" || !/^[a-f0-9]{40}$/.test(value)) {
+    output.push(`${label} 40 karakterlik lowercase commit SHA olmalı.`);
+  }
+}
+
+function requireDate(value, label, output) {
+  if (typeof value !== "string" || Number.isNaN(Date.parse(value))) {
+    output.push(`${label} geçerli tarih olmalı.`);
+  }
+}
+
+function requireDeliveryChronology(value, output) {
+  const timestamps = [value.firingAt, value.firingDeliveredAt, value.resolvedAt, value.resolvedDeliveredAt].map(
+    (item) => Date.parse(item),
+  );
+  if (timestamps.some(Number.isNaN)) return;
+  if (!(timestamps[0] <= timestamps[1] && timestamps[1] <= timestamps[2] && timestamps[2] <= timestamps[3])) {
+    output.push("Alert firing, firing delivery, resolved ve resolved delivery kronolojisi sıralı olmalı.");
+  }
+  if (timestamps.some((timestamp) => timestamp > Date.now() + 5 * 60 * 1000)) {
+    output.push("Alert delivery zamanları gelecekte olamaz.");
+  }
+}
+
 function requireEmptyArray(value, label, output) {
   if (!Array.isArray(value) || value.length > 0) {
     output.push(`${label} boş liste olmalı.`);
+  }
+}
+
+function requireExactKeys(value, expected, label, output) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    output.push(`${label} nesnesi zorunlu.`);
+    return;
+  }
+  const keys = Object.keys(value);
+  if (keys.length !== expected.length || expected.some((key) => !Object.hasOwn(value, key))) {
+    output.push(`${label} tam ${expected.length} alan içermeli.`);
   }
 }
 

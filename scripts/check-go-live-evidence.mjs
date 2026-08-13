@@ -255,6 +255,7 @@ const summaryRequiredReportKeys = {
     "lokiLogPanelOk",
     "alertWebhookStatus",
     "alertsVerified",
+    "alertDelivery",
     "evidenceReferences",
   ],
   externalMonitoring: ["environment", "checkedAt", "provider", "monitoringNode", "monitorsVerified", "outageDrill", "evidenceReferences"],
@@ -1362,6 +1363,15 @@ function requireSummaryReports(summary, failures, goLiveReport) {
       failures,
       "productionEvidenceSummary.summary.reports.observabilityUat.evidenceReferences",
       "evidenceReferences",
+    );
+    requireMatchingString(
+      observabilityUat.alertDelivery,
+      failures,
+      "productionEvidenceSummary.summary.reports.observabilityUat.alertDelivery.releaseCandidate",
+      "releaseCandidate",
+      reports.githubCi,
+      "productionEvidenceSummary.summary.reports.githubCi.commitSha",
+      "commitSha",
     );
   }
 

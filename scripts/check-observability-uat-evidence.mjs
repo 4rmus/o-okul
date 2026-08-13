@@ -14,6 +14,7 @@ const observabilityUatTopLevelKeys = [
   "alertWebhookStatus",
   "dashboardPanelsVerified",
   "alertsVerified",
+  "alertDelivery",
   "evidenceReferences",
   "gaps",
 ];
@@ -188,10 +189,52 @@ function validateReport(report) {
 
   requireExactStringSet(report, failures, "dashboardPanelsVerified", requiredDashboardPanels, "panel");
   requireExactStringSet(report, failures, "alertsVerified", requiredAlerts, "alert");
+  requireAlertDelivery(report.alertDelivery, failures);
   requireEvidenceReferences(report, failures, "evidenceReferences");
   requireEmptyArray(report, failures, "gaps");
 
   return failures;
+}
+
+function requireAlertDelivery(value, failures) {
+  const label = "alertDelivery";
+  const keys = [
+    "releaseCandidate",
+    "alertName",
+    "receiver",
+    "firingStatus",
+    "firingAt",
+    "firingDeliveredAt",
+    "resolvedStatus",
+    "resolvedAt",
+    "resolvedDeliveredAt",
+    "failedNotificationDelta",
+    "evidenceReference",
+  ];
+  if (!requireObjectKeySet(value, keys, failures, label)) return;
+  if (typeof value.releaseCandidate !== "string" || !/^[a-f0-9]{40}$/.test(value.releaseCandidate)) {
+    failures.push(`${label}.releaseCandidate 40 karakterlik lowercase commit SHA olmalı.`);
+  }
+  if (value.alertName !== "OOkulApiDown") failures.push(`${label}.alertName OOkulApiDown olmalı.`);
+  if (value.receiver !== "authenticated-webhook") failures.push(`${label}.receiver authenticated-webhook olmalı.`);
+  if (value.firingStatus !== "DELIVERED") failures.push(`${label}.firingStatus DELIVERED olmalı.`);
+  if (value.resolvedStatus !== "DELIVERED") failures.push(`${label}.resolvedStatus DELIVERED olmalı.`);
+  if (value.failedNotificationDelta !== 0) failures.push(`${label}.failedNotificationDelta 0 olmalı.`);
+  const timestamps = ["firingAt", "firingDeliveredAt", "resolvedAt", "resolvedDeliveredAt"].map((key) => {
+    if (typeof value[key] !== "string" || Number.isNaN(Date.parse(value[key]))) {
+      failures.push(`${label}.${key} geçerli tarih olmalı.`);
+    }
+    return Date.parse(value[key]);
+  });
+  if (timestamps.every((timestamp) => !Number.isNaN(timestamp))) {
+    if (!(timestamps[0] <= timestamps[1] && timestamps[1] <= timestamps[2] && timestamps[2] <= timestamps[3])) {
+      failures.push(`${label} firing ve resolved teslim kronolojisi sıralı olmalı.`);
+    }
+    if (!allowExampleEvidence && timestamps.some((timestamp) => timestamp > Date.now() + 5 * 60 * 1000)) {
+      failures.push(`${label} zamanları gelecekte olamaz.`);
+    }
+  }
+  requireEvidenceReferenceValue(value.evidenceReference, failures, `${label}.evidenceReference`);
 }
 
 function requireEqual(report, failures, key, expected) {
@@ -315,6 +358,19 @@ function requireEvidenceReferences(report, failures, label) {
       failures.push(`${label} production kanıtı için örnek/placeholder/redacted değer içermemeli.`);
       return;
     }
+  }
+}
+
+function requireEvidenceReferenceValue(value, failures, label) {
+  if (typeof value !== "string" || value.trim() === "") {
+    failures.push(`${label} boş olmayan referans olmalı.`);
+    return;
+  }
+  if (!allowExampleEvidence && hasPlaceholderToken(value)) {
+    failures.push(`${label} production kanıtı için örnek/placeholder/redacted değer içermemeli.`);
+  }
+  if (/[?#]/.test(value)) {
+    failures.push(`${label} query veya fragment taşımamalı.`);
   }
 }
 

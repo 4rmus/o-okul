@@ -171,9 +171,12 @@ pnpm backup:restore:smoke
   migration/preflight/backfill tek-seferlik container'larını edge compose ve sabit proxy IP olmadan çalıştırır,
   release SHA'sına bağlı özel owner karar dosyası varsa yalnız deploy kullanıcısına ait `0600`,
   normal ve symlink olmayan dosya olarak doğrulayıp backfill container'ına salt-okunur bağlar,
-  `docker-compose.release.yml` override'ı ile imajları çeker, migration çalıştırır, Traefik'li stack'i
-  ayağa kaldırır ve `web`, `api`, `worker`, `queue-board` servislerinin çalışan image tag'ini deploy
-  `IMAGE_TAG` değeriyle birebir karşılaştırır. Otomatik deploy yalnız image activation, migration,
+  `docker-compose.release.yml` override'ı ile imajları çeker, migration çalıştırır, base/release/edge ve
+  `docker-compose.observability.yml` dosyalarını aynı `o-okul` projesinde ayağa kaldırır. Böylece Prometheus
+  ayrı bir ağ/proje üretmeden mevcut `backend_net` üzerindeki `api:3100` hedefine erişir. Workflow
+  `web`, `api`, `worker`, `queue-board` servislerinin çalışan image tag'ini deploy `IMAGE_TAG` değeriyle,
+  Alertmanager/Prometheus/Grafana/Loki/Alloy servislerini de sabit beklenen image'larıyla karşılaştırır.
+  Otomatik deploy yalnız image activation, migration,
   health ve first-gates sonucuyla yeşil/kırmızı olur; `prod:evidence:check --summary-file` ve
   `staging:release-artifacts:check` verify-only workflow'unda, seçilen deploy cutover/tag bağı doğrulandıktan
   sonra promotion/full evidence kapısı olarak koşar.
@@ -200,6 +203,16 @@ pnpm backup:restore:smoke
   altındaki `smoke/` klasöründe toplar. Secret env dosyası `TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE`
   benzeri raw smoke path'lerini ve `REPORT_GENERATION_SMOKE_EVIDENCE_FILE` değerini içeremez;
   bunlar summary hedefinden türeyen `artifacts/staging/smoke/*.json` dosyalarıdır.
+  Aynı secret içindeki yalnız `ALERT_WEBHOOK_URL` ve `ALERT_WEBHOOK_TOKEN` runner'da loglanmadan ayrılır,
+  SSH üzerinden release-scoped `root:root/0700` dizine `root:root/0600` dosyalar olarak taşınır ve transient
+  runner/archive dosyaları exit trap ile silinir. Root çalışan tek-seferlik init servisi secret'ları
+  Alertmanager'ın root olmayan kullanıcısının okuyabildiği private Docker volume'a kopyalar. Alertmanager config'i
+  `url_file` ve `authorization.credentials_file` kullanır; secret değerler Compose config/environment veya
+  evidence artifact'ine gömülmez. Eksik/boş/unsafe dosya, HTTPS dışı URL ya da 32 karakterden kısa bearer secret
+  deployment'ı fail-closed durdurur.
+  Eski release secret dizinleri yalnız Alertmanager `amtool` healthcheck'i ve tüm image kontrolleri geçtikten
+  sonra temizlenir. Temizlik exact private root altında sadece doğrudan, symlink olmayan, release adı
+  sözleşmesine uyan eski dizinleri siler; aktif secret dizinini korur ve tanınmayan dizinleri atlar.
   UI/UX redesign release candidate ve GitHub run referansları staging workflow'un `GITHUB_REPOSITORY`
   slug'ıyla aynı olmalıdır; bu hatta gerçek repo slug `4rmus/o-okul` olduğu için image prefix
   `ghcr.io/4rmus/o-okul` olmalıdır.
@@ -725,7 +738,7 @@ pnpm backup:restore:smoke
 - BullMQ operasyon paneli `queue-board` servisi olarak yalnız `backend_net` içinde çalışır; host portu
   `127.0.0.1:${QUEUE_BOARD_HOST_PORT:-3200}` ile loopback'e bağlıdır, Traefik router'ı yoktur ve
   erişim `QUEUE_BOARD_BASIC_AUTH_USER`/`QUEUE_BOARD_BASIC_AUTH_PASSWORD` ile korunur.
-- Prometheus, Grafana, Loki ve Alloy host portları `docker-compose.observability.yml` içinde loopback'e
+- Alertmanager, Prometheus, Grafana, Loki ve Alloy host portları `docker-compose.observability.yml` içinde loopback'e
   bağlıdır; public bind kullanılmaz. UAT erişimi SSH tunnel veya auth'lu reverse proxy arkasından yapılır.
 - `LOG_LEVEL=info`, `LOG_ENABLED=true`, `QUEUE_METRICS_ENABLED=true`,
   `API_RATE_LIMIT_ENABLED=true`, `API_RATE_LIMIT_STORE=redis`, `IDEMPOTENCY_STORE=postgres`,
@@ -737,17 +750,21 @@ pnpm backup:restore:smoke
   çalıştırılarak test edilir. Smoke komutu webhook'a istek atmadan önce `ALERT_WEBHOOK_URL`
   değerinin `https://` gerçek host olduğunu, userinfo/query/fragment taşımadığını ve lokal/test
   host olmadığını doğrular; aksi durumda bearer secret hedefe gönderilmeden kırılır.
+- Prometheus kuralları `alertmanager:9093` hedefine gider; Alertmanager mevcut authenticated HTTPS webhook'a
+  bearer header ile firing ve resolved bildirimlerini yollar. Doğrudan `pnpm alert:webhook:smoke` yalnız kanal
+  erişimini kanıtlar; gerçek UAT ayrıca kontrollü test alertinin Prometheus -> Alertmanager -> webhook teslim
+  kaydını PII ve secret içermeyen bir evidence reference ile göstermelidir.
 - Staging kanıt dosyası için `ALERT_WEBHOOK_SMOKE_EVIDENCE_FILE=artifacts/staging/alert-webhook.json`
   verilir; dosya webhook URL'ini credential olmadan, HTTP status'ü, `authorizationScheme="bearer"`,
   `checkedAt`, tek `commandsPassed=["pnpm alert:webhook:smoke"]` ve boş `gaps` listesiyle yazar.
 - Alert ve dashboard UAT raporu `pnpm observability:uat:check` ile doğrulanır. Staging artifact'i
-  `STAGING_ENVIRONMENT=staging OBSERVABILITY_UAT_OUTPUT=artifacts/staging/reports/observability-uat.json OBSERVABILITY_UAT_PROMETHEUS_URL=https://... OBSERVABILITY_UAT_GRAFANA_URL=https://... OBSERVABILITY_UAT_LOKI_URL=https://... OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET=file:///.../alert-webhook.json OBSERVABILITY_UAT_DASHBOARD_PANELS_VERIFIED="API up,Request rate,Average duration,Readiness failures,Docker logs" OBSERVABILITY_UAT_ALERTS_VERIFIED="OOkulApiDown,OOkulReadinessFailing,OOkulApiHighErrorRate,OOkulApiSlowRequests" OBSERVABILITY_UAT_PROMETHEUS_EVIDENCE_REFERENCE=... OBSERVABILITY_UAT_GRAFANA_EVIDENCE_REFERENCE=... OBSERVABILITY_UAT_LOKI_EVIDENCE_REFERENCE=... OBSERVABILITY_UAT_ALERT_WEBHOOK_EVIDENCE_REFERENCE=... pnpm observability:uat:generate`
+  `STAGING_ENVIRONMENT=staging OBSERVABILITY_UAT_OUTPUT=artifacts/staging/reports/observability-uat.json OBSERVABILITY_UAT_PROMETHEUS_URL=https://... OBSERVABILITY_UAT_GRAFANA_URL=https://... OBSERVABILITY_UAT_LOKI_URL=https://... OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET=file:///.../alert-webhook.json OBSERVABILITY_UAT_ALERT_CHAIN_TARGET=file:///.../alertmanager-firing-resolved-delivery.json OBSERVABILITY_UAT_DASHBOARD_PANELS_VERIFIED="API up,Request rate,Average duration,Readiness failures,Docker logs" OBSERVABILITY_UAT_ALERTS_VERIFIED="OOkulApiDown,OOkulReadinessFailing,OOkulApiHighErrorRate,OOkulApiSlowRequests" OBSERVABILITY_UAT_RELEASE_CANDIDATE=<exact-sha> OBSERVABILITY_UAT_PROMETHEUS_EVIDENCE_REFERENCE=... OBSERVABILITY_UAT_GRAFANA_EVIDENCE_REFERENCE=... OBSERVABILITY_UAT_LOKI_EVIDENCE_REFERENCE=... OBSERVABILITY_UAT_ALERT_WEBHOOK_EVIDENCE_REFERENCE=... pnpm observability:uat:generate`
   ile üretilir. Generator gerçek endpoint, alert smoke artifact'i ve dashboard/alert referansları
   olmadan JSON yazmaz.
 - Gerçek observability UAT raporunda Prometheus scrape, Grafana dashboard, Loki query ve alert delivery
   artifact referansları `evidenceReferences` altında yer almalıdır; `example`, `.test`, `redacted`,
   `localhost`, `__SET` veya placeholder değerler yalnız template kontrolünde
-  `OBSERVABILITY_UAT_ALLOW_EXAMPLE_EVIDENCE=1` ile geçebilir. Rapor top-level 11 alanı, beş
+  `OBSERVABILITY_UAT_ALLOW_EXAMPLE_EVIDENCE=1` ile geçebilir. Rapor top-level 12 alanı, beş
   dashboard paneli, dört alert kuralı ve boş `gaps` listesi template invalid/non-empty gaps negatifleriyle korunur.
   `OBSERVABILITY_UAT_TARGET`, `OBSERVABILITY_UAT_OUTPUT` ve `OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET`
   lokal temp path, `artifacts/local/**`, symlink file/parent veya userinfo/query/fragment taşıyan
