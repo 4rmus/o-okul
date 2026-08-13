@@ -736,6 +736,7 @@ jobs:
             exit 1
           fi
           printf '%s' "$STAGING_EVIDENCE_ENV_B64" | base64 -d > .staging-evidence.env
+          chmod 600 .staging-evidence.env
           test -s .staging-evidence.env
 
       - name: Rebind staging activation origin
@@ -756,6 +757,38 @@ jobs:
         shell: bash
         run: |
           GITHUB_CI_EVIDENCE_TARGET="file://$PWD/artifacts/staging/reports/github-ci.json" pnpm github-ci:check
+
+      - name: Configure SSH for WAL evidence
+        shell: bash
+        env:
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$STAGING_SSH_PRIVATE_KEY" > ~/.ssh/staging_wal_key
+          chmod 600 ~/.ssh/staging_wal_key
+          {
+            echo "Host *"
+            echo "  IdentityFile ~/.ssh/staging_wal_key"
+            echo "  StrictHostKeyChecking accept-new"
+          } > ~/.ssh/config
+          chmod 600 ~/.ssh/config
+
+      - name: Run WAL archive staging smoke
+        shell: bash
+        env:
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          STAGING_ENVIRONMENT: staging
+          WAL_ARCHIVE_SMOKE_EVIDENCE_FILE: artifacts/staging/smoke/wal-archive.json
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/staging/smoke
+          export DOCKER_HOST="ssh://$STAGING_SSH_USER@$STAGING_SSH_HOST"
+          export COMPOSE_PROJECT_NAME=o-okul
+          export COMPOSE_ENV_FILES="$PWD/.staging-evidence.env"
+          pnpm wal:archive:smoke -- --env-file .staging-evidence.env
 
       - name: Bind local UI/UX completion to verified source
         shell: bash
@@ -798,7 +831,7 @@ jobs:
       - name: Cleanup staging evidence env
         if: always()
         shell: bash
-        run: rm -f .staging-evidence.env
+        run: rm -f .staging-evidence.env ~/.ssh/staging_wal_key ~/.ssh/config
 
       - uses: actions/upload-artifact@v4
         if: ${{ success() }}

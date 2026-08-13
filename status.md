@@ -1,6 +1,6 @@
 # O-Okul Durum
 
-Son güncelleme: 2026-08-12
+Son güncelleme: 2026-08-13
 İnceleme snapshotı: Gate D runtime commit'i `bb2779bc1087a150b648407385e3cee1d0122692`;
 Gate D kapanışı ve Gate E WAL dilimi `agent/gate-d-onboarding-closure-20260810` izole worktree'sindedir.
 Kanıt düzeyi: Gate A, Gate B ve Gate C `LOCAL_STATIC`; Gate D `GITHUB_CI`, `STAGING_DEPLOY`,
@@ -8,6 +8,8 @@ Kanıt düzeyi: Gate A, Gate B ve Gate C `LOCAL_STATIC`; Gate D `GITHUB_CI`, `ST
 kanıtı taşır. Gate D `PASS`; Gate E WAL archive izin düzeltmesi `LOCAL_STATIC` ve
 `LOCAL_SYNTHETIC`, `GITHUB_CI`, `STAGING_DEPLOY` ve `STAGING_WAL_RUNTIME` kanıtı taşır.
 Gate E'nin geri kalanı açık; pilot ve production `EXTERNAL_NOT_RUN`.
+Exact-SHA staging `pnpm wal:archive:smoke` otomasyonu repo düzeyinde `LOCAL_STATIC` hazırlanmıştır;
+yeni workflow run'ı çalıştırılmadığı için PII-safe WAL artifact'i `EXTERNAL_NOT_RUN` kalır.
 Faz 6 repo davranışı `LOCAL_STATIC` / `LOCAL_SYNTHETIC` düzeyinde kapalıdır; WhatsApp dış kanıtı
 kullanıcı kararıyla sonraya bırakılmış ve capability kapalı tutulmuştur.
 

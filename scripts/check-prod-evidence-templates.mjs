@@ -6006,6 +6006,9 @@ function runStagingEvidenceEnvNegativeCheck() {
       "TRAEFIK_HTTPS_SMOKE_URL=https://staging.o-okul.com/health",
       "ALERT_WEBHOOK_URL=https://alerts.o-okul.com/staging",
       "ALERT_WEBHOOK_TOKEN=activation-alert-token-12345678901234567890",
+      "WAL_ARCHIVE_TARGET=s3://o-okul-wal/staging",
+      "S3_ACCESS_KEY_ID=activation-s3-access-key",
+      "S3_SECRET_ACCESS_KEY=activation-s3-secret-key",
       "",
     ].join("\n");
     writeFileSync(activationPath, activationContents);
@@ -6201,7 +6204,7 @@ function runStagingEvidenceEnvNegativeCheck() {
     const cleanupBlock = `      - name: Cleanup staging evidence env
         if: always()
         shell: bash
-        run: rm -f .staging-evidence.env`;
+        run: rm -f .staging-evidence.env ~/.ssh/staging_wal_key ~/.ssh/config`;
     const uploadBlock = `      - uses: actions/upload-artifact@v4
         if: \${{ success() }}
         with:

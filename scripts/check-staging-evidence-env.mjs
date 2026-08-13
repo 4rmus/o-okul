@@ -88,6 +88,9 @@ const activationRequiredKeys = [
   "TRAEFIK_HTTPS_SMOKE_URL",
   "ALERT_WEBHOOK_URL",
   "ALERT_WEBHOOK_TOKEN",
+  "WAL_ARCHIVE_TARGET",
+  "S3_ACCESS_KEY_ID",
+  "S3_SECRET_ACCESS_KEY",
 ];
 const requiredKeys = validationMode === "activation" ? activationRequiredKeys : fullRequiredKeys;
 const keysRequiredInSecret = requiredKeys.filter(
@@ -243,6 +246,13 @@ function checkWorkflowContract(output) {
     "path: artifacts/staging/reports",
     "path: artifacts/staging/reports/github-ci.json",
     "Check pre-deploy GitHub CI evidence",
+    "Configure SSH for WAL evidence",
+    "Run WAL archive staging smoke",
+    "WAL_ARCHIVE_SMOKE_EVIDENCE_FILE: artifacts/staging/smoke/wal-archive.json",
+    "export DOCKER_HOST=\"ssh://$STAGING_SSH_USER@$STAGING_SSH_HOST\"",
+    "export COMPOSE_PROJECT_NAME=o-okul",
+    "export COMPOSE_ENV_FILES=\"$PWD/.staging-evidence.env\"",
+    "pnpm wal:archive:smoke -- --env-file .staging-evidence.env",
     "Bind local UI/UX completion to verified source",
     "UI_UX_PROFESSIONALIZATION_SOURCE_SHA: ${{ needs.build-images.outputs.deploy-sha }}",
     "pnpm ui-ux-professionalization:completion:check -- --local-proof-only",
@@ -329,6 +339,9 @@ function checkWorkflowContract(output) {
     "Check staging evidence env",
     "pnpm staging:evidence-env:check -- --mode activation --env-file .staging-evidence.env",
     "Check pre-deploy GitHub CI evidence",
+    "Configure SSH for WAL evidence",
+    "Run WAL archive staging smoke",
+    "pnpm wal:archive:smoke -- --env-file .staging-evidence.env",
     "Bind local UI/UX completion to verified source",
     "pnpm ui-ux-professionalization:completion:check -- --local-proof-only",
     "Append release evidence metadata",
