@@ -78,6 +78,12 @@ test.describe("DataTable mobil sözleşmesi", () => {
       await expect(announcementSummary).not.toContainText("SMS");
     }
     await expect(announcementSummary.getByLabel("Duyuru özeti önerilen işlemler")).toBeVisible();
+    const whatsappLifecycle = page.getByRole("region", { exact: true, name: "WhatsApp izin yaşam döngüsü" });
+    await expect(whatsappLifecycle).toContainText("Bu sürümde kapalıdır");
+    await expect(whatsappLifecycle.getByRole("region", { name: "WhatsApp izin yaşam döngüsü özeti" })).toContainText("İzin kaydı");
+    await expect(whatsappLifecycle).toContainText("Kanal kapalıyken onay veya geri çekme kaydı yazılmaz");
+    await expect(whatsappLifecycle).toContainText("Aktivasyon kanıtı bekleniyor");
+    await expect(whatsappLifecycle.getByRole("button")).toHaveCount(0);
     const announcementTable = page.getByRole("table", { name: "Duyuru yönetimi" });
     await expect(announcementTable.getByRole("columnheader", { name: "Başlık" })).toBeVisible();
     await expect(announcementTable.getByRole("columnheader", { name: "Kapsam" })).toHaveCount(0);

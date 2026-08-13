@@ -6,8 +6,10 @@ Gate D kapanışı ve Gate E WAL dilimi `agent/gate-d-onboarding-closure-2026081
 Kanıt düzeyi: Gate A, Gate B ve Gate C `LOCAL_STATIC`; Gate D `GITHUB_CI`, `STAGING_DEPLOY`,
 `STAGING_DB_RUNTIME`, `STAGING_API_RUNTIME`, `STAGING_LIVE_UI` ve `STAGING_PROVIDER_DELIVERY`
 kanıtı taşır. Gate D `PASS`; Gate E WAL archive izin düzeltmesi `LOCAL_STATIC` ve
-`LOCAL_SYNTHETIC`, exact-SHA staging WAL kanıtı `EXTERNAL_NOT_RUN`. Pilot ve production
-`EXTERNAL_NOT_RUN`.
+`LOCAL_SYNTHETIC`, `GITHUB_CI`, `STAGING_DEPLOY` ve `STAGING_WAL_RUNTIME` kanıtı taşır.
+Gate E'nin geri kalanı açık; pilot ve production `EXTERNAL_NOT_RUN`.
+Faz 6 repo davranışı `LOCAL_STATIC` / `LOCAL_SYNTHETIC` düzeyinde kapalıdır; WhatsApp dış kanıtı
+kullanıcı kararıyla sonraya bırakılmış ve capability kapalı tutulmuştur.
 
 5 Ağustos 2026 ürün kararları: giriş kurum subdomaini + tenant-local kimliktir; guardian ürün
 kapsamından çıkarılacaktır; hukuk/KVKK incelemesi bu fazda repo uygulamasını ve pilot hazırlığını
@@ -142,6 +144,27 @@ ortam ve tarih içeren kalıcı evidence ile yükseltilir.
   exact GitHub CI `31542604334` ve staging deploy `31543523234` `PASS`. UAT-SYS-02 ve
   UAT-KURUM-01 gerçek activation e-postası, parola yenileme, tenant login ve kurulumla exact runtime
   üzerinde `PASS`; genel Gate D kapandı. Gate E yalnız WAL archive izin kök-neden dilimiyle başladı.
+
+## Faz 6 — Portallar, İletişim, Destek ve Finans Repo Kapanışı (2026-08-12)
+
+- **Öğretmen/öğrenci portalları:** Günlük özet ve öncelikli görevler ilk görünümde yer alır. Portal
+  route'ları persona-kapsamlı `/me/**` okumalarını kullanır; legacy/geniş dataset yollarının çağrılmadığı
+  mobil/tablet tarayıcı sözleşmeleriyle korunur.
+- **İletişim/destek:** Duyuru composer, alıcı/okunma raporu, provider teslim raporundan ayrı görünür;
+  destek master-detail ve materyal akışları mevcut API/test sözleşmeleriyle çalışır. SMS release
+  kapsamı dışında ve disabled-path'tedir.
+- **WhatsApp sınırı:** Duyuru ekranı mutasyonsuz default-off izin yaşam döngüsü görünümünü gösterir.
+  İzin yönetimi veya runtime kaydı açılmaz; `WHATSAPP_ENABLED=false` ve sıfır kayıt kuralı sürer.
+  Kullanıcı dış ortam/provider kanıtını sonraya bırakmıştır; alt kapsam
+  `CONTRACT_READY_EXTERNAL_NOT_RUN` kalır.
+- **Finans:** Özet, taksit/tahsilat master-detail, idempotent transaction ve finans/akademik yetki
+  ayrımı mevcut API ve tarayıcı negatif testleriyle korunur. Ödeme sağlayıcı/fatura/makbuz `V1_OUT`tur.
+- **Sonuç:** Faz 6 repo davranışı `LOCAL_STATIC` / `LOCAL_SYNTHETIC` düzeyinde kapanmıştır. Hedefli
+  API paketi 8 dosya/168 test, portal/iletişim/finans Playwright paketi 34 test, web typecheck,
+  product journey, production plan, account-management DB, SMS disabled-path, ops ve production
+  evidence template kontrolleri ve üç görev x beş örnek measurement baseline `PASS`tir. İzole portta
+  `NEXT_E2E_PORT=43162 pnpm run ci` tam repo zinciri de `PASS`tir. Bu kapanış staging/provider,
+  production veya Gate E kapanışı değildir; Gate F başlatılmamıştır.
 
 ## Production Teknik Aktivasyonu — 2026-08-05
 
