@@ -164,8 +164,8 @@ function validateMeasurementRuntimeConfig(source) {
 function isAncestorCommit(ancestor, current) {
   if (typeof ancestor !== "string" || !commitPattern.test(ancestor)) return false;
   try {
-    execFileSync("git", ["merge-base", "--is-ancestor", ancestor, current], { stdio: "ignore" });
-    return true;
+    const ancestors = execFileSync("git", ["rev-list", current], { encoding: "utf8" }).trim().split("\n");
+    return ancestors.includes(ancestor);
   } catch {
     return false;
   }
