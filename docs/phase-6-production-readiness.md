@@ -218,8 +218,11 @@ pnpm backup:restore:smoke
   evidence env içindeki aynı alanı bu doğrulanmış runtime politikasına bağlar; eski `optional` secret
   kopyası Phase B'yi yanlış negatifte bırakamaz. Aynı workflow `DOMAIN`, `CF_DNS_API_TOKEN_FILE`,
   `LEGACY_TENANT_LOGIN_CUTOFF_AT`, `NOTIFICATION_FROM_EMAIL` ve `NOTIFICATION_REPLY_TO_EMAIL`
-  değerlerini loglamadan staging host `.env` dosyasından private runner env'ine birleştirir; eksik,
-  boş veya yinelenmiş runtime anahtarında full aggregation başlamaz. Gate E e-posta-only doğrulamasında
+  değerlerine ek olarak DB/Redis bağlantı anahtarlarını loglamadan staging host `.env` dosyasından
+  `umask 077` ile oluşturulan private runner env'ine birleştirir; böylece eski GitHub evidence secret
+  snapshot'ı gerçek staging veri sayımlarını başka bir DSN'e yönlendiremez. Geçici runtime env ve decode
+  edilen evidence env exit trap ile silinir; eksik, boş veya yinelenmiş runtime anahtarında full aggregation
+  başlamaz. Gate E e-posta-only doğrulamasında
   eski secret kopyasındaki `NOTIFICATION_SMOKE_PUSH_TO` değeri açıkça boşaltılır ve push gönderimi yapılmaz.
   `pnpm staging:evidence-env:secret:set` varsayılan olarak aynı tam doğrulamayı çalıştırır;
   yalnız normal cutover secret senkronu için açıkça `--mode activation` verilebilir. Helper repo/temp/symlink
