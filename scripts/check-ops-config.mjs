@@ -1393,6 +1393,7 @@ const expectations = {
     "if: ${{ inputs.full_evidence }}",
     "trap 'rm -f -- .staging-evidence.env \"$runtime_env\"' EXIT",
     "sed -i 's/^ADMIN_MFA_MODE=.*/ADMIN_MFA_MODE=required/' .staging-evidence.env",
+    "grep -Fxq 'NOTIFICATION_SMOKE_PUSH_TO=' .staging-evidence.env",
     "staging-runtime-required.env",
     "LEGACY_TENANT_LOGIN_CUTOFF_AT",
     "chmod 600 .staging-evidence.env",

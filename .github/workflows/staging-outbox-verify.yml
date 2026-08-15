@@ -315,6 +315,12 @@ jobs:
           chmod 600 .staging-evidence.env
           sed -i 's/^ADMIN_MFA_MODE=.*/ADMIN_MFA_MODE=required/' .staging-evidence.env
           grep -Fxq 'ADMIN_MFA_MODE=required' .staging-evidence.env
+          if grep -q '^NOTIFICATION_SMOKE_PUSH_TO=' .staging-evidence.env; then
+            sed -i 's/^NOTIFICATION_SMOKE_PUSH_TO=.*/NOTIFICATION_SMOKE_PUSH_TO=/' .staging-evidence.env
+          else
+            printf '\nNOTIFICATION_SMOKE_PUSH_TO=\n' >> .staging-evidence.env
+          fi
+          grep -Fxq 'NOTIFICATION_SMOKE_PUSH_TO=' .staging-evidence.env
           ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" "bash -se" > "$runtime_env" <<'REMOTE'
           set -euo pipefail
           cd /root/o-okul

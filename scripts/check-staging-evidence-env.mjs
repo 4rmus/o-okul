@@ -506,6 +506,8 @@ function checkOutboxVerifyWorkflowContract(output) {
     "-v \"$OUTBOX_VERIFY_HELPERS_DIR:/app/docs/evidence-manifests:ro\"",
     "trap 'rm -f -- .staging-evidence.env \"$runtime_env\"' EXIT",
     "sed -i 's/^ADMIN_MFA_MODE=.*/ADMIN_MFA_MODE=required/' .staging-evidence.env",
+    "sed -i 's/^NOTIFICATION_SMOKE_PUSH_TO=.*/NOTIFICATION_SMOKE_PUSH_TO=/' .staging-evidence.env",
+    "grep -Fxq 'NOTIFICATION_SMOKE_PUSH_TO=' .staging-evidence.env",
     "staging-runtime-required.env",
     "DOMAIN CF_DNS_API_TOKEN_FILE LEGACY_TENANT_LOGIN_CUTOFF_AT NOTIFICATION_FROM_EMAIL NOTIFICATION_REPLY_TO_EMAIL",
     "chmod 600 .staging-evidence.env",
