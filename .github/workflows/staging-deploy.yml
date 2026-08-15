@@ -768,6 +768,17 @@ jobs:
             -f docker-compose.observability.yml \
             up -d --remove-orphans
 
+          # Compose does not recreate Prometheus when only its bind-mounted config changes.
+          # Reload it before runtime verification so the deployed config is authoritative.
+          docker compose \
+            --env-file .env \
+            --env-file "$release_env_file" \
+            -f docker-compose.yml \
+            -f docker-compose.release.yml \
+            -f "$EDGE_COMPOSE_FILE" \
+            -f docker-compose.observability.yml \
+            kill -s HUP prometheus
+
           mv "$release_env_file" .env.release
 
           docker compose \

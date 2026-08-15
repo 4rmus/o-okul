@@ -344,6 +344,7 @@ const expectations = {
     "chmod 600 \"$secret_path\"",
     "stat -c '%a:%u:%g' \"$secret_path\"",
     "-f docker-compose.observability.yml",
+    "kill -s HUP prometheus",
     "require_running_image alertmanager \"prom/alertmanager:v0.28.1\"",
     "prune_old_alertmanager_secret_dirs()",
     "find \"$private_root\" -mindepth 1 -maxdepth 1 -type d -print0",
