@@ -106,10 +106,42 @@ jobs:
           if (eventName === "pull_request" && pullRequestHeadSha?.toLowerCase() !== cutoverSourceSha.toLowerCase()) process.exit(1);
           NODE
 
+      - name: Stage verifier-only evidence helpers
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "$(git rev-parse HEAD)" = "$GITHUB_SHA" ]
+          verifier_root="$RUNNER_TEMP/gate-e-verifier"
+          install -d -m 700 "$verifier_root"
+          for relative in \
+            .github/workflows/staging-outbox-verify.yml \
+            scripts/check-staging-evidence-env.mjs \
+            scripts/generate-identity-migration-evidence.mjs \
+            scripts/generate-financial-retention-evidence.mjs; do
+            [ -f "$relative" ] && [ ! -L "$relative" ]
+            install -D -m 600 "$relative" "$verifier_root/$relative"
+          done
+
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.CUTOVER_SOURCE_SHA }}
           clean: false
+
+      - name: Overlay verifier-only evidence helpers
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "$(git rev-parse HEAD)" = "$CUTOVER_SOURCE_SHA" ]
+          verifier_root="$RUNNER_TEMP/gate-e-verifier"
+          for relative in \
+            .github/workflows/staging-outbox-verify.yml \
+            scripts/check-staging-evidence-env.mjs \
+            scripts/generate-identity-migration-evidence.mjs \
+            scripts/generate-financial-retention-evidence.mjs; do
+            source_file="$verifier_root/$relative"
+            [ -f "$source_file" ] && [ ! -L "$source_file" ]
+            install -m 644 "$source_file" "$relative"
+          done
 
       - name: Validate staging verify environment
         shell: bash

@@ -484,7 +484,12 @@ function checkOutboxVerifyWorkflowContract(output) {
     "Bind selected deployment run to cutover source",
     "github.event.pull_request.head.sha",
     "eventName === \"pull_request\"",
+    "Stage verifier-only evidence helpers",
+    'verifier_root="$RUNNER_TEMP/gate-e-verifier"',
+    "scripts/generate-identity-migration-evidence.mjs",
+    "scripts/generate-financial-retention-evidence.mjs",
     "clean: false",
+    "Overlay verifier-only evidence helpers",
     "Validate staging verify environment",
     "Preflight current images and private outbox source",
     "Phase B private source missing for release",
@@ -578,6 +583,15 @@ function checkOutboxVerifyWorkflowContract(output) {
     "Remove private outbox verification material",
     "rm -f -- \"$SOURCE_CLAIM_DIR/source-id\"",
     "Clean local verification secrets",
+  ]);
+  requireWorkflowOrder(output, workflow, "verifier helper ve exact target checkout sırası", [
+    "Bind selected deployment run to cutover source",
+    "Stage verifier-only evidence helpers",
+    "ref: ${{ env.CUTOVER_SOURCE_SHA }}",
+    "clean: false",
+    "Overlay verifier-only evidence helpers",
+    "[ \"$(git rev-parse HEAD)\" = \"$CUTOVER_SOURCE_SHA\" ]",
+    "Validate staging verify environment",
   ]);
   requireWorkflowOrder(output, workflow, "full evidence runtime env birleştirme sırası", [
     "Run configured production evidence aggregation",
