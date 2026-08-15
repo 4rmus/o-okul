@@ -2,7 +2,12 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { validateSmokeEvidenceOutputTarget, validateSmokeEvidencePayload, writeSmokeEvidence } from "./smoke-evidence.mjs";
+import {
+  validateReusedNotificationSmokePayload,
+  validateSmokeEvidenceOutputTarget,
+  validateSmokeEvidencePayload,
+  writeSmokeEvidence,
+} from "./smoke-evidence.mjs";
 
 const summary = JSON.parse(readFileSync("docs/evidence-templates/production-evidence-summary.example.json", "utf8"));
 const isemOpticalPipeline = JSON.parse(readFileSync("docs/evidence-templates/isem-optical-pipeline.example.json", "utf8"));
@@ -17,6 +22,54 @@ const smokeChecks = [
 ];
 
 const failures = [];
+const reuseEmail = "ops@o-okul.com";
+const reuseNotificationPayload = {
+  ...summary.smokeEvidence.notificationProvider,
+  recipients: [`${"*".repeat(reuseEmail.length - 4)}${reuseEmail.slice(-4)}`],
+};
+const reuseOptions = {
+  notBefore: "2026-06-15T09:00:00.000Z",
+  email: reuseEmail,
+  pushTo: "",
+};
+failures.push(...validateReusedNotificationSmokePayload(reuseNotificationPayload, reuseOptions));
+for (const [label, payload, options, expectedFailure] of [
+  [
+    "Reused notification stale cutover negative",
+    reuseNotificationPayload,
+    { ...reuseOptions, notBefore: "2026-06-15T09:11:00.000Z" },
+    "checkedAt cutover zamanından eski olamaz",
+  ],
+  [
+    "Reused notification provider negative",
+    { ...reuseNotificationPayload, provider: "noop" },
+    reuseOptions,
+    "provider http olmalı",
+  ],
+  [
+    "Reused notification channel negative",
+    { ...reuseNotificationPayload, channels: ["EMAIL", "PUSH"] },
+    reuseOptions,
+    "yalnız EMAIL kanalını içermeli",
+  ],
+  [
+    "Reused notification recipient negative",
+    { ...reuseNotificationPayload, recipients: ["************.net"] },
+    reuseOptions,
+    "configured email maskesiyle eşleşmeli",
+  ],
+  [
+    "Reused notification push target negative",
+    reuseNotificationPayload,
+    { ...reuseOptions, pushTo: "push-target" },
+    "NOTIFICATION_SMOKE_PUSH_TO boş olmalı",
+  ],
+]) {
+  const result = validateReusedNotificationSmokePayload(payload, options);
+  if (!result.some((message) => message.includes(expectedFailure))) {
+    failures.push(`${label}: beklenen hata yok (${expectedFailure}).`);
+  }
+}
 const isemProducerSource = readFileSync("scripts/smoke-isem-optical-pipeline-live.mjs", "utf8");
 for (const requiredSource of [
   "verifyQuarantinePath(baseUrl, token, opticalRows[0])",

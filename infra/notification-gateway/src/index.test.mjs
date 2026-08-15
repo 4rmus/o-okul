@@ -91,6 +91,62 @@ test("keeps onboarding evidence bearer protected and out of the request URL", as
   assert.equal(evidenceRequest(query).url.includes(recipient), false);
 });
 
+test("stores an allowlisted public tenant activation only through the staging evidence host", async () => {
+  const objectNames = [];
+  const recipient = "tenant.admin+gate-d+public@example.com";
+  const createdAfter = new Date(Date.now() - 1_000).toISOString();
+  const activationUrl = "https://uat-kurumu.o-okul.com/parola-sifirla#token=public-release-token";
+  const environment = env([], undefined, {
+    objectNames,
+    LIVE_ONBOARDING_EMAIL_EVIDENCE_ACTIVATION_HOST: "uat-kurumu.o-okul.com",
+  });
+
+  const sendResponse = await worker.fetch(request({
+    messages: [{
+      channel: "EMAIL",
+      to: recipient,
+      subject: "O-Okul hesap aktivasyonu",
+      body: `Hesabınızı 24 saat içinde etkinleştirmek için bağlantıyı açın: ${activationUrl}`,
+    }],
+  }), environment);
+  const lookupResponse = await worker.fetch(
+    evidenceRequest({ recipient, purpose: "PASSWORD_RESET", createdAfter }),
+    environment,
+  );
+
+  assert.equal((await sendResponse.json()).results[0].status, "sent");
+  assert.equal(lookupResponse.status, 200);
+  assert.deepEqual(await lookupResponse.json(), { activationUrl });
+  assert.equal(objectNames.some((name) => name.includes(recipient)), false);
+});
+
+test("keeps onboarding evidence disabled for activation hosts outside o-okul.com", async () => {
+  const objectNames = [];
+  const recipient = "tenant.admin+gate-d+outside@example.com";
+  const createdAfter = new Date(Date.now() - 1_000).toISOString();
+  const environment = env([], undefined, {
+    objectNames,
+    LIVE_ONBOARDING_EMAIL_EVIDENCE_ACTIVATION_HOST: "tenant.other.invalid",
+  });
+
+  const sendResponse = await worker.fetch(request({
+    messages: [{
+      channel: "EMAIL",
+      to: recipient,
+      subject: "O-Okul hesap aktivasyonu",
+      body: "Hesabınızı açın: https://tenant.other.invalid/parola-sifirla#token=must-not-store",
+    }],
+  }), environment);
+  const lookupResponse = await worker.fetch(
+    evidenceRequest({ recipient, purpose: "PASSWORD_RESET", createdAfter }),
+    environment,
+  );
+
+  assert.equal((await sendResponse.json()).results[0].status, "sent");
+  assert.equal(lookupResponse.status, 404);
+  assert.equal(objectNames.some((name) => name.startsWith("onboarding-evidence:")), false);
+});
+
 test("keeps onboarding evidence unavailable on production and non-allowlisted hosts", async () => {
   const objectNames = [];
   const query = { recipient: "tenant.admin+gate-d+run@example.com", purpose: "PASSWORD_RESET", createdAfter: new Date().toISOString() };

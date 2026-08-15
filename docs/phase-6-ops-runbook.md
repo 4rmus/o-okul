@@ -1526,7 +1526,10 @@ Production Worker'da `LIVE_ONBOARDING_EMAIL_EVIDENCE_ENABLED=false` ve
 hostunda `404` döner ve aktivasyon tokenı tutulmaz. Kanıt yüzeyi yalnız ayrı staging Worker'da
 `LIVE_ONBOARDING_EMAIL_EVIDENCE_ENABLED=true`, `LIVE_ONBOARDING_EMAIL_EVIDENCE_ENVIRONMENT=staging`,
 `LIVE_ONBOARDING_EMAIL_EVIDENCE_HOST=notify.staging.o-okul.com` ve exact
-`LIVE_ONBOARDING_EMAIL_EVIDENCE_ACTIVATION_HOST=<tenant>.staging.o-okul.com` ile açılabilir.
+`LIVE_ONBOARDING_EMAIL_EVIDENCE_ACTIVATION_HOST` ile açılabilir. İzole staging UI topolojisinde bu
+değer `<tenant>.staging.o-okul.com`, release UI mevcut public tenant hostunda çalışıyorsa exact
+`<tenant>.o-okul.com` olmalıdır. Her iki durumda evidence endpoint'i yalnız
+`notify.staging.o-okul.com` üzerinde açılır; production Worker bu kanıt yüzeyini sunmaz.
 Staging Worker yalnız repo dışında Wrangler secret olarak tanımlanan exact base alıcıyı ve onun
 `+run-id` alias'larını, Email Sending kabulünden sonra alıcının HMAC kimliği altında 15 dakika tutar. `POST /messages/latest` ayrı bearer
 ister; ham alıcı kalıcı anahtara, URL'ye veya yanıta yazılmaz ve normal parola sıfırlama/diğer alıcılar
@@ -1543,6 +1546,10 @@ Runtime `.env` içinde `NOTIFICATION_PROVIDER=http`,
 `NOTIFICATION_HTTP_ENDPOINT=https://notify.o-okul.com`,
 `NOTIFICATION_ALLOW_NOOP_IN_PRODUCTION=false`, doğru From/Reply-To ve repo dışı gerçek bearer
 secret kullanılır. `pnpm notification:smoke` gerçek alıcıyla PASS olmadan provider kanıtı kapanmaz.
+UAT için cutover sonrasında üretilmiş aynı smoke artifact'i final summary aggregation'a taşınırken
+`--reuse-notification-smoke` yalnız `NOTIFICATION_SMOKE_NOT_BEFORE=<cutoverAt>`, exact maskeli alıcı,
+`provider=http` ve tek `EMAIL` kanalı doğrulandıktan sonra ikinci gönderimi bastırır. Artifact eksik,
+eski, symlink veya farklı alıcı/kanal ise aggregation fail-closed olur.
 Gateway PUSH mesajını gönderilmiş gibi işaretlemez; ayrı push sağlayıcısı kurulana kadar
 `NOTIFICATION_PUSH_NOT_CONFIGURED` ile fail-closed kalır ve production
 `NOTIFICATION_SMOKE_PUSH_TO` boş tutulur.

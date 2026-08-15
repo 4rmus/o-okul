@@ -37,5 +37,36 @@
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
+  },
+  "env": {
+    "staging": {
+      "name": "o-okul-notification-gateway-staging",
+      "routes": [
+        {
+          "pattern": "notify.staging.o-okul.com",
+          "custom_domain": true
+        }
+      ],
+      "vars": {
+        "WHATSAPP_ENABLED": "false",
+        "LIVE_ONBOARDING_EMAIL_EVIDENCE_ENABLED": "true",
+        "LIVE_ONBOARDING_EMAIL_EVIDENCE_ENVIRONMENT": "staging",
+        "LIVE_ONBOARDING_EMAIL_EVIDENCE_HOST": "notify.staging.o-okul.com"
+      },
+      "send_email": [
+        {
+          "name": "EMAIL",
+          "allowed_sender_addresses": ["bildirim@o-okul.com"]
+        }
+      ],
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "IDEMPOTENCY",
+            "class_name": "NotificationIdempotency"
+          }
+        ]
+      }
+    }
   }
 }

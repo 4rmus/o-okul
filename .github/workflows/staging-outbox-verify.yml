@@ -302,6 +302,8 @@ jobs:
         shell: bash
         env:
           STAGING_EVIDENCE_ENV_B64: ${{ secrets.STAGING_EVIDENCE_ENV_B64 }}
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
         run: |
           set -euo pipefail
           trap 'rm -f -- .staging-evidence.env' EXIT
@@ -359,6 +361,11 @@ jobs:
           )"
           github_ci_run_url="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).workflow.runUrl' artifacts/staging/reports/github-ci.json)"
           mkdir -p artifacts/staging/smoke artifacts/staging/reports
+          notification_smoke_remote=/root/o-okul/artifacts/staging/smoke/notification-provider.json
+          ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+            "test -f '$notification_smoke_remote' && test ! -L '$notification_smoke_remote'"
+          scp -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new \
+            "$STAGING_SSH_USER@$STAGING_SSH_HOST:$notification_smoke_remote" artifacts/staging/smoke/notification-provider.json
           cp artifacts/secret-delivery-outbox.json artifacts/staging/smoke/secret-delivery-outbox.json
           cp artifacts/cutover/deployment-cutover.json artifacts/staging/reports/deployment-cutover.json
           {
@@ -374,6 +381,8 @@ jobs:
             echo "SECRET_DELIVERY_OUTBOX_EVIDENCE_TARGET=file://$PWD/artifacts/staging/smoke/secret-delivery-outbox.json"
             echo "SECRET_DELIVERY_OUTBOX_NOT_BEFORE=$CUTOVER_AT"
             echo "SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG=$CUTOVER_RELEASE_IMAGE_TAG"
+            echo "NOTIFICATION_PROVIDER_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/notification-provider.json"
+            echo "NOTIFICATION_SMOKE_NOT_BEFORE=$CUTOVER_AT"
           } >> .staging-evidence.env
           STAGING_ENVIRONMENT=production \
           IDENTITY_MIGRATION_OUTPUT=artifacts/staging/reports/identity-migration.json \
@@ -416,7 +425,7 @@ jobs:
           UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES=1 \
             pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env --environment staging
           PRODUCTION_EVIDENCE_ALLOW_STAGING_UI_UX=1 PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX=1 UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES=1 \
-            pnpm prod:evidence:check -- --env-file .staging-evidence.env --summary-file "artifacts/staging/release-summary-$CUTOVER_RELEASE_IMAGE_TAG.json"
+            pnpm prod:evidence:check -- --env-file .staging-evidence.env --summary-file "artifacts/staging/release-summary-$CUTOVER_RELEASE_IMAGE_TAG.json" --reuse-notification-smoke
 
       - name: Bind verified UI/UX completion to full evidence
         if: ${{ inputs.full_evidence }}

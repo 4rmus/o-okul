@@ -444,6 +444,11 @@ pnpm backup:restore:smoke
   `NOTIFICATION_SMOKE_EMAIL_TO` placeholder/test/example değer içeremez. Bu release e-posta-only
   olduğu için `NOTIFICATION_SMOKE_PUSH_TO` boş kalır; evidence ve go-live summary ham e-posta,
   telefon veya push endpoint'i taşıyamaz.
+- UAT hazırlığında aynı release için üretilen notification smoke artifact'i final aggregation'da
+  ikinci e-posta göndermeden `--reuse-notification-smoke` ile doğrulanabilir. Bu yol yalnız
+  `--summary-file` ile, `NOTIFICATION_SMOKE_NOT_BEFORE=<cutoverAt>` sınırından yeni, `provider=http`,
+  yalnız `EMAIL` kanallı ve configured alıcının maskesiyle exact eşleşen symlink olmayan artifact'i
+  kabul eder; normal `prod:evidence:check` notification smoke'u göndermeye devam eder.
 - `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN` ve `ALERT_WEBHOOK_URL` production'da gerçek HTTPS host
   olmalıdır; Sentry smoke için `SENTRY_SMOKE_CONFIRM=send` ve gerçek `SENTRY_SMOKE_MESSAGE`,
   alert webhook için `ALERT_WEBHOOK_TOKEN` en az 32 karakterlik gerçek bearer secret olmalıdır.
