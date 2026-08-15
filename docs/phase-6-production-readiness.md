@@ -889,6 +889,8 @@ pnpm backup:restore:smoke
   Staging artifact'i üretmek için `STAGING_ENVIRONMENT=staging FINANCIAL_RETENTION_OUTPUT=artifacts/staging/reports/financial-retention.json FINANCIAL_RETENTION_APPROVED_BY=... FINANCIAL_RETENTION_APPROVAL_REFERENCE=... FINANCIAL_RETENTION_LEGAL_BASIS=... FINANCIAL_RETENTION_PERIOD_YEARS=10 FINANCIAL_RETENTION_PURGE_EXCEPTION=true pnpm financial-retention:generate`
   kullanılır; generator gerçek onay alanları, pozitif `PaymentPlan`/`PaymentInstallment` sayımı ve
   payment e2e içindeki KVKK purge ödeme planı koruma testi olmadan PASS artifact yazmaz.
+  Tenant-geneli finansal sayım da `DIRECT_DATABASE_URL` üzerindeki salt-okunur transaction'a bağlı
+  `app.bypass_rls=true` ile alınır; transaction dışında bypass bırakılmaz ve veri değiştirilmez.
   Hedefli payment e2e testi canlı `DATABASE_URL`/`DIRECT_DATABASE_URL`/`NODE_ENV`/`ADMIN_MFA_MODE`/`PERSISTENCE_DRIVER`/`IDEMPOTENCY_STORE`
   ortamından izole edilir; finans kayıt sayımı yine gerçek staging/prod DB bağlantısından okunur.
   Rapor top-level 7 alanı, `policyDecision`/`financialRecords` blok shape'leri, iki

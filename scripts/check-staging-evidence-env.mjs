@@ -9,6 +9,7 @@ const prodEvidenceScriptPath = "scripts/check-prod-evidence.mjs";
 const workflowPath = process.env.STAGING_DEPLOY_WORKFLOW_PATH ?? ".github/workflows/staging-deploy.yml";
 const outboxVerifyWorkflowPath = ".github/workflows/staging-outbox-verify.yml";
 const identityMigrationGeneratorPath = "scripts/generate-identity-migration-evidence.mjs";
+const financialRetentionGeneratorPath = "scripts/generate-financial-retention-evidence.mjs";
 
 const args = process.argv.slice(2);
 const envFile = readArgValue("--env-file");
@@ -453,14 +454,16 @@ function checkAlertmanagerUrlParserDoesNotLeak(output, workflow) {
 
 function checkOutboxVerifyWorkflowContract(output) {
   const workflow = readFileSync(outboxVerifyWorkflowPath, "utf8");
-  const identityMigrationGenerator = readFileSync(identityMigrationGeneratorPath, "utf8");
-  for (const token of [
-    'client.query("BEGIN READ ONLY")',
-    'client.query("SELECT set_config(\'app.bypass_rls\', \'true\', true)")',
-    'client.query("ROLLBACK")',
-  ]) {
-    if (!identityMigrationGenerator.includes(token)) {
-      output.push(`${identityMigrationGeneratorPath} transaction-scoped RLS bypass token eksik: ${token}`);
+  for (const generatorPath of [identityMigrationGeneratorPath, financialRetentionGeneratorPath]) {
+    const generator = readFileSync(generatorPath, "utf8");
+    for (const token of [
+      'client.query("BEGIN READ ONLY")',
+      'client.query("SELECT set_config(\'app.bypass_rls\', \'true\', true)")',
+      'client.query("ROLLBACK")',
+    ]) {
+      if (!generator.includes(token)) {
+        output.push(`${generatorPath} transaction-scoped RLS bypass token eksik: ${token}`);
+      }
     }
   }
   for (const token of [

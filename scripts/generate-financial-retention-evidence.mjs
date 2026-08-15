@@ -35,7 +35,19 @@ runCommand(paymentTestCommand);
 
 const pool = new pg.Pool({ connectionString: directDatabaseUrl });
 try {
-  const financialRecords = await readFinancialRecordCounts(pool);
+  const client = await pool.connect();
+  let financialRecords;
+  try {
+    await client.query("BEGIN READ ONLY");
+    await client.query("SELECT set_config('app.bypass_rls', 'true', true)");
+    financialRecords = await readFinancialRecordCounts(client);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
   const report = {
     result: "PASS",
     environment,
