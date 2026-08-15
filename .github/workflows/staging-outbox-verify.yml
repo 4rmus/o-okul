@@ -375,13 +375,13 @@ jobs:
             echo "SECRET_DELIVERY_OUTBOX_NOT_BEFORE=$CUTOVER_AT"
             echo "SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG=$CUTOVER_RELEASE_IMAGE_TAG"
           } >> .staging-evidence.env
-          STAGING_ENVIRONMENT=staging \
+          STAGING_ENVIRONMENT=production \
           IDENTITY_MIGRATION_OUTPUT=artifacts/staging/reports/identity-migration.json \
           IDENTITY_MIGRATION_APPROVED_BY=release-owner \
           IDENTITY_MIGRATION_APPROVAL_REFERENCE=https://github.com/4rmus/o-okul/pull/74#issuecomment-5303640939 \
           IDENTITY_MIGRATION_ACTIVATION_MODE=invite \
             node --env-file=.staging-evidence.env scripts/generate-identity-migration-evidence.mjs
-          STAGING_ENVIRONMENT=staging \
+          STAGING_ENVIRONMENT=production \
           FINANCIAL_RETENTION_OUTPUT=artifacts/staging/reports/financial-retention.json \
           FINANCIAL_RETENTION_APPROVED_BY=release-owner \
           FINANCIAL_RETENTION_APPROVAL_REFERENCE=https://github.com/4rmus/o-okul/pull/74#issuecomment-5303640939 \
@@ -389,7 +389,7 @@ jobs:
           FINANCIAL_RETENTION_PERIOD_YEARS=10 \
           FINANCIAL_RETENTION_PURGE_EXCEPTION=true \
             node --env-file=.staging-evidence.env scripts/generate-financial-retention-evidence.mjs
-          STAGING_ENVIRONMENT=staging \
+          STAGING_ENVIRONMENT=production \
           SECURITY_AUDIT_OUTPUT=artifacts/staging/reports/security-audit.json \
           SECURITY_AUDIT_APP_URL=https://o-okul.com \
           SECURITY_AUDIT_API_URL=https://o-okul.com \

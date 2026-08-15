@@ -530,6 +530,9 @@ function checkOutboxVerifyWorkflowContract(output) {
   if (workflow.split("if: ${{ inputs.full_evidence }}").length - 1 !== 4) {
     output.push(`${outboxVerifyWorkflowPath} full evidence adımları tam olarak dört explicit koşulla ayrılmalı.`);
   }
+  if (workflow.split("STAGING_ENVIRONMENT=production").length - 1 !== 3) {
+    output.push(`${outboxVerifyWorkflowPath} production summary child generator'larını tam üç production environment bağıyla çalıştırmalı.`);
+  }
   requireWorkflowOrder(output, workflow, "outbox source claim ve cleanup sırası", [
     "Bind selected deployment run to cutover source",
     "clean: false",

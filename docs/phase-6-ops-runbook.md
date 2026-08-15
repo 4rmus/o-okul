@@ -542,7 +542,8 @@ geçtiğinde yayımlanır. PR label yolu yalnız Phase B kapsamındadır.
 Full aggregation, private env dosyasındaki UI/UX GitHub run referansını seçilen deploy'un indirilen
 `github-ci.json` artifact'indeki exact run URL'sine çalışma anında bağlar; secret içeriğini loglamaz ve
 env dosyasını `0600` modunda tutar. Aynı koşuda identity migration, financial retention ve security audit
-raporlarını staging DB tüneli ile üretir; bu üç hedefi runner'daki raw artifact'lere yeniden bağlar.
+raporlarını staging DB tüneli üzerinden production-summary child sözleşmesiyle üretir; runtime kaynağı
+staging olarak ayrı raporlanır ve bu üç hedef runner'daki raw artifact'lere yeniden bağlanır.
 Rollback tag'i yalnız exact release candidate ile eşleşen doğrulanabilir HTTPS rollback raporundan alınır.
 Böylece eski bir template run URL'si veya eski uzak rapor yeni cutover kanıtına karışamaz.
 - PR-4 rollback önceki web+API image çiftidir. Additive kolonlar ve legacy membership satırları yerinde
