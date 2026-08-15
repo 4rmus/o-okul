@@ -2,59 +2,77 @@ import { lstat, readFile } from "node:fs/promises";
 import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const target = process.env.DEPLOYMENT_ROLLBACK_TARGET;
-const allowExampleEvidence = process.env.DEPLOYMENT_ROLLBACK_ALLOW_EXAMPLE_EVIDENCE === "1";
+const allowExampleEvidence =
+  process.env.DEPLOYMENT_ROLLBACK_ALLOW_EXAMPLE_EVIDENCE === "1" ||
+  process.env.PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE === "1" ||
+  process.env.GO_LIVE_ALLOW_EXAMPLE_EVIDENCE === "1";
 const deploymentRollbackTopLevelKeys = [
+  "schemaVersion",
   "result",
   "environment",
   "checkedAt",
   "releaseCandidate",
-  "failedImageTag",
   "rollbackImageTag",
-  "drillStartedAt",
-  "drillCompletedAt",
-  "failureInjected",
-  "failureMode",
+  "drill",
   "migrationRollbackSafe",
   "commandsPassed",
   "servicesVerified",
+  "approval",
   "evidenceReferences",
   "gaps",
 ];
+const drillKeys = [
+  "mode",
+  "sourceImageTag",
+  "rollbackImageTag",
+  "restoredImageTag",
+  "startedAt",
+  "completedAt",
+  "failureInjected",
+  "failureMode",
+  "evidence",
+];
+const drillEvidenceKeys = ["commandLogReference", "source", "rollback", "restored"];
+const drillCheckpointKeys = ["sha", "runUrl", "uatArtifactUrl", "artifactName", "artifactDigest"];
+const approvalKeys = ["approvedBy", "approvalReference"];
 const serviceVerifiedItemKeys = ["service", "status", "imageTag", "evidenceReference"];
 const requiredServices = ["web", "api", "worker", "queue-board"];
-const requiredCommandsPassed = [
-  "docker compose pull web api worker queue-board",
-  "docker compose up -d --remove-orphans",
-  "pnpm compose:health:smoke",
-  "pnpm prod:evidence:check",
-];
-const dateOrderFailureMessages = {
-  "drillStartedAt:drillCompletedAt": "drillStartedAt drillCompletedAt sonrasında olamaz.",
-  "drillCompletedAt:checkedAt": "drillCompletedAt checkedAt sonrasında olamaz.",
+const requiredCommandsByMode = {
+  "failure-injection": [
+    "docker compose pull web api worker queue-board",
+    "docker compose up -d --remove-orphans",
+    "pnpm compose:health:smoke",
+    "pnpm prod:evidence:check",
+  ],
+  "cold-rollback-rehearsal": [
+    "docker compose up -d --remove-orphans",
+    "docker inspect four-service image parity",
+    "curl public health/readiness HTTP 200",
+    "node tenant-subdomain-live-uat.mjs",
+  ],
 };
 
-if (!target) {
-  fail(["DEPLOYMENT_ROLLBACK_TARGET boş bırakılamaz."]);
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await main();
 }
 
-let targetUrl;
-try {
-  targetUrl = new URL(target);
-} catch {
-  fail(["DEPLOYMENT_ROLLBACK_TARGET file:// veya https:// URL olmalı."]);
+async function main() {
+  const target = process.env.DEPLOYMENT_ROLLBACK_TARGET;
+  if (!target) fail(["DEPLOYMENT_ROLLBACK_TARGET boş bırakılamaz."]);
+
+  let targetUrl;
+  try {
+    targetUrl = new URL(target);
+  } catch {
+    fail(["DEPLOYMENT_ROLLBACK_TARGET file:// veya https:// URL olmalı."]);
+  }
+
+  requireAllowedEvidenceTargetUrl(targetUrl);
+  const report = await readJsonTarget(targetUrl);
+  const failures = validateDeploymentRollbackReport(report);
+  if (failures.length > 0) fail(failures);
+  console.log(`Deployment rollback kanıt kontrolü geçti: ${report.environment} ${report.rollbackImageTag}`);
 }
-
-requireAllowedEvidenceTargetUrl(targetUrl);
-
-const report = await readJsonTarget(targetUrl);
-const failures = validateReport(report);
-
-if (failures.length > 0) {
-  fail(failures);
-}
-
-console.log(`Deployment rollback kanıt kontrolü geçti: ${report.environment} ${report.rollbackImageTag}`);
 
 async function readJsonTarget(url) {
   if (url.protocol === "file:") {
@@ -173,44 +191,177 @@ function parseJson(value) {
   }
 }
 
-function validateReport(report) {
+export function validateDeploymentRollbackReport(report) {
   const failures = [];
 
   if (!requireObjectKeySet(report, deploymentRollbackTopLevelKeys, failures, "deploymentRollback")) {
     return failures;
   }
+  requireEqual(report, failures, "schemaVersion", 2);
   requireEqual(report, failures, "result", "PASS");
   requireOneOf(report, failures, "environment", ["staging", "production"]);
   requireDate(report, failures, "checkedAt");
   requireDateNotInFuture(report, failures, "checkedAt");
   requireString(report, failures, "releaseCandidate");
-  requireString(report, failures, "failedImageTag");
   requireString(report, failures, "rollbackImageTag");
   requireNonPlaceholderString(report, failures, "releaseCandidate");
-  requireNonPlaceholderString(report, failures, "failedImageTag");
   requireNonPlaceholderString(report, failures, "rollbackImageTag");
-  requireDate(report, failures, "drillStartedAt");
-  requireDateNotInFuture(report, failures, "drillStartedAt");
-  requireDate(report, failures, "drillCompletedAt");
-  requireDateNotInFuture(report, failures, "drillCompletedAt");
-  requireDateNotAfter(report, failures, "drillStartedAt", "drillCompletedAt");
-  requireDateNotAfter(report, failures, "drillCompletedAt", "checkedAt");
-  requireTrue(report, failures, "failureInjected");
-  requireString(report, failures, "failureMode");
+  requireReleaseImageCommitSha(report.releaseCandidate, failures, "releaseCandidate");
+  requireReleaseImageCommitSha(report.rollbackImageTag, failures, "rollbackImageTag");
+  requireDrill(report, failures);
   requireTrue(report, failures, "migrationRollbackSafe");
-  requireExactStringSet(report, failures, "commandsPassed", requiredCommandsPassed);
+  requireExactStringSet(report, failures, "commandsPassed", requiredCommandsByMode[report.drill?.mode] ?? []);
   requireServices(report, failures);
+  requireApproval(report, failures);
   requireEvidenceReferences(report, failures);
   requireEmptyArray(report, failures, "gaps");
 
-  if (report.failedImageTag && report.rollbackImageTag && report.failedImageTag === report.rollbackImageTag) {
-    failures.push("failedImageTag ve rollbackImageTag farklı olmalı.");
-  }
   if (report.releaseCandidate && report.rollbackImageTag && report.releaseCandidate === report.rollbackImageTag) {
     failures.push("releaseCandidate ve rollbackImageTag farklı olmalı.");
   }
 
   return failures;
+}
+
+function requireDrill(report, failures) {
+  const drill = report.drill;
+  if (!requireObjectKeySet(drill, drillKeys, failures, "drill")) return;
+
+  requireOneOf(drill, failures, "mode", Object.keys(requiredCommandsByMode));
+  for (const key of ["sourceImageTag", "rollbackImageTag", "restoredImageTag"]) {
+    requireObjectString(drill, failures, `drill.${key}`, key);
+    requireObjectNonPlaceholderString(drill, failures, `drill.${key}`, key);
+  }
+  for (const key of ["startedAt", "completedAt"]) {
+    requireObjectDate(drill, failures, `drill.${key}`, key);
+    requireObjectDateNotInFuture(drill, failures, `drill.${key}`, key);
+  }
+  requireObjectDateNotAfter(drill, failures, "startedAt", "completedAt", "drill.startedAt drill.completedAt sonrasında olamaz.");
+  requireDateValueNotAfter(drill.completedAt, report.checkedAt, failures, "drill.completedAt checkedAt sonrasında olamaz.");
+
+  if (drill.sourceImageTag === drill.rollbackImageTag) {
+    failures.push("drill.sourceImageTag ve drill.rollbackImageTag farklı olmalı.");
+  }
+
+  if (drill.mode === "failure-injection") {
+    if (drill.failureInjected !== true) failures.push("drill.failureInjected failure-injection modunda true olmalı.");
+    requireObjectString(drill, failures, "drill.failureMode", "failureMode");
+    requireObjectNonPlaceholderString(drill, failures, "drill.failureMode", "failureMode");
+    if (drill.restoredImageTag !== drill.rollbackImageTag) {
+      failures.push("drill.restoredImageTag failure-injection modunda drill.rollbackImageTag ile eşleşmeli.");
+    }
+  }
+
+  if (drill.mode === "cold-rollback-rehearsal") {
+    if (drill.failureInjected !== false) failures.push("drill.failureInjected cold-rollback-rehearsal modunda false olmalı.");
+    if (drill.failureMode !== null) failures.push("drill.failureMode cold-rollback-rehearsal modunda null olmalı.");
+    if (drill.restoredImageTag !== drill.sourceImageTag) {
+      failures.push("drill.restoredImageTag cold-rollback-rehearsal modunda drill.sourceImageTag ile eşleşmeli.");
+    }
+  }
+
+  requireDrillEvidence(report, drill, failures);
+}
+
+function requireDrillEvidence(report, drill, failures) {
+  const evidence = drill.evidence;
+  if (!requireObjectKeySet(evidence, drillEvidenceKeys, failures, "drill.evidence")) return;
+  requireObjectString(evidence, failures, "drill.evidence.commandLogReference", "commandLogReference");
+  requireObjectNonPlaceholderString(evidence, failures, "drill.evidence.commandLogReference", "commandLogReference");
+  requireObjectNoSecretBearingReference(evidence, failures, "drill.evidence.commandLogReference", "commandLogReference");
+
+  const checkpoints = {};
+  for (const key of ["source", "rollback", "restored"]) {
+    const checkpoint = evidence[key];
+    checkpoints[key] = checkpoint;
+    if (!requireObjectKeySet(checkpoint, drillCheckpointKeys, failures, `drill.evidence.${key}`)) continue;
+    requireCheckpointSha(checkpoint, failures, `drill.evidence.${key}.sha`);
+    requireGithubRunReference(report, checkpoint, failures, `drill.evidence.${key}.runUrl`);
+    requireGithubArtifactReference(report, checkpoint, failures, `drill.evidence.${key}.uatArtifactUrl`);
+    requireCheckpointArtifactMetadata(checkpoint, failures, key);
+    requireCheckpointImageSha(drill, checkpoint, failures, key);
+    requireMatchingRunId(checkpoint, failures, key);
+  }
+
+  if (drill.mode === "failure-injection" && !sameCheckpoint(checkpoints.restored, checkpoints.rollback)) {
+    failures.push("drill.evidence.restored failure-injection modunda drill.evidence.rollback ile eşleşmeli.");
+  }
+  if (drill.mode === "cold-rollback-rehearsal") {
+    if (checkpoints.restored?.sha !== checkpoints.source?.sha) {
+      failures.push("drill.evidence.restored.sha cold-rollback-rehearsal modunda drill.evidence.source.sha ile eşleşmeli.");
+    }
+    if (checkpoints.restored?.runUrl === checkpoints.source?.runUrl || checkpoints.restored?.uatArtifactUrl === checkpoints.source?.uatArtifactUrl) {
+      failures.push("drill.evidence.restored cold-rollback-rehearsal modunda ayrı restore run ve UAT artifact'i taşımalı.");
+    }
+  }
+}
+
+function requireCheckpointSha(checkpoint, failures, label) {
+  if (typeof checkpoint?.sha !== "string" || !/^[a-f0-9]{40}$/.test(checkpoint.sha)) {
+    failures.push(`${label} 40 karakter lowercase commit SHA olmalı.`);
+  }
+}
+
+function requireGithubRunReference(report, checkpoint, failures, label) {
+  if (typeof checkpoint?.runUrl !== "string" || !/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/actions\/runs\/[1-9][0-9]*$/.test(checkpoint.runUrl)) {
+    failures.push(`${label} canonical GitHub Actions run URL olmalı.`);
+    return;
+  }
+  requireObjectNoSecretBearingReference(checkpoint, failures, label, "runUrl");
+  requireGithubRepository(report, checkpoint.runUrl, failures, label);
+}
+
+function requireGithubArtifactReference(report, checkpoint, failures, label) {
+  if (typeof checkpoint?.uatArtifactUrl !== "string" || !/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/actions\/runs\/[1-9][0-9]*\/artifacts\/[1-9][0-9]*$/.test(checkpoint.uatArtifactUrl)) {
+    failures.push(`${label} canonical GitHub Actions artifact URL olmalı.`);
+    return;
+  }
+  requireObjectNoSecretBearingReference(checkpoint, failures, label, "uatArtifactUrl");
+  requireGithubRepository(report, checkpoint.uatArtifactUrl, failures, label);
+}
+
+function requireGithubRepository(report, value, failures, label) {
+  const expected = getImageRepository(report.releaseCandidate);
+  const actual = value?.match(/^https:\/\/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\//)?.[1];
+  if (!expected || actual !== expected) failures.push(`${label} releaseCandidate GitHub repository ile eşleşmeli.`);
+}
+
+function requireCheckpointArtifactMetadata(checkpoint, failures, key) {
+  if (checkpoint?.artifactName !== `staging-activation-evidence-${checkpoint?.sha ?? ""}`) {
+    failures.push(`drill.evidence.${key}.artifactName checkpoint SHA'ya bağlı staging activation artifact adı olmalı.`);
+  }
+  if (typeof checkpoint?.artifactDigest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(checkpoint.artifactDigest)) {
+    failures.push(`drill.evidence.${key}.artifactDigest sha256 digest olmalı.`);
+  }
+}
+
+function requireCheckpointImageSha(drill, checkpoint, failures, key) {
+  const imageSha = getImageVersion(drill?.[`${key}ImageTag`]);
+  if (imageSha && checkpoint?.sha && imageSha !== checkpoint.sha) {
+    failures.push(`drill.evidence.${key}.sha drill.${key}ImageTag versiyonuyla eşleşmeli.`);
+  }
+}
+
+function requireMatchingRunId(checkpoint, failures, key) {
+  const runId = checkpoint?.runUrl?.match(/\/actions\/runs\/([1-9][0-9]*)$/)?.[1];
+  const artifactRunId = checkpoint?.uatArtifactUrl?.match(/\/actions\/runs\/([1-9][0-9]*)\/artifacts\/[1-9][0-9]*$/)?.[1];
+  if (runId && artifactRunId && runId !== artifactRunId) {
+    failures.push(`drill.evidence.${key}.runUrl ve uatArtifactUrl aynı GitHub run'a ait olmalı.`);
+  }
+}
+
+function sameCheckpoint(first, second) {
+  return Boolean(first && second && drillCheckpointKeys.every((key) => first[key] === second[key]));
+}
+
+function requireApproval(report, failures) {
+  const approval = report.approval;
+  if (!requireObjectKeySet(approval, approvalKeys, failures, "approval")) return;
+  requireObjectString(approval, failures, "approval.approvedBy", "approvedBy");
+  requireObjectNonPlaceholderString(approval, failures, "approval.approvedBy", "approvedBy");
+  requireObjectString(approval, failures, "approval.approvalReference", "approvalReference");
+  requireObjectNonPlaceholderString(approval, failures, "approval.approvalReference", "approvalReference");
+  requireObjectNoSecretBearingReference(approval, failures, "approval.approvalReference", "approvalReference");
 }
 
 function requireEqual(report, failures, key, expected) {
@@ -247,15 +398,24 @@ function requireDateNotInFuture(report, failures, key) {
   }
 }
 
-function requireDateNotAfter(report, failures, firstKey, secondKey) {
-  const first = Date.parse(report[firstKey]);
-  const second = Date.parse(report[secondKey]);
-  if (Number.isNaN(first) || Number.isNaN(second)) return;
-  if (first > second) {
-    failures.push(
-      dateOrderFailureMessages[`${firstKey}:${secondKey}`] ?? `${firstKey} ${secondKey} sonrasında olamaz.`,
-    );
-  }
+function requireObjectDate(report, failures, label, key) {
+  if (typeof report?.[key] !== "string" || Number.isNaN(Date.parse(report[key]))) failures.push(`${label} geçerli tarih olmalı.`);
+}
+
+function requireObjectDateNotInFuture(report, failures, label, key) {
+  if (allowExampleEvidence) return;
+  const value = Date.parse(report?.[key]);
+  if (Number.isFinite(value) && value > Date.now() + 5 * 60 * 1000) failures.push(`${label} gelecekte olamaz.`);
+}
+
+function requireObjectDateNotAfter(report, failures, firstKey, secondKey, message) {
+  requireDateValueNotAfter(report?.[firstKey], report?.[secondKey], failures, message);
+}
+
+function requireDateValueNotAfter(firstValue, secondValue, failures, message) {
+  const first = Date.parse(firstValue);
+  const second = Date.parse(secondValue);
+  if (Number.isFinite(first) && Number.isFinite(second) && first > second) failures.push(message);
 }
 
 function requireString(report, failures, key) {
@@ -373,12 +533,12 @@ function requireServices(report, failures) {
 }
 
 function requireServiceRollbackImageVersion(report, item, failures, service) {
-  const expectedVersion = getImageVersion(report.rollbackImageTag);
+  const expectedVersion = getImageVersion(report.drill?.rollbackImageTag);
   const actualVersion = getImageVersion(item.imageTag);
   if (!expectedVersion || !actualVersion) return;
 
   if (actualVersion !== expectedVersion) {
-    failures.push(`${service}.imageTag rollbackImageTag versiyonuyla eşleşmeli.`);
+    failures.push(`${service}.imageTag drill.rollbackImageTag versiyonuyla eşleşmeli.`);
   }
 }
 
@@ -398,12 +558,37 @@ function getImageVersion(value) {
   return normalized.slice(lastColon + 1);
 }
 
+function getImageRepository(value) {
+  if (typeof value !== "string") return undefined;
+  return value.trim().match(/^ghcr\.io\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/[A-Za-z0-9_.-]+(?::|@)/)?.[1];
+}
+
+function requireReleaseImageCommitSha(value, failures, label) {
+  if (allowExampleEvidence) return;
+  const version = getImageVersion(value);
+  if (!version || !/^[a-f0-9]{40}$/.test(version)) {
+    failures.push(`${label} 40 karakter lowercase commit SHA tag'i taşımalı.`);
+  }
+}
+
 function requireEvidenceReferences(report, failures) {
   const value = report.evidenceReferences;
-  if (!Array.isArray(value) || value.length === 0) {
-    failures.push("evidenceReferences boş olmayan liste olmalı.");
+  if (!Array.isArray(value)) {
+    failures.push("evidenceReferences listesi zorunlu.");
     return;
   }
+
+  const evidence = report.drill?.evidence;
+  const expected = new Set([
+    evidence?.commandLogReference,
+    evidence?.source?.runUrl,
+    evidence?.source?.uatArtifactUrl,
+    evidence?.rollback?.runUrl,
+    evidence?.rollback?.uatArtifactUrl,
+    evidence?.restored?.runUrl,
+    evidence?.restored?.uatArtifactUrl,
+  ].filter(Boolean));
+  requireExactStringSet(report, failures, "evidenceReferences", [...expected]);
 
   for (const item of value) {
     if (typeof item !== "string" || item.trim() === "") {
@@ -418,6 +603,18 @@ function requireEvidenceReferences(report, failures) {
       failures.push("evidenceReferences userinfo, query veya fragment tasimamali.");
       return;
     }
+  }
+
+  const checkpointReferences = [
+    evidence?.source?.runUrl,
+    evidence?.source?.uatArtifactUrl,
+    evidence?.rollback?.runUrl,
+    evidence?.rollback?.uatArtifactUrl,
+    evidence?.restored?.runUrl,
+    evidence?.restored?.uatArtifactUrl,
+  ];
+  if (evidence?.commandLogReference && checkpointReferences.includes(evidence.commandLogReference)) {
+    failures.push("drill.evidence.commandLogReference run veya UAT artifact referansından farklı olmalı.");
   }
 }
 

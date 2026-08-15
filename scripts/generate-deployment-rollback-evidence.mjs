@@ -3,12 +3,20 @@ import { existsSync, lstatSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, parse, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const requiredCommandsPassed = [
-  "docker compose pull web api worker queue-board",
-  "docker compose up -d --remove-orphans",
-  "pnpm compose:health:smoke",
-  "pnpm prod:evidence:check",
-];
+const requiredCommandsByMode = {
+  "failure-injection": [
+    "docker compose pull web api worker queue-board",
+    "docker compose up -d --remove-orphans",
+    "pnpm compose:health:smoke",
+    "pnpm prod:evidence:check",
+  ],
+  "cold-rollback-rehearsal": [
+    "docker compose up -d --remove-orphans",
+    "docker inspect four-service image parity",
+    "curl public health/readiness HTTP 200",
+    "node tenant-subdomain-live-uat.mjs",
+  ],
+};
 const serviceNames = ["web", "api", "worker", "queue-board"];
 
 const outputPath = readOption("--output") ?? process.env.DEPLOYMENT_ROLLBACK_OUTPUT;
@@ -17,6 +25,12 @@ const environment = readOption("--environment") ?? process.env.STAGING_ENVIRONME
 const releaseCandidate = process.env.DEPLOYMENT_ROLLBACK_RELEASE_CANDIDATE?.trim();
 const failedImageTag = process.env.DEPLOYMENT_ROLLBACK_FAILED_IMAGE_TAG?.trim();
 const rollbackImageTag = process.env.DEPLOYMENT_ROLLBACK_ROLLBACK_IMAGE_TAG?.trim();
+const drillMode = process.env.DEPLOYMENT_ROLLBACK_DRILL_MODE?.trim() ?? "failure-injection";
+const drillSourceImageTag = process.env.DEPLOYMENT_ROLLBACK_DRILL_SOURCE_IMAGE_TAG?.trim() ?? failedImageTag;
+const drillRollbackImageTag = process.env.DEPLOYMENT_ROLLBACK_DRILL_ROLLBACK_IMAGE_TAG?.trim() ?? rollbackImageTag;
+const drillRestoredImageTag =
+  process.env.DEPLOYMENT_ROLLBACK_DRILL_RESTORED_IMAGE_TAG?.trim() ??
+  (drillMode === "failure-injection" ? drillRollbackImageTag : undefined);
 const drillStartedAt = process.env.DEPLOYMENT_ROLLBACK_DRILL_STARTED_AT?.trim();
 const drillCompletedAt = process.env.DEPLOYMENT_ROLLBACK_DRILL_COMPLETED_AT?.trim();
 const failureInjected = process.env.DEPLOYMENT_ROLLBACK_FAILURE_INJECTED;
@@ -26,56 +40,128 @@ const approvedBy = process.env.DEPLOYMENT_ROLLBACK_APPROVED_BY?.trim();
 const approvalReference = process.env.DEPLOYMENT_ROLLBACK_APPROVAL_REFERENCE?.trim();
 const drillConfirmed = process.env.DEPLOYMENT_ROLLBACK_DRILL_CONFIRMED;
 const commandLogReference = process.env.DEPLOYMENT_ROLLBACK_COMMAND_LOG_REFERENCE?.trim();
-const brokenSummaryReference = process.env.DEPLOYMENT_ROLLBACK_BROKEN_SUMMARY_REFERENCE?.trim();
-const rollbackSummaryReference = process.env.DEPLOYMENT_ROLLBACK_ROLLBACK_SUMMARY_REFERENCE?.trim();
+const sourceRunUrl = process.env.DEPLOYMENT_ROLLBACK_SOURCE_RUN_URL?.trim();
+const sourceUatArtifactUrl = process.env.DEPLOYMENT_ROLLBACK_SOURCE_UAT_ARTIFACT_URL?.trim();
+const rollbackRunUrl = process.env.DEPLOYMENT_ROLLBACK_ROLLBACK_RUN_URL?.trim();
+const rollbackUatArtifactUrl = process.env.DEPLOYMENT_ROLLBACK_ROLLBACK_UAT_ARTIFACT_URL?.trim();
+const restoredRunUrl = process.env.DEPLOYMENT_ROLLBACK_RESTORED_RUN_URL?.trim();
+const restoredUatArtifactUrl = process.env.DEPLOYMENT_ROLLBACK_RESTORED_UAT_ARTIFACT_URL?.trim();
 const checkedAt = new Date().toISOString();
 
 const failures = [];
 requireValue(outputPath, "DEPLOYMENT_ROLLBACK_OUTPUT veya --output", failures);
 requireOneOf(environment, "environment", ["staging", "production"], failures);
 requireEvidenceValue(releaseCandidate, "DEPLOYMENT_ROLLBACK_RELEASE_CANDIDATE", failures);
-requireEvidenceValue(failedImageTag, "DEPLOYMENT_ROLLBACK_FAILED_IMAGE_TAG", failures);
 requireEvidenceValue(rollbackImageTag, "DEPLOYMENT_ROLLBACK_ROLLBACK_IMAGE_TAG", failures);
-requireDifferent(failedImageTag, rollbackImageTag, "DEPLOYMENT_ROLLBACK_FAILED_IMAGE_TAG", "DEPLOYMENT_ROLLBACK_ROLLBACK_IMAGE_TAG", failures);
+requireImageCommitSha(releaseCandidate, "DEPLOYMENT_ROLLBACK_RELEASE_CANDIDATE", failures);
+requireImageCommitSha(rollbackImageTag, "DEPLOYMENT_ROLLBACK_ROLLBACK_IMAGE_TAG", failures);
 requireDifferent(releaseCandidate, rollbackImageTag, "DEPLOYMENT_ROLLBACK_RELEASE_CANDIDATE", "DEPLOYMENT_ROLLBACK_ROLLBACK_IMAGE_TAG", failures);
+requireOneOf(drillMode, "DEPLOYMENT_ROLLBACK_DRILL_MODE", Object.keys(requiredCommandsByMode), failures);
+requireEvidenceValue(drillSourceImageTag, "DEPLOYMENT_ROLLBACK_DRILL_SOURCE_IMAGE_TAG", failures);
+requireEvidenceValue(drillRollbackImageTag, "DEPLOYMENT_ROLLBACK_DRILL_ROLLBACK_IMAGE_TAG", failures);
+requireEvidenceValue(drillRestoredImageTag, "DEPLOYMENT_ROLLBACK_DRILL_RESTORED_IMAGE_TAG", failures);
+requireImageCommitSha(drillSourceImageTag, "DEPLOYMENT_ROLLBACK_DRILL_SOURCE_IMAGE_TAG", failures);
+requireImageCommitSha(drillRollbackImageTag, "DEPLOYMENT_ROLLBACK_DRILL_ROLLBACK_IMAGE_TAG", failures);
+requireImageCommitSha(drillRestoredImageTag, "DEPLOYMENT_ROLLBACK_DRILL_RESTORED_IMAGE_TAG", failures);
+requireDifferent(drillSourceImageTag, drillRollbackImageTag, "DEPLOYMENT_ROLLBACK_DRILL_SOURCE_IMAGE_TAG", "DEPLOYMENT_ROLLBACK_DRILL_ROLLBACK_IMAGE_TAG", failures);
+const expectedRepository = getImageRepository(releaseCandidate);
+requireImageRepository(expectedRepository, "DEPLOYMENT_ROLLBACK_RELEASE_CANDIDATE", failures);
+for (const [value, label] of [
+  [rollbackImageTag, "DEPLOYMENT_ROLLBACK_ROLLBACK_IMAGE_TAG"],
+  [drillSourceImageTag, "DEPLOYMENT_ROLLBACK_DRILL_SOURCE_IMAGE_TAG"],
+  [drillRollbackImageTag, "DEPLOYMENT_ROLLBACK_DRILL_ROLLBACK_IMAGE_TAG"],
+  [drillRestoredImageTag, "DEPLOYMENT_ROLLBACK_DRILL_RESTORED_IMAGE_TAG"],
+]) {
+  requireMatchingImageRepository(value, expectedRepository, label, failures);
+}
 requireDate(drillStartedAt, "DEPLOYMENT_ROLLBACK_DRILL_STARTED_AT", failures);
 requireDate(drillCompletedAt, "DEPLOYMENT_ROLLBACK_DRILL_COMPLETED_AT", failures);
 requireDateNotInFuture(drillStartedAt, "DEPLOYMENT_ROLLBACK_DRILL_STARTED_AT", failures);
 requireDateNotInFuture(drillCompletedAt, "DEPLOYMENT_ROLLBACK_DRILL_COMPLETED_AT", failures);
 requireDateNotAfter(drillStartedAt, drillCompletedAt, "DEPLOYMENT_ROLLBACK_DRILL_STARTED_AT", "DEPLOYMENT_ROLLBACK_DRILL_COMPLETED_AT", failures);
 requireDateNotAfter(drillCompletedAt, checkedAt, "DEPLOYMENT_ROLLBACK_DRILL_COMPLETED_AT", "checkedAt", failures);
-requireTrue(failureInjected, "DEPLOYMENT_ROLLBACK_FAILURE_INJECTED", failures);
-requireEvidenceValue(failureMode, "DEPLOYMENT_ROLLBACK_FAILURE_MODE", failures);
+if (drillMode === "failure-injection") {
+  requireTrue(failureInjected, "DEPLOYMENT_ROLLBACK_FAILURE_INJECTED", failures);
+  requireEvidenceValue(failureMode, "DEPLOYMENT_ROLLBACK_FAILURE_MODE", failures);
+  requireEqual(drillRestoredImageTag, drillRollbackImageTag, "DEPLOYMENT_ROLLBACK_DRILL_RESTORED_IMAGE_TAG", "DEPLOYMENT_ROLLBACK_DRILL_ROLLBACK_IMAGE_TAG", failures);
+}
+if (drillMode === "cold-rollback-rehearsal") {
+  requireFalse(failureInjected, "DEPLOYMENT_ROLLBACK_FAILURE_INJECTED", failures);
+  requireEmpty(failureMode, "DEPLOYMENT_ROLLBACK_FAILURE_MODE", failures);
+  requireEqual(drillRestoredImageTag, drillSourceImageTag, "DEPLOYMENT_ROLLBACK_DRILL_RESTORED_IMAGE_TAG", "DEPLOYMENT_ROLLBACK_DRILL_SOURCE_IMAGE_TAG", failures);
+}
 requireTrue(migrationRollbackSafe, "DEPLOYMENT_ROLLBACK_MIGRATION_ROLLBACK_SAFE", failures);
 requireTrue(drillConfirmed, "DEPLOYMENT_ROLLBACK_DRILL_CONFIRMED", failures);
 requireEvidenceValue(approvedBy, "DEPLOYMENT_ROLLBACK_APPROVED_BY", failures);
 requireEvidenceValue(approvalReference, "DEPLOYMENT_ROLLBACK_APPROVAL_REFERENCE", failures);
 requireEvidenceReference(commandLogReference, "DEPLOYMENT_ROLLBACK_COMMAND_LOG_REFERENCE", failures);
-requireEvidenceReference(brokenSummaryReference, "DEPLOYMENT_ROLLBACK_BROKEN_SUMMARY_REFERENCE", failures);
-requireEvidenceReference(rollbackSummaryReference, "DEPLOYMENT_ROLLBACK_ROLLBACK_SUMMARY_REFERENCE", failures);
+requireGithubRunUrl(sourceRunUrl, "DEPLOYMENT_ROLLBACK_SOURCE_RUN_URL", failures);
+requireGithubArtifactUrl(sourceUatArtifactUrl, sourceRunUrl, "DEPLOYMENT_ROLLBACK_SOURCE_UAT_ARTIFACT_URL", failures);
+requireGithubRunUrl(rollbackRunUrl, "DEPLOYMENT_ROLLBACK_ROLLBACK_RUN_URL", failures);
+requireGithubArtifactUrl(rollbackUatArtifactUrl, rollbackRunUrl, "DEPLOYMENT_ROLLBACK_ROLLBACK_UAT_ARTIFACT_URL", failures);
+requireGithubRunUrl(restoredRunUrl, "DEPLOYMENT_ROLLBACK_RESTORED_RUN_URL", failures);
+requireGithubArtifactUrl(restoredUatArtifactUrl, restoredRunUrl, "DEPLOYMENT_ROLLBACK_RESTORED_UAT_ARTIFACT_URL", failures);
+if (drillMode === "failure-injection") {
+  requireEqual(restoredRunUrl, rollbackRunUrl, "DEPLOYMENT_ROLLBACK_RESTORED_RUN_URL", "DEPLOYMENT_ROLLBACK_ROLLBACK_RUN_URL", failures);
+  requireEqual(restoredUatArtifactUrl, rollbackUatArtifactUrl, "DEPLOYMENT_ROLLBACK_RESTORED_UAT_ARTIFACT_URL", "DEPLOYMENT_ROLLBACK_ROLLBACK_UAT_ARTIFACT_URL", failures);
+}
+if (drillMode === "cold-rollback-rehearsal") {
+  requireDifferent(restoredRunUrl, sourceRunUrl, "DEPLOYMENT_ROLLBACK_RESTORED_RUN_URL", "DEPLOYMENT_ROLLBACK_SOURCE_RUN_URL", failures);
+  requireDifferent(restoredUatArtifactUrl, sourceUatArtifactUrl, "DEPLOYMENT_ROLLBACK_RESTORED_UAT_ARTIFACT_URL", "DEPLOYMENT_ROLLBACK_SOURCE_UAT_ARTIFACT_URL", failures);
+}
 
 const servicesVerified = serviceNames.map((service) => readService(service, failures));
-requireServiceRollbackImageVersions(servicesVerified, rollbackImageTag, failures);
+requireServiceRollbackImageVersions(servicesVerified, drillRollbackImageTag, failures);
+for (const service of servicesVerified) requireMatchingImageRepository(service.imageTag, expectedRepository, `${service.service}.imageTag`, failures);
+let verifiedCheckpoints = {};
+if (failures.length === 0) {
+  verifiedCheckpoints = await verifyGithubCheckpoints(expectedRepository, {
+    source: { imageTag: drillSourceImageTag, runUrl: sourceRunUrl, uatArtifactUrl: sourceUatArtifactUrl },
+    rollback: { imageTag: drillRollbackImageTag, runUrl: rollbackRunUrl, uatArtifactUrl: rollbackUatArtifactUrl },
+    restored: { imageTag: drillRestoredImageTag, runUrl: restoredRunUrl, uatArtifactUrl: restoredUatArtifactUrl },
+  }, failures);
+}
 if (failures.length > 0) fail(failures);
 
 const outputFile = resolve(outputPath);
 validateOutputTarget(outputFile);
 
 const report = {
+  schemaVersion: 2,
   result: "PASS",
   environment,
   checkedAt,
   releaseCandidate,
-  failedImageTag,
   rollbackImageTag,
-  drillStartedAt,
-  drillCompletedAt,
-  failureInjected: true,
-  failureMode,
+  drill: {
+    mode: drillMode,
+    sourceImageTag: drillSourceImageTag,
+    rollbackImageTag: drillRollbackImageTag,
+    restoredImageTag: drillRestoredImageTag,
+    startedAt: drillStartedAt,
+    completedAt: drillCompletedAt,
+    failureInjected: drillMode === "failure-injection",
+    failureMode: drillMode === "failure-injection" ? failureMode : null,
+    evidence: {
+      commandLogReference,
+      source: checkpointEvidence(drillSourceImageTag, sourceRunUrl, sourceUatArtifactUrl, verifiedCheckpoints.source),
+      rollback: checkpointEvidence(drillRollbackImageTag, rollbackRunUrl, rollbackUatArtifactUrl, verifiedCheckpoints.rollback),
+      restored: checkpointEvidence(drillRestoredImageTag, restoredRunUrl, restoredUatArtifactUrl, verifiedCheckpoints.restored),
+    },
+  },
   migrationRollbackSafe: true,
-  commandsPassed: requiredCommandsPassed,
+  commandsPassed: requiredCommandsByMode[drillMode],
   servicesVerified,
-  evidenceReferences: [commandLogReference, brokenSummaryReference, rollbackSummaryReference],
+  approval: { approvedBy, approvalReference },
+  evidenceReferences: [...new Set([
+    commandLogReference,
+    sourceRunUrl,
+    sourceUatArtifactUrl,
+    rollbackRunUrl,
+    rollbackUatArtifactUrl,
+    restoredRunUrl,
+    restoredUatArtifactUrl,
+  ])],
   gaps: [],
 };
 
@@ -85,6 +171,16 @@ writeFileSync(outputFile, `${JSON.stringify(report, null, 2)}\n`, "utf8");
 validateOutputTarget(outputFile);
 runCheck(outputFile);
 console.log(`Deployment rollback kanıtı yazıldı: ${outputFile}`);
+
+function checkpointEvidence(imageTag, runUrl, uatArtifactUrl, metadata) {
+  return {
+    sha: getImageVersion(imageTag),
+    runUrl,
+    uatArtifactUrl,
+    artifactName: metadata.artifactName,
+    artifactDigest: metadata.artifactDigest,
+  };
+}
 
 function readService(service, output) {
   const prefix = `DEPLOYMENT_ROLLBACK_${service.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
@@ -142,6 +238,18 @@ function requireTrue(value, label, output) {
   }
 }
 
+function requireFalse(value, label, output) {
+  if (value !== "false") output.push(`${label} false olmalı.`);
+}
+
+function requireEmpty(value, label, output) {
+  if (typeof value === "string" && value.trim() !== "") output.push(`${label} cold-rollback-rehearsal modunda boş olmalı.`);
+}
+
+function requireEqual(first, second, firstLabel, secondLabel, output) {
+  if (first && second && first !== second) output.push(`${firstLabel} ${secondLabel} ile eşleşmeli.`);
+}
+
 function requireDate(value, label, output) {
   if (typeof value !== "string" || Number.isNaN(Date.parse(value))) {
     output.push(`${label} geçerli tarih olmalı.`);
@@ -183,8 +291,15 @@ function requireServiceRollbackImageVersions(services, expectedImageTag, output)
     const actualVersion = getImageVersion(item.imageTag);
     if (!actualVersion) continue;
     if (actualVersion !== expectedVersion) {
-      output.push(`${item.service}.imageTag DEPLOYMENT_ROLLBACK_ROLLBACK_IMAGE_TAG versiyonuyla eşleşmeli.`);
+      output.push(`${item.service}.imageTag DEPLOYMENT_ROLLBACK_DRILL_ROLLBACK_IMAGE_TAG versiyonuyla eşleşmeli.`);
     }
+  }
+}
+
+function requireImageCommitSha(value, label, output) {
+  const version = getImageVersion(value);
+  if (!version || !/^[a-f0-9]{40}$/.test(version)) {
+    output.push(`${label} 40 karakter lowercase commit SHA tag'i taşımalı.`);
   }
 }
 
@@ -204,6 +319,81 @@ function getImageVersion(value) {
   return normalized.slice(lastColon + 1);
 }
 
+function getImageRepository(value) {
+  if (typeof value !== "string") return undefined;
+  return value.trim().match(/^ghcr\.io\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/[A-Za-z0-9_.-]+(?::|@)/)?.[1];
+}
+
+function requireImageRepository(value, label, output) {
+  if (!value) output.push(`${label} ghcr.io/<owner>/<repo>/<service>:<sha> biçiminde olmalı.`);
+}
+
+function requireMatchingImageRepository(value, expectedRepository, label, output) {
+  if (expectedRepository && getImageRepository(value) !== expectedRepository) {
+    output.push(`${label} DEPLOYMENT_ROLLBACK_RELEASE_CANDIDATE repository ile eşleşmeli.`);
+  }
+}
+
+async function verifyGithubCheckpoints(repository, checkpoints, output) {
+  const verified = {};
+  for (const [key, checkpoint] of Object.entries(checkpoints)) {
+    verified[key] = await verifyGithubCheckpoint(repository, key, checkpoint, output);
+  }
+  return verified;
+}
+
+async function verifyGithubCheckpoint(repository, key, checkpoint, output) {
+  const runMatch = checkpoint.runUrl.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/actions\/runs\/([1-9][0-9]*)$/);
+  const artifactMatch = checkpoint.uatArtifactUrl.match(
+    /^https:\/\/github\.com\/([^/]+\/[^/]+)\/actions\/runs\/([1-9][0-9]*)\/artifacts\/([1-9][0-9]*)$/,
+  );
+  if (!runMatch || !artifactMatch || runMatch[1] !== repository || artifactMatch[1] !== repository) {
+    output.push(`DEPLOYMENT_ROLLBACK ${key} GitHub run/artifact repository release image ile eşleşmeli.`);
+    return {};
+  }
+
+  const sha = getImageVersion(checkpoint.imageTag);
+  const runId = runMatch[2];
+  const artifactId = artifactMatch[3];
+  try {
+    const run = await fetchGithubJson(`https://api.github.com/repos/${repository}/actions/runs/${runId}`);
+    if (run.repository?.full_name !== repository || String(run.id) !== runId || run.head_sha !== sha || run.conclusion !== "success") {
+      output.push(`DEPLOYMENT_ROLLBACK ${key} GitHub run repository/head SHA/success bağı geçersiz.`);
+    }
+
+    const artifact = await fetchGithubJson(`https://api.github.com/repos/${repository}/actions/artifacts/${artifactId}`);
+    const expectedName = `staging-activation-evidence-${sha}`;
+    if (
+      String(artifact.id) !== artifactId ||
+      artifact.expired !== false ||
+      artifact.name !== expectedName ||
+      artifact.workflow_run?.id !== Number(runId) ||
+      artifact.workflow_run?.head_sha !== sha ||
+      typeof artifact.digest !== "string" ||
+      !/^sha256:[a-f0-9]{64}$/.test(artifact.digest)
+    ) {
+      output.push(`DEPLOYMENT_ROLLBACK ${key} UAT artifact run/head SHA/name/digest bağı geçersiz.`);
+    }
+    return { artifactName: artifact.name, artifactDigest: artifact.digest };
+  } catch (error) {
+    output.push(`DEPLOYMENT_ROLLBACK ${key} GitHub kanıtı doğrulanamadı: ${error instanceof Error ? error.message : "unknown error"}`);
+    return {};
+  }
+}
+
+async function fetchGithubJson(url) {
+  const token = process.env.GITHUB_TOKEN?.trim();
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "o-okul-deployment-rollback-evidence/1.0",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (!response.ok) throw new Error(`GitHub API HTTP ${response.status}`);
+  return response.json();
+}
+
 function requireEvidenceValue(value, label, output) {
   if (typeof value !== "string" || value.trim() === "") {
     output.push(`${label} boş bırakılamaz.`);
@@ -221,6 +411,28 @@ function requireEvidenceReference(value, label, output) {
 
   if (hasSecretBearingReference(value)) {
     output.push(`${label} userinfo, query veya fragment taşımamalı.`);
+  }
+}
+
+function requireGithubRunUrl(value, label, output) {
+  requireEvidenceReference(value, label, output);
+  if (typeof value === "string" && !/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/actions\/runs\/[1-9][0-9]*$/.test(value)) {
+    output.push(`${label} canonical GitHub Actions run URL olmalı.`);
+  }
+}
+
+function requireGithubArtifactUrl(value, runUrl, label, output) {
+  requireEvidenceReference(value, label, output);
+  const match = typeof value === "string"
+    ? value.match(/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/actions\/runs\/([1-9][0-9]*)\/artifacts\/[1-9][0-9]*$/)
+    : undefined;
+  if (!match) {
+    output.push(`${label} canonical GitHub Actions artifact URL olmalı.`);
+    return;
+  }
+  const expectedRunId = typeof runUrl === "string" ? runUrl.match(/\/actions\/runs\/([1-9][0-9]*)$/)?.[1] : undefined;
+  if (expectedRunId && match[1] !== expectedRunId) {
+    output.push(`${label} ilgili run URL ile aynı GitHub run'a ait olmalı.`);
   }
 }
 

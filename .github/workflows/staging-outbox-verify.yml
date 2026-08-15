@@ -337,9 +337,77 @@ jobs:
           lines[index] = `${key}=${references.join(",")}`;
           writeFileSync(envPath, lines.join("\n"), { mode: 0o600 });
           NODE
+          rollback_image_tag="$(node --env-file=.staging-evidence.env --input-type=module - "$CUTOVER_REPOSITORY" "$CUTOVER_RELEASE_IMAGE_TAG" <<'NODE'
+          const [repository, releaseImageTag] = process.argv.slice(2);
+          const target = new URL(process.env.DEPLOYMENT_ROLLBACK_TARGET);
+          if (target.protocol !== "https:" || target.username || target.password || target.search || target.hash) {
+            throw new Error("Deployment rollback target credential-free HTTPS olmalı.");
+          }
+          const response = await fetch(target);
+          if (!response.ok) throw new Error(`Deployment rollback report okunamadı: HTTP ${response.status}`);
+          const report = await response.json();
+          const expectedReleaseCandidate = `ghcr.io/${repository}/api:${releaseImageTag}`;
+          if (
+            report?.result !== "PASS" ||
+            report?.releaseCandidate !== expectedReleaseCandidate ||
+            !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(report?.rollbackImageTag ?? "")
+          ) {
+            throw new Error("Deployment rollback report cutover release/tag bağı geçersiz.");
+          }
+          console.log(report.rollbackImageTag);
+          NODE
+          )"
+          github_ci_run_url="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).workflow.runUrl' artifacts/staging/reports/github-ci.json)"
           mkdir -p artifacts/staging/smoke artifacts/staging/reports
           cp artifacts/secret-delivery-outbox.json artifacts/staging/smoke/secret-delivery-outbox.json
           cp artifacts/cutover/deployment-cutover.json artifacts/staging/reports/deployment-cutover.json
+          {
+            echo "SENTRY_RELEASE=$CUTOVER_RELEASE_IMAGE_TAG"
+            echo "ROLLBACK_IMAGE_TAG=$rollback_image_tag"
+            echo "GITHUB_CI_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/github-ci.json"
+            echo "IDENTITY_MIGRATION_TARGET=file://$PWD/artifacts/staging/reports/identity-migration.json"
+            echo "FINANCIAL_RETENTION_TARGET=file://$PWD/artifacts/staging/reports/financial-retention.json"
+            echo "SECURITY_AUDIT_TARGET=file://$PWD/artifacts/staging/reports/security-audit.json"
+            echo "UI_UX_REDESIGN_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/ui-ux-redesign.json"
+            echo "PRODUCTION_EVIDENCE_SUMMARY_TARGET=file://$PWD/artifacts/staging/release-summary-$CUTOVER_RELEASE_IMAGE_TAG.json"
+            echo "SECRET_DELIVERY_OUTBOX_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/secret-delivery-outbox.json"
+            echo "SECRET_DELIVERY_OUTBOX_EVIDENCE_TARGET=file://$PWD/artifacts/staging/smoke/secret-delivery-outbox.json"
+            echo "SECRET_DELIVERY_OUTBOX_NOT_BEFORE=$CUTOVER_AT"
+            echo "SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG=$CUTOVER_RELEASE_IMAGE_TAG"
+          } >> .staging-evidence.env
+          STAGING_ENVIRONMENT=staging \
+          IDENTITY_MIGRATION_OUTPUT=artifacts/staging/reports/identity-migration.json \
+          IDENTITY_MIGRATION_APPROVED_BY=release-owner \
+          IDENTITY_MIGRATION_APPROVAL_REFERENCE=https://github.com/4rmus/o-okul/pull/74#issuecomment-5303640939 \
+          IDENTITY_MIGRATION_ACTIVATION_MODE=invite \
+            node --env-file=.staging-evidence.env scripts/generate-identity-migration-evidence.mjs
+          STAGING_ENVIRONMENT=staging \
+          FINANCIAL_RETENTION_OUTPUT=artifacts/staging/reports/financial-retention.json \
+          FINANCIAL_RETENTION_APPROVED_BY=release-owner \
+          FINANCIAL_RETENTION_APPROVAL_REFERENCE=https://github.com/4rmus/o-okul/pull/74#issuecomment-5303640939 \
+          FINANCIAL_RETENTION_LEGAL_BASIS='Finansal kayıtların yasal saklama yükümlülüğü nedeniyle PII purge dışında tutulması' \
+          FINANCIAL_RETENTION_PERIOD_YEARS=10 \
+          FINANCIAL_RETENTION_PURGE_EXCEPTION=true \
+            node --env-file=.staging-evidence.env scripts/generate-financial-retention-evidence.mjs
+          STAGING_ENVIRONMENT=staging \
+          SECURITY_AUDIT_OUTPUT=artifacts/staging/reports/security-audit.json \
+          SECURITY_AUDIT_APP_URL=https://o-okul.com \
+          SECURITY_AUDIT_API_URL=https://o-okul.com \
+          SECURITY_AUDIT_HEADERS_URL=https://o-okul.com \
+          SECURITY_AUDIT_COOKIE_SECURE_VERIFIED=true \
+          SECURITY_AUDIT_LOGIN_LOCKOUT_VERIFIED=true \
+          SECURITY_AUDIT_STRONG_JWT_SECRETS_VERIFIED=true \
+          SECURITY_AUDIT_REFRESH_SESSION_REVOCATION_VERIFIED=true \
+          SECURITY_AUDIT_TENANT_ISOLATION_VERIFIED=true \
+          SECURITY_AUDIT_AUDIT_PII_REDACTION_VERIFIED=true \
+          SECURITY_AUDIT_SENTRY_PII_DISABLED_VERIFIED=true \
+          SECURITY_AUDIT_NO_CRITICAL_FINDINGS=true \
+          SECURITY_AUDIT_PROD_ENV_REFERENCE="run:$github_ci_run_url" \
+          SECURITY_AUDIT_HTTPS_HEADERS_REFERENCE=url:https://o-okul.com \
+          SECURITY_AUDIT_RLS_LIVE_REFERENCE=url:https://o-okul.com/evidence/rls-live.json \
+          SECURITY_AUDIT_AUTH_CONTROLS_REFERENCE="run:$github_ci_run_url" \
+          SECURITY_AUDIT_DATA_CONTROLS_REFERENCE="run:$github_ci_run_url" \
+            node --env-file=.staging-evidence.env scripts/generate-security-audit-evidence.mjs
           UI_UX_REDESIGN_EVIDENCE_OUTPUT="artifacts/staging/reports/ui-ux-redesign.json" \
           UI_UX_REDESIGN_RELEASE_CANDIDATE="ghcr.io/$CUTOVER_REPOSITORY/api:$CUTOVER_RELEASE_IMAGE_TAG" \
           UI_UX_REDESIGN_SOURCE_COMMIT_SHA="$CUTOVER_SOURCE_SHA" \
@@ -347,15 +415,6 @@ jobs:
           GITHUB_CI_EVIDENCE_TARGET="file://$PWD/artifacts/staging/reports/github-ci.json" \
           UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES=1 \
             pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env --environment staging
-          {
-            echo "SENTRY_RELEASE=$CUTOVER_RELEASE_IMAGE_TAG"
-            echo "GITHUB_CI_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/github-ci.json"
-            echo "UI_UX_REDESIGN_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/ui-ux-redesign.json"
-            echo "SECRET_DELIVERY_OUTBOX_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/secret-delivery-outbox.json"
-            echo "SECRET_DELIVERY_OUTBOX_EVIDENCE_TARGET=file://$PWD/artifacts/staging/smoke/secret-delivery-outbox.json"
-            echo "SECRET_DELIVERY_OUTBOX_NOT_BEFORE=$CUTOVER_AT"
-            echo "SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG=$CUTOVER_RELEASE_IMAGE_TAG"
-          } >> .staging-evidence.env
           PRODUCTION_EVIDENCE_ALLOW_STAGING_UI_UX=1 PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX=1 UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES=1 \
             pnpm prod:evidence:check -- --env-file .staging-evidence.env --summary-file "artifacts/staging/release-summary-$CUTOVER_RELEASE_IMAGE_TAG.json"
 

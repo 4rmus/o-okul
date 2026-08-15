@@ -231,24 +231,30 @@ pnpm backup:restore:smoke
   `STAGING_ENVIRONMENT=staging ADMIN_MFA_OUTPUT=artifacts/staging/reports/admin-mfa.json DIRECT_DATABASE_URL=... ADMIN_MFA_MODE=required ADMIN_MFA_SECRET_ENCRYPTION_KEY=... ADMIN_MFA_RECOVERY_HASH_KEY=... ADMIN_MFA_CHALLENGE_SECRET=... ADMIN_MFA_RECOVERY_CODES_PER_ENROLLMENT=8 ADMIN_MFA_PASSWORD_ONLY_LOGIN_BLOCKED=true ADMIN_MFA_TOTP_LOGIN_SUCCEEDED=true ADMIN_MFA_INVALID_TOTP_REJECTED=true ADMIN_MFA_TOTP_REUSE_REJECTED=true ADMIN_MFA_RECOVERY_CODE_LOGIN_SUCCEEDED=true ADMIN_MFA_RECOVERY_CODE_REUSE_REJECTED=true ADMIN_MFA_SESSIONS_REVOKED_ON_ENABLE=true ADMIN_MFA_SESSIONS_REVOKED_ON_DISABLE=true ADMIN_MFA_PASSWORD_ONLY_EVIDENCE_REFERENCE=... ADMIN_MFA_TOTP_SUCCESS_EVIDENCE_REFERENCE=... ADMIN_MFA_INVALID_TOTP_EVIDENCE_REFERENCE=... ADMIN_MFA_TOTP_REUSE_EVIDENCE_REFERENCE=... ADMIN_MFA_RECOVERY_SUCCESS_EVIDENCE_REFERENCE=... ADMIN_MFA_RECOVERY_REUSE_EVIDENCE_REFERENCE=... ADMIN_MFA_SESSIONS_REVOKED_ENABLE_EVIDENCE_REFERENCE=... ADMIN_MFA_SESSIONS_REVOKED_DISABLE_EVIDENCE_REFERENCE=... pnpm admin-mfa:generate`
   kullanılır; generator gerçek secret, DB enrollment sayımı ve login/recovery/session kanıt
   referansları olmadan artifact yazmaz.
-- Bozuk imajdan geri dönüş tatbikatı `DEPLOYMENT_ROLLBACK_TARGET` ve
-  `pnpm deployment:rollback:check` ile ayrı kanıt raporu olarak doğrulanır; UAT içindeki
-  `rollbackImageTag` yalnız release adayı referansıdır. Gerçek deployment rollback
-  kanıtlarında `example`, `.test`, `localhost`, `__SET` veya placeholder provider/image/artifact
-  referansı kabul edilmez; target URL ve kanıt referansları userinfo, query token veya fragment
-  taşıyamaz; rollback raporunda `checkedAt`, `drillStartedAt` ve `drillCompletedAt`
-  gelecekte olamaz, `drillStartedAt <= drillCompletedAt <= checkedAt` sırası korunmalıdır.
-  `releaseCandidate` ile `rollbackImageTag` aynı tag olamaz. Rollback raporu top-level alan kümesi,
-  dört servislik `servicesVerified` seti, her servis image'inin `rollbackImageTag` versiyonuyla
-  eşleşmesi, dört komutluk `commandsPassed` seti ve boş `gaps` listesi
-  `prod:evidence:templates:check` içindeki fazla alan/servis/komut, servis image versiyon
-  uyumsuzluğu, ters kronoloji ve invalid/non-empty gaps negatifleriyle korunur.
-  Bu gevşetme yalnız template kontrolünde özel izin bayraklarıyla açılır.
-  Staging artifact'i üretmek için
-  `STAGING_ENVIRONMENT=staging DEPLOYMENT_ROLLBACK_OUTPUT=artifacts/staging/reports/deployment-rollback.json DEPLOYMENT_ROLLBACK_RELEASE_CANDIDATE=... DEPLOYMENT_ROLLBACK_FAILED_IMAGE_TAG=... DEPLOYMENT_ROLLBACK_ROLLBACK_IMAGE_TAG=... DEPLOYMENT_ROLLBACK_DRILL_STARTED_AT=... DEPLOYMENT_ROLLBACK_DRILL_COMPLETED_AT=... DEPLOYMENT_ROLLBACK_FAILURE_INJECTED=true DEPLOYMENT_ROLLBACK_FAILURE_MODE=... DEPLOYMENT_ROLLBACK_MIGRATION_ROLLBACK_SAFE=true DEPLOYMENT_ROLLBACK_DRILL_CONFIRMED=true DEPLOYMENT_ROLLBACK_APPROVED_BY=... DEPLOYMENT_ROLLBACK_APPROVAL_REFERENCE=... DEPLOYMENT_ROLLBACK_COMMAND_LOG_REFERENCE=... DEPLOYMENT_ROLLBACK_BROKEN_SUMMARY_REFERENCE=... DEPLOYMENT_ROLLBACK_ROLLBACK_SUMMARY_REFERENCE=... DEPLOYMENT_ROLLBACK_WEB_STATUS=healthy DEPLOYMENT_ROLLBACK_WEB_IMAGE_TAG=... DEPLOYMENT_ROLLBACK_WEB_EVIDENCE_REFERENCE=... DEPLOYMENT_ROLLBACK_API_STATUS=healthy DEPLOYMENT_ROLLBACK_API_IMAGE_TAG=... DEPLOYMENT_ROLLBACK_API_EVIDENCE_REFERENCE=... DEPLOYMENT_ROLLBACK_WORKER_STATUS=running DEPLOYMENT_ROLLBACK_WORKER_IMAGE_TAG=... DEPLOYMENT_ROLLBACK_WORKER_EVIDENCE_REFERENCE=... DEPLOYMENT_ROLLBACK_QUEUE_BOARD_STATUS=healthy DEPLOYMENT_ROLLBACK_QUEUE_BOARD_IMAGE_TAG=... DEPLOYMENT_ROLLBACK_QUEUE_BOARD_EVIDENCE_REFERENCE=... pnpm deployment:rollback:generate`
-  kullanılır. Generator gerçek drill onayı, command log, bozuk release summary, rollback summary
-  ve dört servis kanıt referansı olmadan artifact yazmaz; gerçek bozuk image tatbikatını çalıştırmadan
-  elle şekilli JSON yazmak Faz 10 kapanışı değildir.
+- Deployment rollback tatbikatı `DEPLOYMENT_ROLLBACK_TARGET` ve
+  `pnpm deployment:rollback:check` ile ayrı schema v2 raporu olarak doğrulanır; UAT içindeki
+  `rollbackImageTag` güncel release adayının fallback image'ıdır. `releaseCandidate`/`rollbackImageTag`
+  güncel exact-SHA zincirine, `drill.sourceImageTag`/`drill.rollbackImageTag`/`drill.restoredImageTag`
+  ise gerçekten çalıştırılan tatbikata aittir. `failure-injection` modu bozuk-image tatbikatında
+  `drill.failureInjected=true` ister. Daha önce tamamlanmış gerçek exact-SHA cold rollback + restore
+  kanıtı yeniden çalıştırılmayacaksa `cold-rollback-rehearsal` modu kullanılır; bu mod
+  `drill.failureInjected=false`, `drill.failureMode=null` ve `restoredImageTag=sourceImageTag`
+  olmadan geçmez. Source/rollback/restore için canonical GitHub run ve UAT artifact URL'leri
+  zorunlu olmalı; her checkpoint SHA'sı image tag'iyle, artifact URL run id'si de ilgili run URL'siyle
+  eşleşmeli. Generator GitHub API üzerinden repository, başarılı run head SHA'sı, artifact adı,
+  expiry ve SHA-256 digest metadata'sını doğrulamalı. Kullanıcı onayı `approval` bloğuna yazılmalı;
+  geçmiş tatbikat bozuk-image enjeksiyonu gibi
+  gösterilemez. `checkedAt` ve drill zamanları gelecekte olamaz,
+  `drill.startedAt <= drill.completedAt <= checkedAt` sırası korunur. Her servis image'ı
+  `drill.rollbackImageTag` ile eşleşir; moda özel dört `commandsPassed`, exact blok shape'leri ve
+  boş `gaps` listesi template pozitif/negatifleriyle korunur.
+- Staging artifact üretiminde ortak alanlara ek olarak
+  `DEPLOYMENT_ROLLBACK_DRILL_MODE`, `DEPLOYMENT_ROLLBACK_DRILL_SOURCE_IMAGE_TAG`,
+  `DEPLOYMENT_ROLLBACK_DRILL_ROLLBACK_IMAGE_TAG`, `DEPLOYMENT_ROLLBACK_DRILL_RESTORED_IMAGE_TAG`,
+  `DEPLOYMENT_ROLLBACK_SOURCE_RUN_URL`, `DEPLOYMENT_ROLLBACK_SOURCE_UAT_ARTIFACT_URL`,
+  `DEPLOYMENT_ROLLBACK_ROLLBACK_RUN_URL`, `DEPLOYMENT_ROLLBACK_ROLLBACK_UAT_ARTIFACT_URL`,
+  `DEPLOYMENT_ROLLBACK_RESTORED_RUN_URL` ve `DEPLOYMENT_ROLLBACK_RESTORED_UAT_ARTIFACT_URL`
+  verilir. Generator gerçek drill onayı, command log ve dört servis referansı olmadan artifact yazmaz.
 - GitHub Actions remote CI kanıtı `GITHUB_CI_EVIDENCE_TARGET` ve `pnpm github-ci:check` ile
   doğrulanır; staging deploy workflow'u bu raporu aynı commit'in başarılı CI run'ından
   `artifacts/staging/reports/github-ci.json` olarak üretir. Rapor `repository`, 40 karakter `commitSha`, `.github/workflows/ci.yml` workflow path'i,

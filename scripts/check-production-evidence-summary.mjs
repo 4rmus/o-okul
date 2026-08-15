@@ -3,6 +3,7 @@ import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { getTenantScopedTables } from "../packages/db/scripts/tenant-models.mjs";
 import { validateSmokeEvidencePayload } from "./smoke-evidence.mjs";
+import { validateDeploymentRollbackReport } from "./check-deployment-rollback-evidence.mjs";
 import { ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST } from "./isem-optical-pipeline-contract.mjs";
 import { validateUiUxRedesignBindings } from "./ui-ux-redesign-evidence-bindings.mjs";
 
@@ -64,16 +65,16 @@ const requiredSmokeEvidence = new Map([
 const requiredReports = {
   restoreDrill: ["environment", "drillDate", "sourceBackup", "targetDatabase", "tableCounts"],
   deploymentRollback: [
+    "schemaVersion",
     "environment",
     "checkedAt",
     "releaseCandidate",
-    "failedImageTag",
     "rollbackImageTag",
-    "failureInjected",
-    "failureMode",
+    "drill",
     "migrationRollbackSafe",
     "commandsPassed",
     "servicesVerified",
+    "approval",
     "evidenceReferences",
   ],
   githubCi: [
@@ -698,6 +699,15 @@ function requireReports(summary, failures) {
     }
   }
 
+  if (reports.deploymentRollback) {
+    failures.push(
+      ...validateDeploymentRollbackReport({
+        ...reports.deploymentRollback,
+        result: "PASS",
+        gaps: [],
+      }).map((failure) => `reports.deploymentRollback: ${failure}`),
+    );
+  }
   requireObjectTrue(reports.securityAudit, failures, "reports.securityAudit.prodEnvCheckOk", "prodEnvCheckOk");
   requireObjectTrue(reports.securityAudit, failures, "reports.securityAudit.httpsOk", "httpsOk");
   requireObjectTrue(reports.securityAudit, failures, "reports.securityAudit.rlsLiveCheckOk", "rlsLiveCheckOk");

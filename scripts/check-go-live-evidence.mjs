@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { getTenantScopedTables } from "../packages/db/scripts/tenant-models.mjs";
 import { validateUiUxRedesignBindings } from "./ui-ux-redesign-evidence-bindings.mjs";
 import { ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST } from "./isem-optical-pipeline-contract.mjs";
+import { validateDeploymentRollbackReport } from "./check-deployment-rollback-evidence.mjs";
 
 const target = process.env.GO_LIVE_EVIDENCE_TARGET;
 const allowExampleEvidence = process.env.GO_LIVE_ALLOW_EXAMPLE_EVIDENCE === "1";
@@ -207,16 +208,16 @@ const expectedWhatsappConsentEventStoredFields = [
 const summaryRequiredReportKeys = {
   restoreDrill: ["environment", "drillDate", "sourceBackup", "targetDatabase", "tableCounts"],
   deploymentRollback: [
+    "schemaVersion",
     "environment",
     "checkedAt",
     "releaseCandidate",
-    "failedImageTag",
     "rollbackImageTag",
-    "failureInjected",
-    "failureMode",
+    "drill",
     "migrationRollbackSafe",
     "commandsPassed",
     "servicesVerified",
+    "approval",
     "evidenceReferences",
   ],
   githubCi: [
@@ -1173,6 +1174,14 @@ function requireSummaryReports(summary, failures, goLiveReport) {
     "deploymentRollback",
   );
   if (deploymentRollback) {
+    failures.push(
+      ...validateDeploymentRollbackReport({
+        ...deploymentRollback,
+        result: "PASS",
+        gaps: [],
+      }).map((failure) => `productionEvidenceSummary.summary.reports.deploymentRollback: ${failure}`),
+    );
+    requireObjectEqual(deploymentRollback, failures, "productionEvidenceSummary.summary.reports.deploymentRollback.schemaVersion", "schemaVersion", 2);
     requireObjectEqual(deploymentRollback, failures, "productionEvidenceSummary.summary.reports.deploymentRollback.environment", "environment", "production");
     requireSummaryReportDateNotAfter(
       deploymentRollback,
@@ -1184,7 +1193,6 @@ function requireSummaryReports(summary, failures, goLiveReport) {
     );
     requireObjectString(deploymentRollback, failures, "productionEvidenceSummary.summary.reports.deploymentRollback.rollbackImageTag", "rollbackImageTag");
     requireNonPlaceholderString(deploymentRollback, failures, "productionEvidenceSummary.summary.reports.deploymentRollback.releaseCandidate", "releaseCandidate");
-    requireNonPlaceholderString(deploymentRollback, failures, "productionEvidenceSummary.summary.reports.deploymentRollback.failedImageTag", "failedImageTag");
     requireNonPlaceholderString(deploymentRollback, failures, "productionEvidenceSummary.summary.reports.deploymentRollback.rollbackImageTag", "rollbackImageTag");
     requireMatchingString(
       goLiveReport,
@@ -1204,14 +1212,8 @@ function requireSummaryReports(summary, failures, goLiveReport) {
       "productionEvidenceSummary.summary.reports.deploymentRollback.rollbackImageTag",
       "rollbackImageTag",
     );
-    requireObjectTrue(deploymentRollback, failures, "productionEvidenceSummary.summary.reports.deploymentRollback.failureInjected", "failureInjected");
-    requireObjectString(deploymentRollback, failures, "productionEvidenceSummary.summary.reports.deploymentRollback.failureMode", "failureMode");
-    requireNonPlaceholderString(
-      deploymentRollback,
-      failures,
-      "productionEvidenceSummary.summary.reports.deploymentRollback.failureMode",
-      "failureMode",
-    );
+    requireSummaryRollbackDrill(deploymentRollback, failures);
+    requireSummaryRollbackApproval(deploymentRollback, failures);
     requireObjectTrue(deploymentRollback, failures, "productionEvidenceSummary.summary.reports.deploymentRollback.migrationRollbackSafe", "migrationRollbackSafe");
     requireObjectStringList(
       deploymentRollback,
@@ -1979,6 +1981,64 @@ function requireSummaryReports(summary, failures, goLiveReport) {
     requireObjectArrayAtLeast(uat, failures, "productionEvidenceSummary.summary.reports.uat.flowsVerified", "flowsVerified", 1);
     requireObjectArrayAtLeast(uat, failures, "productionEvidenceSummary.summary.reports.uat.journeyScenariosVerified", "journeyScenariosVerified", 21);
     requireObjectArrayAtLeast(uat, failures, "productionEvidenceSummary.summary.reports.uat.commandsPassed", "commandsPassed", 1);
+  }
+}
+
+function requireSummaryRollbackDrill(report, failures) {
+  const drill = requireNestedObject(
+    report,
+    failures,
+    "productionEvidenceSummary.summary.reports.deploymentRollback.drill",
+    "drill",
+  );
+  if (!drill) return;
+  requireSummaryObjectKeySet(
+    drill,
+    ["mode", "sourceImageTag", "rollbackImageTag", "restoredImageTag", "startedAt", "completedAt", "failureInjected", "failureMode", "evidence"],
+    failures,
+    "productionEvidenceSummary.summary.reports.deploymentRollback.drill",
+  );
+  if (!["failure-injection", "cold-rollback-rehearsal"].includes(drill.mode)) {
+    failures.push("productionEvidenceSummary.summary.reports.deploymentRollback.drill.mode geçersiz.");
+  }
+  for (const key of ["sourceImageTag", "rollbackImageTag", "restoredImageTag"]) {
+    requireObjectString(drill, failures, `productionEvidenceSummary.summary.reports.deploymentRollback.drill.${key}`, key);
+    requireNonPlaceholderString(drill, failures, `productionEvidenceSummary.summary.reports.deploymentRollback.drill.${key}`, key);
+  }
+  for (const key of ["startedAt", "completedAt"]) {
+    requireObjectDate(drill, failures, `productionEvidenceSummary.summary.reports.deploymentRollback.drill.${key}`, key);
+  }
+  if (Date.parse(drill.startedAt) > Date.parse(drill.completedAt)) {
+    failures.push("productionEvidenceSummary.summary.reports.deploymentRollback.drill.startedAt completedAt sonrasında olamaz.");
+  }
+  if (drill.mode === "failure-injection") {
+    requireObjectTrue(drill, failures, "productionEvidenceSummary.summary.reports.deploymentRollback.drill.failureInjected", "failureInjected");
+    requireObjectString(drill, failures, "productionEvidenceSummary.summary.reports.deploymentRollback.drill.failureMode", "failureMode");
+  }
+  if (drill.mode === "cold-rollback-rehearsal") {
+    if (drill.failureInjected !== false || drill.failureMode !== null || drill.restoredImageTag !== drill.sourceImageTag) {
+      failures.push("productionEvidenceSummary.summary.reports.deploymentRollback cold rollback drill alanları geçersiz.");
+    }
+  }
+}
+
+function requireSummaryRollbackApproval(report, failures) {
+  const approval = requireNestedObject(
+    report,
+    failures,
+    "productionEvidenceSummary.summary.reports.deploymentRollback.approval",
+    "approval",
+  );
+  if (!approval) return;
+  requireSummaryObjectKeySet(
+    approval,
+    ["approvedBy", "approvalReference"],
+    failures,
+    "productionEvidenceSummary.summary.reports.deploymentRollback.approval",
+  );
+  for (const key of ["approvedBy", "approvalReference"]) {
+    requireObjectString(approval, failures, `productionEvidenceSummary.summary.reports.deploymentRollback.approval.${key}`, key);
+    requireNonPlaceholderString(approval, failures, `productionEvidenceSummary.summary.reports.deploymentRollback.approval.${key}`, key);
   }
 }
 

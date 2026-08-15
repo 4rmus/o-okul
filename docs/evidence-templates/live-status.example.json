@@ -115,8 +115,8 @@
       "status": "PASS",
       "command": "pnpm deployment:rollback:check",
       "source": "productionEvidenceSummary.reports.deploymentRollback",
-      "checkedAt": "2026-05-30",
-      "evidenceReference": "artifacts/example/production/release-summary-broken-20260615.json"
+      "checkedAt": "2026-05-30T10:30:00.000Z",
+      "evidenceReference": "artifact:logs/deployment-rollback.log"
     },
     {
       "label": "Pilot kapanış kanıtı",
