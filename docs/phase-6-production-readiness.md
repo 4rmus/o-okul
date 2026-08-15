@@ -216,7 +216,10 @@ pnpm backup:restore:smoke
   `ghcr.io/4rmus/o-okul` olmalıdır.
   Verify-only workflow host `.env` dosyasında `ADMIN_MFA_MODE=required` değerini doğrular ve full
   evidence env içindeki aynı alanı bu doğrulanmış runtime politikasına bağlar; eski `optional` secret
-  kopyası Phase B'yi yanlış negatifte bırakamaz.
+  kopyası Phase B'yi yanlış negatifte bırakamaz. Aynı workflow `DOMAIN`, `CF_DNS_API_TOKEN_FILE`,
+  `LEGACY_TENANT_LOGIN_CUTOFF_AT`, `NOTIFICATION_FROM_EMAIL` ve `NOTIFICATION_REPLY_TO_EMAIL`
+  değerlerini loglamadan staging host `.env` dosyasından private runner env'ine birleştirir; eksik,
+  boş veya yinelenmiş runtime anahtarında full aggregation başlamaz.
   `pnpm staging:evidence-env:secret:set` varsayılan olarak aynı tam doğrulamayı çalıştırır;
   yalnız normal cutover secret senkronu için açıkça `--mode activation` verilebilir. Helper repo/temp/symlink
   dosyalarını reddeder ve `STAGING_EVIDENCE_ENV_B64` değerini GitHub environment secret'a stdin üzerinden yazar.

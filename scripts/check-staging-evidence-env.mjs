@@ -501,8 +501,13 @@ function checkOutboxVerifyWorkflowContract(output) {
     "if: ${{ always() }}",
     "Clean local verification secrets",
     "STAGING_SSH_KEY_PATH=$RUNNER_TEMP/staging_deploy_key",
-    "trap 'rm -f -- .staging-evidence.env' EXIT",
+    "scripts/isem-optical-pipeline-contract.mjs",
+    "docs/evidence-manifests/isem-optical-pipeline-inputs.json",
+    "-v \"$OUTBOX_VERIFY_HELPERS_DIR:/app/docs/evidence-manifests:ro\"",
+    "trap 'rm -f -- .staging-evidence.env \"$runtime_env\"' EXIT",
     "sed -i 's/^ADMIN_MFA_MODE=.*/ADMIN_MFA_MODE=required/' .staging-evidence.env",
+    "staging-runtime-required.env",
+    "DOMAIN CF_DNS_API_TOKEN_FILE LEGACY_TENANT_LOGIN_CUTOFF_AT NOTIFICATION_FROM_EMAIL NOTIFICATION_REPLY_TO_EMAIL",
     "chmod 600 .staging-evidence.env",
     "const expectedRunUrl = `https://github.com/${repository}/actions/runs/${runId}`;",
     "references[1] = `run:${githubCi.workflow.runUrl}`;",
@@ -551,6 +556,15 @@ function checkOutboxVerifyWorkflowContract(output) {
     "Remove private outbox verification material",
     "rm -f -- \"$SOURCE_CLAIM_DIR/source-id\"",
     "Clean local verification secrets",
+  ]);
+  requireWorkflowOrder(output, workflow, "full evidence runtime env birleştirme sırası", [
+    "Run configured production evidence aggregation",
+    'runtime_env="$RUNNER_TEMP/staging-runtime-required.env"',
+    "trap 'rm -f -- .staging-evidence.env \"$runtime_env\"' EXIT",
+    'ssh -i "$STAGING_SSH_KEY_PATH"',
+    'chmod 600 "$runtime_env"',
+    "node --input-type=module - .staging-evidence.env \"$runtime_env\"",
+    "pnpm staging:evidence-env:check -- --mode full --env-file .staging-evidence.env",
   ]);
 }
 

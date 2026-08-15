@@ -238,8 +238,10 @@ jobs:
           verify_helpers="/root/o-okul-private/verify-scripts/$CUTOVER_RELEASE_IMAGE_TAG/${{ github.run_id }}"
           echo "OUTBOX_VERIFY_HELPERS_DIR=$verify_helpers" >> "$GITHUB_ENV"
           ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" "install -d -m 700 '$verify_helpers'"
-          scp -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new scripts/smoke-secret-delivery-outbox-staging.mjs scripts/smoke-evidence.mjs "$STAGING_SSH_USER@$STAGING_SSH_HOST:$verify_helpers/"
-          ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" "chmod 600 '$verify_helpers/'*.mjs"
+          scp -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new \
+            scripts/smoke-secret-delivery-outbox-staging.mjs scripts/smoke-evidence.mjs scripts/isem-optical-pipeline-contract.mjs \
+            docs/evidence-manifests/isem-optical-pipeline-inputs.json "$STAGING_SSH_USER@$STAGING_SSH_HOST:$verify_helpers/"
+          ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" "chmod 600 '$verify_helpers/'*.mjs '$verify_helpers/isem-optical-pipeline-inputs.json'"
 
       - name: Run private outbox smoke
         shell: bash
@@ -275,7 +277,8 @@ jobs:
           source_file="$source_dir/source-id"
           mkdir -p artifacts/staging/smoke
           WORKER_IMAGE="$expected_worker_image" docker compose --env-file .env --env-file .env.release -f docker-compose.yml -f docker-compose.release.yml -f "$EDGE_COMPOSE_FILE" run --rm -T \
-            -v "$OUTBOX_VERIFY_HELPERS_DIR:/app/scripts:ro" -v "$PWD/artifacts:/app/artifacts" -v "$source_dir:/run/outbox-source:ro" \
+            -v "$OUTBOX_VERIFY_HELPERS_DIR:/app/scripts:ro" -v "$OUTBOX_VERIFY_HELPERS_DIR:/app/docs/evidence-manifests:ro" \
+            -v "$PWD/artifacts:/app/artifacts" -v "$source_dir:/run/outbox-source:ro" \
             -e STAGING_ENVIRONMENT=staging -e SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_FILE=/run/outbox-source/source-id \
             -e SECRET_DELIVERY_OUTBOX_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/secret-delivery-outbox.json \
             -e SECRET_DELIVERY_OUTBOX_NOT_BEFORE="$CUTOVER_AT" -e SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG="$RELEASE_IMAGE_TAG" \
@@ -306,11 +309,45 @@ jobs:
           STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
         run: |
           set -euo pipefail
-          trap 'rm -f -- .staging-evidence.env' EXIT
+          runtime_env="$RUNNER_TEMP/staging-runtime-required.env"
+          trap 'rm -f -- .staging-evidence.env "$runtime_env"' EXIT
           printf '%s' "$STAGING_EVIDENCE_ENV_B64" | base64 -d > .staging-evidence.env
           chmod 600 .staging-evidence.env
           sed -i 's/^ADMIN_MFA_MODE=.*/ADMIN_MFA_MODE=required/' .staging-evidence.env
           grep -Fxq 'ADMIN_MFA_MODE=required' .staging-evidence.env
+          ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" "bash -se" > "$runtime_env" <<'REMOTE'
+          set -euo pipefail
+          cd /root/o-okul
+          keys=(DOMAIN CF_DNS_API_TOKEN_FILE LEGACY_TENANT_LOGIN_CUTOFF_AT NOTIFICATION_FROM_EMAIL NOTIFICATION_REPLY_TO_EMAIL)
+          for key in "${keys[@]}"; do
+            [ "$(grep -Ec "^${key}=" .env)" -eq 1 ]
+            line="$(grep -E "^${key}=" .env)"
+            [ -n "${line#*=}" ]
+            printf '%s\n' "$line"
+          done
+          REMOTE
+          chmod 600 "$runtime_env"
+          node --input-type=module - .staging-evidence.env "$runtime_env" <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+
+          const [envPath, runtimePath] = process.argv.slice(2);
+          const requiredKeys = [
+            "DOMAIN",
+            "CF_DNS_API_TOKEN_FILE",
+            "LEGACY_TENANT_LOGIN_CUTOFF_AT",
+            "NOTIFICATION_FROM_EMAIL",
+            "NOTIFICATION_REPLY_TO_EMAIL",
+          ];
+          const runtimeLines = readFileSync(runtimePath, "utf8").trim().split("\n");
+          const runtimeByKey = new Map(runtimeLines.map((line) => [line.slice(0, line.indexOf("=")), line]));
+          if (runtimeByKey.size !== requiredKeys.length || requiredKeys.some((key) => !runtimeByKey.get(key)?.slice(key.length + 1))) {
+            throw new Error("Staging runtime evidence anahtarları eksik veya yinelenmiş.");
+          }
+          const sourceLines = readFileSync(envPath, "utf8").split("\n");
+          const merged = sourceLines.filter((line) => !requiredKeys.some((key) => line.startsWith(`${key}=`)));
+          merged.push(...requiredKeys.map((key) => runtimeByKey.get(key)));
+          writeFileSync(envPath, `${merged.join("\n").replace(/\n+$/u, "")}\n`, { mode: 0o600 });
+          NODE
           pnpm staging:evidence-env:check -- --mode full --env-file .staging-evidence.env
           node scripts/append-staging-evidence-tunnel-env.mjs --env-file .staging-evidence.env --postgres-port 15432 --redis-port 16379
           node --input-type=module <<'NODE'
@@ -497,7 +534,8 @@ jobs:
           rmdir -- "$(dirname "$SOURCE_CLAIM_DIR")" 2>/dev/null || true
           rmdir -- "$(dirname "$(dirname "$SOURCE_CLAIM_DIR")")" 2>/dev/null || true
           if [ -n "$HELPERS_DIR" ]; then
-            rm -f -- "$HELPERS_DIR/smoke-secret-delivery-outbox-staging.mjs" "$HELPERS_DIR/smoke-evidence.mjs"
+            rm -f -- "$HELPERS_DIR/smoke-secret-delivery-outbox-staging.mjs" "$HELPERS_DIR/smoke-evidence.mjs" \
+              "$HELPERS_DIR/isem-optical-pipeline-contract.mjs" "$HELPERS_DIR/isem-optical-pipeline-inputs.json"
             rmdir -- "$HELPERS_DIR" 2>/dev/null || true
             rmdir -- "$(dirname "$HELPERS_DIR")" 2>/dev/null || true
           fi
