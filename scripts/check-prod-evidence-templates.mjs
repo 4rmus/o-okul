@@ -7262,6 +7262,34 @@ function runStagingReleaseArtifactsBundleCheck() {
         process.exit(1);
       }
 
+      mkdirSync(archiveDir, { recursive: true });
+      writeFileSync(join(archiveDir, "occupied"), "existing archive target\n");
+      const archiveExistingTarget = spawnSync(
+        process.execPath,
+        [
+          "scripts/archive-staging-release-unexpected-artifacts.mjs",
+          "--artifacts-dir",
+          root,
+          "--gap-report-file",
+          gapReportPath,
+          "--archive-dir",
+          archiveDir,
+          "--apply",
+        ],
+        { env: process.env, encoding: "utf8" },
+      );
+      const archiveExistingTargetOutput = `${archiveExistingTarget.stdout ?? ""}${archiveExistingTarget.stderr ?? ""}`;
+      if (
+        archiveExistingTarget.status === 0 ||
+        !archiveExistingTargetOutput.includes("archive-dir apply öncesi mevcut olmamalı:") ||
+        !existsSync(unexpectedRootFilePath)
+      ) {
+        console.error("Production evidence template kontrolü başarısız: existing archive target preflight fail-closed değil.");
+        console.error(archiveExistingTargetOutput);
+        process.exit(1);
+      }
+      rmSync(archiveDir, { recursive: true, force: true });
+
       const archiveApply = spawnSync(
         process.execPath,
         [

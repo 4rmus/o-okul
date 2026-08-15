@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, normalize, relative, resolve } from "node:path";
 
 const artifactsTarget = readOption("--artifacts-dir") ?? process.env.STAGING_RELEASE_ARTIFACTS_TARGET ?? "artifacts/staging";
@@ -54,15 +54,9 @@ if (!apply) {
   process.exit(0);
 }
 
+preflightArchiveApply(entries);
 mkdirSync(archiveDir, { recursive: true });
 for (const entry of entries) {
-  if (!existsSync(entry.sourcePath)) {
-    throw new Error(`unexpected artifact bulunamadı: ${entry.artifactPath}`);
-  }
-  if (existsSync(entry.destinationPath)) {
-    throw new Error(`archive hedefi zaten var: ${formatPath(entry.destinationPath)}`);
-  }
-
   mkdirSync(dirname(entry.destinationPath), { recursive: true });
   renameSync(entry.sourcePath, entry.destinationPath);
 }
@@ -87,6 +81,41 @@ writeFileSync(
 );
 
 console.log(`Unexpected artifact arşiv manifest'i yazıldı: ${formatPath(manifestPath)}`);
+
+function preflightArchiveApply(archiveEntries) {
+  if (existsSync(archiveDir)) {
+    throw new Error(`archive-dir apply öncesi mevcut olmamalı: ${formatPath(archiveDir)}`);
+  }
+
+  const archiveRelativeToArtifacts = relative(artifactsDir, archiveDir);
+  if (
+    archiveRelativeToArtifacts === "" ||
+    (!archiveRelativeToArtifacts.startsWith("..") && !isAbsolute(archiveRelativeToArtifacts))
+  ) {
+    throw new Error("archive-dir staging release bundle dışında olmalı.");
+  }
+
+  const seenSources = new Set();
+  const seenDestinations = new Set();
+  for (const entry of archiveEntries) {
+    if (seenSources.has(entry.sourcePath) || seenDestinations.has(entry.destinationPath)) {
+      throw new Error(`unexpected artifact listesi tekrarlı path içeriyor: ${entry.artifactPath}`);
+    }
+    seenSources.add(entry.sourcePath);
+    seenDestinations.add(entry.destinationPath);
+
+    if (!existsSync(entry.sourcePath)) {
+      throw new Error(`unexpected artifact bulunamadı: ${entry.artifactPath}`);
+    }
+    const sourceStat = lstatSync(entry.sourcePath);
+    if (sourceStat.isSymbolicLink() || !sourceStat.isFile()) {
+      throw new Error(`unexpected artifact symlink olmayan dosya olmalı: ${entry.artifactPath}`);
+    }
+    if (existsSync(entry.destinationPath)) {
+      throw new Error(`archive hedefi zaten var: ${formatPath(entry.destinationPath)}`);
+    }
+  }
+}
 
 function buildArchiveEntry(artifactPath) {
   if (typeof artifactPath !== "string" || artifactPath.trim() === "") {
