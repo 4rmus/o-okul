@@ -307,6 +307,7 @@ jobs:
           STAGING_EVIDENCE_ENV_B64: ${{ secrets.STAGING_EVIDENCE_ENV_B64 }}
           STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
           STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           runtime_env="$RUNNER_TEMP/staging-runtime-required.env"
@@ -382,26 +383,71 @@ jobs:
           lines[index] = `${key}=${references.join(",")}`;
           writeFileSync(envPath, lines.join("\n"), { mode: 0o600 });
           NODE
-          rollback_image_tag="$(node --env-file=.staging-evidence.env --input-type=module - "$CUTOVER_REPOSITORY" "$CUTOVER_RELEASE_IMAGE_TAG" <<'NODE'
-          const [repository, releaseImageTag] = process.argv.slice(2);
-          const target = new URL(process.env.DEPLOYMENT_ROLLBACK_TARGET);
-          if (target.protocol !== "https:" || target.username || target.password || target.search || target.hash) {
-            throw new Error("Deployment rollback target credential-free HTTPS olmalı.");
+          rollback_source="$RUNNER_TEMP/deployment-rollback-source.json"
+          rollback_source_remote=/root/o-okul/artifacts/staging/reports/deployment-rollback.json
+          ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+            "test -f '$rollback_source_remote' && test ! -L '$rollback_source_remote'"
+          scp -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new \
+            "$STAGING_SSH_USER@$STAGING_SSH_HOST:$rollback_source_remote" "$rollback_source"
+          chmod 600 "$rollback_source"
+          DEPLOYMENT_ROLLBACK_TARGET="file://$rollback_source" pnpm deployment:rollback:check
+          rollback_image_tag="$(ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+            "cd /root/o-okul && test \"\$(grep -Ec '^ROLLBACK_IMAGE_TAG=' .env.release)\" -eq 1 && sed -n 's/^ROLLBACK_IMAGE_TAG=//p' .env.release")"
+          [[ "$rollback_image_tag" =~ ^[a-f0-9]{40}$ ]]
+          [ "$rollback_image_tag" != "$CUTOVER_RELEASE_IMAGE_TAG" ]
+          node --input-type=module - "$rollback_source" "artifacts/staging/reports/deployment-rollback.json" "$CUTOVER_REPOSITORY" "$CUTOVER_RELEASE_IMAGE_TAG" "$rollback_image_tag" <<'NODE'
+          import { spawnSync } from "node:child_process";
+          import { readFileSync } from "node:fs";
+
+          const [sourcePath, outputPath, repository, releaseImageTag, rollbackImageTag] = process.argv.slice(2);
+          const source = JSON.parse(readFileSync(sourcePath, "utf8"));
+          const releaseCandidate = `ghcr.io/${repository}/api:${releaseImageTag}`;
+          const rollbackCandidate = `ghcr.io/${repository}/api:${rollbackImageTag}`;
+          if (source.releaseCandidate !== rollbackCandidate || source.drill?.mode !== "cold-rollback-rehearsal") {
+            throw new Error("Historical rollback report current fallback image ile zincirlenemedi.");
           }
-          const response = await fetch(target);
-          if (!response.ok) throw new Error(`Deployment rollback report okunamadı: HTTP ${response.status}`);
-          const report = await response.json();
-          const expectedReleaseCandidate = `ghcr.io/${repository}/api:${releaseImageTag}`;
-          if (
-            report?.result !== "PASS" ||
-            report?.releaseCandidate !== expectedReleaseCandidate ||
-            !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(report?.rollbackImageTag ?? "")
-          ) {
-            throw new Error("Deployment rollback report cutover release/tag bağı geçersiz.");
+          const evidence = source.drill.evidence;
+          const childEnv = {
+            ...process.env,
+            STAGING_ENVIRONMENT: "production",
+            DEPLOYMENT_ROLLBACK_OUTPUT: outputPath,
+            DEPLOYMENT_ROLLBACK_RELEASE_CANDIDATE: releaseCandidate,
+            DEPLOYMENT_ROLLBACK_ROLLBACK_IMAGE_TAG: rollbackCandidate,
+            DEPLOYMENT_ROLLBACK_DRILL_MODE: source.drill.mode,
+            DEPLOYMENT_ROLLBACK_DRILL_SOURCE_IMAGE_TAG: source.drill.sourceImageTag,
+            DEPLOYMENT_ROLLBACK_DRILL_ROLLBACK_IMAGE_TAG: source.drill.rollbackImageTag,
+            DEPLOYMENT_ROLLBACK_DRILL_RESTORED_IMAGE_TAG: source.drill.restoredImageTag,
+            DEPLOYMENT_ROLLBACK_DRILL_STARTED_AT: source.drill.startedAt,
+            DEPLOYMENT_ROLLBACK_DRILL_COMPLETED_AT: source.drill.completedAt,
+            DEPLOYMENT_ROLLBACK_FAILURE_INJECTED: String(source.drill.failureInjected),
+            DEPLOYMENT_ROLLBACK_FAILURE_MODE: "",
+            DEPLOYMENT_ROLLBACK_MIGRATION_ROLLBACK_SAFE: String(source.migrationRollbackSafe),
+            DEPLOYMENT_ROLLBACK_APPROVED_BY: source.approval.approvedBy,
+            DEPLOYMENT_ROLLBACK_APPROVAL_REFERENCE: source.approval.approvalReference,
+            DEPLOYMENT_ROLLBACK_DRILL_CONFIRMED: "true",
+            DEPLOYMENT_ROLLBACK_COMMAND_LOG_REFERENCE: evidence.commandLogReference,
+            DEPLOYMENT_ROLLBACK_SOURCE_RUN_URL: evidence.source.runUrl,
+            DEPLOYMENT_ROLLBACK_SOURCE_UAT_ARTIFACT_URL: evidence.source.uatArtifactUrl,
+            DEPLOYMENT_ROLLBACK_ROLLBACK_RUN_URL: evidence.rollback.runUrl,
+            DEPLOYMENT_ROLLBACK_ROLLBACK_UAT_ARTIFACT_URL: evidence.rollback.uatArtifactUrl,
+            DEPLOYMENT_ROLLBACK_RESTORED_RUN_URL: evidence.restored.runUrl,
+            DEPLOYMENT_ROLLBACK_RESTORED_UAT_ARTIFACT_URL: evidence.restored.uatArtifactUrl,
+          };
+          for (const item of source.servicesVerified ?? []) {
+            const prefix = `DEPLOYMENT_ROLLBACK_${item.service.toUpperCase().replaceAll("-", "_")}`;
+            childEnv[`${prefix}_STATUS`] = item.status;
+            childEnv[`${prefix}_IMAGE_TAG`] = item.imageTag;
+            childEnv[`${prefix}_EVIDENCE_REFERENCE`] = item.evidenceReference;
           }
-          console.log(report.rollbackImageTag);
+          const result = spawnSync(process.execPath, ["scripts/generate-deployment-rollback-evidence.mjs"], {
+            env: childEnv,
+            stdio: "inherit",
+          });
+          if (result.status !== 0) process.exit(result.status ?? 1);
           NODE
-          )"
+          rm -f -- "$rollback_source"
+          sed -i "s#^DEPLOYMENT_ROLLBACK_TARGET=.*#DEPLOYMENT_ROLLBACK_TARGET=file://$PWD/artifacts/staging/reports/deployment-rollback.json#" .staging-evidence.env
+          grep -Fxq "DEPLOYMENT_ROLLBACK_TARGET=file://$PWD/artifacts/staging/reports/deployment-rollback.json" .staging-evidence.env
           github_ci_run_url="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).workflow.runUrl' artifacts/staging/reports/github-ci.json)"
           mkdir -p artifacts/staging/smoke artifacts/staging/reports
           notification_smoke_remote=/root/o-okul/artifacts/staging/smoke/notification-provider.json

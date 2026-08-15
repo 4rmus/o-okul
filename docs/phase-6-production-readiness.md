@@ -251,7 +251,10 @@ pnpm backup:restore:smoke
   gösterilemez. `checkedAt` ve drill zamanları gelecekte olamaz,
   `drill.startedAt <= drill.completedAt <= checkedAt` sırası korunur. Her servis image'ı
   `drill.rollbackImageTag` ile eşleşir; moda özel dört `commandsPassed`, exact blok shape'leri ve
-  boş `gaps` listesi template pozitif/negatifleriyle korunur.
+  boş `gaps` listesi template pozitif/negatifleriyle korunur. Verify-only workflow mevcut gerçek
+  cold rollback raporunu source olarak doğrular, current fallback image'ın source raporun release
+  adayıyla eşleşmesini ister, GitHub run/artifact metadata'sını generator ile yeniden doğrular ve
+  yalnız top-level current release/fallback alanlarını yeniden bağlar; rollback tatbikatını tekrarlamaz.
 - Staging artifact üretiminde ortak alanlara ek olarak
   `DEPLOYMENT_ROLLBACK_DRILL_MODE`, `DEPLOYMENT_ROLLBACK_DRILL_SOURCE_IMAGE_TAG`,
   `DEPLOYMENT_ROLLBACK_DRILL_ROLLBACK_IMAGE_TAG`, `DEPLOYMENT_ROLLBACK_DRILL_RESTORED_IMAGE_TAG`,

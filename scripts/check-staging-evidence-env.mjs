@@ -513,7 +513,12 @@ function checkOutboxVerifyWorkflowContract(output) {
     "chmod 600 .staging-evidence.env",
     "const expectedRunUrl = `https://github.com/${repository}/actions/runs/${runId}`;",
     "references[1] = `run:${githubCi.workflow.runUrl}`;",
-    "Deployment rollback report cutover release/tag bağı geçersiz.",
+    "deployment-rollback-source.json",
+    "pnpm deployment:rollback:check",
+    "scripts/generate-deployment-rollback-evidence.mjs",
+    "Historical rollback report current fallback image ile zincirlenemedi.",
+    "DEPLOYMENT_ROLLBACK_SOURCE_RUN_URL",
+    "DEPLOYMENT_ROLLBACK_TARGET=file://$PWD/artifacts/staging/reports/deployment-rollback.json",
     "echo \"ROLLBACK_IMAGE_TAG=$rollback_image_tag\"",
     "IDENTITY_MIGRATION_OUTPUT=artifacts/staging/reports/identity-migration.json",
     "node --env-file=.staging-evidence.env scripts/generate-identity-migration-evidence.mjs",
@@ -567,6 +572,15 @@ function checkOutboxVerifyWorkflowContract(output) {
     'chmod 600 "$runtime_env"',
     "node --input-type=module - .staging-evidence.env \"$runtime_env\"",
     "pnpm staging:evidence-env:check -- --mode full --env-file .staging-evidence.env",
+  ]);
+  requireWorkflowOrder(output, workflow, "historical rollback yeniden bağlama sırası", [
+    'rollback_source="$RUNNER_TEMP/deployment-rollback-source.json"',
+    "pnpm deployment:rollback:check",
+    'rollback_image_tag="$(ssh -i "$STAGING_SSH_KEY_PATH"',
+    "Historical rollback report current fallback image ile zincirlenemedi.",
+    "scripts/generate-deployment-rollback-evidence.mjs",
+    "DEPLOYMENT_ROLLBACK_TARGET=file://$PWD/artifacts/staging/reports/deployment-rollback.json",
+    "echo \"ROLLBACK_IMAGE_TAG=$rollback_image_tag\"",
   ]);
 }
 
