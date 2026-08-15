@@ -871,6 +871,9 @@ pnpm backup:restore:smoke
   Staging artifact'i üretmek için `STAGING_ENVIRONMENT=staging IDENTITY_MIGRATION_OUTPUT=artifacts/staging/reports/identity-migration.json IDENTITY_MIGRATION_APPROVED_BY=... IDENTITY_MIGRATION_APPROVAL_REFERENCE=... IDENTITY_MIGRATION_ACTIVATION_MODE=invite pnpm identity-migration:generate`
   kullanılır; generator pozitif subject sayımı, eksiksiz user link, eşleşen tenant membership ve
   identity invitation/tenant user management e2e testleri olmadan PASS artifact yazmaz.
+  Tenant-geneli subject sayımı `DIRECT_DATABASE_URL` üzerindeki salt-okunur transaction içinde,
+  yalnız o transaction'a bağlı `app.bypass_rls=true` ile alınır; transaction dışında RLS bypass
+  bırakılmaz ve bu adım veri değiştirmez.
   Hedefli API e2e testleri canlı `DATABASE_URL`/`DIRECT_DATABASE_URL`/`NODE_ENV`/`ADMIN_MFA_MODE`/`PERSISTENCE_DRIVER`/`IDEMPOTENCY_STORE`
   ortamından izole edilir; subject sayımı yine gerçek staging/prod DB bağlantısından okunur.
   Rapor top-level 8 alanı, `migrationDecision`/`invitationFlow` blok shape'leri, üç subject item

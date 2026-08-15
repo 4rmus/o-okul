@@ -33,8 +33,21 @@ validateOutputTarget(outputFile);
 
 const pool = new pg.Pool({ connectionString: directDatabaseUrl });
 try {
-  const subjects = await readSubjectReadiness(pool);
-  const invitationFlow = await readInvitationFlow(pool);
+  const client = await pool.connect();
+  let subjects;
+  let invitationFlow;
+  try {
+    await client.query("BEGIN READ ONLY");
+    await client.query("SELECT set_config('app.bypass_rls', 'true', true)");
+    subjects = await readSubjectReadiness(client);
+    invitationFlow = await readInvitationFlow(client);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
   runCommand(invitationTestCommand);
   runCommand(userManagementTestCommand);
 
