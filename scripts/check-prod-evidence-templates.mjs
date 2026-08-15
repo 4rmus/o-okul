@@ -2053,7 +2053,7 @@ runStagingOutboxProductionSummaryModeChecks();
 runProductionSummaryNegativeCheck({
   label: "Production summary extra check negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-check.tmp.json",
-  expectedFailure: "checks tam 29 madde içermeli.",
+  expectedFailure: "checks tam 28 madde içermeli.",
   mutate: (fixture) => {
     fixture.checks.push({
       label: "Beklenmeyen production check",
@@ -2143,35 +2143,9 @@ runProductionSummaryNegativeCheck({
   },
 });
 runProductionSummaryNegativeCheck({
-  label: "Production summary external monitoring URL origin mismatch negative",
-  path: "docs/evidence-templates/production-evidence-summary.external-monitoring-url-origin-mismatch.tmp.json",
-  expectedFailure: "reports.externalMonitoring.monitorsVerified.Web login.url webUrl origin'i ile eşleşmeli.",
-  mutate: (fixture) => {
-    const monitor = fixture.reports.externalMonitoring.monitorsVerified.find((item) => item.name === "Web login");
-    monitor.url = "https://other-staging.example.test/login";
-  },
-});
-runProductionSummaryNegativeCheck({
-  label: "Production summary external monitoring outage drill chronology negative",
-  path: "docs/evidence-templates/production-evidence-summary.external-monitoring-outage-drill-chronology.tmp.json",
-  expectedFailure:
-    "reports.externalMonitoring.outageDrill.detectedAt reports.externalMonitoring.outageDrill.webhookDeliveredAt sonrasında olamaz.",
-  mutate: (fixture) => {
-    fixture.reports.externalMonitoring.outageDrill.webhookDeliveredAt = "2026-05-30T09:01:00.000Z";
-  },
-});
-runProductionSummaryNegativeCheck({
-  label: "Production summary external monitoring outage drill latency mismatch negative",
-  path: "docs/evidence-templates/production-evidence-summary.external-monitoring-outage-drill-latency-mismatch.tmp.json",
-  expectedFailure: "reports.externalMonitoring.outageDrill.detectionLatencySeconds inducedAt/detectedAt farkıyla eşleşmeli.",
-  mutate: (fixture) => {
-    fixture.reports.externalMonitoring.outageDrill.detectionLatencySeconds = 74;
-  },
-});
-runProductionSummaryNegativeCheck({
   label: "Production summary extra report negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-report.tmp.json",
-  expectedFailure: "reports tam 20 alan içermeli.",
+  expectedFailure: "reports tam 19 alan içermeli.",
   mutate: (fixture) => {
     fixture.reports.unexpectedReport = { ...fixture.reports.securityAudit };
   },
@@ -2621,7 +2595,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live extra deployment field negative",
   path: "docs/evidence-templates/go-live.extra-deployment-field.tmp.json",
-  expectedFailure: "deployment tam 12 alan icermeli.",
+  expectedFailure: "deployment tam 11 alan icermeli.",
   mutate: (fixture) => {
     fixture.deployment.unexpectedField = true;
   },
@@ -2650,7 +2624,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live extra checksPassed negative",
   path: "docs/evidence-templates/go-live.extra-checks-passed.tmp.json",
-  expectedFailure: "productionEvidenceSummary.checksPassed tam 29 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.checksPassed tam 28 madde icermeli.",
   mutate: (fixture) => {
     fixture.productionEvidenceSummary.checksPassed.push("Beklenmeyen production check");
   },
@@ -2716,7 +2690,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked duplicate summary check negative",
   path: "docs/evidence-templates/go-live.linked-duplicate-summary-check.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary.checks tam 29 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary.checks tam 28 madde icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.duplicate-check-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -2859,52 +2833,9 @@ runGoLiveNegativeCheck({
   },
 });
 runGoLiveNegativeCheck({
-  label: "Go-live linked summary external monitoring URL origin mismatch negative",
-  path: "docs/evidence-templates/go-live.linked-summary-external-monitoring-url-origin-mismatch.tmp.json",
-  expectedFailure:
-    "productionEvidenceSummary.summary.reports.externalMonitoring.monitorsVerified.Web login.url productionEvidenceSummary.summary.webUrl origin'i ile eslesmeli.",
-  mutate: (fixture, cleanupPaths) => {
-    const linkedPath = "docs/evidence-templates/production-evidence-summary.external-monitoring-url-origin-for-go-live.tmp.json";
-    const linkedSummary = structuredClone(productionSummaryFixture);
-    const monitor = linkedSummary.reports.externalMonitoring.monitorsVerified.find((item) => item.name === "Web login");
-    monitor.url = "https://other-staging.example.test/login";
-    fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.external-monitoring-url-origin-for-go-live.tmp.json";
-    writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
-    cleanupPaths.push(linkedPath);
-  },
-});
-runGoLiveNegativeCheck({
-  label: "Go-live linked summary external monitoring outage drill chronology negative",
-  path: "docs/evidence-templates/go-live.linked-summary-external-monitoring-outage-drill-chronology.tmp.json",
-  expectedFailure:
-    "productionEvidenceSummary.summary.reports.externalMonitoring.outageDrill.detectedAt productionEvidenceSummary.summary.reports.externalMonitoring.outageDrill.webhookDeliveredAt sonrasinda olamaz.",
-  mutate: (fixture, cleanupPaths) => {
-    const linkedPath = "docs/evidence-templates/production-evidence-summary.external-monitoring-outage-drill-chronology-for-go-live.tmp.json";
-    const linkedSummary = structuredClone(productionSummaryFixture);
-    linkedSummary.reports.externalMonitoring.outageDrill.webhookDeliveredAt = "2026-05-30T09:01:00.000Z";
-    fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.external-monitoring-outage-drill-chronology-for-go-live.tmp.json";
-    writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
-    cleanupPaths.push(linkedPath);
-  },
-});
-runGoLiveNegativeCheck({
-  label: "Go-live linked summary external monitoring outage drill latency mismatch negative",
-  path: "docs/evidence-templates/go-live.linked-summary-external-monitoring-outage-drill-latency-mismatch.tmp.json",
-  expectedFailure:
-    "productionEvidenceSummary.summary.reports.externalMonitoring.outageDrill.detectionLatencySeconds inducedAt/detectedAt farkiyla eslesmeli.",
-  mutate: (fixture, cleanupPaths) => {
-    const linkedPath = "docs/evidence-templates/production-evidence-summary.external-monitoring-outage-drill-latency-for-go-live.tmp.json";
-    const linkedSummary = structuredClone(productionSummaryFixture);
-    linkedSummary.reports.externalMonitoring.outageDrill.detectionLatencySeconds = 74;
-    fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.external-monitoring-outage-drill-latency-for-go-live.tmp.json";
-    writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
-    cleanupPaths.push(linkedPath);
-  },
-});
-runGoLiveNegativeCheck({
   label: "Go-live linked extra summary report negative",
   path: "docs/evidence-templates/go-live.linked-extra-summary-report.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary.reports tam 20 alan icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary.reports tam 19 alan icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.extra-report-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -6716,13 +6647,6 @@ function runStagingReleaseArtifactsBundleCheck() {
     summary.smokeEvidence.alertWebhook.webhookUrl = "https://alerts.o-okul.com/hooks/staging";
     summary.reports.liveExamCycle.appUrl = summary.appUrl;
     summary.reports.liveExamCycle.apiUrl = summary.apiUrl;
-    for (const monitor of summary.reports.externalMonitoring.monitorsVerified) {
-      if (monitor.name === "API /health") monitor.url = `${summary.webUrl}/health`;
-      if (monitor.name === "API /health/ready") monitor.url = `${summary.webUrl}/health/ready`;
-      if (monitor.name === "Web login") monitor.url = `${summary.webUrl}/login`;
-      if (monitor.name === "Traefik TLS certificate") monitor.url = `${summary.webUrl}/`;
-    }
-
     const releaseSummaryPath = `${root}/release-summary-${"1".repeat(40)}.json`;
     writeFileSync(releaseSummaryPath, `${JSON.stringify(summary, null, 2)}\n`);
     for (const [key, file] of Object.entries({
@@ -6734,7 +6658,6 @@ function runStagingReleaseArtifactsBundleCheck() {
       financialRetention: "financial-retention.example.json",
       uploadAv: "upload-av.example.json",
       observabilityUat: "observability-uat.example.json",
-      externalMonitoring: "external-monitoring.example.json",
       adminMfa: "admin-mfa.example.json",
       securityAudit: "security-audit.example.json",
       liveExamCycle: "live-exam-cycle.example.json",
@@ -8831,7 +8754,6 @@ function createValidProdEnvForNegativeCheck() {
     "FINANCIAL_RETENTION_TARGET",
     "UPLOAD_AV_TARGET",
     "OBSERVABILITY_UAT_TARGET",
-    "EXTERNAL_MONITORING_TARGET",
     "ADMIN_MFA_EVIDENCE_TARGET",
     "SECURITY_AUDIT_TARGET",
     "UAT_EVIDENCE_TARGET",

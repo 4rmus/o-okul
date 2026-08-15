@@ -184,7 +184,7 @@ ortam ve tarih içeren kalıcı evidence ile yükseltilir.
   `/root/o-okul-cutover-backups/20260805T161400Z` altında; checksum ve `pg_restore --list` kontrolü geçti.
 - Bu teknik aktivasyon go-live onayı değildir. `pnpm prod:env:check` canlı sunucuda hâlâ `FAIL`:
   notification provider/inbox smoke, güvenli harici S3, Sentry, WAL/off-host backup, pull edilebilir image
-  rollback hedefi, restore tatbikatı, alerting/external monitoring, RLS/MFA/UAT/pilot ve go-live evidence
+  rollback hedefi, restore tatbikatı, alerting, RLS/MFA/UAT/pilot ve go-live evidence
   hedefleri tamamlanmalıdır.
 
 ## Silinen Tarihsel Kayıtlar
