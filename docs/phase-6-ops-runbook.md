@@ -218,7 +218,11 @@ Minimum kanıt içeriği:
 - Loopback modu observability servislerini public ağa açmaz; production'da, farklı host/portta veya
   açık bayrak olmadan HTTP endpoint kullanıldığında generator dosya yazmadan kırılır.
 
-## External Monitoring Evidence
+## Optional External Monitoring Evidence
+
+Bu araç Gate E, pilot ve go-live kapsamı dışındadır; production summary veya release bundle için
+zorunlu değildir. İhtiyaç halinde bağımsız operasyon kontrolü olarak kullanılabilir ve çıktısı
+strict staging release bundle dizininin dışında tutulmalıdır.
 
 Kanıt sözleşmesi: `docs/evidence-templates/external-monitoring.example.json`.
 
@@ -232,7 +236,7 @@ Artifact üretim komutu:
 
 ```sh
 STAGING_ENVIRONMENT=staging \
-EXTERNAL_MONITORING_OUTPUT=artifacts/staging/reports/external-monitoring.json \
+EXTERNAL_MONITORING_OUTPUT=artifacts/optional/external-monitoring.json \
 EXTERNAL_MONITORING_NODE_HOST=... \
 EXTERNAL_MONITORING_NODE_REGION=tr-istanbul-1 \
 EXTERNAL_MONITORING_NODE_NETWORK=external-vps \
@@ -1631,7 +1635,7 @@ Minimum kanıt içeriği:
   rate-limit top-level/config/instance/API/login/path/command/gaps shape fazlası,
   RLS live top-level/schema/isolation/loadSmoke/table/command/gaps shape fazlası,
   pilot top-level/nested/assessment/gaps shape fazlası, deployment rollback top-level/servis/komut/gaps shape,
-  kronoloji fazlası ve release=rollback sapması, external monitoring outage chronology/latency, production summary smoke environment, Traefik URL origin, external monitoring URL origin ve live exam cycle release/app/API sapması, go-live `gatesPassed` fazlası, live-status
+  kronoloji fazlası ve release=rollback sapması, external monitoring outage chronology/latency, production summary smoke environment, Traefik URL origin ve live exam cycle release/app/API sapması, go-live `gatesPassed` fazlası, live-status
   top-level/gate item shape fazlası, bağlı live-status duplicate
   gate/top-level/gate item shape fazlası, live-status source-date/evidenceReference ve `FAIL`/staging source sapmaları, bağlı live-status target, source-date ve evidenceReference sapmaları ile kırık summary/pilot/go-live kaynak ve go-live linked pilot gaps negatiflerinin yanında production summary
   top-level/check-list/check-field/smoke/report/report-field fazlası, check status/script/duplicate sapmaları ve smoke/report tarih negatifleri, go-live top-level/production-summary/

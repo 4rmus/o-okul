@@ -40,7 +40,6 @@ pnpm rate-limit:smoke
 pnpm rate-limit:check
 pnpm rls:live:check
 pnpm observability:uat:check
-pnpm external-monitoring:check
 pnpm admin-mfa:check
 pnpm security:audit:check
 pnpm pilot:check
@@ -157,8 +156,7 @@ pnpm backup:restore:smoke
   Mevcut kanıt dosyaları `no-store` ve `nosniff` header'larıyla sunulur, eksik dosyalar 404 kalır.
 - Summary yazımı smoke kanıtlarında `result=PASS`, beklenen `check` adı, `environment=production`,
   gelecekte olmayan `generatedAt` ve her smoke tipine özgü alanları doğrular: Traefik smoke URL origin'i
-  summary `webUrl` origin'iyle eşleşmeli; external monitoring monitor URL origin'leri de summary
-  `webUrl` origin'inden sapmamalı; Traefik/Sentry/alert HTTPS URL ve 2xx/HSTS,
+  summary `webUrl` origin'iyle eşleşmeli; Traefik/Sentry/alert HTTPS URL ve 2xx/HSTS,
   SMS/notification gerçek provider, WAL `target`, sha256 marker ve `postgresWalArchive` hash özeti.
   Bu payload sözleşmesi `pnpm smoke:evidence:check` ve `pnpm prod:evidence:templates:check`
   zincirinde örnek summary üstünden korunur.
@@ -445,10 +443,9 @@ pnpm backup:restore:smoke
   alert webhook için `ALERT_WEBHOOK_TOKEN` en az 32 karakterlik gerçek bearer secret olmalıdır.
   `.test`, `.example`, `.invalid`, `example`, `localhost`, `__SET` veya placeholder host
   kabul edilmez.
-- Dış erişilebilirlik izleme self-hosted Uptime Kuma ile ayrı node'dan yapılır; `EXTERNAL_MONITORING_TARGET`
-  içindeki rapor `API /health`, `API /health/ready`, `Web login`, `Traefik TLS certificate`,
-  kesinti algılama ve alert webhook teslim kanıtını taşır. Production summary içinde bu monitor
-  URL'lerinin origin'i summary `webUrl` public edge origin'iyle eşleşmelidir.
+- Dış erişilebilirlik izleme ve Uptime Kuma Gate E, pilot ve go-live kapsamı dışındadır. Mevcut
+  yardımcı compose/checker araçları isteğe bağlı operasyon aracı olarak kalır; production summary
+  veya go-live paketi `EXTERNAL_MONITORING_TARGET` istemez.
 - `S3_ENDPOINT` production'da gerçek HTTPS object-storage host'u olmalıdır; MinIO/local/example
   endpoint'ler production env kontrolünden geçmez.
 - İlk tek-sunucu pilot fazında runtime upload arşivi için internal MinIO kullanılabilir:
@@ -770,15 +767,16 @@ pnpm backup:restore:smoke
   `OBSERVABILITY_UAT_TARGET`, `OBSERVABILITY_UAT_OUTPUT` ve `OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET`
   lokal temp path, `artifacts/local/**`, symlink file/parent veya userinfo/query/fragment taşıyan
   URL üzerinden kullanılamaz.
-- External monitoring raporu `pnpm external-monitoring:check` ile doğrulanır. Self-hosted Uptime Kuma
+- İsteğe bağlı external monitoring raporu `pnpm external-monitoring:check` ile doğrulanabilir; bu
+  rapor Gate E, pilot veya go-live kanıtı değildir. Self-hosted Uptime Kuma
   node'u dış ağdan public HTTPS endpoint'leri izler; `API /health`, `API /health/ready`, `Web login`
   ve `Traefik TLS certificate` monitor'ları `UP` olmalı, bilinçli kesinti webhook'a 120 saniye içinde
   düşmelidir. `outageDrill` zamanları `inducedAt <= detectedAt <= webhookDeliveredAt <= recoveredAt`
   sırasını ve latency saniyeleri timestamp farklarıyla eşleşmeyi kanıtlamalıdır. Rapor top-level
   10 alanı, `monitoringNode`, monitor item, `outageDrill` blok shape'leri ve boş `gaps` listesi
   template invalid/non-empty gaps negatifleriyle korunur.
-  Staging artifact'i
-  `STAGING_ENVIRONMENT=staging EXTERNAL_MONITORING_OUTPUT=artifacts/staging/reports/external-monitoring.json EXTERNAL_MONITORING_NODE_HOST=... EXTERNAL_MONITORING_NODE_REGION=tr-istanbul-1 EXTERNAL_MONITORING_NODE_NETWORK=external-vps EXTERNAL_MONITORING_API_HEALTH_URL=https://.../health EXTERNAL_MONITORING_API_READY_URL=https://.../health/ready EXTERNAL_MONITORING_WEB_LOGIN_URL=https://.../login EXTERNAL_MONITORING_TLS_URL=https://.../ EXTERNAL_MONITORING_ALERT_WEBHOOK_STATUS=200 EXTERNAL_MONITORING_OUTAGE_INDUCED_AT=... EXTERNAL_MONITORING_OUTAGE_DETECTED_AT=... EXTERNAL_MONITORING_OUTAGE_WEBHOOK_DELIVERED_AT=... EXTERNAL_MONITORING_OUTAGE_RECOVERED_AT=... EXTERNAL_MONITORING_MONITORS_EVIDENCE_REFERENCE=... EXTERNAL_MONITORING_OUTAGE_EVIDENCE_REFERENCE=... EXTERNAL_MONITORING_TLS_EVIDENCE_REFERENCE=... pnpm external-monitoring:generate`
+  Strict staging bundle dışındaki opsiyonel artifact
+  `STAGING_ENVIRONMENT=staging EXTERNAL_MONITORING_OUTPUT=artifacts/optional/external-monitoring.json EXTERNAL_MONITORING_NODE_HOST=... EXTERNAL_MONITORING_NODE_REGION=tr-istanbul-1 EXTERNAL_MONITORING_NODE_NETWORK=external-vps EXTERNAL_MONITORING_API_HEALTH_URL=https://.../health EXTERNAL_MONITORING_API_READY_URL=https://.../health/ready EXTERNAL_MONITORING_WEB_LOGIN_URL=https://.../login EXTERNAL_MONITORING_TLS_URL=https://.../ EXTERNAL_MONITORING_ALERT_WEBHOOK_STATUS=200 EXTERNAL_MONITORING_OUTAGE_INDUCED_AT=... EXTERNAL_MONITORING_OUTAGE_DETECTED_AT=... EXTERNAL_MONITORING_OUTAGE_WEBHOOK_DELIVERED_AT=... EXTERNAL_MONITORING_OUTAGE_RECOVERED_AT=... EXTERNAL_MONITORING_MONITORS_EVIDENCE_REFERENCE=... EXTERNAL_MONITORING_OUTAGE_EVIDENCE_REFERENCE=... EXTERNAL_MONITORING_TLS_EVIDENCE_REFERENCE=... pnpm external-monitoring:generate`
   ile üretilir; generator gerçek endpoint ve outage drill kanıtları olmadan JSON yazmaz.
 - Admin MFA raporu `pnpm admin-mfa:check` ile doğrulanır. TOTP secret'ları AES-GCM ile şifreli
   saklanır, recovery code'lar hash'lenir, SMS OTP kullanılmaz ve enable/disable işlemleri mevcut
@@ -1167,7 +1165,7 @@ restore-drill top-level/tableCounts shape fazlası,
 rate-limit top-level/config/instance/API/login/path/command/gaps shape fazlası,
 RLS live top-level/schema/isolation/loadSmoke/table/command/gaps shape fazlası,
 pilot top-level/nested/assessment/gaps shape fazlası, deployment rollback top-level/servis/komut/gaps
-shape, kronoloji fazlası ve release=rollback sapması, external monitoring outage chronology/latency, production summary smoke environment, Traefik URL origin, external monitoring URL origin, live exam cycle release/app/API ve UAT release/rollback/restore eşleşme sapmaları, go-live `gatesPassed` fazlası
+shape, kronoloji fazlası ve release=rollback sapması, external monitoring outage chronology/latency, production summary smoke environment, Traefik URL origin, live exam cycle release/app/API ve UAT release/rollback/restore eşleşme sapmaları, go-live `gatesPassed` fazlası
 ve live-status source-date/evidenceReference sapmaları, bağlı live-status duplicate gate/top-level/gate item shape fazlası, target, source-date ve evidenceReference sapmaları, production summary
 top-level/check-list/check-field/smoke/report/report-field fazlası, check status/script/duplicate sapmaları ve smoke/report tarih negatifleri, go-live top-level/production-summary/
 deployment/approval shape fazlası, go-live `checksPassed` fazlası, bağlı summary duplicate check,
