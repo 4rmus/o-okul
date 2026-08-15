@@ -263,8 +263,8 @@ const missingArtifactRemediation = new Map([
     {
       command:
         "DEPLOYMENT_ROLLBACK_OUTPUT=artifacts/staging/reports/deployment-rollback.json corepack pnpm deployment:rollback:generate",
-      prerequisite: "Broken image drill, healthcheck rejection, previous-pass rollback image, and service health references.",
-      blocker: "No real rollback drill or linked broken/rollback summary references are present.",
+      prerequisite: "Failure-injection or exact-SHA cold rollback/restore drill, current rollback image, approval, and service health references.",
+      blocker: "No real rollback drill or linked source/rollback/restore evidence references are present.",
     },
   ],
   [

@@ -1172,8 +1172,9 @@ observability ve UAT kanıtlarını üretmek için kapıdır.
 
 ## Deployment Rollback Drill
 
-Amaç: Faz 9 release gate'inde bozuk imajdan son bilinen iyi imaja dönüşün raporlu ve tekrarlanabilir
-olduğunu kanıtlamak.
+Amaç: Faz 9 release gate'inde son bilinen iyi imaja dönüşün raporlu ve tekrarlanabilir olduğunu
+kanıtlamak. Sözleşme hem bozuk-image enjeksiyonunu hem de exact-SHA cold rollback + restore
+tatbikatını ayrı modlarda ve gerçek semantiğiyle taşır.
 
 Kanıt sözleşmesi: `docs/evidence-templates/deployment-rollback.example.json`.
 
@@ -1189,8 +1190,11 @@ Artifact üretim komutu:
 STAGING_ENVIRONMENT=staging \
   DEPLOYMENT_ROLLBACK_OUTPUT=artifacts/staging/reports/deployment-rollback.json \
   DEPLOYMENT_ROLLBACK_RELEASE_CANDIDATE=... \
-  DEPLOYMENT_ROLLBACK_FAILED_IMAGE_TAG=... \
   DEPLOYMENT_ROLLBACK_ROLLBACK_IMAGE_TAG=... \
+  DEPLOYMENT_ROLLBACK_DRILL_MODE=failure-injection \
+  DEPLOYMENT_ROLLBACK_DRILL_SOURCE_IMAGE_TAG=... \
+  DEPLOYMENT_ROLLBACK_DRILL_ROLLBACK_IMAGE_TAG=... \
+  DEPLOYMENT_ROLLBACK_DRILL_RESTORED_IMAGE_TAG=... \
   DEPLOYMENT_ROLLBACK_DRILL_STARTED_AT=... \
   DEPLOYMENT_ROLLBACK_DRILL_COMPLETED_AT=... \
   DEPLOYMENT_ROLLBACK_FAILURE_INJECTED=true \
@@ -1200,8 +1204,12 @@ STAGING_ENVIRONMENT=staging \
   DEPLOYMENT_ROLLBACK_APPROVED_BY=... \
   DEPLOYMENT_ROLLBACK_APPROVAL_REFERENCE=... \
   DEPLOYMENT_ROLLBACK_COMMAND_LOG_REFERENCE=... \
-  DEPLOYMENT_ROLLBACK_BROKEN_SUMMARY_REFERENCE=... \
-  DEPLOYMENT_ROLLBACK_ROLLBACK_SUMMARY_REFERENCE=... \
+  DEPLOYMENT_ROLLBACK_SOURCE_RUN_URL=... \
+  DEPLOYMENT_ROLLBACK_SOURCE_UAT_ARTIFACT_URL=... \
+  DEPLOYMENT_ROLLBACK_ROLLBACK_RUN_URL=... \
+  DEPLOYMENT_ROLLBACK_ROLLBACK_UAT_ARTIFACT_URL=... \
+  DEPLOYMENT_ROLLBACK_RESTORED_RUN_URL=... \
+  DEPLOYMENT_ROLLBACK_RESTORED_UAT_ARTIFACT_URL=... \
   DEPLOYMENT_ROLLBACK_WEB_STATUS=healthy \
   DEPLOYMENT_ROLLBACK_WEB_IMAGE_TAG=... \
   DEPLOYMENT_ROLLBACK_WEB_EVIDENCE_REFERENCE=... \
@@ -1211,6 +1219,9 @@ STAGING_ENVIRONMENT=staging \
   DEPLOYMENT_ROLLBACK_WORKER_STATUS=running \
   DEPLOYMENT_ROLLBACK_WORKER_IMAGE_TAG=... \
   DEPLOYMENT_ROLLBACK_WORKER_EVIDENCE_REFERENCE=... \
+  DEPLOYMENT_ROLLBACK_QUEUE_BOARD_STATUS=healthy \
+  DEPLOYMENT_ROLLBACK_QUEUE_BOARD_IMAGE_TAG=... \
+  DEPLOYMENT_ROLLBACK_QUEUE_BOARD_EVIDENCE_REFERENCE=... \
   pnpm deployment:rollback:generate
 ```
 
@@ -1222,14 +1233,24 @@ Minimum tatbikat akışı:
   `ROLLBACK_IMAGE_TAG` zincirindeki son bilinen iyi tag'e çekilir.
 - `docker compose pull web api worker queue-board` ve `docker compose up -d --remove-orphans` çalıştırılır.
 - `pnpm compose:health:smoke` ve `pnpm prod:evidence:check` tekrar PASS olur.
-- Rapor `DEPLOYMENT_ROLLBACK_TARGET` altında `releaseCandidate`, `failedImageTag`, `rollbackImageTag`,
-  `failureInjected=true`, `migrationRollbackSafe=true`, `servicesVerified` ve artifact referanslarını taşır.
-- Generator gerçek drill onayı, command log, bozuk release summary, rollback summary ve dört servis
-  kanıt referansı olmadan artifact yazmaz.
-- `checkedAt`, `drillStartedAt` ve `drillCompletedAt` gelecekte olamaz;
-  `drillStartedAt <= drillCompletedAt <= checkedAt` sırası korunmalıdır.
+- Rapor top-level `releaseCandidate`/`rollbackImageTag` değerleriyle güncel release zincirine,
+  `drill` bloğuyla gerçek tatbikatın source/rollback/restored image'larına bağlanır.
+- `failure-injection` modunda `drill.failureInjected=true` ve gerçek failure mode zorunludur.
+- Daha önce tamamlanmış gerçek cold rollback yeniden çalıştırılmayacaksa
+  `DEPLOYMENT_ROLLBACK_DRILL_MODE=cold-rollback-rehearsal`, `DEPLOYMENT_ROLLBACK_FAILURE_INJECTED=false`,
+  boş `DEPLOYMENT_ROLLBACK_FAILURE_MODE` kullanılır. Bu modda
+  `drill.restoredImageTag=drill.sourceImageTag` olmalı; source, rollback ve restore için ayrı canonical
+  GitHub run/UAT artifact URL'leri zorunludur. Her checkpoint'in 40 karakter commit SHA'sı image tag'iyle,
+  UAT artifact URL'sindeki run id de ilgili run URL'siyle eşleşir. Generator GitHub API'den repo,
+  başarılı run head SHA'sı, artifact adı, expiry ve digest metadata'sını doğrulamadan rapor yazmaz;
+  private repo için `GITHUB_TOKEN` gerekir.
+- Generator gerçek drill onayı, command log, source/rollback/restored run + UAT artifact çiftleri ve
+  dört servis kanıt referansı olmadan artifact yazmaz.
+- `checkedAt`, `drill.startedAt` ve `drill.completedAt` gelecekte olamaz;
+  `drill.startedAt <= drill.completedAt <= checkedAt` sırası korunmalıdır.
 - `releaseCandidate` ile `rollbackImageTag` aynı tag olamaz.
-- Rollback raporu top-level alan kümesi, dört servislik `servicesVerified` seti, dört komutluk
+- Rollback raporu schema v2 alan kümesi, exact `drill`/`approval` blokları, dört servislik
+  `servicesVerified` seti, moda özel dört komutluk
   `commandsPassed` seti ve boş `gaps` listesi `prod:evidence:templates:check` içindeki fazla
   alan/servis/komut, ters kronoloji, release=rollback ve invalid/non-empty gaps negatifleriyle korunur.
 - Image tag ve evidence reference değerleri gerçek release/artifact referansı olmalı; `ghcr.io/example`,

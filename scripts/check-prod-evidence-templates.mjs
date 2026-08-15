@@ -1952,7 +1952,7 @@ runDeploymentRegionSymlinkParentTargetNegativeCheck();
 runDeploymentRollbackNegativeCheck({
   label: "Deployment rollback extra top-level key negative",
   path: "docs/evidence-templates/deployment-rollback.extra-top-level.tmp.json",
-  expectedFailure: "deploymentRollback tam 15 alan içermeli.",
+  expectedFailure: "deploymentRollback tam 13 alan içermeli.",
   mutate: (fixture) => {
     fixture.unexpectedTopLevel = true;
   },
@@ -1989,15 +1989,15 @@ runDeploymentRollbackNegativeCheck({
 runDeploymentRollbackNegativeCheck({
   label: "Deployment rollback completed before started negative",
   path: "docs/evidence-templates/deployment-rollback.completed-before-started.tmp.json",
-  expectedFailure: "drillStartedAt drillCompletedAt sonrasında olamaz.",
+  expectedFailure: "drill.startedAt drill.completedAt sonrasında olamaz.",
   mutate: (fixture) => {
-    fixture.drillCompletedAt = "2026-05-30T10:10:00.000Z";
+    fixture.drill.completedAt = "2026-05-30T10:10:00.000Z";
   },
 });
 runDeploymentRollbackNegativeCheck({
   label: "Deployment rollback completed after checkedAt negative",
   path: "docs/evidence-templates/deployment-rollback.completed-after-checked-at.tmp.json",
-  expectedFailure: "drillCompletedAt checkedAt sonrasında olamaz.",
+  expectedFailure: "drill.completedAt checkedAt sonrasında olamaz.",
   mutate: (fixture) => {
     fixture.checkedAt = "2026-05-30T10:20:00.000Z";
   },
@@ -2021,9 +2021,43 @@ runDeploymentRollbackNegativeCheck({
 runDeploymentRollbackNegativeCheck({
   label: "Deployment rollback service image version mismatch negative",
   path: "docs/evidence-templates/deployment-rollback.service-image-version-mismatch.tmp.json",
-  expectedFailure: "web.imageTag rollbackImageTag versiyonuyla eşleşmeli.",
+  expectedFailure: "web.imageTag drill.rollbackImageTag versiyonuyla eşleşmeli.",
   mutate: (fixture) => {
     fixture.servicesVerified[0].imageTag = "ghcr.io/example/o-okul/web:stale-pass";
+  },
+});
+runDeploymentRollbackNegativeCheck({
+  label: "Deployment rollback failure injection restore mismatch negative",
+  path: "docs/evidence-templates/deployment-rollback.failure-restore-mismatch.tmp.json",
+  expectedFailure: "drill.restoredImageTag failure-injection modunda drill.rollbackImageTag ile eşleşmeli.",
+  mutate: (fixture) => {
+    fixture.drill.restoredImageTag = fixture.drill.sourceImageTag;
+  },
+});
+runDeploymentRollbackNegativeCheck({
+  label: "Deployment rollback checkpoint SHA mismatch negative",
+  path: "docs/evidence-templates/deployment-rollback.checkpoint-sha-mismatch.tmp.json",
+  expectedFailure: "drill.evidence.source.sha drill.sourceImageTag versiyonuyla eşleşmeli.",
+  mutate: (fixture) => {
+    fixture.drill.evidence.source.sha = "4444444444444444444444444444444444444444";
+  },
+});
+runDeploymentRollbackNegativeCheck({
+  label: "Deployment rollback GitHub repository mismatch negative",
+  path: "docs/evidence-templates/deployment-rollback.github-repository-mismatch.tmp.json",
+  expectedFailure: "drill.evidence.source.runUrl releaseCandidate GitHub repository ile eşleşmeli.",
+  mutate: (fixture) => {
+    const oldRun = fixture.drill.evidence.source.runUrl;
+    const oldArtifact = fixture.drill.evidence.source.uatArtifactUrl;
+    fixture.drill.evidence.source.runUrl = oldRun.replace("github.com/example/o-okul/", "github.com/other/repo/");
+    fixture.drill.evidence.source.uatArtifactUrl = oldArtifact.replace("github.com/example/o-okul/", "github.com/other/repo/");
+    fixture.evidenceReferences = fixture.evidenceReferences.map((value) =>
+      value === oldRun
+        ? fixture.drill.evidence.source.runUrl
+        : value === oldArtifact
+          ? fixture.drill.evidence.source.uatArtifactUrl
+          : value,
+    );
   },
 });
 runDeploymentRollbackNegativeCheck({
@@ -2046,6 +2080,7 @@ runDeploymentRollbackNegativeCheck({
 runDeploymentRollbackLocalArtifactTargetNegativeCheck();
 runDeploymentRollbackSecretTargetNegativeCheck();
 runDeploymentRollbackSymlinkParentTargetNegativeCheck();
+runDeploymentRollbackColdRehearsalContractCheck();
 runProductionSummaryHttpTargetNegativeCheck();
 runProductionSummarySecretUrlTargetNegativeCheck();
 runProductionSummarySymlinkParentTargetNegativeCheck();
@@ -2182,6 +2217,14 @@ runProductionSummaryNegativeCheck({
   expectedFailure: "reports.deploymentRollback tam 11 alan içermeli.",
   mutate: (fixture) => {
     fixture.reports.deploymentRollback.unexpectedField = true;
+  },
+});
+runProductionSummaryNegativeCheck({
+  label: "Production summary rollback raw contract negative",
+  path: "docs/evidence-templates/production-evidence-summary.rollback-raw-contract.tmp.json",
+  expectedFailure: "reports.deploymentRollback: commandsPassed tam 4 madde içermeli.",
+  mutate: (fixture) => {
+    fixture.reports.deploymentRollback.commandsPassed.push("pnpm fake:rollback-pass");
   },
 });
 runProductionSummaryNegativeCheck({
@@ -2923,6 +2966,21 @@ runGoLiveNegativeCheck({
     const linkedSummary = structuredClone(productionSummaryFixture);
     linkedSummary.reports.deploymentRollback.unexpectedField = true;
     fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.extra-report-field-for-go-live.tmp.json";
+    writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
+    cleanupPaths.push(linkedPath);
+  },
+});
+runGoLiveNegativeCheck({
+  label: "Go-live linked rollback raw contract negative",
+  path: "docs/evidence-templates/go-live.linked-rollback-raw-contract.tmp.json",
+  expectedFailure:
+    "productionEvidenceSummary.summary.reports.deploymentRollback: web.imageTag drill.rollbackImageTag versiyonuyla eşleşmeli.",
+  mutate: (fixture, cleanupPaths) => {
+    const linkedPath = "docs/evidence-templates/production-evidence-summary.rollback-raw-contract-for-go-live.tmp.json";
+    const linkedSummary = structuredClone(productionSummaryFixture);
+    linkedSummary.reports.deploymentRollback.servicesVerified[0].imageTag =
+      "ghcr.io/example/o-okul/web:4444444444444444444444444444444444444444";
+    fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.rollback-raw-contract-for-go-live.tmp.json";
     writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
     cleanupPaths.push(linkedPath);
   },
@@ -5497,6 +5555,106 @@ function runDeploymentRollbackNegativeCheck({ label, path, expectedFailure, muta
   }
 }
 
+function runDeploymentRollbackColdRehearsalContractCheck() {
+  const path = "docs/evidence-templates/deployment-rollback.cold-rehearsal.tmp.json";
+  const fixture = structuredClone(deploymentRollbackFixture);
+  fixture.drill = {
+    mode: "cold-rollback-rehearsal",
+    sourceImageTag: "ghcr.io/example/o-okul/api:3333333333333333333333333333333333333333",
+    rollbackImageTag: "ghcr.io/example/o-okul/api:2222222222222222222222222222222222222222",
+    restoredImageTag: "ghcr.io/example/o-okul/api:3333333333333333333333333333333333333333",
+    startedAt: "2026-05-30T10:15:00.000Z",
+    completedAt: "2026-05-30T10:25:00.000Z",
+    failureInjected: false,
+    failureMode: null,
+    evidence: {
+      commandLogReference: "artifact:logs/deployment-rollback.log",
+      source: {
+        sha: "3333333333333333333333333333333333333333",
+        runUrl: "https://github.com/example/o-okul/actions/runs/1001",
+        uatArtifactUrl: "https://github.com/example/o-okul/actions/runs/1001/artifacts/10001",
+        artifactName: "staging-activation-evidence-3333333333333333333333333333333333333333",
+        artifactDigest: "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      },
+      rollback: {
+        sha: "2222222222222222222222222222222222222222",
+        runUrl: "https://github.com/example/o-okul/actions/runs/1002",
+        uatArtifactUrl: "https://github.com/example/o-okul/actions/runs/1002/artifacts/10002",
+        artifactName: "staging-activation-evidence-2222222222222222222222222222222222222222",
+        artifactDigest: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      },
+      restored: {
+        sha: "3333333333333333333333333333333333333333",
+        runUrl: "https://github.com/example/o-okul/actions/runs/1003",
+        uatArtifactUrl: "https://github.com/example/o-okul/actions/runs/1003/artifacts/10003",
+        artifactName: "staging-activation-evidence-3333333333333333333333333333333333333333",
+        artifactDigest: "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      },
+    },
+  };
+  fixture.commandsPassed = [
+    "docker compose up -d --remove-orphans",
+    "docker inspect four-service image parity",
+    "curl public health/readiness HTTP 200",
+    "node tenant-subdomain-live-uat.mjs",
+  ];
+  for (const service of fixture.servicesVerified) {
+    service.imageTag = `ghcr.io/example/o-okul/${service.service}:2222222222222222222222222222222222222222`;
+  }
+  fixture.evidenceReferences = [
+    "artifact:logs/deployment-rollback.log",
+    "https://github.com/example/o-okul/actions/runs/1001",
+    "https://github.com/example/o-okul/actions/runs/1001/artifacts/10001",
+    "https://github.com/example/o-okul/actions/runs/1002",
+    "https://github.com/example/o-okul/actions/runs/1002/artifacts/10002",
+    "https://github.com/example/o-okul/actions/runs/1003",
+    "https://github.com/example/o-okul/actions/runs/1003/artifacts/10003",
+  ];
+
+  try {
+    writeFileSync(path, `${JSON.stringify(fixture, null, 2)}\n`);
+    const positive = spawnSync(process.execPath, ["scripts/check-deployment-rollback-evidence.mjs"], {
+      env: {
+        ...process.env,
+        DEPLOYMENT_ROLLBACK_ALLOW_EXAMPLE_EVIDENCE: "1",
+        DEPLOYMENT_ROLLBACK_TARGET: pathToFileURL(path).href,
+      },
+      encoding: "utf8",
+    });
+    if (positive.status !== 0) {
+      console.error("Production evidence template kontrolü başarısız: cold rollback rehearsal positive geçmedi.");
+      console.error(`${positive.stdout ?? ""}${positive.stderr ?? ""}`);
+      process.exit(1);
+    }
+
+    fixture.drill.restoredImageTag = "ghcr.io/example/o-okul/api:not-restored";
+    writeFileSync(path, `${JSON.stringify(fixture, null, 2)}\n`);
+    const negative = spawnSync(process.execPath, ["scripts/check-deployment-rollback-evidence.mjs"], {
+      env: {
+        ...process.env,
+        DEPLOYMENT_ROLLBACK_ALLOW_EXAMPLE_EVIDENCE: "1",
+        DEPLOYMENT_ROLLBACK_TARGET: pathToFileURL(path).href,
+      },
+      encoding: "utf8",
+    });
+    const output = `${negative.stdout ?? ""}${negative.stderr ?? ""}`;
+    if (
+      negative.status === 0 ||
+      !output.includes("drill.restoredImageTag cold-rollback-rehearsal modunda drill.sourceImageTag ile eşleşmeli.")
+    ) {
+      console.error("Production evidence template kontrolü başarısız: cold rollback restore mismatch negative kırılmadı.");
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    try {
+      unlinkSync(path);
+    } catch {
+      // Ignore cleanup errors; the contract failure above is actionable.
+    }
+  }
+}
+
 function runDeploymentRollbackSecretTargetNegativeCheck() {
   const result = spawnSync(process.execPath, ["scripts/check-deployment-rollback-evidence.mjs"], {
     env: {
@@ -6723,6 +6881,13 @@ function runStagingReleaseArtifactsBundleCheck() {
       if (monitor.name === "Traefik TLS certificate") monitor.url = `${summary.webUrl}/`;
     }
 
+    const deploymentRollbackCheckedAt = Date.parse(summary.reports.deploymentRollback.checkedAt);
+    summary.reports.deploymentRollback.drill.startedAt = new Date(
+      deploymentRollbackCheckedAt - 15 * 60 * 1000,
+    ).toISOString();
+    summary.reports.deploymentRollback.drill.completedAt = new Date(
+      deploymentRollbackCheckedAt - 5 * 60 * 1000,
+    ).toISOString();
     const releaseSummaryPath = `${root}/release-summary-${"1".repeat(40)}.json`;
     writeFileSync(releaseSummaryPath, `${JSON.stringify(summary, null, 2)}\n`);
     for (const [key, file] of Object.entries({
@@ -6756,8 +6921,8 @@ function runStagingReleaseArtifactsBundleCheck() {
       const payload = { ...examplePayload, ...summaryOverlay };
       if (key === "deploymentRollback") {
         const checkedAtMs = Date.parse(payload.checkedAt);
-        payload.drillStartedAt = new Date(checkedAtMs - 15 * 60 * 1000).toISOString();
-        payload.drillCompletedAt = new Date(checkedAtMs - 5 * 60 * 1000).toISOString();
+        payload.drill.startedAt = new Date(checkedAtMs - 15 * 60 * 1000).toISOString();
+        payload.drill.completedAt = new Date(checkedAtMs - 5 * 60 * 1000).toISOString();
       }
       const targetFile = key.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
       const artifactFile =
@@ -7411,7 +7576,10 @@ function runStagingReleaseArtifactsBundleCheck() {
     writeFileSync(firstGateTraefikPath, `${JSON.stringify(originalTraefikFirstGate, null, 2)}\n`);
 
     const originalDeploymentRollback = JSON.parse(readFileSync(`${reportsDir}/deployment-rollback.json`, "utf8"));
-    const badDeploymentRollback = { ...originalDeploymentRollback, failureMode: "different rollback drill failure mode" };
+    const badDeploymentRollback = {
+      ...originalDeploymentRollback,
+      drill: { ...originalDeploymentRollback.drill, failureMode: "different rollback drill failure mode" },
+    };
     writeFileSync(`${reportsDir}/deployment-rollback.json`, `${JSON.stringify(badDeploymentRollback, null, 2)}\n`);
     const reportNegative = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
       env: {
@@ -7426,7 +7594,7 @@ function runStagingReleaseArtifactsBundleCheck() {
       console.error("Production evidence template kontrolü başarısız: staging release artifact bundle raw report negative beklenen şekilde kırılmadı.");
       process.exit(1);
     }
-    if (!reportNegativeOutput.includes("summary.reports.deploymentRollback.failureMode reports/deployment-rollback.json ile eşleşmeli")) {
+    if (!reportNegativeOutput.includes("summary.reports.deploymentRollback.drill reports/deployment-rollback.json ile eşleşmeli")) {
       console.error("Production evidence template kontrolü başarısız: staging release artifact bundle raw report negative beklenen hata yok.");
       console.error(reportNegativeOutput);
       process.exit(1);
