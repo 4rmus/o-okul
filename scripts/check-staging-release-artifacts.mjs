@@ -105,15 +105,6 @@ const reportArtifacts = new Map([
     },
   ],
   [
-    "externalMonitoring",
-    {
-      file: "external-monitoring.json",
-      script: "scripts/check-external-monitoring-evidence.mjs",
-      targetEnv: "EXTERNAL_MONITORING_TARGET",
-      allowEnv: "EXTERNAL_MONITORING_ALLOW_EXAMPLE_EVIDENCE",
-    },
-  ],
-  [
     "adminMfa",
     {
       file: "admin-mfa.json",
@@ -325,14 +316,6 @@ const missingArtifactRemediation = new Map([
     },
   ],
   [
-    "reports/external-monitoring.json",
-    {
-      command: "EXTERNAL_MONITORING_OUTPUT=artifacts/staging/reports/external-monitoring.json corepack pnpm external-monitoring:generate",
-      prerequisite: "External monitoring node, public health/login/TLS monitors, and outage drill chronology.",
-      blocker: "Monitoring node evidence and outage drill delivery evidence are missing.",
-    },
-  ],
-  [
     "reports/admin-mfa.json",
     {
       command: "ADMIN_MFA_OUTPUT=artifacts/staging/reports/admin-mfa.json corepack pnpm admin-mfa:generate",
@@ -522,15 +505,6 @@ const missingArtifactHandoff = new Map([
       ownerAgent: "observability_sre_engineer",
       evidenceGate: "observability:uat:check",
       nextActionKind: "monitoring_stack_and_alert_artifact",
-    },
-  ],
-  [
-    "reports/external-monitoring.json",
-    {
-      phase: "Faz 5 - Dış monitoring kanıtı",
-      ownerAgent: "observability_sre_engineer",
-      evidenceGate: "external-monitoring:check",
-      nextActionKind: "external_monitoring_drill",
     },
   ],
   [

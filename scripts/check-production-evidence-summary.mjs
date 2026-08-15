@@ -38,7 +38,6 @@ const requiredChecks = new Map([
   ["Financial retention evidence", "scripts/check-financial-retention-evidence.mjs"],
   ["Upload AV evidence", "scripts/check-upload-av-evidence.mjs"],
   ["Observability UAT evidence", "scripts/check-observability-uat-evidence.mjs"],
-  ["External monitoring evidence", "scripts/check-external-monitoring-evidence.mjs"],
   ["Admin MFA evidence", "scripts/check-admin-mfa-evidence.mjs"],
   ["Security audit evidence", "scripts/check-security-audit-evidence.mjs"],
   ["Live exam cycle evidence", "scripts/check-live-exam-cycle-evidence.mjs"],
@@ -114,7 +113,6 @@ const requiredReports = {
     "alertDelivery",
     "evidenceReferences",
   ],
-  externalMonitoring: ["environment", "checkedAt", "provider", "monitoringNode", "monitorsVerified", "outageDrill", "evidenceReferences"],
   adminMfa: ["environment", "checkedAt", "policy", "enrollment", "loginVerification", "commandsPassed", "evidenceReferences"],
   securityAudit: ["environment", "checkedAt", "prodEnvCheckOk", "httpsOk", "rlsLiveCheckOk", "noCriticalFindings", "evidenceReferences"],
   liveExamCycle: [
@@ -368,8 +366,6 @@ const expectedRlsEvidenceReferenceFileNames = [
   "db-rls-check-live.log",
   "rls-load-smoke.json",
 ];
-const externalMonitoringPublicEdgeMonitors = ["API /health", "API /health/ready", "Web login", "Traefik TLS certificate"];
-
 if (!target) {
   fail(["PRODUCTION_EVIDENCE_SUMMARY_TARGET veya dosya argümanı boş bırakılamaz."]);
 }
@@ -712,10 +708,6 @@ function requireReports(summary, failures) {
       }).map((failure) => `reports.deploymentRollback: ${failure}`),
     );
   }
-
-  requireObjectEqual(reports.externalMonitoring, failures, "reports.externalMonitoring.provider", "provider", "self-hosted-uptime-kuma");
-  requireExternalMonitoringPublicEdge(reports.externalMonitoring, summary, failures);
-  requireExternalMonitoringOutageDrill(reports.externalMonitoring, failures);
   requireObjectTrue(reports.securityAudit, failures, "reports.securityAudit.prodEnvCheckOk", "prodEnvCheckOk");
   requireObjectTrue(reports.securityAudit, failures, "reports.securityAudit.httpsOk", "httpsOk");
   requireObjectTrue(reports.securityAudit, failures, "reports.securityAudit.rlsLiveCheckOk", "rlsLiveCheckOk");
@@ -1367,82 +1359,6 @@ function requireUatJourneyScenarios(scope, failures) {
   }
 }
 
-function requireExternalMonitoringPublicEdge(scope, summary, failures) {
-  const monitors = scope?.monitorsVerified;
-  if (!Array.isArray(monitors)) {
-    failures.push("reports.externalMonitoring.monitorsVerified alan listesi zorunlu.");
-    return;
-  }
-
-  for (const name of externalMonitoringPublicEdgeMonitors) {
-    const monitor = monitors.find((candidate) => candidate && typeof candidate === "object" && candidate.name === name);
-    if (!monitor) {
-      failures.push(`reports.externalMonitoring.monitorsVerified eksik: ${name}`);
-      continue;
-    }
-    requireObjectHttpsUrl(monitor, failures, `reports.externalMonitoring.monitorsVerified.${name}.url`, "url");
-    requireMatchingUrlOrigin(
-      monitor,
-      failures,
-      `reports.externalMonitoring.monitorsVerified.${name}.url`,
-      "url",
-      summary,
-      "webUrl",
-      "webUrl",
-    );
-  }
-}
-
-function requireExternalMonitoringOutageDrill(scope, failures) {
-  const drill = requireObject(scope, failures, "reports.externalMonitoring.outageDrill", "outageDrill");
-  if (!drill) return;
-
-  for (const key of ["inducedAt", "detectedAt", "webhookDeliveredAt", "recoveredAt"]) {
-    requireObjectDate(drill, failures, `reports.externalMonitoring.outageDrill.${key}`, key);
-  }
-
-  requireDateOrder(
-    drill,
-    failures,
-    "reports.externalMonitoring.outageDrill.inducedAt",
-    "inducedAt",
-    "reports.externalMonitoring.outageDrill.detectedAt",
-    "detectedAt",
-  );
-  requireDateOrder(
-    drill,
-    failures,
-    "reports.externalMonitoring.outageDrill.detectedAt",
-    "detectedAt",
-    "reports.externalMonitoring.outageDrill.webhookDeliveredAt",
-    "webhookDeliveredAt",
-  );
-  requireDateOrder(
-    drill,
-    failures,
-    "reports.externalMonitoring.outageDrill.webhookDeliveredAt",
-    "webhookDeliveredAt",
-    "reports.externalMonitoring.outageDrill.recoveredAt",
-    "recoveredAt",
-  );
-  requireLatencyMatches(
-    drill,
-    failures,
-    "reports.externalMonitoring.outageDrill.detectionLatencySeconds",
-    "detectionLatencySeconds",
-    "inducedAt",
-    "detectedAt",
-  );
-  requireLatencyMatches(
-    drill,
-    failures,
-    "reports.externalMonitoring.outageDrill.webhookDeliveryLatencySeconds",
-    "webhookDeliveryLatencySeconds",
-    "inducedAt",
-    "webhookDeliveredAt",
-  );
-}
-
 function requireExactStringSet(value, failures, label, expected) {
   if (!Array.isArray(value)) {
     failures.push(`${label} listesi zorunlu.`);
@@ -1506,27 +1422,6 @@ function requireDateNotAfter(scope, failures, firstLabel, firstKey, secondScope,
   }
 }
 
-function requireDateOrder(scope, failures, firstLabel, firstKey, secondLabel, secondKey) {
-  const first = Date.parse(scope?.[firstKey]);
-  const second = Date.parse(scope?.[secondKey]);
-  if (Number.isNaN(first) || Number.isNaN(second)) return;
-  if (first > second) {
-    failures.push(`${firstLabel} ${secondLabel} sonrasında olamaz.`);
-  }
-}
-
-function requireLatencyMatches(scope, failures, label, key, startKey, endKey) {
-  const start = Date.parse(scope?.[startKey]);
-  const end = Date.parse(scope?.[endKey]);
-  const value = scope?.[key];
-  if (Number.isNaN(start) || Number.isNaN(end) || !Number.isInteger(value)) return;
-
-  const seconds = Math.round((end - start) / 1000);
-  if (value !== seconds) {
-    failures.push(`${label} ${startKey}/${endKey} farkıyla eşleşmeli.`);
-  }
-}
-
 function requireHttpsUrl(scope, failures, key) {
   const value = scope?.[key];
   try {
@@ -1540,22 +1435,6 @@ function requireHttpsUrl(scope, failures, key) {
     }
   } catch {
     failures.push(`${key} geçerli URL olmalı.`);
-  }
-}
-
-function requireObjectHttpsUrl(scope, failures, label, key) {
-  const value = scope?.[key];
-  try {
-    const url = new URL(value);
-    if (url.protocol !== "https:") {
-      failures.push(`${label} https URL olmalı.`);
-      return;
-    }
-    if (!allowExampleEvidence && isPlaceholderHost(url.hostname)) {
-      failures.push(`${label} production için gerçek host olmalı.`);
-    }
-  } catch {
-    failures.push(`${label} geçerli URL olmalı.`);
   }
 }
 

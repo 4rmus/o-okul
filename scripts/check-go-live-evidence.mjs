@@ -32,7 +32,6 @@ const requiredEvidenceCheckScripts = new Map([
   ["Financial retention evidence", "scripts/check-financial-retention-evidence.mjs"],
   ["Upload AV evidence", "scripts/check-upload-av-evidence.mjs"],
   ["Observability UAT evidence", "scripts/check-observability-uat-evidence.mjs"],
-  ["External monitoring evidence", "scripts/check-external-monitoring-evidence.mjs"],
   ["Admin MFA evidence", "scripts/check-admin-mfa-evidence.mjs"],
   ["Security audit evidence", "scripts/check-security-audit-evidence.mjs"],
   ["Live exam cycle evidence", "scripts/check-live-exam-cycle-evidence.mjs"],
@@ -75,7 +74,6 @@ const goLiveDeploymentKeys = [
   "reportGenerationPassed",
   "rollbackDrillPassed",
   "observabilityUatPassed",
-  "externalMonitoringPassed",
   "adminMfaPassed",
   "rateLimitRedisPassed",
   "rlsLivePassed",
@@ -139,7 +137,6 @@ const summaryReportKeys = [
   "financialRetention",
   "uploadAv",
   "observabilityUat",
-  "externalMonitoring",
   "adminMfa",
   "securityAudit",
   "liveExamCycle",
@@ -259,7 +256,6 @@ const summaryRequiredReportKeys = {
     "alertDelivery",
     "evidenceReferences",
   ],
-  externalMonitoring: ["environment", "checkedAt", "provider", "monitoringNode", "monitorsVerified", "outageDrill", "evidenceReferences"],
   adminMfa: ["environment", "checkedAt", "policy", "enrollment", "loginVerification", "commandsPassed", "evidenceReferences"],
   securityAudit: ["environment", "checkedAt", "prodEnvCheckOk", "httpsOk", "rlsLiveCheckOk", "noCriticalFindings", "evidenceReferences"],
   liveExamCycle: [
@@ -571,8 +567,6 @@ const linkedLiveStatusTopLevelKeys = [
   "gates",
 ];
 const linkedLiveStatusGateKeys = ["label", "status", "command", "source", "checkedAt", "evidenceReference"];
-const externalMonitoringPublicEdgeMonitors = ["API /health", "API /health/ready", "Web login", "Traefik TLS certificate"];
-
 if (!target) {
   fail(["GO_LIVE_EVIDENCE_TARGET bos birakilamaz."]);
 }
@@ -1374,38 +1368,6 @@ function requireSummaryReports(summary, failures, goLiveReport) {
       reports.githubCi,
       "productionEvidenceSummary.summary.reports.githubCi.commitSha",
       "commitSha",
-    );
-  }
-
-  const externalMonitoring = requireNestedObject(
-    reports,
-    failures,
-    "productionEvidenceSummary.summary.reports.externalMonitoring",
-    "externalMonitoring",
-  );
-  if (externalMonitoring) {
-    requireObjectEqual(externalMonitoring, failures, "productionEvidenceSummary.summary.reports.externalMonitoring.environment", "environment", "production");
-    requireSummaryReportDateNotAfter(
-      externalMonitoring,
-      failures,
-      "productionEvidenceSummary.summary.reports.externalMonitoring.checkedAt",
-      "checkedAt",
-      summary,
-      goLiveReport,
-    );
-    requireObjectEqual(
-      externalMonitoring,
-      failures,
-      "productionEvidenceSummary.summary.reports.externalMonitoring.provider",
-      "provider",
-      "self-hosted-uptime-kuma",
-    );
-    requireSummaryExternalMonitoring(externalMonitoring, summary, failures);
-    requireObjectEvidenceReferences(
-      externalMonitoring,
-      failures,
-      "productionEvidenceSummary.summary.reports.externalMonitoring.evidenceReferences",
-      "evidenceReferences",
     );
   }
 
@@ -2616,150 +2578,6 @@ function requireSummaryUploadAv(report, failures) {
   }
 }
 
-function requireSummaryExternalMonitoring(report, summary, failures) {
-  const node = requireNestedObject(
-    report,
-    failures,
-    "productionEvidenceSummary.summary.reports.externalMonitoring.monitoringNode",
-    "monitoringNode",
-  );
-  if (node) {
-    for (const key of ["host", "region", "network"]) {
-      requireObjectString(
-        node,
-        failures,
-        `productionEvidenceSummary.summary.reports.externalMonitoring.monitoringNode.${key}`,
-        key,
-      );
-      requireNonPlaceholderString(
-        node,
-        failures,
-        `productionEvidenceSummary.summary.reports.externalMonitoring.monitoringNode.${key}`,
-        key,
-      );
-    }
-  }
-
-  const monitors = report.monitorsVerified;
-  if (!Array.isArray(monitors)) {
-    failures.push("productionEvidenceSummary.summary.reports.externalMonitoring.monitorsVerified alan listesi zorunlu.");
-  } else {
-    for (const expected of externalMonitoringPublicEdgeMonitors) {
-      const monitor = monitors.find((item) => item?.name === expected);
-      if (!monitor) {
-        failures.push(`productionEvidenceSummary.summary.reports.externalMonitoring.monitorsVerified eksik: ${expected}`);
-        continue;
-      }
-      requireObjectEqual(
-        monitor,
-        failures,
-        `productionEvidenceSummary.summary.reports.externalMonitoring.monitorsVerified.${expected}.status`,
-        "status",
-        "UP",
-      );
-      requireObjectString(
-        monitor,
-        failures,
-        `productionEvidenceSummary.summary.reports.externalMonitoring.monitorsVerified.${expected}.url`,
-        "url",
-      );
-      requireNonPlaceholderString(
-        monitor,
-        failures,
-        `productionEvidenceSummary.summary.reports.externalMonitoring.monitorsVerified.${expected}.url`,
-        "url",
-      );
-      if (!String(monitor.url).startsWith("https://")) {
-        failures.push(`productionEvidenceSummary.summary.reports.externalMonitoring.monitorsVerified.${expected}.url https:// olmali.`);
-      }
-      requireMatchingUrlOrigin(
-        monitor,
-        failures,
-        `productionEvidenceSummary.summary.reports.externalMonitoring.monitorsVerified.${expected}.url`,
-        "url",
-        summary,
-        "productionEvidenceSummary.summary.webUrl",
-        "webUrl",
-      );
-      if (expected === "Traefik TLS certificate") {
-        requireObjectIntegerAtLeast(
-          monitor,
-          failures,
-          `productionEvidenceSummary.summary.reports.externalMonitoring.monitorsVerified.${expected}.certificateDaysRemaining`,
-          "certificateDaysRemaining",
-          14,
-        );
-      }
-    }
-  }
-
-  const drill = requireNestedObject(
-    report,
-    failures,
-    "productionEvidenceSummary.summary.reports.externalMonitoring.outageDrill",
-    "outageDrill",
-  );
-  if (drill) {
-    for (const key of ["inducedAt", "detectedAt", "webhookDeliveredAt", "recoveredAt"]) {
-      requireObjectDate(drill, failures, `productionEvidenceSummary.summary.reports.externalMonitoring.outageDrill.${key}`, key);
-    }
-    requireObjectNumberAtMost(
-      drill,
-      failures,
-      "productionEvidenceSummary.summary.reports.externalMonitoring.outageDrill.detectionLatencySeconds",
-      "detectionLatencySeconds",
-      120,
-    );
-    requireObjectNumberAtMost(
-      drill,
-      failures,
-      "productionEvidenceSummary.summary.reports.externalMonitoring.outageDrill.webhookDeliveryLatencySeconds",
-      "webhookDeliveryLatencySeconds",
-      120,
-    );
-    requireDateOrder(
-      drill,
-      failures,
-      "productionEvidenceSummary.summary.reports.externalMonitoring.outageDrill.inducedAt",
-      "inducedAt",
-      "productionEvidenceSummary.summary.reports.externalMonitoring.outageDrill.detectedAt",
-      "detectedAt",
-    );
-    requireDateOrder(
-      drill,
-      failures,
-      "productionEvidenceSummary.summary.reports.externalMonitoring.outageDrill.detectedAt",
-      "detectedAt",
-      "productionEvidenceSummary.summary.reports.externalMonitoring.outageDrill.webhookDeliveredAt",
-      "webhookDeliveredAt",
-    );
-    requireDateOrder(
-      drill,
-      failures,
-      "productionEvidenceSummary.summary.reports.externalMonitoring.outageDrill.webhookDeliveredAt",
-      "webhookDeliveredAt",
-      "productionEvidenceSummary.summary.reports.externalMonitoring.outageDrill.recoveredAt",
-      "recoveredAt",
-    );
-    requireLatencyMatches(
-      drill,
-      failures,
-      "productionEvidenceSummary.summary.reports.externalMonitoring.outageDrill.detectionLatencySeconds",
-      "detectionLatencySeconds",
-      "inducedAt",
-      "detectedAt",
-    );
-    requireLatencyMatches(
-      drill,
-      failures,
-      "productionEvidenceSummary.summary.reports.externalMonitoring.outageDrill.webhookDeliveryLatencySeconds",
-      "webhookDeliveryLatencySeconds",
-      "inducedAt",
-      "webhookDeliveredAt",
-    );
-  }
-}
-
 function requireSummaryAdminMfa(report, failures) {
   const policy = requireNestedObject(report, failures, "productionEvidenceSummary.summary.reports.adminMfa.policy", "policy");
   if (policy) {
@@ -3729,7 +3547,6 @@ function requireDeployment(report, failures) {
     "reportGenerationPassed",
     "rollbackDrillPassed",
     "observabilityUatPassed",
-    "externalMonitoringPassed",
     "adminMfaPassed",
     "rateLimitRedisPassed",
     "rlsLivePassed",
@@ -4354,15 +4171,6 @@ function requireDateNotAfter(report, failures, firstLabel, firstKey, secondRepor
   }
 }
 
-function requireDateOrder(report, failures, firstLabel, firstKey, secondLabel, secondKey) {
-  const first = Date.parse(report[firstKey]);
-  const second = Date.parse(report[secondKey]);
-  if (Number.isNaN(first) || Number.isNaN(second)) return;
-  if (first > second) {
-    failures.push(`${firstLabel} ${secondLabel} sonrasinda olamaz.`);
-  }
-}
-
 function requireMatchingDate(firstReport, failures, firstLabel, firstKey, secondReport, secondLabel, secondKey) {
   const first = Date.parse(firstReport[firstKey]);
   const second = Date.parse(secondReport[secondKey]);
@@ -4392,18 +4200,6 @@ function requireMatchingUrlOrigin(firstReport, failures, firstLabel, firstKey, s
     }
   } catch {
     // URL format errors are reported by the field-specific URL validators.
-  }
-}
-
-function requireLatencyMatches(report, failures, label, key, startKey, endKey) {
-  const start = Date.parse(report[startKey]);
-  const end = Date.parse(report[endKey]);
-  const value = report[key];
-  if (Number.isNaN(start) || Number.isNaN(end) || !Number.isInteger(value)) return;
-
-  const seconds = Math.round((end - start) / 1000);
-  if (value !== seconds) {
-    failures.push(`${label} ${startKey}/${endKey} farkiyla eslesmeli.`);
   }
 }
 

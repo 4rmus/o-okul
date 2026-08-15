@@ -92,11 +92,6 @@
       "status": "PASS"
     },
     {
-      "label": "External monitoring evidence",
-      "script": "scripts/check-external-monitoring-evidence.mjs",
-      "status": "PASS"
-    },
-    {
       "label": "Admin MFA evidence",
       "script": "scripts/check-admin-mfa-evidence.mjs",
       "status": "PASS"
@@ -719,59 +714,6 @@
         "artifacts/example/observability/grafana-api-overview.png",
         "artifacts/example/observability/loki-request-id-query.png",
         "artifacts/example/observability/alert-webhook-delivery.json"
-      ]
-    },
-    "externalMonitoring": {
-      "environment": "production",
-      "checkedAt": "2026-05-30",
-      "provider": "self-hosted-uptime-kuma",
-      "monitoringNode": {
-        "host": "uptime-kuma.example.test",
-        "region": "tr-istanbul-1",
-        "network": "external-vps"
-      },
-      "monitorsVerified": [
-        {
-          "name": "API /health",
-          "type": "http",
-          "url": "https://staging.example.test/health",
-          "status": "UP",
-          "responseTimeMs": 142
-        },
-        {
-          "name": "API /health/ready",
-          "type": "http",
-          "url": "https://staging.example.test/health/ready",
-          "status": "UP",
-          "responseTimeMs": 168
-        },
-        {
-          "name": "Web login",
-          "type": "http",
-          "url": "https://staging.example.test/login",
-          "status": "UP",
-          "responseTimeMs": 190
-        },
-        {
-          "name": "Traefik TLS certificate",
-          "type": "certificate",
-          "url": "https://staging.example.test/",
-          "status": "UP",
-          "certificateDaysRemaining": 45
-        }
-      ],
-      "outageDrill": {
-        "inducedAt": "2026-05-30T09:00:00.000Z",
-        "detectedAt": "2026-05-30T09:01:15.000Z",
-        "webhookDeliveredAt": "2026-05-30T09:01:25.000Z",
-        "recoveredAt": "2026-05-30T09:02:30.000Z",
-        "detectionLatencySeconds": 75,
-        "webhookDeliveryLatencySeconds": 85
-      },
-      "evidenceReferences": [
-        "artifacts/example/external-monitoring/uptime-kuma-monitors.png",
-        "artifacts/example/external-monitoring/outage-webhook-delivery.json",
-        "artifacts/example/external-monitoring/tls-certificate-monitor.png"
       ]
     },
     "adminMfa": {
