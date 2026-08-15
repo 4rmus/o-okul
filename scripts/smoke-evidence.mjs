@@ -57,12 +57,53 @@ export function validateSmokeEvidencePayload(
   return failures;
 }
 
+export function validateReusedNotificationSmokePayload(payload, { notBefore, email, pushTo } = {}) {
+  const failures = validateSmokeEvidencePayload(payload, {
+    expectedCheck: "notification_provider_smoke",
+    allowedEnvironments: ["staging", "production"],
+    label: "Reused notification smoke",
+  });
+  const notBeforeTimestamp = Date.parse(notBefore ?? "");
+
+  if (!notBefore || Number.isNaN(notBeforeTimestamp)) {
+    failures.push("NOTIFICATION_SMOKE_NOT_BEFORE geçerli cutover tarihi olmalı.");
+    return failures;
+  }
+
+  if (Date.parse(payload?.checkedAt ?? "") < notBeforeTimestamp) {
+    failures.push("Reused notification smoke checkedAt cutover zamanından eski olamaz.");
+  }
+  if (Date.parse(payload?.generatedAt ?? "") < notBeforeTimestamp) {
+    failures.push("Reused notification smoke generatedAt cutover zamanından eski olamaz.");
+  }
+  if (payload?.provider !== "http") {
+    failures.push("Reused notification smoke provider http olmalı.");
+  }
+  if (!Array.isArray(payload?.channels) || payload.channels.length !== 1 || payload.channels[0] !== "EMAIL") {
+    failures.push("Reused notification smoke yalnız EMAIL kanalını içermeli.");
+  }
+  if (pushTo) {
+    failures.push("Reused notification smoke için NOTIFICATION_SMOKE_PUSH_TO boş olmalı.");
+  }
+  const expectedRecipient = typeof email === "string" && email ? maskRecipient(email) : undefined;
+  if (!expectedRecipient || payload?.recipients?.length !== 1 || payload.recipients[0] !== expectedRecipient) {
+    failures.push("Reused notification smoke alıcısı configured email maskesiyle eşleşmeli.");
+  }
+
+  return failures;
+}
+
 export function redactedUrl(value) {
   const url = value instanceof URL ? new URL(value.href) : new URL(value);
   url.username = "";
   url.password = "";
   url.hash = "";
   return url.href;
+}
+
+function maskRecipient(value) {
+  const visible = value.slice(-4);
+  return `${"*".repeat(Math.max(0, value.length - visible.length))}${visible}`;
 }
 
 async function validateSmokeEvidenceOutputPath(filePath) {

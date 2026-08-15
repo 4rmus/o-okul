@@ -337,7 +337,7 @@ function onboardingEvidenceEnabled(env) {
     && typeof host === "string"
     && host.endsWith(".staging.o-okul.com")
     && typeof activationHost === "string"
-    && activationHost.endsWith(".staging.o-okul.com");
+    && activationHost.endsWith(".o-okul.com");
 }
 
 function evidenceHost(env) {

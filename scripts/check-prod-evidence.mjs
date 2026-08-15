@@ -2,11 +2,12 @@ import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, parse, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { validateSmokeEvidencePayload } from "./smoke-evidence.mjs";
+import { validateReusedNotificationSmokePayload, validateSmokeEvidencePayload } from "./smoke-evidence.mjs";
 
 const env = { ...process.env, ...readEnvFileArg() };
 const summaryFile = readArgValue("--summary-file");
 const summaryOutputFile = summaryFile ? validateSummaryOutputFile(summaryFile) : undefined;
+const reuseNotificationSmoke = process.argv.includes("--reuse-notification-smoke");
 const summarySmokeEnvironments = ["staging", "production"];
 const evidenceTargetKeys = [
   "DEPLOYMENT_ROLLBACK_TARGET",
@@ -102,8 +103,13 @@ const reportArtifacts = {
 requireSmokeEvidenceFileTargets();
 requireNoExampleEvidenceFlags();
 requireEvidenceTargetUrls();
+if (reuseNotificationSmoke) validateReusedNotificationSmoke();
 
 for (const [label, script] of checks) {
+  if (reuseNotificationSmoke && script === "scripts/smoke-notification-provider.mjs") {
+    console.log("Notification provider smoke mevcut cutover-bound artifact ile doğrulandı.");
+    continue;
+  }
   const result = spawnSync(process.execPath, [script], {
     env,
     stdio: "inherit",
@@ -155,6 +161,20 @@ function readArgValue(name) {
     process.exit(1);
   }
   return value;
+}
+
+function validateReusedNotificationSmoke() {
+  if (!summaryOutputFile) {
+    fail(["--reuse-notification-smoke yalnız --summary-file ile kullanılabilir."]);
+  }
+
+  const payload = readSmokeEvidence("NOTIFICATION_PROVIDER_SMOKE_EVIDENCE_FILE", "notification_provider_smoke");
+  const failures = validateReusedNotificationSmokePayload(payload, {
+    notBefore: env.NOTIFICATION_SMOKE_NOT_BEFORE,
+    email: env.NOTIFICATION_SMOKE_EMAIL_TO,
+    pushTo: env.NOTIFICATION_SMOKE_PUSH_TO,
+  });
+  if (failures.length > 0) fail(failures);
 }
 
 function requireEvidenceTargetUrls() {
