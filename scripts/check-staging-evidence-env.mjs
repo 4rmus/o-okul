@@ -460,13 +460,15 @@ function checkOutboxVerifyWorkflowContract(output) {
       'client.query("BEGIN READ ONLY")',
       'client.query("SELECT set_config(\'app.bypass_rls\', \'true\', true)")',
       'client.query("ROLLBACK")',
-      '"REDIS_URL"',
       '"QUEUE_PREFIX"',
       'NODE_ENV: "test"',
       'PERSISTENCE_DRIVER: "memory"',
       'API_RATE_LIMIT_ENABLED: "false"',
       'API_RATE_LIMIT_STORE: "memory"',
+      'LOGIN_ATTEMPT_LIMITER_STORE: "memory"',
       'QUEUE_METRICS_ENABLED: "false"',
+      'REDIS_URL: "redis://127.0.0.1:1"',
+      'REPORT_PDF_RENDERER: "memory"',
     ]) {
       if (!generator.includes(token)) {
         output.push(`${generatorPath} staging-safe generator token eksik: ${token}`);

@@ -105,14 +105,16 @@ function runCommand(command) {
     PERSISTENCE_DRIVER: "memory",
     API_RATE_LIMIT_ENABLED: "false",
     API_RATE_LIMIT_STORE: "memory",
+    LOGIN_ATTEMPT_LIMITER_STORE: "memory",
     QUEUE_METRICS_ENABLED: "false",
+    REDIS_URL: "redis://127.0.0.1:1",
+    REPORT_PDF_RENDERER: "memory",
   };
   for (const key of [
     "DATABASE_URL",
     "DIRECT_DATABASE_URL",
     "ADMIN_MFA_MODE",
     "IDEMPOTENCY_STORE",
-    "REDIS_URL",
     "QUEUE_PREFIX",
   ]) {
     delete testEnv[key];

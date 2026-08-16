@@ -232,8 +232,8 @@ pnpm backup:restore:smoke
   DB, SMS adapter ve notification adapter paketleri yeniden build edilir. Güvenlik denetimi artık yaşamayan
   bir public evidence URL'sine güvenmez; staging host'taki symlink olmayan gerçek `rls-live.json` artifact'ini
   runner bundle'ına kopyalar, ham RLS checker'dan geçirir ve security-audit referansını bu dosyaya bağlar.
-  Identity/financial E2E child process'leri gerçek DB sayımından ayrıdır; staging `REDIS_URL`, queue metrics ve
-  API rate-limit seçimlerini devralmaz, böylece test kapanışı canlı BullMQ/Redis bağlantısı açıp kanıtı flaky yapmaz.
+  Identity/financial E2E child process'leri gerçek DB sayımından ayrıdır; staging Redis, queue metrics, API rate-limit,
+  login limiter ve report PDF worker seçimlerini devralmaz, böylece test kapanışı canlı BullMQ/Redis bağlantısı açıp kanıtı flaky yapmaz.
   `pnpm staging:evidence-env:secret:set` varsayılan olarak aynı tam doğrulamayı çalıştırır;
   yalnız normal cutover secret senkronu için açıkça `--mode activation` verilebilir. Helper repo/temp/symlink
   dosyalarını reddeder ve `STAGING_EVIDENCE_ENV_B64` değerini GitHub environment secret'a stdin üzerinden yazar.
