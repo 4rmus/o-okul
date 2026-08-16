@@ -1404,7 +1404,7 @@ const expectations = {
     "rmdir -- \"$SOURCE_CLAIM_DIR\" 2>/dev/null || true",
     "Clean local verification secrets",
     "staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}",
-    "if: ${{ success() && inputs.full_evidence }}",
+    "if: ${{ always() && inputs.full_evidence }}",
   ],
   "docker/alloy/config.alloy": ["loki.source.docker", "loki.write", "http://loki:3100/loki/api/v1/push"],
   "docker/prometheus/rules/api-alerts.yml": [

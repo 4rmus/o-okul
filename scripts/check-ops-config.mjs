@@ -1429,7 +1429,7 @@ const expectations = {
     "rmdir -- \"$SOURCE_CLAIM_DIR\" 2>/dev/null || true",
     "Clean local verification secrets",
     "staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}",
-    "if: ${{ success() && inputs.full_evidence }}",
+    "if: ${{ always() && inputs.full_evidence }}",
   ],
   "package.json": [
     "tenant-db:check",

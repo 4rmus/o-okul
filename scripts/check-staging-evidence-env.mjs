@@ -483,7 +483,7 @@ function checkOutboxVerifyWorkflowContract(output) {
     "ui_ux_approved_at:",
     "description: \"Also run the separate full production evidence aggregation.\"",
     "if: ${{ inputs.full_evidence }}",
-    "if: ${{ success() && inputs.full_evidence }}",
+    "if: ${{ always() && inputs.full_evidence }}",
     "types: [labeled]",
     "github.event.label.name == 'staging-outbox-verify'",
     "vars.STAGING_OUTBOX_DEPLOY_RUN_ID",

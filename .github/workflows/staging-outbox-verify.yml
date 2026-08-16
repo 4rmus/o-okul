@@ -712,7 +712,7 @@ jobs:
           REMOTE
 
       - uses: actions/upload-artifact@v4
-        if: ${{ success() && inputs.full_evidence }}
+        if: ${{ always() && inputs.full_evidence }}
         with:
           name: staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}
           path: artifacts/staging
