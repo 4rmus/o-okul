@@ -201,6 +201,7 @@ async function validateGithubRun(url, report, failures) {
   const headers = {
     Accept: "application/vnd.github+json",
     Authorization: `Bearer ${token}`,
+    "User-Agent": "o-okul-gate-e-evidence",
     "X-GitHub-Api-Version": "2022-11-28",
   };
   const response = await secureFetch(apiUrl, { headers });

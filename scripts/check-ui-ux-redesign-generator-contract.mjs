@@ -22,6 +22,7 @@ writeFileSync(envPath, buildValidEnvFile());
 
 try {
   expectPinnedLookupContract();
+  expectGithubApiUserAgentContract();
   expectGeneratePass();
   expectMalformedPngFailure();
   expectBlankPngFailure();
@@ -93,6 +94,13 @@ try {
 }
 
 console.log("UI/UX redesign generator contract kontrolü geçti.");
+
+function expectGithubApiUserAgentContract() {
+  const checker = readFileSync("scripts/check-ui-ux-redesign-evidence.mjs", "utf8");
+  if (!checker.includes('"User-Agent": "o-okul-gate-e-evidence"')) {
+    failContract("private GitHub Actions API doğrulaması explicit User-Agent göndermeli.");
+  }
+}
 
 function expectGeneratePass() {
   const result = runGenerator(envPath, outputPath);
