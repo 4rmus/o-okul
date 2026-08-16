@@ -461,13 +461,15 @@ function checkOutboxVerifyWorkflowContract(output) {
       'client.query("SELECT set_config(\'app.bypass_rls\', \'true\', true)")',
       'client.query("ROLLBACK")',
       '"REDIS_URL"',
-      '"API_RATE_LIMIT_ENABLED"',
-      '"API_RATE_LIMIT_STORE"',
-      '"QUEUE_METRICS_ENABLED"',
       '"QUEUE_PREFIX"',
+      'NODE_ENV: "test"',
+      'PERSISTENCE_DRIVER: "memory"',
+      'API_RATE_LIMIT_ENABLED: "false"',
+      'API_RATE_LIMIT_STORE: "memory"',
+      'QUEUE_METRICS_ENABLED: "false"',
     ]) {
       if (!generator.includes(token)) {
-        output.push(`${generatorPath} transaction-scoped RLS bypass token eksik: ${token}`);
+        output.push(`${generatorPath} staging-safe generator token eksik: ${token}`);
       }
     }
   }

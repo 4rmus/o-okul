@@ -99,18 +99,20 @@ async function readFinancialRecordCounts(pool) {
 }
 
 function runCommand(command) {
-  const testEnv = { ...process.env };
+  const testEnv = {
+    ...process.env,
+    NODE_ENV: "test",
+    PERSISTENCE_DRIVER: "memory",
+    API_RATE_LIMIT_ENABLED: "false",
+    API_RATE_LIMIT_STORE: "memory",
+    QUEUE_METRICS_ENABLED: "false",
+  };
   for (const key of [
     "DATABASE_URL",
     "DIRECT_DATABASE_URL",
-    "NODE_ENV",
     "ADMIN_MFA_MODE",
-    "PERSISTENCE_DRIVER",
     "IDEMPOTENCY_STORE",
     "REDIS_URL",
-    "API_RATE_LIMIT_ENABLED",
-    "API_RATE_LIMIT_STORE",
-    "QUEUE_METRICS_ENABLED",
     "QUEUE_PREFIX",
   ]) {
     delete testEnv[key];
