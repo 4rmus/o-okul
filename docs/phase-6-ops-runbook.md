@@ -556,6 +556,15 @@ Full aggregation, private env dosyasındaki UI/UX GitHub run referansını seçi
 env dosyasını `0600` modunda tutar. Aynı koşuda identity migration, financial retention ve security audit
 raporlarını staging DB tüneli üzerinden production-summary child sözleşmesiyle üretir; runtime kaynağı
 staging olarak ayrı raporlanır ve bu üç hedef runner'daki raw artifact'lere yeniden bağlanır.
+Stale iSEM/live-UI/rate-limit raporlarını yenilemek için `run_gate_e_mutating_smokes=true` yalnız ayrı
+release-owner onayından sonra ve `full_evidence=true` ile kullanılabilir. Bu tek seferlik yol GitHub staging
+environment'ındaki `GATE_E_ISEM_OPTICAL_TXT_BASE64`, `GATE_E_ISEM_ANSWER_KEY_BASE64` ve
+`GATE_E_ISEM_SMOKE_PASSWORD` secret'larını kullanır; fixture hash'lerini manifestle doğrular, staging test
+tenant/sınav/rapor kayıtlarını üretir, canlı UI oturumlarını logout ile iptal eder ve geçici ikinci API shard'ında
+Redis rate-limit smoke'u çalıştırır. Shard her sonuçta kaldırılır; credential taşıyan private UI girdisi ve
+materialize edilen cevap anahtarı exit trap'i ile full artifact upload'ından önce silinir. Public iSEM,
+live-UI, live-exam-cycle ve rate-limit raporları aynı verifier run'ına ve cutover SHA'sına bağlanır. Bu input
+kapalıyken workflow eski raporları yenilemez ve eksik/stale kanıta PASS vermez.
 Rollback tag'i yalnız exact release candidate ile eşleşen doğrulanabilir HTTPS rollback raporundan alınır.
 Böylece eski bir template run URL'si veya eski uzak rapor yeni cutover kanıtına karışamaz.
 - PR-4 rollback önceki web+API image çiftidir. Additive kolonlar ve legacy membership satırları yerinde
