@@ -367,6 +367,12 @@ IDENTITY_MIGRATION_ACTIVATION_MODE=invite \
 pnpm identity-migration:generate
 ```
 
+Gate E staging verifier, eksik bağı yalnız açık onaylı çalıştırmada tamamlar:
+`run_identity_migration=true` girişi `full_evidence=true` ile birlikte verilmelidir. Verifier önce
+`pnpm identity-link:audit` eşdeğeri salt-okunur sayımı çalıştırır; yalnız sonuç
+`NEEDS_INVITE_MIGRATION` ise korumalı ve idempotent göçü uygular, ardından ikinci audit sonucunun
+`READY` olmasını zorunlu tutar. Varsayılan değer `false` olduğundan göç kendiliğinden çalışmaz.
+
 Minimum kanıt içeriği:
 
 - `environment=staging|production`, `result=PASS` ve geleceğe taşmayan `checkedAt`.

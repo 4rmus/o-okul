@@ -24,6 +24,11 @@ on:
         description: "Optional prior verifier run ID whose exact cutover-bound aggregate smoke artifacts will be reused."
         required: false
         type: string
+      run_identity_migration:
+        description: "Run the approved, guarded identity-link migration only when the live audit reports missing links."
+        required: false
+        default: false
+        type: boolean
       ui_ux_approved_at:
         description: "Release-owner UI/UX approval time (ISO-8601); required for full evidence."
         required: false
@@ -47,6 +52,7 @@ jobs:
       REUSE_OUTBOX_SMOKE_RUN_ID: ${{ inputs.reuse_outbox_smoke_run_id }}
       REUSE_PROVIDER_SMOKE_RUN_ID: ${{ inputs.reuse_provider_smoke_run_id }}
       REUSE_AGGREGATE_SMOKE_RUN_ID: ${{ inputs.reuse_aggregate_smoke_run_id }}
+      RUN_IDENTITY_MIGRATION: ${{ inputs.run_identity_migration }}
       UI_UX_APPROVED_AT_INPUT: ${{ inputs.ui_ux_approved_at }}
     timeout-minutes: 30
     concurrency:
@@ -66,6 +72,10 @@ jobs:
           [ -z "$REUSE_OUTBOX_SMOKE_RUN_ID" ] || [[ "$REUSE_OUTBOX_SMOKE_RUN_ID" =~ ^[0-9]+$ ]]
           [ -z "$REUSE_PROVIDER_SMOKE_RUN_ID" ] || [[ "$REUSE_PROVIDER_SMOKE_RUN_ID" =~ ^[0-9]+$ ]]
           [ -z "$REUSE_AGGREGATE_SMOKE_RUN_ID" ] || [[ "$REUSE_AGGREGATE_SMOKE_RUN_ID" =~ ^[0-9]+$ ]]
+          if [ "$RUN_IDENTITY_MIGRATION" = true ] && [ "$FULL_EVIDENCE" != true ]; then
+            echo "run_identity_migration requires full_evidence=true." >&2
+            exit 1
+          fi
           if [ "$FULL_EVIDENCE" = true ]; then
             node --input-type=module - "$UI_UX_APPROVED_AT_INPUT" <<'NODE'
           const [approvedAt] = process.argv.slice(2);
@@ -153,11 +163,13 @@ jobs:
             scripts/check-production-evidence-summary.mjs \
             scripts/check-staging-evidence-env.mjs \
             scripts/check-ui-ux-redesign-evidence.mjs \
+            scripts/audit-identity-links-live.mjs \
             scripts/generate-identity-migration-evidence.mjs \
             scripts/generate-financial-retention-evidence.mjs \
             scripts/generate-ui-ux-redesign-evidence.mjs \
             scripts/prepare-ui-ux-redesign-staging-artifacts.mjs \
             scripts/run-staging-first-gate-smokes.mjs \
+            scripts/migrate-identity-links-live.mjs \
             scripts/smoke-report-generation-live.mjs; do
             [ -f "$relative" ] && [ ! -L "$relative" ]
             install -D -m 600 "$relative" "$verifier_root/$relative"
@@ -181,11 +193,13 @@ jobs:
             scripts/check-production-evidence-summary.mjs \
             scripts/check-staging-evidence-env.mjs \
             scripts/check-ui-ux-redesign-evidence.mjs \
+            scripts/audit-identity-links-live.mjs \
             scripts/generate-identity-migration-evidence.mjs \
             scripts/generate-financial-retention-evidence.mjs \
             scripts/generate-ui-ux-redesign-evidence.mjs \
             scripts/prepare-ui-ux-redesign-staging-artifacts.mjs \
             scripts/run-staging-first-gate-smokes.mjs \
+            scripts/migrate-identity-links-live.mjs \
             scripts/smoke-report-generation-live.mjs; do
             source_file="$verifier_root/$relative"
             [ -f "$source_file" ] && [ ! -L "$source_file" ]
@@ -671,6 +685,22 @@ jobs:
           pnpm --filter @o-okul/db build
           pnpm --filter @o-okul/sms-adapter build
           pnpm --filter @o-okul/notification-adapter build
+          identity_audit_before="$RUNNER_TEMP/identity-link-audit-before.json"
+          node --env-file=.staging-evidence.env scripts/audit-identity-links-live.mjs > "$identity_audit_before"
+          identity_status="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).status' "$identity_audit_before")"
+          if [ "$identity_status" = NEEDS_INVITE_MIGRATION ]; then
+            if [ "$RUN_IDENTITY_MIGRATION" != true ]; then
+              echo "Identity-link audit requires the separately approved guarded migration." >&2
+              exit 1
+            fi
+            IDENTITY_LINK_MIGRATION_APPROVED=true \
+              node --env-file=.staging-evidence.env scripts/migrate-identity-links-live.mjs > "$RUNNER_TEMP/identity-link-migration.json"
+          elif [ "$identity_status" != READY ]; then
+            echo "Unexpected identity-link audit status: $identity_status" >&2
+            exit 1
+          fi
+          node --env-file=.staging-evidence.env scripts/audit-identity-links-live.mjs > "$RUNNER_TEMP/identity-link-audit-after.json"
+          [ "$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).status' "$RUNNER_TEMP/identity-link-audit-after.json")" = READY ]
           STAGING_ENVIRONMENT=production \
           IDENTITY_MIGRATION_OUTPUT=artifacts/staging/reports/identity-migration.json \
           IDENTITY_MIGRATION_APPROVED_BY=release-owner \
