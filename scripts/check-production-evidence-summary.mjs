@@ -16,7 +16,7 @@ const trustedUiUxEvidenceHosts = (process.env.UI_UX_REDESIGN_ALLOWED_EVIDENCE_HO
   .map((host) => host.trim())
   .filter(Boolean);
 
-const requiredSummaryKeys = ["result", "generatedAt", "nodeEnv", "appUrl", "apiUrl", "webUrl", "checks", "smokeEvidence", "reports"];
+const requiredSummaryKeys = ["result", "canPromote", "generatedAt", "nodeEnv", "appUrl", "apiUrl", "webUrl", "checks", "smokeEvidence", "reports"];
 const requiredCheckItemKeys = ["label", "script", "status"];
 const expectedTenantTables = getTenantScopedTables();
 
@@ -509,6 +509,7 @@ function validateSummary(summary) {
 
   requireExpectedObjectKeys(summary, requiredSummaryKeys, failures, "summary");
   requireEqual(summary, failures, "result", "PASS");
+  requireEqual(summary, failures, "canPromote", true);
   requireEqual(summary, failures, "nodeEnv", "production");
   requireDate(summary, failures, "generatedAt");
   requireDateNotInFuture(summary, failures, "generatedAt");

@@ -134,6 +134,8 @@ pnpm backup:restore:smoke
   yanlış public edge host'unu smoke hedefi olarak kabul etmez.
 - Production kanıt zinciri `--summary-file` ile release özeti üretir ve aynı komut içinde
   `scripts/check-production-evidence-summary.mjs` sözleşmesiyle doğrular.
+  Özet yalnız tüm zorunlu check ve artifact'ler PASS olduktan sonra `canPromote=true` taşır;
+  eksik dış kanıt için promotion özeti yazılmaz.
   `--summary-file`, sibling `reports/` ve `smoke/` artifact layout'u lokal temp path veya symlink
   file/directory üzerinden yazılamaz; birleşik kapı bu output hedeflerini evidence check'lerine
   başlamadan önce reddeder.

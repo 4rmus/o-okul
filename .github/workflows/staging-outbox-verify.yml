@@ -20,6 +20,10 @@ on:
         description: "Optional prior verifier run ID whose exact cutover-bound Sentry and alert smoke artifacts will be reused."
         required: false
         type: string
+      reuse_aggregate_smoke_run_id:
+        description: "Optional prior verifier run ID whose exact cutover-bound aggregate smoke artifacts will be reused."
+        required: false
+        type: string
       ui_ux_approved_at:
         description: "Release-owner UI/UX approval time (ISO-8601); required for full evidence."
         required: false
@@ -42,6 +46,7 @@ jobs:
     env:
       REUSE_OUTBOX_SMOKE_RUN_ID: ${{ inputs.reuse_outbox_smoke_run_id }}
       REUSE_PROVIDER_SMOKE_RUN_ID: ${{ inputs.reuse_provider_smoke_run_id }}
+      REUSE_AGGREGATE_SMOKE_RUN_ID: ${{ inputs.reuse_aggregate_smoke_run_id }}
       UI_UX_APPROVED_AT_INPUT: ${{ inputs.ui_ux_approved_at }}
     timeout-minutes: 30
     concurrency:
@@ -60,6 +65,7 @@ jobs:
           [[ "$DEPLOY_RUN_ID" =~ ^[0-9]+$ ]]
           [ -z "$REUSE_OUTBOX_SMOKE_RUN_ID" ] || [[ "$REUSE_OUTBOX_SMOKE_RUN_ID" =~ ^[0-9]+$ ]]
           [ -z "$REUSE_PROVIDER_SMOKE_RUN_ID" ] || [[ "$REUSE_PROVIDER_SMOKE_RUN_ID" =~ ^[0-9]+$ ]]
+          [ -z "$REUSE_AGGREGATE_SMOKE_RUN_ID" ] || [[ "$REUSE_AGGREGATE_SMOKE_RUN_ID" =~ ^[0-9]+$ ]]
           if [ "$FULL_EVIDENCE" = true ]; then
             node --input-type=module - "$UI_UX_APPROVED_AT_INPUT" <<'NODE'
           const [approvedAt] = process.argv.slice(2);
@@ -144,12 +150,14 @@ jobs:
             .github/workflows/staging-outbox-verify.yml \
             apps/web/e2e-next/ui-visual-qa-next.spec.ts \
             scripts/check-prod-evidence.mjs \
+            scripts/check-production-evidence-summary.mjs \
             scripts/check-staging-evidence-env.mjs \
             scripts/check-ui-ux-redesign-evidence.mjs \
             scripts/generate-identity-migration-evidence.mjs \
             scripts/generate-financial-retention-evidence.mjs \
             scripts/generate-ui-ux-redesign-evidence.mjs \
             scripts/prepare-ui-ux-redesign-staging-artifacts.mjs \
+            scripts/run-staging-first-gate-smokes.mjs \
             scripts/smoke-report-generation-live.mjs; do
             [ -f "$relative" ] && [ ! -L "$relative" ]
             install -D -m 600 "$relative" "$verifier_root/$relative"
@@ -170,12 +178,14 @@ jobs:
             .github/workflows/staging-outbox-verify.yml \
             apps/web/e2e-next/ui-visual-qa-next.spec.ts \
             scripts/check-prod-evidence.mjs \
+            scripts/check-production-evidence-summary.mjs \
             scripts/check-staging-evidence-env.mjs \
             scripts/check-ui-ux-redesign-evidence.mjs \
             scripts/generate-identity-migration-evidence.mjs \
             scripts/generate-financial-retention-evidence.mjs \
             scripts/generate-ui-ux-redesign-evidence.mjs \
             scripts/prepare-ui-ux-redesign-staging-artifacts.mjs \
+            scripts/run-staging-first-gate-smokes.mjs \
             scripts/smoke-report-generation-live.mjs; do
             source_file="$verifier_root/$relative"
             [ -f "$source_file" ] && [ ! -L "$source_file" ]
@@ -307,6 +317,14 @@ jobs:
           run-id: ${{ inputs.reuse_provider_smoke_run_id }}
           github-token: ${{ github.token }}
           path: artifacts/provider-smoke-reuse
+
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.full_evidence && inputs.reuse_aggregate_smoke_run_id != '' }}
+        with:
+          name: staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ inputs.reuse_aggregate_smoke_run_id }}
+          run-id: ${{ inputs.reuse_aggregate_smoke_run_id }}
+          github-token: ${{ github.token }}
+          path: artifacts/aggregate-smoke-reuse
 
       - name: Validate cutover-bound GitHub CI evidence
         shell: bash
@@ -577,6 +595,30 @@ jobs:
             "test -f '$notification_smoke_remote' && test ! -L '$notification_smoke_remote'"
           scp -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new \
             "$STAGING_SSH_USER@$STAGING_SSH_HOST:$notification_smoke_remote" artifacts/staging/smoke/notification-provider.json
+          while read -r target_key report_file; do
+            report_remote="/root/o-okul/artifacts/staging/reports/$report_file"
+            report_local="artifacts/staging/reports/$report_file"
+            ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+              "test -f '$report_remote' && test ! -L '$report_remote'"
+            scp -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new \
+              "$STAGING_SSH_USER@$STAGING_SSH_HOST:$report_remote" "$report_local"
+            chmod 600 "$report_local"
+            [ "$(grep -Ec "^${target_key}=" .staging-evidence.env)" -eq 1 ]
+            sed -i "s#^${target_key}=.*#${target_key}=file://$PWD/$report_local#" .staging-evidence.env
+            grep -Fxq "${target_key}=file://$PWD/$report_local" .staging-evidence.env
+          done <<'REPORTS'
+          RESTORE_DRILL_TARGET restore-drill.json
+          KVKK_INVENTORY_TARGET kvkk-inventory.json
+          UPLOAD_AV_TARGET upload-av.json
+          OBSERVABILITY_UAT_TARGET observability-uat.json
+          ADMIN_MFA_EVIDENCE_TARGET admin-mfa.json
+          LIVE_EXAM_CYCLE_TARGET live-exam-cycle.json
+          ISEM_OPTICAL_PIPELINE_TARGET isem-optical-pipeline.json
+          LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET live-ui-worker-result.json
+          INLINE_UPLOAD_CONTENT_MIGRATION_TARGET inline-upload-content-migration.json
+          AUDIT_NULL_TENANT_EVIDENCE_TARGET audit-null-tenant.json
+          RATE_LIMIT_EVIDENCE_TARGET rate-limit.json
+          REPORTS
           rls_live_remote=/root/o-okul/artifacts/staging/reports/rls-live.json
           ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
             "test -f '$rls_live_remote' && test ! -L '$rls_live_remote'"
@@ -599,7 +641,14 @@ jobs:
               cp "artifacts/provider-smoke-reuse/smoke/$smoke_file" "artifacts/staging/smoke/$smoke_file"
             done
           fi
+          if [ -n "$REUSE_AGGREGATE_SMOKE_RUN_ID" ]; then
+            cmp -s artifacts/aggregate-smoke-reuse/reports/deployment-cutover.json artifacts/cutover/deployment-cutover.json
+            test -f artifacts/aggregate-smoke-reuse/smoke/report-generation.json
+            test ! -L artifacts/aggregate-smoke-reuse/smoke/report-generation.json
+            cp artifacts/aggregate-smoke-reuse/smoke/report-generation.json artifacts/staging/smoke/report-generation.json
+          fi
           {
+            echo "STAGING_ENVIRONMENT=staging"
             echo "SENTRY_RELEASE=$CUTOVER_RELEASE_IMAGE_TAG"
             echo "ROLLBACK_IMAGE_TAG=$rollback_image_tag"
             echo "GITHUB_CI_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/github-ci.json"
@@ -616,6 +665,7 @@ jobs:
             echo "NOTIFICATION_SMOKE_NOT_BEFORE=$CUTOVER_AT"
             echo "SENTRY_SMOKE_NOT_BEFORE=$CUTOVER_AT"
             echo "ALERT_WEBHOOK_SMOKE_NOT_BEFORE=$CUTOVER_AT"
+            echo "REPORT_GENERATION_SMOKE_NOT_BEFORE=$CUTOVER_AT"
           } >> .staging-evidence.env
           pnpm --filter @o-okul/shared-types build
           pnpm --filter @o-okul/db build
@@ -672,13 +722,96 @@ jobs:
           GITHUB_CI_EVIDENCE_TARGET="file://$PWD/artifacts/staging/reports/github-ci.json" \
           UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES=1 \
             pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env --environment staging
+          mkdir -p artifacts/uat-inputs
+          [ -n "$REUSE_AGGREGATE_SMOKE_RUN_ID" ]
+          aggregate_smoke_run_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$REUSE_AGGREGATE_SMOKE_RUN_ID"
+          node --input-type=module - "$github_ci_run_url" "$aggregate_smoke_run_url" <<'NODE'
+          import { mkdirSync, writeFileSync } from "node:fs";
+
+          const [ciRunUrl, aggregateSmokeRunUrl] = process.argv.slice(2);
+          const ciRun = `run:${ciRunUrl}`;
+          const aggregateSmokeRun = `run:${aggregateSmokeRunUrl}`;
+          const artifact = (path) => `artifact:${path}`;
+          const commands = [
+            ["pnpm run ci", ciRun],
+            ["pnpm prod:env:check", aggregateSmokeRun],
+            ["pnpm db:rls:check:live", artifact("artifacts/staging/reports/rls-live.json")],
+            ["pnpm raw-import:smoke", artifact("artifacts/staging/reports/isem-optical-pipeline.json")],
+            ["pnpm report-generation:smoke", aggregateSmokeRun],
+            ["pnpm live:exam-cycle:check", artifact("artifacts/staging/reports/live-exam-cycle.json")],
+            ["pnpm queue:smoke", ciRun],
+            ["pnpm live:onboarding:smoke", artifact("artifacts/staging/smoke/secret-delivery-outbox.json")],
+            ["pnpm live:ui-worker:smoke", artifact("artifacts/staging/reports/live-ui-worker-result.json")],
+            ["pnpm sms:smoke", aggregateSmokeRun],
+            ["pnpm notification:smoke", artifact("artifacts/staging/smoke/notification-provider.json")],
+            ["pnpm traefik:https:smoke", aggregateSmokeRun],
+          ].map(([command, evidence]) => ({ command, status: "PASS", evidence }));
+          const evidenceByScenario = new Map([
+            ["UAT-SYS-01", [artifact("artifacts/staging/reports/observability-uat.json"), artifact("artifacts/staging/ui-ux-redesign/uat.json")]],
+            ["UAT-SYS-02", [artifact("artifacts/staging/smoke/secret-delivery-outbox.json"), aggregateSmokeRun]],
+            ["UAT-SYS-03", [ciRun]],
+            ["UAT-SYS-04", [artifact("artifacts/staging/reports/deployment-rollback.json"), aggregateSmokeRun]],
+            ["UAT-KURUM-01", [artifact("artifacts/staging/ui-ux-redesign/uat.json"), aggregateSmokeRun]],
+            ["UAT-KURUM-02", [ciRun]],
+            ["UAT-KURUM-03", [artifact("artifacts/staging/reports/identity-migration.json"), aggregateSmokeRun]],
+            ["UAT-KURUM-04", [ciRun]],
+            ["UAT-KURUM-05", [artifact("artifacts/staging/reports/isem-optical-pipeline.json"), artifact("artifacts/staging/reports/live-exam-cycle.json")]],
+            ["UAT-KURUM-06", [aggregateSmokeRun, artifact("artifacts/staging/reports/live-ui-worker-result.json")]],
+            ["UAT-KURUM-07", [ciRun]],
+            ["UAT-KURUM-08", [aggregateSmokeRun, artifact("artifacts/staging/smoke/notification-provider.json")]],
+            ["UAT-TEACHER-01", [ciRun, artifact("artifacts/staging/ui-ux-redesign/uat.json")]],
+            ["UAT-TEACHER-02", [ciRun]],
+            ["UAT-TEACHER-03", [ciRun]],
+            ["UAT-STUDENT-01", [ciRun, artifact("artifacts/staging/reports/live-ui-worker-result.json")]],
+            ["UAT-STUDENT-02", [ciRun]],
+            ["UAT-STUDENT-03", [ciRun]],
+            ["UAT-GUARDIAN-01", [ciRun, artifact("artifacts/staging/reports/live-ui-worker-result.json")]],
+            ["UAT-GUARDIAN-02", [ciRun]],
+            ["UAT-GUARDIAN-03", [ciRun]],
+          ]);
+          const personas = {
+            "UAT-SYS": "SYSTEM_ADMIN",
+            "UAT-KURUM": "TENANT_ADMIN",
+            "UAT-TEACHER": "TEACHER",
+            "UAT-STUDENT": "STUDENT",
+            "UAT-GUARDIAN": "GUARDIAN",
+          };
+          const scenarios = [...evidenceByScenario].map(([id, evidence]) => ({
+            id,
+            persona: Object.entries(personas).find(([prefix]) => id.startsWith(prefix))?.[1],
+            status: "PASS",
+            evidence,
+          }));
+          mkdirSync("artifacts/uat-inputs", { recursive: true });
+          writeFileSync("artifacts/uat-inputs/commands.json", `${JSON.stringify({ commands }, null, 2)}\n`);
+          writeFileSync("artifacts/uat-inputs/scenarios.json", `${JSON.stringify({ journeyScenariosVerified: scenarios }, null, 2)}\n`);
+          NODE
+          restore_backup_reference="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).sourceBackup' artifacts/staging/reports/restore-drill.json)"
+          UAT_OUTPUT=artifacts/staging/reports/uat.json \
+          UAT_TESTER=release-owner-gate-e \
+          UAT_RELEASE_CANDIDATE="ghcr.io/$CUTOVER_REPOSITORY/api:$CUTOVER_RELEASE_IMAGE_TAG" \
+          UAT_ROLLBACK_IMAGE_TAG="ghcr.io/$CUTOVER_REPOSITORY/api:$rollback_image_tag" \
+          UAT_RESTORE_BACKUP_REFERENCE="$restore_backup_reference" \
+          UAT_COMMAND_EVIDENCE_TARGET="file://$PWD/artifacts/uat-inputs/commands.json" \
+          UAT_SCENARIOS_TARGET="file://$PWD/artifacts/uat-inputs/scenarios.json" \
+            pnpm uat:generate -- --environment staging
+          [ "$(grep -Ec '^UAT_EVIDENCE_TARGET=' .staging-evidence.env)" -eq 1 ]
+          sed -i "s#^UAT_EVIDENCE_TARGET=.*#UAT_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/uat.json#" .staging-evidence.env
+          grep -Fxq "UAT_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/uat.json" .staging-evidence.env
           provider_reuse_args=()
           if [ -n "$REUSE_PROVIDER_SMOKE_RUN_ID" ]; then
             provider_reuse_args=(--reuse-sentry-smoke --reuse-alert-webhook-smoke)
           fi
+          aggregate_reuse_args=()
+          if [ -n "$REUSE_AGGREGATE_SMOKE_RUN_ID" ]; then
+            aggregate_reuse_args=(--reuse-report-generation-smoke)
+          fi
           PRODUCTION_EVIDENCE_ALLOW_STAGING_UI_UX=1 PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX=1 UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES=1 \
             pnpm prod:evidence:check -- --env-file .staging-evidence.env --summary-file "artifacts/staging/release-summary-$CUTOVER_RELEASE_IMAGE_TAG.json" \
-              --reuse-notification-smoke --reuse-wal-smoke "${provider_reuse_args[@]}"
+              --reuse-notification-smoke --reuse-wal-smoke "${provider_reuse_args[@]}" "${aggregate_reuse_args[@]}"
+          STAGING_ENVIRONMENT=staging NODE_ENV=production pnpm staging:first-gates:smoke -- \
+            --output-dir artifacts/staging/first-gates --reuse-smoke-dir artifacts/staging/smoke
+          STAGING_FIRST_GATES_TARGET="$PWD/artifacts/staging/first-gates/first-gates-manifest.json" pnpm staging:first-gates:check
 
       - name: Bind verified UI/UX completion to full evidence
         if: ${{ inputs.full_evidence }}

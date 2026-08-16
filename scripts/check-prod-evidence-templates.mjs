@@ -2100,9 +2100,17 @@ runProductionSummaryNegativeCheck({
 runProductionSummaryNegativeCheck({
   label: "Production summary extra top-level key negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-top-level.tmp.json",
-  expectedFailure: "summary tam 9 alan içermeli.",
+  expectedFailure: "summary tam 10 alan içermeli.",
   mutate: (fixture) => {
     fixture.unexpectedTopLevel = true;
+  },
+});
+runProductionSummaryNegativeCheck({
+  label: "Production summary can promote false negative",
+  path: "docs/evidence-templates/production-evidence-summary.can-promote-false.tmp.json",
+  expectedFailure: "canPromote true olmalı.",
+  mutate: (fixture) => {
+    fixture.canPromote = false;
   },
 });
 runProductionSummaryNegativeCheck({
@@ -2746,7 +2754,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked extra summary top-level negative",
   path: "docs/evidence-templates/go-live.linked-extra-summary-top-level.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary tam 9 alan icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary tam 10 alan icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.extra-top-level-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);

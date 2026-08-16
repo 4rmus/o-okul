@@ -1070,7 +1070,8 @@ Beklenen akış:
   komutunu çalıştırır. Yalnız bu staging verify akışı `PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX=1`
   ile outbox smoke'un `environment=staging` kaydını kabul eder; production/go-live çalışmaları bu
   istisnayı taşımaz. Bu komut release summary dosyasını yazdıktan sonra aynı summary'yi
-  `scripts/check-production-evidence-summary.mjs` ile doğrular ve `artifacts/staging`
+  `scripts/check-production-evidence-summary.mjs` ile doğrular; yalnız tüm zorunlu kanıtlar PASS ise
+  summary `canPromote=true` taşır ve `artifacts/staging`
   klasörünü artifact olarak saklar. Aynı source SHA, GitHub CI ve UI/UX artifact'i ile
   `pnpm ui-ux-professionalization:completion:check` full-evidence modu da çalışır. `--summary-file`, sibling `reports/` ve `smoke/` output
   layout'u lokal temp path veya symlink file/directory üzerinden yazılamaz; birleşik kapı bunu

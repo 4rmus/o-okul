@@ -11,6 +11,7 @@ const reuseNotificationSmoke = process.argv.includes("--reuse-notification-smoke
 const reuseSentrySmoke = process.argv.includes("--reuse-sentry-smoke");
 const reuseAlertWebhookSmoke = process.argv.includes("--reuse-alert-webhook-smoke");
 const reuseWalSmoke = process.argv.includes("--reuse-wal-smoke");
+const reuseReportGenerationSmoke = process.argv.includes("--reuse-report-generation-smoke");
 const summarySmokeEnvironments = ["staging", "production"];
 const evidenceTargetKeys = [
   "DEPLOYMENT_ROLLBACK_TARGET",
@@ -122,6 +123,7 @@ if (reuseAlertWebhookSmoke) validateReusedEndpointSmoke({
   payloadEndpointKey: "webhookUrl",
 });
 if (reuseWalSmoke) validateReusedWalSmoke();
+if (reuseReportGenerationSmoke) validateReusedReportGenerationSmoke();
 
 for (const [label, script] of checks) {
   if (reuseNotificationSmoke && script === "scripts/smoke-notification-provider.mjs") {
@@ -138,6 +140,10 @@ for (const [label, script] of checks) {
   }
   if (reuseWalSmoke && script === "scripts/smoke-wal-archive-target.mjs") {
     console.log("WAL archive smoke mevcut cutover-bound artifact ile doğrulandı.");
+    continue;
+  }
+  if (reuseReportGenerationSmoke && script === "scripts/smoke-report-generation-live.mjs") {
+    console.log("Report generation smoke mevcut cutover-bound artifact ile doğrulandı.");
     continue;
   }
   const result = spawnSync(process.execPath, [script], {
@@ -261,6 +267,26 @@ function validateReusedWalSmoke() {
   }
 }
 
+function validateReusedReportGenerationSmoke() {
+  if (!summaryOutputFile) {
+    fail(["--reuse-report-generation-smoke yalnız --summary-file ile kullanılabilir."]);
+  }
+
+  const payload = readSmokeEvidence("REPORT_GENERATION_SMOKE_EVIDENCE_FILE", "report_generation_smoke");
+  const notBefore = Date.parse(env.REPORT_GENERATION_SMOKE_NOT_BEFORE ?? "");
+  if (!Number.isFinite(notBefore)) {
+    fail(["REPORT_GENERATION_SMOKE_NOT_BEFORE geçerli cutover tarihi olmalı."]);
+  }
+  for (const key of ["checkedAt", "generatedAt"]) {
+    if (Date.parse(payload[key] ?? "") < notBefore) {
+      fail([`Reused report_generation_smoke ${key} cutover zamanından eski olamaz.`]);
+    }
+  }
+  if (payload.commandsPassed.length !== 1 || payload.commandsPassed[0] !== "pnpm report-generation:smoke") {
+    fail(["Reused report_generation_smoke commandsPassed tek pnpm report-generation:smoke komutu içermeli."]);
+  }
+}
+
 function requireEvidenceTargetUrls() {
   const failures = [];
   for (const key of evidenceTargetKeys) {
@@ -343,6 +369,7 @@ function writeSummary(file) {
 
   const summary = {
     result: "PASS",
+    canPromote: true,
     generatedAt: new Date().toISOString(),
     nodeEnv: env.NODE_ENV,
     appUrl: env.APP_URL,

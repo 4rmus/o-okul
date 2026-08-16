@@ -1,5 +1,6 @@
 {
   "result": "PASS",
+  "canPromote": true,
   "generatedAt": "2026-06-15T10:00:00.000Z",
   "nodeEnv": "production",
   "appUrl": "https://staging.example.test",
