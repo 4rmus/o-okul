@@ -612,7 +612,7 @@ jobs:
           while read -r target_key report_file; do
             report_remote="/root/o-okul/artifacts/staging/reports/$report_file"
             report_local="artifacts/staging/reports/$report_file"
-            ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+            ssh -n -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
               "test -f '$report_remote' && test ! -L '$report_remote'"
             scp -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new \
               "$STAGING_SSH_USER@$STAGING_SSH_HOST:$report_remote" "$report_local"
@@ -759,7 +759,7 @@ jobs:
               for report_remote in \
                 "/root/o-okul/artifacts/staging/$report_file" \
                 "/root/o-okul/artifacts/staging/reports/$report_file"; do
-                if ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+                if ssh -n -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
                   "test -f '$report_remote' && test ! -L '$report_remote'"; then
                   scp -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new \
                     "$STAGING_SSH_USER@$STAGING_SSH_HOST:$report_remote" "$report_local"
