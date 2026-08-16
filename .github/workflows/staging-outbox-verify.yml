@@ -703,8 +703,66 @@ jobs:
           pnpm --filter @o-okul/sms-adapter build
           pnpm --filter @o-okul/notification-adapter build
           if [ "$RUN_GATE_E_MUTATING_SMOKES" = true ]; then
-            trap 'rm -f -- .staging-evidence.env "$runtime_env" "$private_ui_file" "$answer_key_file"' EXIT
             gate_e_evidence_environment=production
+            gate_e_smoke_started_at="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+            cleanup_gate_e_mutating_state() {
+              GATE_E_SMOKE_STARTED_AT="$gate_e_smoke_started_at" \
+                node --env-file=.staging-evidence.env --input-type=module <<'NODE'
+          import pg from "pg";
+
+          const pool = new pg.Pool({ connectionString: process.env.DIRECT_DATABASE_URL });
+          const client = await pool.connect();
+          try {
+            await client.query("BEGIN");
+            await client.query("SELECT set_config('app.bypass_rls', 'true', true)");
+            const tenants = await client.query(
+              `SELECT "id"
+               FROM "Tenant"
+               WHERE "createdAt" >= $1::timestamptz
+                 AND (
+                   "id" LIKE 'tenant-isem-answer-key-smoke-%'
+                   OR "id" LIKE 'tenant-raw-import-smoke-%'
+                   OR "id" LIKE 'tenant-isem-optical-smoke-%'
+                 )
+               FOR UPDATE`,
+              [process.env.GATE_E_SMOKE_STARTED_AT],
+            );
+            const tenantIds = tenants.rows.map((row) => row.id);
+            if (tenantIds.length > 0) {
+              await client.query(
+                `UPDATE "AuthSession" SET "status" = 'REVOKED', "updatedAt" = now() WHERE "tenantId" = ANY($1::text[])`,
+                [tenantIds],
+              );
+              await client.query(
+                `UPDATE "Tenant" SET "status" = 'SUSPENDED', "updatedAt" = now() WHERE "id" = ANY($1::text[])`,
+                [tenantIds],
+              );
+            }
+            await client.query("COMMIT");
+            console.log(`Gate E sentetik tenant temizliği geçti: ${tenantIds.length} tenant askıya alındı.`);
+          } catch {
+            await client.query("ROLLBACK").catch(() => undefined);
+            console.error("Gate E sentetik tenant/session temizliği başarısız oldu.");
+            process.exitCode = 1;
+          } finally {
+            client.release();
+            await pool.end();
+          }
+          NODE
+            }
+            cleanup_gate_e_mutating_exit() {
+              original_status=$?
+              trap - EXIT
+              set +e
+              cleanup_gate_e_mutating_state
+              cleanup_status=$?
+              rm -f -- .staging-evidence.env "$runtime_env" "$private_ui_file" "$answer_key_file"
+              if [ "$original_status" -ne 0 ]; then
+                exit "$original_status"
+              fi
+              exit "$cleanup_status"
+            }
+            trap cleanup_gate_e_mutating_exit EXIT
             : "${ISEM_OPTICAL_PIPELINE_TXT_BASE64:?GATE_E_ISEM_OPTICAL_TXT_BASE64 staging secret gerekli}"
             : "${ISEM_OPTICAL_PIPELINE_ANSWER_KEY_BASE64:?GATE_E_ISEM_ANSWER_KEY_BASE64 staging secret gerekli}"
             : "${ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD:?GATE_E_ISEM_SMOKE_PASSWORD staging secret gerekli}"

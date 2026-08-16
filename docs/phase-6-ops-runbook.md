@@ -562,7 +562,8 @@ environment'ındaki `GATE_E_ISEM_OPTICAL_TXT_BASE64`, `GATE_E_ISEM_ANSWER_KEY_BA
 `GATE_E_ISEM_SMOKE_PASSWORD` secret'larını kullanır; fixture hash'lerini manifestle doğrular, staging test
 tenant/sınav/rapor kayıtlarını üretir, canlı UI oturumlarını logout ile iptal eder ve geçici ikinci API shard'ında
 Redis rate-limit smoke'u çalıştırır. Shard her sonuçta kaldırılır; credential taşıyan private UI girdisi ve
-materialize edilen cevap anahtarı exit trap'i ile full artifact upload'ından önce silinir. Public iSEM,
+materialize edilen cevap anahtarı exit trap'i ile full artifact upload'ından önce silinir. Aynı run'da
+oluşturulan sentetik tenant'lar exit trap'inde askıya alınır ve oturumları iptal edilir. Public iSEM,
 live-UI, live-exam-cycle ve rate-limit raporları aynı verifier run'ına ve cutover SHA'sına bağlanır. Bu input
 kapalıyken workflow eski raporları yenilemez ve eksik/stale kanıta PASS vermez.
 Rollback tag'i yalnız exact release candidate ile eşleşen doğrulanabilir HTTPS rollback raporundan alınır.
