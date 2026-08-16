@@ -160,6 +160,11 @@ function runCommand(command) {
     "ADMIN_MFA_MODE",
     "PERSISTENCE_DRIVER",
     "IDEMPOTENCY_STORE",
+    "REDIS_URL",
+    "API_RATE_LIMIT_ENABLED",
+    "API_RATE_LIMIT_STORE",
+    "QUEUE_METRICS_ENABLED",
+    "QUEUE_PREFIX",
   ]) {
     delete testEnv[key];
   }

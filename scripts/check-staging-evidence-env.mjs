@@ -460,6 +460,11 @@ function checkOutboxVerifyWorkflowContract(output) {
       'client.query("BEGIN READ ONLY")',
       'client.query("SELECT set_config(\'app.bypass_rls\', \'true\', true)")',
       'client.query("ROLLBACK")',
+      '"REDIS_URL"',
+      '"API_RATE_LIMIT_ENABLED"',
+      '"API_RATE_LIMIT_STORE"',
+      '"QUEUE_METRICS_ENABLED"',
+      '"QUEUE_PREFIX"',
     ]) {
       if (!generator.includes(token)) {
         output.push(`${generatorPath} transaction-scoped RLS bypass token eksik: ${token}`);
