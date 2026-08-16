@@ -715,6 +715,9 @@ function checkOutboxVerifyWorkflowContract(output) {
   if ((workflow.match(/scripts\/check-staging-release-artifacts\.mjs/g) ?? []).length !== 2) {
     output.push("Staging release artifact checker verifier helper stage ve overlay listelerinde tam iki kez bulunmalı.");
   }
+  if ((workflow.match(/^\s+package\.json \\$/gmu) ?? []).length !== 2) {
+    output.push("Verifier-only package script yüzeyi stage ve overlay listelerinde tam iki kez bulunmalı.");
+  }
   for (const helper of ["scripts/check-release-evidence-manifest.mjs", "scripts/generate-release-evidence-manifest.mjs"]) {
     if (workflow.split(helper).length - 1 !== 3) {
       output.push(`${helper} verifier stage, overlay ve execution için tam üç kez bulunmalı.`);

@@ -213,6 +213,7 @@ jobs:
           verifier_root="$RUNNER_TEMP/gate-e-verifier"
           install -d -m 700 "$verifier_root"
           for relative in \
+            package.json \
             .github/workflows/staging-outbox-verify.yml \
             apps/web/e2e-next/ui-visual-qa-next.spec.ts \
             packages/db/scripts/check-rls-live.mjs \
@@ -264,6 +265,7 @@ jobs:
           [ "$(git rev-parse HEAD)" = "$CUTOVER_SOURCE_SHA" ]
           verifier_root="$RUNNER_TEMP/gate-e-verifier"
           for relative in \
+            package.json \
             .github/workflows/staging-outbox-verify.yml \
             apps/web/e2e-next/ui-visual-qa-next.spec.ts \
             packages/db/scripts/check-rls-live.mjs \
