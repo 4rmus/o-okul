@@ -752,6 +752,27 @@ jobs:
           GITHUB_CI_EVIDENCE_TARGET="file://$PWD/artifacts/staging/reports/github-ci.json" \
           UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES=1 \
             pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env --environment staging
+          for report_file in live-exam-cycle.json isem-optical-pipeline.json live-ui-worker-result.json; do
+            report_local="artifacts/staging/reports/$report_file"
+            if [ ! -f "$report_local" ] || [ -L "$report_local" ]; then
+              copied=false
+              for report_remote in \
+                "/root/o-okul/artifacts/staging/$report_file" \
+                "/root/o-okul/artifacts/staging/reports/$report_file"; do
+                if ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+                  "test -f '$report_remote' && test ! -L '$report_remote'"; then
+                  scp -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new \
+                    "$STAGING_SSH_USER@$STAGING_SSH_HOST:$report_remote" "$report_local"
+                  copied=true
+                  break
+                fi
+              done
+              [ "$copied" = true ]
+            fi
+            test -f "$report_local"
+            test ! -L "$report_local"
+            chmod 600 "$report_local"
+          done
           mkdir -p artifacts/uat-inputs
           [ -n "$REUSE_AGGREGATE_SMOKE_RUN_ID" ]
           aggregate_smoke_run_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$REUSE_AGGREGATE_SMOKE_RUN_ID"
