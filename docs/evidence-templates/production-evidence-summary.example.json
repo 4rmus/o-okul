@@ -1073,6 +1073,44 @@
           ]
         },
         {
+          "surface": "system dashboard",
+          "widths": [
+            320,
+            375,
+            414,
+            768,
+            1024,
+            1440
+          ],
+          "evidenceReferences": [
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-dashboard-320.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-dashboard-375.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-dashboard-414.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-dashboard-768.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-dashboard-1024.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-dashboard-1440.png"
+          ]
+        },
+        {
+          "surface": "system tenants",
+          "widths": [
+            320,
+            375,
+            414,
+            768,
+            1024,
+            1440
+          ],
+          "evidenceReferences": [
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-tenants-320.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-tenants-375.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-tenants-414.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-tenants-768.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-tenants-1024.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-tenants-1440.png"
+          ]
+        },
+        {
           "surface": "optik workspace",
           "widths": [
             320,

@@ -35,6 +35,7 @@ const alertsVerified = parseCommaList(process.env.OBSERVABILITY_UAT_ALERTS_VERIF
 const evidenceReferences = evidenceReferenceEnvNames.map((name) => process.env[name]?.trim());
 const releaseCandidate = process.env.OBSERVABILITY_UAT_RELEASE_CANDIDATE?.trim();
 const alertChainTarget = process.env.OBSERVABILITY_UAT_ALERT_CHAIN_TARGET?.trim();
+const notBefore = process.env.OBSERVABILITY_UAT_NOT_BEFORE?.trim();
 
 const failures = [];
 requireValue(outputPath, "OBSERVABILITY_UAT_OUTPUT veya --output", failures);
@@ -56,6 +57,8 @@ for (const [index, reference] of evidenceReferences.entries()) {
 }
 requireSha(releaseCandidate, "OBSERVABILITY_UAT_RELEASE_CANDIDATE", failures);
 requireEvidenceTarget(alertChainTarget, "OBSERVABILITY_UAT_ALERT_CHAIN_TARGET", failures);
+requireDate(notBefore, "OBSERVABILITY_UAT_NOT_BEFORE", failures);
+if (validDate(notBefore) && Date.parse(notBefore) > Date.now() + 5 * 60 * 1000) failures.push("OBSERVABILITY_UAT_NOT_BEFORE gelecekte olamaz.");
 if (failures.length > 0) fail(failures);
 
 const outputFile = resolve(outputPath);
@@ -133,6 +136,9 @@ async function readAlertWebhookEvidence(target) {
   if (environment !== payload?.environment) {
     evidenceFailures.push(`alertWebhook.environment ${environment} ile eşleşmeli.`);
   }
+  if (validDate(payload?.checkedAt) && Date.parse(payload.checkedAt) < Date.parse(notBefore)) {
+    evidenceFailures.push("alertWebhook.checkedAt OBSERVABILITY_UAT_NOT_BEFORE öncesi olamaz.");
+  }
   if (evidenceFailures.length > 0) fail(evidenceFailures);
 
   return payload;
@@ -170,6 +176,9 @@ async function readAlertDeliveryEvidence(target, expectedReleaseCandidate) {
   }
   requireEvidenceReference(payload?.evidenceReference, "alertDelivery.evidenceReference", output);
   requireDeliveryChronology(payload ?? {}, output);
+  if (validDate(payload?.firingAt) && Date.parse(payload.firingAt) < Date.parse(notBefore)) {
+    output.push("alertDelivery.firingAt OBSERVABILITY_UAT_NOT_BEFORE öncesi olamaz.");
+  }
   if (output.length > 0) fail(output);
   return payload;
 }
@@ -262,6 +271,10 @@ function requireDate(value, label, output) {
   if (typeof value !== "string" || Number.isNaN(Date.parse(value))) {
     output.push(`${label} geçerli tarih olmalı.`);
   }
+}
+
+function validDate(value) {
+  return typeof value === "string" && !Number.isNaN(Date.parse(value));
 }
 
 function requireDeliveryChronology(value, output) {

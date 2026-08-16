@@ -484,7 +484,8 @@ function checkOutboxVerifyWorkflowContract(output) {
     "ui_ux_approved_at:",
     "description: \"Also run the separate full production evidence aggregation.\"",
     "if: ${{ inputs.full_evidence }}",
-    "if: ${{ always() && inputs.full_evidence }}",
+    "if: ${{ success() && inputs.full_evidence }}",
+    "if: ${{ failure() && inputs.full_evidence }}",
     "types: [labeled]",
     "github.event.label.name == 'staging-outbox-verify'",
     "vars.STAGING_OUTBOX_DEPLOY_RUN_ID",
@@ -561,8 +562,30 @@ function checkOutboxVerifyWorkflowContract(output) {
     "DEPLOYMENT_ROLLBACK_SOURCE_RUN_URL",
     "DEPLOYMENT_ROLLBACK_TARGET=file://$PWD/artifacts/staging/reports/deployment-rollback.json",
     "echo \"ROLLBACK_IMAGE_TAG=$rollback_image_tag\"",
-    "rls_live_remote=/root/o-okul/artifacts/staging/reports/rls-live.json",
+    "run_gate_e_live_uat_rls",
+    "run_gate_e_data_safety_reconciliation",
+    "run_gate_e_observability_alert_drill",
+    "full_evidence requires run_gate_e_mutating_smokes=true; stale iSEM/UI/rate-limit artifacts cannot be promoted.",
+    "full_evidence requires run_gate_e_live_uat_rls=true; stale onboarding/RLS artifacts cannot be promoted.",
+    "full_evidence requires run_gate_e_data_safety_reconciliation=true; stale restore/inline-upload artifacts cannot be promoted.",
+    "full_evidence requires run_gate_e_observability_alert_drill=true; stale alert delivery artifacts cannot be promoted.",
+    "corepack pnpm live:onboarding:smoke",
+    "Live onboarding sentetik tenant/session temizliği geçti",
+    "RLS_LIVE_OUTPUT=artifacts/staging/reports/rls-live.json",
+    "scripts/generate-rls-live-evidence.mjs",
+    "scripts/generate-audit-null-tenant-evidence.mjs",
+    "scripts/generate-restore-drill-evidence.mjs",
+    "scripts/run-observability-alert-drill.mjs",
+    "OBSERVABILITY_UAT_NOT_BEFORE=\"$CUTOVER_AT\"",
+    "SMS_ENABLED=false",
+    "packages/db/scripts/check-rls-live.mjs",
     "RLS_LIVE_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/rls-live.json",
+    "LIVE_ONBOARDING_RESULT_TARGET=\"file://$PWD/artifacts/staging/reports/live-onboarding.json\"",
+    "pnpm live:onboarding:result-check",
+    "Gate E sentetik tenant/session temizliği geçti",
+    "UAT_SOURCE_SHA=\"$CUTOVER_SOURCE_SHA\"",
+    "UAT_VERIFIER_RUN_URL=\"$verifier_run_url\"",
+    "UAT_GITHUB_CI_RUN_URL=\"$github_ci_run_url\"",
     "SECURITY_AUDIT_RLS_LIVE_REFERENCE=artifact:artifacts/staging/reports/rls-live.json",
     "SENTRY_SMOKE_NOT_BEFORE=$CUTOVER_AT",
     "ALERT_WEBHOOK_SMOKE_NOT_BEFORE=$CUTOVER_AT",
@@ -579,14 +602,21 @@ function checkOutboxVerifyWorkflowContract(output) {
     "NEXT_E2E_BASE_URL=https://o-okul.com",
     "UI_VISUAL_IGNORE_CLOUDFLARE_BEACON_CSP=1",
     "UI_VISUAL_ARTIFACT_DIR=\"$RUNNER_TEMP/gate-e-ui-captures\"",
-    "e2e-next/ui-visual-qa-next.spec.ts --grep \"kurum dashboard|rol portal aksiyon şeritleri|rapor çalışma alanı|optik workflow\"",
+    "e2e-next/ui-visual-qa-next.spec.ts --grep \"kurum dashboard|sistem dashboard|sistem kurum yönetimi|rol portal aksiyon şeritleri|rapor çalışma alanı|optik workflow\"",
     "scripts/prepare-ui-ux-redesign-staging-artifacts.mjs",
     "--output-dir artifacts/staging/ui-ux-redesign",
     "IDENTITY_MIGRATION_TARGET=file://$PWD/artifacts/staging/reports/identity-migration.json",
     "FINANCIAL_RETENTION_TARGET=file://$PWD/artifacts/staging/reports/financial-retention.json",
     "SECURITY_AUDIT_TARGET=file://$PWD/artifacts/staging/reports/security-audit.json",
     "Recheck exact images before publishing verification",
-    "Final public health PASS: $path HTTP $status",
+    "artifacts/staging/reports/runtime-parity.json",
+    "Finalize verified release summary",
+    "summary.canPromote = true",
+    "Generate exact release evidence manifest",
+    "scripts/generate-release-evidence-manifest.mjs",
+    "scripts/check-release-evidence-manifest.mjs",
+    "release-evidence-manifest.json",
+    "Check verified staging release artifact bundle",
     "Invalidate unverified release summary",
     "summary.canPromote = false",
     "--reuse-sentry-smoke",
@@ -603,11 +633,18 @@ function checkOutboxVerifyWorkflowContract(output) {
   if (workflow.match(/SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID|inputs\.source|secrets\..*SOURCE/i)) {
     output.push(`${outboxVerifyWorkflowPath} source ID GitHub input/secret olarak taşımamalı.`);
   }
-  if (workflow.split("if: ${{ inputs.full_evidence }}").length - 1 !== 5) {
-    output.push(`${outboxVerifyWorkflowPath} full evidence adımları tam olarak beş explicit koşulla ayrılmalı.`);
+  if (workflow.split("if: ${{ inputs.full_evidence }}").length - 1 !== 8) {
+    output.push(`${outboxVerifyWorkflowPath} full evidence adımları tam olarak sekiz explicit koşulla ayrılmalı.`);
   }
-  if (workflow.split("STAGING_ENVIRONMENT=production").length - 1 !== 3) {
-    output.push(`${outboxVerifyWorkflowPath} production summary child generator'larını tam üç production environment bağıyla çalıştırmalı.`);
+  for (const outputToken of [
+    "IDENTITY_MIGRATION_OUTPUT=artifacts/staging/reports/identity-migration.json",
+    "FINANCIAL_RETENTION_OUTPUT=artifacts/staging/reports/financial-retention.json",
+    "SECURITY_AUDIT_OUTPUT=artifacts/staging/reports/security-audit.json",
+  ]) {
+    const index = workflow.indexOf(outputToken);
+    if (index === -1 || !workflow.slice(Math.max(0, index - 80), index).includes("STAGING_ENVIRONMENT=staging")) {
+      output.push(`${outboxVerifyWorkflowPath} ${outputToken} staging environment bağıyla çalışmalı.`);
+    }
   }
   if (workflow.split("scripts/prepare-ui-ux-redesign-staging-artifacts.mjs").length - 1 !== 3) {
     output.push(`${outboxVerifyWorkflowPath} UI/UX hazırlayıcıyı iki helper overlay ve bir execution bağıyla taşımalı.`);
@@ -664,11 +701,21 @@ function checkOutboxVerifyWorkflowContract(output) {
   if ((workflow.match(/scripts\/check-staging-release-artifacts\.mjs/g) ?? []).length !== 2) {
     output.push("Staging release artifact checker verifier helper stage ve overlay listelerinde tam iki kez bulunmalı.");
   }
+  for (const helper of ["scripts/check-release-evidence-manifest.mjs", "scripts/generate-release-evidence-manifest.mjs"]) {
+    if (workflow.split(helper).length - 1 !== 3) {
+      output.push(`${helper} verifier stage, overlay ve execution için tam üç kez bulunmalı.`);
+    }
+  }
   requireWorkflowOrder(output, workflow, "final promotion ve başarısız summary sırası", [
-    "Check verified staging release artifact bundle",
+    "summary.canPromote = false",
     "Recheck exact images before publishing verification",
-    "Final public health PASS: $path HTTP $status",
+    "artifacts/staging/reports/runtime-parity.json",
+    "Finalize verified release summary",
+    "summary.canPromote = true",
+    "Generate exact release evidence manifest",
+    "Check verified staging release artifact bundle",
     "Invalidate unverified release summary",
+    "if: ${{ success() && inputs.full_evidence }}",
     "actions/upload-artifact@v4",
   ]);
   requireWorkflowOrder(output, workflow, "full evidence runtime env birleştirme sırası", [

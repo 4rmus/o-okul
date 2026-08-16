@@ -120,7 +120,7 @@ function expectGeneratePass() {
     failContract("generator PASS staging raporu üretmeli.", result);
   }
   if (report.phaseEvidence?.length !== 6) failContract("generator altı faz kanıtı üretmeli.", result);
-  if (report.viewportCoverage?.length !== 4) failContract("generator dört viewport yüzeyi üretmeli.", result);
+  if (report.viewportCoverage?.length !== 6) failContract("generator altı viewport yüzeyi üretmeli.", result);
   if (report.schemaVersion !== 2 || report.artifacts?.length === 0) failContract("generator digest bağlı schema v2 artifact manifesti üretmeli.", result);
   if (report.githubCi?.commitSha !== "1".repeat(40)) failContract("generator exact GitHub CI SHA bağını üretmeli.", result);
   if (report.privacy?.rawPiiInArtifacts !== false) failContract("generator raw PII bayrağını false yazmalı.", result);
@@ -383,15 +383,21 @@ function createEvidenceArtifacts() {
         checkedAt: "2026-06-25T12:00:00.000Z",
         runUrl: "https://github.com/4rmus/o-okul/actions/runs/31938363572",
         commandsPassed,
+        ...(name === "uat" ? {
+          systemUiEvidence: Object.fromEntries(["system", "system-tenants"].map((surface) => [
+            surface,
+            [320, 375, 414, 768, 1024, 1440].map((width) => `artifact:${relativeArtifactPath(`${surface}-${width}.png`)}`),
+          ])),
+        } : {}),
       })}\n`,
     );
   }
-  for (const surface of ["dashboard", "optik", "rapor", "portal"]) {
+  for (const surface of ["dashboard", "system", "system-tenants", "optik", "rapor", "portal"]) {
     for (const width of [320, 375, 414, 768, 1024, 1440]) {
       writeFileSync(join(artifactRoot, `${surface}-${width}.png`), minimalPng(width, 1));
     }
   }
-  const reviewedPngSha256 = ["dashboard", "optik", "rapor", "portal"].flatMap((surface) =>
+  const reviewedPngSha256 = ["dashboard", "system", "system-tenants", "optik", "rapor", "portal"].flatMap((surface) =>
     [320, 375, 414, 768, 1024, 1440].map((width) =>
       createHash("sha256").update(readFileSync(join(artifactRoot, `${surface}-${width}.png`))).digest("hex"),
     ),

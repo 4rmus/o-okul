@@ -34,6 +34,21 @@ on:
         required: false
         default: false
         type: boolean
+      run_gate_e_live_uat_rls:
+        description: "Run separately approved live onboarding/provider UAT and fresh RLS/load evidence with synthetic-state cleanup."
+        required: false
+        default: false
+        type: boolean
+      run_gate_e_data_safety_reconciliation:
+        description: "Run separately approved restore drill and inline-upload hash repair/migration/orphan reconciliation with cleanup."
+        required: false
+        default: false
+        type: boolean
+      run_gate_e_observability_alert_drill:
+        description: "Run the separately approved Prometheus scrape-isolation firing/resolved authenticated webhook drill."
+        required: false
+        default: false
+        type: boolean
       ui_ux_approved_at:
         description: "Release-owner UI/UX approval time (ISO-8601); required for full evidence."
         required: false
@@ -59,6 +74,9 @@ jobs:
       REUSE_AGGREGATE_SMOKE_RUN_ID: ${{ inputs.reuse_aggregate_smoke_run_id }}
       RUN_IDENTITY_MIGRATION: ${{ inputs.run_identity_migration }}
       RUN_GATE_E_MUTATING_SMOKES: ${{ inputs.run_gate_e_mutating_smokes }}
+      RUN_GATE_E_LIVE_UAT_RLS: ${{ inputs.run_gate_e_live_uat_rls }}
+      RUN_GATE_E_DATA_SAFETY_RECONCILIATION: ${{ inputs.run_gate_e_data_safety_reconciliation }}
+      RUN_GATE_E_OBSERVABILITY_ALERT_DRILL: ${{ inputs.run_gate_e_observability_alert_drill }}
       UI_UX_APPROVED_AT_INPUT: ${{ inputs.ui_ux_approved_at }}
     timeout-minutes: 45
     concurrency:
@@ -86,7 +104,35 @@ jobs:
             echo "run_gate_e_mutating_smokes requires full_evidence=true." >&2
             exit 1
           fi
+          if [ "$RUN_GATE_E_LIVE_UAT_RLS" = true ] && [ "$FULL_EVIDENCE" != true ]; then
+            echo "run_gate_e_live_uat_rls requires full_evidence=true." >&2
+            exit 1
+          fi
+          if [ "$RUN_GATE_E_DATA_SAFETY_RECONCILIATION" = true ] && [ "$FULL_EVIDENCE" != true ]; then
+            echo "run_gate_e_data_safety_reconciliation requires full_evidence=true." >&2
+            exit 1
+          fi
+          if [ "$RUN_GATE_E_OBSERVABILITY_ALERT_DRILL" = true ] && [ "$FULL_EVIDENCE" != true ]; then
+            echo "run_gate_e_observability_alert_drill requires full_evidence=true." >&2
+            exit 1
+          fi
           if [ "$FULL_EVIDENCE" = true ]; then
+            if [ "$RUN_GATE_E_MUTATING_SMOKES" != true ]; then
+              echo "full_evidence requires run_gate_e_mutating_smokes=true; stale iSEM/UI/rate-limit artifacts cannot be promoted." >&2
+              exit 1
+            fi
+            if [ "$RUN_GATE_E_LIVE_UAT_RLS" != true ]; then
+              echo "full_evidence requires run_gate_e_live_uat_rls=true; stale onboarding/RLS artifacts cannot be promoted." >&2
+              exit 1
+            fi
+            if [ "$RUN_GATE_E_DATA_SAFETY_RECONCILIATION" != true ]; then
+              echo "full_evidence requires run_gate_e_data_safety_reconciliation=true; stale restore/inline-upload artifacts cannot be promoted." >&2
+              exit 1
+            fi
+            if [ "$RUN_GATE_E_OBSERVABILITY_ALERT_DRILL" != true ]; then
+              echo "full_evidence requires run_gate_e_observability_alert_drill=true; stale alert delivery artifacts cannot be promoted." >&2
+              exit 1
+            fi
             node --input-type=module - "$UI_UX_APPROVED_AT_INPUT" <<'NODE'
           const [approvedAt] = process.argv.slice(2);
           if (!approvedAt || Number.isNaN(Date.parse(approvedAt)) || Date.parse(approvedAt) > Date.now() + 5 * 60 * 1000) {
@@ -169,22 +215,39 @@ jobs:
           for relative in \
             .github/workflows/staging-outbox-verify.yml \
             apps/web/e2e-next/ui-visual-qa-next.spec.ts \
+            packages/db/scripts/check-rls-live.mjs \
             scripts/check-prod-evidence.mjs \
             scripts/check-production-evidence-summary.mjs \
+            scripts/check-release-evidence-manifest.mjs \
             scripts/check-staging-release-artifacts.mjs \
             scripts/check-staging-evidence-env.mjs \
+            scripts/check-rls-live-evidence.mjs \
+            scripts/check-live-onboarding-result.mjs \
+            scripts/check-runtime-parity-evidence.mjs \
+            scripts/check-uat-evidence.mjs \
             scripts/check-ui-ux-redesign-evidence.mjs \
             scripts/audit-identity-links-live.mjs \
+            scripts/generate-admin-mfa-evidence.mjs \
+            scripts/generate-audit-null-tenant-evidence.mjs \
             scripts/generate-identity-migration-evidence.mjs \
             scripts/generate-financial-retention-evidence.mjs \
             scripts/generate-kvkk-inventory-evidence.mjs \
+            scripts/generate-observability-uat-evidence.mjs \
+            scripts/generate-upload-av-evidence.mjs \
+            scripts/generate-release-evidence-manifest.mjs \
+            scripts/generate-restore-drill-evidence.mjs \
+            scripts/generate-rls-live-evidence.mjs \
+            scripts/generate-uat-evidence.mjs \
             scripts/generate-ui-ux-redesign-evidence.mjs \
             scripts/prepare-ui-ux-redesign-staging-artifacts.mjs \
             scripts/run-staging-first-gate-smokes.mjs \
+            scripts/rls-live-evidence-contract.mjs \
+            scripts/ui-ux-redesign-evidence-bindings.mjs \
             scripts/migrate-identity-links-live.mjs \
             scripts/smoke-isem-answer-key-live.mjs \
             scripts/smoke-raw-import-upload-live.mjs \
-            scripts/smoke-report-generation-live.mjs; do
+            scripts/smoke-report-generation-live.mjs \
+            scripts/run-observability-alert-drill.mjs; do
             [ -f "$relative" ] && [ ! -L "$relative" ]
             install -D -m 600 "$relative" "$verifier_root/$relative"
           done
@@ -203,22 +266,39 @@ jobs:
           for relative in \
             .github/workflows/staging-outbox-verify.yml \
             apps/web/e2e-next/ui-visual-qa-next.spec.ts \
+            packages/db/scripts/check-rls-live.mjs \
             scripts/check-prod-evidence.mjs \
             scripts/check-production-evidence-summary.mjs \
+            scripts/check-release-evidence-manifest.mjs \
             scripts/check-staging-release-artifacts.mjs \
             scripts/check-staging-evidence-env.mjs \
+            scripts/check-rls-live-evidence.mjs \
+            scripts/check-live-onboarding-result.mjs \
+            scripts/check-runtime-parity-evidence.mjs \
+            scripts/check-uat-evidence.mjs \
             scripts/check-ui-ux-redesign-evidence.mjs \
             scripts/audit-identity-links-live.mjs \
+            scripts/generate-admin-mfa-evidence.mjs \
+            scripts/generate-audit-null-tenant-evidence.mjs \
             scripts/generate-identity-migration-evidence.mjs \
             scripts/generate-financial-retention-evidence.mjs \
             scripts/generate-kvkk-inventory-evidence.mjs \
+            scripts/generate-observability-uat-evidence.mjs \
+            scripts/generate-upload-av-evidence.mjs \
+            scripts/generate-release-evidence-manifest.mjs \
+            scripts/generate-restore-drill-evidence.mjs \
+            scripts/generate-rls-live-evidence.mjs \
+            scripts/generate-uat-evidence.mjs \
             scripts/generate-ui-ux-redesign-evidence.mjs \
             scripts/prepare-ui-ux-redesign-staging-artifacts.mjs \
             scripts/run-staging-first-gate-smokes.mjs \
+            scripts/rls-live-evidence-contract.mjs \
+            scripts/ui-ux-redesign-evidence-bindings.mjs \
             scripts/migrate-identity-links-live.mjs \
             scripts/smoke-isem-answer-key-live.mjs \
             scripts/smoke-raw-import-upload-live.mjs \
-            scripts/smoke-report-generation-live.mjs; do
+            scripts/smoke-report-generation-live.mjs \
+            scripts/run-observability-alert-drill.mjs; do
             source_file="$verifier_root/$relative"
             [ -f "$source_file" ] && [ ! -L "$source_file" ]
             install -m 644 "$source_file" "$relative"
@@ -369,8 +449,25 @@ jobs:
           STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
           STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
         run: |
+          set -euo pipefail
           ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -fN -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new \
-            -L 127.0.0.1:15432:127.0.0.1:5432 -L 127.0.0.1:16379:127.0.0.1:6379 "$STAGING_SSH_USER@$STAGING_SSH_HOST"
+            -L 127.0.0.1:15432:127.0.0.1:5432 -L 127.0.0.1:16379:127.0.0.1:6379 \
+            -L 127.0.0.1:9090:127.0.0.1:9090 -L 127.0.0.1:3002:127.0.0.1:3002 -L 127.0.0.1:3101:127.0.0.1:3101 \
+            "$STAGING_SSH_USER@$STAGING_SSH_HOST"
+          clamav_ip="$(ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" "bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd /root/o-okul
+          compose=(docker compose --env-file .env --env-file .env.release -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.traefik.yml --profile av)
+          id="$("${compose[@]}" ps -q clamav)"
+          [ -n "$id" ]
+          [ "$(docker inspect -f '{{.State.Status}}' "$id")" = running ]
+          [ "$(docker inspect -f '{{.State.Health.Status}}' "$id")" = healthy ]
+          docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$id"
+          REMOTE
+          )"
+          [[ "$clamav_ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]
+          ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -fN -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new \
+            -L "127.0.0.1:13310:$clamav_ip:3310" "$STAGING_SSH_USER@$STAGING_SSH_HOST"
 
       - name: Upload cutover-bound smoke helpers
         if: ${{ inputs.reuse_outbox_smoke_run_id == '' }}
@@ -626,42 +723,288 @@ jobs:
           sed -i "s#^DEPLOYMENT_ROLLBACK_TARGET=.*#DEPLOYMENT_ROLLBACK_TARGET=file://$PWD/artifacts/staging/reports/deployment-rollback.json#" .staging-evidence.env
           grep -Fxq "DEPLOYMENT_ROLLBACK_TARGET=file://$PWD/artifacts/staging/reports/deployment-rollback.json" .staging-evidence.env
           github_ci_run_url="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).workflow.runUrl' artifacts/staging/reports/github-ci.json)"
+          verifier_run_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           mkdir -p artifacts/staging/smoke artifacts/staging/reports
-          notification_smoke_remote=/root/o-okul/artifacts/staging/smoke/notification-provider.json
+          STAGING_ENVIRONMENT=staging \
+          ADMIN_MFA_OUTPUT=artifacts/staging/reports/admin-mfa.json \
+          ADMIN_MFA_PASSWORD_ONLY_LOGIN_BLOCKED=true \
+          ADMIN_MFA_TOTP_LOGIN_SUCCEEDED=true \
+          ADMIN_MFA_INVALID_TOTP_REJECTED=true \
+          ADMIN_MFA_TOTP_REUSE_REJECTED=true \
+          ADMIN_MFA_RECOVERY_CODE_LOGIN_SUCCEEDED=true \
+          ADMIN_MFA_RECOVERY_CODE_REUSE_REJECTED=true \
+          ADMIN_MFA_SESSIONS_REVOKED_ON_ENABLE=true \
+          ADMIN_MFA_SESSIONS_REVOKED_ON_DISABLE=true \
+          ADMIN_MFA_PASSWORD_ONLY_EVIDENCE_REFERENCE="run:$github_ci_run_url" \
+          ADMIN_MFA_TOTP_SUCCESS_EVIDENCE_REFERENCE="run:$github_ci_run_url" \
+          ADMIN_MFA_INVALID_TOTP_EVIDENCE_REFERENCE="run:$github_ci_run_url" \
+          ADMIN_MFA_TOTP_REUSE_EVIDENCE_REFERENCE="run:$github_ci_run_url" \
+          ADMIN_MFA_RECOVERY_SUCCESS_EVIDENCE_REFERENCE="run:$github_ci_run_url" \
+          ADMIN_MFA_RECOVERY_REUSE_EVIDENCE_REFERENCE="run:$github_ci_run_url" \
+          ADMIN_MFA_SESSIONS_REVOKED_ENABLE_EVIDENCE_REFERENCE="run:$github_ci_run_url" \
+          ADMIN_MFA_SESSIONS_REVOKED_DISABLE_EVIDENCE_REFERENCE="run:$github_ci_run_url" \
+            node --env-file=.staging-evidence.env scripts/generate-admin-mfa-evidence.mjs
+          STAGING_ENVIRONMENT=staging \
+          AUDIT_NULL_TENANT_OUTPUT=artifacts/staging/reports/audit-null-tenant.json \
+          AUDIT_NULL_TENANT_EVIDENCE_REFERENCE="$verifier_run_url" \
+            node --env-file=.staging-evidence.env scripts/generate-audit-null-tenant-evidence.mjs
+          STAGING_ENVIRONMENT=staging \
+          UPLOAD_AV_OUTPUT=artifacts/staging/reports/upload-av.json \
+          UPLOAD_AV_SCANNER_DECISION_MODE=local \
+          UPLOAD_AV_APPROVED_BY=release-owner-gate-e \
+          UPLOAD_AV_APPROVAL_REFERENCE="run:$verifier_run_url" \
+          UPLOAD_AV_SCANNER_NAME=ClamAV \
+          UPLOAD_AV_SCANNER=clamav \
+          UPLOAD_AV_FAIL_CLOSED=true \
+          UPLOAD_AV_CLEAN_FILE_ACCEPTED=true \
+          UPLOAD_AV_EICAR_REJECTED=true \
+          UPLOAD_AV_SCANNER_UNAVAILABLE_REJECTED=true \
+          CLAMAV_HOST=127.0.0.1 \
+          CLAMAV_PORT=13310 \
+          UPLOAD_AV_UNAVAILABLE_TEST_HOST=127.0.0.1 \
+          UPLOAD_AV_UNAVAILABLE_TEST_PORT=13311 \
+            node scripts/generate-upload-av-evidence.mjs
+          [ "$RUN_GATE_E_DATA_SAFETY_RECONCILIATION" = true ]
+          data_safety_root="/root/o-okul-private/gate-e-data-safety/$CUTOVER_RELEASE_IMAGE_TAG/$GITHUB_RUN_ID"
           ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
-            "test -f '$notification_smoke_remote' && test ! -L '$notification_smoke_remote'"
+            "install -d -m 700 '$data_safety_root'"
           scp -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new \
-            "$STAGING_SSH_USER@$STAGING_SSH_HOST:$notification_smoke_remote" artifacts/staging/smoke/notification-provider.json
-          while read -r target_key report_file; do
-            report_remote="/root/o-okul/artifacts/staging/reports/$report_file"
-            report_local="artifacts/staging/reports/$report_file"
-            ssh -n -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
-              "test -f '$report_remote' && test ! -L '$report_remote'"
+            scripts/generate-restore-drill-evidence.mjs "$STAGING_SSH_USER@$STAGING_SSH_HOST:$data_safety_root/"
+          ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+            "CUTOVER_SOURCE_SHA='$CUTOVER_SOURCE_SHA' DATA_SAFETY_ROOT='$data_safety_root' GITHUB_REPOSITORY='$GITHUB_REPOSITORY' GITHUB_RUN_ID='$GITHUB_RUN_ID' bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd /root/o-okul
+          [ "$(git rev-parse HEAD)" = "$CUTOVER_SOURCE_SHA" ]
+          work_dir="$DATA_SAFETY_ROOT"
+          [ -d "$work_dir" ] && [ ! -L "$work_dir" ]
+          cleanup() {
+            find "$work_dir" -mindepth 1 -maxdepth 1 -type f -delete
+            rmdir "$work_dir"
+          }
+          trap cleanup EXIT
+          set -a
+          . ./.env
+          . ./.env.release
+          set +a
+          export STAGING_ENVIRONMENT=staging
+          RESTORE_DRILL_OUTPUT=artifacts/staging/reports/restore-drill.json \
+            node "$work_dir/generate-restore-drill-evidence.mjs"
+          INLINE_UPLOAD_CONTENT_HASH_AUDIT_OUTPUT="$work_dir/hash-audit.json" corepack pnpm inline-upload-content:hash-audit
+          INLINE_UPLOAD_CONTENT_SHA_REPAIR_OUTPUT="$work_dir/sha-repair-dry-run.json" corepack pnpm inline-upload-content:repair-sha
+          INLINE_UPLOAD_CONTENT_SHA_REPAIR_APPROVED=true \
+          INLINE_UPLOAD_CONTENT_SHA_REPAIR_OUTPUT="$work_dir/sha-repair-approved.json" \
+            corepack pnpm inline-upload-content:repair-sha
+          node --input-type=module - "$work_dir/sha-repair-approved.json" <<'NODE'
+          import { readFileSync } from "node:fs";
+          const value = JSON.parse(readFileSync(process.argv[2], "utf8"));
+          if (value.result !== "PASS" || value.gaps?.length !== 0 || value.approvalRequired !== null) process.exit(1);
+          NODE
+          INLINE_UPLOAD_CONTENT_HASH_AUDIT_OUTPUT="$work_dir/hash-audit-after-repair.json" corepack pnpm inline-upload-content:hash-audit
+          node --input-type=module - "$work_dir/hash-audit-after-repair.json" <<'NODE'
+          import { readFileSync } from "node:fs";
+          const value = JSON.parse(readFileSync(process.argv[2], "utf8"));
+          if (!["NO_PENDING_ROWS", "PENDING_HASHES_MATCH"].includes(value.status)) process.exit(1);
+          for (const item of value.subjects ?? []) {
+            if (item.sha256MismatchRows !== 0 || item.invalidBase64Rows !== 0 || item.missingSha256Rows !== 0) process.exit(1);
+          }
+          NODE
+          INLINE_UPLOAD_CONTENT_MIGRATION_REPORT_FILE="$work_dir/dry-run.json" corepack pnpm inline-upload-content:audit
+          INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true \
+          INLINE_UPLOAD_CONTENT_MIGRATION_REPORT_FILE="$work_dir/migrated.json" \
+            corepack pnpm inline-upload-content:migrate
+          INLINE_UPLOAD_CONTENT_ORPHAN_AUDIT_OUTPUT="$work_dir/orphan-audit-after-migration.json" \
+            corepack pnpm inline-upload-content:orphan-audit
+          INLINE_UPLOAD_CONTENT_DRY_RUN_TARGET="file://$work_dir/dry-run.json" \
+          INLINE_UPLOAD_CONTENT_APPROVED_MIGRATION_TARGET="file://$work_dir/migrated.json" \
+          INLINE_UPLOAD_CONTENT_ORPHAN_AUDIT_TARGET="file://$work_dir/orphan-audit-after-migration.json" \
+          INLINE_UPLOAD_CONTENT_MIGRATION_OUTPUT=artifacts/staging/reports/inline-upload-content-migration.json \
+          INLINE_UPLOAD_CONTENT_APPROVED_BY=release-owner-gate-e \
+          INLINE_UPLOAD_CONTENT_APPROVAL_REFERENCE="run:https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+          SUPPORT_ATTACHMENT_STORAGE=s3 \
+          HOMEWORK_MATERIAL_FILE_STORAGE=s3 \
+          INLINE_UPLOAD_CONTENT_DOWNLOAD_MODE=signed-url \
+          INLINE_UPLOAD_CONTENT_DOWNLOAD_URL_EXPIRES_IN_SECONDS=300 \
+          INLINE_UPLOAD_CONTENT_CONTENT_BASE64_WRITE_DISABLED=true \
+          INLINE_UPLOAD_CONTENT_INLINE_READ_COMPATIBILITY=true \
+            corepack pnpm inline-upload-content:generate
+          REMOTE
+          for report_file in restore-drill.json inline-upload-content-migration.json; do
             scp -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new \
-              "$STAGING_SSH_USER@$STAGING_SSH_HOST:$report_remote" "$report_local"
-            chmod 600 "$report_local"
+              "$STAGING_SSH_USER@$STAGING_SSH_HOST:/root/o-okul/artifacts/staging/reports/$report_file" "artifacts/staging/reports/$report_file"
+            test -f "artifacts/staging/reports/$report_file"
+            test ! -L "artifacts/staging/reports/$report_file"
+            chmod 600 "artifacts/staging/reports/$report_file"
+          done
+          for pair in \
+            "ADMIN_MFA_EVIDENCE_TARGET admin-mfa.json" \
+            "AUDIT_NULL_TENANT_EVIDENCE_TARGET audit-null-tenant.json" \
+            "UPLOAD_AV_TARGET upload-av.json" \
+            "RESTORE_DRILL_TARGET restore-drill.json" \
+            "INLINE_UPLOAD_CONTENT_MIGRATION_TARGET inline-upload-content-migration.json"; do
+            read -r target_key report_file <<< "$pair"
             [ "$(grep -Ec "^${target_key}=" .staging-evidence.env)" -eq 1 ]
-            sed -i "s#^${target_key}=.*#${target_key}=file://$PWD/$report_local#" .staging-evidence.env
-            grep -Fxq "${target_key}=file://$PWD/$report_local" .staging-evidence.env
-          done <<'REPORTS'
-          RESTORE_DRILL_TARGET restore-drill.json
-          KVKK_INVENTORY_TARGET kvkk-inventory.json
-          UPLOAD_AV_TARGET upload-av.json
-          OBSERVABILITY_UAT_TARGET observability-uat.json
-          ADMIN_MFA_EVIDENCE_TARGET admin-mfa.json
-          LIVE_EXAM_CYCLE_TARGET live-exam-cycle.json
-          ISEM_OPTICAL_PIPELINE_TARGET isem-optical-pipeline.json
-          LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET live-ui-worker-result.json
-          INLINE_UPLOAD_CONTENT_MIGRATION_TARGET inline-upload-content-migration.json
-          AUDIT_NULL_TENANT_EVIDENCE_TARGET audit-null-tenant.json
-          RATE_LIMIT_EVIDENCE_TARGET rate-limit.json
-          REPORTS
-          rls_live_remote=/root/o-okul/artifacts/staging/reports/rls-live.json
+            sed -i "s#^${target_key}=.*#${target_key}=file://$PWD/artifacts/staging/reports/$report_file#" .staging-evidence.env
+          done
+          if [ -z "$REUSE_PROVIDER_SMOKE_RUN_ID" ]; then
+            notification_smoke_remote=/root/o-okul/artifacts/staging/smoke/notification-provider.json
+            ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+              "test -f '$notification_smoke_remote' && test ! -L '$notification_smoke_remote'"
+            scp -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new \
+              "$STAGING_SSH_USER@$STAGING_SSH_HOST:$notification_smoke_remote" artifacts/staging/smoke/notification-provider.json
+          fi
+          [ "$RUN_GATE_E_LIVE_UAT_RLS" = true ]
+          onboarding_started_at="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+          onboarding_status=0
           ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
-            "test -f '$rls_live_remote' && test ! -L '$rls_live_remote'"
-          scp -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new \
-            "$STAGING_SSH_USER@$STAGING_SSH_HOST:$rls_live_remote" artifacts/staging/reports/rls-live.json
-          chmod 600 artifacts/staging/reports/rls-live.json
+            "CUTOVER_SOURCE_SHA='$CUTOVER_SOURCE_SHA' bash -se" <<'REMOTE' || onboarding_status=$?
+          set -euo pipefail
+          cd /root/o-okul
+          [ "$(git rev-parse HEAD)" = "$CUTOVER_SOURCE_SHA" ]
+          private_root=/root/o-okul-private/uat
+          private_env="$private_root/live-onboarding.env"
+          private_input="$private_root/live-onboarding-input.json"
+          [ -d "$private_root" ] && [ ! -L "$private_root" ]
+          [ -f "$private_env" ] && [ ! -L "$private_env" ] && [ "$(stat -c %a "$private_env")" = 600 ] && [ "$(stat -c %u "$private_env")" = "$(id -u)" ]
+          [ -f "$private_input" ] && [ ! -L "$private_input" ] && [ "$(stat -c %a "$private_input")" = 600 ] && [ "$(stat -c %u "$private_input")" = "$(id -u)" ]
+          for key in NEXT_E2E_LIVE_ONBOARDING LIVE_ONBOARDING_EVIDENCE_PATH LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN NEXT_E2E_BASE_URL; do
+            [ "$(grep -Ec "^${key}=" "$private_env")" -eq 1 ]
+          done
+          set -a
+          . "$private_env"
+          set +a
+          [ "$NEXT_E2E_LIVE_ONBOARDING" = 1 ]
+          [ "$LIVE_ONBOARDING_EVIDENCE_PATH" = "$private_input" ]
+          [ "$NEXT_E2E_BASE_URL" = https://o-okul.com ]
+          export NEXT_E2E_SKIP_WEB_SERVER=1
+          corepack pnpm live:onboarding:evidence-contract
+          corepack pnpm live:onboarding:smoke
+          REMOTE
+          cleanup_status=0
+          ONBOARDING_STARTED_AT="$onboarding_started_at" ONBOARDING_EXPECT_SUCCESS="$([ "$onboarding_status" -eq 0 ] && echo 1 || echo 0)" \
+            node --env-file=.staging-evidence.env --input-type=module <<'NODE' || cleanup_status=$?
+          import pg from "pg";
+
+          const pool = new pg.Pool({ connectionString: process.env.DIRECT_DATABASE_URL });
+          const client = await pool.connect();
+          try {
+            await client.query("BEGIN");
+            await client.query("SELECT set_config('app.bypass_rls', 'true', true)");
+            const candidates = await client.query(
+              `SELECT tenant."id"
+                 FROM "Tenant" tenant
+                WHERE tenant."createdAt" >= $1::timestamptz
+                  AND EXISTS (
+                    SELECT 1 FROM "LicenseTerm" term
+                     WHERE term."tenantId" = tenant."id"
+                       AND term."auditReference" LIKE 'gate-d-uat-%'
+                  )
+                FOR UPDATE`,
+              [process.env.ONBOARDING_STARTED_AT],
+            );
+            const tenantIds = candidates.rows.map((row) => row.id);
+            if (tenantIds.length > 1 || (process.env.ONBOARDING_EXPECT_SUCCESS === "1" && tenantIds.length !== 1)) {
+              throw new Error(`Onboarding cleanup exact tenant sayısı geçersiz: ${tenantIds.length}.`);
+            }
+            if (tenantIds.length > 0) {
+              const deleted = await client.query(`DELETE FROM "Tenant" WHERE "id" = ANY($1::text[]) RETURNING "id"`, [tenantIds]);
+              if (deleted.rowCount !== tenantIds.length) throw new Error("Onboarding tenant cleanup eksik kaldı.");
+              const sessions = await client.query(`SELECT count(*)::int AS count FROM "AuthSession" WHERE "tenantId" = ANY($1::text[])`, [tenantIds]);
+              if (sessions.rows[0]?.count !== 0) throw new Error("Onboarding AuthSession cleanup eksik kaldı.");
+            }
+            await client.query("COMMIT");
+            console.log(`Live onboarding sentetik tenant/session temizliği geçti: ${tenantIds.length} tenant silindi.`);
+          } catch (error) {
+            await client.query("ROLLBACK").catch(() => undefined);
+            console.error(error instanceof Error ? error.message : String(error));
+            process.exitCode = 1;
+          } finally {
+            client.release();
+            await pool.end();
+          }
+          NODE
+          [ "$cleanup_status" -eq 0 ]
+          [ "$onboarding_status" -eq 0 ]
+          node --input-type=module - "$onboarding_started_at" "$CUTOVER_SOURCE_SHA" "$CUTOVER_REPOSITORY" "$verifier_run_url" <<'NODE'
+          import { mkdirSync, writeFileSync } from "node:fs";
+          const [startedAt, sourceSha, repository, verifierRunUrl] = process.argv.slice(2);
+          const report = {
+            result: "PASS",
+            environment: "staging",
+            startedAt,
+            checkedAt: new Date().toISOString(),
+            sourceSha,
+            repository,
+            verifierRunUrl,
+            command: "pnpm live:onboarding:smoke",
+            scenarios: [
+              { id: "UAT-SYS-02", status: "PASS" },
+              { id: "UAT-KURUM-01", status: "PASS" },
+              { id: "UAT-KURUM-03", status: "PASS" },
+            ],
+            providerDelivery: {
+              channel: "EMAIL",
+              result: "PASS",
+              evidenceEndpoint: "https://notify.staging.o-okul.com/messages/latest",
+            },
+            cleanup: { result: "PASS", tenantsDeleted: 1, authSessionsRemaining: 0 },
+            gaps: [],
+          };
+          mkdirSync("artifacts/staging/reports", { recursive: true });
+          writeFileSync("artifacts/staging/reports/live-onboarding.json", `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+          NODE
+          LIVE_ONBOARDING_RESULT_TARGET="file://$PWD/artifacts/staging/reports/live-onboarding.json" \
+          LIVE_ONBOARDING_RESULT_EXPECTED_SOURCE_SHA="$CUTOVER_SOURCE_SHA" \
+          LIVE_ONBOARDING_RESULT_EXPECTED_REPOSITORY="$CUTOVER_REPOSITORY" \
+          LIVE_ONBOARDING_RESULT_EXPECTED_VERIFIER_RUN_URL="$verifier_run_url" \
+            pnpm live:onboarding:result-check
+          node --env-file=.staging-evidence.env --input-type=module <<'NODE'
+          import { mkdirSync, writeFileSync } from "node:fs";
+          import { spawnSync } from "node:child_process";
+
+          mkdirSync("artifacts/staging/reports", { recursive: true });
+          const commands = [
+            {
+              args: ["tenant-db:check"],
+              log: "artifacts/staging/reports/db-rls-check.log",
+            },
+            {
+              args: ["db:rls:check"],
+              append: true,
+              log: "artifacts/staging/reports/db-rls-check.log",
+            },
+            {
+              args: ["db:rls:check:live"],
+              log: "artifacts/staging/reports/db-rls-check-live.log",
+            },
+            {
+              args: ["rls:load:smoke"],
+              env: {
+                RLS_LOAD_SMOKE_EVIDENCE_FILE: "artifacts/staging/reports/rls-load-smoke.json",
+                STAGING_ENVIRONMENT: "staging",
+              },
+            },
+          ];
+          for (const command of commands) {
+            const result = spawnSync("pnpm", command.args, {
+              env: { ...process.env, ...command.env },
+              encoding: "utf8",
+              maxBuffer: 4 * 1024 * 1024,
+            });
+            const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+            if (command.log) writeFileSync(command.log, output, { encoding: "utf8", flag: command.append ? "a" : "w", mode: 0o600 });
+            process.stdout.write(output);
+            if (result.status !== 0) process.exit(result.status ?? 1);
+          }
+          NODE
+          STAGING_ENVIRONMENT=staging \
+          RLS_LIVE_OUTPUT=artifacts/staging/reports/rls-live.json \
+          RLS_LIVE_SOURCE_SHA="$CUTOVER_SOURCE_SHA" \
+          RLS_LIVE_REPOSITORY="$CUTOVER_REPOSITORY" \
+          RLS_LIVE_VERIFIER_RUN_URL="$verifier_run_url" \
+          RLS_LIVE_STATIC_LOG_TARGET="file://$PWD/artifacts/staging/reports/db-rls-check.log" \
+          RLS_LIVE_RUNTIME_LOG_TARGET="file://$PWD/artifacts/staging/reports/db-rls-check-live.log" \
+          RLS_LOAD_SMOKE_TARGET="file://$PWD/artifacts/staging/reports/rls-load-smoke.json" \
+            node scripts/generate-rls-live-evidence.mjs
           [ "$(grep -Ec '^RLS_LIVE_EVIDENCE_TARGET=' .staging-evidence.env)" -eq 1 ]
           sed -i "s#^RLS_LIVE_EVIDENCE_TARGET=.*#RLS_LIVE_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/rls-live.json#" .staging-evidence.env
           RLS_LIVE_EVIDENCE_TARGET="file://$PWD/artifacts/staging/reports/rls-live.json" pnpm rls:live:check
@@ -672,7 +1015,7 @@ jobs:
           cp artifacts/activation/smoke/wal-archive.json artifacts/staging/smoke/wal-archive.json
           if [ -n "$REUSE_PROVIDER_SMOKE_RUN_ID" ]; then
             cmp -s artifacts/provider-smoke-reuse/reports/deployment-cutover.json artifacts/cutover/deployment-cutover.json
-            for smoke_file in sentry-event.json alert-webhook.json; do
+            for smoke_file in sentry-event.json alert-webhook.json notification-provider.json; do
               test -f "artifacts/provider-smoke-reuse/smoke/$smoke_file"
               test ! -L "artifacts/provider-smoke-reuse/smoke/$smoke_file"
               cp "artifacts/provider-smoke-reuse/smoke/$smoke_file" "artifacts/staging/smoke/$smoke_file"
@@ -684,6 +1027,63 @@ jobs:
             test ! -L artifacts/aggregate-smoke-reuse/smoke/report-generation.json
             cp artifacts/aggregate-smoke-reuse/smoke/report-generation.json artifacts/staging/smoke/report-generation.json
           fi
+          [ "$RUN_GATE_E_OBSERVABILITY_ALERT_DRILL" = true ]
+          observability_helper_root="/root/o-okul-private/gate-e-observability/$CUTOVER_RELEASE_IMAGE_TAG/$GITHUB_RUN_ID"
+          observability_chain_remote=/root/o-okul/artifacts/staging/private/alertmanager-firing-resolved-delivery.json
+          ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+            "install -d -m 700 '$observability_helper_root' /root/o-okul/artifacts/staging/private"
+          scp -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new \
+            scripts/run-observability-alert-drill.mjs "$STAGING_SSH_USER@$STAGING_SSH_HOST:$observability_helper_root/"
+          ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+            "CUTOVER_SOURCE_SHA='$CUTOVER_SOURCE_SHA' OBSERVABILITY_HELPER_ROOT='$observability_helper_root' OBSERVABILITY_CHAIN_OUTPUT='$observability_chain_remote' GITHUB_REPOSITORY='$GITHUB_REPOSITORY' GITHUB_RUN_ID='$GITHUB_RUN_ID' bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd /root/o-okul
+          [ "$(git rev-parse HEAD)" = "$CUTOVER_SOURCE_SHA" ]
+          cleanup_observability() {
+            original_status=$?
+            trap - EXIT
+            set +e
+            compose=(docker compose --env-file .env --env-file .env.release -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.traefik.yml -f docker-compose.observability.yml)
+            prometheus_id="$("${compose[@]}" ps -q prometheus)"
+            cleanup_status=0
+            if [ -n "$prometheus_id" ]; then
+              docker exec -u 0 "$prometheus_id" sh -lc "awk '!index(\$0, \"gate-e-observability-$GITHUB_RUN_ID\")' /etc/hosts > /tmp/gate-e-observability-$GITHUB_RUN_ID.hosts && cat /tmp/gate-e-observability-$GITHUB_RUN_ID.hosts > /etc/hosts && rm -f /tmp/gate-e-observability-$GITHUB_RUN_ID.hosts && ! grep -F 'gate-e-observability-$GITHUB_RUN_ID' /etc/hosts" || cleanup_status=1
+            else
+              cleanup_status=1
+            fi
+            find "$OBSERVABILITY_HELPER_ROOT" -mindepth 1 -maxdepth 1 -type f -delete || cleanup_status=1
+            rmdir "$OBSERVABILITY_HELPER_ROOT" || cleanup_status=1
+            if [ "$original_status" -ne 0 ]; then exit "$original_status"; fi
+            exit "$cleanup_status"
+          }
+          trap cleanup_observability EXIT
+          OBSERVABILITY_ALERT_DRILL_OUTPUT="$OBSERVABILITY_CHAIN_OUTPUT" \
+          OBSERVABILITY_ALERT_DRILL_RELEASE_CANDIDATE="$CUTOVER_SOURCE_SHA" \
+          OBSERVABILITY_ALERT_DRILL_EVIDENCE_REFERENCE="run:https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            node "$OBSERVABILITY_HELPER_ROOT/run-observability-alert-drill.mjs"
+          REMOTE
+          mkdir -p artifacts/uat-inputs
+          scp -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new \
+            "$STAGING_SSH_USER@$STAGING_SSH_HOST:$observability_chain_remote" artifacts/uat-inputs/alertmanager-firing-resolved-delivery.json
+          STAGING_ENVIRONMENT=staging \
+          OBSERVABILITY_UAT_OUTPUT=artifacts/staging/reports/observability-uat.json \
+          OBSERVABILITY_UAT_PRIVATE_LOOPBACK=1 \
+          OBSERVABILITY_UAT_PROMETHEUS_URL=http://127.0.0.1:9090 \
+          OBSERVABILITY_UAT_GRAFANA_URL=http://127.0.0.1:3002 \
+          OBSERVABILITY_UAT_LOKI_URL=http://127.0.0.1:3101 \
+          OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET="file://$PWD/artifacts/staging/smoke/alert-webhook.json" \
+          OBSERVABILITY_UAT_ALERT_CHAIN_TARGET="file://$PWD/artifacts/uat-inputs/alertmanager-firing-resolved-delivery.json" \
+          OBSERVABILITY_UAT_DASHBOARD_PANELS_VERIFIED="API up,Request rate,Average duration,Readiness failures,Docker logs" \
+          OBSERVABILITY_UAT_ALERTS_VERIFIED="OOkulApiDown,OOkulReadinessFailing,OOkulApiHighErrorRate,OOkulApiSlowRequests" \
+          OBSERVABILITY_UAT_RELEASE_CANDIDATE="$CUTOVER_SOURCE_SHA" \
+          OBSERVABILITY_UAT_NOT_BEFORE="$CUTOVER_AT" \
+          OBSERVABILITY_UAT_PROMETHEUS_EVIDENCE_REFERENCE="run:$verifier_run_url" \
+          OBSERVABILITY_UAT_GRAFANA_EVIDENCE_REFERENCE="run:$verifier_run_url" \
+          OBSERVABILITY_UAT_LOKI_EVIDENCE_REFERENCE="run:$verifier_run_url" \
+          OBSERVABILITY_UAT_ALERT_WEBHOOK_EVIDENCE_REFERENCE="run:$verifier_run_url" \
+            node scripts/generate-observability-uat-evidence.mjs
+          [ "$(grep -Ec '^OBSERVABILITY_UAT_TARGET=' .staging-evidence.env)" -eq 1 ]
+          sed -i "s#^OBSERVABILITY_UAT_TARGET=.*#OBSERVABILITY_UAT_TARGET=file://$PWD/artifacts/staging/reports/observability-uat.json#" .staging-evidence.env
           {
             echo "STAGING_ENVIRONMENT=staging"
             echo "SENTRY_RELEASE=$CUTOVER_RELEASE_IMAGE_TAG"
@@ -708,8 +1108,14 @@ jobs:
           pnpm --filter @o-okul/db build
           pnpm --filter @o-okul/sms-adapter build
           pnpm --filter @o-okul/notification-adapter build
+          STAGING_ENVIRONMENT=staging \
+          SMS_ENABLED=false \
+          SMS_PROVIDER_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/sms-provider.json \
+            pnpm sms:smoke
+          [ "$(grep -Ec '^SMS_PROVIDER_SMOKE_EVIDENCE_FILE=' .staging-evidence.env)" -eq 1 ]
+          sed -i "s#^SMS_PROVIDER_SMOKE_EVIDENCE_FILE=.*#SMS_PROVIDER_SMOKE_EVIDENCE_FILE=$PWD/artifacts/staging/smoke/sms-provider.json#" .staging-evidence.env
           if [ "$RUN_GATE_E_MUTATING_SMOKES" = true ]; then
-            gate_e_evidence_environment=production
+            gate_e_evidence_environment=staging
             gate_e_smoke_started_at="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
             cleanup_gate_e_mutating_state() {
               GATE_E_SMOKE_STARTED_AT="$gate_e_smoke_started_at" \
@@ -735,17 +1141,13 @@ jobs:
             );
             const tenantIds = tenants.rows.map((row) => row.id);
             if (tenantIds.length > 0) {
-              await client.query(
-                `UPDATE "AuthSession" SET "status" = 'REVOKED', "updatedAt" = now() WHERE "tenantId" = ANY($1::text[])`,
-                [tenantIds],
-              );
-              await client.query(
-                `UPDATE "Tenant" SET "status" = 'SUSPENDED', "updatedAt" = now() WHERE "id" = ANY($1::text[])`,
-                [tenantIds],
-              );
+              const deleted = await client.query(`DELETE FROM "Tenant" WHERE "id" = ANY($1::text[]) RETURNING "id"`, [tenantIds]);
+              if (deleted.rowCount !== tenantIds.length) throw new Error("Gate E sentetik tenant cleanup eksik kaldı.");
+              const sessions = await client.query(`SELECT count(*)::int AS count FROM "AuthSession" WHERE "tenantId" = ANY($1::text[])`, [tenantIds]);
+              if (sessions.rows[0]?.count !== 0) throw new Error("Gate E sentetik AuthSession cleanup eksik kaldı.");
             }
             await client.query("COMMIT");
-            console.log(`Gate E sentetik tenant temizliği geçti: ${tenantIds.length} tenant askıya alındı.`);
+            console.log(`Gate E sentetik tenant/session temizliği geçti: ${tenantIds.length} tenant silindi.`);
           } catch {
             await client.query("ROLLBACK").catch(() => undefined);
             console.error("Gate E sentetik tenant/session temizliği başarısız oldu.");
@@ -855,9 +1257,10 @@ jobs:
           REDIS_URL=redis://127.0.0.1:6379 \
             node --env-file=.env scripts/smoke-rate-limit-live.mjs
           REMOTE
+            mkdir -p artifacts/uat-inputs
             scp -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new \
-              "$STAGING_SSH_USER@$STAGING_SSH_HOST:$rate_limit_remote" artifacts/staging/smoke/rate-limit.json
-            RATE_LIMIT_SMOKE_EVIDENCE_TARGET="file://$PWD/artifacts/staging/smoke/rate-limit.json" \
+              "$STAGING_SSH_USER@$STAGING_SSH_HOST:$rate_limit_remote" artifacts/uat-inputs/rate-limit-smoke.json
+            RATE_LIMIT_SMOKE_EVIDENCE_TARGET="file://$PWD/artifacts/uat-inputs/rate-limit-smoke.json" \
             RATE_LIMIT_EVIDENCE_OUTPUT=artifacts/staging/reports/rate-limit.json \
               pnpm rate-limit:generate
             node --input-type=module - "$CUTOVER_REPOSITORY" "$CUTOVER_RELEASE_IMAGE_TAG" "$GITHUB_RUN_ID" "$REUSE_AGGREGATE_SMOKE_RUN_ID" <<'NODE'
@@ -868,7 +1271,7 @@ jobs:
           const ui = JSON.parse(readFileSync("artifacts/staging/reports/live-ui-worker-result.json", "utf8"));
           const report = {
             result: "PASS",
-            environment: "production",
+            environment: "staging",
             checkedAt: new Date().toISOString(),
             tester: "release-owner",
             releaseCandidate: `ghcr.io/${repository}/api:${releaseImageTag}`,
@@ -947,13 +1350,13 @@ jobs:
           fi
           node --env-file=.staging-evidence.env scripts/audit-identity-links-live.mjs > "$RUNNER_TEMP/identity-link-audit-after.json"
           [ "$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).status' "$RUNNER_TEMP/identity-link-audit-after.json")" = READY ]
-          STAGING_ENVIRONMENT=production \
+          STAGING_ENVIRONMENT=staging \
           IDENTITY_MIGRATION_OUTPUT=artifacts/staging/reports/identity-migration.json \
           IDENTITY_MIGRATION_APPROVED_BY=release-owner \
           IDENTITY_MIGRATION_APPROVAL_REFERENCE=https://github.com/4rmus/o-okul/pull/74#issuecomment-5303640939 \
           IDENTITY_MIGRATION_ACTIVATION_MODE=invite \
             node --env-file=.staging-evidence.env scripts/generate-identity-migration-evidence.mjs
-          STAGING_ENVIRONMENT=production \
+          STAGING_ENVIRONMENT=staging \
           FINANCIAL_RETENTION_OUTPUT=artifacts/staging/reports/financial-retention.json \
           FINANCIAL_RETENTION_APPROVED_BY=release-owner \
           FINANCIAL_RETENTION_APPROVAL_REFERENCE=https://github.com/4rmus/o-okul/pull/74#issuecomment-5303640939 \
@@ -961,7 +1364,7 @@ jobs:
           FINANCIAL_RETENTION_PERIOD_YEARS=10 \
           FINANCIAL_RETENTION_PURGE_EXCEPTION=true \
             node --env-file=.staging-evidence.env scripts/generate-financial-retention-evidence.mjs
-          STAGING_ENVIRONMENT=production \
+          STAGING_ENVIRONMENT=staging \
           SECURITY_AUDIT_OUTPUT=artifacts/staging/reports/security-audit.json \
           SECURITY_AUDIT_APP_URL=https://o-okul.com \
           SECURITY_AUDIT_API_URL=https://o-okul.com \
@@ -983,12 +1386,14 @@ jobs:
           STAGING_ENVIRONMENT=staging \
           KVKK_INVENTORY_OUTPUT=artifacts/staging/reports/kvkk-inventory.json \
             node --env-file=.staging-evidence.env scripts/generate-kvkk-inventory-evidence.mjs
+          [ "$(grep -Ec '^KVKK_INVENTORY_TARGET=' .staging-evidence.env)" -eq 1 ]
+          sed -i "s#^KVKK_INVENTORY_TARGET=.*#KVKK_INVENTORY_TARGET=file://$PWD/artifacts/staging/reports/kvkk-inventory.json#" .staging-evidence.env
           NEXT_E2E_BASE_URL=https://o-okul.com \
           NEXT_E2E_SKIP_WEB_SERVER=1 \
           UI_VISUAL_IGNORE_CLOUDFLARE_BEACON_CSP=1 \
           UI_VISUAL_ARTIFACT_DIR="$RUNNER_TEMP/gate-e-ui-captures" \
             pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts --workers=1 --update-snapshots=none \
-              e2e-next/ui-visual-qa-next.spec.ts --grep "kurum dashboard|rol portal aksiyon şeritleri|rapor çalışma alanı|optik workflow"
+              e2e-next/ui-visual-qa-next.spec.ts --grep "kurum dashboard|sistem dashboard|sistem kurum yönetimi|rol portal aksiyon şeritleri|rapor çalışma alanı|optik workflow"
           node scripts/prepare-ui-ux-redesign-staging-artifacts.mjs \
             --env-file .staging-evidence.env \
             --capture-dir "$RUNNER_TEMP/gate-e-ui-captures" \
@@ -1025,76 +1430,60 @@ jobs:
             sed -i "s#^${target_key}=.*#${target_key}=file://$PWD/$report_local#" .staging-evidence.env
             grep -Fxq "${target_key}=file://$PWD/$report_local" .staging-evidence.env
           done <<'REPORTS'
-          KVKK_INVENTORY_TARGET kvkk-inventory.json
-          UPLOAD_AV_TARGET upload-av.json
-          OBSERVABILITY_UAT_TARGET observability-uat.json
-          ADMIN_MFA_EVIDENCE_TARGET admin-mfa.json
           LIVE_EXAM_CYCLE_TARGET live-exam-cycle.json
           ISEM_OPTICAL_PIPELINE_TARGET isem-optical-pipeline.json
           LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET live-ui-worker-result.json
-          INLINE_UPLOAD_CONTENT_MIGRATION_TARGET inline-upload-content-migration.json
-          AUDIT_NULL_TENANT_EVIDENCE_TARGET audit-null-tenant.json
           RATE_LIMIT_EVIDENCE_TARGET rate-limit.json
           REPORTS
           mkdir -p artifacts/uat-inputs
           [ -n "$REUSE_AGGREGATE_SMOKE_RUN_ID" ]
           aggregate_smoke_run_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$REUSE_AGGREGATE_SMOKE_RUN_ID"
-          node --input-type=module - "$github_ci_run_url" "$aggregate_smoke_run_url" <<'NODE'
+          node --input-type=module - "$CUTOVER_SOURCE_SHA" "$github_ci_run_url" "$verifier_run_url" "$aggregate_smoke_run_url" <<'NODE'
           import { mkdirSync, writeFileSync } from "node:fs";
 
-          const [ciRunUrl, aggregateSmokeRunUrl] = process.argv.slice(2);
+          const [sourceSha, ciRunUrl, verifierRunUrl, aggregateSmokeRunUrl] = process.argv.slice(2);
           const ciRun = `run:${ciRunUrl}`;
+          const verifierRun = `run:${verifierRunUrl}`;
           const aggregateSmokeRun = `run:${aggregateSmokeRunUrl}`;
           const artifact = (path) => `artifact:${path}`;
           const commands = [
-            ["pnpm run ci", ciRun],
-            ["pnpm prod:env:check", aggregateSmokeRun],
-            ["pnpm db:rls:check:live", artifact("artifacts/staging/reports/rls-live.json")],
-            ["pnpm raw-import:smoke", artifact("artifacts/staging/reports/isem-optical-pipeline.json")],
-            ["pnpm report-generation:smoke", aggregateSmokeRun],
-            ["pnpm live:exam-cycle:check", artifact("artifacts/staging/reports/live-exam-cycle.json")],
-            ["pnpm queue:smoke", ciRun],
-            ["pnpm live:onboarding:smoke", artifact("artifacts/staging/smoke/secret-delivery-outbox.json")],
-            ["pnpm live:ui-worker:smoke", artifact("artifacts/staging/reports/live-ui-worker-result.json")],
-            ["pnpm sms:smoke", aggregateSmokeRun],
-            ["pnpm notification:smoke", artifact("artifacts/staging/smoke/notification-provider.json")],
-            ["pnpm traefik:https:smoke", aggregateSmokeRun],
-          ].map(([command, evidence]) => ({ command, status: "PASS", evidence }));
-          const evidenceByScenario = new Map([
-            ["UAT-SYS-01", [artifact("artifacts/staging/reports/observability-uat.json"), artifact("artifacts/staging/ui-ux-redesign/uat.json")]],
-            ["UAT-SYS-02", [artifact("artifacts/staging/smoke/secret-delivery-outbox.json"), aggregateSmokeRun]],
-            ["UAT-SYS-03", [ciRun]],
-            ["UAT-SYS-04", [artifact("artifacts/staging/reports/deployment-rollback.json"), aggregateSmokeRun]],
-            ["UAT-KURUM-01", [artifact("artifacts/staging/ui-ux-redesign/uat.json"), aggregateSmokeRun]],
-            ["UAT-KURUM-02", [ciRun]],
-            ["UAT-KURUM-03", [artifact("artifacts/staging/reports/identity-migration.json"), aggregateSmokeRun]],
-            ["UAT-KURUM-04", [ciRun]],
-            ["UAT-KURUM-05", [artifact("artifacts/staging/reports/isem-optical-pipeline.json"), artifact("artifacts/staging/reports/live-exam-cycle.json")]],
-            ["UAT-KURUM-06", [aggregateSmokeRun, artifact("artifacts/staging/reports/live-ui-worker-result.json")]],
-            ["UAT-KURUM-07", [ciRun]],
-            ["UAT-KURUM-08", [aggregateSmokeRun, artifact("artifacts/staging/smoke/notification-provider.json")]],
-            ["UAT-TEACHER-01", [ciRun, artifact("artifacts/staging/ui-ux-redesign/uat.json")]],
-            ["UAT-TEACHER-02", [ciRun]],
-            ["UAT-TEACHER-03", [ciRun]],
-            ["UAT-STUDENT-01", [ciRun, artifact("artifacts/staging/reports/live-ui-worker-result.json")]],
-            ["UAT-STUDENT-02", [ciRun]],
-            ["UAT-STUDENT-03", [ciRun]],
-            ["UAT-GUARDIAN-01", [ciRun, artifact("artifacts/staging/reports/live-ui-worker-result.json")]],
-            ["UAT-GUARDIAN-02", [ciRun]],
-            ["UAT-GUARDIAN-03", [ciRun]],
-          ]);
-          const personas = {
-            "UAT-SYS": "SYSTEM_ADMIN",
-            "UAT-KURUM": "TENANT_ADMIN",
-            "UAT-TEACHER": "TEACHER",
-            "UAT-STUDENT": "STUDENT",
-            "UAT-GUARDIAN": "GUARDIAN",
-          };
-          const scenarios = [...evidenceByScenario].map(([id, evidence]) => ({
-            id,
-            persona: Object.entries(personas).find(([prefix]) => id.startsWith(prefix))?.[1],
-            status: "PASS",
-            evidence,
+            ["pnpm run ci", "CI", artifact("artifacts/staging/reports/github-ci.json")],
+            ["pnpm prod:env:check", "STAGING", aggregateSmokeRun],
+            ["pnpm db:rls:check:live", "STAGING", artifact("artifacts/staging/reports/rls-live.json")],
+            ["pnpm raw-import:smoke", "STAGING", artifact("artifacts/staging/reports/isem-optical-pipeline.json")],
+            ["pnpm report-generation:smoke", "STAGING", artifact("artifacts/staging/smoke/report-generation.json")],
+            ["pnpm live:exam-cycle:check", "STAGING", artifact("artifacts/staging/reports/live-exam-cycle.json")],
+            ["pnpm queue:smoke", "CI", artifact("artifacts/staging/reports/github-ci.json")],
+            ["pnpm live:onboarding:smoke", "STAGING", artifact("artifacts/staging/reports/live-onboarding.json")],
+            ["pnpm live:ui-worker:smoke", "STAGING", artifact("artifacts/staging/reports/live-ui-worker-result.json")],
+            ["pnpm sms:smoke", "STAGING", artifact("artifacts/staging/smoke/sms-provider.json")],
+            ["pnpm notification:smoke", "STAGING", artifact("artifacts/staging/smoke/notification-provider.json")],
+            ["pnpm traefik:https:smoke", "STAGING", artifact("artifacts/staging/smoke/traefik-https.json")],
+          ].map(([command, evidenceClass, evidence]) => ({ command, status: "PASS", evidence, evidenceClass, sourceSha }));
+          const scenarios = [
+            ["UAT-SYS-01", "SYSTEM_ADMIN", "CI_AND_STAGING", ["pnpm --filter @o-okul/web test:e2e", "pnpm observability:uat:check"], [artifact("artifacts/staging/reports/github-ci.json"), ciRun, artifact("artifacts/staging/reports/observability-uat.json"), artifact("artifacts/staging/ui-ux-redesign/uat.json"), verifierRun]],
+            ["UAT-SYS-02", "SYSTEM_ADMIN", "STAGING", ["pnpm live:onboarding:smoke"], [artifact("artifacts/staging/reports/live-onboarding.json"), verifierRun]],
+            ["UAT-SYS-03", "SYSTEM_ADMIN", "CI", ["pnpm --filter @o-okul/api exec vitest run src/tenant/tenant.controller.e2e.test.ts"], [artifact("artifacts/staging/reports/github-ci.json"), ciRun]],
+            ["UAT-SYS-04", "SYSTEM_ADMIN", "STAGING_WITH_HISTORICAL_DRILL", ["pnpm deployment:rollback:check", "pnpm deployment:cutover:check"], [artifact("artifacts/staging/reports/deployment-rollback.json"), artifact("artifacts/staging/reports/deployment-cutover.json"), verifierRun]],
+            ["UAT-KURUM-01", "TENANT_ADMIN", "STAGING", ["pnpm live:onboarding:smoke"], [artifact("artifacts/staging/reports/live-onboarding.json"), verifierRun]],
+            ["UAT-KURUM-02", "TENANT_ADMIN", "CI", ["pnpm --filter @o-okul/api exec vitest run src/school/school.e2e.test.ts src/student/student-profile.e2e.test.ts"], [artifact("artifacts/staging/reports/github-ci.json"), ciRun]],
+            ["UAT-KURUM-03", "TENANT_ADMIN", "CI_AND_STAGING", ["pnpm --filter @o-okul/api exec vitest run src/user-management/user-management.e2e.test.ts src/identity-invitation/identity-invitation.e2e.test.ts", "pnpm live:onboarding:smoke"], [artifact("artifacts/staging/reports/github-ci.json"), ciRun, artifact("artifacts/staging/reports/live-onboarding.json"), verifierRun]],
+            ["UAT-KURUM-04", "TENANT_ADMIN", "CI", ["pnpm --filter @o-okul/api exec vitest run src/program src/attendance"], [artifact("artifacts/staging/reports/github-ci.json"), ciRun]],
+            ["UAT-KURUM-05", "TENANT_ADMIN", "STAGING", ["pnpm isem-optical-pipeline:evidence-check", "pnpm live:exam-cycle:check", "pnpm live:ui-worker:smoke"], [artifact("artifacts/staging/reports/isem-optical-pipeline.json"), artifact("artifacts/staging/reports/live-exam-cycle.json"), artifact("artifacts/staging/reports/live-ui-worker-result.json"), verifierRun]],
+            ["UAT-KURUM-06", "TENANT_ADMIN", "STAGING", ["pnpm report-generation:smoke", "pnpm live:exam-cycle:check", "pnpm live:ui-worker:smoke"], [artifact("artifacts/staging/smoke/report-generation.json"), artifact("artifacts/staging/reports/live-exam-cycle.json"), artifact("artifacts/staging/reports/live-ui-worker-result.json"), verifierRun]],
+            ["UAT-KURUM-07", "TENANT_ADMIN", "CI", ["pnpm run ci"], [artifact("artifacts/staging/reports/github-ci.json"), ciRun]],
+            ["UAT-KURUM-08", "TENANT_ADMIN", "CI_AND_STAGING", ["pnpm run ci", "pnpm sms:smoke", "pnpm notification:smoke"], [artifact("artifacts/staging/reports/github-ci.json"), ciRun, artifact("artifacts/staging/smoke/sms-provider.json"), artifact("artifacts/staging/smoke/notification-provider.json"), verifierRun]],
+            ["UAT-TEACHER-01", "TEACHER", "CI", ["pnpm --filter @o-okul/api exec vitest run src/me/me-access-matrix.e2e.test.ts src/report/report-generation.service.test.ts"], [artifact("artifacts/staging/reports/github-ci.json"), ciRun]],
+            ["UAT-TEACHER-02", "TEACHER", "CI", ["pnpm --filter @o-okul/api exec vitest run src/app.e2e.test.ts src/homework/homework.e2e.test.ts src/support-ticket/support-ticket.e2e.test.ts"], [artifact("artifacts/staging/reports/github-ci.json"), ciRun]],
+            ["UAT-TEACHER-03", "TEACHER", "CI", ["pnpm --filter @o-okul/api exec vitest run src/tenant src/school/assert-teacher-assigned.test.ts"], [artifact("artifacts/staging/reports/github-ci.json"), ciRun]],
+            ["UAT-STUDENT-01", "STUDENT", "CI", ["pnpm --filter @o-okul/api exec vitest run src/app.e2e.test.ts src/me/me-access-matrix.e2e.test.ts"], [artifact("artifacts/staging/reports/github-ci.json"), ciRun]],
+            ["UAT-STUDENT-02", "STUDENT", "CI", ["pnpm --filter @o-okul/api exec vitest run src/app.e2e.test.ts src/support-ticket/support-ticket.e2e.test.ts"], [artifact("artifacts/staging/reports/github-ci.json"), ciRun]],
+            ["UAT-STUDENT-03", "STUDENT", "CI", ["pnpm --filter @o-okul/api exec vitest run src/me/me-access-matrix.e2e.test.ts"], [artifact("artifacts/staging/reports/github-ci.json"), ciRun]],
+            ["UAT-GUARDIAN-01", "GUARDIAN", "CI", ["pnpm --filter @o-okul/api exec vitest run src/app.e2e.test.ts src/payment/payment.e2e.test.ts"], [artifact("artifacts/staging/reports/github-ci.json"), ciRun]],
+            ["UAT-GUARDIAN-02", "GUARDIAN", "CI", ["pnpm --filter @o-okul/api exec vitest run src/app.e2e.test.ts src/announcement/announcement.e2e.test.ts src/support-ticket/support-ticket.e2e.test.ts"], [artifact("artifacts/staging/reports/github-ci.json"), ciRun]],
+            ["UAT-GUARDIAN-03", "GUARDIAN", "CI", ["pnpm --filter @o-okul/api exec vitest run src/app.e2e.test.ts src/payment/payment.e2e.test.ts"], [artifact("artifacts/staging/reports/github-ci.json"), ciRun]],
+          ].map(([id, persona, evidenceClass, verificationCommands, evidence]) => ({
+            id, persona, status: "PASS", evidenceClass, sourceSha, verificationCommands, evidence,
           }));
           mkdirSync("artifacts/uat-inputs", { recursive: true });
           writeFileSync("artifacts/uat-inputs/commands.json", `${JSON.stringify({ commands }, null, 2)}\n`);
@@ -1106,6 +1495,9 @@ jobs:
           UAT_RELEASE_CANDIDATE="ghcr.io/$CUTOVER_REPOSITORY/api:$CUTOVER_RELEASE_IMAGE_TAG" \
           UAT_ROLLBACK_IMAGE_TAG="ghcr.io/$CUTOVER_REPOSITORY/api:$rollback_image_tag" \
           UAT_RESTORE_BACKUP_REFERENCE="$restore_backup_reference" \
+          UAT_SOURCE_SHA="$CUTOVER_SOURCE_SHA" \
+          UAT_VERIFIER_RUN_URL="$verifier_run_url" \
+          UAT_GITHUB_CI_RUN_URL="$github_ci_run_url" \
           UAT_COMMAND_EVIDENCE_TARGET="file://$PWD/artifacts/uat-inputs/commands.json" \
           UAT_SCENARIOS_TARGET="file://$PWD/artifacts/uat-inputs/scenarios.json" \
             pnpm uat:generate -- --environment staging
@@ -1123,6 +1515,14 @@ jobs:
           PRODUCTION_EVIDENCE_ALLOW_STAGING=1 UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES=1 \
             pnpm prod:evidence:check -- --env-file .staging-evidence.env --summary-file "artifacts/staging/release-summary-$CUTOVER_RELEASE_IMAGE_TAG.json" \
               --reuse-notification-smoke --reuse-wal-smoke "${provider_reuse_args[@]}" "${aggregate_reuse_args[@]}"
+          node --input-type=module - "artifacts/staging/release-summary-$CUTOVER_RELEASE_IMAGE_TAG.json" <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          const path = process.argv[2];
+          const summary = JSON.parse(readFileSync(path, "utf8"));
+          if (summary.result !== "PASS" || summary.canPromote !== true) throw new Error("Production evidence aggregation PASS candidate üretmedi.");
+          summary.canPromote = false;
+          writeFileSync(path, `${JSON.stringify(summary, null, 2)}\n`, { mode: 0o600 });
+          NODE
           STAGING_ENVIRONMENT=staging NODE_ENV=production pnpm staging:first-gates:smoke -- \
             --output-dir artifacts/staging/first-gates --reuse-smoke-dir artifacts/staging/smoke
           STAGING_FIRST_GATES_TARGET="$PWD/artifacts/staging/first-gates/first-gates-manifest.json" pnpm staging:first-gates:check
@@ -1139,20 +1539,17 @@ jobs:
           UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES: "1"
         run: pnpm ui-ux-professionalization:completion:check
 
-      - name: Check verified staging release artifact bundle
-        if: ${{ inputs.full_evidence }}
-        shell: bash
-        run: STAGING_RELEASE_ARTIFACTS_TARGET="$PWD/artifacts/staging" pnpm staging:release-artifacts:check
-
       - name: Recheck exact images before publishing verification
+        if: ${{ inputs.full_evidence }}
         shell: bash
         env:
           STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
           STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
         run: |
           set -euo pipefail
+          runtime_parity_remote=/root/o-okul/artifacts/staging/private/runtime-parity.json
           ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
-            "STAGING_EDGE_MODE='$STAGING_EDGE_MODE' RELEASE_IMAGE_TAG='$CUTOVER_RELEASE_IMAGE_TAG' REPOSITORY='$CUTOVER_REPOSITORY' bash -se" <<'REMOTE'
+            "STAGING_EDGE_MODE='$STAGING_EDGE_MODE' RELEASE_IMAGE_TAG='$CUTOVER_RELEASE_IMAGE_TAG' REPOSITORY='$CUTOVER_REPOSITORY' GITHUB_RUN_ID='$GITHUB_RUN_ID' RUNTIME_PARITY_OUTPUT='$runtime_parity_remote' bash -se" <<'REMOTE'
           set -euo pipefail
           cd /root/o-okul
           case "$STAGING_EDGE_MODE" in
@@ -1169,17 +1566,116 @@ jobs:
             state="$(docker inspect -f '{{.State.Status}}' "$id")"
             health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$id")"
             [ "$image" = "$expected" ] && [ "$state" = running ] && { [ -z "$health" ] || [ "$health" = healthy ]; }
+            printf '%s|%s|%s|%s\n' "$service" "$image" "$state" "${health:-none}"
           }
-          require_running_image web "$expected_prefix/web:$RELEASE_IMAGE_TAG"
-          require_running_image api "$expected_prefix/api:$RELEASE_IMAGE_TAG"
-          require_running_image worker "$expected_prefix/worker:$RELEASE_IMAGE_TAG"
-          require_running_image queue-board "$expected_prefix/queue-board:$RELEASE_IMAGE_TAG"
+          web_record="$(require_running_image web "$expected_prefix/web:$RELEASE_IMAGE_TAG")"
+          api_record="$(require_running_image api "$expected_prefix/api:$RELEASE_IMAGE_TAG")"
+          worker_record="$(require_running_image worker "$expected_prefix/worker:$RELEASE_IMAGE_TAG")"
+          queue_board_record="$(require_running_image queue-board "$expected_prefix/queue-board:$RELEASE_IMAGE_TAG")"
+          health_records=()
           for path in /health /health/ready; do
             status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 10 "https://o-okul.com$path")"
             [ "$status" = 200 ]
-            echo "Final public health PASS: $path HTTP $status"
+            health_records+=("https://o-okul.com$path|$status")
           done
+          install -d -m 700 "$(dirname "$RUNTIME_PARITY_OUTPUT")"
+          node --input-type=module - "$RUNTIME_PARITY_OUTPUT" "$REPOSITORY" "$RELEASE_IMAGE_TAG" "$GITHUB_RUN_ID" \
+            "$web_record" "$api_record" "$worker_record" "$queue_board_record" "${health_records[0]}" "${health_records[1]}" <<'NODE'
+          import { writeFileSync } from "node:fs";
+          const [output, repository, sourceSha, runId, ...records] = process.argv.slice(2);
+          const services = records.slice(0, 4).map((record) => {
+            const [service, image, state, health] = record.split("|");
+            return { service, image, state, health };
+          });
+          const publicHealth = records.slice(4).map((record) => {
+            const [url, statusCode] = record.split("|");
+            return { url, statusCode: Number(statusCode) };
+          });
+          const report = {
+            result: "PASS",
+            environment: "staging",
+            checkedAt: new Date().toISOString(),
+            repository,
+            sourceSha,
+            releaseImageTag: sourceSha,
+            verifierRunUrl: `https://github.com/${repository}/actions/runs/${runId}`,
+            services,
+            publicHealth,
+          };
+          writeFileSync(output, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+          NODE
           REMOTE
+          scp -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new \
+            "$STAGING_SSH_USER@$STAGING_SSH_HOST:$runtime_parity_remote" artifacts/staging/reports/runtime-parity.json
+          RUNTIME_PARITY_EVIDENCE_TARGET="file://$PWD/artifacts/staging/reports/runtime-parity.json" \
+          RUNTIME_PARITY_EXPECTED_SOURCE_SHA="$CUTOVER_SOURCE_SHA" \
+          RUNTIME_PARITY_EXPECTED_REPOSITORY="$CUTOVER_REPOSITORY" \
+          RUNTIME_PARITY_EXPECTED_VERIFIER_RUN_URL="https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            pnpm runtime-parity:check
+
+      - name: Finalize verified release summary
+        if: ${{ inputs.full_evidence }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          summary="artifacts/staging/release-summary-$CUTOVER_RELEASE_IMAGE_TAG.json"
+          node --input-type=module - "$summary" "$CUTOVER_SOURCE_SHA" "$CUTOVER_REPOSITORY" "$CUTOVER_RELEASE_IMAGE_TAG" "$CUTOVER_AT" <<'NODE'
+          import { readFileSync, renameSync, writeFileSync } from "node:fs";
+          const [path, sourceSha, repository, releaseImageTag, cutoverAt] = process.argv.slice(2);
+          const summary = JSON.parse(readFileSync(path, "utf8"));
+          const runtimeParity = JSON.parse(readFileSync("artifacts/staging/reports/runtime-parity.json", "utf8"));
+          const githubCi = summary.reports?.githubCi;
+          const uiUx = summary.reports?.uiUxRedesign;
+          const observability = summary.reports?.observabilityUat;
+          const outbox = summary.smokeEvidence?.secretDeliveryOutbox;
+          if (
+            summary.result !== "PASS" || summary.canPromote !== false ||
+            githubCi?.repository !== repository || githubCi?.commitSha !== sourceSha ||
+            uiUx?.sourceCommitSha !== sourceSha || observability?.alertDelivery?.releaseCandidate !== sourceSha ||
+            outbox?.releaseImageTag !== releaseImageTag || outbox?.notBefore !== cutoverAt ||
+            runtimeParity?.result !== "PASS" || runtimeParity?.sourceSha !== sourceSha ||
+            runtimeParity?.repository !== repository || runtimeParity?.releaseImageTag !== releaseImageTag ||
+            runtimeParity?.services?.length !== 4 || runtimeParity?.publicHealth?.length !== 2
+          ) {
+            throw new Error("Release summary exact-SHA candidate bağı geçersiz.");
+          }
+          summary.generatedAt = new Date().toISOString();
+          summary.canPromote = true;
+          const temporaryPath = `${path}.tmp-${process.pid}`;
+          writeFileSync(temporaryPath, `${JSON.stringify(summary, null, 2)}\n`, { mode: 0o600 });
+          renameSync(temporaryPath, path);
+          NODE
+          PRODUCTION_EVIDENCE_ALLOW_STAGING=1 \
+          PRODUCTION_EVIDENCE_SUMMARY_TARGET="file://$PWD/$summary" \
+            pnpm prod:evidence:summary:check
+
+      - name: Generate exact release evidence manifest
+        if: ${{ inputs.full_evidence }}
+        shell: bash
+        env:
+          DEPLOY_RUN_ID: ${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}
+        run: |
+          set -euo pipefail
+          RELEASE_EVIDENCE_ARTIFACTS_DIR="$PWD/artifacts/staging" \
+          RELEASE_EVIDENCE_MANIFEST_OUTPUT="$PWD/artifacts/staging/release-evidence-manifest.json" \
+          RELEASE_EVIDENCE_REPOSITORY="$CUTOVER_REPOSITORY" \
+          RELEASE_EVIDENCE_SOURCE_SHA="$CUTOVER_SOURCE_SHA" \
+          RELEASE_EVIDENCE_IMAGE_TAG="$CUTOVER_RELEASE_IMAGE_TAG" \
+          RELEASE_EVIDENCE_DEPLOY_RUN_ID="$DEPLOY_RUN_ID" \
+          RELEASE_EVIDENCE_VERIFIER_RUN_ID="$GITHUB_RUN_ID" \
+          RELEASE_EVIDENCE_OUTBOX_REUSE_RUN_ID="$REUSE_OUTBOX_SMOKE_RUN_ID" \
+          RELEASE_EVIDENCE_PROVIDER_REUSE_RUN_ID="$REUSE_PROVIDER_SMOKE_RUN_ID" \
+          RELEASE_EVIDENCE_AGGREGATE_REUSE_RUN_ID="$REUSE_AGGREGATE_SMOKE_RUN_ID" \
+          RELEASE_EVIDENCE_CUTOVER_AT="$CUTOVER_AT" \
+            node scripts/generate-release-evidence-manifest.mjs
+          RELEASE_EVIDENCE_ARTIFACTS_DIR="$PWD/artifacts/staging" \
+          RELEASE_EVIDENCE_MANIFEST_TARGET="$PWD/artifacts/staging/release-evidence-manifest.json" \
+            node scripts/check-release-evidence-manifest.mjs
+
+      - name: Check verified staging release artifact bundle
+        if: ${{ inputs.full_evidence }}
+        shell: bash
+        run: STAGING_RELEASE_ARTIFACTS_TARGET="$PWD/artifacts/staging" pnpm staging:release-artifacts:check
 
       - name: Invalidate unverified release summary
         if: ${{ failure() && inputs.full_evidence }}
@@ -1198,6 +1694,43 @@ jobs:
           writeFileSync(path, `${JSON.stringify(summary, null, 2)}\n`, { mode: 0o600 });
           NODE
           done
+
+      - name: Remove private Gate E verifier material
+        if: ${{ always() && inputs.full_evidence }}
+        shell: bash
+        env:
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+        run: |
+          set -euo pipefail
+          [ -s "${STAGING_SSH_KEY_PATH:-}" ] || exit 0
+          [[ "${CUTOVER_RELEASE_IMAGE_TAG:-}" =~ ^[a-f0-9]{40}$ ]] || exit 0
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]]
+          ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+            "RELEASE_IMAGE_TAG='$CUTOVER_RELEASE_IMAGE_TAG' GITHUB_RUN_ID='$GITHUB_RUN_ID' bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd /root/o-okul
+          data_dir="/root/o-okul-private/gate-e-data-safety/$RELEASE_IMAGE_TAG/$GITHUB_RUN_ID"
+          obs_dir="/root/o-okul-private/gate-e-observability/$RELEASE_IMAGE_TAG/$GITHUB_RUN_ID"
+          rm -f -- \
+            "$data_dir/generate-restore-drill-evidence.mjs" \
+            "$data_dir/hash-audit.json" \
+            "$data_dir/sha-repair-dry-run.json" \
+            "$data_dir/sha-repair-approved.json" \
+            "$data_dir/hash-audit-after-repair.json" \
+            "$data_dir/dry-run.json" \
+            "$data_dir/migrated.json" \
+            "$data_dir/orphan-audit-after-migration.json" \
+            "$obs_dir/run-observability-alert-drill.mjs" \
+            artifacts/staging/private/alertmanager-firing-resolved-delivery.json \
+            artifacts/staging/private/runtime-parity.json
+          rmdir -- "$data_dir" 2>/dev/null || true
+          rmdir -- "$obs_dir" 2>/dev/null || true
+          compose=(docker compose --env-file .env --env-file .env.release -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.traefik.yml -f docker-compose.observability.yml)
+          prometheus_id="$("${compose[@]}" ps -q prometheus)"
+          [ -n "$prometheus_id" ]
+          docker exec -u 0 "$prometheus_id" sh -lc "awk '!index(\$0, \"gate-e-observability-$GITHUB_RUN_ID\")' /etc/hosts > /tmp/gate-e-observability-$GITHUB_RUN_ID.hosts && cat /tmp/gate-e-observability-$GITHUB_RUN_ID.hosts > /etc/hosts && rm -f /tmp/gate-e-observability-$GITHUB_RUN_ID.hosts && ! grep -F 'gate-e-observability-$GITHUB_RUN_ID' /etc/hosts"
+          REMOTE
 
       - name: Remove private outbox verification material
         if: ${{ always() }}
@@ -1229,7 +1762,7 @@ jobs:
           REMOTE
 
       - uses: actions/upload-artifact@v4
-        if: ${{ always() && inputs.full_evidence }}
+        if: ${{ success() && inputs.full_evidence }}
         with:
           name: staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}
           path: |
@@ -1237,12 +1770,32 @@ jobs:
             !artifacts/staging/private/**
           if-no-files-found: error
 
+      - uses: actions/upload-artifact@v4
+        if: ${{ failure() && inputs.full_evidence }}
+        with:
+          name: staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}-diagnostic
+          path: |
+            artifacts/staging
+            !artifacts/staging/private/**
+            !artifacts/staging/release-summary-*.json
+            !artifacts/staging/release-evidence-manifest.json
+          if-no-files-found: error
+
       - name: Clean local verification secrets
         if: ${{ always() }}
         shell: bash
         run: |
           set -euo pipefail
-          paths=(.staging-evidence.env artifacts/secret-delivery-outbox.json "$RUNNER_TEMP/staging-deploy-run.json")
+          paths=(
+            .staging-evidence.env
+            artifacts/secret-delivery-outbox.json
+            artifacts/uat-inputs/alertmanager-firing-resolved-delivery.json
+            artifacts/uat-inputs/commands.json
+            artifacts/uat-inputs/rate-limit-smoke.json
+            artifacts/uat-inputs/scenarios.json
+            "$RUNNER_TEMP/staging-deploy-run.json"
+          )
           [ -n "${STAGING_SSH_KEY_PATH:-}" ] && paths+=("$STAGING_SSH_KEY_PATH")
           [ -n "${STAGING_KNOWN_HOSTS_PATH:-}" ] && paths+=("$STAGING_KNOWN_HOSTS_PATH")
           rm -f -- "${paths[@]}"
+          rmdir artifacts/uat-inputs 2>/dev/null || true

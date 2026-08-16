@@ -51,6 +51,71 @@ const expectedCommandsPassed = [
   "pnpm notification:smoke",
   "pnpm traefik:https:smoke",
 ];
+const commandEvidenceContracts = new Map([
+  ["pnpm run ci", ["CI", ["artifact:artifacts/staging/reports/github-ci.json"]]],
+  ["pnpm prod:env:check", ["STAGING", []]],
+  ["pnpm db:rls:check:live", ["STAGING", ["artifact:artifacts/staging/reports/rls-live.json"]]],
+  ["pnpm raw-import:smoke", ["STAGING", ["artifact:artifacts/staging/reports/isem-optical-pipeline.json"]]],
+  ["pnpm report-generation:smoke", ["STAGING", ["artifact:artifacts/staging/smoke/report-generation.json"]]],
+  ["pnpm live:exam-cycle:check", ["STAGING", ["artifact:artifacts/staging/reports/live-exam-cycle.json"]]],
+  ["pnpm queue:smoke", ["CI", ["artifact:artifacts/staging/reports/github-ci.json"]]],
+  ["pnpm live:onboarding:smoke", ["STAGING", ["artifact:artifacts/staging/reports/live-onboarding.json"]]],
+  ["pnpm live:ui-worker:smoke", ["STAGING", ["artifact:artifacts/staging/reports/live-ui-worker-result.json"]]],
+  ["pnpm sms:smoke", ["STAGING", ["artifact:artifacts/staging/smoke/sms-provider.json"]]],
+  ["pnpm notification:smoke", ["STAGING", ["artifact:artifacts/staging/smoke/notification-provider.json"]]],
+  ["pnpm traefik:https:smoke", ["STAGING", ["artifact:artifacts/staging/smoke/traefik-https.json"]]],
+]);
+const scenarioEvidenceContracts = new Map([
+  ["UAT-SYS-01", contract("CI_AND_STAGING", ["pnpm --filter @o-okul/web test:e2e", "pnpm observability:uat:check"], [
+    "artifact:artifacts/staging/reports/github-ci.json",
+    "artifact:artifacts/staging/reports/observability-uat.json",
+    "artifact:artifacts/staging/ui-ux-redesign/uat.json",
+  ])],
+  ["UAT-SYS-02", contract("STAGING", ["pnpm live:onboarding:smoke"], ["artifact:artifacts/staging/reports/live-onboarding.json"])],
+  ["UAT-SYS-03", contract("CI", ["pnpm --filter @o-okul/api exec vitest run src/tenant/tenant.controller.e2e.test.ts"], [
+    "artifact:artifacts/staging/reports/github-ci.json",
+  ])],
+  ["UAT-SYS-04", contract("STAGING_WITH_HISTORICAL_DRILL", ["pnpm deployment:rollback:check", "pnpm deployment:cutover:check"], [
+    "artifact:artifacts/staging/reports/deployment-rollback.json",
+    "artifact:artifacts/staging/reports/deployment-cutover.json",
+  ])],
+  ["UAT-KURUM-01", contract("STAGING", ["pnpm live:onboarding:smoke"], ["artifact:artifacts/staging/reports/live-onboarding.json"])],
+  ["UAT-KURUM-02", contract("CI", ["pnpm --filter @o-okul/api exec vitest run src/school/school.e2e.test.ts src/student/student-profile.e2e.test.ts"], [
+    "artifact:artifacts/staging/reports/github-ci.json",
+  ])],
+  ["UAT-KURUM-03", contract("CI_AND_STAGING", ["pnpm --filter @o-okul/api exec vitest run src/user-management/user-management.e2e.test.ts src/identity-invitation/identity-invitation.e2e.test.ts", "pnpm live:onboarding:smoke"], [
+    "artifact:artifacts/staging/reports/github-ci.json",
+    "artifact:artifacts/staging/reports/live-onboarding.json",
+  ])],
+  ["UAT-KURUM-04", contract("CI", ["pnpm --filter @o-okul/api exec vitest run src/program src/attendance"], [
+    "artifact:artifacts/staging/reports/github-ci.json",
+  ])],
+  ["UAT-KURUM-05", contract("STAGING", ["pnpm isem-optical-pipeline:evidence-check", "pnpm live:exam-cycle:check", "pnpm live:ui-worker:smoke"], [
+    "artifact:artifacts/staging/reports/isem-optical-pipeline.json",
+    "artifact:artifacts/staging/reports/live-exam-cycle.json",
+    "artifact:artifacts/staging/reports/live-ui-worker-result.json",
+  ])],
+  ["UAT-KURUM-06", contract("STAGING", ["pnpm report-generation:smoke", "pnpm live:exam-cycle:check", "pnpm live:ui-worker:smoke"], [
+    "artifact:artifacts/staging/smoke/report-generation.json",
+    "artifact:artifacts/staging/reports/live-exam-cycle.json",
+    "artifact:artifacts/staging/reports/live-ui-worker-result.json",
+  ])],
+  ["UAT-KURUM-07", contract("CI", ["pnpm run ci"], ["artifact:artifacts/staging/reports/github-ci.json"])],
+  ["UAT-KURUM-08", contract("CI_AND_STAGING", ["pnpm run ci", "pnpm sms:smoke", "pnpm notification:smoke"], [
+    "artifact:artifacts/staging/reports/github-ci.json",
+    "artifact:artifacts/staging/smoke/sms-provider.json",
+    "artifact:artifacts/staging/smoke/notification-provider.json",
+  ])],
+  ["UAT-TEACHER-01", ciContract("pnpm --filter @o-okul/api exec vitest run src/me/me-access-matrix.e2e.test.ts src/report/report-generation.service.test.ts")],
+  ["UAT-TEACHER-02", ciContract("pnpm --filter @o-okul/api exec vitest run src/app.e2e.test.ts src/homework/homework.e2e.test.ts src/support-ticket/support-ticket.e2e.test.ts")],
+  ["UAT-TEACHER-03", ciContract("pnpm --filter @o-okul/api exec vitest run src/tenant src/school/assert-teacher-assigned.test.ts")],
+  ["UAT-STUDENT-01", ciContract("pnpm --filter @o-okul/api exec vitest run src/app.e2e.test.ts src/me/me-access-matrix.e2e.test.ts")],
+  ["UAT-STUDENT-02", ciContract("pnpm --filter @o-okul/api exec vitest run src/app.e2e.test.ts src/support-ticket/support-ticket.e2e.test.ts")],
+  ["UAT-STUDENT-03", ciContract("pnpm --filter @o-okul/api exec vitest run src/me/me-access-matrix.e2e.test.ts")],
+  ["UAT-GUARDIAN-01", ciContract("pnpm --filter @o-okul/api exec vitest run src/app.e2e.test.ts src/payment/payment.e2e.test.ts")],
+  ["UAT-GUARDIAN-02", ciContract("pnpm --filter @o-okul/api exec vitest run src/app.e2e.test.ts src/announcement/announcement.e2e.test.ts src/support-ticket/support-ticket.e2e.test.ts")],
+  ["UAT-GUARDIAN-03", ciContract("pnpm --filter @o-okul/api exec vitest run src/app.e2e.test.ts src/payment/payment.e2e.test.ts")],
+]);
 const evidenceReferencePrefixes = ["artifact:", "file://", "https://", "log:", "run:", "s3://", "url:"];
 
 const outputPath = readOption("--output") ?? process.env.UAT_OUTPUT;
@@ -61,6 +126,9 @@ const rollbackImageTag = process.env.UAT_ROLLBACK_IMAGE_TAG?.trim();
 const restoreBackupReference = process.env.UAT_RESTORE_BACKUP_REFERENCE?.trim();
 const scenariosTarget = process.env.UAT_SCENARIOS_TARGET?.trim();
 const commandEvidenceTarget = process.env.UAT_COMMAND_EVIDENCE_TARGET?.trim();
+const sourceSha = process.env.UAT_SOURCE_SHA?.trim();
+const verifierRunUrl = process.env.UAT_VERIFIER_RUN_URL?.trim();
+const githubCiRunUrl = process.env.UAT_GITHUB_CI_RUN_URL?.trim();
 
 const failures = [];
 requireValue(outputPath, "UAT_OUTPUT veya --output", failures);
@@ -72,6 +140,9 @@ requireEvidenceValue(restoreBackupReference, "UAT_RESTORE_BACKUP_REFERENCE", fai
 requireNoSecretBearingReference(restoreBackupReference, "UAT_RESTORE_BACKUP_REFERENCE", failures);
 requireEvidenceTarget(scenariosTarget, "UAT_SCENARIOS_TARGET", failures);
 requireEvidenceTarget(commandEvidenceTarget, "UAT_COMMAND_EVIDENCE_TARGET", failures);
+requireCommitSha(sourceSha, "UAT_SOURCE_SHA", failures);
+requireGithubRunUrl(verifierRunUrl, "UAT_VERIFIER_RUN_URL", failures);
+requireGithubRunUrl(githubCiRunUrl, "UAT_GITHUB_CI_RUN_URL", failures);
 if (releaseCandidate && rollbackImageTag && releaseCandidate === rollbackImageTag) {
   failures.push("UAT_RELEASE_CANDIDATE ve UAT_ROLLBACK_IMAGE_TAG farklı olmalı.");
 }
@@ -147,6 +218,15 @@ function validateCommandEvidence(payload) {
       failures.push(`${command} status PASS olmalı.`);
     }
     requireEvidenceReference(item.evidence, `${command} evidence`, failures);
+    const [evidenceClass, requiredReferences] = commandEvidenceContracts.get(command);
+    if (item.evidenceClass !== evidenceClass) failures.push(`${command} evidenceClass ${evidenceClass} olmalı.`);
+    if (item.sourceSha?.toLowerCase() !== sourceSha.toLowerCase()) failures.push(`${command} sourceSha UAT_SOURCE_SHA ile eşleşmeli.`);
+    for (const reference of requiredReferences) {
+      if (item.evidence !== reference) failures.push(`${command} evidence ${reference} olmalı.`);
+    }
+    if (evidenceClass === "CI" && item.evidence !== `artifact:artifacts/staging/reports/github-ci.json`) {
+      failures.push(`${command} exact GitHub CI artifact'ine bağlanmalı.`);
+    }
   }
 
   const seen = new Set();
@@ -158,6 +238,7 @@ function validateCommandEvidence(payload) {
     if (!expectedCommandsPassed.includes(item?.command)) {
       failures.push(`UAT_COMMAND_EVIDENCE_TARGET beklenmeyen komut içeriyor: ${item?.command}`);
     }
+    requireExactKeys(item, ["command", "status", "evidence", "evidenceClass", "sourceSha"], `commands.${item?.command ?? "unknown"}`, failures);
   }
   if (failures.length > 0) fail(failures);
 }
@@ -194,13 +275,39 @@ function validateAndReadScenarios(payload) {
     if (scenario.status !== "PASS") {
       failures.push(`${id} status PASS olmalı.`);
     }
+    const contract = scenarioEvidenceContracts.get(id);
+    if (scenario.evidenceClass !== contract.evidenceClass) {
+      failures.push(`${id} evidenceClass ${contract.evidenceClass} olmalı.`);
+    }
+    if (scenario.sourceSha?.toLowerCase() !== sourceSha.toLowerCase()) {
+      failures.push(`${id} sourceSha UAT_SOURCE_SHA ile eşleşmeli.`);
+    }
+    requireExactStringList(scenario.verificationCommands, contract.verificationCommands, `${id}.verificationCommands`, failures);
     if (!Array.isArray(scenario.evidence) || scenario.evidence.length === 0) {
       failures.push(`${id}.evidence boş olmayan liste olmalı.`);
     } else {
       for (const [index, item] of scenario.evidence.entries()) {
         requireEvidenceReference(item, `${id}.evidence.${index}`, failures);
       }
+      for (const reference of contract.requiredReferences) {
+        if (!scenario.evidence.includes(reference)) failures.push(`${id}.evidence eksik: ${reference}`);
+      }
+      if (["CI", "CI_AND_STAGING"].includes(contract.evidenceClass)) {
+        for (const reference of ["artifact:artifacts/staging/reports/github-ci.json", `run:${githubCiRunUrl}`]) {
+          if (!scenario.evidence.includes(reference)) failures.push(`${id}.evidence exact CI bağı eksik: ${reference}`);
+        }
+      }
+      if (["STAGING", "CI_AND_STAGING", "STAGING_WITH_HISTORICAL_DRILL"].includes(contract.evidenceClass)
+        && !scenario.evidence.includes(`run:${verifierRunUrl}`)) {
+        failures.push(`${id}.evidence current verifier run URL'sine bağlanmalı.`);
+      }
     }
+    requireExactKeys(
+      scenario,
+      ["id", "persona", "status", "evidenceClass", "sourceSha", "verificationCommands", "evidence"],
+      `scenarios.${id}`,
+      failures,
+    );
     output.push({
       id,
       persona,
@@ -246,6 +353,49 @@ function readOption(name) {
 function requireValue(value, label, output) {
   if (typeof value !== "string" || value.trim() === "") {
     output.push(`${label} boş bırakılamaz.`);
+  }
+}
+
+function contract(evidenceClass, verificationCommands, requiredReferences) {
+  return { evidenceClass, verificationCommands, requiredReferences };
+}
+
+function ciContract(command) {
+  return contract("CI", [command], ["artifact:artifacts/staging/reports/github-ci.json"]);
+}
+
+function requireCommitSha(value, label, output) {
+  if (!/^[a-f0-9]{40}$/i.test(value ?? "")) output.push(`${label} 40 karakter hex SHA olmalı.`);
+}
+
+function requireGithubRunUrl(value, label, output) {
+  let url;
+  try {
+    url = new URL(value ?? "");
+  } catch {
+    output.push(`${label} GitHub Actions run URL olmalı.`);
+    return;
+  }
+  if (url.protocol !== "https:" || url.hostname !== "github.com" || url.username || url.password || url.search || url.hash
+    || !/^\/[^/]+\/[^/]+\/actions\/runs\/\d+\/?$/u.test(url.pathname)) {
+    output.push(`${label} secret taşımayan GitHub Actions run URL olmalı.`);
+  }
+}
+
+function requireExactKeys(value, expectedKeys, label, output) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    output.push(`${label} nesnesi zorunlu.`);
+    return;
+  }
+  const actual = Object.keys(value).sort();
+  const expected = [...expectedKeys].sort();
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) output.push(`${label} exact alan setini taşımalı: ${expectedKeys.join(", ")}`);
+}
+
+function requireExactStringList(value, expected, label, output) {
+  if (!Array.isArray(value) || value.length !== expected.length || new Set(value).size !== value.length
+    || !expected.every((item) => value.includes(item))) {
+    output.push(`${label} exact komut setiyle eşleşmeli.`);
   }
 }
 

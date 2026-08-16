@@ -2,45 +2,17 @@ import { lstat, readFile } from "node:fs/promises";
 import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getTenantScopedTables } from "../packages/db/scripts/tenant-models.mjs";
+import {
+  requiredRlsLiveCommands,
+  requiredTenantCompositeRelations,
+  requiredTenantFkInsertRejects,
+  requiredWriteRejects,
+} from "./rls-live-evidence-contract.mjs";
 
 const target = process.env.RLS_LIVE_EVIDENCE_TARGET;
 const allowExampleEvidence = process.env.RLS_LIVE_ALLOW_EXAMPLE_EVIDENCE === "1";
 
 const expectedTenantTables = getTenantScopedTables();
-const requiredTenantCompositeRelations = [
-  "AnnouncementReceipt.announcement",
-  "AnnouncementDeliveryReport.announcement",
-  "Homework.class",
-  "ScheduleLesson.class",
-  "StudySession.class",
-  "StudySessionStudent.studySession",
-  "StudySessionStudent.student",
-  "TeacherAssignment.class",
-  "TeacherAssignment.student",
-  "GuardianStudent.guardian",
-  "GuardianStudent.student",
-  "DevelopmentAssessment.teacher",
-  "TeacherAssignment.teacher",
-  "TeacherNote.teacher",
-  "ScheduleLesson.teacher",
-  "StudySession.teacher",
-  "Homework.sourceMaterial",
-  "SupportTicket.class",
-  "PaymentPlan.class",
-  "ReportSnapshot.class",
-  "StudentEnrollment.class",
-  "Student.class",
-  "Student.responsibleTeacher",
-  "MembershipCampusScope.membership",
-  "MembershipCampusScope.campus",
-  "LicenseUsage.licenseTerm",
-  "Employee.accountUser",
-  "Teacher.employee",
-  "StudentContact.student",
-  "WhatsAppConsentEvent.whatsappConsent",
-  "WhatsAppConsentEvent.studentContact",
-];
-const requiredTenantFkInsertRejects = requiredTenantCompositeRelations.map((relation) => `${relation} cross tenant insert`);
 const rlsLiveTopLevelKeys = [
   "result",
   "environment",
@@ -74,34 +46,11 @@ const tenantFkPreflightKeys = [
   "migrationPreflightCommand",
 ];
 const loadSmokeKeys = ["targetRps", "actualRps", "durationSeconds", "concurrency", "queriesCompleted", "failures"];
-const requiredCommands = [
-  "pnpm db:rls:check",
-  "pnpm db:rls:check:live",
-  "pnpm rls:load:smoke",
-  "pnpm rls:live:check",
-];
+const requiredCommands = requiredRlsLiveCommands;
 const requiredEvidenceReferenceFileNames = [
   "db-rls-check.log",
   "db-rls-check-live.log",
   "rls-load-smoke.json",
-];
-const requiredWriteRejects = [
-  "Student wrong tenant insert",
-  "Homework wrong tenant insert",
-  "Announcement wrong tenant insert",
-  "MessageTemplate wrong tenant insert",
-  "WhatsAppConsent wrong tenant insert",
-  "WhatsAppConsentEvent cross tenant contact",
-  "WhatsAppConsentEvent update forbidden",
-  "WhatsAppConsentEvent delete forbidden",
-  "WhatsAppConsent direct update forbidden",
-  "WhatsAppConsent direct delete forbidden",
-  "WhatsAppConsent grant withdraw regrant",
-  "WhatsAppConsent sibling withdrawal",
-  "ExamResult foreign tenant RawImport",
-  "ParsedAnswer foreign tenant RawImport",
-  "ParsedAnswer cross exam mismatch",
-  "ParsedAnswer duplicate raw import participant parser",
 ];
 
 if (!target) {

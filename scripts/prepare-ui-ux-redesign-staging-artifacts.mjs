@@ -111,6 +111,25 @@ for (const surface of surfaces) {
   }
   artifactReferences.set(surface.envKey, references.join(","));
 }
+const systemUiEvidence = {};
+for (const surface of [
+  { name: "system", source: "faz9-system-dashboard" },
+  { name: "system-tenants", source: "faz9-system-tenants" },
+]) {
+  const references = [];
+  for (const width of requiredWidths) {
+    const source = resolve(captureDir, `${surface.source}-${width}.png`);
+    const bytes = readPlainFile(source, `${surface.name} ${width}px capture`);
+    const png = inspectPng(bytes);
+    if (!png?.hasVisibleContent || png.width !== width) fail(`${surface.name} ${width}px capture görünür içerik ve exact genişlik taşımalı.`);
+    const destination = resolve(outputDir, `${surface.name}-${width}.png`);
+    copyFileSync(source, destination);
+    chmodSync(destination, 0o600);
+    references.push(artifactReference(destination));
+    pngHashes.push(createHash("sha256").update(bytes).digest("hex"));
+  }
+  systemUiEvidence[surface.name] = references;
+}
 
 const sharedEvidence = {
   result: "PASS",
@@ -125,7 +144,7 @@ const sharedEvidence = {
 };
 const supportingArtifacts = [
   ["summary.json", { ...sharedEvidence, evidenceType: "ui-ux-redesign-summary", commandsPassed: releaseCommands }],
-  ["uat.json", { ...sharedEvidence, evidenceType: "ui-ux-redesign-uat", commandsPassed: ["pnpm uat:check"] }],
+  ["uat.json", { ...sharedEvidence, evidenceType: "ui-ux-redesign-uat", commandsPassed: ["pnpm uat:check"], systemUiEvidence }],
   ...phaseCommands.map((commandsPassed, index) => [
     `phase-${index}.json`,
     { ...sharedEvidence, evidenceType: `ui-ux-redesign-phase-${index}`, commandsPassed },

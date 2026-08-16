@@ -165,8 +165,8 @@ for (const coverage of viewportCoverage) {
     failures.push(`${coverage.surface} viewport referansları okunabilir PNG artifact/url olmalı; run: kullanılamaz.`);
   }
 }
-
 if (failures.length > 0) fail(failures);
+viewportCoverage.push(...await readSystemUiCoverage(stagingEvidenceReferences[2]));
 const githubCi = readGithubCiEvidence(githubCiEvidenceTarget, sourceCommitSha, stagingEvidenceReferences);
 const artifactContracts = buildArtifactContracts(stagingEvidenceReferences, phaseEvidence, privacyReviewReference);
 const artifacts = await buildArtifactManifest({
@@ -311,6 +311,36 @@ function buildArtifactContracts(stagingEvidenceReferences, phaseEvidence, privac
     }
   }
   return contracts;
+}
+
+async function readSystemUiCoverage(uatReference) {
+  let payload;
+  try {
+    payload = JSON.parse((await readEvidenceBytes(uatReference)).toString("utf8"));
+  } catch {
+    fail(["UI/UX UAT artifact systemUiEvidence içeren geçerli JSON olmalı."]);
+  }
+  const value = payload?.systemUiEvidence;
+  if (!value || typeof value !== "object" || Array.isArray(value)
+    || JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(["system", "system-tenants"])) {
+    fail(["UI/UX UAT artifact system ve system-tenants exact kanıt setini taşımalı."]);
+  }
+  const separator = uatReference.lastIndexOf("/");
+  if (!uatReference.startsWith("artifact:") || separator <= "artifact:".length) {
+    fail(["UI/UX UAT artifact system UI bağları için repo içi artifact: referansı olmalı."]);
+  }
+  const artifactPrefix = uatReference.slice(0, separator);
+  return [
+    ["system dashboard", "system"],
+    ["system tenants", "system-tenants"],
+  ].map(([surface, key]) => {
+    const expected = requiredWidths.map((width) => `${artifactPrefix}/${key}-${width}.png`);
+    if (!Array.isArray(value[key]) || value[key].length !== expected.length
+      || !expected.every((reference, index) => value[key][index] === reference)) {
+      fail([`UI/UX UAT artifact ${key} 320/375/414/768/1024/1440 exact PNG referanslarını taşımalı.`]);
+    }
+    return { surface, widths: requiredWidths, evidenceReferences: value[key] };
+  });
 }
 
 function addArtifactContract(contracts, reference, contract) {

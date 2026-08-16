@@ -1,0 +1,63 @@
+export const requiredTenantCompositeRelations = [
+  "AnnouncementReceipt.announcement",
+  "AnnouncementDeliveryReport.announcement",
+  "Homework.class",
+  "ScheduleLesson.class",
+  "StudySession.class",
+  "StudySessionStudent.studySession",
+  "StudySessionStudent.student",
+  "TeacherAssignment.class",
+  "TeacherAssignment.student",
+  "GuardianStudent.guardian",
+  "GuardianStudent.student",
+  "DevelopmentAssessment.teacher",
+  "TeacherAssignment.teacher",
+  "TeacherNote.teacher",
+  "ScheduleLesson.teacher",
+  "StudySession.teacher",
+  "Homework.sourceMaterial",
+  "SupportTicket.class",
+  "PaymentPlan.class",
+  "ReportSnapshot.class",
+  "StudentEnrollment.class",
+  "Student.class",
+  "Student.responsibleTeacher",
+  "MembershipCampusScope.membership",
+  "MembershipCampusScope.campus",
+  "LicenseUsage.licenseTerm",
+  "Employee.accountUser",
+  "Teacher.employee",
+  "StudentContact.student",
+  "WhatsAppConsentEvent.whatsappConsent",
+  "WhatsAppConsentEvent.studentContact",
+];
+
+export const requiredTenantFkInsertRejects = requiredTenantCompositeRelations.map(
+  (relation) => `${relation} cross tenant insert`,
+);
+
+export const requiredWriteRejects = [
+  "Student wrong tenant insert",
+  "Homework wrong tenant insert",
+  "Announcement wrong tenant insert",
+  "MessageTemplate wrong tenant insert",
+  "WhatsAppConsent wrong tenant insert",
+  "WhatsAppConsentEvent cross tenant contact",
+  "WhatsAppConsentEvent update forbidden",
+  "WhatsAppConsentEvent delete forbidden",
+  "WhatsAppConsent direct update forbidden",
+  "WhatsAppConsent direct delete forbidden",
+  "WhatsAppConsent grant withdraw regrant",
+  "WhatsAppConsent sibling withdrawal",
+  "ExamResult foreign tenant RawImport",
+  "ParsedAnswer foreign tenant RawImport",
+  "ParsedAnswer cross exam mismatch",
+  "ParsedAnswer duplicate raw import participant parser",
+];
+
+export const requiredRlsLiveCommands = [
+  "pnpm db:rls:check",
+  "pnpm db:rls:check:live",
+  "pnpm rls:load:smoke",
+  "pnpm rls:live:check",
+];
