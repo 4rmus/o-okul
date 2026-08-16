@@ -752,7 +752,17 @@ jobs:
           GITHUB_CI_EVIDENCE_TARGET="file://$PWD/artifacts/staging/reports/github-ci.json" \
           UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES=1 \
             pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env --environment staging
-          for report_file in live-exam-cycle.json isem-optical-pipeline.json live-ui-worker-result.json; do
+          for report_file in \
+            kvkk-inventory.json \
+            upload-av.json \
+            observability-uat.json \
+            admin-mfa.json \
+            live-exam-cycle.json \
+            isem-optical-pipeline.json \
+            live-ui-worker-result.json \
+            inline-upload-content-migration.json \
+            audit-null-tenant.json \
+            rate-limit.json; do
             report_local="artifacts/staging/reports/$report_file"
             if [ ! -f "$report_local" ] || [ -L "$report_local" ]; then
               copied=false
