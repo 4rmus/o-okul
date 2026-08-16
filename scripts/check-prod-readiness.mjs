@@ -1335,6 +1335,7 @@ const expectations = {
     "github.event.pull_request.head.sha",
     "eventName === \"pull_request\"",
     "clean: false",
+    "scripts/smoke-report-generation-live.mjs; do",
     "Validate staging verify environment",
     "Preflight current images and private outbox source",
     "Phase B private source missing for release",

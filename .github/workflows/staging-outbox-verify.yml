@@ -149,7 +149,8 @@ jobs:
             scripts/generate-identity-migration-evidence.mjs \
             scripts/generate-financial-retention-evidence.mjs \
             scripts/generate-ui-ux-redesign-evidence.mjs \
-            scripts/prepare-ui-ux-redesign-staging-artifacts.mjs; do
+            scripts/prepare-ui-ux-redesign-staging-artifacts.mjs \
+            scripts/smoke-report-generation-live.mjs; do
             [ -f "$relative" ] && [ ! -L "$relative" ]
             install -D -m 600 "$relative" "$verifier_root/$relative"
           done
@@ -174,7 +175,8 @@ jobs:
             scripts/generate-identity-migration-evidence.mjs \
             scripts/generate-financial-retention-evidence.mjs \
             scripts/generate-ui-ux-redesign-evidence.mjs \
-            scripts/prepare-ui-ux-redesign-staging-artifacts.mjs; do
+            scripts/prepare-ui-ux-redesign-staging-artifacts.mjs \
+            scripts/smoke-report-generation-live.mjs; do
             source_file="$verifier_root/$relative"
             [ -f "$source_file" ] && [ ! -L "$source_file" ]
             install -m 644 "$source_file" "$relative"
