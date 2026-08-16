@@ -570,6 +570,11 @@ function checkOutboxVerifyWorkflowContract(output) {
     "run_gate_e_live_uat_rls",
     "run_gate_e_data_safety_reconciliation",
     "run_gate_e_observability_alert_drill",
+    "Validate preserved unexpected artifact archive",
+    "Tam 16 dosyalık unexpected artifact arşivi doğrulanamadı.",
+    "Unexpected artifact archive root plain dizin olmalı.",
+    "Unexpected artifact arşiv dosyası plain file olmalı.",
+    'manifest.entries.length !== 16',
     "full_evidence requires run_gate_e_mutating_smokes=true; stale iSEM/UI/rate-limit artifacts cannot be promoted.",
     "full_evidence requires run_gate_e_live_uat_rls=true; stale onboarding/RLS artifacts cannot be promoted.",
     "full_evidence requires run_gate_e_data_safety_reconciliation=true; stale restore/inline-upload artifacts cannot be promoted.",
@@ -649,8 +654,8 @@ function checkOutboxVerifyWorkflowContract(output) {
   if (workflow.match(/SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID|inputs\.source|secrets\..*SOURCE/i)) {
     output.push(`${outboxVerifyWorkflowPath} source ID GitHub input/secret olarak taşımamalı.`);
   }
-  if (workflow.split("if: ${{ inputs.full_evidence }}").length - 1 !== 8) {
-    output.push(`${outboxVerifyWorkflowPath} full evidence adımları tam olarak sekiz explicit koşulla ayrılmalı.`);
+  if (workflow.split("if: ${{ inputs.full_evidence }}").length - 1 !== 9) {
+    output.push(`${outboxVerifyWorkflowPath} full evidence adımları tam olarak dokuz explicit koşulla ayrılmalı.`);
   }
   for (const outputToken of [
     "IDENTITY_MIGRATION_OUTPUT=artifacts/staging/reports/identity-migration.json",
@@ -681,6 +686,11 @@ function checkOutboxVerifyWorkflowContract(output) {
     "pnpm --filter @o-okul/shared-types build",
     "pnpm --filter @o-okul/db build",
     "node --env-file=.staging-evidence.env scripts/generate-admin-mfa-evidence.mjs",
+  ]);
+  requireWorkflowOrder(output, workflow, "unexpected artifact arşiv preflight sırası", [
+    "Preflight current images and private outbox source",
+    "Validate preserved unexpected artifact archive",
+    "Run configured production evidence aggregation",
   ]);
   requireWorkflowOrder(output, workflow, "Gate E cleanup ve audit-null tazelik sırası", [
     "Live onboarding sentetik tenant/session temizliği geçti",

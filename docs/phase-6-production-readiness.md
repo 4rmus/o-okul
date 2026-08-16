@@ -1123,6 +1123,8 @@ pnpm backup:restore:smoke
   `corepack pnpm staging:release-artifacts:archive-unexpected -- --artifacts-dir artifacts/staging --gap-report-file artifacts/local/staging-release-gap-report.json --archive-dir artifacts/local/staging-release-unexpected-<tag> --apply`.
   Komut önce gap raporunu taze üretir, yalnız `unexpectedFiles[]` girdilerini arşivler,
   `manifest.json` yazar ve varsayılan olarak dry-run çalışır; `--apply` olmadan dosya taşımaz.
+  Gate E full verifier aynı arşivi mutation öncesinde tekrar okur; manifest sonucu, tam `16`
+  benzersiz entry ve her entry için gerçek symlink olmayan archive dosyası doğrulanmadan ilerlemez.
 - `pnpm staging:evidence-env:check`, normal deploy'da GitHub CI artifact üretimi/download, activation env
   decode/check, metadata append, first-gates, cutover, cleanup ve upload sırasını; verify-only workflow'unda
   ise full env, production evidence ve release bundle kontrol sırasını statik olarak korur.

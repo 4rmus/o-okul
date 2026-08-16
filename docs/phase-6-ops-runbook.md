@@ -1164,6 +1164,9 @@ Beklenen akış:
   `corepack pnpm staging:release-artifacts:archive-unexpected -- --artifacts-dir artifacts/staging --gap-report-file artifacts/local/staging-release-gap-report.json --archive-dir artifacts/local/staging-release-unexpected-<tag> --apply`
   kullanılır. Komut silmez; sadece taze gap raporundaki `unexpectedFiles[]` girdilerini bundle
   dışındaki archive dizinine taşır ve `manifest.json` yazar. `--apply` yoksa dry-run çıktısı verir.
+  Gate E full verifier, provider veya sentetik veri adımlarından önce remote archive manifestini
+  salt-okunur doğrular; sonuç `ARCHIVED_UNEXPECTED_STAGING_RELEASE_ARTIFACTS`, entry sayısı tam `16`
+  ve her `archivedTo` hedefi symlink olmayan plain file değilse run fail-closed durur.
 - First-gates manifest'indeki `evidenceFile` değerleri manifest dizini altındaki symlink olmayan
   relative artifact dosya adlarıdır; mutlak URL/yol veya manifest dizini dışına çıkan kanıt
   referansı geçmez.

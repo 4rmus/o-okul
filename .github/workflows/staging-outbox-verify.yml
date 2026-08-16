@@ -395,6 +395,76 @@ jobs:
           [ "$source_mtime" -ge "$((cutover_epoch - 60))" ]
           REMOTE
 
+      - name: Validate preserved unexpected artifact archive
+        if: ${{ inputs.full_evidence }}
+        shell: bash
+        env:
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" "bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd /root/o-okul
+          node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          import { lstatSync, readFileSync, readdirSync } from "node:fs";
+          import { isAbsolute, normalize, relative, resolve } from "node:path";
+
+          const archiveRoot = resolve("artifacts/local");
+          const archiveRootStat = lstatSync(archiveRoot);
+          if (archiveRootStat.isSymbolicLink() || !archiveRootStat.isDirectory()) throw new Error("Unexpected artifact archive root plain dizin olmalı.");
+          const archives = [];
+          for (const entry of readdirSync(archiveRoot, { withFileTypes: true })) {
+            if (!entry.isDirectory() || !entry.name.startsWith("staging-release-unexpected-")) continue;
+            const archiveDir = resolve(archiveRoot, entry.name);
+            const manifestPath = resolve(archiveDir, "manifest.json");
+            let manifestText;
+            try {
+              const manifestStat = lstatSync(manifestPath);
+              if (manifestStat.isSymbolicLink() || !manifestStat.isFile()) continue;
+              manifestText = readFileSync(manifestPath, "utf8");
+            } catch {
+              continue;
+            }
+            const manifest = JSON.parse(manifestText);
+            if (
+              manifest.result !== "ARCHIVED_UNEXPECTED_STAGING_RELEASE_ARTIFACTS" ||
+              manifest.artifactsTarget !== "artifacts/staging" ||
+              typeof manifest.archivedAt !== "string" ||
+              Number.isNaN(Date.parse(manifest.archivedAt)) ||
+              !Array.isArray(manifest.entries) ||
+              manifest.entries.length !== 16
+            ) continue;
+            const paths = new Set();
+            for (const archived of manifest.entries) {
+              if (
+                Object.keys(archived).sort().join(",") !== "archivedTo,path" ||
+                typeof archived.path !== "string" ||
+                typeof archived.archivedTo !== "string" ||
+                archived.path === "" ||
+                isAbsolute(archived.path) ||
+                normalize(archived.path) !== archived.path ||
+                paths.has(archived.path)
+              ) throw new Error("Unexpected artifact archive manifest entry geçersiz.");
+              paths.add(archived.path);
+              const expectedPath = resolve(archiveDir, archived.path);
+              if (resolve(archived.archivedTo) !== expectedPath) throw new Error("Unexpected artifact archive hedef bağı geçersiz.");
+              const archivedStat = lstatSync(expectedPath);
+              if (archivedStat.isSymbolicLink() || !archivedStat.isFile()) throw new Error("Unexpected artifact arşiv dosyası plain file olmalı.");
+            }
+            archives.push({
+              archiveDir: relative(resolve("."), archiveDir),
+              archivedAt: manifest.archivedAt,
+              manifestSha256: createHash("sha256").update(manifestText).digest("hex"),
+            });
+          }
+          if (archives.length === 0) throw new Error("Tam 16 dosyalık unexpected artifact arşivi doğrulanamadı.");
+          archives.sort((a, b) => Date.parse(b.archivedAt) - Date.parse(a.archivedAt));
+          console.log(JSON.stringify({ result: "PASS", entryCount: 16, ...archives[0] }));
+          NODE
+          REMOTE
+
       - uses: pnpm/action-setup@v4
         with:
           version: 11.5.0
