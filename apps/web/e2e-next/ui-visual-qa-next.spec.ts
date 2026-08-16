@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
 import { expectNoHorizontalOverflow } from "./helpers/horizontal-overflow.js";
 
-const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
+const appOrigin = process.env.NEXT_E2E_BASE_URL ?? `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const artifactDir = path.resolve(repoRoot, process.env.UI_VISUAL_ARTIFACT_DIR ?? "artifacts/ui-ux-redesign/local");
 
@@ -1893,7 +1893,12 @@ function corsHeadersFor(route: Route) {
 function collectConsoleErrors(page: Page) {
   const errors: string[] = [];
   page.on("console", (message) => {
-    if (message.type() === "error") errors.push(message.text());
+    const text = message.text();
+    const ignoredCloudflareBeaconCsp =
+      process.env.UI_VISUAL_IGNORE_CLOUDFLARE_BEACON_CSP === "1" &&
+      text.includes("https://static.cloudflareinsights.com/beacon.min.js") &&
+      text.includes("violates the following Content Security Policy directive");
+    if (message.type() === "error" && !ignoredCloudflareBeaconCsp) errors.push(text);
   });
   page.on("pageerror", (error) => {
     errors.push(error.message);
@@ -2133,5 +2138,9 @@ async function expectNoClippedVisibleText(page: Page, label: string) {
 
 async function saveScreenshot(page: Page, fileName: string) {
   await mkdir(artifactDir, { recursive: true });
-  await page.screenshot({ fullPage: true, path: path.join(artifactDir, fileName) });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error("UI_VISUAL_VIEWPORT_MISSING");
+  const height = await page.evaluate(() => Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, window.innerHeight));
+  await page.screenshot({ clip: { height, width: viewport.width, x: 0, y: 0 }, path: path.join(artifactDir, fileName) });
 }

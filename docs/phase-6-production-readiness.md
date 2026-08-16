@@ -985,7 +985,8 @@ pnpm backup:restore:smoke
   smoke'a bağlanır; verify artifact publish edilmeden dört çalışan servis tag'i yeniden kontrol edilir.
   `release-summary-<tag>.json` dosya adındaki tag summary içindeki
   `reports.deploymentRollback.releaseCandidate` image tag'iyle eşleşmelidir; bundle yalnız beklenen
-  root, `reports/`, `smoke/` ve `first-gates/` dosyalarını içerebilir; beklenmeyen raw JSON/log dosyası
+  root, `reports/`, `smoke/`, `first-gates/` ve hash manifestine bağlı `ui-ux-redesign/` dosyalarını
+  içerebilir; beklenmeyen raw JSON/log dosyası
   kalırsa kontrol kırılır; bundle symlink içeremez, beklenen artifact'ler symlink olmayan dosya/dizin
   olmalıdır; `STAGING_RELEASE_ARTIFACTS_TARGET` parent-symlink target üzerinden verilemez, hedef
   path'in parent zincirinde symlink varsa veya hedef `/tmp`/`/var/tmp` altında kalıyorsa kontrol kırılır;
@@ -1002,7 +1003,13 @@ pnpm backup:restore:smoke
   ile üretilir; env dosyasındaki faz, 320/375/414/768/1024/1440 viewport, PII review, UAT,
   live onboarding ve live UI-worker
   referansları gerçek staging/prod artifact'lerine bağlanmalı, local/mock screenshot paketi tek başına
-  release kanıtı sayılmaz. Schema v2 her JSON/PNG referansını byte boyutu ve SHA-256 özetiyle
+  release kanıtı sayılmaz. Staging doğrulayıcı, çalışan dört servis exact cutover SHA ile eşleşirken
+  `https://o-okul.com` public yüzeyini Playwright ile açar; yalnız API yanıtlarını PII-safe sentetik
+  fixture'larla sınırlar, 24 gerçek viewport PNG'sini `artifacts/staging/ui-ux-redesign/` altında üretir
+  ve `scripts/prepare-ui-ux-redesign-staging-artifacts.mjs` ile exact CI run/SHA/onay zincirine bağlar.
+  Cloudflare'ın enjekte ettiği Insights beacon mevcut CSP tarafından engellenirse yalnız bu exact
+  üçüncü taraf konsol mesajı artifact'e kaydedilerek dışlanır; diğer console/page hataları kapıyı
+  kırmaya devam eder. Schema v2 her JSON/PNG referansını byte boyutu ve SHA-256 özetiyle
   manifestte sabitler; PNG viewport kanıtında IHDR genişliği bildirilen 320/375/414/768/1024/1440
   değeriyle eşleşir. JSON/text artifact'leri yasak PII alanları ve ham TCKN/e-posta/telefon için
   taranır; raster kanıtı aynı digest'e bağlı `piiReview=PASS` onayını taşır. Uzak referanslar yalnız

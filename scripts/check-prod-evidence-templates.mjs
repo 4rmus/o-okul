@@ -7093,7 +7093,7 @@ function runStagingReleaseArtifactsBundleCheck() {
           gapReportPath,
         ],
         {
-          env: process.env,
+          env: { ...process.env, STAGING_RELEASE_ARTIFACTS_ALLOW_EXAMPLE_EVIDENCE: "1" },
           encoding: "utf8",
         },
       );

@@ -115,9 +115,13 @@ jobs:
           install -d -m 700 "$verifier_root"
           for relative in \
             .github/workflows/staging-outbox-verify.yml \
+            apps/web/e2e-next/ui-visual-qa-next.spec.ts \
             scripts/check-staging-evidence-env.mjs \
+            scripts/check-ui-ux-redesign-evidence.mjs \
             scripts/generate-identity-migration-evidence.mjs \
-            scripts/generate-financial-retention-evidence.mjs; do
+            scripts/generate-financial-retention-evidence.mjs \
+            scripts/generate-ui-ux-redesign-evidence.mjs \
+            scripts/prepare-ui-ux-redesign-staging-artifacts.mjs; do
             [ -f "$relative" ] && [ ! -L "$relative" ]
             install -D -m 600 "$relative" "$verifier_root/$relative"
           done
@@ -135,9 +139,13 @@ jobs:
           verifier_root="$RUNNER_TEMP/gate-e-verifier"
           for relative in \
             .github/workflows/staging-outbox-verify.yml \
+            apps/web/e2e-next/ui-visual-qa-next.spec.ts \
             scripts/check-staging-evidence-env.mjs \
+            scripts/check-ui-ux-redesign-evidence.mjs \
             scripts/generate-identity-migration-evidence.mjs \
-            scripts/generate-financial-retention-evidence.mjs; do
+            scripts/generate-financial-retention-evidence.mjs \
+            scripts/generate-ui-ux-redesign-evidence.mjs \
+            scripts/prepare-ui-ux-redesign-staging-artifacts.mjs; do
             source_file="$verifier_root/$relative"
             [ -f "$source_file" ] && [ ! -L "$source_file" ]
             install -m 644 "$source_file" "$relative"
@@ -238,6 +246,9 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium for public staging UI evidence
+        run: pnpm --filter @o-okul/web exec playwright install --with-deps chromium
 
       - uses: actions/download-artifact@v4
         with:
@@ -560,6 +571,17 @@ jobs:
           SECURITY_AUDIT_AUTH_CONTROLS_REFERENCE="run:$github_ci_run_url" \
           SECURITY_AUDIT_DATA_CONTROLS_REFERENCE="run:$github_ci_run_url" \
             node --env-file=.staging-evidence.env scripts/generate-security-audit-evidence.mjs
+          NEXT_E2E_BASE_URL=https://o-okul.com \
+          NEXT_E2E_SKIP_WEB_SERVER=1 \
+          UI_VISUAL_IGNORE_CLOUDFLARE_BEACON_CSP=1 \
+          UI_VISUAL_ARTIFACT_DIR="$RUNNER_TEMP/gate-e-ui-captures" \
+            pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts --workers=1 --update-snapshots=none \
+              e2e-next/ui-visual-qa-next.spec.ts --grep "kurum dashboard|rol portal aksiyon şeritleri|rapor çalışma alanı|optik workflow"
+          node scripts/prepare-ui-ux-redesign-staging-artifacts.mjs \
+            --env-file .staging-evidence.env \
+            --capture-dir "$RUNNER_TEMP/gate-e-ui-captures" \
+            --output-dir artifacts/staging/ui-ux-redesign \
+            --base-url https://o-okul.com
           UI_UX_REDESIGN_EVIDENCE_OUTPUT="artifacts/staging/reports/ui-ux-redesign.json" \
           UI_UX_REDESIGN_RELEASE_CANDIDATE="ghcr.io/$CUTOVER_REPOSITORY/api:$CUTOVER_RELEASE_IMAGE_TAG" \
           UI_UX_REDESIGN_SOURCE_COMMIT_SHA="$CUTOVER_SOURCE_SHA" \

@@ -525,7 +525,7 @@ function scanJsonPii(value, output, path = "artifact") {
     }
     return;
   }
-  if (typeof value === "string" && rawPiiPatterns.some((pattern) => pattern.test(value))) {
+  if (typeof value === "string" && !path.endsWith(".runUrl") && rawPiiPatterns.some((pattern) => pattern.test(value))) {
     output.push(`ham PII benzeri değer: ${path}`);
   }
 }

@@ -31,6 +31,15 @@ const firstGateSummaryMatchFields = new Map([
   ["traefikHttps", ["url", "expectedStatus", "statusCode", "strictTransportSecurity"]],
   ["alertWebhook", ["webhookUrl", "statusCode", "authorizationScheme"]],
 ]);
+const uiUxArtifactFiles = [
+  "summary.json",
+  "uat.json",
+  "privacy-review.json",
+  ...Array.from({ length: 6 }, (_, index) => `phase-${index}.json`),
+  ...["dashboard", "optik", "rapor", "portal"].flatMap((surface) =>
+    [320, 375, 414, 768, 1024, 1440].map((width) => `${surface}-${width}.png`),
+  ),
+];
 const reportArtifacts = new Map([
   [
     "restoreDrill",
@@ -1006,7 +1015,7 @@ function requireFile(path, output, label) {
 }
 
 function requireExpectedArtifactEntries(rootDir, summaryFile, output) {
-  const expectedRootEntries = new Set(["first-gates", "reports", "smoke", basename(summaryFile)]);
+  const expectedRootEntries = new Set(["first-gates", "reports", "smoke", "ui-ux-redesign", basename(summaryFile)]);
   requireExactDirectoryEntries(rootDir, expectedRootEntries, output);
 
   requireExactDirectoryEntries(
@@ -1027,10 +1036,11 @@ function requireExpectedArtifactEntries(rootDir, summaryFile, output) {
     ]),
     output,
   );
+  requireUiUxArtifactEntries(rootDir, output);
 }
 
 function requireExpectedArtifactEntriesWithoutSummary(rootDir, output) {
-  requireExactDirectoryEntries(rootDir, new Set(["first-gates", "reports", "smoke"]), output);
+  requireExactDirectoryEntries(rootDir, new Set(["first-gates", "reports", "smoke", "ui-ux-redesign"]), output);
   requireExactDirectoryEntries(
     resolve(rootDir, "reports"),
     new Set([...reportArtifacts.values()].map(({ file }) => file).concat(deploymentCutoverArtifact.file)),
@@ -1049,6 +1059,12 @@ function requireExpectedArtifactEntriesWithoutSummary(rootDir, output) {
     ]),
     output,
   );
+  requireUiUxArtifactEntries(rootDir, output);
+}
+
+function requireUiUxArtifactEntries(rootDir, output) {
+  const directory = resolve(rootDir, "ui-ux-redesign");
+  requireExactDirectoryEntries(directory, new Set(uiUxArtifactFiles), output);
 }
 
 function requireExactDirectoryEntries(dir, expectedEntries, output) {

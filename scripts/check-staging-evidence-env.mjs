@@ -558,6 +558,14 @@ function checkOutboxVerifyWorkflowContract(output) {
     "node --env-file=.staging-evidence.env scripts/generate-financial-retention-evidence.mjs",
     "SECURITY_AUDIT_OUTPUT=artifacts/staging/reports/security-audit.json",
     "node --env-file=.staging-evidence.env scripts/generate-security-audit-evidence.mjs",
+    "Install Chromium for public staging UI evidence",
+    "pnpm --filter @o-okul/web exec playwright install --with-deps chromium",
+    "NEXT_E2E_BASE_URL=https://o-okul.com",
+    "UI_VISUAL_IGNORE_CLOUDFLARE_BEACON_CSP=1",
+    "UI_VISUAL_ARTIFACT_DIR=\"$RUNNER_TEMP/gate-e-ui-captures\"",
+    "e2e-next/ui-visual-qa-next.spec.ts --grep \"kurum dashboard|rol portal aksiyon şeritleri|rapor çalışma alanı|optik workflow\"",
+    "scripts/prepare-ui-ux-redesign-staging-artifacts.mjs",
+    "--output-dir artifacts/staging/ui-ux-redesign",
     "IDENTITY_MIGRATION_TARGET=file://$PWD/artifacts/staging/reports/identity-migration.json",
     "FINANCIAL_RETENTION_TARGET=file://$PWD/artifacts/staging/reports/financial-retention.json",
     "SECURITY_AUDIT_TARGET=file://$PWD/artifacts/staging/reports/security-audit.json",
@@ -576,6 +584,9 @@ function checkOutboxVerifyWorkflowContract(output) {
   }
   if (workflow.split("STAGING_ENVIRONMENT=production").length - 1 !== 3) {
     output.push(`${outboxVerifyWorkflowPath} production summary child generator'larını tam üç production environment bağıyla çalıştırmalı.`);
+  }
+  if (workflow.split("scripts/prepare-ui-ux-redesign-staging-artifacts.mjs").length - 1 !== 3) {
+    output.push(`${outboxVerifyWorkflowPath} UI/UX hazırlayıcıyı iki helper overlay ve bir execution bağıyla taşımalı.`);
   }
   requireWorkflowOrder(output, workflow, "outbox source claim ve cleanup sırası", [
     "Bind selected deployment run to cutover source",
@@ -622,6 +633,17 @@ function checkOutboxVerifyWorkflowContract(output) {
     "scripts/generate-deployment-rollback-evidence.mjs",
     "DEPLOYMENT_ROLLBACK_TARGET=file://$PWD/artifacts/staging/reports/deployment-rollback.json",
     "echo \"ROLLBACK_IMAGE_TAG=$rollback_image_tag\"",
+  ]);
+  requireWorkflowOrder(output, workflow, "public cutover UI artifact sırası", [
+    "node --env-file=.staging-evidence.env scripts/generate-security-audit-evidence.mjs",
+    "NEXT_E2E_BASE_URL=https://o-okul.com",
+    "UI_VISUAL_IGNORE_CLOUDFLARE_BEACON_CSP=1",
+    "e2e-next/ui-visual-qa-next.spec.ts --grep",
+    "node scripts/prepare-ui-ux-redesign-staging-artifacts.mjs",
+    "--output-dir artifacts/staging/ui-ux-redesign",
+    "UI_UX_REDESIGN_EVIDENCE_OUTPUT=\"artifacts/staging/reports/ui-ux-redesign.json\"",
+    "pnpm ui-ux-redesign:evidence-generate",
+    "pnpm prod:evidence:check",
   ]);
 }
 

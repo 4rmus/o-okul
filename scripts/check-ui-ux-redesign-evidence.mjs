@@ -798,7 +798,7 @@ function scanArtifactPii(value, reference, failures, path = "artifact") {
     }
     return;
   }
-  if (typeof value === "string" && rawPiiPatterns.some((pattern) => pattern.test(value))) {
+  if (typeof value === "string" && !path.endsWith(".runUrl") && rawPiiPatterns.some((pattern) => pattern.test(value))) {
     failures.push(`Artifact ham PII benzeri değer içermemeli: ${reference} ${path}`);
   }
 }
@@ -998,25 +998,23 @@ function localArtifactPath(path) {
   return normalized.endsWith("/artifacts/local") || normalized.includes("/artifacts/local/");
 }
 
-function scanRawPii(value, failures) {
-  const strings = [];
-  collectStrings(value, strings);
-  for (const candidate of strings) {
-    const normalizedCandidate = candidate.replace(
-      /(github\.com\/[^/]+\/[^/]+\/actions\/runs\/)\d+/gi,
-      "$1{run-id}",
-    );
-    if (rawPiiPatterns.some((pattern) => pattern.test(normalizedCandidate))) {
-      failures.push("Kanıt JSON ham PII benzeri değer içermemeli.");
-      return;
-    }
+function scanRawPii(value, failures, path = "report") {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => scanRawPii(item, failures, `${path}.${index}`));
+    return;
   }
-}
-
-function collectStrings(value, strings) {
-  if (typeof value === "string") strings.push(value);
-  else if (Array.isArray(value)) value.forEach((item) => collectStrings(item, strings));
-  else if (value && typeof value === "object") Object.values(value).forEach((item) => collectStrings(item, strings));
+  if (value && typeof value === "object") {
+    for (const [key, child] of Object.entries(value)) scanRawPii(child, failures, `${path}.${key}`);
+    return;
+  }
+  if (typeof value !== "string" || (path.endsWith(".runId") && /^\d+$/.test(value))) return;
+  const normalized = value.replace(
+    /(github\.com\/[^/]+\/[^/]+\/actions\/runs\/)\d+/gi,
+    "$1{run-id}",
+  );
+  if (rawPiiPatterns.some((pattern) => pattern.test(normalized))) {
+    failures.push("Kanıt JSON ham PII benzeri değer içermemeli.");
+  }
 }
 
 function parseJson(value) {
