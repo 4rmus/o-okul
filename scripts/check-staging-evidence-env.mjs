@@ -619,8 +619,11 @@ function checkOutboxVerifyWorkflowContract(output) {
       '["staging", "production"].includes(environment.toLowerCase())',
       "configuredPassword.length < 16",
       "/password|qwerty|12345678|admin123/i",
+      'INSERT INTO "LicenseTerm"',
+      '"licenseStartsAt"',
+      '"licenseEndsAt"',
     ]) {
-      if (!source.includes(token)) output.push(`${helper} release smoke parola sözleşmesi eksik: ${token}`);
+      if (!source.includes(token)) output.push(`${helper} release smoke sözleşmesi eksik: ${token}`);
     }
     if (source.includes('const smokePassword = "password"')) {
       output.push(`${helper} release smoke için sabit varsayılan parola kullanmamalı.`);
