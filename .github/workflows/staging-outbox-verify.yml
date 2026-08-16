@@ -447,6 +447,7 @@ jobs:
                 typeof archived.path !== "string" ||
                 typeof archived.archivedTo !== "string" ||
                 archived.path === "" ||
+                archived.path === "manifest.json" ||
                 isAbsolute(archived.path) ||
                 normalize(archived.path) !== archived.path ||
                 normalize(archived.path) === "." ||

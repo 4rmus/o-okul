@@ -579,6 +579,7 @@ function checkOutboxVerifyWorkflowContract(output) {
     "Unexpected artifact arşiv dosyası plain file olmalı.",
     'manifest.gapReportFile !== "artifacts/local/staging-release-gap-report.json"',
     'Object.keys(manifest).sort().join(",") !== "archivedAt,artifactsTarget,entries,gapReportFile,result"',
+    'archived.path === "manifest.json"',
     'manifest.entries.length !== 16',
     "full_evidence requires run_gate_e_mutating_smokes=true; stale iSEM/UI/rate-limit artifacts cannot be promoted.",
     "full_evidence requires run_gate_e_live_uat_rls=true; stale onboarding/RLS artifacts cannot be promoted.",
