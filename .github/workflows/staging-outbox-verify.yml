@@ -774,7 +774,14 @@ jobs:
             "CUTOVER_SOURCE_SHA='$CUTOVER_SOURCE_SHA' DATA_SAFETY_ROOT='$data_safety_root' GITHUB_REPOSITORY='$GITHUB_REPOSITORY' GITHUB_RUN_ID='$GITHUB_RUN_ID' bash -se" <<'REMOTE'
           set -euo pipefail
           cd /root/o-okul
-          [ "$(git rev-parse HEAD)" = "$CUTOVER_SOURCE_SHA" ]
+          for release_binding in \
+            "WEB_IMAGE=ghcr.io/$GITHUB_REPOSITORY/web:$CUTOVER_SOURCE_SHA" \
+            "API_IMAGE=ghcr.io/$GITHUB_REPOSITORY/api:$CUTOVER_SOURCE_SHA" \
+            "WORKER_IMAGE=ghcr.io/$GITHUB_REPOSITORY/worker:$CUTOVER_SOURCE_SHA" \
+            "QUEUE_BOARD_IMAGE=ghcr.io/$GITHUB_REPOSITORY/queue-board:$CUTOVER_SOURCE_SHA" \
+            "SENTRY_RELEASE=$CUTOVER_SOURCE_SHA"; do
+            grep -Fxq "$release_binding" .env.release
+          done
           work_dir="$DATA_SAFETY_ROOT"
           [ -d "$work_dir" ] && [ ! -L "$work_dir" ]
           cleanup() {
@@ -856,10 +863,17 @@ jobs:
           onboarding_started_at="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
           onboarding_status=0
           ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
-            "CUTOVER_SOURCE_SHA='$CUTOVER_SOURCE_SHA' bash -se" <<'REMOTE' || onboarding_status=$?
+            "CUTOVER_SOURCE_SHA='$CUTOVER_SOURCE_SHA' GITHUB_REPOSITORY='$GITHUB_REPOSITORY' bash -se" <<'REMOTE' || onboarding_status=$?
           set -euo pipefail
           cd /root/o-okul
-          [ "$(git rev-parse HEAD)" = "$CUTOVER_SOURCE_SHA" ]
+          for release_binding in \
+            "WEB_IMAGE=ghcr.io/$GITHUB_REPOSITORY/web:$CUTOVER_SOURCE_SHA" \
+            "API_IMAGE=ghcr.io/$GITHUB_REPOSITORY/api:$CUTOVER_SOURCE_SHA" \
+            "WORKER_IMAGE=ghcr.io/$GITHUB_REPOSITORY/worker:$CUTOVER_SOURCE_SHA" \
+            "QUEUE_BOARD_IMAGE=ghcr.io/$GITHUB_REPOSITORY/queue-board:$CUTOVER_SOURCE_SHA" \
+            "SENTRY_RELEASE=$CUTOVER_SOURCE_SHA"; do
+            grep -Fxq "$release_binding" .env.release
+          done
           private_root=/root/o-okul-private/uat
           private_env="$private_root/live-onboarding.env"
           private_input="$private_root/live-onboarding-input.json"
@@ -1038,7 +1052,14 @@ jobs:
             "CUTOVER_SOURCE_SHA='$CUTOVER_SOURCE_SHA' OBSERVABILITY_HELPER_ROOT='$observability_helper_root' OBSERVABILITY_CHAIN_OUTPUT='$observability_chain_remote' GITHUB_REPOSITORY='$GITHUB_REPOSITORY' GITHUB_RUN_ID='$GITHUB_RUN_ID' bash -se" <<'REMOTE'
           set -euo pipefail
           cd /root/o-okul
-          [ "$(git rev-parse HEAD)" = "$CUTOVER_SOURCE_SHA" ]
+          for release_binding in \
+            "WEB_IMAGE=ghcr.io/$GITHUB_REPOSITORY/web:$CUTOVER_SOURCE_SHA" \
+            "API_IMAGE=ghcr.io/$GITHUB_REPOSITORY/api:$CUTOVER_SOURCE_SHA" \
+            "WORKER_IMAGE=ghcr.io/$GITHUB_REPOSITORY/worker:$CUTOVER_SOURCE_SHA" \
+            "QUEUE_BOARD_IMAGE=ghcr.io/$GITHUB_REPOSITORY/queue-board:$CUTOVER_SOURCE_SHA" \
+            "SENTRY_RELEASE=$CUTOVER_SOURCE_SHA"; do
+            grep -Fxq "$release_binding" .env.release
+          done
           cleanup_observability() {
             original_status=$?
             trap - EXIT

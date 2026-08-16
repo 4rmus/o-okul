@@ -222,7 +222,11 @@ pnpm backup:restore:smoke
   `ghcr.io/4rmus/o-okul` olmalıdır.
   Verify-only workflow host `.env` dosyasında `ADMIN_MFA_MODE=required` değerini doğrular ve full
   evidence env içindeki aynı alanı bu doğrulanmış runtime politikasına bağlar; eski `optional` secret
-  kopyası Phase B'yi yanlış negatifte bırakamaz. Aynı workflow `DOMAIN`, `CF_DNS_API_TOKEN_FILE`,
+  kopyası Phase B'yi yanlış negatifte bırakamaz. Uzak deploy ağacı `.git` taşımadığı için onaylı
+  Gate E mutasyon blokları Git checkout varsaymaz; her blok başlamadan `.env.release` içindeki
+  web/api/worker/queue-board image değerlerini ve `SENTRY_RELEASE` değerini cutover exact SHA'sına
+  bağlar. Workflow ayrıca başlangıç ve yayın öncesinde çalışan dört container image'ını aynı SHA ile
+  yeniden doğrular. Aynı workflow `DOMAIN`, `CF_DNS_API_TOKEN_FILE`,
   `LEGACY_TENANT_LOGIN_CUTOFF_AT`, `NOTIFICATION_FROM_EMAIL` ve `NOTIFICATION_REPLY_TO_EMAIL`
   değerlerine ek olarak DB/Redis bağlantı anahtarlarını loglamadan staging host `.env` dosyasından
   `umask 077` ile oluşturulan private runner env'ine birleştirir; böylece eski GitHub evidence secret

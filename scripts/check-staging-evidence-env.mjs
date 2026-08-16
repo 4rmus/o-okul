@@ -698,6 +698,20 @@ function checkOutboxVerifyWorkflowContract(output) {
     "[ \"$(git rev-parse HEAD)\" = \"$CUTOVER_SOURCE_SHA\" ]",
     "Validate staging verify environment",
   ]);
+  if ((workflow.match(/\[ "\$\(git rev-parse HEAD\)" = "\$CUTOVER_SOURCE_SHA" \]/g) ?? []).length !== 1) {
+    output.push(`${outboxVerifyWorkflowPath} git checkout exact-SHA kontrolünü yalnız GitHub runner checkout'unda kullanmalı.`);
+  }
+  for (const releaseBinding of [
+    '"WEB_IMAGE=ghcr.io/$GITHUB_REPOSITORY/web:$CUTOVER_SOURCE_SHA"',
+    '"API_IMAGE=ghcr.io/$GITHUB_REPOSITORY/api:$CUTOVER_SOURCE_SHA"',
+    '"WORKER_IMAGE=ghcr.io/$GITHUB_REPOSITORY/worker:$CUTOVER_SOURCE_SHA"',
+    '"QUEUE_BOARD_IMAGE=ghcr.io/$GITHUB_REPOSITORY/queue-board:$CUTOVER_SOURCE_SHA"',
+    '"SENTRY_RELEASE=$CUTOVER_SOURCE_SHA"',
+  ]) {
+    if (workflow.split(releaseBinding).length - 1 !== 3) {
+      output.push(`${outboxVerifyWorkflowPath} üç uzak Gate E mutasyon bloğunda exact release bağı eksik: ${releaseBinding}`);
+    }
+  }
   if ((workflow.match(/scripts\/check-staging-release-artifacts\.mjs/g) ?? []).length !== 2) {
     output.push("Staging release artifact checker verifier helper stage ve overlay listelerinde tam iki kez bulunmalı.");
   }
