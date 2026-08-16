@@ -587,6 +587,8 @@ function checkOutboxVerifyWorkflowContract(output) {
     "--reuse-alert-webhook-smoke",
     "--reuse-wal-smoke",
     "staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}",
+    "path: |",
+    "!artifacts/staging/private/**",
     "scripts/smoke-secret-delivery-outbox-staging.mjs",
     "scripts/check-secret-delivery-outbox-evidence.mjs",
   ]) {

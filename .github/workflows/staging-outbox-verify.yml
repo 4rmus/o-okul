@@ -1203,7 +1203,9 @@ jobs:
         if: ${{ always() && inputs.full_evidence }}
         with:
           name: staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}
-          path: artifacts/staging
+          path: |
+            artifacts/staging
+            !artifacts/staging/private/**
           if-no-files-found: error
 
       - name: Clean local verification secrets

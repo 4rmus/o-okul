@@ -565,7 +565,9 @@ Redis rate-limit smoke'u çalıştırır. Shard her sonuçta kaldırılır; cred
 materialize edilen cevap anahtarı exit trap'i ile full artifact upload'ından önce silinir. Aynı run'da
 oluşturulan sentetik tenant'lar exit trap'inde askıya alınır ve oturumları iptal edilir. Public iSEM,
 live-UI, live-exam-cycle ve rate-limit raporları aynı verifier run'ına ve cutover SHA'sına bağlanır. Bu input
-kapalıyken workflow eski raporları yenilemez ve eksik/stale kanıta PASS vermez.
+kapalıyken workflow eski raporları yenilemez ve eksik/stale kanıta PASS vermez. Zorla runner iptali gibi
+trap çalışmayabilecek hata yollarında da artifact upload glob'u `artifacts/staging/private/**` ağacını açıkça
+dışlar; private credential girdisi hiçbir full bundle'a giremez.
 Rollback tag'i yalnız exact release candidate ile eşleşen doğrulanabilir HTTPS rollback raporundan alınır.
 Böylece eski bir template run URL'si veya eski uzak rapor yeni cutover kanıtına karışamaz.
 - PR-4 rollback önceki web+API image çiftidir. Additive kolonlar ve legacy membership satırları yerinde
