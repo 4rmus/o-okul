@@ -222,6 +222,7 @@ jobs:
             scripts/check-release-evidence-manifest.mjs \
             scripts/check-staging-release-artifacts.mjs \
             scripts/check-staging-evidence-env.mjs \
+            scripts/check-audit-null-tenant-evidence.mjs \
             scripts/check-rls-live-evidence.mjs \
             scripts/check-live-onboarding-result.mjs \
             scripts/check-runtime-parity-evidence.mjs \
@@ -274,6 +275,7 @@ jobs:
             scripts/check-release-evidence-manifest.mjs \
             scripts/check-staging-release-artifacts.mjs \
             scripts/check-staging-evidence-env.mjs \
+            scripts/check-audit-null-tenant-evidence.mjs \
             scripts/check-rls-live-evidence.mjs \
             scripts/check-live-onboarding-result.mjs \
             scripts/check-runtime-parity-evidence.mjs \
@@ -735,6 +737,8 @@ jobs:
           github_ci_run_url="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).workflow.runUrl' artifacts/staging/reports/github-ci.json)"
           verifier_run_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           mkdir -p artifacts/staging/smoke artifacts/staging/reports
+          pnpm --filter @o-okul/shared-types build
+          pnpm --filter @o-okul/db build
           STAGING_ENVIRONMENT=staging \
           ADMIN_MFA_OUTPUT=artifacts/staging/reports/admin-mfa.json \
           ADMIN_MFA_PASSWORD_ONLY_LOGIN_BLOCKED=true \
@@ -754,10 +758,6 @@ jobs:
           ADMIN_MFA_SESSIONS_REVOKED_ENABLE_EVIDENCE_REFERENCE="run:$github_ci_run_url" \
           ADMIN_MFA_SESSIONS_REVOKED_DISABLE_EVIDENCE_REFERENCE="run:$github_ci_run_url" \
             node --env-file=.staging-evidence.env scripts/generate-admin-mfa-evidence.mjs
-          STAGING_ENVIRONMENT=staging \
-          AUDIT_NULL_TENANT_OUTPUT=artifacts/staging/reports/audit-null-tenant.json \
-          AUDIT_NULL_TENANT_EVIDENCE_REFERENCE="$verifier_run_url" \
-            node --env-file=.staging-evidence.env scripts/generate-audit-null-tenant-evidence.mjs
           STAGING_ENVIRONMENT=staging \
           UPLOAD_AV_OUTPUT=artifacts/staging/reports/upload-av.json \
           UPLOAD_AV_SCANNER_DECISION_MODE=local \
@@ -854,7 +854,6 @@ jobs:
           done
           for pair in \
             "ADMIN_MFA_EVIDENCE_TARGET admin-mfa.json" \
-            "AUDIT_NULL_TENANT_EVIDENCE_TARGET audit-null-tenant.json" \
             "UPLOAD_AV_TARGET upload-av.json" \
             "RESTORE_DRILL_TARGET restore-drill.json" \
             "INLINE_UPLOAD_CONTENT_MIGRATION_TARGET inline-upload-content-migration.json"; do
@@ -906,8 +905,11 @@ jobs:
           cleanup_status=0
           ONBOARDING_STARTED_AT="$onboarding_started_at" ONBOARDING_EXPECT_SUCCESS="$([ "$onboarding_status" -eq 0 ] && echo 1 || echo 0)" \
             node --env-file=.staging-evidence.env --input-type=module <<'NODE' || cleanup_status=$?
+          import { createHash } from "node:crypto";
           import pg from "pg";
 
+          const cleanupRunId = process.env.GITHUB_RUN_ID;
+          if (!/^\d+$/.test(cleanupRunId ?? "")) throw new Error("Onboarding cleanup GITHUB_RUN_ID bağı eksik.");
           const pool = new pg.Pool({ connectionString: process.env.DIRECT_DATABASE_URL });
           const client = await pool.connect();
           try {
@@ -930,10 +932,41 @@ jobs:
               throw new Error(`Onboarding cleanup exact tenant sayısı geçersiz: ${tenantIds.length}.`);
             }
             if (tenantIds.length > 0) {
+              const auditStamps = [];
+              for (const tenantId of tenantIds) {
+                const tenantIdHash = createHash("sha256").update(tenantId).digest("hex");
+                const auditCount = await client.query(
+                  `SELECT count(*)::int AS count FROM "AuditLog" WHERE "tenantId" = $1`,
+                  [tenantId],
+                );
+                const expectedAuditRows = auditCount.rows[0]?.count ?? 0;
+                const stamped = await client.query(
+                  `UPDATE "AuditLog"
+                      SET "diff" = COALESCE("diff", '{}'::jsonb) || jsonb_build_object(
+                        'deletedTenantIdHash', $2::text,
+                        'deletedTenantCleanupRunId', $3::text
+                      )
+                    WHERE "tenantId" = $1`,
+                  [tenantId, tenantIdHash, cleanupRunId],
+                );
+                if (stamped.rowCount !== expectedAuditRows) throw new Error("Onboarding audit lineage stamp eksik kaldı.");
+                auditStamps.push({ tenantIdHash, expectedAuditRows });
+              }
               const deleted = await client.query(`DELETE FROM "Tenant" WHERE "id" = ANY($1::text[]) RETURNING "id"`, [tenantIds]);
               if (deleted.rowCount !== tenantIds.length) throw new Error("Onboarding tenant cleanup eksik kaldı.");
               const sessions = await client.query(`SELECT count(*)::int AS count FROM "AuthSession" WHERE "tenantId" = ANY($1::text[])`, [tenantIds]);
               if (sessions.rows[0]?.count !== 0) throw new Error("Onboarding AuthSession cleanup eksik kaldı.");
+              for (const { tenantIdHash, expectedAuditRows } of auditStamps) {
+                const preserved = await client.query(
+                  `SELECT count(*)::int AS count
+                     FROM "AuditLog"
+                    WHERE "tenantId" IS NULL
+                      AND "diff"->>'deletedTenantIdHash' = $1
+                      AND "diff"->>'deletedTenantCleanupRunId' = $2`,
+                  [tenantIdHash, cleanupRunId],
+                );
+                if (preserved.rows[0]?.count !== expectedAuditRows) throw new Error("Onboarding audit lineage cleanup sonrası korunamadı.");
+              }
             }
             await client.query("COMMIT");
             console.log(`Live onboarding sentetik tenant/session temizliği geçti: ${tenantIds.length} tenant silindi.`);
@@ -1135,8 +1168,6 @@ jobs:
             echo "ALERT_WEBHOOK_SMOKE_NOT_BEFORE=$CUTOVER_AT"
             echo "REPORT_GENERATION_SMOKE_NOT_BEFORE=$CUTOVER_AT"
           } >> .staging-evidence.env
-          pnpm --filter @o-okul/shared-types build
-          pnpm --filter @o-okul/db build
           pnpm --filter @o-okul/sms-adapter build
           pnpm --filter @o-okul/notification-adapter build
           STAGING_ENVIRONMENT=staging \
@@ -1148,11 +1179,15 @@ jobs:
           if [ "$RUN_GATE_E_MUTATING_SMOKES" = true ]; then
             gate_e_evidence_environment=staging
             gate_e_smoke_started_at="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+            gate_e_mutating_cleanup_complete=false
             cleanup_gate_e_mutating_state() {
               GATE_E_SMOKE_STARTED_AT="$gate_e_smoke_started_at" \
                 node --env-file=.staging-evidence.env --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
           import pg from "pg";
 
+          const cleanupRunId = process.env.GITHUB_RUN_ID;
+          if (!/^\d+$/.test(cleanupRunId ?? "")) throw new Error("Gate E cleanup GITHUB_RUN_ID bağı eksik.");
           const pool = new pg.Pool({ connectionString: process.env.DIRECT_DATABASE_URL });
           const client = await pool.connect();
           try {
@@ -1172,10 +1207,41 @@ jobs:
             );
             const tenantIds = tenants.rows.map((row) => row.id);
             if (tenantIds.length > 0) {
+              const auditStamps = [];
+              for (const tenantId of tenantIds) {
+                const tenantIdHash = createHash("sha256").update(tenantId).digest("hex");
+                const auditCount = await client.query(
+                  `SELECT count(*)::int AS count FROM "AuditLog" WHERE "tenantId" = $1`,
+                  [tenantId],
+                );
+                const expectedAuditRows = auditCount.rows[0]?.count ?? 0;
+                const stamped = await client.query(
+                  `UPDATE "AuditLog"
+                      SET "diff" = COALESCE("diff", '{}'::jsonb) || jsonb_build_object(
+                        'deletedTenantIdHash', $2::text,
+                        'deletedTenantCleanupRunId', $3::text
+                      )
+                    WHERE "tenantId" = $1`,
+                  [tenantId, tenantIdHash, cleanupRunId],
+                );
+                if (stamped.rowCount !== expectedAuditRows) throw new Error("Gate E audit lineage stamp eksik kaldı.");
+                auditStamps.push({ tenantIdHash, expectedAuditRows });
+              }
               const deleted = await client.query(`DELETE FROM "Tenant" WHERE "id" = ANY($1::text[]) RETURNING "id"`, [tenantIds]);
               if (deleted.rowCount !== tenantIds.length) throw new Error("Gate E sentetik tenant cleanup eksik kaldı.");
               const sessions = await client.query(`SELECT count(*)::int AS count FROM "AuthSession" WHERE "tenantId" = ANY($1::text[])`, [tenantIds]);
               if (sessions.rows[0]?.count !== 0) throw new Error("Gate E sentetik AuthSession cleanup eksik kaldı.");
+              for (const { tenantIdHash, expectedAuditRows } of auditStamps) {
+                const preserved = await client.query(
+                  `SELECT count(*)::int AS count
+                     FROM "AuditLog"
+                    WHERE "tenantId" IS NULL
+                      AND "diff"->>'deletedTenantIdHash' = $1
+                      AND "diff"->>'deletedTenantCleanupRunId' = $2`,
+                  [tenantIdHash, cleanupRunId],
+                );
+                if (preserved.rows[0]?.count !== expectedAuditRows) throw new Error("Gate E audit lineage cleanup sonrası korunamadı.");
+              }
             }
             await client.query("COMMIT");
             console.log(`Gate E sentetik tenant/session temizliği geçti: ${tenantIds.length} tenant silindi.`);
@@ -1193,8 +1259,11 @@ jobs:
               original_status=$?
               trap - EXIT
               set +e
-              cleanup_gate_e_mutating_state
-              cleanup_status=$?
+              cleanup_status=0
+              if [ "$gate_e_mutating_cleanup_complete" != true ]; then
+                cleanup_gate_e_mutating_state
+                cleanup_status=$?
+              fi
               rm -f -- .staging-evidence.env "$runtime_env" "$private_ui_file" "$answer_key_file"
               if [ "$original_status" -ne 0 ]; then
                 exit "$original_status"
@@ -1404,7 +1473,16 @@ jobs:
               [ "$(grep -Ec "^${target_key}=" .staging-evidence.env)" -eq 1 ]
               sed -i "s#^${target_key}=.*#${target_key}=file://$PWD/artifacts/staging/reports/$report_file#" .staging-evidence.env
             done
+            cleanup_gate_e_mutating_state
+            gate_e_mutating_cleanup_complete=true
           fi
+          STAGING_ENVIRONMENT=staging \
+          AUDIT_NULL_TENANT_OUTPUT=artifacts/staging/reports/audit-null-tenant.json \
+          AUDIT_NULL_TENANT_EVIDENCE_REFERENCE="$verifier_run_url" \
+            node --env-file=.staging-evidence.env scripts/generate-audit-null-tenant-evidence.mjs
+          [ "$(grep -Ec '^AUDIT_NULL_TENANT_EVIDENCE_TARGET=' .staging-evidence.env)" -eq 1 ]
+          sed -i "s#^AUDIT_NULL_TENANT_EVIDENCE_TARGET=.*#AUDIT_NULL_TENANT_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/audit-null-tenant.json#" .staging-evidence.env
+          grep -Fxq "AUDIT_NULL_TENANT_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/audit-null-tenant.json" .staging-evidence.env
           identity_audit_before="$RUNNER_TEMP/identity-link-audit-before.json"
           node --env-file=.staging-evidence.env scripts/audit-identity-links-live.mjs > "$identity_audit_before"
           identity_status="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).status' "$identity_audit_before")"
@@ -1507,24 +1585,19 @@ jobs:
           RATE_LIMIT_EVIDENCE_TARGET rate-limit.json
           REPORTS
           mkdir -p artifacts/uat-inputs
-          [ -n "$REUSE_AGGREGATE_SMOKE_RUN_ID" ]
-          aggregate_smoke_run_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$REUSE_AGGREGATE_SMOKE_RUN_ID"
-          node --input-type=module - "$CUTOVER_SOURCE_SHA" "$github_ci_run_url" "$verifier_run_url" "$aggregate_smoke_run_url" <<'NODE'
+          node --input-type=module - "$CUTOVER_SOURCE_SHA" "$github_ci_run_url" "$verifier_run_url" <<'NODE'
           import { mkdirSync, writeFileSync } from "node:fs";
 
-          const [sourceSha, ciRunUrl, verifierRunUrl, aggregateSmokeRunUrl] = process.argv.slice(2);
+          const [sourceSha, ciRunUrl, verifierRunUrl] = process.argv.slice(2);
           const ciRun = `run:${ciRunUrl}`;
           const verifierRun = `run:${verifierRunUrl}`;
-          const aggregateSmokeRun = `run:${aggregateSmokeRunUrl}`;
           const artifact = (path) => `artifact:${path}`;
           const commands = [
             ["pnpm run ci", "CI", artifact("artifacts/staging/reports/github-ci.json")],
-            ["pnpm prod:env:check", "STAGING", aggregateSmokeRun],
             ["pnpm db:rls:check:live", "STAGING", artifact("artifacts/staging/reports/rls-live.json")],
             ["pnpm raw-import:smoke", "STAGING", artifact("artifacts/staging/reports/isem-optical-pipeline.json")],
             ["pnpm report-generation:smoke", "STAGING", artifact("artifacts/staging/smoke/report-generation.json")],
             ["pnpm live:exam-cycle:check", "STAGING", artifact("artifacts/staging/reports/live-exam-cycle.json")],
-            ["pnpm queue:smoke", "CI", artifact("artifacts/staging/reports/github-ci.json")],
             ["pnpm live:onboarding:smoke", "STAGING", artifact("artifacts/staging/reports/live-onboarding.json")],
             ["pnpm live:ui-worker:smoke", "STAGING", artifact("artifacts/staging/reports/live-ui-worker-result.json")],
             ["pnpm sms:smoke", "STAGING", artifact("artifacts/staging/smoke/sms-provider.json")],
@@ -1532,7 +1605,7 @@ jobs:
             ["pnpm traefik:https:smoke", "STAGING", artifact("artifacts/staging/smoke/traefik-https.json")],
           ].map(([command, evidenceClass, evidence]) => ({ command, status: "PASS", evidence, evidenceClass, sourceSha }));
           const scenarios = [
-            ["UAT-SYS-01", "SYSTEM_ADMIN", "CI_AND_STAGING", ["pnpm --filter @o-okul/web test:e2e", "pnpm observability:uat:check"], [artifact("artifacts/staging/reports/github-ci.json"), ciRun, artifact("artifacts/staging/reports/observability-uat.json"), artifact("artifacts/staging/ui-ux-redesign/uat.json"), verifierRun]],
+            ["UAT-SYS-01", "SYSTEM_ADMIN", "CI_AND_STAGING", ["pnpm ui-ux-redesign:visual-qa", "pnpm observability:uat:check"], [artifact("artifacts/staging/reports/github-ci.json"), ciRun, artifact("artifacts/staging/reports/observability-uat.json"), artifact("artifacts/staging/ui-ux-redesign/uat.json"), verifierRun]],
             ["UAT-SYS-02", "SYSTEM_ADMIN", "STAGING", ["pnpm live:onboarding:smoke"], [artifact("artifacts/staging/reports/live-onboarding.json"), verifierRun]],
             ["UAT-SYS-03", "SYSTEM_ADMIN", "CI", ["pnpm --filter @o-okul/api exec vitest run src/tenant/tenant.controller.e2e.test.ts"], [artifact("artifacts/staging/reports/github-ci.json"), ciRun]],
             ["UAT-SYS-04", "SYSTEM_ADMIN", "STAGING_WITH_HISTORICAL_DRILL", ["pnpm deployment:rollback:check", "pnpm deployment:cutover:check"], [artifact("artifacts/staging/reports/deployment-rollback.json"), artifact("artifacts/staging/reports/deployment-cutover.json"), verifierRun]],
@@ -1569,6 +1642,7 @@ jobs:
           UAT_SOURCE_SHA="$CUTOVER_SOURCE_SHA" \
           UAT_VERIFIER_RUN_URL="$verifier_run_url" \
           UAT_GITHUB_CI_RUN_URL="$github_ci_run_url" \
+          UAT_GITHUB_CI_EVIDENCE_TARGET="file://$PWD/artifacts/staging/reports/github-ci.json" \
           UAT_COMMAND_EVIDENCE_TARGET="file://$PWD/artifacts/uat-inputs/commands.json" \
           UAT_SCENARIOS_TARGET="file://$PWD/artifacts/uat-inputs/scenarios.json" \
             pnpm uat:generate -- --environment staging

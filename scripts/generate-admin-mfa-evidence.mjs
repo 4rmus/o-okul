@@ -168,7 +168,7 @@ function runCommand(command) {
     REDIS_URL: "redis://127.0.0.1:1",
     REPORT_PDF_RENDERER: "memory",
   };
-  for (const key of ["DATABASE_URL", "DIRECT_DATABASE_URL", "IDEMPOTENCY_STORE", "QUEUE_PREFIX"]) {
+  for (const key of ["DATABASE_URL", "DIRECT_DATABASE_URL", "ADMIN_MFA_MODE", "IDEMPOTENCY_STORE", "QUEUE_PREFIX"]) {
     delete commandEnv[key];
   }
   const result = spawnSync("sh", ["-lc", command], {

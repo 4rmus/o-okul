@@ -39,12 +39,10 @@ const expectedFlowsVerified = [
 ];
 const expectedCommandsPassed = [
   "pnpm run ci",
-  "pnpm prod:env:check",
   "pnpm db:rls:check:live",
   "pnpm raw-import:smoke",
   "pnpm report-generation:smoke",
   "pnpm live:exam-cycle:check",
-  "pnpm queue:smoke",
   "pnpm live:onboarding:smoke",
   "pnpm live:ui-worker:smoke",
   "pnpm sms:smoke",
@@ -53,12 +51,10 @@ const expectedCommandsPassed = [
 ];
 const commandEvidenceContracts = new Map([
   ["pnpm run ci", ["CI", ["artifact:artifacts/staging/reports/github-ci.json"]]],
-  ["pnpm prod:env:check", ["STAGING", []]],
   ["pnpm db:rls:check:live", ["STAGING", ["artifact:artifacts/staging/reports/rls-live.json"]]],
   ["pnpm raw-import:smoke", ["STAGING", ["artifact:artifacts/staging/reports/isem-optical-pipeline.json"]]],
   ["pnpm report-generation:smoke", ["STAGING", ["artifact:artifacts/staging/smoke/report-generation.json"]]],
   ["pnpm live:exam-cycle:check", ["STAGING", ["artifact:artifacts/staging/reports/live-exam-cycle.json"]]],
-  ["pnpm queue:smoke", ["CI", ["artifact:artifacts/staging/reports/github-ci.json"]]],
   ["pnpm live:onboarding:smoke", ["STAGING", ["artifact:artifacts/staging/reports/live-onboarding.json"]]],
   ["pnpm live:ui-worker:smoke", ["STAGING", ["artifact:artifacts/staging/reports/live-ui-worker-result.json"]]],
   ["pnpm sms:smoke", ["STAGING", ["artifact:artifacts/staging/smoke/sms-provider.json"]]],
@@ -66,7 +62,7 @@ const commandEvidenceContracts = new Map([
   ["pnpm traefik:https:smoke", ["STAGING", ["artifact:artifacts/staging/smoke/traefik-https.json"]]],
 ]);
 const scenarioEvidenceContracts = new Map([
-  ["UAT-SYS-01", contract("CI_AND_STAGING", ["pnpm --filter @o-okul/web test:e2e", "pnpm observability:uat:check"], [
+  ["UAT-SYS-01", contract("CI_AND_STAGING", ["pnpm ui-ux-redesign:visual-qa", "pnpm observability:uat:check"], [
     "artifact:artifacts/staging/reports/github-ci.json",
     "artifact:artifacts/staging/reports/observability-uat.json",
     "artifact:artifacts/staging/ui-ux-redesign/uat.json",
@@ -129,6 +125,7 @@ const commandEvidenceTarget = process.env.UAT_COMMAND_EVIDENCE_TARGET?.trim();
 const sourceSha = process.env.UAT_SOURCE_SHA?.trim();
 const verifierRunUrl = process.env.UAT_VERIFIER_RUN_URL?.trim();
 const githubCiRunUrl = process.env.UAT_GITHUB_CI_RUN_URL?.trim();
+const githubCiEvidenceTarget = process.env.UAT_GITHUB_CI_EVIDENCE_TARGET?.trim();
 
 const failures = [];
 requireValue(outputPath, "UAT_OUTPUT veya --output", failures);
@@ -143,6 +140,7 @@ requireEvidenceTarget(commandEvidenceTarget, "UAT_COMMAND_EVIDENCE_TARGET", fail
 requireCommitSha(sourceSha, "UAT_SOURCE_SHA", failures);
 requireGithubRunUrl(verifierRunUrl, "UAT_VERIFIER_RUN_URL", failures);
 requireGithubRunUrl(githubCiRunUrl, "UAT_GITHUB_CI_RUN_URL", failures);
+requireEvidenceTarget(githubCiEvidenceTarget, "UAT_GITHUB_CI_EVIDENCE_TARGET", failures);
 if (releaseCandidate && rollbackImageTag && releaseCandidate === rollbackImageTag) {
   failures.push("UAT_RELEASE_CANDIDATE ve UAT_ROLLBACK_IMAGE_TAG farklı olmalı.");
 }
@@ -151,6 +149,9 @@ if (failures.length > 0) fail(failures);
 const outputFile = resolve(outputPath);
 validateOutputTarget(outputFile, "UAT_OUTPUT");
 
+const githubCiEvidence = await readJsonTarget(githubCiEvidenceTarget, "UAT_GITHUB_CI_EVIDENCE_TARGET");
+validateGithubCiEvidence(githubCiEvidence);
+validateCiScenarioCoverage();
 const commandEvidence = await readJsonTarget(commandEvidenceTarget, "UAT_COMMAND_EVIDENCE_TARGET");
 validateCommandEvidence(commandEvidence);
 const scenariosPayload = await readJsonTarget(scenariosTarget, "UAT_SCENARIOS_TARGET");
@@ -241,6 +242,113 @@ function validateCommandEvidence(payload) {
     requireExactKeys(item, ["command", "status", "evidence", "evidenceClass", "sourceSha"], `commands.${item?.command ?? "unknown"}`, failures);
   }
   if (failures.length > 0) fail(failures);
+}
+
+function validateGithubCiEvidence(report) {
+  const failures = [];
+  if (report?.result !== "PASS") failures.push("GitHub CI artifact result PASS olmalı.");
+  if (report?.environment !== "github-actions") failures.push("GitHub CI artifact environment github-actions olmalı.");
+  if (report?.commitSha?.toLowerCase() !== sourceSha.toLowerCase()) {
+    failures.push("GitHub CI artifact commitSha UAT_SOURCE_SHA ile eşleşmeli.");
+  }
+  if (report?.workflow?.runUrl !== githubCiRunUrl) {
+    failures.push("GitHub CI artifact workflow.runUrl UAT_GITHUB_CI_RUN_URL ile eşleşmeli.");
+  }
+  if (report?.workflow?.conclusion !== "success") failures.push("GitHub CI artifact workflow conclusion success olmalı.");
+  if (report?.workflow?.path !== ".github/workflows/ci.yml") failures.push("GitHub CI artifact workflow path CI workflow olmalı.");
+  if (report?.command?.command !== "pnpm run ci" || report?.command?.workflowUsesSingleCiCommand !== true
+    || report?.command?.localCiParity !== true) {
+    failures.push("GitHub CI artifact exact pnpm run ci ve local parity bağını taşımalı.");
+  }
+  if (!Array.isArray(report?.commandsPassed) || !report.commandsPassed.includes("pnpm run ci")) {
+    failures.push("GitHub CI artifact commandsPassed pnpm run ci içermeli.");
+  }
+  const ciRun = parseGithubRunUrl(githubCiRunUrl);
+  const verifyJob = Array.isArray(report?.jobs)
+    ? report.jobs.find((job) => job?.conclusion === "success" && job?.stepsPassed?.includes("pnpm run ci"))
+    : undefined;
+  if (!verifyJob) {
+    failures.push("GitHub CI artifact success job içinde pnpm run ci adımını taşımalı.");
+  } else if (!isGithubJobUrlForRun(verifyJob.logUrl, ciRun)) {
+    failures.push("GitHub CI artifact pnpm run ci job URL'si exact CI run'a bağlanmalı.");
+  }
+  if (!Array.isArray(report?.gaps) || report.gaps.length !== 0) failures.push("GitHub CI artifact gaps boş olmalı.");
+
+  const releaseMatch = /^ghcr\.io\/([^/]+\/[^/]+)\/api:([a-f0-9]{40})$/iu.exec(releaseCandidate ?? "");
+  if (!releaseMatch || releaseMatch[1].toLowerCase() !== report?.repository?.toLowerCase()
+    || releaseMatch[2].toLowerCase() !== sourceSha.toLowerCase()) {
+    failures.push("UAT release candidate repository/SHA GitHub CI artifact ile eşleşmeli.");
+  }
+  if (failures.length > 0) fail(failures);
+}
+
+function validateCiScenarioCoverage() {
+  const failures = [];
+  const rootPackage = readJsonAtSource("package.json", "exact-SHA root package.json");
+  const apiPackage = readJsonAtSource("apps/api/package.json", "exact-SHA API package.json");
+  if (!rootPackage?.scripts?.ci?.includes("pnpm test")) failures.push("Root ci script pnpm test çalıştırmalı.");
+  if (rootPackage?.scripts?.test !== "turbo run test --concurrency=1") {
+    failures.push("Root test script tüm workspace testlerini serial Turbo zincirinde çalıştırmalı.");
+  }
+  if (apiPackage?.scripts?.test !== "vitest run --no-file-parallelism") {
+    failures.push("API test script tüm Vitest dosyalarını çalıştırmalı.");
+  }
+  if (!rootPackage?.scripts?.ci?.includes("pnpm ui-ux-redesign:visual-qa")) {
+    failures.push("Root ci script UI/UX visual QA kapısını çalıştırmalı.");
+  }
+
+  for (const [scenarioId, contract] of scenarioEvidenceContracts) {
+    if (!new Set(["CI", "CI_AND_STAGING"]).has(contract.evidenceClass)) continue;
+    const ciCommands = contract.verificationCommands.filter(isCiVerificationCommand);
+    if (ciCommands.length === 0) failures.push(`${scenarioId} scenario-specific CI komutu taşımıyor.`);
+    for (const command of ciCommands) {
+      const prefix = "pnpm --filter @o-okul/api exec vitest run ";
+      if (!command.startsWith(prefix)) continue;
+      for (const sourcePath of command.slice(prefix.length).trim().split(/\s+/u)) {
+        if (!sourcePath.startsWith("src/") || !gitPathExistsAtSource(`apps/api/${sourcePath}`)) {
+          failures.push(`${scenarioId} CI kaynak yolu bulunamadı: ${sourcePath}`);
+        }
+      }
+    }
+  }
+  if (failures.length > 0) fail(failures);
+}
+
+function isCiVerificationCommand(command) {
+  return command === "pnpm run ci" || command === "pnpm ui-ux-redesign:visual-qa"
+    || command.startsWith("pnpm --filter @o-okul/api exec vitest run ");
+}
+
+function readJsonAtSource(filePath, label) {
+  const result = spawnSync("git", ["show", `${sourceSha}:${filePath}`], { encoding: "utf8" });
+  if (result.status !== 0) fail([`${label} exact SHA'da okunamadı.`]);
+  try {
+    return JSON.parse(result.stdout);
+  } catch {
+    fail([`${label} okunabilir geçerli JSON olmalı.`]);
+  }
+}
+
+function gitPathExistsAtSource(filePath) {
+  return spawnSync("git", ["cat-file", "-e", `${sourceSha}:${filePath}`], { stdio: "ignore" }).status === 0;
+}
+
+function parseGithubRunUrl(value) {
+  const url = new URL(value);
+  const match = /^\/([^/]+)\/([^/]+)\/actions\/runs\/(\d+)\/?$/u.exec(url.pathname);
+  return match ? { repository: `${match[1]}/${match[2]}`.toLowerCase(), runId: match[3] } : undefined;
+}
+
+function isGithubJobUrlForRun(value, expectedRun) {
+  try {
+    const url = new URL(value);
+    const match = /^\/([^/]+)\/([^/]+)\/actions\/runs\/(\d+)\/job\/(\d+)\/?$/u.exec(url.pathname);
+    return url.protocol === "https:" && url.hostname === "github.com" && !url.username && !url.password
+      && !url.search && !url.hash && Boolean(match) && Boolean(expectedRun)
+      && `${match[1]}/${match[2]}`.toLowerCase() === expectedRun.repository && match[3] === expectedRun.runId;
+  } catch {
+    return false;
+  }
 }
 
 function validateAndReadScenarios(payload) {

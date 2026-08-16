@@ -8,6 +8,11 @@ const outputPath = process.env.AUDIT_NULL_TENANT_OUTPUT;
 const environment = process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "staging";
 const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? process.env.DATABASE_URL;
 const evidenceReference = process.env.AUDIT_NULL_TENANT_EVIDENCE_REFERENCE?.trim();
+const systemClassificationRule =
+  "tenantId IS NULL AND (system action prefix OR actor user belongs to system tenant)";
+const deletedTenantClassificationRule =
+  "tenantId IS NULL AND not system AND (diff.deletedTenantIdHash exists OR actorUserId no longer exists)";
+const unknownClassificationRule = "tenantId IS NULL AND no system/deletedTenant rule matched";
 const failures = [];
 
 if (typeof outputPath !== "string" || outputPath.trim() === "") failures.push("AUDIT_NULL_TENANT_OUTPUT boş bırakılamaz.");
@@ -27,25 +32,40 @@ try {
     await client.query("BEGIN READ ONLY");
     await client.query("SELECT set_config('app.bypass_rls', 'true', true)");
     const result = await client.query(
-      `SELECT
+      `WITH classified AS (
+         SELECT
+           audit."tenantId",
+           CASE
+             WHEN audit."tenantId" IS NOT NULL THEN 'TENANT'
+             WHEN audit."action" LIKE 'system.%'
+               OR audit."action" LIKE 'auth.system_%'
+               OR EXISTS (
+                 SELECT 1
+                 FROM "User" actor
+                 WHERE actor."id" = audit."actorUserId"
+                   AND actor."tenantId" = 'system'
+               ) THEN 'SYSTEM'
+             WHEN COALESCE(audit."diff" ? 'deletedTenantIdHash', false)
+               OR (
+                 audit."actorUserId" IS NOT NULL
+                 AND NOT EXISTS (
+                   SELECT 1
+                   FROM "User" actor
+                   WHERE actor."id" = audit."actorUserId"
+                 )
+               ) THEN 'DELETED_TENANT'
+             ELSE 'UNKNOWN'
+           END AS classification
+         FROM "AuditLog" audit
+       )
+       SELECT
          count(*)::int AS "totalRows",
          count(*) FILTER (WHERE "tenantId" IS NOT NULL)::int AS "tenantRows",
          count(*) FILTER (WHERE "tenantId" IS NULL)::int AS "nullTenantRows",
-         count(*) FILTER (
-           WHERE "tenantId" IS NULL
-             AND ("action" LIKE 'system.%' OR "action" LIKE 'auth.system_%')
-         )::int AS "systemRows",
-         count(*) FILTER (
-           WHERE "tenantId" IS NULL
-             AND NOT ("action" LIKE 'system.%' OR "action" LIKE 'auth.system_%')
-             AND COALESCE("diff" ? 'deletedTenantIdHash', false)
-         )::int AS "deletedTenantRows",
-         count(*) FILTER (
-           WHERE "tenantId" IS NULL
-             AND NOT ("action" LIKE 'system.%' OR "action" LIKE 'auth.system_%')
-             AND NOT COALESCE("diff" ? 'deletedTenantIdHash', false)
-         )::int AS "unknownRows"
-       FROM "AuditLog"`,
+         count(*) FILTER (WHERE classification = 'SYSTEM')::int AS "systemRows",
+         count(*) FILTER (WHERE classification = 'DELETED_TENANT')::int AS "deletedTenantRows",
+         count(*) FILTER (WHERE classification = 'UNKNOWN')::int AS "unknownRows"
+       FROM classified`,
     );
     counts = result.rows[0];
     await client.query("COMMIT");
@@ -67,15 +87,15 @@ try {
       nullTenantBreakdown: {
         system: {
           count: number(counts?.systemRows, "systemRows"),
-          classificationRule: "tenantId IS NULL AND (action LIKE 'system.%' OR action LIKE 'auth.system_%')",
+          classificationRule: systemClassificationRule,
         },
         deletedTenant: {
           count: number(counts?.deletedTenantRows, "deletedTenantRows"),
-          classificationRule: "tenantId IS NULL AND not system AND diff.deletedTenantIdHash IS NOT NULL",
+          classificationRule: deletedTenantClassificationRule,
         },
         unknown: {
           count: number(counts?.unknownRows, "unknownRows"),
-          classificationRule: "tenantId IS NULL AND no system/deletedTenant rule matched",
+          classificationRule: unknownClassificationRule,
         },
       },
     },

@@ -242,12 +242,10 @@ const expectedUatJourneyScenarios = [
 ];
 const expectedUatCommandsPassed = [
   "pnpm run ci",
-  "pnpm prod:env:check",
   "pnpm db:rls:check:live",
   "pnpm raw-import:smoke",
   "pnpm report-generation:smoke",
   "pnpm live:exam-cycle:check",
-  "pnpm queue:smoke",
   "pnpm live:onboarding:smoke",
   "pnpm live:ui-worker:smoke",
   "pnpm sms:smoke",

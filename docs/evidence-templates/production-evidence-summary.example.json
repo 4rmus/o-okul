@@ -1339,11 +1339,11 @@
         "nullTenantBreakdown": {
           "system": {
             "count": 5,
-            "classificationRule": "tenantId IS NULL AND action LIKE 'system.%' OR action LIKE 'auth.system_%'"
+            "classificationRule": "tenantId IS NULL AND (system action prefix OR actor user belongs to system tenant)"
           },
           "deletedTenant": {
             "count": 3,
-            "classificationRule": "tenantId IS NULL AND diff.deletedTenantIdHash IS NOT NULL"
+            "classificationRule": "tenantId IS NULL AND not system AND (diff.deletedTenantIdHash exists OR actorUserId no longer exists)"
           },
           "unknown": {
             "count": 0,
@@ -1822,12 +1822,10 @@
       ],
       "commandsPassed": [
         "pnpm run ci",
-        "pnpm prod:env:check",
         "pnpm db:rls:check:live",
         "pnpm raw-import:smoke",
         "pnpm report-generation:smoke",
         "pnpm live:exam-cycle:check",
-        "pnpm queue:smoke",
         "pnpm live:onboarding:smoke",
         "pnpm live:ui-worker:smoke",
         "pnpm sms:smoke",

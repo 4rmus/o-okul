@@ -430,7 +430,7 @@ const missingArtifactRemediation = new Map([
     "reports/uat.json",
     {
       command: "UAT_OUTPUT=artifacts/staging/reports/uat.json corepack pnpm uat:generate",
-      prerequisite: "Twelve command evidence entries and all 21 UAT persona scenarios must be PASS.",
+      prerequisite: "Ten executed command evidence entries and all 21 UAT persona scenarios must be PASS.",
       blocker: "Real role-based UAT command and scenario evidence JSON files are missing.",
     },
   ],

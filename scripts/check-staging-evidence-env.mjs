@@ -8,6 +8,7 @@ const prodEnvScriptPath = "scripts/check-prod-env.mjs";
 const prodEvidenceScriptPath = "scripts/check-prod-evidence.mjs";
 const workflowPath = process.env.STAGING_DEPLOY_WORKFLOW_PATH ?? ".github/workflows/staging-deploy.yml";
 const outboxVerifyWorkflowPath = ".github/workflows/staging-outbox-verify.yml";
+const adminMfaGeneratorPath = "scripts/generate-admin-mfa-evidence.mjs";
 const identityMigrationGeneratorPath = "scripts/generate-identity-migration-evidence.mjs";
 const financialRetentionGeneratorPath = "scripts/generate-financial-retention-evidence.mjs";
 
@@ -574,9 +575,12 @@ function checkOutboxVerifyWorkflowContract(output) {
     "full_evidence requires run_gate_e_observability_alert_drill=true; stale alert delivery artifacts cannot be promoted.",
     "corepack pnpm live:onboarding:smoke",
     "Live onboarding sentetik tenant/session temizliği geçti",
+    "deletedTenantIdHash",
+    "deletedTenantCleanupRunId",
     "RLS_LIVE_OUTPUT=artifacts/staging/reports/rls-live.json",
     "scripts/generate-rls-live-evidence.mjs",
     "scripts/generate-audit-null-tenant-evidence.mjs",
+    "scripts/check-audit-null-tenant-evidence.mjs",
     "scripts/generate-restore-drill-evidence.mjs",
     "scripts/run-observability-alert-drill.mjs",
     "OBSERVABILITY_UAT_NOT_BEFORE=\"$CUTOVER_AT\"",
@@ -586,6 +590,7 @@ function checkOutboxVerifyWorkflowContract(output) {
     "LIVE_ONBOARDING_RESULT_TARGET=\"file://$PWD/artifacts/staging/reports/live-onboarding.json\"",
     "pnpm live:onboarding:result-check",
     "Gate E sentetik tenant/session temizliği geçti",
+    "gate_e_mutating_cleanup_complete=true",
     "RATE_LIMIT_LOGIN_SMOKE_TENANT_ID",
     "RATE_LIMIT_LOGIN_SMOKE_LOGIN_NAME",
     "redis_cleanup_keys=()",
@@ -595,6 +600,7 @@ function checkOutboxVerifyWorkflowContract(output) {
     "UAT_SOURCE_SHA=\"$CUTOVER_SOURCE_SHA\"",
     "UAT_VERIFIER_RUN_URL=\"$verifier_run_url\"",
     "UAT_GITHUB_CI_RUN_URL=\"$github_ci_run_url\"",
+    "UAT_GITHUB_CI_EVIDENCE_TARGET=\"file://$PWD/artifacts/staging/reports/github-ci.json\"",
     "SECURITY_AUDIT_RLS_LIVE_REFERENCE=artifact:artifacts/staging/reports/rls-live.json",
     "SENTRY_SMOKE_NOT_BEFORE=$CUTOVER_AT",
     "ALERT_WEBHOOK_SMOKE_NOT_BEFORE=$CUTOVER_AT",
@@ -670,6 +676,41 @@ function checkOutboxVerifyWorkflowContract(output) {
     'RATE_LIMIT_LOGIN_SMOKE_LOGIN_NAME="$RATE_LIMIT_LOGIN_SMOKE_LOGIN_NAME"',
     "node --env-file=.env scripts/smoke-rate-limit-live.mjs",
   ]);
+  requireWorkflowOrder(output, workflow, "Admin MFA build ve generator sırası", [
+    "pnpm --filter @o-okul/shared-types build",
+    "pnpm --filter @o-okul/db build",
+    "node --env-file=.staging-evidence.env scripts/generate-admin-mfa-evidence.mjs",
+  ]);
+  requireWorkflowOrder(output, workflow, "Gate E cleanup ve audit-null tazelik sırası", [
+    "Live onboarding sentetik tenant/session temizliği geçti",
+    "Gate E sentetik tenant/session temizliği geçti",
+    "gate_e_mutating_cleanup_complete=true",
+    "node --env-file=.staging-evidence.env scripts/generate-audit-null-tenant-evidence.mjs",
+  ]);
+  if (workflow.split("'deletedTenantIdHash'").length - 1 !== 4) {
+    output.push(`${outboxVerifyWorkflowPath} onboarding ve iSEM cleanup için audit hash yazma/doğrulama bağlarını tam taşımalı.`);
+  }
+  if (workflow.split("'deletedTenantCleanupRunId'").length - 1 !== 4) {
+    output.push(`${outboxVerifyWorkflowPath} onboarding ve iSEM cleanup için verifier run yazma/doğrulama bağlarını tam taşımalı.`);
+  }
+  if (workflow.split("scripts/check-audit-null-tenant-evidence.mjs").length - 1 !== 2) {
+    output.push(`${outboxVerifyWorkflowPath} audit-null checker'ı iki verifier helper listesinde de taşımalı.`);
+  }
+  const adminMfaGenerator = readFileSync(adminMfaGeneratorPath, "utf8");
+  if (!adminMfaGenerator.includes('["DATABASE_URL", "DIRECT_DATABASE_URL", "ADMIN_MFA_MODE", "IDEMPOTENCY_STORE", "QUEUE_PREFIX"]')) {
+    output.push(`${adminMfaGeneratorPath} hedefli test child env'inden ADMIN_MFA_MODE değerini kaldırmalı.`);
+  }
+  const uatGenerator = readFileSync("scripts/generate-uat-evidence.mjs", "utf8");
+  for (const token of [
+    "UAT_GITHUB_CI_EVIDENCE_TARGET",
+    "validateGithubCiEvidence(githubCiEvidence)",
+    "validateCiScenarioCoverage()",
+    "GitHub CI artifact pnpm run ci job URL'si exact CI run'a bağlanmalı.",
+    "Root ci script pnpm test çalıştırmalı.",
+    "scenario-specific CI komutu taşımıyor.",
+  ]) {
+    if (!uatGenerator.includes(token)) output.push(`scripts/generate-uat-evidence.mjs exact CI UAT bağı eksik: ${token}`);
+  }
   for (const helper of ["scripts/smoke-isem-answer-key-live.mjs", "scripts/smoke-raw-import-upload-live.mjs"]) {
     if (workflow.split(helper).length - 1 !== 2) {
       output.push(`${outboxVerifyWorkflowPath} ${helper} iki verifier helper listesinde de taşınmalı.`);

@@ -1566,6 +1566,14 @@ runAuditNullTenantNegativeCheck({
     fixture.auditNullTenant.nullTenantBreakdown.system.count += 1;
   },
 });
+runAuditNullTenantNegativeCheck({
+  label: "Audit null tenant classification rule mismatch negative",
+  path: "docs/evidence-templates/audit-null-tenant.classification-rule.tmp.json",
+  expectedFailure: "auditNullTenant.nullTenantBreakdown.deletedTenant.classificationRule tenantId IS NULL AND not system AND (diff.deletedTenantIdHash exists OR actorUserId no longer exists) olmali.",
+  mutate: (fixture) => {
+    fixture.auditNullTenant.nullTenantBreakdown.deletedTenant.classificationRule = "tenantId IS NULL";
+  },
+});
 runAuditNullTenantSymlinkParentTargetNegativeCheck();
 runRateLimitNegativeCheck({
   label: "Rate limit extra top-level key negative",
@@ -1803,7 +1811,7 @@ runUatNegativeCheck({
 runUatNegativeCheck({
   label: "UAT extra command negative",
   path: "docs/evidence-templates/uat.extra-command.tmp.json",
-  expectedFailure: "commandsPassed tam 12 komut içermeli.",
+  expectedFailure: "commandsPassed tam 10 komut içermeli.",
   mutate: (fixture) => {
     fixture.commandsPassed.push("pnpm unexpected:smoke");
   },
@@ -5320,6 +5328,7 @@ function runUatGeneratorLocalArtifactNegativeChecks() {
     UAT_SOURCE_SHA: "1".repeat(40),
     UAT_VERIFIER_RUN_URL: "https://github.com/4rmus/o-okul/actions/runs/123456789",
     UAT_GITHUB_CI_RUN_URL: "https://github.com/4rmus/o-okul/actions/runs/123456788",
+    UAT_GITHUB_CI_EVIDENCE_TARGET: pathToFileURL(resolve(githubCiFixturePath)).href,
   };
   const cases = [
     {

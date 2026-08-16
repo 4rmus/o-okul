@@ -907,7 +907,11 @@ pnpm backup:restore:smoke
   sayıları `0/0` değilse veya izole audit-log testleri geçmezse kanıt üretmeden durur.
 - Audit null tenant sınıflandırması `AUDIT_NULL_TENANT_EVIDENCE_TARGET` üzerinden ayrıca
   doğrulanır; staging evidence secret bu target'ı içermek zorundadır ve `unknown.count` sıfır
-  değilse release kanıtı geçmez.
+  değilse release kanıtı geçmez. Sistem satırları action prefix'ine veya halen `system` tenant'ına
+  bağlı actor'a göre; silinmiş tenant satırları `deletedTenantIdHash` işaretine veya artık bulunmayan
+  actor bağına göre açıkça ayrılır. Gate E sentetik tenant cleanup'ları silmeden önce audit diff'ine
+  tenant hash'i ve verifier run ID'si yazar; audit-null artifact'i onboarding ve iSEM cleanup'larından
+  sonra yeniden üretilir.
 - Kimlik göç kanıtı: öğrenci/veli/öğretmen user bağları, tenant membership ve negatif erişim
   kontrolleri `pnpm identity-migration:check` üzerinden doğrulanır. Gerçek kanıtta onay sahibi ve
   onay referansı `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder değer içeremez;
@@ -1123,8 +1127,10 @@ pnpm backup:restore:smoke
   decode/check, metadata append, first-gates, cutover, cleanup ve upload sırasını; verify-only workflow'unda
   ise full env, production evidence ve release bundle kontrol sırasını statik olarak korur.
 - Staging/prod UAT raporu `pnpm uat:check` ile doğrulanır. Staging artifact'i
-  `STAGING_ENVIRONMENT=staging UAT_OUTPUT=artifacts/staging/reports/uat.json UAT_TESTER=... UAT_RELEASE_CANDIDATE=... UAT_ROLLBACK_IMAGE_TAG=... UAT_RESTORE_BACKUP_REFERENCE=s3://... UAT_COMMAND_EVIDENCE_TARGET=file:///.../uat-command-evidence.json UAT_SCENARIOS_TARGET=file:///.../uat-scenarios.json pnpm uat:generate`
-  ile üretilir; generator gerçek komut kanıtı ve 21 senaryoluk UAT kaynak artifact'i olmadan JSON yazmaz.
+  `STAGING_ENVIRONMENT=staging UAT_OUTPUT=artifacts/staging/reports/uat.json UAT_TESTER=... UAT_RELEASE_CANDIDATE=... UAT_ROLLBACK_IMAGE_TAG=... UAT_RESTORE_BACKUP_REFERENCE=s3://... UAT_GITHUB_CI_EVIDENCE_TARGET=file:///.../github-ci.json UAT_COMMAND_EVIDENCE_TARGET=file:///.../uat-command-evidence.json UAT_SCENARIOS_TARGET=file:///.../uat-scenarios.json pnpm uat:generate`
+  ile üretilir; generator GitHub CI artifact'inin exact SHA/run/success job bağını, `pnpm run ci -> pnpm test -> API Vitest`
+  zincirini, scenario-specific test kaynak yollarını, gerçek komut kanıtını ve 21 senaryoluk UAT kaynak artifact'ini
+  doğrulamadan JSON yazmaz. Çalıştırılmamış `prod:env` veya live queue smoke UAT içinde PASS diye sentezlenmez.
   `UAT_OUTPUT`, `UAT_COMMAND_EVIDENCE_TARGET` ve `UAT_SCENARIOS_TARGET` lokal temp path,
   `artifacts/local/**` veya symlink file/parent üzerinden gelemez.
 - Gerçek UAT raporunda `checkedAt` gelecekte olamaz; `tester`, `rollbackImageTag`,
