@@ -56,11 +56,11 @@ jobs:
           [ -z "$REUSE_OUTBOX_SMOKE_RUN_ID" ] || [[ "$REUSE_OUTBOX_SMOKE_RUN_ID" =~ ^[0-9]+$ ]]
           if [ "$FULL_EVIDENCE" = true ]; then
             node --input-type=module - "$UI_UX_APPROVED_AT_INPUT" <<'NODE'
-            const [approvedAt] = process.argv.slice(2);
-            if (!approvedAt || Number.isNaN(Date.parse(approvedAt)) || Date.parse(approvedAt) > Date.now() + 5 * 60 * 1000) {
-              process.exit(1);
-            }
-            NODE
+          const [approvedAt] = process.argv.slice(2);
+          if (!approvedAt || Number.isNaN(Date.parse(approvedAt)) || Date.parse(approvedAt) > Date.now() + 5 * 60 * 1000) {
+            process.exit(1);
+          }
+          NODE
           fi
 
       - name: Validate selected deployment run metadata
