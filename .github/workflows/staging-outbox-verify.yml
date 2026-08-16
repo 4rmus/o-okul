@@ -16,6 +16,10 @@ on:
         description: "Optional prior verifier run ID whose exact cutover-bound sanitized outbox smoke artifact will be reused."
         required: false
         type: string
+      reuse_provider_smoke_run_id:
+        description: "Optional prior verifier run ID whose exact cutover-bound Sentry and alert smoke artifacts will be reused."
+        required: false
+        type: string
       ui_ux_approved_at:
         description: "Release-owner UI/UX approval time (ISO-8601); required for full evidence."
         required: false
@@ -37,6 +41,7 @@ jobs:
     environment: staging
     env:
       REUSE_OUTBOX_SMOKE_RUN_ID: ${{ inputs.reuse_outbox_smoke_run_id }}
+      REUSE_PROVIDER_SMOKE_RUN_ID: ${{ inputs.reuse_provider_smoke_run_id }}
       UI_UX_APPROVED_AT_INPUT: ${{ inputs.ui_ux_approved_at }}
     timeout-minutes: 30
     concurrency:
@@ -54,6 +59,7 @@ jobs:
           set -euo pipefail
           [[ "$DEPLOY_RUN_ID" =~ ^[0-9]+$ ]]
           [ -z "$REUSE_OUTBOX_SMOKE_RUN_ID" ] || [[ "$REUSE_OUTBOX_SMOKE_RUN_ID" =~ ^[0-9]+$ ]]
+          [ -z "$REUSE_PROVIDER_SMOKE_RUN_ID" ] || [[ "$REUSE_PROVIDER_SMOKE_RUN_ID" =~ ^[0-9]+$ ]]
           if [ "$FULL_EVIDENCE" = true ]; then
             node --input-type=module - "$UI_UX_APPROVED_AT_INPUT" <<'NODE'
           const [approvedAt] = process.argv.slice(2);
@@ -137,6 +143,7 @@ jobs:
           for relative in \
             .github/workflows/staging-outbox-verify.yml \
             apps/web/e2e-next/ui-visual-qa-next.spec.ts \
+            scripts/check-prod-evidence.mjs \
             scripts/check-staging-evidence-env.mjs \
             scripts/check-ui-ux-redesign-evidence.mjs \
             scripts/generate-identity-migration-evidence.mjs \
@@ -161,6 +168,7 @@ jobs:
           for relative in \
             .github/workflows/staging-outbox-verify.yml \
             apps/web/e2e-next/ui-visual-qa-next.spec.ts \
+            scripts/check-prod-evidence.mjs \
             scripts/check-staging-evidence-env.mjs \
             scripts/check-ui-ux-redesign-evidence.mjs \
             scripts/generate-identity-migration-evidence.mjs \
@@ -281,6 +289,22 @@ jobs:
           run-id: ${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}
           github-token: ${{ github.token }}
           path: artifacts/staging/reports
+
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.full_evidence }}
+        with:
+          name: staging-activation-evidence-${{ env.CUTOVER_SOURCE_SHA }}
+          run-id: ${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}
+          github-token: ${{ github.token }}
+          path: artifacts/activation
+
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.full_evidence && inputs.reuse_provider_smoke_run_id != '' }}
+        with:
+          name: staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ inputs.reuse_provider_smoke_run_id }}
+          run-id: ${{ inputs.reuse_provider_smoke_run_id }}
+          github-token: ${{ github.token }}
+          path: artifacts/provider-smoke-reuse
 
       - name: Validate cutover-bound GitHub CI evidence
         shell: bash
@@ -562,6 +586,17 @@ jobs:
           RLS_LIVE_EVIDENCE_TARGET="file://$PWD/artifacts/staging/reports/rls-live.json" pnpm rls:live:check
           cp artifacts/secret-delivery-outbox.json artifacts/staging/smoke/secret-delivery-outbox.json
           cp artifacts/cutover/deployment-cutover.json artifacts/staging/reports/deployment-cutover.json
+          test -f artifacts/activation/smoke/wal-archive.json
+          test ! -L artifacts/activation/smoke/wal-archive.json
+          cp artifacts/activation/smoke/wal-archive.json artifacts/staging/smoke/wal-archive.json
+          if [ -n "$REUSE_PROVIDER_SMOKE_RUN_ID" ]; then
+            cmp -s artifacts/provider-smoke-reuse/reports/deployment-cutover.json artifacts/cutover/deployment-cutover.json
+            for smoke_file in sentry-event.json alert-webhook.json; do
+              test -f "artifacts/provider-smoke-reuse/smoke/$smoke_file"
+              test ! -L "artifacts/provider-smoke-reuse/smoke/$smoke_file"
+              cp "artifacts/provider-smoke-reuse/smoke/$smoke_file" "artifacts/staging/smoke/$smoke_file"
+            done
+          fi
           {
             echo "SENTRY_RELEASE=$CUTOVER_RELEASE_IMAGE_TAG"
             echo "ROLLBACK_IMAGE_TAG=$rollback_image_tag"
@@ -577,6 +612,8 @@ jobs:
             echo "SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG=$CUTOVER_RELEASE_IMAGE_TAG"
             echo "NOTIFICATION_PROVIDER_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/notification-provider.json"
             echo "NOTIFICATION_SMOKE_NOT_BEFORE=$CUTOVER_AT"
+            echo "SENTRY_SMOKE_NOT_BEFORE=$CUTOVER_AT"
+            echo "ALERT_WEBHOOK_SMOKE_NOT_BEFORE=$CUTOVER_AT"
           } >> .staging-evidence.env
           pnpm --filter @o-okul/shared-types build
           pnpm --filter @o-okul/db build
@@ -633,8 +670,13 @@ jobs:
           GITHUB_CI_EVIDENCE_TARGET="file://$PWD/artifacts/staging/reports/github-ci.json" \
           UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES=1 \
             pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env --environment staging
+          provider_reuse_args=()
+          if [ -n "$REUSE_PROVIDER_SMOKE_RUN_ID" ]; then
+            provider_reuse_args=(--reuse-sentry-smoke --reuse-alert-webhook-smoke)
+          fi
           PRODUCTION_EVIDENCE_ALLOW_STAGING_UI_UX=1 PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX=1 UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES=1 \
-            pnpm prod:evidence:check -- --env-file .staging-evidence.env --summary-file "artifacts/staging/release-summary-$CUTOVER_RELEASE_IMAGE_TAG.json" --reuse-notification-smoke
+            pnpm prod:evidence:check -- --env-file .staging-evidence.env --summary-file "artifacts/staging/release-summary-$CUTOVER_RELEASE_IMAGE_TAG.json" \
+              --reuse-notification-smoke --reuse-wal-smoke "${provider_reuse_args[@]}"
 
       - name: Bind verified UI/UX completion to full evidence
         if: ${{ inputs.full_evidence }}

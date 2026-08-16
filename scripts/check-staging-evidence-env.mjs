@@ -480,6 +480,7 @@ function checkOutboxVerifyWorkflowContract(output) {
     "deploy_run_id:",
     "full_evidence:",
     "reuse_outbox_smoke_run_id:",
+    "reuse_provider_smoke_run_id:",
     "ui_ux_approved_at:",
     "description: \"Also run the separate full production evidence aggregation.\"",
     "if: ${{ inputs.full_evidence }}",
@@ -499,6 +500,7 @@ function checkOutboxVerifyWorkflowContract(output) {
     'verifier_root="$RUNNER_TEMP/gate-e-verifier"',
     "scripts/generate-identity-migration-evidence.mjs",
     "scripts/generate-financial-retention-evidence.mjs",
+    "scripts/check-prod-evidence.mjs",
     "clean: false",
     "Overlay verifier-only evidence helpers",
     "Validate staging verify environment",
@@ -518,6 +520,8 @@ function checkOutboxVerifyWorkflowContract(output) {
     "Reuse exact cutover-bound sanitized outbox smoke",
     "staging-outbox-smoke-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ inputs.reuse_outbox_smoke_run_id }}",
     "staging-outbox-smoke-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}",
+    "staging-activation-evidence-${{ env.CUTOVER_SOURCE_SHA }}",
+    "staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ inputs.reuse_provider_smoke_run_id }}",
     "PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX=1",
     "pnpm staging:evidence-env:check -- --mode full --env-file .staging-evidence.env",
     "Bind verified UI/UX completion to full evidence",
@@ -557,6 +561,10 @@ function checkOutboxVerifyWorkflowContract(output) {
     "rls_live_remote=/root/o-okul/artifacts/staging/reports/rls-live.json",
     "RLS_LIVE_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/rls-live.json",
     "SECURITY_AUDIT_RLS_LIVE_REFERENCE=artifact:artifacts/staging/reports/rls-live.json",
+    "SENTRY_SMOKE_NOT_BEFORE=$CUTOVER_AT",
+    "ALERT_WEBHOOK_SMOKE_NOT_BEFORE=$CUTOVER_AT",
+    "cmp -s artifacts/provider-smoke-reuse/reports/deployment-cutover.json artifacts/cutover/deployment-cutover.json",
+    "artifacts/activation/smoke/wal-archive.json",
     "IDENTITY_MIGRATION_OUTPUT=artifacts/staging/reports/identity-migration.json",
     "node --env-file=.staging-evidence.env scripts/generate-identity-migration-evidence.mjs",
     "FINANCIAL_RETENTION_OUTPUT=artifacts/staging/reports/financial-retention.json",
@@ -575,6 +583,9 @@ function checkOutboxVerifyWorkflowContract(output) {
     "FINANCIAL_RETENTION_TARGET=file://$PWD/artifacts/staging/reports/financial-retention.json",
     "SECURITY_AUDIT_TARGET=file://$PWD/artifacts/staging/reports/security-audit.json",
     "Recheck exact images before publishing verification",
+    "--reuse-sentry-smoke",
+    "--reuse-alert-webhook-smoke",
+    "--reuse-wal-smoke",
     "staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}",
     "scripts/smoke-secret-delivery-outbox-staging.mjs",
     "scripts/check-secret-delivery-outbox-evidence.mjs",
@@ -584,8 +595,8 @@ function checkOutboxVerifyWorkflowContract(output) {
   if (workflow.match(/SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID|inputs\.source|secrets\..*SOURCE/i)) {
     output.push(`${outboxVerifyWorkflowPath} source ID GitHub input/secret olarak taşımamalı.`);
   }
-  if (workflow.split("if: ${{ inputs.full_evidence }}").length - 1 !== 4) {
-    output.push(`${outboxVerifyWorkflowPath} full evidence adımları tam olarak dört explicit koşulla ayrılmalı.`);
+  if (workflow.split("if: ${{ inputs.full_evidence }}").length - 1 !== 5) {
+    output.push(`${outboxVerifyWorkflowPath} full evidence adımları tam olarak beş explicit koşulla ayrılmalı.`);
   }
   if (workflow.split("STAGING_ENVIRONMENT=production").length - 1 !== 3) {
     output.push(`${outboxVerifyWorkflowPath} production summary child generator'larını tam üç production environment bağıyla çalıştırmalı.`);
