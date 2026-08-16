@@ -12,6 +12,14 @@ on:
         required: false
         default: false
         type: boolean
+      reuse_outbox_smoke_run_id:
+        description: "Optional prior verifier run ID whose exact cutover-bound sanitized outbox smoke artifact will be reused."
+        required: false
+        type: string
+      ui_ux_approved_at:
+        description: "Release-owner UI/UX approval time (ISO-8601); required for full evidence."
+        required: false
+        type: string
   pull_request:
     types: [labeled]
 
@@ -27,6 +35,9 @@ jobs:
       github.event.label.name == 'staging-outbox-verify'
     runs-on: ubuntu-latest
     environment: staging
+    env:
+      REUSE_OUTBOX_SMOKE_RUN_ID: ${{ inputs.reuse_outbox_smoke_run_id }}
+      UI_UX_APPROVED_AT_INPUT: ${{ inputs.ui_ux_approved_at }}
     timeout-minutes: 30
     concurrency:
       group: staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}
@@ -38,9 +49,19 @@ jobs:
         shell: bash
         env:
           DEPLOY_RUN_ID: ${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}
+          FULL_EVIDENCE: ${{ inputs.full_evidence }}
         run: |
           set -euo pipefail
           [[ "$DEPLOY_RUN_ID" =~ ^[0-9]+$ ]]
+          [ -z "$REUSE_OUTBOX_SMOKE_RUN_ID" ] || [[ "$REUSE_OUTBOX_SMOKE_RUN_ID" =~ ^[0-9]+$ ]]
+          if [ "$FULL_EVIDENCE" = true ]; then
+            node --input-type=module - "$UI_UX_APPROVED_AT_INPUT" <<'NODE'
+            const [approvedAt] = process.argv.slice(2);
+            if (!approvedAt || Number.isNaN(Date.parse(approvedAt)) || Date.parse(approvedAt) > Date.now() + 5 * 60 * 1000) {
+              process.exit(1);
+            }
+            NODE
+          fi
 
       - name: Validate selected deployment run metadata
         shell: bash
@@ -186,7 +207,7 @@ jobs:
         run: |
           set -euo pipefail
           ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
-            "STAGING_EDGE_MODE='$STAGING_EDGE_MODE' RELEASE_IMAGE_TAG='$CUTOVER_RELEASE_IMAGE_TAG' REPOSITORY='$CUTOVER_REPOSITORY' CUTOVER_AT='$CUTOVER_AT' SOURCE_CLAIM_DIR='$OUTBOX_SOURCE_CLAIM_DIR' bash -se" <<'REMOTE'
+            "STAGING_EDGE_MODE='$STAGING_EDGE_MODE' RELEASE_IMAGE_TAG='$CUTOVER_RELEASE_IMAGE_TAG' REPOSITORY='$CUTOVER_REPOSITORY' CUTOVER_AT='$CUTOVER_AT' SOURCE_CLAIM_DIR='$OUTBOX_SOURCE_CLAIM_DIR' REUSE_OUTBOX_SMOKE_RUN_ID='$REUSE_OUTBOX_SMOKE_RUN_ID' bash -se" <<'REMOTE'
           set -euo pipefail
           cd /root/o-okul
           case "$STAGING_EDGE_MODE" in
@@ -211,6 +232,10 @@ jobs:
           require_running_image api "$expected_prefix/api:$RELEASE_IMAGE_TAG"
           require_running_image worker "$expected_prefix/worker:$RELEASE_IMAGE_TAG"
           require_running_image queue-board "$expected_prefix/queue-board:$RELEASE_IMAGE_TAG"
+          if [ -n "$REUSE_OUTBOX_SMOKE_RUN_ID" ]; then
+            [[ "$REUSE_OUTBOX_SMOKE_RUN_ID" =~ ^[0-9]+$ ]]
+            exit 0
+          fi
           private_root=/root/o-okul-private/secret-delivery-outbox
           source_dir="$private_root/$RELEASE_IMAGE_TAG"
           source_file="$source_dir/source-id"
@@ -272,6 +297,7 @@ jobs:
             -L 127.0.0.1:15432:127.0.0.1:5432 -L 127.0.0.1:16379:127.0.0.1:6379 "$STAGING_SSH_USER@$STAGING_SSH_HOST"
 
       - name: Upload cutover-bound smoke helpers
+        if: ${{ inputs.reuse_outbox_smoke_run_id == '' }}
         shell: bash
         env:
           STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
@@ -287,6 +313,7 @@ jobs:
           ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" "chmod 600 '$verify_helpers/'*.mjs '$verify_helpers/isem-optical-pipeline-inputs.json'"
 
       - name: Run private outbox smoke
+        if: ${{ inputs.reuse_outbox_smoke_run_id == '' }}
         shell: bash
         env:
           STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
@@ -330,6 +357,15 @@ jobs:
           REMOTE
           scp -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST:/root/o-okul/artifacts/staging/smoke/secret-delivery-outbox.json" artifacts/secret-delivery-outbox.json
 
+      - name: Reuse exact cutover-bound sanitized outbox smoke
+        if: ${{ inputs.reuse_outbox_smoke_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: staging-outbox-smoke-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ inputs.reuse_outbox_smoke_run_id }}
+          run-id: ${{ inputs.reuse_outbox_smoke_run_id }}
+          github-token: ${{ github.token }}
+          path: artifacts
+
       - name: Validate sanitized outbox evidence
         shell: bash
         run: |
@@ -357,6 +393,9 @@ jobs:
           trap 'rm -f -- .staging-evidence.env "$runtime_env"' EXIT
           printf '%s' "$STAGING_EVIDENCE_ENV_B64" | base64 -d > .staging-evidence.env
           chmod 600 .staging-evidence.env
+          [ "$(grep -Ec '^UI_UX_REDESIGN_APPROVED_AT=' .staging-evidence.env)" -eq 1 ]
+          sed -i "s#^UI_UX_REDESIGN_APPROVED_AT=.*#UI_UX_REDESIGN_APPROVED_AT=$UI_UX_APPROVED_AT_INPUT#" .staging-evidence.env
+          grep -Fxq "UI_UX_REDESIGN_APPROVED_AT=$UI_UX_APPROVED_AT_INPUT" .staging-evidence.env
           sed -i 's/^ADMIN_MFA_MODE=.*/ADMIN_MFA_MODE=required/' .staging-evidence.env
           grep -Fxq 'ADMIN_MFA_MODE=required' .staging-evidence.env
           if grep -q '^NOTIFICATION_SMOKE_PUSH_TO=' .staging-evidence.env; then
@@ -649,6 +688,7 @@ jobs:
           STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
         run: |
           set -euo pipefail
+          [ -z "${REUSE_OUTBOX_SMOKE_RUN_ID:-}" ] || exit 0
           [[ "${CUTOVER_RELEASE_IMAGE_TAG:-}" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] || exit 0
           [ -s "${STAGING_SSH_KEY_PATH:-}" ] || exit 0
           [ -n "${OUTBOX_SOURCE_CLAIM_DIR:-}" ] || exit 0

@@ -504,7 +504,7 @@ Staging deploy, exact dört servis tag'i ve first-gates sonrası PII-safe `deplo
 üretir. Operatör, retry edilmiş `DELIVERED` source ID'yi GitHub input/secret/log/artifact'a koymadan yalnız
 `$(dirname "$STAGING_DEPLOY_DIR")/o-okul-private/secret-delivery-outbox/<releaseImageTag>/source-id`
 yoluna koyar. Sibling private root ve tag dizini `0700`, regular dosya `0600`, aynı remote kullanıcı sahibi
-olmalıdır; symlink kabul edilmez. Verify-only dispatch yalnız `deploy_run_id` alır, önce indirilen cutover
+olmalıdır; symlink kabul edilmez. Verify-only dispatch source ID almaz; `deploy_run_id` ile seçilen cutover
 artifact'i ve güncel dört container tag'ini doğrular. Eksik private source veya image drift'i, bağımlılık
 kurulumundan ve data tunnel açılmasından önce açık bir preflight hatasıyla durur. Geçerli source dizini
 preflight sırasında run-scope `.claims/<releaseImageTag>/<verifyRunId>` yoluna atomik taşınır; başka verify
@@ -515,8 +515,14 @@ taşınır. Boş dizin temizliği idempotent, source/helper dosya silme hatası 
 yoldaki dosyayı silmeli ve source değeri olmadan incident/audit referansını kaydetmelidir. Yeni verify için
 yeni source kaydı gerekir.
 
+Verifier, outbox smoke adımından sonra başka bir Gate E kontrolünde durmuşsa yeni source/retry üretmeyin.
+Aynı deploy run ID'sine bağlı önceki `staging-outbox-smoke-<deployRunId>-<verifyRunId>` artifact'ını
+`reuse_outbox_smoke_run_id` ile seçin; workflow artifact'ı aynı `releaseImageTag` ve cutover `notBefore`
+bağıyla tekrar doğrular. Full evidence çalıştırmasında `ui_ux_approved_at`, hedef SHA'nın başarılı GitHub CI
+tamamlanmasından sonraki gerçek release-owner onay zamanıdır; bu sıra fail-closed doğrulanır.
+
 ```sh
-GitHub Actions’tan **Staging Outbox Verify** workflow’unu yalnız deploy run ID ile çalıştırın. Workflow
+GitHub Actions’tan **Staging Outbox Verify** workflow’unu deploy run ID ile çalıştırın. Workflow
 cutover artifact'inden `notBefore` ve image tag'ini alır; source dosyası worker image içindeki read-only mount
 ile okunur.
 ```
