@@ -876,6 +876,8 @@ pnpm backup:restore:smoke
   Audit diff negatif kontrolleri `body`, `contentBase64`, `fileBase64`, `fileName`, `objectKey`,
   `rawLine`, `rawRow`, `rawText`, `s3Key`, `sourceFileName`, `sourceFilePath`, kişi adı,
   iletişim, TCKN-benzeri ve token alanlarının audit/evidence çıktısında redakte edildiğini kanıtlar.
+  Gate E staging generator'ı canlı DB sayımlarını `BEGIN READ ONLY` ile alır; WhatsApp projection/event
+  sayıları `0/0` değilse veya izole audit-log testleri geçmezse kanıt üretmeden durur.
 - Audit null tenant sınıflandırması `AUDIT_NULL_TENANT_EVIDENCE_TARGET` üzerinden ayrıca
   doğrulanır; staging evidence secret bu target'ı içermek zorundadır ve `unknown.count` sıfır
   değilse release kanıtı geçmez.

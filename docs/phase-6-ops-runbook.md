@@ -662,6 +662,10 @@ Kanıt sözleşmesi: `docs/evidence-templates/kvkk-inventory.example.json`.
 Komut:
 
 ```sh
+STAGING_ENVIRONMENT=staging \
+KVKK_INVENTORY_OUTPUT=artifacts/staging/reports/kvkk-inventory.json \
+node --env-file=.staging-evidence.env scripts/generate-kvkk-inventory-evidence.mjs
+
 KVKK_INVENTORY_TARGET=file:///path/to/kvkk-inventory.json pnpm privacy:inventory:check
 ```
 
@@ -683,6 +687,8 @@ Minimum kanıt içeriği:
   taşır. `WHATSAPP_ENABLED=false` iken projection/event tablolarına runtime kayıt yazılamaz ve bu kanıt WhatsApp
   capability veya teslimat kanıtı sayılmaz.
 - Audit action seti beş canonical KVKK purge action'ını içerir ve `gaps` boş olmalıdır.
+- Generator kişi ve WhatsApp tablo sayılarını `BEGIN READ ONLY` transaction ile canlı DB'den alır;
+  WhatsApp projection/event sayıları `0/0` değilse veya izole audit-log redaction testleri geçmezse artifact yazmaz.
 - Rapor top-level 10 alanı, beş count alanı, beş coverage subject'i, subject field setleri,
   beş audit action seti, `/audit-logs` audit diff redaction bloğu ve boş `gaps` listesi
   template invalid/non-empty gaps negatifleriyle korunur.

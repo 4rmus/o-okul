@@ -84,6 +84,7 @@
     "observability:uat:check": "node scripts/check-observability-uat-evidence.mjs",
     "observability:uat:generate": "node scripts/generate-observability-uat-evidence.mjs",
     "privacy:inventory:check": "node scripts/check-kvkk-inventory-evidence.mjs",
+    "privacy:inventory:generate": "node scripts/generate-kvkk-inventory-evidence.mjs",
     "pii:contact-policy:check": "node scripts/check-pii-contact-policy.mjs",
     "prod:env:check": "node scripts/check-prod-env.mjs",
     "prod:evidence:check": "pnpm --filter @o-okul/shared-types build && pnpm --filter @o-okul/db build && pnpm --filter @o-okul/api build && pnpm --filter @o-okul/worker build && pnpm --filter @o-okul/sms-adapter build && pnpm --filter @o-okul/notification-adapter build && node scripts/check-prod-evidence.mjs",

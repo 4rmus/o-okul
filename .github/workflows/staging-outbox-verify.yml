@@ -734,6 +734,9 @@ jobs:
           SECURITY_AUDIT_AUTH_CONTROLS_REFERENCE="run:$github_ci_run_url" \
           SECURITY_AUDIT_DATA_CONTROLS_REFERENCE="run:$github_ci_run_url" \
             node --env-file=.staging-evidence.env scripts/generate-security-audit-evidence.mjs
+          STAGING_ENVIRONMENT=staging \
+          KVKK_INVENTORY_OUTPUT=artifacts/staging/reports/kvkk-inventory.json \
+            node --env-file=.staging-evidence.env scripts/generate-kvkk-inventory-evidence.mjs
           NEXT_E2E_BASE_URL=https://o-okul.com \
           NEXT_E2E_SKIP_WEB_SERVER=1 \
           UI_VISUAL_IGNORE_CLOUDFLARE_BEACON_CSP=1 \
