@@ -752,17 +752,7 @@ jobs:
           GITHUB_CI_EVIDENCE_TARGET="file://$PWD/artifacts/staging/reports/github-ci.json" \
           UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES=1 \
             pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env --environment staging
-          for report_file in \
-            kvkk-inventory.json \
-            upload-av.json \
-            observability-uat.json \
-            admin-mfa.json \
-            live-exam-cycle.json \
-            isem-optical-pipeline.json \
-            live-ui-worker-result.json \
-            inline-upload-content-migration.json \
-            audit-null-tenant.json \
-            rate-limit.json; do
+          while read -r target_key report_file; do
             report_local="artifacts/staging/reports/$report_file"
             if [ ! -f "$report_local" ] || [ -L "$report_local" ]; then
               copied=false
@@ -782,7 +772,21 @@ jobs:
             test -f "$report_local"
             test ! -L "$report_local"
             chmod 600 "$report_local"
-          done
+            [ "$(grep -Ec "^${target_key}=" .staging-evidence.env)" -eq 1 ]
+            sed -i "s#^${target_key}=.*#${target_key}=file://$PWD/$report_local#" .staging-evidence.env
+            grep -Fxq "${target_key}=file://$PWD/$report_local" .staging-evidence.env
+          done <<'REPORTS'
+          KVKK_INVENTORY_TARGET kvkk-inventory.json
+          UPLOAD_AV_TARGET upload-av.json
+          OBSERVABILITY_UAT_TARGET observability-uat.json
+          ADMIN_MFA_EVIDENCE_TARGET admin-mfa.json
+          LIVE_EXAM_CYCLE_TARGET live-exam-cycle.json
+          ISEM_OPTICAL_PIPELINE_TARGET isem-optical-pipeline.json
+          LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET live-ui-worker-result.json
+          INLINE_UPLOAD_CONTENT_MIGRATION_TARGET inline-upload-content-migration.json
+          AUDIT_NULL_TENANT_EVIDENCE_TARGET audit-null-tenant.json
+          RATE_LIMIT_EVIDENCE_TARGET rate-limit.json
+          REPORTS
           mkdir -p artifacts/uat-inputs
           [ -n "$REUSE_AGGREGATE_SMOKE_RUN_ID" ]
           aggregate_smoke_run_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$REUSE_AGGREGATE_SMOKE_RUN_ID"
