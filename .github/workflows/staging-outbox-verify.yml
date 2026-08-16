@@ -166,6 +166,7 @@ jobs:
             scripts/audit-identity-links-live.mjs \
             scripts/generate-identity-migration-evidence.mjs \
             scripts/generate-financial-retention-evidence.mjs \
+            scripts/generate-kvkk-inventory-evidence.mjs \
             scripts/generate-ui-ux-redesign-evidence.mjs \
             scripts/prepare-ui-ux-redesign-staging-artifacts.mjs \
             scripts/run-staging-first-gate-smokes.mjs \
@@ -196,6 +197,7 @@ jobs:
             scripts/audit-identity-links-live.mjs \
             scripts/generate-identity-migration-evidence.mjs \
             scripts/generate-financial-retention-evidence.mjs \
+            scripts/generate-kvkk-inventory-evidence.mjs \
             scripts/generate-ui-ux-redesign-evidence.mjs \
             scripts/prepare-ui-ux-redesign-staging-artifacts.mjs \
             scripts/run-staging-first-gate-smokes.mjs \
