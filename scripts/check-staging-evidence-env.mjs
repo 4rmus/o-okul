@@ -501,6 +501,7 @@ function checkOutboxVerifyWorkflowContract(output) {
     "scripts/generate-identity-migration-evidence.mjs",
     "scripts/generate-financial-retention-evidence.mjs",
     "scripts/check-prod-evidence.mjs",
+    "scripts/check-staging-release-artifacts.mjs",
     "scripts/smoke-isem-answer-key-live.mjs",
     "scripts/smoke-raw-import-upload-live.mjs",
     "clean: false",
@@ -524,7 +525,7 @@ function checkOutboxVerifyWorkflowContract(output) {
     "staging-outbox-smoke-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}",
     "staging-activation-evidence-${{ env.CUTOVER_SOURCE_SHA }}",
     "staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ inputs.reuse_provider_smoke_run_id }}",
-    "PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX=1",
+    "PRODUCTION_EVIDENCE_ALLOW_STAGING=1",
     "pnpm staging:evidence-env:check -- --mode full --env-file .staging-evidence.env",
     "Bind verified UI/UX completion to full evidence",
     "UI_UX_PROFESSIONALIZATION_FULL_EVIDENCE: \"1\"",
@@ -585,6 +586,9 @@ function checkOutboxVerifyWorkflowContract(output) {
     "FINANCIAL_RETENTION_TARGET=file://$PWD/artifacts/staging/reports/financial-retention.json",
     "SECURITY_AUDIT_TARGET=file://$PWD/artifacts/staging/reports/security-audit.json",
     "Recheck exact images before publishing verification",
+    "Final public health PASS: $path HTTP $status",
+    "Invalidate unverified release summary",
+    "summary.canPromote = false",
     "--reuse-sentry-smoke",
     "--reuse-alert-webhook-smoke",
     "--reuse-wal-smoke",
@@ -656,6 +660,16 @@ function checkOutboxVerifyWorkflowContract(output) {
     "Overlay verifier-only evidence helpers",
     "[ \"$(git rev-parse HEAD)\" = \"$CUTOVER_SOURCE_SHA\" ]",
     "Validate staging verify environment",
+  ]);
+  if ((workflow.match(/scripts\/check-staging-release-artifacts\.mjs/g) ?? []).length !== 2) {
+    output.push("Staging release artifact checker verifier helper stage ve overlay listelerinde tam iki kez bulunmalı.");
+  }
+  requireWorkflowOrder(output, workflow, "final promotion ve başarısız summary sırası", [
+    "Check verified staging release artifact bundle",
+    "Recheck exact images before publishing verification",
+    "Final public health PASS: $path HTTP $status",
+    "Invalidate unverified release summary",
+    "actions/upload-artifact@v4",
   ]);
   requireWorkflowOrder(output, workflow, "full evidence runtime env birleştirme sırası", [
     "Run configured production evidence aggregation",

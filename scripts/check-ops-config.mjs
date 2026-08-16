@@ -1394,7 +1394,7 @@ const expectations = {
     "--reuse-wal-smoke",
     "staging-outbox-smoke-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ inputs.reuse_outbox_smoke_run_id }}",
     "staging-outbox-smoke-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}",
-    "PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX=1",
+    "PRODUCTION_EVIDENCE_ALLOW_STAGING=1",
     "pnpm staging:evidence-env:check -- --mode full --env-file .staging-evidence.env",
     "Bind verified UI/UX completion to full evidence",
     "UI_UX_PROFESSIONALIZATION_FULL_EVIDENCE: \"1\"",

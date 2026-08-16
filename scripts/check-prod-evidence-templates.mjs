@@ -2085,6 +2085,7 @@ runProductionSummaryHttpTargetNegativeCheck();
 runProductionSummarySecretUrlTargetNegativeCheck();
 runProductionSummarySymlinkParentTargetNegativeCheck();
 runStagingOutboxProductionSummaryModeChecks();
+runStagingProductionSummaryModeChecks();
 runProductionSummaryNegativeCheck({
   label: "Production summary extra check negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-check.tmp.json",
@@ -3441,6 +3442,51 @@ function runStagingOutboxProductionSummaryModeChecks() {
     });
     if (accepted.status !== 0) {
       console.error("Production evidence template kontrolü başarısız: explicit staging outbox summary modu geçmeli.");
+      console.error(accepted.stdout);
+      console.error(accepted.stderr);
+      process.exit(accepted.status ?? 1);
+    }
+  } finally {
+    try {
+      unlinkSync(path);
+    } catch {
+      // Ignore cleanup errors; the contract result above is the actionable signal.
+    }
+  }
+}
+
+function runStagingProductionSummaryModeChecks() {
+  const path = "docs/evidence-templates/production-evidence-summary.staging.tmp.json";
+  const fixture = structuredClone(productionSummaryFixture);
+  for (const smoke of Object.values(fixture.smokeEvidence)) smoke.environment = "staging";
+  for (const [key, report] of Object.entries(fixture.reports)) {
+    if (key !== "githubCi") report.environment = "staging";
+  }
+  writeFileSync(path, `${JSON.stringify(fixture, null, 2)}\n`);
+
+  try {
+    const baseEnv = {
+      ...process.env,
+      PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE: "1",
+      PRODUCTION_EVIDENCE_SUMMARY_TARGET: pathToFileURL(path).href,
+    };
+    const rejected = spawnSync(process.execPath, ["scripts/check-production-evidence-summary.mjs"], {
+      env: baseEnv,
+      encoding: "utf8",
+    });
+    const rejectedOutput = `${rejected.stdout ?? ""}${rejected.stderr ?? ""}`;
+    if (rejected.status === 0 || !rejectedOutput.includes("smokeEvidence.traefikHttps.environment production olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: staging summary explicit mod olmadan kırılmalı.");
+      console.error(rejectedOutput);
+      process.exit(1);
+    }
+
+    const accepted = spawnSync(process.execPath, ["scripts/check-production-evidence-summary.mjs"], {
+      env: { ...baseEnv, PRODUCTION_EVIDENCE_ALLOW_STAGING: "1" },
+      encoding: "utf8",
+    });
+    if (accepted.status !== 0) {
+      console.error("Production evidence template kontrolü başarısız: explicit staging summary modu geçmeli.");
       console.error(accepted.stdout);
       console.error(accepted.stderr);
       process.exit(accepted.status ?? 1);

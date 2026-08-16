@@ -119,9 +119,9 @@ pnpm backup:restore:smoke
   Recipient, token, URL, source ID veya şifreli payload artifact'a yazılamaz; ardından
   `pnpm secret-delivery-outbox:evidence:check` ile doğrulanır. Bu DB rolü/delivery-state kanıtı,
   gerçek inbox-provider teslimatı ile KVKK/DPA kanıtının yerine geçmez; bunlar ayrı live gate'tir.
-  Staging verify summary'sinde bu smoke `environment=staging` kalır ve yalnız
-  `PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX=1` ile kabul edilir; production/go-live zinciri bu
-  istisnayı kullanamaz.
+  Staging verify summary'sinde kanıtların gerçek `environment=staging` etiketi korunur ve yalnız
+  `PRODUCTION_EVIDENCE_ALLOW_STAGING=1` ile kabul edilir; production/go-live zinciri bu
+  staging-bundle modunu kullanamaz.
 - Ortak smoke evidence preflight/writer, `*_SMOKE_EVIDENCE_FILE`/`SMOKE_EVIDENCE_FILE`
   çıktılarının lokal temp path (`/tmp`, `/var/tmp`) altında veya symlink file/parent directory
   üzerinden yazılmasını reddeder; writer ayrıca payload'u yazmadan önce smoke tipine özgü schema ile
@@ -985,7 +985,8 @@ pnpm backup:restore:smoke
   `STAGING_RELEASE_ARTIFACTS_TARGET=/path/to/artifacts/staging pnpm staging:release-artifacts:check`
   komutu `reports/deployment-cutover.json`, diğer `reports/*.json`, first-gates manifest'i, tek
   `release-summary-*.json` dosyası ve `smoke/*.json` ham kanıtlarının, `smoke/report-generation.json`
-  dahil, mevcut checker'lardan geçtiğini doğrular. Cutover SHA/repository/tag/zamanı summary ile outbox
+  dahil, mevcut checker'lardan geçtiğini doğrular. Bu staging-bundle kapısı summary checker'ı açık
+  staging modunda çalıştırır; artifact ortam etiketlerini production olarak yeniden yazmaz. Cutover SHA/repository/tag/zamanı summary ile outbox
   smoke'a bağlanır; verify artifact publish edilmeden dört çalışan servis tag'i yeniden kontrol edilir.
   `release-summary-<tag>.json` dosya adındaki tag summary içindeki
   `reports.deploymentRollback.releaseCandidate` image tag'iyle eşleşmelidir; bundle yalnız beklenen

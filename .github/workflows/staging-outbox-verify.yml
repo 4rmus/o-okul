@@ -171,6 +171,7 @@ jobs:
             apps/web/e2e-next/ui-visual-qa-next.spec.ts \
             scripts/check-prod-evidence.mjs \
             scripts/check-production-evidence-summary.mjs \
+            scripts/check-staging-release-artifacts.mjs \
             scripts/check-staging-evidence-env.mjs \
             scripts/check-ui-ux-redesign-evidence.mjs \
             scripts/audit-identity-links-live.mjs \
@@ -204,6 +205,7 @@ jobs:
             apps/web/e2e-next/ui-visual-qa-next.spec.ts \
             scripts/check-prod-evidence.mjs \
             scripts/check-production-evidence-summary.mjs \
+            scripts/check-staging-release-artifacts.mjs \
             scripts/check-staging-evidence-env.mjs \
             scripts/check-ui-ux-redesign-evidence.mjs \
             scripts/audit-identity-links-live.mjs \
@@ -1118,7 +1120,7 @@ jobs:
           if [ -n "$REUSE_AGGREGATE_SMOKE_RUN_ID" ]; then
             aggregate_reuse_args=(--reuse-report-generation-smoke)
           fi
-          PRODUCTION_EVIDENCE_ALLOW_STAGING_UI_UX=1 PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX=1 UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES=1 \
+          PRODUCTION_EVIDENCE_ALLOW_STAGING=1 UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES=1 \
             pnpm prod:evidence:check -- --env-file .staging-evidence.env --summary-file "artifacts/staging/release-summary-$CUTOVER_RELEASE_IMAGE_TAG.json" \
               --reuse-notification-smoke --reuse-wal-smoke "${provider_reuse_args[@]}" "${aggregate_reuse_args[@]}"
           STAGING_ENVIRONMENT=staging NODE_ENV=production pnpm staging:first-gates:smoke -- \
@@ -1172,7 +1174,30 @@ jobs:
           require_running_image api "$expected_prefix/api:$RELEASE_IMAGE_TAG"
           require_running_image worker "$expected_prefix/worker:$RELEASE_IMAGE_TAG"
           require_running_image queue-board "$expected_prefix/queue-board:$RELEASE_IMAGE_TAG"
+          for path in /health /health/ready; do
+            status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 10 "https://o-okul.com$path")"
+            [ "$status" = 200 ]
+            echo "Final public health PASS: $path HTTP $status"
+          done
           REMOTE
+
+      - name: Invalidate unverified release summary
+        if: ${{ failure() && inputs.full_evidence }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          summaries=(artifacts/staging/release-summary-*.json)
+          for summary in "${summaries[@]}"; do
+            node --input-type=module - "$summary" <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          const path = process.argv[2];
+          const summary = JSON.parse(readFileSync(path, "utf8"));
+          summary.result = "FAIL";
+          summary.canPromote = false;
+          writeFileSync(path, `${JSON.stringify(summary, null, 2)}\n`, { mode: 0o600 });
+          NODE
+          done
 
       - name: Remove private outbox verification material
         if: ${{ always() }}

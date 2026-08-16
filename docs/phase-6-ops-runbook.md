@@ -1093,9 +1093,9 @@ Beklenen akış:
   Verify workflow sanitize edilmiş outbox artifact'ini toplar ve ardından GitHub runner doğrulanmış
   production evidence env sözleşmesiyle
   `pnpm prod:evidence:check -- --summary-file artifacts/staging/release-summary-<tag>.json`
-  komutunu çalıştırır. Yalnız bu staging verify akışı `PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX=1`
-  ile outbox smoke'un `environment=staging` kaydını kabul eder; production/go-live çalışmaları bu
-  istisnayı taşımaz. Bu komut release summary dosyasını yazdıktan sonra aynı summary'yi
+  komutunu çalıştırır. Yalnız bu staging verify akışı `PRODUCTION_EVIDENCE_ALLOW_STAGING=1`
+  ile staging rapor/smoke'larının gerçek `environment=staging` kaydını kabul eder; production/go-live
+  çalışmaları bu modu taşımaz. Bu komut release summary dosyasını yazdıktan sonra aynı summary'yi
   `scripts/check-production-evidence-summary.mjs` ile doğrular; yalnız tüm zorunlu kanıtlar PASS ise
   summary `canPromote=true` taşır ve `artifacts/staging`
   klasörünü artifact olarak saklar. Aynı source SHA, GitHub CI ve UI/UX artifact'i ile
@@ -1121,10 +1121,12 @@ Beklenen akış:
   `staging-outbox-verify-<deploy-run-id>-<verify-run-id>` artifact setinde `reports/deployment-cutover.json`,
   diğer `reports/*.json`, `first-gates/first-gates-manifest.json`, tek `release-summary-*.json` ve
   `smoke/*.json` ham kanıt dosyalarının mevcut olduğunu doğrular. Cutover SHA/repository/tag/zamanı release
-  summary ve outbox smoke ile birebir eşleşmelidir; publish öncesinde dört çalışan image tag'i tekrar
+  summary ve outbox smoke ile birebir eşleşmelidir; staging-bundle checker artifact ortamlarını
+  production olarak yeniden etiketlemeden açık staging modunda doğrular; publish öncesinde dört çalışan image tag'i tekrar
   denetlenir. `release-summary-<tag>.json`
   dosya adındaki tag, summary içindeki `reports.deploymentRollback.releaseCandidate` image tag'iyle
-  eşleşmelidir. Bundle yalnız beklenen root, `reports/`, `smoke/` ve `first-gates/` dosyalarını
+  eşleşmelidir. Bundle yalnız beklenen root, `reports/`, `smoke/`, `first-gates/` ve hash manifestine
+  bağlı `ui-ux-redesign/` dosyalarını
   içerebilir; beklenmeyen raw JSON/log dosyası kalırsa kontrol kırılır. Bundle symlink içeremez;
   beklenen artifact'ler symlink olmayan dosya/dizin olmalıdır. `STAGING_RELEASE_ARTIFACTS_TARGET`
   parent-symlink target üzerinden verilemez; hedef path'in parent zincirinde symlink varsa veya hedef `/tmp`/`/var/tmp` altında kalıyorsa kontrol kırılır. Bundle `.staging-evidence.env`,

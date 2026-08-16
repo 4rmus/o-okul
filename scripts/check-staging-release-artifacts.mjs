@@ -678,7 +678,7 @@ if (failures.length === 0) {
   });
   runChecker("scripts/check-production-evidence-summary.mjs", {
     PRODUCTION_EVIDENCE_SUMMARY_TARGET: pathToFileURL(releaseSummaryFiles[0]).href,
-    PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX: "1",
+    PRODUCTION_EVIDENCE_ALLOW_STAGING: "1",
     ...(allowExampleEvidence ? { PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE: "1" } : {}),
   });
 }
