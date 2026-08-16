@@ -9,6 +9,7 @@ const prodEvidenceScriptPath = "scripts/check-prod-evidence.mjs";
 const workflowPath = process.env.STAGING_DEPLOY_WORKFLOW_PATH ?? ".github/workflows/staging-deploy.yml";
 const outboxVerifyWorkflowPath = ".github/workflows/staging-outbox-verify.yml";
 const adminMfaGeneratorPath = "scripts/generate-admin-mfa-evidence.mjs";
+const auditNullTenantGeneratorPath = "scripts/generate-audit-null-tenant-evidence.mjs";
 const identityMigrationGeneratorPath = "scripts/generate-identity-migration-evidence.mjs";
 const financialRetentionGeneratorPath = "scripts/generate-financial-retention-evidence.mjs";
 
@@ -700,6 +701,12 @@ function checkOutboxVerifyWorkflowContract(output) {
   if (!adminMfaGenerator.includes('["DATABASE_URL", "DIRECT_DATABASE_URL", "ADMIN_MFA_MODE", "IDEMPOTENCY_STORE", "QUEUE_PREFIX"]')) {
     output.push(`${adminMfaGeneratorPath} hedefli test child env'inden ADMIN_MFA_MODE değerini kaldırmalı.`);
   }
+  const auditNullTenantGenerator = readFileSync(auditNullTenantGeneratorPath, "utf8");
+  requireWorkflowOrder(output, auditNullTenantGenerator, "audit null-tenant deleted marker önceliği", [
+    'WHEN COALESCE(audit."diff" ? \'deletedTenantIdHash\', false) THEN \'DELETED_TENANT\'',
+    'WHEN audit."action" LIKE \'system.%\'',
+    'WHEN audit."actorUserId" IS NOT NULL',
+  ]);
   const uatGenerator = readFileSync("scripts/generate-uat-evidence.mjs", "utf8");
   for (const token of [
     "UAT_GITHUB_CI_EVIDENCE_TARGET",

@@ -9,9 +9,9 @@ const environment = process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "
 const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? process.env.DATABASE_URL;
 const evidenceReference = process.env.AUDIT_NULL_TENANT_EVIDENCE_REFERENCE?.trim();
 const systemClassificationRule =
-  "tenantId IS NULL AND (system action prefix OR actor user belongs to system tenant)";
+  "tenantId IS NULL AND no deletedTenantIdHash AND (system action prefix OR actor user belongs to system tenant)";
 const deletedTenantClassificationRule =
-  "tenantId IS NULL AND not system AND (diff.deletedTenantIdHash exists OR actorUserId no longer exists)";
+  "tenantId IS NULL AND (diff.deletedTenantIdHash exists OR (not system AND actorUserId no longer exists))";
 const unknownClassificationRule = "tenantId IS NULL AND no system/deletedTenant rule matched";
 const failures = [];
 
@@ -37,6 +37,7 @@ try {
            audit."tenantId",
            CASE
              WHEN audit."tenantId" IS NOT NULL THEN 'TENANT'
+             WHEN COALESCE(audit."diff" ? 'deletedTenantIdHash', false) THEN 'DELETED_TENANT'
              WHEN audit."action" LIKE 'system.%'
                OR audit."action" LIKE 'auth.system_%'
                OR EXISTS (
@@ -45,14 +46,11 @@ try {
                  WHERE actor."id" = audit."actorUserId"
                    AND actor."tenantId" = 'system'
                ) THEN 'SYSTEM'
-             WHEN COALESCE(audit."diff" ? 'deletedTenantIdHash', false)
-               OR (
-                 audit."actorUserId" IS NOT NULL
-                 AND NOT EXISTS (
-                   SELECT 1
-                   FROM "User" actor
-                   WHERE actor."id" = audit."actorUserId"
-                 )
+             WHEN audit."actorUserId" IS NOT NULL
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM "User" actor
+                 WHERE actor."id" = audit."actorUserId"
                ) THEN 'DELETED_TENANT'
              ELSE 'UNKNOWN'
            END AS classification

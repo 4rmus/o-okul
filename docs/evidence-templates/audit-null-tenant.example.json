@@ -9,11 +9,11 @@
     "nullTenantBreakdown": {
       "system": {
         "count": 5,
-        "classificationRule": "tenantId IS NULL AND (system action prefix OR actor user belongs to system tenant)"
+        "classificationRule": "tenantId IS NULL AND no deletedTenantIdHash AND (system action prefix OR actor user belongs to system tenant)"
       },
       "deletedTenant": {
         "count": 3,
-        "classificationRule": "tenantId IS NULL AND not system AND (diff.deletedTenantIdHash exists OR actorUserId no longer exists)"
+        "classificationRule": "tenantId IS NULL AND (diff.deletedTenantIdHash exists OR (not system AND actorUserId no longer exists))"
       },
       "unknown": {
         "count": 0,

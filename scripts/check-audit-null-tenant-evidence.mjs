@@ -19,8 +19,8 @@ const auditNullTenantKeys = ["totalRows", "tenantRows", "nullTenantRows", "nullT
 const breakdownKeys = ["system", "deletedTenant", "unknown"];
 const breakdownItemKeys = ["count", "classificationRule"];
 const classificationRules = {
-  system: "tenantId IS NULL AND (system action prefix OR actor user belongs to system tenant)",
-  deletedTenant: "tenantId IS NULL AND not system AND (diff.deletedTenantIdHash exists OR actorUserId no longer exists)",
+  system: "tenantId IS NULL AND no deletedTenantIdHash AND (system action prefix OR actor user belongs to system tenant)",
+  deletedTenant: "tenantId IS NULL AND (diff.deletedTenantIdHash exists OR (not system AND actorUserId no longer exists))",
   unknown: "tenantId IS NULL AND no system/deletedTenant rule matched",
 };
 

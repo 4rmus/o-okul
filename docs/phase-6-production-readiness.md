@@ -908,8 +908,8 @@ pnpm backup:restore:smoke
 - Audit null tenant sınıflandırması `AUDIT_NULL_TENANT_EVIDENCE_TARGET` üzerinden ayrıca
   doğrulanır; staging evidence secret bu target'ı içermek zorundadır ve `unknown.count` sıfır
   değilse release kanıtı geçmez. Sistem satırları action prefix'ine veya halen `system` tenant'ına
-  bağlı actor'a göre; silinmiş tenant satırları `deletedTenantIdHash` işaretine veya artık bulunmayan
-  actor bağına göre açıkça ayrılır. Gate E sentetik tenant cleanup'ları silmeden önce audit diff'ine
+  bağlı actor'a göre; silinmiş tenant satırları önce kesin `deletedTenantIdHash` işaretine, işaret yoksa
+  sistem olmayan ve artık bulunmayan actor bağına göre açıkça ayrılır. Gate E sentetik tenant cleanup'ları silmeden önce audit diff'ine
   tenant hash'i ve verifier run ID'si yazar; audit-null artifact'i onboarding ve iSEM cleanup'larından
   sonra yeniden üretilir.
 - Kimlik göç kanıtı: öğrenci/veli/öğretmen user bağları, tenant membership ve negatif erişim

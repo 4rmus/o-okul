@@ -1569,7 +1569,7 @@ runAuditNullTenantNegativeCheck({
 runAuditNullTenantNegativeCheck({
   label: "Audit null tenant classification rule mismatch negative",
   path: "docs/evidence-templates/audit-null-tenant.classification-rule.tmp.json",
-  expectedFailure: "auditNullTenant.nullTenantBreakdown.deletedTenant.classificationRule tenantId IS NULL AND not system AND (diff.deletedTenantIdHash exists OR actorUserId no longer exists) olmali.",
+  expectedFailure: "auditNullTenant.nullTenantBreakdown.deletedTenant.classificationRule tenantId IS NULL AND (diff.deletedTenantIdHash exists OR (not system AND actorUserId no longer exists)) olmali.",
   mutate: (fixture) => {
     fixture.auditNullTenant.nullTenantBreakdown.deletedTenant.classificationRule = "tenantId IS NULL";
   },
