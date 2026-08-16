@@ -160,6 +160,9 @@ function runCommand(command) {
     QUEUE_METRICS_ENABLED: "false",
     REDIS_URL: "redis://127.0.0.1:1",
     REPORT_PDF_RENDERER: "memory",
+    UPLOAD_AV_SCANNER: "disabled",
+    SUPPORT_ATTACHMENT_STORAGE: "inline",
+    HOMEWORK_MATERIAL_FILE_STORAGE: "inline",
   };
   for (const key of ["DATABASE_URL", "DIRECT_DATABASE_URL", "ADMIN_MFA_MODE", "IDEMPOTENCY_STORE", "QUEUE_PREFIX"]) {
     delete testEnv[key];
