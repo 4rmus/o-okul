@@ -576,8 +576,16 @@ jobs:
           [ "$(grep -Ec '^UI_UX_REDESIGN_APPROVED_AT=' .staging-evidence.env)" -eq 1 ]
           sed -i "s#^UI_UX_REDESIGN_APPROVED_AT=.*#UI_UX_REDESIGN_APPROVED_AT=$UI_UX_APPROVED_AT_INPUT#" .staging-evidence.env
           grep -Fxq "UI_UX_REDESIGN_APPROVED_AT=$UI_UX_APPROVED_AT_INPUT" .staging-evidence.env
+          grep -Fq 'Array.from({ length: 8 }, () => createRecoveryCode())' apps/api/src/auth/totp-mfa.ts
           sed -i 's/^ADMIN_MFA_MODE=.*/ADMIN_MFA_MODE=required/' .staging-evidence.env
           grep -Fxq 'ADMIN_MFA_MODE=required' .staging-evidence.env
+          if grep -q '^ADMIN_MFA_RECOVERY_CODES_PER_ENROLLMENT=' .staging-evidence.env; then
+            sed -i 's/^ADMIN_MFA_RECOVERY_CODES_PER_ENROLLMENT=.*/ADMIN_MFA_RECOVERY_CODES_PER_ENROLLMENT=8/' .staging-evidence.env
+          else
+            printf '\nADMIN_MFA_RECOVERY_CODES_PER_ENROLLMENT=8\n' >> .staging-evidence.env
+          fi
+          [ "$(grep -Ec '^ADMIN_MFA_RECOVERY_CODES_PER_ENROLLMENT=' .staging-evidence.env)" -eq 1 ]
+          grep -Fxq 'ADMIN_MFA_RECOVERY_CODES_PER_ENROLLMENT=8' .staging-evidence.env
           if grep -q '^NOTIFICATION_SMOKE_PUSH_TO=' .staging-evidence.env; then
             sed -i 's/^NOTIFICATION_SMOKE_PUSH_TO=.*/NOTIFICATION_SMOKE_PUSH_TO=/' .staging-evidence.env
           else
