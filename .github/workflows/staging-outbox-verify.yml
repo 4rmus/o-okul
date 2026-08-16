@@ -409,7 +409,7 @@ jobs:
           node --input-type=module <<'NODE'
           import { createHash } from "node:crypto";
           import { lstatSync, readFileSync, readdirSync } from "node:fs";
-          import { isAbsolute, normalize, relative, resolve } from "node:path";
+          import { dirname, isAbsolute, normalize, relative, resolve } from "node:path";
 
           const archiveRoot = resolve("artifacts/local");
           const archiveRootStat = lstatSync(archiveRoot);
@@ -418,6 +418,8 @@ jobs:
           for (const entry of readdirSync(archiveRoot, { withFileTypes: true })) {
             if (!entry.isDirectory() || !entry.name.startsWith("staging-release-unexpected-")) continue;
             const archiveDir = resolve(archiveRoot, entry.name);
+            const archiveDirStat = lstatSync(archiveDir);
+            if (archiveDirStat.isSymbolicLink() || !archiveDirStat.isDirectory()) continue;
             const manifestPath = resolve(archiveDir, "manifest.json");
             let manifestText;
             try {
@@ -429,8 +431,10 @@ jobs:
             }
             const manifest = JSON.parse(manifestText);
             if (
+              Object.keys(manifest).sort().join(",") !== "archivedAt,artifactsTarget,entries,gapReportFile,result" ||
               manifest.result !== "ARCHIVED_UNEXPECTED_STAGING_RELEASE_ARTIFACTS" ||
               manifest.artifactsTarget !== "artifacts/staging" ||
+              manifest.gapReportFile !== "artifacts/local/staging-release-gap-report.json" ||
               typeof manifest.archivedAt !== "string" ||
               Number.isNaN(Date.parse(manifest.archivedAt)) ||
               !Array.isArray(manifest.entries) ||
@@ -445,14 +449,61 @@ jobs:
                 archived.path === "" ||
                 isAbsolute(archived.path) ||
                 normalize(archived.path) !== archived.path ||
+                normalize(archived.path) === "." ||
+                normalize(archived.path).startsWith("..") ||
                 paths.has(archived.path)
               ) throw new Error("Unexpected artifact archive manifest entry geçersiz.");
               paths.add(archived.path);
               const expectedPath = resolve(archiveDir, archived.path);
+              const expectedRelative = relative(archiveDir, expectedPath);
+              if (!expectedRelative || expectedRelative.startsWith("..") || isAbsolute(expectedRelative)) {
+                throw new Error("Unexpected artifact archive path bundle dışına çıkamaz.");
+              }
+              let parentPath = archiveDir;
+              for (const segment of dirname(archived.path).split(/[\\/]+/u)) {
+                if (!segment || segment === ".") continue;
+                parentPath = resolve(parentPath, segment);
+                const parentStat = lstatSync(parentPath);
+                if (parentStat.isSymbolicLink() || !parentStat.isDirectory()) {
+                  throw new Error("Unexpected artifact archive parent dizini plain olmalı.");
+                }
+              }
               if (resolve(archived.archivedTo) !== expectedPath) throw new Error("Unexpected artifact archive hedef bağı geçersiz.");
               const archivedStat = lstatSync(expectedPath);
               if (archivedStat.isSymbolicLink() || !archivedStat.isFile()) throw new Error("Unexpected artifact arşiv dosyası plain file olmalı.");
             }
+            const expectedFiles = new Set(["manifest.json", ...paths]);
+            const expectedDirectories = new Set();
+            for (const archivedPath of paths) {
+              let parent = dirname(archivedPath);
+              while (parent !== ".") {
+                expectedDirectories.add(parent);
+                parent = dirname(parent);
+              }
+            }
+            const actualFiles = new Set();
+            const actualDirectories = new Set();
+            const scanDirectory = (directory) => {
+              for (const child of readdirSync(directory)) {
+                const childPath = resolve(directory, child);
+                const childRelative = relative(archiveDir, childPath);
+                if (!childRelative || childRelative.startsWith("..") || isAbsolute(childRelative)) {
+                  throw new Error("Unexpected artifact archive içeriği bundle dışına çıkamaz.");
+                }
+                const childStat = lstatSync(childPath);
+                if (childStat.isSymbolicLink()) throw new Error("Unexpected artifact archive içeriği symlink olamaz.");
+                if (childStat.isFile()) actualFiles.add(childRelative);
+                else if (childStat.isDirectory()) {
+                  actualDirectories.add(childRelative);
+                  scanDirectory(childPath);
+                } else throw new Error("Unexpected artifact archive içeriği plain file veya dizin olmalı.");
+              }
+            };
+            scanDirectory(archiveDir);
+            if (
+              [...actualFiles].sort().join("\n") !== [...expectedFiles].sort().join("\n") ||
+              [...actualDirectories].sort().join("\n") !== [...expectedDirectories].sort().join("\n")
+            ) throw new Error("Unexpected artifact archive içeriği manifest ile birebir eşleşmeli.");
             archives.push({
               archiveDir: relative(resolve("."), archiveDir),
               archivedAt: manifest.archivedAt,
