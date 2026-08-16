@@ -229,7 +229,9 @@ pnpm backup:restore:smoke
   dört dosya overlay edilir. `git HEAD` deploy SHA'da kalır; servis, cutover, CI ve final release artifact
   bağları verifier commit'ine değil çalışan release SHA'sına yazılır. Exact checkout'ta build artifact'i
   bulunmayabileceği için identity/financial E2E kanıtlarından önce API'nin runtime import ettiği shared-types,
-  DB, SMS adapter ve notification adapter paketleri yeniden build edilir.
+  DB, SMS adapter ve notification adapter paketleri yeniden build edilir. Güvenlik denetimi artık yaşamayan
+  bir public evidence URL'sine güvenmez; staging host'taki symlink olmayan gerçek `rls-live.json` artifact'ini
+  runner bundle'ına kopyalar, ham RLS checker'dan geçirir ve security-audit referansını bu dosyaya bağlar.
   `pnpm staging:evidence-env:secret:set` varsayılan olarak aynı tam doğrulamayı çalıştırır;
   yalnız normal cutover secret senkronu için açıkça `--mode activation` verilebilir. Helper repo/temp/symlink
   dosyalarını reddeder ve `STAGING_EVIDENCE_ENV_B64` değerini GitHub environment secret'a stdin üzerinden yazar.
