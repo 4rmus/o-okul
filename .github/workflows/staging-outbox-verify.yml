@@ -181,6 +181,8 @@ jobs:
             scripts/prepare-ui-ux-redesign-staging-artifacts.mjs \
             scripts/run-staging-first-gate-smokes.mjs \
             scripts/migrate-identity-links-live.mjs \
+            scripts/smoke-isem-answer-key-live.mjs \
+            scripts/smoke-raw-import-upload-live.mjs \
             scripts/smoke-report-generation-live.mjs; do
             [ -f "$relative" ] && [ ! -L "$relative" ]
             install -D -m 600 "$relative" "$verifier_root/$relative"
@@ -212,6 +214,8 @@ jobs:
             scripts/prepare-ui-ux-redesign-staging-artifacts.mjs \
             scripts/run-staging-first-gate-smokes.mjs \
             scripts/migrate-identity-links-live.mjs \
+            scripts/smoke-isem-answer-key-live.mjs \
+            scripts/smoke-raw-import-upload-live.mjs \
             scripts/smoke-report-generation-live.mjs; do
             source_file="$verifier_root/$relative"
             [ -f "$source_file" ] && [ ! -L "$source_file" ]

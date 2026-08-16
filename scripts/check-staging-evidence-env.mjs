@@ -501,6 +501,8 @@ function checkOutboxVerifyWorkflowContract(output) {
     "scripts/generate-identity-migration-evidence.mjs",
     "scripts/generate-financial-retention-evidence.mjs",
     "scripts/check-prod-evidence.mjs",
+    "scripts/smoke-isem-answer-key-live.mjs",
+    "scripts/smoke-raw-import-upload-live.mjs",
     "clean: false",
     "Overlay verifier-only evidence helpers",
     "Validate staging verify environment",
@@ -605,6 +607,24 @@ function checkOutboxVerifyWorkflowContract(output) {
   }
   if (workflow.split("scripts/prepare-ui-ux-redesign-staging-artifacts.mjs").length - 1 !== 3) {
     output.push(`${outboxVerifyWorkflowPath} UI/UX hazırlayıcıyı iki helper overlay ve bir execution bağıyla taşımalı.`);
+  }
+  for (const helper of ["scripts/smoke-isem-answer-key-live.mjs", "scripts/smoke-raw-import-upload-live.mjs"]) {
+    if (workflow.split(helper).length - 1 !== 2) {
+      output.push(`${outboxVerifyWorkflowPath} ${helper} iki verifier helper listesinde de taşınmalı.`);
+    }
+    const source = readFileSync(helper, "utf8");
+    for (const token of [
+      "process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? \"unknown\"",
+      "resolveSmokePassword(process.env.ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD)",
+      '["staging", "production"].includes(environment.toLowerCase())',
+      "configuredPassword.length < 16",
+      "/password|qwerty|12345678|admin123/i",
+    ]) {
+      if (!source.includes(token)) output.push(`${helper} release smoke parola sözleşmesi eksik: ${token}`);
+    }
+    if (source.includes('const smokePassword = "password"')) {
+      output.push(`${helper} release smoke için sabit varsayılan parola kullanmamalı.`);
+    }
   }
   requireWorkflowOrder(output, workflow, "outbox source claim ve cleanup sırası", [
     "Bind selected deployment run to cutover source",

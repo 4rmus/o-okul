@@ -16,7 +16,8 @@ const userId = `user-isem-answer-key-smoke-${runId}`;
 const membershipId = `membership-isem-answer-key-smoke-${runId}`;
 const examId = `exam-isem-answer-key-smoke-${runId}`;
 const smokeEmail = `isem-answer-key-smoke-${runId}@example.test`;
-const smokePassword = "password";
+const environment = process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "unknown";
+const smokePassword = resolveSmokePassword(process.env.ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD);
 const answerKeyVersion = "isem-lgs-1-v1";
 const answerKeyFilePath = "ornek-veriler/iSEM - LGS - 1 Detaylı Cevap Anahtarı.xlsx";
 const expectedBranches = new Map([
@@ -122,6 +123,27 @@ async function seedTenantAndExam() {
     client.release();
     await pool.end();
   }
+}
+
+function resolveSmokePassword(configuredPassword) {
+  const liveEnvironment = ["staging", "production"].includes(environment.toLowerCase());
+  if (!configuredPassword && !liveEnvironment) return "password";
+  if (!configuredPassword) {
+    throw new Error("ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD staging/production için açıkça verilmelidir.");
+  }
+  if (
+    configuredPassword.length < 16 ||
+    !/[a-z]/.test(configuredPassword) ||
+    !/[A-Z]/.test(configuredPassword) ||
+    !/[0-9]/.test(configuredPassword) ||
+    !/[^A-Za-z0-9]/.test(configuredPassword) ||
+    /password|qwerty|12345678|admin123/i.test(configuredPassword)
+  ) {
+    throw new Error(
+      "ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD en az 16 karakter, büyük/küçük harf, rakam ve sembol içeren güçlü bir secret olmalıdır.",
+    );
+  }
+  return configuredPassword;
 }
 
 async function login(baseUrl) {
