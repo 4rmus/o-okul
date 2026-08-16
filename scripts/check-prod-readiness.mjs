@@ -2035,6 +2035,8 @@ const expectations = {
     "emailHash",
     "queuedJobIdHash",
     "generationDurationMsMax",
+    `INSERT INTO "User" ("id", "tenantId", "email"`,
+    `SET "tenantId" = EXCLUDED."tenantId"`,
     "password",
     "ReportGeneration live smoke passed",
   ],
