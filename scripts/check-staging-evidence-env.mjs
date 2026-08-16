@@ -583,6 +583,12 @@ function checkOutboxVerifyWorkflowContract(output) {
     "LIVE_ONBOARDING_RESULT_TARGET=\"file://$PWD/artifacts/staging/reports/live-onboarding.json\"",
     "pnpm live:onboarding:result-check",
     "Gate E sentetik tenant/session temizliği geçti",
+    "RATE_LIMIT_LOGIN_SMOKE_TENANT_ID",
+    "RATE_LIMIT_LOGIN_SMOKE_LOGIN_NAME",
+    "redis_cleanup_keys=()",
+    "auth:login-attempt:$attempt_key:failures",
+    "auth:login-attempt:$attempt_key:lock",
+    "redis-cli EXISTS \"$cleanup_key\"",
     "UAT_SOURCE_SHA=\"$CUTOVER_SOURCE_SHA\"",
     "UAT_VERIFIER_RUN_URL=\"$verifier_run_url\"",
     "UAT_GITHUB_CI_RUN_URL=\"$github_ci_run_url\"",
@@ -649,6 +655,18 @@ function checkOutboxVerifyWorkflowContract(output) {
   if (workflow.split("scripts/prepare-ui-ux-redesign-staging-artifacts.mjs").length - 1 !== 3) {
     output.push(`${outboxVerifyWorkflowPath} UI/UX hazırlayıcıyı iki helper overlay ve bir execution bağıyla taşımalı.`);
   }
+  requireWorkflowOrder(output, workflow, "rate-limit sentetik state cleanup sırası", [
+    'rate_limit_login_name="rate-limit-smoke-$GITHUB_RUN_ID"',
+    "redis_cleanup_keys=()",
+    'redis-cli DEL "${redis_cleanup_keys[@]}"',
+    'redis-cli EXISTS "$cleanup_key"',
+    'rm -sf api-rate-limit-shard',
+    "trap cleanup EXIT",
+    'redis_cleanup_keys=("$rate_key" "$other_rate_key")',
+    'redis_cleanup_keys+=("auth:login-attempt:$attempt_key:failures" "auth:login-attempt:$attempt_key:lock")',
+    'RATE_LIMIT_LOGIN_SMOKE_LOGIN_NAME="$RATE_LIMIT_LOGIN_SMOKE_LOGIN_NAME"',
+    "node --env-file=.env scripts/smoke-rate-limit-live.mjs",
+  ]);
   for (const helper of ["scripts/smoke-isem-answer-key-live.mjs", "scripts/smoke-raw-import-upload-live.mjs"]) {
     if (workflow.split(helper).length - 1 !== 2) {
       output.push(`${outboxVerifyWorkflowPath} ${helper} iki verifier helper listesinde de taşınmalı.`);

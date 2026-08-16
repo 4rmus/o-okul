@@ -1226,10 +1226,12 @@ jobs:
             LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET="file://$PWD/artifacts/staging/reports/live-ui-worker-result.json" \
               pnpm live:ui-worker:result-check
             rate_limit_tenant_slug="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).tenantSlug' "$private_ui_file")"
-            [[ "$rate_limit_tenant_slug" =~ ^[a-z0-9-]{1,120}$ ]]
+            [[ "$rate_limit_tenant_slug" =~ ^isem-optical-smoke-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
+            rate_limit_tenant_id="tenant-$rate_limit_tenant_slug"
+            rate_limit_login_name="rate-limit-smoke-$GITHUB_RUN_ID"
             rate_limit_remote=/root/o-okul/artifacts/staging/smoke/rate-limit.json
             ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
-              "RATE_LIMIT_LOGIN_SMOKE_TENANT_SLUG='$rate_limit_tenant_slug' GATE_E_EVIDENCE_ENVIRONMENT='$gate_e_evidence_environment' GITHUB_REPOSITORY='$GITHUB_REPOSITORY' GITHUB_RUN_ID='$GITHUB_RUN_ID' bash -se" <<'REMOTE'
+              "RATE_LIMIT_LOGIN_SMOKE_TENANT_SLUG='$rate_limit_tenant_slug' RATE_LIMIT_LOGIN_SMOKE_TENANT_ID='$rate_limit_tenant_id' RATE_LIMIT_LOGIN_SMOKE_LOGIN_NAME='$rate_limit_login_name' GATE_E_EVIDENCE_ENVIRONMENT='$gate_e_evidence_environment' GITHUB_REPOSITORY='$GITHUB_REPOSITORY' GITHUB_RUN_ID='$GITHUB_RUN_ID' bash -se" <<'REMOTE'
           set -euo pipefail
           cd /root/o-okul
           compose=(docker compose --env-file .env --env-file .env.release -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.traefik.yml -f docker-compose.rate-limit-shard.yml)
@@ -1237,8 +1239,21 @@ jobs:
             echo "api-rate-limit-shard zaten çalışıyor; verifier sahipliğini kanıtlayamıyor." >&2
             exit 1
           }
+          redis_cleanup_keys=()
           cleanup() {
-            "${compose[@]}" rm -sf api-rate-limit-shard >/dev/null 2>&1 || true
+            original_status=$?
+            trap - EXIT
+            set +e
+            cleanup_status=0
+            if [ "${#redis_cleanup_keys[@]}" -gt 0 ]; then
+              "${compose[@]}" exec -T redis redis-cli DEL "${redis_cleanup_keys[@]}" >/dev/null || cleanup_status=1
+              for cleanup_key in "${redis_cleanup_keys[@]}"; do
+                [ "$("${compose[@]}" exec -T redis redis-cli EXISTS "$cleanup_key" | tr -d '\r')" = 0 ] || cleanup_status=1
+              done
+            fi
+            "${compose[@]}" rm -sf api-rate-limit-shard >/dev/null 2>&1 || cleanup_status=1
+            if [ "$original_status" -ne 0 ]; then exit "$original_status"; fi
+            exit "$cleanup_status"
           }
           trap cleanup EXIT
           "${compose[@]}" up -d --no-deps api-rate-limit-shard
@@ -1258,6 +1273,30 @@ jobs:
           [[ "$rate_prefix" =~ ^[A-Za-z0-9_.:-]{1,128}$ ]]
           edge_ip_hash="$(printf '%s' "$edge_ip" | sha256sum | cut -d' ' -f1)"
           rate_key="$rate_prefix:api-rate-limit:$edge_ip_hash"
+          other_login_ip="$(sed -n 's/^RATE_LIMIT_SMOKE_EGRESS_IP=//p' .env)"
+          [ -n "$other_login_ip" ] || other_login_ip=172.31.255.4
+          [[ "$other_login_ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$|^[0-9A-Fa-f:]+$ ]]
+          other_rate_key="$rate_prefix:api-rate-limit:$(printf '%s' "$other_login_ip" | sha256sum | cut -d' ' -f1)"
+          mapfile -t login_attempt_keys < <(
+            RATE_LIMIT_LOGIN_SMOKE_CLIENT_IP="$edge_ip" \
+            RATE_LIMIT_SMOKE_EGRESS_IP="$other_login_ip" \
+              node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+
+          const sha256 = (value, encoding = "hex") => createHash("sha256").update(value).digest(encoding);
+          const loginNameKey = sha256(process.env.RATE_LIMIT_LOGIN_SMOKE_LOGIN_NAME.trim().toLowerCase(), "base64url");
+          const identifier = `${process.env.RATE_LIMIT_LOGIN_SMOKE_TENANT_ID}:${loginNameKey}`.trim().toLowerCase();
+          for (const ip of [process.env.RATE_LIMIT_LOGIN_SMOKE_CLIENT_IP, process.env.RATE_LIMIT_SMOKE_EGRESS_IP]) {
+            process.stdout.write(`${sha256(`login:${identifier}|ip:${ip.trim().toLowerCase()}`)}\n`);
+          }
+          NODE
+          )
+          [ "${#login_attempt_keys[@]}" -eq 2 ]
+          redis_cleanup_keys=("$rate_key" "$other_rate_key")
+          for attempt_key in "${login_attempt_keys[@]}"; do
+            [[ "$attempt_key" =~ ^[0-9a-f]{64}$ ]]
+            redis_cleanup_keys+=("auth:login-attempt:$attempt_key:failures" "auth:login-attempt:$attempt_key:lock")
+          done
           "${compose[@]}" exec -T redis redis-cli DEL "$rate_key" >/dev/null
           curl --silent --show-error --output /dev/null --max-time 10 https://o-okul.com/api/v1/__rate-limit-smoke
           [ "$("${compose[@]}" exec -T redis redis-cli GET "$rate_key" | tr -d '\r')" = 1 ] || {
@@ -1272,6 +1311,7 @@ jobs:
           RATE_LIMIT_LOGIN_SMOKE_SECOND_INSTANCE_URL=https://o-okul.com/__rate-limit-shard/api/v1/auth/login \
           RATE_LIMIT_SMOKE_CLIENT_IP="$edge_ip" \
           RATE_LIMIT_LOGIN_SMOKE_CLIENT_IP="$edge_ip" \
+          RATE_LIMIT_LOGIN_SMOKE_LOGIN_NAME="$RATE_LIMIT_LOGIN_SMOKE_LOGIN_NAME" \
           RATE_LIMIT_SMOKE_API_LIMIT_RESET_IP="$edge_ip" \
           RATE_LIMIT_SMOKE_RESET_API_LIMIT_BEFORE_API=true \
           RATE_LIMIT_SMOKE_RESET_API_LIMIT_BEFORE_LOGIN=true \

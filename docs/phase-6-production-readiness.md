@@ -622,7 +622,11 @@ pnpm backup:restore:smoke
   `RATE_LIMIT_SMOKE_RESET_API_LIMIT_BEFORE_API=true`,
   `RATE_LIMIT_SMOKE_RESET_API_LIMIT_BEFORE_LOGIN=true`,
   `RATE_LIMIT_SMOKE_API_LIMIT_RESET_IP=<edge-ip>` ve `REDIS_URL=redis://127.0.0.1:6379` verilebilir.
-  Bu yalnız smoke API-limit key'ini siler; login limiter Redis key'lerini temizlemez.
+  Bu reset yalnız smoke fazları arasındaki API-limit key'ini siler. Gate E verifier, run'a özgü
+  `RATE_LIMIT_LOGIN_SMOKE_LOGIN_NAME` kullanır; EXIT cleanup'ı ana edge IP ve shard IP için hem
+  global API-limit key'lerini hem login limiter `failures`/`lock` key'lerini exact formülle siler,
+  her key için Redis `EXISTS=0` doğrular ve ardından geçici shard container'ını kaldırır. Smoke
+  başarılı olsa bile bu cleanup doğrulanmazsa verifier başarısızdır.
   `differentIpNotLocked` negatifi, sabit `RATE_LIMIT_SMOKE_EGRESS_IP` kullanan
   `api-rate-limit-shard` container'ının sabit `API_PROXY_IP` adresine doğrudan isteğiyle üretilir;
   localhost veya sahte forwarded başlığı farklı IP kanıtı sayılmaz. Ana lock kanıtı yine iki HTTPS
