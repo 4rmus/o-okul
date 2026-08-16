@@ -514,6 +514,10 @@ jobs:
             echo "NOTIFICATION_PROVIDER_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/notification-provider.json"
             echo "NOTIFICATION_SMOKE_NOT_BEFORE=$CUTOVER_AT"
           } >> .staging-evidence.env
+          pnpm --filter @o-okul/shared-types build
+          pnpm --filter @o-okul/db build
+          pnpm --filter @o-okul/sms-adapter build
+          pnpm --filter @o-okul/notification-adapter build
           STAGING_ENVIRONMENT=production \
           IDENTITY_MIGRATION_OUTPUT=artifacts/staging/reports/identity-migration.json \
           IDENTITY_MIGRATION_APPROVED_BY=release-owner \
