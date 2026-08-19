@@ -11,6 +11,32 @@ Codex is the canonical agent and skill surface for this repo:
 - `.codex/config.toml` defines the project subagent limits and MCP configuration.
 - `.claude/agents` and `.cursor/skills` are adapter surfaces only. They must not become independent sources of truth.
 
+## Local Safety Contract
+
+Local workspace commands use the following fail-closed project defaults:
+
+```toml
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = false
+```
+
+Writes stay inside the workspace, commands cannot use the network, and actions outside the granted boundary require approval.
+
+## Concurrency Contract
+
+The installed `codex-cli 0.142.3` uses the supported legacy concurrency alias:
+
+```toml
+[agents]
+max_threads = 4
+max_depth = 1
+```
+
+Migration to `max_concurrent_threads_per_session` is a separate compatibility gate after the local Codex client can load that canonical key. With `max_threads = 4`, concurrent participation is limited to the main agent and at most three subagents. The main agent is the sole scope and integration owner. Each active gate has one write-capable participant and may use no more than three parallel read-only reviewers. This gate keeps the existing 15 agent profiles, four routed skills, and the compatibility router.
+
 ## Research Basis
 
 The configuration follows current agent-system patterns from primary sources:
@@ -74,14 +100,19 @@ Use the narrowest repo skill before spawning agents:
 
 ## Collaboration Rules
 
-1. The main agent remains the architect of the turn. It decides scope, assigns agents, integrates results, resolves conflicts, and reports the final state.
+1. The main agent remains the sole scope and integration owner. It assigns agents, resolves conflicts, and reports the final state.
 2. Load the narrowest repo skill before spawning agents.
 3. Spawn subagents only when the user explicitly asks for agents/delegation/parallel work or when the task is large enough that isolated exploration prevents context overload.
-4. Prefer read-only parallelism. Use parallel write work only with disjoint file ownership.
-5. Keep `max_depth = 1`. Subagents should not create further subagent trees.
-6. Use small handoffs. Each agent gets a concrete objective, owned paths, forbidden paths, expected output, and validation commands.
-7. Subagent output must be a summary: findings, changed files, tests run, residual risk. Long logs stay out of the main thread unless an exact error is needed.
-8. The final review should run after integration for high-risk work: security/RLS, report generation, production evidence, schema migrations, and broad UI changes.
+4. Each active gate may have only one write-capable participant. If the main agent writes, no subagent may write. If a subagent writes, the main agent changes no files except for integration.
+5. Use no more than three parallel read-only reviewers.
+6. Keep `max_depth = 1`. Subagents should not create further subagent trees.
+7. Before a gate starts, record its objective, owned paths, forbidden paths, acceptance criteria, and validation commands.
+8. Use small handoffs. Each agent gets a concrete objective, owned paths, forbidden paths, expected output, and validation commands.
+9. Subagent output must be a summary: findings, changed files, tests run, residual risk. Long logs stay out of the main thread unless an exact error is needed.
+10. The final review should run after integration for high-risk work: security/RLS, report generation, production evidence, schema migrations, and broad UI changes.
+11. When a gate completes, report its result and stop; do not automatically continue to the next gate.
+12. Report `LOCAL_STATIC`, `LOCAL_TEST`, `CI`, `STAGING`, `PRODUCTION`, `EXTERNAL_NOT_RUN`, and `UNPROVEN` separately.
+13. Deploys, provider actions, secret/config changes, DB/data mutations, and mutating smokes require explicit user approval.
 
 ## Standard Workflows
 

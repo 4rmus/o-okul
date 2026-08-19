@@ -31,6 +31,7 @@ const requiredSkills = new Map([
 ]);
 
 checkConfig();
+checkGovernanceContracts();
 checkSkills();
 checkOrchestrationRouter();
 checkAgents();
@@ -48,10 +49,67 @@ console.log(
 
 function checkConfig() {
   const source = readFileSync(".codex/config.toml", "utf8");
-  const maxDepth = Number(source.match(/^\s*max_depth\s*=\s*(\d+)/m)?.[1]);
-  const maxThreads = Number(source.match(/^\s*max_threads\s*=\s*(\d+)/m)?.[1]);
+  const configLines = source.split(/\r?\n/);
+  const rootEnd = configLines.findIndex((line) => /^\s*\[[^\]]+\]\s*$/.test(line));
+  const rootBlock = configLines.slice(0, rootEnd < 0 ? undefined : rootEnd).join("\n");
+  const agentsStart = configLines.findIndex((line) => line.trim() === "[agents]");
+  const agentsEnd = configLines.findIndex(
+    (line, index) => index > agentsStart && /^\s*\[[^\]]+\]\s*$/.test(line),
+  );
+  const agentsBlock = agentsStart < 0
+    ? ""
+    : configLines.slice(agentsStart + 1, agentsEnd < 0 ? undefined : agentsEnd).join("\n");
+  const sandboxStart = configLines.findIndex((line) => line.trim() === "[sandbox_workspace_write]");
+  const sandboxEnd = configLines.findIndex(
+    (line, index) => index > sandboxStart && /^\s*\[[^\]]+\]\s*$/.test(line),
+  );
+  const sandboxBlock = sandboxStart < 0
+    ? ""
+    : configLines.slice(sandboxStart + 1, sandboxEnd < 0 ? undefined : sandboxEnd).join("\n");
+  const approvalPolicy = rootBlock.match(/^\s*approval_policy\s*=\s*"([^"]+)"/m)?.[1];
+  const sandboxMode = rootBlock.match(/^\s*sandbox_mode\s*=\s*"([^"]+)"/m)?.[1];
+  const networkAccess = sandboxBlock.match(/^\s*network_access\s*=\s*(true|false)\s*$/m)?.[1];
+  const maxDepth = Number(agentsBlock.match(/^\s*max_depth\s*=\s*(\d+)/m)?.[1]);
+  const maxThreads = Number(agentsBlock.match(/^\s*max_threads\s*=\s*(\d+)/m)?.[1]);
+  if (approvalPolicy !== "on-request") failures.push(".codex/config.toml top-level approval_policy='on-request' olmalı.");
+  if (sandboxMode !== "workspace-write") failures.push(".codex/config.toml top-level sandbox_mode='workspace-write' olmalı.");
+  if (!sandboxBlock) failures.push(".codex/config.toml [sandbox_workspace_write] tablosu içermeli.");
+  if (networkAccess !== "false") failures.push(".codex/config.toml sandbox_workspace_write.network_access=false olmalı.");
+  if (!agentsBlock) failures.push(".codex/config.toml [agents] tablosu içermeli.");
   if (maxDepth !== 1) failures.push(".codex/config.toml agents.max_depth=1 olmalı.");
-  if (!Number.isFinite(maxThreads) || maxThreads > 6) failures.push(".codex/config.toml agents.max_threads 6 veya daha düşük olmalı.");
+  if (maxThreads !== 4) failures.push(".codex/config.toml agents.max_threads=4 olmalı.");
+  if (/^\s*max_concurrent_threads_per_session\s*=/m.test(agentsBlock)) {
+    failures.push(".codex/config.toml canonical concurrency anahtarı yerel Codex uyumluluk gate'i kapanmadan kullanılmamalı.");
+  }
+}
+
+function checkGovernanceContracts() {
+  const agentsSource = readFileSync("AGENTS.md", "utf8");
+  for (const token of [
+    "Each active gate may have only one write-capable participant.",
+    "Use no more than three parallel read-only reviewers",
+    "When a gate completes, report its result and stop; do not automatically continue to the next gate.",
+    "LOCAL_STATIC`, `LOCAL_TEST`, `CI`, `STAGING`, `PRODUCTION`, `EXTERNAL_NOT_RUN`, and `UNPROVEN",
+    "require explicit user approval.",
+  ]) {
+    if (!agentsSource.includes(token)) failures.push(`AGENTS.md beklenen yönetişim sözleşmesini içermeli: ${token}`);
+  }
+
+  const architectureSource = readFileSync("docs/codex-agent-architecture.md", "utf8");
+  for (const token of [
+    'approval_policy = "on-request"',
+    'sandbox_mode = "workspace-write"',
+    "network_access = false",
+    "max_threads = 4",
+    "max_depth = 1",
+    "sole scope and integration owner",
+    "one write-capable participant",
+    "three parallel read-only reviewers",
+  ]) {
+    if (!architectureSource.includes(token)) {
+      failures.push(`docs/codex-agent-architecture.md beklenen yönetişim sözleşmesini içermeli: ${token}`);
+    }
+  }
 }
 
 function checkSkills() {
@@ -92,8 +150,20 @@ function checkOrchestrationRouter() {
   for (const skillName of requiredSkills.keys()) {
     if (!source.includes(skillName)) failures.push(`o-okul-agent-orchestration ${skillName} rotasını içermeli.`);
   }
-  for (const token of ["1-4 agents", "one write-capable agent per file area", "owned paths and forbidden paths"]) {
+  for (const token of [
+    "max_threads = 4",
+    "Each active gate may have only one write-capable participant.",
+    "If the main agent writes, every subagent must remain read-only.",
+    "If a subagent writes, the main agent may change files only for integration.",
+    "Use no more than three parallel read-only reviewers",
+    "owned paths and forbidden paths",
+  ]) {
     if (!source.includes(token)) failures.push(`o-okul-agent-orchestration beklenen kuralı içermeli: ${token}`);
+  }
+  for (const legacyToken of ["1-4 agents", "one write-capable agent per file area"]) {
+    if (source.toLowerCase().includes(legacyToken)) {
+      failures.push(`o-okul-agent-orchestration eski ve çelişkili kuralı içermemeli: ${legacyToken}`);
+    }
   }
 }
 
