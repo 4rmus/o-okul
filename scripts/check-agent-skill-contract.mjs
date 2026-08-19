@@ -2,6 +2,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 const failures = [];
+const requiredAgentsApprovalLine =
+  "- Deploys, provider actions, secret/config changes, DB/data mutations, and mutating smokes require explicit user approval.";
 
 const requiredSkills = new Map([
   [
@@ -77,7 +79,7 @@ function checkConfig() {
   if (networkAccess !== "false") failures.push(".codex/config.toml sandbox_workspace_write.network_access=false olmalı.");
   if (!agentsBlock) failures.push(".codex/config.toml [agents] tablosu içermeli.");
   if (maxDepth !== 1) failures.push(".codex/config.toml agents.max_depth=1 olmalı.");
-  if (maxThreads !== 4) failures.push(".codex/config.toml agents.max_threads=4 olmalı.");
+  if (maxThreads !== 3) failures.push(".codex/config.toml agents.max_threads=3 olmalı.");
   if (/^\s*max_concurrent_threads_per_session\s*=/m.test(agentsBlock)) {
     failures.push(".codex/config.toml canonical concurrency anahtarı yerel Codex uyumluluk gate'i kapanmadan kullanılmamalı.");
   }
@@ -86,13 +88,26 @@ function checkConfig() {
 function checkGovernanceContracts() {
   const agentsSource = readFileSync("AGENTS.md", "utf8");
   for (const token of [
+    "agents.max_threads = 3",
+    "the main agent and at most three subagents may participate concurrently.",
+    "Use no more than three subagents total.",
+    "If one subagent writes, at most two read-only subagents may remain.",
     "Each active gate may have only one write-capable participant.",
-    "Use no more than three parallel read-only reviewers",
     "When a gate completes, report its result and stop; do not automatically continue to the next gate.",
     "LOCAL_STATIC`, `LOCAL_TEST`, `CI`, `STAGING`, `PRODUCTION`, `EXTERNAL_NOT_RUN`, and `UNPROVEN",
-    "require explicit user approval.",
   ]) {
     if (!agentsSource.includes(token)) failures.push(`AGENTS.md beklenen yönetişim sözleşmesini içermeli: ${token}`);
+  }
+  if (!hasRequiredAgentsApprovalRule(agentsSource)) {
+    failures.push(`AGENTS.md beklenen onay kuralını birebir satır olarak içermeli: ${requiredAgentsApprovalLine}`);
+  }
+  for (const invalidApprovalSource of [
+    "- Unrelated actions require explicit user approval.",
+    "- Deploys, provider actions, secret/config changes, DB/data mutations, and mutating smokes do not require explicit user approval.",
+  ]) {
+    if (hasRequiredAgentsApprovalRule(invalidApprovalSource)) {
+      failures.push(`AGENTS.md onay kuralı negatif kontrolü yanlış eşleşti: ${invalidApprovalSource}`);
+    }
   }
 
   const architectureSource = readFileSync("docs/codex-agent-architecture.md", "utf8");
@@ -100,16 +115,22 @@ function checkGovernanceContracts() {
     'approval_policy = "on-request"',
     'sandbox_mode = "workspace-write"',
     "network_access = false",
-    "max_threads = 4",
+    "max_threads = 3",
     "max_depth = 1",
+    "limits subagents and excludes the main agent",
+    "at most three subagents",
+    "at most two read-only subagents",
     "sole scope and integration owner",
     "one write-capable participant",
-    "three parallel read-only reviewers",
   ]) {
     if (!architectureSource.includes(token)) {
       failures.push(`docs/codex-agent-architecture.md beklenen yönetişim sözleşmesini içermeli: ${token}`);
     }
   }
+}
+
+function hasRequiredAgentsApprovalRule(source) {
+  return source.split(/\r?\n/).includes(requiredAgentsApprovalLine);
 }
 
 function checkSkills() {
@@ -151,11 +172,14 @@ function checkOrchestrationRouter() {
     if (!source.includes(skillName)) failures.push(`o-okul-agent-orchestration ${skillName} rotasını içermeli.`);
   }
   for (const token of [
-    "max_threads = 4",
+    "max_threads = 3",
+    "limits subagents and excludes the main agent",
+    "at most three subagents",
+    "Use no more than three subagents total.",
+    "If one subagent writes, at most two read-only subagents may remain.",
     "Each active gate may have only one write-capable participant.",
     "If the main agent writes, every subagent must remain read-only.",
     "If a subagent writes, the main agent may change files only for integration.",
-    "Use no more than three parallel read-only reviewers",
     "owned paths and forbidden paths",
   ]) {
     if (!source.includes(token)) failures.push(`o-okul-agent-orchestration beklenen kuralı içermeli: ${token}`);

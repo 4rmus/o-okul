@@ -31,11 +31,11 @@ The installed `codex-cli 0.142.3` uses the supported legacy concurrency alias:
 
 ```toml
 [agents]
-max_threads = 4
+max_threads = 3
 max_depth = 1
 ```
 
-Migration to `max_concurrent_threads_per_session` is a separate compatibility gate after the local Codex client can load that canonical key. With `max_threads = 4`, concurrent participation is limited to the main agent and at most three subagents. The main agent is the sole scope and integration owner. Each active gate has one write-capable participant and may use no more than three parallel read-only reviewers. This gate keeps the existing 15 agent profiles, four routed skills, and the compatibility router.
+Migration to `max_concurrent_threads_per_session` is a separate compatibility gate after the local Codex client can load that canonical key. Legacy `max_threads = 3` limits subagents and excludes the main agent, so concurrent participation is limited to the main agent and at most three subagents. The total subagent count may not exceed three. The main agent is the sole scope and integration owner. Each active gate has one write-capable participant. If one subagent writes, at most two read-only subagents may remain. This gate keeps the existing 15 agent profiles, four routed skills, and the compatibility router.
 
 ## Research Basis
 
@@ -104,7 +104,7 @@ Use the narrowest repo skill before spawning agents:
 2. Load the narrowest repo skill before spawning agents.
 3. Spawn subagents only when the user explicitly asks for agents/delegation/parallel work or when the task is large enough that isolated exploration prevents context overload.
 4. Each active gate may have only one write-capable participant. If the main agent writes, no subagent may write. If a subagent writes, the main agent changes no files except for integration.
-5. Use no more than three parallel read-only reviewers.
+5. Use no more than three subagents total. If one subagent writes, at most two read-only subagents may remain.
 6. Keep `max_depth = 1`. Subagents should not create further subagent trees.
 7. Before a gate starts, record its objective, owned paths, forbidden paths, acceptance criteria, and validation commands.
 8. Use small handoffs. Each agent gets a concrete objective, owned paths, forbidden paths, expected output, and validation commands.
