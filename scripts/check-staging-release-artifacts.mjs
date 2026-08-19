@@ -41,6 +41,16 @@ const uiUxArtifactFiles = [
   ),
 ];
 const supportingReportArtifacts = ["db-rls-check.log", "db-rls-check-live.log", "rls-load-smoke.json"];
+const sensitiveRlsLogPatterns = [
+  /\b(?:postgres(?:ql)?|redis):\/\/\S+/iu,
+  /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/iu,
+  /\b(?:\+90|0)?5\d{9}\b/u,
+  /\b[1-9]\d{10}\b/u,
+  /(?:^|[\s,{])["']?(?:tenantId|tenant_id|studentId|student_id)["']?\s*[:=]\s*["']?[^\s,"'}]+/imu,
+  /(?:^|[\s,{])["']?(?:authorization|cookie|password|secret|token|api[_-]?key|database_url|direct_database_url)["']?\s*[:=]\s*["']?[^\s,"'}]+/imu,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/u,
+  /\bBearer\s+\S+/iu,
+];
 const reportArtifacts = new Map([
   [
     "restoreDrill",
@@ -847,6 +857,8 @@ function requireRlsSupportingEvidence(rootDir, output) {
 
   const staticLog = readFileSync(staticLogPath, "utf8");
   const liveLog = readFileSync(liveLogPath, "utf8");
+  requireSafeRlsLog(staticLog, "reports/db-rls-check.log", output);
+  requireSafeRlsLog(liveLog, "reports/db-rls-check-live.log", output);
   for (const token of [
     "Tenant model parity kontrolü geçti:",
     "RLS policy kontrolü geçti:",
@@ -884,6 +896,12 @@ function requireRlsSupportingEvidence(rootDir, output) {
     if (rlsReport.isolation?.[key] !== loadSmoke.isolation?.[key]) {
       output.push(`reports/rls-live.json isolation.${key} reports/rls-load-smoke.json ile eşleşmeli.`);
     }
+  }
+}
+
+function requireSafeRlsLog(value, label, output) {
+  if (sensitiveRlsLogPatterns.some((pattern) => pattern.test(value))) {
+    output.push(`${label} hassas log içeriği taşımamalı.`);
   }
 }
 

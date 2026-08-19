@@ -450,6 +450,7 @@ runAlertWebhookHttpUrlNegativeCheck();
 runAlertWebhookSecretUrlNegativeCheck();
 runAlertWebhookLocalHostNegativeCheck();
 runTraefikInsecureEvidenceFileNegativeCheck();
+runStagingOutboxDiagnosticAllowlistCheck();
 runStagingReleaseArtifactsBundleCheck();
 
 const generatedLiveStatusPath = "docs/evidence-templates/live-status.generated.tmp.json";
@@ -6845,6 +6846,34 @@ function runInlineUploadMigrationReportOutputNegative(outputPath) {
   });
 }
 
+function runStagingOutboxDiagnosticAllowlistCheck() {
+  const workflow = readFileSync(".github/workflows/staging-outbox-verify.yml", "utf8");
+  const marker = "name: staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}-diagnostic";
+  const markerIndex = workflow.indexOf(marker);
+  const start = workflow.lastIndexOf("- uses: actions/upload-artifact@v4", markerIndex);
+  const end = workflow.indexOf("if-no-files-found: error", markerIndex);
+  const block = start >= 0 && end > start ? workflow.slice(start, end) : "";
+  const actualPaths = [...block.matchAll(/^\s+(artifacts\/\S+)\s*$/gm)].map((match) => match[1]);
+  const expectedPaths = [
+    "artifacts/diagnostic/deployment-cutover.json",
+    "artifacts/diagnostic/github-ci.json",
+    "artifacts/diagnostic/secret-delivery-outbox.json",
+  ];
+  const expectedStagingCommands = [
+    "install -D -m 600 artifacts/cutover/deployment-cutover.json artifacts/diagnostic/deployment-cutover.json",
+    "install -D -m 600 artifacts/staging/reports/github-ci.json artifacts/diagnostic/github-ci.json",
+    "install -D -m 600 artifacts/secret-delivery-outbox.json artifacts/diagnostic/secret-delivery-outbox.json",
+  ];
+  if (
+    !block.includes("if: ${{ failure() && inputs.full_evidence }}") ||
+    JSON.stringify(actualPaths) !== JSON.stringify(expectedPaths) ||
+    expectedStagingCommands.some((command) => !workflow.includes(command))
+  ) {
+    console.error("Production evidence template kontrolü başarısız: Gate E failure diagnostic upload exact sanitize allowlist ile sınırlı olmalı.");
+    process.exit(1);
+  }
+}
+
 function runStagingReleaseArtifactsBundleCheck() {
   const rootParent = resolve("artifacts/prod-evidence-template-check");
   mkdirSync(rootParent, { recursive: true });
@@ -7143,6 +7172,34 @@ function runStagingReleaseArtifactsBundleCheck() {
       console.error(positive.stdout);
       console.error(positive.stderr);
       process.exit(positive.status ?? 1);
+    }
+
+    for (const { file, value } of [
+      { file: `${reportsDir}/db-rls-check.log`, value: "DATABASE_URL=postgresql://app:secret@db.internal/o_okul" },
+      { file: `${reportsDir}/db-rls-check-live.log`, value: "student@example.com" },
+      { file: `${reportsDir}/db-rls-check-live.log`, value: "tenantId=tenant-raw-123 studentId=student-raw-456" },
+    ]) {
+      const original = readFileSync(file, "utf8");
+      try {
+        writeFileSync(file, `${original}${value}\n`);
+        const sensitiveLogNegative = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
+          env: {
+            ...process.env,
+            STAGING_RELEASE_ARTIFACTS_TARGET: root,
+            STAGING_RELEASE_ARTIFACTS_ALLOW_EXAMPLE_EVIDENCE: "1",
+          },
+          encoding: "utf8",
+        });
+        const sensitiveLogOutput = `${sensitiveLogNegative.stdout ?? ""}${sensitiveLogNegative.stderr ?? ""}`;
+        const label = file.endsWith("db-rls-check.log") ? "reports/db-rls-check.log" : "reports/db-rls-check-live.log";
+        if (sensitiveLogNegative.status === 0 || !sensitiveLogOutput.includes(`${label} hassas log içeriği taşımamalı.`)) {
+          console.error("Production evidence template kontrolü başarısız: raw RLS log hassas içerik negatifi kırılmadı.");
+          console.error(sensitiveLogOutput);
+          process.exit(1);
+        }
+      } finally {
+        writeFileSync(file, original);
+      }
     }
 
     const releaseManifestPath = `${root}/release-evidence-manifest.json`;

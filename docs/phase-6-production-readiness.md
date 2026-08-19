@@ -139,7 +139,8 @@ pnpm backup:restore:smoke
   Verify-only Gate E workflow'u bu ilk çıktıyı hemen `canPromote=false` adayı olarak işaretler;
   UI completion, dört çalışan image, public `/health` ve `/health/ready` kontrolleri geçmeden
   `canPromote=true` yeniden yazılamaz. Başarısız run release summary/manifest yayınlamaz; yalnız
-  promotion dosyalarını dışlayan `-diagnostic` artifact'i yükler.
+  doğrulanmış cutover, GitHub CI ve sanitize outbox JSON dosyalarından oluşan exact allowlist'i
+  `-diagnostic` artifact'i olarak yükler; raw RLS logları veya staging bundle ağacı yüklenmez.
   `--summary-file`, sibling `reports/` ve `smoke/` artifact layout'u lokal temp path veya symlink
   file/directory üzerinden yazılamaz; birleşik kapı bu output hedeflerini evidence check'lerine
   başlamadan önce reddeder.

@@ -181,6 +181,7 @@ jobs:
         run: |
           DEPLOYMENT_CUTOVER_EVIDENCE_TARGET="file://$PWD/artifacts/cutover/deployment-cutover.json" DEPLOYMENT_CUTOVER_EXPECTED_RUN_ID="$DEPLOY_RUN_ID" DEPLOYMENT_CUTOVER_EXPECTED_REPOSITORY="$GITHUB_REPOSITORY" \
             node scripts/check-deployment-cutover-evidence.mjs
+          install -D -m 600 artifacts/cutover/deployment-cutover.json artifacts/diagnostic/deployment-cutover.json
 
       - name: Bind helpers to cutover source SHA
         shell: bash
@@ -566,7 +567,9 @@ jobs:
 
       - name: Validate cutover-bound GitHub CI evidence
         shell: bash
-        run: GITHUB_CI_EVIDENCE_TARGET="file://$PWD/artifacts/staging/reports/github-ci.json" pnpm github-ci:check
+        run: |
+          GITHUB_CI_EVIDENCE_TARGET="file://$PWD/artifacts/staging/reports/github-ci.json" pnpm github-ci:check
+          install -D -m 600 artifacts/staging/reports/github-ci.json artifacts/diagnostic/github-ci.json
 
       - name: Open staging data tunnels for aggregate checks
         if: ${{ inputs.full_evidence }}
@@ -670,6 +673,7 @@ jobs:
         run: |
           SECRET_DELIVERY_OUTBOX_EVIDENCE_TARGET="file://$PWD/artifacts/secret-delivery-outbox.json" SECRET_DELIVERY_OUTBOX_NOT_BEFORE="$CUTOVER_AT" SECRET_DELIVERY_OUTBOX_RELEASE_IMAGE_TAG="$CUTOVER_RELEASE_IMAGE_TAG" \
             node scripts/check-secret-delivery-outbox-evidence.mjs
+          install -D -m 600 artifacts/secret-delivery-outbox.json artifacts/diagnostic/secret-delivery-outbox.json
 
       - name: Upload sanitized Phase B outbox evidence
         uses: actions/upload-artifact@v4
@@ -2042,10 +2046,9 @@ jobs:
         with:
           name: staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}-diagnostic
           path: |
-            artifacts/staging
-            !artifacts/staging/private/**
-            !artifacts/staging/release-summary-*.json
-            !artifacts/staging/release-evidence-manifest.json
+            artifacts/diagnostic/deployment-cutover.json
+            artifacts/diagnostic/github-ci.json
+            artifacts/diagnostic/secret-delivery-outbox.json
           if-no-files-found: error
 
       - name: Clean local verification secrets
