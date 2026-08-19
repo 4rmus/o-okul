@@ -7159,6 +7159,60 @@ function runStagingReleaseArtifactsBundleCheck() {
       process.exit(1);
     }
 
+    const releaseEvidenceManifestPath = `${root}/release-evidence-manifest.json`;
+    const freshManifestSource = readFileSync(releaseEvidenceManifestPath, "utf8");
+    const freshManifest = JSON.parse(freshManifestSource);
+    const freshReportEntry = freshManifest.entries.find((entry) => entry.path === "smoke/report-generation.json");
+    const verifierRunUrl = `https://github.com/${freshManifest.repository}/actions/runs/${freshManifest.verifierRunId}`;
+    if (freshManifest.aggregateReuseRunId !== null || freshReportEntry?.runUrl !== verifierRunUrl) {
+      console.error("Production evidence template kontrolü başarısız: fresh report-generation manifest current verifier run'a bağlanmadı.");
+      process.exit(1);
+    }
+    try {
+      const reusedManifest = structuredClone(freshManifest);
+      reusedManifest.aggregateReuseRunId = "876543210";
+      reusedManifest.entries.find((entry) => entry.path === "smoke/report-generation.json").runUrl =
+        `https://github.com/${reusedManifest.repository}/actions/runs/${reusedManifest.aggregateReuseRunId}`;
+      writeFileSync(releaseEvidenceManifestPath, `${JSON.stringify(reusedManifest, null, 2)}\n`);
+      const reuseManifestCheck = spawnSync(process.execPath, ["scripts/check-release-evidence-manifest.mjs"], {
+        env: {
+          ...process.env,
+          RELEASE_EVIDENCE_ARTIFACTS_DIR: root,
+          RELEASE_EVIDENCE_MANIFEST_TARGET: releaseEvidenceManifestPath,
+          RELEASE_EVIDENCE_MANIFEST_ALLOW_EXAMPLE_EVIDENCE: "1",
+        },
+        encoding: "utf8",
+      });
+      if (reuseManifestCheck.status !== 0) {
+        console.error("Production evidence template kontrolü başarısız: reused report-generation manifest provenance geçmedi.");
+        console.error(reuseManifestCheck.stdout);
+        console.error(reuseManifestCheck.stderr);
+        process.exit(reuseManifestCheck.status ?? 1);
+      }
+
+      const wrongFreshManifest = structuredClone(freshManifest);
+      wrongFreshManifest.entries.find((entry) => entry.path === "smoke/report-generation.json").runUrl =
+        `https://github.com/${wrongFreshManifest.repository}/actions/runs/111111111`;
+      writeFileSync(releaseEvidenceManifestPath, `${JSON.stringify(wrongFreshManifest, null, 2)}\n`);
+      const wrongFreshCheck = spawnSync(process.execPath, ["scripts/check-release-evidence-manifest.mjs"], {
+        env: {
+          ...process.env,
+          RELEASE_EVIDENCE_ARTIFACTS_DIR: root,
+          RELEASE_EVIDENCE_MANIFEST_TARGET: releaseEvidenceManifestPath,
+          RELEASE_EVIDENCE_MANIFEST_ALLOW_EXAMPLE_EVIDENCE: "1",
+        },
+        encoding: "utf8",
+      });
+      const wrongFreshOutput = `${wrongFreshCheck.stdout ?? ""}${wrongFreshCheck.stderr ?? ""}`;
+      if (wrongFreshCheck.status === 0 || !wrongFreshOutput.includes(".runUrl artifact sınıfıyla eşleşmeli.")) {
+        console.error("Production evidence template kontrolü başarısız: fresh report-generation yanlış run URL negatifi kırılmadı.");
+        console.error(wrongFreshOutput);
+        process.exit(1);
+      }
+    } finally {
+      writeFileSync(releaseEvidenceManifestPath, freshManifestSource);
+    }
+
     const positive = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
       env: {
         ...process.env,

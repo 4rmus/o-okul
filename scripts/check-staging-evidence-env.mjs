@@ -585,6 +585,20 @@ function checkOutboxVerifyWorkflowContract(output) {
     "full_evidence requires run_gate_e_live_uat_rls=true; stale onboarding/RLS artifacts cannot be promoted.",
     "full_evidence requires run_gate_e_data_safety_reconciliation=true; stale restore/inline-upload artifacts cannot be promoted.",
     "full_evidence requires run_gate_e_observability_alert_drill=true; stale alert delivery artifacts cannot be promoted.",
+    'report_smoke_scope="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"',
+    'report_smoke_tenant_id="tenant-gate-e-report-smoke-$report_smoke_scope"',
+    'report_smoke_queue_prefix="gate-e-report-generation-$report_smoke_scope"',
+    "report_smoke_started=false",
+    'if [ -z "$REUSE_AGGREGATE_SMOKE_RUN_ID" ]; then',
+    'REPORT_GENERATION_SMOKE_PASSWORD="$ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD"',
+    'REPORT_GENERATION_SMOKE_EVIDENCE_FILE="$PWD/artifacts/staging/smoke/report-generation.json"',
+    'QUEUE_PREFIX="$report_smoke_queue_prefix"',
+    'pnpm --filter @o-okul/worker exec node --env-file="$PWD/.staging-evidence.env" --input-type=module',
+    'spawnSync("pnpm", ["report-generation:smoke"]',
+    "await queue.obliterate({ force: true });",
+    'REPORT_GENERATION_SMOKE_STARTED="$report_smoke_started"',
+    'if (aggregateRunId) evidenceReferences.push(`run:https://github.com/${repository}/actions/runs/${aggregateRunId}`);',
+    "aggregate_reuse_args=(--reuse-report-generation-smoke)",
     "corepack pnpm live:onboarding:smoke",
     "Live onboarding sentetik tenant/session temizliği geçti",
     "deletedTenantIdHash",
@@ -666,6 +680,26 @@ function checkOutboxVerifyWorkflowContract(output) {
   if (workflow.includes("timeout-minutes: 45")) {
     output.push(`${outboxVerifyWorkflowPath} eski 45 dakikalık job süresi taşımamalı.`);
   }
+  if (workflow.split(/\r?\n/u).includes('            [[ "$REUSE_AGGREGATE_SMOKE_RUN_ID" =~ ^[0-9]+$ ]]')) {
+    output.push(`${outboxVerifyWorkflowPath} fresh aggregate smoke yolunda reuse run ID zorunlu olmamalı.`);
+  }
+  if (
+    workflow.includes("grep -Ec '^REPORT_GENERATION_SMOKE_EVIDENCE_FILE='") ||
+    workflow.includes('sed -i "s#^REPORT_GENERATION_SMOKE_EVIDENCE_FILE=')
+  ) {
+    output.push(`${outboxVerifyWorkflowPath} summary-defaulted report-generation output anahtarını staging env içinde aramamalı.`);
+  }
+  if (workflow.split('pnpm --filter @o-okul/worker exec node --env-file="$PWD/.staging-evidence.env" --input-type=module').length - 1 !== 2) {
+    output.push(`${outboxVerifyWorkflowPath} BullMQ preflight ve cleanup tam iki worker-package Node çağrısı kullanmalı.`);
+  }
+  const workerModuleResolution = spawnSync(
+    "pnpm",
+    ["--filter", "@o-okul/worker", "exec", "node", "--input-type=module", "-e", 'await import("bullmq"); await import("pg");'],
+    { encoding: "utf8" },
+  );
+  if (workerModuleResolution.status !== 0) {
+    output.push(`${outboxVerifyWorkflowPath} worker package BullMQ/pg runtime çözümlemesi başarısız.`);
+  }
   if (workflow.match(/SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID|inputs\.source|secrets\..*SOURCE/i)) {
     output.push(`${outboxVerifyWorkflowPath} source ID GitHub input/secret olarak taşımamalı.`);
   }
@@ -706,6 +740,17 @@ function checkOutboxVerifyWorkflowContract(output) {
     "Preflight current images and private outbox source",
     "Validate preserved unexpected artifact archive",
     "Run configured production evidence aggregation",
+  ]);
+  requireWorkflowOrder(output, workflow, "fresh report-generation smoke ve cleanup sırası", [
+    "report_smoke_started=false",
+    'if [ -z "$REUSE_AGGREGATE_SMOKE_RUN_ID" ]; then',
+    'REPORT_GENERATION_SMOKE_PASSWORD="$ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD"',
+    "report_smoke_started=true",
+    'spawnSync("pnpm", ["report-generation:smoke"]',
+    "cleanup_gate_e_mutating_state",
+    "gate_e_mutating_cleanup_complete=true",
+    "aggregate_reuse_args=(--reuse-report-generation-smoke)",
+    "pnpm prod:evidence:check",
   ]);
   requireWorkflowOrder(output, workflow, "Gate E cleanup ve audit-null tazelik sırası", [
     "Live onboarding sentetik tenant/session temizliği geçti",

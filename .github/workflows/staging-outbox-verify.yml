@@ -1306,14 +1306,28 @@ jobs:
             gate_e_evidence_environment=staging
             gate_e_smoke_started_at="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
             gate_e_mutating_cleanup_complete=false
+            report_smoke_scope="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+            [[ "$report_smoke_scope" =~ ^[0-9]+-[0-9]+$ ]]
+            report_smoke_tenant_id="tenant-gate-e-report-smoke-$report_smoke_scope"
+            report_smoke_user_id="user-gate-e-report-smoke-$report_smoke_scope"
+            report_smoke_queue_prefix="gate-e-report-generation-$report_smoke_scope"
+            report_smoke_started=false
             cleanup_gate_e_mutating_state() {
+              local cleanup_status=0
+              REPORT_GENERATION_SMOKE_STARTED="$report_smoke_started" \
+              REPORT_GENERATION_SMOKE_TENANT_ID="$report_smoke_tenant_id" \
               GATE_E_SMOKE_STARTED_AT="$gate_e_smoke_started_at" \
-                node --env-file=.staging-evidence.env --input-type=module <<'NODE'
+                node --env-file=.staging-evidence.env --input-type=module <<'NODE' || cleanup_status=1
           import { createHash } from "node:crypto";
           import pg from "pg";
 
           const cleanupRunId = process.env.GITHUB_RUN_ID;
           if (!/^\d+$/.test(cleanupRunId ?? "")) throw new Error("Gate E cleanup GITHUB_RUN_ID bağı eksik.");
+          const reportSmokeStarted = process.env.REPORT_GENERATION_SMOKE_STARTED === "true";
+          const reportSmokeTenantId = process.env.REPORT_GENERATION_SMOKE_TENANT_ID;
+          if (!/^tenant-gate-e-report-smoke-\d+-\d+$/.test(reportSmokeTenantId ?? "")) {
+            throw new Error("Gate E report smoke tenant scope bağı geçersiz.");
+          }
           const pool = new pg.Pool({ connectionString: process.env.DIRECT_DATABASE_URL });
           const client = await pool.connect();
           try {
@@ -1327,9 +1341,10 @@ jobs:
                    "id" LIKE 'tenant-isem-answer-key-smoke-%'
                    OR "id" LIKE 'tenant-raw-import-smoke-%'
                    OR "id" LIKE 'tenant-isem-optical-smoke-%'
+                   OR ($2::boolean AND "id" = $3)
                  )
                FOR UPDATE`,
-              [process.env.GATE_E_SMOKE_STARTED_AT],
+              [process.env.GATE_E_SMOKE_STARTED_AT, reportSmokeStarted, reportSmokeTenantId],
             );
             const tenantIds = tenants.rows.map((row) => row.id);
             if (tenantIds.length > 0) {
@@ -1380,6 +1395,36 @@ jobs:
             await pool.end();
           }
           NODE
+              if [ "$report_smoke_started" = true ]; then
+                REPORT_GENERATION_SMOKE_QUEUE_PREFIX="$report_smoke_queue_prefix" \
+                  pnpm --filter @o-okul/worker exec node --env-file="$PWD/.staging-evidence.env" --input-type=module <<'NODE' || cleanup_status=1
+          import { Queue } from "bullmq";
+
+          const prefix = process.env.REPORT_GENERATION_SMOKE_QUEUE_PREFIX;
+          if (!/^gate-e-report-generation-\d+-\d+$/.test(prefix ?? "")) {
+            throw new Error("Gate E report smoke Redis scope bağı geçersiz.");
+          }
+          const redisUrl = new URL(process.env.REDIS_URL);
+          if (!['redis:', 'rediss:'].includes(redisUrl.protocol)) throw new Error("Gate E report smoke Redis URL geçersiz.");
+          const connection = {
+            host: redisUrl.hostname,
+            port: Number(redisUrl.port || 6379),
+            ...(redisUrl.username ? { username: decodeURIComponent(redisUrl.username) } : {}),
+            ...(redisUrl.password ? { password: decodeURIComponent(redisUrl.password) } : {}),
+            ...(redisUrl.pathname.length > 1 ? { db: Number(redisUrl.pathname.slice(1)) } : {}),
+            ...(redisUrl.protocol === 'rediss:' ? { tls: {} } : {}),
+          };
+          const queue = new Queue("report-generation", { connection, prefix });
+          try {
+            await queue.obliterate({ force: true });
+            const counts = await queue.getJobCounts();
+            if (Object.values(counts).some((count) => count !== 0)) throw new Error("Gate E report smoke Redis cleanup eksik kaldı.");
+          } finally {
+            await queue.close();
+          }
+          NODE
+              fi
+              return "$cleanup_status"
             }
             cleanup_gate_e_mutating_exit() {
               original_status=$?
@@ -1400,7 +1445,6 @@ jobs:
             : "${ISEM_OPTICAL_PIPELINE_TXT_BASE64:?GATE_E_ISEM_OPTICAL_TXT_BASE64 staging secret gerekli}"
             : "${ISEM_OPTICAL_PIPELINE_ANSWER_KEY_BASE64:?GATE_E_ISEM_ANSWER_KEY_BASE64 staging secret gerekli}"
             : "${ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD:?GATE_E_ISEM_SMOKE_PASSWORD staging secret gerekli}"
-            [[ "$REUSE_AGGREGATE_SMOKE_RUN_ID" =~ ^[0-9]+$ ]]
             install -d -m 700 "$PWD/ornek-veriler" "$PWD/artifacts/staging/private"
             printf '%s' "$ISEM_OPTICAL_PIPELINE_ANSWER_KEY_BASE64" | base64 -d > "$answer_key_file"
             chmod 600 "$answer_key_file"
@@ -1412,6 +1456,62 @@ jobs:
             if (result.status !== 0) process.exit(result.status ?? 1);
           }
           NODE
+            if [ -z "$REUSE_AGGREGATE_SMOKE_RUN_ID" ]; then
+              REPORT_GENERATION_SMOKE_TENANT_ID="$report_smoke_tenant_id" \
+              REPORT_GENERATION_SMOKE_QUEUE_PREFIX="$report_smoke_queue_prefix" \
+              REPORT_GENERATION_SMOKE_PASSWORD="$ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD" \
+                pnpm --filter @o-okul/worker exec node --env-file="$PWD/.staging-evidence.env" --input-type=module <<'NODE'
+          import { Queue } from "bullmq";
+          import pg from "pg";
+
+          const tenantId = process.env.REPORT_GENERATION_SMOKE_TENANT_ID;
+          const prefix = process.env.REPORT_GENERATION_SMOKE_QUEUE_PREFIX;
+          const password = process.env.REPORT_GENERATION_SMOKE_PASSWORD;
+          if (!/^tenant-gate-e-report-smoke-\d+-\d+$/.test(tenantId ?? "")) throw new Error("Gate E report smoke tenant scope bağı geçersiz.");
+          if (!/^gate-e-report-generation-\d+-\d+$/.test(prefix ?? "")) throw new Error("Gate E report smoke Redis scope bağı geçersiz.");
+          if ((password?.length ?? 0) < 16 || !/[a-z]/u.test(password) || !/[A-Z]/u.test(password) || !/\d/u.test(password)) {
+            throw new Error("Gate E report smoke güçlü parola bağı eksik.");
+          }
+          const pool = new pg.Pool({ connectionString: process.env.DIRECT_DATABASE_URL });
+          const existing = await pool.query(`SELECT count(*)::int AS count FROM "Tenant" WHERE "id" = $1`, [tenantId]);
+          await pool.end();
+          if (existing.rows[0]?.count !== 0) throw new Error("Gate E report smoke tenant scope önceden mevcut.");
+
+          const redisUrl = new URL(process.env.REDIS_URL);
+          if (!["redis:", "rediss:"].includes(redisUrl.protocol)) throw new Error("Gate E report smoke Redis URL geçersiz.");
+          const connection = {
+            host: redisUrl.hostname,
+            port: Number(redisUrl.port || 6379),
+            ...(redisUrl.username ? { username: decodeURIComponent(redisUrl.username) } : {}),
+            ...(redisUrl.password ? { password: decodeURIComponent(redisUrl.password) } : {}),
+            ...(redisUrl.pathname.length > 1 ? { db: Number(redisUrl.pathname.slice(1)) } : {}),
+            ...(redisUrl.protocol === "rediss:" ? { tls: {} } : {}),
+          };
+          const queue = new Queue("report-generation", { connection, prefix });
+          try {
+            const counts = await queue.getJobCounts();
+            if (Object.values(counts).some((count) => count !== 0)) throw new Error("Gate E report smoke Redis scope önceden dolu.");
+          } finally {
+            await queue.close();
+          }
+          NODE
+              report_smoke_started=true
+              STAGING_ENVIRONMENT=staging \
+              REPORT_GENERATION_SMOKE_TENANT_ID="$report_smoke_tenant_id" \
+              REPORT_GENERATION_SMOKE_USER_ID="$report_smoke_user_id" \
+              REPORT_GENERATION_SMOKE_EMAIL="report-smoke-$report_smoke_scope@staging.o-okul.com" \
+              REPORT_GENERATION_SMOKE_PASSWORD="$ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD" \
+              REPORT_GENERATION_SMOKE_EVIDENCE_FILE="$PWD/artifacts/staging/smoke/report-generation.json" \
+              REPORT_GENERATION_SMOKE_COMMAND="pnpm report-generation:smoke" \
+              REPORT_GENERATION_SMOKE_RESULT_COUNT=1 \
+              QUEUE_PREFIX="$report_smoke_queue_prefix" \
+                node --env-file=.staging-evidence.env --input-type=module <<'NODE'
+          import { spawnSync } from "node:child_process";
+
+          const result = spawnSync("pnpm", ["report-generation:smoke"], { env: process.env, stdio: "inherit" });
+          if (result.status !== 0) process.exit(result.status ?? 1);
+          NODE
+            fi
             STAGING_ENVIRONMENT="$gate_e_evidence_environment" \
             ISEM_OPTICAL_PIPELINE_SMOKE_EMAIL_DOMAIN=staging.o-okul.com \
             ISEM_OPTICAL_PIPELINE_SMOKE_EVIDENCE_FILE=artifacts/staging/reports/isem-optical-pipeline.json \
@@ -1535,6 +1635,12 @@ jobs:
           const [repository, releaseImageTag, runId, aggregateRunId] = process.argv.slice(2);
           const isem = JSON.parse(readFileSync("artifacts/staging/reports/isem-optical-pipeline.json", "utf8"));
           const ui = JSON.parse(readFileSync("artifacts/staging/reports/live-ui-worker-result.json", "utf8"));
+          const evidenceReferences = [
+            "artifact:artifacts/staging/reports/isem-optical-pipeline.json",
+            "artifact:artifacts/staging/reports/live-ui-worker-result.json",
+            `run:https://github.com/${repository}/actions/runs/${runId}`,
+          ];
+          if (aggregateRunId) evidenceReferences.push(`run:https://github.com/${repository}/actions/runs/${aggregateRunId}`);
           const report = {
             result: "PASS",
             environment: "staging",
@@ -1579,12 +1685,7 @@ jobs:
               guardianPortalViewed: ui.guardianPortalViewed,
               noMockRoutes: true,
             },
-            evidenceReferences: [
-              "artifact:artifacts/staging/reports/isem-optical-pipeline.json",
-              "artifact:artifacts/staging/reports/live-ui-worker-result.json",
-              `run:https://github.com/${repository}/actions/runs/${runId}`,
-              `run:https://github.com/${repository}/actions/runs/${aggregateRunId}`,
-            ],
+            evidenceReferences,
             gaps: [],
           };
           writeFileSync("artifacts/staging/reports/live-exam-cycle.json", `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
@@ -1779,10 +1880,7 @@ jobs:
           if [ -n "$REUSE_PROVIDER_SMOKE_RUN_ID" ]; then
             provider_reuse_args=(--reuse-sentry-smoke --reuse-alert-webhook-smoke)
           fi
-          aggregate_reuse_args=()
-          if [ -n "$REUSE_AGGREGATE_SMOKE_RUN_ID" ]; then
-            aggregate_reuse_args=(--reuse-report-generation-smoke)
-          fi
+          aggregate_reuse_args=(--reuse-report-generation-smoke)
           PRODUCTION_EVIDENCE_ALLOW_STAGING=1 UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES=1 \
             pnpm prod:evidence:check -- --env-file .staging-evidence.env --summary-file "artifacts/staging/release-summary-$CUTOVER_RELEASE_IMAGE_TAG.json" \
               --reuse-notification-smoke --reuse-wal-smoke "${provider_reuse_args[@]}" "${aggregate_reuse_args[@]}"

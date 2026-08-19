@@ -124,7 +124,7 @@ try {
   });
 
   console.log(
-    `ReportGeneration live smoke passed: tenant ${tenantId}, exam ${examId}, first student ${snapshot.firstStudentId}, ${resultCount} results, queued ${producedJob.options.jobId}, snapshot ${snapshot.id}, seed ${seedDurationMs}ms, generation ${generationDurationMs}ms`,
+    `ReportGeneration live smoke passed: tenantHash ${sha256(tenantId)}, examHash ${sha256(examId)}, firstStudentHash ${sha256(snapshot.firstStudentId)}, ${resultCount} results, queuedJobIdHash ${sha256(producedJob.options.jobId)}, snapshotHash ${sha256(snapshot.id)}, seed ${seedDurationMs}ms, generation ${generationDurationMs}ms`,
   );
 } finally {
   await worker.close();

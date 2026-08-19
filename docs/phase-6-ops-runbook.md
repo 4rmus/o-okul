@@ -572,6 +572,10 @@ trap çalışmayabilecek hata yollarında da artifact upload glob'u `artifacts/s
 dışlar; private credential girdisi hiçbir full bundle'a giremez. Answer-key ve raw-import smoke yardımcıları
 da staging/production koşusunda aynı tek kullanımlık güçlü secret'ı zorunlu tutar; böylece exit trap'i
 çalışmasa bile bilinen varsayılan parolalı aktif test hesabı bırakılmaz.
+`reuse_aggregate_smoke_run_id` boşsa aynı mutating trap içinde run/attempt kapsamlı tenant, kullanıcı ve
+Redis prefix'iyle fresh `pnpm report-generation:smoke` üretilir; DB ve queue kalıntısı temizlenmeden summary
+kapısına geçilmez ve manifest kaynağı current verifier run olur. Reuse ID verilirse mevcut artifact yalnız
+deployment-cutover byte eşleşmesi sonrası kullanılır ve manifest gerçek önceki run ID'sini korur.
 Rollback tag'i yalnız exact release candidate ile eşleşen doğrulanabilir HTTPS rollback raporundan alınır.
 Böylece eski bir template run URL'si veya eski uzak rapor yeni cutover kanıtına karışamaz.
 - PR-4 rollback önceki web+API image çiftidir. Additive kolonlar ve legacy membership satırları yerinde

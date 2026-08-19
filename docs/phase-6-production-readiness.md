@@ -1043,7 +1043,8 @@ pnpm backup:restore:smoke
   uzaklıkta ve hedef SHA/deploy run bağıyla kabul edilir. Outbox, provider ve aggregate smoke yeniden
   kullanımı manifestte ayrı `outboxReuseRunId`, `providerReuseRunId` ve `aggregateReuseRunId` alanlarıyla
   gerçek kaynak Actions run'ına bağlanır; yeniden kullanılan artifact mevcut verifier üretmiş gibi
-  etiketlenemez. Diğer tüm staging artifact'leri cutover sonrası hedef SHA/verifier run bağıyla
+  etiketlenemez. Aggregate reuse yoksa fresh report-generation smoke current verifier içinde üretilir,
+  `aggregateReuseRunId=null` kalır ve manifest entry'si verifier run URL'sine bağlanır. Diğer tüm staging artifact'leri cutover sonrası hedef SHA/verifier run bağıyla
   üretilmelidir. Observability içindeki firing zamanı da cutover öncesine
   taşınamaz. Örnek-evidence gevşetmesi yalnız `artifacts/prod-evidence-template-check/**`
   fixture'ında kabul edilir.
