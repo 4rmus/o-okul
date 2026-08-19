@@ -31,6 +31,26 @@ const firstGateSummaryMatchFields = new Map([
   ["traefikHttps", ["url", "expectedStatus", "statusCode", "strictTransportSecurity"]],
   ["alertWebhook", ["webhookUrl", "statusCode", "authorizationScheme"]],
 ]);
+const uiUxArtifactFiles = [
+  "summary.json",
+  "uat.json",
+  "privacy-review.json",
+  ...Array.from({ length: 6 }, (_, index) => `phase-${index}.json`),
+  ...["dashboard", "system", "system-tenants", "optik", "rapor", "portal"].flatMap((surface) =>
+    [320, 375, 414, 768, 1024, 1440].map((width) => `${surface}-${width}.png`),
+  ),
+];
+const supportingReportArtifacts = ["db-rls-check.log", "db-rls-check-live.log", "rls-load-smoke.json"];
+const sensitiveRlsLogPatterns = [
+  /\b(?:postgres(?:ql)?|redis):\/\/\S+/iu,
+  /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/iu,
+  /\b(?:\+90|0)?5\d{9}\b/u,
+  /\b[1-9]\d{10}\b/u,
+  /(?:^|[\s,{])["']?(?:tenantId|tenant_id|studentId|student_id)["']?\s*[:=]\s*["']?[^\s,"'}]+/imu,
+  /(?:^|[\s,{])["']?(?:authorization|cookie|password|secret|token|api[_-]?key|database_url|direct_database_url)["']?\s*[:=]\s*["']?[^\s,"'}]+/imu,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/u,
+  /\bBearer\s+\S+/iu,
+];
 const reportArtifacts = new Map([
   [
     "restoreDrill",
@@ -201,6 +221,23 @@ const reportArtifacts = new Map([
       script: "scripts/check-uat-evidence.mjs",
       targetEnv: "UAT_EVIDENCE_TARGET",
       allowEnv: "UAT_ALLOW_EXAMPLE_EVIDENCE",
+    },
+  ],
+  [
+    "runtimeParity",
+    {
+      file: "runtime-parity.json",
+      script: "scripts/check-runtime-parity-evidence.mjs",
+      targetEnv: "RUNTIME_PARITY_EVIDENCE_TARGET",
+    },
+  ],
+  [
+    "liveOnboarding",
+    {
+      file: "live-onboarding.json",
+      script: "scripts/check-live-onboarding-result.mjs",
+      targetEnv: "LIVE_ONBOARDING_RESULT_TARGET",
+      allowEnv: "LIVE_ONBOARDING_RESULT_ALLOW_EXAMPLE_EVIDENCE",
     },
   ],
 ]);
@@ -403,8 +440,16 @@ const missingArtifactRemediation = new Map([
     "reports/uat.json",
     {
       command: "UAT_OUTPUT=artifacts/staging/reports/uat.json corepack pnpm uat:generate",
-      prerequisite: "Twelve command evidence entries and all 21 UAT persona scenarios must be PASS.",
+      prerequisite: "Ten executed command evidence entries and all 21 UAT persona scenarios must be PASS.",
       blocker: "Real role-based UAT command and scenario evidence JSON files are missing.",
+    },
+  ],
+  [
+    "reports/runtime-parity.json",
+    {
+      command: "RUNTIME_PARITY_EVIDENCE_TARGET=file:///.../runtime-parity.json corepack pnpm runtime-parity:check",
+      prerequisite: "Final verifier run must recheck all four exact-SHA service images and both public health endpoints.",
+      blocker: "Runtime parity is not release evidence when it exists only in logs or predates final summary publication.",
     },
   ],
   [
@@ -607,6 +652,15 @@ const missingArtifactHandoff = new Map([
     },
   ],
   [
+    "reports/runtime-parity.json",
+    {
+      phase: "Gate E - Final runtime parity",
+      ownerAgent: "ops_release_engineer",
+      evidenceGate: "runtime-parity:check",
+      nextActionKind: "exact_image_and_public_health_artifact",
+    },
+  ],
+  [
     "release-summary-*.json",
     {
       phase: "Faz 5/Faz 10 - Production summary terfisi",
@@ -632,6 +686,7 @@ requireNoForbiddenArtifactFiles(artifactsDir, failures);
 const githubCiFile = resolve(artifactsDir, "reports", "github-ci.json");
 const deploymentCutoverFile = resolve(artifactsDir, "reports", deploymentCutoverArtifact.file);
 const firstGatesManifestFile = resolve(artifactsDir, "first-gates", "first-gates-manifest.json");
+const releaseEvidenceManifestFile = resolve(artifactsDir, "release-evidence-manifest.json");
 const releaseSummaryFiles = existsSync(artifactsDir)
   ? readdirSync(artifactsDir)
       .filter((file) => /^release-summary-.+\.json$/.test(file))
@@ -640,7 +695,11 @@ const releaseSummaryFiles = existsSync(artifactsDir)
   : [];
 
 requireFile(firstGatesManifestFile, failures, "first-gates/first-gates-manifest.json");
+requireFile(releaseEvidenceManifestFile, failures, "release-evidence-manifest.json");
 for (const { file } of reportArtifacts.values()) {
+  requireFile(resolve(artifactsDir, "reports", file), failures, `reports/${file}`);
+}
+for (const file of supportingReportArtifacts) {
   requireFile(resolve(artifactsDir, "reports", file), failures, `reports/${file}`);
 }
 requireFile(deploymentCutoverFile, failures, `reports/${deploymentCutoverArtifact.file}`);
@@ -669,38 +728,70 @@ if (failures.length === 0) {
   });
   runChecker("scripts/check-production-evidence-summary.mjs", {
     PRODUCTION_EVIDENCE_SUMMARY_TARGET: pathToFileURL(releaseSummaryFiles[0]).href,
-    PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX: "1",
+    PRODUCTION_EVIDENCE_ALLOW_STAGING: "1",
     ...(allowExampleEvidence ? { PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE: "1" } : {}),
   });
 }
 
-const reportFailures = failures.length === 0 ? validateArtifactBundle(releaseSummaryFiles[0], githubCiFile, deploymentCutoverFile, firstGatesManifestFile) : failures;
+const reportFailures = failures.length === 0
+  ? validateArtifactBundle(releaseSummaryFiles[0], githubCiFile, deploymentCutoverFile, firstGatesManifestFile, releaseEvidenceManifestFile)
+  : failures;
 if (reportFailures.length > 0) {
   fail(reportFailures);
 }
+runChecker("scripts/check-release-evidence-manifest.mjs", {
+  RELEASE_EVIDENCE_ARTIFACTS_DIR: artifactsDir,
+  RELEASE_EVIDENCE_MANIFEST_TARGET: releaseEvidenceManifestFile,
+  ...(allowExampleEvidence ? { RELEASE_EVIDENCE_MANIFEST_ALLOW_EXAMPLE_EVIDENCE: "1" } : {}),
+});
 
 console.log(
   `Staging release artifact bundle kontrolü geçti: ${releaseSummaryFiles[0].replace(`${process.cwd()}/`, "")}`,
 );
 
-function validateArtifactBundle(summaryFile, githubCiFilePath, deploymentCutoverFilePath, manifestFilePath) {
+function validateArtifactBundle(summaryFile, githubCiFilePath, deploymentCutoverFilePath, firstGatesManifestPath, releaseManifestPath) {
   const output = [];
   const summary = readJsonFile(summaryFile, "release summary", output);
   const githubCi = readJsonFile(githubCiFilePath, "github-ci", output);
   const deploymentCutover = readJsonFile(deploymentCutoverFilePath, "deployment cutover", output);
-  const firstGatesManifest = readJsonFile(manifestFilePath, "first-gates manifest", output);
-  if (!summary || !githubCi || !deploymentCutover || !firstGatesManifest) return output;
+  const firstGatesManifest = readJsonFile(firstGatesManifestPath, "first-gates manifest", output);
+  const releaseManifest = readJsonFile(releaseManifestPath, "release evidence manifest", output);
+  if (!summary || !githubCi || !deploymentCutover || !firstGatesManifest || !releaseManifest) return output;
 
   requireDateNotAfter(firstGatesManifest, output, "first-gates.generatedAt", "generatedAt", summary, "summary.generatedAt", "generatedAt");
   requireReleaseSummaryFileNameMatchesSummary(summaryFile, summary, output);
   requireGithubCiMatchesSummary(summary, githubCi, output);
   requireReleaseSourceBinding(summary, output);
   requireDeploymentCutoverMatchesSummary(summary, deploymentCutover, output);
+  requireReleaseManifestMatchesBundle(summary, githubCi, deploymentCutover, releaseManifest, output);
+  requireRlsSupportingEvidence(artifactsDir, output);
   requireReportFilesMatchSummary(summary, artifactsDir, output);
+  requireRuntimeParityMatchesRelease(summary, deploymentCutover, artifactsDir, output);
   requireSmokeFilesMatchSummary(summary, dirname(summaryFile), output);
-  requireFirstGatesMatchSummary(summary, firstGatesManifest, manifestFilePath, output);
+  requireFirstGatesMatchSummary(summary, firstGatesManifest, firstGatesManifestPath, output);
 
   return output;
+}
+
+function requireReleaseManifestMatchesBundle(summary, githubCi, cutover, manifest, output) {
+  const summarySha = summary?.reports?.githubCi?.commitSha;
+  const summaryTag = extractImageTag(summary?.reports?.deploymentRollback?.releaseCandidate);
+  if (
+    manifest?.repository !== githubCi?.repository ||
+    manifest?.repository !== cutover?.repository ||
+    manifest?.sourceSha !== summarySha ||
+    manifest?.sourceSha !== githubCi?.commitSha ||
+    manifest?.sourceSha !== cutover?.sourceSha ||
+    manifest?.releaseImageTag !== summaryTag ||
+    manifest?.releaseImageTag !== cutover?.releaseImageTag ||
+    String(manifest?.deployRunId) !== String(cutover?.deployRunId) ||
+    manifest?.cutoverAt !== cutover?.cutoverAt
+  ) {
+    output.push("release-evidence-manifest.json summary/github-ci/deployment-cutover exact release bağıyla eşleşmeli.");
+  }
+  if (Date.parse(summary?.generatedAt) > Date.parse(manifest?.generatedAt)) {
+    output.push("release-evidence-manifest.json final summary üretildikten sonra yazılmalı.");
+  }
 }
 
 function requireDeploymentCutoverMatchesSummary(summary, cutover, output) {
@@ -756,6 +847,64 @@ function requireReleaseSummaryFileNameMatchesSummary(summaryFile, summary, outpu
   }
 }
 
+function requireRlsSupportingEvidence(rootDir, output) {
+  const reportsDir = resolve(rootDir, "reports");
+  const staticLogPath = resolve(reportsDir, "db-rls-check.log");
+  const liveLogPath = resolve(reportsDir, "db-rls-check-live.log");
+  const loadSmokePath = resolve(reportsDir, "rls-load-smoke.json");
+  const rlsReportPath = resolve(reportsDir, "rls-live.json");
+  if (![staticLogPath, liveLogPath, loadSmokePath, rlsReportPath].every(existsSync)) return;
+
+  const staticLog = readFileSync(staticLogPath, "utf8");
+  const liveLog = readFileSync(liveLogPath, "utf8");
+  requireSafeRlsLog(staticLog, "reports/db-rls-check.log", output);
+  requireSafeRlsLog(liveLog, "reports/db-rls-check-live.log", output);
+  for (const token of [
+    "Tenant model parity kontrolü geçti:",
+    "RLS policy kontrolü geçti:",
+    "Tenant relation FK kontrolü geçti:",
+  ]) {
+    if (!staticLog.includes(token)) output.push(`reports/db-rls-check.log başarı kanıtı eksik: ${token}`);
+  }
+  for (const token of ["Canlı RLS kontrolü geçti:", "Sentetik RLS fixture temizliği geçti: 2 tenant silindi."]) {
+    if (!liveLog.includes(token)) output.push(`reports/db-rls-check-live.log başarı/cleanup kanıtı eksik: ${token}`);
+  }
+
+  const loadSmoke = readJsonFile(loadSmokePath, "reports/rls-load-smoke.json", output);
+  const rlsReport = readJsonFile(rlsReportPath, "reports/rls-live.json", output);
+  if (!loadSmoke || !rlsReport) return;
+  output.push(...validateSmokeEvidencePayload(loadSmoke, {
+    expectedCheck: "rls_load_smoke",
+    allowedEnvironments: ["staging", "production"],
+    label: "reports/rls-load-smoke.json",
+    allowExampleEvidence,
+  }));
+  const expectedReferences = [
+    "artifact:artifacts/staging/reports/db-rls-check.log",
+    "artifact:artifacts/staging/reports/db-rls-check-live.log",
+    "artifact:artifacts/staging/reports/rls-load-smoke.json",
+  ];
+  for (const reference of expectedReferences) {
+    if (!rlsReport.evidenceReferences?.includes(reference)) output.push(`reports/rls-live.json evidenceReferences eksik: ${reference}`);
+  }
+  for (const key of ["targetRps", "actualRps", "durationSeconds", "concurrency", "queriesCompleted", "failures"]) {
+    if (stableStringify(rlsReport.loadSmoke?.[key]) !== stableStringify(loadSmoke.loadSmoke?.[key])) {
+      output.push(`reports/rls-live.json loadSmoke.${key} reports/rls-load-smoke.json ile eşleşmeli.`);
+    }
+  }
+  for (const key of ["tenantAHash", "tenantBHash"]) {
+    if (rlsReport.isolation?.[key] !== loadSmoke.isolation?.[key]) {
+      output.push(`reports/rls-live.json isolation.${key} reports/rls-load-smoke.json ile eşleşmeli.`);
+    }
+  }
+}
+
+function requireSafeRlsLog(value, label, output) {
+  if (sensitiveRlsLogPatterns.some((pattern) => pattern.test(value))) {
+    output.push(`${label} hassas log içeriği taşımamalı.`);
+  }
+}
+
 function extractImageTag(value) {
   if (typeof value !== "string" || value.trim() === "") return undefined;
   const slashIndex = value.lastIndexOf("/");
@@ -808,6 +957,7 @@ function requireReportFilesMatchSummary(summary, artifactsDirPath, output) {
     const reportFile = resolve(artifactsDirPath, "reports", file);
     const payload = readJsonFile(reportFile, `reports/${file}`, output);
     if (!payload) continue;
+    if (key === "runtimeParity" || key === "liveOnboarding") continue;
 
     const embedded = embeddedReports[key];
     if (!embedded || typeof embedded !== "object" || Array.isArray(embedded)) {
@@ -824,6 +974,23 @@ function requireReportFilesMatchSummary(summary, artifactsDirPath, output) {
         output.push(`summary.reports.${key}.${embeddedKey} reports/${file} ile eşleşmeli.`);
       }
     }
+  }
+}
+
+function requireRuntimeParityMatchesRelease(summary, cutover, artifactsDirPath, output) {
+  const runtimeParity = readJsonFile(resolve(artifactsDirPath, "reports/runtime-parity.json"), "reports/runtime-parity.json", output);
+  if (!runtimeParity) return;
+  const sourceSha = summary?.reports?.githubCi?.commitSha;
+  const repository = summary?.reports?.githubCi?.repository;
+  if (
+    runtimeParity.sourceSha !== sourceSha ||
+    runtimeParity.releaseImageTag !== sourceSha ||
+    runtimeParity.repository !== repository ||
+    runtimeParity.sourceSha !== cutover?.sourceSha ||
+    runtimeParity.repository !== cutover?.repository
+  ) output.push("reports/runtime-parity.json summary/github-ci/deployment-cutover exact release bağıyla eşleşmeli.");
+  if (Date.parse(runtimeParity.checkedAt) > Date.parse(summary?.generatedAt)) {
+    output.push("reports/runtime-parity.json final summary üretiminden sonra olamaz.");
   }
 }
 
@@ -1006,12 +1173,12 @@ function requireFile(path, output, label) {
 }
 
 function requireExpectedArtifactEntries(rootDir, summaryFile, output) {
-  const expectedRootEntries = new Set(["first-gates", "reports", "smoke", basename(summaryFile)]);
+  const expectedRootEntries = new Set(["first-gates", "reports", "smoke", "ui-ux-redesign", "release-evidence-manifest.json", basename(summaryFile)]);
   requireExactDirectoryEntries(rootDir, expectedRootEntries, output);
 
   requireExactDirectoryEntries(
     resolve(rootDir, "reports"),
-    new Set([...reportArtifacts.values()].map(({ file }) => file).concat(deploymentCutoverArtifact.file)),
+    new Set([...reportArtifacts.values()].map(({ file }) => file).concat(deploymentCutoverArtifact.file, supportingReportArtifacts)),
     output,
   );
   requireExactDirectoryEntries(
@@ -1027,13 +1194,14 @@ function requireExpectedArtifactEntries(rootDir, summaryFile, output) {
     ]),
     output,
   );
+  requireUiUxArtifactEntries(rootDir, output);
 }
 
 function requireExpectedArtifactEntriesWithoutSummary(rootDir, output) {
-  requireExactDirectoryEntries(rootDir, new Set(["first-gates", "reports", "smoke"]), output);
+  requireExactDirectoryEntries(rootDir, new Set(["first-gates", "reports", "smoke", "ui-ux-redesign", "release-evidence-manifest.json"]), output);
   requireExactDirectoryEntries(
     resolve(rootDir, "reports"),
-    new Set([...reportArtifacts.values()].map(({ file }) => file).concat(deploymentCutoverArtifact.file)),
+    new Set([...reportArtifacts.values()].map(({ file }) => file).concat(deploymentCutoverArtifact.file, supportingReportArtifacts)),
     output,
   );
   requireExactDirectoryEntries(
@@ -1049,6 +1217,12 @@ function requireExpectedArtifactEntriesWithoutSummary(rootDir, output) {
     ]),
     output,
   );
+  requireUiUxArtifactEntries(rootDir, output);
+}
+
+function requireUiUxArtifactEntries(rootDir, output) {
+  const directory = resolve(rootDir, "ui-ux-redesign");
+  requireExactDirectoryEntries(directory, new Set(uiUxArtifactFiles), output);
 }
 
 function requireExactDirectoryEntries(dir, expectedEntries, output) {

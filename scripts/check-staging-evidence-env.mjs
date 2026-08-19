@@ -8,6 +8,10 @@ const prodEnvScriptPath = "scripts/check-prod-env.mjs";
 const prodEvidenceScriptPath = "scripts/check-prod-evidence.mjs";
 const workflowPath = process.env.STAGING_DEPLOY_WORKFLOW_PATH ?? ".github/workflows/staging-deploy.yml";
 const outboxVerifyWorkflowPath = ".github/workflows/staging-outbox-verify.yml";
+const adminMfaGeneratorPath = "scripts/generate-admin-mfa-evidence.mjs";
+const auditNullTenantGeneratorPath = "scripts/generate-audit-null-tenant-evidence.mjs";
+const identityMigrationGeneratorPath = "scripts/generate-identity-migration-evidence.mjs";
+const financialRetentionGeneratorPath = "scripts/generate-financial-retention-evidence.mjs";
 
 const args = process.argv.slice(2);
 const envFile = readArgValue("--env-file");
@@ -452,13 +456,38 @@ function checkAlertmanagerUrlParserDoesNotLeak(output, workflow) {
 
 function checkOutboxVerifyWorkflowContract(output) {
   const workflow = readFileSync(outboxVerifyWorkflowPath, "utf8");
+  for (const generatorPath of [identityMigrationGeneratorPath, financialRetentionGeneratorPath]) {
+    const generator = readFileSync(generatorPath, "utf8");
+    for (const token of [
+      'client.query("BEGIN READ ONLY")',
+      'client.query("SELECT set_config(\'app.bypass_rls\', \'true\', true)")',
+      'client.query("ROLLBACK")',
+      '"QUEUE_PREFIX"',
+      'NODE_ENV: "test"',
+      'PERSISTENCE_DRIVER: "memory"',
+      'API_RATE_LIMIT_ENABLED: "false"',
+      'API_RATE_LIMIT_STORE: "memory"',
+      'LOGIN_ATTEMPT_LIMITER_STORE: "memory"',
+      'QUEUE_METRICS_ENABLED: "false"',
+      'REDIS_URL: "redis://127.0.0.1:1"',
+      'REPORT_PDF_RENDERER: "memory"',
+    ]) {
+      if (!generator.includes(token)) {
+        output.push(`${generatorPath} staging-safe generator token eksik: ${token}`);
+      }
+    }
+  }
   for (const token of [
     "name: Staging Outbox Verify",
     "deploy_run_id:",
     "full_evidence:",
+    "reuse_outbox_smoke_run_id:",
+    "reuse_provider_smoke_run_id:",
+    "ui_ux_approved_at:",
     "description: \"Also run the separate full production evidence aggregation.\"",
     "if: ${{ inputs.full_evidence }}",
     "if: ${{ success() && inputs.full_evidence }}",
+    "if: ${{ failure() && inputs.full_evidence }}",
     "types: [labeled]",
     "github.event.label.name == 'staging-outbox-verify'",
     "vars.STAGING_OUTBOX_DEPLOY_RUN_ID",
@@ -470,7 +499,16 @@ function checkOutboxVerifyWorkflowContract(output) {
     "Bind selected deployment run to cutover source",
     "github.event.pull_request.head.sha",
     "eventName === \"pull_request\"",
+    "Stage verifier-only evidence helpers",
+    'verifier_root="$RUNNER_TEMP/gate-e-verifier"',
+    "scripts/generate-identity-migration-evidence.mjs",
+    "scripts/generate-financial-retention-evidence.mjs",
+    "scripts/check-prod-evidence.mjs",
+    "scripts/check-staging-release-artifacts.mjs",
+    "scripts/smoke-isem-answer-key-live.mjs",
+    "scripts/smoke-raw-import-upload-live.mjs",
     "clean: false",
+    "Overlay verifier-only evidence helpers",
     "Validate staging verify environment",
     "Preflight current images and private outbox source",
     "Phase B private source missing for release",
@@ -485,8 +523,12 @@ function checkOutboxVerifyWorkflowContract(output) {
     "o-okul-private/secret-delivery-outbox",
     "SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_FILE=/run/outbox-source/source-id",
     "Upload sanitized Phase B outbox evidence",
+    "Reuse exact cutover-bound sanitized outbox smoke",
+    "staging-outbox-smoke-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ inputs.reuse_outbox_smoke_run_id }}",
     "staging-outbox-smoke-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}",
-    "PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX=1",
+    "staging-activation-evidence-${{ env.CUTOVER_SOURCE_SHA }}",
+    "staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ inputs.reuse_provider_smoke_run_id }}",
+    "PRODUCTION_EVIDENCE_ALLOW_STAGING=1",
     "pnpm staging:evidence-env:check -- --mode full --env-file .staging-evidence.env",
     "Bind verified UI/UX completion to full evidence",
     "UI_UX_PROFESSIONALIZATION_FULL_EVIDENCE: \"1\"",
@@ -501,37 +543,271 @@ function checkOutboxVerifyWorkflowContract(output) {
     "if: ${{ always() }}",
     "Clean local verification secrets",
     "STAGING_SSH_KEY_PATH=$RUNNER_TEMP/staging_deploy_key",
-    "trap 'rm -f -- .staging-evidence.env' EXIT",
+    "scripts/isem-optical-pipeline-contract.mjs",
+    "docs/evidence-manifests/isem-optical-pipeline-inputs.json",
+    "-v \"$OUTBOX_VERIFY_HELPERS_DIR:/app/docs/evidence-manifests:ro\"",
+    "trap 'rm -f -- .staging-evidence.env \"$runtime_env\"' EXIT",
+    "grep -Fq 'Array.from({ length: 8 }, () => createRecoveryCode())' apps/api/src/auth/totp-mfa.ts",
     "sed -i 's/^ADMIN_MFA_MODE=.*/ADMIN_MFA_MODE=required/' .staging-evidence.env",
+    "sed -i 's/^ADMIN_MFA_RECOVERY_CODES_PER_ENROLLMENT=.*/ADMIN_MFA_RECOVERY_CODES_PER_ENROLLMENT=8/' .staging-evidence.env",
+    "grep -Fxq 'ADMIN_MFA_RECOVERY_CODES_PER_ENROLLMENT=8' .staging-evidence.env",
+    "sed -i 's/^NOTIFICATION_SMOKE_PUSH_TO=.*/NOTIFICATION_SMOKE_PUSH_TO=/' .staging-evidence.env",
+    "grep -Fxq 'NOTIFICATION_SMOKE_PUSH_TO=' .staging-evidence.env",
+    "umask 077",
+    "staging-runtime-required.env",
+    "APP_URL API_URL WEB_URL DOMAIN CF_DNS_API_TOKEN_FILE LEGACY_TENANT_LOGIN_CUTOFF_AT NOTIFICATION_FROM_EMAIL NOTIFICATION_REPLY_TO_EMAIL NOTIFICATION_SMOKE_EMAIL_TO TRAEFIK_HTTPS_SMOKE_URL DATABASE_URL DIRECT_DATABASE_URL DOCKER_DATABASE_URL DOCKER_DIRECT_DATABASE_URL SECRET_DELIVERY_WORKER_DB_PASSWORD SECRET_DELIVERY_OUTBOX_DATABASE_URL DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL REDIS_URL",
     "chmod 600 .staging-evidence.env",
+    "UI_UX_REDESIGN_APPROVED_AT=$UI_UX_APPROVED_AT_INPUT",
     "const expectedRunUrl = `https://github.com/${repository}/actions/runs/${runId}`;",
     "references[1] = `run:${githubCi.workflow.runUrl}`;",
-    "Deployment rollback report cutover release/tag bağı geçersiz.",
+    "deployment-rollback-source.json",
+    "pnpm deployment:rollback:check",
+    "scripts/generate-deployment-rollback-evidence.mjs",
+    "Historical rollback report current fallback image ile zincirlenemedi.",
+    "DEPLOYMENT_ROLLBACK_SOURCE_RUN_URL",
+    "DEPLOYMENT_ROLLBACK_TARGET=file://$PWD/artifacts/staging/reports/deployment-rollback.json",
     "echo \"ROLLBACK_IMAGE_TAG=$rollback_image_tag\"",
+    "run_gate_e_live_uat_rls",
+    "run_gate_e_data_safety_reconciliation",
+    "run_gate_e_observability_alert_drill",
+    "Validate preserved unexpected artifact archive",
+    "Tam 16 dosyalık unexpected artifact arşivi doğrulanamadı.",
+    "Unexpected artifact archive root plain dizin olmalı.",
+    "Unexpected artifact archive path bundle dışına çıkamaz.",
+    "Unexpected artifact archive parent dizini plain olmalı.",
+    "Unexpected artifact archive içeriği manifest ile birebir eşleşmeli.",
+    "Unexpected artifact arşiv dosyası plain file olmalı.",
+    'manifest.gapReportFile !== "artifacts/local/staging-release-gap-report.json"',
+    'Object.keys(manifest).sort().join(",") !== "archivedAt,artifactsTarget,entries,gapReportFile,result"',
+    'archived.path === "manifest.json"',
+    'manifest.entries.length !== 16',
+    "full_evidence requires run_gate_e_mutating_smokes=true; stale iSEM/UI/rate-limit artifacts cannot be promoted.",
+    "full_evidence requires run_gate_e_live_uat_rls=true; stale onboarding/RLS artifacts cannot be promoted.",
+    "full_evidence requires run_gate_e_data_safety_reconciliation=true; stale restore/inline-upload artifacts cannot be promoted.",
+    "full_evidence requires run_gate_e_observability_alert_drill=true; stale alert delivery artifacts cannot be promoted.",
+    'report_smoke_scope="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"',
+    'report_smoke_tenant_id="tenant-gate-e-report-smoke-$report_smoke_scope"',
+    'report_smoke_queue_prefix="gate-e-report-generation-$report_smoke_scope"',
+    "report_smoke_started=false",
+    'if [ -z "$REUSE_AGGREGATE_SMOKE_RUN_ID" ]; then',
+    'REPORT_GENERATION_SMOKE_PASSWORD="$ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD"',
+    'REPORT_GENERATION_SMOKE_EVIDENCE_FILE="$PWD/artifacts/staging/smoke/report-generation.json"',
+    'QUEUE_PREFIX="$report_smoke_queue_prefix"',
+    'pnpm --filter @o-okul/worker exec node --env-file="$PWD/.staging-evidence.env" --input-type=module',
+    'spawnSync("pnpm", ["report-generation:smoke"]',
+    "await queue.obliterate({ force: true });",
+    'REPORT_GENERATION_SMOKE_STARTED="$report_smoke_started"',
+    'if (aggregateRunId) evidenceReferences.push(`run:https://github.com/${repository}/actions/runs/${aggregateRunId}`);',
+    "aggregate_reuse_args=(--reuse-report-generation-smoke)",
+    "corepack pnpm live:onboarding:smoke",
+    "Live onboarding sentetik tenant/session temizliği geçti",
+    "deletedTenantIdHash",
+    "deletedTenantCleanupRunId",
+    "RLS_LIVE_OUTPUT=artifacts/staging/reports/rls-live.json",
+    "scripts/generate-rls-live-evidence.mjs",
+    "scripts/generate-audit-null-tenant-evidence.mjs",
+    "scripts/check-audit-null-tenant-evidence.mjs",
+    "scripts/generate-restore-drill-evidence.mjs",
+    "scripts/run-observability-alert-drill.mjs",
+    "OBSERVABILITY_UAT_NOT_BEFORE=\"$CUTOVER_AT\"",
+    "SMS_ENABLED=false",
+    "packages/db/scripts/check-rls-live.mjs",
+    "RLS_LIVE_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/rls-live.json",
+    "LIVE_ONBOARDING_RESULT_TARGET=\"file://$PWD/artifacts/staging/reports/live-onboarding.json\"",
+    "pnpm live:onboarding:result-check",
+    "Gate E sentetik tenant/session temizliği geçti",
+    "gate_e_mutating_cleanup_complete=true",
+    "RATE_LIMIT_LOGIN_SMOKE_TENANT_ID",
+    "RATE_LIMIT_LOGIN_SMOKE_LOGIN_NAME",
+    "redis_cleanup_keys=()",
+    "auth:login-attempt:$attempt_key:failures",
+    "auth:login-attempt:$attempt_key:lock",
+    "redis-cli EXISTS \"$cleanup_key\"",
+    "UAT_SOURCE_SHA=\"$CUTOVER_SOURCE_SHA\"",
+    "UAT_VERIFIER_RUN_URL=\"$verifier_run_url\"",
+    "UAT_GITHUB_CI_RUN_URL=\"$github_ci_run_url\"",
+    "UAT_GITHUB_CI_EVIDENCE_TARGET=\"file://$PWD/artifacts/staging/reports/github-ci.json\"",
+    "SECURITY_AUDIT_RLS_LIVE_REFERENCE=artifact:artifacts/staging/reports/rls-live.json",
+    "SENTRY_SMOKE_NOT_BEFORE=$CUTOVER_AT",
+    "ALERT_WEBHOOK_SMOKE_NOT_BEFORE=$CUTOVER_AT",
+    "cmp -s artifacts/provider-smoke-reuse/reports/deployment-cutover.json artifacts/cutover/deployment-cutover.json",
+    "artifacts/activation/smoke/wal-archive.json",
     "IDENTITY_MIGRATION_OUTPUT=artifacts/staging/reports/identity-migration.json",
     "node --env-file=.staging-evidence.env scripts/generate-identity-migration-evidence.mjs",
     "FINANCIAL_RETENTION_OUTPUT=artifacts/staging/reports/financial-retention.json",
     "node --env-file=.staging-evidence.env scripts/generate-financial-retention-evidence.mjs",
     "SECURITY_AUDIT_OUTPUT=artifacts/staging/reports/security-audit.json",
     "node --env-file=.staging-evidence.env scripts/generate-security-audit-evidence.mjs",
+    "Install Chromium for public staging UI evidence",
+    "pnpm --filter @o-okul/web exec playwright install --with-deps chromium",
+    "NEXT_E2E_BASE_URL=https://o-okul.com",
+    "UI_VISUAL_IGNORE_CLOUDFLARE_BEACON_CSP=1",
+    "UI_VISUAL_ARTIFACT_DIR=\"$RUNNER_TEMP/gate-e-ui-captures\"",
+    "e2e-next/ui-visual-qa-next.spec.ts --grep \"kurum dashboard|sistem dashboard|sistem kurum yönetimi|rol portal aksiyon şeritleri|rapor çalışma alanı|optik workflow\"",
+    "scripts/prepare-ui-ux-redesign-staging-artifacts.mjs",
+    "--output-dir artifacts/staging/ui-ux-redesign",
     "IDENTITY_MIGRATION_TARGET=file://$PWD/artifacts/staging/reports/identity-migration.json",
     "FINANCIAL_RETENTION_TARGET=file://$PWD/artifacts/staging/reports/financial-retention.json",
     "SECURITY_AUDIT_TARGET=file://$PWD/artifacts/staging/reports/security-audit.json",
     "Recheck exact images before publishing verification",
+    "artifacts/staging/reports/runtime-parity.json",
+    "Finalize verified release summary",
+    "summary.canPromote = true",
+    "Generate exact release evidence manifest",
+    "scripts/generate-release-evidence-manifest.mjs",
+    "scripts/check-release-evidence-manifest.mjs",
+    "release-evidence-manifest.json",
+    "Check verified staging release artifact bundle",
+    "Invalidate unverified release summary",
+    "summary.canPromote = false",
+    "--reuse-sentry-smoke",
+    "--reuse-alert-webhook-smoke",
+    "--reuse-wal-smoke",
     "staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}",
+    "path: |",
+    "!artifacts/staging/private/**",
     "scripts/smoke-secret-delivery-outbox-staging.mjs",
     "scripts/check-secret-delivery-outbox-evidence.mjs",
   ]) {
     if (!workflow.includes(token)) output.push(`${outboxVerifyWorkflowPath} token eksik: ${token}`);
   }
+  const timeoutLines = workflow
+    .split(/\r?\n/u)
+    .filter((line) => /^\s*timeout-minutes:/u.test(line));
+  if (timeoutLines.length !== 1 || timeoutLines[0] !== "    timeout-minutes: 90") {
+    output.push(`${outboxVerifyWorkflowPath} verify job timeout satırı tam olarak 90 dakika olmalı.`);
+  }
+  if (workflow.includes("timeout-minutes: 45")) {
+    output.push(`${outboxVerifyWorkflowPath} eski 45 dakikalık job süresi taşımamalı.`);
+  }
+  if (workflow.split(/\r?\n/u).includes('            [[ "$REUSE_AGGREGATE_SMOKE_RUN_ID" =~ ^[0-9]+$ ]]')) {
+    output.push(`${outboxVerifyWorkflowPath} fresh aggregate smoke yolunda reuse run ID zorunlu olmamalı.`);
+  }
+  if (
+    workflow.includes("grep -Ec '^REPORT_GENERATION_SMOKE_EVIDENCE_FILE='") ||
+    workflow.includes('sed -i "s#^REPORT_GENERATION_SMOKE_EVIDENCE_FILE=')
+  ) {
+    output.push(`${outboxVerifyWorkflowPath} summary-defaulted report-generation output anahtarını staging env içinde aramamalı.`);
+  }
+  if (workflow.split('pnpm --filter @o-okul/worker exec node --env-file="$PWD/.staging-evidence.env" --input-type=module').length - 1 !== 2) {
+    output.push(`${outboxVerifyWorkflowPath} BullMQ preflight ve cleanup tam iki worker-package Node çağrısı kullanmalı.`);
+  }
+  const workerModuleResolution = spawnSync(
+    "pnpm",
+    ["--filter", "@o-okul/worker", "exec", "node", "--input-type=module", "-e", 'await import("bullmq"); await import("pg");'],
+    { encoding: "utf8" },
+  );
+  if (workerModuleResolution.status !== 0) {
+    output.push(`${outboxVerifyWorkflowPath} worker package BullMQ/pg runtime çözümlemesi başarısız.`);
+  }
   if (workflow.match(/SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID|inputs\.source|secrets\..*SOURCE/i)) {
     output.push(`${outboxVerifyWorkflowPath} source ID GitHub input/secret olarak taşımamalı.`);
   }
-  if (workflow.split("if: ${{ inputs.full_evidence }}").length - 1 !== 4) {
-    output.push(`${outboxVerifyWorkflowPath} full evidence adımları tam olarak dört explicit koşulla ayrılmalı.`);
+  if (workflow.split("if: ${{ inputs.full_evidence }}").length - 1 !== 9) {
+    output.push(`${outboxVerifyWorkflowPath} full evidence adımları tam olarak dokuz explicit koşulla ayrılmalı.`);
   }
-  if (workflow.split("STAGING_ENVIRONMENT=production").length - 1 !== 3) {
-    output.push(`${outboxVerifyWorkflowPath} production summary child generator'larını tam üç production environment bağıyla çalıştırmalı.`);
+  for (const outputToken of [
+    "IDENTITY_MIGRATION_OUTPUT=artifacts/staging/reports/identity-migration.json",
+    "FINANCIAL_RETENTION_OUTPUT=artifacts/staging/reports/financial-retention.json",
+    "SECURITY_AUDIT_OUTPUT=artifacts/staging/reports/security-audit.json",
+  ]) {
+    const index = workflow.indexOf(outputToken);
+    if (index === -1 || !workflow.slice(Math.max(0, index - 80), index).includes("STAGING_ENVIRONMENT=staging")) {
+      output.push(`${outboxVerifyWorkflowPath} ${outputToken} staging environment bağıyla çalışmalı.`);
+    }
+  }
+  if (workflow.split("scripts/prepare-ui-ux-redesign-staging-artifacts.mjs").length - 1 !== 3) {
+    output.push(`${outboxVerifyWorkflowPath} UI/UX hazırlayıcıyı iki helper overlay ve bir execution bağıyla taşımalı.`);
+  }
+  requireWorkflowOrder(output, workflow, "rate-limit sentetik state cleanup sırası", [
+    'rate_limit_login_name="rate-limit-smoke-$GITHUB_RUN_ID"',
+    "redis_cleanup_keys=()",
+    'redis-cli DEL "${redis_cleanup_keys[@]}"',
+    'redis-cli EXISTS "$cleanup_key"',
+    'rm -sf api-rate-limit-shard',
+    "trap cleanup EXIT",
+    'redis_cleanup_keys=("$rate_key" "$other_rate_key")',
+    'redis_cleanup_keys+=("auth:login-attempt:$attempt_key:failures" "auth:login-attempt:$attempt_key:lock")',
+    'RATE_LIMIT_LOGIN_SMOKE_LOGIN_NAME="$RATE_LIMIT_LOGIN_SMOKE_LOGIN_NAME"',
+    "node --env-file=.env scripts/smoke-rate-limit-live.mjs",
+  ]);
+  requireWorkflowOrder(output, workflow, "Admin MFA build ve generator sırası", [
+    "pnpm --filter @o-okul/shared-types build",
+    "pnpm --filter @o-okul/db build",
+    "node --env-file=.staging-evidence.env scripts/generate-admin-mfa-evidence.mjs",
+  ]);
+  requireWorkflowOrder(output, workflow, "unexpected artifact arşiv preflight sırası", [
+    "Preflight current images and private outbox source",
+    "Validate preserved unexpected artifact archive",
+    "Run configured production evidence aggregation",
+  ]);
+  requireWorkflowOrder(output, workflow, "fresh report-generation smoke ve cleanup sırası", [
+    "report_smoke_started=false",
+    'if [ -z "$REUSE_AGGREGATE_SMOKE_RUN_ID" ]; then',
+    'REPORT_GENERATION_SMOKE_PASSWORD="$ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD"',
+    "report_smoke_started=true",
+    'spawnSync("pnpm", ["report-generation:smoke"]',
+    "cleanup_gate_e_mutating_state",
+    "gate_e_mutating_cleanup_complete=true",
+    "aggregate_reuse_args=(--reuse-report-generation-smoke)",
+    "pnpm prod:evidence:check",
+  ]);
+  requireWorkflowOrder(output, workflow, "Gate E cleanup ve audit-null tazelik sırası", [
+    "Live onboarding sentetik tenant/session temizliği geçti",
+    "Gate E sentetik tenant/session temizliği geçti",
+    "gate_e_mutating_cleanup_complete=true",
+    "node --env-file=.staging-evidence.env scripts/generate-audit-null-tenant-evidence.mjs",
+  ]);
+  if (workflow.split("'deletedTenantIdHash'").length - 1 !== 4) {
+    output.push(`${outboxVerifyWorkflowPath} onboarding ve iSEM cleanup için audit hash yazma/doğrulama bağlarını tam taşımalı.`);
+  }
+  if (workflow.split("'deletedTenantCleanupRunId'").length - 1 !== 4) {
+    output.push(`${outboxVerifyWorkflowPath} onboarding ve iSEM cleanup için verifier run yazma/doğrulama bağlarını tam taşımalı.`);
+  }
+  if (workflow.split("scripts/check-audit-null-tenant-evidence.mjs").length - 1 !== 2) {
+    output.push(`${outboxVerifyWorkflowPath} audit-null checker'ı iki verifier helper listesinde de taşımalı.`);
+  }
+  const adminMfaGenerator = readFileSync(adminMfaGeneratorPath, "utf8");
+  if (!adminMfaGenerator.includes('["DATABASE_URL", "DIRECT_DATABASE_URL", "ADMIN_MFA_MODE", "IDEMPOTENCY_STORE", "QUEUE_PREFIX"]')) {
+    output.push(`${adminMfaGeneratorPath} hedefli test child env'inden ADMIN_MFA_MODE değerini kaldırmalı.`);
+  }
+  const auditNullTenantGenerator = readFileSync(auditNullTenantGeneratorPath, "utf8");
+  requireWorkflowOrder(output, auditNullTenantGenerator, "audit null-tenant deleted marker önceliği", [
+    'WHEN COALESCE(audit."diff" ? \'deletedTenantIdHash\', false) THEN \'DELETED_TENANT\'',
+    'WHEN audit."action" LIKE \'system.%\'',
+    'WHEN audit."actorUserId" IS NOT NULL',
+  ]);
+  const uatGenerator = readFileSync("scripts/generate-uat-evidence.mjs", "utf8");
+  for (const token of [
+    "UAT_GITHUB_CI_EVIDENCE_TARGET",
+    "validateGithubCiEvidence(githubCiEvidence)",
+    "validateCiScenarioCoverage()",
+    "GitHub CI artifact pnpm run ci job URL'si exact CI run'a bağlanmalı.",
+    "Root ci script pnpm test çalıştırmalı.",
+    "scenario-specific CI komutu taşımıyor.",
+  ]) {
+    if (!uatGenerator.includes(token)) output.push(`scripts/generate-uat-evidence.mjs exact CI UAT bağı eksik: ${token}`);
+  }
+  for (const helper of ["scripts/smoke-isem-answer-key-live.mjs", "scripts/smoke-raw-import-upload-live.mjs"]) {
+    if (workflow.split(helper).length - 1 !== 2) {
+      output.push(`${outboxVerifyWorkflowPath} ${helper} iki verifier helper listesinde de taşınmalı.`);
+    }
+    const source = readFileSync(helper, "utf8");
+    for (const token of [
+      "process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? \"unknown\"",
+      "resolveSmokePassword(process.env.ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD)",
+      '["staging", "production"].includes(environment.toLowerCase())',
+      "configuredPassword.length < 16",
+      "/password|qwerty|12345678|admin123/i",
+      'INSERT INTO "LicenseTerm"',
+      '"licenseStartsAt"',
+      '"licenseEndsAt"',
+    ]) {
+      if (!source.includes(token)) output.push(`${helper} release smoke sözleşmesi eksik: ${token}`);
+    }
+    if (source.includes('const smokePassword = "password"')) {
+      output.push(`${helper} release smoke için sabit varsayılan parola kullanmamalı.`);
+    }
   }
   requireWorkflowOrder(output, workflow, "outbox source claim ve cleanup sırası", [
     "Bind selected deployment run to cutover source",
@@ -551,6 +827,81 @@ function checkOutboxVerifyWorkflowContract(output) {
     "Remove private outbox verification material",
     "rm -f -- \"$SOURCE_CLAIM_DIR/source-id\"",
     "Clean local verification secrets",
+  ]);
+  requireWorkflowOrder(output, workflow, "verifier helper ve exact target checkout sırası", [
+    "Bind selected deployment run to cutover source",
+    "Stage verifier-only evidence helpers",
+    "ref: ${{ env.CUTOVER_SOURCE_SHA }}",
+    "clean: false",
+    "Overlay verifier-only evidence helpers",
+    "[ \"$(git rev-parse HEAD)\" = \"$CUTOVER_SOURCE_SHA\" ]",
+    "Validate staging verify environment",
+  ]);
+  if ((workflow.match(/\[ "\$\(git rev-parse HEAD\)" = "\$CUTOVER_SOURCE_SHA" \]/g) ?? []).length !== 1) {
+    output.push(`${outboxVerifyWorkflowPath} git checkout exact-SHA kontrolünü yalnız GitHub runner checkout'unda kullanmalı.`);
+  }
+  for (const releaseBinding of [
+    '"WEB_IMAGE=ghcr.io/$GITHUB_REPOSITORY/web:$CUTOVER_SOURCE_SHA"',
+    '"API_IMAGE=ghcr.io/$GITHUB_REPOSITORY/api:$CUTOVER_SOURCE_SHA"',
+    '"WORKER_IMAGE=ghcr.io/$GITHUB_REPOSITORY/worker:$CUTOVER_SOURCE_SHA"',
+    '"QUEUE_BOARD_IMAGE=ghcr.io/$GITHUB_REPOSITORY/queue-board:$CUTOVER_SOURCE_SHA"',
+    '"SENTRY_RELEASE=$CUTOVER_SOURCE_SHA"',
+  ]) {
+    if (workflow.split(releaseBinding).length - 1 !== 3) {
+      output.push(`${outboxVerifyWorkflowPath} üç uzak Gate E mutasyon bloğunda exact release bağı eksik: ${releaseBinding}`);
+    }
+  }
+  if ((workflow.match(/scripts\/check-staging-release-artifacts\.mjs/g) ?? []).length !== 2) {
+    output.push("Staging release artifact checker verifier helper stage ve overlay listelerinde tam iki kez bulunmalı.");
+  }
+  if ((workflow.match(/^\s+package\.json \\$/gmu) ?? []).length !== 2) {
+    output.push("Verifier-only package script yüzeyi stage ve overlay listelerinde tam iki kez bulunmalı.");
+  }
+  for (const helper of ["scripts/check-release-evidence-manifest.mjs", "scripts/generate-release-evidence-manifest.mjs"]) {
+    if (workflow.split(helper).length - 1 !== 3) {
+      output.push(`${helper} verifier stage, overlay ve execution için tam üç kez bulunmalı.`);
+    }
+  }
+  requireWorkflowOrder(output, workflow, "final promotion ve başarısız summary sırası", [
+    "summary.canPromote = false",
+    "Recheck exact images before publishing verification",
+    "artifacts/staging/reports/runtime-parity.json",
+    "Finalize verified release summary",
+    "summary.canPromote = true",
+    "Generate exact release evidence manifest",
+    "Check verified staging release artifact bundle",
+    "Invalidate unverified release summary",
+    "if: ${{ success() && inputs.full_evidence }}",
+    "actions/upload-artifact@v4",
+  ]);
+  requireWorkflowOrder(output, workflow, "full evidence runtime env birleştirme sırası", [
+    "Run configured production evidence aggregation",
+    'runtime_env="$RUNNER_TEMP/staging-runtime-required.env"',
+    "trap 'rm -f -- .staging-evidence.env \"$runtime_env\"' EXIT",
+    'ssh -i "$STAGING_SSH_KEY_PATH"',
+    'chmod 600 "$runtime_env"',
+    "node --input-type=module - .staging-evidence.env \"$runtime_env\"",
+    "pnpm staging:evidence-env:check -- --mode full --env-file .staging-evidence.env",
+  ]);
+  requireWorkflowOrder(output, workflow, "historical rollback yeniden bağlama sırası", [
+    'rollback_source="$RUNNER_TEMP/deployment-rollback-source.json"',
+    "pnpm deployment:rollback:check",
+    'rollback_image_tag="$(ssh -i "$STAGING_SSH_KEY_PATH"',
+    "Historical rollback report current fallback image ile zincirlenemedi.",
+    "scripts/generate-deployment-rollback-evidence.mjs",
+    "DEPLOYMENT_ROLLBACK_TARGET=file://$PWD/artifacts/staging/reports/deployment-rollback.json",
+    "echo \"ROLLBACK_IMAGE_TAG=$rollback_image_tag\"",
+  ]);
+  requireWorkflowOrder(output, workflow, "public cutover UI artifact sırası", [
+    "node --env-file=.staging-evidence.env scripts/generate-security-audit-evidence.mjs",
+    "NEXT_E2E_BASE_URL=https://o-okul.com",
+    "UI_VISUAL_IGNORE_CLOUDFLARE_BEACON_CSP=1",
+    "e2e-next/ui-visual-qa-next.spec.ts --grep",
+    "node scripts/prepare-ui-ux-redesign-staging-artifacts.mjs",
+    "--output-dir artifacts/staging/ui-ux-redesign",
+    "UI_UX_REDESIGN_EVIDENCE_OUTPUT=\"artifacts/staging/reports/ui-ux-redesign.json\"",
+    "pnpm ui-ux-redesign:evidence-generate",
+    "pnpm prod:evidence:check",
   ]);
 }
 

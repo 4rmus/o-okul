@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, parse, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const outputPath = readOption("--output") ?? process.env.RESTORE_DRILL_OUTPUT;
 const environment = readOption("--environment") ?? process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "staging";
@@ -26,13 +27,15 @@ function run(command) {
   return result.stdout.trim();
 }
 
+let report;
+let drillError;
 try {
   run(`pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom --no-owner --no-privileges --file="${dumpPath}"`);
   run(`createdb -U "$POSTGRES_USER" "${restoreDb}"`);
   run(`pg_restore -U "$POSTGRES_USER" -d "${restoreDb}" "${dumpPath}"`);
 
   const tableCounts = readTableCounts(restoreDb);
-  const report = {
+  report = {
     result: "PASS",
     environment,
     drillDate: new Date().toISOString(),
@@ -42,23 +45,38 @@ try {
     errors: [],
   };
 
-  mkdirSync(dirname(outputFile), { recursive: true });
-  validateOutputTarget(outputFile);
-  writeFileSync(outputFile, `${JSON.stringify(report, null, 2)}\n`);
-  validateOutputTarget(outputFile);
-  console.log(`Restore drill kanıtı yazıldı: ${outputFile}`);
-} finally {
-  try {
-    run(`dropdb -U "$POSTGRES_USER" --if-exists "${restoreDb}"`);
-  } catch {
-    // Best-effort cleanup.
-  }
-  try {
-    run(`rm -f "${dumpPath}"`);
-  } catch {
-    // Best-effort cleanup.
-  }
+} catch (error) {
+  drillError = error;
 }
+
+const cleanupFailures = [];
+try {
+  run(`dropdb -U "$POSTGRES_USER" --if-exists "${restoreDb}"`);
+} catch (error) {
+  cleanupFailures.push(`restore database cleanup başarısız: ${error instanceof Error ? error.message : String(error)}`);
+}
+try {
+  run(`rm -f "${dumpPath}"`);
+} catch (error) {
+  cleanupFailures.push(`restore dump cleanup başarısız: ${error instanceof Error ? error.message : String(error)}`);
+}
+if (drillError || cleanupFailures.length > 0) {
+  fail([
+    ...(drillError ? [drillError instanceof Error ? drillError.message : String(drillError)] : []),
+    ...cleanupFailures,
+  ]);
+}
+
+mkdirSync(dirname(outputFile), { recursive: true });
+validateOutputTarget(outputFile);
+writeFileSync(outputFile, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+validateOutputTarget(outputFile);
+const check = spawnSync("pnpm", ["restore:drill:check"], {
+  env: { ...process.env, RESTORE_DRILL_TARGET: pathToFileURL(outputFile).href },
+  stdio: "inherit",
+});
+if (check.status !== 0) fail(["pnpm restore:drill:check başarısız oldu."]);
+console.log(`Restore drill kanıtı yazıldı: ${outputFile}`);
 
 function readTableCounts(databaseName) {
   const lines = run(

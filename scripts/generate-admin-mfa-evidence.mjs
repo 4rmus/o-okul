@@ -157,7 +157,22 @@ async function readEnrollment(pool) {
 }
 
 function runCommand(command) {
+  const commandEnv = {
+    ...process.env,
+    NODE_ENV: "test",
+    PERSISTENCE_DRIVER: "memory",
+    API_RATE_LIMIT_ENABLED: "false",
+    API_RATE_LIMIT_STORE: "memory",
+    LOGIN_ATTEMPT_LIMITER_STORE: "memory",
+    QUEUE_METRICS_ENABLED: "false",
+    REDIS_URL: "redis://127.0.0.1:1",
+    REPORT_PDF_RENDERER: "memory",
+  };
+  for (const key of ["DATABASE_URL", "DIRECT_DATABASE_URL", "ADMIN_MFA_MODE", "IDEMPOTENCY_STORE", "QUEUE_PREFIX"]) {
+    delete commandEnv[key];
+  }
   const result = spawnSync("sh", ["-lc", command], {
+    env: commandEnv,
     encoding: "utf8",
     stdio: "inherit",
   });

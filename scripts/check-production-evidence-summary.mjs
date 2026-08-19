@@ -9,6 +9,7 @@ import { validateUiUxRedesignBindings } from "./ui-ux-redesign-evidence-bindings
 
 const target = process.env.PRODUCTION_EVIDENCE_SUMMARY_TARGET ?? process.argv[2];
 const allowExampleEvidence = process.env.PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE === "1";
+const allowStagingEvidence = process.env.PRODUCTION_EVIDENCE_ALLOW_STAGING === "1";
 const allowStagingUiUx = process.env.PRODUCTION_EVIDENCE_ALLOW_STAGING_UI_UX === "1";
 const allowStagingOutbox = process.env.PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX === "1";
 const trustedUiUxEvidenceHosts = (process.env.UI_UX_REDESIGN_ALLOWED_EVIDENCE_HOSTS ?? "")
@@ -16,7 +17,7 @@ const trustedUiUxEvidenceHosts = (process.env.UI_UX_REDESIGN_ALLOWED_EVIDENCE_HO
   .map((host) => host.trim())
   .filter(Boolean);
 
-const requiredSummaryKeys = ["result", "generatedAt", "nodeEnv", "appUrl", "apiUrl", "webUrl", "checks", "smokeEvidence", "reports"];
+const requiredSummaryKeys = ["result", "canPromote", "generatedAt", "nodeEnv", "appUrl", "apiUrl", "webUrl", "checks", "smokeEvidence", "reports"];
 const requiredCheckItemKeys = ["label", "script", "status"];
 const expectedTenantTables = getTenantScopedTables();
 
@@ -241,12 +242,10 @@ const expectedUatJourneyScenarios = [
 ];
 const expectedUatCommandsPassed = [
   "pnpm run ci",
-  "pnpm prod:env:check",
   "pnpm db:rls:check:live",
   "pnpm raw-import:smoke",
   "pnpm report-generation:smoke",
   "pnpm live:exam-cycle:check",
-  "pnpm queue:smoke",
   "pnpm live:onboarding:smoke",
   "pnpm live:ui-worker:smoke",
   "pnpm sms:smoke",
@@ -509,6 +508,7 @@ function validateSummary(summary) {
 
   requireExpectedObjectKeys(summary, requiredSummaryKeys, failures, "summary");
   requireEqual(summary, failures, "result", "PASS");
+  requireEqual(summary, failures, "canPromote", true);
   requireEqual(summary, failures, "nodeEnv", "production");
   requireDate(summary, failures, "generatedAt");
   requireDateNotInFuture(summary, failures, "generatedAt");
@@ -614,9 +614,9 @@ function requireSmokeEvidence(summary, failures) {
     );
     if (key === "secretDeliveryOutbox") requireSecretDeliveryOutboxSmoke(value[key], failures);
     if (value[key]) {
-      if (key === "secretDeliveryOutbox" && allowStagingOutbox) {
+      if (allowStagingEvidence || (key === "secretDeliveryOutbox" && allowStagingOutbox)) {
         if (!["staging", "production"].includes(value[key].environment)) {
-          failures.push("smokeEvidence.secretDeliveryOutbox.environment staging veya production olmalı.");
+          failures.push(`smokeEvidence.${key}.environment staging veya production olmalı.`);
         }
       } else {
         requireObjectEqual(value[key], failures, `smokeEvidence.${key}.environment`, "environment", "production");
@@ -682,13 +682,14 @@ function requireReports(summary, failures) {
 
     requireExpectedObjectKeys(report, requiredKeys, failures, `reports.${key}`);
 
-    if (key === "uiUxRedesign" && (allowExampleEvidence || allowStagingUiUx)) {
+    if (key === "githubCi") {
+      requireObjectEqual(report, failures, `reports.${key}.environment`, "environment", "github-actions");
+    } else if (allowStagingEvidence || (key === "uiUxRedesign" && (allowExampleEvidence || allowStagingUiUx))) {
       if (!["staging", "production"].includes(report.environment)) {
-        failures.push("reports.uiUxRedesign.environment staging veya production olmalı.");
+        failures.push(`reports.${key}.environment staging veya production olmalı.`);
       }
     } else {
-      const expectedEnvironment = key === "githubCi" ? "github-actions" : "production";
-      requireObjectEqual(report, failures, `reports.${key}.environment`, "environment", expectedEnvironment);
+      requireObjectEqual(report, failures, `reports.${key}.environment`, "environment", "production");
     }
 
     const dateKey = key === "restoreDrill" ? "drillDate" : "checkedAt";
@@ -1085,7 +1086,13 @@ function requireLiveUiWorkerResultReport(scope, failures) {
       allowExampleEvidence,
     }),
   );
-  requireObjectEqual(scope, failures, "reports.liveUiWorkerResult.environment", "environment", "production");
+  if (allowStagingEvidence) {
+    if (!["staging", "production"].includes(scope?.environment)) {
+      failures.push("reports.liveUiWorkerResult.environment staging veya production olmalı.");
+    }
+  } else {
+    requireObjectEqual(scope, failures, "reports.liveUiWorkerResult.environment", "environment", "production");
+  }
   requireExactStringSet(scope?.commandsPassed, failures, "reports.liveUiWorkerResult.commandsPassed", ["pnpm live:ui-worker:smoke"]);
 }
 

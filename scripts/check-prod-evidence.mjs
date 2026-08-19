@@ -2,12 +2,16 @@ import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, parse, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { validateReusedNotificationSmokePayload, validateSmokeEvidencePayload } from "./smoke-evidence.mjs";
+import { redactedUrl, validateReusedNotificationSmokePayload, validateSmokeEvidencePayload } from "./smoke-evidence.mjs";
 
 const env = { ...process.env, ...readEnvFileArg() };
 const summaryFile = readArgValue("--summary-file");
 const summaryOutputFile = summaryFile ? validateSummaryOutputFile(summaryFile) : undefined;
 const reuseNotificationSmoke = process.argv.includes("--reuse-notification-smoke");
+const reuseSentrySmoke = process.argv.includes("--reuse-sentry-smoke");
+const reuseAlertWebhookSmoke = process.argv.includes("--reuse-alert-webhook-smoke");
+const reuseWalSmoke = process.argv.includes("--reuse-wal-smoke");
+const reuseReportGenerationSmoke = process.argv.includes("--reuse-report-generation-smoke");
 const summarySmokeEnvironments = ["staging", "production"];
 const evidenceTargetKeys = [
   "DEPLOYMENT_ROLLBACK_TARGET",
@@ -104,10 +108,42 @@ requireSmokeEvidenceFileTargets();
 requireNoExampleEvidenceFlags();
 requireEvidenceTargetUrls();
 if (reuseNotificationSmoke) validateReusedNotificationSmoke();
+if (reuseSentrySmoke) validateReusedEndpointSmoke({
+  fileKey: "SENTRY_SMOKE_EVIDENCE_FILE",
+  expectedCheck: "sentry_smoke",
+  notBeforeKey: "SENTRY_SMOKE_NOT_BEFORE",
+  endpointKey: "SENTRY_DSN",
+  payloadEndpointKey: "dsn",
+});
+if (reuseAlertWebhookSmoke) validateReusedEndpointSmoke({
+  fileKey: "ALERT_WEBHOOK_SMOKE_EVIDENCE_FILE",
+  expectedCheck: "alert_webhook_smoke",
+  notBeforeKey: "ALERT_WEBHOOK_SMOKE_NOT_BEFORE",
+  endpointKey: "ALERT_WEBHOOK_URL",
+  payloadEndpointKey: "webhookUrl",
+});
+if (reuseWalSmoke) validateReusedWalSmoke();
+if (reuseReportGenerationSmoke) validateReusedReportGenerationSmoke();
 
 for (const [label, script] of checks) {
   if (reuseNotificationSmoke && script === "scripts/smoke-notification-provider.mjs") {
     console.log("Notification provider smoke mevcut cutover-bound artifact ile doğrulandı.");
+    continue;
+  }
+  if (reuseSentrySmoke && script === "scripts/smoke-sentry-event.mjs") {
+    console.log("Sentry smoke mevcut cutover-bound artifact ile doğrulandı.");
+    continue;
+  }
+  if (reuseAlertWebhookSmoke && script === "scripts/smoke-alert-webhook.mjs") {
+    console.log("Alert webhook smoke mevcut cutover-bound artifact ile doğrulandı.");
+    continue;
+  }
+  if (reuseWalSmoke && script === "scripts/smoke-wal-archive-target.mjs") {
+    console.log("WAL archive smoke mevcut cutover-bound artifact ile doğrulandı.");
+    continue;
+  }
+  if (reuseReportGenerationSmoke && script === "scripts/smoke-report-generation-live.mjs") {
+    console.log("Report generation smoke mevcut cutover-bound artifact ile doğrulandı.");
     continue;
   }
   const result = spawnSync(process.execPath, [script], {
@@ -175,6 +211,80 @@ function validateReusedNotificationSmoke() {
     pushTo: env.NOTIFICATION_SMOKE_PUSH_TO,
   });
   if (failures.length > 0) fail(failures);
+}
+
+function validateReusedEndpointSmoke({ fileKey, expectedCheck, notBeforeKey, endpointKey, payloadEndpointKey }) {
+  if (!summaryOutputFile) {
+    fail([`--reuse-${expectedCheck.replaceAll("_", "-")} yalnız --summary-file ile kullanılabilir.`]);
+  }
+
+  const payload = readSmokeEvidence(fileKey, expectedCheck);
+  const failures = [];
+  const notBefore = Date.parse(env[notBeforeKey] ?? "");
+  if (!Number.isFinite(notBefore)) {
+    failures.push(`${notBeforeKey} geçerli cutover tarihi olmalı.`);
+  } else {
+    for (const key of ["checkedAt", "generatedAt"]) {
+      if (Date.parse(payload[key] ?? "") < notBefore) {
+        failures.push(`Reused ${expectedCheck} ${key} cutover zamanından eski olamaz.`);
+      }
+    }
+  }
+
+  let expectedEndpoint;
+  try {
+    expectedEndpoint = redactedUrl(env[endpointKey]);
+  } catch {
+    failures.push(`${endpointKey} geçerli URL olmalı.`);
+  }
+  if (!expectedEndpoint || payload[payloadEndpointKey] !== expectedEndpoint) {
+    failures.push(`Reused ${expectedCheck} configured ${endpointKey} ile eşleşmeli.`);
+  }
+  if (payload.environment !== env.SENTRY_ENVIRONMENT) {
+    failures.push(`Reused ${expectedCheck} SENTRY_ENVIRONMENT ile eşleşmeli.`);
+  }
+
+  if (failures.length > 0) fail(failures);
+}
+
+function validateReusedWalSmoke() {
+  if (!summaryOutputFile) {
+    fail(["--reuse-wal-smoke yalnız --summary-file ile kullanılabilir."]);
+  }
+
+  const payload = readSmokeEvidence("WAL_ARCHIVE_SMOKE_EVIDENCE_FILE", "wal_archive_smoke");
+  let target;
+  try {
+    const url = new URL(env.WAL_ARCHIVE_TARGET);
+    target = url.protocol === "s3:"
+      ? { protocol: "s3", bucket: url.hostname, prefix: url.pathname.replace(/^\/+|\/+$/g, "") }
+      : { protocol: "file", pathRedacted: true };
+  } catch {
+    fail(["WAL_ARCHIVE_TARGET geçerli URL olmalı."]);
+  }
+  if (JSON.stringify(payload.target) !== JSON.stringify(target)) {
+    fail(["Reused WAL archive smoke configured WAL_ARCHIVE_TARGET ile eşleşmeli."]);
+  }
+}
+
+function validateReusedReportGenerationSmoke() {
+  if (!summaryOutputFile) {
+    fail(["--reuse-report-generation-smoke yalnız --summary-file ile kullanılabilir."]);
+  }
+
+  const payload = readSmokeEvidence("REPORT_GENERATION_SMOKE_EVIDENCE_FILE", "report_generation_smoke");
+  const notBefore = Date.parse(env.REPORT_GENERATION_SMOKE_NOT_BEFORE ?? "");
+  if (!Number.isFinite(notBefore)) {
+    fail(["REPORT_GENERATION_SMOKE_NOT_BEFORE geçerli cutover tarihi olmalı."]);
+  }
+  for (const key of ["checkedAt", "generatedAt"]) {
+    if (Date.parse(payload[key] ?? "") < notBefore) {
+      fail([`Reused report_generation_smoke ${key} cutover zamanından eski olamaz.`]);
+    }
+  }
+  if (payload.commandsPassed.length !== 1 || payload.commandsPassed[0] !== "pnpm report-generation:smoke") {
+    fail(["Reused report_generation_smoke commandsPassed tek pnpm report-generation:smoke komutu içermeli."]);
+  }
 }
 
 function requireEvidenceTargetUrls() {
@@ -259,6 +369,7 @@ function writeSummary(file) {
 
   const summary = {
     result: "PASS",
+    canPromote: true,
     generatedAt: new Date().toISOString(),
     nodeEnv: env.NODE_ENV,
     appUrl: env.APP_URL,

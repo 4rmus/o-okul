@@ -22,6 +22,7 @@ writeFileSync(envPath, buildValidEnvFile());
 
 try {
   expectPinnedLookupContract();
+  expectGithubApiUserAgentContract();
   expectGeneratePass();
   expectMalformedPngFailure();
   expectBlankPngFailure();
@@ -94,6 +95,13 @@ try {
 
 console.log("UI/UX redesign generator contract kontrolü geçti.");
 
+function expectGithubApiUserAgentContract() {
+  const checker = readFileSync("scripts/check-ui-ux-redesign-evidence.mjs", "utf8");
+  if (!checker.includes('"User-Agent": "o-okul-gate-e-evidence"')) {
+    failContract("private GitHub Actions API doğrulaması explicit User-Agent göndermeli.");
+  }
+}
+
 function expectGeneratePass() {
   const result = runGenerator(envPath, outputPath);
   if (result.status !== 0) failContract("generator geçerli staging env ile PASS üretmeli.", result);
@@ -112,7 +120,7 @@ function expectGeneratePass() {
     failContract("generator PASS staging raporu üretmeli.", result);
   }
   if (report.phaseEvidence?.length !== 6) failContract("generator altı faz kanıtı üretmeli.", result);
-  if (report.viewportCoverage?.length !== 4) failContract("generator dört viewport yüzeyi üretmeli.", result);
+  if (report.viewportCoverage?.length !== 6) failContract("generator altı viewport yüzeyi üretmeli.", result);
   if (report.schemaVersion !== 2 || report.artifacts?.length === 0) failContract("generator digest bağlı schema v2 artifact manifesti üretmeli.", result);
   if (report.githubCi?.commitSha !== "1".repeat(40)) failContract("generator exact GitHub CI SHA bağını üretmeli.", result);
   if (report.privacy?.rawPiiInArtifacts !== false) failContract("generator raw PII bayrağını false yazmalı.", result);
@@ -318,7 +326,7 @@ function buildValidEnvFile() {
     `UI_UX_REDESIGN_RELEASE_CANDIDATE=ghcr.io/4rmus/o-okul/api:${"1".repeat(40)}`,
     `UI_UX_REDESIGN_SOURCE_COMMIT_SHA=${"1".repeat(40)}`,
     `GITHUB_CI_EVIDENCE_TARGET=${pathToFileURL(githubCiPath).href}`,
-    `UI_UX_REDESIGN_STAGING_EVIDENCE_REFERENCES=${artifact("summary.json")},run:https://github.com/4rmus/o-okul/actions/runs/987654321,${artifact("uat.json")},${artifact("privacy-review.json")}`,
+    `UI_UX_REDESIGN_STAGING_EVIDENCE_REFERENCES=${artifact("summary.json")},run:https://github.com/4rmus/o-okul/actions/runs/31938363572,${artifact("uat.json")},${artifact("privacy-review.json")}`,
     `UI_UX_REDESIGN_PHASE_0_REFERENCES=${artifact("phase-0.json")}`,
     `UI_UX_REDESIGN_PHASE_1_REFERENCES=${artifact("phase-1.json")}`,
     `UI_UX_REDESIGN_PHASE_2_REFERENCES=${artifact("phase-2.json")}`,
@@ -373,17 +381,23 @@ function createEvidenceArtifacts() {
         environment: "staging",
         sourceCommitSha: "1".repeat(40),
         checkedAt: "2026-06-25T12:00:00.000Z",
-        runUrl: "https://github.com/4rmus/o-okul/actions/runs/987654321",
+        runUrl: "https://github.com/4rmus/o-okul/actions/runs/31938363572",
         commandsPassed,
+        ...(name === "uat" ? {
+          systemUiEvidence: Object.fromEntries(["system", "system-tenants"].map((surface) => [
+            surface,
+            [320, 375, 414, 768, 1024, 1440].map((width) => `artifact:${relativeArtifactPath(`${surface}-${width}.png`)}`),
+          ])),
+        } : {}),
       })}\n`,
     );
   }
-  for (const surface of ["dashboard", "optik", "rapor", "portal"]) {
+  for (const surface of ["dashboard", "system", "system-tenants", "optik", "rapor", "portal"]) {
     for (const width of [320, 375, 414, 768, 1024, 1440]) {
       writeFileSync(join(artifactRoot, `${surface}-${width}.png`), minimalPng(width, 1));
     }
   }
-  const reviewedPngSha256 = ["dashboard", "optik", "rapor", "portal"].flatMap((surface) =>
+  const reviewedPngSha256 = ["dashboard", "system", "system-tenants", "optik", "rapor", "portal"].flatMap((surface) =>
     [320, 375, 414, 768, 1024, 1440].map((width) =>
       createHash("sha256").update(readFileSync(join(artifactRoot, `${surface}-${width}.png`))).digest("hex"),
     ),
@@ -396,7 +410,7 @@ function createEvidenceArtifacts() {
       environment: "staging",
       checkedAt: "2026-06-25T12:00:00.000Z",
       sourceCommitSha: "1".repeat(40),
-      runUrl: "https://github.com/4rmus/o-okul/actions/runs/987654321",
+      runUrl: "https://github.com/4rmus/o-okul/actions/runs/31938363572",
       syntheticDataOnly: true,
       reviewer: { id: "privacy-owner-github", role: "privacy-owner" },
       reviewedPngSha256,
@@ -482,9 +496,9 @@ function createGithubCiEvidence(filePath, commitSha) {
     workflow: {
       name: "CI",
       path: ".github/workflows/ci.yml",
-      runId: "987654321",
+      runId: "31938363572",
       runAttempt: 1,
-      runUrl: "https://github.com/4rmus/o-okul/actions/runs/987654321",
+      runUrl: "https://github.com/4rmus/o-okul/actions/runs/31938363572",
       conclusion: "success",
       event: "push",
       startedAt: "2026-06-25T11:00:00.000Z",
@@ -501,13 +515,13 @@ function createGithubCiEvidence(filePath, commitSha) {
         conclusion: "success",
         startedAt: "2026-06-25T11:00:00.000Z",
         completedAt: "2026-06-25T12:00:00.000Z",
-        logUrl: "https://github.com/4rmus/o-okul/actions/runs/987654321/job/123456789",
+        logUrl: "https://github.com/4rmus/o-okul/actions/runs/31938363572/job/123456789",
         stepsPassed: ["pnpm install --frozen-lockfile", "pnpm run ci"],
       },
     ],
     commandsPassed: ["pnpm run ci", "pnpm github-ci:check"],
     evidenceReferences: [
-      "https://github.com/4rmus/o-okul/actions/runs/987654321",
+      "https://github.com/4rmus/o-okul/actions/runs/31938363572",
       relative(process.cwd(), filePath).replaceAll("\\", "/"),
     ],
     gaps: [],
@@ -536,7 +550,7 @@ function replaceLine(key, value) {
 function secretBearingReferenceEnv() {
   const value = [
     `url:https://staging.o-okul.com/evidence/ui-ux-redesign/summary.json?token=${secretLeakMarker}`,
-    "run:https://github.com/4rmus/o-okul/actions/runs/987654321",
+    "run:https://github.com/4rmus/o-okul/actions/runs/31938363572",
     "url:https://staging.o-okul.com/evidence/ui-ux-redesign/uat.json",
   ].join(",");
   return replaceLine("UI_UX_REDESIGN_STAGING_EVIDENCE_REFERENCES", value);

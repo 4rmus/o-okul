@@ -1,10 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { parse, relative, resolve } from "node:path";
 import { validateSmokeEvidencePayload } from "./smoke-evidence.mjs";
 
 const envFile = readArgValue("--env-file");
 const outputDir = resolve(readArgValue("--output-dir") ?? "artifacts/staging/first-gates");
+const reuseSmokeDir = readArgValue("--reuse-smoke-dir");
 if (isLocalTempPath(outputDir)) {
   fail("staging:first-gates:smoke output-dir lokal temp path olmamalı.");
 }
@@ -61,13 +62,17 @@ const manifest = {
 };
 
 for (const check of smokeChecks) {
-  const result = spawnSync(process.execPath, [check.script], {
-    env,
-    stdio: "inherit",
-  });
+  if (reuseSmokeDir) {
+    copyReusedEvidenceFile(check);
+  } else {
+    const result = spawnSync(process.execPath, [check.script], {
+      env,
+      stdio: "inherit",
+    });
 
-  if (result.status !== 0) {
-    fail(`${check.label} başarısız.`);
+    if (result.status !== 0) {
+      fail(`${check.label} başarısız.`);
+    }
   }
 
   validateEvidenceFile(check);
@@ -77,6 +82,31 @@ for (const check of smokeChecks) {
     evidenceFile: relative(outputDir, check.evidenceFile),
     status: "PASS",
   });
+}
+
+function copyReusedEvidenceFile(check) {
+  const sourceDir = resolve(reuseSmokeDir);
+  if (isLocalTempPath(sourceDir) || isLocalSmokePath(sourceDir)) {
+    fail("staging:first-gates:smoke reuse-smoke-dir temp veya artifacts/local altında olmamalı.");
+  }
+  assertOutputPathAllowed(sourceDir);
+  if (!existsSync(sourceDir)) {
+    fail("staging:first-gates:smoke reuse-smoke-dir okunabilir dizin olmalı.");
+  }
+  const sourceDirStat = lstatSync(sourceDir);
+  if (sourceDirStat.isSymbolicLink() || !sourceDirStat.isDirectory()) {
+    fail("staging:first-gates:smoke reuse-smoke-dir symlink olmayan dizin olmalı.");
+  }
+
+  const sourceFile = resolve(sourceDir, check.evidenceFile.split("/").at(-1));
+  if (!existsSync(sourceFile)) {
+    fail(`${check.label} reuse evidence dosyası bulunamadı.`);
+  }
+  const sourceStat = lstatSync(sourceFile);
+  if (sourceStat.isSymbolicLink() || !sourceStat.isFile()) {
+    fail(`${check.label} reuse evidence symlink olmayan dosya olmalı.`);
+  }
+  copyFileSync(sourceFile, check.evidenceFile);
 }
 
 manifest.generatedAt = new Date().toISOString();

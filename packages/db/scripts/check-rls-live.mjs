@@ -1482,6 +1482,7 @@ async function assertParsedAnswerBlocksDuplicateParsedRows() {
 
 let adminConnected = false;
 let appConnected = false;
+let fixturesSeeded = false;
 
 try {
   await adminClient.connect();
@@ -1489,6 +1490,7 @@ try {
   await appClient.connect();
   appConnected = true;
   await seedFixtures();
+  fixturesSeeded = true;
   for (const table of tenantReadTables) {
     if (["WhatsAppConsent", "WhatsAppConsentEvent"].includes(table)) continue;
     await assertTenantAOnlyReadsTenantA(table);
@@ -1518,6 +1520,33 @@ try {
   }
   process.exitCode = 1;
 } finally {
+  if (adminConnected && fixturesSeeded) {
+    try {
+      await cleanupFixtures();
+    } catch (error) {
+      console.error("Sentetik RLS fixture temizliği başarısız oldu.", error);
+      process.exitCode = 1;
+    }
+  }
   if (adminConnected) await adminClient.end();
   if (appConnected) await appClient.end();
+}
+
+async function cleanupFixtures() {
+  await adminClient.query("BEGIN");
+  try {
+    await adminClient.query("SELECT set_config('app.bypass_rls', 'true', true)");
+    const deleted = await adminClient.query(
+      `DELETE FROM "Tenant" WHERE "id" = ANY($1::text[]) RETURNING "id"`,
+      [[ids.tenantA, ids.tenantB]],
+    );
+    if (deleted.rowCount !== 2) {
+      throw new Error(`Beklenen 2 sentetik tenant silinemedi; silinen=${deleted.rowCount ?? 0}.`);
+    }
+    await adminClient.query("COMMIT");
+    console.log("Sentetik RLS fixture temizliği geçti: 2 tenant silindi.");
+  } catch (error) {
+    await adminClient.query("ROLLBACK");
+    throw error;
+  }
 }

@@ -58,7 +58,14 @@ const approvalKeys = ["role", "approvedBy", "decision", "approvedAt", "sourceCom
 
 const requiredPhases = ["Faz 0", "Faz 1", "Faz 2", "Faz 3", "Faz 4", "Faz 5"];
 const requiredWidths = [320, 375, 414, 768, 1024, 1440];
-const requiredSurfaces = ["kurum dashboard", "optik workspace", "rapor workspace", "portal shell"];
+const requiredSurfaces = [
+  "kurum dashboard",
+  "system dashboard",
+  "system tenants",
+  "optik workspace",
+  "rapor workspace",
+  "portal shell",
+];
 const localCommands = [
   "pnpm --filter @o-okul/web typecheck",
   "pnpm web:design-tokens:check",
@@ -201,6 +208,7 @@ async function validateGithubRun(url, report, failures) {
   const headers = {
     Accept: "application/vnd.github+json",
     Authorization: `Bearer ${token}`,
+    "User-Agent": "o-okul-gate-e-evidence",
     "X-GitHub-Api-Version": "2022-11-28",
   };
   const response = await secureFetch(apiUrl, { headers });
@@ -798,7 +806,7 @@ function scanArtifactPii(value, reference, failures, path = "artifact") {
     }
     return;
   }
-  if (typeof value === "string" && rawPiiPatterns.some((pattern) => pattern.test(value))) {
+  if (typeof value === "string" && !path.endsWith(".runUrl") && rawPiiPatterns.some((pattern) => pattern.test(value))) {
     failures.push(`Artifact ham PII benzeri değer içermemeli: ${reference} ${path}`);
   }
 }
@@ -998,25 +1006,23 @@ function localArtifactPath(path) {
   return normalized.endsWith("/artifacts/local") || normalized.includes("/artifacts/local/");
 }
 
-function scanRawPii(value, failures) {
-  const strings = [];
-  collectStrings(value, strings);
-  for (const candidate of strings) {
-    const normalizedCandidate = candidate.replace(
-      /(github\.com\/[^/]+\/[^/]+\/actions\/runs\/)\d+/gi,
-      "$1{run-id}",
-    );
-    if (rawPiiPatterns.some((pattern) => pattern.test(normalizedCandidate))) {
-      failures.push("Kanıt JSON ham PII benzeri değer içermemeli.");
-      return;
-    }
+function scanRawPii(value, failures, path = "report") {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => scanRawPii(item, failures, `${path}.${index}`));
+    return;
   }
-}
-
-function collectStrings(value, strings) {
-  if (typeof value === "string") strings.push(value);
-  else if (Array.isArray(value)) value.forEach((item) => collectStrings(item, strings));
-  else if (value && typeof value === "object") Object.values(value).forEach((item) => collectStrings(item, strings));
+  if (value && typeof value === "object") {
+    for (const [key, child] of Object.entries(value)) scanRawPii(child, failures, `${path}.${key}`);
+    return;
+  }
+  if (typeof value !== "string" || (path.endsWith(".runId") && /^\d+$/.test(value))) return;
+  const normalized = value.replace(
+    /(github\.com\/[^/]+\/[^/]+\/actions\/runs\/)\d+/gi,
+    "$1{run-id}",
+  );
+  if (rawPiiPatterns.some((pattern) => pattern.test(normalized))) {
+    failures.push("Kanıt JSON ham PII benzeri değer içermemeli.");
+  }
 }
 
 function parseJson(value) {

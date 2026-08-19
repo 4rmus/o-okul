@@ -11,7 +11,14 @@ const artifactKeys = [
   "piiReview",
 ];
 const requiredWidths = [320, 375, 414, 768, 1024, 1440];
-const requiredSurfaces = ["kurum dashboard", "optik workspace", "rapor workspace", "portal shell"];
+const requiredSurfaces = [
+  "kurum dashboard",
+  "system dashboard",
+  "system tenants",
+  "optik workspace",
+  "rapor workspace",
+  "portal shell",
+];
 
 export function validateUiUxRedesignBindings(report, {
   allowExampleEvidence = false,

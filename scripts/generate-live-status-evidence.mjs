@@ -295,6 +295,7 @@ function resolveTargetReference(value, baseUrl) {
 
 function validateSourceReports(summary, goLive, pilot, output) {
   requireEqual(summary, output, "productionEvidenceSummary.result", "result", "PASS");
+  requireEqual(summary, output, "productionEvidenceSummary.canPromote", "canPromote", true);
   requireEqual(summary, output, "productionEvidenceSummary.nodeEnv", "nodeEnv", "production");
   requireDate(summary?.generatedAt, "productionEvidenceSummary.generatedAt", output);
   requireEqual(goLive, output, "goLiveEvidence.result", "result", "PASS");

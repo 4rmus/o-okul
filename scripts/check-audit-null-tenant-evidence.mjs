@@ -18,6 +18,11 @@ const topLevelKeys = [
 const auditNullTenantKeys = ["totalRows", "tenantRows", "nullTenantRows", "nullTenantBreakdown"];
 const breakdownKeys = ["system", "deletedTenant", "unknown"];
 const breakdownItemKeys = ["count", "classificationRule"];
+const classificationRules = {
+  system: "tenantId IS NULL AND no deletedTenantIdHash AND (system action prefix OR actor user belongs to system tenant)",
+  deletedTenant: "tenantId IS NULL AND (diff.deletedTenantIdHash exists OR (not system AND actorUserId no longer exists))",
+  unknown: "tenantId IS NULL AND no system/deletedTenant rule matched",
+};
 
 if (!target) {
   fail(["AUDIT_NULL_TENANT_EVIDENCE_TARGET bos birakilamaz."]);
@@ -186,7 +191,13 @@ function requireAuditNullTenantClassification(value, failures) {
       continue;
     }
     requireObjectIntegerAtLeast(item, failures, `auditNullTenant.nullTenantBreakdown.${key}.count`, "count", 0);
-    requireObjectString(item, failures, `auditNullTenant.nullTenantBreakdown.${key}.classificationRule`, "classificationRule");
+    requireObjectEqual(
+      item,
+      failures,
+      `auditNullTenant.nullTenantBreakdown.${key}.classificationRule`,
+      "classificationRule",
+      classificationRules[key],
+    );
     if (Number.isInteger(item.count)) breakdownCount += item.count;
   }
 
@@ -255,6 +266,12 @@ function requireDateNotInFuture(report, failures, key) {
 function requireObjectString(scope, failures, label, key) {
   if (typeof scope?.[key] !== "string" || scope[key].trim() === "") {
     failures.push(`${label} bos olmayan metin olmali.`);
+  }
+}
+
+function requireObjectEqual(scope, failures, label, key, expected) {
+  if (scope?.[key] !== expected) {
+    failures.push(`${label} ${expected} olmali.`);
   }
 }
 

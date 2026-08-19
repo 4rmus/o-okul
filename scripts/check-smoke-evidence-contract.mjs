@@ -86,6 +86,13 @@ for (const requiredSource of [
     failures.push(`iSEM optical producer zorunlu gate eksik: ${requiredSource}`);
   }
 }
+const reportGenerationSource = readFileSync("scripts/smoke-report-generation-live.mjs", "utf8");
+for (const token of ["tenantHash ${sha256(tenantId)}", "examHash ${sha256(examId)}", "firstStudentHash ${sha256(snapshot.firstStudentId)}", "queuedJobIdHash ${sha256(producedJob.options.jobId)}", "snapshotHash ${sha256(snapshot.id)}"]) {
+  if (!reportGenerationSource.includes(token)) failures.push(`Report generation smoke hash-only log token eksik: ${token}`);
+}
+if (reportGenerationSource.includes("tenant ${tenantId}, exam ${examId}, first student ${snapshot.firstStudentId}")) {
+  failures.push("Report generation smoke ham sentetik kimlikleri loglamamalı.");
+}
 if (isemProducerSource.includes("quarantinePathVerified: evidence.quarantineCount === expectedQuarantineCount")) {
   failures.push("iSEM optical producer karantina yolunu yalnız sıfır sayımından doğrulamamalı.");
 }

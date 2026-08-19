@@ -1,0 +1,35 @@
+{
+  "result": "PASS",
+  "environment": "staging",
+  "startedAt": "2026-08-02T11:55:00.000Z",
+  "checkedAt": "2026-08-02T12:00:00.000Z",
+  "sourceSha": "1111111111111111111111111111111111111111",
+  "repository": "example/o-okul",
+  "verifierRunUrl": "https://github.com/example/o-okul/actions/runs/987654321",
+  "command": "pnpm live:onboarding:smoke",
+  "scenarios": [
+    {
+      "id": "UAT-SYS-02",
+      "status": "PASS"
+    },
+    {
+      "id": "UAT-KURUM-01",
+      "status": "PASS"
+    },
+    {
+      "id": "UAT-KURUM-03",
+      "status": "PASS"
+    }
+  ],
+  "providerDelivery": {
+    "channel": "EMAIL",
+    "result": "PASS",
+    "evidenceEndpoint": "https://notify.staging.o-okul.com/messages/latest"
+  },
+  "cleanup": {
+    "result": "PASS",
+    "tenantsDeleted": 1,
+    "authSessionsRemaining": 0
+  },
+  "gaps": []
+}

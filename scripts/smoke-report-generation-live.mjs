@@ -124,7 +124,7 @@ try {
   });
 
   console.log(
-    `ReportGeneration live smoke passed: tenant ${tenantId}, exam ${examId}, first student ${snapshot.firstStudentId}, ${resultCount} results, queued ${producedJob.options.jobId}, snapshot ${snapshot.id}, seed ${seedDurationMs}ms, generation ${generationDurationMs}ms`,
+    `ReportGeneration live smoke passed: tenantHash ${sha256(tenantId)}, examHash ${sha256(examId)}, firstStudentHash ${sha256(snapshot.firstStudentId)}, ${resultCount} results, queuedJobIdHash ${sha256(producedJob.options.jobId)}, snapshotHash ${sha256(snapshot.id)}, seed ${seedDurationMs}ms, generation ${generationDurationMs}ms`,
   );
 } finally {
   await worker.close();
@@ -145,13 +145,14 @@ async function seedReportInput() {
       [tenantId, "Report Smoke Tenant", `report-smoke-${runId}`],
     );
     await client.query(
-      `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
-       VALUES ($1, $2, 'Report Smoke Admin', $3, now())
+      `INSERT INTO "User" ("id", "tenantId", "email", "name", "passwordHash", "updatedAt")
+       VALUES ($1, $2, $3, 'Report Smoke Admin', $4, now())
        ON CONFLICT ("id") DO UPDATE
-       SET "email" = EXCLUDED."email",
+       SET "tenantId" = EXCLUDED."tenantId",
+           "email" = EXCLUDED."email",
            "passwordHash" = EXCLUDED."passwordHash",
            "updatedAt" = now()`,
-      [userId, smokeEmail, hashPassword(smokePassword)],
+      [userId, tenantId, smokeEmail, hashPassword(smokePassword)],
     );
     await client.query(
       `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")

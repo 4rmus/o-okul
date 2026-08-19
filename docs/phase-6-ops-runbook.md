@@ -367,6 +367,12 @@ IDENTITY_MIGRATION_ACTIVATION_MODE=invite \
 pnpm identity-migration:generate
 ```
 
+Gate E staging verifier, eksik bağı yalnız açık onaylı çalıştırmada tamamlar:
+`run_identity_migration=true` girişi `full_evidence=true` ile birlikte verilmelidir. Verifier önce
+`pnpm identity-link:audit` eşdeğeri salt-okunur sayımı çalıştırır; yalnız sonuç
+`NEEDS_INVITE_MIGRATION` ise korumalı ve idempotent göçü uygular, ardından ikinci audit sonucunun
+`READY` olmasını zorunlu tutar. Varsayılan değer `false` olduğundan göç kendiliğinden çalışmaz.
+
 Minimum kanıt içeriği:
 
 - `environment=staging|production`, `result=PASS` ve geleceğe taşmayan `checkedAt`.
@@ -504,7 +510,7 @@ Staging deploy, exact dört servis tag'i ve first-gates sonrası PII-safe `deplo
 üretir. Operatör, retry edilmiş `DELIVERED` source ID'yi GitHub input/secret/log/artifact'a koymadan yalnız
 `$(dirname "$STAGING_DEPLOY_DIR")/o-okul-private/secret-delivery-outbox/<releaseImageTag>/source-id`
 yoluna koyar. Sibling private root ve tag dizini `0700`, regular dosya `0600`, aynı remote kullanıcı sahibi
-olmalıdır; symlink kabul edilmez. Verify-only dispatch yalnız `deploy_run_id` alır, önce indirilen cutover
+olmalıdır; symlink kabul edilmez. Verify-only dispatch source ID almaz; `deploy_run_id` ile seçilen cutover
 artifact'i ve güncel dört container tag'ini doğrular. Eksik private source veya image drift'i, bağımlılık
 kurulumundan ve data tunnel açılmasından önce açık bir preflight hatasıyla durur. Geçerli source dizini
 preflight sırasında run-scope `.claims/<releaseImageTag>/<verifyRunId>` yoluna atomik taşınır; başka verify
@@ -515,8 +521,14 @@ taşınır. Boş dizin temizliği idempotent, source/helper dosya silme hatası 
 yoldaki dosyayı silmeli ve source değeri olmadan incident/audit referansını kaydetmelidir. Yeni verify için
 yeni source kaydı gerekir.
 
+Verifier, outbox smoke adımından sonra başka bir Gate E kontrolünde durmuşsa yeni source/retry üretmeyin.
+Aynı deploy run ID'sine bağlı önceki `staging-outbox-smoke-<deployRunId>-<verifyRunId>` artifact'ını
+`reuse_outbox_smoke_run_id` ile seçin; workflow artifact'ı aynı `releaseImageTag` ve cutover `notBefore`
+bağıyla tekrar doğrular. Full evidence çalıştırmasında `ui_ux_approved_at`, hedef SHA'nın başarılı GitHub CI
+tamamlanmasından sonraki gerçek release-owner onay zamanıdır; bu sıra fail-closed doğrulanır.
+
 ```sh
-GitHub Actions’tan **Staging Outbox Verify** workflow’unu yalnız deploy run ID ile çalıştırın. Workflow
+GitHub Actions’tan **Staging Outbox Verify** workflow’unu deploy run ID ile çalıştırın. Workflow
 cutover artifact'inden `notBefore` ve image tag'ini alır; source dosyası worker image içindeki read-only mount
 ile okunur.
 ```
@@ -539,11 +551,31 @@ evidence kapısı Phase B'nin sonucu değildir: workflow varsayılan olarak yaln
 `full_evidence=true` açıkça seçilirse ayrı full production evidence aggregation da koşar;
 `staging-outbox-verify-*` full release bundle'ı yine yalnız tüm full-evidence ve release-artifact kapıları
 geçtiğinde yayımlanır. PR label yolu yalnız Phase B kapsamındadır.
+Full-evidence verify job'u Chromium kurulumu, canlı kanıt üretimi ve fail-closed temizliği tek koşuda
+tamamlayabilmek için 90 dakika bütçelidir; süre artışı tek başına Gate E PASS kanıtı değildir.
 Full aggregation, private env dosyasındaki UI/UX GitHub run referansını seçilen deploy'un indirilen
 `github-ci.json` artifact'indeki exact run URL'sine çalışma anında bağlar; secret içeriğini loglamaz ve
 env dosyasını `0600` modunda tutar. Aynı koşuda identity migration, financial retention ve security audit
 raporlarını staging DB tüneli üzerinden production-summary child sözleşmesiyle üretir; runtime kaynağı
 staging olarak ayrı raporlanır ve bu üç hedef runner'daki raw artifact'lere yeniden bağlanır.
+Stale iSEM/live-UI/rate-limit raporlarını yenilemek için `run_gate_e_mutating_smokes=true` yalnız ayrı
+release-owner onayından sonra ve `full_evidence=true` ile kullanılabilir. Bu tek seferlik yol GitHub staging
+environment'ındaki `GATE_E_ISEM_OPTICAL_TXT_BASE64`, `GATE_E_ISEM_ANSWER_KEY_BASE64` ve
+`GATE_E_ISEM_SMOKE_PASSWORD` secret'larını kullanır; fixture hash'lerini manifestle doğrular, staging test
+tenant/sınav/rapor kayıtlarını üretir, canlı UI oturumlarını logout ile iptal eder ve geçici ikinci API shard'ında
+Redis rate-limit smoke'u çalıştırır. Shard her sonuçta kaldırılır; credential taşıyan private UI girdisi ve
+materialize edilen cevap anahtarı exit trap'i ile full artifact upload'ından önce silinir. Aynı run'da
+oluşturulan sentetik tenant'lar exit trap'inde askıya alınır ve oturumları iptal edilir. Public iSEM,
+live-UI, live-exam-cycle ve rate-limit raporları aynı verifier run'ına ve cutover SHA'sına bağlanır. Bu input
+kapalıyken workflow eski raporları yenilemez ve eksik/stale kanıta PASS vermez. Zorla runner iptali gibi
+trap çalışmayabilecek hata yollarında da artifact upload glob'u `artifacts/staging/private/**` ağacını açıkça
+dışlar; private credential girdisi hiçbir full bundle'a giremez. Answer-key ve raw-import smoke yardımcıları
+da staging/production koşusunda aynı tek kullanımlık güçlü secret'ı zorunlu tutar; böylece exit trap'i
+çalışmasa bile bilinen varsayılan parolalı aktif test hesabı bırakılmaz.
+`reuse_aggregate_smoke_run_id` boşsa aynı mutating trap içinde run/attempt kapsamlı tenant, kullanıcı ve
+Redis prefix'iyle fresh `pnpm report-generation:smoke` üretilir; DB ve queue kalıntısı temizlenmeden summary
+kapısına geçilmez ve manifest kaynağı current verifier run olur. Reuse ID verilirse mevcut artifact yalnız
+deployment-cutover byte eşleşmesi sonrası kullanılır ve manifest gerçek önceki run ID'sini korur.
 Rollback tag'i yalnız exact release candidate ile eşleşen doğrulanabilir HTTPS rollback raporundan alınır.
 Böylece eski bir template run URL'si veya eski uzak rapor yeni cutover kanıtına karışamaz.
 - PR-4 rollback önceki web+API image çiftidir. Additive kolonlar ve legacy membership satırları yerinde
@@ -650,6 +682,10 @@ Kanıt sözleşmesi: `docs/evidence-templates/kvkk-inventory.example.json`.
 Komut:
 
 ```sh
+STAGING_ENVIRONMENT=staging \
+KVKK_INVENTORY_OUTPUT=artifacts/staging/reports/kvkk-inventory.json \
+node --env-file=.staging-evidence.env scripts/generate-kvkk-inventory-evidence.mjs
+
 KVKK_INVENTORY_TARGET=file:///path/to/kvkk-inventory.json pnpm privacy:inventory:check
 ```
 
@@ -671,6 +707,8 @@ Minimum kanıt içeriği:
   taşır. `WHATSAPP_ENABLED=false` iken projection/event tablolarına runtime kayıt yazılamaz ve bu kanıt WhatsApp
   capability veya teslimat kanıtı sayılmaz.
 - Audit action seti beş canonical KVKK purge action'ını içerir ve `gaps` boş olmalıdır.
+- Generator kişi ve WhatsApp tablo sayılarını `BEGIN READ ONLY` transaction ile canlı DB'den alır;
+  WhatsApp projection/event sayıları `0/0` değilse veya izole audit-log redaction testleri geçmezse artifact yazmaz.
 - Rapor top-level 10 alanı, beş count alanı, beş coverage subject'i, subject field setleri,
   beş audit action seti, `/audit-logs` audit diff redaction bloğu ve boş `gaps` listesi
   template invalid/non-empty gaps negatifleriyle korunur.
@@ -1061,10 +1099,11 @@ Beklenen akış:
   Verify workflow sanitize edilmiş outbox artifact'ini toplar ve ardından GitHub runner doğrulanmış
   production evidence env sözleşmesiyle
   `pnpm prod:evidence:check -- --summary-file artifacts/staging/release-summary-<tag>.json`
-  komutunu çalıştırır. Yalnız bu staging verify akışı `PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX=1`
-  ile outbox smoke'un `environment=staging` kaydını kabul eder; production/go-live çalışmaları bu
-  istisnayı taşımaz. Bu komut release summary dosyasını yazdıktan sonra aynı summary'yi
-  `scripts/check-production-evidence-summary.mjs` ile doğrular ve `artifacts/staging`
+  komutunu çalıştırır. Yalnız bu staging verify akışı `PRODUCTION_EVIDENCE_ALLOW_STAGING=1`
+  ile staging rapor/smoke'larının gerçek `environment=staging` kaydını kabul eder; production/go-live
+  çalışmaları bu modu taşımaz. Bu komut release summary dosyasını yazdıktan sonra aynı summary'yi
+  `scripts/check-production-evidence-summary.mjs` ile doğrular; yalnız tüm zorunlu kanıtlar PASS ise
+  summary `canPromote=true` taşır ve `artifacts/staging`
   klasörünü artifact olarak saklar. Aynı source SHA, GitHub CI ve UI/UX artifact'i ile
   `pnpm ui-ux-professionalization:completion:check` full-evidence modu da çalışır. `--summary-file`, sibling `reports/` ve `smoke/` output
   layout'u lokal temp path veya symlink file/directory üzerinden yazılamaz; birleşik kapı bunu
@@ -1088,10 +1127,12 @@ Beklenen akış:
   `staging-outbox-verify-<deploy-run-id>-<verify-run-id>` artifact setinde `reports/deployment-cutover.json`,
   diğer `reports/*.json`, `first-gates/first-gates-manifest.json`, tek `release-summary-*.json` ve
   `smoke/*.json` ham kanıt dosyalarının mevcut olduğunu doğrular. Cutover SHA/repository/tag/zamanı release
-  summary ve outbox smoke ile birebir eşleşmelidir; publish öncesinde dört çalışan image tag'i tekrar
+  summary ve outbox smoke ile birebir eşleşmelidir; staging-bundle checker artifact ortamlarını
+  production olarak yeniden etiketlemeden açık staging modunda doğrular; publish öncesinde dört çalışan image tag'i tekrar
   denetlenir. `release-summary-<tag>.json`
   dosya adındaki tag, summary içindeki `reports.deploymentRollback.releaseCandidate` image tag'iyle
-  eşleşmelidir. Bundle yalnız beklenen root, `reports/`, `smoke/` ve `first-gates/` dosyalarını
+  eşleşmelidir. Bundle yalnız beklenen root, `reports/`, `smoke/`, `first-gates/` ve hash manifestine
+  bağlı `ui-ux-redesign/` dosyalarını
   içerebilir; beklenmeyen raw JSON/log dosyası kalırsa kontrol kırılır. Bundle symlink içeremez;
   beklenen artifact'ler symlink olmayan dosya/dizin olmalıdır. `STAGING_RELEASE_ARTIFACTS_TARGET`
   parent-symlink target üzerinden verilemez; hedef path'in parent zincirinde symlink varsa veya hedef `/tmp`/`/var/tmp` altında kalıyorsa kontrol kırılır. Bundle `.staging-evidence.env`,
@@ -1129,6 +1170,9 @@ Beklenen akış:
   `corepack pnpm staging:release-artifacts:archive-unexpected -- --artifacts-dir artifacts/staging --gap-report-file artifacts/local/staging-release-gap-report.json --archive-dir artifacts/local/staging-release-unexpected-<tag> --apply`
   kullanılır. Komut silmez; sadece taze gap raporundaki `unexpectedFiles[]` girdilerini bundle
   dışındaki archive dizinine taşır ve `manifest.json` yazar. `--apply` yoksa dry-run çıktısı verir.
+  Gate E full verifier, provider veya sentetik veri adımlarından önce remote archive manifestini
+  salt-okunur doğrular; sonuç `ARCHIVED_UNEXPECTED_STAGING_RELEASE_ARTIFACTS`, entry sayısı tam `16`
+  ve her `archivedTo` hedefi symlink olmayan plain file değilse run fail-closed durur.
 - First-gates manifest'indeki `evidenceFile` değerleri manifest dizini altındaki symlink olmayan
   relative artifact dosya adlarıdır; mutlak URL/yol veya manifest dizini dışına çıkan kanıt
   referansı geçmez.

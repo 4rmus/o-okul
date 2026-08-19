@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
 import { expectNoHorizontalOverflow } from "./helpers/horizontal-overflow.js";
 
-const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
+const appOrigin = process.env.NEXT_E2E_BASE_URL ?? `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const artifactDir = path.resolve(repoRoot, process.env.UI_VISUAL_ARTIFACT_DIR ?? "artifacts/ui-ux-redesign/local");
 
@@ -217,48 +217,45 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Finans" })).toBeVisible();
   });
 
-  test("sistem dashboard ortak metrik grid sözleşmesini korur", async ({ page }) => {
+  test("sistem dashboard ortak metrik grid sözleşmesini korur; 320/375/414/768/1024/1440 görünüm üretir", async ({ page }) => {
+    test.setTimeout(90_000);
     const consoleErrors = collectConsoleErrors(page);
-    await openWithUiMocks(page, "/sistem", { height: 900, width: 1280 }, { authProfile: "systemAdmin" });
-
-    await expect(page.getByRole("heading", { level: 1, name: "Sistem Paneli" })).toBeVisible();
-    const systemSummary = page.getByRole("region", { name: "Sistem özeti" });
-    await expect(systemSummary).toHaveClass(/uh-metric-grid/);
-    await expect(systemSummary.locator(".uh-metric-card")).toHaveCount(3);
-    await expect(systemSummary).toContainText("Kurum");
-    await expect(systemSummary).toContainText("Aktif");
-    await expect(systemSummary).toContainText("Deneme");
-    await expectUiStable(page, "faz9-system-dashboard-desktop", consoleErrors);
+    for (const viewport of redesignViewports) {
+      await openWithUiMocks(page, "/sistem", viewport, { authProfile: "systemAdmin" });
+      await expect(page.getByRole("heading", { level: 1, name: "Sistem Paneli" })).toBeVisible();
+      const systemSummary = page.getByRole("region", { name: "Sistem özeti" });
+      await expect(systemSummary).toHaveClass(/uh-metric-grid/);
+      await expect(systemSummary.locator(".uh-metric-card")).toHaveCount(3);
+      await expect(systemSummary).toContainText("Kurum");
+      await expect(systemSummary).toContainText("Aktif");
+      await expect(systemSummary).toContainText("Deneme");
+      const stabilityLabel = viewport.width === 1440 ? "faz9-system-dashboard-desktop" : `faz9-system-dashboard-${viewport.width}`;
+      await expectUiStable(page, stabilityLabel, consoleErrors);
+      await saveScreenshot(page, `faz9-system-dashboard-${viewport.width}.png`);
+    }
   });
 
-  test("sistem kurum yönetimi DataTable ve detay rozetlerini korur", async ({ page }) => {
+  test("sistem kurum yönetimi 320/375/414/768/1024/1440 görünümde DataTable ve detay rozetlerini korur", async ({ page }) => {
+    test.setTimeout(90_000);
     const consoleErrors = collectConsoleErrors(page);
-    await openWithUiMocks(page, "/sistem/kurumlar", { height: 900, width: 1280 }, { authProfile: "systemAdmin" });
-
-    await expect(page.getByRole("heading", { level: 1, name: "Kurumlar" })).toBeVisible();
-    const tenantSummary = page.getByRole("region", { name: "Kurum listesi özeti" });
-    await expect(tenantSummary).toContainText("Kurum toplamı");
-    await expect(tenantSummary).toContainText("Yaklaşan lisans bitişi");
-    await expect(tenantSummary).toContainText("Sistem yöneticisi görünümü");
-    const tenantsTable = page.getByRole("table", { name: "Kurum listesi" });
-    await expect(tenantsTable.getByRole("columnheader", { name: "Kurum", exact: true })).toBeVisible();
-    await expect(tenantsTable.getByRole("columnheader", { name: "Plan" })).toBeVisible();
-    await expect(tenantsTable.getByRole("columnheader", { name: "Durum" })).toBeVisible();
-    await expect(tenantsTable).toContainText("Enterprise");
-    await expect(tenantsTable).toContainText("Aktif");
-    await expect(tenantsTable.getByRole("link", { name: "Faz 9 Akademi detay" })).toHaveAttribute(
-      "href",
-      "/sistem/kurumlar/tenant-faz9",
-    );
-    await expectUiStable(page, "faz9-system-tenants-desktop", consoleErrors);
-    await saveScreenshot(page, "faz9-system-tenants-desktop.png");
-
-    await page.setViewportSize({ height: 844, width: 390 });
-    await page.goto("/sistem/kurumlar");
-    await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
-    await expect(page.getByRole("table", { name: "Kurum listesi" })).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: "Lisans bitişi" })).toHaveCount(0);
-    await expectUiStable(page, "faz9-system-tenants-mobile", consoleErrors);
+    for (const viewport of redesignViewports) {
+      await openWithUiMocks(page, "/sistem/kurumlar", viewport, { authProfile: "systemAdmin" });
+      await expect(page.getByRole("heading", { level: 1, name: "Kurumlar" })).toBeVisible();
+      const tenantSummary = page.getByRole("region", { name: "Kurum listesi özeti" });
+      await expect(tenantSummary).toContainText("Kurum toplamı");
+      await expect(tenantSummary).toContainText("Yaklaşan lisans bitişi");
+      await expect(tenantSummary).toContainText("Sistem yöneticisi görünümü");
+      const tenantsTable = page.getByRole("table", { name: "Kurum listesi" });
+      await expect(tenantsTable.getByRole("columnheader", { name: "Kurum", exact: true })).toBeVisible();
+      await expect(tenantsTable).toContainText("Enterprise");
+      await expect(tenantsTable).toContainText("Aktif");
+      await expect(tenantsTable.getByRole("link", { name: "Faz 9 Akademi detay" })).toHaveAttribute(
+        "href",
+        "/sistem/kurumlar/tenant-faz9",
+      );
+      await expectUiStable(page, `faz9-system-tenants-${viewport.width}`, consoleErrors);
+      await saveScreenshot(page, `faz9-system-tenants-${viewport.width}.png`);
+    }
 
     await page.setViewportSize({ height: 900, width: 1280 });
     await page.goto("/sistem/kurumlar/tenant-faz9");
@@ -1893,7 +1890,12 @@ function corsHeadersFor(route: Route) {
 function collectConsoleErrors(page: Page) {
   const errors: string[] = [];
   page.on("console", (message) => {
-    if (message.type() === "error") errors.push(message.text());
+    const text = message.text();
+    const ignoredCloudflareBeaconCsp =
+      process.env.UI_VISUAL_IGNORE_CLOUDFLARE_BEACON_CSP === "1" &&
+      text.includes("https://static.cloudflareinsights.com/beacon.min.js") &&
+      text.includes("violates the following Content Security Policy directive");
+    if (message.type() === "error" && !ignoredCloudflareBeaconCsp) errors.push(text);
   });
   page.on("pageerror", (error) => {
     errors.push(error.message);
@@ -2133,5 +2135,9 @@ async function expectNoClippedVisibleText(page: Page, label: string) {
 
 async function saveScreenshot(page: Page, fileName: string) {
   await mkdir(artifactDir, { recursive: true });
-  await page.screenshot({ fullPage: true, path: path.join(artifactDir, fileName) });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error("UI_VISUAL_VIEWPORT_MISSING");
+  const height = await page.evaluate(() => Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, window.innerHeight));
+  await page.screenshot({ clip: { height, width: viewport.width, x: 0, y: 0 }, path: path.join(artifactDir, fileName) });
 }

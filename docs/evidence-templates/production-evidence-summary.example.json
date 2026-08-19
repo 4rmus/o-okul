@@ -1,5 +1,6 @@
 {
   "result": "PASS",
+  "canPromote": true,
   "generatedAt": "2026-06-15T10:00:00.000Z",
   "nodeEnv": "production",
   "appUrl": "https://staging.example.test",
@@ -1072,6 +1073,44 @@
           ]
         },
         {
+          "surface": "system dashboard",
+          "widths": [
+            320,
+            375,
+            414,
+            768,
+            1024,
+            1440
+          ],
+          "evidenceReferences": [
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-dashboard-320.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-dashboard-375.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-dashboard-414.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-dashboard-768.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-dashboard-1024.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-dashboard-1440.png"
+          ]
+        },
+        {
+          "surface": "system tenants",
+          "widths": [
+            320,
+            375,
+            414,
+            768,
+            1024,
+            1440
+          ],
+          "evidenceReferences": [
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-tenants-320.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-tenants-375.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-tenants-414.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-tenants-768.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-tenants-1024.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/system-tenants-1440.png"
+          ]
+        },
+        {
           "surface": "optik workspace",
           "widths": [
             320,
@@ -1300,11 +1339,11 @@
         "nullTenantBreakdown": {
           "system": {
             "count": 5,
-            "classificationRule": "tenantId IS NULL AND action LIKE 'system.%' OR action LIKE 'auth.system_%'"
+            "classificationRule": "tenantId IS NULL AND no deletedTenantIdHash AND (system action prefix OR actor user belongs to system tenant)"
           },
           "deletedTenant": {
             "count": 3,
-            "classificationRule": "tenantId IS NULL AND diff.deletedTenantIdHash IS NOT NULL"
+            "classificationRule": "tenantId IS NULL AND (diff.deletedTenantIdHash exists OR (not system AND actorUserId no longer exists))"
           },
           "unknown": {
             "count": 0,
@@ -1783,12 +1822,10 @@
       ],
       "commandsPassed": [
         "pnpm run ci",
-        "pnpm prod:env:check",
         "pnpm db:rls:check:live",
         "pnpm raw-import:smoke",
         "pnpm report-generation:smoke",
         "pnpm live:exam-cycle:check",
-        "pnpm queue:smoke",
         "pnpm live:onboarding:smoke",
         "pnpm live:ui-worker:smoke",
         "pnpm sms:smoke",

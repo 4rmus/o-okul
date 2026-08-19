@@ -450,6 +450,7 @@ runAlertWebhookHttpUrlNegativeCheck();
 runAlertWebhookSecretUrlNegativeCheck();
 runAlertWebhookLocalHostNegativeCheck();
 runTraefikInsecureEvidenceFileNegativeCheck();
+runStagingOutboxDiagnosticAllowlistCheck();
 runStagingReleaseArtifactsBundleCheck();
 
 const generatedLiveStatusPath = "docs/evidence-templates/live-status.generated.tmp.json";
@@ -1566,6 +1567,14 @@ runAuditNullTenantNegativeCheck({
     fixture.auditNullTenant.nullTenantBreakdown.system.count += 1;
   },
 });
+runAuditNullTenantNegativeCheck({
+  label: "Audit null tenant classification rule mismatch negative",
+  path: "docs/evidence-templates/audit-null-tenant.classification-rule.tmp.json",
+  expectedFailure: "auditNullTenant.nullTenantBreakdown.deletedTenant.classificationRule tenantId IS NULL AND (diff.deletedTenantIdHash exists OR (not system AND actorUserId no longer exists)) olmali.",
+  mutate: (fixture) => {
+    fixture.auditNullTenant.nullTenantBreakdown.deletedTenant.classificationRule = "tenantId IS NULL";
+  },
+});
 runAuditNullTenantSymlinkParentTargetNegativeCheck();
 runRateLimitNegativeCheck({
   label: "Rate limit extra top-level key negative",
@@ -1803,7 +1812,7 @@ runUatNegativeCheck({
 runUatNegativeCheck({
   label: "UAT extra command negative",
   path: "docs/evidence-templates/uat.extra-command.tmp.json",
-  expectedFailure: "commandsPassed tam 12 komut içermeli.",
+  expectedFailure: "commandsPassed tam 10 komut içermeli.",
   mutate: (fixture) => {
     fixture.commandsPassed.push("pnpm unexpected:smoke");
   },
@@ -2085,6 +2094,7 @@ runProductionSummaryHttpTargetNegativeCheck();
 runProductionSummarySecretUrlTargetNegativeCheck();
 runProductionSummarySymlinkParentTargetNegativeCheck();
 runStagingOutboxProductionSummaryModeChecks();
+runStagingProductionSummaryModeChecks();
 runProductionSummaryNegativeCheck({
   label: "Production summary extra check negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-check.tmp.json",
@@ -2100,9 +2110,17 @@ runProductionSummaryNegativeCheck({
 runProductionSummaryNegativeCheck({
   label: "Production summary extra top-level key negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-top-level.tmp.json",
-  expectedFailure: "summary tam 9 alan içermeli.",
+  expectedFailure: "summary tam 10 alan içermeli.",
   mutate: (fixture) => {
     fixture.unexpectedTopLevel = true;
+  },
+});
+runProductionSummaryNegativeCheck({
+  label: "Production summary can promote false negative",
+  path: "docs/evidence-templates/production-evidence-summary.can-promote-false.tmp.json",
+  expectedFailure: "canPromote true olmalı.",
+  mutate: (fixture) => {
+    fixture.canPromote = false;
   },
 });
 runProductionSummaryNegativeCheck({
@@ -2746,7 +2764,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked extra summary top-level negative",
   path: "docs/evidence-templates/go-live.linked-extra-summary-top-level.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary tam 9 alan icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary tam 10 alan icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.extra-top-level-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -3446,6 +3464,51 @@ function runStagingOutboxProductionSummaryModeChecks() {
   }
 }
 
+function runStagingProductionSummaryModeChecks() {
+  const path = "docs/evidence-templates/production-evidence-summary.staging.tmp.json";
+  const fixture = structuredClone(productionSummaryFixture);
+  for (const smoke of Object.values(fixture.smokeEvidence)) smoke.environment = "staging";
+  for (const [key, report] of Object.entries(fixture.reports)) {
+    if (key !== "githubCi") report.environment = "staging";
+  }
+  writeFileSync(path, `${JSON.stringify(fixture, null, 2)}\n`);
+
+  try {
+    const baseEnv = {
+      ...process.env,
+      PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE: "1",
+      PRODUCTION_EVIDENCE_SUMMARY_TARGET: pathToFileURL(path).href,
+    };
+    const rejected = spawnSync(process.execPath, ["scripts/check-production-evidence-summary.mjs"], {
+      env: baseEnv,
+      encoding: "utf8",
+    });
+    const rejectedOutput = `${rejected.stdout ?? ""}${rejected.stderr ?? ""}`;
+    if (rejected.status === 0 || !rejectedOutput.includes("smokeEvidence.traefikHttps.environment production olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: staging summary explicit mod olmadan kırılmalı.");
+      console.error(rejectedOutput);
+      process.exit(1);
+    }
+
+    const accepted = spawnSync(process.execPath, ["scripts/check-production-evidence-summary.mjs"], {
+      env: { ...baseEnv, PRODUCTION_EVIDENCE_ALLOW_STAGING: "1" },
+      encoding: "utf8",
+    });
+    if (accepted.status !== 0) {
+      console.error("Production evidence template kontrolü başarısız: explicit staging summary modu geçmeli.");
+      console.error(accepted.stdout);
+      console.error(accepted.stderr);
+      process.exit(accepted.status ?? 1);
+    }
+  } finally {
+    try {
+      unlinkSync(path);
+    } catch {
+      // Ignore cleanup errors; the contract result above is the actionable signal.
+    }
+  }
+}
+
 function runProductionSummaryHttpTargetNegativeCheck() {
   const result = spawnSync(process.execPath, ["scripts/check-production-evidence-summary.mjs"], {
     env: {
@@ -3850,6 +3913,7 @@ function runObservabilityUatGeneratorLocalArtifactNegativeChecks() {
     OBSERVABILITY_UAT_LOKI_EVIDENCE_REFERENCE: "run:loki-ready-2026-06-24",
     OBSERVABILITY_UAT_ALERT_WEBHOOK_EVIDENCE_REFERENCE: "run:alert-webhook-2026-06-24",
     OBSERVABILITY_UAT_RELEASE_CANDIDATE: "0123456789abcdef0123456789abcdef01234567",
+    OBSERVABILITY_UAT_NOT_BEFORE: "2026-05-30T09:00:00.000Z",
     OBSERVABILITY_UAT_ALERT_CHAIN_TARGET: pathToFileURL(resolve(alertmanagerDeliveryFixturePath)).href,
   };
   const cases = [
@@ -5262,6 +5326,10 @@ function runUatGeneratorLocalArtifactNegativeChecks() {
     UAT_RELEASE_CANDIDATE: "ghcr.io/o-okul/api:2026-06-24.1",
     UAT_ROLLBACK_IMAGE_TAG: "ghcr.io/o-okul/api:2026-06-23.1",
     UAT_RESTORE_BACKUP_REFERENCE: "s3://uh-prod-backups/2026-06-24/base.dump",
+    UAT_SOURCE_SHA: "1".repeat(40),
+    UAT_VERIFIER_RUN_URL: "https://github.com/4rmus/o-okul/actions/runs/123456789",
+    UAT_GITHUB_CI_RUN_URL: "https://github.com/4rmus/o-okul/actions/runs/123456788",
+    UAT_GITHUB_CI_EVIDENCE_TARGET: pathToFileURL(resolve(githubCiFixturePath)).href,
   };
   const cases = [
     {
@@ -6778,6 +6846,34 @@ function runInlineUploadMigrationReportOutputNegative(outputPath) {
   });
 }
 
+function runStagingOutboxDiagnosticAllowlistCheck() {
+  const workflow = readFileSync(".github/workflows/staging-outbox-verify.yml", "utf8");
+  const marker = "name: staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}-diagnostic";
+  const markerIndex = workflow.indexOf(marker);
+  const start = workflow.lastIndexOf("- uses: actions/upload-artifact@v4", markerIndex);
+  const end = workflow.indexOf("if-no-files-found: error", markerIndex);
+  const block = start >= 0 && end > start ? workflow.slice(start, end) : "";
+  const actualPaths = [...block.matchAll(/^\s+(artifacts\/\S+)\s*$/gm)].map((match) => match[1]);
+  const expectedPaths = [
+    "artifacts/diagnostic/deployment-cutover.json",
+    "artifacts/diagnostic/github-ci.json",
+    "artifacts/diagnostic/secret-delivery-outbox.json",
+  ];
+  const expectedStagingCommands = [
+    "install -D -m 600 artifacts/cutover/deployment-cutover.json artifacts/diagnostic/deployment-cutover.json",
+    "install -D -m 600 artifacts/staging/reports/github-ci.json artifacts/diagnostic/github-ci.json",
+    "install -D -m 600 artifacts/secret-delivery-outbox.json artifacts/diagnostic/secret-delivery-outbox.json",
+  ];
+  if (
+    !block.includes("if: ${{ failure() && inputs.full_evidence }}") ||
+    JSON.stringify(actualPaths) !== JSON.stringify(expectedPaths) ||
+    expectedStagingCommands.some((command) => !workflow.includes(command))
+  ) {
+    console.error("Production evidence template kontrolü başarısız: Gate E failure diagnostic upload exact sanitize allowlist ile sınırlı olmalı.");
+    process.exit(1);
+  }
+}
+
 function runStagingReleaseArtifactsBundleCheck() {
   const rootParent = resolve("artifacts/prod-evidence-template-check");
   mkdirSync(rootParent, { recursive: true });
@@ -6785,12 +6881,15 @@ function runStagingReleaseArtifactsBundleCheck() {
   const reportsDir = `${root}/reports`;
   const smokeDir = `${root}/smoke`;
   const firstGatesDir = `${root}/first-gates`;
+  const uiUxDir = `${root}/ui-ux-redesign`;
   const evidenceTime = new Date(Date.now() - 120_000).toISOString();
   const summaryTime = new Date(Date.now() - 60_000).toISOString();
+  const cutoverTime = evidenceTime;
 
   mkdirSync(reportsDir, { recursive: true });
   mkdirSync(smokeDir, { recursive: true });
   mkdirSync(firstGatesDir, { recursive: true });
+  mkdirSync(uiUxDir, { recursive: true });
 
   try {
     const summary = normalizeDateStrings(
@@ -6805,6 +6904,15 @@ function runStagingReleaseArtifactsBundleCheck() {
     summary.smokeEvidence.alertWebhook.webhookUrl = "https://alerts.o-okul.com/hooks/staging";
     summary.reports.liveExamCycle.appUrl = summary.appUrl;
     summary.reports.liveExamCycle.apiUrl = summary.apiUrl;
+    summary.reports.rlsLive.evidenceReferences = [
+      "artifact:artifacts/staging/reports/db-rls-check.log",
+      "artifact:artifacts/staging/reports/db-rls-check-live.log",
+      "artifact:artifacts/staging/reports/rls-load-smoke.json",
+      "run:https://github.com/4rmus/o-okul/actions/runs/123456789",
+    ];
+    summary.reports.rlsLive.isolation.tenantAHash = "a".repeat(64);
+    summary.reports.rlsLive.isolation.tenantBHash = "b".repeat(64);
+    summary.smokeEvidence.secretDeliveryOutbox.notBefore = cutoverTime;
     const deploymentRollbackCheckedAt = Date.parse(summary.reports.deploymentRollback.checkedAt);
     summary.reports.deploymentRollback.drill.startedAt = new Date(
       deploymentRollbackCheckedAt - 15 * 60 * 1000,
@@ -6852,6 +6960,28 @@ function runStagingReleaseArtifactsBundleCheck() {
         key === "inlineUploadMigration" ? "inline-upload-content-migration" : key === "githubCi" ? "github-ci" : targetFile;
       writeFileSync(`${reportsDir}/${artifactFile}.json`, `${JSON.stringify(payload, null, 2)}\n`);
     }
+    const runtimeParity = normalizeDateStrings(
+      JSON.parse(readFileSync("docs/evidence-templates/runtime-parity.example.json", "utf8")),
+      evidenceTime,
+    );
+    runtimeParity.repository = summary.reports.githubCi.repository;
+    runtimeParity.sourceSha = summary.reports.githubCi.commitSha;
+    runtimeParity.releaseImageTag = summary.reports.githubCi.commitSha;
+    runtimeParity.verifierRunUrl = `https://github.com/${runtimeParity.repository}/actions/runs/987654321`;
+    runtimeParity.services = runtimeParity.services.map((service) => ({
+      ...service,
+      image: `ghcr.io/${runtimeParity.repository}/${service.service}:${runtimeParity.sourceSha}`,
+    }));
+    writeFileSync(`${reportsDir}/runtime-parity.json`, `${JSON.stringify(runtimeParity, null, 2)}\n`);
+    const liveOnboarding = normalizeDateStrings(
+      JSON.parse(readFileSync("docs/evidence-templates/live-onboarding-result.example.json", "utf8")),
+      evidenceTime,
+    );
+    liveOnboarding.sourceSha = summary.reports.githubCi.commitSha;
+    liveOnboarding.repository = summary.reports.githubCi.repository;
+    liveOnboarding.verifierRunUrl = `https://github.com/${liveOnboarding.repository}/actions/runs/987654321`;
+    liveOnboarding.startedAt = new Date(Date.parse(evidenceTime) - 5 * 60 * 1000).toISOString();
+    writeFileSync(`${reportsDir}/live-onboarding.json`, `${JSON.stringify(liveOnboarding, null, 2)}\n`);
     for (const [key, file] of Object.entries({
       traefikHttps: "traefik-https.json",
       smsProvider: "sms-provider.json",
@@ -6868,6 +6998,35 @@ function runStagingReleaseArtifactsBundleCheck() {
     writeFileSync(
       `${reportsDir}/github-ci.json`,
       `${JSON.stringify({ result: "PASS", ...summary.reports.githubCi, gaps: [] }, null, 2)}\n`,
+    );
+    writeFileSync(
+      `${reportsDir}/db-rls-check.log`,
+      "Tenant model parity kontrolü geçti: 64 tenant tablo.\nRLS policy kontrolü geçti: 64 tenant tablosu doğrulandı.\nTenant relation FK kontrolü geçti: 110 composite, 0 izlenen legacy istisna.\n",
+    );
+    writeFileSync(
+      `${reportsDir}/db-rls-check-live.log`,
+      "Canlı RLS kontrolü geçti: 64 tenant tablosunda cross-tenant okuma izolasyonu doğrulandı.\nSentetik RLS fixture temizliği geçti: 2 tenant silindi.\n",
+    );
+    writeFileSync(
+      `${reportsDir}/rls-load-smoke.json`,
+      `${JSON.stringify({
+        result: "PASS",
+        check: "rls_load_smoke",
+        environment: summary.reports.rlsLive.environment,
+        generatedAt: evidenceTime,
+        checkedAt: evidenceTime,
+        loadSmoke: {
+          ...summary.reports.rlsLive.loadSmoke,
+          seedStudentsPerTenant: 80,
+        },
+        isolation: {
+          tenantAHash: summary.reports.rlsLive.isolation.tenantAHash,
+          tenantBHash: summary.reports.rlsLive.isolation.tenantBHash,
+          crossTenantReadRows: 0,
+        },
+        commandsPassed: ["pnpm rls:load:smoke"],
+        gaps: [],
+      }, null, 2)}\n`,
     );
     const cutover = normalizeDateStrings(
       JSON.parse(readFileSync("docs/evidence-templates/deployment-cutover.example.json", "utf8")),
@@ -6943,6 +7102,116 @@ function runStagingReleaseArtifactsBundleCheck() {
         2,
       )}\n`,
     );
+    for (const file of ["summary.json", "uat.json", "privacy-review.json", ...Array.from({ length: 6 }, (_, index) => `phase-${index}.json`)]) {
+      const payload = file === "uat.json" ? { reproducedAt: evidenceTime } : {};
+      writeFileSync(`${uiUxDir}/${file}`, `${JSON.stringify(payload, null, 2)}\n`);
+    }
+    for (const surface of ["dashboard", "system", "system-tenants", "optik", "rapor", "portal"]) {
+      for (const width of [320, 375, 414, 768, 1024, 1440]) writeFileSync(`${uiUxDir}/${surface}-${width}.png`, "fixture\n");
+    }
+
+    const manifestResult = spawnSync(process.execPath, ["scripts/generate-release-evidence-manifest.mjs"], {
+      env: {
+        ...process.env,
+        RELEASE_EVIDENCE_ARTIFACTS_DIR: root,
+        RELEASE_EVIDENCE_MANIFEST_OUTPUT: `${root}/release-evidence-manifest.json`,
+        RELEASE_EVIDENCE_REPOSITORY: summary.reports.githubCi.repository,
+        RELEASE_EVIDENCE_SOURCE_SHA: summary.reports.githubCi.commitSha,
+        RELEASE_EVIDENCE_IMAGE_TAG: summary.smokeEvidence.secretDeliveryOutbox.releaseImageTag,
+        RELEASE_EVIDENCE_DEPLOY_RUN_ID: String(cutover.deployRunId),
+        RELEASE_EVIDENCE_VERIFIER_RUN_ID: "987654321",
+        RELEASE_EVIDENCE_OUTBOX_REUSE_RUN_ID: "",
+        RELEASE_EVIDENCE_PROVIDER_REUSE_RUN_ID: "",
+        RELEASE_EVIDENCE_AGGREGATE_REUSE_RUN_ID: "",
+        RELEASE_EVIDENCE_CUTOVER_AT: cutover.cutoverAt,
+        RELEASE_EVIDENCE_MANIFEST_ALLOW_EXAMPLE_EVIDENCE: "1",
+      },
+      encoding: "utf8",
+    });
+    if (manifestResult.status !== 0) {
+      console.error("Production evidence template kontrolü başarısız: release evidence manifest fixture üretilemedi.");
+      console.error(manifestResult.stdout);
+      console.error(manifestResult.stderr);
+      process.exit(manifestResult.status ?? 1);
+    }
+
+    const strictManifestResult = spawnSync(process.execPath, ["scripts/generate-release-evidence-manifest.mjs"], {
+      env: {
+        ...process.env,
+        RELEASE_EVIDENCE_ARTIFACTS_DIR: root,
+        RELEASE_EVIDENCE_MANIFEST_OUTPUT: `${root}/release-evidence-manifest.json`,
+        RELEASE_EVIDENCE_REPOSITORY: summary.reports.githubCi.repository,
+        RELEASE_EVIDENCE_SOURCE_SHA: summary.reports.githubCi.commitSha,
+        RELEASE_EVIDENCE_IMAGE_TAG: summary.smokeEvidence.secretDeliveryOutbox.releaseImageTag,
+        RELEASE_EVIDENCE_DEPLOY_RUN_ID: String(cutover.deployRunId),
+        RELEASE_EVIDENCE_VERIFIER_RUN_ID: "987654321",
+        RELEASE_EVIDENCE_OUTBOX_REUSE_RUN_ID: "",
+        RELEASE_EVIDENCE_PROVIDER_REUSE_RUN_ID: "",
+        RELEASE_EVIDENCE_AGGREGATE_REUSE_RUN_ID: "",
+        RELEASE_EVIDENCE_CUTOVER_AT: cutover.cutoverAt,
+      },
+      encoding: "utf8",
+    });
+    const strictManifestOutput = `${strictManifestResult.stdout ?? ""}${strictManifestResult.stderr ?? ""}`;
+    if (strictManifestResult.status === 0 || !strictManifestOutput.includes("cutover öncesi stale artifact")) {
+      console.error("Production evidence template kontrolü başarısız: gerçek manifest yolu stale fixture kanıtını reddetmedi.");
+      console.error(strictManifestOutput);
+      process.exit(1);
+    }
+
+    const releaseEvidenceManifestPath = `${root}/release-evidence-manifest.json`;
+    const freshManifestSource = readFileSync(releaseEvidenceManifestPath, "utf8");
+    const freshManifest = JSON.parse(freshManifestSource);
+    const freshReportEntry = freshManifest.entries.find((entry) => entry.path === "smoke/report-generation.json");
+    const verifierRunUrl = `https://github.com/${freshManifest.repository}/actions/runs/${freshManifest.verifierRunId}`;
+    if (freshManifest.aggregateReuseRunId !== null || freshReportEntry?.runUrl !== verifierRunUrl) {
+      console.error("Production evidence template kontrolü başarısız: fresh report-generation manifest current verifier run'a bağlanmadı.");
+      process.exit(1);
+    }
+    try {
+      const reusedManifest = structuredClone(freshManifest);
+      reusedManifest.aggregateReuseRunId = "876543210";
+      reusedManifest.entries.find((entry) => entry.path === "smoke/report-generation.json").runUrl =
+        `https://github.com/${reusedManifest.repository}/actions/runs/${reusedManifest.aggregateReuseRunId}`;
+      writeFileSync(releaseEvidenceManifestPath, `${JSON.stringify(reusedManifest, null, 2)}\n`);
+      const reuseManifestCheck = spawnSync(process.execPath, ["scripts/check-release-evidence-manifest.mjs"], {
+        env: {
+          ...process.env,
+          RELEASE_EVIDENCE_ARTIFACTS_DIR: root,
+          RELEASE_EVIDENCE_MANIFEST_TARGET: releaseEvidenceManifestPath,
+          RELEASE_EVIDENCE_MANIFEST_ALLOW_EXAMPLE_EVIDENCE: "1",
+        },
+        encoding: "utf8",
+      });
+      if (reuseManifestCheck.status !== 0) {
+        console.error("Production evidence template kontrolü başarısız: reused report-generation manifest provenance geçmedi.");
+        console.error(reuseManifestCheck.stdout);
+        console.error(reuseManifestCheck.stderr);
+        process.exit(reuseManifestCheck.status ?? 1);
+      }
+
+      const wrongFreshManifest = structuredClone(freshManifest);
+      wrongFreshManifest.entries.find((entry) => entry.path === "smoke/report-generation.json").runUrl =
+        `https://github.com/${wrongFreshManifest.repository}/actions/runs/111111111`;
+      writeFileSync(releaseEvidenceManifestPath, `${JSON.stringify(wrongFreshManifest, null, 2)}\n`);
+      const wrongFreshCheck = spawnSync(process.execPath, ["scripts/check-release-evidence-manifest.mjs"], {
+        env: {
+          ...process.env,
+          RELEASE_EVIDENCE_ARTIFACTS_DIR: root,
+          RELEASE_EVIDENCE_MANIFEST_TARGET: releaseEvidenceManifestPath,
+          RELEASE_EVIDENCE_MANIFEST_ALLOW_EXAMPLE_EVIDENCE: "1",
+        },
+        encoding: "utf8",
+      });
+      const wrongFreshOutput = `${wrongFreshCheck.stdout ?? ""}${wrongFreshCheck.stderr ?? ""}`;
+      if (wrongFreshCheck.status === 0 || !wrongFreshOutput.includes(".runUrl artifact sınıfıyla eşleşmeli.")) {
+        console.error("Production evidence template kontrolü başarısız: fresh report-generation yanlış run URL negatifi kırılmadı.");
+        console.error(wrongFreshOutput);
+        process.exit(1);
+      }
+    } finally {
+      writeFileSync(releaseEvidenceManifestPath, freshManifestSource);
+    }
 
     const positive = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
       env: {
@@ -6957,6 +7226,58 @@ function runStagingReleaseArtifactsBundleCheck() {
       console.error(positive.stdout);
       console.error(positive.stderr);
       process.exit(positive.status ?? 1);
+    }
+
+    for (const { file, value } of [
+      { file: `${reportsDir}/db-rls-check.log`, value: "DATABASE_URL=postgresql://app:secret@db.internal/o_okul" },
+      { file: `${reportsDir}/db-rls-check-live.log`, value: "student@example.com" },
+      { file: `${reportsDir}/db-rls-check-live.log`, value: "tenantId=tenant-raw-123 studentId=student-raw-456" },
+    ]) {
+      const original = readFileSync(file, "utf8");
+      try {
+        writeFileSync(file, `${original}${value}\n`);
+        const sensitiveLogNegative = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
+          env: {
+            ...process.env,
+            STAGING_RELEASE_ARTIFACTS_TARGET: root,
+            STAGING_RELEASE_ARTIFACTS_ALLOW_EXAMPLE_EVIDENCE: "1",
+          },
+          encoding: "utf8",
+        });
+        const sensitiveLogOutput = `${sensitiveLogNegative.stdout ?? ""}${sensitiveLogNegative.stderr ?? ""}`;
+        const label = file.endsWith("db-rls-check.log") ? "reports/db-rls-check.log" : "reports/db-rls-check-live.log";
+        if (sensitiveLogNegative.status === 0 || !sensitiveLogOutput.includes(`${label} hassas log içeriği taşımamalı.`)) {
+          console.error("Production evidence template kontrolü başarısız: raw RLS log hassas içerik negatifi kırılmadı.");
+          console.error(sensitiveLogOutput);
+          process.exit(1);
+        }
+      } finally {
+        writeFileSync(file, original);
+      }
+    }
+
+    const releaseManifestPath = `${root}/release-evidence-manifest.json`;
+    const originalReleaseManifest = readFileSync(releaseManifestPath, "utf8");
+    try {
+      const mismatchedManifest = JSON.parse(originalReleaseManifest);
+      mismatchedManifest.entries[0].sha256 = "0".repeat(64);
+      writeFileSync(releaseManifestPath, `${JSON.stringify(mismatchedManifest, null, 2)}\n`);
+      const manifestDigestNegative = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
+        env: {
+          ...process.env,
+          STAGING_RELEASE_ARTIFACTS_TARGET: root,
+          STAGING_RELEASE_ARTIFACTS_ALLOW_EXAMPLE_EVIDENCE: "1",
+        },
+        encoding: "utf8",
+      });
+      const manifestDigestOutput = `${manifestDigestNegative.stdout ?? ""}${manifestDigestNegative.stderr ?? ""}`;
+      if (manifestDigestNegative.status === 0 || !manifestDigestOutput.includes("sha256 artifact bytes ile eşleşmeli")) {
+        console.error("Production evidence template kontrolü başarısız: release manifest digest negative kırılmadı.");
+        console.error(manifestDigestOutput);
+        process.exit(1);
+      }
+    } finally {
+      writeFileSync(releaseManifestPath, originalReleaseManifest);
     }
 
     const deploymentCutoverPath = `${reportsDir}/deployment-cutover.json`;
@@ -7093,7 +7414,7 @@ function runStagingReleaseArtifactsBundleCheck() {
           gapReportPath,
         ],
         {
-          env: process.env,
+          env: { ...process.env, STAGING_RELEASE_ARTIFACTS_ALLOW_EXAMPLE_EVIDENCE: "1" },
           encoding: "utf8",
         },
       );

@@ -116,7 +116,7 @@ const goLiveCutoverKeys = [
 ];
 const goLiveApprovalKeys = ["role", "decision", "approver", "approvedAt"];
 const goLiveOpenRiskKeys = ["id", "severity", "accepted", "owner", "mitigation"];
-const summaryTopLevelKeys = ["result", "generatedAt", "nodeEnv", "appUrl", "apiUrl", "webUrl", "checks", "smokeEvidence", "reports"];
+const summaryTopLevelKeys = ["result", "canPromote", "generatedAt", "nodeEnv", "appUrl", "apiUrl", "webUrl", "checks", "smokeEvidence", "reports"];
 const summaryCheckItemKeys = ["label", "script", "status"];
 const summarySmokeEvidenceKeys = [
   "traefikHttps",
@@ -829,6 +829,7 @@ function requireProductionEvidenceSummary(report, failures, linkedSummary) {
 function validateLinkedProductionEvidenceSummary(summary, failures, goLiveReport, declaredSummary) {
   requireSummaryObjectKeySet(summary, summaryTopLevelKeys, failures, "productionEvidenceSummary.summary");
   requireObjectEqual(summary, failures, "productionEvidenceSummary.summary.result", "result", "PASS");
+  requireObjectEqual(summary, failures, "productionEvidenceSummary.summary.canPromote", "canPromote", true);
   requireObjectEqual(summary, failures, "productionEvidenceSummary.summary.nodeEnv", "nodeEnv", "production");
   requireObjectDate(summary, failures, "productionEvidenceSummary.summary.generatedAt", "generatedAt");
   requireMatchingDate(

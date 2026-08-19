@@ -35,7 +35,19 @@ runCommand(paymentTestCommand);
 
 const pool = new pg.Pool({ connectionString: directDatabaseUrl });
 try {
-  const financialRecords = await readFinancialRecordCounts(pool);
+  const client = await pool.connect();
+  let financialRecords;
+  try {
+    await client.query("BEGIN READ ONLY");
+    await client.query("SELECT set_config('app.bypass_rls', 'true', true)");
+    financialRecords = await readFinancialRecordCounts(client);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
   const report = {
     result: "PASS",
     environment,
@@ -87,14 +99,23 @@ async function readFinancialRecordCounts(pool) {
 }
 
 function runCommand(command) {
-  const testEnv = { ...process.env };
+  const testEnv = {
+    ...process.env,
+    NODE_ENV: "test",
+    PERSISTENCE_DRIVER: "memory",
+    API_RATE_LIMIT_ENABLED: "false",
+    API_RATE_LIMIT_STORE: "memory",
+    LOGIN_ATTEMPT_LIMITER_STORE: "memory",
+    QUEUE_METRICS_ENABLED: "false",
+    REDIS_URL: "redis://127.0.0.1:1",
+    REPORT_PDF_RENDERER: "memory",
+  };
   for (const key of [
     "DATABASE_URL",
     "DIRECT_DATABASE_URL",
-    "NODE_ENV",
     "ADMIN_MFA_MODE",
-    "PERSISTENCE_DRIVER",
     "IDEMPOTENCY_STORE",
+    "QUEUE_PREFIX",
   ]) {
     delete testEnv[key];
   }
