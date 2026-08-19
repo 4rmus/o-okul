@@ -17,9 +17,16 @@
 - Use the narrowest repo skill first: `o-okul-planning`, `o-okul-implementation-slice`, `o-okul-release-evidence`, or `o-okul-pr-review`.
 - Treat `.claude/agents` and `.cursor/skills` as adapter surfaces only; do not make them independent sources of truth.
 - Use subagents only when the user asks for agents, delegation, parallel review, or a large task that benefits from isolated exploration.
-- Keep `agents.max_depth = 1`; the main agent owns orchestration, integration, conflict resolution, and final delivery.
-- Prefer read-only parallel agents for exploration, security review, docs research, and PR review.
-- Use at most one write-capable implementation agent for a given file area. Parallel write work must have disjoint ownership.
+- Keep legacy `agents.max_threads = 3`; it limits subagents and excludes the main agent, so the main agent and at most three subagents may participate concurrently.
+- Keep `agents.max_depth = 1`; the main agent is the sole scope and integration owner and retains conflict resolution and final delivery.
+- Each active gate may have only one write-capable participant.
+- If the main agent writes, no subagent may write.
+- If a subagent writes, the main agent changes no files except for integration.
+- Use no more than three subagents total. If one subagent writes, at most two read-only subagents may remain.
+- Before every gate starts, define its objective, owned paths, forbidden paths, acceptance criteria, and validation commands.
+- When a gate completes, report its result and stop; do not automatically continue to the next gate.
+- Report `LOCAL_STATIC`, `LOCAL_TEST`, `CI`, `STAGING`, `PRODUCTION`, `EXTERNAL_NOT_RUN`, and `UNPROVEN` as separate evidence classes.
+- Deploys, provider actions, secret/config changes, DB/data mutations, and mutating smokes require explicit user approval.
 - Every delegated task needs: objective, owned paths, forbidden paths, expected output, and validation commands.
 - Subagent summaries should return findings and changed files, not raw logs.
 

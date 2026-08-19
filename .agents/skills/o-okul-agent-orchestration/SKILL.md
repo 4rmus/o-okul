@@ -18,10 +18,12 @@ Use this as the router for O-Okul agent work. Prefer the narrower skill when the
 
 1. Read `AGENTS.md` and `docs/codex-agent-architecture.md` when relevant.
 2. Decide whether subagents are useful. Prefer single-agent work for small edits.
-3. If delegating, choose 1-4 agents with disjoint responsibilities.
-4. Prefer read-only agents for discovery, security review, docs research, QA strategy, and PR review.
-5. Use only one write-capable agent per file area. Give explicit owned paths and forbidden paths.
-6. Keep the main agent responsible for integration, conflict resolution, final verification, and user-facing summary.
+3. Keep legacy `max_threads = 3`; it limits subagents and excludes the main agent, so the main agent and at most three subagents may participate concurrently.
+4. Use no more than three subagents total. If one subagent writes, at most two read-only subagents may remain.
+5. Each active gate may have only one write-capable participant. Give explicit owned paths and forbidden paths.
+6. If the main agent writes, every subagent must remain read-only.
+7. If a subagent writes, the main agent may change files only for integration.
+8. Keep the main agent responsible for integration, conflict resolution, final verification, and user-facing summary.
 
 ## Delegation Prompt Template
 
