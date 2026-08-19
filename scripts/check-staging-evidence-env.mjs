@@ -657,6 +657,15 @@ function checkOutboxVerifyWorkflowContract(output) {
   ]) {
     if (!workflow.includes(token)) output.push(`${outboxVerifyWorkflowPath} token eksik: ${token}`);
   }
+  const timeoutLines = workflow
+    .split(/\r?\n/u)
+    .filter((line) => /^\s*timeout-minutes:/u.test(line));
+  if (timeoutLines.length !== 1 || timeoutLines[0] !== "    timeout-minutes: 90") {
+    output.push(`${outboxVerifyWorkflowPath} verify job timeout satırı tam olarak 90 dakika olmalı.`);
+  }
+  if (workflow.includes("timeout-minutes: 45")) {
+    output.push(`${outboxVerifyWorkflowPath} eski 45 dakikalık job süresi taşımamalı.`);
+  }
   if (workflow.match(/SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID|inputs\.source|secrets\..*SOURCE/i)) {
     output.push(`${outboxVerifyWorkflowPath} source ID GitHub input/secret olarak taşımamalı.`);
   }

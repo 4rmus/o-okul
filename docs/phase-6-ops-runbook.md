@@ -551,6 +551,8 @@ evidence kapısı Phase B'nin sonucu değildir: workflow varsayılan olarak yaln
 `full_evidence=true` açıkça seçilirse ayrı full production evidence aggregation da koşar;
 `staging-outbox-verify-*` full release bundle'ı yine yalnız tüm full-evidence ve release-artifact kapıları
 geçtiğinde yayımlanır. PR label yolu yalnız Phase B kapsamındadır.
+Full-evidence verify job'u Chromium kurulumu, canlı kanıt üretimi ve fail-closed temizliği tek koşuda
+tamamlayabilmek için 90 dakika bütçelidir; süre artışı tek başına Gate E PASS kanıtı değildir.
 Full aggregation, private env dosyasındaki UI/UX GitHub run referansını seçilen deploy'un indirilen
 `github-ci.json` artifact'indeki exact run URL'sine çalışma anında bağlar; secret içeriğini loglamaz ve
 env dosyasını `0600` modunda tutar. Aynı koşuda identity migration, financial retention ve security audit

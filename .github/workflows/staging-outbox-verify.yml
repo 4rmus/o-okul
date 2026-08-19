@@ -78,7 +78,7 @@ jobs:
       RUN_GATE_E_DATA_SAFETY_RECONCILIATION: ${{ inputs.run_gate_e_data_safety_reconciliation }}
       RUN_GATE_E_OBSERVABILITY_ALERT_DRILL: ${{ inputs.run_gate_e_observability_alert_drill }}
       UI_UX_APPROVED_AT_INPUT: ${{ inputs.ui_ux_approved_at }}
-    timeout-minutes: 45
+    timeout-minutes: 90
     concurrency:
       group: staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}
       cancel-in-progress: false
