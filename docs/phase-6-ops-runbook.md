@@ -814,6 +814,28 @@ Beklenen sonuç:
 - `access-token` bearer security scheme'i bulunur.
 - Swagger UI staging/prod ortamlarında `OPENAPI_UI_ENABLED=false` ile kapalı kalır.
 
+## Aynı VPS'te Production Ayrımı
+
+Staging çalışırken production hazırlığı aynı VPS'te ayrı compose project olarak doğrulanır:
+
+```sh
+docker compose -p o-okul-production \
+  --env-file /secure/path/production.env \
+  --env-file /secure/path/production.release.env \
+  -f docker-compose.yml \
+  -f docker-compose.release.yml \
+  -f docker-compose.production.yml \
+  config
+```
+
+- Production veritabanı, Redis, volume ve loopback host portları `o-okul-production` project'ine aittir.
+- Mevcut staging Traefik'i ortak edge olarak kullanılır; production router/service adları `prod-` ön eki taşır.
+- Production router öncelikleri staging router'larından düşüktür ve reserved-host kuralı
+  `staging.o-okul.com` adresini kapsamaz.
+- Internal MinIO yalnız açık `local-storage` profiliyle çalışır; production go-live gerçek HTTPS S3 ister.
+- Bu komut yalnız config preflight'tır. `pnpm prod:env:check`, backup/restore ve açık production
+  DNS/deploy onayı olmadan `up` çalıştırılmaz.
+
 ## Staging Deploy Workflow
 
 Amaç: staging VPS'e aynı release adımlarını tekrarlanabilir şekilde uygulamak ve dış ortam kanıtlarını

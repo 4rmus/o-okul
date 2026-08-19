@@ -1,0 +1,107 @@
+services:
+  web:
+    ports: !override
+      - "127.0.0.1:${PRODUCTION_WEB_HOST_PORT:-3011}:3001"
+    labels: !override
+      - "traefik.enable=true"
+      - "traefik.docker.network=o-okul_frontend_net"
+      - "traefik.http.routers.prod-web.rule=Host(`${DOMAIN}`) || Host(`sistem.${DOMAIN}`) || Host(`*.${DOMAIN}`)"
+      - "traefik.http.routers.prod-web.entrypoints=websecure"
+      - "traefik.http.routers.prod-web.priority=5"
+      - "traefik.http.routers.prod-web.service=prod-web"
+      - "traefik.http.routers.prod-web.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.prod-web.tls.domains[0].main=${DOMAIN}"
+      - "traefik.http.routers.prod-web.tls.domains[0].sans=*.${DOMAIN}"
+      - "traefik.http.routers.prod-web.middlewares=prod-web-security-headers"
+      - "traefik.http.middlewares.prod-web-security-headers.headers.stsseconds=15552000"
+      - "traefik.http.middlewares.prod-web-security-headers.headers.stsincludesubdomains=true"
+      - "traefik.http.middlewares.prod-web-security-headers.headers.contenttypenosniff=true"
+      - "traefik.http.middlewares.prod-web-security-headers.headers.framedeny=true"
+      - "traefik.http.middlewares.prod-web-security-headers.headers.referrerpolicy=no-referrer"
+      - "traefik.http.middlewares.prod-web-security-headers.headers.permissionspolicy=camera=(), microphone=(), geolocation=()"
+      - "traefik.http.middlewares.prod-web-security-headers.headers.contentsecuritypolicy=default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' wss:; worker-src 'self' blob:; manifest-src 'self'; media-src 'self' blob:"
+      - "traefik.http.services.prod-web.loadbalancer.server.port=3001"
+      - "traefik.http.routers.prod-reserved-hosts.rule=Host(`www.${DOMAIN}`) || Host(`api.${DOMAIN}`) || Host(`admin.${DOMAIN}`) || Host(`ops.${DOMAIN}`) || Host(`evidence.${DOMAIN}`) || Host(`status.${DOMAIN}`) || Host(`mail.${DOMAIN}`) || Host(`support.${DOMAIN}`) || Host(`cdn.${DOMAIN}`) || Host(`assets.${DOMAIN}`)"
+      - "traefik.http.routers.prod-reserved-hosts.entrypoints=websecure"
+      - "traefik.http.routers.prod-reserved-hosts.priority=200"
+      - "traefik.http.routers.prod-reserved-hosts.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.prod-reserved-hosts.service=noop@internal"
+
+  api:
+    ports: !override
+      - "127.0.0.1:${PRODUCTION_API_HOST_PORT:-3110}:3100"
+    networks:
+      frontend_net:
+      backend_net:
+      proxy_net:
+        ipv4_address: ${PRODUCTION_API_PROXY_IP:-172.31.255.5}
+    labels: !override
+      - "traefik.enable=true"
+      - "traefik.docker.network=o-okul_proxy_net"
+      - "traefik.http.routers.prod-api.rule=(Host(`${DOMAIN}`) || Host(`sistem.${DOMAIN}`) || Host(`*.${DOMAIN}`)) && (PathPrefix(`/api`) || PathPrefix(`/health`))"
+      - "traefik.http.routers.prod-api.entrypoints=websecure"
+      - "traefik.http.routers.prod-api.priority=90"
+      - "traefik.http.routers.prod-api.service=prod-api"
+      - "traefik.http.routers.prod-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.prod-api.middlewares=prod-api-security-headers"
+      - "traefik.http.middlewares.prod-api-security-headers.headers.stsseconds=15552000"
+      - "traefik.http.middlewares.prod-api-security-headers.headers.stsincludesubdomains=true"
+      - "traefik.http.middlewares.prod-api-security-headers.headers.contenttypenosniff=true"
+      - "traefik.http.middlewares.prod-api-security-headers.headers.framedeny=true"
+      - "traefik.http.middlewares.prod-api-security-headers.headers.referrerpolicy=no-referrer"
+      - "traefik.http.middlewares.prod-api-security-headers.headers.permissionspolicy=camera=(), microphone=(), geolocation=()"
+      - "traefik.http.middlewares.prod-api-security-headers.headers.contentsecuritypolicy=default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+      - "traefik.http.services.prod-api.loadbalancer.server.port=3100"
+
+  queue-board:
+    ports: !override
+      - "127.0.0.1:${PRODUCTION_QUEUE_BOARD_HOST_PORT:-3210}:3200"
+
+  evidence:
+    ports: !override
+      - "127.0.0.1:${PRODUCTION_EVIDENCE_HOST_PORT:-3310}:8080"
+    volumes: !override
+      - ./artifacts/production/reports:/usr/share/nginx/html:ro
+      - ./docker/evidence/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    labels: !override
+      - "traefik.enable=true"
+      - "traefik.docker.network=o-okul_frontend_net"
+      - "traefik.http.routers.prod-evidence.rule=Host(`${DOMAIN}`) && PathPrefix(`/evidence`)"
+      - "traefik.http.routers.prod-evidence.entrypoints=websecure"
+      - "traefik.http.routers.prod-evidence.priority=105"
+      - "traefik.http.routers.prod-evidence.service=prod-evidence"
+      - "traefik.http.routers.prod-evidence.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.prod-evidence.middlewares=prod-evidence-strip,prod-evidence-security-headers"
+      - "traefik.http.middlewares.prod-evidence-strip.stripprefix.prefixes=/evidence"
+      - "traefik.http.middlewares.prod-evidence-security-headers.headers.stsseconds=15552000"
+      - "traefik.http.middlewares.prod-evidence-security-headers.headers.stsincludesubdomains=true"
+      - "traefik.http.middlewares.prod-evidence-security-headers.headers.contenttypenosniff=true"
+      - "traefik.http.middlewares.prod-evidence-security-headers.headers.framedeny=true"
+      - "traefik.http.middlewares.prod-evidence-security-headers.headers.referrerpolicy=no-referrer"
+      - "traefik.http.middlewares.prod-evidence-security-headers.headers.contentsecuritypolicy=default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+      - "traefik.http.services.prod-evidence.loadbalancer.server.port=8080"
+
+  postgres:
+    ports: !override
+      - "127.0.0.1:${PRODUCTION_POSTGRES_HOST_PORT:-55432}:5432"
+
+  redis:
+    ports: !override
+      - "127.0.0.1:${PRODUCTION_REDIS_HOST_PORT:-56379}:6379"
+
+  minio:
+    profiles: ["local-storage"]
+    ports: !override
+      - "127.0.0.1:${PRODUCTION_MINIO_HOST_PORT:-59000}:9000"
+      - "127.0.0.1:${PRODUCTION_MINIO_CONSOLE_HOST_PORT:-59001}:9001"
+
+  minio-setup:
+    profiles: ["local-storage"]
+
+networks:
+  frontend_net: !override
+    external: true
+    name: o-okul_frontend_net
+  proxy_net: !override
+    external: true
+    name: o-okul_proxy_net
