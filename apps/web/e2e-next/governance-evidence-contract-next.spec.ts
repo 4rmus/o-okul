@@ -258,11 +258,12 @@ test.describe("Governance evidence sözleşmesi", () => {
     await page.getByRole("button", { name: "Komut paleti" }).click();
     const auditCommandDialog = page.getByRole("dialog", { name: "Komut paleti" });
     await auditCommandDialog.getByLabel("Komut ara").fill("denetim");
-    await expect(auditCommandDialog.getByRole("link", { exact: true, name: "Denetim Yönetim" })).toHaveAttribute("href", "/kurum/denetim");
+    await expect(auditCommandDialog.getByRole("link", { exact: true, name: "Denetim Ayarlar" })).toHaveAttribute("href", "/kurum/denetim");
     await auditCommandDialog.getByRole("button", { name: "Kapat" }).click();
     await page.getByRole("button", { name: "Ana menüyü aç" }).click();
     const auditNavigation = page.getByRole("navigation", { name: "Ana menü" });
-    await auditNavigation.getByRole("button", { name: "Yönetim", exact: true }).click();
+    const auditSettingsGroup = auditNavigation.getByRole("button", { name: "Ayarlar", exact: true });
+    if ((await auditSettingsGroup.getAttribute("aria-expanded")) !== "true") await auditSettingsGroup.click();
     await expect(auditNavigation.getByRole("link", { name: "Denetim", exact: true })).toHaveCount(0);
     await expect(auditNavigation.getByRole("link", { name: "Operasyon ve kanıt", exact: true })).toHaveAttribute("href", "/kurum/operasyon-ve-kanit");
 
@@ -321,11 +322,12 @@ test.describe("Governance evidence sözleşmesi", () => {
     await page.getByRole("button", { name: "Komut paleti" }).click();
     const kvkkCommandDialog = page.getByRole("dialog", { name: "Komut paleti" });
     await kvkkCommandDialog.getByLabel("Komut ara").fill("kvkk");
-    await expect(kvkkCommandDialog.getByRole("link", { exact: true, name: "KVKK Yönetim" })).toHaveAttribute("href", "/kurum/kvkk");
+    await expect(kvkkCommandDialog.getByRole("link", { exact: true, name: "KVKK Ayarlar" })).toHaveAttribute("href", "/kurum/kvkk");
     await kvkkCommandDialog.getByRole("button", { name: "Kapat" }).click();
     await page.getByRole("button", { name: "Ana menüyü aç" }).click();
     const kvkkNavigation = page.getByRole("navigation", { name: "Ana menü" });
-    await kvkkNavigation.getByRole("button", { name: "Yönetim", exact: true }).click();
+    const kvkkSettingsGroup = kvkkNavigation.getByRole("button", { name: "Ayarlar", exact: true });
+    if ((await kvkkSettingsGroup.getAttribute("aria-expanded")) !== "true") await kvkkSettingsGroup.click();
     await expect(kvkkNavigation.getByRole("link", { name: "KVKK", exact: true })).toHaveCount(0);
     await expect(kvkkNavigation.getByRole("link", { name: "Operasyon ve kanıt", exact: true })).toHaveAttribute("href", "/kurum/operasyon-ve-kanit");
 

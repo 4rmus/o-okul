@@ -151,7 +151,7 @@ test.describe("UI route family smoke", () => {
       const unknownApiRequests: string[] = [];
       await installRouteApiMocks(page, routeCase.persona, unknownApiRequests, {
         featureRolloutKeys: routeCase.feature === "exam-workspace"
-          ? ["web.shell-v2", "web.exam-workspace-v2"]
+          ? ["web.exam-workspace-v2"]
           : [],
       });
       await page.addInitScript(() => {
@@ -404,7 +404,7 @@ async function installRouteApiMocks(
   persona: Persona,
   unknownApiRequests: string[],
   options: {
-    featureRolloutKeys?: Array<"web.shell-v2" | "web.exam-workspace-v2">;
+    featureRolloutKeys?: Array<"web.exam-workspace-v2">;
     portalAccess?: ReturnType<typeof createPortalAccessMock>;
   } = {},
 ) {

@@ -83,71 +83,45 @@ export const institutionOperationEvidenceItems: readonly InstitutionNavigationIt
   { href: "/kurum/canli-yayin", hiddenFromRail: true, icon: Activity, label: "Yayın Hazırlığı", requiredCapability: institutionOperationEvidenceCapability },
 ];
 
-export const institutionNavGroups: readonly InstitutionNavGroup[] = [
-  {
-    label: "Bugün",
-    items: [
-      { href: "/kurum", icon: LayoutDashboard, label: "Özet" },
-      { href: "/kurum/kurulum", icon: Settings, label: "Kurulum", requiredCapability: "setup:manage" },
-    ],
-  },
-  {
-    label: "Öğrenci ve eğitim",
-    items: [
-      { href: "/kurum/ogrenciler", icon: GraduationCap, label: "Öğrenciler", requiredCapability: "student:manage" },
-      { href: "/kurum/veliler", icon: Users, label: "Veli kayıtları", requiredCapability: "student:manage" },
-      { href: "/kurum/ogretmenler", icon: UserRoundCog, label: "Öğretmenler", requiredCapability: "staff:manage" },
-      { href: "/kurum/siniflar", icon: School, label: "Sınıflar", requiredCapability: "class:manage" },
-      { href: "/kurum/seviyeler", icon: ClipboardList, label: "Seviyeler", requiredCapability: "class:manage" },
-      { href: "/kurum/kampusler", icon: Building2, label: "Kampüsler", requiredCapability: "class:manage" },
-      { href: "/kurum/dersler", icon: BookOpen, label: "Dersler", requiredCapability: "academic:manage" },
-      { href: "/kurum/program", icon: CalendarDays, label: "Program", requiredCapability: "academic:manage" },
-      { href: "/kurum/etutler", icon: NotebookTabs, label: "Etütler", requiredCapability: "academic:manage" },
-      { href: "/kurum/devamsizlik", icon: ClipboardCheck, label: "Devamsızlık", requiredCapability: "attendance:manage" },
-      { href: "/kurum/akademik-takvim", icon: CalendarDays, label: "Takvim", requiredCapability: "academic:manage" },
-      { href: "/kurum/materyaller", icon: Library, label: "Materyaller", requiredCapability: "academic:manage" },
-      { href: "/kurum/notlar", icon: NotebookTabs, label: "Notlar", requiredCapability: "note:manage" },
-    ],
-  },
-  {
-    label: "Sınav ve rapor",
-    items: [
-      { href: "/kurum/sinavlar", icon: FileText, label: "Sınavlar", requiredCapability: "academic:manage" },
-      { href: "/kurum/kazanimlar", icon: ClipboardList, label: "Kazanımlar", requiredCapability: "academic:manage" },
-      { href: "/kurum/optik", icon: ScanLine, label: "Optik Okuma", requiredCapability: "academic:manage" },
-      { href: "/kurum/raporlar", icon: BarChart3, label: "Sınav Raporları", requiredCapability: "academic:manage" },
-    ],
-  },
-  {
-    label: "İletişim",
-    items: [
-      { href: "/kurum/duyurular", icon: Megaphone, label: "Duyurular", requiredCapability: "announcement:manage" },
-      ...(isSmsEnabled ? [{ href: "/kurum/sablonlar", icon: MessageSquareText, label: "Mesaj Şablonları", requiredCapability: "announcement:manage" }] : []),
-      { href: "/kurum/destek", icon: LifeBuoy, label: "Kurum içi destek", requiredCapability: "support:manage" },
-    ],
-  },
-  {
-    label: "Yönetim",
-    items: [
-      { href: "/kurum/finans", icon: CreditCard, label: "Ödeme planları", requiredCapability: "finance:manage" },
-      { href: "/kurum/calisanlar", icon: UserRoundCog, label: "Çalışanlar ve Yetkiler", requiredCapability: "user:manage" },
-      { href: "/kurum/ogrenci-portal-erisimi", icon: GraduationCap, label: "Öğrenci Portal Erişimi", requiredCapability: "user:manage" },
-      { href: "/kurum/kullanicilar", icon: Users, label: "Kullanıcılar", requiredCapability: "user:manage" },
-      { href: "/kurum/lisans-donemleri", icon: ClipboardCheck, label: "Lisans Dönemleri", requiredCapability: "setup:manage" },
-      { href: "/kurum/rol-onizleme", icon: ShieldCheck, label: "Rol Önizleme", requiredCapability: "role-preview:manage" },
-      { href: "/kurum/operasyon-ve-kanit", icon: ShieldCheck, label: "Operasyon ve kanıt", requiredCapability: institutionOperationEvidenceCapability },
-      ...institutionOperationEvidenceItems,
-    ],
-  },
+const institutionNavigationItems: readonly InstitutionNavigationItem[] = [
+  { href: "/kurum", icon: LayoutDashboard, label: "Özet" },
+  { href: "/kurum/kurulum", icon: Settings, label: "Kurulum", requiredCapability: "setup:manage" },
+  { href: "/kurum/ogrenciler", icon: GraduationCap, label: "Öğrenciler", requiredCapability: "student:manage" },
+  { href: "/kurum/veliler", icon: Users, label: "Veli kayıtları", requiredCapability: "student:manage" },
+  { href: "/kurum/ogretmenler", icon: UserRoundCog, label: "Öğretmenler", requiredCapability: "staff:manage" },
+  { href: "/kurum/calisanlar", icon: UserRoundCog, label: "Çalışanlar ve Yetkiler", requiredCapability: "user:manage" },
+  { href: "/kurum/ogrenci-portal-erisimi", icon: GraduationCap, label: "Öğrenci Portal Erişimi", requiredCapability: "user:manage" },
+  { href: "/kurum/kullanicilar", icon: Users, label: "Kullanıcılar", requiredCapability: "user:manage" },
+  { href: "/kurum/siniflar", icon: School, label: "Sınıflar", requiredCapability: "class:manage" },
+  { href: "/kurum/seviyeler", icon: ClipboardList, label: "Seviyeler", requiredCapability: "class:manage" },
+  { href: "/kurum/kampusler", icon: Building2, label: "Kampüsler", requiredCapability: "class:manage" },
+  { href: "/kurum/dersler", icon: BookOpen, label: "Dersler", requiredCapability: "academic:manage" },
+  { href: "/kurum/program", icon: CalendarDays, label: "Program", requiredCapability: "academic:manage" },
+  { href: "/kurum/etutler", icon: NotebookTabs, label: "Etütler", requiredCapability: "academic:manage" },
+  { href: "/kurum/devamsizlik", icon: ClipboardCheck, label: "Devamsızlık", requiredCapability: "attendance:manage" },
+  { href: "/kurum/akademik-takvim", icon: CalendarDays, label: "Takvim", requiredCapability: "academic:manage" },
+  { href: "/kurum/materyaller", icon: Library, label: "Materyaller", requiredCapability: "academic:manage" },
+  { href: "/kurum/notlar", icon: NotebookTabs, label: "Notlar", requiredCapability: "note:manage" },
+  { href: "/kurum/sinavlar", icon: FileText, label: "Sınavlar", requiredCapability: "academic:manage" },
+  { href: "/kurum/kazanimlar", icon: ClipboardList, label: "Kazanımlar", requiredCapability: "academic:manage" },
+  { href: "/kurum/optik", icon: ScanLine, label: "Optik Okuma", requiredCapability: "academic:manage" },
+  { href: "/kurum/raporlar", icon: BarChart3, label: "Sınav Raporları", requiredCapability: "academic:manage" },
+  { href: "/kurum/duyurular", icon: Megaphone, label: "Duyurular", requiredCapability: "announcement:manage" },
+  ...(isSmsEnabled ? [{ href: "/kurum/sablonlar", icon: MessageSquareText, label: "Mesaj Şablonları", requiredCapability: "announcement:manage" }] : []),
+  { href: "/kurum/destek", icon: LifeBuoy, label: "Kurum içi destek", requiredCapability: "support:manage" },
+  { href: "/kurum/finans", icon: CreditCard, label: "Ödeme planları", requiredCapability: "finance:manage" },
+  { href: "/kurum/lisans-donemleri", icon: ClipboardCheck, label: "Lisans Dönemleri", requiredCapability: "setup:manage" },
+  { href: "/kurum/rol-onizleme", icon: ShieldCheck, label: "Rol Önizleme", requiredCapability: "role-preview:manage" },
+  { href: "/kurum/operasyon-ve-kanit", icon: ShieldCheck, label: "Operasyon ve kanıt", requiredCapability: institutionOperationEvidenceCapability },
 ];
 
 const institutionItemByHref = new Map(
-  institutionNavGroups.flatMap((group) => group.items).map((item) => [item.href, item]),
+  [...institutionNavigationItems, ...institutionOperationEvidenceItems].map((item) => [item.href, item]),
 );
 
-export const institutionNavGroupsV2: readonly InstitutionNavGroup[] = [
-  v2Group("Bugün", ["/kurum"]),
-  v2Group("Kişiler", [
+export const institutionNavGroups: readonly InstitutionNavGroup[] = [
+  navigationGroup("Bugün", ["/kurum"]),
+  navigationGroup("Kişiler", [
     "/kurum/ogrenciler",
     "/kurum/veliler",
     "/kurum/ogretmenler",
@@ -155,7 +129,7 @@ export const institutionNavGroupsV2: readonly InstitutionNavGroup[] = [
     "/kurum/ogrenci-portal-erisimi",
     "/kurum/kullanicilar",
   ]),
-  v2Group("Akademik", [
+  navigationGroup("Akademik", [
     "/kurum/siniflar",
     "/kurum/seviyeler",
     "/kurum/kampusler",
@@ -167,19 +141,30 @@ export const institutionNavGroupsV2: readonly InstitutionNavGroup[] = [
     "/kurum/materyaller",
     "/kurum/notlar",
   ]),
-  v2Group("Sınav", ["/kurum/sinavlar", "/kurum/kazanimlar", "/kurum/optik", "/kurum/raporlar"]),
-  v2Group("İletişim", ["/kurum/duyurular", "/kurum/sablonlar", "/kurum/destek"]),
-  v2Group("Finans", ["/kurum/finans", "/kurum/lisans-donemleri"]),
-  v2Group("Ayarlar", ["/kurum/kurulum", "/kurum/rol-onizleme", "/kurum/operasyon-ve-kanit"]),
+  navigationGroup("Sınav", ["/kurum/sinavlar", "/kurum/kazanimlar", "/kurum/optik", "/kurum/raporlar"]),
+  navigationGroup("İletişim", ["/kurum/duyurular", "/kurum/sablonlar", "/kurum/destek"]),
+  navigationGroup("Finans", ["/kurum/finans", "/kurum/lisans-donemleri"]),
+  navigationGroup(
+    "Ayarlar",
+    ["/kurum/kurulum", "/kurum/rol-onizleme", "/kurum/operasyon-ve-kanit"],
+    institutionOperationEvidenceItems,
+  ),
 ];
 
-function v2Group(label: string, hrefs: string[]): InstitutionNavGroup {
+function navigationGroup(
+  label: string,
+  hrefs: string[],
+  additionalItems: readonly InstitutionNavigationItem[] = [],
+): InstitutionNavGroup {
   return {
     label,
-    items: hrefs.flatMap((href) => {
-      const item = institutionItemByHref.get(href);
-      return item ? [item] : [];
-    }),
+    items: [
+      ...hrefs.flatMap((href) => {
+        const item = institutionItemByHref.get(href);
+        return item ? [item] : [];
+      }),
+      ...additionalItems,
+    ],
   };
 }
 

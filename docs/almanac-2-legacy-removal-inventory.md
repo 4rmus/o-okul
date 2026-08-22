@@ -13,7 +13,8 @@ silinmez.
 | `/kurum/uat-rollback` ekranı | `REMOVED_LOCAL_TESTED` | Yok; UAT sözleşmesi belge, template ve checker ile doğrulanıyor | CI; staging/production `EXTERNAL_NOT_RUN` |
 | `/kurum/operasyon-ve-kanit` | `CANONICAL` | Yetkiye göre yedek, güvenlik, sağlık ve yayın araçlarını listeliyor | Korunur |
 | Eski `/k/{tenantSlug}/giris` yolu | `ACTIVE_LEGACY` | Parola sıfırlama, onboarding ve canlı UI testleri hâlâ bu yolu kullanıyor | Canlı kullanım ve host geçişi doğrulanmadan kaldırılmaz |
-| Eski kurum navigasyonu | `ACTIVE_FALLBACK` | `web.shell-v2` tenant rollout'u kapalı olduğunda kullanılıyor | Rollout kullanımı ve tüm tenantlar için yeni shell doğrulanır |
+| Eski kurum navigasyonu | `REMOVED_LOCAL_TESTED` | Yok; yedi gruplu yeni navigasyon kanonik | CI; staging/production `EXTERNAL_NOT_RUN` |
+| `web.ia-v2` / `web.shell-v2` bayrakları | `REMOVED_LOCAL_TESTED` | Shell artık rollout cevabına bağlı değil | Eski config anahtarları fail-closed reddedilir; staging env preflight `EXTERNAL_NOT_RUN` |
 | Guardian/veli ekranları | `ACTIVE_TRANSITION` | Portal, destek, duyuru, rapor ve ödeme akışları kullanıyor | Önce StudentContact/self-service hedefi ve veri taşıma planı |
 | `Guardian` / `GuardianStudent` veri yapıları | `ACTIVE_DATA` | API, RLS, rapor, destek ve portal ilişkileri kullanıyor | Tenant bazlı sayım, yeni modele taşıma, doğrulanmış yedek; sonra migration |
 | Legacy `SYSTEM_ADMIN` tenant erişim kalıntıları | `PARTIAL_SECURITY_DEBT` | Bazı route ve rol uyumluluk testleri sürüyor | Route ailesi bazında exact capability/control-plane kesimi |

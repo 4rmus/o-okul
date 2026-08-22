@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 import { CrudPage, type DataTableColumn } from "@o-okul/ui";
 import { tenantRoleLabel } from "@o-okul/shared-types";
 import { institutionNavGroups, institutionOperationEvidenceItems } from "../app/(app)/_shared/navigation.js";
+import { canAccessInstitutionPath } from "../app/(app)/_shared/access.js";
 import { buildListUrl } from "../src/list-controls.js";
 
 const columns: Array<DataTableColumn<{ id: string }>> = [
@@ -41,11 +42,14 @@ test("CrudPage durum önceliğini ve filtreli boş durumu korur", () => {
 test("kurum rail ve ürün terimleri yeni bağlamı kullanır", () => {
   expect(institutionNavGroups.map((group) => group.label)).toEqual([
     "Bugün",
-    "Öğrenci ve eğitim",
-    "Sınav ve rapor",
+    "Kişiler",
+    "Akademik",
+    "Sınav",
     "İletişim",
-    "Yönetim",
+    "Finans",
+    "Ayarlar",
   ]);
   expect(institutionOperationEvidenceItems.every((item) => item.hiddenFromRail)).toBe(true);
+  expect(canAccessInstitutionPath(["TENANT_ADMIN"], "/kurum/yedek-restore")).toBe(true);
   expect(tenantRoleLabel("TENANT_ADMIN")).toBe("Kurum yöneticisi");
 });

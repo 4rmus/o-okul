@@ -502,7 +502,7 @@ Son kontrol: 2026-08-09
 
 ### DEC-20260823-01 — Yeni ürün yapısı kanoniktir; legacy ürüne dönüş yapılmaz
 
-Durum: Onaylı; forward-only sözleşme ve ilk legacy UI temizliği yerelde uygulandı, CI/staging ve kalan temizlik bekliyor
+Durum: Onaylı; forward-only sözleşme ve ilk iki legacy UI temizliği yerelde test edildi, CI/staging ve kalan temizlik bekliyor
 Karar: Yeni ekranlar ve yeni veri modeli kanonik üründür. Ürün eski ekranlara veya eski veri modeline
 geri döndürülmez; sorunlar yeni yapı üzerinde ileriye doğru düzeltilir. Tarihsel fallback imajına
 dönüş provası Gate E veya pilot için ayrı kabul kapısı değildir. Doğrulanmış yedek ve geri yükleme

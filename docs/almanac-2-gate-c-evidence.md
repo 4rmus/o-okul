@@ -1,5 +1,8 @@
 # Almanak 2.0 Gate C İlk Dikey Dilim Kanıtı
 
+> Tarihsel not: Bu kanıt `web.shell-v2` rollout dönemine aittir. 23 Ağustos 2026'da yeni shell
+> kanonik hale getirilmiş ve `web.shell-v2`/`web.ia-v2` katalogdan kaldırılmıştır.
+
 Tarih: 2026-08-10
 Branch: `agent/almanac-gate-a-local-20260809-2`
 Başlangıç commit'i: `7e074e18905260b70f4abdaac95df0f6fe15e0af`

@@ -2339,7 +2339,7 @@ const expectations = {
   ],
   "apps/web/e2e-next/backup-restore-next.spec.ts": [
     "yedek restore paneli hedef sözleşmesini API çağrısından önce doğrular",
-    'getByRole("button", { name: "Yönetim", exact: true })',
+    'getByRole("button", { name: "Ayarlar", exact: true })',
     'getByRole("link", { name: "Operasyon ve kanıt" })',
     'getByRole("link", { name: "Yedekleme" })',
     "backupRestorePostCount",

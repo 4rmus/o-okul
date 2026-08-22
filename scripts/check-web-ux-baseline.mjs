@@ -1695,7 +1695,7 @@ requireTokens("apps/web/app/(app)/kurum/_shared/import-template-panel.tsx", [
 requireTokens("apps/web/app/(app)/_shared/navigation.ts", [
   'const institutionOperationEvidenceCapability = "operation:manage"',
   '{ href: "/kurum/kurulum", icon: Settings, label: "Kurulum", requiredCapability: "setup:manage" }',
-  'label: "Yönetim"',
+  'navigationGroup(\n    "Ayarlar",',
   '{ href: "/kurum/operasyon-ve-kanit", icon: ShieldCheck, label: "Operasyon ve kanıt", requiredCapability: institutionOperationEvidenceCapability }',
   '{ href: "/kurum/denetim", hiddenFromRail: true, icon: ClipboardList, label: "Denetim", requiredCapability: "tenant-audit:read", requiredPersona: "STAFF" }',
   '{ href: "/kurum/kvkk", hiddenFromRail: true, icon: ShieldCheck, label: "KVKK", requiredCapability: "privacy:manage" }',
