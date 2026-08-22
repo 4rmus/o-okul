@@ -3895,7 +3895,6 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByRole("link", { name: "KVKK" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Güvenlik Denetimi" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Sistem İzleme" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Kabul ve Geri Dönüş" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Yayın Hazırlığı" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Sistem Sağlığı" })).toHaveCount(0);
   await expandSidebarGroup(page, "Öğrenci ve eğitim");
@@ -4990,7 +4989,6 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   for (const operationPath of [
     "/kurum/guvenlik-denetimi",
     "/kurum/gozlemlenebilirlik",
-    "/kurum/uat-rollback",
     "/kurum/canli-yayin",
     "/kurum/sistem-sagligi",
   ]) {

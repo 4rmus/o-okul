@@ -11,6 +11,7 @@ const appRoot = "apps/web/app";
 const smokePath = "apps/web/e2e-next/ui-route-family-smoke-next.spec.ts";
 const failures = [];
 const pageRoutes = collectPageRoutes(appRoot).sort();
+const retiredRoutes = new Set(["/kurum/uat-rollback"]);
 const smoke = readFileSync(smokePath, "utf8");
 const start = smoke.indexOf("const routeCases = [");
 const end = smoke.indexOf("] satisfies RouteCase[];", start);
@@ -26,6 +27,9 @@ if (JSON.stringify(pageRoutes) !== JSON.stringify(manifestRoutes)) {
 }
 if (new Set(manifestRoutes).size !== manifestRoutes.length) failures.push("route smoke manifest duplicate route içeriyor");
 if (manifestPersonas.size !== pageRoutes.length) failures.push("route smoke persona envanteri eksik veya duplicate");
+for (const route of retiredRoutes) {
+  if (pageRoutes.includes(route) || manifestRoutes.includes(route)) failures.push("retired route yeniden eklenemez: " + route);
+}
 
 for (const route of pageRoutes) {
   try {
@@ -75,6 +79,7 @@ const navigation = readFileSync("apps/web/app/(app)/_shared/navigation.ts", "utf
 const navigationRoutes = [...navigation.matchAll(/href:\s*"([^"]+)"/g)].map((match) => match[1]);
 for (const route of navigationRoutes) {
   if (!pageRoutes.includes(route)) failures.push("navigation route manifestte yok: " + route);
+  if (retiredRoutes.has(route)) failures.push("retired navigation route yeniden eklenemez: " + route);
 }
 
 if (failures.length > 0) {

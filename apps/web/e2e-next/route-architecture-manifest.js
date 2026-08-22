@@ -75,7 +75,6 @@ const tenantModules = {
   sinavlar: ["exam", "REGISTRY"],
   siniflar: ["academic-structure", "REGISTRY"],
   "sistem-sagligi": ["operations", "WORKFLOW"],
-  "uat-rollback": ["operations", "WORKFLOW"],
   veliler: ["guardian-portal", "REGISTRY"],
   "yedek-restore": ["operations", "WORKFLOW"],
 };

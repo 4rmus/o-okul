@@ -47,7 +47,6 @@ const files = {
   "apps/web/app/(app)/kurum/canli-yayin/live-release-page.tsx": readFileSync("apps/web/app/(app)/kurum/canli-yayin/live-release-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/gozlemlenebilirlik/observability-page.tsx": readFileSync("apps/web/app/(app)/kurum/gozlemlenebilirlik/observability-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/guvenlik-denetimi/security-audit-page.tsx": readFileSync("apps/web/app/(app)/kurum/guvenlik-denetimi/security-audit-page.tsx", "utf8"),
-  "apps/web/app/(app)/kurum/uat-rollback/uat-rollback-page.tsx": readFileSync("apps/web/app/(app)/kurum/uat-rollback/uat-rollback-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/yedek-restore/backup-restore-page.tsx": readFileSync("apps/web/app/(app)/kurum/yedek-restore/backup-restore-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/kampusler/campuses-page.tsx": readFileSync("apps/web/app/(app)/kurum/kampusler/campuses-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/kazanimlar/learning-outcomes-page.tsx": readFileSync("apps/web/app/(app)/kurum/kazanimlar/learning-outcomes-page.tsx", "utf8"),
@@ -807,7 +806,6 @@ requireTokens("apps/web/e2e-next/governance-evidence-contract-next.spec.ts", [
   'personasız legacy tenant admin denetim route\'una fail-closed erişir',
   'openWithGovernanceMocks(page, "/kurum/denetim", { height: 844, width: 390 }, { roles: ["ASSISTANT_ADMIN"] })',
   'openWithGovernanceMocks(page, "/kurum/canli-yayin", { height: 900, width: 390 },',
-  'openWithGovernanceMocks(page, "/kurum/uat-rollback", { height: 900, width: 768 },',
   'openWithGovernanceMocks(page, "/kurum/yedek-restore", { height: 900, width: 390 },',
   'openWithGovernanceMocks(page, "/kurum/sistem-sagligi", { height: 900, width: 390 },',
   'openWithGovernanceMocks(page, "/kurum/gozlemlenebilirlik", { height: 900, width: 768 },',
@@ -828,7 +826,6 @@ requireTokens("apps/web/e2e-next/governance-evidence-contract-next.spec.ts", [
   'await expect(page).toHaveURL(/\\/kurum\\/kvkk$/)',
   'getByLabel("Güvenlik güven durumu")',
   'getByLabel("Canlıya geçiş doğrulama durumu")',
-  'getByLabel("Kullanıcı kabulü ve geri dönüş durumu")',
   'getByLabel("Yedekleme ve geri yükleme güven durumu")',
   'getByLabel("Sistem sağlığı doğrulama durumu")',
   'getByLabel("Sistem izleme doğrulama durumu")',
@@ -863,17 +860,9 @@ requireTokens("apps/web/e2e-next/governance-evidence-contract-next.spec.ts", [
   "Pilot değerlendirme sonuçları",
   'expectNoUnlabeledControls(page, "live-release-governance-mobile")',
   'getByRole("button", { name: /Canlı yayına al|Yayınla|Go-live başlat|Release başlat/i })',
-  'getByRole("region", { exact: true, name: "Kullanıcı kabulü ve geri dönüş özeti" })',
-  "Kullanıcı kabulü ve geri dönüş özeti önerilen işlemler",
-  'getByRole("table", { name: "Kullanıcı yolculuğu senaryoları" })',
-  'getByRole("table", { name: "Yayın öncesi zorunlu kontroller" })',
-  'getByRole("table", { name: "Geri dönüş için zorunlu bilgiler" })',
-  "Yalnızca kontrol",
   "pnpm db:rls:check:live",
   "pnpm traefik:https:smoke",
   "rollbackImageTag",
-  "restoreBackupReference",
-  "defects boş",
   'getByRole("region", { exact: true, name: "Yedekleme ve geri yükleme operasyon özeti" })',
   "Yedekleme ve geri yükleme operasyon özeti önerilen işlemler",
   'getByRole("button", { name: "Kurum verisini indir" })',
@@ -3398,50 +3387,6 @@ requireNoTokens("apps/web/app/(app)/kurum/canli-yayin/live-release-page.tsx", [
   "next-report-list",
 ]);
 
-requireTokens("apps/web/app/(app)/kurum/uat-rollback/uat-rollback-page.tsx", [
-  "OperationSummary",
-  "OperationSummaryAction",
-  "OperationSummaryBadge",
-  "OperationSummaryItem",
-  "DataTable",
-  "Panel",
-  "StatusBadge",
-  'ariaLabel="Kullanıcı kabulü ve geri dönüş özeti"',
-  'caption="Yayın öncesi kabul ve geri dönüş kontrolleri"',
-  'caption="Kullanıcı kabul akışları"',
-  'caption="Kullanıcı yolculuğu senaryoları"',
-  'caption="Yayın öncesi zorunlu kontroller"',
-  'caption="Geri dönüş için zorunlu bilgiler"',
-  'density="compact"',
-  'mobilePriority: "primary"',
-  'mobilePriority: "secondary"',
-  'priority: "primary"',
-  'priority: "secondary"',
-  'sticky: "left"',
-  "buildUatRollbackSummaryItems",
-  "buildUatRollbackSummaryBadges",
-  "buildUatRollbackSummaryActions",
-  "buildUatRollbackRows",
-  "personaScope",
-  "commandScope",
-  "rollbackFieldDetail",
-  "Yalnızca kontrol",
-  "Yayın doğrulaması ayrıca yapılır",
-  "Canlı kanıt gerekir",
-  "Onay ve işlem kaydı zorunlu",
-  "pnpm db:rls:check:live",
-  "pnpm traefik:https:smoke",
-  "rollbackImageTag",
-  "restoreBackupReference",
-]);
-
-requireNoTokens("apps/web/app/(app)/kurum/uat-rollback/uat-rollback-page.tsx", [
-  "MetricPanelGrid",
-  "EvidenceListSection",
-  "EvidenceGateSection",
-  "next-report-list",
-]);
-
 requireTokens("apps/web/app/(app)/kurum/yedek-restore/backup-restore-page.tsx", [
   "OperationSummary",
   "OperationSummaryAction",
@@ -5035,7 +4980,6 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   '"route-family-student-detail-768.png"',
   '"route-family-student-portal-414.png"',
   '"route-family-report-1440.png"',
-  '"route-family-evidence-1440.png"',
   'toHaveScreenshot("institution-shell-rail-1440.png"',
 ]);
 requireNoTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
@@ -5051,7 +4995,7 @@ requireTokens("apps/web/app/globals.css", ["scroll-margin-block-start: 4.5rem;"]
 requireRegexCount(
   "apps/web/e2e-next/ui-visual-qa-next.spec.ts",
   /await expectRouteFamilyGolden\(/g,
-  9,
+  8,
   "route family golden invocation",
 );
 requireTokensInOrder("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
@@ -5063,7 +5007,6 @@ requireTokensInOrder("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   '"route-family-student-detail-768.png"',
   '"route-family-student-portal-414.png"',
   '"route-family-report-1440.png"',
-  '"route-family-evidence-1440.png"',
 ]);
 const routeFamilyGoldenNames = [
   "route-family-landing-1280",
@@ -5074,7 +5017,6 @@ const routeFamilyGoldenNames = [
   "route-family-student-detail-768",
   "route-family-student-portal-414",
   "route-family-report-1440",
-  "route-family-evidence-1440",
 ];
 for (const platform of ["darwin", "linux"]) {
   for (const goldenName of routeFamilyGoldenNames) {
@@ -5250,8 +5192,8 @@ function validateRouteFamilySmokeContract() {
   const manifestRoutes = [...manifestSource.matchAll(/^\s*route\("([^"]+)"/gm)].map((match) => match[1]);
   const duplicateRoutes = manifestRoutes.filter((route, index) => manifestRoutes.indexOf(route) !== index);
   const fileSystemRoutes = collectRoutePageTemplates("apps/web/app").sort();
-  if (manifestRoutes.length !== 88) {
-    failures.push(`${path} route manifest must contain exactly 88 route tests; found ${manifestRoutes.length}.`);
+  if (manifestRoutes.length !== 87) {
+    failures.push(`${path} route manifest must contain exactly 87 route tests; found ${manifestRoutes.length}.`);
   }
   if (duplicateRoutes.length > 0) {
     failures.push(`${path} route manifest contains duplicate routes: ${[...new Set(duplicateRoutes)].join(", ")}.`);
@@ -5261,8 +5203,8 @@ function validateRouteFamilySmokeContract() {
   }
 
   const primaryTaskCount = manifestSource.match(/\{ role: "(?:button|form|link|region)", name: "[^"]+" \}/g)?.length ?? 0;
-  if (primaryTaskCount !== 88) {
-    failures.push(`${path} must give all 88 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
+  if (primaryTaskCount !== 87) {
+    failures.push(`${path} must give all 87 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
   }
 
   const viewportStart = source.indexOf("const routeViewports = [");

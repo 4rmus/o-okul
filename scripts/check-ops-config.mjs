@@ -4153,7 +4153,6 @@ const expectations = {
     "docs/product-journeys-v1.md",
     "scripts/check-uat-evidence.mjs",
     "docs/evidence-templates/uat.example.json",
-    "uat-rollback-page.tsx",
     "parseJourneyMatrix",
     "parseCheckerScenarios",
     "Product journeys kontrolü geçti",

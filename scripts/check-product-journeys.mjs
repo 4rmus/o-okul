@@ -4,7 +4,6 @@ const files = {
   journeys: readFileSync("docs/product-journeys-v1.md", "utf8"),
   uatChecker: readFileSync("scripts/check-uat-evidence.mjs", "utf8"),
   uatTemplate: JSON.parse(readFileSync("docs/evidence-templates/uat.example.json", "utf8")),
-  uatPage: readFileSync("apps/web/app/(app)/kurum/uat-rollback/uat-rollback-page.tsx", "utf8"),
 };
 
 const failures = [];
@@ -26,14 +25,12 @@ if (journeyMatrix.statusById.get("UAT-KURUM-08") !== "PASS") {
 const moduleOwnershipIds = extractScenarioIds(sectionBody(files.journeys, "## Modul Sahipligi"));
 const checkerScenarios = parseCheckerScenarios(files.uatChecker);
 const templateScenarios = parseTemplateScenarios(files.uatTemplate);
-const uatPageIds = extractScenarioIds(files.uatPage);
 const repoEvidenceRefs = parseRepoEvidenceRefs(files.journeys);
 
 compareSets("Yolculuk matrisi", journeyMatrix.ids, "UAT senaryo iskeleti", journeySkeleton.ids, failures);
 compareSets("UAT senaryo iskeleti", journeySkeleton.ids, "Modul sahipligi", moduleOwnershipIds, failures);
 compareSets("Yolculuk matrisi", journeyMatrix.ids, "UAT checker", new Set(checkerScenarios.keys()), failures);
 compareSets("Yolculuk matrisi", journeyMatrix.ids, "UAT template", new Set(templateScenarios.keys()), failures);
-compareSets("Yolculuk matrisi", journeyMatrix.ids, "UAT rollback ekranı", uatPageIds, failures);
 compareScenarioStatuses(journeyMatrix.statusById, journeySkeleton.statusById, failures);
 
 for (const ref of repoEvidenceRefs) {

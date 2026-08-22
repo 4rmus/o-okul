@@ -17,6 +17,7 @@
 - Gate D; sınav–optik–rapor, öğrenci, kurulum ve IAM için exact kaynak, CI ve staging kanıtlarıyla kapatıldı. Kanonik kayıt `docs/almanac-2-gate-d-evidence.md` dosyasıdır.
 - Gate E hazırlığında provider, gözlemlenebilirlik, WAL/yedek ve canlı UAT kanıtlarının önemli bölümü üretildi. Son toplama çalışması eski sürüme dönüş kanıtını aradığı için tamamlanmadı; bu eksiklik aşağıdaki yeni ürün kararıyla pilot öncesi ayrı kapı olmaktan çıkarıldı.
 - 23 Ağustos 2026 yerel uygulamasında Gate E otomasyonu schema v3 `forward-only-readiness` moduna uyarlandı. Exact-SHA cutover, dört servis ve restore kanıtı korunurken eski sürüme geçiş checkpoint'i kaldırıldı. Yerel sözleşme/template kontrolleri `PASS`; CI ve staging çalışması `EXTERNAL_NOT_RUN` durumundadır.
+- İlk legacy UI diliminde `/kurum/uat-rollback` ekranı, navigasyon/manifest kaydı, özel testleri ve iki görsel snapshot'ı kaldırıldı. UAT matrisi ve checker/template kanıtı korundu; kalan 87 route ile operasyon/kanıt akışları 97 yerel tarayıcı testinde `PASS` oldu. CI ve dış ortam `EXTERNAL_NOT_RUN` durumundadır.
 - Gate F pilot/go-live ve Gate G temizlik kapanışı henüz tamamlanmadı. Planın kalan büyük çalışma alanları Faz 5–8'dir; bazı alt dilimler uygulanmış olsa da her fazın güncel envanteri ayrı doğrulanacaktır.
 
 ### Onaylı yön değişikliği

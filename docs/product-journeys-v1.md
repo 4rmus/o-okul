@@ -82,7 +82,7 @@ yolculuk matrisi, UAT senaryo iskeleti ve ilgili evidence checker/template gunce
 ## Faz 1 Kabul Kriterleri
 
 - V1 kapsam disi kararlar `docs/DECISIONS.md` `DEC-20260613-01` ile ayni kalir.
-- Her UAT senaryosu yolculuk matrisi, senaryo iskeleti, evidence template, checker ve UAT operasyon ekraninda gorunur.
+- Her UAT senaryosu yolculuk matrisi, senaryo iskeleti, evidence template ve checker tarafindan birlikte dogrulanir; ayri bir legacy UAT/rollback ekrani tutulmaz.
 - Her UAT senaryosu en az bir modul sahipligi satirina baglidir.
 - `PASS`, `PARTIAL`, `CONTRACT_READY_EXTERNAL_NOT_RUN` ve `EXTERNAL_NOT_RUN` etiketleri local/statik kanit ile staging/prod kanitini karistirmaz.
 - Kapsam genislemesi gerekiyorsa once yeni DEC acilir; bu dosya tek basina kapsam genisletmez.
