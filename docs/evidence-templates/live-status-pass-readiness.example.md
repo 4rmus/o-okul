@@ -21,7 +21,7 @@ template dogrulamasina pass-readiness fixture'i saglar. Gercek readiness belgesi
 - Notification provider kanıtı: `PASS`
 - Report generation perf kanıtı: `PASS`
 - Staging/prod UAT: `PASS`
-- Deployment rollback tatbikatı: `PASS`
+- Deployment continuity kanıtı: `PASS`
 - Pilot kapanış kanıtı: `PASS`
 - Go-live karar paketi: `PASS`
 - Alert bildirim kanalı: `PASS`

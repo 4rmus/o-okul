@@ -54,7 +54,7 @@
       "id": "UAT-SYS-04",
       "persona": "SYSTEM_ADMIN",
       "status": "PASS",
-      "evidence": ["prod evidence check passed", "rollback reference reviewed"]
+      "evidence": ["prod evidence check passed", "forward-only decision and restore reference reviewed"]
     },
     {
       "id": "UAT-KURUM-01",

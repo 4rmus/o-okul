@@ -481,6 +481,9 @@ function checkOutboxVerifyWorkflowContract(output) {
     "require_running_image api",
     "require_running_image worker",
     "require_running_image queue-board",
+    "DEPLOYMENT_CONTINUITY_RUNTIME_VERIFIED=true",
+    "DEPLOYMENT_CONTINUITY_RUNTIME_VERIFIED_AT=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)",
+    "DEPLOYMENT_CONTINUITY_RUNTIME_EVIDENCE_REFERENCE=run:https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID",
     "grep -Fxq 'ADMIN_MFA_MODE=required' .env",
     "o-okul-private/secret-delivery-outbox",
     "SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_FILE=/run/outbox-source/source-id",
@@ -506,7 +509,11 @@ function checkOutboxVerifyWorkflowContract(output) {
     "chmod 600 .staging-evidence.env",
     "const expectedRunUrl = `https://github.com/${repository}/actions/runs/${runId}`;",
     "references[1] = `run:${githubCi.workflow.runUrl}`;",
-    "Deployment rollback report cutover release/tag bağı geçersiz.",
+    "Stage forward-only evidence helpers",
+    "Overlay forward-only evidence helpers",
+    "scripts/generate-forward-only-deployment-evidence.mjs",
+    "DEPLOYMENT_ROLLBACK_APPROVAL_REFERENCE=artifact:docs/DECISIONS.md",
+    "DEPLOYMENT_ROLLBACK_TARGET=file://$PWD/artifacts/staging/reports/deployment-rollback.json",
     "echo \"ROLLBACK_IMAGE_TAG=$rollback_image_tag\"",
     "IDENTITY_MIGRATION_OUTPUT=artifacts/staging/reports/identity-migration.json",
     "node --env-file=.staging-evidence.env scripts/generate-identity-migration-evidence.mjs",
@@ -524,14 +531,17 @@ function checkOutboxVerifyWorkflowContract(output) {
   ]) {
     if (!workflow.includes(token)) output.push(`${outboxVerifyWorkflowPath} token eksik: ${token}`);
   }
+  if (workflow.includes("Deployment rollback report cutover release/tag bağı geçersiz.")) {
+    output.push(`${outboxVerifyWorkflowPath} tarihsel rollback raporunu yeni release için zorunlu tutmamalı.`);
+  }
   if (workflow.match(/SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID|inputs\.source|secrets\..*SOURCE/i)) {
     output.push(`${outboxVerifyWorkflowPath} source ID GitHub input/secret olarak taşımamalı.`);
   }
   if (workflow.split("if: ${{ inputs.full_evidence }}").length - 1 !== 4) {
     output.push(`${outboxVerifyWorkflowPath} full evidence adımları tam olarak dört explicit koşulla ayrılmalı.`);
   }
-  if (workflow.split("STAGING_ENVIRONMENT=production").length - 1 !== 3) {
-    output.push(`${outboxVerifyWorkflowPath} production summary child generator'larını tam üç production environment bağıyla çalıştırmalı.`);
+  if (workflow.split("STAGING_ENVIRONMENT=production").length - 1 !== 4) {
+    output.push(`${outboxVerifyWorkflowPath} forward-only ve production summary child generator'larını tam dört production environment bağıyla çalıştırmalı.`);
   }
   requireWorkflowOrder(output, workflow, "outbox source claim ve cleanup sırası", [
     "Bind selected deployment run to cutover source",

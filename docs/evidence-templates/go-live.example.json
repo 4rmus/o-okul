@@ -19,7 +19,7 @@
       "WAL archive target",
       "Report generation smoke",
       "Secret delivery outbox evidence",
-      "Deployment rollback evidence",
+      "Deployment continuity evidence",
       "GitHub CI evidence",
       "Restore drill evidence",
       "KVKK inventory evidence",
@@ -58,7 +58,7 @@
       "Notification provider kanıtı",
       "Report generation perf kanıtı",
       "Staging/prod UAT",
-      "Deployment rollback tatbikatı",
+      "Deployment continuity kanıtı",
       "Pilot kapanış kanıtı",
       "Go-live karar paketi",
       "Alert bildirim kanalı"

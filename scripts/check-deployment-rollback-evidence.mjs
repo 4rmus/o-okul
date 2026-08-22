@@ -50,6 +50,12 @@ const requiredCommandsByMode = {
     "curl public health/readiness HTTP 200",
     "node tenant-subdomain-live-uat.mjs",
   ],
+  "forward-only-readiness": [
+    "pnpm deployment-cutover:evidence-check",
+    "pnpm restore:drill:check",
+    "docker inspect four-service image parity",
+    "curl public health/readiness HTTP 200",
+  ],
 };
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -71,7 +77,7 @@ async function main() {
   const report = await readJsonTarget(targetUrl);
   const failures = validateDeploymentRollbackReport(report);
   if (failures.length > 0) fail(failures);
-  console.log(`Deployment rollback kanıt kontrolü geçti: ${report.environment} ${report.rollbackImageTag}`);
+  console.log(`Deployment continuity kanıt kontrolü geçti: ${report.environment} ${report.drill.mode}`);
 }
 
 async function readJsonTarget(url) {
@@ -197,7 +203,8 @@ export function validateDeploymentRollbackReport(report) {
   if (!requireObjectKeySet(report, deploymentRollbackTopLevelKeys, failures, "deploymentRollback")) {
     return failures;
   }
-  requireEqual(report, failures, "schemaVersion", 2);
+  const forwardOnly = report.drill?.mode === "forward-only-readiness";
+  requireEqual(report, failures, "schemaVersion", forwardOnly ? 3 : 2);
   requireEqual(report, failures, "result", "PASS");
   requireOneOf(report, failures, "environment", ["staging", "production"]);
   requireDate(report, failures, "checkedAt");
@@ -209,7 +216,11 @@ export function validateDeploymentRollbackReport(report) {
   requireReleaseImageCommitSha(report.releaseCandidate, failures, "releaseCandidate");
   requireReleaseImageCommitSha(report.rollbackImageTag, failures, "rollbackImageTag");
   requireDrill(report, failures);
-  requireTrue(report, failures, "migrationRollbackSafe");
+  if (forwardOnly) {
+    if (report.migrationRollbackSafe !== false) failures.push("migrationRollbackSafe forward-only-readiness modunda false olmalı.");
+  } else {
+    requireTrue(report, failures, "migrationRollbackSafe");
+  }
   requireExactStringSet(report, failures, "commandsPassed", requiredCommandsByMode[report.drill?.mode] ?? []);
   requireServices(report, failures);
   requireApproval(report, failures);
@@ -260,6 +271,14 @@ function requireDrill(report, failures) {
     }
   }
 
+  if (drill.mode === "forward-only-readiness") {
+    if (drill.failureInjected !== false) failures.push("drill.failureInjected forward-only-readiness modunda false olmalı.");
+    if (drill.failureMode !== null) failures.push("drill.failureMode forward-only-readiness modunda null olmalı.");
+    if (drill.restoredImageTag !== drill.sourceImageTag) {
+      failures.push("drill.restoredImageTag forward-only-readiness modunda drill.sourceImageTag ile eşleşmeli.");
+    }
+  }
+
   requireDrillEvidence(report, drill, failures);
 }
 
@@ -269,6 +288,14 @@ function requireDrillEvidence(report, drill, failures) {
   requireObjectString(evidence, failures, "drill.evidence.commandLogReference", "commandLogReference");
   requireObjectNonPlaceholderString(evidence, failures, "drill.evidence.commandLogReference", "commandLogReference");
   requireObjectNoSecretBearingReference(evidence, failures, "drill.evidence.commandLogReference", "commandLogReference");
+
+  if (drill.mode === "forward-only-readiness") {
+    requireForwardOnlyRuntimeReference(report, evidence.commandLogReference, failures);
+    requireForwardOnlySourceCheckpoint(report, drill, evidence.source, failures);
+    if (evidence.rollback !== null) failures.push("drill.evidence.rollback forward-only-readiness modunda null olmalı.");
+    if (evidence.restored !== null) failures.push("drill.evidence.restored forward-only-readiness modunda null olmalı.");
+    return;
+  }
 
   const checkpoints = {};
   for (const key of ["source", "rollback", "restored"]) {
@@ -294,6 +321,31 @@ function requireDrillEvidence(report, drill, failures) {
       failures.push("drill.evidence.restored cold-rollback-rehearsal modunda ayrı restore run ve UAT artifact'i taşımalı.");
     }
   }
+}
+
+function requireForwardOnlyRuntimeReference(report, value, failures) {
+  const match = typeof value === "string"
+    ? value.match(/^run:https:\/\/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/actions\/runs\/[1-9][0-9]*$/)
+    : null;
+  if (!match || match[1] !== getImageRepository(report.releaseCandidate)) {
+    failures.push("drill.evidence.commandLogReference forward-only-readiness modunda release repository'sine bağlı GitHub run referansı olmalı.");
+  }
+}
+
+function requireForwardOnlySourceCheckpoint(report, drill, checkpoint, failures) {
+  if (!requireObjectKeySet(checkpoint, drillCheckpointKeys, failures, "drill.evidence.source")) return;
+  requireCheckpointSha(checkpoint, failures, "drill.evidence.source.sha");
+  requireGithubRunReference(report, checkpoint, failures, "drill.evidence.source.runUrl");
+  if (checkpoint.uatArtifactUrl !== null) {
+    failures.push("drill.evidence.source.uatArtifactUrl forward-only-readiness modunda null olmalı.");
+  }
+  if (checkpoint.artifactName !== "deployment-cutover.json") {
+    failures.push("drill.evidence.source.artifactName forward-only-readiness modunda deployment-cutover.json olmalı.");
+  }
+  if (typeof checkpoint.artifactDigest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(checkpoint.artifactDigest)) {
+    failures.push("drill.evidence.source.artifactDigest sha256 digest olmalı.");
+  }
+  requireCheckpointImageSha(drill, checkpoint, failures, "source");
 }
 
 function requireCheckpointSha(checkpoint, failures, label) {
@@ -526,19 +578,26 @@ function requireServices(report, failures) {
     requireObjectString(item, failures, `${service}.imageTag`, "imageTag");
     requireObjectString(item, failures, `${service}.evidenceReference`, "evidenceReference");
     requireObjectNonPlaceholderString(item, failures, `${service}.imageTag`, "imageTag");
-    requireServiceRollbackImageVersion(report, item, failures, service);
+    requireServiceExpectedImageVersion(report, item, failures, service);
     requireObjectNonPlaceholderString(item, failures, `${service}.evidenceReference`, "evidenceReference");
     requireObjectNoSecretBearingReference(item, failures, `${service}.evidenceReference`, "evidenceReference");
+    if (report.drill?.mode === "forward-only-readiness" && item.evidenceReference !== report.drill?.evidence?.commandLogReference) {
+      failures.push(`${service}.evidenceReference forward-only runtime kontrol run'ıyla eşleşmeli.`);
+    }
   }
 }
 
-function requireServiceRollbackImageVersion(report, item, failures, service) {
-  const expectedVersion = getImageVersion(report.drill?.rollbackImageTag);
+function requireServiceExpectedImageVersion(report, item, failures, service) {
+  const expectedImage = report.drill?.mode === "forward-only-readiness"
+    ? report.drill?.sourceImageTag
+    : report.drill?.rollbackImageTag;
+  const expectedVersion = getImageVersion(expectedImage);
   const actualVersion = getImageVersion(item.imageTag);
   if (!expectedVersion || !actualVersion) return;
 
   if (actualVersion !== expectedVersion) {
-    failures.push(`${service}.imageTag drill.rollbackImageTag versiyonuyla eşleşmeli.`);
+    const label = report.drill?.mode === "forward-only-readiness" ? "drill.sourceImageTag" : "drill.rollbackImageTag";
+    failures.push(`${service}.imageTag ${label} versiyonuyla eşleşmeli.`);
   }
 }
 

@@ -253,9 +253,9 @@ const missingArtifactRemediation = new Map([
     "reports/deployment-rollback.json",
     {
       command:
-        "DEPLOYMENT_ROLLBACK_OUTPUT=artifacts/staging/reports/deployment-rollback.json corepack pnpm deployment:rollback:generate",
-      prerequisite: "Failure-injection or exact-SHA cold rollback/restore drill, current rollback image, approval, and service health references.",
-      blocker: "No real rollback drill or linked source/rollback/restore evidence references are present.",
+        "DEPLOYMENT_ROLLBACK_OUTPUT=artifacts/staging/reports/deployment-rollback.json corepack pnpm deployment:forward-only:generate",
+      prerequisite: "Exact-SHA deployment cutover, current four-service parity, public health/readiness, restore drill evidence, and DEC-20260823-01 approval.",
+      blocker: "No forward-only deployment continuity evidence is present.",
     },
   ],
   [

@@ -2081,6 +2081,8 @@ runDeploymentRollbackLocalArtifactTargetNegativeCheck();
 runDeploymentRollbackSecretTargetNegativeCheck();
 runDeploymentRollbackSymlinkParentTargetNegativeCheck();
 runDeploymentRollbackColdRehearsalContractCheck();
+runDeploymentForwardOnlyContractCheck();
+runForwardOnlyGeneratorContractCheck();
 runProductionSummaryHttpTargetNegativeCheck();
 runProductionSummarySecretUrlTargetNegativeCheck();
 runProductionSummarySymlinkParentTargetNegativeCheck();
@@ -2902,10 +2904,10 @@ runGoLiveNegativeCheck({
   },
 });
 runGoLiveNegativeCheck({
-  label: "Go-live linked rollback raw contract negative",
+  label: "Go-live linked continuity raw contract negative",
   path: "docs/evidence-templates/go-live.linked-rollback-raw-contract.tmp.json",
   expectedFailure:
-    "productionEvidenceSummary.summary.reports.deploymentRollback: web.imageTag drill.rollbackImageTag versiyonuyla eşleşmeli.",
+    "productionEvidenceSummary.summary.reports.deploymentRollback: web.imageTag drill.sourceImageTag versiyonuyla eşleşmeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.rollback-raw-contract-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -5586,6 +5588,121 @@ function runDeploymentRollbackColdRehearsalContractCheck() {
   }
 }
 
+function runDeploymentForwardOnlyContractCheck() {
+  const path = "docs/evidence-templates/deployment-forward-only.tmp.json";
+  const fixture = JSON.parse(readFileSync("docs/evidence-templates/deployment-forward-only.example.json", "utf8"));
+
+  try {
+    writeFileSync(path, `${JSON.stringify(fixture, null, 2)}\n`);
+    const positive = spawnSync(process.execPath, ["scripts/check-deployment-rollback-evidence.mjs"], {
+      env: {
+        ...process.env,
+        DEPLOYMENT_ROLLBACK_ALLOW_EXAMPLE_EVIDENCE: "1",
+        DEPLOYMENT_ROLLBACK_TARGET: pathToFileURL(path).href,
+      },
+      encoding: "utf8",
+    });
+    if (positive.status !== 0) {
+      console.error("Production evidence template kontrolü başarısız: forward-only positive geçmedi.");
+      console.error(`${positive.stdout ?? ""}${positive.stderr ?? ""}`);
+      process.exit(1);
+    }
+
+    fixture.drill.evidence.rollback = structuredClone(fixture.drill.evidence.source);
+    writeFileSync(path, `${JSON.stringify(fixture, null, 2)}\n`);
+    const negative = spawnSync(process.execPath, ["scripts/check-deployment-rollback-evidence.mjs"], {
+      env: {
+        ...process.env,
+        DEPLOYMENT_ROLLBACK_ALLOW_EXAMPLE_EVIDENCE: "1",
+        DEPLOYMENT_ROLLBACK_TARGET: pathToFileURL(path).href,
+      },
+      encoding: "utf8",
+    });
+    const output = `${negative.stdout ?? ""}${negative.stderr ?? ""}`;
+    if (negative.status === 0 || !output.includes("drill.evidence.rollback forward-only-readiness modunda null olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: forward-only rollback negative kırılmadı.");
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    try {
+      unlinkSync(path);
+    } catch {
+      // Ignore cleanup errors; the contract failure above is actionable.
+    }
+  }
+}
+
+function runForwardOnlyGeneratorContractCheck() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "forward-only-generator-"));
+  const cutoverPath = join(root, "deployment-cutover.json");
+  const outputPath = join(root, "deployment-rollback.json");
+  copyFileSync("docs/evidence-templates/deployment-cutover.example.json", cutoverPath);
+
+  try {
+    const result = spawnSync(process.execPath, ["scripts/generate-forward-only-deployment-evidence.mjs"], {
+      env: {
+        ...process.env,
+        DEPLOYMENT_ROLLBACK_ALLOW_EXAMPLE_EVIDENCE: "1",
+        DEPLOYMENT_ROLLBACK_OUTPUT: outputPath,
+        DEPLOYMENT_CUTOVER_EVIDENCE_FILE: cutoverPath,
+        DEPLOYMENT_ROLLBACK_ROLLBACK_IMAGE_TAG:
+          "ghcr.io/example/o-okul/api:2222222222222222222222222222222222222222",
+        DEPLOYMENT_ROLLBACK_APPROVED_BY: "product-owner",
+        DEPLOYMENT_ROLLBACK_APPROVAL_REFERENCE: "artifact:docs/DECISIONS.md",
+        DEPLOYMENT_CONTINUITY_RUNTIME_VERIFIED: "true",
+        DEPLOYMENT_CONTINUITY_RUNTIME_VERIFIED_AT: "2026-08-02T12:05:00.000Z",
+        DEPLOYMENT_CONTINUITY_RUNTIME_EVIDENCE_REFERENCE:
+          "run:https://github.com/example/o-okul/actions/runs/1234567891",
+        GITHUB_RUN_ID: "1234567891",
+        STAGING_ENVIRONMENT: "staging",
+      },
+      encoding: "utf8",
+    });
+    if (result.status !== 0) {
+      console.error("Production evidence template kontrolü başarısız: forward-only generator positive geçmedi.");
+      console.error(`${result.stdout ?? ""}${result.stderr ?? ""}`);
+      process.exit(1);
+    }
+    const report = JSON.parse(readFileSync(outputPath, "utf8"));
+    if (
+      report.schemaVersion !== 3 ||
+      report.drill?.mode !== "forward-only-readiness" ||
+      report.drill?.evidence?.rollback !== null ||
+      report.drill?.evidence?.restored !== null ||
+      report.migrationRollbackSafe !== false
+    ) {
+      console.error("Production evidence template kontrolü başarısız: forward-only generator yanlış sözleşme yazdı.");
+      process.exit(1);
+    }
+
+    const missingRuntimeProof = spawnSync(process.execPath, ["scripts/generate-forward-only-deployment-evidence.mjs"], {
+      env: {
+        ...process.env,
+        DEPLOYMENT_ROLLBACK_ALLOW_EXAMPLE_EVIDENCE: "1",
+        DEPLOYMENT_ROLLBACK_OUTPUT: join(root, "missing-runtime-proof.json"),
+        DEPLOYMENT_CUTOVER_EVIDENCE_FILE: cutoverPath,
+        DEPLOYMENT_ROLLBACK_ROLLBACK_IMAGE_TAG:
+          "ghcr.io/example/o-okul/api:2222222222222222222222222222222222222222",
+        DEPLOYMENT_ROLLBACK_APPROVED_BY: "product-owner",
+        DEPLOYMENT_ROLLBACK_APPROVAL_REFERENCE: "artifact:docs/DECISIONS.md",
+        STAGING_ENVIRONMENT: "staging",
+      },
+      encoding: "utf8",
+    });
+    const missingRuntimeOutput = `${missingRuntimeProof.stdout ?? ""}${missingRuntimeProof.stderr ?? ""}`;
+    if (missingRuntimeProof.status === 0 || !missingRuntimeOutput.includes("zorunlu girdi eksik")) {
+      console.error("Production evidence template kontrolü başarısız: runtime kanıtsız forward-only generator kırılmadı.");
+      console.error(missingRuntimeOutput);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 function runDeploymentRollbackSecretTargetNegativeCheck() {
   const result = spawnSync(process.execPath, ["scripts/check-deployment-rollback-evidence.mjs"], {
     env: {
@@ -7529,7 +7646,7 @@ function runStagingReleaseArtifactsBundleCheck() {
     const originalDeploymentRollback = JSON.parse(readFileSync(`${reportsDir}/deployment-rollback.json`, "utf8"));
     const badDeploymentRollback = {
       ...originalDeploymentRollback,
-      drill: { ...originalDeploymentRollback.drill, failureMode: "different rollback drill failure mode" },
+      approval: { ...originalDeploymentRollback.approval, approvalReference: "artifact:docs/DIFFERENT-DECISIONS.md" },
     };
     writeFileSync(`${reportsDir}/deployment-rollback.json`, `${JSON.stringify(badDeploymentRollback, null, 2)}\n`);
     const reportNegative = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
@@ -7545,7 +7662,7 @@ function runStagingReleaseArtifactsBundleCheck() {
       console.error("Production evidence template kontrolü başarısız: staging release artifact bundle raw report negative beklenen şekilde kırılmadı.");
       process.exit(1);
     }
-    if (!reportNegativeOutput.includes("summary.reports.deploymentRollback.drill reports/deployment-rollback.json ile eşleşmeli")) {
+    if (!reportNegativeOutput.includes("summary.reports.deploymentRollback.approval reports/deployment-rollback.json ile eşleşmeli")) {
       console.error("Production evidence template kontrolü başarısız: staging release artifact bundle raw report negative beklenen hata yok.");
       console.error(reportNegativeOutput);
       process.exit(1);
