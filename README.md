@@ -230,6 +230,7 @@ pnpm live:smoke
 ## Dokümantasyon
 
 - [`status.md`](status.md) — güncel uygulama ve release durumu
+- [`docs/almanac-2-architecture-plan.md`](docs/almanac-2-architecture-plan.md) — onaylı hedef mimari, fazlar ve güncel ilerleme
 - [`docs/llm-wiki/README.md`](docs/llm-wiki/README.md) — kod ajanları için hızlı yön bulma
 - [`docs/product-journeys-v1.md`](docs/product-journeys-v1.md) — ürün kapsamı ve UAT matrisi
 - [`docs/DECISIONS.md`](docs/DECISIONS.md) — mimari karar kayıtları (ADR)

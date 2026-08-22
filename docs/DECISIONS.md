@@ -500,6 +500,28 @@ Açık soru: Gerçek kullanıcı gözlemi, staging/prod rollout aktivasyonu ve a
 ortam kanıtı olarak ayrıca yürütülecektir.
 Son kontrol: 2026-08-09
 
+### DEC-20260823-01 — Yeni ürün yapısı kanoniktir; legacy ürüne dönüş yapılmaz
+
+Durum: Onaylı; temizlik ve kanıt sözleşmesi uygulaması bekliyor
+Karar: Yeni ekranlar ve yeni veri modeli kanonik üründür. Ürün eski ekranlara veya eski veri modeline
+geri döndürülmez; sorunlar yeni yapı üzerinde ileriye doğru düzeltilir. Tarihsel fallback imajına
+dönüş provası Gate E veya pilot için ayrı kabul kapısı değildir. Doğrulanmış yedek ve geri yükleme
+kabiliyeti veri kaybı ve afet güvenliği için korunur; bu kabiliyet eski ürün sürümüne dönüş anlamına
+gelmez.
+
+Legacy ekran, route, adapter, feature flag ve veri yapıları bağımlılık sıralı küçük dilimlerle
+kaldırılabilir. Gate G temizliğe başlama izni değil, temizliğin tamamlandığını doğrulayan kapanıştır.
+Veri yapısının kaldırılması mevcut kayıtların silinmesi olarak yorumlanmaz: kayıtlar yeni yapıya
+taşınmadan, tenant bazlı sayımlar eşleşmeden ve doğrulanmış yedek bulunmadan fiziksel tablo veya kolon
+kaldırılmaz. Bu kontroller yeni bir ürün gate'i değil, her geri dönüşsüz veri diliminin kabul
+kriteridir.
+Kaynak: Ürün sahibinin 23 Ağustos 2026 tarihli yönlendirmesi.
+Kanıt: `docs/almanac-2-architecture-plan.md`, `docs/almanac-2-gate-d-evidence.md`.
+Etkilenen ADR: ADR-0006, ADR-0008, ADR-0010
+Açık soru: Legacy route/veri envanteri ve kaldırma sırası ilk temizlik diliminde kesinleştirilecektir.
+Provider, gerçek kullanıcı pilotu, veri güvenliği ve canlı ortam kanıtları bu kararla PASS sayılmaz.
+Son kontrol: 2026-08-23
+
 ## Faz Öncesi Onay Gerektirenler
 
 | ID | Faz | Bloklar mı? | Soru | Beklenen kanıt |
