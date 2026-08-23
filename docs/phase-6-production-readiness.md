@@ -1048,7 +1048,8 @@ pnpm backup:restore:smoke
   `example`, `.test`, `redacted`, `localhost`, `__SET` veya şablondaki açıklama cümleleri yalnız template
   kontrolünde `UAT_ALLOW_EXAMPLE_EVIDENCE=1` ile geçebilir.
 - Kurum açılışı ve ilk admin kurulum zinciri staging'de `pnpm live:onboarding:smoke` ile doğrulanır;
-  komut `NEXT_E2E_LIVE_ONBOARDING=1`, `LIVE_ONBOARDING_EVIDENCE_PATH`, bearer korumalı
+  komut gerçek HTTPS kök `NEXT_E2E_BASE_URL`, `NEXT_E2E_SKIP_WEB_SERVER=1`,
+  `NEXT_E2E_LIVE_ONBOARDING=1`, `LIVE_ONBOARDING_EVIDENCE_PATH`, bearer korumalı
   `LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT` ve `LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN` gerektirir.
   `pnpm live:onboarding:evidence-contract` bu preflight'ı tarayıcı açmadan doğrular; gerçek smoke
   başlamadan önce evidence JSON'unun exact system admin (parola + Base32 TOTP anahtarı)/first admin/tenant/onboarding shape'i,

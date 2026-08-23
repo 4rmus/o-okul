@@ -6,11 +6,12 @@ import {
   resolveTenantSlugFromRequest,
 } from "./tenant-host.js";
 
-const env = { DOMAIN: "o-okul.com", LEGACY_TENANT_LOGIN_CUTOFF_AT: "2099-01-01T00:00:00.000Z" };
+const env = { DOMAIN: "o-okul.com", LEGACY_TENANT_LOGIN_CUTOFF_AT: new Date(Date.now() + 29 * 24 * 60 * 60 * 1000).toISOString() };
 
 describe("tenant host", () => {
   it("tenant ve sistem hostunu çözer", () => {
     expect(resolveTenantHostContext(request("DNA-EGITIM.O-OKUL.COM:443"), env)).toEqual({ kind: "tenant", slug: "dna-egitim" });
+    expect(resolveTenantSlugFromRequest(request("dna-egitim.o-okul.com"), undefined, env)).toBe("dna-egitim");
     expect(resolveTenantSlugFromRequest(request("sistem.o-okul.com"), undefined, env)).toBe("system");
   });
 
@@ -39,6 +40,21 @@ describe("tenant host", () => {
       request("o-okul.com"),
       "dna-egitim",
       { ...env, LEGACY_TENANT_LOGIN_CUTOFF_AT: "2020-01-01T00:00:00.000Z" },
+    )).toThrow("LEGACY_TENANT_LOGIN_RETIRED");
+    expect(() => resolveTenantSlugFromRequest(
+      request("o-okul.com"),
+      "dna-egitim",
+      { DOMAIN: "o-okul.com" },
+    )).toThrow("LEGACY_TENANT_LOGIN_RETIRED");
+  });
+
+  it("legacy root girişini 30 günden uzak cutoff ile fail-closed kapatır", () => {
+    const now = Date.parse("2026-08-23T00:00:00.000Z");
+    expect(() => resolveTenantSlugFromRequest(
+      request("o-okul.com"),
+      "dna-egitim",
+      { ...env, LEGACY_TENANT_LOGIN_CUTOFF_AT: "2026-09-22T00:00:00.001Z" },
+      now,
     )).toThrow("LEGACY_TENANT_LOGIN_RETIRED");
   });
 

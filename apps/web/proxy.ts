@@ -1,4 +1,4 @@
-import { type NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server.js";
 import { legacyLoginAllowed, tenantLoginOrigin, webHostContext } from "./src/tenant-host.js";
 
 export function proxy(request: NextRequest) {

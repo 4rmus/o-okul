@@ -2,6 +2,8 @@ export const reservedTenantSlugs = new Set([
   "www", "sistem", "system", "api", "admin", "ops", "evidence", "status", "staging", "mail", "support", "cdn", "assets",
 ]);
 
+const legacyLoginWindowMs = 30 * 24 * 60 * 60 * 1000;
+
 const tenantSlugPattern = /^(?!xn--)[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/;
 
 export type WebHostContext =
@@ -32,14 +34,23 @@ export function tenantLoginOrigin(slug: string, domain: string, protocol = "http
 }
 
 export function legacyLoginAllowed(cutoff: string | undefined, now = Date.now()): boolean {
-  if (!cutoff?.trim()) return true;
+  if (!cutoff?.trim()) return false;
   const parsed = Date.parse(cutoff);
-  return Number.isFinite(parsed) && now < parsed;
+  return Number.isFinite(parsed) && now < parsed && parsed - now <= legacyLoginWindowMs;
 }
 
 export function browserTenantSlug(): string | undefined {
   if (typeof document === "undefined") return undefined;
   return document.querySelector<HTMLElement>("main[data-tenant-slug]")?.dataset.tenantSlug || undefined;
+}
+
+export function browserTenantLoginHref(slug: string): string {
+  if (typeof window === "undefined") return "/login";
+  try {
+    return tenantLoginOrigin(slug, window.location.host, window.location.protocol);
+  } catch {
+    return "/login";
+  }
 }
 
 function normalizeHost(value: string | null | undefined): string | undefined {

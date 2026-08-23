@@ -1271,6 +1271,8 @@ Minimum kanıt içeriği:
 Live onboarding smoke preflight:
 
 ```sh
+NEXT_E2E_BASE_URL=https://o-okul.com \
+NEXT_E2E_SKIP_WEB_SERVER=1 \
 NEXT_E2E_LIVE_ONBOARDING=1 \
 LIVE_ONBOARDING_EVIDENCE_PATH=/root/o-okul-private/uat/live-onboarding-input.json \
 LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT=https://notify.staging.o-okul.com/messages/latest \
@@ -1281,6 +1283,8 @@ pnpm live:onboarding:evidence-check
 Smoke komutu aynı preflight'ı tarayıcı açmadan önce otomatik çalıştırır:
 
 ```sh
+NEXT_E2E_BASE_URL=https://o-okul.com \
+NEXT_E2E_SKIP_WEB_SERVER=1 \
 NEXT_E2E_LIVE_ONBOARDING=1 \
 LIVE_ONBOARDING_EVIDENCE_PATH=/root/o-okul-private/uat/live-onboarding-input.json \
 LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT=https://notify.staging.o-okul.com/messages/latest \
@@ -1301,6 +1305,11 @@ PII'yi URL/loglara taşımayan JSON POST gövdesindeki `recipient`, `purpose=PAS
 döndürür ve URL tokenı hiçbir kalıcı evidence çıktısına yazılmaz.
 Preflight endpoint'i tam olarak `https://notify.staging.o-okul.com/messages/latest` olmalıdır; production
 hostu, farklı path, query veya fragment kabul edilmez.
+`NEXT_E2E_BASE_URL` yalnız `https://o-okul.com` veya `https://staging.o-okul.com` kök origin'i
+olabilir; başka host, lokal/test/placeholder host, alt path, query veya fragment kabul edilmez.
+Tenant alt alan adı ve özel port da bu sistem-yöneticisi smoke'unda kabul edilmez.
+`NEXT_E2E_SKIP_WEB_SERVER=1` yerel Next sunucusunun yanlışlıkla canlı onboarding kanıtı yerine
+geçmesini engeller.
 `pnpm live:onboarding:evidence-contract` bu negatifleri lokal CI'da tarayıcı açmadan korur.
 
 Live UI-worker/report smoke preflight:

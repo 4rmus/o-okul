@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { tenantLoginUrl } from "./helpers/tenant-login.js";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const corsHeaders = {
@@ -5068,7 +5069,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     second: Object.keys(window[second as keyof Window] as Storage),
   }), ["local" + "Storage", "session" + "Storage"]);
   expect(storageKeys.first.filter((key) => key !== "des.sidebar.expandedGroups.v2")).toEqual([]);
-  expect(storageKeys.second.sort()).toEqual(["o-okul.role-preview-token", "uh_onboarding_tenant-a_draft"].sort());
+  expect(storageKeys.second).toEqual(["o-okul.role-preview-token"]);
 });
 
 test("ilk girişte zorunlu şifre değişimi ekranına yönlendirir", async ({ page }) => {
@@ -6490,7 +6491,7 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
 });
 
 async function loginAs(page: Page, email: string, password = "password") {
-  await page.goto(email === "system@example.test" ? "/sistem/giris" : "/k/dna-egitim/giris");
+  await page.goto(email === "system@example.test" ? "/sistem/giris" : tenantLoginUrl(appOrigin, "dna-egitim"));
   await page.getByLabel("Kullanıcı adı veya e-posta").fill(email);
   await page.locator('input[name="password"]').fill(password);
   await page.getByRole("button", { name: "Giriş yap" }).click();

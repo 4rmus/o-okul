@@ -274,9 +274,9 @@ Kanıt: `apps/api/src/school/guardian-student-store.ts`, `apps/api/src/school/sc
 `packages/db/prisma/migrations/20260627152000_add_global_search_trigram_indexes/migration.sql`,
 `packages/db/prisma/migrations/20260627154000_add_alan_grade_level_courses/migration.sql`.
 Etkilenen ADR: Yok
-Açık soru: Per-tenant giriş yolu (`/k/{slug}/giris` veya kurum kodu alanı) ve akademik taksonomi
-ortak ders kapsamı sonraki migration dalında netleştirilecek.
-Son kontrol: 2026-06-27
+Açık soru: Per-tenant giriş yolu DEC-20260804-01 ile `{tenantSlug}.o-okul.com/giris` olarak
+kesinleştirildi. Akademik taksonomi ortak ders kapsamı sonraki migration dalında netleştirilecek.
+Son kontrol: 2026-08-23
 
 ### DEC-20260713-01 — Günlük sınıf yoklaması
 
@@ -402,7 +402,7 @@ Son kontrol: 2026-08-01
 
 ### DEC-20260804-01 — Kurum subdomaini tenant giriş bağlamıdır
 
-Durum: Onaylı; staging wildcard DNS/TLS ve runtime cutover kanıtı bekliyor
+Durum: Onaylı; iç tüketiciler tenant-host girişine yerelde taşındı, staging wildcard DNS/TLS ve runtime cutover kanıtı bekliyor
 Karar: Her kurum tek paylaşımlı uygulama ve veritabanı üzerinde `{tenantSlug}.o-okul.com`
 adresinde çalışır. Kurum hostu login, parola sıfırlama, aktivasyon ve oturum isteklerinde tenant
 bağlamını belirler; token/session tenantı host tenantıyla eşleşmek zorundadır. Öğrenci numarası,
@@ -417,7 +417,7 @@ Kanıt: `docs/tenant-subdomain-login-architecture-plan.md`, `apps/api/src/http/t
 Etkilenen ADR: ADR-0001, ADR-0002
 Açık soru: Yok. Yerel/static PASS gerçek DNS, wildcard sertifika, staging deploy veya canlı cutover
 kanıtı değildir.
-Son kontrol: 2026-08-04
+Son kontrol: 2026-08-23
 
 ### DEC-20260808-01 — WhatsApp opsiyonel ve varsayılan kapalı bildirim kanalıdır
 
@@ -502,7 +502,7 @@ Son kontrol: 2026-08-09
 
 ### DEC-20260823-01 — Yeni ürün yapısı kanoniktir; legacy ürüne dönüş yapılmaz
 
-Durum: Onaylı; forward-only sözleşme ve ilk iki legacy UI temizliği yerelde test edildi, CI/staging ve kalan temizlik bekliyor
+Durum: Onaylı; forward-only sözleşme ve ilk üç legacy UI temizliği yerelde test edildi, CI/staging ve kalan temizlik bekliyor
 Karar: Yeni ekranlar ve yeni veri modeli kanonik üründür. Ürün eski ekranlara veya eski veri modeline
 geri döndürülmez; sorunlar yeni yapı üzerinde ileriye doğru düzeltilir. Tarihsel fallback imajına
 dönüş provası Gate E veya pilot için ayrı kabul kapısı değildir. Doğrulanmış yedek ve geri yükleme
@@ -518,7 +518,9 @@ kriteridir.
 Kaynak: Ürün sahibinin 23 Ağustos 2026 tarihli yönlendirmesi.
 Kanıt: `docs/almanac-2-architecture-plan.md`, `docs/almanac-2-gate-d-evidence.md`.
 Etkilenen ADR: ADR-0006, ADR-0008, ADR-0010
-Açık soru: Legacy route/veri envanteri ve kaldırma sırası ilk temizlik diliminde kesinleştirilecektir.
+Açık soru: `/k/{tenantSlug}/giris` yalnız süreli geçiş uyumluluğu için kalır; gerçek cutover ve kesim
+tarihi kanıtından sonra kaldırılır. Guardian/veri yapıları için taşıma ve kaldırma sırası ayrıca
+kesinleştirilecektir.
 Provider, gerçek kullanıcı pilotu, veri güvenliği ve canlı ortam kanıtları bu kararla PASS sayılmaz.
 Son kontrol: 2026-08-23
 

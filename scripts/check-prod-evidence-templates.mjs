@@ -419,6 +419,7 @@ runStagingFirstGatesFixtureCheck();
 runStagingFirstGatesTargetNegativeCheck();
 runStagingFirstGatesOutputDirNegativeCheck();
 runProdEnvValidCheck();
+runProdEnvLegacyCutoffTooFarNegativeCheck();
 runProdEnvHttpEvidenceTargetNegativeCheck();
 runProdEnvSecretEvidenceTargetNegativeCheck();
 runProdEnvLocalEvidenceTargetNegativeCheck();
@@ -8614,6 +8615,27 @@ function runProdEnvTraefikOriginNegativeCheck() {
   }
 }
 
+function runProdEnvLegacyCutoffTooFarNegativeCheck() {
+  const env = createValidProdEnvForNegativeCheck();
+  env.LEGACY_TENANT_LOGIN_CUTOFF_AT = new Date(Date.now() + 31 * 24 * 60 * 60 * 1000).toISOString();
+
+  const result = spawnSync(process.execPath, ["scripts/check-prod-env.mjs"], {
+    env,
+    encoding: "utf8",
+  });
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: uzak legacy cutoff negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+
+  if (!String(result.stderr).includes("LEGACY_TENANT_LOGIN_CUTOFF_AT bugünden en fazla 30 gün sonrası olabilir.")) {
+    console.error("Production evidence template kontrolü başarısız: uzak legacy cutoff negative beklenen hata yok.");
+    console.error(result.stderr);
+    process.exit(1);
+  }
+}
+
 function runProdEnvValidCheck() {
   const result = spawnSync(process.execPath, ["scripts/check-prod-env.mjs"], {
     env: createValidProdEnvForNegativeCheck(),
@@ -8975,7 +8997,7 @@ function createValidProdEnvForNegativeCheck() {
     ADMIN_MFA_ISSUER: "o-okul",
     DOMAIN: "o-okul.com",
     CF_DNS_API_TOKEN_FILE: "./secrets/cloudflare_dns_api_token",
-    LEGACY_TENANT_LOGIN_CUTOFF_AT: "2099-01-01T00:00:00.000Z",
+    LEGACY_TENANT_LOGIN_CUTOFF_AT: new Date(Date.now() + 29 * 24 * 60 * 60 * 1000).toISOString(),
     COOKIE_SECURE: "true",
     LOG_LEVEL: "info",
     LOG_ENABLED: "true",

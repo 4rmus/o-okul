@@ -1,5 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { tenantLoginOrigin, webHostContext } from "../src/tenant-host.js";
+import { NextRequest } from "next/server.js";
+import { proxy } from "../proxy.js";
+import { legacyLoginAllowed, tenantLoginOrigin, webHostContext } from "../src/tenant-host.js";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 
@@ -33,6 +35,39 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
   test("punycode kurum kodunu web trust boundary'sinde reddeder", () => {
     expect(webHostContext("xn--niversite-p9a.o-okul.com", "o-okul.com")).toEqual({ kind: "invalid" });
     expect(() => tenantLoginOrigin("xn--niversite-p9a", "o-okul.com")).toThrow("TENANT_SLUG_INVALID");
+  });
+
+  test("legacy tenant giriş süresini cutoff öncesi açar, sonrasında kapatır", () => {
+    const now = Date.parse("2026-08-23T00:00:00.000Z");
+    expect(legacyLoginAllowed("2026-09-22T00:00:00.000Z", now)).toBe(true);
+    expect(legacyLoginAllowed("2026-09-22T00:00:00.001Z", now)).toBe(false);
+    expect(legacyLoginAllowed("2026-08-24T00:00:00.000Z", Date.parse("2026-08-24T00:00:00.000Z"))).toBe(false);
+    expect(legacyLoginAllowed("invalid", Date.parse("2026-08-23T00:00:00.000Z"))).toBe(false);
+    expect(legacyLoginAllowed(undefined, now)).toBe(false);
+  });
+
+  test("legacy tenant girişini gerçek alan adında yönlendirir, cutoff sonrasında kapatır", async () => {
+    const previousDomain = process.env.DOMAIN;
+    const previousCutoff = process.env.LEGACY_TENANT_LOGIN_CUTOFF_AT;
+    const request = new NextRequest("https://o-okul.com/k/dna-egitim/giris", {
+      headers: { host: "o-okul.com" },
+    });
+
+    try {
+      process.env.DOMAIN = "o-okul.com";
+      process.env.LEGACY_TENANT_LOGIN_CUTOFF_AT = new Date(Date.now() + 29 * 24 * 60 * 60 * 1000).toISOString();
+      const redirect = proxy(request);
+      expect(redirect.status).toBe(307);
+      expect(redirect.headers.get("location")).toBe("https://dna-egitim.o-okul.com/giris");
+
+      process.env.LEGACY_TENANT_LOGIN_CUTOFF_AT = "2000-01-01T00:00:00.000Z";
+      const retired = proxy(request);
+      expect(retired.status).toBe(410);
+      expect(await retired.text()).toBe("LEGACY_TENANT_LOGIN_RETIRED");
+    } finally {
+      restoreEnvironment("DOMAIN", previousDomain);
+      restoreEnvironment("LEGACY_TENANT_LOGIN_CUTOFF_AT", previousCutoff);
+    }
   });
 
   test("kurum operasyon özeti URL state ve tenant kapsamını korur", async ({ page }) => {
@@ -214,6 +249,14 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     expect(captured.forbiddenTenantScopedPaths).toEqual([]);
   });
 });
+
+function restoreEnvironment(name: "DOMAIN" | "LEGACY_TENANT_LOGIN_CUTOFF_AT", value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[name];
+    return;
+  }
+  process.env[name] = value;
+}
 
 async function openWithSystemTenantMocks(page: Page, captured: CapturedSystemRequests, pathName: string) {
   await installSystemTenantApiMocks(page, captured);

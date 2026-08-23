@@ -148,6 +148,7 @@ NOTIFICATION_ALLOW_NOOP_IN_PRODUCTION=true \
 docker compose --env-file .env.local up -d
 
 # Gerçek domain ile HTTPS edge koşusu.
+# Cutover anında bir kez belirlenmiş, en fazla 30 gün sonrası gerçek UTC tarihini girin.
 DOMAIN=o-okul.com \
 APP_URL=https://o-okul.com \
 API_URL=https://o-okul.com \
@@ -155,7 +156,7 @@ WEB_URL=https://o-okul.com \
 NEXT_PUBLIC_API_URL=https://o-okul.com \
 COOKIE_SECURE=true \
 CF_DNS_API_TOKEN_FILE=./secrets/cloudflare_dns_api_token \
-LEGACY_TENANT_LOGIN_CUTOFF_AT=2099-01-01T00:00:00.000Z \
+LEGACY_TENANT_LOGIN_CUTOFF_AT=__SET_ONCE_CUTOVER_PLUS_MAX_30_DAYS_UTC__ \
 ACME_EMAIL=admin@o-okul.com \
 API_NODE_ENV=staging \
 WORKER_NODE_ENV=staging \

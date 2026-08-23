@@ -12,18 +12,24 @@ silinmez.
 |---|---|---|---|
 | `/kurum/uat-rollback` ekranı | `REMOVED_LOCAL_TESTED` | Yok; UAT sözleşmesi belge, template ve checker ile doğrulanıyor | CI; staging/production `EXTERNAL_NOT_RUN` |
 | `/kurum/operasyon-ve-kanit` | `CANONICAL` | Yetkiye göre yedek, güvenlik, sağlık ve yayın araçlarını listeliyor | Korunur |
-| Eski `/k/{tenantSlug}/giris` yolu | `ACTIVE_LEGACY` | Parola sıfırlama, onboarding ve canlı UI testleri hâlâ bu yolu kullanıyor | Canlı kullanım ve host geçişi doğrulanmadan kaldırılmaz |
+| Eski `/k/{tenantSlug}/giris` yolu | `CONSUMERS_MIGRATED_LOCAL_TESTED` | Yalnız 30 günlük geçiş uyumluluğu, route envanteri ve doğrudan uyumluluk testi kullanıyor | CI ve gerçek tenant hostunda `307/410` kanıtı; kesim tarihinden sonra route kaldırma |
 | Eski kurum navigasyonu | `REMOVED_LOCAL_TESTED` | Yok; yedi gruplu yeni navigasyon kanonik | CI; staging/production `EXTERNAL_NOT_RUN` |
 | `web.ia-v2` / `web.shell-v2` bayrakları | `REMOVED_LOCAL_TESTED` | Shell artık rollout cevabına bağlı değil | Eski config anahtarları fail-closed reddedilir; staging env preflight `EXTERNAL_NOT_RUN` |
 | Guardian/veli ekranları | `ACTIVE_TRANSITION` | Portal, destek, duyuru, rapor ve ödeme akışları kullanıyor | Önce StudentContact/self-service hedefi ve veri taşıma planı |
 | `Guardian` / `GuardianStudent` veri yapıları | `ACTIVE_DATA` | API, RLS, rapor, destek ve portal ilişkileri kullanıyor | Tenant bazlı sayım, yeni modele taşıma, doğrulanmış yedek; sonra migration |
 | Legacy `SYSTEM_ADMIN` tenant erişim kalıntıları | `PARTIAL_SECURITY_DEBT` | Bazı route ve rol uyumluluk testleri sürüyor | Route ailesi bazında exact capability/control-plane kesimi |
 
-## Bu dilimin sınırı
+## Güncel dilimin sınırı
 
-- Yalnız `/kurum/uat-rollback` sayfası, navigasyon kaydı, route manifest girdisi ve doğrudan testleri kaldırılır.
-- UAT senaryo matrisi, UAT checker/template, restore ve forward-only deployment continuity kanıtları korunur.
-- API, veritabanı, migration, tenant verisi ve canlı ortam değişmez.
+- Parola sıfırlama, auth state, onboarding, ana giriş, erişilebilirlik ve canlı UI testleri kanonik
+  `{tenantSlug}.{domain}/giris` adresine taşındı.
+- Eski `/k/{tenantSlug}/giris` route'u 30 günlük geçiş uyumluluğu için korunur; gerçek alan adında
+  kesim öncesi `307`, kesim sonrasında `410` davranışı yerel sözleşme testiyle doğrulanır.
+- Web ve API, gelecekteki cutoff'u bugünden en fazla 30 günle sınırlar; daha uzak tarih fail-closed
+  reddedilir. API istek sözleşmesi, veritabanı, migration, tenant verisi, DNS, secret ve canlı ortam
+  değişmez.
+- Route'un fiziksel olarak kaldırılması gerçek staging/canlı geçiş ve kesim tarihi kanıtından sonra
+  ayrı bir dilimdir.
 
 ## Fiziksel veri temizliği koşulu
 
