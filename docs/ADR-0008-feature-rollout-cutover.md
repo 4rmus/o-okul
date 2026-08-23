@@ -19,7 +19,7 @@ gerektiğinde actor modeli, atomiklik, RLS ve step-up ayrı ADR/dilimle ele alı
 ## Gerekçe
 
 İlk internal tenant rollout'u için kalıcı bir yönetim sistemi kurmak gereksiz güvenlik ve migration
-yüzeyi açar. Server-only allowlist rollback ihtiyacını davranış açmadan karşılar.
+yüzeyi açar. Server-only allowlist kontrollü aktivasyon ve cutover ihtiyacını davranış açmadan karşılar.
 
 ## Kaynak İzi
 
@@ -31,3 +31,4 @@ yüzeyi açar. Server-only allowlist rollback ihtiyacını davranış açmadan k
 - Her flag owner, expiry ve removal issue taşır.
 - İlk catalog flag'lerinin tamamı default-off'tur.
 - Staging/production tenant aktivasyonu ayrı dış ortam kararı ve kanıtıdır.
+- `web.ia-v2` ve `web.shell-v2`, 23 Ağustos 2026'da yeni kurum navigasyonu kanonik hale geldiği için katalogdan kaldırılmıştır.

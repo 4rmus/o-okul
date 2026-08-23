@@ -32,6 +32,76 @@ try {
   );
 
   runNegativeCheck(
+    "live onboarding missing base URL negative",
+    {
+      NEXT_E2E_LIVE_ONBOARDING: "1",
+      NEXT_E2E_BASE_URL: "",
+      LIVE_ONBOARDING_EVIDENCE_PATH: validEvidencePath,
+    },
+    "NEXT_E2E_BASE_URL gerçek https staging/prod kök URL olmalı.",
+  );
+
+  runNegativeCheck(
+    "live onboarding local base URL negative",
+    {
+      NEXT_E2E_LIVE_ONBOARDING: "1",
+      NEXT_E2E_BASE_URL: "http://localhost:3001",
+      LIVE_ONBOARDING_EVIDENCE_PATH: validEvidencePath,
+    },
+    "NEXT_E2E_BASE_URL gerçek https staging/prod kök URL olmalı.",
+  );
+
+  runNegativeCheck(
+    "live onboarding non-root base URL negative",
+    {
+      NEXT_E2E_LIVE_ONBOARDING: "1",
+      NEXT_E2E_BASE_URL: "https://staging.o-okul.com/app",
+      LIVE_ONBOARDING_EVIDENCE_PATH: validEvidencePath,
+    },
+    "NEXT_E2E_BASE_URL gerçek https staging/prod kök URL olmalı.",
+  );
+
+  runNegativeCheck(
+    "live onboarding foreign base URL negative",
+    {
+      NEXT_E2E_LIVE_ONBOARDING: "1",
+      NEXT_E2E_BASE_URL: "https://attacker.invalid",
+      LIVE_ONBOARDING_EVIDENCE_PATH: validEvidencePath,
+    },
+    "NEXT_E2E_BASE_URL gerçek https staging/prod kök URL olmalı.",
+  );
+
+  runNegativeCheck(
+    "live onboarding tenant subdomain base URL negative",
+    {
+      NEXT_E2E_LIVE_ONBOARDING: "1",
+      NEXT_E2E_BASE_URL: "https://dna-egitim.o-okul.com",
+      LIVE_ONBOARDING_EVIDENCE_PATH: validEvidencePath,
+    },
+    "NEXT_E2E_BASE_URL gerçek https staging/prod kök URL olmalı.",
+  );
+
+  runNegativeCheck(
+    "live onboarding custom port base URL negative",
+    {
+      NEXT_E2E_LIVE_ONBOARDING: "1",
+      NEXT_E2E_BASE_URL: "https://o-okul.com:444",
+      LIVE_ONBOARDING_EVIDENCE_PATH: validEvidencePath,
+    },
+    "NEXT_E2E_BASE_URL gerçek https staging/prod kök URL olmalı.",
+  );
+
+  runNegativeCheck(
+    "live onboarding missing skip web server negative",
+    {
+      NEXT_E2E_LIVE_ONBOARDING: "1",
+      NEXT_E2E_SKIP_WEB_SERVER: "",
+      LIVE_ONBOARDING_EVIDENCE_PATH: validEvidencePath,
+    },
+    "NEXT_E2E_SKIP_WEB_SERVER=1 olmalı.",
+  );
+
+  runNegativeCheck(
     "live onboarding missing email evidence endpoint negative",
     {
       NEXT_E2E_LIVE_ONBOARDING: "1",
@@ -202,6 +272,8 @@ function runPreflight(env) {
       ...process.env,
       LIVE_ONBOARDING_ALLOW_EXAMPLE_EVIDENCE: "",
       NEXT_E2E_LIVE_ONBOARDING: "",
+      NEXT_E2E_BASE_URL: "https://staging.o-okul.com",
+      NEXT_E2E_SKIP_WEB_SERVER: "1",
       LIVE_ONBOARDING_EVIDENCE_PATH: "",
       LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT: "https://notify.staging.o-okul.com/messages/latest",
       LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN: "live-onboarding-test-bearer-token",

@@ -37,7 +37,9 @@ pnpm web:measurement-baseline:collect
 
 ## Rollout güven sınırı
 
-Feature katalogundaki dokuz anahtar default-off'tur. Opsiyonel `FEATURE_ROLLOUTS_JSON` yalnız API
+Gate B tarihinde feature katalogundaki dokuz anahtar default-off'tu. 23 Ağustos 2026'da kanonik
+navigasyon cutover'ı tamamlanınca `web.ia-v2` ve `web.shell-v2` kaldırıldı; güncel katalog yedi
+anahtar taşır. Opsiyonel `FEATURE_ROLLOUTS_JSON` yalnız API
 prosesinde okunur; bilinmeyen anahtar veya bozuk kayıt başlangıçta fail eder. Kayıtlar zorunlu
 `FEATURE_ROLLOUT_ENVIRONMENT`, `tenantId`, `startsAt`/`expiresAt` ve PII içermeyen `reference`
 taşır, en fazla 90 gün geçerlidir. Client

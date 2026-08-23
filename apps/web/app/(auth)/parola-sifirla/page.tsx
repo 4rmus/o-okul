@@ -5,13 +5,13 @@ import Link from "next/link";
 import { Button, Field, Input } from "@o-okul/ui";
 import { confirmPasswordReset } from "../../../src/api-client.js";
 import { appBrand } from "../../../src/brand.js";
-import { browserTenantSlug } from "../../../src/tenant-host.js";
+import { browserTenantLoginHref, browserTenantSlug } from "../../../src/tenant-host.js";
 import { ContactSupportLink } from "../contact-support-link.js";
 
 export default function ResetPasswordPage() {
   const [token, setToken] = useState("");
   const [tenantSlug, setTenantSlug] = useState("");
-  const [hostTenantSlug, setHostTenantSlug] = useState("");
+  const [loginHref, setLoginHref] = useState("/login");
   const [password, setPassword] = useState("");
   const [passwordAgain, setPasswordAgain] = useState("");
   const [error, setError] = useState("");
@@ -23,8 +23,9 @@ export default function ResetPasswordPage() {
     const fragmentParams = new URLSearchParams(window.location.hash.slice(1));
     setToken(fragmentParams.get("token")?.trim() || searchParams.get("token")?.trim() || "");
     const fromHost = browserTenantSlug() ?? "";
-    setHostTenantSlug(fromHost);
-    setTenantSlug(fromHost || fragmentParams.get("tenant")?.trim() || searchParams.get("tenant")?.trim() || "");
+    const resolvedTenantSlug = fromHost || fragmentParams.get("tenant")?.trim() || searchParams.get("tenant")?.trim() || "";
+    setTenantSlug(resolvedTenantSlug);
+    setLoginHref(fromHost ? "/giris" : resolvedTenantSlug ? browserTenantLoginHref(resolvedTenantSlug) : "/login");
     if (window.location.hash || searchParams.has("token")) {
       searchParams.delete("token");
       const query = searchParams.toString();
@@ -35,8 +36,6 @@ export default function ResetPasswordPage() {
       );
     }
   }, []);
-  const loginHref = hostTenantSlug ? "/giris" : tenantSlug ? `/k/${encodeURIComponent(tenantSlug)}/giris` : "/login";
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");

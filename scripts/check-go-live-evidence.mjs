@@ -24,7 +24,7 @@ const requiredEvidenceCheckScripts = new Map([
   ["WAL archive target", "scripts/smoke-wal-archive-target.mjs"],
   ["Report generation smoke", "scripts/smoke-report-generation-live.mjs"],
   ["Secret delivery outbox evidence", "scripts/check-secret-delivery-outbox-evidence.mjs"],
-  ["Deployment rollback evidence", "scripts/check-deployment-rollback-evidence.mjs"],
+  ["Deployment continuity evidence", "scripts/check-deployment-rollback-evidence.mjs"],
   ["GitHub CI evidence", "scripts/check-github-ci-evidence.mjs"],
   ["Restore drill evidence", "scripts/check-restore-drill-evidence.mjs"],
   ["KVKK inventory evidence", "scripts/check-kvkk-inventory-evidence.mjs"],
@@ -525,8 +525,8 @@ const liveStatusGates = [
     dateKey: "checkedAt",
   },
   {
-    label: "Deployment rollback tatbikatı",
-    command: "pnpm deployment:rollback:check",
+    label: "Deployment continuity kanıtı",
+    command: "pnpm deployment:continuity:check",
     source: "productionEvidenceSummary.reports.deploymentRollback",
     target: "summary",
     path: ["reports", "deploymentRollback"],
@@ -1181,7 +1181,13 @@ function requireSummaryReports(summary, failures, goLiveReport) {
         gaps: [],
       }).map((failure) => `productionEvidenceSummary.summary.reports.deploymentRollback: ${failure}`),
     );
-    requireObjectEqual(deploymentRollback, failures, "productionEvidenceSummary.summary.reports.deploymentRollback.schemaVersion", "schemaVersion", 2);
+    requireObjectOneOf(
+      deploymentRollback,
+      failures,
+      "productionEvidenceSummary.summary.reports.deploymentRollback.schemaVersion",
+      "schemaVersion",
+      [2, 3],
+    );
     requireObjectEqual(deploymentRollback, failures, "productionEvidenceSummary.summary.reports.deploymentRollback.environment", "environment", "production");
     requireSummaryReportDateNotAfter(
       deploymentRollback,
@@ -1214,7 +1220,13 @@ function requireSummaryReports(summary, failures, goLiveReport) {
     );
     requireSummaryRollbackDrill(deploymentRollback, failures);
     requireSummaryRollbackApproval(deploymentRollback, failures);
-    requireObjectTrue(deploymentRollback, failures, "productionEvidenceSummary.summary.reports.deploymentRollback.migrationRollbackSafe", "migrationRollbackSafe");
+    if (deploymentRollback.drill?.mode === "forward-only-readiness") {
+      if (deploymentRollback.migrationRollbackSafe !== false) {
+        failures.push("productionEvidenceSummary.summary.reports.deploymentRollback.migrationRollbackSafe forward-only-readiness modunda false olmalı.");
+      }
+    } else {
+      requireObjectTrue(deploymentRollback, failures, "productionEvidenceSummary.summary.reports.deploymentRollback.migrationRollbackSafe", "migrationRollbackSafe");
+    }
     requireObjectStringList(
       deploymentRollback,
       failures,
@@ -1998,7 +2010,7 @@ function requireSummaryRollbackDrill(report, failures) {
     failures,
     "productionEvidenceSummary.summary.reports.deploymentRollback.drill",
   );
-  if (!["failure-injection", "cold-rollback-rehearsal"].includes(drill.mode)) {
+  if (!["failure-injection", "cold-rollback-rehearsal", "forward-only-readiness"].includes(drill.mode)) {
     failures.push("productionEvidenceSummary.summary.reports.deploymentRollback.drill.mode geçersiz.");
   }
   for (const key of ["sourceImageTag", "rollbackImageTag", "restoredImageTag"]) {
@@ -2018,6 +2030,11 @@ function requireSummaryRollbackDrill(report, failures) {
   if (drill.mode === "cold-rollback-rehearsal") {
     if (drill.failureInjected !== false || drill.failureMode !== null || drill.restoredImageTag !== drill.sourceImageTag) {
       failures.push("productionEvidenceSummary.summary.reports.deploymentRollback cold rollback drill alanları geçersiz.");
+    }
+  }
+  if (drill.mode === "forward-only-readiness") {
+    if (drill.failureInjected !== false || drill.failureMode !== null || drill.restoredImageTag !== drill.sourceImageTag) {
+      failures.push("productionEvidenceSummary.summary.reports.deploymentRollback forward-only readiness alanları geçersiz.");
     }
   }
 }

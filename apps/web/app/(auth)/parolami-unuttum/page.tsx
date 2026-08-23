@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button, Field, Input } from "@o-okul/ui";
 import { requestPasswordReset } from "../../../src/api-client.js";
 import { appBrand } from "../../../src/brand.js";
-import { browserTenantSlug } from "../../../src/tenant-host.js";
+import { browserTenantLoginHref, browserTenantSlug } from "../../../src/tenant-host.js";
 import { ContactSupportLink } from "../contact-support-link.js";
 
 export default function ForgotPasswordPage() {
@@ -14,12 +14,12 @@ export default function ForgotPasswordPage() {
   const [loginName, setLoginName] = useState("");
   const [status, setStatus] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const loginHref = hostTenantSlug ? "/giris" : tenantSlug ? `/k/${encodeURIComponent(tenantSlug)}/giris` : "/login";
-
+  const loginHref = hostTenantSlug ? "/giris" : tenantSlug ? browserTenantLoginHref(tenantSlug) : "/login";
   useEffect(() => {
     const fromHost = browserTenantSlug() ?? "";
     setHostTenantSlug(fromHost);
-    setTenantSlug(fromHost || new URLSearchParams(window.location.search).get("tenant")?.trim() || "");
+    const resolvedTenantSlug = fromHost || new URLSearchParams(window.location.search).get("tenant")?.trim() || "";
+    setTenantSlug(resolvedTenantSlug);
   }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

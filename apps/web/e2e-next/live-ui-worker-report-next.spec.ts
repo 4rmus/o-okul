@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, parse, resolve } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import { tenantLoginUrl } from "./helpers/tenant-login.js";
 
 interface LiveReportEvidence {
   examId: string;
@@ -21,6 +22,7 @@ interface LiveReportPortalCredentials {
 }
 
 const evidencePath = process.env.LIVE_UI_WORKER_EVIDENCE_PATH;
+const appOrigin = process.env.NEXT_E2E_BASE_URL ?? `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const resultEvidencePath = process.env.LIVE_UI_WORKER_RESULT_EVIDENCE_FILE ?? process.env.LIVE_UI_WORKER_RESULT_EVIDENCE_PATH;
 const enabled = process.env.NEXT_E2E_LIVE_UI_WORKER === "1" && Boolean(evidencePath);
 
@@ -89,7 +91,7 @@ test("worker tarafından üretilen canlı rapor kurum UI içinde açılır", asy
 });
 
 async function loginAs(page: Page, tenantSlug: string, loginName: string, password: string, expectedUrl: RegExp) {
-  await page.goto(`/k/${encodeURIComponent(tenantSlug)}/giris`);
+  await page.goto(tenantLoginUrl(appOrigin, tenantSlug));
   await page.locator('input[name="loginName"]').fill(loginName);
   await page.locator('input[name="password"]').fill(password);
   await Promise.all([

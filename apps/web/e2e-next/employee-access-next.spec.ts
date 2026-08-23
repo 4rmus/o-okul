@@ -112,7 +112,7 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
   });
 
   await login(page);
-  const managementGroup = page.getByRole("button", { name: "Yönetim", exact: true });
+  const managementGroup = page.getByRole("button", { name: "Kişiler", exact: true });
   if ((await managementGroup.getAttribute("aria-expanded")) !== "true") await managementGroup.click();
   await page.getByRole("link", { name: "Çalışanlar ve Yetkiler" }).click();
   await expect(page).toHaveURL(/\/kurum\/calisanlar$/u);

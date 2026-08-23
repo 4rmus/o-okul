@@ -9,7 +9,6 @@ import { Button, Dialog, Field, Input, Panel, StatusBadge, type StatusBadgeProps
 import { isTenantRoleName, tenantRoleLabel, type ActivePersona, type GlobalSearchResultRecord, type MeProfileResponse, type NotificationDeviceTokenRecord, type Session, type TenantRecord } from "@o-okul/shared-types";
 import { apiBaseUrl, apiListRequest, apiRequest, withQueryParams } from "../../src/api-client.js";
 import { appBrand } from "../../src/brand.js";
-import { featureRolloutQueryKey, isFeatureEnabled, loadFeatureRollouts } from "../../src/feature-rollouts.js";
 import { productTerms } from "../../src/product-terms.js";
 import { useAuth } from "../providers.js";
 import { readRolePreviewToken } from "./portals/_shared/portal-shell.js";
@@ -21,7 +20,7 @@ import {
   hasSubjectPortalAccess,
   hasSystemAccess,
 } from "./_shared/access.js";
-import { dynamicDetailParents, institutionNavGroups, institutionNavGroupsV2, rolePortalItems, rolePortalNavGroups, staticBreadcrumbLabels, systemNavGroups } from "./_shared/navigation.js";
+import { dynamicDetailParents, institutionNavGroups, rolePortalItems, rolePortalNavGroups, staticBreadcrumbLabels, systemNavGroups } from "./_shared/navigation.js";
 const allNavigationItems = [
   ...systemNavGroups.flatMap((group) => group.items),
   ...institutionNavGroups.flatMap((group) => group.items),
@@ -89,24 +88,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const mobileNavCloseRef = useRef<HTMLButtonElement | null>(null);
   const sidebarRef = useRef<HTMLElement | null>(null);
   const isRolePreviewRoute = hasRolePreviewAccess(searchParams);
-  const featureRolloutsQuery = useQuery({
-    queryKey: featureRolloutQueryKey(
-      auth?.session.tenantId,
-      auth?.session.id,
-      auth?.session.activePersona,
-    ),
-    queryFn: () => loadFeatureRollouts(auth?.accessToken ?? ""),
-    enabled: Boolean(
-      auth
-      && pathname.startsWith("/kurum")
-      && hasInstitutionAccess(auth.session.roles)
-      && !isRolePreviewRoute
-    ),
-    refetchOnWindowFocus: false,
-  });
-  const shellV2Enabled = featureRolloutsQuery.isSuccess
-    && !featureRolloutsQuery.isError
-    && isFeatureEnabled(featureRolloutsQuery.data, "web.shell-v2");
   const visiblePortalNavGroups = useMemo(
     () => auth?.session ? rolePortalNavGroups.filter((group) => hasSubjectPortalAccess(auth.session, group.role, group.subjectType)) : [],
     [auth],
@@ -116,10 +97,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       ? getInstitutionNavGroups(
           auth.session.roles,
           auth.session.activePersona,
-          shellV2Enabled ? institutionNavGroupsV2 : institutionNavGroups,
+          institutionNavGroups,
         )
       : [],
-    [auth, shellV2Enabled],
+    [auth],
   );
   const institutionRailNavGroups = useMemo(
     () => visibleInstitutionNavGroups
@@ -348,7 +329,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="next-app-shell" data-shell-version={shellV2Enabled ? "v2" : "legacy"}>
+    <div className="next-app-shell" data-shell-version="v2">
       <a className="next-skip-link" href="#next-content">
         İçeriğe geç
       </a>

@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
+import { tenantLoginUrl } from "./helpers/tenant-login.js";
 
 interface LiveOnboardingEvidence {
   appendRunId?: boolean;
@@ -29,6 +30,7 @@ interface LiveOnboardingEvidence {
 }
 
 const evidencePath = process.env.LIVE_ONBOARDING_EVIDENCE_PATH;
+const appOrigin = process.env.NEXT_E2E_BASE_URL ?? `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const enabled = process.env.NEXT_E2E_LIVE_ONBOARDING === "1" && Boolean(evidencePath);
 
 test.skip(!enabled, "NEXT_E2E_LIVE_ONBOARDING=1 ve LIVE_ONBOARDING_EVIDENCE_PATH gerekir.");
@@ -99,7 +101,7 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
   await page.getByRole("button", { name: "Şifreyi yenile" }).click();
   await expect(page.getByRole("status")).toContainText("Şifreniz yenilendi");
 
-  await page.goto(`/k/${encodeURIComponent(tenantSlug)}/giris`);
+  await page.goto(tenantLoginUrl(appOrigin, tenantSlug));
   await page.locator('input[name="loginName"]').fill(firstAdminEmail);
   await page.locator('input[name="password"]').fill(evidence.firstAdmin.password);
   await page.getByRole("button", { name: "Giriş yap" }).click();

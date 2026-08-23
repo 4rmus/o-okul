@@ -42,21 +42,20 @@ test("Gate C internal tenant Shell v2 ve salt okunur sınav paritesini beş view
 });
 
 for (const mode of ["disabled", "error", "malformed"] as const) {
-  test(`Gate C ${mode} rollout sonucunda workspace çağırmadan aynı legacy sınava döner`, async ({ page }) => {
+  test(`Gate C ${mode} rollout sonucunda workspace çağırmadan kanonik sınav listesine döner`, async ({ page }) => {
     const evidence = await installGateCApi(page, mode);
     await page.addInitScript(() => {
       window.localStorage.setItem("web.exam-workspace-v2", "true");
-      window.localStorage.setItem("web.shell-v2", "true");
     });
 
-    await page.goto(`/kurum/sinavlar/${examId}?shellV2=1&web.exam-workspace-v2=true`, {
+    await page.goto(`/kurum/sinavlar/${examId}?web.exam-workspace-v2=true`, {
       waitUntil: "domcontentloaded",
     });
 
     await expect(page).toHaveURL((url) =>
       url.pathname === "/kurum/sinavlar" && url.searchParams.get("examId") === examId,
     );
-    await expect(page.locator(".next-app-shell")).toHaveAttribute("data-shell-version", "legacy");
+    await expect(page.locator(".next-app-shell")).toHaveAttribute("data-shell-version", "v2");
     await expect(page.getByRole("region", { name: "Sınav katılımcıları" })).toContainText("Gate C Denemesi");
     expect(evidence.workspaceRequests).toBe(0);
     expect(evidence.mutationRequests).toEqual([]);
@@ -133,12 +132,12 @@ async function installGateCApi(
         await fulfillData(route, { code: "ROLLOUT_UNAVAILABLE" }, 500);
       } else if (mode === "malformed") {
         await fulfillData(route, {
-          enabledFeatureKeys: ["web.shell-v2", "web.exam-workspace-v2", 42],
+          enabledFeatureKeys: ["web.exam-workspace-v2", 42],
           tenantId: "spoof",
         });
       } else {
         await fulfillData(route, {
-          enabledFeatureKeys: mode === "enabled" ? ["web.shell-v2", "web.exam-workspace-v2"] : [],
+          enabledFeatureKeys: mode === "enabled" ? ["web.exam-workspace-v2"] : [],
         });
       }
       return;

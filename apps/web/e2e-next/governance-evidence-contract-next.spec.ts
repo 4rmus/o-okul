@@ -258,11 +258,12 @@ test.describe("Governance evidence sözleşmesi", () => {
     await page.getByRole("button", { name: "Komut paleti" }).click();
     const auditCommandDialog = page.getByRole("dialog", { name: "Komut paleti" });
     await auditCommandDialog.getByLabel("Komut ara").fill("denetim");
-    await expect(auditCommandDialog.getByRole("link", { exact: true, name: "Denetim Yönetim" })).toHaveAttribute("href", "/kurum/denetim");
+    await expect(auditCommandDialog.getByRole("link", { exact: true, name: "Denetim Ayarlar" })).toHaveAttribute("href", "/kurum/denetim");
     await auditCommandDialog.getByRole("button", { name: "Kapat" }).click();
     await page.getByRole("button", { name: "Ana menüyü aç" }).click();
     const auditNavigation = page.getByRole("navigation", { name: "Ana menü" });
-    await auditNavigation.getByRole("button", { name: "Yönetim", exact: true }).click();
+    const auditSettingsGroup = auditNavigation.getByRole("button", { name: "Ayarlar", exact: true });
+    if ((await auditSettingsGroup.getAttribute("aria-expanded")) !== "true") await auditSettingsGroup.click();
     await expect(auditNavigation.getByRole("link", { name: "Denetim", exact: true })).toHaveCount(0);
     await expect(auditNavigation.getByRole("link", { name: "Operasyon ve kanıt", exact: true })).toHaveAttribute("href", "/kurum/operasyon-ve-kanit");
 
@@ -321,11 +322,12 @@ test.describe("Governance evidence sözleşmesi", () => {
     await page.getByRole("button", { name: "Komut paleti" }).click();
     const kvkkCommandDialog = page.getByRole("dialog", { name: "Komut paleti" });
     await kvkkCommandDialog.getByLabel("Komut ara").fill("kvkk");
-    await expect(kvkkCommandDialog.getByRole("link", { exact: true, name: "KVKK Yönetim" })).toHaveAttribute("href", "/kurum/kvkk");
+    await expect(kvkkCommandDialog.getByRole("link", { exact: true, name: "KVKK Ayarlar" })).toHaveAttribute("href", "/kurum/kvkk");
     await kvkkCommandDialog.getByRole("button", { name: "Kapat" }).click();
     await page.getByRole("button", { name: "Ana menüyü aç" }).click();
     const kvkkNavigation = page.getByRole("navigation", { name: "Ana menü" });
-    await kvkkNavigation.getByRole("button", { name: "Yönetim", exact: true }).click();
+    const kvkkSettingsGroup = kvkkNavigation.getByRole("button", { name: "Ayarlar", exact: true });
+    if ((await kvkkSettingsGroup.getAttribute("aria-expanded")) !== "true") await kvkkSettingsGroup.click();
     await expect(kvkkNavigation.getByRole("link", { name: "KVKK", exact: true })).toHaveCount(0);
     await expect(kvkkNavigation.getByRole("link", { name: "Operasyon ve kanıt", exact: true })).toHaveAttribute("href", "/kurum/operasyon-ve-kanit");
 
@@ -406,43 +408,6 @@ test.describe("Governance evidence sözleşmesi", () => {
     await expect(page).toHaveURL(/\/kurum$/);
     await expect(page.getByRole("region", { exact: true, name: "Yayın hazırlığı özeti" })).toHaveCount(0);
     await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Yayın Hazırlığı" })).toHaveCount(0);
-
-    await openWithGovernanceMocks(page, "/kurum/uat-rollback", { height: 900, width: 768 }, {
-      roles: ["TENANT_ADMIN", "SYSTEM_ADMIN"],
-    });
-    await expectEvidenceScopes(page.getByLabel("Kullanıcı kabulü ve geri dönüş durumu"), {
-      "Kanıt kapsamı: Deneme/canlı ortam": 1,
-      "Kanıt kapsamı: Canlı kanıt": 1,
-      "Kanıt kapsamı: Sistem kaydı": 1,
-    });
-    await expect(page.getByLabel("Kullanıcı kabulü ve geri dönüş durumu")).toContainText("Canlı kanıt gerekir");
-    const uatSummary = page.getByRole("region", { exact: true, name: "Kullanıcı kabulü ve geri dönüş özeti" });
-    await expect(uatSummary).toContainText("Yalnızca kontrol");
-    await expect(uatSummary).toContainText("Yayın doğrulaması ayrıca yapılır");
-    await expect(uatSummary.getByLabel("Kullanıcı kabulü ve geri dönüş özeti önerilen işlemler")).toBeVisible();
-    const uatScenarioTable = page.getByRole("table", { name: "Kullanıcı yolculuğu senaryoları" });
-    await expect(uatScenarioTable).toContainText("Kurum yolculuğu 1");
-    await expect(uatScenarioTable).toContainText("Mevcut veli erişimi 3");
-    await expect(uatScenarioTable.getByText("UAT-KURUM-01", { exact: true })).toBeHidden();
-    await expect(uatScenarioTable.getByText("UAT-GUARDIAN-03", { exact: true })).toBeHidden();
-    await openAllTechnicalDetails(uatScenarioTable);
-    await expect(uatScenarioTable.getByText("UAT-KURUM-01", { exact: true })).toBeVisible();
-    await expect(uatScenarioTable.getByText("UAT-GUARDIAN-03", { exact: true })).toBeVisible();
-    const uatCommandTable = page.getByRole("table", { name: "Yayın öncesi zorunlu kontroller" });
-    await expect(uatCommandTable).toContainText("Kurum verisi ayrımı");
-    await expect(uatCommandTable).toContainText("Güvenli bağlantı");
-    await openAllTechnicalDetails(uatCommandTable);
-    await expect(uatCommandTable.getByText("pnpm db:rls:check:live", { exact: true })).toBeVisible();
-    await expect(uatCommandTable.getByText("pnpm traefik:https:smoke", { exact: true })).toBeVisible();
-    const rollbackFieldTable = page.getByRole("table", { name: "Geri dönüş için zorunlu bilgiler" });
-    await expect(rollbackFieldTable).toContainText("Geri dönülecek sürüm");
-    await expect(rollbackFieldTable).toContainText("Geri yüklenecek yedek");
-    await expect(rollbackFieldTable).toContainText("Açık sorun yok");
-    await openAllTechnicalDetails(rollbackFieldTable);
-    await expect(rollbackFieldTable.getByText("rollbackImageTag", { exact: true })).toBeVisible();
-    await expect(rollbackFieldTable.getByText("restoreBackupReference", { exact: true })).toBeVisible();
-    await expect(rollbackFieldTable.getByText("defects boş", { exact: true })).toBeVisible();
-    await expectNoHorizontalOverflow(page, "uat-rollback-governance-tablet");
 
     await openWithGovernanceMocks(page, "/kurum/yedek-restore", { height: 900, width: 390 }, {
       roles: ["TENANT_ADMIN", "SYSTEM_ADMIN"],

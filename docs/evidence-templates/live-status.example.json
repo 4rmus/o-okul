@@ -111,12 +111,12 @@
       "evidenceReference": "production-evidence-summary.example.json#/reports/uat"
     },
     {
-      "label": "Deployment rollback tatbikatı",
+      "label": "Deployment continuity kanıtı",
       "status": "PASS",
-      "command": "pnpm deployment:rollback:check",
+      "command": "pnpm deployment:continuity:check",
       "source": "productionEvidenceSummary.reports.deploymentRollback",
       "checkedAt": "2026-05-30T10:30:00.000Z",
-      "evidenceReference": "artifact:logs/deployment-rollback.log"
+      "evidenceReference": "run:https://github.com/example/o-okul/actions/runs/1234567891"
     },
     {
       "label": "Pilot kapanış kanıtı",

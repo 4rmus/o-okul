@@ -148,6 +148,7 @@ NOTIFICATION_ALLOW_NOOP_IN_PRODUCTION=true \
 docker compose --env-file .env.local up -d
 
 # Gerçek domain ile HTTPS edge koşusu.
+# Cutover anında bir kez belirlenmiş, en fazla 30 gün sonrası gerçek UTC tarihini girin.
 DOMAIN=o-okul.com \
 APP_URL=https://o-okul.com \
 API_URL=https://o-okul.com \
@@ -155,7 +156,7 @@ WEB_URL=https://o-okul.com \
 NEXT_PUBLIC_API_URL=https://o-okul.com \
 COOKIE_SECURE=true \
 CF_DNS_API_TOKEN_FILE=./secrets/cloudflare_dns_api_token \
-LEGACY_TENANT_LOGIN_CUTOFF_AT=2099-01-01T00:00:00.000Z \
+LEGACY_TENANT_LOGIN_CUTOFF_AT=__SET_ONCE_CUTOVER_PLUS_MAX_30_DAYS_UTC__ \
 ACME_EMAIL=admin@o-okul.com \
 API_NODE_ENV=staging \
 WORKER_NODE_ENV=staging \
@@ -230,6 +231,8 @@ pnpm live:smoke
 ## Dokümantasyon
 
 - [`status.md`](status.md) — güncel uygulama ve release durumu
+- [`docs/almanac-2-architecture-plan.md`](docs/almanac-2-architecture-plan.md) — onaylı hedef mimari, fazlar ve güncel ilerleme
+- [`docs/almanac-2-legacy-removal-inventory.md`](docs/almanac-2-legacy-removal-inventory.md) — eski ekran ve veri yapısı temizlik envanteri
 - [`docs/llm-wiki/README.md`](docs/llm-wiki/README.md) — kod ajanları için hızlı yön bulma
 - [`docs/product-journeys-v1.md`](docs/product-journeys-v1.md) — ürün kapsamı ve UAT matrisi
 - [`docs/DECISIONS.md`](docs/DECISIONS.md) — mimari karar kayıtları (ADR)

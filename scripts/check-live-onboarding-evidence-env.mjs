@@ -2,18 +2,27 @@ import { lstat, readFile } from "node:fs/promises";
 import { dirname, parse, relative, resolve } from "node:path";
 
 const enabled = process.env.NEXT_E2E_LIVE_ONBOARDING;
+const baseUrl = process.env.NEXT_E2E_BASE_URL;
+const skipWebServer = process.env.NEXT_E2E_SKIP_WEB_SERVER;
 const evidencePath = process.env.LIVE_ONBOARDING_EVIDENCE_PATH;
 const emailEvidenceEndpoint = process.env.LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT;
 const emailEvidenceBearerToken = process.env.LIVE_ONBOARDING_EMAIL_EVIDENCE_BEARER_TOKEN;
 const allowExampleEvidence = process.env.LIVE_ONBOARDING_ALLOW_EXAMPLE_EVIDENCE === "1";
 const liveEvidenceMaxAgeMs = 24 * 60 * 60 * 1000;
 const allowedEmailEvidenceEndpoint = "https://notify.staging.o-okul.com/messages/latest";
+const allowedBaseHostnames = new Set(["o-okul.com", "staging.o-okul.com"]);
 const repositoryRoot = resolve(process.cwd());
 
 const failures = [];
 
 if (enabled !== "1") {
   failures.push("NEXT_E2E_LIVE_ONBOARDING=1 olmalı.");
+}
+
+validateBaseUrl(baseUrl, failures);
+
+if (skipWebServer !== "1") {
+  failures.push("NEXT_E2E_SKIP_WEB_SERVER=1 olmalı.");
 }
 
 if (!evidencePath) {
@@ -125,6 +134,44 @@ function isAllowedEmailEvidenceEndpoint(value) {
     return new URL(value).toString() === allowedEmailEvidenceEndpoint;
   } catch {
     return false;
+  }
+}
+
+function validateBaseUrl(value, collectedFailures) {
+  if (!value) {
+    collectedFailures.push("NEXT_E2E_BASE_URL gerçek https staging/prod kök URL olmalı.");
+    return;
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    collectedFailures.push("NEXT_E2E_BASE_URL gerçek https staging/prod kök URL olmalı.");
+    return;
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.port ||
+    parsed.username ||
+    parsed.password ||
+    parsed.pathname !== "/" ||
+    parsed.search ||
+    parsed.hash ||
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "0.0.0.0" ||
+    hostname === "::1" ||
+    hostname.endsWith(".test") ||
+    hostname.includes("example") ||
+    hostname.includes("redacted") ||
+    hostname.includes("placeholder") ||
+    hostname.includes("__set") ||
+    !allowedBaseHostnames.has(hostname)
+  ) {
+    collectedFailures.push("NEXT_E2E_BASE_URL gerçek https staging/prod kök URL olmalı.");
   }
 }
 

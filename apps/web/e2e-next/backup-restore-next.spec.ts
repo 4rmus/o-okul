@@ -187,7 +187,7 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
   });
 
   await loginAsTenantAdmin(page);
-  const managementGroup = page.getByRole("button", { name: "Yönetim", exact: true });
+  const managementGroup = page.getByRole("button", { name: "Ayarlar", exact: true });
   if ((await managementGroup.getAttribute("aria-expanded")) !== "true") {
     await managementGroup.click();
   }

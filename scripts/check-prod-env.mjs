@@ -228,8 +228,11 @@ function checkProductionEnv(env) {
   requireSet(env, failures, "CF_DNS_API_TOKEN_FILE");
   requireNoPlaceholderValue(env, failures, "CF_DNS_API_TOKEN_FILE");
   requireSet(env, failures, "LEGACY_TENANT_LOGIN_CUTOFF_AT");
-  if (!Number.isFinite(Date.parse(env.LEGACY_TENANT_LOGIN_CUTOFF_AT ?? ""))) {
+  const legacyTenantLoginCutoff = Date.parse(env.LEGACY_TENANT_LOGIN_CUTOFF_AT ?? "");
+  if (!Number.isFinite(legacyTenantLoginCutoff)) {
     failures.push("LEGACY_TENANT_LOGIN_CUTOFF_AT geçerli UTC ISO-8601 tarih olmalı.");
+  } else if (legacyTenantLoginCutoff - Date.now() > 30 * 24 * 60 * 60 * 1000) {
+    failures.push("LEGACY_TENANT_LOGIN_CUTOFF_AT bugünden en fazla 30 gün sonrası olabilir.");
   }
   requireHttpsUrl(env, failures, "TRAEFIK_HTTPS_SMOKE_URL");
   requireMatchingUrlOrigin(env, failures, "TRAEFIK_HTTPS_SMOKE_URL", "WEB_URL");

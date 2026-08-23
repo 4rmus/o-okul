@@ -15,14 +15,12 @@ describe("Feature rollout API", () => {
   const auditRecord = vi.fn().mockResolvedValue({});
   const originalConfig = process.env.FEATURE_ROLLOUTS_JSON;
   const originalEnvironment = process.env.FEATURE_ROLLOUT_ENVIRONMENT;
-  const originalPublicFlag = process.env.NEXT_PUBLIC_SHELL_V2_ENABLED;
 
   beforeAll(async () => {
     const now = Date.now();
     process.env.FEATURE_ROLLOUT_ENVIRONMENT = "local";
-    process.env.NEXT_PUBLIC_SHELL_V2_ENABLED = "true";
     process.env.FEATURE_ROLLOUTS_JSON = JSON.stringify({
-      "web.shell-v2": [{
+      "web.exam-workspace-v2": [{
         environment: "local",
         tenantId: "tenant-a",
         startsAt: new Date(now - 60_000).toISOString(),
@@ -48,8 +46,6 @@ describe("Feature rollout API", () => {
     else process.env.FEATURE_ROLLOUTS_JSON = originalConfig;
     if (originalEnvironment === undefined) delete process.env.FEATURE_ROLLOUT_ENVIRONMENT;
     else process.env.FEATURE_ROLLOUT_ENVIRONMENT = originalEnvironment;
-    if (originalPublicFlag === undefined) delete process.env.NEXT_PUBLIC_SHELL_V2_ENABLED;
-    else process.env.NEXT_PUBLIC_SHELL_V2_ENABLED = originalPublicFlag;
   });
 
   it("yalnız çözülen keyleri no-store response ile döndürür", async () => {
@@ -59,7 +55,7 @@ describe("Feature rollout API", () => {
       .expect(200);
 
     expect(response.headers["cache-control"]).toBe("private, no-store");
-    expect(response.body).toEqual({ enabledFeatureKeys: ["web.shell-v2"] });
+    expect(response.body).toEqual({ enabledFeatureKeys: ["web.exam-workspace-v2"] });
     const serialized = JSON.stringify(response.body);
     expect(serialized).not.toContain("tenant-a");
     expect(serialized).not.toContain("DEC-20260809-01");
@@ -76,7 +72,7 @@ describe("Feature rollout API", () => {
       .set("Authorization", `Bearer ${tenantToken}`)
       .set("x-feature-rollout-environment", "production")
       .expect(200);
-    expect(response.body).toEqual({ enabledFeatureKeys: ["web.shell-v2"] });
+    expect(response.body).toEqual({ enabledFeatureKeys: ["web.exam-workspace-v2"] });
   });
 
   it("SYSTEM_ADMIN ve bypass header ile tenant flagi çözülemez", async () => {
@@ -99,7 +95,7 @@ describe("Feature rollout API", () => {
       .get("/me/feature-rollouts")
       .set("Authorization", `Bearer ${tenantToken}`)
       .expect(500);
-    expect(JSON.stringify(response.body)).not.toContain("web.shell-v2");
+    expect(JSON.stringify(response.body)).not.toContain("web.exam-workspace-v2");
   });
 
   async function login(email: string): Promise<string> {

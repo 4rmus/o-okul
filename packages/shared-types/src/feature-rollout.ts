@@ -1,6 +1,4 @@
 export const featureRolloutKeys = [
-  "web.ia-v2",
-  "web.shell-v2",
   "web.exam-workspace-v2",
   "web.student-registry-v2",
   "web.setup-v2",

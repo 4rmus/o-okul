@@ -18,6 +18,7 @@ export const reservedTenantSlugs = new Set([
 ]);
 
 export const tenantSlugPattern = /^(?!xn--)[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/;
+const legacyLoginWindowMs = 30 * 24 * 60 * 60 * 1000;
 
 export type TenantHostContext =
   | { kind: "legacy" }
@@ -96,9 +97,9 @@ export function assertSessionTenantMatchesHost(
 
 export function legacyTenantLoginAllowed(env: NodeJS.ProcessEnv = process.env, now = Date.now()): boolean {
   const rawCutoff = env.LEGACY_TENANT_LOGIN_CUTOFF_AT?.trim();
-  if (!rawCutoff) return true;
+  if (!rawCutoff) return false;
   const cutoff = Date.parse(rawCutoff);
-  return Number.isFinite(cutoff) && now < cutoff;
+  return Number.isFinite(cutoff) && now < cutoff && cutoff - now <= legacyLoginWindowMs;
 }
 
 export function assertValidTenantSlug(slug: string): string {

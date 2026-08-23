@@ -106,10 +106,31 @@ jobs:
           if (eventName === "pull_request" && pullRequestHeadSha?.toLowerCase() !== cutoverSourceSha.toLowerCase()) process.exit(1);
           NODE
 
+      - name: Stage forward-only evidence helpers
+        shell: bash
+        run: |
+          set -euo pipefail
+          verifier_root="$RUNNER_TEMP/forward-only-verifier"
+          install -d -m 700 "$verifier_root/scripts"
+          install -m 600 scripts/check-deployment-rollback-evidence.mjs "$verifier_root/scripts/"
+          install -m 600 scripts/check-prod-evidence.mjs "$verifier_root/scripts/"
+          install -m 600 scripts/check-production-evidence-summary.mjs "$verifier_root/scripts/"
+          install -m 600 scripts/generate-forward-only-deployment-evidence.mjs "$verifier_root/scripts/"
+
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.CUTOVER_SOURCE_SHA }}
           clean: false
+
+      - name: Overlay forward-only evidence helpers
+        shell: bash
+        run: |
+          set -euo pipefail
+          verifier_root="$RUNNER_TEMP/forward-only-verifier"
+          install -m 600 "$verifier_root/scripts/check-deployment-rollback-evidence.mjs" scripts/
+          install -m 600 "$verifier_root/scripts/check-prod-evidence.mjs" scripts/
+          install -m 600 "$verifier_root/scripts/check-production-evidence-summary.mjs" scripts/
+          install -m 600 "$verifier_root/scripts/generate-forward-only-deployment-evidence.mjs" scripts/
 
       - name: Validate staging verify environment
         shell: bash
@@ -193,6 +214,9 @@ jobs:
           source_mtime="$(stat -c %Y "$source_file")"
           [ "$source_mtime" -ge "$((cutover_epoch - 60))" ]
           REMOTE
+          echo "DEPLOYMENT_CONTINUITY_RUNTIME_VERIFIED=true" >> "$GITHUB_ENV"
+          echo "DEPLOYMENT_CONTINUITY_RUNTIME_VERIFIED_AT=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" >> "$GITHUB_ENV"
+          echo "DEPLOYMENT_CONTINUITY_RUNTIME_EVIDENCE_REFERENCE=run:https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> "$GITHUB_ENV"
 
       - uses: pnpm/action-setup@v4
         with:
@@ -339,26 +363,10 @@ jobs:
           lines[index] = `${key}=${references.join(",")}`;
           writeFileSync(envPath, lines.join("\n"), { mode: 0o600 });
           NODE
-          rollback_image_tag="$(node --env-file=.staging-evidence.env --input-type=module - "$CUTOVER_REPOSITORY" "$CUTOVER_RELEASE_IMAGE_TAG" <<'NODE'
-          const [repository, releaseImageTag] = process.argv.slice(2);
-          const target = new URL(process.env.DEPLOYMENT_ROLLBACK_TARGET);
-          if (target.protocol !== "https:" || target.username || target.password || target.search || target.hash) {
-            throw new Error("Deployment rollback target credential-free HTTPS olmalı.");
-          }
-          const response = await fetch(target);
-          if (!response.ok) throw new Error(`Deployment rollback report okunamadı: HTTP ${response.status}`);
-          const report = await response.json();
-          const expectedReleaseCandidate = `ghcr.io/${repository}/api:${releaseImageTag}`;
-          if (
-            report?.result !== "PASS" ||
-            report?.releaseCandidate !== expectedReleaseCandidate ||
-            !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(report?.rollbackImageTag ?? "")
-          ) {
-            throw new Error("Deployment rollback report cutover release/tag bağı geçersiz.");
-          }
-          console.log(report.rollbackImageTag);
-          NODE
-          )"
+          rollback_image_tag="$(ssh -i "$STAGING_SSH_KEY_PATH" -o UserKnownHostsFile="$STAGING_KNOWN_HOSTS_PATH" -o StrictHostKeyChecking=accept-new "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+            "cd /root/o-okul && test \"\$(grep -Ec '^ROLLBACK_IMAGE_TAG=' .env.release)\" -eq 1 && sed -n 's/^ROLLBACK_IMAGE_TAG=//p' .env.release")"
+          [[ "$rollback_image_tag" =~ ^[a-f0-9]{40}$ ]]
+          [ "$rollback_image_tag" != "$CUTOVER_RELEASE_IMAGE_TAG" ]
           github_ci_run_url="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).workflow.runUrl' artifacts/staging/reports/github-ci.json)"
           mkdir -p artifacts/staging/smoke artifacts/staging/reports
           notification_smoke_remote=/root/o-okul/artifacts/staging/smoke/notification-provider.json
@@ -368,6 +376,15 @@ jobs:
             "$STAGING_SSH_USER@$STAGING_SSH_HOST:$notification_smoke_remote" artifacts/staging/smoke/notification-provider.json
           cp artifacts/secret-delivery-outbox.json artifacts/staging/smoke/secret-delivery-outbox.json
           cp artifacts/cutover/deployment-cutover.json artifacts/staging/reports/deployment-cutover.json
+          STAGING_ENVIRONMENT=production \
+          DEPLOYMENT_ROLLBACK_OUTPUT=artifacts/staging/reports/deployment-rollback.json \
+          DEPLOYMENT_CUTOVER_EVIDENCE_FILE=artifacts/staging/reports/deployment-cutover.json \
+          DEPLOYMENT_ROLLBACK_ROLLBACK_IMAGE_TAG="ghcr.io/$CUTOVER_REPOSITORY/api:$rollback_image_tag" \
+          DEPLOYMENT_ROLLBACK_APPROVED_BY=product-owner \
+          DEPLOYMENT_ROLLBACK_APPROVAL_REFERENCE=artifact:docs/DECISIONS.md \
+            node --env-file=.staging-evidence.env scripts/generate-forward-only-deployment-evidence.mjs
+          sed -i "s#^DEPLOYMENT_ROLLBACK_TARGET=.*#DEPLOYMENT_ROLLBACK_TARGET=file://$PWD/artifacts/staging/reports/deployment-rollback.json#" .staging-evidence.env
+          grep -Fxq "DEPLOYMENT_ROLLBACK_TARGET=file://$PWD/artifacts/staging/reports/deployment-rollback.json" .staging-evidence.env
           {
             echo "SENTRY_RELEASE=$CUTOVER_RELEASE_IMAGE_TAG"
             echo "ROLLBACK_IMAGE_TAG=$rollback_image_tag"

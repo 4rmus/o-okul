@@ -52,7 +52,7 @@
       "status": "PASS"
     },
     {
-      "label": "Deployment rollback evidence",
+      "label": "Deployment continuity evidence",
       "script": "scripts/check-deployment-rollback-evidence.mjs",
       "status": "PASS"
     },
@@ -344,88 +344,73 @@
       }
     },
     "deploymentRollback": {
-      "schemaVersion": 2,
+      "schemaVersion": 3,
       "environment": "production",
       "checkedAt": "2026-05-30T10:30:00.000Z",
       "releaseCandidate": "ghcr.io/example/o-okul/api:1111111111111111111111111111111111111111",
       "rollbackImageTag": "ghcr.io/example/o-okul/api:2222222222222222222222222222222222222222",
       "drill": {
-        "mode": "failure-injection",
-        "sourceImageTag": "ghcr.io/example/o-okul/api:3333333333333333333333333333333333333333",
+        "mode": "forward-only-readiness",
+        "sourceImageTag": "ghcr.io/example/o-okul/api:1111111111111111111111111111111111111111",
         "rollbackImageTag": "ghcr.io/example/o-okul/api:2222222222222222222222222222222222222222",
-        "restoredImageTag": "ghcr.io/example/o-okul/api:2222222222222222222222222222222222222222",
+        "restoredImageTag": "ghcr.io/example/o-okul/api:1111111111111111111111111111111111111111",
         "startedAt": "2026-05-30T10:15:00.000Z",
         "completedAt": "2026-05-30T10:25:00.000Z",
-        "failureInjected": true,
-        "failureMode": "broken image deploy rejected by healthcheck",
+        "failureInjected": false,
+        "failureMode": null,
         "evidence": {
-          "commandLogReference": "artifact:logs/deployment-rollback.log",
+          "commandLogReference": "run:https://github.com/example/o-okul/actions/runs/1234567891",
           "source": {
-            "sha": "3333333333333333333333333333333333333333",
-            "runUrl": "https://github.com/example/o-okul/actions/runs/111",
-            "uatArtifactUrl": "https://github.com/example/o-okul/actions/runs/111/artifacts/1111",
-            "artifactName": "staging-activation-evidence-3333333333333333333333333333333333333333",
-            "artifactDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+            "sha": "1111111111111111111111111111111111111111",
+            "runUrl": "https://github.com/example/o-okul/actions/runs/1234567890",
+            "uatArtifactUrl": null,
+            "artifactName": "deployment-cutover.json",
+            "artifactDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
           },
-          "rollback": {
-            "sha": "2222222222222222222222222222222222222222",
-            "runUrl": "https://github.com/example/o-okul/actions/runs/222",
-            "uatArtifactUrl": "https://github.com/example/o-okul/actions/runs/222/artifacts/2222",
-            "artifactName": "staging-activation-evidence-2222222222222222222222222222222222222222",
-            "artifactDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
-          },
-          "restored": {
-            "sha": "2222222222222222222222222222222222222222",
-            "runUrl": "https://github.com/example/o-okul/actions/runs/222",
-            "uatArtifactUrl": "https://github.com/example/o-okul/actions/runs/222/artifacts/2222",
-            "artifactName": "staging-activation-evidence-2222222222222222222222222222222222222222",
-            "artifactDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
-          }
+          "rollback": null,
+          "restored": null
         }
       },
-      "migrationRollbackSafe": true,
+      "migrationRollbackSafe": false,
       "commandsPassed": [
-        "docker compose pull web api worker queue-board",
-        "docker compose up -d --remove-orphans",
-        "pnpm compose:health:smoke",
-        "pnpm prod:evidence:check"
+        "pnpm deployment-cutover:evidence-check",
+        "pnpm restore:drill:check",
+        "docker inspect four-service image parity",
+        "curl public health/readiness HTTP 200"
       ],
       "servicesVerified": [
         {
           "service": "web",
           "status": "healthy",
-          "imageTag": "ghcr.io/example/o-okul/web:2222222222222222222222222222222222222222",
-          "evidenceReference": "https://staging.example.test/"
+          "imageTag": "ghcr.io/example/o-okul/web:1111111111111111111111111111111111111111",
+          "evidenceReference": "run:https://github.com/example/o-okul/actions/runs/1234567891"
         },
         {
           "service": "api",
           "status": "healthy",
-          "imageTag": "ghcr.io/example/o-okul/api:2222222222222222222222222222222222222222",
-          "evidenceReference": "https://staging.example.test/api/v1/health"
+          "imageTag": "ghcr.io/example/o-okul/api:1111111111111111111111111111111111111111",
+          "evidenceReference": "run:https://github.com/example/o-okul/actions/runs/1234567891"
         },
         {
           "service": "worker",
           "status": "running",
-          "imageTag": "ghcr.io/example/o-okul/worker:2222222222222222222222222222222222222222",
-          "evidenceReference": "docker compose ps worker"
+          "imageTag": "ghcr.io/example/o-okul/worker:1111111111111111111111111111111111111111",
+          "evidenceReference": "run:https://github.com/example/o-okul/actions/runs/1234567891"
         },
         {
           "service": "queue-board",
           "status": "healthy",
-          "imageTag": "ghcr.io/example/o-okul/queue-board:2222222222222222222222222222222222222222",
-          "evidenceReference": "docker compose ps queue-board"
+          "imageTag": "ghcr.io/example/o-okul/queue-board:1111111111111111111111111111111111111111",
+          "evidenceReference": "run:https://github.com/example/o-okul/actions/runs/1234567891"
         }
       ],
       "approval": {
         "approvedBy": "release-owner",
-        "approvalReference": "artifact:approvals/deployment-rollback.md"
+        "approvalReference": "artifact:docs/DECISIONS.md"
       },
       "evidenceReferences": [
-        "artifact:logs/deployment-rollback.log",
-        "https://github.com/example/o-okul/actions/runs/111",
-        "https://github.com/example/o-okul/actions/runs/111/artifacts/1111",
-        "https://github.com/example/o-okul/actions/runs/222",
-        "https://github.com/example/o-okul/actions/runs/222/artifacts/2222"
+        "run:https://github.com/example/o-okul/actions/runs/1234567891",
+        "https://github.com/example/o-okul/actions/runs/1234567890"
       ]
     },
     "githubCi": {

@@ -1,6 +1,7 @@
 import { AxeBuilder } from "@axe-core/playwright";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { expectNoHorizontalOverflow, inspectHorizontalOverflow } from "./helpers/horizontal-overflow.js";
+import { tenantLoginUrl } from "./helpers/tenant-login.js";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 
@@ -53,7 +54,7 @@ test.describe("Next erişilebilirlik smoke", () => {
     await expect(loginForm.getByRole("button", { name: "Giriş yap" })).toBeVisible();
     await expectNoHighImpactA11yViolations(page, "login");
 
-    await page.goto("/k/dna-egitim/giris");
+    await page.goto(tenantLoginUrl(appOrigin, "dna-egitim"));
     const tenantLoginForm = page.getByRole("form", { name: "Giriş formu" });
     await expect(tenantLoginForm.getByLabel("Kurum Kodu")).toHaveCount(0);
     await expect(tenantLoginForm.getByLabel("Kullanıcı Adı")).toBeVisible();

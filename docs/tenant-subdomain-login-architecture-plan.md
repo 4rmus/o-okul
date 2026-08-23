@@ -36,6 +36,16 @@ Eski `/k/{slug}/giris` ve `/sistem/giris` rotaları canlı aktivasyondan itibare
 `307` yönlendirir; kesim sonrasında `410 LEGACY_TENANT_LOGIN_RETIRED` döner. Davet, aktivasyon ve
 reset linkleri doğrulanmış tenant slugı ile merkezi origin builder üzerinden üretilir.
 
+## Güncel uygulama durumu — 23 Ağustos 2026
+
+Parola sıfırlama, auth state, onboarding, ana giriş, erişilebilirlik ve canlı UI testlerindeki aktif
+`/k/{slug}/giris` tüketimleri kanonik tenant-host `/giris` adresine taşındı. Eski route henüz
+kaldırılmadı; yalnız süreli geçiş uyumluluğu, route envanteri ve doğrudan uyumluluk testi için
+korunuyor. Kesim öncesi `307` ve kesim sonrası `410` davranışı yerel sözleşme testinde `PASS` oldu.
+Cutoff gelecekteyse bugünden en fazla 30 gün uzakta olabilir; daha uzak tarih runtime ve production
+env kontrolünde fail-closed reddedilir.
+CI, gerçek wildcard DNS/TLS, staging ve production kanıtları `EXTERNAL_NOT_RUN` durumundadır.
+
 ## Edge ve sertifika
 
 Production sertifikası `o-okul.com` ve `*.o-okul.com`; staging sertifikası `staging.o-okul.com` ve
@@ -51,8 +61,8 @@ B hostunda reddetmeli, sistem/tenant hostlarını ayırmalı ve cookie'de `Domai
 
 Yerel typecheck/test/OpenAPI, web a11y/UX, RLS, token-storage, MFA, rate-limit, security ve ops
 kapıları gerçek wildcard DNS/TLS kanıtı değildir. Staging/canlı kapanış exact SHA, çalışan image,
-gerçek sertifika SAN/yenileme, iki tenant hostu, cross-host `403`, legacy `307/410` ve rollback
-kanıtını ayrı toplar.
+gerçek sertifika SAN/yenileme, iki tenant hostu, cross-host `403`, legacy `307/410`, restore ve
+ileri-düzeltme kanıtını ayrı toplar.
 
 Kaynaklar: [Traefik ACME DNS challenge](https://doc.traefik.io/traefik/reference/install-configuration/tls/certificate-resolvers/acme/),
 [Cloudflare API token kapsamı](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/),

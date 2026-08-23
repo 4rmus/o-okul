@@ -22,6 +22,7 @@ export default defineConfig({
           command: webServerCommand,
           env: {
             ...process.env,
+            DOMAIN: process.env.DOMAIN ?? "localhost",
             NEXT_E2E_PORT: port,
           },
           reuseExistingServer: measurementMode ? false : !process.env.CI && !process.env.NEXT_E2E_PORT,

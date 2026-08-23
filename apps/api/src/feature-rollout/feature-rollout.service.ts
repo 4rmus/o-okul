@@ -170,8 +170,6 @@ function ownerFor(key: FeatureRolloutKey): string {
 
 function removalIssueFor(key: FeatureRolloutKey): string {
   const issueByKey: Record<FeatureRolloutKey, string> = {
-    "web.ia-v2": "UI-02",
-    "web.shell-v2": "UI-03",
     "web.exam-workspace-v2": "EX-02",
     "web.student-registry-v2": "ST-01",
     "web.setup-v2": "SET-02",

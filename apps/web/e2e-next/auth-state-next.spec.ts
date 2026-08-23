@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { expectNoHorizontalOverflow } from "./helpers/horizontal-overflow.js";
+import { tenantLoginUrl } from "./helpers/tenant-login.js";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const corsHeaders = {
@@ -87,7 +88,7 @@ test.describe("auth state görsel sözleşmesi", () => {
   test("auth state kurum kilidinde MFA istemeden kurum alanına yönlendirir", async ({ page }) => {
     let loginBody: Record<string, unknown> | undefined;
     await prepareAuthPage(page, {
-      routePath: "/k/dna-egitim/giris",
+      routePath: tenantLoginUrl(appOrigin, "dna-egitim"),
       onLogin(body) {
         loginBody = body;
         return createAuthResponse("TENANT_ADMIN");
@@ -98,7 +99,7 @@ test.describe("auth state görsel sözleşmesi", () => {
 
     await expect(page).toHaveURL(/\/kurum$/, { timeout: 15_000 });
     await expect(page.getByLabel("Doğrulama kodu")).toHaveCount(0);
-    expect(loginBody).toEqual({ loginName: "admin-a@example.test", password: "password", tenantSlug: "dna-egitim" });
+    expect(loginBody).toEqual({ loginName: "admin-a@example.test", password: "password" });
   });
 
   test("auth state yanlış MFA kodunda güvenli hata gösterir ve kimlik alanlarını kilitli tutar", async ({ page }) => {
@@ -173,7 +174,7 @@ async function prepareAuthPage(
   page: Page,
   options: {
     onLogin(body: Record<string, unknown>): Record<string, unknown>;
-    routePath?: "/login" | "/k/dna-egitim/giris" | "/sistem/giris";
+    routePath?: string;
   },
 ) {
   await page.route("**/api/v1/auth/login", async (route) => {

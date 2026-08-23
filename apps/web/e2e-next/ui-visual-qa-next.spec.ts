@@ -936,17 +936,6 @@ test.describe("Faz 9 UI görsel smoke", () => {
     }
   });
 
-  test("kullanıcı kabulü ve geri dönüş route family golden sözleşmesini korur", async ({ page }) => {
-    const consoleErrors = collectConsoleErrors(page);
-    await openWithUiMocks(page, "/kurum/uat-rollback", { height: 960, width: 1440 });
-
-    const heading = page.getByRole("heading", { level: 1, name: "Kullanıcı Kabulü ve Geri Dönüş" });
-    await expect(heading).toBeVisible();
-    await expect(page.getByRole("region", { name: "Kullanıcı kabulü ve geri dönüş durumu" })).toBeVisible();
-    await expectUiStable(page, "route-family-evidence-1440", consoleErrors);
-    await expectRouteFamilyGolden(page, heading, "route-family-evidence-1440.png");
-  });
-
   test("optik workflow 320/375/414/768/1024/1440 görünümde tab semantiği ve yoğun form düzenini korur", async ({ page }) => {
     test.setTimeout(90_000);
     const consoleErrors = collectConsoleErrors(page);

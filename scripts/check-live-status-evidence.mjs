@@ -131,8 +131,8 @@ const externalGates = [
     dateKey: "checkedAt",
   },
   {
-    label: "Deployment rollback tatbikatı",
-    command: "pnpm deployment:rollback:check",
+    label: "Deployment continuity kanıtı",
+    command: "pnpm deployment:continuity:check",
     source: "productionEvidenceSummary.reports.deploymentRollback",
     target: "summary",
     path: ["reports", "deploymentRollback"],

@@ -34,6 +34,8 @@
     "deployment:region:generate": "node scripts/generate-deployment-region-evidence.mjs",
     "deployment:rollback:check": "node scripts/check-deployment-rollback-evidence.mjs",
     "deployment:rollback:generate": "node scripts/generate-deployment-rollback-evidence.mjs",
+    "deployment:continuity:check": "node scripts/check-deployment-rollback-evidence.mjs",
+    "deployment:forward-only:generate": "node scripts/generate-forward-only-deployment-evidence.mjs",
     "dev": "turbo run dev --parallel",
     "docker:check": "node scripts/check-docker-config.mjs",
     "external-monitoring:check": "node scripts/check-external-monitoring-evidence.mjs",

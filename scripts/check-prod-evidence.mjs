@@ -58,7 +58,7 @@ const checks = [
   ["WAL archive target", "scripts/smoke-wal-archive-target.mjs"],
   ["Report generation smoke", "scripts/smoke-report-generation-live.mjs"],
   ["Secret delivery outbox evidence", "scripts/check-secret-delivery-outbox-evidence.mjs"],
-  ["Deployment rollback evidence", "scripts/check-deployment-rollback-evidence.mjs"],
+  ["Deployment continuity evidence", "scripts/check-deployment-rollback-evidence.mjs"],
   ["GitHub CI evidence", "scripts/check-github-ci-evidence.mjs"],
   ["Restore drill evidence", "scripts/check-restore-drill-evidence.mjs"],
   ["KVKK inventory evidence", "scripts/check-kvkk-inventory-evidence.mjs"],

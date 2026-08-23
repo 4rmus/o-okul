@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 3,
+  "result": "PASS",
+  "environment": "staging",
+  "checkedAt": "2026-08-23T12:10:00.000Z",
+  "releaseCandidate": "ghcr.io/example/o-okul/api:1111111111111111111111111111111111111111",
+  "rollbackImageTag": "ghcr.io/example/o-okul/api:2222222222222222222222222222222222222222",
+  "drill": {
+    "mode": "forward-only-readiness",
+    "sourceImageTag": "ghcr.io/example/o-okul/api:1111111111111111111111111111111111111111",
+    "rollbackImageTag": "ghcr.io/example/o-okul/api:2222222222222222222222222222222222222222",
+    "restoredImageTag": "ghcr.io/example/o-okul/api:1111111111111111111111111111111111111111",
+    "startedAt": "2026-08-23T12:00:00.000Z",
+    "completedAt": "2026-08-23T12:10:00.000Z",
+    "failureInjected": false,
+    "failureMode": null,
+    "evidence": {
+      "commandLogReference": "run:https://github.com/example/o-okul/actions/runs/1234567891",
+      "source": {
+        "sha": "1111111111111111111111111111111111111111",
+        "runUrl": "https://github.com/example/o-okul/actions/runs/1234567890",
+        "uatArtifactUrl": null,
+        "artifactName": "deployment-cutover.json",
+        "artifactDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "rollback": null,
+      "restored": null
+    }
+  },
+  "migrationRollbackSafe": false,
+  "commandsPassed": [
+    "pnpm deployment-cutover:evidence-check",
+    "pnpm restore:drill:check",
+    "docker inspect four-service image parity",
+    "curl public health/readiness HTTP 200"
+  ],
+  "servicesVerified": [
+    {
+      "service": "web",
+      "status": "healthy",
+      "imageTag": "ghcr.io/example/o-okul/web:1111111111111111111111111111111111111111",
+      "evidenceReference": "run:https://github.com/example/o-okul/actions/runs/1234567891"
+    },
+    {
+      "service": "api",
+      "status": "healthy",
+      "imageTag": "ghcr.io/example/o-okul/api:1111111111111111111111111111111111111111",
+      "evidenceReference": "run:https://github.com/example/o-okul/actions/runs/1234567891"
+    },
+    {
+      "service": "worker",
+      "status": "running",
+      "imageTag": "ghcr.io/example/o-okul/worker:1111111111111111111111111111111111111111",
+      "evidenceReference": "run:https://github.com/example/o-okul/actions/runs/1234567891"
+    },
+    {
+      "service": "queue-board",
+      "status": "healthy",
+      "imageTag": "ghcr.io/example/o-okul/queue-board:1111111111111111111111111111111111111111",
+      "evidenceReference": "run:https://github.com/example/o-okul/actions/runs/1234567891"
+    }
+  ],
+  "approval": {
+    "approvedBy": "product-owner",
+    "approvalReference": "artifact:docs/DECISIONS.md"
+  },
+  "evidenceReferences": [
+    "run:https://github.com/example/o-okul/actions/runs/1234567891",
+    "https://github.com/example/o-okul/actions/runs/1234567890"
+  ],
+  "gaps": []
+}

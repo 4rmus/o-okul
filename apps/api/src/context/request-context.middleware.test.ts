@@ -61,7 +61,7 @@ describe("RequestContextMiddleware", () => {
 
   it("token tenantı ile kurum hostu ayrışırsa reddeder", async () => {
     vi.stubEnv("DOMAIN", "o-okul.com");
-    vi.stubEnv("LEGACY_TENANT_LOGIN_CUTOFF_AT", "2099-01-01T00:00:00.000Z");
+    vi.stubEnv("LEGACY_TENANT_LOGIN_CUTOFF_AT", new Date(Date.now() + 29 * 24 * 60 * 60 * 1000).toISOString());
     const middleware = createMiddleware({ roles: ["TENANT_ADMIN"], tenantId: "tenant-a", tenantSlug: "dna-egitim" });
 
     await expect(middleware.use(

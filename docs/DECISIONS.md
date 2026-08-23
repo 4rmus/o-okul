@@ -274,9 +274,9 @@ Kanıt: `apps/api/src/school/guardian-student-store.ts`, `apps/api/src/school/sc
 `packages/db/prisma/migrations/20260627152000_add_global_search_trigram_indexes/migration.sql`,
 `packages/db/prisma/migrations/20260627154000_add_alan_grade_level_courses/migration.sql`.
 Etkilenen ADR: Yok
-Açık soru: Per-tenant giriş yolu (`/k/{slug}/giris` veya kurum kodu alanı) ve akademik taksonomi
-ortak ders kapsamı sonraki migration dalında netleştirilecek.
-Son kontrol: 2026-06-27
+Açık soru: Per-tenant giriş yolu DEC-20260804-01 ile `{tenantSlug}.o-okul.com/giris` olarak
+kesinleştirildi. Akademik taksonomi ortak ders kapsamı sonraki migration dalında netleştirilecek.
+Son kontrol: 2026-08-23
 
 ### DEC-20260713-01 — Günlük sınıf yoklaması
 
@@ -402,7 +402,7 @@ Son kontrol: 2026-08-01
 
 ### DEC-20260804-01 — Kurum subdomaini tenant giriş bağlamıdır
 
-Durum: Onaylı; staging wildcard DNS/TLS ve runtime cutover kanıtı bekliyor
+Durum: Onaylı; iç tüketiciler tenant-host girişine yerelde taşındı, staging wildcard DNS/TLS ve runtime cutover kanıtı bekliyor
 Karar: Her kurum tek paylaşımlı uygulama ve veritabanı üzerinde `{tenantSlug}.o-okul.com`
 adresinde çalışır. Kurum hostu login, parola sıfırlama, aktivasyon ve oturum isteklerinde tenant
 bağlamını belirler; token/session tenantı host tenantıyla eşleşmek zorundadır. Öğrenci numarası,
@@ -417,7 +417,7 @@ Kanıt: `docs/tenant-subdomain-login-architecture-plan.md`, `apps/api/src/http/t
 Etkilenen ADR: ADR-0001, ADR-0002
 Açık soru: Yok. Yerel/static PASS gerçek DNS, wildcard sertifika, staging deploy veya canlı cutover
 kanıtı değildir.
-Son kontrol: 2026-08-04
+Son kontrol: 2026-08-23
 
 ### DEC-20260808-01 — WhatsApp opsiyonel ve varsayılan kapalı bildirim kanalıdır
 
@@ -499,6 +499,50 @@ Etkilenen ADR: ADR-0003, ADR-0004, ADR-0005, ADR-0006, ADR-0007, ADR-0008, ADR-0
 Açık soru: Gerçek kullanıcı gözlemi, staging/prod rollout aktivasyonu ve analytics transportu dış
 ortam kanıtı olarak ayrıca yürütülecektir.
 Son kontrol: 2026-08-09
+
+### DEC-20260823-01 — Yeni ürün yapısı kanoniktir; legacy ürüne dönüş yapılmaz
+
+Durum: Onaylı; forward-only sözleşme, ilk üç legacy UI temizliği ve sentetik veri temizliği doğrulandı; staging ve kalan temizlik bekliyor
+Karar: Yeni ekranlar ve yeni veri modeli kanonik üründür. Ürün eski ekranlara veya eski veri modeline
+geri döndürülmez; sorunlar yeni yapı üzerinde ileriye doğru düzeltilir. Tarihsel fallback imajına
+dönüş provası Gate E veya pilot için ayrı kabul kapısı değildir. Doğrulanmış yedek ve geri yükleme
+kabiliyeti veri kaybı ve afet güvenliği için korunur; bu kabiliyet eski ürün sürümüne dönüş anlamına
+gelmez.
+
+Legacy ekran, route, adapter, feature flag ve veri yapıları bağımlılık sıralı küçük dilimlerle
+kaldırılabilir. Gate G temizliğe başlama izni değil, temizliğin tamamlandığını doğrulayan kapanıştır.
+Veri yapısının kaldırılması mevcut kayıtların silinmesi olarak yorumlanmaz: kayıtlar yeni yapıya
+taşınmadan, tenant bazlı sayımlar eşleşmeden ve doğrulanmış yedek bulunmadan fiziksel tablo veya kolon
+kaldırılmaz. Bu kontroller yeni bir ürün gate'i değil, her geri dönüşsüz veri diliminin kabul
+kriteridir.
+Kaynak: Ürün sahibinin 23 Ağustos 2026 tarihli yönlendirmesi.
+Kanıt: `docs/almanac-2-architecture-plan.md`, `docs/almanac-2-gate-d-evidence.md`.
+Etkilenen ADR: ADR-0006, ADR-0008, ADR-0010
+Açık soru: `/k/{tenantSlug}/giris` yalnız süreli geçiş uyumluluğu için kalır; gerçek cutover ve kesim
+tarihi kanıtından sonra kaldırılır. Guardian/veri yapıları için taşıma ve kaldırma sırası ayrıca
+kesinleştirilecektir.
+Provider, gerçek kullanıcı pilotu, veri güvenliği ve canlı ortam kanıtları bu kararla PASS sayılmaz.
+Son kontrol: 2026-08-23
+
+### DEC-20260823-02 — Doğrulanmış 11 sentetik tenant yedeksiz temizlendi
+
+Durum: Onaylı ve uygulandı; yalnız exact sentetik küme kapsamındadır
+Karar: Daha önce Gate D onboarding denemelerinde oluşturulan ve kapatılan 11 sentetik tenant;
+ürün/veri sahibinin açık onayıyla yedek alınmadan canlı veritabanından fiziksel olarak silinmiştir.
+Bu tek seferlik istisna yalnız exact aday sayısı ve küme özeti eşleşen, hesabı `DISABLED`, aktif
+kullanıcı/oturumu olmayan ve öğrenci, Guardian, StudentContact veya consent kaydı taşımayan kümeye
+uygulanır. Sistem tenantı, kalan 6 tenant ve bağımsız denetim kayıtları korunur. Gerçek müşteri veya
+aktif Guardian verisi için genel taşıma/sayım/retention koşulları değişmez.
+Kaynak: Ürün/veri sahibinin 23 Ağustos 2026 tarihli yedeksiz silme onayı.
+Kanıt: `docs/almanac-2-synthetic-tenant-cleanup-evidence.md`; canlı AuditLog
+`tenant.synthetic_purged`, aday küme özeti `93f97738c14146381082aff2188a0ee4`; production audit-null
+tenant artifact SHA-256 `c7c34f1abfe936cdbd42b3b43b26486accabdcacd646b422f1b3cc56a369625d`
+ve `unknown=0` checker `PASS`.
+Etkilenen ADR: ADR-0001, ADR-0008, ADR-0010
+Açık soru: Korunan 67 eski AuditLog satırı ile cleanup AuditLog kaydının nihai saklama/imha süresi
+privacy/go-live kararı olarak açıktır; bu karara kadar kayıtlar korunur. Bu karar PR #79 merge/deploy,
+Guardian retirement veya diğer tenantların silinmesi için yetki vermez.
+Son kontrol: 2026-08-23
 
 ## Faz Öncesi Onay Gerektirenler
 

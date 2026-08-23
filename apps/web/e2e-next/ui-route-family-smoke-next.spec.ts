@@ -99,7 +99,6 @@ const routeCases = [
   route("/kurum/siniflar", "Sınıflar", "assistantAdmin", { role: "region", name: "Sınıf yönetimi" }),
   route("/kurum/siniflar/[classId]", "8-A", "assistantAdmin", { role: "region", name: "Sınıf detayı" }),
   route("/kurum/sistem-sagligi", "Sistem Sağlığı", "tenantAdmin", { role: "region", name: "Sistem bağlantıları ve kullanım durumu" }),
-  route("/kurum/uat-rollback", "Kullanıcı Kabulü ve Geri Dönüş", "tenantAdmin", { role: "region", name: "Yayın öncesi kontroller" }),
   route("/kurum/veliler", "Veliler", "assistantAdmin", { role: "region", name: "Veli yönetimi" }),
   route("/kurum/veliler/[guardianId]", "Veli Test", "assistantAdmin", { role: "region", name: "Veli detayı" }),
   route("/kurum/yedek-restore", "Yedekleme ve Geri Yükleme", "tenantAdmin", { role: "region", name: "Yedekleme ve geri yükleme doğrulamaları" }),
@@ -152,7 +151,7 @@ test.describe("UI route family smoke", () => {
       const unknownApiRequests: string[] = [];
       await installRouteApiMocks(page, routeCase.persona, unknownApiRequests, {
         featureRolloutKeys: routeCase.feature === "exam-workspace"
-          ? ["web.shell-v2", "web.exam-workspace-v2"]
+          ? ["web.exam-workspace-v2"]
           : [],
       });
       await page.addInitScript(() => {
@@ -376,7 +375,7 @@ function assertRouteManifestParity(manifest: readonly RouteCase[]) {
   const fileSystemRoutes = collectPageRoutes(appDirectory).sort();
   const manifestRoutes = manifest.map((entry) => entry.routeTemplate).sort();
   const duplicates = manifestRoutes.filter((routeTemplate, index) => manifestRoutes.indexOf(routeTemplate) !== index);
-  if (manifest.length !== 88) throw new Error(`Route manifest must contain exactly 88 entries; found ${manifest.length}.`);
+  if (manifest.length !== 87) throw new Error(`Route manifest must contain exactly 87 entries; found ${manifest.length}.`);
   if (duplicates.length > 0) throw new Error(`Route manifest contains duplicates: ${[...new Set(duplicates)].join(", ")}`);
   if (JSON.stringify(manifestRoutes) !== JSON.stringify(fileSystemRoutes)) {
     throw new Error(`Route manifest does not match page.tsx inventory.\nmanifest=${manifestRoutes.join(",")}\nfilesystem=${fileSystemRoutes.join(",")}`);
@@ -405,7 +404,7 @@ async function installRouteApiMocks(
   persona: Persona,
   unknownApiRequests: string[],
   options: {
-    featureRolloutKeys?: Array<"web.shell-v2" | "web.exam-workspace-v2">;
+    featureRolloutKeys?: Array<"web.exam-workspace-v2">;
     portalAccess?: ReturnType<typeof createPortalAccessMock>;
   } = {},
 ) {

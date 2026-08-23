@@ -2,6 +2,10 @@
 
 Bu runbook production'a geçmeden önce yedek, restore ve PITR davranışını kanıtlamak için tutulur.
 
+`DEC-20260823-01` uyarınca ürün eski ekrana veya eski veri modeline döndürülmez. Yeni release'ler
+forward-only ilerler; arızalar yeni yapı üzerinde düzeltilir. Bu karar yedek, restore, WAL ve veri
+bütünlüğü kontrollerini kaldırmaz.
+
 ## Lokal Backup/Restore Smoke
 
 Amaç: canlı geliştirme DB'sinden dump alınabildiğini ve dump'ın temiz bir geçici veritabanına geri
@@ -544,8 +548,10 @@ Full aggregation, private env dosyasındaki UI/UX GitHub run referansını seçi
 env dosyasını `0600` modunda tutar. Aynı koşuda identity migration, financial retention ve security audit
 raporlarını staging DB tüneli üzerinden production-summary child sözleşmesiyle üretir; runtime kaynağı
 staging olarak ayrı raporlanır ve bu üç hedef runner'daki raw artifact'lere yeniden bağlanır.
-Rollback tag'i yalnız exact release candidate ile eşleşen doğrulanabilir HTTPS rollback raporundan alınır.
-Böylece eski bir template run URL'si veya eski uzak rapor yeni cutover kanıtına karışamaz.
+Fallback tag'i staging hostundaki `.env.release` dosyasından yalnız tarihsel metadata olarak okunur;
+çalışan servislere uygulanmaz. Workflow seçilen exact-SHA cutover artifact'inden schema v3
+`forward-only-readiness` raporu üretir. Böylece eski bir rollback raporu yeni cutover'ı engelleyemez
+veya yeni release kanıtı gibi yeniden etiketlenemez.
 - PR-4 rollback önceki web+API image çiftidir. Additive kolonlar ve legacy membership satırları yerinde
   kalır; backfill tersine çevrilmez, global e-posta unique geri getirilmez ve canonical alanlar drop edilmez.
   Rollback sonrasında yeniden cutover öncesi backfill checker ve aktif session legacy-role parity çalıştırılır.
@@ -1178,94 +1184,33 @@ Beklenen akış:
 Bu workflow prod deploy değildir; staging environment üzerinde gerçek HTTPS, provider, backup,
 observability ve UAT kanıtlarını üretmek için kapıdır.
 
-## Deployment Rollback Drill
+## Deployment Continuity Evidence
 
-Amaç: Faz 9 release gate'inde son bilinen iyi imaja dönüşün raporlu ve tekrarlanabilir olduğunu
-kanıtlamak. Sözleşme hem bozuk-image enjeksiyonunu hem de exact-SHA cold rollback + restore
-tatbikatını ayrı modlarda ve gerçek semantiğiyle taşır.
+Amaç: Yeni sürümün exact-SHA cutover, çalışan dört servis ve veri geri yükleme kanıtına bağlı olduğunu;
+eski ürün sürümüne dönmeden ileriye doğru düzeltileceğini göstermek.
 
-Kanıt sözleşmesi: `docs/evidence-templates/deployment-rollback.example.json`.
-
-Komut:
+Kanıt sözleşmesi: `docs/evidence-templates/deployment-forward-only.example.json`.
 
 ```sh
-DEPLOYMENT_ROLLBACK_TARGET=file:///path/to/deployment-rollback.json pnpm deployment:rollback:check
+DEPLOYMENT_ROLLBACK_TARGET=file:///path/to/deployment-rollback.json \
+pnpm deployment:continuity:check
 ```
 
-Artifact üretim komutu:
+Staging Outbox Verify, seçilen deployment cutover artifact'inden schema v3
+`forward-only-readiness` raporu üretir. Uyumluluk nedeniyle mevcut target ve dosya adı korunur.
+Rapor:
 
-```sh
-STAGING_ENVIRONMENT=staging \
-  DEPLOYMENT_ROLLBACK_OUTPUT=artifacts/staging/reports/deployment-rollback.json \
-  DEPLOYMENT_ROLLBACK_RELEASE_CANDIDATE=... \
-  DEPLOYMENT_ROLLBACK_ROLLBACK_IMAGE_TAG=... \
-  DEPLOYMENT_ROLLBACK_DRILL_MODE=failure-injection \
-  DEPLOYMENT_ROLLBACK_DRILL_SOURCE_IMAGE_TAG=... \
-  DEPLOYMENT_ROLLBACK_DRILL_ROLLBACK_IMAGE_TAG=... \
-  DEPLOYMENT_ROLLBACK_DRILL_RESTORED_IMAGE_TAG=... \
-  DEPLOYMENT_ROLLBACK_DRILL_STARTED_AT=... \
-  DEPLOYMENT_ROLLBACK_DRILL_COMPLETED_AT=... \
-  DEPLOYMENT_ROLLBACK_FAILURE_INJECTED=true \
-  DEPLOYMENT_ROLLBACK_FAILURE_MODE=... \
-  DEPLOYMENT_ROLLBACK_MIGRATION_ROLLBACK_SAFE=true \
-  DEPLOYMENT_ROLLBACK_DRILL_CONFIRMED=true \
-  DEPLOYMENT_ROLLBACK_APPROVED_BY=... \
-  DEPLOYMENT_ROLLBACK_APPROVAL_REFERENCE=... \
-  DEPLOYMENT_ROLLBACK_COMMAND_LOG_REFERENCE=... \
-  DEPLOYMENT_ROLLBACK_SOURCE_RUN_URL=... \
-  DEPLOYMENT_ROLLBACK_SOURCE_UAT_ARTIFACT_URL=... \
-  DEPLOYMENT_ROLLBACK_ROLLBACK_RUN_URL=... \
-  DEPLOYMENT_ROLLBACK_ROLLBACK_UAT_ARTIFACT_URL=... \
-  DEPLOYMENT_ROLLBACK_RESTORED_RUN_URL=... \
-  DEPLOYMENT_ROLLBACK_RESTORED_UAT_ARTIFACT_URL=... \
-  DEPLOYMENT_ROLLBACK_WEB_STATUS=healthy \
-  DEPLOYMENT_ROLLBACK_WEB_IMAGE_TAG=... \
-  DEPLOYMENT_ROLLBACK_WEB_EVIDENCE_REFERENCE=... \
-  DEPLOYMENT_ROLLBACK_API_STATUS=healthy \
-  DEPLOYMENT_ROLLBACK_API_IMAGE_TAG=... \
-  DEPLOYMENT_ROLLBACK_API_EVIDENCE_REFERENCE=... \
-  DEPLOYMENT_ROLLBACK_WORKER_STATUS=running \
-  DEPLOYMENT_ROLLBACK_WORKER_IMAGE_TAG=... \
-  DEPLOYMENT_ROLLBACK_WORKER_EVIDENCE_REFERENCE=... \
-  DEPLOYMENT_ROLLBACK_QUEUE_BOARD_STATUS=healthy \
-  DEPLOYMENT_ROLLBACK_QUEUE_BOARD_IMAGE_TAG=... \
-  DEPLOYMENT_ROLLBACK_QUEUE_BOARD_EVIDENCE_REFERENCE=... \
-  pnpm deployment:rollback:generate
-```
+- güncel release candidate ile cutover source SHA'yı eşleştirir;
+- fallback image'ı yalnız tarihsel metadata olarak taşır, ona geçiş yapmaz;
+- `rollback` ve `restored` checkpoint'lerini `null` bırakır;
+- `migrationRollbackSafe=false` ve `failureInjected=false` ister;
+- dört servisin güncel source image üzerinde healthy/running olduğunu aynı verifier GitHub run
+  referansıyla doğrular; bu runtime referansı yoksa generator PASS yazmaz;
+- `pnpm restore:drill:check`, image parity ve public health/readiness kontrollerini zorunlu tutar;
+- ürün sahibi kararını `artifact:docs/DECISIONS.md` referansıyla taşır.
 
-Minimum tatbikat akışı:
-
-- Staging'e bilinçli bozuk veya healthcheck'i geçmeyen bir image tag'i release adayı olarak uygulanır.
-- Health/readiness başarısızlığı kaydedilir; veri migrasyon uyumluluğu geri dönüş için onaylanır.
-- `.env.release` içindeki `WEB_IMAGE`, `API_IMAGE`, `WORKER_IMAGE` ve `QUEUE_BOARD_IMAGE` değerleri
-  `ROLLBACK_IMAGE_TAG` zincirindeki son bilinen iyi tag'e çekilir.
-- `docker compose pull web api worker queue-board` ve `docker compose up -d --remove-orphans` çalıştırılır.
-- `pnpm compose:health:smoke` ve `pnpm prod:evidence:check` tekrar PASS olur.
-- Rapor top-level `releaseCandidate`/`rollbackImageTag` değerleriyle güncel release zincirine,
-  `drill` bloğuyla gerçek tatbikatın source/rollback/restored image'larına bağlanır.
-- `failure-injection` modunda `drill.failureInjected=true` ve gerçek failure mode zorunludur.
-- Daha önce tamamlanmış gerçek cold rollback yeniden çalıştırılmayacaksa
-  `DEPLOYMENT_ROLLBACK_DRILL_MODE=cold-rollback-rehearsal`, `DEPLOYMENT_ROLLBACK_FAILURE_INJECTED=false`,
-  boş `DEPLOYMENT_ROLLBACK_FAILURE_MODE` kullanılır. Bu modda
-  `drill.restoredImageTag=drill.sourceImageTag` olmalı; source, rollback ve restore için ayrı canonical
-  GitHub run/UAT artifact URL'leri zorunludur. Her checkpoint'in 40 karakter commit SHA'sı image tag'iyle,
-  UAT artifact URL'sindeki run id de ilgili run URL'siyle eşleşir. Generator GitHub API'den repo,
-  başarılı run head SHA'sı, artifact adı, expiry ve digest metadata'sını doğrulamadan rapor yazmaz;
-  private repo için `GITHUB_TOKEN` gerekir.
-- Generator gerçek drill onayı, command log, source/rollback/restored run + UAT artifact çiftleri ve
-  dört servis kanıt referansı olmadan artifact yazmaz.
-- `checkedAt`, `drill.startedAt` ve `drill.completedAt` gelecekte olamaz;
-  `drill.startedAt <= drill.completedAt <= checkedAt` sırası korunmalıdır.
-- `releaseCandidate` ile `rollbackImageTag` aynı tag olamaz.
-- Rollback raporu schema v2 alan kümesi, exact `drill`/`approval` blokları, dört servislik
-  `servicesVerified` seti, moda özel dört komutluk
-  `commandsPassed` seti ve boş `gaps` listesi `prod:evidence:templates:check` içindeki fazla
-  alan/servis/komut, ters kronoloji, release=rollback ve invalid/non-empty gaps negatifleriyle korunur.
-- Image tag ve evidence reference değerleri gerçek release/artifact referansı olmalı; `ghcr.io/example`,
-  `.test`, `example`, `localhost`, `__SET` veya placeholder değerler yalnız template kontrolünde
-  `DEPLOYMENT_ROLLBACK_ALLOW_EXAMPLE_EVIDENCE=1` ile geçebilir.
-- `DEPLOYMENT_ROLLBACK_TARGET`, servis `evidenceReference` değerleri ve `evidenceReferences`
-  userinfo, query token veya fragment taşıyamaz.
+Schema v2 failure-injection ve cold-rollback raporları tarihsel kayıt olarak doğrulanabilir; yeni Gate E,
+pilot veya go-live için yeniden çalıştırılmaları gerekmez.
 
 ## Staging/Prod UAT Evidence
 
@@ -1326,6 +1271,8 @@ Minimum kanıt içeriği:
 Live onboarding smoke preflight:
 
 ```sh
+NEXT_E2E_BASE_URL=https://o-okul.com \
+NEXT_E2E_SKIP_WEB_SERVER=1 \
 NEXT_E2E_LIVE_ONBOARDING=1 \
 LIVE_ONBOARDING_EVIDENCE_PATH=/root/o-okul-private/uat/live-onboarding-input.json \
 LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT=https://notify.staging.o-okul.com/messages/latest \
@@ -1336,6 +1283,8 @@ pnpm live:onboarding:evidence-check
 Smoke komutu aynı preflight'ı tarayıcı açmadan önce otomatik çalıştırır:
 
 ```sh
+NEXT_E2E_BASE_URL=https://o-okul.com \
+NEXT_E2E_SKIP_WEB_SERVER=1 \
 NEXT_E2E_LIVE_ONBOARDING=1 \
 LIVE_ONBOARDING_EVIDENCE_PATH=/root/o-okul-private/uat/live-onboarding-input.json \
 LIVE_ONBOARDING_EMAIL_EVIDENCE_ENDPOINT=https://notify.staging.o-okul.com/messages/latest \
@@ -1356,6 +1305,11 @@ PII'yi URL/loglara taşımayan JSON POST gövdesindeki `recipient`, `purpose=PAS
 döndürür ve URL tokenı hiçbir kalıcı evidence çıktısına yazılmaz.
 Preflight endpoint'i tam olarak `https://notify.staging.o-okul.com/messages/latest` olmalıdır; production
 hostu, farklı path, query veya fragment kabul edilmez.
+`NEXT_E2E_BASE_URL` yalnız `https://o-okul.com` veya `https://staging.o-okul.com` kök origin'i
+olabilir; başka host, lokal/test/placeholder host, alt path, query veya fragment kabul edilmez.
+Tenant alt alan adı ve özel port da bu sistem-yöneticisi smoke'unda kabul edilmez.
+`NEXT_E2E_SKIP_WEB_SERVER=1` yerel Next sunucusunun yanlışlıkla canlı onboarding kanıtı yerine
+geçmesini engeller.
 `pnpm live:onboarding:evidence-contract` bu negatifleri lokal CI'da tarayıcı açmadan korur.
 
 Live UI-worker/report smoke preflight:
@@ -1632,7 +1586,7 @@ Minimum kanıt içeriği:
   `Live UI-worker result kanıtı`, `KVKK inventory kanıtı`, `RLS live kanıtı`,
   `Inline upload migration kanıtı`, `Audit null tenant kanıtı`, `Rate limit Redis kanıtı`,
   `SMS disabled path kanıtı`, `Notification provider kanıtı`, `Report generation perf kanıtı`,
-  `Staging/prod UAT`, `Deployment rollback tatbikatı`, `Pilot kapanış kanıtı`,
+  `Staging/prod UAT`, `Deployment continuity kanıtı`, `Pilot kapanış kanıtı`,
   `Go-live karar paketi` ve `Alert bildirim kanalı` satırlarını
   readiness dokümanındaki durumla birebir eşleştirir. Liste tam 17 satırdan oluşmalı, beklenmeyen
   veya tekrarlı gate içermemelidir. Readiness içindeki `STAGING_PASS_WITH_FINAL_CHAIN_PENDING`,
