@@ -1,6 +1,6 @@
 # O-Okul Durum
 
-Son güncelleme: 2026-08-13
+Son güncelleme: 2026-08-23
 İnceleme snapshotı: Gate D runtime commit'i `bb2779bc1087a150b648407385e3cee1d0122692`;
 Gate E WAL exact-SHA staging commit'i `b2b91d9ec160d43d119937336782127e7e77325d`.
 Kanıt düzeyi: Gate A, Gate B ve Gate C `LOCAL_STATIC`; Gate D `GITHUB_CI`, `STAGING_DEPLOY`,
@@ -13,6 +13,16 @@ Exact-SHA staging `pnpm wal:archive:smoke`, main CI `31735017355` ve Staging Dep
 `sha256:8b63ccf7c8fbc0d7309b789d0c5bbaf91c72c01300d5349beff0d47945709697`.
 Faz 6 repo davranışı `LOCAL_STATIC` / `LOCAL_SYNTHETIC` düzeyinde kapalıdır; WhatsApp dış kanıtı
 kullanıcı kararıyla sonraya bırakılmış ve capability kapalı tutulmuştur.
+
+23 Ağustos 2026 canlı veri temizliğinde daha önce kapatılan 11 sentetik tenant yedeksiz silindi;
+aktif kullanıcı/oturum ve kişi verisi yokluğu, exact aday kümesi ve rollback edilen prova ile
+doğrulandı. Sistem tenantı, kalan 6 tenant ve 67 mevcut AuditLog kaydı korundu. PII-safe kanıt
+`docs/almanac-2-synthetic-tenant-cleanup-evidence.md` dosyasındadır. PR #79 uygulama adayı
+`795286daf...` exact CI `32645879234` üç işte `PASS`; merge/deploy yapılmadı.
+Bu sonuç `PRODUCTION_DB_RUNTIME` veri temizliği kanıtıdır; production go-live ve Gate F hâlâ
+`EXTERNAL_NOT_RUN` durumundadır. Null-tenant audit sınıflandırması `system=72`,
+`deletedTenant=100`, `unknown=0` ve checker `PASS`tir. Audit saklama/imha süresi privacy/go-live
+kararı olarak açıktır.
 
 5 Ağustos 2026 ürün kararları: giriş kurum subdomaini + tenant-local kimliktir; guardian ürün
 kapsamından çıkarılacaktır; hukuk/KVKK incelemesi bu fazda repo uygulamasını ve pilot hazırlığını

@@ -502,7 +502,7 @@ Son kontrol: 2026-08-09
 
 ### DEC-20260823-01 — Yeni ürün yapısı kanoniktir; legacy ürüne dönüş yapılmaz
 
-Durum: Onaylı; forward-only sözleşme ve ilk üç legacy UI temizliği yerelde test edildi, CI/staging ve kalan temizlik bekliyor
+Durum: Onaylı; forward-only sözleşme, ilk üç legacy UI temizliği ve sentetik veri temizliği doğrulandı; staging ve kalan temizlik bekliyor
 Karar: Yeni ekranlar ve yeni veri modeli kanonik üründür. Ürün eski ekranlara veya eski veri modeline
 geri döndürülmez; sorunlar yeni yapı üzerinde ileriye doğru düzeltilir. Tarihsel fallback imajına
 dönüş provası Gate E veya pilot için ayrı kabul kapısı değildir. Doğrulanmış yedek ve geri yükleme
@@ -522,6 +522,26 @@ Açık soru: `/k/{tenantSlug}/giris` yalnız süreli geçiş uyumluluğu için k
 tarihi kanıtından sonra kaldırılır. Guardian/veri yapıları için taşıma ve kaldırma sırası ayrıca
 kesinleştirilecektir.
 Provider, gerçek kullanıcı pilotu, veri güvenliği ve canlı ortam kanıtları bu kararla PASS sayılmaz.
+Son kontrol: 2026-08-23
+
+### DEC-20260823-02 — Doğrulanmış 11 sentetik tenant yedeksiz temizlendi
+
+Durum: Onaylı ve uygulandı; yalnız exact sentetik küme kapsamındadır
+Karar: Daha önce Gate D onboarding denemelerinde oluşturulan ve kapatılan 11 sentetik tenant;
+ürün/veri sahibinin açık onayıyla yedek alınmadan canlı veritabanından fiziksel olarak silinmiştir.
+Bu tek seferlik istisna yalnız exact aday sayısı ve küme özeti eşleşen, hesabı `DISABLED`, aktif
+kullanıcı/oturumu olmayan ve öğrenci, Guardian, StudentContact veya consent kaydı taşımayan kümeye
+uygulanır. Sistem tenantı, kalan 6 tenant ve bağımsız denetim kayıtları korunur. Gerçek müşteri veya
+aktif Guardian verisi için genel taşıma/sayım/retention koşulları değişmez.
+Kaynak: Ürün/veri sahibinin 23 Ağustos 2026 tarihli yedeksiz silme onayı.
+Kanıt: `docs/almanac-2-synthetic-tenant-cleanup-evidence.md`; canlı AuditLog
+`tenant.synthetic_purged`, aday küme özeti `93f97738c14146381082aff2188a0ee4`; production audit-null
+tenant artifact SHA-256 `c7c34f1abfe936cdbd42b3b43b26486accabdcacd646b422f1b3cc56a369625d`
+ve `unknown=0` checker `PASS`.
+Etkilenen ADR: ADR-0001, ADR-0008, ADR-0010
+Açık soru: Korunan 67 eski AuditLog satırı ile cleanup AuditLog kaydının nihai saklama/imha süresi
+privacy/go-live kararı olarak açıktır; bu karara kadar kayıtlar korunur. Bu karar PR #79 merge/deploy,
+Guardian retirement veya diğer tenantların silinmesi için yetki vermez.
 Son kontrol: 2026-08-23
 
 ## Faz Öncesi Onay Gerektirenler
