@@ -4,7 +4,7 @@
 **Kaynak rapor:** `o-okul.com Yeniden Tasarım ve Ürün Deneyimi Nihai Raporu`\
 **Repo:** `4rmus/o-okul`\
 **Plan baz alınan `main` snapshotı:** `af5dc5ad1572965709f0fc47f3bdf84a939e0626`\
-**Güncel repo snapshotı:** `ce321b9274703e4c99c5d92893144353a6251b9f`\
+**Güncel deployed runtime snapshotı:** `ce321b9274703e4c99c5d92893144353a6251b9f`\
 **Belge durumu:** Onaylı hedef mimari ve uygulama programı. Kanıt durumu aşağıdaki güncel ilerleme kaydından izlenir; bu belge tek başına canlı ortam kanıtı değildir.
 
 ---
