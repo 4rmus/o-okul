@@ -544,6 +544,29 @@ privacy/go-live kararı olarak açıktır; bu karara kadar kayıtlar korunur. Bu
 Guardian retirement veya diğer tenantların silinmesi için yetki vermez.
 Son kontrol: 2026-08-23
 
+### DEC-20260824-01 — Ownerless üç test tenant temizlendi ve PR #79 yayınlandı
+
+Durum: Onaylı ve uygulandı; Gate F/go-live kararı değildir
+Karar: Exact-SHA PR #79 yayını, canlı account-management backfill'de 6 aktif tenantın 3'ünde
+`TENANT_OWNER` bulunmadığı için fail-closed durdu. Ürün/veri sahibinin açık onayıyla yalnız test adı
+işaretli, owner ve geçerli aktif oturumu olmayan bu 3 tenant yedek alınmadan; 10 hesap, 3 sentetik
+öğrenci, 2 sentetik Guardian, 2 sentetik StudentContact ve bağlı fixture grafiğiyle silindi. Sistem
+tenantı, owner-backed kalan 3 tenant ve bağımsız AuditLog kayıtları korundu.
+
+Silme sonrasında backfill owner dağılımı `3/3`, missing `0`, blockers/gaps `[]`; production audit-null
+tenant dağılımı `system=72`, `deletedTenant=103`, `unknown=0` ve checker `PASS`tir. PR #79 squash
+merge `ce321b927...`; main CI `32649882436`, Staging Deploy `32749363674`, dört servis image parity,
+cutover, first-gates ve WAL kanıtları `PASS`. Rollback image `8a3ec5e...` olarak bağlandı.
+Bağlı finans, destek/ek, ödev/dosya ve raw-import/report satırları `FIXTURE_ONLY` tenant grafiğinde
+temizlendi; mevcut tenantla eşleşmeyen exact 2 raw-import nesnesi (3.838 bayt) nesne depolamadan
+silindi ve kalan nesne sayısı `0` doğrulandı.
+Kaynak: Ürün/veri sahibinin 24 Ağustos 2026 tarihli exact canlı silme ve yayın onayı.
+Kanıt: `docs/almanac-2-synthetic-tenant-cleanup-evidence.md`; deploy run `32749363674`; audit-null
+artifact SHA-256 `bb56be0d95c83f6576450c4c091ee5a10eed39ae19a36ab378a2ae917570413d`.
+Etkilenen ADR: ADR-0001, ADR-0002, ADR-0008, ADR-0010
+Açık soru: Audit saklama/imha süresi ve 14 günlük pilot/go-live imzaları ayrıca karara bağlanacaktır.
+Son kontrol: 2026-08-24
+
 ## Faz Öncesi Onay Gerektirenler
 
 | ID | Faz | Bloklar mı? | Soru | Beklenen kanıt |
