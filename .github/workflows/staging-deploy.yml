@@ -34,7 +34,9 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'workflow_run' &&
         github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.head_branch == 'main')
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 10
@@ -53,7 +55,8 @@ jobs:
         shell: bash
         env:
           DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
-          ASSOCIATED_PR_BASE_SHA: ${{ github.event.workflow_run.pull_requests[0].base.sha }}
+          WORKFLOW_RUN_EVENT: ${{ github.event.workflow_run.event }}
+          WORKFLOW_RUN_HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -61,40 +64,87 @@ jobs:
           deploy_required=true
           deploy_reason="manual dispatch"
           if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
+            if [ "$WORKFLOW_RUN_EVENT" != "push" ] || [ "$WORKFLOW_RUN_HEAD_REPOSITORY" != "$GITHUB_REPOSITORY" ]; then
+              echo "untrusted workflow_run source; fail-closed" >&2
+              exit 1
+            fi
+
             latest_main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}' || true)"
             if [ -z "$latest_main_sha" ]; then
-              deploy_reason="current main SHA unavailable; fail-open"
+              echo "current main SHA unavailable; fail-closed" >&2
+              exit 1
             elif [ "$DEPLOY_SHA" != "$latest_main_sha" ]; then
-              successful_runs="$RUNNER_TEMP/latest-main-successful-ci-runs.json"
+              deploy_required=false
+              deploy_reason="newer main SHA exists; stale automatic run skipped"
+            elif ! git merge-base --is-ancestor "$DEPLOY_SHA" "$latest_main_sha"; then
+              echo "deploy SHA is not an origin/main ancestor; fail-closed" >&2
+              exit 1
+            else
+              deploy_runs="$RUNNER_TEMP/successful-staging-deploy-runs.json"
+              last_deployed_sha=""
               if curl --fail --silent --show-error \
                 -H "Authorization: Bearer $GITHUB_TOKEN" \
                 -H "X-GitHub-Api-Version: 2022-11-28" \
-                "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&status=success&per_page=20" \
-                > "$successful_runs" &&
-                node -e 'const fs = require("node:fs"); const [file, sha] = process.argv.slice(1); const runs = JSON.parse(fs.readFileSync(file, "utf8")).workflow_runs ?? []; if (!runs.some((run) => run.head_sha === sha && run.conclusion === "success")) process.exit(1);' \
-                  "$successful_runs" "$latest_main_sha"
+                "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/staging-deploy.yml/runs?status=success&per_page=20" \
+                > "$deploy_runs"
               then
-                deploy_required=false
-                deploy_reason="newer CI-verified main SHA exists"
-              else
-                deploy_reason="newer main SHA is not CI-verified; fail-open"
+                mapfile -t deploy_run_ids < <(node -e 'const fs=require("node:fs"); const runs=JSON.parse(fs.readFileSync(process.argv[1],"utf8")).workflow_runs??[]; for (const run of runs) console.log(run.id);' "$deploy_runs")
+                for run_id in "${deploy_run_ids[@]}"; do
+                  artifacts_file="$RUNNER_TEMP/staging-deploy-artifacts-$run_id.json"
+                  if ! curl --fail --silent --show-error \
+                    -H "Authorization: Bearer $GITHUB_TOKEN" \
+                    -H "X-GitHub-Api-Version: 2022-11-28" \
+                    "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts" \
+                    > "$artifacts_file"
+                  then
+                    continue
+                  fi
+                  cutover_artifact_id="$(node -e 'const fs=require("node:fs"); const [file,name]=process.argv.slice(1); const items=JSON.parse(fs.readFileSync(file,"utf8")).artifacts??[]; const found=items.find((item)=>item.name===name&&!item.expired); if(found) process.stdout.write(String(found.id));' "$artifacts_file" "staging-deployment-cutover-$run_id")"
+                  if [ -z "$cutover_artifact_id" ]; then
+                    continue
+                  fi
+                  cutover_zip="$RUNNER_TEMP/staging-deployment-cutover-$run_id.zip"
+                  cutover_json="$RUNNER_TEMP/staging-deployment-cutover-$run_id.json"
+                  cutover_headers="$RUNNER_TEMP/staging-deployment-cutover-$run_id.headers"
+                  if ! curl --fail --silent --show-error \
+                    --dump-header "$cutover_headers" \
+                    --output /dev/null \
+                    -H "Authorization: Bearer $GITHUB_TOKEN" \
+                    -H "X-GitHub-Api-Version: 2022-11-28" \
+                    "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/artifacts/$cutover_artifact_id/zip"
+                  then
+                    continue
+                  fi
+                  cutover_download_url="$(awk 'tolower($1) == "location:" {sub(/\r$/, "", $2); print $2; exit}' "$cutover_headers")"
+                  if [[ "$cutover_download_url" != https://* ]] ||
+                    ! curl --fail --silent --show-error --location "$cutover_download_url" > "$cutover_zip" ||
+                    ! unzip -p "$cutover_zip" deployment-cutover.json > "$cutover_json"
+                  then
+                    continue
+                  fi
+                  candidate_sha="$(node -e 'const fs=require("node:fs"); const value=JSON.parse(fs.readFileSync(process.argv[1],"utf8")).sourceSha; if(typeof value==="string"&&/^[0-9a-f]{40}$/i.test(value)) process.stdout.write(value.toLowerCase());' "$cutover_json")"
+                  if [ -n "$candidate_sha" ] && git merge-base --is-ancestor "$candidate_sha" "$DEPLOY_SHA"; then
+                    last_deployed_sha="$candidate_sha"
+                    break
+                  fi
+                done
               fi
-            elif [ -n "$ASSOCIATED_PR_BASE_SHA" ] &&
-              git merge-base --is-ancestor "$ASSOCIATED_PR_BASE_SHA" "$DEPLOY_SHA"
-            then
-              changed_files="$RUNNER_TEMP/staging-deploy-changed-files.txt"
-              if git diff --name-only "$ASSOCIATED_PR_BASE_SHA" "$DEPLOY_SHA" > "$changed_files"; then
-                if grep -Eq '^(apps/|packages/|docker/|infra/|scripts/|Dockerfile$|docker-compose[^/]*\.yml$|\.dockerignore$|\.github/workflows/staging-deploy\.yml$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|turbo\.json$|\.node-version$|tokens\.css$)' "$changed_files"; then
-                  deploy_reason="runtime-affecting files changed"
+
+              if [ -z "$last_deployed_sha" ]; then
+                deploy_reason="last successful deployment cutover unavailable; deploy required"
+              else
+                changed_files="$RUNNER_TEMP/staging-deploy-changed-files.txt"
+                if git diff --name-only "$last_deployed_sha" "$DEPLOY_SHA" > "$changed_files"; then
+                  if grep -Eq '^(apps/|packages/|docker/|infra/|scripts/|docs/evidence-manifests/|Dockerfile$|docker-compose[^/]*\.yml$|\.dockerignore$|\.github/workflows/staging-deploy\.yml$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|turbo\.json$|\.node-version$|tokens\.css$)' "$changed_files"; then
+                    deploy_reason="runtime-affecting files changed since last successful deployment cutover"
+                  else
+                    deploy_required=false
+                    deploy_reason="no runtime-affecting files changed since last successful deployment cutover"
+                  fi
                 else
-                  deploy_required=false
-                  deploy_reason="no runtime-affecting files changed"
+                  deploy_reason="last successful deployment change range unavailable; deploy required"
                 fi
-              else
-                deploy_reason="change range unavailable; fail-open"
               fi
-            else
-              deploy_reason="associated PR range unavailable; fail-open"
             fi
           fi
 
