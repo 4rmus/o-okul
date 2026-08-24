@@ -1,6 +1,6 @@
 # O-Okul Durum
 
-Son güncelleme: 2026-08-23
+Son güncelleme: 2026-08-24
 İnceleme snapshotı: Gate D runtime commit'i `bb2779bc1087a150b648407385e3cee1d0122692`;
 Gate E WAL exact-SHA staging commit'i `b2b91d9ec160d43d119937336782127e7e77325d`.
 Kanıt düzeyi: Gate A, Gate B ve Gate C `LOCAL_STATIC`; Gate D `GITHUB_CI`, `STAGING_DEPLOY`,
@@ -23,6 +23,20 @@ Bu sonuç `PRODUCTION_DB_RUNTIME` veri temizliği kanıtıdır; production go-li
 `EXTERNAL_NOT_RUN` durumundadır. Null-tenant audit sınıflandırması `system=72`,
 `deletedTenant=100`, `unknown=0` ve checker `PASS`tir. Audit saklama/imha süresi privacy/go-live
 kararı olarak açıktır.
+
+24 Ağustos 2026'da owner doğrulaması eksik 3 test tenant, exact ürün sahibi onayı ve rollback edilen
+prova sonrasında yedeksiz silindi. Sistem tenantı ve owner-backed 3 tenant korundu; ownerless `0`.
+Account-management backfill dry-run `READY`, apply `PASS`, missing `0`, blockers/gaps `[]`.
+Exact test grafiğindeki finans, destek/ek, ödev/dosya ve raw-import/report fixture satırları ile
+mevcut tenantla eşleşmeyen 2 raw-import nesnesi (3.838 bayt) silindi; bucket nesne sayısı `0`.
+Audit sınıflandırması `228` toplam, `53` tenant bağlı, `175` null-tenant;
+`system=72`, `deletedTenant=103`, `unknown=0` ve checker `PASS`tir.
+
+PR #79 `ce321b927...` olarak squash merge edildi. Main CI `32649882436` ve Staging Deploy
+`32749363674` `PASS`; web, API, worker ve queue-board exact `ce321b927...`, rollback image
+`8a3ec5e...`. Public health/readiness/root-system-tenant login `200`, legacy tenant login `307`
+exact tenant `/giris`; cutover, first-gates, HTTPS/alert ve WAL kanıtları `PASS`, gaps `[]`.
+Bu sonuç `STAGING_DEPLOY/STAGING_RUNTIME`dır; Gate F ve production go-live `EXTERNAL_NOT_RUN` kalır.
 
 5 Ağustos 2026 ürün kararları: giriş kurum subdomaini + tenant-local kimliktir; guardian ürün
 kapsamından çıkarılacaktır; hukuk/KVKK incelemesi bu fazda repo uygulamasını ve pilot hazırlığını

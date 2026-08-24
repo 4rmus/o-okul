@@ -4,12 +4,12 @@
 **Kaynak rapor:** `o-okul.com Yeniden Tasarım ve Ürün Deneyimi Nihai Raporu`\
 **Repo:** `4rmus/o-okul`\
 **Plan baz alınan `main` snapshotı:** `af5dc5ad1572965709f0fc47f3bdf84a939e0626`\
-**Güncel repo snapshotı:** `8a3ec5e640f4e29d66a6ad66d869d8159e1e021e`\
+**Güncel repo snapshotı:** `ce321b9274703e4c99c5d92893144353a6251b9f`\
 **Belge durumu:** Onaylı hedef mimari ve uygulama programı. Kanıt durumu aşağıdaki güncel ilerleme kaydından izlenir; bu belge tek başına canlı ortam kanıtı değildir.
 
 ---
 
-## Güncel ilerleme ve ürün kararı — 23 Ağustos 2026
+## Güncel ilerleme ve ürün kararı — 24 Ağustos 2026
 
 ### Nerede kalındı?
 
@@ -17,10 +17,12 @@
 - Gate D; sınav–optik–rapor, öğrenci, kurulum ve IAM için exact kaynak, CI ve staging kanıtlarıyla kapatıldı. Kanonik kayıt `docs/almanac-2-gate-d-evidence.md` dosyasıdır.
 - Gate E hazırlığında provider, gözlemlenebilirlik, WAL/yedek ve canlı UAT kanıtlarının önemli bölümü üretildi. Son toplama çalışması eski sürüme dönüş kanıtını aradığı için tamamlanmadı; bu eksiklik aşağıdaki yeni ürün kararıyla pilot öncesi ayrı kapı olmaktan çıkarıldı.
 - 23 Ağustos 2026 yerel uygulamasında Gate E otomasyonu schema v3 `forward-only-readiness` moduna uyarlandı. Exact-SHA cutover, dört servis ve restore kanıtı korunurken eski sürüme geçiş checkpoint'i kaldırıldı. Yerel sözleşme/template kontrolleri `PASS`; CI ve staging çalışması `EXTERNAL_NOT_RUN` durumundadır.
-- İlk legacy UI diliminde `/kurum/uat-rollback` ekranı, navigasyon/manifest kaydı, özel testleri ve iki görsel snapshot'ı kaldırıldı. UAT matrisi ve checker/template kanıtı korundu; kalan 87 route ile operasyon/kanıt akışları 97 yerel tarayıcı testinde `PASS` oldu. PR #79 uygulama adayı `795286daf...` exact CI `32645879234` içinde `PASS`; staging/production UI aktivasyonu `EXTERNAL_NOT_RUN` durumundadır.
-- İkinci legacy UI diliminde eski beş gruplu kurum navigasyonu kaldırıldı; yedi gruplu yeni navigasyon kanonik hale getirildi. Artık kullanılmayan `web.ia-v2` ve `web.shell-v2` rollout anahtarları shared/API/OpenAPI sözleşmesinden çıkarıldı; eski config anahtarları fail-closed reddedilir. API/shared/typecheck/OpenAPI/statik kontroller, 111 tarayıcı testi ve ana kurum yönetimi akışı yerelde `PASS`; PR #79 CI `PASS`, staging/production UI aktivasyonu `EXTERNAL_NOT_RUN` durumundadır.
-- Üçüncü legacy UI diliminde parola sıfırlama, auth state, onboarding, ana giriş, erişilebilirlik ve canlı UI testlerinin `/k/{tenantSlug}/giris` tüketimi kanonik tenant-host `/giris` adresine taşındı. Eski route yalnız 30 günlük geçiş uyumluluğu için korundu; daha uzak cutoff web, API ve production env kontrolünde fail-closed reddedilir. Gerçek alan adında kesim öncesi `307`, kesim sonrasında `410` sözleşmesi ve 89 route'luk ekran taraması yerelde `PASS`. Canlı onboarding preflight'ı gerçek HTTPS kök adresi ve haricî sunucu kullanımını zorunlu tutar. PR #79 CI `PASS`; staging DNS/TLS ve canlı UI aktivasyonu `EXTERNAL_NOT_RUN` durumundadır.
+- İlk legacy UI diliminde `/kurum/uat-rollback` ekranı, navigasyon/manifest kaydı, özel testleri ve iki görsel snapshot'ı kaldırıldı. UAT matrisi ve checker/template kanıtı korundu; kalan 87 route ile operasyon/kanıt akışları 97 yerel tarayıcı testinde `PASS` oldu. Final source `1619bd32d...`, merge `ce321b927...`, main CI ve Staging Deploy `PASS`; kaldırılan route için doğrudan yetkili runtime probe `UNPROVEN` durumundadır.
+- İkinci legacy UI diliminde eski beş gruplu kurum navigasyonu kaldırıldı; yedi gruplu yeni navigasyon kanonik hale getirildi. Artık kullanılmayan `web.ia-v2` ve `web.shell-v2` rollout anahtarları shared/API/OpenAPI sözleşmesinden çıkarıldı; eski config anahtarları fail-closed reddedilir. API/shared/typecheck/OpenAPI/statik kontroller, 111 tarayıcı testi ve ana kurum yönetimi akışı yerelde `PASS`; exact image deploy `PASS`, canlı yetkili navigasyon/flag probe'ları `UNPROVEN` durumundadır.
+- Üçüncü legacy UI diliminde parola sıfırlama, auth state, onboarding, ana giriş, erişilebilirlik ve canlı UI testlerinin `/k/{tenantSlug}/giris` tüketimi kanonik tenant-host `/giris` adresine taşındı. Eski route yalnız 30 günlük geçiş uyumluluğu için korundu; daha uzak cutoff web, API ve production env kontrolünde fail-closed reddedilir. 89 route'luk yerel ekran taraması, canlı tenant `/giris` `200` ve legacy `/k/{slug}/giris` → exact tenant `/giris` `307` sözleşmesi `PASS`. Canlı onboarding preflight'ı gerçek HTTPS kök adresi ve haricî sunucu kullanımını zorunlu tutar.
 - Dördüncü legacy temizlik diliminde daha önce kapatılan 11 sentetik tenant, ürün/veri sahibinin açık yedeksiz silme onayıyla `o-okul.com` canlı veritabanından kaldırıldı. Exact aday sayısı/küme özeti, `DISABLED` sentetik hesaplar, sıfır aktif oturum ve sıfır öğrenci/veli/contact verisi önce salt-okunur ve rollback edilen prova ile doğrulandı. 67 AuditLog satırı ile sistem ve diğer 6 tenant korundu; null-tenant sınıflandırması `system=72`, `deletedTenant=100`, `unknown=0` ve checker `PASS`; silme sonrası health/readiness/login `200`. Bu kanıt `PRODUCTION_DB_RUNTIME`dır, production go-live değildir. Kanonik kayıt `docs/almanac-2-synthetic-tenant-cleanup-evidence.md` dosyasıdır.
+- Beşinci legacy temizlik diliminde exact-SHA deploy'u `OWNER_VERIFICATION_REQUIRED` ile durduran, sahibi ve geçerli aktif oturumu olmayan 3 test tenant ürün/veri sahibinin açık yedeksiz silme onayıyla kaldırıldı. 10 hesap, 3 öğrenci, 2 Guardian ve 2 StudentContact fixture grafiği yalnız bu tenantlarla birlikte silindi; 2 AuditLog korundu. Kalan 3 tenantın tamamında owner vardır; backfill dry-run `READY`, apply `PASS`, missing `0`. Güncel null-tenant sınıflandırması `system=72`, `deletedTenant=103`, `unknown=0` ve checker `PASS`tir.
+- PR #79 `ce321b927...` squash merge'i, main CI `32649882436` ve Staging Deploy `32749363674` zincirinde doğrulandı. Dört servis exact `ce321b927...`, rollback image `8a3ec5e...`; deployment cutover, first-gates, HTTPS/alert ve WAL artifact'leri `PASS`, gaps `[]`. Public health/readiness/root-system-tenant login `200`; legacy tenant login `307` ile exact tenant `/giris` konumuna gider. Bu `STAGING_DEPLOY/STAGING_RUNTIME` kanıtıdır; Gate F ve production go-live değildir.
 - Gate F pilot/go-live ve Gate G temizlik kapanışı henüz tamamlanmadı. Planın kalan büyük çalışma alanları Faz 5–8'dir; bazı alt dilimler uygulanmış olsa da her fazın güncel envanteri ayrı doğrulanacaktır.
 
 ### Onaylı yön değişikliği
@@ -34,6 +36,9 @@
 7. `DEC-20260823-02` yalnız kişi verisi taşımadığı exact canlı sayımla doğrulanan 11 sentetik tenant
    için ürün/veri sahibinin yedeksiz silme onayını kaydeden tek seferlik istisnadır; gerçek müşteri
    verisi veya aktif Guardian geçişi için genel koşulları gevşetmez.
+8. `DEC-20260824-01`; exact 3 test-marker tenant, `FIXTURE_ONLY` kişi grafiği, owner ve geçerli aktif
+   session yokluğu, rollback edilen prova ve açık ürün/veri sahibi onayıyla ikinci dar yedeksiz silme
+   istisnasıdır. Genel Guardian, finans, destek, upload veya gerçek müşteri silme yetkisi vermez.
 
 Bu bölüm, belgenin eski ekrana dönüşü veya tarihsel fallback imajını zorunlu kılan önceki ifadelerine göre önceliklidir. Exact kaynak, CI, staging, provider, UAT, veri güvenliği ve pilot kanıtları zorunlu olmaya devam eder; yalnız eski ürün sürümüne dönüş koşulu kaldırılmıştır.
 
