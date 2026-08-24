@@ -296,12 +296,21 @@ const expectations = {
     "environment: staging",
     "Validate staging dispatch inputs and environment",
     "Select current runtime-affecting deploy",
-    "newer CI-verified main SHA exists",
-    "associated PR range unavailable; fail-open",
-    "ASSOCIATED_PR_BASE_SHA",
-    "/actions/workflows/ci.yml/runs?branch=main&status=success",
+    "github.event.workflow_run.event == 'push'",
+    "github.event.workflow_run.head_repository.full_name == github.repository",
+    "WORKFLOW_RUN_HEAD_REPOSITORY",
+    "untrusted workflow_run source; fail-closed",
+    "current main SHA unavailable; fail-closed",
+    "last successful deployment cutover unavailable; deploy required",
+    "/actions/workflows/staging-deploy.yml/runs?status=success",
+    "staging-deployment-cutover-$run_id",
+    "actions/artifacts/$cutover_artifact_id/zip",
+    "cutover_download_url",
+    'curl --fail --silent --show-error --location "$cutover_download_url"',
+    "unzip -p",
+    "docs/evidence-manifests/",
     "git merge-base --is-ancestor",
-    "no runtime-affecting files changed",
+    "no runtime-affecting files changed since last successful deployment cutover",
     "if: needs.preflight.outputs.deploy-required == 'true'",
     "STAGING_NEXT_PUBLIC_API_URL must be an https:// URL.",
     "STAGING_DEPLOY_DIR must be /root/o-okul.",
@@ -482,6 +491,24 @@ if (stagingDeployWorkflow.includes("pnpm run ci")) {
 
 if (stagingDeployWorkflow.includes("playwright install --with-deps chromium")) {
   failures.push("staging-deploy workflow web Playwright bağımlılığı kurmamalı; bu yalnız CI workflow'unda kalmalı");
+}
+
+const stagingRuntimePatternSource = "^(apps/|packages/|docker/|infra/|scripts/|docs/evidence-manifests/|Dockerfile$|docker-compose[^/]*\\.yml$|\\.dockerignore$|\\.github/workflows/staging-deploy\\.yml$|package\\.json$|pnpm-lock\\.yaml$|pnpm-workspace\\.yaml$|turbo\\.json$|\\.node-version$|tokens\\.css$)";
+const stagingRuntimePattern = new RegExp(stagingRuntimePatternSource);
+if (!stagingDeployWorkflow.includes(`grep -Eq '${stagingRuntimePatternSource}'`)) {
+  failures.push("staging-deploy workflow runtime path regex'i semantic contract ile eşleşmeli");
+}
+for (const [label, input, expected] of [
+  ["deployed-to-docs", { lastDeployAvailable: true, lastDeployAncestor: true, paths: ["docs/DECISIONS.md"] }, false],
+  ["undeployed-runtime-parent-to-docs", { lastDeployAvailable: true, lastDeployAncestor: true, paths: ["apps/api/src/app.module.ts", "docs/DECISIONS.md"] }, true],
+  ["missing-cutover", { lastDeployAvailable: false, lastDeployAncestor: false, paths: ["docs/DECISIONS.md"] }, true],
+  ["non-ancestor-cutover", { lastDeployAvailable: true, lastDeployAncestor: false, paths: ["docs/DECISIONS.md"] }, true],
+  ["evidence-manifest", { lastDeployAvailable: true, lastDeployAncestor: true, paths: ["docs/evidence-manifests/isem-optical-approved.json"] }, true],
+]) {
+  const actual = !input.lastDeployAvailable || !input.lastDeployAncestor || input.paths.some((path) => stagingRuntimePattern.test(path));
+  if (actual !== expected) {
+    failures.push(`staging deploy selection fixture başarısız: ${label}`);
+  }
 }
 
 const logLevelOccurrences = compose.match(/LOG_LEVEL: \${LOG_LEVEL:-info}/g)?.length ?? 0;
