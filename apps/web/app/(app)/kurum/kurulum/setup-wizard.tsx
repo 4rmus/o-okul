@@ -215,6 +215,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
   const [savedSummary, setSavedSummary] = useState("");
   const [kazanimImportFileBase64, setKazanimImportFileBase64] = useState("");
   const [studentImportFileBase64, setStudentImportFileBase64] = useState("");
+  const [studentImportIdempotencyKey, setStudentImportIdempotencyKey] = useState("");
   const [teacherImportFileBase64, setTeacherImportFileBase64] = useState("");
   const [kazanimImportUploadStatus, setKazanimImportUploadStatus] = useState<SetupUploadStatus>(() =>
     createIdleUploadStatus(),
@@ -372,6 +373,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
 
   async function changeStudentImportFile(file: File | undefined) {
     setStudentImportFileBase64("");
+    setStudentImportIdempotencyKey("");
     setSaveError("");
     if (!file) {
       setStudentImportUploadStatus(createIdleUploadStatus());
@@ -386,6 +388,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
 
     try {
       setStudentImportFileBase64(await readFileAsBase64(file));
+      setStudentImportIdempotencyKey(globalThis.crypto.randomUUID());
     } catch {
       setStudentImportUploadStatus(createErrorUploadStatus(file, "Dosya okunamadı. Lütfen dosyayı yeniden seçin."));
       updateDraft("people", { studentImportFileName: "" });
@@ -440,6 +443,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
 
   function changeStudentModel(model: OnboardingDraft["people"]["studentModel"]) {
     setStudentImportFileBase64("");
+    setStudentImportIdempotencyKey("");
     setStudentImportUploadStatus(createIdleUploadStatus());
     updateDraft("people", { studentImportFileName: "", studentModel: model });
   }
@@ -515,6 +519,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
         draft,
         teacherImportFileBase64,
         studentImportFileBase64,
+        studentImportIdempotencyKey,
         kazanimImportFileBase64,
         allCourseOptions,
       );
@@ -560,6 +565,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
     window.sessionStorage.removeItem(draftStorageKey);
     setKazanimImportFileBase64("");
     setStudentImportFileBase64("");
+    setStudentImportIdempotencyKey("");
     setTeacherImportFileBase64("");
     setKazanimImportUploadStatus(createIdleUploadStatus());
     setStudentImportUploadStatus(createIdleUploadStatus());
@@ -1386,6 +1392,7 @@ async function saveSetup(
   draft: OnboardingDraft,
   teacherImportFileBase64: string,
   studentImportFileBase64: string,
+  studentImportIdempotencyKey: string,
   kazanimImportFileBase64: string,
   courseOptions: SetupCourseOption[],
 ) {
@@ -1507,7 +1514,7 @@ async function saveSetup(
     }
     const imported = await apiRequest<StudentImportResult>(accessToken, `${apiBaseUrl}/students/imports`, {
       body: JSON.stringify({ fileBase64: studentImportFileBase64 }),
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "Idempotency-Key": studentImportIdempotencyKey },
       method: "POST",
     });
     importedStudents = imported.importedRows;

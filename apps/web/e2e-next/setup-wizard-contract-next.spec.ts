@@ -4,7 +4,7 @@ const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 
 const corsHeaders = {
   "access-control-allow-credentials": "true",
-  "access-control-allow-headers": "authorization,content-type,x-csrf-token",
+  "access-control-allow-headers": "authorization,content-type,idempotency-key,x-csrf-token",
   "access-control-allow-methods": "DELETE,GET,PATCH,POST,OPTIONS",
   "access-control-allow-origin": appOrigin,
 };
@@ -226,7 +226,12 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
   });
 
   test("öğrenci Excel dosyasını zorunlu tutar ve veli bağlantı mesajını özetler", async ({ page }) => {
-    await openSetupWizard(page, { height: 844, width: 390 }, { roles: ["TENANT_ADMIN"] });
+    const studentImportIdempotencyKeys: string[] = [];
+    await openSetupWizard(page, { height: 844, width: 390 }, {
+      roles: ["TENANT_ADMIN"],
+      studentImportFailures: 1,
+      studentImportIdempotencyKeys,
+    });
 
     const setupForm = page.getByLabel("Kurulum formu");
     await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
@@ -242,9 +247,14 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
       name: "ogrenci-ada-veli-5550000101.csv",
     });
     await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
+    await expect(setupForm).toContainText("API_REQUEST_FAILED");
+    await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
 
     await expect(setupForm).toContainText("2 sınıf, 3 ders, 0 öğretmen, 0 öğretmen ataması");
     await expect(setupForm).toContainText("1 öğrenci ve dosyadaki veli bağlantıları işlendi");
+    expect(studentImportIdempotencyKeys).toHaveLength(2);
+    expect(studentImportIdempotencyKeys[0]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(studentImportIdempotencyKeys[1]).toBe(studentImportIdempotencyKeys[0]);
     await expect(setupForm).not.toContainText("veli eklendi");
     await expectNoVisibleTextValues(page, "setup-student-guardian-link-summary", [
       ...hostileUploadValues,
@@ -329,6 +339,19 @@ async function installSetupApiMocks(
     const url = new URL(request.url());
     const pathName = url.pathname.replace(/^\/api\/v1/, "");
     options.requestedPaths?.push(`${request.method()} ${pathName}`);
+    if (request.method() === "POST" && pathName === "/students/imports") {
+      options.studentImportIdempotencyKeys?.push(request.headers()["idempotency-key"] ?? "");
+      if ((options.studentImportFailures ?? 0) > 0) {
+        options.studentImportFailures = (options.studentImportFailures ?? 0) - 1;
+        await route.fulfill({
+          body: JSON.stringify({ error: { code: "TRANSIENT_IMPORT_FAILURE" } }),
+          contentType: "application/json",
+          headers: corsHeadersFor(route),
+          status: 503,
+        });
+        return;
+      }
+    }
     if (request.method() !== "GET" && pathName !== "/auth/refresh") {
       options.unexpectedMutations?.push(`${request.method()} ${pathName}`);
     }
@@ -469,6 +492,8 @@ interface SetupMockOptions {
   setupV2?: boolean;
   spoofCompletedCookie?: boolean;
   studentDryRun?: "duplicate";
+  studentImportFailures?: number;
+  studentImportIdempotencyKeys?: string[];
   unexpectedMutations?: string[];
 }
 
