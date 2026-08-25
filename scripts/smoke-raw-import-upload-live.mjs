@@ -178,9 +178,9 @@ async function seedExam() {
          "id", "tenantId", "userId", "role", "staffRole", "hasTeacherPersona", "hasStudentPersona",
          "status", "version", "scopeMode", "updatedAt"
        )
-       VALUES ($1, $2, $3, 'TENANT_ADMIN', 'TENANT_ADMIN', false, false, 'ACTIVE', 1, 'TENANT', now())
+       VALUES ($1, $2, $3, 'TENANT_OWNER', 'TENANT_OWNER', false, false, 'ACTIVE', 1, 'TENANT', now())
        ON CONFLICT ("tenantId", "userId", "role") DO UPDATE
-       SET "staffRole" = 'TENANT_ADMIN',
+       SET "staffRole" = 'TENANT_OWNER',
            "hasTeacherPersona" = false,
            "hasStudentPersona" = false,
            "status" = 'ACTIVE',

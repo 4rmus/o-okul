@@ -751,6 +751,9 @@ Minimum kanıt içeriği:
   içinde görünmelidir.
 - `isolation.crossTenantReadRows=0`, `withCheckRejects` yanlış tenant yazım/referans negatiflerini
   ve `system.rls_bypass_requested` audit aksiyonunu kanıtlar.
+- `pnpm db:rls:check:live` sabit A/B fixture tenantlarını canonical `TENANT_OWNER` membership ve
+  aynı session rolüyle kurar veya yeniler; canlı RLS kontrolü bir sonraki account backfill'i
+  ownerless fixture ile bloke etmez.
 - `loadSmoke.actualRps >= targetRps >= 200`, `failures=0` ve smoke artifact'i arşivlenmiş olmalıdır.
   Smoke artifact'i için komut `RLS_LOAD_SMOKE_EVIDENCE_FILE=artifacts/staging/rls-live/rls-load-smoke.json pnpm rls:load:smoke`
   biçiminde çalıştırılır; `pnpm rls:live:check` `evidenceReferences` içinde `rls-load-smoke`
@@ -1261,7 +1264,7 @@ provider/outbox işlemlerini, deploy'u veya final production aggregation'ı çal
 Minimum kanıt içeriği:
 
 `pnpm raw-import:smoke`, run-scope benzersiz queue prefix'i kullanır ve yalnız sentetik tenantta
-current login önkoşullarını kurar: Tenant/LicenseTerm mirror parity, canonical `TENANT_ADMIN`
+current login önkoşullarını kurar: Tenant/LicenseTerm mirror parity, canonical `TENANT_OWNER`
 membership, aktif account ve onaylı `parser-smoke-v1` ParserConfig. Upload sonrası arşiv/DB/job
 bağı doğrulanır; queue `contentHash` değeri `RawImport.sha256` ile exact eşleşmeden smoke `PASS`
 vermez. Bu fixture gerçek tenant veya mevcut kurum kaydını güncellemez.
