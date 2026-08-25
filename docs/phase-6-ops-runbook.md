@@ -1239,6 +1239,25 @@ UAT_SCENARIOS_TARGET=file:///.../uat-scenarios.json \
 pnpm uat:generate
 ```
 
+Exact-SHA toplama tamamlandıktan sonra **Staging Role UAT** workflow'u yalnız başarılı staging
+`deploy_run_id` ile ve `main` ref'inde elle çalıştırılır. Dispatch öncesi staging hostunda aşağıdaki
+release-scoped, PII ve secret içermeyen girdiler hazırlanır:
+
+- `/root/o-okul-private/uat/<releaseImageTag>/metadata.json`: exact `sourceSha`, son 24 saatlik
+  `generatedAt`, PII'siz `tester`, gerçek `restoreBackupReference` ve exact `githubCiRunUrl`.
+- `commands.json`: exact `sourceSha`, `generatedAt` ve CI/full-env dışında kalan 10 canlı UAT
+  komutunun exact `{command,status,evidence}` maddelerinde `PASS` + kalıcı `run/url/https/s3` kanıtı.
+- `scenarios.json`: exact `sourceSha`, `generatedAt` ve 21 persona senaryosunun `PASS` kanıtları;
+  exact `{id,persona,status,evidence}` maddelerindeki her senaryo exact CI run'ına, dış UAT gereken
+  sekiz senaryo ayrıca staging kanıtına bağlanır.
+
+Release dizini `0700`, üç girdi regular/symlink olmayan `0600` dosya ve deploy SSH kullanıcısının
+sahipliğinde olmalıdır. Workflow full evidence secret'ını değer yazdırmadan doğrular, current CI ve
+full-env sonuçlarını 12 komut setine ekler, `pnpm uat:generate` + `pnpm uat:check` çalıştırır ve
+yalnız doğrulanmış `reports/uat.json` dosyasını GitHub artifact ile staging evidence yüzeyine yayımlar.
+Önceki `uat.json` private archive'a taşındığı için geri alınabilir. Bu workflow canlı UAT komutlarını,
+provider/outbox işlemlerini, deploy'u veya final production aggregation'ı çalıştırmaz.
+
 Minimum kanıt içeriği:
 
 - `environment=staging` veya `production`, release candidate, rollback image ve restore backup referansı.
