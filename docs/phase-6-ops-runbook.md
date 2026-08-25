@@ -1260,6 +1260,12 @@ provider/outbox işlemlerini, deploy'u veya final production aggregation'ı çal
 
 Minimum kanıt içeriği:
 
+`pnpm raw-import:smoke`, run-scope benzersiz queue prefix'i kullanır ve yalnız sentetik tenantta
+current login önkoşullarını kurar: Tenant/LicenseTerm mirror parity, canonical `TENANT_ADMIN`
+membership, aktif account ve onaylı `parser-smoke-v1` ParserConfig. Upload sonrası arşiv/DB/job
+bağı doğrulanır; queue `contentHash` değeri `RawImport.sha256` ile exact eşleşmeden smoke `PASS`
+vermez. Bu fixture gerçek tenant veya mevcut kurum kaydını güncellemez.
+
 - `environment=staging` veya `production`, release candidate, rollback image ve restore backup referansı.
 - `commandsPassed` içinde CI, production env, canlı RLS, raw import, report generation, queue,
   live onboarding, live UI-worker, SMS, notification ve Traefik HTTPS smoke komutları.
