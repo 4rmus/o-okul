@@ -4,9 +4,9 @@ import ExcelJS from "exceljs";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import { normalizeTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
+import { FeatureRolloutService } from "../feature-rollout/feature-rollout.service.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import { toTurkishUpperCase } from "../http/zod-validation.js";
-import { FeatureRolloutService } from "../feature-rollout/feature-rollout.service.js";
 import { maskContactEmail, maskContactPhone } from "../privacy/contact-mask.js";
 import { SchoolService } from "../school/school.service.js";
 import { StudentService, type StudentGuardianProvisionInput, type StudentRecord } from "./student.service.js";
@@ -126,17 +126,13 @@ export class StudentImportService {
       throw new BadRequestException("IMPORT_FILE_REQUIRED");
     }
     const rows = await this.readRows(fileBase64);
-    const rowPilotErrors: StudentImportError[] = [];
-    const registryV2Enabled = await this.isRegistryV2Enabled(context);
-    if (registryV2Enabled) {
-      for (const row of rows) {
-        rowPilotErrors.push(...errorsForCoreOnlyPilot(row));
-      }
-    }
-    if (!registryV2Enabled && rows.some((row) => Boolean(row.guardian))) {
+    const registryErrors = await this.isRegistryV2Enabled(context)
+      ? rows.flatMap(errorsForRegistryPilot)
+      : [];
+    if (rows.some((row) => Boolean(row.guardian))) {
       await this.students.assertGuardianProvisioningAllowed(context);
     }
-    const errors = [...rowPilotErrors, ...await this.validateRows(context, rows)];
+    const errors = [...registryErrors, ...await this.validateRows(context, rows)];
     const incomingActiveStudents = filterValidRows(rows, errors).filter((row) => Boolean(row.classId)).length;
     const quota = await this.students.previewQuota(context, incomingActiveStudents);
 
@@ -316,12 +312,6 @@ export class StudentImportService {
       if (row.email && !isEmailLike(row.email)) {
         errors.push({ row: row.row, field: "email", code: "INVALID_EMAIL" });
       }
-      if (row.nationalId && !row.phone) {
-        errors.push({ row: row.row, field: "phone", code: "REQUIRED" });
-      }
-      if (row.phone && !row.nationalId) {
-        errors.push({ row: row.row, field: "nationalId", code: "REQUIRED" });
-      }
       let identityValid = true;
       if (row.nationalId) {
         try {
@@ -372,11 +362,8 @@ export class StudentImportService {
             ...maskedNationalIdValue(row.guardian.nationalId),
           });
         }
-        if (!row.guardian.phone) {
-          errors.push({ row: row.row, field: "guardianPhone", code: "REQUIRED" });
-        }
       }
-      if (row.guardian?.nationalId && row.guardian.phone) {
+      if (row.guardian?.phone) {
         try {
           row.guardian.phone = normalizeTurkishMobilePhone(row.guardian.phone, "GUARDIAN_PHONE_INVALID");
         } catch {
@@ -452,13 +439,8 @@ function toPublicImportedStudent(student: StudentRecord): PublicStudentRecord {
   };
 }
 
-function errorsForCoreOnlyPilot(row: ParsedStudentImportRow): StudentImportError[] {
-  const errors: StudentImportError[] = [];
-  if (row.nationalId) errors.push({ row: row.row, field: "nationalId", code: "STUDENT_IMPORT_PILOT_CORE_ONLY" });
-  if (row.phone) errors.push({ row: row.row, field: "phone", code: "STUDENT_IMPORT_PILOT_CORE_ONLY" });
-  if (row.email) errors.push({ row: row.row, field: "email", code: "STUDENT_IMPORT_PILOT_CORE_ONLY" });
-  if (row.guardian) errors.push({ row: row.row, field: "guardian", code: "STUDENT_CONTACT_IMPORT_REQUIRED" });
-  return errors;
+function errorsForRegistryPilot(row: ParsedStudentImportRow): StudentImportError[] {
+  return row.email ? [{ row: row.row, field: "email", code: "STUDENT_IMPORT_PILOT_CORE_ONLY" }] : [];
 }
 
 function isXlsx(bytes: Buffer): boolean {

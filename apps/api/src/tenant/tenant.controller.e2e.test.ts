@@ -117,7 +117,6 @@ describe("TenantController", () => {
       startsAt: "2031-01-01T00:00:00.000Z",
       endsAt: "2032-01-01T00:00:00.000Z",
       activeStudentLimit: 500,
-      auditReference: "contract-2031",
     };
     await request(server)
       .post("/tenants/tenant-license-term-e2e/license-terms")
@@ -125,13 +124,17 @@ describe("TenantController", () => {
       .send(body)
       .expect(201)
       .expect(({ body: responseBody }) => {
-        expect(responseBody).toMatchObject({ tenantId: "tenant-license-term-e2e", ...body });
+        expect(responseBody).toMatchObject({
+          tenantId: "tenant-license-term-e2e",
+          ...body,
+          auditReference: expect.stringMatching(/^license-[0-9a-f-]{36}$/),
+        });
       });
 
     await request(server)
       .post("/tenants/tenant-license-term-e2e/license-terms")
       .set("Authorization", `Bearer ${systemToken}`)
-      .send({ ...body, auditReference: "overlap-contract" })
+      .send(body)
       .expect(400)
       .expect(({ body: responseBody }) => {
         expect(JSON.stringify(responseBody)).toContain("LICENSE_TERM_OVERLAP");
@@ -141,6 +144,12 @@ describe("TenantController", () => {
       .post("/tenants/tenant-license-term-e2e/license-terms")
       .set("Authorization", `Bearer ${systemToken}`)
       .send({ ...body, startsAt: body.endsAt, endsAt: body.startsAt })
+      .expect(422);
+
+    await request(server)
+      .post("/tenants/tenant-license-term-e2e/license-terms")
+      .set("Authorization", `Bearer ${systemToken}`)
+      .send({ ...body, auditReference: "manual-reference" })
       .expect(422);
   });
 
@@ -202,7 +211,6 @@ describe("TenantController", () => {
         startsAt: "2032-01-01T00:00:00.000Z",
         endsAt: "2033-01-01T00:00:00.000Z",
         activeStudentLimit: 400,
-        auditReference: "contract-owner-e2e",
       },
       firstOwner: { name: "İLK SAHİP", email: "owner-e2e@example.test" },
     };
@@ -224,7 +232,12 @@ describe("TenantController", () => {
     expect(first.body).toMatchObject({
       tenant: { id: "tenant-owner-e2e", plan: "PRO", seatLimit: 400 },
       campuses: [{ tenantId: "tenant-owner-e2e", name: "MERKEZ KAMPÜS", unitType: "SCHOOL" }],
-      licenseTerm: { tenantId: "tenant-owner-e2e", planCode: "PRO", activeStudentLimit: 400 },
+      licenseTerm: {
+        tenantId: "tenant-owner-e2e",
+        planCode: "PRO",
+        activeStudentLimit: 400,
+        auditReference: expect.stringMatching(/^license-[0-9a-f-]{36}$/),
+      },
       owner: { tenantId: "tenant-owner-e2e", roles: ["TENANT_OWNER"] },
     });
     expect(JSON.stringify(first.body)).not.toContain("tokenHash");

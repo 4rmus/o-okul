@@ -10,6 +10,29 @@ import { StudentService } from "./student.service.js";
 import { hashTcIdentity, normalizeTcIdentity } from "./tc-identity.js";
 
 describe("StudentService", () => {
+  it("öğrenci TC kimlik ve telefon alanlarını birbirinden bağımsız saklar", async () => {
+    const setup = createService();
+
+    const tcStudent = await setup.service.create(adminContext, {
+      firstName: "Tc",
+      lastName: "Ogrenci",
+      nationalId: "10000000146",
+    });
+    const phoneStudent = await setup.service.create(adminContext, {
+      firstName: "Telefon",
+      lastName: "Ogrenci",
+      phone: "5551234567",
+    });
+
+    const tcProfile = await setup.studentStore.findProfileById(tcStudent.id);
+    expect(tcProfile).toMatchObject({ nationalIdHash: hashTcIdentity("10000000146") });
+    expect(tcProfile).not.toHaveProperty("phone");
+
+    const phoneProfile = await setup.studentStore.findProfileById(phoneStudent.id);
+    expect(phoneProfile).toMatchObject({ phone: "5551234567" });
+    expect(phoneProfile).not.toHaveProperty("nationalIdHash");
+  });
+
   it("ogrenci olustururken yeni veli, link ve davet uretir", async () => {
     const setup = createService();
 
@@ -72,6 +95,23 @@ describe("StudentService", () => {
       }),
     ]);
     expect(setup.invitations).toEqual([]);
+  });
+
+  it("veliyi yalnız TC kimlik numarasıyla oluşturur", async () => {
+    const setup = createService();
+
+    const student = await setup.service.create(adminContext, {
+      firstName: "Tc",
+      lastName: "Ogrenci",
+      guardian: { nationalId: "10000001372" },
+    });
+
+    const guardians = await setup.guardianStore.list();
+    const guardian = guardians.find((record) => record.nationalIdHash === hashTcIdentity("10000001372"));
+    expect(guardian).toMatchObject({ phone: undefined, nationalIdEncrypted: expect.any(String) });
+    await expect(setup.guardianStudentStore.listByStudent(student.id)).resolves.toEqual([
+      expect.objectContaining({ guardianId: guardian?.id, studentId: student.id }),
+    ]);
   });
 
   it("TC eslesirse mevcut veliyi telefon farkli olsa da yeniden kullanir", async () => {

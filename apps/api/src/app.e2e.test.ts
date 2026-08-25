@@ -969,7 +969,7 @@ describe("API auth + tenant isolation", () => {
     expect(JSON.stringify(response.body)).not.toContain("5550000014");
   });
 
-  it("student CSV dry-run TC tek başına gelirse hesap oluşturmayı sessiz geçmez", async () => {
+  it("student CSV dry-run yalnız TC ile gelen kaydı hesap oluşturmadan kabul eder", async () => {
     const issued = await login("admin-a@example.test");
     const fileBase64 = Buffer.from("\uFEFFad;soyad;tc_kimlik_no\nEce;EksikTelefon;10000001372\n", "utf8").toString("base64");
 
@@ -982,10 +982,11 @@ describe("API auth + tenant isolation", () => {
     expect(response.body).toMatchObject({
       dryRun: true,
       totalRows: 1,
-      validRows: [],
-      errors: [{ row: 2, field: "phone", code: "REQUIRED" }],
-      wouldImport: false,
+      validRows: [{ row: 2, firstName: "ECE", lastName: "EKSİKTELEFON" }],
+      errors: [],
+      wouldImport: true,
     });
+    expect(response.body.validRows[0]).not.toHaveProperty("accountPreview");
     expect(JSON.stringify(response.body)).not.toContain("10000001372");
   });
 

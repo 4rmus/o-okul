@@ -23,27 +23,44 @@ describe("StudentImportService Gate D", () => {
     expect(students.createMany).not.toHaveBeenCalled();
   });
 
-  it("registry v2 pilotunda post-commit hesap/guardian yan etkisi doğuracak kolonları reddeder", async () => {
+  it("öğrenci ve veli TC/telefon alanlarını birbirinden bağımsız işler", async () => {
     const { service, students } = createService({ registryV2: true });
     const fileBase64 = csv([
-      "ad;soyad;tc;telefon;veli_ad;veli_soyad;veli_telefon",
-      "Ada;Kaya;10000000146;5551234567;Fatma;Kaya;5557654321",
+      "ad;soyad;tc;telefon;veli_ad;veli_soyad;veli_tc;veli_telefon",
+      "Tc;Ogrenci;10000000146;;;;;",
+      "Telefon;Ogrenci;;05551234567;;;;",
+      "VeliTc;Ogrenci;;;Fatma;Kaya;10000001372;",
+      "VeliTelefon;Ogrenci;;;Ayse;Kaya;;05557654321",
     ].join("\n"));
 
     const preview = await service.dryRun(context, { fileBase64 });
-    expect(preview.wouldImport).toBe(false);
-    expect(preview.errors).toEqual(expect.arrayContaining([
-      expect.objectContaining({ field: "nationalId", code: "STUDENT_IMPORT_PILOT_CORE_ONLY" }),
-      expect.objectContaining({ field: "phone", code: "STUDENT_IMPORT_PILOT_CORE_ONLY" }),
-      expect.objectContaining({ field: "guardian", code: "STUDENT_CONTACT_IMPORT_REQUIRED" }),
-    ]));
-    await expect(service.import(context, { fileBase64 }, "registry-v2-core-only-a"))
-      .rejects.toMatchObject({ status: 400 });
-    expect(students.createMany).not.toHaveBeenCalled();
+    expect(preview).toMatchObject({ totalRows: 4, errors: [], wouldImport: true });
+
+    await expect(service.import(context, { fileBase64 }, "independent-identity-fields-a"))
+      .resolves.toMatchObject({ importedRows: 0 });
+    expect(students.assertGuardianProvisioningAllowed).toHaveBeenCalledWith(context);
+    expect(students.createMany).toHaveBeenCalledWith(context, [
+      expect.objectContaining({ nationalId: "10000000146", firstName: "TC" }),
+      expect.objectContaining({ phone: "5551234567", firstName: "TELEFON" }),
+      expect.objectContaining({ guardian: expect.objectContaining({ nationalId: "10000001372" }) }),
+      expect.objectContaining({ guardian: expect.objectContaining({ phone: "5557654321" }) }),
+    ]);
   });
 
-  it("registry v2 iletişim kişisini maskeli dry-run ve default-off izinlerle import girdisine taşır", async () => {
-    const { service, students } = createService({ registryV2: true });
+  it("registry v2 pilotunda öğrenci hesap e-postasını reddetmeye devam eder", async () => {
+    const { service } = createService({ registryV2: true });
+    const preview = await service.dryRun(context, {
+      fileBase64: csv("ad;soyad;email\nAda;Kaya;ada@example.test"),
+    });
+
+    expect(preview).toMatchObject({
+      wouldImport: false,
+      errors: [{ row: 2, field: "email", code: "STUDENT_IMPORT_PILOT_CORE_ONLY" }],
+    });
+  });
+
+  it("iletişim kişisini maskeli dry-run ve default-off izinlerle import girdisine taşır", async () => {
+    const { service, students } = createService();
     const fileBase64 = csv([
       "ad;soyad;contactFirstName;contactLastName;contactRelation;contactPhone;contactEmail",
       "Ada;Kaya;Fatma;Kaya;ANNE;5551234567;fatma@example.test",

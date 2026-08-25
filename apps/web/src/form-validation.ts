@@ -136,7 +136,6 @@ export const tenantFormSchema = tenantUpdateFormSchema.extend({
 });
 
 export const tenantCreateFormSchema = tenantFormSchema.and(z.object({
-  auditReference: requiredText("Sözleşme referansı"),
   campus: z.object({
     code: optionalText(),
     name: requiredText("Kampüs adı"),
@@ -170,7 +169,6 @@ export const tenantCreateFormSchema = tenantFormSchema.and(z.object({
     startsAt: calendarDateToIso(value.licenseStartsAt),
     endsAt: calendarDateToIso(value.licenseEndsAt),
     activeStudentLimit: value.seatLimit!,
-    auditReference: value.auditReference,
   },
 }));
 

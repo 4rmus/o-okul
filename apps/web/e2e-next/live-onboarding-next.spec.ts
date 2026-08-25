@@ -67,7 +67,6 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
   await createDialog.getByLabel("Lisans başlangıç").fill(licenseStartsAt);
   await createDialog.getByLabel("Lisans bitiş").fill(licenseEndsAtDate.toISOString().slice(0, 10));
   await createDialog.getByLabel("Aktif öğrenci limiti").fill(String(evidence.tenant.seatLimit ?? 25));
-  await createDialog.getByLabel("Sözleşme referansı").fill(`gate-d-uat-${runId}`);
   await createDialog.getByLabel("İlk kampüs adı").fill("Merkez Kampüs");
   await createDialog.getByLabel("İlk kurum sahibi ad soyad").fill(evidence.firstAdmin.name);
   await createDialog.getByLabel("İlk kurum sahibi e-posta").fill(firstAdminEmail);

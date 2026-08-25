@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type { LicenseTermListRecord, TenantCreateResponse } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
@@ -196,7 +197,7 @@ export class TenantService {
         endsAt: body.endsAt,
         activeStudentLimit: body.activeStudentLimit,
         createdByPlatformAccountId: context.userId,
-        auditReference: body.auditReference,
+        auditReference: createLicenseTrackingReference(),
       });
     } catch (error) {
       if (isPostgresConstraintError(error, "23P01") || (error instanceof Error && error.message === "LICENSE_TERM_OVERLAP")) {
@@ -372,8 +373,13 @@ function parseTenantOnboarding(
     licenseTerm: {
       ...parsedTerm.data,
       createdByPlatformAccountId: platformAccountId,
+      auditReference: createLicenseTrackingReference(),
     },
   };
+}
+
+function createLicenseTrackingReference(): string {
+  return `license-${randomUUID()}`;
 }
 
 function parseFirstOwner(body: TenantFirstAdminBody): CreateTenantOnboardingInput["firstOwner"] {

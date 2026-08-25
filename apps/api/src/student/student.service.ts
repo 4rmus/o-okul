@@ -1697,14 +1697,15 @@ function todayDateString(): string {
 function parseGuardianProvisionInput(input: StudentGuardianProvisionInput, student: Pick<StudentRecord, "lastName">) {
   const phone = optionalTurkishMobilePhone(input.phone, "GUARDIAN_PHONE_INVALID");
   const email = optionalGuardianEmail(input.email);
-  if (!phone && !email) {
+  const nationalId = optionalGuardianText(input.nationalId);
+  if (!nationalId && !phone && !email) {
     throw new BadRequestException("GUARDIAN_CONTACT_REQUIRED");
   }
 
   return {
     firstName: optionalGuardianText(input.firstName) ?? "Veli",
     lastName: optionalGuardianText(input.lastName) ?? optionalGuardianText(student.lastName) ?? "Veli",
-    nationalId: optionalGuardianText(input.nationalId),
+    nationalId,
     phone,
     email,
     canViewFinance: input.canViewFinance,

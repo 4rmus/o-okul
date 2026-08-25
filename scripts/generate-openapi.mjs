@@ -779,7 +779,7 @@ const tenantCreateResponseForbiddenDeep = [
   "token",
   "tokenHash",
 ];
-const licenseTermCreateRequestProperties = ["activeStudentLimit", "auditReference", "endsAt", "planCode", "startsAt"];
+const licenseTermCreateRequestProperties = ["activeStudentLimit", "endsAt", "planCode", "startsAt"];
 const licenseTermRecordRequired = ["id", "tenantId", "planCode", "startsAt", "endsAt", "activeStudentLimit"];
 const tenantCreateFieldChecks = [
   { path: ["requestBody", "contactEmail"], format: "email" },
@@ -1996,7 +1996,6 @@ const requiredOperationContracts = [
     responseDataRequired: licenseTermRecordRequired,
     fieldChecks: [
       { path: ["requestBody", "activeStudentLimit"], minimum: 1 },
-      { path: ["requestBody", "auditReference"], minLength: 1 },
       { path: ["requestBody", "endsAt"], format: "date-time" },
       { path: ["requestBody", "planCode"], minLength: 1 },
       { path: ["requestBody", "startsAt"], format: "date-time" },
