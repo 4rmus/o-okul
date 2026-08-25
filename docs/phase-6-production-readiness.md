@@ -1033,6 +1033,17 @@ pnpm backup:restore:smoke
   ile üretilir; generator gerçek komut kanıtı ve 21 senaryoluk UAT kaynak artifact'i olmadan JSON yazmaz.
   `UAT_OUTPUT`, `UAT_COMMAND_EVIDENCE_TARGET` ve `UAT_SCENARIOS_TARGET` lokal temp path,
   `artifacts/local/**` veya symlink file/parent üzerinden gelemez.
+- Manuel **Staging Role UAT** workflow'u yalnız `main` üzerindeki exact başarılı staging deploy run'ını
+  kabul eder. Cutover, GitHub CI, dört çalışan image ve full staging evidence env bağını doğruladıktan
+  sonra `/root/o-okul-private/uat/<releaseImageTag>/` altındaki `0600` `metadata.json`, `commands.json`
+  ve `scenarios.json` girdilerini okur. Girdiler cutover sonrasında ve son 24 saat içinde üretilmiş,
+  exact source SHA'ya bağlı ve yalnız secret taşımayan kalıcı `run/url/https/s3` referanslı olmalıdır.
+  Workflow `pnpm run ci` ve `pnpm prod:env:check` kanıtlarını kendi exact run'larından bağlar; kalan
+  10 canlı komutu yeniden çalıştırmaz, onların önceden onaylı koşulmuş kanıt manifestlerini doğrular. Ardından
+  12/12 komut ve 21/21 senaryo için `uat.json` üretip checker'dan geçirir, image parity'yi yeniden
+  doğrular ve önceki UAT raporunu private arşivde koruyarak canonical staging raporunu atomik yayımlar.
+  Deploy, provider çağrısı, outbox smoke veya production summary çalıştırmaz; workflow dispatch'i ve
+  öncül canlı UAT komutları ayrı açık operatör onayı gerektirir.
 - Gerçek UAT raporunda `checkedAt` gelecekte olamaz; `tester`, `rollbackImageTag`,
   `restoreBackupReference` ve her
   `journeyScenariosVerified[].evidence` maddesi gerçek release/artifact/run/log referansı olmalıdır.

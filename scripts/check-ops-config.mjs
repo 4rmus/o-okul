@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 
 const files = {
@@ -5424,6 +5425,13 @@ if (files[".github/workflows/staging-deploy.yml"].includes("pnpm run ci")) {
 
 if (files[".github/workflows/staging-deploy.yml"].includes("playwright install --with-deps chromium")) {
   failures.push("staging-deploy workflow Playwright bağımlılığı kurmamalı; bu sorumluluk CI workflow'unda kalmalı.");
+}
+
+const roleUatContract = spawnSync(process.execPath, ["scripts/check-staging-role-uat-inputs.mjs", "--contract"], {
+  encoding: "utf8",
+});
+if (roleUatContract.status !== 0) {
+  failures.push("Staging Role UAT workflow/input contract kontrolü geçmedi.");
 }
 
 if (failures.length > 0) {
