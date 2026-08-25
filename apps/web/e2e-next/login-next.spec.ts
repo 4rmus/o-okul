@@ -5521,7 +5521,7 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
         status: string;
         campuses: Array<{ name: string; code?: string; unitType: string }>;
         firstOwner: { name: string; email: string; nationalId?: string };
-        licenseTerm: { planCode: string; startsAt: string; endsAt: string; activeStudentLimit: number; auditReference: string };
+        licenseTerm: { planCode: string; startsAt: string; endsAt: string; activeStudentLimit: number };
       };
       tenantCreateCount += 1;
       const id = tenantCreateCount === 1 ? "tenant-created" : `tenant-created-${tenantCreateCount}`;
@@ -5619,7 +5619,6 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
   await createDialog.getByLabel("Lisans başlangıç").fill("2026-08-01");
   await createDialog.getByLabel("Lisans bitiş").fill("2027-08-01");
   await createDialog.getByLabel("Aktif öğrenci limiti").fill("50");
-  await createDialog.getByLabel("Sözleşme referansı").fill("contract-2026-001");
   await createDialog.getByLabel("İlk kampüs adı").fill("Merkez Kampüs");
   await createDialog.getByLabel("İlk kurum sahibi ad soyad").fill("Yeni Yönetici");
   await createDialog.getByLabel("İlk kurum sahibi e-posta").fill("first.admin@example.test");
@@ -5638,7 +5637,6 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
   await createDialog.getByLabel("Lisans başlangıç").fill("2026-08-01");
   await createDialog.getByLabel("Lisans bitiş").fill("2027-08-01");
   await createDialog.getByLabel("Aktif öğrenci limiti").fill("50");
-  await createDialog.getByLabel("Sözleşme referansı").fill("contract-2026-002");
   await createDialog.getByLabel("İlk kampüs adı").fill("Merkez Kampüs");
   await createDialog.getByLabel("İlk kurum sahibi ad soyad").fill("Davetli Yönetici");
   await createDialog.getByLabel("İlk kurum sahibi e-posta").fill("phone.admin@example.test");

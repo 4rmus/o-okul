@@ -29,7 +29,6 @@ export function LicenseTermsPage() {
       priority: "primary",
       render: (term) => <StatusBadge tone={stateTone(term.state)}>{stateLabel(term.state)}</StatusBadge>,
     },
-    { key: "auditReference", header: "Sözleşme kaydı", priority: "optional", render: (term) => term.auditReference ?? "-" },
   ];
   const summaryItems: OperationSummaryItem[] = [
     { key: "total", label: "Dönem toplamı", description: "Yenilemeler dahil geçmiş", value: formatCount(terms.length) },

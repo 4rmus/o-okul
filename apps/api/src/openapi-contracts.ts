@@ -148,8 +148,7 @@ const licenseTermCreateRequestSchema = objectSchema({
   startsAt: stringSchema({ format: "date-time" }),
   endsAt: stringSchema({ format: "date-time" }),
   activeStudentLimit: integerSchema({ minimum: 1 }),
-  auditReference: stringSchema({ minLength: 1 }),
-}, ["planCode", "startsAt", "endsAt", "activeStudentLimit", "auditReference"]);
+}, ["planCode", "startsAt", "endsAt", "activeStudentLimit"]);
 
 const institutionDashboardClassSchema = objectSchema({
   classId: stringSchema(),
@@ -2723,7 +2722,6 @@ const studentImportErrorSchema = objectSchema({
       "INVALID_PHONE",
       "INVALID_RELATION_TYPE",
       "REQUIRED",
-      "STUDENT_CONTACT_IMPORT_REQUIRED",
       "STUDENT_IMPORT_PILOT_CORE_ONLY",
       "STUDENT_NATIONAL_ID_DUPLICATE",
       "STUDENT_NO_DUPLICATE",

@@ -241,7 +241,6 @@ export interface LicenseTermCreateRequest {
   startsAt: string;
   endsAt: string;
   activeStudentLimit: number;
-  auditReference: string;
 }
 
 export interface TenantCurrentProfileUpdateRequest {
@@ -1018,7 +1017,6 @@ export interface StudentImportError {
     | "INVALID_PHONE"
     | "INVALID_RELATION_TYPE"
     | "REQUIRED"
-    | "STUDENT_CONTACT_IMPORT_REQUIRED"
     | "STUDENT_IMPORT_PILOT_CORE_ONLY"
     | "STUDENT_NATIONAL_ID_DUPLICATE"
     | "STUDENT_NO_DUPLICATE"

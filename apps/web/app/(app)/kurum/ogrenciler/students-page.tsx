@@ -1657,8 +1657,7 @@ function formatStudentImportError(error: StudentImportDryRunResult["errors"][num
   if (error.code === "INVALID_PHONE") return `${row}: telefon geçersiz`;
   if (error.code === "INVALID_RELATION_TYPE") return `${row}: iletişim kişisi ilişki türü geçersiz`;
   if (error.code === "ACTIVE_STUDENT_LIMIT_REACHED") return "Aktif öğrenci kotası aşılır";
-  if (error.code === "STUDENT_IMPORT_PILOT_CORE_ONLY") return `${row}: pilot içe aktarımında hesap/iletişim alanı kullanılamaz`;
-  if (error.code === "STUDENT_CONTACT_IMPORT_REQUIRED") return `${row}: veli yerine öğrenci iletişim kişisi akışı kullanılmalı`;
+  if (error.code === "STUDENT_IMPORT_PILOT_CORE_ONLY") return `${row}: pilot içe aktarımında hesap e-postası kullanılamaz`;
   return `${row}: dosya satırı kontrol edilmeli`;
 }
 

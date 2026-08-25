@@ -42,7 +42,6 @@ const emptyForm: TenantFormState = {
 
 const emptyCreateForm: TenantCreateFormState = {
   ...emptyForm,
-  auditReference: "",
   campus: {
     code: "MRK",
     name: "",
@@ -300,9 +299,6 @@ function TenantFormModal({
           value={form.seatLimit ?? ""}
           onChange={(event) => onChange({ ...form, seatLimit: event.target.value })}
         />
-      </Field>
-      <Field label="Sözleşme referansı">
-        <Input required value={form.auditReference} onChange={(event) => onChange({ ...form, auditReference: event.target.value })} />
       </Field>
       <Field label="İlk kampüs adı">
         <Input required value={form.campus.name} onChange={(event) => onChange({ ...form, campus: { ...form.campus, name: event.target.value } })} />

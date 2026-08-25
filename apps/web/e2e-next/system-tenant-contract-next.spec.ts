@@ -105,7 +105,7 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     await createDialog.getByLabel("Lisans başlangıç").fill("2026-08-01");
     await createDialog.getByLabel("Lisans bitiş").fill("2027-08-01");
     await createDialog.getByLabel("Aktif öğrenci limiti").fill("100");
-    await createDialog.getByLabel("Sözleşme referansı").fill("SOZ-001");
+    await expect(createDialog.getByLabel("Sözleşme referansı")).toHaveCount(0);
     await createDialog.getByLabel("İlk kampüs adı").fill("Davetli Kampüs");
     await createDialog.getByLabel("İlk kurum sahibi ad soyad").fill("Davetli Yönetici");
     await createDialog.getByLabel("İlk kurum sahibi e-posta").fill("phone.admin@example.test");
@@ -123,7 +123,6 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
         },
         licenseTerm: {
           activeStudentLimit: 100,
-          auditReference: "SOZ-001",
           endsAt: "2027-08-01T00:00:00.000Z",
           planCode: "PRO",
           startsAt: "2026-08-01T00:00:00.000Z",
@@ -151,7 +150,6 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     await createDialog.getByLabel("Lisans başlangıç").fill("2026-08-01");
     await createDialog.getByLabel("Lisans bitiş").fill("2027-08-01");
     await createDialog.getByLabel("Aktif öğrenci limiti").fill("100");
-    await createDialog.getByLabel("Sözleşme referansı").fill("SOZ-002");
     await createDialog.getByLabel("İlk kampüs adı").fill("Demo Kampüs");
     await createDialog.getByLabel("İlk kurum sahibi ad soyad").fill("Demo Yönetici");
     await createDialog.getByLabel("İlk kurum sahibi e-posta").fill("used.admin@example.test");
@@ -196,7 +194,6 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     await createDialog.getByLabel("Lisans başlangıç").fill("2026-08-01");
     await createDialog.getByLabel("Lisans bitiş").fill("2027-08-01");
     await createDialog.getByLabel("Aktif öğrenci limiti").fill("100");
-    await createDialog.getByLabel("Sözleşme referansı").fill("SOZ-003");
     await createDialog.getByLabel("İlk kampüs adı").fill("Geçersiz Kampüs");
     await createDialog.getByLabel("İlk kurum sahibi ad soyad").fill("Geçersiz Yönetici");
     await createDialog.getByLabel("İlk kurum sahibi e-posta").fill("invalid-admin@example.test");

@@ -193,7 +193,6 @@ describe("TenantService", () => {
         startsAt: "2026-08-01T00:00:00.000Z",
         endsAt: "2027-08-01T00:00:00.000Z",
         activeStudentLimit: 500,
-        auditReference: "contract-owner-1",
       },
       firstOwner: {
         name: "İlk Sahip",
@@ -210,7 +209,12 @@ describe("TenantService", () => {
         seatLimit: 500,
       },
       campuses: [{ tenantId: "tenant-owner-onboarding", name: "Merkez Kampüs", code: "MRK", unitType: "SCHOOL" }],
-      licenseTerm: { tenantId: "tenant-owner-onboarding", planCode: "PRO", activeStudentLimit: 500 },
+      licenseTerm: {
+        tenantId: "tenant-owner-onboarding",
+        planCode: "PRO",
+        activeStudentLimit: 500,
+        auditReference: expect.stringMatching(/^license-[0-9a-f-]{36}$/),
+      },
       owner: {
         tenantId: "tenant-owner-onboarding",
         roles: ["TENANT_OWNER"],
@@ -226,7 +230,6 @@ describe("TenantService", () => {
         startsAt: "2026-08-01T00:00:00.000Z",
         endsAt: "2027-08-01T00:00:00.000Z",
         activeStudentLimit: 500,
-        auditReference: "contract-owner-1",
       },
       firstOwner: { name: "İlk Sahip", email: "OWNER@example.test" },
     }, "tenant-owner-onboarding-1");
