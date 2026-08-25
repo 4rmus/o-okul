@@ -23,16 +23,21 @@ const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migra
 const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
 const s3Endpoint = process.env.S3_ENDPOINT ?? "http://localhost:9000";
 const s3Bucket = process.env.S3_BUCKET ?? "o-okul-local";
-const queuePrefix = process.env.QUEUE_PREFIX ?? `raw-import-smoke-${Date.now()}`;
 const s3Credentials = resolveS3Credentials();
 const runId = randomUUID();
+const queuePrefix = process.env.RAW_IMPORT_SMOKE_QUEUE_PREFIX ?? `raw-import-smoke-${runId}`;
 const tenantId = `tenant-raw-import-smoke-${runId}`;
 const tenantSlug = `raw-import-smoke-${runId}`;
 const userId = `user-raw-import-smoke-${runId}`;
 const membershipId = `membership-raw-import-smoke-${runId}`;
+const licenseTermId = `license-term-raw-import-smoke-${runId}`;
 const examId = `exam-smoke-${runId}`;
+const parserConfigId = `parser-config-raw-import-smoke-${runId}`;
+const parserConfigVersion = "parser-smoke-v1";
 const smokeEmail = `raw-import-smoke-${runId}@example.test`;
 const smokePassword = "password";
+const licenseStartsAt = new Date(Date.now() - 24 * 60 * 60 * 1_000).toISOString();
+const licenseEndsAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1_000).toISOString();
 
 process.env.DATABASE_URL = databaseUrl;
 process.env.REDIS_URL = redisUrl;
@@ -104,7 +109,7 @@ try {
     processedJob.name !== "excel-import" ||
     processedJob.payload.tenantId !== tenantId ||
     processedJob.payload.entityId !== rawImport.id ||
-    !processedJob.payload.contentHash.startsWith(`${rawImport.sha256}-`)
+    processedJob.payload.contentHash !== rawImport.sha256
   ) {
     throw new Error("RAW_IMPORT_SMOKE_QUEUE_PAYLOAD_MISMATCH");
   }
@@ -129,20 +134,59 @@ async function seedExam() {
     await client.query("BEGIN");
     await client.query("SELECT set_config('app.bypass_rls', 'true', true)");
     await client.query(
-      `INSERT INTO "Tenant" ("id", "name", "slug", "status", "updatedAt")
-       VALUES ($1, $2, $3, 'ACTIVE', now())
-       ON CONFLICT ("id") DO UPDATE SET "status" = 'ACTIVE', "updatedAt" = now()`,
-      [tenantId, "Raw Import Smoke Tenant", tenantSlug],
+      `INSERT INTO "Tenant" (
+         "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", "status", "updatedAt"
+       )
+       VALUES ($1, $2, $3, 'ROLE-UAT', $4::timestamptz, $5::timestamptz, 100, 'ACTIVE', now())
+       ON CONFLICT ("id") DO UPDATE
+       SET "plan" = EXCLUDED."plan",
+           "licenseStartsAt" = EXCLUDED."licenseStartsAt",
+           "licenseEndsAt" = EXCLUDED."licenseEndsAt",
+           "seatLimit" = EXCLUDED."seatLimit",
+           "status" = 'ACTIVE',
+           "updatedAt" = now()`,
+      [tenantId, "Raw Import Smoke Tenant", tenantSlug, licenseStartsAt, licenseEndsAt],
     );
     await client.query(
-      `INSERT INTO "User" ("id", "tenantId", "email", "emailNormalized", "loginName", "loginNameNormalized", "name", "passwordHash", "updatedAt")
-       VALUES ($1, $2, $3, lower(btrim($3)), $3, lower(btrim($3)), 'Raw Import Smoke Admin', $4, now())`,
+      `INSERT INTO "LicenseTerm" (
+         "id", "tenantId", "planCode", "startsAt", "endsAt", "activeStudentLimit", "auditReference", "updatedAt"
+       )
+       VALUES ($1, $2, 'ROLE-UAT', $3::timestamptz, $4::timestamptz, 100, 'raw-import-smoke', now())
+       ON CONFLICT ("id") DO UPDATE
+       SET "planCode" = EXCLUDED."planCode",
+           "startsAt" = EXCLUDED."startsAt",
+           "endsAt" = EXCLUDED."endsAt",
+           "activeStudentLimit" = EXCLUDED."activeStudentLimit",
+           "cancelledAt" = NULL,
+           "auditReference" = EXCLUDED."auditReference",
+           "updatedAt" = now()`,
+      [licenseTermId, tenantId, licenseStartsAt, licenseEndsAt],
+    );
+    await client.query(
+      `INSERT INTO "User" (
+         "id", "tenantId", "email", "emailNormalized", "loginName", "loginNameNormalized", "name",
+         "passwordHash", "passwordHashVersion", "accountStatus", "membershipVersion", "updatedAt"
+       )
+       VALUES (
+         $1, $2, $3, lower(btrim($3)), $3, lower(btrim($3)), 'Raw Import Smoke Admin',
+         $4, 1, 'ACTIVE', 1, now()
+       )`,
       [userId, tenantId, smokeEmail, hashPassword(smokePassword)],
     );
     await client.query(
-      `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
-       VALUES ($1, $2, $3, 'TENANT_ADMIN', now())
-       ON CONFLICT ("tenantId", "userId", "role") DO UPDATE SET "updatedAt" = now()`,
+      `INSERT INTO "TenantMembership" (
+         "id", "tenantId", "userId", "role", "staffRole", "hasTeacherPersona", "hasStudentPersona",
+         "status", "version", "scopeMode", "updatedAt"
+       )
+       VALUES ($1, $2, $3, 'TENANT_ADMIN', 'TENANT_ADMIN', false, false, 'ACTIVE', 1, 'TENANT', now())
+       ON CONFLICT ("tenantId", "userId", "role") DO UPDATE
+       SET "staffRole" = 'TENANT_ADMIN',
+           "hasTeacherPersona" = false,
+           "hasStudentPersona" = false,
+           "status" = 'ACTIVE',
+           "version" = 1,
+           "scopeMode" = 'TENANT',
+           "updatedAt" = now()`,
       [membershipId, tenantId, userId],
     );
     await client.query(
@@ -150,6 +194,31 @@ async function seedExam() {
        VALUES ($1, $2, $3, 'DRAFT', now())
        ON CONFLICT ("id") DO UPDATE SET "updatedAt" = now()`,
       [examId, tenantId, "RawImport Smoke Exam"],
+    );
+    await client.query(
+      `INSERT INTO "ParserConfig" (
+         "id", "tenantId", "examId", "version", "encoding", "delimiter", "skipHeaderLines", "fieldMapping", "status", "updatedAt"
+       )
+       VALUES ($1, $2, $3, $4, 'UTF-8', 'TAB', 1, $5::jsonb, 'APPROVED', now())
+       ON CONFLICT ("tenantId", "examId", "version") DO UPDATE
+       SET "encoding" = EXCLUDED."encoding",
+           "delimiter" = EXCLUDED."delimiter",
+           "skipHeaderLines" = EXCLUDED."skipHeaderLines",
+           "fieldMapping" = EXCLUDED."fieldMapping",
+           "status" = 'APPROVED',
+           "deletedAt" = NULL,
+           "updatedAt" = now()`,
+      [
+        parserConfigId,
+        tenantId,
+        examId,
+        parserConfigVersion,
+        JSON.stringify({
+          studentNo: { kind: "delimited", column: 0 },
+          bookletType: { kind: "delimited", column: 1 },
+          answers: { kind: "delimited", column: 2, estimatedQuestionCount: 90 },
+        }),
+      ],
     );
     await client.query("COMMIT");
   } catch (error) {
@@ -220,7 +289,7 @@ async function uploadRawImport(baseUrl, token) {
       fileName: `answers-${runId}.dat`,
       fileBase64: file.toString("base64"),
       contentType: "text/plain",
-      parserConfigVersion: "parser-smoke-v1",
+      parserConfigVersion,
     }),
   });
   if (!response.ok) {
