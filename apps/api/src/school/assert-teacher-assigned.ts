@@ -42,6 +42,7 @@ export function assertTeacherAssignedFromRecords(
 
 function canBypassTeacherAssignment(context: RequestContext): boolean {
   return (context.bypassRls && isSystemAdmin(context.roles)) ||
+    context.roles.includes("TENANT_OWNER") ||
     context.roles.includes("TENANT_ADMIN") ||
     context.roles.includes("ASSISTANT_ADMIN");
 }

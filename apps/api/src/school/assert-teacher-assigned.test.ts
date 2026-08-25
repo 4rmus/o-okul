@@ -5,9 +5,10 @@ import { assertTeacherAssigned } from "./assert-teacher-assigned.js";
 import { InMemoryTeacherAssignmentStore } from "./teacher-assignment-store.js";
 
 describe("assertTeacherAssigned", () => {
-  it("TENANT_ADMIN ve ASSISTANT_ADMIN icin atama aramaz", async () => {
+  it("TENANT_OWNER, TENANT_ADMIN ve ASSISTANT_ADMIN icin atama aramaz", async () => {
     const store = new InMemoryTeacherAssignmentStore();
 
+    await expect(assertTeacherAssigned(tenantOwnerContext, store, { tenantId: "tenant-a", classId: "class-x" })).resolves.toBeUndefined();
     await expect(assertTeacherAssigned(tenantAdminContext, store, { tenantId: "tenant-a", classId: "class-x" })).resolves.toBeUndefined();
     await expect(assertTeacherAssigned(assistantContext, store, { tenantId: "tenant-a", classId: "class-x" })).resolves.toBeUndefined();
   });
@@ -55,6 +56,13 @@ const tenantAdminContext: RequestContext = {
   userId: "user-tenant-a",
   tenantId: "tenant-a",
   roles: ["TENANT_ADMIN"],
+  bypassRls: false,
+};
+
+const tenantOwnerContext: RequestContext = {
+  userId: "owner-tenant-a",
+  tenantId: "tenant-a",
+  roles: ["TENANT_OWNER"],
   bypassRls: false,
 };
 
