@@ -208,9 +208,11 @@ async function seedFixtures() {
     await adminClient.query(
       `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
        VALUES
-         ($1, $2, $3, 'TENANT_ADMIN', now()),
-         ($4, $5, $6, 'TENANT_ADMIN', now())
-       ON CONFLICT ("id") DO NOTHING`,
+         ($1, $2, $3, 'TENANT_OWNER', now()),
+         ($4, $5, $6, 'TENANT_OWNER', now())
+       ON CONFLICT ("id") DO UPDATE
+       SET "role" = 'TENANT_OWNER',
+           "updatedAt" = now()`,
       [ids.tenantMembershipA, ids.tenantA, ids.userA, ids.tenantMembershipB, ids.tenantB, ids.userB],
     );
 
@@ -257,9 +259,13 @@ async function seedFixtures() {
          "id", "tenantId", "userId", "roles", "tokenFamilyId", "refreshTokenHash", "status", "membershipVersion", "expiresAt", "updatedAt"
        )
        VALUES
-         ($1, $2, $3, ARRAY['TENANT_ADMIN'], 'family-a', 'refresh-hash-a', 'ACTIVE', 1, now() + interval '1 day', now()),
-         ($4, $5, $6, ARRAY['TENANT_ADMIN'], 'family-b', 'refresh-hash-b', 'ACTIVE', 1, now() + interval '1 day', now())
-       ON CONFLICT ("id") DO NOTHING`,
+         ($1, $2, $3, ARRAY['TENANT_OWNER'], 'family-a', 'refresh-hash-a', 'ACTIVE', 1, now() + interval '1 day', now()),
+         ($4, $5, $6, ARRAY['TENANT_OWNER'], 'family-b', 'refresh-hash-b', 'ACTIVE', 1, now() + interval '1 day', now())
+       ON CONFLICT ("id") DO UPDATE
+       SET "roles" = EXCLUDED."roles",
+           "status" = EXCLUDED."status",
+           "expiresAt" = EXCLUDED."expiresAt",
+           "updatedAt" = now()`,
       [ids.authSessionA, ids.tenantA, ids.userA, ids.authSessionB, ids.tenantB, ids.userB],
     );
 
