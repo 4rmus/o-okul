@@ -58,6 +58,17 @@ describe("tenant access", () => {
     ).not.toThrow();
   });
 
+  it("tenant owner aynı tenant kaynağına erişir, başka tenant kaynağına erişemez", () => {
+    const context = { userId: "owner-a", tenantId: "tenant-a", roles: ["TENANT_OWNER"], bypassRls: false };
+
+    expect(() =>
+      assertSubjectResourceAccess(context, { tenantId: "tenant-a", studentId: "student-a" }),
+    ).not.toThrow();
+    expect(() =>
+      assertSubjectResourceAccess(context, { tenantId: "tenant-b", studentId: "student-b" }),
+    ).toThrow("FORBIDDEN_TENANT");
+  });
+
   it("student yalnız kendi kaynağına erişebilir", () => {
     const context = {
       userId: "student-user-a",

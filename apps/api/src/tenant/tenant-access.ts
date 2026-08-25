@@ -156,5 +156,5 @@ function assertMatchingSubjectList(resourceSubjectIds: string[], contextSubjectI
 }
 
 function hasTenantManagementRole(context: RequestContext): boolean {
-  return context.roles.includes("TENANT_ADMIN") || context.roles.includes("ASSISTANT_ADMIN");
+  return context.roles.includes("TENANT_OWNER") || context.roles.includes("TENANT_ADMIN") || context.roles.includes("ASSISTANT_ADMIN");
 }

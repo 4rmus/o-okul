@@ -6,12 +6,13 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../app.module.js";
 import { resetInMemoryAuthUsers, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
 import { FeatureRolloutService } from "../feature-rollout/feature-rollout.service.js";
-import { testLoginBody } from "../test-auth.js";
+import { registerTestLoginIdentity, testLoginBody } from "../test-auth.js";
 
 describe("StudentContact API", () => {
   let app: INestApplication;
   let server: Parameters<typeof request>[0];
   let adminToken: string;
+  let ownerToken: string;
   let teacherToken: string;
   let tenantBToken: string;
   let campusOperationsToken: string;
@@ -35,6 +36,24 @@ describe("StudentContact API", () => {
         campusIds: ["campus-main"],
       },
     });
+    registerTestLoginIdentity("owner-student-overview@example.test", { tenantSlug: "dna-egitim" });
+    upsertInMemoryAuthUser({
+      id: "user-owner-student-overview",
+      email: "owner-student-overview@example.test",
+      name: "Tenant Owner",
+      password: "password",
+      tenantId: "tenant-a",
+      roles: ["TENANT_OWNER"],
+      membership: {
+        id: "membership-owner-student-overview",
+        staffRole: "TENANT_OWNER",
+        hasTeacherPersona: false,
+        hasStudentPersona: false,
+        version: 1,
+        scopeMode: "TENANT",
+        campusIds: [],
+      },
+    });
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(FeatureRolloutService)
       .useValue({
@@ -46,6 +65,7 @@ describe("StudentContact API", () => {
     await app.init();
     server = app.getHttpServer() as Parameters<typeof request>[0];
     adminToken = await login("admin-a@example.test");
+    ownerToken = await login("owner-student-overview@example.test");
     teacherToken = await login("teacher-a@example.test");
     tenantBToken = await login("admin-b@example.test");
     campusOperationsToken = await login("operations-a@example.test");
@@ -199,6 +219,15 @@ describe("StudentContact API", () => {
     expect(serializedOverview).not.toContain("emailEncrypted");
     expect(serializedTeachers).not.toContain("userId");
     expect(serializedTeachers).not.toContain("5550000010");
+
+    const ownerOverview = await request(server)
+      .get("/students/student-a/overview")
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(ownerOverview.status, JSON.stringify(ownerOverview.body)).toBe(200);
+    expect(ownerOverview.body.profile.id).toBe("student-a");
+    expect(ownerOverview.body.canViewFinance).toBe(true);
+    expect(JSON.stringify(ownerOverview.body)).not.toContain("nationalIdEncrypted");
+    expect(JSON.stringify(ownerOverview.body)).not.toContain("nationalIdHash");
 
     await request(server)
       .get("/students/student-a/overview")
