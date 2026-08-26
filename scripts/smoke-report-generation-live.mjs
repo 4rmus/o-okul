@@ -22,6 +22,10 @@ const tenantId = process.env.REPORT_GENERATION_SMOKE_TENANT_ID ?? "tenant-smoke-
 const userId = process.env.REPORT_GENERATION_SMOKE_USER_ID ?? "user-smoke-report";
 const smokeEmail = process.env.REPORT_GENERATION_SMOKE_EMAIL ?? `report-smoke-${runId}@example.test`;
 const smokePassword = process.env.REPORT_GENERATION_SMOKE_PASSWORD ?? "password";
+const licenseTermId = "license-term-smoke-report";
+const licenseStartsAt = new Date(Date.now() - 24 * 60 * 60 * 1_000).toISOString();
+const licenseEndsAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1_000).toISOString();
+const smokeStudentLimit = Math.max(100, resultCount);
 const evidencePath = process.env.REPORT_GENERATION_SMOKE_EVIDENCE_FILE ?? process.env.REPORT_GENERATION_SMOKE_EVIDENCE_PATH;
 const environment = process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "unknown";
 const commandPassed =
@@ -139,24 +143,110 @@ async function seedReportInput() {
     await client.query("BEGIN");
     await client.query("SELECT set_config('app.bypass_rls', 'true', true)");
     await client.query(
-      `INSERT INTO "Tenant" ("id", "name", "slug", "status", "updatedAt")
-       VALUES ($1, $2, $3, 'ACTIVE', now())
-       ON CONFLICT ("id") DO UPDATE SET "updatedAt" = now()`,
-      [tenantId, "Report Smoke Tenant", `report-smoke-${runId}`],
-    );
-    await client.query(
-      `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
-       VALUES ($1, $2, 'Report Smoke Admin', $3, now())
+      `INSERT INTO "Tenant" (
+         "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", "status", "updatedAt"
+       )
+       VALUES ($1, $2, $3, 'ROLE-UAT', $4::timestamptz, $5::timestamptz, $6, 'ACTIVE', now())
        ON CONFLICT ("id") DO UPDATE
-       SET "email" = EXCLUDED."email",
-           "passwordHash" = EXCLUDED."passwordHash",
+       SET "plan" = EXCLUDED."plan",
+           "licenseStartsAt" = EXCLUDED."licenseStartsAt",
+           "licenseEndsAt" = EXCLUDED."licenseEndsAt",
+           "seatLimit" = EXCLUDED."seatLimit",
+           "status" = 'ACTIVE',
            "updatedAt" = now()`,
-      [userId, smokeEmail, hashPassword(smokePassword)],
+      [tenantId, "Report Smoke Tenant", `report-smoke-${runId}`, licenseStartsAt, licenseEndsAt, smokeStudentLimit],
+    );
+    const licenseTerm = await client.query(
+      `WITH updated_license AS (
+         UPDATE "LicenseTerm"
+         SET "planCode" = 'ROLE-UAT',
+             "startsAt" = $2::timestamptz,
+             "endsAt" = $3::timestamptz,
+             "activeStudentLimit" = $4,
+             "auditReference" = 'report-generation-smoke',
+             "updatedAt" = now()
+         WHERE "tenantId" = $1 AND "cancelledAt" IS NULL
+         RETURNING "id"
+       ), inserted_license AS (
+         INSERT INTO "LicenseTerm" (
+           "id", "tenantId", "planCode", "startsAt", "endsAt", "activeStudentLimit", "auditReference", "updatedAt"
+         )
+         SELECT $5, $1, 'ROLE-UAT', $2::timestamptz, $3::timestamptz, $4, 'report-generation-smoke', now()
+         WHERE NOT EXISTS (SELECT 1 FROM updated_license)
+         ON CONFLICT ("id") DO UPDATE
+         SET "planCode" = EXCLUDED."planCode",
+             "startsAt" = EXCLUDED."startsAt",
+             "endsAt" = EXCLUDED."endsAt",
+             "activeStudentLimit" = EXCLUDED."activeStudentLimit",
+             "cancelledAt" = NULL,
+             "auditReference" = EXCLUDED."auditReference",
+             "updatedAt" = now()
+         WHERE "LicenseTerm"."tenantId" = EXCLUDED."tenantId"
+         RETURNING "id"
+       )
+       SELECT "id" FROM updated_license
+       UNION ALL
+       SELECT "id" FROM inserted_license`,
+      [tenantId, licenseStartsAt, licenseEndsAt, smokeStudentLimit, licenseTermId],
+    );
+    if (licenseTerm.rowCount !== 1) {
+      throw new Error("REPORT_GENERATION_SMOKE_LICENSE_TERM_MISMATCH");
+    }
+    await client.query(
+      `INSERT INTO "User" (
+         "id", "tenantId", "email", "emailNormalized", "loginName", "loginNameNormalized", "name",
+         "passwordHash", "passwordHashVersion", "accountStatus", "membershipVersion", "mustChangePassword", "updatedAt"
+       )
+       VALUES (
+         $1, $2, $3, lower(btrim($3)), $3, lower(btrim($3)), 'Report Smoke Admin',
+         $4, 1, 'ACTIVE', 1, false, now()
+       )
+       ON CONFLICT ("id") DO UPDATE
+       SET "tenantId" = EXCLUDED."tenantId",
+           "email" = EXCLUDED."email",
+           "emailNormalized" = EXCLUDED."emailNormalized",
+           "loginName" = EXCLUDED."loginName",
+           "loginNameNormalized" = EXCLUDED."loginNameNormalized",
+           "name" = EXCLUDED."name",
+           "passwordHash" = EXCLUDED."passwordHash",
+           "passwordHashVersion" = 1,
+           "accountStatus" = 'ACTIVE',
+           "membershipVersion" = 1,
+           "mustChangePassword" = false,
+           "updatedAt" = now()`,
+      [userId, tenantId, smokeEmail, hashPassword(smokePassword)],
     );
     await client.query(
-      `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
-       VALUES ($1, $2, $3, 'TENANT_ADMIN', now())
-       ON CONFLICT ("tenantId", "userId", "role") DO UPDATE SET "updatedAt" = now()`,
+      `UPDATE "AuthSession"
+       SET "status" = 'REVOKED', "updatedAt" = now()
+       WHERE "tenantId" = $1 AND "userId" = $2 AND "status" = 'ACTIVE'`,
+      [tenantId, userId],
+    );
+    await client.query(
+      `UPDATE "TenantMembership"
+       SET "status" = 'ENDED',
+           "endsAt" = COALESCE("endsAt", now()),
+           "endedReason" = 'REPORT_SMOKE_OWNER_REPLACED',
+           "updatedAt" = now()
+       WHERE "tenantId" = $1 AND "userId" = $2 AND "role" <> 'TENANT_OWNER' AND "status" = 'ACTIVE'`,
+      [tenantId, userId],
+    );
+    await client.query(
+      `INSERT INTO "TenantMembership" (
+         "id", "tenantId", "userId", "role", "staffRole", "hasTeacherPersona", "hasStudentPersona",
+         "status", "version", "endsAt", "endedReason", "scopeMode", "updatedAt"
+       )
+       VALUES ($1, $2, $3, 'TENANT_OWNER', 'TENANT_OWNER', false, false, 'ACTIVE', 1, NULL, NULL, 'TENANT', now())
+       ON CONFLICT ("tenantId", "userId", "role") DO UPDATE
+       SET "staffRole" = 'TENANT_OWNER',
+           "hasTeacherPersona" = false,
+           "hasStudentPersona" = false,
+           "status" = 'ACTIVE',
+           "version" = 1,
+           "endsAt" = NULL,
+           "endedReason" = NULL,
+           "scopeMode" = 'TENANT',
+           "updatedAt" = now()`,
       [membershipId, tenantId, userId],
     );
     await client.query(

@@ -1459,6 +1459,10 @@ Minimum kanıt içeriği:
   alanı, `examCycle` 27 alanı, 5 komutluk `commandsPassed` seti ve boş `gaps` listesi
   `prod:evidence:templates:check` fazla alan/komut ve invalid/non-empty gaps negatifleriyle korunur.
 - 10k rapor listeleme k6 p95 eşikleri, >200 rps RLS yük smoke'u ve rapor üretim süresi eşiği.
+  `pnpm report-generation:smoke` ve `pnpm report-generation:perf`, sabit sentetik tenantı
+  Tenant/LicenseTerm mirror parity, tenant-scoped aktif account ve tek canonical `TENANT_OWNER`
+  membership ile kurar. Eski aktif sentetik session'lar revoke edilir; eski non-owner membership
+  geçmişi silinmeden `ENDED` yapılır. Fixture sonraki account backfill'i ownerless tenantla bloke etmez.
   Rapor üretim kanıtı için `REPORT_GENERATION_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/report-generation.json pnpm report-generation:perf`
   çalıştırılır; artifact `report_generation_smoke`, hash'li tenant/user/email/exam/snapshot referansları,
   `generationDurationMs`, `resultCount=10000` ve eşik sonucunu taşır, ham credential veya ham id içermez.
