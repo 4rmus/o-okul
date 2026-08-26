@@ -193,6 +193,15 @@
   }
 
   @media (max-width: 414px) {
+    .next-onboarding-actions {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .next-onboarding-actions .uh-button {
+      width: 100%;
+    }
+
     .next-workspace {
       padding: var(--space-xs);
     }

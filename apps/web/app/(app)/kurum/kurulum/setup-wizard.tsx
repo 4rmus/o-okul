@@ -210,6 +210,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
   const [activeStepId, setActiveStepId] = useState<StepId>(initialStep);
   const [draft, setDraft] = useState<OnboardingDraft>(initialDraft);
   const [errors, setErrors] = useState<StepErrors>({});
+  const [isCheckingImports, setIsCheckingImports] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [savedSummary, setSavedSummary] = useState("");
@@ -375,6 +376,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
     setStudentImportFileBase64("");
     setStudentImportIdempotencyKey("");
     setSaveError("");
+    setSavedSummary("");
     if (!file) {
       setStudentImportUploadStatus(createIdleUploadStatus());
       updateDraft("people", { studentImportFileName: "" });
@@ -399,6 +401,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
   async function changeTeacherImportFile(file: File | undefined) {
     setTeacherImportFileBase64("");
     setSaveError("");
+    setSavedSummary("");
     if (!file) {
       setTeacherImportUploadStatus(createIdleUploadStatus());
       updateDraft("people", { teacherImportFileName: "" });
@@ -421,6 +424,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
   async function changeKazanimImportFile(file: File | undefined) {
     setKazanimImportFileBase64("");
     setSaveError("");
+    setSavedSummary("");
     if (!file) {
       setKazanimImportUploadStatus(createIdleUploadStatus());
       updateDraft("people", { kazanimImportFileName: "" });
@@ -445,13 +449,80 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
     setStudentImportFileBase64("");
     setStudentImportIdempotencyKey("");
     setStudentImportUploadStatus(createIdleUploadStatus());
+    setSavedSummary("");
     updateDraft("people", { studentImportFileName: "", studentModel: model });
   }
 
   function changeTeacherModel(model: OnboardingDraft["people"]["teacherModel"]) {
     setTeacherImportFileBase64("");
     setTeacherImportUploadStatus(createIdleUploadStatus());
+    setSavedSummary("");
     updateDraft("people", { teacherImportFileName: "", teacherModel: model });
+  }
+
+  async function checkImportFiles() {
+    if (teacherImportUploadStatus.state === "error") {
+      setSaveError("Öğretmen aktarım dosyasını desteklenen tür ve boyutla yeniden seçin.");
+      return;
+    }
+    if (studentImportUploadStatus.state === "error") {
+      setSaveError("Öğrenci aktarım dosyasını desteklenen tür ve boyutla yeniden seçin.");
+      return;
+    }
+    if (kazanimImportUploadStatus.state === "error") {
+      setSaveError("Kazanım aktarım dosyasını desteklenen tür ve boyutla yeniden seçin.");
+      return;
+    }
+    if (draft.people.teacherModel === "excel" && !teacherImportFileBase64) {
+      setSaveError("Öğretmen aktarım dosyası seçilmelidir.");
+      return;
+    }
+    if (draft.people.studentModel === "excel" && !studentImportFileBase64) {
+      setSaveError("Öğrenci aktarım dosyası seçilmelidir.");
+      return;
+    }
+    if (draft.people.teacherModel !== "excel" && draft.people.studentModel !== "excel" && !kazanimImportFileBase64) {
+      setSaveError("Ön kontrol için en az bir aktarım dosyası seçin.");
+      return;
+    }
+    if (!auth?.accessToken) {
+      setSaveError("Oturum bulunamadı. Yeniden giriş yapıp tekrar deneyin.");
+      return;
+    }
+
+    setIsCheckingImports(true);
+    setSaveError("");
+    setSavedSummary("");
+    try {
+      const checked: string[] = [];
+      if (draft.people.teacherModel === "excel" && teacherImportFileBase64) {
+        const dryRun = await dryRunTeacherImport(auth.accessToken, teacherImportFileBase64);
+        if (!dryRun.wouldImport) throw new Error(teacherImportErrorMessage(dryRun));
+        checked.push(`${dryRun.validRows.length} öğretmen`);
+        setTeacherImportUploadStatus(markUploadStatusServerChecked);
+      }
+      if (draft.people.studentModel === "excel" && studentImportFileBase64) {
+        const dryRun = await dryRunStudentImport(auth.accessToken, studentImportFileBase64);
+        if (!dryRun.wouldImport) throw new Error(studentImportErrorMessage(dryRun));
+        checked.push(`${dryRun.validRows.length} öğrenci`);
+        setStudentImportUploadStatus(markUploadStatusServerChecked);
+      }
+      if (kazanimImportFileBase64) {
+        const dryRun = await dryRunLearningOutcomeImport(auth.accessToken, kazanimImportFileBase64);
+        if (!dryRun.wouldImport) throw new Error(kazanimImportErrorMessage(dryRun));
+        checked.push(`${dryRun.validRows.length} kazanım`);
+        setKazanimImportUploadStatus(markUploadStatusServerChecked);
+      }
+      setSavedSummary(`Sunucu ön kontrolü geçti: ${checked.join(", ")}. Henüz kayıt oluşturulmadı.`);
+    } catch (error) {
+      setSaveError(
+        error instanceof Error && error.message
+          ? error.message
+          : "Aktarım dosyaları ön kontrolden geçirilemedi. Lütfen dosyaları kontrol edin.",
+      );
+    } finally {
+      setIsCheckingImports(false);
+    }
   }
 
   async function finishSetup() {
@@ -669,13 +740,18 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
             </div>
           ) : null}
           <footer className="next-onboarding-actions">
-            <Button variant="secondary" type="button" onClick={goBack} disabled={activeStepIndex === 0}>
+            <Button variant="secondary" type="button" onClick={goBack} disabled={activeStepIndex === 0 || isCheckingImports || isSaving}>
               Geri
             </Button>
             {activeStep.id === "people" ? (
-              <Button type="button" onClick={() => void finishSetup()} disabled={isSaving}>
-                {isSaving ? "Kaydediliyor" : "Kaydet ve bitir"}
-              </Button>
+              <>
+                <Button variant="secondary" type="button" onClick={() => void checkImportFiles()} disabled={isCheckingImports || isSaving}>
+                  {isCheckingImports ? "Kontrol ediliyor" : "Dosyaları ön kontrol et"}
+                </Button>
+                <Button type="button" onClick={() => void finishSetup()} disabled={isCheckingImports || isSaving}>
+                  {isSaving ? "Kaydediliyor" : "Kaydet ve bitir"}
+                </Button>
+              </>
             ) : activeStepIndex < steps.length - 1 ? (
               <Button type="button" onClick={goNext}>
                 İleri
@@ -1319,6 +1395,15 @@ function createErrorUploadStatus(file: File, detail: string): SetupUploadStatus 
   };
 }
 
+function markUploadStatusServerChecked(status: SetupUploadStatus): SetupUploadStatus {
+  return {
+    ...status,
+    badge: "Sunucu ön kontrolü",
+    meta: status.meta.replace("Sunucu ön kontrolü bekleniyor", "Sunucu ön kontrolü geçti"),
+    title: "Ön kontrol geçti",
+  };
+}
+
 function formatUploadByteSize(byteSize: number) {
   if (byteSize < 1024) return `${byteSize} B`;
   if (byteSize < 1024 * 1024) return `${(byteSize / 1024).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} KB`;
@@ -1486,11 +1571,7 @@ async function saveSetup(
   }
 
   if (draft.people.teacherModel === "excel" && teacherImportFileBase64) {
-    const dryRun = await apiRequest<TeacherImportDryRunResult>(accessToken, `${apiBaseUrl}/teachers/imports/dry-run`, {
-      body: JSON.stringify({ fileBase64: teacherImportFileBase64 }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    });
+    const dryRun = await dryRunTeacherImport(accessToken, teacherImportFileBase64);
     if (!dryRun.wouldImport) {
       throw new Error(teacherImportErrorMessage(dryRun));
     }
@@ -1504,11 +1585,7 @@ async function saveSetup(
   }
 
   if (draft.people.studentModel === "excel" && studentImportFileBase64) {
-    const dryRun = await apiRequest<StudentImportDryRunResult>(accessToken, `${apiBaseUrl}/students/imports/dry-run`, {
-      body: JSON.stringify({ fileBase64: studentImportFileBase64 }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    });
+    const dryRun = await dryRunStudentImport(accessToken, studentImportFileBase64);
     if (!dryRun.wouldImport) {
       throw new Error(studentImportErrorMessage(dryRun));
     }
@@ -1521,11 +1598,7 @@ async function saveSetup(
   }
 
   if (kazanimImportFileBase64) {
-    const dryRun = await apiRequest<LearningOutcomeImportDryRunResult>(accessToken, `${apiBaseUrl}/learning-outcomes/imports/dry-run`, {
-      body: JSON.stringify({ fileBase64: kazanimImportFileBase64 }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    });
+    const dryRun = await dryRunLearningOutcomeImport(accessToken, kazanimImportFileBase64);
     if (!dryRun.wouldImport) {
       throw new Error(kazanimImportErrorMessage(dryRun));
     }
@@ -1547,6 +1620,30 @@ async function saveSetup(
     importedOutcomes,
     importedStudents,
   };
+}
+
+function dryRunTeacherImport(accessToken: string, fileBase64: string) {
+  return apiRequest<TeacherImportDryRunResult>(accessToken, `${apiBaseUrl}/teachers/imports/dry-run`, {
+    body: JSON.stringify({ fileBase64 }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+}
+
+function dryRunStudentImport(accessToken: string, fileBase64: string) {
+  return apiRequest<StudentImportDryRunResult>(accessToken, `${apiBaseUrl}/students/imports/dry-run`, {
+    body: JSON.stringify({ fileBase64 }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+}
+
+function dryRunLearningOutcomeImport(accessToken: string, fileBase64: string) {
+  return apiRequest<LearningOutcomeImportDryRunResult>(accessToken, `${apiBaseUrl}/learning-outcomes/imports/dry-run`, {
+    body: JSON.stringify({ fileBase64 }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
 }
 
 function kazanimImportErrorMessage(dryRun: LearningOutcomeImportDryRunResult) {

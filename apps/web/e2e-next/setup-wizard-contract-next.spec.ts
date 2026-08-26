@@ -184,8 +184,34 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     expect(unexpectedMutations).toEqual([]);
   });
 
+  test("ayrı dosya ön kontrolü kayıt oluşturmadan dry-run özetini gösterir", async ({ page }) => {
+    const requestedPaths: string[] = [];
+    await openSetupWizard(page, { height: 844, width: 390 }, { requestedPaths, roles: ["TENANT_ADMIN"] });
+
+    const setupForm = page.getByLabel("Kurulum formu");
+    await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
+    await setupForm.getByLabel("Öğrenci aktarım dosyası").setInputFiles({
+      buffer: Buffer.from("\uFEFFokul_no;ad;soyad\n100;Ada;Kaya\n", "utf8"),
+      mimeType: "text/csv",
+      name: "ogrenci-ada-kaya-tckn-12345678901.csv",
+    });
+    await setupForm.getByRole("button", { name: "Dosyaları ön kontrol et" }).click();
+
+    await expect(setupForm).toContainText("Sunucu ön kontrolü geçti: 1 öğrenci. Henüz kayıt oluşturulmadı.");
+    await expect(page.getByLabel("Öğrenci aktarım güven durumu")).toContainText("Ön kontrol geçti");
+    const setupPosts = requestedPaths.filter((path) => path.startsWith("POST ") && path !== "POST /auth/refresh");
+    expect(setupPosts).toEqual(["POST /students/imports/dry-run"]);
+    await expectNoVisibleTextValues(page, "setup-preflight-success", hostileUploadValues);
+    await expectDraftStorageDoesNotContain(page, "setup-preflight-success-storage", hostileUploadValues);
+  });
+
   test("dry-run hatasını import değerini açmadan gösterir", async ({ page }) => {
-    await openSetupWizard(page, { height: 844, width: 390 }, { roles: ["TENANT_ADMIN"], studentDryRun: "duplicate" });
+    const requestedPaths: string[] = [];
+    await openSetupWizard(page, { height: 844, width: 390 }, {
+      requestedPaths,
+      roles: ["TENANT_ADMIN"],
+      studentDryRun: "duplicate",
+    });
 
     const setupForm = page.getByLabel("Kurulum formu");
     await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
@@ -194,10 +220,11 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
       mimeType: "text/csv",
       name: "ogrenci-ada-kaya-tckn-12345678901.csv",
     });
-    await setupForm.getByLabel("Veri sorumlusu").fill("Operasyon sorumlusu");
-    await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
+    await setupForm.getByRole("button", { name: "Dosyaları ön kontrol et" }).click();
 
     await expect(setupForm).toContainText("Öğrenci dosyasında tekrar eden veya sistemde zaten kayıtlı okul no var. Satır: 2.");
+    const setupPosts = requestedPaths.filter((path) => path.startsWith("POST ") && path !== "POST /auth/refresh");
+    expect(setupPosts).toEqual(["POST /students/imports/dry-run"]);
     await expectNoVisibleTextValues(page, "setup-dry-run-error", hostileUploadValues);
     await expectDraftStorageDoesNotContain(page, "setup-dry-run-error-storage", hostileUploadValues);
   });
