@@ -47,6 +47,21 @@ describe("StudentImportService Gate D", () => {
     ]);
   });
 
+  it("veli adı olup TC veya telefonu olmayan satırı commit öncesinde reddeder", async () => {
+    const { service, students } = createService();
+    const fileBase64 = csv("ad;soyad;veli_ad;veli_soyad\nAda;Kaya;Fatma;Kaya");
+
+    await expect(service.dryRun(context, { fileBase64 })).resolves.toMatchObject({
+      totalRows: 1,
+      validRows: [],
+      errors: [{ row: 2, field: "guardian", code: "GUARDIAN_CONTACT_REQUIRED" }],
+      wouldImport: false,
+    });
+    await expect(service.import(context, { fileBase64 }, "guardian-contact-required-a"))
+      .rejects.toMatchObject({ response: { code: "STUDENT_IMPORT_INVALID" } });
+    expect(students.createMany).not.toHaveBeenCalled();
+  });
+
   it("registry v2 pilotunda öğrenci hesap e-postasını reddetmeye devam eder", async () => {
     const { service } = createService({ registryV2: true });
     const preview = await service.dryRun(context, {
