@@ -4,7 +4,7 @@
   "evidenceLevel": "LOCAL_SYNTHETIC",
   "externalStatus": "EXTERNAL_NOT_RUN",
   "generatedAt": "2026-08-26T18:00:04.398Z",
-  "baseCommitSha": "7a0b7a35859f2ceb18a741aa5b223ab4b5d15c40",
+  "baseCommitSha": "d061809140f5068299ee74f36ee276ccc52f38d9",
   "sourceWorktreeDirty": false,
   "sourceTreeSha256": "a522fc537287677ae118c68b43ff6d490960c799de20ad0edac7a195a8ce4533",
   "measurementRun": {
