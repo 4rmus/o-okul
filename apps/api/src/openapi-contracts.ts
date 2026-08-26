@@ -2721,6 +2721,7 @@ const studentImportErrorSchema = objectSchema({
       "INVALID_NATIONAL_ID",
       "INVALID_PHONE",
       "INVALID_RELATION_TYPE",
+      "GUARDIAN_CONTACT_REQUIRED",
       "REQUIRED",
       "STUDENT_IMPORT_PILOT_CORE_ONLY",
       "STUDENT_NATIONAL_ID_DUPLICATE",

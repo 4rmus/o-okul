@@ -370,6 +370,9 @@ export class StudentImportService {
           errors.push({ row: row.row, field: "guardianPhone", code: "INVALID_PHONE" });
         }
       }
+      if (row.guardian && !row.guardian.nationalId && !row.guardian.phone) {
+        errors.push({ row: row.row, field: "guardian", code: "GUARDIAN_CONTACT_REQUIRED" });
+      }
       if (row.contact) {
         if (!row.contact.firstName) errors.push({ row: row.row, field: "contactFirstName", code: "REQUIRED" });
         if (!row.contact.lastName) errors.push({ row: row.row, field: "contactLastName", code: "REQUIRED" });

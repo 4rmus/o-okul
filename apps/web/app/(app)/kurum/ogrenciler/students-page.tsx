@@ -1656,6 +1656,7 @@ function formatStudentImportError(error: StudentImportDryRunResult["errors"][num
   if (error.code === "INVALID_NATIONAL_ID") return `${row}: TC kimlik no geçersiz`;
   if (error.code === "INVALID_PHONE") return `${row}: telefon geçersiz`;
   if (error.code === "INVALID_RELATION_TYPE") return `${row}: iletişim kişisi ilişki türü geçersiz`;
+  if (error.code === "GUARDIAN_CONTACT_REQUIRED") return `${row}: veli TC kimlik no veya telefonu zorunlu`;
   if (error.code === "ACTIVE_STUDENT_LIMIT_REACHED") return "Aktif öğrenci kotası aşılır";
   if (error.code === "STUDENT_IMPORT_PILOT_CORE_ONLY") return `${row}: pilot içe aktarımında hesap e-postası kullanılamaz`;
   return `${row}: dosya satırı kontrol edilmeli`;

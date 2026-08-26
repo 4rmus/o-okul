@@ -1716,6 +1716,11 @@ function studentImportErrorMessage(dryRun: StudentImportDryRunResult) {
     return `Öğrenci dosyasında sistemde olmayan sınıf var. Satır: ${classError.row}.`;
   }
 
+  const guardianContactError = dryRun.errors.find((error) => error.code === "GUARDIAN_CONTACT_REQUIRED");
+  if (guardianContactError) {
+    return `Öğrenci dosyasında veli TC kimlik no veya telefon alanlarından biri zorunludur. Satır: ${guardianContactError.row}.`;
+  }
+
   const requiredError = dryRun.errors.find((error) => error.code === "REQUIRED");
   if (requiredError) {
     const fieldName = studentImportFieldLabel(requiredError.field);
