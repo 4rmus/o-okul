@@ -159,6 +159,11 @@ pnpm backup:restore:smoke
   `./artifacts/staging/reports` klasörünü salt-okunur mount eder; Traefik
   `/evidence/<dosya>.json` isteklerini prefix strip ederek bu servise yollar.
   Mevcut kanıt dosyaları `no-store` ve `nosniff` header'larıyla sunulur, eksik dosyalar 404 kalır.
+  Yeni runtime başarıyla aktive edildikten sonra activation evidence işi önce eski public
+  `deployment-cutover.json` dosyasını fail-closed kaldırır; current WAL/first-gates veya cutover üretimi
+  kırılırsa endpoint eski SHA sunmak yerine 404 kalır. Current cutover artifact'i deploy run ID/repository
+  checker'ından geçirildikten sonra aynı reports dizinindeki run-scope geçici dosyaya yüklenir, SHA-256 ve
+  regular-file/symlink/mode kontrolleri geçince atomik `mv` ile canonical ada yayımlanır.
 - Summary yazımı smoke kanıtlarında `result=PASS`, beklenen `check` adı, `environment=production`,
   gelecekte olmayan `generatedAt` ve her smoke tipine özgü alanları doğrular: Traefik smoke URL origin'i
   summary `webUrl` origin'iyle eşleşmeli; Traefik/Sentry/alert HTTPS URL ve 2xx/HSTS,

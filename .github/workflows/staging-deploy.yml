@@ -1003,6 +1003,26 @@ jobs:
           } > ~/.ssh/config
           chmod 600 ~/.ssh/config
 
+      - name: Invalidate stale public deployment cutover
+        shell: bash
+        env:
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh "$STAGING_SSH_USER@$STAGING_SSH_HOST" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          reports_dir=/root/o-okul/artifacts/staging/reports
+          canonical_cutover=/root/o-okul/artifacts/staging/reports/deployment-cutover.json
+          [ -d "$reports_dir" ]
+          [ ! -L "$reports_dir" ]
+          if [ -e "$canonical_cutover" ] || [ -L "$canonical_cutover" ]; then
+            [ -f "$canonical_cutover" ]
+            [ ! -L "$canonical_cutover" ]
+            rm -f -- "$canonical_cutover"
+          fi
+          REMOTE
+
       - name: Run WAL archive staging smoke
         shell: bash
         env:
@@ -1054,7 +1074,66 @@ jobs:
           DEPLOYMENT_CUTOVER_SOURCE_SHA: ${{ needs.build-images.outputs.deploy-sha }}
           DEPLOYMENT_CUTOVER_RELEASE_IMAGE_TAG: ${{ needs.build-images.outputs.image-tag }}
           DEPLOYMENT_CUTOVER_IMAGE_PREFIX: ${{ needs.build-images.outputs.image-prefix }}
-        run: node scripts/generate-deployment-cutover-evidence.mjs
+        run: |
+          set -euo pipefail
+          node scripts/generate-deployment-cutover-evidence.mjs
+          DEPLOYMENT_CUTOVER_EVIDENCE_TARGET="file://$PWD/artifacts/staging/reports/deployment-cutover.json" \
+          DEPLOYMENT_CUTOVER_EXPECTED_RUN_ID="$GITHUB_RUN_ID" \
+          DEPLOYMENT_CUTOVER_EXPECTED_REPOSITORY="$GITHUB_REPOSITORY" \
+            node scripts/check-deployment-cutover-evidence.mjs
+
+      - name: Publish current deployment cutover atomically
+        shell: bash
+        env:
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+        run: |
+          set -euo pipefail
+          local_file=artifacts/staging/reports/deployment-cutover.json
+          remote_dir=/root/o-okul/artifacts/staging/reports
+          remote_target="$remote_dir/deployment-cutover.json"
+          remote_temp="$remote_dir/.deployment-cutover-$GITHUB_RUN_ID.json"
+          local_sha="$(sha256sum "$local_file" | awk '{print $1}')"
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$local_sha" =~ ^[a-f0-9]{64}$ ]]
+
+          ssh "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+            "REMOTE_DIR='$remote_dir' REMOTE_TEMP='$remote_temp' REMOTE_TARGET='$remote_target' bash -se" <<'REMOTE'
+          set -euo pipefail
+          [ -d "$REMOTE_DIR" ]
+          [ ! -L "$REMOTE_DIR" ]
+          [ ! -e "$REMOTE_TEMP" ]
+          [ ! -L "$REMOTE_TEMP" ]
+          [ ! -e "$REMOTE_TARGET" ]
+          [ ! -L "$REMOTE_TARGET" ]
+          REMOTE
+
+          if ! scp "$local_file" "$STAGING_SSH_USER@$STAGING_SSH_HOST:$remote_temp"; then
+            ssh "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+              "REMOTE_TEMP='$remote_temp' bash -se" <<'REMOTE' || true
+          set -euo pipefail
+          rm -f -- "$REMOTE_TEMP"
+          REMOTE
+            exit 1
+          fi
+
+          ssh "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+            "REMOTE_TEMP='$remote_temp' REMOTE_TARGET='$remote_target' EXPECTED_SHA='$local_sha' bash -se" <<'REMOTE'
+          set -euo pipefail
+          cleanup_publish() { rm -f -- "$REMOTE_TEMP" "$REMOTE_TARGET"; }
+          trap cleanup_publish ERR
+          [ -f "$REMOTE_TEMP" ]
+          [ ! -L "$REMOTE_TEMP" ]
+          [ "$(sha256sum "$REMOTE_TEMP" | awk '{print $1}')" = "$EXPECTED_SHA" ]
+          chmod 644 "$REMOTE_TEMP"
+          mv -- "$REMOTE_TEMP" "$REMOTE_TARGET"
+          [ -f "$REMOTE_TARGET" ]
+          [ ! -L "$REMOTE_TARGET" ]
+          [ "$(stat -c '%a' "$REMOTE_TARGET")" = "644" ]
+          [ "$(stat -c '%u:%g' "$REMOTE_TARGET")" = "$(id -u):$(id -g)" ]
+          [ "$(sha256sum "$REMOTE_TARGET" | awk '{print $1}')" = "$EXPECTED_SHA" ]
+          trap - ERR
+          REMOTE
 
       - name: Cleanup staging evidence env
         if: always()
