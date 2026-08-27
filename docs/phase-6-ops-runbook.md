@@ -1004,6 +1004,11 @@ Beklenen akış:
   `IMAGE_TAG` değeriyle birebir karşılaştırılır; container eksikse, running değilse veya healthcheck
   `healthy` değilse deploy kırmızıya düşer. `evidence` servisi `artifacts/staging/reports` altındaki doğrulanmış JSON kanıtlarını
   `/evidence/*.json` olarak salt-okunur sunar; eksik kanıt dosyası bilinçli olarak 404 döner.
+- Host aktivasyonu geçtikten sonra evidence işi eski public `deployment-cutover.json` dosyasını kaldırır.
+  Current WAL/first-gates veya cutover üretimi tamamlanamazsa canonical endpoint 404 kalır; önceki release
+  SHA'sı yeni deploy kanıtı gibi sunulmaz. Yeni artifact önce deploy run ID/repository checker'ından geçer,
+  ardından reports dizinindeki run-scope geçici dosyaya yüklenir; local/remote SHA-256, regular-file,
+  symlink, sahiplik ve `0644` kontrolleri geçince atomik `mv` ile canonical ada yayımlanır.
 - GitHub runner, `STAGING_EVIDENCE_ENV_B64` içeriğini normal evidence job'da yeniden decode edip
   `pnpm staging:evidence-env:check -- --mode activation` ile tekrar doğrular; verify-only job aynı
   dosyayı `--mode full` ile doğrular.
