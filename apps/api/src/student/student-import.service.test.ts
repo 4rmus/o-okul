@@ -125,6 +125,21 @@ describe("StudentImportService Gate D", () => {
       expect.objectContaining({ field: "className", code: "CLASS_NOT_FOUND" }),
     ]));
   });
+
+  it("özel sınıf adını boşluk ve harf farkı olmadan eşleştirip aynı classId ile commit eder", async () => {
+    const { service, students } = createService({
+      classes: [{ id: "class-custom", tenantId: "tenant-a", campusId: "campus-main", name: "Bilim Atölyesi" }],
+    });
+    const fileBase64 = csv("okul_no;ad;soyad;sinif\n100;Ada;Kaya; bİLİMAtölyesi ");
+
+    await expect(service.dryRun(context, { fileBase64 })).resolves.toMatchObject({
+      errors: [],
+      validRows: [expect.objectContaining({ classId: "class-custom", className: "bİLİMAtölyesi" })],
+      wouldImport: true,
+    });
+    await service.import(context, { fileBase64 }, "custom-class-name-import");
+    expect(students.createMany).toHaveBeenCalledWith(context, [expect.objectContaining({ classId: "class-custom" })]);
+  });
 });
 
 function createService(options: {

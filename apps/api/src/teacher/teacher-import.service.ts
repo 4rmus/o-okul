@@ -14,8 +14,9 @@ import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import { toTurkishUpperCase } from "../http/zod-validation.js";
 import { maskTcIdentity, normalizeTcIdentity } from "../student/tc-identity.js";
-import { type ClassStore, classStoreToken } from "../school/class-store.js";
+import { normalizeClassName } from "../school/class-store.js";
 import { type CourseStore, courseStoreToken } from "../school/course-store.js";
+import { SchoolService } from "../school/school.service.js";
 import { TeacherService } from "./teacher.service.js";
 import {
   type TeacherAssignmentStore,
@@ -39,7 +40,7 @@ const maxTeacherImportBytes = 5 * 1024 * 1024;
 export class TeacherImportService {
   constructor(
     private readonly teacherService: TeacherService,
-    @Inject(classStoreToken) private readonly classes: ClassStore,
+    private readonly school: SchoolService,
     @Inject(courseStoreToken) private readonly courses: CourseStore,
     @Inject(teacherStoreToken) private readonly teachers: TeacherStore,
     @Inject(teacherAssignmentStoreToken) private readonly teacherAssignments: TeacherAssignmentStore,
@@ -200,9 +201,9 @@ export class TeacherImportService {
     }
 
     const errors: TeacherImportError[] = [];
-    const classes = (await this.classes.list()).filter((record) => record.tenantId === tenantId && !record.deletedAt);
+    const classes = await this.school.listClasses(context);
     const courses = (await this.courses.list()).filter((record) => record.tenantId === tenantId && !record.deletedAt);
-    const classByName = new Map(classes.map((record) => [normalizeValue(record.name), record]));
+    const classByName = new Map(classes.map((record) => [normalizeClassName(record.name), record]));
     const courseByNameOrCode = new Map<string, (typeof courses)[number]>();
     for (const course of courses) {
       courseByNameOrCode.set(normalizeValue(course.name), course);
@@ -249,7 +250,7 @@ export class TeacherImportService {
         errors.push({ row: row.row, field: "className", code: "REQUIRED" });
       }
       if (row.className) {
-        const classRecord = classByName.get(normalizeValue(row.className));
+        const classRecord = classByName.get(normalizeClassName(row.className));
         if (classRecord) {
           row.classId = classRecord.id;
         } else {

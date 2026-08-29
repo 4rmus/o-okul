@@ -9,6 +9,7 @@ import { IdempotencyService } from "../http/idempotency.js";
 import { toTurkishUpperCase } from "../http/zod-validation.js";
 import { maskContactEmail, maskContactPhone } from "../privacy/contact-mask.js";
 import { SchoolService } from "../school/school.service.js";
+import { normalizeClassName } from "../school/class-store.js";
 import { StudentService, type StudentGuardianProvisionInput, type StudentRecord } from "./student.service.js";
 import { maskTcIdentity, normalizeTcIdentity } from "./tc-identity.js";
 import type {
@@ -279,7 +280,7 @@ export class StudentImportService {
   private async validateRows(context: RequestContext, rows: ParsedStudentImportRow[]): Promise<StudentImportError[]> {
     const errors: StudentImportError[] = [];
     const classes = await this.school.listClasses(context);
-    const classByName = new Map(classes.map((record) => [this.normalizeValue(record.name), record]));
+    const classByName = new Map(classes.map((record) => [normalizeClassName(record.name), record]));
     const existingStudentNos = new Set(
       (await this.students.listStudentNosForImport(context))
         .map((studentNo) => this.normalizeStudentNo(studentNo)),
@@ -302,7 +303,7 @@ export class StudentImportService {
         errors.push({ row: row.row, field: "lastName", code: "REQUIRED" });
       }
       if (row.className) {
-        const classRecord = classByName.get(this.normalizeValue(row.className));
+        const classRecord = classByName.get(normalizeClassName(row.className));
         if (classRecord) {
           row.classId = classRecord.id;
         } else {
@@ -401,10 +402,6 @@ export class StudentImportService {
   private async isRegistryV2Enabled(context: RequestContext): Promise<boolean> {
     if (!this.featureRollouts) return false;
     return (await this.featureRollouts.resolve(context)).enabledFeatureKeys.includes("web.student-registry-v2");
-  }
-
-  private normalizeValue(value: string): string {
-    return value.trim().toLocaleLowerCase("tr-TR");
   }
 
   private normalizeStudentNo(value: string): string {

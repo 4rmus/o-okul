@@ -553,7 +553,7 @@ describe("Homework API", () => {
     const classC = await request(server)
       .post("/classes")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ name: "9-C" })
+      .send({ name: "9-D" })
       .expect(201);
     const unscopedStudent = await request(server)
       .post("/students")

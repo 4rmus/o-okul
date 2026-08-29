@@ -19,7 +19,7 @@ import type {
 } from "@o-okul/shared-types";
 import { Button, Field, Input, MetricCard, MetricGrid, Panel, SegmentedControl, Select, StatusBadge, TabButton, Tabs } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiListRequest, apiRequest, queryClient } from "../../../../src/api-client.js";
+import { ApiRequestError, apiBaseUrl, apiListRequest, apiRequest, queryClient } from "../../../../src/api-client.js";
 import { featureRolloutQueryKey, isFeatureEnabled, loadFeatureRollouts } from "../../../../src/feature-rollouts.js";
 import { ImportTemplatePanel } from "../_shared/import-template-panel.js";
 import { PageFrame } from "../_shared/page-frame.js";
@@ -45,6 +45,7 @@ interface SetupUploadStatus {
 interface OnboardingDraft {
   classes: {
     classCounts: Record<StageId, string>;
+    classNames: Record<string, string>;
   };
   courses: {
     selectedCourseIds: string[];
@@ -95,6 +96,7 @@ const initialDraft: OnboardingDraft = {
       "12": "0",
       "TYT/AYT": "0",
     },
+    classNames: {},
   },
   courses: {
     selectedCourseIds: ["8-lgs-turkce", "8-lgs-matematik", "8-lgs-fen"],
@@ -280,7 +282,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
   const progressPercent = Math.round((completedStepCount / progressStepCount) * 100);
   const isFinished = Boolean(setupV2Enabled && setupProgressQuery.data?.status === "READY");
   const selectedCourses = selectedCourseOptions(draft.courses.selectedCourseIds, allCourseOptions);
-  const generatedClasses = generateClasses(draft.classes.classCounts);
+  const generatedClasses = generateClasses(draft.classes.classCounts, draft.classes.classNames);
   const courseCount = selectedCourses.length;
   const classCount = generatedClasses.length;
 
@@ -624,11 +626,11 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
         `${result.createdClasses} sınıf, ${result.createdCourses} ders, ${result.createdTeachers} öğretmen, ${result.createdTeacherAssignments} öğretmen ataması, ${result.createdAcademicYears} akademik yıl, ${result.createdAcademicTerms} dönem, ${studentSummary}${outcomeSummary}. Mevcut kayıtlar tekrar eklenmedi.`,
       );
     } catch (error) {
-      setSaveError(
-        error instanceof Error && error.message
+      setSaveError(error instanceof ApiRequestError && error.code === "CLASS_NAME_ALREADY_EXISTS"
+        ? "Bu sınıf adı kurumda aktif olarak kullanılıyor. Farklı bir ad girin."
+        : error instanceof Error && error.message
           ? error.message
-          : "Kurulum kayıtları sisteme eklenemedi. Lütfen tekrar deneyin.",
-      );
+          : "Kurulum kayıtları sisteme eklenemedi. Lütfen tekrar deneyin.");
       return;
     } finally {
       setIsSaving(false);
@@ -1052,7 +1054,7 @@ function ClassesStep({
   errors: StepErrors;
   updateDraft: (section: "classes", nextValue: Partial<OnboardingDraft["classes"]>) => void;
 }) {
-  const generatedClasses = generateClasses(draft.classes.classCounts);
+  const generatedClasses = generateClasses(draft.classes.classCounts, draft.classes.classNames);
 
   return (
     <div className="next-onboarding-fields">
@@ -1081,14 +1083,37 @@ function ClassesStep({
         })}
       </fieldset>
       <FieldError message={errors.classCounts ?? errors["classes.classCounts"]} />
-      <section className="next-onboarding-auto-classes" aria-label="Otomatik atanacak sınıflar">
-        <h3>Otomatik atanacak şubeler</h3>
-        <div>
-          {generatedClasses.map((classRecord) => (
-            <span key={`${classRecord.stageId}-${classRecord.section}`}>{classRecord.name}</span>
-          ))}
-        </div>
-      </section>
+      <fieldset className="next-onboarding-class-counts" aria-label="Sınıf adları">
+        <legend>Sınıf adları</legend>
+        <p>Otomatik adlar başlangıç önerisidir; sınıf adını ihtiyacınıza göre düzenleyebilirsiniz.</p>
+        {generatedClasses.map((classRecord) => {
+          const fieldError = errors[`classNames.${classRecord.key}`] ?? errors[`classes.classNames.${classRecord.key}`];
+          return (
+            <Field
+              key={classRecord.key}
+              label={`${stageOptions.find((stage) => stage.id === classRecord.stageId)?.label ?? classRecord.stageId} · ${classRecord.section} şubesi · Sınıf adı`}
+              error={fieldError}
+            >
+              <Input
+                invalid={Boolean(fieldError)}
+                value={classRecord.name}
+                onChange={(event) => updateDraft("classes", {
+                  classNames: {
+                    ...draft.classes.classNames,
+                    [classRecord.key]: event.target.value,
+                  },
+                })}
+                onBlur={(event) => updateDraft("classes", {
+                  classNames: {
+                    ...draft.classes.classNames,
+                    [classRecord.key]: event.target.value.trim(),
+                  },
+                })}
+              />
+            </Field>
+          );
+        })}
+      </fieldset>
     </div>
   );
 }
@@ -1288,6 +1313,22 @@ function validateClasses(classes: OnboardingDraft["classes"]): StepErrors {
   if (totalClassCount <= 0) {
     errors.classCounts = "En az bir kademe için sınıf sayısı girilmelidir.";
   }
+  const classKeyByName = new Map<string, string>();
+  for (const classRecord of generateClasses(classes.classCounts, classes.classNames)) {
+    const trimmedName = classRecord.name.trim();
+    if (!trimmedName) {
+      errors[`classNames.${classRecord.key}`] = "Sınıf adı zorunludur.";
+      continue;
+    }
+    const normalizedName = normalizeClassNameValue(trimmedName);
+    const duplicateKey = classKeyByName.get(normalizedName);
+    if (duplicateKey) {
+      errors[`classNames.${duplicateKey}`] = "Aktif sınıf adları boşluk ve harf farkı olmadan tekil olmalıdır.";
+      errors[`classNames.${classRecord.key}`] = "Aktif sınıf adları boşluk ve harf farkı olmadan tekil olmalıdır.";
+    } else {
+      classKeyByName.set(normalizedName, classRecord.key);
+    }
+  }
   return errors;
 }
 
@@ -1452,14 +1493,16 @@ function sameStringList(left: string[], right: string[]) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
-function generateClasses(classCounts: Record<StageId, string>) {
+function generateClasses(classCounts: Record<StageId, string>, classNames: Record<string, string>) {
   return stageOptions.flatMap((stage) => {
     const classCount = Number(classCounts[stage.id]);
     if (!Number.isInteger(classCount) || classCount <= 0) return [];
     return Array.from({ length: Math.min(classCount, 26) }, (_item, index) => {
       const section = String.fromCharCode(65 + index);
+      const key = `${stage.id}:${section}`;
       return {
-        name: `${stageClassPrefix(stage.id)}-${section}`,
+        key,
+        name: classNames[key] ?? `${stageClassPrefix(stage.id)}-${section}`,
         section,
         stageId: stage.id,
       };
@@ -1500,7 +1543,7 @@ async function saveSetup(
     apiListRequest<GradeLevelRecord>(accessToken, `${apiBaseUrl}/grade-levels?limit=200`),
   ]);
   const existingCourseNames = new Set(existingCourses.data.map((course) => normalizeValue(course.name)));
-  const existingClassNames = new Set(existingClasses.data.map((classRecord) => normalizeValue(classRecord.name)));
+  const existingClassNames = new Set(existingClasses.data.map((classRecord) => normalizeClassNameValue(classRecord.name)));
   const gradeLevelIdByStageId = new Map(
     gradeLevels.data
       .map((gradeLevel) => [stageIdFromGradeLevel(gradeLevel), gradeLevel.id] as const)
@@ -1556,11 +1599,11 @@ async function saveSetup(
     createdCourses += 1;
   }
 
-  for (const classRecord of generateClasses(draft.classes.classCounts)) {
-    if (existingClassNames.has(normalizeValue(classRecord.name))) continue;
+  for (const classRecord of generateClasses(draft.classes.classCounts, draft.classes.classNames)) {
+    if (existingClassNames.has(normalizeClassNameValue(classRecord.name))) continue;
     await apiRequest<ClassRecord>(accessToken, `${apiBaseUrl}/classes`, {
       body: JSON.stringify({
-        name: classRecord.name,
+        name: classRecord.name.trim(),
         section: classRecord.section,
         ...(gradeLevelIdByStageId.get(classRecord.stageId) ? { gradeLevelId: gradeLevelIdByStageId.get(classRecord.stageId) } : {}),
       }),
@@ -1777,6 +1820,10 @@ function normalizeValue(value: string) {
   return value.trim().toLocaleLowerCase("tr-TR");
 }
 
+function normalizeClassNameValue(value: string) {
+  return value.replace(/\s/gu, "").toLocaleLowerCase("tr-TR");
+}
+
 function loadCurrentTenant(accessToken: string) {
   return apiRequest<TenantProfileRecord>(accessToken, `${apiBaseUrl}/me/tenant`);
 }
@@ -1871,6 +1918,7 @@ function mergeDraft(rawDraft: string): OnboardingDraft {
       classes: {
         ...initialDraft.classes,
         classCounts: normalizeClassCounts(parsedClasses),
+        classNames: normalizeClassNames(parsedClasses?.classNames),
       },
       courses: {
         ...initialDraft.courses,
@@ -1954,6 +2002,14 @@ function normalizeClassCounts(
     classCounts[legacyStage] = String(value.classCount);
   }
   return classCounts;
+}
+
+function normalizeClassNames(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key, name]) => /^(?:7|8-LGS|10|11|12|TYT\/AYT):[A-Z]$/.test(key) && typeof name === "string"),
+  ) as Record<string, string>;
 }
 
 function normalizeCourseIds(values: unknown[]) {

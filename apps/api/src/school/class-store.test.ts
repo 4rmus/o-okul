@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { runWithRequestContext } from "../context/request-context.js";
-import { PostgresClassStore } from "./class-store.js";
+import { InMemoryClassStore, PostgresClassStore, normalizeClassName } from "./class-store.js";
 
 describe("PostgresClassStore", () => {
   it("Class CRUD için beklenen SQL parametrelerini kullanır", async () => {
@@ -43,5 +43,23 @@ describe("PostgresClassStore", () => {
     expect(businessQueries[4]?.sql).toContain('UPDATE "Class"');
     expect(businessQueries[4]?.values).toEqual(["class-a", "9 Fen", false, null, false, null, false, null, false, null]);
     expect(businessQueries[6]?.values).toEqual(["class-a", "2026-05-29T20:00:00.000Z"]);
+  });
+});
+
+describe("Class name uniqueness", () => {
+  it("ignores whitespace and Turkish letter case while preserving the stored name", async () => {
+    const store = new InMemoryClassStore();
+    const created = await store.create({ tenantId: "tenant-a", name: "  Bilim Atölyesi  " });
+
+    expect(created.name).toBe("Bilim Atölyesi");
+    expect(normalizeClassName(" BİLİM\tATÖLYESİ ")).toBe(normalizeClassName(created.name));
+    await expect(store.create({ tenantId: "tenant-a", name: " bİlİmAtölyesi " })).rejects.toThrow("CLASS_NAME_ALREADY_EXISTS");
+    await expect(store.create({ tenantId: "tenant-b", name: "bİlİmAtölyesi" })).resolves.toMatchObject({ tenantId: "tenant-b" });
+
+    await store.softDelete(created.id, "2026-08-29T12:00:00.000Z");
+    await expect(store.create({ tenantId: "tenant-a", name: "bİlİmAtölyesi" })).resolves.toMatchObject({
+      name: "bİlİmAtölyesi",
+      tenantId: "tenant-a",
+    });
   });
 });

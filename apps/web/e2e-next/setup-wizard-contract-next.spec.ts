@@ -89,7 +89,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
 
     const stepNavigation = page.getByLabel("Adım ilerlemesi");
     await stepNavigation.getByRole("tab", { name: /Sınıf ve Şubeler/ }).click();
-    const classCounts = setupForm.locator(".next-onboarding-class-counts");
+    const classCounts = setupForm.getByRole("group", { name: "Kademeye göre sınıf sayısı" });
     await expect(classCounts.locator(".uh-field")).toHaveCount(6);
     await expect(classCounts.locator(".uh-input")).toHaveCount(6);
     await expect(classCounts.getByLabel("8. sınıf / LGS")).toHaveValue("2");
@@ -158,6 +158,58 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await expectNoHorizontalOverflow(page, "setup-wizard-mobile");
     await expectNoUnlabeledControls(page, "setup-wizard-mobile");
     await expectNoClippedVisibleText(page, "setup-wizard-mobile");
+  });
+
+  test("önerilen sınıf adını düzenler, taslakta korur ve adı kırpılmış biçimiyle ayrı seviye/şube alanlarıyla gönderir", async ({ page }) => {
+    const classCreateBodies: Array<Record<string, unknown>> = [];
+    await openSetupWizard(page, { height: 844, width: 390 }, {
+      classCreateBodies,
+      roles: ["TENANT_ADMIN"],
+    });
+
+    const setupForm = page.getByLabel("Kurulum formu");
+    const stepNavigation = page.getByLabel("Adım ilerlemesi");
+    await stepNavigation.getByRole("tab", { name: /Sınıf ve Şubeler/ }).click();
+    const classAName = setupForm.getByLabel(/8\. sınıf \/ LGS · A şubesi · Sınıf adı/);
+    const classBName = setupForm.getByLabel(/8\. sınıf \/ LGS · B şubesi · Sınıf adı/);
+    await expect(classAName).toHaveValue("8-A");
+    await expect(classBName).toHaveValue("8-B");
+
+    await classAName.fill("  Bilim Atölyesi  ");
+    await classBName.fill("bİLİMAtölyesi");
+    await setupForm.getByRole("button", { name: "İleri" }).click();
+    await expect(setupForm.getByText("Aktif sınıf adları boşluk ve harf farkı olmadan tekil olmalıdır.").first()).toBeVisible();
+
+    await classBName.fill("8-B");
+    await stepNavigation.getByRole("tab", { name: /Derslerin Oluşturulması/ }).click();
+    await stepNavigation.getByRole("tab", { name: /Sınıf ve Şubeler/ }).click();
+    await expect(classAName).toHaveValue("Bilim Atölyesi");
+
+    await page.reload();
+    await expect(setupForm.getByLabel(/8\. sınıf \/ LGS · A şubesi · Sınıf adı/)).toHaveValue("Bilim Atölyesi");
+    const storedDraft = await page.evaluate(() =>
+      JSON.parse(window.sessionStorage.getItem("uh_onboarding_tenant-setup_draft") ?? "{}"),
+    );
+    expect(storedDraft.classes.classNames["8-LGS:A"]).toBe("Bilim Atölyesi");
+
+    await stepNavigation.getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
+    await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
+    await setupForm.getByLabel("Veri sorumlusu").fill("Operasyon sorumlusu");
+    await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
+    await expect(setupForm).toContainText("2 sınıf, 3 ders");
+
+    expect(classCreateBodies).toEqual(expect.arrayContaining([
+      {
+        gradeLevelId: "grade-setup-lgs",
+        name: "Bilim Atölyesi",
+        section: "A",
+      },
+      {
+        gradeLevelId: "grade-setup-lgs",
+        name: "8-B",
+        section: "B",
+      },
+    ]));
   });
 
   test("tablette taşma üretmez ve assistant rolünde kurulum yüzeyini açar", async ({ page }) => {
@@ -335,8 +387,17 @@ async function openSetupWizard(
 ) {
   await page.setViewportSize(viewport);
   await installSetupApiMocks(page, options);
+  if (page.url().startsWith(appOrigin)) {
+    await page.evaluate(() => {
+      window.sessionStorage.clear();
+      window.name = "";
+    });
+  }
   await page.addInitScript(() => {
-    window.sessionStorage.clear();
+    if (window.name !== "__setup_test_initialized") {
+      window.sessionStorage.clear();
+      window.name = "__setup_test_initialized";
+    }
     document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
   });
   await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
@@ -378,6 +439,9 @@ async function installSetupApiMocks(
         });
         return;
       }
+    }
+    if (request.method() === "POST" && pathName === "/classes") {
+      options.classCreateBodies?.push(request.postDataJSON() as Record<string, unknown>);
     }
     if (request.method() !== "GET" && pathName !== "/auth/refresh") {
       options.unexpectedMutations?.push(`${request.method()} ${pathName}`);
@@ -512,6 +576,7 @@ function mockSetupApiResponse(
 }
 
 interface SetupMockOptions {
+  classCreateBodies?: Array<Record<string, unknown>>;
   emptyCourseTemplates?: boolean;
   readiness?: "ready" | "incomplete";
   requestedPaths?: string[];

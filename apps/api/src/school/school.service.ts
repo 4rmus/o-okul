@@ -27,7 +27,7 @@ import { assertTeacherScopedStudentAccess, assertTenantResourceAccess, filterTen
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "./academic-calendar-store.js";
 import { type AlanStore, alanStoreToken } from "./alan-store.js";
 import { type CampusStore, campusStoreToken } from "./campus-store.js";
-import { type ClassStore, classStoreToken } from "./class-store.js";
+import { activeClassNameUniqueConstraint, type ClassStore, classStoreToken } from "./class-store.js";
 import { type CourseStore, courseStoreToken } from "./course-store.js";
 import { type GradeLevelCourseStore, gradeLevelCourseStoreToken } from "./grade-level-course-store.js";
 import { type GradeLevelStore, gradeLevelStoreToken } from "./grade-level-store.js";
@@ -505,14 +505,19 @@ export class SchoolService {
     if (alanId) {
       await this.assertAlanFitsClass(context, alanId, tenantId, gradeLevelId);
     }
-    const record = await this.classStore.create({
-      tenantId,
-      alanId,
-      campusId,
-      gradeLevelId,
-      name: input.name ?? "",
-      section: optionalText(input.section),
-    });
+    let record: ClassRecord;
+    try {
+      record = await this.classStore.create({
+        tenantId,
+        alanId,
+        campusId,
+        gradeLevelId,
+        name: input.name ?? "",
+        section: optionalText(input.section),
+      });
+    } catch (error) {
+      throwClassNameConflict(error);
+    }
     await this.auditLogs?.record({
       tenantId: record.tenantId,
       actorUserId: context.userId,
@@ -543,13 +548,18 @@ export class SchoolService {
     if (effectiveAlanId) {
       await this.assertAlanFitsClass(context, effectiveAlanId, existing.tenantId, gradeLevelId ?? existing.gradeLevelId);
     }
-    const record = await this.classStore.update(id, {
-      name: input.name,
-      alanId,
-      campusId,
-      gradeLevelId,
-      section: input.section !== undefined ? optionalText(input.section) : undefined,
-    });
+    let record: ClassRecord | undefined;
+    try {
+      record = await this.classStore.update(id, {
+        name: input.name,
+        alanId,
+        campusId,
+        gradeLevelId,
+        section: input.section !== undefined ? optionalText(input.section) : undefined,
+      });
+    } catch (error) {
+      throwClassNameConflict(error);
+    }
     if (!record) {
       throw new NotFoundException("CLASS_NOT_FOUND");
     }
@@ -815,6 +825,16 @@ function changedInputFields<TRecord>(
   fields: Array<keyof TRecord>,
 ): string[] {
   return fields.filter((field) => input[field] !== undefined).map(String);
+}
+
+function throwClassNameConflict(error: unknown): never {
+  if (error && typeof error === "object") {
+    const candidate = error as { code?: unknown; constraint?: unknown };
+    if (candidate.code === "23505" && candidate.constraint === activeClassNameUniqueConstraint) {
+      throw new ConflictException("CLASS_NAME_ALREADY_EXISTS");
+    }
+  }
+  throw error;
 }
 
 function optionalText(value: string | undefined): string | undefined {
