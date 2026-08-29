@@ -17,6 +17,11 @@ export interface ClassStore {
 }
 
 export const classStoreToken = Symbol("ClassStore");
+export const activeClassNameUniqueConstraint = "Class_tenantId_active_name_key";
+
+export function normalizeClassName(value: string): string {
+  return value.replace(/\s/gu, "").toLocaleLowerCase("tr-TR");
+}
 
 const demoClasses: ClassRecord[] = [
   { id: "class-a", tenantId: "tenant-a", name: "8-A", campusId: "campus-main", gradeLevelId: "grade-8", section: "A" },
@@ -35,9 +40,11 @@ export class InMemoryClassStore implements ClassStore {
   }
 
   async create(input: Omit<ClassRecord, "id">): Promise<ClassRecord> {
+    this.assertActiveNameAvailable(input.tenantId, input.name);
     const record = {
       id: `class-${this.classes.length + 1}`,
       ...input,
+      name: input.name.trim(),
     };
     this.classes.push(record);
     return record;
@@ -47,7 +54,10 @@ export class InMemoryClassStore implements ClassStore {
     const record = await this.findById(id);
     if (!record) return undefined;
 
-    if (input.name !== undefined) record.name = input.name;
+    if (input.name !== undefined) {
+      this.assertActiveNameAvailable(record.tenantId, input.name, id);
+      record.name = input.name.trim();
+    }
     if (input.alanId !== undefined) record.alanId = input.alanId;
     if (input.campusId !== undefined) record.campusId = input.campusId;
     if (input.gradeLevelId !== undefined) record.gradeLevelId = input.gradeLevelId;
@@ -61,6 +71,20 @@ export class InMemoryClassStore implements ClassStore {
 
     record.deletedAt = deletedAt;
     return record;
+  }
+
+  private assertActiveNameAvailable(tenantId: string, name: string, excludedId?: string): void {
+    const nameKey = normalizeClassName(name);
+    if (this.classes.some((record) =>
+      record.id !== excludedId
+      && record.tenantId === tenantId
+      && !record.deletedAt
+      && normalizeClassName(record.name) === nameKey)) {
+      throw Object.assign(new Error("CLASS_NAME_ALREADY_EXISTS"), {
+        code: "23505",
+        constraint: activeClassNameUniqueConstraint,
+      });
+    }
   }
 }
 
@@ -93,7 +117,7 @@ export class PostgresClassStore implements ClassStore {
           input.alanId ?? null,
           input.campusId ?? null,
           input.gradeLevelId ?? null,
-          input.name,
+          input.name.trim(),
           input.section ?? null,
         ],
       );
@@ -122,7 +146,7 @@ export class PostgresClassStore implements ClassStore {
          RETURNING *`,
         [
           id,
-          input.name ?? null,
+          input.name?.trim() ?? null,
           input.alanId !== undefined,
           input.alanId ?? null,
           input.campusId !== undefined,

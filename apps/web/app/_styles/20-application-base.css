@@ -3040,6 +3040,12 @@
   min-width: 0;
 }
 
+.next-onboarding-class-counts > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
 .next-onboarding-class-counts .uh-field {
   min-width: 0;
 }

@@ -512,6 +512,8 @@ model SecretDeliveryOutbox {
   @@index([purpose, sourceId, status])
 }
 
+/// Active class names are unique per tenant through the partial expression index
+/// in 20260829120000_enforce_active_class_name_uniqueness.
 model Class {
   id        String    @id @default(uuid())
   tenantId  String

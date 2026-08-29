@@ -481,7 +481,7 @@ describe("School management API", () => {
       .send({ name: "9 Fen" })
       .expect(200)
       .expect(({ body }) => {
-        expect(body.name).toBe("9 FEN");
+        expect(body.name).toBe("9 Fen");
         expect(body.alanId).toBe(alanId);
         expect(body.campusId).toBe("campus-main");
         expect(body.gradeLevelId).toBe("grade-8");
@@ -519,6 +519,108 @@ describe("School management API", () => {
     await request(server).get(`/classes/${classId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(404);
     await request(server).delete(`/alanlar/${alanId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
     await request(server).delete(`/grade-levels/${otherGradeLevelId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
+  });
+
+  it("sınıf adını kırpar, kimliği ve bağlı verileri korur, eski rapor snapshotını değiştirmez", async () => {
+    const snapshotsBefore = await request(server)
+      .get("/exams/exam-demo/reports/snapshots")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200);
+
+    try {
+      await request(server)
+        .patch("/classes/class-a")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ name: "  Bilim Atölyesi  " })
+        .expect(200)
+        .expect(({ body }) => {
+          expect(body.id).toBe("class-a");
+          expect(body.name).toBe("Bilim Atölyesi");
+          expect(body.campusId).toBe("campus-main");
+          expect(body.gradeLevelId).toBe("grade-8");
+          expect(body.section).toBe("A");
+        });
+
+      await request(server)
+        .get("/students/student-a")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .expect(200)
+        .expect(({ body }) => {
+          expect(body.classId).toBe("class-a");
+        });
+
+      const snapshotsAfter = await request(server)
+        .get("/exams/exam-demo/reports/snapshots")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .expect(200);
+      expect(snapshotsAfter.body).toEqual(snapshotsBefore.body);
+      expect(JSON.stringify(snapshotsAfter.body)).toContain("8-A");
+      expect(JSON.stringify(snapshotsAfter.body)).not.toContain("Bilim Atölyesi");
+    } finally {
+      await request(server)
+        .patch("/classes/class-a")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ name: "8-A" });
+    }
+  });
+
+  it("aktif sınıf adını doğrudan ve eşzamanlı isteklerde tekilleştirir, silinmiş adı yeniden kullandırır", async () => {
+    const createdIds: string[] = [];
+    try {
+      const outcomes = await Promise.all([
+        request(server)
+          .post("/classes")
+          .set("Authorization", `Bearer ${tenantAAccessToken}`)
+          .send({ name: "Eş Zamanlı Etüt" }),
+        request(server)
+          .post("/classes")
+          .set("Authorization", `Bearer ${tenantAAccessToken}`)
+          .send({ name: " eşzamanlıetüt " }),
+      ]);
+      expect(outcomes.map((response) => response.status).sort()).toEqual([201, 409]);
+      const created = outcomes.find((response) => response.status === 201);
+      expect(created?.body.name).toMatch(/^(Eş Zamanlı Etüt|eşzamanlıetüt)$/);
+      createdIds.push(created!.body.id);
+      expect(JSON.stringify(outcomes.find((response) => response.status === 409)?.body)).toContain("CLASS_NAME_ALREADY_EXISTS");
+
+      await request(server)
+        .post("/classes")
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .send({ name: "Yetkisiz Sınıf" })
+        .expect(403);
+
+      await request(server)
+        .delete(`/classes/${created!.body.id}`)
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .expect(204);
+
+      const reused = await request(server)
+        .post("/classes")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ name: "EŞZAMANLI ETÜT" })
+        .expect(201);
+      expect(reused.body.id).not.toBe(created!.body.id);
+      createdIds.push(reused.body.id);
+
+      const other = await request(server)
+        .post("/classes")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ name: "Başka Sınıf" })
+        .expect(201);
+      createdIds.push(other.body.id);
+      await request(server)
+        .patch(`/classes/${other.body.id}`)
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ name: " eş zamanlı etüt " })
+        .expect(409)
+        .expect(({ body }) => {
+          expect(JSON.stringify(body)).toContain("CLASS_NAME_ALREADY_EXISTS");
+        });
+    } finally {
+      for (const classId of createdIds) {
+        await request(server).delete(`/classes/${classId}`).set("Authorization", `Bearer ${tenantAAccessToken}`);
+      }
+    }
   });
 
   it("kampüs CRUD akışını tenant içinde tamamlar", async () => {
@@ -1496,6 +1598,34 @@ describe("School management API", () => {
         });
         expect(JSON.stringify(body)).not.toContain("5550000012");
       });
+  });
+
+  it("öğretmen import özel sınıf adını boşluk ve harf farkı olmadan eşleştirir", async () => {
+    const customClass = await request(server)
+      .post("/classes")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "Bilim Atölyesi", campusId: "campus-main", gradeLevelId: "grade-8", section: "Z" })
+      .expect(201);
+
+    try {
+      await request(server)
+        .post("/teachers/imports/dry-run")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({
+          fileBase64: createCsvBase64("ad;soyad;brans;atanacak_sinif\nMerve;Import;Matematik; bİLİMAtölyesi \n"),
+        })
+        .expect(201)
+        .expect(({ body }) => {
+          expect(body.errors).toEqual([]);
+          expect(body.validRows).toEqual([
+            expect.objectContaining({ classId: customClass.body.id, className: "bİLİMAtölyesi" }),
+          ]);
+        });
+    } finally {
+      await request(server)
+        .delete(`/classes/${customClass.body.id}`)
+        .set("Authorization", `Bearer ${tenantAAccessToken}`);
+    }
   });
 
   it("öğretmen import eski şablonda bransı ders olarak eşleştirir", async () => {

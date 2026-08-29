@@ -88,7 +88,7 @@ export const classCreateBodySchema = z.object({
   alanId: optionalNonEmptyString,
   campusId: optionalNonEmptyString,
   gradeLevelId: optionalNonEmptyString,
-  name: requiredUppercaseString,
+  name: requiredTrimmedString,
   section: optionalUppercaseString,
   tenantId: optionalNonEmptyString,
 }).strict() satisfies z.ZodType<ClassCreateRequest>;
@@ -97,7 +97,7 @@ export const classUpdateBodySchema = z.object({
   alanId: optionalNonEmptyString,
   campusId: optionalNonEmptyString,
   gradeLevelId: optionalNonEmptyString,
-  name: optionalNonEmptyUppercaseString,
+  name: requiredTrimmedString.optional(),
   section: optionalUppercaseString,
 }).strict().refine(hasAtLeastOneField, {
   message: "UPDATE_BODY_EMPTY",
