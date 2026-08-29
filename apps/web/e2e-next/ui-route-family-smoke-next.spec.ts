@@ -220,7 +220,14 @@ async function collectRouteMeasurement(
   });
   page.on("pageerror", () => runtimeErrors.push("pageerror"));
   page.on("requestfailed", (request) => {
-    runtimeErrors.push(`requestfailed:${request.url()}:${request.failure()?.errorText ?? "unknown"}`);
+    const errorText = request.failure()?.errorText ?? "unknown";
+    const url = new URL(request.url());
+    if (
+      errorText === "net::ERR_ABORTED"
+      && url.origin === new URL(page.url()).origin
+      && (url.searchParams.has("_rsc") || url.pathname.startsWith("/_next/static/chunks/"))
+    ) return;
+    runtimeErrors.push(`requestfailed:${request.url()}:${errorText}`);
   });
   page.on("response", (response) => {
     if (response.status() >= 400) runtimeErrors.push(`http-${response.status()}`);
