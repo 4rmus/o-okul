@@ -388,12 +388,15 @@ async function openSetupWizard(
   await page.setViewportSize(viewport);
   await installSetupApiMocks(page, options);
   if (page.url().startsWith(appOrigin)) {
-    await page.evaluate(() => window.sessionStorage.clear());
+    await page.evaluate(() => {
+      window.sessionStorage.clear();
+      window.name = "";
+    });
   }
   await page.addInitScript(() => {
-    if (!window.sessionStorage.getItem("__setup_test_initialized")) {
+    if (window.name !== "__setup_test_initialized") {
       window.sessionStorage.clear();
-      window.sessionStorage.setItem("__setup_test_initialized", "1");
+      window.name = "__setup_test_initialized";
     }
     document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
   });
