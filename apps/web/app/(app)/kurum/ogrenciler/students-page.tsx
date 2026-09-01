@@ -931,7 +931,7 @@ export function StudentsPage() {
         {importError ? <p className="uh-crud-page__error">{importError}</p> : null}
       </FormModal>
       <FormModal
-        description="Ad ve soyad zorunludur. Diğer alanlar opsiyoneldir."
+        description={editingStudent ? "Ad ve soyad zorunludur. Diğer alanlar opsiyoneldir." : "Ad, soyad ve seviye zorunludur. Sınıf ve diğer alanlar opsiyoneldir."}
         onCancel={closeForm}
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
