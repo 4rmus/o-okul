@@ -1,9 +1,10 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const schemaPath = join(__dirname, "../prisma/schema.prisma");
+const migrationsRoot = join(__dirname, "../prisma/migrations");
 const repoRoot = join(__dirname, "../../..");
 
 const allowedLegacyRelations = new Map([]);
@@ -33,7 +34,9 @@ const requiredCompositeRelations = new Set([
   "PaymentTransaction.plan",
   "ReportSnapshot.class",
   "StudentEnrollment.class",
+  "StudentEnrollment.gradeLevel",
   "Student.class",
+  "Student.gradeLevel",
   "Student.responsibleTeacher",
   "MembershipCampusScope.membership",
   "MembershipCampusScope.campus",
@@ -44,6 +47,10 @@ const requiredCompositeRelations = new Set([
   "WhatsAppConsentEvent.whatsappConsent",
   "WhatsAppConsentEvent.studentContact",
 ]);
+const requiredRawConstraints = [
+  "Class_tenantId_id_gradeLevelId_key",
+  "Student_tenantId_classId_gradeLevelId_fkey",
+];
 
 const schema = readFileSync(schemaPath, "utf8");
 const models = parseModels(schema);
@@ -94,13 +101,27 @@ for (const relationKey of requiredCompositeRelations) {
   }
 }
 
+const migrationSql = readdirSync(migrationsRoot, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name)
+  .sort()
+  .map((directory) => readFileSync(join(migrationsRoot, directory, "migration.sql"), "utf8"))
+  .join("\n");
+for (const constraint of requiredRawConstraints) {
+  const addPosition = migrationSql.lastIndexOf(`ADD CONSTRAINT "${constraint}"`);
+  const dropPosition = migrationSql.lastIndexOf(`DROP CONSTRAINT "${constraint}"`);
+  if (addPosition === -1 || dropPosition > addPosition) {
+    failures.push(`${constraint}: canonical raw composite constraint migration zincirinde aktif degil.`);
+  }
+}
+
 if (failures.length > 0) {
   console.error("Tenant relation FK kontrolü başarısız:");
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
 
-console.log(`Tenant relation FK kontrolü geçti: ${compositeCount} composite, ${exceptionCount} izlenen legacy istisna.`);
+console.log(`Tenant relation FK kontrolü geçti: ${compositeCount} composite, ${requiredRawConstraints.length} raw invariant, ${exceptionCount} izlenen legacy istisna.`);
 
 function parseModels(source) {
   const output = new Map();

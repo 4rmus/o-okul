@@ -567,6 +567,37 @@ Etkilenen ADR: ADR-0001, ADR-0002, ADR-0008, ADR-0010
 Açık soru: Audit saklama/imha süresi ve 14 günlük pilot/go-live imzaları ayrıca karara bağlanacaktır.
 Son kontrol: 2026-08-24
 
+### DEC-20260831-01 — Öğrenci seviyesi doğrudan kayıttır; aktif kota açık enrollment ile ölçülür
+
+Durum: Onaylı; yerel uygulama ve gerçek PostgreSQL cutover/yarış kanıtı var, staging/production
+migration ve UAT kanıtı yok
+Karar: `Student.gradeLevelId` öğrencinin güncel seviyesidir; `StudentEnrollment.gradeLevelId`
+kayıt dönemindeki seviyeyi taşır. Yeni bireysel ve toplu öğrenci kaydında çözülmüş seviye
+zorunludur, sınıf opsiyoneldir. Eski istemci yalnız `classId` gönderirse seviye sınıftan türetilir;
+ikisi de yoksa veya sınıf ile seviye uyuşmazsa istek fail-closed reddedilir. Sınıf adından seviye
+tahmini yapılmaz.
+
+Aktif öğrenci kotasının kanonik birimi sınıfa üyelik değil, `status='ACTIVE'` ve `endsAt IS NULL`
+olan tek açık `StudentEnrollment` kaydıdır. Bu nedenle sınıfsız fakat seviyeli ACTIVE öğrenci,
+`classId=NULL` ve seçilen `gradeLevelId` ile açık enrollment oluşturur ve kotayı tüketir; PASSIVE
+öğrenci tüketmez. DEC-20260801-01'deki çalışan hesaplarının ücretli koltuk olmaması değişmez.
+
+Öğrencili sınıfın seviyesi tek transaction içinde sınıf, bağlı öğrenciler ve yalnız açık ACTIVE
+enrollment'lar için birlikte değiştirilir; kapalı enrollment geçmişi değiştirilmez. Eski satırların
+backfill'i yalnız gerçek sınıf ilişkisine dayanır ve tutarsız açık enrollment migration'ı durdurur.
+Kaynak: Ürün sahibinin Öğrenci Seviye Kaydı ve Seviye Bazlı Görünüm Planı için kilitlediği
+seviye, sınıf ve kota kararları.
+Kanıt: `packages/db/prisma/migrations/20260831120000_add_student_grade_level/migration.sql`,
+`packages/db/scripts/check-student-grade-level-postgres.mjs`,
+`apps/api/src/student/student.service.ts`, `apps/api/src/student/student.service.test.ts`,
+`apps/api/src/student/student-import.service.test.ts`,
+`apps/api/src/student/student-license-concurrency.postgres.test.ts`,
+`apps/web/app/(app)/kurum/ogrenciler/students-page.tsx`, `docs/product-journeys-v1.md`.
+Etkilenen ADR: ADR-0001
+Açık soru: Yok. Canlı migration preflight'i, staging rol bazlı UAT ve production aktivasyonu ayrı
+release kanıt kapılarıdır; bu karar bunları PASS yapmaz.
+Son kontrol: 2026-08-31
+
 ## Faz Öncesi Onay Gerektirenler
 
 | ID | Faz | Bloklar mı? | Soru | Beklenen kanıt |

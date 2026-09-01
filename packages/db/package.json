@@ -20,6 +20,7 @@
     "db:migrate": "prisma migrate dev --config prisma.config.ts",
     "db:rls:check": "tsx scripts/check-tenant-models-parity.ts && node scripts/check-rls.mjs && node scripts/check-tenant-relation-fks.mjs",
     "db:rls:check:live": "node scripts/check-rls-live.mjs",
+    "db:student-grade-level:check:postgres": "node scripts/check-student-grade-level-postgres.mjs",
     "db:seed": "tsx prisma/seed.ts",
     "dev": "tsc -p tsconfig.json --watch",
     "lint": "prisma validate --config prisma.config.ts && tsc -p tsconfig.json --noEmit",

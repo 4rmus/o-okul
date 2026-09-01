@@ -155,6 +155,7 @@ describe("API auth + tenant isolation", () => {
         studentNo: "100",
         firstName: "Ada",
         lastName: "A",
+        gradeLevelId: "grade-8",
         classId: "class-a",
         responsibleTeacherId: "teacher-a",
         status: "ACTIVE",
@@ -236,7 +237,7 @@ describe("API auth + tenant isolation", () => {
     const created = await request(server)
       .post("/students")
       .set("Authorization", `Bearer ${admin.accessToken}`)
-      .send({ firstName: "Idor", lastName: "Deneme" })
+      .send({ firstName: "Idor", lastName: "Deneme", gradeLevelId: "grade-8" })
       .expect(201);
     const otherStudentId = (created.body as { id: string }).id;
 
@@ -330,6 +331,7 @@ describe("API auth + tenant isolation", () => {
             studentNo: "100",
             firstName: "Ada",
             lastName: "A",
+            gradeLevelId: "grade-8",
             classId: "class-a",
             responsibleTeacherId: "teacher-a",
             status: "ACTIVE",
@@ -759,7 +761,7 @@ describe("API auth + tenant isolation", () => {
     const created = await request(server)
       .post("/students")
       .set("Authorization", `Bearer ${issued.accessToken}`)
-      .send({ firstName: "Can", lastName: "Ogrenci" })
+      .send({ firstName: "Can", lastName: "Ogrenci", gradeLevelId: "grade-8" })
       .expect(201);
 
     const studentId = (created.body as { id: string }).id;
@@ -828,7 +830,7 @@ describe("API auth + tenant isolation", () => {
       .post("/students")
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .set("Idempotency-Key", "student-create-invalid-guardian-a")
-      .send({ firstName: "YanEtki", lastName: "Ogrenci", guardian: {} })
+      .send({ firstName: "YanEtki", lastName: "Ogrenci", gradeLevelId: "grade-8", guardian: {} })
       .expect(400)
       .expect(({ body }) => {
         expect(JSON.stringify(body)).toContain("GUARDIAN_CONTACT_REQUIRED");
@@ -878,7 +880,7 @@ describe("API auth + tenant isolation", () => {
       totalRows: 1,
       validRows: [{ row: 2, firstName: "ECE", lastName: "IMPORT" }],
       errors: [],
-      quota: { limit: 2, current: 1, incoming: 0, wouldExceed: false },
+      quota: { limit: 2, current: 1, incoming: 1, wouldExceed: false },
       wouldImport: true,
     });
 
@@ -890,6 +892,7 @@ describe("API auth + tenant isolation", () => {
         studentNo: "100",
         firstName: "Ada",
         lastName: "A",
+        gradeLevelId: "grade-8",
         classId: "class-a",
         responsibleTeacherId: "teacher-a",
         status: "ACTIVE",
@@ -918,7 +921,7 @@ describe("API auth + tenant isolation", () => {
 
   it("student CSV dry-run TC hatasında ham kimlik numarası döndürmez", async () => {
     const issued = await login("admin-a@example.test");
-    const fileBase64 = Buffer.from("\uFEFFad;soyad;tc_kimlik_no;telefon\nEce;Kimlik;1111111111;5550000014\n", "utf8").toString("base64");
+    const fileBase64 = Buffer.from("\uFEFFad;soyad;seviye;tc_kimlik_no;telefon\nEce;Kimlik;8. Sınıf;1111111111;5550000014\n", "utf8").toString("base64");
 
     const response = await request(server)
       .post("/students/imports/dry-run")
@@ -938,7 +941,7 @@ describe("API auth + tenant isolation", () => {
 
   it("student CSV dry-run hesap önizlemesini maskeli döner", async () => {
     const issued = await login("admin-a@example.test");
-    const fileBase64 = Buffer.from("\uFEFFad;soyad;tc_kimlik_no;telefon\nEce;Hesap;10000001204;0555 000 0014\n", "utf8").toString("base64");
+    const fileBase64 = Buffer.from("\uFEFFad;soyad;seviye;tc_kimlik_no;telefon\nEce;Hesap;8. Sınıf;10000001204;0555 000 0014\n", "utf8").toString("base64");
 
     const response = await request(server)
       .post("/students/imports/dry-run")
@@ -971,7 +974,7 @@ describe("API auth + tenant isolation", () => {
 
   it("student CSV dry-run yalnız TC ile gelen kaydı hesap oluşturmadan kabul eder", async () => {
     const issued = await login("admin-a@example.test");
-    const fileBase64 = Buffer.from("\uFEFFad;soyad;tc_kimlik_no\nEce;EksikTelefon;10000001372\n", "utf8").toString("base64");
+    const fileBase64 = Buffer.from("\uFEFFad;soyad;seviye;tc_kimlik_no\nEce;EksikTelefon;8. Sınıf;10000001372\n", "utf8").toString("base64");
 
     const response = await request(server)
       .post("/students/imports/dry-run")
@@ -1045,6 +1048,7 @@ describe("API auth + tenant isolation", () => {
               "321",
               "Ece",
               "Velili",
+              "8. Sınıf",
               "8-A",
               "ece.velili@example.test",
               "10000001440",
@@ -1058,6 +1062,7 @@ describe("API auth + tenant isolation", () => {
               "okul_no",
               "ad",
               "soyad",
+              "seviye",
               "sinif",
               "email",
               "tc_kimlik_no",
@@ -1243,6 +1248,7 @@ describe("API auth + tenant isolation", () => {
         studentNo: "100",
         firstName: "Ada",
         lastName: "A",
+        gradeLevelId: "grade-8",
         classId: "class-a",
         responsibleTeacherId: "teacher-a",
         status: "ACTIVE",
@@ -1264,7 +1270,7 @@ describe("API auth + tenant isolation", () => {
       rowCount: 1,
     });
 
-    await expect(readStudentWorkbookRows(response.body.fileBase64 as string)).resolves.toEqual([["100", "Ada", "A", "8-A"]]);
+    await expect(readStudentWorkbookRows(response.body.fileBase64 as string)).resolves.toEqual([["100", "Ada", "A", "8. Sınıf", "8-A"]]);
   });
 
   it("student Excel import hata veya kota aşımında rollback davranışı gösterir", async () => {
@@ -1285,6 +1291,7 @@ describe("API auth + tenant isolation", () => {
         studentNo: "100",
         firstName: "Ada",
         lastName: "A",
+        gradeLevelId: "grade-8",
         classId: "class-a",
         responsibleTeacherId: "teacher-a",
         status: "ACTIVE",
@@ -1306,6 +1313,7 @@ describe("API auth + tenant isolation", () => {
         studentNo: "100",
         firstName: "Ada",
         lastName: "A",
+        gradeLevelId: "grade-8",
         classId: "class-a",
         responsibleTeacherId: "teacher-a",
         status: "ACTIVE",
@@ -1465,7 +1473,7 @@ function readCookieValue(cookie: string, name: string): string {
 
 async function createStudentWorkbookBase64(
   rows: string[][],
-  headers = ["firstName", "lastName"],
+  headers?: string[],
   leadingRows: string[][] = [],
   withSummarySheet = false,
 ): Promise<string> {
@@ -1480,9 +1488,9 @@ async function createStudentWorkbookBase64(
   for (const row of leadingRows) {
     worksheet.addRow(row);
   }
-  worksheet.addRow(headers);
+  worksheet.addRow(headers ?? ["firstName", "lastName", "seviye"]);
   for (const row of rows) {
-    worksheet.addRow(row);
+    worksheet.addRow(headers ? row : [...row, "8. Sınıf"]);
   }
 
   const buffer = await workbook.xlsx.writeBuffer();
@@ -1505,6 +1513,7 @@ async function readStudentWorkbookRows(fileBase64: string): Promise<string[][]> 
       String(row.getCell(2).value ?? ""),
       String(row.getCell(3).value ?? ""),
       String(row.getCell(4).value ?? ""),
+      String(row.getCell(5).value ?? ""),
     ]);
   });
   return rows;

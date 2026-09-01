@@ -546,18 +546,36 @@ export class SchoolService {
     }
     const effectiveAlanId = input.alanId !== undefined ? alanId : existing.alanId;
     if (effectiveAlanId) {
-      await this.assertAlanFitsClass(context, effectiveAlanId, existing.tenantId, gradeLevelId ?? existing.gradeLevelId);
+      await this.assertAlanFitsClass(
+        context,
+        effectiveAlanId,
+        existing.tenantId,
+        input.gradeLevelId !== undefined ? gradeLevelId : existing.gradeLevelId,
+      );
     }
     let record: ClassRecord | undefined;
+    let gradeLevelCascade: { studentsUpdated: number; enrollmentsUpdated: number } | undefined;
     try {
-      record = await this.classStore.update(id, {
+      const updateInput = {
         name: input.name,
         alanId,
         campusId,
-        gradeLevelId,
+        gradeLevelId: input.gradeLevelId !== undefined ? gradeLevelId ?? "" : undefined,
         section: input.section !== undefined ? optionalText(input.section) : undefined,
-      });
+      };
+      if (input.gradeLevelId !== undefined) {
+        const result = await this.classStore.updateWithGradeLevelCascade(id, updateInput);
+        record = result?.record;
+        gradeLevelCascade = result
+          ? { studentsUpdated: result.studentsUpdated, enrollmentsUpdated: result.enrollmentsUpdated }
+          : undefined;
+      } else {
+        record = await this.classStore.update(id, updateInput);
+      }
     } catch (error) {
+      if (error instanceof Error && error.message === "CLASS_GRADE_LEVEL_REQUIRED_FOR_STUDENTS") {
+        throw new BadRequestException(error.message);
+      }
       throwClassNameConflict(error);
     }
     if (!record) {
@@ -572,6 +590,7 @@ export class SchoolService {
       diff: {
         before: previousState,
         after: { name: record.name, alanId: record.alanId, campusId: record.campusId, gradeLevelId: record.gradeLevelId, section: record.section },
+        ...(gradeLevelCascade ? { gradeLevelCascade } : {}),
       },
     });
     return record;

@@ -259,7 +259,7 @@ describe("Attendance API", () => {
     const unscoped = await request(server)
       .post("/students")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ firstName: "Kapsam", lastName: "Disi" })
+      .send({ firstName: "Kapsam", lastName: "Disi", gradeLevelId: "grade-8" })
       .expect(201);
 
     await request(server)

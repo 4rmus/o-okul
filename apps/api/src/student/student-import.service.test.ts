@@ -26,11 +26,11 @@ describe("StudentImportService Gate D", () => {
   it("öğrenci ve veli TC/telefon alanlarını birbirinden bağımsız işler", async () => {
     const { service, students } = createService({ registryV2: true });
     const fileBase64 = csv([
-      "ad;soyad;tc;telefon;veli_ad;veli_soyad;veli_tc;veli_telefon",
-      "Tc;Ogrenci;10000000146;;;;;",
-      "Telefon;Ogrenci;;05551234567;;;;",
-      "VeliTc;Ogrenci;;;Fatma;Kaya;10000001372;",
-      "VeliTelefon;Ogrenci;;;Ayse;Kaya;;05557654321",
+      "ad;soyad;seviye;tc;telefon;veli_ad;veli_soyad;veli_tc;veli_telefon",
+      "Tc;Ogrenci;8. Sınıf;10000000146;;;;;",
+      "Telefon;Ogrenci;8. Sınıf;;05551234567;;;;",
+      "VeliTc;Ogrenci;8. Sınıf;;;Fatma;Kaya;10000001372;",
+      "VeliTelefon;Ogrenci;8. Sınıf;;;Ayse;Kaya;;05557654321",
     ].join("\n"));
 
     const preview = await service.dryRun(context, { fileBase64 });
@@ -49,7 +49,7 @@ describe("StudentImportService Gate D", () => {
 
   it("veli adı olup TC veya telefonu olmayan satırı commit öncesinde reddeder", async () => {
     const { service, students } = createService();
-    const fileBase64 = csv("ad;soyad;veli_ad;veli_soyad\nAda;Kaya;Fatma;Kaya");
+    const fileBase64 = csv("ad;soyad;seviye;veli_ad;veli_soyad\nAda;Kaya;8. Sınıf;Fatma;Kaya");
 
     await expect(service.dryRun(context, { fileBase64 })).resolves.toMatchObject({
       totalRows: 1,
@@ -65,7 +65,7 @@ describe("StudentImportService Gate D", () => {
   it("registry v2 pilotunda öğrenci hesap e-postasını reddetmeye devam eder", async () => {
     const { service } = createService({ registryV2: true });
     const preview = await service.dryRun(context, {
-      fileBase64: csv("ad;soyad;email\nAda;Kaya;ada@example.test"),
+      fileBase64: csv("ad;soyad;seviye;email\nAda;Kaya;8. Sınıf;ada@example.test"),
     });
 
     expect(preview).toMatchObject({
@@ -77,8 +77,8 @@ describe("StudentImportService Gate D", () => {
   it("iletişim kişisini maskeli dry-run ve default-off izinlerle import girdisine taşır", async () => {
     const { service, students } = createService();
     const fileBase64 = csv([
-      "ad;soyad;contactFirstName;contactLastName;contactRelation;contactPhone;contactEmail",
-      "Ada;Kaya;Fatma;Kaya;ANNE;5551234567;fatma@example.test",
+      "ad;soyad;seviye;contactFirstName;contactLastName;contactRelation;contactPhone;contactEmail",
+      "Ada;Kaya;8. Sınıf;Fatma;Kaya;ANNE;5551234567;fatma@example.test",
     ].join("\n"));
 
     const preview = await service.dryRun(context, { fileBase64 });
@@ -113,7 +113,7 @@ describe("StudentImportService Gate D", () => {
 
   it("dry-run sınıf ve okul no kontrolünü kampüs kapsamı ile tenant benzersizliğinde yapar", async () => {
     const { service } = createService({
-      classes: [{ id: "class-main", tenantId: "tenant-a", campusId: "campus-main", name: "8-A" }],
+      classes: [{ id: "class-main", tenantId: "tenant-a", campusId: "campus-main", gradeLevelId: "grade-8", name: "8-A" }],
       studentNos: ["999"],
     });
     const preview = await service.dryRun(context, {
@@ -128,23 +128,69 @@ describe("StudentImportService Gate D", () => {
 
   it("özel sınıf adını boşluk ve harf farkı olmadan eşleştirip aynı classId ile commit eder", async () => {
     const { service, students } = createService({
-      classes: [{ id: "class-custom", tenantId: "tenant-a", campusId: "campus-main", name: "Bilim Atölyesi" }],
+      classes: [{ id: "class-custom", tenantId: "tenant-a", campusId: "campus-main", gradeLevelId: "grade-8", name: "Bilim Atölyesi" }],
     });
     const fileBase64 = csv("okul_no;ad;soyad;sinif\n100;Ada;Kaya; bİLİMAtölyesi ");
 
     await expect(service.dryRun(context, { fileBase64 })).resolves.toMatchObject({
       errors: [],
-      validRows: [expect.objectContaining({ classId: "class-custom", className: "bİLİMAtölyesi" })],
+      validRows: [expect.objectContaining({ gradeLevelId: "grade-8", gradeLevelName: "8. Sınıf", classId: "class-custom", className: "bİLİMAtölyesi" })],
       wouldImport: true,
     });
     await service.import(context, { fileBase64 }, "custom-class-name-import");
-    expect(students.createMany).toHaveBeenCalledWith(context, [expect.objectContaining({ classId: "class-custom" })]);
+    expect(students.createMany).toHaveBeenCalledWith(context, [expect.objectContaining({ gradeLevelId: "grade-8", classId: "class-custom" })]);
+  });
+
+  it("seviye ile sınıf uyuşmadığında satırı reddeder", async () => {
+    const { service } = createService({
+      classes: [{ id: "class-main", tenantId: "tenant-a", campusId: "campus-main", gradeLevelId: "grade-8", name: "8-A" }],
+      gradeLevels: [
+        { id: "grade-7", tenantId: "tenant-a", code: "7", name: "7. Sınıf" },
+        { id: "grade-8", tenantId: "tenant-a", code: "8", name: "8. Sınıf" },
+      ],
+    });
+
+    await expect(service.dryRun(context, {
+      fileBase64: csv("ad;soyad;seviye;sinif\nAda;Kaya;7. Sınıf;8-A"),
+    })).resolves.toMatchObject({
+      wouldImport: false,
+      errors: [expect.objectContaining({ row: 2, field: "gradeLevelName", code: "CLASS_GRADE_LEVEL_MISMATCH" })],
+    });
+  });
+
+  it("eksik, bilinmeyen ve belirsiz seviye değerlerini ayrı hata kodlarıyla reddeder", async () => {
+    const missing = createService();
+    await expect(missing.service.dryRun(context, {
+      fileBase64: csv("ad;soyad\nAda;Kaya"),
+    })).resolves.toMatchObject({
+      errors: [expect.objectContaining({ code: "GRADE_LEVEL_REQUIRED" })],
+    });
+
+    const unknown = createService();
+    await expect(unknown.service.dryRun(context, {
+      fileBase64: csv("ad;soyad;seviye\nAda;Kaya;Bilinmeyen"),
+    })).resolves.toMatchObject({
+      errors: [expect.objectContaining({ code: "GRADE_LEVEL_NOT_FOUND" })],
+    });
+
+    const ambiguous = createService({
+      gradeLevels: [
+        { id: "grade-8-a", tenantId: "tenant-a", code: "8A", name: "8. Sınıf" },
+        { id: "grade-8-b", tenantId: "tenant-a", code: "8B", name: "8. Sınıf" },
+      ],
+    });
+    await expect(ambiguous.service.dryRun(context, {
+      fileBase64: csv("ad;soyad;seviye\nAda;Kaya;8. Sınıf"),
+    })).resolves.toMatchObject({
+      errors: [expect.objectContaining({ code: "GRADE_LEVEL_AMBIGUOUS" })],
+    });
   });
 });
 
 function createService(options: {
   registryV2?: boolean;
-  classes?: Array<{ id: string; tenantId: string; campusId?: string; name: string }>;
+  classes?: Array<{ id: string; tenantId: string; campusId?: string; gradeLevelId?: string; name: string }>;
+  gradeLevels?: Array<{ id: string; tenantId: string; code?: string; name: string }>;
   studentNos?: string[];
 } = {}) {
   const students = {
@@ -156,7 +202,8 @@ function createService(options: {
     previewQuota: vi.fn(async (_context, incoming: number) => ({ limit: 200, current: 0, incoming, wouldExceed: false })),
   };
   const school = {
-    listClasses: vi.fn(async () => options.classes ?? [{ id: "class-main", tenantId: "tenant-a", campusId: "campus-main", name: "8-A" }]),
+    listClasses: vi.fn(async () => options.classes ?? [{ id: "class-main", tenantId: "tenant-a", campusId: "campus-main", gradeLevelId: "grade-8", name: "8-A" }]),
+    listGradeLevels: vi.fn(async () => options.gradeLevels ?? [{ id: "grade-8", tenantId: "tenant-a", code: "8", name: "8. Sınıf" }]),
   };
   const featureRollouts = {
     resolve: vi.fn(async () => ({ enabledFeatureKeys: options.registryV2 ? ["web.student-registry-v2"] : [] })),

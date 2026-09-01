@@ -3,6 +3,7 @@ import type { RequestContext } from "../context/request-context.js";
 import { InMemoryGuardianStudentStore } from "../school/guardian-student-store.js";
 import { InMemoryGuardianStore } from "../school/guardian-store.js";
 import { InMemoryClassStore } from "../school/class-store.js";
+import { InMemoryGradeLevelStore } from "../school/grade-level-store.js";
 import { InMemoryStudentStore, type StudentStore } from "./student-store.js";
 import { InMemoryStudentEnrollmentStore } from "./student-enrollment-store.js";
 import { InMemoryStudentContactStore } from "./student-contact-store.js";
@@ -16,11 +17,13 @@ describe("StudentService", () => {
     const tcStudent = await setup.service.create(adminContext, {
       firstName: "Tc",
       lastName: "Ogrenci",
+      gradeLevelId: "grade-8",
       nationalId: "10000000146",
     });
     const phoneStudent = await setup.service.create(adminContext, {
       firstName: "Telefon",
       lastName: "Ogrenci",
+      gradeLevelId: "grade-8",
       phone: "5551234567",
     });
 
@@ -39,6 +42,7 @@ describe("StudentService", () => {
     const student = await setup.service.create(adminContext, {
       firstName: "Yeni",
       lastName: "Ogrenci",
+      gradeLevelId: "grade-8",
       guardian: {
         firstName: "Ayse",
         lastName: "Veli",
@@ -83,6 +87,7 @@ describe("StudentService", () => {
     const student = await setup.service.create(adminContext, {
       firstName: "Kardes",
       lastName: "Ogrenci",
+      gradeLevelId: "grade-8",
       guardian: {
         phone: "5000000001",
       },
@@ -103,6 +108,7 @@ describe("StudentService", () => {
     const student = await setup.service.create(adminContext, {
       firstName: "Tc",
       lastName: "Ogrenci",
+      gradeLevelId: "grade-8",
       guardian: { nationalId: "10000001372" },
     });
 
@@ -128,6 +134,7 @@ describe("StudentService", () => {
     const student = await setup.service.create(adminContext, {
       firstName: "Tc",
       lastName: "Ogrenci",
+      gradeLevelId: "grade-8",
       guardian: {
         nationalId,
         phone: "0 500 000 00 98",
@@ -152,6 +159,7 @@ describe("StudentService", () => {
     const student = await setup.service.create(adminContext, {
       firstName: "Hesapli",
       lastName: "Ogrenci",
+      gradeLevelId: "grade-8",
       guardian: {
         firstName: "Can",
         lastName: "Veli",
@@ -293,12 +301,57 @@ describe("StudentService", () => {
     })).rejects.toThrow("ACTIVE_STUDENT_LIMIT_REACHED");
   });
 
-  it("sınıfsız öğrenci açık enrollment oluşmadığı için aktif lisans kotasını tüketmez", async () => {
-    const setup = createService({ activeStudentLimit: 1 });
+  it("seviye zorunluluğunu ve sınıf-seviye uyumunu fail-closed doğrular", async () => {
+    const setup = createService();
+
     await expect(setup.service.create(adminContext, {
+      firstName: "Seviyesiz",
+      lastName: "Öğrenci",
+    })).rejects.toThrow("STUDENT_GRADE_LEVEL_REQUIRED");
+    await expect(setup.service.create(adminContext, {
+      firstName: "Uyumsuz",
+      lastName: "Öğrenci",
+      gradeLevelId: "grade-7",
+      classId: "class-a",
+    })).rejects.toThrow("STUDENT_CLASS_GRADE_LEVEL_MISMATCH");
+    await expect(setup.service.create(adminContext, {
+      firstName: "Başka",
+      lastName: "Tenant",
+      gradeLevelId: "grade-7",
+    })).rejects.toThrow();
+  });
+
+  it("yalnız sınıf değiştiğinde yeni seviyeyi sınıftan türetir", async () => {
+    const setup = createService();
+    const gradeLevel = await setup.gradeLevelStore.create({ tenantId: "tenant-a", name: "9. Sınıf", code: "9" });
+    const schoolClass = await setup.classStore.create({
+      tenantId: "tenant-a",
+      name: "9-A",
+      gradeLevelId: gradeLevel.id,
+    });
+
+    await expect(setup.service.update(adminContext, "student-a", { classId: schoolClass.id })).resolves.toMatchObject({
+      gradeLevelId: gradeLevel.id,
+      classId: schoolClass.id,
+    });
+    await expect(setup.enrollmentStore.listByStudent("student-a")).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ gradeLevelId: gradeLevel.id, classId: schoolClass.id, reason: "CLASS_CHANGED" }),
+    ]));
+  });
+
+  it("sınıfsız seviyeli öğrenci açık enrollment oluşturarak aktif lisans kotasını tüketir", async () => {
+    const setup = createService({ activeStudentLimit: 2 });
+    const student = await setup.service.create(adminContext, {
       firstName: "Planlı",
       lastName: "Öğrenci",
-    })).resolves.toMatchObject({ status: "ACTIVE", classId: undefined });
+      gradeLevelId: "grade-8",
+    });
+
+    expect(student).toMatchObject({ status: "ACTIVE", gradeLevelId: "grade-8", classId: undefined });
+    await expect(setup.enrollmentStore.listByStudent(student.id)).resolves.toEqual([
+      expect.objectContaining({ status: "ACTIVE", gradeLevelId: "grade-8", classId: undefined }),
+    ]);
+    await expect(setup.service.previewQuota(adminContext, 1)).resolves.toMatchObject({ current: 2, wouldExceed: true });
   });
 
   it("PASSIVE geçişinde kapasiteyi boşaltır ve ACTIVE dönüşünde açık enrollment oluşturur", async () => {
@@ -458,6 +511,7 @@ function createService(options: { failReportSnapshotPurge?: boolean; activeStude
   const studentStore = new InMemoryStudentStore();
   const enrollmentStore = new InMemoryStudentEnrollmentStore();
   const classStore = new InMemoryClassStore();
+  const gradeLevelStore = new InMemoryGradeLevelStore();
   const guardianStudentStore = new InMemoryGuardianStudentStore();
   const guardianStore = new InMemoryGuardianStore();
   const studentContactStore = new InMemoryStudentContactStore();
@@ -532,7 +586,7 @@ function createService(options: { failReportSnapshotPurge?: boolean; activeStude
       { listYears: async () => [], listTerms: async () => [] } as never,
       {} as never,
       classStore,
-      {} as never,
+      gradeLevelStore,
       {} as never,
       identityInvitations as never,
       reportSnapshots as never,
@@ -554,6 +608,7 @@ function createService(options: { failReportSnapshotPurge?: boolean; activeStude
     studentStore,
     enrollmentStore,
     classStore,
+    gradeLevelStore,
     studentContactStore,
   };
 }

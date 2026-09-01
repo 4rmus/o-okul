@@ -1,11 +1,12 @@
 "use client";
 
 import { type FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { GradeLevelRecord } from "@o-okul/shared-types";
 import { Button, CrudPage, EmptyState, Field, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@o-okul/ui";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import {
@@ -131,6 +132,9 @@ export function GradeLevelsPage() {
       sticky: "right",
       render: (record) => (
         <span className="next-row-actions">
+          <Link href={`/kurum/ogrenciler?level=${encodeURIComponent(record.id)}`} aria-label={`${record.name} öğrencilerini gör`}>
+            <Eye size={17} aria-hidden="true" />
+          </Link>
           <Button size="icon" variant="ghost" type="button" onClick={() => openEditForm(record)} aria-label={`${record.name} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
           </Button>

@@ -377,6 +377,7 @@ type StudentFixture = {
   firstName: string;
   lastName: string;
   studentNo?: string;
+  gradeLevelId?: string;
   classId?: string;
   responsibleTeacherId?: string;
   status: "ACTIVE" | "PASSIVE" | "GRADUATED" | "TRANSFERRED";
@@ -387,6 +388,7 @@ type StudentEnrollmentFixture = {
   studentId: string;
   academicYearId?: string;
   termId?: string;
+  gradeLevelId?: string;
   classId?: string;
   status: StudentFixture["status"];
   startsAt: string;
@@ -521,6 +523,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       firstName: "Ada",
       lastName: "A",
       studentNo: "176",
+      gradeLevelId: "grade-8",
       classId: "class-a",
       responsibleTeacherId: "teacher-a",
       status: "ACTIVE",
@@ -535,6 +538,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       studentId: "student-a",
       academicYearId: "academic-year-2026",
       termId: "term-2026-spring",
+      gradeLevelId: "grade-8",
       classId: "class-a",
       status: "ACTIVE",
       startsAt: "2026-06-01",
@@ -3638,10 +3642,9 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       const responsibleTeacherId = url.searchParams.get("responsibleTeacherId");
       const status = url.searchParams.get("status");
       const guardianLinked = url.searchParams.get("guardianLinked");
-      const classIdsByLevel = new Set(classes.filter((klass) => !level || klass.gradeLevelId === level).map((klass) => klass.id));
       const filteredStudents = students.filter((student) =>
         (!classId || student.classId === classId) &&
-        (!level || Boolean(student.classId && classIdsByLevel.has(student.classId))) &&
+        (!level || student.gradeLevelId === level) &&
         (!responsibleTeacherId || student.responsibleTeacherId === responsibleTeacherId) &&
         (!status || student.status === status) &&
         (!guardianLinked || (guardianLinked === "true" ? student.id === "student-a" : student.id !== "student-a")),
@@ -3662,6 +3665,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
         tenantId: "tenant-a",
         firstName: body.firstName,
         lastName: body.lastName,
+        gradeLevelId: body.gradeLevelId,
         classId: body.classId,
         responsibleTeacherId: body.responsibleTeacherId,
         status: body.status ?? "ACTIVE",
@@ -3679,6 +3683,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     if (path === "/students/enrollments/bulk-renew" && request.method() === "POST") {
       const body = request.postDataJSON() as {
         studentIds?: string[];
+        gradeLevelId?: string;
         classId?: string;
         classIdBySourceClassId?: Record<string, string>;
         useAutomaticClassMapping?: boolean;
@@ -3701,6 +3706,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
           studentId,
           academicYearId: body.academicYearId ?? "academic-year-2026",
           termId: body.termId ?? "term-2026-spring",
+          gradeLevelId: targetClassId ? classes.find((record) => record.id === targetClassId)?.gradeLevelId : body.gradeLevelId,
           classId: targetClassId,
           status: "ACTIVE",
           startsAt,
@@ -3713,7 +3719,12 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       studentEnrollments = [...studentEnrollments, ...created];
       students = students.map((student) =>
         studentIds.includes(student.id)
-          ? { ...student, classId: created.find((record) => record.studentId === student.id)?.classId, status: "ACTIVE" }
+          ? {
+              ...student,
+              gradeLevelId: created.find((record) => record.studentId === student.id)?.gradeLevelId,
+              classId: created.find((record) => record.studentId === student.id)?.classId,
+              status: "ACTIVE",
+            }
           : student,
       );
       await route.fulfill({
@@ -3735,6 +3746,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
         tenantId: "tenant-a",
         firstName: body.firstName,
         lastName: body.lastName,
+        gradeLevelId: body.gradeLevelId,
         classId: body.classId,
         responsibleTeacherId: body.responsibleTeacherId,
         status: body.status ?? current.status,
@@ -4075,6 +4087,8 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
 
   await clickSidebarLink(page, "Seviyeler", /\/kurum\/seviyeler$/);
   await expect(heading(page, { name: "Seviyeler" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "8. Sınıf öğrencilerini gör" }))
+    .toHaveAttribute("href", "/kurum/ogrenciler?level=grade-8");
   await expect(page.getByText("8. Sınıf")).toBeVisible();
   await expect(page.getByText("1 kayıt").first()).toBeVisible();
 
@@ -4529,6 +4543,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   )).toBe(true);
 
   await page.getByRole("button", { name: "Öğrenci ekle" }).click();
+  await page.getByRole("dialog", { name: "Öğrenci ekle" }).getByLabel("Seviye").selectOption("grade-8");
   await page.getByLabel("Ad", { exact: true }).fill("Deniz");
   await page.getByLabel("Soyad", { exact: true }).fill("Demo");
   await page.getByLabel("TC Kimlik No", { exact: true }).fill("123");
