@@ -630,16 +630,19 @@ function requireNoRawPiiEvidence(value, failures, path = "liveExamCycle") {
   if (typeof value !== "string") return;
 
   const normalized = value.toLowerCase();
+  const numericPiiValue = path === "liveExamCycle.releaseCandidate"
+    ? value.replace(/[a-f0-9]{40}/gi, "")
+    : value;
   if (normalized.includes("ornek-veriler") || /\bisem\s*\.txt\b/.test(normalized) || /\.txt(\b|$)/.test(normalized)) {
     failures.push(`${path} ham TXT dosya adi veya yolu tasimamali.`);
   }
-  if (/\b\d{11}\b/.test(value)) {
+  if (/\b\d{11}\b/.test(numericPiiValue)) {
     failures.push(`${path} TCKN benzeri 11 haneli deger tasimamali.`);
   }
   if (/[^\s@]+@[^\s@]+\.[^\s@]+/.test(value)) {
     failures.push(`${path} ham e-posta tasimamali.`);
   }
-  if (/(?:\+?90[\s-]?)?5\d{2}[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}/.test(value)) {
+  if (/(?:\+?90[\s-]?)?5\d{2}[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}/.test(numericPiiValue)) {
     failures.push(`${path} ham telefon tasimamali.`);
   }
 }

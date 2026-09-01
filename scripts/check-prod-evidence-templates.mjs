@@ -1247,6 +1247,14 @@ runLiveExamCycleNegativeCheck({
   },
 });
 runLiveExamCycleNegativeCheck({
+  label: "Live exam cycle release SHA phone suffix negative",
+  path: "docs/evidence-templates/live-exam-cycle.release-sha-phone.tmp.json",
+  expectedFailure: "liveExamCycle.releaseCandidate ham telefon tasimamali.",
+  mutate: (fixture) => {
+    fixture.releaseCandidate += "-5551234567";
+  },
+});
+runLiveExamCycleNegativeCheck({
   label: "Live exam cycle stale checkedAt negative",
   path: "docs/evidence-templates/live-exam-cycle.stale.tmp.json",
   expectedFailure: "checkedAt en fazla 24 saatlik olmali.",
