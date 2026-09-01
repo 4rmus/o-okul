@@ -4543,6 +4543,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   )).toBe(true);
 
   await page.getByRole("button", { name: "Öğrenci ekle" }).click();
+  await expect(page.getByRole("dialog", { name: "Öğrenci ekle" })).toContainText("Ad, soyad ve seviye zorunludur. Sınıf ve diğer alanlar opsiyoneldir.");
   await page.getByRole("dialog", { name: "Öğrenci ekle" }).getByLabel("Seviye").selectOption("grade-8");
   await page.getByLabel("Ad", { exact: true }).fill("Deniz");
   await page.getByLabel("Soyad", { exact: true }).fill("Demo");
