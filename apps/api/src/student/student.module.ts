@@ -12,12 +12,12 @@ import { StudentController } from "./student.controller.js";
 import { StudentContactController } from "./student-contact.controller.js";
 import { createStudentContactStore, studentContactStoreToken } from "./student-contact-store.js";
 import { StudentContactService } from "./student-contact.service.js";
-import { createStudentEnrollmentStore, studentEnrollmentStoreToken } from "./student-enrollment-store.js";
 import { StudentImportService } from "./student-import.service.js";
+import { StudentPersistenceModule } from "./student-persistence.module.js";
 import { StudentService } from "./student.service.js";
 
 @Module({
-  imports: [AuditLogModule, FeatureRolloutModule, GuardianModule, IdentityInvitationModule, IdentityProvisioningModule, LicensePersistenceModule, ReportModule, SchoolModule, TeacherModule],
+  imports: [AuditLogModule, FeatureRolloutModule, GuardianModule, IdentityInvitationModule, IdentityProvisioningModule, LicensePersistenceModule, ReportModule, SchoolModule, StudentPersistenceModule, TeacherModule],
   controllers: [StudentController, StudentContactController],
   providers: [
     StudentImportService,
@@ -26,12 +26,8 @@ import { StudentService } from "./student.service.js";
       provide: studentContactStoreToken,
       useFactory: createStudentContactStore,
     },
-    {
-      provide: studentEnrollmentStoreToken,
-      useFactory: createStudentEnrollmentStore,
-    },
     StudentService,
   ],
-  exports: [StudentContactService, StudentService, studentEnrollmentStoreToken],
+  exports: [StudentContactService, StudentPersistenceModule, StudentService],
 })
 export class StudentModule {}

@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { createStudentEnrollmentStore, studentEnrollmentStoreToken } from "./student-enrollment-store.js";
 import { createStudentStore, studentStoreToken } from "./student-store.js";
 
 @Module({
@@ -7,7 +8,11 @@ import { createStudentStore, studentStoreToken } from "./student-store.js";
       provide: studentStoreToken,
       useFactory: createStudentStore,
     },
+    {
+      provide: studentEnrollmentStoreToken,
+      useFactory: createStudentEnrollmentStore,
+    },
   ],
-  exports: [studentStoreToken],
+  exports: [studentEnrollmentStoreToken, studentStoreToken],
 })
 export class StudentPersistenceModule {}

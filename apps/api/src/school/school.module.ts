@@ -1,6 +1,8 @@
 import { Module } from "@nestjs/common";
 import { AuditLogModule } from "../audit-log/audit-log.module.js";
+import { type StudentEnrollmentStore, studentEnrollmentStoreToken } from "../student/student-enrollment-store.js";
 import { StudentPersistenceModule } from "../student/student-persistence.module.js";
+import { type StudentStore, studentStoreToken } from "../student/student-store.js";
 import { AcademicCalendarController } from "./academic-calendar.controller.js";
 import { academicCalendarStoreToken, createAcademicCalendarStore } from "./academic-calendar-store.js";
 import { alanStoreToken, createAlanStore } from "./alan-store.js";
@@ -38,7 +40,8 @@ const schoolStoreProviders = [
   },
   {
     provide: classStoreToken,
-    useFactory: createClassStore,
+    inject: [studentStoreToken, studentEnrollmentStoreToken].slice(),
+    useFactory: (studentStore: StudentStore, enrollmentStore: StudentEnrollmentStore) => createClassStore(studentStore, enrollmentStore),
   },
   {
     provide: courseStoreToken,

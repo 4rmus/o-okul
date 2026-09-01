@@ -134,7 +134,7 @@ export class StudentImportService {
       await this.students.assertGuardianProvisioningAllowed(context);
     }
     const errors = [...registryErrors, ...await this.validateRows(context, rows)];
-    const incomingActiveStudents = filterValidRows(rows, errors).filter((row) => Boolean(row.classId)).length;
+    const incomingActiveStudents = filterValidRows(rows, errors).filter((row) => Boolean(row.gradeLevelId)).length;
     const quota = await this.students.previewQuota(context, incomingActiveStudents);
 
     if (quota.wouldExceed) {
@@ -148,12 +148,22 @@ export class StudentImportService {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Students");
     const students = await this.students.list(context);
-    const classes = await this.school.listClasses(context);
+    const [classes, gradeLevels] = await Promise.all([
+      this.school.listClasses(context),
+      this.school.listGradeLevels(context),
+    ]);
     const classById = new Map(classes.map((record) => [record.id, record]));
+    const gradeLevelById = new Map(gradeLevels.map((record) => [record.id, record]));
 
-    worksheet.addRow(["okul_no", "ad", "soyad", "sinif"]);
+    worksheet.addRow(["okul_no", "ad", "soyad", "seviye", "sinif"]);
     for (const student of students) {
-      worksheet.addRow([student.studentNo ?? "", student.firstName, student.lastName, student.classId ? classById.get(student.classId)?.name ?? "" : ""]);
+      worksheet.addRow([
+        student.studentNo ?? "",
+        student.firstName,
+        student.lastName,
+        student.gradeLevelId ? gradeLevelById.get(student.gradeLevelId)?.name ?? "" : "",
+        student.classId ? classById.get(student.classId)?.name ?? "" : "",
+      ]);
     }
 
     const buffer = await workbook.xlsx.writeBuffer();
@@ -230,6 +240,7 @@ export class StudentImportService {
     const studentNoIndex = findHeaderIndex(header, ["studentNo", "schoolNo", "okulNo", "okulNumarasi", "okulNumarası", "ogrenciNo", "öğrenciNo"]);
     const firstNameIndex = findHeaderIndex(header, ["firstName", "ad", "adi", "adı", "isim"]) ?? 0;
     const lastNameIndex = findHeaderIndex(header, ["lastName", "soyad", "soyadi", "soyadı"]) ?? 1;
+    const gradeLevelIndex = findHeaderIndex(header, ["gradeLevel", "gradeLevelName", "level", "seviye", "kademe"]);
     const classIndex = findHeaderIndex(header, ["class", "className", "sinif", "sınıf", "sube", "şube", "sinifAdi", "sınıfAdı"]);
     const emailIndex = findHeaderIndex(header, ["email", "ePosta", "eposta", "studentEmail", "ogrenciEmail", "öğrenciEmail"]);
     const phoneIndex = findHeaderIndex(header, ["phone", "telefon", "cepTelefonu", "studentPhone", "ogrenciTelefon", "öğrenciTelefon"]);
@@ -252,6 +263,7 @@ export class StudentImportService {
       const studentNo = studentNoIndex === undefined ? "" : row.cells[studentNoIndex]?.trim() ?? "";
       const firstName = toTurkishUpperCase(row.cells[firstNameIndex]?.trim() ?? "");
       const lastName = toTurkishUpperCase(row.cells[lastNameIndex]?.trim() ?? "");
+      const gradeLevelName = gradeLevelIndex === undefined ? "" : row.cells[gradeLevelIndex]?.trim() ?? "";
       const className = classIndex === undefined ? "" : row.cells[classIndex]?.trim() ?? "";
       const email = readOptionalCell(row.cells, emailIndex);
       const phone = readOptionalCell(row.cells, phoneIndex);
@@ -265,6 +277,7 @@ export class StudentImportService {
         firstName,
         lastName,
         ...(studentNo ? { studentNo } : {}),
+        ...(gradeLevelName ? { gradeLevelName } : {}),
         ...(className ? { className } : {}),
         ...(email ? { email } : {}),
         ...(phone ? { phone } : {}),
@@ -279,11 +292,25 @@ export class StudentImportService {
 
   private async validateRows(context: RequestContext, rows: ParsedStudentImportRow[]): Promise<StudentImportError[]> {
     const errors: StudentImportError[] = [];
-    const classes = await this.school.listClasses(context);
+    const [classes, gradeLevels, studentNos] = await Promise.all([
+      this.school.listClasses(context),
+      this.school.listGradeLevels(context),
+      this.students.listStudentNosForImport(context),
+    ]);
     const classByName = new Map(classes.map((record) => [normalizeClassName(record.name), record]));
+    const gradeLevelById = new Map(gradeLevels.map((record) => [record.id, record]));
+    const gradeLevelsByLookup = new Map<string, typeof gradeLevels>();
+    for (const gradeLevel of gradeLevels) {
+      for (const value of [gradeLevel.code, gradeLevel.name]) {
+        const key = normalizeGradeLevelLookup(value);
+        if (!key) continue;
+        const matches = gradeLevelsByLookup.get(key) ?? [];
+        if (!matches.some((record) => record.id === gradeLevel.id)) matches.push(gradeLevel);
+        gradeLevelsByLookup.set(key, matches);
+      }
+    }
     const existingStudentNos = new Set(
-      (await this.students.listStudentNosForImport(context))
-        .map((studentNo) => this.normalizeStudentNo(studentNo)),
+      studentNos.map((studentNo) => this.normalizeStudentNo(studentNo)),
     );
     const seenStudentNos = new Set<string>();
     const seenNationalIds = new Set<string>();
@@ -302,13 +329,34 @@ export class StudentImportService {
       if (!row.lastName) {
         errors.push({ row: row.row, field: "lastName", code: "REQUIRED" });
       }
+      const classRecord = row.className ? classByName.get(normalizeClassName(row.className)) : undefined;
       if (row.className) {
-        const classRecord = classByName.get(normalizeClassName(row.className));
         if (classRecord) {
           row.classId = classRecord.id;
         } else {
           errors.push({ row: row.row, field: "className", code: "CLASS_NOT_FOUND", value: row.className });
         }
+      }
+      const gradeLevelMatches = row.gradeLevelName
+        ? gradeLevelsByLookup.get(normalizeGradeLevelLookup(row.gradeLevelName)) ?? []
+        : [];
+      if (row.gradeLevelName && gradeLevelMatches.length === 0) {
+        errors.push({ row: row.row, field: "gradeLevelName", code: "GRADE_LEVEL_NOT_FOUND", value: row.gradeLevelName });
+      } else if (gradeLevelMatches.length > 1) {
+        errors.push({ row: row.row, field: "gradeLevelName", code: "GRADE_LEVEL_AMBIGUOUS", value: row.gradeLevelName });
+      }
+      const explicitGradeLevel = gradeLevelMatches.length === 1 ? gradeLevelMatches[0] : undefined;
+      if (classRecord && (!classRecord.gradeLevelId || (explicitGradeLevel && explicitGradeLevel.id !== classRecord.gradeLevelId))) {
+        errors.push({ row: row.row, field: "gradeLevelName", code: "CLASS_GRADE_LEVEL_MISMATCH", value: row.gradeLevelName ?? row.className });
+      }
+      const resolvedGradeLevelId = explicitGradeLevel?.id ?? classRecord?.gradeLevelId;
+      if (!resolvedGradeLevelId && !(row.className && !classRecord) && !(row.gradeLevelName && gradeLevelMatches.length !== 1)) {
+        errors.push({ row: row.row, field: "gradeLevelName", code: "GRADE_LEVEL_REQUIRED" });
+      }
+      const resolvedGradeLevel = resolvedGradeLevelId ? gradeLevelById.get(resolvedGradeLevelId) : undefined;
+      if (resolvedGradeLevel) {
+        row.gradeLevelId = resolvedGradeLevel.id;
+        row.gradeLevelName = resolvedGradeLevel.name;
       }
       if (row.email && !isEmailLike(row.email)) {
         errors.push({ row: row.row, field: "email", code: "INVALID_EMAIL" });
@@ -433,6 +481,7 @@ function toPublicImportedStudent(student: StudentRecord): PublicStudentRecord {
     studentNo: student.studentNo,
     firstName: student.firstName,
     lastName: student.lastName,
+    gradeLevelId: student.gradeLevelId,
     classId: student.classId,
     responsibleTeacherId: student.responsibleTeacherId,
     status: student.status,
@@ -617,4 +666,8 @@ function isEmailLike(value: string): boolean {
 
 function normalizeHeader(value: string): string {
   return value.trim().toLocaleLowerCase("tr-TR").replace(/[\s_-]+/g, "");
+}
+
+function normalizeGradeLevelLookup(value: string | undefined): string {
+  return value?.trim().replace(/\s+/g, " ").toLocaleLowerCase("tr-TR") ?? "";
 }

@@ -514,17 +514,20 @@ async function seedDemoTeachers(client: pg.PoolClient, tenantId: string, fixture
 }
 
 async function seedDemoStudentsAndGuardians(client: pg.PoolClient, tenantId: string, fixtures: DemoFixtures): Promise<void> {
+  const gradeLevelIdByClassId = new Map(fixtures.classes.map((record) => [record.id, record.gradeLevelId]));
   for (const student of fixtures.students) {
     const studentUserId = student.id === fixtures.accountStudent.id ? DEMO_STUDENT_USER_ID : null;
     const guardianUserId = student.id === fixtures.accountStudent.id ? DEMO_GUARDIAN_USER_ID : null;
+    const gradeLevelId = gradeLevelIdByClassId.get(student.classId) ?? null;
 
     await client.query(
       `INSERT INTO "Student" (
-         "id", "tenantId", "classId", "responsibleTeacherId", "status", "firstName", "lastName", "studentNo", "email", "phone", "userId", "updatedAt"
+         "id", "tenantId", "gradeLevelId", "classId", "responsibleTeacherId", "status", "firstName", "lastName", "studentNo", "email", "phone", "userId", "updatedAt"
        )
-       VALUES ($1, $2, $3, $4, 'ACTIVE', $5, $6, $7, $8, $9, $10, now())
+       VALUES ($1, $2, $3, $4, $5, 'ACTIVE', $6, $7, $8, $9, $10, $11, now())
        ON CONFLICT ("id") DO UPDATE
        SET "tenantId" = EXCLUDED."tenantId",
+           "gradeLevelId" = EXCLUDED."gradeLevelId",
            "classId" = EXCLUDED."classId",
            "responsibleTeacherId" = EXCLUDED."responsibleTeacherId",
            "status" = EXCLUDED."status",
@@ -539,6 +542,7 @@ async function seedDemoStudentsAndGuardians(client: pg.PoolClient, tenantId: str
       [
         student.id,
         tenantId,
+        gradeLevelId,
         student.classId,
         student.responsibleTeacherId,
         student.firstName,
@@ -552,19 +556,20 @@ async function seedDemoStudentsAndGuardians(client: pg.PoolClient, tenantId: str
 
     await client.query(
       `INSERT INTO "StudentEnrollment" (
-         "id", "tenantId", "studentId", "classId", "status", "startsAt", "reason", "updatedAt"
+         "id", "tenantId", "studentId", "gradeLevelId", "classId", "status", "startsAt", "reason", "updatedAt"
        )
-       VALUES ($1, $2, $3, $4, 'ACTIVE', $5::date, 'CREATED', now())
+       VALUES ($1, $2, $3, $4, $5, 'ACTIVE', $6::date, 'CREATED', now())
        ON CONFLICT ("id") DO UPDATE
        SET "tenantId" = EXCLUDED."tenantId",
            "studentId" = EXCLUDED."studentId",
+           "gradeLevelId" = EXCLUDED."gradeLevelId",
            "classId" = EXCLUDED."classId",
            "status" = EXCLUDED."status",
            "startsAt" = EXCLUDED."startsAt",
            "endsAt" = NULL,
            "reason" = EXCLUDED."reason",
            "updatedAt" = now()`,
-      [`student-enrollment-${student.id}`, tenantId, student.id, student.classId, DEMO_CLASS_START_DATE],
+      [`student-enrollment-${student.id}`, tenantId, student.id, gradeLevelId, student.classId, DEMO_CLASS_START_DATE],
     );
 
     await client.query(

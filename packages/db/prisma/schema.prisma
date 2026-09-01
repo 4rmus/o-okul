@@ -540,6 +540,7 @@ model Class {
   paymentPlans PaymentPlan[]
 
   @@unique([tenantId, id])
+  @@unique([tenantId, id, gradeLevelId])
   @@index([tenantId, campusId])
   @@index([tenantId, gradeLevelId])
   @@index([tenantId, alanId])
@@ -558,6 +559,8 @@ model GradeLevel {
   alanlar   Alan[]
   gradeLevelCourses GradeLevelCourse[]
   classes   Class[]
+  students  Student[]
+  studentEnrollments StudentEnrollment[]
   exams     Exam[]
   supportTickets SupportTicket[]
   reportSnapshots ReportSnapshot[]
@@ -708,6 +711,7 @@ model AcademicTerm {
 model Student {
   id          String    @id @default(uuid())
   tenantId    String
+  gradeLevelId String?
   classId     String?
   responsibleTeacherId String?
   status      String    @default("ACTIVE")
@@ -726,6 +730,9 @@ model Student {
   createdById String?
   updatedById String?
   tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  gradeLevel  GradeLevel? @relation(fields: [tenantId, gradeLevelId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  /// A deferrable `(tenantId, classId, gradeLevelId)` FK in 20260831120000
+  /// additionally pins the current class/grade pair while retaining legacy null-grade rows.
   class       Class?    @relation(fields: [tenantId, classId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   responsibleTeacher Teacher? @relation("StudentResponsibleTeacher", fields: [tenantId, responsibleTeacherId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   accountUser User?     @relation("StudentAccountUser", fields: [tenantId, userId], references: [tenantId, id], onDelete: NoAction)
@@ -746,6 +753,7 @@ model Student {
 
   @@index([tenantId, deletedAt])
   @@index([tenantId, status, deletedAt])
+  @@index([tenantId, gradeLevelId, deletedAt])
   @@index([tenantId, classId, deletedAt])
   @@index([tenantId, responsibleTeacherId])
   @@index([tenantId, studentNo])
@@ -760,6 +768,7 @@ model StudentEnrollment {
   studentId String
   academicYearId String?
   termId    String?
+  gradeLevelId String?
   classId   String?
   status    String    @default("ACTIVE")
   startsAt  DateTime  @db.Date
@@ -771,11 +780,13 @@ model StudentEnrollment {
   student   Student   @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade)
   academicYear AcademicYear? @relation(fields: [tenantId, academicYearId], references: [tenantId, id], onDelete: Restrict)
   term      AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
+  gradeLevel GradeLevel? @relation(fields: [tenantId, gradeLevelId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   class     Class?    @relation(fields: [tenantId, classId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([tenantId, studentId, startsAt])
   @@index([tenantId, academicYearId])
   @@index([tenantId, termId])
+  @@index([tenantId, gradeLevelId])
   @@index([tenantId, classId])
   @@index([tenantId, status, endsAt])
 }

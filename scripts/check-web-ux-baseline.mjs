@@ -598,7 +598,7 @@ requireTokens("apps/web/e2e-next/list-url-state-next.spec.ts", [
   'getByLabel("Toplu dönem geçişi")',
   'filters.locator(".uh-field")).toHaveCount(5)',
   'filters.locator(".uh-select")).toHaveCount(5)',
-  'tableView.locator(".uh-checkbox")).toHaveCount(6)',
+  'tableView.locator(".uh-checkbox")).toHaveCount(7)',
   'bulkTransition.locator(".uh-field")).toHaveCount(3)',
   'bulkTransition.locator(".uh-select")).toHaveCount(2)',
   'bulkTransition.locator(".uh-checkbox")).toHaveCount(1)',

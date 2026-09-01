@@ -183,6 +183,13 @@ jobs:
           --command "CREATE EXTENSION IF NOT EXISTS btree_gist"
       - name: Apply database migrations
         run: pnpm --filter @o-okul/db exec prisma migrate deploy --config prisma.config.ts
+      - name: Verify student grade-level migration and concurrency
+        env:
+          PGPASSWORD: postgres
+          STUDENT_GRADE_LEVEL_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/o_okul_student_grade_level_test
+        run: |
+          createdb --host localhost --username postgres o_okul_student_grade_level_test
+          pnpm --filter @o-okul/db db:student-grade-level:check:postgres
       - name: Verify account-management PostgreSQL concurrency
         run: >-
           pnpm --filter @o-okul/api exec vitest run --no-file-parallelism --reporter=verbose

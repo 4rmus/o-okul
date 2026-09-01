@@ -884,6 +884,7 @@ export interface StudentRecord {
   studentNo?: string;
   firstName: string;
   lastName: string;
+  gradeLevelId?: string;
   classId?: string;
   responsibleTeacherId?: string;
   status: StudentStatus;
@@ -956,6 +957,7 @@ export interface StudentCreateRequest {
   studentNo?: string;
   firstName: string;
   lastName: string;
+  gradeLevelId?: string;
   classId?: string;
   responsibleTeacherId?: string;
   status?: StudentStatus;
@@ -968,6 +970,7 @@ export interface StudentCreateRequest {
 export interface StudentUpdateRequest {
   firstName?: string;
   lastName?: string;
+  gradeLevelId?: string;
   classId?: string;
   responsibleTeacherId?: string;
   status?: StudentStatus;
@@ -987,6 +990,7 @@ export interface StudentProfileUpdateRequest {
 export interface StudentEnrollmentActionRequest {
   academicYearId?: string;
   termId?: string;
+  gradeLevelId?: string;
   classId?: string;
   startsAt?: string;
 }
@@ -1008,9 +1012,13 @@ export interface StudentImportRequest {
 
 export interface StudentImportError {
   row: number;
-  field: "className" | "contactEmail" | "contactFirstName" | "contactLastName" | "contactPhone" | "contactRelation" | "email" | "firstName" | "guardian" | "guardianNationalId" | "guardianPhone" | "lastName" | "nationalId" | "phone" | "quota" | "studentNo";
+  field: "className" | "contactEmail" | "contactFirstName" | "contactLastName" | "contactPhone" | "contactRelation" | "email" | "firstName" | "gradeLevelName" | "guardian" | "guardianNationalId" | "guardianPhone" | "lastName" | "nationalId" | "phone" | "quota" | "studentNo";
   code:
+    | "CLASS_GRADE_LEVEL_MISMATCH"
     | "CLASS_NOT_FOUND"
+    | "GRADE_LEVEL_AMBIGUOUS"
+    | "GRADE_LEVEL_NOT_FOUND"
+    | "GRADE_LEVEL_REQUIRED"
     | "INVALID_DATE"
     | "INVALID_EMAIL"
     | "INVALID_NATIONAL_ID"
@@ -1033,6 +1041,8 @@ export interface StudentImportPreviewRow {
   };
   classId?: string;
   className?: string;
+  gradeLevelId?: string;
+  gradeLevelName?: string;
   contact?: {
     firstName: string;
     lastName: string;
@@ -1107,6 +1117,7 @@ export interface StudentEnrollmentRecord {
   studentId: string;
   academicYearId?: string;
   termId?: string;
+  gradeLevelId?: string;
   classId?: string;
   className?: string;
   campusName?: string;

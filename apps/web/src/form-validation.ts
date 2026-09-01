@@ -255,6 +255,7 @@ export const studentFormSchema = z.object({
   firstName: requiredText("Ad"),
   lastName: requiredText("Soyad"),
   studentNo: optionalText(),
+  gradeLevelId: optionalText(),
   classId: optionalText(),
   responsibleTeacherId: optionalText(),
   status: z.enum(["ACTIVE", "PASSIVE", "GRADUATED", "TRANSFERRED"]),

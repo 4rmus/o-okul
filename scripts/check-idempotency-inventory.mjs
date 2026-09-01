@@ -97,6 +97,7 @@ for (const item of inventory) {
 const uatKurums07 = findTableRow(files.journeys, "UAT-KURUM-07");
 for (const token of [
   "idempotent calisir",
+  "ogrenci create",
   "ogretmen import commit",
   "scripts/check-idempotency-inventory.mjs",
   "pnpm idempotency:inventory:check",

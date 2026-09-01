@@ -420,18 +420,21 @@ async function seedClasses(client: pg.PoolClient, fixtures: DemoFixtures): Promi
 }
 
 async function seedStudents(client: pg.PoolClient, fixtures: DemoFixtures): Promise<void> {
+  const gradeLevelIdByClassId = new Map(fixtures.classes.map((record) => [record.id, record.gradeLevelId]));
   for (const student of fixtures.students) {
+    const gradeLevelId = gradeLevelIdByClassId.get(student.classId) ?? null;
     await client.query(
       `
-        INSERT INTO "Student" ("id","tenantId","classId","responsibleTeacherId","status","firstName","lastName","studentNo","email","phone","updatedAt")
-        VALUES ($1,$2,$3,$4,'ACTIVE',$5,$6,$7,$8,$9,now())
+        INSERT INTO "Student" ("id","tenantId","gradeLevelId","classId","responsibleTeacherId","status","firstName","lastName","studentNo","email","phone","updatedAt")
+        VALUES ($1,$2,$3,$4,$5,'ACTIVE',$6,$7,$8,$9,$10,now())
         ON CONFLICT ("id") DO UPDATE SET "firstName"=EXCLUDED."firstName","lastName"=EXCLUDED."lastName",
           "studentNo"=EXCLUDED."studentNo","email"=EXCLUDED."email","phone"=EXCLUDED."phone","classId"=EXCLUDED."classId",
-          "responsibleTeacherId"=EXCLUDED."responsibleTeacherId","deletedAt"=NULL,"updatedAt"=now()
+          "gradeLevelId"=EXCLUDED."gradeLevelId","responsibleTeacherId"=EXCLUDED."responsibleTeacherId","deletedAt"=NULL,"updatedAt"=now()
       `,
       [
         student.id,
         TENANT_ID,
+        gradeLevelId,
         student.classId,
         student.responsibleTeacherId,
         student.firstName,
@@ -444,11 +447,11 @@ async function seedStudents(client: pg.PoolClient, fixtures: DemoFixtures): Prom
 
     await client.query(
       `
-        INSERT INTO "StudentEnrollment" ("id","tenantId","studentId","classId","status","startsAt","reason","updatedAt")
-        VALUES ($1,$2,$3,$4,'ACTIVE','2026-06-01'::date,'CREATED',now())
-        ON CONFLICT ("id") DO UPDATE SET "classId"=EXCLUDED."classId","status"=EXCLUDED."status","endsAt"=NULL,"updatedAt"=now()
+        INSERT INTO "StudentEnrollment" ("id","tenantId","studentId","gradeLevelId","classId","status","startsAt","reason","updatedAt")
+        VALUES ($1,$2,$3,$4,$5,'ACTIVE','2026-06-01'::date,'CREATED',now())
+        ON CONFLICT ("id") DO UPDATE SET "gradeLevelId"=EXCLUDED."gradeLevelId","classId"=EXCLUDED."classId","status"=EXCLUDED."status","endsAt"=NULL,"updatedAt"=now()
       `,
-      [`student-enrollment-${student.id}`, TENANT_ID, student.id, student.classId],
+      [`student-enrollment-${student.id}`, TENANT_ID, student.id, gradeLevelId, student.classId],
     );
   }
 }

@@ -3,6 +3,19 @@ import { runWithRequestContext } from "../context/request-context.js";
 import { InMemoryStudentStore, PostgresStudentStore } from "./student-store.js";
 
 describe("PostgresStudentStore", () => {
+  it("seviye filtresi sınıfsız öğrenciyi doğrudan gradeLevelId ile döndürür", async () => {
+    const store = new InMemoryStudentStore();
+    await store.create({ tenantId: "tenant-a", firstName: "Sınıfsız", lastName: "Sekiz", gradeLevelId: "grade-8", status: "ACTIVE" });
+    await store.create({ tenantId: "tenant-a", firstName: "Sınıfsız", lastName: "Yedi", gradeLevelId: "grade-7", status: "ACTIVE" });
+
+    const page = await store.listRegistryPage("tenant-a", { page: 1, limit: 20, gradeLevelId: "grade-8" });
+
+    const classlessStudent = page.records.find((student) => student.firstName === "Sınıfsız" && student.lastName === "Sekiz");
+    expect(classlessStudent).toMatchObject({ gradeLevelId: "grade-8" });
+    expect(classlessStudent?.classId).toBeUndefined();
+    expect(page.records.every((student) => student.gradeLevelId === "grade-8")).toBe(true);
+  });
+
   it("10 bin kayıtlı sentetik registry'de yalnız istenen sunucu sayfasını 500 ms altında döndürür", async () => {
     const store = new InMemoryStudentStore();
     await store.createMany(Array.from({ length: 10_000 }, (_, index) => ({
@@ -62,6 +75,7 @@ describe("PostgresStudentStore", () => {
       limit: 1,
       q: "Ada",
       sort: "-lastName",
+      gradeLevelId: "grade-8",
       classIds: ["class-a"],
       hasContact: true,
       teacherId: "teacher-a",
@@ -76,10 +90,12 @@ describe("PostgresStudentStore", () => {
     const listQuery = queries.find((query) => query.sql.includes('SELECT student.*'));
     expect(listQuery?.sql).toContain('FROM "StudentContact" contact');
     expect(listQuery?.sql).toContain('student."tenantId" = $1');
+    expect(listQuery?.sql).toContain('student."gradeLevelId" = $2');
     expect(listQuery?.sql).toContain('ORDER BY lower(student."lastName") DESC');
     expect(listQuery?.sql).toContain("LIMIT 1 OFFSET 1");
     expect(listQuery?.values).toEqual([
       "tenant-a",
+      "grade-8",
       ["class-a"],
       "teacher-a",
       ["student-a"],
@@ -241,10 +257,10 @@ describe("PostgresStudentStore", () => {
       async () => {
         await store.list();
         await store.findById("student-a");
-        await store.create({ tenantId: "tenant-a", firstName: "Ece", lastName: "Import" });
+        await store.create({ tenantId: "tenant-a", firstName: "Ece", lastName: "Import", gradeLevelId: "grade-8" });
         await store.createMany([
-          { tenantId: "tenant-a", firstName: "Deniz", lastName: "Import" },
-          { tenantId: "tenant-a", firstName: "Mert", lastName: "Import" },
+          { tenantId: "tenant-a", firstName: "Deniz", lastName: "Import", gradeLevelId: "grade-8" },
+          { tenantId: "tenant-a", firstName: "Mert", lastName: "Import", gradeLevelId: "grade-8" },
         ]);
         await store.update("student-a", { firstName: "Ada Guncel" });
         await store.purgePii("student-a");
@@ -259,10 +275,12 @@ describe("PostgresStudentStore", () => {
     expect(businessQueries[0]?.sql).toContain('SELECT * FROM "Student"');
     expect(businessQueries[1]?.values).toEqual(["student-a"]);
     expect(businessQueries.filter((query) => query.sql.includes("pg_advisory_xact_lock"))).toHaveLength(3);
-    expect(insertQueries[0]?.values).toEqual([expect.any(String), "tenant-a", "101", "Ece", "Import", null, null, "ACTIVE"]);
-    expect(insertQueries[1]?.values).toEqual([expect.any(String), "tenant-a", "102", "Deniz", "Import", null, "ACTIVE"]);
-    expect(insertQueries[2]?.values).toEqual([expect.any(String), "tenant-a", "103", "Mert", "Import", null, "ACTIVE"]);
-    expect(businessQueries.find((query) => query.values?.[1] === "Ada Guncel")?.values).toEqual(["student-a", "Ada Guncel", null, false, null, false, null, null]);
+    expect(insertQueries[0]?.values).toEqual([expect.any(String), "tenant-a", "101", "Ece", "Import", "grade-8", null, null, "ACTIVE"]);
+    expect(insertQueries[1]?.values).toEqual([expect.any(String), "tenant-a", "102", "Deniz", "Import", "grade-8", null, null, "ACTIVE"]);
+    expect(insertQueries[2]?.values).toEqual([expect.any(String), "tenant-a", "103", "Mert", "Import", "grade-8", null, null, "ACTIVE"]);
+    expect(businessQueries.find((query) => query.values?.[1] === "Ada Guncel")?.values).toEqual([
+      "student-a", "Ada Guncel", null, false, null, false, null, false, null, null,
+    ]);
     expect(businessQueries.some((query) => query.sql.includes('"firstName" = \'Anonim\''))).toBe(true);
     expect(businessQueries.some((query) => query.sql.includes('"nationalIdEncrypted" = NULL'))).toBe(true);
     expect(businessQueries.some((query) => query.sql.includes('"photoKey" = NULL'))).toBe(true);
@@ -335,6 +353,7 @@ describe("PostgresStudentStore", () => {
     const client = {
       async query<T>(sql: string, values?: unknown[]) {
         queries.push(sql);
+        if (sql.includes('FROM "Class"') && sql.includes("FOR SHARE")) return { rows: [{ gradeLevelId: "grade-8" }] as T[] };
         if (sql.includes('candidate::text AS "studentNo"')) return { rows: [{ studentNo: "101" }] as T[] };
         if (sql.includes('INSERT INTO "Student"')) {
           return { rows: [{
@@ -364,8 +383,8 @@ describe("PostgresStudentStore", () => {
       { userId: "user-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false },
       async () => {
         await expect(store.createManyWithEnrollmentsAndContacts!([{
-          student: { tenantId: "tenant-a", firstName: "Ada", lastName: "Kaya", classId: "class-a" },
-          enrollment: { classId: "class-a", startsAt: "2026-08-10", status: "ACTIVE" },
+          student: { tenantId: "tenant-a", firstName: "Ada", lastName: "Kaya", gradeLevelId: "grade-8", classId: "class-a" },
+          enrollment: { gradeLevelId: "grade-8", classId: "class-a", startsAt: "2026-08-10", status: "ACTIVE" },
           contact: {
             tenantId: "tenant-a",
             firstName: "Fatma",
@@ -392,6 +411,9 @@ describe("PostgresStudentStore", () => {
     const client = {
       async query<T>(sql: string, values?: unknown[]) {
         queries.push(sql);
+        if (sql.includes('FROM "Class"') && sql.includes("FOR SHARE")) {
+          return { rows: [{ gradeLevelId: "grade-8" }] as T[] };
+        }
         if (sql.includes('candidate::text AS "studentNo"')) {
           return { rows: [{ studentNo: "101" }] as T[] };
         }
@@ -434,13 +456,14 @@ describe("PostgresStudentStore", () => {
       { userId: "user-tenant-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false },
       async () => {
         await expect(store.createWithEnrollment(
-          { tenantId: "tenant-a", firstName: "Kotalı", lastName: "Öğrenci", classId: "class-a" },
-          { classId: "class-a", startsAt: "2026-08-01", status: "ACTIVE", reason: "CREATED" },
+          { tenantId: "tenant-a", firstName: "Kotalı", lastName: "Öğrenci", gradeLevelId: "grade-8", classId: "class-a" },
+          { gradeLevelId: "grade-8", classId: "class-a", startsAt: "2026-08-01", status: "ACTIVE", reason: "CREATED" },
         )).rejects.toThrow("ACTIVE_STUDENT_LIMIT_REACHED");
       },
     );
 
     expect(queries.some((sql) => sql.includes('INSERT INTO "Student"'))).toBe(true);
+    expect(queries.some((sql) => sql.includes('FROM "Class"') && sql.includes("FOR SHARE"))).toBe(true);
     expect(queries.some((sql) => sql.includes('INSERT INTO "StudentEnrollment"'))).toBe(true);
     expect(queries).toContain("ROLLBACK");
     expect(queries).not.toContain("COMMIT");

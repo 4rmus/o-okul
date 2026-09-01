@@ -384,17 +384,17 @@ async function seedFixtures() {
     );
 
     await adminClient.query(
-      `INSERT INTO "Class" ("id", "tenantId", "name", "updatedAt")
-       VALUES ($1, $2, 'A Sınıfı', now()), ($3, $4, 'B Sınıfı', now())
+      `INSERT INTO "Class" ("id", "tenantId", "gradeLevelId", "name", "updatedAt")
+       VALUES ($1, $2, $3, 'A Sınıfı', now()), ($4, $5, $6, 'B Sınıfı', now())
        ON CONFLICT ("id") DO NOTHING`,
-      [ids.classA, ids.tenantA, ids.classB, ids.tenantB],
+      [ids.classA, ids.tenantA, ids.gradeLevelA, ids.classB, ids.tenantB, ids.gradeLevelB],
     );
 
     await adminClient.query(
-      `INSERT INTO "Student" ("id", "tenantId", "classId", "firstName", "lastName", "studentNo", "updatedAt")
-       VALUES ($1, $2, $3, 'Ada', 'A', 'A-001', now()), ($4, $5, $6, 'Bora', 'B', 'B-001', now())
+      `INSERT INTO "Student" ("id", "tenantId", "gradeLevelId", "classId", "firstName", "lastName", "studentNo", "updatedAt")
+       VALUES ($1, $2, $3, $4, 'Ada', 'A', 'A-001', now()), ($5, $6, $7, $8, 'Bora', 'B', 'B-001', now())
        ON CONFLICT ("id") DO NOTHING`,
-      [ids.studentA, ids.tenantA, ids.classA, ids.studentB, ids.tenantB, ids.classB],
+      [ids.studentA, ids.tenantA, ids.gradeLevelA, ids.classA, ids.studentB, ids.tenantB, ids.gradeLevelB, ids.classB],
     );
 
     await adminClient.query(
@@ -408,12 +408,23 @@ async function seedFixtures() {
     );
 
     await adminClient.query(
-      `INSERT INTO "StudentEnrollment" ("id", "tenantId", "studentId", "classId", "status", "startsAt", "reason", "updatedAt")
+      `INSERT INTO "StudentEnrollment" ("id", "tenantId", "studentId", "gradeLevelId", "classId", "status", "startsAt", "reason", "updatedAt")
        VALUES
-         ($1, $2, $3, $4, 'ACTIVE', '2026-06-01', 'RLS', now()),
-         ($5, $6, $7, $8, 'ACTIVE', '2026-06-01', 'RLS', now())
+         ($1, $2, $3, $4, $5, 'ACTIVE', '2026-06-01', 'RLS', now()),
+         ($6, $7, $8, $9, $10, 'ACTIVE', '2026-06-01', 'RLS', now())
        ON CONFLICT ("id") DO NOTHING`,
-      [ids.studentEnrollmentA, ids.tenantA, ids.studentA, ids.classA, ids.studentEnrollmentB, ids.tenantB, ids.studentB, ids.classB],
+      [
+        ids.studentEnrollmentA,
+        ids.tenantA,
+        ids.studentA,
+        ids.gradeLevelA,
+        ids.classA,
+        ids.studentEnrollmentB,
+        ids.tenantB,
+        ids.studentB,
+        ids.gradeLevelB,
+        ids.classB,
+      ],
     );
 
     await adminClient.query(
@@ -1432,6 +1443,22 @@ async function assertExamResultBlocksCrossTenantReferences() {
   });
 }
 
+async function assertStudentGradeLevelBlocksCrossTenantReferences() {
+  await withAppTransaction(async () => {
+    await setTenantContext(appClient, ids.tenantA);
+    await expectSqlState(
+      `UPDATE "Student" SET "gradeLevelId" = $1 WHERE "id" = $2`,
+      [ids.gradeLevelB, ids.studentA],
+      "23503",
+    );
+    await expectSqlState(
+      `UPDATE "StudentEnrollment" SET "gradeLevelId" = $1 WHERE "id" = $2`,
+      [ids.gradeLevelB, ids.studentEnrollmentA],
+      "23503",
+    );
+  });
+}
+
 async function assertParsedAnswerBlocksCrossTenantReferences() {
   await withAppTransaction(async () => {
     await setTenantContext(appClient, ids.tenantA);
@@ -1508,6 +1535,7 @@ try {
   await assertWhatsAppConsentCatalogSecurity();
   await assertWithCheckBlocksWrongTenantWhatsAppConsentWrite();
   await assertExamResultBlocksCrossTenantReferences();
+  await assertStudentGradeLevelBlocksCrossTenantReferences();
   await assertParsedAnswerBlocksCrossTenantReferences();
   await assertParsedAnswerBlocksCrossExamReferences();
   await assertParsedAnswerBlocksDuplicateParsedRows();

@@ -351,7 +351,7 @@ describe("School management API", () => {
     const studentCreated = await request(server)
       .post("/students")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ firstName: "Cem", lastName: "Liste" })
+      .send({ firstName: "Cem", lastName: "Liste", gradeLevelId: "grade-8" })
       .expect(201);
 
     await request(server)
@@ -2237,7 +2237,7 @@ describe("School management API", () => {
     const replacement = await request(server)
       .post("/students")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ firstName: "Yeni", lastName: "Numara" })
+      .send({ firstName: "Yeni", lastName: "Numara", gradeLevelId: "grade-8" })
       .expect(201)
       .expect(({ body }) => {
         expect(body.studentNo).toBe(created.body.studentNo);

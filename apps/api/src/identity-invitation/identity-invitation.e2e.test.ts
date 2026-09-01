@@ -78,7 +78,7 @@ describe("Identity invitations", () => {
     const student = await request(server)
       .post("/students")
       .set("Authorization", `Bearer ${admin}`)
-      .send({ firstName: "Davet", lastName: "Ogrenci", nationalId: "10000001754" })
+      .send({ firstName: "Davet", lastName: "Ogrenci", gradeLevelId: "grade-8", nationalId: "10000001754" })
       .expect(201);
     const studentId = (student.body as { id: string }).id;
 

@@ -1066,11 +1066,17 @@ function mockApiResponse(pathName: string, method: string, url: URL): { data: un
   if (pathName === "/classes") return { data: createClasses() };
   if (pathName === "/classes/class-8a" && method === "GET") return { data: createClasses()[0] };
   if (pathName === "/courses") return { data: [{ id: "course-math", name: "Matematik", tenantId: "tenant-datatable" }] };
-  if (pathName === "/grade-levels") return { data: [{ id: "grade-8", name: "8. Sınıf", tenantId: "tenant-datatable" }] };
+  if (pathName === "/grade-levels") return { data: [
+    { id: "grade-8", name: "8. Sınıf", tenantId: "tenant-datatable" },
+    { id: "grade-9", name: "9. Sınıf", tenantId: "tenant-datatable" },
+  ] };
   if (pathName === "/academic-terms") return { data: [{ id: "term-2026", name: "2026 Bahar", tenantId: "tenant-datatable" }] };
   if (pathName === "/students") {
     const classId = url.searchParams.get("classId");
-    return listResponse(classId ? createStudents().filter((student) => student.classId === classId) : createStudents());
+    const level = url.searchParams.get("level");
+    return listResponse(createStudents().filter((student) =>
+      (!classId || student.classId === classId) && (!level || student.gradeLevelId === level),
+    ));
   }
   if (pathName === "/students/student-a/profile") return { data: createStudentProfile() };
   if (pathName === "/students/student-a/guardians") return { data: createStudentGuardians() };
@@ -1189,8 +1195,8 @@ function createAnnouncements() {
       body: "Haftalık sınav bilgilendirmesi.",
       campusId: "campus-main",
       classId: "class-8a",
-      courseId: "course-math",
       gradeLevelId: "grade-8",
+      courseId: "course-math",
       id: "announcement-a",
       publishedAt: "2026-06-17T09:00:00.000Z",
       tenantId: "tenant-datatable",
@@ -1266,6 +1272,7 @@ function createStudents() {
   return [
     {
       classId: "class-8a",
+      gradeLevelId: "grade-8",
       email: "ada.kaya@example.test",
       firstName: "Ada",
       id: "student-a",
@@ -1278,6 +1285,7 @@ function createStudents() {
     },
     {
       classId: "class-9b",
+      gradeLevelId: "grade-9",
       email: "bora.kaya@example.test",
       firstName: "Bora",
       id: "student-b",
@@ -1294,6 +1302,7 @@ function createStudents() {
 function createStudentProfile() {
   return {
     classId: "class-8a",
+    gradeLevelId: "grade-8",
     email: "ada.kaya@example.test",
     firstName: "Ada",
     id: "student-a",
@@ -1332,6 +1341,7 @@ function createStudentEnrollments() {
       campusName: "Ana Kampüs",
       classId: "class-8a",
       className: "8-A",
+      gradeLevelId: "grade-8",
       gradeLevelName: "8. Sınıf",
       id: "student-enrollment-created",
       reason: "CREATED",
@@ -1345,6 +1355,7 @@ function createStudentEnrollments() {
     {
       academicYearId: "academic-year-2026",
       classId: "class-9b",
+      gradeLevelId: "grade-9",
       endsAt: "2026-06-18",
       id: "student-enrollment-transferred",
       reason: "TRANSFERRED",

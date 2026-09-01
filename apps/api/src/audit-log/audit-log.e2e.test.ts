@@ -247,7 +247,7 @@ describe("Audit log API", () => {
     const student = await request(server)
       .post("/students")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ firstName: "DenetimGizli", lastName: "Ogrenci" })
+      .send({ firstName: "DenetimGizli", lastName: "Ogrenci", gradeLevelId: "grade-8" })
       .expect(201);
     const studentId = (student.body as { id: string }).id;
 
@@ -308,7 +308,7 @@ describe("Audit log API", () => {
         entityType: "Student",
         entityId: studentId,
         action: "student.created",
-        diff: { fieldsSet: ["studentNo", "firstName", "lastName", "status"] },
+        diff: { fieldsSet: ["studentNo", "firstName", "lastName", "gradeLevelId", "status"] },
       }),
       expect.objectContaining({
         entityType: "Student",
@@ -919,7 +919,7 @@ describe("Audit log API", () => {
     const student = await request(server)
       .post("/students")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ firstName: "Sakli", lastName: "Ogrenci" })
+      .send({ firstName: "Sakli", lastName: "Ogrenci", gradeLevelId: "grade-8" })
       .expect(201);
     const studentId = (student.body as { id: string }).id;
 
@@ -1095,8 +1095,8 @@ describe("Audit log API", () => {
 async function createStudentWorkbookBase64(rows: string[][]): Promise<string> {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("Students");
-  worksheet.addRow(["firstName", "lastName"]);
-  rows.forEach((row) => worksheet.addRow(row));
+  worksheet.addRow(["firstName", "lastName", "seviye"]);
+  rows.forEach((row) => worksheet.addRow([...row, "8. Sınıf"]));
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer).toString("base64");
 }

@@ -148,11 +148,12 @@ test.describe("Liste URL state", () => {
     await expect(filters.getByLabel("Veli")).toHaveValue("true");
     await expect(tableView.locator(".uh-field")).toHaveCount(1);
     await expect(tableView.locator(".uh-select")).toHaveCount(1);
-    await expect(tableView.locator(".uh-checkbox")).toHaveCount(6);
+    await expect(tableView.locator(".uh-checkbox")).toHaveCount(7);
     await expect(tableView.getByLabel("Görünüm")).toHaveValue("compact");
     await expect(tableView.getByLabel("Sorumlu")).not.toBeChecked();
     await expect(studentsRegion).toHaveClass(/next-students-page--compact/);
     await expect.poll(() => captured.students.at(-1)?.get("classId")).toBe("class-11a");
+    await expect.poll(() => captured.students.at(-1)?.get("level")).toBe("grade-11");
     await expect.poll(() => captured.students.at(-1)?.get("guardianLinked")).toBe("true");
 
     await filters.getByLabel("Veli").selectOption("false");
@@ -397,7 +398,7 @@ test.describe("Liste URL state", () => {
     await expect(filters.locator(".uh-select")).toHaveCount(5);
     await expect(filters.getByRole("combobox").nth(0)).toHaveValue("class-11a");
     await expect(filters.getByRole("combobox").nth(1)).toHaveValue("grade-11");
-    await expect(tableView.locator(".uh-checkbox")).toHaveCount(6);
+    await expect(tableView.locator(".uh-checkbox")).toHaveCount(7);
     await expect(tableView.getByLabel("Görünüm")).toHaveValue("compact");
     await expect(bulkTransition.locator(".uh-field")).toHaveCount(3);
     await expect(bulkTransition.locator(".uh-select")).toHaveCount(2);
@@ -1180,6 +1181,7 @@ function createAcademicTerm() {
 function createStudent() {
   return {
     classId: "class-11a",
+    gradeLevelId: "grade-11",
     firstName: "Ada",
     id: "student-a",
     lastName: "Kaya",

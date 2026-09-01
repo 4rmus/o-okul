@@ -66,7 +66,13 @@
       "id": "UAT-KURUM-02",
       "persona": "TENANT_ADMIN",
       "status": "PASS",
-      "evidence": ["student created", "guardian and teacher relation verified"]
+      "evidence": [
+        "student created",
+        "student created with required grade level and optional class",
+        "grade-level filter included classless student",
+        "student import grade and class validation verified",
+        "guardian and teacher relation verified"
+      ]
     },
     {
       "id": "UAT-KURUM-03",
@@ -96,7 +102,12 @@
       "id": "UAT-KURUM-07",
       "persona": "TENANT_ADMIN",
       "status": "PASS",
-      "evidence": ["payment plan created", "idempotency retry verified"]
+      "evidence": [
+        "payment plan created",
+        "student create and import idempotency verified",
+        "active student quota rejection left no partial writes",
+        "idempotency retry verified"
+      ]
     },
     {
       "id": "UAT-KURUM-08",

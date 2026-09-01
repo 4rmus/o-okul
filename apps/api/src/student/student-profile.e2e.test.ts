@@ -167,7 +167,7 @@ describe("Student profile + TC API", () => {
     const created = await request(server)
       .post("/students")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ firstName: "Ece", lastName: "Profil" })
+      .send({ firstName: "Ece", lastName: "Profil", gradeLevelId: "grade-8" })
       .expect(201);
 
     await request(server)
@@ -213,7 +213,13 @@ describe("Student profile + TC API", () => {
     await request(server)
       .post("/students")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ firstName: "Yanlis", lastName: "Ogretmen", responsibleTeacherId: "teacher-b" })
+      .send({ firstName: "Yanlis", lastName: "Seviye", gradeLevelId: "grade-7" })
+      .expect(403);
+
+    await request(server)
+      .post("/students")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Yanlis", lastName: "Ogretmen", gradeLevelId: "grade-8", responsibleTeacherId: "teacher-b" })
       .expect(403);
 
     await request(server)

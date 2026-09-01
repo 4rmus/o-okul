@@ -170,7 +170,7 @@ describe("Me access matrix", () => {
     const otherStudent = await request(server)
       .post("/students")
       .set("Authorization", `Bearer ${adminToken}`)
-      .send({ firstName: "BagliOlmayan", lastName: "Ogrenci" })
+      .send({ firstName: "BagliOlmayan", lastName: "Ogrenci", gradeLevelId: "grade-8" })
       .expect(201);
     const otherStudentId = (otherStudent.body as { id: string }).id;
     const endpointPrefix = `/me/guardian/students/${otherStudentId}`;

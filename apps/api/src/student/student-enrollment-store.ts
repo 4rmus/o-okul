@@ -5,13 +5,14 @@ import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
 export type StudentEnrollmentInput = Pick<StudentEnrollmentRecord, "tenantId" | "studentId" | "startsAt" | "status"> &
-  Partial<Pick<StudentEnrollmentRecord, "academicYearId" | "termId" | "classId" | "endsAt" | "reason">>;
+  Partial<Pick<StudentEnrollmentRecord, "academicYearId" | "termId" | "gradeLevelId" | "classId" | "endsAt" | "reason">>;
 
 export interface StudentEnrollmentStore {
   listByStudent(studentId: string): Promise<StudentEnrollmentRecord[]>;
   listByStudents(studentIds: string[]): Promise<StudentEnrollmentRecord[]>;
   create(input: StudentEnrollmentInput): Promise<StudentEnrollmentRecord>;
   closeActiveForStudent(studentId: string, endsAt: string, status?: StudentStatus): Promise<StudentEnrollmentRecord[]>;
+  updateOpenGradeLevelForClass(classId: string, gradeLevelId: string | undefined): Promise<number>;
 }
 
 export const studentEnrollmentStoreToken = Symbol("StudentEnrollmentStore");
@@ -23,6 +24,7 @@ const demoEnrollments: StudentEnrollmentRecord[] = [
     studentId: "student-a",
     academicYearId: "academic-year-2026",
     termId: "term-2026-spring",
+    gradeLevelId: "grade-8",
     classId: "class-a",
     status: "ACTIVE",
     startsAt: "2026-06-01",
@@ -67,6 +69,16 @@ export class InMemoryStudentEnrollmentStore implements StudentEnrollmentStore {
     }
     return updated;
   }
+
+  async updateOpenGradeLevelForClass(classId: string, gradeLevelId: string | undefined): Promise<number> {
+    let updated = 0;
+    for (const enrollment of this.enrollments) {
+      if (enrollment.classId !== classId || enrollment.status !== "ACTIVE" || enrollment.endsAt) continue;
+      enrollment.gradeLevelId = gradeLevelId;
+      updated += 1;
+    }
+    return updated;
+  }
 }
 
 export class PostgresStudentEnrollmentStore implements StudentEnrollmentStore {
@@ -108,6 +120,7 @@ export class PostgresStudentEnrollmentStore implements StudentEnrollmentStore {
            "studentId",
            "academicYearId",
            "termId",
+           "gradeLevelId",
            "classId",
            "status",
            "startsAt",
@@ -115,7 +128,7 @@ export class PostgresStudentEnrollmentStore implements StudentEnrollmentStore {
            "reason",
            "updatedAt"
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9::date, $10, now())
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, $10::date, $11, now())
          RETURNING *`,
         [
           randomUUID(),
@@ -123,6 +136,7 @@ export class PostgresStudentEnrollmentStore implements StudentEnrollmentStore {
           input.studentId,
           input.academicYearId ?? null,
           input.termId ?? null,
+          input.gradeLevelId ?? null,
           input.classId ?? null,
           input.status,
           input.startsAt,
@@ -153,6 +167,22 @@ export class PostgresStudentEnrollmentStore implements StudentEnrollmentStore {
       return result.rows.map(toStudentEnrollmentRecord);
     });
   }
+
+  async updateOpenGradeLevelForClass(classId: string, gradeLevelId: string | undefined): Promise<number> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<{ id: string }>(
+        `UPDATE "StudentEnrollment"
+         SET "gradeLevelId" = $2,
+             "updatedAt" = now()
+         WHERE "classId" = $1
+           AND "status" = 'ACTIVE'
+           AND "endsAt" IS NULL
+         RETURNING "id"`,
+        [classId, gradeLevelId ?? null],
+      );
+      return result.rows.length;
+    });
+  }
 }
 
 export function createStudentEnrollmentStore(): StudentEnrollmentStore {
@@ -167,6 +197,7 @@ interface StudentEnrollmentRow {
   studentId: string;
   academicYearId: string | null;
   termId: string | null;
+  gradeLevelId: string | null;
   classId: string | null;
   status: StudentStatus;
   startsAt: Date | string;
@@ -183,6 +214,7 @@ function toStudentEnrollmentRecord(row: StudentEnrollmentRow): StudentEnrollment
     studentId: row.studentId,
     academicYearId: row.academicYearId ?? undefined,
     termId: row.termId ?? undefined,
+    gradeLevelId: row.gradeLevelId ?? undefined,
     classId: row.classId ?? undefined,
     status: row.status,
     startsAt: toDateString(row.startsAt),

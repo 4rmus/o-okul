@@ -52,6 +52,7 @@ export interface StudentRegistryQuery {
   q?: string;
   sort?: string;
   ids?: string[];
+  gradeLevelId?: string;
   classIds?: string[];
   responsibleTeacherId?: string;
   status?: StudentRecord["status"];
@@ -106,6 +107,7 @@ export interface StudentStore {
   findProfileById(id: string): Promise<StudentProfileStorageRecord | undefined>;
   findByUserId(tenantId: string, userId: string): Promise<StudentRecord | undefined>;
   findByNationalIdHash(tenantId: string, nationalIdHash: string): Promise<StudentProfileStorageRecord | undefined>;
+  updateGradeLevelForClass(classId: string, gradeLevelId: string | undefined): Promise<number>;
   create(input: StudentInput): Promise<StudentRecord>;
   createMany(inputs: StudentInput[]): Promise<StudentRecord[]>;
   createWithEnrollment?(
@@ -118,10 +120,10 @@ export interface StudentStore {
   createManyWithEnrollmentsAndContacts?(inputs: StudentBatchCreateInput[]): Promise<StudentRecord[]>;
   updateWithEnrollmentTransition?(
     id: string,
-    input: Partial<Pick<StudentRecord, "firstName" | "lastName" | "classId" | "responsibleTeacherId" | "status">>,
+    input: Partial<Pick<StudentRecord, "firstName" | "lastName" | "gradeLevelId" | "classId" | "responsibleTeacherId" | "status">>,
     transition: StudentEnrollmentTransition,
   ): Promise<StudentEnrollmentTransitionResult | undefined>;
-  update(id: string, input: Partial<Pick<StudentRecord, "firstName" | "lastName" | "classId" | "responsibleTeacherId" | "status">>): Promise<StudentRecord | undefined>;
+  update(id: string, input: Partial<Pick<StudentRecord, "firstName" | "lastName" | "gradeLevelId" | "classId" | "responsibleTeacherId" | "status">>): Promise<StudentRecord | undefined>;
   updateProfile(id: string, input: StudentProfileUpdate): Promise<StudentProfileStorageRecord | undefined>;
   bindUser(tenantId: string, id: string, userId: string): Promise<StudentRecord | undefined>;
   softDelete(id: string, deletedAt: string): Promise<StudentRecord | undefined>;
@@ -139,6 +141,7 @@ const demoStudents: StudentProfileStorageRecord[] = [
     lastName: "A",
     studentNo: "100",
     userId: "student-tenant-a",
+    gradeLevelId: "grade-8",
     classId: "class-a",
     responsibleTeacherId: "teacher-a",
     status: "ACTIVE",
@@ -175,6 +178,7 @@ export class InMemoryStudentStore implements StudentStore {
     const records = this.students
       .filter((student) => student.tenantId === tenantId && !student.deletedAt)
       .filter((student) => !query.ids || query.ids.includes(student.id))
+      .filter((student) => !query.gradeLevelId || student.gradeLevelId === query.gradeLevelId)
       .filter((student) => !query.classIds || Boolean(student.classId && query.classIds.includes(student.classId)))
       .filter((student) => !query.responsibleTeacherId || student.responsibleTeacherId === query.responsibleTeacherId)
       .filter((student) => !query.status || student.status === query.status)
@@ -296,17 +300,28 @@ export class InMemoryStudentStore implements StudentStore {
 
   async update(
     id: string,
-    input: Partial<Pick<StudentRecord, "firstName" | "lastName" | "classId" | "responsibleTeacherId" | "status">>,
+    input: Partial<Pick<StudentRecord, "firstName" | "lastName" | "gradeLevelId" | "classId" | "responsibleTeacherId" | "status">>,
   ): Promise<StudentRecord | undefined> {
     const student = await this.findById(id);
     if (!student) return undefined;
 
     if (input.firstName !== undefined) student.firstName = input.firstName;
     if (input.lastName !== undefined) student.lastName = input.lastName;
+    if (input.gradeLevelId !== undefined) student.gradeLevelId = input.gradeLevelId || undefined;
     if (input.classId !== undefined) student.classId = input.classId || undefined;
     if (input.responsibleTeacherId !== undefined) student.responsibleTeacherId = input.responsibleTeacherId || undefined;
     if (input.status !== undefined) student.status = input.status;
     return student;
+  }
+
+  async updateGradeLevelForClass(classId: string, gradeLevelId: string | undefined): Promise<number> {
+    let updated = 0;
+    for (const student of this.students) {
+      if (student.classId !== classId) continue;
+      student.gradeLevelId = gradeLevelId;
+      updated += 1;
+    }
+    return updated;
   }
 
   async updateProfile(id: string, input: StudentProfileUpdate): Promise<StudentProfileStorageRecord | undefined> {
@@ -381,6 +396,7 @@ export class PostgresStudentStore implements StudentStore {
       };
 
       if (query.ids) addFilter((parameter) => `student."id" = ANY(${parameter}::text[])`, query.ids);
+      if (query.gradeLevelId) addFilter((parameter) => `student."gradeLevelId" = ${parameter}`, query.gradeLevelId);
       if (query.classIds) addFilter((parameter) => `student."classId" = ANY(${parameter}::text[])`, query.classIds);
       if (query.responsibleTeacherId) addFilter((parameter) => `student."responsibleTeacherId" = ${parameter}`, query.responsibleTeacherId);
       if (query.status) addFilter((parameter) => `student."status" = ${parameter}`, query.status);
@@ -729,28 +745,7 @@ export class PostgresStudentStore implements StudentStore {
 
   async create(input: StudentInput): Promise<StudentRecord> {
     return withTenantQuery(this.pool, async (client) => {
-      await lockStudentNoAllocation(client, input.tenantId);
-      const studentNo = normalizeStudentNo(input.studentNo) ?? await nextStudentNo(client, input.tenantId);
-      const result = await client.query<StudentRow>(
-        `INSERT INTO "Student" ("id", "tenantId", "studentNo", "firstName", "lastName", "classId", "responsibleTeacherId", "status", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
-         RETURNING *`,
-        [
-          randomUUID(),
-          input.tenantId,
-          studentNo,
-          input.firstName,
-          input.lastName,
-          input.classId ?? null,
-          input.responsibleTeacherId ?? null,
-          input.status ?? "ACTIVE",
-        ],
-      );
-      const record = result.rows[0];
-      if (!record) {
-        throw new Error("STUDENT_CREATE_FAILED");
-      }
-      return toStudentRecord(record);
+      return insertStudent(client, input);
     });
   }
 
@@ -799,7 +794,7 @@ export class PostgresStudentStore implements StudentStore {
 
   async updateWithEnrollmentTransition(
     id: string,
-    input: Partial<Pick<StudentRecord, "firstName" | "lastName" | "classId" | "responsibleTeacherId" | "status">>,
+    input: Partial<Pick<StudentRecord, "firstName" | "lastName" | "gradeLevelId" | "classId" | "responsibleTeacherId" | "status">>,
     transition: StudentEnrollmentTransition,
   ): Promise<StudentEnrollmentTransitionResult | undefined> {
     return withTenantQuery(this.pool, async (client) => {
@@ -835,18 +830,7 @@ export class PostgresStudentStore implements StudentStore {
     return withTenantQuery(this.pool, async (client) => {
       const created: StudentRecord[] = [];
       for (const input of inputs) {
-        await lockStudentNoAllocation(client, input.tenantId);
-        const studentNo = normalizeStudentNo(input.studentNo) ?? await nextStudentNo(client, input.tenantId);
-        const result = await client.query<StudentRow>(
-          `INSERT INTO "Student" ("id", "tenantId", "studentNo", "firstName", "lastName", "classId", "status", "updatedAt")
-           VALUES ($1, $2, $3, $4, $5, $6, $7, now())
-           RETURNING *`,
-          [randomUUID(), input.tenantId, studentNo, input.firstName, input.lastName, input.classId ?? null, input.status ?? "ACTIVE"],
-        );
-        if (!result.rows[0]) {
-          throw new Error("STUDENT_CREATE_FAILED");
-        }
-        created.push(toStudentRecord(result.rows[0]));
+        created.push(await insertStudent(client, input));
       }
       return created;
     });
@@ -854,7 +838,7 @@ export class PostgresStudentStore implements StudentStore {
 
   async update(
     id: string,
-    input: Partial<Pick<StudentRecord, "firstName" | "lastName" | "classId" | "responsibleTeacherId" | "status">>,
+    input: Partial<Pick<StudentRecord, "firstName" | "lastName" | "gradeLevelId" | "classId" | "responsibleTeacherId" | "status">>,
   ): Promise<StudentRecord | undefined> {
     const existing = await this.findById(id);
     if (!existing) return undefined;
@@ -862,6 +846,20 @@ export class PostgresStudentStore implements StudentStore {
     return withTenantQuery(this.pool, async (client) => {
       const result = await updateStudent(client, id, input);
       return result.rows[0] ? toStudentRecord(result.rows[0]) : undefined;
+    });
+  }
+
+  async updateGradeLevelForClass(classId: string, gradeLevelId: string | undefined): Promise<number> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<{ id: string }>(
+        `UPDATE "Student"
+         SET "gradeLevelId" = $2,
+             "updatedAt" = now()
+         WHERE "classId" = $1
+         RETURNING "id"`,
+        [classId, gradeLevelId ?? null],
+      );
+      return result.rows.length;
     });
   }
 
@@ -980,11 +978,12 @@ async function lockStudentNoAllocation(client: Queryable, tenantId: string): Pro
 }
 
 async function insertStudent(client: Queryable, input: StudentInput): Promise<StudentRecord> {
+  await assertClassPlacementMatches(client, input.tenantId, input.gradeLevelId, input.classId);
   await lockStudentNoAllocation(client, input.tenantId);
   const studentNo = normalizeStudentNo(input.studentNo) ?? await nextStudentNo(client, input.tenantId);
   const result = await client.query<StudentRow>(
-    `INSERT INTO "Student" ("id", "tenantId", "studentNo", "firstName", "lastName", "classId", "responsibleTeacherId", "status", "updatedAt")
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+    `INSERT INTO "Student" ("id", "tenantId", "studentNo", "firstName", "lastName", "gradeLevelId", "classId", "responsibleTeacherId", "status", "updatedAt")
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
      RETURNING *`,
     [
       randomUUID(),
@@ -992,6 +991,7 @@ async function insertStudent(client: Queryable, input: StudentInput): Promise<St
       studentNo,
       input.firstName,
       input.lastName,
+      input.gradeLevelId ?? null,
       input.classId ?? null,
       input.responsibleTeacherId ?? null,
       input.status ?? "ACTIVE",
@@ -1009,10 +1009,10 @@ async function insertEnrollment(
 ): Promise<StudentEnrollmentRecord> {
   const result = await client.query<StudentEnrollmentRow>(
     `INSERT INTO "StudentEnrollment" (
-       "id", "tenantId", "studentId", "academicYearId", "termId", "classId",
+       "id", "tenantId", "studentId", "academicYearId", "termId", "gradeLevelId", "classId",
        "status", "startsAt", "endsAt", "reason", "updatedAt"
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9::date, $10, now())
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, $10::date, $11, now())
      RETURNING *`,
     [
       randomUUID(),
@@ -1020,6 +1020,7 @@ async function insertEnrollment(
       student.id,
       input.academicYearId ?? null,
       input.termId ?? null,
+      input.gradeLevelId ?? null,
       input.classId ?? null,
       input.status,
       input.startsAt,
@@ -1035,6 +1036,7 @@ async function insertEnrollment(
     studentId: row.studentId,
     academicYearId: row.academicYearId ?? undefined,
     termId: row.termId ?? undefined,
+    gradeLevelId: row.gradeLevelId ?? undefined,
     classId: row.classId ?? undefined,
     status: row.status,
     startsAt: toDateString(row.startsAt),
@@ -1154,18 +1156,38 @@ async function suspendStudentPortalAccess(
   };
 }
 
-function updateStudent(
+async function updateStudent(
   client: Queryable,
   id: string,
-  input: Partial<Pick<StudentRecord, "firstName" | "lastName" | "classId" | "responsibleTeacherId" | "status">>,
+  input: Partial<Pick<StudentRecord, "firstName" | "lastName" | "gradeLevelId" | "classId" | "responsibleTeacherId" | "status">>,
 ): Promise<{ rows: StudentRow[]; rowCount?: number | null }> {
+  if (input.gradeLevelId !== undefined || input.classId !== undefined) {
+    const current = await client.query<Pick<StudentRow, "tenantId" | "gradeLevelId" | "classId">>(
+      `SELECT "tenantId", "gradeLevelId", "classId"
+       FROM "Student"
+       WHERE "id" = $1
+         AND "deletedAt" IS NULL
+       LIMIT 1`,
+      [id],
+    );
+    const record = current.rows[0];
+    if (!record) return { rows: [] };
+    await assertClassPlacementMatches(
+      client,
+      record.tenantId,
+      input.gradeLevelId !== undefined ? input.gradeLevelId || undefined : record.gradeLevelId ?? undefined,
+      input.classId !== undefined ? input.classId || undefined : record.classId ?? undefined,
+    );
+  }
+
   return client.query<StudentRow>(
     `UPDATE "Student"
      SET "firstName" = COALESCE($2, "firstName"),
          "lastName" = COALESCE($3, "lastName"),
-         "classId" = CASE WHEN $4 THEN $5 ELSE "classId" END,
-         "responsibleTeacherId" = CASE WHEN $6 THEN $7 ELSE "responsibleTeacherId" END,
-         "status" = COALESCE($8, "status"),
+         "gradeLevelId" = CASE WHEN $4 THEN $5 ELSE "gradeLevelId" END,
+         "classId" = CASE WHEN $6 THEN $7 ELSE "classId" END,
+         "responsibleTeacherId" = CASE WHEN $8 THEN $9 ELSE "responsibleTeacherId" END,
+         "status" = COALESCE($10, "status"),
          "updatedAt" = now()
      WHERE "id" = $1
        AND "deletedAt" IS NULL
@@ -1174,6 +1196,8 @@ function updateStudent(
       id,
       input.firstName ?? null,
       input.lastName ?? null,
+      input.gradeLevelId !== undefined,
+      input.gradeLevelId || null,
       input.classId !== undefined,
       input.classId || null,
       input.responsibleTeacherId !== undefined,
@@ -1181,6 +1205,29 @@ function updateStudent(
       input.status ?? null,
     ],
   );
+}
+
+async function assertClassPlacementMatches(
+  client: Queryable,
+  tenantId: string,
+  gradeLevelId: string | undefined,
+  classId: string | undefined,
+): Promise<void> {
+  if (!classId) return;
+  const result = await client.query<{ gradeLevelId: string | null }>(
+    `SELECT "gradeLevelId"
+     FROM "Class"
+     WHERE "tenantId" = $1
+       AND "id" = $2
+       AND "deletedAt" IS NULL
+     FOR SHARE`,
+    [tenantId, classId],
+  );
+  const schoolClass = result.rows[0];
+  if (!schoolClass) throw new Error("CLASS_NOT_FOUND");
+  if (!gradeLevelId || schoolClass.gradeLevelId !== gradeLevelId) {
+    throw new Error("STUDENT_CLASS_GRADE_LEVEL_MISMATCH");
+  }
 }
 
 async function nextStudentNo(client: Queryable, tenantId: string): Promise<string> {
@@ -1236,6 +1283,7 @@ interface StudentRow {
   firstName: string;
   lastName: string;
   studentNo: string | null;
+  gradeLevelId: string | null;
   classId: string | null;
   responsibleTeacherId: string | null;
   status: StudentRecord["status"];
@@ -1284,6 +1332,7 @@ interface StudentEnrollmentRow {
   studentId: string;
   academicYearId: string | null;
   termId: string | null;
+  gradeLevelId: string | null;
   classId: string | null;
   status: StudentRecord["status"];
   startsAt: Date | string;
@@ -1327,6 +1376,7 @@ function toStudentRecord(row: StudentRow): StudentRecord {
     studentNo: row.studentNo ?? undefined,
     firstName: row.firstName,
     lastName: row.lastName,
+    gradeLevelId: row.gradeLevelId ?? undefined,
     classId: row.classId ?? undefined,
     responsibleTeacherId: row.responsibleTeacherId ?? undefined,
     status: row.status,

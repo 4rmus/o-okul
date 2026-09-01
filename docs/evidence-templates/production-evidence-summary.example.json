@@ -1628,6 +1628,9 @@
           "status": "PASS",
           "evidence": [
             "student created",
+            "student created with required grade level and optional class",
+            "grade-level filter included classless student",
+            "student import grade and class validation verified",
             "guardian and teacher relation verified"
           ]
         },
@@ -1673,6 +1676,8 @@
           "status": "PASS",
           "evidence": [
             "payment plan created",
+            "student create and import idempotency verified",
+            "active student quota rejection left no partial writes",
             "idempotency retry verified"
           ]
         },

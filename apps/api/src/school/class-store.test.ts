@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { runWithRequestContext } from "../context/request-context.js";
-import { InMemoryClassStore, PostgresClassStore, normalizeClassName } from "./class-store.js";
+import { InMemoryStudentEnrollmentStore } from "../student/student-enrollment-store.js";
+import { InMemoryStudentStore } from "../student/student-store.js";
+import { InMemoryClassStore, PostgresClassStore, createClassStore, normalizeClassName } from "./class-store.js";
 
 describe("PostgresClassStore", () => {
   it("Class CRUD için beklenen SQL parametrelerini kullanır", async () => {
@@ -44,6 +46,44 @@ describe("PostgresClassStore", () => {
     expect(businessQueries[4]?.values).toEqual(["class-a", "9 Fen", false, null, false, null, false, null, false, null]);
     expect(businessQueries[6]?.values).toEqual(["class-a", "2026-05-29T20:00:00.000Z"]);
   });
+
+  it("sınıf seviyesi değişince öğrenci ve açık enrollment seviyesini aynı transactionda taşır", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const pool = {
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        if (sql.includes('SELECT * FROM "Class"') && sql.includes("FOR UPDATE")) {
+          return { rows: [{ id: "class-a", tenantId: "tenant-a", name: "8-A", gradeLevelId: "grade-8", deletedAt: null }] as T[] };
+        }
+        if (sql.includes('UPDATE "Class"')) {
+          return { rows: [{ id: "class-a", tenantId: "tenant-a", name: "8-A", gradeLevelId: "grade-9", deletedAt: null }] as T[] };
+        }
+        if (sql.includes('UPDATE "StudentEnrollment"')) {
+          return { rows: [{ id: "enrollment-a" }, { id: "enrollment-b" }] as T[] };
+        }
+        if (sql.includes('UPDATE "Student"')) {
+          return { rows: [{ id: "student-a" }, { id: "student-b" }] as T[] };
+        }
+        return { rows: [] as T[] };
+      },
+    };
+    const store = new PostgresClassStore(pool);
+
+    const result = await runWithRequestContext(
+      { userId: "user-tenant-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      () => store.updateWithGradeLevelCascade("class-a", { gradeLevelId: "grade-9" }),
+    );
+
+    expect(result).toMatchObject({
+      record: { id: "class-a", gradeLevelId: "grade-9" },
+      studentsUpdated: 2,
+      enrollmentsUpdated: 2,
+    });
+    expect(queries.some((query) => query.sql === "BEGIN")).toBe(true);
+    expect(queries.some((query) => query.sql === "COMMIT")).toBe(true);
+    expect(queries.find((query) => query.sql.includes('UPDATE "Student"'))?.values).toEqual(["class-a", "grade-9"]);
+    expect(queries.find((query) => query.sql.includes('UPDATE "StudentEnrollment"'))?.sql).toContain('"endsAt" IS NULL');
+  });
 });
 
 describe("Class name uniqueness", () => {
@@ -61,5 +101,18 @@ describe("Class name uniqueness", () => {
       name: "bİlİmAtölyesi",
       tenantId: "tenant-a",
     });
+  });
+
+  it("memory adapter sınıf seviyesi değişimini öğrenci ve açık enrollment'a taşır", async () => {
+    const studentStore = new InMemoryStudentStore();
+    const enrollmentStore = new InMemoryStudentEnrollmentStore();
+    const store = createClassStore(studentStore, enrollmentStore);
+
+    await store.updateWithGradeLevelCascade("class-a", { gradeLevelId: "grade-9" });
+
+    await expect(studentStore.findById("student-a")).resolves.toMatchObject({ gradeLevelId: "grade-9" });
+    await expect(enrollmentStore.listByStudent("student-a")).resolves.toEqual([
+      expect.objectContaining({ gradeLevelId: "grade-9", classId: "class-a", status: "ACTIVE" }),
+    ]);
   });
 });

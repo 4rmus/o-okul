@@ -86,7 +86,7 @@ interface BulkEnrollmentActionState extends EnrollmentActionState {
   useAutomaticClassMapping: boolean;
 }
 
-const studentColumnKeys = ["studentNo", "name", "class", "responsibleTeacher", "status", "actions"] as const;
+const studentColumnKeys = ["studentNo", "name", "gradeLevel", "class", "responsibleTeacher", "status", "actions"] as const;
 
 type StudentColumnKey = typeof studentColumnKeys[number];
 type StudentTableDensity = "comfortable" | "compact";
@@ -104,6 +104,7 @@ const studentImportAllowedExtensions = new Set(["CSV", "XLSX"]);
 const studentColumnOptions: Array<{ key: StudentColumnKey; label: string }> = [
   { key: "studentNo", label: "Okul No" },
   { key: "name", label: "Ad Soyad" },
+  { key: "gradeLevel", label: "Seviye" },
   { key: "class", label: "Sınıf" },
   { key: "responsibleTeacher", label: "Sorumlu" },
   { key: "status", label: "Durum" },
@@ -114,6 +115,7 @@ const emptyForm: StudentFormState = {
   studentNo: "",
   firstName: "",
   lastName: "",
+  gradeLevelId: "",
   classId: "",
   responsibleTeacherId: "",
   status: "ACTIVE",
@@ -223,8 +225,9 @@ export function StudentsPage() {
   const classes = referencesQuery.data?.classes ?? [];
   const classNameById = new Map(classes.map((klass) => [klass.id, klass.name]));
   const gradeLevels = referencesQuery.data?.gradeLevels ?? [];
-  const classGradeLevelIds = new Set(classes.map((klass) => klass.gradeLevelId).filter((value): value is string => Boolean(value)));
-  const levelOptions = gradeLevels.filter((gradeLevel) => classGradeLevelIds.has(gradeLevel.id));
+  const gradeLevelNameById = new Map(gradeLevels.map((gradeLevel) => [gradeLevel.id, gradeLevel.name]));
+  const levelOptions = gradeLevels;
+  const formClasses = classes.filter((klass) => klass.gradeLevelId === form.gradeLevelId);
 
   const teachers = referencesQuery.data?.teachers ?? [];
   const teacherNameById = new Map(teachers.map((teacher) => [teacher.id, `${teacher.firstName} ${teacher.lastName}`]));
@@ -250,6 +253,13 @@ export function StudentsPage() {
       priority: "primary",
       render: (student) => `${student.firstName} ${student.lastName}`,
       sticky: true,
+    },
+    {
+      key: "gradeLevel",
+      header: "Seviye",
+      mobilePriority: "hidden",
+      priority: "secondary",
+      render: (student) => student.gradeLevelId ? (gradeLevelNameById.get(student.gradeLevelId) ?? "Seviye bulunamadı") : "Seviye atanmadı",
     },
     {
       key: "class",
@@ -391,6 +401,7 @@ export function StudentsPage() {
       ...emptyForm,
       firstName: student.firstName,
       lastName: student.lastName,
+      gradeLevelId: student.gradeLevelId ?? classes.find((klass) => klass.id === student.classId)?.gradeLevelId ?? "",
       classId: student.classId ?? "",
       responsibleTeacherId: student.responsibleTeacherId ?? "",
       status: student.status,
@@ -444,12 +455,17 @@ export function StudentsPage() {
     setIsSaving(true);
     try {
       const studentForm = parsedForm.data;
+      if (!wasEditing && !studentForm.gradeLevelId) {
+        setError("Seviye seçilmelidir.");
+        return;
+      }
       const guardianPayload = guardianReadOnly ? undefined : buildGuardianPayload(studentForm);
       const savedStudent = wasEditing
         ? await updateStudent(auth.accessToken, wasEditing.id, {
             firstName: studentForm.firstName,
             lastName: studentForm.lastName,
-            classId: studentForm.classId,
+            gradeLevelId: studentForm.gradeLevelId || (wasEditing.gradeLevelId ? "" : undefined),
+            classId: studentForm.classId || (wasEditing.classId ? "" : undefined),
             responsibleTeacherId: studentForm.responsibleTeacherId,
             status: studentForm.status,
           })
@@ -457,6 +473,7 @@ export function StudentsPage() {
             studentNo: studentForm.studentNo || undefined,
             firstName: studentForm.firstName,
             lastName: studentForm.lastName,
+            gradeLevelId: studentForm.gradeLevelId || undefined,
             classId: studentForm.classId || undefined,
             responsibleTeacherId: studentForm.responsibleTeacherId || undefined,
             status: studentForm.status,
@@ -875,14 +892,17 @@ export function StudentsPage() {
         </Field>
         {isImportChecking ? <span className="next-field-hint">Kontrol ediliyor…</span> : null}
         {importDryRun ? (
-          <InfoGrid>
-            <InfoItem label="Satır" value={formatCount(importDryRun.totalRows)} />
-            <InfoItem label="Geçerli" value={formatCount(importDryRun.validRows.length)} />
-            <InfoItem label="Hesap" value={formatCount(importDryRun.validRows.filter((row) => row.accountPreview).length)} />
-            {studentRegistryV2 ? <InfoItem label="İletişim kişisi" value={formatCount(importDryRun.validRows.filter((row) => row.contact).length)} /> : null}
-            <InfoItem label="Hata" value={formatCount(importDryRun.errors.length)} />
-            <InfoItem label="Kota" value={`${importDryRun.quota.current}+${importDryRun.quota.incoming}/${importDryRun.quota.limit}`} />
-          </InfoGrid>
+          <>
+            <InfoGrid>
+              <InfoItem label="Satır" value={formatCount(importDryRun.totalRows)} />
+              <InfoItem label="Geçerli" value={formatCount(importDryRun.validRows.length)} />
+              <InfoItem label="Hesap" value={formatCount(importDryRun.validRows.filter((row) => row.accountPreview).length)} />
+              {studentRegistryV2 ? <InfoItem label="İletişim kişisi" value={formatCount(importDryRun.validRows.filter((row) => row.contact).length)} /> : null}
+              <InfoItem label="Hata" value={formatCount(importDryRun.errors.length)} />
+              <InfoItem label="Kota" value={`${importDryRun.quota.current}+${importDryRun.quota.incoming}/${importDryRun.quota.limit}`} />
+            </InfoGrid>
+            <p className="next-field-hint">Seviye dağılımı: {formatGradeLevelDistribution(importDryRun)}</p>
+          </>
         ) : null}
         {importDryRun && studentImportAccountPreviewCount(importDryRun) > 0 ? (
           <div className="next-form-actions">
@@ -940,13 +960,36 @@ export function StudentsPage() {
             />
           </Field>
         ) : null}
+        <Field label="Seviye" description="Seviye zorunludur; sınıf seçmeden de öğrenci kaydedilebilir.">
+          <Select
+            required={!editingStudent}
+            value={form.gradeLevelId}
+            onChange={(event) => {
+              const gradeLevelId = event.target.value;
+              setForm((current) => ({
+                ...current,
+                gradeLevelId,
+                classId: classes.some((klass) => klass.id === current.classId && klass.gradeLevelId === gradeLevelId)
+                  ? current.classId
+                  : "",
+              }));
+            }}
+          >
+            <option value="">Seviye seçiniz</option>
+            {gradeLevels.map((gradeLevel) => (
+              <option key={gradeLevel.id} value={gradeLevel.id}>
+                {gradeLevel.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
         <Field label="Sınıf" description="Sınıf bağlantısı rapor, devamsızlık, ödeme ve portal bağlamını besler.">
           <Select
             value={form.classId}
             onChange={(event) => setForm((current) => ({ ...current, classId: event.target.value }))}
           >
             <option value="">Sınıfsız</option>
-            {classes.map((klass) => (
+            {formClasses.map((klass) => (
               <option key={klass.id} value={klass.id}>
                 {klass.name}
               </option>
@@ -1471,6 +1514,7 @@ async function createStudent(
     studentNo?: string;
     firstName: string;
     lastName: string;
+    gradeLevelId?: string;
     classId?: string;
     responsibleTeacherId?: string;
     status: StudentRecord["status"];
@@ -1487,7 +1531,7 @@ async function createStudent(
 async function updateStudent(
   accessToken: string,
   id: string,
-  input: { firstName: string; lastName: string; classId?: string; responsibleTeacherId?: string; status: StudentRecord["status"] },
+  input: { firstName: string; lastName: string; gradeLevelId?: string; classId?: string; responsibleTeacherId?: string; status: StudentRecord["status"] },
 ) {
   return apiRequest<StudentRecord>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}`, {
     body: JSON.stringify(input),
@@ -1610,6 +1654,19 @@ function studentImportAccountPreviewCount(dryRun: StudentImportDryRunResult) {
   return dryRun.validRows.filter((row) => row.accountPreview).length;
 }
 
+function formatGradeLevelDistribution(dryRun: StudentImportDryRunResult) {
+  const counts = new Map<string, number>();
+  for (const row of dryRun.validRows) {
+    const label = row.gradeLevelName ?? "Seviye atanmadı";
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  if (counts.size === 0) return "geçerli satır yok";
+  return [...counts.entries()]
+    .sort(([left], [right]) => left.localeCompare(right, "tr-TR"))
+    .map(([label, count]) => `${label}: ${formatCount(count)}`)
+    .join(" · ");
+}
+
 function downloadStudentImportAccountPreview(dryRun: StudentImportDryRunResult) {
   const rows = dryRun.validRows
     .filter((row) => row.accountPreview)
@@ -1647,7 +1704,11 @@ function escapeCsvCell(value: string): string {
 
 function formatStudentImportError(error: StudentImportDryRunResult["errors"][number]) {
   const row = error.row > 0 ? `${error.row}. satır` : "Kota";
+  if (error.code === "CLASS_GRADE_LEVEL_MISMATCH") return `${row}: sınıf ile seviye uyuşmuyor`;
   if (error.code === "CLASS_NOT_FOUND") return `${row}: sınıf bulunamadı (${error.value ?? "-"})`;
+  if (error.code === "GRADE_LEVEL_AMBIGUOUS") return `${row}: seviye adı birden fazla kayıtla eşleşiyor`;
+  if (error.code === "GRADE_LEVEL_NOT_FOUND") return `${row}: seviye bulunamadı (${error.value ?? "-"})`;
+  if (error.code === "GRADE_LEVEL_REQUIRED") return `${row}: seviye veya seviyeye bağlı sınıf zorunlu`;
   if (error.code === "REQUIRED") return `${row}: ${studentImportFieldLabel(error.field)} zorunlu`;
   if (error.code === "STUDENT_NO_DUPLICATE") return `${row}: okul no tekrar ediyor`;
   if (error.code === "STUDENT_NATIONAL_ID_DUPLICATE") return `${row}: TC kimlik no tekrar ediyor`;
@@ -1672,6 +1733,7 @@ function studentImportFieldLabel(field: StudentImportDryRunResult["errors"][numb
     contactRelation: "iletişim kişisi ilişkisi",
     email: "e-posta",
     firstName: "ad",
+    gradeLevelName: "seviye",
     guardian: "iletişim kişisi",
     guardianNationalId: "veli TC kimlik no",
     guardianPhone: "veli telefonu",

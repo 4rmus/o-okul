@@ -111,7 +111,7 @@ export type StudentBulkEnrollmentResult = SharedStudentBulkEnrollmentResult;
 export type StudentGuardianProvisionInput = StudentGuardianProvisionRequest;
 export type StudentCreateInput = StudentCreateRequest;
 export type StudentBulkCreateInput = Pick<StudentRecord, "firstName" | "lastName"> &
-  Partial<Pick<StudentRecord, "classId" | "studentNo">> &
+  Partial<Pick<StudentRecord, "gradeLevelId" | "classId" | "studentNo">> &
   StudentProfileInput & {
     guardian?: StudentGuardianProvisionInput;
     contact?: StudentContactCreateRequest;
@@ -244,17 +244,17 @@ export class StudentService {
     const classes = filterTenantResources(context, await this.classStore.list()).filter((record) => !record.deletedAt);
     const requestedClassIds = classes
       .filter((record) => !input.classId || record.id === input.classId)
-      .filter((record) => !input.level || record.gradeLevelId === input.level)
       .filter((record) => context.campusScope?.scopeMode !== "CAMPUSES"
         || Boolean(record.campusId && context.campusScope.campusIds.includes(record.campusId)))
       .map((record) => record.id);
-    const classFilterRequested = Boolean(input.classId || input.level || context.campusScope?.scopeMode === "CAMPUSES");
+    const classFilterRequested = Boolean(input.classId || context.campusScope?.scopeMode === "CAMPUSES");
     const registryQuery: StudentRegistryQuery = {
       page: input.page,
       limit: input.limit,
       q: input.q,
       sort: input.sort,
       ids: input.ids,
+      gradeLevelId: input.level,
       classIds: classFilterRequested ? requestedClassIds : undefined,
       responsibleTeacherId: input.responsibleTeacherId,
       status: input.status,
@@ -459,19 +459,21 @@ export class StudentService {
     }
 
     this.assertAccess(context, { tenantId });
-    await this.assertCampusScopeAllowsClass(context, input.classId);
+    const placement = await this.resolveStudentPlacement(context, tenantId, {
+      classId: input.classId,
+      gradeLevelId: input.gradeLevelId,
+    }, true);
     if (input.guardian) {
       parseGuardianProvisionInput(input.guardian, { lastName: input.lastName });
     }
     if (input.studentNo && (await this.list(context)).some((student) => student.tenantId === tenantId && student.studentNo === input.studentNo?.trim())) {
       throw new ConflictException("STUDENT_NO_CONFLICT");
     }
-    const incomingActiveStudents = resolveStudentStatus(input.status) === "ACTIVE" && Boolean(input.classId) ? 1 : 0;
+    const incomingActiveStudents = resolveStudentStatus(input.status) === "ACTIVE" && Boolean(placement.gradeLevelId) ? 1 : 0;
     if ((await this.previewQuota(context, incomingActiveStudents)).wouldExceed) {
       throw new ConflictException("ACTIVE_STUDENT_LIMIT_REACHED");
     }
     await this.assertStudentRelationTargets(context, tenantId, {
-      classId: input.classId,
       responsibleTeacherId: input.responsibleTeacherId,
     });
     const profileUpdate = await this.resolveProfileUpdateForCreate(tenantId, input, new Set());
@@ -481,14 +483,16 @@ export class StudentService {
       studentNo: input.studentNo,
       firstName: input.firstName ?? "",
       lastName: input.lastName ?? "",
-      classId: input.classId,
+      gradeLevelId: placement.gradeLevelId,
+      classId: placement.classId,
       responsibleTeacherId: input.responsibleTeacherId,
       status: resolveStudentStatus(input.status),
     };
     let student: StudentRecord;
-    if (studentInput.classId) {
+    if (studentInput.gradeLevelId) {
       const academicContext = await this.resolveCurrentAcademicContext(context);
       const enrollment = {
+        gradeLevelId: studentInput.gradeLevelId,
         classId: studentInput.classId,
         ...academicContext,
         startsAt: todayDateString(),
@@ -514,7 +518,7 @@ export class StudentService {
       entityType: "Student",
       entityId: student.id,
       action: "student.created",
-      diff: { fieldsSet: presentFields(student, ["studentNo", "firstName", "lastName", "classId", "responsibleTeacherId", "status"]) },
+      diff: { fieldsSet: presentFields(student, ["studentNo", "firstName", "lastName", "gradeLevelId", "classId", "responsibleTeacherId", "status"]) },
     });
     if (input.guardian) {
       await this.autoProvisionGuardian(context, student, input.guardian);
@@ -535,24 +539,18 @@ export class StudentService {
     }
 
     this.assertAccess(context, { tenantId });
-    await Promise.all(inputs.map((input) => this.assertCampusScopeAllowsClass(context, input.classId)));
+    const placements = await Promise.all(inputs.map((input) => this.resolveStudentPlacement(context, tenantId, {
+      classId: input.classId,
+      gradeLevelId: input.gradeLevelId,
+    }, true)));
     for (const input of inputs) {
       if (input.guardian) {
         parseGuardianProvisionInput(input.guardian, { lastName: input.lastName });
       }
     }
-    const quota = await this.previewQuota(context, inputs.filter((input) => Boolean(input.classId)).length);
+    const quota = await this.previewQuota(context, placements.filter((placement) => Boolean(placement.gradeLevelId)).length);
     if (quota.wouldExceed) {
       throw new ConflictException("ACTIVE_STUDENT_LIMIT_REACHED");
-    }
-
-    for (const input of inputs) {
-      if (!input.classId) continue;
-      const schoolClass = await this.classStore.findById(input.classId);
-      if (!schoolClass) {
-        throw new NotFoundException("CLASS_NOT_FOUND");
-      }
-      this.assertAccess(context, schoolClass);
     }
 
     const nationalIdHashes = new Set<string>();
@@ -562,26 +560,31 @@ export class StudentService {
     }
 
     const academicContext = await this.resolveCurrentAcademicContext(context);
-    const createInputs = inputs.map((input) => ({
-      student: {
-        tenantId,
-        studentNo: input.studentNo,
-        firstName: input.firstName,
-        lastName: input.lastName,
-        classId: input.classId,
-        status: "ACTIVE" as const,
-      },
-      enrollment: input.classId ? {
-        classId: input.classId,
-        ...academicContext,
-        startsAt: todayDateString(),
-        status: "ACTIVE" as const,
-        reason: "CREATED",
-      } : undefined,
-      contact: input.contact
-        ? omitStudentId(buildStudentContactStorageInput(tenantId, "pending", input.contact))
-        : undefined,
-    }));
+    const createInputs = inputs.map((input, index) => {
+      const placement = placements[index]!;
+      return {
+        student: {
+          tenantId,
+          studentNo: input.studentNo,
+          firstName: input.firstName,
+          lastName: input.lastName,
+          gradeLevelId: placement.gradeLevelId,
+          classId: placement.classId,
+          status: "ACTIVE" as const,
+        },
+        enrollment: placement.gradeLevelId ? {
+          gradeLevelId: placement.gradeLevelId,
+          classId: placement.classId,
+          ...academicContext,
+          startsAt: todayDateString(),
+          status: "ACTIVE" as const,
+          reason: "CREATED",
+        } : undefined,
+        contact: input.contact
+          ? omitStudentId(buildStudentContactStorageInput(tenantId, "pending", input.contact))
+          : undefined,
+      };
+    });
     const includesContacts = createInputs.some((input) => Boolean(input.contact));
     if (includesContacts && !this.store.createManyWithEnrollmentsAndContacts && !this.studentContactStore) {
       throw new Error("STUDENT_CONTACT_STORE_UNAVAILABLE");
@@ -593,10 +596,11 @@ export class StudentService {
         : await this.store.createMany(createInputs.map(({ student }) => student));
     if (!this.store.createManyWithEnrollments) {
       for (const student of students) {
-        if (!student.classId) continue;
+        if (!student.gradeLevelId) continue;
         await this.enrollmentStore.create({
           tenantId: student.tenantId,
           studentId: student.id,
+          gradeLevelId: student.gradeLevelId,
           classId: student.classId,
           ...academicContext,
           startsAt: todayDateString(),
@@ -689,38 +693,51 @@ export class StudentService {
 
   async update(context: RequestContext, id: string, input: StudentUpdateRequest): Promise<PublicStudentRecord> {
     const existing = await this.findOne(context, id);
-    const previous = { ...existing };
-    const changedFields = changedInputFields(input, ["firstName", "lastName", "classId", "responsibleTeacherId", "status"]);
+    const changedFields = changedInputFields(input, ["firstName", "lastName", "gradeLevelId", "classId", "responsibleTeacherId", "status"]);
     const nextStatus = input.status !== undefined ? resolveStudentStatus(input.status) : undefined;
+    const nextGradeLevelId = input.gradeLevelId !== undefined ? optionalText(input.gradeLevelId) : undefined;
     const nextClassId = input.classId !== undefined ? optionalText(input.classId) : undefined;
     const nextResponsibleTeacherId = input.responsibleTeacherId !== undefined ? optionalText(input.responsibleTeacherId) : undefined;
-    if (input.classId !== undefined) await this.assertCampusScopeAllowsClass(context, nextClassId);
+    const effectiveStatus = nextStatus ?? existing.status;
+    const placementChangedByRequest = input.gradeLevelId !== undefined || input.classId !== undefined;
+    const activated = existing.status !== "ACTIVE" && effectiveStatus === "ACTIVE";
+    const placement = placementChangedByRequest || activated
+      ? await this.resolveStudentPlacement(context, existing.tenantId, {
+          gradeLevelId: input.gradeLevelId !== undefined
+            ? nextGradeLevelId
+            : input.classId !== undefined && nextClassId
+              ? undefined
+              : existing.gradeLevelId,
+          classId: input.classId !== undefined ? nextClassId : existing.classId,
+        }, effectiveStatus === "ACTIVE")
+      : { gradeLevelId: existing.gradeLevelId, classId: existing.classId };
     await this.assertStudentRelationTargets(context, existing.tenantId, {
-      classId: nextClassId,
       responsibleTeacherId: nextResponsibleTeacherId,
     });
     const studentUpdate = {
       firstName: input.firstName,
       lastName: input.lastName,
-      classId: nextClassId,
+      gradeLevelId: placementChangedByRequest || activated ? placement.gradeLevelId : undefined,
+      classId: input.classId !== undefined ? placement.classId : undefined,
       responsibleTeacherId: nextResponsibleTeacherId,
       status: nextStatus,
     };
-    const effectiveClassId = input.classId !== undefined ? nextClassId : existing.classId;
-    const effectiveStatus = nextStatus ?? existing.status;
+    const effectiveGradeLevelId = placement.gradeLevelId;
+    const effectiveClassId = placement.classId;
+    const gradeLevelChanged = placementChangedByRequest && effectiveGradeLevelId !== existing.gradeLevelId;
     const classChanged = input.classId !== undefined && effectiveClassId !== existing.classId;
-    const activated = existing.status !== "ACTIVE" && effectiveStatus === "ACTIVE";
     const deactivated = existing.status === "ACTIVE" && effectiveStatus !== "ACTIVE";
-    const enrollmentTransition = classChanged || activated || deactivated
+    const enrollmentTransition = gradeLevelChanged || classChanged || activated || deactivated
       ? {
           closeActive: { endsAt: todayDateString(), status: deactivated ? effectiveStatus : undefined },
-          create: effectiveStatus === "ACTIVE" && effectiveClassId
+          create: effectiveStatus === "ACTIVE" && effectiveGradeLevelId
             ? {
+                gradeLevelId: effectiveGradeLevelId,
                 classId: effectiveClassId,
                 ...(await this.resolveCurrentAcademicContext(context)),
                 startsAt: todayDateString(),
                 status: "ACTIVE" as const,
-                reason: classChanged ? "CLASS_CHANGED" : "REACTIVATED",
+                reason: classChanged ? "CLASS_CHANGED" : gradeLevelChanged ? "GRADE_LEVEL_CHANGED" : "REACTIVATED",
               }
             : undefined,
           suspendPortalAccess: deactivated
@@ -795,12 +812,20 @@ export class StudentService {
     const existing = await this.findOne(context, id);
     const startsAt = input.startsAt ? enrollmentDate(input.startsAt) : todayDateString();
     const academicContext = await this.resolveEnrollmentAcademicContext(context, input);
-    const classId = input.classId !== undefined ? optionalText(input.classId) : existing.classId;
-    await this.assertStudentRelationTargets(context, existing.tenantId, { classId });
+    const requestedClassId = input.classId !== undefined ? optionalText(input.classId) : existing.classId;
+    const placement = await this.resolveStudentPlacement(context, existing.tenantId, {
+      gradeLevelId: input.gradeLevelId !== undefined
+        ? optionalText(input.gradeLevelId)
+        : input.classId !== undefined && requestedClassId
+          ? undefined
+          : existing.gradeLevelId,
+      classId: requestedClassId,
+    }, true);
     const transition = {
       closeActive: { endsAt: startsAt },
       create: {
-        classId,
+        gradeLevelId: placement.gradeLevelId,
+        classId: placement.classId,
         ...academicContext,
         startsAt,
         status: "ACTIVE" as const,
@@ -808,9 +833,9 @@ export class StudentService {
       },
     };
     const atomicResult = this.store.updateWithEnrollmentTransition
-      ? await this.store.updateWithEnrollmentTransition(id, { classId, status: "ACTIVE" }, transition)
+      ? await this.store.updateWithEnrollmentTransition(id, { gradeLevelId: placement.gradeLevelId, classId: placement.classId, status: "ACTIVE" }, transition)
       : undefined;
-    const updated = atomicResult?.student ?? await this.store.update(id, { classId, status: "ACTIVE" });
+    const updated = atomicResult?.student ?? await this.store.update(id, { gradeLevelId: placement.gradeLevelId, classId: placement.classId, status: "ACTIVE" });
     if (!updated) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
@@ -828,7 +853,7 @@ export class StudentService {
       entityType: "StudentEnrollment",
       entityId: enrollment.id,
       action: "student.enrollment_renewed",
-      diff: { studentId: updated.id, classId, ...academicContext },
+      diff: { studentId: updated.id, gradeLevelId: placement.gradeLevelId, classId: placement.classId, ...academicContext },
     });
     return enrollment;
   }
@@ -857,24 +882,26 @@ export class StudentService {
 
     const students = await Promise.all(studentIds.map((studentId) => this.findOne(context, studentId)));
     const automaticClassMapping = input.useAutomaticClassMapping ? await this.buildAutomaticClassMapping(context) : {};
-    const renewals = students.map((student) => {
+    const renewals = await Promise.all(students.map(async (student) => {
       const mappedClassId = student.classId ? input.classIdBySourceClassId?.[student.classId] : undefined;
       const automaticClassId = student.classId ? automaticClassMapping[student.classId] : undefined;
+      const classId = mappedClassId ?? automaticClassId ?? input.classId;
       return {
         student,
-        classId: mappedClassId ?? automaticClassId ?? input.classId,
+        placement: await this.resolveStudentPlacement(context, student.tenantId, {
+          gradeLevelId: input.gradeLevelId ?? (classId ? undefined : student.gradeLevelId),
+          classId: classId ?? student.classId,
+        }, true),
       };
-    });
-    await Promise.all(
-      renewals.map(({ student, classId }) => this.assertStudentRelationTargets(context, student.tenantId, { classId })),
-    );
+    }));
 
     const enrollments: StudentEnrollmentRecord[] = [];
-    for (const { student, classId } of renewals) {
+    for (const { student, placement } of renewals) {
       enrollments.push(await this.renewEnrollment(context, student.id, {
         academicYearId: input.academicYearId,
         termId: input.termId,
-        classId,
+        gradeLevelId: placement.gradeLevelId,
+        classId: placement.classId,
         startsAt: input.startsAt,
       }));
     }
@@ -937,12 +964,17 @@ export class StudentService {
     const startsAt = input.startsAt ? enrollmentDate(input.startsAt) : todayDateString();
     const academicContext = await this.resolveEnrollmentAcademicContext(context, input);
     const classId = input.classId !== undefined ? optionalText(input.classId) : undefined;
-    await this.assertStudentRelationTargets(context, existing.tenantId, { classId });
-    const nextStatus: StudentStatus = classId ? "ACTIVE" : "TRANSFERRED";
+    const gradeLevelId = input.gradeLevelId !== undefined ? optionalText(input.gradeLevelId) : undefined;
+    const transferIn = Boolean(classId || gradeLevelId);
+    const placement = transferIn
+      ? await this.resolveStudentPlacement(context, existing.tenantId, { gradeLevelId, classId }, true)
+      : { gradeLevelId: undefined, classId: undefined };
+    const nextStatus: StudentStatus = transferIn ? "ACTIVE" : "TRANSFERRED";
     const transition = {
-      closeActive: { endsAt: startsAt, status: classId ? undefined : "TRANSFERRED" as const },
-      create: classId ? {
-        classId,
+      closeActive: { endsAt: startsAt, status: transferIn ? undefined : "TRANSFERRED" as const },
+      create: transferIn ? {
+        gradeLevelId: placement.gradeLevelId,
+        classId: placement.classId,
         ...academicContext,
         startsAt,
         status: "ACTIVE" as const,
@@ -950,10 +982,15 @@ export class StudentService {
       } : undefined,
     };
     const atomicResult = this.store.updateWithEnrollmentTransition
-      ? await this.store.updateWithEnrollmentTransition(id, { classId: classId ?? "", status: nextStatus }, transition)
+      ? await this.store.updateWithEnrollmentTransition(id, {
+          gradeLevelId: placement.gradeLevelId ?? "",
+          classId: placement.classId ?? "",
+          status: nextStatus,
+        }, transition)
       : undefined;
     const updated = atomicResult?.student ?? await this.store.update(id, {
-      classId: classId ?? "",
+      gradeLevelId: placement.gradeLevelId ?? "",
+      classId: placement.classId ?? "",
       status: nextStatus,
     });
     if (!updated) {
@@ -961,9 +998,9 @@ export class StudentService {
     }
 
     if (!atomicResult) {
-      await this.enrollmentStore.closeActiveForStudent(updated.id, startsAt, classId ? undefined : "TRANSFERRED");
+      await this.enrollmentStore.closeActiveForStudent(updated.id, startsAt, transferIn ? undefined : "TRANSFERRED");
     }
-    if (!classId) {
+    if (!transferIn) {
       await this.auditLogs?.record({
         tenantId: updated.tenantId,
         actorUserId: context.userId,
@@ -986,7 +1023,7 @@ export class StudentService {
       entityType: "StudentEnrollment",
       entityId: enrollment.id,
       action: "student.enrollment_transferred",
-      diff: { studentId: updated.id, classId, ...academicContext },
+      diff: { studentId: updated.id, gradeLevelId: placement.gradeLevelId, classId: placement.classId, ...academicContext },
     });
     return enrollment;
   }
@@ -1088,19 +1125,8 @@ export class StudentService {
     const student = await this.findOne(context, id);
     const previousTenantId = student.tenantId;
     this.assertAccess(context, { tenantId });
-    const updated = await this.store.updateTenant(id, tenantId);
-    if (!updated) {
-      throw new NotFoundException("STUDENT_NOT_FOUND");
-    }
-    await this.auditLogs?.record({
-      tenantId: previousTenantId,
-      actorUserId: context.userId,
-      entityType: "Student",
-      entityId: updated.id,
-      action: "student.tenant_updated",
-      diff: { before: { tenantId: previousTenantId }, after: { tenantId } },
-    });
-    return toPublicStudentRecord(updated);
+    if (tenantId === previousTenantId) return toPublicStudentRecord(student);
+    throw new ConflictException("STUDENT_TENANT_TRANSFER_NOT_SUPPORTED");
   }
 
   private assertAccess(context: RequestContext, resource: { tenantId: string }): void {
@@ -1171,20 +1197,49 @@ export class StudentService {
     }
   }
 
-  private async assertStudentRelationTargets(
+  private async resolveStudentPlacement(
     context: RequestContext,
     tenantId: string,
-    input: { classId?: string; responsibleTeacherId?: string },
-  ): Promise<void> {
-    if (input.classId) {
-      const schoolClass = await this.classStore.findById(input.classId);
+    input: { gradeLevelId?: string; classId?: string },
+    required: boolean,
+  ): Promise<{ gradeLevelId?: string; classId?: string }> {
+    const classId = optionalText(input.classId);
+    const requestedGradeLevelId = optionalText(input.gradeLevelId);
+    let schoolClass: ClassRecord | undefined;
+
+    if (classId) {
+      schoolClass = await this.classStore.findById(classId);
       if (!schoolClass || schoolClass.deletedAt) {
         throw new NotFoundException("CLASS_NOT_FOUND");
       }
       this.assertSameTenantRelationTarget(context, tenantId, schoolClass);
-      await this.assertCampusScopeAllowsClass(context, schoolClass.id);
+    }
+    await this.assertCampusScopeAllowsClass(context, classId);
+
+    if (schoolClass && (!schoolClass.gradeLevelId || (requestedGradeLevelId && requestedGradeLevelId !== schoolClass.gradeLevelId))) {
+      throw new BadRequestException("STUDENT_CLASS_GRADE_LEVEL_MISMATCH");
     }
 
+    const gradeLevelId = requestedGradeLevelId ?? schoolClass?.gradeLevelId;
+    if (required && !gradeLevelId) {
+      throw new BadRequestException("STUDENT_GRADE_LEVEL_REQUIRED");
+    }
+    if (gradeLevelId) {
+      const gradeLevel = await this.gradeLevelStore.findById(gradeLevelId);
+      if (!gradeLevel || gradeLevel.deletedAt) {
+        throw new NotFoundException("GRADE_LEVEL_NOT_FOUND");
+      }
+      this.assertSameTenantRelationTarget(context, tenantId, gradeLevel);
+    }
+
+    return { gradeLevelId, classId };
+  }
+
+  private async assertStudentRelationTargets(
+    context: RequestContext,
+    tenantId: string,
+    input: { responsibleTeacherId?: string },
+  ): Promise<void> {
     if (input.responsibleTeacherId) {
       const teacher = await this.teacherStore.findById(input.responsibleTeacherId);
       if (!teacher) {
@@ -1483,6 +1538,7 @@ export class StudentService {
     tenantId: string;
     firstName: string;
     lastName: string;
+    gradeLevelId?: string;
     classId?: string;
     responsibleTeacherId?: string;
     status: StudentStatus;
@@ -1498,7 +1554,7 @@ export class StudentService {
     ]);
     const [campus, gradeLevel] = await Promise.all([
       schoolClass?.campusId ? this.campusStore.findById(schoolClass.campusId) : undefined,
-      schoolClass?.gradeLevelId ? this.gradeLevelStore.findById(schoolClass.gradeLevelId) : undefined,
+      student.gradeLevelId ? this.gradeLevelStore.findById(student.gradeLevelId) : undefined,
     ]);
     return toStudentProfile(student, {
       className: schoolClass?.tenantId === student.tenantId ? schoolClass.name : undefined,
@@ -1514,7 +1570,7 @@ export class StudentService {
       || (context.subjectType === "STUDENT" && context.subjectId === studentId);
   }
 
-  private async withClassNames<TRecord extends { tenantId: string; classId?: string }>(
+  private async withClassNames<TRecord extends { tenantId: string; gradeLevelId?: string; classId?: string }>(
     records: TRecord[],
   ): Promise<Array<TRecord & { campusName?: string; className?: string; gradeLevelName?: string; section?: string }>> {
     const classIds = [...new Set(records.map((record) => record.classId).filter((id): id is string => Boolean(id)))];
@@ -1525,7 +1581,7 @@ export class StudentService {
         .map((record) => [record.id, record]),
     );
     const campusIds = [...new Set(classes.map((record) => record?.campusId).filter((id): id is string => Boolean(id)))];
-    const gradeLevelIds = [...new Set(classes.map((record) => record?.gradeLevelId).filter((id): id is string => Boolean(id)))];
+    const gradeLevelIds = [...new Set(records.map((record) => record.gradeLevelId).filter((id): id is string => Boolean(id)))];
     const [campuses, gradeLevels] = await Promise.all([
       Promise.all(campusIds.map((id) => this.campusStore.findById(id))),
       Promise.all(gradeLevelIds.map((id) => this.gradeLevelStore.findById(id))),
@@ -1537,7 +1593,7 @@ export class StudentService {
       const schoolClass = record.classId ? classById.get(record.classId) : undefined;
       const isTenantClass = schoolClass?.tenantId === record.tenantId;
       const campus = isTenantClass && schoolClass?.campusId ? campusById.get(schoolClass.campusId) : undefined;
-      const gradeLevel = isTenantClass && schoolClass?.gradeLevelId ? gradeLevelById.get(schoolClass.gradeLevelId) : undefined;
+      const gradeLevel = record.gradeLevelId ? gradeLevelById.get(record.gradeLevelId) : undefined;
       return {
         ...record,
         className: isTenantClass ? schoolClass.name : undefined,
@@ -1588,6 +1644,7 @@ function toPublicStudentRecord(student: StudentRecord): PublicStudentRecord {
     studentNo: student.studentNo,
     firstName: student.firstName,
     lastName: student.lastName,
+    gradeLevelId: student.gradeLevelId,
     classId: student.classId,
     responsibleTeacherId: student.responsibleTeacherId,
     status: student.status,
@@ -1604,6 +1661,7 @@ function toStudentProfile(student: {
   tenantId: string;
   firstName: string;
   lastName: string;
+  gradeLevelId?: string;
   classId?: string;
   responsibleTeacherId?: string;
   status: StudentStatus;
@@ -1617,6 +1675,7 @@ function toStudentProfile(student: {
     tenantId: student.tenantId,
     firstName: student.firstName,
     lastName: student.lastName,
+    gradeLevelId: student.gradeLevelId,
     classId: student.classId,
     responsibleTeacherId: student.responsibleTeacherId,
     status: student.status,

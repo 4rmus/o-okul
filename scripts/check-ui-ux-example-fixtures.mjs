@@ -35,6 +35,7 @@ const importTemplates = [
       "okul_no",
       "ad",
       "soyad",
+      "seviye",
       "sinif",
       "email",
       "tc_kimlik_no",

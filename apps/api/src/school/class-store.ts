@@ -3,16 +3,31 @@ import type { ClassRecord as SharedClassRecord } from "@o-okul/shared-types";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
+import type { StudentEnrollmentStore } from "../student/student-enrollment-store.js";
+import type { StudentStore } from "../student/student-store.js";
 
 export interface ClassRecord extends SharedClassRecord {
   deletedAt?: string;
+}
+
+type ClassUpdateInput = Partial<Pick<ClassRecord, "name" | "alanId" | "campusId" | "gradeLevelId" | "section">>;
+type ClassGradeLevelCascade = (classId: string, gradeLevelId: string | undefined) => Promise<{
+  studentsUpdated: number;
+  enrollmentsUpdated: number;
+}>;
+
+export interface ClassGradeLevelCascadeResult {
+  record: ClassRecord;
+  studentsUpdated: number;
+  enrollmentsUpdated: number;
 }
 
 export interface ClassStore {
   list(): Promise<ClassRecord[]>;
   findById(id: string): Promise<ClassRecord | undefined>;
   create(input: Omit<ClassRecord, "id">): Promise<ClassRecord>;
-  update(id: string, input: Partial<Pick<ClassRecord, "name" | "alanId" | "campusId" | "gradeLevelId" | "section">>): Promise<ClassRecord | undefined>;
+  update(id: string, input: ClassUpdateInput): Promise<ClassRecord | undefined>;
+  updateWithGradeLevelCascade(id: string, input: ClassUpdateInput): Promise<ClassGradeLevelCascadeResult | undefined>;
   softDelete(id: string, deletedAt: string): Promise<ClassRecord | undefined>;
 }
 
@@ -30,6 +45,8 @@ const demoClasses: ClassRecord[] = [
 
 export class InMemoryClassStore implements ClassStore {
   private readonly classes = demoClasses.map((record) => ({ ...record }));
+
+  constructor(private readonly cascadeGradeLevel?: ClassGradeLevelCascade) {}
 
   async list(): Promise<ClassRecord[]> {
     return this.classes;
@@ -50,7 +67,7 @@ export class InMemoryClassStore implements ClassStore {
     return record;
   }
 
-  async update(id: string, input: Partial<Pick<ClassRecord, "name" | "alanId" | "campusId" | "gradeLevelId" | "section">>): Promise<ClassRecord | undefined> {
+  async update(id: string, input: ClassUpdateInput): Promise<ClassRecord | undefined> {
     const record = await this.findById(id);
     if (!record) return undefined;
 
@@ -60,9 +77,24 @@ export class InMemoryClassStore implements ClassStore {
     }
     if (input.alanId !== undefined) record.alanId = input.alanId;
     if (input.campusId !== undefined) record.campusId = input.campusId;
-    if (input.gradeLevelId !== undefined) record.gradeLevelId = input.gradeLevelId;
+    if (input.gradeLevelId !== undefined) record.gradeLevelId = input.gradeLevelId || undefined;
     if (input.section !== undefined) record.section = input.section;
     return record;
+  }
+
+  async updateWithGradeLevelCascade(id: string, input: ClassUpdateInput): Promise<ClassGradeLevelCascadeResult | undefined> {
+    const existing = await this.findById(id);
+    if (!existing) return undefined;
+    if (input.name !== undefined) this.assertActiveNameAvailable(existing.tenantId, input.name, id);
+    const cascade = input.gradeLevelId !== undefined && input.gradeLevelId !== existing.gradeLevelId
+      ? await this.cascadeGradeLevel?.(id, input.gradeLevelId || undefined)
+      : undefined;
+    const record = await this.update(id, input);
+    return record ? {
+      record,
+      studentsUpdated: cascade?.studentsUpdated ?? 0,
+      enrollmentsUpdated: cascade?.enrollmentsUpdated ?? 0,
+    } : undefined;
   }
 
   async softDelete(id: string, deletedAt: string): Promise<ClassRecord | undefined> {
@@ -105,6 +137,69 @@ export class PostgresClassStore implements ClassStore {
     });
   }
 
+  async updateWithGradeLevelCascade(id: string, input: ClassUpdateInput): Promise<ClassGradeLevelCascadeResult | undefined> {
+    return withTenantQuery(this.pool, async (client) => {
+      const locked = await client.query<ClassRow>(
+        `SELECT * FROM "Class" WHERE "id" = $1 FOR UPDATE`,
+        [id],
+      );
+      const existing = locked.rows[0];
+      if (!existing) return undefined;
+
+      if (input.gradeLevelId !== undefined && !input.gradeLevelId) {
+        const linked = await client.query<{ count: number | string }>(
+          `SELECT COUNT(*)::int AS count FROM "Student" WHERE "classId" = $1`,
+          [id],
+        );
+        if (Number(linked.rows[0]?.count ?? 0) > 0) {
+          throw new Error("CLASS_GRADE_LEVEL_REQUIRED_FOR_STUDENTS");
+        }
+      }
+
+      const result = await client.query<ClassRow>(
+        `UPDATE "Class"
+         SET "name" = COALESCE($2, "name"),
+             "alanId" = CASE WHEN $3 THEN $4 ELSE "alanId" END,
+             "campusId" = CASE WHEN $5 THEN $6 ELSE "campusId" END,
+             "gradeLevelId" = CASE WHEN $7 THEN $8 ELSE "gradeLevelId" END,
+             "section" = CASE WHEN $9 THEN $10 ELSE "section" END,
+             "updatedAt" = now()
+         WHERE "id" = $1
+         RETURNING *`,
+        classUpdateValues(id, input),
+      );
+      const record = result.rows[0];
+      if (!record) return undefined;
+
+      let studentsUpdated = 0;
+      let enrollmentsUpdated = 0;
+      if (input.gradeLevelId !== undefined && input.gradeLevelId !== existing.gradeLevelId) {
+        const students = await client.query<{ id: string }>(
+          `UPDATE "Student"
+           SET "gradeLevelId" = $2,
+               "updatedAt" = now()
+           WHERE "classId" = $1
+           RETURNING "id"`,
+          [id, input.gradeLevelId || null],
+        );
+        const enrollments = await client.query<{ id: string }>(
+          `UPDATE "StudentEnrollment"
+           SET "gradeLevelId" = $2,
+               "updatedAt" = now()
+           WHERE "classId" = $1
+             AND "status" = 'ACTIVE'
+             AND "endsAt" IS NULL
+           RETURNING "id"`,
+          [id, input.gradeLevelId || null],
+        );
+        studentsUpdated = students.rows.length;
+        enrollmentsUpdated = enrollments.rows.length;
+      }
+
+      return { record: toClassRecord(record), studentsUpdated, enrollmentsUpdated };
+    });
+  }
+
   async create(input: Omit<ClassRecord, "id">): Promise<ClassRecord> {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<ClassRow>(
@@ -116,7 +211,7 @@ export class PostgresClassStore implements ClassStore {
           input.tenantId,
           input.alanId ?? null,
           input.campusId ?? null,
-          input.gradeLevelId ?? null,
+          input.gradeLevelId || null,
           input.name.trim(),
           input.section ?? null,
         ],
@@ -129,7 +224,7 @@ export class PostgresClassStore implements ClassStore {
     });
   }
 
-  async update(id: string, input: Partial<Pick<ClassRecord, "name" | "alanId" | "campusId" | "gradeLevelId" | "section">>): Promise<ClassRecord | undefined> {
+  async update(id: string, input: ClassUpdateInput): Promise<ClassRecord | undefined> {
     const existing = await this.findById(id);
     if (!existing) return undefined;
 
@@ -152,7 +247,7 @@ export class PostgresClassStore implements ClassStore {
           input.campusId !== undefined,
           input.campusId ?? null,
           input.gradeLevelId !== undefined,
-          input.gradeLevelId ?? null,
+          input.gradeLevelId || null,
           input.section !== undefined,
           input.section ?? null,
         ],
@@ -179,8 +274,23 @@ export class PostgresClassStore implements ClassStore {
   }
 }
 
-export function createClassStore(): ClassStore {
-  return resolvePersistenceDriver(process.env.CLASS_STORE) === "postgres" ? new PostgresClassStore() : new InMemoryClassStore();
+export function createClassStore(
+  studentStore?: StudentStore,
+  enrollmentStore?: StudentEnrollmentStore,
+): ClassStore {
+  if (resolvePersistenceDriver(process.env.CLASS_STORE) === "postgres") return new PostgresClassStore();
+  const cascadeGradeLevel = studentStore && enrollmentStore
+    ? async (classId: string, gradeLevelId: string | undefined) => {
+        const linkedStudents = (await studentStore.list()).filter((student) => student.classId === classId);
+        if (!gradeLevelId && linkedStudents.length > 0) throw new Error("CLASS_GRADE_LEVEL_REQUIRED_FOR_STUDENTS");
+        const [studentsUpdated, enrollmentsUpdated] = await Promise.all([
+          studentStore.updateGradeLevelForClass(classId, gradeLevelId),
+          enrollmentStore.updateOpenGradeLevelForClass(classId, gradeLevelId),
+        ]);
+        return { studentsUpdated, enrollmentsUpdated };
+      }
+    : undefined;
+  return new InMemoryClassStore(cascadeGradeLevel);
 }
 
 interface ClassRow {
@@ -192,6 +302,21 @@ interface ClassRow {
   name: string;
   section: string | null;
   deletedAt: Date | null;
+}
+
+function classUpdateValues(id: string, input: ClassUpdateInput): unknown[] {
+  return [
+    id,
+    input.name?.trim() ?? null,
+    input.alanId !== undefined,
+    input.alanId ?? null,
+    input.campusId !== undefined,
+    input.campusId ?? null,
+    input.gradeLevelId !== undefined,
+    input.gradeLevelId || null,
+    input.section !== undefined,
+    input.section ?? null,
+  ];
 }
 
 function toClassRecord(record: ClassRow): ClassRecord {

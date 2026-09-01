@@ -21,7 +21,6 @@ import {
   type StudentProfileInput,
   type StudentRecord,
 } from "./student.service.js";
-import { SchoolService } from "../school/school.service.js";
 import type {
   GuardianRecord,
   GuardianStudentRecord,
@@ -87,6 +86,7 @@ const studentGuardianProvisionBodySchema = z.object({
 const studentCreateBodySchema = z.object({
   classId: optionalTrimmedString,
   firstName: requiredUppercaseString,
+  gradeLevelId: optionalTrimmedString,
   guardian: studentGuardianProvisionBodySchema.optional(),
   lastName: requiredUppercaseString,
   nationalId: optionalTrimmedString,
@@ -100,6 +100,7 @@ const studentCreateBodySchema = z.object({
 const studentUpdateBodySchema = z.object({
   classId: optionalTrimmedString,
   firstName: requiredUppercaseString.optional(),
+  gradeLevelId: optionalTrimmedString,
   lastName: requiredUppercaseString.optional(),
   responsibleTeacherId: optionalTrimmedString,
   status: studentStatusSchema.optional(),
@@ -113,6 +114,7 @@ const studentProfileBodySchema = z.object({
 const studentEnrollmentActionBodySchema = z.object({
   academicYearId: optionalTrimmedString,
   classId: optionalTrimmedString,
+  gradeLevelId: optionalTrimmedString,
   startsAt: optionalStudentEnrollmentStartsAtSchema,
   termId: optionalTrimmedString,
 }).strict();
@@ -134,7 +136,6 @@ export class StudentController {
   constructor(
     private readonly students: StudentService,
     private readonly imports: StudentImportService,
-    private readonly school: SchoolService,
     private readonly guardianService: GuardianService,
     private readonly teacherService: TeacherService,
     private readonly featureRollouts: FeatureRolloutService,
@@ -335,12 +336,7 @@ export class StudentController {
       filtered = filtered.filter((student) => student.status === query.status);
     }
     if (query.level) {
-      const classIds = new Set(
-        (await this.school.listClasses(getRequestContext()))
-          .filter((klass) => klass.gradeLevelId === query.level)
-          .map((klass) => klass.id),
-      );
-      filtered = filtered.filter((student) => Boolean(student.classId && classIds.has(student.classId)));
+      filtered = filtered.filter((student) => student.gradeLevelId === query.level);
     }
     if (query.guardianLinked !== undefined) {
       const expected = query.guardianLinked === "true";

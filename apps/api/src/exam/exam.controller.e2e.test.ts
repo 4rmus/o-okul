@@ -317,7 +317,7 @@ describe("ExamController", () => {
     const extraClass = await request(server)
       .post("/classes")
       .set("Authorization", `Bearer ${issued.accessToken}`)
-      .send({ name: "8-B" })
+      .send({ name: "8-B", gradeLevelId: "grade-8" })
       .expect(201);
     const extraStudent = await request(server)
       .post("/students")
