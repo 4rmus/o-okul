@@ -134,6 +134,35 @@ describe("School management API", () => {
       .expect(403);
   });
 
+  it("seviye-ders bağlantısını tenant içinde idempotent oluşturur", async () => {
+    const gradeLevel = await request(server)
+      .post("/grade-levels")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "9. Sınıf", code: "9-COURSE-LINK" })
+      .expect(201);
+    const course = await request(server)
+      .post("/courses")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "Fen Bilgisi", code: "FEN-COURSE-LINK" })
+      .expect(201);
+    const path = `/grade-levels/${gradeLevel.body.id}/courses/${course.body.id}`;
+
+    await request(server).put(path).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
+    await request(server).put(path).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
+    await request(server)
+      .get(`/grade-levels/${gradeLevel.body.id}/courses`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => expect(body).toEqual([expect.objectContaining({ courseId: course.body.id })]));
+    await request(server)
+      .put(`/grade-levels/${gradeLevel.body.id}/courses/course-turkish`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(403);
+
+    await request(server).delete(`/courses/${course.body.id}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
+    await request(server).delete(`/grade-levels/${gradeLevel.body.id}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
+  });
+
   it("tenant A sadece kendi ders kayıtlarını listeler", async () => {
     const response = await request(server)
       .get("/courses")
@@ -1500,6 +1529,16 @@ describe("School management API", () => {
       });
 
     await request(server)
+      .put(`/grade-levels/grade-8/courses/${extraCourseId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(204);
+    const linkedCourseAssignment = await request(server)
+      .post("/teachers/teacher-a/assignments")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ classId: "class-a", courseId: extraCourseId, role: "BRANCH_TEACHER" })
+      .expect(201);
+
+    await request(server)
       .patch(`/teachers/teacher-a/assignments/${assignmentId}`)
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({ role: "GUIDANCE_COUNSELOR" })
@@ -1553,6 +1592,10 @@ describe("School management API", () => {
 
     await request(server)
       .delete(`/teachers/teacher-a/assignments/${assignmentId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(204);
+    await request(server)
+      .delete(`/teachers/teacher-a/assignments/${linkedCourseAssignment.body.id}`)
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(204);
     await request(server)

@@ -267,6 +267,31 @@ export class SchoolService {
     return filterTenantResources(context, await this.gradeLevelCourseStore.listByGradeLevel(gradeLevelId, optionalText(alanId)));
   }
 
+  async ensureGradeLevelCourse(context: RequestContext, gradeLevelId: string, courseId: string): Promise<void> {
+    const [gradeLevel, course] = await Promise.all([
+      this.findGradeLevel(context, gradeLevelId),
+      this.findCourse(context, courseId),
+    ]);
+    if (gradeLevel.tenantId !== course.tenantId) throw new ForbiddenException("FORBIDDEN_TENANT");
+    const createdId = await this.gradeLevelCourseStore.ensure({
+      tenantId: gradeLevel.tenantId,
+      gradeLevelId: gradeLevel.id,
+      courseId: course.id,
+      courseName: course.name,
+      courseCode: course.code,
+    });
+    if (createdId) {
+      await this.auditLogs?.record({
+        tenantId: gradeLevel.tenantId,
+        actorUserId: context.userId,
+        entityType: "GradeLevelCourse",
+        entityId: createdId,
+        action: "grade_level_course.created",
+        diff: { gradeLevelId: gradeLevel.id, courseId: course.id },
+      });
+    }
+  }
+
   async createGradeLevel(context: RequestContext, input: Partial<GradeLevelRecord>): Promise<GradeLevelRecord> {
     const tenantId = this.resolveTenantId(context, input.tenantId);
     const record = await this.gradeLevelStore.create({

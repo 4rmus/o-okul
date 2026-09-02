@@ -5,7 +5,7 @@ const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const corsHeaders = {
   "access-control-allow-credentials": "true",
   "access-control-allow-headers": "authorization,content-type,idempotency-key,x-csrf-token",
-  "access-control-allow-methods": "DELETE,GET,PATCH,POST,OPTIONS",
+  "access-control-allow-methods": "DELETE,GET,PATCH,POST,PUT,OPTIONS",
   "access-control-allow-origin": appOrigin,
 };
 
@@ -162,8 +162,10 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
 
   test("önerilen sınıf adını düzenler, taslakta korur ve adı kırpılmış biçimiyle ayrı seviye/şube alanlarıyla gönderir", async ({ page }) => {
     const classCreateBodies: Array<Record<string, unknown>> = [];
+    const gradeLevelCourseLinks: string[] = [];
     await openSetupWizard(page, { height: 844, width: 390 }, {
       classCreateBodies,
+      gradeLevelCourseLinks,
       roles: ["TENANT_ADMIN"],
     });
 
@@ -210,6 +212,11 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
         section: "B",
       },
     ]));
+    expect(gradeLevelCourseLinks).toEqual([
+      "grade-setup-lgs/course-LGS-TUR",
+      "grade-setup-lgs/course-LGS-MAT",
+      "grade-setup-lgs/course-LGS-FEN",
+    ]);
   });
 
   test("tablette taşma üretmez ve assistant rolünde kurulum yüzeyini açar", async ({ page }) => {
@@ -443,8 +450,22 @@ async function installSetupApiMocks(
     if (request.method() === "POST" && pathName === "/classes") {
       options.classCreateBodies?.push(request.postDataJSON() as Record<string, unknown>);
     }
+    if (request.method() === "PUT") {
+      const match = pathName.match(/^\/grade-levels\/([^/]+)\/courses\/([^/]+)$/);
+      if (match) options.gradeLevelCourseLinks?.push(`${match[1]}/${match[2]}`);
+    }
     if (request.method() !== "GET" && pathName !== "/auth/refresh") {
       options.unexpectedMutations?.push(`${request.method()} ${pathName}`);
+    }
+    if (request.method() === "POST" && pathName === "/courses") {
+      const body = request.postDataJSON() as { code: string; name: string };
+      await fulfillData(route, { id: `course-${body.code}`, ...body });
+      return;
+    }
+    if (request.method() === "POST" && pathName === "/grade-levels") {
+      const body = request.postDataJSON() as { code: string; name: string };
+      await fulfillData(route, { id: `grade-${body.code}`, tenantId: "tenant-setup", ...body });
+      return;
     }
     const response = mockSetupApiResponse(pathName, request.method(), options);
     await fulfillData(route, response);
@@ -578,6 +599,7 @@ function mockSetupApiResponse(
 interface SetupMockOptions {
   classCreateBodies?: Array<Record<string, unknown>>;
   emptyCourseTemplates?: boolean;
+  gradeLevelCourseLinks?: string[];
   readiness?: "ready" | "incomplete";
   requestedPaths?: string[];
   roles?: string[];

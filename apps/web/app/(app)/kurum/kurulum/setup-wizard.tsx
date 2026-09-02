@@ -1542,13 +1542,29 @@ async function saveSetup(
     apiListRequest<AcademicTermRecord>(accessToken, `${apiBaseUrl}/academic-terms?limit=200`),
     apiListRequest<GradeLevelRecord>(accessToken, `${apiBaseUrl}/grade-levels?limit=200`),
   ]);
-  const existingCourseNames = new Set(existingCourses.data.map((course) => normalizeValue(course.name)));
+  const courseByName = new Map(existingCourses.data.map((course) => [normalizeValue(course.name), course]));
   const existingClassNames = new Set(existingClasses.data.map((classRecord) => normalizeClassNameValue(classRecord.name)));
   const gradeLevelIdByStageId = new Map(
     gradeLevels.data
       .map((gradeLevel) => [stageIdFromGradeLevel(gradeLevel), gradeLevel.id] as const)
       .filter((entry): entry is [StageId, string] => Boolean(entry[0])),
   );
+  const selectedCourseIds = new Set(draft.courses.selectedCourseIds);
+  const selectedCourses = courseOptions.filter((course) => selectedCourseIds.has(course.id));
+  for (const stageId of new Set(selectedCourses.map((course) => course.stageId))) {
+    if (!stageId || gradeLevelIdByStageId.has(stageId)) continue;
+    const gradeLevel = await apiRequest<GradeLevelRecord>(accessToken, `${apiBaseUrl}/grade-levels`, {
+      body: JSON.stringify({ code: stageId, name: stageOptions.find((stage) => stage.id === stageId)?.label ?? stageId }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    gradeLevelIdByStageId.set(stageId, gradeLevel.id);
+  }
+  const selectedCourseLinks = selectedCourses.map((course) => {
+    const gradeLevelId = course.stageId ? gradeLevelIdByStageId.get(course.stageId) : undefined;
+    if (!gradeLevelId) throw new Error(`Seçili ${course.name} dersi için sınıf seviyesi bulunamadı.`);
+    return { course, gradeLevelId };
+  });
   const existingYear = existingYears.data.find((year) => normalizeValue(year.name) === normalizeValue(draft.term.academicYearName));
   let createdCourses = 0;
   let createdClasses = 0;
@@ -1590,13 +1606,24 @@ async function saveSetup(
   }
 
   for (const course of selectedCourseOptions(draft.courses.selectedCourseIds, courseOptions)) {
-    if (existingCourseNames.has(normalizeValue(course.name))) continue;
-    await apiRequest<CourseRecord>(accessToken, `${apiBaseUrl}/courses`, {
+    if (courseByName.has(normalizeValue(course.name))) continue;
+    const created = await apiRequest<CourseRecord>(accessToken, `${apiBaseUrl}/courses`, {
       body: JSON.stringify({ code: course.code, name: course.name }),
       headers: { "content-type": "application/json" },
       method: "POST",
     });
+    courseByName.set(normalizeValue(created.name), created);
     createdCourses += 1;
+  }
+
+  for (const { course, gradeLevelId } of selectedCourseLinks) {
+    const courseRecord = courseByName.get(normalizeValue(course.name));
+    if (!courseRecord) throw new Error(`Seçili ${course.name} dersi oluşturulamadı.`);
+    await apiRequest<void>(
+      accessToken,
+      `${apiBaseUrl}/grade-levels/${encodeURIComponent(gradeLevelId)}/courses/${encodeURIComponent(courseRecord.id)}`,
+      { method: "PUT" },
+    );
   }
 
   for (const classRecord of generateClasses(draft.classes.classCounts, draft.classes.classNames)) {
