@@ -452,7 +452,11 @@ async function installSetupApiMocks(
     }
     if (request.method() === "PUT") {
       const match = pathName.match(/^\/grade-levels\/([^/]+)\/courses\/([^/]+)$/);
-      if (match) options.gradeLevelCourseLinks?.push(`${match[1]}/${match[2]}`);
+      if (match) {
+        options.gradeLevelCourseLinks?.push(`${match[1]}/${match[2]}`);
+        await route.fulfill({ headers: corsHeadersFor(route), status: 204 });
+        return;
+      }
     }
     if (request.method() !== "GET" && pathName !== "/auth/refresh") {
       options.unexpectedMutations?.push(`${request.method()} ${pathName}`);
