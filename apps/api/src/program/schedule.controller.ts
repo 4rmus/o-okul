@@ -4,7 +4,6 @@ import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
-import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import {
   scheduleLessonCreateBodySchema,
@@ -20,13 +19,13 @@ export class ScheduleController {
   constructor(private readonly schedule: ScheduleService) {}
 
   @Get()
-  @Roles("TEACHER")
+  @RequireCapability("academic:read")
   async list(@Query() query: ListQuery): Promise<ScheduleLessonRecord[]> {
     return applyListQuery(await this.schedule.list(getRequestContext()), query, scheduleLessonListFields);
   }
 
   @Get(":id")
-  @Roles("TEACHER")
+  @RequireCapability("academic:read")
   findOne(@Param("id") id: string): Promise<ScheduleLessonRecord> {
     return this.schedule.findOne(getRequestContext(), id);
   }

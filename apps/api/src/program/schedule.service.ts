@@ -23,7 +23,18 @@ export class ScheduleService {
   ) {}
 
   async list(context: RequestContext): Promise<ScheduleLessonRecord[]> {
-    return this.filterReadableLessons(context, filterTenantResources(context, await this.store.list()).filter((lesson) => !lesson.deletedAt));
+    const lessons = this.filterReadableLessons(
+      context,
+      filterTenantResources(context, await this.store.list()).filter((lesson) => !lesson.deletedAt),
+    );
+    if (context.roles.includes("OPERATIONS_STAFF") && !context.campusScope) {
+      throw new ForbiddenException("SCHEDULE_CAMPUS_SCOPE_MISSING");
+    }
+    if (context.campusScope?.scopeMode !== "CAMPUSES") return lessons;
+
+    const classes = await this.school.listClasses(context);
+    const classIds = new Set(classes.map((schoolClass) => schoolClass.id));
+    return lessons.filter((lesson) => classIds.has(lesson.classId));
   }
 
   async listCurrentTeacherLessons(context: RequestContext): Promise<ScheduleLessonRecord[]> {
@@ -44,6 +55,7 @@ export class ScheduleService {
     }
 
     this.assertReadAccess(context, lesson);
+    await this.school.findClass(context, lesson.classId);
     return lesson;
   }
 
@@ -205,7 +217,8 @@ export class ScheduleService {
   ): Promise<void> {
     const startTime = Date.parse(startsAt);
     const endTime = Date.parse(endsAt);
-    const conflictingLesson = (await this.list(context)).find(
+    const tenantLessons = filterTenantResources(context, await this.store.list()).filter((lesson) => !lesson.deletedAt);
+    const conflictingLesson = tenantLessons.find(
       (lesson) =>
         lesson.id !== excludedLessonId &&
         lesson.teacherId === teacherId &&
