@@ -1,7 +1,21 @@
 # O-Okul Durum
 
-Son güncelleme: 2026-08-24
-İnceleme snapshotı: Gate D runtime commit'i `bb2779bc1087a150b648407385e3cee1d0122692`;
+Son güncelleme: 2026-09-02
+
+Güncel GitHub `main` snapshotı `937b32c6bd510183d9e5fccfbbe29be1e0acb697`dir. CI
+`33509083048` ve Staging Deploy `33510589276` `PASS`; deployment-cutover artifact'i web, API,
+worker ve queue-board için aynı SHA image etiketini doğrular. 2 Eylül public kontrolünde production
+`/health` ve `/health/ready` `200`, staging karşılıkları `418` döndürdü. Bu nedenle exact-SHA
+`STAGING_DEPLOY` kanıtlıdır; güncel public staging runtime, production image parity, pilot ve go-live
+`UNPROVEN` kalır.
+
+Çalışma alanındaki öğrenci seviye dilimi, sınıfı boşaltırken Student/açık enrollment tutarlılığını ve
+toplu yenilemede ara hata sonrası öğrenci-bazlı tekrar güvenli devamı düzeltir. Öğrenci/idempotency
+hedefli testleri, okul e2e, API typecheck, idempotency envanteri ve `git diff --check` yerelde `PASS`tir.
+Bu belge değişiklikleri `LOCAL_TEST` düzeyinde kaydeder; branch/PR CI, main, staging ve production
+kanıtları yalnız ilgili exact-SHA kapıları tamamlandıkça ayrıca yükseltilir.
+
+24 Ağustos tarihsel inceleme snapshotı: Gate D runtime commit'i `bb2779bc1087a150b648407385e3cee1d0122692`;
 Gate E WAL exact-SHA staging commit'i `b2b91d9ec160d43d119937336782127e7e77325d`.
 Kanıt düzeyi: Gate A, Gate B ve Gate C `LOCAL_STATIC`; Gate D `GITHUB_CI`, `STAGING_DEPLOY`,
 `STAGING_DB_RUNTIME`, `STAGING_API_RUNTIME`, `STAGING_LIVE_UI` ve `STAGING_PROVIDER_DELIVERY`
@@ -232,11 +246,13 @@ Korunan aktif sözleşmeler:
 
 Güncel sıralama `docs/account-management-architecture-plan.md` bölüm 6 içindedir:
 
-1. P0: kalan 25 controller/151 `@Roles` envanterini route ailesi bazında exact capability + persona +
+1. Mevcut öğrenci tutarlılığı/tekrar güvenliği dilimini main ve staging exact-SHA kanıtına bağlama.
+2. P0: kalan 22 controller/146 `@Roles` envanterini route ailesi bazında exact capability + persona +
    scope modeline kesme; ayrı platform auth realm ve süreli/MFA'lı breakglass akışını kurma.
-2. P1: StudentContact, guardian emekliliği, offboarding/import/cursor ve outbox grant revoke dilimleri.
-3. Canlı SHA için CI parity; uygulamanın ürettiği davet/reset e-postası için gerçek provider/inbox ve MFA;
-   rol bazlı UAT; pull edilebilir image rollback/restore; izleme, pilot ve go-live.
+3. P1: StudentContact, guardian emekliliği, offboarding/import/cursor ve outbox grant revoke dilimleri.
+4. Gate E için gerçek provider/inbox ve MFA; aynı-snapshot rapor, rol bazlı UAT, pull edilebilir image
+   rollback/restore ve izleme kanıtlarını kapatma.
+5. Gate E kapandıktan sonra en az 14 günlük Gate F pilotu ve go-live karar paketi.
 
 Guardian fiziksel silme, grant revoke, production deploy veya go-live; ilgili teknik güvenlik kapıları
 ve gerçek ortam kanıtı olmadan yapılamaz. Workspace mailbox/alias testi tamamlanmıştır; exact-SHA

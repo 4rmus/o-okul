@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
+import { IdempotencyService, InMemoryIdempotencyStore } from "../http/idempotency.js";
 import { InMemoryGuardianStudentStore } from "../school/guardian-student-store.js";
 import { InMemoryGuardianStore } from "../school/guardian-store.js";
 import { InMemoryClassStore } from "../school/class-store.js";
@@ -339,6 +340,87 @@ describe("StudentService", () => {
     ]));
   });
 
+  it("sınıfı boşaltırken güncelleme ve yenilemede öğrenci ile açık enrollmentı birlikte sınıfsız yapar", async () => {
+    const updateSetup = createService();
+    const updated = await updateSetup.service.update(adminContext, "student-a", { classId: "" });
+    const updatedEnrollments = await updateSetup.enrollmentStore.listByStudent("student-a");
+
+    expect(updated.classId).toBeUndefined();
+    expect(updatedEnrollments.find((enrollment) => !enrollment.endsAt)).toMatchObject({
+      gradeLevelId: "grade-8",
+      classId: undefined,
+      reason: "CLASS_CHANGED",
+    });
+
+    const renewalSetup = createService();
+    const renewed = await renewalSetup.service.renewEnrollment(adminContext, "student-a", {
+      gradeLevelId: "grade-8",
+      classId: "",
+      startsAt: "2026-06-02",
+    });
+
+    expect(renewed.classId).toBeUndefined();
+    expect((await renewalSetup.studentStore.findById("student-a"))?.classId).toBeUndefined();
+  });
+
+  it("toplu yenilemeyi ara hata sonrası aynı idempotency anahtarıyla kaldığı yerden sürdürür", async () => {
+    const setup = createService({ idempotency: new IdempotencyService(new InMemoryIdempotencyStore()) });
+    const gradeLevel9 = await setup.gradeLevelStore.create({ tenantId: "tenant-a", name: "9. Sınıf", code: "9" });
+    const gradeLevel10 = await setup.gradeLevelStore.create({ tenantId: "tenant-a", name: "10. Sınıf", code: "10" });
+    const class9 = await setup.classStore.create({
+      tenantId: "tenant-a",
+      name: "9-A",
+      campusId: "campus-main",
+      gradeLevelId: gradeLevel9.id,
+      section: "A",
+    });
+    await setup.classStore.create({
+      tenantId: "tenant-a",
+      name: "10-A",
+      campusId: "campus-main",
+      gradeLevelId: gradeLevel10.id,
+      section: "A",
+    });
+    const secondStudent = await setup.service.create(adminContext, {
+      firstName: "İkinci",
+      lastName: "Öğrenci",
+      gradeLevelId: "grade-8",
+      classId: "class-a",
+    });
+    const updateStudent = setup.studentStore.update.bind(setup.studentStore);
+    let failSecondStudentOnce = true;
+    setup.studentStore.update = async (id, input) => {
+      if (id === secondStudent.id && failSecondStudentOnce) {
+        failSecondStudentOnce = false;
+        throw new Error("SECOND_STUDENT_UPDATE_FAILED");
+      }
+      return updateStudent(id, input);
+    };
+    const input = {
+      studentIds: ["student-a", secondStudent.id],
+      useAutomaticClassMapping: true,
+      startsAt: "2026-06-03",
+    };
+
+    await expect(setup.service.bulkRenewEnrollments(adminContext, input, "bulk-retry-test"))
+      .rejects.toThrow("SECOND_STUDENT_UPDATE_FAILED");
+    await expect(setup.service.bulkRenewEnrollments(adminContext, input, "bulk-retry-test"))
+      .resolves.toMatchObject({ updatedCount: 2 });
+
+    const firstRenewals = (await setup.enrollmentStore.listByStudent("student-a"))
+      .filter((enrollment) => enrollment.reason === "RENEWED" && enrollment.startsAt === input.startsAt);
+    const secondRenewals = (await setup.enrollmentStore.listByStudent(secondStudent.id))
+      .filter((enrollment) => enrollment.reason === "RENEWED" && enrollment.startsAt === input.startsAt);
+    const renewalAudits = setup.auditRecords.filter((record) =>
+      (record as { action?: string }).action === "student.enrollment_renewed");
+
+    expect(firstRenewals).toHaveLength(1);
+    expect(secondRenewals).toHaveLength(1);
+    expect(renewalAudits).toHaveLength(2);
+    expect((await setup.studentStore.findById("student-a"))?.classId).toBe(class9.id);
+    expect((await setup.studentStore.findById(secondStudent.id))?.classId).toBe(class9.id);
+  });
+
   it("sınıfsız seviyeli öğrenci açık enrollment oluşturarak aktif lisans kotasını tüketir", async () => {
     const setup = createService({ activeStudentLimit: 2 });
     const student = await setup.service.create(adminContext, {
@@ -507,7 +589,11 @@ describe("StudentService", () => {
   });
 });
 
-function createService(options: { failReportSnapshotPurge?: boolean; activeStudentLimit?: number } = {}) {
+function createService(options: {
+  failReportSnapshotPurge?: boolean;
+  activeStudentLimit?: number;
+  idempotency?: IdempotencyService;
+} = {}) {
   const studentStore = new InMemoryStudentStore();
   const enrollmentStore = new InMemoryStudentEnrollmentStore();
   const classStore = new InMemoryClassStore();
@@ -591,7 +677,7 @@ function createService(options: { failReportSnapshotPurge?: boolean; activeStude
       identityInvitations as never,
       reportSnapshots as never,
       auditLogs as never,
-      undefined,
+      options.idempotency,
       identityProvisioning as never,
       licenseTerms,
       undefined,

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type {
   StudentBulkEnrollmentRequest,
@@ -718,7 +719,7 @@ export class StudentService {
       firstName: input.firstName,
       lastName: input.lastName,
       gradeLevelId: placementChangedByRequest || activated ? placement.gradeLevelId : undefined,
-      classId: input.classId !== undefined ? placement.classId : undefined,
+      classId: input.classId !== undefined ? placement.classId ?? "" : undefined,
       responsibleTeacherId: nextResponsibleTeacherId,
       status: nextStatus,
     };
@@ -833,9 +834,9 @@ export class StudentService {
       },
     };
     const atomicResult = this.store.updateWithEnrollmentTransition
-      ? await this.store.updateWithEnrollmentTransition(id, { gradeLevelId: placement.gradeLevelId, classId: placement.classId, status: "ACTIVE" }, transition)
+      ? await this.store.updateWithEnrollmentTransition(id, { gradeLevelId: placement.gradeLevelId, classId: placement.classId ?? "", status: "ACTIVE" }, transition)
       : undefined;
-    const updated = atomicResult?.student ?? await this.store.update(id, { gradeLevelId: placement.gradeLevelId, classId: placement.classId, status: "ACTIVE" });
+    const updated = atomicResult?.student ?? await this.store.update(id, { gradeLevelId: placement.gradeLevelId, classId: placement.classId ?? "", status: "ACTIVE" });
     if (!updated) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
@@ -867,14 +868,18 @@ export class StudentService {
       return this.idempotency.run(
         context,
         { key: idempotencyKey, operation: "student.enrollment.bulk-renew", request: input },
-        () => this.bulkRenewEnrollmentBatch(context, input),
+        () => this.bulkRenewEnrollmentBatch(context, input, idempotencyKey),
       );
     }
 
     return this.bulkRenewEnrollmentBatch(context, input);
   }
 
-  private async bulkRenewEnrollmentBatch(context: RequestContext, input: StudentBulkEnrollmentInput): Promise<StudentBulkEnrollmentResult> {
+  private async bulkRenewEnrollmentBatch(
+    context: RequestContext,
+    input: StudentBulkEnrollmentInput,
+    idempotencyKey?: string,
+  ): Promise<StudentBulkEnrollmentResult> {
     const studentIds = [...new Set(input.studentIds ?? [])].filter(Boolean);
     if (studentIds.length === 0) {
       throw new BadRequestException("STUDENT_BULK_ENROLLMENT_STUDENTS_REQUIRED");
@@ -897,13 +902,29 @@ export class StudentService {
 
     const enrollments: StudentEnrollmentRecord[] = [];
     for (const { student, placement } of renewals) {
-      enrollments.push(await this.renewEnrollment(context, student.id, {
+      // ponytail: per-student keys make retries resumable; use one DB transaction only if batches must become all-or-nothing.
+      const itemIdempotencyKey = idempotencyKey
+        ? `bulk-renew.${createHash("sha256").update(idempotencyKey.trim()).update("\0").update(student.id).digest("hex")}`
+        : undefined;
+      const renewalInput = {
         academicYearId: input.academicYearId,
         termId: input.termId,
         gradeLevelId: placement.gradeLevelId,
         classId: placement.classId,
         startsAt: input.startsAt,
-      }));
+      };
+      const renew = () => this.renewEnrollmentOnce(context, student.id, renewalInput);
+      enrollments.push(itemIdempotencyKey && this.idempotency
+        ? await this.idempotency.run(
+            context,
+            {
+              key: itemIdempotencyKey,
+              operation: "student.enrollment.bulk-renew",
+              request: { studentId: student.id, batch: input },
+            },
+            renew,
+          )
+        : await renew());
     }
     return {
       updatedCount: enrollments.length,
