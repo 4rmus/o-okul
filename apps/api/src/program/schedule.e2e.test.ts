@@ -2,7 +2,7 @@ import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
-import { testLoginBody } from "../test-auth.js";
+import { loginAs } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 
@@ -11,6 +11,7 @@ describe("Schedule API", () => {
   let server: Parameters<typeof request>[0];
   let tenantAAccessToken: string;
   let teacherAAccessToken: string;
+  let systemAccessToken: string;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -21,17 +22,9 @@ describe("Schedule API", () => {
     await app.init();
     server = app.getHttpServer() as Parameters<typeof request>[0];
 
-    const login = await request(server)
-      .post("/auth/login")
-      .send(testLoginBody("admin-a@example.test"))
-      .expect(200);
-    tenantAAccessToken = (login.body as { accessToken: string }).accessToken;
-
-    const teacherLogin = await request(server)
-      .post("/auth/login")
-      .send(testLoginBody("teacher-a@example.test"))
-      .expect(200);
-    teacherAAccessToken = (teacherLogin.body as { accessToken: string }).accessToken;
+    tenantAAccessToken = await loginAs(server, "admin-a@example.test");
+    teacherAAccessToken = await loginAs(server, "teacher-a@example.test");
+    systemAccessToken = await loginAs(server, "system@example.test");
   });
 
   afterAll(async () => {
@@ -386,6 +379,13 @@ describe("Schedule API", () => {
     await request(server)
       .delete("/schedule-lessons/lesson-a")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(403);
+  });
+
+  it("normal SYSTEM_ADMIN oturumunu tenant ders programından reddeder", async () => {
+    await request(server)
+      .get("/schedule-lessons")
+      .set("Authorization", `Bearer ${systemAccessToken}`)
       .expect(403);
   });
 });

@@ -1,4 +1,4 @@
-import { ForbiddenException } from "@nestjs/common";
+import { ForbiddenException, NotFoundException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
 import type { SchoolService } from "../school/school.service.js";
@@ -29,6 +29,24 @@ describe("ScheduleService", () => {
       expect.objectContaining({ id: "lesson-other" }),
     ]);
   });
+
+  it("kampüs kapsamlı operasyon çalışanına yalnız izinli kampüs programını gösterir", async () => {
+    const school = {
+      listClasses: async () => [{ id: "class-a" }],
+      findClass: async (_context: RequestContext, id: string) => {
+        if (id !== "class-a") throw new NotFoundException("CLASS_NOT_FOUND");
+        return { id: "class-a" };
+      },
+    } as unknown as SchoolService;
+    const service = new ScheduleService(school, {} as TeacherService, createScheduleStore());
+    const context = createCampusOperationsContext();
+
+    await expect(service.list(context)).resolves.toEqual([
+      expect.objectContaining({ id: "lesson-a", classId: "class-a" }),
+    ]);
+    await expect(service.findOne(context, "lesson-other")).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.list({ ...context, campusScope: undefined })).rejects.toBeInstanceOf(ForbiddenException);
+  });
 });
 
 function createScheduleStore(): ScheduleStore {
@@ -45,7 +63,7 @@ function createScheduleStore(): ScheduleStore {
     {
       id: "lesson-other",
       tenantId: "tenant-a",
-      classId: "class-a",
+      classId: "class-other",
       teacherId: "teacher-other",
       title: "Fen",
       startsAt: "2026-06-01T11:00:00.000Z",
@@ -84,6 +102,17 @@ function createTenantAdminContext(): RequestContext {
     userId: "admin-a",
     tenantId: "tenant-a",
     roles: ["TENANT_ADMIN"],
+    bypassRls: false,
+  };
+}
+
+function createCampusOperationsContext(): RequestContext {
+  return {
+    userId: "operations-a",
+    tenantId: "tenant-a",
+    roles: ["OPERATIONS_STAFF"],
+    activePersona: "STAFF",
+    campusScope: { scopeMode: "CAMPUSES", campusIds: ["campus-main"] },
     bypassRls: false,
   };
 }
