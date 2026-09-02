@@ -435,13 +435,19 @@ Staging kapanışı ayrıca canlı e-posta aktivasyon/reset teslimatı, gerçek 
 - E-posta sağlayıcısı bu planda seçilmiyor; mevcut provider adapter'ı kullanılır, gerçek sağlayıcı ve teslimat kanıtı olmadan go-live bloklanır.
 - Guardian verisinin test verisi olduğu teyidi migration öncesi teknik envanter ve yazılı veri sahibi onayıyla yeniden doğrulanır.
 - 90 günlük ticari saklama varsayılandır; kanuni saklama ve legal hold veri sınıfı bazında kurum/veri sorumlusu ve hukuk danışmanı tarafından ayrıca onaylanır.
-- Ponytail kullanılmayacaktır.
+- Yeni bağımlılık veya soyutlama eklenmeyecek; mevcut repo kalıpları en küçük güvenli dilimlerle genişletilecektir.
 
 ## 6. Güncel kalan iş ve kapanış planı
 
-Bu bölüm 5 Ağustos 2026 repo incelemesinin son halidir. Önceki PR ilerleme notlarını silmez;
+Bu bölüm 2 Eylül 2026 repo uzlaştırmasının son halidir. Önceki PR ilerleme notlarını silmez;
 kalan işi karar, repo uygulaması ve gerçek ortam kanıtı olarak ayırır. Yerel veya template `PASS`,
 exact-SHA staging, production, pilot ya da go-live kanıtı değildir.
+
+Güncel `main` `937b32c6bd510183d9e5fccfbbe29be1e0acb697`; exact CI `33509083048` ve Staging Deploy
+`33510589276` `PASS`tir. Öğrenci seviye kaydı main/staging'e ulaşmıştır. Sınıfı boşaltma tutarlılığı
+ve toplu yenileme ara hata sonrası tekrar güvenliği ise iki öğrenci dosyasında `LOCAL_TEST` olarak hazırdır.
+Branch/PR CI, main, staging ve production kanıtları yalnız ilgili exact-SHA kapıları tamamlandıkça
+ayrıca yükseltilir. Gate D kapalı, Gate E'nin kalan dış kanıtları açık ve Gate F başlatılmamıştır.
 
 ### P0 - Yeni cutover öncesi
 
@@ -473,7 +479,8 @@ exact-SHA staging, production, pilot ya da go-live kanıtı değildir.
      `pnpm db:rls:check`, `pnpm web:token-storage:check`, `pnpm admin-mfa:check`.
    - 9 Ağustos yerel sonucu: tenant audit route ailesi `tenant-audit:read`, aktif `STAFF`, tenant ve
      normal RLS bağlamına kesildi; normal `SYSTEM_ADMIN` ve persona/scope negatifleri `PASS`.
-     `roleRank` ile 25 controller dosyasındaki 151 `@Roles` annotation sonraki dilimlere kalır.
+     Güncel envanterde `roleRank` ile 22 controller dosyasındaki 146 `@Roles` annotation sonraki
+     route-family dilimlerine kalır.
 
 ### P1 - Ürün ve pilot kapanışı
 
@@ -508,9 +515,11 @@ exact-SHA staging, production, pilot ya da go-live kanıtı değildir.
 | MAN-06B | Uygulamanın gerçek notification provider üzerinden ürettiği davet/reset e-postasının test inbox teslim makbuzu; admin MFA enrollment/recovery kabulü. | Messaging + tenant sahibi | Onboarding/go-live |
 | MAN-07 | Canlı image SHA `3e460783b35436dbd33dbc534ce57e2139d40f3f`; domain-cutover rollback yedeği `/root/o-okul-cutover-backups/20260805T161400Z`. `.env.release` içindeki `6f9c9cb...` rollback image'ları sunucuda yok; pull edilebilir bilinen-iyi image hedefi, pilot kurum ve nihai go/no-go imzası açık. | Release captain + ürün sahibi | Production go-live |
 
-### En küçük güvenli ilk PR
+### En küçük güvenli sıradaki PR
 
-En küçük güvenli ilk PR, S-01 evidence sözleşmesidir: iSEM fixture sayımları ve UI-worker credential
-şekli producer/checker/template boyunca teklenir. Gate A'nın bağımlı ikinci PR'ı yalnız tenant audit route
-ailesini exact capability/persona/RLS sınırına keser. DB şeması, guardian runtime'ı, tam RBAC dönüşümü veya
-provider mutation bu iki dilime girmez; dış ortam doğrulamaları ayrı release kanıtıdır.
+Sıradaki PR yalnız mevcut öğrenci tutarlılığı dilimidir: sınıfı boşaltırken Student ve açık enrollment
+birlikte sınıfsız kalır; toplu yenileme ara hatadan sonra tamamlanan öğrenciyi tekrar işlemez. DB şeması,
+API şekli, UI, guardian runtime'ı, RBAC dönüşümü ve provider mutation bu dilime girmez. Hedefli öğrenci,
+idempotency ve okul e2e testleri ile API typecheck/diff kontrolü geçmeden yayınlanmaz. Sonraki ayrı PR,
+22 controller/146 `@Roles` envanterinden yalnız bir route ailesini exact capability/persona/scope
+sınırına keser.
