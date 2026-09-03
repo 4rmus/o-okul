@@ -384,6 +384,7 @@ const lgsScoreSectionAliases: Record<string, AnswerKeyScoreSection> = {
   MATEMATIK: "LGS_MATEMATIK",
   FEN: "LGS_FEN",
   "FEN BILIMLERI": "LGS_FEN",
+  "T C INKILAP": "LGS_INKILAP",
   "INKILAP TARIHI": "LGS_INKILAP",
   "T C INKILAP TARIHI VE ATATURKCULUK": "LGS_INKILAP",
   "DIN KULTURU": "LGS_DIN",
