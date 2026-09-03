@@ -837,6 +837,7 @@ test.describe("DataTable mobil sözleşmesi", () => {
       examType: "LGS",
       examYear: 2026,
       scoringProfileId: "TR-LGS-2026-NOSD-V1",
+      answerKey: { scoringConfig: { wrongPenalty: 1 / 3 } },
     });
 
     await expectNoVisibleTextValues(page, "exams-mobile", [

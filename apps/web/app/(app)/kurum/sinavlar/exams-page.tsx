@@ -65,6 +65,7 @@ type CreateExamPayload = ExamWithClassFormPayload & {
   answerKey: {
     version: string;
     fileBase64: string;
+    scoringConfig?: { wrongPenalty: number };
   };
 };
 
@@ -424,6 +425,7 @@ export function ExamsPage() {
             answerKey: {
               version: createAnswerKeyVersion(parsedForm.data.title),
               fileBase64: answerKeyFileBase64,
+              ...(parsedForm.data.examType === "LGS" ? { scoringConfig: { wrongPenalty: 1 / 3 } } : {}),
             },
           });
       queryClient.setQueryData<ExamRecord[]>(queryKey, (current) => [
