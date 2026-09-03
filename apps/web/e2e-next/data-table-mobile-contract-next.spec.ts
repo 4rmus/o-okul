@@ -760,6 +760,18 @@ test.describe("DataTable mobil sözleşmesi", () => {
 
   test("sınav yönetimi seçili sınav katılımcılarını izole tutar", async ({ page }) => {
     await openWithDataTableMocks(page, "/kurum/sinavlar");
+    await page.route("**/api/v1/exams", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      await fulfillData(route, {
+        ...createExamManagementExams()[0],
+        id: "exam-created",
+        status: "DRAFT",
+        title: "Yeni LGS",
+      });
+    });
 
     const examTable = page.getByRole("table", { name: "Sınav yönetimi" });
     const examSummary = page.getByRole("region", { exact: true, name: "Sınav operasyon özeti" });
@@ -806,7 +818,26 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(examDialog.locator(".next-checkbox-list .uh-checkbox")).toHaveCount(2);
     await expect(examDialog.getByRole("checkbox", { name: /8-A/ })).toBeVisible();
     await expectNoUnlabeledControls(page, "exam-form-mobile");
-    await examDialog.getByRole("button", { name: "Vazgeç" }).click();
+    await examDialog.getByLabel(/^Sınav adı/).fill("Yeni LGS");
+    await examDialog.getByLabel(/^Başlangıç/).fill("2026-09-15T10:00");
+    await examDialog.getByLabel("Sınav türü").selectOption("LGS");
+    await examDialog.getByLabel("Seviye").selectOption("grade-8");
+    await examDialog.getByRole("checkbox", { name: /8-A/ }).check();
+    await examDialog.getByLabel("Cevap anahtarı dosyası").setInputFiles({
+      name: "yeni-lgs.xlsx",
+      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      buffer: Buffer.from("answer-key"),
+    });
+    const examCreateRequestPromise = page.waitForRequest(
+      (request) => request.method() === "POST" && new URL(request.url()).pathname === "/api/v1/exams",
+    );
+    await examDialog.getByRole("button", { name: "Ekle" }).click();
+    const examCreateRequest = await examCreateRequestPromise;
+    expect(examCreateRequest.postDataJSON()).toMatchObject({
+      examType: "LGS",
+      examYear: 2026,
+      scoringProfileId: "TR-LGS-2026-NOSD-V1",
+    });
 
     await expectNoVisibleTextValues(page, "exams-mobile", [
       "student-a",
