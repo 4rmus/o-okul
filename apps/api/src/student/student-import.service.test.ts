@@ -44,7 +44,24 @@ describe("StudentImportService Gate D", () => {
       expect.objectContaining({ phone: "5551234567", firstName: "TELEFON" }),
       expect.objectContaining({ guardian: expect.objectContaining({ nationalId: "10000001372" }) }),
       expect.objectContaining({ guardian: expect.objectContaining({ phone: "5557654321" }) }),
-    ]);
+    ], { provisionAccounts: false });
+  });
+
+  it("toplu importta öğrenci ve veli portal hesabını varsayılan kapalı tutar", async () => {
+    const { service, students } = createService({ registryV2: true });
+    const fileBase64 = csv([
+      "ad;soyad;seviye;tc;telefon;veli_ad;veli_soyad;veli_tc;veli_telefon",
+      "Ada;Kaya;8. Sınıf;10000000146;05551234567;Fatma;Kaya;10000001372;05557654321",
+    ].join("\n"));
+
+    const preview = await service.dryRun(context, { fileBase64 });
+    expect(preview).toMatchObject({ totalRows: 1, errors: [], wouldImport: true });
+    expect(preview.validRows[0]).not.toHaveProperty("accountPreview");
+
+    await service.import(context, { fileBase64 }, "accounts-default-off-a");
+    expect(students.createMany).toHaveBeenCalledWith(context, [
+      expect.objectContaining({ guardian: expect.objectContaining({ firstName: "FATMA" }) }),
+    ], { provisionAccounts: false });
   });
 
   it("veli adı olup TC veya telefonu olmayan satırı commit öncesinde reddeder", async () => {
@@ -108,7 +125,7 @@ describe("StudentImportService Gate D", () => {
         canReceiveAnnouncements: false,
         canReceiveFinance: false,
       }),
-    })]);
+    })], { provisionAccounts: false });
   });
 
   it("dry-run sınıf ve okul no kontrolünü kampüs kapsamı ile tenant benzersizliğinde yapar", async () => {
@@ -138,7 +155,11 @@ describe("StudentImportService Gate D", () => {
       wouldImport: true,
     });
     await service.import(context, { fileBase64 }, "custom-class-name-import");
-    expect(students.createMany).toHaveBeenCalledWith(context, [expect.objectContaining({ gradeLevelId: "grade-8", classId: "class-custom" })]);
+    expect(students.createMany).toHaveBeenCalledWith(
+      context,
+      [expect.objectContaining({ gradeLevelId: "grade-8", classId: "class-custom" })],
+      { provisionAccounts: false },
+    );
   });
 
   it("seviye ile sınıf uyuşmadığında satırı reddeder", async () => {

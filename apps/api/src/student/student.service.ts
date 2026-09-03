@@ -118,6 +118,10 @@ export type StudentBulkCreateInput = Pick<StudentRecord, "firstName" | "lastName
     contact?: StudentContactCreateRequest;
   };
 
+interface StudentBulkCreateOptions {
+  provisionAccounts?: boolean;
+}
+
 @Injectable()
 export class StudentService {
   private readonly testStudentQuota = Number.parseInt(process.env.STUDENT_QUOTA ?? "", 10) || undefined;
@@ -530,6 +534,7 @@ export class StudentService {
   async createMany(
     context: RequestContext,
     inputs: StudentBulkCreateInput[],
+    options: StudentBulkCreateOptions = {},
   ): Promise<StudentRecord[]> {
     if (inputs.some((input) => Boolean(input.guardian))) {
       await this.assertGuardianProvisioningAllowed(context);
@@ -640,15 +645,17 @@ export class StudentService {
       if (!profileUpdate) continue;
       await this.store.updateProfile(student.id, profileUpdate);
     }
-    for (const [index, student] of students.entries()) {
-      const input = inputs[index];
-      if (!input) continue;
-      await this.autoProvisionStudentAccount(context, student, input);
+    if (options.provisionAccounts !== false) {
+      for (const [index, student] of students.entries()) {
+        const input = inputs[index];
+        if (!input) continue;
+        await this.autoProvisionStudentAccount(context, student, input);
+      }
     }
     for (const [index, student] of students.entries()) {
       const guardian = inputs[index]?.guardian;
       if (!guardian) continue;
-      await this.autoProvisionGuardian(context, student, guardian);
+      await this.autoProvisionGuardian(context, student, guardian, options.provisionAccounts !== false);
     }
     return students;
   }
@@ -1285,6 +1292,7 @@ export class StudentService {
     context: RequestContext,
     student: StudentRecord,
     input: StudentGuardianProvisionInput,
+    provisionAccount = true,
   ): Promise<void> {
     const guardianInput = parseGuardianProvisionInput(input, student);
     const identity = this.resolveGuardianIdentity(guardianInput.nationalId);
@@ -1318,7 +1326,9 @@ export class StudentService {
       canOpenSupportTickets: guardianInput.canOpenSupportTickets,
     });
 
-    const { invitationId } = await this.provisionOrInviteGuardianAccount(context, guardian, guardianInput);
+    const { invitationId } = provisionAccount
+      ? await this.provisionOrInviteGuardianAccount(context, guardian, guardianInput)
+      : {};
 
     await this.auditLogs?.record({
       tenantId: student.tenantId,
