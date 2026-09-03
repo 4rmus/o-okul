@@ -172,7 +172,6 @@ function removalIssueFor(key: FeatureRolloutKey): string {
   const issueByKey: Record<FeatureRolloutKey, string> = {
     "web.exam-workspace-v2": "EX-02",
     "web.student-registry-v2": "ST-01",
-    "web.setup-v2": "SET-02",
     "web.teacher-portal-v2": "TP-02",
     "web.student-portal-v2": "SP-02",
     "web.control-plane-v2": "CP-02",

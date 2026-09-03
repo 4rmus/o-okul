@@ -598,6 +598,24 @@ Açık soru: Yok. Canlı migration preflight'i, staging rol bazlı UAT ve produc
 release kanıt kapılarıdır; bu karar bunları PASS yapmaz.
 Son kontrol: 2026-08-31
 
+### DEC-20260903-01 — Kurulum çekirdek hazırlığı beş adım ve ayrı sunucu sonucudur
+
+Durum: Onaylı; yerel uygulama ve hedefli sözleşme testleri kapsamındadır, deploy kanıtı değildir
+Karar: Kurulum sihirbazı beş veri giriş adımı kullanır; hazırlık kontrolü kayıt sonrası ayrı sonuç
+ekranıdır. Çekirdek `READY` için kurum, kampüs, aktif akademik yıl, aktif dönem, seviye, kampüs ve
+seviyeye bağlı sınıf ile seviyeye bağlı ders zorunludur. Öğretmen ve öğrenci kayıtları sonucu
+engellemez; sonraki isteğe bağlı işler olarak gösterilir. Yeni sınıflar açık kampüs seçimi ve gerçek
+seviye bağı olmadan oluşturulamaz; mevcut sınıfın yalnız eksik bağları tamamlanır, farklı bağ sessizce
+taşınmaz. `web.setup-v2` emekli edilir ve sunucu hazırlık sonucu tüm tenantlarda kanonik olur.
+Kaynak: Ürün sahibinin 3 Eylül 2026 tarihli kurulum tutarlılığı kararları.
+Kanıt: `apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx`,
+`apps/web/e2e-next/setup-wizard-contract-next.spec.ts`,
+`apps/api/src/setup/setup-readiness.service.test.ts`, `docs/product-journeys-v1.md`.
+Etkilenen ADR: ADR-0003, ADR-0004
+Açık soru: Runtime `FEATURE_ROLLOUTS_JSON` içinde emekli anahtar bulunmadığı deploy öncesi ayrıca
+doğrulanır; config değişikliği ve deploy ayrı açık onay gerektirir.
+Son kontrol: 2026-09-03
+
 ## Faz Öncesi Onay Gerektirenler
 
 | ID | Faz | Bloklar mı? | Soru | Beklenen kanıt |

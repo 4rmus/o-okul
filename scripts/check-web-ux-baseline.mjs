@@ -1074,7 +1074,6 @@ requireTokens("apps/web/e2e-next/setup-wizard-contract-next.spec.ts", [
   'sessionStorage.getItem("uh_onboarding_tenant-setup_draft")',
   "storedDraft.general.contactEmail",
   "storedDraft.people.kazanimImportFileName",
-  "storedDraft.people.importOwner",
   "storedDraft.people.teacherImportFileName",
   "storedDraft.people.studentImportFileName",
   'value: "12345678901"',
@@ -1775,10 +1774,8 @@ requireTokens("apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx", [
   "writeDraftToSession",
   "sanitizeDraftForStorage",
   'contactEmail: ""',
-  'importOwner: ""',
   'studentImportFileName: ""',
   'teacherImportFileName: ""',
-  "window.sessionStorage.removeItem(draftStorageKey)",
   'setupProgressQuery.data?.status === "READY"',
 ]);
 

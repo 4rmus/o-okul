@@ -665,7 +665,6 @@ Aktif flag seti (`web.ia-v2` ve `web.shell-v2` kanonik cutover sonrasında kald�
 
 - `web.exam-workspace-v2`
 - `web.student-registry-v2`
-- `web.setup-v2`
 - `web.teacher-portal-v2`
 - `web.student-portal-v2`
 - `web.control-plane-v2`
@@ -2869,7 +2868,7 @@ Shared tipler additive; domain adapterları flag arkasındadır.
 
 ### Rollout
 
-- `web.student-registry-v2`, `web.setup-v2` tenant allowlist.
+- `web.student-registry-v2` tenant allowlist; setup readiness tüm tenantlarda kanoniktir.
 - StudentContact önce yeni demo/pilot tenantlarda.
 - Legacy guardian data mutation kapatılmadan önce envanter.
 - Existing tenant için old registry fallback.

@@ -1028,7 +1028,8 @@ const setupReadinessReadModelSchema = objectSchema({
     },
     count: integerSchema({ minimum: 0 }),
     ready: { type: "boolean" },
-  }, ["key", "count", "ready"])),
+    required: { type: "boolean" },
+  }, ["key", "count", "ready", "required"])),
 }, ["status", "completedCount", "totalCount", "steps"]);
 
 const classRecordSchema = objectSchema({

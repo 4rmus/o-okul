@@ -18,13 +18,13 @@ const hostileUploadValues = [
 ] as const;
 
 test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
-  test("setup-v2 sunucu readiness sonucunu çerezden üstün tutar ve flag kapalıyken endpointi çağırmaz", async ({ page }) => {
+  test("sunucu readiness sonucunu eski çerezden üstün tutar ve beş form adımı gösterir", async ({ page }) => {
     const requestedPaths: string[] = [];
     await openSetupWizard(page, { height: 844, width: 390 }, {
       readiness: "incomplete",
+      legacyReadiness: true,
       requestedPaths,
       roles: ["TENANT_ADMIN"],
-      setupV2: true,
       spoofCompletedCookie: true,
     });
 
@@ -32,22 +32,26 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await expect(page.getByLabel("Sunucu kurulum durumu")).toContainText("Eksik");
     await expect(page.getByText("İlk giriş akışı")).toBeVisible();
     expect(requestedPaths).toContain("GET /setup/readiness");
+    await expect(page.getByRole("tablist", { name: "Adım ilerlemesi" }).locator(".uh-tab-button")).toHaveCount(5);
+  });
 
-    requestedPaths.length = 0;
+  test("öğretmen ve öğrenci eksikken çekirdek kurulumu hazır, kişileri sonraki adım gösterir", async ({ page }) => {
     await openSetupWizard(page, { height: 844, width: 390 }, {
-      requestedPaths,
+      readiness: "optional-missing",
       roles: ["TENANT_ADMIN"],
-      setupV2: false,
     });
-    await expect(page.getByLabel("Sunucu kurulum durumu")).toHaveCount(0);
-    expect(requestedPaths).not.toContain("GET /setup/readiness");
+    await page.goto(`${appOrigin}/kurum/kurulum/hazirlik`);
+
+    const readiness = page.getByLabel("Hazırlık kontrolü");
+    await expect(readiness).toContainText("Çekirdek kurulum tamamlandı.");
+    await expect(readiness.getByRole("listitem").filter({ hasText: "Öğretmen" })).toContainText("Sonraki adım");
+    await expect(readiness.getByRole("listitem").filter({ hasText: "Öğrenci" })).toContainText("Sonraki adım");
   });
 
   test("her kurulum adımı deep-link ve ileri geri navigasyonunu korur", async ({ page }) => {
     await openSetupWizard(page, { height: 844, width: 390 }, {
       readiness: "incomplete",
       roles: ["TENANT_ADMIN"],
-      setupV2: true,
     });
 
     const tabs = page.getByRole("tablist", { name: "Adım ilerlemesi" });
@@ -67,11 +71,11 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
 
     await expect(page.getByRole("heading", { level: 1, name: "Kurulum Sihirbazı" })).toBeVisible();
     const setupMetrics = page.getByRole("region", { name: "Kurulum operasyon metrikleri" });
-    await expect(setupMetrics).toContainText("İlerleme");
+    await expect(setupMetrics).toContainText("Form ilerlemesi");
     await expect(setupMetrics).toHaveClass(/uh-metric-grid/);
     await expect(setupMetrics.locator(".uh-metric-card")).toHaveCount(3);
     await expect(page.getByLabel("Adım ilerlemesi")).toBeVisible();
-    await expect(page.getByRole("tablist", { name: "Adım ilerlemesi" }).locator(".uh-tab-button")).toHaveCount(6);
+    await expect(page.getByRole("tablist", { name: "Adım ilerlemesi" }).locator(".uh-tab-button")).toHaveCount(5);
     await expect(page.getByLabel("Kurulum formu")).toBeVisible();
     await expect(page.getByLabel("Kurulum özeti")).toBeVisible();
 
@@ -129,6 +133,8 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await expect(studentUploadStatus).toContainText("Dosya en fazla 5 MB olabilir.");
     await expectDraftStorageDoesNotContain(page, "setup-upload-oversize-storage", hostileUploadValues);
 
+    await expect(setupForm.getByLabel("Öğretmen aktarım dosyası")).toHaveCount(0);
+    await setupForm.getByRole("group", { name: "Öğretmen veri girişi" }).getByRole("button", { name: "Excel aktarımı" }).click();
     await setupForm.getByLabel("Öğretmen aktarım dosyası").setInputFiles({
       buffer: Buffer.from("teacher"),
       mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -150,7 +156,6 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
       JSON.parse(window.sessionStorage.getItem("uh_onboarding_tenant-setup_draft") ?? "{}"),
     );
     expect(storedDraft.general.contactEmail).toBe("");
-    expect(storedDraft.people.importOwner).toBe("");
     expect(storedDraft.people.kazanimImportFileName).toBe("");
     expect(storedDraft.people.teacherImportFileName).toBe("");
     expect(storedDraft.people.studentImportFileName).toBe("");
@@ -196,17 +201,25 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
 
     await stepNavigation.getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
     await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
-    await setupForm.getByLabel("Veri sorumlusu").fill("Operasyon sorumlusu");
-    await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
-    await expect(setupForm).toContainText("2 sınıf, 3 ders");
+    await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
+    await expect(setupForm).toContainText("2 sınıf, 6 ders");
+    await expect(page).toHaveURL(/\/kurum\/kurulum\/hazirlik$/);
+    await expect(setupForm.getByRole("heading", { name: "Hazırlık Kontrolü" })).toBeVisible();
+    await expect(page.getByLabel("Adım ilerlemesi")).toHaveCount(0);
+    await expect(setupForm.getByRole("button", { name: "Kaydet ve kontrol et" })).toHaveCount(0);
+    await expect(setupForm).toContainText("Çekirdek kurulum tamamlandı.");
+    await setupForm.getByText("Kişi Yönetim Altyapısı kontrolleri").click();
+    await expect(setupForm.getByText("Öğretmen (isteğe bağlı)")).toBeVisible();
 
     expect(classCreateBodies).toEqual(expect.arrayContaining([
       {
+        campusId: "campus-setup",
         gradeLevelId: "grade-setup-lgs",
         name: "Bilim Atölyesi",
         section: "A",
       },
       {
+        campusId: "campus-setup",
         gradeLevelId: "grade-setup-lgs",
         name: "8-B",
         section: "B",
@@ -216,7 +229,263 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
       "grade-setup-lgs/course-LGS-TUR",
       "grade-setup-lgs/course-LGS-MAT",
       "grade-setup-lgs/course-LGS-FEN",
+      "grade-setup-lgs/course-LGS-INK",
+      "grade-setup-lgs/course-LGS-ING",
+      "grade-setup-lgs/course-LGS-DIN",
     ]);
+  });
+
+  test("tek kampüsü otomatik seçer, çok kampüste seçim ister ve kampüs yoksa kaydı durdurur", async ({ page }) => {
+    const setupForm = page.getByLabel("Kurulum formu");
+    await openSetupWizard(page, { height: 844, width: 390 }, {
+      campuses: [
+        { id: "campus-a", tenantId: "tenant-setup", name: "A Kampüsü" },
+        { id: "campus-b", tenantId: "tenant-setup", name: "B Kampüsü" },
+      ],
+      roles: ["TENANT_ADMIN"],
+    });
+    await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Sınıf ve Şubeler/ }).click();
+    await expect(setupForm.getByLabel("Sınıfların kampüsü")).toHaveValue("");
+    await setupForm.getByRole("button", { name: "İleri" }).click();
+    await expect(setupForm).toContainText("Sınıfların kampüsü seçilmelidir.");
+    await setupForm.getByLabel("Sınıfların kampüsü").selectOption("campus-b");
+    await setupForm.getByRole("button", { name: "İleri" }).click();
+    await expect(page).toHaveURL(/\/kurum\/kurulum\/dersler$/);
+
+    await openSetupWizard(page, { height: 844, width: 390 }, { campuses: [], roles: ["TENANT_ADMIN"] });
+    await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Sınıf ve Şubeler/ }).click();
+    await expect(setupForm.getByRole("link", { name: "Önce kampüs oluştur" })).toHaveAttribute("href", "/kurum/kampusler?new=1");
+    await setupForm.getByRole("button", { name: "İleri" }).click();
+    await expect(setupForm).toContainText("Sınıfları oluşturmadan önce bir kampüs eklenmelidir.");
+  });
+
+  test("seçili kampüs kayıt öncesinde silinmişse hiçbir mutation başlatmaz", async ({ page }) => {
+    const campuses = [{ id: "campus-setup", tenantId: "tenant-setup", name: "Merkez Kampüs" }];
+    const unexpectedMutations: string[] = [];
+    await openSetupWizard(page, { height: 844, width: 390 }, {
+      campuses,
+      roles: ["TENANT_ADMIN"],
+      unexpectedMutations,
+    });
+    const setupForm = page.getByLabel("Kurulum formu");
+    await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
+    await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
+    campuses.length = 0;
+    await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
+
+    await expect(setupForm).toContainText("Seçili kampüs artık kullanılamıyor.");
+    expect(unexpectedMutations).toEqual([]);
+  });
+
+  test("kısmi sunucu şablonunda eksik seviye ailesini fallback derslerle tamamlar", async ({ page }) => {
+    const classCreateBodies: Array<Record<string, unknown>> = [];
+    const gradeLevelCreateBodies: Array<Record<string, unknown>> = [];
+    const gradeLevelCourseLinks: string[] = [];
+    await openSetupWizard(page, { height: 844, width: 390 }, {
+      classCreateBodies,
+      gradeLevelCreateBodies,
+      gradeLevelCourseLinks,
+      roles: ["TENANT_ADMIN"],
+    });
+    const setupForm = page.getByLabel("Kurulum formu");
+    const steps = page.getByLabel("Adım ilerlemesi");
+    await steps.getByRole("tab", { name: /Sınıf ve Şubeler/ }).click();
+    const classCounts = setupForm.getByRole("group", { name: "Kademeye göre sınıf sayısı" });
+    await classCounts.getByLabel("8. sınıf / LGS").fill("0");
+    await classCounts.getByLabel("7. sınıf").fill("1");
+    await steps.getByRole("tab", { name: /Derslerin Oluşturulması/ }).click();
+    await expect(setupForm.getByRole("button", { name: /7-MAT/ })).toHaveAttribute("aria-pressed", "true");
+    await steps.getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
+    await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
+    await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
+    await expect(page).toHaveURL(/\/kurum\/kurulum\/hazirlik$/);
+
+    expect(gradeLevelCreateBodies).toContainEqual({ code: "7", name: "7. sınıf" });
+    expect(classCreateBodies).toContainEqual({
+      campusId: "campus-setup",
+      gradeLevelId: "grade-7",
+      name: "7-A",
+      section: "A",
+    });
+    expect(gradeLevelCourseLinks).toContain("grade-7/course-7-MAT");
+  });
+
+  test("aynı seviyedeki kısmi sunucu şablonunu eksik fallback derslerle tamamlar", async ({ page }) => {
+    const gradeLevelCourseLinks: string[] = [];
+    await openSetupWizard(page, { height: 844, width: 390 }, {
+      gradeLevelCourseLinks,
+      partialLgsTemplates: true,
+      roles: ["TENANT_ADMIN"],
+    });
+    const setupForm = page.getByLabel("Kurulum formu");
+    const steps = page.getByLabel("Adım ilerlemesi");
+    await steps.getByRole("tab", { name: /Derslerin Oluşturulması/ }).click();
+    await expect(setupForm.getByRole("button", { name: /LGS-MAT/ })).toHaveAttribute("aria-pressed", "true");
+    await steps.getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
+    await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
+    await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
+    await expect(setupForm).toContainText("2 sınıf, 6 ders");
+
+    expect(gradeLevelCourseLinks).toHaveLength(6);
+    expect(gradeLevelCourseLinks).toContain("grade-setup-lgs/course-LGS-MAT");
+  });
+
+  test("fresh 11 ve 12 sınıflarını kendi seviyelerine ve ortak üst seviye derslerine bağlar", async ({ page }) => {
+    const classCreateBodies: Array<Record<string, unknown>> = [];
+    const gradeLevelCreateBodies: Array<Record<string, unknown>> = [];
+    const gradeLevelCourseLinks: string[] = [];
+    await openSetupWizard(page, { height: 844, width: 390 }, {
+      classCreateBodies,
+      emptyCourseTemplates: true,
+      gradeLevelCreateBodies,
+      gradeLevelCourseLinks,
+      roles: ["TENANT_ADMIN"],
+    });
+    const setupForm = page.getByLabel("Kurulum formu");
+    const steps = page.getByLabel("Adım ilerlemesi");
+    await steps.getByRole("tab", { name: /Sınıf ve Şubeler/ }).click();
+    const classCounts = setupForm.getByRole("group", { name: "Kademeye göre sınıf sayısı" });
+    await classCounts.getByLabel("8. sınıf / LGS").fill("0");
+    await classCounts.getByLabel("11. sınıf").fill("1");
+    await classCounts.getByLabel("12. sınıf").fill("1");
+    await steps.getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
+    await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
+    await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
+    await expect(page).toHaveURL(/\/kurum\/kurulum\/hazirlik$/);
+
+    expect(gradeLevelCreateBodies.map((body) => body.code)).toEqual(["11", "12"]);
+    expect(classCreateBodies).toEqual(expect.arrayContaining([
+      { campusId: "campus-setup", gradeLevelId: "grade-11", name: "11-A", section: "A" },
+      { campusId: "campus-setup", gradeLevelId: "grade-12", name: "12-A", section: "A" },
+    ]));
+    expect(gradeLevelCourseLinks).toContain("grade-11/course-AYT-TMAT");
+    expect(gradeLevelCourseLinks).toContain("grade-12/course-AYT-TMAT");
+  });
+
+  test("gerçek 11 ve 12 sunucu şablonlarını karşı seviyeye yaymaz", async ({ page }) => {
+    const gradeLevelCourseLinks: string[] = [];
+    await openSetupWizard(page, { height: 844, width: 390 }, {
+      gradeLevelCourseLinks,
+      roles: ["TENANT_ADMIN"],
+      upperServerTemplates: true,
+    });
+    const setupForm = page.getByLabel("Kurulum formu");
+    const steps = page.getByLabel("Adım ilerlemesi");
+    await steps.getByRole("tab", { name: /Sınıf ve Şubeler/ }).click();
+    const classCounts = setupForm.getByRole("group", { name: "Kademeye göre sınıf sayısı" });
+    await classCounts.getByLabel("8. sınıf / LGS").fill("0");
+    await classCounts.getByLabel("11. sınıf").fill("1");
+    await classCounts.getByLabel("12. sınıf").fill("1");
+    await steps.getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
+    await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
+    await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
+    await expect(page).toHaveURL(/\/kurum\/kurulum\/hazirlik$/);
+
+    expect(gradeLevelCourseLinks).toContain("grade-setup-11/course-11-MAT");
+    expect(gradeLevelCourseLinks).toContain("grade-setup-12/course-12-MAT");
+    expect(gradeLevelCourseLinks).not.toContain("grade-setup-12/course-11-MAT");
+    expect(gradeLevelCourseLinks).not.toContain("grade-setup-11/course-12-MAT");
+  });
+
+  test("mevcut sınıfın eksik bağlarını tamamlar, farklı kampüse bağlı sınıfı taşımaz", async ({ page }) => {
+    const classPatchBodies: Array<Record<string, unknown>> = [];
+    await openSetupWizard(page, { height: 844, width: 390 }, {
+      classPatchBodies,
+      existingClasses: [{ id: "class-existing", tenantId: "tenant-setup", name: "8-A", section: "A" }],
+      roles: ["TENANT_ADMIN"],
+    });
+    const setupForm = page.getByLabel("Kurulum formu");
+    await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
+    await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
+    await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
+    await expect(page).toHaveURL(/\/kurum\/kurulum\/hazirlik$/);
+    expect(classPatchBodies).toContainEqual({ campusId: "campus-setup", gradeLevelId: "grade-setup-lgs" });
+    await expect(setupForm).toContainText("1 sınıf bağlantısı tamamlandı.");
+
+    const unexpectedMutations: string[] = [];
+    await openSetupWizard(page, { height: 844, width: 390 }, {
+      existingClasses: [{
+        id: "class-conflict",
+        tenantId: "tenant-setup",
+        name: "8-A",
+        campusId: "campus-other",
+        gradeLevelId: "grade-setup-lgs",
+      }],
+      roles: ["TENANT_ADMIN"],
+      unexpectedMutations,
+    });
+    await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
+    await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
+    await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
+    await expect(setupForm).toContainText("8-A sınıfı farklı bir kampüse bağlı. Bu kayıt otomatik taşınmadı.");
+    expect(unexpectedMutations).toEqual([]);
+  });
+
+  test("aynı adlı pasif akademik yıl ve dönemi tarihlerini değiştirmeden etkinleştirir", async ({ page }) => {
+    const academicTermPatchBodies: Array<Record<string, unknown>> = [];
+    const academicYearPatchBodies: Array<Record<string, unknown>> = [];
+    await openSetupWizard(page, { height: 844, width: 390 }, {
+      academicTermPatchBodies,
+      academicYearPatchBodies,
+      existingAcademicTerms: [{
+        id: "academic-term-existing",
+        tenantId: "tenant-setup",
+        academicYearId: "academic-year-existing",
+        name: "1. Dönem",
+        startsAt: "2026-09-01",
+        endsAt: "2027-01-16",
+        isActive: false,
+      }],
+      existingAcademicYears: [{
+        id: "academic-year-existing",
+        tenantId: "tenant-setup",
+        name: "2026-2027",
+        startsAt: "2026-09-01",
+        endsAt: "2027-06-19",
+        isActive: false,
+      }],
+      roles: ["TENANT_ADMIN"],
+    });
+    const setupForm = page.getByLabel("Kurulum formu");
+    await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
+    await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
+    await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
+    await expect(page).toHaveURL(/\/kurum\/kurulum\/hazirlik$/);
+
+    expect(academicYearPatchBodies).toEqual([{ isActive: true }]);
+    expect(academicTermPatchBodies).toEqual([{ isActive: true }]);
+  });
+
+  test("tenant-geneli readiness yetkisi yoksa hiçbir kurulum kaydı başlatmaz", async ({ page }) => {
+    const unexpectedMutations: string[] = [];
+    await openSetupWizard(page, { height: 844, width: 390 }, {
+      readinessForbidden: true,
+      roles: ["ASSISTANT_ADMIN"],
+      unexpectedMutations,
+    });
+    const setupForm = page.getByLabel("Kurulum formu");
+    await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
+    await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
+    await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
+
+    await expect(setupForm).toContainText("Kurulum yalnız kurum genelinde yetkili bir hesapla tamamlanabilir.");
+    expect(unexpectedMutations).toEqual([]);
+  });
+
+  test("bozuk readiness yanıtında hiçbir kurulum kaydı başlatmaz", async ({ page }) => {
+    const unexpectedMutations: string[] = [];
+    await openSetupWizard(page, { height: 844, width: 390 }, {
+      malformedReadiness: true,
+      roles: ["TENANT_ADMIN"],
+      unexpectedMutations,
+    });
+    const setupForm = page.getByLabel("Kurulum formu");
+    await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
+    await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
+    await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
+
+    await expect(setupForm).toContainText("Sunucu kurulum durumu doğrulanamadı. Kayıt başlatılmadı");
+    expect(unexpectedMutations).toEqual([]);
   });
 
   test("tablette taşma üretmez ve assistant rolünde kurulum yüzeyini açar", async ({ page }) => {
@@ -232,8 +501,10 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Kurulum Sihirbazı" })).toBeVisible();
     await expect(page.getByLabel("Kurulum formu")).toBeVisible();
     await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
-    await expect(page.getByLabel("Öğretmen aktarım dosyası")).toBeVisible();
+    await expect(page.getByLabel("Öğretmen aktarım dosyası")).toHaveCount(0);
     await expect(page.getByLabel("Öğrenci aktarım dosyası")).toBeVisible();
+    await page.getByRole("group", { name: "Öğretmen veri girişi" }).getByRole("button", { name: "Excel aktarımı" }).click();
+    await expect(page.getByLabel("Öğretmen aktarım dosyası")).toBeVisible();
     await expect(page.getByLabel("Kazanım aktarım dosyası (opsiyonel)")).toBeVisible();
     await expect(page.getByLabel("Veli aktarım dosyası")).toHaveCount(0);
     await page.getByRole("button", { name: "Komut paleti" }).click();
@@ -289,14 +560,18 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
   });
 
   test("öğretmen Excel dosyasını zorunlu tutar ve import sonucunu özetler", async ({ page }) => {
-    await openSetupWizard(page, { height: 844, width: 390 }, { roles: ["TENANT_ADMIN"] });
+    const teacherImportIdempotencyKeys: string[] = [];
+    await openSetupWizard(page, { height: 844, width: 390 }, {
+      roles: ["TENANT_ADMIN"],
+      teacherImportFailures: 1,
+      teacherImportIdempotencyKeys,
+    });
 
     const setupForm = page.getByLabel("Kurulum formu");
     await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
     await setupForm.getByRole("group", { name: "Öğretmen veri girişi" }).getByRole("button", { name: "Excel aktarımı" }).click();
     await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
-    await setupForm.getByLabel("Veri sorumlusu").fill("Operasyon sorumlusu");
-    await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
+    await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
     await expect(setupForm).toContainText("Öğretmen aktarım dosyası zorunludur.");
 
     await setupForm.getByLabel("Öğretmen aktarım dosyası").setInputFiles({
@@ -304,16 +579,23 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
       mimeType: "text/csv",
       name: "ogretmen-zeynep-5551112233.csv",
     });
-    await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
+    await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
+    await expect(setupForm).toContainText("Sunucudan kesin sonuç alınamadı.");
+    await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
 
-    await expect(setupForm).toContainText("2 sınıf, 3 ders, 1 öğretmen, 0 öğretmen ataması");
+    await expect(setupForm).toContainText("2 sınıf, 6 ders, 1 öğretmen, 0 öğretmen ataması");
+    expect(teacherImportIdempotencyKeys).toHaveLength(2);
+    expect(teacherImportIdempotencyKeys[0]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(teacherImportIdempotencyKeys[1]).toBe(teacherImportIdempotencyKeys[0]);
     await expectNoVisibleTextValues(page, "setup-teacher-import-summary", hostileUploadValues);
     await expectDraftStorageDoesNotContain(page, "setup-teacher-import-storage", hostileUploadValues);
   });
 
   test("öğrenci Excel dosyasını zorunlu tutar ve veli bağlantı mesajını özetler", async ({ page }) => {
+    const requestedPaths: string[] = [];
     const studentImportIdempotencyKeys: string[] = [];
     await openSetupWizard(page, { height: 844, width: 390 }, {
+      requestedPaths,
       roles: ["TENANT_ADMIN"],
       studentImportFailures: 1,
       studentImportIdempotencyKeys,
@@ -323,8 +605,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
     await setupForm.getByRole("group", { name: "Öğretmen veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
     await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Excel aktarımı" }).click();
-    await setupForm.getByLabel("Veri sorumlusu").fill("Operasyon sorumlusu");
-    await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
+    await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
     await expect(setupForm).toContainText("Öğrenci aktarım dosyası zorunludur.");
 
     await setupForm.getByLabel("Öğrenci aktarım dosyası").setInputFiles({
@@ -332,12 +613,15 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
       mimeType: "text/csv",
       name: "ogrenci-ada-veli-5550000101.csv",
     });
-    await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
-    await expect(setupForm).toContainText("API_REQUEST_FAILED");
-    await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
+    await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
+    await expect(setupForm).toContainText("Sunucudan kesin sonuç alınamadı.");
+    const coreCreatesAfterFailure = coreSetupCreateRequests(requestedPaths);
+    await installPersistedCoreSetupReads(page);
+    await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
 
-    await expect(setupForm).toContainText("2 sınıf, 3 ders, 0 öğretmen, 0 öğretmen ataması");
+    await expect(setupForm).toContainText("0 sınıf, 0 ders, 0 öğretmen, 0 öğretmen ataması");
     await expect(setupForm).toContainText("1 öğrenci ve dosyadaki veli bağlantıları işlendi");
+    expect(coreSetupCreateRequests(requestedPaths)).toEqual(coreCreatesAfterFailure);
     expect(studentImportIdempotencyKeys).toHaveLength(2);
     expect(studentImportIdempotencyKeys[0]).toMatch(/^[0-9a-f-]{36}$/);
     expect(studentImportIdempotencyKeys[1]).toBe(studentImportIdempotencyKeys[0]);
@@ -360,15 +644,19 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     const setupForm = page.getByLabel("Kurulum formu");
     await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
     await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
-    await setupForm.getByLabel("Veri sorumlusu").fill("Operasyon sorumlusu");
-    await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
+    await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
 
     await expect(setupForm).not.toContainText("Ders şablonu bulunamadı.");
     await expect(setupForm).toContainText("2 sınıf, 6 ders");
   });
 
   test("kazanım aktarım dosyası opsiyoneldir ve seçilirse özetlenir", async ({ page }) => {
-    await openSetupWizard(page, { height: 844, width: 390 }, { roles: ["TENANT_ADMIN"] });
+    const kazanimImportIdempotencyKeys: string[] = [];
+    await openSetupWizard(page, { height: 844, width: 390 }, {
+      kazanimImportFailures: 1,
+      kazanimImportIdempotencyKeys,
+      roles: ["TENANT_ADMIN"],
+    });
 
     const setupForm = page.getByLabel("Kurulum formu");
     await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
@@ -380,10 +668,14 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
       name: "kazanimlar.csv",
     });
     await expect(page.getByLabel("Kazanım aktarım güven durumu")).toContainText("Yerel kontrol tamam");
-    await setupForm.getByLabel("Veri sorumlusu").fill("Operasyon sorumlusu");
-    await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
+    await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
+    await expect(setupForm).toContainText("Sunucudan kesin sonuç alınamadı.");
+    await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
 
     await expect(setupForm).toContainText("1 kazanım");
+    expect(kazanimImportIdempotencyKeys).toHaveLength(2);
+    expect(kazanimImportIdempotencyKeys[0]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(kazanimImportIdempotencyKeys[1]).toBe(kazanimImportIdempotencyKeys[0]);
   });
 });
 
@@ -419,6 +711,66 @@ async function openSetupWizard(
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
 }
 
+async function installPersistedCoreSetupReads(page: Page) {
+  const recordsByPath: Record<string, unknown[]> = {
+    "/academic-years": [{
+      id: "academic-year-setup",
+      tenantId: "tenant-setup",
+      name: "2026-2027",
+      startsAt: "2026-09-01",
+      endsAt: "2027-06-19",
+      isActive: true,
+    }],
+    "/academic-terms": [{
+      id: "academic-term-setup",
+      tenantId: "tenant-setup",
+      academicYearId: "academic-year-setup",
+      name: "1. Dönem",
+      startsAt: "2026-09-01",
+      endsAt: "2027-01-16",
+      isActive: true,
+    }],
+    "/campuses": [{ id: "campus-setup", tenantId: "tenant-setup", name: "Merkez Kampüs", code: "MRK" }],
+    "/classes": [
+      { id: "class-8-a", tenantId: "tenant-setup", campusId: "campus-setup", gradeLevelId: "grade-setup-lgs", name: "8-A", section: "A" },
+      { id: "class-8-b", tenantId: "tenant-setup", campusId: "campus-setup", gradeLevelId: "grade-setup-lgs", name: "8-B", section: "B" },
+    ],
+    "/courses": [
+      { id: "course-LGS-TUR", tenantId: "tenant-setup", code: "LGS-TUR", name: "Türkçe" },
+      { id: "course-LGS-MAT", tenantId: "tenant-setup", code: "LGS-MAT", name: "Matematik" },
+      { id: "course-LGS-FEN", tenantId: "tenant-setup", code: "LGS-FEN", name: "Fen Bilgisi" },
+      { id: "course-LGS-INK", tenantId: "tenant-setup", code: "LGS-INK", name: "Atatürk İlke ve İnkılapları" },
+      { id: "course-LGS-ING", tenantId: "tenant-setup", code: "LGS-ING", name: "Yabancı Dil (İngilizce)" },
+      { id: "course-LGS-DIN", tenantId: "tenant-setup", code: "LGS-DIN", name: "Din Kültürü" },
+    ],
+    "/grade-levels": [
+      { code: "8-LGS", id: "grade-setup-lgs", name: "8. sınıf / LGS", tenantId: "tenant-setup" },
+      { code: "10", id: "grade-setup-10", name: "10. sınıf", tenantId: "tenant-setup" },
+    ],
+  };
+  await page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    const pathName = new URL(request.url()).pathname.replace(/^\/api\/v1/, "");
+    const records = recordsByPath[pathName];
+    if (request.method() !== "GET" || !records) {
+      await route.fallback();
+      return;
+    }
+    await fulfillData(route, records);
+  });
+}
+
+function coreSetupCreateRequests(requestedPaths: string[]) {
+  const corePaths = new Set([
+    "POST /academic-years",
+    "POST /academic-terms",
+    "POST /classes",
+    "POST /courses",
+    "POST /grade-levels",
+  ]);
+  return requestedPaths.filter((path) => corePaths.has(path));
+}
+
 async function installSetupApiMocks(
   page: Page,
   options: SetupMockOptions = {},
@@ -434,6 +786,19 @@ async function installSetupApiMocks(
     const url = new URL(request.url());
     const pathName = url.pathname.replace(/^\/api\/v1/, "");
     options.requestedPaths?.push(`${request.method()} ${pathName}`);
+    if (request.method() === "GET" && pathName === "/setup/readiness" && options.readinessForbidden) {
+      await route.fulfill({
+        body: JSON.stringify({ error: { code: "SETUP_TENANT_WIDE_SCOPE_REQUIRED" } }),
+        contentType: "application/json",
+        headers: corsHeadersFor(route),
+        status: 403,
+      });
+      return;
+    }
+    if (request.method() === "GET" && pathName === "/setup/readiness" && options.malformedReadiness) {
+      await fulfillData(route, { invalid: true });
+      return;
+    }
     if (request.method() === "POST" && pathName === "/students/imports") {
       options.studentImportIdempotencyKeys?.push(request.headers()["idempotency-key"] ?? "");
       if ((options.studentImportFailures ?? 0) > 0) {
@@ -449,6 +814,41 @@ async function installSetupApiMocks(
     }
     if (request.method() === "POST" && pathName === "/classes") {
       options.classCreateBodies?.push(request.postDataJSON() as Record<string, unknown>);
+    }
+    if (request.method() === "PATCH" && pathName.startsWith("/classes/")) {
+      options.classPatchBodies?.push(request.postDataJSON() as Record<string, unknown>);
+    }
+    if (request.method() === "PATCH" && pathName.startsWith("/academic-years/")) {
+      options.academicYearPatchBodies?.push(request.postDataJSON() as Record<string, unknown>);
+    }
+    if (request.method() === "PATCH" && pathName.startsWith("/academic-terms/")) {
+      options.academicTermPatchBodies?.push(request.postDataJSON() as Record<string, unknown>);
+    }
+    if (request.method() === "POST" && pathName === "/teachers/imports") {
+      options.teacherImportIdempotencyKeys?.push(request.headers()["idempotency-key"] ?? "");
+      if ((options.teacherImportFailures ?? 0) > 0) {
+        options.teacherImportFailures = (options.teacherImportFailures ?? 0) - 1;
+        await route.fulfill({
+          body: JSON.stringify({ error: { code: "TRANSIENT_IMPORT_FAILURE" } }),
+          contentType: "application/json",
+          headers: corsHeadersFor(route),
+          status: 503,
+        });
+        return;
+      }
+    }
+    if (request.method() === "POST" && pathName === "/learning-outcomes/imports") {
+      options.kazanimImportIdempotencyKeys?.push(request.headers()["idempotency-key"] ?? "");
+      if ((options.kazanimImportFailures ?? 0) > 0) {
+        options.kazanimImportFailures = (options.kazanimImportFailures ?? 0) - 1;
+        await route.fulfill({
+          body: JSON.stringify({ error: { code: "TRANSIENT_IMPORT_FAILURE" } }),
+          contentType: "application/json",
+          headers: corsHeadersFor(route),
+          status: 503,
+        });
+        return;
+      }
     }
     if (request.method() === "PUT") {
       const match = pathName.match(/^\/grade-levels\/([^/]+)\/courses\/([^/]+)$/);
@@ -468,6 +868,7 @@ async function installSetupApiMocks(
     }
     if (request.method() === "POST" && pathName === "/grade-levels") {
       const body = request.postDataJSON() as { code: string; name: string };
+      options.gradeLevelCreateBodies?.push(body);
       await fulfillData(route, { id: `grade-${body.code}`, tenantId: "tenant-setup", ...body });
       return;
     }
@@ -483,19 +884,52 @@ function mockSetupApiResponse(
 ) {
   if (pathName === "/auth/refresh") return createAuthResponse(options.roles ?? ["TENANT_ADMIN"]);
   if (pathName === "/me/feature-rollouts") {
-    return { enabledFeatureKeys: options.setupV2 ? ["web.setup-v2"] : [] };
+    return { enabledFeatureKeys: [] };
   }
-  if (pathName === "/setup/readiness") return createSetupReadiness(options.readiness ?? "ready");
+  if (pathName === "/setup/readiness") return createSetupReadiness(options.readiness ?? "ready", options.legacyReadiness);
   if (pathName === "/me/tenant") return createTenantResponse();
   if (pathName === "/me/notification-devices") return [];
+  if (method === "GET" && pathName === "/campuses") {
+    return options.campuses ?? [{ id: "campus-setup", tenantId: "tenant-setup", name: "Merkez Kampüs", code: "MRK" }];
+  }
+  if (method === "GET" && pathName === "/classes") return options.existingClasses ?? [];
+  if (method === "GET" && pathName === "/academic-years") return options.existingAcademicYears ?? [];
+  if (method === "GET" && pathName === "/academic-terms") return options.existingAcademicTerms ?? [];
+  if (method === "PATCH" && pathName.startsWith("/classes/")) {
+    return { id: pathName.slice("/classes/".length), tenantId: "tenant-setup", ...options.classPatchBodies?.at(-1) };
+  }
+  if (method === "PATCH" && pathName.startsWith("/academic-years/")) {
+    return { ...options.existingAcademicYears?.[0], ...options.academicYearPatchBodies?.at(-1) };
+  }
+  if (method === "PATCH" && pathName.startsWith("/academic-terms/")) {
+    return { ...options.existingAcademicTerms?.[0], ...options.academicTermPatchBodies?.at(-1) };
+  }
   if (method === "GET" && pathName === "/grade-levels") {
     if (options.emptyCourseTemplates) return [];
+    if (options.upperServerTemplates) {
+      return [
+        { code: "11", id: "grade-setup-11", name: "11. sınıf", tenantId: "tenant-setup" },
+        { code: "12", id: "grade-setup-12", name: "12. sınıf", tenantId: "tenant-setup" },
+      ];
+    }
     return [
       { code: "8-LGS", id: "grade-setup-lgs", name: "8. sınıf / LGS", tenantId: "tenant-setup" },
       { code: "10", id: "grade-setup-10", name: "10. sınıf", tenantId: "tenant-setup" },
     ];
   }
   if (method === "GET" && pathName === "/grade-levels/grade-setup-lgs/courses") {
+    if (options.partialLgsTemplates) {
+      return [{
+        courseCode: "LGS-TUR",
+        courseId: "course-setup-turkce",
+        courseName: "Türkçe",
+        gradeLevelId: "grade-setup-lgs",
+        id: "template-lgs-turkce",
+        isDefault: true,
+        sortOrder: 10,
+        tenantId: "tenant-setup",
+      }];
+    }
     return [
       {
         courseCode: "LGS-TUR",
@@ -542,6 +976,30 @@ function mockSetupApiResponse(
         tenantId: "tenant-setup",
       },
     ];
+  }
+  if (method === "GET" && pathName === "/grade-levels/grade-setup-11/courses") {
+    return [{
+      courseCode: "11-MAT",
+      courseId: "course-setup-11-matematik",
+      courseName: "11 Matematik",
+      gradeLevelId: "grade-setup-11",
+      id: "template-11-matematik",
+      isDefault: true,
+      sortOrder: 10,
+      tenantId: "tenant-setup",
+    }];
+  }
+  if (method === "GET" && pathName === "/grade-levels/grade-setup-12/courses") {
+    return [{
+      courseCode: "12-MAT",
+      courseId: "course-setup-12-matematik",
+      courseName: "12 Matematik",
+      gradeLevelId: "grade-setup-12",
+      id: "template-12-matematik",
+      isDefault: true,
+      sortOrder: 10,
+      tenantId: "tenant-setup",
+    }];
   }
   if (method === "POST" && pathName === "/academic-years") return { id: "academic-year-setup", name: "2026-2027" };
   if (method === "POST" && pathName === "/academic-terms") return { id: "academic-term-setup", name: "1. Dönem" };
@@ -601,21 +1059,59 @@ function mockSetupApiResponse(
 }
 
 interface SetupMockOptions {
+  academicTermPatchBodies?: Array<Record<string, unknown>>;
+  academicYearPatchBodies?: Array<Record<string, unknown>>;
+  campuses?: Array<{ id: string; tenantId: string; name: string; code?: string }>;
   classCreateBodies?: Array<Record<string, unknown>>;
+  classPatchBodies?: Array<Record<string, unknown>>;
   emptyCourseTemplates?: boolean;
+  existingClasses?: Array<{
+    id: string;
+    tenantId: string;
+    name: string;
+    campusId?: string;
+    gradeLevelId?: string;
+    section?: string;
+  }>;
+  existingAcademicTerms?: Array<{
+    id: string;
+    tenantId: string;
+    academicYearId: string;
+    name: string;
+    startsAt: string;
+    endsAt: string;
+    isActive: boolean;
+  }>;
+  existingAcademicYears?: Array<{
+    id: string;
+    tenantId: string;
+    name: string;
+    startsAt: string;
+    endsAt: string;
+    isActive: boolean;
+  }>;
+  gradeLevelCreateBodies?: Array<Record<string, unknown>>;
   gradeLevelCourseLinks?: string[];
-  readiness?: "ready" | "incomplete";
+  kazanimImportFailures?: number;
+  kazanimImportIdempotencyKeys?: string[];
+  legacyReadiness?: boolean;
+  malformedReadiness?: boolean;
+  partialLgsTemplates?: boolean;
+  readiness?: "ready" | "incomplete" | "optional-missing";
+  readinessForbidden?: boolean;
   requestedPaths?: string[];
   roles?: string[];
-  setupV2?: boolean;
   spoofCompletedCookie?: boolean;
   studentDryRun?: "duplicate";
   studentImportFailures?: number;
   studentImportIdempotencyKeys?: string[];
+  teacherImportIdempotencyKeys?: string[];
+  teacherImportFailures?: number;
+  upperServerTemplates?: boolean;
   unexpectedMutations?: string[];
 }
 
-function createSetupReadiness(state: "ready" | "incomplete") {
+function createSetupReadiness(state: "ready" | "incomplete" | "optional-missing", legacy = false) {
   const keys = [
     "institution",
     "campus",
@@ -627,14 +1123,21 @@ function createSetupReadiness(state: "ready" | "incomplete") {
     "teacher",
     "student",
   ] as const;
-  const steps = keys.map((key) => ({
-    key,
-    count: state === "incomplete" && key === "academic-term" ? 0 : 1,
-    ready: !(state === "incomplete" && key === "academic-term"),
-  }));
+  const steps = keys.map((key) => {
+    const missing = (state === "incomplete" && key === "academic-term")
+      || (state === "optional-missing" && (key === "teacher" || key === "student"));
+    const step = {
+      key,
+      count: missing ? 0 : 1,
+      ready: !missing,
+    };
+    return legacy ? step : { ...step, required: key !== "teacher" && key !== "student" };
+  });
   const completedCount = steps.filter((step) => step.ready).length;
   return {
-    status: completedCount === steps.length ? "READY" : "ACTION_REQUIRED",
+    status: legacy
+      ? completedCount === steps.length ? "READY" : "ACTION_REQUIRED"
+      : steps.every((step) => !("required" in step) || !step.required || step.ready) ? "READY" : "ACTION_REQUIRED",
     completedCount,
     totalCount: steps.length,
     steps,

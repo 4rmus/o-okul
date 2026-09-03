@@ -15,8 +15,8 @@ afterEach(() => {
 
 describe("FeatureRolloutService", () => {
   it("katalogdaki tüm flagleri metadata ile default-off tanımlar", () => {
-    expect(featureRolloutCatalog).toHaveLength(7);
-    expect(new Set(featureRolloutCatalog.map((item) => item.featureKey)).size).toBe(7);
+    expect(featureRolloutCatalog).toHaveLength(6);
+    expect(new Set(featureRolloutCatalog.map((item) => item.featureKey)).size).toBe(6);
     expect(featureRolloutCatalog.every((item) => (
       item.defaultEnabled === false
       && /^[a-z][a-z-]+$/.test(item.owner)
@@ -136,7 +136,7 @@ describe("FeatureRolloutService", () => {
     expect(() => parseFeatureRolloutConfig(raw)).toThrow(/^FEATURE_ROLLOUTS_CONFIG_INVALID:/);
   });
 
-  it.each(["web.ia-v2", "web.shell-v2"])("retired %s configini reddeder", (featureKey) => {
+  it.each(["web.ia-v2", "web.shell-v2", "web.setup-v2"])("retired %s configini reddeder", (featureKey) => {
     expect(() => parseFeatureRolloutConfig(JSON.stringify({ [featureKey]: [entry()] })))
       .toThrow("FEATURE_ROLLOUTS_CONFIG_INVALID:UNKNOWN_KEY");
   });

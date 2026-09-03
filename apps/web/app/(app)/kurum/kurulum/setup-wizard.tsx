@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import type {
   AcademicTermRecord,
   AcademicYearRecord,
+  CampusRecord,
   ClassRecord,
   CourseRecord,
   GradeLevelCourseRecord,
@@ -20,17 +21,23 @@ import type {
 import { Button, Field, Input, MetricCard, MetricGrid, Panel, SegmentedControl, Select, StatusBadge, TabButton, Tabs } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError, apiBaseUrl, apiListRequest, apiRequest, queryClient } from "../../../../src/api-client.js";
-import { featureRolloutQueryKey, isFeatureEnabled, loadFeatureRollouts } from "../../../../src/feature-rollouts.js";
 import { ImportTemplatePanel } from "../_shared/import-template-panel.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { useSetupProgress } from "./_shared/use-setup-progress.js";
 import { setupFlowSteps, type SetupFlowStep } from "./_shared/wizard-steps.js";
 
-type StepId = SetupFlowStep["id"];
+type StepId = SetupFlowStep["id"] | "readiness";
 type StageId = "7" | "8-LGS" | "10" | "11" | "12" | "TYT/AYT";
 type SetupImportFileExtension = "CSV" | "XLSX";
 type SetupUploadStatusState = "idle" | "ready" | "error";
-type SetupCourseOption = { id: string; name: string; code: string; isDefault?: boolean; stageId?: StageId };
+type SetupCourseOption = {
+  id: string;
+  name: string;
+  code: string;
+  isDefault?: boolean;
+  stageId?: StageId;
+  targetStageIds?: StageId[];
+};
 type SetupCourseGroup = { title: string; source: string; courses: SetupCourseOption[]; stageId?: StageId };
 
 interface SetupUploadStatus {
@@ -44,6 +51,7 @@ interface SetupUploadStatus {
 
 interface OnboardingDraft {
   classes: {
+    campusId: string;
     classCounts: Record<StageId, string>;
     classNames: Record<string, string>;
   };
@@ -57,7 +65,6 @@ interface OnboardingDraft {
     logoUrl: string;
   };
   people: {
-    importOwner: string;
     kazanimImportFileName: string;
     studentImportFileName: string;
     studentModel: "manual" | "excel";
@@ -85,9 +92,17 @@ interface TenantProfileRecord {
 }
 
 const steps = setupFlowSteps;
+const readinessStep = {
+  id: "readiness" as const,
+  path: "/kurum/kurulum/hazirlik",
+  kicker: "Sonuç",
+  title: "Hazırlık Kontrolü",
+  description: "Sunucudaki gerçek kurum kayıtlarını doğrula ve eksik adımları gör.",
+};
 
 const initialDraft: OnboardingDraft = {
   classes: {
+    campusId: "",
     classCounts: {
       "7": "0",
       "8-LGS": "2",
@@ -108,7 +123,6 @@ const initialDraft: OnboardingDraft = {
     logoUrl: "",
   },
   people: {
-    importOwner: "",
     kazanimImportFileName: "",
     studentImportFileName: "",
     studentModel: "excel",
@@ -217,9 +231,11 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
   const [saveError, setSaveError] = useState("");
   const [savedSummary, setSavedSummary] = useState("");
   const [kazanimImportFileBase64, setKazanimImportFileBase64] = useState("");
+  const [kazanimImportIdempotencyKey, setKazanimImportIdempotencyKey] = useState("");
   const [studentImportFileBase64, setStudentImportFileBase64] = useState("");
   const [studentImportIdempotencyKey, setStudentImportIdempotencyKey] = useState("");
   const [teacherImportFileBase64, setTeacherImportFileBase64] = useState("");
+  const [teacherImportIdempotencyKey, setTeacherImportIdempotencyKey] = useState("");
   const [kazanimImportUploadStatus, setKazanimImportUploadStatus] = useState<SetupUploadStatus>(() =>
     createIdleUploadStatus(),
   );
@@ -240,25 +256,21 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
     queryFn: () => loadCourseTemplateGroups(auth?.accessToken ?? ""),
     enabled: Boolean(auth?.accessToken),
   });
-  const featureRolloutsQuery = useQuery({
-    queryKey: featureRolloutQueryKey(
-      auth?.session.tenantId,
-      auth?.session.id,
-      auth?.session.activePersona,
-    ),
-    queryFn: () => loadFeatureRollouts(auth?.accessToken ?? ""),
+  const campusesQuery = useQuery({
+    queryKey: ["next-campuses", tenantId],
+    queryFn: () => apiListRequest<CampusRecord>(auth?.accessToken ?? "", `${apiBaseUrl}/campuses?limit=200`),
     enabled: Boolean(auth?.accessToken),
-    refetchOnWindowFocus: false,
   });
-  const setupV2Enabled = featureRolloutsQuery.isSuccess
-    && isFeatureEnabled(featureRolloutsQuery.data, "web.setup-v2");
   const setupProgressQuery = useSetupProgress(
     auth?.accessToken ?? "",
     tenantId,
-    Boolean(auth?.accessToken && setupV2Enabled),
+    Boolean(auth?.accessToken),
   );
-  const courseGroups =
-    courseTemplatesQuery.data && courseTemplatesQuery.data.length > 0 ? courseTemplatesQuery.data : fallbackCourseGroups;
+  const courseGroups = useMemo(
+    () => mergeCourseTemplateGroups(courseTemplatesQuery.data ?? []),
+    [courseTemplatesQuery.data],
+  );
+  const campuses = useMemo(() => campusesQuery.data?.data ?? [], [campusesQuery.data]);
   const allCourseOptions = useMemo(
     () => courseGroups.flatMap((group) => group.courses.map((course) => ({ ...course, stageId: course.stageId ?? group.stageId }))),
     [courseGroups],
@@ -266,21 +278,29 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
   const courseTemplateError = courseTemplatesQuery.isError
     ? "Ders şablonları alınamadı."
     : "";
-  const activeStepIndex = Math.max(0, steps.findIndex((step) => step.id === activeStepId));
-  const activeStep = steps[activeStepIndex]!;
+  const campusError = campusesQuery.isError ? "Kampüsler alınamadı." : "";
+  const isReadinessStep = activeStepId === "readiness";
+  const activeStepIndex = steps.findIndex((step) => step.id === activeStepId);
+  const activeStep = isReadinessStep ? readinessStep : steps[Math.max(0, activeStepIndex)]!;
   const stepValidation = useMemo(
-    () => new Map(steps.map((step) => [step.id, validateStep(step.id, draft, allCourseOptions)])),
-    [allCourseOptions, draft],
+    () => new Map(steps.map((step) => [step.id, validateStep(step.id, draft, allCourseOptions, campuses)])),
+    [allCourseOptions, campuses, draft],
   );
-  const draftCompletedStepCount = steps.filter((step) => Object.keys(stepValidation.get(step.id) ?? {}).length === 0).length;
-  const completedStepCount = setupV2Enabled && setupProgressQuery.data
-    ? setupProgressQuery.data.completedCount
-    : draftCompletedStepCount;
-  const progressStepCount = setupV2Enabled && setupProgressQuery.data
-    ? setupProgressQuery.data.totalCount
-    : steps.length;
-  const progressPercent = Math.round((completedStepCount / progressStepCount) * 100);
-  const isFinished = Boolean(setupV2Enabled && setupProgressQuery.data?.status === "READY");
+  const completedStepCount = steps.filter((step) => Object.keys(stepValidation.get(step.id) ?? {}).length === 0).length;
+  const progressPercent = Math.round((completedStepCount / steps.length) * 100);
+  const isFinished = setupProgressQuery.data?.status === "READY";
+  const readinessHeadline = setupProgressQuery.isPending
+    ? "Sunucu kayıtları kontrol ediliyor."
+    : setupProgressQuery.isError
+      ? "Kurulum durumu doğrulanamadı."
+      : isFinished
+        ? "Çekirdek kurulum tamamlandı."
+        : "Kurulumda tamamlanması gereken kayıtlar var.";
+  const readinessMetricValue = setupProgressQuery.isPending
+    ? "Kontrol ediliyor"
+    : setupProgressQuery.isError
+      ? "Doğrulanamadı"
+      : isFinished ? "Hazır" : "Eksik";
   const selectedCourses = selectedCourseOptions(draft.courses.selectedCourseIds, allCourseOptions);
   const generatedClasses = generateClasses(draft.classes.classCounts, draft.classes.classNames);
   const courseCount = selectedCourses.length;
@@ -293,7 +313,9 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
 
   useEffect(() => {
     function syncStepFromHistory() {
-      const step = steps.find((candidate) => candidate.path === window.location.pathname);
+      const step = window.location.pathname === readinessStep.path
+        ? readinessStep
+        : steps.find((candidate) => candidate.path === window.location.pathname);
       if (!step) return;
       setActiveStepId(step.id);
       setErrors({});
@@ -324,6 +346,16 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
   }, [draftStorageKey, loadedDraftKey, tenantProfileQuery.data]);
 
   useEffect(() => {
+    if (!campusesQuery.data) return;
+    setDraft((current) => {
+      const currentCampusExists = campuses.some((campus) => campus.id === current.classes.campusId);
+      const campusId = currentCampusExists ? current.classes.campusId : campuses.length === 1 ? campuses[0]!.id : "";
+      if (campusId === current.classes.campusId) return current;
+      return { ...current, classes: { ...current.classes, campusId } };
+    });
+  }, [campuses, campusesQuery.data]);
+
+  useEffect(() => {
     const activeStageIds = activeStageIdsFromClassCounts(draft.classes.classCounts);
     if (activeStageIds.length === 0) return;
     setDraft((current) => {
@@ -352,14 +384,15 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
   function goToStep(stepId: StepId) {
     setActiveStepId(stepId);
     setErrors({});
-    const step = steps.find((candidate) => candidate.id === stepId);
+    const step = stepId === "readiness" ? readinessStep : steps.find((candidate) => candidate.id === stepId);
     if (step && window.location.pathname !== step.path) {
       window.history.pushState(null, "", step.path);
     }
   }
 
   function goNext() {
-    const nextErrors = validateStep(activeStep.id, draft, allCourseOptions);
+    if (activeStepId === "readiness") return;
+    const nextErrors = validateStep(activeStepId, draft, allCourseOptions, campuses);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
     const nextStep = steps[activeStepIndex + 1];
@@ -369,6 +402,10 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
   }
 
   function goBack() {
+    if (isReadinessStep) {
+      goToStep("people");
+      return;
+    }
     const previousStep = steps[activeStepIndex - 1];
     if (!previousStep) return;
     goToStep(previousStep.id);
@@ -402,6 +439,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
 
   async function changeTeacherImportFile(file: File | undefined) {
     setTeacherImportFileBase64("");
+    setTeacherImportIdempotencyKey("");
     setSaveError("");
     setSavedSummary("");
     if (!file) {
@@ -416,6 +454,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
 
     try {
       setTeacherImportFileBase64(await readFileAsBase64(file));
+      setTeacherImportIdempotencyKey(globalThis.crypto.randomUUID());
     } catch {
       setTeacherImportUploadStatus(createErrorUploadStatus(file, "Dosya okunamadı. Lütfen dosyayı yeniden seçin."));
       updateDraft("people", { teacherImportFileName: "" });
@@ -425,6 +464,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
 
   async function changeKazanimImportFile(file: File | undefined) {
     setKazanimImportFileBase64("");
+    setKazanimImportIdempotencyKey("");
     setSaveError("");
     setSavedSummary("");
     if (!file) {
@@ -440,6 +480,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
 
     try {
       setKazanimImportFileBase64(await readFileAsBase64(file));
+      setKazanimImportIdempotencyKey(globalThis.crypto.randomUUID());
     } catch {
       setKazanimImportUploadStatus(createErrorUploadStatus(file, "Dosya okunamadı. Lütfen dosyayı yeniden seçin."));
       updateDraft("people", { kazanimImportFileName: "" });
@@ -457,6 +498,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
 
   function changeTeacherModel(model: OnboardingDraft["people"]["teacherModel"]) {
     setTeacherImportFileBase64("");
+    setTeacherImportIdempotencyKey("");
     setTeacherImportUploadStatus(createIdleUploadStatus());
     setSavedSummary("");
     updateDraft("people", { teacherImportFileName: "", teacherModel: model });
@@ -530,7 +572,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
   async function finishSetup() {
     const allErrors = Object.fromEntries(
       steps.flatMap((step) =>
-        Object.entries(validateStep(step.id, draft, allCourseOptions)).map(([field, message]) => [
+        Object.entries(validateStep(step.id, draft, allCourseOptions, campuses)).map(([field, message]) => [
           `${step.id}.${field}`,
           message,
         ]),
@@ -538,7 +580,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
     );
     if (Object.keys(allErrors).length > 0) {
       const firstInvalidStep = steps.find(
-        (step) => Object.keys(validateStep(step.id, draft, allCourseOptions)).length > 0,
+        (step) => Object.keys(validateStep(step.id, draft, allCourseOptions, campuses)).length > 0,
       );
       if (firstInvalidStep) goToStep(firstInvalidStep.id);
       setErrors(allErrors);
@@ -552,6 +594,16 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
     if (courseTemplateError) {
       goToStep("courses");
       setSaveError(courseTemplateError);
+      return;
+    }
+    if (campusesQuery.isLoading) {
+      goToStep("classes");
+      setSaveError("Kampüsler yükleniyor. Lütfen birkaç saniye sonra tekrar deneyin.");
+      return;
+    }
+    if (campusError) {
+      goToStep("classes");
+      setSaveError(campusError);
       return;
     }
     if (studentImportUploadStatus.state === "error") {
@@ -579,6 +631,15 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
       setSaveError("Öğrenci aktarım dosyası seçilmelidir.");
       return;
     }
+    if (
+      (draft.people.teacherModel === "excel" && !teacherImportIdempotencyKey)
+      || (draft.people.studentModel === "excel" && !studentImportIdempotencyKey)
+      || (kazanimImportFileBase64 && !kazanimImportIdempotencyKey)
+    ) {
+      goToStep("people");
+      setSaveError("Aktarım dosyası hazırlanamadı. Lütfen dosyayı yeniden seçin.");
+      return;
+    }
     if (!auth?.accessToken) {
       setSaveError("Oturum bulunamadı. Yeniden giriş yapıp tekrar deneyin.");
       return;
@@ -587,13 +648,22 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
     setSaveError("");
     setSavedSummary("");
     try {
+      const accessCheck = await setupProgressQuery.refetch();
+      if (accessCheck.isError) {
+        setSaveError(accessCheck.error instanceof ApiRequestError && accessCheck.error.status === 403
+          ? "Kurulum yalnız kurum genelinde yetkili bir hesapla tamamlanabilir."
+          : "Sunucu kurulum durumu doğrulanamadı. Kayıt başlatılmadı; lütfen tekrar deneyin.");
+        return;
+      }
       const result = await saveSetup(
         auth.accessToken,
         draft,
         teacherImportFileBase64,
+        teacherImportIdempotencyKey,
         studentImportFileBase64,
         studentImportIdempotencyKey,
         kazanimImportFileBase64,
+        kazanimImportIdempotencyKey,
         allCourseOptions,
       );
       await Promise.all([
@@ -611,11 +681,9 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
         queryClient.invalidateQueries({ queryKey: ["next-current-tenant", tenantId] }),
         queryClient.invalidateQueries({ queryKey: ["next-user-subject-refs", tenantId] }),
       ]);
-      if (setupV2Enabled) {
-        const refreshedReadiness = await setupProgressQuery.refetch();
-        if (refreshedReadiness.isError) {
-          setSaveError("Kayıtlar kaydedildi ancak sunucu kurulum durumu doğrulanamadı. Sayfayı yenileyip tekrar kontrol edin.");
-        }
+      const refreshedReadiness = await setupProgressQuery.refetch();
+      if (refreshedReadiness.isError) {
+        setSaveError("Kayıtlar kaydedildi ancak sunucu kurulum durumu doğrulanamadı. Durumu yeniden kontrol edin.");
       }
       const studentSummary =
         result.importedStudents > 0
@@ -623,30 +691,51 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
           : `${result.importedStudents} öğrenci eklendi`;
       const outcomeSummary = result.importedOutcomes > 0 ? `, ${result.importedOutcomes} kazanım` : "";
       setSavedSummary(
-        `${result.createdClasses} sınıf, ${result.createdCourses} ders, ${result.createdTeachers} öğretmen, ${result.createdTeacherAssignments} öğretmen ataması, ${result.createdAcademicYears} akademik yıl, ${result.createdAcademicTerms} dönem, ${studentSummary}${outcomeSummary}. Mevcut kayıtlar tekrar eklenmedi.`,
+        `${result.createdClasses} sınıf, ${result.createdCourses} ders, ${result.createdTeachers} öğretmen, ${result.createdTeacherAssignments} öğretmen ataması, ${result.createdAcademicYears} akademik yıl, ${result.createdAcademicTerms} dönem, ${studentSummary}${outcomeSummary}. ${result.repairedClasses > 0 ? `${result.repairedClasses} sınıf bağlantısı tamamlandı. ` : ""}Mevcut kayıtlar tekrar eklenmedi.`,
       );
+      goToStep("readiness");
     } catch (error) {
-      setSaveError(error instanceof ApiRequestError && error.code === "CLASS_NAME_ALREADY_EXISTS"
-        ? "Bu sınıf adı kurumda aktif olarak kullanılıyor. Farklı bir ad girin."
-        : error instanceof Error && error.message
+      if (error instanceof ApiRequestError && error.code === "CLASS_NAME_ALREADY_EXISTS") {
+        goToStep("classes");
+        setSaveError("Bu sınıf adı kurumda aktif olarak kullanılıyor. Farklı bir ad girin.");
+      } else if (error instanceof Error && error.message.startsWith("SETUP_CLASS_CONTEXT_CONFLICT:")) {
+        goToStep("classes");
+        setSaveError(error.message.slice("SETUP_CLASS_CONTEXT_CONFLICT:".length));
+      } else if (error instanceof ApiRequestError) {
+        setSaveError("Sunucudan kesin sonuç alınamadı. Aynı bilgilerle tekrar deneyin; tamamlanan kayıtlar yeniden eklenmez.");
+      } else {
+        setSaveError(error instanceof Error && error.message
           ? error.message
           : "Kurulum kayıtları sisteme eklenemedi. Lütfen tekrar deneyin.");
+      }
       return;
     } finally {
       setIsSaving(false);
     }
-    window.sessionStorage.removeItem(draftStorageKey);
+    setDraft((current) => ({
+      ...current,
+      people: {
+        ...current.people,
+        kazanimImportFileName: "",
+        studentImportFileName: "",
+        studentModel: "manual",
+        teacherImportFileName: "",
+        teacherModel: "manual",
+      },
+    }));
     setKazanimImportFileBase64("");
+    setKazanimImportIdempotencyKey("");
     setStudentImportFileBase64("");
     setStudentImportIdempotencyKey("");
     setTeacherImportFileBase64("");
+    setTeacherImportIdempotencyKey("");
     setKazanimImportUploadStatus(createIdleUploadStatus());
     setStudentImportUploadStatus(createIdleUploadStatus());
     setTeacherImportUploadStatus(createIdleUploadStatus());
   }
 
   return (
-    <PageFrame title="Kurulum Sihirbazı" subtitle="Yeni kurumun ilk çalışma düzenini altı adımda hazırla.">
+    <PageFrame title="Kurulum Sihirbazı" subtitle="Yeni kurumun ilk çalışma düzenini beş adımda hazırla.">
       <section className="next-onboarding-hero" aria-label="Kurulum karşılama">
         <div>
           <span>{isFinished ? "Temel kurum kayıtları oluşturuldu" : "İlk giriş akışı"}</span>
@@ -654,13 +743,18 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
           <p>Genel bilgilerden kişi yönetimine kadar temel kararları tek akışta toparla.</p>
         </div>
         <MetricGrid className="next-onboarding-metrics" aria-label="Kurulum operasyon metrikleri" role="region">
-          <MetricCard label="İlerleme" value={`${progressPercent}%`} description={`${completedStepCount} / ${progressStepCount} adım doğrulandı`} tone={progressPercent === 100 ? "success" : "info"} />
+          <MetricCard
+            label={isReadinessStep ? "Çekirdek hazırlık" : "Form ilerlemesi"}
+            value={isReadinessStep ? readinessMetricValue : `${progressPercent}%`}
+            description={isReadinessStep ? "Sunucu kayıtları" : `${completedStepCount} / ${steps.length} adım doğrulandı`}
+            tone={(isReadinessStep && isFinished) || (!isReadinessStep && progressPercent === 100) ? "success" : "info"}
+          />
           <MetricCard label="Ders" value={courseCount} description="Seçili ders" />
           <MetricCard label="Sınıf" value={classCount} description="Oluşturulacak şube" />
         </MetricGrid>
       </section>
 
-      <section className="next-onboarding-progress">
+      {!isReadinessStep ? <section className="next-onboarding-progress">
         <div className="next-onboarding-progress__bar">
           <span style={{ width: `${progressPercent}%` }} />
         </div>
@@ -677,7 +771,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
             );
           })}
         </Tabs>
-      </section>
+      </section> : null}
 
       <section className="next-onboarding-layout" aria-label="Kurulum formu">
         <Panel className="next-onboarding-panel" key={activeStep.id}>
@@ -693,7 +787,14 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
             <TermStep draft={draft} errors={errors} updateDraft={updateDraft} />
           ) : null}
           {activeStep.id === "classes" ? (
-            <ClassesStep draft={draft} errors={errors} updateDraft={updateDraft} />
+            <ClassesStep
+              campuses={campuses}
+              draft={draft}
+              errorMessage={campusError}
+              errors={errors}
+              isLoading={campusesQuery.isLoading}
+              updateDraft={updateDraft}
+            />
           ) : null}
           {activeStep.id === "courses" ? (
             <CoursesStep
@@ -718,13 +819,11 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
               onStudentImportFileChange={(file) => void changeStudentImportFile(file)}
               studentImportUploadStatus={studentImportUploadStatus}
               teacherImportUploadStatus={teacherImportUploadStatus}
-              updateDraft={updateDraft}
             />
           ) : null}
           {activeStep.id === "readiness" ? (
             <div className="next-onboarding-done" aria-label="Hazırlık kontrolü">
-              <strong>Sunucu doğrulaması</strong>
-              {!setupV2Enabled ? <span>Kurulum v2 bu kurum için henüz açılmadı.</span> : null}
+              <strong>{readinessHeadline}</strong>
               {setupProgressQuery.isPending ? <span>Kurulum kayıtları doğrulanıyor…</span> : null}
               {setupProgressQuery.isError ? <span>Kurulum durumu doğrulanamadı; tamamlandı kabul edilmiyor.</span> : null}
               {setupProgressQuery.data ? (
@@ -732,40 +831,60 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
                   {setupProgressQuery.data.steps.map((step) => (
                     <li key={step.key}>
                       <span>{setupReadinessLabel(step.key)}</span>
-                      <StatusBadge tone={step.ready ? "success" : "warning"}>
-                        {step.ready ? "Hazır" : "Eksik"}
+                      <StatusBadge tone={step.ready ? "success" : step.required ? "warning" : "info"}>
+                        {step.ready ? "Hazır" : step.required ? "Eksik" : "Sonraki adım"}
                       </StatusBadge>
                     </li>
                   ))}
                 </ul>
               ) : null}
+              {steps.map((step) => step.readinessChecks.length > 0 ? (
+                <details key={step.id}>
+                  <summary>{step.title} kontrolleri</summary>
+                  <ul>
+                    {step.readinessChecks.map((check) => (
+                      <li key={check.id}>
+                        <Link href={check.href}>{check.title}</Link>
+                        {check.optional ? " (isteğe bağlı)" : null}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              ) : null)}
             </div>
           ) : null}
           <footer className="next-onboarding-actions">
             <Button variant="secondary" type="button" onClick={goBack} disabled={activeStepIndex === 0 || isCheckingImports || isSaving}>
               Geri
             </Button>
-            {activeStep.id === "people" ? (
+            {isReadinessStep ? (
               <>
-                <Button variant="secondary" type="button" onClick={() => void checkImportFiles()} disabled={isCheckingImports || isSaving}>
-                  {isCheckingImports ? "Kontrol ediliyor" : "Dosyaları ön kontrol et"}
+                <Button variant="secondary" type="button" onClick={() => void setupProgressQuery.refetch()} disabled={setupProgressQuery.isFetching}>
+                  {setupProgressQuery.isFetching ? "Kontrol ediliyor" : "Durumu yenile"}
                 </Button>
+                <Link className="uh-button uh-button--secondary uh-button--md" href="/kurum">
+                  Kurum paneline dön
+                </Link>
+              </>
+            ) : activeStep.id === "people" ? (
+              <>
+                {draft.people.teacherModel === "excel" || draft.people.studentModel === "excel" || kazanimImportFileBase64 ? (
+                  <Button variant="secondary" type="button" onClick={() => void checkImportFiles()} disabled={isCheckingImports || isSaving}>
+                    {isCheckingImports ? "Kontrol ediliyor" : "Dosyaları ön kontrol et"}
+                  </Button>
+                ) : null}
                 <Button type="button" onClick={() => void finishSetup()} disabled={isCheckingImports || isSaving}>
-                  {isSaving ? "Kaydediliyor" : "Kaydet ve bitir"}
+                  {isSaving ? "Kaydediliyor" : "Kaydet ve kontrol et"}
                 </Button>
               </>
             ) : activeStepIndex < steps.length - 1 ? (
               <Button type="button" onClick={goNext}>
                 İleri
               </Button>
-            ) : (
-              <Button type="button" onClick={() => void finishSetup()} disabled={isSaving}>
-                {isSaving ? "Kaydediliyor" : "Kaydet ve bitir"}
-              </Button>
-            )}
+            ) : null}
           </footer>
-          {saveError ? <p className="next-form-error">{saveError}</p> : null}
-          {savedSummary ? <p className="next-onboarding-success">{savedSummary}</p> : null}
+          {saveError ? <p className="next-form-error" role="alert">{saveError}</p> : null}
+          {savedSummary ? <p className="next-onboarding-success" role="status">{savedSummary}</p> : null}
         </Panel>
 
         <Panel as="aside" className="next-onboarding-aside" aria-label="Kurulum özeti">
@@ -792,7 +911,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
               <dd>{dataModelLabel(draft.people.studentModel)}</dd>
             </div>
           </dl>
-          {setupV2Enabled ? (
+          {!isReadinessStep ? (
             <div className="next-onboarding-done" aria-label="Sunucu kurulum durumu">
               <strong>Sunucu doğrulaması</strong>
               {setupProgressQuery.isPending ? <span>Kurulum kayıtları doğrulanıyor…</span> : null}
@@ -804,34 +923,13 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
                   {setupProgressQuery.data.steps.map((step) => (
                     <li key={step.key}>
                       <span>{setupReadinessLabel(step.key)}</span>
-                      <StatusBadge tone={step.ready ? "success" : "warning"}>
-                        {step.ready ? "Hazır" : "Eksik"}
+                      <StatusBadge tone={step.ready ? "success" : step.required ? "warning" : "info"}>
+                        {step.ready ? "Hazır" : step.required ? "Eksik" : "Sonraki adım"}
                       </StatusBadge>
                     </li>
                   ))}
                 </ul>
               ) : null}
-            </div>
-          ) : null}
-          {isFinished ? (
-            <div className="next-onboarding-done">
-              <strong>Temel kurum kayıtları oluşturuldu; kalan kontroller aşağıda.</strong>
-              {steps.map((step) => step.readinessChecks.length > 0 ? (
-                <details key={step.id}>
-                  <summary>{step.title} kontrolleri</summary>
-                  <ul>
-                    {step.readinessChecks.map((check) => (
-                      <li key={check.id}>
-                        <Link href={check.href}>{check.title}</Link>
-                        {check.optional ? " (isteğe bağlı)" : null}
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              ) : null)}
-              <Link className="uh-button uh-button--secondary uh-button--md" href="/kurum">
-                Kurum paneline dön
-              </Link>
             </div>
           ) : null}
         </Panel>
@@ -1046,18 +1144,39 @@ function CoursesStep({
 }
 
 function ClassesStep({
+  campuses,
   draft,
+  errorMessage,
   errors,
+  isLoading,
   updateDraft,
 }: {
+  campuses: CampusRecord[];
   draft: OnboardingDraft;
+  errorMessage: string;
   errors: StepErrors;
+  isLoading: boolean;
   updateDraft: (section: "classes", nextValue: Partial<OnboardingDraft["classes"]>) => void;
 }) {
   const generatedClasses = generateClasses(draft.classes.classCounts, draft.classes.classNames);
+  const campusFieldError = errors.campusId ?? errors["classes.campusId"];
 
   return (
     <div className="next-onboarding-fields">
+      <Field label="Sınıfların kampüsü" error={campusFieldError}>
+        {isLoading ? <span>Kampüsler yükleniyor.</span> : campuses.length > 0 ? (
+          <Select
+            value={draft.classes.campusId}
+            onChange={(event) => updateDraft("classes", { campusId: event.target.value })}
+          >
+            <option value="">Kampüs seçin</option>
+            {campuses.map((campus) => <option key={campus.id} value={campus.id}>{campus.name}</option>)}
+          </Select>
+        ) : (
+          <Link href="/kurum/kampusler?new=1">Önce kampüs oluştur</Link>
+        )}
+      </Field>
+      {errorMessage ? <p className="next-form-error">{errorMessage}</p> : null}
       <fieldset className="next-onboarding-class-counts">
         <legend>Kademeye göre sınıf sayısı</legend>
         {stageOptions.map((stage) => {
@@ -1129,7 +1248,6 @@ function PeopleStep({
   onStudentImportFileChange,
   studentImportUploadStatus,
   teacherImportUploadStatus,
-  updateDraft,
 }: {
   draft: OnboardingDraft;
   errors: StepErrors;
@@ -1141,7 +1259,6 @@ function PeopleStep({
   onStudentImportFileChange(file: File | undefined): void;
   studentImportUploadStatus: SetupUploadStatus;
   teacherImportUploadStatus: SetupUploadStatus;
-  updateDraft: (section: "people", nextValue: Partial<OnboardingDraft["people"]>) => void;
 }) {
   return (
     <div className="next-onboarding-fields">
@@ -1168,44 +1285,52 @@ function PeopleStep({
         </SegmentedControl>
       </section>
       <ImportTemplatePanel />
-      <Field
-        label="Öğretmen aktarım dosyası"
-        description={describeSelectedUploadFileNotice(
-          draft.people.teacherImportFileName,
-          "Öğretmen XLSX veya CSV dosyası seçilebilir.",
-        )}
-        error={errors.teacherImportFileName ?? errors["people.teacherImportFileName"]}
-      >
-        <Input
-          type="file"
-          accept=".xlsx,.csv"
-          onChange={(event) => {
-            const file = event.currentTarget.files?.[0];
-            onTeacherImportFileChange(file);
-            event.currentTarget.value = "";
-          }}
-        />
-      </Field>
-      <ImportUploadStatus label="Öğretmen aktarım güven durumu" status={teacherImportUploadStatus} />
-      <Field
-        label="Öğrenci aktarım dosyası"
-        description={describeSelectedUploadFileNotice(
-          draft.people.studentImportFileName,
-          "Öğrenci kayıtları ve dosyada varsa mevcut veli bağlantıları için XLSX veya CSV dosyası seçilebilir.",
-        )}
-        error={errors.studentImportFileName ?? errors["people.studentImportFileName"]}
-      >
-        <Input
-          type="file"
-          accept=".xlsx,.csv"
-          onChange={(event) => {
-            const file = event.currentTarget.files?.[0];
-            onStudentImportFileChange(file);
-            event.currentTarget.value = "";
-          }}
-        />
-      </Field>
-      <ImportUploadStatus label="Öğrenci aktarım güven durumu" status={studentImportUploadStatus} />
+      {draft.people.teacherModel === "excel" ? (
+        <>
+          <Field
+            label="Öğretmen aktarım dosyası"
+            description={describeSelectedUploadFileNotice(
+              draft.people.teacherImportFileName,
+              "Öğretmen XLSX veya CSV dosyası seçilebilir.",
+            )}
+            error={errors.teacherImportFileName ?? errors["people.teacherImportFileName"]}
+          >
+            <Input
+              type="file"
+              accept=".xlsx,.csv"
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                onTeacherImportFileChange(file);
+                event.currentTarget.value = "";
+              }}
+            />
+          </Field>
+          <ImportUploadStatus label="Öğretmen aktarım güven durumu" status={teacherImportUploadStatus} />
+        </>
+      ) : null}
+      {draft.people.studentModel === "excel" ? (
+        <>
+          <Field
+            label="Öğrenci aktarım dosyası"
+            description={describeSelectedUploadFileNotice(
+              draft.people.studentImportFileName,
+              "Öğrenci kayıtları ve dosyada varsa mevcut veli bağlantıları için XLSX veya CSV dosyası seçilebilir.",
+            )}
+            error={errors.studentImportFileName ?? errors["people.studentImportFileName"]}
+          >
+            <Input
+              type="file"
+              accept=".xlsx,.csv"
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                onStudentImportFileChange(file);
+                event.currentTarget.value = "";
+              }}
+            />
+          </Field>
+          <ImportUploadStatus label="Öğrenci aktarım güven durumu" status={studentImportUploadStatus} />
+        </>
+      ) : null}
       <Field
         label="Kazanım aktarım dosyası (opsiyonel)"
         description={describeSelectedUploadFileNotice(
@@ -1224,14 +1349,6 @@ function PeopleStep({
         />
       </Field>
       <ImportUploadStatus label="Kazanım aktarım güven durumu" status={kazanimImportUploadStatus} />
-      <Field label="Veri sorumlusu" error={errors.importOwner ?? errors["people.importOwner"]}>
-        <Input
-          invalid={Boolean(errors.importOwner ?? errors["people.importOwner"])}
-          value={draft.people.importOwner}
-          onChange={(event) => updateDraft("people", { importOwner: event.target.value })}
-          placeholder="Operasyon sorumlusu"
-        />
-      </Field>
     </div>
   );
 }
@@ -1258,12 +1375,16 @@ function FieldError({ message }: { message: string | undefined }) {
   return message ? <span className="next-form-error">{message}</span> : null;
 }
 
-function validateStep(stepId: StepId, draft: OnboardingDraft, courseOptions: SetupCourseOption[]): StepErrors {
+function validateStep(
+  stepId: SetupFlowStep["id"],
+  draft: OnboardingDraft,
+  courseOptions: SetupCourseOption[],
+  campuses: CampusRecord[],
+): StepErrors {
   if (stepId === "general") return validateGeneral(draft.general);
   if (stepId === "term") return validateTerm(draft.term);
   if (stepId === "courses") return validateCourses(draft.courses, courseOptions);
-  if (stepId === "classes") return validateClasses(draft.classes);
-  if (stepId === "readiness") return {};
+  if (stepId === "classes") return validateClasses(draft.classes, campuses);
   return validatePeople(draft.people);
 }
 
@@ -1296,8 +1417,15 @@ function validateCourses(courses: OnboardingDraft["courses"], courseOptions: Set
     : { selectedCourseIds: "En az bir ders seçilmelidir." };
 }
 
-function validateClasses(classes: OnboardingDraft["classes"]): StepErrors {
+function validateClasses(classes: OnboardingDraft["classes"], campuses: CampusRecord[]): StepErrors {
   const errors: StepErrors = {};
+  if (campuses.length === 0) {
+    errors.campusId = "Sınıfları oluşturmadan önce bir kampüs eklenmelidir.";
+  } else if (!classes.campusId) {
+    errors.campusId = "Sınıfların kampüsü seçilmelidir.";
+  } else if (!campuses.some((campus) => campus.id === classes.campusId)) {
+    errors.campusId = "Seçili kampüs artık kullanılamıyor. Yeniden seçim yapın.";
+  }
   let totalClassCount = 0;
   for (const stage of stageOptions) {
     const classCount = Number(classes.classCounts[stage.id]);
@@ -1334,9 +1462,6 @@ function validateClasses(classes: OnboardingDraft["classes"]): StepErrors {
 
 function validatePeople(people: OnboardingDraft["people"]): StepErrors {
   const errors: StepErrors = {};
-  if (people.importOwner.trim().length <= 1) {
-    errors.importOwner = "Veri sorumlusu zorunludur.";
-  }
   if (people.teacherModel === "excel" && !people.teacherImportFileName) {
     errors.teacherImportFileName = "Öğretmen aktarım dosyası zorunludur.";
   }
@@ -1476,6 +1601,49 @@ function activeStageIdsFromClassCounts(classCounts: Record<StageId, string>): St
     .map((stage) => stage.id);
 }
 
+function mergeCourseTemplateGroups(serverGroups: SetupCourseGroup[]) {
+  const mergedGroups: SetupCourseGroup[] = serverGroups
+    .filter((group) => group.stageId)
+    .map((group) => ({
+      ...group,
+      courses: group.courses.map((course) => ({
+        ...course,
+        stageId: course.stageId ?? group.stageId,
+        targetStageIds: [course.stageId ?? group.stageId!],
+      })),
+    }));
+
+  for (const fallbackGroup of fallbackCourseGroups) {
+    const missingCourses: SetupCourseOption[] = [];
+    for (const fallbackCourse of fallbackGroup.courses) {
+      const fallbackStageIds: StageId[] = fallbackGroup.stageId === "TYT/AYT"
+        ? ["11", "12", "TYT/AYT"]
+        : [fallbackGroup.stageId!];
+      const matchingCourses = mergedGroups.flatMap((group) => group.courses).filter(
+        (course) => sameCourseOption(course, fallbackCourse)
+          && course.targetStageIds?.some((stageId) => fallbackStageIds.includes(stageId)),
+      );
+      const missingStageIds = fallbackStageIds.filter((stageId) =>
+        !matchingCourses.some((course) => course.targetStageIds?.includes(stageId)),
+      );
+      if (missingStageIds.length === 0) continue;
+      const matchingCourse = matchingCourses[0];
+      if (matchingCourse) {
+        matchingCourse.targetStageIds = [...new Set([...(matchingCourse.targetStageIds ?? []), ...missingStageIds])];
+      } else {
+        missingCourses.push({
+          ...fallbackCourse,
+          stageId: fallbackGroup.stageId,
+          targetStageIds: missingStageIds,
+        });
+      }
+    }
+    if (missingCourses.length > 0) mergedGroups.push({ ...fallbackGroup, courses: missingCourses });
+  }
+
+  return mergedGroups;
+}
+
 function defaultCourseIdsForStages(stageIds: StageId[], courseOptions: SetupCourseOption[]) {
   const activeStages = new Set(stageIds);
   const matchingCourses = courseOptions.filter((course) => courseMatchesActiveStages(course, activeStages));
@@ -1484,9 +1652,19 @@ function defaultCourseIdsForStages(stageIds: StageId[], courseOptions: SetupCour
 }
 
 function courseMatchesActiveStages(course: SetupCourseOption, activeStages: ReadonlySet<StageId>) {
-  if (!course.stageId) return true;
-  if (activeStages.has(course.stageId)) return true;
-  return course.stageId === "TYT/AYT" && (activeStages.has("11") || activeStages.has("12"));
+  const targetStageIds = course.targetStageIds ?? (course.stageId ? [course.stageId] : []);
+  return targetStageIds.length === 0 || targetStageIds.some((stageId) => activeStages.has(stageId));
+}
+
+function targetStageIdsForCourse(course: SetupCourseOption, activeStageIds: StageId[]): StageId[] {
+  const targetStageIds = course.targetStageIds ?? (course.stageId ? [course.stageId] : []);
+  const matchingActiveStages = targetStageIds.filter((stageId) => activeStageIds.includes(stageId));
+  return matchingActiveStages.length > 0 ? matchingActiveStages : targetStageIds;
+}
+
+function sameCourseOption(left: SetupCourseOption, right: SetupCourseOption) {
+  return normalizeValue(left.name) === normalizeValue(right.name)
+    || normalizeValue(left.code) === normalizeValue(right.code);
 }
 
 function sameStringList(left: string[], right: string[]) {
@@ -1519,11 +1697,69 @@ async function saveSetup(
   accessToken: string,
   draft: OnboardingDraft,
   teacherImportFileBase64: string,
+  teacherImportIdempotencyKey: string,
   studentImportFileBase64: string,
   studentImportIdempotencyKey: string,
   kazanimImportFileBase64: string,
+  kazanimImportIdempotencyKey: string,
   courseOptions: SetupCourseOption[],
 ) {
+  const [existingCampuses, existingCourses, existingClasses, existingYears, existingTerms, gradeLevels] = await Promise.all([
+    apiListRequest<CampusRecord>(accessToken, `${apiBaseUrl}/campuses?limit=200`),
+    apiListRequest<CourseRecord>(accessToken, `${apiBaseUrl}/courses?limit=200`),
+    apiListRequest<ClassRecord>(accessToken, `${apiBaseUrl}/classes?limit=200`),
+    apiListRequest<AcademicYearRecord>(accessToken, `${apiBaseUrl}/academic-years?limit=200`),
+    apiListRequest<AcademicTermRecord>(accessToken, `${apiBaseUrl}/academic-terms?limit=200`),
+    apiListRequest<GradeLevelRecord>(accessToken, `${apiBaseUrl}/grade-levels?limit=200`),
+  ]);
+  if (!existingCampuses.data.some((campus) => campus.id === draft.classes.campusId)) {
+    throw new Error("Seçili kampüs artık kullanılamıyor. Sınıf adımından yeniden seçim yapın.");
+  }
+  const courseByName = new Map(existingCourses.data.map((course) => [normalizeValue(course.name), course]));
+  const existingClassByName = new Map(
+    existingClasses.data.map((classRecord) => [normalizeClassNameValue(classRecord.name), classRecord]),
+  );
+  const gradeLevelIdByStageId = new Map(
+    gradeLevels.data
+      .map((gradeLevel) => [stageIdFromGradeLevel(gradeLevel), gradeLevel.id] as const)
+      .filter((entry): entry is [StageId, string] => Boolean(entry[0])),
+  );
+  const gradeLevelStageIdById = new Map(
+    gradeLevels.data
+      .map((gradeLevel) => [gradeLevel.id, stageIdFromGradeLevel(gradeLevel)] as const)
+      .filter((entry): entry is [string, StageId] => Boolean(entry[1])),
+  );
+  const activeStageIds = activeStageIdsFromClassCounts(draft.classes.classCounts);
+  const selectedCourseIds = new Set(draft.courses.selectedCourseIds);
+  const selectedCourses = courseOptions.filter((course) => selectedCourseIds.has(course.id));
+  const requiredStageIds = new Set(activeStageIds);
+  for (const course of selectedCourses) {
+    const targetStageIds = targetStageIdsForCourse(course, activeStageIds);
+    if (targetStageIds.length === 0) throw new Error(`Seçili ${course.name} dersi için sınıf seviyesi bulunamadı.`);
+    for (const stageId of targetStageIds) requiredStageIds.add(stageId);
+  }
+  const existingClassGradeLevelIdByStageId = new Map<StageId, string>();
+  for (const classRecord of generateClasses(draft.classes.classCounts, draft.classes.classNames)) {
+    const existingClass = existingClassByName.get(normalizeClassNameValue(classRecord.name));
+    if (!existingClass) continue;
+    if (existingClass.campusId && existingClass.campusId !== draft.classes.campusId) {
+      throw new Error(`SETUP_CLASS_CONTEXT_CONFLICT:${classRecord.name} sınıfı farklı bir kampüse bağlı. Bu kayıt otomatik taşınmadı.`);
+    }
+    if (existingClass.gradeLevelId) {
+      if (gradeLevelStageIdById.get(existingClass.gradeLevelId) !== classRecord.stageId) {
+        throw new Error(`SETUP_CLASS_CONTEXT_CONFLICT:${classRecord.name} sınıfı farklı bir seviyeye bağlı. Bu kayıt otomatik taşınmadı.`);
+      }
+      const existingGradeLevelId = existingClassGradeLevelIdByStageId.get(classRecord.stageId);
+      if (existingGradeLevelId && existingGradeLevelId !== existingClass.gradeLevelId) {
+        throw new Error(`SETUP_CLASS_CONTEXT_CONFLICT:${classRecord.stageId} seviyesindeki mevcut sınıflar farklı seviye kayıtlarına bağlı. Otomatik değişiklik yapılmadı.`);
+      }
+      existingClassGradeLevelIdByStageId.set(classRecord.stageId, existingClass.gradeLevelId);
+    }
+  }
+  for (const [stageId, gradeLevelId] of existingClassGradeLevelIdByStageId) {
+    gradeLevelIdByStageId.set(stageId, gradeLevelId);
+  }
+
   await apiRequest<TenantProfileRecord>(accessToken, `${apiBaseUrl}/me/tenant`, {
     body: JSON.stringify({
       name: draft.general.institutionName,
@@ -1535,24 +1771,8 @@ async function saveSetup(
     method: "PATCH",
   });
 
-  const [existingCourses, existingClasses, existingYears, existingTerms, gradeLevels] = await Promise.all([
-    apiListRequest<CourseRecord>(accessToken, `${apiBaseUrl}/courses?limit=200`),
-    apiListRequest<ClassRecord>(accessToken, `${apiBaseUrl}/classes?limit=200`),
-    apiListRequest<AcademicYearRecord>(accessToken, `${apiBaseUrl}/academic-years?limit=200`),
-    apiListRequest<AcademicTermRecord>(accessToken, `${apiBaseUrl}/academic-terms?limit=200`),
-    apiListRequest<GradeLevelRecord>(accessToken, `${apiBaseUrl}/grade-levels?limit=200`),
-  ]);
-  const courseByName = new Map(existingCourses.data.map((course) => [normalizeValue(course.name), course]));
-  const existingClassNames = new Set(existingClasses.data.map((classRecord) => normalizeClassNameValue(classRecord.name)));
-  const gradeLevelIdByStageId = new Map(
-    gradeLevels.data
-      .map((gradeLevel) => [stageIdFromGradeLevel(gradeLevel), gradeLevel.id] as const)
-      .filter((entry): entry is [StageId, string] => Boolean(entry[0])),
-  );
-  const selectedCourseIds = new Set(draft.courses.selectedCourseIds);
-  const selectedCourses = courseOptions.filter((course) => selectedCourseIds.has(course.id));
-  for (const stageId of new Set(selectedCourses.map((course) => course.stageId))) {
-    if (!stageId || gradeLevelIdByStageId.has(stageId)) continue;
+  for (const stageId of requiredStageIds) {
+    if (gradeLevelIdByStageId.has(stageId)) continue;
     const gradeLevel = await apiRequest<GradeLevelRecord>(accessToken, `${apiBaseUrl}/grade-levels`, {
       body: JSON.stringify({ code: stageId, name: stageOptions.find((stage) => stage.id === stageId)?.label ?? stageId }),
       headers: { "content-type": "application/json" },
@@ -1560,22 +1780,30 @@ async function saveSetup(
     });
     gradeLevelIdByStageId.set(stageId, gradeLevel.id);
   }
-  const selectedCourseLinks = selectedCourses.map((course) => {
-    const gradeLevelId = course.stageId ? gradeLevelIdByStageId.get(course.stageId) : undefined;
-    if (!gradeLevelId) throw new Error(`Seçili ${course.name} dersi için sınıf seviyesi bulunamadı.`);
-    return { course, gradeLevelId };
-  });
+  const selectedCourseLinks: Array<{ course: SetupCourseOption; gradeLevelId: string }> = [];
+  const selectedCourseLinkKeys = new Set<string>();
+  for (const course of selectedCourses) {
+    for (const stageId of targetStageIdsForCourse(course, activeStageIds)) {
+      const gradeLevelId = gradeLevelIdByStageId.get(stageId);
+      if (!gradeLevelId) throw new Error(`Seçili ${course.name} dersi için ${stageId} seviyesi oluşturulamadı.`);
+      const key = `${gradeLevelId}:${normalizeValue(course.name)}`;
+      if (selectedCourseLinkKeys.has(key)) continue;
+      selectedCourseLinkKeys.add(key);
+      selectedCourseLinks.push({ course, gradeLevelId });
+    }
+  }
   const existingYear = existingYears.data.find((year) => normalizeValue(year.name) === normalizeValue(draft.term.academicYearName));
   let createdCourses = 0;
   let createdClasses = 0;
   let createdAcademicYears = 0;
   let createdAcademicTerms = 0;
+  let repairedClasses = 0;
   let createdTeachers = 0;
   let createdTeacherAssignments = 0;
   let importedStudents = 0;
   let importedOutcomes = 0;
 
-  const academicYear = existingYear ?? await apiRequest<AcademicYearRecord>(accessToken, `${apiBaseUrl}/academic-years`, {
+  let academicYear = existingYear ?? await apiRequest<AcademicYearRecord>(accessToken, `${apiBaseUrl}/academic-years`, {
     body: JSON.stringify({
       endsAt: draft.term.endsAt,
       isActive: true,
@@ -1586,6 +1814,17 @@ async function saveSetup(
     method: "POST",
   });
   if (!existingYear) createdAcademicYears += 1;
+  if (existingYear && !existingYear.isActive) {
+    academicYear = await apiRequest<AcademicYearRecord>(
+      accessToken,
+      `${apiBaseUrl}/academic-years/${encodeURIComponent(existingYear.id)}`,
+      {
+        body: JSON.stringify({ isActive: true }),
+        headers: { "content-type": "application/json" },
+        method: "PATCH",
+      },
+    );
+  }
 
   const existingTerm = existingTerms.data.find(
     (term) => term.academicYearId === academicYear.id && normalizeValue(term.name) === normalizeValue(draft.term.termName),
@@ -1603,6 +1842,12 @@ async function saveSetup(
       method: "POST",
     });
     createdAcademicTerms += 1;
+  } else if (!existingTerm.isActive) {
+    await apiRequest<AcademicTermRecord>(accessToken, `${apiBaseUrl}/academic-terms/${encodeURIComponent(existingTerm.id)}`, {
+      body: JSON.stringify({ isActive: true }),
+      headers: { "content-type": "application/json" },
+      method: "PATCH",
+    });
   }
 
   for (const course of selectedCourseOptions(draft.courses.selectedCourseIds, courseOptions)) {
@@ -1627,12 +1872,36 @@ async function saveSetup(
   }
 
   for (const classRecord of generateClasses(draft.classes.classCounts, draft.classes.classNames)) {
-    if (existingClassNames.has(normalizeClassNameValue(classRecord.name))) continue;
+    const gradeLevelId = gradeLevelIdByStageId.get(classRecord.stageId);
+    if (!gradeLevelId) throw new Error(`${classRecord.name} sınıfı için seviye oluşturulamadı.`);
+    const existingClass = existingClassByName.get(normalizeClassNameValue(classRecord.name));
+    if (existingClass) {
+      if (
+        (existingClass.campusId && existingClass.campusId !== draft.classes.campusId)
+        || (existingClass.gradeLevelId && existingClass.gradeLevelId !== gradeLevelId)
+      ) {
+        throw new Error(`SETUP_CLASS_CONTEXT_CONFLICT:${classRecord.name} sınıfı farklı bir kampüs veya seviyeye bağlı. Bu kayıt otomatik taşınmadı.`);
+      }
+      const missingContext = {
+        ...(!existingClass.campusId ? { campusId: draft.classes.campusId } : {}),
+        ...(!existingClass.gradeLevelId ? { gradeLevelId } : {}),
+      };
+      if (Object.keys(missingContext).length > 0) {
+        await apiRequest<ClassRecord>(accessToken, `${apiBaseUrl}/classes/${encodeURIComponent(existingClass.id)}`, {
+          body: JSON.stringify(missingContext),
+          headers: { "content-type": "application/json" },
+          method: "PATCH",
+        });
+        repairedClasses += 1;
+      }
+      continue;
+    }
     await apiRequest<ClassRecord>(accessToken, `${apiBaseUrl}/classes`, {
       body: JSON.stringify({
+        campusId: draft.classes.campusId,
+        gradeLevelId,
         name: classRecord.name.trim(),
         section: classRecord.section,
-        ...(gradeLevelIdByStageId.get(classRecord.stageId) ? { gradeLevelId: gradeLevelIdByStageId.get(classRecord.stageId) } : {}),
       }),
       headers: { "content-type": "application/json" },
       method: "POST",
@@ -1647,7 +1916,7 @@ async function saveSetup(
     }
     const imported = await apiRequest<TeacherImportResult>(accessToken, `${apiBaseUrl}/teachers/imports`, {
       body: JSON.stringify({ fileBase64: teacherImportFileBase64 }),
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "Idempotency-Key": teacherImportIdempotencyKey },
       method: "POST",
     });
     createdTeachers = imported.createdTeachers;
@@ -1674,7 +1943,7 @@ async function saveSetup(
     }
     const imported = await apiRequest<LearningOutcomeImportResult>(accessToken, `${apiBaseUrl}/learning-outcomes/imports`, {
       body: JSON.stringify({ fileBase64: kazanimImportFileBase64 }),
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "Idempotency-Key": kazanimImportIdempotencyKey },
       method: "POST",
     });
     importedOutcomes = imported.importedRows;
@@ -1689,6 +1958,7 @@ async function saveSetup(
     createdTeachers,
     importedOutcomes,
     importedStudents,
+    repairedClasses,
   };
 }
 
@@ -1857,13 +2127,16 @@ function loadCurrentTenant(accessToken: string) {
 
 async function loadCourseTemplateGroups(accessToken: string): Promise<SetupCourseGroup[]> {
   const gradeLevels = await apiListRequest<GradeLevelRecord>(accessToken, `${apiBaseUrl}/grade-levels?limit=200`);
+  const recognizedGradeLevels = gradeLevels.data.flatMap((gradeLevel) => {
+    const stageId = stageIdFromGradeLevel(gradeLevel);
+    return stageId ? [{ gradeLevel, stageId }] : [];
+  });
   const groups = await Promise.all(
-    gradeLevels.data.map(async (gradeLevel) => {
+    recognizedGradeLevels.map(async ({ gradeLevel, stageId }) => {
       const templates = await apiListRequest<GradeLevelCourseRecord>(
         accessToken,
         `${apiBaseUrl}/grade-levels/${encodeURIComponent(gradeLevel.id)}/courses?limit=200`,
       );
-      const stageId = stageIdFromGradeLevel(gradeLevel);
       return {
         title: gradeLevel.name,
         source: gradeLevel.code ? `${gradeLevel.code} ders şablonu` : "Ders şablonu",
@@ -1944,6 +2217,7 @@ function mergeDraft(rawDraft: string): OnboardingDraft {
     return {
       classes: {
         ...initialDraft.classes,
+        campusId: typeof parsedClasses?.campusId === "string" ? parsedClasses.campusId : initialDraft.classes.campusId,
         classCounts: normalizeClassCounts(parsedClasses),
         classNames: normalizeClassNames(parsedClasses?.classNames),
       },
@@ -1960,7 +2234,6 @@ function mergeDraft(rawDraft: string): OnboardingDraft {
         institutionType: normalizeInstitutionType(parsed.general?.institutionType),
       },
       people: {
-        importOwner: typeof parsedPeople.importOwner === "string" ? parsedPeople.importOwner : initialDraft.people.importOwner,
         kazanimImportFileName:
           typeof parsedPeople.kazanimImportFileName === "string"
             ? parsedPeople.kazanimImportFileName
@@ -1992,7 +2265,6 @@ function sanitizeDraftForStorage(draft: OnboardingDraft): OnboardingDraft {
     },
     people: {
       ...draft.people,
-      importOwner: "",
       kazanimImportFileName: "",
       studentImportFileName: "",
       teacherImportFileName: "",
