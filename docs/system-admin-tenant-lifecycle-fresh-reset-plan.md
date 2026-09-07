@@ -796,3 +796,13 @@ reddedildi; temiz NOLOGIN rolünde tekrar aynı durum korundu. Kanıt: `4e13f193
 Dar migrator + 94 bağlı satır/system hesap-oturum + backfill + 11 PG/5 Redis kontrolleri
 aynı çalışmada PASS. Son runtime source SHA256: `d8a90ec235a9cf689959a1aab452b973b0d0720c683bb12f28893da2d66d5fa8`.
 Bu bootstrap parola/login açmaz veya mevcut yetkiyi sessizce değiştirmez.
+
+
+2026-09-08 Gate 6N CI eki: dc700a19 GitHub PG17 işinde bütün migration'lar ve
+student grade-level kontrolü geçti. Sonraki iki PG test dosyası yeni @o-okul/db
+import'unun dist çıktısı derlenmediği için yüklenemedi. CI'a yalnız gerekli
+`pnpm --filter @o-okul/db... build` adımı eklendi. Aynı iki test dosyası artık
+disposable runner'da zorunlu DB URL'leriyle de çalışır: `b4096676e28c89ebd9938a0e.json`
+PASS; dar migrator/rol negatifleri, dolu upgrade/backfill, system koruması ve
+11 PG + 5 Redis de aynı koşuda PASS. Son source hash: `0f306f032b4bff58319d7fafea28132acfe303d204a527643020e1b685018b5a`.
+Kaynakta yetki engeli kaldırılmadı; bu hâlâ LOCAL_RUNTIME kanıtıdır.

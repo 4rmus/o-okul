@@ -205,6 +205,15 @@ export async function executeDrill(options) {
       }
     }
     finally { await Promise.all(Object.values(rolePools).map((rolePool) => rolePool.end())); }
+    evidence.phase = "ACCOUNT_MANAGEMENT_POSTGRES_TESTS";
+    const appUrl = `postgresql://app:${password}@127.0.0.1:${port}/o_okul_reset_drill`;
+    const adminUrl = `postgresql://postgres:${password}@127.0.0.1:${port}/o_okul_reset_drill`;
+    await command("pnpm", ["--filter", "@o-okul/api", "exec", "vitest", "run", "--no-file-parallelism",
+      "src/identity-invitation/employee-account-activation-store.postgres.test.ts", "src/student/student-license-concurrency.postgres.test.ts"], {
+      ACCOUNT_MANAGEMENT_POSTGRES_REQUIRED: "1", EMPLOYEE_ACTIVATION_POSTGRES_TEST_URL: appUrl, EMPLOYEE_ACTIVATION_POSTGRES_ADMIN_URL: adminUrl,
+      STUDENT_LICENSE_POSTGRES_TEST_URL: appUrl, STUDENT_LICENSE_POSTGRES_ADMIN_URL: adminUrl,
+    });
+    evidence.accountManagementPostgresTests = "PASS";
     assert.equal(unexpectedPoolError, false, "UNEXPECTED_POOL_ERROR");
     evidence.phase = "FINAL_SOURCE_INTEGRITY";
     const finalManifest = await plan(options);
