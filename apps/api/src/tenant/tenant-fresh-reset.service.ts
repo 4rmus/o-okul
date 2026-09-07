@@ -15,6 +15,7 @@ import { hashIdempotencyRequest } from "../http/idempotency.js";
 import { parseRedisUrl } from "../config/env.js";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { TenantResetPreviewService } from "./tenant-reset-preview.service.js";
+import { waitForApiMutations } from "../context/tenant-mutation-activity.js";
 
 export const tenantResetRequestBodySchema = z.object({ expectedRequestId: z.string().regex(/^[a-f0-9]{32}$/).nullable(), preset: z.literal("CLEAN_SETUP_V1") }).strict();
 export const tenantResetRevokeBodySchema = z.object({ expectedRequestId: z.string().regex(/^[a-f0-9]{32}$/) }).strict();
@@ -26,21 +27,22 @@ export class TenantFreshResetService {
   readonly store = this.pool ? new PostgresFreshResetStore(this.pool) : undefined;
   constructor(private readonly preview: TenantResetPreviewService) {}
   private dispatchTimer?: ReturnType<typeof setInterval>;
-  private dispatching = false;
+  private dispatching?: Promise<void>;
+  private stopping = false;
   onModuleInit() {
     if (!this.store || !process.env.REDIS_URL) return;
-    const dispatch = async () => {
-      if (this.dispatching) return;
-      this.dispatching = true;
-      try { for (const op of await this.store!.pending()) await enqueueFreshReset(op); }
-      catch { /* Durable rows remain pending; next interval retries without new operations. */ }
-      finally { this.dispatching = false; }
+    const dispatch = () => {
+      if (this.stopping || this.dispatching) return;
+      this.dispatching = (async () => { for (const op of await this.store!.pending()) await enqueueFreshReset(op); })();
+      // Keep the original rejection visible to shutdown; background failures remain durable and retryable.
+      void this.dispatching.catch(() => {}).finally(() => { this.dispatching = undefined; });
     };
     this.dispatchTimer = setInterval(() => { void dispatch(); }, 30000);
     this.dispatchTimer.unref();
     void dispatch();
   }
-  async onModuleDestroy() { if (this.dispatchTimer) clearInterval(this.dispatchTimer); await this.pool?.end(); }
+  async onModuleDestroy() { this.stopping = true; if (this.dispatchTimer) clearInterval(this.dispatchTimer); await this.dispatching; }
+  async onApplicationShutdown() { await waitForApiMutations(); await this.pool?.end(); }
   async institutionRequest(context: RequestContext): Promise<TenantResetRequestState> {
     assertInstitutionAdmin(context);
     if (!this.pool) throw new ServiceUnavailableException("RESET_SOURCE_UNVERIFIED");
