@@ -417,6 +417,7 @@ function checkWorkflowContract(output) {
     "stop --timeout 300 worker",
     "Release writer did not stop cleanly; migration and restart blocked.",
     "003_bootstrap_secret_delivery_worker_role.sh",
+    "005_bootstrap_tenant_reset_worker_role.sh",
     "prisma migrate deploy --config prisma.config.ts",
     "api node scripts/backfill-account-management.mjs",
     "api node scripts/backfill-license-terms.mjs",

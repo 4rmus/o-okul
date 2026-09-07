@@ -813,6 +813,8 @@ jobs:
             -f "$EDGE_COMPOSE_FILE" \
             exec -T postgres sh /docker-entrypoint-initdb.d/003_bootstrap_secret_delivery_worker_role.sh < /dev/null
 
+          "${backend_compose[@]}" exec -T postgres sh /docker-entrypoint-initdb.d/005_bootstrap_tenant_reset_worker_role.sh < /dev/null
+
           "${backend_compose[@]}" run --rm --no-deps -T api sh -lc 'cd packages/db && ./node_modules/.bin/prisma migrate deploy --config prisma.config.ts' < /dev/null
 
           mkdir -p artifacts/staging/reports

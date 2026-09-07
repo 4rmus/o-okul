@@ -1326,6 +1326,7 @@ const expectations = {
     "\"${backend_compose[@]}\" run --rm --no-deps -T",
     "004_bootstrap_required_extensions.sh",
     "003_bootstrap_secret_delivery_worker_role.sh",
+    "005_bootstrap_tenant_reset_worker_role.sh",
     "actions: read",
     "test -s .staging-evidence.env",
     "trap 'rm -f .staging-evidence.env' EXIT",

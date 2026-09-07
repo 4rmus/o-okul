@@ -70,6 +70,7 @@ export async function plan(options = {}) {
   digest.update(await readFile(fileURLToPath(import.meta.url)));
   digest.update(await readFile(resolve(root, "scripts/tenant-reset-queue-drill.mjs")));
   digest.update(await readFile(resolve(root, "scripts/tenant-legacy-status-drill.mjs")));
+  digest.update(await readFile(resolve(root, "docker/postgres/init/005_bootstrap_tenant_reset_worker_role.sh")));
   for (const file of ["backfill-account-management.mjs", "backfill-license-terms.mjs", "check-account-management-backfill.mjs", "check-license-term-backfill.mjs"]) digest.update(await readFile(resolve(root, "scripts", file)));
   return { evidenceClass: "LOCAL_STATIC", mode: "DRY_RUN", executed: false, runtime: "NOT_RUN", prerequisites: "NOT_CHECKED", image, pull: "never", containerStorage: "tmpfs only", host: "127.0.0.1", port: "Docker-assigned", migrations, migrationMode: "PRISMA_MIGRATE_DEPLOY_VERIFIED_LEDGER", bootstrap: "FRESH_DB_ROLES_AND_GENERATED_LOGIN_CREDENTIALS_ONLY", runtimeSourceSha256: digest.digest("hex"), scenarios: scenarioNames, queueScenarios: options.withQueue ? queueScenarios : [], legacyStatusUpgrade: options.withLegacyStatus === true, requiresExplicitUserApproval: true, provesFullReset: false, quiescence: "WRITE_QUIESCENCE_UNVERIFIED" };
 }
@@ -122,6 +123,31 @@ export async function executeDrill(options) {
     evidence.serverMajor = 16;
     evidence.phase = "BOOTSTRAP_AND_MIGRATIONS";
     await pool.query("CREATE ROLE app NOLOGIN NOSUPERUSER NOBYPASSRLS; CREATE ROLE secret_delivery_worker NOLOGIN NOSUPERUSER NOBYPASSRLS");
+    await pool.query(`CREATE ROLE migration LOGIN PASSWORD '${password}' NOCREATEROLE NOSUPERUSER NOBYPASSRLS;
+      GRANT CONNECT, CREATE ON DATABASE o_okul_reset_drill TO migration;
+      ALTER SCHEMA public OWNER TO migration`);
+    const resetRoleScript = await readFile(resolve(root, "docker/postgres/init/005_bootstrap_tenant_reset_worker_role.sh"), "utf8");
+    const bootstrapResetRole = () => docker(["exec", "--env", "POSTGRES_USER=postgres", owned.id, "sh", "-c", resetRoleScript]);
+    await bootstrapResetRole();
+    const resetRoleFlags = () => pool.query("SELECT rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, rolinherit FROM pg_roles WHERE rolname = 'o_okul_reset_worker'");
+    const roleBefore = (await resetRoleFlags()).rows;
+    for (const [unsafe, undo] of [
+      ["ALTER ROLE o_okul_reset_worker LOGIN", "ALTER ROLE o_okul_reset_worker NOLOGIN"],
+      ["GRANT o_okul_reset_worker TO app", "REVOKE o_okul_reset_worker FROM app"],
+      ["GRANT app TO o_okul_reset_worker", "REVOKE app FROM o_okul_reset_worker"],
+    ]) {
+      await pool.query(unsafe);
+      await assert.rejects(bootstrapResetRole(), (error) => String(error.stderr).includes("TENANT_RESET_WORKER_ROLE_UNSAFE"));
+      await pool.query(undo);
+    }
+    await bootstrapResetRole();
+    assert.deepEqual((await resetRoleFlags()).rows, roleBefore);
+    evidence.resetRoleBootstrap = { status: "PASS", loginRejected: true, inboundMembershipRejected: true, outboundMembershipRejected: true, replayPreserved: true };
+    const migrator = new pg.Pool({ ...connection, user: "migration" });
+    try {
+      assert.deepEqual((await migrator.query("SELECT current_user AS name, rolsuper, rolcreaterole, rolbypassrls FROM pg_roles WHERE rolname = current_user")).rows[0], { name: "migration", rolsuper: false, rolcreaterole: false, rolbypassrls: false });
+    } finally { await migrator.end(); }
+    evidence.migrationIdentity = "migration:NOSUPERUSER:NOCREATEROLE:NOBYPASSRLS";
     const configDirectory = await mkdtemp(resolve(tmpdir(), "o-okul-reset-drill-"));
     let legacyBefore;
     try {
@@ -134,7 +160,7 @@ export async function executeDrill(options) {
       }
       // Isolated config never loads the repository .env; URL exists only in child env.
       await writeFile(configPath, `import { defineConfig } from ${JSON.stringify(pathToFileURL(require.resolve("prisma/config")).href)};\nexport default defineConfig({ schema: ${JSON.stringify(resolve(root, "packages/db/prisma/schema.prisma"))}, migrations: { path: ${JSON.stringify(deployMigrations)} }, datasource: { url: process.env.DRILL_DATABASE_URL } });\n`, { flag: "wx", mode: 0o600 });
-      const deploy = () => command("pnpm", ["--filter", "@o-okul/db", "exec", "prisma", "migrate", "deploy", "--config", configPath], { DRILL_DATABASE_URL: `postgresql://postgres:${password}@127.0.0.1:${port}/o_okul_reset_drill` });
+      const deploy = () => command("pnpm", ["--filter", "@o-okul/db", "exec", "prisma", "migrate", "deploy", "--config", configPath], { DRILL_DATABASE_URL: `postgresql://migration:${password}@127.0.0.1:${port}/o_okul_reset_drill` });
       await deploy();
       if (options.withLegacyStatus) {
         evidence.phase = "LEGACY_STATUS_UPGRADE";

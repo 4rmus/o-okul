@@ -51,7 +51,7 @@ for (const failure of ["", "stop-producers", "stop-worker", "worker-137", "worke
       const phases = readFileSync(trace, "utf8").trim().split("\n");
       assert.equal(existsSync(stale), false, `stale public PASS must disappear before mutation: ${result.stderr}`);
       assert.equal(result.status === 0, failure === "", result.stderr);
-      if (!failure) assert.deepEqual(phases, ["stop-producers", "stop-worker", "bootstrap", "bootstrap", "migration", "account", "license", "start"]);
+      if (!failure) assert.deepEqual(phases, ["stop-producers", "stop-worker", "bootstrap", "bootstrap", "bootstrap", "migration", "account", "license", "start"]);
       else {
         assert.equal(phases.includes("start"), false);
         if (["stop-producers", "stop-worker", "migration", "account", "license"].includes(failure)) assert.ok(phases.includes(failure), "must reach the injected failure");

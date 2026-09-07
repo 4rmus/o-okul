@@ -118,3 +118,31 @@ onaylı, denenmiş restore kullanılır; ledger/constraint değişikliğiyle hat
 - EXTERNAL_NOT_RUN: deploy, migration, yeni gönderim, fresh reset ve pilot.
 
 **Sonraki gate: adayın tam CI kapanışı ve production etkisi açık somut yayın onayı.**
+
+
+### Gate 6N — gerçek CI bulguları ve düzeltmeler
+
+İlk GitHub CI `34160868543`, `20260907120000_tenant_fresh_reset_operation` sırasında
+migration hesabı CREATEROLE taşımadığı için durdu. Genel yetki artırılmadı;
+`005_bootstrap_tenant_reset_worker_role.sh` yönetici bootstrap'ında yalnız dar NOLOGIN
+reset rolünü hazırlar. CI ve kontrollü deploy bu adımı migration'dan önce çalıştırır.
+Yerel runner da artık NOSUPERUSER/NOCREATEROLE/NOBYPASSRLS migration hesabını kullanır.
+`236bfb647c7374ea45d4a42f.json` bu kimlikle 109→116 upgrade/backfill, system/kapalı kurum
+koruması ve 11 PG + 5 Redis senaryosunda PASS. Source hash:
+`9364363dcc3cdbdf18a2d41a27216631626595de3bb53c988ef782d40d4eac83`.
+Eski superuser tabanlı deneyi dar migration rolü kanıtı saymayan bu ek esas alınır.
+
+Tam yerel CI'ın sonraki gerçek engeli lisans ekranının yeni reset-request GET'inin
+route smoke fixture'ında eksik olmasıydı (88/89 PASS). Fixture `{request:null}`
+sözleşmesiyle tamamlandı; dört viewport'lu hedef test PASS. Bilinmeyen API çağrısını
+reddeden kontrol korunur. Ölçümün fixture digest'i de canonical komutla yenilenir.
+Bu iki başarısız çalışma tam CI PASS değildir; yeni aday koşusu ayrı takip edilir.
+Deploy/production mutation/provider/reset yapılmadı.
+
+
+Gate 6N bootstrap son negatifleri gerçek PostgreSQL’de PASS: mevcut LOGIN rolü,
+rolün app'e verilmesi ve rolün başka role üyeliği TENANT_RESET_WORKER_ROLE_UNSAFE ile
+reddedildi; temiz NOLOGIN rolünde tekrar aynı durum korundu. Kanıt: `4e13f19327e9fd1b39acc89f.json`.
+Dar migrator + 94 bağlı satır/system hesap-oturum + backfill + 11 PG/5 Redis kontrolleri
+aynı çalışmada PASS. Son runtime source SHA256: `d8a90ec235a9cf689959a1aab452b973b0d0720c683bb12f28893da2d66d5fa8`.
+Bu bootstrap parola/login açmaz veya mevcut yetkiyi sessizce değiştirmez.
