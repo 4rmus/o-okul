@@ -91,15 +91,14 @@ export class StudentPortalActivationService {
 
   async accept(input: StudentPortalActivationRequest & { tenantSlug: string }): Promise<StudentPortalActivationResponse> {
     const tenantSlug = input.tenantSlug.trim().toLowerCase();
-    if (this.tenants && this.licenseTerms) {
-      const tenant = await this.tenants.findBySlug(tenantSlug);
-      const license = tenant?.status === "ACTIVE" ? await this.licenseTerms.resolveForTenant(tenant.id) : undefined;
-      if (!license || !license.mirrorParity || license.state !== "ACTIVE") {
-        throw new UnauthorizedException("STUDENT_PORTAL_ACTIVATION_INVALID");
-      }
-    }
+    const tenant = await this.tenants?.findBySlug(tenantSlug);
+    if (!tenant || tenant.status !== "ACTIVE" || !Number.isInteger(tenant.lifecycleVersion) || !this.licenseTerms) throw new UnauthorizedException("STUDENT_PORTAL_ACTIVATION_INVALID");
+    // Capture before the asynchronous license check; don't upgrade an old request to a new reset epoch.
+    const source = { tenantId: tenant.id, lifecycleVersion: tenant.lifecycleVersion };
+    const license = await this.licenseTerms.resolveForTenant(tenant.id);
+    if (!license || !license.mirrorParity || license.state !== "ACTIVE") throw new UnauthorizedException("STUDENT_PORTAL_ACTIVATION_INVALID");
     const outcome = await this.store.accept({
-      tenantSlug,
+      tenantSlug, ...source,
       studentNo: input.studentNo.trim(),
       code: normalizeStudentPortalActivationCode(input.code),
       password: input.password,

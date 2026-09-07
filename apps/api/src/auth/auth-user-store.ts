@@ -35,6 +35,8 @@ export interface AuthUser {
   totpLastUsedCounter?: string;
 }
 
+export interface AuthUserMutationSource { tenantId: string; membershipVersion: number; }
+
 export interface AuthUserStore {
   findByEmail(email: string): Promise<AuthUser | undefined>;
   findByTenantAndLoginName(tenantId: string, loginName: string): Promise<AuthUser | undefined>;
@@ -45,17 +47,18 @@ export interface AuthUserStore {
   createOrAttachTenantIdentity(input: CreateTenantIdentityUserInput): Promise<AuthUser>;
   updatePassword(id: string, passwordHash: string, input?: PasswordStateUpdate): Promise<AuthUser | undefined>;
   updatePasswordForReset(id: string, passwordHash: string, input: PasswordStateUpdate, transaction: PasswordResetTransaction): Promise<boolean>;
-  rehashPassword(tenantId: string, id: string, currentPasswordHash: string, passwordHash: string): Promise<boolean>;
+  rehashPassword(tenantId: string, id: string, currentPasswordHash: string, passwordHash: string, expectedMembershipVersion?: number): Promise<boolean>;
   enableTotp(input: {
     userId: string;
+    source: AuthUserMutationSource;
     secretEncrypted: string;
     enabledAt: string;
     recoveryCodeHashes: string[];
     lastUsedCounter?: string;
   }): Promise<AuthUser | undefined>;
-  disableTotp(userId: string): Promise<AuthUser | undefined>;
-  markTotpCounterUsed(userId: string, counter: string): Promise<boolean>;
-  consumeTotpRecoveryCode(userId: string, codeHash: string): Promise<boolean>;
+  disableTotp(userId: string, source: AuthUserMutationSource): Promise<AuthUser | undefined>;
+  markTotpCounterUsed(userId: string, counter: string, source: AuthUserMutationSource): Promise<boolean>;
+  consumeTotpRecoveryCode(userId: string, codeHash: string, source: AuthUserMutationSource): Promise<boolean>;
   purgePii(id: string, input: { email: string; name: string; purgedAt: string }): Promise<AuthUser | undefined>;
 }
 
@@ -71,6 +74,7 @@ export interface CreateTenantIdentityUserInput {
 }
 
 export interface PasswordStateUpdate {
+  source?: AuthUserMutationSource;
   mustChangePassword?: boolean;
   passwordChangedAt?: string;
 }
@@ -344,7 +348,7 @@ export class InMemoryAuthUserStore implements AuthUserStore {
   }
 
   async updatePassword(id: string, passwordHash: string, input: PasswordStateUpdate = {}): Promise<AuthUser | undefined> {
-    const user = this.users.find((candidate) => candidate.id === id);
+    const user = this.users.find((candidate) => candidate.id === id && matchesAuthSource(candidate, input.source));
     if (!user) return undefined;
 
     user.passwordHash = passwordHash;
@@ -356,9 +360,10 @@ export class InMemoryAuthUserStore implements AuthUserStore {
 
   async updatePasswordForReset(id: string, passwordHash: string, input: PasswordStateUpdate, transaction: PasswordResetTransaction): Promise<boolean> {
     const user = this.users.find((candidate) => candidate.id === id);
-    if (!user || transaction.kind !== "memory") return false;
+    if (!user || !matchesAuthSource(user, input.source) || transaction.kind !== "memory") return false;
 
     transaction.stage(() => {
+      if (!matchesAuthSource(user, input.source)) throw new Error("AUTH_MUTATION_SOURCE_STALE");
       user.passwordHash = passwordHash;
       user.mustChangePassword = input.mustChangePassword ?? user.mustChangePassword;
       user.passwordChangedAt = input.passwordChangedAt ?? user.passwordChangedAt;
@@ -367,8 +372,8 @@ export class InMemoryAuthUserStore implements AuthUserStore {
     return true;
   }
 
-  async rehashPassword(tenantId: string, id: string, currentPasswordHash: string, passwordHash: string): Promise<boolean> {
-    const user = this.users.find((candidate) => candidate.tenantId === tenantId && candidate.id === id && candidate.passwordHash === currentPasswordHash);
+  async rehashPassword(tenantId: string, id: string, currentPasswordHash: string, passwordHash: string, expectedMembershipVersion?: number): Promise<boolean> {
+    const user = this.users.find((candidate) => candidate.tenantId === tenantId && candidate.id === id && candidate.passwordHash === currentPasswordHash && (expectedMembershipVersion === undefined || candidate.membershipVersion === expectedMembershipVersion));
     if (!user) return false;
     user.passwordHash = passwordHash;
     return true;
@@ -376,12 +381,13 @@ export class InMemoryAuthUserStore implements AuthUserStore {
 
   async enableTotp(input: {
     userId: string;
+    source: AuthUserMutationSource;
     secretEncrypted: string;
     enabledAt: string;
     recoveryCodeHashes: string[];
     lastUsedCounter?: string;
   }): Promise<AuthUser | undefined> {
-    const user = this.users.find((candidate) => candidate.id === input.userId);
+    const user = this.users.find((candidate) => candidate.id === input.userId && matchesAuthSource(candidate, input.source));
     if (!user || user.totpSecretEncrypted || user.totpEnabledAt) return undefined;
 
     user.totpSecretEncrypted = input.secretEncrypted;
@@ -392,8 +398,8 @@ export class InMemoryAuthUserStore implements AuthUserStore {
     return cloneUser(user);
   }
 
-  async disableTotp(userId: string): Promise<AuthUser | undefined> {
-    const user = this.users.find((candidate) => candidate.id === userId);
+  async disableTotp(userId: string, source: AuthUserMutationSource): Promise<AuthUser | undefined> {
+    const user = this.users.find((candidate) => candidate.id === userId && matchesAuthSource(candidate, source));
     if (!user) return undefined;
 
     user.totpSecretEncrypted = undefined;
@@ -404,16 +410,16 @@ export class InMemoryAuthUserStore implements AuthUserStore {
     return cloneUser(user);
   }
 
-  async markTotpCounterUsed(userId: string, counter: string): Promise<boolean> {
-    const user = this.users.find((candidate) => candidate.id === userId);
+  async markTotpCounterUsed(userId: string, counter: string, source: AuthUserMutationSource): Promise<boolean> {
+    const user = this.users.find((candidate) => candidate.id === userId && matchesAuthSource(candidate, source));
     if (!user || !isNewerTotpCounter(counter, user.totpLastUsedCounter)) return false;
 
     user.totpLastUsedCounter = counter;
     return true;
   }
 
-  async consumeTotpRecoveryCode(userId: string, codeHash: string): Promise<boolean> {
-    const user = this.users.find((candidate) => candidate.id === userId);
+  async consumeTotpRecoveryCode(userId: string, codeHash: string, source: AuthUserMutationSource): Promise<boolean> {
+    const user = this.users.find((candidate) => candidate.id === userId && matchesAuthSource(candidate, source));
     if (!user?.totpRecoveryCodeHashes?.includes(codeHash)) return false;
 
     user.totpRecoveryCodeHashes = user.totpRecoveryCodeHashes.filter((hash) => hash !== codeHash);
@@ -644,12 +650,13 @@ export class PostgresAuthUserStore implements AuthUserStore {
 
   async enableTotp(input: {
     userId: string;
+    source: AuthUserMutationSource;
     secretEncrypted: string;
     enabledAt: string;
     recoveryCodeHashes: string[];
     lastUsedCounter?: string;
   }): Promise<AuthUser | undefined> {
-    const updated = await withBypassRlsQuery(this.pool, async (client) => {
+    const updated = await withAuthMutationQuery(this.pool, input.source, async (client) => {
       const update = await client.query<{ id: string; membershipVersion: number; tenantId: string | null }>(
         `UPDATE "User"
          SET "totpSecretEncrypted" = $2,
@@ -659,21 +666,24 @@ export class PostgresAuthUserStore implements AuthUserStore {
              "membershipVersion" = "membershipVersion" + 1,
              "updatedAt" = now()
          WHERE "id" = $1
+           AND "tenantId" = $6 AND "membershipVersion" = $7
            AND "totpSecretEncrypted" IS NULL
            AND "totpEnabledAt" IS NULL
          RETURNING "id", "tenantId", "membershipVersion"`,
-        [input.userId, input.secretEncrypted, input.enabledAt, input.recoveryCodeHashes, input.lastUsedCounter ?? null],
+        [input.userId, input.secretEncrypted, input.enabledAt, input.recoveryCodeHashes, input.lastUsedCounter ?? null, input.source.tenantId, input.source.membershipVersion],
       );
       const user = update.rows[0];
       if (!user) return false;
       await syncActiveMembershipVersions(client, user);
-      return true;
+      return user.membershipVersion;
     });
-    return updated ? this.findById(input.userId) : undefined;
+    if (updated === false) return undefined;
+    const result = await this.findById(input.userId);
+    return result?.membershipVersion === updated ? result : undefined;
   }
 
-  async disableTotp(userId: string): Promise<AuthUser | undefined> {
-    const updated = await withBypassRlsQuery(this.pool, async (client) => {
+  async disableTotp(userId: string, source: AuthUserMutationSource): Promise<AuthUser | undefined> {
+    const updated = await withAuthMutationQuery(this.pool, source, async (client) => {
       const update = await client.query<{ id: string; membershipVersion: number; tenantId: string | null }>(
         `UPDATE "User"
          SET "totpSecretEncrypted" = NULL,
@@ -683,55 +693,60 @@ export class PostgresAuthUserStore implements AuthUserStore {
              "membershipVersion" = "membershipVersion" + 1,
              "updatedAt" = now()
          WHERE "id" = $1
+           AND "tenantId" = $2 AND "membershipVersion" = $3
          RETURNING "id", "tenantId", "membershipVersion"`,
-        [userId],
+        [userId, source.tenantId, source.membershipVersion],
       );
       const user = update.rows[0];
       if (!user) return false;
       await syncActiveMembershipVersions(client, user);
-      return true;
+      return user.membershipVersion;
     });
-    return updated ? this.findById(userId) : undefined;
+    if (updated === false) return undefined;
+    const result = await this.findById(userId);
+    return result?.membershipVersion === updated ? result : undefined;
   }
 
-  async markTotpCounterUsed(userId: string, counter: string): Promise<boolean> {
+  async markTotpCounterUsed(userId: string, counter: string, source: AuthUserMutationSource): Promise<boolean> {
     if (!isValidTotpCounter(counter)) return false;
-    return withBypassRlsQuery(this.pool, async (client) => {
+    return withAuthMutationQuery(this.pool, source, async (client) => {
       const update = await client.query(
         `UPDATE "User"
          SET "totpLastUsedCounter" = $2,
              "updatedAt" = now()
          WHERE "id" = $1
+           AND "tenantId" = $3 AND "membershipVersion" = $4
            AND CASE
              WHEN "totpLastUsedCounter" IS NULL THEN true
              WHEN "totpLastUsedCounter" ~ '^[0-9]+$' THEN $2::bigint > "totpLastUsedCounter"::bigint
              ELSE false
            END
          RETURNING "id"`,
-        [userId, counter],
+        [userId, counter, source.tenantId, source.membershipVersion],
       );
       return Boolean(update.rows[0]);
     });
   }
 
-  async consumeTotpRecoveryCode(userId: string, codeHash: string): Promise<boolean> {
-    return withBypassRlsQuery(this.pool, async (client) => {
+  async consumeTotpRecoveryCode(userId: string, codeHash: string, source: AuthUserMutationSource): Promise<boolean> {
+    return withAuthMutationQuery(this.pool, source, async (client) => {
       const update = await client.query(
         `UPDATE "User"
          SET "totpRecoveryCodeHashes" = array_remove("totpRecoveryCodeHashes", $2),
              "updatedAt" = now()
          WHERE "id" = $1
+           AND "tenantId" = $3 AND "membershipVersion" = $4
            AND $2 = ANY("totpRecoveryCodeHashes")
          RETURNING "id"`,
-        [userId, codeHash],
+        [userId, codeHash, source.tenantId, source.membershipVersion],
       );
       return Boolean(update.rows[0]);
     });
   }
 
   async updatePassword(id: string, passwordHash: string, input: PasswordStateUpdate = {}): Promise<AuthUser | undefined> {
-    const updated = await withBypassRlsQuery(this.pool, async (client) => {
-      const update = await client.query(
+    const updated = await withAuthMutationQuery(this.pool, input.source, async (client) => {
+      const update = await client.query<{ id: string; tenantId: string | null; membershipVersion: number }>(
         `UPDATE "User"
          SET "passwordHash" = $2,
              "passwordHashVersion" = $5,
@@ -744,18 +759,25 @@ export class PostgresAuthUserStore implements AuthUserStore {
              "membershipVersion" = "membershipVersion" + 1,
              "updatedAt" = now()
          WHERE "id" = $1
-         RETURNING "id"`,
-        [id, passwordHash, input.mustChangePassword ?? null, input.passwordChangedAt ?? null, passwordHashVersionOf(passwordHash)],
+           AND "tenantId" = $6 AND "membershipVersion" = $7
+         RETURNING "id", "tenantId", "membershipVersion"`,
+        [id, passwordHash, input.mustChangePassword ?? null, input.passwordChangedAt ?? null, passwordHashVersionOf(passwordHash), input.source!.tenantId, input.source!.membershipVersion],
       );
-      return Boolean(update.rows[0]);
+      const user = update.rows[0];
+      if (!user) return false;
+      await syncActiveMembershipVersions(client, user);
+      return user.membershipVersion;
     });
-    return updated ? this.findById(id) : undefined;
+    if (updated === false) return undefined;
+    const result = await this.findById(id);
+    return result?.membershipVersion === updated ? result : undefined;
   }
 
   async updatePasswordForReset(id: string, passwordHash: string, input: PasswordStateUpdate, transaction: PasswordResetTransaction): Promise<boolean> {
     if (transaction.kind !== "postgres") return false;
     return transaction.updateUserPassword({
       userId: id,
+      source: input.source!,
       passwordHash,
       passwordHashVersion: passwordHashVersionOf(passwordHash),
       mustChangePassword: input.mustChangePassword,
@@ -763,7 +785,7 @@ export class PostgresAuthUserStore implements AuthUserStore {
     });
   }
 
-  async rehashPassword(tenantId: string, id: string, currentPasswordHash: string, passwordHash: string): Promise<boolean> {
+  async rehashPassword(tenantId: string, id: string, currentPasswordHash: string, passwordHash: string, expectedMembershipVersion?: number): Promise<boolean> {
     return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
       const update = await client.query(
         `UPDATE "User"
@@ -773,8 +795,9 @@ export class PostgresAuthUserStore implements AuthUserStore {
          WHERE "tenantId" = $1
            AND "id" = $2
            AND "passwordHash" = $3
+           AND "membershipVersion" = $6
          RETURNING "id"`,
-        [tenantId, id, currentPasswordHash, passwordHash, passwordHashVersionOf(passwordHash)],
+        [tenantId, id, currentPasswordHash, passwordHash, passwordHashVersionOf(passwordHash), expectedMembershipVersion],
       );
       return Boolean(update.rows[0]);
     });
@@ -1011,4 +1034,16 @@ function cloneCanonicalMembership(membership: CanonicalMembershipProjection): Ca
     ...membership,
     campusIds: membership.campusIds ? [...membership.campusIds] : undefined,
   };
+}
+
+function matchesAuthSource(user: AuthUser, source: AuthUserMutationSource | undefined): boolean {
+  return !!source && source.tenantId === user.tenantId && Number.isInteger(source.membershipVersion) && source.membershipVersion === user.membershipVersion;
+}
+function withAuthMutationQuery<T>(pool: TenantQueryable, source: AuthUserMutationSource | undefined, run: (db: Queryable) => Promise<T>): Promise<T> {
+  if (!source || !source.tenantId || source.tenantId.trim() !== source.tenantId || !Number.isInteger(source.membershipVersion) || source.membershipVersion < 1) throw new Error("AUTH_MUTATION_SOURCE_REQUIRED");
+  return source.tenantId === "system" ? withBypassRlsQuery(pool, run) : withExplicitTenantQuery(pool, source.tenantId, async (db) => {
+    const tenant = await db.query('SELECT "id" FROM "Tenant" WHERE "id" = $1 AND "status" = \'ACTIVE\' FOR SHARE', [source.tenantId]);
+    if (!tenant.rows.length) throw new Error("AUTH_TENANT_INACTIVE");
+    return run(db);
+  });
 }

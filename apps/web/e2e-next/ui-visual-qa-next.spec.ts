@@ -276,13 +276,15 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(tenantCapacity).toContainText("Kullanıcı sayısı");
     await expect(tenantCapacity).toContainText("Operasyon normal");
     await page.getByRole("tab", { name: "Kurum yönetimi" }).click();
-    await page.getByRole("button", { name: "Düzenle" }).click();
+    await expect(page.getByRole("button", { name: "Askıya al" })).toBeVisible();
+    await page.getByRole("button", { name: "Adı düzenle" }).click();
     const editDialog = page.getByRole("dialog", { name: "Kurum düzenle" });
+    await expect(editDialog.getByLabel("Kurum kodu")).toHaveCount(0);
     await expect(editDialog.getByLabel("Plan")).toHaveCount(0);
     await expect(editDialog.getByLabel("Lisans başlangıç")).toHaveCount(0);
     await expect(editDialog.getByLabel("Lisans bitiş")).toHaveCount(0);
     await expect(editDialog.getByLabel("Kullanıcı sınırı")).toHaveCount(0);
-    await expect(editDialog.getByLabel("Durum")).toBeVisible();
+    await expect(editDialog.getByLabel("Durum")).toHaveCount(0);
     await expectUiStable(page, "faz9-system-tenant-detail", consoleErrors);
   });
 
@@ -1017,7 +1019,7 @@ function mockUiApiResponse(pathName: string, searchParams: URLSearchParams, auth
   if (pathName === "/me/tenant") return { data: createTenantResponse() };
   if (pathName === "/me/institution-dashboard") return { data: createInstitutionDashboardSummary() };
   if (pathName === "/tenants") return createListResponse(createSystemTenants(), searchParams);
-  if (pathName === "/tenants/tenant-faz9") return { data: createSystemTenants()[0] };
+  if (pathName === "/tenants/tenant-faz9") return { data: { ...createSystemTenants()[0], lifecycleVersion: 0, management: { verified: true, currentReset: null, allowedActions: { suspend: true, reactivate: false, cleanReset: false } } } };
   if (pathName === "/me/notification-devices") return { data: [] };
   if (pathName === "/me/student/profile") return { data: createStudentProfile() };
   if (pathName === "/me/student/guardians") return { data: createGuardians() };
@@ -1212,7 +1214,7 @@ function createSystemTenants() {
       plan: "TRIAL",
       seatLimit: 25,
       slug: "deneme-koleji",
-      status: "TRIAL",
+      status: "ACTIVE",
     },
   ];
 }

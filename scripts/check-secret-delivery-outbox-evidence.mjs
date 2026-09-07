@@ -21,6 +21,8 @@ const expectedKeys = [
   "outboxRecordHash",
   "purpose",
   "retry",
+  "retainedUncertain",
+  "hasProviderReceipt",
   "terminalStatus",
   "payloadCleared",
   "deliveredAt",
@@ -55,7 +57,7 @@ console.log(`Secret delivery outbox evidence kontrolü geçti: ${evidence.enviro
 function validateEvidence(value) {
   const failures = [];
   if (!exactObject(value, expectedKeys, "outboxEvidence", failures)) return failures;
-  if (value.schemaVersion !== 1) failures.push("schemaVersion 1 olmalı.");
+  if (value.schemaVersion !== 2) failures.push("schemaVersion 2 olmalı.");
   if (value.result !== "PASS") failures.push("result PASS olmalı.");
   if (value.check !== "secret_delivery_outbox_staging_smoke") failures.push("check secret_delivery_outbox_staging_smoke olmalı.");
   if (!['staging', 'production'].includes(value.environment)) failures.push("environment staging veya production olmalı.");
@@ -75,10 +77,14 @@ function validateEvidence(value) {
     failures.push("purpose IDENTITY_INVITATION veya PASSWORD_RESET olmalı.");
   }
   if (!exactObject(value.retry, ["attempts", "retried"], "retry", failures)) return failures;
-  if (!Number.isSafeInteger(value.retry.attempts) || value.retry.attempts < 2) {
-    failures.push("retry.attempts en az 2 olmalı.");
+  if (value.retry.attempts !== 1) {
+    failures.push("retry.attempts 1 olmalı.");
   }
-  if (value.retry.retried !== true) failures.push("retry.retried true olmalı.");
+  if (value.retry.retried !== false) failures.push("retry.retried false olmalı.");
+  if (value.hasProviderReceipt !== true) failures.push("hasProviderReceipt true olmalı.");
+  if (exactObject(value.retainedUncertain, ["recordHash", "attempts", "status", "observedAgeSeconds"], "retainedUncertain", failures)) {
+    if (!/^[a-f0-9]{64}$/.test(value.retainedUncertain.recordHash ?? "") || value.retainedUncertain.recordHash === value.outboxRecordHash || value.retainedUncertain.attempts !== 1 || value.retainedUncertain.status !== "UNCERTAIN" || !Number.isSafeInteger(value.retainedUncertain.observedAgeSeconds) || value.retainedUncertain.observedAgeSeconds < 300 || Date.parse(value.generatedAt) - Date.parse(value.notBefore) < value.retainedUncertain.observedAgeSeconds * 1000) failures.push("retainedUncertain ayrı kayıt/tek deneme/en az 300 saniye taşımalı.");
+  }
   if (value.terminalStatus !== "DELIVERED") failures.push("terminalStatus Phase B success smoke için DELIVERED olmalı.");
   if (value.payloadCleared !== true) failures.push("payloadCleared true olmalı.");
   requireRecentDate(value.deliveredAt, failures, "deliveredAt");
@@ -103,7 +109,7 @@ function validateEvidence(value) {
 }
 
 function validateSeparateRolePrivilege(value, failures) {
-  if (!exactObject(value, ["role", "result", "outboxTable", "otherTables", "publicSchema", "elevatedCapabilities"], "separateRolePrivilege", failures)) return;
+  if (!exactObject(value, ["role", "result", "outboxTable", "otherTables", "tenantAdmission", "publicSchema", "elevatedCapabilities"], "separateRolePrivilege", failures)) return;
   if (value.role !== "secret_delivery_worker") failures.push("separateRolePrivilege.role secret_delivery_worker olmalı.");
   if (value.result !== "PASS") failures.push("separateRolePrivilege.result PASS olmalı.");
   if (exactObject(value.outboxTable, ["select", "update", "insert", "delete", "truncate"], "separateRolePrivilege.outboxTable", failures)) {
@@ -113,6 +119,9 @@ function validateSeparateRolePrivilege(value, failures) {
   }
   if (exactObject(value.otherTables, ["userSelect"], "separateRolePrivilege.otherTables", failures) && value.otherTables.userSelect !== false) {
     failures.push("separateRolePrivilege.otherTables.userSelect false olmalı.");
+  }
+  if (exactObject(value.tenantAdmission, ["idSelect", "statusSelect", "lifecycleVersionSelect", "otherColumnSelect", "write"], "separateRolePrivilege.tenantAdmission", failures)) {
+    if (value.tenantAdmission.idSelect !== true || value.tenantAdmission.statusSelect !== true || value.tenantAdmission.lifecycleVersionSelect !== true || value.tenantAdmission.otherColumnSelect !== false || value.tenantAdmission.write !== false) failures.push("tenantAdmission yalnız id/status/lifecycleVersion SELECT taşımalı.");
   }
   if (exactObject(value.publicSchema, ["create", "owner"], "separateRolePrivilege.publicSchema", failures)) {
     if (value.publicSchema.create !== false || value.publicSchema.owner !== false) {

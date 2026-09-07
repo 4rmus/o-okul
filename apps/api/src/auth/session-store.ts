@@ -1,3 +1,6 @@
+import type { AuthUserMutationSource } from "./auth-user-store.js";
+import { acquireTenantDatabaseSharedLock } from "@o-okul/db";
+import { UnauthorizedException } from "@nestjs/common";
 import { createHash, randomUUID } from "node:crypto";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import pg from "pg";
@@ -52,11 +55,11 @@ export interface SessionStore {
   markFamilyCompromised(tokenFamilyId: string): Promise<void>;
   findConsumedTokenFamily(refreshToken: string): Promise<string | null>;
   revoke(sessionId: string): Promise<void>;
-  revokeOwned(sessionId: string, userId: string, tenantId: string): Promise<boolean>;
-  revokeAllOwned(userId: string, tenantId: string): Promise<number>;
+  revokeOwned(sessionId: string, userId: string, tenantId: string, membershipVersion: number): Promise<boolean>;
+  revokeAllOwned(userId: string, tenantId: string, membershipVersion: number): Promise<number>;
+  revokeByTenant(tenantId: string, lifecycleVersion: number): Promise<number>;
   revokeByMembership(userId: string, tenantId: string, membershipVersion: number): Promise<void>;
-  revokeByUser(userId: string, transaction?: PasswordResetTransaction): Promise<void>;
-  revokeByUserExcept(userId: string, activeSessionId: string): Promise<void>;
+  revokeByUser(userId: string, source: AuthUserMutationSource | PasswordResetTransaction): Promise<void>;
 }
 
 export const authSessionStoreToken = Symbol("AuthSessionStore");
@@ -157,17 +160,29 @@ export class InMemorySessionStore implements SessionStore {
     this.sessions.set(sessionId, { ...session, status: "REVOKED", updatedAt: new Date() });
   }
 
-  async revokeOwned(sessionId: string, userId: string, tenantId: string): Promise<boolean> {
+  async revokeOwned(sessionId: string, userId: string, tenantId: string, membershipVersion: number): Promise<boolean> {
     const session = this.sessions.get(sessionId);
-    if (!session || session.userId !== userId || session.tenantId !== tenantId || session.status !== "ACTIVE") return false;
+    if (!session || session.userId !== userId || session.tenantId !== tenantId || session.status !== "ACTIVE" || session.membershipVersion > membershipVersion) return false;
     this.sessions.set(sessionId, { ...session, status: "REVOKED", updatedAt: new Date() });
     return true;
   }
 
-  async revokeAllOwned(userId: string, tenantId: string): Promise<number> {
+  async revokeAllOwned(userId: string, tenantId: string, membershipVersion: number): Promise<number> {
     let revokedCount = 0;
     for (const [id, session] of this.sessions) {
-      if (session.userId === userId && session.tenantId === tenantId && session.status === "ACTIVE") {
+      if (session.userId === userId && session.tenantId === tenantId && session.status === "ACTIVE" && session.membershipVersion <= membershipVersion) {
+        this.sessions.set(id, { ...session, status: "REVOKED", updatedAt: new Date() });
+        revokedCount += 1;
+      }
+    }
+    return revokedCount;
+  }
+
+  async revokeByTenant(tenantId: string, lifecycleVersion: number): Promise<number> {
+    if (!Number.isInteger(lifecycleVersion) || lifecycleVersion < 0) throw new Error("SESSION_REVOCATION_SOURCE_REQUIRED");
+    let revokedCount = 0;
+    for (const [id, session] of this.sessions) {
+      if (session.tenantId === tenantId && session.status === "ACTIVE") {
         this.sessions.set(id, { ...session, status: "REVOKED", updatedAt: new Date() });
         revokedCount += 1;
       }
@@ -187,10 +202,12 @@ export class InMemorySessionStore implements SessionStore {
     }
   }
 
-  async revokeByUser(userId: string, transaction?: PasswordResetTransaction): Promise<void> {
+  async revokeByUser(userId: string, source: AuthUserMutationSource | PasswordResetTransaction): Promise<void> {
+    const transaction = "kind" in source ? source : undefined;
+    if (!transaction) assertRevocationSource(source as AuthUserMutationSource);
     const revoke = () => {
       for (const [id, session] of this.sessions) {
-        if (session.userId === userId) {
+        if (session.userId === userId && (transaction || (session.tenantId === (source as AuthUserMutationSource).tenantId && session.membershipVersion <= (source as AuthUserMutationSource).membershipVersion))) {
           this.sessions.set(id, { ...session, status: "REVOKED", updatedAt: new Date() });
         }
       }
@@ -202,13 +219,6 @@ export class InMemorySessionStore implements SessionStore {
     }
   }
 
-  async revokeByUserExcept(userId: string, activeSessionId: string): Promise<void> {
-    for (const [id, session] of this.sessions) {
-      if (session.userId === userId && id !== activeSessionId) {
-        this.sessions.set(id, { ...session, status: "REVOKED", updatedAt: new Date() });
-      }
-    }
-  }
 
   private requireSession(sessionId: string): SessionRecord {
     const session = this.sessions.get(sessionId);
@@ -224,12 +234,16 @@ export class PostgresSessionStore implements SessionStore {
 
   async create(input: SessionIssueInput): Promise<SessionRecord> {
     return this.withClient(async (client) => {
+      await this.assertActiveTenant(client, input.tenantId);
+      await this.assertOriginalMembership(client, input);
       return this.insert(client, input);
     });
   }
 
   async replace(sessionId: string, input: SessionIssueInput): Promise<SessionRecord> {
     return this.withClient(async (client) => {
+      await this.assertActiveTenant(client, input.tenantId);
+      await this.assertOriginalMembership(client, input);
       const revoked = await client.query(
         `UPDATE "AuthSession"
          SET "status" = 'REVOKED',
@@ -244,6 +258,19 @@ export class PostgresSessionStore implements SessionStore {
       if (!revoked.rows[0]) throw new Error("SESSION_REPLACE_CONFLICT");
       return this.insert(client, input);
     });
+  }
+
+  private async assertActiveTenant(client: pg.PoolClient, tenantId: string): Promise<void> {
+    if (tenantId !== "system") await acquireTenantDatabaseSharedLock(client, tenantId);
+    // Lock order matches lifecycle transitions: Tenant, then AuthSession.
+    const tenant = await client.query(`SELECT "id" FROM "Tenant" WHERE "id" = $1 AND "status" = 'ACTIVE' FOR SHARE`, [tenantId]);
+    if (!tenant.rows[0]) throw new UnauthorizedException("SESSION_TENANT_INACTIVE");
+  }
+
+  private async assertOriginalMembership(client: pg.PoolClient, input: Pick<SessionIssueInput, "tenantId" | "userId" | "membershipId" | "membershipVersion">): Promise<void> {
+    if (input.tenantId === "system") return;
+    const user = await client.query(`SELECT u."id" FROM "User" u JOIN "TenantMembership" m ON m."userId" = u."id" AND m."tenantId" = u."tenantId" WHERE u."id" = $1 AND u."tenantId" = $2 AND u."accountStatus" = 'ACTIVE' AND u."membershipVersion" = $3 AND m."id" = $4 AND m."version" = $3 AND m."status" = 'ACTIVE' AND m."startsAt" <= now() AND (m."endsAt" IS NULL OR m."endsAt" > now()) FOR SHARE OF u,m`, [input.userId, input.tenantId, input.membershipVersion, input.membershipId]);
+    if (!user.rows.length) throw new Error("SESSION_MEMBERSHIP_CHANGED");
   }
 
   private async insert(client: pg.PoolClient, input: SessionIssueInput): Promise<SessionRecord> {
@@ -313,6 +340,11 @@ export class PostgresSessionStore implements SessionStore {
 
   async updateRefreshToken(sessionId: string, currentRefreshToken: string, nextRefreshToken: string, expiresAt: Date): Promise<SessionRecord> {
     return this.withClient(async (client) => {
+      const source = (await client.query<SessionRow>('SELECT * FROM "AuthSession" WHERE "id" = $1 AND "refreshTokenHash" = $2 AND "status" = \'ACTIVE\' AND "expiresAt" > now()', [sessionId, hashRefreshToken(currentRefreshToken)])).rows[0];
+      if (!source) throw new Error("REFRESH_TOKEN_ROTATION_CONFLICT");
+      const captured = toSessionRecord(source);
+      await this.assertActiveTenant(client, captured.tenantId);
+      await this.assertOriginalMembership(client, captured);
       const updated = await client.query<SessionRow>(
         `WITH rotated AS (
            UPDATE "AuthSession"
@@ -344,13 +376,14 @@ export class PostgresSessionStore implements SessionStore {
 
   async markFamilyCompromised(tokenFamilyId: string): Promise<void> {
     await this.withClient(async (client) => {
-      await client.query(
-        `UPDATE "AuthSession"
-         SET "status" = 'COMPROMISED',
-             "updatedAt" = now()
-         WHERE "tokenFamilyId" = $1`,
-        [tokenFamilyId],
-      );
+      const sources = (await client.query<AuthUserMutationSource>('SELECT DISTINCT "tenantId", "membershipVersion" FROM "AuthSession" WHERE "tokenFamilyId" = $1', [tokenFamilyId])).rows;
+      if (!sources.length) return;
+      if (new Set(sources.map((source) => source.tenantId)).size !== 1) throw new Error("SESSION_FAMILY_SCOPE_CONFLICT");
+      await this.lockSource(client, sources[0]!);
+      for (const source of sources) {
+        assertRevocationSource(source);
+        await client.query('UPDATE "AuthSession" SET "status" = \'COMPROMISED\', "updatedAt" = now() WHERE "tokenFamilyId" = $1 AND "tenantId" = $2 AND "membershipVersion" = $3', [tokenFamilyId, source.tenantId, source.membershipVersion]);
+      }
     });
   }
 
@@ -366,22 +399,16 @@ export class PostgresSessionStore implements SessionStore {
 
   async revoke(sessionId: string): Promise<void> {
     await this.withClient(async (client) => {
-      const result = await client.query(
-        `UPDATE "AuthSession"
-         SET "status" = 'REVOKED',
-             "updatedAt" = now()
-         WHERE "id" = $1
-         RETURNING "id"`,
-        [sessionId],
-      );
-      if (!result.rows[0]) {
-        throw new Error("SESSION_NOT_FOUND");
-      }
+      const source = (await client.query<AuthUserMutationSource>('SELECT "tenantId", "membershipVersion" FROM "AuthSession" WHERE "id" = $1', [sessionId])).rows[0];
+      if (!source) return;
+      await this.lockSource(client, source);
+      await client.query('UPDATE "AuthSession" SET "status" = \'REVOKED\', "updatedAt" = now() WHERE "id" = $1 AND "tenantId" = $2 AND "membershipVersion" = $3', [sessionId, source.tenantId, source.membershipVersion]);
     });
   }
 
-  async revokeOwned(sessionId: string, userId: string, tenantId: string): Promise<boolean> {
+  async revokeOwned(sessionId: string, userId: string, tenantId: string, membershipVersion: number): Promise<boolean> {
     return this.withClient(async (client) => {
+      await this.lockSource(client, { tenantId, membershipVersion });
       const result = await client.query(
         `UPDATE "AuthSession"
          SET "status" = 'REVOKED',
@@ -389,25 +416,45 @@ export class PostgresSessionStore implements SessionStore {
          WHERE "id" = $1
            AND "userId" = $2
            AND "tenantId" = $3
-           AND "status" = 'ACTIVE'
+           AND "status" = 'ACTIVE' AND "membershipVersion" <= $4
          RETURNING "id"`,
-        [sessionId, userId, tenantId],
+        [sessionId, userId, tenantId, membershipVersion],
       );
       return Boolean(result.rows[0]);
     });
   }
 
-  async revokeAllOwned(userId: string, tenantId: string): Promise<number> {
+  async revokeAllOwned(userId: string, tenantId: string, membershipVersion: number): Promise<number> {
     return this.withClient(async (client) => {
+      await this.lockSource(client, { tenantId, membershipVersion });
       const result = await client.query(
         `UPDATE "AuthSession"
          SET "status" = 'REVOKED',
              "updatedAt" = now()
          WHERE "userId" = $1
            AND "tenantId" = $2
+           AND "status" = 'ACTIVE' AND "membershipVersion" <= $3
+         RETURNING "id"`,
+        [userId, tenantId, membershipVersion],
+      );
+      return result.rowCount ?? result.rows.length;
+    });
+  }
+
+  async revokeByTenant(tenantId: string, lifecycleVersion: number): Promise<number> {
+    return this.withClient(async (client) => {
+      if (!Number.isInteger(lifecycleVersion) || lifecycleVersion < 0) throw new Error("SESSION_REVOCATION_SOURCE_REQUIRED");
+      if (tenantId !== "system") await acquireTenantDatabaseSharedLock(client, tenantId);
+      const target = await client.query('SELECT "id" FROM "Tenant" WHERE "id" = $1 AND "lifecycleVersion" = $2 FOR SHARE', [tenantId, lifecycleVersion]);
+      if (!target.rows.length) return 0;
+      const result = await client.query(
+        `UPDATE "AuthSession"
+         SET "status" = 'REVOKED',
+             "updatedAt" = now()
+         WHERE "tenantId" = $1
            AND "status" = 'ACTIVE'
          RETURNING "id"`,
-        [userId, tenantId],
+        [tenantId],
       );
       return result.rowCount ?? result.rows.length;
     });
@@ -415,6 +462,7 @@ export class PostgresSessionStore implements SessionStore {
 
   async revokeByMembership(userId: string, tenantId: string, membershipVersion: number): Promise<void> {
     await this.withClient(async (client) => {
+      await this.lockSource(client, { tenantId, membershipVersion });
       await client.query(
         `UPDATE "AuthSession"
          SET "status" = 'REVOKED',
@@ -427,37 +475,23 @@ export class PostgresSessionStore implements SessionStore {
     });
   }
 
-  async revokeByUser(userId: string, transaction?: PasswordResetTransaction): Promise<void> {
-    if (transaction?.kind === "postgres") {
-      await transaction.revokeUserSessions(userId);
-    } else {
-      await this.withClient(async (client) => {
-        await client.query(
-          `UPDATE "AuthSession"
-           SET "status" = 'REVOKED',
-               "updatedAt" = now()
-           WHERE "userId" = $1`,
-          [userId],
-        );
-      });
-    }
+  async revokeByUser(userId: string, source: AuthUserMutationSource | PasswordResetTransaction): Promise<void> {
+    if ("kind" in source && source.kind === "postgres") return source.revokeUserSessions(userId);
+    if ("kind" in source) throw new Error("SESSION_REVOCATION_SOURCE_REQUIRED");
+    await this.withClient(async (client) => {
+      await this.lockSource(client, source);
+      await client.query('UPDATE "AuthSession" SET "status" = \'REVOKED\', "updatedAt" = now() WHERE "userId" = $1 AND "tenantId" = $2 AND "membershipVersion" <= $3', [userId, source.tenantId, source.membershipVersion]);
+    });
   }
 
-  async revokeByUserExcept(userId: string, activeSessionId: string): Promise<void> {
-    await this.withClient(async (client) => {
-      await client.query(
-        `UPDATE "AuthSession"
-         SET "status" = 'REVOKED',
-             "updatedAt" = now()
-         WHERE "userId" = $1
-           AND "id" <> $2`,
-        [userId, activeSessionId],
-      );
-    });
+  private async lockSource(client: pg.PoolClient, source: AuthUserMutationSource): Promise<void> {
+    assertRevocationSource(source);
+    if (source.tenantId !== "system") await acquireTenantDatabaseSharedLock(client, source.tenantId);
   }
 
   private async withClient<T>(callback: (client: pg.PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
+    let discard = false;
     try {
       await client.query("BEGIN");
       await client.query("SELECT set_config('app.bypass_rls', 'true', true)");
@@ -465,10 +499,10 @@ export class PostgresSessionStore implements SessionStore {
       await client.query("COMMIT");
       return result;
     } catch (error) {
-      await client.query("ROLLBACK");
+      try { await client.query("ROLLBACK"); } catch { discard = true; }
       throw error;
     } finally {
-      client.release();
+      client.release(discard || undefined);
     }
   }
 }
@@ -531,4 +565,8 @@ function cloneSession(session: SessionRecord | null): SessionRecord | null;
 function cloneSession(session: SessionRecord | null): SessionRecord | null {
   if (!session) return null;
   return { ...session, roles: [...session.roles] };
+}
+
+function assertRevocationSource(source: AuthUserMutationSource | undefined): asserts source is AuthUserMutationSource {
+  if (!source || !source.tenantId || source.tenantId.trim() !== source.tenantId || !Number.isInteger(source.membershipVersion) || source.membershipVersion < 1) throw new Error("SESSION_REVOCATION_SOURCE_REQUIRED");
 }

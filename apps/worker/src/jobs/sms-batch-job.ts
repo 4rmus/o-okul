@@ -1,6 +1,5 @@
 import type { SmsAdapter, SmsMessage, SmsSendResult } from "@o-okul/sms-adapter";
 import { runWithJobContext } from "../context/job-context.js";
-import { workerLogger } from "../observability/logging.js";
 import { assertTenantJobPayload, type QueueJob, type TenantJobPayload } from "../queue/queues.js";
 
 export interface SmsBatchJobPayload extends TenantJobPayload {
@@ -79,6 +78,7 @@ export async function processSmsBatchJob(
         jobId: job.id,
       });
       if (completed) {
+        if (completed.failedCount > 0) throw new Error("SMS_PROVIDER_OUTCOME_UNCERTAIN");
         return {
           tenantId: completed.tenantId,
           templateId: completed.templateId,
@@ -103,6 +103,7 @@ export async function processSmsBatchJob(
         throw error;
       }
 
+      if (results.length !== job.payload.recipients.length || results.some((item, index) => item.status !== "sent" || item.to !== job.payload.recipients[index]?.to || typeof item.providerMessageId !== "string" || !item.providerMessageId.trim() || item.providerMessageId.length > 512 || item.errorCode)) throw new Error("SMS_PROVIDER_OUTCOME_UNCERTAIN");
       const result = {
         tenantId: job.payload.tenantId,
         templateId: job.payload.templateId,
@@ -128,21 +129,10 @@ export async function processSmsBatchJob(
   );
 }
 
-async function markCompletedWithoutRetry(
-  deliveryReporter: SmsBatchDeliveryReporter | undefined,
-  input: SmsBatchDeliveryCompletedInput,
-): Promise<void> {
+async function markCompletedWithoutRetry(deliveryReporter: SmsBatchDeliveryReporter | undefined, input: SmsBatchDeliveryCompletedInput): Promise<void> {
   if (!deliveryReporter) return;
-  try {
-    await deliveryReporter.markCompleted(input);
-  } catch (error) {
-    workerLogger.warn({
-      err: error,
-      jobId: input.jobId,
-      tenantId: input.tenantId,
-      templateId: input.templateId,
-    }, "sms_batch_delivery_report_write_failed_after_provider_success");
-  }
+  try { await deliveryReporter.markCompleted(input); }
+  catch { throw new Error("SMS_DELIVERY_RECEIPT_UNVERIFIED"); }
 }
 
 function resolveProviderErrorCode(error: unknown): string {

@@ -21,7 +21,7 @@ describe("Admin MFA TOTP helpers", () => {
     process.env.JWT_ACCESS_SECRET = "jwt-access-secret-123456789";
     delete process.env.ADMIN_MFA_CHALLENGE_SECRET;
 
-    expect(() => createLoginMfaChallenge("admin-a")).toThrow("ADMIN_MFA_CHALLENGE_SECRET_REQUIRED");
+    expect(() => createLoginMfaChallenge("admin-a", 1)).toThrow("ADMIN_MFA_CHALLENGE_SECRET_REQUIRED");
   });
 
   it.each(["production", "staging"])("%s ortamında MFA modunu zorunlu tutar", (nodeEnv) => {
@@ -49,7 +49,7 @@ describe("Admin MFA TOTP helpers", () => {
     process.env.JWT_ACCESS_SECRET = "shared-secret-123456789";
     process.env.ADMIN_MFA_CHALLENGE_SECRET = "shared-secret-123456789";
 
-    expect(() => createLoginMfaChallenge("admin-a")).toThrow("ADMIN_MFA_CHALLENGE_SECRET_MUST_DIFFER");
+    expect(() => createLoginMfaChallenge("admin-a", 1)).toThrow("ADMIN_MFA_CHALLENGE_SECRET_MUST_DIFFER");
   });
 
   it("step-up kanıtını kullanıcı, session, üyelik sürümü ve amaca bağlar", () => {
@@ -71,10 +71,27 @@ describe("Admin MFA TOTP helpers", () => {
     expect(() => verifyAdminMfaStepUpProof(expired.stepUpToken, binding)).toThrow("ADMIN_MFA_TOKEN_EXPIRED");
   });
 
+  it("lifecycle proof hedef kurum, durum, sürüm ve owner amacı arasında taşınamaz", () => {
+    const binding = { userId: "system-a", sessionId: "session-a", membershipVersion: 3,
+      purpose: "TENANT_LIFECYCLE_CHANGE" as const,
+      target: { tenantId: "tenant-a", status: "SUSPENDED" as const, expectedLifecycleVersion: 2 } };
+    const proof = createAdminMfaStepUpProof(binding);
+    expect(() => verifyAdminMfaStepUpProof(proof.stepUpToken, binding)).not.toThrow();
+    for (const target of [{ ...binding.target, tenantId: "tenant-b" }, { ...binding.target, status: "ACTIVE" as const }, { ...binding.target, expectedLifecycleVersion: 3 }]) {
+      expect(() => verifyAdminMfaStepUpProof(proof.stepUpToken, { ...binding, target })).toThrow("ADMIN_MFA_STEP_UP_CONTEXT_INVALID");
+    }
+    for (const changed of [{ userId: "system-b" }, { sessionId: "session-b" }, { membershipVersion: 4 }, { purpose: "OWNER_ADMIN_CHANGE" as const }]) {
+      expect(() => verifyAdminMfaStepUpProof(proof.stepUpToken, { ...binding, ...changed })).toThrow("ADMIN_MFA_STEP_UP_CONTEXT_INVALID");
+    }
+    const missingTarget = { ...binding, target: undefined };
+    expect(() => verifyAdminMfaStepUpProof(createAdminMfaStepUpProof(missingTarget).stepUpToken, missingTarget)).toThrow("ADMIN_MFA_STEP_UP_CONTEXT_INVALID");
+    expect(() => verifyAdminMfaStepUpProof(createAdminMfaStepUpProof(binding, Date.now() - 360000).stepUpToken, binding)).toThrow("ADMIN_MFA_TOKEN_EXPIRED");
+  });
+
   it("login MFA challenge'ına benzersiz bir kimlik ekler", () => {
     const now = Date.now();
-    const first = createLoginMfaChallenge("admin-a", now);
-    const second = createLoginMfaChallenge("admin-a", now);
+    const first = createLoginMfaChallenge("admin-a", 1, now);
+    const second = createLoginMfaChallenge("admin-a", 1, now);
 
     expect(first.challengeToken).not.toBe(second.challengeToken);
     expect(verifyAdminMfaToken(first.challengeToken, "admin-mfa-login").challengeId).toMatch(/^[A-Za-z0-9_-]+$/);

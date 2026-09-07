@@ -8,6 +8,10 @@ const migrationPath = join(
   "../prisma/migrations/20260530143000_partition_audit_log_by_created_at/migration.sql",
 );
 const sql = readFileSync(migrationPath, "utf8");
+const appendOnlySql = readFileSync(join(
+  __dirname,
+  "../prisma/migrations/20260904130000_enforce_audit_log_append_only/migration.sql",
+), "utf8");
 const maintenanceScript = readFileSync(join(__dirname, "maintain-audit-log-partitions.mjs"), "utf8");
 const maintenanceContractScript = readFileSync(join(__dirname, "check-audit-log-partition-maintenance-contract.mjs"), "utf8");
 
@@ -26,6 +30,15 @@ const failures = expectations
   .map((expectation, index) => ({ expectation, index }))
   .filter(({ expectation }) => !expectation.test(sql))
   .map(({ index }) => `partition beklentisi ${index + 1} eksik`);
+
+for (const token of [
+  `REVOKE UPDATE, DELETE, TRUNCATE ON TABLE "AuditLog" FROM app;`,
+  `FROM pg_inherits inheritance`,
+  `parent.relname = 'AuditLog'`,
+  `EXECUTE format('REVOKE ALL PRIVILEGES ON TABLE %I FROM app', partition_name);`,
+]) {
+  if (!appendOnlySql.includes(token)) failures.push(`append-only migration token eksik: ${token}`);
+}
 
 for (const { name, from, to } of expectedBootstrapPartitions("2026-01", 12)) {
   const partition = new RegExp(
@@ -48,6 +61,7 @@ requireTokens(
     "CREATE TABLE IF NOT EXISTS",
     "PARTITION OF \"AuditLog\"",
     "FOR VALUES FROM",
+    "REVOKE ALL PRIVILEGES ON TABLE",
     "AuditLog RANGE partitioned tablo olmalı.",
     "audit_log_partition_maintenance",
     "pnpm audit-log-partition:maintain",

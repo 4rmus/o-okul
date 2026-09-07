@@ -78,6 +78,7 @@ describe("BullMQ tenant queue producer", () => {
     expect(queues[0]?.adds).toEqual([{
       name: "excel-import",
       data: {
+        lifecycleVersion: 0,
         tenantId: "tenant-a",
         userId: "user-a",
         entityId: "raw-import-a",
@@ -113,6 +114,7 @@ describe("BullMQ tenant queue producer", () => {
     expect(queues[0]?.adds).toEqual([{
       name: "report-generation",
       data: {
+        lifecycleVersion: 0,
         tenantId: "tenant-a",
         userId: "user-a",
         entityId: "exam-a",
@@ -199,6 +201,7 @@ describe("BullMQ tenant queue producer", () => {
     expect(queues[0]?.adds).toEqual([{
       name: "sms-batch",
       data: {
+        lifecycleVersion: 0,
         tenantId: "tenant-a",
         userId: "user-a",
         entityId: "message-template-a",
@@ -242,6 +245,7 @@ describe("BullMQ tenant queue producer", () => {
     expect(queues[0]?.adds).toEqual([{
       name: "announcement-delivery",
       data: {
+        lifecycleVersion: 0,
         tenantId: "tenant-a",
         userId: "user-a",
         entityId: "announcement-a",
@@ -279,9 +283,9 @@ class FakeQueue {
     readonly job?: FakeQueueJob,
   ) {}
 
-  async add(name: string, data: unknown, options: unknown): Promise<FakeQueueJob | undefined> {
+  async add(name: string, data: unknown, options: unknown): Promise<FakeQueueJob> {
     this.adds.push({ name, data, options });
-    return this.job;
+    const job = this.job ?? new FakeQueueJob("waiting"); job.data = data; return job;
   }
 
   async close(): Promise<void> {
@@ -290,6 +294,7 @@ class FakeQueue {
 }
 
 class FakeQueueJob {
+  data: unknown;
   readonly retries: string[] = [];
 
   constructor(private readonly state: string) {}

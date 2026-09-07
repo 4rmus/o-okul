@@ -1,5 +1,7 @@
 "use client";
 
+import { ResetRequestPanel } from "./reset-request-panel.js";
+
 import { useQuery } from "@tanstack/react-query";
 import type { LicenseTermListRecord } from "@o-okul/shared-types";
 import { CrudPage, EmptyState, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
@@ -49,6 +51,7 @@ export function LicenseTermsPage() {
   const badges: OperationSummaryBadge[] = [{ key: "authority", label: "Kurum lisans kaydı", tone: "info" }];
 
   return (
+    <>
     <CrudPage
       aria-label="Lisans dönemleri"
       columns={columns}
@@ -65,6 +68,8 @@ export function LicenseTermsPage() {
       tableDescription="Plan, tarih aralığı, aktif öğrenci limiti ve erişim durumu."
       title="Lisans Dönemleri"
     />
+    {auth && auth.session.activePersona === "STAFF" && !auth.session.roles.includes("SYSTEM_ADMIN") && auth.session.roles.some((role) => ["TENANT_ADMIN", "TENANT_OWNER"].includes(role)) ? <ResetRequestPanel key={`${auth.session.tenantId}:${auth.session.userId}:${auth.session.id}`} auth={auth} /> : null}
+    </>
   );
 }
 

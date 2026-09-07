@@ -29,8 +29,8 @@ describe("processSmsBatchJob", () => {
       },
       {
         to: "5000000002",
-        status: "failed",
-        errorCode: "PROVIDER_REJECTED",
+        status: "sent",
+        providerMessageId: "sms-2",
         segmentEstimate: {
           encoding: "GSM_7",
           characterCount: 64,
@@ -67,8 +67,8 @@ describe("processSmsBatchJob", () => {
     expect(result).toEqual({
       tenantId: "tenant-a",
       templateId: "message-template-a",
-      sentCount: 1,
-      failedCount: 1,
+      sentCount: 2,
+      failedCount: 0,
       billableSegments: 2,
       status: "completed",
     });
@@ -77,8 +77,8 @@ describe("processSmsBatchJob", () => {
       jobId: "message-template-a_sms-hash-a",
       templateId: "message-template-a",
       recipientCount: 2,
-      sentCount: 1,
-      failedCount: 1,
+      sentCount: 2,
+      failedCount: 0,
       billableSegments: 2,
     }]);
   });
@@ -91,6 +91,7 @@ describe("processSmsBatchJob", () => {
         return [{
           to: "5000000001",
           status: "sent",
+          providerMessageId: "sms-receipt",
           segmentEstimate: {
             encoding: "GSM_7",
             characterCount: 5,
@@ -171,11 +172,12 @@ describe("processSmsBatchJob", () => {
     });
   });
 
-  it("provider başarılıysa delivery raporu yazılamasa bile retry tetiklemez", async () => {
+  it("provider sonrası delivery receipt ACK kaybını belirsiz bırakır", async () => {
     const deliveryReporter = new FakeDeliveryReporter(undefined, new Error("DB_DOWN"));
     const adapter = new FakeSmsAdapter([{
       to: "5000000001",
       status: "sent",
+      providerMessageId: "sms-receipt",
       segmentEstimate: {
         encoding: "GSM_7",
         characterCount: 5,
@@ -202,14 +204,7 @@ describe("processSmsBatchJob", () => {
       },
       adapter,
       deliveryReporter,
-    )).resolves.toEqual({
-      tenantId: "tenant-a",
-      templateId: "message-template-a",
-      sentCount: 1,
-      failedCount: 0,
-      billableSegments: 1,
-      status: "completed",
-    });
+    )).rejects.toThrow("SMS_DELIVERY_RECEIPT_UNVERIFIED");
   });
 
   it("yanlış job adı veya eksik alıcıda işi başlatmaz", async () => {

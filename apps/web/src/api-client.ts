@@ -136,12 +136,21 @@ export async function getTenantLoginContext(): Promise<TenantLoginContextRespons
   return readData<TenantLoginContextResponse>(response);
 }
 
-export async function changePassword(accessToken: string, input: MePasswordChangeRequest): Promise<MePasswordChangeResponse> {
-  return apiRequest<MePasswordChangeResponse>(accessToken, `${apiBaseUrl}/me/password`, {
-    body: JSON.stringify(input),
-    headers: { "content-type": "application/json" },
-    method: "POST",
+export async function changePassword(accessToken: string, input: MePasswordChangeRequest, expected: { userId: string; sessionId: string; membershipVersion: number }): Promise<MePasswordChangeResponse> {
+  const response = await authenticatedFetchOnce(accessToken, expected, `${apiBaseUrl}/me/password`, {
+    body: JSON.stringify(input), headers: { "content-type": "application/json" }, method: "POST",
   });
+  if (!response.ok) throw new ApiRequestError("PASSWORD_CHANGE_FAILED", response.status, await readErrorCode(response));
+  const result = await readData<MePasswordChangeResponse>(response);
+  if (!result || typeof result.changedAt !== "string" || !Number.isFinite(Date.parse(result.changedAt))) throw new Error("PASSWORD_CHANGE_UNVERIFIED");
+  return result;
+}
+
+export function clearAuthForSession(expected: { userId: string; sessionId: string; membershipVersion: number }): boolean {
+  if (activeAuth && (activeAuth.session.userId !== expected.userId || activeAuth.session.id !== expected.sessionId || activeAuth.session.membershipVersion !== expected.membershipVersion)) return false;
+  activeAuth = null;
+  queryClient.clear();
+  return true;
 }
 
 export async function requestPasswordReset(input: PasswordResetRequest): Promise<PasswordResetAcceptedResponse> {
@@ -280,6 +289,12 @@ export async function logout(): Promise<void> {
   });
   activeAuth = null;
   queryClient.clear();
+}
+
+// Critical operations may refresh through prior reads, but must never change actor or replay a POST.
+export function authenticatedFetchOnce(accessToken: string, expected: { userId: string; sessionId: string; membershipVersion: number }, input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  if (!activeAuth || activeAuth.session.userId !== expected.userId || activeAuth.session.id !== expected.sessionId || activeAuth.session.membershipVersion !== expected.membershipVersion) throw new Error("AUTH_CONTEXT_CHANGED");
+  return fetch(input, withAuthorization(init, activeAuth?.accessToken ?? accessToken));
 }
 
 export async function authenticatedFetch(accessToken: string, input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {

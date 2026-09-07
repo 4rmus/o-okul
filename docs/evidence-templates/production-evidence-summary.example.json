@@ -283,18 +283,18 @@
       "gaps": []
     },
     "secretDeliveryOutbox": {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "result": "PASS",
       "check": "secret_delivery_outbox_staging_smoke",
       "environment": "production",
       "generatedAt": "2026-06-15T09:40:00.000Z",
       "releaseImageTag": "1111111111111111111111111111111111111111",
-      "notBefore": "2026-06-15T09:39:00.000Z",
+      "notBefore": "2026-06-15T09:30:00.000Z",
       "outboxRecordHash": "5f4dcc3b5aa765d61d8327deb882cf99d0f2d2d2d2d2d2d2d2d2d2d2d2d2d2d2",
       "purpose": "IDENTITY_INVITATION",
       "retry": {
-        "attempts": 2,
-        "retried": true
+        "attempts": 1,
+        "retried": false
       },
       "terminalStatus": "DELIVERED",
       "payloadCleared": true,
@@ -322,12 +322,26 @@
           "createRole": false,
           "createDb": false,
           "bypassRls": false
+        },
+        "tenantAdmission": {
+          "idSelect": true,
+          "statusSelect": true,
+          "lifecycleVersionSelect": true,
+          "otherColumnSelect": false,
+          "write": false
         }
       },
       "commandsPassed": [
         "pnpm secret-delivery-outbox:staging:smoke"
       ],
-      "gaps": []
+      "gaps": [],
+      "hasProviderReceipt": true,
+      "retainedUncertain": {
+        "recordHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "attempts": 1,
+        "status": "UNCERTAIN",
+        "observedAgeSeconds": 301
+      }
     }
   },
   "reports": {
@@ -926,7 +940,9 @@
         "runUrl": "https://github.com/example/o-okul/actions/runs/1234567890",
         "completedAt": "2026-05-31T11:45:00.000Z",
         "conclusion": "success",
-        "successfulJobs": ["ci"]
+        "successfulJobs": [
+          "ci"
+        ]
       },
       "allowedEvidenceHosts": [],
       "redesignPlanPath": "docs/ui-ux-professionalization-contract.md",
@@ -1366,7 +1382,7 @@
       "environment": "production",
       "checkedAt": "2026-05-31T11:30:00.000Z",
       "schema": {
-        "tenantScopedTables": 64,
+        "tenantScopedTables": 66,
         "derivedFromSchema": true,
         "staticCheckPassed": true,
         "liveCheckPassed": true,
@@ -1431,6 +1447,8 @@
           "MessageTemplate",
           "SmsBatchDeliveryReport",
           "BackupRestoreJob",
+          "TenantFreshResetOperation",
+          "TenantMutationActivity",
           "SupportTicket",
           "SupportTicketAttachment",
           "SupportTicketComment",
@@ -1441,7 +1459,7 @@
         "tenantAHash": "tenant-a-redacted",
         "tenantBHash": "tenant-b-redacted",
         "crossTenantReadRows": 0,
-        "crossTenantReadChecks": 64,
+        "crossTenantReadChecks": 66,
         "withCheckRejects": [
           "Student wrong tenant insert",
           "Homework wrong tenant insert",

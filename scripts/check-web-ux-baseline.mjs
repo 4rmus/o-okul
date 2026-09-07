@@ -919,7 +919,7 @@ requireTokens("apps/web/e2e-next/governance-evidence-contract-next.spec.ts", [
   "toHaveLength(0)",
   "Komut paleti",
   "createAuthResponse(roles = [\"TENANT_ADMIN\"], activePersona: \"STAFF\" | \"TEACHER\" | null = \"STAFF\")",
-  'roles: ["TENANT_ADMIN", "SYSTEM_ADMIN"]',
+  'roles: ["TENANT_ADMIN"]',
   "12345678901",
   "+905551110001",
   "admin-a@example.test",
@@ -2862,8 +2862,8 @@ requireTokens("apps/web/app/(app)/sistem/system-dashboard.tsx", [
   '<MetricGrid className="next-system-summary-grid" aria-label="Sistem özeti" role="region">',
   "next-system-summary-card",
   "Platformdaki toplam kurum",
-  "Kullanıma açık kurum",
-  "Deneme planındaki kurum",
+  "Listelenen ilk 100 kayıtta kullanıma açık kurum",
+  "Listelenen ilk 100 kayıtta deneme planındaki kurum",
 ]);
 
 requireNoTokens("apps/web/app/(app)/sistem/system-dashboard.tsx", [
@@ -2895,7 +2895,10 @@ requireTokens("apps/web/app/(app)/sistem/kurumlar/[tenantId]/tenant-detail-page.
   "tenantRecommendedAction",
   "seatUsagePercent",
   "tenantUpdateFormSchema",
-  "Kurum kimliği ve durum bilgisi yalnız sistem yöneticisi tarafından değiştirilir.",
+  "Kurum adı ve erişim durumu yalnız sistem yöneticisi tarafından değiştirilir.",
+  "updateTenantStatus",
+  "Tüm açık oturumlar kapatılır.",
+  "Yeniden aç",
 ]);
 
 requireNoTokens("apps/web/app/(app)/sistem/kurumlar/[tenantId]/tenant-detail-page.tsx", [

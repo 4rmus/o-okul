@@ -270,6 +270,9 @@ const allowedAuditDiffKeys = new Set([
   "section",
   "sha256",
   "status",
+  "previousstatus",
+  "lifecycleversion",
+  "previouslifecycleversion",
   "target",
   "visibility",
 ]);

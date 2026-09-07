@@ -110,7 +110,7 @@ operasyon yuzeyini belgeler; hedef control-plane ayriminin tamamlandigi anlamina
 |---|---|---|---|---|---|
 | SYSTEM_ADMIN | Ortam saglik, audit ve observability ekranlarini acar | PARTIAL | `apps/web/app/(app)/sistem/**`, `apps/api/src/metrics/metrics.e2e.test.ts`, `apps/api/src/audit-log/audit-log.e2e.test.ts` | UAT-SYS-01 | Faz 9 canli dashboard kaniti |
 | SYSTEM_ADMIN | Kurum listeler, arar, siralar ve sayfalar | PARTIAL | `apps/api/src/tenant/tenant.controller.e2e.test.ts`, `apps/web/e2e-next/login-next.spec.ts` | UAT-SYS-01 | Canli audit/observability dashboard kaniti UAT-SYS-01'i kapatir |
-| SYSTEM_ADMIN | Kurum + ilk admin olusturur | PASS | `apps/api/src/tenant/tenant.service.test.ts`, `apps/api/src/tenant/tenant-store.test.ts`, `apps/web/e2e-next/login-next.spec.ts`, `apps/web/e2e-next/live-onboarding-next.spec.ts` | UAT-SYS-02 | Yok |
+| SYSTEM_ADMIN | Kurum + ilk kurum sahibi olusturur | PASS | `apps/api/src/tenant/tenant.service.test.ts`, `apps/api/src/tenant/tenant-store.test.ts`, `apps/web/e2e-next/login-next.spec.ts`, `apps/web/e2e-next/live-onboarding-next.spec.ts` | UAT-SYS-02 | Yok |
 | SYSTEM_ADMIN | Lisans, plan, koltuk ve status yonetir | PASS | `apps/api/src/tenant/tenant.controller.e2e.test.ts`, `apps/api/src/context/request-context.middleware.test.ts` | UAT-SYS-03 | Yok |
 | SYSTEM_ADMIN | Release, forward-only devamlılık ve restore kanitlarini denetler | EXTERNAL_NOT_RUN | `docs/phase-6-production-readiness.md`, `scripts/check-prod-evidence.mjs`, `scripts/check-deployment-rollback-evidence.mjs`, `docs/evidence-templates/uat.example.json` | UAT-SYS-04 | Faz 9/Faz 10 staging kaniti |
 | TENANT_ADMIN/ASSISTANT_ADMIN | Bes veri giris adiminda kampus, seviye, sinif, ders ve donem hazirlar; ayri sonuc ekraninda cekirdek sunucu durumunu dogrular | PASS | `apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx`, `apps/api/src/setup/setup-readiness.service.test.ts`, `apps/web/e2e-next/live-onboarding-next.spec.ts` | UAT-KURUM-01 | Ogretmen ve ogrenci kaydi UAT-KURUM-02 kapsamindadir |
@@ -136,7 +136,7 @@ operasyon yuzeyini belgeler; hedef control-plane ayriminin tamamlandigi anlamina
 | ID | Amaç | Minimum kanit | Durum |
 |---|---|---|---|
 | UAT-SYS-01 | Sistem admin sistem paneli, kurum listesi ve audit/observability ekranlarini acar | `pnpm --filter @o-okul/web test:e2e`, `pnpm observability:uat:check` | PARTIAL |
-| UAT-SYS-02 | Sistem admin kurum ve ilk admin olusturur; yeni admin login olur | `apps/api/src/tenant/tenant.service.test.ts`, `pnpm live:onboarding:smoke` | PASS |
+| UAT-SYS-02 | Sistem admin kurum ve ilk kurum sahibini olusturur; yeni sahip login olur | `apps/api/src/tenant/tenant.service.test.ts`, `pnpm live:onboarding:smoke` | PASS |
 | UAT-SYS-03 | Lisansi biten tenant read-only kalir; yazma 403 doner | `apps/api/src/tenant/tenant.controller.e2e.test.ts` | PASS |
 | UAT-SYS-04 | Release, forward-only devamlılık ve restore zinciri staging raporuyla gecilir | `pnpm prod:evidence:check`, `pnpm deployment:continuity:check`, `pnpm uat:check` | EXTERNAL_NOT_RUN |
 | UAT-KURUM-01 | Kurum admin sifir akademik veriden bes adimli kurulumu tamamlar; kampus, aktif yil/donem, seviye, kampus ve seviyeye bagli sinif ile seviyeye bagli ders sunucuda hazirdir | `apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx`, `apps/api/src/setup/setup-readiness.service.test.ts`, `pnpm live:onboarding:smoke` | PASS |
@@ -201,3 +201,5 @@ operasyon yuzeyini belgeler; hedef control-plane ayriminin tamamlandigi anlamina
 - Faz 9: `UAT-SYS-04`, saglayici smoke'lari, Traefik HTTPS, observability ve evidence zinciri.
 - Faz 10: Bu matristen tureyen rol bazli staging/prod UAT raporu, `pnpm pilot:check`
   ile dogrulanan pilot kurum kapanisi ve `pnpm go-live:check` ile final karar paketi.
+
+Gate 4: `tenant.clean-reset.enqueue` — POST `/api/v1/tenants/{id}/clean-reset-jobs`, zorunlu idempotency ve hedef MFA. 202 yanıtı kaybolursa özgün Idempotency-Key ile GET collection (actor+tenant+key) operationId verir; durum GET salt-okunurdur, yeni POST gerekmez; dispatcher aynı operasyonu kullanır. Legal-hold ve write-quiescence doğrulanmadığından canlı reset kapalıdır.

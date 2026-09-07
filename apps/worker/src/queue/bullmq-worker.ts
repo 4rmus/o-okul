@@ -1,4 +1,5 @@
-import { Worker, type ConnectionOptions, type WorkerOptions } from "bullmq";
+import { createTenantPgPool, runTenantMutationActivity, type TenantMutationRunner } from "@o-okul/db";
+import { UnrecoverableError, Worker, type ConnectionOptions, type WorkerOptions } from "bullmq";
 import {
   createAnnouncementDeliveryProcessor,
   type AnnouncementDeliveryProcessor,
@@ -122,6 +123,7 @@ export interface ExamEvaluationBullWorkerOptions {
   connection: ConnectionOptions;
   processor?: ExamEvaluationProcessor;
   workerOptions?: Omit<WorkerOptions, "connection">;
+  activityRunner?: TenantMutationRunner;
   createWorker?: BullWorkerFactory<BullExamEvaluationJob, ExamEvaluationJobResult>;
 }
 
@@ -129,6 +131,7 @@ export interface ExcelImportBullWorkerOptions {
   connection: ConnectionOptions;
   processor?: OpticalParseProcessor;
   workerOptions?: Omit<WorkerOptions, "connection">;
+  activityRunner?: TenantMutationRunner;
   createWorker?: BullWorkerFactory<BullExcelImportJob, ExcelImportJobResult>;
 }
 
@@ -136,6 +139,7 @@ export interface ReportGenerationBullWorkerOptions {
   connection: ConnectionOptions;
   processor?: ReportGenerationProcessor;
   workerOptions?: Omit<WorkerOptions, "connection">;
+  activityRunner?: TenantMutationRunner;
   createWorker?: BullWorkerFactory<BullReportGenerationJob, ReportGenerationJobResult>;
 }
 
@@ -143,6 +147,7 @@ export interface ReportPdfRenderBullWorkerOptions {
   connection: ConnectionOptions;
   renderer?: ReportPdfRenderer;
   workerOptions?: Omit<WorkerOptions, "connection">;
+  activityRunner?: TenantMutationRunner;
   createWorker?: BullWorkerFactory<BullReportPdfRenderJob, ReportPdfRenderJobResult>;
 }
 
@@ -150,6 +155,7 @@ export interface SmsBatchBullWorkerOptions {
   connection: ConnectionOptions;
   processor?: SmsBatchProcessor;
   workerOptions?: Omit<WorkerOptions, "connection">;
+  activityRunner?: TenantMutationRunner;
   createWorker?: BullWorkerFactory<BullSmsBatchJob, SmsBatchJobResult>;
 }
 
@@ -157,6 +163,7 @@ export interface AnnouncementDeliveryBullWorkerOptions {
   connection: ConnectionOptions;
   processor?: AnnouncementDeliveryProcessor;
   workerOptions?: Omit<WorkerOptions, "connection">;
+  activityRunner?: TenantMutationRunner;
   createWorker?: BullWorkerFactory<BullAnnouncementDeliveryJob, AnnouncementDeliveryJobResult>;
 }
 
@@ -164,6 +171,7 @@ export interface BackupRestoreBullWorkerOptions {
   connection: ConnectionOptions;
   processor?: BackupRestoreProcessor;
   workerOptions?: Omit<WorkerOptions, "connection">;
+  activityRunner?: TenantMutationRunner;
   createWorker?: BullWorkerFactory<BullBackupRestoreJob, BackupRestoreJobResult>;
 }
 
@@ -175,7 +183,7 @@ export function createExamEvaluationBullWorker(
 
   return createWorker(
     examEvaluationQueueName,
-    async (job) => runObservedWorkerJob(job, () => processor(toExamEvaluationQueueJob(job))),
+    async (job) => runObservedWorkerJob(job, () => processor(toExamEvaluationQueueJob(job)), options.activityRunner),
     {
       ...options.workerOptions,
       connection: options.connection,
@@ -191,7 +199,7 @@ export function createExcelImportBullWorker(
 
   return createWorker(
     excelImportQueueName,
-    async (job) => runObservedWorkerJob(job, () => processor(toExcelImportQueueJob(job))),
+    async (job) => runObservedWorkerJob(job, () => processor(toExcelImportQueueJob(job)), options.activityRunner),
     {
       ...options.workerOptions,
       connection: options.connection,
@@ -207,7 +215,7 @@ export function createReportGenerationBullWorker(
 
   return createWorker(
     reportGenerationQueueName,
-    async (job) => runObservedWorkerJob(job, () => processor(toReportGenerationQueueJob(job))),
+    async (job) => runObservedWorkerJob(job, () => processor(toReportGenerationQueueJob(job)), options.activityRunner),
     {
       ...options.workerOptions,
       connection: options.connection,
@@ -222,7 +230,7 @@ export function createReportPdfRenderBullWorker(
 
   return createWorker(
     reportPdfRenderQueueName,
-    async (job) => runObservedReportPdfRenderJob(job, () => processReportPdfRenderJob(job, options.renderer)),
+    async (job) => runObservedReportPdfRenderJob(job, () => processReportPdfRenderJob(job, options.renderer), options.activityRunner),
     {
       ...options.workerOptions,
       connection: options.connection,
@@ -238,7 +246,7 @@ export function createSmsBatchBullWorker(
 
   return createWorker(
     smsBatchQueueName,
-    async (job) => runObservedWorkerJob(job, () => processor(toSmsBatchQueueJob(job))),
+    async (job) => runObservedWorkerJob(job, () => processor(toSmsBatchQueueJob(job)), options.activityRunner),
     {
       ...options.workerOptions,
       connection: options.connection,
@@ -254,7 +262,7 @@ export function createAnnouncementDeliveryBullWorker(
 
   return createWorker(
     announcementDeliveryQueueName,
-    async (job) => runObservedWorkerJob(job, () => processor(toAnnouncementDeliveryQueueJob(job))),
+    async (job) => runObservedWorkerJob(job, () => processor(toAnnouncementDeliveryQueueJob(job)), options.activityRunner),
     {
       ...options.workerOptions,
       connection: options.connection,
@@ -270,7 +278,7 @@ export function createBackupRestoreBullWorker(
 
   return createWorker(
     backupRestoreQueueName,
-    async (job) => runObservedWorkerJob(job, () => processor(toBackupRestoreQueueJob(job))),
+    async (job) => runObservedWorkerJob(job, () => processor(toBackupRestoreQueueJob(job)), options.activityRunner),
     {
       ...options.workerOptions,
       connection: options.connection,
@@ -300,6 +308,7 @@ export function createRedisConnectionOptions(
 function toExcelImportQueueJob(
   job: BullExcelImportJob,
 ): QueueJob<TenantJobPayload> {
+  if (!["exam-evaluation", "excel-import", "report-generation", "report-pdf-render", "sms-batch", "announcement-delivery", "backup-restore"].includes(job.name)) throw new Error("TENANT_ACTIVITY_CONTEXT_INVALID");
   if (job.id === undefined || job.id === null || job.id === "") {
     throw new Error("BULLMQ_JOB_ID_MISSING");
   }
@@ -317,6 +326,7 @@ function toExcelImportQueueJob(
 function toExamEvaluationQueueJob(
   job: BullExamEvaluationJob,
 ): QueueJob<ExamEvaluationJobPayload> {
+  if (!["exam-evaluation", "excel-import", "report-generation", "report-pdf-render", "sms-batch", "announcement-delivery", "backup-restore"].includes(job.name)) throw new Error("TENANT_ACTIVITY_CONTEXT_INVALID");
   if (job.id === undefined || job.id === null || job.id === "") {
     throw new Error("BULLMQ_JOB_ID_MISSING");
   }
@@ -334,6 +344,7 @@ function toExamEvaluationQueueJob(
 function toReportGenerationQueueJob(
   job: BullReportGenerationJob,
 ): QueueJob<ReportGenerationJobPayload> {
+  if (!["exam-evaluation", "excel-import", "report-generation", "report-pdf-render", "sms-batch", "announcement-delivery", "backup-restore"].includes(job.name)) throw new Error("TENANT_ACTIVITY_CONTEXT_INVALID");
   if (job.id === undefined || job.id === null || job.id === "") {
     throw new Error("BULLMQ_JOB_ID_MISSING");
   }
@@ -351,6 +362,7 @@ function toReportGenerationQueueJob(
 function toSmsBatchQueueJob(
   job: BullSmsBatchJob,
 ): QueueJob<SmsBatchJobPayload> {
+  if (!["exam-evaluation", "excel-import", "report-generation", "report-pdf-render", "sms-batch", "announcement-delivery", "backup-restore"].includes(job.name)) throw new Error("TENANT_ACTIVITY_CONTEXT_INVALID");
   if (job.id === undefined || job.id === null || job.id === "") {
     throw new Error("BULLMQ_JOB_ID_MISSING");
   }
@@ -368,6 +380,7 @@ function toSmsBatchQueueJob(
 function toAnnouncementDeliveryQueueJob(
   job: BullAnnouncementDeliveryJob,
 ): QueueJob<AnnouncementDeliveryJobPayload> {
+  if (!["exam-evaluation", "excel-import", "report-generation", "report-pdf-render", "sms-batch", "announcement-delivery", "backup-restore"].includes(job.name)) throw new Error("TENANT_ACTIVITY_CONTEXT_INVALID");
   if (job.id === undefined || job.id === null || job.id === "") {
     throw new Error("BULLMQ_JOB_ID_MISSING");
   }
@@ -385,6 +398,7 @@ function toAnnouncementDeliveryQueueJob(
 function toBackupRestoreQueueJob(
   job: BullBackupRestoreJob,
 ): QueueJob<BackupRestoreJobPayload> {
+  if (!["exam-evaluation", "excel-import", "report-generation", "report-pdf-render", "sms-batch", "announcement-delivery", "backup-restore"].includes(job.name)) throw new Error("TENANT_ACTIVITY_CONTEXT_INVALID");
   if (job.id === undefined || job.id === null || job.id === "") {
     throw new Error("BULLMQ_JOB_ID_MISSING");
   }
@@ -402,10 +416,11 @@ function toBackupRestoreQueueJob(
 async function runObservedWorkerJob<TResult>(
   job: { id?: string | number; name: string; data: Partial<TenantJobPayload> },
   run: () => Promise<TResult>,
+  activityRunner: TenantMutationRunner = runWorkerMutation,
 ): Promise<TResult> {
   const startedAt = Date.now();
   try {
-    const result = await run();
+    const result = await activityRunner({ tenantId: job.data.tenantId!, lifecycleVersion: job.data.lifecycleVersion!, kind: "WORKER_JOB", referenceId: workerActivityReference(job) }, run);
     logWorkerJobCompleted(workerLogger, {
       queueName: job.name,
       jobId: job.id === undefined || job.id === null ? undefined : String(job.id),
@@ -433,6 +448,7 @@ async function runObservedWorkerJob<TResult>(
       entityId: job.data.entityId,
       contentHash: job.data.contentHash,
     });
+    if (error instanceof Error && ["TENANT_ACTIVITY_UNRESOLVED", "SMS_PROVIDER_OUTCOME_UNCERTAIN", "SMS_DELIVERY_RECEIPT_UNVERIFIED"].includes(error.message)) throw new UnrecoverableError(error.message);
     throw error;
   }
 }
@@ -440,10 +456,11 @@ async function runObservedWorkerJob<TResult>(
 async function runObservedReportPdfRenderJob<TResult>(
   job: ReportPdfRenderQueueJob,
   run: () => Promise<TResult>,
+  activityRunner: TenantMutationRunner = runWorkerMutation,
 ): Promise<TResult> {
   const startedAt = Date.now();
   try {
-    const result = await run();
+    const result = await activityRunner({ tenantId: job.data.snapshot?.tenantId!, lifecycleVersion: job.data.lifecycleVersion!, kind: "WORKER_JOB", referenceId: workerActivityReference(job) }, run);
     logWorkerJobCompleted(workerLogger, {
       queueName: job.name,
       jobId: job.id === undefined || job.id === null ? undefined : String(job.id),
@@ -466,6 +483,7 @@ async function runObservedReportPdfRenderJob<TResult>(
       tenantId: job.data.snapshot?.tenantId,
       entityId: job.data.snapshot?.id,
     });
+    if (error instanceof Error && ["TENANT_ACTIVITY_UNRESOLVED", "SMS_PROVIDER_OUTCOME_UNCERTAIN", "SMS_DELIVERY_RECEIPT_UNVERIFIED"].includes(error.message)) throw new UnrecoverableError(error.message);
     throw error;
   }
 }
@@ -564,4 +582,18 @@ function createDefaultBackupRestoreWorker(
     processor,
     options,
   );
+}
+
+let mutationPool: ReturnType<typeof createTenantPgPool> | undefined;
+const runWorkerMutation: TenantMutationRunner = (admission, run) => {
+  mutationPool ??= createTenantPgPool();
+  return runTenantMutationActivity(mutationPool, admission, run);
+};
+
+export async function closeWorkerMutationPool(): Promise<void> { const previous = mutationPool; mutationPool = undefined; await previous?.end(); }
+
+function workerActivityReference(job: { id?: string | number; name: string }): string {
+  if (!["exam-evaluation", "excel-import", "report-generation", "report-pdf-render", "sms-batch", "announcement-delivery", "backup-restore"].includes(job.name)) throw new Error("TENANT_ACTIVITY_CONTEXT_INVALID");
+  if (job.id === undefined || job.id === null || !String(job.id)) throw new Error("BULLMQ_JOB_ID_MISSING");
+  return `${job.name}:${String(job.id)}`;
 }

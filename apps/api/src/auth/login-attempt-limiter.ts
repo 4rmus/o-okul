@@ -113,8 +113,9 @@ export function loginAttemptKey(identifier: string, ip = "unknown"): string {
   return createHash("sha256").update(material).digest("hex");
 }
 
-export function mfaAttemptKey(userId: string, purpose: string): string {
-  return createHash("sha256").update(`mfa:${purpose}:${userId}`).digest("hex");
+export function mfaAttemptKey(userId: string, purpose: string, tenantId: string, membershipVersion: number): string {
+  if (!tenantId || !Number.isInteger(membershipVersion) || membershipVersion < 1) throw new Error("AUTH_MUTATION_SOURCE_REQUIRED");
+  return createHash("sha256").update(JSON.stringify(["mfa", tenantId, userId, membershipVersion, purpose])).digest("hex");
 }
 
 function failureKey(key: string): string {

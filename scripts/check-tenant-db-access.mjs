@@ -12,11 +12,7 @@ const bypassRlsFunctionAllowlist = new Map([
   ["apps/api/src/auth/auth-user-store.ts", new Set([
     "purgePii",
     "createOrAttachTenantIdentity",
-    "enableTotp",
-    "disableTotp",
-    "markTotpCounterUsed",
-    "consumeTotpRecoveryCode",
-    "updatePassword",
+    "withAuthMutationQuery",
     "queryAuthUsers",
   ])],
   ["apps/api/src/tenant/tenant-store.ts", new Set([
@@ -24,11 +20,9 @@ const bypassRlsFunctionAllowlist = new Map([
     "findById",
     "findBySlug",
     "findForAdmin",
-    "create",
-    "createWithFirstAdmin",
     "createOnboarding",
     "update",
-    "delete",
+    "transitionStatus",
   ])],
   ["apps/api/src/license/license-term-store.ts", new Set(["create"])],
   ["apps/api/src/identity-invitation/employee-account-activation-store.ts", new Set(["accept"])],
@@ -59,6 +53,7 @@ for (const file of sourceRoots.flatMap(listTsFiles)) {
     "withExplicitTenantQuery",
     "withBypassRlsQuery",
     "withTenantDb",
+    ...(file === "apps/api/src/auth/auth-user-store.ts" ? ["withAuthMutationQuery"] : []),
     ...localScopedWrappers,
   ];
   const protectedRanges = findWrapperCallbackRanges(contents, tenantWrappers);

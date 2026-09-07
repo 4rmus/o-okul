@@ -11,6 +11,7 @@ export type QueueName = (typeof queueNames)[number];
 
 export interface TenantJobPayload {
   tenantId: string;
+  lifecycleVersion?: number;
   userId: string;
   entityId: string;
   contentHash: string;

@@ -1,3 +1,4 @@
+import type { AuthUserMutationSource } from "./auth-user-store.js";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { ActivePersona } from "@o-okul/shared-types";
 import type { SessionIssueInput, SessionRecord, SessionStore } from "./session-store.js";
@@ -163,8 +164,8 @@ export class TokenService {
     await this.store.revokeByMembership(userId, tenantId, membershipVersion);
   }
 
-  async revokeUser(userId: string): Promise<void> {
-    await this.store.revokeByUser(userId);
+  async revokeUser(userId: string, source: AuthUserMutationSource): Promise<void> {
+    await this.store.revokeByUser(userId, source);
   }
 
   private signAccessToken(payload: Omit<AccessTokenPayload, "iat" | "exp">): string {

@@ -41,6 +41,7 @@ describe("BullMQ exam evaluation worker", () => {
     const result = createResult();
 
     createExamEvaluationBullWorker({
+      activityRunner: async (_admission, run) => run(),
       connection: { host: "127.0.0.1", port: 6379 },
       createWorker,
       workerOptions: { prefix: "o-okul-test" },
@@ -67,6 +68,7 @@ describe("BullMQ exam evaluation worker", () => {
   it("BullMQ job id yoksa işi başlatmaz", async () => {
     let processor: ((job: BullExamEvaluationJob) => Promise<ExamEvaluationJobResult>) | undefined;
     createExamEvaluationBullWorker({
+      activityRunner: async (_admission, run) => run(),
       connection: { host: "127.0.0.1", port: 6379 },
       createWorker: (_name, createdProcessor) => {
         processor = createdProcessor;
@@ -112,6 +114,7 @@ describe("BullMQ excel import worker", () => {
     };
 
     createExcelImportBullWorker({
+      activityRunner: async (_admission, run) => run(),
       connection: { host: "127.0.0.1", port: 6379 },
       createWorker,
       workerOptions: { prefix: "o-okul-test" },
@@ -138,6 +141,7 @@ describe("BullMQ excel import worker", () => {
   it("excel-import BullMQ job adı yanlışsa işi başlatmaz", async () => {
     let processor: ((job: BullExcelImportJob) => Promise<ExcelImportJobResult>) | undefined;
     createExcelImportBullWorker({
+      activityRunner: async (_admission, run) => run(),
       connection: { host: "127.0.0.1", port: 6379 },
       createWorker: (_name, createdProcessor) => {
         processor = createdProcessor;
@@ -160,6 +164,7 @@ describe("BullMQ excel import worker", () => {
   it("excel-import BullMQ job id yoksa işi başlatmaz", async () => {
     let processor: ((job: BullExcelImportJob) => Promise<ExcelImportJobResult>) | undefined;
     createExcelImportBullWorker({
+      activityRunner: async (_admission, run) => run(),
       connection: { host: "127.0.0.1", port: 6379 },
       createWorker: (_name, createdProcessor) => {
         processor = createdProcessor;
@@ -195,6 +200,7 @@ describe("BullMQ report generation worker", () => {
     const result = createReportGenerationResult();
 
     createReportGenerationBullWorker({
+      activityRunner: async (_admission, run) => run(),
       connection: { host: "127.0.0.1", port: 6379 },
       createWorker,
       workerOptions: { prefix: "o-okul-test" },
@@ -221,6 +227,7 @@ describe("BullMQ report generation worker", () => {
   it("report-generation BullMQ job adı yanlışsa işi başlatmaz", async () => {
     let processor: ((job: BullReportGenerationJob) => Promise<ReportGenerationJobResult>) | undefined;
     createReportGenerationBullWorker({
+      activityRunner: async (_admission, run) => run(),
       connection: { host: "127.0.0.1", port: 6379 },
       createWorker: (_name, createdProcessor) => {
         processor = createdProcessor;
@@ -247,6 +254,7 @@ describe("BullMQ report PDF render worker", () => {
     };
 
     createReportPdfRenderBullWorker({
+      activityRunner: async (_admission, run) => run(),
       connection: { host: "127.0.0.1", port: 6379 },
       createWorker,
       workerOptions: { prefix: "o-okul-test" },
@@ -286,6 +294,7 @@ describe("BullMQ SMS batch worker", () => {
     const result = createSmsBatchResult();
 
     createSmsBatchBullWorker({
+      activityRunner: async (_admission, run) => run(),
       connection: { host: "127.0.0.1", port: 6379 },
       createWorker,
       workerOptions: { prefix: "o-okul-test" },
@@ -312,6 +321,7 @@ describe("BullMQ SMS batch worker", () => {
   it("sms-batch BullMQ job adı yanlışsa işi başlatmaz", async () => {
     let processor: ((job: BullSmsBatchJob) => Promise<SmsBatchJobResult>) | undefined;
     createSmsBatchBullWorker({
+      activityRunner: async (_admission, run) => run(),
       connection: { host: "127.0.0.1", port: 6379 },
       createWorker: (_name, createdProcessor) => {
         processor = createdProcessor;
@@ -340,6 +350,7 @@ describe("BullMQ announcement delivery worker", () => {
     const result = createAnnouncementDeliveryResult();
 
     createAnnouncementDeliveryBullWorker({
+      activityRunner: async (_admission, run) => run(),
       connection: { host: "127.0.0.1", port: 6379 },
       createWorker,
       workerOptions: { prefix: "o-okul-test" },
@@ -366,6 +377,7 @@ describe("BullMQ announcement delivery worker", () => {
   it("announcement-delivery BullMQ job adı yanlışsa işi başlatmaz", async () => {
     let processor: ((job: BullAnnouncementDeliveryJob) => Promise<AnnouncementDeliveryJobResult>) | undefined;
     createAnnouncementDeliveryBullWorker({
+      activityRunner: async (_admission, run) => run(),
       connection: { host: "127.0.0.1", port: 6379 },
       createWorker: (_name, createdProcessor) => {
         processor = createdProcessor;
@@ -394,6 +406,7 @@ describe("BullMQ backup restore worker", () => {
     const result = createBackupRestoreResult();
 
     createBackupRestoreBullWorker({
+      activityRunner: async (_admission, run) => run(),
       connection: { host: "127.0.0.1", port: 6379 },
       createWorker,
       workerOptions: { prefix: "o-okul-test" },
@@ -420,6 +433,7 @@ describe("BullMQ backup restore worker", () => {
   it("backup-restore BullMQ job adı yanlışsa işi başlatmaz", async () => {
     let processor: ((job: BullBackupRestoreJob) => Promise<BackupRestoreJobResult>) | undefined;
     createBackupRestoreBullWorker({
+      activityRunner: async (_admission, run) => run(),
       connection: { host: "127.0.0.1", port: 6379 },
       createWorker: (_name, createdProcessor) => {
         processor = createdProcessor;
@@ -688,3 +702,13 @@ function createBackupRestoreResult(): BackupRestoreJobResult {
     checkedTables: ["Tenant", "AuditLog", "ReportSnapshot", "_prisma_migrations"],
   };
 }
+
+it.each([undefined, 2])("real worker activity admission rejects legacy/stale lifecycle %s before processor", async (version) => {
+  const { runTenantMutationActivity } = await import("@o-okul/db");
+  const calls: string[] = []; let processed = false; let run!: (job: BullExamEvaluationJob) => Promise<ExamEvaluationJobResult>;
+  const db = { async query<T>(sql: string): Promise<{ rows: T[] }> { calls.push(sql); return { rows: (sql.includes("pg_try_advisory_xact_lock_shared") ? [{ locked: true }] : sql.includes('FROM "Tenant"') ? [{ status: "ACTIVE", lifecycleVersion: 3 }] : []) as T[] }; }, release() {} };
+  createExamEvaluationBullWorker({ connection: { host: "localhost" }, activityRunner: (admission, callback) => runTenantMutationActivity({ query: db.query, connect: async () => db }, admission, callback), processor: async () => { processed = true; return {} as ExamEvaluationJobResult; }, createWorker: (_name, callback) => { run = callback; return { close: async () => {} }; } });
+  const job = createBullJob(); job.data.lifecycleVersion = version;
+  await expect(run(job)).rejects.toThrow(version === undefined ? "TENANT_ACTIVITY_CONTEXT_INVALID" : "TENANT_ACTIVITY_STALE");
+  expect(processed).toBe(false); expect(calls.some((sql) => sql.startsWith("INSERT"))).toBe(false);
+});

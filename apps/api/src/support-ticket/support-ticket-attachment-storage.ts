@@ -1,3 +1,4 @@
+import { runApiTenantMutation } from "../context/tenant-mutation-activity.js";
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createS3ClientConfigFromEnv } from "../exam/s3-raw-import-archive-store.js";
@@ -82,14 +83,14 @@ export class S3SupportTicketAttachmentStorage implements SupportTicketAttachment
     }
 
     const storageKey = createSupportAttachmentStorageKey(input);
-    await this.client.send(
+    await runApiTenantMutation("S3_MUTATION", () => this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: storageKey,
         Body: input.body,
         ContentType: input.contentType,
       }),
-    );
+    ), input.tenantId);
     return { storageKey };
   }
 

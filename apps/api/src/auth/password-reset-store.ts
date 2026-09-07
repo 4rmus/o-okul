@@ -1,5 +1,6 @@
+import type { AuthUserMutationSource } from "./auth-user-store.js";
 import { randomUUID } from "node:crypto";
-import type { SecretDeliveryOutboxInput } from "@o-okul/db";
+import { acquireTenantDatabaseSharedLock, type SecretDeliveryOutboxInput } from "@o-okul/db";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import type { Queryable } from "../db/tenant-query.js";
 import pg from "pg";
@@ -7,6 +8,9 @@ import pg from "pg";
 export type PasswordResetStatus = "PENDING" | "USED" | "REVOKED";
 
 export interface PasswordResetRecord {
+  tenantId?: string | null;
+  tenantLifecycleVersion?: number;
+  userMembershipVersion?: number;
   id: string;
   userId: string;
   tokenHash: string;
@@ -36,6 +40,7 @@ export type PasswordResetTransaction =
       kind: "postgres";
       updateUserPassword(input: {
         userId: string;
+        source: AuthUserMutationSource;
         passwordHash: string;
         passwordHashVersion: number;
         mustChangePassword?: boolean;
@@ -46,6 +51,7 @@ export type PasswordResetTransaction =
 
 export interface PasswordResetIssueInput {
   userId: string;
+  expectedMembershipVersion?: number;
   tokenHash: string;
   expiresAt: string;
   delivery: SecretDeliveryOutboxInput;
@@ -71,6 +77,7 @@ export class InMemoryPasswordResetStore implements PasswordResetStore {
     const record: PasswordResetRecord = {
       id: `password-reset-${this.records.length + 1}`,
       userId: input.userId,
+      tenantId: input.delivery.tenantId ?? "system", tenantLifecycleVersion: input.delivery.tenantLifecycleVersion, userMembershipVersion: input.expectedMembershipVersion,
       tokenHash: input.tokenHash,
       status: "PENDING",
       expiresAt: input.expiresAt,
@@ -145,7 +152,15 @@ export class PostgresPasswordResetStore implements PasswordResetStore {
 
   async issue(input: PasswordResetIssueInput): Promise<PasswordResetRecord | undefined> {
     return this.withClient(async (client) => {
+      if (input.delivery.sourceScope === "TENANT") {
+        if (!input.delivery.tenantId || !Number.isInteger(input.delivery.tenantLifecycleVersion) || !Number.isInteger(input.expectedMembershipVersion)) throw new Error("SECRET_DELIVERY_PROVENANCE_UNVERIFIED");
+        await acquireTenantDatabaseSharedLock(client, input.delivery.tenantId);
+        const tenant = await client.query('SELECT "id" FROM "Tenant" WHERE "id" = $1 AND "status" = \'ACTIVE\' AND "lifecycleVersion" = $2 FOR SHARE', [input.delivery.tenantId, input.delivery.tenantLifecycleVersion]);
+        if (!tenant.rows.length) throw new Error("TENANT_ACTIVITY_STALE");
+      } else if (input.delivery.sourceScope !== "SYSTEM" || input.delivery.tenantId != null) throw new Error("SECRET_DELIVERY_PROVENANCE_UNVERIFIED");
       await lockPasswordResetUser(client, input.userId);
+      const sourceUser = await client.query('SELECT "id" FROM "User" WHERE "id" = $1 AND "tenantId" = $2 AND "membershipVersion" = $3 FOR SHARE', [input.userId, input.delivery.tenantId ?? "system", input.expectedMembershipVersion]);
+      if (!sourceUser.rows.length) return undefined;
       const pending = await client.query<PasswordResetRow>(
         `${passwordResetSelect('"PasswordResetToken"')}
          WHERE "userId" = $1
@@ -167,8 +182,8 @@ export class PostgresPasswordResetStore implements PasswordResetStore {
   async findByTokenHash(tokenHash: string): Promise<PasswordResetRecord | undefined> {
     return this.withClient(async (client) => {
       const result = await client.query<PasswordResetRow>(
-        `${passwordResetSelect('"PasswordResetToken"')}
-         WHERE "tokenHash" = $1
+        `SELECT r.*, u."tenantId", u."membershipVersion" AS "userMembershipVersion", t."lifecycleVersion" AS "tenantLifecycleVersion" FROM (${passwordResetSelect('"PasswordResetToken"')}) r JOIN "User" u ON u."id" = r."userId" LEFT JOIN "Tenant" t ON t."id" = u."tenantId"
+         WHERE r."tokenHash" = $1
          LIMIT 1`,
         [tokenHash],
       );
@@ -207,6 +222,7 @@ export class PostgresPasswordResetStore implements PasswordResetStore {
       return operation({
         kind: "postgres",
         async updateUserPassword(input) {
+          if (!input.source?.tenantId || !Number.isInteger(input.source.membershipVersion)) throw new Error("AUTH_MUTATION_SOURCE_REQUIRED");
           const updated = await client.query<{ id: string; tenantId: string | null; membershipVersion: number }>(
             `UPDATE "User"
              SET "passwordHash" = $2,
@@ -219,14 +235,14 @@ export class PostgresPasswordResetStore implements PasswordResetStore {
                  "passwordChangedAt" = COALESCE($4::timestamptz, "passwordChangedAt"),
                  "membershipVersion" = "membershipVersion" + 1,
                  "updatedAt" = now()
-             WHERE "id" = $1
+             WHERE "id" = $1 AND "tenantId" = $6 AND "membershipVersion" = $7
              RETURNING "id", "tenantId", "membershipVersion"`,
             [
               input.userId,
               input.passwordHash,
               input.mustChangePassword ?? null,
               input.passwordChangedAt ?? null,
-              input.passwordHashVersion,
+              input.passwordHashVersion, input.source.tenantId, input.source.membershipVersion,
             ],
           );
           const user = updated.rows[0];
@@ -287,12 +303,18 @@ async function markPasswordResetUsed(
   id: string,
   usedAt: string,
 ): Promise<PasswordResetRecord | undefined> {
-  const owner = await client.query<{ userId: string }>(
-    `SELECT "userId" FROM "PasswordResetToken" WHERE "id" = $1 LIMIT 1`,
+  const owner = await client.query<{ userId: string; tenantId?: string }>(
+    `SELECT p."userId", u."tenantId" FROM "PasswordResetToken" p JOIN "User" u ON u."id" = p."userId" WHERE p."id" = $1 LIMIT 1`,
     [id],
   );
   const userId = owner.rows[0]?.userId;
   if (!userId) return undefined;
+  const tenantId = owner.rows[0]?.tenantId;
+  if (tenantId && tenantId !== "system") {
+    await acquireTenantDatabaseSharedLock(client, tenantId);
+    const tenant = await client.query('SELECT "id" FROM "Tenant" WHERE "id" = $1 AND "status" = \'ACTIVE\' FOR SHARE', [tenantId]);
+    if (!tenant.rows.length) return undefined;
+  }
   await lockPasswordResetUser(client, userId);
   const result = await client.query<PasswordResetRow>(
     `WITH updated AS (
@@ -327,9 +349,9 @@ async function insertPasswordReset(client: pg.PoolClient, input: PasswordResetIs
   const record = toPasswordResetRecord(result.rows[0]);
   await client.query(
     `INSERT INTO "SecretDeliveryOutbox" (
-       "id", "tenantId", "purpose", "sourceId", "payloadEncrypted", "status", "availableAt", "expiresAt", "updatedAt"
-     ) VALUES ($1, $2, $3, $4, $5, 'PENDING', now(), $6, now())`,
-    [randomUUID(), input.delivery.tenantId ?? null, input.delivery.purpose, record.id, input.delivery.payloadEncrypted, input.delivery.expiresAt],
+       "id", "tenantId", "purpose", "sourceId", "payloadEncrypted", "status", "availableAt", "expiresAt", "updatedAt", "sourceScope", "tenantLifecycleVersion"
+     ) VALUES ($1, $2, $3, $4, $5, 'PENDING', now(), $6, now(), $7, $8)`,
+    [randomUUID(), input.delivery.tenantId ?? null, input.delivery.purpose, record.id, input.delivery.payloadEncrypted, input.delivery.expiresAt, input.delivery.sourceScope ?? null, input.delivery.tenantLifecycleVersion ?? null],
   );
   return record;
 }
@@ -359,10 +381,10 @@ async function clearPasswordResetDeliveries(client: Queryable, sourceIds: string
   if (sourceIds.length === 0) return;
   await client.query(
     `UPDATE "SecretDeliveryOutbox"
-     SET "status" = 'EXPIRED',
+     SET "status" = CASE WHEN "status" = 'PENDING' AND "attempts" = 0 AND "claimToken" IS NULL THEN 'EXPIRED' ELSE 'UNCERTAIN' END,
          "payloadEncrypted" = NULL,
-         "claimedAt" = NULL,
-         "claimToken" = NULL,
+         "claimedAt" = CASE WHEN "attempts" = 0 THEN NULL ELSE "claimedAt" END,
+         "claimToken" = CASE WHEN "attempts" = 0 THEN NULL ELSE "claimToken" END,
          "lastErrorCode" = NULL,
          "updatedAt" = $2
      WHERE "purpose" = 'PASSWORD_RESET'
@@ -379,6 +401,9 @@ export function createPasswordResetStore(): PasswordResetStore {
 }
 
 interface PasswordResetRow {
+  tenantId?: string | null;
+  tenantLifecycleVersion?: number;
+  userMembershipVersion?: number;
   id: string;
   userId: string;
   tokenHash: string;
@@ -408,6 +433,7 @@ function toPasswordResetRecord(row: PasswordResetRow | undefined): PasswordReset
   }
   return {
     id: row.id,
+    tenantId: row.tenantId, tenantLifecycleVersion: row.tenantLifecycleVersion, userMembershipVersion: row.userMembershipVersion,
     userId: row.userId,
     tokenHash: row.tokenHash,
     status: row.status,

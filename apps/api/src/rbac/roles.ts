@@ -17,6 +17,7 @@ const roleRank: Record<Role, number> = {
 };
 
 export function hasRole(userRoles: readonly string[], requiredRole: Role): boolean {
+  if (userRoles.includes("SYSTEM_ADMIN")) return requiredRole === "SYSTEM_ADMIN";
   return userRoles.some((role) => (
     isRole(role) && (
       role === requiredRole ||

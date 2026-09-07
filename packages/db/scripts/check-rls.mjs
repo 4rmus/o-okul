@@ -15,6 +15,7 @@ const tenantTables = getTenantScopedTables();
 
 const failures = [];
 const restrictedPrivilegeProfiles = new Map([
+  ["TenantFreshResetOperation", new Set(["SELECT", "INSERT", "UPDATE"])],
   ["WhatsAppConsent", new Set(["SELECT", "INSERT"])],
   ["WhatsAppConsentEvent", new Set(["SELECT", "INSERT"])],
 ]);
@@ -56,7 +57,7 @@ for (const table of tenantTables) {
   const restrictedPrivileges = restrictedPrivilegeProfiles.get(table);
   if (restrictedPrivileges) {
     const withCheckBody = /\bWITH CHECK\b([\s\S]*)/m.exec(policyBody)?.[1] ?? "";
-    if (withCheckBody.includes("app.bypass_rls")) {
+    if (table !== "TenantFreshResetOperation" && withCheckBody.includes("app.bypass_rls")) {
       failures.push(`${table}: INSERT WITH CHECK app.bypass_rls kabul etmemeli`);
     }
     for (const privilege of ["SELECT", "INSERT", "UPDATE", "DELETE"]) {

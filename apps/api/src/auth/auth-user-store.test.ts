@@ -38,10 +38,10 @@ describe("auth user store", () => {
   it("TOTP counterını yalnız monotonik olarak ilerletir", async () => {
     const store = new InMemoryAuthUserStore();
 
-    await expect(store.markTotpCounterUsed("user-tenant-a", "101")).resolves.toBe(true);
-    await expect(store.markTotpCounterUsed("user-tenant-a", "100")).resolves.toBe(false);
-    await expect(store.markTotpCounterUsed("user-tenant-a", "101")).resolves.toBe(false);
-    await expect(store.markTotpCounterUsed("user-tenant-a", "102")).resolves.toBe(true);
+    await expect(store.markTotpCounterUsed("user-tenant-a", "101", { tenantId: "tenant-a", membershipVersion: 1 })).resolves.toBe(true);
+    await expect(store.markTotpCounterUsed("user-tenant-a", "100", { tenantId: "tenant-a", membershipVersion: 1 })).resolves.toBe(false);
+    await expect(store.markTotpCounterUsed("user-tenant-a", "101", { tenantId: "tenant-a", membershipVersion: 1 })).resolves.toBe(false);
+    await expect(store.markTotpCounterUsed("user-tenant-a", "102", { tenantId: "tenant-a", membershipVersion: 1 })).resolves.toBe(true);
   });
 
   it("yeni parolayı rastgele tuzlu sürümlü scrypt ile asenkron hashler", async () => {
@@ -84,6 +84,8 @@ describe("auth user store", () => {
         return {
           async query<T>(sql: string, values?: unknown[]) {
             queries.push({ sql, values });
+        if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
+        if (sql.includes('FROM "Tenant" WHERE')) return { rows: [{ id: "tenant-a" }] as T[] };
             if (sql.includes('UPDATE "User"')) {
               return { rows: [{ id: "user-a", tenantId: "tenant-a", membershipVersion: 7 }] as T[] };
             }
@@ -139,13 +141,15 @@ describe("auth user store", () => {
 
     await store.enableTotp({
       userId: "user-a",
+      source: { tenantId: "tenant-a", membershipVersion: 7 },
       secretEncrypted: "encrypted-secret",
       enabledAt: "2026-07-13T00:00:00.000Z",
       recoveryCodeHashes: ["recovery-hash"],
     });
-    await store.disableTotp("user-a");
-    await store.markTotpCounterUsed("user-a", "123456");
+    await store.disableTotp("user-a", { tenantId: "tenant-a", membershipVersion: 7 });
+    await store.markTotpCounterUsed("user-a", "123456", { tenantId: "tenant-a", membershipVersion: 7 });
     await store.updatePassword("user-a", "scrypt:v2:test-salt:test-hash", {
+      source: { tenantId: "tenant-a", membershipVersion: 7 },
       mustChangePassword: false,
       passwordChangedAt: "2026-08-01T12:00:00.000Z",
     });
@@ -174,15 +178,16 @@ describe("auth user store", () => {
       "scrypt:v2:test-salt:test-hash",
       false,
       "2026-08-01T12:00:00.000Z",
-      2,
+      2, "tenant-a", 7,
     ]);
     const counterUpdate = queries.find((query) => query.sql.includes('"totpLastUsedCounter" = $2'));
     expect(counterUpdate?.sql).toContain('$2::bigint > "totpLastUsedCounter"::bigint');
     expect(counterUpdate?.sql).not.toContain('IS DISTINCT FROM $2');
     const totpMembershipUpdates = queries.filter((query) => query.sql.includes('UPDATE "TenantMembership"'));
-    expect(totpMembershipUpdates).toHaveLength(2);
+    expect(totpMembershipUpdates).toHaveLength(3);
     expect(totpMembershipUpdates.every((query) => query.sql.includes('"version" = $3'))).toBe(true);
     expect(totpMembershipUpdates.map((query) => query.values)).toEqual([
+      ["tenant-a", "user-a", 7],
       ["tenant-a", "user-a", 7],
       ["tenant-a", "user-a", 7],
     ]);
@@ -237,6 +242,8 @@ describe("auth user store", () => {
         return {
           async query<T>(sql: string, values?: unknown[]) {
             queries.push({ sql, values });
+        if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
+        if (sql.includes('FROM "Tenant" WHERE')) return { rows: [{ id: "tenant-a" }] as T[] };
             if (sql.includes('INSERT INTO "User"')) return { rows: [{ id: "user-dual" }] as T[] };
             if (sql.includes('FROM "TenantMembership"') && sql.includes('"version"')) {
               return { rows: [{ role: "ASSISTANT_ADMIN", version: 3 }] as T[] };

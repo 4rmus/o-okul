@@ -1753,7 +1753,7 @@ runRlsLiveNegativeCheck({
 runRlsLiveNegativeCheck({
   label: "RLS live extra table negative",
   path: "docs/evidence-templates/rls-live.extra-table.tmp.json",
-  expectedFailure: "schema.tablesVerified tam 64 tablo icermeli.",
+  expectedFailure: "schema.tablesVerified tam 66 tablo icermeli.",
   mutate: (fixture) => {
     fixture.schema.tablesVerified.push("UnexpectedTenantTable");
   },
@@ -6924,6 +6924,7 @@ function runStagingReleaseArtifactsBundleCheck() {
       evidenceTime,
     );
     summary.generatedAt = summaryTime;
+    summary.smokeEvidence.secretDeliveryOutbox.notBefore = new Date(Date.parse(evidenceTime) - 600_000).toISOString();
     summary.webUrl = "https://staging.o-okul.com";
     summary.appUrl = "https://staging.o-okul.com";
     summary.apiUrl = "https://staging-api.o-okul.com";

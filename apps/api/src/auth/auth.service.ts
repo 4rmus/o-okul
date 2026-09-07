@@ -1,7 +1,8 @@
+import { runVerifiedTenantMutation } from "../context/tenant-mutation-activity.js";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { BadRequestException, HttpException, HttpStatus, Inject, Injectable, NotFoundException, Optional, UnauthorizedException } from "@nestjs/common";
 import { encryptSecretDeliveryPayload } from "@o-okul/db";
-import type { ActivePersona, MeProfileResponse, MeSessionRecord, MeSessionRevokeAllResponse, MfaEnrollmentRequiredResponse, MfaStepUpPurpose, MfaStepUpResponse, SelfPurgeResult, TenantLoginContextResponse, TenantSelectionOption, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
+import type { ActivePersona, MeProfileResponse, MeSessionRecord, MeSessionRevokeAllResponse, MfaEnrollmentRequiredResponse, MfaStepUpPurpose, MfaStepUpResponse, TenantLifecycleMfaTarget, TenantCleanResetMfaTarget, SelfPurgeResult, TenantLoginContextResponse, TenantSelectionOption, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { licenseTermStoreToken, type LicenseTermStore } from "../license/license-term-store.js";
@@ -139,7 +140,7 @@ export class AuthService {
     await this.loginAttempts.recordSuccess(attemptKey);
     await Promise.all(users.filter((user) => passwordHashNeedsRehash(user.passwordHash)).map(async (user) => {
       const passwordHash = await hashPasswordAsync(credentials.password);
-      await this.users.rehashPassword(user.tenantId, user.id, user.passwordHash, passwordHash);
+      await this.users.rehashPassword(user.tenantId, user.id, user.passwordHash, passwordHash, user.membershipVersion);
     }));
     if (users.length > 1) {
       return this.createTenantSelectionChallenge(users);
@@ -163,11 +164,11 @@ export class AuthService {
       throw new UnauthorizedException("LOGIN_FAILED");
     }
     const selectedUser = await this.users.findById(candidate.userId);
-    if (!selectedUser || selectedUser.tenantId !== input.tenantId) {
+    if (!selectedUser || selectedUser.tenantId !== input.tenantId || selectedUser.membershipVersion !== candidate.membershipVersion) {
       throw new UnauthorizedException("LOGIN_FAILED");
     }
     const tenant = await this.tenants?.findById(selectedUser.tenantId);
-    if (!tenant || !await this.licenseAllowsLogin(selectedUser.tenantId)) {
+    if (!tenant || tenant.lifecycleVersion !== candidate.lifecycleVersion || !await this.licenseAllowsLogin(selectedUser.tenantId)) {
       throw new UnauthorizedException("LOGIN_FAILED");
     }
     return this.issueLoginForUser(selectedUser, clientContext);
@@ -175,10 +176,12 @@ export class AuthService {
 
   private async createTenantSelectionChallenge(users: AuthUser[]): Promise<TenantSelectionRequiredResponse> {
     const options: TenantSelectionOption[] = [];
+    const candidates: TenantSelectionTokenPayload["candidates"] = [];
     for (const user of users) {
       const tenant = await this.tenants?.findById(user.tenantId);
       if (tenant && await this.licenseAllowsLogin(user.tenantId)) {
         options.push({ tenantId: tenant.id, name: tenant.name, slug: tenant.slug });
+        candidates.push({ userId: user.id, tenantId: user.tenantId, membershipVersion: user.membershipVersion, lifecycleVersion: tenant.lifecycleVersion });
       }
     }
     if (options.length < 2) {
@@ -186,9 +189,7 @@ export class AuthService {
     }
 
     const { selectionToken, expiresAt } = createTenantSelectionToken(
-      users
-        .filter((user) => options.some((option) => option.tenantId === user.tenantId))
-        .map((user) => ({ userId: user.id, tenantId: user.tenantId })),
+      candidates,
     );
     return { status: "TENANT_SELECTION_REQUIRED", selectionToken, expiresAt, tenants: options };
   }
@@ -222,7 +223,7 @@ export class AuthService {
         action: "auth.login_mfa_required",
         diff: { roles: user.roles, methods: ["totp", "recovery_code"] },
       });
-      return createLoginMfaChallenge(user.id);
+      return createLoginMfaChallenge(user.id, user.membershipVersion);
     }
 
     return this.issueTokenPairForUser(user, "auth.login", { roles: user.roles, mustChangePassword: Boolean(user.mustChangePassword) }, { clientContext });
@@ -235,12 +236,12 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException("MFA_CHALLENGE_INVALID");
     }
-    if (!payload.challengeId) {
+    if (!payload.challengeId || !Number.isInteger(payload.membershipVersion) || payload.membershipVersion! < 1) {
       throw new UnauthorizedException("MFA_CHALLENGE_INVALID");
     }
 
     const user = await this.users.findById(payload.userId);
-    if (!user || !this.shouldChallengeWithTotp(user)) {
+    if (!user || payload.membershipVersion !== user.membershipVersion || !this.shouldChallengeWithTotp(user)) {
       throw new UnauthorizedException("MFA_CHALLENGE_INVALID");
     }
 
@@ -265,7 +266,7 @@ export class AuthService {
 
   async createTotpSetup(context: RequestContext): Promise<TotpSetupResult> {
     this.assertAdminMfaManageable(context);
-    const user = await this.requireCurrentUser(context);
+    const user = await this.requireOriginalUser(context);
     if (user.totpSecretEncrypted && user.totpEnabledAt) {
       throw new BadRequestException("MFA_ALREADY_ENABLED");
     }
@@ -299,7 +300,7 @@ export class AuthService {
     if (payload.userId !== context.userId || !payload.secret || !payload.recoveryCodeHashes?.length) {
       throw new UnauthorizedException("MFA_SETUP_TOKEN_INVALID");
     }
-    const currentUser = await this.requireCurrentUser(context);
+    const currentUser = await this.requireOriginalUser(context);
     if (payload.membershipVersion !== currentUser.membershipVersion) {
       throw new UnauthorizedException("MFA_SETUP_TOKEN_INVALID");
     }
@@ -312,13 +313,14 @@ export class AuthService {
     const enabledAt = new Date().toISOString();
     const user = await this.users.enableTotp({
       userId: context.userId,
+      source: { tenantId: currentUser.tenantId, membershipVersion: currentUser.membershipVersion },
       secretEncrypted: encryptAdminMfaSecret(payload.secret),
       enabledAt,
       recoveryCodeHashes: payload.recoveryCodeHashes,
       lastUsedCounter: counter,
     });
     if (!user) throw new NotFoundException("USER_NOT_FOUND");
-    await this.sessions.revokeByUser(context.userId);
+    await this.sessions.revokeByUser(context.userId, { tenantId: currentUser.tenantId, membershipVersion: currentUser.membershipVersion });
     await this.auditLogs?.record({
       tenantId: user.tenantId === "system" ? undefined : user.tenantId,
       actorUserId: user.id,
@@ -363,13 +365,14 @@ export class AuthService {
     const enabledAt = new Date().toISOString();
     const user = await this.users.enableTotp({
       userId: payload.userId,
+      source: { tenantId: currentUser.tenantId, membershipVersion: currentUser.membershipVersion },
       secretEncrypted: encryptAdminMfaSecret(payload.secret),
       enabledAt,
       recoveryCodeHashes: payload.recoveryCodeHashes,
       lastUsedCounter: counter,
     });
     if (!user) throw new UnauthorizedException("MFA_SETUP_TOKEN_INVALID");
-    await this.sessions.revokeByUser(user.id);
+    await this.sessions.revokeByUser(user.id, { tenantId: currentUser.tenantId, membershipVersion: currentUser.membershipVersion });
     await this.auditLogs?.record({
       tenantId: user.tenantId === "system" ? undefined : user.tenantId,
       actorUserId: user.id,
@@ -386,11 +389,11 @@ export class AuthService {
 
   async disableTotp(context: RequestContext, input: TotpVerificationInput): Promise<TotpDisableResult> {
     this.assertAdminMfaManageable(context);
-    const currentUser = await this.requireCurrentUser(context);
+    const currentUser = await this.requireOriginalUser(context);
     await this.verifySecondFactorWithAttemptLimit(currentUser, input, "disable", "MFA_SECOND_FACTOR_LOCKED");
-    const user = await this.users.disableTotp(context.userId);
+    const user = await this.users.disableTotp(context.userId, { tenantId: currentUser.tenantId, membershipVersion: currentUser.membershipVersion });
     if (!user) throw new NotFoundException("USER_NOT_FOUND");
-    await this.sessions.revokeByUser(context.userId);
+    await this.sessions.revokeByUser(context.userId, { tenantId: currentUser.tenantId, membershipVersion: currentUser.membershipVersion });
     const disabledAt = new Date().toISOString();
     await this.auditLogs?.record({
       tenantId: user.tenantId === "system" ? undefined : user.tenantId,
@@ -407,11 +410,26 @@ export class AuthService {
     context: RequestContext,
     purpose: MfaStepUpPurpose,
     input: TotpVerificationInput,
+    target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget,
   ): Promise<MfaStepUpResponse> {
     this.assertAdminMfaManageable(context);
     const currentUser = await this.requireCurrentUser(context);
     if (!context.sessionId || context.membershipVersion !== currentUser.membershipVersion) {
       throw new UnauthorizedException("MFA_STEP_UP_CONTEXT_INVALID");
+    }
+    if (purpose === "TENANT_LIFECYCLE_CHANGE" || purpose === "TENANT_CLEAN_RESET") {
+      if (!target || target.tenantId === "system" || (purpose === "TENANT_LIFECYCLE_CHANGE" ? !("status" in target) || !["ACTIVE", "SUSPENDED"].includes(target.status) : !("preset" in target) || target.preset !== "CLEAN_SETUP_V1" || !/^[a-f0-9]{64}$/.test(target.preflightDigest)) ||
+        !Number.isInteger(target.expectedLifecycleVersion) || target.expectedLifecycleVersion < 0 || target.expectedLifecycleVersion > 2147483646) {
+        throw new BadRequestException("MFA_STEP_UP_TARGET_INVALID");
+      }
+      const session = await this.sessions.findById(context.sessionId);
+      if (!session || session.status !== "ACTIVE" || session.expiresAt.getTime() <= Date.now() ||
+        session.userId !== currentUser.id || session.tenantId !== "system" || currentUser.tenantId !== "system" ||
+        !isAdminMfaRole(currentUser.roles) || session.membershipVersion !== context.membershipVersion) {
+        throw new UnauthorizedException("MFA_STEP_UP_CONTEXT_INVALID");
+      }
+    } else if (target) {
+      throw new BadRequestException("MFA_STEP_UP_TARGET_INVALID");
     }
     const method = await this.verifySecondFactorWithAttemptLimit(
       currentUser,
@@ -424,6 +442,7 @@ export class AuthService {
       sessionId: context.sessionId,
       membershipVersion: context.membershipVersion,
       purpose,
+      ...(target ? { target } : {}),
     });
     await this.auditLogs?.record({
       tenantId: currentUser.tenantId === "system" ? undefined : currentUser.tenantId,
@@ -477,14 +496,17 @@ export class AuthService {
     const tokenPair = options.replaceSessionId
       ? await this.tokens.issueReplacing(options.replaceSessionId, tokenInput)
       : await this.tokens.issue(tokenInput);
-    await this.auditLogs?.record({
+    if (this.auditLogs) {
+    const snapshot = user.tenantId === "system" ? undefined : await this.tenants?.findForAdmin(user.tenantId);
+    await runVerifiedTenantMutation({ tenantId: user.tenantId, lifecycleVersion: snapshot?.lifecycleVersion!, kind: "HTTP_MUTATION", actor: { userId: tokenPair.session.userId, sessionId: tokenPair.session.id, membershipVersion: tokenPair.session.membershipVersion } }, async () => this.auditLogs!.record({
       tenantId: user.tenantId === "system" ? undefined : user.tenantId,
       actorUserId: user.id,
       entityType: "Auth",
       entityId: user.id,
       action: auditAction,
       diff: { ...auditDiff, roles, activePersona: persona?.activePersona },
-    });
+    }));
+    }
     return { ...tokenPair, mustChangePassword: Boolean(user.mustChangePassword) };
   }
 
@@ -550,12 +572,12 @@ export class AuthService {
   }
 
   async revokeCurrentSession(context: RequestContext, sessionId: string): Promise<void> {
-    const user = await this.requireCurrentUser(context);
+    const user = await this.requireOriginalUser(context);
     const tenantId = context.tenantId ?? (user.tenantId === "system" ? "system" : undefined);
     if (!tenantId || user.tenantId !== tenantId) {
       throw new UnauthorizedException("SESSION_INVENTORY_UNAVAILABLE");
     }
-    const revoked = await this.sessions.revokeOwned(sessionId, user.id, tenantId);
+    const revoked = await this.sessions.revokeOwned(sessionId, user.id, tenantId, user.membershipVersion);
     if (!revoked) throw new NotFoundException("SESSION_NOT_FOUND");
     await this.auditLogs?.record({
       tenantId,
@@ -568,12 +590,12 @@ export class AuthService {
   }
 
   async revokeAllCurrentSessions(context: RequestContext): Promise<MeSessionRevokeAllResponse> {
-    const user = await this.requireCurrentUser(context);
+    const user = await this.requireOriginalUser(context);
     const tenantId = context.tenantId ?? (user.tenantId === "system" ? "system" : undefined);
     if (!tenantId || user.tenantId !== tenantId) {
       throw new UnauthorizedException("SESSION_INVENTORY_UNAVAILABLE");
     }
-    const revokedCount = await this.sessions.revokeAllOwned(user.id, tenantId);
+    const revokedCount = await this.sessions.revokeAllOwned(user.id, tenantId, user.membershipVersion);
     await this.auditLogs?.record({
       tenantId,
       actorUserId: user.id,
@@ -630,13 +652,17 @@ export class AuthService {
     if (!user?.email) return { status: "IGNORED" };
     const resetToken = createResetToken();
     const expiresAt = nextResetExpiry();
-    const reset = await this.passwordResets.issue({
+    let reset;
+    try { reset = await this.passwordResets.issue({
       userId: user.id,
+      expectedMembershipVersion: user.membershipVersion,
       tokenHash: hashResetToken(resetToken),
       expiresAt,
       resendNotBefore: new Date(Date.now() - passwordResetResendDelayMs).toISOString(),
       delivery: {
         tenantId: user.tenantId === "system" ? undefined : user.tenantId,
+        sourceScope: user.tenantId === "system" ? "SYSTEM" : "TENANT",
+        tenantLifecycleVersion: tenant && "lifecycleVersion" in tenant ? tenant.lifecycleVersion : undefined,
         purpose: "PASSWORD_RESET",
         payloadEncrypted: encryptSecretDeliveryPayload({
           channel: "EMAIL",
@@ -646,7 +672,10 @@ export class AuthService {
         }),
         expiresAt,
       },
-    });
+    }); } catch (error) {
+      if (error instanceof Error && error.message === "TENANT_ACTIVITY_STALE") return { status: "IGNORED" };
+      throw error;
+    }
     if (!reset) return { status: "IGNORED" };
     await this.auditLogs?.record({
       tenantId: user.tenantId === "system" ? undefined : user.tenantId,
@@ -673,8 +702,10 @@ export class AuthService {
     if (!existingUser) throw new NotFoundException("USER_NOT_FOUND");
     const resetAt = new Date().toISOString();
     const passwordHash = await hashPasswordAsync(password);
+    return runVerifiedTenantMutation({ tenantId: reset.tenantId ?? existingUser.tenantId, lifecycleVersion: reset.tenantLifecycleVersion!, kind: "AUTH_MUTATION", referenceId: `password-reset:${reset.id}`, source: { type: "PASSWORD_RESET", id: reset.id, tokenHash: hashResetToken(resetToken), membershipVersion: reset.userMembershipVersion } }, async () => {
     const user = await this.passwordResets.confirm(reset.id, resetAt, async (transaction) => {
       const updated = await this.users.updatePasswordForReset(reset.userId, passwordHash, {
+        source: { tenantId: reset.tenantId ?? existingUser.tenantId, membershipVersion: reset.userMembershipVersion! },
         mustChangePassword: false,
         passwordChangedAt: resetAt,
       }, transaction);
@@ -692,6 +723,7 @@ export class AuthService {
       diff: { userId: user.id },
     });
     return { resetAt };
+    });
   }
 
   async purgeCurrentUserPii(context: RequestContext): Promise<SelfPurgeResult> {
@@ -711,7 +743,7 @@ export class AuthService {
     if (!purged) {
       throw new NotFoundException("USER_NOT_FOUND");
     }
-    await this.tokens.revokeUser(user.id);
+    await this.tokens.revokeUser(user.id, { tenantId: user.tenantId, membershipVersion: user.membershipVersion });
 
     await this.auditLogs?.record({
       tenantId: context.tenantId ?? undefined,
@@ -785,22 +817,19 @@ export class AuthService {
 
   async changeCurrentPassword(context: RequestContext, currentPassword: string, newPassword: string): Promise<{ changedAt: string }> {
     assertPasswordPolicy(newPassword);
-    const user = await this.requireCurrentUser(context);
+    const user = await this.requireOriginalUser(context);
     if (!await verifyPasswordAsync(currentPassword, user.passwordHash)) {
       throw new UnauthorizedException("CURRENT_PASSWORD_INVALID");
     }
 
     const changedAt = new Date().toISOString();
     const updated = await this.users.updatePassword(user.id, await hashPasswordAsync(newPassword), {
+      source: { tenantId: user.tenantId, membershipVersion: user.membershipVersion },
       mustChangePassword: false,
       passwordChangedAt: changedAt,
     });
     if (!updated) throw new NotFoundException("USER_NOT_FOUND");
-    if (context.sessionId) {
-      await this.sessions.revokeByUserExcept(user.id, context.sessionId);
-    } else {
-      await this.sessions.revokeByUser(user.id);
-    }
+    await this.sessions.revokeByUser(user.id, { tenantId: user.tenantId, membershipVersion: user.membershipVersion });
     await this.auditLogs?.record({
       tenantId: user.tenantId === "system" ? undefined : user.tenantId,
       actorUserId: user.id,
@@ -860,6 +889,12 @@ export class AuthService {
     }
   }
 
+  private async requireOriginalUser(context: RequestContext) {
+    const user = await this.requireCurrentUser(context);
+    if (user.tenantId !== (context.tenantId ?? "system") || !Number.isInteger(context.membershipVersion) || context.membershipVersion !== user.membershipVersion) throw new UnauthorizedException("AUTH_MUTATION_SOURCE_STALE");
+    return user;
+  }
+
   private async requireCurrentUser(context: RequestContext) {
     const user = await this.users.findById(context.userId);
     if (!user) throw new NotFoundException("USER_NOT_FOUND");
@@ -867,7 +902,7 @@ export class AuthService {
   }
 
   private async verifySecondFactor(user: {
-    id: string;
+    id: string; tenantId: string; membershipVersion: number;
     totpSecretEncrypted?: string;
     totpEnabledAt?: string;
   }, input: TotpVerificationInput): Promise<"totp" | "recovery_code"> {
@@ -880,7 +915,7 @@ export class AuthService {
       if (!counter) {
         throw new UnauthorizedException("MFA_CODE_INVALID");
       }
-      const marked = await this.users.markTotpCounterUsed(user.id, counter);
+      const marked = await this.users.markTotpCounterUsed(user.id, counter, { tenantId: user.tenantId, membershipVersion: user.membershipVersion });
       if (!marked) {
         throw new UnauthorizedException("MFA_CODE_REUSED");
       }
@@ -888,7 +923,7 @@ export class AuthService {
     }
 
     if (input.recoveryCode?.trim()) {
-      const consumed = await this.users.consumeTotpRecoveryCode(user.id, hashRecoveryCode(input.recoveryCode));
+      const consumed = await this.users.consumeTotpRecoveryCode(user.id, hashRecoveryCode(input.recoveryCode), { tenantId: user.tenantId, membershipVersion: user.membershipVersion });
       if (!consumed) {
         throw new UnauthorizedException("MFA_RECOVERY_CODE_INVALID");
       }
@@ -900,7 +935,7 @@ export class AuthService {
 
   private async verifySecondFactorWithAttemptLimit(
     user: {
-      id: string;
+      id: string; tenantId: string; membershipVersion: number;
       totpSecretEncrypted?: string;
       totpEnabledAt?: string;
     },
@@ -908,7 +943,7 @@ export class AuthService {
     purpose: string,
     lockedCode: string,
   ): Promise<"totp" | "recovery_code"> {
-    const attemptKey = mfaAttemptKey(user.id, purpose);
+    const attemptKey = mfaAttemptKey(user.id, purpose, user.tenantId, user.membershipVersion);
     try {
       await this.loginAttempts.assertAllowed(attemptKey);
     } catch (error) {
@@ -1019,7 +1054,7 @@ function assertPasswordPolicy(password: string): void {
 interface TenantSelectionTokenPayload {
   purpose: "tenant-selection";
   expiresAt: number;
-  candidates: Array<{ userId: string; tenantId: string }>;
+  candidates: Array<{ userId: string; tenantId: string; membershipVersion: number; lifecycleVersion: number }>;
 }
 
 const tenantSelectionTtlMs = 5 * 60 * 1000;
@@ -1042,7 +1077,7 @@ function verifyTenantSelectionToken(token: string): TenantSelectionTokenPayload 
   }
 
   const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as TenantSelectionTokenPayload;
-  if (payload.purpose !== "tenant-selection" || payload.expiresAt <= Date.now() || payload.candidates.length === 0) {
+  if (payload.purpose !== "tenant-selection" || (!Number.isFinite(payload.expiresAt) || payload.expiresAt <= Date.now()) || !Array.isArray(payload.candidates) || payload.candidates.length === 0 || payload.candidates.some((candidate) => !candidate || typeof candidate.userId !== "string" || !candidate.userId || typeof candidate.tenantId !== "string" || !candidate.tenantId || !Number.isInteger(candidate.membershipVersion) || candidate.membershipVersion < 1 || !Number.isInteger(candidate.lifecycleVersion) || candidate.lifecycleVersion < 0)) {
     throw new Error("TENANT_SELECTION_TOKEN_INVALID");
   }
   return payload;

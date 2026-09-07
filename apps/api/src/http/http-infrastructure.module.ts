@@ -1,5 +1,6 @@
+import { TenantMutationInterceptor } from "./tenant-mutation.interceptor.js";
 import { Global, Module } from "@nestjs/common";
-import { APP_FILTER, APP_GUARD } from "@nestjs/core";
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { AuditLogModule } from "../audit-log/audit-log.module.js";
 import { RlsBypassGuard } from "../context/rls-bypass.guard.js";
 import { CapabilityGuard } from "../rbac/capability.guard.js";
@@ -12,6 +13,7 @@ import { createIdempotencyStore, IdempotencyService, idempotencyStoreToken } fro
   imports: [AuditLogModule],
   providers: [
     IdempotencyService,
+    { provide: APP_INTERCEPTOR, useClass: TenantMutationInterceptor },
     {
       provide: idempotencyStoreToken,
       useFactory: createIdempotencyStore,

@@ -1,6 +1,9 @@
+import { runVerifiedTenantMutation } from "../context/tenant-mutation-activity.js";
 import { randomUUID } from "node:crypto";
-import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
-import type { LicenseTermListRecord, TenantCreateResponse } from "@o-okul/shared-types";
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, Optional, UnauthorizedException } from "@nestjs/common";
+import type { LicenseTermListRecord, TenantStatusUpdateRequest, TenantCreateResponse, TenantStatusUpdateResult } from "@o-okul/shared-types";
+import { verifyAdminMfaStepUpProof } from "../auth/totp-mfa.js";
+import { tenantStatusUpdateBodySchema } from "./tenant-validation.js";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import { hashIdempotencyRequest } from "../http/idempotency.js";
 import type { RequestContext } from "../context/request-context.js";
@@ -15,7 +18,6 @@ import { licenseTermCreateBodySchema, type LicenseTermCreateBody } from "../lice
 import { resolveLicenseState } from "../license/license-state.js";
 import { normalizeTcIdentity } from "../student/tc-identity.js";
 import { assertValidTenantSlug, TenantHostError } from "../http/tenant-host.js";
-import type { TenantUserRecord } from "../user-management/user-management-store.js";
 import {
   type CreateTenantInput,
   type CreateTenantOnboardingInput,
@@ -29,21 +31,15 @@ export interface TenantWriteBody {
   id?: string;
   name?: string;
   slug?: string;
-  plan?: string;
-  licenseStartsAt?: string;
-  licenseEndsAt?: string;
   institutionType?: string;
   contactEmail?: string;
   logoUrl?: string;
-  seatLimit?: number;
-  status?: string;
-  firstAdmin?: TenantFirstAdminBody;
-  firstOwner?: TenantFirstAdminBody;
+  firstOwner?: TenantFirstOwnerBody;
   campuses?: CreateTenantOnboardingInput["campuses"];
   licenseTerm?: LicenseTermCreateBody;
 }
 
-export interface TenantFirstAdminBody {
+export interface TenantFirstOwnerBody {
   name?: string;
   email?: string;
   nationalId?: string;
@@ -66,6 +62,7 @@ export class TenantService {
 
   async findOne(context: RequestContext, id: string): Promise<TenantRecord> {
     this.assertSystemAdmin(context);
+    if (id.trim() === "system") throw new NotFoundException("TENANT_NOT_FOUND");
     const tenant = await this.tenants.findForAdmin(id);
     if (!tenant) {
       throw new NotFoundException("TENANT_NOT_FOUND");
@@ -93,33 +90,25 @@ export class TenantService {
 
   async create(context: RequestContext, body: TenantWriteBody, idempotencyKey?: string): Promise<TenantCreateResponse> {
     this.assertSystemAdmin(context);
+    assertMutableTenantId(body.id);
     const tenantInput = parseCreateTenant(body);
     const onboarding = parseTenantOnboarding(body, context.userId, idempotencyKey);
-    if (onboarding) {
-      if (!this.tenants.createOnboarding) throw new BadRequestException("TENANT_ATOMIC_ONBOARDING_REQUIRED");
-      const stored = await createTenantOrThrow(() => this.tenants.createOnboarding!(tenantInput, onboarding));
-      if (!stored.replayed) {
-        await this.recordTenantCreated(context, stored.result.tenant);
-        await this.recordFirstOwnerCreated(context, stored.result.tenant.id, stored.result.owner);
-      }
-      return stored.result;
+    const stored = await createTenantOrThrow(() => this.tenants.createOnboarding(tenantInput, onboarding));
+    if (!stored.replayed && !stored.auditedAtomically) {
+      await this.recordTenantCreated(context, stored.result.tenant);
+      await this.recordFirstOwnerCreated(context, stored.result.tenant.id, stored.result.owner);
     }
-    const firstAdmin = parseFirstAdmin(body.firstAdmin);
-    if (firstAdmin) {
-      if (!this.tenants.createWithFirstAdmin) throw new BadRequestException("TENANT_ATOMIC_ONBOARDING_REQUIRED");
-      const result = await createTenantOrThrow(() => this.tenants.createWithFirstAdmin!(tenantInput, firstAdmin));
-      await this.recordTenantCreated(context, result.tenant);
-      await this.recordFirstAdminCreated(context, result.tenant.id, result.admin);
-      return result;
-    }
-    const tenant = await createTenantOrThrow(() => this.tenants.create(tenantInput));
-    await this.recordTenantCreated(context, tenant);
-    return tenant;
+    return stored.result;
   }
 
   async update(context: RequestContext, id: string, body: TenantWriteBody): Promise<TenantRecord> {
     this.assertSystemAdmin(context);
-    const tenant = await this.tenants.update(id, parseUpdateTenant(body));
+    assertMutableTenantId(id);
+    const parsed = parseUpdateTenant(body);
+    const captured = await this.tenants.findForAdmin(id);
+    if (!captured) throw new NotFoundException("TENANT_NOT_FOUND");
+    return this.adminMutation(context, id, captured.lifecycleVersion, async () => {
+    const tenant = await this.tenants.update(id, parsed);
     if (!tenant) {
       throw new NotFoundException("TENANT_NOT_FOUND");
     }
@@ -130,18 +119,61 @@ export class TenantService {
       entityId: tenant.id,
       action: "tenant.updated",
       diff: {
-        plan: tenant.plan,
-        licenseStartsAt: tenant.licenseStartsAt,
-        licenseEndsAt: tenant.licenseEndsAt,
-        seatLimit: tenant.seatLimit,
-        status: tenant.status,
+        name: tenant.name,
+        institutionType: tenant.institutionType,
+        contactEmail: tenant.contactEmail,
+        logoUrl: tenant.logoUrl,
       },
     });
     return tenant;
+    });
+  }
+
+  async updateStatus(context: RequestContext, id: string, body: TenantStatusUpdateRequest, idempotencyKey?: string, stepUpToken?: string): Promise<TenantStatusUpdateResult> {
+    this.assertSystemAdmin(context);
+    assertMutableTenantId(id);
+    const parsed = tenantStatusUpdateBodySchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException("TENANT_LIFECYCLE_REQUEST_INVALID");
+    const key = idempotencyKey?.trim();
+    if (!key) throw new BadRequestException("IDEMPOTENCY_KEY_REQUIRED");
+    if (key.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(key)) throw new BadRequestException("IDEMPOTENCY_KEY_INVALID");
+    if (!stepUpToken || !context.sessionId || context.membershipVersion === undefined) {
+      throw new UnauthorizedException("MFA_STEP_UP_REQUIRED");
+    }
+    try {
+      verifyAdminMfaStepUpProof(stepUpToken, {
+        userId: context.userId, sessionId: context.sessionId, membershipVersion: context.membershipVersion,
+        purpose: "TENANT_LIFECYCLE_CHANGE",
+        target: { tenantId: id, status: body.status, expectedLifecycleVersion: body.expectedLifecycleVersion },
+      });
+    } catch {
+      throw new UnauthorizedException("MFA_STEP_UP_INVALID");
+    }
+    const captured = await this.tenants.findForAdmin(id);
+    if (!captured) throw new NotFoundException("TENANT_NOT_FOUND");
+    return this.adminMutation(context, id, captured.lifecycleVersion, async () => {
+    try {
+      const result = await this.tenants.transitionStatus(id, {
+        ...parsed.data, actorUserId: context.userId, sessionId: context.sessionId!,
+        membershipVersion: context.membershipVersion!, idempotencyKey: key,
+        requestHash: hashIdempotencyRequest("tenant.lifecycle.change", { tenantId: id, ...parsed.data }),
+      });
+      if (!result) throw new NotFoundException("TENANT_NOT_FOUND");
+      return result;
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      if (code === "TENANT_NOT_FOUND") throw new NotFoundException(code);
+      if (["TENANT_LIFECYCLE_VERSION_CONFLICT", "IDEMPOTENCY_KEY_BODY_MISMATCH", "IDEMPOTENCY_KEY_IN_PROGRESS", "RESET_OPERATION_IN_PROGRESS"].includes(code)) throw new ConflictException(code);
+      if (["TENANT_CONFIRMATION_MISMATCH", "TENANT_STATUS_UNSUPPORTED"].includes(code)) throw new BadRequestException(code);
+      if (code === "MFA_STEP_UP_CONTEXT_INVALID") throw new UnauthorizedException(code);
+      throw error;
+    }
+    });
   }
 
   async updateCurrent(context: RequestContext, body: TenantWriteBody): Promise<TenantRecord> {
     const tenantId = requireTenantId(context);
+    assertMutableTenantId(tenantId);
     const tenant = await this.tenants.update(tenantId, parseCurrentTenantProfileUpdate(body));
     if (!tenant) {
       throw new NotFoundException("TENANT_NOT_FOUND");
@@ -162,35 +194,16 @@ export class TenantService {
     return tenant;
   }
 
-  async delete(context: RequestContext, id: string): Promise<TenantRecord> {
-    this.assertSystemAdmin(context);
-    const tenant = await this.tenants.findForAdmin(id);
-    if (!tenant || tenant.id === "system") {
-      throw new NotFoundException("TENANT_NOT_FOUND");
-    }
-    const deletedTenant = { ...tenant, status: "DELETED" };
-    await this.auditLogs?.record({
-      tenantId: tenant.id,
-      actorUserId: context.userId,
-      entityType: "Tenant",
-      entityId: tenant.id,
-      action: "tenant.deleted",
-      diff: { status: deletedTenant.status },
-    });
-    const removedTenant = await this.tenants.delete(id);
-    if (!removedTenant) {
-      throw new NotFoundException("TENANT_NOT_FOUND");
-    }
-    return deletedTenant;
-  }
-
   async createLicenseTerm(context: RequestContext, tenantId: string, body: LicenseTermCreateBody): Promise<LicenseTermRecord> {
     this.assertSystemAdmin(context);
+    assertMutableTenantId(tenantId);
     if (!this.licenseTerms) throw new BadRequestException("LICENSE_TERM_STORE_REQUIRED");
-    if (!await this.tenants.findForAdmin(tenantId)) throw new NotFoundException("TENANT_NOT_FOUND");
+    const captured = await this.tenants.findForAdmin(tenantId);
+    if (!captured) throw new NotFoundException("TENANT_NOT_FOUND");
+    return this.adminMutation(context, tenantId, captured.lifecycleVersion, async () => {
     let term: LicenseTermRecord;
     try {
-      term = await this.licenseTerms.create({
+      term = await this.licenseTerms!.create({
         tenantId,
         planCode: body.planCode,
         startsAt: body.startsAt,
@@ -221,6 +234,11 @@ export class TenantService {
       },
     });
     return term;
+    });
+  }
+
+  private adminMutation<T>(context: RequestContext, tenantId: string, lifecycleVersion: number, run: () => Promise<T>): Promise<T> {
+    return runVerifiedTenantMutation({ tenantId, lifecycleVersion, kind: "ADMIN_MUTATION", actor: { platform: true, userId: context.userId, sessionId: context.sessionId!, membershipVersion: context.membershipVersion! } }, run);
   }
 
   private assertSystemAdmin(context: RequestContext): void {
@@ -245,17 +263,6 @@ export class TenantService {
         seatLimit: tenant.seatLimit,
         status: tenant.status,
       },
-    });
-  }
-
-  private async recordFirstAdminCreated(context: RequestContext, tenantId: string, admin: TenantUserRecord): Promise<void> {
-    await this.auditLogs?.record({
-      tenantId,
-      actorUserId: context.userId,
-      entityType: "User",
-      entityId: admin.id,
-      action: "tenant.first_admin_created",
-      diff: { emailProvided: true, roles: admin.roles },
     });
   }
 
@@ -285,14 +292,11 @@ function parseCreateTenant(body: TenantWriteBody): CreateTenantInput {
     id: optionalText(body.id),
     name: requiredText(body.name, "TENANT_NAME_REQUIRED"),
     slug: validTenantSlug(requiredText(body.slug, "TENANT_SLUG_REQUIRED")),
-    plan: optionalText(body.plan) ?? "TRIAL",
-    licenseStartsAt: optionalDate(body.licenseStartsAt, "TENANT_LICENSE_START_INVALID"),
-    licenseEndsAt: optionalDate(body.licenseEndsAt, "TENANT_LICENSE_END_INVALID"),
+    plan: "TRIAL",
     institutionType: optionalText(body.institutionType),
     contactEmail: optionalEmail(body.contactEmail, "TENANT_CONTACT_EMAIL_INVALID"),
     logoUrl: optionalUrl(body.logoUrl, "TENANT_LOGO_URL_INVALID"),
-    seatLimit: optionalPositiveInt(body.seatLimit, "TENANT_SEAT_LIMIT_INVALID"),
-    status: optionalText(body.status) ?? "ACTIVE",
+    status: "ACTIVE",
   };
 }
 
@@ -302,7 +306,6 @@ function parseUpdateTenant(body: TenantWriteBody): UpdateTenantInput {
     institutionType: optionalText(body.institutionType),
     contactEmail: optionalEmail(body.contactEmail, "TENANT_CONTACT_EMAIL_INVALID"),
     logoUrl: optionalUrl(body.logoUrl, "TENANT_LOGO_URL_INVALID"),
-    status: optionalText(body.status),
   };
 }
 
@@ -324,32 +327,11 @@ function parseCurrentTenantProfileUpdate(body: TenantWriteBody): UpdateTenantInp
   };
 }
 
-function parseFirstAdmin(body: TenantFirstAdminBody | undefined):
-  | {
-      name: string;
-      email: string;
-      nationalId: string;
-    }
-  | undefined {
-  if (!body) return undefined;
-  const nationalId = normalizeTcIdentity(
-    requiredText(body.nationalId, "TENANT_FIRST_ADMIN_NATIONAL_ID_REQUIRED"),
-    "TENANT_FIRST_ADMIN_NATIONAL_ID_INVALID",
-  );
-  return {
-    name: requiredText(body.name, "TENANT_FIRST_ADMIN_NAME_REQUIRED"),
-    email: requiredEmail(body.email, "TENANT_FIRST_ADMIN_EMAIL_REQUIRED"),
-    nationalId,
-  };
-}
-
 function parseTenantOnboarding(
   body: TenantWriteBody,
   platformAccountId: string,
   idempotencyKey: string | undefined,
-): CreateTenantOnboardingInput | undefined {
-  const hasAny = Boolean(body.firstOwner || body.campuses || body.licenseTerm);
-  if (!hasAny) return undefined;
+): CreateTenantOnboardingInput {
   if (!body.firstOwner || !body.campuses?.length || !body.licenseTerm) {
     throw new BadRequestException("TENANT_ONBOARDING_FIELDS_REQUIRED");
   }
@@ -382,7 +364,7 @@ function createLicenseTrackingReference(): string {
   return `license-${randomUUID()}`;
 }
 
-function parseFirstOwner(body: TenantFirstAdminBody): CreateTenantOnboardingInput["firstOwner"] {
+function parseFirstOwner(body: TenantFirstOwnerBody): CreateTenantOnboardingInput["firstOwner"] {
   const nationalId = optionalText(body.nationalId);
   return {
     name: requiredText(body.name, "TENANT_FIRST_OWNER_NAME_REQUIRED"),
@@ -429,33 +411,6 @@ function optionalUrl(value: string | undefined, errorCode: string): string | und
   }
 }
 
-function optionalDate(value: string | undefined, errorCode: string): string | undefined {
-  if (value === undefined || value === "") return undefined;
-  const trimmed = value.trim();
-  if (!isIsoDateTimeString(trimmed)) {
-    throw new BadRequestException(errorCode);
-  }
-  return new Date(Date.parse(trimmed)).toISOString();
-}
-
-function isIsoDateTimeString(value: string): boolean {
-  const match = /^(\d{4}-\d{2}-\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})?)?$/.exec(value);
-  return Boolean(match?.[1] && isCalendarDateString(match[1]) && !Number.isNaN(Date.parse(value)));
-}
-
-function isCalendarDateString(value: string): boolean {
-  const parsed = new Date(`${value}T00:00:00.000Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
-
-function optionalPositiveInt(value: number | undefined, errorCode: string): number | undefined {
-  if (value === undefined) return undefined;
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new BadRequestException(errorCode);
-  }
-  return value;
-}
-
 async function createTenantOrThrow<T>(createTenant: () => Promise<T>): Promise<T> {
   try {
     return await createTenant();
@@ -481,4 +436,8 @@ function requireTenantId(context: RequestContext): string {
     throw new BadRequestException("TENANT_CONTEXT_REQUIRED");
   }
   return context.tenantId;
+}
+
+function assertMutableTenantId(id: string | undefined): void {
+  if (id?.trim() === "system") throw new BadRequestException("SYSTEM_TENANT_IMMUTABLE");
 }

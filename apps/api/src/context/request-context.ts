@@ -5,6 +5,7 @@ export interface RequestContext {
   userId: string;
   sessionId?: string;
   tenantId: string | null;
+  tenantLifecycleVersion?: number;
   membershipId?: string;
   activePersona?: ActivePersona;
   membershipVersion?: number;

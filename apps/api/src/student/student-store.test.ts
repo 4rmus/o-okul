@@ -45,6 +45,7 @@ describe("PostgresStudentStore", () => {
     const pool = {
       async query<T>(sql: string, values?: unknown[]) {
         queries.push({ sql, values });
+        if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
         if (sql.includes("COUNT(*)::int AS total")) return { rows: [{ total: 2 }] as T[] };
         if (sql.includes('SELECT student.*')) {
           return { rows: [{
@@ -109,6 +110,7 @@ describe("PostgresStudentStore", () => {
     const pool = {
       async query<T>(sql: string, values?: unknown[]) {
         queries.push({ sql, values });
+        if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
         if (sql.includes("WITH anchor AS")) {
           return {
             rows: [
@@ -214,6 +216,7 @@ describe("PostgresStudentStore", () => {
     const pool = {
       async query<T>(sql: string, values?: unknown[]) {
         queries.push({ sql, values });
+        if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
         if (sql.includes('candidate::text AS "studentNo"')) {
           return { rows: [{ studentNo: String(nextStudentNo++) }] as T[] };
         }
@@ -308,6 +311,7 @@ describe("PostgresStudentStore", () => {
     const client = {
       async query<T>(sql: string, _values?: unknown[]) {
         queries.push(sql);
+        if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
         if (sql.includes('candidate::text AS "studentNo"')) {
           return { rows: [{ studentNo: "101" }] as T[] };
         }
@@ -353,6 +357,7 @@ describe("PostgresStudentStore", () => {
     const client = {
       async query<T>(sql: string, values?: unknown[]) {
         queries.push(sql);
+        if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
         if (sql.includes('FROM "Class"') && sql.includes("FOR SHARE")) return { rows: [{ gradeLevelId: "grade-8" }] as T[] };
         if (sql.includes('candidate::text AS "studentNo"')) return { rows: [{ studentNo: "101" }] as T[] };
         if (sql.includes('INSERT INTO "Student"')) {
@@ -411,6 +416,7 @@ describe("PostgresStudentStore", () => {
     const client = {
       async query<T>(sql: string, values?: unknown[]) {
         queries.push(sql);
+        if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
         if (sql.includes('FROM "Class"') && sql.includes("FOR SHARE")) {
           return { rows: [{ gradeLevelId: "grade-8" }] as T[] };
         }
@@ -475,6 +481,7 @@ describe("PostgresStudentStore", () => {
     const client = {
       async query<T>(sql: string, values?: unknown[]) {
         queries.push({ sql, values });
+        if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
         if (sql.includes('UPDATE "Student"') && sql.includes('RETURNING *')) {
           return {
             rows: [{
@@ -537,6 +544,7 @@ describe("PostgresStudentStore", () => {
     const client = {
       async query<T>(sql: string) {
         queries.push(sql);
+        if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
         if (sql.includes('UPDATE "Student"') && sql.includes('RETURNING *')) {
           return {
             rows: [{
@@ -583,6 +591,7 @@ describe("PostgresStudentStore", () => {
     const client = {
       async query<T>(sql: string, values?: unknown[]) {
         queries.push({ sql, values });
+        if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
         if (sql.includes('SELECT s."id" AS "studentId"')) {
           return { rows: [{
             studentId: "student-a",

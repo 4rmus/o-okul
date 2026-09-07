@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { licenseTermCreateBodySchema } from "../license/license-validation.js";
-import { optionalIsoDateTime, optionalTrimmedString, optionalUppercaseString, requiredTrimmedString, requiredUppercaseString } from "../http/zod-validation.js";
+import { optionalTrimmedString, optionalUppercaseString, requiredTrimmedString, requiredUppercaseString } from "../http/zod-validation.js";
 
 const tenantEmailSchema = requiredTrimmedString.refine((value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value), {
   message: "TENANT_EMAIL_INVALID",
@@ -15,15 +15,7 @@ const tenantUrlSchema = requiredTrimmedString.refine((value) => {
   }
 }, { message: "TENANT_URL_INVALID" });
 const optionalTenantUrlSchema = tenantUrlSchema.optional();
-const optionalTenantLicenseStartsAtSchema = z.preprocess((value) => value === "" ? undefined : value, optionalIsoDateTime("TENANT_LICENSE_START_INVALID"));
-const optionalTenantLicenseEndsAtSchema = z.preprocess((value) => value === "" ? undefined : value, optionalIsoDateTime("TENANT_LICENSE_END_INVALID"));
-const positiveIntegerSchema = z.number().int().positive();
-
-const tenantFirstAdminBodySchema = z.object({
-  email: tenantEmailSchema,
-  name: requiredUppercaseString,
-  nationalId: requiredTrimmedString,
-}).strict();
+const tenantAccessStatusSchema = z.enum(["ACTIVE", "SUSPENDED"]);
 
 const tenantFirstOwnerBodySchema = z.object({
   email: tenantEmailSchema,
@@ -37,22 +29,15 @@ const tenantCampusCreateBodySchema = z.object({
   unitType: z.enum(["SCHOOL", "COURSE", "MIXED"]).optional(),
 }).strict();
 
-const tenantAdminWritableFields = {
+const tenantCreateWritableFields = {
   contactEmail: optionalTenantEmailSchema,
-  campuses: z.array(tenantCampusCreateBodySchema).min(1).optional(),
-  firstAdmin: tenantFirstAdminBodySchema.optional(),
-  firstOwner: tenantFirstOwnerBodySchema.optional(),
-  id: optionalTrimmedString,
+  campuses: z.array(tenantCampusCreateBodySchema).min(1),
+  firstOwner: tenantFirstOwnerBodySchema,
   institutionType: optionalTrimmedString,
-  licenseEndsAt: optionalTenantLicenseEndsAtSchema,
-  licenseStartsAt: optionalTenantLicenseStartsAtSchema,
   logoUrl: optionalTenantUrlSchema,
-  licenseTerm: licenseTermCreateBodySchema.optional(),
+  licenseTerm: licenseTermCreateBodySchema,
   name: optionalUppercaseString,
-  plan: optionalTrimmedString,
-  seatLimit: positiveIntegerSchema.optional(),
   slug: optionalTrimmedString,
-  status: optionalTrimmedString,
 };
 
 const tenantAdminUpdateWritableFields = {
@@ -60,21 +45,22 @@ const tenantAdminUpdateWritableFields = {
   institutionType: optionalTrimmedString,
   logoUrl: optionalTenantUrlSchema,
   name: optionalUppercaseString,
-  status: optionalTrimmedString,
 };
 
 export const tenantCreateBodySchema = z.object({
-  ...tenantAdminWritableFields,
+  ...tenantCreateWritableFields,
   name: requiredUppercaseString,
   slug: requiredTrimmedString,
-}).strict().superRefine((value, context) => {
-  const canonicalFields = [value.firstOwner, value.campuses, value.licenseTerm];
-  if (canonicalFields.some(Boolean) && canonicalFields.some((field) => !field)) {
-    context.addIssue({ code: "custom", path: ["firstOwner"], message: "TENANT_ONBOARDING_FIELDS_REQUIRED" });
-  }
-});
+}).strict();
 
 export const tenantUpdateBodySchema = z.object(tenantAdminUpdateWritableFields).strict();
+
+export const tenantStatusUpdateBodySchema = z.object({
+  status: tenantAccessStatusSchema,
+  expectedLifecycleVersion: z.number().int().min(0).max(2147483646),
+  reason: z.enum(["SECURITY_REVIEW", "INSTITUTION_REQUEST", "OPERATIONS_REVIEW"]),
+  confirmationText: z.string().min(1).max(128),
+}).strict();
 
 export const tenantCurrentProfileBodySchema = z.object({
   contactEmail: optionalTenantEmailSchema,
@@ -85,4 +71,5 @@ export const tenantCurrentProfileBodySchema = z.object({
 
 export type TenantCreateBody = z.infer<typeof tenantCreateBodySchema>;
 export type TenantUpdateBody = z.infer<typeof tenantUpdateBodySchema>;
+export type TenantStatusUpdateBody = z.infer<typeof tenantStatusUpdateBodySchema>;
 export type TenantCurrentProfileBody = z.infer<typeof tenantCurrentProfileBodySchema>;

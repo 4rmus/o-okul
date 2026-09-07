@@ -105,11 +105,10 @@ export const examParticipantFormSchema = z.object({
 
 export const tenantUpdateFormSchema = z.object({
   name: requiredText("Kurum adı"),
-  slug: requiredText("Slug"),
-  status: z.enum(["ACTIVE", "SUSPENDED", "TRIAL"]),
 });
 
 export const tenantFormSchema = tenantUpdateFormSchema.extend({
+  slug: requiredText("Slug"),
   plan: z.enum(["TRIAL", "PRO", "ENTERPRISE"]),
   licenseStartsAt: optionalDate,
   licenseEndsAt: optionalDate,
@@ -153,7 +152,6 @@ export const tenantCreateFormSchema = tenantFormSchema.and(z.object({
 }).transform((value) => ({
   name: value.name,
   slug: value.slug,
-  status: value.status,
   campuses: [{
     name: value.campus.name,
     ...(value.campus.code ? { code: value.campus.code } : {}),

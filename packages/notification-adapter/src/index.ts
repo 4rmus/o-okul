@@ -1,5 +1,40 @@
 export type NotificationChannel = "EMAIL" | "PUSH" | "WHATSAPP";
 
+export interface NotificationReceiptLookup {
+  status: "PROVIDER_ACCEPTED" | "UNCERTAIN" | "NOT_FOUND" | "EXPIRED" | "UNVERIFIED" | "UNAVAILABLE";
+  keyHash: string;
+  createdAt: string | null;
+  expiresAt: string | null;
+  providerReceiptHash: string | null;
+}
+
+/** Reads stored gateway acceptance only. Never calls the send endpoint or authorizes a retry. */
+export async function lookupNotificationReceiptFromEnv(env: NotificationAdapterEnvironment, key: string, fetchImpl: typeof fetch = fetch): Promise<NotificationReceiptLookup> {
+  if (typeof key !== "string" || !/^secret-delivery:[A-Za-z0-9_-]{1,128}$/.test(key)) throw new Error("INVALID_RECEIPT_KEY");
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(key));
+  const keyHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const empty = { keyHash, createdAt: null, expiresAt: null, providerReceiptHash: null };
+  if (env.NOTIFICATION_PROVIDER !== "http" || !env.NOTIFICATION_HTTP_ENDPOINT || !env.NOTIFICATION_HTTP_BEARER_TOKEN) return { ...empty, status: "UNAVAILABLE" };
+  try {
+    const url = new URL("/receipts", env.NOTIFICATION_HTTP_ENDPOINT);
+    url.searchParams.set("key", key);
+    const response = await fetchImpl(url.toString(), { method: "GET", headers: { authorization: `Bearer ${env.NOTIFICATION_HTTP_BEARER_TOKEN}`, "cache-control": "no-store" }, signal: AbortSignal.timeout(5000), redirect: "error", cache: "no-store" });
+    if (!response.ok) return { ...empty, status: "UNAVAILABLE" };
+    const value = await response.json() as NotificationReceiptLookup;
+    if (!value || typeof value !== "object" || Object.keys(value).sort().join(",") !== "createdAt,expiresAt,keyHash,providerReceiptHash,status" || value.keyHash !== keyHash || !["PROVIDER_ACCEPTED", "UNCERTAIN", "NOT_FOUND", "EXPIRED", "UNVERIFIED"].includes(value.status)) return { ...empty, status: "UNVERIFIED" };
+    if (value.status === "NOT_FOUND" || value.status === "UNVERIFIED") {
+      if (value.createdAt !== null || value.expiresAt !== null || value.providerReceiptHash !== null) return { ...empty, status: "UNVERIFIED" };
+      return { ...empty, status: value.status };
+    }
+    const createdAt = typeof value.createdAt === "string" ? Date.parse(value.createdAt) : NaN;
+    const expiresAt = typeof value.expiresAt === "string" ? Date.parse(value.expiresAt) : NaN;
+    if (!Number.isFinite(createdAt) || createdAt <= 0 || createdAt > Date.now() || expiresAt - createdAt !== 30 * 24 * 60 * 60 * 1000 || new Date(createdAt).toISOString() !== value.createdAt || new Date(expiresAt).toISOString() !== value.expiresAt) return { ...empty, status: "UNVERIFIED" };
+    if (expiresAt <= Date.now()) return { ...empty, createdAt: value.createdAt, expiresAt: value.expiresAt, status: "EXPIRED" };
+    if (value.status === "EXPIRED" || (value.status === "PROVIDER_ACCEPTED" ? typeof value.providerReceiptHash !== "string" || !/^[a-f0-9]{64}$/.test(value.providerReceiptHash) : value.providerReceiptHash !== null)) return { ...empty, status: "UNVERIFIED" };
+    return { keyHash, status: value.status, createdAt: value.createdAt, expiresAt: value.expiresAt, providerReceiptHash: value.providerReceiptHash };
+  } catch { return { ...empty, status: "UNAVAILABLE" }; }
+}
+
 interface NotificationMessageBase {
   to: string;
   idempotencyKey?: string;

@@ -16,9 +16,11 @@ export class ApiErrorFilter implements ExceptionFilter {
     const http = host.switchToHttp();
     const response = http.getResponse<Response>();
     const request = http.getRequest<Request>();
+    const admissionCode = exception instanceof Error && ["TENANT_DATABASE_BUSY", "TENANT_ACTIVITY_INACTIVE", "TENANT_ACTIVITY_STALE", "TENANT_ACTIVITY_UNRESOLVED", "NOTIFICATION_PROVIDER_OUTCOME_UNCERTAIN", "TENANT_ACTIVITY_ACTOR_STALE", "TENANT_QUEUE_JOB_STALE", "TENANT_ACTIVITY_CONTEXT_INVALID", "TENANT_ACTIVITY_SETTLEMENT_UNVERIFIED", "TENANT_ACTIVITY_ADMISSION_UNVERIFIED"].includes(exception.message) ? exception.message : undefined;
     const databaseBusinessCode = knownDatabaseBusinessCode(exception);
     const status = exception instanceof HttpException
       ? exception.getStatus()
+      : admissionCode ? HttpStatus.SERVICE_UNAVAILABLE
       : databaseBusinessCode
         ? HttpStatus.CONFLICT
         : HttpStatus.INTERNAL_SERVER_ERROR;
@@ -31,7 +33,7 @@ export class ApiErrorFilter implements ExceptionFilter {
       });
     }
 
-    response.status(status).json(toErrorBody(exception, status, databaseBusinessCode));
+    response.status(status).json(toErrorBody(exception, status, admissionCode ?? databaseBusinessCode));
   }
 
   protected reportException(exception: unknown, metadata: ApiExceptionMetadata): void {

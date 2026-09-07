@@ -12,6 +12,7 @@ describe("PostgresUserManagementStore", () => {
         return {
           async query<T>(sql: string, values?: unknown[]) {
             queries.push({ sql, values });
+            if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
             if (sql.includes('FROM "Employee" e')) {
               return {
                 rows: [{
@@ -68,6 +69,7 @@ describe("PostgresUserManagementStore", () => {
         return {
           async query<T>(sql: string, values?: unknown[]) {
             queries.push({ sql, values });
+            if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
             if (sql.includes('ORDER BY lower(e."lastName") ASC, e."id" ASC')) {
               return {
                 rows: [{
@@ -128,6 +130,7 @@ describe("PostgresUserManagementStore", () => {
         return {
           async query<T>(sql: string, values?: unknown[]) {
             queries.push({ sql, values });
+            if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
             if (sql.includes('INSERT INTO "User"')) {
               return { rows: [{ id: "user-created" }] as T[] };
             }
@@ -223,6 +226,7 @@ describe("PostgresUserManagementStore", () => {
         return {
           async query<T>(sql: string, values?: unknown[]) {
             queries.push({ sql, values });
+            if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
             if (sql.includes('INSERT INTO "User"')) {
               return { rows: [] as T[] };
             }
@@ -287,6 +291,7 @@ describe("PostgresUserManagementStore", () => {
         return {
           async query<T>(sql: string, values?: unknown[]) {
             queries.push({ sql, values });
+            if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
             if (sql.includes('INSERT INTO "User"')) {
               return { rows: [{ id: "user-new-seat" }] as T[] };
             }
@@ -338,6 +343,7 @@ describe("PostgresUserManagementStore", () => {
         return {
           async query<T>(sql: string, values?: unknown[]) {
             queries.push({ sql, values });
+            if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
             if (sql.includes('SELECT "role"::text AS role')) {
               return { rows: [{ role: "TENANT_ADMIN" }, { role: "TEACHER" }] as T[] };
             }
@@ -591,6 +597,7 @@ function membershipLifecyclePool(
       return {
         async query<T>(sql: string, values?: unknown[]) {
           queries.push({ sql, values });
+          if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
           if (sql.includes('FOR UPDATE OF m, u, e')) {
             return { rows: [{
               membershipId: "membership-a",

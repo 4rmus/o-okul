@@ -273,6 +273,15 @@ const sharedTypeDriftContracts = [
   { interfaceName: "MeProfileResponse", method: "get", path: "/api/v1/me/profile", schemaPath: ["responseData"] },
   { interfaceName: "MeSessionRecord", method: "get", path: "/api/v1/me/sessions", schemaPath: ["responseDataItem"] },
   { interfaceName: "MeSessionRevokeAllResponse", method: "delete", path: "/api/v1/me/sessions", schemaPath: ["responseData"] },
+  { interfaceName: "TenantResetDiagnostics", method: "get", path: "/api/v1/tenants/{id}/reset-diagnostics", schemaPath: ["responseData"] },
+  { interfaceName: "TenantResetDeliveryReceipt", method: "get", path: "/api/v1/tenants/{id}/reset-diagnostics/deliveries/{deliveryId}/receipt", schemaPath: ["responseData"] },
+  { interfaceName: "TenantResetRequestState", method: "get", path: "/api/v1/tenants/current/reset-request", schemaPath: ["responseData"] },
+  { interfaceName: "TenantResetInstitutionRequestCreate", method: "post", path: "/api/v1/tenants/current/reset-request", schemaPath: ["requestBody"] },
+  { interfaceName: "TenantResetInstitutionRequestRevoke", method: "post", path: "/api/v1/tenants/current/reset-request/revoke", schemaPath: ["requestBody"] },
+  { interfaceName: "TenantCleanResetRequest", method: "post", path: "/api/v1/tenants/{id}/clean-reset-jobs", schemaPath: ["requestBody"] },
+  { interfaceName: "TenantCleanResetStatus", method: "get", path: "/api/v1/tenants/{id}/clean-reset-jobs", schemaPath: ["responseData"] },
+  { interfaceName: "TenantCleanResetStatus", method: "get", path: "/api/v1/tenants/{id}/clean-reset-jobs/{operationId}", schemaPath: ["responseData"] },
+  { interfaceName: "TenantResetPreview", method: "get", path: "/api/v1/tenants/{id}/clean-reset-preview", schemaPath: ["responseData"] },
   { interfaceName: "TenantRecord", method: "get", path: "/api/v1/tenants/{id}", schemaPath: ["responseData"] },
   { interfaceName: "TenantCreateRequest", method: "post", path: "/api/v1/tenants", schemaPath: ["requestBody"] },
   { interfaceName: "TenantUserRecord", method: "get", path: "/api/v1/tenant-users", schemaPath: ["responseDataItem"] },
@@ -714,7 +723,8 @@ const meProfileForbiddenDeep = [
   "storageKey",
   "token",
 ];
-const tenantRecordRequired = ["id", "name", "slug", "plan", "status"];
+const tenantRecordRequired = ["id", "name", "slug", "plan", "status", "lifecycleVersion"];
+const tenantAccessStatuses = ["ACTIVE", "SUSPENDED"];
 const tenantRecordForbiddenDeep = [
   "activationToken",
   "firstAdmin",
@@ -729,8 +739,6 @@ const tenantAdminUpdateRequestProperties = [
   "institutionType",
   "logoUrl",
   "name",
-  "slug",
-  "status",
 ];
 const tenantAdminUpdateRequestForbidden = [
   "activeSeatCount",
@@ -744,18 +752,14 @@ const tenantAdminUpdateRequestForbidden = [
   "tokenHash",
 ];
 const tenantCreateRequestProperties = [
+  "campuses",
   "contactEmail",
-  "firstAdmin",
-  "id",
+  "firstOwner",
   "institutionType",
-  "licenseEndsAt",
-  "licenseStartsAt",
+  "licenseTerm",
   "logoUrl",
   "name",
-  "plan",
-  "seatLimit",
   "slug",
-  "status",
 ];
 const tenantCreateRequestForbidden = [
   "activeSeatCount",
@@ -763,8 +767,15 @@ const tenantCreateRequestForbidden = [
   "activationTokenExpiresAt",
   "activationTokenIssued",
   "admin",
+  "firstAdmin",
+  "id",
+  "licenseEndsAt",
+  "licenseStartsAt",
   "passwordHash",
+  "plan",
   "refreshToken",
+  "seatLimit",
+  "status",
   "tenant",
   "token",
   "tokenHash",
@@ -783,15 +794,16 @@ const licenseTermCreateRequestProperties = ["activeStudentLimit", "endsAt", "pla
 const licenseTermRecordRequired = ["id", "tenantId", "planCode", "startsAt", "endsAt", "activeStudentLimit"];
 const tenantCreateFieldChecks = [
   { path: ["requestBody", "contactEmail"], format: "email" },
-  { path: ["requestBody", "firstAdmin", "email"], format: "email" },
-  { path: ["requestBody", "firstAdmin", "name"], minLength: 1 },
-  { path: ["requestBody", "firstAdmin", "nationalId"], minLength: 11 },
-  { path: ["requestBody", "licenseEndsAt"], format: "date-time" },
-  { path: ["requestBody", "licenseStartsAt"], format: "date-time" },
+  { path: ["requestBody", "campuses"], minItems: 1 },
+  { path: ["requestBody", "firstOwner", "email"], format: "email" },
+  { path: ["requestBody", "firstOwner", "name"], minLength: 1 },
+  { path: ["requestBody", "licenseTerm", "activeStudentLimit"], minimum: 1 },
+  { path: ["requestBody", "licenseTerm", "endsAt"], format: "date-time" },
+  { path: ["requestBody", "licenseTerm", "startsAt"], format: "date-time" },
   { path: ["requestBody", "name"], minLength: 1 },
-  { path: ["requestBody", "seatLimit"], minimum: 1 },
   { path: ["requestBody", "slug"], minLength: 1 },
 ];
+const tenantOnboardingResponseRequired = ["tenant", "campuses", "licenseTerm", "owner"];
 const tenantCurrentProfileRequestProperties = ["contactEmail", "institutionType", "logoUrl", "name"];
 const tenantCurrentProfileRequestForbidden = [
   "activeSeatCount",
@@ -821,6 +833,7 @@ const tenantRecordFieldChecks = [
   { path: ["responseData", "licenseStartsAt"], format: "date-time" },
   { path: ["responseData", "seatLimit"], minimum: 1 },
   { path: ["responseData", "activeSeatCount"], minimum: 0 },
+  { path: ["responseData", "status"], enum: tenantAccessStatuses },
 ];
 const tenantRecordListFieldChecks = [
   { path: ["responseDataItem", "contactEmail"], format: "email" },
@@ -828,6 +841,7 @@ const tenantRecordListFieldChecks = [
   { path: ["responseDataItem", "licenseStartsAt"], format: "date-time" },
   { path: ["responseDataItem", "seatLimit"], minimum: 1 },
   { path: ["responseDataItem", "activeSeatCount"], minimum: 0 },
+  { path: ["responseDataItem", "status"], enum: tenantAccessStatuses },
 ];
 const tenantUserRecordFieldChecks = [
   { path: ["responseData", "email"], format: "email" },
@@ -1939,8 +1953,8 @@ const requiredOperationContracts = [
     requestForbidden: ["sessionId", "membershipVersion", "stepUpToken", "userId"],
     responseDataRequired: ["purpose", "stepUpToken", "expiresAt"],
     fieldChecks: [
-      { path: ["requestBody", "purpose"], enum: ["OWNER_ADMIN_CHANGE"] },
-      { path: ["responseData", "purpose"], enum: ["OWNER_ADMIN_CHANGE"] },
+      { path: ["requestBody", "purpose"], enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET"] },
+      { path: ["responseData", "purpose"], enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET"] },
       { path: ["responseData", "expiresAt"], format: "date-time" },
     ],
   },
@@ -1965,10 +1979,11 @@ const requiredOperationContracts = [
     path: "/api/v1/tenants",
     requestBody: true,
     responseEnvelope: true,
-    requestRequired: ["name", "slug"],
+    requiredHeaders: ["Idempotency-Key"],
+    requestRequired: ["campuses", "firstOwner", "licenseTerm", "name", "slug"],
     requestProperties: tenantCreateRequestProperties,
     requestForbidden: tenantCreateRequestForbidden,
-    responseDataOneOfRequired: [tenantRecordRequired, ["tenant", "admin"]],
+    responseDataRequired: tenantOnboardingResponseRequired,
     responseDataForbiddenDeep: tenantCreateResponseForbiddenDeep,
     fieldChecks: tenantCreateFieldChecks,
   },
@@ -1984,6 +1999,32 @@ const requiredOperationContracts = [
     fieldChecks: [
       { path: ["requestBody", "contactEmail"], format: "email" },
       ...tenantRecordFieldChecks,
+    ],
+  },
+  {
+    method: "get", path: "/api/v1/tenants/{id}/clean-reset-jobs", responseEnvelope: true,
+    requiredHeaders: ["Idempotency-Key"], responseDataRequired: ["operationId", "status", "phase", "errorCode", "result"],
+  },
+  {
+    method: "post", path: "/api/v1/tenants/{id}/clean-reset-jobs", requestBody: true, responseEnvelope: true,
+    requiredHeaders: ["Idempotency-Key", "X-Step-Up-Token"],
+    requestRequired: ["preset", "expectedLifecycleVersion", "preflightDigest", "reason", "confirmationText"],
+    requestForbidden: ["backupReceipt", "objectKeys", "tenantId", "actorUserId", "legalHoldCleared", "quiescenceVerified"],
+    responseDataRequired: ["operationId", "status", "phase", "errorCode", "result"],
+  },
+  {
+    method: "patch",
+    path: "/api/v1/tenants/{id}/status",
+    requestBody: true,
+    responseEnvelope: true,
+    requiredHeaders: ["Idempotency-Key", "X-Step-Up-Token"],
+    requestRequired: ["status", "expectedLifecycleVersion", "reason", "confirmationText"],
+    requestProperties: ["status", "expectedLifecycleVersion", "reason", "confirmationText"],
+    responseDataRequired: ["tenant", "sessionsRevoked"],
+    fieldChecks: [
+      { path: ["requestBody", "status"], enum: tenantAccessStatuses },
+      { path: ["responseData", "sessionsRevoked"], minimum: 0 },
+      { path: ["responseData", "tenant", "status"], enum: tenantAccessStatuses },
     ],
   },
   {

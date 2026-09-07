@@ -636,10 +636,10 @@ function requireSecretDeliveryOutboxSmoke(value, failures) {
     return;
   }
   requireExpectedObjectKeys(value, [
-    "schemaVersion", "result", "check", "environment", "generatedAt", "releaseImageTag", "notBefore", "outboxRecordHash", "purpose", "retry",
+    "schemaVersion", "result", "check", "environment", "generatedAt", "releaseImageTag", "notBefore", "outboxRecordHash", "purpose", "retry", "hasProviderReceipt", "retainedUncertain",
     "terminalStatus", "payloadCleared", "deliveredAt", "updatedAt", "separateRolePrivilege", "commandsPassed", "gaps",
   ], failures, label);
-  if (value.schemaVersion !== 1) failures.push(`${label}.schemaVersion 1 olmalı.`);
+  if (value.schemaVersion !== 2) failures.push(`${label}.schemaVersion 2 olmalı.`);
   if (value.terminalStatus !== "DELIVERED") failures.push(`${label}.terminalStatus DELIVERED olmalı.`);
   if (value.payloadCleared !== true) failures.push(`${label}.payloadCleared true olmalı.`);
   if (typeof value.releaseImageTag !== "string" || !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(value.releaseImageTag)) failures.push(`${label}.releaseImageTag güvenli IMAGE_TAG olmalı.`);
@@ -658,11 +658,14 @@ function requireSecretDeliveryOutboxSmoke(value, failures) {
     failures.push(`${label}.deliveredAt ve updatedAt 24 saatten eski olamaz.`);
   }
   const retry = requireObject(value, failures, `${label}.retry`, "retry");
-  if (retry && (!Number.isSafeInteger(retry.attempts) || retry.attempts < 2 || retry.retried !== true)) failures.push(`${label}.retry retry edilmiş en az iki deneme olmalı.`);
+  if (retry && (retry.attempts !== 1 || retry.retried !== false)) failures.push(`${label}.retry tek deneme ve retried=false olmalı.`);
+  if (value.hasProviderReceipt !== true) failures.push(`${label}.hasProviderReceipt true olmalı.`);
+  const retained = value.retainedUncertain;
+  if (!retained || !/^[a-f0-9]{64}$/.test(retained.recordHash ?? "") || retained.recordHash === value.outboxRecordHash || retained.attempts !== 1 || retained.status !== "UNCERTAIN" || !Number.isSafeInteger(retained.observedAgeSeconds) || retained.observedAgeSeconds < 300 || Date.parse(value.generatedAt) - Date.parse(value.notBefore) < retained.observedAgeSeconds * 1000) failures.push(`${label}.retainedUncertain ayrı kayıt/tek deneme/en az 300 saniye taşımalı.`);
   const privilege = requireObject(value, failures, `${label}.separateRolePrivilege`, "separateRolePrivilege");
   if (!privilege) return;
   if (privilege.role !== "secret_delivery_worker" || privilege.result !== "PASS") failures.push(`${label}.separateRolePrivilege ayrı worker rolü PASS olmalı.`);
-  if (privilege.outboxTable?.select !== true || privilege.outboxTable?.update !== true || privilege.outboxTable?.insert !== false || privilege.outboxTable?.delete !== false || privilege.outboxTable?.truncate !== false || privilege.otherTables?.userSelect !== false || privilege.publicSchema?.create !== false || privilege.publicSchema?.owner !== false || Object.values(privilege.elevatedCapabilities ?? {}).some((value) => value !== false)) {
+  if (privilege.outboxTable?.select !== true || privilege.outboxTable?.update !== true || privilege.outboxTable?.insert !== false || privilege.outboxTable?.delete !== false || privilege.outboxTable?.truncate !== false || privilege.otherTables?.userSelect !== false || privilege.tenantAdmission?.idSelect !== true || privilege.tenantAdmission?.statusSelect !== true || privilege.tenantAdmission?.lifecycleVersionSelect !== true || privilege.tenantAdmission?.otherColumnSelect !== false || privilege.tenantAdmission?.write !== false || privilege.publicSchema?.create !== false || privilege.publicSchema?.owner !== false || Object.values(privilege.elevatedCapabilities ?? {}).some((value) => value !== false)) {
     failures.push(`${label}.separateRolePrivilege least-privilege sonucu geçersiz.`);
   }
   if (JSON.stringify(value).toLowerCase().match(/https?:\/\/|[\w.+-]+@[\w.-]+\.[a-z]{2,}|recipient|token|payloadencrypted|sourceid/)) {

@@ -36,6 +36,12 @@ model Tenant {
   contactEmail String?
   logoUrl     String?
   seatLimit   Int?
+  lifecycleVersion Int           @default(0)
+  resetRequest Json?
+  mutationActivities TenantMutationActivity[]
+  suspendedAt DateTime?
+  suspendedReason String?
+  /// ACTIVE or SUSPENDED; enforced by Tenant_status_check.
   status      String             @default("ACTIVE")
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
@@ -86,6 +92,7 @@ model Tenant {
   importQuarantines ImportQuarantine[]
   reportSnapshots ReportSnapshot[]
   backupRestoreJobs BackupRestoreJob[]
+  freshResetOperations TenantFreshResetOperation[]
   announcements Announcement[]
   announcementReceipts AnnouncementReceipt[]
   announcementDeliveryReports AnnouncementDeliveryReport[]
@@ -495,6 +502,9 @@ model SecretDeliveryOutbox {
   tenantId         String?
   purpose          String
   sourceId         String
+  sourceScope      String?
+  tenantLifecycleVersion Int?
+  providerMessageId String?
   payloadEncrypted String?
   status           String   @default("PENDING")
   attempts         Int      @default(0)
@@ -1771,4 +1781,42 @@ model AuditLog {
 
   @@id([id, createdAt])
   @@index([tenantId, entityType, createdAt])
+}
+
+model TenantFreshResetOperation {
+  id String @id
+  institutionRequestId String?
+  tenantId String
+  actorUserId String
+  idempotencyKey String
+  requestHash String
+  preset String @default("CLEAN_SETUP_V1")
+  expectedLifecycleVersion Int
+  preflightDigest String
+  reason String
+  status String @default("QUEUED")
+  phase String @default("PREFLIGHT")
+  errorCode String?
+  backupReceipt Json?
+  result Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  @@unique([tenantId, id])
+  @@unique([actorUserId, idempotencyKey])
+  @@unique([tenantId, institutionRequestId], map: "TenantFreshResetOperation_request_once")
+  @@index([tenantId, status])
+}
+
+model TenantMutationActivity {
+  id String @id
+  referenceId String?
+  tenantId String
+  lifecycleVersion Int
+  kind String
+  status String @default("RUNNING")
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  @@index([tenantId, status])
+  @@unique([tenantId, lifecycleVersion, kind, referenceId], map: "TenantMutationActivity_reference_key")
 }

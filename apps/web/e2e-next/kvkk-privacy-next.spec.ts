@@ -191,7 +191,8 @@ function createAuthResponse(email: string) {
     session: {
       id: "session-a",
       membershipVersion: 1,
-      roles: ["TENANT_ADMIN", "SYSTEM_ADMIN"],
+      activePersona: "STAFF",
+      roles: ["TENANT_ADMIN"],
       status: "ACTIVE",
       tenantId: "tenant-a",
       userId: email === "admin-a@example.test" ? "user-tenant-a" : "user-other",

@@ -49,9 +49,42 @@ const employeePendingInvitationMigration = readFileSync(
   new URL("../prisma/migrations/20260810114500_employee_pending_invitation_unique/migration.sql", import.meta.url),
   "utf8",
 );
+const tenantAccessStatusMigration = readFileSync(
+  new URL("../prisma/migrations/20260904120000_enforce_tenant_access_status/migration.sql", import.meta.url),
+  "utf8",
+);
+
+const tenantLifecycleMigration = readFileSync(
+  new URL("../prisma/migrations/20260906120000_tenant_lifecycle_version/migration.sql", import.meta.url), "utf8",
+);
 
 const failures = [];
 const tenantModels = ["LicenseTerm", "LicenseUsage", "Employee", "MembershipCampusScope", "StudentContact"];
+
+for (const token of [
+  `LOCK TABLE "Tenant" IN ACCESS EXCLUSIVE MODE;`,
+  `MESSAGE = 'TENANT_STATUS_UNSUPPORTED'`,
+  `MESSAGE = 'SYSTEM_TENANT_STATUS_INVALID'`,
+  `SET "status" = 'ACTIVE', "updatedAt" = now()`,
+  `WHERE "status" = 'TRIAL';`,
+  `CONSTRAINT "Tenant_status_check"`,
+  `CHECK ("status" IN ('ACTIVE', 'SUSPENDED'))`,
+  `CONSTRAINT "Tenant_system_status_check"`,
+]) {
+  requireToken(tenantAccessStatusMigration, token, `tenant access status migration ${token}`);
+}
+if (/\bDELETE\s+FROM\s+"Tenant"/i.test(tenantAccessStatusMigration)) {
+  failures.push("Tenant access status migration'ı tenant kaydı silmemeli.");
+}
+
+for (const token of [
+  'ADD COLUMN "lifecycleVersion" integer NOT NULL DEFAULT 0',
+  'ADD COLUMN "suspendedAt" timestamp(3)',
+  'ADD COLUMN "suspendedReason" text',
+  'CHECK ("lifecycleVersion" >= 0)',
+  "'SECURITY_REVIEW', 'INSTITUTION_REQUEST', 'OPERATIONS_REVIEW'",
+]) requireToken(tenantLifecycleMigration, token, `tenant lifecycle migration ${token}`);
+for (const field of ["lifecycleVersion", "suspendedAt", "suspendedReason"]) requireToken(schema, field, `tenant lifecycle ${field}`);
 
 for (const model of ["PlatformAccount", "PlatformSession", "PlatformIdempotencyKey", "WhatsAppConsent", "WhatsAppConsentEvent", ...tenantModels]) {
   requireToken(schema, `model ${model} {`, `schema model ${model}`);

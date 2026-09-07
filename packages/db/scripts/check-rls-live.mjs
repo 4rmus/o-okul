@@ -872,6 +872,17 @@ async function seedFixtures() {
     );
 
     await adminClient.query(
+      `INSERT INTO "TenantMutationActivity" ("id", "tenantId", "lifecycleVersion", "kind", "status")
+       VALUES ('rls-activity-a', $1, 0, 'HTTP_MUTATION', 'RUNNING'), ('rls-activity-b', $2, 0, 'WORKER_JOB', 'UNCERTAIN')
+       ON CONFLICT ("id") DO NOTHING`, [ids.tenantA, ids.tenantB],
+    );
+    await adminClient.query(
+      `INSERT INTO "TenantFreshResetOperation" ("id", "tenantId", "actorUserId", "idempotencyKey", "requestHash", "expectedLifecycleVersion", "preflightDigest", "reason", "status", "phase")
+       VALUES ('rls-reset-a', $1, $3, 'rls-reset-a', 'fixture', 0, 'fixture', 'OPERATIONS_REVIEW', 'COMPLETED', 'DONE'),
+              ('rls-reset-b', $2, $4, 'rls-reset-b', 'fixture', 0, 'fixture', 'OPERATIONS_REVIEW', 'COMPLETED', 'DONE')
+       ON CONFLICT ("id") DO NOTHING`, [ids.tenantA, ids.tenantB, ids.userA, ids.userB],
+    );
+    await adminClient.query(
       `INSERT INTO "BackupRestoreJob" (
          "id", "tenantId", "requestedByUserId", "operationType", "targetReference", "reason", "jobId", "status", "checkedTables", "updatedAt"
        )
@@ -980,6 +991,47 @@ async function assertAppCannotDeleteTenant() {
 
     throw new Error("app rolü Tenant DELETE sorgusunu çalıştırabildi.");
   });
+}
+
+async function assertAuditLogAppendOnlyPrivileges() {
+  const parent = await appClient.query(
+    `SELECT
+       has_table_privilege(current_user, '"AuditLog"', 'SELECT') AS "canSelect",
+       has_table_privilege(current_user, '"AuditLog"', 'INSERT') AS "canInsert",
+       has_table_privilege(current_user, '"AuditLog"', 'UPDATE') AS "canUpdate",
+       has_table_privilege(current_user, '"AuditLog"', 'DELETE') AS "canDelete",
+       has_table_privilege(current_user, '"AuditLog"', 'TRUNCATE') AS "canTruncate"`,
+  );
+  const parentPrivileges = parent.rows[0];
+  if (
+    parent.rowCount !== 1
+    || parentPrivileges?.canSelect !== true
+    || parentPrivileges?.canInsert !== true
+    || parentPrivileges?.canUpdate !== false
+    || parentPrivileges?.canDelete !== false
+    || parentPrivileges?.canTruncate !== false
+  ) {
+    throw new Error("app rolü AuditLog parent üzerinde append-only profile sahip değil.");
+  }
+
+  const partitions = await appClient.query(
+    `SELECT
+       child.relname AS "tableName",
+       has_table_privilege(current_user, child.oid, 'SELECT') AS "canSelect",
+       has_table_privilege(current_user, child.oid, 'INSERT') AS "canInsert",
+       has_table_privilege(current_user, child.oid, 'UPDATE') AS "canUpdate",
+       has_table_privilege(current_user, child.oid, 'DELETE') AS "canDelete",
+       has_table_privilege(current_user, child.oid, 'TRUNCATE') AS "canTruncate"
+     FROM pg_inherits inheritance
+     JOIN pg_class parent ON parent.oid = inheritance.inhparent
+     JOIN pg_class child ON child.oid = inheritance.inhrelid
+     WHERE parent.relname = 'AuditLog'`,
+  );
+  if (partitions.rowCount === 0 || partitions.rows.some((partition) => (
+    partition.canSelect || partition.canInsert || partition.canUpdate || partition.canDelete || partition.canTruncate
+  ))) {
+    throw new Error("app rolü AuditLog child partition'a doğrudan erişebiliyor.");
+  }
 }
 
 async function assertWithCheckBlocksWrongTenantWrite() {
@@ -1527,6 +1579,7 @@ try {
     await assertTenantAOnlyReadsTenantA(table);
   }
   await assertAppCannotDeleteTenant();
+  await assertAuditLogAppendOnlyPrivileges();
   await assertWithCheckBlocksWrongTenantWrite();
   await assertWithCheckBlocksWrongTenantHomeworkWrite();
   await assertWithCheckBlocksWrongTenantAnnouncementWrite();

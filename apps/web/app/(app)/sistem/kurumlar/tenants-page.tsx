@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -37,7 +37,6 @@ const emptyForm: TenantFormState = {
   licenseStartsAt: "",
   licenseEndsAt: "",
   seatLimit: "",
-  status: "ACTIVE",
 };
 
 const emptyCreateForm: TenantCreateFormState = {
@@ -68,11 +67,11 @@ export function TenantsPage() {
     refetchOnWindowFocus: false,
   });
   const [form, setForm] = useState<TenantCreateFormState>(emptyCreateForm);
+  const createAttempt = useRef<{ body: string; idempotencyKey: string } | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
   const rows = tenantsQuery.data?.data ?? [];
   const activeTenantCount = rows.filter((tenant) => tenant.status === "ACTIVE").length;
-  const trialTenantCount = rows.filter((tenant) => tenant.status === "TRIAL").length;
   const suspendedTenantCount = rows.filter((tenant) => tenant.status === "SUSPENDED").length;
   const expiringTenantCount = rows.filter((tenant) => licenseDaysRemaining(tenant.licenseEndsAt) <= 30).length;
   const overSeatLimitCount = rows.filter((tenant) => isSeatLimitExceeded(tenant)).length;
@@ -84,11 +83,11 @@ export function TenantsPage() {
       value: formatCount(tenantsQuery.data?.meta?.total ?? rows.length),
     },
     {
-      description: "Aktif / deneme / askıda",
+      description: "Bu sayfadaki aktif / askıda kurumlar",
       key: "status",
       label: "Durum dağılımı",
       tone: suspendedTenantCount > 0 ? "warning" : "success",
-      value: `${formatCount(activeTenantCount)} / ${formatCount(trialTenantCount)} / ${formatCount(suspendedTenantCount)}`,
+      value: `${formatCount(activeTenantCount)} / ${formatCount(suspendedTenantCount)}`,
     },
     {
       description: "Lisansı 30 gün içinde biten kurumlar",
@@ -151,12 +150,14 @@ export function TenantsPage() {
   ];
 
   function openCreateForm() {
+    createAttempt.current = null;
     setForm(emptyCreateForm);
     setError("");
     setIsFormOpen(true);
   }
 
   function closeForm() {
+    createAttempt.current = null;
     setIsFormOpen(false);
     setForm(emptyCreateForm);
   }
@@ -180,8 +181,13 @@ export function TenantsPage() {
       return;
     }
 
+    const requestBody = JSON.stringify(parsedForm.data);
+    if (createAttempt.current?.body !== requestBody) {
+      createAttempt.current = { body: requestBody, idempotencyKey: crypto.randomUUID() };
+    }
+
     try {
-      const created = await createTenant(auth.accessToken, parsedForm.data);
+      const created = await createTenant(auth.accessToken, parsedForm.data, createAttempt.current.idempotencyKey);
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
       void queryClient.invalidateQueries({ queryKey: ["next-tenant", created.tenant.id] });
@@ -313,13 +319,6 @@ function TenantFormModal({
           <option value="MIXED">Karma</option>
         </Select>
       </Field>
-      <Field label="Durum">
-        <Select value={form.status} onChange={(event) => onChange({ ...form, status: event.target.value as TenantFormState["status"] })}>
-          <option value="ACTIVE">Aktif</option>
-          <option value="SUSPENDED">Askıda</option>
-          <option value="TRIAL">Deneme</option>
-        </Select>
-      </Field>
       <Field label="İlk kurum sahibi ad soyad">
         <Input
           required
@@ -343,7 +342,7 @@ function TenantFormModal({
           onChange={(event) => onChange({ ...form, firstOwner: { ...form.firstOwner, nationalId: event.target.value } })}
         />
       </Field>
-      <p className="next-status-note">İlk yöneticiye 24 saat geçerli parola kurulum bağlantısı e-posta ile gönderilir.</p>
+      <p className="next-status-note">İlk kurum sahibine 24 saat geçerli parola kurulum bağlantısı e-posta ile gönderilir.</p>
     </FormModal>
   );
 }
@@ -387,14 +386,12 @@ function isSeatLimitExceeded(tenant: TenantRecord) {
 function statusLabel(status: string) {
   if (status === "ACTIVE") return "Aktif";
   if (status === "SUSPENDED") return "Askıda";
-  if (status === "TRIAL") return "Deneme";
   return "Durum bilgisi alınamadı";
 }
 
 function statusTone(status: string): StatusBadgeProps["tone"] {
   if (status === "ACTIVE") return "success";
   if (status === "SUSPENDED") return "danger";
-  if (status === "TRIAL") return "warning";
   return "neutral";
 }
 
@@ -415,9 +412,6 @@ function planTone(plan: string): StatusBadgeProps["tone"] {
 function tenantCreateErrorMessage(error: unknown) {
   if (error instanceof ApiRequestError && error.code === "TENANT_SLUG_ALREADY_EXISTS") {
     return "Bu kurum kodu zaten kullanımda. Farklı bir kurum kodu girin.";
-  }
-  if (error instanceof ApiRequestError && error.code === "TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS") {
-    return "Bu yönetici e-postası zaten kullanımda. Farklı bir e-posta girin.";
   }
   return apiErrorMessage(error, "Kurum oluşturulamadı.");
 }

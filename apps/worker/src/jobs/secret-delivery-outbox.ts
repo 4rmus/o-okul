@@ -1,4 +1,4 @@
-import { createTenantPgPool, decryptSecretDeliveryPayload, type TenantQueryable } from "@o-okul/db";
+import { createTenantPgPool, decryptSecretDeliveryPayload, withTenantDb, type Queryable, type TenantQueryable } from "@o-okul/db";
 import { createNotificationAdapterFromEnv, type NotificationAdapter } from "@o-okul/notification-adapter";
 import { randomUUID } from "node:crypto";
 import { workerLogger } from "../observability/logging.js";
@@ -9,90 +9,81 @@ export interface SecretDeliveryOutboxRecord {
   payloadEncrypted: string;
   attempts: number;
   claimToken: string;
+  tenantId?: string | null;
+  sourceScope?: "TENANT" | "SYSTEM" | null;
+  tenantLifecycleVersion?: number | null;
 }
 
 export interface SecretDeliveryOutboxStore {
   claimNext(now: Date): Promise<SecretDeliveryOutboxRecord | undefined>;
-  markDelivered(id: string, claimToken: string, deliveredAt: Date): Promise<void>;
-  markFailed(id: string, input: { attempts: number; claimToken: string; errorCode: string; now: Date }): Promise<void>;
+  markDelivered(id: string, claimToken: string, deliveredAt: Date, providerMessageId: string): Promise<void>;
+  markFailed(id: string, input: { attempts: number; claimToken: string; errorCode: string; now: Date; providerMessageId?: string }): Promise<void>;
 }
 
 export class PostgresSecretDeliveryOutboxStore implements SecretDeliveryOutboxStore {
   constructor(private readonly pool: TenantQueryable = createTenantPgPool(resolveSecretDeliveryOutboxDatabaseUrl())) {}
 
   async claimNext(now: Date): Promise<SecretDeliveryOutboxRecord | undefined> {
-    const staleBefore = new Date(now.getTime() - 5 * 60 * 1000);
-    const claimToken = randomUUID();
-    const result = await this.pool.query<SecretDeliveryOutboxRow>(
-      `WITH expired AS (
-         UPDATE "SecretDeliveryOutbox"
-         SET "status" = 'EXPIRED',
-             "payloadEncrypted" = NULL,
-             "claimedAt" = NULL,
-             "claimToken" = NULL,
-             "lastErrorCode" = NULL,
-             "updatedAt" = $1
-         WHERE "payloadEncrypted" IS NOT NULL
-           AND "expiresAt" <= $1
-         RETURNING "id"
-       ), candidate AS (
-         SELECT "id"
-         FROM "SecretDeliveryOutbox"
-         WHERE "payloadEncrypted" IS NOT NULL
-           AND "expiresAt" > $1
-           AND (
-             ("status" = 'PENDING' AND "availableAt" <= $1)
-             OR ("status" = 'PROCESSING' AND "claimedAt" < $2)
-           )
-         ORDER BY "availableAt" ASC, "createdAt" ASC
-         FOR UPDATE SKIP LOCKED
-         LIMIT 1
-       )
-       UPDATE "SecretDeliveryOutbox" outbox
-       SET "status" = 'PROCESSING',
-           "attempts" = outbox."attempts" + 1,
-           "claimedAt" = $1,
-           "claimToken" = $3,
-           "updatedAt" = $1
-       FROM candidate
-       WHERE outbox."id" = candidate."id"
-       RETURNING outbox."id", outbox."purpose", outbox."payloadEncrypted", outbox."attempts", outbox."claimToken"`,
-      [now, staleBefore, claimToken],
-    );
-    return result.rows[0] ? toRecord(result.rows[0]) : undefined;
+    try { await this.expireOne(now); } catch (error) { if (!(error instanceof Error) || error.message !== "TENANT_DATABASE_BUSY") throw error; }
+    // Availability filtering keeps a suspended/legacy tenant from starving other tenants.
+    const candidates = await this.pool.query<SecretDeliveryOutboxRecord>(`SELECT o."id", o."tenantId", o."sourceScope", o."tenantLifecycleVersion" FROM "SecretDeliveryOutbox" o LEFT JOIN "Tenant" t ON t."id" = o."tenantId"
+      WHERE o."status" = 'PENDING' AND o."attempts" = 0 AND o."claimToken" IS NULL AND o."payloadEncrypted" IS NOT NULL AND o."expiresAt" > $1 AND o."availableAt" <= $1
+      AND ((o."sourceScope" = 'SYSTEM' AND o."tenantId" IS NULL AND o."tenantLifecycleVersion" IS NULL) OR (o."sourceScope" = 'TENANT' AND t."status" = 'ACTIVE' AND t."lifecycleVersion" = o."tenantLifecycleVersion"))
+      ORDER BY o."availableAt", o."createdAt" LIMIT 20`, [now]);
+    for (const candidate of candidates.rows) {
+      let claimed: SecretDeliveryOutboxRecord | undefined;
+      try { claimed = await this.transaction(candidate, async (db) => {
+        if (candidate.sourceScope === "TENANT") {
+          const tenant = (await db.query<{ status: string; lifecycleVersion: number }>('SELECT "status", "lifecycleVersion" FROM "Tenant" WHERE "id" = $1', [candidate.tenantId])).rows[0];
+          if (tenant?.status !== "ACTIVE" || tenant.lifecycleVersion !== candidate.tenantLifecycleVersion) return undefined;
+        }
+        const available = await db.query<{ id: string }>('SELECT "id" FROM "SecretDeliveryOutbox" WHERE "id" = $1 AND "status" = \'PENDING\' FOR UPDATE SKIP LOCKED', [candidate.id]);
+        if (!available.rows.length) return undefined;
+        const result = await db.query<SecretDeliveryOutboxRecord>(`UPDATE "SecretDeliveryOutbox" SET "status" = 'PROCESSING', "attempts" = "attempts" + 1, "claimedAt" = $2, "claimToken" = $3, "updatedAt" = $2
+          WHERE "id" = $1 AND "status" = 'PENDING' AND "attempts" = 0 AND "claimToken" IS NULL AND "payloadEncrypted" IS NOT NULL AND "expiresAt" > $2 AND "availableAt" <= $2
+          RETURNING "id", "tenantId", "sourceScope", "tenantLifecycleVersion", "purpose", "payloadEncrypted", "attempts", "claimToken"`, [candidate.id, now, randomUUID()]);
+        const row = result.rows[0];
+        if (row && (row.id !== candidate.id || row.tenantId !== candidate.tenantId || row.sourceScope !== candidate.sourceScope || row.tenantLifecycleVersion !== candidate.tenantLifecycleVersion)) throw new Error("SECRET_DELIVERY_PROVENANCE_UNVERIFIED");
+        return row;
+      }); } catch (error) { if (error instanceof Error && error.message === "TENANT_DATABASE_BUSY") continue; throw error; }
+      if (claimed) return claimed;
+    }
+    return undefined;
+  }
+  private async expireOne(now: Date): Promise<void> {
+    const rows = await this.pool.query<SecretDeliveryOutboxRecord>(`SELECT "id", "tenantId", "sourceScope", "tenantLifecycleVersion" FROM "SecretDeliveryOutbox" WHERE "expiresAt" <= $1 AND "payloadEncrypted" IS NOT NULL AND "sourceScope" IS NOT NULL ORDER BY "expiresAt" LIMIT 1`, [now]);
+    const row = rows.rows[0]; if (!row) return;
+    await this.transaction(row, async (db) => {
+      // Redaction is independent of dispatch certainty. Attempted rows never become safe EXPIRED.
+      await db.query(`UPDATE "SecretDeliveryOutbox" SET "payloadEncrypted" = NULL,
+        "status" = CASE WHEN "status" = 'PENDING' AND "attempts" = 0 AND "claimToken" IS NULL THEN 'EXPIRED' WHEN "status" IN ('PENDING','PROCESSING','UNCERTAIN') THEN 'UNCERTAIN' ELSE "status" END,
+        "updatedAt" = $2 WHERE "id" = $1 AND "expiresAt" <= $2`, [row.id, now]);
+    });
+  }
+  async markDelivered(id: string, claimToken: string, deliveredAt: Date, providerMessageId: string): Promise<void> {
+    if (!providerMessageId?.trim() || providerMessageId.length > 512) throw new Error("SECRET_DELIVERY_RECEIPT_UNVERIFIED");
+    const row = await this.claimRecord(id, claimToken);
+    await this.transaction(row, async (db) => {
+      const updated = await db.query<{ id: string }>(`UPDATE "SecretDeliveryOutbox" SET "status" = 'DELIVERED', "payloadEncrypted" = NULL, "providerMessageId" = $4, "claimedAt" = NULL, "claimToken" = NULL, "deliveredAt" = $3, "lastErrorCode" = NULL, "updatedAt" = $3 WHERE "id" = $1 AND "status" = 'PROCESSING' AND "claimToken" = $2 RETURNING "id"`, [id, claimToken, deliveredAt, providerMessageId]);
+      if (updated.rows[0]?.id !== id) throw new Error("SECRET_DELIVERY_CLAIM_CHANGED");
+    });
+  }
+  async markFailed(id: string, input: { attempts: number; claimToken: string; errorCode: string; now: Date; providerMessageId?: string }): Promise<void> {
+    const row = await this.claimRecord(id, input.claimToken);
+    await this.transaction(row, async (db) => {
+      const updated = await db.query<{ id: string }>(`UPDATE "SecretDeliveryOutbox" SET "status" = 'UNCERTAIN', "lastErrorCode" = $3, "updatedAt" = $4, "providerMessageId" = COALESCE($5, "providerMessageId") WHERE "id" = $1 AND "status" IN ('PROCESSING','UNCERTAIN') AND "claimToken" = $2 RETURNING "id"`, [id, input.claimToken, input.errorCode, input.now, input.providerMessageId ?? null]);
+      if (updated.rows[0]?.id !== id) throw new Error("SECRET_DELIVERY_CLAIM_CHANGED");
+    });
+  }
+  private async claimRecord(id: string, claimToken: string): Promise<SecretDeliveryOutboxRecord> {
+    const row = (await this.pool.query<SecretDeliveryOutboxRecord>(`SELECT "id", "tenantId", "sourceScope", "tenantLifecycleVersion" FROM "SecretDeliveryOutbox" WHERE "id" = $1 AND "claimToken" = $2 AND "status" IN ('PROCESSING','UNCERTAIN')`, [id, claimToken])).rows[0];
+    if (!row) throw new Error("SECRET_DELIVERY_CLAIM_CHANGED"); return row;
+  }
+  private transaction<T>(row: SecretDeliveryOutboxRecord, run: (db: Queryable) => Promise<T>): Promise<T> {
+    if (!this.pool.connect || !(row.sourceScope === "SYSTEM" ? row.tenantId == null && row.tenantLifecycleVersion == null : row.sourceScope === "TENANT" && !!row.tenantId && Number.isInteger(row.tenantLifecycleVersion) && row.tenantLifecycleVersion! >= 0)) throw new Error("SECRET_DELIVERY_PROVENANCE_UNVERIFIED");
+    return withTenantDb(this.pool, { tenantId: row.tenantId ?? null, bypassRls: row.sourceScope === "SYSTEM" }, run);
   }
 
-  async markDelivered(id: string, claimToken: string, deliveredAt: Date): Promise<void> {
-    await this.pool.query(
-      `UPDATE "SecretDeliveryOutbox"
-       SET "status" = 'DELIVERED',
-           "payloadEncrypted" = NULL,
-           "claimedAt" = NULL,
-           "claimToken" = NULL,
-           "deliveredAt" = $3,
-           "lastErrorCode" = NULL,
-           "updatedAt" = $3
-       WHERE "id" = $1 AND "status" = 'PROCESSING' AND "claimToken" = $2`,
-      [id, claimToken, deliveredAt],
-    );
-  }
-
-  async markFailed(id: string, input: { attempts: number; claimToken: string; errorCode: string; now: Date }): Promise<void> {
-    const terminal = input.attempts >= 5;
-    const availableAt = new Date(input.now.getTime() + Math.min(60, 2 ** input.attempts) * 1000);
-    await this.pool.query(
-      `UPDATE "SecretDeliveryOutbox"
-       SET "status" = $2,
-           "payloadEncrypted" = CASE WHEN $2 = 'FAILED' THEN NULL ELSE "payloadEncrypted" END,
-           "claimedAt" = NULL,
-           "claimToken" = NULL,
-           "availableAt" = $3,
-           "lastErrorCode" = $4,
-           "updatedAt" = $5
-       WHERE "id" = $1 AND "status" = 'PROCESSING' AND "claimToken" = $6`,
-      [id, terminal ? "FAILED" : "PENDING", availableAt, input.errorCode, input.now, input.claimToken],
-    );
-  }
 }
 
 export async function processNextSecretDelivery(
@@ -104,10 +95,13 @@ export async function processNextSecretDelivery(
   const record = await store.claimNext(now);
   if (!record) return false;
 
+  let providerMessageId: string | undefined;
   try {
     const payload = decryptSecretDeliveryPayload(record.payloadEncrypted, env);
-    const [result] = await adapter.sendBatch([{ ...payload, idempotencyKey: `secret-delivery:${record.id}` }]);
-    if (result?.status !== "sent") {
+    if (!(record.sourceScope === "SYSTEM" ? record.tenantId == null && record.tenantLifecycleVersion == null : record.sourceScope === "TENANT" && !!record.tenantId && Number.isInteger(record.tenantLifecycleVersion))) throw new Error("SECRET_DELIVERY_PROVENANCE_UNVERIFIED");
+    const results = await adapter.sendBatch([{ ...payload, idempotencyKey: `secret-delivery:${record.id}` }]);
+    const result = results[0];
+    if (results.length !== 1 || result?.status !== "sent" || result.channel !== payload.channel || result.to !== payload.to || !result.providerMessageId?.trim() || result.providerMessageId.length > 512 || result.errorCode) {
       await store.markFailed(record.id, {
         attempts: record.attempts,
         claimToken: record.claimToken,
@@ -116,12 +110,14 @@ export async function processNextSecretDelivery(
       });
       return true;
     }
-    await store.markDelivered(record.id, record.claimToken, now);
+    providerMessageId = result.providerMessageId;
+    await store.markDelivered(record.id, record.claimToken, now, providerMessageId!);
   } catch (error) {
     await store.markFailed(record.id, {
       attempts: record.attempts,
       claimToken: record.claimToken,
       errorCode: safeErrorCode(error),
+      providerMessageId,
       now,
     });
   }
@@ -168,18 +164,6 @@ export function createSecretDeliveryOutboxRunner(options: {
 
 export function assertSecretDeliveryOutboxDatabaseConfig(env: NodeJS.ProcessEnv = process.env): void {
   resolveSecretDeliveryOutboxDatabaseUrl(env);
-}
-
-interface SecretDeliveryOutboxRow {
-  id: string;
-  purpose: "IDENTITY_INVITATION" | "PASSWORD_RESET";
-  payloadEncrypted: string;
-  attempts: number;
-  claimToken: string;
-}
-
-function toRecord(row: SecretDeliveryOutboxRow): SecretDeliveryOutboxRecord {
-  return { ...row };
 }
 
 function safeErrorCode(error: unknown): string {

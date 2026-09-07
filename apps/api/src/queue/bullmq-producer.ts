@@ -1,3 +1,4 @@
+import { currentTenantMutationVersion, runApiTenantMutation } from "../context/tenant-mutation-activity.js";
 import { Queue, type JobsOptions, type QueueOptions } from "bullmq";
 import { parseRedisUrl } from "../config/env.js";
 import {
@@ -45,13 +46,18 @@ export function createBullTenantQueueProducer(
 
   return {
     async enqueue(input) {
-      const job = createTenantQueueJob(input);
+      const version = currentTenantMutationVersion(input.tenantId);
+      const job = createTenantQueueJob({ ...input, lifecycleVersion: version });
       const queue = getQueue(job.queueName, queues, createQueue, queueOptions);
+      return runApiTenantMutation("QUEUE_ADMISSION", async () => {
       const queueJob = await queue.add(job.name, job.payload, job.options);
+      const stored = (queueJob as { data?: { tenantId?: string; lifecycleVersion?: number } } | null)?.data;
+      if (stored?.tenantId !== input.tenantId || stored.lifecycleVersion !== version) throw new Error("TENANT_QUEUE_JOB_STALE");
       if (job.queueName === "report-generation" || job.queueName === "exam-evaluation") {
         await retryFailedQueueJob(queueJob);
       }
       return job;
+      }, input.tenantId);
     },
 
     async close() {

@@ -1,3 +1,4 @@
+import { acquireTenantDatabaseSharedLock, assertTenantDbContext } from "@o-okul/db";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
@@ -142,23 +143,27 @@ async function withAuditWriteQuery<T>(
   input: Pick<CreateAuditLogInput, "tenantId">,
   callback: (client: TenantQueryable) => Promise<T>,
 ): Promise<T> {
+  assertTenantDbContext({ tenantId: input.tenantId ?? null, bypassRls: !input.tenantId });
   if (!pool.connect) {
     await applyAuditWriteSettings(pool, input);
     return callback(pool);
   }
 
   const client = await pool.connect();
+  let discard = false;
   try {
     await client.query("BEGIN");
+    // Append-only historical events survive reset; serialize inserts, never relabel their source generation.
+    if (input.tenantId && input.tenantId !== "system") await acquireTenantDatabaseSharedLock(client, input.tenantId);
     await applyAuditWriteSettings(client, input);
     const result = await callback(client);
     await client.query("COMMIT");
     return result;
   } catch (error) {
-    await client.query("ROLLBACK");
+    try { await client.query("ROLLBACK"); } catch { discard = true; }
     throw error;
   } finally {
-    client.release();
+    client.release(discard || undefined);
   }
 }
 

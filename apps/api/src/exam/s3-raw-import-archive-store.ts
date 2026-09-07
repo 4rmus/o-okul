@@ -1,3 +1,4 @@
+import { runApiTenantMutation } from "../context/tenant-mutation-activity.js";
 import { DeleteObjectCommand, PutObjectCommand, S3Client, type S3ClientConfig } from "@aws-sdk/client-s3";
 import type { RawImportArchiveStore } from "./raw-import-upload.service.js";
 
@@ -37,20 +38,20 @@ export class S3RawImportArchiveStore implements RawImportArchiveStore {
       throw new Error("RAW_IMPORT_ARCHIVE_BODY_EMPTY");
     }
 
-    await this.client.send(
+    await runApiTenantMutation("S3_MUTATION", () => this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: key,
         Body: input.body,
         ContentType: input.contentType,
       }),
-    );
+    ), rawImportKeyTenant(key));
   }
 
   async delete(s3Key: string): Promise<void> {
     const key = s3Key.trim();
     if (key.length === 0) throw new Error("RAW_IMPORT_ARCHIVE_KEY_MISSING");
-    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+    await runApiTenantMutation("S3_MUTATION", () => this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key })), rawImportKeyTenant(key));
   }
 }
 
@@ -111,4 +112,13 @@ function parseBooleanEnv(value: string, key: string): boolean {
     return false;
   }
   throw new Error(`${key}_INVALID`);
+}
+
+function rawImportKeyTenant(key: string): string {
+  const parts = key.split("/");
+  if (parts.length !== 6 || parts[0] !== "raw-imports" || parts[5] !== "source" || parts.some((part) => !part)) throw new Error("RAW_IMPORT_ARCHIVE_KEY_INVALID");
+  let tenantId: string;
+  try { tenantId = decodeURIComponent(parts[1]!); } catch { throw new Error("RAW_IMPORT_ARCHIVE_KEY_INVALID"); }
+  if (!tenantId || encodeURIComponent(tenantId) !== parts[1]) throw new Error("RAW_IMPORT_ARCHIVE_KEY_INVALID");
+  return tenantId;
 }

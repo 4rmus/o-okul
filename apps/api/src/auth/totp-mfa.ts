@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import type { TenantLifecycleMfaTarget, TenantCleanResetMfaTarget } from "@o-okul/shared-types";
 import { authenticator } from "otplib";
 
 const defaultTestEncryptionKey = "33333333333333333333333333333333";
@@ -12,7 +13,7 @@ const stepUpTtlSeconds = 5 * 60;
 
 export type AdminMfaMode = "off" | "optional" | "required";
 export type AdminMfaTokenType = "admin-mfa-login" | "admin-mfa-setup" | "admin-mfa-step-up";
-export type AdminMfaStepUpPurpose = "OWNER_ADMIN_CHANGE";
+export type AdminMfaStepUpPurpose = "OWNER_ADMIN_CHANGE" | "TENANT_LIFECYCLE_CHANGE" | "TENANT_CLEAN_RESET";
 type AuthenticatorOptionOverrides = {
   epoch?: number;
   step?: number;
@@ -46,6 +47,7 @@ export interface AdminMfaTokenPayload {
   membershipVersion?: number;
   sessionId?: string;
   purpose?: AdminMfaStepUpPurpose;
+  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget;
 }
 
 export interface AdminMfaStepUpBinding {
@@ -53,6 +55,7 @@ export interface AdminMfaStepUpBinding {
   sessionId: string;
   membershipVersion: number;
   purpose: AdminMfaStepUpPurpose;
+  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget;
 }
 
 export interface AdminMfaStepUpProof {
@@ -71,13 +74,14 @@ export function isAdminMfaRole(roles: readonly string[]): boolean {
   return roles.includes("SYSTEM_ADMIN");
 }
 
-export function createLoginMfaChallenge(userId: string, now = Date.now()): LoginMfaChallenge {
+export function createLoginMfaChallenge(userId: string, membershipVersion: number, now = Date.now()): LoginMfaChallenge {
+  if (!Number.isInteger(membershipVersion) || membershipVersion < 1) throw new Error("MFA_CHALLENGE_BINDING_INVALID");
   const expiresAtMs = now + loginChallengeTtlSeconds * 1000;
   return {
     status: "MFA_REQUIRED",
     challengeToken: signAdminMfaToken({
       type: "admin-mfa-login",
-      userId,
+      userId, membershipVersion,
       challengeId: randomBytes(16).toString("base64url"),
       exp: Math.floor(expiresAtMs / 1000),
     }),
@@ -100,11 +104,15 @@ export function createAdminMfaStepUpProof(binding: AdminMfaStepUpBinding, now = 
 
 export function verifyAdminMfaStepUpProof(token: string, expected: AdminMfaStepUpBinding): void {
   const payload = verifyAdminMfaToken(token, "admin-mfa-step-up");
+  if (expected.purpose !== "OWNER_ADMIN_CHANGE" && (!expected.target || !payload.target)) throw new Error("ADMIN_MFA_STEP_UP_CONTEXT_INVALID");
   if (
     payload.userId !== expected.userId ||
     payload.sessionId !== expected.sessionId ||
     payload.membershipVersion !== expected.membershipVersion ||
-    payload.purpose !== expected.purpose
+    payload.purpose !== expected.purpose ||
+    payload.target?.tenantId !== expected.target?.tenantId ||
+    JSON.stringify(payload.target ? Object.entries(payload.target).sort() : null) !== JSON.stringify(expected.target ? Object.entries(expected.target).sort() : null) ||
+    payload.target?.expectedLifecycleVersion !== expected.target?.expectedLifecycleVersion
   ) {
     throw new Error("ADMIN_MFA_STEP_UP_CONTEXT_INVALID");
   }

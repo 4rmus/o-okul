@@ -1,3 +1,4 @@
+import { runVerifiedTenantMutation } from "../context/tenant-mutation-activity.js";
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import {
@@ -175,7 +176,7 @@ export class AnnouncementService {
       throw new BadRequestException("IDEMPOTENCY_SERVICE_UNAVAILABLE");
     }
 
-    return this.idempotency.run(
+    return runVerifiedTenantMutation({ tenantId: context.tenantId!, lifecycleVersion: context.tenantLifecycleVersion!, kind: "PROVIDER_MUTATION", referenceId: `notification:${createHash("sha256").update(key).digest("hex")}`, actor: { userId: context.userId, sessionId: context.sessionId!, membershipVersion: context.membershipVersion! } }, () => this.idempotency!.run(
       context,
       {
         key,
@@ -183,7 +184,7 @@ export class AnnouncementService {
         request: { announcementId: id, ...input },
       },
       () => this.sendExternalDeliveryOnce(context, id, input),
-    );
+    ));
   }
 
   private async sendExternalDeliveryOnce(
@@ -195,6 +196,7 @@ export class AnnouncementService {
     const channel = resolveDeliveryChannel(input.channel);
     const messages = await this.resolveNotificationMessages(context, announcement, channel);
     const results = await this.notificationAdapter.sendBatch(messages);
+    if (results.some((result, index) => result.status !== "sent" || result.channel !== messages[index]?.channel || result.to !== messages[index]?.to || !result.providerMessageId?.trim() || result.providerMessageId.length > 512 || result.errorCode)) throw new Error("NOTIFICATION_PROVIDER_OUTCOME_UNCERTAIN");
     if (results.length !== messages.length) {
       throw new BadRequestException("ANNOUNCEMENT_DELIVERY_RESULT_COUNT_INVALID");
     }

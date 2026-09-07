@@ -337,7 +337,7 @@ describe("Announcement API", () => {
   it("tenant admin duyuru alıcılarına e-posta gönderir ve sonucu rapor kuyruğuna bağlar", async () => {
     notificationAdapter.results = [
       { channel: "EMAIL", to: "guardian-a@example.test", status: "sent", providerMessageId: "mail-1" },
-      { channel: "EMAIL", to: "student-a@example.test", status: "failed", errorCode: "EMAIL_BOUNCED" },
+      { channel: "EMAIL", to: "student-a@example.test", status: "sent", providerMessageId: "mail-2" },
       { channel: "EMAIL", to: "teacher-a@example.test", status: "sent", providerMessageId: "mail-3" },
     ];
 
@@ -376,18 +376,17 @@ describe("Announcement API", () => {
       entityId: "announcement-a",
       channel: "EMAIL",
       recipientCount: 3,
-      deliveredCount: 2,
-      failedCount: 1,
+      deliveredCount: 3,
+      failedCount: 0,
       status: "completed",
-      providerErrorCode: "EMAIL_BOUNCED",
     });
     expect(response.body).toEqual({
       tenantId: "tenant-a",
       announcementId: "announcement-a",
       channel: "EMAIL",
       recipientCount: 3,
-      deliveredCount: 2,
-      failedCount: 1,
+      deliveredCount: 3,
+      failedCount: 0,
       queueName: "announcement-delivery",
       jobId: `${producer.inputs[0]?.entityId}_${producer.inputs[0]?.contentHash}`,
       status: "queued",
@@ -409,11 +408,17 @@ describe("Announcement API", () => {
     expect(producer.inputs).toHaveLength(0);
   });
 
+  it("resolved provider failure is not completed or queued as a successful delivery", async () => {
+    notificationAdapter.results = [{ channel: "EMAIL", to: "guardian-a@example.test", status: "sent", providerMessageId: "mail-1" }, { channel: "EMAIL", to: "student-a@example.test", status: "failed", errorCode: "EMAIL_BOUNCED" }, { channel: "EMAIL", to: "teacher-a@example.test", status: "sent", providerMessageId: "mail-3" }];
+    await request(server).post("/announcements/announcement-a/deliveries").set("Authorization", `Bearer ${tenantAAccessToken}`).set("Idempotency-Key", "uncertain-delivery-fixture").send({ channel: "EMAIL" }).expect(503);
+    expect(producer.inputs).toHaveLength(0);
+  });
+
   it("tenant admin dış duyuru gönderimini Idempotency-Key ile tekilleştirir", async () => {
     const key = "announcement-delivery-send-idempotency-a";
     notificationAdapter.results = [
       { channel: "EMAIL", to: "guardian-a@example.test", status: "sent", providerMessageId: "mail-1" },
-      { channel: "EMAIL", to: "student-a@example.test", status: "failed", errorCode: "EMAIL_BOUNCED" },
+      { channel: "EMAIL", to: "student-a@example.test", status: "sent", providerMessageId: "mail-2" },
       { channel: "EMAIL", to: "teacher-a@example.test", status: "sent", providerMessageId: "mail-3" },
     ];
     const body = { channel: "EMAIL" };

@@ -23,5 +23,9 @@ describe("roles", () => {
   it("system admin rolünü ayırt eder", () => {
     expect(isSystemAdmin(["SYSTEM_ADMIN"])).toBe(true);
     expect(isSystemAdmin(["TENANT_ADMIN"])).toBe(false);
+    expect(hasRole(["SYSTEM_ADMIN"], "SYSTEM_ADMIN")).toBe(true);
+    expect(hasRole(["SYSTEM_ADMIN"], "TENANT_ADMIN")).toBe(false);
+    expect(hasRole(["SYSTEM_ADMIN"], "TEACHER")).toBe(false);
+    expect(hasRole(["SYSTEM_ADMIN", "TENANT_ADMIN"], "TENANT_ADMIN")).toBe(false);
   });
 });

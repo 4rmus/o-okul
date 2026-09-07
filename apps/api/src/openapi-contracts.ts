@@ -123,8 +123,11 @@ const tenantRecordSchema = objectSchema({
   logoUrl: stringSchema(),
   seatLimit: integerSchema({ minimum: 1 }),
   activeSeatCount: integerSchema({ minimum: 0 }),
-  status: stringSchema(),
-}, ["id", "name", "slug", "plan", "status"]);
+  status: { type: "string", enum: ["ACTIVE", "SUSPENDED"] },
+  lifecycleVersion: integerSchema({ minimum: 0 }),
+  suspendedAt: stringSchema({ format: "date-time" }),
+  suspendedReason: { type: "string", enum: ["SECURITY_REVIEW", "INSTITUTION_REQUEST", "OPERATIONS_REVIEW"] },
+}, ["id", "name", "slug", "plan", "status", "lifecycleVersion"]);
 
 const licenseTermSchema = objectSchema({
   id: stringSchema(),
@@ -204,12 +207,6 @@ const institutionDashboardSummarySchema = objectSchema({
   latestExam: institutionDashboardExamSchema,
 }, ["generatedAt", "institution", "activeStudentCount", "attention"]);
 
-const tenantFirstAdminCreateRequestSchema = objectSchema({
-  email: stringSchema({ format: "email" }),
-  name: stringSchema({ minLength: 1 }),
-  nationalId: stringSchema({ minLength: 11, maxLength: 11 }),
-}, ["email", "name", "nationalId"]);
-
 const tenantFirstOwnerCreateRequestSchema = objectSchema({
   email: stringSchema({ format: "email" }),
   name: stringSchema({ minLength: 1 }),
@@ -225,20 +222,13 @@ const tenantCampusCreateRequestSchema = objectSchema({
 const tenantCreateRequestSchema = objectSchema({
   contactEmail: stringSchema({ format: "email" }),
   campuses: arraySchema(tenantCampusCreateRequestSchema, { minItems: 1 }),
-  firstAdmin: tenantFirstAdminCreateRequestSchema,
   firstOwner: tenantFirstOwnerCreateRequestSchema,
-  id: stringSchema(),
   institutionType: stringSchema(),
-  licenseEndsAt: stringSchema({ format: "date-time" }),
-  licenseStartsAt: stringSchema({ format: "date-time" }),
   logoUrl: stringSchema(),
   licenseTerm: licenseTermCreateRequestSchema,
   name: stringSchema({ minLength: 1 }),
-  plan: stringSchema(),
-  seatLimit: integerSchema({ minimum: 1 }),
   slug: stringSchema({ minLength: 1 }),
-  status: stringSchema(),
-}, ["name", "slug"]);
+}, ["campuses", "firstOwner", "licenseTerm", "name", "slug"]);
 
 const tenantCurrentProfileUpdateRequestSchema = objectSchema({
   contactEmail: stringSchema({ format: "email" }),
@@ -252,9 +242,19 @@ const tenantAdminUpdateRequestSchema = objectSchema({
   institutionType: stringSchema(),
   logoUrl: stringSchema(),
   name: stringSchema(),
-  slug: stringSchema(),
-  status: stringSchema(),
 });
+
+const tenantStatusUpdateRequestSchema = objectSchema({
+  status: { type: "string", enum: ["ACTIVE", "SUSPENDED"] },
+  expectedLifecycleVersion: integerSchema({ minimum: 0, maximum: 2147483646 }),
+  reason: { type: "string", enum: ["SECURITY_REVIEW", "INSTITUTION_REQUEST", "OPERATIONS_REVIEW"] },
+  confirmationText: stringSchema({ minLength: 1, maxLength: 128 }),
+}, ["status", "expectedLifecycleVersion", "reason", "confirmationText"]);
+
+const tenantStatusUpdateResultSchema = objectSchema({
+  tenant: tenantRecordSchema,
+  sessionsRevoked: integerSchema({ minimum: 0 }),
+}, ["tenant", "sessionsRevoked"]);
 
 const tenantAssignableRoleSchema = {
   type: "string",
@@ -323,15 +323,6 @@ const tenantMembershipUpdateResultSchema = objectSchema({
   employee: employeeAccessSchema,
   sessionsRevoked: integerSchema({ minimum: 0 }),
 }, ["employee", "sessionsRevoked"]);
-
-const tenantFirstAdminProvisionResultSchema = objectSchema({
-  ...(tenantUserRecordSchema.properties as Record<string, JsonSchema>),
-}, ["id", "email", "name", "tenantId", "roles", "createdAt", "updatedAt"]);
-
-const tenantCreateWithAdminResponseSchema = objectSchema({
-  tenant: tenantRecordSchema,
-  admin: tenantFirstAdminProvisionResultSchema,
-}, ["tenant", "admin"]);
 
 const tenantOnboardingOwnerSchema = objectSchema({
   id: stringSchema(),
@@ -498,11 +489,32 @@ const totpDisableResponseSchema = objectSchema({
   disabledAt: stringSchema({ format: "date-time" }),
 }, ["disabledAt"]);
 
+const tenantResetInstitutionRequestSchema = objectSchema({
+  id: stringSchema(), tenantId: stringSchema(), requestedBy: stringSchema(), requestedAt: stringSchema({ format: "date-time" }), lifecycleVersion: integerSchema({ minimum: 0 }), status: stringSchema({ enum: ["PENDING", "REVOKED", "ACCEPTED", "COMPLETED"] }), operationId: stringSchema({ nullable: true }),
+}, ["id", "tenantId", "requestedBy", "requestedAt", "lifecycleVersion", "status", "operationId"]);
+const tenantResetRequestStateSchema = objectSchema({ request: { ...tenantResetInstitutionRequestSchema, nullable: true } }, ["request"]);
+
+const tenantCleanResetStatusSchema = objectSchema({
+  operationId: stringSchema(), status: stringSchema({ enum: ["QUEUED", "RUNNING", "BLOCKED", "FAILED", "COMPLETED"] }),
+  phase: stringSchema({ enum: ["PREFLIGHT", "BACKUP", "DATABASE", "OBJECTS", "VERIFY", "DONE"] }), errorCode: stringSchema({ nullable: true }),
+  result: objectSchema({ preservedOwnerCount: integerSchema({ minimum: 0 }), deletedObjectCount: integerSchema({ minimum: 0 }) }, ["preservedOwnerCount", "deletedObjectCount"], { nullable: true }),
+}, ["operationId", "status", "phase", "errorCode", "result"]);
 const mfaStepUpRequestSchema = objectSchema({
-  purpose: { type: "string", enum: ["OWNER_ADMIN_CHANGE"] },
+  target: objectSchema({
+    tenantId: stringSchema({ minLength: 1, maxLength: 128 }),
+    status: { type: "string", enum: ["ACTIVE", "SUSPENDED"] },
+    preset: stringSchema({ enum: ["CLEAN_SETUP_V1"] }), preflightDigest: stringSchema({ pattern: "^[a-f0-9]{64}$" }),
+    expectedLifecycleVersion: integerSchema({ minimum: 0, maximum: 2147483646 }),
+  }, ["tenantId", "expectedLifecycleVersion"]),
+  purpose: { type: "string", enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET"] },
   totpCode: stringSchema(),
   recoveryCode: stringSchema(),
 }, ["purpose"], {
+  oneOf: [
+    { properties: { purpose: { enum: ["OWNER_ADMIN_CHANGE"] } }, not: { required: ["target"] } },
+    { properties: { purpose: { enum: ["TENANT_LIFECYCLE_CHANGE"] }, target: { required: ["status"], not: { anyOf: [{ required: ["preset"] }, { required: ["preflightDigest"] }] } } }, required: ["target"] },
+    { properties: { purpose: { enum: ["TENANT_CLEAN_RESET"] }, target: { required: ["preset", "preflightDigest"], not: { required: ["status"] } } }, required: ["target"] },
+  ],
   anyOf: [
     { required: ["totpCode"] },
     { required: ["recoveryCode"] },
@@ -510,7 +522,7 @@ const mfaStepUpRequestSchema = objectSchema({
 });
 
 const mfaStepUpResponseSchema = objectSchema({
-  purpose: { type: "string", enum: ["OWNER_ADMIN_CHANGE"] },
+  purpose: { type: "string", enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET"] },
   stepUpToken: stringSchema(),
   expiresAt: stringSchema({ format: "date-time" }),
 }, ["purpose", "stepUpToken", "expiresAt"]);
@@ -3091,19 +3103,55 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: arraySchema(tenantRecordSchema),
     listResponse: true,
   },
+  "get /api/v1/tenants/current/reset-request": { responseBody: tenantResetRequestStateSchema },
+  "post /api/v1/tenants/current/reset-request": {
+    requestBody: objectSchema({ expectedRequestId: stringSchema({ nullable: true, pattern: "^[a-f0-9]{32}$" }), preset: stringSchema({ enum: ["CLEAN_SETUP_V1"] }) }, ["expectedRequestId", "preset"]), responseBody: tenantResetRequestStateSchema,
+  },
+  "post /api/v1/tenants/current/reset-request/revoke": {
+    requestBody: objectSchema({ expectedRequestId: stringSchema({ pattern: "^[a-f0-9]{32}$" }) }, ["expectedRequestId"]), responseBody: tenantResetRequestStateSchema,
+  },
+  "post /api/v1/tenants/{id}/clean-reset-jobs": {
+    idempotent: true, idempotencyRequired: true,
+    requiredHeaders: [{ name: "X-Step-Up-Token", description: "MFA proof bound to actor/session, tenant, preset, version and preflight digest.", schema: stringSchema() }],
+
+    requestBody: objectSchema({ preset: stringSchema({ enum: ["CLEAN_SETUP_V1"] }), expectedLifecycleVersion: integerSchema({ minimum: 0, maximum: 2147483646 }), preflightDigest: stringSchema({ pattern: "^[a-f0-9]{64}$" }), confirmationText: stringSchema({ minLength: 1, maxLength: 128 }), reason: stringSchema({ enum: ["SECURITY_REVIEW", "INSTITUTION_REQUEST", "OPERATIONS_REVIEW"] }) }, ["preset", "expectedLifecycleVersion", "preflightDigest", "confirmationText", "reason"]),
+    responseBody: tenantCleanResetStatusSchema,
+  },
+  "get /api/v1/tenants/{id}/clean-reset-jobs": {
+    requiredHeaders: [{ name: "Idempotency-Key", description: "Read-only lookup of the current actor's original request in this tenant after a lost response.", schema: stringSchema({ minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9._:-]+$" }) }],
+    responseBody: tenantCleanResetStatusSchema,
+  },
+  "get /api/v1/tenants/{id}/clean-reset-jobs/{operationId}": { responseBody: tenantCleanResetStatusSchema },
+  "get /api/v1/tenants/{id}/reset-diagnostics": {
+    queryParameters: [{ name: "activityAfter", schema: stringSchema({ maxLength: 128 }) }, { name: "deliveryAfter", schema: stringSchema({ maxLength: 128 }) }],
+    responseBody: objectSchema({
+      activities: objectSchema({ items: arraySchema(objectSchema({ id: stringSchema(), kind: stringSchema(), status: stringSchema(), lifecycleVersion: integerSchema(), createdAt: stringSchema({ format: "date-time" }) }, ["id", "kind", "status", "lifecycleVersion", "createdAt"])), nextCursor: stringSchema({ nullable: true }) }, ["items", "nextCursor"]),
+      deliveries: objectSchema({ items: arraySchema(objectSchema({ id: stringSchema(), purpose: stringSchema(), status: stringSchema(), sourceScope: stringSchema({ nullable: true }), lifecycleVersion: integerSchema({ nullable: true }), createdAt: stringSchema({ format: "date-time" }), attempted: { type: "boolean" }, hasProviderReceipt: { type: "boolean" } }, ["id", "purpose", "status", "sourceScope", "lifecycleVersion", "createdAt", "attempted", "hasProviderReceipt"])), nextCursor: stringSchema({ nullable: true }) }, ["items", "nextCursor"]),
+      reconciliation: stringSchema({ enum: ["EXTERNAL_PROOF_REQUIRED"] }),
+    }, ["activities", "deliveries", "reconciliation"]),
+  },
+  "get /api/v1/tenants/{id}/reset-diagnostics/deliveries/{deliveryId}/receipt": {
+    responseBody: objectSchema({ deliveryId: stringSchema(), lifecycleVersion: integerSchema({ minimum: 0 }), status: stringSchema({ enum: ["PROVIDER_ACCEPTED", "UNCERTAIN", "NOT_FOUND", "EXPIRED", "UNVERIFIED", "UNAVAILABLE"] }), correlation: stringSchema({ enum: ["KEY_ONLY", "LOCAL_RECEIPT_MATCH", "UNVERIFIED"] }), createdAt: stringSchema({ format: "date-time", nullable: true }), expiresAt: stringSchema({ format: "date-time", nullable: true }), providerReceiptHash: stringSchema({ pattern: "^[a-f0-9]{64}$", nullable: true }), reconciliation: stringSchema({ enum: ["EXTERNAL_PROOF_REQUIRED"] }) }, ["deliveryId", "lifecycleVersion", "status", "correlation", "createdAt", "expiresAt", "providerReceiptHash", "reconciliation"]),
+  },
+  "get /api/v1/tenants/{id}/clean-reset-preview": {
+    responseBody: objectSchema({
+      institutionRequest: { ...tenantResetInstitutionRequestSchema, nullable: true },
+      preset: stringSchema({ enum: ["CLEAN_SETUP_V1"] }), lifecycleVersion: integerSchema({ minimum: 0 }),
+      preservedOwnerCount: integerSchema({ minimum: 0 }),
+      categories: arraySchema(objectSchema({ category: stringSchema(), preserved: integerSchema({ minimum: 0 }), deleted: integerSchema({ minimum: 0 }), blocked: integerSchema({ minimum: 0 }) }, ["category", "preserved", "deleted", "blocked"])),
+      objectCount: integerSchema({ minimum: 0 }), objectBytes: integerSchema({ minimum: 0 }),
+      blockerCounts: arraySchema(objectSchema({ code: stringSchema(), count: integerSchema({ minimum: 0, nullable: true }) }, ["code", "count"])),
+      blockers: arraySchema(stringSchema()), allowed: { type: "boolean" }, preflightDigest: stringSchema(),
+    }, ["preset", "lifecycleVersion", "preservedOwnerCount", "categories", "objectCount", "objectBytes", "blockers", "blockerCounts", "allowed", "preflightDigest"]),
+  },
   "get /api/v1/tenants/{id}": {
-    responseBody: tenantRecordSchema,
+    responseBody: { ...tenantRecordSchema, properties: { ...(tenantRecordSchema.properties as Record<string, unknown>), management: objectSchema({ verified: { type: "boolean" }, allowedActions: objectSchema({ suspend: { type: "boolean" }, reactivate: { type: "boolean" }, cleanReset: { type: "boolean" } }, ["suspend", "reactivate", "cleanReset"]), currentReset: { ...tenantCleanResetStatusSchema, nullable: true } }, ["verified", "allowedActions", "currentReset"]) }, required: [...(tenantRecordSchema.required as string[]), "management"] },
   },
   "post /api/v1/tenants": {
     idempotent: true,
+    idempotencyRequired: true,
     requestBody: tenantCreateRequestSchema,
-    responseBody: {
-      oneOf: [
-        tenantRecordSchema,
-        tenantCreateWithAdminResponseSchema,
-        tenantOnboardingResponseSchema,
-      ],
-    },
+    responseBody: tenantOnboardingResponseSchema,
   },
   "get /api/v1/tenants/current/license-terms": {
     responseBody: arraySchema(licenseTermListSchema),
@@ -3112,6 +3160,14 @@ const operationContracts: Record<string, OperationContract> = {
   "patch /api/v1/tenants/{id}": {
     requestBody: tenantAdminUpdateRequestSchema,
     responseBody: tenantRecordSchema,
+  },
+  "patch /api/v1/tenants/{id}/status": {
+    requiredHeaders: [
+      { name: "Idempotency-Key", description: "Same key with a different request returns 409.", schema: stringSchema({ maxLength: 128 }) },
+      { name: "X-Step-Up-Token", description: "MFA proof bound to the actor session, tenant, requested status and lifecycle version.", schema: stringSchema() },
+    ],
+    requestBody: tenantStatusUpdateRequestSchema,
+    responseBody: tenantStatusUpdateResultSchema,
   },
   "post /api/v1/tenants/{id}/license-terms": {
     requestBody: licenseTermCreateRequestSchema,

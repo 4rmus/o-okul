@@ -734,30 +734,7 @@ jobs:
             -f docker-compose.observability.yml \
             pull web api worker queue-board alertmanager-secrets-init alertmanager prometheus loki alloy grafana
 
-          docker compose \
-            --env-file .env \
-            --env-file "$release_env_file" \
-            -f docker-compose.yml \
-            -f docker-compose.release.yml \
-            -f "$EDGE_COMPOSE_FILE" \
-            up -d postgres
-
-          docker compose \
-            --env-file .env \
-            --env-file "$release_env_file" \
-            -f docker-compose.yml \
-            -f docker-compose.release.yml \
-            -f "$EDGE_COMPOSE_FILE" \
-            exec -T postgres sh /docker-entrypoint-initdb.d/004_bootstrap_required_extensions.sh < /dev/null
-
-          docker compose \
-            --env-file .env \
-            --env-file "$release_env_file" \
-            -f docker-compose.yml \
-            -f docker-compose.release.yml \
-            -f "$EDGE_COMPOSE_FILE" \
-            exec -T postgres sh /docker-entrypoint-initdb.d/003_bootstrap_secret_delivery_worker_role.sh < /dev/null
-
+          # BEGIN LIFECYCLE RELEASE CUTOVER
           backend_compose=(
             env API_PROXY_IP="${PRE_CUTOVER_API_PROXY_IP:-172.31.255.6}"
             docker compose
@@ -783,6 +760,59 @@ jobs:
             )
           fi
 
+          # Invalidate stale public deployment cutover before stopping writers or changing the database.
+          reports_dir="$PWD/artifacts/staging/reports"
+          canonical_cutover="$reports_dir/deployment-cutover.json"
+          if [ -e "$reports_dir" ] || [ -L "$reports_dir" ]; then
+            [ -d "$reports_dir" ]
+            [ ! -L "$reports_dir" ]
+            [ "$(realpath -e "$reports_dir")" = "$reports_dir" ]
+          fi
+          if [ -e "$canonical_cutover" ] || [ -L "$canonical_cutover" ]; then
+            [ -f "$canonical_cutover" ]
+            [ ! -L "$canonical_cutover" ]
+            rm -f -- "$canonical_cutover"
+          fi
+
+          # Keep the old producers/consumers stopped on every migration/backfill failure.
+          writer_ids="$("${backend_compose[@]}" ps --all --quiet queue-board api worker)"
+          "${backend_compose[@]}" stop --timeout 60 queue-board api
+          "${backend_compose[@]}" stop --timeout 300 worker
+          for container_id in $writer_ids; do
+            [[ "$container_id" =~ ^[a-f0-9]{64}$ ]]
+            writer_state="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}} {{.State.Running}} {{.State.OOMKilled}} {{.State.ExitCode}}' "$container_id")"
+            case "$writer_state" in
+              'worker false false 0'|'api false false 0'|'api false false 143'|'queue-board false false 0'|'queue-board false false 143') ;;
+              *) echo "Release writer did not stop cleanly; migration and restart blocked." >&2; exit 1 ;;
+            esac
+          done
+          running_writer_ids="$("${backend_compose[@]}" ps --status running --quiet queue-board api worker)"
+          [ -z "$running_writer_ids" ]
+
+          docker compose \
+            --env-file .env \
+            --env-file "$release_env_file" \
+            -f docker-compose.yml \
+            -f docker-compose.release.yml \
+            -f "$EDGE_COMPOSE_FILE" \
+            up -d postgres
+
+          docker compose \
+            --env-file .env \
+            --env-file "$release_env_file" \
+            -f docker-compose.yml \
+            -f docker-compose.release.yml \
+            -f "$EDGE_COMPOSE_FILE" \
+            exec -T postgres sh /docker-entrypoint-initdb.d/004_bootstrap_required_extensions.sh < /dev/null
+
+          docker compose \
+            --env-file .env \
+            --env-file "$release_env_file" \
+            -f docker-compose.yml \
+            -f docker-compose.release.yml \
+            -f "$EDGE_COMPOSE_FILE" \
+            exec -T postgres sh /docker-entrypoint-initdb.d/003_bootstrap_secret_delivery_worker_role.sh < /dev/null
+
           "${backend_compose[@]}" run --rm --no-deps -T api sh -lc 'cd packages/db && ./node_modules/.bin/prisma migrate deploy --config prisma.config.ts' < /dev/null
 
           mkdir -p artifacts/staging/reports
@@ -802,12 +832,21 @@ jobs:
           "${backend_compose[@]}" run --rm --no-deps -T \
             -v "$PWD/scripts:/app/scripts:ro" \
             -v "$PWD/artifacts:/app/artifacts" \
-            "${owner_decisions_args[@]}" \
+            ${owner_decisions_args[@]+"${owner_decisions_args[@]}"} \
             -e STAGING_ENVIRONMENT=staging \
             -e ACCOUNT_MANAGEMENT_BACKFILL_MODE=APPLY \
             -e ACCOUNT_MANAGEMENT_BACKFILL_CONFIRM=apply-pr4-backfill \
             -e ACCOUNT_MANAGEMENT_BACKFILL_OUTPUT=artifacts/staging/reports/account-management-backfill.json \
             api node scripts/backfill-account-management.mjs < /dev/null
+
+          "${backend_compose[@]}" run --rm --no-deps -T \
+            -v "$PWD/scripts:/app/scripts:ro" \
+            -v "$PWD/artifacts:/app/artifacts" \
+            -e STAGING_ENVIRONMENT=staging \
+            -e LICENSE_TERM_BACKFILL_MODE=APPLY \
+            -e LICENSE_TERM_BACKFILL_CONFIRM=apply-pr5-license-term-backfill \
+            -e LICENSE_TERM_BACKFILL_OUTPUT=artifacts/staging/reports/license-term-backfill.json \
+            api node scripts/backfill-license-terms.mjs < /dev/null
 
           docker compose \
             --env-file .env \
@@ -817,6 +856,8 @@ jobs:
             -f "$EDGE_COMPOSE_FILE" \
             -f docker-compose.observability.yml \
             up -d --remove-orphans
+
+          # END LIFECYCLE RELEASE CUTOVER
 
           # Compose does not recreate Prometheus when only its bind-mounted config changes.
           # Reload it before runtime verification so the deployed config is authoritative.
@@ -1002,26 +1043,6 @@ jobs:
             echo "  StrictHostKeyChecking accept-new"
           } > ~/.ssh/config
           chmod 600 ~/.ssh/config
-
-      - name: Invalidate stale public deployment cutover
-        shell: bash
-        env:
-          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
-          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
-        run: |
-          set -euo pipefail
-          ssh "$STAGING_SSH_USER@$STAGING_SSH_HOST" 'bash -se' <<'REMOTE'
-          set -euo pipefail
-          reports_dir=/root/o-okul/artifacts/staging/reports
-          canonical_cutover=/root/o-okul/artifacts/staging/reports/deployment-cutover.json
-          [ -d "$reports_dir" ]
-          [ ! -L "$reports_dir" ]
-          if [ -e "$canonical_cutover" ] || [ -L "$canonical_cutover" ]; then
-            [ -f "$canonical_cutover" ]
-            [ ! -L "$canonical_cutover" ]
-            rm -f -- "$canonical_cutover"
-          fi
-          REMOTE
 
       - name: Run WAL archive staging smoke
         shell: bash

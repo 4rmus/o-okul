@@ -69,8 +69,22 @@ describe("role capabilities", () => {
 
     expect(hasCapability(context, "system:manage")).toBe(true);
     expect(hasCapability(context, "tenant:manage")).toBe(true);
+    expect(hasCapability(context, "tenant:lifecycle")).toBe(true);
+    expect(hasCapability(context, "tenant:delete")).toBe(false);
     expect(hasCapability(context, "audit:read")).toBe(true);
     expect(hasCapability(context, "tenant-audit:read")).toBe(false);
+  });
+
+  it("karma SYSTEM_ADMIN oturumu tenant capability'lerini devralmaz", () => {
+    const context = {
+      roles: ["SYSTEM_ADMIN", "TENANT_ADMIN"],
+      capabilities: capabilitiesForRoles(["SYSTEM_ADMIN", "TENANT_ADMIN"]),
+    };
+
+    expect(hasCapability(context, "tenant:manage")).toBe(true);
+    expect(hasCapability(context, "student:manage")).toBe(false);
+    expect(hasCapability(context, "finance:manage")).toBe(false);
+    expect(hasCapability(context, "setup:manage")).toBe(false);
   });
 
   it("TEACHER yönetim capability'lerini alamaz", () => {

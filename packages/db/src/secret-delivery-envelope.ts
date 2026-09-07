@@ -11,6 +11,8 @@ export type SecretDeliveryPurpose = "IDENTITY_INVITATION" | "PASSWORD_RESET";
 
 export interface SecretDeliveryOutboxInput {
   tenantId?: string;
+  sourceScope?: "TENANT" | "SYSTEM";
+  tenantLifecycleVersion?: number;
   purpose: SecretDeliveryPurpose;
   payloadEncrypted: string;
   expiresAt: string;

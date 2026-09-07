@@ -89,11 +89,11 @@ describe("LoginAttemptLimiter", () => {
   });
 
   it("MFA anahtarında ham kullanıcı kimliğini saklamaz ve amacı ayırır", () => {
-    const key = mfaAttemptKey("user-secret-value", "login");
+    const key = mfaAttemptKey("user-secret-value", "login", "tenant-a", 1);
 
     expect(key).toMatch(/^[a-f0-9]{64}$/);
     expect(key).not.toContain("user-secret-value");
-    expect(mfaAttemptKey("user-secret-value", "disable")).not.toBe(key);
+    expect(mfaAttemptKey("user-secret-value", "disable", "tenant-a", 1)).not.toBe(key);
   });
 });
 

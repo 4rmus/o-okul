@@ -12,7 +12,7 @@ describe("PostgresStudentPortalActivationStore", () => {
     const store = new PostgresStudentPortalActivationStore(createPool(queries, { invitationId, code }));
 
     const result = await store.accept({
-      tenantSlug: "okul-a",
+      tenantSlug: "okul-a", tenantId: "tenant-a", lifecycleVersion: 0,
       studentNo: "101",
       code,
       password: "secure-password-123",
@@ -41,7 +41,7 @@ describe("PostgresStudentPortalActivationStore", () => {
     }));
 
     await expect(store.accept({
-      tenantSlug: "okul-a",
+      tenantSlug: "okul-a", tenantId: "tenant-a", lifecycleVersion: 0,
       studentNo: "101",
       code: "222222222222",
       password: "secure-password-123",
@@ -62,7 +62,7 @@ describe("PostgresStudentPortalActivationStore", () => {
     }));
 
     await expect(store.accept({
-      tenantSlug: "okul-a",
+      tenantSlug: "okul-a", tenantId: "tenant-a", lifecycleVersion: 0,
       studentNo: "101",
       code: "ABCDEFGHJKL2",
       password: "secure-password-123",
@@ -76,14 +76,16 @@ describe("PostgresStudentPortalActivationStore", () => {
 
 function createPool(
   queries: Array<{ sql: string; values?: unknown[] }>,
-  options: { invitationId: string; code: string; failUserInsert?: boolean },
+  options: { invitationId: string; code: string; failUserInsert?: boolean; changedEpoch?: boolean },
 ) {
   return {
     async connect() {
       return {
         async query<T>(sql: string, values?: unknown[]) {
           queries.push({ sql, values });
-          if (sql.includes('FROM "Tenant"')) return { rows: [{ id: "tenant-a" }] as T[] };
+          if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
+          if (sql.includes("FOR SHARE OF tenant") && options.changedEpoch) return { rows: [] as T[] };
+          if (sql.includes('FROM "Tenant"')) return { rows: [{ id: "tenant-a", lifecycleVersion: 0 }] as T[] };
           if (sql.includes('FROM "Student"')) {
             return {
               rows: [{
@@ -93,7 +95,7 @@ function createPool(
                 lastName: "A",
                 status: "ACTIVE",
                 userId: null,
-                tenantSlug: "okul-a",
+                tenantSlug: "okul-a", tenantId: "tenant-a", lifecycleVersion: 0,
               }] as T[],
             };
           }
@@ -117,3 +119,14 @@ function createPool(
     async query<T>() { return { rows: [] as T[] }; },
   };
 }
+
+it("original student-code epoch is rechecked after shared key and before any wrong-code counter/write", async () => {
+  const queries: Array<{ sql: string; values?: unknown[] }> = [];
+  const store = new PostgresStudentPortalActivationStore(createPool(queries, { invitationId: "invitation-a", code: "ABCDEFGHJKL2", changedEpoch: true }));
+  await expect(store.accept({ tenantSlug: "okul-a", tenantId: "tenant-a", lifecycleVersion: 0, studentNo: "101", code: "wrong", password: "secure-password-123" })).resolves.toEqual({ status: "INVALID" });
+  const locked = queries.find(({ sql }) => sql.includes("FOR SHARE OF tenant"))!;
+  expect(locked.sql).toContain('tenant."lifecycleVersion" = $3'); expect(locked.values).toEqual(["okul-a", "tenant-a", 0]);
+  expect(queries.findIndex(({ sql }) => sql.includes("pg_try_advisory_xact_lock_shared"))).toBeLessThan(queries.indexOf(locked));
+  expect(queries.some(({ sql }) => /^(INSERT|UPDATE)/.test(sql.trim()))).toBe(false);
+  expect(queries.some(({ sql }) => sql.includes("TenantMutationActivity"))).toBe(false);
+});

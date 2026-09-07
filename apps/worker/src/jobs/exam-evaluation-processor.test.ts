@@ -96,6 +96,7 @@ class FakeClient implements Queryable {
 
   async query<T>(sql: string, values?: unknown[]): Promise<{ rows: T[] }> {
     this.queries.push({ sql: sql.trim(), values });
+    if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
     return { rows: this.handler(sql, values) as T[] };
   }
 

@@ -11,6 +11,7 @@ import {
 import type { ActivePersona, AuthResponse, LoginRequest, MePasswordChangeRequest } from "@o-okul/shared-types";
 import {
   changePassword as requestChangePassword,
+  clearAuthForSession,
   confirmMfaEnrollment as requestConfirmMfaEnrollment,
   login as requestLogin,
   logout as requestLogout,
@@ -71,8 +72,9 @@ export function Providers({ children }: { children: ReactNode }) {
       },
       async changePassword(input) {
         if (!auth) throw new Error("AUTH_REQUIRED");
-        await requestChangePassword(auth.accessToken, input);
-        setAuth(await refreshSession());
+        const expected = { userId: auth.session.userId, sessionId: auth.session.id, membershipVersion: auth.session.membershipVersion };
+        await requestChangePassword(auth.accessToken, input, expected);
+        if (clearAuthForSession(expected)) setAuth((current) => current?.session.userId === expected.userId && current.session.id === expected.sessionId && current.session.membershipVersion === expected.membershipVersion ? null : current);
       },
       async switchPersona(activePersona) {
         if (!auth) throw new Error("AUTH_REQUIRED");
