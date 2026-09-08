@@ -1,27 +1,53 @@
 import { createHash, type KeyObject } from "node:crypto";
 import pg from "pg";
-import { withTenantDb, readTenantBackupSchema, tenantResetOwnershipPredicate, resetDigest, tenantResetTableNames, tenantDatabaseLockKey } from "@o-okul/db";
+import { withTenantDb, readTenantBackupSchema, tenantResetOwnershipPredicate, resetDigest, tenantResetTableNames, tenantDatabaseLockKey, resetS3Client, type ResetS3Config } from "@o-okul/db";
 import { openDeviceBackup } from "./device-backup-archive.js";
-import { projectDeviceBackup, validateDeviceBackupPayload } from "./device-backup.service.js";
+import { projectDeviceBackup, validateDeviceBackupPayload, type DeviceBackupPayload } from "./device-backup.service.js";
 import { readDeviceRestoreForeignKeys } from "./device-backup-references.js";
 import { deviceRestoreTablePolicy } from "./device-backup-impact.js";
+import { cleanExistingRestoreObjects, collectExistingRestoreFiles, mapExistingRestorePhotos, prepareExistingRestoreObjects, stageExistingRestoreObjects } from "./device-backup-existing-objects.js";
 import { encryptTcIdentity, hashTcIdentity } from "../student/tc-identity.js";
 
 const ident = (s: string) => `"${s.replaceAll('"', '""')}"`;
-/** Database-only offline drill. Never an API/worker entry point or an apply authorization. */
-export async function restoreExistingDeviceBackupDrill(input: { databaseUrl: string; tenantId: string; file: Buffer; password: string; trustedKeys: Map<string, KeyObject>; operationId: string; failBeforeCommit?: boolean; failAfterCommit?: boolean }) {
+/** Disposable existing-tenant recovery engine; production remains independently gated. */
+export async function restoreExistingDeviceBackupDrill(input: { databaseUrl: string; tenantId: string; file: Buffer; password: string; trustedKeys: Map<string, KeyObject>; operationId: string; failBeforeCommit?: boolean; failAfterCommit?: boolean; objects?: ResetS3Config; recover?: boolean; crash?: "after-first-put" | "before-commit" | "after-commit" | "after-first-delete" }) {
   if (!/^[a-f0-9]{32}$/.test(input.operationId)) throw new Error("DEVICE_EXISTING_OPERATION_REQUIRED");
   const archiveDigest=createHash("sha256").update(input.file).digest("hex");
   const url = new URL(input.databaseUrl);
   if (url.protocol !== "postgresql:" || !["localhost","127.0.0.1"].includes(url.hostname) || url.search || url.hash || !["/o_okul_reset_drill","/o_okul_device_backup_test"].includes(url.pathname) || !/^device-backup-[a-f0-9-]+-a$/.test(input.tenantId)) throw new Error("DEVICE_EXISTING_DISPOSABLE_REQUIRED");
   const opened = await openDeviceBackup(input.file,input.tenantId,input.password,input.trustedKeys);
-  let archive;
+  let archive: DeviceBackupPayload;
   try { archive = validateDeviceBackupPayload(JSON.parse(opened.payload.toString("utf8")),input.tenantId); }
   finally { opened.payload.fill(0); }
-  if (archive.files.length) throw new Error("DEVICE_EXISTING_FILES_UNSUPPORTED");
+  if (input.objects) {
+    const endpoint = new URL(input.objects.endpoint);
+    if (endpoint.protocol !== "http:" || endpoint.hostname !== "127.0.0.1" || !endpoint.port || Number(endpoint.port) < 1024 || endpoint.pathname !== "/" || endpoint.search || endpoint.hash || endpoint.username || endpoint.password || !/^device-existing-[a-f0-9]{24}$/.test(input.objects.bucket)) throw new Error("DEVICE_EXISTING_DISPOSABLE_OBJECTS_REQUIRED");
+  } else if (archive.files.length) throw new Error("DEVICE_EXISTING_FILES_UNSUPPORTED");
   const pool = new pg.Pool({ connectionString: input.databaseUrl, max: 1, options: "-c default_transaction_isolation=serializable", connectionTimeoutMillis: 5000, statement_timeout: 15000 });
+  const connection = await pool.connect();
+  const session = { connect: async () => ({ query: connection.query.bind(connection), release() {} }), query: connection.query.bind(connection) };
+  const s3 = input.objects ? resetS3Client(input.objects, { maxAttempts: 1, requestHandler: { connectionTimeout: 3000, requestTimeout: 5000, socketTimeout: 5000 } }) : undefined;
+  const scope = { tenantId: input.tenantId, bypassRls: false };
+  let intent: Awaited<ReturnType<typeof prepareExistingRestoreObjects>> = [];
+  const filesDigest = (files: typeof archive.files) => resetDigest(files.map(f => [f.key,f.sha256]).sort(([a],[b]) => a!.localeCompare(b!)));
   try {
-    const result=await withTenantDb(pool,{tenantId:input.tenantId,bypassRls:false},async db=>{
+    // Session fence survives the durable intent commit and is released only after reconciliation.
+    const locked = (await connection.query<{ locked: boolean }>("SELECT pg_try_advisory_lock(hashtextextended($1,0)) AS locked", [tenantDatabaseLockKey(input.tenantId)])).rows[0]?.locked;
+    if (!locked) throw new Error("DEVICE_EXISTING_BUSY");
+    if (s3 && input.objects) {
+      archive = await mapExistingRestorePhotos(archive, connection);
+      intent = await withTenantDb(session, scope, db => prepareExistingRestoreObjects(db,s3,input.objects!.bucket,input.objects!.endpoint,input.tenantId,input.operationId,archiveDigest,archive.files,input.recover));
+      if (input.recover) {
+        const committed = await withTenantDb(session, scope, async db => (await db.query("SELECT operation_id FROM device_existing_restore.receipts WHERE operation_id=$1 AND tenant_id=$2",[input.operationId,input.tenantId])).rows.length > 0);
+        if (!committed) {
+          await withTenantDb(session, scope, db => db.query("UPDATE device_existing_restore.object_jobs SET state='CLEANING' WHERE operation_id=$1 AND tenant_id=$2",[input.operationId,input.tenantId]));
+          await cleanExistingRestoreObjects(s3,input.objects.bucket,input.operationId,intent,input.crash);
+          await withTenantDb(session, scope, db => db.query("UPDATE device_existing_restore.object_jobs SET state='ABORTED' WHERE operation_id=$1 AND tenant_id=$2",[input.operationId,input.tenantId]));
+          return { aborted: true, objectStorageVerified: true, restoreVerified: false, canRestore: false };
+        }
+      }
+    }
+    const result=await withTenantDb(session,{tenantId:input.tenantId,bypassRls:false},async db=>{
     await db.query("SET LOCAL TIME ZONE 'UTC'; SET LOCAL search_path=public,pg_catalog");
     await db.query("SELECT set_config('app.current_tenant_id',$1,true),set_config('app.bypass_rls','false',true),pg_advisory_xact_lock(hashtextextended($2,0))",[input.tenantId,tenantDatabaseLockKey(input.tenantId)]);
     const role=(await db.query<{rolsuper:boolean;rolbypassrls:boolean}>("SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user")).rows[0];
@@ -35,8 +61,9 @@ export async function restoreExistingDeviceBackupDrill(input: { databaseUrl: str
     if ((await db.query('SELECT id FROM "User" WHERE "tenantId"=$1 AND "accountStatus"<>\'DISABLED\' LIMIT 1',[input.tenantId])).rows.length) throw new Error("DEVICE_EXISTING_ACTIVE_IDENTITY");
     const schema=await readTenantBackupSchema(db);
     if (schema !== archive.schemaDigest) throw new Error("DEVICE_EXISTING_SCHEMA_MISMATCH");
-    const current=validateDeviceBackupPayload(await projectDeviceBackup(input.tenantId,schema,db),input.tenantId);
-    if (current.files.length) throw new Error("DEVICE_EXISTING_FILES_UNSUPPORTED");
+    const projection = await projectDeviceBackup(input.tenantId,schema,db);
+    if (s3 && input.objects) await collectExistingRestoreFiles(projection,s3,input.objects.bucket);
+    const current=validateDeviceBackupPayload(projection,input.tenantId);
     for (const table of ["Student","Teacher","Guardian","Employee"]) {
       if ([...(archive.tables[table] ?? []),...(current.tables[table] ?? [])].some(e=>JSON.parse(e.row).userId!=null)) throw new Error("DEVICE_EXISTING_ACCOUNT_LINKS_UNSUPPORTED");
     }
@@ -64,11 +91,13 @@ export async function restoreExistingDeviceBackupDrill(input: { databaseUrl: str
       return resetDigest(rows);
     };
     const before=await protectedDigest();
+    const stateDigest = (tables: typeof archive.tables, files: typeof archive.files) => resetDigest({ tables, protectedDigest: before, ...(s3 ? {files:filesDigest(files)} : {}) });
     const receipt=(await db.query<{archive_digest:string;schema_digest:string;result_digest:string}>("SELECT archive_digest,schema_digest,result_digest FROM device_existing_restore.receipts WHERE operation_id=$1 AND tenant_id=$2",[input.operationId,input.tenantId])).rows[0];
     if(receipt){
       if(receipt.archive_digest!==archiveDigest || receipt.schema_digest!==schema)throw new Error("DEVICE_EXISTING_RECEIPT_MISMATCH");
-      if(receipt.result_digest!==resetDigest({tables:current.tables,protectedDigest:before}))throw new Error("DEVICE_EXISTING_RECEIPT_STATE_CHANGED");
-      return {databaseRowsRestored:true,protectedRowsUnchanged:true,globalStateVerified:false,mutations:0,replay:true,restoreVerified:false,canRestore:false};
+      if(receipt.result_digest!==stateDigest(current.tables,current.files))throw new Error("DEVICE_EXISTING_RECEIPT_STATE_CHANGED");
+      if (s3 && input.objects) await stageExistingRestoreObjects(s3,input.objects.bucket,input.operationId,archive.files,intent,true);
+      return {objectStorageVerified:Boolean(s3),databaseRowsRestored:true,protectedRowsUnchanged:true,globalStateVerified:false,mutations:0,replay:true,restoreVerified:false,canRestore:false};
     }
     const changedTables=new Set<string>();
     const tasks: Array<{sql:string;values:unknown[]}>=[];
@@ -108,13 +137,27 @@ export async function restoreExistingDeviceBackupDrill(input: { databaseUrl: str
       pending=retry;
     }
     if (before!==await protectedDigest()) throw new Error("DEVICE_EXISTING_PROTECTED_ROWS_CHANGED");
+    if (s3 && input.objects) await stageExistingRestoreObjects(s3,input.objects.bucket,input.operationId,archive.files,intent,false,input.crash);
     const actual=await projectDeviceBackup(input.tenantId,schema,db);
     if (resetDigest(actual.tables)!==resetDigest(archive.tables)) throw new Error("DEVICE_EXISTING_POSTCONDITION_FAILED");
-    await db.query("INSERT INTO device_existing_restore.receipts (operation_id,tenant_id,archive_digest,schema_digest,result_digest) VALUES ($1,$2,$3,$4,$5)",[input.operationId,input.tenantId,archiveDigest,schema,resetDigest({tables:actual.tables,protectedDigest:before})]);
+    if (s3 && input.objects) {
+      await collectExistingRestoreFiles(actual,s3,input.objects.bucket);
+      validateDeviceBackupPayload(actual,input.tenantId);
+      if (filesDigest(actual.files)!==filesDigest(archive.files)) throw new Error("DEVICE_EXISTING_FILE_POSTCONDITION");
+      await db.query("UPDATE device_existing_restore.object_jobs SET state='COMPLETE' WHERE operation_id=$1 AND tenant_id=$2",[input.operationId,input.tenantId]);
+    }
+    await db.query("INSERT INTO device_existing_restore.receipts (operation_id,tenant_id,archive_digest,schema_digest,result_digest) VALUES ($1,$2,$3,$4,$5)",[input.operationId,input.tenantId,archiveDigest,schema,stateDigest(actual.tables,actual.files)]);
+    if(input.crash === "before-commit") process.kill(process.pid,"SIGKILL");
     if(input.failBeforeCommit)throw new Error("DEVICE_EXISTING_INJECTED_FAILURE");
-    return {databaseRowsRestored:true,protectedRowsUnchanged:true,globalStateVerified:false,mutations:tasks.length,replay:false,restoreVerified:false,canRestore:false};
+    return {objectStorageVerified:Boolean(s3),databaseRowsRestored:true,protectedRowsUnchanged:true,globalStateVerified:false,mutations:tasks.length,replay:false,restoreVerified:false,canRestore:false};
     });
+    if(input.crash === "after-commit") process.kill(process.pid,"SIGKILL");
     if(input.failAfterCommit)throw new Error("DEVICE_EXISTING_LOST_ACK");
     return result;
-  }finally{await pool.end();}
+  }finally{
+    s3?.destroy();
+    // Destroy the connection: no session-level lock can leak back into a pool.
+    connection.release(true);
+    await pool.end();
+  }
 }
