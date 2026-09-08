@@ -1,6 +1,7 @@
+import { readDeviceDomainRows } from "./device-backup.service.js";
 import { expect, it } from "vitest";
 import { deviceBackupImpact } from "./device-backup-impact.js";
-import { readDeviceDomainRows, type DeviceDomainRows } from "./device-backup-domain-links.js";
+import { type DeviceDomainRows } from "./device-backup-domain-links.js";
 import type { DeviceBackupPayload } from "./device-backup.service.js";
 import type { Queryable } from "@o-okul/db";
 const row=(id:string,fields:Record<string,unknown>={})=>({row:JSON.stringify({id,tenantId:"a",...fields})});

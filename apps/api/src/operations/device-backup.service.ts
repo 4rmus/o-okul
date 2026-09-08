@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, HttpException, Injectable, PayloadTooLargeException, ServiceUnavailableException } from "@nestjs/common";
 import pg from "pg";
-import { bindDeviceRestorePlan, readDevicePlanControls, verifyDeviceRestorePlan } from "./device-backup-plan.js";
-import { readDeviceDomainRows } from "./device-backup-domain-links.js";
+import { bindDeviceRestorePlan, verifyDeviceRestorePlan } from "./device-backup-plan.js";
+import type { DeviceDomainRows } from "./device-backup-domain-links.js";
 import { readDeviceRestoreForeignKeys } from "./device-backup-references.js";
 import { deviceBackupImpact } from "./device-backup-impact.js";
 import { resetBytesHash, resetDigest, referencedResetObjectInventory, readResetObject, resetS3Client, resetS3Config, tenantResetColumns, tenantResetTableNames, withTenantDb, readTenantBackupSchema, type TenantResetSnapshot, type TenantResetTable, type Queryable } from "@o-okul/db";
@@ -108,6 +108,33 @@ export function validateDeviceBackupPayload(value: unknown, tenantId: string): D
   return payload;
 }
 
+export async function readDeviceDomainRows(db: Queryable, tenantId: string): Promise<DeviceDomainRows> {
+  // Bound each metadata read; secrets and recipient payloads never enter this planner.
+  const sessions = (await db.query<DeviceDomainRows["sessions"][number]>(`SELECT /* device_restore_domain */ "userId","subjectType","subjectId",roles FROM "AuthSession" WHERE "tenantId"=$1 AND status='ACTIVE' AND "expiresAt">now() ORDER BY id LIMIT 2001`,[tenantId])).rows;
+  const invitations = (await db.query<DeviceDomainRows["invitations"][number]>(`SELECT /* device_restore_domain */ id,"subjectType","subjectId",(status='PENDING' AND "expiresAt">now()) AS pending FROM "IdentityInvitation" WHERE "tenantId"=$1 ORDER BY id LIMIT 2001`,[tenantId])).rows;
+  const resets = (await db.query<DeviceDomainRows["resets"][number]>(`SELECT /* device_restore_domain */ p.id,p."userId" FROM "PasswordResetToken" p JOIN "User" u ON u.id=p."userId" WHERE u."tenantId"=$1 ORDER BY p.id LIMIT 2001`,[tenantId])).rows;
+  const outbox = (await db.query<DeviceDomainRows["outbox"][number]>(`SELECT /* device_restore_domain */ o.purpose,o."sourceId",o."sourceScope",o."tenantLifecycleVersion",t."lifecycleVersion" AS "currentVersion",o.status,o.attempts FROM "SecretDeliveryOutbox" o JOIN "Tenant" t ON t.id=o."tenantId" WHERE o."tenantId"=$1 ORDER BY o.id LIMIT 2001`,[tenantId])).rows;
+  const truncated = Object.entries({AuthSession:sessions,IdentityInvitation:invitations,PasswordResetToken:resets,SecretDeliveryOutbox:outbox}).filter(([,rows])=>rows.length>2000).map(([name])=>name);
+  return {sessions:sessions.slice(0,2000),invitations:invitations.slice(0,2000),resets:resets.slice(0,2000),outbox:outbox.slice(0,2000),truncated};
+}
+
+export async function readDevicePlanControls(db:Queryable,tenantId:string) {
+  const fields:Record<string,string[]>={
+    Tenant:["id","status","lifecycleVersion","resetRequest","plan","licenseStartsAt","licenseEndsAt","seatLimit"],
+    User:["id","accountStatus","membershipVersion","passwordChangedAt","totpEnabledAt"],
+    TenantMembership:["id","userId","role","staffRole","hasTeacherPersona","hasStudentPersona","scopeMode","version","status","startsAt","endsAt"],
+    MembershipCampusScope:["id","membershipId","campusId"],
+    LicenseTerm:["id","planCode","startsAt","endsAt","activeStudentLimit","cancelledAt"],
+    AuthSession:["id","userId","membershipId","membershipVersion","activePersona","roles","subjectType","subjectId","status","expiresAt"],
+  };
+  const result:Record<string,string[]>={};
+  for(const [table,columns]of Object.entries(fields)){
+    const rows=(await db.query<{row:string}>(`SELECT /* device_restore_plan */ to_jsonb(meta)::text AS row FROM (SELECT ${columns.map(c=>'"'+c+'"').join(',')} FROM "${table}" WHERE "${table==='Tenant'?'id':'tenantId'}"=$1 ${table==='AuthSession'?"AND status='ACTIVE' AND \"expiresAt\">now()":""} ORDER BY id LIMIT 2001) meta`,[tenantId])).rows;
+    if(rows.length>2000)return null;result[table]=rows.map(r=>r.row);
+  }
+  return result;
+}
+
 @Injectable()
 export class DeviceBackupService {
   private pool?: pg.Pool;
@@ -177,7 +204,10 @@ export class DeviceBackupService {
       try { payload = validateDeviceBackupPayload(JSON.parse(bytes.toString("utf8")), context.tenantId!); }
       catch { throw new BadRequestException("DEVICE_BACKUP_CONTENT_INVALID"); }
       finally { bytes.fill(0); }
-      const current = await this.readSource(context, async (db, schema) => {
+      const current = await withTenantDb(this.sourcePool(), { tenantId: context.tenantId, bypassRls: false, readOnly: true, repeatableRead: true }, async db => {
+        await db.query("SET LOCAL TIME ZONE 'UTC'");
+        await assertSourceActor(db, context);
+        const schema = await readTenantBackupSchema(db);
         if (schema !== payload.schemaDigest) { if (planToken) throw new ConflictException("DEVICE_RESTORE_PLAN_STALE"); return { schema, impact: undefined, plan: undefined }; }
         const projected = await projectDeviceBackup(context.tenantId!, schema, db);
         const terms = await db.query<{ activeStudentLimit: number; matches: boolean }>(`SELECT term."activeStudentLimit",

@@ -1,4 +1,3 @@
-import type { Queryable } from "@o-okul/db";
 import type { TenantDeviceBackupPreview } from "@o-okul/shared-types";
 import type { DeviceBackupPayload } from "./device-backup.service.js";
 import { missingBoundSubjectRole } from "../auth/subject-binding.js";
@@ -10,15 +9,6 @@ export type DeviceDomainRows = {
   outbox: Array<{purpose:string;sourceId:string;sourceScope:string|null;tenantLifecycleVersion:number|null;currentVersion:number;status:string;attempts:number}>;
   truncated: string[];
 };
-export async function readDeviceDomainRows(db: Queryable, tenantId: string): Promise<DeviceDomainRows> {
-  // Bound each metadata read; secrets and recipient payloads never enter this planner.
-  const sessions = (await db.query<DeviceDomainRows["sessions"][number]>(`SELECT /* device_restore_domain */ "userId","subjectType","subjectId",roles FROM "AuthSession" WHERE "tenantId"=$1 AND status='ACTIVE' AND "expiresAt">now() ORDER BY id LIMIT 2001`,[tenantId])).rows;
-  const invitations = (await db.query<DeviceDomainRows["invitations"][number]>(`SELECT /* device_restore_domain */ id,"subjectType","subjectId",(status='PENDING' AND "expiresAt">now()) AS pending FROM "IdentityInvitation" WHERE "tenantId"=$1 ORDER BY id LIMIT 2001`,[tenantId])).rows;
-  const resets = (await db.query<DeviceDomainRows["resets"][number]>(`SELECT /* device_restore_domain */ p.id,p."userId" FROM "PasswordResetToken" p JOIN "User" u ON u.id=p."userId" WHERE u."tenantId"=$1 ORDER BY p.id LIMIT 2001`,[tenantId])).rows;
-  const outbox = (await db.query<DeviceDomainRows["outbox"][number]>(`SELECT /* device_restore_domain */ o.purpose,o."sourceId",o."sourceScope",o."tenantLifecycleVersion",t."lifecycleVersion" AS "currentVersion",o.status,o.attempts FROM "SecretDeliveryOutbox" o JOIN "Tenant" t ON t.id=o."tenantId" WHERE o."tenantId"=$1 ORDER BY o.id LIMIT 2001`,[tenantId])).rows;
-  const truncated = Object.entries({AuthSession:sessions,IdentityInvitation:invitations,PasswordResetToken:resets,SecretDeliveryOutbox:outbox}).filter(([,rows])=>rows.length>2000).map(([name])=>name);
-  return {sessions:sessions.slice(0,2000),invitations:invitations.slice(0,2000),resets:resets.slice(0,2000),outbox:outbox.slice(0,2000),truncated};
-}
 export function deviceDomainLinks(archive: DeviceBackupPayload, current: DeviceBackupPayload, policies: Impact["tables"], metadata: DeviceDomainRows): NonNullable<Impact["domainLinks"]> {
   const proposed = new Map(Object.entries(policies).map(([table,p])=>[table,new Map((p.policy==="PRESERVE"?current:archive).tables[table]!.map(e=>{const row=JSON.parse(e.row) as Record<string,unknown>;return [String(row.id),row];}))]));
   const conflicts = new Map<string,{source:string;target:string;links:number}>(), unverified = new Set(metadata.truncated.map(n=>n+":limit"));

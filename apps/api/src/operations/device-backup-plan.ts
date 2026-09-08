@@ -2,7 +2,6 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { ConflictException } from "@nestjs/common";
 import { z } from "zod";
 import type { RequestContext } from "../context/request-context.js";
-import type { Queryable } from "@o-okul/db";
 import type { TenantDeviceBackupPreview } from "@o-okul/shared-types";
 
 const ttl = 5 * 60_000;
@@ -30,20 +29,4 @@ export function bindDeviceRestorePlan(context:RequestContext,file:Buffer,snapsho
   if(issuedAt>now || now-issuedAt>=ttl)throw new ConflictException("DEVICE_RESTORE_PLAN_EXPIRED");
   const body=Buffer.from(JSON.stringify({v:1,n:randomBytes(16).toString("hex"),i:issuedAt,e:issuedAt+ttl,a:actor(context),f:mac("archive",file),s:state})).toString("base64url");
   return {token:body+"."+mac("ticket",body),createdAt:new Date(issuedAt).toISOString(),expiresAt:new Date(issuedAt+ttl).toISOString(),scope:"DATABASE_PREVIEW_ONLY",canApply:false};
-}
-export async function readDevicePlanControls(db:Queryable,tenantId:string) {
-  const fields:Record<string,string[]>={
-    Tenant:["id","status","lifecycleVersion","resetRequest","plan","licenseStartsAt","licenseEndsAt","seatLimit"],
-    User:["id","accountStatus","membershipVersion","passwordChangedAt","totpEnabledAt"],
-    TenantMembership:["id","userId","role","staffRole","hasTeacherPersona","hasStudentPersona","scopeMode","version","status","startsAt","endsAt"],
-    MembershipCampusScope:["id","membershipId","campusId"],
-    LicenseTerm:["id","planCode","startsAt","endsAt","activeStudentLimit","cancelledAt"],
-    AuthSession:["id","userId","membershipId","membershipVersion","activePersona","roles","subjectType","subjectId","status","expiresAt"],
-  };
-  const result:Record<string,string[]>={};
-  for(const [table,columns]of Object.entries(fields)){
-    const rows=(await db.query<{row:string}>(`SELECT /* device_restore_plan */ to_jsonb(meta)::text AS row FROM (SELECT ${columns.map(c=>'"'+c+'"').join(',')} FROM "${table}" WHERE "${table==='Tenant'?'id':'tenantId'}"=$1 ${table==='AuthSession'?"AND status='ACTIVE' AND \"expiresAt\">now()":""} ORDER BY id LIMIT 2001) meta`,[tenantId])).rows;
-    if(rows.length>2000)return null;result[table]=rows.map(r=>r.row);
-  }
-  return result;
 }

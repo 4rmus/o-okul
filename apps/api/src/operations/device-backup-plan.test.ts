@@ -1,5 +1,6 @@
+import { readDevicePlanControls } from "./device-backup.service.js";
 import { expect, it, vi } from "vitest";
-import { bindDeviceRestorePlan, verifyDeviceRestorePlan, readDevicePlanControls } from "./device-backup-plan.js";
+import { bindDeviceRestorePlan, verifyDeviceRestorePlan } from "./device-backup-plan.js";
 import type { RequestContext } from "../context/request-context.js";
 import type { Queryable } from "@o-okul/db";
 const actor:RequestContext={tenantId:"private-tenant",userId:"private-user",sessionId:"private-session",membershipId:"m",membershipVersion:1,activePersona:"STAFF",roles:["TENANT_ADMIN"],bypassRls:false};
