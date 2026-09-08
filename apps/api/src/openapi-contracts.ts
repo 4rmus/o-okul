@@ -2844,6 +2844,15 @@ const tenantDataExportPayloadSchema = objectSchema({
 }, ["formatVersion", "tenantId", "generatedByUserId", "exportedAt", "scope", "rowLimitPerTable", "tables", "warnings"]);
 
 const deviceBackupPreviewSchema = objectSchema({
+  plan: objectSchema({token:stringSchema({maxLength:1024}),createdAt:stringSchema({format:"date-time"}),expiresAt:stringSchema({format:"date-time"}),scope:{type:"string",enum:["DATABASE_PREVIEW_ONLY"]},canApply:{type:"boolean",enum:[false]}},["token","createdAt","expiresAt","scope","canApply"]),
+  impact: objectSchema({
+    additions: integerSchema({ minimum: 0 }), changes: integerSchema({ minimum: 0 }), removals: integerSchema({ minimum: 0 }),
+    tables: { type: "object", additionalProperties: objectSchema({ policy: { type: "string", enum: ["PRESERVE","REPLACE"] }, added: integerSchema({minimum:0}), changed: integerSchema({minimum:0}), removed: integerSchema({minimum:0}), unchanged: integerSchema({minimum:0}) }, ["policy","added","changed","removed","unchanged"]) },
+    domainLinks: objectSchema({checkedLinks:integerSchema({minimum:0}),conflicts:arraySchema(objectSchema({source:stringSchema(),target:stringSchema(),links:integerSchema({minimum:1})},["source","target","links"])),pendingDeliveries:integerSchema({minimum:0}),unverified:arraySchema(stringSchema())},["checkedLinks","conflicts","pendingDeliveries","unverified"]),
+    references: objectSchema({ checkedLinks: integerSchema({minimum:0}), conflicts: arraySchema(objectSchema({table:stringSchema(),references:stringSchema(),links:integerSchema({minimum:1})},["table","references","links"])), unverified: arraySchema(stringSchema()) },["checkedLinks","conflicts","unverified"]),
+    activeStudents: integerSchema({minimum:0}), activeStudentLimit: { anyOf: [integerSchema({minimum:1}), {type:"null"}] },
+    preserved: arraySchema(stringSchema()), blockers: arraySchema(stringSchema()), canApply: {type:"boolean",enum:[false]},
+  }, ["additions","changes","removals","tables","activeStudents","activeStudentLimit","preserved","blockers","canApply"]),
   backupId: stringSchema(), tenantId: stringSchema(), createdAt: stringSchema({ format: "date-time" }),
   schemaCompatible: { type: "boolean" }, tableCounts: { type: "object", additionalProperties: integerSchema({ minimum: 0 }) },
   fileCount: integerSchema({ minimum: 0 }), fileBytes: integerSchema({ minimum: 0 }),
@@ -4407,7 +4416,7 @@ const operationContracts: Record<string, OperationContract> = {
     rawResponseBody: stringSchema({ format: "binary" }), rawResponseContentType: "application/octet-stream",
   },
   "post /api/v1/device-backups/preview": {
-    requestBody: objectSchema({ password: stringSchema({ minLength: 12, maxLength: 128, format: "password", writeOnly: true }), file: stringSchema({ format: "binary" }) }, ["password", "file"]),
+    requestBody: objectSchema({ password: stringSchema({ minLength: 12, maxLength: 128, format: "password", writeOnly: true }), file: stringSchema({ format: "binary" }), planToken: stringSchema({minLength:1,maxLength:1024,writeOnly:true}) }, ["password", "file"]),
     requestContentType: "multipart/form-data", responseBody: deviceBackupPreviewSchema,
   },
   "get /api/v1/backup-restore-jobs": {

@@ -1,5 +1,9 @@
 import { BadRequestException, ConflictException, ForbiddenException, HttpException, Injectable, PayloadTooLargeException, ServiceUnavailableException } from "@nestjs/common";
 import pg from "pg";
+import { bindDeviceRestorePlan, readDevicePlanControls, verifyDeviceRestorePlan } from "./device-backup-plan.js";
+import { readDeviceDomainRows } from "./device-backup-domain-links.js";
+import { readDeviceRestoreForeignKeys } from "./device-backup-references.js";
+import { deviceBackupImpact } from "./device-backup-impact.js";
 import { resetBytesHash, resetDigest, referencedResetObjectInventory, readResetObject, resetS3Client, resetS3Config, tenantResetColumns, tenantResetTableNames, withTenantDb, readTenantBackupSchema, type TenantResetSnapshot, type TenantResetTable, type Queryable } from "@o-okul/db";
 import type { TenantDeviceBackupPreview } from "@o-okul/shared-types";
 import { z } from "zod";
@@ -164,17 +168,36 @@ export class DeviceBackupService {
       } finally { s3.destroy(); }
     });
   }
-  async preview(context: RequestContext, file: Buffer, password: string): Promise<TenantDeviceBackupPreview> {
+  async preview(context: RequestContext, file: Buffer, password: string, planToken?: string): Promise<TenantDeviceBackupPreview> {
     return this.exclusive(context, async () => {
+      const issuedAt = Date.now();
+      if (planToken) verifyDeviceRestorePlan(planToken, context, file);
       const { header, payload: bytes } = await openDeviceBackup(file, context.tenantId!, password, deviceBackupSigningKeys().publicKeys);
       let payload: DeviceBackupPayload;
       try { payload = validateDeviceBackupPayload(JSON.parse(bytes.toString("utf8")), context.tenantId!); }
       catch { throw new BadRequestException("DEVICE_BACKUP_CONTENT_INVALID"); }
       finally { bytes.fill(0); }
-      const current = await this.readSource(context, async (_db, schema) => schema);
-      const compatible = current === payload.schemaDigest;
+      const current = await this.readSource(context, async (db, schema) => {
+        if (schema !== payload.schemaDigest) { if (planToken) throw new ConflictException("DEVICE_RESTORE_PLAN_STALE"); return { schema, impact: undefined, plan: undefined }; }
+        const projected = await projectDeviceBackup(context.tenantId!, schema, db);
+        const terms = await db.query<{ activeStudentLimit: number; matches: boolean }>(`SELECT term."activeStudentLimit",
+          (term."planCode"=tenant."plan" AND term."startsAt"=tenant."licenseStartsAt" AND term."endsAt"=tenant."licenseEndsAt" AND term."activeStudentLimit"=tenant."seatLimit") AS matches
+          FROM "LicenseTerm" term JOIN "Tenant" tenant ON tenant.id=term."tenantId"
+          WHERE term."tenantId"=$1 AND term."cancelledAt" IS NULL AND term."startsAt"<=now() AND now()<term."endsAt" ORDER BY term."startsAt" DESC LIMIT 2`, [context.tenantId]);
+        const limit = terms.rows.length === 1 && terms.rows[0]?.matches === true ? terms.rows[0].activeStudentLimit : null;
+        const foreignKeys=await readDeviceRestoreForeignKeys(db), domainRows=await readDeviceDomainRows(db,context.tenantId!);
+        const impact=deviceBackupImpact(payload,projected,limit,foreignKeys,domainRows), controls=await readDevicePlanControls(db,context.tenantId!);
+        if (!controls || domainRows.truncated.length) {
+          if (planToken) throw new ConflictException("DEVICE_RESTORE_PLAN_SOURCE_UNVERIFIED");
+          impact.blockers.push("DEVICE_RESTORE_PLAN_SOURCE_UNVERIFIED");
+          return {schema,impact,plan:undefined};
+        }
+        const plan=bindDeviceRestorePlan(context,file,{schema,tables:projected.tables,terms:terms.rows,foreignKeys,domainRows,controls,impact},issuedAt,planToken);
+        return {schema,impact,plan};
+      });
+      const compatible = current.schema === payload.schemaDigest;
       const inline = ["HomeworkMaterialFile", "SupportTicketAttachment"].flatMap(name => decodedRows(payload, name)).filter(row => typeof row.contentBase64 === "string");
-      return { backupId: header.backupId, tenantId: header.tenantId, createdAt: header.createdAt, schemaCompatible: compatible, tableCounts: Object.fromEntries(Object.entries(payload.tables).map(([table,rows]) => [table,rows.length])), fileCount: payload.files.length + inline.length, fileBytes: [...payload.files, ...inline].reduce((sum,f) => sum + Buffer.byteLength(String(f.contentBase64),"base64"),0), integrityVerified: true, restoreVerified: false, canRestore: false, blockers: [...(compatible ? [] : ["DEVICE_BACKUP_SCHEMA_UNSUPPORTED"]), "DEVICE_BACKUP_RESTORE_NOT_VERIFIED"] };
+      return { backupId: header.backupId, tenantId: header.tenantId, createdAt: header.createdAt, schemaCompatible: compatible, tableCounts: Object.fromEntries(Object.entries(payload.tables).map(([table,rows]) => [table,rows.length])), fileCount: payload.files.length + inline.length, fileBytes: [...payload.files, ...inline].reduce((sum,f) => sum + Buffer.byteLength(String(f.contentBase64),"base64"),0), integrityVerified: true, restoreVerified: false, canRestore: false, plan: current.plan, impact: current.impact, blockers: [...(compatible ? [] : ["DEVICE_BACKUP_SCHEMA_UNSUPPORTED"]), "DEVICE_BACKUP_RESTORE_NOT_VERIFIED", ...(current.impact?.blockers ?? [])] };
     });
   }
 }

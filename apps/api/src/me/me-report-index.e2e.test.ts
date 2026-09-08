@@ -30,7 +30,7 @@ describe("Me report index API", () => {
       })
       .compile();
     app = moduleRef.createNestApplication();
-    await app.init();
+    await app.listen(0, "127.0.0.1");
     server = app.getHttpServer() as Parameters<typeof request>[0];
     [studentToken, guardianToken, teacherToken] = await Promise.all([
       login("student-a@example.test"),

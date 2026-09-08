@@ -23,6 +23,9 @@ describe("api structured logging", () => {
     });
   });
 
+  it("redacts preview plan tickets", () => {
+    expect(redactLogValue({planToken:"private-plan",plan:{token:"private-plan"}})).toEqual({planToken:"[Filtered]",plan:{token:"[Filtered]"}});
+  });
   it("redacts PII keys and string values", () => {
     expect(redactLogValue({
       email: "veli@example.test",

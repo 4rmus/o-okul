@@ -2874,6 +2874,7 @@ export interface TenantResetDeliveryReceipt {
 }
 
 export interface TenantDeviceBackupPreview {
+  plan?: { token: string; createdAt: string; expiresAt: string; scope: "DATABASE_PREVIEW_ONLY"; canApply: false };
   backupId: string;
   tenantId: string;
   createdAt: string;
@@ -2885,4 +2886,17 @@ export interface TenantDeviceBackupPreview {
   restoreVerified: false;
   canRestore: false;
   blockers: string[];
+  impact?: {
+    additions: number;
+    changes: number;
+    removals: number;
+    tables: Record<string, { policy: "PRESERVE" | "REPLACE"; added: number; changed: number; removed: number; unchanged: number }>;
+    domainLinks?: { checkedLinks: number; conflicts: Array<{ source: string; target: string; links: number }>; pendingDeliveries: number; unverified: string[] };
+    references?: { checkedLinks: number; conflicts: Array<{ table: string; references: string; links: number }>; unverified: string[] };
+    activeStudents: number;
+    activeStudentLimit: number | null;
+    preserved: string[];
+    blockers: string[];
+    canApply: false;
+  };
 }
