@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import pg from "pg";
-import { generateKeyPairSync, randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomUUID, randomBytes } from "node:crypto";
 import { readTenantBackupSchema, withTenantDb } from "@o-okul/db";
 import { projectDeviceBackup } from "./device-backup.service.js";
 import { deviceBackupKeyId, sealDeviceBackup } from "./device-backup-archive.js";
 import { restoreExistingDeviceBackupDrill } from "./device-backup-existing-drill.js";
 
 it("rejects live tenants, non-local DBs, and URL options before archive processing", async()=>{
- const input={databaseUrl:"postgresql://app:app@127.0.0.1:15432/o_okul_reset_drill",tenantId:"device-backup-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa-a",file:Buffer.alloc(0),password:"fixture-password",trustedKeys:new Map()};
+ const input={databaseUrl:"postgresql://app:app@127.0.0.1:15432/o_okul_reset_drill",operationId:"a".repeat(32),tenantId:"device-backup-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa-a",file:Buffer.alloc(0),password:"fixture-password",trustedKeys:new Map()};
  for(const tenantId of ["dna","demoo","system","device-preview-uat-a"])await expect(restoreExistingDeviceBackupDrill({...input,tenantId})).rejects.toThrow("DEVICE_EXISTING_DISPOSABLE_REQUIRED");
  for(const databaseUrl of [input.databaseUrl.replace('127.0.0.1','remote'),input.databaseUrl.replace('o_okul_reset_drill','o_okul'),input.databaseUrl+'?options=unsafe'])await expect(restoreExistingDeviceBackupDrill({...input,databaseUrl})).rejects.toThrow("DEVICE_EXISTING_DISPOSABLE_REQUIRED");
 });
@@ -21,7 +21,7 @@ if(process.env.DEVICE_EXISTING_REQUIRED==='1'&&(!url||!adminUrl))throw new Error
   const keys=generateKeyPairSync('ed25519'),password='offline-existing-restore-password';
   const snapshot=()=>withTenantDb(app,{tenantId,readOnly:true},async db=>projectDeviceBackup(tenantId,await readTenantBackupSchema(db),db));
   const seal=async(p:Awaited<ReturnType<typeof snapshot>>)=>sealDeviceBackup(Buffer.from(JSON.stringify(p)),tenantId,password,keys.privateKey);
-  const restore=(file:Buffer,failBeforeCommit=false)=>restoreExistingDeviceBackupDrill({databaseUrl:url!,tenantId,file,password,trustedKeys:new Map([[deviceBackupKeyId(keys.publicKey),keys.publicKey]]),failBeforeCommit});
+  const restore=(file:Buffer,failBeforeCommit=false,operationId=randomBytes(16).toString("hex"),failAfterCommit=false)=>restoreExistingDeviceBackupDrill({databaseUrl:url!,tenantId,file,password,trustedKeys:new Map([[deviceBackupKeyId(keys.publicKey),keys.publicKey]]),failBeforeCommit,operationId,failAfterCommit});
   try{
    for(const id of [tenantId,other]){
     await admin.query('INSERT INTO "Tenant" (id,name,slug,status,"updatedAt") VALUES ($1,$1,$1,\'SUSPENDED\',now())',[id]);
@@ -35,6 +35,16 @@ if(process.env.DEVICE_EXISTING_REQUIRED==='1'&&(!url||!adminUrl))throw new Error
    const dirty=await snapshot();
    await expect(restore(file,true)).rejects.toThrow('DEVICE_EXISTING_INJECTED_FAILURE');
    expect(await snapshot()).toEqual(dirty);
+   expect((await admin.query('SELECT count(*)::int AS n FROM device_existing_restore.receipts WHERE tenant_id=$1',[tenantId])).rows[0].n).toBe(0);
+   const operationId=randomBytes(16).toString('hex');
+   await expect(restore(file,false,operationId,true)).rejects.toThrow('DEVICE_EXISTING_LOST_ACK');
+   expect(await restore(file,false,operationId)).toMatchObject({mutations:0,replay:true});
+   const another=structuredClone(initial);another.tables.Exam![0]!.row=another.tables.Exam![0]!.row.replace('Before','Different');
+   await expect(restore(await seal(another),false,operationId)).rejects.toThrow('DEVICE_EXISTING_RECEIPT_MISMATCH');
+   await admin.query('UPDATE "Exam" SET title=\'Changed\' WHERE id=$1',[tenantId+'-exam']);
+   await expect(restore(file,false,operationId)).rejects.toThrow('DEVICE_EXISTING_RECEIPT_STATE_CHANGED');
+   expect(await snapshot()).toEqual(dirty);
+
    expect(await restore(file)).toMatchObject({databaseRowsRestored:true,mutations:1,protectedRowsUnchanged:true,canRestore:false});
    expect(await snapshot()).toEqual(initial);
    expect(await restore(file)).toMatchObject({mutations:0});

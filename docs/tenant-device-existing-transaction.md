@@ -15,7 +15,10 @@ SERIALIZABLE işlem, withTenantDb kapsamı, RLS ve kurum advisory kilidi kullan�
 Korunan kurum tablolarının tam satır özetleri işlem öncesi/sonrası eşleşmek zorundadır;
 bir tetikleyici bunları değiştirirse tüm işlem geri alınır. Korunan arşiv verisi ile
 mevcut veri farklıysa yazma başlamaz. Son veri projeksiyonu arşivle eşleşmeden commit yoktur.
-Aynı arşiv ikinci kez uygulandığında değişiklik sayısı0 olur; kalıcı iş makbuzu değildir.
+Aynı operationId için makbuz, veri değişikliğiyle aynı transaction içinde yazılır.
+Arşiv/schema/sonuç özetleri değişmez biçimde bağlanır. Yanıt commit sonrasında
+kaybolursa tekrar çağrı makbuzu okuyup0 değişiklikle sonuçlanır; farklı arşiv veya
+sonradan değişmiş veriyle tekrar uygulama reddedilir. Bu henüz production iş kuyruğu değildir.
 
 Dar sınırlar: yalnız localhost üzerindeki adlandırılmış disposable DB ve
 `device-backup-...-a` fixture hedefi; askıda kurum, devre dışı kullanıcılar, sıfır
@@ -37,3 +40,11 @@ Doğrulama:
 Kalan: kalıcı geri yükleme işi/başvuru makbuzu, gerçek dosya deposuyla birlikte
 uygulama-kurtarma, aktif kimlik/domain uzlaştırması, özel worker rolü ve çalışmaları
 sakinleştirme kanıtı. Bu katman bunları atlayarak ürün UI'ına bağlanmaz.
+
+## Kalıcı makbuz devamı
+
+Yerel receipt tablosu ayrı device_existing_restore şemasındadır. Tenant RLS ve
+salt SELECT/INSERT hakkı vardır; uygulama rolüne UPDATE/DELETE verilmez. Commit
+öncesi hata hem veriyi hem makbuzu geri alır. Commit sonrası yanıt kaybı, tekrar
+ve sonraki veri değişimi gerçek PG'de doğrulandı. Ürün migration/worker bağlantısı,
+dosya kurtarma ve aktif kimlik uzlaştırması hâlâ açık; canlıya dahil edilmedi.

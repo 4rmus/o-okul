@@ -1,4 +1,4 @@
-import type { KeyObject } from "node:crypto";
+import { createHash, type KeyObject } from "node:crypto";
 import pg from "pg";
 import { withTenantDb, readTenantBackupSchema, tenantResetOwnershipPredicate, resetDigest, tenantResetTableNames, tenantDatabaseLockKey } from "@o-okul/db";
 import { openDeviceBackup } from "./device-backup-archive.js";
@@ -9,7 +9,9 @@ import { encryptTcIdentity, hashTcIdentity } from "../student/tc-identity.js";
 
 const ident = (s: string) => `"${s.replaceAll('"', '""')}"`;
 /** Database-only offline drill. Never an API/worker entry point or an apply authorization. */
-export async function restoreExistingDeviceBackupDrill(input: { databaseUrl: string; tenantId: string; file: Buffer; password: string; trustedKeys: Map<string, KeyObject>; failBeforeCommit?: boolean }) {
+export async function restoreExistingDeviceBackupDrill(input: { databaseUrl: string; tenantId: string; file: Buffer; password: string; trustedKeys: Map<string, KeyObject>; operationId: string; failBeforeCommit?: boolean; failAfterCommit?: boolean }) {
+  if (!/^[a-f0-9]{32}$/.test(input.operationId)) throw new Error("DEVICE_EXISTING_OPERATION_REQUIRED");
+  const archiveDigest=createHash("sha256").update(input.file).digest("hex");
   const url = new URL(input.databaseUrl);
   if (url.protocol !== "postgresql:" || !["localhost","127.0.0.1"].includes(url.hostname) || url.search || url.hash || !["/o_okul_reset_drill","/o_okul_device_backup_test"].includes(url.pathname) || !/^device-backup-[a-f0-9-]+-a$/.test(input.tenantId)) throw new Error("DEVICE_EXISTING_DISPOSABLE_REQUIRED");
   const opened = await openDeviceBackup(input.file,input.tenantId,input.password,input.trustedKeys);
@@ -19,7 +21,7 @@ export async function restoreExistingDeviceBackupDrill(input: { databaseUrl: str
   if (archive.files.length) throw new Error("DEVICE_EXISTING_FILES_UNSUPPORTED");
   const pool = new pg.Pool({ connectionString: input.databaseUrl, max: 1, options: "-c default_transaction_isolation=serializable", connectionTimeoutMillis: 5000, statement_timeout: 15000 });
   try {
-    return await withTenantDb(pool,{tenantId:input.tenantId,bypassRls:false},async db=>{
+    const result=await withTenantDb(pool,{tenantId:input.tenantId,bypassRls:false},async db=>{
     await db.query("SET LOCAL TIME ZONE 'UTC'; SET LOCAL search_path=public,pg_catalog");
     await db.query("SELECT set_config('app.current_tenant_id',$1,true),set_config('app.bypass_rls','false',true),pg_advisory_xact_lock(hashtextextended($2,0))",[input.tenantId,tenantDatabaseLockKey(input.tenantId)]);
     const role=(await db.query<{rolsuper:boolean;rolbypassrls:boolean}>("SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user")).rows[0];
@@ -62,6 +64,12 @@ export async function restoreExistingDeviceBackupDrill(input: { databaseUrl: str
       return resetDigest(rows);
     };
     const before=await protectedDigest();
+    const receipt=(await db.query<{archive_digest:string;schema_digest:string;result_digest:string}>("SELECT archive_digest,schema_digest,result_digest FROM device_existing_restore.receipts WHERE operation_id=$1 AND tenant_id=$2",[input.operationId,input.tenantId])).rows[0];
+    if(receipt){
+      if(receipt.archive_digest!==archiveDigest || receipt.schema_digest!==schema)throw new Error("DEVICE_EXISTING_RECEIPT_MISMATCH");
+      if(receipt.result_digest!==resetDigest({tables:current.tables,protectedDigest:before}))throw new Error("DEVICE_EXISTING_RECEIPT_STATE_CHANGED");
+      return {databaseRowsRestored:true,protectedRowsUnchanged:true,globalStateVerified:false,mutations:0,replay:true,restoreVerified:false,canRestore:false};
+    }
     const changedTables=new Set<string>();
     const tasks: Array<{sql:string;values:unknown[]}>=[];
     for (const [table,entries] of Object.entries(archive.tables)) {
@@ -102,8 +110,11 @@ export async function restoreExistingDeviceBackupDrill(input: { databaseUrl: str
     if (before!==await protectedDigest()) throw new Error("DEVICE_EXISTING_PROTECTED_ROWS_CHANGED");
     const actual=await projectDeviceBackup(input.tenantId,schema,db);
     if (resetDigest(actual.tables)!==resetDigest(archive.tables)) throw new Error("DEVICE_EXISTING_POSTCONDITION_FAILED");
+    await db.query("INSERT INTO device_existing_restore.receipts (operation_id,tenant_id,archive_digest,schema_digest,result_digest) VALUES ($1,$2,$3,$4,$5)",[input.operationId,input.tenantId,archiveDigest,schema,resetDigest({tables:actual.tables,protectedDigest:before})]);
     if(input.failBeforeCommit)throw new Error("DEVICE_EXISTING_INJECTED_FAILURE");
-    return {databaseRowsRestored:true,protectedRowsUnchanged:true,globalStateVerified:false,mutations:tasks.length,restoreVerified:false,canRestore:false};
+    return {databaseRowsRestored:true,protectedRowsUnchanged:true,globalStateVerified:false,mutations:tasks.length,replay:false,restoreVerified:false,canRestore:false};
     });
+    if(input.failAfterCommit)throw new Error("DEVICE_EXISTING_LOST_ACK");
+    return result;
   }finally{await pool.end();}
 }
