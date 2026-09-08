@@ -54,15 +54,28 @@ export function resetSnapshotBlockers(snapshot: TenantResetSnapshot): string[] {
   return [...new Set(blockers)].sort();
 }
 
+export async function assertTenantBackupCatalog(client: Queryable): Promise<void> {
+  const actual = await client.query<{ name: string }>(`SELECT c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind IN ('r','p','f','m') AND NOT c.relispartition AND c.relname <> '_prisma_migrations' ORDER BY c.relname`);
+  assertResetCatalog(actual.rows.map((row) => row.name));
+  const columns = await client.query<{ name: string; columns: string[] }>(`SELECT c.relname AS name, array_agg(a.attname::text ORDER BY a.attname COLLATE "C") AS columns FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped WHERE n.nspname = 'public' AND c.relkind IN ('r','p') AND NOT c.relispartition AND c.relname <> '_prisma_migrations' GROUP BY c.relname`);
+  assertResetColumns(Object.fromEntries(columns.rows.map((row) => [row.name, row.columns])));
+  const partitions = await client.query<{ count: string }>(`SELECT count(*)::text AS count FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid JOIN pg_class p ON p.oid = i.inhparent JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND p.relkind IN ('r','p') AND p.relname <> 'AuditLog'`);
+  if (partitions.rows[0]?.count !== "0") throw new Error("RESET_CATALOG_UNCLASSIFIED_TABLE");
+}
+
+/** Schema metadata is readable by the tenant app role; migration-control rows are not required. */
+export async function readTenantBackupSchema(client: Queryable): Promise<string> {
+  await assertTenantBackupCatalog(client);
+  const columns = await client.query(`SELECT c.relname::text AS table_name, a.attname::text AS column_name, format_type(a.atttypid,a.atttypmod) AS type, a.attnotnull AS required, coalesce(pg_get_expr(d.adbin,d.adrelid),'') AS default_value FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped LEFT JOIN pg_attrdef d ON d.adrelid=c.oid AND d.adnum=a.attnum WHERE n.nspname='public' AND c.relkind IN ('r','p') AND NOT c.relispartition AND c.relname<>'_prisma_migrations' ORDER BY c.relname COLLATE "C",a.attname COLLATE "C"`);
+  const constraints = await client.query<{ validated: boolean }>(`SELECT r.relname::text AS table_name,c.conname::text AS name,pg_get_constraintdef(c.oid) AS definition,c.convalidated AS validated FROM pg_constraint c JOIN pg_class r ON r.oid=c.conrelid JOIN pg_namespace n ON n.oid=r.relnamespace WHERE n.nspname='public' AND NOT r.relispartition AND r.relname<>'_prisma_migrations' ORDER BY r.relname COLLATE "C",c.conname COLLATE "C"`);
+  if (constraints.rows.some(row => !row.validated)) throw new Error("DEVICE_BACKUP_SCHEMA_UNVERIFIED");
+  return resetDigest({ columns: columns.rows, constraints: constraints.rows });
+}
+
 export async function readResetSnapshot(client: Queryable, tenantId: string, operationId?: string): Promise<TenantResetSnapshot> {
   // Identical raw timestamptz JSON for backup and direct worker transactions.
   await client.query("SET LOCAL TIME ZONE 'UTC'");
-  const actual = await client.query<{ name: string }>(`SELECT c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind IN ('r','p','f','m') AND NOT c.relispartition AND c.relname <> '_prisma_migrations' ORDER BY c.relname`);
-  assertResetCatalog(actual.rows.map((row) => row.name));
-  const columns = await client.query<{ name: string; columns: string[] }>(`SELECT c.relname AS name, array_agg(a.attname ORDER BY a.attname COLLATE "C") AS columns FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped WHERE n.nspname = 'public' AND c.relkind IN ('r','p') AND NOT c.relispartition AND c.relname <> '_prisma_migrations' GROUP BY c.relname`);
-  assertResetColumns(Object.fromEntries(columns.rows.map((row) => [row.name, row.columns])));
-  const partitions = await client.query<{ count: string }>(`SELECT count(*)::text AS count FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid JOIN pg_class p ON p.oid = i.inhparent JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND p.relname <> 'AuditLog'`);
-  if (partitions.rows[0]?.count !== "0") throw new Error("RESET_CATALOG_UNCLASSIFIED_TABLE");
+  await assertTenantBackupCatalog(client);
   const migrations = await client.query<{ row: string }>('SELECT to_jsonb(t)::text AS row FROM "_prisma_migrations" t ORDER BY migration_name COLLATE "C", id COLLATE "C"');
   const migrationRows = migrations.rows.map((row) => row.row).sort();
   if (!migrationRows.length || migrationRows.some((raw) => { const row = JSON.parse(raw); return row.finished_at == null && row.rolled_back_at == null; })) throw new Error("RESET_SCHEMA_UNVERIFIED");

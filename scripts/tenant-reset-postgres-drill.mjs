@@ -209,9 +209,10 @@ export async function executeDrill(options) {
     const appUrl = `postgresql://app:${password}@127.0.0.1:${port}/o_okul_reset_drill`;
     const adminUrl = `postgresql://postgres:${password}@127.0.0.1:${port}/o_okul_reset_drill`;
     await command("pnpm", ["--filter", "@o-okul/api", "exec", "vitest", "run", "--no-file-parallelism",
-      "src/identity-invitation/employee-account-activation-store.postgres.test.ts", "src/student/student-license-concurrency.postgres.test.ts"], {
+      "src/identity-invitation/employee-account-activation-store.postgres.test.ts", "src/student/student-license-concurrency.postgres.test.ts", "src/operations/device-backup.postgres.test.ts"], {
       ACCOUNT_MANAGEMENT_POSTGRES_REQUIRED: "1", EMPLOYEE_ACTIVATION_POSTGRES_TEST_URL: appUrl, EMPLOYEE_ACTIVATION_POSTGRES_ADMIN_URL: adminUrl,
       STUDENT_LICENSE_POSTGRES_TEST_URL: appUrl, STUDENT_LICENSE_POSTGRES_ADMIN_URL: adminUrl,
+      DEVICE_BACKUP_POSTGRES_TEST_URL: appUrl, DEVICE_BACKUP_POSTGRES_ADMIN_URL: adminUrl, DEVICE_BACKUP_POSTGRES_REQUIRED: "1",
     });
     evidence.accountManagementPostgresTests = "PASS";
     assert.equal(unexpectedPoolError, false, "UNEXPECTED_POOL_ERROR");

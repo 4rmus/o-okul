@@ -407,3 +407,4 @@ export type { TenantResetInstitutionRequestCreate, TenantResetInstitutionRequest
 
 export type { TenantResetDiagnostics } from "./domain.js";
 export type { TenantResetDeliveryReceipt } from "./domain.js";
+export type { TenantDeviceBackupPreview } from "./domain.js";

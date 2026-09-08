@@ -155,6 +155,9 @@ jobs:
       STUDENT_LICENSE_POSTGRES_TEST_URL: postgresql://app:app@localhost:5432/o_okul
       STUDENT_LICENSE_POSTGRES_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/o_okul
       ACCOUNT_MANAGEMENT_POSTGRES_REQUIRED: "1"
+      DEVICE_BACKUP_POSTGRES_TEST_URL: postgresql://app:app@localhost:5432/o_okul
+      DEVICE_BACKUP_POSTGRES_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/o_okul
+      DEVICE_BACKUP_POSTGRES_REQUIRED: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -204,3 +207,4 @@ jobs:
           pnpm --filter @o-okul/api exec vitest run --no-file-parallelism --reporter=verbose
           src/identity-invitation/employee-account-activation-store.postgres.test.ts
           src/student/student-license-concurrency.postgres.test.ts
+          src/operations/device-backup.postgres.test.ts

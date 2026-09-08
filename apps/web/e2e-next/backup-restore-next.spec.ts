@@ -31,6 +31,7 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
   let activeEmail = "";
   let backupRestorePostCount = 0;
   let tenantExportGetCount = 0;
+  let deviceDownloads = 0, devicePreviews = 0;
   const backupRestoreJobs: BackupRestoreJobFixture[] = [];
 
   await page.route("**/*", async (route) => {
@@ -75,6 +76,19 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
     }
 
     expect(request.headers().authorization).toBe("Bearer next-access-token");
+
+    if (path === "/device-backups/status") {
+      await route.fulfill({ headers: corsHeaders, contentType: "application/json", body: JSON.stringify(envelope({ available: true, maxFileBytes: 33558528 })) }); return;
+    }
+    if (path === "/device-backups/download") {
+      expect(request.postDataJSON()).toEqual({ password: "uzun-yedek-parolasi" }); deviceDownloads++;
+      await route.fulfill({ headers: { ...corsHeaders, "content-disposition": 'attachment; filename="fixture.ookulbackup"' }, contentType: "application/octet-stream", body: Buffer.from("encrypted-fixture") }); return;
+    }
+    if (path === "/device-backups/preview") {
+      devicePreviews++; expect(request.headers()["content-type"]).toContain("multipart/form-data");
+      expect(request.postDataBuffer()?.toString()).toContain('name="password"');
+      await route.fulfill({ headers: corsHeaders, contentType: "application/json", body: JSON.stringify(envelope({ backupId: "a".repeat(32), tenantId: "tenant-a", createdAt: "2026-09-08T00:00:00Z", schemaCompatible: true, tableCounts: { Student: 2 }, fileCount: 1, fileBytes: 7, integrityVerified: true, restoreVerified: false, canRestore: false, blockers: ["DEVICE_BACKUP_RESTORE_NOT_VERIFIED"] })) }); return;
+    }
 
     if (path === "/me/tenant" && request.method() === "GET") {
       await route.fulfill({
@@ -201,12 +215,30 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
   await expect(page.getByRole("heading", { name: "Yedekleme ve Geri Yükleme" })).toBeVisible();
   await expect(page.getByLabel("Yedekleme ve geri yükleme güven durumu").getByText("Yedekleme Güvence Durumu")).toBeVisible();
   await expect(page.getByLabel("Yedekleme ve geri yükleme güven durumu").getByText("Maskeli")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Kurum Veri Yedeği" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "JSON Veri Dışa Aktarımı" })).toBeVisible();
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Kurum verisini indir" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe("o-okul-tenant-a-2026-06-14.json");
   expect(tenantExportGetCount).toBe(1);
+  await page.getByLabel("Yeni yedek parolası", { exact: true }).fill("uzun-yedek-parolasi");
+  await page.getByLabel("Yedek parolasını tekrar yaz").fill("farkli-yedek-parolasi");
+  await page.getByRole("button", { name: "Şifreli yedeği indir", exact: true }).click();
+  await expect(page.getByLabel("Cihazda şifreli kurum yedeği").getByRole("alert")).toHaveText("Yedek parolaları eşleşmiyor."); expect(deviceDownloads).toBe(0);
+  await page.getByLabel("Yedek parolasını tekrar yaz").fill("uzun-yedek-parolasi");
+  const encryptedDownload = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Şifreli yedeği indir", exact: true }).click();
+  expect((await encryptedDownload).suggestedFilename()).toMatch(/\.ookulbackup$/); expect(deviceDownloads).toBe(1);
+  await expect(page.getByLabel("Yeni yedek parolası", { exact: true })).toHaveValue("");
+  await page.getByLabel("Cihazımdaki yedek dosyası").setInputFiles({ name: "fixture.ookulbackup", mimeType: "application/octet-stream", buffer: Buffer.from("fixture") });
+  await page.getByLabel("Dosyanın yedek parolası").fill("uzun-yedek-parolasi");
+  await page.getByRole("button", { name: "Yedeği yükle ve doğrula", exact: true }).click();
+  await expect(page.getByText("2 kayıt ve 1 dosya.")).toBeVisible();
+  await expect(page.getByText(/Kurum verilerine uygulama kapalı/)).toBeVisible(); expect(devicePreviews).toBe(1);
+  await expect(page.getByLabel("Dosyanın yedek parolası")).toHaveValue("");
+  await page.getByLabel("Cihazda şifreli kurum yedeği").screenshot({ path: test.info().outputPath("device-backup-panel.png") });
+
+  await page.getByText("Teknik operasyonlar", { exact: true }).click();
   await expect(page.getByLabel("Panel geri yükleme tatbikatı işi").getByText("Korumalı İş Başlatma")).toBeVisible();
 
   await page.getByLabel("Panel geri yükleme tatbikatı işi").getByLabel("İş tipi").selectOption("BACKUP");

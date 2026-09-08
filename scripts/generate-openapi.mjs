@@ -265,6 +265,7 @@ const portalReportProgressPaths = [
   "/api/v1/me/guardian/students/{studentId}/reports/{examId}/progress",
 ];
 const sharedTypeDriftContracts = [
+  { interfaceName: "TenantDeviceBackupPreview", method: "post", path: "/api/v1/device-backups/preview", schemaPath: ["responseData"] },
   { interfaceName: "LoginRequest", method: "post", path: "/api/v1/auth/login", schemaPath: ["requestBody"] },
   { interfaceName: "PersonaSwitchRequest", method: "post", path: "/api/v1/auth/persona/switch", schemaPath: ["requestBody"] },
   { interfaceName: "StudentPortalActivationRequest", method: "post", path: "/api/v1/auth/activate", schemaPath: ["requestBody"] },
@@ -1185,6 +1186,10 @@ const schoolReferenceCrudContracts = [
   }),
 ];
 const requiredOperationContracts = [
+  { method: "get", path: "/api/v1/device-backups/status", responseEnvelope: true, responseDataRequired: ["available", "maxFileBytes"] },
+  { method: "post", path: "/api/v1/device-backups/download", requestBody: true, requestRequired: ["password"], rawResponseContentType: "application/octet-stream", fieldChecks: [{ path: ["rawResponse"], type: "string", format: "binary" }] },
+  { method: "post", path: "/api/v1/device-backups/preview", requestBody: true, requestContentType: "multipart/form-data", requestRequired: ["password", "file"], responseEnvelope: true, responseDataRequired: ["backupId", "tenantId", "createdAt", "schemaCompatible", "tableCounts", "fileCount", "fileBytes", "integrityVerified", "restoreVerified", "canRestore", "blockers"], fieldChecks: [{ path: ["responseData", "canRestore"], enum: [false] }, { path: ["responseData", "restoreVerified"], enum: [false] }] },
+
   ...schoolReferenceCrudContracts,
   {
     method: "post",
@@ -4096,11 +4101,11 @@ function validateOpenApiDocument(document) {
       continue;
     }
 
-    if (contract.requestBody && !operation.requestBody?.content?.["application/json"]?.schema) {
+    if (contract.requestBody && !operation.requestBody?.content?.[contract.requestContentType ?? "application/json"]?.schema) {
       failures.push(`OpenAPI request body schema eksik: ${contract.method.toUpperCase()} ${contract.path}`);
     }
 
-    const requestSchema = operation.requestBody?.content?.["application/json"]?.schema;
+    const requestSchema = operation.requestBody?.content?.[contract.requestContentType ?? "application/json"]?.schema;
     if (contract.requestBodyRequired !== undefined && operation.requestBody?.required !== contract.requestBodyRequired) {
       failures.push(`OpenAPI request body required beklenmiyor: ${contract.method.toUpperCase()} ${contract.path}=${operation.requestBody?.required}`);
     }

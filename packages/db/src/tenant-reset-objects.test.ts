@@ -1,9 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import { tenantResetTableNames, type TenantResetSnapshot } from "@o-okul/db";
-import { resetObjectInventory, resetPreflightDigest } from "./tenant-reset-objects.js";
+import { referencedResetObjectInventory, resetObjectInventory, resetPreflightDigest } from "./tenant-reset-objects.js";
 
 describe("reset object inventory", () => {
+  it("device export bounds bytes before GET and never scans other tenants' objects", async () => {
+    const tables = Object.fromEntries(tenantResetTableNames.map(name => [name, []])) as unknown as TenantResetSnapshot["tables"];
+    tables.Student = [{ id: "student-a", photoKey: "students/student-a/photo.jpg" }];
+    const snapshot = { tenantId: "tenant-a", tables } as TenantResetSnapshot;
+    const calls: string[] = [];
+    const s3 = { async send(command: { constructor: { name: string }; input: { Key?: string } }) {
+      calls.push(command.constructor.name); expect(command.input.Key).toBe("students/student-a/photo.jpg");
+      if (command.constructor.name === "HeadObjectCommand") return { ContentLength: 10, ETag: "etag" };
+      return { Body: { transformToByteArray: async () => Buffer.alloc(10) } };
+    } };
+    await expect(referencedResetObjectInventory(snapshot,s3 as never,"source",{ maxBytes: 9,maxObjects: 1 })).rejects.toThrow("RESET_OBJECT_SIZE_LIMIT");
+    expect(calls).toEqual(["HeadObjectCommand"]); calls.length = 0;
+    expect(await referencedResetObjectInventory(snapshot,s3 as never,"source",{ maxBytes: 10,maxObjects: 1 })).toHaveLength(1);
+    expect(calls).toEqual(["HeadObjectCommand", "GetObjectCommand"]);
+  });
   it.each(["valid", "orphan", "unknown", "hash"])("paginates, deduplicates and verifies %s inventory", async (variant) => {
     const bytes = Buffer.from("attachment bytes"); const sha256 = createHash("sha256").update(bytes).digest("hex");
     const key = `homework-material-files/tenant-a/material-a/${sha256}/source`;

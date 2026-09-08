@@ -9,7 +9,7 @@ function locks() {
     const clearShared = () => { for (const holders of shared.values()) holders.delete(id); };
     return { async query<T>(sql: string, values?: unknown[]): Promise<{ rows: T[] }> {
       calls.push({ client: id, sql, values }); const key = String(values?.[0]);
-      if (sql === "BEGIN READ ONLY") readOnly = true;
+      if (sql.endsWith("READ ONLY")) readOnly = true;
       if (readOnly && sql.startsWith("UPDATE")) throw new Error("READ_ONLY_TRANSACTION");
       if (sql.includes("pg_try_advisory_xact_lock_shared")) {
         const locked = !exclusive.has(key) || exclusive.get(key) === id;
@@ -31,6 +31,17 @@ function locks() {
   return { pool, calls, releases, shared, rollbackFailure() { rollbackFails = true; } };
 }
 describe("tenant database shared/exclusive coordination (injected lock model)", () => {
+  it("repeatable export transactions remain read-only and tenant scoped", async () => {
+    const f = locks();
+    await expect(withTenantDb(f.pool, { tenantId: "tenant-a", readOnly: true, repeatableRead: true }, db => db.query("UPDATE forbidden"))).rejects.toThrow("READ_ONLY_TRANSACTION");
+    expect(f.calls[0]?.sql).toBe("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+    expect(f.calls.find(call => call.sql.includes("app.bypass_rls"))?.values).toEqual(["false"]);
+    expect(f.calls.find(call => call.sql.includes("app.current_tenant_id"))?.values).toEqual(["tenant-a"]);
+    const bad = locks();
+    await expect(withTenantDb(bad.pool, { tenantId: "tenant-a", repeatableRead: true }, async () => {})).rejects.toThrow("TENANT_CONTEXT_INVALID");
+    expect(bad.calls).toHaveLength(0);
+  });
+
   it("same-tenant exclusive blocks callback, other tenant proceeds and read-only polls remain available", async () => {
     const f = locks(); const reset = await f.pool.connect();
     await reset.query("SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS locked", [tenantDatabaseLockKey("tenant-a")]);
