@@ -682,6 +682,7 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
     "/audit-logs": [],
     "/audit-logs/safe-list": [],
     "/backup-restore-jobs": [],
+    "/device-backups/status": { available: false, maxFileBytes: 33558528 },
     "/campuses": [campusFixture],
     "/classes": [classFixture],
     "/courses": [courseFixture],

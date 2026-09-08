@@ -200,8 +200,8 @@ jobs:
         run: |
           createdb --host localhost --username postgres o_okul_student_grade_level_test
           pnpm --filter @o-okul/db db:student-grade-level:check:postgres
-      - name: Build account-management test dependencies
-        run: pnpm --filter @o-okul/db... build
+      - name: Build API PostgreSQL test dependencies
+        run: pnpm --filter '@o-okul/api^...' build
       - name: Verify account-management PostgreSQL concurrency
         run: >-
           pnpm --filter @o-okul/api exec vitest run --no-file-parallelism --reporter=verbose

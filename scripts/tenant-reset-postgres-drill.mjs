@@ -90,8 +90,7 @@ export async function executeDrill(options) {
   assert.equal(context.length, 1); validateContext(context[0], options);
   const images = JSON.parse(await docker(["image", "inspect", image])); // No implicit pull.
   assert.equal(images.length, 1); assert.match(images[0].Id, /^sha256:[a-f0-9]{64}$/);
-  await command("pnpm", ["--filter", "@o-okul/shared-types", "build"]);
-  await command("pnpm", ["--filter", "@o-okul/db", "build"]);
+  await command("pnpm", ["--filter", "@o-okul/api^...", "build"]);
   const manifest = await plan(options);
   const nonce = randomBytes(12).toString("hex"), name = `o-okul-reset-drill-${nonce}`;
   const password = randomBytes(24).toString("hex");
