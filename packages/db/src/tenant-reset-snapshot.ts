@@ -14,6 +14,10 @@ const predicates: Partial<Record<TenantResetTable, string>> = {
   SecretDeliveryOutbox: `t."tenantId" = $1 OR (t."purpose" = 'PASSWORD_RESET' AND t."sourceId" IN (SELECT p."id" FROM "PasswordResetToken" p JOIN "User" u ON u."id" = p."userId" WHERE u."tenantId" = $1)) OR (t."purpose" = 'IDENTITY_INVITATION' AND t."sourceId" IN (SELECT "id" FROM "IdentityInvitation" WHERE "tenantId" = $1))`,
 };
 
+export function tenantResetOwnershipPredicate(table: TenantResetTable): string {
+  return predicates[table] ?? 't."tenantId" = $1';
+}
+
 export async function withResetSnapshot<T>(pool: TenantQueryable, tenantId: string, run: (snapshot: TenantResetSnapshot, client: Queryable) => Promise<T>, operationId?: string): Promise<T> {
   if (!tenantId.trim() || tenantId === "system") throw new Error("RESET_TARGET_INVALID");
   if (!pool.connect) throw new Error("RESET_TRANSACTION_REQUIRED");
@@ -82,7 +86,7 @@ export async function readResetSnapshot(client: Queryable, tenantId: string, ope
   const tables = {} as ResetTables;
   const rawTables = {} as Record<TenantResetTable, string[]>;
   for (const name of tenantResetTableNames) {
-    const predicate = predicates[name] ?? 't."tenantId" = $1';
+    const predicate = tenantResetOwnershipPredicate(name);
     const rows = await client.query<{ row: string }>(`SELECT (${name === "PlatformAccount" ? `jsonb_build_object('id', t."id", 'loginName', 'restore-dependency-' || md5(t."id"), 'loginNameNormalized', 'restore-dependency-' || md5(t."id"), 'email', NULL, 'emailNormalized', NULL, 'name', 'Restore dependency', 'passwordHash', '!NON_AUTHENTICATING_RESTORE_DEPENDENCY!', 'passwordHashVersion', 2, 'status', 'SUSPENDED', 'totpSecretEncrypted', NULL, 'totpEnabledAt', NULL, 'createdAt', '1970-01-01T00:00:00+00:00'::timestamptz, 'updatedAt', '1970-01-01T00:00:00+00:00'::timestamptz)` : "to_jsonb(t)"})::text AS row FROM "${name}" t WHERE ${predicate} ORDER BY ${name === "PlatformAccount" ? 't."id"' : 'to_jsonb(t)::text'} COLLATE "C"`, name === "PlatformSession" ? [] : [tenantId]);
     rawTables[name] = rows.rows.map((row) => row.row).sort();
     tables[name] = rawTables[name].map((row) => JSON.parse(row));

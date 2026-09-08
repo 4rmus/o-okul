@@ -13,6 +13,11 @@ const replaceTables = new Set(["Employee","DevelopmentCriterion","DevelopmentAss
 const identities = new Set(["Tenant", "User"]);
 const profileTables = new Set(["Student", "Teacher", "Guardian", "Employee"]);
 
+export function deviceRestoreTablePolicy(table: string): "PRESERVE" | "REPLACE" | undefined {
+  if (finance.has(table) || consent.has(table) || support.has(table) || delivery.has(table) || identities.has(table)) return "PRESERVE";
+  return replaceTables.has(table) ? "REPLACE" : undefined;
+}
+
 /** Counts only: no row identifiers, contact details, national IDs or money values leave this planner. */
 export function deviceBackupImpact(archive: DeviceBackupPayload, current: DeviceBackupPayload, activeStudentLimit: number | null, foreignKeys?: readonly DeviceRestoreForeignKey[], domainRows?: DeviceDomainRows): NonNullable<TenantDeviceBackupPreview["impact"]> {
   if (archive.tenantId !== current.tenantId || archive.schemaDigest !== current.schemaDigest || JSON.stringify(Object.keys(archive.tables).sort()) !== JSON.stringify(Object.keys(current.tables).sort())) throw new Error("DEVICE_RESTORE_COMPARISON_MISMATCH");
@@ -22,9 +27,9 @@ export function deviceBackupImpact(archive: DeviceBackupPayload, current: Device
   for (const [table, entries] of Object.entries(archive.tables)) {
     const old = new Map(current.tables[table]!.map(e => [JSON.parse(e.row).id as string,e]));
     const next = new Map(entries.map(e => [JSON.parse(e.row).id as string,e]));
-    const classifiedPreserve = finance.has(table) || consent.has(table) || support.has(table) || delivery.has(table) || identities.has(table);
-    if (!classifiedPreserve && !replaceTables.has(table)) blockers.add("DEVICE_RESTORE_POLICY_UNCLASSIFIED");
-    const preserve = classifiedPreserve || !replaceTables.has(table);
+    const policy = deviceRestoreTablePolicy(table);
+    if (!policy) blockers.add("DEVICE_RESTORE_POLICY_UNCLASSIFIED");
+    const preserve = policy !== "REPLACE";
     let added = 0, changed = 0, removed = 0, unchanged = 0;
     for (const [id, entry] of next) { const prior = old.get(id); if (!prior) added++; else if (prior.row !== entry.row || prior.nationalId !== entry.nationalId) changed++; else unchanged++; }
     for (const id of old.keys()) if (!next.has(id)) removed++;
