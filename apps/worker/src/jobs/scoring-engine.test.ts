@@ -248,6 +248,24 @@ describe("ScoringEngine", () => {
     });
   });
 
+  it("LGS toplam görünümünde bölüm netlerini toplamadan önce yuvarlamaz", () => {
+    const keys = lgsKeys();
+    const result = scoreExam(keys.map((item, index) => ({
+      questionNo: item.questionNo,
+      answer: index === 0 || index === 20 ? "B" : "A",
+    })), keys, lgsProfile);
+
+    expect(result.scoreViews?.[0]?.metrics).toMatchObject({
+      correct: 88,
+      wrong: 2,
+      blank: 0,
+      net: 87.33,
+      questionCount: 90,
+      successRate: 97.04,
+    });
+    expect(result.scoreViews?.[0]?.metrics.net).toBe(result.total.net);
+  });
+
   it("iptal soruyu fiziksel sayıda tutar, aktif metrik ve puandan çıkarır", () => {
     const keys = lgsKeys().map((item, index) => ({
       ...item,

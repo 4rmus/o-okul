@@ -315,7 +315,6 @@ function createValidEvidence() {
     generatedAt: new Date(Date.now() - 60_000).toISOString(),
     onboarding: {
       contactEmail: "kurulum@staging.o-okul.com",
-      importOwner: "Canli UAT",
       institutionName: "UAT Kurumu",
     },
     systemAdmin: {

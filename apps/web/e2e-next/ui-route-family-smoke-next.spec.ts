@@ -573,6 +573,20 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
     };
   }
   if (pathName === "/me/notification-devices") return { data: [] };
+  if (pathName === "/setup/readiness") {
+    const steps = [
+      ["institution", true],
+      ["campus", true],
+      ["academic-year", true],
+      ["academic-term", true],
+      ["grade-level", true],
+      ["class", true],
+      ["course", true],
+      ["teacher", false],
+      ["student", false],
+    ].map(([key, required]) => ({ key, count: 1, ready: true, required }));
+    return { data: { status: "READY", completedCount: steps.length, totalCount: steps.length, steps } };
+  }
   if (pathName === "/import-quarantines/summary") return { data: { openCount: 0 } };
   if (pathName === "/attendance/summary" || pathName === "/me/student/attendance/summary" || pathName === "/me/guardian/students/student-a/attendance/summary") {
     return { data: { absent: 0, excused: 0, late: 0, present: 0, studentId: "student-a", total: 0 } };

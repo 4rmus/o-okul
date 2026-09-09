@@ -1028,7 +1028,8 @@ const setupReadinessReadModelSchema = objectSchema({
     },
     count: integerSchema({ minimum: 0 }),
     ready: { type: "boolean" },
-  }, ["key", "count", "ready"])),
+    required: { type: "boolean" },
+  }, ["key", "count", "ready", "required"])),
 }, ["status", "completedCount", "totalCount", "steps"]);
 
 const classRecordSchema = objectSchema({
@@ -3850,6 +3851,9 @@ const operationContracts: Record<string, OperationContract> = {
   "get /api/v1/grade-levels/{id}/courses": {
     responseBody: arraySchema(gradeLevelCourseRecordSchema),
     listResponse: true,
+  },
+  "put /api/v1/grade-levels/{id}/courses/{courseId}": {
+    noContent: true,
   },
   "patch /api/v1/grade-levels/{id}": {
     requestBody: namedSchoolReferenceUpdateRequestSchema,

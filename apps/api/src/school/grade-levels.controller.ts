@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query, UseGuards } from "@nestjs/common";
 import type { GradeLevelCourseRecord, GradeLevelRecord } from "@o-okul/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
@@ -35,6 +35,13 @@ export class GradeLevelsController {
   @Roles("TEACHER", "STUDENT", "GUARDIAN")
   listCourses(@Param("id") id: string, @Query("alanId") alanId?: string): Promise<GradeLevelCourseRecord[]> {
     return this.school.listGradeLevelCourses(getRequestContext(), id, alanId);
+  }
+
+  @Put(":id/courses/:courseId")
+  @HttpCode(204)
+  @RequireCapability("academic:manage")
+  ensureCourse(@Param("id") id: string, @Param("courseId") courseId: string): Promise<void> {
+    return this.school.ensureGradeLevelCourse(getRequestContext(), id, courseId);
   }
 
   @Post()

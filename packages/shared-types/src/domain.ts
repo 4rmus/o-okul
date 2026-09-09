@@ -702,6 +702,7 @@ export interface SetupReadinessStep {
   key: SetupReadinessKey;
   count: number;
   ready: boolean;
+  required: boolean;
 }
 
 export interface SetupReadinessReadModel {

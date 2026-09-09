@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { GradeLevelCourseRecord as SharedGradeLevelCourseRecord } from "@o-okul/shared-types";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
@@ -5,8 +6,17 @@ import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
 export type GradeLevelCourseRecord = SharedGradeLevelCourseRecord;
 
+interface EnsureGradeLevelCourseInput {
+  tenantId: string;
+  gradeLevelId: string;
+  courseId: string;
+  courseName: string;
+  courseCode?: string;
+}
+
 export interface GradeLevelCourseStore {
   listByGradeLevel(gradeLevelId: string, alanId?: string): Promise<GradeLevelCourseRecord[]>;
+  ensure(input: EnsureGradeLevelCourseInput): Promise<string | undefined>;
 }
 
 export const gradeLevelCourseStoreToken = Symbol("GradeLevelCourseStore");
@@ -31,6 +41,25 @@ export class InMemoryGradeLevelCourseStore implements GradeLevelCourseStore {
     return this.records
       .filter((record) => record.gradeLevelId === gradeLevelId && (!record.alanId || record.alanId === alanId))
       .sort(compareGradeLevelCourses);
+  }
+
+  async ensure(input: EnsureGradeLevelCourseInput): Promise<string | undefined> {
+    const existing = this.records.find((record) =>
+      record.tenantId === input.tenantId
+      && record.gradeLevelId === input.gradeLevelId
+      && record.courseId === input.courseId
+      && !record.alanId,
+    );
+    if (existing) return undefined;
+
+    const record: GradeLevelCourseRecord = {
+      id: `grade-course-${this.records.length + 1}`,
+      ...input,
+      isDefault: true,
+      sortOrder: 0,
+    };
+    this.records.push(record);
+    return record.id;
   }
 }
 
@@ -66,6 +95,19 @@ export class PostgresGradeLevelCourseStore implements GradeLevelCourseStore {
         [gradeLevelId, alanId ?? null],
       );
       return result.rows.map(toGradeLevelCourseRecord);
+    });
+  }
+
+  async ensure(input: EnsureGradeLevelCourseInput): Promise<string | undefined> {
+    return withTenantQuery(this.pool, async (client) => {
+      const inserted = await client.query<{ id: string }>(
+        `INSERT INTO "GradeLevelCourse" ("id", "tenantId", "gradeLevelId", "courseId", "isDefault", "sortOrder", "updatedAt")
+         VALUES ($1, $2, $3, $4, true, 0, now())
+         ON CONFLICT ("tenantId", "gradeLevelId", "courseId") WHERE "alanId" IS NULL DO NOTHING
+         RETURNING "id"`,
+        [randomUUID(), input.tenantId, input.gradeLevelId, input.courseId],
+      );
+      return inserted.rows[0]?.id;
     });
   }
 }

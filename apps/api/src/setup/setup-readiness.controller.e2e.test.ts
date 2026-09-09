@@ -33,8 +33,8 @@ describe("SetupReadinessController", () => {
       completedCount: expect.any(Number),
       totalCount: 9,
       steps: expect.arrayContaining([
-        expect.objectContaining({ key: "academic-term", ready: expect.any(Boolean) }),
-        expect.objectContaining({ key: "student", ready: expect.any(Boolean) }),
+        expect.objectContaining({ key: "academic-term", ready: expect.any(Boolean), required: true }),
+        expect.objectContaining({ key: "student", ready: expect.any(Boolean), required: false }),
       ]),
     });
     expect(JSON.stringify(response.body)).not.toContain("Ada");

@@ -2430,7 +2430,7 @@ const expectations = {
     `new URLSearchParams(activationUrl.hash.slice(1)).get("token")`,
     `activationUrl.hostname.endsWith`,
     `activationUrl.searchParams.has("token")`,
-    "Kaydet ve bitir",
+    "Kaydet ve kontrol et",
     ".next-onboarding-success",
     "1 akademik yıl, 1 dönem",
   ],

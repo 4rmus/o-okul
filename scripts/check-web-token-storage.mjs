@@ -15,7 +15,6 @@ const allowedStorageSnippets = {
     'window.localStorage.setItem("web.exam-workspace-v2", "true")',
   ],
   "apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx": [
-    "window.sessionStorage.removeItem(draftStorageKey)",
     "window.sessionStorage.getItem(key)",
     "window.sessionStorage.setItem(key, JSON.stringify(draft))",
   ],

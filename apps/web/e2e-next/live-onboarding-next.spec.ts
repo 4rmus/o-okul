@@ -13,7 +13,6 @@ interface LiveOnboardingEvidence {
   };
   onboarding?: {
     contactEmail?: string;
-    importOwner?: string;
     institutionName?: string;
   };
   systemAdmin: {
@@ -116,15 +115,17 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
   await setupForm.getByLabel("İletişim e-postası").fill(contactEmail);
   await setupForm.getByRole("button", { name: "İleri", exact: true }).click();
   await setupForm.getByRole("button", { name: "İleri", exact: true }).click();
+  await expect(setupForm.getByLabel("Sınıfların kampüsü")).not.toHaveValue("");
   await setupForm.getByRole("button", { name: "İleri", exact: true }).click();
   await setupForm.getByRole("button", { name: "İleri", exact: true }).click();
   await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
-  await setupForm.getByLabel("Veri sorumlusu").fill(evidence.onboarding?.importOwner ?? "Canli UAT");
-  await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
+  await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
 
   const setupSummary = setupForm.locator(".next-onboarding-success");
   await expect(setupSummary).toContainText(/2 sınıf, [1-9]\d* ders/);
   await expect(setupSummary).toContainText("1 akademik yıl, 1 dönem");
+  await expect(page).toHaveURL(/\/kurum\/kurulum\/hazirlik$/);
+  await expect(setupForm).toContainText("Çekirdek kurulum tamamlandı.");
 });
 
 function readEvidence(path: string | undefined): LiveOnboardingEvidence {

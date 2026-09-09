@@ -303,6 +303,7 @@ export async function apiRequest<T>(accessToken: string, input: RequestInfo | UR
   if (!response.ok) {
     throw new ApiRequestError("API_REQUEST_FAILED", response.status, await readErrorCode(response));
   }
+  if (response.status === 204) return undefined as T;
 
   return readData<T>(response);
 }

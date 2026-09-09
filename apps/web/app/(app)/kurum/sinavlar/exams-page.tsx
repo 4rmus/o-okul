@@ -60,9 +60,12 @@ interface ExamPageReferences {
 }
 
 type CreateExamPayload = ExamWithClassFormPayload & {
+  examYear?: number;
+  scoringProfileId?: string;
   answerKey: {
     version: string;
     fileBase64: string;
+    scoringConfig?: { wrongPenalty: number };
   };
 };
 
@@ -414,9 +417,15 @@ export function ExamsPage() {
         ? await updateExam(auth.accessToken, editingExam.id, parsedForm.data)
         : await createExam(auth.accessToken, {
             ...parsedForm.data,
+            ...(parsedForm.data.examType === "LGS"
+              ? { examYear: 2026, scoringProfileId: "TR-LGS-2026-NOSD-V1" }
+              : parsedForm.data.examType === "TYT" || parsedForm.data.examType === "AYT"
+                ? { examYear: 2026, scoringProfileId: "TR-YKS-2026-NOSD-V1" }
+                : {}),
             answerKey: {
               version: createAnswerKeyVersion(parsedForm.data.title),
               fileBase64: answerKeyFileBase64,
+              ...(parsedForm.data.examType === "LGS" ? { scoringConfig: { wrongPenalty: 1 / 3 } } : {}),
             },
           });
       queryClient.setQueryData<ExamRecord[]>(queryKey, (current) => [

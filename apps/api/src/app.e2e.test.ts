@@ -939,7 +939,7 @@ describe("API auth + tenant isolation", () => {
     expect(JSON.stringify(response.body)).not.toContain("1111111111");
   });
 
-  it("student CSV dry-run hesap önizlemesini maskeli döner", async () => {
+  it("student CSV dry-run portal hesabı önizlemesi döndürmez", async () => {
     const issued = await login("admin-a@example.test");
     const fileBase64 = Buffer.from("\uFEFFad;soyad;seviye;tc_kimlik_no;telefon\nEce;Hesap;8. Sınıf;10000001204;0555 000 0014\n", "utf8").toString("base64");
 
@@ -957,10 +957,6 @@ describe("API auth + tenant isolation", () => {
           row: 2,
           firstName: "ECE",
           lastName: "HESAP",
-          accountPreview: {
-            usernameMasked: "*******1204",
-            willCreate: true,
-          },
         },
       ],
       errors: [],
@@ -968,6 +964,7 @@ describe("API auth + tenant isolation", () => {
     });
     expect(response.body.validRows[0]).not.toHaveProperty("nationalId");
     expect(response.body.validRows[0]).not.toHaveProperty("phone");
+    expect(response.body.validRows[0]).not.toHaveProperty("accountPreview");
     expect(JSON.stringify(response.body)).not.toContain("10000001204");
     expect(JSON.stringify(response.body)).not.toContain("5550000014");
   });

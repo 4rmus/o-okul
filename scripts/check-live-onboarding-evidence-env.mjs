@@ -283,11 +283,11 @@ function validateOnboarding(value, collectedFailures) {
     return;
   }
 
-  requireObjectKeySet(value, collectedFailures, "onboarding", [], ["contactEmail", "importOwner", "institutionName"]);
+  requireObjectKeySet(value, collectedFailures, "onboarding", [], ["contactEmail", "institutionName"]);
   if (Object.hasOwn(value, "contactEmail")) {
     requireEmail(value, collectedFailures, "onboarding.contactEmail", "contactEmail");
   }
-  for (const key of ["importOwner", "institutionName"]) {
+  for (const key of ["institutionName"]) {
     if (Object.hasOwn(value, key)) {
       requireString(value, collectedFailures, `onboarding.${key}`, key);
       requireNonPlaceholderString(value, collectedFailures, `onboarding.${key}`, key);

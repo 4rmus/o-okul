@@ -15,7 +15,7 @@ export interface SetupReadinessCheck {
 
 export interface SetupFlowStep {
   description: string;
-  id: "general" | "term" | "classes" | "courses" | "people" | "readiness";
+  id: "general" | "term" | "classes" | "courses" | "people";
   kicker: string;
   path: string;
   readinessChecks: readonly SetupReadinessCheck[];
@@ -32,7 +32,7 @@ export const setupFlowSteps: readonly SetupFlowStep[] = [
     title: "Kurum Genel Bilgileri",
     description: "Kurum adı, türü ve marka bilgisi.",
     readinessChecks: [
-      { id: "campuses", title: "Kampüs", description: "Sınıf ve öğrenci yapısını bağlayacağın kampüsü ekle.", href: "/kurum/kampusler?new=1", optional: true },
+      { id: "campuses", title: "Kampüs", description: "Sınıf ve öğrenci yapısını bağlayacağın kampüsü ekle.", href: "/kurum/kampusler?new=1" },
     ],
   },
   {
@@ -50,7 +50,7 @@ export const setupFlowSteps: readonly SetupFlowStep[] = [
     title: "Sınıf ve Şubeler",
     description: "Kademe ve sınıf sayısına göre şubeleri otomatik oluştur.",
     readinessChecks: [
-      { id: "grade-levels", title: "Seviye", description: "8. sınıf gibi seviyeleri tanımla.", href: "/kurum/seviyeler?new=1", optional: true },
+      { id: "grade-levels", title: "Seviye", description: "8. sınıf gibi seviyeleri tanımla.", href: "/kurum/seviyeler?new=1" },
       { id: "classes", title: "Sınıf", description: "Öğrencileri yerleştireceğin ilk sınıfı oluştur.", href: "/kurum/siniflar?new=1" },
     ],
   },
@@ -61,7 +61,7 @@ export const setupFlowSteps: readonly SetupFlowStep[] = [
     title: "Derslerin Oluşturulması",
     description: "LGS ve TYT/AYT derslerini tıklayarak seç.",
     readinessChecks: [
-      { id: "courses", title: "Ders", description: "Program, sınav ve öğretmen akışları için dersleri hazırla.", href: "/kurum/dersler?new=1", optional: true },
+      { id: "courses", title: "Ders", description: "Program, sınav ve öğretmen akışları için dersleri hazırla.", href: "/kurum/dersler?new=1" },
       { id: "learning-outcomes", title: "Kazanım", description: "Sınav ve optik analizlerinde kullanılacak ilk kazanımı ekle.", href: "/kurum/kazanimlar?new=1", optional: true },
     ],
   },
@@ -72,17 +72,9 @@ export const setupFlowSteps: readonly SetupFlowStep[] = [
     title: "Kişi Yönetim Altyapısı",
     description: "Öğretmen ve öğrenci veri giriş modeli.",
     readinessChecks: [
-      { id: "teachers", title: "Öğretmen", description: "İlk öğretmen kaydını aç.", href: "/kurum/ogretmenler?new=1" },
-      { id: "students", title: "Öğrenci", description: "İlk öğrenciyi ekleyerek çekirdek kurulumu tamamla.", href: "/kurum/ogrenciler?new=1" },
+      { id: "teachers", title: "Öğretmen", description: "İlk öğretmen kaydını aç.", href: "/kurum/ogretmenler?new=1", optional: true },
+      { id: "students", title: "Öğrenci", description: "İlk öğrenciyi ekle.", href: "/kurum/ogrenciler?new=1", optional: true },
     ],
-  },
-  {
-    id: "readiness",
-    path: "/kurum/kurulum/hazirlik",
-    kicker: "6. Adım",
-    title: "Hazırlık Kontrolü",
-    description: "Sunucudaki gerçek kurum kayıtlarını doğrula ve eksik adımları gör.",
-    readinessChecks: [],
   },
 ] as const;
 

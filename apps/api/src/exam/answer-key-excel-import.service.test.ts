@@ -5,7 +5,12 @@ import type { AnswerKeyRecord } from "@o-okul/shared-types";
 import type { RequestContext } from "../context/request-context.js";
 import type { LearningOutcomeRecord, LearningOutcomeStore } from "../school/learning-outcome-store.js";
 import { AnswerKeyExcelImportService } from "./answer-key-excel-import.service.js";
-import { AnswerKeyService, type AnswerKeyRepository, type SaveAnswerKeyInput } from "./answer-key.service.js";
+import {
+  AnswerKeyService,
+  type AnswerKeyExamScoringContext,
+  type AnswerKeyRepository,
+  type SaveAnswerKeyInput,
+} from "./answer-key.service.js";
 
 const isemAnswerKeyPath = "../../ornek-veriler/iSEM - LGS - 1 Detaylı Cevap Anahtarı.xlsx";
 // ponytail: ornek-veriler is local-only; keep real fixture tests active only when present.
@@ -137,6 +142,31 @@ describe("AnswerKeyExcelImportService", () => {
     expect(learningOutcomes.records).toEqual([]);
   });
 
+  it("T.C. İNKILAP bölümünü resmî LGS puanlama dilimine eşler", async () => {
+    const repository = new FakeAnswerKeyRepository({
+      examType: "LGS",
+      examYear: 2026,
+      scoringProfileId: "TR-LGS-2026-NOSD-V1",
+    });
+    const service = new AnswerKeyExcelImportService(new AnswerKeyService(repository));
+
+    const result = await service.dryRun(createContext(), {
+      examId: "exam-lgs",
+      version: "lgs-v1",
+      fileBase64: await createPlaceholderWorkbook([
+        { branch: "Türkçe", count: 20 },
+        { branch: "T.C. İNKILAP", count: 10 },
+        { branch: "Din Kültürü", count: 10 },
+        { branch: "İngilizce", count: 10 },
+        { branch: "Matematik", count: 20 },
+        { branch: "Fen Bilimleri", count: 20 },
+      ]),
+      scoringConfig: { wrongPenalty: 1 / 3 },
+    });
+
+    expect(result).toMatchObject({ questionCount: 90, wouldImport: true });
+  });
+
   it.each([
     {
       examType: "TYT",
@@ -218,6 +248,8 @@ function createContext(): RequestContext {
 class FakeAnswerKeyRepository implements AnswerKeyRepository {
   records: SaveAnswerKeyInput[] = [];
 
+  constructor(private readonly scoringContext?: AnswerKeyExamScoringContext) {}
+
   async create(input: SaveAnswerKeyInput): Promise<AnswerKeyRecord> {
     this.records.push(input);
     return {
@@ -236,6 +268,10 @@ class FakeAnswerKeyRepository implements AnswerKeyRepository {
 
   async list(): Promise<AnswerKeyRecord[]> {
     return [];
+  }
+
+  async findExamScoringContext(): Promise<AnswerKeyExamScoringContext | undefined> {
+    return this.scoringContext;
   }
 
   async publish(): Promise<AnswerKeyRecord | undefined> {

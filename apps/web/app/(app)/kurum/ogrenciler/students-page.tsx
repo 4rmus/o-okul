@@ -24,7 +24,7 @@ import type {
   TeacherNoteRecord,
   TeacherRecord,
 } from "@o-okul/shared-types";
-import { Download, Eye, Pencil, Plus, Trash2, Upload } from "lucide-react";
+import { Eye, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError, apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch, withQueryParams } from "../../../../src/api-client.js";
 import { featureRolloutQueryKey, isFeatureEnabled, loadFeatureRollouts } from "../../../../src/feature-rollouts.js";
@@ -896,7 +896,6 @@ export function StudentsPage() {
             <InfoGrid>
               <InfoItem label="Satır" value={formatCount(importDryRun.totalRows)} />
               <InfoItem label="Geçerli" value={formatCount(importDryRun.validRows.length)} />
-              <InfoItem label="Hesap" value={formatCount(importDryRun.validRows.filter((row) => row.accountPreview).length)} />
               {studentRegistryV2 ? <InfoItem label="İletişim kişisi" value={formatCount(importDryRun.validRows.filter((row) => row.contact).length)} /> : null}
               <InfoItem label="Hata" value={formatCount(importDryRun.errors.length)} />
               <InfoItem label="Kota" value={`${importDryRun.quota.current}+${importDryRun.quota.incoming}/${importDryRun.quota.limit}`} />
@@ -904,14 +903,7 @@ export function StudentsPage() {
             <p className="next-field-hint">Seviye dağılımı: {formatGradeLevelDistribution(importDryRun)}</p>
           </>
         ) : null}
-        {importDryRun && studentImportAccountPreviewCount(importDryRun) > 0 ? (
-          <div className="next-form-actions">
-            <Button type="button" variant="secondary" onClick={() => downloadStudentImportAccountPreview(importDryRun)}>
-              <Download size={16} aria-hidden="true" />
-              Hesap CSV indir
-            </Button>
-          </div>
-        ) : null}
+        <p className="next-field-hint">Toplu aktarım portal hesabı oluşturmaz; erişimi Öğrenci Portal Erişimi ekranından ayrıca açabilirsiniz.</p>
         {guardianReadOnly ? (
           <p className="next-field-hint">Yeni veli hesabı ve veli bağlantısı kapalıdır; aktarım dosyası veli alanı içermemelidir.</p>
         ) : null}
@@ -1650,10 +1642,6 @@ function inferStudentImportExtension(file: File): "CSV" | "XLSX" | undefined {
   return undefined;
 }
 
-function studentImportAccountPreviewCount(dryRun: StudentImportDryRunResult) {
-  return dryRun.validRows.filter((row) => row.accountPreview).length;
-}
-
 function formatGradeLevelDistribution(dryRun: StudentImportDryRunResult) {
   const counts = new Map<string, number>();
   for (const row of dryRun.validRows) {
@@ -1665,41 +1653,6 @@ function formatGradeLevelDistribution(dryRun: StudentImportDryRunResult) {
     .sort(([left], [right]) => left.localeCompare(right, "tr-TR"))
     .map(([label, count]) => `${label}: ${formatCount(count)}`)
     .join(" · ");
-}
-
-function downloadStudentImportAccountPreview(dryRun: StudentImportDryRunResult) {
-  const rows = dryRun.validRows
-    .filter((row) => row.accountPreview)
-    .map((row) => [
-      String(row.row),
-      row.firstName,
-      row.lastName,
-      row.accountPreview?.usernameMasked ?? "",
-      row.accountPreview ? "telefon numarasıyla ilk giriş" : "",
-      row.accountPreview?.willCreate ? "evet" : "hayir",
-    ]);
-  if (rows.length === 0) return;
-
-  downloadCsvFile(`ogrenci-hesap-onizleme-${new Date().toISOString().slice(0, 10)}.csv`, [
-    ["satir", "ad", "soyad", "kullanici_adi", "ilk_sifre_notu", "hesap_olusturulacak"],
-    ...rows,
-  ]);
-}
-
-function downloadCsvFile(fileName: string, rows: string[][]) {
-  const content = rows.map((row) => row.map(escapeCsvCell).join(";")).join("\n");
-  const blob = new Blob([`\uFEFF${content}`], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
-
-function escapeCsvCell(value: string): string {
-  if (!/[;"\n\r]/.test(value)) return value;
-  return `"${value.replace(/"/g, "\"\"")}"`;
 }
 
 function formatStudentImportError(error: StudentImportDryRunResult["errors"][number]) {

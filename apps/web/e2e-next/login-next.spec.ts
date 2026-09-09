@@ -5275,6 +5275,32 @@ test("Next sıfır-veri kurulum adımlarını ve yeni kayıt derin linkini göst
       return;
     }
 
+    if (path === "/setup/readiness" && request.method() === "GET") {
+      const readiness = [
+        ["institution", 1, true],
+        ["campus", campuses.length, true],
+        ["academic-year", 0, true],
+        ["academic-term", 0, true],
+        ["grade-level", 0, true],
+        ["class", 0, true],
+        ["course", 0, true],
+        ["teacher", 0, false],
+        ["student", 0, false],
+      ].map(([key, count, required]) => ({ key, count, ready: Number(count) > 0, required }));
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope({
+          status: "ACTION_REQUIRED",
+          completedCount: readiness.filter((step) => step.ready).length,
+          totalCount: readiness.length,
+          steps: readiness,
+        })),
+      });
+      return;
+    }
+
     if (path === "/campuses" && request.method() === "GET") {
       await route.fulfill({
         contentType: "application/json",
@@ -5369,11 +5395,13 @@ test("Next sıfır-veri kurulum adımlarını ve yeni kayıt derin linkini göst
   await expect(setupStart).toBeHidden();
   await expect.poll(() => page.evaluate(() => document.cookie)).toContain("uh_setup_tenant-a_dismissed=true");
   await page.reload();
+  await expect(page).toHaveURL(/\/kurum$/);
   await expect(setupStart).toBeHidden();
   await page.evaluate(() => {
     document.cookie = "uh_setup_tenant-a_dismissed=; path=/; max-age=0; samesite=lax";
   });
   await page.reload();
+  await expect(page).toHaveURL(/\/kurum$/);
   await expect(setupStart.getByText("Kurumunuzu kurmaya başlayın")).toBeVisible();
   await setupStart.getByRole("link", { name: "Kuruluma git" }).click();
   await expect(page).toHaveURL(/\/kurum\/kurulum$/);
@@ -6516,7 +6544,9 @@ async function loginAs(page: Page, email: string, password = "password") {
     "guardian-a@example.test": /\/veli$/,
   };
   await expect(page).toHaveURL(homeUrlByEmail[email] ?? /\/kurum$/, { timeout: 15_000 });
-  await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
+  await page.context().addCookies(
+    [...new Set([appOrigin, new URL(page.url()).origin])].map((url) => ({ name: "csrfToken", url, value: "csrf-token" })),
+  );
 }
 
 function loginEmailFromRequest(body: { email?: string; loginName?: string }) {
@@ -6524,6 +6554,7 @@ function loginEmailFromRequest(body: { email?: string; loginName?: string }) {
 }
 
 type TestAuthSession = {
+  activePersona?: "STAFF" | "TEACHER" | "STUDENT";
   id: string;
   userId: string;
   tenantId: string;
@@ -6544,20 +6575,21 @@ type TestAuthResponse = {
 function createAuthResponse(email = "admin-a@example.test"): TestAuthResponse {
   const profileByEmail: Record<
     string,
-    { userId: string; roles: string[]; tenantId?: string; subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER"; subjectId?: string }
+    { activePersona?: "STAFF" | "TEACHER" | "STUDENT"; userId: string; roles: string[]; tenantId?: string; subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER"; subjectId?: string }
   > = {
     "system@example.test": { userId: "user-system", roles: ["SYSTEM_ADMIN"] },
-    "first.admin@example.test": { userId: "user-created-admin", roles: ["TENANT_ADMIN"], tenantId: "tenant-created" },
-    "assistant@example.test": { userId: "user-assistant", roles: ["ASSISTANT_ADMIN"] },
+    "first.admin@example.test": { activePersona: "STAFF", userId: "user-created-admin", roles: ["TENANT_ADMIN"], tenantId: "tenant-created" },
+    "assistant@example.test": { activePersona: "STAFF", userId: "user-assistant", roles: ["ASSISTANT_ADMIN"] },
     "student-a@example.test": { userId: "student-tenant-a", roles: ["STUDENT"], subjectType: "STUDENT", subjectId: "student-a" },
     "teacher-a@example.test": { userId: "teacher-tenant-a", roles: ["TEACHER"], subjectType: "TEACHER", subjectId: "teacher-a" },
     "guardian-a@example.test": { userId: "guardian-tenant-a", roles: ["GUARDIAN"], subjectType: "GUARDIAN", subjectId: "guardian-a" },
   };
-  const profile = profileByEmail[email] ?? { userId: "user-tenant-a", roles: ["TENANT_ADMIN"] };
+  const profile = profileByEmail[email] ?? { activePersona: "STAFF" as const, userId: "user-tenant-a", roles: ["TENANT_ADMIN"] };
   return {
     accessToken: "next-access-token",
     session: {
       id: "session-a",
+      activePersona: profile.activePersona,
       userId: profile.userId,
       tenantId: profile.tenantId ?? "tenant-a",
       roles: profile.roles,

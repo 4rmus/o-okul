@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService, InMemoryIdempotencyStore } from "../http/idempotency.js";
 import { InMemoryGuardianStudentStore } from "../school/guardian-student-store.js";
@@ -12,6 +12,31 @@ import { StudentService } from "./student.service.js";
 import { hashTcIdentity, normalizeTcIdentity } from "./tc-identity.js";
 
 describe("StudentService", () => {
+  it("toplu kayıtta portal hesaplarını kapatırken öğrenci ve veli bağlantısını oluşturur", async () => {
+    const setup = createService();
+
+    const students = await setup.service.createMany(adminContext, [{
+      firstName: "Ada",
+      lastName: "Kaya",
+      gradeLevelId: "grade-8",
+      nationalId: "10000000146",
+      phone: "5551234567",
+      guardian: {
+        firstName: "Fatma",
+        lastName: "Kaya",
+        nationalId: "10000001372",
+        phone: "5557654321",
+      },
+    }], { provisionAccounts: false });
+
+    expect(students).toHaveLength(1);
+    expect(setup.provisionOrInvite).not.toHaveBeenCalled();
+    await expect(setup.guardianStore.list()).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ firstName: "Fatma", lastName: "Kaya", phone: "5557654321" }),
+    ]));
+    await expect(setup.guardianStudentStore.listByStudent(students[0]!.id)).resolves.toHaveLength(1);
+  });
+
   it("öğrenci TC kimlik ve telefon alanlarını birbirinden bağımsız saklar", async () => {
     const setup = createService();
 
@@ -612,14 +637,15 @@ function createService(options: {
       return { invitation: { id: "identity-invitation-test" }, activationToken: "activation-token-test" };
     },
   };
-  const identityProvisioning = {
-    provisionOrInvite: async (_context: RequestContext, input: { email?: string; nationalId?: string; phone?: string }) => {
+  const provisionOrInvite = vi.fn(async (_context: RequestContext, input: { email?: string; nationalId?: string; phone?: string }) => {
       if (input.email) {
         invitations.push(input);
         return { status: "INVITED", invitationId: "identity-invitation-test" };
       }
       return { status: "SKIPPED" };
-    },
+    });
+  const identityProvisioning = {
+    provisionOrInvite,
     deactivateProfile: async (input: { subjectId: string; deletedAt: string }) => {
       lifecycleCalls.push(input);
       const existing = await studentStore.findById(input.subjectId);
@@ -686,6 +712,7 @@ function createService(options: {
     ),
     guardianStore,
     guardianStudentStore,
+    provisionOrInvite,
     invitations,
     auditRecords,
     provisionedSubjects,

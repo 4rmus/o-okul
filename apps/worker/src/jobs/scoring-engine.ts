@@ -399,13 +399,13 @@ function practiceScore(ratio: number): number {
   return roundPracticeScore(100 + 400 * clamp(ratio, 0, 1));
 }
 
-function combineMetrics(scores: ReadonlyArray<ExamScoreMetrics>): ExamScoreMetrics {
+function combineMetrics(scores: ReadonlyArray<SectionScore>): ExamScoreMetrics {
   const combined = scores.reduce(
     (sum, score) => ({
       correct: sum.correct + score.correct,
       wrong: sum.wrong + score.wrong,
       blank: sum.blank + score.blank,
-      net: sum.net + score.net,
+      net: sum.net + exactSectionNet(score),
       questionCount: sum.questionCount + score.questionCount,
     }),
     { correct: 0, wrong: 0, blank: 0, net: 0, questionCount: 0 },

@@ -99,7 +99,7 @@ export class StudentImportService {
       throw new ConflictException("ACTIVE_STUDENT_LIMIT_REACHED");
     }
 
-    const students = await this.students.createMany(context, filterValidRows(rows, errors));
+    const students = await this.students.createMany(context, filterValidRows(rows, errors), { provisionAccounts: false });
     await this.auditLogs?.record({
       tenantId: context.tenantId ?? undefined,
       actorUserId: context.userId,
@@ -576,7 +576,7 @@ function filterValidRows<T extends { row: number }>(rows: T[], errors: StudentIm
 }
 
 function toPreviewRow(row: ParsedStudentImportRow): StudentImportPreviewRow {
-  const { nationalId: _nationalId, phone: _phone, contact, ...previewRow } = row;
+  const { nationalId: _nationalId, phone: _phone, accountPreview: _accountPreview, contact, ...previewRow } = row;
   if (previewRow.guardian?.nationalId) {
     previewRow.guardian = {
       ...previewRow.guardian,
