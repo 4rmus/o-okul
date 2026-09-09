@@ -54,6 +54,8 @@ ayrı saklama politikasını değiştirmez ve disk üzerinden güvenli silme idd
 Normal API imajı içindeki ortak kod, ayrı `device-restore-worker` sürecinde kullanılır;
 HTTP sunucusu başlatılmaz. `docker-compose.device-restore.yml` yalnız açıkça seçilen
 `device-restore` profilini ekler. Normal worker/önizleme bu işlemciyi kendiliğinden açmaz.
+Ana Compose ile `--profile device-restore --profile av` birlikte seçilir. İşlemci
+PostgreSQL, Redis, MinIO ve ClamAV ile aynı `backend_net` ağına bağlanır; port açmaz.
 
 API için `TENANT_DEVICE_RESTORE_ENABLED=1`, exact `TENANT_DEVICE_RESTORE_TENANT_ID`
 ve ayrı 32-byte base64 `TENANT_DEVICE_RESTORE_CUSTODY_KEY` gerekir. Özel işlemciye

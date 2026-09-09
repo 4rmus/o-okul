@@ -7,6 +7,7 @@ services:
     restart: unless-stopped
     mem_limit: 768m
     cpus: 1
+    networks: [backend_net]
     command: [node, apps/api/dist/operations/device-restore-worker-main.js]
     environment:
       NODE_ENV: production
