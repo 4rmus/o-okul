@@ -23,6 +23,8 @@ interface OperationContract {
 }
 
 const jsonContentType = "application/json";
+const deviceRestoreOperationSchema=objectSchema({operationId:stringSchema({pattern:"^[a-f0-9]{32}$"}),tenantId:stringSchema(),archiveDigest:stringSchema({pattern:"^[a-f0-9]{64}$"}),expectedLifecycleVersion:integerSchema({minimum:0}),state:stringSchema({enum:["AWAITING_APPROVAL","QUEUED","RUNNING","COMPLETED","ABORTED","BLOCKED"]}),tableCounts:{type:"object",additionalProperties:{type:"integer",minimum:0}},fileCount:integerSchema({minimum:0}),errorCode:{type:"string",nullable:true},createdAt:stringSchema({format:"date-time"})},["operationId","tenantId","archiveDigest","expectedLifecycleVersion","state","tableCounts","fileCount","errorCode","createdAt"]);
+const deviceRestoreCurrentSchema=objectSchema({available:{type:"boolean"},operation:{...deviceRestoreOperationSchema,nullable:true}},["available","operation"]);
 
 const csrfHeaderContract = {
   name: "X-CSRF-Token",
@@ -504,17 +506,19 @@ const mfaStepUpRequestSchema = objectSchema({
   target: objectSchema({
     tenantId: stringSchema({ minLength: 1, maxLength: 128 }),
     status: { type: "string", enum: ["ACTIVE", "SUSPENDED"] },
+    operationId:stringSchema({pattern:"^[a-f0-9]{32}$"}),archiveDigest:stringSchema({pattern:"^[a-f0-9]{64}$"}),
     preset: stringSchema({ enum: ["CLEAN_SETUP_V1"] }), preflightDigest: stringSchema({ pattern: "^[a-f0-9]{64}$" }),
     expectedLifecycleVersion: integerSchema({ minimum: 0, maximum: 2147483646 }),
   }, ["tenantId", "expectedLifecycleVersion"]),
-  purpose: { type: "string", enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET"] },
+  purpose: { type: "string", enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET", "TENANT_DEVICE_RESTORE"] },
   totpCode: stringSchema(),
   recoveryCode: stringSchema(),
 }, ["purpose"], {
   oneOf: [
     { properties: { purpose: { enum: ["OWNER_ADMIN_CHANGE"] } }, not: { required: ["target"] } },
     { properties: { purpose: { enum: ["TENANT_LIFECYCLE_CHANGE"] }, target: { required: ["status"], not: { anyOf: [{ required: ["preset"] }, { required: ["preflightDigest"] }] } } }, required: ["target"] },
-    { properties: { purpose: { enum: ["TENANT_CLEAN_RESET"] }, target: { required: ["preset", "preflightDigest"], not: { required: ["status"] } } }, required: ["target"] },
+    { properties: { purpose: { enum: ["TENANT_CLEAN_RESET"] }, target: { required: ["preset", "preflightDigest"], not: { anyOf:[{required:["status"]},{required:["operationId"]},{required:["archiveDigest"]}] } } }, required: ["target"] },
+    { properties: {purpose:{enum:["TENANT_DEVICE_RESTORE"]},target:{required:["operationId","archiveDigest"],not:{anyOf:[{required:["status"]},{required:["preset"]},{required:["preflightDigest"]}]}}},required:["target"]},
   ],
   anyOf: [
     { required: ["totpCode"] },
@@ -523,7 +527,7 @@ const mfaStepUpRequestSchema = objectSchema({
 });
 
 const mfaStepUpResponseSchema = objectSchema({
-  purpose: { type: "string", enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET"] },
+  purpose: { type: "string", enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET", "TENANT_DEVICE_RESTORE"] },
   stepUpToken: stringSchema(),
   expiresAt: stringSchema({ format: "date-time" }),
 }, ["purpose", "stepUpToken", "expiresAt"]);
@@ -4408,8 +4412,13 @@ const operationContracts: Record<string, OperationContract> = {
     requestBody: backupRestoreJobCreateRequestSchema,
     responseBody: backupRestoreJobRecordSchema,
   },
+  "get /api/v1/device-restores/current": {responseBody:deviceRestoreCurrentSchema},
+  "get /api/v1/device-restores/tenants/{tenantId}": {responseBody:deviceRestoreCurrentSchema},
+  "post /api/v1/device-restores/requests": {idempotent:true,idempotencyRequired:true,requestBody:objectSchema({password:stringSchema({minLength:12,maxLength:128,format:"password",writeOnly:true}),file:stringSchema({format:"binary"}),planToken:stringSchema({minLength:1,maxLength:1024,writeOnly:true})},["password","file","planToken"]),requestContentType:"multipart/form-data",responseBody:deviceRestoreOperationSchema},
+  "post /api/v1/device-restores/{operationId}/cancel": {responseBody:deviceRestoreOperationSchema},
+  "post /api/v1/device-restores/tenants/{tenantId}/{operationId}/approve": {requiredHeaders:[{name:"X-Step-Up-Token",schema:stringSchema()}],responseBody:deviceRestoreOperationSchema},
   "get /api/v1/device-backups/status": {
-    responseBody: objectSchema({ available: { type: "boolean" }, maxFileBytes: integerSchema({ minimum: 1 }) }, ["available", "maxFileBytes"]),
+    responseBody: objectSchema({ available: { type: "boolean" }, restoreAvailable:{type:"boolean"}, maxFileBytes: integerSchema({ minimum: 1 }) }, ["available", "maxFileBytes"]),
   },
   "post /api/v1/device-backups/download": {
     requestBody: objectSchema({ password: stringSchema({ minLength: 12, maxLength: 128, format: "password", writeOnly: true }) }, ["password"]),

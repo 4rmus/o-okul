@@ -190,7 +190,9 @@ jobs:
           PGPASSWORD: postgres
           POSTGRES_USER: postgres
           POSTGRES_DB: o_okul
-        run: sh docker/postgres/init/005_bootstrap_tenant_reset_worker_role.sh
+        run: |
+          sh docker/postgres/init/005_bootstrap_tenant_reset_worker_role.sh
+          sh docker/postgres/init/006_bootstrap_device_restore_worker_role.sh
       - name: Apply database migrations
         run: pnpm --filter @o-okul/db exec prisma migrate deploy --config prisma.config.ts
       - name: Verify student grade-level migration and concurrency
@@ -207,4 +209,5 @@ jobs:
           pnpm --filter @o-okul/api exec vitest run --no-file-parallelism --reporter=verbose
           src/identity-invitation/employee-account-activation-store.postgres.test.ts
           src/student/student-license-concurrency.postgres.test.ts
+          src/tenant/tenant-reset-preview.postgres.test.ts
           src/operations/device-backup.postgres.test.ts

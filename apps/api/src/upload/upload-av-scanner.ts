@@ -1,7 +1,7 @@
 import { BadRequestException, ServiceUnavailableException } from "@nestjs/common";
 import { createConnection } from "node:net";
 
-export type UploadAvSurface = "homework_material_file" | "support_ticket_attachment";
+export type UploadAvSurface = "homework_material_file" | "support_ticket_attachment" | "device_restore";
 
 export interface UploadAvScanInput {
   surface: UploadAvSurface;

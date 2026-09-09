@@ -197,6 +197,54 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     await expect(page.getByText("2 açık oturum kapatıldı.")).toBeVisible();
   });
 
+  test("lifecycle arka plan yenilemesinde buton sabit kalır ve onay sessizce kaybolmaz", async ({ page }) => {
+    const captured = createCapturedSystemRequests();
+    await openWithSystemTenantMocks(page, captured, "/sistem/kurumlar/tenant-faz9");
+    await page.getByRole("tab", { name: "Kurum yönetimi" }).click();
+    const button = page.getByRole("button", { name: "Askıya al", exact: true });
+    await expect(button).toBeVisible();
+    let release!: () => void, blocked = 0, hold = true;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    await page.route("**/api/v1/tenants/tenant-faz9", async route => {
+      if (route.request().method() === "GET" && hold) { blocked++; await gate; }
+      await route.fallback();
+    });
+    try {
+      await page.getByRole("button", { name: "Durumu kontrol et", exact: true }).click();
+      await expect.poll(() => blocked).toBe(1);
+      await expect(button).toBeVisible();
+      await button.click();
+      const dialog = page.getByRole("dialog", { name: "Kurum erişimini askıya al" });
+      await dialog.getByLabel("Kurum kodu onayı").fill("faz9-akademi");
+      await dialog.getByLabel("Doğrulama kodu").fill("123456");
+      await expect(dialog.getByRole("button", { name: "Askıya al", exact: true })).toBeEnabled();
+      await dialog.getByRole("button", { name: "Askıya al", exact: true }).click();
+      await expect.poll(() => blocked).toBe(2);
+      expect(captured.stepUps).toEqual([]);
+      expect(captured.tenantStatusUpdates).toEqual([]);
+      hold = false; release();
+      await expect(dialog).toBeHidden();
+      expect(captured.tenantStatusUpdates).toHaveLength(1);
+      await expect(page.getByText("2 açık oturum kapatıldı.")).toBeVisible();
+    } finally { hold = false; release(); }
+  });
+
+  test("lifecycle onayından önce değişmiş işlem yetkisini MFA göndermeden reddeder", async ({ page }) => {
+    const captured = createCapturedSystemRequests();
+    await openWithSystemTenantMocks(page, captured, "/sistem/kurumlar/tenant-faz9");
+    await page.getByRole("tab", { name: "Kurum yönetimi" }).click();
+    await page.getByRole("button", { name: "Askıya al", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Kurum erişimini askıya al" });
+    await dialog.getByLabel("Kurum kodu onayı").fill("faz9-akademi");
+    await dialog.getByLabel("Doğrulama kodu").fill("123456");
+    await page.route("**/api/v1/tenants/tenant-faz9", route => fulfillData(route, { ...createSystemTenants()[0], management: { verified: true, allowedActions: { suspend: false, reactivate: false, cleanReset: false }, currentReset: null } }));
+    await dialog.getByRole("button", { name: "Askıya al", exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByText("Kurum bilgisi değişmiş.", { exact: false })).toBeVisible();
+    expect(captured.stepUps).toEqual([]);
+    expect(captured.tenantStatusUpdates).toEqual([]);
+  });
+
   for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
     test(`lifecycle exact onay ve belirsiz retry klavye akışı ${viewport.width}`, async ({ page }) => {
       await page.setViewportSize(viewport);
@@ -210,6 +258,7 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
       await dialog.getByLabel("Kurum kodu onayı").fill("FAZ9-AKADEMI");
       await dialog.getByLabel("Doğrulama kodu").fill("123456");
       await expect(dialog.getByRole("button", { name: "Askıya al", exact: true })).toBeDisabled();
+      await expect(dialog.getByText("Kurum kodu eşleşmiyor. Beklenen: faz9-akademi")).toBeVisible();
       await dialog.getByLabel("Kurum kodu onayı").fill("faz9-akademi");
       await dialog.getByLabel("İşlem gerekçesi").selectOption("INSTITUTION_REQUEST");
       await dialog.getByRole("button", { name: "Askıya al", exact: true }).focus(); await page.keyboard.press("Enter");

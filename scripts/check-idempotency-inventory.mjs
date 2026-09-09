@@ -9,6 +9,7 @@ const files = {
 };
 
 const inventory = [
+  {...entry("tenant.device-restore.request","POST","/api/v1/device-restores/requests","covered","apps/api/src/operations/device-restore.controller.ts","apps/api/src/operations/device-restore.service.ts","apps/api/src/operations/device-restore.postgres.test.ts",['@Post("requests")','@Headers("idempotency-key")'],["device-restore-idempotency-a"]),requestContentType:"multipart/form-data"},
   entry("tenant.clean-reset.enqueue", "POST", "/api/v1/tenants/{id}/clean-reset-jobs", "covered", "apps/api/src/tenant/tenant.controller.ts", "apps/api/src/tenant/tenant-fresh-reset.service.ts", "apps/api/src/tenant/tenant.controller.e2e.test.ts", ['@Post(":id/clean-reset-jobs")', '@Headers("idempotency-key")'], ["reset-idempotency-a"]),
   entry("tenant.lifecycle.change", "PATCH", "/api/v1/tenants/{id}/status", "covered", "apps/api/src/tenant/tenant.controller.ts", "apps/api/src/tenant/tenant.service.ts", "apps/api/src/tenant/tenant.controller.e2e.test.ts", ['@Patch(":id/status")', '@Headers("idempotency-key")'], ["lifecycle-idempotency-a"]),
   entry("announcement.create", "POST", "/api/v1/announcements", "covered", "apps/api/src/announcement/announcement.controller.ts", "apps/api/src/announcement/announcement.service.ts", "apps/api/src/announcement/announcement.e2e.test.ts", ["@Post()", "@Headers(\"idempotency-key\")"], ["announcement-create-idempotency-a"]),
@@ -63,6 +64,7 @@ const failures = [];
 const operationsInCode = extractOperations("apps/api/src");
 if (readFileSync("apps/api/src/tenant/tenant.service.ts", "utf8").includes('hashIdempotencyRequest("tenant.lifecycle.change"')) operationsInCode.add("tenant.lifecycle.change");
 if (readFileSync("apps/api/src/tenant/tenant-fresh-reset.service.ts", "utf8").includes('hashIdempotencyRequest("tenant.clean-reset.enqueue"')) operationsInCode.add("tenant.clean-reset.enqueue");
+if (readFileSync("apps/api/src/operations/device-restore.service.ts", "utf8").includes('hashIdempotencyRequest("tenant.device-restore.request"')) operationsInCode.add("tenant.device-restore.request");
 const inventoryOperations = new Set(inventory.map((item) => item.operation));
 const operationsWithoutRequestBody = new Set([
   "answer-key.publish",
@@ -81,7 +83,7 @@ for (const item of inventory) {
     failures.push(`Idempotency operation kodda bulunamadi: ${item.operation}`);
   }
   checkFileTokens(item.controllerFile, item.controllerTokens, `${item.operation} controller`, failures);
-  checkFileTokens(item.serviceFile, [["tenant.lifecycle.change", "tenant.clean-reset.enqueue"].includes(item.operation) ? `hashIdempotencyRequest("${item.operation}"` : `operation: "${item.operation}"`], `${item.operation} service`, failures);
+  checkFileTokens(item.serviceFile, [["tenant.lifecycle.change", "tenant.clean-reset.enqueue", "tenant.device-restore.request"].includes(item.operation) ? `hashIdempotencyRequest("${item.operation}"` : `operation: "${item.operation}"`], `${item.operation} service`, failures);
   checkFileTokens(item.testFile, ["Idempotency-Key", ...item.testTokens], `${item.operation} e2e`, failures);
 
   if (item.openApi !== "covered") {
@@ -165,7 +167,7 @@ function hasArtifactOpenApiHeader(item) {
 }
 
 function hasOpenApiRequestBody(item) {
-  return Boolean(openApiOperation(item)?.requestBody?.content?.["application/json"]?.schema);
+  return Boolean(openApiOperation(item)?.requestBody?.content?.[item.requestContentType ?? "application/json"]?.schema);
 }
 
 function hasOpenApiResponseEnvelope(item) {

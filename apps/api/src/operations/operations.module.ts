@@ -1,3 +1,5 @@
+import { DeviceRestoreController } from "./device-restore.controller.js";
+import { DeviceRestoreService } from "./device-restore.service.js";
 import { Module } from "@nestjs/common";
 import { DeviceBackupController, DeviceBackupGuard } from "./device-backup.controller.js";
 import { DeviceBackupService } from "./device-backup.service.js";
@@ -14,9 +16,10 @@ import { createTenantDataExportStore, tenantDataExportStoreToken } from "./tenan
 
 @Module({
   imports: [AuditLogModule],
-  controllers: [BackupRestoreController, DeviceBackupController],
+  controllers: [BackupRestoreController, DeviceBackupController, DeviceRestoreController],
   providers: [
     DeviceBackupService,
+    DeviceRestoreService,
     DeviceBackupGuard,
     BackupRestoreService,
     TenantDataExportService,

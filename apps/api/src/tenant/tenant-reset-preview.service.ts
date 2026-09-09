@@ -1,7 +1,7 @@
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { Queue } from "bullmq";
 import pg from "pg";
-import { parseInstitutionResetRequest, resetDigest, resetSnapshotBlockers, resetTableCounts, resetOwnerIds, resetOwnerMemberships, tenantResetQueues, withResetSnapshot } from "@o-okul/db";
+import { parseInstitutionResetRequest, resetDigest, resetSnapshotBlockers, resetTableCounts, resetOwnerIds, resetOwnerMemberships, tenantResetQueues, withResetPreviewSnapshot } from "@o-okul/db";
 import type { TenantResetPreview } from "@o-okul/shared-types";
 import { parseRedisUrl } from "../config/env.js";
 import { resolvePersistenceDriver } from "../config/persistence.js";
@@ -20,7 +20,7 @@ export class TenantResetPreviewService {
     }
     const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
     try {
-      return await withResetSnapshot(pool, tenantId, async (snapshot, db) => {
+      return await withResetPreviewSnapshot(pool, tenantId, async (snapshot, db) => {
         const blockers = resetSnapshotBlockers(snapshot);
         let objects: Awaited<ReturnType<typeof resetObjectInventory>> = [];
         try {

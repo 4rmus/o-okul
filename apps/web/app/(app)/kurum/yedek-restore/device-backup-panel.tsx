@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button, Field, Input, Panel } from "@o-okul/ui";
-import type { TenantDeviceBackupPreview } from "@o-okul/shared-types";
+import type { TenantDeviceBackupPreview, TenantDeviceRestoreOperation } from "@o-okul/shared-types";
 import { apiBaseUrl, apiRequest, authenticatedFetchOnce } from "../../../../src/api-client.js";
 import { useAuth } from "../../../providers.js";
 
@@ -40,9 +40,11 @@ export function DeviceBackupPanel() {
   const [notice, setNotice] = useState("");
   const [preview, setPreview] = useState<TenantDeviceBackupPreview | null>(null);
   const request = useRef<AbortController | null>(null);
+  const restoreKey=useRef<string|null>(null);
   useEffect(() => () => request.current?.abort(), []);
   const allowed = Boolean(auth?.session.roles.some(role => ["TENANT_OWNER", "TENANT_ADMIN"].includes(role)));
-  const status = useQuery({ queryKey: ["device-backup-status", auth?.session.tenantId, auth?.session.id], enabled: allowed, queryFn: () => apiRequest<{ available: boolean; maxFileBytes: number }>(auth!.accessToken, `${apiBaseUrl}/device-backups/status`), retry: false });
+  const status = useQuery({ queryKey: ["device-backup-status", auth?.session.tenantId, auth?.session.id], enabled: allowed, queryFn: () => apiRequest<{ available: boolean; maxFileBytes: number; restoreAvailable?:boolean }>(auth!.accessToken, `${apiBaseUrl}/device-backups/status`), retry: false });
+  const restore=useQuery({queryKey:["device-restore",auth?.session.tenantId,auth?.session.id],enabled:allowed&&status.data?.restoreAvailable===true,queryFn:()=>apiRequest<{available:boolean;operation:TenantDeviceRestoreOperation|null}>(auth!.accessToken,`${apiBaseUrl}/device-restores/current`),retry:false});
   if (!auth || !allowed) return null;
   const enabled = status.data?.available === true;
   async function submit(event: FormEvent, mode: "download" | "preview") {
@@ -76,6 +78,23 @@ export function DeviceBackupPanel() {
     } catch (cause) { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Yedek işlemi tamamlanamadı."); }
     finally { if (!controller.signal.aborted) { setPending(false); setPassword(""); setConfirmation(""); setUploadPassword(""); } }
   }
+  async function requestRestore(event:FormEvent){
+    event.preventDefault();if(!auth||!file||!preview?.plan||pending)return;
+    const controller=new AbortController();request.current=controller;setPending(true);setError("");
+    try{
+      restoreKey.current??=crypto.randomUUID();
+      const body=new FormData();body.append("file",file);body.append("password",uploadPassword);body.append("planToken",preview.plan.token);
+      const response=await authenticatedFetchOnce(auth.accessToken,{userId:auth.session.userId,sessionId:auth.session.id,membershipVersion:auth.session.membershipVersion},`${apiBaseUrl}/device-restores/requests`,{method:"POST",headers:{"Idempotency-Key":restoreKey.current},body,signal:controller.signal});
+      if(!response.ok)throw new Error(response.status===409?"Kaynak değişmiş veya başka bir talep var. Talep durumunu kontrol edip yeni önizleme oluşturun.":"Geri yükleme talebi doğrulanamadı.");
+      await restore.refetch();setNotice("Geri yükleme talebi iletildi. Sistem yöneticisinin onayı bekleniyor.");
+    }catch(cause){if(!controller.signal.aborted)setError(cause instanceof Error?cause.message:"Talep iletilemedi.");}
+    finally{if(!controller.signal.aborted){setPending(false);setUploadPassword("");}}
+  }
+  async function cancelRestore(){
+    if(!auth||!restore.data?.operation||pending)return;setPending(true);setError("");
+    try{await apiRequest(auth.accessToken,`${apiBaseUrl}/device-restores/${restore.data.operation.operationId}/cancel`,{method:"POST"});await restore.refetch();restoreKey.current=null;}
+    catch{setError("Talep iptal edilemedi; onaylanmış olabilir.");}finally{setPending(false);}
+  }
   return <Panel title="Cihazımda Şifreli Yedek" aria-label="Cihazda şifreli kurum yedeği" description="Kurum kayıtlarını ve bağlı dosyaları tek bir parola korumalı pakette sakla. Yüklemek kurum verilerini değiştirmez.">
     {status.isPending ? <p role="status">Yedekleme kullanılabilirliği kontrol ediliyor.</p> : !enabled ? <p role="status">Güvenli cihaz yedeği henüz etkinleştirilmedi. Mevcut JSON dışa aktarımı, tam geri yükleme paketi değildir.</p> : null}
     <form onSubmit={event => void submit(event, "download")} aria-label="Şifreli yedeği indir">
@@ -85,7 +104,7 @@ export function DeviceBackupPanel() {
       <Button type="submit" disabled={!enabled || pending}>{pending ? "İşlem sürüyor" : "Şifreli yedeği indir"}</Button>
     </form>
     <form onSubmit={event => void submit(event, "preview")} aria-label="Yedeği yükle ve doğrula">
-      <Field label="Cihazımdaki yedek dosyası"><Input type="file" accept=".ookulbackup" required onChange={event => { setFile(event.target.files?.[0] ?? null); setPreview(null); }} disabled={!enabled || pending} /></Field>
+      <Field label="Cihazımdaki yedek dosyası"><Input type="file" accept=".ookulbackup" required onChange={event => { setFile(event.target.files?.[0] ?? null); setPreview(null); restoreKey.current=null; }} disabled={!enabled || pending} /></Field>
       <Field label="Dosyanın yedek parolası"><Input type="password" autoComplete="off" required minLength={12} maxLength={128} value={uploadPassword} onChange={event => setUploadPassword(event.target.value)} disabled={!enabled || pending} /></Field>
       <Button type="submit" disabled={!enabled || pending}>{preview?.plan ? "Planı yeniden doğrula" : "Yedeği yükle ve doğrula"}</Button>
     </form>
@@ -105,7 +124,17 @@ export function DeviceBackupPanel() {
         <p>Bu sayılar bir uygulama onayı değildir. Tamamlanması gereken kontroller:</p>
         <ul>{preview.impact.blockers.map(code => <li key={code}>{impactMessages[code] ?? "Ek inceleme gerekiyor."}</li>)}</ul>
       </div> : null}
-      <p>Henüz izole geri yükleme provası yapılmadı. Kurum verilerine uygulama kapalı; hiçbir kayıt değiştirilmedi.</p>
+      {status.data?.restoreAvailable ? <p>Önizleme kurum verilerini değiştirmedi. Uygulama için aşağıdaki ayrı talep ve sistem yöneticisinin MFA onayı gerekir.</p> : <p>Kurum verilerine uygulama kapalı; hiçbir kayıt değiştirilmedi.</p>}
     </div> : null}
+    {status.data?.restoreAvailable ? <section aria-label="Geri yükleme talebi">
+      {restore.data?.operation ? <p role="status">Talep durumu: {({AWAITING_APPROVAL:"Sistem yöneticisinin onayı bekleniyor",QUEUED:"Sırada",RUNNING:"Geri yükleniyor",COMPLETED:"Tamamlandı",ABORTED:"Uygulanmadı; kurtarma sonucu kontrol edilmeli",BLOCKED:"İşlem inceleme bekliyor"})[restore.data.operation.state]}</p> : null}
+      {restore.data?.operation?.state==="AWAITING_APPROVAL" ? <Button type="button" disabled={pending} onClick={()=>void cancelRestore()}>Talebi iptal et</Button> : null}
+      {preview?.plan && (!restore.data?.operation || ["COMPLETED","ABORTED"].includes(restore.data.operation.state)) ? <form onSubmit={event=>void requestRestore(event)} aria-label="Geri yükleme talebi oluştur">
+        <Field label="Talep için yedek parolasını tekrar yaz"><Input type="password" autoComplete="off" minLength={12} maxLength={128} required value={uploadPassword} onChange={event=>setUploadPassword(event.target.value)} disabled={pending}/></Field>
+        <label><input type="checkbox" required disabled={pending}/> Seçtiğim yedeğe dönülmesini istiyorum. Onay sırasında kurum erişiminin geçici olarak kapanacağını anlıyorum.</label>
+        <p>Bu sürüm en fazla 2.000 kaydı geri yükler. Mevcut finans, izin ve hesap güvenliği kayıtları korunur; eski oturumlar yeniden açılmaz.</p>
+        <Button type="submit" disabled={pending||restore.isError||restore.isPending}>Geri yükleme talebi gönder</Button>
+      </form> : null}
+    </section> : null}
   </Panel>;
 }

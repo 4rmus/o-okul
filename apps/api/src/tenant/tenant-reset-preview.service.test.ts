@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetDigest, tenantResetTableNames, type TenantResetSnapshot } from "@o-okul/db";
 import { runWithRequestContext } from "../context/request-context.js";
 const state = vi.hoisted(() => ({ snapshot: null as TenantResetSnapshot | null, queues: [] as Array<{ name: string; options: unknown }>, jobs: [] as unknown[], objectFailure: false }));
-vi.mock("@o-okul/db", async (original) => ({ ...await original<typeof import("@o-okul/db")>(), withResetSnapshot: async (_pool: unknown, _tenantId: string, run: (snapshot: TenantResetSnapshot, db: unknown) => Promise<unknown>) => run(state.snapshot!, {}) }));
+vi.mock("@o-okul/db", async (original) => ({ ...await original<typeof import("@o-okul/db")>(), withResetPreviewSnapshot: async (_pool: unknown, _tenantId: string, run: (snapshot: TenantResetSnapshot, db: unknown) => Promise<unknown>) => run(state.snapshot!, {}) }));
 vi.mock("pg", () => ({ default: { Pool: class { async end() {} } } }));
 vi.mock("./tenant-reset-objects.js", async (original) => ({ ...await original<typeof import("./tenant-reset-objects.js")>(), resetS3Config: () => ({ bucket: "source", endpoint: "https://source.example.test" }), resetS3Client: () => ({ destroy() {} }), resetObjectInventory: async () => {
   if (state.objectFailure) throw new Error("secret object key");
