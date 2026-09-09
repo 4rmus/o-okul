@@ -264,6 +264,7 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
       await dialog.getByRole("button", { name: "Askıya al", exact: true }).focus(); await page.keyboard.press("Enter");
       await expect(dialog).toContainText("İşlem sonucu doğrulanamadı");
       await expect(dialog.getByLabel("Kurum kodu onayı")).toBeDisabled();
+      await expect(dialog.getByRole("button", { name: "Kapat", exact: true })).toBeEnabled();
       await page.keyboard.press("Escape"); await expect(dialog).toBeHidden();
       await page.getByRole("button", { name: "İşlemi sonuçlandır", exact: true }).click();
       await dialog.getByRole("button", { name: "Aynı işlemi tekrar dene" }).click();
@@ -286,6 +287,7 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     await dialog.getByLabel("Doğrulama kodu").fill("000000");
     await dialog.getByRole("button", { name: "Askıya al", exact: true }).click();
     await expect(dialog).toContainText("İkinci doğrulama başarısız"); expect(captured.tenantStatusUpdates).toEqual([]);
+    await expect(dialog.getByRole("button", { name: "Kapat", exact: true })).toBeEnabled();
     await page.keyboard.press("Escape"); await expect(dialog).toBeHidden();
     await page.getByRole("button", { name: "İşlemi sonuçlandır", exact: true }).click();
     await dialog.getByLabel("Doğrulama yöntemi").selectOption("recovery");
