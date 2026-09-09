@@ -23,7 +23,7 @@ run("clean-reset preview with restricted production app role", () => {
     try {
       await db.query("BEGIN");
       for (const id of tenants) {
-        await db.query('INSERT INTO "PlatformAccount" (id,"loginName","loginNameNormalized",name,"passwordHash",status,"updatedAt") VALUES ($1,$1,$1,\'Platform fixture\',\'DO_NOT_READ_PLATFORM_SECRET\',\'SUSPENDED\',now())', [id + "-platform"]);
+        await db.query('INSERT INTO "PlatformAccount" (id,"loginName","loginNameNormalized",name,"passwordHash",status,"updatedAt") VALUES ($1,$1,$1,\'Platform fixture\',\'DO_NOT_READ_PLATFORM_SECRET\',\'DISABLED\',now())', [id + "-platform"]);
         await db.query('INSERT INTO "Tenant" (id,slug,name,status,"updatedAt") VALUES ($1,$1,\'Reset preview fixture\',\'ACTIVE\',now())', [id]);
         await db.query('INSERT INTO "LicenseTerm" (id,"tenantId","planCode","startsAt","endsAt","activeStudentLimit","createdByPlatformAccountId") VALUES ($1,$2,\'TRIAL\',now()-interval \'1 day\',now()+interval \'1 day\',100,$3)', [id + "-license", id, id + "-platform"]);
         await db.query('INSERT INTO "User" (id,"tenantId",name,"passwordHash","updatedAt") VALUES ($1,$2,\'Owner\',\'FIXTURE_OWNER_HASH\',now())', [id + "-owner", id]);
