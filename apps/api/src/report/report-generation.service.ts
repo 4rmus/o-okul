@@ -1,6 +1,6 @@
-import { currentTenantMutationVersion, runApiTenantMutation } from "../context/tenant-mutation-activity.js";
+import { currentTenantMutationVersion, runApiTenantMutation, waitForApiMutations } from "../context/tenant-mutation-activity.js";
 import { createHash, randomUUID } from "node:crypto";
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional, type OnModuleDestroy } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional, type OnApplicationShutdown } from "@nestjs/common";
 import type {
   ExamScoreAverage,
   ExamScoreStatus,
@@ -137,7 +137,7 @@ export interface ReportPdfRenderer {
 }
 
 @Injectable()
-export class ReportGenerationService implements OnModuleDestroy {
+export class ReportGenerationService implements OnApplicationShutdown {
   constructor(
     @Inject(reportGenerationQueueProducerToken)
     private readonly producer: ReportGenerationQueueProducer,
@@ -168,7 +168,8 @@ export class ReportGenerationService implements OnModuleDestroy {
     private readonly generationJobStatuses?: ReportGenerationJobStatusReader,
   ) {}
 
-  async onModuleDestroy(): Promise<void> {
+  async onApplicationShutdown(): Promise<void> {
+    await waitForApiMutations();
     await Promise.all([
       this.pdfRenderer.close?.(),
       this.generationJobStatuses?.close?.(),
@@ -1507,9 +1508,9 @@ class BullReportPdfRenderer implements ReportPdfRenderer {
   private readonly timeoutMs = Number(process.env.REPORT_PDF_RENDER_TIMEOUT_MS ?? 30_000);
 
   async render(input: ReportPdfRenderInput): Promise<ReportSnapshotPdfResult> {
-    await this.queueEvents.waitUntilReady();
     const lifecycleVersion = currentTenantMutationVersion(input.snapshot.tenantId);
     return runApiTenantMutation("QUEUE_ADMISSION", async () => {
+    await this.queueEvents.waitUntilReady();
     const job = await this.queue.add("report-pdf-render", { ...input, lifecycleVersion }, {
       attempts: 1,
       jobId: `report-pdf-${randomUUID()}`,

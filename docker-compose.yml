@@ -43,6 +43,7 @@ services:
         condition: service_healthy
 
   api:
+    init: true
     cpus: ${API_CPUS:-1.00}
     mem_limit: ${API_MEM_LIMIT:-1g}
     restart: unless-stopped

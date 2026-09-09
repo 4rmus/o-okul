@@ -1,9 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { lastValueFrom, Observable, of, throwError } from "rxjs";
-import type { ExecutionContext } from "@nestjs/common";
-const state = vi.hoisted(() => ({ version: 2, status: "ACTIVE", actorActive: true, rows: new Map<string, { id: string; tenantId: string; version: number; status: string }>() }));
+import { Controller, Post, type ExecutionContext } from "@nestjs/common";
+import { Test } from "@nestjs/testing";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { request as httpRequest } from "node:http";
+const state = vi.hoisted(() => ({ end: vi.fn(), version: 2, status: "ACTIVE", actorActive: true, rows: new Map<string, { id: string; tenantId: string; version: number; status: string }>() }));
+const pdfQueue = vi.hoisted(() => ({ ready: vi.fn(async () => {}), complete: vi.fn(async () => ({})), close: vi.fn(async () => {}) }));
+vi.mock("bullmq", () => ({ Queue: class { async add() { return { waitUntilFinished: pdfQueue.complete }; } close = pdfQueue.close; }, QueueEvents: class { waitUntilReady = pdfQueue.ready; close = pdfQueue.close; } }));
 vi.mock("pg", () => ({ default: { Pool: class {
+  private ended = false;
   async query<T>(sql: string, values: unknown[] = []): Promise<{ rows: T[] }> {
+    if (this.ended) throw new Error("POOL_ALREADY_CLOSED");
     const rows = (items: unknown[]) => ({ rows: items as T[] });
     if (sql.includes("pg_try_advisory_xact_lock_shared")) return rows([{ locked: true }]);
     if (sql.includes('FROM "AuthSession"')) return rows(state.actorActive ? [{ id: "session" }] : []);
@@ -14,18 +21,109 @@ vi.mock("pg", () => ({ default: { Pool: class {
     return rows([]);
   }
   async connect() { return { query: this.query.bind(this), release() {} }; }
-  async end() {}
+  async end() { this.ended = true; state.end(); }
 } } }));
 import { TenantMutationInterceptor } from "./tenant-mutation.interceptor.js";
-import { closeTenantMutationPool } from "../context/tenant-mutation-activity.js";
+import { closeTenantMutationPool, openApiMutationAdmission, runApiTenantMutation, stopApiMutationAdmission, trackApiMutation, waitForApiMutations } from "../context/tenant-mutation-activity.js";
 import { runWithRequestContext } from "../context/request-context.js";
 import { S3RawImportArchiveStore } from "../exam/s3-raw-import-archive-store.js";
 import { createBullTenantQueueProducer } from "../queue/bullmq-producer.js";
+import { createReportPdfRenderer, ReportGenerationService } from "../report/report-generation.service.js";
 const context = { sessionId: "session", membershipVersion: 1, userId: "admin", tenantId: "tenant-a", tenantLifecycleVersion: 2, roles: ["TENANT_ADMIN"], bypassRls: false };
 const execution = { switchToHttp: () => ({ getRequest: () => ({ method: "POST" }) }) } as ExecutionContext;
-beforeEach(() => { state.version = 2; state.status = "ACTIVE"; state.actorActive = true; state.rows.clear(); vi.stubEnv("NODE_ENV", "production"); vi.stubEnv("PERSISTENCE_DRIVER", "memory"); vi.stubEnv("TENANT_STORE", "memory"); });
+beforeEach(() => { openApiMutationAdmission(); state.end.mockClear(); state.version = 2; state.status = "ACTIVE"; state.actorActive = true; state.rows.clear(); vi.stubEnv("NODE_ENV", "production"); vi.stubEnv("PERSISTENCE_DRIVER", "memory"); vi.stubEnv("TENANT_STORE", "memory"); });
 afterEach(async () => { await closeTenantMutationPool(); vi.unstubAllEnvs(); });
 describe("HTTP durable lifetime with real activity adapter and injected SQL", () => {
+  it("blocks a real disconnected HTTP request that reaches the interceptor after shutdown", async () => {
+    const effect = vi.fn(() => "changed");
+    @Controller("shutdown-probe") class Probe { @Post() mutate() { return effect(); } }
+    const module = await Test.createTestingModule({ controllers: [Probe], providers: [TenantMutationInterceptor] }).compile();
+    const app = module.createNestApplication(); app.useGlobalInterceptors(app.get(TenantMutationInterceptor));
+    let release!: () => void, began!: () => void, disconnected!: () => void, resumed!: () => void;
+    const hold = new Promise<void>((resolve) => { release = resolve; });
+    const entered = new Promise<void>((resolve) => { began = resolve; });
+    const gone = new Promise<void>((resolve) => { disconnected = resolve; });
+    const continued = new Promise<void>((resolve) => { resumed = resolve; });
+    app.use(async (req: import("express").Request, _res: import("express").Response, next: import("express").NextFunction) => {
+      req.socket.once("close", disconnected); began(); await hold; next(); resumed();
+    });
+    await app.listen(0, "127.0.0.1");
+    const request = httpRequest((await app.getUrl()) + "/shutdown-probe", { method: "POST" }); request.on("error", () => {}); request.end();
+    await entered; request.destroy(); await gone;
+    await app.close(); release(); await continued; await new Promise((resolve) => setImmediate(resolve));
+    expect(effect).not.toHaveBeenCalled(); expect(state.rows.size).toBe(0); expect(state.end).not.toHaveBeenCalled();
+  });
+  it("keeps PDF QueueEvents open through delayed readiness and job completion", async () => {
+    let ready!: () => void, complete!: (value: object) => void;
+    pdfQueue.close.mockClear();
+    pdfQueue.ready.mockImplementationOnce(() => new Promise<void>((resolve) => { ready = resolve; }));
+    pdfQueue.complete.mockImplementationOnce(() => new Promise<object>((resolve) => { complete = resolve; }));
+    vi.stubEnv("REDIS_URL", "redis://localhost:6379");
+    const renderer = createReportPdfRenderer();
+    const service = new ReportGenerationService({} as never, {} as never, renderer);
+    const rendering = runWithRequestContext(context, () => renderer.render({ snapshot: { tenantId: "tenant-a" } } as never));
+    await vi.waitFor(() => expect(ready).toBeTypeOf("function"));
+    const shutdown = service.onApplicationShutdown();
+    await new Promise((resolve) => setImmediate(resolve)); expect(pdfQueue.close).not.toHaveBeenCalled();
+    ready(); await vi.waitFor(() => expect(complete).toBeTypeOf("function"));
+    expect(pdfQueue.close).not.toHaveBeenCalled(); expect(state.rows.size).toBe(1);
+    complete({}); await rendering; await shutdown;
+    expect(pdfQueue.close).toHaveBeenCalledTimes(2); expect(state.rows.size).toBe(0);
+  });
+  it("Nest shutdown waits for a disconnected controller, nested work and durable settlement before closing resources", async () => {
+    const closedPdf = vi.fn(async () => {});
+    const report = new ReportGenerationService({} as never, {} as never, { render: vi.fn(), close: closedPdf });
+    const module = await Test.createTestingModule({ providers: [TenantMutationInterceptor, { provide: ReportGenerationService, useValue: report }] }).compile();
+    const app = module.createNestApplication(); await app.init();
+    let finish!: () => void;
+    const handle = () => new Observable((subscriber) => {
+      finish = AsyncLocalStorage.bind(() => { void runApiTenantMutation("S3_MUTATION", async () => { subscriber.next("done"); subscriber.complete(); }); });
+    });
+    const subscription = runWithRequestContext(context, () => app.get(TenantMutationInterceptor).intercept(execution, { handle }).subscribe());
+    await vi.waitFor(() => expect(state.rows.size).toBe(1));
+    subscription.unsubscribe();
+    let closed = false; const shutdown = app.close().then(() => { closed = true; });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(closed).toBe(false); expect(state.end).not.toHaveBeenCalled(); expect(closedPdf).not.toHaveBeenCalled();
+    runWithRequestContext(context, finish);
+    await shutdown;
+    expect(state.rows.size).toBe(0); expect(state.end).toHaveBeenCalledOnce(); expect(closedPdf).toHaveBeenCalledOnce();
+  });
+  it("tracks detached platform POST work even without tenant admission", async () => {
+    let finish!: () => void;
+    const handle = () => new Observable((subscriber) => { finish = () => { subscriber.next("queued"); subscriber.complete(); }; });
+    const subscription = runWithRequestContext({ ...context, tenantId: null, bypassRls: true }, () => new TenantMutationInterceptor().intercept(execution, { handle }).subscribe());
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function")); subscription.unsubscribe();
+    let drained = false; const drain = waitForApiMutations().then(() => { drained = true; });
+    await new Promise((resolve) => setImmediate(resolve)); expect(drained).toBe(false);
+    finish(); await drain; expect(state.rows.size).toBe(0);
+  });
+  it("rejects late admission and expired async context without opening a new pool", async () => {
+    let delayed!: () => Promise<unknown>;
+    await trackApiMutation(async () => { delayed = AsyncLocalStorage.bind(() => runApiTenantMutation("S3_MUTATION", async () => "late")); });
+    stopApiMutationAdmission();
+    await expect(runWithRequestContext(context, () => runApiTenantMutation("HTTP_MUTATION", async () => "late"))).rejects.toMatchObject({ status: 503 });
+    await expect(delayed()).rejects.toMatchObject({ status: 503 });
+    expect(state.rows.size).toBe(0); await closeTenantMutationPool(); expect(state.end).not.toHaveBeenCalled();
+  });
+  it("does not report a successful drain when pending work rejects", async () => {
+    let reject!: (error: Error) => void;
+    const work = trackApiMutation(() => new Promise((_, fail) => { reject = fail; }));
+    const observed = expect(work).rejects.toThrow("REMOTE_UNKNOWN");
+    await vi.waitFor(() => expect(reject).toBeTypeOf("function"));
+    const drain = expect(waitForApiMutations()).rejects.toThrow("REMOTE_UNKNOWN");
+    reject(new Error("REMOTE_UNKNOWN")); await Promise.all([observed, drain]);
+  });
+  it("retains nested failures during concurrent drains even if the outer request handles them", async () => {
+    let nested!: () => void;
+    const outer = trackApiMutation(() => new Promise<void>((resolve) => {
+      nested = () => { void trackApiMutation(async () => { throw new Error("NESTED_UNKNOWN"); }).catch(() => resolve()); };
+    }));
+    await vi.waitFor(() => expect(nested).toBeTypeOf("function"));
+    const drains = [expect(waitForApiMutations()).rejects.toThrow("NESTED_UNKNOWN"), expect(waitForApiMutations()).rejects.toThrow("NESTED_UNKNOWN")];
+    nested(); await outer; await Promise.all(drains);
+    await expect(waitForApiMutations()).resolves.toBeUndefined();
+  });
   it("unsubscribe retains row until controller actually finishes, despite production memory flags", async () => {
     let finish!: () => void, started!: () => void;
     const began = new Promise<void>((resolve) => { started = resolve; });

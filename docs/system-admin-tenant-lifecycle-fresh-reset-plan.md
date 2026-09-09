@@ -1,5 +1,54 @@
 # Sistem Admin Kurum Yaşam Döngüsü ve Fresh Reset Planı
 
+<!-- gate6o-current:start -->
+## Güncel sonuç — Gate 6O / 2026-09-08
+
+**Kontrollü ilk PRODUCTION yayını PASS.** Kullanıcının açık onayıyla exact kaynak
+`362a2d549e9714b5238e7d2836f2f56197455f02`, 2026-09-08 02:14:21 +03 itibarıyla dört
+uygulamada çalışıyor. 109→116 migration, dar NOLOGIN rol bootstrap'ı ve yalnız ACTIVE
+kurum hesap/lisans backfill'i tamamlandı. Bu bölüm aşağıdaki eski bekleme/onay/109
+migration notlarının güncel karşılığıdır; tarihsel kanıtlar korunur.
+
+- **CI:** exact SHA için GitHub `34161751919` üç iş SUCCESS; tam yerel CI ayrıca PASS.
+- **PRODUCTION:** temiz duruş API143 / worker0 / queue-board0; taze şifreli PG yedeği,
+  ayrı ağsız restore, gerçek migrator ile migration/DRY_RUN/APPLY/replay prova PASS.
+  Canlı önce/sonra 72 eski tablo koruma ve 74 tablo prova karşılaştırması PASS.
+  dna/demoo/system aynı kimliklerle ACTIVE; silinen 25 kurum için işlem tekrarlanmadı.
+  Parola/MFA/mevcut oturum durumları korundu; yalnız beklenen hesap bağları ve iki
+  günlük LicenseUsage satırı eklendi/güncellendi. Reset rolü NOLOGIN, üyelik0 ve
+  tehlikeli yetki0; uygulama rolüyle üç kurumda RLS dış satır0.
+- **PRODUCTION runtime:** dört image etiketi/ID/kaynak doğrulandı, yeniden başlama0,
+  worker hata0; `/health`, `/health/ready`, `/login` 200, iki yetkisiz tenant GET401.
+  Kuyruk kayıtları değişmedi; belirsiz outbox0. Bu sonuç tenant reset deneyi değildir.
+- **EXTERNAL_NOT_RUN / UNPROVEN:** genel staging workflow'u, registry push, off-host
+  reset PG+S3 restore, tam reset, pilot ve 14 günlük izleme. Reset DSN/wiring eklenmedi;
+  write-quiescence guardı kapalıdır. Provider test gönderimi yapılmadı.
+
+İlk kesim API exit137 ile migration öncesi durdu; şema109/reset rolü0/env değişmemiş/
+kuyruk boş uzlaştırmasından sonra eski sürüm kontrollü geri açıldı. İlk FAIL kaydı
+saklandı. PID1 sorunu aynı aday image'da üretildi; Docker `init: true` ile hook tamam,
+exit143/0.55s kanıtlandı. Private init override preflight/stop/activate boyunca bağlı;
+137/OOM engelleri kaldırılmadı. Repo Compose ve aday kaynak değiştirilmedi; sonraki
+standart deploy bu private override'ı kullanmalı veya bu ayarı kaynakta sağlamalıdır.
+
+Genel staging workflow'u alert POST, WAL ve mevcut secret bootstrap yan etkileri
+nedeniyle dar onayla çalıştırılmadı. Registry push yetkisi yok; dört linux/amd64 image
+şifreli SSH ile hash/image ID doğrulanarak yüklendi. Recovery image arşivi private
+sunucuda saklandı. GitHub deploy run'ı veya canonical staging cutover PASS üretilmedi;
+eski public cutover kaldırıldı. Gerçek manuel production kanıtı ayrı dosyadadır.
+
+Kanıt: `artifacts/tenant-reset-release-execution/production-release.json`;
+`cutover-attempt-2-result.json`, `precommit-backup-result.json`, `shutdown-probe.json`,
+`retry-reconciliation.json` ve hash envanteri aynı dizindedir. Taze şifreli yedek
+SHA256: `f9bbb1ee13e4bafd51b70a7d7e0387e61bd6b03b2d32255a5c362e2f13cbf787`.
+
+**Sonraki en küçük gate (6P):** API kapanırken devam eden mutasyonun sonuç kaydını,
+reset dispatcher/doğrudan enqueue ve PDF işini beklemek. Bu yerel düzeltme için yeni
+canlı onay gerekmez; yeni kaynak bu yayın başarısını devralmaz ve ayrıca doğrulanır.
+Tam reset için tüm yazıcıları kapsayan duraklatma, terminal provider uzlaştırması,
+off-host PG+S3 kanıtı ve dna/demoo/system dışındaki exact pilot/onay hâlâ gerekir.
+<!-- gate6o-current:end -->
+
 ## İlerleme kaydı — 2026-09-07
 
 Bu kayıt, aşağıdaki kullanıcı planını değiştirmeden mevcut checkout durumunu ayırır.
@@ -806,3 +855,77 @@ disposable runner'da zorunlu DB URL'leriyle de çalışır: `b4096676e28c89ebd99
 PASS; dar migrator/rol negatifleri, dolu upgrade/backfill, system koruması ve
 11 PG + 5 Redis de aynı koşuda PASS. Son source hash: `0f306f032b4bff58319d7fafea28132acfe303d204a527643020e1b685018b5a`.
 Kaynakta yetki engeli kaldırılmadı; bu hâlâ LOCAL_RUNTIME kanıtıdır.
+
+
+### Gate 6N — tam yerel CI kapanışı (2026-09-08)
+
+Exact aday `362a2d549e9714b5238e7d2836f2f56197455f02` üzerinde `pnpm run ci`
+exit 0. UI 174, route 89, görsel 31; API 1218 PASS/6 SKIP, DB 94 PASS/2 SKIP,
+worker 222 PASS/8 SKIP; OpenAPI 247 path, idempotency 48 işlem. Normal suite'te
+atlanmış dış DB testleriyle ayrı gerçek PG koşusu karıştırılmaz. Yerel tam zincirdeki
+önceki school HTTP parse hatası hedefli 56/56 ve bu tam tekrarda oluşmadı; kök neden
+kanıtlanmadan uygulama/test eşiği değiştirilmedi.
+
+Kanıt: `artifacts/tenant-reset-release-scope/gate6n-local-ci.json` ve hash'i bağlı
+`artifacts/gate6/gate6n-362a2d54-full-ci.log`. Runtime kaynak hash'i son geçici PG
+kanıtıyla eşleşti. GitHub run `34161751919` PostgreSQL ve UI/UX işleri PASS;
+genel verify henüz tamamlanmadı. Yeni yayın/STAGING/PRODUCTION ve reset UNPROVEN.
+
+Aday 194 dosyadır; release dalı ve taslak PR #102 mevcut PR #101 tabanını korur.
+Bu son yerel plan notları aday kodunu değiştirmez; immutable adayın hash envanteri
+`gate6n-candidate.json` içindedir. Asıl çalışma ağacında staging/commit yapılmadı.
+İncelemeye hazır canlı işlem kapsamı: `artifacts/tenant-reset-release-scope/gate6n-approval-packet.md`.
+Staging production hedefine bağlı olduğundan yeni şifreli backup/izole restore ve
+kontrollü ilk yayın için açık onay gerekir. Tam reset ve pilot ayrı açık kapılardır.
+
+
+### Gate 6N — exact aday CI kapanışı (2026-09-08)
+
+**CI PASS:** https://github.com/4rmus/o-okul/actions/runs/34161751919 — exact head
+`362a2d549e9714b5238e7d2836f2f56197455f02`. verify, account-management-postgres ve
+ui-ux-rc üçü SUCCESS. Genel işte `pnpm run ci` SUCCESS; Linux görsel paketi 31/31,
+route 89/89; API 1218 PASS/6 SKIP, DB 94 PASS/2 SKIP, worker 222 PASS/8 SKIP,
+OpenAPI 247 path/idempotency 48 işlem. Ayrı PostgreSQL 17 işinde migration'lar,
+grade-level ve gerçek hesap/lisans testleri SUCCESS. Linux referansları başka
+platformdan kopyalanmadı; eşikler değişmedi. Yerel tam CI ayrıca PASS.
+
+**PRODUCTION yalnız salt okuma:** son kontrolde dna/demoo/system ACTIVE, migration
+109 ve incomplete 0; dört uygulama image'ı halen e4bde6f… . Yeni deploy, migration,
+reset veya provider gönderimi yapılmadı. Tam reset/pilot hâlâ UNPROVEN ve guard kapalı.
+Kanıtlar: `gate6n-github-ci.json`, `gate6n-local-ci.json`,
+`gate6n-final-production-readonly.json`; tümü artifacts/tenant-reset-release-scope altında.
+
+**Sonraki gerekli kullanıcı adımı:** `gate6n-approval-packet.md` içindeki hedef/SHA/
+bakım, yeni private şifreli backup + izole restore ve yedi migration/backfill ile
+kontrollü ilk production yayınına açık onay. "Staging" aynı canlı hedefi kullandığından
+okuma izni veya test kurumu temizliği onayı bu yeni yayına taşınmaz. PR #101 main'e
+merge edilmez; source adayı ayrı dalda sabittir. Tam resetin duraklatma, terminal
+provider uzlaştırması, off-host restore, aynı-operation sürdürme ve tek pilot/14 gün
+kapıları ilk korumalı yayından ayrı açık kalır. Bu kayıtla tamamlanmış gösterilmez.
+
+## Gate 6P — API kapanış düzeltmesi (2026-09-08)
+
+Tek yazıcı ana ajan; ayrı dal `fix/tenant-reset-shutdown-drain`, taban362a2d54.
+Kapsam API mutation admission/settlement, reset dispatcher, PDF kaynak kapanışı ve
+Compose API init; migration/RBAC/reset izni veya kullanıcı verisi değişmez.
+
+Başlamış HTTP/platform ve iç içe işler gerçek sonuç kaydı bitene kadar izlenir.
+Kapanışta geç gelen istek veya bitmiş async bağlam yeni pool/iş başlatamaz (503).
+Kabul edilmiş nested işler tamamlanır; kapanış sırasında içte yakalanmış hata bile
+başarılı drain sayılmaz. PDF readiness/completion ve dispatcher beklenir; pool/PDF
+kapanışı HTTP kapanışı ve ortak drain sonrasındadır. Docker API `init: true` kaynakta
+sağlandı; canlıdaki private override henüz yeni kaynak yayını değildir.
+
+LOCAL_TEST: gerçek Nest HTTP bağlantı kopması/geç middleware, nested settlement,
+platform POST, gecikmiş PDF ve dispatcher rejection dahil hedefli 88 test PASS.
+DB activity/reset39 PASS, API typecheck ve ops kontrolü PASS. İlk tam API koşusunda
+1224 PASS/1 HTTP parse FAIL/6 SKIP; ilgili dosya hedefli tekrarda geçti. Bu hata için
+ürün koruması veya test eşiği değiştirilmedi. Son kaynakta tam `pnpm run ci` sürüyor;
+sonuç gelmeden tam CI PASS sayılmaz. Salt okuma incelemede kalan P1/P2 yok.
+
+PRODUCTION halen362a2d54; 6P yayınlanmadı. Tam reset guardı ve reset DSN kapalı.
+Canlı salt okuma reset preflight'ında API/worker için backup/source/restore S3 ve
+restore DB yapılandırmaları yok; secret değerleri okunmadı/yayımlanmadı. Sonraki dış
+deney için ayrı off-host backup/restore ortamı ve güvenli erişim profili tanımlanmalı.
+Kanıtlar ana çalışma ağacındaki `artifacts/tenant-reset-release-execution/shutdown-*`
+ve `reset-external-preflight.json` dosyalarıdır.

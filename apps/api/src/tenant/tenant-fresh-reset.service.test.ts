@@ -16,6 +16,25 @@ function fixture() {
   return { service, create, find, op };
 }
 describe("reset admission and read-only reconciliation", () => {
+  it.each([false, true])("shutdown waits for pending dispatch and preserves rejection=%s", async (rejectDispatch) => {
+    vi.useFakeTimers(); vi.stubEnv("REDIS_URL", "redis://localhost:6379");
+    const f = fixture(); let finish!: (value: FreshResetOperation[]) => void, fail!: (error: Error) => void;
+    const pending = vi.fn(() => new Promise<FreshResetOperation[]>((resolve, reject) => { finish = resolve; fail = reject; }));
+    Object.assign(f.service.store!, { pending });
+    const end = vi.fn(async () => {}); Object.defineProperty(f.service, "pool", { value: { end } });
+    try {
+      f.service.onModuleInit(); expect(pending).toHaveBeenCalledOnce();
+      let stopped = false;
+      const stopping = f.service.onModuleDestroy().then(() => { stopped = true; });
+      const observed = rejectDispatch ? expect(stopping).rejects.toThrow("QUEUE_UNAVAILABLE") : stopping;
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(stopped).toBe(false); expect(end).not.toHaveBeenCalled(); expect(pending).toHaveBeenCalledOnce();
+      if (rejectDispatch) fail(new Error("QUEUE_UNAVAILABLE")); else finish([]);
+      await observed;
+      if (!rejectDispatch) { await f.service.onApplicationShutdown(); expect(end).toHaveBeenCalledOnce(); }
+      else expect(end).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); vi.unstubAllEnvs(); }
+  });
   it.each(["TENANT_OWNER", "TENANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN"])("rejects %s before storage", async (role) => {
     const f = fixture();
     await expect(f.service.create({ ...context, roles: [role] as never }, "tenant-a", body, "reset-idempotency-a", proof())).rejects.toMatchObject({ status: 403 });
