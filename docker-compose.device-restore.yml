@@ -1,0 +1,39 @@
+services:
+  device-restore-worker:
+    image: ${API_IMAGE:-o-okul-api:latest}
+    pull_policy: never
+    profiles: [device-restore]
+    init: true
+    restart: unless-stopped
+    mem_limit: 768m
+    cpus: 1
+    command: [node, apps/api/dist/operations/device-restore-worker-main.js]
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=512
+      TENANT_DEVICE_RESTORE_ENABLED: ${TENANT_DEVICE_RESTORE_ENABLED:-0}
+      TENANT_DEVICE_RESTORE_TENANT_ID: ${TENANT_DEVICE_RESTORE_TENANT_ID:-}
+      TENANT_DEVICE_RESTORE_DATABASE_URL: ${TENANT_DEVICE_RESTORE_DATABASE_URL:-}
+      TENANT_DEVICE_RESTORE_CUSTODY_KEY: ${TENANT_DEVICE_RESTORE_CUSTODY_KEY:-}
+      TENANT_DEVICE_BACKUP_TRUSTED_PUBLIC_KEYS: '${TENANT_DEVICE_BACKUP_TRUSTED_PUBLIC_KEYS:-[]}'
+      STUDENT_PII_ENCRYPTION_KEY: ${STUDENT_PII_ENCRYPTION_KEY:-}
+      STUDENT_PII_HASH_KEY: ${STUDENT_PII_HASH_KEY:-}
+      REDIS_URL: ${DOCKER_REDIS_URL:-redis://redis:6379}
+      QUEUE_PREFIX: ${QUEUE_PREFIX:-}
+      S3_ENDPOINT: ${DOCKER_S3_ENDPOINT:-http://minio:9000}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      UPLOAD_AV_SCANNER: clamav
+      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
+      CLAMAV_TIMEOUT_MS: ${CLAMAV_TIMEOUT_MS:-5000}
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      minio: {condition: service_healthy}
+      clamav: {condition: service_healthy}
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}

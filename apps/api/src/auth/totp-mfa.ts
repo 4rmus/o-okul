@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import type { TenantLifecycleMfaTarget, TenantCleanResetMfaTarget } from "@o-okul/shared-types";
+import type { TenantLifecycleMfaTarget, TenantCleanResetMfaTarget, TenantDeviceRestoreMfaTarget } from "@o-okul/shared-types";
 import { authenticator } from "otplib";
 
 const defaultTestEncryptionKey = "33333333333333333333333333333333";
@@ -13,7 +13,7 @@ const stepUpTtlSeconds = 5 * 60;
 
 export type AdminMfaMode = "off" | "optional" | "required";
 export type AdminMfaTokenType = "admin-mfa-login" | "admin-mfa-setup" | "admin-mfa-step-up";
-export type AdminMfaStepUpPurpose = "OWNER_ADMIN_CHANGE" | "TENANT_LIFECYCLE_CHANGE" | "TENANT_CLEAN_RESET";
+export type AdminMfaStepUpPurpose = "OWNER_ADMIN_CHANGE" | "TENANT_LIFECYCLE_CHANGE" | "TENANT_CLEAN_RESET" | "TENANT_DEVICE_RESTORE";
 type AuthenticatorOptionOverrides = {
   epoch?: number;
   step?: number;
@@ -47,7 +47,7 @@ export interface AdminMfaTokenPayload {
   membershipVersion?: number;
   sessionId?: string;
   purpose?: AdminMfaStepUpPurpose;
-  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget;
+  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget;
 }
 
 export interface AdminMfaStepUpBinding {
@@ -55,7 +55,7 @@ export interface AdminMfaStepUpBinding {
   sessionId: string;
   membershipVersion: number;
   purpose: AdminMfaStepUpPurpose;
-  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget;
+  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget;
 }
 
 export interface AdminMfaStepUpProof {

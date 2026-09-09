@@ -265,6 +265,7 @@ const portalReportProgressPaths = [
   "/api/v1/me/guardian/students/{studentId}/reports/{examId}/progress",
 ];
 const sharedTypeDriftContracts = [
+  { interfaceName: "TenantDeviceRestoreOperation", method:"post",path:"/api/v1/device-restores/requests",schemaPath:["responseData"] },
   { interfaceName: "TenantDeviceBackupPreview", method: "post", path: "/api/v1/device-backups/preview", schemaPath: ["responseData"] },
   { interfaceName: "LoginRequest", method: "post", path: "/api/v1/auth/login", schemaPath: ["requestBody"] },
   { interfaceName: "PersonaSwitchRequest", method: "post", path: "/api/v1/auth/persona/switch", schemaPath: ["requestBody"] },
@@ -1186,6 +1187,8 @@ const schoolReferenceCrudContracts = [
   }),
 ];
 const requiredOperationContracts = [
+  {method:"post",path:"/api/v1/device-restores/requests",requestBody:true,requestContentType:"multipart/form-data",requestRequired:["password","file","planToken"],responseEnvelope:true,responseDataRequired:["operationId","tenantId","archiveDigest","expectedLifecycleVersion","state","tableCounts","fileCount","errorCode","createdAt"]},
+  {method:"post",path:"/api/v1/device-restores/tenants/{tenantId}/{operationId}/approve",responseEnvelope:true,responseDataRequired:["operationId","state"]},
   { method: "get", path: "/api/v1/device-backups/status", responseEnvelope: true, responseDataRequired: ["available", "maxFileBytes"] },
   { method: "post", path: "/api/v1/device-backups/download", requestBody: true, requestRequired: ["password"], rawResponseContentType: "application/octet-stream", fieldChecks: [{ path: ["rawResponse"], type: "string", format: "binary" }] },
   { method: "post", path: "/api/v1/device-backups/preview", requestBody: true, requestContentType: "multipart/form-data", requestRequired: ["password", "file"], responseEnvelope: true, responseDataRequired: ["backupId", "tenantId", "createdAt", "schemaCompatible", "tableCounts", "fileCount", "fileBytes", "integrityVerified", "restoreVerified", "canRestore", "blockers"], fieldChecks: [{ path: ["responseData", "canRestore"], enum: [false] }, { path: ["responseData", "restoreVerified"], enum: [false] }, { path: ["responseData", "impact", "canApply"], enum: [false] }, { path: ["responseData", "plan", "canApply"], enum: [false] }] },
@@ -1958,8 +1961,8 @@ const requiredOperationContracts = [
     requestForbidden: ["sessionId", "membershipVersion", "stepUpToken", "userId"],
     responseDataRequired: ["purpose", "stepUpToken", "expiresAt"],
     fieldChecks: [
-      { path: ["requestBody", "purpose"], enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET"] },
-      { path: ["responseData", "purpose"], enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET"] },
+      { path: ["requestBody", "purpose"], enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET", "TENANT_DEVICE_RESTORE"] },
+      { path: ["responseData", "purpose"], enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET", "TENANT_DEVICE_RESTORE"] },
       { path: ["responseData", "expiresAt"], format: "date-time" },
     ],
   },

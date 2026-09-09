@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {randomBytes} from 'node:crypto';
+import {randomBytes,createHash} from 'node:crypto';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {readFile,mkdir,writeFile} from 'node:fs/promises';
@@ -19,8 +19,11 @@ const image=JSON.parse(await docker('image','inspect','postgres:16'))[0];
 const nonce=randomBytes(12).toString('hex'),password=randomBytes(24).toString('hex');
 const owned={nonce,name:'device-existing-'+nonce,imageId:image.Id,id:''};
 const directory=root+'artifacts/device-existing-restore';await mkdir(directory,{recursive:true});
-const result={status:'FAIL',evidenceClass:'LOCAL_RUNTIME_POSTGRES',productionEnabled:false};
-let pool, storage;
+try{const prior=JSON.parse(await readFile(directory+'/result.json','utf8'));const saved=directory+'/'+prior.container.nonce;await mkdir(saved,{recursive:true});for(const file of ['result.json','tests.log','failure.log'])try{await writeFile(saved+'/'+file,await readFile(directory+'/'+file));}catch(e){if(e.code!=='ENOENT')throw e;}}catch(e){if(e.code!=='ENOENT')throw e;}
+const sourcePaths=(await cmd(['rg','--files','apps/api/src','packages/db/src','packages/shared-types/src','packages/db/prisma/migrations','docker/postgres/init'])).split('\n').concat(['scripts/tenant-device-existing-drill.mjs','pnpm-lock.yaml']).sort();
+const sourceHash=async()=>{const hash=createHash('sha256');for(const path of sourcePaths)hash.update(path).update(await readFile(root+path));return hash.digest('hex');};
+const result={status:'FAIL',evidenceClass:'LOCAL_RUNTIME_POSTGRES_MINIO_REDIS',productionEnabled:false,sourceDigest:await sourceHash()};
+let pool, storage, redis;
 const storageEnv={};
 async function validateStorage(){
  const c=JSON.parse(await docker('inspect',storage.id))[0];
@@ -34,27 +37,31 @@ try{
  const require=createRequire(root+'packages/db/package.json');const pg=require('pg');
  pool=new pg.Pool({host:'127.0.0.1',port,user:'postgres',password,database:'o_okul_reset_drill',max:1,connectionTimeoutMillis:2000});
  for(let i=0;i<40;i++){try{await pool.query('SELECT 1');break;}catch(e){if(i===39)throw e;await new Promise(r=>setTimeout(r,250));}}
- await pool.query(`CREATE ROLE app LOGIN PASSWORD '${password}' NOSUPERUSER NOBYPASSRLS; CREATE ROLE secret_delivery_worker NOLOGIN NOSUPERUSER NOBYPASSRLS; CREATE ROLE o_okul_reset_worker NOLOGIN NOSUPERUSER NOBYPASSRLS NOINHERIT; CREATE ROLE migration LOGIN PASSWORD '${password}' NOSUPERUSER NOBYPASSRLS; GRANT CONNECT,CREATE ON DATABASE o_okul_reset_drill TO migration; ALTER SCHEMA public OWNER TO migration; CREATE EXTENSION pg_trgm; CREATE EXTENSION btree_gist`);
+ await pool.query(`CREATE ROLE app LOGIN PASSWORD '${password}' NOSUPERUSER NOBYPASSRLS; CREATE ROLE secret_delivery_worker NOLOGIN NOSUPERUSER NOBYPASSRLS; CREATE ROLE o_okul_reset_worker NOLOGIN NOSUPERUSER NOBYPASSRLS NOINHERIT; CREATE ROLE o_okul_device_restore_worker NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOINHERIT; CREATE ROLE migration LOGIN PASSWORD '${password}' NOSUPERUSER NOBYPASSRLS; GRANT CONNECT,CREATE ON DATABASE o_okul_reset_drill TO migration; ALTER SCHEMA public OWNER TO migration; CREATE EXTENSION pg_trgm; CREATE EXTENSION btree_gist`);
  const config=directory+'/prisma.config.mjs';
  await writeFile(config,`import {defineConfig} from ${JSON.stringify(pathToFileURL(require.resolve('prisma/config')).href)}; export default defineConfig({schema:${JSON.stringify(root+'packages/db/prisma/schema.prisma')},migrations:{path:${JSON.stringify(root+'packages/db/prisma/migrations')}},datasource:{url:process.env.DRILL_DATABASE_URL}});`);
  await cmd(['pnpm','--filter','@o-okul/db','exec','prisma','migrate','deploy','--config',config],{DRILL_DATABASE_URL:`postgresql://migration:${password}@127.0.0.1:${port}/o_okul_reset_drill`});
  await pool.query('REVOKE INSERT,UPDATE,DELETE,TRUNCATE ON "PlatformAccount","PlatformSession","PlatformIdempotencyKey" FROM app');
- await pool.query(`CREATE SCHEMA device_existing_restore; CREATE TABLE device_existing_restore.receipts (operation_id text PRIMARY KEY CHECK(operation_id ~ '^[a-f0-9]{32}$'),tenant_id text NOT NULL,archive_digest text NOT NULL CHECK(archive_digest ~ '^[a-f0-9]{64}$'),schema_digest text NOT NULL,result_digest text NOT NULL,created_at timestamptz NOT NULL DEFAULT now()); ALTER TABLE device_existing_restore.receipts ENABLE ROW LEVEL SECURITY; ALTER TABLE device_existing_restore.receipts FORCE ROW LEVEL SECURITY; CREATE POLICY tenant_receipt ON device_existing_restore.receipts USING (tenant_id=current_setting('app.current_tenant_id',true)) WITH CHECK (tenant_id=current_setting('app.current_tenant_id',true)); GRANT USAGE ON SCHEMA device_existing_restore TO app; GRANT SELECT,INSERT ON device_existing_restore.receipts TO app`);
- await pool.query(`CREATE TABLE device_existing_restore.object_jobs (operation_id text PRIMARY KEY CHECK(operation_id ~ '^[a-f0-9]{32}$'),tenant_id text NOT NULL,archive_digest text NOT NULL CHECK(archive_digest ~ '^[a-f0-9]{64}$'),target text NOT NULL CHECK(target ~ '^[a-f0-9]{64}$'),state text NOT NULL CHECK(state IN ('PREPARED','CLEANING','ABORTED','COMPLETE')),intent jsonb NOT NULL CHECK(jsonb_typeof(intent)='array')); ALTER TABLE device_existing_restore.object_jobs ENABLE ROW LEVEL SECURITY; ALTER TABLE device_existing_restore.object_jobs FORCE ROW LEVEL SECURITY; CREATE POLICY tenant_objects ON device_existing_restore.object_jobs USING (tenant_id=current_setting('app.current_tenant_id',true)) WITH CHECK (tenant_id=current_setting('app.current_tenant_id',true)); CREATE UNIQUE INDEX tenant_objects_active ON device_existing_restore.object_jobs(tenant_id) WHERE state IN ('PREPARED','CLEANING'); GRANT SELECT,INSERT,UPDATE(state) ON device_existing_restore.object_jobs TO app`);
  if(withObjects){
   const image='minio/minio:RELEASE.2025-09-07T16-13-09Z';
   storage={name:'device-existing-objects-'+nonce,imageId:JSON.parse(await docker('image','inspect',image))[0].Id};
   storage.id=await cmd(['docker','--context',options.context,'run','-d','--pull=never','--name',storage.name,'--label','com.o-okul.device-existing-drill='+nonce,'--publish','127.0.0.1::9000','--read-only','--tmpfs','/data:rw,noexec,nosuid,size=128m','--tmpfs','/tmp:rw,nosuid,size=16m','--memory','512m','--cpus','1','--env','MINIO_ROOT_USER=fixture','--env','MINIO_ROOT_PASSWORD',image,'server','/data','--console-address',':9001'],{MINIO_ROOT_PASSWORD:password});
   const endpoint='http://127.0.0.1:'+await validateStorage();
   for(let i=0;i<40;i++){try{if((await fetch(endpoint+'/minio/health/live',{signal:AbortSignal.timeout(1000)})).ok)break;}catch{}if(i===39)throw new Error('MINIO_NOT_READY');await new Promise(r=>setTimeout(r,250));}
+  redis={nonce,name:'device-existing-redis-'+nonce,image:'redis:7',imageId:JSON.parse(await docker('image','inspect','redis:7'))[0].Id};
+  redis.id=await cmd(['docker','--context',options.context,'run','-d','--pull=never','--name',redis.name,'--label','com.o-okul.tenant-reset-drill='+nonce,'--publish','127.0.0.1::6379','--tmpfs','/data:rw,noexec,nosuid,size=64m','--memory','128m','--env','DEVICE_REDIS_PASSWORD','redis:7','sh','-c','exec redis-server --save "" --appendonly no --requirepass "$DEVICE_REDIS_PASSWORD"'],{DEVICE_REDIS_PASSWORD:password});
+  const redisPort=validateContainer(JSON.parse(await docker('inspect',redis.id))[0],redis);
+  storageEnv.DEVICE_EXISTING_REDIS_URL=`redis://:${password}@127.0.0.1:${redisPort}`;
   Object.assign(storageEnv,{DEVICE_EXISTING_OBJECT_ENDPOINT:endpoint,DEVICE_EXISTING_OBJECT_ACCESS_KEY:'fixture',DEVICE_EXISTING_OBJECT_SECRET_KEY:password,DEVICE_EXISTING_OBJECTS_REQUIRED:'1'});
  }
+ await pool.query(`ALTER ROLE o_okul_device_restore_worker LOGIN PASSWORD '${password}'`);
  result.migrations=Number((await pool.query('SELECT count(*) AS n FROM "_prisma_migrations" WHERE finished_at IS NOT NULL')).rows[0].n);
- const log=await cmd(['pnpm','--filter','@o-okul/api','exec','vitest','run','src/operations/device-backup-existing-drill.test.ts','src/operations/device-backup-impact.test.ts',...(withObjects?['src/operations/device-backup-existing-objects.test.ts']:[]),'--no-file-parallelism'],{...storageEnv,DEVICE_EXISTING_APP_URL:`postgresql://app:${password}@127.0.0.1:${port}/o_okul_reset_drill`,DEVICE_EXISTING_ADMIN_URL:`postgresql://postgres:${password}@127.0.0.1:${port}/o_okul_reset_drill`,DEVICE_EXISTING_REQUIRED:'1'});
- await writeFile(directory+'/tests.log',log.replaceAll(password,'[REDACTED]'));result.status='PASS';
+ const log=await cmd(['pnpm','--filter','@o-okul/api','exec','vitest','run','src/operations/device-backup-existing-drill.test.ts','src/operations/device-backup-impact.test.ts',...(withObjects?['src/operations/device-backup-existing-objects.test.ts','src/operations/device-restore.postgres.test.ts']:[]),'--no-file-parallelism'],{...storageEnv,DEVICE_EXISTING_CUSTODY_URL:`postgresql://app:${password}@127.0.0.1:${port}/o_okul_reset_drill`,DEVICE_EXISTING_APP_URL:`postgresql://o_okul_device_restore_worker:${password}@127.0.0.1:${port}/o_okul_reset_drill`,DEVICE_EXISTING_ADMIN_URL:`postgresql://postgres:${password}@127.0.0.1:${port}/o_okul_reset_drill`,DEVICE_EXISTING_REQUIRED:'1'});
+ await writeFile(directory+'/tests.log',log.replaceAll(password,'[REDACTED]'));assert.equal(await sourceHash(),result.sourceDigest,'SOURCE_CHANGED_DURING_DRILL');result.status='PASS';
 }catch(e){await writeFile(directory+'/failure.log',(String(e.stdout??'')+String(e.stderr??'')+String(e.message??'')).replaceAll(password,'[REDACTED]'));throw e;}
 finally{
  await pool?.end();
+ if(redis?.id&&result.status==='PASS'){validateContainer(JSON.parse(await docker('inspect',redis.id))[0],redis);await docker('rm','--force',redis.id);result.redisCleanup='OWNED_CONTAINER_REMOVED';}
  if(storage?.id&&result.status==='PASS'){await validateStorage();await docker('rm','--force',storage.id);result.storageCleanup='OWNED_CONTAINER_REMOVED';}
  if(owned.id && result.status==='PASS'){validateContainer(JSON.parse(await docker('inspect',owned.id))[0],owned);await docker('rm','--force',owned.id);result.cleanup='OWNED_CONTAINER_REMOVED';}
  else result.cleanup='RETAINED_FOR_REVIEW';

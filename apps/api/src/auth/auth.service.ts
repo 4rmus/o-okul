@@ -2,7 +2,7 @@ import { runVerifiedTenantMutation } from "../context/tenant-mutation-activity.j
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { BadRequestException, HttpException, HttpStatus, Inject, Injectable, NotFoundException, Optional, UnauthorizedException } from "@nestjs/common";
 import { encryptSecretDeliveryPayload } from "@o-okul/db";
-import type { ActivePersona, MeProfileResponse, MeSessionRecord, MeSessionRevokeAllResponse, MfaEnrollmentRequiredResponse, MfaStepUpPurpose, MfaStepUpResponse, TenantLifecycleMfaTarget, TenantCleanResetMfaTarget, SelfPurgeResult, TenantLoginContextResponse, TenantSelectionOption, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
+import type { ActivePersona, MeProfileResponse, MeSessionRecord, MeSessionRevokeAllResponse, MfaEnrollmentRequiredResponse, MfaStepUpPurpose, MfaStepUpResponse, TenantLifecycleMfaTarget, TenantCleanResetMfaTarget, TenantDeviceRestoreMfaTarget, SelfPurgeResult, TenantLoginContextResponse, TenantSelectionOption, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { licenseTermStoreToken, type LicenseTermStore } from "../license/license-term-store.js";
@@ -410,15 +410,15 @@ export class AuthService {
     context: RequestContext,
     purpose: MfaStepUpPurpose,
     input: TotpVerificationInput,
-    target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget,
+    target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget,
   ): Promise<MfaStepUpResponse> {
     this.assertAdminMfaManageable(context);
     const currentUser = await this.requireCurrentUser(context);
     if (!context.sessionId || context.membershipVersion !== currentUser.membershipVersion) {
       throw new UnauthorizedException("MFA_STEP_UP_CONTEXT_INVALID");
     }
-    if (purpose === "TENANT_LIFECYCLE_CHANGE" || purpose === "TENANT_CLEAN_RESET") {
-      if (!target || target.tenantId === "system" || (purpose === "TENANT_LIFECYCLE_CHANGE" ? !("status" in target) || !["ACTIVE", "SUSPENDED"].includes(target.status) : !("preset" in target) || target.preset !== "CLEAN_SETUP_V1" || !/^[a-f0-9]{64}$/.test(target.preflightDigest)) ||
+    if (purpose === "TENANT_LIFECYCLE_CHANGE" || purpose === "TENANT_CLEAN_RESET" || purpose === "TENANT_DEVICE_RESTORE") {
+      if (!target || target.tenantId === "system" || (purpose === "TENANT_DEVICE_RESTORE" ? !("operationId" in target) || !/^[a-f0-9]{32}$/.test(target.operationId) || !/^[a-f0-9]{64}$/.test(target.archiveDigest) : purpose === "TENANT_LIFECYCLE_CHANGE" ? !("status" in target) || !["ACTIVE", "SUSPENDED"].includes(target.status) : !("preset" in target) || target.preset !== "CLEAN_SETUP_V1" || !/^[a-f0-9]{64}$/.test(target.preflightDigest)) ||
         !Number.isInteger(target.expectedLifecycleVersion) || target.expectedLifecycleVersion < 0 || target.expectedLifecycleVersion > 2147483646) {
         throw new BadRequestException("MFA_STEP_UP_TARGET_INVALID");
       }

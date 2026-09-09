@@ -30,12 +30,13 @@ if(process.env.DEVICE_EXISTING_REQUIRED==='1'&&(!url||!adminUrl))throw new Error
    }
    const initial=await snapshot(),file=await seal(initial);
    const invalid=structuredClone(initial);invalid.tables.User![0]!.row=invalid.tables.User![0]!.row.replace('Preserved','Changed');
-   await expect(restore(await seal(invalid))).rejects.toThrow('DEVICE_EXISTING_PRESERVED_DIFFERENCE');
+   expect(await restore(await seal(invalid))).toMatchObject({mutations:0,protectedRowsUnchanged:true});
+   expect(await snapshot()).toEqual(initial);
    await admin.query('UPDATE "Exam" SET title=\'Changed\' WHERE id=$1',[tenantId+'-exam']);
    const dirty=await snapshot();
    await expect(restore(file,true)).rejects.toThrow('DEVICE_EXISTING_INJECTED_FAILURE');
    expect(await snapshot()).toEqual(dirty);
-   expect((await admin.query('SELECT count(*)::int AS n FROM device_existing_restore.receipts WHERE tenant_id=$1',[tenantId])).rows[0].n).toBe(0);
+   expect((await admin.query('SELECT count(*)::int AS n FROM device_existing_restore.receipts WHERE tenant_id=$1',[tenantId])).rows[0].n).toBe(1);
    const operationId=randomBytes(16).toString('hex');
    await expect(restore(file,false,operationId,true)).rejects.toThrow('DEVICE_EXISTING_LOST_ACK');
    expect(await restore(file,false,operationId)).toMatchObject({mutations:0,replay:true});
@@ -51,8 +52,9 @@ if(process.env.DEVICE_EXISTING_REQUIRED==='1'&&(!url||!adminUrl))throw new Error
    await admin.query('INSERT INTO "Exam" (id,"tenantId",title,"updatedAt") VALUES ($1,$2,\'Remove\',now())',[tenantId+'-extra',tenantId]);
    await admin.query('DELETE FROM "Exam" WHERE id=$1',[tenantId+'-exam']);
    expect(await restore(file)).toMatchObject({mutations:2});expect(await snapshot()).toEqual(initial);
-   // A real DB-side unexpected write to protected identity data must roll back the entire restore.
-   await admin.query(`CREATE FUNCTION public.device_existing_test_trigger() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN UPDATE "User" SET name='trigger changed' WHERE "tenantId"=NEW."tenantId"; RETURN NEW; END $$; CREATE TRIGGER device_existing_test AFTER UPDATE ON "Exam" FOR EACH ROW EXECUTE FUNCTION public.device_existing_test_trigger()`);
+   // The role cannot update identities. A privileged trigger's unexpected write must also roll back.
+   await expect(withTenantDb(app,{tenantId},db=>db.query('UPDATE "User" SET name=\'invalid\' WHERE "tenantId"=$1',[tenantId]))).rejects.toThrow('permission denied for table User');
+   await admin.query(`CREATE FUNCTION public.device_existing_test_trigger() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_catalog AS $$ BEGIN UPDATE "User" SET name='trigger changed' WHERE "tenantId"=NEW."tenantId"; RETURN NEW; END $$; CREATE TRIGGER device_existing_test AFTER UPDATE ON "Exam" FOR EACH ROW EXECUTE FUNCTION public.device_existing_test_trigger()`);
    const changed=structuredClone(initial);changed.tables.Exam![0]!.row=changed.tables.Exam![0]!.row.replace('Before','After');
    await expect(restore(await seal(changed))).rejects.toThrow('DEVICE_EXISTING_PROTECTED_ROWS_CHANGED');
    expect(await snapshot()).toEqual(initial);
@@ -63,7 +65,8 @@ if(process.env.DEVICE_EXISTING_REQUIRED==='1'&&(!url||!adminUrl))throw new Error
    expect(await snapshot()).toEqual(initial);
    expect((await admin.query('SELECT title FROM "Exam" WHERE "tenantId"=$1',[other])).rows).toEqual([{title:'Before'}]);
    await admin.query('UPDATE "User" SET "accountStatus"=\'ACTIVE\' WHERE "tenantId"=$1',[tenantId]);
-   await expect(restore(file)).rejects.toThrow('DEVICE_EXISTING_ACTIVE_IDENTITY');
+   expect(await restore(file)).toMatchObject({databaseRowsRestored:true,mutations:0});
+   expect((await admin.query('SELECT "accountStatus" FROM "User" WHERE "tenantId"=$1',[tenantId])).rows[0].accountStatus).toBe("ACTIVE");
   }finally{await Promise.all([admin.end(),app.end()]);}
  },60000);
 });

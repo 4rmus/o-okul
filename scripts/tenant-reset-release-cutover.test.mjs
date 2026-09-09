@@ -23,6 +23,7 @@ else if (args.join(' ').includes('prisma migrate deploy')) phase = 'migration';
 else if (args.includes('scripts/backfill-account-management.mjs')) phase = 'account';
 else if (args.includes('scripts/backfill-license-terms.mjs')) phase = 'license';
 else if (args.includes('up') && args.includes('--remove-orphans')) phase = 'start';
+else if (args.includes('/docker-entrypoint-initdb.d/006_bootstrap_device_restore_worker_role.sh')) phase = 'device-bootstrap';
 else if (args.includes('exec')) phase = 'bootstrap';
 if (phase) {
   fs.appendFileSync(process.env.TRACE, phase + '\\n');
@@ -30,7 +31,7 @@ if (phase) {
 }
 `;
 
-for (const failure of ["", "stop-producers", "stop-worker", "worker-137", "worker-oom", "restarted", "state-query", "migration", "account", "license"]) {
+for (const failure of ["", "stop-producers", "stop-worker", "worker-137", "worker-oom", "restarted", "state-query", "device-bootstrap", "migration", "account", "license"]) {
   test(`release cutover ${failure || "success"} never restarts after an unsafe stop or failed migration/backfill`, () => {
     const directory = realpathSync(mkdtempSync(join(tmpdir(), "o-okul-cutover-contract-")));
     try {
@@ -51,10 +52,10 @@ for (const failure of ["", "stop-producers", "stop-worker", "worker-137", "worke
       const phases = readFileSync(trace, "utf8").trim().split("\n");
       assert.equal(existsSync(stale), false, `stale public PASS must disappear before mutation: ${result.stderr}`);
       assert.equal(result.status === 0, failure === "", result.stderr);
-      if (!failure) assert.deepEqual(phases, ["stop-producers", "stop-worker", "bootstrap", "bootstrap", "bootstrap", "migration", "account", "license", "start"]);
+      if (!failure) assert.deepEqual(phases, ["stop-producers", "stop-worker", "bootstrap", "bootstrap", "bootstrap", "device-bootstrap", "migration", "account", "license", "start"]);
       else {
         assert.equal(phases.includes("start"), false);
-        if (["stop-producers", "stop-worker", "migration", "account", "license"].includes(failure)) assert.ok(phases.includes(failure), "must reach the injected failure");
+        if (["stop-producers", "stop-worker", "device-bootstrap", "migration", "account", "license"].includes(failure)) assert.ok(phases.includes(failure), "must reach the injected failure");
         if (!["migration", "account", "license"].includes(failure)) assert.equal(phases.includes("migration"), false);
       }
     } finally { rmSync(directory, { recursive: true, force: true }); }

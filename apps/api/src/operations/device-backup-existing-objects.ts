@@ -14,7 +14,7 @@ export async function mapExistingRestorePhotos(payload: DeviceBackupPayload, db:
   const files = new Map(result.files.map(f => [f.key, f]));
   for (const entry of result.tables.Student ?? []) {
     const row = JSON.parse(entry.row);
-    if (row.photoKey == null) continue;
+    if (row.photoKey == null || row.deletedAt != null) continue;
     const file = files.get(row.photoKey);
     if (!file) throw new Error("DEVICE_EXISTING_FILE_MISSING");
     const key = `students/${row.id}/restore-${resetDigest(payload.tenantId).slice(0, 16)}-${file.sha256}`;

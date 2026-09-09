@@ -41,7 +41,7 @@ const userFields = new Set(["id", "tenantId", "name", "email", "emailNormalized"
 const tenantFields = new Set(["id", "name", "slug", "institutionType", "contactEmail", "logoUrl", "createdAt", "updatedAt"]);
 const payloadSchema = z.object({ format: z.literal("tenant-device-backup-v1"), tenantId: z.string().min(1), schemaDigest: z.string().regex(/^[a-f0-9]{64}$/), tables: z.record(z.string(), z.array(z.object({ row: z.string(), nationalId: z.string().regex(/^[0-9]{11}$/).nullable().optional() }).strict())), files: z.array(z.object({ key: z.string().min(1).max(2048), sha256: z.string().regex(/^[a-f0-9]{64}$/), contentBase64: z.string() }).strict()).max(2000) }).strict();
 export type DeviceBackupPayload = z.infer<typeof payloadSchema>;
-async function assertSourceActor(db: Queryable, context: RequestContext) {
+export async function assertSourceActor(db: Queryable, context: RequestContext) {
   const result = await db.query<{ valid: boolean }>(`SELECT true AS valid FROM "AuthSession" s JOIN "User" u ON u."id"=s."userId" AND u."tenantId"=s."tenantId" JOIN "TenantMembership" m ON m."id"=s."membershipId" AND m."tenantId"=s."tenantId" AND m."userId"=s."userId" JOIN "Tenant" t ON t."id"=s."tenantId" WHERE s."tenantId"=$1 AND s."id"=$2 AND s."userId"=$3 AND s."membershipId"=$4 AND s."membershipVersion"=$5 AND s."status"='ACTIVE' AND s."expiresAt">now() AND s."activePersona"='STAFF' AND s."roles" && ARRAY['TENANT_OWNER','TENANT_ADMIN']::text[] AND u."accountStatus"='ACTIVE' AND u."membershipVersion"=s."membershipVersion" AND m."version"=s."membershipVersion" AND m."status"='ACTIVE' AND m."staffRole" IN ('TENANT_OWNER','TENANT_ADMIN') AND m."scopeMode"='TENANT' AND m."startsAt"<=now() AND (m."endsAt" IS NULL OR m."endsAt">now()) AND t."status"='ACTIVE'`, [context.tenantId, context.sessionId, context.userId, context.membershipId, context.membershipVersion]);
   if (result.rows[0]?.valid !== true) throw new ForbiddenException("DEVICE_BACKUP_ACTOR_CHANGED");
 }
@@ -135,14 +135,21 @@ export async function readDevicePlanControls(db:Queryable,tenantId:string) {
   return result;
 }
 
+export async function readDeviceRestoreSourceDigest(db:Queryable,tenantId:string){
+  await db.query("SET LOCAL TIME ZONE 'UTC'");
+  const schema=await readTenantBackupSchema(db),projection=await projectDeviceBackup(tenantId,schema,db),controls=await readDevicePlanControls(db,tenantId);
+  if(!controls)throw new ConflictException("DEVICE_RESTORE_SOURCE_UNVERIFIED");
+  return resetDigest({schema,tables:projection.tables,controls});
+}
+
 @Injectable()
 export class DeviceBackupService {
   private pool?: pg.Pool;
   private busy = false;
   status(context: RequestContext) {
     assertInstitutionAdmin(context);
-    try { deviceBackupSigningKeys(); resetS3Config(); return { available: resolvePersistenceDriver(process.env.TENANT_STORE) === "postgres" && Boolean(process.env.DATABASE_URL), maxFileBytes: deviceBackupPayloadLimit + 4096 }; }
-    catch { return { available: false, maxFileBytes: deviceBackupPayloadLimit + 4096 }; }
+    try { deviceBackupSigningKeys(); resetS3Config(); return { available: resolvePersistenceDriver(process.env.TENANT_STORE) === "postgres" && Boolean(process.env.DATABASE_URL), maxFileBytes: deviceBackupPayloadLimit + 4096, restoreAvailable: process.env.TENANT_DEVICE_RESTORE_ENABLED==="1" && process.env.TENANT_DEVICE_RESTORE_TENANT_ID===context.tenantId }; }
+    catch { return { available: false, maxFileBytes: deviceBackupPayloadLimit + 4096, restoreAvailable:false }; }
   }
   async onApplicationShutdown() { await waitForApiMutations(); await this.pool?.end(); }
   private sourcePool() {

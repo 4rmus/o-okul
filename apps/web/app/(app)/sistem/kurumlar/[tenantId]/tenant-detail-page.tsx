@@ -30,6 +30,7 @@ import {
   type TenantUpdateFormState,
 } from "../../../../../src/form-validation.js";
 import { PageFrame } from "../../../kurum/_shared/page-frame.js";
+import { DeviceRestorePanel } from "./device-restore-panel.js";
 import { TenantResetPanel } from "./tenant-reset-panel.js";
 import { tenantManagementSchema, createLifecycleStepUp, loadTenant, updateTenant, updateTenantStatus, type TenantRecord } from "../../_shared/system-api.js";
 
@@ -51,6 +52,7 @@ function ScopedTenantDetailPage({ tenantId, scope }: { tenantId: string; scope: 
   const statusAttempt = useRef(0);
   useEffect(() => { alive.current = true; return () => { alive.current = false; statusAttempt.current++; }; }, []);
   const [resetPending, setResetPending] = useState(false);
+  const [restorePending,setRestorePending]=useState(false);
   const tenantQuery = useQuery({
     queryKey: ["next-tenant", tenantId, scope],
     queryFn: () => loadTenant(auth?.accessToken ?? "", tenantId),
@@ -61,7 +63,7 @@ function ScopedTenantDetailPage({ tenantId, scope }: { tenantId: string; scope: 
   });
   const tenant = tenantQuery.data?.id === tenantId ? tenantQuery.data : null;
   const management = tenantManagementSchema.safeParse(tenant?.management);
-  const canChangeStatus = !resetPending && !tenantQuery.isError && !tenantQuery.isFetching && management.success && management.data.verified && (tenant?.status === "ACTIVE" ? management.data.allowedActions.suspend : management.data.allowedActions.reactivate) && (!management.data.currentReset || management.data.currentReset.status === "COMPLETED") && tenant?.id !== "system" && Number.isInteger(tenant?.lifecycleVersion) && (tenant?.lifecycleVersion ?? -1) >= 0 && (tenant?.lifecycleVersion ?? -1) < 2147483647 && (tenant?.status === "ACTIVE" || tenant?.status === "SUSPENDED");
+  const canChangeStatus = !restorePending && !resetPending && !tenantQuery.isError && !tenantQuery.isFetching && management.success && management.data.verified && (tenant?.status === "ACTIVE" ? management.data.allowedActions.suspend : management.data.allowedActions.reactivate) && (!management.data.currentReset || management.data.currentReset.status === "COMPLETED") && tenant?.id !== "system" && Number.isInteger(tenant?.lifecycleVersion) && (tenant?.lifecycleVersion ?? -1) >= 0 && (tenant?.lifecycleVersion ?? -1) < 2147483647 && (tenant?.status === "ACTIVE" || tenant?.status === "SUSPENDED");
   const licenseDays = tenant ? licenseDaysRemaining(tenant.licenseEndsAt) : null;
   const seatPercent = tenant ? seatUsagePercent(tenant) : null;
   const [form, setForm] = useState<TenantUpdateFormState>(emptyForm);
@@ -292,6 +294,7 @@ function ScopedTenantDetailPage({ tenantId, scope }: { tenantId: string; scope: 
             title="Kurum yönetimi"
             tone="muted"
           />
+          {auth ? <DeviceRestorePanel key={scope} tenantId={tenant.id} auth={auth} onPendingChange={setRestorePending} onChange={()=>void tenantQuery.refetch()}/> : null}
           {auth ? <TenantResetPanel tenant={tenant} auth={auth} scope={scope} authoritative={!tenantQuery.isError && !tenantQuery.isFetching && tenantQuery.isFetchedAfterMount} onPendingChange={setResetPending} /> : null}
         </div>
       ) : null}

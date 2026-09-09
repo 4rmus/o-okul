@@ -172,7 +172,7 @@ export interface TotpDisableResponse {
   disabledAt: string;
 }
 
-export type MfaStepUpPurpose = "OWNER_ADMIN_CHANGE" | "TENANT_LIFECYCLE_CHANGE" | "TENANT_CLEAN_RESET";
+export type MfaStepUpPurpose = "OWNER_ADMIN_CHANGE" | "TENANT_LIFECYCLE_CHANGE" | "TENANT_CLEAN_RESET" | "TENANT_DEVICE_RESTORE";
 
 export interface TenantLifecycleMfaTarget {
   tenantId: string;
@@ -182,7 +182,7 @@ export interface TenantLifecycleMfaTarget {
 
 export interface MfaStepUpRequest {
   purpose: MfaStepUpPurpose;
-  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget;
+  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget;
   totpCode?: string;
   recoveryCode?: string;
 }
@@ -2899,4 +2899,18 @@ export interface TenantDeviceBackupPreview {
     blockers: string[];
     canApply: false;
   };
+}
+
+export interface TenantDeviceRestoreMfaTarget {
+  tenantId: string;
+  operationId: string;
+  archiveDigest: string;
+  expectedLifecycleVersion: number;
+}
+export interface TenantDeviceRestoreOperation extends TenantDeviceRestoreMfaTarget {
+  state: "AWAITING_APPROVAL" | "QUEUED" | "RUNNING" | "COMPLETED" | "ABORTED" | "BLOCKED";
+  tableCounts: Record<string,number>;
+  fileCount: number;
+  errorCode: string | null;
+  createdAt: string;
 }
