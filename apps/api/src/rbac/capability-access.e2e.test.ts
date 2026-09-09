@@ -146,7 +146,7 @@ describe("Capability access matrix", () => {
     outOfScopePaymentPlanId = outOfScopePlan.id;
 
     app = moduleRef.createNestApplication();
-    await app.init();
+    await app.listen(0, "127.0.0.1");
     server = app.getHttpServer() as Parameters<typeof request>[0];
 
     tenantAdminToken = await login("admin-a@example.test");

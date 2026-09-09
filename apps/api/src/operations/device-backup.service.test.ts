@@ -18,7 +18,11 @@ vi.mock("@o-okul/db", async original => {
       return run({ query: async (sql: string, values: unknown[] = []) => {
         state.calls.push(sql);
         if (sql.startsWith("SET")) return { rows: [] };
+        if (sql.includes("FROM pg_constraint c")) { expect(values).toEqual([]); return { rows: [] }; }
         expect(values[0]).toBe(tenantId);
+        if (sql.includes("device_restore_plan")) return { rows: [] };
+        if (sql.includes("device_restore_domain")) return { rows: [] };
+        if (sql.includes('FROM "LicenseTerm" term')) return { rows: [{activeStudentLimit:100,matches:true}] };
         if (sql.startsWith("SELECT true AS valid")) return { rows: snapshot.tables.User[0]?.accountStatus === "ACTIVE" ? [{ valid: true }] : [] };
         if (sql.includes("sum(octet_length")) return { rows: [{ bytes: "100" }] };
         const table = sql.match(/FROM "([A-Za-z]+)"/)![1] as keyof typeof snapshot.tables;

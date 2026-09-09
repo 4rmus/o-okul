@@ -6,6 +6,29 @@ import type { TenantDeviceBackupPreview } from "@o-okul/shared-types";
 import { apiBaseUrl, apiRequest, authenticatedFetchOnce } from "../../../../src/api-client.js";
 import { useAuth } from "../../../providers.js";
 
+const impactMessages: Record<string,string> = {
+  DEVICE_RESTORE_PLAN_SOURCE_UNVERIFIED: "Plan için gerekli kaynak bilgileri eksiksiz doğrulanamadı.",
+  DEVICE_RESTORE_DOMAIN_LINK_CONFLICT: "Kimlik veya gönderim kayıtlarının bağlı olduğu bilgiler değişiyor.",
+  DEVICE_RESTORE_DOMAIN_LINK_UNVERIFIED: "Bazı kimlik ve gönderim bağları henüz doğrulanamadı.",
+  DEVICE_RESTORE_DELIVERIES_UNRESOLVED: "Bekleyen veya sonucu belirsiz gönderimler sonuçlandırılmalı.",
+  DEVICE_RESTORE_REFERENCE_CONFLICT: "Bazı kayıtların bağlı olduğu kayıtlar geri yükleme planında bulunmuyor.",
+  DEVICE_RESTORE_FOREIGN_KEYS_UNVERIFIED: "Bazı veritabanı ilişkileri henüz doğrulanamadı.",
+  DEVICE_RESTORE_DOMAIN_REFERENCES_UNVERIFIED: "Veritabanı ilişkileri dışında kalan iş kuralları ayrıca incelenmeli.",
+  DEVICE_RESTORE_WORK_QUIESCENCE_UNVERIFIED: "Devam eden işler ve gönderimler kontrol edilmeli.",
+  DEVICE_RESTORE_FILES_UNVERIFIED: "Mevcut dosyaların korunacağı doğrulanmalı.",
+  DEVICE_RESTORE_FINANCE_DIFFERENCE: "Finans geçmişi farklı; mevcut finans kayıtları korunacak.",
+  DEVICE_RESTORE_CONSENT_DIFFERENCE: "İletişim izinleri farklı; eski izinler yeniden açılmayacak.",
+  DEVICE_RESTORE_SUPPORT_DIFFERENCE: "Destek geçmişi farklı; mevcut destek kayıtları korunacak.",
+  DEVICE_RESTORE_DELIVERY_HISTORY_DIFFERENCE: "Gönderim geçmişi farklı; eski gönderimler tekrarlanmayacak.",
+  DEVICE_RESTORE_IDENTITY_RECONCILIATION_REQUIRED: "Hesap kayıtları ayrıca uzlaştırılmalı.",
+  DEVICE_RESTORE_ACCOUNT_LINK_CHANGE: "Öğrenci veya personel hesap bağlantıları değişiyor.",
+  DEVICE_RESTORE_PROTECTED_DEPENDENCIES_UNVERIFIED: "Korunan geçmişin bağlı olduğu kayıtlar ayrıca incelenmeli.",
+  DEVICE_RESTORE_CURRENT_LICENSE_UNVERIFIED: "Geçerli lisans ve öğrenci sınırı doğrulanamadı.",
+  DEVICE_RESTORE_STUDENT_LIMIT_EXCEEDED: "Yedekteki aktif öğrenci sayısı mevcut sınırı aşıyor.",
+  DEVICE_RESTORE_ENROLLMENT_CONFLICT: "Bir öğrenci için birden fazla açık aktif kayıt var.",
+  DEVICE_RESTORE_POLICY_UNCLASSIFIED: "Bazı veriler için geri yükleme kuralı henüz tanımlanmamış.",
+};
+
 export function DeviceBackupPanel() {
   const { auth } = useAuth();
   const [password, setPassword] = useState("");
@@ -24,19 +47,20 @@ export function DeviceBackupPanel() {
   const enabled = status.data?.available === true;
   async function submit(event: FormEvent, mode: "download" | "preview") {
     event.preventDefault(); if (!auth || pending || !enabled) return;
+    const planToken = mode === "preview" ? preview?.plan?.token : undefined;
     setError(""); setNotice(""); setPreview(null);
     if (mode === "download" && password !== confirmation) { setError("Yedek parolaları eşleşmiyor."); return; }
     if (mode === "preview" && (!file || file.size > (status.data?.maxFileBytes ?? 0))) { setError("Geçerli bir yedek dosyası seçin. Bu sürümün dosya sınırı yaklaşık 32 MB."); return; }
     const controller = new AbortController(); request.current = controller; setPending(true);
     try {
       const body = new FormData();
-      if (mode === "preview") { body.append("password", uploadPassword); body.append("file", file!); }
+      if (mode === "preview") { body.append("password", uploadPassword); body.append("file", file!); if (planToken) body.append("planToken", planToken); }
       const response = await authenticatedFetchOnce(auth.accessToken, { userId: auth.session.userId, sessionId: auth.session.id, membershipVersion: auth.session.membershipVersion }, `${apiBaseUrl}/device-backups/${mode}`, { method: "POST", signal: controller.signal, ...(mode === "download" ? { headers: { "content-type": "application/json" }, body: JSON.stringify({ password }) } : { body }) });
       if (!response.ok) {
         if (response.status === 413) throw new Error("Yedek bu sürümün 32 MB sınırını aşıyor; eksik bir paket hazırlanmadı.");
         if (response.status === 503) throw new Error("Yedekleme şu an hazır değil veya başka bir işlem sürüyor. Daha sonra tekrar deneyin.");
         if (response.status === 401 || response.status === 403) throw new Error("Oturum veya yedekleme yetkisi doğrulanamadı. Yeniden giriş yapın.");
-        if (response.status === 409) throw new Error("Hazırlık sırasında kurum verileri değişti. Yeniden deneyin.");
+        if (response.status === 409) throw new Error("Planın süresi dolmuş veya kaynak bilgileri değişmiş olabilir. Yeni önizleme oluşturun.");
         throw new Error("Dosya veya yedek parolası doğrulanamadı. Aynı kuruma ait, değiştirilmemiş bir yedek seçin.");
       }
       if (mode === "download") {
@@ -63,14 +87,24 @@ export function DeviceBackupPanel() {
     <form onSubmit={event => void submit(event, "preview")} aria-label="Yedeği yükle ve doğrula">
       <Field label="Cihazımdaki yedek dosyası"><Input type="file" accept=".ookulbackup" required onChange={event => { setFile(event.target.files?.[0] ?? null); setPreview(null); }} disabled={!enabled || pending} /></Field>
       <Field label="Dosyanın yedek parolası"><Input type="password" autoComplete="off" required minLength={12} maxLength={128} value={uploadPassword} onChange={event => setUploadPassword(event.target.value)} disabled={!enabled || pending} /></Field>
-      <Button type="submit" disabled={!enabled || pending}>Yedeği yükle ve doğrula</Button>
+      <Button type="submit" disabled={!enabled || pending}>{preview?.plan ? "Planı yeniden doğrula" : "Yedeği yükle ve doğrula"}</Button>
     </form>
     {error ? <p role="alert">{error}</p> : null}
     {notice ? <p role="status">{notice}</p> : null}
     {preview ? <div role="status">
+      {preview.plan ? <p>Veritabanı önizleme planı {new Date(preview.plan.expiresAt).toLocaleTimeString("tr-TR")} saatine kadar yeniden doğrulanabilir. Bu bir geri yükleme onayı değildir.</p> : null}
       <p>Bu kuruma ait paket bütünlüğü doğrulandı. Yedek tarihi: {new Date(preview.createdAt).toLocaleString("tr-TR")}</p>
       <p>{Object.values(preview.tableCounts).reduce((sum,count) => sum+count,0)} kayıt ve {preview.fileCount} dosya.</p>
       <p>{preview.schemaCompatible ? "Veri sürümü eşleşiyor." : "Bu yedeğin veri sürümü mevcut kurumla uyumlu değil."}</p>
+      {preview.impact ? <div aria-label="Geri yükleme etki önizlemesi">
+        <p>Operasyon kayıtları: {preview.impact.additions} eklenecek, {preview.impact.changes} değişecek, {preview.impact.removals} kaldırılacak kayıt.</p>
+        <p>Finans, iletişim izinleri, destek ve gönderim geçmişi, hesaplar, lisanslar ve oturumlar mevcut haliyle korunur.</p>
+        <p>Yedekteki aktif öğrenci: {preview.impact.activeStudents}. Doğrulanan mevcut limit: {preview.impact.activeStudentLimit ?? "doğrulanamadı"}.</p>
+        {preview.impact.references ? <p>{preview.impact.references.checkedLinks} ilişki kontrol edildi; {preview.impact.references.conflicts.reduce((n,c)=>n+c.links,0)} ilişki çatışması, {preview.impact.references.unverified.length} doğrulanamayan ilişki grubu var.</p> : null}
+        {preview.impact.domainLinks ? <p>Kimlik ve gönderim bağları: {preview.impact.domainLinks.checkedLinks} kontrol, {preview.impact.domainLinks.conflicts.reduce((n,c)=>n+c.links,0)} çatışma; görülen {preview.impact.domainLinks.pendingDeliveries} sonuçlandırılmamış gönderim.</p> : null}
+        <p>Bu sayılar bir uygulama onayı değildir. Tamamlanması gereken kontroller:</p>
+        <ul>{preview.impact.blockers.map(code => <li key={code}>{impactMessages[code] ?? "Ek inceleme gerekiyor."}</li>)}</ul>
+      </div> : null}
       <p>Henüz izole geri yükleme provası yapılmadı. Kurum verilerine uygulama kapalı; hiçbir kayıt değiştirilmedi.</p>
     </div> : null}
   </Panel>;

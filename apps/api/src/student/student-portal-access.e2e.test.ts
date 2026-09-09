@@ -21,7 +21,7 @@ describe("Student portal access management", () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     configureApiApp(app);
-    await app.init();
+    await app.listen(0, "127.0.0.1");
     server = app.getHttpServer() as Parameters<typeof request>[0];
     await app.get<StudentStore>(studentStoreToken).create({
       tenantId: "tenant-a",

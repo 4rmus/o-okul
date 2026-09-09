@@ -21,7 +21,7 @@ describe("Student portal activation", () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     configureApiApp(app);
-    await app.init();
+    await app.listen(0, "127.0.0.1");
     server = app.getHttpServer() as Parameters<typeof request>[0];
     const students = app.get<StudentStore>(studentStoreToken);
     await students.create({

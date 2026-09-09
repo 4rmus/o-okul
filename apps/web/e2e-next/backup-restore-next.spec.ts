@@ -87,7 +87,8 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
     if (path === "/device-backups/preview") {
       devicePreviews++; expect(request.headers()["content-type"]).toContain("multipart/form-data");
       expect(request.postDataBuffer()?.toString()).toContain('name="password"');
-      await route.fulfill({ headers: corsHeaders, contentType: "application/json", body: JSON.stringify(envelope({ backupId: "a".repeat(32), tenantId: "tenant-a", createdAt: "2026-09-08T00:00:00Z", schemaCompatible: true, tableCounts: { Student: 2 }, fileCount: 1, fileBytes: 7, integrityVerified: true, restoreVerified: false, canRestore: false, blockers: ["DEVICE_BACKUP_RESTORE_NOT_VERIFIED"] })) }); return;
+      if (devicePreviews === 2) { expect(request.postDataBuffer()?.toString()).toContain('name="planToken"'); expect(request.postDataBuffer()?.toString()).toContain("fixture-plan-ticket"); }
+      await route.fulfill({ headers: corsHeaders, contentType: "application/json", body: JSON.stringify(envelope({ backupId: "a".repeat(32), plan: {token:"fixture-plan-ticket",createdAt:"2026-09-08T00:00:00Z",expiresAt:"2026-09-08T00:05:00Z",scope:"DATABASE_PREVIEW_ONLY",canApply:false}, tenantId: "tenant-a", createdAt: "2026-09-08T00:00:00Z", schemaCompatible: true, impact: { domainLinks: {checkedLinks:4,conflicts:[{source:"IdentityInvitation",target:"Student",links:1}],pendingDeliveries:2,unverified:[]}, references: { checkedLinks: 3, conflicts: [{table:"PaymentPlan",references:"Student",links:1}], unverified: [] }, additions: 2, changes: 1, removals: 0, tables: {}, activeStudents: 2, activeStudentLimit: 1, preserved: ["FINANCE","CONSENT","IDENTITY"], blockers: ["DEVICE_RESTORE_STUDENT_LIMIT_EXCEEDED","DEVICE_RESTORE_FINANCE_DIFFERENCE","DEVICE_RESTORE_DOMAIN_LINK_CONFLICT","DEVICE_RESTORE_DELIVERIES_UNRESOLVED"], canApply: false }, tableCounts: { Student: 2 }, fileCount: 1, fileBytes: 7, integrityVerified: true, restoreVerified: false, canRestore: false, blockers: ["DEVICE_BACKUP_RESTORE_NOT_VERIFIED"] })) }); return;
     }
 
     if (path === "/me/tenant" && request.method() === "GET") {
@@ -236,6 +237,16 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
   await expect(page.getByText("2 kayıt ve 1 dosya.")).toBeVisible();
   await expect(page.getByText(/Kurum verilerine uygulama kapalı/)).toBeVisible(); expect(devicePreviews).toBe(1);
   await expect(page.getByLabel("Dosyanın yedek parolası")).toHaveValue("");
+  await expect(page.getByLabel("Geri yükleme etki önizlemesi")).toContainText("2 eklenecek, 1 değişecek, 0 kaldırılacak");
+  await expect(page.getByLabel("Geri yükleme etki önizlemesi")).toContainText("3 ilişki kontrol edildi; 1 ilişki çatışması");
+  await expect(page.getByLabel("Geri yükleme etki önizlemesi")).toContainText("4 kontrol, 1 çatışma; görülen 2 sonuçlandırılmamış gönderim");
+  await expect(page.getByText("Bekleyen veya sonucu belirsiz gönderimler sonuçlandırılmalı.")).toBeVisible();
+  await expect(page.getByText("Yedekteki aktif öğrenci sayısı mevcut sınırı aşıyor.")).toBeVisible();
+  await expect(page.getByText("Finans geçmişi farklı; mevcut finans kayıtları korunacak.")).toBeVisible();
+  await expect(page.getByText(/Bu bir geri yükleme onayı değildir/)).toBeVisible();
+  await page.getByLabel("Dosyanın yedek parolası").fill("uzun-yedek-parolasi");
+  await page.getByRole("button",{name:"Planı yeniden doğrula",exact:true}).click();
+  await expect(page.getByRole("button",{name:"Planı yeniden doğrula",exact:true})).toBeVisible();expect(devicePreviews).toBe(2);
   await page.getByLabel("Cihazda şifreli kurum yedeği").screenshot({ path: test.info().outputPath("device-backup-panel.png") });
 
   await page.getByText("Teknik operasyonlar", { exact: true }).click();

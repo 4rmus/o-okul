@@ -62,7 +62,7 @@ describe("StudentContact API", () => {
       })
       .compile();
     app = moduleRef.createNestApplication();
-    await app.init();
+    await app.listen(0, "127.0.0.1");
     server = app.getHttpServer() as Parameters<typeof request>[0];
     adminToken = await login("admin-a@example.test");
     ownerToken = await login("owner-student-overview@example.test");

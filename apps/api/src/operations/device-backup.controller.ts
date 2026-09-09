@@ -16,6 +16,7 @@ export class DeviceBackupGuard implements CanActivate {
     assertInstitutionAdmin(context); return true;
   }
 }
+const previewBodySchema = z.object({ password: deviceBackupPasswordSchema, planToken: z.string().min(1).max(1024).optional() }).strict();
 const bodySchema = z.object({ password: deviceBackupPasswordSchema }).strict();
 function password(body: unknown) {
   const result = bodySchema.safeParse(body);
@@ -44,12 +45,14 @@ export class DeviceBackupController {
   @Post("preview")
   @RequireCapability("operation:manage")
   @ReadOnlyOperation()
-  // Busboy emits partsLimit upon reaching it; file/field limits still enforce exactly one of each.
-  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: deviceBackupFileLimit, files: 1, fields: 1, parts: 3, fieldSize: 1024 } }))
+  // Busboy emits partsLimit upon reaching it; file/field limits still enforce one file and password plus an optional plan token.
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: deviceBackupFileLimit, files: 1, fields: 2, parts: 4, fieldSize: 1024 } }))
   async preview(@Body() body: unknown, @UploadedFile() file?: { buffer: Buffer; size: number }) {
-    const secret = password(body);
+    const parsed = previewBodySchema.safeParse(body);
+    if (!parsed.success) { file?.buffer.fill(0); throw new BadRequestException("DEVICE_BACKUP_PREVIEW_INVALID"); }
+    const secret = parsed.data.password;
     if (!file?.buffer || file.size !== file.buffer.length) throw new BadRequestException("DEVICE_BACKUP_FILE_REQUIRED");
-    try { return await this.backups.preview(getRequestContext(), file.buffer, secret); }
+    try { return await this.backups.preview(getRequestContext(), file.buffer, secret, parsed.data.planToken); }
     finally { file.buffer.fill(0); }
   }
 }

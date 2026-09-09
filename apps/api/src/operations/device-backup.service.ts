@@ -1,5 +1,9 @@
 import { BadRequestException, ConflictException, ForbiddenException, HttpException, Injectable, PayloadTooLargeException, ServiceUnavailableException } from "@nestjs/common";
 import pg from "pg";
+import { bindDeviceRestorePlan, verifyDeviceRestorePlan } from "./device-backup-plan.js";
+import type { DeviceDomainRows } from "./device-backup-domain-links.js";
+import { readDeviceRestoreForeignKeys } from "./device-backup-references.js";
+import { deviceBackupImpact } from "./device-backup-impact.js";
 import { resetBytesHash, resetDigest, referencedResetObjectInventory, readResetObject, resetS3Client, resetS3Config, tenantResetColumns, tenantResetTableNames, withTenantDb, readTenantBackupSchema, type TenantResetSnapshot, type TenantResetTable, type Queryable } from "@o-okul/db";
 import type { TenantDeviceBackupPreview } from "@o-okul/shared-types";
 import { z } from "zod";
@@ -104,6 +108,33 @@ export function validateDeviceBackupPayload(value: unknown, tenantId: string): D
   return payload;
 }
 
+export async function readDeviceDomainRows(db: Queryable, tenantId: string): Promise<DeviceDomainRows> {
+  // Bound each metadata read; secrets and recipient payloads never enter this planner.
+  const sessions = (await db.query<DeviceDomainRows["sessions"][number]>(`SELECT /* device_restore_domain */ "userId","subjectType","subjectId",roles FROM "AuthSession" WHERE "tenantId"=$1 AND status='ACTIVE' AND "expiresAt">now() ORDER BY id LIMIT 2001`,[tenantId])).rows;
+  const invitations = (await db.query<DeviceDomainRows["invitations"][number]>(`SELECT /* device_restore_domain */ id,"subjectType","subjectId",(status='PENDING' AND "expiresAt">now()) AS pending FROM "IdentityInvitation" WHERE "tenantId"=$1 ORDER BY id LIMIT 2001`,[tenantId])).rows;
+  const resets = (await db.query<DeviceDomainRows["resets"][number]>(`SELECT /* device_restore_domain */ p.id,p."userId" FROM "PasswordResetToken" p JOIN "User" u ON u.id=p."userId" WHERE u."tenantId"=$1 ORDER BY p.id LIMIT 2001`,[tenantId])).rows;
+  const outbox = (await db.query<DeviceDomainRows["outbox"][number]>(`SELECT /* device_restore_domain */ o.purpose,o."sourceId",o."sourceScope",o."tenantLifecycleVersion",t."lifecycleVersion" AS "currentVersion",o.status,o.attempts FROM "SecretDeliveryOutbox" o JOIN "Tenant" t ON t.id=o."tenantId" WHERE o."tenantId"=$1 ORDER BY o.id LIMIT 2001`,[tenantId])).rows;
+  const truncated = Object.entries({AuthSession:sessions,IdentityInvitation:invitations,PasswordResetToken:resets,SecretDeliveryOutbox:outbox}).filter(([,rows])=>rows.length>2000).map(([name])=>name);
+  return {sessions:sessions.slice(0,2000),invitations:invitations.slice(0,2000),resets:resets.slice(0,2000),outbox:outbox.slice(0,2000),truncated};
+}
+
+export async function readDevicePlanControls(db:Queryable,tenantId:string) {
+  const fields:Record<string,string[]>={
+    Tenant:["id","status","lifecycleVersion","resetRequest","plan","licenseStartsAt","licenseEndsAt","seatLimit"],
+    User:["id","accountStatus","membershipVersion","passwordChangedAt","totpEnabledAt"],
+    TenantMembership:["id","userId","role","staffRole","hasTeacherPersona","hasStudentPersona","scopeMode","version","status","startsAt","endsAt"],
+    MembershipCampusScope:["id","membershipId","campusId"],
+    LicenseTerm:["id","planCode","startsAt","endsAt","activeStudentLimit","cancelledAt"],
+    AuthSession:["id","userId","membershipId","membershipVersion","activePersona","roles","subjectType","subjectId","status","expiresAt"],
+  };
+  const result:Record<string,string[]>={};
+  for(const [table,columns]of Object.entries(fields)){
+    const rows=(await db.query<{row:string}>(`SELECT /* device_restore_plan */ to_jsonb(meta)::text AS row FROM (SELECT ${columns.map(c=>'"'+c+'"').join(',')} FROM "${table}" WHERE "${table==='Tenant'?'id':'tenantId'}"=$1 ${table==='AuthSession'?"AND status='ACTIVE' AND \"expiresAt\">now()":""} ORDER BY id LIMIT 2001) meta`,[tenantId])).rows;
+    if(rows.length>2000)return null;result[table]=rows.map(r=>r.row);
+  }
+  return result;
+}
+
 @Injectable()
 export class DeviceBackupService {
   private pool?: pg.Pool;
@@ -164,17 +195,39 @@ export class DeviceBackupService {
       } finally { s3.destroy(); }
     });
   }
-  async preview(context: RequestContext, file: Buffer, password: string): Promise<TenantDeviceBackupPreview> {
+  async preview(context: RequestContext, file: Buffer, password: string, planToken?: string): Promise<TenantDeviceBackupPreview> {
     return this.exclusive(context, async () => {
+      const issuedAt = Date.now();
+      if (planToken) verifyDeviceRestorePlan(planToken, context, file);
       const { header, payload: bytes } = await openDeviceBackup(file, context.tenantId!, password, deviceBackupSigningKeys().publicKeys);
       let payload: DeviceBackupPayload;
       try { payload = validateDeviceBackupPayload(JSON.parse(bytes.toString("utf8")), context.tenantId!); }
       catch { throw new BadRequestException("DEVICE_BACKUP_CONTENT_INVALID"); }
       finally { bytes.fill(0); }
-      const current = await this.readSource(context, async (_db, schema) => schema);
-      const compatible = current === payload.schemaDigest;
+      const current = await withTenantDb(this.sourcePool(), { tenantId: context.tenantId, bypassRls: false, readOnly: true, repeatableRead: true }, async db => {
+        await db.query("SET LOCAL TIME ZONE 'UTC'");
+        await assertSourceActor(db, context);
+        const schema = await readTenantBackupSchema(db);
+        if (schema !== payload.schemaDigest) { if (planToken) throw new ConflictException("DEVICE_RESTORE_PLAN_STALE"); return { schema, impact: undefined, plan: undefined }; }
+        const projected = await projectDeviceBackup(context.tenantId!, schema, db);
+        const terms = await db.query<{ activeStudentLimit: number; matches: boolean }>(`SELECT term."activeStudentLimit",
+          (term."planCode"=tenant."plan" AND term."startsAt"=tenant."licenseStartsAt" AND term."endsAt"=tenant."licenseEndsAt" AND term."activeStudentLimit"=tenant."seatLimit") AS matches
+          FROM "LicenseTerm" term JOIN "Tenant" tenant ON tenant.id=term."tenantId"
+          WHERE term."tenantId"=$1 AND term."cancelledAt" IS NULL AND term."startsAt"<=now() AND now()<term."endsAt" ORDER BY term."startsAt" DESC LIMIT 2`, [context.tenantId]);
+        const limit = terms.rows.length === 1 && terms.rows[0]?.matches === true ? terms.rows[0].activeStudentLimit : null;
+        const foreignKeys=await readDeviceRestoreForeignKeys(db), domainRows=await readDeviceDomainRows(db,context.tenantId!);
+        const impact=deviceBackupImpact(payload,projected,limit,foreignKeys,domainRows), controls=await readDevicePlanControls(db,context.tenantId!);
+        if (!controls || domainRows.truncated.length) {
+          if (planToken) throw new ConflictException("DEVICE_RESTORE_PLAN_SOURCE_UNVERIFIED");
+          impact.blockers.push("DEVICE_RESTORE_PLAN_SOURCE_UNVERIFIED");
+          return {schema,impact,plan:undefined};
+        }
+        const plan=bindDeviceRestorePlan(context,file,{schema,tables:projected.tables,terms:terms.rows,foreignKeys,domainRows,controls,impact},issuedAt,planToken);
+        return {schema,impact,plan};
+      });
+      const compatible = current.schema === payload.schemaDigest;
       const inline = ["HomeworkMaterialFile", "SupportTicketAttachment"].flatMap(name => decodedRows(payload, name)).filter(row => typeof row.contentBase64 === "string");
-      return { backupId: header.backupId, tenantId: header.tenantId, createdAt: header.createdAt, schemaCompatible: compatible, tableCounts: Object.fromEntries(Object.entries(payload.tables).map(([table,rows]) => [table,rows.length])), fileCount: payload.files.length + inline.length, fileBytes: [...payload.files, ...inline].reduce((sum,f) => sum + Buffer.byteLength(String(f.contentBase64),"base64"),0), integrityVerified: true, restoreVerified: false, canRestore: false, blockers: [...(compatible ? [] : ["DEVICE_BACKUP_SCHEMA_UNSUPPORTED"]), "DEVICE_BACKUP_RESTORE_NOT_VERIFIED"] };
+      return { backupId: header.backupId, tenantId: header.tenantId, createdAt: header.createdAt, schemaCompatible: compatible, tableCounts: Object.fromEntries(Object.entries(payload.tables).map(([table,rows]) => [table,rows.length])), fileCount: payload.files.length + inline.length, fileBytes: [...payload.files, ...inline].reduce((sum,f) => sum + Buffer.byteLength(String(f.contentBase64),"base64"),0), integrityVerified: true, restoreVerified: false, canRestore: false, plan: current.plan, impact: current.impact, blockers: [...(compatible ? [] : ["DEVICE_BACKUP_SCHEMA_UNSUPPORTED"]), "DEVICE_BACKUP_RESTORE_NOT_VERIFIED", ...(current.impact?.blockers ?? [])] };
     });
   }
 }

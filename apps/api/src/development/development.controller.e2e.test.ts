@@ -18,7 +18,7 @@ describe("Development API", () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
-    await app.init();
+    await app.listen(0, "127.0.0.1");
     server = app.getHttpServer() as Parameters<typeof request>[0];
 
     tenantAAccessToken = await login("admin-a@example.test");

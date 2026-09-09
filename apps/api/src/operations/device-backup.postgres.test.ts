@@ -45,6 +45,7 @@ run("device backup PostgreSQL projection", () => {
       await admin.query('DELETE FROM "Exam" WHERE "tenantId" = ANY($1::text[])',[tenants]);
       await admin.query('DELETE FROM "AuthSession" WHERE "tenantId" = ANY($1::text[])',[tenants]);
       await admin.query('DELETE FROM "TenantMembership" WHERE "tenantId" = ANY($1::text[])',[tenants]);
+      for (const table of ["LicenseTerm"]) await admin.query(`DELETE FROM "${table}" WHERE "tenantId"=ANY($1::text[])`,[tenants]);
       await admin.query('DELETE FROM "User" WHERE "tenantId" = ANY($1::text[])',[tenants]);
       await admin.query('DELETE FROM "Tenant" WHERE "id" = ANY($1::text[])',[tenants]);
     } finally { await Promise.all([admin.end(),app.end()]); vi.unstubAllEnvs(); }
@@ -76,11 +77,34 @@ run("device backup PostgreSQL projection", () => {
     const password = "local synthetic backup password";
     const file = await sealDeviceBackup(Buffer.from(JSON.stringify(payload)),tenantId,password,signing.privateKey);
     const context: RequestContext = { tenantId, userId: tenantId+"-user", sessionId: tenantId+"-session", membershipId: tenantId+"-member", membershipVersion: 1, activePersona: "STAFF", roles: ["TENANT_ADMIN"], bypassRls: false };
+    const starts = new Date(Date.now()-86400000), ends = new Date(Date.now()+86400000);
+    await admin.query('INSERT INTO "LicenseTerm" (id,"tenantId","planCode","startsAt","endsAt","activeStudentLimit") VALUES ($1,$2,$3,$4,$5,100)',[tenantId+"-preview-term",tenantId,"FIXTURE",starts,ends]);
+    await admin.query('UPDATE "Tenant" SET plan=$2,"licenseStartsAt"=$3,"licenseEndsAt"=$4,"seatLimit"=100 WHERE id=$1',[tenantId,"FIXTURE",starts,ends]);
+    const beforePreview = await withTenantDb(app,{tenantId,readOnly:true},async db => projectDeviceBackup(tenantId,await readTenantBackupSchema(db),db));
     const service = new DeviceBackupService();
     try {
+      const initialPreview = await service.preview(context,file,password), impact = initialPreview.impact;
+      expect(initialPreview.plan).toMatchObject({scope:"DATABASE_PREVIEW_ONLY",canApply:false});
+      expect((await service.preview(context,file,password,initialPreview.plan!.token)).plan).toEqual(initialPreview.plan);
+      await admin.query('UPDATE "Exam" SET title=$2 WHERE id=$1',[tenantId+"-exam","changed after plan"]);
+      await expect(service.preview(context,file,password,initialPreview.plan!.token)).rejects.toMatchObject({status:409,message:"DEVICE_RESTORE_PLAN_STALE"});
+      await admin.query('UPDATE "Exam" SET title=$2 WHERE id=$1',[tenantId+"-exam","Fixture"]);
+      await admin.query('INSERT INTO "LicenseTerm" (id,"tenantId","planCode","startsAt","endsAt","activeStudentLimit") VALUES ($1,$2,$3,$4,$5,100)',[tenantId+"-future-term",tenantId,"FUTURE",new Date(Date.now()+2*86400000),new Date(Date.now()+3*86400000)]);
+      await expect(service.preview(context,file,password,initialPreview.plan!.token)).rejects.toMatchObject({status:409,message:"DEVICE_RESTORE_PLAN_STALE"});
+      await admin.query('DELETE FROM "LicenseTerm" WHERE id=$1',[tenantId+"-future-term"]);
+      expect(impact).toMatchObject({additions:0,changes:0,removals:0,activeStudentLimit:100,canApply:false});
+      expect(await withTenantDb(app,{tenantId,readOnly:true},async db=>projectDeviceBackup(tenantId,await readTenantBackupSchema(db),db))).toEqual(beforePreview);
+      await admin.query('UPDATE "Tenant" SET "seatLimit"=101 WHERE id=$1',[tenantId]);
+      expect((await service.preview(context,file,password)).impact?.blockers).toContain("DEVICE_RESTORE_CURRENT_LICENSE_UNVERIFIED");
+      await admin.query('UPDATE "Tenant" SET "seatLimit"=100 WHERE id=$1',[tenantId]);
       expect(await service.preview(context,file,password)).toMatchObject({ tenantId, integrityVerified: true, schemaCompatible: true, fileCount: 1, canRestore: false });
       await admin.query('UPDATE "AuthSession" SET "status"=\'REVOKED\' WHERE "id"=$1',[context.sessionId]);
-      await expect(service.preview(context,file,password)).rejects.toMatchObject({ status: 403, message: "DEVICE_BACKUP_ACTOR_CHANGED" });
-    } finally { await service.onApplicationShutdown(); }
+      await expect(service.preview(context,file,password,initialPreview.plan!.token)).rejects.toMatchObject({ status: 403, message: "DEVICE_BACKUP_ACTOR_CHANGED" });
+    } finally {
+      await service.onApplicationShutdown();
+      await admin.query('DELETE FROM "LicenseTerm" WHERE id=$1',[tenantId+"-preview-term"]);
+      await admin.query('UPDATE "Tenant" SET plan=$2,"licenseStartsAt"=NULL,"licenseEndsAt"=NULL,"seatLimit"=NULL WHERE id=$1',[tenantId,"TRIAL"]);
+    }
   });
+
 });
