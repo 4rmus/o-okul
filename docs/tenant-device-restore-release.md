@@ -40,7 +40,9 @@ RLS zorunlu iş, dosya niyeti ve makbuz tablolarını kurar. Bunlar portable kur
 arşivine dahil edilmez; işlem kuyruğu eski yedekten yeniden çalıştırılamaz.
 Yeni rol `o_okul_device_restore_worker`, CREATEROLE/BYPASSRLS/rol üyeliği olmadan
 ve korunan kurumları ayrıca dışlayan dar politikalarla çalışır. Bootstrap yeni rolü
-NOLOGIN oluşturur; önceden güvenle sağlanmış login/parolayı değiştirmez.
+NOLOGIN oluşturur ve yalnız özel şemayı migration hesabına ait olarak hazırlar;
+önceden güvenle sağlanmış login/parolayı değiştirmez. Migration hesabına genel
+veritabanı CREATE yetkisi verilmez.
 
 Arşiv, parola ve kurtarma içeriği AES-GCM altında kalır. Bitmiş/iptal edilmiş işlerin
 şifreli içeriği yedi gün sonra temizlenir; işlem kimliği, hash ve sonuç makbuzu kalır.

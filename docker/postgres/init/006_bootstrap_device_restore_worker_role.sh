@@ -14,5 +14,11 @@ DO $$ BEGIN
       OR EXISTS (SELECT 1 FROM pg_auth_members membership WHERE membership.roleid = pg_roles.oid OR membership.member = pg_roles.oid))) THEN
     RAISE EXCEPTION 'DEVICE_RESTORE_WORKER_ROLE_UNSAFE';
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='device_existing_restore') THEN
+    CREATE SCHEMA device_existing_restore AUTHORIZATION migration;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_namespace n JOIN pg_roles r ON r.oid=n.nspowner WHERE n.nspname='device_existing_restore' AND r.rolname<>'migration') THEN
+    RAISE EXCEPTION 'DEVICE_RESTORE_SCHEMA_OWNER_UNSAFE';
+  END IF;
 END $$;
 SQL

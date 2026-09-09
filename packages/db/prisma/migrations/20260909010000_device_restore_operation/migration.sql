@@ -5,7 +5,11 @@ DO $$ BEGIN
     CREATE ROLE o_okul_device_restore_worker NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
   END IF;
 END $$;
-CREATE SCHEMA device_existing_restore;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_namespace n JOIN pg_roles r ON r.oid=n.nspowner WHERE n.nspname='device_existing_restore' AND r.rolname=current_user) THEN
+    RAISE EXCEPTION 'DEVICE_RESTORE_SCHEMA_BOOTSTRAP_REQUIRED';
+  END IF;
+END $$;
 REVOKE ALL ON SCHEMA device_existing_restore FROM PUBLIC;
 GRANT USAGE ON SCHEMA device_existing_restore TO app,o_okul_device_restore_worker;
 GRANT USAGE ON SCHEMA public TO o_okul_device_restore_worker;
