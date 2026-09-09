@@ -672,6 +672,7 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
   if (portalArrayPaths.has(pathName)) return { data: [] };
 
   if (pathName === "/tenants/current/reset-request") return { data: { request: null } };
+  if (pathName === "/device-backups/status") return { data: { available: false, maxFileBytes: 33558528 } };
 
   const directArrays: Record<string, unknown[]> = {
     "/academic-terms": [termFixture],

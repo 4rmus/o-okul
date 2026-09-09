@@ -6,6 +6,7 @@ type JsonContent = Record<string, { schema: JsonSchema }>;
 
 interface OperationContract {
   requestBody?: JsonSchema;
+  requestContentType?: string;
   requestBodyRequired?: boolean;
   responseBody?: JsonSchema;
   rawResponseBody?: JsonSchema;
@@ -2842,6 +2843,14 @@ const tenantDataExportPayloadSchema = objectSchema({
   warnings: arraySchema(stringSchema()),
 }, ["formatVersion", "tenantId", "generatedByUserId", "exportedAt", "scope", "rowLimitPerTable", "tables", "warnings"]);
 
+const deviceBackupPreviewSchema = objectSchema({
+  backupId: stringSchema(), tenantId: stringSchema(), createdAt: stringSchema({ format: "date-time" }),
+  schemaCompatible: { type: "boolean" }, tableCounts: { type: "object", additionalProperties: integerSchema({ minimum: 0 }) },
+  fileCount: integerSchema({ minimum: 0 }), fileBytes: integerSchema({ minimum: 0 }),
+  integrityVerified: { type: "boolean", enum: [true] }, restoreVerified: { type: "boolean", enum: [false] },
+  canRestore: { type: "boolean", enum: [false] }, blockers: arraySchema(stringSchema()),
+}, ["backupId", "tenantId", "createdAt", "schemaCompatible", "tableCounts", "fileCount", "fileBytes", "integrityVerified", "restoreVerified", "canRestore", "blockers"]);
+
 const messageTemplateChannelSchema = { type: "string", enum: ["SMS"] };
 
 const identityInvitationSubjectTypeSchema = { type: "string", enum: ["TEACHER", "STUDENT", "GUARDIAN", "EMPLOYEE"] };
@@ -4390,6 +4399,17 @@ const operationContracts: Record<string, OperationContract> = {
     requestBody: backupRestoreJobCreateRequestSchema,
     responseBody: backupRestoreJobRecordSchema,
   },
+  "get /api/v1/device-backups/status": {
+    responseBody: objectSchema({ available: { type: "boolean" }, maxFileBytes: integerSchema({ minimum: 1 }) }, ["available", "maxFileBytes"]),
+  },
+  "post /api/v1/device-backups/download": {
+    requestBody: objectSchema({ password: stringSchema({ minLength: 12, maxLength: 128, format: "password", writeOnly: true }) }, ["password"]),
+    rawResponseBody: stringSchema({ format: "binary" }), rawResponseContentType: "application/octet-stream",
+  },
+  "post /api/v1/device-backups/preview": {
+    requestBody: objectSchema({ password: stringSchema({ minLength: 12, maxLength: 128, format: "password", writeOnly: true }), file: stringSchema({ format: "binary" }) }, ["password", "file"]),
+    requestContentType: "multipart/form-data", responseBody: deviceBackupPreviewSchema,
+  },
   "get /api/v1/backup-restore-jobs": {
     responseBody: arraySchema(backupRestoreJobRecordSchema),
     listResponse: true,
@@ -4456,7 +4476,7 @@ export function applyOpenApiContracts(document: OpenAPIObject): OpenAPIObject {
     if (contract.requestBody) {
       operation.requestBody = {
         required: contract.requestBodyRequired ?? true,
-        content: jsonContent(contract.requestBody),
+        content: jsonContent(contract.requestBody, contract.requestContentType ?? jsonContentType),
       };
     }
 

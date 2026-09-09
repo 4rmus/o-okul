@@ -1,4 +1,6 @@
 import { Module } from "@nestjs/common";
+import { DeviceBackupController, DeviceBackupGuard } from "./device-backup.controller.js";
+import { DeviceBackupService } from "./device-backup.service.js";
 import { AuditLogModule } from "../audit-log/audit-log.module.js";
 import { createBullTenantQueueProducer } from "../queue/bullmq-producer.js";
 import { BackupRestoreController } from "./backup-restore.controller.js";
@@ -12,8 +14,10 @@ import { createTenantDataExportStore, tenantDataExportStoreToken } from "./tenan
 
 @Module({
   imports: [AuditLogModule],
-  controllers: [BackupRestoreController],
+  controllers: [BackupRestoreController, DeviceBackupController],
   providers: [
+    DeviceBackupService,
+    DeviceBackupGuard,
     BackupRestoreService,
     TenantDataExportService,
     {

@@ -15,6 +15,8 @@ export interface TenantDbContext {
   bypassRls?: boolean;
   /** Enforced by PostgreSQL; reserved for polling reset metadata during the exclusive lock. */
   readOnly?: boolean;
+  /** Consistent tenant data export; valid only with readOnly. */
+  repeatableRead?: boolean;
 }
 
 export async function withTenantDb<T>(
@@ -34,7 +36,7 @@ export async function withTenantDb<T>(
   const client = await pool.connect();
   let discard = false;
   try {
-    await client.query(context.readOnly ? "BEGIN READ ONLY" : "BEGIN");
+    await client.query(context.repeatableRead ? "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY" : context.readOnly ? "BEGIN READ ONLY" : "BEGIN");
     if (context.tenantId && !context.readOnly) await acquireTenantDatabaseSharedLock(client, context.tenantId);
     await applyTenantSettings(client, context);
     const result = await callback(client);
@@ -58,6 +60,8 @@ async function applyTenantSettings(client: Queryable, context: TenantDbContext):
 export function assertTenantDbContext(context: TenantDbContext): void {
   if (context.bypassRls !== undefined && typeof context.bypassRls !== "boolean") throw new Error("TENANT_CONTEXT_INVALID");
   if (context.readOnly !== undefined && typeof context.readOnly !== "boolean") throw new Error("TENANT_CONTEXT_INVALID");
+  if (context.repeatableRead !== undefined && typeof context.repeatableRead !== "boolean") throw new Error("TENANT_CONTEXT_INVALID");
+  if (context.repeatableRead && !context.readOnly) throw new Error("TENANT_CONTEXT_INVALID");
   if (context.tenantId === null && context.bypassRls === true) return;
   tenantDatabaseLockKey(context.tenantId as string);
 }

@@ -90,8 +90,7 @@ export async function executeDrill(options) {
   assert.equal(context.length, 1); validateContext(context[0], options);
   const images = JSON.parse(await docker(["image", "inspect", image])); // No implicit pull.
   assert.equal(images.length, 1); assert.match(images[0].Id, /^sha256:[a-f0-9]{64}$/);
-  await command("pnpm", ["--filter", "@o-okul/shared-types", "build"]);
-  await command("pnpm", ["--filter", "@o-okul/db", "build"]);
+  await command("pnpm", ["--filter", "@o-okul/api^...", "build"]);
   const manifest = await plan(options);
   const nonce = randomBytes(12).toString("hex"), name = `o-okul-reset-drill-${nonce}`;
   const password = randomBytes(24).toString("hex");
@@ -209,9 +208,10 @@ export async function executeDrill(options) {
     const appUrl = `postgresql://app:${password}@127.0.0.1:${port}/o_okul_reset_drill`;
     const adminUrl = `postgresql://postgres:${password}@127.0.0.1:${port}/o_okul_reset_drill`;
     await command("pnpm", ["--filter", "@o-okul/api", "exec", "vitest", "run", "--no-file-parallelism",
-      "src/identity-invitation/employee-account-activation-store.postgres.test.ts", "src/student/student-license-concurrency.postgres.test.ts"], {
+      "src/identity-invitation/employee-account-activation-store.postgres.test.ts", "src/student/student-license-concurrency.postgres.test.ts", "src/operations/device-backup.postgres.test.ts"], {
       ACCOUNT_MANAGEMENT_POSTGRES_REQUIRED: "1", EMPLOYEE_ACTIVATION_POSTGRES_TEST_URL: appUrl, EMPLOYEE_ACTIVATION_POSTGRES_ADMIN_URL: adminUrl,
       STUDENT_LICENSE_POSTGRES_TEST_URL: appUrl, STUDENT_LICENSE_POSTGRES_ADMIN_URL: adminUrl,
+      DEVICE_BACKUP_POSTGRES_TEST_URL: appUrl, DEVICE_BACKUP_POSTGRES_ADMIN_URL: adminUrl, DEVICE_BACKUP_POSTGRES_REQUIRED: "1",
     });
     evidence.accountManagementPostgresTests = "PASS";
     assert.equal(unexpectedPoolError, false, "UNEXPECTED_POOL_ERROR");

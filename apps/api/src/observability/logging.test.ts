@@ -26,6 +26,7 @@ describe("api structured logging", () => {
   it("redacts PII keys and string values", () => {
     expect(redactLogValue({
       email: "veli@example.test",
+      TENANT_DEVICE_BACKUP_SIGNING_PRIVATE_KEY: "private signing material",
       profile: {
         firstName: "Ada",
         phone: "0500 123 45 67",
@@ -33,6 +34,7 @@ describe("api structured logging", () => {
       },
     })).toEqual({
       email: "[Filtered]",
+      TENANT_DEVICE_BACKUP_SIGNING_PRIVATE_KEY: "[Filtered]",
       profile: {
         firstName: "[Filtered]",
         phone: "[Filtered]",

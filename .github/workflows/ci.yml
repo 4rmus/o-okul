@@ -155,6 +155,9 @@ jobs:
       STUDENT_LICENSE_POSTGRES_TEST_URL: postgresql://app:app@localhost:5432/o_okul
       STUDENT_LICENSE_POSTGRES_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/o_okul
       ACCOUNT_MANAGEMENT_POSTGRES_REQUIRED: "1"
+      DEVICE_BACKUP_POSTGRES_TEST_URL: postgresql://app:app@localhost:5432/o_okul
+      DEVICE_BACKUP_POSTGRES_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/o_okul
+      DEVICE_BACKUP_POSTGRES_REQUIRED: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -197,10 +200,11 @@ jobs:
         run: |
           createdb --host localhost --username postgres o_okul_student_grade_level_test
           pnpm --filter @o-okul/db db:student-grade-level:check:postgres
-      - name: Build account-management test dependencies
-        run: pnpm --filter @o-okul/db... build
+      - name: Build API PostgreSQL test dependencies
+        run: pnpm --filter '@o-okul/api^...' build
       - name: Verify account-management PostgreSQL concurrency
         run: >-
           pnpm --filter @o-okul/api exec vitest run --no-file-parallelism --reporter=verbose
           src/identity-invitation/employee-account-activation-store.postgres.test.ts
           src/student/student-license-concurrency.postgres.test.ts
+          src/operations/device-backup.postgres.test.ts

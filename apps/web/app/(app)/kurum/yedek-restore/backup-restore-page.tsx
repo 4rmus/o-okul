@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, DataTable, EmptyState, Field, Input, Panel, Select, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
 import { apiBaseUrl, apiErrorMessage, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import { useAuth } from "../../../providers.js";
+import { DeviceBackupPanel } from "./device-backup-panel.js";
 import { EvidenceTrustPanel, OperationDecisionNotice, ReferenceBadge } from "../_shared/evidence-panels.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
@@ -182,6 +183,7 @@ export function BackupRestorePage() {
         badges={summaryBadges}
         items={summaryItems}
       />
+      <DeviceBackupPanel key={`${auth?.session.tenantId}:${auth?.session.id}:${auth?.session.membershipVersion}:${auth?.session.roles.join(",")}`} />
       <EvidenceTrustPanel
         ariaLabel="Yedekleme ve geri yükleme güven durumu"
         title="Yedekleme Güvence Durumu"
@@ -189,7 +191,7 @@ export function BackupRestorePage() {
         items={[
           {
             label: "Ekrandan dışa aktarım",
-            value: "Kullanıcı yedeği",
+            value: "JSON dışa aktarımı",
             tone: "success",
             scope: "configured-api",
             detail: "Kurum verisi JSON olarak indirilir; sunucu tarafındaki geri yükleme kanıtının yerine geçmez.",
@@ -222,12 +224,14 @@ export function BackupRestorePage() {
           </Button>
         }
         aria-label="Kurum veri yedeği"
-        description="Kurumun kendi eklediği operasyon kayıtları sunucu dışına taşınabilir JSON dosyası olarak hazırlanır."
-        title="Kurum Veri Yedeği"
+        description="Seçili kayıtların JSON kopyasıdır. Dosya içeriklerini kapsamaz ve doğrudan geri yüklenemez."
+        title="JSON Veri Dışa Aktarımı"
       >
         <p>Öğrenci, veli, öğretmen, sınıf, finans, sınav, rapor, duyuru ve destek kayıtlarını JSON dosyası olarak indir.</p>
         {exportError ? <p className="next-form-error">{exportError}</p> : null}
       </Panel>
+      <details>
+        <summary>Teknik operasyonlar</summary>
       <Panel
         as="form"
         aria-label="Panel geri yükleme tatbikatı işi"
@@ -280,6 +284,7 @@ export function BackupRestorePage() {
           {operationType === "BACKUP" ? "Yedek al" : "Geri yüklemeyi dene"}
         </Button>
       </Panel>
+      </details>
       <Panel
         aria-label="Yedekleme ve geri yükleme işleri"
         description="Son panel işleri maskeli hedef ve hazırlama işlemi kaydıyla listelenir."

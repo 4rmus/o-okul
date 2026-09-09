@@ -2872,3 +2872,17 @@ export interface TenantResetDeliveryReceipt {
   providerReceiptHash: string | null;
   reconciliation: "EXTERNAL_PROOF_REQUIRED";
 }
+
+export interface TenantDeviceBackupPreview {
+  backupId: string;
+  tenantId: string;
+  createdAt: string;
+  schemaCompatible: boolean;
+  tableCounts: Record<string, number>;
+  fileCount: number;
+  fileBytes: number;
+  integrityVerified: true;
+  restoreVerified: false;
+  canRestore: false;
+  blockers: string[];
+}

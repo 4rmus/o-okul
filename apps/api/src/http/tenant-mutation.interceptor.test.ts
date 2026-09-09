@@ -3,6 +3,7 @@ import { lastValueFrom, Observable, of, throwError } from "rxjs";
 import { Controller, Post, type ExecutionContext } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { readOnlyOperationMetadata } from "./read-only-operation.js";
 import { request as httpRequest } from "node:http";
 const state = vi.hoisted(() => ({ end: vi.fn(), version: 2, status: "ACTIVE", actorActive: true, rows: new Map<string, { id: string; tenantId: string; version: number; status: string }>() }));
 const pdfQueue = vi.hoisted(() => ({ ready: vi.fn(async () => {}), complete: vi.fn(async () => ({})), close: vi.fn(async () => {}) }));
@@ -34,6 +35,13 @@ const execution = { switchToHttp: () => ({ getRequest: () => ({ method: "POST" }
 beforeEach(() => { openApiMutationAdmission(); state.end.mockClear(); state.version = 2; state.status = "ACTIVE"; state.actorActive = true; state.rows.clear(); vi.stubEnv("NODE_ENV", "production"); vi.stubEnv("PERSISTENCE_DRIVER", "memory"); vi.stubEnv("TENANT_STORE", "memory"); });
 afterEach(async () => { await closeTenantMutationPool(); vi.unstubAllEnvs(); });
 describe("HTTP durable lifetime with real activity adapter and injected SQL", () => {
+  it("tracks an explicitly read-only POST without creating durable mutation uncertainty", async () => {
+    const handler = () => {};
+    Reflect.defineMetadata(readOnlyOperationMetadata, true, handler);
+    const ctx = { ...execution, getHandler: () => handler } as ExecutionContext;
+    await expect(runWithRequestContext(context, () => lastValueFrom(new TenantMutationInterceptor().intercept(ctx, { handle: () => throwError(() => new Error("INVALID_BACKUP")) })))).rejects.toThrow("INVALID_BACKUP");
+    expect(state.rows.size).toBe(0); expect(state.end).not.toHaveBeenCalled();
+  });
   it("blocks a real disconnected HTTP request that reaches the interceptor after shutdown", async () => {
     const effect = vi.fn(() => "changed");
     @Controller("shutdown-probe") class Probe { @Post() mutate() { return effect(); } }
