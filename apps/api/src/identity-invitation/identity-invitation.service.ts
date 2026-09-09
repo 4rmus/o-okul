@@ -1,3 +1,4 @@
+import { runVerifiedTenantMutation } from "../context/tenant-mutation-activity.js";
 import { BadRequestException, ForbiddenException, GoneException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import {
   hasCapabilityForRoles,
@@ -97,7 +98,7 @@ export class IdentityInvitationService {
       role: subjectType,
       tokenHash: hashActivationToken(token),
       expiresAt,
-      delivery: createInvitationDelivery(tenantId, tenantSlug, email, token, expiresAt),
+      delivery: createInvitationDelivery(tenantId, tenantSlug, email, token, expiresAt, context.tenantLifecycleVersion),
     });
     await this.auditLogs?.record({
       tenantId,
@@ -146,7 +147,7 @@ export class IdentityInvitationService {
         role: input.role,
         tokenHash: hashActivationToken(token),
         expiresAt,
-        delivery: createInvitationDelivery(tenantId, tenantSlug, email, token, expiresAt),
+        delivery: createInvitationDelivery(tenantId, tenantSlug, email, token, expiresAt, context.tenantLifecycleVersion),
       });
     } catch (error) {
       if (isEmployeePendingInvitationConflict(error)) {
@@ -189,7 +190,7 @@ export class IdentityInvitationService {
     const invitation = await this.invitations.resend(tenantId, id, {
       tokenHash: hashActivationToken(token),
       expiresAt,
-      delivery: createInvitationDelivery(tenantId, tenantSlug, existing.email, token, expiresAt),
+      delivery: createInvitationDelivery(tenantId, tenantSlug, existing.email, token, expiresAt, context.tenantLifecycleVersion),
     });
     if (!invitation) throw new NotFoundException("IDENTITY_INVITATION_NOT_FOUND");
     await this.auditLogs?.record({
@@ -212,6 +213,10 @@ export class IdentityInvitationService {
 
     const invitation = await this.invitations.findByTokenHash(hashActivationToken(token));
     if (!invitation) throw new NotFoundException("IDENTITY_INVITATION_NOT_FOUND");
+    if (invitation.status !== "PENDING") throw new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
+    if (Date.parse(invitation.expiresAt) <= Date.now()) throw new BadRequestException("IDENTITY_INVITATION_EXPIRED");
+    const passwordHash = await hashPasswordAsync(password);
+    return runVerifiedTenantMutation({ tenantId: invitation.tenantId, lifecycleVersion: invitation.tenantLifecycleVersion!, kind: "AUTH_MUTATION", referenceId: `invitation:${invitation.id}`, source: { type: "INVITATION", id: invitation.id, tokenHash: hashActivationToken(token) } }, async () => {
     if (invitation.subjectType === "GUARDIAN") {
       await this.assertGuardianInvitationWritable({
         tenantId: invitation.tenantId,
@@ -223,7 +228,7 @@ export class IdentityInvitationService {
     if (invitation.subjectType === "EMPLOYEE" && this.employeeActivations) {
       const outcome = await this.employeeActivations.accept({
         tokenHash: hashActivationToken(token),
-        passwordHash: await hashPasswordAsync(password),
+        passwordHash,
         name: body.name?.trim(),
         acceptedAt: new Date().toISOString(),
       });
@@ -263,7 +268,7 @@ export class IdentityInvitationService {
         name: body.name?.trim() || invitation.name,
         nationalIdEncrypted,
         nationalIdHash,
-        passwordHash: await hashPasswordAsync(password),
+        passwordHash,
         roles: [invitation.role],
       });
     } catch (error) {
@@ -289,6 +294,7 @@ export class IdentityInvitationService {
       diff: { subjectType: invitation.subjectType, subjectId: invitation.subjectId, userId: user.id },
     });
     return accepted;
+    });
   }
 
   private requireTenantId(context: RequestContext): string {
@@ -412,10 +418,10 @@ function nextExpiry(): string {
   return expiresAt.toISOString();
 }
 
-function createInvitationDelivery(tenantId: string, tenantSlug: string, email: string, token: string, expiresAt: string): SecretDeliveryOutboxInput {
+function createInvitationDelivery(tenantId: string, tenantSlug: string, email: string, token: string, expiresAt: string, tenantLifecycleVersion?: number): SecretDeliveryOutboxInput {
   const url = createInvitationDeliveryUrl(token, tenantSlug);
   return {
-    tenantId,
+    tenantId, sourceScope: "TENANT", tenantLifecycleVersion,
     purpose: "IDENTITY_INVITATION",
     payloadEncrypted: encryptSecretDeliveryPayload({
       channel: "EMAIL",

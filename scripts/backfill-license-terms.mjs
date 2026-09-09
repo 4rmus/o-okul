@@ -97,7 +97,7 @@ async function collectReadiness(queryable) {
     WITH eligible AS (
       SELECT t.*
       FROM "Tenant" t
-      WHERE t."id" <> 'system' AND t."status" NOT IN ('DELETED', 'CLOSED')
+      WHERE t."id" <> 'system' AND t."status" = 'ACTIVE'
     ), term_counts AS (
       SELECT lt."tenantId", count(*)::int AS terms
       FROM "LicenseTerm" lt
@@ -106,6 +106,7 @@ async function collectReadiness(queryable) {
     ), overlapping AS (
       SELECT DISTINCT left_term."tenantId"
       FROM "LicenseTerm" left_term
+      JOIN eligible tenant ON tenant."id" = left_term."tenantId"
       JOIN "LicenseTerm" right_term
         ON right_term."tenantId" = left_term."tenantId" AND right_term."id" > left_term."id"
       WHERE left_term."cancelledAt" IS NULL AND right_term."cancelledAt" IS NULL
@@ -153,14 +154,14 @@ async function applyBackfill(queryable) {
     SELECT tenant."id", tenant."plan", tenant."licenseStartsAt", tenant."licenseEndsAt", tenant."seatLimit",
            'account-management-pr5-license-backfill', now()
     FROM "Tenant" tenant
-    WHERE tenant."id" <> 'system' AND tenant."status" NOT IN ('DELETED', 'CLOSED')
+    WHERE tenant."id" <> 'system' AND tenant."status" = 'ACTIVE'
       AND tenant."licenseStartsAt" IS NOT NULL AND tenant."licenseEndsAt" IS NOT NULL AND tenant."seatLimit" IS NOT NULL
       AND tenant."licenseStartsAt" < tenant."licenseEndsAt" AND tenant."seatLimit" > 0 AND btrim(tenant."plan") <> ''
       AND NOT EXISTS (SELECT 1 FROM "LicenseTerm" term WHERE term."tenantId" = tenant."id")`);
   await queryable.query(`
     SELECT o_okul_refresh_license_usage(tenant."id")
     FROM "Tenant" tenant
-    WHERE tenant."id" <> 'system' AND tenant."status" NOT IN ('DELETED', 'CLOSED')`);
+    WHERE tenant."id" <> 'system' AND tenant."status" = 'ACTIVE'`);
 }
 
 function deriveBlockers(checks) {

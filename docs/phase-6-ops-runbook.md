@@ -1734,7 +1734,7 @@ Minimum kanıt içeriği:
   mevcut veriyi okuyabilir.
 - Aynı tenant için POST/PATCH/PUT/DELETE yazma istekleri middleware'de `TENANT_LICENSE_EXPIRED_READ_ONLY`
   koduyla 403 olarak durdurulur.
-- `SUSPENDED` veya `DELETED` tenant'lar read-only moda alınmaz; request context kurulmadan
+- `SUSPENDED` tenant'lar read-only moda alınmaz; request context kurulmadan
   `TENANT_INACTIVE_OR_EXPIRED` ile reddedilir.
 
 ## Kurum Veri Export ve Opsiyonel Backup Smoke
@@ -2086,3 +2086,228 @@ pnpm restore:drill:check
 
 PITR kabul kriteri: seçilen zamana restore edilen DB'de son başarılı migration kaydı, tenant izolasyon
 policy'leri ve kritik tablolar okunabilir olmalıdır.
+
+### Fresh reset Gate 6G — geçici PostgreSQL doğrulaması için hazırlık
+
+İncelenecek artifact: `scripts/tenant-reset-postgres-drill.mjs`; guard testleri
+`scripts/tenant-reset-postgres-drill.test.mjs`. Varsayılan komut sadece kaynak/migration
+dosya adları ve SHA256'ları ile 11 senaryonun manifestini stdout'a basar:
+
+```sh
+node scripts/tenant-reset-postgres-drill.mjs
+node --test scripts/tenant-reset-postgres-drill.test.mjs
+```
+
+Bu iki komut Docker veya DB çağırmaz. `--execute` bir teknik kilittir, kullanıcı onayı
+değildir. AGENTS.md gereği gerçek geçici DB kurulumu/veri yazımı öncesinde bu somut artifact
+ve hedef için açık onay gerekir. Hazırlık sırasında Docker başlatılmaz, image çekilmez.
+
+Onaydan sonra kullanılabilecek **yerel default hedef** komutu:
+
+```sh
+node scripts/tenant-reset-postgres-drill.mjs --execute --docker-context default --approved-local-socket /var/run/docker.sock
+```
+
+Docker Desktop `desktop-linux` hedefi seçilecekse socket yalnız kullanıcının
+`~/.docker/run/docker.sock` mutlak yolu olabilir ve aynı endpoint context inspect'te
+görülmelidir. Docker Desktop olmayan macOS için yalnız ayrı `colima-o-okul-reset-drill`
+context'i ve `~/.colima/o-okul-reset-drill/docker.sock` mutlak yolu da kabul edilir.
+Onaylı deney için kurulmuş Colima ile hazırlık ve çalıştırma:
+
+```sh
+colima start o-okul-reset-drill --runtime docker --cpu 2 --memory 3 --disk 10 --mount none --activate=false --ssh-config=false
+docker --context colima-o-okul-reset-drill pull postgres:16
+node scripts/tenant-reset-postgres-drill.mjs --execute --docker-context colima-o-okul-reset-drill --approved-local-socket "$HOME/.colima/o-okul-reset-drill/docker.sock"
+```
+
+Bu profil varsayılan Colima ortamını başlatmaz ve aktif Docker context'ini değiştirmez.
+TCP/SSH/başka Unix socket, ambient DATABASE_URL/PG/DOCKER/NODE_OPTIONS/
+DOTENV override'ları reddedilir; `.env` yüklenmez. Docker daemon erişilebilir ve
+`postgres:16` image'ı önceden mevcut olmalıdır. `--pull=never`: eksik image gizlice çekilmez.
+
+Runner fresh nonce/name/label ile tek PostgreSQL 16 container oluşturur. Host DB dizini
+mount etmez; data tmpfs, publish yalnız `127.0.0.1` ve Docker'ın boş seçtiği porttur.
+DSN kullanıcıdan alınmaz: container inspect'te doğrulanan ID/image/label/tmpfs/loopback
+porttan kurulur. Parola yalnız o çalışma için üretilir; izole child env ile Docker'a
+aktarılır, argv/çıktı/kanıta yazılmaz.
+
+Bootstrap fresh `app`/`secret_delivery_worker` rolleri ve migration'ın oluşturduğu
+`o_okul_reset_worker` için geçici login kimliği sağlar; tablo izinleri migration'lardan
+gelir. `docker/postgres/init/001_roles.sql`, `002_sync_role_passwords.sh`,
+`003_bootstrap_secret_delivery_worker_role.sh`, `004_bootstrap_required_extensions.sh`
+üretim başlangıç varsayımlarının kaynağıdır; production parola/config dosyaları çalıştırılmaz.
+Repo migration'ları kendi extension tanımlarını uygular. Gerçek `prisma migrate deploy`,
+`.env` yüklemeyen geçici config ve yalnız yeni container portundan üretilmiş child-env
+DSN ile çalışır. Config dosyasına parola yazılmaz ve dosya finally ile kaldırılır.
+Başarılı `_prisma_migrations` ad/checksum kayıtları kaynak manifestiyle karşılaştırılır;
+ledger taklit edilmez. Bu yerel migration kanıtı full reset snapshot/restore kanıtı değildir.
+
+Gerçek kaynaklarla iki sentetik kurum üzerinde ortak/exclusive kilit, diğer kurumun
+ilerlemesi, READ ONLY, session sonlanınca kilit bırakılması, app RLS, ayrı reset/secret
+worker login grantları, immutable request/outbox triggerları, özgün epoch admission ve
+User-version MFA CAS kontrol edilir. `SET ROLE` ile worker kimliği taklit edilmez;
+`session_user=current_user` ve gerçek `assertResetWorkerRole` çalışır. Epoch/member
+değişimi sentetik fixture'dır; destructive reset/purge çalıştırılmaz. Shared/db build
+sonrasında mevcut TS kaynakları repoda kurulu tsx ile yüklenir.
+
+Kanıt yalnız `artifacts/tenant-reset-postgres-drill/<run-nonce>.json` dosyasına, üzerine
+yazmadan kaydedilir. Kaynak/migration hashleri sonunda tekrar eşleşmelidir; server major
+16 ve image ID gözlenir. Başarıda yalnız ID+name+nonce+image+tmpfs+port tekrar doğrulanmış
+container kaldırılır. Hata/şüpheli oluşturma sonucu otomatik retry veya silme yapmaz;
+container adı, sabit phase/scenario etiketi ve güvenli hata kodu kanıtta kalır. Tmpfs veri kalıcılığı/backup vaat etmez;
+container durursa verisi kaybolabilir. Ayrı inceleme olmadan belirsiz container silinmez.
+
+Başarılı bir çalıştırma bile yalnız `LOCAL_RUNTIME` PG SQL/role/concurrency kanıtıdır.
+S3/backup restore, Redis/provider, tam write-drain, staging/production veya canlı reset
+kanıtı değildir. `WRITE_QUIESCENCE_UNVERIFIED` değişmez.
+
+### Fresh reset Gate 6F — kayıtlı gateway kabul sonucunu salt okuma
+
+Sistem yöneticisi `GET /tenants/:id/reset-diagnostics/deliveries/:deliveryId/receipt`
+yoluyla yalnız o kuruma ait, değişmez `TENANT` provenance ve özgün lifecycleVersion
+taşıyan outbox kaydını sorgular. API, `secret-delivery:<outbox.id>` anahtarını kendisi
+türetir; kullanıcıdan gateway anahtarı almaz. DB transaction `READ ONLY` olarak kapanır,
+ardından mevcut notification endpoint origin'inde bearer ile `GET /receipts?key=...`
+çağrılır. Response/fetch `no-store`, redirect reddi ve 5 saniye timeout kullanılır.
+
+Bu endpoint **göndermez, tekrar denemez, satır temizlemez veya uzlaştırmayı onaylamaz**.
+`/send` bir lookup değildir; hiç çağrılmaz. `/messages/latest` yalnız aktivasyon URL
+kanıtıdır, terminal teslimat kanıtı değildir. Yeni send record'larının mevcut iki put'ı
+aynı createdAt/expiresAt/keyHash snapshotını saklar; eski kayıtlar doldurulmaz. Read,
+storage.get dışında put/setAlarm/delete yapmaz. Süresi dolan kaydı silmek veya alarmını
+uzatmak yerine `EXPIRED`; legacy/bozuk kayıt `UNVERIFIED`, yoksa `NOT_FOUND` döner.
+
+`PROVIDER_ACCEPTED`, gateway'in bu anahtar altında receipt'li sağlayıcı kabulü sakladığını
+gösterir; son kullanıcıya teslim edildiğini göstermez. Yerel providerMessageId varsa SHA256
+eşleşmesi `LOCAL_RECEIPT_MATCH`, yoksa yalnız `KEY_ONLY` korelasyonudur. KEY_ONLY tam mesaj
+içeriğini doğrulamaz. Mismatch `UNVERIFIED` olur. Çıktı sadece kayıt ID/özgün epoch,
+sınıflandırma, zamanlar ve receipt hash içerir; adres, body, token, fingerprint veya raw
+receipt açığa çıkmaz. Başarısız kayıt `UNCERTAIN`, erişim sorunu `UNAVAILABLE` kalır.
+
+Hiçbir durum `EXTERNAL_PROOF_REQUIRED` veya `WRITE_QUIESCENCE_UNVERIFIED` kapısını açmaz.
+Gerçek terminal teslimat ve belirsiz işlem uzlaştırması ayrı, yan etkisiz authoritative
+kanıt ister. Bu kaynak dilimi gateway deploy/config veya canlı lookup/send yetkisi değildir.
+
+### Fresh reset Gate 6D — outbox kanıt sözleşmesi v2
+
+Outbox same-row automatic retry artık güvenlik kanıtı değildir. Yeni read-only
+`secret-delivery-outbox:staging:smoke` ayrı iki kayıt ister:
+`SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_FILE` doğrulanmış tek denemeli başarı kaydını,
+`SECRET_DELIVERY_OUTBOX_UNCERTAIN_SOURCE_FILE` korunmuş tek denemeli UNCERTAIN kaydını
+referanslayan ayrı private 0600 dosyalardır. Değerler/artifact'ler bu kaynak değişikliğinde
+oluşturulmadı; gerçek gönderim ve smoke ayrı dış ortam yetkilendirmesi gerektirir.
+
+Belirsiz kaydın en az 300 saniyelik güncellenmemiş DB durumu gözlemdir; provider terminal
+sonucu veya worker canlılığı değildir. Başarı kaydı ayrı açık bir gönderime aittir ve
+provider receipt içerir. Kanıt yalnız hash/durum/sayaç taşır; belirsiz kayıt temizlenmez.
+`secret_delivery_worker` Outbox SELECT/UPDATE yanında yalnız Tenant id/status/lifecycleVersion
+kolonlarını okuyabilir. User veya diğer Tenant kolonları/yazma yetkisi verilemez; yeni
+migration ve checker bu sınırı tanımlar. Migration canlıya uygulanmadı.
+
+Legacy sourceScope/epoch doldurulmaz. Denenmiş PENDING, PROCESSING, UNCERTAIN ve legacy
+FAILED/EXPIRED kayıtları provider sonucu doğrulanmadan tekrar gönderilemez veya güvenli
+terminal duruma çevrilemez. Ciphertext redaksiyonu bu belirsizliği kaldırmaz. İşletim,
+`GET /tenants/:id/reset-diagnostics` metadata tanısını kullanabilir; destructive clear
+endpoint'i yoktur. Gateway `/send` bir lookup değildir; mevcut read-only terminal
+provider arayüzü eksikliği [Gate 6D kaydında](system-admin-tenant-reset-gate6-preflight.md) açıklanır.
+
+
+Gate 6G CLI çalıştırması (2026-09-07): `LOCAL_RUNTIME PASS`, 116 migration ve 11/11
+senaryo; kanıt `artifacts/tenant-reset-postgres-drill/d36575d9b02329266601c43f.json`.
+İlk SQL bootstrap ve session-termination test düzeni hataları incelenip düzeltildi;
+başarısız denemeler ayrı review kayıtlarıyla korundu. Tüm deney konteynerleri kaldırıldı.
+İş bitince yalnız bu profile ait kaynakları durdurmak için:
+
+```sh
+colima stop o-okul-reset-drill
+```
+
+Profil ve indirilen imaj sonraki yerel denemeler için diskte kalır. Tam reset ve
+queue/provider kapıları bu sonuçla açılmaz.
+
+
+### Fresh reset Gate 6H — yerel Redis/BullMQ doğrulaması
+
+Onaylı, ayrı `o-okul-reset-drill` Colima profilinde:
+
+```sh
+colima start o-okul-reset-drill --activate=false --ssh-config=false
+docker --context colima-o-okul-reset-drill pull redis:7
+node scripts/tenant-reset-postgres-drill.mjs --with-queue
+node --test scripts/tenant-reset-postgres-drill.test.mjs
+node scripts/tenant-reset-postgres-drill.mjs --execute --with-queue --docker-context colima-o-okul-reset-drill --approved-local-socket "$HOME/.colima/o-okul-reset-drill/docker.sock"
+```
+
+`--with-queue` tek başına sadece manifest üretir. `postgres:16` ve `redis:7` önceden
+mevcut olmalıdır; runner `--pull=never` kullanır. Caller DB/Redis hedefi alınmaz; yeni
+container inspect ile belirlenen loopback portları kullanılır. Redis parola child-env
+ile aktarılır ve tmpfs kullanılır. Callback provider'ı yerel stub'dır; SMS/HTTP göndermez.
+Sentetik tenant status/epoch değişiklikleri SQL üzerinden yapılır; canlı suspend API
+veya tüm queue türleri doğrulanmış sayılmaz. Worker kaynakları hash kapsamındadır.
+
+2026-09-07 sonucu: `LOCAL_RUNTIME PASS`, 11 PG + 5 queue senaryosu;
+`artifacts/tenant-reset-postgres-drill/06ba96e3564d98081fb13ad4.json`.
+Belirsiz gönderim otomatik/manual retry ile yeniden gönderilmedi; unresolved activity
+kaldı. Bu satırlar uzlaştırma taklidiyle silinmez. Başarıda yalnız run-owned container'lar
+silinir; FAIL'de güvenli metadata incelenmeden retry/cleanup yapılmaz. Bitişte profil
+container listesinin boşluğunu doğrulayıp `colima stop o-okul-reset-drill` çalıştırılır.
+Gerçek provider terminal receipt, tüm yazıcıların durması ve full reset hâlâ kanıtsızdır.
+
+### Fresh reset Gate 6I — Cloudflare Email Service salt okuma önkoşulları
+
+2026-09-07 mevcut Wrangler oturumuyla o-okul.com zone lookup GET: HTTP 403/code 9109.
+Oturum bitişi geçmiş, analytics scope kayıtlı değil. Bu erişim sağlanmadan terminal
+teslimat kontrolü yapılamadı; Gate 6I BLOCKED. OAuth/secret değerleri kanıta yazılmaz.
+
+Geçerli o-okul.com Analytics Read erişimiyle önce gerçek GraphQL şeması ve filtre
+sınırları doğrulanır. Özgün outbox/gateway providerMessageId, tenant/epoch ve gönderim
+zamanına bağlanan emailSendingAdaptive olayı okunur. Liste sınırı, saklama süresi,
+sampling veya bulunamayan olay teslimat olmadığına kanıt sayılamaz. delivered alıcı
+sunucunun kabulüdür; okunma kanıtı değildir. Terminal sonuç olsa da ayrı uzlaştırma
+ve tüm yazıcıların durduğu kanıtı olmadan activity/outbox temizlenmez veya reset açılmaz.
+Kaynaklar: [Analytics](https://developers.cloudflare.com/email-service/observability/metrics-analytics/),
+[email lifecycle](https://developers.cloudflare.com/email-service/concepts/email-lifecycle/).
+
+### Fresh reset Gate 6K — legacy CLOSED yükseltme deneyi
+
+Ayrı yerel Colima profilinde, önceden onaylı geçici DB deneyi için:
+
+```sh
+node scripts/tenant-reset-postgres-drill.mjs --with-legacy-status --with-queue
+node --test scripts/tenant-reset-postgres-drill.test.mjs
+node scripts/tenant-reset-postgres-drill.mjs --execute --with-legacy-status --with-queue --docker-context colima-o-okul-reset-drill --approved-local-socket "$HOME/.colima/o-okul-reset-drill/docker.sock"
+```
+
+İlk komut çevrimdışı manifesttir. Gerçek çalıştırma 109 migration'lı sentetik dolu
+DB kurar, 12 CLOSED ve bağlı User/AuthSession/LicenseTerm kayıtlarını oluşturur,
+kalan yedi migration'ı gerçek Prisma ile uygular. Production verisi kopyalanmaz.
+CLOSED → SUSPENDED erişimi açmaz; updatedAt korunur, neden/tarih uydurulmaz.
+Başarı kanıtı `artifacts/tenant-reset-postgres-drill/db4886e1f0b65268bea16c2d.json`.
+Yeni migration checksum'u önceki Gate 6J hazırlık manifestinden farklıdır; release
+adayı oluşturulurken manifest yenilenir. Canlıya uygulanmış 109 dosya değiştirilmedi.
+
+Deploy pipeline migration'dan sonra otomatik account-management APPLY çalıştırır.
+Bu backfill ve manuel license backfill'in kapalı kurum kapsamı incelenip doğrulanmadan
+bu migration'ın tek başına PASS olması yayın izni değildir. Gate 6K'de bu scriptler
+production'da veya sentetik DB'de APPLY çalıştırılmadı. `db:seed` çalıştırılmaz.
+
+
+### Lifecycle/reset korumalı yayın sırası (Gate 6M)
+
+Bu paket reset açmaz. Mevcut staging değişkenleri production originini kullanıyorsa
+workflow çalıştırmak canlı yayın sayılır; ayrı ortam varsayılmaz. Exact aday CI ve
+bakım onayı, yeni şifreli backup/izole restore kanıtı ve güncel migration ledger'ı
+hazırlanmadan tetiklenmez. Korunan dna/demoo/system için önce/sonra içerik ve erişim
+kontrolleri yapılır; test kurumu temizliği tekrarlanmaz.
+
+Image pull/config ve owner-decision kontrolleri sonrası eski public cutover PASS'ı
+kaldırılır. Queue-board/API 60 saniye, worker 300 saniye süreyle durdurulur; yakalanan
+container kimlikleri, OOM/exit durumu ve yeniden başlamama doğrulanır. Worker 137,
+OOM veya yeniden çalışan servis migration'ı engeller. Ardından bootstrap, migration,
+hesap preflight/backfill ve lisans backfill çalışır. Hepsi başarılıysa aynı aday
+image'lar başlar; bir hata olursa yazıcılar kapalı kalır, eski worker otomatik açılmaz.
+
+Bu sıranın mock Docker ile çalıştırılan kontrolü
+`node --test scripts/tenant-reset-release-cutover.test.mjs` ve `pnpm ops:check` içindedir.
+Test başarısı gerçek drain, backup, provider terminal sonucu veya canlı cutover kanıtı
+değildir. Bekleyen/belirsiz işler korunur; toplu retry, epoch damgalama veya temizleme yok.

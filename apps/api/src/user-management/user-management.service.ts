@@ -76,11 +76,12 @@ export class UserManagementService {
       throw new BadRequestException("SELF_TENANT_ADMIN_ROLE_REQUIRED");
     }
 
+    const originalSessions = await this.sessions.listActiveByUser(userId, tenantId);
     const record = await this.store.setTenantRoles(tenantId, userId, nextRoles);
     if (!record) {
       throw new NotFoundException("USER_MEMBERSHIP_NOT_FOUND");
     }
-    await this.sessions.revokeByUser(userId);
+    for (const session of originalSessions) await this.sessions.revokeOwned(session.id, userId, tenantId, session.membershipVersion);
     await this.auditLogs?.record({
       tenantId,
       actorUserId: context.userId,

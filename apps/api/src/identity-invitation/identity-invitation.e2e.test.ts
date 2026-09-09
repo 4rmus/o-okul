@@ -197,21 +197,28 @@ describe("Identity invitations", () => {
 
   it("koltuk limiti dolu tenantta davet kabulünü engeller", async () => {
     const system = await login("system@example.test");
-    await request(server)
+    const created = await request(server)
       .post("/tenants")
       .set("Authorization", `Bearer ${system}`)
+      .set("Idempotency-Key", "tenant-seat-invitations-1")
       .send({
-        id: "tenant-seat-invitations",
         name: "Seat Invitations Tenant",
         slug: "seat-invitations-tenant",
-        seatLimit: 1,
-        firstAdmin: {
+        campuses: [{ name: "Main Campus", code: "MAIN", unitType: "SCHOOL" }],
+        firstOwner: {
           name: "Seat Invitations Admin",
           email: "seat-invitations-admin@example.test",
           nationalId: "10000000450",
         },
+        licenseTerm: {
+          planCode: "PRO",
+          startsAt: "2026-01-01T00:00:00.000Z",
+          endsAt: "2027-01-01T00:00:00.000Z",
+          activeStudentLimit: 1,
+        },
       })
       .expect(201);
+    const tenantId = created.body.tenant.id as string;
 
     const activatedPassword = "Seat-invitations-admin-password";
     upsertInMemoryAuthUser({
@@ -220,7 +227,7 @@ describe("Identity invitations", () => {
       name: "Seat Invitations Admin",
       nationalIdHash: hashTcIdentity("10000000450"),
       password: activatedPassword,
-      tenantId: "tenant-seat-invitations",
+      tenantId,
       roles: ["TENANT_ADMIN"],
       mustChangePassword: false,
     });

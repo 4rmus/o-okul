@@ -11,6 +11,11 @@ const allowedLocalStorageKeys = {
   },
 };
 const allowedStorageSnippets = {
+  "apps/web/app/(app)/sistem/kurumlar/[tenantId]/tenant-reset-panel.tsx": [
+    "window.sessionStorage.getItem(storageKey)",
+    "window.sessionStorage.setItem(storageKey, requestKey)",
+    "window.sessionStorage.removeItem(storageKey)",
+  ],
   "apps/web/e2e-next/gate-c-exam-workspace-next.spec.ts": [
     'window.localStorage.setItem("web.exam-workspace-v2", "true")',
   ],

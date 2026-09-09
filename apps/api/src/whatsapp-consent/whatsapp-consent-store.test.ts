@@ -194,6 +194,7 @@ function createPool(respond: (sql: string, values?: unknown[]) => unknown[]) {
   const client = {
     async query<T>(sql: string, values?: unknown[]) {
       queries.push({ sql, values });
+      if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
       return { rows: respond(sql, values) as T[] };
     },
     release() {},

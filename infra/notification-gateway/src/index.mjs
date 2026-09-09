@@ -14,6 +14,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/webhooks/whatsapp") return whatsappWebhook(request, env, url);
     if (url.pathname === "/messages/latest") return latestOnboardingEvidence(request, env, url);
+    if (url.pathname === "/receipts") return lookupReceipt(request, env, url);
     if (request.method === "GET" && url.pathname === "/health") {
       return json({ status: "ok", releaseSha: env.RELEASE_SHA ?? "unknown" }, 200);
     }
@@ -111,7 +112,34 @@ export class NotificationIdempotency {
     if (path === "/webhook") return this.storeWebhookEvent(request);
     if (path === "/onboarding-evidence/store") return this.storeOnboardingEvidence(request);
     if (path === "/onboarding-evidence/latest") return this.latestOnboardingEvidence(request);
-    return this.sendMessage(request);
+    if (path === "/receipt") return this.readReceipt(request);
+    if (path === "/send" && request.method === "POST") return this.sendMessage(request);
+    return json({ errorCode: "NOT_FOUND" }, 404);
+  }
+
+  async readReceipt(request) {
+    if (request.method !== "GET") return receiptJson({ errorCode: "METHOD_NOT_ALLOWED" }, 405);
+    const key = new URL(request.url).searchParams.get("key");
+    if (!validReceiptKey(key)) return receiptJson({ errorCode: "INVALID_RECEIPT_KEY" }, 400);
+    const keyHash = await sha256(key);
+    const record = await this.state.storage.get("record");
+    const base = { keyHash, createdAt: null, expiresAt: null, providerReceiptHash: null };
+    if (record === undefined || record === null) return receiptJson({ ...base, status: "NOT_FOUND" });
+    if (!record || typeof record !== "object" || Object.keys(record).sort().join(",") !== "createdAt,expiresAt,fingerprint,keyHash,outcome" || record.keyHash !== keyHash || typeof record.fingerprint !== "string" || !/^[a-f0-9]{64}$/.test(record.fingerprint)
+      || !Number.isSafeInteger(record.createdAt) || !Number.isSafeInteger(record.expiresAt)
+      || record.createdAt <= 0 || record.createdAt > Date.now()
+      || record.expiresAt - record.createdAt !== IDEMPOTENCY_RETENTION_MS) {
+      return receiptJson({ ...base, status: "UNVERIFIED" });
+    }
+    const dated = { ...base, createdAt: new Date(record.createdAt).toISOString(), expiresAt: new Date(record.expiresAt).toISOString() };
+    if (record.expiresAt <= Date.now()) return receiptJson({ ...dated, status: "EXPIRED" });
+    const outcome = record.outcome;
+    if (!outcome || typeof outcome !== "object" || Object.keys(outcome).some((key) => !["status", "providerMessageId", "errorCode"].includes(key)) || !["sent", "failed"].includes(outcome.status)
+      || (outcome.providerMessageId !== undefined && (typeof outcome.providerMessageId !== "string" || outcome.providerMessageId.length > 512))
+      || (outcome.errorCode !== undefined && (typeof outcome.errorCode !== "string" || outcome.errorCode.length > 512))) return receiptJson({ ...base, status: "UNVERIFIED" });
+    if (outcome.status !== "sent" || outcome.errorCode || typeof outcome.providerMessageId !== "string"
+      || !outcome.providerMessageId.trim() || outcome.providerMessageId.length > 512) return receiptJson({ ...dated, status: "UNCERTAIN" });
+    return receiptJson({ ...dated, status: "PROVIDER_ACCEPTED", providerReceiptHash: await sha256(outcome.providerMessageId) });
   }
 
   async sendMessage(request) {
@@ -129,15 +157,17 @@ export class NotificationIdempotency {
         }
 
         const uncertain = { status: "failed", errorCode: "NOTIFICATION_DELIVERY_UNCERTAIN" };
-        await this.state.storage.put("record", { fingerprint, outcome: uncertain });
-        await this.state.storage.setAlarm(Date.now() + IDEMPOTENCY_RETENTION_MS);
+        const createdAt = Date.now();
+        const metadata = { createdAt, expiresAt: createdAt + IDEMPOTENCY_RETENTION_MS, keyHash: await sha256(message.idempotencyKey) };
+        await this.state.storage.put("record", { fingerprint, ...metadata, outcome: uncertain });
+        await this.state.storage.setAlarm(metadata.expiresAt);
 
         try {
           outcome = await dispatchMessage(message, this.env);
         } catch (error) {
           outcome = { status: "failed", errorCode: providerErrorCode(error, message.channel) };
         }
-        await this.state.storage.put("record", { fingerprint, outcome });
+        await this.state.storage.put("record", { fingerprint, ...metadata, outcome });
       } catch {
         outcome = { status: "failed", errorCode: "NOTIFICATION_IDEMPOTENCY_FAILED" };
       }
@@ -217,6 +247,20 @@ export class NotificationIdempotency {
   async alarm() {
     await this.state.storage.deleteAll();
   }
+}
+
+function validReceiptKey(key) { return typeof key === "string" && /^secret-delivery:[A-Za-z0-9_-]{1,128}$/.test(key); }
+function receiptJson(value, status = 200) { return json(value, status, { "cache-control": "no-store" }); }
+async function lookupReceipt(request, env, url) {
+  if (request.method !== "GET") return receiptJson({ errorCode: "METHOD_NOT_ALLOWED" }, 405);
+  if (!env.NOTIFICATION_BEARER_TOKEN || !(await secretsEqual(request.headers.get("authorization") ?? "", `Bearer ${env.NOTIFICATION_BEARER_TOKEN}`))) return receiptJson({ errorCode: "NOTIFICATION_HTTP_401" }, 401);
+  const key = url.searchParams.get("key");
+  if (!validReceiptKey(key) || [...url.searchParams.keys()].some((name) => name !== "key") || url.searchParams.getAll("key").length !== 1) return receiptJson({ errorCode: "INVALID_RECEIPT_KEY" }, 400);
+  try {
+    const id = env.IDEMPOTENCY.idFromName(key);
+    const response = await env.IDEMPOTENCY.get(id).fetch(`https://idempotency.internal/receipt?key=${encodeURIComponent(key)}`, { method: "GET" });
+    return receiptJson(await response.json(), response.status);
+  } catch { return receiptJson({ errorCode: "RECEIPT_LOOKUP_UNAVAILABLE" }, 503); }
 }
 
 async function sendIdempotently(message, env) {

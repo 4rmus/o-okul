@@ -1,9 +1,78 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createHash } from "node:crypto";
 import worker, { NotificationIdempotency } from "./index.mjs";
 
 const token = "notification-bearer-token-for-tests";
 const evidenceToken = "live-onboarding-evidence-bearer-token-for-tests";
+
+const receiptKey = "secret-delivery:outbox-1";
+const hash = (value) => createHash("sha256").update(value).digest("hex");
+function receiptRequest(key = receiptKey, bearer = token, method = "GET") {
+  return new Request(`https://notify.o-okul.com/receipts?key=${encodeURIComponent(key)}`, { method, headers: { authorization: `Bearer ${bearer}` } });
+}
+function receiptFixture(record) {
+  const calls = [];
+  const object = new NotificationIdempotency({
+    storage: { get: async () => { calls.push("get"); return record; }, put: () => calls.push("put"), setAlarm: () => calls.push("alarm"), deleteAll: () => calls.push("delete") },
+    blockConcurrencyWhile: (run) => run(),
+  }, { EMAIL: { send: () => calls.push("send") } });
+  const environment = { NOTIFICATION_BEARER_TOKEN: token, IDEMPOTENCY: { idFromName: (key) => key, get: () => ({ fetch: (input, init) => object.fetch(new Request(input, init)) }) } };
+  return { calls, object, environment };
+}
+function validReceiptRecord() {
+  const createdAt = Date.now() - 1000;
+  return { keyHash: hash(receiptKey), fingerprint: "a".repeat(64), createdAt, expiresAt: createdAt + 30 * 86400000, outcome: { status: "sent", providerMessageId: "provider-1" } };
+}
+
+test("receipt read is bearer protected and invalid routing cannot dispatch", async () => {
+  const f = receiptFixture(undefined);
+  assert.equal((await worker.fetch(receiptRequest(receiptKey, "wrong"), f.environment)).status, 401);
+  assert.equal((await worker.fetch(receiptRequest(receiptKey, token, "POST"), f.environment)).status, 405);
+  assert.equal((await worker.fetch(receiptRequest("invalid"), f.environment)).status, 400);
+  for (const [path, method] of [["/receipt", "POST"], ["/receipt?key=bad", "GET"], ["/reciept", "POST"], ["/send", "GET"]]) {
+    assert.ok((await f.object.fetch(new Request(`https://internal${path}`, { method }))).status >= 400);
+  }
+  assert.deepEqual(f.calls, []);
+});
+
+test("receipt miss, legacy, invalid, expired and uncertain records never mutate", async () => {
+  const valid = validReceiptRecord();
+  for (const [record, status] of [
+    [undefined, "NOT_FOUND"], [false, "UNVERIFIED"], [{ fingerprint: valid.fingerprint, outcome: valid.outcome }, "UNVERIFIED"],
+    [{ ...valid, keyHash: "b".repeat(64) }, "UNVERIFIED"], [{ ...valid, createdAt: "yesterday" }, "UNVERIFIED"],
+    [{ ...valid, createdAt: Date.now() - 31 * 86400000, expiresAt: Date.now() - 86400000 }, "EXPIRED"],
+    [{ ...valid, outcome: { status: "failed", errorCode: "private provider error" } }, "UNCERTAIN"],
+    [{ ...valid, outcome: { status: "sent", providerMessageId: "" } }, "UNCERTAIN"],
+    [{ ...valid, outcome: { status: "sent", providerMessageId: 123 } }, "UNVERIFIED"],
+    [{ ...valid, outcome: { ...valid.outcome, errorCode: false } }, "UNVERIFIED"],
+    [{ ...valid, outcome: { status: "delivered", to: "private@example.com" } }, "UNVERIFIED"],
+  ]) {
+    const f = receiptFixture(record);
+    const response = await worker.fetch(receiptRequest(), f.environment);
+    assert.equal(response.status, 200); assert.equal(response.headers.get("cache-control"), "no-store");
+    const body = await response.json(); assert.equal(body.status, status);
+    if (status === "UNVERIFIED") assert.equal(body.createdAt, null);
+    assert.equal(JSON.stringify(body).includes("private"), false);
+    assert.deepEqual(f.calls, ["get"]);
+  }
+});
+
+test("receipt success reveals only hashed acceptance and never terminal delivery or writes", async () => {
+  const f = receiptFixture(validReceiptRecord());
+  const body = await (await worker.fetch(receiptRequest(), f.environment)).json();
+  assert.equal(body.status, "PROVIDER_ACCEPTED"); assert.equal(body.providerReceiptHash, hash("provider-1"));
+  assert.equal(body.keyHash, hash(receiptKey)); assert.deepEqual(f.calls, ["get"]);
+  assert.equal(JSON.stringify(body).includes("provider-1"), false);
+});
+
+test("new send record can be read without resending or renewing expiry", async () => {
+  const sent = []; const environment = env(sent);
+  await worker.fetch(request({ messages: [{ channel: "EMAIL", to: "recipient@outside.example.org", body: "hello", idempotencyKey: receiptKey }] }), environment);
+  const first = await (await worker.fetch(receiptRequest(), environment)).json();
+  const second = await (await worker.fetch(receiptRequest(), environment)).json();
+  assert.equal(first.status, "PROVIDER_ACCEPTED"); assert.deepEqual(first, second); assert.equal(sent.length, 1);
+});
 
 test("reports the deployed release SHA without authentication", async () => {
   const response = await worker.fetch(new Request("https://notify.o-okul.com/health"), env());

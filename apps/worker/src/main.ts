@@ -1,5 +1,7 @@
+import { createTenantFreshResetWorker } from "./jobs/tenant-fresh-reset-worker.js";
 import {
   createAnnouncementDeliveryBullWorker,
+  closeWorkerMutationPool,
   createBackupRestoreBullWorker,
   createExcelImportBullWorker,
   createExamEvaluationBullWorker,
@@ -31,7 +33,9 @@ const queueNames = [
   "report-pdf-render",
   "sms-batch",
 ];
+const resetWorker = createTenantFreshResetWorker(connection);
 const workers = [
+  ...(resetWorker ? [resetWorker] : []),
   createSecretDeliveryOutboxRunner(),
   createAnnouncementDeliveryBullWorker({
     connection,
@@ -68,6 +72,7 @@ workerLogger.info({ queueNames, workerCount: workers.length }, "workers_started"
 async function shutdown(): Promise<void> {
   workerLogger.info({ workerCount: workers.length }, "workers_shutdown_started");
   await Promise.all(workers.map((worker) => worker.close()));
+  await closeWorkerMutationPool();
   await flushWorkerSentry();
   workerLogger.info({ workerCount: workers.length }, "workers_shutdown_completed");
   process.exit(0);

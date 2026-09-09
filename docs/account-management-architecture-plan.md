@@ -73,7 +73,8 @@ flowchart TD
 ### Kurum ve lisans
 
 - `Tenant`, müşteri, veri izolasyonu ve operasyonel durum sınırı olarak kalacak.
-- `Tenant.status`: `PROVISIONING | ACTIVE | SUSPENDED | OFFBOARDING | CLOSED`.
+- İlk sade runtime diliminde `Tenant.status` yalnız `ACTIVE | SUSPENDED` erişim durumudur; `TRIAL`
+  lisans planıdır. Fresh reset ve ilerideki offboarding/imha durumları bu alana eklenmez.
 - Mevcut `Campus`, tenant altındaki şube olarak kullanılacak. Tenant için `PRIVATE_SCHOOL | PRIVATE_TEACHING_COURSE | MIXED`, kampüs için okul/kurs birim tipi eklenecek.
 - Mutable `plan/licenseStartsAt/licenseEndsAt/seatLimit` alanlarının ticari otoritesi yeni `LicenseTerm` olacak:
   - `tenantId`, `planCode`, `startsAt`, `endsAt`, `activeStudentLimit`, `cancelledAt`, oluşturan platform hesabı ve audit referansı.
@@ -130,10 +131,19 @@ Sabit role paketleri:
 - Farklı personaların capability'leri birleşmez.
 - Rank tabanlı `hasRole >= requiredRole` kaldırılır. Endpoint'ler exact capability ve scope kontrolü kullanır.
 - `SYSTEM_ADMIN` tenant rolü olmaktan çıkar; ayrı control plane hesabı olur. Tenant verisine varsayılan erişimi yoktur. Breakglass erişimi MFA, gerekçe, ticket, 30 dakikalık süre ve append-only audit gerektirir.
+- Uygulama ilerlemesi: `SYSTEM_ADMIN` artık tenant rollerini rank ile devralmaz; platform tenant
+  yönetimi `tenant:manage` ve `tenant:lifecycle` capability'leriyle sınırlıdır. Tenant rolleri
+  arasındaki kalan legacy rank kontrolleri ayrı route-family dilimlerinde kapatılacaktır.
 
 ### Public API ve shared contract değişiklikleri
 
 - `POST /tenants`, tenant + ilk `LicenseTerm` + kampüsler + ilk `TENANT_OWNER` çalışan profili ve davetini tek idempotent iş akışında oluşturacak; parola/telefon kabul etmeyecek.
+- `PATCH /tenants/:id/status`, `tenant:lifecycle` capability, zorunlu `Idempotency-Key`, hedefe
+  bağlı `X-Step-Up-Token`, `status + expectedLifecycleVersion + reason + confirmationText`
+  ister. Gerekçe sonlu PII-safe kod listesidir; onay exact slugdır. Status/sürüm + aktif session
+  iptali + audit + idempotent sonuç PostgreSQL'de tek transactiondır. Replay sürüm kontrolünden
+  önce döner; güncel sürümle aynı status no-op olur. Yerel Gate 2 kanıtı
+  `docs/system-admin-tenant-lifecycle-fresh-reset-plan.md` içindedir.
 - `POST /tenants/:id/license-terms` yenileme veya planlı dönem ekleyecek.
 - `DELETE /tenants/:id` kaldırılacak ve geçiş sürümünde `410 TENANT_HARD_DELETE_RETIRED` döndürecek.
 - Yerine `POST /tenants/:id/offboarding` durum geçişini başlatacak. Fiziksel purge yalnız ayrı privileged worker, çift platform onayı, retention bitişi ve yedek/export makbuzuyla çalışacak.
@@ -179,6 +189,9 @@ Sabit role paketleri:
 - Shared PostgreSQL korunacak. Bütün yeni tenant tabloları aynı migration'da composite tenant FK, `ENABLE/FORCE RLS`, `USING` ve `WITH CHECK` politikası alacak.
 - Tenant uygulama DB rolü ile dar auth/control-plane rolü ayrılacak; `BYPASSRLS` ve tablo sahibi yetkileri normal API prosesine verilmeyecek. PostgreSQL'de owner ve `BYPASSRLS` rollerinin RLS'yi aşabildiği ayrıca test edilecek. Kaynak: [PostgreSQL RLS](https://www.postgresql.org/docs/17/ddl-rowsecurity.html).
 - Audit kayıtları app rolü için append-only olacak; actor account/membership/persona, request correlation, sonuç ve hedef ID taşıyacak. E-posta, telefon, T.C., parola ve token metadata'ya yazılmayacak.
+- Uygulama ilerlemesi: `app` rolünün `AuditLog` parent tablosundaki `UPDATE/DELETE/TRUNCATE`
+  yetkileri ile child partition'lardaki tüm doğrudan yetkileri ileri migration ile geri alınmıştır;
+  gerçek Postgres grant kanıtı staging migration kapısında ayrıca doğrulanacaktır.
 - StudentContact telefon/e-postası maskeli response, field encryption ve kontrollü exact-match indeksi kullanacak. Öğretmen varsayılan olarak iletişim verisini göremeyecek.
 - Kurum kapatma: `OFFBOARDING -> export -> legal hold ayrımı -> freeze -> purge/anonimleştirme -> imha makbuzu`. İmha işlem kayıtları en az üç yıl korunacak. Kaynak: [KVKK İmha Yönetmeliği](https://www.kvkk.gov.tr/Icerik/5441/KISISEL-VERILERIN-SILINMESI-YOK-EDILMESI-VEYA-ANONIM-HALE-GETIRILMESI-HAKKINDA-YONETMELIK).
 - E-posta, hata izleme, CDN, yedek ve destek sağlayıcıları alt işleyen envanterinde veri konumu ve yurt dışı aktarım mekanizmasıyla kaydedilecek.

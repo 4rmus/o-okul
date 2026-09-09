@@ -1,3 +1,4 @@
+import { acquireTenantDatabaseSharedLock, assertTenantDbContext } from "@o-okul/db";
 import { getRequestContext } from "../context/request-context.js";
 
 export interface Queryable {
@@ -9,7 +10,7 @@ export interface TenantQueryable extends Queryable {
 }
 
 interface TenantQueryClient extends Queryable {
-  release(): void;
+  release(destroy?: boolean): void;
 }
 
 export async function withTenantQuery<T>(
@@ -44,21 +45,25 @@ async function runInTenantTransaction<T>(
   context: { tenantId: string | null; bypassRls: boolean },
   callback: (client: Queryable) => Promise<T>,
 ): Promise<T> {
+  assertTenantDbContext(context);
   // Acquire a dedicated client when the pool supports it; otherwise treat the
   // provided Queryable as a single connection (or test double). Either way the
   // work runs inside an explicit transaction so the transaction-local
   // set_config() GUCs apply to the callback's queries instead of being
   // discarded by autocommit before they take effect.
   const client = pool.connect ? await pool.connect() : pool;
-  const release = pool.connect ? () => (client as TenantQueryClient).release() : undefined;
+  let discard = false;
+  const release = pool.connect ? () => (client as TenantQueryClient).release(discard || undefined) : undefined;
   try {
     await client.query("BEGIN");
+    // Legacy no-connect adapters are not covered by this connection-bound lock.
+    if (pool.connect && context.tenantId) await acquireTenantDatabaseSharedLock(client, context.tenantId);
     await applyTenantSettings(client, context);
     const result = await callback(client);
     await client.query("COMMIT");
     return result;
   } catch (error) {
-    await client.query("ROLLBACK");
+    try { await client.query("ROLLBACK"); } catch { discard = true; }
     throw error;
   } finally {
     release?.();

@@ -1,14 +1,51 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 import {
   createNoopNotificationAdapter,
   createNotificationAdapterFromEnv,
   HttpNotificationAdapter,
+  lookupNotificationReceiptFromEnv,
 } from "./index.js";
 
 const httpIdentity = {
   fromEmail: "bildirim@o-okul.com",
   replyToEmail: "destek@o-okul.com",
 };
+
+describe("read-only stored receipt lookup", () => {
+  const env = { NOTIFICATION_PROVIDER: "http", NOTIFICATION_HTTP_ENDPOINT: "https://notify.example.test/send", NOTIFICATION_HTTP_BEARER_TOKEN: "private-token" };
+  const key = "secret-delivery:outbox-1";
+  const keyHash = createHash("sha256").update(key).digest("hex");
+  const createdAt = new Date(Date.now() - 1000).toISOString();
+  const expiresAt = new Date(Date.parse(createdAt) + 30 * 86400000).toISOString();
+  const accepted = { status: "PROVIDER_ACCEPTED", keyHash, createdAt, expiresAt, providerReceiptHash: "a".repeat(64) };
+  it("uses only GET at trusted origin without redirects, cache or send payload", async () => {
+    const fetch = vi.fn(async () => Response.json(accepted));
+    expect(await lookupNotificationReceiptFromEnv(env, key, fetch)).toEqual(accepted);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch.mock.calls[0]).toEqual([`https://notify.example.test/receipts?key=secret-delivery%3Aoutbox-1`, expect.objectContaining({ method: "GET", redirect: "error", cache: "no-store" })]);
+  });
+  it.each([
+    { ...accepted, keyHash: "b".repeat(64) }, { ...accepted, providerReceiptHash: "raw-id" },
+    { ...accepted, createdAt: null }, { ...accepted, expiresAt: createdAt },
+    { ...accepted, status: "DELIVERED" }, { ...accepted, status: "NOT_FOUND" },
+    { ...accepted, to: "private@example.test" }, { ...accepted, createdAt: new Date(createdAt).toUTCString() },
+  ])("fails closed for malformed or mismatched 200: %j", async (body) => {
+    expect((await lookupNotificationReceiptFromEnv(env, key, async () => Response.json(body))).status).toBe("UNVERIFIED");
+  });
+  it("keeps expired acceptance expired and missing distinct from unavailable", async () => {
+    const old = Date.now() - 31 * 86400000;
+    expect((await lookupNotificationReceiptFromEnv(env, key, async () => Response.json({ ...accepted, createdAt: new Date(old).toISOString(), expiresAt: new Date(old + 30 * 86400000).toISOString() }))).status).toBe("EXPIRED");
+    expect((await lookupNotificationReceiptFromEnv(env, key, async () => Response.json({ keyHash, status: "NOT_FOUND", createdAt: null, expiresAt: null, providerReceiptHash: null }))).status).toBe("NOT_FOUND");
+    expect((await lookupNotificationReceiptFromEnv(env, key, async () => new Response("", { status: 503 }))).status).toBe("UNAVAILABLE");
+  });
+  it("does not call anything for missing config/noop or invalid keys", async () => {
+    const fetch = vi.fn();
+    expect((await lookupNotificationReceiptFromEnv({}, key, fetch)).status).toBe("UNAVAILABLE");
+    await expect(lookupNotificationReceiptFromEnv(env, "arbitrary-provider-key", fetch)).rejects.toThrow("INVALID_RECEIPT_KEY");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
 
 describe("createNoopNotificationAdapter", () => {
   it("lokalde e-posta ve push sonucunu başarılı döndürür", async () => {

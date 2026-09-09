@@ -42,7 +42,7 @@ export default function ChangePasswordPage() {
     setIsSubmitting(true);
     try {
       await changePassword({ currentPassword, newPassword });
-      router.replace(auth ? getAuthHomePath(auth) : "/login");
+      // Current auth state drives the login redirect; a newer login must not be replaced by this old response.
     } catch {
       setError("Şifre değiştirilemedi.");
     } finally {
@@ -98,7 +98,7 @@ export default function ChangePasswordPage() {
       <aside className="next-auth-context" aria-label="Zorunlu şifre değişikliği güven bilgisi">
         <p className="next-section-eyebrow">Doğrulanmış oturum</p>
         <h2>Devam etmeden önce geçici şifrenizi değiştirin.</h2>
-        <p>Kurum ve rol kapsamınız mevcut oturumdan korunur; yeni şifre kaydedilene kadar çalışma alanına geçilmez.</p>
+        <p>Şifreniz kaydedildikten sonra yeni şifrenizle yeniden giriş yapmanız gerekir.</p>
       </aside>
     </section>
   );

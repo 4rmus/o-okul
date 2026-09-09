@@ -351,6 +351,9 @@ export type {
   TeacherRecord,
   TeacherUpdateRequest,
   TenantAdminUpdateRequest,
+  TenantAccessStatus,
+  TenantLifecycleReason,
+  TenantLifecycleMfaTarget,
   TenantMembershipLifecycleStatus,
   TenantMembershipScopeMode,
   TenantMembershipUpdateRequest,
@@ -364,12 +367,12 @@ export type {
   TenantSelectionOption,
   TenantSelectionRequest,
   TenantSelectionRequiredResponse,
-  TenantFirstAdminCreateRequest,
-  TenantFirstAdminProvisionResult,
   TenantFirstOwnerCreateRequest,
   TenantCampusCreateRequest,
   TenantOnboardingOwnerRecord,
   TenantRecord,
+  TenantStatusUpdateRequest,
+  TenantStatusUpdateResult,
   TenantUserRecord,
   TenantUserRoleUpdateRequest,
   TotpChallengeVerifyRequest,
@@ -393,3 +396,14 @@ export type {
   ParserEncoding,
 } from "./format-analyzer.js";
 export type { PortalSubjectRoleName, RoleCapability, TenantAssignableRoleName, TenantRoleName } from "./role-capabilities.js";
+
+export type { TenantResetPreview } from "./domain.js";
+export type { TenantCleanResetMfaTarget, TenantCleanResetRequest, TenantCleanResetStatus } from "./domain.js";
+
+export type { TenantManagement } from "./domain.js";
+
+export type { TenantResetInstitutionRequest, TenantResetRequestState } from "./domain.js";
+export type { TenantResetInstitutionRequestCreate, TenantResetInstitutionRequestRevoke } from "./domain.js";
+
+export type { TenantResetDiagnostics } from "./domain.js";
+export type { TenantResetDeliveryReceipt } from "./domain.js";

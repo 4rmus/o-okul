@@ -54,7 +54,7 @@ describe("AuthService", () => {
       tenantId: "tenant-a",
       roles: ["TENANT_ADMIN"],
     });
-    expect(users.rehashPassword).toHaveBeenCalledWith(user.tenantId, user.id, user.passwordHash, expect.stringMatching(/^scrypt:v2:/));
+    expect(users.rehashPassword).toHaveBeenCalledWith(user.tenantId, user.id, user.passwordHash, expect.stringMatching(/^scrypt:v2:/), 1);
     const rehashed = vi.mocked(users.rehashPassword).mock.calls[0]?.[3] ?? "";
     await expect(verifyPasswordAsync("password", rehashed)).resolves.toBe(true);
   });
@@ -476,6 +476,7 @@ describe("AuthService", () => {
       sessionId: current.id,
       tenantId: user.tenantId,
       roles: user.roles,
+      membershipVersion: user.membershipVersion,
       bypassRls: false,
     };
 
@@ -825,6 +826,7 @@ describe("AuthService", () => {
       userId: user.id,
       tenantId: user.tenantId,
       roles: user.roles,
+      membershipVersion: user.membershipVersion,
       bypassRls: false,
     }, { totpCode: createTotpCodeForTest(enrollment.secret, Date.now() + 30_000) });
     await expect(auth.confirmRequiredTotpEnrollment(
@@ -877,6 +879,7 @@ describe("AuthService", () => {
       userId: user.id,
       tenantId: user.tenantId,
       roles: user.roles,
+      membershipVersion: user.membershipVersion,
       bypassRls: false,
     })).rejects.toThrow("ADMIN_MFA_ADMIN_ROLE_REQUIRED");
   });
@@ -909,6 +912,7 @@ describe("AuthService", () => {
       userId: user.id,
       tenantId: user.tenantId,
       roles: user.roles,
+      membershipVersion: user.membershipVersion,
       bypassRls: false,
     });
     const setupCode = createTotpCodeForTest(setup.secret);
@@ -916,6 +920,7 @@ describe("AuthService", () => {
       userId: user.id,
       tenantId: user.tenantId,
       roles: user.roles,
+      membershipVersion: user.membershipVersion,
       bypassRls: false,
     }, setup.setupToken, setupCode);
 
@@ -955,7 +960,7 @@ describe("AuthService", () => {
       new LoginAttemptLimiter(5, 60_000),
       new InMemoryTenantStore(),
     );
-    const context = { userId: user.id, tenantId: user.tenantId, roles: user.roles, bypassRls: false };
+    const context = { userId: user.id, tenantId: user.tenantId, membershipVersion: user.membershipVersion, roles: user.roles, bypassRls: false };
     const setup = await auth.createTotpSetup(context);
     await auth.confirmTotpSetup(context, setup.setupToken, createTotpCodeForTest(setup.secret));
     const challenge = await auth.login(loginCredentials(user.email ?? "", "password", "system"));
@@ -1001,7 +1006,7 @@ describe("AuthService", () => {
       new LoginAttemptLimiter(5, 60_000),
       new InMemoryTenantStore(),
     );
-    const setupContext = { userId: user.id, tenantId: user.tenantId, roles: user.roles, bypassRls: false };
+    const setupContext = { userId: user.id, tenantId: user.tenantId, membershipVersion: user.membershipVersion, roles: user.roles, bypassRls: false };
     const setup = await auth.createTotpSetup(setupContext);
     await auth.confirmTotpSetup(setupContext, setup.setupToken, createTotpCodeForTest(setup.secret));
     const actionContext = { ...setupContext, sessionId: "session-mfa-sensitive-actions", membershipVersion: user.membershipVersion };
@@ -1057,6 +1062,7 @@ describe("AuthService", () => {
       userId: user.id,
       tenantId: user.tenantId,
       roles: user.roles,
+      membershipVersion: user.membershipVersion,
       bypassRls: false,
     };
     const setup = await auth.createTotpSetup(context);
@@ -1095,7 +1101,7 @@ describe("AuthService", () => {
       undefined,
       new InMemoryTenantStore(),
     );
-    const setupContext = { userId: user.id, tenantId: user.tenantId, roles: user.roles, bypassRls: false };
+    const setupContext = { userId: user.id, tenantId: user.tenantId, membershipVersion: user.membershipVersion, roles: user.roles, bypassRls: false };
     const setup = await auth.createTotpSetup(setupContext);
     await auth.confirmTotpSetup(setupContext, setup.setupToken, createTotpCodeForTest(setup.secret));
     const challenge = await auth.login(loginCredentials(user.email ?? "", "password", "system"));
@@ -1125,6 +1131,17 @@ describe("AuthService", () => {
     await expect(auth.createMfaStepUp({ ...context, membershipVersion: context.membershipVersion + 1 }, "OWNER_ADMIN_CHANGE", {
       recoveryCode: setup.recoveryCodes[1],
     })).rejects.toThrow("MFA_STEP_UP_CONTEXT_INVALID");
+    const target = { tenantId: "tenant-a", status: "SUSPENDED" as const, expectedLifecycleVersion: 0 };
+    await expect(auth.createMfaStepUp(context, "TENANT_LIFECYCLE_CHANGE", { recoveryCode: "wrong" }, target)).rejects.toThrow("MFA_RECOVERY_CODE_INVALID");
+    await expect(auth.createMfaStepUp(context, "TENANT_LIFECYCLE_CHANGE", { recoveryCode: setup.recoveryCodes[1] })).rejects.toThrow("MFA_STEP_UP_TARGET_INVALID");
+    await expect(auth.createMfaStepUp({ ...context, sessionId: "missing" }, "TENANT_LIFECYCLE_CHANGE", { recoveryCode: setup.recoveryCodes[1] }, target)).rejects.toThrow("MFA_STEP_UP_CONTEXT_INVALID");
+    await expect(auth.createMfaStepUp({ ...context, roles: ["TENANT_OWNER"] }, "TENANT_LIFECYCLE_CHANGE", { recoveryCode: setup.recoveryCodes[1] }, target)).rejects.toThrow("ADMIN_MFA_ADMIN_ROLE_REQUIRED");
+    const lifecycle = await auth.createMfaStepUp(context, "TENANT_LIFECYCLE_CHANGE", { recoveryCode: setup.recoveryCodes[1] }, target);
+    expect(() => verifyAdminMfaStepUpProof(lifecycle.stepUpToken, { userId: user.id, sessionId: context.sessionId,
+      membershipVersion: context.membershipVersion, purpose: "TENANT_LIFECYCLE_CHANGE", target })).not.toThrow();
+    await auth.logout(issued.refreshToken);
+    await expect(auth.createMfaStepUp(context, "TENANT_LIFECYCLE_CHANGE", { recoveryCode: setup.recoveryCodes[2] }, target)).rejects.toThrow("MFA_STEP_UP_CONTEXT_INVALID");
+
   });
 });
 
@@ -1240,3 +1257,44 @@ function createMutableUserStore(user: AuthUser): AuthUserStore {
     purgePii: vi.fn(),
   };
 }
+
+describe("password proof challenge version binding", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it.each(["valid", "password", "membership", "reset", "legacy"])("tenant selection %s proof cannot upgrade to newest credentials", async (mode) => {
+    const { createHmac } = await import("node:crypto");
+    vi.stubEnv("AUTH_SELECTION_SECRET", "test-selection-proof-secret"); vi.stubEnv("ADMIN_MFA_MODE", "off");
+    const user: AuthUser = { id: "proof-user", tenantId: "tenant-a", membershipVersion: 1, passwordHash: hashPassword("password"), roles: ["TENANT_ADMIN"], name: "Proof" };
+    let epoch = 0;
+    const tenants = { findById: vi.fn(async (id: string) => ({ id, name: id, slug: id, status: "ACTIVE", lifecycleVersion: epoch })) } as unknown as InMemoryTenantStore;
+    const users = createUserStoreMock({ findById: vi.fn(async () => user) });
+    const sessions = new InMemorySessionStore(); const create = vi.spyOn(sessions, "create");
+    const auth = new AuthService(users, sessions, new InMemoryPasswordResetStore(), { resolve: vi.fn(async () => undefined) } as never, undefined, undefined, tenants);
+    const issue = auth as unknown as { createTenantSelectionChallenge(users: AuthUser[]): Promise<{ selectionToken: string; tenants: unknown[] }> };
+    const challenge = await issue.createTenantSelectionChallenge([user, { ...user, id: "proof-other", tenantId: "tenant-b" }]);
+    expect(JSON.stringify(challenge.tenants)).not.toMatch(/membershipVersion|lifecycleVersion/);
+    if (mode === "password" || mode === "membership") { user.membershipVersion = 2; if (mode === "password") user.passwordHash = hashPassword("changed"); }
+    if (mode === "reset") epoch = 1;
+    if (mode === "legacy") {
+      const payload = Buffer.from(JSON.stringify({ purpose: "tenant-selection", expiresAt: Date.now() + 60_000, candidates: [{ userId: user.id, tenantId: user.tenantId }] })).toString("base64url");
+      challenge.selectionToken = `${payload}.${createHmac("sha256", "test-selection-proof-secret").update(payload).digest("base64url")}`;
+    }
+    if (mode === "valid") { await expect(auth.selectTenant({ selectionToken: challenge.selectionToken, tenantId: user.tenantId })).resolves.toHaveProperty("accessToken"); expect(create).toHaveBeenCalledTimes(1); }
+    else { await expect(auth.selectTenant({ selectionToken: challenge.selectionToken, tenantId: user.tenantId })).rejects.toThrow("LOGIN_FAILED"); expect(create).not.toHaveBeenCalled(); }
+  });
+  it.each(["stale", "legacy"])("MFA %s password proof is rejected before consuming second factor", async (mode) => {
+    const { createHmac } = await import("node:crypto");
+    const { createLoginMfaChallenge } = await import("./totp-mfa.js");
+    vi.stubEnv("ADMIN_MFA_MODE", "optional"); vi.stubEnv("ADMIN_MFA_CHALLENGE_SECRET", "test-mfa-proof-secret");
+    const user: AuthUser = { id: "system-proof", tenantId: "system", membershipVersion: 2, passwordHash: "unused", roles: ["SYSTEM_ADMIN"], name: "Proof", totpSecretEncrypted: "encrypted", totpEnabledAt: new Date().toISOString() };
+    const users = createUserStoreMock({ findById: vi.fn(async () => user) });
+    const sessions = new InMemorySessionStore(); const create = vi.spyOn(sessions, "create");
+    const auth = new AuthService(users, sessions, new InMemoryPasswordResetStore(), { resolve: vi.fn() } as never);
+    let token = createLoginMfaChallenge(user.id, 1).challengeToken;
+    if (mode === "legacy") {
+      const payload = Buffer.from(JSON.stringify({ type: "admin-mfa-login", userId: user.id, challengeId: "old", exp: Math.floor(Date.now() / 1000) + 60 })).toString("base64url");
+      token = `${payload}.${createHmac("sha256", "test-mfa-proof-secret").update(payload).digest("base64url")}`;
+    }
+    await expect(auth.verifyTotpChallenge(token, { recoveryCode: "unused" })).rejects.toThrow("MFA_CHALLENGE_INVALID");
+    expect(users.consumeTotpRecoveryCode).not.toHaveBeenCalled(); expect(create).not.toHaveBeenCalled();
+  });
+});

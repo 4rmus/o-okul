@@ -9,6 +9,8 @@ const files = {
 };
 
 const inventory = [
+  entry("tenant.clean-reset.enqueue", "POST", "/api/v1/tenants/{id}/clean-reset-jobs", "covered", "apps/api/src/tenant/tenant.controller.ts", "apps/api/src/tenant/tenant-fresh-reset.service.ts", "apps/api/src/tenant/tenant.controller.e2e.test.ts", ['@Post(":id/clean-reset-jobs")', '@Headers("idempotency-key")'], ["reset-idempotency-a"]),
+  entry("tenant.lifecycle.change", "PATCH", "/api/v1/tenants/{id}/status", "covered", "apps/api/src/tenant/tenant.controller.ts", "apps/api/src/tenant/tenant.service.ts", "apps/api/src/tenant/tenant.controller.e2e.test.ts", ['@Patch(":id/status")', '@Headers("idempotency-key")'], ["lifecycle-idempotency-a"]),
   entry("announcement.create", "POST", "/api/v1/announcements", "covered", "apps/api/src/announcement/announcement.controller.ts", "apps/api/src/announcement/announcement.service.ts", "apps/api/src/announcement/announcement.e2e.test.ts", ["@Post()", "@Headers(\"idempotency-key\")"], ["announcement-create-idempotency-a"]),
   entry("announcement.delivery-result.enqueue", "POST", "/api/v1/announcements/{id}/delivery-results", "covered", "apps/api/src/announcement/announcement.controller.ts", "apps/api/src/announcement/announcement.service.ts", "apps/api/src/announcement/announcement.e2e.test.ts", ["@Post(\":id/delivery-results\")", "@Headers(\"idempotency-key\")"], ["announcement-delivery-result-idempotency-a"]),
   entry("announcement.delivery.send", "POST", "/api/v1/announcements/{id}/deliveries", "covered", "apps/api/src/announcement/announcement.controller.ts", "apps/api/src/announcement/announcement.service.ts", "apps/api/src/announcement/announcement.e2e.test.ts", ["@Post(\":id/deliveries\")", "@Headers(\"idempotency-key\")"], ["announcement-delivery-send-idempotency-a"]),
@@ -59,6 +61,8 @@ const inventory = [
 
 const failures = [];
 const operationsInCode = extractOperations("apps/api/src");
+if (readFileSync("apps/api/src/tenant/tenant.service.ts", "utf8").includes('hashIdempotencyRequest("tenant.lifecycle.change"')) operationsInCode.add("tenant.lifecycle.change");
+if (readFileSync("apps/api/src/tenant/tenant-fresh-reset.service.ts", "utf8").includes('hashIdempotencyRequest("tenant.clean-reset.enqueue"')) operationsInCode.add("tenant.clean-reset.enqueue");
 const inventoryOperations = new Set(inventory.map((item) => item.operation));
 const operationsWithoutRequestBody = new Set([
   "answer-key.publish",
@@ -77,7 +81,7 @@ for (const item of inventory) {
     failures.push(`Idempotency operation kodda bulunamadi: ${item.operation}`);
   }
   checkFileTokens(item.controllerFile, item.controllerTokens, `${item.operation} controller`, failures);
-  checkFileTokens(item.serviceFile, [`operation: "${item.operation}"`], `${item.operation} service`, failures);
+  checkFileTokens(item.serviceFile, [["tenant.lifecycle.change", "tenant.clean-reset.enqueue"].includes(item.operation) ? `hashIdempotencyRequest("${item.operation}"` : `operation: "${item.operation}"`], `${item.operation} service`, failures);
   checkFileTokens(item.testFile, ["Idempotency-Key", ...item.testTokens], `${item.operation} e2e`, failures);
 
   if (item.openApi !== "covered") {

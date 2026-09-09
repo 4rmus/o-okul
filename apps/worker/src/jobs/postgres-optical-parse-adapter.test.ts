@@ -19,11 +19,12 @@ describe("PostgresOpticalParseAdapter", () => {
 
     expect(result).toEqual({ matchedSaved: 1, unmatchedSaved: 1 });
     expect(client.queries[0]?.sql).toBe("BEGIN");
-    expect(client.queries[1]).toEqual({
+    expect(client.queries[1]).toEqual({ sql: "SELECT pg_try_advisory_xact_lock_shared(hashtextextended($1, 0)) AS locked", values: ["tenant-database:tenant-a"] });
+    expect(client.queries[2]).toEqual({
       sql: "SELECT set_config('app.bypass_rls', $1, true)",
       values: ["false"],
     });
-    expect(client.queries[2]).toEqual({
+    expect(client.queries[3]).toEqual({
       sql: "SELECT set_config('app.current_tenant_id', $1, true)",
       values: ["tenant-a"],
     });
@@ -139,6 +140,7 @@ class FakeClient implements Queryable {
 
   async query<T>(sql: string, values?: unknown[]): Promise<{ rows: T[] }> {
     this.queries.push({ sql: sql.trim(), values });
+    if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
     return { rows: this.handler(sql, values) as T[] };
   }
 

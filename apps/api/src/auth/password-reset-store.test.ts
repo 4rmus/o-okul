@@ -10,6 +10,8 @@ describe("PostgresPasswordResetStore", () => {
     const queries: string[] = [];
     const store = new PostgresPasswordResetStore(poolWith(async <T>(sql: string) => {
       queries.push(sql);
+      if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
+      if (sql.includes('FROM "Tenant"') || sql.includes('FROM "User"')) return { rows: [{ id: "user-a" }] as T[] };
       if (sql.includes("pg_advisory_xact_lock")) return { rows: [] as T[] };
       if (sql.includes('INSERT INTO "PasswordResetToken"')) {
         return { rows: [resetRow()] as T[] };
@@ -23,6 +25,10 @@ describe("PostgresPasswordResetStore", () => {
     expect(queries.some((sql) => sql.includes("pg_advisory_xact_lock"))).toBe(true);
     expect(queries.some((sql) => sql.includes('INSERT INTO "PasswordResetToken"'))).toBe(true);
     expect(queries.some((sql) => sql.includes('INSERT INTO "SecretDeliveryOutbox"'))).toBe(true);
+    const mutex = queries.findIndex((sql) => sql.includes("pg_advisory_xact_lock(") && !sql.includes("pg_try"));
+    expect(mutex).toBeGreaterThan(queries.findIndex((sql) => sql.includes('FROM "Tenant"')));
+    expect(queries.findIndex((sql) => sql.includes('FROM "User"') && sql.includes("FOR SHARE"))).toBeGreaterThan(mutex);
+
     expect(queries.at(-1)).toBe("COMMIT");
   });
 
@@ -30,6 +36,8 @@ describe("PostgresPasswordResetStore", () => {
     const queries: string[] = [];
     const store = new PostgresPasswordResetStore(poolWith(async <T>(sql: string) => {
       queries.push(sql);
+      if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
+      if (sql.includes('FROM "Tenant"') || sql.includes('FROM "User"')) return { rows: [{ id: "user-a" }] as T[] };
       if (sql.includes("pg_advisory_xact_lock")) return { rows: [] as T[] };
       if (sql.includes('INSERT INTO "PasswordResetToken"')) return { rows: [resetRow()] as T[] };
       if (sql.includes('INSERT INTO "SecretDeliveryOutbox"')) throw new Error("OUTBOX_INSERT_FAILED");
@@ -45,7 +53,9 @@ describe("PostgresPasswordResetStore", () => {
     const queries: string[] = [];
     const store = new PostgresPasswordResetStore(poolWith(async <T>(sql: string) => {
       queries.push(sql);
-      if (sql.includes('SELECT "userId" FROM "PasswordResetToken"')) return { rows: [{ userId: "user-a" }] as T[] };
+      if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
+      if (sql.includes('FROM "Tenant"') || sql.includes('FROM "User"')) return { rows: [{ id: "user-a" }] as T[] };
+      if (sql.includes('SELECT p."userId", u."tenantId" FROM "PasswordResetToken"')) return { rows: [{ userId: "user-a", tenantId: "tenant-a" }] as T[] };
       if (sql.includes("pg_advisory_xact_lock")) return { rows: [] as T[] };
       if (sql.includes("SET \"status\" = 'USED'")) return { rows: [resetRow()] as T[] };
       if (sql.includes("SET \"status\" = 'REVOKED'")) return { rows: [{ id: "reset-sibling" }] as T[] };
@@ -56,7 +66,7 @@ describe("PostgresPasswordResetStore", () => {
 
     expect(queries.some((sql) => sql.includes('"id" <> $2'))).toBe(true);
     expect(queries.some((sql) => sql.includes(`"payloadEncrypted" = NULL`))).toBe(true);
-    expect(queries.some((sql) => sql.includes(`"claimToken" = NULL`))).toBe(true);
+    expect(queries.some((sql) => sql.includes(`"claimToken" = CASE WHEN "attempts" = 0 THEN NULL ELSE "claimToken" END`))).toBe(true);
     expect(queries.at(-1)).toBe("COMMIT");
   });
 
@@ -64,7 +74,9 @@ describe("PostgresPasswordResetStore", () => {
     const queries: string[] = [];
     const pool = poolWith(async <T>(sql: string) => {
       queries.push(sql);
-      if (sql.includes('SELECT "userId" FROM "PasswordResetToken"')) return { rows: [{ userId: "user-a" }] as T[] };
+      if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
+      if (sql.includes('FROM "Tenant"') || sql.includes('FROM "User"')) return { rows: [{ id: "user-a" }] as T[] };
+      if (sql.includes('SELECT p."userId", u."tenantId" FROM "PasswordResetToken"')) return { rows: [{ userId: "user-a", tenantId: "tenant-a" }] as T[] };
       if (sql.includes("pg_advisory_xact_lock")) return { rows: [] as T[] };
       if (sql.includes("SET \"status\" = 'USED'")) return { rows: [resetRow()] as T[] };
       if (sql.includes('SET "passwordHash" = $2')) {
@@ -80,6 +92,7 @@ describe("PostgresPasswordResetStore", () => {
 
     await expect(store.confirm("reset-a", "2026-08-01T12:05:00.000Z", async (transaction) => {
       const updated = await users.updatePasswordForReset("user-a", "scrypt:v2:salt:hash", {
+        source: { tenantId: "tenant-a", membershipVersion: 1 },
         mustChangePassword: false,
         passwordChangedAt: "2026-08-01T12:05:00.000Z",
       }, transaction);
@@ -128,6 +141,7 @@ describe("InMemoryPasswordResetStore", () => {
 
     await expect(store.confirm(reset!.id, "2026-08-01T12:05:00.000Z", async (transaction) => {
       await users.updatePasswordForReset("user-tenant-a", "scrypt:v2:next:hash", {
+        source: { tenantId: "tenant-a", membershipVersion: before!.membershipVersion },
         mustChangePassword: false,
         passwordChangedAt: "2026-08-01T12:05:00.000Z",
       }, transaction);
@@ -151,7 +165,9 @@ function resetInput() {
     tokenHash: "token-hash",
     expiresAt,
     resendNotBefore: "2026-08-01T11:50:00.000Z",
+    expectedMembershipVersion: 1,
     delivery: {
+      sourceScope: "TENANT" as const, tenantLifecycleVersion: 0,
       tenantId: "tenant-a",
       purpose: "PASSWORD_RESET" as const,
       payloadEncrypted: "encrypted-payload",

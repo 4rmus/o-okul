@@ -1,3 +1,5 @@
+import { TenantFreshResetService } from "./tenant-fresh-reset.service.js";
+import { TenantResetPreviewService } from "./tenant-reset-preview.service.js";
 import { Module } from "@nestjs/common";
 import { AuditLogModule } from "../audit-log/audit-log.module.js";
 import { AuthPersistenceModule } from "../auth/auth-persistence.module.js";
@@ -10,7 +12,7 @@ import { TenantService } from "./tenant.service.js";
 @Module({
   imports: [AuditLogModule, AuthPersistenceModule, LicensePersistenceModule, TenantPersistenceModule, UserManagementPersistenceModule],
   controllers: [TenantController],
-  providers: [TenantService],
+  providers: [TenantService, TenantResetPreviewService, TenantFreshResetService],
   exports: [TenantService],
 })
 export class TenantModule {}

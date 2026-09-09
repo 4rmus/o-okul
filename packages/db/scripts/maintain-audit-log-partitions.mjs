@@ -72,6 +72,7 @@ function buildPartitionPlan(month, count) {
       from: `${fromMonth}-01`,
       to: `${toMonth}-01`,
       sql: `CREATE TABLE IF NOT EXISTS "${name}" PARTITION OF "AuditLog"\n  FOR VALUES FROM ('${fromMonth}-01') TO ('${toMonth}-01');`,
+      privilegeSql: `REVOKE ALL PRIVILEGES ON TABLE "${name}" FROM app;`,
     };
   });
 }
@@ -98,6 +99,7 @@ async function applyPartitions(partitionPlan) {
     await requireAuditLogPartitionedTable(client);
     for (const partition of partitionPlan) {
       await client.query(partition.sql);
+      await client.query(partition.privilegeSql);
       await requirePartitionExists(client, partition.name);
     }
     await client.query("COMMIT");

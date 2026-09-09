@@ -370,6 +370,19 @@ koltuk değildir. Yıllık veya çok yıllık lisans dönemleri geriye dönük d
 `LicenseTerm` segmentleri eklenir. Dönem öncesinde giriş kapalı, dönem sonunda 14 gün salt-okunur,
 15-90. günlerde dondurulmuş saklama ve 91. günde legal hold/retention kontrolüne bağlı imha süreci
 uygulanır. Normal API tenant graph'ını fiziksel silemez.
+İlk sade runtime diliminde `Tenant.status` yalnız `ACTIVE | SUSPENDED` erişim durumudur; `TRIAL`
+lisans planıdır. Eski `status=TRIAL` kayıtları kontrollü migration ile `ACTIVE` duruma taşınır;
+diğer bilinmeyen durumlar migrationı durdurur. `system` tenantı aktif kalır. Fresh
+reset ve ilerideki offboarding/imha durumları bu alana eklenmez.
+Public kurum açılışı yalnız ilk `TENANT_OWNER`, kampüs ve lisans dönemini birlikte oluşturan
+idempotent onboarding sözleşmesidir. `SYSTEM_ADMIN` tenant rollerini rank ile devralmaz. Durum
+değişimi ayrı capability altında tenant, aktif session iptali ve PII-safe audit kaydını tek
+transaction içinde günceller. Gate 2 sözleşmesi `expectedLifecycleVersion`, exact slug,
+PII-safe `SECURITY_REVIEW | INSTITUTION_REQUEST | OPERATIONS_REVIEW` gerekçe kodu, zorunlu
+`Idempotency-Key` ve kullanıcı/session/üyelik/kurum/status/sürüm bağlı `TENANT_LIFECYCLE_CHANGE`
+MFA kanıtıdır. Aynı body/key replay yeni geçiş yaratmaz; güncel sürümle aynı status isteği
+sürümü veya sessionları değiştirmez. Gerçek geçişte sürüm artar, eski oturumlar yeniden açmada
+da geçersiz kalır. Bu yerel sözleşme kapanışı migration/deploy veya fresh-reset kanıtı değildir.
 
 Tenant hesabı, çalışan/öğrenci profili, tenant üyeliği ve session birbirinden ayrılır. Giriş
 `kurum kodu + kurum içi kullanıcı kimliği` ile yapılır; T.C. kimlik numarası ve telefon kullanıcı adı,

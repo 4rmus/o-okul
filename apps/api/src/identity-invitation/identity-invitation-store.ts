@@ -44,7 +44,7 @@ export interface IdentityInvitationStore {
   list(tenantId: string): Promise<IdentityInvitationRecord[]>;
   create(input: CreateIdentityInvitationInput): Promise<IdentityInvitationRecord>;
   findById(tenantId: string, id: string): Promise<IdentityInvitationRecord | undefined>;
-  findByTokenHash(tokenHash: string): Promise<IdentityInvitationRecord | undefined>;
+  findByTokenHash(tokenHash: string): Promise<(IdentityInvitationRecord & { tenantLifecycleVersion?: number }) | undefined>;
   resend(tenantId: string, id: string, input: { tokenHash: string; expiresAt: string; delivery: SecretDeliveryOutboxInput }): Promise<IdentityInvitationRecord | undefined>;
   markAccepted(id: string, userId: string, acceptedAt: string): Promise<IdentityInvitationRecord | undefined>;
   revokePendingForSubject(tenantId: string, subjectType: InvitationSubjectType, subjectId: string): Promise<number>;
@@ -95,7 +95,7 @@ export class InMemoryIdentityInvitationStore implements IdentityInvitationStore 
     return stripTokenHash(this.invitations.find((invitation) => invitation.tenantId === tenantId && invitation.id === id));
   }
 
-  async findByTokenHash(tokenHash: string): Promise<IdentityInvitationRecord | undefined> {
+  async findByTokenHash(tokenHash: string): Promise<(IdentityInvitationRecord & { tenantLifecycleVersion?: number }) | undefined> {
     return stripTokenHash(this.invitations.find((invitation) => invitation.tokenHash === tokenHash));
   }
 
@@ -200,13 +200,13 @@ export class PostgresIdentityInvitationStore implements IdentityInvitationStore 
     });
   }
 
-  async findByTokenHash(tokenHash: string): Promise<IdentityInvitationRecord | undefined> {
+  async findByTokenHash(tokenHash: string): Promise<(IdentityInvitationRecord & { tenantLifecycleVersion?: number }) | undefined> {
     return this.withBypassQuery(async (client) => {
-      const result = await client.query<IdentityInvitationRow>(
-        `SELECT * FROM "IdentityInvitation" WHERE "tokenHash" = $1 LIMIT 1`,
+      const result = await client.query<IdentityInvitationRow & { tenantLifecycleVersion: number }>(
+        `SELECT i.*, t."lifecycleVersion" AS "tenantLifecycleVersion" FROM "IdentityInvitation" i JOIN "Tenant" t ON t."id" = i."tenantId" WHERE i."tokenHash" = $1 LIMIT 1`,
         [tokenHash],
       );
-      return result.rows[0] ? toIdentityInvitationRecord(result.rows[0]) : undefined;
+      return result.rows[0] ? { ...toIdentityInvitationRecord(result.rows[0]), tenantLifecycleVersion: result.rows[0].tenantLifecycleVersion } : undefined;
     });
   }
 
@@ -298,21 +298,24 @@ export class PostgresIdentityInvitationStore implements IdentityInvitationStore 
 }
 
 async function insertSecretDeliveryOutbox(client: Queryable, sourceId: string, input: SecretDeliveryOutboxInput): Promise<void> {
+  if (input.sourceScope !== "TENANT" || !input.tenantId || !Number.isInteger(input.tenantLifecycleVersion)) throw new Error("SECRET_DELIVERY_PROVENANCE_UNVERIFIED");
+  const tenant = await client.query('SELECT "id" FROM "Tenant" WHERE "id" = $1 AND "status" = \'ACTIVE\' AND "lifecycleVersion" = $2 FOR SHARE', [input.tenantId, input.tenantLifecycleVersion]);
+  if (!tenant.rows.length) throw new Error("TENANT_ACTIVITY_STALE");
   await client.query(
     `INSERT INTO "SecretDeliveryOutbox" (
-       "id", "tenantId", "purpose", "sourceId", "payloadEncrypted", "status", "availableAt", "expiresAt", "updatedAt"
-     ) VALUES ($1, $2, $3, $4, $5, 'PENDING', now(), $6, now())`,
-    [randomUUID(), input.tenantId ?? null, input.purpose, sourceId, input.payloadEncrypted, input.expiresAt],
+       "id", "tenantId", "purpose", "sourceId", "payloadEncrypted", "status", "availableAt", "expiresAt", "updatedAt", "sourceScope", "tenantLifecycleVersion"
+     ) VALUES ($1, $2, $3, $4, $5, 'PENDING', now(), $6, now(), $7, $8)`,
+    [randomUUID(), input.tenantId ?? null, input.purpose, sourceId, input.payloadEncrypted, input.expiresAt, input.sourceScope ?? null, input.tenantLifecycleVersion ?? null],
   );
 }
 
 async function clearInvitationDeliveries(client: Queryable, sourceId: string): Promise<void> {
   await client.query(
     `UPDATE "SecretDeliveryOutbox"
-     SET "status" = 'EXPIRED',
+     SET "status" = CASE WHEN "status" = 'PENDING' AND "attempts" = 0 AND "claimToken" IS NULL THEN 'EXPIRED' ELSE 'UNCERTAIN' END,
          "payloadEncrypted" = NULL,
-         "claimedAt" = NULL,
-         "claimToken" = NULL,
+         "claimedAt" = CASE WHEN "attempts" = 0 THEN NULL ELSE "claimedAt" END,
+         "claimToken" = CASE WHEN "attempts" = 0 THEN NULL ELSE "claimToken" END,
          "lastErrorCode" = NULL,
          "updatedAt" = now()
      WHERE "purpose" = 'IDENTITY_INVITATION'

@@ -68,6 +68,7 @@ describe("LicenseTermStore", () => {
         return {
           async query<T>(sql: string, values?: unknown[]) {
             queries.push({ sql, values });
+            if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
             if (sql.includes("AS matches")) return { rows: [{ matches: true }] as T[] };
             if (sql.includes('FROM "LicenseTerm"')) return { rows: [baseTerm] as T[] };
             return { rows: [] as T[] };
@@ -96,6 +97,7 @@ describe("LicenseTermStore", () => {
         return {
           async query<T>(sql: string, values?: unknown[]) {
             queries.push({ sql, values });
+            if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
             if (sql.includes('INSERT INTO "LicenseTerm"')) {
               return { rows: [{ ...baseTerm, createdByPlatformAccountId: "platform-a", auditReference: "contract-2026" }] as T[] };
             }

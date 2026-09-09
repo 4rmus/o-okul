@@ -17,7 +17,7 @@ export function SystemDashboard() {
   });
   const tenants = tenantsQuery.data?.data ?? [];
   const activeCount = tenants.filter((tenant) => tenant.status === "ACTIVE").length;
-  const trialCount = tenants.filter((tenant) => tenant.plan === "TRIAL" || tenant.status === "TRIAL").length;
+  const trialCount = tenants.filter((tenant) => tenant.plan === "TRIAL").length;
 
   return (
     <PageFrame title="Sistem Paneli" subtitle="Kurumların kullanım durumunu ve lisanslarını tek yerden izleyin.">
@@ -31,14 +31,14 @@ export function SystemDashboard() {
         />
         <MetricCard
           className="next-system-summary-card"
-          description="Kullanıma açık kurum"
+          description="Listelenen ilk 100 kayıtta kullanıma açık kurum"
           label="Aktif"
           tone="success"
           value={activeCount}
         />
         <MetricCard
           className="next-system-summary-card"
-          description="Deneme planındaki kurum"
+          description="Listelenen ilk 100 kayıtta deneme planındaki kurum"
           label="Deneme"
           tone="warning"
           value={trialCount}

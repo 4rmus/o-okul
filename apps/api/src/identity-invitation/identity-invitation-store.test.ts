@@ -9,6 +9,8 @@ describe("PostgresIdentityInvitationStore", () => {
         return {
           async query<T>(sql: string) {
             queries.push(sql);
+            if (sql.includes('FROM "Tenant"')) return { rows: [{ id: "tenant-a" }] as T[] };
+            if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
             if (sql.includes('INSERT INTO "IdentityInvitation"')) {
               return { rows: [invitationRow()] as T[] };
             }
@@ -33,7 +35,7 @@ describe("PostgresIdentityInvitationStore", () => {
       expiresAt,
       delivery: {
         tenantId: "tenant-a",
-        purpose: "IDENTITY_INVITATION",
+        sourceScope: "TENANT", tenantLifecycleVersion: 0, purpose: "IDENTITY_INVITATION",
         payloadEncrypted: "encrypted-payload",
         expiresAt,
       },
@@ -53,6 +55,8 @@ describe("PostgresIdentityInvitationStore", () => {
         return {
           async query<T>(sql: string) {
             queries.push(sql);
+            if (sql.includes('FROM "Tenant"')) return { rows: [{ id: "tenant-a" }] as T[] };
+            if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
             if (sql.includes('UPDATE "IdentityInvitation"')) return { rows: [invitationRow()] as T[] };
             return { rows: [] as T[] };
           },
@@ -69,7 +73,7 @@ describe("PostgresIdentityInvitationStore", () => {
       expiresAt,
       delivery: {
         tenantId: "tenant-a",
-        purpose: "IDENTITY_INVITATION",
+        sourceScope: "TENANT", tenantLifecycleVersion: 0, purpose: "IDENTITY_INVITATION",
         payloadEncrypted: "new-encrypted-payload",
         expiresAt,
       },
@@ -89,6 +93,8 @@ describe("PostgresIdentityInvitationStore", () => {
         return {
           async query<T>(sql: string) {
             queries.push(sql);
+            if (sql.includes('FROM "Tenant"')) return { rows: [{ id: "tenant-a" }] as T[] };
+            if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
             if (sql.includes('UPDATE "IdentityInvitation"')) {
               return { rows: [{ id: "invitation-a" }] as T[] };
             }
@@ -105,7 +111,7 @@ describe("PostgresIdentityInvitationStore", () => {
 
     expect(queries.some((sql) => sql.includes(`"status" = 'REVOKED'`))).toBe(true);
     expect(queries.some((sql) => sql.includes(`"payloadEncrypted" = NULL`))).toBe(true);
-    expect(queries.some((sql) => sql.includes(`"claimToken" = NULL`))).toBe(true);
+    expect(queries.some((sql) => sql.includes(`"claimToken" = CASE WHEN "attempts" = 0 THEN NULL ELSE "claimToken" END`))).toBe(true);
     expect(queries.at(-1)).toBe("COMMIT");
   });
 });

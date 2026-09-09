@@ -11,6 +11,8 @@ const outputPath = process.env.ACCOUNT_MANAGEMENT_BACKFILL_OUTPUT;
 const ownerDecisionsTarget = process.env.ACCOUNT_MANAGEMENT_OWNER_DECISIONS_TARGET;
 const applyConfirmation = process.env.ACCOUNT_MANAGEMENT_BACKFILL_CONFIRM;
 
+// The status migration runs first; suspended and unknown tenants are outside this backfill.
+const activeTenantIdsSql = `SELECT "id" FROM "Tenant" WHERE "status" = 'ACTIVE'`;
 const inputFailures = [];
 requireOneOf(mode, "ACCOUNT_MANAGEMENT_BACKFILL_MODE", ["DRY_RUN", "APPLY"], inputFailures);
 requireOneOf(environment, "environment", ["staging", "production"], inputFailures);
@@ -135,7 +137,7 @@ async function resolveOwners(queryable, decisions) {
   const tenants = await queryable.query(
     `SELECT "id"
      FROM "Tenant"
-     WHERE "id" <> 'system' AND "status" NOT IN ('DELETED', 'CLOSED')
+     WHERE "id" <> 'system' AND "status" = 'ACTIVE'
      ORDER BY "id"`,
   );
   const candidates = await queryable.query(
@@ -144,7 +146,7 @@ async function resolveOwners(queryable, decisions) {
             m."createdAt" AS "membershipCreatedAt", u."createdAt" AS "userCreatedAt"
      FROM "TenantMembership" m
      JOIN "User" u ON u."tenantId" = m."tenantId" AND u."id" = m."userId"
-     WHERE m."status" = 'ACTIVE' AND m."role"::text IN ('TENANT_OWNER', 'TENANT_ADMIN')
+     WHERE m."tenantId" IN (${activeTenantIdsSql}) AND m."status" = 'ACTIVE' AND m."role"::text IN ('TENANT_OWNER', 'TENANT_ADMIN')
      ORDER BY m."tenantId", m."createdAt", u."createdAt", m."userId"`,
   );
   const byTenant = new Map();
@@ -213,7 +215,7 @@ async function collectPreconditions(queryable) {
     WITH email_collisions AS (
       SELECT "tenantId", lower(btrim("email")) AS normalized
       FROM "User"
-      WHERE "tenantId" IS NOT NULL AND "email" IS NOT NULL AND btrim("email") <> ''
+      WHERE "tenantId" IN (${activeTenantIdsSql}) AND "email" IS NOT NULL AND btrim("email") <> ''
       GROUP BY "tenantId", lower(btrim("email"))
       HAVING count(*) > 1
     ), planned_logins AS (
@@ -229,7 +231,7 @@ async function collectPreconditions(queryable) {
       FROM "User" u
       LEFT JOIN "Student" student
         ON student."tenantId" = u."tenantId" AND student."userId" = u."id" AND student."deletedAt" IS NULL
-      WHERE u."tenantId" IS NOT NULL AND u."tenantId" <> 'system'
+      WHERE u."tenantId" IN (${activeTenantIdsSql}) AND u."tenantId" <> 'system'
     ), login_collisions AS (
       SELECT "tenantId", normalized
       FROM planned_logins
@@ -244,17 +246,17 @@ async function collectPreconditions(queryable) {
              bool_or(m."role"::text = 'STUDENT') AS has_student,
              bool_or(m."role"::text = 'GUARDIAN') AS has_guardian
       FROM "TenantMembership" m
-      WHERE m."status" = 'ACTIVE' AND m."role"::text <> 'SYSTEM_ADMIN'
+      WHERE m."tenantId" IN (${activeTenantIdsSql}) AND m."status" = 'ACTIVE' AND m."role"::text <> 'SYSTEM_ADMIN'
       GROUP BY m."tenantId", m."userId"
     ), invalid_roles AS (
       SELECT "tenantId", "userId" FROM role_sets
       WHERE staff_role_count > 1 OR (has_student AND role_count > 1) OR (has_guardian AND role_count > 1)
     ), profile_links AS (
-      SELECT "tenantId", "userId", 'STUDENT'::text AS role FROM "Student" WHERE "deletedAt" IS NULL AND "userId" IS NOT NULL
+      SELECT "tenantId", "userId", 'STUDENT'::text AS role FROM "Student" WHERE "tenantId" IN (${activeTenantIdsSql}) AND "deletedAt" IS NULL AND "userId" IS NOT NULL
       UNION ALL
-      SELECT "tenantId", "userId", 'TEACHER'::text AS role FROM "Teacher" WHERE "deletedAt" IS NULL AND "userId" IS NOT NULL
+      SELECT "tenantId", "userId", 'TEACHER'::text AS role FROM "Teacher" WHERE "tenantId" IN (${activeTenantIdsSql}) AND "deletedAt" IS NULL AND "userId" IS NOT NULL
       UNION ALL
-      SELECT "tenantId", "userId", 'GUARDIAN'::text AS role FROM "Guardian" WHERE "deletedAt" IS NULL AND "userId" IS NOT NULL
+      SELECT "tenantId", "userId", 'GUARDIAN'::text AS role FROM "Guardian" WHERE "tenantId" IN (${activeTenantIdsSql}) AND "deletedAt" IS NULL AND "userId" IS NOT NULL
     ), orphan_profiles AS (
       SELECT profile."tenantId", profile."userId"
       FROM profile_links profile
@@ -266,7 +268,7 @@ async function collectPreconditions(queryable) {
     ), subject_memberships AS (
       SELECT "tenantId", "userId", "role"::text AS role
       FROM "TenantMembership"
-      WHERE "status" = 'ACTIVE' AND "role"::text IN ('STUDENT', 'TEACHER', 'GUARDIAN')
+      WHERE "tenantId" IN (${activeTenantIdsSql}) AND "status" = 'ACTIVE' AND "role"::text IN ('STUDENT', 'TEACHER', 'GUARDIAN')
     ), orphan_memberships AS (
       SELECT membership."tenantId", membership."userId"
       FROM subject_memberships membership
@@ -285,7 +287,7 @@ async function collectPreconditions(queryable) {
     ), ambiguous_employees AS (
       SELECT teacher."tenantId", teacher."id"
       FROM "Teacher" teacher
-      WHERE teacher."deletedAt" IS NULL AND teacher."employeeId" IS NULL
+      WHERE teacher."tenantId" IN (${activeTenantIdsSql}) AND teacher."deletedAt" IS NULL AND teacher."employeeId" IS NULL
         AND 1 < (
           SELECT count(*) FROM "Employee" employee
           WHERE employee."tenantId" = teacher."tenantId"
@@ -302,7 +304,7 @@ async function collectPreconditions(queryable) {
       FROM "User" account
       JOIN "TenantMembership" membership
         ON membership."tenantId" = account."tenantId" AND membership."userId" = account."id"
-      WHERE membership."role"::text = 'SYSTEM_ADMIN' AND membership."status" = 'ACTIVE'
+      WHERE membership."tenantId" IN (${activeTenantIdsSql}) AND membership."role"::text = 'SYSTEM_ADMIN' AND membership."status" = 'ACTIVE'
     ), platform_login_collisions AS (
       SELECT normalized_login FROM platform_identities GROUP BY normalized_login HAVING count(*) > 1
       UNION ALL
@@ -356,7 +358,7 @@ async function collectReadiness(queryable, owners) {
       FROM "User" u
       LEFT JOIN "Student" student
         ON student."tenantId" = u."tenantId" AND student."userId" = u."id" AND student."deletedAt" IS NULL
-      WHERE u."tenantId" IS NOT NULL AND u."tenantId" <> 'system'
+      WHERE u."tenantId" IN (${activeTenantIdsSql}) AND u."tenantId" <> 'system'
     ), account_readiness AS (
       SELECT account.*, (
         actual."emailNormalized" IS NOT DISTINCT FROM account.email_normalized
@@ -381,7 +383,7 @@ async function collectReadiness(queryable, owners) {
       FROM "User" account
       JOIN "TenantMembership" membership
         ON membership."tenantId" = account."tenantId" AND membership."userId" = account."id"
-      WHERE membership."role"::text = 'SYSTEM_ADMIN' AND membership."status" = 'ACTIVE'
+      WHERE membership."tenantId" IN (${activeTenantIdsSql}) AND membership."role"::text = 'SYSTEM_ADMIN' AND membership."status" = 'ACTIVE'
     ), role_sets AS (
       SELECT membership."tenantId", membership."userId",
              bool_or(membership."role"::text = 'TEACHER') AS has_teacher,
@@ -395,7 +397,7 @@ async function collectReadiness(queryable, owners) {
              END) AS staff_role
       FROM "TenantMembership" membership
       LEFT JOIN owners owner ON owner."tenantId" = membership."tenantId" AND owner."userId" = membership."userId"
-      WHERE membership."status" = 'ACTIVE' AND membership."role"::text <> 'SYSTEM_ADMIN'
+      WHERE membership."tenantId" IN (${activeTenantIdsSql}) AND membership."status" = 'ACTIVE' AND membership."role"::text <> 'SYSTEM_ADMIN'
       GROUP BY membership."tenantId", membership."userId"
     ), ranked AS (
       SELECT membership."tenantId", membership."userId", membership."id",
@@ -409,7 +411,7 @@ async function collectReadiness(queryable, owners) {
                  membership."createdAt", membership."id"
              ) AS rank
       FROM "TenantMembership" membership
-      WHERE membership."status" = 'ACTIVE' AND membership."role"::text <> 'SYSTEM_ADMIN'
+      WHERE membership."tenantId" IN (${activeTenantIdsSql}) AND membership."status" = 'ACTIVE' AND membership."role"::text <> 'SYSTEM_ADMIN'
     ), expected_memberships AS (
       SELECT roles."tenantId", roles."userId", ranked."id", roles.staff_role,
              roles.has_teacher, roles.has_student, account."membershipVersion"
@@ -423,7 +425,7 @@ async function collectReadiness(queryable, owners) {
              account."membershipVersion"
       FROM "TenantMembership" membership
       JOIN "User" account ON account."tenantId" = membership."tenantId" AND account."id" = membership."userId"
-      WHERE membership."status" = 'ACTIVE'
+      WHERE membership."tenantId" IN (${activeTenantIdsSql}) AND membership."status" = 'ACTIVE'
       GROUP BY membership."tenantId", membership."userId", account."membershipVersion"
     )
     SELECT
@@ -445,14 +447,14 @@ async function collectReadiness(queryable, owners) {
           AND actual."hasTeacherPersona" = expected.has_teacher
           AND actual."hasStudentPersona" = expected.has_student
           AND actual."version" = expected."membershipVersion") AS "canonicalMembershipReady",
-      (SELECT count(*)::int FROM "Teacher" WHERE "deletedAt" IS NULL) AS teachers,
+      (SELECT count(*)::int FROM "Teacher" WHERE "tenantId" IN (${activeTenantIdsSql}) AND "deletedAt" IS NULL) AS teachers,
       (SELECT count(*)::int FROM "Teacher" teacher JOIN "Employee" employee
         ON employee."tenantId" = teacher."tenantId" AND employee."id" = teacher."employeeId"
-        WHERE teacher."deletedAt" IS NULL AND employee."deletedAt" IS NULL) AS "teachersLinked",
-      (SELECT count(*)::int FROM "AuthSession" WHERE "status" = 'ACTIVE') AS "activeSessions",
+        WHERE teacher."tenantId" IN (${activeTenantIdsSql}) AND teacher."deletedAt" IS NULL AND employee."deletedAt" IS NULL) AS "teachersLinked",
+      (SELECT count(*)::int FROM "AuthSession" WHERE "tenantId" IN (${activeTenantIdsSql}) AND "status" = 'ACTIVE') AS "activeSessions",
       (SELECT count(*)::int FROM "AuthSession" session JOIN legacy_session_roles expected
         ON expected."tenantId" = session."tenantId" AND expected."userId" = session."userId"
-        WHERE session."status" = 'ACTIVE' AND session."membershipVersion" = expected."membershipVersion") AS "sessionVersionMatches",
+        WHERE session."tenantId" IN (${activeTenantIdsSql}) AND session."status" = 'ACTIVE' AND session."membershipVersion" = expected."membershipVersion") AS "sessionVersionMatches",
       (SELECT count(*)::int
        FROM "AuthSession" session
        LEFT JOIN legacy_session_roles legacy
@@ -460,7 +462,7 @@ async function collectReadiness(queryable, owners) {
        LEFT JOIN expected_memberships canonical
          ON canonical."tenantId" = session."tenantId" AND canonical."userId" = session."userId"
         AND canonical."id" = session."membershipId"
-       WHERE session."status" = 'ACTIVE'
+       WHERE session."tenantId" IN (${activeTenantIdsSql}) AND session."status" = 'ACTIVE'
          AND (
            (session."membershipId" IS NULL AND session."activePersona" IS NULL
              AND ARRAY(SELECT DISTINCT role FROM unnest(session.roles) role ORDER BY role) = legacy.roles)
@@ -513,7 +515,7 @@ async function applyBackfill(queryable, owners) {
       FROM "User" u
       LEFT JOIN "Student" student
         ON student."tenantId" = u."tenantId" AND student."userId" = u."id" AND student."deletedAt" IS NULL
-      WHERE u."tenantId" IS NOT NULL
+      WHERE u."tenantId" IN (${activeTenantIdsSql})
     )
     UPDATE "User" account
     SET "emailNormalized" = planned.email_normalized,
@@ -529,7 +531,7 @@ async function applyBackfill(queryable, owners) {
     UPDATE "Teacher" teacher
     SET "employeeId" = employee."id", "updatedAt" = now()
     FROM "Employee" employee
-    WHERE teacher."employeeId" IS NULL AND teacher."deletedAt" IS NULL
+    WHERE teacher."tenantId" IN (${activeTenantIdsSql}) AND teacher."employeeId" IS NULL AND teacher."deletedAt" IS NULL
       AND employee."tenantId" = teacher."tenantId" AND employee."deletedAt" IS NULL
       AND ((teacher."userId" IS NOT NULL AND employee."userId" = teacher."userId")
         OR (teacher."nationalIdHash" IS NOT NULL AND employee."nationalIdHash" = teacher."nationalIdHash"))`);
@@ -543,13 +545,13 @@ async function applyBackfill(queryable, owners) {
            account."email", teacher."phone", teacher."userId", 'ACTIVE', now()
     FROM "Teacher" teacher
     LEFT JOIN "User" account ON account."tenantId" = teacher."tenantId" AND account."id" = teacher."userId"
-    WHERE teacher."deletedAt" IS NULL AND teacher."employeeId" IS NULL
+    WHERE teacher."tenantId" IN (${activeTenantIdsSql}) AND teacher."deletedAt" IS NULL AND teacher."employeeId" IS NULL
     ON CONFLICT DO NOTHING`);
   await queryable.query(`
     UPDATE "Teacher" teacher
     SET "employeeId" = employee."id", "updatedAt" = now()
     FROM "Employee" employee
-    WHERE teacher."employeeId" IS NULL AND teacher."deletedAt" IS NULL
+    WHERE teacher."tenantId" IN (${activeTenantIdsSql}) AND teacher."employeeId" IS NULL AND teacher."deletedAt" IS NULL
       AND employee."tenantId" = teacher."tenantId" AND employee."deletedAt" IS NULL
       AND (employee."id" = 'employee-' || md5(teacher."tenantId" || ':' || teacher."id")
         OR (teacher."userId" IS NOT NULL AND employee."userId" = teacher."userId")
@@ -558,7 +560,7 @@ async function applyBackfill(queryable, owners) {
   await queryable.query(`
     UPDATE "TenantMembership"
     SET "staffRole" = NULL, "hasTeacherPersona" = false, "hasStudentPersona" = false, "updatedAt" = now()
-    WHERE "role"::text <> 'SYSTEM_ADMIN'
+    WHERE "tenantId" IN (${activeTenantIdsSql}) AND "role"::text <> 'SYSTEM_ADMIN'
       AND ("staffRole" IS NOT NULL OR "hasTeacherPersona" OR "hasStudentPersona")`);
   await queryable.query(`
     WITH owners AS (
@@ -576,7 +578,7 @@ async function applyBackfill(queryable, owners) {
              END) AS staff_role
       FROM "TenantMembership" membership
       LEFT JOIN owners owner ON owner."tenantId" = membership."tenantId" AND owner."userId" = membership."userId"
-      WHERE membership."status" = 'ACTIVE' AND membership."role"::text <> 'SYSTEM_ADMIN'
+      WHERE membership."tenantId" IN (${activeTenantIdsSql}) AND membership."status" = 'ACTIVE' AND membership."role"::text <> 'SYSTEM_ADMIN'
       GROUP BY membership."tenantId", membership."userId"
     ), ranked AS (
       SELECT membership."tenantId", membership."userId", membership."id",
@@ -586,7 +588,7 @@ async function applyBackfill(queryable, owners) {
                     WHEN membership."role"::text = 'TEACHER' THEN 3 ELSE 99 END,
                membership."createdAt", membership."id") AS rank
       FROM "TenantMembership" membership
-      WHERE membership."status" = 'ACTIVE' AND membership."role"::text <> 'SYSTEM_ADMIN'
+      WHERE membership."tenantId" IN (${activeTenantIdsSql}) AND membership."status" = 'ACTIVE' AND membership."role"::text <> 'SYSTEM_ADMIN'
     ), targets AS (
       SELECT roles.*, ranked."id"
       FROM role_sets roles JOIN ranked ON ranked."tenantId" = roles."tenantId" AND ranked."userId" = roles."userId" AND ranked.rank = 1
@@ -617,7 +619,7 @@ async function applyBackfill(queryable, owners) {
            account."passwordHashVersion", account."accountStatus", account."totpSecretEncrypted", account."totpEnabledAt", now()
     FROM "User" account
     JOIN "TenantMembership" membership ON membership."tenantId" = account."tenantId" AND membership."userId" = account."id"
-    WHERE membership."role"::text = 'SYSTEM_ADMIN' AND membership."status" = 'ACTIVE'
+    WHERE membership."tenantId" IN (${activeTenantIdsSql}) AND membership."role"::text = 'SYSTEM_ADMIN' AND membership."status" = 'ACTIVE'
     ON CONFLICT ("id") DO UPDATE
     SET "loginName" = EXCLUDED."loginName", "loginNameNormalized" = EXCLUDED."loginNameNormalized",
         "email" = EXCLUDED."email", "emailNormalized" = EXCLUDED."emailNormalized", "name" = EXCLUDED."name",

@@ -11,6 +11,7 @@ export type TenantQueueName =
 interface BaseTenantQueueJobInput {
   queueName: TenantQueueName;
   tenantId: string;
+  lifecycleVersion?: number;
   userId: string;
   entityId: string;
   contentHash: string;

@@ -157,6 +157,16 @@ describe("AuditLogService", () => {
     expect(JSON.stringify(summary)).not.toContain("student.profile_updated");
   });
 
+  it("lifecycle status, sürüm ve gerekçe kodlarını korurken PII alanını redakte eder", async () => {
+    const service = new AuditLogService(new FakeAuditLogStore([]));
+    const record = await service.record({ action: "tenant.suspended", actorUserId: "system-a", tenantId: "tenant-a",
+      entityType: "Tenant", entityId: "tenant-a", diff: { previousStatus: "ACTIVE", status: "SUSPENDED",
+        previousLifecycleVersion: 0, lifecycleVersion: 1, reason: "SECURITY_REVIEW", email: "private@example.test" } });
+    expect(record.diff).toMatchObject({ previousStatus: "ACTIVE", status: "SUSPENDED", previousLifecycleVersion: 0,
+      lifecycleVersion: 1, reason: "SECURITY_REVIEW" });
+    expect(JSON.stringify(record)).not.toContain("private@example.test");
+  });
+
   it("audit diff değerlerini yazarken ve okurken redakte eder", async () => {
     const service = new AuditLogService(new FakeAuditLogStore([]));
 

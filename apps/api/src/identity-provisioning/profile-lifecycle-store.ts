@@ -43,6 +43,7 @@ export class InMemoryProfileLifecycleStore implements ProfileLifecycleStore {
     const profile = await this.findProfile(input);
     if (!profile) return undefined;
     const userId = profile.userId;
+    const originalSessions = userId ? await this.sessions.listActiveByUser(userId, input.tenantId) : [];
 
     const deleted = await this.softDeleteProfile(input);
     if (!deleted) return undefined;
@@ -59,7 +60,7 @@ export class InMemoryProfileLifecycleStore implements ProfileLifecycleStore {
     const tenantUser = await this.users.findTenantUser(input.tenantId, userId);
     const roleRemoved = tenantUser?.roles.includes(input.subjectType) ?? false;
     await this.users.removeTenantRole(input.tenantId, userId, input.subjectType);
-    await this.sessions.revokeByUser(userId);
+    for (const session of originalSessions) await this.sessions.revokeOwned(session.id, userId, input.tenantId, session.membershipVersion);
     return {
       userId,
       roleRemoved,

@@ -172,10 +172,17 @@ export interface TotpDisableResponse {
   disabledAt: string;
 }
 
-export type MfaStepUpPurpose = "OWNER_ADMIN_CHANGE";
+export type MfaStepUpPurpose = "OWNER_ADMIN_CHANGE" | "TENANT_LIFECYCLE_CHANGE" | "TENANT_CLEAN_RESET";
+
+export interface TenantLifecycleMfaTarget {
+  tenantId: string;
+  status: TenantAccessStatus;
+  expectedLifecycleVersion: number;
+}
 
 export interface MfaStepUpRequest {
   purpose: MfaStepUpPurpose;
+  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget;
   totpCode?: string;
   recoveryCode?: string;
 }
@@ -203,8 +210,18 @@ export interface MeProfileResponse {
   };
 }
 
+export type TenantAccessStatus = "ACTIVE" | "SUSPENDED";
+export type TenantLifecycleReason = "SECURITY_REVIEW" | "INSTITUTION_REQUEST" | "OPERATIONS_REVIEW";
+
+export interface TenantManagement {
+  allowedActions: { suspend: boolean; reactivate: boolean; cleanReset: boolean };
+  currentReset: TenantCleanResetStatus | null;
+  verified: boolean;
+}
+
 export interface TenantRecord {
   id: string;
+  management?: TenantManagement;
   name: string;
   slug: string;
   plan: string;
@@ -215,7 +232,10 @@ export interface TenantRecord {
   logoUrl?: string;
   seatLimit?: number;
   activeSeatCount?: number;
-  status: string;
+  status: TenantAccessStatus;
+  lifecycleVersion: number;
+  suspendedAt?: string;
+  suspendedReason?: TenantLifecycleReason;
 }
 
 export type LicenseState = "SCHEDULED" | "ACTIVE" | "READ_ONLY" | "FROZEN" | "EXPIRED" | "CANCELLED";
@@ -250,12 +270,6 @@ export interface TenantCurrentProfileUpdateRequest {
   name?: string;
 }
 
-export interface TenantFirstAdminCreateRequest {
-  email: string;
-  name: string;
-  nationalId: string;
-}
-
 export interface TenantFirstOwnerCreateRequest {
   email: string;
   name: string;
@@ -276,21 +290,14 @@ export interface TenantOnboardingOwnerRecord {
 }
 
 export interface TenantCreateRequest {
-  campuses?: TenantCampusCreateRequest[];
+  campuses: TenantCampusCreateRequest[];
   contactEmail?: string;
-  firstAdmin?: TenantFirstAdminCreateRequest;
-  firstOwner?: TenantFirstOwnerCreateRequest;
-  id?: string;
+  firstOwner: TenantFirstOwnerCreateRequest;
   institutionType?: string;
-  licenseEndsAt?: string;
-  licenseStartsAt?: string;
   logoUrl?: string;
-  licenseTerm?: LicenseTermCreateRequest;
+  licenseTerm: LicenseTermCreateRequest;
   name: string;
-  plan?: string;
-  seatLimit?: number;
   slug: string;
-  status?: string;
 }
 
 export interface TenantAdminUpdateRequest {
@@ -298,8 +305,18 @@ export interface TenantAdminUpdateRequest {
   institutionType?: string;
   logoUrl?: string;
   name?: string;
-  slug?: string;
-  status?: string;
+}
+
+export interface TenantStatusUpdateRequest {
+  status: TenantAccessStatus;
+  expectedLifecycleVersion: number;
+  reason: TenantLifecycleReason;
+  confirmationText: string;
+}
+
+export interface TenantStatusUpdateResult {
+  tenant: TenantRecord;
+  sessionsRevoked: number;
 }
 
 export interface TenantUserRecord {
@@ -384,20 +401,12 @@ export interface TenantMembershipUpdateResult {
   sessionsRevoked: number;
 }
 
-export type TenantFirstAdminProvisionResult = TenantUserRecord;
-
-export type TenantCreateResponse =
-  | TenantRecord
-  | {
-      tenant: TenantRecord;
-      admin: TenantFirstAdminProvisionResult;
-    }
-  | {
-      tenant: TenantRecord;
-      campuses: CampusRecord[];
-      licenseTerm: LicenseTermRecord;
-      owner: TenantOnboardingOwnerRecord;
-    };
+export interface TenantCreateResponse {
+  tenant: TenantRecord;
+  campuses: CampusRecord[];
+  licenseTerm: LicenseTermRecord;
+  owner: TenantOnboardingOwnerRecord;
+}
 
 export interface RolePreviewStartRequest {
   targetRole: PortalSubjectRoleName;
@@ -2267,6 +2276,7 @@ export interface ReportPdfInstitution {
 }
 
 export interface ReportPdfRenderJobPayload {
+  lifecycleVersion?: number;
   snapshot: ReportPdfSnapshotRecord;
   institution?: ReportPdfInstitution;
 }
@@ -2800,4 +2810,65 @@ export interface AnswerKeyRecord {
   publishedAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TenantResetInstitutionRequest {
+  id: string; tenantId: string; requestedBy: string; requestedAt: string; lifecycleVersion: number;
+  status: "PENDING" | "REVOKED" | "ACCEPTED" | "COMPLETED"; operationId: string | null;
+}
+
+export interface TenantResetInstitutionRequestCreate { expectedRequestId: string | null; preset: "CLEAN_SETUP_V1"; }
+export interface TenantResetInstitutionRequestRevoke { expectedRequestId: string; }
+export interface TenantResetRequestState { request: TenantResetInstitutionRequest | null; }
+
+export interface TenantResetPreview {
+  institutionRequest?: TenantResetInstitutionRequest | null;
+  preset: "CLEAN_SETUP_V1";
+  lifecycleVersion: number;
+  preservedOwnerCount: number;
+  categories: Array<{ category: string; preserved: number; deleted: number; blocked: number }>;
+  objectCount: number;
+  objectBytes: number;
+  blockers: string[];
+  allowed: boolean;
+  preflightDigest: string;
+  blockerCounts: Array<{ code: string; count: number | null }>;
+}
+
+export interface TenantCleanResetMfaTarget {
+  tenantId: string;
+  preset: "CLEAN_SETUP_V1";
+  expectedLifecycleVersion: number;
+  preflightDigest: string;
+}
+export interface TenantCleanResetRequest {
+  preset: "CLEAN_SETUP_V1";
+  expectedLifecycleVersion: number;
+  preflightDigest: string;
+  confirmationText: string;
+  reason: TenantLifecycleReason;
+}
+export interface TenantCleanResetStatus {
+  operationId: string;
+  status: "QUEUED" | "RUNNING" | "BLOCKED" | "FAILED" | "COMPLETED";
+  phase: "PREFLIGHT" | "BACKUP" | "DATABASE" | "OBJECTS" | "VERIFY" | "DONE";
+  errorCode: string | null;
+  result: { preservedOwnerCount: number; deletedObjectCount: number } | null;
+}
+
+export interface TenantResetDiagnostics {
+  activities: { items: Array<{ id: string; kind: string; status: string; lifecycleVersion: number; createdAt: string }>; nextCursor: string | null };
+  deliveries: { items: Array<{ id: string; purpose: string; status: string; sourceScope: string | null; lifecycleVersion: number | null; createdAt: string; attempted: boolean; hasProviderReceipt: boolean }>; nextCursor: string | null };
+  reconciliation: "EXTERNAL_PROOF_REQUIRED";
+}
+
+export interface TenantResetDeliveryReceipt {
+  deliveryId: string;
+  lifecycleVersion: number;
+  status: "PROVIDER_ACCEPTED" | "UNCERTAIN" | "NOT_FOUND" | "EXPIRED" | "UNVERIFIED" | "UNAVAILABLE";
+  correlation: "KEY_ONLY" | "LOCAL_RECEIPT_MATCH" | "UNVERIFIED";
+  createdAt: string | null;
+  expiresAt: string | null;
+  providerReceiptHash: string | null;
+  reconciliation: "EXTERNAL_PROOF_REQUIRED";
 }

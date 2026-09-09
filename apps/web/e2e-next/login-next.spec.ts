@@ -5,7 +5,7 @@ import { tenantLoginUrl } from "./helpers/tenant-login.js";
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const corsHeaders = {
   "access-control-allow-credentials": "true",
-  "access-control-allow-headers": "authorization,content-type,x-csrf-token",
+  "access-control-allow-headers": "authorization,content-type,x-csrf-token,idempotency-key,x-step-up-token",
   "access-control-allow-methods": "DELETE,GET,PATCH,POST,PUT,OPTIONS",
   "access-control-allow-origin": appOrigin,
 };
@@ -5099,6 +5099,9 @@ test("ilk girişte zorunlu şifre değişimi ekranına yönlendirir", async ({ p
     mustChangePassword: true,
   };
   let passwordChanged = false;
+  let rejectPasswordOnce = true;
+  let refreshAfterChange = 0;
+  let logoutAfterChange = 0;
 
   await page.route("**/*", async (route) => {
     if (route.request().method() === "OPTIONS") {
@@ -5109,6 +5112,7 @@ test("ilk girişte zorunlu şifre değişimi ekranına yönlendirir", async ({ p
   });
 
   await page.route("**/api/v1/auth/refresh", async (route) => {
+    if (passwordChanged) { refreshAfterChange++; await route.fulfill({ status: 401, headers: corsHeaders }); return; }
     await route.fulfill({
       contentType: "application/json",
       headers: corsHeaders,
@@ -5116,6 +5120,8 @@ test("ilk girişte zorunlu şifre değişimi ekranına yönlendirir", async ({ p
       body: JSON.stringify(envelope(auth)),
     });
   });
+
+  await page.route("**/api/v1/auth/logout", async (route) => { if (passwordChanged) logoutAfterChange++; await route.fulfill({ status: 204, headers: corsHeaders }); });
 
   await page.route("**/api/v1/auth/login", async (route) => {
     await route.fulfill({
@@ -5129,6 +5135,7 @@ test("ilk girişte zorunlu şifre değişimi ekranına yönlendirir", async ({ p
   await page.route("**/api/v1/me/password", async (route) => {
     const body = route.request().postDataJSON() as { currentPassword?: string; newPassword?: string };
     expect(body).toMatchObject({ currentPassword: "5551234567", newPassword: "YeniAb12" });
+    if (rejectPasswordOnce) { rejectPasswordOnce = false; await route.fulfill({ status: 400, headers: corsHeaders, contentType: "application/json", body: JSON.stringify({ error: { code: "CURRENT_PASSWORD_INVALID" } }) }); return; }
     passwordChanged = true;
     auth = {
       ...auth,
@@ -5192,7 +5199,13 @@ test("ilk girişte zorunlu şifre değişimi ekranına yönlendirir", async ({ p
   await page.getByLabel("Yeni şifre tekrar").fill("YeniAb12");
   await page.getByRole("button", { name: "Kaydet" }).click();
 
-  await expect(page).toHaveURL(/\/ogrenci$/, { timeout: 15_000 });
+  await expect(page.getByText("Şifre değiştirilemedi.", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/sifre-degistir$/);
+  expect(passwordChanged).toBe(false);
+  await page.getByRole("button", { name: "Kaydet" }).click();
+  await expect(page).toHaveURL(/\/login$/, { timeout: 15_000 });
+  await expect(page.getByText("Şifre değiştirilemedi.", { exact: true })).toHaveCount(0);
+  expect(refreshAfterChange).toBe(0); expect(logoutAfterChange).toBe(0);
   expect(passwordChanged).toBe(true);
 });
 
@@ -5468,6 +5481,7 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
     status: string;
     seatLimit: number;
     activeSeatCount?: number;
+    lifecycleVersion: number;
   }> = [];
   let tenantCreateCount = 0;
 
@@ -5512,6 +5526,13 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname.replace("/api/v1", "");
+    if (path === "/auth/step-up" && request.method() === "POST") {
+      const body = request.postDataJSON();
+      const target = tenants.find((tenant) => tenant.id === "tenant-created")!;
+      expect(body).toEqual({ purpose: "TENANT_LIFECYCLE_CHANGE", target: { tenantId: target.id, status: target.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE", expectedLifecycleVersion: target.lifecycleVersion }, totpCode: "123456" });
+      await route.fulfill({ contentType: "application/json", headers: corsHeaders, status: 200, body: JSON.stringify(envelope({ purpose: "TENANT_LIFECYCLE_CHANGE", stepUpToken: "lifecycle-proof", expiresAt: new Date(Date.now() + 300000).toISOString() })) });
+      return;
+    }
     if (path.startsWith("/auth/")) {
       await route.fallback();
       return;
@@ -5562,7 +5583,6 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
       const body = request.postDataJSON() as {
         name: string;
         slug: string;
-        status: string;
         campuses: Array<{ name: string; code?: string; unitType: string }>;
         firstOwner: { name: string; email: string; nationalId?: string };
         licenseTerm: { planCode: string; startsAt: string; endsAt: string; activeStudentLimit: number };
@@ -5574,11 +5594,12 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
         name: body.name,
         slug: body.slug,
         plan: body.licenseTerm.planCode,
-        status: body.status,
+        status: "ACTIVE",
         licenseStartsAt: body.licenseTerm.startsAt,
         licenseEndsAt: body.licenseTerm.endsAt,
         seatLimit: body.licenseTerm.activeStudentLimit,
         activeSeatCount: 1,
+        lifecycleVersion: 0,
       };
       tenants = [created, ...tenants];
       await route.fulfill({
@@ -5607,7 +5628,25 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
         contentType: "application/json",
         headers: corsHeaders,
         status: tenant ? 200 : 404,
-        body: JSON.stringify(envelope(tenant ?? null)),
+        body: JSON.stringify(envelope(tenant ? { ...tenant, management: { verified: true, currentReset: null, allowedActions: { suspend: tenant.status === "ACTIVE", reactivate: tenant.status === "SUSPENDED", cleanReset: false } } } : null)),
+      });
+      return;
+    }
+
+    if (/^\/tenants\/[^/]+\/status$/.test(path) && request.method() === "PATCH") {
+      const id = decodeURIComponent(path.split("/")[2] ?? "");
+      const body = request.postDataJSON() as { status: string; expectedLifecycleVersion: number; confirmationText: string; reason: string };
+      const tenant = tenants.find((candidate) => candidate.id === id) ?? tenants[0]!;
+      expect(body).toEqual({ status: body.status, expectedLifecycleVersion: tenant.lifecycleVersion, confirmationText: tenant.slug, reason: "SECURITY_REVIEW" });
+      expect(request.headers()["idempotency-key"]).toBeTruthy();
+      expect(request.headers()["x-step-up-token"]).toBe("lifecycle-proof");
+      const updated = { ...tenant, status: body.status, lifecycleVersion: tenant.lifecycleVersion + 1 };
+      tenants = tenants.map((candidate) => (candidate.id === id ? updated : candidate));
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope({ tenant: updated, sessionsRevoked: 1 })),
       });
       return;
     }
@@ -5692,13 +5731,21 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
   await expect(page).toHaveURL(/\/sistem\/kurumlar\/tenant-created$/);
   await expect(heading(page, { name: "Yeni Kurum" })).toBeVisible();
   await page.getByRole("tab", { name: "Kurum yönetimi" }).click();
-  await page.getByRole("button", { name: "Düzenle" }).click();
-  const editDialog = page.getByRole("dialog", { name: "Kurum düzenle" });
-  await editDialog.getByLabel("Durum").selectOption("SUSPENDED");
-  await page.getByRole("button", { name: "Kaydet" }).click();
+  await page.getByRole("button", { name: "Askıya al" }).click();
+  const suspendDialog = page.getByRole("dialog", { name: "Kurum erişimini askıya al" });
+  await suspendDialog.getByLabel("Kurum kodu onayı").fill("yeni-kurum");
+  await suspendDialog.getByLabel("Doğrulama kodu").fill("123456");
+  await suspendDialog.getByRole("button", { name: "Askıya al" }).click();
   await expect(page.getByLabel("Kurum detayı").getByText("Pro", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Kurum detayı").getByText("Askıda")).toBeVisible();
   await expect(page.getByLabel("Kurum detayı").getByText("1 / 50")).toBeVisible();
+
+  await page.getByRole("button", { name: "Yeniden aç", exact: true }).click();
+  const reopenDialog = page.getByRole("dialog", { name: "Kurum erişimini yeniden aç" });
+  await reopenDialog.getByLabel("Kurum kodu onayı").fill("yeni-kurum");
+  await reopenDialog.getByLabel("Doğrulama kodu").fill("123456");
+  await reopenDialog.getByRole("button", { name: "Yeniden aç" }).click();
+  await expect(page.getByLabel("Kurum detayı").getByText("Aktif", { exact: true })).toBeVisible();
 
   await page.getByLabel("Üst gezinme").getByRole("button", { name: "Çıkış" }).click();
   await loginAs(page, "first.admin@example.test", "5551234567");
@@ -8253,3 +8300,39 @@ function announcementRecipientReport(announcementId: string) {
     ],
   };
 }
+
+
+test("parola yanıtı beklerken yeni actor hatırlanırsa eski yanıt auth/cache temizleyemez", async () => {
+  const client = await import("../src/api-client.js");
+  const originalFetch = globalThis.fetch;
+  const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { cookie: "csrfToken=test" } });
+  const oldAuth = { accessToken: "old-access", session: { id: "old-session", userId: "old-user", tenantId: "tenant-a", membershipVersion: 1, roles: ["TENANT_ADMIN"], status: "ACTIVE" } };
+  const newAuth = { accessToken: "new-access", session: { id: "new-session", userId: "new-user", tenantId: "tenant-b", membershipVersion: 2, roles: ["TENANT_ADMIN"], status: "ACTIVE" } };
+  const oldScope = { sessionId: oldAuth.session.id, userId: oldAuth.session.userId, membershipVersion: 1 };
+  const newScope = { sessionId: newAuth.session.id, userId: newAuth.session.userId, membershipVersion: 2 };
+  let loginResponse = oldAuth; let complete!: (response: Response) => void; const requests: string[] = [];
+  globalThis.fetch = async (input, init) => {
+    const path = String(input); requests.push(path);
+    if (path.endsWith("/auth/login")) return new Response(JSON.stringify({ data: loginResponse }), { status: 200 });
+    if (path.endsWith("/me/password")) { expect(new Headers(init?.headers).get("authorization")).toBe("Bearer old-access"); return new Promise<Response>((resolve) => { complete = resolve; }); }
+    return new Response("{}", { status: 200 });
+  };
+  try {
+    await client.login({ loginName: "old", password: "password" });
+    const pending = client.changePassword(oldAuth.accessToken, { currentPassword: "password", newPassword: "NewPassword123" }, oldScope);
+    loginResponse = newAuth; await client.login({ loginName: "new", password: "password" });
+    client.queryClient.setQueryData(["new-actor-test"], "keep");
+    complete(new Response(JSON.stringify({ data: { changedAt: "2026-09-07T00:00:00.000Z" } }), { status: 200 }));
+    await pending;
+    expect(client.clearAuthForSession(oldScope)).toBe(false);
+    expect(client.queryClient.getQueryData(["new-actor-test"])).toBe("keep");
+    await client.authenticatedFetchOnce(newAuth.accessToken, newScope, "/check-new-actor");
+    expect(requests.some((path) => /\/auth\/(refresh|logout)$/.test(path))).toBe(false);
+  } finally {
+    client.clearAuthForSession(newScope);
+    expect(client.clearAuthForSession(oldScope)).toBe(true); // Already-cleared module auth must not strand old React auth.
+    globalThis.fetch = originalFetch;
+    if (originalDocument) Object.defineProperty(globalThis, "document", originalDocument); else Reflect.deleteProperty(globalThis, "document");
+  }
+});

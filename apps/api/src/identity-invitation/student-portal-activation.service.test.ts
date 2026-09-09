@@ -53,7 +53,7 @@ describe("StudentPortalActivationService", () => {
         userId: "user-student-a",
       })),
     };
-    const service = new StudentPortalActivationService(store, auditLogs as never);
+    const service = new StudentPortalActivationService(store, auditLogs as never, { findBySlug: vi.fn(async () => ({ id: "tenant-a", status: "ACTIVE", lifecycleVersion: 0 })) } as never, { resolveForTenant: vi.fn(async () => ({ mirrorParity: true, state: "ACTIVE" })) } as never);
 
     await expect(service.accept({
       tenantSlug: " OKUL-A ",
@@ -102,4 +102,17 @@ describe("StudentPortalActivationService", () => {
     })).rejects.toThrow("STUDENT_PORTAL_ACTIVATION_INVALID");
     expect(store.accept).not.toHaveBeenCalled();
   });
+});
+
+it("passes first tenant epoch through async license lookup; stale store cannot touch a new invitation counter", async () => {
+  const tenant = { id: "tenant-a", status: "ACTIVE", lifecycleVersion: 0 }; let writes = 0;
+  const accept = vi.fn(async (input: Parameters<StudentPortalActivationStore["accept"]>[0]) => {
+    if (input.tenantId !== tenant.id || input.lifecycleVersion !== tenant.lifecycleVersion) return { status: "INVALID" as const };
+    writes++; return { status: "INVALID" as const };
+  });
+  const service = new StudentPortalActivationService({ issue: vi.fn(), accept }, { record: vi.fn() } as never,
+    { findBySlug: vi.fn(async () => tenant) } as never,
+    { resolveForTenant: vi.fn(async () => { tenant.lifecycleVersion = 1; return { mirrorParity: true, state: "ACTIVE" }; }) } as never);
+  await expect(service.accept({ tenantSlug: "okul-a", studentNo: "101", code: "old-code", password: "Valid-password-123" })).rejects.toThrow("STUDENT_PORTAL_ACTIVATION_INVALID");
+  expect(accept).toHaveBeenCalledWith(expect.objectContaining({ tenantId: "tenant-a", lifecycleVersion: 0 })); expect(writes).toBe(0);
 });

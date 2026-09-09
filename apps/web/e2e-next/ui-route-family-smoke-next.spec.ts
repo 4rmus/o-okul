@@ -671,6 +671,8 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
   ]);
   if (portalArrayPaths.has(pathName)) return { data: [] };
 
+  if (pathName === "/tenants/current/reset-request") return { data: { request: null } };
+
   const directArrays: Record<string, unknown[]> = {
     "/academic-terms": [termFixture],
     "/academic-years": [],

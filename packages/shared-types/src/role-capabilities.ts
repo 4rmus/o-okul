@@ -20,7 +20,7 @@ export const tenantRoleLabels: Record<TenantRoleName, string> = {
 };
 
 export const roleCapabilities: Record<TenantRoleName, readonly RoleCapability[]> = {
-  SYSTEM_ADMIN: ["system:*", "tenant:*", "audit:*"],
+  SYSTEM_ADMIN: ["system:*", "tenant:manage", "tenant:lifecycle", "tenant:clean-reset", "audit:*"],
   TENANT_OWNER: [
     "academic:*", "announcement:*", "attendance:*", "audit:*", "class:*", "feature-rollout:read", "finance:*", "note:*",
     "observability:*", "operation:*", "privacy:*", "role-preview:*", "security:*", "search:*", "setup:*",
@@ -72,6 +72,8 @@ export const roleCapabilities: Record<TenantRoleName, readonly RoleCapability[]>
 };
 
 export function capabilitiesForRoles(roles: readonly string[]): RoleCapability[] {
+  if (roles.includes("SYSTEM_ADMIN")) return [...roleCapabilities.SYSTEM_ADMIN];
+
   const capabilities = new Set<RoleCapability>();
   for (const role of roles) {
     if (!isTenantRoleName(role)) continue;

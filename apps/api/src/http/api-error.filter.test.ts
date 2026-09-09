@@ -81,3 +81,10 @@ function createHost(response: ReturnType<typeof createResponse>, request: { meth
     }),
   } as unknown as ArgumentsHost;
 }
+
+it("tenant admission busy maps to stable 503 instead of generic 500", () => {
+  const response = createResponse(); const filter = new TestApiErrorFilter();
+  filter.catch(new Error("TENANT_DATABASE_BUSY"), createHost(response, { method: "POST", path: "/api/v1/students" }));
+  expect(response.status).toHaveBeenCalledWith(503);
+  expect(response.json).toHaveBeenCalledWith({ error: { code: "TENANT_DATABASE_BUSY", message: "Servis hazır değil." } });
+});

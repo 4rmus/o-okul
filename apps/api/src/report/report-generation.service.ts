@@ -1,3 +1,4 @@
+import { currentTenantMutationVersion, runApiTenantMutation } from "../context/tenant-mutation-activity.js";
 import { createHash, randomUUID } from "node:crypto";
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional, type OnModuleDestroy } from "@nestjs/common";
 import type {
@@ -1507,13 +1508,16 @@ class BullReportPdfRenderer implements ReportPdfRenderer {
 
   async render(input: ReportPdfRenderInput): Promise<ReportSnapshotPdfResult> {
     await this.queueEvents.waitUntilReady();
-    const job = await this.queue.add("report-pdf-render", input, {
+    const lifecycleVersion = currentTenantMutationVersion(input.snapshot.tenantId);
+    return runApiTenantMutation("QUEUE_ADMISSION", async () => {
+    const job = await this.queue.add("report-pdf-render", { ...input, lifecycleVersion }, {
       attempts: 1,
       jobId: `report-pdf-${randomUUID()}`,
       removeOnComplete: true,
       removeOnFail: false,
     });
     return job.waitUntilFinished(this.queueEvents, this.timeoutMs);
+    }, input.snapshot.tenantId);
   }
 
   async close(): Promise<void> {

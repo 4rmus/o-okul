@@ -1,3 +1,4 @@
+import { acquireTenantDatabaseSharedLock } from "@o-okul/db";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import pg from "pg";
 import { hashPasswordAsync, InMemoryAuthUserStore, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
@@ -31,7 +32,7 @@ export type StudentPortalActivationOutcome =
 
 export interface StudentPortalActivationStore {
   issue(input: IssueStudentPortalActivationInput): Promise<StudentPortalActivationInvitation | undefined>;
-  accept(input: { tenantSlug: string; studentNo: string; code: string; password: string }): Promise<StudentPortalActivationOutcome>;
+  accept(input: { tenantSlug: string; tenantId: string; lifecycleVersion: number; studentNo: string; code: string; password: string }): Promise<StudentPortalActivationOutcome>;
 }
 
 export const studentPortalActivationStoreToken = Symbol("StudentPortalActivationStore");
@@ -77,9 +78,9 @@ export class InMemoryStudentPortalActivationStore implements StudentPortalActiva
     };
   }
 
-  async accept(input: { tenantSlug: string; studentNo: string; code: string; password: string }): Promise<StudentPortalActivationOutcome> {
+  async accept(input: { tenantSlug: string; tenantId: string; lifecycleVersion: number; studentNo: string; code: string; password: string }): Promise<StudentPortalActivationOutcome> {
     const tenant = await this.tenants.findBySlug(input.tenantSlug);
-    if (!tenant) return { status: "INVALID" };
+    if (!tenant || tenant.id !== input.tenantId || tenant.lifecycleVersion !== input.lifecycleVersion) return { status: "INVALID" };
     const student = (await this.students.list()).find((candidate) => (
       candidate.tenantId === tenant.id && candidate.studentNo?.toLowerCase() === input.studentNo.toLowerCase()
     ));
@@ -189,8 +190,11 @@ export class PostgresStudentPortalActivationStore implements StudentPortalActiva
     });
   }
 
-  async accept(input: { tenantSlug: string; studentNo: string; code: string; password: string }): Promise<StudentPortalActivationOutcome> {
+  async accept(input: { tenantSlug: string; tenantId: string; lifecycleVersion: number; studentNo: string; code: string; password: string }): Promise<StudentPortalActivationOutcome> {
     return withBypassRlsQuery(this.pool, async (client) => {
+      const captured = (await client.query<{ id: string; lifecycleVersion: number }>('SELECT "id", "lifecycleVersion" FROM "Tenant" WHERE lower("slug") = lower($1) AND "id" = $2 AND "lifecycleVersion" = $3', [input.tenantSlug, input.tenantId, input.lifecycleVersion])).rows[0];
+      if (!captured || captured.id !== input.tenantId || captured.lifecycleVersion !== input.lifecycleVersion || !Number.isInteger(captured.lifecycleVersion)) return { status: "INVALID" };
+      await acquireTenantDatabaseSharedLock(client, captured.id);
       const tenant = await client.query<{ id: string }>(
         `SELECT tenant."id"
          FROM "Tenant" tenant
@@ -201,11 +205,12 @@ export class PostgresStudentPortalActivationStore implements StudentPortalActiva
            AND license."endsAt" = tenant."licenseEndsAt"
            AND license."activeStudentLimit" = tenant."seatLimit"
          WHERE lower(tenant."slug") = lower($1)
+           AND tenant."id" = $2 AND tenant."lifecycleVersion" = $3
            AND tenant."status" = 'ACTIVE'
            AND license."startsAt" <= now() AND now() < license."endsAt"
          LIMIT 1
          FOR SHARE OF tenant, license`,
-        [input.tenantSlug],
+        [input.tenantSlug, captured.id, captured.lifecycleVersion],
       );
       const tenantId = tenant.rows[0]?.id;
       if (!tenantId) return { status: "INVALID" };

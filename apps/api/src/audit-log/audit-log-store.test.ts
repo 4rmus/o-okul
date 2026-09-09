@@ -91,3 +91,22 @@ describe("PostgresAuditLogStore", () => {
     ]);
   });
 });
+
+it("known-tenant audit is append-only historical data, serialized with reset; failed rollback discards connection", async () => {
+  for (const locked of [true, false]) {
+    const calls: Array<{ sql: string; values?: unknown[] }> = []; const released: Array<boolean | undefined> = [];
+    const input = { tenantId: "tenant-a", actorUserId: "historical-actor", entityType: "Auth", action: "auth.historical", createdAt: "2020-01-01T00:00:00.000Z" };
+    const db = { async query<T>(sql: string, values?: unknown[]): Promise<{ rows: T[] }> {
+      calls.push({ sql, values });
+      if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked }] as T[] };
+      if (sql === "ROLLBACK" && !locked) throw new Error("CONNECTION_LOST");
+      if (sql.startsWith('INSERT INTO "AuditLog"')) return { rows: [{ ...input, id: "audit-a", createdAt: new Date(input.createdAt) }] as T[] };
+      return { rows: [] };
+    }, release(destroy?: boolean) { released.push(destroy); } };
+    const store = new PostgresAuditLogStore({ query: db.query, connect: async () => db });
+    if (locked) { expect(await store.create(input)).toMatchObject({ actorUserId: input.actorUserId, createdAt: input.createdAt }); expect(released).toEqual([undefined]); }
+    else { await expect(store.create(input)).rejects.toThrow("TENANT_DATABASE_BUSY"); expect(calls.some(({ sql }) => sql.startsWith("INSERT"))).toBe(false); expect(released).toEqual([true]); }
+    expect(calls.some(({ sql }) => /^(UPDATE|DELETE)/.test(sql))).toBe(false);
+    expect(calls.some(({ sql }) => sql.includes('FROM "User"') || sql.includes('FROM "Tenant"'))).toBe(false);
+  }
+});

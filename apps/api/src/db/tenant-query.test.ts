@@ -14,7 +14,7 @@ describe("withTenantQuery", () => {
     const client = {
       async query<T>(sql: string, values?: unknown[]) {
         queries.push({ sql, values });
-        return { rows: [{ ok: true }] as T[] };
+        return { rows: sql.includes("pg_try_advisory_xact_lock_shared") ? [{ locked: true }] as T[] : [{ ok: true }] as T[] };
       },
       release() {
         queries.push({ sql: "RELEASE" });
@@ -38,14 +38,16 @@ describe("withTenantQuery", () => {
     expect(result.rows).toEqual([{ ok: true }]);
     expect(queries.map((query) => query.sql)).toEqual([
       "BEGIN",
+      "SELECT pg_try_advisory_xact_lock_shared(hashtextextended($1, 0)) AS locked",
       "SELECT set_config('app.bypass_rls', $1, true)",
       "SELECT set_config('app.current_tenant_id', $1, true)",
       "SELECT 1",
       "COMMIT",
       "RELEASE",
     ]);
-    expect(queries[1]?.values).toEqual(["false"]);
-    expect(queries[2]?.values).toEqual(["tenant-a"]);
+    expect(queries[1]?.values).toEqual(["tenant-database:tenant-a"]);
+    expect(queries[2]?.values).toEqual(["false"]);
+    expect(queries[3]?.values).toEqual(["tenant-a"]);
   });
 
   it("hata olursa rollback eder", async () => {
@@ -53,6 +55,7 @@ describe("withTenantQuery", () => {
     const client = {
       async query<T>(sql: string) {
         queries.push(sql);
+        if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
         if (sql === "SELECT broken") throw new Error("BROKEN_QUERY");
         return { rows: [] as T[] };
       },
@@ -79,6 +82,7 @@ describe("withTenantQuery", () => {
 
     expect(queries).toEqual([
       "BEGIN",
+      "SELECT pg_try_advisory_xact_lock_shared(hashtextextended($1, 0)) AS locked",
       "SELECT set_config('app.bypass_rls', $1, true)",
       "SELECT set_config('app.current_tenant_id', $1, true)",
       "SELECT broken",
@@ -107,5 +111,20 @@ describe("withTenantQuery", () => {
       { sql: "SELECT system_scope", values: undefined },
       { sql: "COMMIT", values: undefined },
     ]);
+  });
+});
+
+describe("API connected tenant database fence", () => {
+  it.each([false, undefined, "true"])("unverified shared lock suppresses callback (%s)", async (locked) => {
+    const calls: string[] = []; let called = false;
+    const client = { async query<T>(sql: string) { calls.push(sql); return { rows: [{ locked }] as T[] }; }, release() {} };
+    await expect(runWithRequestContext({ userId: "admin", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false }, () => withTenantQuery({ query: client.query, connect: async () => client }, async () => { called = true; }))).rejects.toThrow("TENANT_DATABASE_BUSY");
+    expect(called).toBe(false); expect(calls.at(-1)).toBe("ROLLBACK");
+  });
+  it("rollback connection loss discards rather than recycling a transaction holding shared lock", async () => {
+    const released: Array<boolean | undefined> = [];
+    const client = { async query<T>(sql: string) { if (sql === "ROLLBACK") throw new Error("LOST_CONNECTION"); return { rows: [{ locked: true }] as T[] }; }, release(destroy?: boolean) { released.push(destroy); } };
+    await expect(runWithRequestContext({ userId: "admin", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false }, () => withTenantQuery({ query: client.query, connect: async () => client }, async () => { throw new Error("ORIGINAL_FAILURE"); }))).rejects.toThrow("ORIGINAL_FAILURE");
+    expect(released).toEqual([true]);
   });
 });

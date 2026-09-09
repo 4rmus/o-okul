@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -15,12 +15,14 @@ import {
   MetricCard,
   MetricGrid,
   Panel,
-  Select,
   StatusBadge,
   TabButton,
   Tabs,
+  Select,
   type StatusBadgeProps,
 } from "@o-okul/ui";
+import type { TenantStatusUpdateRequest, TenantLifecycleReason } from "@o-okul/shared-types";
+import { ApiRequestError } from "../../../../../src/api-client.js";
 import { useAuth } from "../../../../providers.js";
 import {
   firstFormError,
@@ -28,30 +30,52 @@ import {
   type TenantUpdateFormState,
 } from "../../../../../src/form-validation.js";
 import { PageFrame } from "../../../kurum/_shared/page-frame.js";
-import { loadTenant, updateTenant, type TenantRecord } from "../../_shared/system-api.js";
+import { TenantResetPanel } from "./tenant-reset-panel.js";
+import { tenantManagementSchema, createLifecycleStepUp, loadTenant, updateTenant, updateTenantStatus, type TenantRecord } from "../../_shared/system-api.js";
 
 const emptyForm: TenantUpdateFormState = {
   name: "",
-  slug: "",
-  status: "ACTIVE",
 };
 
 export function TenantDetailPage() {
   const { tenantId } = useParams<{ tenantId: string }>();
   const { auth } = useAuth();
+  const scope = `${tenantId}:${auth?.session.userId}:${auth?.session.id}:${auth?.session.membershipVersion}`;
+  return <ScopedTenantDetailPage key={scope} tenantId={tenantId} scope={scope} />;
+}
+
+function ScopedTenantDetailPage({ tenantId, scope }: { tenantId: string; scope: string }) {
+  const { auth } = useAuth();
   const queryClient = useQueryClient();
+  const alive = useRef(true);
+  const statusAttempt = useRef(0);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; statusAttempt.current++; }; }, []);
+  const [resetPending, setResetPending] = useState(false);
   const tenantQuery = useQuery({
-    queryKey: ["next-tenant", tenantId],
+    queryKey: ["next-tenant", tenantId, scope],
     queryFn: () => loadTenant(auth?.accessToken ?? "", tenantId),
     enabled: Boolean(auth && tenantId),
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
+    refetchOnMount: "always",
+    refetchInterval: 5000,
   });
-  const tenant = tenantQuery.data ?? null;
+  const tenant = tenantQuery.data?.id === tenantId ? tenantQuery.data : null;
+  const management = tenantManagementSchema.safeParse(tenant?.management);
+  const canChangeStatus = !resetPending && !tenantQuery.isError && !tenantQuery.isFetching && management.success && management.data.verified && (tenant?.status === "ACTIVE" ? management.data.allowedActions.suspend : management.data.allowedActions.reactivate) && (!management.data.currentReset || management.data.currentReset.status === "COMPLETED") && tenant?.id !== "system" && Number.isInteger(tenant?.lifecycleVersion) && (tenant?.lifecycleVersion ?? -1) >= 0 && (tenant?.lifecycleVersion ?? -1) < 2147483647 && (tenant?.status === "ACTIVE" || tenant?.status === "SUSPENDED");
   const licenseDays = tenant ? licenseDaysRemaining(tenant.licenseEndsAt) : null;
   const seatPercent = tenant ? seatUsagePercent(tenant) : null;
   const [form, setForm] = useState<TenantUpdateFormState>(emptyForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [statusPending, setStatusPending] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [statusTarget, setStatusTarget] = useState<TenantRecord | null>(null);
+  const [confirmationText, setConfirmationText] = useState("");
+  const [reason, setReason] = useState<TenantLifecycleReason>("SECURITY_REVIEW");
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaMethod, setMfaMethod] = useState<"totp" | "recovery">("totp");
+  const [statusRequest, setStatusRequest] = useState<{ id: string; body: TenantStatusUpdateRequest; key: string; proof?: string; expiresAt?: string } | null>(null);
   const [activeSection, setActiveSection] = useState<"license" | "management">("license");
 
   useEffect(() => {
@@ -86,15 +110,89 @@ export function TenantDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ["next-tenant", tenant.id] });
       void queryClient.invalidateQueries({ queryKey: ["next-tenants"] });
       setIsFormOpen(false);
+      setNotice("Kurum adı güncellendi.");
     } catch {
       setError("Kurum güncellenemedi.");
+    }
+  }
+
+  function openStatusForm() {
+    if (!tenant || !canChangeStatus) return;
+    setStatusTarget(statusRequest ? statusTarget : tenant);
+    setStatusOpen(true);
+    if (!statusRequest) {
+      setConfirmationText("");
+      setMfaCode("");
+      setError("");
+    }
+  }
+
+  async function handleStatusChange(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canChangeStatus || !auth || !statusTarget || statusPending || confirmationText !== statusTarget.slug) return;
+    const pending = statusRequest ?? {
+      id: statusTarget.id,
+      body: { status: statusTarget.status === "ACTIVE" ? "SUSPENDED" as const : "ACTIVE" as const,
+        expectedLifecycleVersion: statusTarget.lifecycleVersion, reason, confirmationText },
+      key: crypto.randomUUID(),
+    };
+    setStatusRequest(pending);
+    setError("");
+    setNotice("");
+    setStatusPending(true);
+    const attemptId = ++statusAttempt.current;
+    const active = () => alive.current && statusAttempt.current === attemptId;
+    let attempted = false;
+    try {
+      if (!pending.proof || !Number.isFinite(Date.parse(pending.expiresAt ?? "")) || Date.parse(pending.expiresAt ?? "") <= Date.now()) {
+        const proof = await createLifecycleStepUp(auth.accessToken, {
+          purpose: "TENANT_LIFECYCLE_CHANGE",
+          target: { tenantId: pending.id, status: pending.body.status, expectedLifecycleVersion: pending.body.expectedLifecycleVersion },
+          ...(mfaMethod === "totp" ? { totpCode: mfaCode } : { recoveryCode: mfaCode }),
+        });
+        if (!active()) return;
+        if (!Number.isFinite(Date.parse(proof.expiresAt)) || Date.parse(proof.expiresAt) <= Date.now()) throw new Error("MFA_EXPIRED");
+        pending.proof = proof.stepUpToken;
+        pending.expiresAt = proof.expiresAt;
+        setStatusRequest({ ...pending });
+        setMfaCode("");
+      }
+      if (!active()) return;
+      attempted = true;
+      const result = await updateTenantStatus(auth.accessToken, pending.id, pending.body, pending.key, pending.proof);
+      if (!active()) return;
+      setStatusRequest(null);
+      setStatusOpen(false);
+      setStatusTarget(null);
+      setNotice(pending.body.status === "SUSPENDED"
+        ? `Kurum askıya alındı; ${result.sessionsRevoked} açık oturum kapatıldı.`
+        : "Kurum erişime açıldı; kullanıcıların yeniden giriş yapması gerekir.");
+      await queryClient.invalidateQueries({ queryKey: ["next-tenant", pending.id] });
+      void queryClient.invalidateQueries({ queryKey: ["next-tenants"] });
+    } catch (failure) {
+      if (!active()) return;
+      if (failure instanceof ApiRequestError && failure.status === 409 && failure.code !== "IDEMPOTENCY_KEY_IN_PROGRESS") {
+        setStatusRequest(null);
+        setStatusOpen(false);
+        setStatusTarget(null);
+        setError("Kurum bilgisi değişmiş. Güncel durumu okuyup işlemi yeniden onaylayın.");
+      } else if (!attempted || (failure instanceof ApiRequestError && failure.status === 401)) {
+        setStatusRequest({ ...pending, proof: undefined, expiresAt: undefined });
+        setMfaCode("");
+        setError("İkinci doğrulama başarısız veya süresi dolmuş. Yeni doğrulama koduyla tekrar deneyin.");
+      } else {
+        setError("İşlem sonucu doğrulanamadı. Aynı işlemle tekrar deneyin; tekrar gönderim ikinci bir değişiklik yapmaz.");
+      }
+      await tenantQuery.refetch();
+    } finally {
+      if (active()) setStatusPending(false);
     }
   }
 
   return (
     <PageFrame
       title={tenant?.name ?? "Kurum Detayı"}
-      subtitle="Kurum kodunu, lisansını, kullanıcı sınırını ve kullanım durumunu yönetin."
+      subtitle="Kurum adı ve erişim durumunu yönetin; kurum kodu, lisans ve kapasiteyi görüntüleyin."
     >
       {tenantQuery.isPending ? <LoadingState label="Kurum detayı yükleniyor…" /> : null}
       {tenantQuery.isError ? (
@@ -178,13 +276,23 @@ export function TenantDetailPage() {
         <div aria-labelledby="tenant-detail-tab-management" id="tenant-detail-panel-management" role="tabpanel" tabIndex={0}>
           <Panel
             actions={
-              <Button onClick={openEditForm}>Düzenle</Button>
+              <>
+                <Button disabled={statusPending} onClick={openEditForm} variant="secondary">Adı düzenle</Button>
+                {canChangeStatus ? <Button
+                  disabled={statusPending}
+                  onClick={openStatusForm}
+                  variant={tenant.status === "ACTIVE" ? "danger" : "primary"}
+                >
+                  {statusPending ? "İşleniyor…" : statusRequest ? "İşlemi sonuçlandır" : tenant.status === "ACTIVE" ? "Askıya al" : "Yeniden aç"}
+                </Button> : null}
+              </>
             }
             aria-label="Kurum yönetimi"
-            description="Kurum kimliği ve durum bilgisi yalnız sistem yöneticisi tarafından değiştirilir."
+            description="Kurum adı ve erişim durumu yalnız sistem yöneticisi tarafından değiştirilir."
             title="Kurum yönetimi"
             tone="muted"
           />
+          {auth ? <TenantResetPanel tenant={tenant} auth={auth} scope={scope} authoritative={!tenantQuery.isError && !tenantQuery.isFetching && tenantQuery.isFetchedAfterMount} onPendingChange={setResetPending} /> : null}
         </div>
       ) : null}
       {error ? (
@@ -192,6 +300,7 @@ export function TenantDetailPage() {
           {error}
         </Alert>
       ) : null}
+      {notice ? <Alert tone="success" title="İşlem tamamlandı">{notice}</Alert> : null}
       <TenantEditModal
         form={form}
         onCancel={closeForm}
@@ -199,6 +308,29 @@ export function TenantDetailPage() {
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
       />
+      <FormModal
+        open={statusOpen}
+        title={statusTarget?.status === "ACTIVE" ? "Kurum erişimini askıya al" : "Kurum erişimini yeniden aç"}
+        description={`Tüm açık oturumlar kapatılır. Eski oturumlar yeniden açmada da kapalı kalır. Onay için kurum kodunu aynen yazın: ${statusTarget?.slug ?? ""}`}
+        onCancel={() => { statusAttempt.current++; setStatusPending(false); setMfaCode(""); setStatusOpen(false); }}
+        cancelLabel="Kapat"
+        onSubmit={(event) => void handleStatusChange(event)}
+        submitting={statusPending}
+        submitDisabled={confirmationText !== statusTarget?.slug || (!statusRequest?.proof && !mfaCode.trim())}
+        submitLabel={statusRequest ? "Aynı işlemi tekrar dene" : statusTarget?.status === "ACTIVE" ? "Askıya al" : "Yeniden aç"}
+        submitError={error || undefined}
+      >
+        <Field label="Kurum kodu onayı"><Input autoComplete="off" disabled={Boolean(statusRequest)} required value={confirmationText} onChange={(event) => setConfirmationText(event.target.value)} /></Field>
+        <Field label="İşlem gerekçesi"><Select disabled={Boolean(statusRequest)} value={reason} onChange={(event) => setReason(event.target.value as TenantLifecycleReason)}>
+          <option value="SECURITY_REVIEW">Güvenlik incelemesi</option>
+          <option value="INSTITUTION_REQUEST">Kurum talebi</option>
+          <option value="OPERATIONS_REVIEW">Operasyon incelemesi</option>
+        </Select></Field>
+        <Field label="Doğrulama yöntemi"><Select disabled={statusPending} value={mfaMethod} onChange={(event) => { setMfaMethod(event.target.value as "totp" | "recovery"); setMfaCode(""); }}>
+          <option value="totp">Doğrulama uygulaması</option><option value="recovery">Yedek kod</option>
+        </Select></Field>
+        <Field label={mfaMethod === "totp" ? "Doğrulama kodu" : "Yedek kod"}><Input type="password" autoComplete="one-time-code" disabled={statusPending} value={mfaCode} onChange={(event) => setMfaCode(event.target.value)} /></Field>
+      </FormModal>
     </PageFrame>
   );
 }
@@ -218,7 +350,7 @@ function TenantEditModal({
 }) {
   return (
     <FormModal
-      description="Kurum kimliği ve durum bilgisini güncelle."
+      description="Kurum adını güncelle."
       onCancel={onCancel}
       onSubmit={onSubmit}
       open={open}
@@ -228,16 +360,6 @@ function TenantEditModal({
       <Field label="Kurum adı">
         <Input required value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
       </Field>
-      <Field label="Kurum kodu" description="Giriş bağlantısında kullanılacak kısa ad. Örnek: yeni-kurum.">
-        <Input required value={form.slug} onChange={(event) => onChange({ ...form, slug: event.target.value })} />
-      </Field>
-      <Field label="Durum">
-        <Select value={form.status} onChange={(event) => onChange({ ...form, status: event.target.value as TenantUpdateFormState["status"] })}>
-          <option value="ACTIVE">Aktif</option>
-          <option value="SUSPENDED">Askıda</option>
-          <option value="TRIAL">Deneme</option>
-        </Select>
-      </Field>
     </FormModal>
   );
 }
@@ -245,8 +367,6 @@ function TenantEditModal({
 function toTenantForm(tenant: TenantRecord): TenantUpdateFormState {
   return {
     name: tenant.name,
-    slug: tenant.slug,
-    status: tenant.status === "SUSPENDED" || tenant.status === "TRIAL" ? tenant.status : "ACTIVE",
   };
 }
 
@@ -307,21 +427,18 @@ function isSeatLimitExceeded(tenant: TenantRecord) {
 function statusLabel(status: string) {
   if (status === "ACTIVE") return "Aktif";
   if (status === "SUSPENDED") return "Askıda";
-  if (status === "TRIAL") return "Deneme";
   return "Durum bilgisi alınamadı";
 }
 
 function statusTone(status: string): StatusBadgeProps["tone"] {
   if (status === "ACTIVE") return "success";
   if (status === "SUSPENDED") return "danger";
-  if (status === "TRIAL") return "warning";
   return "neutral";
 }
 
 function metricStatusTone(status: string): "danger" | "default" | "success" | "warning" {
   if (status === "ACTIVE") return "success";
   if (status === "SUSPENDED") return "danger";
-  if (status === "TRIAL") return "warning";
   return "default";
 }
 

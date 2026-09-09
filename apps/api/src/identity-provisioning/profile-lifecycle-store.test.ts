@@ -24,7 +24,7 @@ describe("ProfileLifecycleStore", () => {
       subjectId: "teacher-a",
       refreshToken: "refresh-token",
       membershipVersion: 1,
-      expiresAt: new Date("2026-08-02T00:00:00.000Z"),
+      expiresAt: new Date(Date.now() + 60_000),
     });
     await invitations.create({
       tenantId: "tenant-a",
@@ -77,6 +77,7 @@ describe("ProfileLifecycleStore", () => {
     const queries: Array<{ sql: string; values?: unknown[] }> = [];
     const pool = transactionPool(async <T>(sql: string, values?: unknown[]) => {
       queries.push({ sql, values });
+      if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
       if (sql.includes('SELECT "userId"')) return { rows: [{ userId: "teacher-user" }] as T[] };
       if (sql.includes('UPDATE "IdentityInvitation"')) return { rows: [{ id: "invite-a" }] as T[] };
       if (sql.includes('UPDATE "TenantMembership"')) return { rows: [{ id: "membership-staff" }] as T[], rowCount: 1 };
@@ -119,6 +120,7 @@ describe("ProfileLifecycleStore", () => {
     const queries: string[] = [];
     const pool = transactionPool(async <T>(sql: string) => {
       queries.push(sql);
+      if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
       if (sql.includes('SELECT "userId"')) return { rows: [{ userId: "student-user" }] as T[] };
       if (sql.includes('UPDATE "IdentityInvitation"')) return { rows: [] as T[] };
       if (sql.includes('UPDATE "AuthSession"')) throw new Error("SESSION_REVOKE_FAILED");

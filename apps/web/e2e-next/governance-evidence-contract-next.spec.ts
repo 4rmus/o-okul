@@ -104,7 +104,7 @@ test.describe("Governance evidence sözleşmesi", () => {
     });
 
     await openWithGovernanceMocks(page, "/kurum/guvenlik-denetimi", { height: 1024, width: 768 }, {
-      roles: ["TENANT_ADMIN", "SYSTEM_ADMIN"],
+      roles: ["TENANT_ADMIN"],
     });
 
     await expect.poll(() => securitySafeAuditListRequests.length).toBe(1);
@@ -168,7 +168,7 @@ test.describe("Governance evidence sözleşmesi", () => {
 
     await openWithGovernanceMocks(page, "/kurum/guvenlik-denetimi", { height: 844, width: 390 }, {
       auditSafeListFailure: true,
-      roles: ["TENANT_ADMIN", "SYSTEM_ADMIN"],
+      roles: ["TENANT_ADMIN"],
     });
     const failedSecurityEventsTable = page.getByRole("region", { name: "Son güvenlik olayları" }).getByRole("table", { name: "Güvenlik olayları" });
     await expect(failedSecurityEventsTable).toContainText("Güvenlik olayları alınamadı.");
@@ -410,7 +410,7 @@ test.describe("Governance evidence sözleşmesi", () => {
     await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Yayın Hazırlığı" })).toHaveCount(0);
 
     await openWithGovernanceMocks(page, "/kurum/yedek-restore", { height: 900, width: 390 }, {
-      roles: ["TENANT_ADMIN", "SYSTEM_ADMIN"],
+      roles: ["TENANT_ADMIN"],
     });
     await expectEvidenceScopes(page.getByLabel("Yedekleme ve geri yükleme güven durumu"), {
       "Kanıt kapsamı: Bağlı sistem": 1,
@@ -458,7 +458,7 @@ test.describe("Governance evidence sözleşmesi", () => {
 
   test("sağlık ve gözlemlenebilirlik kısmi endpoint hatasında kanıtı düşürmez", async ({ page }) => {
     await openWithGovernanceMocks(page, "/kurum/sistem-sagligi", { height: 900, width: 390 }, {
-      roles: ["TENANT_ADMIN", "SYSTEM_ADMIN"],
+      roles: ["TENANT_ADMIN"],
       systemEndpoints: "partial-metrics-failure",
     });
     const healthTrustPanel = page.getByLabel("Sistem sağlığı doğrulama durumu");
@@ -491,7 +491,7 @@ test.describe("Governance evidence sözleşmesi", () => {
     await expectNoHorizontalOverflow(page, "system-health-partial-mobile");
 
     await openWithGovernanceMocks(page, "/kurum/gozlemlenebilirlik", { height: 900, width: 768 }, {
-      roles: ["TENANT_ADMIN", "SYSTEM_ADMIN"],
+      roles: ["TENANT_ADMIN"],
       systemEndpoints: "partial-metrics-failure",
     });
     const observabilityTrustPanel = page.getByLabel("Sistem izleme doğrulama durumu");

@@ -1,14 +1,15 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { encryptSecretDeliveryPayload } from "@o-okul/db";
-import type { CampusRecord, LicenseTermRecord, TenantOnboardingOwnerRecord } from "@o-okul/shared-types";
+import type { CampusRecord, LicenseTermRecord, TenantAccessStatus, TenantLifecycleReason, TenantStatusUpdateRequest, TenantOnboardingOwnerRecord } from "@o-okul/shared-types";
 import pg from "pg";
+import type { AuditLogService } from "../audit-log/audit-log.service.js";
 import { hashPasswordAsync, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
+import type { SessionStore } from "../auth/session-store.js";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withBypassRlsQuery } from "../db/tenant-query.js";
 import { buildTenantMembershipDualWriteRows } from "../identity-provisioning/tenant-membership-dual-write.js";
 import { encryptTcIdentity, hashTcIdentity } from "../student/tc-identity.js";
 import { tenantWebUrl } from "../http/tenant-origin.js";
-import type { TenantUserRecord } from "../user-management/user-management-store.js";
 
 export interface TenantRecord {
   id: string;
@@ -22,7 +23,10 @@ export interface TenantRecord {
   logoUrl?: string;
   seatLimit?: number;
   activeSeatCount?: number;
-  status: string;
+  status: TenantAccessStatus;
+  lifecycleVersion: number;
+  suspendedAt?: string;
+  suspendedReason?: TenantLifecycleReason;
 }
 
 export interface TenantStore {
@@ -30,18 +34,16 @@ export interface TenantStore {
   findById(id: string): Promise<TenantRecord | undefined>;
   findBySlug(slug: string): Promise<TenantRecord | undefined>;
   findForAdmin(id: string): Promise<TenantRecord | undefined>;
-  create(input: CreateTenantInput): Promise<TenantRecord>;
-  createWithFirstAdmin?(input: CreateTenantInput, firstAdmin: CreateTenantFirstAdminInput): Promise<TenantCreateWithAdminResult>;
-  createOnboarding?(input: CreateTenantInput, onboarding: CreateTenantOnboardingInput): Promise<TenantOnboardingStoreResult>;
+  createOnboarding(input: CreateTenantInput, onboarding: CreateTenantOnboardingInput): Promise<TenantOnboardingStoreResult>;
   update(id: string, input: UpdateTenantInput): Promise<TenantRecord | undefined>;
-  delete(id: string): Promise<TenantRecord | undefined>;
+  transitionStatus(id: string, input: TenantStatusTransitionInput): Promise<TenantStatusTransitionResult | undefined>;
 }
 
 export const tenantStoreToken = Symbol("TenantStore");
 
 const demoTenants: TenantRecord[] = [
-  { id: "tenant-a", name: "DNA EĞİTİM KURUMU", slug: "dna-egitim", plan: "PRO", activeSeatCount: 4, status: "ACTIVE" },
-  { id: "tenant-b", name: "Demo Kurum B", slug: "demo-kurum-b", plan: "TRIAL", activeSeatCount: 1, status: "ACTIVE" },
+  { id: "tenant-a", name: "DNA EĞİTİM KURUMU", slug: "dna-egitim", plan: "PRO", activeSeatCount: 4, status: "ACTIVE", lifecycleVersion: 0 },
+  { id: "tenant-b", name: "Demo Kurum B", slug: "demo-kurum-b", plan: "TRIAL", activeSeatCount: 1, status: "ACTIVE", lifecycleVersion: 0 },
   {
     id: "tenant-expired",
     name: "Demo Süresi Dolmuş Kurum",
@@ -50,16 +52,22 @@ const demoTenants: TenantRecord[] = [
     licenseEndsAt: "2020-01-01T00:00:00.000Z",
     activeSeatCount: 0,
     status: "ACTIVE",
+    lifecycleVersion: 0,
   },
 ];
 
 export class InMemoryTenantStore implements TenantStore {
-  private readonly tenants = demoTenants.map((record) => ({ ...record }));
-  private readonly firstAdmins: TenantUserRecord[] = [];
+  private readonly tenants: TenantRecord[];
+  private readonly lifecycleRequests = new Map<string, { requestHash: string; response: TenantStatusTransitionResult }>();
+  private lifecyclePending = false;
   private readonly onboardingRequests = new Map<string, { requestHash: string; response: TenantOnboardingResult }>();
 
+  constructor(private readonly lifecycle?: TenantLifecycleDependencies, initialTenants: readonly TenantRecord[] = demoTenants) {
+    this.tenants = initialTenants.map((record) => ({ ...record }));
+  }
+
   async list(): Promise<TenantRecord[]> {
-    return this.tenants.filter((tenant) => tenant.status !== "DELETED").map((tenant) => ({ ...tenant }));
+    return this.tenants.map((tenant) => ({ ...tenant }));
   }
 
   async findById(id: string): Promise<TenantRecord | undefined> {
@@ -74,11 +82,11 @@ export class InMemoryTenantStore implements TenantStore {
   }
 
   async findForAdmin(id: string): Promise<TenantRecord | undefined> {
-    const tenant = this.tenants.find((record) => record.id === id && record.status !== "DELETED");
+    const tenant = this.tenants.find((record) => record.id === id);
     return tenant ? { ...tenant } : undefined;
   }
 
-  async create(input: CreateTenantInput): Promise<TenantRecord> {
+  private async createRecord(input: CreateTenantInput): Promise<TenantRecord> {
     const tenant: TenantRecord = {
       id: input.id ?? randomUUID(),
       name: input.name,
@@ -92,41 +100,10 @@ export class InMemoryTenantStore implements TenantStore {
       seatLimit: input.seatLimit,
       activeSeatCount: 0,
       status: input.status ?? "ACTIVE",
+      lifecycleVersion: 0,
     };
     this.tenants.push(tenant);
     return { ...tenant };
-  }
-
-  async createWithFirstAdmin(input: CreateTenantInput, firstAdmin: CreateTenantFirstAdminInput): Promise<TenantCreateWithAdminResult> {
-    const activation = await createFirstAdminActivation(input.slug, firstAdmin.email);
-    const tenant = await this.create(input);
-    const storedTenant = this.tenants.find((record) => record.id === tenant.id);
-    if (storedTenant) {
-      storedTenant.activeSeatCount = 1;
-    }
-    tenant.activeSeatCount = 1;
-    const now = new Date().toISOString();
-    const admin: TenantUserRecord = {
-      id: activation.userId,
-      email: firstAdmin.email.toLowerCase(),
-      name: firstAdmin.name,
-      tenantId: tenant.id,
-      roles: ["TENANT_ADMIN"],
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.firstAdmins.push(admin);
-    upsertInMemoryAuthUser({
-      id: admin.id,
-      email: admin.email,
-      name: admin.name,
-      nationalIdHash: hashTcIdentity(firstAdmin.nationalId),
-      mustChangePassword: true,
-      passwordHash: activation.passwordHash,
-      tenantId: admin.tenantId,
-      roles: admin.roles,
-    });
-    return { tenant: { ...tenant, activeSeatCount: 1 }, admin: { ...admin } };
   }
 
   async createOnboarding(input: CreateTenantInput, onboarding: CreateTenantOnboardingInput): Promise<TenantOnboardingStoreResult> {
@@ -134,16 +111,19 @@ export class InMemoryTenantStore implements TenantStore {
     const previous = this.onboardingRequests.get(idempotencyId);
     if (previous) {
       if (previous.requestHash !== onboarding.requestHash) throw new Error("IDEMPOTENCY_KEY_BODY_MISMATCH");
-      return { result: structuredClone(previous.response), replayed: true };
+      return { auditedAtomically: false, result: structuredClone(previous.response), replayed: true };
     }
     const activation = await createFirstAdminActivation(input.slug, onboarding.firstOwner.email);
-    const tenant = await this.create({
+    const tenant = await this.createRecord({
       ...input,
       plan: onboarding.licenseTerm.planCode,
       licenseStartsAt: onboarding.licenseTerm.startsAt,
       licenseEndsAt: onboarding.licenseTerm.endsAt,
       seatLimit: onboarding.licenseTerm.activeStudentLimit,
     });
+    const storedTenant = this.tenants.find((record) => record.id === tenant.id);
+    if (storedTenant) storedTenant.activeSeatCount = 1;
+    tenant.activeSeatCount = 1;
     const owner = createInMemoryOwner(tenant, onboarding.firstOwner, activation);
     const campuses = onboarding.campuses.map((campus, index) => ({
       id: `campus-onboarding-${index + 1}-${tenant.id}`,
@@ -157,29 +137,55 @@ export class InMemoryTenantStore implements TenantStore {
     };
     const response = { tenant: { ...tenant, activeSeatCount: 1 }, owner, campuses, licenseTerm };
     this.onboardingRequests.set(idempotencyId, { requestHash: onboarding.requestHash, response });
-    return { result: structuredClone(response), replayed: false };
+    return { auditedAtomically: false, result: structuredClone(response), replayed: false };
   }
 
   async update(id: string, input: UpdateTenantInput): Promise<TenantRecord | undefined> {
-    const tenant = this.tenants.find((record) => record.id === id);
+    const tenant = this.tenants.find((record) => record.id === id && record.id !== "system");
     if (!tenant) return undefined;
     Object.assign(tenant, withoutUndefined(input));
     return { ...tenant };
   }
 
-  async delete(id: string): Promise<TenantRecord | undefined> {
-    const index = this.tenants.findIndex((record) => record.id === id && record.id !== "system");
-    if (index === -1) return undefined;
-    const tenant = this.tenants[index];
-    if (!tenant) return undefined;
-    this.tenants.splice(index, 1);
-    for (let i = this.firstAdmins.length - 1; i >= 0; i -= 1) {
-      if (this.firstAdmins[i]?.tenantId === id) {
-        this.firstAdmins.splice(i, 1);
+  async transitionStatus(id: string, input: TenantStatusTransitionInput): Promise<TenantStatusTransitionResult | undefined> {
+    // ponytail: memory driver serializes lifecycle writes; PostgreSQL uses row locks in deployed environments.
+    if (this.lifecyclePending) throw new Error("IDEMPOTENCY_KEY_IN_PROGRESS");
+    this.lifecyclePending = true;
+    try {
+      const tenant = this.tenants.find((record) => record.id === id && record.id !== "system");
+      if (!tenant) return undefined;
+      assertTenantAccessStatus(tenant.status);
+      assertTenantAccessStatus(input.status);
+      if (!this.lifecycle) throw new Error("TENANT_LIFECYCLE_DEPENDENCIES_REQUIRED");
+      const session = await this.lifecycle.sessions.findById(input.sessionId);
+      if (!session || session.status !== "ACTIVE" || session.userId !== input.actorUserId || session.tenantId !== "system" ||
+        session.membershipVersion !== input.membershipVersion || session.expiresAt.getTime() <= Date.now()) throw new Error("MFA_STEP_UP_CONTEXT_INVALID");
+      const key = `${input.actorUserId}:${input.idempotencyKey}`;
+      const previous = this.lifecycleRequests.get(key);
+      if (previous) {
+        if (previous.requestHash !== input.requestHash) throw new Error("IDEMPOTENCY_KEY_BODY_MISMATCH");
+        return structuredClone(previous.response);
       }
+      assertLifecycleRequest(tenant, input);
+      let sessionsRevoked = 0;
+      if (tenant.status !== input.status) {
+        const next = lifecycleNext(tenant, input);
+        await this.lifecycle.auditLogs.record({
+          tenantId: id, actorUserId: input.actorUserId, entityType: "Tenant", entityId: id,
+          action: input.status === "SUSPENDED" ? "tenant.suspended" : "tenant.activated",
+          diff: lifecycleDiff(tenant, input),
+        });
+        sessionsRevoked = await this.lifecycle.sessions.revokeByTenant(id, input.expectedLifecycleVersion + 1);
+        Object.assign(tenant, next);
+      }
+      const response = { tenant: { ...tenant }, sessionsRevoked };
+      this.lifecycleRequests.set(key, { requestHash: input.requestHash, response: structuredClone(response) });
+      return response;
+    } finally {
+      this.lifecyclePending = false;
     }
-    return { ...tenant, status: "DELETED" };
   }
+
 }
 
 export class PostgresTenantStore implements TenantStore {
@@ -200,10 +206,10 @@ export class PostgresTenantStore implements TenantStore {
            t."logoUrl",
            t."seatLimit",
            COUNT(DISTINCT m."userId")::int AS "activeSeatCount",
-           t."status"
+           t."status", t."lifecycleVersion", t."suspendedAt", t."suspendedReason"
          FROM "Tenant" t
          LEFT JOIN "TenantMembership" m ON m."tenantId" = t."id"
-         WHERE t."id" <> 'system' AND t."status" <> 'DELETED'
+         WHERE t."id" <> 'system'
          GROUP BY t."id", t."name", t."slug", t."plan", t."licenseStartsAt", t."licenseEndsAt", t."institutionType", t."contactEmail", t."logoUrl", t."seatLimit", t."status", t."createdAt"
          ORDER BY t."createdAt" DESC`,
       );
@@ -226,7 +232,7 @@ export class PostgresTenantStore implements TenantStore {
            t."logoUrl",
            t."seatLimit",
            COUNT(DISTINCT m."userId")::int AS "activeSeatCount",
-           t."status"
+           t."status", t."lifecycleVersion", t."suspendedAt", t."suspendedReason"
          FROM "Tenant" t
          LEFT JOIN "TenantMembership" m ON m."tenantId" = t."id"
          WHERE t."id" = $1 AND t."status" = 'ACTIVE'
@@ -254,7 +260,7 @@ export class PostgresTenantStore implements TenantStore {
            t."logoUrl",
            t."seatLimit",
            COUNT(DISTINCT m."userId")::int AS "activeSeatCount",
-           t."status"
+           t."status", t."lifecycleVersion", t."suspendedAt", t."suspendedReason"
          FROM "Tenant" t
          LEFT JOIN "TenantMembership" m ON m."tenantId" = t."id"
          WHERE lower(t."slug") = lower($1) AND t."status" = 'ACTIVE'
@@ -282,132 +288,16 @@ export class PostgresTenantStore implements TenantStore {
            t."logoUrl",
            t."seatLimit",
            COUNT(DISTINCT m."userId")::int AS "activeSeatCount",
-           t."status"
+           t."status", t."lifecycleVersion", t."suspendedAt", t."suspendedReason"
          FROM "Tenant" t
          LEFT JOIN "TenantMembership" m ON m."tenantId" = t."id"
-         WHERE t."id" = $1 AND t."status" <> 'DELETED'
+         WHERE t."id" = $1
          GROUP BY t."id", t."name", t."slug", t."plan", t."licenseStartsAt", t."licenseEndsAt", t."institutionType", t."contactEmail", t."logoUrl", t."seatLimit", t."status"
          LIMIT 1`,
         [id],
       );
       const row = result.rows[0];
       return row ? mapTenantRow(row) : undefined;
-    });
-  }
-
-  async create(input: CreateTenantInput): Promise<TenantRecord> {
-    return withBypassRlsQuery(this.pool, async (client) => {
-      const result = await client.query<TenantRow>(
-        `INSERT INTO "Tenant" ("id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "institutionType", "contactEmail", "logoUrl", "seatLimit", "status", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
-         RETURNING "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "institutionType", "contactEmail", "logoUrl", "seatLimit", 0::int AS "activeSeatCount", "status"`,
-        [
-          input.id ?? randomUUID(),
-          input.name,
-          input.slug,
-          input.plan ?? "TRIAL",
-          input.licenseStartsAt ?? null,
-          input.licenseEndsAt ?? null,
-          input.institutionType ?? null,
-          input.contactEmail ?? null,
-          input.logoUrl ?? null,
-          input.seatLimit ?? null,
-          input.status ?? "ACTIVE",
-        ],
-      );
-      return mapTenantRow(result.rows[0]!);
-    });
-  }
-
-  async createWithFirstAdmin(input: CreateTenantInput, firstAdmin: CreateTenantFirstAdminInput): Promise<TenantCreateWithAdminResult> {
-    const activation = await createFirstAdminActivation(input.slug, firstAdmin.email);
-    return withBypassRlsQuery(this.pool, async (client) => {
-      const normalizedEmail = firstAdmin.email.toLowerCase();
-      const tenantResult = await client.query<TenantRow>(
-        `INSERT INTO "Tenant" ("id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "institutionType", "contactEmail", "logoUrl", "seatLimit", "status", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
-         RETURNING "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "institutionType", "contactEmail", "logoUrl", "seatLimit", 0::int AS "activeSeatCount", "status"`,
-        [
-          input.id ?? randomUUID(),
-          input.name,
-          input.slug,
-          input.plan ?? "TRIAL",
-          input.licenseStartsAt ?? null,
-          input.licenseEndsAt ?? null,
-          input.institutionType ?? null,
-          input.contactEmail ?? null,
-          input.logoUrl ?? null,
-          input.seatLimit ?? null,
-          input.status ?? "ACTIVE",
-        ],
-      );
-      const tenant = mapTenantRow(tenantResult.rows[0]!);
-      const nationalIdEncrypted = encryptTcIdentity(firstAdmin.nationalId);
-      const nationalIdHash = hashTcIdentity(firstAdmin.nationalId);
-      const createdUser = await client.query<{ id: string }>(
-        `INSERT INTO "User" (
-           "id", "tenantId", "email", "emailNormalized", "loginName", "loginNameNormalized",
-           "nationalIdEncrypted", "nationalIdHash", "name", "passwordHash", "passwordHashVersion",
-           "accountStatus", "mustChangePassword", "updatedAt"
-         )
-         VALUES ($1, $2, $3, $3, $3, $3, $4, $5, $6, $7, 2, 'PENDING_ACTIVATION', true, now())
-         RETURNING "id"`,
-        [activation.userId, tenant.id, normalizedEmail, nationalIdEncrypted, nationalIdHash, firstAdmin.name, activation.passwordHash],
-      );
-      const userId = createdUser.rows[0]?.id;
-      if (!userId) {
-        throw new Error("USER_CREATE_FAILED");
-      }
-
-      await client.query(`DELETE FROM "TenantMembership" WHERE "tenantId" = $1 AND "userId" = $2`, [tenant.id, userId]);
-      const [membership] = buildTenantMembershipDualWriteRows(["TENANT_ADMIN"]);
-      await client.query(
-        `INSERT INTO "TenantMembership" (
-           "id", "tenantId", "userId", "role", "staffRole", "hasTeacherPersona", "hasStudentPersona",
-           "status", "version", "scopeMode", "updatedAt"
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', 1, 'TENANT', now())`,
-        [
-          randomUUID(),
-          tenant.id,
-          userId,
-          membership!.role,
-          membership!.staffRole,
-          membership!.hasTeacherPersona,
-          membership!.hasStudentPersona,
-        ],
-      );
-      await client.query(
-        `INSERT INTO "PasswordResetToken" ("id", "userId", "tokenHash", "status", "expiresAt", "updatedAt")
-         VALUES ($1, $2, $3, 'PENDING', $4, now())`,
-        [activation.resetId, userId, activation.tokenHash, activation.expiresAt],
-      );
-      await client.query(
-        `INSERT INTO "SecretDeliveryOutbox" (
-           "id", "tenantId", "purpose", "sourceId", "payloadEncrypted", "status", "availableAt", "expiresAt", "updatedAt"
-         ) VALUES ($1, $2, 'PASSWORD_RESET', $3, $4, 'PENDING', now(), $5, now())`,
-        [randomUUID(), tenant.id, activation.resetId, activation.payloadEncrypted, activation.expiresAt],
-      );
-      const adminResult = await client.query<TenantAdminRow>(
-        `SELECT
-           u."id",
-           u."email",
-           u."name",
-           m."tenantId",
-           array_agg(m."role"::text ORDER BY m."role"::text) AS roles,
-           min(u."createdAt") AS "createdAt",
-           max(u."updatedAt") AS "updatedAt"
-         FROM "TenantMembership" m
-         JOIN "User" u ON u."id" = m."userId"
-         WHERE m."tenantId" = $1 AND u."id" = $2
-         GROUP BY u."id", u."email", u."name", m."tenantId"
-         LIMIT 1`,
-        [tenant.id, userId],
-      );
-      const admin = adminResult.rows[0] ? mapTenantAdminRow(adminResult.rows[0]) : undefined;
-      if (!admin) {
-        throw new Error("USER_MEMBERSHIP_CREATE_FAILED");
-      }
-      return { tenant: { ...tenant, activeSeatCount: 1 }, admin };
     });
   }
 
@@ -433,7 +323,7 @@ export class PostgresTenantStore implements TenantStore {
         const record = previous.rows[0];
         if (!record || record.requestHash !== onboarding.requestHash) throw new Error("IDEMPOTENCY_KEY_BODY_MISMATCH");
         if (record.status !== "COMPLETED" || !record.responseBody) throw new Error("IDEMPOTENCY_KEY_IN_PROGRESS");
-        return { result: record.responseBody, replayed: true };
+        return { auditedAtomically: true, result: record.responseBody, replayed: true };
       }
       const tenantId = input.id ?? randomUUID();
       const ownerId = activation.userId;
@@ -446,7 +336,7 @@ export class PostgresTenantStore implements TenantStore {
            "contactEmail", "logoUrl", "seatLimit", "status", "updatedAt"
          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
          RETURNING "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "institutionType",
-                   "contactEmail", "logoUrl", "seatLimit", 0::int AS "activeSeatCount", "status"`,
+                   "contactEmail", "logoUrl", "seatLimit", 0::int AS "activeSeatCount", "status", "lifecycleVersion", "suspendedAt", "suspendedReason"`,
         [
           tenantId,
           input.name,
@@ -533,8 +423,8 @@ export class PostgresTenantStore implements TenantStore {
       );
       await client.query(
         `INSERT INTO "SecretDeliveryOutbox" (
-           "id", "tenantId", "purpose", "sourceId", "payloadEncrypted", "status", "availableAt", "expiresAt", "updatedAt"
-         ) VALUES ($1, $2, 'PASSWORD_RESET', $3, $4, 'PENDING', now(), $5, now())`,
+           "id", "tenantId", "purpose", "sourceId", "payloadEncrypted", "status", "availableAt", "expiresAt", "updatedAt", "sourceScope", "tenantLifecycleVersion"
+         ) VALUES ($1, $2, 'PASSWORD_RESET', $3, $4, 'PENDING', now(), $5, now(), 'TENANT', 0)`,
         [randomUUID(), tenant.id, activation.resetId, activation.payloadEncrypted, activation.expiresAt],
       );
       await client.query(`SELECT o_okul_refresh_license_usage($1)`, [tenant.id]);
@@ -552,20 +442,40 @@ export class PostgresTenantStore implements TenantStore {
         },
       };
       await client.query(
+        `INSERT INTO "AuditLog" ("id", "tenantId", "actorUserId", "entityType", "entityId", "action", "diff")
+         VALUES
+           ($1, $2, $3, 'Tenant', $2, 'tenant.created', $4::jsonb),
+           ($5, $2, $3, 'Employee', $6, 'tenant.first_owner_invited', $7::jsonb)`,
+        [
+          randomUUID(),
+          tenant.id,
+          term.createdByPlatformAccountId,
+          JSON.stringify({
+            licenseStartsAt: tenant.licenseStartsAt,
+            licenseEndsAt: tenant.licenseEndsAt,
+            capacity: tenant.seatLimit,
+            status: tenant.status,
+          }),
+          randomUUID(),
+          employeeId,
+          JSON.stringify({ accountId: ownerId, emailProvided: true, roles: ["TENANT_OWNER"] }),
+        ],
+      );
+      await client.query(
         `UPDATE "PlatformIdempotencyKey"
          SET "status" = 'COMPLETED', "responseBody" = $4::jsonb, "completedAt" = now(), "updatedAt" = now()
          WHERE "platformAccountId" = $1 AND "key" = $2 AND "operation" = 'tenant.onboarding.create' AND "requestHash" = $3`,
         [onboarding.licenseTerm.createdByPlatformAccountId, onboarding.idempotencyKey, onboarding.requestHash, JSON.stringify(response)],
       );
-      return { result: response, replayed: false };
+      return { auditedAtomically: true, result: response, replayed: false };
     });
   }
 
   async update(id: string, input: UpdateTenantInput): Promise<TenantRecord | undefined> {
     return withBypassRlsQuery(this.pool, async (client) => {
       const currentResult = await client.query<TenantRow>(
-        `SELECT "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "institutionType", "contactEmail", "logoUrl", "seatLimit", 0::int AS "activeSeatCount", "status" FROM "Tenant"
-         WHERE "id" = $1
+        `SELECT "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "institutionType", "contactEmail", "logoUrl", "seatLimit", 0::int AS "activeSeatCount", "status", "lifecycleVersion", "suspendedAt", "suspendedReason" FROM "Tenant"
+         WHERE "id" = $1 AND "id" <> 'system'
          LIMIT 1`,
         [id],
       );
@@ -575,16 +485,11 @@ export class PostgresTenantStore implements TenantStore {
       const result = await client.query<TenantRow>(
         `UPDATE "Tenant"
          SET "name" = $2,
-             "plan" = $3,
-             "licenseStartsAt" = $4,
-             "licenseEndsAt" = $5,
-             "institutionType" = $6,
-             "contactEmail" = $7,
-             "logoUrl" = $8,
-             "seatLimit" = $9,
-             "status" = $10,
+             "institutionType" = $3,
+             "contactEmail" = $4,
+             "logoUrl" = $5,
              "updatedAt" = now()
-         WHERE "id" = $1
+         WHERE "id" = $1 AND "id" <> 'system'
          RETURNING
            "id",
            "name",
@@ -601,53 +506,92 @@ export class PostgresTenantStore implements TenantStore {
              FROM "TenantMembership"
              WHERE "tenantId" = "Tenant"."id"
            ) AS "activeSeatCount",
-           "status"`,
+           "status", "lifecycleVersion", "suspendedAt", "suspendedReason"`,
         [
           id,
           next.name,
-          next.plan,
-          next.licenseStartsAt ?? null,
-          next.licenseEndsAt ?? null,
           next.institutionType ?? null,
           next.contactEmail ?? null,
           next.logoUrl ?? null,
-          next.seatLimit ?? null,
-          next.status,
         ],
       );
       return mapTenantRow(result.rows[0]!);
     });
   }
 
-  async delete(id: string): Promise<TenantRecord | undefined> {
+  async transitionStatus(id: string, input: TenantStatusTransitionInput): Promise<TenantStatusTransitionResult | undefined> {
     return withBypassRlsQuery(this.pool, async (client) => {
+      const actor = await client.query<{ id: string }>(
+        `SELECT "id" FROM "AuthSession" WHERE "id" = $1 AND "userId" = $2 AND "tenantId" = 'system'
+         AND "membershipVersion" = $3 AND "status" = 'ACTIVE' AND "expiresAt" > now() FOR SHARE`,
+        [input.sessionId, input.actorUserId, input.membershipVersion],
+      );
+      if (!actor.rows[0]) throw new Error("MFA_STEP_UP_CONTEXT_INVALID");
+      const inserted = await client.query<{ id: string }>(
+        `INSERT INTO "PlatformIdempotencyKey" ("platformAccountId", "key", "operation", "requestHash", "status", "updatedAt")
+         VALUES ($1, $2, 'tenant.lifecycle.change', $3, 'IN_PROGRESS', now())
+         ON CONFLICT ("platformAccountId", "key", "operation") DO NOTHING RETURNING "id"`,
+        [input.actorUserId, input.idempotencyKey, input.requestHash],
+      );
+      if (!inserted.rows[0]) {
+        const previous = await client.query<{ requestHash: string; status: string; responseBody: TenantStatusTransitionResult | null }>(
+          `SELECT "requestHash", "status", "responseBody" FROM "PlatformIdempotencyKey"
+           WHERE "platformAccountId" = $1 AND "key" = $2 AND "operation" = 'tenant.lifecycle.change' FOR UPDATE`,
+          [input.actorUserId, input.idempotencyKey],
+        );
+        const record = previous.rows[0];
+        if (!record || record.requestHash !== input.requestHash) throw new Error("IDEMPOTENCY_KEY_BODY_MISMATCH");
+        if (record.status !== "COMPLETED" || !record.responseBody) throw new Error("IDEMPOTENCY_KEY_IN_PROGRESS");
+        return record.responseBody;
+      }
       const currentResult = await client.query<TenantRow>(
-        `SELECT
-           t."id",
-           t."name",
-           t."slug",
-           t."plan",
-           t."licenseStartsAt",
-           t."licenseEndsAt",
-           t."institutionType",
-           t."contactEmail",
-           t."logoUrl",
-           t."seatLimit",
-           COUNT(DISTINCT m."userId")::int AS "activeSeatCount",
-           t."status"
-         FROM "Tenant" t
-         LEFT JOIN "TenantMembership" m ON m."tenantId" = t."id"
-         WHERE t."id" = $1 AND t."id" <> 'system' AND t."status" <> 'DELETED'
-         GROUP BY t."id", t."name", t."slug", t."plan", t."licenseStartsAt", t."licenseEndsAt", t."institutionType", t."contactEmail", t."logoUrl", t."seatLimit", t."status"
-         LIMIT 1`,
+        `SELECT t."id", t."name", t."slug", t."plan", t."licenseStartsAt", t."licenseEndsAt",
+           t."institutionType", t."contactEmail", t."logoUrl", t."seatLimit", t."status",
+           t."lifecycleVersion", t."suspendedAt", t."suspendedReason",
+           (SELECT COUNT(DISTINCT m."userId")::int FROM "TenantMembership" m WHERE m."tenantId" = t."id") AS "activeSeatCount"
+         FROM "Tenant" t WHERE t."id" = $1 AND t."id" <> 'system' FOR UPDATE OF t`,
         [id],
       );
       const current = currentResult.rows[0] ? mapTenantRow(currentResult.rows[0]) : undefined;
-      if (!current) return undefined;
-      await client.query(`DELETE FROM "Tenant" WHERE "id" = $1 AND "id" <> 'system'`, [id]);
-      return { ...current, status: "DELETED" };
+      if (!current) throw new Error("TENANT_NOT_FOUND");
+      assertTenantAccessStatus(current.status);
+      assertTenantAccessStatus(input.status);
+      assertLifecycleRequest(current, input);
+      if (input.status === "ACTIVE") {
+        const reset = await client.query('SELECT "id" FROM "TenantFreshResetOperation" WHERE "tenantId" = $1 AND "status" <> \'COMPLETED\'', [id]);
+        if (reset.rows.length) throw new Error("RESET_OPERATION_IN_PROGRESS");
+      }
+      let response: TenantStatusTransitionResult = { tenant: current, sessionsRevoked: 0 };
+      if (current.status !== input.status) {
+        const next = lifecycleNext(current, input);
+        const updated = await client.query<{ id: string }>(
+          `UPDATE "Tenant" SET "status" = $2, "lifecycleVersion" = "lifecycleVersion" + 1,
+             "suspendedAt" = $4, "suspendedReason" = $5, "updatedAt" = now()
+           WHERE "id" = $1 AND "id" <> 'system' AND "lifecycleVersion" = $3 RETURNING "id"`,
+          [id, input.status, input.expectedLifecycleVersion, next.suspendedAt ?? null, next.suspendedReason ?? null],
+        );
+        if (!updated.rows[0]) throw new Error("TENANT_LIFECYCLE_VERSION_CONFLICT");
+        const revoked = await client.query<{ id: string }>(
+          `UPDATE "AuthSession" SET "status" = 'REVOKED', "updatedAt" = now()
+           WHERE "tenantId" = $1 AND "status" = 'ACTIVE' RETURNING "id"`, [id],
+        );
+        response = { tenant: next, sessionsRevoked: revoked.rowCount ?? revoked.rows.length };
+        await client.query(
+          `INSERT INTO "AuditLog" ("id", "tenantId", "actorUserId", "entityType", "entityId", "action", "diff")
+           VALUES ($1, $2, $3, 'Tenant', $2, $4, $5::jsonb)`,
+          [randomUUID(), id, input.actorUserId, input.status === "SUSPENDED" ? "tenant.suspended" : "tenant.activated", JSON.stringify(lifecycleDiff(current, input))],
+        );
+      }
+      const completed = await client.query<{ id: string }>(
+        `UPDATE "PlatformIdempotencyKey" SET "status" = 'COMPLETED', "responseBody" = $4::jsonb, "completedAt" = now(), "updatedAt" = now()
+         WHERE "platformAccountId" = $1 AND "key" = $2 AND "operation" = 'tenant.lifecycle.change' AND "requestHash" = $3 AND "status" = 'IN_PROGRESS' RETURNING "id"`,
+        [input.actorUserId, input.idempotencyKey, input.requestHash, JSON.stringify(response)],
+      );
+      if (!completed.rows[0]) throw new Error("IDEMPOTENCY_COMPLETION_FAILED");
+      return response;
     });
   }
+
 }
 
 interface TenantRow {
@@ -662,17 +606,10 @@ interface TenantRow {
   logoUrl: string | null;
   seatLimit: number | null;
   activeSeatCount?: number | string | null;
-  status: string;
-}
-
-interface TenantAdminRow {
-  id: string;
-  email: string;
-  name: string;
-  tenantId: string;
-  roles: TenantUserRecord["roles"];
-  createdAt: Date | string;
-  updatedAt: Date | string;
+  status: TenantAccessStatus;
+  lifecycleVersion: number;
+  suspendedAt: Date | string | null;
+  suspendedReason: TenantLifecycleReason | null;
 }
 
 export interface CreateTenantInput {
@@ -686,18 +623,7 @@ export interface CreateTenantInput {
   contactEmail?: string;
   logoUrl?: string;
   seatLimit?: number;
-  status?: string;
-}
-
-export interface CreateTenantFirstAdminInput {
-  email: string;
-  name: string;
-  nationalId: string;
-}
-
-export interface TenantCreateWithAdminResult {
-  tenant: TenantRecord;
-  admin: TenantUserRecord;
+  status?: TenantAccessStatus;
 }
 
 export interface CreateTenantOnboardingInput {
@@ -716,11 +642,30 @@ export interface TenantOnboardingResult {
 }
 
 export interface TenantOnboardingStoreResult {
+  auditedAtomically: boolean;
   result: TenantOnboardingResult;
   replayed: boolean;
 }
 
-export type UpdateTenantInput = Partial<Omit<CreateTenantInput, "id" | "slug">>;
+export interface TenantStatusTransitionInput extends TenantStatusUpdateRequest {
+  actorUserId: string;
+  sessionId: string;
+  membershipVersion: number;
+  idempotencyKey: string;
+  requestHash: string;
+}
+
+export interface TenantStatusTransitionResult {
+  tenant: TenantRecord;
+  sessionsRevoked: number;
+}
+
+interface TenantLifecycleDependencies {
+  auditLogs: AuditLogService;
+  sessions: SessionStore;
+}
+
+export type UpdateTenantInput = Partial<Pick<CreateTenantInput, "name" | "institutionType" | "contactEmail" | "logoUrl">>;
 
 function mapTenantRow(row: TenantRow): TenantRecord {
   return {
@@ -736,24 +681,15 @@ function mapTenantRow(row: TenantRow): TenantRecord {
     seatLimit: row.seatLimit ?? undefined,
     activeSeatCount: optionalNumber(row.activeSeatCount),
     status: row.status,
+    lifecycleVersion: row.lifecycleVersion,
+    suspendedAt: optionalDateString(row.suspendedAt),
+    suspendedReason: row.suspendedReason ?? undefined,
   };
 }
 
 function optionalDateString(value: Date | string | null): string | undefined {
   if (!value) return undefined;
   return value instanceof Date ? value.toISOString() : value;
-}
-
-function mapTenantAdminRow(row: TenantAdminRow): TenantUserRecord {
-  return {
-    id: row.id,
-    email: row.email,
-    name: row.name,
-    tenantId: row.tenantId,
-    roles: row.roles,
-    createdAt: dateString(row.createdAt),
-    updatedAt: dateString(row.updatedAt),
-  };
 }
 
 function dateString(value: Date | string): string {
@@ -768,6 +704,10 @@ function optionalNumber(value: number | string | null | undefined): number | und
 
 function isUsableTenant(tenant: TenantRecord): boolean {
   return tenant.status === "ACTIVE";
+}
+
+function assertTenantAccessStatus(status: string): void {
+  if (status !== "ACTIVE" && status !== "SUSPENDED") throw new Error("TENANT_STATUS_UNSUPPORTED");
 }
 
 function withoutUndefined<T extends object>(input: T): Partial<T> {
@@ -885,6 +825,22 @@ export function createFirstAdminActivationUrl(tenantSlug: string, token: string)
   return url;
 }
 
-export function createTenantStore(): TenantStore {
-  return resolvePersistenceDriver(process.env.TENANT_STORE) === "postgres" ? new PostgresTenantStore() : new InMemoryTenantStore();
+export function createTenantStore(lifecycle?: TenantLifecycleDependencies): TenantStore {
+  return resolvePersistenceDriver(process.env.TENANT_STORE) === "postgres" ? new PostgresTenantStore() : new InMemoryTenantStore(lifecycle);
+}
+
+function assertLifecycleRequest(tenant: TenantRecord, input: TenantStatusTransitionInput): void {
+  if (!Number.isInteger(tenant.lifecycleVersion) || tenant.lifecycleVersion !== input.expectedLifecycleVersion) throw new Error("TENANT_LIFECYCLE_VERSION_CONFLICT");
+  if (tenant.slug !== input.confirmationText) throw new Error("TENANT_CONFIRMATION_MISMATCH");
+}
+
+function lifecycleNext(tenant: TenantRecord, input: TenantStatusTransitionInput): TenantRecord {
+  return { ...tenant, status: input.status, lifecycleVersion: tenant.lifecycleVersion + 1,
+    suspendedAt: input.status === "SUSPENDED" ? new Date().toISOString() : undefined,
+    suspendedReason: input.status === "SUSPENDED" ? input.reason : undefined };
+}
+
+function lifecycleDiff(tenant: TenantRecord, input: TenantStatusTransitionInput) {
+  return { previousStatus: tenant.status, status: input.status, reason: input.reason,
+    previousLifecycleVersion: tenant.lifecycleVersion, lifecycleVersion: tenant.lifecycleVersion + 1 };
 }
