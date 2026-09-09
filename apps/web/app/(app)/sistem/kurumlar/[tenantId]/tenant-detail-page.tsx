@@ -63,7 +63,7 @@ function ScopedTenantDetailPage({ tenantId, scope }: { tenantId: string; scope: 
   });
   const tenant = tenantQuery.data?.id === tenantId ? tenantQuery.data : null;
   const management = tenantManagementSchema.safeParse(tenant?.management);
-  const canChangeStatus = !restorePending && !resetPending && !tenantQuery.isError && !tenantQuery.isFetching && management.success && management.data.verified && (tenant?.status === "ACTIVE" ? management.data.allowedActions.suspend : management.data.allowedActions.reactivate) && (!management.data.currentReset || management.data.currentReset.status === "COMPLETED") && tenant?.id !== "system" && Number.isInteger(tenant?.lifecycleVersion) && (tenant?.lifecycleVersion ?? -1) >= 0 && (tenant?.lifecycleVersion ?? -1) < 2147483647 && (tenant?.status === "ACTIVE" || tenant?.status === "SUSPENDED");
+  const canChangeStatus = !restorePending && !resetPending && !tenantQuery.isError && tenantQuery.isFetchedAfterMount && management.success && management.data.verified && (tenant?.status === "ACTIVE" ? management.data.allowedActions.suspend : management.data.allowedActions.reactivate) && (!management.data.currentReset || management.data.currentReset.status === "COMPLETED") && tenant?.id !== "system" && Number.isInteger(tenant?.lifecycleVersion) && (tenant?.lifecycleVersion ?? -1) >= 0 && (tenant?.lifecycleVersion ?? -1) < 2147483647 && (tenant?.status === "ACTIVE" || tenant?.status === "SUSPENDED");
   const licenseDays = tenant ? licenseDaysRemaining(tenant.licenseEndsAt) : null;
   const seatPercent = tenant ? seatUsagePercent(tenant) : null;
   const [form, setForm] = useState<TenantUpdateFormState>(emptyForm);
@@ -145,7 +145,15 @@ function ScopedTenantDetailPage({ tenantId, scope }: { tenantId: string; scope: 
     const attemptId = ++statusAttempt.current;
     const active = () => alive.current && statusAttempt.current === attemptId;
     let attempted = false;
+    let checkingTenant = !statusRequest;
     try {
+      if (checkingTenant) {
+        const fresh = await loadTenant(auth.accessToken, pending.id);
+        if (!active()) return;
+        const freshManagement = tenantManagementSchema.safeParse(fresh.management);
+        if (fresh.id !== pending.id || fresh.status !== statusTarget.status || fresh.lifecycleVersion !== pending.body.expectedLifecycleVersion || !freshManagement.success || !freshManagement.data.verified || !freshManagement.data.allowedActions[pending.body.status === "SUSPENDED" ? "suspend" : "reactivate"] || (freshManagement.data.currentReset && freshManagement.data.currentReset.status !== "COMPLETED")) throw new ApiRequestError("TENANT_STATE_CHANGED", 409, "TENANT_LIFECYCLE_VERSION_CONFLICT");
+        checkingTenant = false;
+      }
       if (!pending.proof || !Number.isFinite(Date.parse(pending.expiresAt ?? "")) || Date.parse(pending.expiresAt ?? "") <= Date.now()) {
         const proof = await createLifecycleStepUp(auth.accessToken, {
           purpose: "TENANT_LIFECYCLE_CHANGE",
@@ -178,6 +186,9 @@ function ScopedTenantDetailPage({ tenantId, scope }: { tenantId: string; scope: 
         setStatusOpen(false);
         setStatusTarget(null);
         setError("Kurum bilgisi değişmiş. Güncel durumu okuyup işlemi yeniden onaylayın.");
+      } else if (checkingTenant) {
+        setStatusRequest(null);
+        setError("Güncel kurum bilgisi okunamadı. İşlem gönderilmedi; tekrar deneyin.");
       } else if (!attempted || (failure instanceof ApiRequestError && failure.status === 401)) {
         setStatusRequest({ ...pending, proof: undefined, expiresAt: undefined });
         setMfaCode("");
@@ -319,11 +330,11 @@ function ScopedTenantDetailPage({ tenantId, scope }: { tenantId: string; scope: 
         cancelLabel="Kapat"
         onSubmit={(event) => void handleStatusChange(event)}
         submitting={statusPending}
-        submitDisabled={confirmationText !== statusTarget?.slug || (!statusRequest?.proof && !mfaCode.trim())}
+        submitDisabled={!canChangeStatus || confirmationText !== statusTarget?.slug || (!statusRequest?.proof && !mfaCode.trim())}
         submitLabel={statusRequest ? "Aynı işlemi tekrar dene" : statusTarget?.status === "ACTIVE" ? "Askıya al" : "Yeniden aç"}
-        submitError={error || undefined}
+        submitError={error || (statusOpen && !canChangeStatus ? "Kurum durumu veya işlem yetkisi doğrulanamadı. Güncel bilgileri kontrol edin." : undefined)}
       >
-        <Field label="Kurum kodu onayı"><Input autoComplete="off" disabled={Boolean(statusRequest)} required value={confirmationText} onChange={(event) => setConfirmationText(event.target.value)} /></Field>
+        <Field label="Kurum kodu onayı" description={`Aynen yazın: ${statusTarget?.slug ?? ""}`} error={confirmationText && confirmationText !== statusTarget?.slug ? `Kurum kodu eşleşmiyor. Beklenen: ${statusTarget?.slug ?? ""}` : undefined}><Input autoComplete="off" disabled={Boolean(statusRequest)} required value={confirmationText} onChange={(event) => setConfirmationText(event.target.value)} /></Field>
         <Field label="İşlem gerekçesi"><Select disabled={Boolean(statusRequest)} value={reason} onChange={(event) => setReason(event.target.value as TenantLifecycleReason)}>
           <option value="SECURITY_REVIEW">Güvenlik incelemesi</option>
           <option value="INSTITUTION_REQUEST">Kurum talebi</option>
