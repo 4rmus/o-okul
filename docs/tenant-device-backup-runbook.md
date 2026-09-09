@@ -1,5 +1,9 @@
 # Cihaz yedeği — ilk dilim işletim notu
 
+> Tarihsel kayıt: geçmiş durum ve iş listeleri yazıldıkları aşamaya aittir.
+> Cihaz yedeği/geri yüklemenin güncel kapsamı ve sonuçları
+> [tek yayın ve işletim özetinde](tenant-device-restore-release.md) tutulur.
+
 Bu sürüm indirme ve yükleme doğrulamasıdır; gerçek geri yükleme API'si yoktur.
 SaaS'ın mevcut sunucusu ve kaynak depolaması kullanılır. AWS veya ücretli yedek
 hizmeti zorunlu değildir. Çıktı standart tarayıcı indirmesiyle kullanıcı cihazına gider.

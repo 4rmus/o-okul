@@ -1,5 +1,9 @@
 # Kurum kullanıcısının cihazına yedek ve kontrollü geri yükleme
 
+> Tarihsel kayıt: geçmiş durum ve iş listeleri yazıldıkları aşamaya aittir.
+> Cihaz yedeği/geri yüklemenin güncel kapsamı ve sonuçları
+> [tek yayın ve işletim özetinde](tenant-device-restore-release.md) tutulur.
+
 Durum: ürün yönü ve kabul ölçütleri; uygulama henüz tamamlanmadı.
 Kullanıcı talebi: kurum yetkilisi yedeği kendi cihazına indirebilsin, daha sonra
 ayrı bir bulut hesabı gerekmeksizin aynı kuruma yükleyebilsin.

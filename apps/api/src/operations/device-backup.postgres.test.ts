@@ -2,8 +2,10 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { generateKeyPairSync, randomUUID } from "node:crypto";
 import pg from "pg";
 import { resetBytesHash, withTenantDb, readTenantBackupSchema } from "@o-okul/db";
-import { DeviceBackupService, projectDeviceBackup, validateDeviceBackupPayload } from "./device-backup.service.js";
+import { DeviceBackupService, projectDeviceBackup, readDeviceDomainRows, validateDeviceBackupPayload } from "./device-backup.service.js";
 import { sealDeviceBackup } from "./device-backup-archive.js";
+import { deviceBackupImpact } from "./device-backup-impact.js";
+import { readDeviceRestoreForeignKeys } from "./device-backup-references.js";
 import type { RequestContext } from "../context/request-context.js";
 import { encryptTcIdentity } from "../student/tc-identity.js";
 
@@ -106,5 +108,70 @@ run("device backup PostgreSQL projection", () => {
       await admin.query('UPDATE "Tenant" SET plan=$2,"licenseStartsAt"=NULL,"licenseEndsAt"=NULL,"seatLimit"=NULL WHERE id=$1',[tenantId,"TRIAL"]);
     }
   });
-
+  it("detects the real protected PaymentPlan foreign key without changing financial or student rows", async () => {
+    const tenantId = tenants[0]!, studentId = tenantId+"-protected-student", paymentId = tenantId+"-protected-payment";
+    const otherBefore = await withTenantDb(app,{tenantId:tenants[1]!,readOnly:true,repeatableRead:true},async db => projectDeviceBackup(tenants[1]!,await readTenantBackupSchema(db),db));
+    try {
+      await admin.query('INSERT INTO "Student" (id,"tenantId","firstName","lastName","studentNo","updatedAt") VALUES ($1,$2,\'Fixture\',\'Student\',\'protected\',now())',[studentId,tenantId]);
+      await admin.query('INSERT INTO "PaymentPlan" (id,"tenantId","studentId",title,"totalAmount","updatedAt") VALUES ($1,$2,$3,\'Protected fixture\',12500,now())',[paymentId,tenantId,studentId]);
+      await withTenantDb(app,{tenantId,readOnly:true,repeatableRead:true},async db => {
+        const current = await projectDeviceBackup(tenantId,await readTenantBackupSchema(db),db), archive = structuredClone(current);
+        archive.tables.Student = archive.tables.Student!.filter(entry => JSON.parse(entry.row).id !== studentId);
+        archive.tables.PaymentPlan = [];
+        const keys = await readDeviceRestoreForeignKeys(db);
+        expect(keys).toEqual(expect.arrayContaining([expect.objectContaining({table:"PaymentPlan",references:"Student",columns:["tenantId","studentId"],targetColumns:["tenantId","id"],validated:true})]));
+        const impact = deviceBackupImpact(archive,current,100,keys);
+        expect(impact.references?.conflicts).toContainEqual({table:"PaymentPlan",references:"Student",links:1});
+        expect(impact.blockers).toContain("DEVICE_RESTORE_REFERENCE_CONFLICT");
+        expect(impact.canApply).toBe(false);
+        expect(JSON.stringify(impact)).not.toMatch(/protected-student|protected-payment|12500/);
+        expect(await projectDeviceBackup(tenantId,current.schemaDigest,db)).toEqual(current);
+      });
+      expect(await withTenantDb(app,{tenantId:tenants[1]!,readOnly:true,repeatableRead:true},async db => projectDeviceBackup(tenants[1]!,await readTenantBackupSchema(db),db))).toEqual(otherBefore);
+    } finally {
+      await admin.query('DELETE FROM "PaymentPlan" WHERE id=$1 AND "tenantId"=$2',[paymentId,tenantId]);
+      await admin.query('DELETE FROM "Student" WHERE id=$1 AND "tenantId"=$2',[studentId,tenantId]);
+    }
+  });
+  it("checks real tenant-scoped invitation, outbox and template bindings without exposing secrets or changing state", async () => {
+    const tenantId = tenants[0]!, templateId = tenantId+"-domain-template", reportId = tenantId+"-domain-report";
+    try {
+      for (const tenant of tenants) {
+        await admin.query('INSERT INTO "Student" (id,"tenantId","firstName","lastName","studentNo","updatedAt") VALUES ($1,$2,\'Fixture\',\'Student\',\'domain\',now())',[tenant+"-domain-student",tenant]);
+        await admin.query('INSERT INTO "IdentityInvitation" (id,"tenantId","subjectType","subjectId",name,email,role,"tokenHash","expiresAt","updatedAt") VALUES ($1,$2,\'STUDENT\',$3,\'DO_NOT_READ_NAME\',\'private@example.test\',\'STUDENT\',$4,now()+interval \'1 day\',now())',[tenant+"-domain-invite",tenant,tenant+"-domain-student","DO_NOT_READ_TOKEN_"+tenant]);
+        await admin.query('INSERT INTO "SecretDeliveryOutbox" (id,"tenantId",purpose,"sourceId","sourceScope","tenantLifecycleVersion",status,attempts,"expiresAt","payloadEncrypted") SELECT $1,$2,\'IDENTITY_INVITATION\',$3,\'TENANT\',"lifecycleVersion",\'UNCERTAIN\',1,now()+interval \'1 day\',\'DO_NOT_READ_PAYLOAD\' FROM "Tenant" WHERE id=$2',[tenant+"-domain-outbox",tenant,tenant+"-domain-invite"]);
+      }
+      await admin.query('INSERT INTO "MessageTemplate" (id,"tenantId",name,body,"updatedAt") VALUES ($1,$2,\'Fixture template\',\'current content\',now())',[templateId,tenantId]);
+      await admin.query('INSERT INTO "SmsBatchDeliveryReport" (id,"tenantId","jobId","templateId","recipientCount","sentCount",status,"updatedAt") VALUES ($1,$2,$1,$3,1,1,\'completed\',now())',[reportId,tenantId,templateId]);
+      const otherBefore = await withTenantDb(app,{tenantId:tenants[1]!,readOnly:true,repeatableRead:true},async db => readDeviceDomainRows(db,tenants[1]!));
+      await withTenantDb(app,{tenantId,readOnly:true,repeatableRead:true},async db => {
+        const current = await projectDeviceBackup(tenantId,await readTenantBackupSchema(db),db), archive = structuredClone(current), metadata = await readDeviceDomainRows(db,tenantId);
+        expect(metadata.invitations).toEqual([{id:tenantId+"-domain-invite",subjectType:"STUDENT",subjectId:tenantId+"-domain-student",pending:true}]);
+        expect(metadata.outbox).toHaveLength(1);
+        expect(metadata.outbox[0]).toMatchObject({sourceId:tenantId+"-domain-invite",status:"UNCERTAIN",attempts:1,sourceScope:"TENANT"});
+        expect(JSON.stringify(metadata)).not.toMatch(/DO_NOT_READ|private@example/);
+        expect(JSON.stringify(metadata)).not.toContain(tenants[1]);
+        archive.tables.Student = archive.tables.Student!.filter(entry => JSON.parse(entry.row).id !== tenantId+"-domain-student");
+        const template = archive.tables.MessageTemplate!.find(entry => JSON.parse(entry.row).id === templateId)!;
+        template.row = JSON.stringify({...JSON.parse(template.row),body:"old content"});
+        const impact = deviceBackupImpact(archive,current,100,await readDeviceRestoreForeignKeys(db),metadata);
+        expect(impact.domainLinks?.conflicts).toEqual(expect.arrayContaining([{source:"IdentityInvitation",target:"Student",links:1},{source:"SmsBatchDeliveryReport",target:"MessageTemplateContent",links:1}]));
+        expect(impact.domainLinks?.pendingDeliveries).toBe(1);
+        expect(impact.blockers).toContain("DEVICE_RESTORE_DELIVERIES_UNRESOLVED");
+        expect(impact.canApply).toBe(false);
+        expect(JSON.stringify(impact)).not.toMatch(/domain-invite|domain-outbox|domain-student|DO_NOT_READ|private@example/);
+        expect(await readDeviceDomainRows(db,tenantId)).toEqual(metadata);
+        expect(await projectDeviceBackup(tenantId,current.schemaDigest,db)).toEqual(current);
+      });
+      expect(await withTenantDb(app,{tenantId:tenants[1]!,readOnly:true,repeatableRead:true},async db => readDeviceDomainRows(db,tenants[1]!))).toEqual(otherBefore);
+    } finally {
+      await admin.query('DELETE FROM "SmsBatchDeliveryReport" WHERE id=$1 AND "tenantId"=$2',[reportId,tenantId]);
+      await admin.query('DELETE FROM "MessageTemplate" WHERE id=$1 AND "tenantId"=$2',[templateId,tenantId]);
+      for (const tenant of tenants) {
+        await admin.query('DELETE FROM "SecretDeliveryOutbox" WHERE id=$1 AND "tenantId"=$2',[tenant+"-domain-outbox",tenant]);
+        await admin.query('DELETE FROM "IdentityInvitation" WHERE id=$1 AND "tenantId"=$2',[tenant+"-domain-invite",tenant]);
+        await admin.query('DELETE FROM "Student" WHERE id=$1 AND "tenantId"=$2',[tenant+"-domain-student",tenant]);
+      }
+    }
+  });
 });
