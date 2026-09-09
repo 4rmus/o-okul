@@ -1,9 +1,57 @@
-# Cihaz yedeğini uygulama ve worker yayın kapsamı
+# Cihaz yedeği ve geri yükleme — durum ve işletim özeti
 
-Tek yazıcı ana ajan; çalışma ağacı `/Users/arair/works/o-okul-device-existing-restore`.
-Amaç: kurum talebi ve MFA onayından, DB + dosya uygulamasına ve güvenli yeniden
-açılmaya kadar aynı kalıcı işlemi tamamlamak. Asıl kirli çalışma ağacı ve üretimdeki
-dna/demoo/system veri değişikliği kapsam dışıdır. Tam fresh-reset koruması değişmez.
+Cihaz yedeği ve geri yükleme için güncel durumun tek başvuru belgesi budur.
+Önceki planlar tarihçedir; içlerindeki eski engel ve sonraki iş listeleri güncel
+iş listesi olarak kullanılmaz. Yeni doğrulanmış sonuçlar bu belgeye tarih ve
+kaynaklarıyla eklenir.
+
+## Son doğrulanmış kayıtlar — 9 Eylül 2026
+
+| Kanıt sınıfı | Sonuç ve sınır |
+|---|---|
+| LOCAL_STATIC / LOCAL_TEST | `f56954f30`: ödeme–öğrenci bağlantısı ve davet/bildirim gizliliği için iki gerçek PostgreSQL testi eklendi. Dosyadaki 5 testin tamamı geçti, atlanan 0; API tip kontrolü başarılı. Geçici DB kaldırıldı, test VM'i kapatıldı. |
+| CI | `4a560e58` main birleştirmesinin [üç kontrolü başarılı](https://github.com/4rmus/o-okul/actions/runs/34356557283). Daha sonraki yerel `f56954f30` test commit'i için GitHub CI henüz çalıştırılmadı. |
+| STAGING | `2a16e43f` kaynağında iki sentetik kurumla gerçek tarayıcı/MFA, 89 kayıt ve 12 dosya geri yükleme, süreç kesintisinden kurtarma ve gerçek ClamAV reddi geçti; kontrol kurumu korundu. |
+| PRODUCTION | Kod/schema yayını ve yalnız boş `restore-pilot` kurumu için etkinleştirme tamamlandı. Bu, gerçek kurum verisinin canlıda geri yüklendiği anlamına gelmez. |
+| EXTERNAL_NOT_RUN / UNPROVEN | Gerçek kurum verisiyle canlı indirme/geri yükleme ve genel fresh-reset/purge bu kapanışın kapsamında değildir. Önizlemenin `canRestore=false` / `restoreVerified=false` alanları gerçek uygulama sonucunu ifade etmez; pilot erişimi ayrı alanlarla kontrol edilir. |
+
+Son salt-okunur sürüm kontrolü **2026-09-09 13:48:55 UTC** kaydına aittir:
+
+| Servis | Doğrulanan kaynak |
+|---|---|
+| Web | `255496edb30a00a3985537e10b9b430e52faba21` — kurum erişim düğmesinin yenilemede sabit kalması |
+| API ve özel geri yükleme işçisi | `f9826db24932ec5b89f1218957bb5eb2bf31a278` — kısıtlı API rolüyle temizleme önizlemesi |
+| Normal işçi ve kuyruk paneli | `2a16e43f595199d2d48f680694d43abcb0546767` |
+
+Bu kontrolde beş imaj kimliği değişmedi; health/readiness/login HTTP 200 döndü.
+Kaynakların main'e birleştirilmesi sırasında yeni deploy yapılmadı. Bu bölüm
+tarihli kanıt özetidir; belge düzenlemesi yeni bir canlı kontrol veya işlem değildir.
+
+Kanıt kaynakları: `artifacts/tenant-device-restore-release/result.json`,
+`staging-summary.json` ve `production/activation.json` aynı klasördeki pilot
+kayıtlarıdır. Son sürüm kontrolü `o-okul-main-sync-20260909` çalışma kopyasındaki
+`artifacts/local/main-sync-20260909/result.json`; yeni testlerin yerel kanıtı
+`artifacts/local/device-backup-reference-tests/result.json` içindedir. Yerel
+kanıt dosyaları GitHub CI veya genel production kabulü yerine kullanılmaz.
+
+## İşletimde korunacak bilgiler
+
+- İmza/PII anahtarları gelişigüzel değiştirilmez; eski arşivler için güvenilir açık
+  anahtar kayıtları korunur. 8 Eylül imza anahtarı kimliği
+  `197ee2fe0aeccb2d576a6c17b2f7532ffc7b6a8bc25fc0cc61155c10e4b93cfe`;
+  açık kurtarma kaydı `artifacts/tenant-device-backup-activation/signing-public.json`.
+  Bu kimlik yeni anahtara otomatik güven veya anahtar değiştirme onayı değildir.
+- Önizleme, geri yükleme talebi ve MFA ile onaylanan uygulama ayrı aşamalardır.
+  Yeni kuruma/gerçek veriye genişletme bu belgeden onay devralmaz; dna/demoo/system
+  üzerinde veri işlemi ve tam fresh-reset ayrı kapsamlardır.
+- Genel `Staging Deploy` iş akışının kayıtlı staging hedefi canlı kurulumla
+  çakıştığı için bağımsız test ortamı ayrı dizin, ağ, depo ve sentetik veriyle
+  çalıştırılmıştır. Yeni yayın/test öncesinde hedefler ve çalışan sürümler yeniden
+  okunur; eski ortam ve imaj bilgileriyle doğrudan işlem yapılmaz.
+
+Demo veri kurulumunun tekrar kullanılabilir tarifi
+[demo kabul senaryosunda](demo-kurum-veri-kurulum-plani.md) tutulur; bu geri yükleme
+pilotunun sonucu veya yeni canlı veri işlemi onayı değildir.
 
 ## Kaynak kapsamı ve kabul
 
@@ -88,4 +136,5 @@ LOCAL_STATIC ve LOCAL_RUNTIME_POSTGRES_MINIO_REDIS sonuçları ayrı kaydedilir.
 Yeni kaynağın tam CI, bağımsız staging HTTP/tarayıcı/ClamAV uygulaması, kontrollü
 restore pilotu ve production image/health zinciri kapanmadan canlı restore PASS
 denmez. Tarihsel önizleme yayını veya eski fresh-reset pilotu bu kabulün yerine
-geçmez. Güncel sonuçlar asıl çalışma ağacındaki üç kullanıcı planına işlenir.
+geçmez. Güncel sonuçlar bu belgenin tarihli özetine işlenir; eski planlara aynı
+durum kaydı tekrar kopyalanmaz.

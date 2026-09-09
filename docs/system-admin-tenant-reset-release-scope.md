@@ -1,5 +1,9 @@
 # Kurum lifecycle/reset kontrollü yayın paketi
 
+> Tarihsel kayıt: geçmiş durum ve iş listeleri yazıldıkları aşamaya aittir.
+> Cihaz yedeği/geri yüklemenin güncel kapsamı ve sonuçları
+> [tek yayın ve işletim özetinde](tenant-device-restore-release.md) tutulur.
+
 <!-- gate6o-current:start -->
 ## Güncel sonuç — Gate 6O / 2026-09-08
 
