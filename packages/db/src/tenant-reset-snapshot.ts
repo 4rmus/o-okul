@@ -1,5 +1,5 @@
 import { assertInstitutionResetRequest } from "./tenant-reset-request.js";
-import type { Queryable, TenantQueryable } from "./tenant-db.js";
+import { withTenantDb, type Queryable, type TenantQueryable } from "./tenant-db.js";
 import { assertResetCatalog, assertResetColumns, resetDigest, resetOwnerIds, resetOwnerMemberships, tenantResetCatalog, tenantResetTableNames, type ResetTables, type TenantResetTable } from "./tenant-reset-catalog.js";
 
 export interface TenantResetSnapshot { tenantId: string; lifecycleVersion: number; capturedAt: string; schemaDigest: string; tables: ResetTables; rawTables: Record<TenantResetTable, string[]>; migrationRows: string[]; objectOwners: { tenantIds: string[]; students: Array<{ id: string; tenantId: string }> }; dataDigest: string; }
@@ -83,11 +83,30 @@ export async function readResetSnapshot(client: Queryable, tenantId: string, ope
   const migrations = await client.query<{ row: string }>('SELECT to_jsonb(t)::text AS row FROM "_prisma_migrations" t ORDER BY migration_name COLLATE "C", id COLLATE "C"');
   const migrationRows = migrations.rows.map((row) => row.row).sort();
   if (!migrationRows.length || migrationRows.some((raw) => { const row = JSON.parse(raw); return row.finished_at == null && row.rolled_back_at == null; })) throw new Error("RESET_SCHEMA_UNVERIFIED");
+  return readResetRows(client, tenantId, resetDigest(migrationRows), migrationRows, operationId);
+}
+
+/** Counts-only preview is not a verified backup or an apply authorization. */
+export async function withResetPreviewSnapshot<T>(pool: TenantQueryable, tenantId: string, run: (snapshot: TenantResetSnapshot, client: Queryable) => Promise<T>): Promise<T> {
+  if (!tenantId.trim() || tenantId === "system") throw new Error("RESET_TARGET_INVALID");
+  return withTenantDb(pool, { tenantId, bypassRls: true, readOnly: true, repeatableRead: true }, async client => {
+    await client.query("SET LOCAL TIME ZONE 'UTC'");
+    const schemaDigest = resetDigest({ purpose: "RESET_PREVIEW_ONLY", schema: await readTenantBackupSchema(client) });
+    return run(await readResetRows(client, tenantId, schemaDigest, [], undefined, true), client);
+  });
+}
+
+async function readResetRows(client: Queryable, tenantId: string, schemaDigest: string, migrationRows: string[], operationId?: string, preview = false): Promise<TenantResetSnapshot> {
   const tables = {} as ResetTables;
   const rawTables = {} as Record<TenantResetTable, string[]>;
   for (const name of tenantResetTableNames) {
-    const predicate = tenantResetOwnershipPredicate(name);
-    const rows = await client.query<{ row: string }>(`SELECT (${name === "PlatformAccount" ? `jsonb_build_object('id', t."id", 'loginName', 'restore-dependency-' || md5(t."id"), 'loginNameNormalized', 'restore-dependency-' || md5(t."id"), 'email', NULL, 'emailNormalized', NULL, 'name', 'Restore dependency', 'passwordHash', '!NON_AUTHENTICATING_RESTORE_DEPENDENCY!', 'passwordHashVersion', 2, 'status', 'SUSPENDED', 'totpSecretEncrypted', NULL, 'totpEnabledAt', NULL, 'createdAt', '1970-01-01T00:00:00+00:00'::timestamptz, 'updatedAt', '1970-01-01T00:00:00+00:00'::timestamptz)` : "to_jsonb(t)"})::text AS row FROM "${name}" t WHERE ${predicate} ORDER BY ${name === "PlatformAccount" ? 't."id"' : 'to_jsonb(t)::text'} COLLATE "C"`, name === "PlatformSession" ? [] : [tenantId]);
+    // Platform sessions are never part of a tenant reset. Preview counts account
+    // dependencies through existing FKs without reading platform credentials.
+    if (preview && name === "PlatformSession") { rawTables[name] = []; tables[name] = []; continue; }
+    const accountReferences = preview && name === "PlatformAccount";
+    const relation = accountReferences ? `(SELECT "createdByPlatformAccountId" AS id FROM "LicenseTerm" WHERE "tenantId"=$1 AND "createdByPlatformAccountId" IS NOT NULL UNION SELECT "platformAccountId" AS id FROM "PlatformIdempotencyKey" WHERE "responseBody" #>> '{tenant,id}'=$1)` : `"${name}"`;
+    const predicate = accountReferences ? "true" : tenantResetOwnershipPredicate(name);
+    const rows = await client.query<{ row: string }>(`SELECT (${name === "PlatformAccount" ? `jsonb_build_object('id', t."id", 'loginName', 'restore-dependency-' || md5(t."id"), 'loginNameNormalized', 'restore-dependency-' || md5(t."id"), 'email', NULL, 'emailNormalized', NULL, 'name', 'Restore dependency', 'passwordHash', '!NON_AUTHENTICATING_RESTORE_DEPENDENCY!', 'passwordHashVersion', 2, 'status', 'SUSPENDED', 'totpSecretEncrypted', NULL, 'totpEnabledAt', NULL, 'createdAt', '1970-01-01T00:00:00+00:00'::timestamptz, 'updatedAt', '1970-01-01T00:00:00+00:00'::timestamptz)` : "to_jsonb(t)"})::text AS row FROM ${relation} t WHERE ${predicate} ORDER BY ${name === "PlatformAccount" ? 't."id"' : 'to_jsonb(t)::text'} COLLATE "C"`, name === "PlatformSession" ? [] : [tenantId]);
     rawTables[name] = rows.rows.map((row) => row.row).sort();
     tables[name] = rawTables[name].map((row) => JSON.parse(row));
   }
@@ -103,7 +122,6 @@ export async function readResetSnapshot(client: Queryable, tenantId: string, ope
   const objectOwnerStudents = await client.query<{ id: string; tenantId: string }>('SELECT "id", "tenantId" FROM "Student"');
   const objectOwners = { tenantIds: objectOwnerTenants.rows.map((row) => row.id), students: objectOwnerStudents.rows };
   const capturedAt = new Date().toISOString();
-  const schemaDigest = resetDigest(migrationRows);
   const snapshot = { tenantId, lifecycleVersion: Number(tenant.lifecycleVersion), capturedAt, schemaDigest, tables, rawTables, migrationRows, objectOwners, dataDigest: resetDataDigest(schemaDigest, rawTables, operationId) };
   return snapshot;
 }

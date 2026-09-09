@@ -209,4 +209,5 @@ jobs:
           pnpm --filter @o-okul/api exec vitest run --no-file-parallelism --reporter=verbose
           src/identity-invitation/employee-account-activation-store.postgres.test.ts
           src/student/student-license-concurrency.postgres.test.ts
+          src/tenant/tenant-reset-preview.postgres.test.ts
           src/operations/device-backup.postgres.test.ts
