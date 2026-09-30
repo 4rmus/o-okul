@@ -24,7 +24,39 @@
     --color-bg: var(--karne-app-bg);
     --color-danger: var(--karne-danger);
     --color-danger-subtle: var(--karne-app-danger-subtle);
-    /* Karne geometrisi Berrak radius/gölge değişiminden etkilenmez (G10'a kadar donmuş). */
+    /* Karne G10'a kadar donmuş: Almanac primitive renkleri, radius ve gölge burada sabittir.
+       Tema bağımsızdır; koyu temada da karne bu açık değerlerle çizilir (KARNE-ALMANAC-PINS). */
+    /* KARNE-ALMANAC-PINS BEGIN */
+    --color-paper: oklch(96.5% 0.012 220);
+    --color-paper-raised: oklch(98.5% 0.007 220);
+    --color-paper-muted: oklch(93% 0.018 220);
+    --color-ink: oklch(20% 0.025 235);
+    --color-ink-secondary: oklch(30% 0.025 235);
+    --color-ink-chart-soft: oklch(30% 0.025 235 / 18%);
+    --color-ink-muted: oklch(42% 0.025 235);
+    --color-rule: oklch(80% 0.020 225);
+    --color-rule-strong: oklch(66% 0.025 225);
+    --color-rule-faint: oklch(89% 0.014 225);
+    --color-accent: oklch(42% 0.150 230);
+    --color-accent-hover: oklch(36% 0.135 230);
+    --color-accent-strong: oklch(32% 0.120 230);
+    --color-accent-soft: oklch(92% 0.035 230);
+    --color-accent-secondary: oklch(44% 0.100 175);
+    --color-accent-chart-soft: oklch(42% 0.150 230 / 18%);
+    --color-accent-ink: oklch(98% 0.006 220);
+    --color-focus: oklch(48% 0.180 245);
+    --color-success-token: oklch(42% 0.120 155);
+    --color-success-soft-token: oklch(93% 0.025 155);
+    --color-warning-token: oklch(52% 0.120 80);
+    --color-warning-soft-token: oklch(94% 0.025 85);
+    --color-danger-token: oklch(48% 0.165 25);
+    --color-danger-soft-token: oklch(94% 0.030 25);
+    --color-overlay-token: oklch(18% 0.020 235 / 72%);
+    --color-shadow-soft: oklch(18% 0.020 235 / 10%);
+    --color-shadow-medium: oklch(18% 0.020 235 / 16%);
+    --color-shadow-strong: oklch(18% 0.020 235 / 28%);
+    --color-chart-grid: oklch(20% 0.025 235 / 12%);
+    /* KARNE-ALMANAC-PINS END */
     --radius-control: 4px;
     --radius-panel: 2px;
     --radius-dialog: 6px;

@@ -157,6 +157,7 @@ requireTokens("apps/web/app/layout.tsx", files.layout, [
 ]);
 forbidRegex("apps/web/app/layout.tsx", files.layout, /Source_Serif_4|font-source-serif/g, "serif display fontu");
 validateBerrakDarkTheme(files.tokens, files.darkTheme);
+validateKarnePins(files.tokens, read("apps/web/app/_styles/73-almanac-report.css"));
 
 if (!files.globals.startsWith('@import "../../../tokens.css";')) {
   failures.push("apps/web/app/globals.css tokens.css importu ilk satırda olmalı.");
@@ -546,14 +547,26 @@ function validateBerrakDarkTheme(tokensSource, darkSource) {
     return;
   }
   const reset = darkSource.slice(resetBegin, resetEnd);
-  for (const selector of [':root[data-theme="dark"] .next-karne-sheet {', "@media print {"]) {
-    if (!reset.includes(selector)) failures.push(`BERRAK-LIGHT-RESET beklenen seçiciyi içermiyor: ${selector}`);
-  }
+  if (!reset.includes("@media print {")) failures.push("BERRAK-LIGHT-RESET @media print bloğu içermeli.");
   const blocks = [...reset.matchAll(/\{([^{}]*)\}/g)].map((match) => parseCustomProperties(match[1]));
-  if (blocks.length !== 2) failures.push(`BERRAK-LIGHT-RESET iki blok içermeli: ${blocks.length}`);
+  if (blocks.length !== 1) failures.push(`BERRAK-LIGHT-RESET tek print bloğu içermeli: ${blocks.length}`);
   for (const block of blocks) {
     for (const [name, value] of lightColors) {
       if (block.get(name) !== value) failures.push(`BERRAK-LIGHT-RESET tokens.css değerinden sapıyor: ${name}`);
     }
+  }
+}
+
+// Karne G10'a kadar donmuştur: her primitive renk token'ı karne kapsamında sabitlenmelidir.
+function validateKarnePins(tokensSource, reportSource) {
+  const begin = reportSource.indexOf("/* KARNE-ALMANAC-PINS BEGIN */");
+  const end = reportSource.indexOf("/* KARNE-ALMANAC-PINS END */");
+  if (begin < 0 || end <= begin) {
+    failures.push("73-almanac-report.css KARNE-ALMANAC-PINS markerlarını içermeli.");
+    return;
+  }
+  const pins = parseCustomProperties(reportSource.slice(begin, end));
+  for (const name of parseCustomProperties(tokensSource).keys()) {
+    if (name.startsWith("--color-") && !pins.has(name)) failures.push(`KARNE-ALMANAC-PINS eksik token: ${name}`);
   }
 }

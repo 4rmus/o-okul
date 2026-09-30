@@ -18,7 +18,8 @@ Local PASS staging kanıtı değildir. Secret değerleri bu dosyaya yazılmaz; y
 |---|---|---|---|
 | G0 Plan ve karar kayıtları | `berrak/g0-plan-kararlar` | Tamam | 4rmus/o-okul#109 |
 | G1 Platform sağlık yüzeyleri | `berrak/g1-platform-saglik` | Tamam | 4rmus/o-okul#110 |
-| G2 Berrak token'ları | `berrak/g2-tokenlar` | Tamam | draft PR |
+| G2 Berrak token'ları | `berrak/g2-tokenlar` | Tamam | 4rmus/o-okul#111 |
+| G3 Runtime route manifest | `berrak/g3-route-manifest` | Tamam | draft PR |
 
 ## G0 — Plan ve karar kayıtları
 
@@ -100,6 +101,19 @@ düzeltildi (release env dosyası `umask 077` ile oluşturulur; token karakter k
 - Test boşlukları: redirect status'ü (`permanent: false`) için test yok; controller seviyesinde
   prod+token-yok testi yok (fonksiyon testi var).
 
+## Ortak CI notları
+
+- Gate B measurement baseline (`docs/measurement-baselines/gate-b-local-synthetic.json`) web kaynak
+  ağacının özetini taşır; her gate'te `pnpm web:measurement-baseline:collect` ile yenilenir. G1 CI ilk
+  denemede yalnız bu nedenle kırmızıydı (düzeltildi).
+- Karne golden'ı (`student-report-card-1024-*`) G10'a kadar değişmez. G2'den itibaren sayfa başlık
+  fontu değiştiği için karnenin sayfadaki y konumu alt-piksel kaydı (71.5625 → 72.078); karne alt
+  ağacının hesaplanmış stilleri G1 ile birebir aynıdır (369 öğe, fark yalnız html/body). Darwin farkı
+  %0.5 eşiğin altında (2276 px) kalırken Linux CI'da eşiği aşar (4669 px). Bu nedenle G2–G9 PR'larında
+  CI `karne:visual-contract:check` adımında kırmızıdır ve sonraki CI adımları koşmaz; bu gate'lerin
+  kanıtı `LOCAL_*` sınıfındadır. Karne ve Linux golden'ları G10'da yeniden üretilir (CI Linux çıktısı).
+- Linux golden'ları: docker yok. Final branch'te CI Linux Playwright çıktısından üretilecek.
+
 ## G2 — Berrak token'ları (§1)
 
 - Hedef: açık/koyu token değerleri, font sadeleştirme (`Source_Serif_4` kaldırıldı), radius/gölge,
@@ -147,3 +161,40 @@ Görsel kanıt: `artifacts/ui-ux-redesign/berrak/g2/before` (açık) ve `after` 
 
 Review (read-only): API/DB/yetki değişikliği yok. Token-storage istisnası yalnız tema tercihi;
 inline script CSP'de izinli (`script-src 'unsafe-inline'`). P0/P1 yok.
+
+## G3 — Runtime route manifest (UI-02, §3)
+
+- Hedef: nav, breadcrumb, komut paleti ve hub için tek kaynak.
+- Sahip olunan yollar: `apps/web/src/route-manifest.js` (+ `.d.ts`; `e2e-next/route-architecture-manifest.*`
+  buraya taşındı), `(app)/_shared/navigation.ts`, `(app)/app-shell.tsx` (palette aksiyonları),
+  `scripts/check-route-manifest.mjs`, `scripts/check-web-ux-baseline.mjs` (pin taşıma),
+  `scripts/almanac-foundation-digest.mjs` (dosya yolu), ADR-0005.
+- Yasak yollar: görsel CSS.
+- Kabul: `route-manifest:check`, `web:architecture:check`; görsel fark yok.
+
+### G3 notları
+
+- Manifest kayıtları: `href, label, group, iconName, capability, persona, hiddenFromRail, hub,
+  keywords, breadcrumbLabel, detailParent, requiresSms, operationEvidence`; `family/boundary`
+  `resolveRouteArchitecture(href)` ile aynı dosyadan gelir. `hub` değerleri §2 tablosundan (G5 kullanır).
+- `navigation.ts` yalnız `iconName → lucide` eşlemesi ve menü şekli üretir; dışa aktarımları aynı
+  kaldı. `staticBreadcrumbLabels`, `dynamicDetailParents` ve komut paleti aksiyonları manifestten.
+- `check-route-manifest.mjs`: manifest route'ları page envanterinde, tekil, hub kökleri geçerli,
+  palette hedefleri mevcut; `navigation.ts`/`app-shell.tsx` içinde elle href/breadcrumb/palette
+  girdisi yasak.
+- UX baseline'daki capability/persona pin'leri aynı anlamla manifest satırlarına taşındı
+  (`audit:read` yasağı dahil).
+- G2 tamamlayıcısı: karne kapsamında Almanac primitive renkleri sabitlendi (`KARNE-ALMANAC-PINS`,
+  check'e eklendi); koyu temada da karne donmuş açık değerlerle çizilir. Print sıfırlaması tek blok.
+- Ayrı iş olarak işaretlendi: `login-next` içindeki iki test `main`'de de kırmızı (CI alt kümesinde yok).
+
+### G3 kanıt
+
+| Sınıf | Sonuç |
+|---|---|
+| `LOCAL_STATIC` | PASS: `route-manifest:check`, `web:architecture:check`, `web:ux-baseline:check`, `web:design-tokens:check`, `web:measurement-baseline:check`, lint, web typecheck |
+| `LOCAL_TEST` | PASS: app-context, route-family smoke (90), a11y, visual QA 31/31 (golden değişmedi), `web:auth-contract:check` (17), `ui-ux-redesign:local-gates` |
+| `CI` | Beklenen: karne Linux alt-piksel nedeniyle kırmızı (ortak not) |
+
+Görsel kanıt: görsel fark yok (visual QA golden'ları güncellenmeden geçti); ek ekran görüntüsü gerekmedi.
+Review (read-only): yetki mantığı değişmedi; capability/persona alanları birebir taşındı ve pin'lendi. P0/P1 yok.

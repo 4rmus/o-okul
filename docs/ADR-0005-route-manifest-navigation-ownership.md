@@ -20,6 +20,12 @@ olur. Navigation, breadcrumb, komut paleti ve hub sekmeleri bu manifestten türe
 manifestle parity kontrolüne devam eder. Karar: DEC-20260930-01, plan:
 `docs/ui-ux-berrak-redesign-plan.md` §3.
 
+Uygulandı (G3): `apps/web/e2e-next/route-architecture-manifest.js` → `apps/web/src/route-manifest.js`
+(+ `.d.ts`). `navigation.ts` yalnız ikon eşlemesi ve menü şekli üretir; breadcrumb etiketleri,
+detay ebeveynleri ve komut paleti aksiyonları manifestten gelir. `pnpm route-manifest:check`
+manifest route'larını page envanterine, hub köklerine ve palette hedeflerine karşı doğrular ve
+elle tutulan kopyaların geri gelmesini engeller.
+
 ## Gerekçe
 
 İkinci bir route listesi oluşturmadan mevcut 81-route smoke yatırımı sahiplik ve mimari gate için

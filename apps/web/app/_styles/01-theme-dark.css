@@ -33,42 +33,10 @@
   --color-chart-grid: oklch(96% 0.005 265 / 14%);
 }
 
-/* Karne ve baskı daima açık kâğıttır: koyu temada açık token değerleri geri yüklenir.
+/* Baskı daima açık kâğıttır: koyu temada açık token değerleri geri yüklenir. Ekrandaki karne kendi
+   primitive renklerini 73-almanac-report.css içinde sabitler (KARNE-ALMANAC-PINS).
    BERRAK-LIGHT-RESET değerleri tokens.css ile birebir aynı olmalı (web:design-tokens:check). */
 /* BERRAK-LIGHT-RESET BEGIN */
-:root[data-theme="dark"] .next-karne-sheet {
-  color-scheme: light;
-  --color-paper: oklch(98.3% 0.003 250);
-  --color-paper-raised: oklch(99.9% 0.001 250);
-  --color-paper-muted: oklch(96.5% 0.005 250);
-  --color-ink: oklch(21% 0.020 265);
-  --color-ink-secondary: oklch(35% 0.025 263);
-  --color-ink-chart-soft: oklch(35% 0.025 263 / 18%);
-  --color-ink-muted: oklch(51% 0.030 260);
-  --color-rule: oklch(91% 0.008 255);
-  --color-rule-strong: oklch(83% 0.008 255);
-  --color-rule-faint: oklch(95% 0.008 255);
-  --color-accent: oklch(51% 0.230 277);
-  --color-accent-hover: oklch(46% 0.215 277);
-  --color-accent-strong: oklch(41% 0.190 277);
-  --color-accent-soft: oklch(96% 0.018 272);
-  --color-accent-secondary: oklch(60% 0.118 185);
-  --color-accent-chart-soft: oklch(51% 0.230 277 / 18%);
-  --color-accent-ink: oklch(99% 0.003 270);
-  --color-focus: oklch(51% 0.230 277);
-  --color-success-token: oklch(50% 0.130 150);
-  --color-success-soft-token: oklch(96.2% 0.044 157);
-  --color-warning-token: oklch(52% 0.140 49);
-  --color-warning-soft-token: oklch(96.2% 0.059 96);
-  --color-danger-token: oklch(52% 0.215 27);
-  --color-danger-soft-token: oklch(97.1% 0.013 17);
-  --color-overlay-token: oklch(21% 0.020 265 / 50%);
-  --color-shadow-soft: oklch(21% 0.020 265 / 6%);
-  --color-shadow-medium: oklch(21% 0.020 265 / 10%);
-  --color-shadow-strong: oklch(21% 0.020 265 / 18%);
-  --color-chart-grid: oklch(21% 0.020 265 / 10%);
-}
-
 @media print {
   :root[data-theme="dark"] {
     color-scheme: light;

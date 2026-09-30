@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { AxeBuilder } from "@axe-core/playwright";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { expectNoHorizontalOverflow } from "./helpers/horizontal-overflow.js";
-import { resolveRouteArchitecture, type RouteArchitecture } from "./route-architecture-manifest.js";
+import { resolveRouteArchitecture, type RouteArchitecture } from "../src/route-manifest.js";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const appDirectory = fileURLToPath(new URL("../app", import.meta.url));

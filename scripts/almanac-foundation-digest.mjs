@@ -13,8 +13,8 @@ export const almanacFoundationSourceRoots = [
   "packages/ui/src",
 ];
 export const almanacFoundationRequiredFiles = [
-  "apps/web/e2e-next/route-architecture-manifest.js",
-  "apps/web/e2e-next/route-architecture-manifest.d.ts",
+  "apps/web/src/route-manifest.js",
+  "apps/web/src/route-manifest.d.ts",
   "apps/web/e2e-next/ui-route-family-smoke-next.spec.ts",
   "apps/web/instrumentation-client.ts",
   "apps/web/instrumentation.ts",

@@ -20,6 +20,7 @@ import {
   hasSubjectPortalAccess,
   hasSystemAccess,
 } from "./_shared/access.js";
+import { commandActions } from "../../src/route-manifest.js";
 import { dynamicDetailParents, institutionNavGroups, rolePortalItems, rolePortalNavGroups, staticBreadcrumbLabels, systemNavGroups } from "./_shared/navigation.js";
 const allNavigationItems = [
   ...systemNavGroups.flatMap((group) => group.items),
@@ -1072,21 +1073,15 @@ function buildCommandItems(
     ...systemGroups.flatMap((group) => group.items.map((item) => commandItem(item.href, item.label, group.label))),
     ...portalGroups.flatMap((group) => group.items.map((item) => commandItem(item.href, item.label, group.label))),
   ];
-  const actionItems = hasInstitutionAccess(roles)
-    ? [
-        hasCapabilityForRoles(roles, "setup:manage") ? commandItem("/kurum/kurulum", "Yeni dönem açılışı", "İş akışı") : null,
-        hasCapabilityForRoles(roles, "academic:manage") ? commandItem("/kurum/raporlar", "Sınav sonrası kapanış", "İş akışı") : null,
-        hasCapabilityForRoles(roles, "class:manage") ? commandItem("/kurum/kampusler?new=1", "Kampüs ekle", "Hızlı işlem") : null,
-        hasCapabilityForRoles(roles, "class:manage") ? commandItem("/kurum/seviyeler?new=1", "Seviye ekle", "Hızlı işlem") : null,
-        hasCapabilityForRoles(roles, "class:manage") ? commandItem("/kurum/siniflar?new=1", "Sınıf ekle", "Hızlı işlem") : null,
-        hasCapabilityForRoles(roles, "academic:manage") ? commandItem("/kurum/dersler?new=1", "Ders ekle", "Hızlı işlem") : null,
-        hasCapabilityForRoles(roles, "staff:manage") ? commandItem("/kurum/ogretmenler?new=1", "Öğretmen ekle", "Hızlı işlem") : null,
-        hasCapabilityForRoles(roles, "student:manage") ? commandItem("/kurum/ogrenciler?new=1", "Öğrenci ekle", "Hızlı işlem") : null,
-      ].filter((item): item is CommandPaletteItem => Boolean(item))
-    : [];
-  const systemActions = hasSystemAccess(roles) ? [commandItem("/sistem/kurumlar", "Kurum oluştur", "Hızlı işlem")] : [];
+  const actionItems = commandActions
+    .filter((action) =>
+      action.scope === "system"
+        ? hasSystemAccess(roles)
+        : hasInstitutionAccess(roles) && (!action.capability || hasCapabilityForRoles(roles, action.capability)),
+    )
+    .map((action) => commandItem(action.href, action.label, action.group));
 
-  return dedupeCommandItems([...navigationItems, ...actionItems, ...systemActions]);
+  return dedupeCommandItems([...navigationItems, ...actionItems]);
 }
 
 function canUseEntitySearch(roles: readonly string[]) {
