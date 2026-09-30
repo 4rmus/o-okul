@@ -6,6 +6,7 @@ import request from "supertest";
 import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { AnswerKeyRecord, ExamParticipantRecord, ExamRecord } from "@o-okul/shared-types";
+import { examWorkspaceProgressStoreToken, type ExamWorkspaceProgressStore } from "./exam-workspace-progress-store.js";
 import { AppModule } from "../app.module.js";
 import { AnswerKeyExcelImportService } from "./answer-key-excel-import.service.js";
 import {
@@ -30,12 +31,21 @@ describe("ExamController", () => {
   let repository: FakeExamRepository;
   let participants: FakeExamParticipantRepository;
   let answerKeys: FakeAnswerKeyRepository;
+  const workspaceProgressCalls: Array<{ examId: string; tenantId: string }> = [];
+  const workspaceProgress: ExamWorkspaceProgressStore = {
+    async load(tenantId, examId) {
+      workspaceProgressCalls.push({ examId, tenantId });
+      return { approvedLayout: false, openQuarantineCount: 0, matchedCount: 0, evaluatedCount: 0, readyReport: false };
+    },
+  };
 
   beforeAll(async () => {
     repository = new FakeExamRepository();
     participants = new FakeExamParticipantRepository();
     answerKeys = new FakeAnswerKeyRepository();
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(examWorkspaceProgressStoreToken)
+      .useValue(workspaceProgress)
       .overrideProvider(examRepositoryToken)
       .useValue(repository)
       .overrideProvider(examParticipantRepositoryToken)
@@ -495,8 +505,14 @@ describe("ExamController", () => {
         { key: "PARTICIPANTS", status: "READY" },
         { key: "PUBLISHED", status: "READY" },
         { key: "OPTICAL_ENTRY", status: "READY" },
+        { key: "OPTICAL_LAYOUT", status: "BLOCKED", blocker: "OPTICAL_LAYOUT_MISSING" },
+        { key: "IMPORT", status: "BLOCKED", blocker: "IMPORT_MISSING" },
+        { key: "REPORT", status: "BLOCKED", blocker: "REPORT_MISSING" },
       ]),
+      progress: { openQuarantineCount: 0, matchedCount: 0, evaluatedCount: 0 },
     });
+    expect(response.body.readiness).toHaveLength(10);
+    expect(workspaceProgressCalls.at(-1)).toEqual({ examId: created.body.id, tenantId: "tenant-a" });
     const serialized = JSON.stringify(response.body);
     expect(serialized).not.toContain("student-a");
     expect(serialized).not.toContain("PII-42");

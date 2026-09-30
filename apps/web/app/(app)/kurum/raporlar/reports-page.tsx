@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
   Alert,
@@ -40,6 +40,7 @@ import {
 } from "@o-okul/shared-types";
 import { Download, Eye, RefreshCw } from "lucide-react";
 import { KarneSheet } from "../../_shared/karne-sheet.js";
+import { reportWorkspaceHref } from "../sinavlar/exam-workspace-routes.js";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError, apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, withQueryParams } from "../../../../src/api-client.js";
 import { firstFormError, reportQueryFormSchema } from "../../../../src/form-validation.js";
@@ -104,11 +105,14 @@ const reportWorkspaceTabs: Array<{ id: ReportWorkspaceTab; label: string }> = [
 
 const defaultReportWorkspaceTab: ReportWorkspaceTab = "overview";
 
-export function ReportsPage() {
+// Route modu (Berrak §4): /kurum/sinavlar/[examId]/rapor/{genel,ogrenciler,karne,ciktilar}. Sınav ve sekme
+// route'tan gelir; /kurum/raporlar sınavlar arası dizin olarak eski URL state ile çalışır.
+export function ReportsPage({ routeExamId, routeTab }: { routeExamId?: string; routeTab?: ReportWorkspaceTab } = {}) {
   const { auth } = useAuth();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const searchParamsKey = searchParams.toString();
-  const [examId, setExamId] = useState(() => searchParams.get("examId") ?? "");
+  const [examId, setExamId] = useState(() => routeExamId ?? searchParams.get("examId") ?? "");
   const [loadedExamId, setLoadedExamId] = useState("");
   const [filters, setFilters] = useState(emptyFilters);
   const [reportData, setReportData] = useState<ReportData | null>(null);
@@ -117,7 +121,7 @@ export function ReportsPage() {
   const [error, setError] = useState("");
   const [queueMessage, setQueueMessage] = useState("");
   const [reportJobState, setReportJobState] = useState<ReportJobState>("idle");
-  const [activeTab, setActiveTab] = useState<ReportWorkspaceTab>(() => readReportWorkspaceTab(searchParams));
+  const [activeTab, setActiveTab] = useState<ReportWorkspaceTab>(() => routeTab ?? readReportWorkspaceTab(searchParams));
   const examIdRef = useRef(examId);
   const selectionGeneration = useRef(0);
   const reportDataAbortController = useRef<AbortController | null>(null);
@@ -235,6 +239,10 @@ export function ReportsPage() {
   }, [scoreType, scoreTypeOptions]);
 
   useEffect(() => {
+    if (routeExamId) {
+      if (routeTab) setActiveTab((current) => (current === routeTab ? current : routeTab));
+      return;
+    }
     const nextSearchParams = new URLSearchParams(window.location.search);
     const nextTab = readReportWorkspaceTab(nextSearchParams);
     const nextExamId = nextSearchParams.get("examId") ?? "";
@@ -251,15 +259,23 @@ export function ReportsPage() {
       setQueueMessage("");
       setReportJobState("idle");
     }
-  }, [searchParamsKey]);
+  }, [routeExamId, routeTab, searchParamsKey]);
 
   function selectReportTab(tab: ReportWorkspaceTab) {
     setActiveTab(tab);
+    if (routeExamId && examId) {
+      router.push(`${reportWorkspaceHref(examId, tab)}${window.location.search}`);
+      return;
+    }
     writeWorkspaceTabToUrl(tab, defaultReportWorkspaceTab, examId);
   }
 
   function selectReportExam(nextExamId: string) {
     if (nextExamId === examId) return;
+    if (routeExamId && nextExamId) {
+      router.push(reportWorkspaceHref(nextExamId, defaultReportWorkspaceTab));
+      return;
+    }
 
     advanceSelectionGeneration();
     examIdRef.current = nextExamId;

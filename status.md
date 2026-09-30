@@ -139,8 +139,8 @@ ortam ve tarih içeren kalıcı evidence ile yükseltilir.
 - **Güvenlik:** Route `academic:manage` exact capability, tenant bağlamı ve açık admin rol/persona
   sınırını birlikte uygular. Başka tenant 404 alır; öğretmen, öğrenci, veli, sistem, role-preview ve
   kampüs kapsamlı çalışan reddedilir. Response öğrenci/katılımcı kimliği taşımaz.
-- **Rollback:** `web.exam-workspace-v2` kapalı veya rollout endpoint'i hatalıysa workspace API hiç
-  çağrılmaz ve aynı `examId` ile legacy sınav görünümüne dönülür. Compose yalnız server-side rollout
+- **Rollback:** (Tarihçe) `web.exam-workspace-v2` Berrak G6'da ADR-0008 cutover ile emekli oldu; çalışma
+  alanı kanoniktir ve rollback önceki image'a dönüşle yapılır. Compose yalnız server-side rollout
   environment/JSON değerlerini API'ye geçirir; istemciye allowlist veya public env verilmez.
 - **Kapsam sınırı:** Gerçek tenant aktivasyonu yapılmadı. Önceden var olan kampüs kapsamlı rapor
   erişim borcu bu salt okunur dilimde değiştirilmedi; kampüs kapsamlı pilot veya Gate D açılmadan önce

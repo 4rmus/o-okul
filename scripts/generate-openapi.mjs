@@ -2238,9 +2238,31 @@ const requiredOperationContracts = [
       { path: ["responseData", "participantSummary", "registered"], minimum: 0 },
       { path: ["responseData", "participantSummary", "attended"], minimum: 0 },
       { path: ["responseData", "participantSummary", "absent"], minimum: 0 },
-      { path: ["responseData", "readiness", "items", "key"], enum: ["EXAM", "ANSWER_KEY", "PARTICIPANTS", "PUBLISHED", "OPTICAL_ENTRY"] },
+      {
+        path: ["responseData", "readiness", "items", "key"],
+        enum: ["EXAM", "ANSWER_KEY", "PARTICIPANTS", "PUBLISHED", "OPTICAL_ENTRY", "OPTICAL_LAYOUT", "IMPORT", "MATCHING", "EVALUATION", "REPORT"],
+      },
       { path: ["responseData", "readiness", "items", "status"], enum: ["READY", "BLOCKED"] },
-      { path: ["responseData", "nextAction"], enum: ["ADD_ANSWER_KEY", "ADD_PARTICIPANTS", "PUBLISH_EXAM", "OPEN_OPTICAL"] },
+      {
+        path: ["responseData", "readiness", "items", "blocker"],
+        enum: [
+          "ANSWER_KEY_MISSING",
+          "PARTICIPANTS_MISSING",
+          "EXAM_NOT_PUBLISHED",
+          "OPTICAL_LAYOUT_MISSING",
+          "IMPORT_MISSING",
+          "UNMATCHED_ROWS",
+          "EVALUATION_PENDING",
+          "REPORT_MISSING",
+        ],
+      },
+      {
+        path: ["responseData", "nextAction"],
+        enum: ["ADD_ANSWER_KEY", "ADD_PARTICIPANTS", "PUBLISH_EXAM", "OPEN_OPTICAL", "UPLOAD_OPTICAL", "RESOLVE_UNMATCHED", "WAIT_EVALUATION", "GENERATE_REPORT", "OPEN_REPORT"],
+      },
+      { path: ["responseData", "progress", "openQuarantineCount"], minimum: 0 },
+      { path: ["responseData", "progress", "matchedCount"], minimum: 0 },
+      { path: ["responseData", "progress", "evaluatedCount"], minimum: 0 },
     ],
   },
   {

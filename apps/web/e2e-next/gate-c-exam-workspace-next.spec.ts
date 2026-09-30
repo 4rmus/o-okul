@@ -10,7 +10,7 @@ const requiredViewports = [
   { width: 1440, height: 900 },
 ] as const;
 
-test("Gate C internal tenant Shell v2 ve salt okunur sınav paritesini beş viewport'ta gösterir", async ({ page }) => {
+test("Gate C sınav çalışma alanı sunucu hazırlığını 8 adımlı Stepper ile beş viewport'ta gösterir", async ({ page }) => {
   const evidence = await installGateCApi(page, "enabled");
 
   for (const viewport of requiredViewports) {
@@ -20,20 +20,19 @@ test("Gate C internal tenant Shell v2 ve salt okunur sınav paritesini beş view
     await expect(page.locator(".next-app-shell")).toHaveAttribute("data-shell-version", "v3");
     await expect(page.locator(".next-sidebar-group-toggle").filter({ hasText: "Sınav" })).toHaveCount(1);
     await expect(page.getByRole("heading", { level: 1, name: "Gate C Denemesi" })).toBeVisible();
-    const workspace = page.getByRole("region", { name: "Salt okunur sınav çalışma alanı" });
-    await expect(workspace.getByText("90 soru", { exact: false })).toBeVisible();
-    await expect(workspace.getByText("21", { exact: true }).first()).toBeVisible();
-    await expect(workspace.getByText("Optik akışına geçiş", { exact: true })).toBeVisible();
-    await expect(workspace.getByText("Hazır", { exact: true })).toHaveCount(5);
-    await expect(workspace.getByRole("button")).toHaveCount(0);
-    await expect(workspace.getByRole("link", { name: "Optik işlemlerine geç" })).toHaveAttribute(
-      "href",
-      `/kurum/optik?examId=${examId}`,
-    );
-    await expect(workspace.getByRole("link", { name: "Rapor görünümünü aç" })).toHaveAttribute(
-      "href",
-      `/kurum/raporlar?examId=${examId}`,
-    );
+    const overview = page.getByRole("region", { name: "Sınav çalışma alanı özeti" });
+    await expect(overview.getByText("90 soru", { exact: false })).toBeVisible();
+    await expect(overview.getByText("21", { exact: true }).first()).toBeVisible();
+    await expect(overview.getByRole("button")).toHaveCount(0);
+    const steps = page.getByRole("navigation", { name: "Sınav adımları" });
+    await expect(steps.getByRole("listitem")).toHaveCount(8);
+    await expect(steps.getByText("Tamam", { exact: true })).toHaveCount(3);
+    await expect(steps.getByText("Sıradaki", { exact: true })).toHaveCount(1);
+    await expect(steps.getByRole("link", { name: /Sınav bilgisi/ })).toHaveAttribute("aria-current", "page");
+    await expect(steps.getByRole("link", { name: /Optik düzen/ })).toHaveAttribute("href", `/kurum/sinavlar/${examId}/optik/duzen`);
+    await expect(steps.getByRole("link", { name: /Rapor/ })).toHaveAttribute("href", `/kurum/sinavlar/${examId}/rapor/genel`);
+    const nextStep = page.getByRole("group", { name: "Sonraki önerilen iş" });
+    await expect(nextStep.getByRole("link", { name: "Optik düzeni onayla" })).toHaveAttribute("href", `/kurum/sinavlar/${examId}/optik/duzen`);
   }
 
   expect(evidence.workspaceRequests).toBeGreaterThan(0);
@@ -41,23 +40,19 @@ test("Gate C internal tenant Shell v2 ve salt okunur sınav paritesini beş view
   expect(evidence.unknownRequests).toEqual([]);
 });
 
-for (const mode of ["disabled", "error", "malformed"] as const) {
-  test(`Gate C ${mode} rollout sonucunda workspace çağırmadan kanonik sınav listesine döner`, async ({ page }) => {
+// web.exam-workspace-v2 ADR-0008 cutover ile emekli: çalışma alanı kanonik. Sunucu hatası veya bozuk yanıt
+// güvenli hata ekranında kalır; client hazırlık tahmini ve mutasyon yapılmaz.
+for (const mode of ["error", "malformed"] as const) {
+  test(`Gate C workspace ${mode} yanıtında güvenli hata gösterir ve mutasyon yapmaz`, async ({ page }) => {
     const evidence = await installGateCApi(page, mode);
-    await page.addInitScript(() => {
-      window.localStorage.setItem("web.exam-workspace-v2", "true");
-    });
 
-    await page.goto(`/kurum/sinavlar/${examId}?web.exam-workspace-v2=true`, {
-      waitUntil: "domcontentloaded",
-    });
+    await page.goto(`/kurum/sinavlar/${examId}`, { waitUntil: "domcontentloaded" });
 
-    await expect(page).toHaveURL((url) =>
-      url.pathname === "/kurum/sinavlar" && url.searchParams.get("examId") === examId,
-    );
-    await expect(page.locator(".next-app-shell")).toHaveAttribute("data-shell-version", "v3");
-    await expect(page.getByRole("region", { name: "Sınav katılımcıları" })).toContainText("Gate C Denemesi");
-    expect(evidence.workspaceRequests).toBe(0);
+    await expect(page.getByRole("region", { name: "Sınav çalışma alanı hatası" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Sınav listesine dön" })).toHaveAttribute("href", `/kurum/sinavlar?examId=${examId}`);
+    await expect(page.getByRole("navigation", { name: "Sınav adımları" })).toHaveCount(0);
+    await expect(page.getByText("Sınav hazırlık durumu şu an alınamadı", { exact: false })).toBeVisible();
+    expect(evidence.workspaceRequests).toBeGreaterThan(0);
     expect(evidence.mutationRequests).toEqual([]);
     expect(evidence.unknownRequests).toEqual([]);
   });
@@ -74,9 +69,16 @@ for (const sessionCase of [
     });
     await page.goto(`/kurum/sinavlar?examId=${examId}`, { waitUntil: "domcontentloaded" });
 
-    await expect(page.getByRole("link", { name: "Salt okunur çalışma alanını aç" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Sınav çalışma alanını aç" })).toHaveCount(0);
     await page.goto(`/kurum/sinavlar/${examId}`, { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(`${appOrigin}/kurum`);
+    // Alt route'lar önceki /kurum/optik ile aynı erişim kuralını izler (yeni kapsam açılmaz); çalışma alanı
+    // çerçevesi ve workspace API'si bu roller için açılmaz.
+    await page.goto("/kurum/optik", { waitUntil: "domcontentloaded" });
+    const legacyOpticalAllowed = new URL(page.url()).pathname === "/kurum/optik";
+    await page.goto(`/kurum/sinavlar/${examId}/optik/duzen`, { waitUntil: "domcontentloaded" });
+    expect(new URL(page.url()).pathname === `/kurum/sinavlar/${examId}/optik/duzen`).toBe(legacyOpticalAllowed);
+    await expect(page.getByRole("navigation", { name: "Sınav adımları" })).toHaveCount(0);
     expect(evidence.workspaceRequests).toBe(0);
     expect(evidence.mutationRequests).toEqual([]);
   });
@@ -97,7 +99,7 @@ test("Gate C personasız tek-rol legacy admin için ortak workspace kuralını k
 
 async function installGateCApi(
   page: Page,
-  mode: "enabled" | "disabled" | "error" | "malformed",
+  mode: "enabled" | "error" | "malformed",
   sessionOverride: Partial<typeof authFixture.session> = {},
 ) {
   const auth = {
@@ -128,23 +130,14 @@ async function installGateCApi(
       return;
     }
     if (pathName === "/me/feature-rollouts") {
-      if (mode === "error") {
-        await fulfillData(route, { code: "ROLLOUT_UNAVAILABLE" }, 500);
-      } else if (mode === "malformed") {
-        await fulfillData(route, {
-          enabledFeatureKeys: ["web.exam-workspace-v2", 42],
-          tenantId: "spoof",
-        });
-      } else {
-        await fulfillData(route, {
-          enabledFeatureKeys: mode === "enabled" ? ["web.exam-workspace-v2"] : [],
-        });
-      }
+      await fulfillData(route, { enabledFeatureKeys: [] });
       return;
     }
     if (pathName === `/exams/${examId}/workspace`) {
       evidence.workspaceRequests += 1;
-      await fulfillData(route, workspaceFixture);
+      if (mode === "error") await fulfillData(route, { code: "WORKSPACE_UNAVAILABLE" }, 500);
+      else if (mode === "malformed") await fulfillData(route, { exam: workspaceFixture.exam, readiness: "spoof", tenantId: "spoof" });
+      else await fulfillData(route, workspaceFixture);
       return;
     }
     if (pathName === "/me/profile") {
@@ -255,8 +248,14 @@ const workspaceFixture = {
     { key: "PARTICIPANTS", status: "READY" },
     { key: "PUBLISHED", status: "READY" },
     { key: "OPTICAL_ENTRY", status: "READY" },
+    { key: "OPTICAL_LAYOUT", status: "BLOCKED", blocker: "OPTICAL_LAYOUT_MISSING" },
+    { key: "IMPORT", status: "BLOCKED", blocker: "IMPORT_MISSING" },
+    { key: "MATCHING", status: "BLOCKED", blocker: "IMPORT_MISSING" },
+    { key: "EVALUATION", status: "BLOCKED", blocker: "IMPORT_MISSING" },
+    { key: "REPORT", status: "BLOCKED", blocker: "REPORT_MISSING" },
   ],
   nextAction: "OPEN_OPTICAL",
+  progress: { openQuarantineCount: 0, matchedCount: 0, evaluatedCount: 0 },
 };
 
 const otherExamFixture = {

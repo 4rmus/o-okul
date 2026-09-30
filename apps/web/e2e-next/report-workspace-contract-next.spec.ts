@@ -123,7 +123,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
   });
 
   test("popstate ile sınav değişince bekleyen genel rapor GET sonucu eski bağlamı geri getirmez", async ({ page }) => {
-    await openWithReportMocks(page, "/kurum/raporlar?examId=exam-report-ready", { height: 960, width: 1440 });
+    await openLegacyReportDirectory(page, "exam-report-ready", { height: 960, width: 1440 });
     await page.evaluate(() => {
       window.history.pushState(window.history.state, "", "/kurum/raporlar?examId=exam-report-general");
       window.history.back();
@@ -163,7 +163,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
   });
 
   test("geç gelen öğrenci raporu yeni sınavın snapshot bağlamına yazılmaz", async ({ page }) => {
-    await openWithReportMocks(page, "/kurum/raporlar?examId=exam-report-ready", { height: 960, width: 1440 });
+    await openLegacyReportDirectory(page, "exam-report-ready", { height: 960, width: 1440 });
     await page.getByRole("button", { name: "Raporu getir" }).click();
     await expect(page.getByRole("region", { name: "Rapor iş akışı" })).toContainText("LGS Rapor Denemesi");
     await expect(page.getByRole("button", { name: "Raporu getir" })).toBeEnabled();
@@ -216,11 +216,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
   });
 
   test("popstate ile sınav değişince bekleyen öğrenci raporu eski bağlama yazılmaz", async ({ page }) => {
-    await openWithReportMocks(
-      page,
-      "/kurum/raporlar?examId=exam-report-ready",
-      { height: 960, width: 1440 },
-    );
+    await openLegacyReportDirectory(page, "exam-report-ready", { height: 960, width: 1440 });
     const examSelect = page.getByRole("combobox", { name: "Sınav" });
     await expect(examSelect).toHaveValue("exam-report-ready");
     await page.evaluate(() => {
@@ -293,7 +289,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     const jobStatusRequests = trackApiRequests(page, (url, method) =>
       method === "GET" && url.pathname.endsWith("/reports/generation-jobs/job-report-a"),
     );
-    await openWithReportMocks(page, "/kurum/raporlar?examId=exam-report-ready", { height: 960, width: 1440 });
+    await openLegacyReportDirectory(page, "exam-report-ready", { height: 960, width: 1440 });
     await page.evaluate(() => {
       window.history.pushState(window.history.state, "", "/kurum/raporlar?examId=exam-report-general");
       window.history.back();
@@ -345,7 +341,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     const readySnapshotRequests = trackApiRequests(page, (url, method) =>
       method === "GET" && url.pathname === "/api/v1/exams/exam-report-ready/reports/snapshots",
     );
-    await openWithReportMocks(page, "/kurum/raporlar?examId=exam-report-ready", { height: 960, width: 1440 });
+    await openLegacyReportDirectory(page, "exam-report-ready", { height: 960, width: 1440 });
     await page.evaluate(() => {
       History.prototype.replaceState.call(
         window.history,
@@ -767,6 +763,15 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await expectNoClippedVisibleText(page, "report-workspace-ready-karne-mobile");
   });
 });
+
+// Berrak §4: ?examId= bağlantısı sunucuda sınav çalışma alanına yönlenir. Eski rapor dizininin URL-state
+// yarışları sayfa içi history ile kurulur (Next pushState/replaceState senkronu sunucuya gitmez, yönlendirme yok).
+async function openLegacyReportDirectory(page: Page, examId: string, viewport: { height: number; width: number }) {
+  await openWithReportMocks(page, "/kurum/raporlar", viewport);
+  await page.evaluate((id) => window.history.replaceState(window.history.state, "", `/kurum/raporlar?examId=${id}`), examId);
+  await expect(page.getByRole("combobox", { name: "Sınav" })).toHaveValue(examId);
+  await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+}
 
 async function openWithReportMocks(page: Page, pathName: string, viewport: { height: number; width: number }) {
   await page.setViewportSize(viewport);

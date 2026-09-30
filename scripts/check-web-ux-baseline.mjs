@@ -1126,16 +1126,16 @@ requireNoTokens("apps/web/app/(app)/kurum/_shared/import-template-panel.tsx", [
 ]);
 
 requireTokens("apps/web/e2e-next/optik-workspace-contract-next.spec.ts", [
-  "aktif sınav ve adım URL state ile korunur",
+  "aktif sınav ve adım sınav çalışma alanı URL'iyle korunur",
   "optik düzenleri ana bilgileri gösterir, destek ayrıntılarını kapalı tutar",
   "OPTIK_129",
   "YANIT",
   "OPTIK_840_LGS",
   'openWithOptikMocks(page, "/kurum/optik?examId=exam-optik&tab=upload")',
-  'searchParams.get("examId")).toBe("exam-optik")',
-  'searchParams.get("tab")).toBe("upload")',
-  'searchParams.get("tab")).toBe("quarantine")',
-  'searchParams.get("tab")).toBeNull()',
+  'url.pathname === "/kurum/sinavlar/exam-optik/optik/yukleme"',
+  'url.pathname === "/kurum/sinavlar/exam-optik/optik/eslesmeyenler"',
+  'url.pathname === "/kurum/sinavlar/exam-optik/optik/duzen"',
+  'page.goto("/kurum/optik?examId=exam-optik&tab=quarantine")',
   'page.setViewportSize({ height: 844, width: 390 })',
   'getByRole("tab", { name: "1. Optik düzen" })',
   'getByRole("tab", { name: "2. Optik yükleme" })',
@@ -1169,7 +1169,7 @@ requireTokens("apps/web/e2e-next/optik-workspace-contract-next.spec.ts", [
   'getByRole("region", { name: "Raporlara geçiş" })',
   'reportHandoff.locator(".next-report-status-grid")).toHaveCount(0)',
   'getByRole("link", { name: "Rapor çalışma alanına geç" })',
-  '"/kurum/raporlar?examId=exam-optik"',
+  '"/kurum/sinavlar/exam-optik/rapor/genel"',
   'getByRole("table", { name: "Hazır optik raporlar" })).toHaveCount(0)',
   'getByRole("table", { name: "Optik katılımcı sonuçları" })).toHaveCount(0)',
   "expectNoHorizontalOverflow",
@@ -3732,7 +3732,7 @@ requireTokens("apps/web/app/(app)/kurum/optik/parser-config-page.tsx", [
   'title="Raporlara geçiş"',
   'description={`${reportMessage} Analiz, öğrenci sonuçları ve çıktılar Raporlar çalışma alanında yönetilir.`}',
   '<MetricGrid aria-label="Rapor hazırlama durumu" role="region">',
-  'href={`/kurum/raporlar?examId=${encodeURIComponent(examId)}`}',
+  "href={reportWorkspaceHref(examId)}",
   "Rapor çalışma alanına geç",
   'mobileLabel: "Çöz"',
   'mobilePriority: "primary"',
@@ -5213,8 +5213,8 @@ function validateRouteFamilySmokeContract() {
   const manifestRoutes = [...manifestSource.matchAll(/^\s*route\("([^"]+)"/gm)].map((match) => match[1]);
   const duplicateRoutes = manifestRoutes.filter((route, index) => manifestRoutes.indexOf(route) !== index);
   const fileSystemRoutes = collectRoutePageTemplates("apps/web/app").sort();
-  if (manifestRoutes.length !== 85) {
-    failures.push(`${path} route manifest must contain exactly 85 route tests; found ${manifestRoutes.length}.`);
+  if (manifestRoutes.length !== 93) {
+    failures.push(`${path} route manifest must contain exactly 93 route tests; found ${manifestRoutes.length}.`);
   }
   if (duplicateRoutes.length > 0) {
     failures.push(`${path} route manifest contains duplicate routes: ${[...new Set(duplicateRoutes)].join(", ")}.`);
@@ -5224,8 +5224,8 @@ function validateRouteFamilySmokeContract() {
   }
 
   const primaryTaskCount = manifestSource.match(/\{ role: "(?:button|form|link|region)", name: "[^"]+" \}/g)?.length ?? 0;
-  if (primaryTaskCount !== 85) {
-    failures.push(`${path} must give all 85 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
+  if (primaryTaskCount !== 93) {
+    failures.push(`${path} must give all 93 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
   }
 
   const viewportStart = source.indexOf("const routeViewports = [");

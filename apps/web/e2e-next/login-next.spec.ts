@@ -4721,6 +4721,9 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     page.getByRole("button", { name: "Ekle", exact: true }).click(),
   ]);
   expect(examCreateResponse.status()).toBe(201);
+  // Berrak §4: yeni sınav çalışma alanında açılır; yayın ve katılımcı işlemleri sınav yönetimindedir.
+  await expect(page).toHaveURL(/\/kurum\/sinavlar\/[^/?]+$/);
+  await page.goto("/kurum/sinavlar");
   await expect(page.getByRole("cell", { name: "Haziran Genel Deneme", exact: true })).toBeVisible();
   await expect(page.getByRole("row", { name: /Haziran Genel Deneme/ }).getByText("Taslak")).toBeVisible();
   await page.getByRole("button", { name: "Haziran Genel Deneme yayınla" }).click();
@@ -4768,7 +4771,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   const opticalReportPanel = page.getByLabel("Raporlara geçiş");
   await expect(opticalReportPanel.getByText("2 öğrenci için rapor hazır.", { exact: true })).toBeVisible();
   await expect(opticalReportPanel.getByLabel("Rapor hazırlama durumu").getByText("Tamamlandı")).toBeVisible();
-  await expect(opticalReportPanel.getByRole("link", { name: "Rapor çalışma alanına geç" })).toHaveAttribute("href", "/kurum/raporlar?examId=exam-a");
+  await expect(opticalReportPanel.getByRole("link", { name: "Rapor çalışma alanına geç" })).toHaveAttribute("href", "/kurum/sinavlar/exam-a/rapor/genel");
 
   await expandSidebarGroup(page, "Sınav");
   await clickSidebarLink(page, "Sınav Raporları", /\/kurum\/raporlar$/);

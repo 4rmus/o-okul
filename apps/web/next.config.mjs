@@ -6,11 +6,29 @@ const nextConfig = {
   transpilePackages: ["@o-okul/ui", "@o-okul/shared-types"],
   async redirects() {
     // DEC-20260930-02: platform sağlık yüzeyleri control-plane'e taşındı.
-    return ["/kurum/sistem-sagligi", "/kurum/gozlemlenebilirlik"].map((source) => ({
+    const retiredPlatformHealth = ["/kurum/sistem-sagligi", "/kurum/gozlemlenebilirlik"].map((source) => ({
       source,
       destination: "/kurum/operasyon-ve-kanit",
       permanent: false,
     }));
+    // Berrak §4: tek sınav optik/rapor işi sınav çalışma alanındadır; eski ?examId= bağlantıları yönlenir.
+    const examId = { type: "query", key: "examId", value: "(?<examId>[A-Za-z0-9_-]+)" };
+    const workspaceRedirect = (source, tab, segment) => ({
+      source,
+      has: tab ? [examId, { type: "query", key: "tab", value: tab }] : [examId],
+      destination: `/kurum/sinavlar/:examId/${segment}`,
+      permanent: false,
+    });
+    return [
+      ...retiredPlatformHealth,
+      workspaceRedirect("/kurum/optik", "upload", "optik/yukleme"),
+      workspaceRedirect("/kurum/optik", "quarantine", "optik/eslesmeyenler"),
+      workspaceRedirect("/kurum/optik", undefined, "optik/duzen"),
+      workspaceRedirect("/kurum/raporlar", "students", "rapor/ogrenciler"),
+      workspaceRedirect("/kurum/raporlar", "karne", "rapor/karne"),
+      workspaceRedirect("/kurum/raporlar", "exports", "rapor/ciktilar"),
+      workspaceRedirect("/kurum/raporlar", undefined, "rapor/genel"),
+    ];
   },
   async rewrites() {
     if (process.env.NODE_ENV !== "development") return [];

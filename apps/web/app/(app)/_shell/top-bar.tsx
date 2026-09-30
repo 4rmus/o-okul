@@ -10,6 +10,7 @@ import { productTerms } from "../../../src/product-terms.js";
 import { hasInstitutionAccess, hasSystemAccess } from "../_shared/access.js";
 import { dynamicDetailParents, institutionNavGroups, rolePortalItems, rolePortalNavGroups, staticBreadcrumbLabels, systemNavGroups } from "../_shared/navigation.js";
 import { type ShellTenantBrand } from "./nav-sidebar.js";
+import { examWorkspaceSegments } from "../../../src/route-manifest.js";
 const allNavigationItems = [
   ...systemNavGroups.flatMap((group) => group.items),
   ...institutionNavGroups.flatMap((group) => group.items),
@@ -162,8 +163,10 @@ export function RouteBreadcrumb({ pathname }: { pathname: string }) {
           <li key={crumb.path}>
             {crumb.isCurrent ? (
               <span aria-current="page">{crumb.label}</span>
-            ) : (
+            ) : crumb.hasPage ? (
               <Link href={crumb.path}>{crumb.label}</Link>
+            ) : (
+              <span>{crumb.label}</span>
             )}
             {index < crumbs.length - 1 ? <span aria-hidden="true">/</span> : null}
           </li>
@@ -178,12 +181,13 @@ function getBreadcrumbs(pathname: string) {
   const segments = cleanPath.split("/").filter(Boolean);
 
   if (segments.length === 0) {
-    return [{ label: "Ana Sayfa", path: "/", isCurrent: true }];
+    return [{ hasPage: true, label: "Ana Sayfa", path: "/", isCurrent: true }];
   }
 
-  const items: Array<{ label: string; path: string; isCurrent: boolean }> = [
-    { label: "Ana Sayfa", path: "/", isCurrent: false },
+  const items: Array<{ hasPage: boolean; label: string; path: string; isCurrent: boolean }> = [
+    { hasPage: true, label: "Ana Sayfa", path: "/", isCurrent: false },
   ];
+  const isExamWorkspace = segments[0] === "kurum" && segments[1] === "sinavlar" && segments.length > 3;
 
   let current = "";
   for (let index = 0; index < segments.length; index += 1) {
@@ -193,8 +197,10 @@ function getBreadcrumbs(pathname: string) {
     current += `/${segment}`;
     const isCurrent = index === segments.length - 1;
     const previous = index === 0 ? undefined : segments[index - 1];
+    const workspaceSegment = isExamWorkspace && index > 2 ? examWorkspaceSegments[segment] : undefined;
     items.push({
-      label: resolveBreadcrumbLabel(current, previous, segment, index),
+      hasPage: workspaceSegment?.page ?? true,
+      label: workspaceSegment?.label ?? resolveBreadcrumbLabel(current, previous, segment, index),
       path: current,
       isCurrent,
     });

@@ -1,5 +1,4 @@
 export const featureRolloutKeys = [
-  "web.exam-workspace-v2",
   "web.student-registry-v2",
   "web.teacher-portal-v2",
   "web.student-portal-v2",

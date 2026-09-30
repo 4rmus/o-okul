@@ -21,6 +21,7 @@ export { Pagination, type PaginationProps } from "./components/pagination.js";
 export { Panel, type PanelProps } from "./components/panel.js";
 export { Skeleton } from "./components/skeleton.js";
 export { StatusBadge, type StatusBadgeProps } from "./components/status-badge.js";
+export { Stepper, type StepperProps, type StepperStatus, type StepperStep } from "./components/stepper.js";
 export { FilterBar, Toolbar, type FilterBarProps, type ToolbarProps } from "./components/toolbar.js";
 export {
   SegmentedControl,

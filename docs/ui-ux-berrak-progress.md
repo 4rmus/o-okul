@@ -21,7 +21,8 @@ Local PASS staging kanıtı değildir. Secret değerleri bu dosyaya yazılmaz; y
 | G2 Berrak token'ları | `berrak/g2-tokenlar` | Tamam | 4rmus/o-okul#111 |
 | G3 Runtime route manifest | `berrak/g3-route-manifest` | Tamam | 4rmus/o-okul#112 |
 | G4 Primitive konsolidasyonu | `berrak/g4-primitive` | Tamam | 4rmus/o-okul#113 |
-| G5 Shell v3 + hub IA + ContextBar | `berrak/g5-shell` | Tamam | draft PR |
+| G5 Shell v3 + hub IA + ContextBar | `berrak/g5-shell` | Tamam | 4rmus/o-okul#114 |
+| G6 Sınav çalışma alanı | `berrak/g6-sinav-calisma-alani` | Tamam | draft PR |
 
 ## G0 — Plan ve karar kayıtları
 
@@ -86,7 +87,7 @@ Görsel kanıt: ekran değişmedi, gerekmez.
 |---|---|
 | `LOCAL_STATIC` | PASS: `route-manifest:check` (85 route), `web:architecture:check`, `web:ux-baseline:check`, `docker:check` (+ negatif senaryo: Traefik kuralı geri alınınca kırmızı), `ops:check`, `prod:evidence:templates:check`, `check-prod-env --contract .env.example`, `security:audit:check` (örnek kanıt), `openapi:generate`, web/api typecheck |
 | `LOCAL_TEST` | PASS: `@o-okul/api test` (1275), governance + system-tenant + route-family smoke + app-context e2e, `ui-ux-redesign:local-gates` (visual QA 31/31) |
-| `CI` | PR CI'da izlenir |
+| `CI` | PASS: GitHub CI run 36780621229 (`a7c209c`, baseline düzeltmesi sonrası; ilk run yalnız measurement baseline nedeniyle kırmızıydı) |
 | `STAGING` | `EXTERNAL_NOT_RUN` (secret yazıldı; deploy son gate sonunda) |
 | `PRODUCTION` | kapsam dışı |
 
@@ -303,3 +304,74 @@ portalı alt çubuğu; açık + koyu; 375/1440).
 Review (read-only): rail temsilcisi capability süzgecinden geçmiş öğelerden seçilir; hub sekmeleri de
 aynı `canAccessNavigationItem` ile süzülür (yalnız frontend ön kontrolü, backend guard'ları değişmedi).
 ContextBar yalnız kimlikleri URL'e yazar, PII taşımaz. P0/P1 yok.
+
+## G6 — Sınav çalışma alanı (§4, EX-01/EX-02)
+
+- Hedef: sunucuda hesaplanan hazırlık, 8 adımlı Stepper, optik/rapor sekmelerinin çalışma alanı
+  route'larına bölünmesi, eski `?examId=` bağlantılarının yönlendirilmesi, bayrak cutover'ı.
+- Sahip olunan yollar: `apps/api/src/exam/{exam.service.ts,exam.module.ts,exam-workspace-progress-store*.ts,exam-workspace-readiness*.ts,exam.controller.e2e.test.ts}`,
+  `apps/api/src/feature-rollout/*` (+ testler), `packages/shared-types` (`domain.ts`, `feature-rollout.ts`),
+  `apps/api/src/openapi-contracts.ts`, `scripts/generate-openapi.mjs`, `packages/ui` (`Stepper`),
+  `kurum/sinavlar/[examId]/**` (layout, optik/*, rapor/*, degerlendirme), `kurum/sinavlar/{exam-workspace-*,exam-evaluation-page}.tsx`,
+  `kurum/sinavlar/exams-page.tsx`, `kurum/optik/{parser-config-page,optical-workspace}.tsx`,
+  `kurum/raporlar/{reports-page,report-workspace}.tsx`, `next.config.mjs`, `next-navigation.d.ts`,
+  route manifest (segment etiketleri) + breadcrumb, smoke spec, ilgili e2e'ler, `.github/workflows/ci.yml`
+  (Postgres testi), UX baseline/token-storage pin'leri, ADR-0008, `status.md`.
+- Yasak yollar: karne, parser/skorlama mantığı.
+- Kabul: API test + `openapi:generate`; `optik-workspace-contract`, `report-workspace-contract`,
+  `gate-c-exam-workspace`; `karne:visual-contract:check`; UAT-KURUM-05/06 STAGING = `EXTERNAL_NOT_RUN`.
+
+### G6 notları
+
+- Sunucu hazırlığı 10 anahtar: mevcut 5 + `OPTICAL_LAYOUT` (onaylı parser config), `IMPORT` (son raw
+  import), `MATCHING` (sınavda açık karantina = 0), `EVALUATION` (son importta eşleşen > 0 ve
+  değerlendirilen ≥ eşleşen), `REPORT` (READY snapshot). Tek SQL (`ExamWorkspaceProgressStore`,
+  `withTenantQuery` + RLS, her alt sorgu `tenantId` filtreli). `nextAction` 9 değer; read model'e yalnız
+  sayım içeren `progress` eklendi (PII yok). Migration gerekmedi (mevcut tablo/indeksler).
+- UI 8 adım: Sınav bilgisi (yayın) · Katılımcılar · Cevap anahtarı · Optik düzen · Yükleme ·
+  Eşleşmeyenler · Değerlendirme · Rapor. "Sıradaki" adım sunucunun `nextAction`'ından türetilir; client
+  hazırlık tahmini yapmaz. `exams-page`'deki ikinci hazırlık hesabı silindi; seçili sınav bölümü çalışma
+  alanına yönlendirir, yeni sınav oluşturulunca çalışma alanı açılır (yetkisi olmayan rol listede kalır).
+- Optik/rapor sekmeleri ayrı URL'lerdir; bileşen `optik/layout.tsx` ve `rapor/layout.tsx` içinde tutulur
+  (sekmeler arası bellek durumu — yükleme → eşleşmeyenler — korunur), aktif sekme URL segmentinden gelir.
+  Dev dosyalar yeniden yazılmadı; `ParserConfigPage`/`ReportsPage` route moduna prop ile girer.
+- `next.config.mjs`: `/kurum/optik?examId=X[&tab=upload|quarantine]` → `…/optik/{duzen,yukleme,eslesmeyenler}`,
+  `/kurum/raporlar?examId=X[&tab=students|karne|exports]` → `…/rapor/{genel,ogrenciler,karne,ciktilar}`.
+  `examId` yakalaması `[A-Za-z0-9_-]+`. Parametresiz `/kurum/optik` ve `/kurum/raporlar` mevcut sınav
+  seçicili ekranı korur (seçim URL'e yazılır; yenilemede çalışma alanına yönlenir). Karne golden testi bu
+  dizin modunda koştuğu için etkilenmedi.
+- Bayrak: `web.exam-workspace-v2` katalogdan kaldırıldı (ADR-0008 emsali, EX-02). Gate-C'nin bayrak-kapalı
+  testleri yerine workspace hata/bozuk yanıt testleri kondu (güvenli hata, mutasyon yok, istek yok).
+- Route sayısı 85 → 93. Ara breadcrumb segmentleri (`optik`, `rapor`) sayfası olmadığı için link değil.
+- Test uyarlamaları: optik URL-state testi sekme = alt route davranışına göre; rapor popstate yarış
+  testleri eski dizin modunu sayfa içi `replaceState` ile kurar (Next history senkronu sunucuya gitmez,
+  yönlendirme olmaz); rapor el değiştirme linki kanonik route'a işaret eder.
+
+### G6 kanıt
+
+| Sınıf | Sonuç |
+|---|---|
+| `LOCAL_STATIC` | PASS: shared-types/api/web typecheck, lint, `openapi:generate` (+ output contract), `route-manifest:check` (93), `web:ux-baseline:check`, `web:architecture:check`, `web:token-storage:check`, `web:design-tokens:check`, `docker:check`, `ops:check`, `prod:plan:check`, measurement baseline |
+| `LOCAL_TEST` | PASS: `@o-okul/api test` (1280), `feature-rollout:check` (46), readiness birim testleri, exam controller e2e, gate-c (6), optik + rapor sözleşmeleri, route smoke (95 dahil yeni 8 route), `ui-ux-redesign:local-gates` (visual QA 31/31, golden değişmedi) |
+| `CI` | Postgres ilerleme testi (`exam-workspace-progress-store.postgres.test.ts`) yalnız CI Postgres işinde koşar (yerelde Postgres yok, atlandı) |
+| `EXTERNAL_NOT_RUN` | `report-generation:smoke`, `raw-import:smoke` (yerelde Postgres yok); UAT-KURUM-05/06 staging |
+
+Görsel kanıt: `artifacts/ui-ux-redesign/berrak/g6/before` (eski çalışma alanı ve `/kurum/optik`) ve
+`after` (çalışma alanı + Stepper, eşleşmeyenler, değerlendirme; açık + koyu; 375/1440).
+
+Review (`o-okul-pr-review` + `tenant_security_reviewer`, read-only): P0/P1 yok. SQL'in her alt sorgusu
+`tenantId`+`examId` filtreli ve RLS altında; erişim sırası doğru (rol kontrolü → sınav 404 → sayım);
+yönlendirmeler güvenli (`examId` regex ankrajlı, sabit iç hedef). Bulgular:
+- P2 (açık, deploy riski): `web.exam-workspace-v2` artık katalogda yok; mevcut sözleşme emekli anahtarı
+  fail-closed reddeder (`parseFeatureRolloutConfig` → `UNKNOWN_KEY`, API açılmaz). Sözleşme korunarak
+  emekli anahtar reddetme testine eklendi. Staging/prod `FEATURE_ROLLOUTS_JSON` bu anahtarı içeriyorsa
+  deploy öncesi çıkarılmalı (DEC-20260903-01'deki açık soru ile aynı prosedür). Staging config'i uzak
+  host'ta; staging deploy sırasında doğrulanacak.
+- P2 (karar): çalışma alanı alt route'ları (optik/rapor/değerlendirme) önceki `/kurum/optik`/`/kurum/raporlar`
+  erişim kuralını izler; genel bakış ve çerçeve çalışma alanı rol/persona kuralına tabidir. Böylece
+  `?examId=` yönlendirmesi mevcut kullanıcıların erişimini daraltmaz ya da genişletmez. Gate-C'ye bu
+  eşitliği doğrulayan assert eklendi (operasyon çalışanı ve öğretmen personası).
+- P3: açık karantina sayısı sınavdaki tüm importları, eşleşen/değerlendirilen yalnız son importu sayar;
+  READY rapor eski bir importa ait olabilir. Muhafazakâr (engelleyici) tarafta hata yapar; iyileştirme ayrı.
+- Test boşlukları: Postgres fixture'ında `ParsedAnswer`/`ExamResult` yok (sayılar 0'da doğrulanıyor);
+  yönlendirme eşlemesi için ayrı e2e yok (optik tarafı kapsanıyor).

@@ -99,3 +99,4 @@ export function breadcrumbLabels(): Record<string, string>;
 export function detailParentSegments(): string[];
 export function hubRoot(route: NavRoute): NavRoute | undefined;
 export function hubMembers(hubHref: string): NavRoute[];
+export const examWorkspaceSegments: Readonly<Record<string, { label: string; page: boolean }>>;

@@ -83,22 +83,25 @@ const newOpticalFormCases = [
 ] as const;
 
 test.describe("Optik çalışma alanı sözleşmesi", () => {
-  test("aktif sınav ve adım URL state ile korunur", async ({ page }) => {
+  test("aktif sınav ve adım sınav çalışma alanı URL'iyle korunur", async ({ page }) => {
+    // Berrak §4: eski ?examId=&tab= bağlantısı çalışma alanındaki sekme route'una yönlenir.
     await openWithOptikMocks(page, "/kurum/optik?examId=exam-optik&tab=upload");
 
+    await expect(page).toHaveURL((url) => url.pathname === "/kurum/sinavlar/exam-optik/optik/yukleme");
     await expect(page.getByRole("tab", { name: "2. Optik yükleme" })).toHaveAttribute("aria-selected", "true");
-    await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-optik");
-    await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBe("upload");
 
     await page.getByRole("tab", { name: "3. Eşleşmeyen satırlar" }).click();
+    await expect(page).toHaveURL((url) => url.pathname === "/kurum/sinavlar/exam-optik/optik/eslesmeyenler");
     await expect(page.getByRole("tab", { name: "3. Eşleşmeyen satırlar" })).toHaveAttribute("aria-selected", "true");
-    await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-optik");
-    await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBe("quarantine");
 
     await page.getByRole("tab", { name: "1. Optik düzen" }).click();
+    await expect(page).toHaveURL((url) => url.pathname === "/kurum/sinavlar/exam-optik/optik/duzen");
     await expect(page.getByRole("tab", { name: "1. Optik düzen" })).toHaveAttribute("aria-selected", "true");
-    await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-optik");
-    await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBeNull();
+
+    await page.goto("/kurum/optik?examId=exam-optik&tab=quarantine");
+    await expect(page).toHaveURL((url) => url.pathname === "/kurum/sinavlar/exam-optik/optik/eslesmeyenler");
+    await page.goto("/kurum/optik?examId=exam-optik");
+    await expect(page).toHaveURL((url) => url.pathname === "/kurum/sinavlar/exam-optik/optik/duzen");
   });
 
   test("optik düzenleri ana bilgileri gösterir, destek ayrıntılarını kapalı tutar", async ({ page }) => {
@@ -279,7 +282,7 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await expect(reportHandoff).toBeVisible();
     await expect(reportHandoff.getByRole("link", { name: "Rapor çalışma alanına geç" })).toHaveAttribute(
       "href",
-      "/kurum/raporlar?examId=exam-optik",
+      "/kurum/sinavlar/exam-optik/rapor/genel",
     );
 
     await page.getByRole("tab", { name: "3. Eşleşmeyen satırlar" }).click();

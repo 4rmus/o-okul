@@ -15,8 +15,10 @@ afterEach(() => {
 
 describe("FeatureRolloutService", () => {
   it("katalogdaki tüm flagleri metadata ile default-off tanımlar", () => {
-    expect(featureRolloutCatalog).toHaveLength(6);
-    expect(new Set(featureRolloutCatalog.map((item) => item.featureKey)).size).toBe(6);
+    // web.exam-workspace-v2 ADR-0008 cutover ile emekli (Berrak G6): çalışma alanı kanonik.
+    expect(featureRolloutCatalog).toHaveLength(5);
+    expect(new Set(featureRolloutCatalog.map((item) => item.featureKey)).size).toBe(5);
+    expect(featureRolloutCatalog.map((item) => item.featureKey)).not.toContain("web.exam-workspace-v2");
     expect(featureRolloutCatalog.every((item) => (
       item.defaultEnabled === false
       && /^[a-z][a-z-]+$/.test(item.owner)
@@ -50,7 +52,7 @@ describe("FeatureRolloutService", () => {
     const service = new FeatureRolloutService(audit as never);
 
     await expect(service.resolve(tenantContext, new Date("2026-08-10T00:00:00.000Z"))).resolves.toEqual({
-      enabledFeatureKeys: ["web.exam-workspace-v2"],
+      enabledFeatureKeys: ["web.student-registry-v2"],
     });
     await expect(service.resolve({ ...tenantContext, tenantId: "tenant-b" }, new Date("2026-08-10T00:00:00.000Z")))
       .resolves.toEqual({ enabledFeatureKeys: [] });
@@ -59,7 +61,7 @@ describe("FeatureRolloutService", () => {
       actorUserId: "user-a",
       entityType: "FeatureRollout",
       action: "feature_rollout.exposed",
-      diff: { featureKeys: ["web.exam-workspace-v2"] },
+      diff: { featureKeys: ["web.student-registry-v2"] },
     });
   });
 
@@ -84,11 +86,11 @@ describe("FeatureRolloutService", () => {
   it("aynı tenant için farklı environment kayıtlarını ayrı çözer", async () => {
     process.env.FEATURE_ROLLOUT_ENVIRONMENT = "staging";
     process.env.FEATURE_ROLLOUTS_JSON = JSON.stringify({
-      "web.exam-workspace-v2": [entry(), { ...entry(), environment: "staging", reference: "EX-02" }],
+      "web.student-registry-v2": [entry(), { ...entry(), environment: "staging", reference: "EX-02" }],
     });
     const service = new FeatureRolloutService({ record: vi.fn().mockResolvedValue({}) } as never);
     await expect(service.resolve(tenantContext, new Date("2026-08-10T00:00:00.000Z")))
-      .resolves.toEqual({ enabledFeatureKeys: ["web.exam-workspace-v2"] });
+      .resolves.toEqual({ enabledFeatureKeys: ["web.student-registry-v2"] });
   });
 
   it("config varken runtime environment eksik veya bilinmiyorsa startup fail eder", () => {
@@ -118,32 +120,32 @@ describe("FeatureRolloutService", () => {
   it("assertEnabled kapalı flagte erişimi reddeder", async () => {
     delete process.env.FEATURE_ROLLOUTS_JSON;
     const service = new FeatureRolloutService({ record: vi.fn() } as never);
-    await expect(service.assertEnabled(tenantContext, "web.exam-workspace-v2")).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.assertEnabled(tenantContext, "web.student-registry-v2")).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it.each([
     ["bozuk JSON", "{"],
     ["bilinmeyen key", JSON.stringify({ "web.unknown": [] })],
-    ["bilinmeyen alan", JSON.stringify({ "web.exam-workspace-v2": [{ ...entry(), extra: true }] })],
-    ["bilinmeyen environment", JSON.stringify({ "web.exam-workspace-v2": [{ ...entry(), environment: "preview" }] })],
-    ["duplicate tenant", JSON.stringify({ "web.exam-workspace-v2": [entry(), entry()] })],
-    ["ters tarih", JSON.stringify({ "web.exam-workspace-v2": [{ ...entry(), startsAt: "2026-09-01T00:00:00.000Z" }] })],
-    ["90 günden uzun", JSON.stringify({ "web.exam-workspace-v2": [{ ...entry(), expiresAt: "2026-12-01T00:00:00.000Z" }] })],
-    ["eksik expiry", JSON.stringify({ "web.exam-workspace-v2": [{ tenantId: "tenant-a", startsAt: "2026-08-01T00:00:00.000Z", reference: "DEC-20260809-01" }] })],
-    ["PII tenant", JSON.stringify({ "web.exam-workspace-v2": [{ ...entry(), tenantId: "veli@example.test" }] })],
-    ["PII reference", JSON.stringify({ "web.exam-workspace-v2": [{ ...entry(), reference: "Ahmet_Yilmaz" }] })],
+    ["bilinmeyen alan", JSON.stringify({ "web.student-registry-v2": [{ ...entry(), extra: true }] })],
+    ["bilinmeyen environment", JSON.stringify({ "web.student-registry-v2": [{ ...entry(), environment: "preview" }] })],
+    ["duplicate tenant", JSON.stringify({ "web.student-registry-v2": [entry(), entry()] })],
+    ["ters tarih", JSON.stringify({ "web.student-registry-v2": [{ ...entry(), startsAt: "2026-09-01T00:00:00.000Z" }] })],
+    ["90 günden uzun", JSON.stringify({ "web.student-registry-v2": [{ ...entry(), expiresAt: "2026-12-01T00:00:00.000Z" }] })],
+    ["eksik expiry", JSON.stringify({ "web.student-registry-v2": [{ tenantId: "tenant-a", startsAt: "2026-08-01T00:00:00.000Z", reference: "DEC-20260809-01" }] })],
+    ["PII tenant", JSON.stringify({ "web.student-registry-v2": [{ ...entry(), tenantId: "veli@example.test" }] })],
+    ["PII reference", JSON.stringify({ "web.student-registry-v2": [{ ...entry(), reference: "Ahmet_Yilmaz" }] })],
   ])("%s configini startup parserda reddeder", (_name, raw) => {
     expect(() => parseFeatureRolloutConfig(raw)).toThrow(/^FEATURE_ROLLOUTS_CONFIG_INVALID:/);
   });
 
-  it.each(["web.ia-v2", "web.shell-v2", "web.setup-v2"])("retired %s configini reddeder", (featureKey) => {
+  it.each(["web.ia-v2", "web.shell-v2", "web.setup-v2", "web.exam-workspace-v2"])("retired %s configini reddeder", (featureKey) => {
     expect(() => parseFeatureRolloutConfig(JSON.stringify({ [featureKey]: [entry()] })))
       .toThrow("FEATURE_ROLLOUTS_CONFIG_INVALID:UNKNOWN_KEY");
   });
 });
 
 function validConfig() {
-  return JSON.stringify({ "web.exam-workspace-v2": [entry()] });
+  return JSON.stringify({ "web.student-registry-v2": [entry()] });
 }
 
 function entry() {

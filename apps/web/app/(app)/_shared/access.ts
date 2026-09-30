@@ -87,5 +87,7 @@ function normalizeInstitutionPath(pathname: string) {
 }
 
 function isExamWorkspacePath(pathname: string) {
+  // Yalnız genel bakış çalışma alanı rol/persona kuralına tabidir. Berrak G6 alt route'ları (optik, rapor,
+  // değerlendirme) /kurum/optik ve /kurum/raporlar ile aynı `academic:manage` kuralını izler; çerçeve gizlenir.
   return /^\/kurum\/sinavlar\/[^/]+\/?$/.test(pathname);
 }

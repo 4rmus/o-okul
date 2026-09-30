@@ -9,6 +9,7 @@ import { AnswerKeyService, answerKeyRepositoryToken } from "./answer-key.service
 import { ExamController } from "./exam.controller.js";
 import { ExamPersistenceModule } from "./exam-persistence.module.js";
 import { ExamService } from "./exam.service.js";
+import { createExamWorkspaceProgressStore, examWorkspaceProgressStoreToken } from "./exam-workspace-progress-store.js";
 import { ImportQuarantineController } from "./import-quarantine.controller.js";
 import { OpticalFormTemplateController } from "./optical-form-template.controller.js";
 import { OpticalFormTemplateService } from "./optical-form-template.service.js";
@@ -50,6 +51,10 @@ import { createS3RawImportArchiveStoreFromEnv } from "./s3-raw-import-archive-st
       useFactory: () => new PostgresAnswerKeyRepository(),
     },
     ExamService,
+    {
+      provide: examWorkspaceProgressStoreToken,
+      useFactory: createExamWorkspaceProgressStore,
+    },
     OpticalFormTemplateService,
     ParserConfigApprovalService,
     ParserConfigSuggestionService,

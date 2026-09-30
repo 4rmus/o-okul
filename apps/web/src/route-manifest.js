@@ -256,6 +256,20 @@ export const pageLabels = {
   "/veli": "Veli Portalı",
 };
 
+// Sınav çalışma alanı alt segmentleri (/kurum/sinavlar/[examId]/...). `page: false` segmentin kendi sayfası yoktur.
+export const examWorkspaceSegments = {
+  optik: { label: "Optik", page: false },
+  duzen: { label: "Optik düzen", page: true },
+  yukleme: { label: "Yükleme", page: true },
+  eslesmeyenler: { label: "Eşleşmeyenler", page: true },
+  degerlendirme: { label: "Değerlendirme", page: true },
+  rapor: { label: "Rapor", page: false },
+  genel: { label: "Genel bakış", page: true },
+  ogrenciler: { label: "Öğrenciler", page: true },
+  karne: { label: "Karne", page: true },
+  ciktilar: { label: "Çıktılar", page: true },
+};
+
 // Komut paletindeki iş akışı ve hızlı işlem girdileri.
 export const commandActions = [
   commandAction("/kurum/kurulum", "Yeni dönem açılışı", "İş akışı", "setup:manage"),

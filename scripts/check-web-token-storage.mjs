@@ -18,9 +18,6 @@ const allowedStorageSnippets = {
     "window.sessionStorage.setItem(storageKey, requestKey)",
     "window.sessionStorage.removeItem(storageKey)",
   ],
-  "apps/web/e2e-next/gate-c-exam-workspace-next.spec.ts": [
-    'window.localStorage.setItem("web.exam-workspace-v2", "true")',
-  ],
   "apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx": [
     "window.sessionStorage.getItem(key)",
     "window.sessionStorage.setItem(key, JSON.stringify(draft))",

@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
+import { ExamWorkspaceFrame } from "../exam-workspace-frame.js";
 
-export default function ExamWorkspaceLayout({ children }: { children: ReactNode }) {
-  return <section data-exam-workspace-layout="read-only">{children}</section>;
+export default async function ExamWorkspaceLayout({ children, params }: { children: ReactNode; params: Promise<{ examId: string }> }) {
+  const { examId } = await params;
+  return <ExamWorkspaceFrame examId={examId}>{children}</ExamWorkspaceFrame>;
 }

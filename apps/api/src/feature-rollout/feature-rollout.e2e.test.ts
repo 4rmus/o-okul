@@ -20,7 +20,7 @@ describe("Feature rollout API", () => {
     const now = Date.now();
     process.env.FEATURE_ROLLOUT_ENVIRONMENT = "local";
     process.env.FEATURE_ROLLOUTS_JSON = JSON.stringify({
-      "web.exam-workspace-v2": [{
+      "web.student-registry-v2": [{
         environment: "local",
         tenantId: "tenant-a",
         startsAt: new Date(now - 60_000).toISOString(),
@@ -55,7 +55,7 @@ describe("Feature rollout API", () => {
       .expect(200);
 
     expect(response.headers["cache-control"]).toBe("private, no-store");
-    expect(response.body).toEqual({ enabledFeatureKeys: ["web.exam-workspace-v2"] });
+    expect(response.body).toEqual({ enabledFeatureKeys: ["web.student-registry-v2"] });
     const serialized = JSON.stringify(response.body);
     expect(serialized).not.toContain("tenant-a");
     expect(serialized).not.toContain("DEC-20260809-01");
@@ -72,7 +72,7 @@ describe("Feature rollout API", () => {
       .set("Authorization", `Bearer ${tenantToken}`)
       .set("x-feature-rollout-environment", "production")
       .expect(200);
-    expect(response.body).toEqual({ enabledFeatureKeys: ["web.exam-workspace-v2"] });
+    expect(response.body).toEqual({ enabledFeatureKeys: ["web.student-registry-v2"] });
   });
 
   it("SYSTEM_ADMIN ve bypass header ile tenant flagi çözülemez", async () => {
@@ -95,7 +95,7 @@ describe("Feature rollout API", () => {
       .get("/me/feature-rollouts")
       .set("Authorization", `Bearer ${tenantToken}`)
       .expect(500);
-    expect(JSON.stringify(response.body)).not.toContain("web.exam-workspace-v2");
+    expect(JSON.stringify(response.body)).not.toContain("web.student-registry-v2");
   });
 
   async function login(email: string): Promise<string> {
