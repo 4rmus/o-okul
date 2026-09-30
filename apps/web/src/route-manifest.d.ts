@@ -60,9 +60,11 @@ export interface NavRoute {
   iconName: NavIconName;
   keywords?: readonly string[];
   label: string;
+  menuLabel?: string;
   operationEvidence?: boolean;
   persona?: "STAFF";
   requiresSms?: boolean;
+  tabLabel?: string;
 }
 export type PortalRole = "TEACHER" | "STUDENT" | "GUARDIAN";
 export interface PortalHomeRoute {
@@ -95,3 +97,5 @@ export const commandActions: readonly CommandAction[];
 export function navigationRoutes(): NavRoute[];
 export function breadcrumbLabels(): Record<string, string>;
 export function detailParentSegments(): string[];
+export function hubRoot(route: NavRoute): NavRoute | undefined;
+export function hubMembers(hubHref: string): NavRoute[];

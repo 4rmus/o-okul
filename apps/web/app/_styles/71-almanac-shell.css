@@ -134,7 +134,7 @@
     white-space: nowrap;
   }
 
-  .next-page-frame__header h1,
+  .uh-page-header h1,
   .uh-crud-page__header h2 {
     font-size: var(--text-xl);
     font-weight: 700;

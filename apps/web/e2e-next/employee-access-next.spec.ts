@@ -114,8 +114,15 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
   await login(page);
   const managementGroup = page.getByRole("button", { name: "Kişiler", exact: true });
   if ((await managementGroup.getAttribute("aria-expanded")) !== "true") await managementGroup.click();
-  await page.getByRole("link", { name: "Çalışanlar ve Yetkiler" }).click();
+  // Hub modeli (Berrak §2): Personel hub'ı → "Çalışanlar ve yetkiler" sekmesi.
+  await page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Personel", exact: true }).click();
+  await expect(page).toHaveURL(/\/kurum\/ogretmenler$/u);
+  const staffTabs = page.getByRole("navigation", { name: "Personel bölümleri" });
+  await expect(staffTabs.getByRole("link", { name: "Öğretmenler", exact: true })).toHaveAttribute("aria-current", "page");
+  await staffTabs.getByRole("link", { name: "Çalışanlar ve yetkiler", exact: true }).click();
   await expect(page).toHaveURL(/\/kurum\/calisanlar$/u);
+  await expect(page.getByRole("navigation", { name: "Personel bölümleri" }).getByRole("link", { name: "Çalışanlar ve yetkiler", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Personel", exact: true })).toHaveAttribute("aria-current", "page");
   await expect.poll(() => employeeRequests.at(-1)?.searchParams.get("limit")).toBe("50");
   await page.getByRole("button", { name: "Sonraki çalışanlar" }).click();
   await expect.poll(() => employeeRequests.at(-1)?.searchParams.get("cursor")).toBe("employee-page-2");

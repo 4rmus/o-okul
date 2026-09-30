@@ -112,6 +112,7 @@ for (const [file, pattern, label] of [
   ["apps/web/app/(app)/_shared/navigation.ts", /href:\s*"\//, "elle tutulan navigation href'i"],
   ["apps/web/app/(app)/_shared/navigation.ts", /staticBreadcrumbLabels[^=]*=\s*\{/, "elle tutulan breadcrumb haritası"],
   ["apps/web/app/(app)/app-shell.tsx", /commandItem\("\//, "elle tutulan komut paleti girdisi"],
+  ["apps/web/app/(app)/_shell/command-palette.tsx", /commandItem\("\//, "elle tutulan komut paleti girdisi"],
 ]) {
   if (pattern.test(readFileSync(file, "utf8"))) failures.push(file + " " + label + " içeremez; apps/web/src/route-manifest.js kullanılmalı");
 }

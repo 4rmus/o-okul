@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   breadcrumbLabels,
   detailParentSegments,
+  hubMembers,
   institutionNavGroupLabels,
   institutionRoutes,
   portalHomeRoutes,
@@ -39,6 +40,7 @@ import {
 export type InstitutionNavigationItem = {
   href: string;
   hiddenFromRail?: boolean;
+  hub?: string;
   icon: LucideIcon;
   label: string;
   requiredCapability?: string;
@@ -112,6 +114,7 @@ function toInstitutionItem(route: NavRoute): InstitutionNavigationItem {
   return {
     href: route.href,
     ...(route.hiddenFromRail ? { hiddenFromRail: true } : {}),
+    ...(route.hub ? { hub: route.hub } : {}),
     icon: navIcons[route.iconName],
     label: route.label,
     ...(route.capability ? { requiredCapability: route.capability } : {}),
@@ -155,3 +158,34 @@ export const rolePortalNavGroups: readonly RolePortalNavGroup[] = portalNavGroup
 export const staticBreadcrumbLabels: Record<string, string> = breadcrumbLabels();
 
 export const dynamicDetailParents: string[] = detailParentSegments();
+
+export type RailItem = { href: string; icon: LucideIcon; label: string; matchHrefs: readonly string[] };
+
+// Rail: her hub için kullanıcının erişebildiği ilk üye, hub etiketiyle tek girdi olur (§2).
+// `groups` capability süzgecinden geçmiş olmalıdır; aktiflik tüm hub üyelerine göre hesaplanır.
+export function buildInstitutionRailGroups(groups: readonly InstitutionNavGroup[]) {
+  return groups
+    .map((group) => {
+      const seenHubs = new Set<string>();
+      const items: RailItem[] = [];
+      for (const item of group.items) {
+        if (item.hub) {
+          if (seenHubs.has(item.hub)) continue;
+          seenHubs.add(item.hub);
+          const root = institutionRoutes.find((route) => route.href === item.hub);
+          items.push({
+            href: item.href,
+            icon: root ? navIcons[root.iconName] : item.icon,
+            label: root ? root.menuLabel ?? root.label : item.label,
+            matchHrefs: hubMembers(item.hub).map((member) => member.href),
+          });
+          continue;
+        }
+        if (item.hiddenFromRail) continue;
+        const route = institutionRoutes.find((candidate) => candidate.href === item.href);
+        items.push({ href: item.href, icon: item.icon, label: route?.menuLabel ?? item.label, matchHrefs: [item.href] });
+      }
+      return { label: group.label, items };
+    })
+    .filter((group) => group.items.length > 0);
+}

@@ -1,6 +1,6 @@
 import { DataTable, Panel, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
 import { EvidenceGateSection, EvidenceTrustPanel, OperationDecisionNotice, ReferenceBadge } from "../../kurum/_shared/evidence-panels.js";
-import { PageFrame } from "../../kurum/_shared/page-frame.js";
+import { PageFrame } from "../../_shared/page-frame.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge } from "../../kurum/_shared/operation-summary.js";
 
 const observabilityGates = [

@@ -196,6 +196,20 @@ test.describe("Faz 9 UI görsel smoke", () => {
           maxDiffPixelRatio: 0.005,
         });
       }
+      if (viewport.width === 414) {
+        // Shell v3 (Berrak G5): mobil çekmecede hub menüsü.
+        await hideNextDevIndicator(page);
+        await page.getByRole("button", { name: "Ana menüyü aç" }).click();
+        const drawer = page.locator(".next-sidebar");
+        await expect(drawer).toHaveAttribute("data-mobile-open", "true");
+        await expect(drawer.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { exact: true, name: "Özet" })).toHaveAttribute("aria-current", "page");
+        await expect(drawer).toHaveScreenshot("institution-shell-drawer-414.png", {
+          animations: "disabled",
+          maxDiffPixelRatio: 0.005,
+        });
+        await page.getByRole("button", { name: "Ana menüyü kapat" }).click();
+        await expect(drawer).toHaveAttribute("data-mobile-open", "false");
+      }
       await saveScreenshot(page, `faz9-dashboard-${viewport.width}.png`);
     }
   });

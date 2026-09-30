@@ -20,7 +20,8 @@ Local PASS staging kanıtı değildir. Secret değerleri bu dosyaya yazılmaz; y
 | G1 Platform sağlık yüzeyleri | `berrak/g1-platform-saglik` | Tamam | 4rmus/o-okul#110 |
 | G2 Berrak token'ları | `berrak/g2-tokenlar` | Tamam | 4rmus/o-okul#111 |
 | G3 Runtime route manifest | `berrak/g3-route-manifest` | Tamam | 4rmus/o-okul#112 |
-| G4 Primitive konsolidasyonu | `berrak/g4-primitive` | Tamam | draft PR |
+| G4 Primitive konsolidasyonu | `berrak/g4-primitive` | Tamam | 4rmus/o-okul#113 |
+| G5 Shell v3 + hub IA + ContextBar | `berrak/g5-shell` | Tamam | draft PR |
 
 ## G0 — Plan ve karar kayıtları
 
@@ -247,3 +248,58 @@ Review (read-only): yetki mantığı değişmedi; capability/persona alanları b
 Görsel kanıt: `artifacts/ui-ux-redesign/berrak/g4/{before,after}` — öğrenci listesi, çalışanlar,
 öğretmen portalı hata durumu; açık + koyu, 375/1440. Golden değişmedi (pager satır düzeni korundu).
 Review (read-only): yetki/veri akışı değişmedi; toast bölgesi PII taşımaz (sabit bildirim metinleri). P0/P1 yok.
+
+## G5 — Shell v3 + hub IA + ContextBar (§2–3)
+
+- Hedef: menüde 19 hub, hub sekmeleri, interaktif çalışma bağlamı, shell bölme.
+- Sahip olunan yollar: `app-shell.tsx` → `(app)/_shell/{command-palette,nav-sidebar,top-bar,push-devices,portal-bottom-nav}.tsx`,
+  `packages/ui` (`PageHeader`, `HubTabs`, `ContextBar`), `(app)/_shared/page-frame.tsx` (PageFrame buraya taşındı;
+  `kurum/_shared/page-frame.tsx` re-export), `_shared/navigation.ts`, `src/route-manifest.js` (menuLabel/tabLabel),
+  `_styles/30-primitives.css` ve shell CSS'i, `check-web-architecture.mjs`, `check-web-ux-baseline.mjs`,
+  `check-route-manifest.mjs`, sidebar'a dayanan e2e seçicileri.
+- Yasak yollar: portal içerikleri, API.
+- Kabul: kurum rail 1440 ve 414 drawer golden'ları; `persona-switch`, `app-context`, `a11y`.
+
+### G5 notları
+
+- Rail: her hub tek girdi; girdi kullanıcının erişebildiği ilk hub üyesine gider (hub köküne yetkisi
+  olmayan ama sekmesine yetkisi olan kullanıcı erişimi kaybetmez) ve tüm hub üyelerinde aktif görünür.
+  Kurum menüsü 19 girdi: Özet · Öğrenciler, Personel · Sınıf yapısı, Ders ve program, Yoklama, Takvim,
+  Ödev ve materyal, Notlar · Sınavlar, Raporlar, Kazanımlar · Duyurular, Destek · Ödeme planları ·
+  Kurulum, Lisans dönemleri, Rol önizleme, Operasyon ve kanıt. "Optik Okuma" menüden çıktı (palette'te
+  duruyor; G6'da sınav çalışma alanına bağlanır).
+- Menü etiketleri (`menuLabel`) bilinçli terminoloji birleştirmesidir; sayfa başlıkları, breadcrumb ve
+  komut paleti route etiketlerini korur (e2e başlık sözleşmeleri değişmedi).
+- `HubTabs` route tabanlı link listesidir (`nav` + `aria-current`), tablist değil; yetkiye göre süzülür,
+  ≥2 erişilebilir üye varsa çizilir. `PageFrame` artık `(app)/_shared` katmanında: ADR-0003
+  allowlist'inden `page-frame` çıktı (kalan: `evidence-panels`, `operation-summary`).
+- ContextBar: kampüs/dönem `campusId`/`termId` URL parametresine yazılır (sayfalama sıfırlanır);
+  bu parametreleri okuyan finans ve destek listelerinin query key'leri değişir ve yeniden sorgular.
+  Seçenekler tembel yüklenir (URL'de bağlam varsa ya da seçiciye odaklanınca) — her kurum sayfasında
+  gereksiz istek yok. Erişilebilir adlar "Çalışma kampüsü"/"Çalışma dönemi" (sayfa filtreleriyle çakışmaz).
+- Portal alt sekme çubuğu (<1024 px, öğretmen/öğrenci): Özet · Ödevler · Raporlar · Duyurular ·
+  Daha fazla. "Daha fazla" yeni route yerine mevcut mobil çekmeceyi açar (sapma: route envanteri sabit).
+- Shell sürümü `data-shell-version="v3"`.
+- Açık madde (düşük): 1024–1279 px'te 64 px ikon rail uygulanmadı. Rail'deki push-cihaz paneli,
+  persona/çıkış metinli kontrolleri ayrı tasarım ister ve karne golden'ının 1024 px konumunu kaydırır;
+  ayrı dilim olarak kaldı. Üst çubuk ayrı "kullanıcı menüsü" açılır listesine çevrilmedi; persona ve
+  çıkış görünür butonlar olarak kaldı (e2e çıkış akışları buna dayanıyor), tema anahtarı G8'de buraya eklenir.
+- `login-next` yardımcı `clickSidebarLink` hub modelini manifestten okur (hub girdisi → sekme; menüden
+  çıkan route → palette). Büyük kurum yolculuğu yerelde 4954. satıra kadar geçiyor; oradaki
+  `/kurum/denetim` beklentisi, önceden var olan palette "Denetim" hatasıyla aynı kök nedendir (ayrı iş).
+
+### G5 kanıt
+
+| Sınıf | Sonuç |
+|---|---|
+| `LOCAL_STATIC` | PASS: `web:ux-baseline:check` (shell pin'leri `_shell/*` birleşimine uygulanır), `web:architecture:check`, `route-manifest:check`, `web:token-storage:check`, `web:design-tokens:check`, lint, typecheck, measurement baseline |
+| `LOCAL_TEST` | PASS: `ui-ux-redesign:local-gates` (ux-contract 87, auth-contract, visual QA 31/31), persona-switch, app-context, a11y, employee-access (hub → sekme), portal sözleşmeleri, list-url-state |
+| `CI` | Beklenen: karne Linux alt-piksel (ortak not); yeni `institution-shell-drawer-414` Linux golden'ı final gate'te |
+
+Golden'lar (darwin, bilinçli): dashboard 1440, rail 1440, öğrenci listesi 414, devamsızlık 414, öğrenci
+detay 768, rapor 1440 + yeni `institution-shell-drawer-414`. Karne golden'ı değişmedi.
+Görsel kanıt: `artifacts/ui-ux-redesign/berrak/g5/{before,after}` (dashboard, Personel hub'ı, öğretmen
+portalı alt çubuğu; açık + koyu; 375/1440).
+Review (read-only): rail temsilcisi capability süzgecinden geçmiş öğelerden seçilir; hub sekmeleri de
+aynı `canAccessNavigationItem` ile süzülür (yalnız frontend ön kontrolü, backend guard'ları değişmedi).
+ContextBar yalnız kimlikleri URL'e yazar, PII taşımaz. P0/P1 yok.

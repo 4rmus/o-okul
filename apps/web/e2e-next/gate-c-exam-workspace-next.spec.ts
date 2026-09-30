@@ -17,7 +17,7 @@ test("Gate C internal tenant Shell v2 ve salt okunur sınav paritesini beş view
     await page.setViewportSize(viewport);
     await page.goto(`/kurum/sinavlar/${examId}`, { waitUntil: "domcontentloaded" });
 
-    await expect(page.locator(".next-app-shell")).toHaveAttribute("data-shell-version", "v2");
+    await expect(page.locator(".next-app-shell")).toHaveAttribute("data-shell-version", "v3");
     await expect(page.locator(".next-sidebar-group-toggle").filter({ hasText: "Sınav" })).toHaveCount(1);
     await expect(page.getByRole("heading", { level: 1, name: "Gate C Denemesi" })).toBeVisible();
     const workspace = page.getByRole("region", { name: "Salt okunur sınav çalışma alanı" });
@@ -55,7 +55,7 @@ for (const mode of ["disabled", "error", "malformed"] as const) {
     await expect(page).toHaveURL((url) =>
       url.pathname === "/kurum/sinavlar" && url.searchParams.get("examId") === examId,
     );
-    await expect(page.locator(".next-app-shell")).toHaveAttribute("data-shell-version", "v2");
+    await expect(page.locator(".next-app-shell")).toHaveAttribute("data-shell-version", "v3");
     await expect(page.getByRole("region", { name: "Sınav katılımcıları" })).toContainText("Gate C Denemesi");
     expect(evidence.workspaceRequests).toBe(0);
     expect(evidence.mutationRequests).toEqual([]);

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { institutionRoutes } from "../src/route-manifest.js";
 import { tenantLoginUrl } from "./helpers/tenant-login.js";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
@@ -22,10 +23,30 @@ async function expandSidebarGroup(page: Page, name: string) {
   }
 }
 
+// Hub modeli (Berrak §2): kardeş sayfalar menüde hub girdisi + hub sekmesidir; menüden çıkan route'lar
+// (ör. Optik Okuma) komut paletinden açılır. Etiketler runtime manifestten okunur.
 async function clickSidebarLink(page: Page, name: string, url: RegExp) {
-  const link = page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name, exact: true });
-  await expect(link).toBeVisible();
-  await link.click();
+  const menu = page.getByRole("navigation", { name: "Ana menü" });
+  const route = institutionRoutes.find((candidate) => candidate.label === name || candidate.menuLabel === name);
+  const hubRoot = route?.hub ? institutionRoutes.find((candidate) => candidate.href === route.hub) : undefined;
+  if (route && hubRoot) {
+    const hubLabel = hubRoot.menuLabel ?? hubRoot.label;
+    await expandSidebarGroup(page, hubRoot.group);
+    const hubLink = menu.getByRole("link", { name: hubLabel, exact: true });
+    const hubHref = await hubLink.getAttribute("href");
+    await hubLink.click();
+    if (hubHref !== route.href) {
+      await page.getByRole("navigation", { name: `${hubLabel} bölümleri` }).getByRole("link", { name: route.tabLabel ?? route.label, exact: true }).click();
+    }
+  } else if (route?.hiddenFromRail) {
+    const palette = await openCommandPalette(page);
+    await palette.getByLabel("Komut ara").fill(route.label);
+    await palette.getByRole("link", { name: new RegExp(`^${route.label}`) }).first().click();
+  } else {
+    const link = menu.getByRole("link", { name: route?.menuLabel ?? name, exact: true });
+    await expect(link).toBeVisible();
+    await link.click();
+  }
   await expect(page).toHaveURL(url, { timeout: 15_000 });
 }
 
@@ -3913,18 +3934,22 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByRole("link", { name: "Yayın Hazırlığı" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Sistem Sağlığı" })).toHaveCount(0);
   await expandSidebarGroup(page, "Kişiler");
-  await expect(page.getByRole("link", { name: "Kullanıcılar" })).toBeVisible();
+  // Hub modeli: Kullanıcılar ve Kampüsler hub sekmesidir, menüde hub girdisi görünür.
+  await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Personel", exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Kullanıcılar" })).toHaveCount(0);
   await expandSidebarGroup(page, "Ayarlar");
   await expect(page.getByRole("link", { name: "Operasyon ve kanıt" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Rol Önizleme" })).toBeVisible();
   await expandSidebarGroup(page, "Akademik");
-  await expect(page.getByRole("link", { name: "Kampüsler" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Sınıf yapısı", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Takvim" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Seviyeler" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Sınıflar" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Dersler" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Program" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Etütler" })).toBeVisible();
+  const academicMenu = page.getByRole("navigation", { name: "Ana menü" });
+  await expect(academicMenu.getByRole("link", { name: "Ders ve program", exact: true })).toBeVisible();
+  await expect(academicMenu.getByRole("link", { name: "Yoklama", exact: true })).toBeVisible();
+  await expect(academicMenu.getByRole("link", { name: "Ödev ve materyal", exact: true })).toBeVisible();
+  for (const tabOnlyLabel of ["Seviyeler", "Sınıflar", "Dersler", "Program", "Etütler"]) {
+    await expect(academicMenu.getByRole("link", { name: tabOnlyLabel, exact: true })).toHaveCount(0);
+  }
   await expandSidebarGroup(page, "Sınav");
   await expandSidebarGroup(page, "İletişim");
   await expandSidebarGroup(page, "Ayarlar");
@@ -3988,10 +4013,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await Promise.all([page.waitForURL(/\/kurum\/siniflar\/class-a$/), classResult.click()]);
   await expect(heading(page, { name: "8-A" })).toBeVisible();
 
-  await expandSidebarGroup(page, "Kişiler");
-  const usersLink = page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Kullanıcılar" });
-  await expect(usersLink).toBeVisible();
-  await Promise.all([page.waitForURL(/\/kurum\/kullanicilar$/), usersLink.click()]);
+  await clickSidebarLink(page, "Kullanıcılar", /\/kurum\/kullanicilar$/);
   await expect(heading(page, { name: "Kullanıcılar" })).toBeVisible();
   await expect(page.getByText("Admin A")).toBeVisible();
   const userList = page.getByLabel("Kullanıcı ve rol yönetimi");
@@ -5768,7 +5790,7 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
   await expect(page.getByRole("link", { name: "KVKK" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Yedekleme" })).toHaveCount(0);
   await expandSidebarGroup(page, "İletişim");
-  await expect(page.getByRole("link", { name: "Kurum içi destek", exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Destek", exact: true })).toBeVisible();
   await expect(page.getByLabel("Bugün ilgilenmeniz gerekenler").getByRole("link", { name: /Geciken ödeme/ })).toHaveCount(0);
   await expect(page.getByLabel("Bugün ilgilenmeniz gerekenler").getByRole("link", { name: /Öğrenci destek talepleri/ })).toBeVisible();
   await page.keyboard.press("ControlOrMeta+K");

@@ -150,39 +150,40 @@ export const institutionNavGroupLabels = ["Bugün", "Kişiler", "Akademik", "Sı
 
 export const institutionRoutes = [
   navRoute("/kurum", "Özet", "Bugün", "LayoutDashboard", { breadcrumbLabel: "Kurum Özeti" }),
-  navRoute("/kurum/ogrenciler", "Öğrenciler", "Kişiler", "GraduationCap", { capability: "student:manage", detailParent: true, hub: "/kurum/ogrenciler" }),
+  navRoute("/kurum/ogrenciler", "Öğrenciler", "Kişiler", "GraduationCap", { capability: "student:manage", detailParent: true, hub: "/kurum/ogrenciler", tabLabel: "Liste" }),
   navRoute("/kurum/veliler", "Veli kayıtları", "Kişiler", "Users", { capability: "student:manage", detailParent: true, hub: "/kurum/ogrenciler" }),
-  navRoute("/kurum/ogretmenler", "Öğretmenler", "Kişiler", "UserRoundCog", { capability: "staff:manage", detailParent: true, hub: "/kurum/ogretmenler" }),
-  navRoute("/kurum/calisanlar", "Çalışanlar ve Yetkiler", "Kişiler", "UserRoundCog", { capability: "user:manage", hub: "/kurum/ogretmenler" }),
-  navRoute("/kurum/ogrenci-portal-erisimi", "Öğrenci Portal Erişimi", "Kişiler", "GraduationCap", { capability: "user:manage", hub: "/kurum/ogrenciler" }),
-  navRoute("/kurum/kullanicilar", "Kullanıcılar", "Kişiler", "Users", { capability: "user:manage", hub: "/kurum/ogretmenler" }),
-  navRoute("/kurum/siniflar", "Sınıflar", "Akademik", "School", { capability: "class:manage", detailParent: true, hub: "/kurum/siniflar" }),
+  navRoute("/kurum/ogretmenler", "Öğretmenler", "Kişiler", "UserRoundCog", { capability: "staff:manage", detailParent: true, hub: "/kurum/ogretmenler", menuLabel: "Personel" }),
+  navRoute("/kurum/calisanlar", "Çalışanlar ve Yetkiler", "Kişiler", "UserRoundCog", { capability: "user:manage", hub: "/kurum/ogretmenler", tabLabel: "Çalışanlar ve yetkiler" }),
+  navRoute("/kurum/ogrenci-portal-erisimi", "Öğrenci Portal Erişimi", "Kişiler", "GraduationCap", { capability: "user:manage", hub: "/kurum/ogrenciler", tabLabel: "Portal erişimi" }),
+  navRoute("/kurum/kullanicilar", "Kullanıcılar", "Kişiler", "Users", { capability: "user:manage", hub: "/kurum/ogretmenler", tabLabel: "Kullanıcı hesapları" }),
+  navRoute("/kurum/siniflar", "Sınıflar", "Akademik", "School", { capability: "class:manage", detailParent: true, hub: "/kurum/siniflar", menuLabel: "Sınıf yapısı" }),
   navRoute("/kurum/seviyeler", "Seviyeler", "Akademik", "ClipboardList", { capability: "class:manage", hub: "/kurum/siniflar" }),
   navRoute("/kurum/kampusler", "Kampüsler", "Akademik", "Building2", { capability: "class:manage", hub: "/kurum/siniflar" }),
-  navRoute("/kurum/dersler", "Dersler", "Akademik", "BookOpen", { capability: "academic:manage", hub: "/kurum/dersler" }),
-  navRoute("/kurum/program", "Program", "Akademik", "CalendarDays", { capability: "academic:manage", hub: "/kurum/dersler" }),
+  navRoute("/kurum/dersler", "Dersler", "Akademik", "BookOpen", { capability: "academic:manage", hub: "/kurum/dersler", menuLabel: "Ders ve program" }),
+  navRoute("/kurum/program", "Program", "Akademik", "CalendarDays", { capability: "academic:manage", hub: "/kurum/dersler", tabLabel: "Haftalık program" }),
   navRoute("/kurum/etutler", "Etütler", "Akademik", "NotebookTabs", { capability: "academic:manage", hub: "/kurum/dersler" }),
-  navRoute("/kurum/devamsizlik", "Devamsızlık", "Akademik", "ClipboardCheck", { capability: "attendance:manage", keywords: ["yoklama"] }),
+  navRoute("/kurum/devamsizlik", "Devamsızlık", "Akademik", "ClipboardCheck", { capability: "attendance:manage", keywords: ["yoklama"], menuLabel: "Yoklama" }),
   navRoute("/kurum/akademik-takvim", "Takvim", "Akademik", "CalendarDays", { capability: "academic:manage" }),
-  navRoute("/kurum/materyaller", "Materyaller", "Akademik", "Library", { capability: "academic:manage", keywords: ["ödev"] }),
+  navRoute("/kurum/materyaller", "Materyaller", "Akademik", "Library", { capability: "academic:manage", keywords: ["ödev"], menuLabel: "Ödev ve materyal" }),
   navRoute("/kurum/notlar", "Notlar", "Akademik", "NotebookTabs", { capability: "note:manage" }),
   navRoute("/kurum/sinavlar", "Sınavlar", "Sınav", "FileText", { capability: "academic:manage", detailParent: true }),
+  navRoute("/kurum/raporlar", "Sınav Raporları", "Sınav", "BarChart3", { capability: "academic:manage", keywords: ["karne"], menuLabel: "Raporlar" }),
   navRoute("/kurum/kazanimlar", "Kazanımlar", "Sınav", "ClipboardList", { capability: "academic:manage" }),
-  navRoute("/kurum/optik", "Optik Okuma", "Sınav", "ScanLine", { capability: "academic:manage" }),
-  navRoute("/kurum/raporlar", "Sınav Raporları", "Sınav", "BarChart3", { capability: "academic:manage", keywords: ["karne"] }),
+  // Optik okuma menüden çıktı; sınav çalışma alanından açılır (§4).
+  navRoute("/kurum/optik", "Optik Okuma", "Sınav", "ScanLine", { capability: "academic:manage", hiddenFromRail: true }),
   navRoute("/kurum/duyurular", "Duyurular", "İletişim", "Megaphone", { capability: "announcement:manage", detailParent: true, hub: "/kurum/duyurular" }),
-  navRoute("/kurum/sablonlar", "Mesaj Şablonları", "İletişim", "MessageSquareText", { capability: "announcement:manage", hub: "/kurum/duyurular", requiresSms: true }),
-  navRoute("/kurum/destek", "Kurum içi destek", "İletişim", "LifeBuoy", { capability: "support:manage" }),
+  navRoute("/kurum/sablonlar", "Mesaj Şablonları", "İletişim", "MessageSquareText", { capability: "announcement:manage", hub: "/kurum/duyurular", requiresSms: true, tabLabel: "Mesaj şablonları" }),
+  navRoute("/kurum/destek", "Kurum içi destek", "İletişim", "LifeBuoy", { capability: "support:manage", menuLabel: "Destek" }),
   navRoute("/kurum/finans", "Ödeme planları", "Finans", "CreditCard", { breadcrumbLabel: "Finans", capability: "finance:manage" }),
-  navRoute("/kurum/lisans-donemleri", "Lisans Dönemleri", "Finans", "ClipboardCheck", { capability: "setup:manage" }),
   navRoute("/kurum/kurulum", "Kurulum", "Ayarlar", "Settings", { capability: "setup:manage" }),
+  navRoute("/kurum/lisans-donemleri", "Lisans Dönemleri", "Ayarlar", "ClipboardCheck", { capability: "setup:manage" }),
   navRoute("/kurum/rol-onizleme", "Rol Önizleme", "Ayarlar", "ShieldCheck", { capability: "role-preview:manage" }),
-  navRoute("/kurum/operasyon-ve-kanit", "Operasyon ve kanıt", "Ayarlar", "ShieldCheck", { capability: operationEvidenceCapability, hub: "/kurum/operasyon-ve-kanit" }),
+  navRoute("/kurum/operasyon-ve-kanit", "Operasyon ve kanıt", "Ayarlar", "ShieldCheck", { capability: operationEvidenceCapability, hub: "/kurum/operasyon-ve-kanit", tabLabel: "Genel bakış" }),
   navRoute("/kurum/yedek-restore", "Yedekleme", "Ayarlar", "Activity", { capability: "operation:manage", hiddenFromRail: true, hub: "/kurum/operasyon-ve-kanit", operationEvidence: true }),
   navRoute("/kurum/kvkk", "KVKK", "Ayarlar", "ShieldCheck", { capability: "privacy:manage", hiddenFromRail: true, hub: "/kurum/operasyon-ve-kanit", operationEvidence: true }),
   navRoute("/kurum/denetim", "Denetim", "Ayarlar", "ClipboardList", { capability: "tenant-audit:read", hiddenFromRail: true, hub: "/kurum/operasyon-ve-kanit", operationEvidence: true, persona: "STAFF" }),
-  navRoute("/kurum/guvenlik-denetimi", "Güvenlik Denetimi", "Ayarlar", "ShieldCheck", { capability: operationEvidenceCapability, hiddenFromRail: true, hub: "/kurum/operasyon-ve-kanit", operationEvidence: true }),
-  navRoute("/kurum/canli-yayin", "Yayın Hazırlığı", "Ayarlar", "Activity", { capability: operationEvidenceCapability, hiddenFromRail: true, hub: "/kurum/operasyon-ve-kanit", operationEvidence: true }),
+  navRoute("/kurum/guvenlik-denetimi", "Güvenlik Denetimi", "Ayarlar", "ShieldCheck", { capability: operationEvidenceCapability, hiddenFromRail: true, hub: "/kurum/operasyon-ve-kanit", operationEvidence: true, tabLabel: "Güvenlik denetimi" }),
+  navRoute("/kurum/canli-yayin", "Yayın Hazırlığı", "Ayarlar", "Activity", { capability: operationEvidenceCapability, hiddenFromRail: true, hub: "/kurum/operasyon-ve-kanit", operationEvidence: true, tabLabel: "Yayın hazırlığı" }),
 ];
 
 export const systemRoutes = [
@@ -282,6 +283,15 @@ export function breadcrumbLabels() {
     if (route.breadcrumbLabel) labels[route.href] = route.breadcrumbLabel;
   }
   return { ...labels, ...pageLabels };
+}
+
+// Hub modeli (§2): menüde her hub tek girdidir; kardeş sayfalar hub sekmesi olur. URL değişmez.
+export function hubRoot(route) {
+  return route.hub ? institutionRoutes.find((candidate) => candidate.href === route.hub) : undefined;
+}
+
+export function hubMembers(hubHref) {
+  return institutionRoutes.filter((route) => route.hub === hubHref);
 }
 
 export function detailParentSegments() {

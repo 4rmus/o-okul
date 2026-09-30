@@ -104,7 +104,8 @@ test("Next eşzamanlı 401 yanıtlarında tek refresh çağrısı yapar", async 
   await expect(page.getByRole("region", { name: "Kurum başarı görünümü" })).toContainText("1");
 
   await page.getByRole("button", { name: "Akademik" }).click();
-  await page.getByRole("link", { name: "Sınıflar" }).click();
+  // Hub modeli (Berrak §2): /kurum/siniflar menüde "Sınıf yapısı" hub girdisidir.
+  await page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Sınıf yapısı", exact: true }).click();
   await expect(page.getByRole("region", { name: "Sınıf yönetimi" })).toBeVisible();
   await expect.poll(() => refreshCount).toBe(1);
   await expect.poll(() => expiredOnce.size).toBe(expiringPaths.size);

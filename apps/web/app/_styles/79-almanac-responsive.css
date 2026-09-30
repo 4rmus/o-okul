@@ -221,6 +221,15 @@
       white-space: normal;
     }
 
+    .uh-context-bar.next-work-context > .uh-context-bar__item:first-child {
+      grid-column: 1 / -1;
+    }
+
+    .uh-context-bar.next-work-context select {
+      width: 100%;
+      max-width: none;
+    }
+
     .next-work-context.next-report-work-context {
       grid-template-columns: minmax(0, 1fr);
     }
@@ -233,7 +242,7 @@
       grid-template-columns: minmax(0, 1fr);
     }
 
-    .next-page-frame__header h1,
+    .uh-page-header h1,
     .uh-crud-page__header h2 {
       font-size: 1.5rem;
     }

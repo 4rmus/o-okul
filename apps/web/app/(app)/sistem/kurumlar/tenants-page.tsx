@@ -27,7 +27,7 @@ import {
 } from "../../../../src/form-validation.js";
 import { ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../../kurum/_shared/operation-summary.js";
-import { PageFrame } from "../../kurum/_shared/page-frame.js";
+import { PageFrame } from "../../_shared/page-frame.js";
 import { createTenant, loadTenants, type TenantRecord } from "../_shared/system-api.js";
 
 const emptyForm: TenantFormState = {

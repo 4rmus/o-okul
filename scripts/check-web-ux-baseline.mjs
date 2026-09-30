@@ -31,7 +31,10 @@ const files = {
   "apps/web/app/(app)/_shared/report-chart-panel.tsx": readFileSync("apps/web/app/(app)/_shared/report-chart-panel.tsx", "utf8"),
   "apps/web/app/(app)/_shared/navigation.ts": readFileSync("apps/web/app/(app)/_shared/navigation.ts", "utf8"),
   "apps/web/src/route-manifest.js": readFileSync("apps/web/src/route-manifest.js", "utf8"),
-  "apps/web/app/(app)/app-shell.tsx": readFileSync("apps/web/app/(app)/app-shell.tsx", "utf8"),
+  // Shell v3 (Berrak G5) app-shell.tsx + _shell/* dosyalarına bölündü; pin'ler shell kaynağının bütününe uygulanır.
+  "apps/web/app/(app)/app-shell.tsx": ["apps/web/app/(app)/app-shell.tsx", ...readdirSync("apps/web/app/(app)/_shell").sort().map((name) => `apps/web/app/(app)/_shell/${name}`)]
+    .map((path) => readFileSync(path, "utf8"))
+    .join("\n"),
   "apps/web/app/(app)/kurum/_shared/evidence-panels.tsx": readFileSync("apps/web/app/(app)/kurum/_shared/evidence-panels.tsx", "utf8"),
   "apps/web/app/(app)/kurum/_shared/import-template-panel.tsx": readFileSync("apps/web/app/(app)/kurum/_shared/import-template-panel.tsx", "utf8"),
   "apps/web/app/(app)/kurum/_shared/operation-summary.tsx": readFileSync("apps/web/app/(app)/kurum/_shared/operation-summary.tsx", "utf8"),
@@ -128,7 +131,8 @@ const failures = [];
 const appSourcePaths = collectSourceFiles("apps/web/app/(app)", [".ts", ".tsx"]);
 const rawButtonSourcePaths = collectSourceFiles("apps/web/app", [".ts", ".tsx"]);
 const rawButtonAllowlist = new Map([
-  ["apps/web/app/(app)/app-shell.tsx", 6],
+  ["apps/web/app/(app)/app-shell.tsx", 5],
+  ["apps/web/app/(app)/_shell/nav-sidebar.tsx", 1],
   ["apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx", 5],
   ["apps/web/app/(app)/portals/guardian-portal-page.tsx", 1],
   ["apps/web/app/(app)/portals/teacher-portal-page.tsx", 1],
@@ -1697,12 +1701,12 @@ requireTokens("apps/web/src/route-manifest.js", [
   'const operationEvidenceCapability = "operation:manage"',
   'navRoute("/kurum/kurulum", "Kurulum", "Ayarlar", "Settings", { capability: "setup:manage" })',
   'export const institutionNavGroupLabels = ["Bugün", "Kişiler", "Akademik", "Sınav", "İletişim", "Finans", "Ayarlar"];',
-  'navRoute("/kurum/operasyon-ve-kanit", "Operasyon ve kanıt", "Ayarlar", "ShieldCheck", { capability: operationEvidenceCapability, hub: "/kurum/operasyon-ve-kanit" })',
+  'navRoute("/kurum/operasyon-ve-kanit", "Operasyon ve kanıt", "Ayarlar", "ShieldCheck", { capability: operationEvidenceCapability, hub: "/kurum/operasyon-ve-kanit", tabLabel: "Genel bakış" })',
   'navRoute("/kurum/denetim", "Denetim", "Ayarlar", "ClipboardList", { capability: "tenant-audit:read", hiddenFromRail: true, hub: "/kurum/operasyon-ve-kanit", operationEvidence: true, persona: "STAFF" })',
   'navRoute("/kurum/kvkk", "KVKK", "Ayarlar", "ShieldCheck", { capability: "privacy:manage", hiddenFromRail: true, hub: "/kurum/operasyon-ve-kanit", operationEvidence: true })',
-  'navRoute("/kurum/guvenlik-denetimi", "Güvenlik Denetimi", "Ayarlar", "ShieldCheck", { capability: operationEvidenceCapability, hiddenFromRail: true, hub: "/kurum/operasyon-ve-kanit", operationEvidence: true })',
-  'navRoute("/kurum/canli-yayin", "Yayın Hazırlığı", "Ayarlar", "Activity", { capability: operationEvidenceCapability, hiddenFromRail: true, hub: "/kurum/operasyon-ve-kanit", operationEvidence: true })',
-  'navRoute("/kurum/raporlar", "Sınav Raporları", "Sınav", "BarChart3", { capability: "academic:manage", keywords: ["karne"] })',
+  'navRoute("/kurum/guvenlik-denetimi", "Güvenlik Denetimi", "Ayarlar", "ShieldCheck", { capability: operationEvidenceCapability, hiddenFromRail: true, hub: "/kurum/operasyon-ve-kanit", operationEvidence: true, tabLabel: "Güvenlik denetimi" })',
+  'navRoute("/kurum/canli-yayin", "Yayın Hazırlığı", "Ayarlar", "Activity", { capability: operationEvidenceCapability, hiddenFromRail: true, hub: "/kurum/operasyon-ve-kanit", operationEvidence: true, tabLabel: "Yayın hazırlığı" })',
+  'navRoute("/kurum/raporlar", "Sınav Raporları", "Sınav", "BarChart3", { capability: "academic:manage", keywords: ["karne"], menuLabel: "Raporlar" })',
   'navRoute("/kurum", "Özet", "Bugün", "LayoutDashboard", { breadcrumbLabel: "Kurum Özeti" })',
   'commandAction("/kurum/kurulum", "Yeni dönem açılışı", "İş akışı", "setup:manage")',
 ]);
@@ -1719,7 +1723,8 @@ requireNoTokens("apps/web/src/route-manifest.js", [
 ]);
 
 requireTokens("apps/web/app/(app)/app-shell.tsx", [
-  "Button, Dialog, Field, Input, Panel, StatusBadge, type StatusBadgeProps",
+  'import { Button, Dialog, Field, Input } from "@o-okul/ui";',
+  'import { Button, Panel, StatusBadge, type StatusBadgeProps } from "@o-okul/ui";',
   '<Field className="next-command-search" label="Komut ara">',
   "hasInstitutionAccess(roles) && (!action.capability || hasCapabilityForRoles(roles, action.capability))",
   'action.scope === "system"\n        ? hasSystemAccess(roles)',

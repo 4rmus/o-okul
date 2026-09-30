@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { EmptyState, LoadingState, MetricCard, MetricGrid } from "@o-okul/ui";
 import { useAuth } from "../../providers.js";
 import { initialListQuery } from "../../../src/list-controls.js";
-import { PageFrame } from "../kurum/_shared/page-frame.js";
+import { PageFrame } from "../_shared/page-frame.js";
 import { loadTenants } from "./_shared/system-api.js";
 
 export function SystemDashboard() {
