@@ -32,6 +32,7 @@ const summaryDefaultedSmokeKeys = new Map([
 const workflowInjectedKeys = new Set([
   "ROLLBACK_IMAGE_TAG",
   "SENTRY_RELEASE",
+  "METRICS_SCRAPE_TOKEN",
   "GITHUB_CI_EVIDENCE_TARGET",
   "UI_UX_REDESIGN_EVIDENCE_TARGET",
   "PRODUCTION_EVIDENCE_SUMMARY_TARGET",
@@ -661,6 +662,8 @@ function checkResolvedProductionEnv(target) {
     env[key] = value;
   }
   env.ROLLBACK_IMAGE_TAG = "staging-evidence-preflight";
+  // Workflow STAGING_METRICS_SCRAPE_TOKEN secret'ından release env'e yazar; preflight yalnız şekli doğrular.
+  env.METRICS_SCRAPE_TOKEN = "staging-evidence-preflight-metrics-scrape-token-0001";
   env.GITHUB_CI_EVIDENCE_TARGET = "file:///var/lib/o-okul/staging-artifacts/github-ci.json";
   env.UI_UX_REDESIGN_EVIDENCE_TARGET = "file:///var/lib/o-okul/staging-artifacts/ui-ux-redesign.json";
   env.PRODUCTION_EVIDENCE_SUMMARY_TARGET = "file:///var/lib/o-okul/staging-artifacts/release-summary-preflight.json";

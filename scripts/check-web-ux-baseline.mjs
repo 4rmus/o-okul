@@ -45,7 +45,7 @@ const files = {
   "apps/web/app/(app)/kurum/etutler/study-sessions-page.tsx": readFileSync("apps/web/app/(app)/kurum/etutler/study-sessions-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/finans/finance-page.tsx": readFileSync("apps/web/app/(app)/kurum/finans/finance-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/canli-yayin/live-release-page.tsx": readFileSync("apps/web/app/(app)/kurum/canli-yayin/live-release-page.tsx", "utf8"),
-  "apps/web/app/(app)/kurum/gozlemlenebilirlik/observability-page.tsx": readFileSync("apps/web/app/(app)/kurum/gozlemlenebilirlik/observability-page.tsx", "utf8"),
+  "apps/web/app/(app)/sistem/gozlemlenebilirlik/observability-page.tsx": readFileSync("apps/web/app/(app)/sistem/gozlemlenebilirlik/observability-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/guvenlik-denetimi/security-audit-page.tsx": readFileSync("apps/web/app/(app)/kurum/guvenlik-denetimi/security-audit-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/yedek-restore/backup-restore-page.tsx": readFileSync("apps/web/app/(app)/kurum/yedek-restore/backup-restore-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/kampusler/campuses-page.tsx": readFileSync("apps/web/app/(app)/kurum/kampusler/campuses-page.tsx", "utf8"),
@@ -70,7 +70,7 @@ const files = {
   "apps/web/app/(app)/kurum/seviyeler/grade-levels-page.tsx": readFileSync("apps/web/app/(app)/kurum/seviyeler/grade-levels-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/siniflar/class-detail-page.tsx": readFileSync("apps/web/app/(app)/kurum/siniflar/class-detail-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/siniflar/classes-page.tsx": readFileSync("apps/web/app/(app)/kurum/siniflar/classes-page.tsx", "utf8"),
-  "apps/web/app/(app)/kurum/sistem-sagligi/system-health-page.tsx": readFileSync("apps/web/app/(app)/kurum/sistem-sagligi/system-health-page.tsx", "utf8"),
+  "apps/web/app/(app)/sistem/sistem-sagligi/system-health-page.tsx": readFileSync("apps/web/app/(app)/sistem/sistem-sagligi/system-health-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/veliler/guardians-page.tsx": readFileSync("apps/web/app/(app)/kurum/veliler/guardians-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/veliler/guardian-detail-page.tsx": readFileSync("apps/web/app/(app)/kurum/veliler/guardian-detail-page.tsx", "utf8"),
   "apps/web/app/(app)/sistem/system-dashboard.tsx": readFileSync("apps/web/app/(app)/sistem/system-dashboard.tsx", "utf8"),
@@ -621,7 +621,11 @@ requireNoTokens("apps/web/e2e-next/list-url-state-next.spec.ts", [
 requireTokens("apps/web/e2e-next/system-tenant-contract-next.spec.ts", [
   "Sistem tenant yönetimi sözleşmesi",
   "kurum operasyon özeti URL state ve tenant kapsamını korur",
-  "sistem referans ekranları statik kanıtı kontrol listesi olarak gösterir",
+  "sistem denetim referans ekranı statik kanıtı kontrol listesi olarak gösterir",
+  "sistem sağlığı canlı sağlık kartlarını kısmi hatada düşürmeden gösterir ve metrik okumaz",
+  'getByLabel("Sistem sağlığı doğrulama durumu")',
+  'getByLabel("Sistem izleme doğrulama durumu")',
+  "Bağlantı kurulamadı",
   'getByRole("region", { exact: true, name: "Kurum listesi özeti" })',
   "referans kontrol listesi",
   "forbiddenTenantScopedPaths",
@@ -807,9 +811,9 @@ requireTokens("apps/web/e2e-next/governance-evidence-contract-next.spec.ts", [
   'openWithGovernanceMocks(page, "/kurum/denetim", { height: 844, width: 390 }, { roles: ["ASSISTANT_ADMIN"] })',
   'openWithGovernanceMocks(page, "/kurum/canli-yayin", { height: 900, width: 390 },',
   'openWithGovernanceMocks(page, "/kurum/yedek-restore", { height: 900, width: 390 },',
-  'openWithGovernanceMocks(page, "/kurum/sistem-sagligi", { height: 900, width: 390 },',
-  'openWithGovernanceMocks(page, "/kurum/gozlemlenebilirlik", { height: 900, width: 768 },',
-  'systemEndpoints: "partial-metrics-failure"',
+  'for (const retiredPath of ["/kurum/sistem-sagligi", "/kurum/gozlemlenebilirlik"])',
+  'openWithGovernanceMocks(page, retiredPath, { height: 900, width: 390 }, { roles: ["TENANT_ADMIN"] })',
+  "expect(platformRequests).toEqual([])",
   'getByLabel("KVKK güven durumu")',
   'roles: ["TENANT_ADMIN"]',
   'getByRole("region", { exact: true, name: "KVKK operasyon özeti" })',
@@ -827,8 +831,6 @@ requireTokens("apps/web/e2e-next/governance-evidence-contract-next.spec.ts", [
   'getByLabel("Güvenlik güven durumu")',
   'getByLabel("Canlıya geçiş doğrulama durumu")',
   'getByLabel("Yedekleme ve geri yükleme güven durumu")',
-  'getByLabel("Sistem sağlığı doğrulama durumu")',
-  'getByLabel("Sistem izleme doğrulama durumu")',
   'getByRole("region", { exact: true, name: "Denetim operasyon özeti" })',
   'getByRole("table", { name: "Denetim kayıtları" })',
   'getByRole("region", { exact: true, name: "Yayın hazırlığı özeti" })',
@@ -891,7 +893,6 @@ requireTokens("apps/web/e2e-next/governance-evidence-contract-next.spec.ts", [
   'not.toContainText("entityId")',
   'not.toContainText("diff")',
   'not.toContainText("Gizli destek konusu")',
-  "Bağlantı kurulamadı",
   'await expect(page).toHaveURL(/\\/kurum\\/denetim$/)',
   'await expect(page).toHaveURL(/\\/kurum$/)',
   'Kanıt kapsamı: Sistem kaydı',
@@ -1730,12 +1731,12 @@ requireNoTokens("apps/web/app/(app)/_shared/access.ts", [
   "hasCapabilityForRoles(roles, hiddenCapability)",
 ]);
 
-requireTokens("apps/web/app/(app)/kurum/gozlemlenebilirlik/observability-page.tsx", [
+requireTokens("apps/web/app/(app)/sistem/gozlemlenebilirlik/observability-page.tsx", [
   '"Bağlantı sorunu arttı"',
   '"Yanıt süresi uzadı"',
 ]);
 
-requireNoTokens("apps/web/app/(app)/kurum/gozlemlenebilirlik/observability-page.tsx", [
+requireNoTokens("apps/web/app/(app)/sistem/gozlemlenebilirlik/observability-page.tsx", [
   '"OOkulHigh5xxRate"',
   '"OOkulSlowRequests"',
 ]);
@@ -3237,7 +3238,7 @@ requireNoTokens("apps/web/app/(app)/kurum/denetim/audit-logs-page.tsx", [
   "diff ham",
 ]);
 
-requireTokens("apps/web/app/(app)/kurum/sistem-sagligi/system-health-page.tsx", [
+requireTokens("apps/web/app/(app)/sistem/sistem-sagligi/system-health-page.tsx", [
   "OperationSummary",
   "OperationSummaryAction",
   "OperationSummaryBadge",
@@ -3246,7 +3247,7 @@ requireTokens("apps/web/app/(app)/kurum/sistem-sagligi/system-health-page.tsx", 
   "Panel",
   "StatusBadge",
   'ariaLabel="Sistem sağlığı özeti"',
-  'caption="Sistem bağlantıları ve kullanım durumu"',
+  'caption="Sistem bağlantıları"',
   'caption="Teknik sistem kontrol adresleri"',
   'density="compact"',
   'mobilePriority: "primary"',
@@ -3265,35 +3266,40 @@ requireTokens("apps/web/app/(app)/kurum/sistem-sagligi/system-health-page.tsx", 
   'scope: "staging-prod"',
 ]);
 
-requireNoTokens("apps/web/app/(app)/kurum/sistem-sagligi/system-health-page.tsx", [
+requireNoTokens("apps/web/app/(app)/sistem/sistem-sagligi/system-health-page.tsx", [
   "MetricPanelGrid",
   "next-report-list",
+  "/metrics",
 ]);
 
 requireTokens("apps/web/e2e-next/governance-evidence-contract-next.spec.ts", [
+  "platform sağlık yüzeyleri tenant düzleminden emekli ve yönlendirilir",
+  "toHaveURL(/\\/kurum\\/operasyon-ve-kanit$/)",
+  'getByRole("link", { name: "Sistem Sağlığı" })).toHaveCount(0)',
+  'getByRole("link", { name: "Sistem İzleme" })).toHaveCount(0)',
+]);
+
+requireTokens("apps/web/e2e-next/system-tenant-contract-next.spec.ts", [
   'getByRole("region", { exact: true, name: "Sistem sağlığı özeti" })',
-  'getByRole("table", { name: "Sistem bağlantıları ve kullanım durumu" })',
+  'getByRole("table", { name: "Sistem bağlantıları" })',
   'getByRole("table", { name: "Teknik sistem kontrol adresleri" })',
   "Sistem sağlığı özeti önerilen işlemler",
+  'not.toContainText("/metrics")',
+  "expect(metricsRequests).toEqual([])",
   'getByRole("region", { exact: true, name: "Sistem izleme özeti" })',
-  'getByRole("table", { name: "Anlık sistem kontrol adresleri" })',
-  "Sistem izleme özeti önerilen işlemler",
-  "Anlık durum kısmi",
   "observability:uat:check",
   "alert:webhook:smoke",
   "sentry:smoke",
 ]);
 
-requireTokens("apps/web/app/(app)/kurum/gozlemlenebilirlik/observability-page.tsx", [
+requireTokens("apps/web/app/(app)/sistem/gozlemlenebilirlik/observability-page.tsx", [
   "OperationSummary",
   "OperationSummaryAction",
   "OperationSummaryBadge",
-  "OperationSummaryItem",
   "DataTable",
   "Panel",
   "StatusBadge",
   'ariaLabel="Sistem izleme özeti"',
-  'caption="Anlık sistem kontrol adresleri"',
   'caption="Sistem izleme panoları"',
   'caption="Sistem uyarı kuralları"',
   'caption="Teknik sistem izleme kontrolleri"',
@@ -3303,25 +3309,19 @@ requireTokens("apps/web/app/(app)/kurum/gozlemlenebilirlik/observability-page.ts
   'priority: "primary"',
   'priority: "secondary"',
   'sticky: "left"',
-  "buildObservabilitySummaryItems",
-  "buildObservabilitySummaryBadges",
-  "buildObservabilitySummaryActions",
-  "buildObservabilitySignalRows",
   "buildChecklistRows",
-  "observabilityEndpointState",
-  "observabilityEndpointTone",
   "Uyarı kanalı",
   "İzleme panoları",
   'ariaLabel="Sistem izleme doğrulama durumu"',
-  'scope: sourceLabel(apiUrl) === "Bu bilgisayar" ? "local-static" : "configured-api"',
-  'scope: "configured-api"',
   'scope: "live-required"',
   'scope: "staging-prod"',
 ]);
 
-requireNoTokens("apps/web/app/(app)/kurum/gozlemlenebilirlik/observability-page.tsx", [
+requireNoTokens("apps/web/app/(app)/sistem/gozlemlenebilirlik/observability-page.tsx", [
   "MetricPanelGrid",
   "next-report-list",
+  "/metrics",
+  "fetch(",
 ]);
 
 requireTokens("apps/web/app/(app)/kurum/canli-yayin/live-release-page.tsx", [
@@ -5192,8 +5192,8 @@ function validateRouteFamilySmokeContract() {
   const manifestRoutes = [...manifestSource.matchAll(/^\s*route\("([^"]+)"/gm)].map((match) => match[1]);
   const duplicateRoutes = manifestRoutes.filter((route, index) => manifestRoutes.indexOf(route) !== index);
   const fileSystemRoutes = collectRoutePageTemplates("apps/web/app").sort();
-  if (manifestRoutes.length !== 87) {
-    failures.push(`${path} route manifest must contain exactly 87 route tests; found ${manifestRoutes.length}.`);
+  if (manifestRoutes.length !== 85) {
+    failures.push(`${path} route manifest must contain exactly 85 route tests; found ${manifestRoutes.length}.`);
   }
   if (duplicateRoutes.length > 0) {
     failures.push(`${path} route manifest contains duplicate routes: ${[...new Set(duplicateRoutes)].join(", ")}.`);
@@ -5203,8 +5203,8 @@ function validateRouteFamilySmokeContract() {
   }
 
   const primaryTaskCount = manifestSource.match(/\{ role: "(?:button|form|link|region)", name: "[^"]+" \}/g)?.length ?? 0;
-  if (primaryTaskCount !== 87) {
-    failures.push(`${path} must give all 87 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
+  if (primaryTaskCount !== 85) {
+    failures.push(`${path} must give all 85 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
   }
 
   const viewportStart = source.indexOf("const routeViewports = [");

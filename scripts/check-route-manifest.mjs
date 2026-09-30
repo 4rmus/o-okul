@@ -11,7 +11,8 @@ const appRoot = "apps/web/app";
 const smokePath = "apps/web/e2e-next/ui-route-family-smoke-next.spec.ts";
 const failures = [];
 const pageRoutes = collectPageRoutes(appRoot).sort();
-const retiredRoutes = new Set(["/kurum/uat-rollback"]);
+const redirectedRetiredRoutes = ["/kurum/sistem-sagligi", "/kurum/gozlemlenebilirlik"];
+const retiredRoutes = new Set(["/kurum/uat-rollback", ...redirectedRetiredRoutes]);
 const smoke = readFileSync(smokePath, "utf8");
 const start = smoke.indexOf("const routeCases = [");
 const end = smoke.indexOf("] satisfies RouteCase[];", start);
@@ -29,6 +30,10 @@ if (new Set(manifestRoutes).size !== manifestRoutes.length) failures.push("route
 if (manifestPersonas.size !== pageRoutes.length) failures.push("route smoke persona envanteri eksik veya duplicate");
 for (const route of retiredRoutes) {
   if (pageRoutes.includes(route) || manifestRoutes.includes(route)) failures.push("retired route yeniden eklenemez: " + route);
+}
+const nextConfig = readFileSync("apps/web/next.config.mjs", "utf8");
+for (const route of redirectedRetiredRoutes) {
+  if (!nextConfig.includes('"' + route + '"')) failures.push("emekli route için next.config.mjs yönlendirmesi eksik: " + route);
 }
 
 for (const route of pageRoutes) {

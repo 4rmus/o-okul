@@ -52,7 +52,6 @@ const tenantModules = {
   duyurular: ["communication", "REGISTRY"],
   etutler: ["academic-structure", "REGISTRY"],
   finans: ["finance", "MASTER_DETAIL"],
-  gozlemlenebilirlik: ["operations", "WORKFLOW"],
   "guvenlik-denetimi": ["operations", "WORKFLOW"],
   kampusler: ["academic-structure", "REGISTRY"],
   kazanimlar: ["academic-structure", "REGISTRY"],
@@ -74,7 +73,6 @@ const tenantModules = {
   seviyeler: ["academic-structure", "REGISTRY"],
   sinavlar: ["exam", "REGISTRY"],
   siniflar: ["academic-structure", "REGISTRY"],
-  "sistem-sagligi": ["operations", "WORKFLOW"],
   veliler: ["guardian-portal", "REGISTRY"],
   "yedek-restore": ["operations", "WORKFLOW"],
 };

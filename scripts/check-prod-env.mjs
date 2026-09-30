@@ -55,6 +55,7 @@ function checkContract(file) {
     "DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL",
     "SECRET_DELIVERY_WORKER_DB_PASSWORD",
     "JWT_ACCESS_SECRET",
+    "METRICS_SCRAPE_TOKEN",
     "STUDENT_PII_ENCRYPTION_KEY",
     "STUDENT_PII_HASH_KEY",
     "ADMIN_MFA_MODE",
@@ -198,6 +199,7 @@ function checkProductionEnv(env) {
   requireDistinctDatabasePassword(env, failures, "DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL", "DATABASE_URL");
   requireDistinctDatabasePassword(env, failures, "DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL", "DIRECT_DATABASE_URL");
   requireSecret(env, failures, "JWT_ACCESS_SECRET");
+  requireSecret(env, failures, "METRICS_SCRAPE_TOKEN");
   requireSecret(env, failures, "STUDENT_PII_ENCRYPTION_KEY");
   requireSecret(env, failures, "STUDENT_PII_HASH_KEY");
   requireEqual(env, failures, "ADMIN_MFA_MODE", "required");

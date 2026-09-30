@@ -529,6 +529,31 @@ if (!workerBlock.includes("SECRET_DELIVERY_OUTBOX_DATABASE_URL: ${DOCKER_SECRET_
   failures.push("docker-compose.yml worker dedicated SECRET_DELIVERY_OUTBOX_DATABASE_URL almalı");
 }
 
+// DEC-20260930-02: platform metrikleri yalnız iç ağdan, bearer token ile okunur.
+for (const edgeFile of ["docker-compose.traefik.yml", "docker-compose.traefik-ip.yml"]) {
+  const apiRule = readFileSync(edgeFile, "utf8").match(/traefik\.http\.routers\.api(?:-ip)?\.rule=([^"]+)"/)?.[1] ?? "";
+  if (!apiRule.includes("!PathPrefix(`/api/v1/metrics`)")) {
+    failures.push(`${edgeFile} API router kuralı /api/v1/metrics yolunu dışarı açmamalı`);
+  }
+}
+if (/source:\s*"\/metrics"|\/metrics`/.test(readFileSync("apps/web/next.config.mjs", "utf8"))) {
+  failures.push("apps/web/next.config.mjs /metrics yolunu rewrite ile açmamalı");
+}
+for (const [file, token] of [
+  ["docker/prometheus/prometheus.yml", "credentials_file: /run/secrets/prometheus/metrics-scrape-token"],
+  ["docker-compose.observability.yml", "prometheus_secrets:/run/secrets/prometheus:ro"],
+  ["docker-compose.observability.yml", "test -s /source/metrics-scrape-token"],
+  ["docker-compose.yml", "METRICS_SCRAPE_TOKEN: ${METRICS_SCRAPE_TOKEN:-}"],
+  [".github/workflows/staging-deploy.yml", "STAGING_METRICS_SCRAPE_TOKEN: ${{ secrets.STAGING_METRICS_SCRAPE_TOKEN }}"],
+  [".github/workflows/staging-deploy.yml", "for secret_file in webhook-url webhook-token metrics-scrape-token; do"],
+  [".github/workflows/staging-deploy.yml", 'METRICS_SCRAPE_TOKEN=$(cat "$alertmanager_secrets_dir/metrics-scrape-token")'],
+  [".github/workflows/staging-deploy.yml", '(umask 077 && : > "$release_env_file")'],
+  [".github/workflows/staging-deploy.yml", "/^[A-Za-z0-9._~-]{32,}$/.test(metricsScrapeToken)"],
+  ["apps/api/src/metrics/metrics.controller.ts", "isMetricsScrapeAuthorized(authorization)"],
+]) {
+  if (!readFileSync(file, "utf8").includes(token)) failures.push(`${file} metrics scrape token sözleşmesi eksik: ${token}`);
+}
+
 if (failures.length > 0) {
   console.error("Docker/CI statik kontrolü başarısız:");
   for (const failure of failures) console.error(`- ${failure}`);

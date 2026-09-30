@@ -40,7 +40,7 @@ function expectBlockedSummary() {
     "- result: GAP",
     "- overallStatus: BLOCKED",
     "- releaseEvidence: false",
-    "- githubMissingSecrets: 2",
+    "- githubMissingSecrets: 3",
     "- remoteCommit: contract123",
     "- remoteUiUxEvidenceScript: missing",
     "- localHead:",
@@ -62,7 +62,7 @@ function expectBlockedSummary() {
   }
   if (summary.releaseEvidence !== false) failContract("summary releaseEvidence=false olmalı.", result);
   if (JSON.stringify(summary).includes(secretLeakMarker)) failContract("summary secret değerini içermemeli.", result);
-  if (JSON.stringify(summary.githubEnvironment.missingSecrets) !== JSON.stringify(["GHCR_READ_TOKEN", "STAGING_EVIDENCE_ENV_B64"])) {
+  if (JSON.stringify(summary.githubEnvironment.missingSecrets) !== JSON.stringify(["GHCR_READ_TOKEN", "STAGING_EVIDENCE_ENV_B64", "STAGING_METRICS_SCRAPE_TOKEN"])) {
     failContract("summary eksik GitHub secret isimlerini taşımalı.", result);
   }
   if (!summary.remoteReleaseBundle.openClosureItems?.some((item) => item.path === "reports/ui-ux-redesign.json")) {
@@ -147,7 +147,7 @@ if (path === "repos/owner/repo/environments/staging/secrets?per_page=100") {
   const names =
     scenario === "missing-secrets"
       ? ["STAGING_SSH_HOST", "STAGING_SSH_USER", "STAGING_SSH_PRIVATE_KEY"]
-      : ["STAGING_SSH_HOST", "STAGING_SSH_USER", "STAGING_SSH_PRIVATE_KEY", "GHCR_READ_TOKEN", "STAGING_EVIDENCE_ENV_B64"];
+      : ["STAGING_SSH_HOST", "STAGING_SSH_USER", "STAGING_SSH_PRIVATE_KEY", "GHCR_READ_TOKEN", "STAGING_EVIDENCE_ENV_B64", "STAGING_METRICS_SCRAPE_TOKEN"];
   writeJson({ secrets: names.map((name) => ({ name, value: "${secretLeakMarker}" })) });
 }
 fail("unknown path");

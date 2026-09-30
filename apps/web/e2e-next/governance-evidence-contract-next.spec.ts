@@ -35,7 +35,6 @@ interface GovernanceMockOptions {
   activePersona?: "STAFF" | "TEACHER" | null;
   auditSafeListFailure?: boolean;
   roles?: string[];
-  systemEndpoints?: "partial-metrics-failure";
 }
 
 test.describe("Governance evidence sözleşmesi", () => {
@@ -456,82 +455,23 @@ test.describe("Governance evidence sözleşmesi", () => {
     await expectNoUnlabeledControls(page, "backup-restore-governance-mobile");
   });
 
-  test("sağlık ve gözlemlenebilirlik kısmi endpoint hatasında kanıtı düşürmez", async ({ page }) => {
-    await openWithGovernanceMocks(page, "/kurum/sistem-sagligi", { height: 900, width: 390 }, {
-      roles: ["TENANT_ADMIN"],
-      systemEndpoints: "partial-metrics-failure",
+  test("platform sağlık yüzeyleri tenant düzleminden emekli ve yönlendirilir", async ({ page }) => {
+    const platformRequests: string[] = [];
+    page.on("request", (request) => {
+      const { pathname } = new URL(request.url());
+      if (pathname === "/health" || pathname === "/health/ready" || pathname === "/metrics") platformRequests.push(pathname);
     });
-    const healthTrustPanel = page.getByLabel("Sistem sağlığı doğrulama durumu");
-    await expectEvidenceScopes(healthTrustPanel, {
-      "Kanıt kapsamı: Bu ekrandaki bilgi": 0,
-      "Kanıt kapsamı: Bağlı sistem": 2,
-      "Kanıt kapsamı: Deneme/canlı ortam": 1,
-    });
-    const healthSummary = page.getByRole("region", { exact: true, name: "Sistem sağlığı özeti" });
-    await expect(healthSummary).toContainText("Kontrol kapsamı");
-    await expect(healthSummary).toContainText("Bağlantı durumu");
-    await expect(healthSummary.getByLabel("Sistem sağlığı özeti önerilen işlemler")).toBeVisible();
-    const dependencyTable = page.getByRole("table", { name: "Sistem bağlantıları ve kullanım durumu" });
-    await expect(dependencyTable).toContainText("Veritabanı");
-    await expect(dependencyTable).toContainText("Hızlı erişim");
-    await expect(dependencyTable).toContainText("Web istekleri");
-    await expect(dependencyTable).not.toContainText("Postgres");
-    await expect(dependencyTable).not.toContainText("Redis");
-    const healthDetails = page.getByRole("region", { name: "Teknik sistem kontrolleri" });
-    const healthEndpointTable = healthDetails.getByRole("table", { name: "Teknik sistem kontrol adresleri" });
-    await expect(healthEndpointTable).toBeHidden();
-    await openAllTechnicalDetails(page.locator("main"));
-    await expect(healthEndpointTable).toBeVisible();
-    await expect(healthEndpointTable).toContainText("/health");
-    await expect(healthEndpointTable).toContainText("/health/ready");
-    await expect(healthEndpointTable).toContainText("/metrics");
-    await expect(healthEndpointTable).toContainText("200 tamam");
-    await expect(healthEndpointTable).toContainText("Bağlantı kurulamadı");
-    await expect(page.getByText("Sağlık bilgisi alınamadı.")).toHaveCount(0);
-    await expectNoHorizontalOverflow(page, "system-health-partial-mobile");
 
-    await openWithGovernanceMocks(page, "/kurum/gozlemlenebilirlik", { height: 900, width: 768 }, {
-      roles: ["TENANT_ADMIN"],
-      systemEndpoints: "partial-metrics-failure",
-    });
-    const observabilityTrustPanel = page.getByLabel("Sistem izleme doğrulama durumu");
-    await expectEvidenceScopes(observabilityTrustPanel, {
-      "Kanıt kapsamı: Bu ekrandaki bilgi": 0,
-      "Kanıt kapsamı: Bağlı sistem": 2,
-      "Kanıt kapsamı: Canlı kanıt": 1,
-      "Kanıt kapsamı: Deneme/canlı ortam": 1,
-    });
-    const observabilitySummary = page.getByRole("region", { exact: true, name: "Sistem izleme özeti" });
-    await expect(observabilitySummary).toContainText("Kontrol kapsamı");
-    await expect(observabilitySummary).toContainText("Uyarı kanalı");
-    await expect(observabilitySummary).toContainText("İzleme panoları");
-    await expect(observabilitySummary).toContainText("Anlık durum kısmi");
-    await expect(observabilitySummary.getByLabel("Sistem izleme özeti önerilen işlemler")).toBeVisible();
-    const observabilitySignals = page.getByRole("region", { name: "Anlık sistem durumu" });
-    const observabilitySignalTable = observabilitySignals.getByRole("table", { name: "Anlık sistem kontrol adresleri" });
-    await expect(observabilitySignalTable).toContainText("Uygulama");
-    await expect(observabilitySignalTable).toContainText("Bağlantılar");
-    await expect(observabilitySignalTable).toContainText("Kullanım bilgileri");
-    await expect(observabilitySignalTable).not.toContainText("/health");
-    await expect(page.getByLabel("Uyarı kuralları", { exact: true })).toContainText("Uyarı ve hata izleme kanalları");
-    await expect(page.getByLabel("İzleme panoları", { exact: true })).toContainText("Temel sistem göstergeleri ve uygulama kayıtları");
-    const observabilityDetails = page.getByRole("region", { name: "Teknik bağlantı adresleri" });
-    const observabilityEndpointTable = observabilityDetails.getByRole("table", { name: "Teknik bağlantı adresleri" });
-    await expect(observabilityEndpointTable).toBeHidden();
-    await openAllTechnicalDetails(page.locator("main"));
-    await expect(observabilityEndpointTable.getByRole("columnheader", { name: "Kontrol" })).toBeVisible();
-    await expect(observabilityEndpointTable.getByRole("columnheader", { name: "Durum" })).toBeVisible();
-    await expect(observabilityEndpointTable.getByRole("columnheader", { name: "Açıklama" })).toBeVisible();
-    await expect(observabilityEndpointTable).toContainText("/health");
-    await expect(observabilityEndpointTable).toContainText("/health/ready");
-    await expect(observabilityEndpointTable).toContainText("/metrics");
-    await expect(observabilityEndpointTable).toContainText("200 tamam");
-    await expect(observabilityEndpointTable).toContainText("Bağlantı kurulamadı");
-    await expect(page.getByLabel("Sistem izleme teknik kontrolleri", { exact: true })).toContainText("observability:uat:check");
-    await expect(page.getByLabel("Sistem izleme teknik kontrolleri", { exact: true })).toContainText("alert:webhook:smoke");
-    await expect(page.getByLabel("Sistem izleme teknik kontrolleri", { exact: true })).toContainText("sentry:smoke");
-    await expect(page.getByText("Sistem izleme bilgisi alınamadı.")).toHaveCount(0);
-    await expectNoHorizontalOverflow(page, "observability-partial-tablet");
+    for (const retiredPath of ["/kurum/sistem-sagligi", "/kurum/gozlemlenebilirlik"]) {
+      await openWithGovernanceMocks(page, retiredPath, { height: 900, width: 390 }, { roles: ["TENANT_ADMIN"] });
+      await expect(page).toHaveURL(/\/kurum\/operasyon-ve-kanit$/);
+      const tools = page.getByRole("region", { name: "Operasyon ve kanıt araçları" });
+      await expect(tools.getByRole("link", { name: "Güvenlik Denetimi" })).toBeVisible();
+      await expect(tools.getByRole("link", { name: "Sistem Sağlığı" })).toHaveCount(0);
+      await expect(tools.getByRole("link", { name: "Sistem İzleme" })).toHaveCount(0);
+      await expectNoHorizontalOverflow(page, "retired-platform-health-redirect-mobile");
+    }
+    expect(platformRequests).toEqual([]);
   });
 });
 
@@ -553,7 +493,6 @@ async function openWithGovernanceMocks(
 ) {
   await page.setViewportSize(viewport);
   await installGovernanceApiMocks(page, options);
-  await installSystemEndpointMocks(page, options.systemEndpoints);
   await page.addInitScript(() => {
     document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
   });
@@ -587,31 +526,6 @@ async function installGovernanceApiMocks(page: Page, options: GovernanceMockOpti
 
     const response = mockGovernanceApiResponse(pathName, options);
     await fulfillData(route, response.data, response.meta, response.status);
-  });
-}
-
-async function installSystemEndpointMocks(page: Page, mode: "partial-metrics-failure" | undefined) {
-  await page.unroute("**/health").catch(() => undefined);
-  await page.unroute("**/health/ready").catch(() => undefined);
-  await page.unroute("**/metrics").catch(() => undefined);
-  if (!mode) return;
-
-  await page.route("**/health", async (route) => {
-    await route.fulfill({
-      body: JSON.stringify({ status: "ok" }),
-      headers: { "content-type": "application/json" },
-      status: 200,
-    });
-  });
-  await page.route("**/health/ready", async (route) => {
-    await route.fulfill({
-      body: JSON.stringify({ dependencies: { postgres: "ok", redis: "ok" }, status: "ready" }),
-      headers: { "content-type": "application/json" },
-      status: 200,
-    });
-  });
-  await page.route("**/metrics", async (route) => {
-    await route.abort("failed");
   });
 }
 

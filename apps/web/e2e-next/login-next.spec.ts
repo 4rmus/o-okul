@@ -5006,12 +5006,14 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
 
   for (const operationPath of [
     "/kurum/guvenlik-denetimi",
-    "/kurum/gozlemlenebilirlik",
     "/kurum/canli-yayin",
-    "/kurum/sistem-sagligi",
   ]) {
     await page.goto(operationPath);
     await expect(page).toHaveURL(new RegExp(`${operationPath}$`));
+  }
+  for (const retiredPath of ["/kurum/gozlemlenebilirlik", "/kurum/sistem-sagligi"]) {
+    await page.goto(retiredPath);
+    await expect(page).toHaveURL(/\/kurum\/operasyon-ve-kanit$/);
   }
 
   await expandSidebarGroup(page, "Ayarlar");

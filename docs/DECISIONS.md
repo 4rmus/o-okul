@@ -657,8 +657,10 @@ taşınmaz, metrikler için Grafana esas kaynaktır ve yeni metrik endpoint'i ek
 korunur; Prometheus/Alloy scrape config'i bearer token kullanır. Güvenlik check'i Traefik API
 router'ının ve Next rewrite'larının `/metrics` yolunu dışarı açmadığını doğrular.
 Kaynak: 30 Eylül 2026 Berrak planı §10 güvenlik incelemesi; derinlemesine savunma ürün sahibi
-tarafından onaylandı. Bugün aktif sızıntı yoktur; karar sınır ihlali (ADR-0010) ve prod'da bozuk
-metrik kartı içindir.
+tarafından onaylandı. Düzeltme (G1 uygulaması): planın "aktif sızıntı yok" tespiti eksikti; API
+global prefix ile metrikleri `/api/v1/metrics` altında sunuyordu ve Traefik `PathPrefix(/api)`
+kuralı bu yolu kimlik doğrulamasız dışarı açıyordu (PII yok; tüm kurumların toplam trafik ve kuyruk
+sayıları). G1 bearer guard ve Traefik `!PathPrefix(/api/v1/metrics)` hariç tutmasıyla kapatır.
 Kanıt: `docs/ui-ux-berrak-redesign-plan.md` §10, `pnpm route-manifest:check`,
 `pnpm security:audit:check`, `apps/api/src/metrics/*`.
 Etkilenen ADR: ADR-0010

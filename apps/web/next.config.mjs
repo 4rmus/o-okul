@@ -4,6 +4,14 @@ import { withSentryConfig } from "@sentry/nextjs";
 const nextConfig = {
   poweredByHeader: false,
   transpilePackages: ["@o-okul/ui", "@o-okul/shared-types"],
+  async redirects() {
+    // DEC-20260930-02: platform sağlık yüzeyleri control-plane'e taşındı.
+    return ["/kurum/sistem-sagligi", "/kurum/gozlemlenebilirlik"].map((source) => ({
+      source,
+      destination: "/kurum/operasyon-ve-kanit",
+      permanent: false,
+    }));
+  },
   async rewrites() {
     if (process.env.NODE_ENV !== "development") return [];
     const apiUrl = process.env.API_URL ?? "http://localhost:3100";
@@ -11,7 +19,6 @@ const nextConfig = {
       { source: "/api/:path*", destination: `${apiUrl}/api/:path*` },
       { source: "/health", destination: `${apiUrl}/health` },
       { source: "/health/ready", destination: `${apiUrl}/health/ready` },
-      { source: "/metrics", destination: `${apiUrl}/metrics` },
     ];
   },
 };

@@ -8996,6 +8996,7 @@ function createValidProdEnvForNegativeCheck() {
     DOCKER_SECRET_DELIVERY_OUTBOX_DATABASE_URL: "postgresql://secret_delivery_worker:secret-delivery-worker-db-password-123456789@postgres:5432/o_okul",
     SECRET_DELIVERY_WORKER_DB_PASSWORD: "secret-delivery-worker-db-password-123456789",
     JWT_ACCESS_SECRET: "access-secret-123456789012345678901234",
+    METRICS_SCRAPE_TOKEN: "metrics-scrape-token-1234567890123456789012",
     STUDENT_PII_ENCRYPTION_KEY: "student-pii-encryption-123456789012",
     STUDENT_PII_HASH_KEY: "student-pii-hash-123456789012345678",
     ADMIN_MFA_MODE: "required",

@@ -111,6 +111,12 @@ function buildRemediation(messages) {
         "pnpm staging:evidence-env:secret:set -- --repo 4rmus/o-okul --environment staging --env-file /secure/path/staging-evidence.env",
     });
   }
+  if (missingSecrets.has("STAGING_METRICS_SCRAPE_TOKEN")) {
+    remediation.push({
+      name: "STAGING_METRICS_SCRAPE_TOKEN",
+      command: "openssl rand -hex 32 | tr -d '\\n' | gh secret set STAGING_METRICS_SCRAPE_TOKEN --repo 4rmus/o-okul --env staging",
+    });
+  }
   return remediation;
 }
 

@@ -37,4 +37,18 @@ describe("Metrics API", () => {
     expect(response.text).toContain('path="/health"');
     expect(response.text).toContain('status="200"');
   });
+
+  it("scrape token yapılandırıldığında bearer olmadan metrik vermez", async () => {
+    const previous = process.env.METRICS_SCRAPE_TOKEN;
+    process.env.METRICS_SCRAPE_TOKEN = "s".repeat(48);
+    try {
+      await request(server).get("/metrics").expect(401);
+      await request(server).get("/metrics").set("authorization", `Bearer ${"x".repeat(48)}`).expect(401);
+      const response = await request(server).get("/metrics").set("authorization", `Bearer ${"s".repeat(48)}`).expect(200);
+      expect(response.text).toContain("o_okul_http_requests_total");
+    } finally {
+      if (previous === undefined) delete process.env.METRICS_SCRAPE_TOKEN;
+      else process.env.METRICS_SCRAPE_TOKEN = previous;
+    }
+  });
 });

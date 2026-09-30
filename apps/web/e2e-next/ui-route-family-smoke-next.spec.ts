@@ -65,7 +65,6 @@ const routeCases = [
   route("/kurum/duyurular", "Duyurular", "assistantAdmin", { role: "region", name: "Duyuru yönetimi" }),
   route("/kurum/etutler", "Etütler", "assistantAdmin", { role: "region", name: "Etüt yönetimi" }),
   route("/kurum/finans", "Finans", "tenantAdmin", { role: "region", name: "Finans yönetimi" }),
-  route("/kurum/gozlemlenebilirlik", "Sistem İzleme", "tenantAdmin", { role: "region", name: "Anlık sistem durumu" }),
   route("/kurum/guvenlik-denetimi", "Güvenlik Denetimi", "tenantAdmin", { role: "region", name: "Canlıya geçiş güvenlik kontrolleri" }),
   route("/kurum/kampusler", "Kampüsler", "assistantAdmin", { role: "region", name: "Kampüs yönetimi" }),
   route("/kurum/kazanimlar", "Kazanımlar", "assistantAdmin", { role: "region", name: "Kazanım yönetimi" }),
@@ -98,17 +97,16 @@ const routeCases = [
   route("/kurum/sinavlar/[examId]", "Gate C Denemesi", "assistantAdmin", { role: "region", name: "Salt okunur sınav çalışma alanı" }, { feature: "exam-workspace" }),
   route("/kurum/siniflar", "Sınıflar", "assistantAdmin", { role: "region", name: "Sınıf yönetimi" }),
   route("/kurum/siniflar/[classId]", "8-A", "assistantAdmin", { role: "region", name: "Sınıf detayı" }),
-  route("/kurum/sistem-sagligi", "Sistem Sağlığı", "tenantAdmin", { role: "region", name: "Sistem bağlantıları ve kullanım durumu" }),
   route("/kurum/veliler", "Veliler", "assistantAdmin", { role: "region", name: "Veli yönetimi" }),
   route("/kurum/veliler/[guardianId]", "Veli Test", "assistantAdmin", { role: "region", name: "Veli detayı" }),
   route("/kurum/yedek-restore", "Yedekleme ve Geri Yükleme", "tenantAdmin", { role: "region", name: "Yedekleme ve geri yükleme doğrulamaları" }),
 
   route("/sistem", "Sistem Paneli", "systemAdmin", { role: "region", name: "Sistem özeti" }),
   route("/sistem/denetim", "Denetim", "systemAdmin", { role: "region", name: "Denetim referans kontrol listesi" }),
-  route("/sistem/gozlemlenebilirlik", "Sistem İzleme", "systemAdmin", { role: "region", name: "Sistem İzleme referans kontrol listesi" }),
+  route("/sistem/gozlemlenebilirlik", "Sistem İzleme", "systemAdmin", { role: "region", name: "İzleme panoları" }),
   route("/sistem/kurumlar", "Kurumlar", "systemAdmin", { role: "region", name: "Kurum yönetimi" }),
   route("/sistem/kurumlar/[tenantId]", "Route Smoke Akademi", "systemAdmin", { role: "region", name: "Kurum detayı" }),
-  route("/sistem/sistem-sagligi", "Sistem Sağlığı", "systemAdmin", { role: "region", name: "Sistem Sağlığı referans kontrol listesi" }),
+  route("/sistem/sistem-sagligi", "Sistem Sağlığı", "systemAdmin", { role: "region", name: "Sistem bağlantıları" }),
 
   route("/ogrenci", "Öğrenci Portalı", "student", { role: "region", name: "Öğrenci günlük aksiyonları" }),
   route("/ogrenci/destek", "Öğrenci Portalı", "student", { role: "region", name: "Destek talepleri" }),
@@ -382,7 +380,7 @@ function assertRouteManifestParity(manifest: readonly RouteCase[]) {
   const fileSystemRoutes = collectPageRoutes(appDirectory).sort();
   const manifestRoutes = manifest.map((entry) => entry.routeTemplate).sort();
   const duplicates = manifestRoutes.filter((routeTemplate, index) => manifestRoutes.indexOf(routeTemplate) !== index);
-  if (manifest.length !== 87) throw new Error(`Route manifest must contain exactly 87 entries; found ${manifest.length}.`);
+  if (manifest.length !== 85) throw new Error(`Route manifest must contain exactly 85 entries; found ${manifest.length}.`);
   if (duplicates.length > 0) throw new Error(`Route manifest contains duplicates: ${[...new Set(duplicates)].join(", ")}`);
   if (JSON.stringify(manifestRoutes) !== JSON.stringify(fileSystemRoutes)) {
     throw new Error(`Route manifest does not match page.tsx inventory.\nmanifest=${manifestRoutes.join(",")}\nfilesystem=${fileSystemRoutes.join(",")}`);

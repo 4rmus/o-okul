@@ -12,6 +12,7 @@ const requiredSecrets = [
   "STAGING_SSH_PRIVATE_KEY",
   "GHCR_READ_TOKEN",
   "STAGING_EVIDENCE_ENV_B64",
+  "STAGING_METRICS_SCRAPE_TOKEN",
 ];
 const requiredVariables = ["STAGING_DEPLOY_DIR", "STAGING_NEXT_PUBLIC_API_URL"];
 const optionalVariables = ["STAGING_EDGE_MODE"];

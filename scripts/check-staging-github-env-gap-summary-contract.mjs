@@ -32,9 +32,11 @@ function expectGapSummary() {
     "GitHub staging environment gap özeti",
     "- result: GAP",
     "- overallStatus: BLOCKED",
-    "- missingSecrets: 2",
+    "- missingSecrets: 3",
     "missing secret: GHCR_READ_TOKEN",
     "missing secret: STAGING_EVIDENCE_ENV_B64",
+    "missing secret: STAGING_METRICS_SCRAPE_TOKEN",
+    "gh secret set STAGING_METRICS_SCRAPE_TOKEN",
     "pnpm staging:ghcr-read-token:secret:set",
     "pnpm staging:evidence-env:secret:set",
     "GitHub staging environment gap raporu yazıldı:",
@@ -47,7 +49,7 @@ function expectGapSummary() {
   const report = JSON.parse(readFileSync(gapReportFile, "utf8"));
   if (report.result !== "GAP") failContract("gap raporu result=GAP olmalı.", result);
   if (report.overallStatus !== "BLOCKED") failContract("gap raporu BLOCKED olmalı.", result);
-  if (JSON.stringify(report.missingSecrets) !== JSON.stringify(["GHCR_READ_TOKEN", "STAGING_EVIDENCE_ENV_B64"])) {
+  if (JSON.stringify(report.missingSecrets) !== JSON.stringify(["GHCR_READ_TOKEN", "STAGING_EVIDENCE_ENV_B64", "STAGING_METRICS_SCRAPE_TOKEN"])) {
     failContract("gap raporu eksik secret isimlerini taşımalı.", result);
   }
   if (JSON.stringify(report).includes(secretLeakMarker)) failContract("gap raporu secret değeri içermemeli.", result);
@@ -120,7 +122,7 @@ if (path === "repos/owner/repo/environments/staging/secrets?per_page=100") {
   const names =
     scenario === "missing-secrets"
       ? ["STAGING_SSH_HOST", "STAGING_SSH_USER", "STAGING_SSH_PRIVATE_KEY"]
-      : ["STAGING_SSH_HOST", "STAGING_SSH_USER", "STAGING_SSH_PRIVATE_KEY", "GHCR_READ_TOKEN", "STAGING_EVIDENCE_ENV_B64"];
+      : ["STAGING_SSH_HOST", "STAGING_SSH_USER", "STAGING_SSH_PRIVATE_KEY", "GHCR_READ_TOKEN", "STAGING_EVIDENCE_ENV_B64", "STAGING_METRICS_SCRAPE_TOKEN"];
   writeJson({ secrets: names.map((name) => ({ name, value: "${secretLeakMarker}" })) });
 }
 fail("unknown path");

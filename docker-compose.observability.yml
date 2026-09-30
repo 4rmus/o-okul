@@ -12,6 +12,11 @@ services:
       - |
         test -s /source/webhook-url
         test -s /source/webhook-token
+        test -s /source/metrics-scrape-token
+        cp /source/metrics-scrape-token /prometheus-target/.metrics-scrape-token.next
+        chown 65534:65534 /prometheus-target/.metrics-scrape-token.next
+        chmod 400 /prometheus-target/.metrics-scrape-token.next
+        mv /prometheus-target/.metrics-scrape-token.next /prometheus-target/metrics-scrape-token
         cp /source/webhook-url /target/.webhook-url.next
         cp /source/webhook-token /target/.webhook-token.next
         chown 65534:65534 /target/.webhook-url.next /target/.webhook-token.next
@@ -21,6 +26,7 @@ services:
     volumes:
       - ${ALERTMANAGER_SECRETS_DIR:?ALERTMANAGER_SECRETS_DIR is required}:/source:ro
       - alertmanager_secrets:/target
+      - prometheus_secrets:/prometheus-target
 
   alertmanager:
     image: prom/alertmanager:v0.28.1
@@ -56,11 +62,15 @@ services:
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_secrets:/run/secrets/prometheus:ro
       - prometheus_data:/prometheus
     networks:
       - backend_net
     depends_on:
-      - alertmanager
+      alertmanager:
+        condition: service_started
+      alertmanager-secrets-init:
+        condition: service_completed_successfully
 
   loki:
     image: grafana/loki:3.4.2
@@ -116,6 +126,7 @@ networks:
 volumes:
   alertmanager_secrets:
   alertmanager_data:
+  prometheus_secrets:
   prometheus_data:
   loki_data:
   grafana_data:
