@@ -253,15 +253,16 @@ export function ExamsPage() {
       priority: "primary",
       render: (exam) => (
         <div className="next-row-actions">
-          <button
-            type="button"
+          <Button
+            aria-label={`${exam.title} katılımcıları`}
             aria-pressed={activeExamId === exam.id}
             data-active={activeExamId === exam.id ? "true" : undefined}
             onClick={() => setSelectedExamId(exam.id)}
-            aria-label={`${exam.title} katılımcıları`}
+            size="icon"
+            variant="ghost"
           >
             <Users size={17} aria-hidden="true" />
-          </button>
+          </Button>
           <Button size="icon" variant="ghost" type="button" onClick={() => void openEditForm(exam)} aria-label={`${exam.title} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
           </Button>

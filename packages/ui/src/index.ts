@@ -29,4 +29,5 @@ export {
   type TabButtonProps,
   type TabsProps,
 } from "./components/tabs.js";
+export { ToastProvider, useToast, type ToastTone } from "./components/toast.js";
 export { Tooltip, type TooltipProps } from "./components/tooltip.js";

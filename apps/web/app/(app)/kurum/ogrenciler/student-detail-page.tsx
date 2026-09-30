@@ -37,6 +37,7 @@ import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
 import { formatCourseName, formatOutcomeCode, shortCourseName } from "../../_shared/academic-labels.js";
+import { ErrorBookletTable } from "../../_shared/error-booklet-table.js";
 import { ExamResultDonut, ProgressLineChart, TopicRadarChart } from "../../_shared/lazy-report-charts.js";
 import { formatNetNumber, OutcomeNetTable } from "../../_shared/outcome-net-table.js";
 import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
@@ -1232,60 +1233,6 @@ function buildStudentExamSummaryActions(
       value: errorBooklet ? `${formatCount(errorBooklet.items.length)} soru` : "Hata yok",
     },
   ];
-}
-
-function ErrorBookletTable({
-  caption,
-  emptyLabel,
-  items,
-}: {
-  caption: string;
-  emptyLabel: string;
-  items: ReportStudentQuestionSummary[];
-}) {
-  return (
-    <table className="uh-chart-table next-error-booklet-table">
-      <caption>{caption}</caption>
-      <thead>
-        <tr>
-          <th scope="col">Soru</th>
-          <th scope="col">Ders</th>
-          <th scope="col">Kazanım</th>
-          <th scope="col">Durum</th>
-          <th scope="col">Yanıt</th>
-          <th scope="col">Doğru</th>
-        </tr>
-      </thead>
-      <tbody>
-        {items.some((item) => item.status !== "CANCELLED") ? (
-          items.filter((item) => item.status !== "CANCELLED").map((item) => (
-            <tr key={`${item.questionNo}-${item.branch}-${item.status}`}>
-              <th scope="row">{item.questionNo}</th>
-              <td>{formatCourseName(item.branch)}</td>
-              <td>{item.outcomeCode ? formatOutcomeCode(item.outcomeCode) : "-"}</td>
-              <td>{formatQuestionStatus(item.status)}</td>
-              <td>{item.status === "BLANK" ? "Boş" : item.answer}</td>
-              <td>{item.correctAnswer}</td>
-            </tr>
-          ))
-        ) : (
-          <tr>
-            <td colSpan={6}>{emptyLabel}</td>
-          </tr>
-        )}
-      </tbody>
-    </table>
-  );
-}
-
-function formatQuestionStatus(status: ReportStudentQuestionSummary["status"]) {
-  const labels: Record<ReportStudentQuestionSummary["status"], string> = {
-    BLANK: "Boş",
-    CANCELLED: "İptal",
-    CORRECT: "Doğru",
-    WRONG: "Yanlış",
-  };
-  return labels[status] ?? status;
 }
 
 async function loadStudentDetailPageData(

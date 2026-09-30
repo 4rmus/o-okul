@@ -29,6 +29,7 @@ import {
   Input,
   Select,
   StatusBadge,
+  useToast,
   type DataTableColumn,
   type StatusBadgeProps,
 } from "@o-okul/ui";
@@ -74,7 +75,7 @@ export function EmployeesPage() {
   const [form, setForm] = useState<EmployeeAccessFormState>(emptyAccessForm);
   const [isSaving, setIsSaving] = useState(false);
   const [submitError, setSubmitError] = useState("");
-  const [actionNotice, setActionNotice] = useState("");
+  const { notify } = useToast();
   const canManageOwners = auth?.session.roles.includes("TENANT_OWNER") ?? false;
   const linkedCount = employees.filter((employee) => employee.access).length;
   const columns: Array<DataTableColumn<EmployeeAccessRecord>> = [
@@ -198,7 +199,7 @@ export function EmployeesPage() {
       await queryClient.invalidateQueries({ queryKey: ["employees", tenantId] });
       setIsCreateOpen(false);
       setCreateForm(emptyEmployeeCreateForm);
-      setActionNotice("Çalışan profili oluşturuldu. Hesap gerektiğinde satırdaki davet işlemini kullanın.");
+      notify("Çalışan profili oluşturuldu. Hesap gerektiğinde satırdaki davet işlemini kullanın.");
     } catch (error) {
       setSubmitError(employeeWriteErrorMessage(error));
     } finally {
@@ -214,7 +215,7 @@ export function EmployeesPage() {
     try {
       await inviteEmployee(auth.accessToken, invitingEmployee.id, invitationForm);
       setInvitingEmployee(null);
-      setActionNotice("Hesap daveti gönderime alındı. Hesabı açma bağlantısı 24 saat geçerlidir.");
+      notify("Hesap daveti gönderime alındı. Hesabı açma bağlantısı 24 saat geçerlidir.");
     } catch (error) {
       setSubmitError(employeeWriteErrorMessage(error));
     } finally {
@@ -305,7 +306,6 @@ export function EmployeesPage() {
         tableDescription="Çalışan, hesap, rol, çalışma alanı, çalışma durumu ve kampüs kapsamı."
         title="Çalışanlar ve Yetkiler"
       />
-      {actionNotice ? <p className="next-status-note" role="status">{actionNotice}</p> : null}
       <FormModal
         description="Profil, hesap ve yetkiden bağımsız oluşturulur. Planlı çalışan daha sonra aktifleştirilebilir."
         onCancel={() => { if (!isSaving) { setIsCreateOpen(false); setSubmitError(""); } }}
@@ -503,7 +503,7 @@ function EmployeeCursorControls({
           <option value={100}>100</option>
         </Select>
       </Field>
-      <span className="next-list-status">Kayıt sayfası</span>
+      <StatusBadge tone="neutral">Kayıt sayfası</StatusBadge>
       <Button
         aria-label="Önceki çalışanlar"
         disabled={!meta?.previousCursor}

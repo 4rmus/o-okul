@@ -600,7 +600,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(examReportContext).toContainText("Eski hesaplama");
     await expect(examReportContext).not.toContainText("LGS puanı");
     await expect(examReportContext).not.toContainText("Standart puan");
-    await expect(studentExamDetails.getByRole("region", { name: "Hata kitapçığı" })).toContainText("Yanıt");
+    await expect(studentExamDetails.getByRole("region", { exact: true, name: "Hata kitapçığı" })).toContainText("Yanıt");
     await expectStudentDetailNoRawIds(page, "student-exam-detail-desktop");
     await expectUiStable(page, "faz9-student-exam-detail-desktop", consoleErrors);
     await saveScreenshot(page, "faz9-student-exam-detail-desktop.png");
@@ -637,8 +637,8 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(reportContext).toContainText("Eski hesaplama");
     await expect(reportContext).not.toContainText("LGS puanı");
     await expect(reportContext).not.toContainText("Standart puan");
-    await expect(studentExamDetails.getByRole("region", { name: "Hata kitapçığı" })).toContainText("Yanıt");
-    await expect(studentExamDetails.getByRole("region", { name: "Hata kitapçığı" })).toContainText("Boş");
+    await expect(studentExamDetails.getByRole("region", { exact: true, name: "Hata kitapçığı" })).toContainText("Yanıt");
+    await expect(studentExamDetails.getByRole("region", { exact: true, name: "Hata kitapçığı" })).toContainText("Boş");
     await expectStudentDetailNoRawIds(page, "student-exam-detail-direct");
     await expectUiStable(page, "faz9-student-exam-detail-direct", consoleErrors);
     await saveScreenshot(page, "faz9-student-exam-detail-direct.png");
@@ -831,7 +831,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(studentResultsTable).toContainText("%81,7");
     await studentResultsTable.getByRole("button", { name: "Ada Kaya karnesini aç" }).click();
     await expect(page.getByRole("tab", { name: "Karne" })).toHaveAttribute("aria-selected", "true");
-    const reportErrorBooklet = page.getByRole("region", { name: "Hata kitapçığı" });
+    const reportErrorBooklet = page.getByRole("region", { exact: true, name: "Hata kitapçığı" });
     await expect(reportErrorBooklet).toHaveClass(/next-report-output-panel/);
     await expect(reportErrorBooklet.getByRole("table", { name: "Seçili öğrenci hata kitapçığı" })).toBeVisible();
     await page.getByRole("tab", { name: "Çıktılar" }).click();

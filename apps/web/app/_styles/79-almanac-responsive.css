@@ -327,6 +327,17 @@
       padding-inline: var(--space-3xs);
     }
 
+    .next-list-controls[aria-label="Liste kontrolleri"] .next-list-filter-details__content > .next-list-pagination {
+      grid-column: span 3;
+      flex-wrap: nowrap;
+      align-items: center;
+    }
+
+    .next-list-pagination .uh-button {
+      flex: 1;
+      min-width: 0;
+    }
+
     .next-list-controls[aria-label="Liste kontrolleri"] > .uh-button:not([aria-label]) {
       grid-column: 1 / -1;
     }

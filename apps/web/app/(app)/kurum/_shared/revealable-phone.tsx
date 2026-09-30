@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@o-okul/ui";
 
 export function RevealablePhone({
   canReveal = false,
@@ -20,13 +21,14 @@ export function RevealablePhone({
     <span className="next-revealable-phone" data-revealed={revealed ? "true" : "false"}>
       <span>{revealed ? value : maskPhoneNumber(value)}</span>
       {canReveal ? (
-        <button
-          type="button"
+        <Button
           aria-label={revealed ? "Telefonu kapat" : "Telefonu aç"}
           onClick={() => setRevealed((current) => !current)}
+          size="sm"
+          variant="ghost"
         >
           {revealed ? "Gizle" : "Göster"}
-        </button>
+        </Button>
       ) : null}
     </span>
   );

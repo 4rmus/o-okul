@@ -3,6 +3,7 @@
 @import "./_styles/01-theme-dark.css";
 @import "./_styles/10-marketing-base.css";
 @import "./_styles/20-application-base.css";
+@import "./_styles/30-primitives.css";
 @import "./_styles/70-almanac-foundation.css";
 @import "./_styles/71-almanac-shell.css";
 @import "./_styles/72-almanac-portal.css";

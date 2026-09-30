@@ -637,7 +637,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await expect(branchPsychometryTable.getByRole("row", { name: /Türkçe/ })).toContainText("%60,0");
     await expect(branchPsychometryTable.getByRole("row", { name: /Türkçe/ })).toContainText("12");
     await expect(branchPsychometryTable.getByRole("row", { name: /Türkçe/ })).toContainText("20");
-    const errorBookletRegion = page.getByRole("region", { name: "Hata kitapçığı" });
+    const errorBookletRegion = page.getByRole("region", { exact: true, name: "Hata kitapçığı" });
     await expect(errorBookletRegion).toHaveClass(/next-report-output-panel/);
     await expect(errorBookletRegion.getByRole("table", { name: "Seçili öğrenci hata kitapçığı" })).toBeVisible();
 

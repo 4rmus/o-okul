@@ -1,7 +1,7 @@
 "use client";
 
 import { type MouseEvent, type ReactNode } from "react";
-import { ActionCard, MetricCard, MetricGrid as UiMetricGrid, Panel, Skeleton, type MetricCardProps, type StatusBadgeProps } from "@o-okul/ui";
+import { ActionCard, EmptyState, LoadingState, MetricCard, MetricGrid, Panel, type MetricCardProps, type StatusBadgeProps } from "@o-okul/ui";
 import { PageFrame } from "../../_shared/page-frame.js";
 
 interface PortalFrameProps {
@@ -65,9 +65,10 @@ export function AccessPanel({ title }: { title: string }) {
   );
 }
 
-export function MetricGrid({ items }: { items: PortalMetricItem[] }) {
+// Portal özet kartları; @o-okul/ui MetricGrid üzerine kurulu adaptördür (adı gölgelemesin diye Portal*).
+export function PortalMetricGrid({ items }: { items: PortalMetricItem[] }) {
   return (
-    <UiMetricGrid aria-label="Portal özeti" className="next-portal-summary-grid" role="region">
+    <MetricGrid aria-label="Portal özeti" className="next-portal-summary-grid" role="region">
       {items.map((item) => (
         <MetricCard
           className="next-portal-summary-card"
@@ -78,7 +79,7 @@ export function MetricGrid({ items }: { items: PortalMetricItem[] }) {
           value={item.value}
         />
       ))}
-    </UiMetricGrid>
+    </MetricGrid>
   );
 }
 
@@ -93,6 +94,7 @@ export function PortalWorkspace({ ariaLabel, main, side }: PortalWorkspaceProps)
   );
 }
 
+// Portal durumları ortak LoadingState/EmptyState primitive'lerini kullanır (Berrak §6).
 export function PortalStatePanel({
   description,
   state,
@@ -102,26 +104,19 @@ export function PortalStatePanel({
   state: "empty" | "error" | "loading";
   title: string;
 }) {
+  if (state === "loading") {
+    return <LoadingState aria-busy="true" aria-label={title} className="next-portal-state" data-state="loading" label={title} />;
+  }
   return (
-    <Panel
-      aria-busy={state === "loading" ? "true" : undefined}
+    <EmptyState
       aria-label={title}
       className="next-portal-state"
-      description={description}
       data-state={state}
+      description={description}
+      hint={state === "error" ? "Kontrol gerekiyor" : "Boş durum"}
       role={state === "error" ? "alert" : "status"}
       title={title}
-    >
-      <p className="next-section-eyebrow">{stateLabel(state)}</p>
-      {state === "loading" ? (
-        <div className="next-portal-state__skeleton" aria-hidden="true">
-          <Skeleton />
-          <Skeleton />
-          <Skeleton />
-          <Skeleton />
-        </div>
-      ) : null}
-    </Panel>
+    />
   );
 }
 
@@ -189,7 +184,7 @@ export function PortalDailyBrief({
           {scope.detail ? <small>{scope.detail}</small> : null}
         </div>
       ) : null}
-      <UiMetricGrid aria-label={`${title} özeti`} className="next-portal-brief__grid" role="group">
+      <MetricGrid aria-label={`${title} özeti`} className="next-portal-brief__grid" role="group">
         {items.map((item) => (
           <MetricCard
             className="next-portal-brief__item"
@@ -200,7 +195,7 @@ export function PortalDailyBrief({
             value={item.value}
           />
         ))}
-      </UiMetricGrid>
+      </MetricGrid>
     </Panel>
   );
 }
@@ -355,8 +350,3 @@ export function readRolePreviewToken(searchParams: Pick<URLSearchParams, "get">)
   return window.sessionStorage.getItem(rolePreviewTokenStorageKey)?.trim() ?? "";
 }
 
-function stateLabel(state: "empty" | "error" | "loading") {
-  if (state === "loading") return "Hazırlanıyor";
-  if (state === "error") return "Kontrol gerekiyor";
-  return "Boş durum";
-}

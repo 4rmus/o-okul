@@ -129,9 +129,7 @@ const appSourcePaths = collectSourceFiles("apps/web/app/(app)", [".ts", ".tsx"])
 const rawButtonSourcePaths = collectSourceFiles("apps/web/app", [".ts", ".tsx"]);
 const rawButtonAllowlist = new Map([
   ["apps/web/app/(app)/app-shell.tsx", 6],
-  ["apps/web/app/(app)/kurum/_shared/revealable-phone.tsx", 1],
   ["apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx", 5],
-  ["apps/web/app/(app)/kurum/sinavlar/exams-page.tsx", 1],
   ["apps/web/app/(app)/portals/guardian-portal-page.tsx", 1],
   ["apps/web/app/(app)/portals/teacher-portal-page.tsx", 1],
   ["apps/web/app/(auth)/tenant-login-page.tsx", 2],
@@ -147,8 +145,8 @@ for (const path of rawButtonSourcePaths) {
   }
 }
 
-if (rawButtonTotal !== 17) {
-  failures.push(`apps/web/app must contain exactly 17 semantic raw buttons; found ${rawButtonTotal}.`);
+if (rawButtonTotal !== 15) {
+  failures.push(`apps/web/app must contain exactly 15 semantic raw buttons; found ${rawButtonTotal}.`);
 }
 
 const visualSnapshotDirectory = "apps/web/e2e-next/__screenshots__/ui-visual-qa-next.spec.ts";
@@ -371,7 +369,9 @@ requireNoTokens("apps/web/app/(auth)/login/page.tsx", [
 ]);
 
 requireTokens("apps/web/src/list-controls.tsx", [
-  'import { Button, Field, FilterBar, Input, Select } from "@o-okul/ui";',
+  'import { Field, FilterBar, Input, Pagination, Select } from "@o-okul/ui";',
+  "<Pagination",
+  'className="next-list-pagination"',
   "type ReactNode",
   "children?: ReactNode;",
   '<FilterBar className="next-list-controls" role="group" aria-label="Liste kontrolleri">',
@@ -1544,7 +1544,7 @@ requireTokens("apps/web/e2e-next/report-workspace-contract-next.spec.ts", [
   'getByRole("region", { name: "Öğrenci karne özeti özet sayfası" })',
   'getByRole("region", { name: "Rapor özeti" }).locator(".uh-metric-card")).toHaveCount(0)',
   'analyticsPanel.locator(".next-report-summary-card")).toHaveCount(0)',
-  'getByRole("region", { name: "Hata kitapçığı" })',
+  'getByRole("region", { exact: true, name: "Hata kitapçığı" })',
   'getByRole("table", { name: "Seçili öğrenci hata kitapçığı" })',
   'getByRole("region", { name: "Rapor çıktıları" })',
   "toHaveClass(/next-report-output-panel/)",
@@ -4157,7 +4157,10 @@ requireTokens("apps/web/app/(app)/portals/_shared/portal-shell.tsx", [
   "ActionCard,",
   "Panel,",
   "MetricCard,",
-  "MetricGrid as UiMetricGrid",
+  "EmptyState, LoadingState, MetricCard, MetricGrid,",
+  "export function PortalMetricGrid(",
+  '<LoadingState aria-busy="true" aria-label={title} className="next-portal-state" data-state="loading" label={title} />',
+  'role={state === "error" ? "alert" : "status"}',
   "MetricCardProps",
   "PortalMetricItem",
   "PortalWorkspace",
@@ -4179,7 +4182,7 @@ requireTokens("apps/web/app/(app)/portals/_shared/portal-shell.tsx", [
   "statusLabel?: string",
   'actions={<p className="next-portal-brief__summary">{summary}</p>}',
   'description={<span className="next-section-eyebrow">Bugünün odağı</span>}',
-  '<UiMetricGrid aria-label={`${title} özeti`} className="next-portal-brief__grid" role="group">',
+  '<MetricGrid aria-label={`${title} özeti`} className="next-portal-brief__grid" role="group">',
   '<MetricCard',
   'className="next-portal-brief__item"',
   "tone={portalDailyBriefMetricTone(item.tone)}",
@@ -4208,7 +4211,7 @@ requireTokens("apps/web/app/(app)/portals/_shared/portal-shell.tsx", [
   "next-portal-workspace",
   "next-portal-workspace__main",
   "next-portal-workspace__side",
-  '<UiMetricGrid aria-label="Portal özeti" className="next-portal-summary-grid" role="region">',
+  '<MetricGrid aria-label="Portal özeti" className="next-portal-summary-grid" role="region">',
   "next-portal-summary-card",
   "portalMetricDescription",
   "portalMetricTone",
@@ -4240,6 +4243,9 @@ requireNoTokens("apps/web/app/(app)/portals/_shared/portal-shell.tsx", [
   "next-portal-action-strip__badges",
   "next-portal-action-strip__state",
   "next-list-panel",
+  "MetricGrid as UiMetricGrid",
+  "export function MetricGrid(",
+  "<Skeleton />",
 ]);
 
 requireNoTokens("apps/web/app/(app)/portals/guardian-portal-page.tsx", [

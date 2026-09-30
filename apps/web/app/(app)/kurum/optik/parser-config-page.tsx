@@ -1148,7 +1148,7 @@ function OpticalUploadPanel({
         </Button>
       </Panel>
       <Panel
-        actions={<span className="next-reference-badge">{resultStatus}</span>}
+        actions={<StatusBadge tone="neutral">{resultStatus}</StatusBadge>}
         aria-label="Optik yükleme sonucu"
         className="next-optical-upload-panel next-optical-upload-panel--wide"
         description="Yüklenen dosyanın kontrolü ve analiz durumu."

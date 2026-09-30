@@ -19,7 +19,8 @@ Local PASS staging kanıtı değildir. Secret değerleri bu dosyaya yazılmaz; y
 | G0 Plan ve karar kayıtları | `berrak/g0-plan-kararlar` | Tamam | 4rmus/o-okul#109 |
 | G1 Platform sağlık yüzeyleri | `berrak/g1-platform-saglik` | Tamam | 4rmus/o-okul#110 |
 | G2 Berrak token'ları | `berrak/g2-tokenlar` | Tamam | 4rmus/o-okul#111 |
-| G3 Runtime route manifest | `berrak/g3-route-manifest` | Tamam | draft PR |
+| G3 Runtime route manifest | `berrak/g3-route-manifest` | Tamam | 4rmus/o-okul#112 |
+| G4 Primitive konsolidasyonu | `berrak/g4-primitive` | Tamam | draft PR |
 
 ## G0 — Plan ve karar kayıtları
 
@@ -198,3 +199,51 @@ inline script CSP'de izinli (`script-src 'unsafe-inline'`). P0/P1 yok.
 
 Görsel kanıt: görsel fark yok (visual QA golden'ları güncellenmeden geçti); ek ekran görüntüsü gerekmedi.
 Review (read-only): yetki mantığı değişmedi; capability/persona alanları birebir taşındı ve pin'lendi. P0/P1 yok.
+
+## G4 — Primitive konsolidasyonu (§6)
+
+- Hedef: yerel primitive kopyalarını `packages/ui` bileşenlerine bağlamak.
+- Sahip olunan yollar: `packages/ui/src/components/{toast,pagination}.tsx`, `packages/ui/src/index.ts`,
+  `portals/_shared/portal-shell.tsx`, `portals/guardian-portal-page.tsx` (yalnız import adı),
+  `src/list-controls.tsx`, `_shared/error-booklet-table.tsx` (yeni), rapor/öğrenci detay sayfaları,
+  `evidence-panels.tsx`, `parser-config-page.tsx`, `employees-page.tsx`, `revealable-phone.tsx`,
+  `exams-page.tsx`, `app/providers.tsx`, `_styles/30-primitives.css` (yeni), responsive/app CSS,
+  ilgili e2e seçicileri ve UX baseline pin'leri.
+- Yasak yollar: API, DB.
+- Kabul: `ui-primitives-state-next`, `data-table-mobile-contract-next`, `list-url-state-next`.
+
+### G4 notları
+
+- `PortalStatePanel` çağrı yerleri korundu; içi `LoadingState` / `EmptyState` (durum etiketi `hint`)
+  ile yeniden kuruldu, `Skeleton` kopyası kalktı. Veli ekranı içeriği değişmedi.
+- Portal özet grid'i `@o-okul/ui` `MetricGrid`'ini gölgelemesin diye `PortalMetricGrid` adını aldı
+  (zaten `MetricGrid` + `MetricCard` üzerine kurulu adaptör). UX pin'i gölgeleme dönüşünü yasaklar.
+- Liste pager'ı `Pagination` (role=navigation) kullanır; `Pagination`'a opsiyonel `previousLabel`/
+  `nextLabel` eklendi, liste bağlamında ikonlar korunur (erişilebilir adlar aynı). Mobilde tek satır.
+- Rozetler: `next-reference-badge` (2 kullanım) ve çalışanlar sayfasındaki çip `StatusBadge`'e geçti;
+  kullanılmayan `next-permission-badge` CSS'i silindi. Envanterdeki diğer "rozet" sınıfları ya
+  `StatusBadge` kapsayıcısı ya da durum değil (kurs çipleri, adım numarası) — dokunulmadı.
+- Ham tablolar: iki kopya `ErrorBookletTable` tek paylaşılan `DataTable` bileşenine indi. DataTable'ın
+  kaydırma bölgesi adı kapsamsız `name: "Hata kitapçığı"` eşleşmesine takıldığı için o seçiciler
+  `exact: true` ile sıkılaştırıldı (zayıflatma değil).
+- Ham butonlar 17 → 15 (telefon göster/gizle, sınav katılımcı satır aksiyonu `Button`); kalanlar
+  `SegmentedControl` çocukları veya app-shell (G5).
+- Toast: `ToastProvider` + `useToast`, tek `aria-live="polite"` bölgesi (role eklenmedi; kapsamsız
+  `getByRole("status")` testlerini bozmamak için). Çalışan oluşturma/davet bildirimleri toasta geçti;
+  e2e'ye toast assert'i eklendi. Diğer `role="status"` kullanımları yükleme/ilerleme veya form içi
+  durum olduğu için yerinde kaldı.
+- Stepper G6'ya bırakıldı: kurulum sihirbazının `tablist` rolleri e2e sözleşmesidir.
+- Test ortamı notu: Playwright webServer yalnız `.next/BUILD_ID` yoksa build alır; `web typecheck`
+  `.next`'i siler. Doğrulamalar her kod değişikliğinden sonra typecheck → e2e sırasıyla koşuldu.
+
+### G4 kanıt
+
+| Sınıf | Sonuç |
+|---|---|
+| `LOCAL_STATIC` | PASS: `web:ux-baseline:check` (ham buton 15), `web:design-tokens:check`, `route-manifest:check`, lint, typecheck, measurement baseline |
+| `LOCAL_TEST` | PASS: `ui-primitives-state-next`, `data-table-mobile-contract-next`, `list-url-state-next` (32), employee-access (toast), portal sözleşmeleri + route smoke (112), report-workspace, visual QA 31/31, `ui-ux-redesign:local-gates` |
+| `CI` | Beklenen: karne Linux alt-piksel (ortak not) |
+
+Görsel kanıt: `artifacts/ui-ux-redesign/berrak/g4/{before,after}` — öğrenci listesi, çalışanlar,
+öğretmen portalı hata durumu; açık + koyu, 375/1440. Golden değişmedi (pager satır düzeni korundu).
+Review (read-only): yetki/veri akışı değişmedi; toast bölgesi PII taşımaz (sabit bildirim metinleri). P0/P1 yok.

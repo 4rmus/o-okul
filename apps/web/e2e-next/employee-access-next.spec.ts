@@ -150,6 +150,11 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
   await invitationDialog.getByRole("button", { name: "Daveti gönder" }).click();
   await expect(invitationDialog).toBeHidden();
   expect(capturedInvitation).toEqual({ email: "yeni.admin@example.test", role: "TENANT_ADMIN" });
+  const toastRegion = page.locator('.uh-toast-region[aria-live="polite"]');
+  await expect(toastRegion).toHaveCount(1);
+  await expect(toastRegion).toContainText("Hesap daveti gönderime alındı.");
+  await page.getByRole("button", { name: "Bildirimi kapat" }).click();
+  await expect(toastRegion).not.toContainText("Hesap daveti gönderime alındı.");
 });
 
 async function login(page: Page) {
