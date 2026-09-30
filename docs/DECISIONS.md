@@ -629,6 +629,59 @@ Açık soru: Runtime `FEATURE_ROLLOUTS_JSON` içinde emekli anahtar bulunmadığ
 doğrulanır; config değişikliği ve deploy ayrı açık onay gerektirir.
 Son kontrol: 2026-09-03
 
+### DEC-20260930-01 — Berrak görsel dili
+
+Durum: Onaylı; uygulama G2 (token), G5 (shell), G8 (koyu tema anahtarı) gate'lerinde yapılır
+Karar: Arayüz "Berrak" (sakin ürün) görsel diline geçer: nötr yüzeyler, tek sans aile (IBM Plex
+Sans; `Source_Serif_4` kaldırılır), 6/8/12 px radius, hafif gölge token'ları, indigo vurgu ve
+`<html data-theme="light|dark">` ile açık/koyu tema. Token adları (`paper/ink/rule/accent`)
+korunur, yalnız değerler değişir. Varsayılan `prefers-color-scheme`'dir; kullanıcı tercihi
+localStorage'da tutulur ve paint öncesi inline script ile uygulanır. Karne ve print yüzeyleri tema
+dışındadır ve daima `color-scheme: light` ile açık kâğıt çizilir. Veli ekranları tasarım dışıdır;
+token değişimini yalnız pasif olarak alır. Yeni UI kütüphanesi eklenmez.
+Kaynak: Ürün sahibinin 30 Eylül 2026 tarihli "Sakin ürün" yönü ve veli kapsam dışı kararı.
+Kanıt: `docs/ui-ux-berrak-redesign-plan.md` §1, `apps/web/app/tokens.css`, `design.md`,
+`pnpm web:design-tokens:check`, `pnpm web:a11y:check`.
+Etkilenen ADR: ADR-0003
+Açık soru: Yok.
+Son kontrol: 2026-09-30
+
+### DEC-20260930-02 — Platform sağlık ve izleme yüzeyleri control-plane'dedir
+
+Durum: Onaylı; uygulama G1 gate'indedir
+Karar: `/kurum/sistem-sagligi` ve `/kurum/gozlemlenebilirlik` tenant düzleminden emekliye ayrılır;
+eski URL'ler `/kurum/operasyon-ve-kanit` adresine yönlenir. `/sistem/sistem-sagligi` canlı
+`/health` ve `/health/ready` kartlarını gösterir ve yalnız `SYSTEM_ADMIN` erişir; metrik kartı
+taşınmaz, metrikler için Grafana esas kaynaktır ve yeni metrik endpoint'i eklenmez. Kullanılmayan
+`/metrics` dev rewrite'ı silinir. `/metrics` API'de `METRICS_SCRAPE_TOKEN` bearer guard'ı ile
+korunur; Prometheus/Alloy scrape config'i bearer token kullanır. Güvenlik check'i Traefik API
+router'ının ve Next rewrite'larının `/metrics` yolunu dışarı açmadığını doğrular.
+Kaynak: 30 Eylül 2026 Berrak planı §10 güvenlik incelemesi; derinlemesine savunma ürün sahibi
+tarafından onaylandı. Bugün aktif sızıntı yoktur; karar sınır ihlali (ADR-0010) ve prod'da bozuk
+metrik kartı içindir.
+Kanıt: `docs/ui-ux-berrak-redesign-plan.md` §10, `pnpm route-manifest:check`,
+`pnpm security:audit:check`, `apps/api/src/metrics/*`.
+Etkilenen ADR: ADR-0010
+Açık soru: Staging secret yazımı ve deploy doğrulaması ayrı `STAGING` kanıtıdır.
+Son kontrol: 2026-09-30
+
+### DEC-20260930-03 — UX baseline CSS sınıf pin'leri davranış kanıtına taşınır
+
+Durum: Onaylı; uygulama G8 gate'indedir
+Karar: `scripts/check-web-ux-baseline.mjs` içinde yalnız `apps/web/app/globals.css` üzerinde CSS
+sınıf adı pinleyen `requireTokens(...)` blokları emekliye ayrılabilir. Her kaldırma eşdeğer bir
+davranış kanıtıyla eşlenir: Playwright golden, `ui-primitives-state-next.spec.ts` veya
+`check-web-design-tokens.mjs` ham px ratchet'i (sayılar yalnız azalabilir). Güvenlik, a11y, metin
+ve rol assert'leri değiştirilmez. Doğrulama atlanmaz, yeri değişir.
+Kaynak: Berrak planı §7; kaynak CSS pin'leri her görsel değişimde kırılıyor ve davranış güvencesi
+vermiyor.
+Kanıt: `scripts/check-web-ux-baseline.mjs`, `scripts/check-web-design-tokens.mjs`,
+`apps/web/e2e-next/ui-primitives-state-next.spec.ts`, `docs/ui-ux-berrak-progress.md` (G8 eşleme
+tablosu).
+Etkilenen ADR: Yok
+Açık soru: Yok.
+Son kontrol: 2026-09-30
+
 ## Faz Öncesi Onay Gerektirenler
 
 | ID | Faz | Bloklar mı? | Soru | Beklenen kanıt |
