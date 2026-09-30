@@ -1,36 +1,36 @@
-/* Hallmark · macrostructure: Narrative Workflow / Workbench · tone: technical-austere · anchor hue: ink-blue 230 */
+/* Hallmark · macrostructure: Narrative Workflow / Workbench · tone: calm-product · anchor hue: indigo 277 */
 /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V4 */
-/* Hallmark · genre: editorial · landing: Narrative Workflow · app: Workbench · theme: Almanac */
+/* Hallmark · genre: product · landing: Narrative Workflow · app: Workbench · theme: Berrak */
 :root {
-  --color-paper: oklch(96.5% 0.012 220);
-  --color-paper-raised: oklch(98.5% 0.007 220);
-  --color-paper-muted: oklch(93% 0.018 220);
-  --color-ink: oklch(20% 0.025 235);
-  --color-ink-secondary: oklch(30% 0.025 235);
-  --color-ink-chart-soft: oklch(30% 0.025 235 / 18%);
-  --color-ink-muted: oklch(42% 0.025 235);
-  --color-rule: oklch(80% 0.020 225);
-  --color-rule-strong: oklch(66% 0.025 225);
-  --color-rule-faint: oklch(89% 0.014 225);
-  --color-accent: oklch(42% 0.150 230);
-  --color-accent-hover: oklch(36% 0.135 230);
-  --color-accent-strong: oklch(32% 0.120 230);
-  --color-accent-soft: oklch(92% 0.035 230);
-  --color-accent-secondary: oklch(44% 0.100 175);
-  --color-accent-chart-soft: oklch(42% 0.150 230 / 18%);
-  --color-accent-ink: oklch(98% 0.006 220);
-  --color-focus: oklch(48% 0.180 245);
-  --color-success-token: oklch(42% 0.120 155);
-  --color-success-soft-token: oklch(93% 0.025 155);
-  --color-warning-token: oklch(52% 0.120 80);
-  --color-warning-soft-token: oklch(94% 0.025 85);
-  --color-danger-token: oklch(48% 0.165 25);
-  --color-danger-soft-token: oklch(94% 0.030 25);
-  --color-overlay-token: oklch(18% 0.020 235 / 72%);
-  --color-shadow-soft: oklch(18% 0.020 235 / 10%);
-  --color-shadow-medium: oklch(18% 0.020 235 / 16%);
-  --color-shadow-strong: oklch(18% 0.020 235 / 28%);
-  --color-chart-grid: oklch(20% 0.025 235 / 12%);
+  --color-paper: oklch(98.3% 0.003 250);
+  --color-paper-raised: oklch(99.9% 0.001 250);
+  --color-paper-muted: oklch(96.5% 0.005 250);
+  --color-ink: oklch(21% 0.020 265);
+  --color-ink-secondary: oklch(35% 0.025 263);
+  --color-ink-chart-soft: oklch(35% 0.025 263 / 18%);
+  --color-ink-muted: oklch(51% 0.030 260);
+  --color-rule: oklch(91% 0.008 255);
+  --color-rule-strong: oklch(83% 0.008 255);
+  --color-rule-faint: oklch(95% 0.008 255);
+  --color-accent: oklch(51% 0.230 277);
+  --color-accent-hover: oklch(46% 0.215 277);
+  --color-accent-strong: oklch(41% 0.190 277);
+  --color-accent-soft: oklch(96% 0.018 272);
+  --color-accent-secondary: oklch(60% 0.118 185);
+  --color-accent-chart-soft: oklch(51% 0.230 277 / 18%);
+  --color-accent-ink: oklch(99% 0.003 270);
+  --color-focus: oklch(51% 0.230 277);
+  --color-success-token: oklch(50% 0.130 150);
+  --color-success-soft-token: oklch(96.2% 0.044 157);
+  --color-warning-token: oklch(52% 0.140 49);
+  --color-warning-soft-token: oklch(96.2% 0.059 96);
+  --color-danger-token: oklch(52% 0.215 27);
+  --color-danger-soft-token: oklch(97.1% 0.013 17);
+  --color-overlay-token: oklch(21% 0.020 265 / 50%);
+  --color-shadow-soft: oklch(21% 0.020 265 / 6%);
+  --color-shadow-medium: oklch(21% 0.020 265 / 10%);
+  --color-shadow-strong: oklch(21% 0.020 265 / 18%);
+  --color-chart-grid: oklch(21% 0.020 265 / 10%);
 
   --chart-accent: var(--color-accent-secondary);
   --chart-primary: var(--color-accent);
@@ -42,7 +42,7 @@
   --chart-text: var(--color-ink-muted);
   --chart-surface: var(--color-paper-raised);
 
-  --font-display: var(--font-source-serif-4), ui-serif, Georgia, serif;
+  --font-display: var(--font-ibm-plex-sans), ui-sans-serif, system-ui, sans-serif;
   --font-body: var(--font-ibm-plex-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
 
@@ -59,12 +59,12 @@
   --text-sm: 0.875rem;
   --text-base: 1rem;
   --text-lg: 1.25rem;
-  --text-xl: 1.75rem;
+  --text-xl: 1.5rem;
   --text-display: clamp(2.25rem, 4vw, 3rem);
 
-  --radius-control: 4px;
-  --radius-panel: 2px;
-  --radius-dialog: 6px;
+  --radius-control: 6px;
+  --radius-panel: 8px;
+  --radius-dialog: 12px;
   --radius-pill: 999px;
   --dur-instant: 100ms;
   --dur-short: 180ms;

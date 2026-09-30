@@ -17,7 +17,8 @@ Local PASS staging kanıtı değildir. Secret değerleri bu dosyaya yazılmaz; y
 | Gate | Branch | Durum | PR |
 |---|---|---|---|
 | G0 Plan ve karar kayıtları | `berrak/g0-plan-kararlar` | Tamam | 4rmus/o-okul#109 |
-| G1 Platform sağlık yüzeyleri | `berrak/g1-platform-saglik` | Tamam | draft PR |
+| G1 Platform sağlık yüzeyleri | `berrak/g1-platform-saglik` | Tamam | 4rmus/o-okul#110 |
+| G2 Berrak token'ları | `berrak/g2-tokenlar` | Tamam | draft PR |
 
 ## G0 — Plan ve karar kayıtları
 
@@ -98,3 +99,51 @@ düzeltildi (release env dosyası `umask 077` ile oluşturulur; token karakter k
 - P3: `NODE_ENV` production dışı ve token yoksa guard açık kalır (Traefik hariç tutması geçerli).
 - Test boşlukları: redirect status'ü (`permanent: false`) için test yok; controller seviyesinde
   prod+token-yok testi yok (fonksiyon testi var).
+
+## G2 — Berrak token'ları (§1)
+
+- Hedef: açık/koyu token değerleri, font sadeleştirme (`Source_Serif_4` kaldırıldı), radius/gölge,
+  `design.md` "Theme — Berrak", chart'ların tema değişiminde token'ları yeniden okuması.
+- Sahip olunan yollar: `tokens.css`, `design.md`, `.hallmark/log.json`, `apps/web/app/layout.tsx`,
+  `apps/web/app/next-font.d.ts`, `_styles/00-foundation.css`, yeni `_styles/01-theme-dark.css`,
+  `_styles/70-almanac-foundation.css` (alias/gölge), `_styles/73-almanac-report.css` (karne geometrisi
+  sabitleme), `globals.css` (import), `scripts/check-web-design-tokens.mjs`,
+  `scripts/check-web-token-storage.mjs` (tema anahtarı), `packages/ui/src/components/charts.tsx`,
+  darwin golden'ları.
+- Yasak yollar: API, DB, route dosyaları; karne golden'ı.
+- Kabul: `web:design-tokens:check`, `web:a11y:check`, golden'lar bilinçli yenilenir, karne golden
+  değişmez.
+
+### G2 notları
+
+- Token adları korundu, yalnız değerler değişti. `--color-paper-raised` plandaki `oklch(100% 0 0)`
+  yerine `oklch(99.9% 0.001 250)`: tasarım check'i saf beyaz/siyahı yasaklıyor, check gevşetilmedi.
+- Semantik renkler AA için planın 700/600 tonlarından biraz koyu: danger `oklch(52% 0.215 27)`,
+  success `oklch(50% 0.130 150)`, warning `oklch(52% 0.140 49)`. İlk değerle danger metni soft zeminde
+  4.36:1 kalıyordu (axe, `system-tenant-contract` 390 px). Tüm semantik çiftler açık ve koyuda ≥ 4.5:1.
+- `--text-display` landing'e özel olduğu için G9'a kadar eski değerinde.
+- Koyu tema: `:root[data-theme="dark"]`; tercih `o-okul-theme` anahtarında, paint öncesi inline
+  script. Karne ve `@media print` için `BERRAK-LIGHT-RESET` bloğu tokens.css değerleriyle birebir
+  aynı olmak zorunda (check'e negatif senaryosuyla eklendi). Alias token'lar `:root, .next-karne-sheet`
+  üzerinde çözülür, böylece karne koyu temada da açık kâğıttır.
+- Karne geometrisi (radius/gölge) G10'a kadar karne kapsamında eski değerlere sabitlendi; karne
+  golden'ı değişmedi (`karne:visual-contract:check` PASS, png dokunulmadı).
+- G8'e not: koyu temada üst çubukta sıcak ton kalıntısı; koyu tema axe taraması G8 kapsamı.
+
+### G2 kanıt
+
+| Sınıf | Sonuç |
+|---|---|
+| `LOCAL_STATIC` | PASS: `web:design-tokens:check` (+ negatif: sıfırlama sapması yakalanır), `web:token-storage:check`, `web:ux-baseline:check`, `web:architecture:check`, `route-manifest:check`, web typecheck, ui build |
+| `LOCAL_TEST` | PASS: `web:a11y:check`, `ui-ux-redesign:local-gates` (student-guardian-portal dahil ux-contract ve visual QA 31/31), `karne:visual-contract:check` |
+| `CI` | PR CI; Linux golden'ları CI `actual` çıktısından alınacak |
+| `EXTERNAL_NOT_RUN` | Linux golden'ları (docker yok) |
+
+Değişen darwin golden'ları (11): kurum rail 1440, login 414, rapor durum 1440, devamsızlık 414,
+parola 414, dashboard 1440, landing 1280, rapor 1440, öğrenci detay 768, öğrenci portal 414,
+öğrenci listesi 414. Karne golden'ı değişmedi.
+
+Görsel kanıt: `artifacts/ui-ux-redesign/berrak/g2/before` (açık) ve `after` (açık + koyu), 375/1440.
+
+Review (read-only): API/DB/yetki değişikliği yok. Token-storage istisnası yalnız tema tercihi;
+inline script CSP'de izinli (`script-src 'unsafe-inline'`). P0/P1 yok.

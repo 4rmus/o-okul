@@ -24,6 +24,15 @@
     --color-bg: var(--karne-app-bg);
     --color-danger: var(--karne-danger);
     --color-danger-subtle: var(--karne-app-danger-subtle);
+    /* Karne geometrisi Berrak radius/gölge değişiminden etkilenmez (G10'a kadar donmuş). */
+    --radius-control: 4px;
+    --radius-panel: 2px;
+    --radius-dialog: 6px;
+    --radius: 4px;
+    --radius-lg: 2px;
+    --shadow-soft: none;
+    --shadow-card: none;
+    --shadow-card-hover: none;
   }
 
   .next-karne-sheet h2,

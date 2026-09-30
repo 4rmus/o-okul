@@ -70,7 +70,7 @@ function useChartColors() {
   const [colors, setColors] = useState(defaultChartColors);
 
   useEffect(() => {
-    setColors({
+    const readColors = () => setColors({
       accent: chartToken("--chart-accent"),
       danger: chartToken("--chart-danger"),
       grid: chartToken("--chart-grid"),
@@ -81,6 +81,11 @@ function useChartColors() {
       surface: chartToken("--chart-surface"),
       text: chartToken("--chart-text"),
     });
+    readColors();
+    // Tema değişince (html[data-theme]) token'lar yeniden okunur; grafik yeni renklerle çizilir.
+    const observer = new MutationObserver(readColors);
+    observer.observe(document.documentElement, { attributeFilter: ["data-theme"], attributes: true });
+    return () => observer.disconnect();
   }, []);
 
   return colors;

@@ -1,4 +1,5 @@
-:root {
+:root,
+.next-karne-sheet {
   --color-text: var(--color-ink);
   --color-text-secondary: var(--color-ink-secondary);
   --color-text-muted: var(--color-ink-muted);
@@ -39,7 +40,9 @@
   --chart-warning: var(--color-warning-token);
   --chart-danger: var(--color-danger-token);
   --chart-neutral: var(--color-ink-muted);
+}
 
+:root {
   color: var(--color-text);
   background: var(--color-bg);
   font-family: var(--font-body);

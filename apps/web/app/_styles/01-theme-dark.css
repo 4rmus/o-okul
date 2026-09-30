@@ -1,0 +1,106 @@
+/* Berrak koyu tema (DEC-20260930-01). Token adları tokens.css ile aynıdır; yalnız değerler değişir.
+   Seçim: <html data-theme="light|dark">, paint öncesi apps/web/app/layout.tsx içindeki script ile yazılır. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-paper: oklch(17% 0.010 265);
+  --color-paper-raised: oklch(21% 0.012 265);
+  --color-paper-muted: oklch(25% 0.012 265);
+  --color-ink: oklch(96% 0.005 265);
+  --color-ink-secondary: oklch(86% 0.010 265);
+  --color-ink-chart-soft: oklch(86% 0.010 265 / 18%);
+  --color-ink-muted: oklch(72% 0.015 265);
+  --color-rule: oklch(30% 0.012 265);
+  --color-rule-strong: oklch(38% 0.012 265);
+  --color-rule-faint: oklch(26% 0.012 265);
+  --color-accent: oklch(67% 0.180 277);
+  --color-accent-hover: oklch(72% 0.160 277);
+  --color-accent-strong: oklch(78% 0.130 277);
+  --color-accent-soft: oklch(28% 0.060 277);
+  --color-accent-secondary: oklch(72% 0.110 185);
+  --color-accent-chart-soft: oklch(67% 0.180 277 / 22%);
+  --color-accent-ink: oklch(17% 0.010 265);
+  --color-focus: oklch(72% 0.160 277);
+  --color-success-token: oklch(79% 0.170 152);
+  --color-success-soft-token: oklch(30% 0.060 152);
+  --color-warning-token: oklch(83% 0.160 84);
+  --color-warning-soft-token: oklch(32% 0.060 75);
+  --color-danger-token: oklch(71% 0.170 22);
+  --color-danger-soft-token: oklch(30% 0.080 25);
+  --color-overlay-token: oklch(8% 0.010 265 / 70%);
+  --color-shadow-soft: oklch(5% 0.010 265 / 30%);
+  --color-shadow-medium: oklch(5% 0.010 265 / 40%);
+  --color-shadow-strong: oklch(5% 0.010 265 / 55%);
+  --color-chart-grid: oklch(96% 0.005 265 / 14%);
+}
+
+/* Karne ve baskı daima açık kâğıttır: koyu temada açık token değerleri geri yüklenir.
+   BERRAK-LIGHT-RESET değerleri tokens.css ile birebir aynı olmalı (web:design-tokens:check). */
+/* BERRAK-LIGHT-RESET BEGIN */
+:root[data-theme="dark"] .next-karne-sheet {
+  color-scheme: light;
+  --color-paper: oklch(98.3% 0.003 250);
+  --color-paper-raised: oklch(99.9% 0.001 250);
+  --color-paper-muted: oklch(96.5% 0.005 250);
+  --color-ink: oklch(21% 0.020 265);
+  --color-ink-secondary: oklch(35% 0.025 263);
+  --color-ink-chart-soft: oklch(35% 0.025 263 / 18%);
+  --color-ink-muted: oklch(51% 0.030 260);
+  --color-rule: oklch(91% 0.008 255);
+  --color-rule-strong: oklch(83% 0.008 255);
+  --color-rule-faint: oklch(95% 0.008 255);
+  --color-accent: oklch(51% 0.230 277);
+  --color-accent-hover: oklch(46% 0.215 277);
+  --color-accent-strong: oklch(41% 0.190 277);
+  --color-accent-soft: oklch(96% 0.018 272);
+  --color-accent-secondary: oklch(60% 0.118 185);
+  --color-accent-chart-soft: oklch(51% 0.230 277 / 18%);
+  --color-accent-ink: oklch(99% 0.003 270);
+  --color-focus: oklch(51% 0.230 277);
+  --color-success-token: oklch(50% 0.130 150);
+  --color-success-soft-token: oklch(96.2% 0.044 157);
+  --color-warning-token: oklch(52% 0.140 49);
+  --color-warning-soft-token: oklch(96.2% 0.059 96);
+  --color-danger-token: oklch(52% 0.215 27);
+  --color-danger-soft-token: oklch(97.1% 0.013 17);
+  --color-overlay-token: oklch(21% 0.020 265 / 50%);
+  --color-shadow-soft: oklch(21% 0.020 265 / 6%);
+  --color-shadow-medium: oklch(21% 0.020 265 / 10%);
+  --color-shadow-strong: oklch(21% 0.020 265 / 18%);
+  --color-chart-grid: oklch(21% 0.020 265 / 10%);
+}
+
+@media print {
+  :root[data-theme="dark"] {
+    color-scheme: light;
+    --color-paper: oklch(98.3% 0.003 250);
+    --color-paper-raised: oklch(99.9% 0.001 250);
+    --color-paper-muted: oklch(96.5% 0.005 250);
+    --color-ink: oklch(21% 0.020 265);
+    --color-ink-secondary: oklch(35% 0.025 263);
+    --color-ink-chart-soft: oklch(35% 0.025 263 / 18%);
+    --color-ink-muted: oklch(51% 0.030 260);
+    --color-rule: oklch(91% 0.008 255);
+    --color-rule-strong: oklch(83% 0.008 255);
+    --color-rule-faint: oklch(95% 0.008 255);
+    --color-accent: oklch(51% 0.230 277);
+    --color-accent-hover: oklch(46% 0.215 277);
+    --color-accent-strong: oklch(41% 0.190 277);
+    --color-accent-soft: oklch(96% 0.018 272);
+    --color-accent-secondary: oklch(60% 0.118 185);
+    --color-accent-chart-soft: oklch(51% 0.230 277 / 18%);
+    --color-accent-ink: oklch(99% 0.003 270);
+    --color-focus: oklch(51% 0.230 277);
+    --color-success-token: oklch(50% 0.130 150);
+    --color-success-soft-token: oklch(96.2% 0.044 157);
+    --color-warning-token: oklch(52% 0.140 49);
+    --color-warning-soft-token: oklch(96.2% 0.059 96);
+    --color-danger-token: oklch(52% 0.215 27);
+    --color-danger-soft-token: oklch(97.1% 0.013 17);
+    --color-overlay-token: oklch(21% 0.020 265 / 50%);
+    --color-shadow-soft: oklch(21% 0.020 265 / 6%);
+    --color-shadow-medium: oklch(21% 0.020 265 / 10%);
+    --color-shadow-strong: oklch(21% 0.020 265 / 18%);
+    --color-chart-grid: oklch(21% 0.020 265 / 10%);
+  }
+}
+/* BERRAK-LIGHT-RESET END */
