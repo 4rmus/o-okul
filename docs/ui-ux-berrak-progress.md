@@ -667,3 +667,22 @@ artifact'ından (run 36834671993, 36841947066); CI'ın ilk hatada durduğu için
   ölçek dışı ham px (ratchet ile azalacak), web karnesinde baskı başına tek sayfa doğrulaması, worker
   imajında IBM Plex yok, production go-live (kapsam dışı).
 
+## Main merge ve staging role UAT — 2026-10-01
+
+- Yığın 4rmus/o-okul#119 ile main'e merge edildi (merge commit `ac5bc3d99`, kullanıcı onayıyla); #109
+  otomatik merged, #110–#118 içerikleri main'de olduğu için yorumla kapatıldı. Dallar silinmedi.
+- Main CI: run 36849748803 PASS (`verify`, `ui-ux-rc`, `account-management-postgres`).
+- Main staging deploy: run 36851505369 PASS, `deploy`/`build-images` bilinçli atlandı — son cutover
+  `fd01a5c63`'ten (run 36845578115) bu yana yalnız doküman ve merge commit'i değişti; staging zaten aynı
+  kodu çalıştırıyor.
+- Staging role UAT: run 36851619071 (main, `deploy_run_id=36845578115`) **FAIL** — "Validate full staging
+  evidence environment" adımı: GitHub `staging` ortamındaki `STAGING_EVIDENCE_ENV_B64` secret'ı (son
+  güncelleme 2026-08-09) tam mod için zorunlu 5 anahtarı içermiyor: `DOMAIN`, `CF_DNS_API_TOKEN_FILE`,
+  `LEGACY_TENANT_LOGIN_CUTOFF_AT`, `NOTIFICATION_FROM_EMAIL`, `NOTIFICATION_REPLY_TO_EMAIL`. Bu anahtarlar
+  Berrak öncesinde de `check-prod-env.mjs`'te zorunluydu (Berrak yalnız workflow'un enjekte ettiği
+  `METRICS_SCRAPE_TOKEN`'ı ekledi). Workflow'un geçmişte başarılı UAT koşusu yok. Değerler staging
+  `.env`'indedir; secret güncellenmeden UAT-KURUM-05/06 `UNPROVEN` kalır.
+- Yapılacak: `STAGING_EVIDENCE_ENV_B64`'ü 5 anahtarla yeniden yazmak (`base64 < .staging-evidence.env |
+  gh secret set STAGING_EVIDENCE_ENV_B64 --env staging`), ardından
+  `gh workflow run staging-role-uat.yml --ref main -f deploy_run_id=36845578115`.
+
