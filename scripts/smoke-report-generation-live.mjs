@@ -5,6 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import pg from "pg";
 import { hashPassword } from "../apps/api/dist/auth/auth-user-store.js";
 import { createBullTenantQueueProducer } from "../apps/api/dist/queue/bullmq-producer.js";
+import { runInLiveSmokeTenantContext } from "./live-smoke-tenant-context.mjs";
 import {
   createRedisConnectionOptions,
   createReportGenerationBullWorker,
@@ -65,14 +66,18 @@ try {
     await worker.waitUntilReady();
   }
 
-  const producedJob = await producer.enqueue({
-    queueName: "report-generation",
-    tenantId,
-    userId,
-    entityId: examId,
-    contentHash,
-    reportType: "EXAM_RESULT_SUMMARY",
-  });
+  // Kalıcı tenant store'da kuyruk kabulü aktif tenant + oturum bağlamı ister; koruma atlanmaz.
+  const producedJob = await runInLiveSmokeTenantContext(
+    { directDatabaseUrl, tenantId, userId, label: "Report" },
+    () => producer.enqueue({
+      queueName: "report-generation",
+      tenantId,
+      userId,
+      entityId: examId,
+      contentHash,
+      reportType: "EXAM_RESULT_SUMMARY",
+    }),
+  );
 
   const startedAt = performance.now();
   const snapshot = await waitForSnapshot(generationDurationMsMax);
@@ -515,8 +520,11 @@ function classIdAt(index) {
     : `class-report-smoke-${runId}-${String(index).padStart(2, "0")}`;
 }
 
+// Fixture tenant kalıcıdır; aktif sınıf adı tenant içinde benzersiz olduğundan ad koşuya özeldir
+// (sabit ad ikinci koşuda Class_tenantId_active_name_key ile çakışıyordu).
 function classNameAt(index) {
-  return resultCount === 1 ? "Smoke 8-A" : `Smoke 8-${String(index + 1).padStart(2, "0")}`;
+  const runLabel = runId.slice(0, 8);
+  return resultCount === 1 ? `Smoke 8-A ${runLabel}` : `Smoke 8-${String(index + 1).padStart(2, "0")} ${runLabel}`;
 }
 
 function studentIdAt(index) {
