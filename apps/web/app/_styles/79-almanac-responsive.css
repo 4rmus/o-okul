@@ -225,8 +225,16 @@
       grid-column: 1 / -1;
     }
 
+    /* WebKit'te select metni etiketin yanında 2 sütunlu hücreyi taşırıyordu (G5); etiket üste alınır. */
+    .uh-context-bar.next-work-context > .uh-context-bar__item:not(:first-child) {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--space-3xs);
+    }
+
     .uh-context-bar.next-work-context select {
       width: 100%;
+      min-width: 0;
       max-width: none;
     }
 
