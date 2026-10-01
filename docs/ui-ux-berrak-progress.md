@@ -685,4 +685,17 @@ artifact'ından (run 36834671993, 36841947066); CI'ın ilk hatada durduğu için
 - Yapılacak: `STAGING_EVIDENCE_ENV_B64`'ü 5 anahtarla yeniden yazmak (`base64 < .staging-evidence.env |
   gh secret set STAGING_EVIDENCE_ENV_B64 --env staging`), ardından
   `gh workflow run staging-role-uat.yml --ref main -f deploy_run_id=36845578115`.
+- Secret güncellemesi (11:50:17): 5 eksik anahtar staging sunucusundaki `/root/o-okul/.env`'den aktarıldı
+  (sunucunun `fd01a5c63` imajlarını çalıştırdığı doğrulandı), `NOTIFICATION_SMOKE_PUSH_TO` e-posta-only
+  release kuralı gereği boşaltıldı; dosya tam (MFA=required ile) ve activation modda doğrulandı.
+- UAT run 36857880989: evidence ortamı adımı geçti; "Preflight exact images and release-scoped UAT inputs"
+  adımında `/root/o-okul-private/uat/<releaseImageTag>/` girdileri olmadığı için durdu. Bu workflow UAT'ı
+  koşmaz, operatörün UAT sonuçlarını doğrulayıp yayımlar.
+- Otomatik hazırlanan taslak girdiler (repo dışı, özel dizin; 0700/0600): 13 CI kapsamlı senaryo `PASS`
+  (exact CI run 36843682705), `traefik:https:smoke` `PASS` (deploy run 36845578115 kanıtı),
+  `githubCiRunUrl`. Doğrulayıcıyla kalan eksikler: `tester`, `restoreBackupReference`, 9 canlı komut
+  (`db:rls:check:live`, `raw-import:smoke`, `report-generation:smoke`, `live:exam-cycle:check`,
+  `queue:smoke`, `live:onboarding:smoke`, `live:ui-worker:smoke`, `sms:smoke`, `notification:smoke`) ve
+  8 dış senaryonun staging kanıtı (UAT-SYS-01/02/04, UAT-KURUM-01/03/05/06/08). Canlı smoke'lar staging'e
+  veri yazdığı için onaysız koşturulmadı; doldurulmamış alanlar `PENDING` bırakıldı.
 
