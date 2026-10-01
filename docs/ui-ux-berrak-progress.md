@@ -24,7 +24,7 @@ Local PASS staging kanıtı değildir. Secret değerleri bu dosyaya yazılmaz; y
 | G5 Shell v3 + hub IA + ContextBar | `berrak/g5-shell` | Tamam | 4rmus/o-okul#114 |
 | G6 Sınav çalışma alanı | `berrak/g6-sinav-calisma-alani` | Tamam | 4rmus/o-okul#115 |
 | G7 Günlük özetler | `berrak/g7-gunluk-ozet` | Tamam | 4rmus/o-okul#116 |
-| G8 CSS temizliği + ratchet + koyu tema anahtarı | `berrak/g8-css-ratchet` | Tamam | draft PR |
+| G8 CSS temizliği + ratchet + koyu tema anahtarı | `berrak/g8-css-ratchet` | Tamam | 4rmus/o-okul#117 |
 
 ## G0 — Plan ve karar kayıtları
 
