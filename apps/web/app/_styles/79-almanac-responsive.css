@@ -23,7 +23,7 @@
       top: 0;
       z-index: 50;
       display: grid;
-      grid-template-columns: 44px minmax(0, 1fr) 44px;
+      grid-template-columns: 44px minmax(0, 1fr) auto;
       align-items: center;
       gap: var(--space-2xs);
       border-bottom: 1px solid var(--color-rule);
@@ -225,8 +225,16 @@
       grid-column: 1 / -1;
     }
 
+    /* WebKit'te select metni etiketin yanında 2 sütunlu hücreyi taşırıyordu (G5); etiket üste alınır. */
+    .uh-context-bar.next-work-context > .uh-context-bar__item:not(:first-child) {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--space-3xs);
+    }
+
     .uh-context-bar.next-work-context select {
       width: 100%;
+      min-width: 0;
       max-width: none;
     }
 
@@ -514,7 +522,7 @@
     }
 
     .next-mobile-topbar {
-      grid-template-columns: 44px minmax(0, 1fr) 44px;
+      grid-template-columns: 44px minmax(0, 1fr) auto;
       padding-inline: var(--space-2xs);
     }
 
@@ -619,3 +627,18 @@
   }
 }
 /* Hallmark redesign layer · END */
+
+/* Berrak G8: mobil üst çubukta tema anahtarı + komut paleti yan yana. */
+.next-mobile-topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+
+/* 320 px'te iki 44 px düğme marka ile birlikte sığmaz; dokunma hedefi 375 px ve üstünde 44 px. */
+@media (min-width: 375px) {
+  .next-mobile-topbar__actions .uh-button--icon {
+    width: 44px;
+    height: 44px;
+  }
+}

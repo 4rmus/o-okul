@@ -86,7 +86,7 @@
 
   .next-desktop-topbar {
     border-color: var(--color-rule);
-    background: color-mix(in oklch, var(--color-paper-raised) 96%, transparent);
+    background: color-mix(in oklab, var(--color-paper-raised) 96%, transparent);
     box-shadow: none;
   }
 

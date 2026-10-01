@@ -403,6 +403,9 @@ requireNoTokens("apps/web/app/(app)/kurum/kurum-dashboard.tsx", [
   'className="next-dashboard-compact-links"',
   "Diğer kurum işlemleri",
 ]);
+// DEC-20260930-03 (G8): bağlantı duvarının CSS pin'leri emekli; eşdeğer kanıt yukarıdaki requireNoTokens,
+// kurum dashboard golden'ı (route-family-dashboard-*) ve aşağıdaki ölü CSS yasağı.
+requireNoTokens("apps/web/app/globals.css", [".next-dashboard-compact-links", ".next-institution-growth-side"]);
 
 requireTokens("apps/web/app/(app)/kurum/kurum-dashboard.tsx", [
   "ActionCard,",
@@ -4724,8 +4727,6 @@ requireTokens("apps/web/app/globals.css", [
   ".next-dashboard-exam-panel .uh-panel__body",
   ".next-dashboard-exam-summary",
   ".next-dashboard-exam-summary dl",
-  ".next-dashboard-compact-links",
-  ".next-dashboard-compact-links a",
   ".next-portal-karne-detail",
   ".next-portal-karne-empty",
   ".next-portal-karne-sheet",

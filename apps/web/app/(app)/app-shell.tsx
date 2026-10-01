@@ -15,6 +15,7 @@ import { buildInstitutionRailGroups, institutionNavGroups, rolePortalNavGroups, 
 import { buildCommandItems, canUseEntitySearch, CommandPalette, focusCommandOpener } from "./_shell/command-palette.js";
 import { keepFocusInMobileNav, safeTenantBrand, ShellBrand, SidebarGroup, type NavigationGroup, type SidebarItem } from "./_shell/nav-sidebar.js";
 import { DesktopTopBar, RouteBreadcrumb, WorkContext } from "./_shell/top-bar.js";
+import { ThemeToggle } from "./_shell/theme-toggle.js";
 import { PortalBottomNav } from "./_shell/portal-bottom-nav.js";
 import { isWebPushCapabilityEnabled, PushDevicePanel } from "./_shell/push-devices.js";
 
@@ -315,9 +316,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Menu size={18} aria-hidden="true" />
         </button>
         <ShellBrand tenantBrand={tenantBrand} />
-        <button className="next-command-open" type="button" onClick={(event) => openCommandPalette(event.currentTarget)} aria-label="Komut paleti" title="Komut paleti">
-          <Search size={16} aria-hidden="true" />
-        </button>
+        <div className="next-mobile-topbar__actions">
+          <ThemeToggle />
+          <button className="next-command-open" type="button" onClick={(event) => openCommandPalette(event.currentTarget)} aria-label="Komut paleti" title="Komut paleti">
+            <Search size={16} aria-hidden="true" />
+          </button>
+        </div>
       </header>
       <aside
         className="next-sidebar"

@@ -270,6 +270,23 @@ forbidRegex("packages/ui/src/components/charts.tsx", files.charts, /#[0-9a-f]{3,
 
 validateCustomPropertyGraph(`${files.tokens}\n${files.globals}`);
 
+// Berrak §7 ratchet: uygulama CSS'indeki ham px sayıları yalnız azalabilir. Sayı düştüğünde baseline
+// aynı değişiklikte düşürülür (sessizce geri artmasın diye eşitlik beklenir).
+{
+  const sample = countRawPx(".a { padding: 8px -4px var(--space-sm); margin-top: 2px; font-size: 12px; border-top-left-radius: 6px; /* gap: 9px; */ }");
+  if (JSON.stringify(sample) !== JSON.stringify({ spacing: 2, fontSize: 1, radius: 1 })) failures.push(`countRawPx öz denetimi başarısız: ${JSON.stringify(sample)}`);
+}
+const rawPxBaseline = { spacing: 505, fontSize: 178, radius: 35 };
+const rawPxCounts = countStyleRawPx();
+for (const [group, baseline] of Object.entries(rawPxBaseline)) {
+  const count = rawPxCounts[group];
+  if (count > baseline) {
+    failures.push(`Ham px ratchet'i aşıldı (${group}): ${count} > ${baseline}. Değerleri tokens.css token'larına bağlayın.`);
+  } else if (count < baseline) {
+    failures.push(`Ham px ratchet'i düştü (${group}): ${count} < ${baseline}. rawPxBaseline.${group} değerini ${count} yapın.`);
+  }
+}
+
 if (failures.length > 0) {
   console.error("Web design token kontrolü başarısız:");
   for (const failure of failures) console.error(`- ${failure}`);
@@ -570,3 +587,31 @@ function validateKarnePins(tokensSource, reportSource) {
     if (name.startsWith("--color-") && !pins.has(name)) failures.push(`KARNE-ALMANAC-PINS eksik token: ${name}`);
   }
 }
+
+function countStyleRawPx() {
+  const styleDir = "apps/web/app/_styles";
+  const paths = readdirSync(styleDir).filter((name) => name.endsWith(".css")).map((name) => `${styleDir}/${name}`);
+  const total = { spacing: 0, fontSize: 0, radius: 0 };
+  for (const path of [...paths, "apps/web/app/globals.css"]) {
+    const counts = countRawPx(read(path));
+    for (const group of Object.keys(total)) total[group] += counts[group];
+  }
+  return total;
+}
+
+// Yalnız pozitif px literal'leri sayılır (calc içindekiler dahil); negatif ofsetler sayılmaz.
+function countRawPx(css) {
+  const groups = {
+    spacing: /^(?:padding|margin|gap|row-gap|column-gap)(?:-[a-z-]+)?$/,
+    fontSize: /^font-size$/,
+    radius: /^border(?:-[a-z]+)*-radius$/,
+  };
+  const counts = { spacing: 0, fontSize: 0, radius: 0 };
+  for (const match of css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([a-z-]+)\s*:\s*([^;{}]+);/g)) {
+    for (const [group, pattern] of Object.entries(groups)) {
+      if (pattern.test(match[1])) counts[group] += (match[2].match(/(?<![\w.-])\d*\.?\d+px\b/g) ?? []).length;
+    }
+  }
+  return counts;
+}
+

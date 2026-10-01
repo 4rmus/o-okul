@@ -239,7 +239,7 @@
   .uh-select--invalid,
   .uh-textarea--invalid {
     border-color: var(--color-danger-token);
-    box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-danger-token) 15%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-danger-token) 15%, transparent);
   }
 
   .uh-checkbox {

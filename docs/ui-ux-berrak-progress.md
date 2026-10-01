@@ -24,6 +24,7 @@ Local PASS staging kanıtı değildir. Secret değerleri bu dosyaya yazılmaz; y
 | G5 Shell v3 + hub IA + ContextBar | `berrak/g5-shell` | Tamam | 4rmus/o-okul#114 |
 | G6 Sınav çalışma alanı | `berrak/g6-sinav-calisma-alani` | Tamam | 4rmus/o-okul#115 |
 | G7 Günlük özetler | `berrak/g7-gunluk-ozet` | Tamam | 4rmus/o-okul#116 |
+| G8 CSS temizliği + ratchet + koyu tema anahtarı | `berrak/g8-css-ratchet` | Tamam | draft PR |
 
 ## G0 — Plan ve karar kayıtları
 
@@ -445,4 +446,78 @@ yeniden doğrular; `latestReport` yalnız öğretmenin atanmış öğrencilerini
   pin'leri DEC-20260930-03 kapsamında G8'de temizlenecek.
 - P3 açık: özet sayfası her ziyarette öğretmenin ödev/sınav/snapshot dizinlerini bellekte tarar (eski
   portal yükleyicisiyle aynı servisler); ölçek gerektiğinde sorgu seviyesinde sınır.
+
+## G8 — CSS temizliği + ratchet + koyu tema anahtarı (§1 koyu tema, §7)
+
+- Hedef: ham px'i token'a bağlayıp ratchet'le kilitlemek, koyu tema anahtarı ve koyu tema axe taraması,
+  koyu üst çubuk ton kalıntısının giderilmesi, `--space-2/3` ve `--workspace-max-width` düzeltmeleri.
+- Sahip olunan yollar: `apps/web/app/_styles/*`, `scripts/check-web-design-tokens.mjs`,
+  `scripts/check-web-ux-baseline.mjs` (DEC-20260930-03 kapsamında), `scripts/check-web-token-storage.mjs`
+  (tema anahtarı), `(app)/_shell/theme-toggle.tsx` + yerleşim (`_shell/top-bar.tsx`, `app-shell.tsx`),
+  `e2e-next/a11y-next.spec.ts`, dashboard golden'ı.
+- Yasak yollar: davranış kodu (tema anahtarı dışında), karne, marketing CSS'i (G9).
+- Kabul: ratchet sayıları düşer; koyu tema axe 320–1440; karne/print açık kalır; `ui-ux-redesign:local-gates`.
+
+### G8 notları
+
+- Ratchet (`check-web-design-tokens.mjs`): `_styles/*.css` + `globals.css` içindeki ham px sayıları
+  (yalnız pozitif literal) eşitlikle kilitli; artış hata, düşüş "baseline'ı düşür" hatası. Sayım fonksiyonu
+  için öz denetim var; negatif deneme (fazladan `padding: 3px`) kırmızı verdi.
+
+  | Grup | Önce | Sonra |
+  |---|---|---|
+  | padding/margin/gap | 799 | 505 |
+  | font-size | 280 | 178 |
+  | border-radius | 43 | 35 |
+
+  Düşüş `20-application-base.css`'te değeri birebir eşit token'a çevirerek yapıldı (4/8/12/16/24/32/48/64 px
+  → `--space-*`, 12/14/16/20/24 px → `--text-*`, 6/8/12/999 px → `--radius-*`; kök 16 px'te piksel-özdeş).
+  `karne|report-card|print` içeren seçiciler atlandı. Golden'lar (karne dahil) değişmeden geçti.
+  `10-marketing-base.css` G9'a bırakıldı. Dosya bölme / "Professional redesign layer" birleştirmesi
+  yapılmadı: kural sırası media override'larını etkiliyor (ör. `.next-workspace` 6953/7284), birleştirme
+  görsel değişiklik getirir; ratchet sonraki dilimlerde dosya bazında ilerler (açık madde).
+- Koyu üst çubuk ton kalıntısı kök neden: Next'in CSS hattı oklch token'larını `lab()`'a çeviriyor; düşük
+  kromlu bir `lab` rengi `color-mix(in oklch, …, transparent)` ile karışınca ton "none" oluyor ve krom
+  0.012 ton 0'da (kırmızı) çiziliyor. Yalnız transparan (alfa) karışımları `in oklab`'a geçti (52 bildirim;
+  iki renk karışımları oklch'de kaldı, karne seçicileri atlandı).
+- `--space-3` 2xs yerine xs (4 pt ölçeği; kullanımı yoktu). `--workspace-max-width` 1440 (etkin genişlik
+  zaten 1440'tı; sonraki kural artık token'ı kullanıyor).
+- Tema anahtarı: masaüstü üst çubukta ve mobil başlıkta "Koyu tema" (`aria-pressed`), tercih
+  `o-okul-theme` anahtarında (token-storage allowlist'inde, kimlik verisi değil). İki örnek `data-theme`'i
+  `MutationObserver` ile izler (ilk sürümde mobil örnek eski durumla ters çeviriyordu; test yakaladı).
+- G7'den kalan ölü CSS (`.next-dashboard-compact-links`, `.next-institution-growth-side`) ve iki sütunlu
+  özet ızgarası kaldırıldı: 1440 px'te sağda boş sütun kalıyordu; dashboard golden'ı yenilendi.
+- DEC-20260930-03 eşleme tablosu (G8'de emekli edilen `globals.css` pin'leri):
+
+  | Emekli pin | Eşdeğer kanıt |
+  |---|---|
+  | `.next-dashboard-compact-links`, `.next-dashboard-compact-links a` | `requireNoTokens` (kurum-dashboard: sınıf + "Diğer kurum işlemleri"), `requireNoTokens` (globals: ölü seçiciler geri gelemez), `route-family-dashboard-*` golden'ları |
+
+  Diğer `globals.css` pin blokları korunuyor: bu gate'teki dönüşüm seçici adlarını değiştirmedi.
+- CI `ui-ux-rc` işi G5'ten (4rmus/o-okul#114) beri kırmızıydı ve karne farkına bağlanarak gözden kaçmıştı:
+  webkit 320 px'te kurum dashboard'unda kök yatay taşma (CI 9 px, yerel 4 px). Kök neden: ContextBar'ın
+  2 sütunlu mobil ızgarasında webkit `select` metni etiketin yanında hücreyi taşırıyordu. Dar ekranda
+  etiket select'in üstüne alındı; `pnpm ux-rc` (chromium + webkit) yerelde 50/50. `route-family-students-list-414`
+  ve `route-family-attendance-414` golden'ları bu yüzden yenilendi. `verify` işinin kırmızısı
+  yalnız karne Linux golden'ı (`student-report-card-1024`), G10'da kapanacak.
+
+### G8 kanıt
+
+| Sınıf | Sonuç |
+|---|---|
+| `LOCAL_STATIC` | PASS: web typecheck, `web:architecture:check`, `route-manifest:check` (93), `web:design-tokens:check` (ratchet), `web:ux-baseline:check`, `web:token-storage:check`, measurement baseline |
+| `LOCAL_TEST` | PASS: `web:a11y:check` (18; koyu tema 6 genişlik + anahtar), `ux-rc` (chromium + webkit 50/50), tüm e2e-next (main'de de kırmızı 2 login-next hariç), `ui-ux-redesign:local-gates` (karne golden dahil) |
+| `CI` | Karne Linux golden farkı G2'den beri bekleniyor (G10) |
+| `EXTERNAL_NOT_RUN` | staging |
+
+Görsel kanıt: `artifacts/ui-ux-redesign/berrak/g8/{before,after}` (öğrenciler listesi, öğretmen özeti, sınav
+çalışma alanı; açık + koyu; 375/1440). Koyu üst çubuktaki kırmızımsı ton `after`'da yok.
+
+Review (`o-okul-pr-review`, read-only): P0/P1 yok. Token değerleri birebir, negatif/calc/karne/print
+dokunulmamış, yalnız transparan karışımlar oklab'a geçmiş, anahtar hidrasyon güvenli ve erişilebilir.
+- P2 düzeltildi: anahtar testi CI `ux-rc` grep'ine girmiyordu (adı "kurum dashboard …" ile başlıyor);
+  animasyon beklemesi sonsuz animasyonları (iskelet/spinner) dışlıyor.
+- P3 düzeltildi: ratchet yorumu (calc içi literal'ler sayılır); mobil anahtar 375 px ve üstünde 44 px.
+- P3 açık: mobil başlıkta marka ~24 px sağa kaymış (sağ sütun iki düğme); diğer sekmeler tema değişimini
+  yenilemeye kadar görmez (`storage` olayı dinlenmiyor); Linux golden'ları G10'da CI çıktısından üretilecek.
 

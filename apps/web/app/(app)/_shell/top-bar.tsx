@@ -10,6 +10,7 @@ import { productTerms } from "../../../src/product-terms.js";
 import { hasInstitutionAccess, hasSystemAccess } from "../_shared/access.js";
 import { dynamicDetailParents, institutionNavGroups, rolePortalItems, rolePortalNavGroups, staticBreadcrumbLabels, systemNavGroups } from "../_shared/navigation.js";
 import { type ShellTenantBrand } from "./nav-sidebar.js";
+import { ThemeToggle } from "./theme-toggle.js";
 import { examWorkspaceSegments } from "../../../src/route-manifest.js";
 const allNavigationItems = [
   ...systemNavGroups.flatMap((group) => group.items),
@@ -113,6 +114,7 @@ export function DesktopTopBar({
             {personaSwitchLabel}
           </Button>
         ) : null}
+        <ThemeToggle />
         <Button type="button" variant="secondary" onClick={onLogout}>
           <LogOut size={16} aria-hidden="true" />
           Çıkış
