@@ -104,7 +104,7 @@ requireTokens("tokens.css", files.tokens, [
   "--space-3xs: 0.25rem;",
   "--space-2xl: 4rem;",
   "--text-base: 1rem;",
-  "--text-display: clamp(2.25rem, 4vw, 3rem);",
+  "--text-display: clamp(2rem, 3.5vw, 2.5rem);",
   "--radius-control: 6px;",
   "--radius-panel: 8px;",
   "--radius-dialog: 12px;",
@@ -276,7 +276,7 @@ validateCustomPropertyGraph(`${files.tokens}\n${files.globals}`);
   const sample = countRawPx(".a { padding: 8px -4px var(--space-sm); margin-top: 2px; font-size: 12px; border-top-left-radius: 6px; /* gap: 9px; */ }");
   if (JSON.stringify(sample) !== JSON.stringify({ spacing: 2, fontSize: 1, radius: 1 })) failures.push(`countRawPx öz denetimi başarısız: ${JSON.stringify(sample)}`);
 }
-const rawPxBaseline = { spacing: 505, fontSize: 178, radius: 35 };
+const rawPxBaseline = { spacing: 469, fontSize: 165, radius: 28 };
 const rawPxCounts = countStyleRawPx();
 for (const [group, baseline] of Object.entries(rawPxBaseline)) {
   const count = rawPxCounts[group];

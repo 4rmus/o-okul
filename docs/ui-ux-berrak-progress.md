@@ -25,6 +25,7 @@ Local PASS staging kanıtı değildir. Secret değerleri bu dosyaya yazılmaz; y
 | G6 Sınav çalışma alanı | `berrak/g6-sinav-calisma-alani` | Tamam | 4rmus/o-okul#115 |
 | G7 Günlük özetler | `berrak/g7-gunluk-ozet` | Tamam | 4rmus/o-okul#116 |
 | G8 CSS temizliği + ratchet + koyu tema anahtarı | `berrak/g8-css-ratchet` | Tamam | 4rmus/o-okul#117 |
+| G9 Landing + auth reskin | `berrak/g9-landing-auth` | Tamam | draft PR |
 
 ## G0 — Plan ve karar kayıtları
 
@@ -520,4 +521,58 @@ dokunulmamış, yalnız transparan karışımlar oklab'a geçmiş, anahtar hidra
 - P3 düzeltildi: ratchet yorumu (calc içi literal'ler sayılır); mobil anahtar 375 px ve üstünde 44 px.
 - P3 açık: mobil başlıkta marka ~24 px sağa kaymış (sağ sütun iki düğme); diğer sekmeler tema değişimini
   yenilemeye kadar görmez (`storage` olayı dinlenmiyor); Linux golden'ları G10'da CI çıktısından üretilecek.
+
+## Ortak CI notu (G2–G9) — 2026-10-01 kontrolü
+
+- `verify` işinin tek kırmızısı karne Linux golden'ı (`student-report-card-1024`); #111–#117'nin hepsinde
+  aynı. Bu hata `pnpm run ci`'nin 10. adımında (`karne:visual-contract:check`) düştüğü için 11–37. adımlar
+  (a11y, ux-baseline, visual-qa, lint, typecheck, test, build, openapi, idempotency) G2'den beri CI'da hiç
+  koşmadı → bu adımlar için `CI` kanıtı yok (`UNPROVEN`), G10'da karne + Linux golden'ları ile kapanacak.
+- Telafi: zincirin tamamı (`agents:check` hariç; kullanıcıya ait `.codex/config.toml` nedeniyle) G8+G9
+  çalışma ağacında yerelde koşturuldu ve geçti (`LOCAL_TEST`): api 1284, worker 230, db 98 test, build,
+  openapi (256 path), idempotency (49 operasyon).
+- `ui-ux-rc` G5'ten beri kırmızıydı (webkit 320 px ContextBar taşması, G8 notlarında). Düzeltme G5'e
+  `fix(web): stack ContextBar labels…` olarak commit'lendi ve G6 → G7 → G8'e merge commit'leriyle indirildi
+  (force push yok); her dalda `ux-rc` ve görsel QA yerelde yeşil, #114/#115 CI'da yeşile döndü.
+
+## G9 — Landing + auth reskin (§1, §7)
+
+- Hedef: marketing CSS'ini Berrak token'larına geçirmek, landing başlığı ve ağırlıkları Berrak ölçeğine
+  çekmek; auth ekranlarının yapısı ve akış mantığı aynı kalır.
+- Sahip olunan yollar: `_styles/10-marketing-base.css`, `_styles/74-almanac-marketing.css`, `tokens.css`
+  (`--text-display`), `design.md`, `scripts/check-web-design-tokens.mjs`, landing golden'ı.
+- Yasak yollar: login/MFA/tenant akış mantığı, `app/page.tsx` ve `(auth)/*` davranış kodu.
+- Kabul: `login-next`, `marketing-context-next`, 1280×800 landing fold golden'ı; `ui-ux-redesign:local-gates`.
+
+### G9 notları
+
+- `10-marketing-base.css`: 56 ham px birebir eşit token'a; 48 transparan `color-mix` oklab'a (G8'deki ton
+  kaybı kök nedeni landing'de de geçerli); 700–900 ağırlıklar 600'e (Berrak 400/500/600); nav logo
+  parlaması `--shadow-xs`. `74-almanac-marketing.css`: iki ağırlık 600.
+- `--text-display` `clamp(2rem, 3.5vw, 2.5rem)` (32–40 px; eski 36–48 px). tokens.css, design.md'deki dört
+  ihraç ve tipografi notu, token sözleşme pin'i birlikte güncellendi.
+- Ratchet: padding/margin/gap 505 → 469, font-size 178 → 165, radius 35 → 28.
+- Kalan marketing ham px'i (ölçek dışı 10/14/18/28 px vb.) birebir token karşılığı olmadığı için
+  dokunulmadı; ratchet sonraki dilimlerde düşer.
+- Auth ekranlarının yapısı değişmedi (yalnız token ve tema); koyu temada giriş ekranı doğrulandı.
+
+### G9 kanıt
+
+| Sınıf | Sonuç |
+|---|---|
+| `LOCAL_STATIC` | PASS: `web:design-tokens:check` (ratchet + design.md ihraç eşitliği), `web:ux-baseline:check`, web typecheck |
+| `LOCAL_TEST` | PASS: tam `pnpm run ci` zinciri (agents:check hariç) bu ağaçta; landing golden'ı bilinçli yenilendi |
+| `CI` | `verify` karne Linux golden'ı nedeniyle kırmızı (G10) |
+| `EXTERNAL_NOT_RUN` | staging |
+
+Görsel kanıt: `artifacts/ui-ux-redesign/berrak/g9/{before,after}` (landing, iletişim, giriş, parolamı
+unuttum; açık + koyu; 375/1280).
+
+Review (`o-okul-pr-review`, read-only): P0/P1/P2 yok. Token değerleri birebir (56 = 36+13+7), değişen
+seçicilerin hepsi `.next-marketing-*`, `--shadow-xs` landing'de çözülüyor, design.md ihraçları eşit, akış
+kodu değişmedi. Kabul spec'leri: `marketing-context-next` yeşil; `login-next`'te main'de de kırmızı olan
+2 test (palet "Denetim", çıkış `/giris`) dışında yeşil. P3 (açık): Linux landing golden'ı (G10'da);
+`--radius-dialog` iki marketing karosunda (değer aynı); `74-almanac-marketing.css:76`'daki iki renkli
+oklch karışımı (transparan değil, ton sorunu yok); uygulama CSS'inde 700–850 ağırlıklar design.md ile
+çelişiyor (uygulama yüzeyi, ayrı dilim).
 

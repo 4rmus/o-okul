@@ -55,6 +55,8 @@ uyarı ve hata kendi semantik tokenlarını kullanır.
 - Mono: mevcut sistem monospace yığını.
 - Ölçek: 12 / 14 / 16 / 18 / 20 / 24 / 30 px. Kurum çalışma alanında gövde
   14 px (yoğun), portal ve auth ekranlarında 16 px (rahat).
+- Landing başlığı `--text-display` (32–40 px, weight 600) tek istisnadır; marketing
+  yüzeyi de 600 üstü ağırlık kullanmaz.
 - Sayılar ve uygulama tabloları `font-variant-numeric: tabular-nums` kullanır.
   Dondurulmuş `.next-karne-sheet` tabloları Arial geometrisini korur ve bu
   genel sayı kuralını devralmaz.
@@ -197,7 +199,7 @@ shadcn bağımlılığı kurmaz.
   --text-base: 1rem;
   --text-lg: 1.25rem;
   --text-xl: 1.5rem;
-  --text-display: clamp(2.25rem, 4vw, 3rem);
+  --text-display: clamp(2rem, 3.5vw, 2.5rem);
 
   --radius-control: 6px;
   --radius-panel: 8px;
@@ -269,7 +271,7 @@ shadcn bağımlılığı kurmaz.
   --text-base: 1rem;
   --text-lg: 1.25rem;
   --text-xl: 1.5rem;
-  --text-display: clamp(2.25rem, 4vw, 3rem);
+  --text-display: clamp(2rem, 3.5vw, 2.5rem);
   --radius-control: 6px;
   --radius-panel: 8px;
   --radius-dialog: 12px;
@@ -349,7 +351,7 @@ shadcn bağımlılığı kurmaz.
     "base": { "$value": "1rem", "$type": "dimension" },
     "lg": { "$value": "1.25rem", "$type": "dimension" },
     "xl": { "$value": "1.5rem", "$type": "dimension" },
-    "display": { "$value": "clamp(2.25rem, 4vw, 3rem)", "$type": "string" }
+    "display": { "$value": "clamp(2rem, 3.5vw, 2.5rem)", "$type": "string" }
   },
   "radius": {
     "control": { "$value": "6px", "$type": "dimension" },
@@ -438,7 +440,7 @@ shadcn bağımlılığı kurmaz.
   --o-okul-text-base: 1rem;
   --o-okul-text-lg: 1.25rem;
   --o-okul-text-xl: 1.5rem;
-  --o-okul-text-display: clamp(2.25rem, 4vw, 3rem);
+  --o-okul-text-display: clamp(2rem, 3.5vw, 2.5rem);
   --o-okul-radius-control: 6px;
   --o-okul-radius-panel: 8px;
   --o-okul-radius-dialog: 12px;
