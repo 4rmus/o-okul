@@ -26,7 +26,7 @@ Local PASS staging kanıtı değildir. Secret değerleri bu dosyaya yazılmaz; y
 | G7 Günlük özetler | `berrak/g7-gunluk-ozet` | Tamam | 4rmus/o-okul#116 |
 | G8 CSS temizliği + ratchet + koyu tema anahtarı | `berrak/g8-css-ratchet` | Tamam | 4rmus/o-okul#117 |
 | G9 Landing + auth reskin | `berrak/g9-landing-auth` | Tamam | 4rmus/o-okul#118 |
-| G10 Karne yeniden tasarımı | `berrak/g10-karne` | Sürüyor (Linux golden'ları) | 4rmus/o-okul#119 |
+| G10 Karne yeniden tasarımı | `berrak/g10-karne` | Tamam | 4rmus/o-okul#119 |
 
 ## G0 — Plan ve karar kayıtları
 
@@ -640,4 +640,30 @@ tanımlanmış, golden diff eşiği sıkılaşmış (0.53/36 → 0.02/6).
 - P3 açık: web karnesi baskıda öğrenci başına tek sayfa sınırını doğrulamıyor (spec yalnız ≥ 842
   yüksekliği bekliyor; worker PDF `break-before: page` ile öğrenci başına sayfa açıyor); worker imajında
   IBM Plex yok (Arial yedeği).
+
+### G10 kanıt
+
+| Sınıf | Sonuç |
+|---|---|
+| `LOCAL_STATIC` | PASS: design-tokens (KARNE-PAPER-PINS eşitliği, 39 renk, ratchet), ux-baseline, karne contract, ops:check, prod-readiness, route-manifest, architecture |
+| `LOCAL_TEST` | PASS: worker 231/231 (yeni biçim testi), `karne:visual-contract:check`, report-workspace / portal-report-panel / visual QA, `ui-ux-redesign:local-gates`, tam `pnpm run ci` zinciri (`agents:check` hariç), `report-generation:smoke` (colima + yerel postgres/redis) |
+| `CI` | **PASS**: 4rmus/o-okul#119, run 36843682705 (`fd01a5c63`) — `verify` (tam `pnpm run ci`), `ui-ux-rc`, `account-management-postgres` |
+| `STAGING` | **PASS** deploy: run 36845578115 (`fd01a5c63`, rollback etiketi `e4bde6f18991ddf2c8db5c0713d032720abf288a`) — cutover, Traefik HTTPS `/health` 200 + HSTS, WAL arşiv ve alert webhook smoke; canlı kontrol: `/health/ready` postgres+redis ok, `/api/v1/metrics` ve `/metrics` dışarıdan 404, emekli `/kurum/sistem-sagligi` yönlendiriliyor |
+| `UNPROVEN` | Staging role UAT (UAT-KURUM-05/06): `staging-role-uat.yml` run 36847304730 `skipped` — iş yalnız `main` ref'inde çalışır ve deploy SHA'sının `main` atası olmasını ister; Berrak dalları main'e merge edilmedi (goal yasağı). Merge sonrası main deploy'u ile koşmalı |
+| `EXTERNAL_NOT_RUN` | `raw-import:smoke` (yerelde girişte 401; Berrak auth/smoke/şemaya dokunmadı, ayrı açık madde) |
+
+Linux golden'ları: karne `student-report-card-1024-linux` ve G2–G9'dan kalan 9 golden CI `ci-test-results`
+artifact'ından (run 36834671993, 36841947066); CI'ın ilk hatada durduğu için ulaşamadığı 4 golden
+(`route-family-dashboard-1440`, `institution-shell-rail-1440`, `route-family-student-portal-414`, eksik
+`institution-shell-drawer-414`) `mcr.microsoft.com/playwright:v1.60.0-noble` imajıyla üretildi; imaj
+çıktısı CI'ın 9 gerçek çıktısıyla %0,5 tolerans içinde eşleşti.
+
+## Kapanış — 2026-10-01
+
+- Son dal `berrak/g10-karne`: GitHub CI PASS (run 36843682705), staging deploy PASS (run 36845578115).
+- Ara PR'ların (#111–#118) `verify` kırmızısı yalnız karne Linux golden'ıdır; zincirin yeşil hali son dalda.
+- Açık maddeler: staging role UAT (main merge sonrası), `raw-import:smoke` girişi, login-next'teki 2 eski
+  kırmızı test (main'de de kırmızı), mobil başlıkta marka ofseti, uygulama CSS'inde 700+ ağırlıklar ve
+  ölçek dışı ham px (ratchet ile azalacak), web karnesinde baskı başına tek sayfa doğrulaması, worker
+  imajında IBM Plex yok, production go-live (kapsam dışı).
 
