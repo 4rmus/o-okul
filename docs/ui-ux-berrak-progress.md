@@ -25,7 +25,7 @@ Local PASS staging kanıtı değildir. Secret değerleri bu dosyaya yazılmaz; y
 | G6 Sınav çalışma alanı | `berrak/g6-sinav-calisma-alani` | Tamam | 4rmus/o-okul#115 |
 | G7 Günlük özetler | `berrak/g7-gunluk-ozet` | Tamam | 4rmus/o-okul#116 |
 | G8 CSS temizliği + ratchet + koyu tema anahtarı | `berrak/g8-css-ratchet` | Tamam | 4rmus/o-okul#117 |
-| G9 Landing + auth reskin | `berrak/g9-landing-auth` | Tamam | draft PR |
+| G9 Landing + auth reskin | `berrak/g9-landing-auth` | Tamam | 4rmus/o-okul#118 |
 
 ## G0 — Plan ve karar kayıtları
 
