@@ -23,7 +23,7 @@ Local PASS staging kanıtı değildir. Secret değerleri bu dosyaya yazılmaz; y
 | G4 Primitive konsolidasyonu | `berrak/g4-primitive` | Tamam | 4rmus/o-okul#113 |
 | G5 Shell v3 + hub IA + ContextBar | `berrak/g5-shell` | Tamam | 4rmus/o-okul#114 |
 | G6 Sınav çalışma alanı | `berrak/g6-sinav-calisma-alani` | Tamam | 4rmus/o-okul#115 |
-| G7 Günlük özetler | `berrak/g7-gunluk-ozet` | Tamam | draft PR |
+| G7 Günlük özetler | `berrak/g7-gunluk-ozet` | Tamam | 4rmus/o-okul#116 |
 
 ## G0 — Plan ve karar kayıtları
 
