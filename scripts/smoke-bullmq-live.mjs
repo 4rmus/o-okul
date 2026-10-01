@@ -6,10 +6,14 @@ import {
   createExamEvaluationBullWorker,
   createRedisConnectionOptions,
 } from "../apps/worker/dist/queue/bullmq-worker.js";
+import { runInLiveSmokeTenantContext } from "./live-smoke-tenant-context.mjs";
 
 const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
 const connection = createRedisConnectionOptions(redisUrl);
 const prefix = process.env.QUEUE_PREFIX ?? `smoke-${Date.now()}`;
+const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? process.env.DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/o_okul";
+const tenantId = "tenant-smoke-queue";
+const userId = "user-smoke-queue";
 
 if (!(await canConnect(connection.host, connection.port))) {
   console.error(
@@ -63,8 +67,8 @@ try {
 
   const examJobInput = {
     queueName: "exam-evaluation",
-    tenantId: "tenant-smoke",
-    userId: "user-smoke",
+    tenantId,
+    userId,
     entityId: `raw-import-${Date.now()}`,
     contentHash: "hash-smoke",
     participantId: "participant-smoke",
@@ -73,13 +77,16 @@ try {
   };
   const importJobInput = {
     queueName: "excel-import",
-    tenantId: "tenant-smoke",
-    userId: "user-smoke",
+    tenantId,
+    userId,
     entityId: `raw-import-${Date.now()}`,
     contentHash: "hash-smoke-import",
   };
-  const producedExamJob = await producer.enqueue(examJobInput);
-  const producedImportJob = await producer.enqueue(importJobInput);
+  // Kalıcı tenant store'da kuyruk kabulü aktif tenant + oturum bağlamı ister; koruma atlanmaz.
+  const [producedExamJob, producedImportJob] = await runInLiveSmokeTenantContext(
+    { directDatabaseUrl, tenantId, userId, label: "Queue" },
+    async () => [await producer.enqueue(examJobInput), await producer.enqueue(importJobInput)],
+  );
 
   await Promise.race([
     processed,
