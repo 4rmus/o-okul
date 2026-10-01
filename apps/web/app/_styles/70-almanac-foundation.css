@@ -1,9 +1,17 @@
 /* Hallmark redesign layer · BEGIN */
 @media screen {
 /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V4 */
-  /* Hallmark · genre: editorial · landing: Narrative Workflow · app: Workbench · theme: Almanac · designed-as-app */
+  /* Hallmark · genre: product · landing: Narrative Workflow · app: Workbench · theme: Berrak · designed-as-app */
   :root {
     color-scheme: light;
+    color: var(--color-ink);
+    background: var(--color-paper);
+    font-family: var(--font-body);
+  }
+
+  /* Alias'lar karne içinde de yeniden çözülür; koyu temada karne açık kâğıt kalır (01-theme-dark.css). */
+  :root,
+  .next-karne-sheet {
     --color-text: var(--color-ink);
     --color-text-secondary: var(--color-ink-secondary);
     --color-text-muted: var(--color-ink-muted);
@@ -33,10 +41,13 @@
     --radius: var(--radius-control);
     --radius-lg: var(--radius-panel);
     --shell-sidebar-width: 15.5rem;
-    --shadow-soft: none;
-    --shadow-card: none;
-    --shadow-card-hover: none;
-    --shadow-modal: 0 24px 58px var(--color-shadow-strong);
+    --shadow-xs: 0 1px 2px var(--color-shadow-soft);
+    --shadow-sm: 0 4px 12px var(--color-shadow-medium);
+    --shadow-lg: 0 20px 48px var(--color-shadow-strong);
+    --shadow-soft: var(--shadow-sm);
+    --shadow-card: var(--shadow-xs);
+    --shadow-card-hover: var(--shadow-sm);
+    --shadow-modal: var(--shadow-lg);
     --focus-ring: 0 0 0 2px var(--color-paper), 0 0 0 4px var(--color-focus);
     --transition-ui: var(--dur-short) var(--ease-out);
     --chart-success: var(--color-success-token);
@@ -49,9 +60,6 @@
     --chart-grid: var(--color-chart-grid);
     --chart-text: var(--color-ink-muted);
     --chart-surface: var(--color-paper-raised);
-    color: var(--color-ink);
-    background: var(--color-paper);
-    font-family: var(--font-body);
   }
 
   html,
@@ -231,7 +239,7 @@
   .uh-select--invalid,
   .uh-textarea--invalid {
     border-color: var(--color-danger-token);
-    box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-danger-token) 15%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-danger-token) 15%, transparent);
   }
 
   .uh-checkbox {

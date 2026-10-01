@@ -1,21 +1,23 @@
-import type { HTMLAttributes } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 import { classNames } from "../class-names.js";
 import { Button } from "./button.js";
 
 export interface PaginationProps extends HTMLAttributes<HTMLDivElement> {
+  nextLabel?: ReactNode;
   onNext(): void;
   onPrevious(): void;
+  previousLabel?: ReactNode;
   page: number;
   totalPages: number;
 }
 
-export function Pagination({ className, onNext, onPrevious, page, totalPages, ...props }: PaginationProps) {
+export function Pagination({ className, nextLabel = "Sonraki", onNext, onPrevious, page, previousLabel = "Önceki", totalPages, ...props }: PaginationProps) {
   const normalizedTotalPages = Math.max(totalPages, 1);
 
   return (
     <div {...props} aria-label={props["aria-label"] ?? "Sayfalama"} className={classNames("uh-pagination", className)} role={props.role ?? "navigation"}>
       <Button aria-label="Önceki sayfa" disabled={page <= 1} onClick={onPrevious} size="sm" variant="secondary">
-        Önceki
+        {previousLabel}
       </Button>
       <span>
         {page}/{normalizedTotalPages}
@@ -27,7 +29,7 @@ export function Pagination({ className, onNext, onPrevious, page, totalPages, ..
         size="sm"
         variant="secondary"
       >
-        Sonraki
+        {nextLabel}
       </Button>
     </div>
   );

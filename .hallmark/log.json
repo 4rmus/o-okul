@@ -1,5 +1,14 @@
 [
   {
+    "date": "2026-09-30",
+    "scope": "app",
+    "macrostructure": "Narrative Workflow / Workbench / Index-First",
+    "theme": "Berrak",
+    "enrichment": "none",
+    "brief": "O-Okul arayüzünü sakin ürün Berrak sistemine taşıma: nötr yüzey, tek sans aile, indigo vurgu, açık ve koyu tema",
+    "theme_axes": "light+dark / sans / cool-indigo"
+  },
+  {
     "date": "2026-07-31",
     "scope": "app",
     "macrostructure": "Narrative Workflow / Workbench / Index-First",

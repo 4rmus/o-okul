@@ -6,9 +6,9 @@ sözleşmeleri görsel sistemden bağımsızdır.
 
 ## Genre
 
-Editoryal ve teknik; serin kâğıt yüzey, koyu mürekkep, ölçülü çizgiler ve karar
-odaklı hiyerarşi kullanır. Ekranlar dekoratif kart duvarları değil, görev,
-durum ve sonraki aksiyon sırasını görünür kılan yaşayan bir okul almanağıdır.
+Sakin ürün: nötr yüzeyler, koyu mürekkep, ince çizgiler ve tek bir indigo vurgu.
+Ekranlar dekoratif kart duvarları değil; görev, durum ve sonraki aksiyon sırasını
+görünür kılan sade bir çalışma alanıdır. Karar kaydı: DEC-20260930-01.
 
 ## Macrostructure family
 
@@ -21,27 +21,45 @@ durum ve sonraki aksiyon sırasını görünür kılan yaşayan bir okul almana�
 - Content/evidence: Index-first. Durum matrisi, zaman çizgisi ve kayıt önce
   gelir; local, staging ve canlı kanıt birbirine karıştırılmaz.
 
-## Theme — Almanac
+## Theme — Berrak
 
-Kanonik değerler bu dosyanın `### tokens.css` ihracındadır; kökteki
-`tokens.css` bu bloğun birebir üretim kopyasıdır.
+Kanonik açık tema değerleri bu dosyanın `### tokens.css` ihracındadır; kökteki
+`tokens.css` bu bloğun birebir üretim kopyasıdır. Token adları (`paper`, `ink`,
+`rule`, `accent`) Almanac'tan korunur; yalnız değerler değişir.
 
-Mürekkep mavisi birincil eylem, aktif öğe ve link ile sınırlıdır; teal
-yalnız dekoratif karşılaştırma vurgusudur ve başarı rengi yerine kullanılmaz.
-Durumlar renk yanında ikon veya açık metin etiketi taşır. Grafiklerin ana
-`Başarı %` serisi mürekkep mavisi, karşılaştırma serisi teal, Net/Soru bağlamı nötrdür;
-başarı, uyarı ve hata kendi semantik tokenlarını kullanır.
+İndigo birincil eylem, aktif öğe, odak ve link ile sınırlıdır; teal yalnız
+grafik karşılaştırma serisidir ve başarı rengi yerine kullanılmaz. Durumlar
+renk yanında ikon veya açık metin etiketi taşır. Grafiklerin ana `Başarı %`
+serisi indigo, karşılaştırma serisi teal, Net/Soru bağlamı nötrdür; başarı,
+uyarı ve hata kendi semantik tokenlarını kullanır.
+
+### Koyu tema
+
+- Seçim `<html data-theme="light|dark">` ile yapılır. Varsayılan
+  `prefers-color-scheme`'dir; kullanıcı tercihi tarayıcıda `o-okul-theme`
+  anahtarıyla saklanır ve paint öncesi `apps/web/app/layout.tsx` içindeki küçük
+  script ile uygulanır.
+- Koyu değerler `apps/web/app/_styles/01-theme-dark.css` içindedir ve aynı token
+  adlarını kullanır: zemin `oklch(17% 0.010 265)`, kart `oklch(21% 0.012 265)`,
+  mürekkep `oklch(96% 0.005 265)`, ikincil mürekkep `oklch(72% 0.015 265)`,
+  çizgiler `oklch(30/38/26% 0.012 265)`, indigo `oklch(67% 0.180 277)`, teal
+  `oklch(72% 0.110 185)`; başarı/uyarı/hata 400 tonları ve koyu soft zeminler.
+- Karne ve baskı daima açık kâğıttır: `.next-karne-sheet` renk token'larını
+  `tokens.css` açık değerlerine sabitler (`KARNE-PAPER-PINS`), `@media print` koyu
+  temada açık değerleri geri yükler (`BERRAK-LIGHT-RESET`).
+- Grafikler token'ları `html[data-theme]` değişiminde yeniden okur.
 
 ## Typography
 
-- Display: Source Serif 4, weight 600–700, normal.
-- Body: IBM Plex Sans, weight 400–600.
+- Tek aile: IBM Plex Sans (`latin-ext`), weight 400 / 500 / 600.
+  `--font-display` aynı sans aileye eşlenir; serif kullanılmaz.
 - Mono: mevcut sistem monospace yığını.
-- Display tracking: `-0.018em`.
-- Ölçek: 12 / 14 / 16 / 20 / 28 px; landing display en fazla 48 px.
-- Sayılar ve uygulama tabloları `font-variant-numeric: tabular-nums` kullanır.
-  Dondurulmuş `.next-karne-sheet` tabloları Arial geometrisini korur ve bu
-  genel sayı kuralını devralmaz.
+- Ölçek: 12 / 14 / 16 / 18 / 20 / 24 / 30 px. Kurum çalışma alanında gövde
+  14 px (yoğun), portal ve auth ekranlarında 16 px (rahat).
+- Landing başlığı `--text-display` (32–40 px, weight 600) tek istisnadır; marketing
+  yüzeyi de 600 üstü ağırlık kullanmaz.
+- Sayılar ve uygulama tabloları `font-variant-numeric: tabular-nums` kullanır;
+  karne de dahil (DEC-20260930-04: IBM Plex, Arial yalnız yedek font).
 
 Başlıklar hiçbir zaman italik değildir. Uzun başlıklar `overflow-wrap:
 anywhere` ile kendi kolonunda kalır.
@@ -50,8 +68,10 @@ anywhere` ile kendi kolonunda kalır.
 
 4-point named scale `tokens.css` içindedir: 4 / 8 / 12 / 16 / 24 / 32 /
 48 / 64 px. Kontroller en az 44 px, dokunmatik yüzeylerde 48 px olur.
-Radius kontrollerde 4, panellerde 2, dialoglarda 6 px; pill kontrollerde
-`--radius-pill` kullanır. Gölge dialog, popover ve geçici katmanlarla sınırlıdır.
+Radius kontrollerde 6, panel ve kartlarda 8, dialoglarda 12 px; pill
+kontrollerde `--radius-pill` kullanır. Gölge token'ları: `--shadow-xs` (kart:
+ince çizgi + çok hafif gölge), `--shadow-sm` (popover), `--shadow-lg` (dialog).
+Odak halkası 2 px `--color-focus` + 2 px zemin boşluğudur.
 
 ## Motion
 
@@ -70,8 +90,8 @@ Radius kontrollerde 4, panellerde 2, dialoglarda 6 px; pill kontrollerde
 
 ## CTA voice
 
-- Primary: mürekkep mavisi dolgu, kısa fiil + nesne; tek satır.
-- Secondary: kâğıt yüzey üzerinde mürekkep sınırı; tek satır.
+- Primary: indigo dolgu, kısa fiil + nesne; tek satır.
+- Secondary: yüzey üzerinde ince çizgi sınırı; tek satır.
 - Ghost: yalnız düşük öncelikli veya geri dönüş eylemi.
 - Aynı viewport içinde tek baskın primary eylem hedeflenir.
 
@@ -90,8 +110,9 @@ Radius kontrollerde 4, panellerde 2, dialoglarda 6 px; pill kontrollerde
 
 Tüm sayfalar wordmark, renkler, fontlar, focus, CTA ve bölüm başlığı ritmini
 paylaşır. Yalnız route ailesinin içerik yapısı değişebilir. Marketing görsel
-zenginlik kullanabilir; uygulama ekranlarında işlev sayfayı taşır. Print/PDF
-ve mevcut karne geometrisi bu sistemden ayrı tutulur.
+zenginlik kullanabilir; uygulama ekranlarında işlev sayfayı taşır. Karne aynı dili
+A4 kâğıt geometrisinde (595 × 842 pt) kullanır; web sheet ve worker PDF şablonu
+birlikte güncellenir.
 
 ## Visual acceptance
 
@@ -100,8 +121,8 @@ ve mevcut karne geometrisi bu sistemden ayrı tutulur.
   fold sözleşmesi ayrıca 1280 × 800 px'i kapsar.
 - Login paneli (414), kurum rail'i (1440), öğrenci öncelikli aksiyon şeridi
   (414) ve rapor durum bölgesi (1440) Darwin ve Linux golden'larıyla korunur.
-- Mevcut karne golden'ı ayrı sözleşmedir; bu web yeniden tasarımı onu
-  topluca güncellemez.
+- Karne golden'ı (`student-report-card-1024`, 595 × 842) ayrı sözleşmedir ve
+  yalnız karne tasarımı değişirken bilinçli yenilenir (DEC-20260930-04).
 
 ## Hallmark
 
@@ -117,39 +138,39 @@ shadcn bağımlılığı kurmaz.
 ### tokens.css
 
 ```css
-/* Hallmark · macrostructure: Narrative Workflow / Workbench · tone: technical-austere · anchor hue: ink-blue 230 */
+/* Hallmark · macrostructure: Narrative Workflow / Workbench · tone: calm-product · anchor hue: indigo 277 */
 /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V4 */
-/* Hallmark · genre: editorial · landing: Narrative Workflow · app: Workbench · theme: Almanac */
+/* Hallmark · genre: product · landing: Narrative Workflow · app: Workbench · theme: Berrak */
 :root {
-  --color-paper: oklch(96.5% 0.012 220);
-  --color-paper-raised: oklch(98.5% 0.007 220);
-  --color-paper-muted: oklch(93% 0.018 220);
-  --color-ink: oklch(20% 0.025 235);
-  --color-ink-secondary: oklch(30% 0.025 235);
-  --color-ink-chart-soft: oklch(30% 0.025 235 / 18%);
-  --color-ink-muted: oklch(42% 0.025 235);
-  --color-rule: oklch(80% 0.020 225);
-  --color-rule-strong: oklch(66% 0.025 225);
-  --color-rule-faint: oklch(89% 0.014 225);
-  --color-accent: oklch(42% 0.150 230);
-  --color-accent-hover: oklch(36% 0.135 230);
-  --color-accent-strong: oklch(32% 0.120 230);
-  --color-accent-soft: oklch(92% 0.035 230);
-  --color-accent-secondary: oklch(44% 0.100 175);
-  --color-accent-chart-soft: oklch(42% 0.150 230 / 18%);
-  --color-accent-ink: oklch(98% 0.006 220);
-  --color-focus: oklch(48% 0.180 245);
-  --color-success-token: oklch(42% 0.120 155);
-  --color-success-soft-token: oklch(93% 0.025 155);
-  --color-warning-token: oklch(52% 0.120 80);
-  --color-warning-soft-token: oklch(94% 0.025 85);
-  --color-danger-token: oklch(48% 0.165 25);
-  --color-danger-soft-token: oklch(94% 0.030 25);
-  --color-overlay-token: oklch(18% 0.020 235 / 72%);
-  --color-shadow-soft: oklch(18% 0.020 235 / 10%);
-  --color-shadow-medium: oklch(18% 0.020 235 / 16%);
-  --color-shadow-strong: oklch(18% 0.020 235 / 28%);
-  --color-chart-grid: oklch(20% 0.025 235 / 12%);
+  --color-paper: oklch(98.3% 0.003 250);
+  --color-paper-raised: oklch(99.9% 0.001 250);
+  --color-paper-muted: oklch(96.5% 0.005 250);
+  --color-ink: oklch(21% 0.020 265);
+  --color-ink-secondary: oklch(35% 0.025 263);
+  --color-ink-chart-soft: oklch(35% 0.025 263 / 18%);
+  --color-ink-muted: oklch(51% 0.030 260);
+  --color-rule: oklch(91% 0.008 255);
+  --color-rule-strong: oklch(83% 0.008 255);
+  --color-rule-faint: oklch(95% 0.008 255);
+  --color-accent: oklch(51% 0.230 277);
+  --color-accent-hover: oklch(46% 0.215 277);
+  --color-accent-strong: oklch(41% 0.190 277);
+  --color-accent-soft: oklch(96% 0.018 272);
+  --color-accent-secondary: oklch(60% 0.118 185);
+  --color-accent-chart-soft: oklch(51% 0.230 277 / 18%);
+  --color-accent-ink: oklch(99% 0.003 270);
+  --color-focus: oklch(51% 0.230 277);
+  --color-success-token: oklch(50% 0.130 150);
+  --color-success-soft-token: oklch(96.2% 0.044 157);
+  --color-warning-token: oklch(52% 0.140 49);
+  --color-warning-soft-token: oklch(96.2% 0.059 96);
+  --color-danger-token: oklch(52% 0.215 27);
+  --color-danger-soft-token: oklch(97.1% 0.013 17);
+  --color-overlay-token: oklch(21% 0.020 265 / 50%);
+  --color-shadow-soft: oklch(21% 0.020 265 / 6%);
+  --color-shadow-medium: oklch(21% 0.020 265 / 10%);
+  --color-shadow-strong: oklch(21% 0.020 265 / 18%);
+  --color-chart-grid: oklch(21% 0.020 265 / 10%);
 
   --chart-accent: var(--color-accent-secondary);
   --chart-primary: var(--color-accent);
@@ -161,7 +182,7 @@ shadcn bağımlılığı kurmaz.
   --chart-text: var(--color-ink-muted);
   --chart-surface: var(--color-paper-raised);
 
-  --font-display: var(--font-source-serif-4), ui-serif, Georgia, serif;
+  --font-display: var(--font-ibm-plex-sans), ui-sans-serif, system-ui, sans-serif;
   --font-body: var(--font-ibm-plex-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
 
@@ -178,12 +199,12 @@ shadcn bağımlılığı kurmaz.
   --text-sm: 0.875rem;
   --text-base: 1rem;
   --text-lg: 1.25rem;
-  --text-xl: 1.75rem;
-  --text-display: clamp(2.25rem, 4vw, 3rem);
+  --text-xl: 1.5rem;
+  --text-display: clamp(2rem, 3.5vw, 2.5rem);
 
-  --radius-control: 4px;
-  --radius-panel: 2px;
-  --radius-dialog: 6px;
+  --radius-control: 6px;
+  --radius-panel: 8px;
+  --radius-dialog: 12px;
   --radius-pill: 999px;
   --dur-instant: 100ms;
   --dur-short: 180ms;
@@ -197,35 +218,35 @@ shadcn bağımlılığı kurmaz.
 
 ```css
 @theme {
-  --color-paper: oklch(96.5% 0.012 220);
-  --color-paper-raised: oklch(98.5% 0.007 220);
-  --color-paper-muted: oklch(93% 0.018 220);
-  --color-ink: oklch(20% 0.025 235);
-  --color-ink-secondary: oklch(30% 0.025 235);
-  --color-ink-chart-soft: oklch(30% 0.025 235 / 18%);
-  --color-ink-muted: oklch(42% 0.025 235);
-  --color-rule: oklch(80% 0.020 225);
-  --color-rule-strong: oklch(66% 0.025 225);
-  --color-rule-faint: oklch(89% 0.014 225);
-  --color-accent: oklch(42% 0.150 230);
-  --color-accent-hover: oklch(36% 0.135 230);
-  --color-accent-strong: oklch(32% 0.120 230);
-  --color-accent-soft: oklch(92% 0.035 230);
-  --color-accent-secondary: oklch(44% 0.100 175);
-  --color-accent-chart-soft: oklch(42% 0.150 230 / 18%);
-  --color-accent-ink: oklch(98% 0.006 220);
-  --color-focus: oklch(48% 0.180 245);
-  --color-success-token: oklch(42% 0.120 155);
-  --color-success-soft-token: oklch(93% 0.025 155);
-  --color-warning-token: oklch(52% 0.120 80);
-  --color-warning-soft-token: oklch(94% 0.025 85);
-  --color-danger-token: oklch(48% 0.165 25);
-  --color-danger-soft-token: oklch(94% 0.030 25);
-  --color-overlay-token: oklch(18% 0.020 235 / 72%);
-  --color-shadow-soft: oklch(18% 0.020 235 / 10%);
-  --color-shadow-medium: oklch(18% 0.020 235 / 16%);
-  --color-shadow-strong: oklch(18% 0.020 235 / 28%);
-  --color-chart-grid: oklch(20% 0.025 235 / 12%);
+  --color-paper: oklch(98.3% 0.003 250);
+  --color-paper-raised: oklch(99.9% 0.001 250);
+  --color-paper-muted: oklch(96.5% 0.005 250);
+  --color-ink: oklch(21% 0.020 265);
+  --color-ink-secondary: oklch(35% 0.025 263);
+  --color-ink-chart-soft: oklch(35% 0.025 263 / 18%);
+  --color-ink-muted: oklch(51% 0.030 260);
+  --color-rule: oklch(91% 0.008 255);
+  --color-rule-strong: oklch(83% 0.008 255);
+  --color-rule-faint: oklch(95% 0.008 255);
+  --color-accent: oklch(51% 0.230 277);
+  --color-accent-hover: oklch(46% 0.215 277);
+  --color-accent-strong: oklch(41% 0.190 277);
+  --color-accent-soft: oklch(96% 0.018 272);
+  --color-accent-secondary: oklch(60% 0.118 185);
+  --color-accent-chart-soft: oklch(51% 0.230 277 / 18%);
+  --color-accent-ink: oklch(99% 0.003 270);
+  --color-focus: oklch(51% 0.230 277);
+  --color-success-token: oklch(50% 0.130 150);
+  --color-success-soft-token: oklch(96.2% 0.044 157);
+  --color-warning-token: oklch(52% 0.140 49);
+  --color-warning-soft-token: oklch(96.2% 0.059 96);
+  --color-danger-token: oklch(52% 0.215 27);
+  --color-danger-soft-token: oklch(97.1% 0.013 17);
+  --color-overlay-token: oklch(21% 0.020 265 / 50%);
+  --color-shadow-soft: oklch(21% 0.020 265 / 6%);
+  --color-shadow-medium: oklch(21% 0.020 265 / 10%);
+  --color-shadow-strong: oklch(21% 0.020 265 / 18%);
+  --color-chart-grid: oklch(21% 0.020 265 / 10%);
   --chart-accent: var(--color-accent-secondary);
   --chart-primary: var(--color-accent);
   --chart-primary-soft: var(--color-accent-chart-soft);
@@ -235,7 +256,7 @@ shadcn bağımlılığı kurmaz.
   --chart-grid: var(--color-chart-grid);
   --chart-text: var(--color-ink-muted);
   --chart-surface: var(--color-paper-raised);
-  --font-display: var(--font-source-serif-4), ui-serif, Georgia, serif;
+  --font-display: var(--font-ibm-plex-sans), ui-sans-serif, system-ui, sans-serif;
   --font-body: var(--font-ibm-plex-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
   --spacing-3xs: 0.25rem;
@@ -250,11 +271,11 @@ shadcn bağımlılığı kurmaz.
   --text-sm: 0.875rem;
   --text-base: 1rem;
   --text-lg: 1.25rem;
-  --text-xl: 1.75rem;
-  --text-display: clamp(2.25rem, 4vw, 3rem);
-  --radius-control: 4px;
-  --radius-panel: 2px;
-  --radius-dialog: 6px;
+  --text-xl: 1.5rem;
+  --text-display: clamp(2rem, 3.5vw, 2.5rem);
+  --radius-control: 6px;
+  --radius-panel: 8px;
+  --radius-dialog: 12px;
   --radius-pill: 999px;
   --duration-instant: 100ms;
   --duration-short: 180ms;
@@ -269,35 +290,35 @@ shadcn bağımlılığı kurmaz.
 ```json
 {
   "color": {
-    "paper": { "$value": "oklch(96.5% 0.012 220)", "$type": "color" },
-    "paperRaised": { "$value": "oklch(98.5% 0.007 220)", "$type": "color" },
-    "paperMuted": { "$value": "oklch(93% 0.018 220)", "$type": "color" },
-    "ink": { "$value": "oklch(20% 0.025 235)", "$type": "color" },
-    "inkSecondary": { "$value": "oklch(30% 0.025 235)", "$type": "color" },
-    "inkChartSoft": { "$value": "oklch(30% 0.025 235 / 18%)", "$type": "color" },
-    "inkMuted": { "$value": "oklch(42% 0.025 235)", "$type": "color" },
-    "rule": { "$value": "oklch(80% 0.020 225)", "$type": "color" },
-    "ruleStrong": { "$value": "oklch(66% 0.025 225)", "$type": "color" },
-    "ruleFaint": { "$value": "oklch(89% 0.014 225)", "$type": "color" },
-    "accent": { "$value": "oklch(42% 0.150 230)", "$type": "color" },
-    "accentHover": { "$value": "oklch(36% 0.135 230)", "$type": "color" },
-    "accentStrong": { "$value": "oklch(32% 0.120 230)", "$type": "color" },
-    "accentSoft": { "$value": "oklch(92% 0.035 230)", "$type": "color" },
-    "accentSecondary": { "$value": "oklch(44% 0.100 175)", "$type": "color" },
-    "accentChartSoft": { "$value": "oklch(42% 0.150 230 / 18%)", "$type": "color" },
-    "accentInk": { "$value": "oklch(98% 0.006 220)", "$type": "color" },
-    "focus": { "$value": "oklch(48% 0.180 245)", "$type": "color" },
-    "success": { "$value": "oklch(42% 0.120 155)", "$type": "color" },
-    "successSoft": { "$value": "oklch(93% 0.025 155)", "$type": "color" },
-    "warning": { "$value": "oklch(52% 0.120 80)", "$type": "color" },
-    "warningSoft": { "$value": "oklch(94% 0.025 85)", "$type": "color" },
-    "danger": { "$value": "oklch(48% 0.165 25)", "$type": "color" },
-    "dangerSoft": { "$value": "oklch(94% 0.030 25)", "$type": "color" },
-    "overlay": { "$value": "oklch(18% 0.020 235 / 72%)", "$type": "color" },
-    "shadowSoft": { "$value": "oklch(18% 0.020 235 / 10%)", "$type": "color" },
-    "shadowMedium": { "$value": "oklch(18% 0.020 235 / 16%)", "$type": "color" },
-    "shadowStrong": { "$value": "oklch(18% 0.020 235 / 28%)", "$type": "color" },
-    "chartGrid": { "$value": "oklch(20% 0.025 235 / 12%)", "$type": "color" }
+    "paper": { "$value": "oklch(98.3% 0.003 250)", "$type": "color" },
+    "paperRaised": { "$value": "oklch(99.9% 0.001 250)", "$type": "color" },
+    "paperMuted": { "$value": "oklch(96.5% 0.005 250)", "$type": "color" },
+    "ink": { "$value": "oklch(21% 0.020 265)", "$type": "color" },
+    "inkSecondary": { "$value": "oklch(35% 0.025 263)", "$type": "color" },
+    "inkChartSoft": { "$value": "oklch(35% 0.025 263 / 18%)", "$type": "color" },
+    "inkMuted": { "$value": "oklch(51% 0.030 260)", "$type": "color" },
+    "rule": { "$value": "oklch(91% 0.008 255)", "$type": "color" },
+    "ruleStrong": { "$value": "oklch(83% 0.008 255)", "$type": "color" },
+    "ruleFaint": { "$value": "oklch(95% 0.008 255)", "$type": "color" },
+    "accent": { "$value": "oklch(51% 0.230 277)", "$type": "color" },
+    "accentHover": { "$value": "oklch(46% 0.215 277)", "$type": "color" },
+    "accentStrong": { "$value": "oklch(41% 0.190 277)", "$type": "color" },
+    "accentSoft": { "$value": "oklch(96% 0.018 272)", "$type": "color" },
+    "accentSecondary": { "$value": "oklch(60% 0.118 185)", "$type": "color" },
+    "accentChartSoft": { "$value": "oklch(51% 0.230 277 / 18%)", "$type": "color" },
+    "accentInk": { "$value": "oklch(99% 0.003 270)", "$type": "color" },
+    "focus": { "$value": "oklch(51% 0.230 277)", "$type": "color" },
+    "success": { "$value": "oklch(50% 0.130 150)", "$type": "color" },
+    "successSoft": { "$value": "oklch(96.2% 0.044 157)", "$type": "color" },
+    "warning": { "$value": "oklch(52% 0.140 49)", "$type": "color" },
+    "warningSoft": { "$value": "oklch(96.2% 0.059 96)", "$type": "color" },
+    "danger": { "$value": "oklch(52% 0.215 27)", "$type": "color" },
+    "dangerSoft": { "$value": "oklch(97.1% 0.013 17)", "$type": "color" },
+    "overlay": { "$value": "oklch(21% 0.020 265 / 50%)", "$type": "color" },
+    "shadowSoft": { "$value": "oklch(21% 0.020 265 / 6%)", "$type": "color" },
+    "shadowMedium": { "$value": "oklch(21% 0.020 265 / 10%)", "$type": "color" },
+    "shadowStrong": { "$value": "oklch(21% 0.020 265 / 18%)", "$type": "color" },
+    "chartGrid": { "$value": "oklch(21% 0.020 265 / 10%)", "$type": "color" }
   },
   "chart": {
     "accent": { "$value": "{color.accentSecondary}", "$type": "color" },
@@ -311,7 +332,7 @@ shadcn bağımlılığı kurmaz.
     "surface": { "$value": "{color.paperRaised}", "$type": "color" }
   },
   "font": {
-    "display": { "$value": "var(--font-source-serif-4), ui-serif, Georgia, serif", "$type": "fontFamily" },
+    "display": { "$value": "var(--font-ibm-plex-sans), ui-sans-serif, system-ui, sans-serif", "$type": "fontFamily" },
     "body": { "$value": "var(--font-ibm-plex-sans), ui-sans-serif, system-ui, sans-serif", "$type": "fontFamily" },
     "mono": { "$value": "ui-monospace, \"SFMono-Regular\", Consolas, monospace", "$type": "fontFamily" }
   },
@@ -330,13 +351,13 @@ shadcn bağımlılığı kurmaz.
     "sm": { "$value": "0.875rem", "$type": "dimension" },
     "base": { "$value": "1rem", "$type": "dimension" },
     "lg": { "$value": "1.25rem", "$type": "dimension" },
-    "xl": { "$value": "1.75rem", "$type": "dimension" },
-    "display": { "$value": "clamp(2.25rem, 4vw, 3rem)", "$type": "string" }
+    "xl": { "$value": "1.5rem", "$type": "dimension" },
+    "display": { "$value": "clamp(2rem, 3.5vw, 2.5rem)", "$type": "string" }
   },
   "radius": {
-    "control": { "$value": "4px", "$type": "dimension" },
-    "panel": { "$value": "2px", "$type": "dimension" },
-    "dialog": { "$value": "6px", "$type": "dimension" },
+    "control": { "$value": "6px", "$type": "dimension" },
+    "panel": { "$value": "8px", "$type": "dimension" },
+    "dialog": { "$value": "12px", "$type": "dimension" },
     "pill": { "$value": "999px", "$type": "dimension" }
   },
   "duration": {
@@ -355,46 +376,46 @@ shadcn bağımlılığı kurmaz.
 
 ```css
 :root {
-  --background: 96.5% 0.012 220;
-  --foreground: 20% 0.025 235;
-  --primary: 42% 0.150 230;
-  --primary-foreground: 98% 0.006 220;
-  --muted: 96.5% 0.012 220;
-  --muted-foreground: 42% 0.025 235;
-  --border: 80% 0.020 225;
-  --input: 80% 0.020 225;
-  --ring: 48% 0.180 245;
-  --radius: 4px;
+  --background: 98.3% 0.003 250;
+  --foreground: 21% 0.020 265;
+  --primary: 51% 0.230 277;
+  --primary-foreground: 99% 0.003 270;
+  --muted: 96.5% 0.005 250;
+  --muted-foreground: 51% 0.030 260;
+  --border: 91% 0.008 255;
+  --input: 83% 0.008 255;
+  --ring: 51% 0.230 277;
+  --radius: 6px;
 
-  --o-okul-color-paper: oklch(96.5% 0.012 220);
-  --o-okul-color-paper-raised: oklch(98.5% 0.007 220);
-  --o-okul-color-paper-muted: oklch(93% 0.018 220);
-  --o-okul-color-ink: oklch(20% 0.025 235);
-  --o-okul-color-ink-secondary: oklch(30% 0.025 235);
-  --o-okul-color-ink-chart-soft: oklch(30% 0.025 235 / 18%);
-  --o-okul-color-ink-muted: oklch(42% 0.025 235);
-  --o-okul-color-rule: oklch(80% 0.020 225);
-  --o-okul-color-rule-strong: oklch(66% 0.025 225);
-  --o-okul-color-rule-faint: oklch(89% 0.014 225);
-  --o-okul-color-accent: oklch(42% 0.150 230);
-  --o-okul-color-accent-hover: oklch(36% 0.135 230);
-  --o-okul-color-accent-strong: oklch(32% 0.120 230);
-  --o-okul-color-accent-soft: oklch(92% 0.035 230);
-  --o-okul-color-accent-secondary: oklch(44% 0.100 175);
-  --o-okul-color-accent-chart-soft: oklch(42% 0.150 230 / 18%);
-  --o-okul-color-accent-ink: oklch(98% 0.006 220);
-  --o-okul-color-focus: oklch(48% 0.180 245);
-  --o-okul-color-success: oklch(42% 0.120 155);
-  --o-okul-color-success-soft: oklch(93% 0.025 155);
-  --o-okul-color-warning: oklch(52% 0.120 80);
-  --o-okul-color-warning-soft: oklch(94% 0.025 85);
-  --o-okul-color-danger: oklch(48% 0.165 25);
-  --o-okul-color-danger-soft: oklch(94% 0.030 25);
-  --o-okul-color-overlay: oklch(18% 0.020 235 / 72%);
-  --o-okul-color-shadow-soft: oklch(18% 0.020 235 / 10%);
-  --o-okul-color-shadow-medium: oklch(18% 0.020 235 / 16%);
-  --o-okul-color-shadow-strong: oklch(18% 0.020 235 / 28%);
-  --o-okul-color-chart-grid: oklch(20% 0.025 235 / 12%);
+  --o-okul-color-paper: oklch(98.3% 0.003 250);
+  --o-okul-color-paper-raised: oklch(99.9% 0.001 250);
+  --o-okul-color-paper-muted: oklch(96.5% 0.005 250);
+  --o-okul-color-ink: oklch(21% 0.020 265);
+  --o-okul-color-ink-secondary: oklch(35% 0.025 263);
+  --o-okul-color-ink-chart-soft: oklch(35% 0.025 263 / 18%);
+  --o-okul-color-ink-muted: oklch(51% 0.030 260);
+  --o-okul-color-rule: oklch(91% 0.008 255);
+  --o-okul-color-rule-strong: oklch(83% 0.008 255);
+  --o-okul-color-rule-faint: oklch(95% 0.008 255);
+  --o-okul-color-accent: oklch(51% 0.230 277);
+  --o-okul-color-accent-hover: oklch(46% 0.215 277);
+  --o-okul-color-accent-strong: oklch(41% 0.190 277);
+  --o-okul-color-accent-soft: oklch(96% 0.018 272);
+  --o-okul-color-accent-secondary: oklch(60% 0.118 185);
+  --o-okul-color-accent-chart-soft: oklch(51% 0.230 277 / 18%);
+  --o-okul-color-accent-ink: oklch(99% 0.003 270);
+  --o-okul-color-focus: oklch(51% 0.230 277);
+  --o-okul-color-success: oklch(50% 0.130 150);
+  --o-okul-color-success-soft: oklch(96.2% 0.044 157);
+  --o-okul-color-warning: oklch(52% 0.140 49);
+  --o-okul-color-warning-soft: oklch(96.2% 0.059 96);
+  --o-okul-color-danger: oklch(52% 0.215 27);
+  --o-okul-color-danger-soft: oklch(97.1% 0.013 17);
+  --o-okul-color-overlay: oklch(21% 0.020 265 / 50%);
+  --o-okul-color-shadow-soft: oklch(21% 0.020 265 / 6%);
+  --o-okul-color-shadow-medium: oklch(21% 0.020 265 / 10%);
+  --o-okul-color-shadow-strong: oklch(21% 0.020 265 / 18%);
+  --o-okul-color-chart-grid: oklch(21% 0.020 265 / 10%);
   --o-okul-chart-accent: var(--o-okul-color-accent-secondary);
   --o-okul-chart-primary: var(--o-okul-color-accent);
   --o-okul-chart-primary-soft: var(--o-okul-color-accent-chart-soft);
@@ -404,7 +425,7 @@ shadcn bağımlılığı kurmaz.
   --o-okul-chart-grid: var(--o-okul-color-chart-grid);
   --o-okul-chart-text: var(--o-okul-color-ink-muted);
   --o-okul-chart-surface: var(--o-okul-color-paper-raised);
-  --o-okul-font-display: var(--font-source-serif-4), ui-serif, Georgia, serif;
+  --o-okul-font-display: var(--font-ibm-plex-sans), ui-sans-serif, system-ui, sans-serif;
   --o-okul-font-body: var(--font-ibm-plex-sans), ui-sans-serif, system-ui, sans-serif;
   --o-okul-font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
   --o-okul-space-3xs: 0.25rem;
@@ -419,11 +440,11 @@ shadcn bağımlılığı kurmaz.
   --o-okul-text-sm: 0.875rem;
   --o-okul-text-base: 1rem;
   --o-okul-text-lg: 1.25rem;
-  --o-okul-text-xl: 1.75rem;
-  --o-okul-text-display: clamp(2.25rem, 4vw, 3rem);
-  --o-okul-radius-control: 4px;
-  --o-okul-radius-panel: 2px;
-  --o-okul-radius-dialog: 6px;
+  --o-okul-text-xl: 1.5rem;
+  --o-okul-text-display: clamp(2rem, 3.5vw, 2.5rem);
+  --o-okul-radius-control: 6px;
+  --o-okul-radius-panel: 8px;
+  --o-okul-radius-dialog: 12px;
   --o-okul-radius-pill: 999px;
   --o-okul-duration-instant: 100ms;
   --o-okul-duration-short: 180ms;

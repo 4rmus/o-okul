@@ -33,7 +33,7 @@ import { GuardianRelationshipSummaryPanel, NotificationPreferencesPanel, Payment
 import { HomeworkAssignmentsPanel } from "./_shared/homework-panels.js";
 import {
   AccessPanel,
-  MetricGrid,
+  PortalMetricGrid,
   PortalActionStrip,
   PortalDailyBrief,
   PortalFrame,
@@ -326,7 +326,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
               ? ["preview", "support", "student"]
               : ["student", "finance", "report"]}
           />
-          <MetricGrid
+          <PortalMetricGrid
             items={[
               { label: "Devamsızlık", value: data?.attendanceSummary.total ?? 0 },
               { label: "Öğretmen notu", value: data?.teacherNotes.length ?? 0 },

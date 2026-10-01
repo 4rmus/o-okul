@@ -1,4 +1,16 @@
 import type { LucideIcon } from "lucide-react";
+import {
+  breadcrumbLabels,
+  detailParentSegments,
+  hubMembers,
+  institutionNavGroupLabels,
+  institutionRoutes,
+  portalHomeRoutes,
+  portalNavGroups,
+  systemRoutes,
+  type NavIconName,
+  type NavRoute,
+} from "../../../src/route-manifest.js";
 import { isSmsEnabled } from "../../../src/sms-feature.js";
 import {
   Activity,
@@ -28,6 +40,7 @@ import {
 export type InstitutionNavigationItem = {
   href: string;
   hiddenFromRail?: boolean;
+  hub?: string;
   icon: LucideIcon;
   label: string;
   requiredCapability?: string;
@@ -71,187 +84,108 @@ type RolePortalNavigationItem = {
   label: string;
 };
 
-const institutionOperationEvidenceCapability = "operation:manage";
+// Kanonik kaynak apps/web/src/route-manifest.js; bu dosya yalnız ikon eşlemesi ve menü şekli üretir.
+const navIcons: Record<NavIconName, LucideIcon> = {
+  Activity,
+  BarChart3,
+  BookOpen,
+  Building2,
+  CalendarDays,
+  ClipboardCheck,
+  ClipboardList,
+  CreditCard,
+  FileText,
+  GraduationCap,
+  LayoutDashboard,
+  Library,
+  LifeBuoy,
+  Megaphone,
+  MessageSquareText,
+  NotebookTabs,
+  ScanLine,
+  School,
+  Settings,
+  ShieldCheck,
+  UserRoundCog,
+  Users,
+};
 
-export const institutionOperationEvidenceItems: readonly InstitutionNavigationItem[] = [
-  { href: "/kurum/yedek-restore", hiddenFromRail: true, icon: Activity, label: "Yedekleme", requiredCapability: "operation:manage" },
-  { href: "/kurum/kvkk", hiddenFromRail: true, icon: ShieldCheck, label: "KVKK", requiredCapability: "privacy:manage" },
-  { href: "/kurum/denetim", hiddenFromRail: true, icon: ClipboardList, label: "Denetim", requiredCapability: "tenant-audit:read", requiredPersona: "STAFF" },
-  { href: "/kurum/sistem-sagligi", hiddenFromRail: true, icon: Activity, label: "Sistem Sağlığı", requiredCapability: institutionOperationEvidenceCapability },
-  { href: "/kurum/gozlemlenebilirlik", hiddenFromRail: true, icon: BarChart3, label: "Sistem İzleme", requiredCapability: institutionOperationEvidenceCapability },
-  { href: "/kurum/guvenlik-denetimi", hiddenFromRail: true, icon: ShieldCheck, label: "Güvenlik Denetimi", requiredCapability: institutionOperationEvidenceCapability },
-  { href: "/kurum/canli-yayin", hiddenFromRail: true, icon: Activity, label: "Yayın Hazırlığı", requiredCapability: institutionOperationEvidenceCapability },
-];
-
-const institutionNavigationItems: readonly InstitutionNavigationItem[] = [
-  { href: "/kurum", icon: LayoutDashboard, label: "Özet" },
-  { href: "/kurum/kurulum", icon: Settings, label: "Kurulum", requiredCapability: "setup:manage" },
-  { href: "/kurum/ogrenciler", icon: GraduationCap, label: "Öğrenciler", requiredCapability: "student:manage" },
-  { href: "/kurum/veliler", icon: Users, label: "Veli kayıtları", requiredCapability: "student:manage" },
-  { href: "/kurum/ogretmenler", icon: UserRoundCog, label: "Öğretmenler", requiredCapability: "staff:manage" },
-  { href: "/kurum/calisanlar", icon: UserRoundCog, label: "Çalışanlar ve Yetkiler", requiredCapability: "user:manage" },
-  { href: "/kurum/ogrenci-portal-erisimi", icon: GraduationCap, label: "Öğrenci Portal Erişimi", requiredCapability: "user:manage" },
-  { href: "/kurum/kullanicilar", icon: Users, label: "Kullanıcılar", requiredCapability: "user:manage" },
-  { href: "/kurum/siniflar", icon: School, label: "Sınıflar", requiredCapability: "class:manage" },
-  { href: "/kurum/seviyeler", icon: ClipboardList, label: "Seviyeler", requiredCapability: "class:manage" },
-  { href: "/kurum/kampusler", icon: Building2, label: "Kampüsler", requiredCapability: "class:manage" },
-  { href: "/kurum/dersler", icon: BookOpen, label: "Dersler", requiredCapability: "academic:manage" },
-  { href: "/kurum/program", icon: CalendarDays, label: "Program", requiredCapability: "academic:manage" },
-  { href: "/kurum/etutler", icon: NotebookTabs, label: "Etütler", requiredCapability: "academic:manage" },
-  { href: "/kurum/devamsizlik", icon: ClipboardCheck, label: "Devamsızlık", requiredCapability: "attendance:manage" },
-  { href: "/kurum/akademik-takvim", icon: CalendarDays, label: "Takvim", requiredCapability: "academic:manage" },
-  { href: "/kurum/materyaller", icon: Library, label: "Materyaller", requiredCapability: "academic:manage" },
-  { href: "/kurum/notlar", icon: NotebookTabs, label: "Notlar", requiredCapability: "note:manage" },
-  { href: "/kurum/sinavlar", icon: FileText, label: "Sınavlar", requiredCapability: "academic:manage" },
-  { href: "/kurum/kazanimlar", icon: ClipboardList, label: "Kazanımlar", requiredCapability: "academic:manage" },
-  { href: "/kurum/optik", icon: ScanLine, label: "Optik Okuma", requiredCapability: "academic:manage" },
-  { href: "/kurum/raporlar", icon: BarChart3, label: "Sınav Raporları", requiredCapability: "academic:manage" },
-  { href: "/kurum/duyurular", icon: Megaphone, label: "Duyurular", requiredCapability: "announcement:manage" },
-  ...(isSmsEnabled ? [{ href: "/kurum/sablonlar", icon: MessageSquareText, label: "Mesaj Şablonları", requiredCapability: "announcement:manage" }] : []),
-  { href: "/kurum/destek", icon: LifeBuoy, label: "Kurum içi destek", requiredCapability: "support:manage" },
-  { href: "/kurum/finans", icon: CreditCard, label: "Ödeme planları", requiredCapability: "finance:manage" },
-  { href: "/kurum/lisans-donemleri", icon: ClipboardCheck, label: "Lisans Dönemleri", requiredCapability: "setup:manage" },
-  { href: "/kurum/rol-onizleme", icon: ShieldCheck, label: "Rol Önizleme", requiredCapability: "role-preview:manage" },
-  { href: "/kurum/operasyon-ve-kanit", icon: ShieldCheck, label: "Operasyon ve kanıt", requiredCapability: institutionOperationEvidenceCapability },
-];
-
-const institutionItemByHref = new Map(
-  [...institutionNavigationItems, ...institutionOperationEvidenceItems].map((item) => [item.href, item]),
-);
-
-export const institutionNavGroups: readonly InstitutionNavGroup[] = [
-  navigationGroup("Bugün", ["/kurum"]),
-  navigationGroup("Kişiler", [
-    "/kurum/ogrenciler",
-    "/kurum/veliler",
-    "/kurum/ogretmenler",
-    "/kurum/calisanlar",
-    "/kurum/ogrenci-portal-erisimi",
-    "/kurum/kullanicilar",
-  ]),
-  navigationGroup("Akademik", [
-    "/kurum/siniflar",
-    "/kurum/seviyeler",
-    "/kurum/kampusler",
-    "/kurum/dersler",
-    "/kurum/program",
-    "/kurum/etutler",
-    "/kurum/devamsizlik",
-    "/kurum/akademik-takvim",
-    "/kurum/materyaller",
-    "/kurum/notlar",
-  ]),
-  navigationGroup("Sınav", ["/kurum/sinavlar", "/kurum/kazanimlar", "/kurum/optik", "/kurum/raporlar"]),
-  navigationGroup("İletişim", ["/kurum/duyurular", "/kurum/sablonlar", "/kurum/destek"]),
-  navigationGroup("Finans", ["/kurum/finans", "/kurum/lisans-donemleri"]),
-  navigationGroup(
-    "Ayarlar",
-    ["/kurum/kurulum", "/kurum/rol-onizleme", "/kurum/operasyon-ve-kanit"],
-    institutionOperationEvidenceItems,
-  ),
-];
-
-function navigationGroup(
-  label: string,
-  hrefs: string[],
-  additionalItems: readonly InstitutionNavigationItem[] = [],
-): InstitutionNavGroup {
+function toInstitutionItem(route: NavRoute): InstitutionNavigationItem {
   return {
-    label,
-    items: [
-      ...hrefs.flatMap((href) => {
-        const item = institutionItemByHref.get(href);
-        return item ? [item] : [];
-      }),
-      ...additionalItems,
-    ],
+    href: route.href,
+    ...(route.hiddenFromRail ? { hiddenFromRail: true } : {}),
+    ...(route.hub ? { hub: route.hub } : {}),
+    icon: navIcons[route.iconName],
+    label: route.label,
+    ...(route.capability ? { requiredCapability: route.capability } : {}),
+    ...(route.persona ? { requiredPersona: route.persona } : {}),
   };
 }
 
-export const systemNavGroups: readonly SystemNavGroup[] = [
-  {
-    label: "Başlangıç",
-    items: [
-      { href: "/sistem", icon: LayoutDashboard, label: "Özet" },
-      { href: "/sistem/kurumlar", icon: Building2, label: "Kurumlar" },
-    ],
-  },
-  {
-    label: "İzleme",
-    items: [
-      { href: "/sistem/sistem-sagligi", icon: Activity, label: "Sağlık" },
-      { href: "/sistem/gozlemlenebilirlik", icon: BarChart3, label: "Gözlem" },
-      { href: "/sistem/denetim", icon: ClipboardList, label: "Denetim" },
-    ],
-  },
-];
+function toItem(route: { href: string; iconName: NavIconName; label: string }) {
+  return { href: route.href, icon: navIcons[route.iconName], label: route.label };
+}
 
-export const rolePortalItems: readonly RolePortalItem[] = [
-  { href: "/ogretmen", icon: UserRoundCog, label: "Öğretmen Portalı", role: "TEACHER", subjectType: "TEACHER" },
-  { href: "/ogrenci", icon: GraduationCap, label: "Öğrenci Portalı", role: "STUDENT", subjectType: "STUDENT" },
-  { href: "/veli", icon: Users, label: "Veli Portalı", role: "GUARDIAN", subjectType: "GUARDIAN" },
-];
+const enabledInstitutionRoutes = institutionRoutes.filter((route) => isSmsEnabled || !route.requiresSms);
 
-export const rolePortalNavGroups: readonly RolePortalNavGroup[] = [
-  {
-    label: "Öğretmen Paneli",
-    role: "TEACHER",
-    subjectType: "TEACHER",
-    items: [
-      { href: "/ogretmen", icon: LayoutDashboard, label: "Özet" },
-      { href: "/ogretmen/ders-akisi", icon: CalendarDays, label: "Ders Akışı" },
-      { href: "/ogretmen/ogrenci-takibi", icon: GraduationCap, label: "Öğrenci Takibi" },
-      { href: "/ogretmen/odevler", icon: NotebookTabs, label: "Ödev Kontrolü" },
-      { href: "/ogretmen/raporlar", icon: BarChart3, label: "Sınav Raporu" },
-      { href: "/ogretmen/duyurular", icon: Megaphone, label: "Duyurular" },
-      { href: "/ogretmen/destek", icon: LifeBuoy, label: "Kurum içi destek" },
-    ],
-  },
-  {
-    label: "Öğrenci Paneli",
-    role: "STUDENT",
-    subjectType: "STUDENT",
-    items: [
-      { href: "/ogrenci", icon: LayoutDashboard, label: "Özet" },
-      { href: "/ogrenci/raporlar", icon: BarChart3, label: "Sınav Raporu" },
-      { href: "/ogrenci/odevler", icon: NotebookTabs, label: "Ödevler" },
-      { href: "/ogrenci/duyurular", icon: Megaphone, label: "Duyurular" },
-      { href: "/ogrenci/devamsizlik", icon: ClipboardCheck, label: "Devamsızlık" },
-      { href: "/ogrenci/profil", icon: GraduationCap, label: "Profil" },
-      { href: "/ogrenci/destek", icon: LifeBuoy, label: "Kurum içi destek" },
-    ],
-  },
-  {
-    label: "Veli Paneli",
-    role: "GUARDIAN",
-    subjectType: "GUARDIAN",
-    items: [
-      { href: "/veli", icon: LayoutDashboard, label: "Özet" },
-      { href: "/veli/ogrenci", icon: GraduationCap, label: "Öğrenci" },
-      { href: "/veli/raporlar", icon: BarChart3, label: "Sınav Raporu" },
-      { href: "/veli/odemeler", icon: CreditCard, label: "Ödeme planları" },
-      { href: "/veli/odevler", icon: NotebookTabs, label: "Ödevler" },
-      { href: "/veli/duyurular", icon: Megaphone, label: "Duyurular" },
-      { href: "/veli/bildirimler", icon: MessageSquareText, label: "Bildirimler" },
-      { href: "/veli/destek", icon: LifeBuoy, label: "Kurum içi destek" },
-    ],
-  },
-];
+export const institutionOperationEvidenceItems: readonly InstitutionNavigationItem[] = enabledInstitutionRoutes
+  .filter((route) => route.operationEvidence)
+  .map(toInstitutionItem);
 
-export const staticBreadcrumbLabels: Record<string, string> = {
-  "/": "Ana Sayfa",
-  "/hesap": "Hesap",
-  "/hesap/oturumlar": "Oturumlar",
-  "/sistem": "Sistem Özeti",
-  "/kurum": "Kurum Özeti",
-  "/ogretmen": "Öğretmen Portalı",
-  "/ogrenci": "Öğrenci Portalı",
-  "/veli": "Veli Portalı",
-  "/kurum/finans": "Finans",
-  "/kurum/gozlemlenebilirlik": "Gözlem",
-  "/kurum/sistem-sagligi": "Sağlık",
-  "/kurum/sablonlar": "Mesaj Şablonları",
-  "/kurum/operasyon-ve-kanit": "Operasyon ve kanıt",
-};
+export const institutionNavGroups: readonly InstitutionNavGroup[] = institutionNavGroupLabels.map((label) => ({
+  label,
+  items: enabledInstitutionRoutes.filter((route) => route.group === label).map(toInstitutionItem),
+}));
 
-export const dynamicDetailParents: string[] = ["ogrenciler", "ogretmenler", "veliler", "siniflar", "sinavlar", "duyurular"];
+export const systemNavGroups: readonly SystemNavGroup[] = [...new Set(systemRoutes.map((route) => route.group))].map((label) => ({
+  label,
+  items: systemRoutes.filter((route) => route.group === label).map(toItem),
+}));
+
+export const rolePortalItems: readonly RolePortalItem[] = portalHomeRoutes.map((route) => ({
+  ...toItem(route),
+  role: route.role,
+  subjectType: route.subjectType,
+}));
+
+export const rolePortalNavGroups: readonly RolePortalNavGroup[] = portalNavGroups.map((group) => ({
+  label: group.label,
+  role: group.role,
+  subjectType: group.subjectType,
+  items: group.routes.map(toItem),
+}));
+
+export const staticBreadcrumbLabels: Record<string, string> = breadcrumbLabels();
+
+export const dynamicDetailParents: string[] = detailParentSegments();
+
+export type RailItem = { href: string; icon: LucideIcon; label: string; matchHrefs: readonly string[] };
+
+// Rail: her hub için kullanıcının erişebildiği ilk üye, hub etiketiyle tek girdi olur (§2).
+// `groups` capability süzgecinden geçmiş olmalıdır; aktiflik tüm hub üyelerine göre hesaplanır.
+export function buildInstitutionRailGroups(groups: readonly InstitutionNavGroup[]) {
+  return groups
+    .map((group) => {
+      const seenHubs = new Set<string>();
+      const items: RailItem[] = [];
+      for (const item of group.items) {
+        if (item.hub) {
+          if (seenHubs.has(item.hub)) continue;
+          seenHubs.add(item.hub);
+          const root = institutionRoutes.find((route) => route.href === item.hub);
+          items.push({
+            href: item.href,
+            icon: root ? navIcons[root.iconName] : item.icon,
+            label: root ? root.menuLabel ?? root.label : item.label,
+            matchHrefs: hubMembers(item.hub).map((member) => member.href),
+          });
+          continue;
+        }
+        if (item.hiddenFromRail) continue;
+        const route = institutionRoutes.find((candidate) => candidate.href === item.href);
+        items.push({ href: item.href, icon: item.icon, label: route?.menuLabel ?? item.label, matchHrefs: [item.href] });
+      }
+      return { label: group.label, items };
+    })
+    .filter((group) => group.items.length > 0);
+}

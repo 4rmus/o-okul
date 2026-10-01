@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { institutionRoutes } from "../src/route-manifest.js";
 import { tenantLoginUrl } from "./helpers/tenant-login.js";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
@@ -22,10 +23,39 @@ async function expandSidebarGroup(page: Page, name: string) {
   }
 }
 
+// Berrak §5: rol portalı özetleri kısa; ayrıntı panelleri kendi alt rotalarındadır.
+async function openPortalRoute(page: Page, group: string, name: string, url: RegExp) {
+  await expandSidebarGroup(page, group);
+  await Promise.all([
+    page.waitForURL(url, { timeout: 15_000 }),
+    page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name, exact: true }).click(),
+  ]);
+}
+
+// Hub modeli (Berrak §2): kardeş sayfalar menüde hub girdisi + hub sekmesidir; menüden çıkan route'lar
+// (ör. Optik Okuma) komut paletinden açılır. Etiketler runtime manifestten okunur.
 async function clickSidebarLink(page: Page, name: string, url: RegExp) {
-  const link = page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name, exact: true });
-  await expect(link).toBeVisible();
-  await link.click();
+  const menu = page.getByRole("navigation", { name: "Ana menü" });
+  const route = institutionRoutes.find((candidate) => candidate.label === name || candidate.menuLabel === name);
+  const hubRoot = route?.hub ? institutionRoutes.find((candidate) => candidate.href === route.hub) : undefined;
+  if (route && hubRoot) {
+    const hubLabel = hubRoot.menuLabel ?? hubRoot.label;
+    await expandSidebarGroup(page, hubRoot.group);
+    const hubLink = menu.getByRole("link", { name: hubLabel, exact: true });
+    const hubHref = await hubLink.getAttribute("href");
+    await hubLink.click();
+    if (hubHref !== route.href) {
+      await page.getByRole("navigation", { name: `${hubLabel} bölümleri` }).getByRole("link", { name: route.tabLabel ?? route.label, exact: true }).click();
+    }
+  } else if (route?.hiddenFromRail) {
+    const palette = await openCommandPalette(page);
+    await palette.getByLabel("Komut ara").fill(route.label);
+    await palette.getByRole("link", { name: new RegExp(`^${route.label}`) }).first().click();
+  } else {
+    const link = menu.getByRole("link", { name: route?.menuLabel ?? name, exact: true });
+    await expect(link).toBeVisible();
+    await link.click();
+  }
   await expect(page).toHaveURL(url, { timeout: 15_000 });
 }
 
@@ -3913,18 +3943,22 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByRole("link", { name: "Yayın Hazırlığı" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Sistem Sağlığı" })).toHaveCount(0);
   await expandSidebarGroup(page, "Kişiler");
-  await expect(page.getByRole("link", { name: "Kullanıcılar" })).toBeVisible();
+  // Hub modeli: Kullanıcılar ve Kampüsler hub sekmesidir, menüde hub girdisi görünür.
+  await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Personel", exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Kullanıcılar" })).toHaveCount(0);
   await expandSidebarGroup(page, "Ayarlar");
   await expect(page.getByRole("link", { name: "Operasyon ve kanıt" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Rol Önizleme" })).toBeVisible();
   await expandSidebarGroup(page, "Akademik");
-  await expect(page.getByRole("link", { name: "Kampüsler" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Sınıf yapısı", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Takvim" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Seviyeler" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Sınıflar" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Dersler" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Program" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Etütler" })).toBeVisible();
+  const academicMenu = page.getByRole("navigation", { name: "Ana menü" });
+  await expect(academicMenu.getByRole("link", { name: "Ders ve program", exact: true })).toBeVisible();
+  await expect(academicMenu.getByRole("link", { name: "Yoklama", exact: true })).toBeVisible();
+  await expect(academicMenu.getByRole("link", { name: "Ödev ve materyal", exact: true })).toBeVisible();
+  for (const tabOnlyLabel of ["Seviyeler", "Sınıflar", "Dersler", "Program", "Etütler"]) {
+    await expect(academicMenu.getByRole("link", { name: tabOnlyLabel, exact: true })).toHaveCount(0);
+  }
   await expandSidebarGroup(page, "Sınav");
   await expandSidebarGroup(page, "İletişim");
   await expandSidebarGroup(page, "Ayarlar");
@@ -3988,10 +4022,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await Promise.all([page.waitForURL(/\/kurum\/siniflar\/class-a$/), classResult.click()]);
   await expect(heading(page, { name: "8-A" })).toBeVisible();
 
-  await expandSidebarGroup(page, "Kişiler");
-  const usersLink = page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Kullanıcılar" });
-  await expect(usersLink).toBeVisible();
-  await Promise.all([page.waitForURL(/\/kurum\/kullanicilar$/), usersLink.click()]);
+  await clickSidebarLink(page, "Kullanıcılar", /\/kurum\/kullanicilar$/);
   await expect(heading(page, { name: "Kullanıcılar" })).toBeVisible();
   await expect(page.getByText("Admin A")).toBeVisible();
   const userList = page.getByLabel("Kullanıcı ve rol yönetimi");
@@ -4699,6 +4730,9 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     page.getByRole("button", { name: "Ekle", exact: true }).click(),
   ]);
   expect(examCreateResponse.status()).toBe(201);
+  // Berrak §4: yeni sınav çalışma alanında açılır; yayın ve katılımcı işlemleri sınav yönetimindedir.
+  await expect(page).toHaveURL(/\/kurum\/sinavlar\/[^/?]+$/);
+  await page.goto("/kurum/sinavlar");
   await expect(page.getByRole("cell", { name: "Haziran Genel Deneme", exact: true })).toBeVisible();
   await expect(page.getByRole("row", { name: /Haziran Genel Deneme/ }).getByText("Taslak")).toBeVisible();
   await page.getByRole("button", { name: "Haziran Genel Deneme yayınla" }).click();
@@ -4746,7 +4780,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   const opticalReportPanel = page.getByLabel("Raporlara geçiş");
   await expect(opticalReportPanel.getByText("2 öğrenci için rapor hazır.", { exact: true })).toBeVisible();
   await expect(opticalReportPanel.getByLabel("Rapor hazırlama durumu").getByText("Tamamlandı")).toBeVisible();
-  await expect(opticalReportPanel.getByRole("link", { name: "Rapor çalışma alanına geç" })).toHaveAttribute("href", "/kurum/raporlar?examId=exam-a");
+  await expect(opticalReportPanel.getByRole("link", { name: "Rapor çalışma alanına geç" })).toHaveAttribute("href", "/kurum/sinavlar/exam-a/rapor/genel");
 
   await expandSidebarGroup(page, "Sınav");
   await clickSidebarLink(page, "Sınav Raporları", /\/kurum\/raporlar$/);
@@ -5006,12 +5040,14 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
 
   for (const operationPath of [
     "/kurum/guvenlik-denetimi",
-    "/kurum/gozlemlenebilirlik",
     "/kurum/canli-yayin",
-    "/kurum/sistem-sagligi",
   ]) {
     await page.goto(operationPath);
     await expect(page).toHaveURL(new RegExp(`${operationPath}$`));
+  }
+  for (const retiredPath of ["/kurum/gozlemlenebilirlik", "/kurum/sistem-sagligi"]) {
+    await page.goto(retiredPath);
+    await expect(page).toHaveURL(/\/kurum\/operasyon-ve-kanit$/);
   }
 
   await expandSidebarGroup(page, "Ayarlar");
@@ -5766,7 +5802,7 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
   await expect(page.getByRole("link", { name: "KVKK" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Yedekleme" })).toHaveCount(0);
   await expandSidebarGroup(page, "İletişim");
-  await expect(page.getByRole("link", { name: "Kurum içi destek", exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Destek", exact: true })).toBeVisible();
   await expect(page.getByLabel("Bugün ilgilenmeniz gerekenler").getByRole("link", { name: /Geciken ödeme/ })).toHaveCount(0);
   await expect(page.getByLabel("Bugün ilgilenmeniz gerekenler").getByRole("link", { name: /Öğrenci destek talepleri/ })).toBeVisible();
   await page.keyboard.press("ControlOrMeta+K");
@@ -6350,32 +6386,12 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(page.getByLabel("Günlük durum").getByText("1 okunmamış")).toBeVisible();
   await expect(page.getByLabel("Bildirim cihazı")).toHaveCount(0);
   expect(portalNotificationDevices).toHaveLength(0);
-  await expect(page.getByLabel("Profil").getByText("Ada A")).toBeVisible();
-  await expect(page.getByLabel("Profil").getByText("5551234567")).toHaveCount(0);
-  await expect(page.getByLabel("Profil").getByText("••• ••• ••67")).toBeVisible();
-  await expect(page.getByLabel("Profil").getByText("8-A")).toBeVisible();
-  await expect(page.getByLabel("Profil").getByText("Merkez Kampüs")).toBeVisible();
-  await expect(page.getByLabel("Profil").getByText("8. Sınıf")).toBeVisible();
-  await expect(page.getByLabel("Profil").getByText("A", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Profil").getByText("Ayse Ogretmen")).toBeVisible();
-  await expect(page.getByLabel("Veli ilişkileri").getByText("Zeynep Veli")).toBeVisible();
-  await expect(page.getByLabel("Veli ilişkileri").getByText(smsEnabled ? "Ödeme planları, SMS, Duyuru, Destek" : "Ödeme planları, Duyuru, Destek")).toBeVisible();
-  await expect(page.getByLabel("Sınıf ve kayıt geçmişi").getByText("8-A").first()).toBeVisible();
-  await expect(page.getByLabel("Sınıf ve kayıt geçmişi").getByText("Merkez Kampüs / 8. Sınıf / A şube").first()).toBeVisible();
-  await expect(page.getByLabel("Sınıf ve kayıt geçmişi").getByText("İlk kayıt").first()).toBeVisible();
-  await expect(page.getByLabel("Sınıf ve kayıt geçmişi").getByRole("cell", { exact: true, name: "Aktif" })).toBeVisible();
   await expect(page.getByLabel("Duyurular").getByRole("cell", { name: "Öğrenci duyurusu", exact: true })).toBeVisible();
   await page.getByLabel("Duyurular").getByRole("button", { name: "Okundu işaretle" }).click();
   await expect(page.getByLabel("Duyurular").getByText("Okundu")).toBeVisible();
   await expect(page.getByLabel("Ödevler").getByRole("cell", { name: "Bireysel tekrar" })).toBeVisible();
   await expect(page.getByLabel("Ödevler").getByText("Kesirler Çalışma Kağıdı")).toBeVisible();
   await expect(page.getByLabel("Ödevler").getByText("Matematik / 2. Donem")).toBeVisible();
-  await expect(page.getByLabel("Destek talepleri").getByRole("cell", { exact: true, name: "Ödev bağlantısı" })).toBeVisible();
-  await page.getByLabel("Destek talepleri").getByRole("textbox", { exact: true, name: "Konu" }).fill("Soru çözümü");
-  await page.getByLabel("Destek talepleri").getByRole("textbox", { exact: true, name: "Mesaj" }).fill("Çözüm videosu açılmıyor.");
-  await page.getByLabel("Destek talepleri").getByRole("combobox", { exact: true, name: "Öncelik" }).selectOption("HIGH");
-  await page.getByLabel("Destek talepleri").getByRole("button", { name: "Destek talebi aç" }).click();
-  await expect(page.getByLabel("Destek talepleri").getByRole("cell", { exact: true, name: "Soru çözümü" })).toBeVisible();
   const studentReportSummary = page.getByRole("region", { name: "Portal rapor özeti" });
   await expect(studentReportSummary.getByText("%85,2").first()).toBeVisible();
   await studentReportSummary.getByRole("button", { name: "Karne detayını göster" }).click();
@@ -6395,8 +6411,32 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   });
   await expect(page).toHaveURL(/\/ogrenci\?examId=exam-demo$/);
   await expect(studentReportSummary.getByText("17,5").first()).toBeVisible();
+  await openPortalRoute(page, "Öğrenci Paneli", "Devamsızlık", /\/ogrenci\/devamsizlik$/);
   await expect(page.getByLabel("Devamsızlık").getByRole("cell", { name: "Yok", exact: true })).toBeVisible();
   await expect(page.getByLabel("Öğretmen notları").getByText("Problem çözme rutini güçleniyor.")).toBeVisible();
+
+  await openPortalRoute(page, "Öğrenci Paneli", "Profil", /\/ogrenci\/profil$/);
+  await expect(page.getByLabel("Profil").getByText("Ada A")).toBeVisible();
+  await expect(page.getByLabel("Profil").getByText("5551234567")).toHaveCount(0);
+  await expect(page.getByLabel("Profil").getByText("••• ••• ••67")).toBeVisible();
+  await expect(page.getByLabel("Profil").getByText("8-A")).toBeVisible();
+  await expect(page.getByLabel("Profil").getByText("Merkez Kampüs")).toBeVisible();
+  await expect(page.getByLabel("Profil").getByText("8. Sınıf")).toBeVisible();
+  await expect(page.getByLabel("Profil").getByText("A", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Profil").getByText("Ayse Ogretmen")).toBeVisible();
+  await expect(page.getByLabel("Veli ilişkileri").getByText("Zeynep Veli")).toBeVisible();
+  await expect(page.getByLabel("Veli ilişkileri").getByText(smsEnabled ? "Ödeme planları, SMS, Duyuru, Destek" : "Ödeme planları, Duyuru, Destek")).toBeVisible();
+  await expect(page.getByLabel("Sınıf ve kayıt geçmişi").getByText("8-A").first()).toBeVisible();
+  await expect(page.getByLabel("Sınıf ve kayıt geçmişi").getByText("Merkez Kampüs / 8. Sınıf / A şube").first()).toBeVisible();
+  await expect(page.getByLabel("Sınıf ve kayıt geçmişi").getByText("İlk kayıt").first()).toBeVisible();
+  await expect(page.getByLabel("Sınıf ve kayıt geçmişi").getByRole("cell", { exact: true, name: "Aktif" })).toBeVisible();
+  await openPortalRoute(page, "Öğrenci Paneli", "Kurum içi destek", /\/ogrenci\/destek$/);
+  await expect(page.getByLabel("Destek talepleri").getByRole("cell", { exact: true, name: "Ödev bağlantısı" })).toBeVisible();
+  await page.getByLabel("Destek talepleri").getByRole("textbox", { exact: true, name: "Konu" }).fill("Soru çözümü");
+  await page.getByLabel("Destek talepleri").getByRole("textbox", { exact: true, name: "Mesaj" }).fill("Çözüm videosu açılmıyor.");
+  await page.getByLabel("Destek talepleri").getByRole("combobox", { exact: true, name: "Öncelik" }).selectOption("HIGH");
+  await page.getByLabel("Destek talepleri").getByRole("button", { name: "Destek talebi aç" }).click();
+  await expect(page.getByLabel("Destek talepleri").getByRole("cell", { exact: true, name: "Soru çözümü" })).toBeVisible();
 
   await page.getByLabel("Üst gezinme").getByRole("button", { name: "Çıkış" }).click();
   await expect(page).toHaveURL(/\/login$/);
@@ -6410,9 +6450,12 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(mainNav.getByRole("button", { name: "Öğrenci Paneli" })).toBeHidden();
   await expect(mainNav.getByRole("button", { name: "Veli Paneli" })).toBeHidden();
   await expect(heading(page, { name: "Öğretmen Portalı" })).toBeVisible();
-  await expect(page.getByLabel("Günlük ders akışı").getByText("Bugünün odağı")).toBeVisible();
-  await expect(page.getByLabel("Günlük ders akışı").getByText("Ödev kontrolü")).toBeVisible();
-  await expect(page.getByLabel("Günlük ders akışı").getByText(/^(1 bekliyor|Tamam)$/u).first()).toBeVisible();
+  const teacherToday = page.getByRole("region", { name: "Bugün", exact: true });
+  await expect(teacherToday.getByText("Bugünün odağı")).toBeVisible();
+  await expect(teacherToday.getByText("Ödev kontrolü")).toBeVisible();
+  await expect(teacherToday.getByText(/^(1 bekliyor|Tamam)$/u).first()).toBeVisible();
+  await expect(page.getByLabel("Öğretmen günlük aksiyonları").getByRole("link", { name: /Yoklama al/ })).toHaveAttribute("href", "/ogretmen/ders-akisi");
+  await openPortalRoute(page, "Öğretmen Paneli", "Ders Akışı", /\/ogretmen\/ders-akisi$/);
   await expect(page.getByLabel("Öğretmen profil özeti").getByText("Ayse Ogretmen")).toBeVisible();
   await expect(page.getByLabel("Öğretmen profil özeti").getByText("Matematik").first()).toBeVisible();
   await expect(page.getByLabel("Öğretmen profil özeti").getByText("2. Donem")).toBeVisible();
@@ -6420,24 +6463,6 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(page.getByLabel("Öğretmen profil özeti").getByText("Merkez Kampüs / 8. Sınıf / A şube")).toBeVisible();
   await expect(page.getByLabel("Öğretmen profil özeti").getByText("1 öğrenci")).toBeVisible();
   await expect(page.getByLabel("Bugünkü dersler").getByRole("row", { name: /Matematik 8-A Matematik 2\. Donem/ })).toBeVisible();
-  await expect(page.getByLabel("Duyurular").getByRole("cell", { name: "Öğretmen duyurusu", exact: true })).toBeVisible();
-  await page.getByLabel("Duyurular").getByRole("button", { name: "Okundu işaretle" }).click();
-  await expect(page.getByLabel("Duyurular").getByText("Okundu")).toBeVisible();
-  await expect(page.getByLabel("Destek talepleri").getByRole("cell", { exact: true, name: "Yoklama ekranı" })).toBeVisible();
-  await page.getByLabel("Destek talepleri").getByRole("textbox", { exact: true, name: "Konu" }).fill("Portal raporu");
-  await page.getByLabel("Destek talepleri").getByRole("textbox", { exact: true, name: "Mesaj" }).fill("Sınıf raporu geç yükleniyor.");
-  await page.getByLabel("Destek talepleri").getByRole("combobox", { exact: true, name: "Öncelik" }).selectOption("HIGH");
-  await page.getByLabel("Destek talepleri").getByRole("button", { name: "Destek talebi aç" }).click();
-  await expect.poll(() => lastPortalTeacherSupportTicketBody?.studentId ?? "").toBe("student-a");
-  expect(lastPortalTeacherSupportTicketBody).toMatchObject({
-    studentId: "student-a",
-    campusId: "campus-main",
-    gradeLevelId: "grade-8",
-    classId: "class-a",
-    courseId: "course-math",
-    termId: "term-2026-spring",
-  });
-  await expect(page.getByLabel("Destek talepleri").getByRole("cell", { exact: true, name: "Portal raporu" })).toBeVisible();
   await expect(page.getByLabel("Ders programı").getByRole("row", { name: /Matematik 8-A Matematik 2\. Donem/ })).toBeVisible();
   await expect(page.getByLabel("Yoklama branşı")).toHaveCount(0);
   await expect(page.getByLabel("Yoklama dönemi")).toHaveCount(0);
@@ -6466,10 +6491,6 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   expect(lastPortalTeacherNoteBody?.termId).toBe("term-2026-spring");
   await expect(page.getByLabel("Öğretmen notları").getByText("Derste aktif katılım gösterdi.")).toBeVisible();
   await expect(page.getByLabel("Öğretmen notları").getByRole("row", { name: /Ada A Matematik 2\. Donem Derste aktif katılım gösterdi\./ })).toBeVisible();
-  await expect(page.getByLabel("Öğretmen ödev kontrolü").getByRole("cell", { name: "Kesirler", exact: true })).toBeVisible();
-  await expect(page.getByLabel("Öğretmen ödev kontrolü").getByRole("cell", { name: "Bekliyor" })).toBeVisible();
-  await page.getByLabel("Öğretmen ödev kontrolü").getByRole("button", { name: "Kontrol et" }).click();
-  await expect(page.getByLabel("Öğretmen ödev kontrolü").getByRole("cell", { name: "Kontrol edildi" })).toBeVisible();
   await expect(page.getByLabel("Öğretmen materyal atamaları").getByRole("cell", { name: "Bireysel tekrar" })).toBeVisible();
   await expect(page.getByLabel("Materyal branşı")).toHaveValue("course-math");
   await expect(page.getByLabel("Materyal dönemi")).toHaveValue("term-2026-spring");
@@ -6484,6 +6505,32 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(page.getByLabel("Sınıf ve kayıt geçmişi").getByText("Merkez Kampüs / 8. Sınıf / A şube").first()).toBeVisible();
   await expect(page.getByLabel("Sınıf ve kayıt geçmişi").getByText("İlk kayıt").first()).toBeVisible();
   await expect(page.getByLabel("Sınıf ve kayıt geçmişi").getByRole("cell", { name: "Aktif", exact: true })).toBeVisible();
+  await openPortalRoute(page, "Öğretmen Paneli", "Ödev Kontrolü", /\/ogretmen\/odevler$/);
+  await expect(page.getByLabel("Öğretmen ödev kontrolü").getByRole("cell", { name: "Kesirler", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Öğretmen ödev kontrolü").getByRole("cell", { name: "Bekliyor" })).toBeVisible();
+  await page.getByLabel("Öğretmen ödev kontrolü").getByRole("button", { name: "Kontrol et" }).click();
+  await expect(page.getByLabel("Öğretmen ödev kontrolü").getByRole("cell", { name: "Kontrol edildi" })).toBeVisible();
+  await openPortalRoute(page, "Öğretmen Paneli", "Duyurular", /\/ogretmen\/duyurular$/);
+  await expect(page.getByLabel("Duyurular").getByRole("cell", { name: "Öğretmen duyurusu", exact: true })).toBeVisible();
+  await page.getByLabel("Duyurular").getByRole("button", { name: "Okundu işaretle" }).click();
+  await expect(page.getByLabel("Duyurular").getByText("Okundu")).toBeVisible();
+  await openPortalRoute(page, "Öğretmen Paneli", "Kurum içi destek", /\/ogretmen\/destek$/);
+  await expect(page.getByLabel("Destek talepleri").getByRole("cell", { exact: true, name: "Yoklama ekranı" })).toBeVisible();
+  await page.getByLabel("Destek talepleri").getByRole("textbox", { exact: true, name: "Konu" }).fill("Portal raporu");
+  await page.getByLabel("Destek talepleri").getByRole("textbox", { exact: true, name: "Mesaj" }).fill("Sınıf raporu geç yükleniyor.");
+  await page.getByLabel("Destek talepleri").getByRole("combobox", { exact: true, name: "Öncelik" }).selectOption("HIGH");
+  await page.getByLabel("Destek talepleri").getByRole("button", { name: "Destek talebi aç" }).click();
+  await expect.poll(() => lastPortalTeacherSupportTicketBody?.studentId ?? "").toBe("student-a");
+  expect(lastPortalTeacherSupportTicketBody).toMatchObject({
+    studentId: "student-a",
+    campusId: "campus-main",
+    gradeLevelId: "grade-8",
+    classId: "class-a",
+    courseId: "course-math",
+    termId: "term-2026-spring",
+  });
+  await expect(page.getByLabel("Destek talepleri").getByRole("cell", { exact: true, name: "Portal raporu" })).toBeVisible();
+  await openPortalRoute(page, "Öğretmen Paneli", "Sınav Raporu", /\/ogretmen\/raporlar$/);
   const teacherReportSummary = page.getByRole("region", { name: "Portal rapor özeti" });
   await expect(teacherReportSummary.getByText("19,25").first()).toBeVisible();
   await expect(teacherReportSummary.getByText("440").first()).toBeVisible();
@@ -6654,6 +6701,17 @@ function readPortalFixture(path: string): unknown {
   if (path === "/me/teacher/homework") return readPortalFixture("/homework");
   if (path === "/me/teacher/homework/materials") return readPortalFixture("/homework/materials");
   if (path === "/me/teacher/teacher-notes") return [];
+  if (path === "/me/teacher/today") {
+    return {
+      date: "2026-06-10",
+      generatedAt: "2026-06-10T08:00:00.000Z",
+      latestReport: { examId: "exam-demo", latestGeneratedAt: "2026-06-09T12:00:00.000Z", title: "Deneme" },
+      pendingHomework: [{ classId: "class-a", id: "homework-a", title: "Kesirler" }],
+      pendingHomeworkCount: 1,
+      teacherName: "Ayse Ogretmen",
+      todayLessons: [],
+    };
+  }
   if (path === "/me/teacher/lookups") {
     return {
       attendanceClassIds: ["class-a"],

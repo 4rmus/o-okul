@@ -29,7 +29,7 @@ import {
   tenantUpdateFormSchema,
   type TenantUpdateFormState,
 } from "../../../../../src/form-validation.js";
-import { PageFrame } from "../../../kurum/_shared/page-frame.js";
+import { PageFrame } from "../../../_shared/page-frame.js";
 import { DeviceRestorePanel } from "./device-restore-panel.js";
 import { TenantResetPanel } from "./tenant-reset-panel.js";
 import { tenantManagementSchema, createLifecycleStepUp, loadTenant, updateTenant, updateTenantStatus, type TenantRecord } from "../../_shared/system-api.js";

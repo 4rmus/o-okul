@@ -1,4 +1,5 @@
-:root {
+:root,
+.next-karne-sheet {
   --color-text: var(--color-ink);
   --color-text-secondary: var(--color-ink-secondary);
   --color-text-muted: var(--color-ink-muted);
@@ -23,11 +24,11 @@
   --color-danger-subtle: var(--color-danger-soft-token);
   --color-overlay: var(--color-overlay-token);
   --space-2: var(--space-2xs);
-  --space-3: var(--space-2xs);
+  --space-3: var(--space-xs);
   --radius: var(--radius-control);
   --radius-lg: var(--radius-panel);
   --shell-sidebar-width: 16rem;
-  --workspace-max-width: 1360px;
+  --workspace-max-width: 1440px;
   --shadow-soft: 0 10px 28px var(--color-shadow-soft);
   --shadow-card: 0 1px 2px var(--color-shadow-soft), 0 10px 24px var(--color-shadow-soft);
   --shadow-card-hover: 0 2px 4px var(--color-shadow-medium), 0 16px 30px var(--color-shadow-medium);
@@ -39,7 +40,9 @@
   --chart-warning: var(--color-warning-token);
   --chart-danger: var(--color-danger-token);
   --chart-neutral: var(--color-ink-muted);
+}
 
+:root {
   color: var(--color-text);
   background: var(--color-bg);
   font-family: var(--font-body);

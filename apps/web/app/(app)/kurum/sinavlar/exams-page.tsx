@@ -2,7 +2,7 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   canAccessExamWorkspace,
@@ -30,10 +30,10 @@ import {
   type StatusBadgeProps,
   useConfirmDialog,
 } from "@o-okul/ui";
-import { ArrowRight, CheckCircle2, Pencil, Plus, ScanLine, Search, Trash2, Users, X } from "lucide-react";
+import { ArrowRight, CheckCircle2, Pencil, Plus, Search, Trash2, Users, X } from "lucide-react";
+import { examWorkspaceHref } from "./exam-workspace-routes.js";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError, apiBaseUrl, apiErrorMessage, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
-import { featureRolloutQueryKey, isFeatureEnabled, loadFeatureRollouts } from "../../../../src/feature-rollouts.js";
 import {
   examWithClassFormSchema,
   firstFormError,
@@ -71,6 +71,8 @@ type CreateExamPayload = ExamWithClassFormPayload & {
 
 export function ExamsPage() {
   const { auth } = useAuth();
+  const router = useRouter();
+  const canOpenWorkspace = Boolean(auth && canAccessExamWorkspace(auth.session.roles, auth.session.activePersona));
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { confirm, confirmationDialog } = useConfirmDialog();
@@ -87,22 +89,6 @@ export function ExamsPage() {
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
-  const featureRolloutsQuery = useQuery({
-    queryKey: featureRolloutQueryKey(
-      auth?.session.tenantId,
-      auth?.session.id,
-      auth?.session.activePersona,
-    ),
-    queryFn: () => loadFeatureRollouts(auth?.accessToken ?? ""),
-    enabled: Boolean(auth),
-    refetchOnWindowFocus: false,
-  });
-  const workspaceV2Enabled = Boolean(auth && canAccessExamWorkspace(
-    auth.session.roles,
-    auth.session.activePersona,
-  )) && featureRolloutsQuery.isSuccess
-    && !featureRolloutsQuery.isError
-    && isFeatureEnabled(featureRolloutsQuery.data, "web.exam-workspace-v2");
   const requestedExamId = searchParams.get("examId") ?? "";
   const [form, setForm] = useState<ExamWithClassFormState>(emptyForm);
   const [editingExam, setEditingExam] = useState<ExamRecord | null>(null);
@@ -140,10 +126,6 @@ export function ExamsPage() {
   const selectedAbsentCount = participants.filter((participant) => participant.status === "ABSENT").length;
   const selectedRegisteredCount = participants.filter((participant) => participant.status === "REGISTERED").length;
   const selectedBookletSummary = formatBookletSummary(participants);
-  const selectedExamAnswerKeyReady = answerKeyReady(selectedExam);
-  const selectedExamCanOpenOptical = selectedExam?.status === "PUBLISHED"
-    && selectedExamAnswerKeyReady
-    && participants.length > 0;
   const examSummaryItems: OperationSummaryItem[] = [
     {
       description: "Bu kurum kapsamındaki deneme sınavı",
@@ -253,15 +235,16 @@ export function ExamsPage() {
       priority: "primary",
       render: (exam) => (
         <div className="next-row-actions">
-          <button
-            type="button"
+          <Button
+            aria-label={`${exam.title} katılımcıları`}
             aria-pressed={activeExamId === exam.id}
             data-active={activeExamId === exam.id ? "true" : undefined}
             onClick={() => setSelectedExamId(exam.id)}
-            aria-label={`${exam.title} katılımcıları`}
+            size="icon"
+            variant="ghost"
           >
             <Users size={17} aria-hidden="true" />
-          </button>
+          </Button>
           <Button size="icon" variant="ghost" type="button" onClick={() => void openEditForm(exam)} aria-label={`${exam.title} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
           </Button>
@@ -435,7 +418,12 @@ export function ExamsPage() {
       setSelectedExamId(savedExam.id);
       void queryClient.invalidateQueries({ queryKey });
       void queryClient.invalidateQueries({ queryKey: ["next-exam-participants", auth.session.tenantId, savedExam.id] });
+      const wasCreate = !editingExam;
       closeForm();
+      // Yeni sınav çalışma alanında devam eder (Berrak §4); yetkisi olmayan rol listede kalır.
+      if (wasCreate && canOpenWorkspace) {
+        router.push(examWorkspaceHref(savedExam.id));
+      }
     } catch (submitError) {
       setError(apiErrorMessage(submitError, "Sınav kaydedilemedi."));
     }
@@ -534,17 +522,6 @@ export function ExamsPage() {
                 {selectedExam.status === "PUBLISHED" ? "Rapor zinciri açık" : "Rapor için yayın bekliyor"}
               </StatusBadge>
             </div>
-            {workspaceV2Enabled ? (
-              <Link
-                className="uh-button uh-button--secondary uh-button--md"
-                href={`/kurum/sinavlar/${encodeURIComponent(selectedExam.id)}`}
-              >
-                <span className="uh-button__content">
-                  Salt okunur çalışma alanını aç
-                  <ArrowRight size={17} aria-hidden="true" />
-                </span>
-              </Link>
-            ) : null}
             <InfoGrid className="next-exam-selected-meta" aria-label="Seçili sınav metrikleri" role="region">
               <InfoItem label="Başlangıç" value={formatDateTime(selectedExam.startsAt)} />
               <InfoItem label="Katılımcı" value={`${formatCount(participants.length)} öğrenci`} />
@@ -556,43 +533,21 @@ export function ExamsPage() {
               <span>{formatCount(selectedAbsentCount)} gelmeyen katılımcı</span>
               <span>{formatCount(selectedParticipantClassCount)} sınıf kapsamı</span>
             </section>
+            {/* Hazırlık sunucuda hesaplanır (Berrak §4); bu ekran tahmin yapmaz, çalışma alanına yönlendirir. */}
+            {canOpenWorkspace ? (
             <section className="next-exam-next-step" aria-label="Sınav sonraki adımı">
               <div>
-                <strong>
-                  {selectedExam.status === "DRAFT" ? "Sonraki adım: sınavı yayınlayın" : "Sonraki adım: optik işlemleri"}
-                </strong>
-                <span>
-                  {selectedExam.status === "DRAFT"
-                    ? selectedExamAnswerKeyReady
-                      ? "Cevap anahtarı hazır. Sınavı yayınlayarak optik akışını açın."
-                      : "Sınavı yayınlamadan önce cevap anahtarını tamamlayın."
-                    : selectedExamCanOpenOptical
-                      ? "Seçili sınav bağlamını koruyarak format ve TXT / DAT yükleme akışına geçin."
-                      : "Optik işlemleri için cevap anahtarı ve en az bir katılımcı gerekir."}
-                </span>
+                <strong>Sonraki adım: sınav çalışma alanı</strong>
+                <span>Optik düzen, yükleme, eşleştirme, değerlendirme ve rapor adımları çalışma alanında sırayla ilerler.</span>
               </div>
-              {selectedExamCanOpenOptical ? (
-                <Link
-                  className="uh-button uh-button--primary uh-button--md"
-                  href={`/kurum/optik?examId=${encodeURIComponent(selectedExam.id)}`}
-                >
-                  <span className="uh-button__content">
-                    <ScanLine size={17} aria-hidden="true" />
-                    Optik işlemlerine geç
-                    <ArrowRight size={17} aria-hidden="true" />
-                  </span>
-                </Link>
-              ) : selectedExam.status === "DRAFT" && selectedExamAnswerKeyReady ? (
-                <Button type="button" onClick={() => void handlePublish(selectedExam)}>
-                  <CheckCircle2 size={17} aria-hidden="true" />
-                  Sınavı yayınla
-                </Button>
-              ) : (
-                <Button disabled type="button" variant="secondary">
-                  {!selectedExamAnswerKeyReady ? "Cevap anahtarı bekleniyor" : "Katılımcı bekleniyor"}
-                </Button>
-              )}
+              <Link className="uh-button uh-button--primary uh-button--md" href={examWorkspaceHref(selectedExam.id)}>
+                <span className="uh-button__content">
+                  Sınav çalışma alanını aç
+                  <ArrowRight size={17} aria-hidden="true" />
+                </span>
+              </Link>
             </section>
+            ) : null}
             <DataTable
               caption={`${selectedExam.title} katılımcıları`}
               columns={participantColumns}

@@ -13,9 +13,7 @@ import {
   ExamParticipantRecord,
   ExamRecord,
   ExamType,
-  ExamWorkspaceNextAction,
   ExamWorkspaceReadModel,
-  ExamWorkspaceReadinessStep,
 } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
@@ -34,6 +32,8 @@ import { type StudentStore, studentStoreToken } from "../student/student-store.j
 import { requireTenantWideStaffContext } from "../tenant/tenant-access.js";
 import { AnswerKeyExcelImportService } from "./answer-key-excel-import.service.js";
 import { answerKeyRepositoryToken, type AnswerKeyRepository } from "./answer-key.service.js";
+import { examWorkspaceProgressStoreToken, type ExamWorkspaceProgressStore } from "./exam-workspace-progress-store.js";
+import { buildExamWorkspaceReadiness } from "./exam-workspace-readiness.js";
 
 export const examRepositoryToken = Symbol("ExamRepository");
 export const examParticipantRepositoryToken = Symbol("ExamParticipantRepository");
@@ -148,6 +148,8 @@ export class ExamService {
     @Inject(answerKeyRepositoryToken)
     private readonly answerKeys: AnswerKeyRepository,
     private readonly answerKeyImports: AnswerKeyExcelImportService,
+    @Inject(examWorkspaceProgressStoreToken)
+    private readonly workspaceProgress: ExamWorkspaceProgressStore,
     @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() private readonly idempotency?: IdempotencyService,
     @Optional()
@@ -249,31 +251,13 @@ export class ExamService {
     ]);
     const answerKeyReady = exam.answerKeySummary?.status !== undefined
       && exam.answerKeySummary.status !== "MISSING";
-    const participantsReady = participants.length > 0;
-    const published = exam.status === "PUBLISHED";
-    const opticalReady = answerKeyReady && participantsReady && published;
-    const opticalBlocker = !answerKeyReady
-      ? "ANSWER_KEY_MISSING"
-      : !participantsReady
-        ? "PARTICIPANTS_MISSING"
-        : !published
-          ? "EXAM_NOT_PUBLISHED"
-          : undefined;
-    const readiness: ExamWorkspaceReadinessStep[] = [
-      { key: "EXAM", status: "READY" },
-      answerKeyReady
-        ? { key: "ANSWER_KEY", status: "READY" }
-        : { key: "ANSWER_KEY", status: "BLOCKED", blocker: "ANSWER_KEY_MISSING" },
-      participantsReady
-        ? { key: "PARTICIPANTS", status: "READY" }
-        : { key: "PARTICIPANTS", status: "BLOCKED", blocker: "PARTICIPANTS_MISSING" },
-      published
-        ? { key: "PUBLISHED", status: "READY" }
-        : { key: "PUBLISHED", status: "BLOCKED", blocker: "EXAM_NOT_PUBLISHED" },
-      opticalReady
-        ? { key: "OPTICAL_ENTRY", status: "READY" }
-        : { key: "OPTICAL_ENTRY", status: "BLOCKED", blocker: opticalBlocker },
-    ];
+    const progress = await this.workspaceProgress.load(tenantId, id);
+    const { nextAction, readiness } = buildExamWorkspaceReadiness({
+      answerKeyReady,
+      participantsReady: participants.length > 0,
+      progress,
+      published: exam.status === "PUBLISHED",
+    });
 
     return {
       exam,
@@ -284,7 +268,12 @@ export class ExamService {
         absent: countParticipantStatus(participants, "ABSENT"),
       },
       readiness,
-      nextAction: resolveWorkspaceNextAction(answerKeyReady, participantsReady, published),
+      nextAction,
+      progress: {
+        openQuarantineCount: progress.openQuarantineCount,
+        matchedCount: progress.matchedCount,
+        evaluatedCount: progress.evaluatedCount,
+      },
     };
   }
 
@@ -823,13 +812,3 @@ function countParticipantStatus(participants: ExamParticipantRecord[], status: s
   return participants.filter((participant) => participant.status === status).length;
 }
 
-function resolveWorkspaceNextAction(
-  answerKeyReady: boolean,
-  participantsReady: boolean,
-  published: boolean,
-): ExamWorkspaceNextAction {
-  if (!answerKeyReady) return "ADD_ANSWER_KEY";
-  if (!participantsReady) return "ADD_PARTICIPANTS";
-  if (!published) return "PUBLISH_EXAM";
-  return "OPEN_OPTICAL";
-}

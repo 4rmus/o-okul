@@ -193,6 +193,38 @@ const institutionDashboardExamSchema = objectSchema({
   "reportStatus",
 ]);
 
+const teacherTodaySummarySchema = objectSchema({
+  generatedAt: stringSchema({ format: "date-time" }),
+  date: stringSchema({ format: "date" }),
+  teacherName: stringSchema(),
+  todayLessons: arraySchema(objectSchema({
+    id: stringSchema(),
+    classId: stringSchema(),
+    courseId: stringSchema(),
+    title: stringSchema(),
+    startsAt: stringSchema({ format: "date-time" }),
+    endsAt: stringSchema({ format: "date-time" }),
+  }, ["id", "classId", "title", "startsAt", "endsAt"])),
+  pendingHomework: arraySchema(objectSchema({
+    id: stringSchema(),
+    classId: stringSchema(),
+    title: stringSchema(),
+    dueAt: stringSchema({ format: "date-time" }),
+  }, ["id", "classId", "title"])),
+  pendingHomeworkCount: integerSchema({ minimum: 0 }),
+  latestReport: {
+    anyOf: [
+      objectSchema({
+        examId: stringSchema(),
+        title: stringSchema(),
+        startsAt: stringSchema({ format: "date-time" }),
+        latestGeneratedAt: stringSchema({ format: "date-time" }),
+      }, ["examId", "title", "latestGeneratedAt"]),
+      { type: "null" },
+    ],
+  },
+}, ["generatedAt", "date", "teacherName", "todayLessons", "pendingHomework", "pendingHomeworkCount", "latestReport"]);
+
 const institutionDashboardSummarySchema = objectSchema({
   generatedAt: stringSchema({ format: "date-time" }),
   institution: objectSchema({
@@ -2066,12 +2098,45 @@ const examWorkspaceReadModelSchema = objectSchema({
     absent: integerSchema({ minimum: 0 }),
   }, ["total", "registered", "attended", "absent"]),
   readiness: arraySchema(objectSchema({
-    key: { type: "string", enum: ["EXAM", "ANSWER_KEY", "PARTICIPANTS", "PUBLISHED", "OPTICAL_ENTRY"] },
+    key: {
+      type: "string",
+      enum: ["EXAM", "ANSWER_KEY", "PARTICIPANTS", "PUBLISHED", "OPTICAL_ENTRY", "OPTICAL_LAYOUT", "IMPORT", "MATCHING", "EVALUATION", "REPORT"],
+    },
     status: { type: "string", enum: ["READY", "BLOCKED"] },
-    blocker: { type: "string", enum: ["ANSWER_KEY_MISSING", "PARTICIPANTS_MISSING", "EXAM_NOT_PUBLISHED"] },
+    blocker: {
+      type: "string",
+      enum: [
+        "ANSWER_KEY_MISSING",
+        "PARTICIPANTS_MISSING",
+        "EXAM_NOT_PUBLISHED",
+        "OPTICAL_LAYOUT_MISSING",
+        "IMPORT_MISSING",
+        "UNMATCHED_ROWS",
+        "EVALUATION_PENDING",
+        "REPORT_MISSING",
+      ],
+    },
   }, ["key", "status"])),
-  nextAction: { type: "string", enum: ["ADD_ANSWER_KEY", "ADD_PARTICIPANTS", "PUBLISH_EXAM", "OPEN_OPTICAL"] },
-}, ["exam", "participantSummary", "readiness", "nextAction"]);
+  nextAction: {
+    type: "string",
+    enum: [
+      "ADD_ANSWER_KEY",
+      "ADD_PARTICIPANTS",
+      "PUBLISH_EXAM",
+      "OPEN_OPTICAL",
+      "UPLOAD_OPTICAL",
+      "RESOLVE_UNMATCHED",
+      "WAIT_EVALUATION",
+      "GENERATE_REPORT",
+      "OPEN_REPORT",
+    ],
+  },
+  progress: objectSchema({
+    openQuarantineCount: integerSchema({ minimum: 0 }),
+    matchedCount: integerSchema({ minimum: 0 }),
+    evaluatedCount: integerSchema({ minimum: 0 }),
+  }, ["openQuarantineCount", "matchedCount", "evaluatedCount"]),
+}, ["exam", "participantSummary", "readiness", "nextAction", "progress"]);
 
 const examParticipantCreateRequestSchema = objectSchema({
   bookletType: stringSchema(),
@@ -3247,6 +3312,9 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/me/institution-dashboard": {
     responseBody: institutionDashboardSummarySchema,
+  },
+  "get /api/v1/me/teacher/today": {
+    responseBody: teacherTodaySummarySchema,
   },
   "get /api/v1/setup/readiness": {
     responseBody: setupReadinessReadModelSchema,

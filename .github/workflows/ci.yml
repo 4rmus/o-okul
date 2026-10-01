@@ -158,6 +158,9 @@ jobs:
       DEVICE_BACKUP_POSTGRES_TEST_URL: postgresql://app:app@localhost:5432/o_okul
       DEVICE_BACKUP_POSTGRES_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/o_okul
       DEVICE_BACKUP_POSTGRES_REQUIRED: "1"
+      EXAM_WORKSPACE_POSTGRES_TEST_URL: postgresql://app:app@localhost:5432/o_okul
+      EXAM_WORKSPACE_POSTGRES_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/o_okul
+      EXAM_WORKSPACE_POSTGRES_REQUIRED: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -211,3 +214,4 @@ jobs:
           src/student/student-license-concurrency.postgres.test.ts
           src/tenant/tenant-reset-preview.postgres.test.ts
           src/operations/device-backup.postgres.test.ts
+          src/exam/exam-workspace-progress-store.postgres.test.ts

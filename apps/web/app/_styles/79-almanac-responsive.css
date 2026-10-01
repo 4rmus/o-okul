@@ -23,7 +23,7 @@
       top: 0;
       z-index: 50;
       display: grid;
-      grid-template-columns: 44px minmax(0, 1fr) 44px;
+      grid-template-columns: 44px minmax(0, 1fr) auto;
       align-items: center;
       gap: var(--space-2xs);
       border-bottom: 1px solid var(--color-rule);
@@ -221,6 +221,23 @@
       white-space: normal;
     }
 
+    .uh-context-bar.next-work-context > .uh-context-bar__item:first-child {
+      grid-column: 1 / -1;
+    }
+
+    /* WebKit'te select metni etiketin yanında 2 sütunlu hücreyi taşırıyordu (G5); etiket üste alınır. */
+    .uh-context-bar.next-work-context > .uh-context-bar__item:not(:first-child) {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--space-3xs);
+    }
+
+    .uh-context-bar.next-work-context select {
+      width: 100%;
+      min-width: 0;
+      max-width: none;
+    }
+
     .next-work-context.next-report-work-context {
       grid-template-columns: minmax(0, 1fr);
     }
@@ -233,7 +250,7 @@
       grid-template-columns: minmax(0, 1fr);
     }
 
-    .next-page-frame__header h1,
+    .uh-page-header h1,
     .uh-crud-page__header h2 {
       font-size: 1.5rem;
     }
@@ -325,6 +342,17 @@
       width: 100%;
       min-width: 0;
       padding-inline: var(--space-3xs);
+    }
+
+    .next-list-controls[aria-label="Liste kontrolleri"] .next-list-filter-details__content > .next-list-pagination {
+      grid-column: span 3;
+      flex-wrap: nowrap;
+      align-items: center;
+    }
+
+    .next-list-pagination .uh-button {
+      flex: 1;
+      min-width: 0;
     }
 
     .next-list-controls[aria-label="Liste kontrolleri"] > .uh-button:not([aria-label]) {
@@ -494,7 +522,7 @@
     }
 
     .next-mobile-topbar {
-      grid-template-columns: 44px minmax(0, 1fr) 44px;
+      grid-template-columns: 44px minmax(0, 1fr) auto;
       padding-inline: var(--space-2xs);
     }
 
@@ -599,3 +627,18 @@
   }
 }
 /* Hallmark redesign layer · END */
+
+/* Berrak G8: mobil üst çubukta tema anahtarı + komut paleti yan yana. */
+.next-mobile-topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+
+/* 320 px'te iki 44 px düğme marka ile birlikte sığmaz; dokunma hedefi 375 px ve üstünde 44 px. */
+@media (min-width: 375px) {
+  .next-mobile-topbar__actions .uh-button--icon {
+    width: 44px;
+    height: 44px;
+  }
+}

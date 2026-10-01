@@ -30,7 +30,11 @@ const files = {
   "apps/web/app/(app)/_shared/access.ts": readFileSync("apps/web/app/(app)/_shared/access.ts", "utf8"),
   "apps/web/app/(app)/_shared/report-chart-panel.tsx": readFileSync("apps/web/app/(app)/_shared/report-chart-panel.tsx", "utf8"),
   "apps/web/app/(app)/_shared/navigation.ts": readFileSync("apps/web/app/(app)/_shared/navigation.ts", "utf8"),
-  "apps/web/app/(app)/app-shell.tsx": readFileSync("apps/web/app/(app)/app-shell.tsx", "utf8"),
+  "apps/web/src/route-manifest.js": readFileSync("apps/web/src/route-manifest.js", "utf8"),
+  // Shell v3 (Berrak G5) app-shell.tsx + _shell/* dosyalarına bölündü; pin'ler shell kaynağının bütününe uygulanır.
+  "apps/web/app/(app)/app-shell.tsx": ["apps/web/app/(app)/app-shell.tsx", ...readdirSync("apps/web/app/(app)/_shell").sort().map((name) => `apps/web/app/(app)/_shell/${name}`)]
+    .map((path) => readFileSync(path, "utf8"))
+    .join("\n"),
   "apps/web/app/(app)/kurum/_shared/evidence-panels.tsx": readFileSync("apps/web/app/(app)/kurum/_shared/evidence-panels.tsx", "utf8"),
   "apps/web/app/(app)/kurum/_shared/import-template-panel.tsx": readFileSync("apps/web/app/(app)/kurum/_shared/import-template-panel.tsx", "utf8"),
   "apps/web/app/(app)/kurum/_shared/operation-summary.tsx": readFileSync("apps/web/app/(app)/kurum/_shared/operation-summary.tsx", "utf8"),
@@ -45,7 +49,7 @@ const files = {
   "apps/web/app/(app)/kurum/etutler/study-sessions-page.tsx": readFileSync("apps/web/app/(app)/kurum/etutler/study-sessions-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/finans/finance-page.tsx": readFileSync("apps/web/app/(app)/kurum/finans/finance-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/canli-yayin/live-release-page.tsx": readFileSync("apps/web/app/(app)/kurum/canli-yayin/live-release-page.tsx", "utf8"),
-  "apps/web/app/(app)/kurum/gozlemlenebilirlik/observability-page.tsx": readFileSync("apps/web/app/(app)/kurum/gozlemlenebilirlik/observability-page.tsx", "utf8"),
+  "apps/web/app/(app)/sistem/gozlemlenebilirlik/observability-page.tsx": readFileSync("apps/web/app/(app)/sistem/gozlemlenebilirlik/observability-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/guvenlik-denetimi/security-audit-page.tsx": readFileSync("apps/web/app/(app)/kurum/guvenlik-denetimi/security-audit-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/yedek-restore/backup-restore-page.tsx": readFileSync("apps/web/app/(app)/kurum/yedek-restore/backup-restore-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/kampusler/campuses-page.tsx": readFileSync("apps/web/app/(app)/kurum/kampusler/campuses-page.tsx", "utf8"),
@@ -70,7 +74,7 @@ const files = {
   "apps/web/app/(app)/kurum/seviyeler/grade-levels-page.tsx": readFileSync("apps/web/app/(app)/kurum/seviyeler/grade-levels-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/siniflar/class-detail-page.tsx": readFileSync("apps/web/app/(app)/kurum/siniflar/class-detail-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/siniflar/classes-page.tsx": readFileSync("apps/web/app/(app)/kurum/siniflar/classes-page.tsx", "utf8"),
-  "apps/web/app/(app)/kurum/sistem-sagligi/system-health-page.tsx": readFileSync("apps/web/app/(app)/kurum/sistem-sagligi/system-health-page.tsx", "utf8"),
+  "apps/web/app/(app)/sistem/sistem-sagligi/system-health-page.tsx": readFileSync("apps/web/app/(app)/sistem/sistem-sagligi/system-health-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/veliler/guardians-page.tsx": readFileSync("apps/web/app/(app)/kurum/veliler/guardians-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/veliler/guardian-detail-page.tsx": readFileSync("apps/web/app/(app)/kurum/veliler/guardian-detail-page.tsx", "utf8"),
   "apps/web/app/(app)/sistem/system-dashboard.tsx": readFileSync("apps/web/app/(app)/sistem/system-dashboard.tsx", "utf8"),
@@ -92,6 +96,7 @@ const files = {
   "apps/web/app/(app)/portals/_shared/teacher-panels.tsx": readFileSync("apps/web/app/(app)/portals/_shared/teacher-panels.tsx", "utf8"),
   "apps/web/app/(app)/portals/student-portal-page.tsx": readFileSync("apps/web/app/(app)/portals/student-portal-page.tsx", "utf8"),
   "apps/web/app/(app)/portals/teacher-portal-page.tsx": readFileSync("apps/web/app/(app)/portals/teacher-portal-page.tsx", "utf8"),
+  "apps/web/app/(app)/portals/teacher-today-page.tsx": readFileSync("apps/web/app/(app)/portals/teacher-today-page.tsx", "utf8"),
   "apps/web/app/(auth)/login/page.tsx": readFileSync("apps/web/app/(auth)/login/page.tsx", "utf8"),
   "apps/web/app/(auth)/tenant-login-page.tsx": readFileSync("apps/web/app/(auth)/tenant-login-page.tsx", "utf8"),
   "apps/web/app/globals.css": readCssWithLocalImports("apps/web/app/globals.css"),
@@ -127,10 +132,9 @@ const failures = [];
 const appSourcePaths = collectSourceFiles("apps/web/app/(app)", [".ts", ".tsx"]);
 const rawButtonSourcePaths = collectSourceFiles("apps/web/app", [".ts", ".tsx"]);
 const rawButtonAllowlist = new Map([
-  ["apps/web/app/(app)/app-shell.tsx", 6],
-  ["apps/web/app/(app)/kurum/_shared/revealable-phone.tsx", 1],
+  ["apps/web/app/(app)/app-shell.tsx", 5],
+  ["apps/web/app/(app)/_shell/nav-sidebar.tsx", 1],
   ["apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx", 5],
-  ["apps/web/app/(app)/kurum/sinavlar/exams-page.tsx", 1],
   ["apps/web/app/(app)/portals/guardian-portal-page.tsx", 1],
   ["apps/web/app/(app)/portals/teacher-portal-page.tsx", 1],
   ["apps/web/app/(auth)/tenant-login-page.tsx", 2],
@@ -146,8 +150,8 @@ for (const path of rawButtonSourcePaths) {
   }
 }
 
-if (rawButtonTotal !== 17) {
-  failures.push(`apps/web/app must contain exactly 17 semantic raw buttons; found ${rawButtonTotal}.`);
+if (rawButtonTotal !== 15) {
+  failures.push(`apps/web/app must contain exactly 15 semantic raw buttons; found ${rawButtonTotal}.`);
 }
 
 const visualSnapshotDirectory = "apps/web/e2e-next/__screenshots__/ui-visual-qa-next.spec.ts";
@@ -370,7 +374,9 @@ requireNoTokens("apps/web/app/(auth)/login/page.tsx", [
 ]);
 
 requireTokens("apps/web/src/list-controls.tsx", [
-  'import { Button, Field, FilterBar, Input, Select } from "@o-okul/ui";',
+  'import { Field, FilterBar, Input, Pagination, Select } from "@o-okul/ui";',
+  "<Pagination",
+  'className="next-list-pagination"',
   "type ReactNode",
   "children?: ReactNode;",
   '<FilterBar className="next-list-controls" role="group" aria-label="Liste kontrolleri">',
@@ -391,6 +397,15 @@ requireNoTokens("apps/web/src/list-controls.tsx", [
   "<label>\n        Göster",
   "<select",
 ]);
+
+// Berrak G7 (§5): kurum özetindeki bağlantı duvarı kalıcı olarak kaldırıldı; geri gelmemeli.
+requireNoTokens("apps/web/app/(app)/kurum/kurum-dashboard.tsx", [
+  'className="next-dashboard-compact-links"',
+  "Diğer kurum işlemleri",
+]);
+// DEC-20260930-03 (G8): bağlantı duvarının CSS pin'leri emekli; eşdeğer kanıt yukarıdaki requireNoTokens,
+// kurum dashboard golden'ı (route-family-dashboard-*) ve aşağıdaki ölü CSS yasağı.
+requireNoTokens("apps/web/app/globals.css", [".next-dashboard-compact-links", ".next-institution-growth-side"]);
 
 requireTokens("apps/web/app/(app)/kurum/kurum-dashboard.tsx", [
   "ActionCard,",
@@ -417,7 +432,6 @@ requireTokens("apps/web/app/(app)/kurum/kurum-dashboard.tsx", [
   'title="Son sınav ve rapor durumu"',
   'title="Sınıf karşılaştırması"',
   'caption="Son sınav sınıf başarı karşılaştırması"',
-  'className="next-dashboard-compact-links"',
   "slice(0, 3)",
   "buildMetrics",
   "buildAttentionItems",
@@ -621,7 +635,11 @@ requireNoTokens("apps/web/e2e-next/list-url-state-next.spec.ts", [
 requireTokens("apps/web/e2e-next/system-tenant-contract-next.spec.ts", [
   "Sistem tenant yönetimi sözleşmesi",
   "kurum operasyon özeti URL state ve tenant kapsamını korur",
-  "sistem referans ekranları statik kanıtı kontrol listesi olarak gösterir",
+  "sistem denetim referans ekranı statik kanıtı kontrol listesi olarak gösterir",
+  "sistem sağlığı canlı sağlık kartlarını kısmi hatada düşürmeden gösterir ve metrik okumaz",
+  'getByLabel("Sistem sağlığı doğrulama durumu")',
+  'getByLabel("Sistem izleme doğrulama durumu")',
+  "Bağlantı kurulamadı",
   'getByRole("region", { exact: true, name: "Kurum listesi özeti" })',
   "referans kontrol listesi",
   "forbiddenTenantScopedPaths",
@@ -807,9 +825,9 @@ requireTokens("apps/web/e2e-next/governance-evidence-contract-next.spec.ts", [
   'openWithGovernanceMocks(page, "/kurum/denetim", { height: 844, width: 390 }, { roles: ["ASSISTANT_ADMIN"] })',
   'openWithGovernanceMocks(page, "/kurum/canli-yayin", { height: 900, width: 390 },',
   'openWithGovernanceMocks(page, "/kurum/yedek-restore", { height: 900, width: 390 },',
-  'openWithGovernanceMocks(page, "/kurum/sistem-sagligi", { height: 900, width: 390 },',
-  'openWithGovernanceMocks(page, "/kurum/gozlemlenebilirlik", { height: 900, width: 768 },',
-  'systemEndpoints: "partial-metrics-failure"',
+  'for (const retiredPath of ["/kurum/sistem-sagligi", "/kurum/gozlemlenebilirlik"])',
+  'openWithGovernanceMocks(page, retiredPath, { height: 900, width: 390 }, { roles: ["TENANT_ADMIN"] })',
+  "expect(platformRequests).toEqual([])",
   'getByLabel("KVKK güven durumu")',
   'roles: ["TENANT_ADMIN"]',
   'getByRole("region", { exact: true, name: "KVKK operasyon özeti" })',
@@ -827,8 +845,6 @@ requireTokens("apps/web/e2e-next/governance-evidence-contract-next.spec.ts", [
   'getByLabel("Güvenlik güven durumu")',
   'getByLabel("Canlıya geçiş doğrulama durumu")',
   'getByLabel("Yedekleme ve geri yükleme güven durumu")',
-  'getByLabel("Sistem sağlığı doğrulama durumu")',
-  'getByLabel("Sistem izleme doğrulama durumu")',
   'getByRole("region", { exact: true, name: "Denetim operasyon özeti" })',
   'getByRole("table", { name: "Denetim kayıtları" })',
   'getByRole("region", { exact: true, name: "Yayın hazırlığı özeti" })',
@@ -891,7 +907,6 @@ requireTokens("apps/web/e2e-next/governance-evidence-contract-next.spec.ts", [
   'not.toContainText("entityId")',
   'not.toContainText("diff")',
   'not.toContainText("Gizli destek konusu")',
-  "Bağlantı kurulamadı",
   'await expect(page).toHaveURL(/\\/kurum\\/denetim$/)',
   'await expect(page).toHaveURL(/\\/kurum$/)',
   'Kanıt kapsamı: Sistem kaydı',
@@ -1120,16 +1135,16 @@ requireNoTokens("apps/web/app/(app)/kurum/_shared/import-template-panel.tsx", [
 ]);
 
 requireTokens("apps/web/e2e-next/optik-workspace-contract-next.spec.ts", [
-  "aktif sınav ve adım URL state ile korunur",
+  "aktif sınav ve adım sınav çalışma alanı URL'iyle korunur",
   "optik düzenleri ana bilgileri gösterir, destek ayrıntılarını kapalı tutar",
   "OPTIK_129",
   "YANIT",
   "OPTIK_840_LGS",
   'openWithOptikMocks(page, "/kurum/optik?examId=exam-optik&tab=upload")',
-  'searchParams.get("examId")).toBe("exam-optik")',
-  'searchParams.get("tab")).toBe("upload")',
-  'searchParams.get("tab")).toBe("quarantine")',
-  'searchParams.get("tab")).toBeNull()',
+  'url.pathname === "/kurum/sinavlar/exam-optik/optik/yukleme"',
+  'url.pathname === "/kurum/sinavlar/exam-optik/optik/eslesmeyenler"',
+  'url.pathname === "/kurum/sinavlar/exam-optik/optik/duzen"',
+  'page.goto("/kurum/optik?examId=exam-optik&tab=quarantine")',
   'page.setViewportSize({ height: 844, width: 390 })',
   'getByRole("tab", { name: "1. Optik düzen" })',
   'getByRole("tab", { name: "2. Optik yükleme" })',
@@ -1163,7 +1178,7 @@ requireTokens("apps/web/e2e-next/optik-workspace-contract-next.spec.ts", [
   'getByRole("region", { name: "Raporlara geçiş" })',
   'reportHandoff.locator(".next-report-status-grid")).toHaveCount(0)',
   'getByRole("link", { name: "Rapor çalışma alanına geç" })',
-  '"/kurum/raporlar?examId=exam-optik"',
+  '"/kurum/sinavlar/exam-optik/rapor/genel"',
   'getByRole("table", { name: "Hazır optik raporlar" })).toHaveCount(0)',
   'getByRole("table", { name: "Optik katılımcı sonuçları" })).toHaveCount(0)',
   "expectNoHorizontalOverflow",
@@ -1271,9 +1286,11 @@ requireTokens("apps/web/e2e-next/teacher-portal-contract-next.spec.ts", [
   'focusMetrics.locator(".uh-info-item")).toHaveCount(8)',
   "Bugün yapılacaklar",
   "3 iş",
-  'getByRole("link", { name: /Yoklama kaydet: 2 kayıt.*Yoklama.*Kaydet.*Bugün.*2026-06-17 için yoklama/ })',
-  'getByRole("link", { name: /Not ekle: 2 not/ })',
-  'getByRole("link", { name: /Raporu incele: %81,7/ })',
+  // Berrak G7: öğretmen aksiyon şeridi günlük özete (teacher-today-page.tsx) taşındı.
+  'getByRole("link", { name: /Yoklama al: 1 ders/ })',
+  'getByRole("link", { name: /Ödev kontrolü: 1 ödev/ })',
+  'getByRole("link", { name: /Son sınav raporu/ })',
+  "expectTeacherTodaySummary",
   "expectPortalActionHrefs(actionStrip",
   "clickAllPortalActionLinks",
   "expect.poll(() => mutationRequests).toEqual([])",
@@ -1307,8 +1324,8 @@ requireTokens("apps/web/e2e-next/teacher-portal-contract-next.spec.ts", [
   'summary.locator(".uh-metric-card")).toHaveCount(labels.length)',
   ".uh-metric-card__label",
   "toHaveText(labels)",
-  'getByRole("group", { exact: true, name: "Günlük ders akışı özeti" })',
-  '["Sıradaki ders", "Öğrenci kapsamı", "Ödev kontrolü", "Seçili başarı"]',
+  'getByRole("group", { exact: true, name: "Bugün özeti" })',
+  '["Bugünkü ders", "Sıradaki ders", "Ödev kontrolü"]',
   "next-portal-focus-target",
   'getByRole("region", { name: "Öğretmen günlük işlemleri" })',
   'getByRole("region", { exact: true, name: "Öğretmen öğrenci kapsamı" })',
@@ -1334,7 +1351,8 @@ requireTokens("apps/web/e2e-next/teacher-portal-contract-next.spec.ts", [
   'getByRole("region", { exact: true, name: "Öğretmen notları" })',
   'getByRole("table", { name: "Öğretmen notları" })',
   'locator("thead th")).toHaveText([',
-  "for (const panel of [today, profile, reports])",
+  "for (const panel of [today, profile])",
+  "async function expectTeacherClassReportsPanel",
   'getByRole("region", { exact: true, name: "Öğretmen ödev kontrolü" })',
   'getByRole("region", { exact: true, name: "Öğretmen materyal atamaları" })',
   'getByRole("heading", { name: "Ödev Kontrolü" })',
@@ -1376,7 +1394,7 @@ requireTokens("apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts",
   "Öğrenci veli portalı sözleşmesi",
   "{ height: 844, width: 390 }",
   "{ height: 1024, width: 768 }",
-  'options.withReport === false ? "/ogrenci" : "/ogrenci?examId=exam-demo-isem-lgs-1"',
+  'options.withReport === false || options.path ? path : `${path}?examId=exam-demo-isem-lgs-1`',
   'options.withReport === false ? "/veli" : "/veli?examId=exam-demo-isem-lgs-1"',
   "examId yokken demo rapor endpointine gitmez",
   'getByRole("heading", { level: 1, name: "Öğrenci Portalı" })',
@@ -1444,7 +1462,7 @@ requireTokens("apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts",
   "Başarı % ana metrik",
   "Finans görünürlüğü izin kapsamına bağlıdır",
   'getByRole("group", { exact: true, name: "Günlük durum özeti" })',
-  '["Duyuru", "Ödev", "Devamsızlık", "Son sınav"]',
+  '["Bugün teslim", "Son sınav", "Duyuru"]',
   "next-portal-focus-target",
   "expectNoClippedVisibleText",
   'getByRole("link", { name: /Duyuruları oku: 1 okunmamış/ })',
@@ -1542,7 +1560,7 @@ requireTokens("apps/web/e2e-next/report-workspace-contract-next.spec.ts", [
   'getByRole("region", { name: "Öğrenci karne özeti özet sayfası" })',
   'getByRole("region", { name: "Rapor özeti" }).locator(".uh-metric-card")).toHaveCount(0)',
   'analyticsPanel.locator(".next-report-summary-card")).toHaveCount(0)',
-  'getByRole("region", { name: "Hata kitapçığı" })',
+  'getByRole("region", { exact: true, name: "Hata kitapçığı" })',
   'getByRole("table", { name: "Seçili öğrenci hata kitapçığı" })',
   'getByRole("region", { name: "Rapor çıktıları" })',
   "toHaveClass(/next-report-output-panel/)",
@@ -1691,27 +1709,37 @@ requireTokens("apps/web/app/(app)/kurum/_shared/import-template-panel.tsx", [
   "Kazanım XLSX şablonu",
 ]);
 
-requireTokens("apps/web/app/(app)/_shared/navigation.ts", [
-  'const institutionOperationEvidenceCapability = "operation:manage"',
-  '{ href: "/kurum/kurulum", icon: Settings, label: "Kurulum", requiredCapability: "setup:manage" }',
-  'navigationGroup(\n    "Ayarlar",',
-  '{ href: "/kurum/operasyon-ve-kanit", icon: ShieldCheck, label: "Operasyon ve kanıt", requiredCapability: institutionOperationEvidenceCapability }',
-  '{ href: "/kurum/denetim", hiddenFromRail: true, icon: ClipboardList, label: "Denetim", requiredCapability: "tenant-audit:read", requiredPersona: "STAFF" }',
-  '{ href: "/kurum/kvkk", hiddenFromRail: true, icon: ShieldCheck, label: "KVKK", requiredCapability: "privacy:manage" }',
-  '{ href: "/kurum/guvenlik-denetimi", hiddenFromRail: true, icon: ShieldCheck, label: "Güvenlik Denetimi", requiredCapability: institutionOperationEvidenceCapability }',
-  '{ href: "/kurum/canli-yayin", hiddenFromRail: true, icon: Activity, label: "Yayın Hazırlığı", requiredCapability: institutionOperationEvidenceCapability }',
-  '{ href: "/kurum/raporlar", icon: BarChart3, label: "Sınav Raporları", requiredCapability: "academic:manage" }',
-  '"/kurum": "Kurum Özeti"',
+requireTokens("apps/web/src/route-manifest.js", [
+  'const operationEvidenceCapability = "operation:manage"',
+  'navRoute("/kurum/kurulum", "Kurulum", "Ayarlar", "Settings", { capability: "setup:manage" })',
+  'export const institutionNavGroupLabels = ["Bugün", "Kişiler", "Akademik", "Sınav", "İletişim", "Finans", "Ayarlar"];',
+  'navRoute("/kurum/operasyon-ve-kanit", "Operasyon ve kanıt", "Ayarlar", "ShieldCheck", { capability: operationEvidenceCapability, hub: "/kurum/operasyon-ve-kanit", tabLabel: "Genel bakış" })',
+  'navRoute("/kurum/denetim", "Denetim", "Ayarlar", "ClipboardList", { capability: "tenant-audit:read", hiddenFromRail: true, hub: "/kurum/operasyon-ve-kanit", operationEvidence: true, persona: "STAFF" })',
+  'navRoute("/kurum/kvkk", "KVKK", "Ayarlar", "ShieldCheck", { capability: "privacy:manage", hiddenFromRail: true, hub: "/kurum/operasyon-ve-kanit", operationEvidence: true })',
+  'navRoute("/kurum/guvenlik-denetimi", "Güvenlik Denetimi", "Ayarlar", "ShieldCheck", { capability: operationEvidenceCapability, hiddenFromRail: true, hub: "/kurum/operasyon-ve-kanit", operationEvidence: true, tabLabel: "Güvenlik denetimi" })',
+  'navRoute("/kurum/canli-yayin", "Yayın Hazırlığı", "Ayarlar", "Activity", { capability: operationEvidenceCapability, hiddenFromRail: true, hub: "/kurum/operasyon-ve-kanit", operationEvidence: true, tabLabel: "Yayın hazırlığı" })',
+  'navRoute("/kurum/raporlar", "Sınav Raporları", "Sınav", "BarChart3", { capability: "academic:manage", keywords: ["karne"], menuLabel: "Raporlar" })',
+  'navRoute("/kurum", "Özet", "Bugün", "LayoutDashboard", { breadcrumbLabel: "Kurum Özeti" })',
+  'commandAction("/kurum/kurulum", "Yeni dönem açılışı", "İş akışı", "setup:manage")',
 ]);
 
-requireNoTokens("apps/web/app/(app)/_shared/navigation.ts", [
-  'requiredCapability: "audit:read"',
+requireTokens("apps/web/app/(app)/_shared/navigation.ts", [
+  '} from "../../../src/route-manifest.js";',
+  "...(route.capability ? { requiredCapability: route.capability } : {}),",
+  "...(route.persona ? { requiredPersona: route.persona } : {}),",
+  "institutionRoutes.filter((route) => isSmsEnabled || !route.requiresSms)",
+]);
+
+requireNoTokens("apps/web/src/route-manifest.js", [
+  'capability: "audit:read"',
 ]);
 
 requireTokens("apps/web/app/(app)/app-shell.tsx", [
-  "Button, Dialog, Field, Input, Panel, StatusBadge, type StatusBadgeProps",
+  'import { Button, Dialog, Field, Input } from "@o-okul/ui";',
+  'import { Button, Panel, StatusBadge, type StatusBadgeProps } from "@o-okul/ui";',
   '<Field className="next-command-search" label="Komut ara">',
-  'hasCapabilityForRoles(roles, "setup:manage") ? commandItem("/kurum/kurulum"',
+  "hasInstitutionAccess(roles) && (!action.capability || hasCapabilityForRoles(roles, action.capability))",
+  'action.scope === "system"\n        ? hasSystemAccess(roles)',
   'actions={<StatusBadge tone={statusTone}>{statusLabel}</StatusBadge>}',
   'description={`${activeDevices.length} aktif cihaz`}',
   "getPushStatusTone",
@@ -1730,12 +1758,12 @@ requireNoTokens("apps/web/app/(app)/_shared/access.ts", [
   "hasCapabilityForRoles(roles, hiddenCapability)",
 ]);
 
-requireTokens("apps/web/app/(app)/kurum/gozlemlenebilirlik/observability-page.tsx", [
+requireTokens("apps/web/app/(app)/sistem/gozlemlenebilirlik/observability-page.tsx", [
   '"Bağlantı sorunu arttı"',
   '"Yanıt süresi uzadı"',
 ]);
 
-requireNoTokens("apps/web/app/(app)/kurum/gozlemlenebilirlik/observability-page.tsx", [
+requireNoTokens("apps/web/app/(app)/sistem/gozlemlenebilirlik/observability-page.tsx", [
   '"OOkulHigh5xxRate"',
   '"OOkulSlowRequests"',
 ]);
@@ -3237,7 +3265,7 @@ requireNoTokens("apps/web/app/(app)/kurum/denetim/audit-logs-page.tsx", [
   "diff ham",
 ]);
 
-requireTokens("apps/web/app/(app)/kurum/sistem-sagligi/system-health-page.tsx", [
+requireTokens("apps/web/app/(app)/sistem/sistem-sagligi/system-health-page.tsx", [
   "OperationSummary",
   "OperationSummaryAction",
   "OperationSummaryBadge",
@@ -3246,7 +3274,7 @@ requireTokens("apps/web/app/(app)/kurum/sistem-sagligi/system-health-page.tsx", 
   "Panel",
   "StatusBadge",
   'ariaLabel="Sistem sağlığı özeti"',
-  'caption="Sistem bağlantıları ve kullanım durumu"',
+  'caption="Sistem bağlantıları"',
   'caption="Teknik sistem kontrol adresleri"',
   'density="compact"',
   'mobilePriority: "primary"',
@@ -3265,35 +3293,40 @@ requireTokens("apps/web/app/(app)/kurum/sistem-sagligi/system-health-page.tsx", 
   'scope: "staging-prod"',
 ]);
 
-requireNoTokens("apps/web/app/(app)/kurum/sistem-sagligi/system-health-page.tsx", [
+requireNoTokens("apps/web/app/(app)/sistem/sistem-sagligi/system-health-page.tsx", [
   "MetricPanelGrid",
   "next-report-list",
+  "/metrics",
 ]);
 
 requireTokens("apps/web/e2e-next/governance-evidence-contract-next.spec.ts", [
+  "platform sağlık yüzeyleri tenant düzleminden emekli ve yönlendirilir",
+  "toHaveURL(/\\/kurum\\/operasyon-ve-kanit$/)",
+  'getByRole("link", { name: "Sistem Sağlığı" })).toHaveCount(0)',
+  'getByRole("link", { name: "Sistem İzleme" })).toHaveCount(0)',
+]);
+
+requireTokens("apps/web/e2e-next/system-tenant-contract-next.spec.ts", [
   'getByRole("region", { exact: true, name: "Sistem sağlığı özeti" })',
-  'getByRole("table", { name: "Sistem bağlantıları ve kullanım durumu" })',
+  'getByRole("table", { name: "Sistem bağlantıları" })',
   'getByRole("table", { name: "Teknik sistem kontrol adresleri" })',
   "Sistem sağlığı özeti önerilen işlemler",
+  'not.toContainText("/metrics")',
+  "expect(metricsRequests).toEqual([])",
   'getByRole("region", { exact: true, name: "Sistem izleme özeti" })',
-  'getByRole("table", { name: "Anlık sistem kontrol adresleri" })',
-  "Sistem izleme özeti önerilen işlemler",
-  "Anlık durum kısmi",
   "observability:uat:check",
   "alert:webhook:smoke",
   "sentry:smoke",
 ]);
 
-requireTokens("apps/web/app/(app)/kurum/gozlemlenebilirlik/observability-page.tsx", [
+requireTokens("apps/web/app/(app)/sistem/gozlemlenebilirlik/observability-page.tsx", [
   "OperationSummary",
   "OperationSummaryAction",
   "OperationSummaryBadge",
-  "OperationSummaryItem",
   "DataTable",
   "Panel",
   "StatusBadge",
   'ariaLabel="Sistem izleme özeti"',
-  'caption="Anlık sistem kontrol adresleri"',
   'caption="Sistem izleme panoları"',
   'caption="Sistem uyarı kuralları"',
   'caption="Teknik sistem izleme kontrolleri"',
@@ -3303,25 +3336,19 @@ requireTokens("apps/web/app/(app)/kurum/gozlemlenebilirlik/observability-page.ts
   'priority: "primary"',
   'priority: "secondary"',
   'sticky: "left"',
-  "buildObservabilitySummaryItems",
-  "buildObservabilitySummaryBadges",
-  "buildObservabilitySummaryActions",
-  "buildObservabilitySignalRows",
   "buildChecklistRows",
-  "observabilityEndpointState",
-  "observabilityEndpointTone",
   "Uyarı kanalı",
   "İzleme panoları",
   'ariaLabel="Sistem izleme doğrulama durumu"',
-  'scope: sourceLabel(apiUrl) === "Bu bilgisayar" ? "local-static" : "configured-api"',
-  'scope: "configured-api"',
   'scope: "live-required"',
   'scope: "staging-prod"',
 ]);
 
-requireNoTokens("apps/web/app/(app)/kurum/gozlemlenebilirlik/observability-page.tsx", [
+requireNoTokens("apps/web/app/(app)/sistem/gozlemlenebilirlik/observability-page.tsx", [
   "MetricPanelGrid",
   "next-report-list",
+  "/metrics",
+  "fetch(",
 ]);
 
 requireTokens("apps/web/app/(app)/kurum/canli-yayin/live-release-page.tsx", [
@@ -3717,7 +3744,7 @@ requireTokens("apps/web/app/(app)/kurum/optik/parser-config-page.tsx", [
   'title="Raporlara geçiş"',
   'description={`${reportMessage} Analiz, öğrenci sonuçları ve çıktılar Raporlar çalışma alanında yönetilir.`}',
   '<MetricGrid aria-label="Rapor hazırlama durumu" role="region">',
-  'href={`/kurum/raporlar?examId=${encodeURIComponent(examId)}`}',
+  "href={reportWorkspaceHref(examId)}",
   "Rapor çalışma alanına geç",
   'mobileLabel: "Çöz"',
   'mobilePriority: "primary"',
@@ -4147,7 +4174,10 @@ requireTokens("apps/web/app/(app)/portals/_shared/portal-shell.tsx", [
   "ActionCard,",
   "Panel,",
   "MetricCard,",
-  "MetricGrid as UiMetricGrid",
+  "EmptyState, LoadingState, MetricCard, MetricGrid,",
+  "export function PortalMetricGrid(",
+  '<LoadingState aria-busy="true" aria-label={title} className="next-portal-state" data-state="loading" label={title} />',
+  'role={state === "error" ? "alert" : "status"}',
   "MetricCardProps",
   "PortalMetricItem",
   "PortalWorkspace",
@@ -4169,7 +4199,7 @@ requireTokens("apps/web/app/(app)/portals/_shared/portal-shell.tsx", [
   "statusLabel?: string",
   'actions={<p className="next-portal-brief__summary">{summary}</p>}',
   'description={<span className="next-section-eyebrow">Bugünün odağı</span>}',
-  '<UiMetricGrid aria-label={`${title} özeti`} className="next-portal-brief__grid" role="group">',
+  '<MetricGrid aria-label={`${title} özeti`} className="next-portal-brief__grid" role="group">',
   '<MetricCard',
   'className="next-portal-brief__item"',
   "tone={portalDailyBriefMetricTone(item.tone)}",
@@ -4198,7 +4228,7 @@ requireTokens("apps/web/app/(app)/portals/_shared/portal-shell.tsx", [
   "next-portal-workspace",
   "next-portal-workspace__main",
   "next-portal-workspace__side",
-  '<UiMetricGrid aria-label="Portal özeti" className="next-portal-summary-grid" role="region">',
+  '<MetricGrid aria-label="Portal özeti" className="next-portal-summary-grid" role="region">',
   "next-portal-summary-card",
   "portalMetricDescription",
   "portalMetricTone",
@@ -4230,6 +4260,9 @@ requireNoTokens("apps/web/app/(app)/portals/_shared/portal-shell.tsx", [
   "next-portal-action-strip__badges",
   "next-portal-action-strip__state",
   "next-list-panel",
+  "MetricGrid as UiMetricGrid",
+  "export function MetricGrid(",
+  "<Skeleton />",
 ]);
 
 requireNoTokens("apps/web/app/(app)/portals/guardian-portal-page.tsx", [
@@ -4404,6 +4437,23 @@ requireNoTokens("apps/web/app/(app)/portals/_shared/homework-panels.tsx", [
   "?? assignment.termId",
 ]);
 
+// Berrak G7 (§5): öğretmen günlük aksiyon şeridi ve özeti; eski overview şerit pin'lerinin eşdeğeri.
+requireTokens("apps/web/app/(app)/portals/teacher-today-page.tsx", [
+  "PortalActionStrip",
+  "type PortalActionItem",
+  'ariaLabel="Öğretmen günlük aksiyonları"',
+  'label: "Yoklama al"',
+  'label: "Ödev kontrolü"',
+  'label: "Son sınav raporu"',
+  "statusLabel:",
+  'href: href("/ogretmen/ders-akisi")',
+  'href: href("/ogretmen/odevler")',
+  "/ogretmen/raporlar?examId=",
+  "/me/teacher/today",
+  "x-role-preview-token",
+  'title="Bugün"',
+]);
+
 requireTokens("apps/web/app/(app)/portals/teacher-portal-page.tsx", [
   "Alert,",
   "Panel,",
@@ -4411,28 +4461,9 @@ requireTokens("apps/web/app/(app)/portals/teacher-portal-page.tsx", [
   "SegmentedControl,",
   "Select,",
   "Textarea,",
-  "PortalActionStrip",
-  "type PortalActionItem",
-  "teacherActionItems",
-  'ariaLabel="Öğretmen günlük aksiyonları"',
-  'label: "Öğrenci seç"',
-  'label: "Yoklama kaydet"',
-  'label: "Not ekle"',
-  'label: "Materyal ata"',
-  'label: "Ödev kontrol et"',
-  'label: "Raporu incele"',
-  'label: "Destek talebini takip et"',
-  'label: "Önizleme durumu"',
-  "contextLabel:",
-  "statusLabel:",
-  'href: teacherPortalHref("/ogretmen/ogrenci-takibi", isRolePreview)',
   'aria-label="Öğretmen öğrenci kapsamı"',
   'title="Öğrenciler"',
   '<SegmentedControl className="next-segmented" label="Öğrenci seçimi">',
-  'href: teacherPortalHref(isRolePreview ? "/ogretmen" : "/ogretmen/ogrenci-takibi", isRolePreview)',
-  'href: teacherPortalHref("/ogretmen/odevler", isRolePreview)',
-  'href: teacherPortalHref("/ogretmen/raporlar", isRolePreview)',
-  'href: teacherPortalHref("/ogretmen/destek", isRolePreview)',
   'id="portal-teacher-actions"',
   'className="next-teacher-action-grid"',
   'as="form"',
@@ -4696,8 +4727,6 @@ requireTokens("apps/web/app/globals.css", [
   ".next-dashboard-exam-panel .uh-panel__body",
   ".next-dashboard-exam-summary",
   ".next-dashboard-exam-summary dl",
-  ".next-dashboard-compact-links",
-  ".next-dashboard-compact-links a",
   ".next-portal-karne-detail",
   ".next-portal-karne-empty",
   ".next-portal-karne-sheet",
@@ -4817,7 +4846,7 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   "`aurora-ops-landing-${viewport.width}.png`",
   "expectPortalDailyBrief",
   'getByRole("region", { name: "Günlük durum" })',
-  'getByRole("region", { name: "Günlük ders akışı" })',
+  'getByRole("region", { exact: true, name: "Bugün" })',
   'brief.getByRole("group", { name: /özeti/ })',
   'metrics).toHaveClass(/uh-metric-grid/)',
   'metrics.locator(".next-portal-brief__item.uh-metric-card")).toHaveCount(expectedCount)',
@@ -4831,7 +4860,7 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   'dashboardSummaryMetrics.locator(".uh-metric-card")).toHaveCount(4)',
   'getByRole("region", { exact: true, name: "Son sınav ve rapor durumu" })',
   'getByRole("heading", { name: "Sınıf karşılaştırması" })',
-  'getByRole("region", { name: "Diğer kurum işlemleri" }).getByRole("link")).toHaveCount(4)',
+  'getByRole("region", { name: "Diğer kurum işlemleri" })).toHaveCount(0)',
   'getByRole("region", { exact: true, name: "Oturum özeti" })).toHaveCount(0)',
   'getByRole("region", { exact: true, name: "Günlük özet" })).toHaveCount(0)',
   'not.toContainText("tenant-faz9")',
@@ -5192,8 +5221,8 @@ function validateRouteFamilySmokeContract() {
   const manifestRoutes = [...manifestSource.matchAll(/^\s*route\("([^"]+)"/gm)].map((match) => match[1]);
   const duplicateRoutes = manifestRoutes.filter((route, index) => manifestRoutes.indexOf(route) !== index);
   const fileSystemRoutes = collectRoutePageTemplates("apps/web/app").sort();
-  if (manifestRoutes.length !== 87) {
-    failures.push(`${path} route manifest must contain exactly 87 route tests; found ${manifestRoutes.length}.`);
+  if (manifestRoutes.length !== 93) {
+    failures.push(`${path} route manifest must contain exactly 93 route tests; found ${manifestRoutes.length}.`);
   }
   if (duplicateRoutes.length > 0) {
     failures.push(`${path} route manifest contains duplicate routes: ${[...new Set(duplicateRoutes)].join(", ")}.`);
@@ -5203,8 +5232,8 @@ function validateRouteFamilySmokeContract() {
   }
 
   const primaryTaskCount = manifestSource.match(/\{ role: "(?:button|form|link|region)", name: "[^"]+" \}/g)?.length ?? 0;
-  if (primaryTaskCount !== 87) {
-    failures.push(`${path} must give all 87 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
+  if (primaryTaskCount !== 93) {
+    failures.push(`${path} must give all 93 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
   }
 
   const viewportStart = source.indexOf("const routeViewports = [");

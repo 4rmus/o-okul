@@ -4,6 +4,7 @@ import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { MeTeacherTodayService } from "./me-teacher-today.service.js";
 import { AppModule } from "../app.module.js";
 import { AttendanceService } from "../attendance/attendance.service.js";
 import { HomeworkService } from "../homework/homework.service.js";
@@ -26,7 +27,11 @@ describe("Me access matrix", () => {
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      // Rapor dizini Postgres sınav deposu ister; bu matris yalnız erişim sınırını doğrular (birleşim: me-teacher-today.service.test.ts).
+      .overrideProvider(MeTeacherTodayService)
+      .useValue({ get: async () => ({ generatedAt: "2026-10-01T06:00:00.000Z", date: "2026-10-01", teacherName: "Öğretmen", todayLessons: [], pendingHomework: [], pendingHomeworkCount: 0, latestReport: null }) })
+      .compile();
 
     app = moduleRef.createNestApplication();
     await app.listen(0, "127.0.0.1");
@@ -222,6 +227,7 @@ describe("Me access matrix", () => {
       "/me/teacher",
       "/me/teacher/lookups",
       "/me/teacher/schedule",
+      "/me/teacher/today",
       "/me/teacher/announcements",
       "/me/teacher/students",
       "/me/teacher/students/student-a/enrollments",

@@ -644,6 +644,8 @@ const expectations = {
     "V1 karne görsel kabul eşiği",
     "--max-diff-ratio 0.53",
     "--max-mean-channel-delta 36",
+    "DEC-20260930-04",
+    "DEC-20260613-04'ün yerini alır",
     "DEC-20260613-05",
     "DEC-20260808-01",
     "geri çekme kuyruktaki bekleyen gönderileri bastırır",
@@ -2922,9 +2924,10 @@ const expectations = {
     "Production plan/durum kontrolü geçti",
   ],
   "scripts/check-karne-visual-contract.mjs": [
-    "DEC-20260613-04",
-    "0.53",
-    "36",
+    // DEC-20260930-04: karne görsel kabulü golden + geometri (eski ADIGÜZEL benzerlik eşiği 0.53/36 emekli).
+    "DEC-20260930-04",
+    "0.02",
+    "KARNE-PAPER-PINS",
     "karne:visual-contract:check",
     "scripts/compare-karne-visual-evidence.mjs",
     "Karne visual contract wiring check passed.",

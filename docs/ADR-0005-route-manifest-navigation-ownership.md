@@ -13,6 +13,19 @@ checker bu envanteri `apps/web/app/**/page.tsx` ile birebir karşılaştırır.
 Navigation, breadcrumb ve command palette'in aynı manifestten üretilmesi `UI-02` diliminde yapılır.
 Manifest frontend ön kontrolüdür; backend capability ve tenant/scope guard'ının yerine geçmez.
 
+## Berrak güncellemesi (2026-09-30)
+
+UI-02 ile kanonik kaynak smoke spec yerine runtime manifest `apps/web/src/route-manifest.js`
+olur. Navigation, breadcrumb, komut paleti ve hub sekmeleri bu manifestten türetilir; smoke spec
+manifestle parity kontrolüne devam eder. Karar: DEC-20260930-01, plan:
+`docs/ui-ux-berrak-redesign-plan.md` §3.
+
+Uygulandı (G3): `apps/web/e2e-next/route-architecture-manifest.js` → `apps/web/src/route-manifest.js`
+(+ `.d.ts`). `navigation.ts` yalnız ikon eşlemesi ve menü şekli üretir; breadcrumb etiketleri,
+detay ebeveynleri ve komut paleti aksiyonları manifestten gelir. `pnpm route-manifest:check`
+manifest route'larını page envanterine, hub köklerine ve palette hedeflerine karşı doğrular ve
+elle tutulan kopyaların geri gelmesini engeller.
+
 ## Gerekçe
 
 İkinci bir route listesi oluşturmadan mevcut 81-route smoke yatırımı sahiplik ve mimari gate için

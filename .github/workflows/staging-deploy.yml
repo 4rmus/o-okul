@@ -450,6 +450,7 @@ jobs:
           STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
           STAGING_DEPLOY_DIR: ${{ vars.STAGING_DEPLOY_DIR }}
           STAGING_EVIDENCE_ENV_B64: ${{ secrets.STAGING_EVIDENCE_ENV_B64 }}
+          STAGING_METRICS_SCRAPE_TOKEN: ${{ secrets.STAGING_METRICS_SCRAPE_TOKEN }}
         run: |
           set -euo pipefail
 
@@ -496,8 +497,13 @@ jobs:
           }
           writeFileSync(`${outputDir}/webhook-url`, url.href, { mode: 0o600 });
           writeFileSync(`${outputDir}/webhook-token`, token, { mode: 0o600 });
+          const metricsScrapeToken = process.env.STAGING_METRICS_SCRAPE_TOKEN ?? "";
+          if (!/^[A-Za-z0-9._~-]{32,}$/.test(metricsScrapeToken)) {
+            throw new Error("STAGING_METRICS_SCRAPE_TOKEN must be at least 32 characters from [A-Za-z0-9._~-].");
+          }
+          writeFileSync(`${outputDir}/metrics-scrape-token`, metricsScrapeToken, { mode: 0o600 });
           NODE
-          tar -C "$alertmanager_secret_stage" -czf "$alertmanager_secret_archive" webhook-url webhook-token
+          tar -C "$alertmanager_secret_stage" -czf "$alertmanager_secret_archive" webhook-url webhook-token metrics-scrape-token
 
           tar -czf /tmp/o-okul-staging-compose.tgz \
             docker-compose.yml \
@@ -656,7 +662,7 @@ jobs:
             exit 1
           fi
           tar -xzf .alertmanager-secrets.tgz -C "$alertmanager_secrets_dir"
-          for secret_file in webhook-url webhook-token; do
+          for secret_file in webhook-url webhook-token metrics-scrape-token; do
             secret_path="$alertmanager_secrets_dir/$secret_file"
             if [ ! -f "$secret_path" ] || [ -L "$secret_path" ] || [ ! -s "$secret_path" ]; then
               echo "Alertmanager secret file is missing or unsafe: $secret_file" >&2
@@ -671,6 +677,7 @@ jobs:
           done
 
           release_env_file=".env.release.next"
+          (umask 077 && : > "$release_env_file")
           cat > "$release_env_file" <<EOF
           WEB_IMAGE=${IMAGE_PREFIX}/web:${IMAGE_TAG}
           API_IMAGE=${IMAGE_PREFIX}/api:${IMAGE_TAG}
@@ -679,7 +686,9 @@ jobs:
           ALERTMANAGER_SECRETS_DIR=${alertmanager_secrets_dir}
           SENTRY_RELEASE=${IMAGE_TAG}
           ROLLBACK_IMAGE_TAG=${ROLLBACK_IMAGE_TAG}
+          METRICS_SCRAPE_TOKEN=$(cat "$alertmanager_secrets_dir/metrics-scrape-token")
           EOF
+          chmod 600 "$release_env_file"
 
           if [ ! -s .ghcr_read_token ]; then
             echo "GHCR read token file is missing." >&2

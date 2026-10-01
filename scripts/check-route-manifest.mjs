@@ -1,17 +1,24 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import {
+  breadcrumbLabels,
+  commandActions,
+  institutionNavGroupLabels,
+  institutionRoutes,
   moduleDecisions,
+  navigationRoutes,
+  portalHomeRoutes,
   resolveRouteArchitecture,
   routeBoundaries,
   routeFamilies,
-} from "../apps/web/e2e-next/route-architecture-manifest.js";
+} from "../apps/web/src/route-manifest.js";
 
 const appRoot = "apps/web/app";
 const smokePath = "apps/web/e2e-next/ui-route-family-smoke-next.spec.ts";
 const failures = [];
 const pageRoutes = collectPageRoutes(appRoot).sort();
-const retiredRoutes = new Set(["/kurum/uat-rollback"]);
+const redirectedRetiredRoutes = ["/kurum/sistem-sagligi", "/kurum/gozlemlenebilirlik"];
+const retiredRoutes = new Set(["/kurum/uat-rollback", ...redirectedRetiredRoutes]);
 const smoke = readFileSync(smokePath, "utf8");
 const start = smoke.indexOf("const routeCases = [");
 const end = smoke.indexOf("] satisfies RouteCase[];", start);
@@ -29,6 +36,10 @@ if (new Set(manifestRoutes).size !== manifestRoutes.length) failures.push("route
 if (manifestPersonas.size !== pageRoutes.length) failures.push("route smoke persona envanteri eksik veya duplicate");
 for (const route of retiredRoutes) {
   if (pageRoutes.includes(route) || manifestRoutes.includes(route)) failures.push("retired route yeniden eklenemez: " + route);
+}
+const nextConfig = readFileSync("apps/web/next.config.mjs", "utf8");
+for (const route of redirectedRetiredRoutes) {
+  if (!nextConfig.includes('"' + route + '"')) failures.push("emekli route için next.config.mjs yönlendirmesi eksik: " + route);
 }
 
 for (const route of pageRoutes) {
@@ -75,11 +86,38 @@ for (const entry of moduleDecisions) {
   if (!entry.owner) failures.push(entry.module + ": owner eksik");
 }
 
-const navigation = readFileSync("apps/web/app/(app)/_shared/navigation.ts", "utf8");
-const navigationRoutes = [...navigation.matchAll(/href:\s*"([^"]+)"/g)].map((match) => match[1]);
-for (const route of navigationRoutes) {
-  if (!pageRoutes.includes(route)) failures.push("navigation route manifestte yok: " + route);
-  if (retiredRoutes.has(route)) failures.push("retired navigation route yeniden eklenemez: " + route);
+// Runtime manifest (apps/web/src/route-manifest.js) navigation, breadcrumb, palette ve hub'ın tek kaynağıdır.
+const runtimeRoutes = [...navigationRoutes(), ...portalHomeRoutes];
+const runtimeHrefs = navigationRoutes().map((route) => route.href);
+if (new Set(runtimeHrefs).size !== runtimeHrefs.length) failures.push("runtime manifest duplicate href içeriyor");
+for (const route of runtimeRoutes) {
+  if (!pageRoutes.includes(route.href)) failures.push("runtime manifest route'u page.tsx envanterinde yok: " + route.href);
+  if (retiredRoutes.has(route.href)) failures.push("retired navigation route yeniden eklenemez: " + route.href);
+  if (!route.label || !route.iconName) failures.push("runtime manifest label/iconName eksik: " + route.href);
+}
+for (const route of institutionRoutes) {
+  if (!institutionNavGroupLabels.includes(route.group)) failures.push("kurum route grubu tanımsız: " + route.href);
+  if (route.hub && !institutionRoutes.some((candidate) => candidate.href === route.hub)) {
+    failures.push("hub kökü manifestte yok: " + route.href + " -> " + route.hub);
+  }
+  if (route.hub && route.hub !== route.href && institutionRoutes.find((candidate) => candidate.href === route.hub)?.hub !== route.hub) {
+    failures.push("hub kökü kendi hub'ını taşımalı: " + route.hub);
+  }
+}
+for (const action of commandActions) {
+  const actionPath = action.href.split("?")[0];
+  if (!pageRoutes.includes(actionPath)) failures.push("komut paleti hedefi page.tsx envanterinde yok: " + action.href);
+}
+for (const [file, pattern, label] of [
+  ["apps/web/app/(app)/_shared/navigation.ts", /href:\s*"\//, "elle tutulan navigation href'i"],
+  ["apps/web/app/(app)/_shared/navigation.ts", /staticBreadcrumbLabels[^=]*=\s*\{/, "elle tutulan breadcrumb haritası"],
+  ["apps/web/app/(app)/app-shell.tsx", /commandItem\("\//, "elle tutulan komut paleti girdisi"],
+  ["apps/web/app/(app)/_shell/command-palette.tsx", /commandItem\("\//, "elle tutulan komut paleti girdisi"],
+]) {
+  if (pattern.test(readFileSync(file, "utf8"))) failures.push(file + " " + label + " içeremez; apps/web/src/route-manifest.js kullanılmalı");
+}
+for (const [path, label] of Object.entries(breadcrumbLabels())) {
+  if (!label) failures.push("breadcrumb etiketi boş: " + path);
 }
 
 if (failures.length > 0) {

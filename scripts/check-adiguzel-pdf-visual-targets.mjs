@@ -5,6 +5,9 @@ import { basename, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+// DEC-20260930-04: ADIGÜZEL PDF'leri artık görsel hedef değil, sayısal doğruluk referans fikstürüdür.
+// Bu kontrol fikstürlerin değişmediğini (A4 595×842 render + SHA-256) doğrular; karne görseli
+// `student-report-card-1024` golden'ı ile korunur.
 const fixtureDir = new URL("../ornek-veriler/", import.meta.url);
 
 const targets = [

@@ -2,7 +2,7 @@
 
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Alert, Button, DataTable, EmptyState, Field, InfoGrid, InfoItem, Input, MetricCard, MetricGrid, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn } from "@o-okul/ui";
 import type {
   ExamRecord,
@@ -18,6 +18,7 @@ import type {
   StudentRecord,
 } from "@o-okul/shared-types";
 import { CheckCircle2, FileText, Play, RefreshCw, Search, Upload, Wand2 } from "lucide-react";
+import { opticalWorkspaceHref, reportWorkspaceHref } from "../sinavlar/exam-workspace-routes.js";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
@@ -253,12 +254,15 @@ function formatUrlForReplaceState(url: URL) {
   return `${url.pathname}${query ? `?${query}` : ""}${url.hash}`;
 }
 
-export function ParserConfigPage() {
+// Route modu (Berrak §4): /kurum/sinavlar/[examId]/optik/{duzen,yukleme,eslesmeyenler}. Sınav ve sekme
+// route'tan gelir; sekme değişimi ilgili URL'e gider. Route modu dışında (/kurum/optik) eski URL state geçerli.
+export function ParserConfigPage({ routeExamId, routeTab }: { routeExamId?: string; routeTab?: OpticalTab } = {}) {
   const { auth } = useAuth();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const searchParamsKey = searchParams.toString();
-  const [activeTab, setActiveTab] = useState<OpticalTab>(() => readOpticalTab(searchParams));
-  const [examId, setExamId] = useState(() => searchParams.get("examId") ?? "");
+  const [activeTab, setActiveTab] = useState<OpticalTab>(() => routeTab ?? readOpticalTab(searchParams));
+  const [examId, setExamId] = useState(() => routeExamId ?? searchParams.get("examId") ?? "");
   const [exams, setExams] = useState<ExamRecord[]>([]);
   const [version, setVersion] = useState(defaultParserConfigVersion);
   const [fileName, setFileName] = useState("");
@@ -336,16 +340,24 @@ export function ParserConfigPage() {
   }, [auth]);
 
   useEffect(() => {
+    if (routeExamId) {
+      if (routeTab) setActiveTab((current) => (current === routeTab ? current : routeTab));
+      return;
+    }
     const nextTab = readOpticalTab(searchParams);
     const nextExamId = searchParams.get("examId") ?? "";
     setActiveTab((current) => (current === nextTab ? current : nextTab));
     if (nextExamId) {
       setExamId((current) => (current === nextExamId ? current : nextExamId));
     }
-  }, [searchParams, searchParamsKey]);
+  }, [routeExamId, routeTab, searchParams, searchParamsKey]);
 
   function selectOpticalTab(tab: OpticalTab, nextExamId = examId) {
     setActiveTab(tab);
+    if (routeExamId && nextExamId) {
+      router.push(opticalWorkspaceHref(nextExamId, tab));
+      return;
+    }
     writeOpticalWorkspaceToUrl({ examId: nextExamId, tab });
   }
 
@@ -371,6 +383,10 @@ export function ParserConfigPage() {
     setIsQuarantineStudentSearching(false);
     setSelectedStudentByQuarantine({});
     setError("");
+    if (routeExamId && nextExamId) {
+      router.push(opticalWorkspaceHref(nextExamId, activeTab));
+      return;
+    }
     writeOpticalWorkspaceToUrl({ examId: nextExamId, tab: activeTab });
   }
 
@@ -1148,7 +1164,7 @@ function OpticalUploadPanel({
         </Button>
       </Panel>
       <Panel
-        actions={<span className="next-reference-badge">{resultStatus}</span>}
+        actions={<StatusBadge tone="neutral">{resultStatus}</StatusBadge>}
         aria-label="Optik yükleme sonucu"
         className="next-optical-upload-panel next-optical-upload-panel--wide"
         description="Yüklenen dosyanın kontrolü ve analiz durumu."
@@ -1408,7 +1424,7 @@ function OpticalReportPanel({
           <span>{reportMessage}</span>
         </div>
         {isReportReady ? (
-          <Link className="uh-button uh-button--primary uh-button--md" href={`/kurum/raporlar?examId=${encodeURIComponent(examId)}`}>
+          <Link className="uh-button uh-button--primary uh-button--md" href={reportWorkspaceHref(examId)}>
             Rapor çalışma alanına geç
           </Link>
         ) : (

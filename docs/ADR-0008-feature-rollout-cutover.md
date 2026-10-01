@@ -32,3 +32,6 @@ yüzeyi açar. Server-only allowlist kontrollü aktivasyon ve cutover ihtiyacın
 - İlk catalog flag'lerinin tamamı default-off'tur.
 - Staging/production tenant aktivasyonu ayrı dış ortam kararı ve kanıtıdır.
 - `web.ia-v2` ve `web.shell-v2`, 23 Ağustos 2026'da yeni kurum navigasyonu kanonik hale geldiği için katalogdan kaldırılmıştır.
+- `web.exam-workspace-v2`, 30 Eylül 2026'da (Berrak G6) sınav çalışma alanı sunucu hazırlığıyla kanonik hale geldiği
+  için katalogdan kaldırılmıştır (EX-02). Eski `/kurum/optik?examId=` ve `/kurum/raporlar?examId=` bağlantıları
+  `next.config.mjs` yönlendirmeleriyle çalışma alanına gider.

@@ -2,6 +2,7 @@ import { AxeBuilder } from "@axe-core/playwright";
 import { resetCategoryLabels } from "../app/(app)/sistem/_shared/system-api.js";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { NextRequest } from "next/server.js";
+import { expectNoHorizontalOverflow } from "./helpers/horizontal-overflow.js";
 import { proxy } from "../proxy.js";
 import { legacyLoginAllowed, tenantLoginOrigin, webHostContext } from "../src/tenant-host.js";
 
@@ -345,40 +346,94 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     expect(captured.tenantStatusUpdates).toEqual([]);
   });
 
-  test("sistem referans ekranları statik kanıtı kontrol listesi olarak gösterir", async ({ page }) => {
+  test("sistem denetim referans ekranı statik kanıtı kontrol listesi olarak gösterir", async ({ page }) => {
     const captured = createCapturedSystemRequests();
+    await openWithSystemTenantMocks(page, captured, "/sistem/denetim");
+
+    const referencePage = {
+      items: ["Kurum oluşturuldu.", "Kurum bilgileri güncellendi.", "Kullanıcı kuruma eklendi.", "Kullanıcı yetkileri güncellendi."],
+      title: "Denetim",
+    };
+    await expect(page.getByRole("heading", { level: 1, name: referencePage.title })).toBeVisible();
+    await expect(page.getByLabel(`${referencePage.title} güven durumu`)).toContainText("Sistem Kontrol Listesi");
+    const referenceList = page.getByLabel(`${referencePage.title} referans kontrol listesi`);
+    await expect(referenceList).toContainText("Kontrol Başlıkları");
+    await expect(referenceList).toContainText(`${referencePage.items.length} kontrol başlığı`);
+    await expect(referenceList.locator("li")).toHaveCount(referencePage.items.length);
+    for (const item of referencePage.items) {
+      await expect(referenceList.getByText(item)).toBeVisible();
+    }
+    await expect(referenceList.getByText("Ön kontrol")).toHaveCount(referencePage.items.length);
+
+    expect(captured.forbiddenTenantScopedPaths).toEqual([]);
+  });
+
+  test("sistem sağlığı canlı sağlık kartlarını kısmi hatada düşürmeden gösterir ve metrik okumaz", async ({ page }) => {
+    const captured = createCapturedSystemRequests();
+    const metricsRequests: string[] = [];
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname === "/metrics") metricsRequests.push(request.url());
+    });
+    await page.route("**/health", async (route) => {
+      await route.fulfill({ body: JSON.stringify({ status: "ok" }), headers: { "content-type": "application/json" }, status: 200 });
+    });
+    await page.route("**/health/ready", async (route) => {
+      await route.abort("failed");
+    });
+    await page.setViewportSize({ height: 900, width: 390 });
     await openWithSystemTenantMocks(page, captured, "/sistem/sistem-sagligi");
 
-    for (const referencePage of [
-      {
-        items: ["Uygulama", "Bağlantı durumu", "Arka plan işleri", "Veritabanı", "Hızlı erişim hizmeti"],
-        path: "/sistem/sistem-sagligi",
-        title: "Sistem Sağlığı",
-      },
-      {
-        items: ["Sistem ölçümleri", "İzleme panosu", "Uygulama kayıtları", "Uyarı bildirimleri"],
-        path: "/sistem/gozlemlenebilirlik",
-        title: "Sistem İzleme",
-      },
-      {
-        items: ["Kurum oluşturuldu.", "Kurum bilgileri güncellendi.", "Kullanıcı kuruma eklendi.", "Kullanıcı yetkileri güncellendi."],
-        path: "/sistem/denetim",
-        title: "Denetim",
-      },
-    ]) {
-      await page.goto(referencePage.path);
-      await expect(page.getByRole("heading", { level: 1, name: referencePage.title })).toBeVisible();
-      await expect(page.getByLabel(`${referencePage.title} güven durumu`)).toContainText("Sistem Kontrol Listesi");
-      const referenceList = page.getByLabel(`${referencePage.title} referans kontrol listesi`);
-      await expect(referenceList).toContainText("Kontrol Başlıkları");
-      await expect(referenceList).toContainText(`${referencePage.items.length} kontrol başlığı`);
-      await expect(referenceList.locator("li")).toHaveCount(referencePage.items.length);
-      for (const item of referencePage.items) {
-        await expect(referenceList.getByText(item)).toBeVisible();
-      }
-      await expect(referenceList.getByText("Ön kontrol")).toHaveCount(referencePage.items.length);
+    await expect(page.getByRole("heading", { level: 1, name: "Sistem Sağlığı" })).toBeVisible();
+    const healthTrustPanel = page.getByLabel("Sistem sağlığı doğrulama durumu");
+    for (const [scope, count] of Object.entries({
+      "Kanıt kapsamı: Bu ekrandaki bilgi": 0,
+      "Kanıt kapsamı: Bağlı sistem": 2,
+      "Kanıt kapsamı: Deneme/canlı ortam": 1,
+    })) {
+      await expect(healthTrustPanel.getByLabel(scope)).toHaveCount(count);
     }
+    const healthSummary = page.getByRole("region", { exact: true, name: "Sistem sağlığı özeti" });
+    await expect(healthSummary).toContainText("Kontrol kapsamı");
+    await expect(healthSummary).toContainText("Bağlantı durumu");
+    await expect(healthSummary.getByLabel("Sistem sağlığı özeti önerilen işlemler")).toBeVisible();
+    const dependencyTable = page.getByRole("table", { name: "Sistem bağlantıları" });
+    await expect(dependencyTable).toContainText("Veritabanı");
+    await expect(dependencyTable).toContainText("Hızlı erişim");
+    await expect(dependencyTable).not.toContainText("Web istekleri");
+    await expect(dependencyTable).not.toContainText("Postgres");
+    await expect(dependencyTable).not.toContainText("Redis");
+    const healthEndpointTable = page.getByRole("table", { name: "Teknik sistem kontrol adresleri" });
+    await expect(healthEndpointTable).toBeHidden();
+    await page.getByText("İleri ayrıntılar", { exact: true }).click();
+    await expect(healthEndpointTable).toBeVisible();
+    await expect(healthEndpointTable).toContainText("/health");
+    await expect(healthEndpointTable).toContainText("/health/ready");
+    await expect(healthEndpointTable).not.toContainText("/metrics");
+    await expect(healthEndpointTable).toContainText("200 tamam");
+    await expect(healthEndpointTable).toContainText("Bağlantı kurulamadı");
+    await expect(page.getByText("Sağlık bilgisi alınamadı.")).toHaveCount(0);
+    await expectNoHorizontalOverflow(page, "system-health-partial-mobile");
 
+    await page.goto("/sistem/gozlemlenebilirlik");
+    await expect(page.getByRole("heading", { level: 1, name: "Sistem İzleme" })).toBeVisible();
+    const observabilityTrustPanel = page.getByLabel("Sistem izleme doğrulama durumu");
+    for (const [scope, count] of Object.entries({
+      "Kanıt kapsamı: Bağlı sistem": 0,
+      "Kanıt kapsamı: Canlı kanıt": 1,
+      "Kanıt kapsamı: Deneme/canlı ortam": 1,
+    })) {
+      await expect(observabilityTrustPanel.getByLabel(scope)).toHaveCount(count);
+    }
+    await expect(page.getByRole("region", { exact: true, name: "Sistem izleme özeti" })).toContainText("Uyarı kanalı");
+    await expect(page.getByLabel("Uyarı kuralları", { exact: true })).toContainText("Uyarı ve hata izleme kanalları");
+    await expect(page.getByLabel("İzleme panoları", { exact: true })).toContainText("Temel sistem göstergeleri ve uygulama kayıtları");
+    await page.getByText("İleri ayrıntılar", { exact: true }).click();
+    await expect(page.getByLabel("Sistem izleme teknik kontrolleri", { exact: true })).toContainText("observability:uat:check");
+    await expect(page.getByLabel("Sistem izleme teknik kontrolleri", { exact: true })).toContainText("alert:webhook:smoke");
+    await expect(page.getByLabel("Sistem izleme teknik kontrolleri", { exact: true })).toContainText("sentry:smoke");
+    await expectNoHorizontalOverflow(page, "system-observability-mobile");
+
+    expect(metricsRequests).toEqual([]);
     expect(captured.forbiddenTenantScopedPaths).toEqual([]);
   });
 });

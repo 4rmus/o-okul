@@ -79,6 +79,25 @@ iceriktir; e-posta, push veya SMS teslimati degildir. Bu nedenle yayin oncesi al
 kurum geneli gorunurluk ve acik final onayi kullanilir. SMS kendi izinli alici onizlemesi, sifir alici
 engeli ve sunucu dogrulamasi ile ayri kalir. CSS ayrimi kaynak sirasini degistirmez.
 
+## Berrak ile degisti (2026-09-30)
+
+`docs/ui-ux-berrak-redesign-plan.md` bu sozlesmenin su maddelerini gunceller; digerleri aynen
+gecerlidir:
+
+- Gorsel dil: "Berrak" (DEC-20260930-01). Tek sans aile, notr yuzeyler, indigo vurgu, acik ve koyu
+  tema. Token adlari korunur, degerler degisir.
+- Navigasyon: kurum menusu ~19 hub ogesine iner; kardes kayit sayfalari hub sekmesi olur. URL'ler
+  ve klasorler degismez. Nav, breadcrumb, komut paleti ve hub sekmeleri tek runtime manifestten
+  uretilir (ADR-0005 guncellemesi).
+- Sinav zinciri: tek calisma alani ve sunucuda hesaplanan 8 adimli hazirlik.
+- Platform saglik/izleme yuzeyleri tenant duzleminden cikar (DEC-20260930-02); `SYSTEM_ADMIN`
+  satirindaki `/sistem/sistem-sagligi` ve `/sistem/gozlemlenebilirlik` canli kontrol yuzeyi olur.
+- UX baseline CSS sinif pin'leri davranis kanitina tasinir (DEC-20260930-03).
+- Karne gorseli G10'da Berrak diliyle yeniden tasarlanir; verisi ve hesaplanan degerleri,
+  `Basari %` birincil metrik ve A4 duzeni degismez. Karne daima acik kagittir.
+- Degismeyenler: tenant/RBAC, API sozlesmeleri (EX dilimi haric), erisilebilir isimler, yalniz
+  Turkce arayuz, yeni UI kutuphanesi yasagi, veli ekranlarinin icerigi.
+
 ## Token Contract
 
 Tasarim kararlari icin kanonik kaynak kokteki `design.md`, uretim CSS

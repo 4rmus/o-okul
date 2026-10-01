@@ -69,7 +69,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${DOCKER_PROXY_NETWORK:-o-okul_proxy_net}"
-      - "traefik.http.routers.api.rule=(Host(`${DOMAIN}`) || Host(`*.${DOMAIN}`)) && (PathPrefix(`/api`) || PathPrefix(`/health`))"
+      - "traefik.http.routers.api.rule=(Host(`${DOMAIN}`) || Host(`*.${DOMAIN}`)) && (PathPrefix(`/api`) || PathPrefix(`/health`)) && !PathPrefix(`/api/v1/metrics`)"
       - "traefik.http.routers.api.entrypoints=websecure"
       - "traefik.http.routers.api.priority=100"
       - "traefik.http.routers.api.service=api"

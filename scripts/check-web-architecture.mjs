@@ -5,8 +5,8 @@ import ts from "typescript";
 const controlPlanePresentationImports = [
   "/kurum/_shared/evidence-panels.js",
   "/kurum/_shared/operation-summary.js",
-  "/kurum/_shared/page-frame.js",
 ];
+// ADR-0003 borcu: PageFrame (app)/_shared katmanına taşındı (Berrak G5); kalan iki sunum bileşeni geçicidir.
 const controlPlanePresentationSources = controlPlanePresentationImports
   .map((suffix) => suffix.replace(/\.js$/, ".tsx"));
 const failures = [];
@@ -32,7 +32,7 @@ const negativeFixtures = [
   ["apps/web/app/(app)/portals/tenant-command.ts", 'import "../kurum/ogrenciler/students-page.js";'],
   ["apps/web/app/(app)/client-secret.tsx", '"use client";\nconst value = process.env.FEATURE_ROLLOUTS_JSON;'],
   [
-    "apps/web/app/(app)/kurum/_shared/page-frame.tsx",
+    "apps/web/app/(app)/kurum/_shared/evidence-panels.tsx",
     'import "@/src/api-client.js";',
   ],
 ];

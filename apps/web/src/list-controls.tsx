@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Button, Field, FilterBar, Input, Select } from "@o-okul/ui";
+import { Field, FilterBar, Input, Pagination, Select } from "@o-okul/ui";
 import type { ListMeta } from "./api-client.js";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 
@@ -90,8 +90,6 @@ export function ListControls({
   const page = meta?.page ?? state.page;
   const totalPages = meta?.totalPages ?? 0;
   const total = meta?.total ?? 0;
-  const canGoBack = page > 1;
-  const canGoForward = totalPages > 0 && page < totalPages;
   const activeFilterSummary = [
     state.q.trim() ? "Arama aktif" : "",
     state.sort ? "Sıralama seçili" : "",
@@ -138,25 +136,15 @@ export function ListControls({
           <span className="next-list-status" aria-live="polite" aria-atomic="true">
             {total} kayıt
           </span>
-          <Button
-            aria-label="Önceki sayfa"
-            disabled={!canGoBack}
-            onClick={() => onChange({ ...state, page: Math.max(1, page - 1) })}
-            variant="secondary"
-          >
-            <ChevronLeft size={17} aria-hidden="true" />
-          </Button>
-          <span className="next-list-status">
-            {page}/{Math.max(totalPages, 1)}
-          </span>
-          <Button
-            aria-label="Sonraki sayfa"
-            disabled={!canGoForward}
-            onClick={() => onChange({ ...state, page: page + 1 })}
-            variant="secondary"
-          >
-            <ChevronRight size={17} aria-hidden="true" />
-          </Button>
+          <Pagination
+            className="next-list-pagination"
+            nextLabel={<ChevronRight size={17} aria-hidden="true" />}
+            onNext={() => onChange({ ...state, page: page + 1 })}
+            onPrevious={() => onChange({ ...state, page: Math.max(1, page - 1) })}
+            page={page}
+            previousLabel={<ChevronLeft size={17} aria-hidden="true" />}
+            totalPages={totalPages}
+          />
         </div>
       </details>
       {children}

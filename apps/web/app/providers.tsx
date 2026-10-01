@@ -22,6 +22,7 @@ import {
   verifyMfa as requestVerifyMfa,
 } from "../src/api-client.js";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { ToastProvider } from "@o-okul/ui";
 
 interface AuthStore {
   auth: AuthResponse | null;
@@ -92,7 +93,9 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+      <AuthContext.Provider value={value}>
+        <ToastProvider>{children}</ToastProvider>
+      </AuthContext.Provider>
     </QueryClientProvider>
   );
 }

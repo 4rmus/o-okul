@@ -195,7 +195,7 @@ Son kontrol: 2026-08-10
 
 ### DEC-20260613-04 — V1 karne görsel kabul eşiği
 
-Durum: Onaylı
+Durum: Onaylı; yerini DEC-20260930-04 aldı (2026-10-01)
 Karar: ADIGÜZEL hedef PDF'leri v1 için sayısal doğruluk ve görsel regresyon bazı olarak kalır; v1
 go-live için UI/portal karne ekranlarının hedef PDF'e birebir piksel eşleşmesi beklenmez. Kabul
 kapısı iki katmanlıdır: `pnpm karne:visual-targets` 3 hedef PDF render/hash boyutunu korur ve
@@ -628,6 +628,86 @@ Etkilenen ADR: ADR-0003, ADR-0004
 Açık soru: Runtime `FEATURE_ROLLOUTS_JSON` içinde emekli anahtar bulunmadığı deploy öncesi ayrıca
 doğrulanır; config değişikliği ve deploy ayrı açık onay gerektirir.
 Son kontrol: 2026-09-03
+
+### DEC-20260930-01 — Berrak görsel dili
+
+Durum: Onaylı; uygulama G2 (token), G5 (shell), G8 (koyu tema anahtarı) gate'lerinde yapılır
+Karar: Arayüz "Berrak" (sakin ürün) görsel diline geçer: nötr yüzeyler, tek sans aile (IBM Plex
+Sans; `Source_Serif_4` kaldırılır), 6/8/12 px radius, hafif gölge token'ları, indigo vurgu ve
+`<html data-theme="light|dark">` ile açık/koyu tema. Token adları (`paper/ink/rule/accent`)
+korunur, yalnız değerler değişir. Varsayılan `prefers-color-scheme`'dir; kullanıcı tercihi
+localStorage'da tutulur ve paint öncesi inline script ile uygulanır. Karne ve print yüzeyleri tema
+dışındadır ve daima `color-scheme: light` ile açık kâğıt çizilir. Veli ekranları tasarım dışıdır;
+token değişimini yalnız pasif olarak alır. Yeni UI kütüphanesi eklenmez.
+Kaynak: Ürün sahibinin 30 Eylül 2026 tarihli "Sakin ürün" yönü ve veli kapsam dışı kararı.
+Kanıt: `docs/ui-ux-berrak-redesign-plan.md` §1, `apps/web/app/tokens.css`, `design.md`,
+`pnpm web:design-tokens:check`, `pnpm web:a11y:check`.
+Etkilenen ADR: ADR-0003
+Açık soru: Yok.
+Son kontrol: 2026-09-30
+
+### DEC-20260930-02 — Platform sağlık ve izleme yüzeyleri control-plane'dedir
+
+Durum: Onaylı; uygulama G1 gate'indedir
+Karar: `/kurum/sistem-sagligi` ve `/kurum/gozlemlenebilirlik` tenant düzleminden emekliye ayrılır;
+eski URL'ler `/kurum/operasyon-ve-kanit` adresine yönlenir. `/sistem/sistem-sagligi` canlı
+`/health` ve `/health/ready` kartlarını gösterir ve yalnız `SYSTEM_ADMIN` erişir; metrik kartı
+taşınmaz, metrikler için Grafana esas kaynaktır ve yeni metrik endpoint'i eklenmez. Kullanılmayan
+`/metrics` dev rewrite'ı silinir. `/metrics` API'de `METRICS_SCRAPE_TOKEN` bearer guard'ı ile
+korunur; Prometheus/Alloy scrape config'i bearer token kullanır. Güvenlik check'i Traefik API
+router'ının ve Next rewrite'larının `/metrics` yolunu dışarı açmadığını doğrular.
+Kaynak: 30 Eylül 2026 Berrak planı §10 güvenlik incelemesi; derinlemesine savunma ürün sahibi
+tarafından onaylandı. Düzeltme (G1 uygulaması): planın "aktif sızıntı yok" tespiti eksikti; API
+global prefix ile metrikleri `/api/v1/metrics` altında sunuyordu ve Traefik `PathPrefix(/api)`
+kuralı bu yolu kimlik doğrulamasız dışarı açıyordu (PII yok; tüm kurumların toplam trafik ve kuyruk
+sayıları). G1 bearer guard ve Traefik `!PathPrefix(/api/v1/metrics)` hariç tutmasıyla kapatır.
+Kanıt: `docs/ui-ux-berrak-redesign-plan.md` §10, `pnpm route-manifest:check`,
+`pnpm security:audit:check`, `apps/api/src/metrics/*`.
+Etkilenen ADR: ADR-0010
+Açık soru: Staging secret yazımı ve deploy doğrulaması ayrı `STAGING` kanıtıdır.
+Son kontrol: 2026-09-30
+
+### DEC-20260930-03 — UX baseline CSS sınıf pin'leri davranış kanıtına taşınır
+
+Durum: Onaylı; uygulama G8 gate'indedir
+Karar: `scripts/check-web-ux-baseline.mjs` içinde yalnız `apps/web/app/globals.css` üzerinde CSS
+sınıf adı pinleyen `requireTokens(...)` blokları emekliye ayrılabilir. Her kaldırma eşdeğer bir
+davranış kanıtıyla eşlenir: Playwright golden, `ui-primitives-state-next.spec.ts` veya
+`check-web-design-tokens.mjs` ham px ratchet'i (sayılar yalnız azalabilir). Güvenlik, a11y, metin
+ve rol assert'leri değiştirilmez. Doğrulama atlanmaz, yeri değişir.
+Kaynak: Berrak planı §7; kaynak CSS pin'leri her görsel değişimde kırılıyor ve davranış güvencesi
+vermiyor.
+Kanıt: `scripts/check-web-ux-baseline.mjs`, `scripts/check-web-design-tokens.mjs`,
+`apps/web/e2e-next/ui-primitives-state-next.spec.ts`, `docs/ui-ux-berrak-progress.md` (G8 eşleme
+tablosu).
+Etkilenen ADR: Yok
+Açık soru: Yok.
+Son kontrol: 2026-09-30
+
+### DEC-20260930-04 — Karne Berrak diliyle yeniden tasarlanır; görsel kabul golden ve geometriye bağlanır
+
+Durum: Onaylı; DEC-20260613-04'ün yerini alır
+Karar: Web karne sheet'i (`karne-sheet.tsx`, `outcome-net-table.tsx` stilleri) ve worker PDF şablonu
+(`createSnapshotPdfHtml`) birlikte Berrak diline geçer: IBM Plex (Arial yalnız yedek), tabular rakamlar,
+≤600 ağırlık, sola hizalı accent bölüm etiketleri, 1 px kâğıt çizgisi, `Başarı %` birincil metrik kartı
+(Net ve Soru bağlam). Karne tema bağımsız açık kâğıttır: renk token'ları karne kapsamında `tokens.css`
+açık değerlerine birebir sabitlenir (`KARNE-PAPER-PINS`, eşitlik `check-web-design-tokens.mjs` ile
+doğrulanır), `@media print` koyu temada açık değerleri geri yükler. Korunanlar: A4 595 × 842 geometri,
+öğrenci başına sayfa düzeni, aynı snapshot'tan aynı sayılar, metin ve tablo yapısı (erişilebilir isimler).
+Görsel kabul: `pnpm karne:visual-contract:check` karne golden'ını (`student-report-card-1024`, darwin +
+linux, 595 × 842, `maxDiffPixelRatio: 0.005`) ve print geometrisini doğrular; ADIGÜZEL hedef PDF'ine
+benzerlik eşiği kaldırılır. `pnpm karne:visual-diff -- --target golden --ui <png> --max-diff-ratio 0.02
+--max-mean-channel-delta 6` kanıt ekran görüntülerini yeni golden'a karşı ölçer; ADIGÜZEL PDF'leri
+`pnpm karne:visual-targets` ile sayısal doğruluk fikstürü olarak korunur (`--target iSEM` isteğe bağlı).
+`karne-print` ham renk allowlist'i 39 Berrak kâğıt rengidir; karne grafiğinin dört serisi gri tonlamada
+ayrışır (öğrenci, sınıf, okul, genel ≈ 91 / 121 / 170 / 218 luma).
+Kaynak: Berrak planı (G10), karne yeniden tasarım yetkisi.
+Kanıt: `scripts/check-karne-visual-contract.mjs`, `scripts/compare-karne-visual-evidence.mjs`,
+`scripts/check-adiguzel-pdf-visual-targets.mjs`, `scripts/check-web-design-tokens.mjs`,
+`apps/worker/src/jobs/report-pdf-render-job.ts`, `docs/ui-ux-berrak-progress.md` (G10).
+Etkilenen ADR: Yok
+Açık soru: Gerçek kurum logosu ve basılı karne marka uyumu pilot kurum ürün sahibi onayına kalır.
+Son kontrol: 2026-10-01
 
 ## Faz Öncesi Onay Gerektirenler
 

@@ -4,9 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Button, DataTable, Panel, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
 import { RefreshCw } from "lucide-react";
 import { apiUrl } from "../../../../src/api-client.js";
-import { EvidenceTrustPanel } from "../_shared/evidence-panels.js";
-import { PageFrame } from "../_shared/page-frame.js";
-import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+import { EvidenceTrustPanel } from "../../kurum/_shared/evidence-panels.js";
+import { PageFrame } from "../../_shared/page-frame.js";
+import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../../kurum/_shared/operation-summary.js";
 
 interface HealthStatus {
   status: "ok";
@@ -20,9 +20,9 @@ interface ReadyStatus {
   };
 }
 
+// ponytail: platform metrikleri Grafana'da; bu ekran yalnız /health ve /health/ready okur (DEC-20260930-02).
 interface SystemHealth {
   health: EndpointState<HealthStatus>;
-  metrics: EndpointState<MetricsSummary>;
   ready: EndpointState<ReadyStatus>;
 }
 
@@ -31,11 +31,6 @@ interface EndpointState<TData> {
   status: number;
   data: TData | null;
   error: string;
-}
-
-interface MetricsSummary {
-  uptimeSeconds: number | null;
-  requestCount: number | null;
 }
 
 interface DependencyStatusRow {
@@ -70,7 +65,7 @@ export function SystemHealthPage() {
   return (
     <PageFrame
       title="Sistem Sağlığı"
-      subtitle="Uygulamanın, veritabanının ve arka plan hizmetlerinin çalışır durumda olup olmadığını izleyin."
+      subtitle="Tüm kurumları etkileyen uygulama ve bağlantı durumunu canlı izleyin. Ölçümler izleme panosundadır."
       actions={
         <Button onClick={() => void healthQuery.refetch()}>
           <RefreshCw size={17} aria-hidden="true" />
@@ -94,7 +89,7 @@ export function SystemHealthPage() {
             value: sourceLabel(apiUrl),
             tone: sourceLabel(apiUrl) === "Bu bilgisayar" ? "warning" : "info",
             scope: sourceLabel(apiUrl) === "Bu bilgisayar" ? "local-static" : "configured-api",
-            detail: "Uygulama, bağlantılar ve temel kullanım bilgileri aynı sistemden okunur.",
+            detail: "Uygulama ve bağlantı bilgileri aynı sistemden okunur.",
           },
           {
             label: "Bağlantı durumu",
@@ -113,15 +108,15 @@ export function SystemHealthPage() {
         ]}
       />
       <Panel
-        aria-label="Sistem bağlantıları ve kullanım durumu"
-        description="Veritabanı, hızlı erişim hizmeti ve toplam istek sayısı."
-        title="Bağlantılar ve Kullanım"
+        aria-label="Sistem bağlantıları"
+        description="Veritabanı ve hızlı erişim hizmeti."
+        title="Bağlantılar"
       >
         <DataTable
-          caption="Sistem bağlantıları ve kullanım durumu"
+          caption="Sistem bağlantıları"
           columns={dependencyColumns}
           density="compact"
-          description="Seçili sistemden alınan anlık bağlantı ve kullanım bilgileri."
+          description="Seçili sistemden alınan anlık bağlantı bilgileri."
           getRowKey={(row) => row.key}
           rows={dependencyRows}
         />
@@ -139,7 +134,7 @@ export function SystemHealthPage() {
             caption="Teknik sistem kontrol adresleri"
             columns={endpointColumns}
             density="compact"
-            description="Uygulama, bağlantı ve kullanım adreslerinin teknik yanıtları."
+            description="Uygulama ve bağlantı adreslerinin teknik yanıtları."
             getRowKey={(row) => row.key}
             loading={healthQuery.isPending}
             rows={endpointRows}
@@ -203,7 +198,6 @@ const endpointColumns: Array<DataTableColumn<EndpointStatusRow>> = [
 function buildSystemHealthSummaryItems(health: SystemHealth | undefined): OperationSummaryItem[] {
   const healthState = endpointStatusText(health?.health, "Çalışıyor");
   const readyState = endpointStatusText(health?.ready, "Hazır");
-  const requestCount = health?.metrics.data?.requestCount;
   return [
     {
       description: "Uygulamanın yanıt verme durumu",
@@ -218,20 +212,6 @@ function buildSystemHealthSummaryItems(health: SystemHealth | undefined): Operat
       label: "Bağlantılar",
       tone: endpointSummaryTone(health?.ready),
       value: readyState,
-    },
-    {
-      description: "Uygulamanın kesintisiz çalışma süresi",
-      key: "uptime",
-      label: "Çalışma süresi",
-      tone: health?.metrics.ok ? "info" : health ? "warning" : "default",
-      value: formatUptime(health?.metrics.data?.uptimeSeconds),
-    },
-    {
-      description: "Sistemin işlediği toplam web isteği",
-      key: "request-count",
-      label: "Web istekleri",
-      tone: requestCount === null || requestCount === undefined ? "default" : "info",
-      value: formatCount(requestCount),
     },
   ];
 }
@@ -248,23 +228,18 @@ function buildSystemHealthSummaryBadges(health: SystemHealth | undefined): Opera
       label: health?.ready.ok ? "Bağlantılar hazır" : health ? "Bağlantılarda sorun var" : "Bağlantılar bekleniyor",
       tone: health?.ready.ok ? "success" : health ? "danger" : "neutral",
     },
-    {
-      key: "metrics",
-      label: health?.metrics.ok ? "Kullanım bilgisi alındı" : health ? "Kullanım bilgisi bekleniyor" : "Kullanım bilgisi yok",
-      tone: health?.metrics.ok ? "success" : health ? "warning" : "neutral",
-    },
   ];
 }
 
 function buildSystemHealthSummaryActions(health: SystemHealth | undefined): OperationSummaryAction[] {
   return [
     {
-      detail: "Uygulama, bağlantı ve kullanım kontrolleri",
+      detail: "Uygulama ve bağlantı kontrolleri",
       key: "endpoint-coverage",
       label: "Kontrol kapsamı",
       status: health ? "Okundu" : "Bekleniyor",
       tone: health ? "info" : "neutral",
-      value: "3 sinyal",
+      value: "2 sinyal",
     },
     {
       detail: "Veritabanı ve hızlı erişim bağlantıları",
@@ -303,13 +278,6 @@ function buildDependencyRows(health: SystemHealth | undefined): DependencyStatus
       tone: dependencyTone(redis),
       value: redis,
     },
-    {
-      detail: "Sistemin işlediği toplam web isteği",
-      key: "request-count",
-      label: "Web istekleri",
-      tone: health?.metrics.ok ? "info" : health ? "warning" : "neutral",
-      value: formatCount(health?.metrics.data?.requestCount),
-    },
   ];
 }
 
@@ -329,23 +297,15 @@ function buildEndpointRows(health: SystemHealth | undefined): EndpointStatusRow[
       tone: endpointTone(health?.ready),
       value: health ? endpointLabel(health.ready) : "Bekleniyor",
     },
-    {
-      detail: "Çalışma süresi ve istek sayısını verir",
-      key: "metrics",
-      label: "/metrics",
-      tone: endpointTone(health?.metrics),
-      value: health ? endpointLabel(health.metrics) : "Bekleniyor",
-    },
   ];
 }
 
 async function loadSystemHealth(): Promise<SystemHealth> {
-  const [health, ready, metrics] = await Promise.all([
+  const [health, ready] = await Promise.all([
     loadJsonEndpoint<HealthStatus>(`${apiUrl}/health`),
     loadJsonEndpoint<ReadyStatus>(`${apiUrl}/health/ready`),
-    loadMetrics(`${apiUrl}/metrics`),
   ]);
-  return { health, ready, metrics };
+  return { health, ready };
 }
 
 async function loadJsonEndpoint<TData>(url: string): Promise<EndpointState<TData>> {
@@ -357,21 +317,6 @@ async function loadJsonEndpoint<TData>(url: string): Promise<EndpointState<TData
       status: response.status,
       data: response.ok ? (data as TData) : null,
       error: response.ok ? "" : readErrorMessage(data),
-    };
-  } catch {
-    return failedEndpointState();
-  }
-}
-
-async function loadMetrics(url: string): Promise<EndpointState<MetricsSummary>> {
-  try {
-    const response = await fetch(url);
-    const text = await response.text();
-    return {
-      ok: response.ok,
-      status: response.status,
-      data: response.ok ? parseMetrics(text) : null,
-      error: response.ok ? "" : text,
     };
   } catch {
     return failedEndpointState();
@@ -399,25 +344,6 @@ function failedEndpointState<TData>(): EndpointState<TData> {
     ok: false,
     status: 0,
   };
-}
-
-function parseMetrics(text: string): MetricsSummary {
-  const uptime = readMetricValue(text, "o_okul_process_uptime_seconds");
-  const requests = text
-    .split("\n")
-    .filter((line) => line.startsWith("o_okul_http_requests_total"))
-    .reduce((total, line) => total + (Number(line.split(" ").at(-1)) || 0), 0);
-  return {
-    requestCount: requests,
-    uptimeSeconds: uptime,
-  };
-}
-
-function readMetricValue(text: string, metricName: string) {
-  const line = text.split("\n").find((candidate) => candidate.startsWith(`${metricName} `));
-  if (!line) return null;
-  const value = Number(line.split(" ").at(-1));
-  return Number.isFinite(value) ? value : null;
 }
 
 function endpointStatusText(endpoint: EndpointState<unknown> | undefined, successLabel: string) {
@@ -455,19 +381,6 @@ function dependencyTone(label: string): StatusBadgeProps["tone"] {
   if (label === "Hazır") return "success";
   if (label === "Hazır değil") return "warning";
   return "neutral";
-}
-
-function formatCount(value: number | null | undefined) {
-  if (value === null || value === undefined) return "-";
-  return new Intl.NumberFormat("tr-TR").format(value);
-}
-
-function formatUptime(value: number | null | undefined) {
-  if (value === null || value === undefined) return "-";
-  if (value < 60) return `${Math.round(value)} sn`;
-  const minutes = Math.floor(value / 60);
-  const seconds = Math.round(value % 60);
-  return `${minutes} dk ${seconds} sn`;
 }
 
 function sourceLabel(value: string) {

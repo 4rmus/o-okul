@@ -24,24 +24,17 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       const requestedPaths: string[] = [];
       await openStudentPortal(page, viewport, { requestedPaths });
 
+      // Berrak §5: özet = bugün teslim → son sınav Başarı % → duyurular; profil/destek/devamsızlık kendi rotalarında.
       await expect(page.getByRole("heading", { level: 1, name: "Öğrenci Portalı" })).toBeVisible();
       await expect(page.getByRole("region", { exact: true, name: "Portal özeti" })).toHaveCount(0);
-      const focus = page.getByRole("region", { exact: true, name: "Seçili öğrenci özeti" });
-      await expect(focus).toContainText("Seçili Öğrenci");
-      await expect(focus).toContainText("Öğrenci hesabı");
-      await expectStudentFocusMetrics(focus, 8);
-      await expect(focus).toContainText("Başarı %");
-      await expect(focus).toContainText("%81,7");
-      await expect(focus).toContainText("Soru");
-      await expect(focus).toContainText("30");
-      await expect(focus).toContainText("Net");
-      await expect(focus).toContainText("24,5");
       const studentDailyBrief = page.getByRole("region", { exact: true, name: "Günlük durum" });
       await expectPortalSummaryMetrics(
         studentDailyBrief.getByRole("group", { exact: true, name: "Günlük durum özeti" }),
-        ["Duyuru", "Ödev", "Devamsızlık", "Son sınav"],
+        ["Bugün teslim", "Son sınav", "Duyuru"],
         rawPiiValues,
       );
+      await expect(studentDailyBrief).toContainText("%81,7");
+      await expect(studentDailyBrief).toContainText("24,5 net / 30 soru");
       const studentDailyScope = studentDailyBrief.getByLabel("Günlük durum için seçilen kişi veya sınıf");
       await expect(studentDailyScope).toContainText("Öğrenci");
       await expect(studentDailyScope).toContainText("Kişisel görünüm");
@@ -52,40 +45,56 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       await expect(studentActions).toContainText("Bugün yapılacaklar");
       await expect(studentActions).toContainText("Öncelikli işler");
       await expect(studentActions).toContainText("3 iş");
-      await expect(studentActions).toContainText("1 öncelikli");
       await expect(studentActions.getByRole("link", { name: /Duyuruları oku: 1 okunmamış/ })).toHaveAttribute("href", "/ogrenci/duyurular");
       await expect(studentActions.getByRole("link", { name: /Ödevi aç: 1 atama/ })).toHaveAttribute("href", "/ogrenci/odevler");
       await expect(studentActions.getByRole("link", { name: /Son sınavı incele: %81,7/ })).toHaveAttribute("href", "/ogrenci/raporlar");
       await expectPortalActionHrefs(studentActions, [
-        "/ogrenci/duyurular",
         "/ogrenci/odevler",
         "/ogrenci/raporlar",
+        "/ogrenci/duyurular",
       ]);
       await expectNoPortalActionPiiLeak(studentActions, rawPiiValues);
       await expectAnchorsAttached(page, [
-        "#portal-announcements",
         "#portal-homework",
-        "#portal-attendance",
-        "#portal-support",
         "#portal-report",
-        "#portal-focus",
+        "#portal-announcements",
       ]);
       await expect(page.getByRole("region", { exact: true, name: "Öğrenci portal çalışma alanı" })).toBeVisible();
-      await expectStudentProfileAndHistoryPanels(page);
-      await expectGuardianRelationsPanel(page);
-      await expectPortalActivityPanels(page);
       await expect(page.getByRole("region", { name: "Portal rapor özeti" })).toContainText("Başarı %");
       await expectHomeworkAssignmentsPanel(page);
       await expectPortalAnnouncementsTable(page, { readOnly: false });
-      await expectPortalSupportPanel(page, { formVisible: true });
+      await expect(page.getByRole("region", { exact: true, name: "Seçili öğrenci özeti" })).toHaveCount(0);
+      await expect(page.getByRole("region", { exact: true, name: "Destek talepleri" })).toHaveCount(0);
+      await expectStudentPageClean(page, `student-portal-${viewport.width}`);
 
-      for (const value of rawPiiValues) {
-        await expect(page.locator("body")).not.toContainText(value);
-      }
+      await page.goto("/ogrenci/profil");
+      await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+      const focus = page.getByRole("region", { exact: true, name: "Seçili öğrenci özeti" });
+      await expect(focus).toContainText("Seçili Öğrenci");
+      await expect(focus).toContainText("Öğrenci hesabı");
+      await expectStudentFocusMetrics(focus, 8);
+      await expect(focus).toContainText("Başarı %");
+      await expect(focus).toContainText("%81,7");
+      await expect(focus).toContainText("Soru");
+      await expect(focus).toContainText("30");
+      await expect(focus).toContainText("Net");
+      await expect(focus).toContainText("24,5");
+      await expect(focus).toContainText("1 okunmamış");
+      await expectStudentProfileAndHistoryPanels(page);
+      await expectGuardianRelationsPanel(page);
+      await expectStudentPageClean(page, `student-profile-${viewport.width}`);
+
+      await page.goto("/ogrenci/devamsizlik");
+      await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+      await expectPortalActivityPanels(page);
+      await expectStudentPageClean(page, `student-attendance-${viewport.width}`);
+
+      await page.goto("/ogrenci/destek");
+      await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+      await expectPortalSupportPanel(page, { formVisible: true });
+      await expectStudentPageClean(page, `student-support-${viewport.width}`);
+
       expect(requestedPaths.filter((path) => path === "/students" || path.startsWith("/students/"))).toEqual([]);
-      await expectNoHorizontalOverflow(page, `student-portal-${viewport.width}`);
-      await expectNoUnlabeledControls(page, `student-portal-${viewport.width}`);
-      await expectNoClippedVisibleText(page, `student-portal-${viewport.width}`);
     });
   }
 
@@ -96,24 +105,31 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
     await expect(page).toHaveURL(/\/ogrenci\?rolePreview=1$/);
     expect(page.url()).not.toContain("preview-token");
     await expect(page.getByLabel("Rol önizleme bilgisi")).toContainText("Yalnızca Görüntüleme");
-    await expect(page.getByRole("region", { exact: true, name: "Seçili öğrenci özeti" })).toContainText("Yalnızca görüntüleme");
     await expect(page.getByLabel("Günlük durum için seçilen kişi veya sınıf")).toContainText("Yalnızca görüntüleme");
     const studentPreviewActions = page.getByRole("region", { name: "Öğrenci günlük aksiyonları" });
     await expect(studentPreviewActions).toContainText("Önizleme durumu");
     await expect(studentPreviewActions).toContainText("Yalnızca görüntüleme");
     await expect(studentPreviewActions.getByRole("link", { name: /Önizleme durumu: Yalnızca görüntüleme/ })).toHaveAttribute("href", "/ogrenci?rolePreview=1");
-    await expect(studentPreviewActions.getByRole("link", { name: /Duyuruları oku/ })).toHaveAttribute("href", "/ogrenci/duyurular?rolePreview=1");
+    await expect(studentPreviewActions.getByRole("link", { name: /Ödevi aç/ })).toHaveAttribute("href", "/ogrenci/odevler?rolePreview=1");
     await expect(studentPreviewActions.getByRole("link", { name: /Son sınavı incele/ })).toHaveAttribute("href", "/ogrenci/raporlar?rolePreview=1");
     await expectPortalActionHrefs(studentPreviewActions, [
       "/ogrenci?rolePreview=1",
-      "/ogrenci/duyurular?rolePreview=1",
+      "/ogrenci/odevler?rolePreview=1",
       "/ogrenci/raporlar?rolePreview=1",
     ]);
-    await expectStudentProfileAndHistoryPanels(page);
-    await expectGuardianRelationsPanel(page);
-    await expectPortalActivityPanels(page);
     await expectHomeworkAssignmentsPanel(page);
     await expectPortalAnnouncementsTable(page, { readOnly: true });
+
+    await page.goto("/ogrenci/profil?rolePreview=1");
+    await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+    await expect(page.getByRole("region", { exact: true, name: "Seçili öğrenci özeti" })).toContainText("Yalnızca görüntüleme");
+    await expectStudentProfileAndHistoryPanels(page);
+    await expectGuardianRelationsPanel(page);
+    await page.goto("/ogrenci/devamsizlik?rolePreview=1");
+    await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+    await expectPortalActivityPanels(page);
+    await page.goto("/ogrenci/destek?rolePreview=1");
+    await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
     await expect(page.getByLabel("Destek talepleri", { exact: true })).toContainText("Yalnızca görüntüleme sırasında destek talebi açılamaz.");
     await expectPortalSupportPanel(page, { formVisible: false });
     await expect(page.getByRole("button", { name: "Destek talebi aç" })).toHaveCount(0);
@@ -122,7 +138,7 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
 
   test("öğrenci destek konuşmasına yalnız metin yanıtı ekler", async ({ page }) => {
     const mutationRequests: string[] = [];
-    await openStudentPortal(page, { height: 844, width: 390 }, { mutationRequests, withReport: false });
+    await openStudentPortal(page, { height: 844, width: 390 }, { mutationRequests, path: "/ogrenci/destek", withReport: false });
 
     const conversation = page.getByRole("region", { name: "Destek konuşması" });
     await expect(conversation).toContainText("Kurum yanıtı");
@@ -338,6 +354,15 @@ async function expectStudentFocusMetrics(focus: Locator, itemCount: number) {
   await expect(focusMetrics.locator(".uh-info-item")).toHaveCount(itemCount);
 }
 
+async function expectStudentPageClean(page: Page, label: string) {
+  for (const value of rawPiiValues) {
+    await expect(page.locator("body")).not.toContainText(value);
+  }
+  await expectNoHorizontalOverflow(page, label);
+  await expectNoUnlabeledControls(page, label);
+  await expectNoClippedVisibleText(page, label);
+}
+
 async function expectStudentProfileAndHistoryPanels(page: Page) {
   const profile = page.getByRole("region", { exact: true, name: "Profil" });
   await expect(profile.getByRole("heading", { name: "Profil" })).toBeVisible();
@@ -454,7 +479,7 @@ async function expectPortalSupportPanel(page: Page, options: { formVisible: bool
 async function openStudentPortal(
   page: Page,
   viewport: { height: number; width: number },
-  options: { mode?: "student" | "role-preview"; mutationRequests?: string[]; requestedPaths?: string[]; withReport?: boolean } = {},
+  options: { mode?: "student" | "role-preview"; mutationRequests?: string[]; path?: string; requestedPaths?: string[]; withReport?: boolean } = {},
 ) {
   await page.setViewportSize(viewport);
   await installStudentApiMocks(page, options);
@@ -465,7 +490,8 @@ async function openStudentPortal(
     }
   }, options.mode ?? "student");
   await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
-  await page.goto(options.mode === "role-preview" ? "/ogrenci?rolePreview=1" : options.withReport === false ? "/ogrenci" : "/ogrenci?examId=exam-demo-isem-lgs-1");
+  const path = options.path ?? "/ogrenci";
+  await page.goto(options.mode === "role-preview" ? `${path}?rolePreview=1` : options.withReport === false || options.path ? path : `${path}?examId=exam-demo-isem-lgs-1`);
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
 }
 

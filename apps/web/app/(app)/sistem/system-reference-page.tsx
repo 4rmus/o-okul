@@ -1,5 +1,5 @@
 import { EvidenceTrustPanel, ReferenceBadge } from "../kurum/_shared/evidence-panels.js";
-import { PageFrame } from "../kurum/_shared/page-frame.js";
+import { PageFrame } from "../_shared/page-frame.js";
 import { Panel, StatusBadge } from "@o-okul/ui";
 
 export function ReferenceSystemPage({

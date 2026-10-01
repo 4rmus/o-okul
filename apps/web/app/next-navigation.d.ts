@@ -6,6 +6,7 @@ declare module "next/navigation" {
   export function usePathname(): string;
   export function useParams<TParams extends Record<string, string | string[]> = Record<string, string | string[]>>(): TParams;
   export function useSearchParams(): URLSearchParams;
+  export function useSelectedLayoutSegment(parallelRoutesKey?: string): string | null;
   export function redirect(href: string): never;
   export function notFound(): never;
 }

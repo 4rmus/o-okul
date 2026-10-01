@@ -119,6 +119,42 @@ test.describe("Next erişilebilirlik smoke", () => {
     await expectNoHighImpactA11yViolations(page, "kurum-dashboard");
   });
 
+  for (const width of [320, 375, 414, 768, 1024, 1440]) {
+    test(`kurum dashboard koyu temada ${width}px görünümde yüksek etkili axe ihlali yok`, async ({ page }) => {
+      await page.setViewportSize({ height: 900, width });
+      await page.emulateMedia({ colorScheme: "dark" });
+      await openInstitutionDashboard(page, { expectNavigationVisible: width >= 1024 });
+      await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+      await expectNoHighImpactA11yViolations(page, `kurum-dashboard-dark-${width}`);
+    });
+  }
+
+  test("kurum dashboard tema anahtarı koyu/açık tercihini uygular ve yenilemede korur", async ({ page }) => {
+    await page.setViewportSize({ height: 900, width: 1440 });
+    await page.emulateMedia({ colorScheme: "light" });
+    await openInstitutionDashboard(page);
+    const html = page.locator("html");
+    await expect(html).toHaveAttribute("data-theme", "light");
+    const toggle = page.locator('header[aria-label="Üst gezinme"]').getByRole("button", { name: "Koyu tema" });
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await toggle.click();
+    await expect(html).toHaveAttribute("data-theme", "dark");
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    // Renk geçişleri bitmeden kontrast ölçülmez.
+    await expect.poll(() => page.evaluate(() => document.getAnimations().filter((animation) => animation.effect?.getTiming().iterations !== Infinity).length)).toBe(0);
+    await expectNoHighImpactA11yViolations(page, "kurum-dashboard-dark-toggle");
+    await page.reload();
+    await expect(html).toHaveAttribute("data-theme", "dark");
+    await page.locator('header[aria-label="Üst gezinme"]').getByRole("button", { name: "Koyu tema" }).click();
+    await expect(html).toHaveAttribute("data-theme", "light");
+
+    await page.setViewportSize({ height: 812, width: 375 });
+    const mobileToggle = page.locator(".next-mobile-topbar").getByRole("button", { name: "Koyu tema" });
+    await expect(mobileToggle).toBeVisible();
+    await mobileToggle.click();
+    await expect(html).toHaveAttribute("data-theme", "dark");
+  });
+
   test("kurum dashboard shell'i tablet viewport'ta taşmadan açılır", async ({ page }) => {
     await page.setViewportSize({ height: 1024, width: 768 });
     await openInstitutionDashboard(page, { expectNavigationVisible: false });

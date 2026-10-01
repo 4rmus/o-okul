@@ -147,7 +147,8 @@ function createLegacySnapshotPdfHtml(snapshot: ReportPdfSnapshotRecord, institut
   const averages = readRecord(data.averages);
   const students = readRecords(data.students);
   return `<!doctype html><html lang="tr"><head><meta charset="utf-8" /><style>
-    body{font-family:Arial,sans-serif}.content{padding:24px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:6px}
+    body{font-family:"IBM Plex Sans",Arial,sans-serif;color:#161b2b;font-variant-numeric:tabular-nums}.content{padding:24px}
+    table{border-collapse:collapse;width:100%}th,td{border:1px solid #dfe3ea;padding:6px}th{background:#f3f4f8;font-weight:600}
   </style></head><body><main class="content"><h1>Sınav Raporu</h1><p>Eski hesaplama</p>
   <p>Rapor bağlamı · ${escapeHtml(snapshot.status)} snapshot</p>
   <p>Başarı % ${escapeHtml(formatPdfPercent(scoreSuccessRate(averages)))} · Net ${escapeHtml(formatPdfNumber(averages.net))}</p>
@@ -262,27 +263,27 @@ function createV2SnapshotPdfHtml(snapshot: ReportPdfSnapshotRecord, institution:
         return [
           pdfScoreTypeLabel(readText(view.type)),
           formatScoreStatus(view.status),
-          type ? `${formatPdfNumber(view.practiceScore)}\n${formatPdfScoreCourseNets(student, type)}` : formatPdfNumber(view.practiceScore),
-          formatPdfNumber(metrics.correct),
-          formatPdfNumber(metrics.wrong),
-          formatPdfNumber(metrics.blank),
-          formatPdfNumber(metrics.net),
-          formatPdfNumber(metrics.questionCount),
-          formatPdfPercent(scoreSuccessRate(metrics)),
+          type ? `${formatKarneNumber(view.practiceScore)}\n${formatPdfScoreCourseNets(student, type, formatKarneNet)}` : formatKarneNumber(view.practiceScore),
+          formatKarneNumber(metrics.correct),
+          formatKarneNumber(metrics.wrong),
+          formatKarneNumber(metrics.blank),
+          formatKarneNet(metrics.net),
+          formatKarneNumber(metrics.questionCount),
+          formatKarnePercent(scoreSuccessRate(metrics)),
           formatV2Rank(readRecord(ranking?.institution)),
           formatV2Rank(readRecord(ranking?.class)),
         ];
       })}
       ${renderPdfTable("Bölüm Analizi", ["Branş", "Başarı %", "Soru", "Net"], readRecords(student.branches), (branch) => [
-        readText(branch.branch) || "-", formatPdfPercent(scoreSuccessRate(branch)), formatPdfValue(branchQuestionCount(branch)), formatPdfNumber(branch.net),
+        readText(branch.branch) || "-", formatKarnePercent(scoreSuccessRate(branch)), formatPdfValue(branchQuestionCount(branch)), formatKarneNet(branch.net),
       ])}
     </section>
     <section class="karne karne-detail"><p>${examContext}</p><h2>Kazanım ve Soru Analizi</h2><strong>${identity}</strong><p>${context}</p>
       ${renderPdfTable("Öncelikli Kazanım Analizi", ["Kazanım", "Branş", "Başarı %", "Net"], selectPdfOutcomeRows(student.outcomes), (outcome) => [
-        readText(outcome.outcomeCode) || "-", readText(outcome.branch) || "-", formatPdfPercent(scoreSuccessRate(outcome)), formatPdfNumber(outcome.net),
+        readText(outcome.outcomeCode) || "-", readText(outcome.branch) || "-", formatKarnePercent(scoreSuccessRate(outcome)), formatKarneNet(outcome.net),
       ])}
       ${renderPdfTable("Soru Cevap Analizi", ["Soru", "Ders", "Durum"], selectPdfQuestionRows(student.questions), (question) => [
-        formatPdfNumber(question.questionNo),
+        formatKarneNumber(question.questionNo),
         readText(question.branch) || "-",
         formatPdfQuestionStatus(question.status),
       ])}
@@ -302,8 +303,8 @@ function createV2SnapshotPdfHtml(snapshot: ReportPdfSnapshotRecord, institution:
     (student) => [
       readText(student.displayName) || readText(student.studentId) || "-",
       readText(student.className) || "-",
-      formatPdfPercent(scoreSuccessRate(readRecord(student.total))),
-      ...scoreTypes.map((type) => `${formatPdfScoreByType(student, type)}\n${formatPdfScoreCourseNets(student, type)}`),
+      formatKarnePercent(scoreSuccessRate(readRecord(student.total))),
+      ...scoreTypes.map((type) => `${formatPdfScoreByType(student, type, formatKarneNumber)}\n${formatPdfScoreCourseNets(student, type, formatKarneNet)}`),
       formatPdfRankingsByScope(student, "institution"),
       formatPdfRankingsByScope(student, "class"),
     ],
@@ -317,32 +318,34 @@ function createV2SnapshotPdfHtml(snapshot: ReportPdfSnapshotRecord, institution:
       ${renderPdfBarChart("Puan Türü Karşılaştırması", scoreAverages, (score) => pdfScoreTypeLabel(readText(score.type)), (score) => readOptionalNumber(score.practiceScore), 100, 500)}
       ${renderPdfBarChart("Ders Başarı Grafiği", readRecords(data.branches), (branch) => readText(branch.branch) || "-", (branch) => readOptionalNumber(scoreSuccessRate(branch)), 0, 100, "%")}
       ${renderPdfTable("Ortalama Deneme Puanları", ["Tür", "Hesaplanan", "Deneme Puanı"], scoreAverages, (score) => [
-        pdfScoreTypeLabel(readText(score.type)), formatPdfNumber(score.calculatedCount), formatPdfNumber(score.practiceScore),
+        pdfScoreTypeLabel(readText(score.type)), formatKarneNumber(score.calculatedCount), formatKarneNumber(score.practiceScore),
       ])}
       ${renderPdfTable("Branş Karşılaştırması", ["Branş", "Başarı %", "Soru", "Net"], readRecords(data.branches), (branch) => [
-        readText(branch.branch) || "-", formatPdfPercent(scoreSuccessRate(branch)), formatPdfValue(branchQuestionCount(branch)), formatPdfNumber(branch.net),
+        readText(branch.branch) || "-", formatKarnePercent(scoreSuccessRate(branch)), formatPdfValue(branchQuestionCount(branch)), formatKarneNet(branch.net),
       ])}
       ${renderPdfTable("Sınıf Karşılaştırması", ["Sınıf", "Sonuç", "Başarı %", "Net"], readRecords(data.classes), (klass) => {
         const classAverages = readRecord(klass.averages);
         return [
           readText(klass.className) || "Sınıfsız",
-          formatPdfNumber(klass.resultCount),
-          formatPdfPercent(scoreSuccessRate(classAverages)),
-          formatPdfNumber(classAverages.net),
+          formatKarneNumber(klass.resultCount),
+          formatKarnePercent(scoreSuccessRate(classAverages)),
+          formatKarneNet(classAverages.net),
         ];
       })}
       ${institutionStudentTable}</section>`
     : "";
   return `<!doctype html><html lang="tr"><head><meta charset="utf-8" /><style>
-    body{font-family:Arial,sans-serif;color:#101828}.hero{background:#101828;color:white;padding:24px}.content{padding:24px}
-    .warning{background:#fff4e5;border:1px solid #f79009;font-weight:700;padding:10px}.karne{break-before:page;margin-top:24px}
+    body{font-family:"IBM Plex Sans",Arial,sans-serif;color:#161b2b;font-variant-numeric:tabular-nums}
+    .hero{background:#f3f4f8;border-bottom:2px solid #4f46e5;color:#161b2b;padding:24px}.content{padding:24px}
+    h1,h2,h3{font-weight:600;color:#161b2b}.karne h2{border-bottom:1px solid #dfe3ea;padding-bottom:6px}
+    .warning{background:#fdf5e6;border:1px solid #e7b45a;color:#7a4a00;font-weight:600;padding:10px}.karne{break-before:page;margin-top:24px}
     .student-cards>.karne:first-child{break-before:auto}
     .student-cards{font-size:10px}.student-cards .karne{margin-top:0}.student-cards h2{font-size:18px;margin:9px 0}
     .student-cards p{margin:5px 0}.student-cards .warning{padding:6px}.student-cards th,.student-cards td{font-size:9px;line-height:1.15;padding:3px}
     .institution-summary>section{break-inside:avoid}thead{display:table-header-group}
-    table{border-collapse:collapse;width:100%}th,td{border:1px solid #d0d5dd;padding:5px;vertical-align:top}th{background:#eef4ff;text-align:left}
+    table{border-collapse:collapse;width:100%}th,td{border:1px solid #dfe3ea;padding:5px;vertical-align:top}th{background:#f3f4f8;color:#2c3344;font-weight:600;text-align:left}
     .bar-chart{break-inside:avoid;margin:14px 0}.bar-row{display:grid;grid-template-columns:120px 1fr 52px;align-items:center;gap:8px;margin:5px 0}
-    .bar-track{background:#eef2f6;border-radius:5px;height:11px;overflow:hidden}.bar-fill{background:#155eef;height:100%}.bar-value{text-align:right;font-size:11px}
+    .bar-track{background:#edf0f4;border-radius:4px;height:11px;overflow:hidden}.bar-fill{background:#4f46e5;height:100%}.bar-value{text-align:right;font-size:11px}
     .institution-summary table{font-size:9px}
   </style></head><body><main class="content ${pdfMode === "STUDENT_CARDS" ? "student-cards" : ""}">${institutionHtml}${studentHtml}</main></body></html>`;
 }
@@ -361,6 +364,27 @@ function formatPdfValue(value: string | number): string {
 
 function formatPdfNumber(value: unknown): string {
   return formatPdfValue(readNumber(value));
+}
+
+// DEC-20260930-04: karne HTML'i web karnesiyle aynı Türkçe biçimi kullanır (Başarı % bir ondalık: %73,3;
+// net iki ondalık: 24,50; sayı/puan en çok iki ondalık). Değerler aynı snapshot alanlarından gelir, yalnız
+// gösterim biçimlenir. Düz metin fallback satırları ASCII biçimini korur.
+function formatKarnePercent(value: string | number): string {
+  return typeof value === "number"
+    ? `%${value.toLocaleString("tr-TR", { maximumFractionDigits: 1, minimumFractionDigits: 1 })}`
+    : formatPdfPercent(value);
+}
+
+function formatKarneNet(value: unknown): string {
+  const number = readNumber(value);
+  return typeof number === "number"
+    ? number.toLocaleString("tr-TR", { maximumFractionDigits: 2, minimumFractionDigits: 2 })
+    : formatPdfValue(number);
+}
+
+function formatKarneNumber(value: unknown): string {
+  const number = readNumber(value);
+  return typeof number === "number" ? number.toLocaleString("tr-TR", { maximumFractionDigits: 2 }) : formatPdfValue(number);
 }
 
 function formatPdfPercent(value: string | number): string {
@@ -401,16 +425,16 @@ function pdfScoreTypeLabel(type: string): string {
   return type || "-";
 }
 
-function formatPdfScoreByType(student: Record<string, unknown>, type: ExamScoreType): string {
+function formatPdfScoreByType(student: Record<string, unknown>, type: ExamScoreType, format: (value: unknown) => string = formatPdfNumber): string {
   const view = readRecords(student.scoreViews).find((candidate) => readText(candidate.type) === type);
-  return view?.status === "CALCULATED" ? formatPdfNumber(view.practiceScore) : formatScoreStatus(view?.status);
+  return view?.status === "CALCULATED" ? format(view.practiceScore) : formatScoreStatus(view?.status);
 }
 
-function formatPdfScoreCourseNets(student: Record<string, unknown>, type: ExamScoreType): string {
+function formatPdfScoreCourseNets(student: Record<string, unknown>, type: ExamScoreType, format: (value: unknown) => string = formatPdfNumber): string {
   return readRecords(student.branches)
     .filter((branch) => reportCourseMatchesScoreType(type, readText(branch.branch)))
     .sort((left, right) => reportCourseSortOrder(type, readText(left.branch)) - reportCourseSortOrder(type, readText(right.branch)))
-    .map((branch) => `${reportCourseShortName(readText(branch.branch))} ${formatPdfNumber(branch.net)}`)
+    .map((branch) => `${reportCourseShortName(readText(branch.branch))} ${format(branch.net)}`)
     .join(" · ") || "-";
 }
 
@@ -433,7 +457,7 @@ function renderPdfBarChart(
     const numericValue = value(row);
     if (numericValue === undefined) return [];
     const ratio = Math.max(0, Math.min(1, (numericValue - minimum) / (maximum - minimum)));
-    return [`<div class="bar-row"><span>${escapeHtml(label(row))}</span><span class="bar-track"><span class="bar-fill" style="display:block;width:${(ratio * 100).toFixed(2)}%"></span></span><strong class="bar-value">${escapeHtml(formatPdfNumber(numericValue))}${escapeHtml(suffix)}</strong></div>`];
+    return [`<div class="bar-row"><span>${escapeHtml(label(row))}</span><span class="bar-track"><span class="bar-fill" style="display:block;width:${(ratio * 100).toFixed(2)}%"></span></span><strong class="bar-value">${escapeHtml(suffix === "%" ? formatKarnePercent(numericValue) : `${formatKarneNumber(numericValue)}${suffix}`)}</strong></div>`];
   });
   return chartRows.length > 0
     ? `<section class="bar-chart"><h2>${escapeHtml(title)}</h2>${chartRows.join("")}</section>`

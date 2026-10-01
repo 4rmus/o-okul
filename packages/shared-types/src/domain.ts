@@ -2236,6 +2236,17 @@ export interface ReportSnapshotRecord {
   updatedAt: string;
 }
 
+// Öğretmen günlük özeti read model'i (ADR-0007, Berrak §5). Yalnız öğretmenin kendi kapsamı; PII yok.
+export interface TeacherTodaySummary {
+  generatedAt: string;
+  date: string;
+  teacherName: string;
+  todayLessons: Array<{ id: string; classId: string; courseId?: string; title: string; startsAt: string; endsAt: string }>;
+  pendingHomework: Array<{ id: string; classId: string; title: string; dueAt?: string }>;
+  pendingHomeworkCount: number;
+  latestReport: { examId: string; title: string; startsAt?: string; latestGeneratedAt: string } | null;
+}
+
 export interface PortalReportIndexItem {
   examId: string;
   title: string;
@@ -2695,23 +2706,50 @@ export interface ExamParticipantRecord {
   updatedAt: string;
 }
 
+// Sınav çalışma alanı hazırlığı sunucuda hesaplanır (Berrak §4); client tahmin yapmaz.
 export type ExamWorkspaceReadinessKey =
   | "EXAM"
   | "ANSWER_KEY"
   | "PARTICIPANTS"
   | "PUBLISHED"
-  | "OPTICAL_ENTRY";
+  | "OPTICAL_ENTRY"
+  | "OPTICAL_LAYOUT"
+  | "IMPORT"
+  | "MATCHING"
+  | "EVALUATION"
+  | "REPORT";
 
 export type ExamWorkspaceNextAction =
   | "ADD_ANSWER_KEY"
   | "ADD_PARTICIPANTS"
   | "PUBLISH_EXAM"
-  | "OPEN_OPTICAL";
+  | "OPEN_OPTICAL"
+  | "UPLOAD_OPTICAL"
+  | "RESOLVE_UNMATCHED"
+  | "WAIT_EVALUATION"
+  | "GENERATE_REPORT"
+  | "OPEN_REPORT";
+
+export type ExamWorkspaceBlocker =
+  | "ANSWER_KEY_MISSING"
+  | "PARTICIPANTS_MISSING"
+  | "EXAM_NOT_PUBLISHED"
+  | "OPTICAL_LAYOUT_MISSING"
+  | "IMPORT_MISSING"
+  | "UNMATCHED_ROWS"
+  | "EVALUATION_PENDING"
+  | "REPORT_MISSING";
 
 export interface ExamWorkspaceReadinessStep {
   key: ExamWorkspaceReadinessKey;
   status: "READY" | "BLOCKED";
-  blocker?: "ANSWER_KEY_MISSING" | "PARTICIPANTS_MISSING" | "EXAM_NOT_PUBLISHED";
+  blocker?: ExamWorkspaceBlocker;
+}
+
+export interface ExamWorkspaceProgressSummary {
+  openQuarantineCount: number;
+  matchedCount: number;
+  evaluatedCount: number;
 }
 
 export interface ExamWorkspaceReadModel {
@@ -2724,6 +2762,7 @@ export interface ExamWorkspaceReadModel {
   };
   readiness: ExamWorkspaceReadinessStep[];
   nextAction: ExamWorkspaceNextAction;
+  progress: ExamWorkspaceProgressSummary;
 }
 
 export interface OpticalFormTemplateRecord {

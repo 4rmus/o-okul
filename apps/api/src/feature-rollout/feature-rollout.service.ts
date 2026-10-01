@@ -162,7 +162,6 @@ function invalidConfig(reason: string): Error {
 }
 
 function ownerFor(key: FeatureRolloutKey): string {
-  if (key === "web.exam-workspace-v2") return "exam-reporting";
   if (key === "web.control-plane-v2") return "platform-operations";
   if (key === "product.guardian-read-only") return "product-iam";
   return "frontend-experience";
@@ -170,7 +169,6 @@ function ownerFor(key: FeatureRolloutKey): string {
 
 function removalIssueFor(key: FeatureRolloutKey): string {
   const issueByKey: Record<FeatureRolloutKey, string> = {
-    "web.exam-workspace-v2": "EX-02",
     "web.student-registry-v2": "ST-01",
     "web.teacher-portal-v2": "TP-02",
     "web.student-portal-v2": "SP-02",

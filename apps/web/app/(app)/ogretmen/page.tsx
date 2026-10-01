@@ -1,5 +1,5 @@
-import { TeacherPortalPage } from "../portals/teacher-portal-page.js";
+import { TeacherTodayPage } from "../portals/teacher-today-page.js";
 
 export default function Page() {
-  return <TeacherPortalPage />;
+  return <TeacherTodayPage />;
 }

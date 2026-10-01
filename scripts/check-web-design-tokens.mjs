@@ -7,6 +7,7 @@ const files = {
   design: read("design.md"),
   globals: readCssWithLocalImports("apps/web/app/globals.css"),
   layout: read("apps/web/app/layout.tsx"),
+  darkTheme: read("apps/web/app/_styles/01-theme-dark.css"),
   log: read(".hallmark/log.json"),
   package: read("package.json"),
   reportRoute: read("apps/web/app/(app)/kurum/raporlar/reports-page.tsx"),
@@ -19,7 +20,8 @@ requireTokens("design.md", files.design, [
   "# Design — O-Okul",
   "## Genre",
   "## Macrostructure family",
-  "## Theme — Almanac",
+  "## Theme — Berrak",
+  "### Koyu tema",
   "## Typography",
   "## Motion",
   "## CTA voice",
@@ -84,28 +86,28 @@ requireTokens("design.md shadcn ihracı", shadcnExport, [
 ]);
 
 requireTokens("tokens.css", files.tokens, [
-  "Hallmark · macrostructure: Narrative Workflow / Workbench · tone: technical-austere · anchor hue: ink-blue 230",
+  "Hallmark · macrostructure: Narrative Workflow / Workbench · tone: calm-product · anchor hue: indigo 277",
   "Hallmark · pre-emit critique:",
-  "--color-paper: oklch(96.5% 0.012 220);",
-  "--color-paper-raised: oklch(98.5% 0.007 220);",
-  "--color-paper-muted: oklch(93% 0.018 220);",
-  "--color-ink: oklch(20% 0.025 235);",
-  "--color-ink-muted: oklch(42% 0.025 235);",
-  "--color-rule: oklch(80% 0.020 225);",
-  "--color-accent: oklch(42% 0.150 230);",
-  "--color-accent-hover: oklch(36% 0.135 230);",
-  "--color-accent-soft: oklch(92% 0.035 230);",
-  "--color-accent-secondary: oklch(44% 0.100 175);",
-  "--color-focus: oklch(48% 0.180 245);",
-  "--font-display: var(--font-source-serif-4)",
+  "--color-paper: oklch(98.3% 0.003 250);",
+  "--color-paper-raised: oklch(99.9% 0.001 250);",
+  "--color-paper-muted: oklch(96.5% 0.005 250);",
+  "--color-ink: oklch(21% 0.020 265);",
+  "--color-ink-muted: oklch(51% 0.030 260);",
+  "--color-rule: oklch(91% 0.008 255);",
+  "--color-accent: oklch(51% 0.230 277);",
+  "--color-accent-hover: oklch(46% 0.215 277);",
+  "--color-accent-soft: oklch(96% 0.018 272);",
+  "--color-accent-secondary: oklch(60% 0.118 185);",
+  "--color-focus: oklch(51% 0.230 277);",
+  "--font-display: var(--font-ibm-plex-sans)",
   "--font-body: var(--font-ibm-plex-sans)",
   "--space-3xs: 0.25rem;",
   "--space-2xl: 4rem;",
   "--text-base: 1rem;",
-  "--text-display: clamp(2.25rem, 4vw, 3rem);",
-  "--radius-control: 4px;",
-  "--radius-panel: 2px;",
-  "--radius-dialog: 6px;",
+  "--text-display: clamp(2rem, 3.5vw, 2.5rem);",
+  "--radius-control: 6px;",
+  "--radius-panel: 8px;",
+  "--radius-dialog: 12px;",
   "--radius-pill: 999px;",
   "--dur-instant: 100ms;",
   "--dur-short: 180ms;",
@@ -123,7 +125,7 @@ requireTokens("tokens.css", files.tokens, [
 requireTokens("Hallmark yönü", `${files.design}\n${files.tokens}`, [
   "landing: Narrative Workflow",
   "app: Workbench",
-  "theme: Almanac",
+  "theme: Berrak",
 ]);
 forbidRegex(
   "Hallmark damgaları",
@@ -142,14 +144,20 @@ forbidRegex(
 forbidRegex("tokens.css", files.tokens, /oklch\((?:0|100)%\s+0(?:\s|%)/gi, "saf siyah/beyaz uç değer");
 
 requireTokens("apps/web/app/layout.tsx", files.layout, [
-  'import { IBM_Plex_Sans, Source_Serif_4 } from "next/font/google";',
+  'import { IBM_Plex_Sans } from "next/font/google";',
   'variable: "--font-ibm-plex-sans"',
-  'variable: "--font-source-serif-4"',
   'subsets: ["latin", "latin-ext"]',
   "bodyFont.variable",
-  "displayFont.variable",
-  'data-theme="almanac"',
+  'data-theme="light"',
+  "suppressHydrationWarning",
+  'localStorage.getItem("o-okul-theme")',
+  "(prefers-color-scheme: dark)",
+  "d.dataset.theme=t",
+  "<script dangerouslySetInnerHTML={{ __html: themeScript }} />",
 ]);
+forbidRegex("apps/web/app/layout.tsx", files.layout, /Source_Serif_4|font-source-serif/g, "serif display fontu");
+validateBerrakDarkTheme(files.tokens, files.darkTheme);
+validateKarnePins(files.tokens, read("apps/web/app/_styles/73-almanac-report.css"));
 
 if (!files.globals.startsWith('@import "../../../tokens.css";')) {
   failures.push("apps/web/app/globals.css tokens.css importu ilk satırda olmalı.");
@@ -172,8 +180,8 @@ requireTokens("apps/web/app/globals.css Hallmark katmanı", hallmarkLayer, [
   ".next-karne-sheet h2,",
   "font-family: inherit;",
   "min-width: auto;\n    overflow-wrap: normal;",
-  ".next-karne-sheet table {\n    font-variant-numeric: normal;",
-  ".next-karne-sheet .uh-metric-card__value {\n    font-variant-numeric: normal;",
+  ".next-karne-sheet table {\n    font-variant-numeric: tabular-nums;",
+  ".next-karne-sheet .uh-metric-card__value {\n    font-variant-numeric: tabular-nums;",
   ".next-karne-sheet .next-karne-block {\n    box-shadow: 0 1px 2px var(--karne-block-shadow);",
   ".next-report-status-surface .uh-status-badge {\n    border-radius: var(--radius-pill);",
   "color-scheme: light;",
@@ -186,8 +194,10 @@ const karneRawColorBlock = readMarkedBlock(legacyGlobals, "karne-print");
 const receiptRawColorBlock = readMarkedBlock(legacyGlobals, "receipt-print");
 const karneRawColors = karneRawColorBlock.match(rawColorPattern) ?? [];
 const receiptRawColors = receiptRawColorBlock.match(rawColorPattern) ?? [];
-if (karneRawColors.length !== 40) {
-  failures.push(`karne-print allowlist tam 40 dondurulmuş ham renk içermeli: ${karneRawColors.length}`);
+// DEC-20260930-04: Berrak karne kâğıdı 39 print rengi taşır (eski gradyan kenarlık kaldırıldı; iki grafik
+// serisi rengi gri tonlamada ayrışma için eklendi).
+if (karneRawColors.length !== 39) {
+  failures.push(`karne-print allowlist tam 39 Berrak kâğıt rengi içermeli: ${karneRawColors.length}`);
 }
 if (receiptRawColors.length !== 4) {
   failures.push(`receipt-print allowlist tam 4 dondurulmuş ham renk içermeli: ${receiptRawColors.length}`);
@@ -203,7 +213,8 @@ forbidRegex(
 );
 requireTokens("dondurulmuş karne/print istisnaları", legacyGlobals, [
   ".next-karne-sheet {",
-  "font-family: Arial, sans-serif;",
+  "font-family: var(--font-body), Arial, sans-serif;",
+  "font-variant-numeric: tabular-nums;",
   "@media print {",
 ]);
 requireTokens("apps/web/app/globals.css Hallmark katmanı", hallmarkLayer, [
@@ -255,10 +266,29 @@ requireTokens("packages/ui/src/components/charts.tsx", files.charts, [
   "getImageData(0, 0, 1, 1)",
   'padStart(2, "0")',
   "animation: false",
+  'attributeFilter: ["data-theme"]',
+  "observer.disconnect()",
 ]);
 forbidRegex("packages/ui/src/components/charts.tsx", files.charts, /#[0-9a-f]{3,8}\b|\brgba?\(|\bhsla?\(/gi, "ham renk");
 
 validateCustomPropertyGraph(`${files.tokens}\n${files.globals}`);
+
+// Berrak §7 ratchet: uygulama CSS'indeki ham px sayıları yalnız azalabilir. Sayı düştüğünde baseline
+// aynı değişiklikte düşürülür (sessizce geri artmasın diye eşitlik beklenir).
+{
+  const sample = countRawPx(".a { padding: 8px -4px var(--space-sm); margin-top: 2px; font-size: 12px; border-top-left-radius: 6px; /* gap: 9px; */ }");
+  if (JSON.stringify(sample) !== JSON.stringify({ spacing: 2, fontSize: 1, radius: 1 })) failures.push(`countRawPx öz denetimi başarısız: ${JSON.stringify(sample)}`);
+}
+const rawPxBaseline = { spacing: 469, fontSize: 165, radius: 28 };
+const rawPxCounts = countStyleRawPx();
+for (const [group, baseline] of Object.entries(rawPxBaseline)) {
+  const count = rawPxCounts[group];
+  if (count > baseline) {
+    failures.push(`Ham px ratchet'i aşıldı (${group}): ${count} > ${baseline}. Değerleri tokens.css token'larına bağlayın.`);
+  } else if (count < baseline) {
+    failures.push(`Ham px ratchet'i düştü (${group}): ${count} < ${baseline}. rawPxBaseline.${group} değerini ${count} yapın.`);
+  }
+}
 
 if (failures.length > 0) {
   console.error("Web design token kontrolü başarısız:");
@@ -462,9 +492,9 @@ function validateHallmarkLog(source) {
   const expectedValues = {
     scope: "app",
     macrostructure: "Narrative Workflow / Workbench / Index-First",
-    theme: "Almanac",
+    theme: "Berrak",
     enrichment: "none",
-    theme_axes: "light / roman-serif / cool",
+    theme_axes: "light+dark / sans / cool-indigo",
   };
   for (const [key, value] of Object.entries(expectedValues)) {
     if (entry?.[key] !== value) failures.push(`.hallmark/log.json ilk kayıt ${key} değeri ${value} olmalı.`);
@@ -516,7 +546,78 @@ function readMarkedBlock(source, label) {
 function validateCustomPropertyGraph(source) {
   const definitions = new Set([...source.matchAll(/(--[\w-]+)\s*:/g)].map((match) => match[1]));
   const references = new Set([...source.matchAll(/var\((--[\w-]+)/g)].map((match) => match[1]));
-  const runtimeFontVariables = new Set(["--font-ibm-plex-sans", "--font-source-serif-4"]);
+  const runtimeFontVariables = new Set(["--font-ibm-plex-sans"]);
   const missing = [...references].filter((name) => !definitions.has(name) && !runtimeFontVariables.has(name)).sort();
   if (missing.length > 0) failures.push(`Tanımsız CSS custom property referansları: ${missing.join(", ")}`);
 }
+
+function validateBerrakDarkTheme(tokensSource, darkSource) {
+  const lightColors = new Map([...parseCustomProperties(tokensSource)].filter(([name]) => name.startsWith("--color-")));
+  const darkBlock = darkSource.match(/:root\[data-theme="dark"\] \{([^}]*)\}/)?.[1] ?? "";
+  const darkColors = parseCustomProperties(darkBlock);
+  if (!darkBlock.includes("color-scheme: dark;")) failures.push("01-theme-dark.css koyu blok color-scheme: dark içermeli.");
+  const lightNames = [...lightColors.keys()].sort().join(",");
+  if ([...darkColors.keys()].sort().join(",") !== lightNames) {
+    failures.push("01-theme-dark.css koyu blok tokens.css ile aynı renk token adlarını tanımlamalı.");
+  }
+  const resetBegin = darkSource.indexOf("/* BERRAK-LIGHT-RESET BEGIN */");
+  const resetEnd = darkSource.indexOf("/* BERRAK-LIGHT-RESET END */");
+  if (resetBegin < 0 || resetEnd <= resetBegin) {
+    failures.push("01-theme-dark.css BERRAK-LIGHT-RESET markerlarını içermeli.");
+    return;
+  }
+  const reset = darkSource.slice(resetBegin, resetEnd);
+  if (!reset.includes("@media print {")) failures.push("BERRAK-LIGHT-RESET @media print bloğu içermeli.");
+  const blocks = [...reset.matchAll(/\{([^{}]*)\}/g)].map((match) => parseCustomProperties(match[1]));
+  if (blocks.length !== 1) failures.push(`BERRAK-LIGHT-RESET tek print bloğu içermeli: ${blocks.length}`);
+  for (const block of blocks) {
+    for (const [name, value] of lightColors) {
+      if (block.get(name) !== value) failures.push(`BERRAK-LIGHT-RESET tokens.css değerinden sapıyor: ${name}`);
+    }
+  }
+}
+
+// DEC-20260930-04: karne tema bağımsız Berrak açık kâğıdıdır; her renk token'ı karne kapsamında
+// tokens.css'teki açık değerine birebir sabitlenir (koyu tema karneye sızamaz).
+function validateKarnePins(tokensSource, reportSource) {
+  const begin = reportSource.indexOf("/* KARNE-PAPER-PINS BEGIN */");
+  const end = reportSource.indexOf("/* KARNE-PAPER-PINS END */");
+  if (begin < 0 || end <= begin) {
+    failures.push("73-almanac-report.css KARNE-PAPER-PINS markerlarını içermeli.");
+    return;
+  }
+  const pins = parseCustomProperties(reportSource.slice(begin, end));
+  for (const [name, value] of parseCustomProperties(tokensSource)) {
+    if (!name.startsWith("--color-")) continue;
+    if (!pins.has(name)) failures.push(`KARNE-PAPER-PINS eksik token: ${name}`);
+    else if (pins.get(name) !== value) failures.push(`KARNE-PAPER-PINS değeri tokens.css ile eşit olmalı: ${name}`);
+  }
+}
+
+function countStyleRawPx() {
+  const styleDir = "apps/web/app/_styles";
+  const paths = readdirSync(styleDir).filter((name) => name.endsWith(".css")).map((name) => `${styleDir}/${name}`);
+  const total = { spacing: 0, fontSize: 0, radius: 0 };
+  for (const path of [...paths, "apps/web/app/globals.css"]) {
+    const counts = countRawPx(read(path));
+    for (const group of Object.keys(total)) total[group] += counts[group];
+  }
+  return total;
+}
+
+// Yalnız pozitif px literal'leri sayılır (calc içindekiler dahil); negatif ofsetler sayılmaz.
+function countRawPx(css) {
+  const groups = {
+    spacing: /^(?:padding|margin|gap|row-gap|column-gap)(?:-[a-z-]+)?$/,
+    fontSize: /^font-size$/,
+    radius: /^border(?:-[a-z]+)*-radius$/,
+  };
+  const counts = { spacing: 0, fontSize: 0, radius: 0 };
+  for (const match of css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([a-z-]+)\s*:\s*([^;{}]+);/g)) {
+    for (const [group, pattern] of Object.entries(groups)) {
+      if (pattern.test(match[1])) counts[group] += (match[2].match(/(?<![\w.-])\d*\.?\d+px\b/g) ?? []).length;
+    }
+  }
+  return counts;
+}
+

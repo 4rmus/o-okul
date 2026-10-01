@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { AxeBuilder } from "@axe-core/playwright";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { expectNoHorizontalOverflow } from "./helpers/horizontal-overflow.js";
-import { resolveRouteArchitecture, type RouteArchitecture } from "./route-architecture-manifest.js";
+import { resolveRouteArchitecture, type RouteArchitecture } from "../src/route-manifest.js";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const appDirectory = fileURLToPath(new URL("../app", import.meta.url));
@@ -27,7 +27,7 @@ type Persona = "anonymous" | "assistantAdmin" | "guardian" | "student" | "studen
 
 interface RouteCase {
   architecture: RouteArchitecture;
-  feature?: "exam-workspace" | "sms";
+  feature?: "sms";
   heading: string;
   persona: Persona;
   primaryTask: PrimaryTask;
@@ -65,7 +65,6 @@ const routeCases = [
   route("/kurum/duyurular", "Duyurular", "assistantAdmin", { role: "region", name: "Duyuru yönetimi" }),
   route("/kurum/etutler", "Etütler", "assistantAdmin", { role: "region", name: "Etüt yönetimi" }),
   route("/kurum/finans", "Finans", "tenantAdmin", { role: "region", name: "Finans yönetimi" }),
-  route("/kurum/gozlemlenebilirlik", "Sistem İzleme", "tenantAdmin", { role: "region", name: "Anlık sistem durumu" }),
   route("/kurum/guvenlik-denetimi", "Güvenlik Denetimi", "tenantAdmin", { role: "region", name: "Canlıya geçiş güvenlik kontrolleri" }),
   route("/kurum/kampusler", "Kampüsler", "assistantAdmin", { role: "region", name: "Kampüs yönetimi" }),
   route("/kurum/kazanimlar", "Kazanımlar", "assistantAdmin", { role: "region", name: "Kazanım yönetimi" }),
@@ -95,20 +94,27 @@ const routeCases = [
   route("/kurum/sablonlar", "Şablonlar", "assistantAdmin", { role: "region", name: "Şablon yönetimi" }, { feature: "sms" }),
   route("/kurum/seviyeler", "Seviyeler", "assistantAdmin", { role: "region", name: "Seviye yönetimi" }),
   route("/kurum/sinavlar", "Sınavlar", "assistantAdmin", { role: "region", name: "Sınav yönetimi" }),
-  route("/kurum/sinavlar/[examId]", "Gate C Denemesi", "assistantAdmin", { role: "region", name: "Salt okunur sınav çalışma alanı" }, { feature: "exam-workspace" }),
+  route("/kurum/sinavlar/[examId]", "Gate C Denemesi", "assistantAdmin", { role: "region", name: "Sınav çalışma alanı özeti" }),
+  route("/kurum/sinavlar/[examId]/degerlendirme", "Değerlendirme", "assistantAdmin", { role: "region", name: "Değerlendirme durumu" }),
+  route("/kurum/sinavlar/[examId]/optik/duzen", "Optik İşlemleri", "assistantAdmin", { role: "region", name: "Optik iş akışı" }),
+  route("/kurum/sinavlar/[examId]/optik/eslesmeyenler", "Optik İşlemleri", "assistantAdmin", { role: "region", name: "Optik iş akışı" }),
+  route("/kurum/sinavlar/[examId]/optik/yukleme", "Optik İşlemleri", "assistantAdmin", { role: "region", name: "Optik iş akışı" }),
+  route("/kurum/sinavlar/[examId]/rapor/ciktilar", "Sınav Raporu", "assistantAdmin", { role: "region", name: "Rapor çalışma alanı" }),
+  route("/kurum/sinavlar/[examId]/rapor/genel", "Sınav Raporu", "assistantAdmin", { role: "region", name: "Rapor çalışma alanı" }),
+  route("/kurum/sinavlar/[examId]/rapor/karne", "Sınav Raporu", "assistantAdmin", { role: "region", name: "Rapor çalışma alanı" }),
+  route("/kurum/sinavlar/[examId]/rapor/ogrenciler", "Sınav Raporu", "assistantAdmin", { role: "region", name: "Rapor çalışma alanı" }),
   route("/kurum/siniflar", "Sınıflar", "assistantAdmin", { role: "region", name: "Sınıf yönetimi" }),
   route("/kurum/siniflar/[classId]", "8-A", "assistantAdmin", { role: "region", name: "Sınıf detayı" }),
-  route("/kurum/sistem-sagligi", "Sistem Sağlığı", "tenantAdmin", { role: "region", name: "Sistem bağlantıları ve kullanım durumu" }),
   route("/kurum/veliler", "Veliler", "assistantAdmin", { role: "region", name: "Veli yönetimi" }),
   route("/kurum/veliler/[guardianId]", "Veli Test", "assistantAdmin", { role: "region", name: "Veli detayı" }),
   route("/kurum/yedek-restore", "Yedekleme ve Geri Yükleme", "tenantAdmin", { role: "region", name: "Yedekleme ve geri yükleme doğrulamaları" }),
 
   route("/sistem", "Sistem Paneli", "systemAdmin", { role: "region", name: "Sistem özeti" }),
   route("/sistem/denetim", "Denetim", "systemAdmin", { role: "region", name: "Denetim referans kontrol listesi" }),
-  route("/sistem/gozlemlenebilirlik", "Sistem İzleme", "systemAdmin", { role: "region", name: "Sistem İzleme referans kontrol listesi" }),
+  route("/sistem/gozlemlenebilirlik", "Sistem İzleme", "systemAdmin", { role: "region", name: "İzleme panoları" }),
   route("/sistem/kurumlar", "Kurumlar", "systemAdmin", { role: "region", name: "Kurum yönetimi" }),
   route("/sistem/kurumlar/[tenantId]", "Route Smoke Akademi", "systemAdmin", { role: "region", name: "Kurum detayı" }),
-  route("/sistem/sistem-sagligi", "Sistem Sağlığı", "systemAdmin", { role: "region", name: "Sistem Sağlığı referans kontrol listesi" }),
+  route("/sistem/sistem-sagligi", "Sistem Sağlığı", "systemAdmin", { role: "region", name: "Sistem bağlantıları" }),
 
   route("/ogrenci", "Öğrenci Portalı", "student", { role: "region", name: "Öğrenci günlük aksiyonları" }),
   route("/ogrenci/destek", "Öğrenci Portalı", "student", { role: "region", name: "Destek talepleri" }),
@@ -149,11 +155,7 @@ test.describe("UI route family smoke", () => {
     test(title, async ({ page }) => {
       test.setTimeout(120_000);
       const unknownApiRequests: string[] = [];
-      await installRouteApiMocks(page, routeCase.persona, unknownApiRequests, {
-        featureRolloutKeys: routeCase.feature === "exam-workspace"
-          ? ["web.exam-workspace-v2"]
-          : [],
-      });
+      await installRouteApiMocks(page, routeCase.persona, unknownApiRequests);
       await page.addInitScript(() => {
         document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
       });
@@ -382,7 +384,7 @@ function assertRouteManifestParity(manifest: readonly RouteCase[]) {
   const fileSystemRoutes = collectPageRoutes(appDirectory).sort();
   const manifestRoutes = manifest.map((entry) => entry.routeTemplate).sort();
   const duplicates = manifestRoutes.filter((routeTemplate, index) => manifestRoutes.indexOf(routeTemplate) !== index);
-  if (manifest.length !== 87) throw new Error(`Route manifest must contain exactly 87 entries; found ${manifest.length}.`);
+  if (manifest.length !== 93) throw new Error(`Route manifest must contain exactly 93 entries; found ${manifest.length}.`);
   if (duplicates.length > 0) throw new Error(`Route manifest contains duplicates: ${[...new Set(duplicates)].join(", ")}`);
   if (JSON.stringify(manifestRoutes) !== JSON.stringify(fileSystemRoutes)) {
     throw new Error(`Route manifest does not match page.tsx inventory.\nmanifest=${manifestRoutes.join(",")}\nfilesystem=${fileSystemRoutes.join(",")}`);
@@ -411,7 +413,6 @@ async function installRouteApiMocks(
   persona: Persona,
   unknownApiRequests: string[],
   options: {
-    featureRolloutKeys?: Array<"web.exam-workspace-v2">;
     portalAccess?: ReturnType<typeof createPortalAccessMock>;
   } = {},
 ) {
@@ -452,7 +453,7 @@ async function installRouteApiMocks(
       return;
     }
     if (pathName === "/me/feature-rollouts" && request.method() === "GET" && persona !== "anonymous") {
-      await fulfillData(route, { enabledFeatureKeys: options.featureRolloutKeys ?? [] });
+      await fulfillData(route, { enabledFeatureKeys: [] });
       return;
     }
 
@@ -625,6 +626,9 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
   if (pathName === "/audit-logs/student-summary") return { data: [] };
 
   if (pathName === "/me/teacher") return { data: teacherFixture };
+  if (pathName === "/me/teacher/today") {
+    return { data: { date: "2026-06-17", generatedAt: "2026-06-17T08:00:00.000Z", latestReport: null, pendingHomework: [], pendingHomeworkCount: 0, teacherName: "Zeynep Arslan", todayLessons: [] } };
+  }
   if (pathName === "/me/teacher/lookups") {
     return {
       data: {
@@ -778,8 +782,14 @@ const examWorkspaceFixture = {
     { key: "PARTICIPANTS", status: "READY" },
     { key: "PUBLISHED", status: "READY" },
     { key: "OPTICAL_ENTRY", status: "READY" },
+    { key: "OPTICAL_LAYOUT", status: "BLOCKED", blocker: "OPTICAL_LAYOUT_MISSING" },
+    { key: "IMPORT", status: "BLOCKED", blocker: "IMPORT_MISSING" },
+    { key: "MATCHING", status: "BLOCKED", blocker: "IMPORT_MISSING" },
+    { key: "EVALUATION", status: "BLOCKED", blocker: "IMPORT_MISSING" },
+    { key: "REPORT", status: "BLOCKED", blocker: "REPORT_MISSING" },
   ],
   nextAction: "OPEN_OPTICAL",
+  progress: { openQuarantineCount: 0, matchedCount: 0, evaluatedCount: 0 },
 };
 const campusFixture = { id: "campus-main", name: "Ana Kampüs", tenantId: "tenant-faz9" };
 const gradeLevelFixture = { code: "8", id: "grade-8", name: "8. Sınıf", tenantId: "tenant-faz9" };

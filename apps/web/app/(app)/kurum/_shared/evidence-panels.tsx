@@ -151,7 +151,7 @@ export function EvidenceListSection({ ariaLabel, items, title }: EvidenceListSec
 }
 
 export function ReferenceBadge() {
-  return <span className="next-reference-badge">Rehber / Referans</span>;
+  return <StatusBadge tone="neutral">Rehber / Referans</StatusBadge>;
 }
 
 export function OperationDecisionNotice({ decision, nextStep, reason }: OperationDecisionNoticeProps) {

@@ -36,7 +36,7 @@ if (path === "repos/owner/repo/environments/staging/secrets?per_page=100") {
   const names =
     scenario === "missing-secrets"
       ? ["STAGING_SSH_HOST", "STAGING_SSH_USER", "STAGING_SSH_PRIVATE_KEY"]
-      : ["STAGING_SSH_HOST", "STAGING_SSH_USER", "STAGING_SSH_PRIVATE_KEY", "GHCR_READ_TOKEN", "STAGING_EVIDENCE_ENV_B64"];
+      : ["STAGING_SSH_HOST", "STAGING_SSH_USER", "STAGING_SSH_PRIVATE_KEY", "GHCR_READ_TOKEN", "STAGING_EVIDENCE_ENV_B64", "STAGING_METRICS_SCRAPE_TOKEN"];
   writeJson({ secrets: names.map((name) => ({ name, value: "super-secret-value-that-must-not-leak" })) });
 }
 
@@ -60,6 +60,7 @@ try {
   expectFailure("missing-secrets", [
     "GitHub staging secret eksik: GHCR_READ_TOKEN",
     "GitHub staging secret eksik: STAGING_EVIDENCE_ENV_B64",
+    "GitHub staging secret eksik: STAGING_METRICS_SCRAPE_TOKEN",
   ]);
   expectNoOutput("missing-secrets", "super-secret-value-that-must-not-leak");
   expectFailure("bad-edge", ["STAGING_EDGE_MODE ip staging host için ip olmalı."]);

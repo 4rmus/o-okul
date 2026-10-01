@@ -14,10 +14,14 @@ export { Checkbox, type CheckboxProps } from "./components/checkbox.js";
 export { Field, Select, Textarea, type FieldProps, type SelectProps, type TextareaProps } from "./components/field.js";
 export { InfoGrid, InfoItem, type InfoGridProps, type InfoItemProps } from "./components/info-grid.js";
 export { MetricCard, MetricGrid, type MetricCardProps, type MetricGridProps } from "./components/metric-card.js";
+export { ContextBar, type ContextBarOption, type ContextBarProps, type ContextBarSelect } from "./components/context-bar.js";
+export { HubTabs, type HubTabItem, type HubTabsLinkProps, type HubTabsProps } from "./components/hub-tabs.js";
+export { PageHeader, type PageHeaderProps } from "./components/page-header.js";
 export { Pagination, type PaginationProps } from "./components/pagination.js";
 export { Panel, type PanelProps } from "./components/panel.js";
 export { Skeleton } from "./components/skeleton.js";
 export { StatusBadge, type StatusBadgeProps } from "./components/status-badge.js";
+export { Stepper, type StepperProps, type StepperStatus, type StepperStep } from "./components/stepper.js";
 export { FilterBar, Toolbar, type FilterBarProps, type ToolbarProps } from "./components/toolbar.js";
 export {
   SegmentedControl,
@@ -29,4 +33,5 @@ export {
   type TabButtonProps,
   type TabsProps,
 } from "./components/tabs.js";
+export { ToastProvider, useToast, type ToastTone } from "./components/toast.js";
 export { Tooltip, type TooltipProps } from "./components/tooltip.js";

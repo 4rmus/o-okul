@@ -1,4 +1,4 @@
-import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
+import { MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/common";
 import { AuditLogModule } from "./audit-log/audit-log.module.js";
 import { AnnouncementModule } from "./announcement/announcement.module.js";
 import { AttendanceModule } from "./attendance/attendance.module.js";
@@ -81,6 +81,9 @@ import { UserManagementModule } from "./user-management/user-management.module.j
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(SecurityHeadersMiddleware, RequestContextMiddleware, MetricsMiddleware).forRoutes("{*path}");
+    consumer.apply(SecurityHeadersMiddleware).forRoutes("{*path}");
+    // Prometheus scrape bearer'ı kullanıcı JWT'si değildir; /metrics kendi token guard'ını kullanır.
+    consumer.apply(RequestContextMiddleware).exclude({ path: "metrics", method: RequestMethod.GET }).forRoutes("{*path}");
+    consumer.apply(MetricsMiddleware).forRoutes("{*path}");
   }
 }

@@ -100,4 +100,20 @@ describe("API success response envelope", () => {
     expect(response.text).toContain("# TYPE o_okul_process_uptime_seconds gauge");
     expect(response.text).not.toContain("\"data\"");
   });
+
+  it("metrics scrape bearer'ını üretim prefix'inde kullanıcı oturumu gibi doğrulamaz", async () => {
+    const previous = process.env.METRICS_SCRAPE_TOKEN;
+    process.env.METRICS_SCRAPE_TOKEN = "p".repeat(48);
+    try {
+      await request(server).get(`/${apiPrefix}/metrics`).expect(401);
+      const response = await request(server)
+        .get(`/${apiPrefix}/metrics`)
+        .set("Authorization", `Bearer ${"p".repeat(48)}`)
+        .expect(200);
+      expect(response.text).toContain("o_okul_http_requests_total");
+    } finally {
+      if (previous === undefined) delete process.env.METRICS_SCRAPE_TOKEN;
+      else process.env.METRICS_SCRAPE_TOKEN = previous;
+    }
+  });
 });
