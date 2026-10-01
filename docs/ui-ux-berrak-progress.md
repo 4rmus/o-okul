@@ -698,4 +698,20 @@ artifact'ından (run 36834671993, 36841947066); CI'ın ilk hatada durduğu için
   `queue:smoke`, `live:onboarding:smoke`, `live:ui-worker:smoke`, `sms:smoke`, `notification:smoke`) ve
   8 dış senaryonun staging kanıtı (UAT-SYS-01/02/04, UAT-KURUM-01/03/05/06/08). Canlı smoke'lar staging'e
   veri yazdığı için onaysız koşturulmadı; doldurulmamış alanlar `PENDING` bırakıldı.
+- Canlı smoke'lar (kullanıcı onayıyla, 2026-10-01): sunucuda sürüm kaynağından (`git archive fd01a5c63`,
+  `/root/o-okul-private/uat-src/fd01a5c63`) koşturuldu; deploy dizinine dokunulmadı. Kanıtlar
+  `https://o-okul.com/evidence/role-uat/fd01a5c63/` altında:
+  - `pnpm db:rls:check:live` PASS (`rls-live.json`; işlem içinde rollback, kalıcı veri yok)
+  - `pnpm sms:smoke` PASS (`sms-smoke.json`; staging'de `SMS_ENABLED=false` → provider `disabled`)
+  - `pnpm notification:smoke` PASS (`notification-smoke.json`; gerçek e-posta gönderildi, push boş)
+  - `pnpm queue:smoke` FAIL: `TENANT_ACTIVITY_CONTEXT_INVALID`. Smoke script'i 2026-06-01'den beri
+    değişmedi; `currentTenantMutationVersion` koruması 2026-09-08'de (`4eadb5e9a`, Berrak öncesi) kalıcı
+    tenant store'da istek bağlamı istemeye başladı. Berrak kapsamı dışı; ayrı görev önerildi.
+- Ajanın koşturmadığı smoke'lar: `raw-import:smoke` ve `report-generation:smoke` staging'de hesap
+  oluşturup parola ile giriş yapıyor, `live:onboarding:smoke` gerçek sistem yöneticisi parolası + TOTP,
+  `live:ui-worker:smoke` gerçek hesaplarla giriş istiyor, `live:exam-cycle:check` bu akışların kanıtını
+  doğruluyor → kullanıcı/operatör koşturur.
+- Taslak girdiler: `tester=arair-role-uat`; `restoreBackupReference` kullanıcı yeni yedek istemediği için
+  staging'deki mevcut en yeni yedek (2026-08-26, bu sürümden önce). Doğrulayıcıda kalan: 6 komut
+  (yukarıdaki 5 + `queue:smoke`) ve 8 dış senaryonun staging kanıtı.
 
