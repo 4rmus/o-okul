@@ -182,9 +182,19 @@ async function seedFixtures() {
     await adminClient.query("SELECT set_config('app.bypass_rls', 'true', true)");
 
     await adminClient.query(
-      `INSERT INTO "Tenant" ("id", "name", "slug", "updatedAt")
-       VALUES ($1, 'RLS Tenant A', 'rls-tenant-a', now()), ($2, 'RLS Tenant B', 'rls-tenant-b', now())
-       ON CONFLICT ("slug") DO NOTHING`,
+      // Fixture tenant'ın lisans mirror alanları kendi LicenseTerm'iyle aynıdır; kalıcı (staging) veritabanında
+      // boş mirror, deploy'daki LicenseTerm backfill kapısını LICENSE_SNAPSHOT_MISSING ile bloklar.
+      `INSERT INTO "Tenant" ("id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", "updatedAt")
+       VALUES
+         ($1, 'RLS Tenant A', 'rls-tenant-a', 'RLS-PLAN-A', '2026-01-01', '2026-12-31', 100, now()),
+         ($2, 'RLS Tenant B', 'rls-tenant-b', 'RLS-PLAN-B', '2026-01-01', '2026-12-31', 100, now())
+       ON CONFLICT ("slug") DO UPDATE
+       SET "plan" = EXCLUDED."plan",
+           "licenseStartsAt" = EXCLUDED."licenseStartsAt",
+           "licenseEndsAt" = EXCLUDED."licenseEndsAt",
+           "seatLimit" = EXCLUDED."seatLimit",
+           "updatedAt" = now()
+       WHERE "Tenant"."id" = EXCLUDED."id"`,
       [ids.tenantA, ids.tenantB],
     );
 
