@@ -18,6 +18,7 @@ import { TeacherNoteModule } from "../teacher-note/teacher-note.module.js";
 import { TenantModule } from "../tenant/tenant.module.js";
 import { MeController } from "./me.controller.js";
 import { MeInstitutionDashboardService } from "./me-institution-dashboard.service.js";
+import { MeTeacherTodayService } from "./me-teacher-today.service.js";
 import {
   createInstitutionDashboardStore,
   institutionDashboardStoreToken,
@@ -47,6 +48,7 @@ import { MeReportIndexService } from "./me-report-index.service.js";
   controllers: [MeController],
   providers: [
     MeInstitutionDashboardService,
+    MeTeacherTodayService,
     MeReportIndexService,
     {
       provide: institutionDashboardStoreToken,

@@ -89,6 +89,10 @@ test("çift personalı çalışan staff ve teacher çalışma alanları arasınd
       });
       return;
     }
+    if (path === "/me/teacher/today") {
+      await json(route, { date: "2026-08-01", generatedAt: "2026-08-01T10:00:00.000Z", latestReport: null, pendingHomework: [], pendingHomeworkCount: 0, teacherName: "Ada Yılmaz", todayLessons: [] });
+      return;
+    }
     if (path === "/me/teacher/lookups") {
       await json(route, { attendanceClassIds: [], campuses: [], classes: [], courses: [], gradeLevels: [], terms: [] });
       return;

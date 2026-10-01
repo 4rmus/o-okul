@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, ForbiddenException, Get, Headers, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { z } from "zod";
+import type { TeacherTodaySummary } from "@o-okul/shared-types";
 import type {
   DevelopmentTrendItem,
   HomeworkMaterialAssignmentRecord,
@@ -81,6 +82,7 @@ import { tenantCurrentProfileBodySchema, type TenantCurrentProfileBody } from ".
 import { passwordMaxLength, passwordMinLength, passwordPolicyViolation } from "../auth/password-policy.js";
 import { MeInstitutionDashboardService } from "./me-institution-dashboard.service.js";
 import { MeReportIndexService } from "./me-report-index.service.js";
+import { MeTeacherTodayService } from "./me-teacher-today.service.js";
 
 const mePasswordChangeBodySchema = z.object({
   currentPassword: z.string().min(1),
@@ -102,6 +104,7 @@ export class MeController {
     private readonly payments: PaymentService,
     private readonly institutionDashboard: MeInstitutionDashboardService,
     private readonly reportIndex: MeReportIndexService,
+    private readonly teacherTodaySummary: MeTeacherTodayService,
     private readonly reports: ReportGenerationService,
     private readonly guardians: GuardianService,
     private readonly school: SchoolService,
@@ -752,6 +755,14 @@ export class MeController {
   @Roles("TEACHER")
   async teacher(): Promise<TeacherRecord> {
     return toPublicTeacherResponse(await this.teachers.findCurrentTeacher(getRequestContext()));
+  }
+
+  @Get("teacher/today")
+  @Roles("TEACHER")
+  teacherToday(): Promise<TeacherTodaySummary> {
+    const context = getRequestContext();
+    assertTeacherContext(context);
+    return this.teacherTodaySummary.get(context);
   }
 
   @Get("teacher/schedule")

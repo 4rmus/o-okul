@@ -238,6 +238,7 @@ export type {
   ParserConfigSuggestionResult,
   PortalSupportTicketCreateRequest,
   PortalReportIndexItem,
+  TeacherTodaySummary,
   RawImportEvaluationJobRecord,
   RawImportEvaluationQueueResult,
   RawImportEvaluationRequest,

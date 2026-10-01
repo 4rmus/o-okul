@@ -208,7 +208,8 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
   }
   await page.getByRole("link", { name: "Operasyon ve kanıt" }).click();
   await expect(page).toHaveURL(/\/kurum\/operasyon-ve-kanit$/);
-  const backupLink = page.getByRole("link", { name: "Yedekleme" });
+  // Hub sekmeleri de "Yedekleme" bağlantısı taşır (Berrak G5); araç kartını hedefle.
+  const backupLink = page.getByLabel("Operasyon ve kanıt araçları").getByRole("link", { name: "Yedekleme" });
   await expect(backupLink).toHaveAttribute("href", "/kurum/yedek-restore");
   await backupLink.focus();
   await page.keyboard.press("Enter");

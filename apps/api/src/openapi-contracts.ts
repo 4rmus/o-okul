@@ -193,6 +193,38 @@ const institutionDashboardExamSchema = objectSchema({
   "reportStatus",
 ]);
 
+const teacherTodaySummarySchema = objectSchema({
+  generatedAt: stringSchema({ format: "date-time" }),
+  date: stringSchema({ format: "date" }),
+  teacherName: stringSchema(),
+  todayLessons: arraySchema(objectSchema({
+    id: stringSchema(),
+    classId: stringSchema(),
+    courseId: stringSchema(),
+    title: stringSchema(),
+    startsAt: stringSchema({ format: "date-time" }),
+    endsAt: stringSchema({ format: "date-time" }),
+  }, ["id", "classId", "title", "startsAt", "endsAt"])),
+  pendingHomework: arraySchema(objectSchema({
+    id: stringSchema(),
+    classId: stringSchema(),
+    title: stringSchema(),
+    dueAt: stringSchema({ format: "date-time" }),
+  }, ["id", "classId", "title"])),
+  pendingHomeworkCount: integerSchema({ minimum: 0 }),
+  latestReport: {
+    anyOf: [
+      objectSchema({
+        examId: stringSchema(),
+        title: stringSchema(),
+        startsAt: stringSchema({ format: "date-time" }),
+        latestGeneratedAt: stringSchema({ format: "date-time" }),
+      }, ["examId", "title", "latestGeneratedAt"]),
+      { type: "null" },
+    ],
+  },
+}, ["generatedAt", "date", "teacherName", "todayLessons", "pendingHomework", "pendingHomeworkCount", "latestReport"]);
+
 const institutionDashboardSummarySchema = objectSchema({
   generatedAt: stringSchema({ format: "date-time" }),
   institution: objectSchema({
@@ -3280,6 +3312,9 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/me/institution-dashboard": {
     responseBody: institutionDashboardSummarySchema,
+  },
+  "get /api/v1/me/teacher/today": {
+    responseBody: teacherTodaySummarySchema,
   },
   "get /api/v1/setup/readiness": {
     responseBody: setupReadinessReadModelSchema,

@@ -299,8 +299,17 @@ const sharedTypeDriftContracts = [
   { interfaceName: "PaymentPlanWithInstallmentsRecord", method: "get", path: "/api/v1/payment-plans", schemaPath: ["responseDataItem"] },
   { interfaceName: "HomeworkMaterialFileDownloadResult", method: "get", path: "/api/v1/homework/materials/{id}/files/{fileId}/download", schemaPath: ["responseData"] },
   { interfaceName: "SupportTicketAttachmentDownloadResult", method: "get", path: "/api/v1/support-tickets/{id}/attachments/{attachmentId}/download", schemaPath: ["responseData"] },
+  { interfaceName: "TeacherTodaySummary", method: "get", path: "/api/v1/me/teacher/today", schemaPath: ["responseData"] },
 ];
 const portalReportOperationContracts = [
+  // Berrak G7: öğretmen günlük özeti yalnız ders/ödev/rapor özetidir; kişi verisi taşımaz.
+  {
+    method: "get",
+    path: "/api/v1/me/teacher/today",
+    responseEnvelope: true,
+    responseDataRequired: ["generatedAt", "date", "teacherName", "todayLessons", "pendingHomework", "pendingHomeworkCount", "latestReport"],
+    responseDataForbiddenDeep: ["tenantId", "userId", "studentId", "phone", "email", "nationalId", "tcKimlikNo"],
+  },
   ...portalReportIndexPaths.map((path) => ({
     method: "get",
     path,

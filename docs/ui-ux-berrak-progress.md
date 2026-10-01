@@ -22,7 +22,8 @@ Local PASS staging kanıtı değildir. Secret değerleri bu dosyaya yazılmaz; y
 | G3 Runtime route manifest | `berrak/g3-route-manifest` | Tamam | 4rmus/o-okul#112 |
 | G4 Primitive konsolidasyonu | `berrak/g4-primitive` | Tamam | 4rmus/o-okul#113 |
 | G5 Shell v3 + hub IA + ContextBar | `berrak/g5-shell` | Tamam | 4rmus/o-okul#114 |
-| G6 Sınav çalışma alanı | `berrak/g6-sinav-calisma-alani` | Tamam | draft PR |
+| G6 Sınav çalışma alanı | `berrak/g6-sinav-calisma-alani` | Tamam | 4rmus/o-okul#115 |
+| G7 Günlük özetler | `berrak/g7-gunluk-ozet` | Tamam | draft PR |
 
 ## G0 — Plan ve karar kayıtları
 
@@ -375,3 +376,73 @@ yönlendirmeler güvenli (`examId` regex ankrajlı, sabit iç hedef). Bulgular:
   READY rapor eski bir importa ait olabilir. Muhafazakâr (engelleyici) tarafta hata yapar; iyileştirme ayrı.
 - Test boşlukları: Postgres fixture'ında `ParsedAnswer`/`ExamResult` yok (sayılar 0'da doğrulanıyor);
   yönlendirme eşlemesi için ayrı e2e yok (optik tarafı kapsanıyor).
+
+## G7 — Günlük özetler (§5)
+
+- Hedef: kurum, öğretmen ve öğrenci ana sayfalarını "bugün → 1–3 aksiyon → detay" düzenine indirmek;
+  öğretmen özeti için tek read model.
+- Sahip olunan yollar: `apps/api/src/me/{me.controller.ts,me.module.ts,me-teacher-today.service*.ts,me-access-matrix.e2e.test.ts}`,
+  `apps/api/src/openapi-contracts.ts`, `packages/shared-types` (`TeacherTodaySummary`),
+  `kurum/kurum-dashboard.tsx`, `ogretmen/page.tsx`, `portals/{teacher-today-page,teacher-portal-page,student-portal-page}.tsx`,
+  `_styles/72-almanac-portal.css`, ilgili e2e'ler + golden'lar, `scripts/check-web-ux-baseline.mjs`.
+- Yasak yollar: veli portalı içeriği, karne, DB şeması.
+- Kabul: API test + `openapi:generate`; öğretmen/öğrenci/veli portal sözleşmeleri; route smoke; visual QA;
+  `web:ux-baseline:check`; `ui-ux-redesign:local-gates`.
+
+### G7 notları
+
+- `GET /me/teacher/today` (`@Roles("TEACHER")` + `assertTeacherContext`): bugünkü dersler (İstanbul günü),
+  kontrol bekleyen ödevler (ilk 5 + toplam), son hazır sınav raporu. Mevcut `/me/teacher/*` uçlarının
+  kullandığı servis çağrılarını (`findCurrentTeacher`, `listCurrentTeacherLessons`, `homework.list`,
+  `reportIndex.listForTeacher`) birleştirir; kapsam ve RLS bu servislerde aynen kalır. Erişim matrisi
+  testine eklendi; OpenAPI 256 path. Migration yok.
+- `/ogretmen` artık `TeacherTodayPage`: "Bugün" özeti, "Öğretmen günlük aksiyonları" şeridi (Yoklama al →
+  Ders akışı, Ödev kontrolü, Son sınav raporu), bugünkü dersler, bekleyen ödevler, son rapor. Rol önizlemesi
+  `x-role-preview-token` ile salt okunur.
+- `TeacherPortalPage`'in kullanılmayan `overview` görünümü silindi (eski "Günlük ders akışı" özeti ve 7
+  maddelik şerit dahil — yeni özetle bilinçli terminoloji birleşmesi). Yazma formları, profil özeti ve seçili
+  öğrenci özeti (Başarı % için rapor verisi) Ders akışında; materyal atama tablosu formla birlikte Ders
+  akışında da görünür. Destek görünümü artık ders programını yükler: talep ders/dönem bağlamını programdan
+  alıyordu, `/ogretmen/destek`'te bu alanlar boş gidiyordu (düzeltildi, login-next yolculuğu doğrular).
+- `/ogrenci` özeti: Bugün teslim → Son sınav (Başarı %, gelişim özeti, net/soru) → Duyuru; şerit sırası
+  ödev → rapor → duyuru. Profil, veliler, geçmiş, devamsızlık, notlar ve destek yalnız kendi route'larında.
+  Öğrenci için ayrı read model eklenmedi (özet 3 mevcut çağrıyla yükleniyor; açık madde).
+- `/kurum`: "Diğer kurum işlemleri" bağlantı duvarı kaldırıldı; sıra dikkat → metrikler → son sınav →
+  duyurular.
+- Testler rotalar arası yolculuğa dönüştü; eski assert'ler verinin taşındığı route'larda korunuyor.
+  UX baseline pin'leri `teacher-today-page.tsx`'teki eşdeğer token'lara taşındı (silinmedi).
+- G5'ten kalan `backup-restore` seçici çakışması (hub sekmesi + araç kartı aynı "Yedekleme" adı) araç
+  kartına kapsandı.
+- Güncellenen darwin golden'ları: `route-family-dashboard-1440`, `student-portal-actions-414`,
+  `route-family-student-portal-414`.
+
+### G7 kanıt
+
+| Sınıf | Sonuç |
+|---|---|
+| `LOCAL_STATIC` | PASS: shared-types/api/web typecheck, `openapi:generate` (+ output contract), `route-manifest:check` (93), `web:ux-baseline:check`, `web:design-tokens:check`, measurement baseline |
+| `LOCAL_TEST` | PASS: `@o-okul/api test` (1284), tüm e2e-next (340 geçti, 2 canlı test atlandı); `ui-ux-redesign:local-gates` (31/31). Kırmızı kalan 2 test main'de de kırmızı: login-next palet "Denetim" ve çıkış `/giris` (rol portalı yolculuğu çıkış beklentisi yerelde geçici gevşetilerek uçtan uca geçti; commit edilmedi) |
+| `CI` | Karne Linux golden farkı G2'den beri bekleniyor (G10'da düzelecek) |
+| `EXTERNAL_NOT_RUN` | `report-generation:smoke`, `raw-import:smoke` (yerelde Postgres yok); staging UAT |
+
+Görsel kanıt: `artifacts/ui-ux-redesign/berrak/g7/{before,after}` (`/ogretmen`, `/ogrenci`, `/kurum`; açık +
+koyu; 375/1440). Öğrenci ve kurum yakalamaları portal verisi için hata/boş durumdadır (yakalama mock'u).
+
+Review (`o-okul-pr-review`, read-only): P0/P1 yok. Kapsam temiz (her alt çağrı tenant + öğretmen öznesini
+yeniden doğrular; `latestReport` yalnız öğretmenin atanmış öğrencilerini içeren READY snapshot'lardan),
+İstanbul gün sınırı doğru, rol önizlemesi salt okunur. Bulgular ve durum:
+- P2 düzeltildi: Profil sayfasındaki seçili öğrenci özeti rapor/duyuru/ödev/devamsızlık/destek verisini
+  yüklemiyordu ("-", "0 kayıt" gösteriyordu). Profil görünümü bu okumaları yapar; spec'e sayısal assert'ler
+  (%81,7 / 30 / 24,5 / 1 okunmamış) geri kondu.
+- P2 düzeltildi: rapor dizini hatası `/me/teacher/today`'i düşürüyordu; artık `latestReport: null` döner
+  (eski yükleyicideki `apiRequestOrNull` davranışı). Birim testi eklendi.
+- P2 düzeltildi: öğretmen olmayan erişimde genel hata yerine diğer portallar gibi `AccessPanel`.
+- P3 düzeltildi: son rapor kartındaki totolojik "Başarı %" assert'i gerçek metinle değişti; kurum özeti
+  için yorum-pin yerine `requireNoTokens` (link duvarı geri gelemez); `/me/teacher/today` OpenAPI
+  tip-sapma + yasak alan (`tenantId`, `userId`, `studentId`, iletişim/kimlik) sözleşmesine eklendi
+  (negatif denemeyle etkinliği doğrulandı).
+- P3 açık (G8): `.next-dashboard-compact-links` ve `.next-institution-growth-side` CSS'i artık ölü; CSS
+  pin'leri DEC-20260930-03 kapsamında G8'de temizlenecek.
+- P3 açık: özet sayfası her ziyarette öğretmenin ödev/sınav/snapshot dizinlerini bellekte tarar (eski
+  portal yükleyicisiyle aynı servisler); ölçek gerektiğinde sorgu seviyesinde sınır.
+

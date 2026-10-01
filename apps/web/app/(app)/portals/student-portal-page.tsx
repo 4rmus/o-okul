@@ -43,7 +43,7 @@ import { ReportPanel } from "./_shared/report-panel.js";
 import { GuardianRelationsPanel, ProfilePanel, StudentFocusPanel, StudentHistoryPanel } from "./_shared/student-panels.js";
 import { SupportTicketsPanel } from "./_shared/support-tickets-panel.js";
 import { readReportExamId } from "../_shared/report-exam-selection.js";
-import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
+import { formatPercentNumber, formatStudentProgressSummary, reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
 
 export type StudentPortalView = "announcements" | "attendance" | "homework" | "overview" | "profile" | "reports" | "support";
 
@@ -103,6 +103,10 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
   const attendanceStatus = `${data?.attendanceSummary.total ?? 0} kayıt`;
   const supportStatus = openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok";
   const portalSubtitle = studentPortalSubtitle(view, "Öğrenci özeti");
+  // Berrak §5: günlük özet "bugün teslimi olan ödevler → son sınav Başarı % (öncekiyle) → duyurular".
+  const todayKey = istanbulDateKey(new Date());
+  const dueTodayCount = (data?.homeworkAssignments ?? []).filter((assignment) => assignment.dueAt && istanbulDateKey(new Date(assignment.dueAt)) === todayKey).length;
+  const progressSummary = formatStudentProgressSummary(data?.progress ?? null);
   function selectReportExam(examId: string) {
     const nextSearchParams = new URLSearchParams(searchParams.toString());
     if (examId) nextSearchParams.set("examId", examId);
@@ -178,8 +182,8 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
     },
   ];
   const studentPriorityKeys = isRolePreview
-    ? ["preview", "announcement", "report"]
-    : ["announcement", "homework", "report"];
+    ? ["preview", "homework", "report"]
+    : ["homework", "report", "announcement"];
   const studentPriorityItems = studentPriorityKeys
     .map((key) => studentActionItems.find((item) => item.key === key))
     .filter((item): item is PortalActionItem => Boolean(item));
@@ -192,7 +196,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
       {view === "overview" ? (
         <>
           <PortalDailyBrief
-            summary="Devamsızlık, ödev, duyuru ve son sınav durumu tek bakışta; öğrencinin bugün öncelik vermesi gereken işler burada toplanır."
+            summary="Bugün teslim edilecek ödevler, son sınav Başarı % ve okunmamış duyurular tek bakışta."
             scope={{
               detail: isRolePreview ? "Yalnızca görüntüleme" : "Öğrenci hesabı",
               label: "Öğrenci",
@@ -200,28 +204,22 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
             }}
             items={[
               {
-                label: "Duyuru",
-                value: unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel",
-                detail: unreadAnnouncements > 0 ? "Okunmamış okul duyurusu var" : "Okunmamış duyuru yok",
-                tone: unreadAnnouncements > 0 ? "warning" : "success",
-              },
-              {
-                label: "Ödev",
-                value: `${data?.homeworkAssignments.length ?? 0} atama`,
-                detail: "Materyal ve tekrar çalışmaları",
-                tone: (data?.homeworkAssignments.length ?? 0) > 0 ? "info" : "neutral",
-              },
-              {
-                label: "Devamsızlık",
-                value: `${data?.attendanceSummary.total ?? 0} kayıt`,
-                detail: `${data?.attendanceSummary.absent ?? 0} yok, ${data?.attendanceSummary.late ?? 0} geç`,
-                tone: (data?.attendanceSummary.absent ?? 0) > 0 || (data?.attendanceSummary.late ?? 0) > 0 ? "warning" : "success",
+                label: "Bugün teslim",
+                value: `${dueTodayCount} ödev`,
+                detail: `${data?.homeworkAssignments.length ?? 0} atama içinde`,
+                tone: dueTodayCount > 0 ? "warning" : "neutral",
               },
               {
                 label: "Son sınav",
                 value: formatPercentNumber(reportSuccess),
-                detail: `${formatNumber(reportTotal?.net)} net / ${formatNumber(reportQuestionCount(reportTotal))} soru`,
+                detail: `${progressSummary} · ${formatNumber(reportTotal?.net)} net / ${formatNumber(reportQuestionCount(reportTotal))} soru`,
                 tone: (reportSuccess ?? 0) >= 75 ? "success" : "info",
+              },
+              {
+                label: "Duyuru",
+                value: unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel",
+                detail: unreadAnnouncements > 0 ? "Okunmamış okul duyurusu var" : "Okunmamış duyuru yok",
+                tone: unreadAnnouncements > 0 ? "warning" : "success",
               },
             ]}
           />
@@ -236,7 +234,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
           <RolePreviewNotice />
         </div>
       ) : null}
-      {view === "overview" || view === "profile" ? <div id="portal-focus">
+      {view === "profile" ? <div id="portal-focus">
         <StudentFocusPanel
           announcementStatus={announcementStatus}
           attendanceStatus={attendanceStatus}
@@ -254,6 +252,13 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
         ariaLabel="Öğrenci portal çalışma alanı"
         main={
           <>
+            {view === "overview" || view === "homework" ? <div id="portal-homework">
+              <HomeworkAssignmentsPanel
+                assignments={data?.homeworkAssignments ?? []}
+                courseNames={courseNameById}
+                termNames={termNameById}
+              />
+            </div> : null}
             {view === "overview" || view === "reports" ? <div id="portal-report">
               {view === "reports" && (data?.reportIndex.length ?? 0) > 0 ? (
                 <Field label="Sınav raporu">
@@ -271,13 +276,6 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
                 termNames={termNameById}
               />
             </div> : null}
-            {view === "overview" || view === "homework" ? <div id="portal-homework">
-              <HomeworkAssignmentsPanel
-                assignments={data?.homeworkAssignments ?? []}
-                courseNames={courseNameById}
-                termNames={termNameById}
-              />
-            </div> : null}
             {view === "overview" || view === "announcements" ? <div id="portal-announcements">
               <AnnouncementsPanel
                 announcements={data?.announcements ?? []}
@@ -287,7 +285,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
                 }
               />
             </div> : null}
-            {view === "overview" || view === "support" ? <div id="portal-support">
+            {view === "support" ? <div id="portal-support">
               <SupportTicketsPanel
                 accessToken={auth?.accessToken}
                 commentsPath="me/student/support-tickets"
@@ -303,17 +301,17 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
         }
         side={
           <>
-            {view !== "announcements" && view !== "homework" && view !== "reports" && view !== "support" ? <ProfilePanel profile={data?.profile} /> : null}
-            {view === "overview" || view === "profile" ? <GuardianRelationsPanel guardians={data?.guardians ?? []} links={data?.guardianLinks ?? []} /> : null}
-            {view === "overview" || view === "profile" ? <StudentHistoryPanel
+            {view === "profile" || view === "attendance" ? <ProfilePanel profile={data?.profile} /> : null}
+            {view === "profile" ? <GuardianRelationsPanel guardians={data?.guardians ?? []} links={data?.guardianLinks ?? []} /> : null}
+            {view === "profile" ? <StudentHistoryPanel
               enrollments={data?.enrollments ?? []}
               termNames={termNameById}
             /> : null}
-            {view === "overview" || view === "attendance" ? <div id="portal-attendance">
+            {view === "attendance" ? <div id="portal-attendance">
               <AttendancePanel records={data?.attendance ?? []} />
             </div> : null}
-            {view === "overview" || view === "profile" ? <DevelopmentTrendPanel assessments={data?.developmentAssessments ?? []} /> : null}
-            {view === "overview" || view === "profile" || view === "attendance" ? <TeacherNotesPanel notes={data?.teacherNotes ?? []} courseNames={courseNameById} termNames={termNameById} /> : null}
+            {view === "profile" ? <DevelopmentTrendPanel assessments={data?.developmentAssessments ?? []} /> : null}
+            {view === "profile" || view === "attendance" ? <TeacherNotesPanel notes={data?.teacherNotes ?? []} courseNames={courseNameById} termNames={termNameById} /> : null}
           </>
         }
       />
@@ -328,12 +326,14 @@ async function loadStudentPortal(
   view: StudentPortalView = "overview",
 ) {
   const showOverview = view === "overview";
-  const showProfile = showOverview || view === "profile";
-  const showReports = showOverview || view === "reports";
-  const showHomework = showOverview || view === "homework";
-  const showAnnouncements = showOverview || view === "announcements";
-  const showSupport = showOverview || view === "support";
-  const showAttendance = showOverview || view === "attendance";
+  // Günlük özet yalnız ödev, rapor ve duyuru okur. Profil sayfasındaki seçili öğrenci özeti tüm durumları
+  // (Başarı %, duyuru, ödev, devamsızlık, destek) gösterdiği için o görünüm hepsini yükler.
+  const showProfile = view === "profile";
+  const showReports = showOverview || showProfile || view === "reports";
+  const showHomework = showOverview || showProfile || view === "homework";
+  const showAnnouncements = showOverview || showProfile || view === "announcements";
+  const showSupport = showProfile || view === "support";
+  const showAttendance = showProfile || view === "attendance";
   const reportIndex = showReports
     ? await apiRequestOrNull<PortalReportIndexItem[]>(accessToken, `${apiBaseUrl}/me/student/reports`, rolePreviewToken) ?? []
     : [];
@@ -455,7 +455,7 @@ function studentPortalContext(view: StudentPortalView, label: string, isRolePrev
     announcements: "Okunmamış duyurular ve okul bilgilendirmeleri",
     attendance: "Devamsızlık kayıtları ve geç kalma özeti",
     homework: "Ödev ve materyal atamaları",
-    overview: "Günlük durum, ödev, devamsızlık, duyuru ve son sınav",
+    overview: "Bugün teslim, son sınav ve duyurular",
     profile: "Profil, veli ilişkileri ve kayıt geçmişi",
     reports: "Son sınavda başarı %, net ve soru bağlamı",
     support: "Destek talepleri ve yanıt durumu",
@@ -466,4 +466,8 @@ function studentPortalContext(view: StudentPortalView, label: string, isRolePrev
     label,
     meta: isRolePreview ? "Yalnızca görüntüleme" : "Öğrenci hesabı",
   };
+}
+
+function istanbulDateKey(date: Date) {
+  return new Intl.DateTimeFormat("en-CA", { day: "2-digit", month: "2-digit", timeZone: "Europe/Istanbul", year: "numeric" }).format(date);
 }

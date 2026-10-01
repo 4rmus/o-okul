@@ -626,6 +626,9 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
   if (pathName === "/audit-logs/student-summary") return { data: [] };
 
   if (pathName === "/me/teacher") return { data: teacherFixture };
+  if (pathName === "/me/teacher/today") {
+    return { data: { date: "2026-06-17", generatedAt: "2026-06-17T08:00:00.000Z", latestReport: null, pendingHomework: [], pendingHomeworkCount: 0, teacherName: "Zeynep Arslan", todayLessons: [] } };
+  }
   if (pathName === "/me/teacher/lookups") {
     return {
       data: {

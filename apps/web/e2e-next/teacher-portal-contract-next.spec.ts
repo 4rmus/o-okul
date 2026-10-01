@@ -78,6 +78,15 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
       const requestedPaths: string[] = [];
       await openTeacherPortal(page, viewport, { requestedPaths });
 
+      // Berrak §5: /ogretmen günlük özet → 1–3 aksiyon → detay; yazma formları ders bağlamındadır.
+      await expect(page.getByRole("heading", { level: 1, name: "Öğretmen Portalı" })).toBeVisible();
+      await expectTeacherTodaySummary(page, { rolePreview: false });
+      await expect(page.getByRole("region", { name: "Öğretmen günlük işlemleri" })).toHaveCount(0);
+      await expect(page.getByRole("region", { name: "Öğrenci çalışma alanı" })).toHaveCount(0);
+      await expectTeacherPageClean(page, `teacher-today-${viewport.width}`);
+
+      await page.goto("/ogretmen/ders-akisi");
+      await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
       await expect(page.getByRole("heading", { level: 1, name: "Öğretmen Portalı" })).toBeVisible();
       await expect(page.getByRole("region", { exact: true, name: "Portal özeti" })).toHaveCount(0);
       const workspace = page.getByRole("region", { name: "Öğrenci çalışma alanı" });
@@ -101,38 +110,6 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
       await expectTeacherDisplayPanels(page);
       await expectTeacherActivityPanels(page);
 
-      const dailyBrief = page.getByRole("region", { exact: true, name: "Günlük ders akışı" });
-      await expectPortalSummaryMetrics(
-        dailyBrief.getByRole("group", { exact: true, name: "Günlük ders akışı özeti" }),
-        ["Sıradaki ders", "Öğrenci kapsamı", "Ödev kontrolü", "Seçili başarı"],
-        rawInternalValues,
-      );
-      const dailyScope = dailyBrief.getByLabel("Günlük ders akışı için seçilen kişi veya sınıf");
-      await expect(dailyScope).toContainText("Seçili öğrenci");
-      await expect(dailyScope).toContainText("Öğrenci seçili");
-      await expect(dailyScope).toContainText("Matematik / 2026 Bahar");
-      await expect(dailyScope).not.toContainText("Ada Kaya");
-      for (const value of rawInternalValues) {
-        await expect(dailyScope).not.toContainText(value);
-      }
-
-      const actionStrip = page.getByRole("region", { name: "Öğretmen günlük aksiyonları" });
-      await expect(actionStrip).toBeVisible();
-      await expect(actionStrip).toContainText("Bugün yapılacaklar");
-      await expect(actionStrip.getByRole("heading", { name: "Öncelikli işler" })).toBeVisible();
-      await expect(actionStrip).toContainText("3 iş");
-      await expect(actionStrip).toContainText("Planlı işler");
-      await expect(actionStrip.getByRole("link", { name: /Yoklama kaydet: 2 kayıt.*Yoklama.*Kaydet.*Bugün.*2026-06-17 için yoklama/ })).toHaveAttribute(
-        "href",
-        "/ogretmen/ogrenci-takibi",
-      );
-      await expect(actionStrip.getByRole("link", { name: /Not ekle: 2 not/ })).toHaveAttribute("href", "/ogretmen/ogrenci-takibi");
-      await expect(actionStrip.getByRole("link", { name: /Raporu incele: %81,7/ })).toHaveAttribute("href", "/ogretmen/raporlar");
-      await expectPortalActionHrefs(actionStrip, [
-        "/ogretmen/ogrenci-takibi",
-        "/ogretmen/ogrenci-takibi",
-        "/ogretmen/raporlar",
-      ]);
       const studentScope = page.getByRole("region", { exact: true, name: "Öğretmen öğrenci kapsamı" });
       await expect(studentScope.getByRole("heading", { name: "Öğrenciler" })).toBeVisible();
       await expect(studentScope.getByRole("button", { name: "Ada Kaya / 8-A" })).toHaveAttribute("aria-pressed", "true");
@@ -147,15 +124,24 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
       await expect(page.getByRole("button", { name: "Yoklamayı kaydet" })).toBeVisible();
       await expect(page.getByRole("button", { name: "Not ekle" })).toBeVisible();
       await expect(page.getByRole("button", { name: "Materyal ata" })).toBeVisible();
-      await expectTeacherHomeworkPanels(page, { readOnly: false });
       await expect(page.getByRole("table", { name: "Bugünkü dersler" })).toBeVisible();
       const schedule = page.getByRole("region", { exact: true, name: "Ders programı" });
       await expect(schedule.getByRole("heading", { name: "Program" })).toBeVisible();
       await expect(schedule.getByRole("table", { name: "Ders programı" })).toBeVisible();
-      await expect(page.getByRole("table", { name: "Öğretmen sınıf raporları" })).toBeVisible();
-      await expectPortalAnnouncementsTable(page, { readOnly: false });
-      await expectPortalSupportPanel(page, { formVisible: true });
 
+      await workspace.getByRole("button", { name: "Bora Yilmaz / 8-A" }).click();
+      await expect(focus).toContainText("Bora Yilmaz");
+      await expect(focus).toContainText("%63,3");
+      await expectTeacherPageClean(page, `teacher-portal-${viewport.width}`);
+
+      await page.goto("/ogretmen/odevler");
+      await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+      await expectTeacherHomeworkPanels(page, { readOnly: false });
+      await expectTeacherPageClean(page, `teacher-homework-${viewport.width}`);
+
+      await page.goto("/ogretmen/raporlar");
+      await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+      await expectTeacherClassReportsPanel(page);
       const reportSummary = page.getByRole("region", { name: "Portal rapor özeti" });
       await expect(reportSummary).toContainText("Başarı %");
       await expect(reportSummary.getByRole("button", { name: "Karne detayını göster" })).toHaveAttribute("aria-expanded", "false");
@@ -164,22 +150,24 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
       await expect(branchTable.getByRole("columnheader", { name: "Başarı %" })).toBeVisible();
       await expect(branchTable.getByRole("columnheader", { name: "Net" })).toBeVisible();
       await expect(branchTable.getByRole("columnheader", { name: "Soru" })).toBeVisible();
+      await expectTeacherPageClean(page, `teacher-reports-${viewport.width}`);
 
-      await workspace.getByRole("button", { name: "Bora Yilmaz / 8-A" }).click();
-      await expect(focus).toContainText("Bora Yilmaz");
-      await expect(focus).toContainText("%63,3");
-      await expect(dailyScope).toContainText("Öğrenci seçili");
-      await expect(dailyScope).not.toContainText("Bora Yilmaz");
+      await page.goto("/ogretmen/duyurular");
+      await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+      await expectPortalAnnouncementsTable(page, { readOnly: false });
+      await page.goto("/ogretmen/destek");
+      await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+      await expectPortalSupportPanel(page, { formVisible: true });
+      await expectTeacherPageClean(page, `teacher-support-${viewport.width}`);
 
-      await expectNoHorizontalOverflow(page, `teacher-portal-${viewport.width}`);
-      await expectNoUnlabeledControls(page, `teacher-portal-${viewport.width}`);
-      await expectNoClippedVisibleText(page, `teacher-portal-${viewport.width}`);
       expect(requestedPaths.filter((path) => forbiddenTeacherPortalReadPaths.includes(path) || path.startsWith("/students/"))).toEqual([]);
       for (const path of expectedTeacherScopedReadPaths) {
         expect(requestedPaths).toContain(path);
       }
       expect(requestedPaths.filter((path) => /^\/me\/teacher\/homework\/materials\/[^/]+\/assignments$/.test(path))).toEqual([]);
-      expect(requestedPaths.filter((path) => path === "/me/teacher/homework/material-assignments")).toHaveLength(1);
+      // Ders akışı ve Ödev kontrolü sayfaları atamaları sayfa başına tek istekle okur.
+      expect(requestedPaths.filter((path) => path === "/me/teacher/homework/material-assignments")).toHaveLength(2);
+      expect(requestedPaths.filter((path) => path === "/me/teacher/today")).toHaveLength(1);
     });
   }
 
@@ -190,29 +178,29 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
     await expect(page).toHaveURL(/\/ogretmen\?rolePreview=1$/);
     expect(page.url()).not.toContain("preview-token");
     await expect(page.getByLabel("Rol önizleme bilgisi")).toContainText("Yalnızca Görüntüleme");
-    const previewActions = page.getByRole("region", { name: "Öğretmen günlük aksiyonları" });
-    await expect(previewActions).toBeVisible();
-    await expect(previewActions).toContainText("Yalnızca görüntüleme");
-    await expect(previewActions).toContainText("Yoklama, not ve materyal kapalı");
-    await expect(previewActions.getByRole("link", { name: /Önizleme durumu: Yalnızca görüntüleme/ })).toHaveAttribute("href", "/ogretmen?rolePreview=1");
-    await expect(previewActions.getByRole("link", { name: /Yoklama kaydet: Yalnızca görüntüleme/ })).toHaveAttribute("href", "/ogretmen?rolePreview=1");
-    await expect(previewActions.getByRole("link", { name: /Raporu incele: %81,7/ })).toHaveAttribute("href", "/ogretmen/raporlar?rolePreview=1");
-    await expectPortalActionHrefs(previewActions, [
-      "/ogretmen?rolePreview=1",
-      "/ogretmen?rolePreview=1",
-      "/ogretmen/raporlar?rolePreview=1",
-    ]);
+    await expectTeacherTodaySummary(page, { rolePreview: true });
+    await expectTeacherPageClean(page, "teacher-today-role-preview");
+
+    await page.goto("/ogretmen/ders-akisi?rolePreview=1");
+    await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+    await expect(page.getByLabel("Rol önizleme bilgisi")).toContainText("Yalnızca Görüntüleme");
     await expect(page.getByRole("region", { name: "Öğretmen günlük işlemleri" })).toHaveCount(0);
     await expect(page.getByRole("region", { exact: true, name: "Seçili sınıf ve öğrenci özeti" })).toContainText("Yalnızca görüntüleme");
     await expectTeacherDisplayPanels(page);
     await expectTeacherActivityPanels(page);
+    await expectTeacherPageClean(page, "teacher-portal-role-preview");
+
+    await page.goto("/ogretmen/duyurular?rolePreview=1");
+    await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
     await expectPortalAnnouncementsTable(page, { readOnly: true });
+    await page.goto("/ogretmen/destek?rolePreview=1");
+    await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
     await expect(page.getByLabel("Destek talepleri", { exact: true })).toContainText("Yalnızca görüntüleme sırasında destek talebi açılamaz.");
     await expectPortalSupportPanel(page, { formVisible: false });
+    await page.goto("/ogretmen/odevler?rolePreview=1");
+    await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
     await expectTeacherHomeworkPanels(page, { readOnly: true });
-    await expectNoHorizontalOverflow(page, "teacher-portal-role-preview");
-    await expectNoUnlabeledControls(page, "teacher-portal-role-preview");
-    await expectNoClippedVisibleText(page, "teacher-portal-role-preview");
+    await expectTeacherPageClean(page, "teacher-homework-role-preview");
     await expect.poll(() => mutationRequests).toEqual([]);
   });
 
@@ -241,7 +229,7 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
 
   test("öğretmen işlem hatasını alert olarak duyurur", async ({ page }) => {
     const mutationRequests: string[] = [];
-    await openTeacherPortal(page, { height: 844, width: 390 }, { failMutationPath: "/attendance/daily", mutationRequests });
+    await openTeacherPortal(page, { height: 844, width: 390 }, { failMutationPath: "/attendance/daily", mutationRequests, path: "/ogretmen/ders-akisi" });
 
     const attendanceRequest = page.waitForRequest(
       (request) => request.method() === "PUT" && new URL(request.url()).pathname === "/api/v1/attendance/daily",
@@ -264,6 +252,55 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
     expect(mutationRequests).not.toContain("POST /attendance");
   });
 });
+
+async function expectTeacherTodaySummary(page: Page, options: { rolePreview: boolean }) {
+  const suffix = options.rolePreview ? "?rolePreview=1" : "";
+  const brief = page.getByRole("region", { exact: true, name: "Bugün" });
+  await expectPortalSummaryMetrics(
+    brief.getByRole("group", { exact: true, name: "Bugün özeti" }),
+    ["Bugünkü ders", "Sıradaki ders", "Ödev kontrolü"],
+    rawInternalValues,
+  );
+  await expect(brief).toContainText("Matematik problem çözümü");
+  await expect(brief).toContainText("1 bekliyor");
+
+  const actionStrip = page.getByRole("region", { name: "Öğretmen günlük aksiyonları" });
+  await expect(actionStrip).toBeVisible();
+  await expect(actionStrip).toContainText("Bugün yapılacaklar");
+  await expect(actionStrip).toContainText("3 iş");
+  await expect(actionStrip.getByRole("link", { name: /Yoklama al: 1 ders/ })).toHaveAttribute("href", `/ogretmen/ders-akisi${suffix}`);
+  await expect(actionStrip.getByRole("link", { name: /Ödev kontrolü: 1 ödev/ })).toHaveAttribute("href", `/ogretmen/odevler${suffix}`);
+  await expect(actionStrip.getByRole("link", { name: /Son sınav raporu/ })).toHaveAttribute(
+    "href",
+    `/ogretmen/raporlar?examId=exam-demo-isem-lgs-1${options.rolePreview ? "&rolePreview=1" : ""}`,
+  );
+  await expectPortalActionHrefs(actionStrip, [
+    `/ogretmen/ders-akisi${suffix}`,
+    `/ogretmen/odevler${suffix}`,
+    `/ogretmen/raporlar?examId=exam-demo-isem-lgs-1${options.rolePreview ? "&rolePreview=1" : ""}`,
+  ]);
+  if (options.rolePreview) await expect(actionStrip).toContainText("Yalnızca görüntüleme");
+
+  const lessons = page.getByRole("region", { exact: true, name: "Bugünkü dersler" });
+  await expect(lessons.getByRole("table", { name: "Bugünkü dersler" })).toBeVisible();
+  await expect(lessons).toContainText("Matematik problem çözümü");
+  const homework = page.getByRole("region", { exact: true, name: "Kontrol bekleyen ödevler" });
+  await expect(homework).toContainText("Kesirler tekrar");
+  const report = page.getByRole("region", { exact: true, name: "Son sınav raporu" });
+  await expect(report).toContainText("İSEM LGS-1");
+  await expect(report).toContainText("tarihli rapor hazır");
+  for (const region of [brief, actionStrip, lessons, homework, report]) {
+    for (const value of rawInternalValues) {
+      await expect(region).not.toContainText(value);
+    }
+  }
+}
+
+async function expectTeacherPageClean(page: Page, label: string) {
+  await expectNoHorizontalOverflow(page, label);
+  await expectNoUnlabeledControls(page, label);
+  await expectNoClippedVisibleText(page, label);
+}
 
 async function expectTeacherFocusMetrics(focus: Locator) {
   const focusMetrics = focus.getByRole("region", { name: "Seçili sınıf ve öğrenci bilgileri" });
@@ -294,6 +331,15 @@ async function expectTeacherDisplayPanels(page: Page) {
   await expect(profile).toContainText("2 öğrenci");
   await expect(profile).toContainText("1 ders");
 
+  for (const panel of [today, profile]) {
+    for (const value of rawInternalValues) {
+      await expect(panel).not.toContainText(value);
+    }
+  }
+}
+
+// Sınıf raporları Sınav raporu sayfasındadır (Berrak §5 rota ayrımı).
+async function expectTeacherClassReportsPanel(page: Page) {
   const reports = page.getByRole("region", { exact: true, name: "Öğretmen sınıf raporları" });
   await expect(reports.getByRole("heading", { name: "Sınıf Raporları" })).toBeVisible();
   const reportsTable = reports.getByRole("table", { name: "Öğretmen sınıf raporları" });
@@ -308,10 +354,8 @@ async function expectTeacherDisplayPanels(page: Page) {
   ]);
   await expect(reportsTable).toContainText("Soru sayıları farklı raporları Başarı % ile karşılaştırın");
 
-  for (const panel of [today, profile, reports]) {
-    for (const value of rawInternalValues) {
-      await expect(panel).not.toContainText(value);
-    }
+  for (const value of rawInternalValues) {
+    await expect(reports).not.toContainText(value);
   }
 }
 
@@ -412,7 +456,7 @@ async function expectPortalSupportPanel(page: Page, options: { formVisible: bool
 async function openTeacherPortal(
   page: Page,
   viewport: { height: number; width: number },
-  options: { failMutationPath?: string; mode?: "teacher" | "role-preview"; mutationRequests?: string[]; requestedPaths?: string[] } = {},
+  options: { failMutationPath?: string; mode?: "teacher" | "role-preview"; mutationRequests?: string[]; path?: string; requestedPaths?: string[] } = {},
 ) {
   await page.setViewportSize(viewport);
   await page.clock.setFixedTime(new Date("2026-06-17T08:00:00.000Z"));
@@ -424,7 +468,8 @@ async function openTeacherPortal(
     }
   }, options.mode ?? "teacher");
   await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
-  await page.goto(options.mode === "role-preview" ? "/ogretmen?rolePreview=1" : "/ogretmen");
+  const path = options.path ?? "/ogretmen";
+  await page.goto(options.mode === "role-preview" ? `${path}?rolePreview=1` : path);
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
 }
 
@@ -494,6 +539,7 @@ function teacherApiResponse(pathName: string, mode: "teacher" | "role-preview"):
   if (pathName === "/me/tenant") return createTenantResponse();
   if (pathName === "/me/notification-devices") return [];
   if (pathName === "/me/teacher") return createTeacher();
+  if (pathName === "/me/teacher/today") return createTeacherToday();
   if (pathName === "/me/teacher/announcements") return createAnnouncements();
   if (pathName === "/me/teacher/schedule") return createScheduleLessons();
   if (pathName === "/me/teacher/students") return createStudents();
@@ -581,6 +627,18 @@ function createTeacherLookups() {
     courses: createCourses(),
     gradeLevels: createGradeLevels(),
     terms: createTerms(),
+  };
+}
+
+function createTeacherToday() {
+  return {
+    date: "2026-06-17",
+    generatedAt: "2026-06-17T08:00:00.000Z",
+    latestReport: { examId: "exam-demo-isem-lgs-1", latestGeneratedAt: "2026-06-16T12:00:00.000Z", title: "İSEM LGS-1" },
+    pendingHomework: [{ classId: "class-8a", dueAt: "2026-06-18T00:00:00.000Z", id: "homework-a", title: "Kesirler tekrar" }],
+    pendingHomeworkCount: 1,
+    teacherName: "Ayşe Öğretmen",
+    todayLessons: [{ classId: "class-8a", courseId: "course-math", endsAt: "2026-06-17T10:30:00.000Z", id: "schedule-a", startsAt: "2026-06-17T09:30:00.000Z", title: "Matematik problem çözümü" }],
   };
 }
 

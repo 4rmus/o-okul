@@ -2236,6 +2236,17 @@ export interface ReportSnapshotRecord {
   updatedAt: string;
 }
 
+// Öğretmen günlük özeti read model'i (ADR-0007, Berrak §5). Yalnız öğretmenin kendi kapsamı; PII yok.
+export interface TeacherTodaySummary {
+  generatedAt: string;
+  date: string;
+  teacherName: string;
+  todayLessons: Array<{ id: string; classId: string; courseId?: string; title: string; startsAt: string; endsAt: string }>;
+  pendingHomework: Array<{ id: string; classId: string; title: string; dueAt?: string }>;
+  pendingHomeworkCount: number;
+  latestReport: { examId: string; title: string; startsAt?: string; latestGeneratedAt: string } | null;
+}
+
 export interface PortalReportIndexItem {
   examId: string;
   title: string;

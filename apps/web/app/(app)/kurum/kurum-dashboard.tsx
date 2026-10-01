@@ -132,36 +132,6 @@ export function KurumDashboard() {
         items={buildMetrics(dashboard, attentionTotal)}
       />
 
-      <Panel
-        actions={<Link href="/kurum/duyurular">Tüm duyuruları aç</Link>}
-        aria-label="Kurum duyuruları"
-        className="next-attention-panel"
-        description="Kurum genelinde yayımlanan son bilgilendirmeler."
-        title="Kurum duyuruları"
-      >
-        {announcementsQuery.isPending ? (
-          <LoadingState label="Duyurular yükleniyor…" />
-        ) : announcementsQuery.isError ? (
-          <p className="next-attention-empty">Duyurular şu anda alınamadı.</p>
-        ) : announcements.length > 0 ? (
-          <div className="next-attention-list">
-            {announcements.map((announcement) => (
-              <ActionCard
-                as="a"
-                className="next-attention-item"
-                detail={announcement.body}
-                href="/kurum/duyurular"
-                key={announcement.id}
-                label={announcement.title}
-                value={formatDate(announcement.publishedAt)}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="next-attention-empty">Henüz yayımlanmış duyuru yok.</p>
-        )}
-      </Panel>
-
       {dashboard.activeStudentCount === 0 && !isSetupDismissed ? (
         <Panel
           actions={
@@ -182,6 +152,7 @@ export function KurumDashboard() {
         />
       ) : null}
 
+      {/* Günlük özet (Berrak §5): dikkat → metrikler → son sınav/rapor → duyurular. Diğer ekranlara komut paleti ve hub menüsü götürür. */}
       <div className="next-institution-growth-layout">
         <div className="next-institution-growth-primary">
           <Panel
@@ -243,21 +214,38 @@ export function KurumDashboard() {
           </ReportChartPanel>
         </div>
 
-        <Panel
-          aria-label="Diğer kurum işlemleri"
-          className="next-dashboard-links-panel next-institution-growth-side"
-          description="Günlük özetin dışında kalan operasyon ekranları."
-          title="Diğer kurum işlemleri"
-          tone="muted"
-        >
-          <nav aria-label="Kurum operasyon bağlantıları" className="next-dashboard-compact-links">
-            <Link href="/kurum/ogrenciler">Öğrenciler</Link>
-            <Link href="/kurum/raporlar">Başarı raporları</Link>
-            <Link href="/kurum/devamsizlik">Devamsızlık takibi</Link>
-            <Link href="/kurum/optik">Sonuç hazırlama</Link>
-          </nav>
-        </Panel>
       </div>
+
+
+      <Panel
+        actions={<Link href="/kurum/duyurular">Tüm duyuruları aç</Link>}
+        aria-label="Kurum duyuruları"
+        className="next-attention-panel"
+        description="Kurum genelinde yayımlanan son bilgilendirmeler."
+        title="Kurum duyuruları"
+      >
+        {announcementsQuery.isPending ? (
+          <LoadingState label="Duyurular yükleniyor…" />
+        ) : announcementsQuery.isError ? (
+          <p className="next-attention-empty">Duyurular şu anda alınamadı.</p>
+        ) : announcements.length > 0 ? (
+          <div className="next-attention-list">
+            {announcements.map((announcement) => (
+              <ActionCard
+                as="a"
+                className="next-attention-item"
+                detail={announcement.body}
+                href="/kurum/duyurular"
+                key={announcement.id}
+                label={announcement.title}
+                value={formatDate(announcement.publishedAt)}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="next-attention-empty">Henüz yayımlanmış duyuru yok.</p>
+        )}
+      </Panel>
 
       {dashboardQuery.isError ? <p className="next-form-error">Kurum başarı görünümü güncellenemedi; son alınan bilgiler gösteriliyor.</p> : null}
     </PageFrame>
