@@ -715,3 +715,23 @@ artifact'ından (run 36834671993, 36841947066); CI'ın ilk hatada durduğu için
   staging'deki mevcut en yeni yedek (2026-08-26, bu sürümden önce). Doğrulayıcıda kalan: 6 komut
   (yukarıdaki 5 + `queue:smoke`) ve 8 dış senaryonun staging kanıtı.
 
+### Staging UAT girdileri — `a17e68aeb` (2026-10-01)
+
+- Takip düzeltmeleri main'de: 4rmus/o-okul#121 (`queue:smoke`/`report-generation:smoke` tenant oturum
+  bağlamı), 4rmus/o-okul#122 (RLS canlı fixture tenant'larının lisans mirror'ı). #122 öncesi staging'de
+  koşturulan RLS kontrolü iki fixture tenant'ı boş mirror ile bıraktı; `a7e1db08f` deploy'u (run 36916759460)
+  `LicenseTerm backfill` kapısında düştü ve yazıcılar durduğu için API ~1 saat kapalı kaldı. API önceki
+  sürümle elle yeniden başlatıldı, iki fixture tenant'ın mirror'ı kendi LicenseTerm'iyle eşitlendi, deploy
+  yeniden koşturuldu (2. deneme PASS). Takip önerisi: deploy workflow'u pre-migration kapısı düşünce
+  durdurduğu servisleri geri başlatmalı.
+- Güncel staging: `a17e68aeb` (deploy run 36924306618 PASS, CI run 36922384201 PASS, cutover
+  2026-10-01T21:02:38.934Z). `LicenseTerm backfill` DRY_RUN: READY (5/5).
+- Smoke'lar sürüm kaynağından (`/root/o-okul-private/uat-src/a17e68aeb`), kanıtlar
+  `https://o-okul.com/evidence/role-uat/a17e68aeb/`: `db:rls:check:live` PASS, `sms:smoke` PASS
+  (SMS kapalı → disabled), `notification:smoke` PASS (gerçek e-posta), `traefik:https:smoke` PASS (deploy run).
+- Taslak girdiler (özel dizin, 0700/0600): 13 CI senaryosu PASS, 4 komut PASS, `tester=arair-role-uat`,
+  `restoreBackupReference` mevcut en yeni yedek (2026-08-26). Kalan: 6 komut (`queue:smoke`,
+  `report-generation:smoke`, `raw-import:smoke`, `live:onboarding:smoke`, `live:ui-worker:smoke`,
+  `live:exam-cycle:check`; hesap/oturum tohumladıkları veya gerçek kimlik bilgisi istedikleri için
+  operatör koşturur) ve 8 dış senaryonun staging kanıtı.
+
