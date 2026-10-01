@@ -194,9 +194,10 @@ const karneRawColorBlock = readMarkedBlock(legacyGlobals, "karne-print");
 const receiptRawColorBlock = readMarkedBlock(legacyGlobals, "receipt-print");
 const karneRawColors = karneRawColorBlock.match(rawColorPattern) ?? [];
 const receiptRawColors = receiptRawColorBlock.match(rawColorPattern) ?? [];
-// DEC-20260930-04: Berrak karne kâğıdı 37 print rengi taşır (eski gradyan kenarlık kaldırıldı).
-if (karneRawColors.length !== 37) {
-  failures.push(`karne-print allowlist tam 37 Berrak kâğıt rengi içermeli: ${karneRawColors.length}`);
+// DEC-20260930-04: Berrak karne kâğıdı 39 print rengi taşır (eski gradyan kenarlık kaldırıldı; iki grafik
+// serisi rengi gri tonlamada ayrışma için eklendi).
+if (karneRawColors.length !== 39) {
+  failures.push(`karne-print allowlist tam 39 Berrak kâğıt rengi içermeli: ${karneRawColors.length}`);
 }
 if (receiptRawColors.length !== 4) {
   failures.push(`receipt-print allowlist tam 4 dondurulmuş ham renk içermeli: ${receiptRawColors.length}`);

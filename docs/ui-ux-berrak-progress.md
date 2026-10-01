@@ -26,6 +26,7 @@ Local PASS staging kanıtı değildir. Secret değerleri bu dosyaya yazılmaz; y
 | G7 Günlük özetler | `berrak/g7-gunluk-ozet` | Tamam | 4rmus/o-okul#116 |
 | G8 CSS temizliği + ratchet + koyu tema anahtarı | `berrak/g8-css-ratchet` | Tamam | 4rmus/o-okul#117 |
 | G9 Landing + auth reskin | `berrak/g9-landing-auth` | Tamam | 4rmus/o-okul#118 |
+| G10 Karne yeniden tasarımı | `berrak/g10-karne` | Sürüyor (Linux golden'ları) | 4rmus/o-okul#119 |
 
 ## G0 — Plan ve karar kayıtları
 
@@ -575,4 +576,68 @@ kodu değişmedi. Kabul spec'leri: `marketing-context-next` yeşil; `login-next`
 `--radius-dialog` iki marketing karosunda (değer aynı); `74-almanac-marketing.css:76`'daki iki renkli
 oklch karışımı (transparan değil, ton sorunu yok); uygulama CSS'inde 700–850 ağırlıklar design.md ile
 çelişiyor (uygulama yüzeyi, ayrı dilim).
+
+## G10 — Karne yeniden tasarımı (DEC-20260930-04)
+
+- Hedef: karneyi web sheet ve worker PDF şablonunda birlikte Berrak diline taşımak; A4 595 × 842
+  geometri, öğrenci başına sayfa, aynı snapshot → aynı sayılar, `Başarı %` birincil, baskıda
+  okunaklılık ve tema bağımsızlığı korunur.
+- Sahip olunan yollar: karne CSS'i (`20-application-base.css` karne bloğu, `73-almanac-report.css`),
+  `apps/worker/src/jobs/report-pdf-render-job.ts`, `scripts/check-karne-visual-contract.mjs`,
+  `scripts/compare-karne-visual-evidence.mjs`, `scripts/check-adiguzel-pdf-visual-targets.mjs`,
+  `scripts/check-web-design-tokens.mjs` (karne kısımları), karne golden'ları, `docs/DECISIONS.md`,
+  `design.md`; G2–G9'dan kalan Linux golden'ları.
+- Yasak yollar: skorlama ve snapshot mantığı, karne verisi.
+- Kabul: `pnpm --filter @o-okul/worker test`, `pnpm report-generation:smoke`,
+  `pnpm karne:visual-contract:check` (yeni golden), `portal-report-panel-next`,
+  `report-workspace-contract-next`; son dalda `pnpm run ci` ve GitHub CI.
+
+### G10 notları
+
+- Görsel dil: 39 renkli Berrak kâğıt paleti (eski gradyan çerçeve kaldırıldı, iki grafik serisi rengi
+  eklendi → ham renk 40 → 39), 1 px
+  kâğıt çizgisi, 28 px iç boşluk, IBM Plex (Arial yedek) + tabular rakamlar, ≤600 ağırlık, sola hizalı
+  accent bölüm etiketleri, `Başarı %` özet kartı accent kenarlı birincil metrik. Metin, başlıklar ve
+  tablo yapısı aynı (erişilebilir isimler ve e2e assert'leri değişmedi).
+- Tema bağımsızlığı: `KARNE-ALMANAC-PINS` → `KARNE-PAPER-PINS`; karne kapsamındaki her renk token'ı
+  `tokens.css` açık değerine sabit, `check-web-design-tokens.mjs` artık değer eşitliğini de doğruluyor
+  (önceden yalnız varlık). Baskıda `BERRAK-LIGHT-RESET` geçerli.
+- Eski tasarımda "PUAN - SIRA ANALİZİ" tablosu bloğunun sağ kenarından taşıyordu; `table-layout: fixed`
+  ile sığıyor.
+- Worker PDF: V2 ve legacy inline CSS aynı palete geçti. V2 karne HTML'indeki yüzde ve sayılar web ile
+  aynı Türkçe biçimde (Başarı % bir ondalık `%73,3`, net iki ondalık `24,50`, grafik değerleri ve ders
+  netleri dahil); önceden ham değer basılıyordu (`%73.33333333333333`, `Edb 17.25`). Değerler
+  aynı snapshot alanlarından gelir; düz metin fallback satırları ASCII biçimini korur. Worker imajında
+  IBM Plex yok → PDF Arial yedeğiyle çizilir (stack tanımlı).
+- Kontrollerin yeniden tanımı (DEC-20260930-04, hedef dosyasındaki izinli istisna):
+  - `karne:visual-contract:check` DEC-04 belirteçlerini, golden'ı (595 × 842, darwin + linux) ve print
+    geometrisini doğrular; ADIGÜZEL PDF benzerlik eşiği (0.53 / 36) kaldırıldı.
+  - `karne:visual-diff` varsayılan hedefi karne golden'ı (`--target golden`, eşik 0.02 / 6); PDF hedefleri
+    isteğe bağlı.
+  - `karne:visual-targets` aynı (ADIGÜZEL fikstürlerinin SHA-256 bütünlüğü), rolü sayısal referans.
+  - `karne-print` allowlist 40 → 39; Arial pin'i → `var(--font-body), Arial` + `tabular-nums`.
+- Yan yana kanıt: `artifacts/ui-ux-redesign/berrak/g10/{web-karne.png,worker-karne-p1.png,worker-karne.pdf}`
+  (aynı öğrenci: Ada Kaya, LGS; Başarı % 81,7, Net 24,5, Soru 30, branşlar %73,3 / %86,7).
+- Linux golden'ları: docker daemon kapalı (colima çalışmıyor); CI ubuntu runner'da imaj yerine
+  `playwright install --with-deps chromium` kullandığından golden'lar CI'ın `ci-test-results-*`
+  artifact'ındaki çıktılardan bilinçli incelenerek alınır.
+- `report-generation:smoke`: colima ile yerel geçici postgres:16 + redis:7 (CI `account-management-postgres`
+  işinin rol/uzantı/migration bootstrap'ının aynısı) → **PASS** (`LOCAL_TEST`; snapshot üretimi 217 ms).
+- `raw-import:smoke`: aynı ortam + geçici MinIO → girişte 401. Berrak dalları auth, smoke script'i ve DB
+  şemasına dokunmadı (`git diff main...HEAD` boş); mevcut smoke/ortam sorunu, Berrak kapsamı dışında
+  açık madde.
+
+Review (`o-okul-pr-review`, read-only): `:first-child` Başarı % vurgusu tüm KarneSheet varyantlarında doğru
+kartı hedefliyor; koyu tema ekran ve baskıda karneye sızmıyor; kontroller DEC-04 kapsamında yeniden
+tanımlanmış, golden diff eşiği sıkılaşmış (0.53/36 → 0.02/6).
+- P1 düzeltildi: grafikte "Öğrenci" ve "Okul" çubukları aynı renkteydi (gri tonlamada ayırt edilemiyordu).
+  Dört seri gri tonlamada eşit aralıklı: öğrenci #4f46e5, sınıf #3f9b63, okul #9aa4f5, genel #d6dae2
+  (≈ 91 / 121 / 170 / 218 luma); durum renkleri ve kenarlıklar değişmedi.
+- P2 düzeltildi: PDF'te grafik değeri ve ders netleri nokta ondalıkla kalmıştı; netler web gibi iki
+  ondalık. Biçimlendiriciler için worker testi eklendi (HTML Türkçe, fallback ASCII);
+  `Edb 17.25` beklentisi `Edb 17,25` oldu (aynı değer, yeni gösterim).
+- P3 düzeltildi: baskıda karne radius'u ekrandakiyle aynı (pin'ler `@media screen` dışında da geçerli).
+- P3 açık: web karnesi baskıda öğrenci başına tek sayfa sınırını doğrulamıyor (spec yalnız ≥ 842
+  yüksekliği bekliyor; worker PDF `break-before: page` ile öğrenci başına sayfa açıyor); worker imajında
+  IBM Plex yok (Arial yedeği).
 

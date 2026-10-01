@@ -699,7 +699,8 @@ linux, 595 × 842, `maxDiffPixelRatio: 0.005`) ve print geometrisini doğrular; 
 benzerlik eşiği kaldırılır. `pnpm karne:visual-diff -- --target golden --ui <png> --max-diff-ratio 0.02
 --max-mean-channel-delta 6` kanıt ekran görüntülerini yeni golden'a karşı ölçer; ADIGÜZEL PDF'leri
 `pnpm karne:visual-targets` ile sayısal doğruluk fikstürü olarak korunur (`--target iSEM` isteğe bağlı).
-`karne-print` ham renk allowlist'i 37 Berrak kâğıt rengidir.
+`karne-print` ham renk allowlist'i 39 Berrak kâğıt rengidir; karne grafiğinin dört serisi gri tonlamada
+ayrışır (öğrenci, sınıf, okul, genel ≈ 91 / 121 / 170 / 218 luma).
 Kaynak: Berrak planı (G10), karne yeniden tasarım yetkisi.
 Kanıt: `scripts/check-karne-visual-contract.mjs`, `scripts/compare-karne-visual-evidence.mjs`,
 `scripts/check-adiguzel-pdf-visual-targets.mjs`, `scripts/check-web-design-tokens.mjs`,

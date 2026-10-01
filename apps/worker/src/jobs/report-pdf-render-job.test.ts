@@ -282,7 +282,7 @@ describe("report PDF render job", () => {
     expect(html).toContain("398");
     expect(html).toContain("376");
     expect(html).toContain("Mat 28");
-    expect(html).toContain("Edb 17.25");
+    expect(html).toContain("Edb 17,25");
     expect(html).toContain("Kurum başarı sırası");
     expect(html).toContain("Sınıf başarı sırası");
   });
@@ -392,6 +392,50 @@ describe("report PDF render job", () => {
         },
       },
     })).rejects.toThrow("REPORT_PDF_RENDER_JOB_NAME_INVALID");
+  });
+  it("karne HTML'ini web karnesiyle aynı Türkçe biçimde, fallback'i ASCII biçimde yazar", async () => {
+    const renderer = new FakeRenderer();
+    await processReportPdfRenderJob({
+      name: "report-pdf-render",
+      data: {
+        snapshot: {
+          id: "snapshot-format",
+          tenantId: "tenant-a",
+          examId: "exam-lgs",
+          reportType: "EXAM_RESULT_SUMMARY",
+          status: "READY",
+          snapshotData: {
+            schemaVersion: 2,
+            pdfMode: "STUDENT_CARDS",
+            examType: "LGS",
+            examYear: 2026,
+            scoringProfileId: "TR-LGS-2026-NOSD-V1",
+            examTitle: "LGS Biçim",
+            resultCount: 1,
+            averages: { net: 24.5, questionCount: 30, successRate: 81.6667 },
+            scoreAverages: [{ type: "LGS", calculatedCount: 1, practiceScore: 440.125 }],
+            students: [{
+              studentId: "student-format",
+              displayName: "Ada Kaya",
+              total: { net: 24.5, questionCount: 30, successRate: 81.6667 },
+              branches: [{ branch: "Matematik", questionCount: 15, net: 11, successRate: 73.3333 }],
+              scoreViews: [{ type: "LGS", status: "CALCULATED", metrics: { correct: 25, wrong: 4, blank: 1, net: 24.5, questionCount: 30, successRate: 81.6667 }, practiceScore: 440.125, profileId: "TR-LGS-2026-NOSD-V1", officialComparable: false }],
+            }],
+          },
+        },
+      },
+    }, renderer);
+
+    const html = renderer.inputs[0]?.html ?? "";
+    const fallback = renderer.inputs[0]?.fallbackLines.join("\n") ?? "";
+    expect(html).toContain("<td>%81,7</td>");
+    expect(html).toContain("<td>%73,3</td>");
+    expect(html).toContain("<td>24,50</td>");
+    expect(html).toContain("<td>11,00</td>");
+    expect(html).toContain("440,13");
+    expect(html).not.toMatch(/%81\.6667|%73\.3333|>24\.5</u);
+    expect(fallback).toContain("Net 24.5");
+    expect(fallback).toContain("Basari %81.6667");
   });
 });
 

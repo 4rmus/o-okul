@@ -4484,6 +4484,9 @@
 /* RAW-COLOR-ALLOWLIST karne-print BEGIN */
 .next-karne-sheet {
   scroll-margin-block-start: 4.5rem;
+  /* Kâğıt radius'ları ekran ve baskıda aynıdır (73'teki pin'ler yalnız @media screen). */
+  --radius-control: 4px;
+  --radius-panel: 6px;
   --karne-accent: #4f46e5;
   --karne-border: #dfe3ea;
   --karne-border-faint: #edf0f4;
@@ -4498,7 +4501,10 @@
   --karne-shadow: rgb(22 27 43 / 6%);
   --karne-block-shadow: rgb(22 27 43 / 3%);
   --karne-caption: #3a4254;
-  --karne-school: #4f46e5;
+  --karne-school: #9aa4f5;
+  /* Grafik serileri gri tonlamada ayrışır: öğrenci ~91, sınıf ~121, okul ~170, genel ~218 (luma). */
+  --karne-chart-class: #3f9b63;
+  --karne-chart-general: #d6dae2;
   --karne-danger: #b91c1c;
   --karne-warning-border: #e7b45a;
   --karne-warning-bg: #fdf5e6;
@@ -4907,7 +4913,7 @@
 }
 
 .next-outcome-legend__class::before {
-  background: var(--karne-success);
+  background: var(--karne-chart-class);
 }
 
 .next-outcome-legend__school::before {
@@ -4915,7 +4921,7 @@
 }
 
 .next-outcome-legend__general::before {
-  background: var(--karne-border-strong);
+  background: var(--karne-chart-general);
 }
 
 .next-karne-sheet .next-outcome-bar-chart {
@@ -4970,7 +4976,7 @@
 }
 
 .next-outcome-bar--class {
-  background: var(--karne-success);
+  background: var(--karne-chart-class);
 }
 
 .next-outcome-bar--school {
@@ -4978,7 +4984,7 @@
 }
 
 .next-outcome-bar--general {
-  background: var(--karne-border-strong);
+  background: var(--karne-chart-general);
 }
 
 .next-karne-sheet .uh-chart-table {
