@@ -4484,43 +4484,43 @@
 /* RAW-COLOR-ALLOWLIST karne-print BEGIN */
 .next-karne-sheet {
   scroll-margin-block-start: 4.5rem;
-  --karne-accent: #155eef;
-  --karne-border: #d0d5dd;
-  --karne-border-faint: #e4e7ec;
-  --karne-border-strong: #98a2b3;
-  --karne-header-bg: #eef4ff;
-  --karne-muted-bg: #f8fafc;
-  --karne-score-bg: #eff8ff;
-  --karne-text: #101828;
-  --karne-text-muted: #667085;
+  --karne-accent: #4f46e5;
+  --karne-border: #dfe3ea;
+  --karne-border-faint: #edf0f4;
+  --karne-border-strong: #c4cad5;
+  --karne-header-bg: #f3f4f8;
+  --karne-muted-bg: #f7f8fa;
+  --karne-score-bg: #eef0fe;
+  --karne-text: #161b2b;
+  --karne-text-muted: #5a6275;
   --karne-surface: #fff;
-  --karne-success: #0f766e;
-  --karne-shadow: rgb(22 34 55 / 8%);
-  --karne-block-shadow: rgb(22 34 55 / 4%);
-  --karne-caption: #344054;
-  --karne-school: #2e90fa;
-  --karne-danger: #b42318;
-  --karne-warning-border: #f0c36a;
-  --karne-warning-bg: #fff8e6;
-  --karne-warning-text: #704900;
-  --karne-app-text: #18202f;
-  --karne-app-text-secondary: #2b3547;
-  --karne-app-text-muted: #5b6678;
-  --karne-app-primary-hover: #114fd2;
-  --karne-app-primary-subtle: #e8efff;
-  --karne-app-success-subtle: #e2f8f4;
+  --karne-success: #15803d;
+  --karne-shadow: rgb(22 27 43 / 6%);
+  --karne-block-shadow: rgb(22 27 43 / 3%);
+  --karne-caption: #3a4254;
+  --karne-school: #4f46e5;
+  --karne-danger: #b91c1c;
+  --karne-warning-border: #e7b45a;
+  --karne-warning-bg: #fdf5e6;
+  --karne-warning-text: #7a4a00;
+  --karne-app-text: #161b2b;
+  --karne-app-text-secondary: #2c3344;
+  --karne-app-text-muted: #5a6275;
+  --karne-app-primary-hover: #4338ca;
+  --karne-app-primary-subtle: #eef0fe;
+  --karne-app-success-subtle: #e8f5ec;
   --karne-app-warning: #b45309;
-  --karne-app-warning-subtle: #fef3c7;
+  --karne-app-warning-subtle: #fdf3e1;
   --karne-app-info: #0369a1;
-  --karne-app-info-subtle: #e0f2fe;
-  --karne-app-border: #d8deea;
-  --karne-app-border-strong: #b9c3d4;
-  --karne-app-border-faint: #ebeff6;
-  --karne-app-surface-muted: #f7f9fc;
-  --karne-app-surface-elevated: #eef3fb;
-  --karne-app-bg: #f6f8fc;
-  --karne-app-danger-subtle: #fee4e2;
-  --karne-outline: #c9d4e4;
+  --karne-app-info-subtle: #e6f3fb;
+  --karne-app-border: #dfe3ea;
+  --karne-app-border-strong: #c4cad5;
+  --karne-app-border-faint: #edf0f4;
+  --karne-app-surface-muted: #f7f8fa;
+  --karne-app-surface-elevated: #f1f2f7;
+  --karne-app-bg: #f5f6f9;
+  --karne-app-danger-subtle: #fdeceb;
+  --karne-outline: #d3d8e2;
   position: relative;
   display: grid;
   width: min(100%, 595px);
@@ -4528,14 +4528,13 @@
   align-content: start;
   justify-self: center;
   gap: 12px;
-  border: 6px solid transparent;
+  border: 1px solid var(--karne-border);
   border-radius: 0;
-  padding: 24px;
-  background:
-    linear-gradient(#fff, #fff) padding-box,
-    linear-gradient(135deg, var(--karne-accent), #0f766e 58%, var(--karne-border-strong)) border-box;
+  padding: 28px;
+  background: var(--karne-surface);
   color: var(--karne-text);
-  font-family: Arial, sans-serif;
+  font-family: var(--font-body), Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
 }
 /* RAW-COLOR-ALLOWLIST karne-print END */
 
@@ -4594,10 +4593,10 @@
 
 .next-karne-header h2,
 .next-karne-header h3 {
-  padding: 4px 10px;
+  padding: 6px 10px;
   border-bottom: 1px solid var(--karne-border);
   background: var(--karne-header-bg);
-  text-align: center;
+  text-align: left;
 }
 
 .next-karne-header p,
@@ -4607,7 +4606,7 @@
   border-bottom: 1px solid var(--karne-border-faint);
   color: var(--karne-text-muted);
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .next-karne-brand {
@@ -4626,7 +4625,7 @@
 .next-karne-brand span {
   color: var(--karne-accent);
   font-size: 22px;
-  font-weight: 900;
+  font-weight: 600;
   letter-spacing: 0;
 }
 
@@ -4634,7 +4633,7 @@
   max-width: 120px;
   color: var(--karne-accent);
   font-size: 9px;
-  font-weight: 900;
+  font-weight: 600;
   line-height: 1.15;
   overflow-wrap: anywhere;
 }
@@ -4642,7 +4641,7 @@
 .next-karne-brand small {
   color: var(--karne-text);
   font-size: 4px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0;
 }
 
@@ -4668,7 +4667,7 @@
 .next-karne-context-strip > strong {
   color: var(--karne-text);
   font-size: 10px;
-  font-weight: 900;
+  font-weight: 600;
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -4680,7 +4679,7 @@
 
 .next-karne-context-strip__grid > .uh-info-item {
   border: 1px solid var(--karne-border-faint);
-  border-radius: 0;
+  border-radius: var(--radius-panel);
   background: var(--karne-surface);
   padding: 5px 6px;
   box-shadow: none;
@@ -4690,7 +4689,7 @@
 .next-karne-context-strip .uh-info-item__description {
   color: var(--karne-text-muted);
   font-size: 7px;
-  font-weight: 900;
+  font-weight: 600;
   line-height: 1.1;
   text-transform: uppercase;
 }
@@ -4699,7 +4698,7 @@
   min-width: 0;
   color: var(--karne-text);
   font-size: 9px;
-  font-weight: 900;
+  font-weight: 600;
   line-height: 1.2;
   overflow-wrap: anywhere;
 }
@@ -4714,7 +4713,7 @@
   min-height: 42px;
   min-width: 0;
   border: 1px solid var(--karne-border);
-  border-radius: 0;
+  border-radius: var(--radius-panel);
   background: var(--karne-header-bg);
   padding: 5px 6px;
   text-align: center;
@@ -4725,7 +4724,7 @@
 .next-karne-summary-strip .uh-metric-card__description {
   color: var(--karne-text-muted);
   font-size: 7px;
-  font-weight: 900;
+  font-weight: 600;
   line-height: 1.1;
   text-transform: uppercase;
 }
@@ -4734,9 +4733,20 @@
   min-width: 0;
   color: var(--karne-text);
   font-size: 10px;
-  font-weight: 900;
+  font-weight: 600;
   line-height: 1.2;
   overflow-wrap: anywhere;
+}
+
+/* Başarı % karnenin birincil metriğidir; Net ve Soru bağlam kartlarıdır (DEC-20260930-04). */
+.next-karne-summary-strip > .uh-metric-card:first-child {
+  border-color: var(--karne-accent);
+  background: var(--karne-score-bg);
+}
+
+.next-karne-summary-strip > .uh-metric-card:first-child .uh-metric-card__value {
+  color: var(--karne-accent);
+  font-size: var(--text-sm);
 }
 
 .next-karne-grid {
@@ -4749,7 +4759,7 @@
   display: grid;
   gap: 6px;
   border: 1px solid var(--karne-border);
-  border-radius: 0;
+  border-radius: var(--radius-panel);
   background: var(--karne-surface);
   padding: 8px 10px;
 }
@@ -4760,10 +4770,12 @@
 
 .next-karne-block h3,
 .next-karne-block h4 {
-  border-bottom: 2px solid var(--karne-border);
+  border-bottom: 1px solid var(--karne-border);
   padding-bottom: 4px;
-  font-size: 12px;
-  text-align: center;
+  color: var(--karne-accent);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-align: left;
 }
 
 .next-karne-outcome-block {
@@ -4782,7 +4794,7 @@
   padding-bottom: 5px;
   color: var(--karne-caption);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 600;
   text-align: left;
 }
 
@@ -4796,7 +4808,7 @@
 .next-karne-table th {
   background: var(--karne-header-bg);
   color: var(--karne-text);
-  font-weight: 900;
+  font-weight: 600;
 }
 
 .next-karne-table td:first-child,
@@ -4804,12 +4816,14 @@
   text-align: left;
 }
 
+/* Puan tablosu blok genişliğine sığar (eski tasarımda sağ kenardan taşıyordu). */
 .next-karne-score-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   color: var(--karne-text);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .next-karne-score-table th,
@@ -4822,7 +4836,7 @@
 .next-karne-score-table thead th {
   background: var(--karne-header-bg);
   font-size: 9px;
-  font-weight: 900;
+  font-weight: 600;
 }
 
 .next-karne-score-table tbody th {
@@ -4867,7 +4881,7 @@
   justify-content: space-between;
   color: var(--karne-text);
   font-size: 6px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1;
 }
 
@@ -4940,7 +4954,7 @@
   left: 0;
   color: var(--karne-text);
   font-size: 7px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1;
   text-align: center;
   white-space: normal;
@@ -4985,7 +4999,7 @@
 
 .next-karne-sheet .uh-chart-table th {
   background: var(--karne-header-bg);
-  font-weight: 900;
+  font-weight: 600;
 }
 
 .next-karne-sheet .uh-chart-table th:first-child,
@@ -4997,7 +5011,7 @@
   margin: 0;
   color: var(--karne-text);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0;
 }
 
@@ -5027,7 +5041,7 @@
 .next-karne-sheet > p {
   color: var(--karne-caption);
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   text-align: center;
 }
 
@@ -5059,13 +5073,13 @@
   margin: 0;
   color: var(--karne-text-muted);
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .next-karne-status {
   min-height: 18px;
   padding: 0 7px;
-  font-weight: 900;
+  font-weight: 600;
   font-size: 8px;
   line-height: 1;
 }
@@ -5220,7 +5234,7 @@
   padding: 5px 8px;
   color: var(--karne-warning-text);
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.3;
 }
 

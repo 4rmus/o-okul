@@ -17,16 +17,20 @@ const visualBaselines = [
 const expectedSize = { height: 842, width: 595 };
 
 const failures = [];
+// DEC-20260930-04: görsel kabul ADIGÜZEL PDF benzerliğinden Berrak karne golden'ına ve geometriye taşındı.
 const decisionTokens = [
-  "DEC-20260613-04",
-  "V1 karne g\u00f6rsel kabul e\u015fi\u011fi",
-  "Durum: Onayl\u0131",
+  "DEC-20260930-04",
+  "Durum: Onayl\u0131; DEC-20260613-04'\u00fcn yerini al\u0131r",
   "pnpm karne:visual-targets",
-  "pnpm karne:visual-diff -- --target iSEM --ui <png> --max-diff-ratio 0.53 --max-mean-channel-delta 36",
+  "pnpm karne:visual-diff -- --target golden --ui <png> --max-diff-ratio 0.02\n--max-mean-channel-delta 6",
+  "KARNE-PAPER-PINS",
   "Ger\u00e7ek kurum logosu",
   "\u00fcr\u00fcn sahibi",
 ];
 const diffScriptTokens = [
+  'const targetNeedle = options.target ?? "golden";',
+  "student-report-card-1024-${process.platform}.png",
+  "KARNE_GOLDEN_NOT_FOUND",
   "--max-diff-ratio",
   "--max-mean-channel-delta",
   "KARNE_VISUAL_DIFF_TOO_HIGH",

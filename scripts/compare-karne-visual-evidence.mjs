@@ -5,6 +5,11 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const fixtureDir = fileURLToPath(new URL("../ornek-veriler/", import.meta.url));
+// DEC-20260930-04: varsayılan görsel referans Berrak karne golden'ıdır. ADIGÜZEL PDF'leri
+// (`--target iSEM|3D|MUBA`) sayısal doğruluk fikstürü olarak isteğe bağlı karşılaştırılır.
+const goldenPath = fileURLToPath(
+  new URL(`../apps/web/e2e-next/__screenshots__/ui-visual-qa-next.spec.ts/student-report-card-1024-${process.platform}.png`, import.meta.url),
+);
 const expectedSize = { height: 842, width: 595 };
 const options = parseArgs(process.argv.slice(2));
 
@@ -15,11 +20,15 @@ if (!existsSync(options.ui)) {
   throw new Error("UI_SCREENSHOT_NOT_FOUND");
 }
 
-const targetNeedle = options.target ?? "iSEM";
-const pdfName = readdirSync(fixtureDir).find((name) =>
-  name.startsWith("Ahmet-ishak-") && name.includes(targetNeedle) && name.endsWith(".pdf")
-);
-if (!pdfName) throw new Error(`ADIGUZEL_PDF_NOT_FOUND:${targetNeedle}`);
+const targetNeedle = options.target ?? "golden";
+const isGoldenTarget = targetNeedle === "golden";
+const pdfName = isGoldenTarget
+  ? undefined
+  : readdirSync(fixtureDir).find((name) =>
+    name.startsWith("Ahmet-ishak-") && name.includes(targetNeedle) && name.endsWith(".pdf")
+  );
+if (isGoldenTarget && !existsSync(goldenPath)) throw new Error("KARNE_GOLDEN_NOT_FOUND");
+if (!isGoldenTarget && !pdfName) throw new Error(`ADIGUZEL_PDF_NOT_FOUND:${targetNeedle}`);
 
 const tempDir = mkdtempSync(join(tmpdir(), "karne-visual-diff-"));
 
@@ -27,10 +36,10 @@ try {
   const targetPng = join(tempDir, "target.png");
   const targetBmp = join(tempDir, "target.bmp");
   const uiBmp = join(tempDir, "ui.bmp");
-  const pdfPath = join(fixtureDir, pdfName);
+  const pdfPath = isGoldenTarget ? goldenPath : join(fixtureDir, pdfName);
 
-  runSips(["-s", "format", "png", pdfPath, "--out", targetPng], `PDF_RENDER_FAILED:${targetNeedle}`);
-  runSips(["-s", "format", "bmp", targetPng, "--out", targetBmp], `TARGET_BMP_FAILED:${targetNeedle}`);
+  if (!isGoldenTarget) runSips(["-s", "format", "png", pdfPath, "--out", targetPng], `PDF_RENDER_FAILED:${targetNeedle}`);
+  runSips(["-s", "format", "bmp", isGoldenTarget ? goldenPath : targetPng, "--out", targetBmp], `TARGET_BMP_FAILED:${targetNeedle}`);
   runSips(["-s", "format", "bmp", options.ui, "--out", uiBmp], "UI_BMP_FAILED");
 
   const target = readBmp(targetBmp);

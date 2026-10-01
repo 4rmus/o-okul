@@ -195,7 +195,7 @@ Son kontrol: 2026-08-10
 
 ### DEC-20260613-04 — V1 karne görsel kabul eşiği
 
-Durum: Onaylı
+Durum: Onaylı; yerini DEC-20260930-04 aldı (2026-10-01)
 Karar: ADIGÜZEL hedef PDF'leri v1 için sayısal doğruluk ve görsel regresyon bazı olarak kalır; v1
 go-live için UI/portal karne ekranlarının hedef PDF'e birebir piksel eşleşmesi beklenmez. Kabul
 kapısı iki katmanlıdır: `pnpm karne:visual-targets` 3 hedef PDF render/hash boyutunu korur ve
@@ -683,6 +683,30 @@ tablosu).
 Etkilenen ADR: Yok
 Açık soru: Yok.
 Son kontrol: 2026-09-30
+
+### DEC-20260930-04 — Karne Berrak diliyle yeniden tasarlanır; görsel kabul golden ve geometriye bağlanır
+
+Durum: Onaylı; DEC-20260613-04'ün yerini alır
+Karar: Web karne sheet'i (`karne-sheet.tsx`, `outcome-net-table.tsx` stilleri) ve worker PDF şablonu
+(`createSnapshotPdfHtml`) birlikte Berrak diline geçer: IBM Plex (Arial yalnız yedek), tabular rakamlar,
+≤600 ağırlık, sola hizalı accent bölüm etiketleri, 1 px kâğıt çizgisi, `Başarı %` birincil metrik kartı
+(Net ve Soru bağlam). Karne tema bağımsız açık kâğıttır: renk token'ları karne kapsamında `tokens.css`
+açık değerlerine birebir sabitlenir (`KARNE-PAPER-PINS`, eşitlik `check-web-design-tokens.mjs` ile
+doğrulanır), `@media print` koyu temada açık değerleri geri yükler. Korunanlar: A4 595 × 842 geometri,
+öğrenci başına sayfa düzeni, aynı snapshot'tan aynı sayılar, metin ve tablo yapısı (erişilebilir isimler).
+Görsel kabul: `pnpm karne:visual-contract:check` karne golden'ını (`student-report-card-1024`, darwin +
+linux, 595 × 842, `maxDiffPixelRatio: 0.005`) ve print geometrisini doğrular; ADIGÜZEL hedef PDF'ine
+benzerlik eşiği kaldırılır. `pnpm karne:visual-diff -- --target golden --ui <png> --max-diff-ratio 0.02
+--max-mean-channel-delta 6` kanıt ekran görüntülerini yeni golden'a karşı ölçer; ADIGÜZEL PDF'leri
+`pnpm karne:visual-targets` ile sayısal doğruluk fikstürü olarak korunur (`--target iSEM` isteğe bağlı).
+`karne-print` ham renk allowlist'i 37 Berrak kâğıt rengidir.
+Kaynak: Berrak planı (G10), karne yeniden tasarım yetkisi.
+Kanıt: `scripts/check-karne-visual-contract.mjs`, `scripts/compare-karne-visual-evidence.mjs`,
+`scripts/check-adiguzel-pdf-visual-targets.mjs`, `scripts/check-web-design-tokens.mjs`,
+`apps/worker/src/jobs/report-pdf-render-job.ts`, `docs/ui-ux-berrak-progress.md` (G10).
+Etkilenen ADR: Yok
+Açık soru: Gerçek kurum logosu ve basılı karne marka uyumu pilot kurum ürün sahibi onayına kalır.
+Son kontrol: 2026-10-01
 
 ## Faz Öncesi Onay Gerektirenler
 

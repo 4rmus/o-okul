@@ -44,8 +44,9 @@ uyarı ve hata kendi semantik tokenlarını kullanır.
   mürekkep `oklch(96% 0.005 265)`, ikincil mürekkep `oklch(72% 0.015 265)`,
   çizgiler `oklch(30/38/26% 0.012 265)`, indigo `oklch(67% 0.180 277)`, teal
   `oklch(72% 0.110 185)`; başarı/uyarı/hata 400 tonları ve koyu soft zeminler.
-- Karne ve baskı daima açık kâğıttır: `.next-karne-sheet` ve `@media print`
-  koyu temada açık token değerlerini geri yükler (`BERRAK-LIGHT-RESET`).
+- Karne ve baskı daima açık kâğıttır: `.next-karne-sheet` renk token'larını
+  `tokens.css` açık değerlerine sabitler (`KARNE-PAPER-PINS`), `@media print` koyu
+  temada açık değerleri geri yükler (`BERRAK-LIGHT-RESET`).
 - Grafikler token'ları `html[data-theme]` değişiminde yeniden okur.
 
 ## Typography
@@ -57,9 +58,8 @@ uyarı ve hata kendi semantik tokenlarını kullanır.
   14 px (yoğun), portal ve auth ekranlarında 16 px (rahat).
 - Landing başlığı `--text-display` (32–40 px, weight 600) tek istisnadır; marketing
   yüzeyi de 600 üstü ağırlık kullanmaz.
-- Sayılar ve uygulama tabloları `font-variant-numeric: tabular-nums` kullanır.
-  Dondurulmuş `.next-karne-sheet` tabloları Arial geometrisini korur ve bu
-  genel sayı kuralını devralmaz.
+- Sayılar ve uygulama tabloları `font-variant-numeric: tabular-nums` kullanır;
+  karne de dahil (DEC-20260930-04: IBM Plex, Arial yalnız yedek font).
 
 Başlıklar hiçbir zaman italik değildir. Uzun başlıklar `overflow-wrap:
 anywhere` ile kendi kolonunda kalır.
@@ -110,8 +110,9 @@ Odak halkası 2 px `--color-focus` + 2 px zemin boşluğudur.
 
 Tüm sayfalar wordmark, renkler, fontlar, focus, CTA ve bölüm başlığı ritmini
 paylaşır. Yalnız route ailesinin içerik yapısı değişebilir. Marketing görsel
-zenginlik kullanabilir; uygulama ekranlarında işlev sayfayı taşır. Print/PDF
-ve mevcut karne geometrisi bu sistemden ayrı tutulur.
+zenginlik kullanabilir; uygulama ekranlarında işlev sayfayı taşır. Karne aynı dili
+A4 kâğıt geometrisinde (595 × 842 pt) kullanır; web sheet ve worker PDF şablonu
+birlikte güncellenir.
 
 ## Visual acceptance
 
@@ -120,8 +121,8 @@ ve mevcut karne geometrisi bu sistemden ayrı tutulur.
   fold sözleşmesi ayrıca 1280 × 800 px'i kapsar.
 - Login paneli (414), kurum rail'i (1440), öğrenci öncelikli aksiyon şeridi
   (414) ve rapor durum bölgesi (1440) Darwin ve Linux golden'larıyla korunur.
-- Mevcut karne golden'ı ayrı sözleşmedir; bu web yeniden tasarımı onu
-  topluca güncellemez.
+- Karne golden'ı (`student-report-card-1024`, 595 × 842) ayrı sözleşmedir ve
+  yalnız karne tasarımı değişirken bilinçli yenilenir (DEC-20260930-04).
 
 ## Hallmark
 

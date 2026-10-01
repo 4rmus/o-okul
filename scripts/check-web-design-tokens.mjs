@@ -180,8 +180,8 @@ requireTokens("apps/web/app/globals.css Hallmark katmanı", hallmarkLayer, [
   ".next-karne-sheet h2,",
   "font-family: inherit;",
   "min-width: auto;\n    overflow-wrap: normal;",
-  ".next-karne-sheet table {\n    font-variant-numeric: normal;",
-  ".next-karne-sheet .uh-metric-card__value {\n    font-variant-numeric: normal;",
+  ".next-karne-sheet table {\n    font-variant-numeric: tabular-nums;",
+  ".next-karne-sheet .uh-metric-card__value {\n    font-variant-numeric: tabular-nums;",
   ".next-karne-sheet .next-karne-block {\n    box-shadow: 0 1px 2px var(--karne-block-shadow);",
   ".next-report-status-surface .uh-status-badge {\n    border-radius: var(--radius-pill);",
   "color-scheme: light;",
@@ -194,8 +194,9 @@ const karneRawColorBlock = readMarkedBlock(legacyGlobals, "karne-print");
 const receiptRawColorBlock = readMarkedBlock(legacyGlobals, "receipt-print");
 const karneRawColors = karneRawColorBlock.match(rawColorPattern) ?? [];
 const receiptRawColors = receiptRawColorBlock.match(rawColorPattern) ?? [];
-if (karneRawColors.length !== 40) {
-  failures.push(`karne-print allowlist tam 40 dondurulmuş ham renk içermeli: ${karneRawColors.length}`);
+// DEC-20260930-04: Berrak karne kâğıdı 37 print rengi taşır (eski gradyan kenarlık kaldırıldı).
+if (karneRawColors.length !== 37) {
+  failures.push(`karne-print allowlist tam 37 Berrak kâğıt rengi içermeli: ${karneRawColors.length}`);
 }
 if (receiptRawColors.length !== 4) {
   failures.push(`receipt-print allowlist tam 4 dondurulmuş ham renk içermeli: ${receiptRawColors.length}`);
@@ -211,7 +212,8 @@ forbidRegex(
 );
 requireTokens("dondurulmuş karne/print istisnaları", legacyGlobals, [
   ".next-karne-sheet {",
-  "font-family: Arial, sans-serif;",
+  "font-family: var(--font-body), Arial, sans-serif;",
+  "font-variant-numeric: tabular-nums;",
   "@media print {",
 ]);
 requireTokens("apps/web/app/globals.css Hallmark katmanı", hallmarkLayer, [
@@ -574,17 +576,20 @@ function validateBerrakDarkTheme(tokensSource, darkSource) {
   }
 }
 
-// Karne G10'a kadar donmuştur: her primitive renk token'ı karne kapsamında sabitlenmelidir.
+// DEC-20260930-04: karne tema bağımsız Berrak açık kâğıdıdır; her renk token'ı karne kapsamında
+// tokens.css'teki açık değerine birebir sabitlenir (koyu tema karneye sızamaz).
 function validateKarnePins(tokensSource, reportSource) {
-  const begin = reportSource.indexOf("/* KARNE-ALMANAC-PINS BEGIN */");
-  const end = reportSource.indexOf("/* KARNE-ALMANAC-PINS END */");
+  const begin = reportSource.indexOf("/* KARNE-PAPER-PINS BEGIN */");
+  const end = reportSource.indexOf("/* KARNE-PAPER-PINS END */");
   if (begin < 0 || end <= begin) {
-    failures.push("73-almanac-report.css KARNE-ALMANAC-PINS markerlarını içermeli.");
+    failures.push("73-almanac-report.css KARNE-PAPER-PINS markerlarını içermeli.");
     return;
   }
   const pins = parseCustomProperties(reportSource.slice(begin, end));
-  for (const name of parseCustomProperties(tokensSource).keys()) {
-    if (name.startsWith("--color-") && !pins.has(name)) failures.push(`KARNE-ALMANAC-PINS eksik token: ${name}`);
+  for (const [name, value] of parseCustomProperties(tokensSource)) {
+    if (!name.startsWith("--color-")) continue;
+    if (!pins.has(name)) failures.push(`KARNE-PAPER-PINS eksik token: ${name}`);
+    else if (pins.get(name) !== value) failures.push(`KARNE-PAPER-PINS değeri tokens.css ile eşit olmalı: ${name}`);
   }
 }
 
