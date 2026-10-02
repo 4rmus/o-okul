@@ -667,3 +667,90 @@ artifact'ından (run 36834671993, 36841947066); CI'ın ilk hatada durduğu için
   ölçek dışı ham px (ratchet ile azalacak), web karnesinde baskı başına tek sayfa doğrulaması, worker
   imajında IBM Plex yok, production go-live (kapsam dışı).
 
+## Main merge ve staging role UAT — 2026-10-01
+
+- Yığın 4rmus/o-okul#119 ile main'e merge edildi (merge commit `ac5bc3d99`, kullanıcı onayıyla); #109
+  otomatik merged, #110–#118 içerikleri main'de olduğu için yorumla kapatıldı. Dallar silinmedi.
+- Main CI: run 36849748803 PASS (`verify`, `ui-ux-rc`, `account-management-postgres`).
+- Main staging deploy: run 36851505369 PASS, `deploy`/`build-images` bilinçli atlandı — son cutover
+  `fd01a5c63`'ten (run 36845578115) bu yana yalnız doküman ve merge commit'i değişti; staging zaten aynı
+  kodu çalıştırıyor.
+- Staging role UAT: run 36851619071 (main, `deploy_run_id=36845578115`) **FAIL** — "Validate full staging
+  evidence environment" adımı: GitHub `staging` ortamındaki `STAGING_EVIDENCE_ENV_B64` secret'ı (son
+  güncelleme 2026-08-09) tam mod için zorunlu 5 anahtarı içermiyor: `DOMAIN`, `CF_DNS_API_TOKEN_FILE`,
+  `LEGACY_TENANT_LOGIN_CUTOFF_AT`, `NOTIFICATION_FROM_EMAIL`, `NOTIFICATION_REPLY_TO_EMAIL`. Bu anahtarlar
+  Berrak öncesinde de `check-prod-env.mjs`'te zorunluydu (Berrak yalnız workflow'un enjekte ettiği
+  `METRICS_SCRAPE_TOKEN`'ı ekledi). Workflow'un geçmişte başarılı UAT koşusu yok. Değerler staging
+  `.env`'indedir; secret güncellenmeden UAT-KURUM-05/06 `UNPROVEN` kalır.
+- Yapılacak: `STAGING_EVIDENCE_ENV_B64`'ü 5 anahtarla yeniden yazmak (`base64 < .staging-evidence.env |
+  gh secret set STAGING_EVIDENCE_ENV_B64 --env staging`), ardından
+  `gh workflow run staging-role-uat.yml --ref main -f deploy_run_id=36845578115`.
+- Secret güncellemesi (11:50:17): 5 eksik anahtar staging sunucusundaki `/root/o-okul/.env`'den aktarıldı
+  (sunucunun `fd01a5c63` imajlarını çalıştırdığı doğrulandı), `NOTIFICATION_SMOKE_PUSH_TO` e-posta-only
+  release kuralı gereği boşaltıldı; dosya tam (MFA=required ile) ve activation modda doğrulandı.
+- UAT run 36857880989: evidence ortamı adımı geçti; "Preflight exact images and release-scoped UAT inputs"
+  adımında `/root/o-okul-private/uat/<releaseImageTag>/` girdileri olmadığı için durdu. Bu workflow UAT'ı
+  koşmaz, operatörün UAT sonuçlarını doğrulayıp yayımlar.
+- Otomatik hazırlanan taslak girdiler (repo dışı, özel dizin; 0700/0600): 13 CI kapsamlı senaryo `PASS`
+  (exact CI run 36843682705), `traefik:https:smoke` `PASS` (deploy run 36845578115 kanıtı),
+  `githubCiRunUrl`. Doğrulayıcıyla kalan eksikler: `tester`, `restoreBackupReference`, 9 canlı komut
+  (`db:rls:check:live`, `raw-import:smoke`, `report-generation:smoke`, `live:exam-cycle:check`,
+  `queue:smoke`, `live:onboarding:smoke`, `live:ui-worker:smoke`, `sms:smoke`, `notification:smoke`) ve
+  8 dış senaryonun staging kanıtı (UAT-SYS-01/02/04, UAT-KURUM-01/03/05/06/08). Canlı smoke'lar staging'e
+  veri yazdığı için onaysız koşturulmadı; doldurulmamış alanlar `PENDING` bırakıldı.
+- Canlı smoke'lar (kullanıcı onayıyla, 2026-10-01): sunucuda sürüm kaynağından (`git archive fd01a5c63`,
+  `/root/o-okul-private/uat-src/fd01a5c63`) koşturuldu; deploy dizinine dokunulmadı. Kanıtlar
+  `https://o-okul.com/evidence/role-uat/fd01a5c63/` altında:
+  - `pnpm db:rls:check:live` PASS (`rls-live.json`; işlem içinde rollback, kalıcı veri yok)
+  - `pnpm sms:smoke` PASS (`sms-smoke.json`; staging'de `SMS_ENABLED=false` → provider `disabled`)
+  - `pnpm notification:smoke` PASS (`notification-smoke.json`; gerçek e-posta gönderildi, push boş)
+  - `pnpm queue:smoke` FAIL: `TENANT_ACTIVITY_CONTEXT_INVALID`. Smoke script'i 2026-06-01'den beri
+    değişmedi; `currentTenantMutationVersion` koruması 2026-09-08'de (`4eadb5e9a`, Berrak öncesi) kalıcı
+    tenant store'da istek bağlamı istemeye başladı. Berrak kapsamı dışı; ayrı görev önerildi.
+- Ajanın koşturmadığı smoke'lar: `raw-import:smoke` ve `report-generation:smoke` staging'de hesap
+  oluşturup parola ile giriş yapıyor, `live:onboarding:smoke` gerçek sistem yöneticisi parolası + TOTP,
+  `live:ui-worker:smoke` gerçek hesaplarla giriş istiyor, `live:exam-cycle:check` bu akışların kanıtını
+  doğruluyor → kullanıcı/operatör koşturur.
+- Taslak girdiler: `tester=arair-role-uat`; `restoreBackupReference` kullanıcı yeni yedek istemediği için
+  staging'deki mevcut en yeni yedek (2026-08-26, bu sürümden önce). Doğrulayıcıda kalan: 6 komut
+  (yukarıdaki 5 + `queue:smoke`) ve 8 dış senaryonun staging kanıtı.
+
+### Staging UAT girdileri — `a17e68aeb` (2026-10-01)
+
+- Takip düzeltmeleri main'de: 4rmus/o-okul#121 (`queue:smoke`/`report-generation:smoke` tenant oturum
+  bağlamı), 4rmus/o-okul#122 (RLS canlı fixture tenant'larının lisans mirror'ı). #122 öncesi staging'de
+  koşturulan RLS kontrolü iki fixture tenant'ı boş mirror ile bıraktı; `a7e1db08f` deploy'u (run 36916759460)
+  `LicenseTerm backfill` kapısında düştü ve yazıcılar durduğu için API ~1 saat kapalı kaldı. API önceki
+  sürümle elle yeniden başlatıldı, iki fixture tenant'ın mirror'ı kendi LicenseTerm'iyle eşitlendi, deploy
+  yeniden koşturuldu (2. deneme PASS). Takip önerisi: deploy workflow'u pre-migration kapısı düşünce
+  durdurduğu servisleri geri başlatmalı.
+- Güncel staging: `a17e68aeb` (deploy run 36924306618 PASS, CI run 36922384201 PASS, cutover
+  2026-10-01T21:02:38.934Z). `LicenseTerm backfill` DRY_RUN: READY (5/5).
+- Smoke'lar sürüm kaynağından (`/root/o-okul-private/uat-src/a17e68aeb`), kanıtlar
+  `https://o-okul.com/evidence/role-uat/a17e68aeb/`: `db:rls:check:live` PASS, `sms:smoke` PASS
+  (SMS kapalı → disabled), `notification:smoke` PASS (gerçek e-posta), `traefik:https:smoke` PASS (deploy run).
+- Taslak girdiler (özel dizin, 0700/0600): 13 CI senaryosu PASS, 4 komut PASS, `tester=arair-role-uat`,
+  `restoreBackupReference` mevcut en yeni yedek (2026-08-26). Kalan: 6 komut (`queue:smoke`,
+  `report-generation:smoke`, `raw-import:smoke`, `live:onboarding:smoke`, `live:ui-worker:smoke`,
+  `live:exam-cycle:check`; hesap/oturum tohumladıkları veya gerçek kimlik bilgisi istedikleri için
+  operatör koşturur) ve 8 dış senaryonun staging kanıtı.
+
+### Karar — staging role UAT açık madde (2026-10-01)
+
+- Kullanıcı kararı: staging role UAT şimdilik **açık madde** olarak bırakıldı (`UNPROVEN`). Berrak teslimi
+  bu madde hariç kapandı: kod main'de (`a17e68aeb`), main CI PASS (run 36922384201), staging deploy PASS
+  (run 36924306618), staging sağlıklı.
+- UAT run'ları 36927076814 ve 36928082113 sunucuda girdi dizini olmadığı için Preflight adımında düştü
+  (beklenen; girdiler tamamlanmadı).
+- Tamamlamak için: 6 smoke (`queue:smoke`, `report-generation:smoke`, `raw-import:smoke`,
+  `live:onboarding:smoke`, `live:ui-worker:smoke`, `live:exam-cycle:check`) ve 8 dış senaryo
+  (UAT-SYS-01/02/04, UAT-KURUM-01/03/05/06/08) operatör tarafından koşturulup kanıt linkleri verilir; taslak
+  girdiler güncellenip `generatedAt` yenilenir (24 saat kuralı), `/root/o-okul-private/uat/<sha>/`'ye konur ve
+  `gh workflow run staging-role-uat.yml --ref main -f deploy_run_id=<son başarılı deploy>` çalıştırılır.
+  Staging sürümü değişirse girdiler yeni SHA için yeniden üretilmelidir.
+- Korunan yerler: taslak girdiler kullanıcının özel dizininde
+  (`~/.secrets/o-okul/uat/a17e68aebb6854488be0e1f077c7e29727940649/`), sürüm kaynağı sunucuda
+  `/root/o-okul-private/uat-src/a17e68aeb`, smoke kanıtları `https://o-okul.com/evidence/role-uat/a17e68aeb/`.
+- Diğer açık maddeler: deploy workflow'u pre-migration kapısı düşünce durdurduğu servisleri geri
+  başlatmıyor; staging yanıt süreleri 1–3 sn (sunucu yükü düşük, ağ/Cloudflare yolu incelenmeli).
+
