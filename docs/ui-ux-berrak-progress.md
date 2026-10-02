@@ -735,3 +735,22 @@ artifact'ından (run 36834671993, 36841947066); CI'ın ilk hatada durduğu için
   `live:exam-cycle:check`; hesap/oturum tohumladıkları veya gerçek kimlik bilgisi istedikleri için
   operatör koşturur) ve 8 dış senaryonun staging kanıtı.
 
+### Karar — staging role UAT açık madde (2026-10-01)
+
+- Kullanıcı kararı: staging role UAT şimdilik **açık madde** olarak bırakıldı (`UNPROVEN`). Berrak teslimi
+  bu madde hariç kapandı: kod main'de (`a17e68aeb`), main CI PASS (run 36922384201), staging deploy PASS
+  (run 36924306618), staging sağlıklı.
+- UAT run'ları 36927076814 ve 36928082113 sunucuda girdi dizini olmadığı için Preflight adımında düştü
+  (beklenen; girdiler tamamlanmadı).
+- Tamamlamak için: 6 smoke (`queue:smoke`, `report-generation:smoke`, `raw-import:smoke`,
+  `live:onboarding:smoke`, `live:ui-worker:smoke`, `live:exam-cycle:check`) ve 8 dış senaryo
+  (UAT-SYS-01/02/04, UAT-KURUM-01/03/05/06/08) operatör tarafından koşturulup kanıt linkleri verilir; taslak
+  girdiler güncellenip `generatedAt` yenilenir (24 saat kuralı), `/root/o-okul-private/uat/<sha>/`'ye konur ve
+  `gh workflow run staging-role-uat.yml --ref main -f deploy_run_id=<son başarılı deploy>` çalıştırılır.
+  Staging sürümü değişirse girdiler yeni SHA için yeniden üretilmelidir.
+- Korunan yerler: taslak girdiler kullanıcının özel dizininde
+  (`~/.secrets/o-okul/uat/a17e68aebb6854488be0e1f077c7e29727940649/`), sürüm kaynağı sunucuda
+  `/root/o-okul-private/uat-src/a17e68aeb`, smoke kanıtları `https://o-okul.com/evidence/role-uat/a17e68aeb/`.
+- Diğer açık maddeler: deploy workflow'u pre-migration kapısı düşünce durdurduğu servisleri geri
+  başlatmıyor; staging yanıt süreleri 1–3 sn (sunucu yükü düşük, ağ/Cloudflare yolu incelenmeli).
+
