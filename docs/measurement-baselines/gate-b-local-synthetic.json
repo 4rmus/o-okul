@@ -3,14 +3,14 @@
   "result": "BASELINE_RECORDED",
   "evidenceLevel": "LOCAL_SYNTHETIC",
   "externalStatus": "EXTERNAL_NOT_RUN",
-  "generatedAt": "2026-10-03T20:12:16.617Z",
-  "baseCommitSha": "d341ae1ca01e1113b874f8dbd016d74fc3737ec3",
-  "sourceWorktreeDirty": false,
-  "sourceTreeSha256": "180a5330edd486fd50412cd28d0a347a1e67a6a342a5e932ee6726f7002b7af5",
+  "generatedAt": "2026-10-03T20:44:36.131Z",
+  "baseCommitSha": "6465b8b4430cfa4426a7a2ca91fa4b74cbd7f2f8",
+  "sourceWorktreeDirty": true,
+  "sourceTreeSha256": "7b0e3a72d9364f9eb94a73321b46e1cbe2f009429ec5623277c683521c6093b5",
   "measurementRun": {
-    "runId": "21674708-5ba2-4c02-8b7c-e3904d129a2d",
-    "startedAt": "2026-10-03T20:11:54.365Z",
-    "completedAt": "2026-10-03T20:12:16.617Z"
+    "runId": "2727304c-8d58-4bf7-8d78-cdaae7f15661",
+    "startedAt": "2026-10-03T20:44:16.610Z",
+    "completedAt": "2026-10-03T20:44:36.131Z"
   },
   "environment": {
     "browser": "chromium",
@@ -44,60 +44,60 @@
       "samples": [
         {
           "cls": 0,
-          "fcpMs": 48,
-          "lcpMs": 72,
-          "ttfbMs": 2.1,
-          "durationMs": 199.945
+          "fcpMs": 76,
+          "lcpMs": 76,
+          "ttfbMs": 2,
+          "durationMs": 333.418
         },
         {
           "cls": 0.005,
-          "fcpMs": 56,
-          "lcpMs": 56,
-          "ttfbMs": 2.2,
-          "durationMs": 196.877
+          "fcpMs": 96,
+          "lcpMs": 96,
+          "ttfbMs": 6.6,
+          "durationMs": 242.765
         },
         {
           "cls": 0.005,
-          "fcpMs": 56,
-          "lcpMs": 56,
-          "ttfbMs": 1.5,
-          "durationMs": 179.778
-        },
-        {
-          "cls": 0.005,
-          "fcpMs": 56,
-          "lcpMs": 56,
-          "ttfbMs": 1.6,
-          "durationMs": 184.343
+          "fcpMs": 64,
+          "lcpMs": 64,
+          "ttfbMs": 1.9,
+          "durationMs": 216.465
         },
         {
           "cls": 0.005,
           "fcpMs": 60,
           "lcpMs": 60,
-          "ttfbMs": 1.5,
-          "durationMs": 198.332
+          "ttfbMs": 1.8,
+          "durationMs": 196.232
+        },
+        {
+          "cls": 0,
+          "fcpMs": 40,
+          "lcpMs": 64,
+          "ttfbMs": 1.7,
+          "durationMs": 196.962
         }
       ],
       "summary": {
         "durationMs": {
-          "p50": 196.877,
-          "p95": 199.945
+          "p50": 216.465,
+          "p95": 333.418
         },
         "fcpMs": {
-          "p50": 56,
-          "p95": 60
+          "p50": 64,
+          "p95": 96
         },
         "lcpMs": {
-          "p50": 56,
-          "p95": 72
+          "p50": 64,
+          "p95": 96
         },
         "cls": {
           "p50": 0.005,
           "p95": 0.005
         },
         "ttfbMs": {
-          "p50": 1.6,
-          "p95": 2.2
+          "p50": 1.9,
+          "p95": 6.6
         }
       },
       "taskId": "optical_workbench_ready"
@@ -117,58 +117,58 @@
           "cls": 0.007,
           "fcpMs": 60,
           "lcpMs": 60,
-          "ttfbMs": 1.6,
-          "durationMs": 198.449
-        },
-        {
-          "cls": 0.007,
-          "fcpMs": 56,
-          "lcpMs": 56,
           "ttfbMs": 1.7,
-          "durationMs": 184.73
+          "durationMs": 233.354
         },
         {
           "cls": 0.007,
-          "fcpMs": 56,
-          "lcpMs": 56,
-          "ttfbMs": 1.6,
-          "durationMs": 179.465
+          "fcpMs": 64,
+          "lcpMs": 64,
+          "ttfbMs": 2.4,
+          "durationMs": 195.525
         },
         {
           "cls": 0.007,
+          "fcpMs": 60,
+          "lcpMs": 60,
+          "ttfbMs": 1.4,
+          "durationMs": 198.755
+        },
+        {
+          "cls": 0,
           "fcpMs": 56,
           "lcpMs": 56,
-          "ttfbMs": 1.2,
-          "durationMs": 182.184
+          "ttfbMs": 1.4,
+          "durationMs": 183.855
         },
         {
           "cls": 0.007,
           "fcpMs": 56,
           "lcpMs": 56,
           "ttfbMs": 1.4,
-          "durationMs": 181.834
+          "durationMs": 179.552
         }
       ],
       "summary": {
         "durationMs": {
-          "p50": 182.184,
-          "p95": 198.449
+          "p50": 195.525,
+          "p95": 233.354
         },
         "fcpMs": {
-          "p50": 56,
-          "p95": 60
+          "p50": 60,
+          "p95": 64
         },
         "lcpMs": {
-          "p50": 56,
-          "p95": 60
+          "p50": 60,
+          "p95": 64
         },
         "cls": {
           "p50": 0.007,
           "p95": 0.007
         },
         "ttfbMs": {
-          "p50": 1.6,
-          "p95": 1.7
+          "p50": 1.4,
+          "p95": 2.4
         }
       },
       "taskId": "report_workspace_ready"
@@ -186,48 +186,48 @@
       "samples": [
         {
           "cls": 0,
-          "fcpMs": 36,
-          "lcpMs": 60,
-          "ttfbMs": 1.4,
-          "durationMs": 183.347
-        },
-        {
-          "cls": 0,
-          "fcpMs": 36,
+          "fcpMs": 56,
           "lcpMs": 56,
-          "ttfbMs": 1.1,
-          "durationMs": 181.847
-        },
-        {
-          "cls": 0,
-          "fcpMs": 36,
-          "lcpMs": 56,
-          "ttfbMs": 1.4,
-          "durationMs": 185.017
+          "ttfbMs": 1.3,
+          "durationMs": 181.614
         },
         {
           "cls": 0.024,
           "fcpMs": 52,
           "lcpMs": 68,
-          "ttfbMs": 1.2,
-          "durationMs": 178.439
+          "ttfbMs": 1.3,
+          "durationMs": 180.973
         },
         {
           "cls": 0,
-          "fcpMs": 36,
+          "fcpMs": 56,
           "lcpMs": 56,
           "ttfbMs": 1.2,
-          "durationMs": 184.826
+          "durationMs": 182.488
+        },
+        {
+          "cls": 0.024,
+          "fcpMs": 52,
+          "lcpMs": 64,
+          "ttfbMs": 1.4,
+          "durationMs": 181.885
+        },
+        {
+          "cls": 0,
+          "fcpMs": 56,
+          "lcpMs": 56,
+          "ttfbMs": 1.3,
+          "durationMs": 178.787
         }
       ],
       "summary": {
         "durationMs": {
-          "p50": 183.347,
-          "p95": 185.017
+          "p50": 181.614,
+          "p95": 182.488
         },
         "fcpMs": {
-          "p50": 36,
-          "p95": 52
+          "p50": 56,
+          "p95": 56
         },
         "lcpMs": {
           "p50": 56,
@@ -238,7 +238,7 @@
           "p95": 0.024
         },
         "ttfbMs": {
-          "p50": 1.2,
+          "p50": 1.3,
           "p95": 1.4
         }
       },

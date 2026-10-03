@@ -2,8 +2,8 @@
 
 ## Durum
 
-Kabul edildi (şema dilimi AK-2). API ve ekranlar AK-3/AK-4 ile gelir; o zamana kadar runtime durumu
-`PARTIAL`dır.
+Kabul edildi. Şema (AK-2), API (AK-3) ve ekranlar (AK-4) uygulandı; kanıt LOCAL_TEST, STAGING
+`EXTERNAL_NOT_RUN`.
 
 ## Karar
 
@@ -48,9 +48,23 @@ yüzey açar.
 - Kanıt: `packages/db/prisma/migrations/20261003120000_gradebook/migration.sql`,
   `pnpm db:rls:check`, `apps/api/src/operations/tenant-table-coverage.test.ts`.
 
+## Uygulama (AK-3, AK-4)
+
+- `GET/POST /grade-assessments`, `GET /grade-assessments/:id` (bütün sürümler),
+  `PUT /grade-assessments/:id/entries` (taslak), `POST /grade-assessments/:id/publish`.
+- Tanım ve yayın `academic:manage` ister; yayında Idempotency-Key zorunludur (anahtarsız 400) ve aynı
+  anahtar tek yayın üretir. Yayın, taslakları ve `publishedVersion`'ı tek transaction'da, değerlendirme
+  satır kilidi altında yazar; `grade_assessment.published` audit kaydı düşer.
+- Not girişi: sınıf, ders ve dönem için atanmış `CLASS_TEACHER`/`BRANCH_TEACHER` veya
+  `academic:manage`. Yayınlanmış nota yazmak yeni taslak sürüm açar. Kampüs kapsamı dışındaki kayıt
+  ve diğer tenant 404 alır; atanmamış öğretmen 403.
+- Ekranlar: `/kurum/not-defteri` (tanım, not kontrolü, sürüm geçmişi, değişmezlik uyarılı yayın) ve
+  `/ogretmen/not-defteri` (atanan değerlendirmelere taslak giriş). Yayınlanmış hücre salt okunurdur;
+  "Düzelt" yeni sürüm taslağı açar.
+- Öğretmen not defteri rol önizlemesinde açılmaz; API önizleme başlığını desteklemez.
+
 ## Sonuçlar
 
 - Not ölçeği, ağırlıklar ve `kind` kümesi MEB yönetmeliğine karşı doğrulanmadı (UNPROVEN); ek tür
   gerekirse yalnız CHECK kısıtı genişler.
-- `score <= maxScore` kontrolü AK-3'te API'de yapılır.
 - Karne snapshot'ı `{gradeAssessmentId, version}` taşıyacaksa bu AK-3 sonrası ayrı dilimdir.
