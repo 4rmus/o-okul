@@ -129,7 +129,7 @@ Son kontrol: 2026-05-30
 
 ### DEC-20260531-01 — Veli-öğrenci bağlama
 
-Durum: DEC-20260801-01 ile güncellendi
+Durum: DEC-20261003-01 ile yeniden yürürlükte; DEC-20260801-01 güncellemesi geri alındı
 Karar: Veli-öğrenci bağlantısını kurum yöneticisi kurar ve kaldırır; teacher rolü bağlantıları
 okuyabilir, yazamaz. Telefon doğrulama ve veli self-service eşleştirme v1 kapsamı dışındadır.
 Kaynak: Veli portalı ürün kararı.
@@ -363,7 +363,7 @@ Son kontrol: 2026-07-13
 
 ### DEC-20260801-01 — Kurum, hesap, lisans ve erişim modeli
 
-Durum: Onaylı; additive migration ve tenant bazlı cutover bekliyor
+Durum: Onaylı; guardian emekliliği DEC-20261003-01 ile geri alındı; additive migration ve tenant bazlı cutover bekliyor
 Karar: Sözleşmeli müşteri veri izolasyonu ve lisans sınırı olan tek `Tenant`, şubeler tenant
 altındaki `Campus` olarak kalır. Fiyatlama aktif öğrenci kotasına dayanır; çalışan hesapları ücretli
 koltuk değildir. Yıllık veya çok yıllık lisans dönemleri geriye dönük değiştirilmez: yeni
@@ -708,6 +708,57 @@ Kanıt: `scripts/check-karne-visual-contract.mjs`, `scripts/compare-karne-visual
 Etkilenen ADR: Yok
 Açık soru: Gerçek kurum logosu ve basılı karne marka uyumu pilot kurum ürün sahibi onayına kalır.
 Son kontrol: 2026-10-01
+
+### DEC-20261003-01 — Veli hesabı korunur; StudentContact iletişim ve rıza kaydı olarak kalır
+
+Durum: Onaylı; iki flag'in kodla kaldırılması ve Guardian–StudentContact bağlantı dilimi bekliyor
+Karar: `GUARDIAN` rolü, hesabı, session'ı ve veli portalı emekliye ayrılmaz; geliştirilir. Giriş
+kuralı DEC-20260801-01'deki gibidir: kurum kodu + kurum içi kullanıcı kimliği; T.C. kimlik numarası ve
+telefon kullanıcı adı veya parola olamaz; aynı kişi farklı tenantlarda ayrı hesap kullanır.
+`StudentContact` girişsiz iletişim ve rıza kaydıdır: SMS ve duyuru rızasının tek doğruluk kaynağı
+`StudentContact`, portal görünürlüğünün (finans, destek talebi) kaynağı `GuardianStudent` bayraklarıdır.
+Bir `StudentContact` kaydı aynı tenant'taki tek bir `Guardian` hesabına ayrı ve sonraki bir additive
+dilimde (`guardianId` nullable, bileşik FK, RLS) bağlanabilir; bağlantıyı yalnız kurum yöneticisi kurar,
+telefon/e-posta hash'i yalnız öneri listesi üretir, otomatik eşleme ve veli self-service eşleştirme
+yoktur. Öğrenci oluşturma ve import akışı veli hesabı açmaz; yalnız `StudentContact` yazar, veli
+davetini kurum yöneticisi ayrıca ve toplu tetikler. `product.guardian-read-only` ve
+`web.student-registry-v2` flag'leri 2026-11-07 süre dolumundan önce aynı PR'da kodla kaldırılır
+(katalog, `GuardianWritePolicy`, davet servisindeki kopya kontrol, web dalları ve OpenAPI 410
+sözleşmesi); süre dolumuna bırakılmaz, çünkü süresi dolan kayıt enabled listesinden düşer ve yazma
+yolları plansız açılır. Açılan yollar: kurum yöneticisi için veli oluşturma/güncelleme/silme ve
+öğrenci bağlama/bağ güncelleme/bağ kaldırma; `GUARDIAN` öznesi için davet oluşturma, yeniden gönderme
+ve kabul; velinin kendisi için yalnız bildirim tercihi. Öğretmen bağlantıları okur, yazamaz.
+registry-v2 yolu (server-side registry, `StudentContact` CRUD, öğrenci overview read model, import'ta
+`StudentContact`) koşulsuz varsayılan olur, legacy dal silinir. `ward:read` capability'si silinmez;
+veli kapsamını doğrulayan uçlara bağlanır. DEC-20260801-01'in "`GUARDIAN` rolü, hesabı, session'ı ve
+portalı emekliye ayrılacaktır; yeni hedef yalnız login yetkisi olmayan `StudentContact` kaydıdır"
+cümlesi ve guardian kaldırma kapıları geçersizdir; tenant/kampüs modeli, aktif öğrenci kotası
+fiyatlaması, `LicenseTerm`, onboarding, hesap/profil/üyelik/session ayrımı, altı yetki paketi ve
+`SYSTEM_ADMIN` control plane ayrımı geçerli kalır. DEC-20260531-01 yeniden yürürlüğe girer;
+DEC-20260627-01'in veli izin varsayılanları (SMS varsayılan kapalı) değişmez. Ürün dili:
+`docs/marketing-claims.md` veli satırı ve `docs/product-journeys-v1.md` persona tablosu flag kaldırma
+PR'ında güncellenir; izinli cümle "Veli, kurumun açtığı hesapla yalnız bağlı öğrencisinin kurumun
+yetkilendirdiği verilerini görür." olup "veli uygulaması", "veliyle mesajlaşma", "anlık bildirim" ve
+"online ödeme" ifadeleri ilgili kanıt gelene kadar kullanılmaz. Kaldırma issue'ları IAM-04 ve ST-01
+bu DEC ile kapanır.
+Kaynak: Ürün sahibi kararı (2026-10-03, F0–F4 strateji çalışması). Pazar gerekçesi: veli erişimi
+incelenen 8 rakibin 8'inde var (KAYNAKLI; rakip sayfaları ve mağaza listeleri). Velinin satın alma
+kararındaki ağırlığı VARSAYIM.
+Kanıt: `apps/api/src/feature-rollout/feature-rollout.service.ts:15` (tüm katalog `expiresAt`
+2026-11-07) ve `:42` (süresi dolan kayıt düşer), `packages/shared-types/src/feature-rollout.ts`,
+`apps/api/src/guardian/guardian-write-policy.ts:12` (410 `GUARDIAN_WRITE_READ_ONLY`),
+`apps/api/src/identity-invitation/identity-invitation.service.ts` (kopya flag kontrolü),
+`apps/api/src/student/student-contact.service.ts:39` (registry-v2 kapısı),
+`packages/db/prisma/schema.prisma` (`StudentContact`, `Guardian`, `GuardianStudent`),
+`packages/shared-types/src/role-capabilities.ts` (`GUARDIAN` seti), `status.md` guardian durumu,
+`docs/product-journeys-v1.md` persona tablosu. Kanıt sınıfı LOCAL_STATIC; CI, STAGING ve PRODUCTION
+UNPROVEN.
+Etkilenen ADR: ADR-0001 (Guardian–StudentContact bağı bileşik FK ve RLS ile kurulur), ADR-0008 (iki
+anahtar katalogdan çıkar, kaldırma kaydı eklenir). Yeni ADR başlığı: veli kimliği ve rıza kaynağı
+ayrımı.
+Açık soru: Veli yazma yollarının staging kanıtı (`UAT-GUARDIAN-01/02/03` yeniden koşumu) flag
+kaldırma PR'ının kapanış kapısıdır; pazarlama cümlesi bu kanıt gelmeden kullanılmaz.
+Son kontrol: 2026-10-03
 
 ## Faz Öncesi Onay Gerektirenler
 
