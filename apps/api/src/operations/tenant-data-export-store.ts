@@ -54,6 +54,8 @@ const exportTables = [
   table("supportTicketComments", "SupportTicketComment", [], false),
 ] as const;
 
+export const tenantDataExportTableNames: readonly string[] = exportTables.map((config) => config.tableName);
+
 interface ExportTableConfig {
   key: string;
   tableName: string;

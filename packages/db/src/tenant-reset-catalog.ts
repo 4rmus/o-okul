@@ -39,6 +39,14 @@ export function assertResetCatalog(models: readonly string[]): void {
   if (stableJson([...models].sort()) !== stableJson(tenantResetTableNames)) throw new Error("RESET_CATALOG_UNCLASSIFIED_TABLE");
 }
 
+/** Every catalog table needs a restrictive reset-worker policy; only DELETE tables may grant DELETE to the worker. */
+export function assertResetBoundaries(migrationSql: string): void {
+  for (const [table, disposition] of Object.entries(tenantResetCatalog)) {
+    if (!migrationSql.includes(`CREATE POLICY "${table}_reset_boundary"`) || !migrationSql.includes(`ON "${table}" AS RESTRICTIVE TO o_okul_reset_worker`)) throw new Error(`RESET_ROLE_BOUNDARY_MISSING:${table}`);
+    if (disposition !== "DELETE" && migrationSql.includes(`GRANT DELETE ON "${table}" TO o_okul_reset_worker`)) throw new Error(`RESET_ROLE_DELETE_EXCESS:${table}`);
+  }
+}
+
 export function resetOwnerMemberships(tables: ResetTables, now: Date): ResetRow[] {
   return tables.TenantMembership.filter((row) => row.staffRole === "TENANT_OWNER" && row.status === "ACTIVE" &&
     typeof row.startsAt === "string" && Date.parse(row.startsAt) <= now.getTime() &&
