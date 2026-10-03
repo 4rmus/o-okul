@@ -22,6 +22,7 @@ const deviceBackupCatalog = {
   Employee: "DATA", PaymentPlan: "DATA", PaymentInstallment: "DATA", PaymentTransaction: "DATA",
   SupportTicket: "DATA", SupportTicketAttachment: "DATA", SupportTicketComment: "DATA", WhatsAppConsent: "DATA",
   WhatsAppConsentEvent: "DATA", DevelopmentCriterion: "DATA", DevelopmentAssessment: "DATA", DevelopmentScore: "DATA",
+  GradeAssessment: "DATA", GradeEntry: "DATA",
   NotificationDeviceToken: "EXCLUDED", MembershipCampusScope: "EXCLUDED", AuthSession: "EXCLUDED", IdempotencyKey: "EXCLUDED",
   IdentityInvitation: "EXCLUDED", ConsumedRefreshToken: "EXCLUDED", PasswordResetToken: "EXCLUDED", SecretDeliveryOutbox: "EXCLUDED",
   Class: "DATA", GradeLevel: "DATA", Alan: "DATA", Campus: "DATA",

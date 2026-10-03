@@ -40,6 +40,8 @@ const exportTables = [
   table("paymentInstallments", "PaymentInstallment"),
   table("attendance", "Attendance"),
   table("teacherNotes", "TeacherNote"),
+  table("gradeAssessments", "GradeAssessment", [], false),
+  table("gradeEntries", "GradeEntry", [], false),
   table("homeworkMaterials", "HomeworkMaterial"),
   table("homeworkMaterialAssignments", "HomeworkMaterialAssignment"),
   table("exams", "Exam"),

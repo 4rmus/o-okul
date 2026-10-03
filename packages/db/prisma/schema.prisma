@@ -66,6 +66,8 @@ model Tenant {
   developmentCriteria DevelopmentCriterion[]
   developmentAssessments DevelopmentAssessment[]
   developmentScores DevelopmentScore[]
+  gradeAssessments GradeAssessment[]
+  gradeEntries GradeEntry[]
   paymentPlans PaymentPlan[]
   paymentInstallments PaymentInstallment[]
   paymentTransactions PaymentTransaction[]
@@ -203,6 +205,55 @@ model DevelopmentAssessment {
 
   @@unique([tenantId, id])
   @@index([tenantId, studentId, createdAt])
+}
+
+// School grades (ADR-0011): separate from the optical exam pipeline. A published GradeEntry is never
+// updated or deleted by the app; a correction is a new version and publishedVersion caches max(version).
+model GradeAssessment {
+  id               String   @id @default(uuid())
+  tenantId         String
+  classId          String
+  courseId         String
+  termId           String
+  kind             String
+  title            String
+  heldOn           DateTime @db.Date
+  maxScore         Decimal  @default(100) @db.Decimal(5, 2)
+  publishedVersion Int?
+  notifiedVersion  Int?
+  createdById      String
+  createdAt        DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "GradeAssessment_tenantId_fkey")
+  class   Class        @relation(fields: [tenantId, classId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "GradeAssessment_class_fkey")
+  course  Course       @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "GradeAssessment_course_fkey")
+  term    AcademicTerm @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "GradeAssessment_term_fkey")
+  entries GradeEntry[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, classId, termId])
+}
+
+model GradeEntry {
+  id           String    @id @default(uuid())
+  tenantId     String
+  assessmentId String
+  studentId    String
+  version      Int
+  score        Decimal?  @db.Decimal(5, 2)
+  absent       Boolean   @default(false)
+  publishedAt  DateTime? @db.Timestamptz(6)
+  enteredById  String
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+
+  tenant     Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "GradeEntry_tenantId_fkey")
+  assessment GradeAssessment @relation(fields: [tenantId, assessmentId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction, map: "GradeEntry_assessment_fkey")
+  student    Student         @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction, map: "GradeEntry_student_fkey")
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, assessmentId, studentId, version])
+  @@index([tenantId, studentId])
 }
 
 model DevelopmentScore {
@@ -548,6 +599,7 @@ model Class {
   supportTickets SupportTicket[]
   reportSnapshots ReportSnapshot[]
   paymentPlans PaymentPlan[]
+  gradeAssessments GradeAssessment[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, id, gradeLevelId])
@@ -642,6 +694,7 @@ model Course {
   supportTickets SupportTicket[]
   reportSnapshots ReportSnapshot[]
   paymentPlans PaymentPlan[]
+  gradeAssessments GradeAssessment[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -711,6 +764,7 @@ model AcademicTerm {
   reportSnapshots ReportSnapshot[]
   paymentPlans PaymentPlan[]
   studentEnrollments StudentEnrollment[]
+  gradeAssessments GradeAssessment[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, academicYearId, name])
@@ -760,6 +814,7 @@ model Student {
   teacherAssignments TeacherAssignment[]
   enrollments StudentEnrollment[]
   contacts StudentContact[]
+  gradeEntries GradeEntry[]
 
   @@index([tenantId, deletedAt])
   @@index([tenantId, status, deletedAt])
