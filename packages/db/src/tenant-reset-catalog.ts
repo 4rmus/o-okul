@@ -8,6 +8,7 @@ export const tenantResetCatalog = {
   SupportTicket: "BLOCK", SupportTicketAttachment: "BLOCK", SupportTicketComment: "BLOCK",
   WhatsAppConsent: "BLOCK", WhatsAppConsentEvent: "BLOCK",
   DevelopmentCriterion: "DELETE", DevelopmentAssessment: "DELETE", DevelopmentScore: "DELETE",
+  GradeAssessment: "DELETE", GradeEntry: "DELETE",
   NotificationDeviceToken: "DELETE", MembershipCampusScope: "DELETE", AuthSession: "DELETE", IdempotencyKey: "DELETE",
   IdentityInvitation: "DELETE", ConsumedRefreshToken: "DELETE", PasswordResetToken: "DELETE", SecretDeliveryOutbox: "DELETE",
   Class: "DELETE", GradeLevel: "DELETE", Alan: "DELETE", Campus: "DELETE", Course: "DELETE", GradeLevelCourse: "DELETE",
@@ -37,6 +38,14 @@ export function stableJson(value: unknown): string {
 }
 export function assertResetCatalog(models: readonly string[]): void {
   if (stableJson([...models].sort()) !== stableJson(tenantResetTableNames)) throw new Error("RESET_CATALOG_UNCLASSIFIED_TABLE");
+}
+
+/** Every catalog table needs a restrictive reset-worker policy; only DELETE tables may grant DELETE to the worker. */
+export function assertResetBoundaries(migrationSql: string): void {
+  for (const [table, disposition] of Object.entries(tenantResetCatalog)) {
+    if (!migrationSql.includes(`CREATE POLICY "${table}_reset_boundary"`) || !migrationSql.includes(`ON "${table}" AS RESTRICTIVE TO o_okul_reset_worker`)) throw new Error(`RESET_ROLE_BOUNDARY_MISSING:${table}`);
+    if (disposition !== "DELETE" && migrationSql.includes(`GRANT DELETE ON "${table}" TO o_okul_reset_worker`)) throw new Error(`RESET_ROLE_DELETE_EXCESS:${table}`);
+  }
 }
 
 export function resetOwnerMemberships(tables: ResetTables, now: Date): ResetRow[] {
@@ -80,6 +89,8 @@ export const tenantResetColumns: Record<TenantResetTable, readonly string[]> = {
   DevelopmentCriterion: ["createdAt", "deletedAt", "id", "name", "scaleMax", "scaleMin", "sortOrder", "tenantId", "updatedAt"],
   DevelopmentAssessment: ["createdAt", "id", "mentorNote", "periodLabel", "studentId", "teacherId", "tenantId", "termId", "updatedAt", "visibility"],
   DevelopmentScore: ["assessmentId", "createdAt", "criterionId", "id", "score", "tenantId", "updatedAt"],
+  GradeAssessment: ["classId", "courseId", "createdAt", "createdById", "heldOn", "id", "kind", "maxScore", "notifiedVersion", "publishedVersion", "tenantId", "termId", "title", "updatedAt"],
+  GradeEntry: ["absent", "assessmentId", "createdAt", "enteredById", "id", "publishedAt", "score", "studentId", "tenantId", "version"],
   User: ["accountStatus", "createdAt", "email", "emailNormalized", "id", "loginName", "loginNameNormalized", "membershipVersion", "mustChangePassword", "name", "nationalIdEncrypted", "nationalIdHash", "passwordChangedAt", "passwordHash", "passwordHashVersion", "tenantId", "totpEnabledAt", "totpLastUsedCounter", "totpRecoveryCodeHashes", "totpSecretEncrypted", "updatedAt"],
   NotificationDeviceToken: ["createdAt", "disabledAt", "id", "lastSeenAt", "platform", "provider", "subjectId", "subjectType", "tenantId", "token", "updatedAt", "userId"],
   TenantMembership: ["createdAt", "endedReason", "endsAt", "hasStudentPersona", "hasTeacherPersona", "id", "role", "scopeMode", "staffRole", "startsAt", "status", "tenantId", "updatedAt", "userId", "version"],

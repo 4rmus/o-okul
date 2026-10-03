@@ -16,6 +16,7 @@ const tenantTables = getTenantScopedTables();
 const failures = [];
 const restrictedPrivilegeProfiles = new Map([
   ["TenantFreshResetOperation", new Set(["SELECT", "INSERT", "UPDATE"])],
+  ["GradeEntry", new Set(["SELECT", "INSERT", "UPDATE"])],
   ["WhatsAppConsent", new Set(["SELECT", "INSERT"])],
   ["WhatsAppConsentEvent", new Set(["SELECT", "INSERT"])],
 ]);

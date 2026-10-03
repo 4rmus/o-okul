@@ -15,6 +15,7 @@ Yeni tablo eklerken bu kurala uyulur; istisna gerekiyorsa PR açıklamasında ge
 
 - **Soft-delete (`deletedAt`)**: `Student`, `Teacher`, `Guardian`, `Class`, `Course`, `GradeLevel`, `Alan`, `Campus`, `AcademicYear`, `AcademicTerm`, `PaymentPlan`, `PaymentInstallment`, `Exam` ve türevleri, `Homework`/`HomeworkMaterial`, `Announcement`, `MessageTemplate`, `SupportTicket`.
 - **Hard-delete + audit**: `GuardianStudent` (`guardian_student.unlinked`), `TeacherAssignment` (`teacher_assignment.deleted`), `Attendance` (`attendance.deleted`), `TeacherNote` (`teacher_note.deleted`), `StudentEnrollment` (silinmez; terminal durumda `endsAt` ile kapatılır ve `student.enrollment_*` audit kayıtları yazılır).
+- **Yalnız ekleme (append-only, ADR-0011)**: `GradeEntry`; yayınlanmış satır güncellenmez ve silinmez, düzeltme yeni `version` satırıdır. `GradeAssessment` yayından sonra anlamını değiştiremez; yayınlanmamış değerlendirme taslaklarıyla birlikte hard-delete edilebilir. Yalnız tenant sıfırlama işçisi yayınlanmış notu silebilir.
 - **Global auth (RLS dışı)**: `PasswordResetToken`, `ConsumedRefreshToken`; `AuditLog` bilinçli olarak globaldir.
 
 ## Uygulama notları

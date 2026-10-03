@@ -88,7 +88,7 @@ describe("backup production adapter wiring (injected fixtures only)", () => {
   });
   it("roundtrips package, migration ledger and actual target rows/object bytes", async () => {
     const result = await createAndVerifyTenantResetBackup(config);
-    expect(result).toMatchObject({ result: "VERIFIED", tableCount: 73, rowCount: 1, objectCount: 1 });
+    expect(result).toMatchObject({ result: "VERIFIED", tableCount: tenantResetTableNames.length, rowCount: 1, objectCount: 1 });
     expect(state.tools).toEqual(["dump", "pre-data", "post-data"]);
     expect(state.targetRows._prisma_migrations).toEqual(state.snapshot!.migrationRows);
     expect(JSON.stringify(result)).not.toMatch(/owned\/source|postgresql|fixture|tenant-a/);
