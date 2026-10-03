@@ -1753,7 +1753,7 @@ runRlsLiveNegativeCheck({
 runRlsLiveNegativeCheck({
   label: "RLS live extra table negative",
   path: "docs/evidence-templates/rls-live.extra-table.tmp.json",
-  expectedFailure: "schema.tablesVerified tam 66 tablo icermeli.",
+  expectedFailure: "schema.tablesVerified tam 68 tablo icermeli.",
   mutate: (fixture) => {
     fixture.schema.tablesVerified.push("UnexpectedTenantTable");
   },
