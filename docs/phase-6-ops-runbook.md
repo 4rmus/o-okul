@@ -2024,10 +2024,13 @@ pnpm audit-log-partition:maintain
 
 Script aynı transaction içinde DEFAULT ön kontrolünü yapar, `AuditLog_2027_01..AuditLog_2028_12`
 oluşturur, tekrar çalıştırmada değişiklik yapmaz ve kanıta `defaultRowCount` yazar (eski aylardan
-kalan DEFAULT satırları raporlanır, apply'ı durdurmaz). Prod kanıtı da geldikten sonra
-`packages/db/scripts/check-audit-log-partition.mjs` içindeki `appliedPartitionHorizon` aynı PR'da
-`2028-12` yapılır. Bu ufuk güncellenmezse `pnpm audit-log-partition:check` ufuktan bir ay önce
-(ilk kez 2026-12-01'de) CI'da FAIL verir.
+kalan DEFAULT satırları raporlanır, apply'ı durdurmaz). Staging apply 2026-10-03'te yapıldı
+(`AuditLog_2027_01..2028_12`, DEFAULT 0, kanıt `artifacts/staging/audit-log-partition.json`) ve
+`packages/db/scripts/check-audit-log-partition.mjs` içindeki `appliedPartitionHorizon` `2028-12`
+oldu. Production henüz kurulmadı: production bootstrap'ı migration'lardan sonra, trafik açılmadan
+önce aynı ön kontrol ve apply'ı koşar (PO-10 go-live kanıtı). Ufuk her yeni apply kanıtıyla aynı PR'da
+yükseltilir; güncellenmezse `pnpm audit-log-partition:check` ufuktan bir ay önce (2028-12-01) CI'da
+FAIL verir.
 
 ## Production PITR Sözleşmesi
 

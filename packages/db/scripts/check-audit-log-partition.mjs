@@ -49,9 +49,11 @@ for (const { name, from, to } of expectedBootstrapPartitions("2026-01", 12)) {
   }
 }
 
-// Last AuditLog month partition applied in STAGING and PRODUCTION. Raise it in the PR that records the
-// apply evidence; CI fails one month before the horizon so 2027 rows never land in AuditLog_default.
-const appliedPartitionHorizon = "2026-12";
+// Last AuditLog month partition applied in every running environment; CI fails one month before it so
+// rows never land in AuditLog_default. STAGING applied 2027-01..2028-12 on 2026-10-03
+// (artifacts/staging/audit-log-partition.json). PRODUCTION is not provisioned yet: its bootstrap runs the
+// same apply before go-live (PO-10). Raise this in the PR that records the next apply evidence.
+const appliedPartitionHorizon = "2028-12";
 const now = new Date();
 const nextMonth = addMonths(`${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`, 1);
 if (nextMonth > appliedPartitionHorizon) {
