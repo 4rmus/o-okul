@@ -17,6 +17,9 @@ describe("Feature rollout API", () => {
   const originalEnvironment = process.env.FEATURE_ROLLOUT_ENVIRONMENT;
 
   beforeAll(async () => {
+    // Katalog expiresAt (2026-11-07) gerçek saate bağlı kalmasın; yalnız Date sabitlenir.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-08-10T00:00:00.000Z"));
     const now = Date.now();
     process.env.FEATURE_ROLLOUT_ENVIRONMENT = "local";
     process.env.FEATURE_ROLLOUTS_JSON = JSON.stringify({
@@ -42,6 +45,7 @@ describe("Feature rollout API", () => {
 
   afterAll(async () => {
     await app.close();
+    vi.useRealTimers();
     if (originalConfig === undefined) delete process.env.FEATURE_ROLLOUTS_JSON;
     else process.env.FEATURE_ROLLOUTS_JSON = originalConfig;
     if (originalEnvironment === undefined) delete process.env.FEATURE_ROLLOUT_ENVIRONMENT;
