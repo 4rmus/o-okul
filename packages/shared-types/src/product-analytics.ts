@@ -1,5 +1,3 @@
-import { featureRolloutKeys, type FeatureRolloutKey } from "./feature-rollout.js";
-
 export type ProductEventOutcome = "SUCCESS" | "FAILED" | "CANCELLED";
 export type ProductEventPersona = "ANONYMOUS" | "STAFF" | "TEACHER" | "STUDENT" | "GUARDIAN" | "PLATFORM";
 export type ProductEventPropertyValue = boolean | number | string;
@@ -67,10 +65,6 @@ export const productEventCatalog = {
     roleTo: ["TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF", "TEACHER", "STUDENT", "GUARDIAN"],
     scopeMode: ["TENANT", "CAMPUSES"],
   },
-  feature_rollout_exposed: {
-    featureKey: featureRolloutKeys,
-    enabled: [true, false],
-  },
 } as const;
 
 export type ProductEventName = keyof typeof productEventCatalog;
@@ -83,7 +77,6 @@ export interface ProductEventValidationContext {
 
 export interface ProductEvent {
   durationMs?: number;
-  featureFlags?: Partial<Record<FeatureRolloutKey, boolean>>;
   name: ProductEventName;
   occurredAt: string;
   outcome?: ProductEventOutcome;
@@ -96,7 +89,6 @@ export interface ProductEvent {
 
 const topLevelFields = new Set([
   "durationMs",
-  "featureFlags",
   "name",
   "occurredAt",
   "outcome",
@@ -150,19 +142,8 @@ export function assertProductEvent(input: unknown, context: ProductEventValidati
   )) {
     fail("PRODUCT_EVENT_OUTCOME_INVALID");
   }
-  validateFeatureFlags(input.featureFlags);
   validateProperties(name as ProductEventName, input.properties);
   return input as unknown as ProductEvent;
-}
-
-function validateFeatureFlags(value: unknown) {
-  if (value === undefined) return;
-  if (!isPlainObject(value)) fail("PRODUCT_EVENT_FEATURE_FLAGS_INVALID");
-  for (const [key, enabled] of Object.entries(value)) {
-    if (!featureRolloutKeys.includes(key as FeatureRolloutKey) || typeof enabled !== "boolean") {
-      fail("PRODUCT_EVENT_FEATURE_FLAGS_INVALID");
-    }
-  }
 }
 
 function validateProperties(name: ProductEventName, value: unknown) {

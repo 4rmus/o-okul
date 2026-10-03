@@ -30,7 +30,7 @@ const negativeFixtures = [
   ["apps/web/app/page.tsx", 'import "../src/api-client.js";'],
   ["apps/web/app/(app)/portals/admin.ts", 'import "../sistem/_shared/system-api.js";'],
   ["apps/web/app/(app)/portals/tenant-command.ts", 'import "../kurum/ogrenciler/students-page.js";'],
-  ["apps/web/app/(app)/client-secret.tsx", '"use client";\nconst value = process.env.FEATURE_ROLLOUTS_JSON;'],
+  ["apps/web/app/(app)/client-secret.tsx", '"use client";\nconst value = process.env.DATABASE_URL;'],
   [
     "apps/web/app/(app)/kurum/_shared/evidence-panels.tsx",
     'import "@/src/api-client.js";',

@@ -2,7 +2,7 @@
 
 ## Durum
 
-Kabul edildi.
+Emekli (2026-10-04, DEC-20261004-01). Aşağıdaki karar tarihsel kayıttır; kodda rollout mekanizması yoktur.
 
 ## Karar
 
@@ -39,3 +39,10 @@ yüzeyi açar. Server-only allowlist kontrollü aktivasyon ve cutover ihtiyacın
   ile katalogdan kaldırılmıştır (KV-1). Registry/StudentContact yolu ve veli yazma yolları koşulsuzdur;
   bu anahtarları taşıyan `FEATURE_ROLLOUTS_JSON` API açılışında `UNKNOWN_KEY` ile reddedilir, deploy öncesi
   staging/prod config'inden çıkarılmalıdır.
+- `web.teacher-portal-v2` (TP-02), `web.student-portal-v2` (SP-02) ve `web.control-plane-v2` (CP-02),
+  4 Ekim 2026'da DEC-20261004-01 ile kaldırılmıştır. Üçünün de API veya web'de tüketicisi yoktu; öğretmen,
+  öğrenci ve sistem route'ları zaten koşulsuzdu. Katalog boşaldığı için mekanizma da emekliye ayrıldı:
+  `/me/feature-rollouts`, `FeatureRolloutService`, `feature-rollout:read` yetkisi, `feature_rollout_exposed`
+  analytics olayı, `featureFlags` event alanı, `FEATURE_ROLLOUT_ENVIRONMENT`/`FEATURE_ROLLOUTS_JSON` ve
+  `pnpm feature-rollout:check` silindi. Yeni bir kademeli açılış gerekirse bu ADR'nin kuralları (server-only
+  allowlist, tenant + environment + süre, fail-closed, enabled exposure auditi) yeni bir DEC ile yeniden kurulur.

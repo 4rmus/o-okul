@@ -883,9 +883,6 @@ function mockSetupApiResponse(
   options: SetupMockOptions = {},
 ) {
   if (pathName === "/auth/refresh") return createAuthResponse(options.roles ?? ["TENANT_ADMIN"]);
-  if (pathName === "/me/feature-rollouts") {
-    return { enabledFeatureKeys: [] };
-  }
   if (pathName === "/setup/readiness") return createSetupReadiness(options.readiness ?? "ready", options.legacyReadiness);
   if (pathName === "/me/tenant") return createTenantResponse();
   if (pathName === "/me/notification-devices") return [];
