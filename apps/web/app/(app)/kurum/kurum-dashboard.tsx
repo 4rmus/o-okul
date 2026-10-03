@@ -10,6 +10,7 @@ import { ClassCompareBar } from "../_shared/lazy-report-charts.js";
 import { ReportChartPanel } from "../_shared/report-chart-panel.js";
 import { PageFrame } from "./_shared/page-frame.js";
 import { OperationSummary, type OperationSummaryItem } from "./_shared/operation-summary.js";
+import { TrialStatusBanner } from "./_shared/trial-status.js";
 import { useKurumAnnouncementsQuery, useKurumDashboardDataQuery } from "./kurum-dashboard-data.js";
 
 interface DashboardAttentionItem {
@@ -98,6 +99,7 @@ export function KurumDashboard() {
       subtitle="Öğrenci gelişimini, son sınav katılımını ve destek bekleyen işleri tek yerde izleyin."
     >
       {dashboardQuery.isPending ? <LoadingState label="Kurum başarı görünümü yükleniyor…" /> : null}
+      <TrialStatusBanner />
 
       <Panel
         aria-label="Bugün ilgilenmeniz gerekenler"
@@ -139,6 +141,12 @@ export function KurumDashboard() {
               <Link className="uh-button uh-button--primary uh-button--md" href="/kurum/kurulum">
                 Kuruluma git
               </Link>
+              {/* KF-6: the two first steps of a trial, shown only when the user can open them. */}
+              {firstStepLinks.filter((link) => canAccessHref(auth?.session.roles ?? [], link.href, auth?.session.activePersona)).map((link) => (
+                <Link className="uh-button uh-button--secondary uh-button--md" href={link.href} key={link.href}>
+                  {link.label}
+                </Link>
+              ))}
               <Button onClick={dismissSetupCard} type="button" variant="secondary">
                 Daha sonra
               </Button>
@@ -356,3 +364,8 @@ function writeCookie(name: string, value: string): void {
   if (typeof document === "undefined") return;
   document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=31536000; samesite=lax`;
 }
+
+const firstStepLinks = [
+  { href: "/kurum/ogrenciler", label: "Öğrenci listesini yükle" },
+  { href: "/kurum/sinavlar", label: "İlk sınav sonucunu yükle" },
+] as const;

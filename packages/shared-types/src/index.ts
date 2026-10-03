@@ -8,6 +8,8 @@ export type {
   ResolvedFeatureRollouts,
 } from "./feature-rollout.js";
 export { FormatAnalyzerService, getParserConfigPresetSuggestion } from "./format-analyzer.js";
+export { licensePlanCodes, trialLicenseLimits } from "./domain.js";
+export type { LicensePlanCode } from "./domain.js";
 export {
   assertProductEvent,
   productEventCatalog,

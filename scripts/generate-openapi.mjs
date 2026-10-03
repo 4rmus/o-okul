@@ -2055,7 +2055,7 @@ const requiredOperationContracts = [
     fieldChecks: [
       { path: ["requestBody", "activeStudentLimit"], minimum: 1 },
       { path: ["requestBody", "endsAt"], format: "date-time" },
-      { path: ["requestBody", "planCode"], minLength: 1 },
+      { path: ["requestBody", "planCode"], enum: ["TRIAL", "PRO", "ENTERPRISE"] },
       { path: ["requestBody", "startsAt"], format: "date-time" },
       { path: ["responseData", "activeStudentLimit"], minimum: 1 },
       { path: ["responseData", "endsAt"], format: "date-time" },

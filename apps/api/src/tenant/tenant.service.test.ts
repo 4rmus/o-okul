@@ -65,7 +65,7 @@ describe("TenantService", () => {
     await expect(service.updateStatus(systemContext, "system", { status: "SUSPENDED", expectedLifecycleVersion: 0, reason: "SECURITY_REVIEW", confirmationText: "system" }))
       .rejects.toThrow("SYSTEM_TENANT_IMMUTABLE");
     await expect(service.createLicenseTerm(systemContext, "system", {
-      planCode: "SYSTEM",
+      planCode: "PRO" as const,
       startsAt: "2026-01-01T00:00:00.000Z",
       endsAt: "2027-01-01T00:00:00.000Z",
       activeStudentLimit: 1,
@@ -82,7 +82,7 @@ describe("TenantService", () => {
       slug: "sahipli-kurum",
       campuses: [{ name: "Merkez Kampüs", code: "MRK", unitType: "SCHOOL" }],
       licenseTerm: {
-        planCode: "PRO",
+        planCode: "PRO" as const,
         startsAt: "2026-08-01T00:00:00.000Z",
         endsAt: "2027-08-01T00:00:00.000Z",
         activeStudentLimit: 500,
@@ -104,7 +104,7 @@ describe("TenantService", () => {
       campuses: [{ tenantId: "tenant-owner-onboarding", name: "Merkez Kampüs", code: "MRK", unitType: "SCHOOL" }],
       licenseTerm: {
         tenantId: "tenant-owner-onboarding",
-        planCode: "PRO",
+        planCode: "PRO" as const,
         activeStudentLimit: 500,
         auditReference: expect.stringMatching(/^license-[0-9a-f-]{36}$/),
       },
@@ -119,7 +119,7 @@ describe("TenantService", () => {
       slug: "sahipli-kurum",
       campuses: [{ name: "Merkez Kampüs", code: "MRK", unitType: "SCHOOL" }],
       licenseTerm: {
-        planCode: "PRO",
+        planCode: "PRO" as const,
         startsAt: "2026-08-01T00:00:00.000Z",
         endsAt: "2027-08-01T00:00:00.000Z",
         activeStudentLimit: 500,
@@ -157,7 +157,7 @@ describe("TenantService", () => {
       new InMemoryLicenseTermStore([{
         id: "license-scheduled",
         tenantId: "tenant-a",
-        planCode: "PRO",
+        planCode: "PRO" as const,
         startsAt: "2099-01-01T00:00:00.000Z",
         endsAt: "2100-01-01T00:00:00.000Z",
         activeStudentLimit: 500,
@@ -175,7 +175,7 @@ describe("TenantService", () => {
     await expect(service.create(systemContext, {
       ...canonicalTenantBody(undefined, "Hatalı Kurum", "hatali-kurum"),
       licenseTerm: {
-        planCode: "PRO",
+        planCode: "PRO" as const,
         startsAt: "2026-01-01T00:00:00.000Z",
         endsAt: "not-a-date",
         activeStudentLimit: 100,
@@ -192,7 +192,7 @@ function canonicalTenantBody(id: string | undefined, name: string, slug: string)
     campuses: [{ name: "Merkez Kampüs", code: "MRK", unitType: "SCHOOL" as const }],
     firstOwner: { name: "İlk Sahip", email: `${slug}@example.test` },
     licenseTerm: {
-      planCode: "PRO",
+      planCode: "PRO" as const,
       startsAt: "2026-08-01T00:00:00.000Z",
       endsAt: "2027-08-01T00:00:00.000Z",
       activeStudentLimit: 100,

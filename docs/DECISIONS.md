@@ -363,7 +363,7 @@ Son kontrol: 2026-07-13
 
 ### DEC-20260801-01 — Kurum, hesap, lisans ve erişim modeli
 
-Durum: Onaylı; guardian emekliliği DEC-20261003-01 ile geri alındı; additive migration ve tenant bazlı cutover bekliyor
+Durum: Onaylı; guardian emekliliği DEC-20261003-01 ile geri alındı; additive migration ve tenant bazlı cutover bekliyor; deneme lisans dönemi DEC-20261004-01 ile tanımlanır
 Karar: Sözleşmeli müşteri veri izolasyonu ve lisans sınırı olan tek `Tenant`, şubeler tenant
 altındaki `Campus` olarak kalır. Fiyatlama aktif öğrenci kotasına dayanır; çalışan hesapları ücretli
 koltuk değildir. Yıllık veya çok yıllık lisans dönemleri geriye dönük değiştirilmez: yeni
@@ -759,6 +759,24 @@ ayrımı.
 Açık soru: Veli yazma yollarının staging kanıtı (`UAT-GUARDIAN-01/02/03` yeniden koşumu) flag
 kaldırma PR'ının kapanış kapısıdır; pazarlama cümlesi bu kanıt gelmeden kullanılmaz.
 Son kontrol: 2026-10-03
+
+### DEC-20261004-01 — Kartsız deneme lisansı
+
+Durum: Onaylı; kod LOCAL_TEST, STAGING EXTERNAL_NOT_RUN; gecelik şifreli yedek ve staging restore geçmeden gerçek veriyle deneme açılmaz
+Karar: Deneme, mevcut `Tenant` ve `LicenseTerm` modeliyle açılan kısa bir lisans dönemidir; yeni tablo,
+self-servis kayıt veya kart bilgisi yoktur. Yalnız `SYSTEM_ADMIN` açar (kurum açılışı veya lisans dönemi
+ekleme). Yeni lisans dönemlerinde `planCode` kapalı kümedir: `TRIAL`, `PRO`, `ENTERPRISE`; kayıtlı
+satırlar değiştirilmez. `TRIAL` en fazla 7 gün ve en fazla 100 aktif öğrencidir; aşan istek 422 alır.
+Süre dolunca davranış mevcut `resolveLicenseState`'tir: 14 gün salt okunur, ardından dondurulmuş saklama;
+veri silinmez ve kurum ekranı bunu açıkça söyler. Satın alan kurum aynı tenant'a ücretli `LicenseTerm`
+eklenerek devam eder; dönemler çakışamaz, ücretli dönem deneme bitişinde başlarsa erişim kesilmez.
+Kaynak: Ürün sahibi kararı (2026-10-04; strateji planı D7, süre 7 gün, limit 100, bitince salt okunur).
+Kanıt: `packages/shared-types/src/domain.ts` (`licensePlanCodes`, `trialLicenseLimits`),
+`apps/api/src/license/license-validation.ts`, `apps/api/src/license/trial-license.test.ts`,
+`apps/web/e2e-next/trial-license-next.spec.ts`.
+Etkilenen ADR: Yok
+Açık soru: Gecelik yedeğin off-host hedefi (TR S3 sağlayıcısı) ürün sahibi tarafından sonra seçilecek (PO-2).
+Son kontrol: 2026-10-04
 
 ## Faz Öncesi Onay Gerektirenler
 
