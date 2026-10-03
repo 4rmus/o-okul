@@ -228,28 +228,6 @@ describe("IdentityInvitationService", () => {
     },
   );
 
-  it("guardian read-only rollout açıkken doğrudan guardian davetini üretmez", async () => {
-    const invitations = new InMemoryIdentityInvitationStore();
-    const resolve = vi.fn().mockResolvedValue({ enabledFeatureKeys: ["product.guardian-read-only"] });
-    const service = new IdentityInvitationService(
-      invitations,
-      new InMemoryUserManagementStore(),
-      new InMemoryStudentStore(),
-      new InMemoryGuardianStore(),
-      new InMemoryTeacherStore(),
-      new InMemoryTenantStore(),
-      undefined,
-      undefined,
-      { resolve } as never,
-    );
-
-    await expect(service.create(
-      { tenantId: "tenant-a", userId: "admin-a", roles: ["TENANT_ADMIN"], bypassRls: false },
-      { subjectType: "GUARDIAN", subjectId: "guardian-a", email: "guardian@example.test" },
-    )).rejects.toThrow("GUARDIAN_WRITE_READ_ONLY");
-    await expect(invitations.list("tenant-a")).resolves.toEqual([]);
-  });
-
   it("eşzamanlı çalışan davetlerinde yalnız bir pending davet üretir", async () => {
     const invitations = new InMemoryIdentityInvitationStore();
     const users = new InMemoryUserManagementStore();

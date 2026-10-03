@@ -35,7 +35,6 @@ import {
   listTeacherScopedStudents,
   shouldLimitToTeacherScope,
 } from "../school/teacher-scope.js";
-import { GuardianWritePolicy } from "./guardian-write-policy.js";
 
 export interface GuardianRecord extends SharedGuardianRecord {
   deletedAt?: string;
@@ -79,7 +78,6 @@ export class GuardianService {
     @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() private readonly identityProvisioning?: IdentityProvisioningService,
     @Optional() private readonly idempotency?: IdempotencyService,
-    @Optional() private readonly writePolicy?: GuardianWritePolicy,
   ) {}
 
   async listGuardians(context: RequestContext): Promise<GuardianRecord[]> {
@@ -104,7 +102,6 @@ export class GuardianService {
   }
 
   async createGuardian(context: RequestContext, input: GuardianWriteInput, idempotencyKey?: string): Promise<GuardianRecord> {
-    await this.writePolicy?.assertWritable(context);
     if (idempotencyKey && this.idempotency) {
       return this.idempotency.run(
         context,
@@ -153,7 +150,6 @@ export class GuardianService {
   }
 
   async updateGuardian(context: RequestContext, id: string, input: GuardianWriteInput): Promise<GuardianRecord> {
-    await this.writePolicy?.assertWritable(context);
     const existing = await this.findGuardian(context, id);
     const identity = await this.resolveGuardianIdentityInput(context, existing.tenantId, input.nationalId, existing.id);
     const changedFields = changedInputFields(input, ["firstName", "lastName", "phone", "nationalId"]);
@@ -179,7 +175,6 @@ export class GuardianService {
   }
 
   async deleteGuardian(context: RequestContext, id: string): Promise<void> {
-    await this.writePolicy?.assertWritable(context);
     const existing = await this.findGuardian(context, id);
     if (!this.identityProvisioning) {
       throw new Error("PROFILE_LIFECYCLE_STORE_UNAVAILABLE");
@@ -314,7 +309,6 @@ export class GuardianService {
     input: GuardianStudentRelationInput = {},
     idempotencyKey?: string,
   ): Promise<GuardianStudentRecord> {
-    await this.writePolicy?.assertWritable(context);
     if (idempotencyKey && this.idempotency) {
       return this.idempotency.run(
         context,
@@ -363,7 +357,6 @@ export class GuardianService {
     studentId: string,
     input: GuardianStudentRelationInput,
   ): Promise<GuardianStudentRecord> {
-    await this.writePolicy?.assertWritable(context);
     const guardian = await this.findGuardian(context, guardianId);
     const student = await this.studentStore.findById(studentId);
     if (!student) {
@@ -397,7 +390,6 @@ export class GuardianService {
     studentId: string,
     input: GuardianNotificationPreferenceInput,
   ): Promise<GuardianStudentRecord> {
-    await this.writePolicy?.assertWritable(context);
     const link = await this.findCurrentGuardianStudentLink(context, studentId);
     const relation = resolveGuardianNotificationPreference(input);
     const updated = await this.guardianStudentStore.update(link.guardianId, link.studentId, relation);
@@ -421,7 +413,6 @@ export class GuardianService {
   }
 
   async unlinkGuardianStudent(context: RequestContext, guardianId: string, studentId: string): Promise<void> {
-    await this.writePolicy?.assertWritable(context);
     const guardian = await this.findGuardian(context, guardianId);
     const student = await this.studentStore.findById(studentId);
     if (!student) {

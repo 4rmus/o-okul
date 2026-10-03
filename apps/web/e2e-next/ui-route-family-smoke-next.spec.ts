@@ -624,6 +624,29 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
     return { data: [] };
   }
   if (pathName === "/audit-logs/student-summary") return { data: [] };
+  if (pathName === "/students/student-a/overview") {
+    return {
+      data: {
+        profile: studentProfileFixture,
+        enrollments: [],
+        attendance: { absent: 0, excused: 0, late: 0, present: 0, studentId: "student-a", total: 0 },
+        openHomeworkCount: 0,
+        homeworkAssignments: [],
+        teacherNoteCount: 0,
+        teacherNotes: [],
+        contacts: [],
+        guardians: [guardianFixture],
+        guardianLinks: [guardianLinkFixture],
+        teacherAssignments: [],
+        teachers: [teacherFixture],
+        classes: [classFixture],
+        courses: [courseFixture],
+        terms: [termFixture],
+        canViewFinance: false,
+        activity: [],
+      },
+    };
+  }
 
   if (pathName === "/me/teacher") return { data: teacherFixture };
   if (pathName === "/me/teacher/today") {

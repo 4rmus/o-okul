@@ -260,52 +260,6 @@ export const studentFormSchema = z.object({
   nationalId: optionalNationalId,
   phone: optionalText(),
   email: optionalEmail,
-  guardianFirstName: optionalText(),
-  guardianLastName: optionalText(),
-  guardianPhone: optionalText(),
-  guardianCanViewFinance: z.boolean(),
-  guardianCanReceiveSms: z.boolean(),
-  guardianCanReceiveAnnouncements: z.boolean(),
-  guardianCanOpenSupportTickets: z.boolean(),
-}).superRefine((value, context) => {
-  const hasGuardianName = Boolean(value.guardianFirstName || value.guardianLastName);
-  const hasGuardianContact = Boolean(value.guardianPhone);
-  const hasGuardianInput = hasGuardianName || hasGuardianContact;
-  if (value.guardianFirstName && !value.guardianLastName) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Veli soyadı zorunludur.",
-      path: ["guardianLastName"],
-    });
-  }
-  if (!value.guardianFirstName && value.guardianLastName) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Veli adı zorunludur.",
-      path: ["guardianFirstName"],
-    });
-  }
-  if (hasGuardianInput && !value.guardianFirstName) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Veli adı zorunludur.",
-      path: ["guardianFirstName"],
-    });
-  }
-  if (hasGuardianInput && !value.guardianLastName) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Veli soyadı zorunludur.",
-      path: ["guardianLastName"],
-    });
-  }
-  if (hasGuardianInput && !hasGuardianContact) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Veli telefonu zorunludur.",
-      path: ["guardianPhone"],
-    });
-  }
 });
 
 export const announcementFormSchema = z.object({

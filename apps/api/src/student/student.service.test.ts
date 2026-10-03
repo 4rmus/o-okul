@@ -12,8 +12,9 @@ import { StudentService } from "./student.service.js";
 import { hashTcIdentity, normalizeTcIdentity } from "./tc-identity.js";
 
 describe("StudentService", () => {
-  it("toplu kayıtta portal hesaplarını kapatırken öğrenci ve veli bağlantısını oluşturur", async () => {
+  it("toplu kayıtta iletişim kişisi yazar, veli hesabı veya davet üretmez", async () => {
     const setup = createService();
+    const guardiansBefore = await setup.guardianStore.list();
 
     const students = await setup.service.createMany(adminContext, [{
       firstName: "Ada",
@@ -21,20 +22,24 @@ describe("StudentService", () => {
       gradeLevelId: "grade-8",
       nationalId: "10000000146",
       phone: "5551234567",
-      guardian: {
-        firstName: "Fatma",
-        lastName: "Kaya",
-        nationalId: "10000001372",
+      contact: {
+        firstName: "FATMA",
+        lastName: "KAYA",
+        relationType: "LEGAL_GUARDIAN",
         phone: "5557654321",
+        canReceiveSms: false,
+        canReceiveAnnouncements: false,
+        canReceiveFinance: false,
       },
-    }], { provisionAccounts: false });
+    }]);
 
     expect(students).toHaveLength(1);
     expect(setup.provisionOrInvite).not.toHaveBeenCalled();
-    await expect(setup.guardianStore.list()).resolves.toEqual(expect.arrayContaining([
-      expect.objectContaining({ firstName: "Fatma", lastName: "Kaya", phone: "5557654321" }),
-    ]));
-    await expect(setup.guardianStudentStore.listByStudent(students[0]!.id)).resolves.toHaveLength(1);
+    await expect(setup.guardianStore.list()).resolves.toEqual(guardiansBefore);
+    await expect(setup.guardianStudentStore.listByStudent(students[0]!.id)).resolves.toEqual([]);
+    await expect(setup.studentContactStore.listByStudent("tenant-a", students[0]!.id)).resolves.toEqual([
+      expect.objectContaining({ relationType: "LEGAL_GUARDIAN", canReceiveSms: false }),
+    ]);
   });
 
   it("öğrenci TC kimlik ve telefon alanlarını birbirinden bağımsız saklar", async () => {
@@ -60,165 +65,6 @@ describe("StudentService", () => {
     const phoneProfile = await setup.studentStore.findProfileById(phoneStudent.id);
     expect(phoneProfile).toMatchObject({ phone: "5551234567" });
     expect(phoneProfile).not.toHaveProperty("nationalIdHash");
-  });
-
-  it("ogrenci olustururken yeni veli, link ve davet uretir", async () => {
-    const setup = createService();
-
-    const student = await setup.service.create(adminContext, {
-      firstName: "Yeni",
-      lastName: "Ogrenci",
-      gradeLevelId: "grade-8",
-      guardian: {
-        firstName: "Ayse",
-        lastName: "Veli",
-        phone: "5550000001",
-        email: "AYSE@example.test",
-        canViewFinance: false,
-      },
-    });
-
-    const guardians = await setup.guardianStore.list();
-    const guardian = guardians.find((record) => record.phone === "5550000001");
-    expect(guardian).toMatchObject({
-      tenantId: "tenant-a",
-      firstName: "Ayse",
-      lastName: "Veli",
-    });
-    await expect(setup.guardianStudentStore.listByStudent(student.id)).resolves.toEqual([
-      expect.objectContaining({
-        guardianId: guardian?.id,
-        studentId: student.id,
-        canViewFinance: false,
-      }),
-    ]);
-    expect(setup.invitations).toEqual([
-      expect.objectContaining({
-        subjectType: "GUARDIAN",
-        subjectId: guardian?.id,
-        email: "ayse@example.test",
-      }),
-    ]);
-    expect(setup.auditRecords).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        action: "guardian.auto_provisioned",
-        entityType: "GuardianStudent",
-      }),
-    ]));
-  });
-
-  it("telefon eslesirse mevcut veliyi yeniden kullanir", async () => {
-    const setup = createService();
-
-    const student = await setup.service.create(adminContext, {
-      firstName: "Kardes",
-      lastName: "Ogrenci",
-      gradeLevelId: "grade-8",
-      guardian: {
-        phone: "5000000001",
-      },
-    });
-
-    await expect(setup.guardianStudentStore.listByStudent(student.id)).resolves.toEqual([
-      expect.objectContaining({
-        guardianId: "guardian-a",
-        studentId: student.id,
-      }),
-    ]);
-    expect(setup.invitations).toEqual([]);
-  });
-
-  it("veliyi yalnız TC kimlik numarasıyla oluşturur", async () => {
-    const setup = createService();
-
-    const student = await setup.service.create(adminContext, {
-      firstName: "Tc",
-      lastName: "Ogrenci",
-      gradeLevelId: "grade-8",
-      guardian: { nationalId: "10000001372" },
-    });
-
-    const guardians = await setup.guardianStore.list();
-    const guardian = guardians.find((record) => record.nationalIdHash === hashTcIdentity("10000001372"));
-    expect(guardian).toMatchObject({ phone: undefined, nationalIdEncrypted: expect.any(String) });
-    await expect(setup.guardianStudentStore.listByStudent(student.id)).resolves.toEqual([
-      expect.objectContaining({ guardianId: guardian?.id, studentId: student.id }),
-    ]);
-  });
-
-  it("TC eslesirse mevcut veliyi telefon farkli olsa da yeniden kullanir", async () => {
-    const setup = createService();
-    const nationalId = "10000001372";
-    const existingGuardian = await setup.guardianStore.create({
-      tenantId: "tenant-a",
-      firstName: "Tc",
-      lastName: "Veli",
-      phone: "5000000099",
-      nationalIdHash: hashTcIdentity(normalizeTcIdentity(nationalId)),
-    });
-
-    const student = await setup.service.create(adminContext, {
-      firstName: "Tc",
-      lastName: "Ogrenci",
-      gradeLevelId: "grade-8",
-      guardian: {
-        nationalId,
-        phone: "0 500 000 00 98",
-      },
-    });
-
-    await expect(setup.guardianStudentStore.listByStudent(student.id)).resolves.toEqual([
-      expect.objectContaining({
-        guardianId: existingGuardian.id,
-        studentId: student.id,
-      }),
-    ]);
-    await expect(setup.guardianStore.findById(existingGuardian.id)).resolves.toMatchObject({
-      phone: "5000000099",
-      nationalIdEncrypted: expect.any(String),
-    });
-  });
-
-  it("veli TC ve telefonu olsa da e-posta daveti üretir", async () => {
-    const setup = createService();
-
-    const student = await setup.service.create(adminContext, {
-      firstName: "Hesapli",
-      lastName: "Ogrenci",
-      gradeLevelId: "grade-8",
-      guardian: {
-        firstName: "Can",
-        lastName: "Veli",
-        nationalId: "10000000382",
-        phone: "5550000013",
-        email: "can@example.test",
-      },
-    });
-
-    const guardians = await setup.guardianStore.list();
-    const guardian = guardians.find((record) => record.phone === "5550000013");
-    expect(guardian).toMatchObject({
-      tenantId: "tenant-a",
-      nationalIdHash: expect.any(String),
-    });
-    expect(guardian?.userId).toBeUndefined();
-    await expect(setup.guardianStudentStore.listByStudent(student.id)).resolves.toEqual([
-      expect.objectContaining({
-        guardianId: guardian?.id,
-        studentId: student.id,
-      }),
-    ]);
-    expect(setup.invitations).toEqual([
-      expect.objectContaining({
-        tenantId: "tenant-a",
-        subjectType: "GUARDIAN",
-        subjectId: guardian?.id,
-        nationalId: "10000000382",
-        phone: "5550000013",
-        email: "can@example.test",
-      }),
-    ]);
-    expect(setup.provisionedSubjects).toEqual([]);
   });
 
   it("öğrenci PII temizliğinde önce report snapshot kimliğini temizler ve yalnız sayım auditler", async () => {
@@ -631,12 +477,6 @@ function createService(options: {
   const provisionedSubjects: unknown[] = [];
   const reportSnapshotPurgeCalls: Array<{ tenantId: string; studentId: string }> = [];
   const lifecycleCalls: unknown[] = [];
-  const identityInvitations = {
-    create: async (_context: RequestContext, body: unknown) => {
-      invitations.push(body);
-      return { invitation: { id: "identity-invitation-test" }, activationToken: "activation-token-test" };
-    },
-  };
   const provisionOrInvite = vi.fn(async (_context: RequestContext, input: { email?: string; nationalId?: string; phone?: string }) => {
       if (input.email) {
         invitations.push(input);
@@ -692,7 +532,6 @@ function createService(options: {
     service: new StudentService(
       studentStore,
       guardianStudentStore,
-      guardianStore,
       {} as never,
       enrollmentStore,
       { listYears: async () => [], listTerms: async () => [] } as never,
@@ -700,13 +539,11 @@ function createService(options: {
       classStore,
       gradeLevelStore,
       {} as never,
-      identityInvitations as never,
       reportSnapshots as never,
       auditLogs as never,
       options.idempotency,
       identityProvisioning as never,
       licenseTerms,
-      undefined,
       undefined,
       studentContactStore,
     ),

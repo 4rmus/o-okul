@@ -176,7 +176,7 @@ describe("AuditLogService", () => {
       diff: {
         email: "veli@example.test",
         fieldsChanged: ["phone"],
-        featureKeys: ["web.student-registry-v2"],
+        featureKeys: ["web.teacher-portal-v2"],
         firstName: "Sakli",
         nested: {
           message: "Gizli destek metni",
@@ -199,7 +199,7 @@ describe("AuditLogService", () => {
     expect(created.diff).toEqual({
       email: "[REDACTED]",
       fieldsChanged: ["phone"],
-      featureKeys: ["web.student-registry-v2"],
+      featureKeys: ["web.teacher-portal-v2"],
       firstName: "[REDACTED]",
       nested: "[REDACTED]",
       path: "[REDACTED]",

@@ -10,7 +10,6 @@ import type {
 import { AttendanceService } from "../attendance/attendance.service.js";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
-import { FeatureRolloutService } from "../feature-rollout/feature-rollout.service.js";
 import { GuardianService } from "../guardian/guardian.service.js";
 import { toGuardianResponse } from "../guardian/guardian-response.js";
 import { HomeworkService } from "../homework/homework.service.js";
@@ -36,11 +35,9 @@ export class StudentOverviewService {
     private readonly school: SchoolService,
     private readonly reports: ReportGenerationService,
     private readonly auditLogs: AuditLogService,
-    private readonly featureRollouts: FeatureRolloutService,
   ) {}
 
   async get(context: RequestContext, studentId: string): Promise<StudentOverviewRecord> {
-    await this.featureRollouts.assertEnabled(context, "web.student-registry-v2");
     const profile = await this.students.findProfileForViewer(context, studentId);
     const canReadAudit = context.activePersona === "STAFF" && hasCapability(context, "tenant-audit:read");
     const canReadContacts = hasCapability(context, "privacy:manage")

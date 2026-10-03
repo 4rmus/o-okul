@@ -1126,6 +1126,29 @@ function mockUiApiResponse(pathName: string, searchParams: URLSearchParams, auth
   if (pathName === "/import-quarantines/summary") return { data: { openCount: 1 } };
   if (pathName === "/announcements") return createListResponse(createAnnouncements(), searchParams);
   if (pathName === "/exams") return { data: createExams() };
+  if (pathName === "/students/student-a/overview") {
+    return {
+      data: {
+        profile: createStudentProfile(),
+        enrollments: createEnrollments(),
+        attendance: { absent: 1, excused: 0, late: 1, present: 28, studentId: "student-a", total: 30 },
+        openHomeworkCount: 0,
+        homeworkAssignments: [],
+        teacherNoteCount: 0,
+        teacherNotes: [],
+        contacts: [],
+        guardians: createGuardians().map(({ phone: _phone, ...guardian }) => ({ ...guardian, phoneMasked: "••• ••• ••01" })),
+        guardianLinks: createGuardianLinks(),
+        teacherAssignments: createTeacherAssignments(),
+        teachers: createTeachers(),
+        classes: createClasses(),
+        courses: createCourses(),
+        terms: createAcademicTerms(),
+        canViewFinance: true,
+        activity: [{ action: "student.profile_updated", actionLabel: "Profil güncellendi", createdAt: "2026-06-18T08:00:00.000Z", id: "audit-student-summary" }],
+      },
+    };
+  }
   if (pathName === "/students/student-a/profile") return { data: createStudentProfile() };
   if (pathName === "/students/student-a/guardian-links") return { data: createGuardianLinks() };
   if (pathName === "/students/student-a/guardians") return { data: createGuardians() };

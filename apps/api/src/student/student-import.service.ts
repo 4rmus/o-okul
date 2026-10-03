@@ -4,13 +4,12 @@ import ExcelJS from "exceljs";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import { normalizeTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
-import { FeatureRolloutService } from "../feature-rollout/feature-rollout.service.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import { toTurkishUpperCase } from "../http/zod-validation.js";
 import { maskContactEmail, maskContactPhone } from "../privacy/contact-mask.js";
 import { SchoolService } from "../school/school.service.js";
 import { normalizeClassName } from "../school/class-store.js";
-import { StudentService, type StudentGuardianProvisionInput, type StudentRecord } from "./student.service.js";
+import { StudentService, type StudentRecord } from "./student.service.js";
 import { maskTcIdentity, normalizeTcIdentity } from "./tc-identity.js";
 import type {
   PublicStudentRecord,
@@ -33,6 +32,7 @@ type ParsedStudentImportRow = Omit<StudentImportPreviewRow, "contact"> & {
   nationalId?: string;
   phone?: string;
   contact?: ParsedStudentContact;
+  contactColumnsConflict?: true;
 };
 const maxStudentImportBytes = 5 * 1024 * 1024;
 
@@ -43,7 +43,6 @@ export class StudentImportService {
     private readonly school: SchoolService,
     @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() private readonly idempotency?: IdempotencyService,
-    @Optional() private readonly featureRollouts?: FeatureRolloutService,
   ) {}
 
   async dryRun(context: RequestContext, input: StudentImportDryRunInput): Promise<StudentImportDryRunResult> {
@@ -99,7 +98,7 @@ export class StudentImportService {
       throw new ConflictException("ACTIVE_STUDENT_LIMIT_REACHED");
     }
 
-    const students = await this.students.createMany(context, filterValidRows(rows, errors), { provisionAccounts: false });
+    const students = await this.students.createMany(context, filterValidRows(rows, errors));
     await this.auditLogs?.record({
       tenantId: context.tenantId ?? undefined,
       actorUserId: context.userId,
@@ -127,13 +126,7 @@ export class StudentImportService {
       throw new BadRequestException("IMPORT_FILE_REQUIRED");
     }
     const rows = await this.readRows(fileBase64);
-    const registryErrors = await this.isRegistryV2Enabled(context)
-      ? rows.flatMap(errorsForRegistryPilot)
-      : [];
-    if (rows.some((row) => Boolean(row.guardian))) {
-      await this.students.assertGuardianProvisioningAllowed(context);
-    }
-    const errors = [...registryErrors, ...await this.validateRows(context, rows)];
+    const errors = await this.validateRows(context, rows);
     const incomingActiveStudents = filterValidRows(rows, errors).filter((row) => Boolean(row.gradeLevelId)).length;
     const quota = await this.students.previewQuota(context, incomingActiveStudents);
 
@@ -249,7 +242,6 @@ export class StudentImportService {
       firstName: findHeaderIndex(header, ["guardianFirstName", "veliAd", "veliAdi", "veliAdı"]),
       lastName: findHeaderIndex(header, ["guardianLastName", "veliSoyad", "veliSoyadi", "veliSoyadı"]),
       phone: findHeaderIndex(header, ["guardianPhone", "veliTelefon", "veliTel", "veliCep"]),
-      nationalId: findHeaderIndex(header, ["guardianNationalId", "guardianTc", "veliTc", "veliTcKimlikNo", "veliTckn", "veliKimlikNo"]),
     };
     const contactIndexes: ContactColumnIndexes = {
       firstName: findHeaderIndex(header, ["contactFirstName", "iletisimKisiAdi", "iletişimKişiAdı"]),
@@ -268,8 +260,9 @@ export class StudentImportService {
       const email = readOptionalCell(row.cells, emailIndex);
       const phone = readOptionalCell(row.cells, phoneIndex);
       const nationalId = readOptionalCell(row.cells, nationalIdIndex);
-      const guardian = readGuardian(row.cells, guardianIndexes);
-      const contact = readContact(row.cells, contactIndexes);
+      // DEC-20261003-01: import veli hesabı açmaz; veli sütunları iletişim kişisi olur, veli TC'si okunmaz.
+      const guardianContact = readGuardianContact(row.cells, guardianIndexes, lastName);
+      const contact = readContact(row.cells, contactIndexes) ?? guardianContact;
       if (!studentNo && !firstName && !lastName) continue;
 
       rows.push({
@@ -282,8 +275,8 @@ export class StudentImportService {
         ...(email ? { email } : {}),
         ...(phone ? { phone } : {}),
         ...(nationalId ? { nationalId } : {}),
-        ...(guardian ? { guardian } : {}),
         ...(contact ? { contact } : {}),
+        ...(guardianContact && contact !== guardianContact ? { contactColumnsConflict: true as const } : {}),
       });
     }
 
@@ -400,27 +393,8 @@ export class StudentImportService {
           willCreate: true,
         };
       }
-      if (row.guardian?.nationalId) {
-        try {
-          row.guardian.nationalId = normalizeTcIdentity(row.guardian.nationalId);
-        } catch {
-          errors.push({
-            row: row.row,
-            field: "guardianNationalId",
-            code: "INVALID_NATIONAL_ID",
-            ...maskedNationalIdValue(row.guardian.nationalId),
-          });
-        }
-      }
-      if (row.guardian?.phone) {
-        try {
-          row.guardian.phone = normalizeTurkishMobilePhone(row.guardian.phone, "GUARDIAN_PHONE_INVALID");
-        } catch {
-          errors.push({ row: row.row, field: "guardianPhone", code: "INVALID_PHONE" });
-        }
-      }
-      if (row.guardian && !row.guardian.nationalId && !row.guardian.phone) {
-        errors.push({ row: row.row, field: "guardian", code: "GUARDIAN_CONTACT_REQUIRED" });
+      if (row.contactColumnsConflict) {
+        errors.push({ row: row.row, field: "guardian", code: "CONTACT_COLUMNS_CONFLICT" });
       }
       if (row.contact) {
         if (!row.contact.firstName) errors.push({ row: row.row, field: "contactFirstName", code: "REQUIRED" });
@@ -445,11 +419,6 @@ export class StudentImportService {
     }
 
     return errors;
-  }
-
-  private async isRegistryV2Enabled(context: RequestContext): Promise<boolean> {
-    if (!this.featureRollouts) return false;
-    return (await this.featureRollouts.resolve(context)).enabledFeatureKeys.includes("web.student-registry-v2");
   }
 
   private normalizeStudentNo(value: string): string {
@@ -486,10 +455,6 @@ function toPublicImportedStudent(student: StudentRecord): PublicStudentRecord {
     responsibleTeacherId: student.responsibleTeacherId,
     status: student.status,
   };
-}
-
-function errorsForRegistryPilot(row: ParsedStudentImportRow): StudentImportError[] {
-  return row.email ? [{ row: row.row, field: "email", code: "STUDENT_IMPORT_PILOT_CORE_ONLY" }] : [];
 }
 
 function isXlsx(bytes: Buffer): boolean {
@@ -559,7 +524,6 @@ interface GuardianColumnIndexes {
   firstName?: number;
   lastName?: number;
   phone?: number;
-  nationalId?: number;
 }
 
 interface ContactColumnIndexes {
@@ -576,13 +540,14 @@ function filterValidRows<T extends { row: number }>(rows: T[], errors: StudentIm
 }
 
 function toPreviewRow(row: ParsedStudentImportRow): StudentImportPreviewRow {
-  const { nationalId: _nationalId, phone: _phone, accountPreview: _accountPreview, contact, ...previewRow } = row;
-  if (previewRow.guardian?.nationalId) {
-    previewRow.guardian = {
-      ...previewRow.guardian,
-      nationalId: maskTcIdentity(previewRow.guardian.nationalId),
-    };
-  }
+  const {
+    nationalId: _nationalId,
+    phone: _phone,
+    accountPreview: _accountPreview,
+    contactColumnsConflict: _contactColumnsConflict,
+    contact,
+    ...previewRow
+  } = row;
   return {
     ...previewRow,
     ...(contact ? {
@@ -602,18 +567,20 @@ function maskedNationalIdValue(value: string): { value?: string } {
   return digits.length >= 4 ? { value: `*******${digits.slice(-4)}` } : {};
 }
 
-function readGuardian(cells: string[], indexes: GuardianColumnIndexes): StudentGuardianProvisionInput | undefined {
+function readGuardianContact(cells: string[], indexes: GuardianColumnIndexes, studentLastName: string): ParsedStudentContact | undefined {
   const firstName = toTurkishUpperCase(readOptionalCell(cells, indexes.firstName));
   const lastName = toTurkishUpperCase(readOptionalCell(cells, indexes.lastName));
   const phone = readOptionalCell(cells, indexes.phone);
-  const nationalId = readOptionalCell(cells, indexes.nationalId);
-  if (!firstName && !lastName && !phone && !nationalId) return undefined;
+  if (!firstName && !lastName && !phone) return undefined;
 
   return {
-    firstName: firstName || undefined,
-    lastName: lastName || undefined,
-    nationalId: nationalId || undefined,
-    phone: phone || undefined,
+    firstName: firstName || "VELİ",
+    lastName: lastName || studentLastName || "VELİ",
+    relationType: "LEGAL_GUARDIAN",
+    ...(phone ? { phone } : {}),
+    canReceiveSms: false,
+    canReceiveAnnouncements: false,
+    canReceiveFinance: false,
   };
 }
 
