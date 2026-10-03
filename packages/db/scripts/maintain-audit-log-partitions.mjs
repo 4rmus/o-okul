@@ -15,9 +15,7 @@ if (evidenceFile) {
   await validateEvidenceOutputPath(resolve(evidenceFile));
 }
 
-if (shouldApply) {
-  await applyPartitions(partitions);
-}
+const defaultRowCount = shouldApply ? await applyPartitions(partitions) : undefined;
 
 const evidence = {
   result: "PASS",
@@ -28,6 +26,7 @@ const evidence = {
   applied: shouldApply,
   startMonth,
   monthsPlanned: partitions.length,
+  ...(defaultRowCount === undefined ? {} : { defaultRowCount }),
   partitions: partitions.map(({ name, from, to }) => ({
     name,
     from,
@@ -97,12 +96,15 @@ async function applyPartitions(partitionPlan) {
   try {
     await client.query("BEGIN");
     await requireAuditLogPartitionedTable(client);
+    await requireDefaultPartitionClear(client, partitionPlan[0].from, partitionPlan.at(-1).to);
     for (const partition of partitionPlan) {
       await client.query(partition.sql);
       await client.query(partition.privilegeSql);
       await requirePartitionExists(client, partition.name);
     }
+    const defaultRows = await client.query(`SELECT count(*)::int AS count FROM "AuditLog_default"`);
     await client.query("COMMIT");
+    return defaultRows.rows[0].count;
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     throw error;
@@ -120,6 +122,18 @@ async function requireAuditLogPartitionedTable(client) {
   );
   if (result.rowCount !== 1 || result.rows[0]?.partstrat !== "r") {
     throw new Error("AuditLog RANGE partitioned tablo olmalı.");
+  }
+}
+
+async function requireDefaultPartitionClear(client, from, to) {
+  // PostgreSQL would also reject the CREATE; this names the cause before any partition is touched.
+  const result = await client.query(
+    `SELECT count(*)::int AS count FROM "AuditLog_default" WHERE "createdAt" >= $1 AND "createdAt" < $2`,
+    [from, to],
+  );
+  const count = result.rows[0].count;
+  if (count > 0) {
+    throw new Error(`AuditLog_default planlanan aralıkta ${count} satır taşıyor; önce onaylı taşıma gerekir.`);
   }
 }
 

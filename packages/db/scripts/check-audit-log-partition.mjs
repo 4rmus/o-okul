@@ -49,6 +49,17 @@ for (const { name, from, to } of expectedBootstrapPartitions("2026-01", 12)) {
   }
 }
 
+// Last AuditLog month partition applied in STAGING and PRODUCTION. Raise it in the PR that records the
+// apply evidence; CI fails one month before the horizon so 2027 rows never land in AuditLog_default.
+const appliedPartitionHorizon = "2026-12";
+const now = new Date();
+const nextMonth = addMonths(`${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`, 1);
+if (nextMonth > appliedPartitionHorizon) {
+  failures.push(
+    `AuditLog partition ufku ${appliedPartitionHorizon}; ${nextMonth} kaydı DEFAULT'a düşer. Önce staging, sonra prod'da pnpm audit-log-partition:maintain apply edin ve ufku güncelleyin.`,
+  );
+}
+
 requireTokens(
   "maintain-audit-log-partitions.mjs",
   maintenanceScript,
@@ -63,6 +74,8 @@ requireTokens(
     "FOR VALUES FROM",
     "REVOKE ALL PRIVILEGES ON TABLE",
     "AuditLog RANGE partitioned tablo olmalı.",
+    "AuditLog_default planlanan aralıkta",
+    "defaultRowCount",
     "audit_log_partition_maintenance",
     "pnpm audit-log-partition:maintain",
     "AUDIT_LOG_PARTITION_EVIDENCE_FILE lokal temp path olmamalı.",

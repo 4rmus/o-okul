@@ -142,6 +142,9 @@ interface HttpNotificationResponse {
   results?: HttpNotificationResult[];
 }
 
+// infra/notification-gateway MAX_MESSAGES; a larger request is rejected as a whole.
+const maxHttpMessagesPerRequest = 25;
+
 export class HttpNotificationAdapter implements NotificationAdapter {
   private readonly bearerToken?: string;
   private readonly endpoint: string;
@@ -158,10 +161,15 @@ export class HttpNotificationAdapter implements NotificationAdapter {
   }
 
   async sendBatch(messages: NotificationMessage[]): Promise<NotificationSendResult[]> {
-    if (messages.length === 0) {
-      return [];
+    const results: NotificationSendResult[] = [];
+    // ponytail: sequential chunks keep input order; parallelize only if large announcements get slow.
+    for (let start = 0; start < messages.length; start += maxHttpMessagesPerRequest) {
+      results.push(...await this.sendChunk(messages.slice(start, start + maxHttpMessagesPerRequest)));
     }
+    return results;
+  }
 
+  private async sendChunk(messages: NotificationMessage[]): Promise<NotificationSendResult[]> {
     const response = await this.fetchImpl(this.endpoint, {
       method: "POST",
       headers: this.headers(),

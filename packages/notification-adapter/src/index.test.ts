@@ -303,6 +303,70 @@ describe("HttpNotificationAdapter", () => {
     ]);
   });
 
+  it("60 mesajı gateway sınırına göre 25+25+10 isteğe böler ve sonuçları sırayla döndürür", async () => {
+    const chunkSizes: number[] = [];
+    const adapter = new HttpNotificationAdapter({
+      ...httpIdentity,
+      endpoint: "https://notify.example/send",
+      fetch: async (_input, init) => {
+        const { messages } = JSON.parse(init.body) as { messages: Array<{ channel: string; to: string }> };
+        chunkSizes.push(messages.length);
+        return {
+          ok: true,
+          status: 200,
+          async text() {
+            return JSON.stringify({
+              results: messages.map((message) => ({ ...message, status: "sent", providerMessageId: `id-${message.to}` })),
+            });
+          },
+        };
+      },
+    });
+    const messages = Array.from({ length: 60 }, (_, index) => ({ channel: "EMAIL" as const, to: `veli${index}@example.test`, body: "Duyuru" }));
+
+    const results = await adapter.sendBatch(messages);
+
+    expect(chunkSizes).toEqual([25, 25, 10]);
+    expect(results.map((result) => result.to)).toEqual(messages.map((message) => message.to));
+    expect(results.every((result) => result.status === "sent")).toBe(true);
+  });
+
+  it("yalnız HTTP hatası veren parçayı başarısız işaretler", async () => {
+    let call = 0;
+    const adapter = new HttpNotificationAdapter({
+      ...httpIdentity,
+      endpoint: "https://notify.example/send",
+      fetch: async (_input, init) => {
+        call += 1;
+        const { messages } = JSON.parse(init.body) as { messages: Array<{ channel: string; to: string }> };
+        return {
+          ok: call !== 2,
+          status: call === 2 ? 500 : 200,
+          async text() {
+            return call === 2
+              ? JSON.stringify({})
+              : JSON.stringify({ results: messages.map((message) => ({ ...message, status: "sent", providerMessageId: `id-${message.to}` })) });
+          },
+        };
+      },
+    });
+    const messages = Array.from({ length: 60 }, (_, index) => ({ channel: "EMAIL" as const, to: `veli${index}@example.test`, body: "Duyuru" }));
+
+    const results = await adapter.sendBatch(messages);
+
+    expect(results).toHaveLength(60);
+    expect(results.slice(0, 25).every((result) => result.status === "sent")).toBe(true);
+    expect(results.slice(25, 50).every((result) => result.status === "failed" && result.errorCode === "NOTIFICATION_HTTP_500")).toBe(true);
+    expect(results.slice(50).every((result) => result.status === "sent")).toBe(true);
+  });
+
+  it("boş listede sağlayıcıyı çağırmaz", async () => {
+    const fetch = vi.fn();
+    const adapter = new HttpNotificationAdapter({ ...httpIdentity, endpoint: "https://notify.example/send", fetch });
+    await expect(adapter.sendBatch([])).resolves.toEqual([]);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("sağlayıcı hata kodunu HTTP hata sonucunda korur", async () => {
     const adapter = new HttpNotificationAdapter({
       ...httpIdentity,
