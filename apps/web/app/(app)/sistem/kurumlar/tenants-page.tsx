@@ -40,8 +40,10 @@ const emptyForm: TenantFormState = {
   seatLimit: "",
 };
 
+// Trials open with "Deneme aç"; a regular institution starts as a paid plan.
 const emptyCreateForm: TenantCreateFormState = {
   ...emptyForm,
+  plan: "PRO",
   campus: {
     code: "MRK",
     name: "",
