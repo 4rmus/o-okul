@@ -17,8 +17,9 @@ Başarı % odaklı rapor ve öğrenci takibi.
 ve ortam kanıtı varsa eklenir.
 
 Hedef pazarlama personaları kurum sahibi, kurum yöneticisi, operasyon çalışanı, finans çalışanı,
-öğretmen ve öğrencidir. `SYSTEM_ADMIN` platform operasyonudur. `GUARDIAN` mevcut runtime'da geçiş
-desteklidir; yeni müşteri/persona vaadi değildir. `StudentContact` hesapsız öğrenci iletişim kaydıdır.
+öğretmen ve öğrencidir. `SYSTEM_ADMIN` platform operasyonudur. `GUARDIAN` kurumun açtığı ve öğrenciye
+bağladığı veli hesabıdır (DEC-20261003-01); veli cümlesi staging veli UAT kanıtına bağlıdır.
+`StudentContact` hesapsız öğrenci iletişim ve rıza kaydıdır.
 
 ## Kullanıcı Terminolojisi
 
@@ -47,7 +48,7 @@ desteklidir; yeni müşteri/persona vaadi değildir. `StudentContact` hesapsız 
 | Kurum girişi | `DEC-20260804-01`; tenant-host/auth izolasyon testleri; full go-live kanıtı ayrı | "Her kurum kendi O-Okul adresinden kurum içi kullanıcı adıyla giriş yapar." | "Tek global hesapla her kuruma girin" veya "özel domain hazır." |
 | Rol ve veri sınırı | `DEC-20260529-01`; UAT-TEACHER-03, UAT-STUDENT-03 ve UAT-GUARDIAN-03 `PASS`; RLS/security kapıları | "Kullanıcılar rol ve görev alanlarına göre yetkili verileri görür." | "Yüzde yüz güvenli", "ihlal edilemez" veya hukuk onaysız "KVKK uyumlu." |
 | Rapor karşılaştırması | `DEC-20260713-02`, `DEC-20260727-01`; UAT-KURUM-05/06 `CONTRACT_READY_EXTERNAL_NOT_RUN` | "Başarı %, Net/Soru ve standart sapmasız deneme puanıyla gelişimi inceleyin." | "Resmî MEB/ÖSYM puanı" veya farklı soru sayılarında yalnız ham net karşılaştırması |
-| Veli/guardian | `DEC-20260801-01`; mevcut UAT-GUARDIAN-01/02/03 `PASS`; emeklilik kapıları açık | Yalnız destek/release dilinde: "Mevcut veli portalı geçiş süresince desteklenir." | Yeni veli hesabı, portalı veya edinim özelliği vaadi |
+| Veli/guardian | `DEC-20261003-01`; KV-1 veli yazma/bağlama/davet yolları LOCAL_TEST; UAT-GUARDIAN-01/02 staging yeniden koşumu `EXTERNAL_NOT_RUN` | Staging `PASS` sonrası: "Veli, kurumun açtığı hesapla yalnız bağlı öğrencisinin kurumun yetkilendirdiği verilerini görür." | "Veli uygulaması", "veliyle mesajlaşma", "anlık bildirim", "online ödeme", veli self-service eşleştirme |
 | Sistem yönetimi | `DEC-20260801-01`; mevcut UAT-SYS-01/02 `PARTIAL`; control-plane geçişi açık | Yalnız iç dokümanda: "Platform operasyonu kurum rollerinden ayrıdır." | `SYSTEM_ADMIN`i müşteri personası veya sınırsız tenant yöneticisi gibi anlatmak |
 | Canlılık ve hazır olma | UAT-SYS-04 `EXTERNAL_NOT_RUN`; production/pilot/go-live evidence zinciri açık | "Demo isteyin" veya kanıtlanan ortam adıyla sınırlı durum cümlesi | "Production-ready", "go-live onaylı" veya health `200` üzerinden tam hazır iddiası |
 
@@ -61,8 +62,8 @@ satırlarda sonuç garantisi verilmez.
   normal pazarlama metnine taşınmaz.
 - "Anlık", "otomatik", "hatasız", "tam güvenli", "resmî" ve "uyumlu" gibi mutlak nitelemeler
   ölçülebilir, güncel ve ilgili ortama bağlı kanıt olmadan kullanılmaz.
-- Guardian yalnız mevcut kullanıcı yardımı, migration ve emeklilik iletişiminde anılır. Yeni landing,
-  demo ve satış metni hedef personaları kullanır.
+- Veli yalnız kurumun açtığı hesap olarak anılır; veli cümlesi staging veli UAT kanıtı gelmeden landing,
+  demo ve satış metnine girmez.
 - Kurumlar arası veri izolasyonu UI görünürlüğüne değil API guard, subject/scope ve RLS kanıtına
   dayanır; tasarım metni bu güvenlik sınırını genişletemez.
 - Ödeme ve iletişim metni mevcut takip/iş akışını anlatır; sağlayıcı teslimi veya mali belge üretimi

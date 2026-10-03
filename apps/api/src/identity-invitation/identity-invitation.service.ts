@@ -1,5 +1,5 @@
 import { runVerifiedTenantMutation } from "../context/tenant-mutation-activity.js";
-import { BadRequestException, ForbiddenException, GoneException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import {
   hasCapabilityForRoles,
   isPortalSubjectRoleName,
@@ -24,7 +24,6 @@ import {
 } from "../tenant/tenant-seat-limit.js";
 import { type TenantStore, tenantStoreToken } from "../tenant/tenant-store.js";
 import { tenantWebUrl } from "../http/tenant-origin.js";
-import { FeatureRolloutService } from "../feature-rollout/feature-rollout.service.js";
 import { requireTenantWideStaffContext } from "../tenant/tenant-access.js";
 import {
   type TenantUserRecord,
@@ -64,7 +63,6 @@ export class IdentityInvitationService {
     @Optional()
     @Inject(employeeAccountActivationStoreToken)
     private readonly employeeActivations?: EmployeeAccountActivationStore,
-    @Optional() private readonly featureRollouts?: FeatureRolloutService,
   ) {}
 
   async list(context: RequestContext): Promise<IdentityInvitationRecord[]> {
@@ -75,7 +73,6 @@ export class IdentityInvitationService {
   async create(context: RequestContext, body: CreateIdentityInvitationBody): Promise<IdentityInvitationIssueResult> {
     const tenantId = this.requireTenantWideContext(context);
     const subjectType = parseSubjectType(body.subjectType);
-    if (subjectType === "GUARDIAN") await this.assertGuardianInvitationWritable(context);
     const subjectId = body.subjectId?.trim();
     const email = body.email?.trim().toLowerCase();
     if (!subjectId) throw new BadRequestException("SUBJECT_ID_REQUIRED");
@@ -181,7 +178,6 @@ export class IdentityInvitationService {
     const existing = await this.invitations.findById(tenantId, id);
     if (!existing) throw new NotFoundException("IDENTITY_INVITATION_NOT_FOUND");
     if (existing.status !== "PENDING") throw new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
-    if (existing.subjectType === "GUARDIAN") await this.assertGuardianInvitationWritable(context);
     if (existing.kind !== "EMAIL_LINK" || !existing.email) throw new BadRequestException("IDENTITY_INVITATION_RESEND_UNSUPPORTED");
 
     const token = createActivationToken();
@@ -217,14 +213,6 @@ export class IdentityInvitationService {
     if (Date.parse(invitation.expiresAt) <= Date.now()) throw new BadRequestException("IDENTITY_INVITATION_EXPIRED");
     const passwordHash = await hashPasswordAsync(password);
     return runVerifiedTenantMutation({ tenantId: invitation.tenantId, lifecycleVersion: invitation.tenantLifecycleVersion!, kind: "AUTH_MUTATION", referenceId: `invitation:${invitation.id}`, source: { type: "INVITATION", id: invitation.id, tokenHash: hashActivationToken(token) } }, async () => {
-    if (invitation.subjectType === "GUARDIAN") {
-      await this.assertGuardianInvitationWritable({
-        tenantId: invitation.tenantId,
-        userId: "guardian-invitation-accept",
-        roles: [],
-        bypassRls: false,
-      });
-    }
     if (invitation.subjectType === "EMPLOYEE" && this.employeeActivations) {
       const outcome = await this.employeeActivations.accept({
         tokenHash: hashActivationToken(token),
@@ -310,14 +298,6 @@ export class IdentityInvitationService {
       return requireTenantWideStaffContext(context, "EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
     } catch (error) {
       throw new ForbiddenException(error instanceof Error ? error.message : "EMPLOYEE_TENANT_WIDE_SCOPE_REQUIRED");
-    }
-  }
-
-  private async assertGuardianInvitationWritable(context: RequestContext): Promise<void> {
-    if (!this.featureRollouts) return;
-    const resolved = await this.featureRollouts.resolve(context);
-    if (resolved.enabledFeatureKeys.includes("product.guardian-read-only")) {
-      throw new GoneException("GUARDIAN_WRITE_READ_ONLY");
     }
   }
 

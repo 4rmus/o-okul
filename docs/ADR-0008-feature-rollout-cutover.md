@@ -35,3 +35,7 @@ yüzeyi açar. Server-only allowlist kontrollü aktivasyon ve cutover ihtiyacın
 - `web.exam-workspace-v2`, 30 Eylül 2026'da (Berrak G6) sınav çalışma alanı sunucu hazırlığıyla kanonik hale geldiği
   için katalogdan kaldırılmıştır (EX-02). Eski `/kurum/optik?examId=` ve `/kurum/raporlar?examId=` bağlantıları
   `next.config.mjs` yönlendirmeleriyle çalışma alanına gider.
+- `web.student-registry-v2` (ST-01) ve `product.guardian-read-only` (IAM-04), 3 Ekim 2026'da DEC-20261003-01
+  ile katalogdan kaldırılmıştır (KV-1). Registry/StudentContact yolu ve veli yazma yolları koşulsuzdur;
+  bu anahtarları taşıyan `FEATURE_ROLLOUTS_JSON` API açılışında `UNKNOWN_KEY` ile reddedilir, deploy öncesi
+  staging/prod config'inden çıkarılmalıdır.

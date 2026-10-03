@@ -591,7 +591,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await expectDraftStorageDoesNotContain(page, "setup-teacher-import-storage", hostileUploadValues);
   });
 
-  test("öğrenci Excel dosyasını zorunlu tutar ve veli bağlantı mesajını özetler", async ({ page }) => {
+  test("öğrenci Excel dosyasını zorunlu tutar ve iletişim kişisi mesajını özetler", async ({ page }) => {
     const requestedPaths: string[] = [];
     const studentImportIdempotencyKeys: string[] = [];
     await openSetupWizard(page, { height: 844, width: 390 }, {
@@ -620,7 +620,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
 
     await expect(setupForm).toContainText("0 sınıf, 0 ders, 0 öğretmen, 0 öğretmen ataması");
-    await expect(setupForm).toContainText("1 öğrenci ve dosyadaki veli bağlantıları işlendi");
+    await expect(setupForm).toContainText("1 öğrenci ve dosyadaki iletişim kişileri işlendi");
     expect(coreSetupCreateRequests(requestedPaths)).toEqual(coreCreatesAfterFailure);
     expect(studentImportIdempotencyKeys).toHaveLength(2);
     expect(studentImportIdempotencyKeys[0]).toMatch(/^[0-9a-f-]{36}$/);

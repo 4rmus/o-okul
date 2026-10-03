@@ -687,7 +687,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
       }
       const studentSummary =
         result.importedStudents > 0
-          ? `${result.importedStudents} öğrenci ve dosyadaki veli bağlantıları işlendi`
+          ? `${result.importedStudents} öğrenci ve dosyadaki iletişim kişileri işlendi`
           : `${result.importedStudents} öğrenci eklendi`;
       const outcomeSummary = result.importedOutcomes > 0 ? `, ${result.importedOutcomes} kazanım` : "";
       setSavedSummary(
@@ -1314,7 +1314,7 @@ function PeopleStep({
             label="Öğrenci aktarım dosyası"
             description={describeSelectedUploadFileNotice(
               draft.people.studentImportFileName,
-              "Öğrenci kayıtları ve dosyada varsa mevcut veli bağlantıları için XLSX veya CSV dosyası seçilebilir.",
+              "Öğrenci kayıtları ve dosyada varsa veli iletişim kişileri için XLSX veya CSV dosyası seçilebilir; veli hesabı açılmaz.",
             )}
             error={errors.studentImportFileName ?? errors["people.studentImportFileName"]}
           >
@@ -2056,9 +2056,9 @@ function studentImportErrorMessage(dryRun: StudentImportDryRunResult) {
     return `Öğrenci dosyasında sistemde olmayan sınıf var. Satır: ${classError.row}.`;
   }
 
-  const guardianContactError = dryRun.errors.find((error) => error.code === "GUARDIAN_CONTACT_REQUIRED");
-  if (guardianContactError) {
-    return `Öğrenci dosyasında veli TC kimlik no veya telefon alanlarından biri zorunludur. Satır: ${guardianContactError.row}.`;
+  const contactColumnsConflict = dryRun.errors.find((error) => error.code === "CONTACT_COLUMNS_CONFLICT");
+  if (contactColumnsConflict) {
+    return `Öğrenci dosyasında aynı satırda hem veli hem iletişim kişisi sütunları dolu; birini boşaltın. Satır: ${contactColumnsConflict.row}.`;
   }
 
   const requiredError = dryRun.errors.find((error) => error.code === "REQUIRED");
@@ -2107,8 +2107,6 @@ function studentImportFieldLabel(field: string) {
   if (field === "phone") return "telefon";
   if (field === "className") return "sınıf";
   if (field === "email") return "e-posta";
-  if (field === "guardianNationalId") return "veli TC kimlik";
-  if (field === "guardianPhone") return "veli telefonu";
   if (field === "studentNo") return "okul no";
   return field;
 }

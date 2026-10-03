@@ -132,7 +132,7 @@ test.describe("Liste URL state", () => {
     await page.getByText("Filtreler ve görünüm", { exact: true }).click();
     await expect(studentSummary).toContainText("Öğrenci toplamı");
     await expect(studentSummary).toContainText("Yoğun");
-    await expect(studentSummary).toContainText("Veli: Bağlı");
+    await expect(studentSummary).toContainText("İletişim kişisi: Var");
     await expect(studentSummary.getByLabel("Öğrenci operasyon özeti önerilen işlemler")).toBeVisible();
     await expect(studentSummary).toContainText("Sınıf eşleştirme");
     await expect(studentSummary).toContainText("Toplu dönem geçişi");
@@ -145,7 +145,7 @@ test.describe("Liste URL state", () => {
     await expect(filters.getByRole("combobox").nth(1)).toHaveValue("grade-11");
     await expect(filters.getByLabel("Sorumlu")).toHaveValue("teacher-a");
     await expect(filters.getByLabel("Durum")).toHaveValue("ACTIVE");
-    await expect(filters.getByLabel("Veli")).toHaveValue("true");
+    await expect(filters.getByLabel("İletişim kişisi")).toHaveValue("true");
     await expect(tableView.locator(".uh-field")).toHaveCount(1);
     await expect(tableView.locator(".uh-select")).toHaveCount(1);
     await expect(tableView.locator(".uh-checkbox")).toHaveCount(7);
@@ -156,7 +156,7 @@ test.describe("Liste URL state", () => {
     await expect.poll(() => captured.students.at(-1)?.get("level")).toBe("grade-11");
     await expect.poll(() => captured.students.at(-1)?.get("guardianLinked")).toBe("true");
 
-    await filters.getByLabel("Veli").selectOption("false");
+    await filters.getByLabel("İletişim kişisi").selectOption("false");
     await expect.poll(() => new URL(page.url()).searchParams.get("guardianLinked")).toBe("false");
 
     await tableView.getByLabel("Okul No").check();
@@ -390,7 +390,7 @@ test.describe("Liste URL state", () => {
     await page.getByText("Toplu işlemler", { exact: true }).click();
     await expect(studentSummary).toContainText("Öğrenci toplamı");
     await expect(studentSummary).toContainText("Sınıf kapsamı");
-    await expect(studentSummary).toContainText("Veli: Bağlı");
+    await expect(studentSummary).toContainText("İletişim kişisi: Var");
     await expect(studentSummary.getByLabel("Öğrenci operasyon özeti önerilen işlemler")).toBeVisible();
     await expect(studentSummary).toContainText("Sorumlu öğretmen");
     await expect(studentSummary).toContainText("Toplu dönem geçişi");
@@ -406,7 +406,7 @@ test.describe("Liste URL state", () => {
     await expect(bulkTransition.getByLabel("Geçiş tarihi")).toBeVisible();
     await expect(bulkTransition.getByLabel("Otomatik seviye yükselt")).toBeVisible();
 
-    await filters.getByLabel("Veli").selectOption("false");
+    await filters.getByLabel("İletişim kişisi").selectOption("false");
     await expect.poll(() => new URL(page.url()).searchParams.get("guardianLinked")).toBe("false");
     await tableView.getByLabel("Okul No").check();
     await expect.poll(() => new URL(page.url()).searchParams.get("columns")).toContain("studentNo");

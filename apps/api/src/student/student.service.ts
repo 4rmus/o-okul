@@ -7,7 +7,6 @@ import type {
   StudentContactCreateRequest,
   StudentEnrollmentActionRequest,
   StudentEnrollmentRecord,
-  StudentGuardianProvisionRequest,
   StudentUpdateRequest,
   PublicStudentProfileRecord,
   PublicStudentRecord,
@@ -20,7 +19,6 @@ import type {
   StudentStatus,
 } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
-import { optionalTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
 import {
   assertSubjectResourceAccess,
@@ -33,11 +31,8 @@ import {
   type GuardianStudentStore,
   guardianStudentStoreToken,
 } from "../school/guardian-student-store.js";
-import { type GuardianRecord, type GuardianStore, guardianStoreToken } from "../school/guardian-store.js";
-import { IdentityInvitationService } from "../identity-invitation/identity-invitation.service.js";
 import { StudentPortalActivationService } from "../identity-invitation/student-portal-activation.service.js";
 import { IdentityProvisioningService } from "../identity-provisioning/identity-provisioning.service.js";
-import { GuardianWritePolicy } from "../guardian/guardian-write-policy.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import { withCursorListMeta, withListMeta } from "../listing/list-query.js";
 import { maskContactEmail, maskContactPhone } from "../privacy/contact-mask.js";
@@ -109,18 +104,12 @@ export interface StudentPiiPresenceRecord extends StudentRecord {
 export type StudentEnrollmentActionInput = StudentEnrollmentActionRequest;
 export type StudentBulkEnrollmentInput = StudentBulkEnrollmentRequest;
 export type StudentBulkEnrollmentResult = SharedStudentBulkEnrollmentResult;
-export type StudentGuardianProvisionInput = StudentGuardianProvisionRequest;
 export type StudentCreateInput = StudentCreateRequest;
 export type StudentBulkCreateInput = Pick<StudentRecord, "firstName" | "lastName"> &
   Partial<Pick<StudentRecord, "gradeLevelId" | "classId" | "studentNo">> &
   StudentProfileInput & {
-    guardian?: StudentGuardianProvisionInput;
     contact?: StudentContactCreateRequest;
   };
-
-interface StudentBulkCreateOptions {
-  provisionAccounts?: boolean;
-}
 
 @Injectable()
 export class StudentService {
@@ -129,7 +118,6 @@ export class StudentService {
   constructor(
     @Inject(studentStoreToken) private readonly store: StudentStore,
     @Inject(guardianStudentStoreToken) private readonly guardianStudentStore: GuardianStudentStore,
-    @Inject(guardianStoreToken) private readonly guardianStore: GuardianStore,
     @Inject(teacherAssignmentStoreToken) private readonly teacherAssignmentStore: TeacherAssignmentStore,
     @Inject(studentEnrollmentStoreToken) private readonly enrollmentStore: StudentEnrollmentStore,
     @Inject(academicCalendarStoreToken) private readonly academicCalendarStore: AcademicCalendarStore,
@@ -137,14 +125,12 @@ export class StudentService {
     @Inject(classStoreToken) private readonly classStore: ClassStore,
     @Inject(gradeLevelStoreToken) private readonly gradeLevelStore: GradeLevelStore,
     @Inject(teacherStoreToken) private readonly teacherStore: TeacherStore,
-    private readonly identityInvitations: IdentityInvitationService,
     @Inject(reportSnapshotStoreToken) private readonly reportSnapshots: ReportSnapshotStore,
     @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() private readonly idempotency?: IdempotencyService,
     @Optional() private readonly identityProvisioning?: IdentityProvisioningService,
     @Optional() @Inject(licenseTermStoreToken) private readonly licenseTerms?: LicenseTermStore,
     @Optional() private readonly studentPortalActivations?: StudentPortalActivationService,
-    @Optional() private readonly guardianWritePolicy?: GuardianWritePolicy,
     @Optional() @Inject(studentContactStoreToken) private readonly studentContactStore?: StudentContactStore,
   ) {}
 
@@ -443,9 +429,6 @@ export class StudentService {
   }
 
   async create(context: RequestContext, input: StudentCreateInput, idempotencyKey?: string): Promise<StudentRecord> {
-    if (input.guardian) {
-      await this.assertGuardianProvisioningAllowed(context);
-    }
     if (idempotencyKey && this.idempotency) {
       return this.idempotency.run(
         context,
@@ -468,9 +451,6 @@ export class StudentService {
       classId: input.classId,
       gradeLevelId: input.gradeLevelId,
     }, true);
-    if (input.guardian) {
-      parseGuardianProvisionInput(input.guardian, { lastName: input.lastName });
-    }
     if (input.studentNo && (await this.list(context)).some((student) => student.tenantId === tenantId && student.studentNo === input.studentNo?.trim())) {
       throw new ConflictException("STUDENT_NO_CONFLICT");
     }
@@ -525,20 +505,13 @@ export class StudentService {
       action: "student.created",
       diff: { fieldsSet: presentFields(student, ["studentNo", "firstName", "lastName", "gradeLevelId", "classId", "responsibleTeacherId", "status"]) },
     });
-    if (input.guardian) {
-      await this.autoProvisionGuardian(context, student, input.guardian);
-    }
     return student;
   }
 
   async createMany(
     context: RequestContext,
     inputs: StudentBulkCreateInput[],
-    options: StudentBulkCreateOptions = {},
   ): Promise<StudentRecord[]> {
-    if (inputs.some((input) => Boolean(input.guardian))) {
-      await this.assertGuardianProvisioningAllowed(context);
-    }
     const tenantId = context.tenantId;
     if (!tenantId) {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
@@ -549,11 +522,6 @@ export class StudentService {
       classId: input.classId,
       gradeLevelId: input.gradeLevelId,
     }, true)));
-    for (const input of inputs) {
-      if (input.guardian) {
-        parseGuardianProvisionInput(input.guardian, { lastName: input.lastName });
-      }
-    }
     const quota = await this.previewQuota(context, placements.filter((placement) => Boolean(placement.gradeLevelId)).length);
     if (quota.wouldExceed) {
       throw new ConflictException("ACTIVE_STUDENT_LIMIT_REACHED");
@@ -645,23 +613,7 @@ export class StudentService {
       if (!profileUpdate) continue;
       await this.store.updateProfile(student.id, profileUpdate);
     }
-    if (options.provisionAccounts !== false) {
-      for (const [index, student] of students.entries()) {
-        const input = inputs[index];
-        if (!input) continue;
-        await this.autoProvisionStudentAccount(context, student, input);
-      }
-    }
-    for (const [index, student] of students.entries()) {
-      const guardian = inputs[index]?.guardian;
-      if (!guardian) continue;
-      await this.autoProvisionGuardian(context, student, guardian, options.provisionAccounts !== false);
-    }
     return students;
-  }
-
-  async assertGuardianProvisioningAllowed(context: RequestContext): Promise<void> {
-    await this.guardianWritePolicy?.assertWritable(context);
   }
 
   async previewQuota(context: RequestContext, incoming: number): Promise<StudentQuotaPreview> {
@@ -1288,130 +1240,10 @@ export class StudentService {
     }
   }
 
-  private async autoProvisionGuardian(
-    context: RequestContext,
-    student: StudentRecord,
-    input: StudentGuardianProvisionInput,
-    provisionAccount = true,
-  ): Promise<void> {
-    const guardianInput = parseGuardianProvisionInput(input, student);
-    const identity = this.resolveGuardianIdentity(guardianInput.nationalId);
-    const nationalIdMatch = identity.nationalIdHash
-      ? await this.guardianStore.findByNationalIdHash(student.tenantId, identity.nationalIdHash)
-      : undefined;
-    const phoneMatch = await this.findGuardianByPhone(student.tenantId, guardianInput.phone);
-    if (nationalIdMatch && phoneMatch && nationalIdMatch.id !== phoneMatch.id) {
-      throw new ConflictException("GUARDIAN_IDENTITY_CONFLICT");
-    }
 
-    const existingGuardian = nationalIdMatch ?? phoneMatch;
-    let guardian = existingGuardian ? await this.updateMatchedGuardian(existingGuardian, guardianInput.phone, identity) : undefined;
-    if (!guardian) {
-      guardian = await this.guardianStore.create({
-        tenantId: student.tenantId,
-        firstName: guardianInput.firstName,
-        lastName: guardianInput.lastName,
-        phone: guardianInput.phone,
-        ...identity,
-      });
-    }
 
-    const link = await this.guardianStudentStore.create({
-      tenantId: student.tenantId,
-      guardianId: guardian.id,
-      studentId: student.id,
-      canViewFinance: guardianInput.canViewFinance,
-      canReceiveSms: guardianInput.canReceiveSms,
-      canReceiveAnnouncements: guardianInput.canReceiveAnnouncements,
-      canOpenSupportTickets: guardianInput.canOpenSupportTickets,
-    });
 
-    const { invitationId } = provisionAccount
-      ? await this.provisionOrInviteGuardianAccount(context, guardian, guardianInput)
-      : {};
 
-    await this.auditLogs?.record({
-      tenantId: student.tenantId,
-      actorUserId: context.userId,
-      entityType: "GuardianStudent",
-      entityId: link.id,
-      action: "guardian.auto_provisioned",
-      diff: {
-        guardianId: guardian.id,
-        studentId: student.id,
-        invitationId,
-      },
-    });
-  }
-
-  private resolveGuardianIdentity(nationalIdInput: string | undefined): Pick<GuardianRecord, "nationalIdEncrypted" | "nationalIdHash"> {
-    const nationalIdText = optionalText(nationalIdInput);
-    if (!nationalIdText) return {};
-
-    const nationalId = normalizeTcIdentity(nationalIdText, "GUARDIAN_NATIONAL_ID_INVALID");
-    const nationalIdHash = hashTcIdentity(nationalId);
-    return {
-      nationalIdEncrypted: encryptTcIdentity(nationalId),
-      nationalIdHash,
-    };
-  }
-
-  private async updateMatchedGuardian(
-    guardian: GuardianRecord,
-    phone: string | undefined,
-    identity: Pick<GuardianRecord, "nationalIdEncrypted" | "nationalIdHash">,
-  ): Promise<GuardianRecord | undefined> {
-    if (identity.nationalIdHash && guardian.nationalIdHash && guardian.nationalIdHash !== identity.nationalIdHash) {
-      throw new ConflictException("GUARDIAN_NATIONAL_ID_CONFLICT");
-    }
-
-    const update: Partial<Pick<GuardianRecord, "phone" | "nationalIdEncrypted" | "nationalIdHash">> = {};
-    if (phone && !guardian.phone) {
-      update.phone = phone;
-    }
-    if (identity.nationalIdHash && (!guardian.nationalIdHash || !guardian.nationalIdEncrypted)) {
-      update.nationalIdEncrypted = identity.nationalIdEncrypted;
-      update.nationalIdHash = identity.nationalIdHash;
-    }
-
-    if (Object.keys(update).length === 0) return guardian;
-    return await this.guardianStore.update(guardian.id, update) ?? guardian;
-  }
-
-  private async provisionOrInviteGuardianAccount(
-    context: RequestContext,
-    guardian: GuardianRecord,
-    input: ReturnType<typeof parseGuardianProvisionInput>,
-  ): Promise<{ invitationId?: string }> {
-    if (guardian.userId) return {};
-
-    if (this.identityProvisioning) {
-      const provisioning = await this.identityProvisioning.provisionOrInvite(context, {
-        tenantId: guardian.tenantId,
-        subjectType: "GUARDIAN",
-        subjectId: guardian.id,
-        displayName: `${guardian.firstName} ${guardian.lastName}`.trim(),
-        nationalId: input.nationalId,
-        phone: guardian.phone,
-        email: input.email,
-      });
-      return provisioning.status === "INVITED" ? { invitationId: provisioning.invitationId } : {};
-    }
-
-    if (!input.email) return {};
-    const invitation = await this.identityInvitations.create(context, {
-      subjectType: "GUARDIAN",
-      subjectId: guardian.id,
-      email: input.email,
-      name: `${guardian.firstName} ${guardian.lastName}`,
-    });
-    return { invitationId: invitation.invitation.id };
-  }
-
-  private async findGuardianByPhone(tenantId: string, phone: string | undefined): Promise<GuardianRecord | undefined> {
-    if (!phone) return undefined;
-    return this.guardianStore.findByPhone(tenantId, phone);
-  }
 
   private async resolveProfileUpdateForCreate(
     tenantId: string,
@@ -1782,39 +1614,4 @@ function resolveStudentStatus(value: StudentStatus | undefined): StudentStatus {
 
 function todayDateString(): string {
   return new Date().toISOString().slice(0, 10);
-}
-
-function parseGuardianProvisionInput(input: StudentGuardianProvisionInput, student: Pick<StudentRecord, "lastName">) {
-  const phone = optionalTurkishMobilePhone(input.phone, "GUARDIAN_PHONE_INVALID");
-  const email = optionalGuardianEmail(input.email);
-  const nationalId = optionalGuardianText(input.nationalId);
-  if (!nationalId && !phone && !email) {
-    throw new BadRequestException("GUARDIAN_CONTACT_REQUIRED");
-  }
-
-  return {
-    firstName: optionalGuardianText(input.firstName) ?? "Veli",
-    lastName: optionalGuardianText(input.lastName) ?? optionalGuardianText(student.lastName) ?? "Veli",
-    nationalId,
-    phone,
-    email,
-    canViewFinance: input.canViewFinance,
-    canReceiveSms: input.canReceiveSms,
-    canReceiveAnnouncements: input.canReceiveAnnouncements,
-    canOpenSupportTickets: input.canOpenSupportTickets,
-  };
-}
-
-function optionalGuardianText(value: string | undefined): string | undefined {
-  const text = value?.trim();
-  return text || undefined;
-}
-
-function optionalGuardianEmail(value: string | undefined): string | undefined {
-  const email = optionalGuardianText(value)?.toLowerCase();
-  if (!email) return undefined;
-  if (!email.includes("@")) {
-    throw new BadRequestException("GUARDIAN_EMAIL_INVALID");
-  }
-  return email;
 }
