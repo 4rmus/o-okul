@@ -4,6 +4,7 @@ import { type FormEvent, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { trialLicenseLimits } from "@o-okul/shared-types";
 import {
   Button,
   CrudPage,
@@ -39,8 +40,10 @@ const emptyForm: TenantFormState = {
   seatLimit: "",
 };
 
+// Trials open with "Deneme aç"; a regular institution starts as a paid plan.
 const emptyCreateForm: TenantCreateFormState = {
   ...emptyForm,
+  plan: "PRO",
   campus: {
     code: "MRK",
     name: "",
@@ -149,9 +152,9 @@ export function TenantsPage() {
     },
   ];
 
-  function openCreateForm() {
+  function openCreateForm(initial: TenantCreateFormState = emptyCreateForm) {
     createAttempt.current = null;
-    setForm(emptyCreateForm);
+    setForm(initial);
     setError("");
     setIsFormOpen(true);
   }
@@ -202,7 +205,10 @@ export function TenantsPage() {
         actions={
           <>
             <ListControls meta={tenantsQuery.data?.meta} onChange={setListQuery} sortOptions={tenantSortOptions} state={listQuery} />
-            <Button onClick={openCreateForm}>
+            <Button onClick={() => openCreateForm(withPlanDefaults(emptyCreateForm, "TRIAL"))} variant="secondary">
+              Deneme aç
+            </Button>
+            <Button onClick={() => openCreateForm()}>
               <Plus size={17} aria-hidden="true" />
               Kurum oluştur
             </Button>
@@ -215,7 +221,7 @@ export function TenantsPage() {
           <EmptyState
             title="Henüz kurum yok"
             description="İlk kurum kaydını oluşturarak başlayın."
-            primaryAction={{ label: "Kurum oluştur", onClick: openCreateForm }}
+            primaryAction={{ label: "Kurum oluştur", onClick: () => openCreateForm() }}
           />
         }
         emptyText="Kurum kaydı yok"
@@ -284,7 +290,7 @@ function TenantFormModal({
         <Input required value={form.slug} onChange={(event) => onChange({ ...form, slug: event.target.value })} />
       </Field>
       <Field label="Plan">
-        <Select value={form.plan} onChange={(event) => onChange({ ...form, plan: event.target.value as TenantFormState["plan"] })}>
+        <Select value={form.plan} onChange={(event) => onChange(withPlanDefaults(form, event.target.value as TenantFormState["plan"]))}>
           <option value="TRIAL">Deneme</option>
           <option value="PRO">Pro</option>
           <option value="ENTERPRISE">Enterprise</option>
@@ -427,3 +433,15 @@ const tenantSortOptions = [
   { label: "Kurum kodu A-Z", value: "slug" },
   { label: "Kurum kodu Z-A", value: "-slug" },
 ];
+
+/** "Deneme" fills today + 7 days and 100 students (DEC-20261004-01); other plans keep what was typed. */
+function withPlanDefaults<TForm extends TenantFormState>(form: TForm, plan: TenantFormState["plan"]): TForm {
+  if (plan !== "TRIAL") return { ...form, plan };
+  const today = new Date();
+  const end = new Date(today.getFullYear(), today.getMonth(), today.getDate() + trialLicenseLimits.maxDays);
+  return { ...form, plan, licenseStartsAt: localDate(today), licenseEndsAt: localDate(end), seatLimit: String(trialLicenseLimits.maxActiveStudents) };
+}
+
+function localDate(value: Date): string {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+}

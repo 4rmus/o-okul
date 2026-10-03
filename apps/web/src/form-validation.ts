@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { portalSubjectRoles } from "@o-okul/shared-types";
+import { portalSubjectRoles, trialLicenseLimits } from "@o-okul/shared-types";
 
 const requiredText = (fieldName: string) => z.string().trim().min(1, `${fieldName} zorunludur.`);
 const optionalText = () => z.string().trim();
@@ -149,6 +149,14 @@ export const tenantCreateFormSchema = tenantFormSchema.and(z.object({
   if (!value.licenseStartsAt) context.addIssue({ code: "custom", path: ["licenseStartsAt"], message: "Lisans başlangıcı zorunludur." });
   if (!value.licenseEndsAt) context.addIssue({ code: "custom", path: ["licenseEndsAt"], message: "Lisans bitişi zorunludur." });
   if (!value.seatLimit) context.addIssue({ code: "custom", path: ["seatLimit"], message: "Aktif öğrenci limiti zorunludur." });
+  if (value.plan !== "TRIAL") return;
+  if (value.licenseStartsAt && value.licenseEndsAt
+    && Date.parse(value.licenseEndsAt) - Date.parse(value.licenseStartsAt) > trialLicenseLimits.maxDays * 24 * 60 * 60 * 1000) {
+    context.addIssue({ code: "custom", path: ["licenseEndsAt"], message: `Deneme en fazla ${trialLicenseLimits.maxDays} gün olabilir.` });
+  }
+  if (value.seatLimit && value.seatLimit > trialLicenseLimits.maxActiveStudents) {
+    context.addIssue({ code: "custom", path: ["seatLimit"], message: `Denemede en fazla ${trialLicenseLimits.maxActiveStudents} aktif öğrenci olabilir.` });
+  }
 }).transform((value) => ({
   name: value.name,
   slug: value.slug,

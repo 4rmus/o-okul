@@ -1,5 +1,5 @@
 import type { OpenAPIObject } from "@nestjs/swagger";
-import { featureRolloutKeys } from "@o-okul/shared-types";
+import { featureRolloutKeys, licensePlanCodes } from "@o-okul/shared-types";
 
 type JsonSchema = Record<string, unknown>;
 type JsonContent = Record<string, { schema: JsonSchema }>;
@@ -150,7 +150,7 @@ const licenseTermListSchema = objectSchema({
 }, ["id", "tenantId", "planCode", "startsAt", "endsAt", "activeStudentLimit", "state"]);
 
 const licenseTermCreateRequestSchema = objectSchema({
-  planCode: stringSchema({ minLength: 1 }),
+  planCode: { type: "string", enum: [...licensePlanCodes], description: "TRIAL: at most 7 days and 100 active students (DEC-20261004-01)." },
   startsAt: stringSchema({ format: "date-time" }),
   endsAt: stringSchema({ format: "date-time" }),
   activeStudentLimit: integerSchema({ minimum: 1 }),
