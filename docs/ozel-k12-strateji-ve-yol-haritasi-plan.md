@@ -5,6 +5,7 @@
 **Baz SHA:** `d9b42f81a` (`origin/main`); plan PR'ı `origin/main` üzerinden açılır, `berrak/g10-karne` dalında yazım yapılmaz
 **Belge durumu:** Onaylı plan; kapsam DEC ile değişir, bu doküman kapsam genişletmez
 **Kanıt sınıfı:** Kod kanıtları LOCAL_STATIC (repo-göreli `dosya:satır`); hız, satış etkisi ve STAGING/PRODUCTION davranışı ayrıca belirtilmedikçe UNPROVEN
+**İnceleme notu:** 2026-10-03 mimari incelemesi uygulandı; ek dosya inceleme öncesi arşivdir, çelişkide bu plan geçerlidir
 
 ---
 
@@ -23,13 +24,13 @@ Plan genişlik açığını parite dilimleriyle kapatır, derinliği satışa gi
 
 1. **Segment:** Birincil segment özel K12 okul. Dershane ikincil. Kurs/özel öğretim kursuna özgü modül yok.
 2. **Veli modeli:** GUARDIAN rolü korunur. `StudentContact` iletişim ve rıza kaynağıdır (DEC-20261003-01; main'de, PR #123 merge edildi).
-3. **e-Okul:** Yalnız içe aktarma ve "e-Okul'a işlenecek liste". Liste yalnız yayınlanmış `GradePublication` kaydından üretilir. e-Okul'a yazma ve tarayıcı otomasyonu yok.
+3. **e-Okul:** Yalnız içe aktarma ve "e-Okul'a işlenecek liste". Liste yalnız yayınlanmış not sürümünden üretilir (geçerli yayın = en yüksek `version`). e-Okul'a yazma ve tarayıcı otomasyonu yok.
 4. **Okul sınavı ve not defteri (0–3 ay):** Ayrı gradebook bağlamı kurulur. Optik hat ve `ReportSnapshot.examId` dokunulmaz. Yayınlanan satır güncellenmez. Deneme ve yazılı ayrı seri olarak tutulur.
 5. **Tez:** "İlk görüşmede kendi verinle sonuç; yayınlanan hiçbir sayı sessizce değişmez." Bu bir özellik hendeği değil, GTM ve uygulama hızı bahsidir.
 6. **GTM:** Fiyat TL olarak yayınlanır. Deneme kartsızdır; kısa bir `LicenseTerm` olarak operatör açar. Fiyat rakamı ayrı DEC ile belirlenir, bu dokümanda rakam yok.
-7. **Mimari:** EVRİM, dar hibrit. Strangler ile kurulacak üç yüzey: gradebook hattı, NotificationOutbox + VAPID push ve veli overview read model. Yargıcın 8 koşulu bağlayıcıdır.
+7. **Mimari:** EVRİM, dar hibrit. Strangler ile kurulacak üç yüzey: gradebook hattı, mevcut `announcement-delivery` kuyruğu üzerinden VAPID push ve veli overview read model. §4.2'deki 4 koşul bağlayıcıdır.
 8. **Ödev teslimi:** Öğretmen durum satırı ve öğrencinin dosyasız "teslim ettim" işareti yapılır. Dosya eki SONRA.
-9. **Mayıs 2027 = satış başlangıcı; Eylül 2027 = PRODUCTION go-live** (tanımlar aşağıda).
+9. **Mayıs 2027 = satış başlangıcı; Eylül 2027 = PRODUCTION go-live** (tanımlar aşağıda). PDF hattı ve kapasite: ölçüm, kod yalnız eşik aşılırsa.
 10. **Kesim sıraları:**
     - H1: e-Okul import → not ekranı sürüm geçmişi
     - H2: ilk karne adım listesi → veli özetinde okul notu → hazır liste
@@ -42,9 +43,9 @@ Plan genişlik açığını parite dilimleriyle kapatır, derinliği satışa gi
 | Kilometre taşı | Tanım | Kanıt sınıfı |
 |---|---|---|
 | **Mayıs 2027: satış başlangıcı** | Deneme tenant'ı, yayınlanmış fiyat, kimlik/veli modeli, not defteri, e-Okul import ve e-Okul'a işlenecek liste, veli PWA özeti, finans UI | STAGING |
-| **Eylül 2027: PRODUCTION go-live** | Production canlıya geçiş + push + otomatik bildirim + ödev teslimi | PRODUCTION |
+| **Eylül 2027: PRODUCTION go-live** | Production canlıya geçiş + push + otomatik bildirim + ödev teslimi; PDF hattı ve kapasite Eylül'de ölçülür, kod yalnız ölçüm eşiği (timeout/OOM) aşılırsa | PRODUCTION |
 
-PDF hattı ölçeklenmesi ve yük testi H3'ün ŞİMDİ kalemleridir ve koşul 8 kesimine açıktır.
+PDF hattı ve yük testi H3'te tek "kapasite ölçümü" dilimidir (PO-3). Ölçüm Nisan 2027 kontrol noktasında başlar, Eylül go-live öncesi kapanır. İlk adım: tarayıcıyı tek örnekte tutmak ve BullMQ concurrency. 50 okul rakamı DEC'te pilot sayısına bağlanır. Dilim §8 kayma kuralına açıktır.
 
 ## Korunacak sabitler
 
@@ -53,7 +54,7 @@ PDF hattı ölçeklenmesi ve yük testi H3'ün ŞİMDİ kalemleridir ve koşul 8
 - **Snapshot/STALE:** Yayınlanmış sayı yerinde güncellenmez. Düzeltme yeni sürüm olarak yazılır.
 - **Kanıt zinciri:** Kanıt betikleri bütünüyle yeniden yazılmaz. `prod:evidence:templates:check` ve `ops:check` her adımda yeşil kalır.
 - **AGENTS.md kapı kuralları:** §10.2.
-- **Yargıcın 8 koşulu:** §4.2'de tam metin.
+- **4 koşul:** §4.2'de tam metin.
 
 ## Kanıt sınıfı ve etiket sözlüğü
 
@@ -84,11 +85,13 @@ Yeni taslaklar: Taslak; `docs/DECISIONS.md`'ye ayrı PR ile yazılır. 2026-10-0
 | D2 Farklılaşma tezi ve GTM | DEC-20261003-NN | Taslak |
 | D3 e-Okul sınırı | DEC-20261003-NN | Taslak |
 | D4 Okul sınavı ve not defteri modeli | DEC-20261003-NN | Taslak |
-| D5 Mimari evrim ve yargıcın 8 koşulu | DEC-20261003-NN | Taslak |
+| D5 Mimari evrim ve 4 koşul | DEC-20261003-NN | Taslak |
 | D6 Kilometre taşları: Mayıs/Eylül 2027 | DEC-20261003-NN | Taslak |
 | D7 Kartsız deneme lisansı | DEC-20261003-NN | Taslak |
-| D8 Off-host TR yedek için küçük aylık dış bütçe | DEC-20261003-NN | Taslak |
+| D8 Off-host TR yedek için küçük aylık dış bütçe; gecelik şifreli dump, RPO 24 saat (ilk sözleşmeye kadar) | DEC-20261003-NN | Taslak |
 | D9 Ödev teslimi kapsamı | DEC-20261003-NN | Taslak (blokluyor değil) |
+
+ADR: tek yeni ADR var, ADR-0011 değişmez/sürümlü not yayını. ADR-0001, 0002 ve 0008'e kısa ekler yazılır; ADR-0004 ve 0007 yalnız koşullu revize edilir.
 
 ---
 
@@ -176,7 +179,7 @@ Aday üç tezin üçü de düşmanca incelemede "özellik hendeği" olarak çür
 3. Demo anonim/sentetik dosyayla yapılır; VİS olmadan gerçek veri yüklenmez (temiz sıfırlama kapalı, `packages/db/src/tenant-fresh-reset.ts:26`).
 4. Demo vaadinden önce dosya spike'ı; parser yalnız OPTIK_129 ve YANIT'ı tanıyor (`apps/api/src/exam/parser-config-suggestion.service.ts:48`).
 5. Flag'ler 2026-11-07'de bitiyor; DEC-20261003-01 verildi, flag'lerin kaderi bu tarihten önce kapatılır.
-6. Devamsızlık eşiği kurum ayarına taşınır; kampüs kapsamlı personel için boş dönen öğrenci 360 verisi düzeltilir (`apps/api/src/student-overview/student-overview.service.ts:48-49`).
+6. Devamsızlık eşiği worker sabitidir (değer DEC'te, KV-8); kampüs kapsamlı personel için boş dönen öğrenci 360 verisi düzeltilir (`apps/api/src/student-overview/student-overview.service.ts:48-49`).
 
 ### 3.3 Parite özeti
 
@@ -194,7 +197,7 @@ Plan 2026-10-03'te başlar. Dış harcama yok. Eşikler ölçümden önce yazıl
 |---|---|---|---|
 | 0–7 | **Dosya talebi:** ağa aynı yazılı talep (kimliksiz optik dosya, olmazsa form tipi, okuyucu yazılımı, ilk 3 satır); cevap GÖNDERDİ / SÖZ / RET ve itiraz türüyle kaydedilir; önce minimal anonimleştirme betiği (görüşme zamanı) | İlk sinyal 21. gün | Karar 31–60. gün sayı eşiğiyle |
 | 7–21 | **Ön ayar spike'ı:** dosyalar yerel demo tenant'ında OPTIK_129/YANIT ve karantinadan geçer; süre, elle müdahale, "olduğu gibi / yalnız config / kod değişikliği" kaydedilir; LOCAL_TEST (2–4 geliştirici günü; tam KF-10 kiti eşik geçene kadar ertelenir) | Gelen dosyaların en az 2/3'ü kod değişikliği olmadan, yalnız config ile karneye; 30 dk ve ≤2 elle müdahale ayrıca kaydedilir | Yarıdan fazlası parser kodu isterse demo vaadi askıya; parser kapsamı DEC-20260613-01 açık sorusunda |
-| 0–30 | **Kimlik kararı** (1–2 geliştirici günü) ve **KVKK demo yolu:** anonimleştirme betiği, VİS şablonu (3–5 geliştirici günü) | DEC-20261003-01 main'de (onaylı); demo kalıcı veri bırakmaz | Anonimleştirme olmazsa sentetik dosya, "kendi dosyan" vaadi kalkar |
+| 0–30 | **Kimlik kararı** (tamamlandı) ve **KVKK demo yolu:** sabit genişlikte kimlik ezme yapan anonimleştirme betiği (`--self-test`), CI'da 11 haneli sayı/telefon grep'i (izin listesiyle), VİS şablonu; hukuk görüşü K-1/K-4/K-6 ile sınırlı (3–5 geliştirici günü, UNPROVEN) | DEC-20261003-01 main'de (tamamlandı); demo kalıcı veri bırakmaz | Anonimleştirme olmazsa sentetik dosya, "kendi dosyan" vaadi kalkar |
 | 31–60 | **Görüşmeler:** 6–8 müdür/ölçme sorumlusuna "son denemenizin dosyasını getirin"; en az yarısı ağ dışından; ağ içi/dışı ayrı raporlanır (2–3 hafta) | **Sayı eşiği:** en az 6 tekliften 7 gün içinde en az 3 dosya, en az 1'i ağ dışından | ≤1 dosya ya da ağ dışından 0 = başarısız; gri bölge (tam 2): ağ dışından 3 teklif daha. Başarısızlıkta "kendi dosyan" vaadi çıkar, tez T4/not defteri paritesine döner, kazanılan süre H1 kesim sırasına |
 | 31–60 | **Ödeme isteği:** en az 3 kurucuya geçiş/ek modül sorusu; fiyat aralığı kaydedilir, rakam yazılmaz | En az 1 kurucu ücretsiz pilot + dönem sonu ücreti kabul eder | T9 yalnız onboarding aracı olur |
 | 61–90 | **Not defteri prototipi:** 2 öğretmen yazılı girer; deneme ve yazılı ayrı seri (1–2 geliştirici haftası) | Sınıf girişi <15 dk, düzeltme ≤2 | Ölçek karışırsa yazılı Başarı % için DEC |
@@ -218,30 +221,28 @@ Efor aralıkları 1 geliştirici + ajan varsayımına dayanır (UNPROVEN). Ayrı
 | HİBRİT | 4 | 4 | 4 | 5 | 3 | 20 |
 | YENİDEN_YAZIM | 1 | 1 | 1 | 3 | 1 | 7 |
 
-UYGUN_DEGIL bulgular eksik bileşen (not defteri, push gönderici, off-host yedek, çevrimdışı kabuk) ya da dar hatadır (25'lik batch, sahte "sent", muhasebe 403); yığın değişimi gerekmiyor. Tam yeniden yazım reddedildi: 1459 izlenen dosya, 118 migration, yaklaşık 1 MB kanıt betiği (`scripts/check-prod-evidence-templates.mjs` 9248 satır). Toplam süre 5–7 ay (UNPROVEN); P0 eklemeleri yaklaşık 3–6 hafta ekler.
+UYGUN_DEGIL bulguları iki türdür. Birincisi eksik bileşenlerdir: not defteri, push gönderici, off-host yedek ve PWA kurulabilirliği. İkincisi dar hatalardır: 25'lik batch, sahte "sent" ve muhasebe 403. Hiçbiri yığın değişimi gerektirmiyor. Tam yeniden yazım reddedildi: 1459 izlenen dosya, 118 migration, yaklaşık 1 MB kanıt betiği (`scripts/check-prod-evidence-templates.mjs` 9248 satır). Toplam süre 5–7 ay (UNPROVEN); P0 eklemeleri yaklaşık 3–6 hafta ekler.
 
 **Üç strangler yüzeyi.** Eskisi, yenisi aynı kanıt sınıfında yeşil olduktan sonra kaldırılır.
 
 | Yüzey | Yeni bileşen | Neden |
 |---|---|---|
-| Okul notu sonuç hattı | `apps/api/src/gradebook` + GradeAssessment / GradeEntry / GradePublication | Sonuç modeli optik hatta kilitli (`schema.prisma:1488-1489`, `:1538`) |
-| Bildirim teslimi | NotificationOutbox + worker + gateway VAPID web push | 25'ten fazla alıcıda gönderim düşüyor, PUSH koşulsuz başarısız (`infra/notification-gateway/src/index.mjs:3`, `:51`) |
-| Veli portalı veri katmanı | Tek overview read model + PWA kabuğu | İstemci yaklaşık 18 istek atıyor; ADR-0007 ile çelişiyor |
+| Okul notu sonuç hattı | `apps/api/src/gradebook` (yeni) + GradeAssessment / GradeEntry (2 tablo) | Sonuç modeli optik hatta kilitli (`schema.prisma:1488-1489`, `:1538`) |
+| Bildirim teslimi | Mevcut `announcement-delivery` BullMQ kuyruğu + worker'da `web-push`; tablo yok | 25'ten fazla alıcıda gönderim düşüyor, PUSH koşulsuz başarısız (`infra/notification-gateway/src/index.mjs:3`, `:51`) |
+| Veli portalı veri katmanı | Allow-list overview DTO + kurulabilir PWA | İstemci yaklaşık 18 istek atıyor; ADR-0007 ile çelişiyor |
 
 Finans yeni yüzey değildir; gecikme okuma anında türetilir (`OVERDUE` bugün elle yazılıp ödeme kaydında `PENDING`'e dönüyor, `apps/api/src/payment/payment.service.ts:356`), durum yazan cron yok. ADR'ler dilimle yazılır; yoklama eşzamanlılığı ayrı DEC'tir.
 
 **"ŞİMDİ" etiketi.** ŞİMDİ = Eylül 2027 PRODUCTION go-live öncesi ufuk; Mayıs/Eylül ayrımı §7.1'deki onaylı tanıma göredir. ŞİMDİ kalemleri 0–3 ay dilimine sığmaz; yol haritası onları H1/H2/H3'e böler.
 
-### 4.2 Yargıcın 8 koşulu
+### 4.2 4 koşul
 
 1. DEC-20261003-01, 2026-11-07'den önce uygulanır; iki flag kodla ve aynı PR'da kaldırılır. Yapılmazsa seçim geçersizdir.
-2. Yeni tablo ekleyen ilk dilimden önce `check-tenant-reset-catalog.ts` bütün migration'ları tarar (yöntem `check-rls.mjs:8` ile aynı).
-3. Optik hatta dokunulmaz: ExamResult, ReportSnapshot (`examId` zorunlu), RawImport ve karne sözleşmesi değişmez; sentetik Exam yok; yayınlanmış satır güncellenmez.
-4. Her yeni tablo aynı dilimde `tenantId` + bileşik FK, `db:rls:check`, reset kataloğu, cihaz yedek politikası ve KVKK export'a girer.
-5. Strangler: eski yüzey, yenisi aynı kanıt sınıfında (LOCAL_TEST ve CI; varsa STAGING) yeşil olmadan kaldırılmaz; route ve OpenAPI geriye uyumlu kalır.
-6. Kanıt betikleri bütünüyle yeniden yazılmaz; yeni modüller manifest'ten okunur.
-7. Mayıs 2027 öncesi: 25'lik parçalama, hooks-worker "sent" kaldırma, muhasebe 403, audit partition (2026-12 öncesi), off-host TR yedek + restore tatbikatı.
-8. Bir L işi planı 4 haftadan fazla aşarsa kapsam daraltılır; yeniden yazım genişletilmez.
+2. Optik hatta dokunulmaz: ExamResult, ReportSnapshot (`examId` zorunlu), RawImport ve karne sözleşmesi değişmez; sentetik Exam yok.
+3. Yeni tenant tablosu kapısı. AK-2 başlamadan önce `packages/db/scripts/check-tenant-reset-catalog.ts` bütün migration'ları tarar; yöntem `check-rls.mjs:8` ile aynıdır. Bundan sonra her yeni tablo aynı PR'da şunlara girer: `tenantId` + bileşik FK, `db:rls:check`, `check-tenant-relation-fks.mjs`, reset kataloğu ve tenant-table-coverage testi (yeni). §4.5 kapıları olarak cihaz yedek politikası ve KVKK export kapsam testi de aynı PR'da güncellenir.
+4. Mayıs 2027 öncesi tamamlanacaklar: 25'lik parçalama, hooks-worker "sent" kaldırma, muhasebe 403, audit partition (2026-12 öncesi), şifreli off-host TR yedek + restore tatbikatı.
+
+Strangler kuralı: §4.1. "L işi planı 4 haftadan fazla aşarsa kapsam daraltılır" kuralı: §8.
 
 ### 4.3 Takvime bağlı iki sabit tarih
 
@@ -249,18 +250,44 @@ Finans yeni yüzey değildir; gecikme okuma anında türetilir (`OVERDUE` bugün
 
 ### 4.4 Tezin mimariye karşılığı
 
-Efor UNPROVEN: e-Okul kolon profili, dry-run ve idempotent commit (ADR-0015; örnek dosyadan sonra) 1–3 hafta; deneme `LicenseTerm`'ü (`schema.prisma:330-349`, `tenant.service.ts:95-96`) 2–5 gün; demo tenant'lar ayrı kalır, deneme tenant'ı boş açılır (kod yok); ilk karne adım listesi (yeni API yok) 2–4 gün; "yayınlanan sayı değişmez" GradePublication sürümlü yayınıyla (ADR-0012) ve listenin yalnız yayından üretilmesiyle (ADR-0015) sağlanır.
+Efor UNPROVEN.
+
+- **e-Okul içe aktarma:** Mevcut import servisi ve alias'larla yapılır; örnek dosyadan sonra 0,5–1 hafta (KF-7).
+- **Deneme `LicenseTerm`'ü:** `planCode` zod enum + OpenAPI, şema değişmez; 2–5 gün (`schema.prisma:330-349`, `tenant.service.ts:95-96`).
+- **Demo ve deneme tenant'ı:** Demo tenant'lar ayrı kalır; deneme tenant'ı boş açılır (kod yok).
+- **İlk karne adım listesi:** Yeni API yok; 2–4 gün.
+- **"Yayınlanan sayı değişmez":** Sağlayan iki şey var. Birincisi `GradeEntry.version` ile yayınlanmış satırı reddeden trigger'dır. İkincisi listenin yalnız `publishedVersion`'dan üretilmesidir. `publishedVersion`, `max(version)` yayınının önbelleğidir; yayın transaction'ında birlikte yazılır, liste ve karne aynı değeri okur.
 
 ### 4.5 Rol ve alan modeli
 
 Rol × modül tablosunun tamamı: bkz. docs/ozel-k12-strateji-ekleri.md §F4.1.
 
 - Yeni tenant rolü eklenmez. Rehber ayrı rol değildir; `TeacherAssignment.role=GUIDANCE_COUNSELOR` (`apps/api/src/school/school-validation.ts:46`).
-- Yeni uçlarda `@RequireCapability` kullanılır. Tüketilmeyen `note:write-assigned`, `homework:write-assigned`, `self:read` silinir (`role-capabilities.ts:69-70`); `homework:write-assigned` ADR-0013'te teslim uçlarına bağlanırsa kalır. `ward:read` silinmez, veli kapsamı uçlarına bağlanır (KV-4).
+- Yeni uçlarda `@RequireCapability` kullanılır. Tüketilmeyen `note:write-assigned`, `homework:write-assigned`, `self:read` silinir (`role-capabilities.ts:69-70`). `homework:write-assigned` teslim uçlarına bağlanırsa kalır. `ward:read` silinmez, veli kapsamı uçlarına bağlanır (KV-4).
 
-Alan modelinde eklenenler: `StudentContact.guardianId String?` (bileşik FK, ayrı dilim); `HomeworkSubmission` (ek yok); `GradeAssessment`, `GradeEntry`, `GradePublication` (sınav ve not alanı UYGUN_DEGIL → yeni bağlam); `NotificationOutbox` (yeni kod `GuardianStudent.canReceiveSms` okumaz). Kayıt, lisans ve finans modeli değişmez; deneme bir `LicenseTerm` satırı, gecikme `PENDING` ve `dueDate < bugün (Europe/Istanbul)` ile türetilir.
+Alan modelinde eklenenler:
 
-**Değişmez kurallar:** `GradePublication` satırı güncellenmez, düzeltme yeni `version`, eskisine `supersededAt` (desen `apps/worker/src/jobs/postgres-report-generation-adapter.ts:306`); karne snapshot'ı `inputRefs`'te yayın id ve version taşır; e-Okul listesi yalnız supersede edilmemiş yayından üretilir; her yeni tablo koşul 4 kayıtlarına girer (`packages/db/scripts/check-rls.mjs:45`, `packages/db/src/tenant-reset-catalog.ts:3`, `apps/api/src/operations/device-backup-impact.ts:31`, `apps/api/src/operations/tenant-data-export-store.ts:42`).
+- **Not defteri (2 tablo):**
+  - `GradeAssessment`: id, tenantId, classId, courseId, termId, kind (CHECK), title, heldOn, maxScore, publishedVersion, notifiedVersion, createdById.
+  - `GradeEntry`: id, tenantId, assessmentId, studentId, version, score, absent, publishedAt, enteredById, createdAt. Tekillik `@@unique([tenantId, assessmentId, studentId, version])`.
+  - Yazım `assertTeacherAssigned` ile korunur; `TeacherAssignmentScope.roles` BRANCH_TEACHER/CLASS_TEACHER ile filtrelenir ve `courseId` zorunludur (`apps/api/src/attendance/attendance.service.ts:79`).
+- **`HomeworkSubmission`:** Zaman damgalıdır (`submittedAt`, `checkedAt`, `checkedById`). Satırlar tembel oluşur ve durum türetilir. Öğrenci işareti `INSERT ... ON CONFLICT DO UPDATE ... WHERE checkedAt IS NULL` ile yazılır; 0 satır dönerse 409 verilir.
+- **Bildirim:** Tablo yok. Kalıcı dedupe kaynak satırdaki `notifiedAt`/`notifiedVersion` ile yapılır. jobId `sourceType:sourceId:channel:chunkIndex` biçimindedir, chunk 25'liktir. Sonuç mevcut `AnnouncementDeliveryReport`'a yazılır.
+- **`StudentContact.guardianId String?`:** FK hedefi `GuardianStudent(tenantId, guardianId, studentId)`'dır; raw SQL ile, `ON DELETE SET NULL`. Ayrı dilimde gelir.
+
+Kayıt, lisans ve finans modeli değişmez. Deneme bir `LicenseTerm` satırıdır. Veli overview, allow-list DTO ve tek bağ helper'ıyla kurulur (desen `apps/api/src/payment/payment.service.ts:75-82`). Öğretmen notu, iletişim ve diğer velinin alanları dönmez; bunu alan yokluğu testi doğrular.
+
+**Değişmez kurallar:**
+
+- Yayınlanmış `GradeEntry` güncellenmez ve silinmez. Bunu BEFORE trigger sağlar (desen `packages/db/prisma/migrations/20260907180000_delivery_provenance_and_retry_fence/migration.sql:12-26`, `protect_*`). App rolüne DELETE grant'ı verilmez.
+- Düzeltme yeni `version` olarak yazılır; geçerli yayın `max(version)`'dır ve `publishedVersion` bunun aynı transaction'da yazılan önbelleğidir.
+- Karne snapshot'ı `inputRefs`'te `{gradeAssessmentId, version}` taşır ve bu değer hash girdisine girer.
+- e-Okul listesi yalnız `publishedVersion`'dan üretilir.
+- Her yeni tablo koşul 3 kapılarından geçer (`packages/db/scripts/check-rls.mjs:45`, `packages/db/src/tenant-reset-catalog.ts:3`, `apps/api/src/operations/device-backup-impact.ts:31`, `apps/api/src/operations/tenant-data-export-store.ts:42`).
+- KVKK export kapsam testi şu farkın boş olmasını ister: `getTenantScopedTables()` − exportTables − gerekçeli istisna listesi. Employee, Homework ve ScheduleLesson KVKK kararı olarak açık sorudur.
+- Yayın, import ve export uçlarında idempotency zorunludur; anahtarsız istek 400 alır. Import yanıtı yalnız sayım ve id döner, böylece `IdempotencyKey.responseBody` PII saklamaz.
+
+**Gecikme** tek yardımcıdan türetilir: `status IN ('PENDING','OVERDUE') AND deletedAt IS NULL AND dueDate < bugün (Europe/Istanbul)`. `OVERDUE` yazımı enum'dan çıkar; backfill onaylıdır.
 
 ### 4.6 Modüller arası veri akışı
 
@@ -270,58 +297,62 @@ Akış tablosu, platform yetenekleri, 48 konuluk uygunluk tablosu ve hedef bile�
 flowchart LR
   optik["Optik deneme"] -->|"RawImport"| exres["ExamResult"]
   exres --> rsnap["ReportSnapshot"]
-  yazili["Okul sınavı (yazılı/sözlü)"] -->|"GradeEntry taslak"| gpub["GradePublication"]
+  yazili["Okul sınavı (yazılı/sözlü)"] -->|"GradeEntry taslak"| gpub["GradeEntry (yayınlanmış version)"]
   rsnap --> karne["Karne / PDF"]
   gpub -->|"inputRefs"| karne
   karne --> portal["Öğrenci/veli portalı"]
-  karne --> outbox["NotificationOutbox"]
-  gpub -->|"yayın olayı"| outbox
-  devam["Attendance"] -->|"eşik"| outbox
+  karne --> kuyruk["BullMQ kuyruğu (notifiedAt dedupe)"]
+  gpub -->|"yayın olayı"| kuyruk
+  devam["Attendance"] -->|"eşik"| kuyruk
   taksit["PaymentInstallment"] -->|"türetilmiş gecikme"| portal
-  taksit -->|"vade hatırlatma"| outbox
+  taksit -->|"vade hatırlatma"| kuyruk
   odev["HomeworkSubmission"] --> portal
-  outbox --> gw["Gateway: push/e-posta/SMS"]
+  kuyruk --> gw["Worker web-push / gateway e-posta / SMS"]
   eokul["e-Okul Excel / MEB çıktısı"] -->|"dry-run + commit"| kayit["Student / StudentContact"]
   kayit -->|"aktif öğrenci"| kota["LicenseTerm kotası (deneme dahil)"]
   kota --> finans["Fiyat"]
-  gpub -->|"salt okur export; STALE engelli"| liste["e-Okul'a işlenecek liste"]
+  gpub -->|"salt okur export; yalnız publishedVersion; eski sürüm 409"| liste["e-Okul'a işlenecek liste"]
 ```
 
 ### 4.7 ADR başlıkları
 
-ADR-0001..0010 var; 0011..0019 boş. ADR'ler dilimle birlikte yazılır. Bağlam metni: bkz. docs/ozel-k12-strateji-ekleri.md §F4.2.
+ADR-0001..0010 var. ADR'ler dilimle birlikte yazılır. Bağlam metni: bkz. docs/ozel-k12-strateji-ekleri.md §F4.2.
 
 | ADR | Tür | Özet (efor UNPROVEN) |
 |---|---|---|
-| ADR-0001, 0002, 0004, 0007, 0008 | Ek / revizyon | Kampüs kapsamı sınıf üzerinden; alt işleyenler veri yerleşimine; WF-01 outbox kapsamı; veli overview ve `me.controller` bölmesi; iki flag'in katalogdan çıkması |
-| ADR-0011 | Yeni | Yeni tenant tablosu kontrol listesi (S) |
-| ADR-0012 | Yeni | Okul notu ayrı bağlam, sürümlü değişmez yayın (L, 2–6 hf) |
-| ADR-0013 | Yeni | Ödev teslimi: ASSIGNED / SUBMITTED / CHECKED / MISSING; öğrenci yalnız ASSIGNED → SUBMITTED, dosyasız (M: 1–2 hf + 2–4 gün) |
-| ADR-0014 | Yeni | Veli giriş kimliği, StudentContact rıza kaynağı (M, 3–6 gün) |
-| ADR-0015 | Yeni | Import hattı, e-Okul sınırı, işlenecek liste; örnek dosya gelmeden kod yok (M: 1–3 hf + 3–7 gün) |
-| ADR-0016 | Yeni | Outbox ve VAPID push; payload PII içermez; 404/410 cihaz pasif (M: 1–2 hf + 1–2 hf) |
-| ADR-0017 | Yeni | PWA-önce; yalnız veli overview cache'lenir; native HİÇ |
-| ADR-0018 | Yeni | TR içinde S3 uyumlu off-host şifreli yedek + WAL, RPO/RTO, restore tatbikatı (M) |
-| ADR-0019 | Yeni | Modül kanıt manifest'i; önce yalnız not defteri (L) |
+| ADR-0011 | Yeni | Değişmez/sürümlü not yayını: okul notu ayrı bağlam (L; efor §7.2 AK-1..AK-4, 4–7 hf) |
+| ADR-0001, 0002, 0008 | Kısa ek | Kampüs kapsamı sınıf üzerinden; alt işleyenler veri yerleşimine; iki flag'in katalogdan çıkması |
+| ADR-0004, 0007 | Koşullu revizyon | Yalnız KV-4 kararı değiştirirse |
 
-DEC ile karara bağlanacaklar: yönetici MFA, muhasebe 403, e-Okul formatı, yoklama eşzamanlılığı, gecikme/vade kuralları, deneme `planCode`'u, rehberlik privacy DEC'i.
+DEC ile karara bağlanacaklar:
+
+- yönetici MFA
+- muhasebe 403
+- e-Okul formatı ve import alias kuralı
+- yoklama eşzamanlılığı
+- gecikme/vade kuralları
+- deneme `planCode`'u
+- rehberlik privacy DEC'i
+- bildirim kuyruğu ve web-push (payload PII taşımaz; 404/410'da `NotificationDeviceToken.disabledAt`)
+- PWA kurulabilirliği
+- yedek RPO/RTO
 
 ### 4.8 ŞİMDİ / SONRA / HİÇ
 
-Tablonun tamamı ve gerekçeler: bkz. docs/ozel-k12-strateji-ekleri.md §F4.2. ŞİMDİ'nin anlamı §4.1'dedir.
+Tablonun tamamı ve gerekçeler: bkz. docs/ozel-k12-strateji-ekleri.md §F4.2. ŞİMDİ'nin anlamı §4.1'dedir. Efor aralıkları §7 dilim toplamlarıdır.
 
 | Yetenek | Karar | Tetikleyici |
 |---|---|---|
-| Not defteri ve sürümlü yayın (2–6 hf) | ŞİMDİ | ADR-0011 kontrol listesinden sonra |
-| e-Okul import profili; e-Okul'a işlenecek liste (3–7 gün) | ŞİMDİ | Anonim örnek dosya; liste için gradebook yayını ve format |
-| Türetilmiş gecikme ve veli finans görünümü (3–8 gün) | ŞİMDİ | Hemen; veli overview ile aynı dilim |
-| Kartsız deneme (2–5 gün), ilk karne adım listesi (2–4 gün), PWA kurulabilirliği (1–3 gün) | ŞİMDİ | Fiyat sayfasıyla; e-Okul import'tan sonra; hemen |
-| Portal read model; audit partition 2027; OWNER/ADMIN MFA | ŞİMDİ | Karşılandı; 2026-12-01 öncesi; en geç Mayıs 2027 |
-| Ödev teslimi: durum satırı + dosyasız "teslim ettim" | ŞİMDİ — Eylül 2027 (H3) | H3, AK-1 sonrası |
-| Web push uçtan uca | ŞİMDİ — Eylül 2027 (H3) | VAPID onayı; outbox'tan sonra |
-| Vade / gecikme hatırlatması (2–4 gün) | ŞİMDİ — Eylül 2027 (H3) | Outbox ve push canlıya çıktıktan sonra |
-| PDF hattı ölçeklenmesi; 50 okul yük testi | ŞİMDİ — Eylül 2027 (H3), koşul 8 kesimine açık | İlk dönem sonu karnesinden önce |
-| Ödev dosya eki, self-serve kayıt, TWA, Capacitor, çevrimdışı veli okuma/yoklama, öğretmen/veli MFA, sağlayıcı webhook'ları, read replica, snapshot arşivi, PII'siz AI yardımcıları | SONRA | Ekteki tekil tetikleyiciler |
+| Not defteri ve sürümlü yayın (4–7 hf) | ŞİMDİ | Koşul 3 kapısından sonra |
+| e-Okul import (mevcut student-import alias'ları); e-Okul'a işlenecek liste (1,5–2,5 hf) | ŞİMDİ | Anonim örnek dosya; liste için gradebook yayını ve format |
+| Türetilmiş gecikme ve ödeme planı UI (2–4 hf) | ŞİMDİ | Hemen; veli finans görünümü veli overview ile |
+| Kartsız deneme (2–5 gün), ilk karne adım listesi (2–4 gün), PWA kurulabilirliği, cache yok (1–3 gün) | ŞİMDİ | Fiyat sayfasıyla; e-Okul import'tan sonra; hemen |
+| Allow-list veli DTO'su; audit partition tek seferlik 24 ay apply; OWNER/ADMIN MFA rol genişletme | ŞİMDİ | Karşılandı; 2026-12-01 öncesi; en geç Mayıs 2027 |
+| Ödev teslimi: durum satırı + dosyasız "teslim ettim" | ŞİMDİ — Eylül 2027 (H3) | H3, AK-2 sonrası |
+| Web push uçtan uca | ŞİMDİ — Eylül 2027 (H3) | VAPID onayı; kuyruk parçalamasından sonra |
+| Vade / gecikme hatırlatması (2–4 gün) | ŞİMDİ — Eylül 2027 (H3) | Kuyruk ve push canlıya çıktıktan sonra |
+| Kapasite ölçümü (`report-generation:perf` 1500 öğrenci; k6 tek senaryo) | ŞİMDİ — Eylül 2027; kod yalnız eşik aşılırsa | timeout/OOM ya da imzalı okul sayısının ölçülen kapasiteyi aşması |
+| Ödev dosya eki, self-serve kayıt, TWA, Capacitor, çevrimdışı veli okuma/yoklama, öğretmen/veli MFA, sağlayıcı webhook'ları, read replica, snapshot arşivi, PII'siz AI yardımcıları, WAL gönderimi, pgBackRest | SONRA | Ekteki tekil tetikleyiciler |
 | Sanal POS, e-fatura, native, çevrimdışı not girişi, çoklu DB/bölge, açık API, LMS, kurs-özel modül, servis GPS, AI erken uyarı/ders programı/soru çözümü (bu faz), e-Okul'a yazma | HİÇ | Strateji değişikliği DEC'i |
 
 ---
@@ -334,9 +365,11 @@ Karar main'de (PR #123); tek kaynak `docs/DECISIONS.md`.
 
 1. `GUARDIAN` rolü, hesabı, session'ı ve veli portalı korunur; giriş kuralı DEC-20260801-01'deki gibidir; DEC-20260531-01 yeniden yürürlüğe girer.
 2. `StudentContact` SMS ve duyuru rızasının tek kaynağıdır; portal görünürlüğü `GuardianStudent` bayraklarından gelir.
-3. StudentContact–Guardian bağı ayrı additive dilimde gelir (`guardianId` nullable, bileşik FK, RLS); bağı yalnız kurum yöneticisi kurar.
+3. StudentContact–Guardian bağı ayrı additive dilimde gelir: `guardianId` nullable, RLS, ve FK hedefi `GuardianStudent(tenantId, guardianId, studentId)` (raw SQL, `ON DELETE SET NULL`). Bağı yalnız kurum yöneticisi kurar.
 4. Öğrenci oluşturma ve import veli hesabı açmaz; davet ayrıca ve toplu tetiklenir.
-5. İki flag 2026-11-07'den önce aynı PR'da kodla kaldırılır; `ward:read` veli kapsamı uçlarına bağlanır; kapanış kapısı UAT-GUARDIAN-01/02/03'ün staging'de yeniden koşulmasıdır.
+5. İki flag 2026-11-07'den önce aynı PR'da kodla kaldırılır ve `ward:read` veli kapsamı uçlarına bağlanır. Merge ile kapanış ayrıdır:
+   - Merge 2026-11-07'den önce yapılır; kanıtı LOCAL_TEST + CI'dır.
+   - Kapanış için staging `/health` 200 dönmeli ve staging-role-uat güncel SHA'da koşmalıdır. UAT-GUARDIAN-01/02 kanıt metni genişletilir.
 
 ### 5.2 Flag bitişi ve KV-1
 
@@ -345,7 +378,7 @@ Karar main'de (PR #123); tek kaynak `docs/DECISIONS.md`.
 | İş | Efor (UNPROVEN) | Dış harcama |
 |---|---|---|
 | KV-1: flag kaldırma, testler, web dalları, doküman | 2–4 geliştirici günü | yok |
-| KV-3 içinde: StudentContact–Guardian bağı (şema, migration, RLS, tipler, API, UI) | 3–6 geliştirici günü | yok |
+| KV-3 içinde: StudentContact–Guardian bağı (şema, migration, RLS, tipler, API, UI; FK hedefi `GuardianStudent`) | 3–6 geliştirici günü | yok |
 
 KV-1 optik hatta dokunmaz; yasak yollar `apps/api/src/exam/`, `apps/api/src/report/`, `apps/worker/src/jobs/optical-*`, `exam-evaluation-*`, `packages/db/prisma/migrations/`. Etkilenen dosya listesi: bkz. docs/ozel-k12-strateji-ekleri.md §F4.3.
 
@@ -357,7 +390,7 @@ Yeni araştırma yapılmadı; sayılar ve eşikler değiştirilmedi. PR #123 mer
 
 ### 6.1 Varsayım kaydı
 
-F4.4'teki 25 varsayım F6'da 38'e genişledi; tamamı ve yargıç toplamları için bkz. docs/ozel-k12-strateji-ekleri.md §F4.4 ve §F6.3. Öne çıkan DOGRULANMADI kalemler: e-Okul kolon formatı, Worker'da Web Push şifrelemesi, iOS PWA push, TR barındırma beyanı, audit'in domain transaction'ında yazılması, deneme süre dolumu davranışı, vade hatırlatmasının rıza dayanağı.
+F4.4'teki 25 varsayım F6'da 38'e genişledi; tamamı ve yargıç toplamları için bkz. docs/ozel-k12-strateji-ekleri.md §F4.4 ve §F6.3. Öne çıkan DOGRULANMADI kalemler: e-Okul kolon formatı, iOS PWA push, TR barındırma beyanı, audit'in domain transaction'ında yazılması, deneme süre dolumu davranışı, vade hatırlatmasının rıza dayanağı.
 
 ### 6.2 En kritik 5 varsayım ve en ucuz testi
 
@@ -365,11 +398,11 @@ Sıra yargıç toplamına göredir; çürütücü beşinin de özgün eşiğini 
 
 | Sıra | Varsayım | Test ve maliyet | Geçme / başarısızlık | Başarısızlıkta |
 |---|---|---|---|---|
-| 1 C-1 (10) | KV-1+PO-1+KV-6 ≤3 geliştirici haftası (UNPROVEN) | Berrak G1–G10 ve PR #101–#108 için kör tahmin vs git süresi (≤1 gün), sonra dilim başı kayıt; son okuma 2026-12-01 | Geçme: medyan ≤1,0, efor ≤3 hf, KV-1 2026-11-07 öncesi. Başarısız: medyan ≥1,5 ya da KV-1 birleşmemiş; 1,0–1,5 gri | H1 kesim sırası; H2 ölçülmüş oranla yeniden takvim; Mayıs kapsamı yeniden onay |
-| 2 K-2 (9,6) | Okullar tek standart VİS şablonunu müzakeresiz kabul eder (VARSAYIM) | VİS taslağı (1,5 geliştirici günü); hukukçu okuması **dış harcama var, ONAYSIZ** (OPEN-20261003-01); 5–8 okulda 14 gün takip | Geçme: hukukçu onayı ve ≥3 okul 14 günde değişiklik istemeden imza/yazılı söz; onaysız sonuç UNPROVEN | Önce sentetik deneme, gerçek veri VİS imzasından sonra |
+| 1 C-1 (10) | KV-1+PO-1+KV-6 ≤3 geliştirici haftası (UNPROVEN) | §10.1 "plan gün / gerçek gün" kaydı, dilim başına; kontrol noktaları 2026-11-14 ve 2027-01-03; ek maliyet yok | Geçme: medyan ≤1,0, efor ≤3 hf, KV-1 2026-11-07 öncesi. Başarısız: medyan ≥1,5 ya da KV-1 birleşmemiş; 1,0–1,5 gri | Medyan ≥1,5 ise H1 kesim sırası; H2 ölçülmüş oranla yeniden takvim; Mayıs kapsamı yeniden onay |
+| 2 K-2 (9,6) | Okullar tek standart VİS şablonunu müzakeresiz kabul eder (VARSAYIM) | VİS taslağı (1,5 geliştirici günü); hukukçu okuması K-1/K-4/K-6 ile tek görüşte, **dış harcama var, ONAYSIZ** (OPEN-20261003-01) | Geçme: hukukçu standart şablonun savunulabilir olduğunu söyler; onaysız sonuç UNPROVEN | Önce sentetik deneme, gerçek veri VİS imzasından sonra |
 | 3 P-03 (8,48) | "Dosyanı getir" dosyayla sonuçlanır ve dosyalar karneye ulaşır (VARSAYIM) | §3.4 takvimi; 2–4 geliştirici günü | §3.4 sayı eşiği | "Kendi dosyan" vaadi çıkar; tez T4/G5 paritesine döner |
-| 4 C-5 (8,16) | H1 dış girdileri zamanında gelir: e-Okul örneği 60. gün, S3 DEC 2026-12-15, fiyat/deneme DEC 2027-01-03 (VARSAYIM) | 0–7. günde 3 okuldan başlık satırı; 14/30/60. gün kontrol; 1–2 geliştirici günü | Geçme: 14. günde ≥1 başlık; 60. günde 2 okuldan kolon seti, 1 satırlı dosya, öğretmen teyidi | KF-7 sentetik fixture veya H2; teyit yoksa KF-8 kodlanmaz; S3 gecikirse PO-2 H2'nin ilk kalemi |
-| 5 T-9 (7,8) | 2027 partition uygulanırken `AuditLog_default`'ta 2027 satırı yok (VARSAYIM) | Masa başı + staging salt okunur SQL + grep; 0,75 geliştirici günü | Geçme: 2027 aralığında 0 satır, ileri tarih 0 | Onaylı taşıma mutasyonu; 2026-12-01 öncesi onaylı staging apply |
+| 4 C-5 (8,16) | H1 dış girdileri zamanında gelir: e-Okul örneği 60. gün, S3 DEC 2026-12-15, fiyat/deneme DEC 2027-01-03 (VARSAYIM) | 0–7. günde 3 okuldan başlık satırı; 14/30/60. gün kontrol; 1–2 geliştirici günü | Geçme: 14. günde ≥1 başlık; 60. günde 2 okuldan kolon seti, 1 satırlı dosya, öğretmen teyidi | KF-7 H2'de sentetik fixture ile yapılır ya da kayar; teyit yoksa KF-8 kodlanmaz; S3 gecikirse PO-2 H2'de KF-1'den hemen sonra kalır |
+| 5 T-9 (7,8) | 2027 partition uygulanırken `AuditLog_default`'ta 2027 satırı yok (VARSAYIM) | Masa başı + staging salt okunur SQL + grep; 0,75 geliştirici günü | Geçme: 2027 aralığında 0 satır, ileri tarih 0 | Onaylı taşıma mutasyonu; 2026-12-01 öncesi PO-1 tek apply |
 
 **F3.5 ile tutarlılık:** P-03 için F3.5'in özgün eşiği bu planda kullanılmaz; §3.4 ve KF-10 aynı sayı eşiğini taşır. K-2'nin hukuk görüşü OPEN-20261003-01'e bağlıdır (§6.4).
 
@@ -383,98 +416,96 @@ Olasılık ve etki 1–5 arası yargıdır (VARSAYIM). Uzun azaltma metinleri ve
 | RP-02 Görüşmeler 60. güne yetişmez | 4×4 | Haftada 2 sabit slot; 5'ten az görüşmeyle fiyat DEC'i yok | KF-10 | 2026-11-15'te planlı <3 |
 | RP-01 "Dosyanı getir" kancası tutmaz | 3×5 | Sentetik demo yolu; spike görüşmeden önce | KF-10 | 21. gün spike ya da 60. gün P-03 sayı eşiği tutmaz |
 | RP-03 Fiyat/deneme DEC'leri gecikir | 3×5 | Fiyat DEC'i 90. günde, veri yoksa UNPROVEN | KF-9 | 2027-02-01'de fiyat DEC'i yok |
-| RK-1 Reşit olmayan gerçek verisi demo/repo'ya girer | 3×5 | Ağsız betik, self-test, k-anonimlik, CI'da TC/telefon taraması | KF-10 | Self-test başarısız |
+| RK-1 Reşit olmayan gerçek verisi demo/repo'ya girer | 3×5 | Sabit genişlikte kimlik ezme, `--self-test`, CI'da 11 haneli sayı/telefon grep'i (izin listesiyle) | KF-10 | Self-test başarısız |
 | RC-5 Tek gözden geçirici darboğazı | 3×5 | Yeni tablo PR'larında zorunlu CI kapıları | AK-2 | >2 açık PR ya da >5 iş günü bekleyen PR |
 | RT-1 KV-1 2026-11-07'den önce birleşmez | 2×5 | 2026-11-08 saat testi; 2026-10-24'te PR yoksa diğer H1 dilimleri durur | KV-1 | 2026-10-24'te CI yeşil değil |
-| RT-4 Off-host yedek yok | 2×5 | PO-2 H2 2. sıra; ilk deneme tenant'ından önce STAGING restore | PO-2 | KF-5 açılırken restore kanıtı yok |
-| RT-5 Dönem sonu PDF timeout/OOM | 3×4 | T-6 spike'ı H2'de; PO-3'ün asenkron toplu iş bölmesi **sıra dışı kesimdir, DEC ile yazılır** | PO-3 | T-6'da timeout/OOM |
-| RT-3 Staging 418 kök nedeni bilinmiyor | 3×4 | Yarım günlük salt okunur teşhis | PO-9 | 2 iş gününde kök neden yok |
+| RT-4 Off-host yedek yok | 2×5 | Gecelik şifreli dump + restore (RPO 24 saat); ilk deneme tenant'ından önce STAGING restore | PO-2 | KF-5 açılırken restore kanıtı yok |
+| RT-5 Dönem sonu PDF timeout/OOM | 3×4 | Kapasite ölçümü H3; kod yalnız eşik aşılırsa; PO-3 ölçüm dilimi | PO-3 | Ölçümde timeout/OOM |
+| RT-3 Staging 418 kök nedeni bilinmiyor | 3×4 | Yarım günlük salt okunur teşhis | KV-1 kapanışı (ops görevi) | 2 iş gününde kök neden yok |
 
-Diğer O×E ≥12 riskler: RP-06, RK-2, RK-3, RC-3, RC-7, RK-7 (**dış harcama var, ONAYSIZ; OPEN-20261003-01**), RC-2. O×E 12'nin altındakiler: RT-6, RT-7, RT-2 (tetikleyici "2027 aralığında satır >0"), RP-04, RP-05, RP-07, RK-6, RK-5, RK-4, RK-8, RC-4, RC-6.
+Diğer O×E ≥12 riskler: RP-06, RK-2, RK-3, RC-3, RC-7, RK-7 (tek dış görüş; **dış harcama var, ONAYSIZ; OPEN-20261003-01**), RC-2. O×E 12'nin altındakiler: RT-6, RT-7, RT-2 (tetikleyici "2027 aralığında satır >0"), RP-04, RP-05, RP-07, RK-6, RK-5, RK-4, RK-8, RC-4, RC-6.
 
 ### 6.4 Hukuk görüşü gerektiren maddeler
 
-Tek seferlik hukuk görüşü için dış harcama **onaysızdır** (OPEN-20261003-01; karar en geç 2027-01-03). D8'in tek dış bütçe istisnası yalnız TR off-host yedektir. Maddeler tek soru listesinde toplanır (RK-7, KF-10):
+Tek seferlik hukuk görüşü için dış harcama **onaysızdır** (OPEN-20261003-01; karar en geç 2027-01-03). D8'in tek dış bütçe istisnası yalnız TR off-host yedektir. Bloklayıcı maddeler tek soru listesinde toplanır (RK-7, KF-10):
 
-- **K-1** operasyonel veli bildirimi açık rıza ister mi (DOGRULANMADI; onay yoksa KV-8 açılmaz).
-- **K-2** tek standart VİS şablonu savunulabilir mi (VARSAYIM; onay yoksa sonuç UNPROVEN, deneme yalnız sentetik veriyle).
-- **K-4** e-Okul Excel'ini yüklemek MEB yönergesini ihlal eder mi (DOGRULANMADI; masa başı okuma + 3 bilgi işlem cevabıyla sınırlı).
+- **K-1** operasyonel veli bildirimi açık rıza ister mi (DOGRULANMADI; KV-8 öncesi, onay yoksa KV-8 açılmaz).
+- **K-4** e-Okul Excel'ini yüklemek MEB yönergesini ihlal eder mi (DOGRULANMADI; KF-7 öncesi masa başı okuma + 3 bilgi işlem cevabıyla sınırlı).
+- **K-6** ve F4.4 #12 alt işleyenler, md.9 yükü ve TR barındırma beyanı (DOGRULANMADI; KF-9'daki "verin TR'de" iddiasından önce, onay yoksa bu iddia yok).
+
+Not olarak (bloklamaz):
+
+- **K-2** tek standart VİS şablonu savunulabilir mi (VARSAYIM; aynı görüşe sorulur, onay yoksa sonuç UNPROVEN, deneme yalnız sentetik veriyle).
 - **K-5** 5580 sayılı Kanun yazılım için onay/bildirim ister mi (DOGRULANMADI; mevzuat.gov.tr taraması + 3 müdür).
-- **K-6** ve F4.4 #12 alt işleyenler, md.9 yükü ve TR barındırma beyanı (DOGRULANMADI; onay yoksa KF-9'da "verin TR'de" yok).
 - **K-8** 91. gün imha ve süresiz AuditLog yasal saklamayla çelişir mi (DOGRULANMADI; sonuç UNPROVEN).
-- **F4.4 #24** vade hatırlatmasının rıza dayanağı (DOGRULANMADI; onay yoksa KV-8 açılmaz).
+- **F4.4 #24** vade hatırlatmasının rıza dayanağı (DOGRULANMADI; K-1 ile birlikte sorulur).
 
 ---
 
 ## 7. Yol haritası
 
-Kaynak: 2026-10-03 F0–F6 strateji çalışması, F5. 38 aday, 3 bağımsız sıralayıcı ve yargıçla 27 dilime indi; doğrulayıcı her yolu ve komutu kök `package.json` ile kontrol etti. Efor UNPROVEN (paralel ajan kazancı sıfır sayıldı). Dilim başı yollar, kabul kriterleri ve doğrulama komut blokları: bkz. docs/ozel-k12-strateji-ekleri.md §F5.1, §F5.2, §F5.3.
+Kaynak: 2026-10-03 F0–F6 strateji çalışması, F5. 38 aday, 3 bağımsız sıralayıcı ve yargıçla 27 dilime indi; doğrulayıcı her yolu ve komutu kök `package.json` ile kontrol etti. 2026-10-03 mimari incelemesi ve ürün sahibi onayıyla dilimler 20 satıra indi (H1 6, H2 7, H3 7). Efor UNPROVEN (paralel ajan kazancı sıfır sayıldı). Dilim başı yollar, kabul kriterleri ve doğrulama komut blokları: bkz. docs/ozel-k12-strateji-ekleri.md §F5.1, §F5.2, §F5.3.
 
 ### 7.1 Kapasite gerçeği ve Mayıs/Eylül tanımı (onaylı)
 
 | Ufuk | Satılabilir çıktı | Dilim | Hafta min–max | Kapasite |
 |---|---|---|---|---|
-| H1 2026-10-03 → 2027-01-03 (12 hf) | Operatör kartsız deneme açar; e-Okul listesi yüklenir (örnek gelirse); öğretmen not girer, yönetici yayınlar, düzeltme yeni sürüm; 25+ alıcılı duyuru düşmez. LOCAL_TEST/STAGING | 11 | 10,8–23 | Yalnız min sığar |
-| H2 2027-01-03 → 2027-04-03 (13 hf) | e-Okul listesi, toplu veli daveti, kurulabilir veli PWA'sı ve özet, ödeme planı ve gecikme, 403'süz muhasebe, TR off-host yedek ve restore (STAGING) | 8 | 13–24 | Min 13/13, tampon 0 |
-| H3 2027-04-03 → 2027-10-03 (26 hf; Mayıs = 4. hafta) | Mayıs: yayınlanmış TL fiyat (KF-9), OWNER/ADMIN MFA (KV-9; onaylı tanıma ek, §4.8). Eylül: PRODUCTION'da push, otomatik bildirim, ödev teslimi, ölçülmüş PDF hattı, 50 okul kapasitesi | 8 | 17,5–31 | Mayıs öncesine yalnız KF-9 ve KV-9 sığar |
+| H1 2026-10-03 → 2027-01-03 (12 hf) | Operatör kartsız deneme açar; öğretmen not girer, yönetici yayınlar, düzeltme yeni sürüm; 25+ alıcılı duyuru düşmez; gecelik şifreli yedek ilk sürümü. LOCAL_TEST/STAGING | 6 | 7–13,5 | Yalnız min sığar |
+| H2 2027-01-03 → 2027-04-03 (13 hf) | e-Okul import ve liste, toplu veli daveti, kurulabilir veli PWA'sı ve özet, ödeme planı ve gecikme, 403'süz muhasebe, TR off-host yedek ve restore (STAGING) | 7 | 10,5–18,5 | Min sığar (tampon 2,5); max sığmaz |
+| H3 2027-04-03 → 2027-10-03 (26 hf; Mayıs = 4. hafta) | Mayıs: yayınlanmış TL fiyat (KF-9), OWNER/ADMIN MFA (KV-9; onaylı tanıma ek, §4.8). Eylül: PRODUCTION'da push, otomatik bildirim, ödev teslimi; PDF hattı ve kapasite için ölçüm | 7 | 12,5–23 | Min ve max sığar; Mayıs öncesine KF-9 ve KV-9 (2,5–5 hf) |
 
-**Karar (onaylı, F5.3 seçenek A).** Mayıs 2027 "satış başlangıcı"dır: deneme tenant'ı, fiyat, kimlik/veli, not defteri, e-Okul import ve liste, veli PWA özeti, finans UI; kanıt STAGING. Eylül 2027 PRODUCTION go-live'dır: production + push + otomatik bildirim + ödev teslimi; PDF hattı ölçeklenmesi ve yük testi koşul 8 kesimine açık H3 ŞİMDİ kalemleridir. Muhasebe 403 ve TR off-host yedek onaylı tanımın dışında ek kalemdir; koşul 7 gereği Mayıs öncesi biter. Satış takvimiyle uyum VARSAYIM: demo Şubat–Mayıs, sözleşme Mayıs–Haziran, geçiş yaz, canlı Eylül.
+Toplamlar dilim eforlarının toplamıdır, UNPROVEN.
 
-**Hız ölçümü.** Gradebook zinciri (AK-2+AK-3+AK-4, 4,5–8,5 hf) ilk L iştir; H1 sonunda (2027-01-03) hız bununla ölçülür ve plan yeniden çizilir.
+**Karar (onaylı, F5.3 seçenek A; 2026-10-03 güncellemesi).** Mayıs 2027 "satış başlangıcı"dır: deneme tenant'ı, fiyat, kimlik/veli, not defteri, e-Okul import ve liste, veli PWA özeti, finans UI; kanıt STAGING. Eylül 2027 PRODUCTION go-live'dır: production + push + otomatik bildirim + ödev teslimi. PDF hattı ve kapasite için ölçüm yapılır; kod yalnız ölçüm eşiği (timeout/OOM) aşılırsa yazılır. Ölçümdeki okul sayısı DEC'te pilot sayısına bağlanır. Muhasebe 403 ve TR off-host yedek onaylı tanımın dışında ek kalemdir; Mayıs öncesi kalemler koşulu (§4.2) gereği Mayıs öncesi biter. Satış takvimiyle uyum VARSAYIM: demo Şubat–Mayıs, sözleşme Mayıs–Haziran, geçiş yaz, canlı Eylül.
 
-**H1'de istenecek dış onaylar:** örnek e-Okul dosyası ve not liste formatı (KF-7, KF-8); TR S3 (PO-2; küçük aylık dış bütçe onaylı, rakam yok); VAPID secret (KV-7); staging/prod DB mutasyonu ve deploy (PO-1, PO-9, PO-10, PO-4); hooks-worker deploy (KV-6); fiyat DEC'i (KF-9); deneme süresi/limit DEC'i (KF-5).
+**Hız ölçümü.** Gradebook zinciri (AK-1+AK-2 ve AK-3+AK-4, 4–7 hf) ilk L iştir. H1 sonunda (2027-01-03) hız bununla ölçülür, §10.1'deki "plan gün / gerçek gün" kaydına yazılır ve plan yeniden çizilir.
+
+**H1'de istenecek dış onaylar:** örnek e-Okul dosyası ve not liste formatı (KF-7, KF-8); TR S3 (PO-2; küçük aylık dış bütçe onaylı, rakam yok); VAPID secret (KV-7); staging/prod DB mutasyonu ve deploy (PO-1, PO-10, PO-3); hooks-worker deploy (KV-6); fiyat DEC'i (KF-9); deneme süresi/limit DEC'i (KF-5).
 
 ### 7.2 H1 dilimleri (0–3 ay)
 
-Sıra: KV-1 → PO-1 → KV-6 → AK-1 → KF-10 → PO-9 → AK-2 → AK-3 → KF-5 → AK-4 → KF-7
+Sıra: KV-1 → hijyen → AK-1+AK-2 → AK-3+AK-4 → KF-5+yedek → KF-10. KF-10, F3 görüşme takvimi ve 2026-12-01 tarihi için 2–3. sıraya alınabilir (§9.2).
 
 | Dilim | Amaç / kabul özeti | Metrik | Bağımlılık | Efor | Sat. |
 |---|---|---|---|---|---|
-| KV-1 Kimlik DEC uygulaması | İki flag kalkar; veli yazma/davet açılır; saat 2026-11-08 testi | 2026-11-07 sonrası FEATURE_ROLLOUT_DISABLED ve GUARDIAN_WRITE_READ_ONLY 0 | DEC-20261003-01 (karşılandı) | 1–2 hf | 4 |
-| PO-1 AuditLog 2027 partition + bakım | 12 ay ileri plan; kanıt `artifacts/staging/audit-log-partition.json` | 2026-12-01'de STAGING'de 2027_06'ya kadar partition, DEFAULT 0 | DB mutasyonu onayı | 0,5–1,5 hf | 2 |
-| KV-6 25'lik parçalama, `/notification` kalkar | 60 mesaj 25+25+10 | 300 alıcıda sahte "sent" 0 | hooks-worker deploy onayı | 0,5–1 hf | 3 |
-| AK-1 Reset kataloğu tüm migration'lar | Eksik reset_boundary hata verir | Yeni tablolar eski migration'a dokunmadan geçer | yok | 0,3–1 hf | 1 |
-| KF-10 F3 doğrulama kiti | Anonimleştirme betiği (`scripts/anonymize-sample-file.mjs` (yeni)), protokol, görüşme kaydı | En az 6 tekliften 7 gün içinde en az 3 dosya, en az 1'i ağ dışından; gelen dosyaların en az 2/3'ü kod değişikliği olmadan, yalnız config ile karneye ulaşır (30 dk ve ≤2 elle müdahale ayrıca kaydedilir); söz sayılmaz; 90. gün 1 yazılı pilot niyeti | Anonim dosyalar, hukuk görüşü | 1–2 hf | 3 |
-| PO-9 Staging onarımı + rol UAT | `/health` 200; UAT `commitSha` = güncel main | Her rol için güncel SHA'da ≥1 PASS (STAGING) | KV-1, deploy onayı | UAT 1–2 hf, 418 tahminsiz | 3 |
-| AK-2 Gradebook veri modeli | Üç tablo RLS + bileşik FK; yayınlanmış satırda UPDATE reddi | Düzeltme sonrası 2 sürüm, yerinde güncelleme 0 | AK-1 | 1–1,5 hf | 2 |
-| AK-3 Gradebook API + idempotency (PO-5 dahil) | Atanmamış öğretmen 403; anahtarsız yayın 400 | 30 giriş, yayın, 1 düzeltme hatasız | AK-2 | 2–4 hf | 4 |
-| KF-5 Kartsız deneme | Tanımsız planCode 400; TRIAL bitince READ_ONLY; ücretli term ile ACTIVE | Deneme <10 dk açılır | Deneme DEC'i | 1–2 hf | 4 |
-| AK-4 Not giriş ve yayın ekranı | `apps/web/app/(app)/{ogretmen,kurum}/not-defteri/` (yeni); sürüm geçmişi v1/v2 | 30 kişilik sınıf <5 dk | AK-3 | 1,5–3 hf | 5 |
-| KF-7 e-Okul import profili | `apps/api/src/student/eokul-import-profile.ts` (yeni); aynı dosya iki kez commit'te yeni öğrenci yok; audit'te ham TC yok | Dry-run → commit <15 dk; dosya getirme KF-10 sayı eşiğine bağlı | Anonim örnek, KV-1, KF-10 | 1–3 hf | 5 |
+| 1. KV-1 Kimlik DEC uygulaması + staging | İki flag kodla kalkar, veli yazma/davet açılır; saat 2026-11-08 testi. PR 2026-11-07'den önce LOCAL_TEST ve CI ile merge edilir. 418 teşhisi paralel ops görevidir (yarım gün timebox). Kapanış: staging `/health` 200, ardından mevcut `staging-role-uat.yml` ve `uat:check` ile UAT-GUARDIAN-01/02; o zamana kadar EXTERNAL_NOT_RUN | 2026-11-07 sonrası FEATURE_ROLLOUT_DISABLED ve GUARDIAN_WRITE_READ_ONLY 0; her rol için güncel SHA'da ≥1 PASS (STAGING) | DEC-20261003-01 (karşılandı), deploy onayı | 1–2 hf | 4 |
+| 2. Hijyen paketi (PO-1 + KV-6) | PO-1: mevcut `audit-log-partition:maintain` ile tek seferlik 24 ay apply (onaylı; önce staging, sonra prod). DEFAULT ön kontrolü ve CI tarih guard'ı var; kanıt `artifacts/staging/audit-log-partition.json`. KV-6: 60 mesaj 25+25+10; hooks-worker `/notification` kalkar | 2026-12-01'de STAGING'de 2028-12'ye kadar partition, DEFAULT 0; 300 alıcıda sahte "sent" 0 | DB mutasyonu ve hooks-worker deploy onayı | 0,5–1 hf | 3 |
+| 3. AK-1 + AK-2 Tenant kapıları ve not şeması | Reset kataloğu tüm migration'ları tarar. `GradeAssessment` ve append-only `GradeEntry` gelir: `@@unique(tenantId, assessmentId, studentId, version)`. Yayınlanmış satırda UPDATE/DELETE'i BEFORE trigger reddeder (migration 20260907180000 deseni); app rolüne DELETE grant'ı verilmez. Tenant-table-coverage testi eklenir | `db:rls:check`, tenant-relation-fks, reset kataloğu ve kapsam testi yeşil; düzeltme sonrası 2 sürüm, yerinde güncelleme 0 | yok | 1–2 hf | 2 |
+| 4. AK-3 + AK-4 Gradebook API ve not ekranı (PO-5 dahil) | Giriş, yayın ve düzeltme yapılır; düzeltme yeni version açar, geçerli yayın max(version)'dır ve `publishedVersion` aynı transaction'da yazılır. Idempotency zorunlu (anahtarsız 400). `assertTeacherAssigned` ve `TeacherAssignmentScope.roles` (BRANCH_TEACHER/CLASS_TEACHER) uygulanır, courseId zorunludur; atanmamış öğretmen 403 alır. AuditLog yazılır. Öğretmen ekranı ve yönetici yayını `apps/web/app/(app)/{ogretmen,kurum}/not-defteri/` (yeni) altındadır; sürüm geçmişi v1/v2 | 30 kişilik sınıf <5 dk; 30 giriş, yayın, 1 düzeltme hatasız | AK-2 | 3–5 hf | 5 |
+| 5. KF-5 Kartsız deneme + gecelik yedek | `planCode` zod enum + OpenAPI, şema değişmez. Tanımsız planCode 400 döner, TRIAL bitince READ_ONLY olur. Kurulum kartına 2 koşullu link (KF-6). Gecelik şifreli pg_dump ilk sürümü ve staging restore (decrypt dahil). Bu dilim geçmeden gerçek veri içeren deneme tenant'ı açılmaz | Deneme <10 dk açılır; staging restore PASS | Deneme DEC'i, TR S3 ve secret onayı | 0,5–1,5 hf | 4 |
+| 6. KF-10 F3 doğrulama kiti | Sabit genişlikte kimlik ezme betiği `scripts/anonymize-sample-file.mjs` (yeni); `--self-test` var, ağ erişimi yok. CI'da 11 haneli sayı ve telefon grep'i izin listesiyle koşar. Protokol ve görüşme kaydı `docs/validation.md` (yeni) | En az 6 tekliften 7 gün içinde en az 3 dosya, en az 1'i ağ dışından. Gelen dosyaların en az 2/3'ü kod değişikliği olmadan, yalnız config ile karneye ulaşır (30 dk ve ≤2 elle müdahale ayrıca kaydedilir). Söz sayılmaz. 90. gün 1 yazılı pilot niyeti | Anonim dosyalar | 1–2 hf | 3 |
 
 ### 7.3 H2 dilimleri (3–6 ay)
 
-Sıra: KF-1 → PO-2 → KF-8 → KV-4 → KV-3 → KF-2 → KV-5 → KF-6 (koşul 7 kapıları başa alındı).
+Sıra: KF-1 → PO-2 → KF-7 → KF-8 → KV-4 → KV-3 → KF-2 (Mayıs öncesi kalemler başa alındı).
 
-| Dilim | Amaç / kabul özeti | Metrik | Bağımlılık | Efor | Sat. |
-|---|---|---|---|---|---|
-| KF-1 Muhasebe 403 | Parola değişimi 200, `/kurum/finans` 403'süz | Tahsilat hata ekranı 0 (LOCAL_TEST) | yok | 1–2 hf | 3 |
-| PO-2 Off-host TR yedek + restore + veri yerleşimi (PO-8 dahil) | WAL TR hedefe şifreli; restore hash/satır PASS; RPO/RTO yazılı | STAGING kanıtı; RPO ≤15 dk UNPROVEN | TR S3 (onaylı küçük bütçe), secret onayı | 2,5–5 hf | 4 |
-| KF-8 e-Okul'a işlenecek liste | Yalnız geçerli GradePublication; supersede 409/400; aynı istek aynı sha256 | Çift giriş süresi azalır (öğretmen beyanı) | AK-3, AK-4, liste formatı | 1–1,5 hf | 5 |
-| KV-4 Veli overview + okul notu ayrı seri (AK-5 dahil) | Bağlı olmayan öğrenci 404/403; `canViewFinance=false` iken finans yok | İstek 17'den 1'e | KV-1, AK-3; finans KF-2 sonrası | 3–5 hf | 5 |
-| KV-3 guardianId bağı + toplu davet (KV-2 dahil) | Tekrar gönderimde ikinci davet yok; TC/telefon kullanıcı adı olmaz | Kuyruğa geçiş süresi ve kabul oranı | KV-1, AK-1 | 1,5–3 hf | 4 |
-| KF-2 Ödeme planı UI + türetilmiş gecikme (KF-3 dahil) | `kurum/finans/finance-page.tsx`, `payment-plan-form.tsx (yeni)`; aynı anahtarla ikinci plan yok | 9 taksitli plan <2 dk | KF-1 | 2–4 hf | 4 |
-| KV-5 PWA kurulabilirlik | Kurulabilirlik ölçütleri; 375px'te 5 öğe taşmaz | Kurulum / davet kabul oranı | KV-4 | 1–2 hf | 4 |
-| KF-6 İlk karne adım listesi | Boş tenantta 4 adım | 7 günde karne üreten deneme okulu ≥%50 (UNPROVEN) | KF-5, KF-7 | 1–1,5 hf | 4 |
+| Dilim | Amaç ve kabul | Efor |
+|---|---|---|
+| KF-1 Muhasebe 403 | Parola değişimi 200 döner, `/kurum/finans` 403'süz açılır; tahsilat hata ekranı 0 (LOCAL_TEST). | 1–2 hf |
+| PO-2 Off-host TR yedek + restore (PO-8 dahil) | Gecelik şifreli pg_dump (AES-256-GCM, `node:crypto`) mevcut `@aws-sdk/client-s3` ile TR S3'e yazılır; restore tatbikatı `restore:drill:check` ile PASS verir; RPO 24 saat, D8'e yazılır. | ~1 hf |
+| KF-7 e-Okul import | Mevcut student-import alias'ları kullanılır, örnek dosya gelince ve K-4 masa başı okumasından sonra yapılır; audit'e sha256 + satır sayısı yazılır, yanıt yalnız sayım/id döner. | 0,5–1 hf |
+| KF-8 e-Okul'a işlenecek liste | Yalnız geçerli yayın listelenir: `publishedVersion` (max(version) önbelleği, yayın transaction'ında yazılır; karne aynı değeri okur). Aynı istek aynı sha256'yı verir. | 1–1,5 hf |
+| KV-4 Veli özeti + okul notu ayrı seri (AK-5, KV-5 dahil) | Allow-list DTO ve tek bağ helper'ı (`apps/api/src/payment/payment.service.ts:75-82` deseni) kullanılır; öğretmen notu, iletişim ve diğer veli alanı yoktur (alan yokluğu testi). PWA kurulabilirliği: manifest id/start_url, PNG/maskable ikon; cache yok. | 3,5–6 hf |
+| KV-3 guardianId bağı + toplu davet (KV-2 dahil) | `StudentContact.guardianId` FK'sı raw SQL ile `GuardianStudent(tenantId, guardianId, studentId)`'a bağlanır, ON DELETE SET NULL; tekrar gönderimde ikinci davet yok, TC/telefon kullanıcı adı olmaz. | 1,5–3 hf |
+| KF-2 Ödeme planı UI + türetilmiş gecikme (KF-3 dahil) | Ödeme planı UI eklenir. Gecikme tek yardımcıdan türetilir; OVERDUE yazma enum'dan çıkar, backfill onaylıdır. Aynı anahtarla ikinci plan oluşmaz. | 2–4 hf |
 
 ### 7.4 H3 dilimleri (6–12 ay)
 
-Sıra: KF-9 → KV-9 (Mayıs öncesi, ~3,5–6 hf) → KV-7 → PO-10 → AK-6 → KV-8 → PO-3 → PO-4. KF-9 ve KV-9 satış başlangıcına, kalanı Eylül 2027 go-live'ına yazılır (onaylı).
+Sıra: KF-9 → KV-9 (Mayıs öncesi, ~2,5–5 hf) → KV-7 → PO-10 → AK-6 → KV-8 → PO-3. KF-9 ve KV-9 satış başlangıcına, kalanı Eylül 2027 go-live'ına yazılır (onaylı).
 
-| Dilim | Amaç / kabul özeti | Metrik | Bağımlılık | Efor | Sat. |
-|---|---|---|---|---|---|
-| KF-9 Fiyat sayfası ve landing | `apps/web/app/fiyatlar/` (yeni); her iddia DEC/UAT bağlı; "e-Okul entegrasyonu" yok | "Fiyat belli değil" itirazı 0 | Fiyat DEC'i, KF-5 | 1,5–3 hf | 4 |
-| KV-9 OWNER/ADMIN TOTP MFA | Ayrı kanıt yolu `tenant-admin-mfa:check` (yeni) | MFA etkin oranı | yok | 2–3 hf | 3 |
-| KV-7 Outbox + VAPID push | İki worker aynı satırı bir kez gönderir; 410'da cihaz pasif | Delivered/failed/uncertain oranları | KV-6, KV-5, AK-1, VAPID | 3–4 hf (L) | 5 |
-| PO-10 Prod go-live kanıt zinciri (PO-7 dahil) | `go-live:check`, `prod:evidence:summary:check` PRODUCTION PASS | Açık P0 kanıt 0 | PO-1, PO-2, PO-9, KV-9; deploy onayı | 3–6 hf | 5 |
-| AK-6 Ödev teslimi | Öğrenci başkasının satırını değiştiremez; CHECKED'de 409; dosyasız | Teslim oranı | AK-1 | 1,5–3 hf | 4 |
-| KV-8 Tetikleyiciler: vade, devamsızlık, not yayını (KF-4, AK-7 dahil) | Rıza yoksa satır yok; job iki kez koşsa yeni satır yok | Gecikmiş taksit oranı öncesi/sonrası | KV-7, AK-3, KF-2, AK-1 | 3–5 hf | 4 |
-| PO-3 PDF/karne ölçeklenmesi | N iş için 1 launch; PDF Redis'te taşınmaz | 1500 öğrenci süresi, p95 | yok | 2–4 hf | 4 |
-| PO-4 50 okul k6 yük testi | `http_req_failed` < %1; sonuç tarih ve SHA ile | Not girişi p95 < 1 sn (UNPROVEN) | PO-3, AK-3, staging DB onayı | 1,5–3 hf | 3 |
+| Dilim | Amaç ve kabul | Efor |
+|---|---|---|
+| KF-9 Fiyat sayfası ve landing | `apps/web/app/fiyatlar/` (yeni) eklenir. Her iddia DEC/UAT'a bağlıdır, "e-Okul entegrasyonu" ifadesi yoktur. TR barındırma iddiası yalnız K-6 sonrasında yazılır. | 1,5–3 hf |
+| KV-9 OWNER/ADMIN TOTP MFA | Rol listesi `isAdminMfaRole`'a OWNER/ADMIN eklenerek genişler. SYSTEM_ADMIN destekli sıfırlama gelir. Mevcut `scripts/check-admin-mfa-evidence.mjs` requiredRoles güncellenir. Step-up sistem tenant'ına bağlı kalır (negatif test). | 1–2 hf |
+| KV-7 Push (VAPID) | Gönderim mevcut `announcement-delivery` kuyruğuyla worker'a taşınır: 25'lik chunk, jobId = sourceType:sourceId:channel:chunkIndex, `web-push`. 404/410'da `disabledAt` set edilir, payload PII taşımaz. | 2–3 hf |
+| PO-10 Prod go-live kanıt zinciri (PO-7 dahil) | Mevcut `go-live:check` ve `prod:evidence:summary:check` PRODUCTION'da PASS verir; yeni kanıt betiği yok. Bağımlılık: staging 200 + KV-1 UAT. | 3–6 hf |
+| AK-6 Ödev teslimi | `HomeworkSubmission` zaman damgalıdır (submittedAt, checkedAt, checkedById), satırlar tembel oluşur, durum türetilir. Öğrenci işareti `ON CONFLICT ... WHERE checkedAt IS NULL` ile yazılır, 0 satırda 409 döner; dosyasız. | 1,5–3 hf |
+| KV-8 Tetikleyiciler: vade, devamsızlık, not yayını (KF-4, AK-7 dahil) | `notifiedAt`/`notifiedVersion` taraması yapılır, eşik worker sabitidir (değer DEC'te). Rıza ve `disabledAt` gönderim anında kontrol edilir; K-1 önce. | 3–5 hf |
+| PO-3 Kapasite ölçümü (PO-4 dahil) | Ölçüm Nisan 2027 kontrol noktasında başlar, Eylül go-live öncesi kapanır: `report-generation:perf` ile 1500 öğrenci ve `scripts/k6-report-listing.js`'e eklenen tek not girişi senaryosu. Kod yalnız eşik (timeout/OOM) aşılırsa yazılır; ilk adım tarayıcının tek örnekte tutulması + BullMQ concurrency. | 0,5–1 hf (eşik aşılırsa +2–4 hf) |
 
 ### 7.5 Düşürülen ve birleştirilen dilimler
 
-Birleşenler: PO-5 → AK-3; KV-2 → KV-3; AK-5 → KV-4; KF-3 → KF-2; KF-4, AK-7 → KV-8; PO-8 → PO-2; PO-7 → PO-10. Düşenler: PO-6 (kanıt yönetimi darboğaz olursa açılır), AK-8 (yoklama PUT p95 sorun gösterirse), AK-9 (çok kampüslü pilot çıkarsa). Gerekçeler: bkz. docs/ozel-k12-strateji-ekleri.md §F5.4.
+Birleşenler: PO-5 → AK-3; KV-2 → KV-3; AK-5 → KV-4; KF-3 → KF-2; KF-4, AK-7 → KV-8; PO-8 → PO-2; PO-7 → PO-10; AK-1 → AK-2; KF-6 → KF-5; KV-5 → KV-4; PO-4 → PO-3. Düşenler: PO-6 (kanıt yönetimi darboğaz olursa açılır), AK-8 (yoklama PUT p95 sorun gösterirse), AK-9 (çok kampüslü pilot çıkarsa). Gerekçeler: bkz. docs/ozel-k12-strateji-ekleri.md §F5.4.
 
 ---
 
@@ -485,22 +516,24 @@ Kesim sıraları onaylıdır. Ufuk kapasiteyi aşarsa kalemler bu sırayla kesil
 | Ufuk | Onaylı kesim sırası |
 |---|---|
 | H1 | e-Okul import (KF-7) → not ekranı sürüm geçmişi (AK-4) |
-| H2 | İlk karne adım listesi (KF-6) → veli özetinde okul notu (KV-4'ün okul notu kısmı) → hazır liste (KF-8) |
-| H3 (koşul 8) | Push yalnız duyuru (KV-7) → tetikleyici yalnız vade (KV-8) → tek senaryo yük testi (PO-4) |
+| H2 | İlk karne adım listesi (KF-6, KF-5 içinde) → veli özetinde okul notu (KV-4'ün okul notu kısmı) → hazır liste (KF-8) |
+| H3 | Push yalnız duyuru (KV-7) → tetikleyici yalnız vade (KV-8) → tek senaryo yük testi (PO-4, PO-3 içinde) |
 
 **Not (onaylı sıraya ek değildir; sıra dışı kesim DEC ister):**
-- KF-7 örnek dosya gelmezse kod yazılmaz; bu kayma onaylı H1 sırasının 1. kalemidir. PO-9 onarımının 1–2 haftayı aşması hâlinde PO-9'un kaydırılması sıra dışı kesimdir.
-- KV-1, PO-1, KV-6 ve KF-10 kaydırılmaz; KF-1 ve PO-2 koşul 7 gereği kesilmez.
+- KF-7 H2'ye kaydığı için onaylı H1 sırasının 1. kalemi uygulanmış sayılır; H1'de kesilecek ilk kalem AK-4 sürüm geçmişidir. Ek kesim gerekirse DEC'e gider.
+- KF-7 H2'de de örnek dosya gelmezse kod yazılmaz.
+- KF-5'in kurulum kartı linkleri H1'de kesilmezse H2 sırası veli özetinde okul notundan başlar.
+- KV-1, PO-1, KV-6 ve KF-10 kaydırılmaz; KF-1 ve PO-2 Mayıs öncesi kalemler koşulu gereği kesilmez.
 - KF-8 onaylı H2 sırasının 3. kalemidir; "yalnız format doğrulanmadıysa" gibi ek koşul uygulanmaz.
-- PO-3 ve PO-4 H3 ŞİMDİ kalemleridir. PO-3'ün asenkron toplu işinin ayrı dilime bölünmesi sıra dışı kesimdir, DEC ile yazılır (RT-5).
+- PO-3 H3 ŞİMDİ ölçüm kalemidir; kod yalnız ölçüm eşiği aşılırsa yazılır.
 
-**4 hafta kayma kuralı (koşul 8)**
+**4 hafta kayma kuralı**
 
 | L iş | 4 haftayı aşarsa |
 |---|---|
-| Gradebook zinciri AK-2+AK-3+AK-4 (4,5–8,5 hf) | Onaylı H1 sırasıyla AK-4'ün sürüm geçmişi görünümü daralır |
+| Gradebook zinciri AK-1+AK-2 ve AK-3+AK-4 (4–7 hf) | Onaylı H1 sırasıyla AK-4'ün sürüm geçmişi görünümü daralır |
 | KV-7 | Onaylı H3 sırasıyla yalnız duyuru push'una daralır |
-| PO-3 | Asenkron toplu işin ayrı dilime bölünmesi sıra dışı kesimdir, DEC ile yazılır (RT-5) |
+| PO-3 | Ölçüm eşiği aşılırsa kod yazılır; işin bölünmesi DEC ile |
 | PO-10 | Kapsam daralır; daralma DEC ve ürün sahibi onayıyla |
 
 ---
@@ -511,61 +544,64 @@ Kesim sıraları onaylıdır. Ufuk kapasiteyi aşarsa kalemler bu sırayla kesil
 
 | Ufuk | Min toplam | Max toplam |
 |---|---|---|
-| H1 | 10,8/12 hf | 23/12 hf |
-| H2 | 13/13 hf (tampon 0) | 24/13 hf |
-| H3 | 17,5/26 hf | 31/26 hf |
+| H1 | 7/12 hf | 13,5/12 hf |
+| H2 | 10,5/13 hf (tampon 2,5) | 18,5/13 hf |
+| H3 | 12,5/26 hf | 23/26 hf |
 
-2026-10-03 ile 2027-05-01 arası yaklaşık 30 hafta; H1+H2 min 23,8, max 47 hafta. Mayıs'ta gerçekçi çıktı H1+H2 kapsamının STAGING/LOCAL_TEST kanıtlı demosudur. Staging 418 onarımı tahmin edilmedi; 1–2 haftayı aşarsa H1 min toplamı 12 haftayı geçer. Dış harcama yalnız PO-2'nin TR S3 depolaması (onaylı).
+2026-10-03 ile 2027-05-01 arası yaklaşık 30 hafta; H1+H2 toplamı min 17,5, max 32 hafta. Mayıs'ta gerçekçi çıktı H1+H2 kapsamının STAGING/LOCAL_TEST kanıtlı demosudur. Staging 418 teşhisi KV-1'e paralel bir ops görevidir ve tahmin edilmedi. Uzarsa KV-1 kapanışı EXTERNAL_NOT_RUN kalır, H1 toplamı değişmez. Dış harcama yalnız PO-2'nin TR S3 depolaması (onaylı).
 
 ### 9.2 Tutmayan tarihler
 
-PO-10 (2027-04-30), PO-3 (2027-03-31) ve PO-4 (2027-04-15) bu sıralamada tutmuyor. Mayıs = satış başlangıcı, Eylül 2027 = PRODUCTION go-live onaylı olduğundan bu üç tarih geçersizdir. Yeni son tarihler H1 sonu yeniden planlamasında (2027-01-03) Eylül go-live'ından önce kalacak biçimde yazılır ve DEC-20261003-NN (D6; taslak, docs/DECISIONS.md'ye ayrı PR ile) kaydına bağlanır. Bu dokümanda yeni tarih verilmez. PO-2 (2027-04-30) ve KF-1 (Mayıs öncesi) değişmez.
+PO-10 (2027-04-30) bu sıralamada tutmuyor. Mayıs = satış başlangıcı, Eylül 2027 = PRODUCTION go-live onaylı olduğundan bu tarih geçersizdir. PO-3'ün eski tarihi düşer; kapasite ölçümü Nisan 2027 kontrol noktasında başlar, Eylül go-live öncesi kapanır (§10.3). PO-10'un yeni son tarihi H1 sonu yeniden planlamasında (2027-01-03) yazılır ve Eylül go-live'ından önce kalır. Tarih DEC-20261003-NN (D6; taslak, docs/DECISIONS.md'ye ayrı PR ile) kaydına bağlanır. Bu dokümanda yeni tarih verilmez. PO-2 (2027-04-30) ve KF-1 (Mayıs öncesi) değişmez.
 
-Koşul 7 ihlali düzeltildi: PO-2 H2 6. sıradan 2. sıraya (max bitiş ~2027-05-24 → ~2027-02-21), KF-1 4. sıradan 1. sıraya.
+Mayıs öncesi kalemler koşulunun ihlali düzeltildi: PO-2 H2'de 6. sıradan 2. sıraya alındı (max bitiş ~2027-05-24 → ~2027-01-24), KF-1 4. sıradan 1. sıraya.
 
 | H1 sabit tarihi | Max bitiş | Son tarih |
 |---|---|---|
 | KV-1 | ~2026-10-17 | 2026-11-07 |
-| PO-1 | ~2026-10-27 | 2026-12-01 |
-| KV-6 | ~2026-11-03 | 2026-12-01 |
-| KF-10 | ~2026-11-24 | 2026-12-01 (1 hafta tampon) |
+| PO-1 | ~2026-10-24 | 2026-12-01 |
+| KV-6 | ~2026-10-24 | 2026-12-01 |
+| KF-10 | ~2026-11-07 (3. sırada); 6. sırada ~2027-01-05, tarihi kaçırır | 2026-12-01 |
+
+KF-10 tarihi tutturmak için 3. sıraya alınır; bu, §7.2'deki 2–3. sıra notunun uygulamasıdır.
 
 ### 9.3 Yazar çakışması
 
-Paylaşılan dosyalar sıralı yürür: `schema.prisma`, reset kataloğu, yedek ve export listeleri AK-2 → KV-3 → KV-7 → AK-6 → KV-8; `apps/api/src/gradebook/` AK-3 → KF-8 → KV-4 (okuma) → KV-8 (tek çağrı); `app-shell.tsx` AK-4 → KF-1; `students-page.tsx` KV-1 → KF-7 → KV-3; `docker-compose.yml` PO-2 → PO-3 → PO-4.
+Paylaşılan dosyalar sıralı yürür:
+
+- `schema.prisma`, reset kataloğu, yedek ve export listeleri: AK-2 → KV-3 → KF-2 → KV-7 → AK-6 → KV-8
+- `apps/api/src/gradebook/`: AK-3 → KF-8 → KV-4 (okuma) → KV-8 (tek çağrı)
+- `app-shell.tsx`: AK-4 → KF-1
+- `students-page.tsx` ve student-import: KV-1 → KF-7 → KV-3
+- `docker-compose.yml` ve yedek betiği: H1 dilim 5 (yedek ilk sürümü) → PO-2 → PO-3 (yalnız eşik aşılırsa)
 
 ### 9.4 F3 doğrulama planıyla eşleme
 
 | F3 adımı | Tarih | Çakışan dilim | Not |
 |---|---|---|---|
 | Dosya talebi 0–7 / ön ayar spike'ı 7–21. gün | İlk sinyal 21. gün (2026-10-24) | KF-10, mevcut optik hat | Spike mevcut optik import ile elle protokol; tam KF-10 kiti eşik geçene kadar ertelenir |
-| 6–8 müdür görüşmesi ("dosyanı getir") | 31–60. gün (→ 2026-12-02) | KF-10 şablonu, KV-1, PO-9 | Not defteri henüz yok; demo optik karne, veli ve duyuru üzerinden |
+| 6–8 müdür görüşmesi ("dosyanı getir") | 31–60. gün (→ 2026-12-02) | KF-10 şablonu, KV-1 | Not defteri henüz yok; demo optik karne, veli ve duyuru üzerinden |
 | Ödeme isteği sorusu (3 kurucu) | 31–60. gün | KF-10 soru seti | Fiyat DEC'i bu cevaplara dayanır |
-| G5 prototipi (not defteri) | 61–90. gün | AK-2 → AK-3 → AK-4 | Min eforla AK-4 ~2026-12-11'de biter; max'ta 90. günü kaçırır, prototip API ve LOCAL_TEST demosu olur |
-| İlk pilot niyeti | 90. gün (2027-01-01) | KF-5, KF-7 | Kabul eden okul 48 saatte deneme tenant'ına alınır |
+| G5 prototipi (not defteri) | 61–90. gün | AK-2 → AK-3 → AK-4 | KF-10 3. sıradayken AK-4 min eforla ~2026-11-18'de, max eforla ~2026-12-26'da biter; prototip 90. güne yetişir (UNPROVEN) |
+| İlk pilot niyeti | 90. gün (2027-01-01) | KF-5 | Kabul eden okul 48 saatte deneme tenant'ına alınır |
 
 ---
 
 ## 10. İlerleme kaydı ve sahiplik kuralları
 
-### 10.1 İlerleme tablosu
+### 10.1 İlerleme kaydı
 
-Planın tek ilerleme kaydıdır; her dilim kapanışında bir satır eklenir. Kanıt sınıfları tek tek yazılır; LOCAL_TEST, CI ve STAGING aynı hücrede birleştirilmez. "Kapandı" yalnız kabul kriterinin istediği kanıt sınıfı üretildiğinde yazılır.
-
-| Tarih | Dilim | Kanıt sınıfı | SHA/PR | Not |
-| --- | --- | --- | --- | --- |
-| 2026-10-03 | DEC-20261003-01 | main (PR #123 merge) | d9b42f81 | veli hesabı korunur |
-
-Tarih ISO kapanış günüdür; SHA/PR merge SHA'sının ilk 8 karakteri ve PR numarasıdır; çalıştırılmayan kontrol EXTERNAL_NOT_RUN yazılır ve PASS sayılmaz; Not tek cümledir (plan/gerçek farkı geliştirici günü olarak ve uygulanan kesim).
+Planın tek ilerleme kaynağı `status.md` "## Açık İşler" bölümüdür. Her dilim kapanışında bir satır eklenir: tarih, dilim, kanıt sınıfı, SHA/PR ve plan gün / gerçek gün; C-1 hız ölçümü bu sütunlardan okunur. DEC-20261003-01 2026-10-03'te main'dedir (PR #123, d9b42f81).
 
 ### 10.2 Sahiplik kuralları
 
-Kurallar `AGENTS.md` "Subagent Orchestration" bölümünden gelir; bu plan onları değiştirmez: kapı başına tek yazma yetkili katılımcı; en fazla üç alt ajan, derinlik 1; her kapıdan önce hedef, sahip olunan ve yasak yollar, kabul ve doğrulama komutları yazılır, kapı bitince rapor verilir ve durulur; kanıt sınıfları ayrı raporlanır; deploy, sağlayıcı eylemi, secret/config (D8 `BACKUP_OFFSITE_TARGET` dahil), DB/veri mutasyonu ve mutasyonlu smoke açık ürün sahibi onayı ister; ilgisiz değişiklikler geri alınmaz ve commit edilmez. Her dilim kapanışında §10.1 ve `status.md` "## Açık İşler" aynı PR'da güncellenir; tablo 2 haftadan uzun güncellenmezse RC-7 tetiklenir. Onaylı kesim sırası otomatik işler, sıra dışı kesim DEC olarak yazılır.
+Kurallar `AGENTS.md` "Subagent Orchestration" bölümünden gelir; bu plan onları değiştirmez: kapı başına tek yazma yetkili katılımcı; en fazla üç alt ajan, derinlik 1; her kapıdan önce hedef, sahip olunan ve yasak yollar, kabul ve doğrulama komutları yazılır, kapı bitince rapor verilir ve durulur; kanıt sınıfları ayrı raporlanır; deploy, sağlayıcı eylemi, secret/config (D8 `BACKUP_OFFSITE_TARGET` dahil), DB/veri mutasyonu ve mutasyonlu smoke açık ürün sahibi onayı ister; ilgisiz değişiklikler geri alınmaz ve commit edilmez. Her dilim kapanışında `status.md` "## Açık İşler" güncellenir; kayıt 2 haftadan uzun güncellenmezse RC-7 tetiklenir. Onaylı kesim sırası otomatik işler, sıra dışı kesim DEC olarak yazılır.
 
 ### 10.3 H1 kontrol noktaları
 
-- **H1 ortası, 6. hafta sonu (2026-11-14 civarı):** plan/gerçek süre, KV-1'in 2026-11-07'ye yetişmesi, AK-1 → AK-2 ilerlemesi. Eşik aşılırsa onaylı H1 kesim sırası işler; KV-1, PO-1, KV-6, KF-10 kaydırılmaz.
+- **H1 ortası, 6. hafta sonu (2026-11-14 civarı):** plan/gerçek süre, KV-1'in 2026-11-07'ye yetişmesi, AK-1+AK-2 ilerlemesi. Eşik aşılırsa onaylı H1 kesim sırası işler; KV-1, PO-1, KV-6, KF-10 kaydırılmaz.
 - **H1 sonu, 2027-01-03:** gradebook zincirinin gerçek süresi ve F3 60./90. gün sonuçları. Plan ölçülmüş hızla yeniden çizilir; değişen kilometre taşı DEC ile yazılır.
+- **Nisan 2027:** kapasite ölçümü (PO-3) başlar; Eylül go-live öncesi kapanır.
 
 ---
 
@@ -577,13 +613,13 @@ Dokuz kayıt 2026-10-03 F0–F6 strateji çalışmasında hazırlandı; hiçbiri
 |---|---|---|---|
 | D1 | Hedef segment özel K12; konum bütüncül öğrenci takibi | Özel K12 birincil, dershane ikincil, optik hat korunur, kurs-özel modül yok; DEC-20260613-01'in yalnız hedef cümlesinin yerine geçer; "e-Okul entegrasyonu" denmez | F3 eşikleri tutmazsa segment önceliği yeniden değerlendirilir; landing metni KF-9'da onaylanır |
 | D2 | Farklılaşma tezi ve GTM | Tez cümlesi; özellik hendeği değil; TL fiyat yayınlanır (aktif öğrenci kotası); deneme kartsız, operatör açar (D7); fiyat rakamı ayrı DEC | "Kendi dosyan" vaadi masa başı spike (7–21. gün) ve P-03 sayı eşiği geçmeden landing'e girmez |
-| D3 | e-Okul sınırı | Yalnız dosya düzeyinde import (`nationalIdHash`, sha256 audit, veli hesabı açmaz) ve yalnız geçerli `GradePublication`'dan liste; yazma, şifre, RPA yok | Örnek dosya gelmeden KF-7/KF-8 kodlanmaz |
-| D4 | Okul notu ayrı gradebook bağlamı | Üç tablo additive; optik hat değişmez; yayınlanan satır güncellenmez, düzeltme yeni `version`; deneme ve yazılı ayrı seri; Başarı % yalnız deneme | Not ölçeği ve ağırlıklar UNPROVEN; audit transaction'ı DOGRULANMADI |
-| D5 | Mimari evrim ve 8 koşul | Evrim; yalnız üç strangler yüzeyi, liste genişletilmez; §4.2 koşulları | Worker'da Web Push şifrelemesi DOGRULANMADI |
-| D6 | Mayıs 2027 satış başlangıcı, Eylül 2027 go-live | §7.1 onaylı tanım; onaylı kesim sıraları; PDF hattı ve yük testi koşul 8 kesimine açık H3 kalemi; hız H1 sonunda ölçülür | PO-3/PO-4/PO-10 tarihleri Eylül'e göre yeniden yazılır |
-| D7 | Kartsız deneme lisansı | Kısa `LicenseTerm`, yalnız SYSTEM_ADMIN açar; `planCode` kapalı küme; rakam KF-5 ekinde | Süre dolumunda READ_ONLY/FROZEN döngüsü mü, denemeye özgü saklama mı |
-| D8 | Off-host TR yedek için küçük aylık bütçe | TR içinde S3 uyumlu, şifreli base backup + WAL; tek dış bütçe istisnası; tutar PO-2'de; restore en geç 2027-04-30 STAGING | Sağlayıcı ve `BACKUP_OFFSITE_TARGET` onayı; TR beyanı hukuk görüşüne kalır |
-| D9 | Ödev teslimi kapsamı | `HomeworkSubmission` durum satırı; öğrenci yalnız dosyasız ASSIGNED → SUBMITTED; dosya eki SONRA, ayrı DEC | Geç teslim durumu pilot geri bildirimine kalır |
+| D3 | e-Okul sınırı | Yalnız dosya düzeyinde import (TC şifreli + hash olarak mevcut desen: `nationalIdEncrypted`/`nationalIdHash`; sha256 audit; veli hesabı açmaz; yanıt yalnız sayım/id) ve yalnız geçerli yayından (max `version`) liste; yazma, şifre, RPA yok | Örnek dosya gelmeden KF-7/KF-8 kodlanmaz |
+| D4 | Okul notu ayrı gradebook bağlamı | 2 tablo additive (`GradeAssessment` + append-only `GradeEntry`), yayınlanmış satırda trigger, DELETE grant yok, düzeltme yeni `version`; optik hat değişmez; deneme ve yazılı ayrı seri; Başarı % yalnız deneme | Not ölçeği ve ağırlıklar UNPROVEN; audit transaction'ı DOGRULANMADI |
+| D5 | Mimari evrim ve 4 koşul | Evrim; yalnız üç strangler yüzeyi, liste genişletilmez; 4 koşul §4.2 + §8 kayma kuralı | Worker'da `web-push` ile gönderim DOGRULANMADI |
+| D6 | Mayıs 2027 satış başlangıcı, Eylül 2027 go-live | §7.1 onaylı tanım; onaylı kesim sıraları; PDF hattı ve kapasite için Eylül: ölçüm; kod yalnız eşik (timeout/OOM) aşılırsa; hız H1 sonunda ölçülür | 50 okul rakamı DEC'te pilot sayısına bağlanır |
+| D7 | Kartsız deneme lisansı | Kısa `LicenseTerm`, yalnız SYSTEM_ADMIN açar; `planCode` zod enum, şema yok; süre dolumunda READ_ONLY/FROZEN mevcut `resolveLicenseState`; rakam KF-5 ekinde | Kapalı `planCode` kümesinde SYSTEM kalır mı |
+| D8 | Off-host TR yedek için küçük aylık bütçe | TR içinde S3 uyumlu, gecelik şifreli dump; RPO 24 saat ilk sözleşmeye kadar, RTO ve S3 lifecycle süresi yazılır; WAL SONRA; tek dış bütçe istisnası; tutar PO-2'de; restore en geç 2027-04-30 STAGING | Sağlayıcı ve `BACKUP_OFFSITE_TARGET` onayı; TR beyanı hukuk görüşüne kalır (K-6) |
+| D9 | Ödev teslimi kapsamı | `HomeworkSubmission` zaman damgalı satır (`submittedAt`, `checkedAt`, `checkedById`), durum türetilir; öğrenci yalnız dosyasız teslim işareti; dosya eki SONRA, ayrı DEC | Geç teslim durumu pilot geri bildirimine kalır |
 
 ### Ek A.1 Mevcut DEC'lerde Durum güncellemeleri
 
@@ -602,7 +638,7 @@ Her DEC PR'ından sonra `pnpm ops:check` ve `pnpm prod:plan:check` çalıştır�
 
 ## Ek B. Güncellenecek mevcut dokümanlar
 
-DEC-20261003-01 main'dedir (PR #123, d9b42f81). Güncellemeler origin/main üzerinden açılan PR'larda yapılır.
+Güncellemeler origin/main üzerinden açılan PR'larda yapılır (DEC-20261003-01'in durumu için bkz. §10.1).
 
 ### Ek B.1 Doküman güncellemeleri
 
