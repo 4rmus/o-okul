@@ -762,6 +762,27 @@ Açık soru: Veli yazma yollarının staging kanıtı (`UAT-GUARDIAN-01/02/03` y
 kaldırma PR'ının kapanış kapısıdır; pazarlama cümlesi bu kanıt gelmeden kullanılmaz.
 Son kontrol: 2026-10-03
 
+### DEC-20261004-01 — Feature rollout mekanizması emekliye ayrılır
+
+Durum: Onaylı; kodla kaldırıldı (LOCAL_TEST); CI, STAGING ve PRODUCTION UNPROVEN
+Karar: Kalan üç anahtar (`web.teacher-portal-v2` TP-02, `web.student-portal-v2` SP-02,
+`web.control-plane-v2` CP-02) katalogdan çıkarılır ve katalog boşaldığı için ADR-0008 mekanizması
+tümüyle kaldırılır: `GET /me/feature-rollouts`, `FeatureRolloutService`/`assertEnabled`, web
+`feature-rollouts.ts`, `feature-rollout:read` yetkisi, `feature_rollout_exposed` analytics olayı ve
+`featureFlags` event alanı, `FEATURE_ROLLOUT_ENVIRONMENT`/`FEATURE_ROLLOUTS_JSON` env'leri ve
+`pnpm feature-rollout:check`. Expiry uzatılmaz: tüm katalog 2026-11-07'de sessizce kapanacaktı, ancak
+üç anahtarın API veya web'de tüketicisi yoktu (`ogretmen/`, `ogrenci/`, `sistem/` route'ları koşulsuz),
+yani uzatma yalnız hiçbir şeyi açıp kapatmayan bayrakları yaşatırdı. Kaldırma issue'ları TP-02, SP-02 ve
+CP-02 bu DEC ile kapanır.
+Kaynak: Ürün sahibi kararı (2026-10-04, KV-1 sonrası rollout envanteri).
+Kanıt: `packages/shared-types/src/feature-rollout.ts` ve `apps/api/src/feature-rollout/` silindi;
+`pnpm product-analytics-schema:check` `featureFlags` alanını ve emekli olayı reddeder;
+`pnpm openapi:generate` `/me/feature-rollouts` taşımaz. Kanıt sınıfı LOCAL_TEST.
+Etkilenen ADR: ADR-0008 (emekli; kademeli açılış gerekirse kuralları yeni DEC ile yeniden kurulur).
+Açık soru: Staging/prod ortamındaki `FEATURE_ROLLOUTS_JSON` ve `FEATURE_ROLLOUT_ENVIRONMENT` artık
+okunmaz; deploy config'inden temizlenmesi ops işidir, bloklamaz.
+Son kontrol: 2026-10-04
+
 ## Faz Öncesi Onay Gerektirenler
 
 | ID | Faz | Bloklar mı? | Soru | Beklenen kanıt |

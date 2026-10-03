@@ -452,10 +452,6 @@ async function installRouteApiMocks(
       });
       return;
     }
-    if (pathName === "/me/feature-rollouts" && request.method() === "GET" && persona !== "anonymous") {
-      await fulfillData(route, { enabledFeatureKeys: [] });
-      return;
-    }
 
     if (options.portalAccess && pathName === "/students/portal-access" && request.method() === "GET") {
       await fulfillData(route, [options.portalAccess.record], { limit: 20 });

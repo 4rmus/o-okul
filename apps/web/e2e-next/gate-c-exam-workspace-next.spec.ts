@@ -129,10 +129,6 @@ async function installGateCApi(
       await fulfillData(route, {}, 405);
       return;
     }
-    if (pathName === "/me/feature-rollouts") {
-      await fulfillData(route, { enabledFeatureKeys: [] });
-      return;
-    }
     if (pathName === `/exams/${examId}/workspace`) {
       evidence.workspaceRequests += 1;
       if (mode === "error") await fulfillData(route, { code: "WORKSPACE_UNAVAILABLE" }, 500);
