@@ -3,7 +3,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Field, Input } from "@o-okul/ui";
-import type { AuthResponse } from "@o-okul/shared-types";
+import { isFinanceOnlyStaff, type AuthResponse } from "@o-okul/shared-types";
 import { appBrand } from "../../../src/brand.js";
 import { useAuth } from "../../providers.js";
 import { ContactSupportLink } from "../contact-support-link.js";
@@ -107,6 +107,7 @@ export default function ChangePasswordPage() {
 function getAuthHomePath(auth: AuthResponse) {
   const { roles, subjectType } = auth.session;
   if (roles.includes("SYSTEM_ADMIN")) return "/sistem";
+  if (isFinanceOnlyStaff(roles)) return "/kurum/finans";
   if (roles.some((role) => ["TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF"].includes(role))) return "/kurum";
   if (roles.includes("TEACHER") && subjectType === "TEACHER") return "/ogretmen";
   if (roles.includes("STUDENT") && subjectType === "STUDENT") return "/ogrenci";

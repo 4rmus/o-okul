@@ -32,6 +32,7 @@ export {
   canAccessExamWorkspace,
   capabilitiesForRoles,
   hasCapabilityForRoles,
+  isFinanceOnlyStaff,
   isPortalSubjectRoleName,
   isTenantAssignableRoleName,
   isTenantRoleName,

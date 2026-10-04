@@ -23,6 +23,7 @@ import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, withQueryParams, type ListMeta } from "../../../../src/api-client.js";
 import { buildListUrl, initialListQuery, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
+import { hasCapabilityForRoles } from "../../_shared/access.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 interface FinanceFilters {
@@ -116,10 +117,12 @@ export function FinancePage() {
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
+  // FINANCE_STAFF öğrenci/akademik katalog uçlarına erişemez; bu uçları çağırmak 403 ve hata ekranı üretir.
+  const canLoadReferences = hasCapabilityForRoles(auth?.session.roles ?? [], "student:list");
   const referencesQuery = useQuery({
     queryKey: ["next-finance-refs", tenantId],
     queryFn: () => loadReferences(auth?.accessToken ?? ""),
-    enabled: Boolean(auth),
+    enabled: Boolean(auth) && canLoadReferences,
     refetchOnWindowFocus: false,
   });
   const transactionsQuery = useQuery({
@@ -356,7 +359,7 @@ export function FinancePage() {
       <CrudPage
         actions={
           <>
-            <FinanceFiltersPanel filters={filters} onChange={updateFilters} references={references} />
+            {canLoadReferences ? <FinanceFiltersPanel filters={filters} onChange={updateFilters} references={references} /> : null}
             <ListControls meta={meta} onChange={setListQuery} sortOptions={paymentSortOptions} state={listQuery} />
           </>
         }
@@ -375,7 +378,7 @@ export function FinancePage() {
         getRowKey={(row) => row.id}
         density="compact"
         hasActiveFilters={Boolean(listQuery.q.trim()) || financeFilterKeys.some((key) => Boolean(filters[key]))}
-        loading={plansQuery.isPending || referencesQuery.isPending}
+        loading={plansQuery.isPending || (canLoadReferences && referencesQuery.isPending)}
         rows={rows}
         summary={
           <OperationSummary

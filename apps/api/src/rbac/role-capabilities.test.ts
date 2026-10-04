@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { isFinanceOnlyStaff } from "@o-okul/shared-types";
 import { capabilitiesForRoles, hasCapability } from "./role-capabilities.js";
 
 describe("role capabilities", () => {
@@ -104,5 +105,14 @@ describe("role capabilities", () => {
     expect(hasCapability({ roles: ["GUARDIAN"] }, "student:list")).toBe(false);
     expect(hasCapability({ roles: ["STUDENT"] }, "student:manage")).toBe(false);
     expect(hasCapability({ roles: ["GUARDIAN"] }, "student:manage")).toBe(false);
+  });
+
+  it("yalnız finans rolü olan kullanıcıyı ayırır; ek kurum rolü olanı ayırmaz (KF-1)", () => {
+    expect(isFinanceOnlyStaff(["FINANCE_STAFF"])).toBe(true);
+    expect(isFinanceOnlyStaff(["FINANCE_STAFF", "TEACHER"])).toBe(true);
+    expect(isFinanceOnlyStaff(["FINANCE_STAFF", "OPERATIONS_STAFF"])).toBe(false);
+    expect(isFinanceOnlyStaff(["FINANCE_STAFF", "TENANT_ADMIN"])).toBe(false);
+    expect(isFinanceOnlyStaff(["TENANT_OWNER"])).toBe(false);
+    expect(isFinanceOnlyStaff(["TEACHER"])).toBe(false);
   });
 });
