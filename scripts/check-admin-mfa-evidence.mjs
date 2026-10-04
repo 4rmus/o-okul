@@ -15,6 +15,8 @@ const adminMfaTopLevelKeys = [
   "evidenceReferences",
   "gaps",
 ];
+// Must match adminMfaRoles in apps/api/src/auth/totp-mfa.ts (KV-9).
+const adminMfaRequiredRoles = ["SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN"];
 const adminMfaPolicyKeys = [
   "mode",
   "requiredRoles",
@@ -198,8 +200,8 @@ function requirePolicy(policy, failures) {
   requireObjectKeySet(policy, adminMfaPolicyKeys, failures, "policy");
   requireOneOf(policy, failures, "policy.mode", ["optional", "required"], "mode");
   requireStringArray(policy.requiredRoles, failures, "policy.requiredRoles");
-  if (policy.requiredRoles?.length !== 1 || policy.requiredRoles[0] !== "SYSTEM_ADMIN") {
-    failures.push("policy.requiredRoles yalnız SYSTEM_ADMIN içermeli.");
+  if (JSON.stringify(policy.requiredRoles) !== JSON.stringify(adminMfaRequiredRoles)) {
+    failures.push(`policy.requiredRoles tam olarak ${adminMfaRequiredRoles.join(", ")} olmalı.`);
   }
   requireObjectEqual(policy, failures, "policy.secretStorage", "secretStorage", "aes-256-gcm");
   requireObjectEqual(policy, failures, "policy.secretEncryptionKeyEnv", "secretEncryptionKeyEnv", "ADMIN_MFA_SECRET_ENCRYPTION_KEY");

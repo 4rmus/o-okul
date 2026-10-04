@@ -24,12 +24,18 @@ describe("Tenant user management", () => {
     await app.close();
   });
 
-  it("kurum yöneticisini sistem adminine özel MFA uçlarından uzak tutar", async () => {
+  it("kurum yöneticisine kendi MFA uçlarını açar, sistem step-up ve sıfırlama uçlarından uzak tutar", async () => {
     const tenantAdmin = await login("admin-a@example.test");
 
-    await request(server)
+    const status = await request(server)
       .get("/auth/totp/status")
+      .set("Authorization", `Bearer ${tenantAdmin}`);
+    expect(status.status).not.toBe(403);
+    await request(server)
+      .post("/auth/totp/admin-reset")
       .set("Authorization", `Bearer ${tenantAdmin}`)
+      .set("X-Step-Up-Token", "invalid")
+      .send({ tenantId: "tenant-a", userId: "user-a" })
       .expect(403);
     await request(server)
       .post("/auth/step-up")

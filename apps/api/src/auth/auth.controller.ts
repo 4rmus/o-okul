@@ -19,6 +19,8 @@ import type {
   TenantSelectionRequest,
   TenantSelectionRequiredResponse,
   TenantLoginContextResponse,
+  TotpAdminResetRequest,
+  TotpAdminResetResponse,
   TotpChallengeVerifyRequest,
   TotpDisableRequest,
   TotpDisableResponse,
@@ -82,6 +84,10 @@ const totpDisableBodySchema = z.object({
   message: "TOTP kodu veya recovery code zorunlu.",
   path: ["totpCode"],
 }) satisfies z.ZodType<TotpDisableRequest>;
+const totpAdminResetBodySchema = z.object({
+  tenantId: z.string().trim().min(1).max(128),
+  userId: z.string().trim().min(1).max(128),
+}).strict() satisfies z.ZodType<TotpAdminResetRequest>;
 const mfaStepUpBodySchema = z.object({
   purpose: z.enum(["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET", "TENANT_DEVICE_RESTORE"]),
   target: z.union([z.object({
@@ -268,21 +274,21 @@ export class AuthController {
   }
 
   @Get("totp/status")
-  @Roles("SYSTEM_ADMIN")
+  @Roles("SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN")
   totpStatus(): Promise<TotpStatusResponse> {
     return this.auth.getTotpStatus(getRequestContext());
   }
 
   @Post("totp/setup")
   @HttpCode(200)
-  @Roles("SYSTEM_ADMIN")
+  @Roles("SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN")
   createTotpSetup(): Promise<TotpSetupResponse> {
     return this.auth.createTotpSetup(getRequestContext());
   }
 
   @Post("totp/confirm")
   @HttpCode(200)
-  @Roles("SYSTEM_ADMIN")
+  @Roles("SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN")
   confirmTotpSetup(
     @Body(zodBody(totpSetupConfirmBodySchema)) body: TotpSetupConfirmRequest,
   ): Promise<TotpSetupConfirmResponse> {
@@ -291,12 +297,22 @@ export class AuthController {
 
   @Post("totp/disable")
   @HttpCode(200)
-  @Roles("SYSTEM_ADMIN")
+  @Roles("SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN")
   disableTotp(@Body(zodBody(totpDisableBodySchema)) body: TotpDisableRequest): Promise<TotpDisableResponse> {
     return this.auth.disableTotp(getRequestContext(), {
       totpCode: body.totpCode,
       recoveryCode: body.recoveryCode,
     });
+  }
+
+  @Post("totp/admin-reset")
+  @HttpCode(200)
+  @Roles("SYSTEM_ADMIN")
+  resetTotpBySystemAdmin(
+    @Body(zodBody(totpAdminResetBodySchema)) body: TotpAdminResetRequest,
+    @Headers("x-step-up-token") stepUpToken?: string,
+  ): Promise<TotpAdminResetResponse> {
+    return this.auth.resetTotpBySystemAdmin(getRequestContext(), body, stepUpToken);
   }
 
   @Post("step-up")

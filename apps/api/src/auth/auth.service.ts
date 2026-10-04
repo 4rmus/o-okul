@@ -1,6 +1,6 @@
 import { runVerifiedTenantMutation } from "../context/tenant-mutation-activity.js";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { BadRequestException, HttpException, HttpStatus, Inject, Injectable, NotFoundException, Optional, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ConflictException, HttpException, HttpStatus, Inject, Injectable, NotFoundException, Optional, UnauthorizedException } from "@nestjs/common";
 import { encryptSecretDeliveryPayload } from "@o-okul/db";
 import type { ActivePersona, MeProfileResponse, MeSessionRecord, MeSessionRevokeAllResponse, MfaEnrollmentRequiredResponse, MfaStepUpPurpose, MfaStepUpResponse, TenantLifecycleMfaTarget, TenantCleanResetMfaTarget, TenantDeviceRestoreMfaTarget, SelfPurgeResult, TenantLoginContextResponse, TenantSelectionOption, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
@@ -44,8 +44,10 @@ import {
   resolveAdminMfaMode,
   resolveEncryptedTotpCounter,
   resolveTotpCounter,
+  verifyAdminMfaStepUpProof,
   verifyAdminMfaToken,
 } from "./totp-mfa.js";
+import { isSystemAdmin } from "../rbac/roles.js";
 
 export type { SelfPurgeResult };
 
@@ -80,6 +82,10 @@ export interface TotpStatusResult {
   enabled: boolean;
   enabledAt?: string;
   recoveryCodesRemaining: number;
+}
+
+export interface TotpAdminResetResult {
+  resetAt: string;
 }
 
 export interface TotpDisableResult {
@@ -406,6 +412,40 @@ export class AuthService {
     return { disabledAt };
   }
 
+  async resetTotpBySystemAdmin(context: RequestContext, target: { tenantId: string; userId: string }, stepUpToken?: string): Promise<TotpAdminResetResult> {
+    this.assertSystemStepUpContext(context);
+    if (!stepUpToken || !context.sessionId || context.membershipVersion === undefined) {
+      throw new UnauthorizedException("MFA_STEP_UP_REQUIRED");
+    }
+    try {
+      verifyAdminMfaStepUpProof(stepUpToken, {
+        userId: context.userId, sessionId: context.sessionId, membershipVersion: context.membershipVersion, purpose: "OWNER_ADMIN_CHANGE",
+      });
+    } catch {
+      throw new UnauthorizedException("MFA_STEP_UP_INVALID");
+    }
+    const user = await this.users.findById(target.userId);
+    // ponytail: control-plane reset is limited to tenant OWNER/ADMIN; SYSTEM_ADMIN recovery stays out of band.
+    if (!user || target.tenantId === "system" || user.tenantId !== target.tenantId || isSystemAdmin(user.roles) || !isAdminMfaRole(user.roles)) {
+      throw new NotFoundException("MFA_RESET_TARGET_NOT_FOUND");
+    }
+    if (!user.totpSecretEncrypted || !user.totpEnabledAt) throw new BadRequestException("MFA_NOT_ENABLED");
+    const source = { tenantId: user.tenantId, membershipVersion: user.membershipVersion };
+    const reset = await this.users.disableTotp(user.id, source);
+    if (!reset) throw new ConflictException("MFA_RESET_TARGET_STALE");
+    await this.sessions.revokeByUser(user.id, source);
+    const resetAt = new Date().toISOString();
+    await this.auditLogs?.record({
+      tenantId: user.tenantId,
+      actorUserId: context.userId,
+      entityType: "Auth",
+      entityId: user.id,
+      action: "auth.totp_reset_by_system_admin",
+      diff: { resetAt, sessionsRevoked: true },
+    });
+    return { resetAt };
+  }
+
   async createMfaStepUp(
     context: RequestContext,
     purpose: MfaStepUpPurpose,
@@ -413,7 +453,11 @@ export class AuthService {
     target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget,
   ): Promise<MfaStepUpResponse> {
     this.assertAdminMfaManageable(context);
+    this.assertSystemStepUpContext(context);
     const currentUser = await this.requireCurrentUser(context);
+    if (currentUser.tenantId !== "system" || !isSystemAdmin(currentUser.roles)) {
+      throw new UnauthorizedException("MFA_STEP_UP_CONTEXT_INVALID");
+    }
     if (!context.sessionId || context.membershipVersion !== currentUser.membershipVersion) {
       throw new UnauthorizedException("MFA_STEP_UP_CONTEXT_INVALID");
     }
@@ -886,6 +930,13 @@ export class AuthService {
     }
     if (!isAdminMfaRole(context.roles)) {
       throw new UnauthorizedException("ADMIN_MFA_ADMIN_ROLE_REQUIRED");
+    }
+  }
+
+  // Step-up proofs stay bound to the system tenant: tenant OWNER/ADMIN MFA covers login only.
+  private assertSystemStepUpContext(context: RequestContext): void {
+    if (!isSystemAdmin(context.roles) || (context.tenantId ?? "system") !== "system") {
+      throw new UnauthorizedException("MFA_STEP_UP_CONTEXT_INVALID");
     }
   }
 

@@ -70,8 +70,10 @@ export function resolveAdminMfaMode(): AdminMfaMode {
   return "off";
 }
 
+export const adminMfaRoles = ["SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN"] as const;
+
 export function isAdminMfaRole(roles: readonly string[]): boolean {
-  return roles.includes("SYSTEM_ADMIN");
+  return adminMfaRoles.some((role) => roles.includes(role));
 }
 
 export function createLoginMfaChallenge(userId: string, membershipVersion: number, now = Date.now()): LoginMfaChallenge {

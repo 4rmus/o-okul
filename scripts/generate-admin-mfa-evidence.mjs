@@ -75,7 +75,7 @@ try {
     checkedAt: new Date().toISOString(),
     policy: {
       mode: adminMfaMode,
-      requiredRoles: ["SYSTEM_ADMIN"],
+      requiredRoles: ["SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN"],
       secretStorage: "aes-256-gcm",
       secretEncryptionKeyEnv: "ADMIN_MFA_SECRET_ENCRYPTION_KEY",
       recoveryCodeHashKeyEnv: "ADMIN_MFA_RECOVERY_HASH_KEY",

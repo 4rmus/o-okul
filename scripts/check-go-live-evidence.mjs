@@ -2603,9 +2603,9 @@ function requireSummaryAdminMfa(report, failures) {
     requireObjectEqual(policy, failures, "productionEvidenceSummary.summary.reports.adminMfa.policy.recoveryCodeHashKeyEnv", "recoveryCodeHashKeyEnv", "ADMIN_MFA_RECOVERY_HASH_KEY");
     requireObjectEqual(policy, failures, "productionEvidenceSummary.summary.reports.adminMfa.policy.challengeSecretEnv", "challengeSecretEnv", "ADMIN_MFA_CHALLENGE_SECRET");
     requireObjectTrue(policy, failures, "productionEvidenceSummary.summary.reports.adminMfa.policy.smsOtpRejected", "smsOtpRejected");
-    requireObjectStringList(policy, failures, "productionEvidenceSummary.summary.reports.adminMfa.policy.requiredRoles", "requiredRoles", 1, false);
-    if (policy.requiredRoles?.length !== 1 || policy.requiredRoles[0] !== "SYSTEM_ADMIN") {
-      failures.push("productionEvidenceSummary.summary.reports.adminMfa.policy.requiredRoles yalnız SYSTEM_ADMIN içermeli.");
+    requireObjectStringList(policy, failures, "productionEvidenceSummary.summary.reports.adminMfa.policy.requiredRoles", "requiredRoles", 3, false);
+    if (JSON.stringify(policy.requiredRoles) !== JSON.stringify(["SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN"])) {
+      failures.push("productionEvidenceSummary.summary.reports.adminMfa.policy.requiredRoles tam olarak SYSTEM_ADMIN, TENANT_OWNER, TENANT_ADMIN olmalı.");
     }
     if (!["optional", "required"].includes(policy.mode)) {
       failures.push("productionEvidenceSummary.summary.reports.adminMfa.policy.mode optional veya required olmalı.");

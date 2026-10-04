@@ -1962,6 +1962,15 @@ const requiredOperationContracts = [
   },
   {
     method: "post",
+    path: "/api/v1/auth/totp/admin-reset",
+    requestBody: true,
+    responseEnvelope: true,
+    requiredHeaders: ["X-Step-Up-Token"],
+    requestRequired: ["tenantId", "userId"],
+    responseDataRequired: ["resetAt"],
+  },
+  {
+    method: "post",
     path: "/api/v1/auth/step-up",
     requestBody: true,
     responseEnvelope: true,
