@@ -950,18 +950,6 @@ export interface StudentPortalAccessUpdateResult {
   sessionsRevoked: number;
 }
 
-export interface StudentGuardianProvisionRequest {
-  firstName?: string;
-  lastName?: string;
-  nationalId?: string;
-  phone?: string;
-  email?: string;
-  canViewFinance?: boolean;
-  canReceiveSms?: boolean;
-  canReceiveAnnouncements?: boolean;
-  canOpenSupportTickets?: boolean;
-}
-
 export interface StudentCreateRequest {
   tenantId?: string;
   studentNo?: string;
@@ -974,7 +962,6 @@ export interface StudentCreateRequest {
   nationalId?: string;
   phone?: string;
   email?: string;
-  guardian?: StudentGuardianProvisionRequest;
 }
 
 export interface StudentUpdateRequest {
@@ -1022,7 +1009,7 @@ export interface StudentImportRequest {
 
 export interface StudentImportError {
   row: number;
-  field: "className" | "contactEmail" | "contactFirstName" | "contactLastName" | "contactPhone" | "contactRelation" | "email" | "firstName" | "gradeLevelName" | "guardian" | "guardianNationalId" | "guardianPhone" | "lastName" | "nationalId" | "phone" | "quota" | "studentNo";
+  field: "className" | "contactEmail" | "contactFirstName" | "contactLastName" | "contactPhone" | "contactRelation" | "email" | "firstName" | "gradeLevelName" | "guardian" | "lastName" | "nationalId" | "phone" | "quota" | "studentNo";
   code:
     | "CLASS_GRADE_LEVEL_MISMATCH"
     | "CLASS_NOT_FOUND"
@@ -1034,9 +1021,8 @@ export interface StudentImportError {
     | "INVALID_NATIONAL_ID"
     | "INVALID_PHONE"
     | "INVALID_RELATION_TYPE"
-    | "GUARDIAN_CONTACT_REQUIRED"
+    | "CONTACT_COLUMNS_CONFLICT"
     | "REQUIRED"
-    | "STUDENT_IMPORT_PILOT_CORE_ONLY"
     | "STUDENT_NATIONAL_ID_DUPLICATE"
     | "STUDENT_NO_DUPLICATE"
     | "ACTIVE_STUDENT_LIMIT_REACHED";
@@ -1062,7 +1048,6 @@ export interface StudentImportPreviewRow {
   };
   email?: string;
   firstName: string;
-  guardian?: StudentGuardianProvisionRequest;
   lastName: string;
   studentNo?: string;
 }

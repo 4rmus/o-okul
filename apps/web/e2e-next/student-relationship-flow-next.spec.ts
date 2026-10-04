@@ -209,7 +209,7 @@ function mockApiResponse(
   if (pathName === "/auth/refresh") return { data: createAuthResponse(options.roles) };
   if (pathName === "/me/tenant") return { data: createTenantResponse() };
   if (pathName === "/me/notification-devices") return { data: [] };
-  if (pathName === "/me/feature-rollouts") return { data: { enabledFeatureKeys: ["web.student-registry-v2"] } };
+  if (pathName === "/me/feature-rollouts") return { data: { enabledFeatureKeys: [] } };
   if (pathName === "/students/student-a/overview") return { data: createStudentOverview(options.roles) };
   if (pathName === "/students/student-a/profile") return { data: createStudentProfile() };
   if (pathName === "/students/student-a/guardian-links") return { data: createGuardianLinks() };

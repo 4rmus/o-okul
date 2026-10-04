@@ -823,17 +823,26 @@ describe("API auth + tenant isolation", () => {
     await request(server).delete(`/students/${studentId}`).set("Authorization", `Bearer ${issued.accessToken}`).expect(204);
   });
 
-  it("student create guardian hatasında yan etki oluşturmaz", async () => {
+  it("student create veli hesabı açmaz: guardian alanını yan etkisiz reddeder", async () => {
     const issued = await login("admin-a@example.test");
+    const guardiansBefore = await request(server)
+      .get("/guardians")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(200);
 
     await request(server)
       .post("/students")
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .set("Idempotency-Key", "student-create-invalid-guardian-a")
-      .send({ firstName: "YanEtki", lastName: "Ogrenci", gradeLevelId: "grade-8", guardian: {} })
-      .expect(400)
+      .send({ firstName: "YanEtki", lastName: "Ogrenci", gradeLevelId: "grade-8", guardian: { phone: "05557654321" } })
+      .expect(422);
+
+    await request(server)
+      .get("/guardians")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(200)
       .expect(({ body }) => {
-        expect(JSON.stringify(body)).toContain("GUARDIAN_CONTACT_REQUIRED");
+        expect(body).toEqual(guardiansBefore.body);
       });
 
     await request(server)
@@ -1030,7 +1039,7 @@ describe("API auth + tenant isolation", () => {
     );
   });
 
-  it("student Excel import veli bilgilerini oluşturup öğrenciye bağlar", async () => {
+  it("student Excel import veli sütunlarını veli hesabı açmadan iletişim kişisi olarak yazar", async () => {
     const issued = await login("admin-a@example.test");
     let studentId = "";
 
@@ -1080,26 +1089,26 @@ describe("API auth + tenant isolation", () => {
       });
 
       await request(server)
-        .get(`/students/${encodeURIComponent(studentId)}/guardians`)
+        .get(`/students/${encodeURIComponent(studentId)}/guardian-links`)
         .set("Authorization", `Bearer ${issued.accessToken}`)
-        .expect(200)
-        .expect(({ body }) => {
-          expect(body).toEqual([expect.objectContaining({ firstName: "FATMA", lastName: "VELİLİ", phone: "5553210000" })]);
-        });
+        .expect(200, []);
 
       await request(server)
-        .get(`/students/${encodeURIComponent(studentId)}/guardian-links`)
+        .get(`/students/${encodeURIComponent(studentId)}/contacts`)
         .set("Authorization", `Bearer ${issued.accessToken}`)
         .expect(200)
         .expect(({ body }) => {
           expect(body).toEqual([
             expect.objectContaining({
-              canViewFinance: false,
+              firstName: "FATMA",
+              lastName: "VELİLİ",
+              relationType: "LEGAL_GUARDIAN",
               canReceiveSms: false,
               canReceiveAnnouncements: false,
-              canOpenSupportTickets: false,
+              canReceiveFinance: false,
             }),
           ]);
+          expect(JSON.stringify(body)).not.toContain("10000001990");
         });
 
       await request(server)

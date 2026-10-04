@@ -32,7 +32,6 @@ import { ArrowLeft, BarChart3, ChevronRight, LayoutDashboard } from "lucide-reac
 import { ActionCard, Alert, Button, DataTable, Field, InfoGrid, InfoItem, Input, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError, apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
-import { featureRolloutQueryKey, isFeatureEnabled, loadFeatureRollouts } from "../../../../src/feature-rollouts.js";
 import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
@@ -44,7 +43,6 @@ import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
 import { formatPercentNumber, formatStudentProgressSummary, isComparableStudentProgress, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import { readReportExamId } from "../../_shared/report-exam-selection.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
-import { RevealablePhone } from "../_shared/revealable-phone.js";
 
 interface StudentBaseDetail {
   attendanceSummary: AttendanceSummaryRecord | null;
@@ -138,23 +136,14 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
   const searchParams = useSearchParams();
   const requestedReportExamId = readReportExamId(searchParams);
   const canViewFinance = hasCapabilityForRoles(auth?.session.roles ?? [], "finance:manage");
-  const canRevealPhone = hasCapabilityForRoles(auth?.session.roles ?? [], "privacy:manage");
   const canManageStudent = hasCapabilityForRoles(auth?.session.roles ?? [], "student:manage");
-  const featureRolloutsQuery = useQuery({
-    queryKey: featureRolloutQueryKey(auth?.session.tenantId, auth?.session.id, auth?.session.activePersona),
-    queryFn: () => loadFeatureRollouts(auth?.accessToken ?? ""),
-    enabled: Boolean(auth?.accessToken),
-    refetchOnWindowFocus: false,
-  });
-  const studentRegistryV2 = featureRolloutsQuery.isSuccess
-    && isFeatureEnabled(featureRolloutsQuery.data, "web.student-registry-v2");
   const [selectedExamId, setSelectedExamId] = useState("");
   const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
 
   const pageDataQuery = useQuery({
-    queryKey: ["next-student-detail-page-data", auth?.session.tenantId ?? "anonymous", studentId, canViewFinance ? "finance" : "no-finance", studentRegistryV2 ? "contacts-v2" : "legacy-contacts"],
-    queryFn: () => loadStudentDetailPageData(auth?.accessToken ?? "", studentId, { canViewFinance, studentRegistryV2 }),
-    enabled: Boolean(auth) && !featureRolloutsQuery.isPending,
+    queryKey: ["next-student-detail-page-data", auth?.session.tenantId ?? "anonymous", studentId, canViewFinance ? "finance" : "no-finance"],
+    queryFn: () => loadStudentDetailPageData(auth?.accessToken ?? "", studentId, { canViewFinance }),
+    enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
 
@@ -268,7 +257,6 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
       ) : detail ? (
         <StudentDashboard
           classNameById={classNameById}
-          canRevealPhone={canRevealPhone}
           canManageStudent={canManageStudent}
           canViewFinance={canViewFinance}
           courseNameById={courseNameById}
@@ -282,7 +270,6 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
           studentAuditLogs={studentAuditLogs}
           studentExamsHref={studentExamsHref}
           studentId={studentId}
-          studentRegistryV2={studentRegistryV2}
           termNameById={termNameById}
           teacherNameById={teacherNameById}
         />
@@ -293,7 +280,6 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
 
 function StudentDashboard({
   classNameById,
-  canRevealPhone,
   canManageStudent,
   canViewFinance,
   courseNameById,
@@ -307,12 +293,10 @@ function StudentDashboard({
   studentAuditLogs,
   studentExamsHref,
   studentId,
-  studentRegistryV2,
   teacherNameById,
   termNameById,
 }: {
   classNameById: ReadonlyMap<string, string>;
-  canRevealPhone: boolean;
   canManageStudent: boolean;
   canViewFinance: boolean;
   courseNameById: ReadonlyMap<string, string>;
@@ -326,7 +310,6 @@ function StudentDashboard({
   studentAuditLogs: StudentAuditSummaryRecord[];
   studentExamsHref: string;
   studentId: string;
-  studentRegistryV2: boolean;
   teacherNameById: ReadonlyMap<string, string>;
   termNameById: ReadonlyMap<string, string>;
 }) {
@@ -467,10 +450,8 @@ function StudentDashboard({
       <div className="next-student-detail-grid">
         <StudentContactPanel
           canManageStudent={canManageStudent}
-          canRevealPhone={canRevealPhone}
           detail={detail}
           studentId={studentId}
-          studentRegistryV2={studentRegistryV2}
         />
 
         <Panel
@@ -603,16 +584,12 @@ function StudentDetailRowsTable({
 
 function StudentContactPanel({
   canManageStudent,
-  canRevealPhone,
   detail,
   studentId,
-  studentRegistryV2,
 }: {
   canManageStudent: boolean;
-  canRevealPhone: boolean;
   detail: StudentBaseDetail;
   studentId: string;
-  studentRegistryV2: boolean;
 }) {
   const { auth } = useAuth();
   const queryClient = useQueryClient();
@@ -657,19 +634,17 @@ function StudentContactPanel({
 
   return (
     <Panel
-      aria-label={studentRegistryV2 ? "Öğrenci iletişim kişileri" : "İletişim ve veli"}
+      aria-label="Öğrenci iletişim kişileri"
       className="next-student-detail-panel next-student-detail-panel--wide"
-      description={studentRegistryV2
-        ? "İletişim kişileri portal hesabı veya oturum üretmez; telefon ve e-posta sunucuda maskelenir."
-        : "Öğrenci telefonu ve e-postası maskeli kalır; legacy veli telefonu yetkiye göre gösterilir."}
-      title={studentRegistryV2 ? "İletişim kişileri" : "İletişim ve veli"}
+      description="İletişim kişileri portal hesabı veya oturum üretmez; telefon ve e-posta sunucuda maskelenir."
+      title="İletişim kişileri"
     >
       <StudentDetailRowsTable
-        caption={studentRegistryV2 ? "Öğrenci iletişim kişisi kayıtları" : "İletişim ve veli kayıtları"}
+        caption="Öğrenci iletişim kişisi kayıtları"
         emptyText="İletişim kaydı yok"
-        rows={buildContactRows(detail, { canRevealPhone, studentRegistryV2 })}
+        rows={buildContactRows(detail)}
       />
-      {studentRegistryV2 && canManageStudent ? (
+      {canManageStudent ? (
         <form className="next-form-section" onSubmit={(event) => void submit(event)}>
           <p className="next-form-section-title">İletişim kişisi ekle</p>
           <div className="next-form-grid">
@@ -694,7 +669,7 @@ function StudentContactPanel({
   );
 }
 
-function buildContactRows(detail: StudentBaseDetail, options: { canRevealPhone: boolean; studentRegistryV2: boolean }): StudentDetailTableRow[] {
+function buildContactRows(detail: StudentBaseDetail): StudentDetailTableRow[] {
   return [
     {
       detail: detail.profile.phone ? maskPhoneNumber(detail.profile.phone) : (detail.profile.phoneMasked ?? "-"),
@@ -712,21 +687,14 @@ function buildContactRows(detail: StudentBaseDetail, options: { canRevealPhone: 
       status: "Maskeli",
       tone: "success",
     },
-    ...(options.studentRegistryV2 ? detail.contacts.map((contact): StudentDetailTableRow => ({
+    ...detail.contacts.map((contact): StudentDetailTableRow => ({
       detail: [contact.phoneMasked, contact.emailMasked].filter(Boolean).join(" · ") || "İletişim bilgisi yok",
       id: `student-contact-${contact.id}`,
       meta: formatStudentContactRelation(contact.relationType),
       primary: `${contact.firstName} ${contact.lastName}`,
       status: "İletişim kişisi",
       tone: "info",
-    })) : detail.guardians.map((guardian): StudentDetailTableRow => ({
-      detail: <RevealablePhone canReveal={options.canRevealPhone && Boolean(guardian.phone)} value={guardian.phone ?? guardian.phoneMasked} />,
-      id: `guardian-contact-${guardian.id}`,
-      meta: "Veli iletişimi",
-      primary: `${guardian.firstName} ${guardian.lastName}`,
-      status: "Veli",
-      tone: "info",
-    }))),
+    })),
   ];
 }
 
@@ -1238,7 +1206,7 @@ function buildStudentExamSummaryActions(
 async function loadStudentDetailPageData(
   accessToken: string,
   id: string,
-  options: { canViewFinance: boolean; studentRegistryV2: boolean },
+  options: { canViewFinance: boolean },
 ): Promise<StudentDetailPageData> {
   const [detail, exams] = await Promise.all([
     loadStudentBaseDetail(accessToken, id, options),
@@ -1250,88 +1218,31 @@ async function loadStudentDetailPageData(
 async function loadStudentBaseDetail(
   accessToken: string,
   id: string,
-  options: { canViewFinance: boolean; studentRegistryV2: boolean },
+  options: { canViewFinance: boolean },
 ): Promise<StudentBaseDetail> {
-  if (options.studentRegistryV2) {
-    const overview = await apiRequest<StudentOverviewRecord>(
-      accessToken,
-      `${apiBaseUrl}/students/${encodeURIComponent(id)}/overview`,
-    );
-    const paymentPlans = options.canViewFinance && overview.canViewFinance
-      ? await apiRequest<PaymentPlanWithInstallmentsRecord[]>(accessToken, `${apiBaseUrl}/payment-plans?studentId=${encodeURIComponent(id)}`)
-      : [];
-    return {
-      attendanceSummary: overview.attendance,
-      auditLogs: overview.activity,
-      classes: overview.classes,
-      courses: overview.courses,
-      contacts: overview.contacts,
-      guardianLinks: overview.guardianLinks,
-      guardians: overview.guardians,
-      homeworkAssignments: overview.homeworkAssignments,
-      paymentPlans,
-      profile: overview.profile,
-      enrollments: overview.enrollments,
-      teacherAssignments: overview.teacherAssignments,
-      teachers: overview.teachers,
-      teacherNotes: overview.teacherNotes,
-      terms: overview.terms,
-    };
-  }
-  const [
-    attendanceSummary,
-    auditLogs,
-    guardianLinks,
-    profile,
-    guardians,
-    homeworkAssignments,
-    paymentPlans,
-    enrollments,
-    teacherAssignments,
-    teachers,
-    teacherNotes,
-    classes,
-    courses,
-    contacts,
-    terms,
-  ] = await Promise.all([
-    apiRequestOrNull<AttendanceSummaryRecord>(accessToken, `${apiBaseUrl}/attendance/summary?studentId=${encodeURIComponent(id)}`),
-    apiRequestOrNull<StudentAuditSummaryRecord[]>(
-      accessToken,
-      `${apiBaseUrl}/audit-logs/student-summary?studentId=${encodeURIComponent(id)}&limit=5`,
-    ),
-    apiRequest<GuardianStudentRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/guardian-links`),
-    apiRequest<StudentProfileRecord>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/profile`),
-    apiRequest<GuardianRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/guardians`),
-    loadStudentHomeworkAssignments(accessToken, id),
-    options.canViewFinance
-      ? apiRequest<PaymentPlanWithInstallmentsRecord[]>(accessToken, `${apiBaseUrl}/payment-plans?studentId=${encodeURIComponent(id)}`)
-      : Promise.resolve([]),
-    apiRequest<StudentEnrollmentRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/enrollments`),
-    apiRequest<TeacherAssignmentRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/teacher-assignments`),
-    apiRequest<TeacherRecord[]>(accessToken, `${apiBaseUrl}/teachers`),
-    apiRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/teacher-notes?studentId=${encodeURIComponent(id)}`),
-    apiRequest<ClassRecord[]>(accessToken, `${apiBaseUrl}/classes`),
-    apiRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`),
-    Promise.resolve([]),
-    apiRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`),
-  ]);
+  const overview = await apiRequest<StudentOverviewRecord>(
+    accessToken,
+    `${apiBaseUrl}/students/${encodeURIComponent(id)}/overview`,
+  );
+  const paymentPlans = options.canViewFinance && overview.canViewFinance
+    ? await apiRequest<PaymentPlanWithInstallmentsRecord[]>(accessToken, `${apiBaseUrl}/payment-plans?studentId=${encodeURIComponent(id)}`)
+    : [];
   return {
-    attendanceSummary,
-    auditLogs: auditLogs ?? [],
-    classes,
-    courses,
-    contacts,
-    guardianLinks,
-    guardians,
-    homeworkAssignments,
+    attendanceSummary: overview.attendance,
+    auditLogs: overview.activity,
+    classes: overview.classes,
+    courses: overview.courses,
+    contacts: overview.contacts,
+    guardianLinks: overview.guardianLinks,
+    guardians: overview.guardians,
+    homeworkAssignments: overview.homeworkAssignments,
     paymentPlans,
-    profile,
-    enrollments,
-    teacherAssignments,
-    teachers,
-    teacherNotes,
-    terms,
+    profile: overview.profile,
+    enrollments: overview.enrollments,
+    teacherAssignments: overview.teacherAssignments,
+    teachers: overview.teachers,
+    teacherNotes: overview.teacherNotes,
+    terms: overview.terms,
   };
 }
 

@@ -1,7 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
 import { z } from "zod";
-import { FeatureRolloutService } from "../feature-rollout/feature-rollout.service.js";
 import { applyListQuery } from "../listing/list-query.js";
 import { optionalDateString, optionalTrimmedString, optionalUppercaseString, requiredTrimmedString, requiredUppercaseString, zodBody, zodQuery } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
@@ -72,22 +71,10 @@ const studentPortalAccessUpdateBodySchema = z.object({
   expectedVersion: z.number().int().min(1),
   status: z.enum(["ACTIVE", "SUSPENDED"]),
 }).strict() satisfies z.ZodType<StudentPortalAccessUpdateRequest>;
-const studentGuardianProvisionBodySchema = z.object({
-  canOpenSupportTickets: z.boolean().optional(),
-  canReceiveAnnouncements: z.boolean().optional(),
-  canReceiveSms: z.boolean().optional(),
-  canViewFinance: z.boolean().optional(),
-  email: optionalTrimmedString,
-  firstName: optionalUppercaseString,
-  lastName: optionalUppercaseString,
-  nationalId: optionalTrimmedString,
-  phone: optionalTrimmedString,
-}).strict();
 const studentCreateBodySchema = z.object({
   classId: optionalTrimmedString,
   firstName: requiredUppercaseString,
   gradeLevelId: optionalTrimmedString,
-  guardian: studentGuardianProvisionBodySchema.optional(),
   lastName: requiredUppercaseString,
   nationalId: optionalTrimmedString,
   phone: optionalTrimmedString,
@@ -138,15 +125,14 @@ export class StudentController {
     private readonly imports: StudentImportService,
     private readonly guardianService: GuardianService,
     private readonly teacherService: TeacherService,
-    private readonly featureRollouts: FeatureRolloutService,
   ) {}
 
   @Get()
   @RequireCapability("student:list")
   async list(@Query(zodQuery(studentListQuerySchema)) query: StudentListQuery): Promise<PublicStudentRecord[]> {
     const context = getRequestContext();
-    const rollouts = await this.featureRollouts.resolve(context);
-    if (rollouts.enabledFeatureKeys.includes("web.student-registry-v2")) {
+    // ponytail: paged requests (öğrenci listesi) use the DB registry; unpaged lookups across pages keep the full list.
+    if (query.page !== undefined || query.limit !== undefined) {
       return this.students.listRegistryPageForViewer(context, {
         page: positiveListInt(query.page, 1, "LIST_PAGE_INVALID"),
         limit: positiveListInt(query.limit, 20, "LIST_LIMIT_INVALID"),
