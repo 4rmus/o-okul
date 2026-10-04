@@ -1477,7 +1477,7 @@ function createPaymentPlans() {
       currency: "TRY",
       id: "payment-plan-a",
       installments: [
-        { amount: 120000, currency: "TRY", dueDate: "2026-01-10", id: "installment-a", installmentNo: 1, status: "OVERDUE" },
+        { amount: 120000, currency: "TRY", dueDate: "2026-01-10", id: "installment-a", installmentNo: 1, overdue: true, status: "PENDING" },
       ],
       studentId: "student-a",
       tenantId: "tenant-faz9",

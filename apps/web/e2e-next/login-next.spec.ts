@@ -521,7 +521,8 @@ type PaymentInstallmentFixture = {
   installmentNo: number;
   amount: number;
   dueDate: string;
-  status: "PENDING" | "PAID" | "OVERDUE" | "CANCELED";
+  status: "PENDING" | "PAID" | "CANCELED";
+  overdue?: boolean;
   paidAt?: string;
   createdAt: string;
 };
@@ -1033,7 +1034,8 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
           installmentNo: 1,
           amount: 50000,
           dueDate: "2026-06-01",
-          status: "OVERDUE",
+          status: "PENDING",
+          overdue: true,
           createdAt: "2026-06-05T09:00:00.000Z",
         },
         {
@@ -2816,6 +2818,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
                 dueDate: body.dueDate ?? installment.dueDate,
                 paidAt: body.status === "PAID" ? "2026-06-10T09:00:00.000Z" : body.status ? undefined : installment.paidAt,
                 status: body.status ?? installment.status,
+                overdue: body.status && body.status !== "PENDING" ? false : installment.overdue,
               }
             : installment,
         ),

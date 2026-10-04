@@ -197,29 +197,29 @@ function formatMoney(amount: number, currency: string) {
 
 function formatPendingPaymentForPlan(plan: PaymentPlanWithInstallmentsRecord) {
   const total = plan.installments
-    .filter((installment) => installment.status === "PENDING" || installment.status === "OVERDUE")
+    .filter((installment) => installment.status === "PENDING")
     .reduce((sum, installment) => sum + installment.amount, 0);
   return formatMoney(total, plan.currency);
 }
 
 function formatNextInstallmentSummary(plan: PaymentPlanWithInstallmentsRecord) {
   const installment = [...plan.installments]
-    .filter((item) => item.status === "PENDING" || item.status === "OVERDUE")
+    .filter((item) => item.status === "PENDING")
     .sort((left, right) => left.dueDate.localeCompare(right.dueDate) || left.installmentNo - right.installmentNo)[0];
 
   if (!installment) return "Açık taksit yok";
 
-  return `${installment.installmentNo}. taksit / ${formatMoney(installment.amount, plan.currency)} / ${formatDate(installment.dueDate)} / ${paymentInstallmentStatusLabel(installment.status)}`;
+  return `${installment.installmentNo}. taksit / ${formatMoney(installment.amount, plan.currency)} / ${formatDate(installment.dueDate)} / ${paymentInstallmentStatusLabel(installment)}`;
 }
 
-function paymentInstallmentStatusLabel(status: PaymentPlanWithInstallmentsRecord["installments"][number]["status"]) {
+function paymentInstallmentStatusLabel(installment: PaymentPlanWithInstallmentsRecord["installments"][number]) {
+  if (installment.overdue) return "Gecikmiş";
   const labels: Record<PaymentPlanWithInstallmentsRecord["installments"][number]["status"], string> = {
     CANCELED: "İptal",
-    OVERDUE: "Gecikmiş",
     PAID: "Ödendi",
     PENDING: "Bekliyor",
   };
-  return labels[status];
+  return labels[installment.status];
 }
 
 function formatDate(value: string) {
