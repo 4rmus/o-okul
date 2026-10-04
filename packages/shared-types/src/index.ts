@@ -379,6 +379,8 @@ export type {
   TenantUserRecord,
   TenantUserRoleUpdateRequest,
   TotpChallengeVerifyRequest,
+  TotpAdminResetRequest,
+  TotpAdminResetResponse,
   TotpDisableRequest,
   TotpDisableResponse,
   TotpSetupConfirmRequest,

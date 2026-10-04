@@ -5,7 +5,7 @@ import type { IdentityResolver } from "./identity-resolver.js";
 import { InMemoryPasswordResetStore } from "./password-reset-store.js";
 import { InMemorySessionStore } from "./session-store.js";
 import { LoginAttemptLimiter } from "./login-attempt-limiter.js";
-import { createTotpCodeForTest, verifyAdminMfaStepUpProof } from "./totp-mfa.js";
+import { createAdminMfaStepUpProof, createTotpCodeForTest, verifyAdminMfaStepUpProof } from "./totp-mfa.js";
 import { hashTcIdentity } from "../student/tc-identity.js";
 import { InMemoryTenantStore } from "../tenant/tenant-store.js";
 
@@ -836,8 +836,7 @@ describe("AuthService", () => {
   });
 
   it.each([
-    "TENANT_OWNER",
-    "TENANT_ADMIN",
+    "ASSISTANT_ADMIN",
     "OPERATIONS_STAFF",
     "FINANCE_STAFF",
     "TEACHER",
@@ -882,6 +881,99 @@ describe("AuthService", () => {
       membershipVersion: user.membershipVersion,
       bypassRls: false,
     })).rejects.toThrow("ADMIN_MFA_ADMIN_ROLE_REQUIRED");
+  });
+
+  it.each(["TENANT_OWNER", "TENANT_ADMIN"])("MFA required iken mevcut %s kullanıcısını kilitlemeden ilk girişte enrollment'a alır, sonra challenge eder", async (role) => {
+    process.env.ADMIN_MFA_MODE = "required";
+    const user: AuthUser = {
+      id: `tenant-mfa-${role.toLowerCase()}`,
+      email: `mfa-${role.toLowerCase()}@example.test`,
+      nationalIdHash: hashTcIdentity("10000000146"),
+      name: "Tenant MFA Admin",
+      passwordHash: hashPassword("password", "test-salt"),
+      tenantId: "tenant-a",
+      roles: [role],
+      membershipVersion: 1,
+    };
+    const auth = new AuthService(
+      createMutableUserStore(user),
+      new InMemorySessionStore(),
+      new InMemoryPasswordResetStore(),
+      { resolve: vi.fn(async () => undefined) } as unknown as IdentityResolver,
+      undefined,
+      undefined,
+      new InMemoryTenantStore(),
+    );
+
+    const enrollment = await auth.login(loginCredentials(user.email ?? ""));
+    if (!("status" in enrollment) || enrollment.status !== "MFA_ENROLLMENT_REQUIRED") throw new Error("MFA enrollment bekleniyordu.");
+    const enrolled = await auth.confirmRequiredTotpEnrollment(enrollment.setupToken, createTotpCodeForTest(enrollment.secret));
+    expect(enrolled.session).toMatchObject({ tenantId: "tenant-a", roles: expect.arrayContaining([role]) });
+
+    const challenge = await auth.login(loginCredentials(user.email ?? ""));
+    expect(challenge).toMatchObject({ status: "MFA_REQUIRED" });
+    if (!("status" in challenge) || challenge.status !== "MFA_REQUIRED") throw new Error("MFA challenge bekleniyordu.");
+    await expect(auth.verifyTotpChallenge(challenge.challengeToken, {
+      totpCode: createTotpCodeForTest(enrollment.secret, Date.now() + 30_000),
+    })).resolves.toMatchObject({ session: { userId: user.id } });
+
+    const tenantContext = {
+      userId: user.id, tenantId: user.tenantId, roles: user.roles, membershipVersion: user.membershipVersion,
+      sessionId: enrolled.session.id, bypassRls: false,
+    };
+    await expect(auth.getTotpStatus(tenantContext)).resolves.toMatchObject({ enabled: true, mode: "required" });
+    // Step-up stays bound to the system tenant: a tenant OWNER/ADMIN never gets a system step-up proof.
+    for (const purpose of ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE"] as const) {
+      await expect(auth.createMfaStepUp(tenantContext, purpose, {
+        totpCode: createTotpCodeForTest(enrollment.secret, Date.now() + 60_000),
+      }, purpose === "TENANT_LIFECYCLE_CHANGE" ? { tenantId: "tenant-a", status: "SUSPENDED", expectedLifecycleVersion: 0 } : undefined))
+        .rejects.toThrow("MFA_STEP_UP_CONTEXT_INVALID");
+    }
+  });
+
+  it("SYSTEM_ADMIN step-up ile kurum OWNER MFA'sını sıfırlar, oturumları kapatır ve audit'e yazar", async () => {
+    process.env.ADMIN_MFA_MODE = "required";
+    const owner: AuthUser = {
+      id: "tenant-owner-mfa-reset",
+      email: "owner-reset@example.test",
+      name: "Owner Reset",
+      passwordHash: hashPassword("password", "test-salt"),
+      tenantId: "tenant-a",
+      roles: ["TENANT_OWNER"],
+      membershipVersion: 3,
+      totpSecretEncrypted: "encrypted",
+      totpEnabledAt: "2026-09-01T00:00:00.000Z",
+      totpRecoveryCodeHashes: ["hash"],
+    };
+    const sessions = new InMemorySessionStore();
+    const revoke = vi.spyOn(sessions, "revokeByUser");
+    const record = vi.fn(async () => undefined);
+    const auth = new AuthService(
+      createMutableUserStore(owner),
+      sessions,
+      new InMemoryPasswordResetStore(),
+      { resolve: vi.fn(async () => undefined) } as unknown as IdentityResolver,
+      { record } as never,
+      undefined,
+      new InMemoryTenantStore(),
+    );
+    const admin = { userId: "system-admin-reset", tenantId: null, roles: ["SYSTEM_ADMIN"], membershipVersion: 1, sessionId: "system-session", bypassRls: true };
+    const proof = createAdminMfaStepUpProof({ userId: admin.userId, sessionId: admin.sessionId, membershipVersion: 1, purpose: "OWNER_ADMIN_CHANGE" }).stepUpToken;
+    const ownerContext = { userId: owner.id, tenantId: owner.tenantId, roles: owner.roles, membershipVersion: 3, sessionId: "owner-session", bypassRls: false };
+
+    await expect(auth.resetTotpBySystemAdmin(admin, { tenantId: "tenant-a", userId: owner.id })).rejects.toThrow("MFA_STEP_UP_REQUIRED");
+    await expect(auth.resetTotpBySystemAdmin(ownerContext, { tenantId: "tenant-a", userId: owner.id }, proof)).rejects.toThrow("MFA_STEP_UP_CONTEXT_INVALID");
+    await expect(auth.resetTotpBySystemAdmin(admin, { tenantId: "tenant-b", userId: owner.id }, proof)).rejects.toThrow("MFA_RESET_TARGET_NOT_FOUND");
+
+    await expect(auth.resetTotpBySystemAdmin(admin, { tenantId: "tenant-a", userId: owner.id }, proof)).resolves.toMatchObject({ resetAt: expect.any(String) });
+    expect(owner.totpSecretEncrypted).toBeUndefined();
+    expect(revoke).toHaveBeenCalledWith(owner.id, { tenantId: "tenant-a", membershipVersion: 3 });
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: "tenant-a", actorUserId: admin.userId, entityId: owner.id, action: "auth.totp_reset_by_system_admin",
+    }));
+    await expect(auth.resetTotpBySystemAdmin(admin, { tenantId: "tenant-a", userId: owner.id }, proof)).rejects.toThrow("MFA_NOT_ENABLED");
+    // After reset the owner is sent back through first-login enrollment instead of being locked out.
+    await expect(auth.login(loginCredentials(owner.email ?? ""))).resolves.toMatchObject({ status: "MFA_ENROLLMENT_REQUIRED" });
   });
 
   it("sistem admini TOTP etkinleştikten sonra login'i MFA challenge'a böler ve TOTP reuse'u reddeder", async () => {
@@ -1135,7 +1227,7 @@ describe("AuthService", () => {
     await expect(auth.createMfaStepUp(context, "TENANT_LIFECYCLE_CHANGE", { recoveryCode: "wrong" }, target)).rejects.toThrow("MFA_RECOVERY_CODE_INVALID");
     await expect(auth.createMfaStepUp(context, "TENANT_LIFECYCLE_CHANGE", { recoveryCode: setup.recoveryCodes[1] })).rejects.toThrow("MFA_STEP_UP_TARGET_INVALID");
     await expect(auth.createMfaStepUp({ ...context, sessionId: "missing" }, "TENANT_LIFECYCLE_CHANGE", { recoveryCode: setup.recoveryCodes[1] }, target)).rejects.toThrow("MFA_STEP_UP_CONTEXT_INVALID");
-    await expect(auth.createMfaStepUp({ ...context, roles: ["TENANT_OWNER"] }, "TENANT_LIFECYCLE_CHANGE", { recoveryCode: setup.recoveryCodes[1] }, target)).rejects.toThrow("ADMIN_MFA_ADMIN_ROLE_REQUIRED");
+    await expect(auth.createMfaStepUp({ ...context, roles: ["TENANT_OWNER"] }, "TENANT_LIFECYCLE_CHANGE", { recoveryCode: setup.recoveryCodes[1] }, target)).rejects.toThrow("MFA_STEP_UP_CONTEXT_INVALID");
     const lifecycle = await auth.createMfaStepUp(context, "TENANT_LIFECYCLE_CHANGE", { recoveryCode: setup.recoveryCodes[1] }, target);
     expect(() => verifyAdminMfaStepUpProof(lifecycle.stepUpToken, { userId: user.id, sessionId: context.sessionId,
       membershipVersion: context.membershipVersion, purpose: "TENANT_LIFECYCLE_CHANGE", target })).not.toThrow();

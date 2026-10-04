@@ -524,6 +524,15 @@ const totpDisableResponseSchema = objectSchema({
   disabledAt: stringSchema({ format: "date-time" }),
 }, ["disabledAt"]);
 
+const totpAdminResetRequestSchema = objectSchema({
+  tenantId: stringSchema({ minLength: 1, maxLength: 128 }),
+  userId: stringSchema({ minLength: 1, maxLength: 128 }),
+}, ["tenantId", "userId"]);
+
+const totpAdminResetResponseSchema = objectSchema({
+  resetAt: stringSchema({ format: "date-time" }),
+}, ["resetAt"]);
+
 const tenantResetInstitutionRequestSchema = objectSchema({
   id: stringSchema(), tenantId: stringSchema(), requestedBy: stringSchema(), requestedAt: stringSchema({ format: "date-time" }), lifecycleVersion: integerSchema({ minimum: 0 }), status: stringSchema({ enum: ["PENDING", "REVOKED", "ACCEPTED", "COMPLETED"] }), operationId: stringSchema({ nullable: true }),
 }, ["id", "tenantId", "requestedBy", "requestedAt", "lifecycleVersion", "status", "operationId"]);
@@ -3181,6 +3190,11 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/auth/totp/disable": {
     requestBody: totpDisableRequestSchema,
     responseBody: totpDisableResponseSchema,
+  },
+  "post /api/v1/auth/totp/admin-reset": {
+    requiredHeaders: [{ name: "X-Step-Up-Token", description: "SYSTEM_ADMIN OWNER_ADMIN_CHANGE MFA proof bound to actor/session.", schema: stringSchema() }],
+    requestBody: totpAdminResetRequestSchema,
+    responseBody: totpAdminResetResponseSchema,
   },
   "post /api/v1/auth/step-up": {
     requestBody: mfaStepUpRequestSchema,

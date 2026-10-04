@@ -172,6 +172,15 @@ export interface TotpDisableResponse {
   disabledAt: string;
 }
 
+export interface TotpAdminResetRequest {
+  tenantId: string;
+  userId: string;
+}
+
+export interface TotpAdminResetResponse {
+  resetAt: string;
+}
+
 export type MfaStepUpPurpose = "OWNER_ADMIN_CHANGE" | "TENANT_LIFECYCLE_CHANGE" | "TENANT_CLEAN_RESET" | "TENANT_DEVICE_RESTORE";
 
 export interface TenantLifecycleMfaTarget {
