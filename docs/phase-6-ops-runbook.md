@@ -2003,6 +2003,35 @@ olarak koşturur. Canlı bakım kanıtı `result=PASS`, `check=audit_log_partiti
 `mode=apply`, `applied=true`, partition adları/tarih aralıkları, bakım komutu ve boş `gaps`
 listesi taşır.
 
+Tek seferlik 24 ay ufku (PO-1, DEC: özel K12 planı koşul 7; son bootstrap partition `2026_12`):
+önce staging, sonra prod; her ortam ayrı ürün sahibi onayı ister. Önce salt okunur ön kontrol:
+
+```sql
+SELECT count(*) FROM "AuditLog_default" WHERE "createdAt" >= '2027-01-01';
+```
+
+Sonuç `0` değilse apply durur (`AuditLog_default planlanan aralıkta N satır taşıyor`); satırlar
+ayrı onaylı taşıma ile çözülür. Sonuç `0` ise:
+
+```sh
+AUDIT_LOG_PARTITION_APPLY=1 \
+AUDIT_LOG_PARTITION_START_MONTH=2027-01 \
+AUDIT_LOG_PARTITION_MONTHS_AHEAD=24 \
+AUDIT_LOG_PARTITION_EVIDENCE_FILE=artifacts/staging/audit-log-partition.json \
+DIRECT_DATABASE_URL=postgresql://... \
+pnpm audit-log-partition:maintain
+```
+
+Script aynı transaction içinde DEFAULT ön kontrolünü yapar, `AuditLog_2027_01..AuditLog_2028_12`
+oluşturur, tekrar çalıştırmada değişiklik yapmaz ve kanıta `defaultRowCount` yazar (eski aylardan
+kalan DEFAULT satırları raporlanır, apply'ı durdurmaz). Staging apply 2026-10-03'te yapıldı
+(`AuditLog_2027_01..2028_12`, DEFAULT 0, kanıt `artifacts/staging/audit-log-partition.json`) ve
+`packages/db/scripts/check-audit-log-partition.mjs` içindeki `appliedPartitionHorizon` `2028-12`
+oldu. Production henüz kurulmadı: production bootstrap'ı migration'lardan sonra, trafik açılmadan
+önce aynı ön kontrol ve apply'ı koşar (PO-10 go-live kanıtı). Ufuk her yeni apply kanıtıyla aynı PR'da
+yükseltilir; güncellenmezse `pnpm audit-log-partition:check` ufuktan bir ay önce (2028-12-01) CI'da
+FAIL verir.
+
 ## Production PITR Sözleşmesi
 
 Production Postgres yapılandırması:
