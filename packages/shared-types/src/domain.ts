@@ -256,8 +256,14 @@ export interface LicenseTermListRecord extends LicenseTermRecord {
   state: LicenseState;
 }
 
+// DEC-20261004-02: closed plan set for new license terms; stored rows keep their text value.
+export const licensePlanCodes = ["TRIAL", "PRO", "ENTERPRISE"] as const;
+export type LicensePlanCode = (typeof licensePlanCodes)[number];
+/** Card-free trial: one short term opened by SYSTEM_ADMIN; expiry follows the normal READ_ONLY → FROZEN lifecycle. */
+export const trialLicenseLimits = { maxDays: 7, maxActiveStudents: 100 } as const;
+
 export interface LicenseTermCreateRequest {
-  planCode: string;
+  planCode: LicensePlanCode;
   startsAt: string;
   endsAt: string;
   activeStudentLimit: number;

@@ -2032,6 +2032,42 @@ oldu. Production henüz kurulmadı: production bootstrap'ı migration'lardan son
 yükseltilir; güncellenmezse `pnpm audit-log-partition:check` ufuktan bir ay önce (2028-12-01) CI'da
 FAIL verir.
 
+## Gecelik şifreli yedek (KF-5)
+
+Amaç: her gece veritabanının şifreli kopyasını almak ve bu kopyadan gerçekten geri dönülebildiğini
+kanıtlamak. Bu adım geçmeden gerçek veri içeren deneme kurumu açılmaz (DEC-20261004-02). Off-host
+TR S3 yüklemesi PO-2'dir; sağlayıcı ürün sahibi tarafından sonra seçilir.
+
+- `scripts/backup-nightly.mjs`, compose dizininde (`/root/o-okul`) `docker compose exec postgres
+  pg_dump --format=custom` çıktısını akış hâlinde AES-256-GCM ile şifreler ve
+  `${BACKUP_PATH}/o-okul-<UTC zaman>.dump.enc` dosyasına 0600 izinle yazar. Şifresiz döküm diske
+  yazılmaz; yarım kalan dosya `.partial` olarak silinir. `BACKUP_RETENTION_DAYS`'ten eski yedekler
+  silinir.
+- Anahtar: `openssl rand -base64 32` ile bir kez üretilir, `.env` içinde
+  `BACKUP_ENCRYPTION_KEY_BASE64` olarak tutulur ve sunucu dışında güvenli bir yerde de saklanır.
+  Anahtar kaybolursa yedekler açılamaz. Anahtar ve `.env` değişikliği ürün sahibi onayıyla yapılır.
+- Zamanlama (host crontab, kullanıcı onayıyla kurulur):
+
+```cron
+15 3 * * * cd /root/o-okul && /usr/bin/node --env-file=.env scripts/backup-nightly.mjs >> /var/log/o-okul-backup.log 2>&1
+```
+
+- Restore tatbikatı en son şifreli yedekle yapılır; betik dosyayı çözer, geçici veritabanına
+  `pg_restore` eder, tablo sayımlarını doğrular ve geçici veritabanını siler. Yanlış anahtar veya
+  değiştirilmiş dosya tatbikatı FAIL eder.
+
+```sh
+cd /root/o-okul
+BACKUP_PATH="$(grep -E '^BACKUP_PATH=' .env | cut -d= -f2-)"
+node --env-file=.env scripts/generate-restore-drill-evidence.mjs \
+  --from "$(ls -1t "$BACKUP_PATH"/o-okul-*.dump.enc | head -1)" \
+  --output artifacts/staging/restore-drill.json --environment staging
+RESTORE_DRILL_TARGET=file://$PWD/artifacts/staging/restore-drill.json pnpm restore:drill:check
+```
+
+- Yerel/CI sözleşmesi: `pnpm backup:nightly:check` (sahte `docker` ile şifreleme, saklama, birebir
+  şifreli restore, yanlış anahtar ve değişiklik reddi).
+
 ## Production PITR Sözleşmesi
 
 Production Postgres yapılandırması:
@@ -2046,7 +2082,8 @@ archive_timeout = 60s
 Zorunlu operasyon sözleşmesi:
 
 - Günlük base backup alınır ve lokal kalıcı backup path'inde saklanır; off-host hedef pilot
-  release gate'i değildir.
+  release gate'i değildir. İlk sürüm (KF-5, DEC-20261004-02) gecelik şifreli `pg_dump`'tır;
+  ayrıntı aşağıdaki "Gecelik şifreli yedek" bölümündedir.
 - WAL arşivi ayrı kalıcı path veya bucket altında tutulur.
 - En az haftada bir restore denemesi yapılır.
 - Panel/API/worker backup işi yalnız `s3://bucket/prefix` veya kalıcı `file://` dizin hedefi
