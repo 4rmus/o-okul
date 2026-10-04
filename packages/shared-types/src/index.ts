@@ -1,12 +1,4 @@
 export type TenantId = string;
-export {
-  featureRolloutKeys,
-} from "./feature-rollout.js";
-export type {
-  FeatureRolloutCatalogItem,
-  FeatureRolloutKey,
-  ResolvedFeatureRollouts,
-} from "./feature-rollout.js";
 export { FormatAnalyzerService, getParserConfigPresetSuggestion } from "./format-analyzer.js";
 export {
   assertProductEvent,

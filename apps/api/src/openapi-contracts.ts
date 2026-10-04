@@ -1,5 +1,4 @@
 import type { OpenAPIObject } from "@nestjs/swagger";
-import { featureRolloutKeys } from "@o-okul/shared-types";
 
 type JsonSchema = Record<string, unknown>;
 type JsonContent = Record<string, { schema: JsonSchema }>;
@@ -87,10 +86,6 @@ const meProfileResponseSchema = objectSchema({
     version: integerSchema({ minimum: 1 }),
   }, ["id", "version"]),
 }, ["userId", "tenantId", "roles"]);
-
-const resolvedFeatureRolloutsSchema = objectSchema({
-  enabledFeatureKeys: arraySchema({ type: "string", enum: [...featureRolloutKeys] }),
-}, ["enabledFeatureKeys"]);
 
 const personaSwitchRequestSchema = objectSchema({
   activePersona: { type: "string", enum: ["STAFF", "TEACHER", "STUDENT"] },
@@ -3285,9 +3280,6 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/me/profile": {
     responseBody: meProfileResponseSchema,
-  },
-  "get /api/v1/me/feature-rollouts": {
-    responseBody: resolvedFeatureRolloutsSchema,
   },
   "post /api/v1/me/password": {
     requestBody: mePasswordChangeRequestSchema,
