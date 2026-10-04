@@ -2938,3 +2938,64 @@ export interface TenantDeviceRestoreOperation extends TenantDeviceRestoreMfaTarg
   errorCode: string | null;
   createdAt: string;
 }
+
+// School grades (ADR-0011). Separate from optical exam results; a published entry never changes.
+export type GradeAssessmentKind = "WRITTEN" | "PERFORMANCE" | "PROJECT" | "PARTICIPATION";
+
+export interface GradeAssessmentRecord {
+  id: string;
+  tenantId: string;
+  classId: string;
+  courseId: string;
+  termId: string;
+  kind: GradeAssessmentKind;
+  title: string;
+  heldOn: string;
+  maxScore: number;
+  publishedVersion?: number;
+  createdById: string;
+  createdAt: string;
+}
+
+export interface GradeEntryRecord {
+  id: string;
+  assessmentId: string;
+  studentId: string;
+  version: number;
+  score: number | null;
+  absent: boolean;
+  publishedAt?: string;
+  enteredById: string;
+  createdAt: string;
+}
+
+/** All versions of every entry; the current grade per student is its highest version. */
+export interface GradeAssessmentDetail {
+  assessment: GradeAssessmentRecord;
+  entries: GradeEntryRecord[];
+}
+
+export interface GradeAssessmentCreateRequest {
+  classId: string;
+  courseId: string;
+  termId: string;
+  kind: GradeAssessmentKind;
+  title: string;
+  heldOn: string;
+  maxScore?: number;
+}
+
+export interface GradeEntryDraftInput {
+  studentId: string;
+  score: number | null;
+  absent: boolean;
+}
+
+export interface GradeEntriesSaveRequest {
+  entries: GradeEntryDraftInput[];
+}
+
+export interface GradeAssessmentPublishResult {
+  assessment: GradeAssessmentRecord;
+  publishedCount: number;
+}

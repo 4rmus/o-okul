@@ -5,6 +5,7 @@ import { AttendanceModule } from "./attendance/attendance.module.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { RequestContextMiddleware } from "./context/request-context.middleware.js";
 import { DevelopmentModule } from "./development/development.module.js";
+import { GradebookModule } from "./gradebook/gradebook.module.js";
 import { ExamModule } from "./exam/exam.module.js";
 import { HealthModule } from "./health/health.module.js";
 import { HomeworkModule } from "./homework/homework.module.js";
@@ -45,6 +46,7 @@ import { UserManagementModule } from "./user-management/user-management.module.j
     AuthModule,
     AttendanceModule,
     DevelopmentModule,
+    GradebookModule,
     ExamModule,
     HealthModule,
     HomeworkModule,
