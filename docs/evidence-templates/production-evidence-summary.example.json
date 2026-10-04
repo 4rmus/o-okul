@@ -721,7 +721,9 @@
       "policy": {
         "mode": "optional",
         "requiredRoles": [
-          "SYSTEM_ADMIN"
+          "SYSTEM_ADMIN",
+          "TENANT_OWNER",
+          "TENANT_ADMIN"
         ],
         "secretStorage": "aes-256-gcm",
         "secretEncryptionKeyEnv": "ADMIN_MFA_SECRET_ENCRYPTION_KEY",
@@ -1382,13 +1384,15 @@
       "environment": "production",
       "checkedAt": "2026-05-31T11:30:00.000Z",
       "schema": {
-        "tenantScopedTables": 66,
+        "tenantScopedTables": 68,
         "derivedFromSchema": true,
         "staticCheckPassed": true,
         "liveCheckPassed": true,
         "tablesVerified": [
           "DevelopmentCriterion",
           "DevelopmentAssessment",
+          "GradeAssessment",
+          "GradeEntry",
           "DevelopmentScore",
           "User",
           "NotificationDeviceToken",
@@ -1459,7 +1463,7 @@
         "tenantAHash": "tenant-a-redacted",
         "tenantBHash": "tenant-b-redacted",
         "crossTenantReadRows": 0,
-        "crossTenantReadChecks": 66,
+        "crossTenantReadChecks": 68,
         "withCheckRejects": [
           "Student wrong tenant insert",
           "Homework wrong tenant insert",

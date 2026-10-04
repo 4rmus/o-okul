@@ -1,9 +1,13 @@
-import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname, parse, resolve } from "node:path";
+import { spawn, spawnSync } from "node:child_process";
+import { createReadStream, existsSync, lstatSync, mkdirSync, writeFileSync } from "node:fs";
+import { basename, dirname, parse, resolve } from "node:path";
+import { pipeline } from "node:stream/promises";
+import { openEncryptedBackup, readBackupKey } from "./backup-crypto.mjs";
 
 const outputPath = readOption("--output") ?? process.env.RESTORE_DRILL_OUTPUT;
 const environment = readOption("--environment") ?? process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "staging";
+// --from restores an existing nightly backup (decrypting it); without it a fresh dump is taken.
+const encryptedBackup = readOption("--from");
 const restoreDb = `o_okul_restore_drill_${Date.now()}`;
 const dumpPath = `/tmp/${restoreDb}.dump`;
 
@@ -27,16 +31,21 @@ function run(command) {
 }
 
 try {
-  run(`pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom --no-owner --no-privileges --file="${dumpPath}"`);
-  run(`createdb -U "$POSTGRES_USER" "${restoreDb}"`);
-  run(`pg_restore -U "$POSTGRES_USER" -d "${restoreDb}" "${dumpPath}"`);
+  if (encryptedBackup) {
+    run(`createdb -U "$POSTGRES_USER" "${restoreDb}"`);
+    await restoreEncryptedBackup(resolve(encryptedBackup), restoreDb);
+  } else {
+    run(`pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom --no-owner --no-privileges --file="${dumpPath}"`);
+    run(`createdb -U "$POSTGRES_USER" "${restoreDb}"`);
+    run(`pg_restore -U "$POSTGRES_USER" -d "${restoreDb}" "${dumpPath}"`);
+  }
 
   const tableCounts = readTableCounts(restoreDb);
   const report = {
     result: "PASS",
     environment,
     drillDate: new Date().toISOString(),
-    sourceBackup: `docker-compose-postgres-dump:${restoreDb}.dump`,
+    sourceBackup: encryptedBackup ? `encrypted-nightly-dump:${basename(encryptedBackup)}` : `docker-compose-postgres-dump:${restoreDb}.dump`,
     targetDatabase: restoreDb,
     tableCounts,
     errors: [],
@@ -58,6 +67,20 @@ try {
   } catch {
     // Best-effort cleanup.
   }
+}
+
+async function restoreEncryptedBackup(path, databaseName) {
+  const { decipher, start, end } = openEncryptedBackup(path, readBackupKey());
+  const restore = spawn("docker", ["compose", "exec", "-T", "postgres", "sh", "-lc", `pg_restore -U "$POSTGRES_USER" -d "${databaseName}"`], {
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  let stderr = "";
+  restore.stderr.on("data", (chunk) => { stderr += chunk; });
+  const exit = new Promise((resolveExit) => restore.on("close", resolveExit));
+  // A wrong key or tampered file fails decipher.final(); the drill database is dropped in finally either way.
+  await pipeline(createReadStream(path, { start, end }), decipher, restore.stdin);
+  const code = await exit;
+  if (code !== 0) throw new Error(`pg_restore başarısız (${code}): ${stderr.trim()}`);
 }
 
 function readTableCounts(databaseName) {

@@ -444,6 +444,8 @@ Not olarak (bloklamaz):
 
 ## 7. Yol haritası
 
+**2026-10-04 güncellemesi (ürün sahibi):** KF-7 ve KF-8 yol haritasından çıkarıldı, e-Okul örnek dosyası kullanılmayacak (DEC-20261004-05). TR S3 sağlayıcı seçimi ertelendi; PO-2 sağlayıcı seçilene kadar başlamaz (DEC-20261004-09). Hukuk görüşü harcaması (OPEN-20261003-01) ertelendi; KV-8 ve KF-9'daki TR barındırma iddiası bu görüşü bekler. D1–D9 `docs/DECISIONS.md`'de DEC-20261004-02..10 olarak kayıtlıdır (D7 = DEC-20261004-02). Aşağıdaki KF-7/KF-8 satırları yalnız tarihçe içindir.
+
 Kaynak: 2026-10-03 F0–F6 strateji çalışması, F5. 38 aday, 3 bağımsız sıralayıcı ve yargıçla 27 dilime indi; doğrulayıcı her yolu ve komutu kök `package.json` ile kontrol etti. 2026-10-03 mimari incelemesi ve ürün sahibi onayıyla dilimler 20 satıra indi (H1 6, H2 7, H3 7). Efor UNPROVEN (paralel ajan kazancı sıfır sayıldı). Dilim başı yollar, kabul kriterleri ve doğrulama komut blokları: bkz. docs/ozel-k12-strateji-ekleri.md §F5.1, §F5.2, §F5.3.
 
 ### 7.1 Kapasite gerçeği ve Mayıs/Eylül tanımı (onaylı)
@@ -477,14 +479,14 @@ Sıra: KV-1 → hijyen → AK-1+AK-2 → AK-3+AK-4 → KF-5+yedek → KF-10. KF-
 
 ### 7.3 H2 dilimleri (3–6 ay)
 
-Sıra: KF-1 → PO-2 → KF-7 → KF-8 → KV-4 → KV-3 → KF-2 (Mayıs öncesi kalemler başa alındı).
+Sıra: KF-1 → KV-4 → KV-3 → KF-2; PO-2 sağlayıcı seçimine kadar ertelendi, KF-7 ve KF-8 çıkarıldı (2026-10-04).
 
 | Dilim | Amaç ve kabul | Efor |
 |---|---|---|
 | KF-1 Muhasebe 403 | Parola değişimi 200 döner, `/kurum/finans` 403'süz açılır; tahsilat hata ekranı 0 (LOCAL_TEST). | 1–2 hf |
 | PO-2 Off-host TR yedek + restore (PO-8 dahil) | Gecelik şifreli pg_dump (AES-256-GCM, `node:crypto`) mevcut `@aws-sdk/client-s3` ile TR S3'e yazılır; restore tatbikatı `restore:drill:check` ile PASS verir; RPO 24 saat, D8'e yazılır. | ~1 hf |
-| KF-7 e-Okul import | Mevcut student-import alias'ları kullanılır, örnek dosya gelince ve K-4 masa başı okumasından sonra yapılır; audit'e sha256 + satır sayısı yazılır, yanıt yalnız sayım/id döner. | 0,5–1 hf |
-| KF-8 e-Okul'a işlenecek liste | Yalnız geçerli yayın listelenir: `publishedVersion` (max(version) önbelleği, yayın transaction'ında yazılır; karne aynı değeri okur). Aynı istek aynı sha256'yı verir. | 1–1,5 hf |
+| ~~KF-7 e-Okul import~~ (çıkarıldı, DEC-20261004-05) | Mevcut student-import alias'ları kullanılır, örnek dosya gelince ve K-4 masa başı okumasından sonra yapılır; audit'e sha256 + satır sayısı yazılır, yanıt yalnız sayım/id döner. | 0,5–1 hf |
+| ~~KF-8 e-Okul'a işlenecek liste~~ (çıkarıldı, DEC-20261004-05) | Yalnız geçerli yayın listelenir: `publishedVersion` (max(version) önbelleği, yayın transaction'ında yazılır; karne aynı değeri okur). Aynı istek aynı sha256'yı verir. | 1–1,5 hf |
 | KV-4 Veli özeti + okul notu ayrı seri (AK-5, KV-5 dahil) | Allow-list DTO ve tek bağ helper'ı (`apps/api/src/payment/payment.service.ts:75-82` deseni) kullanılır; öğretmen notu, iletişim ve diğer veli alanı yoktur (alan yokluğu testi). PWA kurulabilirliği: manifest id/start_url, PNG/maskable ikon; cache yok. | 3,5–6 hf |
 | KV-3 guardianId bağı + toplu davet (KV-2 dahil) | `StudentContact.guardianId` FK'sı raw SQL ile `GuardianStudent(tenantId, guardianId, studentId)`'a bağlanır, ON DELETE SET NULL; tekrar gönderimde ikinci davet yok, TC/telefon kullanıcı adı olmaz. | 1,5–3 hf |
 | KF-2 Ödeme planı UI + türetilmiş gecikme (KF-3 dahil) | Ödeme planı UI eklenir. Gecikme tek yardımcıdan türetilir; OVERDUE yazma enum'dan çıkar, backfill onaylıdır. Aynı anahtarla ikinci plan oluşmaz. | 2–4 hf |
@@ -498,7 +500,7 @@ Sıra: KF-9 → KV-9 (Mayıs öncesi, ~2,5–5 hf) → KV-7 → PO-10 → AK-6 �
 | KF-9 Fiyat sayfası ve landing | `apps/web/app/fiyatlar/` (yeni) eklenir. Her iddia DEC/UAT'a bağlıdır, "e-Okul entegrasyonu" ifadesi yoktur. TR barındırma iddiası yalnız K-6 sonrasında yazılır. | 1,5–3 hf |
 | KV-9 OWNER/ADMIN TOTP MFA | Rol listesi `isAdminMfaRole`'a OWNER/ADMIN eklenerek genişler. SYSTEM_ADMIN destekli sıfırlama gelir. Mevcut `scripts/check-admin-mfa-evidence.mjs` requiredRoles güncellenir. Step-up sistem tenant'ına bağlı kalır (negatif test). | 1–2 hf |
 | KV-7 Push (VAPID) | Gönderim mevcut `announcement-delivery` kuyruğuyla worker'a taşınır: 25'lik chunk, jobId = sourceType:sourceId:channel:chunkIndex, `web-push`. 404/410'da `disabledAt` set edilir, payload PII taşımaz. | 2–3 hf |
-| PO-10 Prod go-live kanıt zinciri (PO-7 dahil) | Mevcut `go-live:check` ve `prod:evidence:summary:check` PRODUCTION'da PASS verir; yeni kanıt betiği yok. Bağımlılık: staging 200 + KV-1 UAT. | 3–6 hf |
+| PO-10 Prod go-live kanıt zinciri (PO-7 dahil) | Mevcut `go-live:check` ve `prod:evidence:summary:check` PRODUCTION'da PASS verir; yeni kanıt betiği yok. Prod bootstrap'ı trafik açılmadan AuditLog 24 ay partition apply'ını koşar (PO-1 runbook; staging 2026-10-03'te uygulandı). Bağımlılık: staging 200 + KV-1 UAT. | 3–6 hf |
 | AK-6 Ödev teslimi | `HomeworkSubmission` zaman damgalıdır (submittedAt, checkedAt, checkedById), satırlar tembel oluşur, durum türetilir. Öğrenci işareti `ON CONFLICT ... WHERE checkedAt IS NULL` ile yazılır, 0 satırda 409 döner; dosyasız. | 1,5–3 hf |
 | KV-8 Tetikleyiciler: vade, devamsızlık, not yayını (KF-4, AK-7 dahil) | `notifiedAt`/`notifiedVersion` taraması yapılır, eşik worker sabitidir (değer DEC'te). Rıza ve `disabledAt` gönderim anında kontrol edilir; K-1 önce. | 3–5 hf |
 | PO-3 Kapasite ölçümü (PO-4 dahil) | Ölçüm Nisan 2027 kontrol noktasında başlar, Eylül go-live öncesi kapanır: `report-generation:perf` ile 1500 öğrenci ve `scripts/k6-report-listing.js`'e eklenen tek not girişi senaryosu. Kod yalnız eşik (timeout/OOM) aşılırsa yazılır; ilk adım tarayıcının tek örnekte tutulması + BullMQ concurrency. | 0,5–1 hf (eşik aşılırsa +2–4 hf) |

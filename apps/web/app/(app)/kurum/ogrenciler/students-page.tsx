@@ -1496,7 +1496,7 @@ function formatPendingPayment(plans: PaymentPlanWithInstallmentsRecord[]) {
   const total = plans.reduce(
     (sum, plan) =>
       sum + plan.installments
-        .filter((installment) => installment.status === "PENDING" || installment.status === "OVERDUE")
+        .filter((installment) => installment.status === "PENDING")
         .reduce((installmentSum, installment) => installmentSum + installment.amount, 0),
     0,
   );

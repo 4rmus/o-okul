@@ -8,6 +8,7 @@ import { CrudPage, EmptyState, StatusBadge, type DataTableColumn, type StatusBad
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest } from "../../../../src/api-client.js";
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+import { TrialStatusBanner } from "../_shared/trial-status.js";
 
 export function LicenseTermsPage() {
   const { auth } = useAuth();
@@ -52,6 +53,7 @@ export function LicenseTermsPage() {
 
   return (
     <>
+    <TrialStatusBanner />
     <CrudPage
       aria-label="Lisans dönemleri"
       columns={columns}

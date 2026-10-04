@@ -16,7 +16,7 @@ import { CapabilityGuard } from "../rbac/capability.guard.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { PaymentService } from "./payment.service.js";
 
-const paymentInstallmentStatusSchema = z.enum(["PENDING", "PAID", "OVERDUE", "CANCELED"]);
+const paymentInstallmentStatusSchema = z.enum(["PENDING", "PAID", "CANCELED"]);
 const paymentTransactionMethodSchema = z.enum(["CASH", "BANK_TRANSFER", "CARD_POS", "OTHER"]);
 const paymentDateString = requiredDateString("PAYMENT_DATE_INVALID");
 const paymentInstallmentBodySchema = z.object({

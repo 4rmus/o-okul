@@ -9,12 +9,14 @@ const finance = new Set(["PaymentPlan", "PaymentInstallment", "PaymentTransactio
 const consent = new Set(["WhatsAppConsent", "WhatsAppConsentEvent", "StudentContact", "GuardianStudent"]);
 const support = new Set(["SupportTicket", "SupportTicketAttachment", "SupportTicketComment"]);
 const delivery = new Set(["Announcement", "AnnouncementReceipt", "AnnouncementDeliveryReport", "SmsBatchDeliveryReport"]);
+// Published school grades are history (ADR-0011): restore keeps the current rows, the DB refuses rewrites.
+const grades = new Set(["GradeAssessment", "GradeEntry"]);
 const replaceTables = new Set(["Employee","DevelopmentCriterion","DevelopmentAssessment","DevelopmentScore","Class","GradeLevel","Alan","Campus","Course","GradeLevelCourse","AcademicYear","AcademicTerm","Student","StudentEnrollment","Teacher","TeacherAssignment","Guardian","Attendance","TeacherNote","ScheduleLesson","StudySession","StudySessionStudent","HomeworkMaterial","HomeworkMaterialFile","HomeworkMaterialAssignment","Homework","Exam","ParserConfig","OpticalFormTemplate","ExamParticipant","RawImport","AnswerKey","ExamBookletVariant","LearningOutcome","ParsedAnswer","ExamResult","ImportQuarantine","ReportSnapshot","MessageTemplate"]);
 const identities = new Set(["Tenant", "User"]);
 const profileTables = new Set(["Student", "Teacher", "Guardian", "Employee"]);
 
 export function deviceRestoreTablePolicy(table: string): "PRESERVE" | "REPLACE" | undefined {
-  if (finance.has(table) || consent.has(table) || support.has(table) || delivery.has(table) || identities.has(table)) return "PRESERVE";
+  if (finance.has(table) || consent.has(table) || support.has(table) || delivery.has(table) || grades.has(table) || identities.has(table)) return "PRESERVE";
   return replaceTables.has(table) ? "REPLACE" : undefined;
 }
 
@@ -35,7 +37,7 @@ export function deviceBackupImpact(archive: DeviceBackupPayload, current: Device
     for (const id of old.keys()) if (!next.has(id)) removed++;
     tables[table] = { policy: preserve ? "PRESERVE" : "REPLACE", added, changed, removed, unchanged };
     if (!preserve) { additions += added; changes += changed; removals += removed; }
-    if (finance.has(table) || consent.has(table) || support.has(table) || delivery.has(table)) retainedHistory += old.size;
+    if (finance.has(table) || consent.has(table) || support.has(table) || delivery.has(table) || grades.has(table)) retainedHistory += old.size;
     if (added + changed + removed && finance.has(table)) blockers.add("DEVICE_RESTORE_FINANCE_DIFFERENCE");
     if (added + changed + removed && consent.has(table)) blockers.add("DEVICE_RESTORE_CONSENT_DIFFERENCE");
     if (added + changed + removed && support.has(table)) blockers.add("DEVICE_RESTORE_SUPPORT_DIFFERENCE");

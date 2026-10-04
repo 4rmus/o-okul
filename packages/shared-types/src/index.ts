@@ -1,13 +1,7 @@
 export type TenantId = string;
-export {
-  featureRolloutKeys,
-} from "./feature-rollout.js";
-export type {
-  FeatureRolloutCatalogItem,
-  FeatureRolloutKey,
-  ResolvedFeatureRollouts,
-} from "./feature-rollout.js";
 export { FormatAnalyzerService, getParserConfigPresetSuggestion } from "./format-analyzer.js";
+export { licensePlanCodes, trialLicenseLimits } from "./domain.js";
+export type { LicensePlanCode } from "./domain.js";
 export {
   assertProductEvent,
   productEventCatalog,
@@ -32,6 +26,7 @@ export {
   canAccessExamWorkspace,
   capabilitiesForRoles,
   hasCapabilityForRoles,
+  isFinanceOnlyStaff,
   isPortalSubjectRoleName,
   isTenantAssignableRoleName,
   isTenantRoleName,
@@ -313,6 +308,14 @@ export type {
   StudentOverviewLatestExamRecord,
   StudentOverviewRecord,
   StudentContactRelationType,
+  GradeAssessmentCreateRequest,
+  GradeAssessmentDetail,
+  GradeAssessmentKind,
+  GradeAssessmentPublishResult,
+  GradeAssessmentRecord,
+  GradeEntriesSaveRequest,
+  GradeEntryDraftInput,
+  GradeEntryRecord,
   StudentContactUpdateRequest,
   StudentRecord,
   StudentStatus,
@@ -378,6 +381,8 @@ export type {
   TenantUserRecord,
   TenantUserRoleUpdateRequest,
   TotpChallengeVerifyRequest,
+  TotpAdminResetRequest,
+  TotpAdminResetResponse,
   TotpDisableRequest,
   TotpDisableResponse,
   TotpSetupConfirmRequest,

@@ -521,7 +521,8 @@ type PaymentInstallmentFixture = {
   installmentNo: number;
   amount: number;
   dueDate: string;
-  status: "PENDING" | "PAID" | "OVERDUE" | "CANCELED";
+  status: "PENDING" | "PAID" | "CANCELED";
+  overdue?: boolean;
   paidAt?: string;
   createdAt: string;
 };
@@ -1033,7 +1034,8 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
           installmentNo: 1,
           amount: 50000,
           dueDate: "2026-06-01",
-          status: "OVERDUE",
+          status: "PENDING",
+          overdue: true,
           createdAt: "2026-06-05T09:00:00.000Z",
         },
         {
@@ -2816,6 +2818,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
                 dueDate: body.dueDate ?? installment.dueDate,
                 paidAt: body.status === "PAID" ? "2026-06-10T09:00:00.000Z" : body.status ? undefined : installment.paidAt,
                 status: body.status ?? installment.status,
+                overdue: body.status && body.status !== "PENDING" ? false : installment.overdue,
               }
             : installment,
         ),
@@ -5243,6 +5246,64 @@ test("ilk girişte zorunlu şifre değişimi ekranına yönlendirir", async ({ p
   await expect(page.getByText("Şifre değiştirilemedi.", { exact: true })).toHaveCount(0);
   expect(refreshAfterChange).toBe(0); expect(logoutAfterChange).toBe(0);
   expect(passwordChanged).toBe(true);
+});
+
+test("KF-1: yalnız finans rolü olan kullanıcı girişte finans ekranına 403 almadan ulaşır", async ({ page }) => {
+  const auth: TestAuthResponse = {
+    ...createAuthResponse("finance@example.test"),
+    session: { ...createAuthResponse("finance@example.test").session, activePersona: "STAFF", userId: "user-finance", roles: ["FINANCE_STAFF"] },
+  };
+  // API'de FINANCE_STAFF'a açık uçlar; geri kalan her istek gerçek API gibi 403 alır ve kaydedilir.
+  const allowed = [/^\/auth\//, /^\/me\/profile$/, /^\/me\/sessions/, /^\/me\/password$/, /^\/payment-plans/, /^\/feature-rollouts?/];
+  const forbiddenRequests: string[] = [];
+  const plan = {
+    id: "payment-plan-a",
+    tenantId: "tenant-a",
+    studentId: "student-a",
+    campusId: "campus-main",
+    title: "2026 Haziran ödeme planı",
+    totalAmount: 100000,
+    currency: "TRY",
+    createdAt: "2026-06-05T09:00:00.000Z",
+    installments: [
+      { id: "payment-installment-a-1", tenantId: "tenant-a", planId: "payment-plan-a", installmentNo: 1, amount: 50000, dueDate: "2026-06-01", status: "PENDING", createdAt: "2026-06-05T09:00:00.000Z" },
+    ],
+  };
+
+  await page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") {
+      await route.fulfill({ headers: corsHeaders, status: 204 });
+      return;
+    }
+    const path = new URL(request.url()).pathname.replace("/api/v1", "");
+    if (!allowed.some((pattern) => pattern.test(path))) {
+      forbiddenRequests.push(`${request.method()} ${path}`);
+      await route.fulfill({ contentType: "application/json", headers: corsHeaders, status: 403, body: JSON.stringify({ error: { code: "FORBIDDEN" } }) });
+      return;
+    }
+    if (path === "/auth/login" || path === "/auth/refresh") {
+      await route.fulfill({ contentType: "application/json", headers: corsHeaders, status: 200, body: JSON.stringify(envelope(auth)) });
+      return;
+    }
+    if (path === "/payment-plans") {
+      await route.fulfill({ contentType: "application/json", headers: corsHeaders, status: 200, body: JSON.stringify(envelope([plan], request.url())) });
+      return;
+    }
+    await route.fulfill({ contentType: "application/json", headers: corsHeaders, status: 200, body: JSON.stringify(envelope([])) });
+  });
+
+  await page.goto("/login");
+  await page.getByLabel("Kurum Kodu").fill("dna-egitim");
+  await page.getByLabel("Kullanıcı adı veya e-posta").fill("finance@example.test");
+  await page.locator('input[name="password"]').fill("5551234567");
+  await page.getByRole("button", { name: "Giriş yap" }).click();
+
+  await expect(page).toHaveURL(/\/kurum\/finans$/, { timeout: 15_000 });
+  await expect(page.getByText("2026 Haziran ödeme planı").first()).toBeVisible();
+  await expect(page.getByText("Seçim listeleri alınamadı.")).toHaveCount(0);
+  await expect(page.getByText("Ödeme planları alınamadı.")).toHaveCount(0);
+  expect(forbiddenRequests).toEqual([]);
 });
 
 test("Next sıfır-veri kurulum adımlarını ve yeni kayıt derin linkini gösterir", async ({ page }) => {

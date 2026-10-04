@@ -18,12 +18,14 @@ import type {
   StudentRecord,
 } from "@o-okul/shared-types";
 import { Button, CrudPage, DataTable, Dialog, EmptyState, Field, FilterBar, FormModal, Input, Select, StatusBadge, type DataTableColumn } from "@o-okul/ui";
-import { Banknote, CheckCircle2, Pencil, Receipt, RotateCcw, TriangleAlert } from "lucide-react";
+import { Banknote, CheckCircle2, Pencil, Plus, Receipt, RotateCcw } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, withQueryParams, type ListMeta } from "../../../../src/api-client.js";
 import { buildListUrl, initialListQuery, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
+import { hasCapabilityForRoles } from "../../_shared/access.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+import { PaymentPlanFormModal } from "./payment-plan-form.js";
 
 interface FinanceFilters {
   campusId: string;
@@ -101,6 +103,7 @@ export function FinancePage() {
   const [editingRow, setEditingRow] = useState<InstallmentRow | null>(null);
   const [collectingRow, setCollectingRow] = useState<InstallmentRow | null>(null);
   const [receiptRow, setReceiptRow] = useState<InstallmentRow | null>(null);
+  const [creatingPlan, setCreatingPlan] = useState(false);
   const [form, setForm] = useState<InstallmentForm>({ amount: "", dueDate: "", status: "PENDING" });
   const [transactionForm, setTransactionForm] = useState<TransactionForm>({
     amount: "",
@@ -116,10 +119,12 @@ export function FinancePage() {
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
+  // FINANCE_STAFF öğrenci/akademik katalog uçlarına erişemez; bu uçları çağırmak 403 ve hata ekranı üretir.
+  const canLoadReferences = hasCapabilityForRoles(auth?.session.roles ?? [], "student:list");
   const referencesQuery = useQuery({
     queryKey: ["next-finance-refs", tenantId],
     queryFn: () => loadReferences(auth?.accessToken ?? ""),
-    enabled: Boolean(auth),
+    enabled: Boolean(auth) && canLoadReferences,
     refetchOnWindowFocus: false,
   });
   const transactionsQuery = useQuery({
@@ -203,8 +208,8 @@ export function FinancePage() {
       mobilePriority: "primary",
       priority: "primary",
       render: (row) => (
-        <StatusBadge tone={statusTone(row.installment.status)}>
-          {statusLabel(row.installment.status)}
+        <StatusBadge tone={statusTone(row.installment)}>
+          {statusLabel(row.installment)}
         </StatusBadge>
       ),
     },
@@ -228,9 +233,6 @@ export function FinancePage() {
           </Button>
           <Button size="icon" variant="ghost" type="button" onClick={() => void updateInstallmentStatus(row, "PAID")} aria-label={`${row.plan.title} ${row.installment.installmentNo}. taksit ödendi işaretle`}>
             <CheckCircle2 size={17} aria-hidden="true" />
-          </Button>
-          <Button size="icon" variant="ghost" type="button" onClick={() => void updateInstallmentStatus(row, "OVERDUE")} aria-label={`${row.plan.title} ${row.installment.installmentNo}. taksit gecikmiş işaretle`}>
-            <TriangleAlert size={17} aria-hidden="true" />
           </Button>
           <Button size="icon" variant="ghost" type="button" onClick={() => void updateInstallmentStatus(row, "PENDING")} aria-label={`${row.plan.title} ${row.installment.installmentNo}. taksit beklemede işaretle`}>
             <RotateCcw size={17} aria-hidden="true" />
@@ -356,7 +358,15 @@ export function FinancePage() {
       <CrudPage
         actions={
           <>
-            <FinanceFiltersPanel filters={filters} onChange={updateFilters} references={references} />
+            {canLoadReferences ? (
+              <>
+                <Button type="button" onClick={() => setCreatingPlan(true)}>
+                  <Plus size={17} aria-hidden="true" />
+                  Ödeme planı oluştur
+                </Button>
+                <FinanceFiltersPanel filters={filters} onChange={updateFilters} references={references} />
+              </>
+            ) : null}
             <ListControls meta={meta} onChange={setListQuery} sortOptions={paymentSortOptions} state={listQuery} />
           </>
         }
@@ -375,7 +385,7 @@ export function FinancePage() {
         getRowKey={(row) => row.id}
         density="compact"
         hasActiveFilters={Boolean(listQuery.q.trim()) || financeFilterKeys.some((key) => Boolean(filters[key]))}
-        loading={plansQuery.isPending || referencesQuery.isPending}
+        loading={plansQuery.isPending || (canLoadReferences && referencesQuery.isPending)}
         rows={rows}
         summary={
           <OperationSummary
@@ -388,6 +398,17 @@ export function FinancePage() {
         tableCaption="Ödeme taksitleri"
         tableDescription="Bekleyen, geciken ve ödenen taksitler seçili akademik bağlama göre listelenir."
         title="Finans"
+      />
+      <PaymentPlanFormModal
+        accessToken={auth?.accessToken ?? ""}
+        campuses={references.campuses}
+        onCancel={() => setCreatingPlan(false)}
+        onCreated={() => {
+          setCreatingPlan(false);
+          void queryClient.invalidateQueries({ queryKey: listQueryKey });
+        }}
+        open={creatingPlan}
+        students={references.students}
       />
       <InstallmentFormModal
         form={form}
@@ -523,7 +544,6 @@ function InstallmentFormModal({
         <Select value={form.status} onChange={(event) => onChange({ ...form, status: event.target.value as PaymentInstallmentStatus })}>
           <option value="PENDING">Beklemede</option>
           <option value="PAID">Ödendi</option>
-          <option value="OVERDUE">Gecikmiş</option>
           <option value="CANCELED">İptal</option>
         </Select>
       </Field>
@@ -779,9 +799,9 @@ function calculateMetrics(plans: PaymentPlanWithInstallmentsRecord[]) {
   const installments = plans.flatMap((plan) => plan.installments);
   return {
     currency: plans[0]?.currency ?? "TRY",
-    overdueAmount: sumAmounts(installments.filter((installment) => installment.status === "OVERDUE")),
+    overdueAmount: sumAmounts(installments.filter((installment) => installment.overdue === true)),
     paidAmount: sumAmounts(installments.filter((installment) => installment.status === "PAID")),
-    pendingAmount: sumAmounts(installments.filter((installment) => installment.status === "PENDING" || installment.status === "OVERDUE")),
+    pendingAmount: sumAmounts(installments.filter((installment) => installment.status === "PENDING")),
   };
 }
 
@@ -902,20 +922,21 @@ function formatContext(
   return parts.length > 0 ? parts.join(" / ") : "-";
 }
 
-function statusLabel(status: PaymentInstallmentStatus) {
+// "Gecikmiş" comes only from the API-derived overdue flag; it is never a stored status.
+function statusLabel(installment: PaymentInstallmentRecord) {
+  if (installment.overdue) return "Gecikmiş";
   const labels: Record<PaymentInstallmentStatus, string> = {
     CANCELED: "İptal",
-    OVERDUE: "Gecikmiş",
     PAID: "Ödendi",
     PENDING: "Beklemede",
   };
-  return labels[status];
+  return labels[installment.status];
 }
 
-function statusTone(status: PaymentInstallmentStatus) {
-  if (status === "PAID") return "success";
-  if (status === "OVERDUE") return "danger";
-  if (status === "CANCELED") return "neutral";
+function statusTone(installment: PaymentInstallmentRecord) {
+  if (installment.overdue) return "danger";
+  if (installment.status === "PAID") return "success";
+  if (installment.status === "CANCELED") return "neutral";
   return "warning";
 }
 

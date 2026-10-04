@@ -38,9 +38,11 @@ describe("Admin MFA TOTP helpers", () => {
     expect(resolveAdminMfaMode()).toBe("optional");
   });
 
-  it("MFA kapsamını yalnız sistem admini rolüyle sınırlar", () => {
+  it("MFA kapsamını sistem admini ve kurum OWNER/ADMIN rolleriyle sınırlar", () => {
     expect(isAdminMfaRole(["SYSTEM_ADMIN"])).toBe(true);
-    expect(isAdminMfaRole(["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF"])).toBe(false);
+    expect(isAdminMfaRole(["TENANT_OWNER"])).toBe(true);
+    expect(isAdminMfaRole(["TENANT_ADMIN"])).toBe(true);
+    expect(isAdminMfaRole(["ASSISTANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF"])).toBe(false);
     expect(isAdminMfaRole(["TEACHER", "STUDENT", "GUARDIAN"])).toBe(false);
   });
 

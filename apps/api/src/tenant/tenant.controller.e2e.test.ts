@@ -136,13 +136,13 @@ describe("TenantController", () => {
       .send(canonicalOnboardingBody("TENANT E2E", "tenant-e2e", "tenant-e2e-owner@example.test", {
         activeStudentLimit: 250,
         endsAt: "2030-01-01T00:00:00.000Z",
-        planCode: "STANDARD",
+        planCode: "PRO",
         startsAt: "2029-01-01T00:00:00.000Z",
       }))
       .expect(201);
     const tenantId = created.body.tenant.id as string;
     expect(created.body).toMatchObject({
-      tenant: { plan: "STANDARD", seatLimit: 250, status: "ACTIVE" },
+      tenant: { plan: "PRO", seatLimit: 250, status: "ACTIVE" },
       owner: { roles: ["TENANT_OWNER"] },
     });
 
@@ -152,7 +152,7 @@ describe("TenantController", () => {
       .send({ name: "TENANT E2E UPDATED" })
       .expect(200)
       .expect(({ body }) => {
-        expect(body).toMatchObject({ id: tenantId, name: "TENANT E2E UPDATED", plan: "STANDARD" });
+        expect(body).toMatchObject({ id: tenantId, name: "TENANT E2E UPDATED", plan: "PRO" });
       });
 
     await changeStatus(tenantId, "tenant-e2e", "SUSPENDED", 0)
@@ -225,7 +225,7 @@ describe("TenantController", () => {
       .post("/tenants/system/license-terms")
       .set("Authorization", `Bearer ${systemToken}`)
       .send({
-        planCode: "SYSTEM",
+        planCode: "PRO",
         startsAt: "2031-01-01T00:00:00.000Z",
         endsAt: "2032-01-01T00:00:00.000Z",
         activeStudentLimit: 1,

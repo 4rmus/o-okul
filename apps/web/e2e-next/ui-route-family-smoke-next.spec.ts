@@ -80,6 +80,7 @@ const routeCases = [
   route("/kurum/kvkk", "KVKK", "tenantAdmin", { role: "region", name: "KVKK yönetimi" }),
   route("/kurum/materyaller", "Materyaller", "assistantAdmin", { role: "region", name: "Ödev kontrolü" }),
   route("/kurum/notlar", "Öğretmen Notları", "assistantAdmin", { role: "region", name: "Öğretmen notu yönetimi" }),
+  route("/kurum/not-defteri", "Not Defteri", "assistantAdmin", { role: "region", name: "Not defteri yönetimi" }),
   route("/kurum/ogrenci-portal-erisimi", "Öğrenci Portal Erişimi", "tenantAdmin", { role: "region", name: "Öğrenci portal erişimi" }),
   route("/kurum/ogrenciler", "Öğrenciler", "assistantAdmin", { role: "region", name: "Öğrenci yönetimi" }),
   route("/kurum/ogrenciler/[studentId]", "Ada Test", "assistantAdmin", { role: "region", name: "Öğrenci özeti" }),
@@ -129,6 +130,7 @@ const routeCases = [
   route("/ogretmen/destek", "Öğretmen Portalı", "teacher", { role: "region", name: "Destek talepleri" }),
   route("/ogretmen/duyurular", "Öğretmen Portalı", "teacher", { role: "region", name: "Duyurular" }),
   route("/ogretmen/odevler", "Öğretmen Portalı", "teacher", { role: "region", name: "Öğretmen ödev kontrolü" }),
+  route("/ogretmen/not-defteri", "Öğretmen Portalı", "teacher", { role: "region", name: "Öğretmen not girişi" }),
   route("/ogretmen/ogrenci-takibi", "Öğretmen Portalı", "teacher", { role: "region", name: "Öğretmen öğrenci kapsamı" }),
   route("/ogretmen/raporlar", "Öğretmen Portalı", "teacher", { role: "region", name: "Portal rapor özeti" }, { query: "examId=exam-demo-isem-lgs-1&studentId=student-a" }),
 
@@ -384,7 +386,7 @@ function assertRouteManifestParity(manifest: readonly RouteCase[]) {
   const fileSystemRoutes = collectPageRoutes(appDirectory).sort();
   const manifestRoutes = manifest.map((entry) => entry.routeTemplate).sort();
   const duplicates = manifestRoutes.filter((routeTemplate, index) => manifestRoutes.indexOf(routeTemplate) !== index);
-  if (manifest.length !== 93) throw new Error(`Route manifest must contain exactly 93 entries; found ${manifest.length}.`);
+  if (manifest.length !== 95) throw new Error(`Route manifest must contain exactly 95 entries; found ${manifest.length}.`);
   if (duplicates.length > 0) throw new Error(`Route manifest contains duplicates: ${[...new Set(duplicates)].join(", ")}`);
   if (JSON.stringify(manifestRoutes) !== JSON.stringify(fileSystemRoutes)) {
     throw new Error(`Route manifest does not match page.tsx inventory.\nmanifest=${manifestRoutes.join(",")}\nfilesystem=${fileSystemRoutes.join(",")}`);
@@ -450,10 +452,6 @@ async function installRouteApiMocks(
         subjectId: "subjectId" in session ? session.subjectId : undefined,
         capabilities: [],
       });
-      return;
-    }
-    if (pathName === "/me/feature-rollouts" && request.method() === "GET" && persona !== "anonymous") {
-      await fulfillData(route, { enabledFeatureKeys: [] });
       return;
     }
 
@@ -709,6 +707,7 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
     "/attendance": [],
     "/audit-logs": [],
     "/audit-logs/safe-list": [],
+    "/grade-assessments": [],
     "/backup-restore-jobs": [],
     "/campuses": [campusFixture],
     "/classes": [classFixture],

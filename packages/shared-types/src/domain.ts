@@ -172,6 +172,15 @@ export interface TotpDisableResponse {
   disabledAt: string;
 }
 
+export interface TotpAdminResetRequest {
+  tenantId: string;
+  userId: string;
+}
+
+export interface TotpAdminResetResponse {
+  resetAt: string;
+}
+
 export type MfaStepUpPurpose = "OWNER_ADMIN_CHANGE" | "TENANT_LIFECYCLE_CHANGE" | "TENANT_CLEAN_RESET" | "TENANT_DEVICE_RESTORE";
 
 export interface TenantLifecycleMfaTarget {
@@ -256,8 +265,14 @@ export interface LicenseTermListRecord extends LicenseTermRecord {
   state: LicenseState;
 }
 
+// DEC-20261004-02: closed plan set for new license terms; stored rows keep their text value.
+export const licensePlanCodes = ["TRIAL", "PRO", "ENTERPRISE"] as const;
+export type LicensePlanCode = (typeof licensePlanCodes)[number];
+/** Card-free trial: one short term opened by SYSTEM_ADMIN; expiry follows the normal READ_ONLY → FROZEN lifecycle. */
+export const trialLicenseLimits = { maxDays: 7, maxActiveStudents: 100 } as const;
+
 export interface LicenseTermCreateRequest {
-  planCode: string;
+  planCode: LicensePlanCode;
   startsAt: string;
   endsAt: string;
   activeStudentLimit: number;
@@ -1831,7 +1846,8 @@ export interface DevelopmentTrendItem {
   scores: DevelopmentTrendScore[];
 }
 
-export type PaymentInstallmentStatus = "PENDING" | "PAID" | "OVERDUE" | "CANCELED";
+// Stored status only. Overdue is derived on read (see PaymentInstallmentRecord.overdue).
+export type PaymentInstallmentStatus = "PENDING" | "PAID" | "CANCELED";
 export type PaymentTransactionMethod = "CASH" | "BANK_TRANSFER" | "CARD_POS" | "OTHER";
 
 export interface PaymentPlanInstallmentInput {
@@ -1886,6 +1902,8 @@ export interface PaymentInstallmentRecord {
   paidAt?: string;
   createdAt: string;
   deletedAt?: string;
+  /** Derived on read: dueDate < today (Europe/Istanbul) and status is PENDING. Never stored. */
+  overdue?: boolean;
 }
 
 export interface PaymentPlanRecord {
@@ -2937,4 +2955,65 @@ export interface TenantDeviceRestoreOperation extends TenantDeviceRestoreMfaTarg
   fileCount: number;
   errorCode: string | null;
   createdAt: string;
+}
+
+// School grades (ADR-0011). Separate from optical exam results; a published entry never changes.
+export type GradeAssessmentKind = "WRITTEN" | "PERFORMANCE" | "PROJECT" | "PARTICIPATION";
+
+export interface GradeAssessmentRecord {
+  id: string;
+  tenantId: string;
+  classId: string;
+  courseId: string;
+  termId: string;
+  kind: GradeAssessmentKind;
+  title: string;
+  heldOn: string;
+  maxScore: number;
+  publishedVersion?: number;
+  createdById: string;
+  createdAt: string;
+}
+
+export interface GradeEntryRecord {
+  id: string;
+  assessmentId: string;
+  studentId: string;
+  version: number;
+  score: number | null;
+  absent: boolean;
+  publishedAt?: string;
+  enteredById: string;
+  createdAt: string;
+}
+
+/** All versions of every entry; the current grade per student is its highest version. */
+export interface GradeAssessmentDetail {
+  assessment: GradeAssessmentRecord;
+  entries: GradeEntryRecord[];
+}
+
+export interface GradeAssessmentCreateRequest {
+  classId: string;
+  courseId: string;
+  termId: string;
+  kind: GradeAssessmentKind;
+  title: string;
+  heldOn: string;
+  maxScore?: number;
+}
+
+export interface GradeEntryDraftInput {
+  studentId: string;
+  score: number | null;
+  absent: boolean;
+}
+
+export interface GradeEntriesSaveRequest {
+  entries: GradeEntryDraftInput[];
+}
+
+export interface GradeAssessmentPublishResult {
+  assessment: GradeAssessmentRecord;
+  publishedCount: number;
 }

@@ -4,13 +4,12 @@ import {
 } from "../packages/shared-types/dist/product-analytics.js";
 
 const baseEvent = {
-  name: "feature_rollout_exposed",
+  name: "report_exported",
   schemaVersion: 1,
   occurredAt: "2026-08-09T10:00:00.000Z",
   routeFamily: "TENANT_DASHBOARD",
   persona: "STAFF",
-  featureFlags: { "web.teacher-portal-v2": false },
-  properties: { featureKey: "web.teacher-portal-v2", enabled: false },
+  properties: { exportType: "PDF" },
 };
 
 assertProductEvent(baseEvent);
@@ -19,7 +18,7 @@ assertProductEvent(
   { ...baseEvent, tenantPseudonym: trustedTenantPseudonym },
   { trustedTenantPseudonym },
 );
-if (Object.keys(productEventCatalog).length !== 21) {
+if (Object.keys(productEventCatalog).length !== 20) {
   throw new Error("PRODUCT_EVENT_CATALOG_COUNT_INVALID");
 }
 

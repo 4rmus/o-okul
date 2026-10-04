@@ -48,7 +48,7 @@ const guardianStudentRecordRequired = [
   "canOpenSupportTickets",
 ];
 const guardianStudentDetailStudentRequired = ["id", "firstName", "lastName", "status", "hasPortalUser"];
-const paymentInstallmentStatuses = ["PENDING", "PAID", "OVERDUE", "CANCELED"];
+const paymentInstallmentStatuses = ["PENDING", "PAID", "CANCELED"];
 const paymentTransactionMethods = ["CASH", "BANK_TRANSFER", "CARD_POS", "OTHER"];
 const paymentPlanWithInstallmentsRequired = ["id", "tenantId", "studentId", "title", "totalAmount", "currency", "createdAt", "installments"];
 const paymentPlanPortalForbiddenDeep = [
@@ -1962,6 +1962,15 @@ const requiredOperationContracts = [
   },
   {
     method: "post",
+    path: "/api/v1/auth/totp/admin-reset",
+    requestBody: true,
+    responseEnvelope: true,
+    requiredHeaders: ["X-Step-Up-Token"],
+    requestRequired: ["tenantId", "userId"],
+    responseDataRequired: ["resetAt"],
+  },
+  {
+    method: "post",
     path: "/api/v1/auth/step-up",
     requestBody: true,
     responseEnvelope: true,
@@ -2055,7 +2064,7 @@ const requiredOperationContracts = [
     fieldChecks: [
       { path: ["requestBody", "activeStudentLimit"], minimum: 1 },
       { path: ["requestBody", "endsAt"], format: "date-time" },
-      { path: ["requestBody", "planCode"], minLength: 1 },
+      { path: ["requestBody", "planCode"], enum: ["TRIAL", "PRO", "ENTERPRISE"] },
       { path: ["requestBody", "startsAt"], format: "date-time" },
       { path: ["responseData", "activeStudentLimit"], minimum: 1 },
       { path: ["responseData", "endsAt"], format: "date-time" },
@@ -2101,13 +2110,6 @@ const requiredOperationContracts = [
       { path: ["responseData", "roles"], minItems: 1 },
       { path: ["responseData", "subjectType"], enum: ["GUARDIAN", "STUDENT", "TEACHER"] },
     ],
-  },
-  {
-    method: "get",
-    path: "/api/v1/me/feature-rollouts",
-    responseEnvelope: true,
-    responseDataRequired: ["enabledFeatureKeys"],
-    responseDataForbiddenDeep: ["environment", "tenantId", "startsAt", "expiresAt", "reference"],
   },
   {
     method: "get",

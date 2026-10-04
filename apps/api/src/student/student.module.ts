@@ -1,7 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AuditLogModule } from "../audit-log/audit-log.module.js";
 import { GuardianModule } from "../guardian/guardian.module.js";
-import { FeatureRolloutModule } from "../feature-rollout/feature-rollout.module.js";
 import { IdentityInvitationModule } from "../identity-invitation/identity-invitation.module.js";
 import { IdentityProvisioningModule } from "../identity-provisioning/identity-provisioning.module.js";
 import { LicensePersistenceModule } from "../license/license-persistence.module.js";
@@ -17,7 +16,7 @@ import { StudentPersistenceModule } from "./student-persistence.module.js";
 import { StudentService } from "./student.service.js";
 
 @Module({
-  imports: [AuditLogModule, FeatureRolloutModule, GuardianModule, IdentityInvitationModule, IdentityProvisioningModule, LicensePersistenceModule, ReportModule, SchoolModule, StudentPersistenceModule, TeacherModule],
+  imports: [AuditLogModule, GuardianModule, IdentityInvitationModule, IdentityProvisioningModule, LicensePersistenceModule, ReportModule, SchoolModule, StudentPersistenceModule, TeacherModule],
   controllers: [StudentController, StudentContactController],
   providers: [
     StudentImportService,

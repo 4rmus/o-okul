@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import type { RequestContext } from "../context/request-context.js";
 import { isSystemAdmin } from "../rbac/roles.js";
 import type { TeacherAssignmentStore } from "./teacher-assignment-store.js";
-import type { TeacherAssignmentRecord } from "@o-okul/shared-types";
+import type { TeacherAssignmentRecord, TeacherAssignmentRole } from "@o-okul/shared-types";
 
 export interface TeacherAssignmentScope {
   tenantId: string;
@@ -10,6 +10,8 @@ export interface TeacherAssignmentScope {
   studentId?: string;
   courseId?: string;
   termId?: string;
+  /** Only assignments with one of these roles count (e.g. gradebook: CLASS_TEACHER, BRANCH_TEACHER). */
+  roles?: readonly TeacherAssignmentRole[];
 }
 
 export async function assertTeacherAssigned(
@@ -63,6 +65,7 @@ export function hasTeacherAssignmentForScope(
 ): boolean {
   return assignments.some((assignment) => {
     if (assignment.tenantId !== scope.tenantId) return false;
+    if (scope.roles && !scope.roles.includes(assignment.role)) return false;
     if (assignment.startsAt && assignment.startsAt > referenceDate) return false;
     if (assignment.endsAt && assignment.endsAt < referenceDate) return false;
     if (scope.termId && assignment.termId && assignment.termId !== scope.termId) return false;

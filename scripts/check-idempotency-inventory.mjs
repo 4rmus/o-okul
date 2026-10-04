@@ -24,6 +24,7 @@ const inventory = [
   entry("exam.create", "POST", "/api/v1/exams", "covered", "apps/api/src/exam/exam.controller.ts", "apps/api/src/exam/exam.service.ts", "apps/api/src/exam/exam.controller.e2e.test.ts", ["@Post()", "@Headers(\"idempotency-key\")"], ["exam-create-idempotency-a"]),
   entry("exam.participant.create", "POST", "/api/v1/exams/{examId}/participants", "covered", "apps/api/src/exam/exam.controller.ts", "apps/api/src/exam/exam.service.ts", "apps/api/src/exam/exam.controller.e2e.test.ts", ["@Post(\":examId/participants\")", "@Headers(\"idempotency-key\")"], ["exam-participant-idempotency-a"]),
   entry("exam.publish", "POST", "/api/v1/exams/{examId}/publish", "covered", "apps/api/src/exam/exam.controller.ts", "apps/api/src/exam/exam.service.ts", "apps/api/src/exam/exam.controller.e2e.test.ts", ["@Post(\":examId/publish\")", "@Headers(\"idempotency-key\")"], ["exam-publish-idempotency-a"]),
+  entry("grade-assessment.publish", "POST", "/api/v1/grade-assessments/{id}/publish", "covered", "apps/api/src/gradebook/gradebook.controller.ts", "apps/api/src/gradebook/gradebook.service.ts", "apps/api/src/gradebook/gradebook.e2e.test.ts", ["@Post(\":id/publish\")", "@Headers(\"idempotency-key\")"], ["grade-publish-idempotency-a"]),
   entry("homework.material-assignment.create", "POST", "/api/v1/homework/materials/{id}/assignments", "covered", "apps/api/src/homework/homework.controller.ts", "apps/api/src/homework/homework.service.ts", "apps/api/src/homework/homework.e2e.test.ts", ["@Post(\"materials/:id/assignments\")", "@Headers(\"idempotency-key\")"], ["homework-material-assignment-idempotency-a"]),
   entry("homework.material-file.create", "POST", "/api/v1/homework/materials/{id}/files", "covered", "apps/api/src/homework/homework.controller.ts", "apps/api/src/homework/homework.service.ts", "apps/api/src/homework/homework.e2e.test.ts", ["@Post(\"materials/:id/files\")", "@Headers(\"idempotency-key\")"], ["homework-material-file-idempotency-a"]),
   entry("learning-outcome.import.commit", "POST", "/api/v1/learning-outcomes/imports", "covered", "apps/api/src/school/learning-outcomes.controller.ts", "apps/api/src/school/learning-outcome-import.service.ts", "apps/api/src/school/school.e2e.test.ts", ["@Post(\"imports\")", "@Headers(\"idempotency-key\")"], ["learning-outcome-import-idempotency-a"]),
@@ -68,6 +69,7 @@ if (readFileSync("apps/api/src/operations/device-restore.service.ts", "utf8").in
 const inventoryOperations = new Set(inventory.map((item) => item.operation));
 const operationsWithoutRequestBody = new Set([
   "answer-key.publish",
+  "grade-assessment.publish",
   "exam.publish",
   "payment.plan.cancel",
 ]);

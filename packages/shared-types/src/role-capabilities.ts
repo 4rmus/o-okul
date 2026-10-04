@@ -22,7 +22,7 @@ export const tenantRoleLabels: Record<TenantRoleName, string> = {
 export const roleCapabilities: Record<TenantRoleName, readonly RoleCapability[]> = {
   SYSTEM_ADMIN: ["system:*", "tenant:manage", "tenant:lifecycle", "tenant:clean-reset", "audit:*"],
   TENANT_OWNER: [
-    "academic:*", "announcement:*", "attendance:*", "audit:*", "class:*", "feature-rollout:read", "finance:*", "note:*",
+    "academic:*", "announcement:*", "attendance:*", "audit:*", "class:*", "finance:*", "note:*",
     "observability:*", "operation:*", "privacy:*", "role-preview:*", "security:*", "search:*", "setup:*",
     "staff:*", "student:*", "support:*", "tenant-audit:read", "user:*", "owner:*",
   ],
@@ -32,7 +32,6 @@ export const roleCapabilities: Record<TenantRoleName, readonly RoleCapability[]>
     "attendance:*",
     "audit:*",
     "class:*",
-    "feature-rollout:read",
     "finance:*",
     "note:*",
     "observability:*",
@@ -53,7 +52,6 @@ export const roleCapabilities: Record<TenantRoleName, readonly RoleCapability[]>
     "announcement:*",
     "attendance:*",
     "class:*",
-    "feature-rollout:read",
     "note:*",
     "search:*",
     "setup:manage",
@@ -62,13 +60,13 @@ export const roleCapabilities: Record<TenantRoleName, readonly RoleCapability[]>
     "support:*",
   ],
   OPERATIONS_STAFF: [
-    "academic:*", "announcement:*", "attendance:*", "class:*", "feature-rollout:read", "note:*", "search:*", "setup:manage",
+    "academic:*", "announcement:*", "attendance:*", "class:*", "note:*", "search:*", "setup:manage",
     "staff:*", "student:*", "support:*",
   ],
-  FINANCE_STAFF: ["feature-rollout:read", "finance:*"],
-  TEACHER: ["academic:read", "attendance:write-assigned", "feature-rollout:read", "homework:write-assigned", "note:write-assigned", "search:read", "student:list", "student:read"],
-  STUDENT: ["feature-rollout:read", "self:read", "student:read"],
-  GUARDIAN: ["feature-rollout:read", "student:read", "ward:read"],
+  FINANCE_STAFF: ["finance:*"],
+  TEACHER: ["academic:read", "attendance:write-assigned", "homework:write-assigned", "note:write-assigned", "search:read", "student:list", "student:read"],
+  STUDENT: ["self:read", "student:read"],
+  GUARDIAN: ["student:read", "ward:read"],
 };
 
 export function capabilitiesForRoles(roles: readonly string[]): RoleCapability[] {
@@ -106,6 +104,13 @@ export function canAccessExamWorkspace(
     activePersona === "STAFF"
     || (activePersona === undefined && roles.length === 1)
   );
+}
+
+// FINANCE_STAFF rank kalıtımı almaz (apps/api/src/rbac/roles.ts); başka kurum rolü yoksa
+// kurum özeti ve bildirim cihazı uçları 403 döner. Web yönlendirmesi bu ayrımı kullanır.
+export function isFinanceOnlyStaff(roles: readonly string[]): boolean {
+  return roles.includes("FINANCE_STAFF")
+    && !roles.some((role) => ["SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF"].includes(role));
 }
 
 export function isTenantRoleName(role: string): role is TenantRoleName {

@@ -124,7 +124,7 @@ export class MeController {
 
   @Post("password")
   @HttpCode(200)
-  @Roles("SYSTEM_ADMIN", "TENANT_ADMIN", "ASSISTANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN")
+  @Roles("SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF", "TEACHER", "STUDENT", "GUARDIAN")
   changePassword(@Body(zodBody(mePasswordChangeBodySchema)) body: MePasswordChangeRequest): Promise<MePasswordChangeResponse> {
     return this.auth.changeCurrentPassword(getRequestContext(), body.currentPassword, body.newPassword);
   }

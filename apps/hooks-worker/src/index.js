@@ -26,19 +26,6 @@ export async function handleRequest(request, env) {
     return json({ ok: true });
   }
 
-  if (url.pathname === "/notification") {
-    const body = await request.json().catch(() => ({}));
-    const messages = Array.isArray(body.messages) ? body.messages : [];
-    return json({
-      results: messages.map((message, index) => ({
-        channel: message.channel,
-        to: message.to,
-        status: "sent",
-        providerMessageId: `o-okul-hooks-${Date.now()}-${index + 1}`,
-      })),
-    });
-  }
-
   return json({ errorCode: "NOT_FOUND" }, 404);
 }
 
@@ -50,19 +37,20 @@ function json(value, status = 200) {
 }
 
 if (typeof process !== "undefined" && process.argv.includes("--smoke")) {
+  const { strict: assert } = await import("node:assert");
   const env = { HOOKS_TOKEN: "test-token-123456789012345678901234" };
-  const alert = await handleRequest(new Request("https://hooks.example.com/alert", {
+  const post = (path, body) => handleRequest(new Request(`https://hooks.example.com${path}`, {
     method: "POST",
     headers: { authorization: `Bearer ${env.HOOKS_TOKEN}` },
-    body: "{}",
+    body,
   }), env);
-  const notification = await handleRequest(new Request("https://hooks.example.com/notification", {
-    method: "POST",
-    headers: { authorization: `Bearer ${env.HOOKS_TOKEN}` },
-    body: JSON.stringify({ messages: [{ channel: "EMAIL", to: "ops@o-okul.com", body: "ok" }] }),
-  }), env);
+  const health = await handleRequest(new Request("https://hooks.example.com/health"), env);
+  const alert = await post("/alert", "{}");
+  // Notifications go through infra/notification-gateway; this worker must never report a fake "sent".
+  const notification = await post("/notification", JSON.stringify({ messages: [{ channel: "EMAIL", to: "ops@o-okul.com", body: "ok" }] }));
 
-  console.assert(alert.status === 200, "alert smoke failed");
-  console.assert(notification.status === 200, "notification smoke failed");
+  assert.equal(health.status, 200, "health smoke failed");
+  assert.equal(alert.status, 200, "alert smoke failed");
+  assert.equal(notification.status, 404, "notification route must be gone");
   console.log("hooks-worker smoke passed");
 }

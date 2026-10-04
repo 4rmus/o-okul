@@ -663,6 +663,12 @@ pnpm backup:restore:smoke
 - Canlı bakım dry-run olarak `AUDIT_LOG_PARTITION_EVIDENCE_FILE=artifacts/staging/audit-log-partition.json pnpm audit-log-partition:maintain`
   ile planlanır; gerçek uygulama yalnız `AUDIT_LOG_PARTITION_APPLY=1` ve `DIRECT_DATABASE_URL`
   ile yapılır. Evidence output lokal temp path, symlink dosya veya symlink parent dizin olamaz.
+- AuditLog tazelik kontrolü geçer: `pnpm audit-log-freshness:check` (`ops:check` ve `ci` içinde)
+  karar mantığını test eder; canlı kontrol `DATABASE_URL=... pnpm audit-log-freshness:check:live`
+  ile `BEGIN READ ONLY` içinde koşar. Her API oturumu aynı akışta `auth.*` audit kaydı yazdığından
+  son `AuthSession.createdAt` son `auth.*` audit kaydından `AUDIT_LOG_FRESHNESS_GRACE_MINUTES`
+  (varsayılan 15) dakikadan yeniyse FAIL verir. RLS canlı kontrolünün doğrudan SQL ile tohumladığı
+  `rls-tenant-*` fixture oturumları API'den geçmediği için hariç tutulur.
 - İlk pilotta ops seviyesinde off-host backup hedefi release planından çıkarılmıştır. Kurum kullanıcısı `/kurum/yedek-restore` ekranından
   kendi eklediği kurum verilerini JSON olarak bilgisayarına indirir ve sunucu dışındaki kopyayı orada
   saklar. Bu kullanıcı export modeli pilot için yeterlidir; `pnpm backup:offsite:smoke`

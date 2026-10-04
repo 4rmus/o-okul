@@ -1,5 +1,5 @@
 import type { OpenAPIObject } from "@nestjs/swagger";
-import { featureRolloutKeys } from "@o-okul/shared-types";
+import { licensePlanCodes } from "@o-okul/shared-types";
 
 type JsonSchema = Record<string, unknown>;
 type JsonContent = Record<string, { schema: JsonSchema }>;
@@ -88,10 +88,6 @@ const meProfileResponseSchema = objectSchema({
   }, ["id", "version"]),
 }, ["userId", "tenantId", "roles"]);
 
-const resolvedFeatureRolloutsSchema = objectSchema({
-  enabledFeatureKeys: arraySchema({ type: "string", enum: [...featureRolloutKeys] }),
-}, ["enabledFeatureKeys"]);
-
 const personaSwitchRequestSchema = objectSchema({
   activePersona: { type: "string", enum: ["STAFF", "TEACHER", "STUDENT"] },
 }, ["activePersona"]);
@@ -150,7 +146,7 @@ const licenseTermListSchema = objectSchema({
 }, ["id", "tenantId", "planCode", "startsAt", "endsAt", "activeStudentLimit", "state"]);
 
 const licenseTermCreateRequestSchema = objectSchema({
-  planCode: stringSchema({ minLength: 1 }),
+  planCode: { type: "string", enum: [...licensePlanCodes], description: "TRIAL: at most 7 days and 100 active students (DEC-20261004-02)." },
   startsAt: stringSchema({ format: "date-time" }),
   endsAt: stringSchema({ format: "date-time" }),
   activeStudentLimit: integerSchema({ minimum: 1 }),
@@ -524,6 +520,15 @@ const totpDisableResponseSchema = objectSchema({
   disabledAt: stringSchema({ format: "date-time" }),
 }, ["disabledAt"]);
 
+const totpAdminResetRequestSchema = objectSchema({
+  tenantId: stringSchema({ minLength: 1, maxLength: 128 }),
+  userId: stringSchema({ minLength: 1, maxLength: 128 }),
+}, ["tenantId", "userId"]);
+
+const totpAdminResetResponseSchema = objectSchema({
+  resetAt: stringSchema({ format: "date-time" }),
+}, ["resetAt"]);
+
 const tenantResetInstitutionRequestSchema = objectSchema({
   id: stringSchema(), tenantId: stringSchema(), requestedBy: stringSchema(), requestedAt: stringSchema({ format: "date-time" }), lifecycleVersion: integerSchema({ minimum: 0 }), status: stringSchema({ enum: ["PENDING", "REVOKED", "ACCEPTED", "COMPLETED"] }), operationId: stringSchema({ nullable: true }),
 }, ["id", "tenantId", "requestedBy", "requestedAt", "lifecycleVersion", "status", "operationId"]);
@@ -761,7 +766,7 @@ const announcementDeliveryReportRecordSchema = objectSchema({
 
 const paymentInstallmentStatusSchema = {
   type: "string",
-  enum: ["PENDING", "PAID", "OVERDUE", "CANCELED"],
+  enum: ["PENDING", "PAID", "CANCELED"],
 };
 const paymentTransactionMethodSchema = {
   type: "string",
@@ -1651,6 +1656,7 @@ const paymentInstallmentRecordSchema = objectSchema({
   paidAt: stringSchema({ format: "date-time" }),
   createdAt: stringSchema({ format: "date-time" }),
   deletedAt: stringSchema({ format: "date-time" }),
+  overdue: { type: "boolean" },
 }, ["id", "tenantId", "planId", "installmentNo", "amount", "dueDate", "status", "createdAt"]);
 
 const paymentTransactionRecordSchema = objectSchema({
@@ -3056,7 +3062,74 @@ const smsBatchDeliveryReportRecordSchema = objectSchema({
   updatedAt: stringSchema({ format: "date-time" }),
 }, ["id", "tenantId", "jobId", "templateId", "recipientCount", "sentCount", "failedCount", "billableSegments", "status"]);
 
+const gradeAssessmentKindSchema: JsonSchema = { type: "string", enum: ["WRITTEN", "PERFORMANCE", "PROJECT", "PARTICIPATION"] };
+const gradeAssessmentRecordSchema = objectSchema({
+  id: stringSchema(),
+  tenantId: stringSchema(),
+  classId: stringSchema(),
+  courseId: stringSchema(),
+  termId: stringSchema(),
+  kind: gradeAssessmentKindSchema,
+  title: stringSchema(),
+  heldOn: stringSchema({ format: "date" }),
+  maxScore: { type: "number" },
+  publishedVersion: integerSchema({ minimum: 1 }),
+  createdById: stringSchema(),
+  createdAt: stringSchema({ format: "date-time" }),
+}, ["id", "tenantId", "classId", "courseId", "termId", "kind", "title", "heldOn", "maxScore", "createdById", "createdAt"]);
+const gradeEntryRecordSchema = objectSchema({
+  id: stringSchema(),
+  assessmentId: stringSchema(),
+  studentId: stringSchema(),
+  version: integerSchema({ minimum: 1 }),
+  score: { type: "number", nullable: true },
+  absent: { type: "boolean" },
+  publishedAt: stringSchema({ format: "date-time" }),
+  enteredById: stringSchema(),
+  createdAt: stringSchema({ format: "date-time" }),
+}, ["id", "assessmentId", "studentId", "version", "score", "absent", "enteredById", "createdAt"]);
+const gradeAssessmentCreateRequestSchema = objectSchema({
+  classId: stringSchema({ minLength: 1 }),
+  courseId: stringSchema({ minLength: 1 }),
+  termId: stringSchema({ minLength: 1 }),
+  kind: gradeAssessmentKindSchema,
+  title: stringSchema({ minLength: 1, maxLength: 120 }),
+  heldOn: stringSchema({ format: "date" }),
+  maxScore: { type: "number", exclusiveMinimum: 0, maximum: 999.99 },
+}, ["classId", "courseId", "termId", "kind", "title", "heldOn"]);
+const gradeEntriesSaveRequestSchema = objectSchema({
+  entries: arraySchema(objectSchema({
+    studentId: stringSchema({ minLength: 1 }),
+    score: { type: "number", nullable: true, description: "null when absent; otherwise 0..maxScore with two decimals." },
+    absent: { type: "boolean" },
+  }, ["studentId", "score", "absent"]), { minItems: 1, maxItems: 200 }),
+}, ["entries"]);
+
 const operationContracts: Record<string, OperationContract> = {
+  "get /api/v1/grade-assessments": {
+    responseBody: arraySchema(gradeAssessmentRecordSchema),
+    queryParameters: [
+      { name: "classId", schema: stringSchema() },
+      { name: "courseId", schema: stringSchema() },
+      { name: "termId", schema: stringSchema() },
+    ],
+  },
+  "post /api/v1/grade-assessments": {
+    requestBody: gradeAssessmentCreateRequestSchema,
+    responseBody: gradeAssessmentRecordSchema,
+  },
+  "get /api/v1/grade-assessments/{id}": {
+    responseBody: objectSchema({ assessment: gradeAssessmentRecordSchema, entries: arraySchema(gradeEntryRecordSchema) }, ["assessment", "entries"]),
+  },
+  "put /api/v1/grade-assessments/{id}/entries": {
+    requestBody: gradeEntriesSaveRequestSchema,
+    responseBody: arraySchema(gradeEntryRecordSchema),
+  },
+  "post /api/v1/grade-assessments/{id}/publish": {
+    idempotent: true,
+    idempotencyRequired: true,
+    responseBody: objectSchema({ assessment: gradeAssessmentRecordSchema, publishedCount: integerSchema({ minimum: 0 }) }, ["assessment", "publishedCount"]),
+  },
   "get /health": {
     rawResponseBody: healthStatusSchema,
     rawResponseContentType: jsonContentType,
@@ -3167,6 +3240,11 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/auth/totp/disable": {
     requestBody: totpDisableRequestSchema,
     responseBody: totpDisableResponseSchema,
+  },
+  "post /api/v1/auth/totp/admin-reset": {
+    requiredHeaders: [{ name: "X-Step-Up-Token", description: "SYSTEM_ADMIN OWNER_ADMIN_CHANGE MFA proof bound to actor/session.", schema: stringSchema() }],
+    requestBody: totpAdminResetRequestSchema,
+    responseBody: totpAdminResetResponseSchema,
   },
   "post /api/v1/auth/step-up": {
     requestBody: mfaStepUpRequestSchema,
@@ -3285,9 +3363,6 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/me/profile": {
     responseBody: meProfileResponseSchema,
-  },
-  "get /api/v1/me/feature-rollouts": {
-    responseBody: resolvedFeatureRolloutsSchema,
   },
   "post /api/v1/me/password": {
     requestBody: mePasswordChangeRequestSchema,
@@ -4538,11 +4613,15 @@ const operationContracts: Record<string, OperationContract> = {
 };
 
 export function applyOpenApiContracts(document: OpenAPIObject): OpenAPIObject {
+  // PO-5: a contract whose route no longer exists (renamed path, wrong method) must fail generation, not vanish.
+  const unmatched = Object.keys(operationContracts).filter((key) => {
+    const [method, path] = key.split(" ") as [string, string];
+    return !(document.paths?.[path] as Record<string, unknown> | undefined)?.[method];
+  });
+  if (unmatched.length > 0) throw new Error(`OPENAPI_CONTRACT_ROUTE_MISSING: ${unmatched.join(", ")}`);
   for (const [key, contract] of Object.entries(operationContracts)) {
     const [method, path] = key.split(" ") as [string, string];
-    const pathItem = document.paths?.[path] as Record<string, any> | undefined;
-    const operation = pathItem?.[method];
-    if (!operation) continue;
+    const operation = (document.paths?.[path] as Record<string, any>)[method];
 
     if (contract.requestBody) {
       operation.requestBody = {
