@@ -5,6 +5,7 @@ import request from "supertest";
 import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
+import { isPaymentInstallmentOverdue } from "./payment.service.js";
 
 describe("PaymentPlan API", () => {
   let app: INestApplication;
@@ -62,6 +63,7 @@ describe("PaymentPlan API", () => {
                 amount: 50000,
                 dueDate: "2026-07-01",
                 status: "PENDING",
+                overdue: true,
                 createdAt: "2026-06-05T09:00:00.000Z",
               },
               {
@@ -72,6 +74,7 @@ describe("PaymentPlan API", () => {
                 amount: 50000,
                 dueDate: "2026-08-01",
                 status: "PENDING",
+                overdue: true,
                 createdAt: "2026-06-05T09:00:00.000Z",
               },
             ],
@@ -333,13 +336,62 @@ describe("PaymentPlan API", () => {
       .patch("/payment-plans/payment-plan-a/installments/payment-installment-a-1")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({ status: "OVERDUE" })
+      .expect(422);
+
+    await request(server)
+      .patch("/payment-plans/payment-plan-a/installments/payment-installment-a-1")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ status: "PENDING" })
       .expect(200)
       .expect(({ body }) => {
         expect(body.installments[0]).toMatchObject({
           id: "payment-installment-a-1",
-          status: "OVERDUE",
+          status: "PENDING",
+          overdue: true,
         });
         expect(body.installments[0]).not.toHaveProperty("paidAt");
+      });
+  });
+
+  it("gecikme yalnız vade bugünden önceyse ve taksit PENDING ise true olur", () => {
+    expect(isPaymentInstallmentOverdue({ dueDate: "2026-10-03", status: "PENDING" }, "2026-10-04")).toBe(true);
+    expect(isPaymentInstallmentOverdue({ dueDate: "2026-10-04", status: "PENDING" }, "2026-10-04")).toBe(false);
+    expect(isPaymentInstallmentOverdue({ dueDate: "2026-10-03", status: "PAID" }, "2026-10-04")).toBe(false);
+    expect(isPaymentInstallmentOverdue({ dueDate: "2026-10-03", status: "CANCELED" }, "2026-10-04")).toBe(false);
+  });
+
+  it("gecikme türetilir: vadesi geçmiş ödenmemiş taksit gecikmiş, ödenince değil, vadesi gelmemiş değil", async () => {
+    const created = await request(server)
+      .post("/payment-plans")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        studentId: "student-a",
+        title: "Türetilmiş gecikme planı",
+        totalAmount: 20000,
+        installments: [
+          { installmentNo: 1, amount: 10000, dueDate: "2000-01-01" },
+          { installmentNo: 2, amount: 10000, dueDate: "2999-01-01" },
+        ],
+      })
+      .expect(201);
+    expect(created.body.installments.map((installment: { overdue: boolean }) => installment.overdue)).toEqual([true, false]);
+
+    await request(server)
+      .post(`/payment-plans/${created.body.id}/transactions`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ installmentId: created.body.installments[0].id, amount: 10000, method: "CASH", paidAt: "2026-10-01T09:00:00.000Z" })
+      .expect(201);
+
+    await request(server)
+      .get("/payment-plans")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body: plans }) => {
+        const plan = plans.find((candidate: { id: string }) => candidate.id === created.body.id);
+        expect(plan.installments).toEqual([
+          expect.objectContaining({ installmentNo: 1, status: "PAID", overdue: false }),
+          expect.objectContaining({ installmentNo: 2, status: "PENDING", overdue: false }),
+        ]);
       });
   });
 
@@ -405,7 +457,7 @@ describe("PaymentPlan API", () => {
       .patch(`/payment-plans/${created.body.id}/installments/${installmentId}`)
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .set("Idempotency-Key", key)
-      .send({ status: "OVERDUE" })
+      .send({ status: "PENDING" })
       .expect(409)
       .expect(({ body }) => {
         expect(JSON.stringify(body)).toContain("IDEMPOTENCY_KEY_BODY_MISMATCH");

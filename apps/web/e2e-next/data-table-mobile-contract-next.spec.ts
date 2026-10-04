@@ -5,7 +5,7 @@ const smsEnabled = process.env.NEXT_PUBLIC_SMS_ENABLED === "true";
 
 const corsHeaders = {
   "access-control-allow-credentials": "true",
-  "access-control-allow-headers": "authorization,content-type,x-csrf-token",
+  "access-control-allow-headers": "authorization,content-type,idempotency-key,x-csrf-token",
   "access-control-allow-methods": "DELETE,GET,PATCH,POST,OPTIONS",
   "access-control-allow-origin": appOrigin,
 };
@@ -371,6 +371,51 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expectNoHorizontalOverflow(page, "finance-mobile");
     await expectNoUnlabeledControls(page, "finance-mobile");
     await expectNoClippedVisibleText(page, "finance-mobile");
+  });
+
+  test("finans ödeme planı formu eşit taksit önerir, toplam tutmazsa engeller ve tek istek gönderir", async ({ page }) => {
+    await openWithDataTableMocks(page, "/kurum/finans");
+    const createRequests: Array<{ body: unknown; idempotencyKey?: string }> = [];
+    await page.route("**/api/v1/payment-plans", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      createRequests.push({ body: route.request().postDataJSON(), idempotencyKey: route.request().headers()["idempotency-key"] });
+      await fulfillData(route, { ...createPaymentPlans()[0], id: "payment-plan-new" });
+    });
+
+    await page.getByRole("button", { name: "Ödeme planı oluştur" }).click();
+    const dialog = page.getByRole("dialog", { name: "Ödeme planı oluştur" });
+    await dialog.getByRole("combobox", { name: "Öğrenci" }).selectOption("student-a");
+    await dialog.getByLabel("Plan adı").fill("Eylül planı");
+    await dialog.getByLabel("Toplam tutar (TL)").fill("1000");
+    await dialog.getByLabel("Taksit sayısı").fill("3");
+    await dialog.getByLabel("İlk vade").fill("2026-01-31");
+    await dialog.getByRole("button", { name: "Eşit taksitlere böl" }).click();
+    await expect(dialog.getByLabel("1. taksit tutarı (TL)")).toHaveValue("333,33");
+    await expect(dialog.getByLabel("3. taksit tutarı (TL)")).toHaveValue("333,34");
+    await expect(dialog.getByLabel("2. taksit vadesi")).toHaveValue("2026-02-28");
+
+    await dialog.getByLabel("3. taksit tutarı (TL)").fill("300");
+    await expect(dialog.getByText("Taksit toplamı plan toplamıyla aynı olmalıdır.")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Planı oluştur" })).toBeDisabled();
+
+    await dialog.getByLabel("3. taksit tutarı (TL)").fill("333,34");
+    await dialog.getByRole("button", { name: "Planı oluştur" }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(createRequests).toHaveLength(1);
+    expect(createRequests[0]?.idempotencyKey).toMatch(/^payment-plan-/);
+    expect(createRequests[0]?.body).toMatchObject({
+      installments: [
+        { amount: 33333, dueDate: "2026-01-31", installmentNo: 1 },
+        { amount: 33333, dueDate: "2026-02-28", installmentNo: 2 },
+        { amount: 33334, dueDate: "2026-03-31", installmentNo: 3 },
+      ],
+      studentId: "student-a",
+      title: "Eylül planı",
+      totalAmount: 100000,
+    });
   });
 
   test("devamsızlık günlük operasyon tablosu mobilde özet ve URL state korur", async ({ page }) => {
@@ -1732,7 +1777,8 @@ function createPaymentPlans() {
           installmentNo: 1,
           paidAt: undefined,
           planId: "payment-plan-a",
-          status: "OVERDUE",
+          status: "PENDING",
+          overdue: true,
           tenantId: "tenant-datatable",
         },
       ],

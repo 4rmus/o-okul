@@ -48,7 +48,7 @@ const guardianStudentRecordRequired = [
   "canOpenSupportTickets",
 ];
 const guardianStudentDetailStudentRequired = ["id", "firstName", "lastName", "status", "hasPortalUser"];
-const paymentInstallmentStatuses = ["PENDING", "PAID", "OVERDUE", "CANCELED"];
+const paymentInstallmentStatuses = ["PENDING", "PAID", "CANCELED"];
 const paymentTransactionMethods = ["CASH", "BANK_TRANSFER", "CARD_POS", "OTHER"];
 const paymentPlanWithInstallmentsRequired = ["id", "tenantId", "studentId", "title", "totalAmount", "currency", "createdAt", "installments"];
 const paymentPlanPortalForbiddenDeep = [

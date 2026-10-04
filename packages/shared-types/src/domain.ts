@@ -1846,7 +1846,8 @@ export interface DevelopmentTrendItem {
   scores: DevelopmentTrendScore[];
 }
 
-export type PaymentInstallmentStatus = "PENDING" | "PAID" | "OVERDUE" | "CANCELED";
+// Stored status only. Overdue is derived on read (see PaymentInstallmentRecord.overdue).
+export type PaymentInstallmentStatus = "PENDING" | "PAID" | "CANCELED";
 export type PaymentTransactionMethod = "CASH" | "BANK_TRANSFER" | "CARD_POS" | "OTHER";
 
 export interface PaymentPlanInstallmentInput {
@@ -1901,6 +1902,8 @@ export interface PaymentInstallmentRecord {
   paidAt?: string;
   createdAt: string;
   deletedAt?: string;
+  /** Derived on read: dueDate < today (Europe/Istanbul) and status is PENDING. Never stored. */
+  overdue?: boolean;
 }
 
 export interface PaymentPlanRecord {

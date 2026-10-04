@@ -766,7 +766,7 @@ const announcementDeliveryReportRecordSchema = objectSchema({
 
 const paymentInstallmentStatusSchema = {
   type: "string",
-  enum: ["PENDING", "PAID", "OVERDUE", "CANCELED"],
+  enum: ["PENDING", "PAID", "CANCELED"],
 };
 const paymentTransactionMethodSchema = {
   type: "string",
@@ -1656,6 +1656,7 @@ const paymentInstallmentRecordSchema = objectSchema({
   paidAt: stringSchema({ format: "date-time" }),
   createdAt: stringSchema({ format: "date-time" }),
   deletedAt: stringSchema({ format: "date-time" }),
+  overdue: { type: "boolean" },
 }, ["id", "tenantId", "planId", "installmentNo", "amount", "dueDate", "status", "createdAt"]);
 
 const paymentTransactionRecordSchema = objectSchema({

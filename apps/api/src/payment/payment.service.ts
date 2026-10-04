@@ -32,7 +32,7 @@ export interface PaymentPlanListFilters extends StorePaymentPlanListFilters {
 
 type PaymentPlanContextFields = Required<Pick<StorePaymentPlanListFilters, "campusId" | "gradeLevelId" | "classId" | "courseId" | "termId">>;
 
-const installmentStatuses: PaymentInstallmentStatus[] = ["PENDING", "PAID", "OVERDUE", "CANCELED"];
+const installmentStatuses: PaymentInstallmentStatus[] = ["PENDING", "PAID", "CANCELED"];
 const transactionMethods: PaymentTransactionMethod[] = ["CASH", "BANK_TRANSFER", "CARD_POS", "OTHER"];
 
 @Injectable()
@@ -57,11 +57,13 @@ export class PaymentService {
     if (resolvedFilters.studentId) {
       const student = await this.findStudentForTenant(context, resolvedFilters.studentId);
       return filterTenantResources(context, await this.store.listByStudent(student.id, { ...resolvedFilters, ...campusScopeFilters }))
-        .filter((record) => !record.deletedAt);
+        .filter((record) => !record.deletedAt)
+        .map((record) => withDerivedOverdue(record));
     }
 
     return filterTenantResources(context, await this.store.list({ ...resolvedFilters, ...campusScopeFilters }))
-      .filter((record) => !record.deletedAt);
+      .filter((record) => !record.deletedAt)
+      .map((record) => withDerivedOverdue(record));
   }
 
   async listCurrentGuardianStudent(
@@ -83,7 +85,7 @@ export class PaymentService {
 
     const plans = filterTenantResources(context, await this.store.listByStudent(student.id)).filter((record) => !record.deletedAt);
     return Promise.all(plans.map(async (plan) => ({
-      ...plan,
+      ...withDerivedOverdue(plan),
       transactions: (await this.store.listTransactions(plan.id)).map(toPublicPaymentTransaction),
     })));
   }
@@ -97,7 +99,7 @@ export class PaymentService {
       context,
       { key: idempotencyKey, operation: "payment.plan.create", request: input },
       () => this.createPaymentPlan(context, input),
-    );
+    ).then((record) => withDerivedOverdue(record));
   }
 
   private async createPaymentPlan(context: RequestContext, input: Partial<PaymentPlanCreateRequest>): Promise<PaymentPlanWithInstallmentsRecord> {
@@ -149,7 +151,7 @@ export class PaymentService {
       context,
       { key: idempotencyKey, operation: "payment.installment.update", request: { planId, installmentId, input } },
       () => this.updatePaymentInstallment(context, planId, installmentId, input),
-    );
+    ).then((record) => withDerivedOverdue(record));
   }
 
   private async updatePaymentInstallment(
@@ -308,7 +310,7 @@ export class PaymentService {
       context,
       { key: idempotencyKey, operation: "payment.plan.cancel", request: { planId } },
       () => this.cancelPaymentPlan(context, planId),
-    );
+    ).then((record) => withDerivedOverdue(record));
   }
 
   private async cancelPaymentPlan(context: RequestContext, planId: string): Promise<PaymentPlanWithInstallmentsRecord> {
@@ -602,4 +604,24 @@ function resolveUpdatedPaidAt(
 function toPublicPaymentTransaction(record: PaymentTransactionRecord): PaymentTransactionRecord {
   const { recordedByUserId: _recordedByUserId, ...publicRecord } = record;
   return publicRecord;
+}
+
+// KF-3: the single source of "overdue". Never stored; every read path routes through withDerivedOverdue.
+export function isPaymentInstallmentOverdue(
+  installment: Pick<PaymentInstallmentRecord, "dueDate" | "status" | "deletedAt">,
+  today: string = istanbulDate(new Date()),
+): boolean {
+  return installment.status === "PENDING" && !installment.deletedAt && installment.dueDate < today;
+}
+
+function withDerivedOverdue<T extends PaymentPlanWithInstallmentsRecord>(plan: T, today: string = istanbulDate(new Date())): T {
+  return {
+    ...plan,
+    installments: plan.installments.map((installment) => ({ ...installment, overdue: isPaymentInstallmentOverdue(installment, today) })),
+  };
+}
+
+function istanbulDate(now: Date): string {
+  // en-CA formats as YYYY-MM-DD; dueDate is a calendar date in the school's timezone.
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Istanbul", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 }
