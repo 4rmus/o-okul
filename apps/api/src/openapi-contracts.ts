@@ -1775,18 +1775,6 @@ const studentStatusSchema = {
   enum: ["ACTIVE", "PASSIVE", "GRADUATED", "TRANSFERRED"],
 };
 
-const studentGuardianProvisionRequestSchema = objectSchema({
-  canOpenSupportTickets: { type: "boolean" },
-  canReceiveAnnouncements: { type: "boolean" },
-  canReceiveSms: { type: "boolean" },
-  canViewFinance: { type: "boolean" },
-  email: stringSchema(),
-  firstName: stringSchema(),
-  lastName: stringSchema(),
-  nationalId: stringSchema(),
-  phone: stringSchema(),
-});
-
 const guardianRecordSchema = objectSchema({
   id: stringSchema(),
   tenantId: stringSchema(),
@@ -2800,7 +2788,7 @@ const studentImportErrorSchema = objectSchema({
   row: integerSchema({ minimum: 0 }),
   field: { type: "string", enum: [
     "className", "contactEmail", "contactFirstName", "contactLastName", "contactPhone", "contactRelation",
-    "email", "firstName", "gradeLevelName", "guardian", "guardianNationalId", "guardianPhone", "lastName", "nationalId", "phone", "quota", "studentNo",
+    "email", "firstName", "gradeLevelName", "guardian", "lastName", "nationalId", "phone", "quota", "studentNo",
   ] },
   code: {
     type: "string",
@@ -2815,9 +2803,8 @@ const studentImportErrorSchema = objectSchema({
       "INVALID_NATIONAL_ID",
       "INVALID_PHONE",
       "INVALID_RELATION_TYPE",
-      "GUARDIAN_CONTACT_REQUIRED",
+      "CONTACT_COLUMNS_CONFLICT",
       "REQUIRED",
-      "STUDENT_IMPORT_PILOT_CORE_ONLY",
       "STUDENT_NATIONAL_ID_DUPLICATE",
       "STUDENT_NO_DUPLICATE",
       "ACTIVE_STUDENT_LIMIT_REACHED",
@@ -2845,7 +2832,6 @@ const studentImportPreviewRowSchema = objectSchema({
   }, ["firstName", "lastName", "relationType"]),
   email: stringSchema({ format: "email" }),
   firstName: stringSchema(),
-  guardian: studentGuardianProvisionRequestSchema,
   lastName: stringSchema(),
   studentNo: stringSchema(),
 }, ["row", "firstName", "lastName"]);
@@ -3657,7 +3643,6 @@ const operationContracts: Record<string, OperationContract> = {
         classId: stringSchema({ minLength: 1 }),
         firstName: stringSchema(),
         gradeLevelId: stringSchema({ minLength: 1 }),
-        guardian: studentGuardianProvisionRequestSchema,
         lastName: stringSchema(),
         nationalId: stringSchema(),
         phone: stringSchema(),
@@ -3697,7 +3682,7 @@ const operationContracts: Record<string, OperationContract> = {
       { name: "level", schema: stringSchema() },
       { name: "responsibleTeacherId", schema: stringSchema() },
       { name: "status", schema: studentStatusSchema },
-      { name: "guardianLinked", description: "Under student-registry-v2, filters by active StudentContact presence.", schema: { type: "boolean" } },
+      { name: "guardianLinked", description: "Paged requests filter by active StudentContact presence; unpaged requests by guardian link presence.", schema: { type: "boolean" } },
     ],
   },
   "get /api/v1/students/{id}": {

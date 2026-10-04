@@ -163,17 +163,14 @@ function invalidConfig(reason: string): Error {
 
 function ownerFor(key: FeatureRolloutKey): string {
   if (key === "web.control-plane-v2") return "platform-operations";
-  if (key === "product.guardian-read-only") return "product-iam";
   return "frontend-experience";
 }
 
 function removalIssueFor(key: FeatureRolloutKey): string {
   const issueByKey: Record<FeatureRolloutKey, string> = {
-    "web.student-registry-v2": "ST-01",
     "web.teacher-portal-v2": "TP-02",
     "web.student-portal-v2": "SP-02",
     "web.control-plane-v2": "CP-02",
-    "product.guardian-read-only": "IAM-04",
   };
   return issueByKey[key];
 }

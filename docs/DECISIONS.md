@@ -711,7 +711,7 @@ Son kontrol: 2026-10-01
 
 ### DEC-20261003-01 — Veli hesabı korunur; StudentContact iletişim ve rıza kaydı olarak kalır
 
-Durum: Onaylı; iki flag'in kodla kaldırılması ve Guardian–StudentContact bağlantı dilimi bekliyor
+Durum: Onaylı; iki flag KV-1 ile kodla kaldırıldı (LOCAL_TEST); staging veli UAT kanıtı ve Guardian–StudentContact bağlantı dilimi (KV-3) bekliyor
 Karar: `GUARDIAN` rolü, hesabı, session'ı ve veli portalı emekliye ayrılmaz; geliştirilir. Giriş
 kuralı DEC-20260801-01'deki gibidir: kurum kodu + kurum içi kullanıcı kimliği; T.C. kimlik numarası ve
 telefon kullanıcı adı veya parola olamaz; aynı kişi farklı tenantlarda ayrı hesap kullanır.
@@ -744,14 +744,16 @@ bu DEC ile kapanır.
 Kaynak: Ürün sahibi kararı (2026-10-03, F0–F4 strateji çalışması). Pazar gerekçesi: veli erişimi
 incelenen 8 rakibin 8'inde var (KAYNAKLI; rakip sayfaları ve mağaza listeleri). Velinin satın alma
 kararındaki ağırlığı VARSAYIM.
-Kanıt: `apps/api/src/feature-rollout/feature-rollout.service.ts:15` (tüm katalog `expiresAt`
-2026-11-07) ve `:42` (süresi dolan kayıt düşer), `packages/shared-types/src/feature-rollout.ts`,
-`apps/api/src/guardian/guardian-write-policy.ts:12` (410 `GUARDIAN_WRITE_READ_ONLY`),
-`apps/api/src/identity-invitation/identity-invitation.service.ts` (kopya flag kontrolü),
-`apps/api/src/student/student-contact.service.ts:39` (registry-v2 kapısı),
+Kanıt: KV-1 sonrası `packages/shared-types/src/feature-rollout.ts` iki anahtarı taşımaz;
+`feature-rollout.service.test.ts` emekli anahtar configini `UNKNOWN_KEY` ile reddeder;
+`student-contact.e2e.test.ts` saati 2026-11-08'e sabitleyip rollout kaydı olmadan iletişim, özet,
+veli oluşturma/bağlama ve veli davetinde 2xx doğrular; `app.e2e.test.ts` öğrenci oluşturmada
+`guardian` alanını yan etkisiz reddeder ve import'un veli sütunlarını Guardian/davet üretmeden
+`StudentContact` (LEGAL_GUARDIAN, izinler kapalı, veli TC'si okunmaz) yazdığını doğrular. Sayfalı
+`GET /students` registry yolunu, sayfalamasız çağrılar tam listeyi kullanır.
 `packages/db/prisma/schema.prisma` (`StudentContact`, `Guardian`, `GuardianStudent`),
 `packages/shared-types/src/role-capabilities.ts` (`GUARDIAN` seti), `status.md` guardian durumu,
-`docs/product-journeys-v1.md` persona tablosu. Kanıt sınıfı LOCAL_STATIC; CI, STAGING ve PRODUCTION
+`docs/product-journeys-v1.md` persona tablosu. Kanıt sınıfı LOCAL_TEST; CI, STAGING ve PRODUCTION
 UNPROVEN.
 Etkilenen ADR: ADR-0001 (Guardian–StudentContact bağı bileşik FK ve RLS ile kurulur), ADR-0008 (iki
 anahtar katalogdan çıkar, kaldırma kaydı eklenir). Yeni ADR başlığı: veli kimliği ve rıza kaynağı

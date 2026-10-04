@@ -27,8 +27,6 @@ import type {
 import { Eye, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError, apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch, withQueryParams } from "../../../../src/api-client.js";
-import { featureRolloutQueryKey, isFeatureEnabled, loadFeatureRollouts } from "../../../../src/feature-rollouts.js";
-import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import {
   firstFormError,
   studentFormSchema,
@@ -122,13 +120,6 @@ const emptyForm: StudentFormState = {
   nationalId: "",
   phone: "",
   email: "",
-  guardianFirstName: "",
-  guardianLastName: "",
-  guardianPhone: "",
-  guardianCanViewFinance: false,
-  guardianCanReceiveSms: false,
-  guardianCanReceiveAnnouncements: false,
-  guardianCanOpenSupportTickets: false,
 };
 
 const emptyFilters: StudentListFilters = {
@@ -155,20 +146,6 @@ const emptyBulkEnrollmentAction: BulkEnrollmentActionState = {
 export function StudentsPage() {
   const { auth } = useAuth();
   const canRevealPhone = hasCapabilityForRoles(auth?.session.roles ?? [], "privacy:manage");
-  const featureRolloutsQuery = useQuery({
-    queryKey: featureRolloutQueryKey(
-      auth?.session.tenantId,
-      auth?.session.id,
-      auth?.session.activePersona,
-    ),
-    queryFn: () => loadFeatureRollouts(auth?.accessToken ?? ""),
-    enabled: Boolean(auth?.accessToken),
-    refetchOnWindowFocus: false,
-  });
-  const guardianReadOnly = featureRolloutsQuery.isSuccess
-    && isFeatureEnabled(featureRolloutsQuery.data, "product.guardian-read-only");
-  const studentRegistryV2 = featureRolloutsQuery.isSuccess
-    && isFeatureEnabled(featureRolloutsQuery.data, "web.student-registry-v2");
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { confirm, confirmationDialog } = useConfirmDialog();
@@ -337,7 +314,7 @@ export function StudentsPage() {
   const studentSummaryBadges: OperationSummaryBadge[] = [
     {
       key: "guardian",
-      label: `Veli: ${formatGuardianLinkedFilter(filters.guardianLinked)}`,
+      label: `İletişim kişisi: ${formatGuardianLinkedFilter(filters.guardianLinked)}`,
       tone: filters.guardianLinked === "true" ? "success" : filters.guardianLinked === "false" ? "warning" : "neutral",
     },
     {
@@ -459,7 +436,6 @@ export function StudentsPage() {
         setError("Seviye seçilmelidir.");
         return;
       }
-      const guardianPayload = guardianReadOnly ? undefined : buildGuardianPayload(studentForm);
       const savedStudent = wasEditing
         ? await updateStudent(auth.accessToken, wasEditing.id, {
             firstName: studentForm.firstName,
@@ -477,7 +453,6 @@ export function StudentsPage() {
             classId: studentForm.classId || undefined,
             responsibleTeacherId: studentForm.responsibleTeacherId || undefined,
             status: studentForm.status,
-            guardian: guardianPayload ?? undefined,
           });
 
       if (!wasEditing) {
@@ -488,10 +463,6 @@ export function StudentsPage() {
       const profilePayload = buildProfilePayload(studentForm);
       if (profilePayload) {
         await updateStudentProfile(auth.accessToken, savedStudent.id, profilePayload);
-      }
-
-      if (!wasEditing && guardianPayload) {
-        void queryClient.invalidateQueries({ queryKey: ["next-guardians"] });
       }
 
       void queryClient.invalidateQueries({ queryKey: ["next-student-detail"] });
@@ -736,7 +707,7 @@ export function StudentsPage() {
                       <option value="TRANSFERRED">Nakil</option>
                     </Select>
                   </Field>
-                  <Field label="Veli">
+                  <Field label="İletişim kişisi">
                     <Select
                       value={filters.guardianLinked}
                       onChange={(event) => updateFilters({
@@ -745,8 +716,8 @@ export function StudentsPage() {
                       })}
                     >
                       <option value="">Tümü</option>
-                      <option value="true">Bağlı</option>
-                      <option value="false">Bağlı değil</option>
+                      <option value="true">Var</option>
+                      <option value="false">Yok</option>
                     </Select>
                   </Field>
                 </div>
@@ -896,7 +867,7 @@ export function StudentsPage() {
             <InfoGrid>
               <InfoItem label="Satır" value={formatCount(importDryRun.totalRows)} />
               <InfoItem label="Geçerli" value={formatCount(importDryRun.validRows.length)} />
-              {studentRegistryV2 ? <InfoItem label="İletişim kişisi" value={formatCount(importDryRun.validRows.filter((row) => row.contact).length)} /> : null}
+              <InfoItem label="İletişim kişisi" value={formatCount(importDryRun.validRows.filter((row) => row.contact).length)} />
               <InfoItem label="Hata" value={formatCount(importDryRun.errors.length)} />
               <InfoItem label="Kota" value={`${importDryRun.quota.current}+${importDryRun.quota.incoming}/${importDryRun.quota.limit}`} />
             </InfoGrid>
@@ -904,12 +875,7 @@ export function StudentsPage() {
           </>
         ) : null}
         <p className="next-field-hint">Toplu aktarım portal hesabı oluşturmaz; erişimi Öğrenci Portal Erişimi ekranından ayrıca açabilirsiniz.</p>
-        {guardianReadOnly ? (
-          <p className="next-field-hint">Yeni veli hesabı ve veli bağlantısı kapalıdır; aktarım dosyası veli alanı içermemelidir.</p>
-        ) : null}
-        {studentRegistryV2 ? (
-          <p className="next-field-hint">İletişim kişisi için contactFirstName, contactLastName, contactRelation, contactPhone ve contactEmail kolonlarını kullanabilirsin. İzinler varsayılan kapalıdır.</p>
-        ) : null}
+        <p className="next-field-hint">Veli sütunları iletişim kişisi olarak yazılır; veli hesabı açılmaz, veli TC'si okunmaz. İletişim kişisi için contactFirstName, contactLastName, contactRelation, contactPhone ve contactEmail kolonlarını da kullanabilirsin. İzinler varsayılan kapalıdır.</p>
         {importDryRun && importDryRun.errors.length > 0 ? (
           <div className="next-form-guardians">
             <span className="next-field-hint">İlk hatalar</span>
@@ -1062,58 +1028,7 @@ export function StudentsPage() {
               )}
             </div>
           ) : null}
-          {guardianReadOnly ? (
-            <div className="next-form-guardians">
-              <span className="next-field-hint">Yeni veli hesabı ve bağlantısı bu kurumda salt okunur geçişe alınmıştır.</span>
-            </div>
-          ) : (
-            <>
-              <Field label="Veli adı">
-                <Input
-                  value={form.guardianFirstName}
-                  onChange={(event) => setForm((current) => ({ ...current, guardianFirstName: event.target.value }))}
-                />
-              </Field>
-              <Field label="Veli soyadı">
-                <Input
-                  value={form.guardianLastName}
-                  onChange={(event) => setForm((current) => ({ ...current, guardianLastName: event.target.value }))}
-                />
-              </Field>
-              <Field label="Veli telefonu" description="Bağlı veli listelerinde telefon maskeli gösterilir.">
-                <Input
-                  inputMode="tel"
-                  value={form.guardianPhone}
-                  onChange={(event) => setForm((current) => ({ ...current, guardianPhone: event.target.value }))}
-                />
-              </Field>
-              <fieldset className="next-permission-fieldset">
-                <legend>Veli izinleri</legend>
-                <Checkbox
-                  checked={form.guardianCanViewFinance}
-                  label="Finans görünürlüğü"
-                  onChange={(event) => setForm((current) => ({ ...current, guardianCanViewFinance: event.target.checked }))}
-                />
-                {isSmsEnabled ? (
-                  <Checkbox
-                    checked={form.guardianCanReceiveSms}
-                    label="SMS alabilir"
-                    onChange={(event) => setForm((current) => ({ ...current, guardianCanReceiveSms: event.target.checked }))}
-                  />
-                ) : null}
-                <Checkbox
-                  checked={form.guardianCanReceiveAnnouncements}
-                  label="Duyuru alabilir"
-                  onChange={(event) => setForm((current) => ({ ...current, guardianCanReceiveAnnouncements: event.target.checked }))}
-                />
-                <Checkbox
-                  checked={form.guardianCanOpenSupportTickets}
-                  label="Destek talebi açabilir"
-                  onChange={(event) => setForm((current) => ({ ...current, guardianCanOpenSupportTickets: event.target.checked }))}
-                />
-              </fieldset>
-            </>
-          )}
+          <p className="next-field-hint">Veli hesabı Veliler ekranından açılır, öğrenciye bağlanır ve davet edilir. İletişim kişisi öğrenci detayından eklenir.</p>
         </div>
         {editingStudent ? (
           <section className="next-form-section" aria-label="Kayıt işlemleri">
@@ -1263,22 +1178,6 @@ function buildProfilePayload(form: StudentFormPayload): StudentProfilePayload | 
   if (form.phone.trim()) payload.phone = form.phone.trim();
   if (form.email.trim()) payload.email = form.email.trim();
   return Object.keys(payload).length > 0 ? payload : null;
-}
-
-function buildGuardianPayload(form: StudentFormPayload) {
-  if (!form.guardianFirstName.trim() && !form.guardianLastName.trim() && !form.guardianPhone.trim()) {
-    return null;
-  }
-
-  return {
-    firstName: form.guardianFirstName.trim(),
-    lastName: form.guardianLastName.trim(),
-    phone: form.guardianPhone.trim() || undefined,
-    canViewFinance: form.guardianCanViewFinance,
-    canReceiveSms: form.guardianCanReceiveSms,
-    canReceiveAnnouncements: form.guardianCanReceiveAnnouncements,
-    canOpenSupportTickets: form.guardianCanOpenSupportTickets,
-  };
 }
 
 const studentSortOptions = [
@@ -1510,7 +1409,6 @@ async function createStudent(
     classId?: string;
     responsibleTeacherId?: string;
     status: StudentRecord["status"];
-    guardian?: NonNullable<ReturnType<typeof buildGuardianPayload>>;
   },
 ) {
   return apiRequest<StudentRecord>(accessToken, `${apiBaseUrl}/students`, {
@@ -1670,9 +1568,8 @@ function formatStudentImportError(error: StudentImportDryRunResult["errors"][num
   if (error.code === "INVALID_NATIONAL_ID") return `${row}: TC kimlik no geçersiz`;
   if (error.code === "INVALID_PHONE") return `${row}: telefon geçersiz`;
   if (error.code === "INVALID_RELATION_TYPE") return `${row}: iletişim kişisi ilişki türü geçersiz`;
-  if (error.code === "GUARDIAN_CONTACT_REQUIRED") return `${row}: veli TC kimlik no veya telefonu zorunlu`;
+  if (error.code === "CONTACT_COLUMNS_CONFLICT") return `${row}: veli ve iletişim kişisi sütunlarından yalnız biri dolu olmalı`;
   if (error.code === "ACTIVE_STUDENT_LIMIT_REACHED") return "Aktif öğrenci kotası aşılır";
-  if (error.code === "STUDENT_IMPORT_PILOT_CORE_ONLY") return `${row}: pilot içe aktarımında hesap e-postası kullanılamaz`;
   return `${row}: dosya satırı kontrol edilmeli`;
 }
 
@@ -1688,8 +1585,6 @@ function studentImportFieldLabel(field: StudentImportDryRunResult["errors"][numb
     firstName: "ad",
     gradeLevelName: "seviye",
     guardian: "iletişim kişisi",
-    guardianNationalId: "veli TC kimlik no",
-    guardianPhone: "veli telefonu",
     lastName: "soyad",
     nationalId: "TC kimlik no",
     phone: "telefon",
@@ -1712,8 +1607,8 @@ async function readFileAsBase64(file: File): Promise<string> {
 }
 
 function formatGuardianLinkedFilter(value: StudentListFilters["guardianLinked"]) {
-  if (value === "true") return "Bağlı";
-  if (value === "false") return "Bağlı değil";
+  if (value === "true") return "Var";
+  if (value === "false") return "Yok";
   return "Tümü";
 }
 

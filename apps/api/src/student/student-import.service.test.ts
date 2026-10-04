@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
-import type { FeatureRolloutService } from "../feature-rollout/feature-rollout.service.js";
 import type { SchoolService } from "../school/school.service.js";
 import { StudentImportService } from "./student-import.service.js";
 import type { StudentService } from "./student.service.js";
@@ -23,72 +22,58 @@ describe("StudentImportService Gate D", () => {
     expect(students.createMany).not.toHaveBeenCalled();
   });
 
-  it("öğrenci ve veli TC/telefon alanlarını birbirinden bağımsız işler", async () => {
-    const { service, students } = createService({ registryV2: true });
+  it("öğrenci TC/telefonunu işler; veli sütunlarını veli hesabı açmadan iletişim kişisine çevirir", async () => {
+    const { service, students } = createService();
     const fileBase64 = csv([
       "ad;soyad;seviye;tc;telefon;veli_ad;veli_soyad;veli_tc;veli_telefon",
       "Tc;Ogrenci;8. Sınıf;10000000146;;;;;",
       "Telefon;Ogrenci;8. Sınıf;;05551234567;;;;",
       "VeliTc;Ogrenci;8. Sınıf;;;Fatma;Kaya;10000001372;",
-      "VeliTelefon;Ogrenci;8. Sınıf;;;Ayse;Kaya;;05557654321",
+      "VeliTelefon;Ogrenci;8. Sınıf;;;;;;05557654321",
+      "YalnizVeliTc;Ogrenci;8. Sınıf;;;;;10000001372;",
     ].join("\n"));
 
     const preview = await service.dryRun(context, { fileBase64 });
-    expect(preview).toMatchObject({ totalRows: 4, errors: [], wouldImport: true });
+    expect(preview).toMatchObject({ totalRows: 5, errors: [], wouldImport: true });
+    expect(JSON.stringify(preview)).not.toContain("10000001372");
+    expect(JSON.stringify(preview)).not.toContain("guardian");
 
-    await expect(service.import(context, { fileBase64 }, "independent-identity-fields-a"))
-      .resolves.toMatchObject({ importedRows: 0 });
-    expect(students.assertGuardianProvisioningAllowed).toHaveBeenCalledWith(context);
-    expect(students.createMany).toHaveBeenCalledWith(context, [
+    await service.import(context, { fileBase64 }, "independent-identity-fields-a");
+    const [, inputs] = students.createMany.mock.calls[0] as unknown as [RequestContext, Array<Record<string, unknown>>];
+    expect(inputs).toEqual([
       expect.objectContaining({ nationalId: "10000000146", firstName: "TC" }),
       expect.objectContaining({ phone: "5551234567", firstName: "TELEFON" }),
-      expect.objectContaining({ guardian: expect.objectContaining({ nationalId: "10000001372" }) }),
-      expect.objectContaining({ guardian: expect.objectContaining({ phone: "5557654321" }) }),
-    ], { provisionAccounts: false });
+      expect.objectContaining({ contact: expect.objectContaining({ firstName: "FATMA", lastName: "KAYA", relationType: "LEGAL_GUARDIAN" }) }),
+      expect.objectContaining({ contact: expect.objectContaining({ firstName: "VELİ", lastName: "OGRENCİ", phone: "5557654321" }) }),
+      expect.not.objectContaining({ contact: expect.anything() }),
+    ]);
+    expect(JSON.stringify(inputs)).not.toContain("10000001372");
+    expect(inputs.every((input) => !("guardian" in input))).toBe(true);
   });
 
-  it("toplu importta öğrenci ve veli portal hesabını varsayılan kapalı tutar", async () => {
-    const { service, students } = createService({ registryV2: true });
+  it("aynı satırda veli ve iletişim sütunları doluysa satırı commit öncesinde reddeder", async () => {
+    const { service, students } = createService();
     const fileBase64 = csv([
-      "ad;soyad;seviye;tc;telefon;veli_ad;veli_soyad;veli_tc;veli_telefon",
-      "Ada;Kaya;8. Sınıf;10000000146;05551234567;Fatma;Kaya;10000001372;05557654321",
+      "ad;soyad;seviye;veli_ad;veli_telefon;contactFirstName;contactLastName;contactPhone",
+      "Ada;Kaya;8. Sınıf;Fatma;05557654321;Ali;Kaya;05551234567",
     ].join("\n"));
 
-    const preview = await service.dryRun(context, { fileBase64 });
-    expect(preview).toMatchObject({ totalRows: 1, errors: [], wouldImport: true });
-    expect(preview.validRows[0]).not.toHaveProperty("accountPreview");
-
-    await service.import(context, { fileBase64 }, "accounts-default-off-a");
-    expect(students.createMany).toHaveBeenCalledWith(context, [
-      expect.objectContaining({ guardian: expect.objectContaining({ firstName: "FATMA" }) }),
-    ], { provisionAccounts: false });
-  });
-
-  it("veli adı olup TC veya telefonu olmayan satırı commit öncesinde reddeder", async () => {
-    const { service, students } = createService();
-    const fileBase64 = csv("ad;soyad;seviye;veli_ad;veli_soyad\nAda;Kaya;8. Sınıf;Fatma;Kaya");
-
     await expect(service.dryRun(context, { fileBase64 })).resolves.toMatchObject({
-      totalRows: 1,
-      validRows: [],
-      errors: [{ row: 2, field: "guardian", code: "GUARDIAN_CONTACT_REQUIRED" }],
       wouldImport: false,
+      errors: [{ row: 2, field: "guardian", code: "CONTACT_COLUMNS_CONFLICT" }],
     });
-    await expect(service.import(context, { fileBase64 }, "guardian-contact-required-a"))
+    await expect(service.import(context, { fileBase64 }, "contact-columns-conflict-a"))
       .rejects.toMatchObject({ response: { code: "STUDENT_IMPORT_INVALID" } });
     expect(students.createMany).not.toHaveBeenCalled();
   });
 
-  it("registry v2 pilotunda öğrenci hesap e-postasını reddetmeye devam eder", async () => {
-    const { service } = createService({ registryV2: true });
-    const preview = await service.dryRun(context, {
-      fileBase64: csv("ad;soyad;seviye;email\nAda;Kaya;8. Sınıf;ada@example.test"),
-    });
+  it("şablondaki öğrenci e-posta sütununu profil verisi olarak kabul eder", async () => {
+    const { service, students } = createService();
+    const fileBase64 = csv("ad;soyad;seviye;email\nAda;Kaya;8. Sınıf;ada@example.test");
 
-    expect(preview).toMatchObject({
-      wouldImport: false,
-      errors: [{ row: 2, field: "email", code: "STUDENT_IMPORT_PILOT_CORE_ONLY" }],
-    });
+    await expect(service.dryRun(context, { fileBase64 })).resolves.toMatchObject({ wouldImport: true, errors: [] });
+    await service.import(context, { fileBase64 }, "student-email-profile-a");
+    expect(students.createMany).toHaveBeenCalledWith(context, [expect.objectContaining({ email: "ada@example.test" })]);
   });
 
   it("iletişim kişisini maskeli dry-run ve default-off izinlerle import girdisine taşır", async () => {
@@ -114,7 +99,7 @@ describe("StudentImportService Gate D", () => {
     expect(JSON.stringify(preview)).not.toContain("5551234567");
     expect(JSON.stringify(preview)).not.toContain("fatma@example.test");
 
-    await expect(service.import(context, { fileBase64 }, "registry-v2-contact-a"))
+    await expect(service.import(context, { fileBase64 }, "contact-import-a"))
       .resolves.toMatchObject({ importedContacts: 1 });
     expect(students.createMany).toHaveBeenCalledWith(context, [expect.objectContaining({
       contact: expect.objectContaining({
@@ -125,7 +110,7 @@ describe("StudentImportService Gate D", () => {
         canReceiveAnnouncements: false,
         canReceiveFinance: false,
       }),
-    })], { provisionAccounts: false });
+    })]);
   });
 
   it("dry-run sınıf ve okul no kontrolünü kampüs kapsamı ile tenant benzersizliğinde yapar", async () => {
@@ -158,7 +143,6 @@ describe("StudentImportService Gate D", () => {
     expect(students.createMany).toHaveBeenCalledWith(
       context,
       [expect.objectContaining({ gradeLevelId: "grade-8", classId: "class-custom" })],
-      { provisionAccounts: false },
     );
   });
 
@@ -209,13 +193,11 @@ describe("StudentImportService Gate D", () => {
 });
 
 function createService(options: {
-  registryV2?: boolean;
   classes?: Array<{ id: string; tenantId: string; campusId?: string; gradeLevelId?: string; name: string }>;
   gradeLevels?: Array<{ id: string; tenantId: string; code?: string; name: string }>;
   studentNos?: string[];
 } = {}) {
   const students = {
-    assertGuardianProvisioningAllowed: vi.fn(async () => undefined),
     createMany: vi.fn(async () => []),
     hasNationalId: vi.fn(async () => false),
     list: vi.fn(async () => []),
@@ -226,16 +208,10 @@ function createService(options: {
     listClasses: vi.fn(async () => options.classes ?? [{ id: "class-main", tenantId: "tenant-a", campusId: "campus-main", gradeLevelId: "grade-8", name: "8-A" }]),
     listGradeLevels: vi.fn(async () => options.gradeLevels ?? [{ id: "grade-8", tenantId: "tenant-a", code: "8", name: "8. Sınıf" }]),
   };
-  const featureRollouts = {
-    resolve: vi.fn(async () => ({ enabledFeatureKeys: options.registryV2 ? ["web.student-registry-v2"] : [] })),
-  };
   return {
     service: new StudentImportService(
       students as unknown as StudentService,
       school as unknown as SchoolService,
-      undefined,
-      undefined,
-      featureRollouts as unknown as FeatureRolloutService,
     ),
     students,
   };

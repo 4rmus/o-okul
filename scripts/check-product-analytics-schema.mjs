@@ -9,8 +9,8 @@ const baseEvent = {
   occurredAt: "2026-08-09T10:00:00.000Z",
   routeFamily: "TENANT_DASHBOARD",
   persona: "STAFF",
-  featureFlags: { "web.student-registry-v2": false },
-  properties: { featureKey: "web.student-registry-v2", enabled: false },
+  featureFlags: { "web.teacher-portal-v2": false },
+  properties: { featureKey: "web.teacher-portal-v2", enabled: false },
 };
 
 assertProductEvent(baseEvent);
@@ -40,7 +40,7 @@ const rejected = [
   { ...baseEvent, properties: { featureKey: "https://o-okul.test/?studentId=student-a", enabled: true } },
   { ...baseEvent, tenantPseudonym: "tenant-a" },
   { ...baseEvent, tenantPseudonym: "a".repeat(64) },
-  { ...baseEvent, featureFlags: { "web.student-registry-v2": "true" } },
+  { ...baseEvent, featureFlags: { "web.teacher-portal-v2": "true" } },
   { ...baseEvent, featureFlags: { "student.20260001": true } },
   { ...baseEvent, routeFamily: "10000000146" },
   { ...baseEvent, name: "setup_step_completed", properties: { stepId: "20260001" } },
@@ -52,8 +52,8 @@ const rejected = [
   { ...baseEvent, errorCode: "STUDENT_A" },
   { ...baseEvent, errorCode: "20260001" },
   { ...baseEvent, errorCode: "eyJhbGciOiJIUzI1NiJ9.secret.signature" },
-  { ...baseEvent, properties: { featureKey: { nested: "web.student-registry-v2" }, enabled: true } },
-  { ...baseEvent, properties: { featureKey: ["web.student-registry-v2"], enabled: true } },
+  { ...baseEvent, properties: { featureKey: { nested: "web.teacher-portal-v2" }, enabled: true } },
+  { ...baseEvent, properties: { featureKey: ["web.teacher-portal-v2"], enabled: true } },
 ];
 
 for (const fixture of rejected) {

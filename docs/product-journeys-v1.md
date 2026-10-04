@@ -68,11 +68,10 @@ Hedef urun ve pazarlama personalari:
 | `STUDENT` | Ogrenci | Yalniz kendi profil ve akademik verisi |
 
 `ASSISTANT_ADMIN` gecis roludur ve hedefte `OPERATIONS_STAFF` ile yer degistirir. `SYSTEM_ADMIN`
-platform operasyonudur; musteri personası veya kurum yoneticisi degildir. `GUARDIAN` mevcut
-route/session/UAT kapilari kaldirilana kadar gecis destekli runtime personasidir, yeni pazarlama
-personasi degildir. Hedefte login yetkisi olmayan `StudentContact` bulunur; bu kayit da persona
-sayilmaz. Guardian emekliligi ancak `DEC-20260801-01` envanter, yedek, onay ve gozlem kapilariyla
-tamamlanir.
+platform operasyonudur; musteri personası veya kurum yoneticisi degildir. `GUARDIAN` kurumun
+actigi ve ogrenciye bagladigi veli hesabidir (`DEC-20261003-01`); veli pazarlama cumlesi staging veli
+UAT kanitina baglidir. Login yetkisi olmayan `StudentContact` iletisim ve riza kaydidir; persona
+sayilmaz. Ogrenci olusturma ve import veli hesabi acmaz.
 
 ## Modul Sahipligi
 
@@ -87,7 +86,7 @@ yolculuk matrisi, UAT senaryo iskeleti ve ilgili evidence checker/template gunce
 | Finans ve iletisim | `backend_api_engineer` + `messaging_integrations_engineer` | UAT-KURUM-07, UAT-KURUM-08 | Odeme/taksit takibi idempotenttir; duyuru, SMS disabled path, destek ve materyal akislari PII-safe evidence ile ayrilir. WhatsApp alt kapsami `WHATSAPP_ENABLED=false` ile default-off ve `CONTRACT_READY_EXTERNAL_NOT_RUN` durumundadir. | Odeme saglayici, fatura, makbuz entegrasyonu; WhatsApp inbound destek, medya ve auth teslimi |
 | Ogretmen portali | `frontend_ux_engineer` + `tenant_security_reviewer` | UAT-TEACHER-01, UAT-TEACHER-02, UAT-TEACHER-03 | Ogretmen yalniz kendi sinif/ogrenci kapsaminda okur/yazar; negatif erisim 403 ile kanitlanir. | Tenantlar arasi gorunum |
 | Ogrenci portali | `frontend_ux_engineer` + `tenant_security_reviewer` | UAT-STUDENT-01, UAT-STUDENT-02, UAT-STUDENT-03 | Ogrenci kendi profil, odev, devamsizlik, not, rapor, duyuru ve destek akisini kullanir; baska ogrenci verisi kapali kalir. | Ogrenci self-service kurum transferi |
-| Veli portali (gecis) | `frontend_ux_engineer` + `tenant_security_reviewer` | UAT-GUARDIAN-01, UAT-GUARDIAN-02, UAT-GUARDIAN-03 | Mevcut runtime'da veli sadece bagli ogrenci ve izinli finans/rapor verisini gorur; bagli olmayan ogrenci ve kapali finans izni 403 olur. | Yeni guardian edinimi, veli self-service eslestirme |
+| Veli portali | `frontend_ux_engineer` + `tenant_security_reviewer` | UAT-GUARDIAN-01, UAT-GUARDIAN-02, UAT-GUARDIAN-03 | Mevcut runtime'da veli sadece bagli ogrenci ve izinli finans/rapor verisini gorur; bagli olmayan ogrenci ve kapali finans izni 403 olur. | Yeni guardian edinimi, veli self-service eslestirme |
 | DB, RLS, PII ve evidence guardrail | `data_platform_engineer` + `privacy_governance_reviewer` | UAT-SYS-04, UAT-KURUM-02, UAT-KURUM-05, UAT-KURUM-06, UAT-KURUM-07, UAT-KURUM-08, UAT-TEACHER-03, UAT-STUDENT-03, UAT-GUARDIAN-03 | Tenant FK/RLS, audit redaction, bypass siniri, retention ve evidence hedefleri kod/test kapilarinda korunur. | Ham PII iceren evidence veya audit diff'i |
 
 ## Faz 1 Kabul Kriterleri

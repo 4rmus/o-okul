@@ -301,7 +301,6 @@ export type {
   StudentEnrollmentRecord,
   StudentEnrollmentActionRequest,
   StudentExportResult,
-  StudentGuardianProvisionRequest,
   StudentImportDryRunResult,
   StudentImportError,
   StudentImportPreviewRow,

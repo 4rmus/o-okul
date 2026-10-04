@@ -5,7 +5,6 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../app.module.js";
 import { resetInMemoryAuthUsers, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
-import { FeatureRolloutService } from "../feature-rollout/feature-rollout.service.js";
 import { registerTestLoginIdentity, testLoginBody } from "../test-auth.js";
 
 describe("StudentContact API", () => {
@@ -55,11 +54,6 @@ describe("StudentContact API", () => {
       },
     });
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(FeatureRolloutService)
-      .useValue({
-        assertEnabled: vi.fn(async () => undefined),
-        resolve: vi.fn(async () => ({ enabledFeatureKeys: ["web.student-registry-v2"] })),
-      })
       .compile();
     app = moduleRef.createNestApplication();
     await app.listen(0, "127.0.0.1");
@@ -253,5 +247,34 @@ describe("StudentContact API", () => {
       .get("/students/student-a/overview")
       .set("Authorization", `Bearer ${tenantBToken}`)
       .expect(403);
+  });
+
+  it("2026-11-07 flag süresi dolduktan sonra (2026-11-08) kimlik yolları bugünkü gibi davranır", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-08T09:00:00.000Z"));
+    try {
+      const admin = await login("admin-a@example.test");
+      await request(server).get("/students/student-a/contacts").set("Authorization", `Bearer ${admin}`).expect(200);
+      await request(server).get("/students/student-a/overview").set("Authorization", `Bearer ${admin}`).expect(200);
+
+      const guardian = await request(server)
+        .post("/guardians")
+        .set("Authorization", `Bearer ${admin}`)
+        .send({ firstName: "Saat", lastName: "Veli", phone: "5000000108" })
+        .expect(201);
+      const guardianId = (guardian.body as { id: string }).id;
+      await request(server)
+        .post(`/guardians/${guardianId}/students`)
+        .set("Authorization", `Bearer ${admin}`)
+        .send({ studentId: "student-a" })
+        .expect(201);
+      await request(server)
+        .post("/identity-invitations")
+        .set("Authorization", `Bearer ${admin}`)
+        .send({ subjectType: "GUARDIAN", subjectId: guardianId, email: "saat-veli@example.test" })
+        .expect(201);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

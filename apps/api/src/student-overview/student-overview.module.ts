@@ -1,7 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AttendanceModule } from "../attendance/attendance.module.js";
 import { AuditLogModule } from "../audit-log/audit-log.module.js";
-import { FeatureRolloutModule } from "../feature-rollout/feature-rollout.module.js";
 import { GuardianModule } from "../guardian/guardian.module.js";
 import { HomeworkModule } from "../homework/homework.module.js";
 import { ReportModule } from "../report/report.module.js";
@@ -16,7 +15,6 @@ import { StudentOverviewService } from "./student-overview.service.js";
   imports: [
     AttendanceModule,
     AuditLogModule,
-    FeatureRolloutModule,
     GuardianModule,
     HomeworkModule,
     ReportModule,

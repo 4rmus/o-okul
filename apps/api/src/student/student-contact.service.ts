@@ -7,7 +7,6 @@ import type {
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import { normalizeTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
-import { FeatureRolloutService } from "../feature-rollout/feature-rollout.service.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import { maskContactEmail, maskContactPhone } from "../privacy/contact-mask.js";
 import { hasCapability } from "../rbac/role-capabilities.js";
@@ -30,13 +29,11 @@ export class StudentContactService {
   constructor(
     private readonly students: StudentService,
     @Inject(studentContactStoreToken) private readonly store: StudentContactStore,
-    private readonly featureRollouts: FeatureRolloutService,
     @Optional() private readonly idempotency?: IdempotencyService,
     @Optional() private readonly auditLogs?: AuditLogService,
   ) {}
 
   async list(context: RequestContext, studentId: string): Promise<StudentContactRecord[]> {
-    await this.featureRollouts.assertEnabled(context, "web.student-registry-v2");
     this.assertCanRead(context, studentId);
     await this.students.findOneForViewer(context, studentId);
     const tenantId = this.requireTenantId(context);
@@ -65,7 +62,6 @@ export class StudentContactService {
     studentId: string,
     input: StudentContactCreateRequest,
   ): Promise<StudentContactRecord> {
-    await this.featureRollouts.assertEnabled(context, "web.student-registry-v2");
     const student = await this.students.findOne(context, studentId);
     const record = await this.store.create(buildStudentContactStorageInput(student.tenantId, student.id, input));
     await this.recordMutation(context, record, "student_contact.created");
@@ -84,7 +80,6 @@ export class StudentContactService {
     id: string,
     input: StudentContactUpdateRequest,
   ): Promise<StudentContactRecord> {
-    await this.featureRollouts.assertEnabled(context, "web.student-registry-v2");
     const student = await this.students.findOne(context, studentId);
     const existing = await this.store.findById(student.tenantId, id);
     if (!existing || existing.studentId !== student.id) throw new NotFoundException("STUDENT_CONTACT_NOT_FOUND");
@@ -96,7 +91,6 @@ export class StudentContactService {
   }
 
   async delete(context: RequestContext, studentId: string, id: string): Promise<void> {
-    await this.featureRollouts.assertEnabled(context, "web.student-registry-v2");
     const student = await this.students.findOne(context, studentId);
     const existing = await this.store.findById(student.tenantId, id);
     if (!existing || existing.studentId !== student.id) throw new NotFoundException("STUDENT_CONTACT_NOT_FOUND");
