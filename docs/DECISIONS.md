@@ -166,7 +166,7 @@ Son kontrol: 2026-05-31
 
 ### DEC-20260613-01 — V1 ürün kapsam sınırı
 
-Durum: Onaylı
+Durum: Onaylı; hedef segment cümlesi DEC-20261004-03 ile güncellendi; optik, rapor/karne, ödeme takibi ve fatura dışlaması geçerli
 Karar: V1 hedefi tek veya çok şubeli dershane/özel öğretim kurumunda TXT/DAT optik import,
 rapor/karne, kişi portalları, ödeme/taksit takibi, duyuru/SMS/destek ve operasyon kanıt zinciridir.
 Ödeme sağlayıcı/fatura/makbuz entegrasyonu v1 kapsamı dışıdır.
@@ -175,7 +175,7 @@ Kanıt: `docs/product-journeys-v1.md`, `status.md`.
 Etkilenen ADR: Yok
 Açık soru: Pilot kurum farklı optik format veya fatura entegrasyonu isterse Faz 4/Faz 10 karar
 kapısında ayrı DEC açılır.
-Son kontrol: 2026-06-13
+Son kontrol: 2026-10-04
 
 ### DEC-20260613-02 — Sistem admini MFA ikinci faktörü
 
@@ -297,7 +297,7 @@ Son kontrol: 2026-07-13
 
 ### DEC-20260713-02 — Başarı yüzdesi rapor ana metriğidir
 
-Durum: DEC-20260727-01 ile güncellendi
+Durum: DEC-20260727-01 ile güncellendi; Başarı % tanımı yalnız deneme (optik) serisi içindir, okul notu DEC-20261004-06 ile ayrı seridir
 Karar: `successRate` rapor snapshot, API, web, PDF ve Excel yüzeylerinde üretilir ve farklı soru
 sayılarına sahip sınavları karşılaştırmak için ana metriktir. Payda aktif soru sayısıdır; iptal
 edilmiş soru fiziksel soru sayısı doğrulamasında kalır ancak başarı ve puan paydasından çıkarılır.
@@ -760,9 +760,147 @@ Açık soru: Veli yazma yollarının staging kanıtı (`UAT-GUARDIAN-01/02/03` y
 kaldırma PR'ının kapanış kapısıdır; pazarlama cümlesi bu kanıt gelmeden kullanılmaz.
 Son kontrol: 2026-10-03
 
+### DEC-20261004-03 — Hedef segment özel K12 okuldur; konum bütüncül öğrenci takibidir
+
+Durum: Onaylı; landing metni KF-9 diliminde bekliyor
+Karar: Birincil hedef segment tek veya çok kampüslü özel K12 okuldur (ilkokul, ortaokul, lise);
+dershane ve özel öğretim kurumu ikincil segmenttir ve mevcut optik → rapor/karne hattı bu segment için
+aynen korunur. Ürün optik/deneme aracı olarak değil, öğrencinin deneme, okul notu, devamsızlık, ödev,
+iletişim ve finans kaydını tek öğrenci ekranında toplayan bütüncül öğrenci takibi olarak konumlanır.
+Kurs ve özel öğretim kursuna özgü modül (kur, paket ders, saat bazlı ücret) yapılmaz. Bu karar
+DEC-20260613-01'in yalnız "dershane/özel öğretim kurumu" hedef cümlesinin yerine geçer; optik import,
+rapor/karne, ödeme/taksit takibi ve ödeme sağlayıcı/fatura/makbuz dışlaması geçerli kalır.
+"e-Okul entegrasyonu" ifadesi kullanılmaz (DEC-20261004-05).
+Kaynak: Ürün sahibi kararı (2026-10-03, F0–F6 strateji çalışması, D1).
+Kanıt: `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §1, `docs/marketing-claims.md`. Kanıt sınıfı
+LOCAL_STATIC; pazar iddiaları satış görüşmesiyle doğrulanmadı (UNPROVEN).
+Etkilenen ADR: Yok
+Açık soru: Doğrulama planı (§3.4) eşikleri tutmazsa segment önceliği yeniden değerlendirilir; landing
+başlığının kesin metni KF-9 PR'ında onaylanır.
+Son kontrol: 2026-10-04
+
+### DEC-20261004-04 — Farklılaşma tezi ve satışa giriş modeli
+
+Durum: Onaylı; fiyat DEC'i (KF-9) bekliyor
+Karar: Ürün tezi "İlk görüşmede kendi verinle sonuç; yayınlanan hiçbir sayı sessizce değişmez."
+cümlesidir. Tez özellik hendeği değil, satışa giriş ve uygulama hızı bahsidir; ürün dili tezi
+"benzersiz" veya "rakipsiz" diye anlatmaz. Demo gerçek öğrenci verisiyle tenant'a yüklenmez;
+anonimleştirilmiş/sentetik dosya veya kalıcı veri bırakmayan kuru çalıştırma kullanılır (KF-10).
+Fiyat TL olarak public sayfada yayınlanır ve DEC-20260801-01'deki aktif öğrenci kotasına dayanır;
+deneme kartsızdır ve operatör açar (DEC-20261004-02). Online ödeme, POS ve self-serve kayıt kapsam
+dışıdır. Fiyat rakamı bu DEC'te verilmez; ayrı fiyat DEC'i KF-9 ile yazılır.
+Kaynak: Ürün sahibi kararı (2026-10-03, D2).
+Kanıt: `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §3. Kanıt sınıfı LOCAL_STATIC; tezin satış
+etkisi UNPROVEN.
+Etkilenen ADR: Yok
+Açık soru: "Kendi dosyan" vaadi KF-10 doğrulama kiti ve §3.4 sayı eşiği geçmeden landing'e girmez.
+Son kontrol: 2026-10-04
+
+### DEC-20261004-05 — e-Okul'a özel içe aktarma ve liste dilimleri yapılmaz; e-Okul'a yazılmaz
+
+Durum: Onaylı
+Karar: e-Okul örnek dosyası kullanılmayacağı için KF-7 (e-Okul import) ve KF-8 (e-Okul'a işlenecek
+liste) yol haritasından çıkarılır (ürün sahibi kararı, 2026-10-04). Öğrenci aktarımı mevcut
+öğrenci import'u ve resmî şablon alias'larıyla olduğu gibi kalır; e-Okul'a özel kolon profili veya
+dışa aktarma listesi yazılmaz. e-Okul'a yazma, e-Okul kullanıcı adı/şifresi saklama veya isteme,
+tarayıcı otomasyonu/RPA ve resmî olmayan servis çağrısı yapılmaz. Ürün dili "e-Okul entegrasyonu",
+"otomatik aktarım" veya "senkron" demez.
+Kaynak: Ürün sahibi kararı (2026-10-03 D3 sınırı; 2026-10-04 örnek dosya kullanılmayacak kararı).
+Kanıt: `apps/api/src/student/` mevcut import deseni. Kanıt sınıfı LOCAL_STATIC.
+Etkilenen ADR: Yok
+Açık soru: MEB üçüncü taraflara yazılı bir API veya yetkilendirme protokolü yayımlarsa e-Okul
+dilimleri ayrı DEC ile yeniden açılır.
+Son kontrol: 2026-10-04
+
+### DEC-20261004-06 — Okul notu ayrı ve sürümlü bir not defteridir; yayınlanan not güncellenmez
+
+Durum: Onaylı; AK-1+AK-2 (#127) ve AK-3+AK-4 (#128) LOCAL_TEST, merge bekliyor
+Karar: Okul yazılısı, sözlü ve proje notu optik deneme hattından ayrı tutulur: iki additive tablo,
+`GradeAssessment` ve append-only `GradeEntry`. Yayınlanmış satırda UPDATE/DELETE bir BEFORE trigger
+ile reddedilir ve uygulama rolüne DELETE grant verilmez; düzeltme yeni `version` yazar, geçerli yayın
+max(`version`)'dır. Optik hatta dokunulmaz: `Exam`, `ExamResult`, `ReportSnapshot`, `RawImport`
+değişmez, `ReportSnapshot.examId` nullable yapılmaz, sentetik `Exam` üretilmez. Deneme ve okul
+yazılısı iki ayrı seri olarak gösterilir; DEC-20260713-02'deki Başarı % yalnız deneme serisi içindir.
+Ayrı yayın tablosu, içerik hash'i ve STALE durumu yoktur (2026-10-03 mimari incelemesi).
+Kaynak: Ürün sahibi kararı (2026-10-03, D4).
+Kanıt: `docs/ADR-0011-versioned-grade-publication.md` (#127/#128). Kanıt sınıfı LOCAL_TEST; CI,
+STAGING ve PRODUCTION UNPROVEN.
+Etkilenen ADR: ADR-0011 (yeni), ADR-0001
+Açık soru: Not ölçeği, ondalık hassasiyeti ve ağırlıklar MEB yönetmeliğine göre doğrulanmadı.
+Son kontrol: 2026-10-04
+
+### DEC-20261004-07 — Mimari evrimle ilerler; dar hibrit ve dört koşul
+
+Durum: Onaylı
+Karar: Mevcut monorepo evrimle geliştirilir; tam yeniden yazım veya yığın değişimi yapılmaz. Yeni
+ayrık bağlam yalnız not defteridir (DEC-20261004-06). Bildirim için outbox tablosu kurulmaz: mevcut
+`announcement-delivery` BullMQ kuyruğu, jobId ve `notifiedAt` ile tekilleştirilir; push Node worker'da
+`web-push` ile gönderilir, gateway yalnız e-posta taşır. Dört koşul: (1) DEC-20261003-01 2026-11-07'den
+önce kodla uygulanır (KV-1); (2) optik hatta dokunulmaz; (3) her yeni tenant tablosu aynı dilimde RLS,
+bileşik FK, reset kataloğu, cihaz yedek politikası ve KVKK export kaydına girer (yeni tablo kapısı,
+AK-1); (4) Mayıs 2027 öncesi hijyen kalemleri: 25'lik bildirim parçalama, hooks-worker sahte "sent"
+kaldırma, muhasebe 403 düzeltmesi, AuditLog partition bakımı (2026-12-01 öncesi), yedek ve restore
+tatbikatı. Bir dilim planı 4 haftadan fazla aşarsa kapsam DEC-20261004-08'deki kesim sırasıyla daralır.
+Kaynak: Ürün sahibi kararı (2026-10-03, D5; mimari inceleme sadeleştirmesi).
+Kanıt: `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §4. Kanıt sınıfı LOCAL_STATIC; geliştirme hızı
+UNPROVEN.
+Etkilenen ADR: ADR-0001, ADR-0007, ADR-0008, ADR-0011
+Açık soru: Worker'da `web-push` gönderimi KV-7'de doğrulanır.
+Son kontrol: 2026-10-04
+
+### DEC-20261004-08 — Mayıs 2027 satış başlangıcı, Eylül 2027 production go-live'dır
+
+Durum: Onaylı; 2027-01-03 hız gözden geçirmesi bekliyor
+Karar: Mayıs 2027 satış başlangıcıdır, production go-live değildir; kabul kanıtı STAGING ve
+LOCAL_TEST'tir ve ürün dili "canlıda" demez. Kapsam: kartsız deneme, yayınlanmış TL fiyat, kimlik ve
+veli yazma yolları, not defteri ve sürümlü yayın, veli PWA özeti, ödeme planı ve türetilmiş gecikme,
+muhasebe 403 düzeltmesi, OWNER/ADMIN MFA, yedek ve restore tatbikatı. Eylül 2027 (2027–28 dönem başı):
+PRODUCTION go-live, web push, otomatik bildirimler ve ödev teslimi; PDF hattı ve kapasite için yalnız
+ölçüm yapılır, kod yalnız eşik (timeout/OOM) aşılırsa yazılır. Kesim sıraları: H1 not ekranı sürüm
+geçmişi; H2 ilk karne adım listesi → veli özetinde okul notu; H3 push yalnız duyuru → tetikleyici
+yalnız vade → tek senaryo yük testi. KV-1, PO-1, KV-6 ve KF-10 kaydırılmaz.
+Kaynak: Ürün sahibi kararı (2026-10-03, D6; e-Okul kalemleri DEC-20261004-05 ile çıkarıldı).
+Kanıt: `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §7–§8. Ödeyen müşteri yok. Kanıt sınıfı
+LOCAL_STATIC.
+Etkilenen ADR: Yok
+Açık soru: PO-10 son tarihi 2027-01-03 yeniden planlamasında yazılır; 50 okul rakamı pilot sayısına
+bağlanır.
+Son kontrol: 2026-10-04
+
+### DEC-20261004-09 — Yedek önce sunucu diskine şifreli alınır; TR off-host sağlayıcı seçimi ertelendi
+
+Durum: Onaylı; off-host hedef (PO-2) ertelendi
+Karar: Gecelik şifreli `pg_dump` (AES-256-GCM) ve restore tatbikatı ilk sürümde sunucu diskine yazılır
+(KF-5); RPO ilk sözleşmeye kadar 24 saattir, WAL/pgBackRest SONRA'dır. Türkiye içinde S3 uyumlu
+off-host hedef için küçük aylık dış bütçe onaylıdır ve tek dış bütçe istisnasıdır, ancak sağlayıcı
+seçimi ürün sahibi kararıyla 2026-10-04'te ertelendi; PO-2 sağlayıcı seçilene kadar başlamaz.
+Şifreleme anahtarı repo'da, logda veya kanıt dosyasında görünmez. Off-host yedek ve ölçülmüş restore
+olmadan "veriniz Türkiye'de, şifreli ve ayrı lokasyonda" ifadesi kullanılmaz.
+Kaynak: Ürün sahibi kararı (2026-10-03 D8; 2026-10-04 sağlayıcı ertelemesi).
+Kanıt: `scripts/backup-crypto.mjs`, `docs/phase-6-ops-runbook.md` (#131). Kanıt sınıfı LOCAL_TEST;
+sunucu cron'u ve ilk restore tatbikatı EXTERNAL_NOT_RUN.
+Etkilenen ADR: ADR-0002
+Açık soru: Sağlayıcı ve `BACKUP_OFFSITE_TARGET` seçimi; ertelenme Mayıs öncesi yedek koşulunu
+(DEC-20261004-07 koşul 4) yalnız disk yedeğiyle karşılar, sunucu kaybında veri kaybı riski açık kalır.
+Son kontrol: 2026-10-04
+
+### DEC-20261004-10 — Ödev teslimi zaman damgalı ve dosyasızdır
+
+Durum: Onaylı; AK-6 dilimi bekliyor
+Karar: Ödev teslimi `HomeworkSubmission` zaman damgalı satırıdır (`submittedAt`, `checkedAt`,
+`checkedById`); satırlar tembel oluşur, durum türetilir. Öğrenci yalnız dosyasız teslim işareti koyar;
+işaret `ON CONFLICT ... WHERE checkedAt IS NULL` ile yazılır, kontrol edilmiş satırda 409 döner. Dosya
+eki SONRA'dır ve ayrı DEC ister. Yeni tablo yeni tablo kapısından geçer (DEC-20261004-07 koşul 3).
+Kaynak: Ürün sahibi kararı (2026-10-03, D9).
+Kanıt: `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §7.4. Kanıt sınıfı LOCAL_STATIC.
+Etkilenen ADR: ADR-0001
+Açık soru: Geç teslim durumu pilot geri bildirimine kalır.
+Son kontrol: 2026-10-04
+
 ## Faz Öncesi Onay Gerektirenler
 
 | ID | Faz | Bloklar mı? | Soru | Beklenen kanıt |
 |---|---|---|---|---|
 | OPEN-20260529-03 | Faz 4 / Faz 10 | Hayır | iSEM fixture geldi; pilot sınav döngüsü kabulü üretildi mi? | Gerçek iSEM fixture testleri + staging `pnpm live:exam-cycle:check` artifact'i tamam; kalan pilot UAT kanıtı |
 | OPEN-20260529-04 | Faz 5 | Hayır | Netgsm test credential/canlı hesap doğrulaması nasıl yapılacak? | Test hesabı secretları + `pnpm sms:smoke` canlı/staging sonucu |
+| OPEN-20261003-01 | H1–H3 / KF-9, KV-8 | Ertelendi (2026-10-04) | VİS şablonu, veli bildirimi hukuki sebebi, 5580, saklama, md.9 ve TR barındırma beyanı için tek seferlik hukuk görüşüne dış harcama onaylanıyor mu? Ürün sahibi 2026-10-04'te erteledi. Ertelenme süresince K-2 sonucu UNPROVEN kalır, KV-8 otomatik veli bildirimi kodlanmaz ve KF-9'da TR barındırma iddiası yazılmaz. | Ürün sahibi onayı + tek soru listesi (K-1, K-2, K-4, K-5, K-6, K-8) + yazılı görüş |
