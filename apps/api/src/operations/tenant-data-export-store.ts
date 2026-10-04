@@ -40,6 +40,8 @@ const exportTables = [
   table("paymentInstallments", "PaymentInstallment"),
   table("attendance", "Attendance"),
   table("teacherNotes", "TeacherNote"),
+  table("gradeAssessments", "GradeAssessment", [], false),
+  table("gradeEntries", "GradeEntry", [], false),
   table("homeworkMaterials", "HomeworkMaterial"),
   table("homeworkMaterialAssignments", "HomeworkMaterialAssignment"),
   table("exams", "Exam"),
@@ -53,6 +55,8 @@ const exportTables = [
   table("supportTicketAttachments", "SupportTicketAttachment", ["contentBase64", "storageKey"]),
   table("supportTicketComments", "SupportTicketComment", [], false),
 ] as const;
+
+export const tenantDataExportTableNames: readonly string[] = exportTables.map((config) => config.tableName);
 
 interface ExportTableConfig {
   key: string;

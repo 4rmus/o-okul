@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertResetCatalog, resetDigest, resetTableCounts, resetOwnerIds, tenantResetTableNames, tenantResetColumns, type ResetTables } from "./tenant-reset-catalog.js";
+import { assertResetBoundaries, assertResetCatalog, resetDigest, resetTableCounts, resetOwnerIds, tenantResetCatalog, tenantResetTableNames, tenantResetColumns, type ResetTables } from "./tenant-reset-catalog.js";
 import { resetSnapshotBlockers, withResetSnapshot, type TenantResetSnapshot } from "./tenant-reset-snapshot.js";
 
 export function snapshotFixture(): TenantResetSnapshot {
@@ -17,6 +17,13 @@ describe("CLEAN_SETUP_V1 catalog", () => {
     expect(() => assertResetCatalog(tenantResetTableNames)).not.toThrow();
     expect(() => assertResetCatalog([...tenantResetTableNames, "NewFileTable"])).toThrow("RESET_CATALOG_UNCLASSIFIED_TABLE");
     expect(() => assertResetCatalog(tenantResetTableNames.filter((name) => name !== "ConsumedRefreshToken"))).toThrow();
+  });
+  it("reset worker boundary is read from every migration and fails closed when a table lacks one", () => {
+    const boundary = (table: string, disposition: string) => `CREATE POLICY "${table}_reset_boundary"\n  ON "${table}" AS RESTRICTIVE TO o_okul_reset_worker USING (true);\n${disposition === "DELETE" ? `GRANT DELETE ON "${table}" TO o_okul_reset_worker;\n` : ""}`;
+    const complete = tenantResetTableNames.map((table) => boundary(table, tenantResetCatalog[table])).join("");
+    expect(() => assertResetBoundaries(complete)).not.toThrow();
+    expect(() => assertResetBoundaries(complete.replace('CREATE POLICY "Student_reset_boundary"', ""))).toThrow("RESET_ROLE_BOUNDARY_MISSING:Student");
+    expect(() => assertResetBoundaries(`${complete}GRANT DELETE ON "AuditLog" TO o_okul_reset_worker;`)).toThrow("RESET_ROLE_DELETE_EXCESS:AuditLog");
   });
   it("keeps all owners and only canonical memberships; auxiliary teacher row is deleted", () => {
     const snapshot = snapshotFixture();
