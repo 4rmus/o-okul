@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, LockKeyhole, ScanLine } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import type { AuthResponse, MfaChallengeResponse, MfaEnrollmentRequiredResponse, TenantLoginContextResponse, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
+import { isFinanceOnlyStaff, type AuthResponse, type MfaChallengeResponse, type MfaEnrollmentRequiredResponse, type TenantLoginContextResponse, type TenantSelectionRequiredResponse } from "@o-okul/shared-types";
 import { Button, Field, Input, SegmentedControl, Select } from "@o-okul/ui";
 import { useAuth } from "../providers.js";
 import { appBrand } from "../../src/brand.js";
@@ -287,6 +287,7 @@ function getAuthHomePath(auth: AuthResponse) {
   if (auth.session.mustChangePassword) return "/sifre-degistir";
   const { roles, subjectType } = auth.session;
   if (roles.includes("SYSTEM_ADMIN")) return "/sistem";
+  if (isFinanceOnlyStaff(roles)) return "/kurum/finans";
   if (roles.some((role) => ["TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF"].includes(role))) return "/kurum";
   if (roles.includes("TEACHER") && subjectType === "TEACHER") return "/ogretmen";
   if (roles.includes("STUDENT") && subjectType === "STUDENT") return "/ogrenci";

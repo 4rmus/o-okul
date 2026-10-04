@@ -86,6 +86,24 @@ describe("Capability access matrix", () => {
       tenantId: "tenant-a",
       roles: ["FINANCE_STAFF"],
     });
+    upsertInMemoryAuthUser({
+      id: "user-finance-password",
+      email: "finance-password@example.test",
+      name: "Finance Password",
+      password: "password",
+      tenantId: "tenant-a",
+      roles: ["FINANCE_STAFF"],
+      membership: {
+        id: "membership-finance-password",
+        staffRole: "FINANCE_STAFF",
+        hasTeacherPersona: false,
+        hasStudentPersona: false,
+        version: 1,
+        scopeMode: "CAMPUSES",
+        campusIds: ["campus-main"],
+      },
+    });
+    registerTestLoginIdentity("finance-password@example.test", { tenantSlug: "dna-egitim" });
     registerTestLoginIdentity("finance-rbac@example.test", { tenantSlug: "dna-egitim" });
     registerTestLoginIdentity("finance-tenant-scope@example.test", { tenantSlug: "dna-egitim" });
     registerTestLoginIdentity("finance-no-scope@example.test", { tenantSlug: "dna-egitim" });
@@ -269,6 +287,50 @@ describe("Capability access matrix", () => {
       .get("/payment-plans")
       .set("Authorization", `Bearer ${financeWithoutScopeToken}`)
       .expect(403);
+  });
+
+  it("FINANCE_STAFF kendi parolasını değiştirir (KF-1)", async () => {
+    const token = await login("finance-password@example.test");
+    const newPassword = "FinanceStaff!KF1-2026";
+
+    await request(server)
+      .post("/me/password")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: "password", newPassword })
+      .expect(200);
+
+    await request(server).post("/auth/login").send(testLoginBody("finance-password@example.test", newPassword)).expect(200);
+  });
+
+  it("FINANCE_STAFF finans dışı yüzeylerde kapalı kalır; parola düzeltmesi yetki genişletmez (KF-1)", async () => {
+    // Web kabuğu bu uçları yalnız finans rolü olan kullanıcı için çağırmaz (isFinanceOnlyStaff).
+    for (const path of ["/me/institution-dashboard", "/me/notification-devices", "/campuses", "/classes", "/courses", "/grade-levels"]) {
+      await request(server)
+        .get(path)
+        .set("Authorization", `Bearer ${financeToken}`)
+        .expect(403);
+    }
+  });
+
+  it("TEACHER, STUDENT ve GUARDIAN finans yazma uçlarında 403 alır (KF-1)", async () => {
+    for (const token of [teacherToken, studentToken, guardianToken]) {
+      await request(server)
+        .get("/payment-plans")
+        .set("Authorization", `Bearer ${token}`)
+        .expect(403);
+      await request(server)
+        .post(`/payment-plans/${inScopePaymentPlanId}/transactions`)
+        .set("Authorization", `Bearer ${token}`)
+        .set("Idempotency-Key", randomUUID())
+        .send({ amount: 100, method: "CASH", paidAt: "2026-10-01T09:00:00.000Z" })
+        .expect(403);
+      await request(server)
+        .patch(`/payment-plans/${inScopePaymentPlanId}/installments/installment-a`)
+        .set("Authorization", `Bearer ${token}`)
+        .set("Idempotency-Key", randomUUID())
+        .send({ status: "PAID" })
+        .expect(403);
+    }
   });
 
   it("ASSISTANT_ADMIN operasyon, kullanıcı ve KVKK endpoint'lerine giremez", async () => {

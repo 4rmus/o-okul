@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { LifeBuoy, Menu, Search, ShieldCheck, X } from "lucide-react";
 import { Button } from "@o-okul/ui";
-import { type ActivePersona, type MeProfileResponse, type TenantRecord } from "@o-okul/shared-types";
+import { isFinanceOnlyStaff, type ActivePersona, type MeProfileResponse, type TenantRecord } from "@o-okul/shared-types";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../src/api-client.js";
 import { useAuth } from "../providers.js";
 import { readRolePreviewToken } from "./portals/_shared/portal-shell.js";
@@ -70,7 +70,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     [auth?.session.roles, visibleInstitutionNavGroups, visiblePortalNavGroups, visibleSystemNavGroups],
   );
   const canUsePushDevices = auth?.session
-    ? isWebPushCapabilityEnabled() && (hasInstitutionAccess(auth.session.roles) || visiblePortalNavGroups.length > 0)
+    ? isWebPushCapabilityEnabled()
+      // /me/notification-devices FINANCE_STAFF'a kapalı; yalnız finans rolü olan kurum kullanıcısında panel 403 üretir.
+      && ((hasInstitutionAccess(auth.session.roles) && !isFinanceOnlyStaff(auth.session.roles)) || visiblePortalNavGroups.length > 0)
     : false;
   const canUseShellSearch = auth?.session ? hasShellSearchAccess(auth.session) : false;
   const workContextCampusId = pathname.startsWith("/kurum") ? searchParams.get("campusId") ?? "" : "";
@@ -78,7 +80,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const tenantBrandQuery = useQuery({
     queryKey: ["next-shell-tenant-brand", auth?.session.tenantId ?? "anonymous"],
     queryFn: () => loadShellTenant(auth?.accessToken ?? ""),
-    enabled: Boolean(auth && hasInstitutionAccess(auth.session.roles) && !isRolePreviewRoute),
+    // /me/tenant ve çalışma bağlamı katalogları FINANCE_STAFF'a kapalı (KF-1); marka varsayılana düşer.
+    enabled: Boolean(auth && hasInstitutionAccess(auth.session.roles) && !isFinanceOnlyStaff(auth.session.roles) && !isRolePreviewRoute),
     refetchOnWindowFocus: false,
   });
   const workContextQuery = useQuery({
@@ -87,6 +90,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     enabled: Boolean(
       auth
       && hasInstitutionAccess(auth.session.roles)
+      && !isFinanceOnlyStaff(auth.session.roles)
       && !isRolePreviewRoute
       && pathname.startsWith("/kurum")
       && (workContextCampusId || workContextTermId || isWorkContextActivated)
@@ -512,6 +516,7 @@ function canAccessRolePreviewRoute(session: AppSession, searchParams?: Pick<URLS
 
 function getHomePath(session: AppSession) {
   if (hasSystemAccess(session.roles)) return "/sistem";
+  if (isFinanceOnlyStaff(session.roles)) return "/kurum/finans";
   if (hasInstitutionAccess(session.roles)) return "/kurum";
   if (hasSubjectPortalAccess(session, "TEACHER", "TEACHER")) return "/ogretmen";
   if (hasSubjectPortalAccess(session, "STUDENT", "STUDENT")) return "/ogrenci";

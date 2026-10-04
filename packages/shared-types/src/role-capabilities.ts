@@ -106,6 +106,13 @@ export function canAccessExamWorkspace(
   );
 }
 
+// FINANCE_STAFF rank kalıtımı almaz (apps/api/src/rbac/roles.ts); başka kurum rolü yoksa
+// kurum özeti ve bildirim cihazı uçları 403 döner. Web yönlendirmesi bu ayrımı kullanır.
+export function isFinanceOnlyStaff(roles: readonly string[]): boolean {
+  return roles.includes("FINANCE_STAFF")
+    && !roles.some((role) => ["SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF"].includes(role));
+}
+
 export function isTenantRoleName(role: string): role is TenantRoleName {
   return tenantRoles.includes(role as TenantRoleName);
 }
