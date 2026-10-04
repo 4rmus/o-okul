@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { closeSync, openSync, readSync, statSync } from "node:fs";
 import { Transform } from "node:stream";
 
-// Nightly database dump envelope (DEC-20261004-01, KF-5): MAGIC | iv(12) | AES-256-GCM ciphertext | tag(16).
+// Nightly database dump envelope (DEC-20261004-02, KF-5): MAGIC | iv(12) | AES-256-GCM ciphertext | tag(16).
 // Streamed both ways so the plaintext dump never touches the disk and size has no memory ceiling.
 const magic = Buffer.from("OOKULDB1");
 const aad = Buffer.from("O_OKUL_PG_DUMP_V1");

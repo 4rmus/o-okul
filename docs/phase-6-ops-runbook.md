@@ -2006,7 +2006,7 @@ listesi taşır.
 ## Gecelik şifreli yedek (KF-5)
 
 Amaç: her gece veritabanının şifreli kopyasını almak ve bu kopyadan gerçekten geri dönülebildiğini
-kanıtlamak. Bu adım geçmeden gerçek veri içeren deneme kurumu açılmaz (DEC-20261004-01). Off-host
+kanıtlamak. Bu adım geçmeden gerçek veri içeren deneme kurumu açılmaz (DEC-20261004-02). Off-host
 TR S3 yüklemesi PO-2'dir; sağlayıcı ürün sahibi tarafından sonra seçilir.
 
 - `scripts/backup-nightly.mjs`, compose dizininde (`/root/o-okul`) `docker compose exec postgres
@@ -2053,7 +2053,7 @@ archive_timeout = 60s
 Zorunlu operasyon sözleşmesi:
 
 - Günlük base backup alınır ve lokal kalıcı backup path'inde saklanır; off-host hedef pilot
-  release gate'i değildir. İlk sürüm (KF-5, DEC-20261004-01) gecelik şifreli `pg_dump`'tır;
+  release gate'i değildir. İlk sürüm (KF-5, DEC-20261004-02) gecelik şifreli `pg_dump`'tır;
   ayrıntı aşağıdaki "Gecelik şifreli yedek" bölümündedir.
 - WAL arşivi ayrı kalıcı path veya bucket altında tutulur.
 - En az haftada bir restore denemesi yapılır.

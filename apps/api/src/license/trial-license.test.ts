@@ -6,7 +6,7 @@ import { licenseTermCreateBodySchema } from "./license-validation.js";
 const trialStart = "2026-10-05T00:00:00.000Z";
 const trialEnd = "2026-10-12T00:00:00.000Z";
 
-describe("card-free trial license (DEC-20261004-01)", () => {
+describe("card-free trial license (DEC-20261004-02)", () => {
   const parse = (body: Record<string, unknown>) => licenseTermCreateBodySchema.safeParse(body);
   const issues = (body: Record<string, unknown>) => {
     const result = parse(body);

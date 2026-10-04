@@ -13,7 +13,7 @@ export const licenseTermCreateBodySchema = z.object({
     context.addIssue({ code: "custom", path: ["endsAt"], message: "LICENSE_TERM_DATES_INVALID" });
   }
   if (value.planCode !== "TRIAL") return;
-  // DEC-20261004-01: a trial is at most 7 days and 100 active students.
+  // DEC-20261004-02: a trial is at most 7 days and 100 active students.
   if (Date.parse(value.endsAt) - Date.parse(value.startsAt) > trialLicenseLimits.maxDays * 24 * 60 * 60 * 1000) {
     context.addIssue({ code: "custom", path: ["endsAt"], message: "LICENSE_TRIAL_DURATION_EXCEEDED" });
   }

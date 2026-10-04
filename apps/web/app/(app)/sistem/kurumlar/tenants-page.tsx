@@ -434,7 +434,7 @@ const tenantSortOptions = [
   { label: "Kurum kodu Z-A", value: "-slug" },
 ];
 
-/** "Deneme" fills today + 7 days and 100 students (DEC-20261004-01); other plans keep what was typed. */
+/** "Deneme" fills today + 7 days and 100 students (DEC-20261004-02); other plans keep what was typed. */
 function withPlanDefaults<TForm extends TenantFormState>(form: TForm, plan: TenantFormState["plan"]): TForm {
   if (plan !== "TRIAL") return { ...form, plan };
   const today = new Date();

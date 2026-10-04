@@ -363,7 +363,7 @@ Son kontrol: 2026-07-13
 
 ### DEC-20260801-01 — Kurum, hesap, lisans ve erişim modeli
 
-Durum: Onaylı; guardian emekliliği DEC-20261003-01 ile geri alındı; additive migration ve tenant bazlı cutover bekliyor; deneme lisans dönemi DEC-20261004-01 ile tanımlanır
+Durum: Onaylı; guardian emekliliği DEC-20261003-01 ile geri alındı; additive migration ve tenant bazlı cutover bekliyor; deneme lisans dönemi DEC-20261004-02 ile tanımlanır
 Karar: Sözleşmeli müşteri veri izolasyonu ve lisans sınırı olan tek `Tenant`, şubeler tenant
 altındaki `Campus` olarak kalır. Fiyatlama aktif öğrenci kotasına dayanır; çalışan hesapları ücretli
 koltuk değildir. Yıllık veya çok yıllık lisans dönemleri geriye dönük değiştirilmez: yeni
@@ -760,7 +760,7 @@ Açık soru: Veli yazma yollarının staging kanıtı (`UAT-GUARDIAN-01/02/03` y
 kaldırma PR'ının kapanış kapısıdır; pazarlama cümlesi bu kanıt gelmeden kullanılmaz.
 Son kontrol: 2026-10-03
 
-### DEC-20261004-01 — Kartsız deneme lisansı
+### DEC-20261004-02 — Kartsız deneme lisansı
 
 Durum: Onaylı; kod LOCAL_TEST, STAGING EXTERNAL_NOT_RUN; gecelik şifreli yedek ve staging restore geçmeden gerçek veriyle deneme açılmaz
 Karar: Deneme, mevcut `Tenant` ve `LicenseTerm` modeliyle açılan kısa bir lisans dönemidir; yeni tablo,

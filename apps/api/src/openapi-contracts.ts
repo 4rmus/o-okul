@@ -150,7 +150,7 @@ const licenseTermListSchema = objectSchema({
 }, ["id", "tenantId", "planCode", "startsAt", "endsAt", "activeStudentLimit", "state"]);
 
 const licenseTermCreateRequestSchema = objectSchema({
-  planCode: { type: "string", enum: [...licensePlanCodes], description: "TRIAL: at most 7 days and 100 active students (DEC-20261004-01)." },
+  planCode: { type: "string", enum: [...licensePlanCodes], description: "TRIAL: at most 7 days and 100 active students (DEC-20261004-02)." },
   startsAt: stringSchema({ format: "date-time" }),
   endsAt: stringSchema({ format: "date-time" }),
   activeStudentLimit: integerSchema({ minimum: 1 }),

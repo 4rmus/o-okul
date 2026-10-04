@@ -10,7 +10,7 @@ const dayMs = 24 * 60 * 60 * 1000;
 
 type Persona = "tenantAdmin" | "systemAdmin";
 
-test.describe("Kartsız deneme (DEC-20261004-01)", () => {
+test.describe("Kartsız deneme (DEC-20261004-02)", () => {
   test("süren denemede kurum panosu kalan günü ve verinin silinmeyeceğini söyler", async ({ page }) => {
     await open(page, "tenantAdmin", "/kurum", { plan: "TRIAL", licenseEndsAt: new Date(Date.now() + 2.5 * dayMs).toISOString() });
     const banner = page.getByRole("status").filter({ hasText: "Deneme sürümü" });
