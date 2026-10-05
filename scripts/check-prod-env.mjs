@@ -294,6 +294,18 @@ function checkProductionEnv(env) {
   requireNoPlaceholderValue(env, failures, "NOTIFICATION_SMOKE_BODY");
   requireEqual(env, failures, "NOTIFICATION_SMOKE_CONFIRM", "send");
 
+  // KV-7 web push is optional (worker skips it fail-closed when unset) but must be complete when enabled.
+  if ((env.VAPID_PUBLIC_KEY ?? "").trim() || (env.VAPID_PRIVATE_KEY ?? "").trim() || env.NEXT_PUBLIC_WEB_PUSH_ENABLED === "true") {
+    requireProviderCredential(env, failures, "VAPID_PUBLIC_KEY");
+    requireProviderCredential(env, failures, "VAPID_PRIVATE_KEY");
+    if (!/^(mailto:|https:\/\/)\S+$/.test(env.VAPID_SUBJECT ?? "")) {
+      failures.push("VAPID_SUBJECT mailto: veya https:// ile başlamalı.");
+    }
+    if (env.NEXT_PUBLIC_WEB_PUSH_ENABLED === "true" && env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY !== env.VAPID_PUBLIC_KEY) {
+      failures.push("NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY VAPID_PUBLIC_KEY ile aynı olmalı.");
+    }
+  }
+
   requireEqual(env, failures, "SUPPORT_ATTACHMENT_STORAGE", "s3");
   requireEqual(env, failures, "HOMEWORK_MATERIAL_FILE_STORAGE", "s3");
   requireEqual(env, failures, "UPLOAD_AV_SCANNER", "clamav");

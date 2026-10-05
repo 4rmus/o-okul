@@ -1545,6 +1545,34 @@ Gateway PUSH mesajını gönderilmiş gibi işaretlemez; ayrı push sağlayıcı
 `NOTIFICATION_PUSH_NOT_CONFIGURED` ile fail-closed kalır ve production
 `NOTIFICATION_SMOKE_PUSH_TO` boş tutulur.
 
+### Web push VAPID anahtarları (KV-7)
+
+Duyuru push'u gateway'den geçmez; API cihazları 25'lik parçalara bölüp `announcement-delivery`
+kuyruğuna `announcement_<duyuruId>_PUSH_<sendKey>_<chunkIndex>` jobId ile verir (`sendKey` =
+Idempotency-Key'in SHA-256 önekidir), worker `web-push` ile gönderir. Push job'ları tamamlansa da
+başarısız olsa da 30 gün saklanır (`removeOnComplete`/`removeOnFail` `age`): aynı gönderim isteğinin
+yeniden denenmesi bu pencerede ikinci push üretmez; yeni gönderim yeni cihazlara da ulaşır. FCM
+cihazlarına push gitmez (ürün sahibi kabulü, 2026-10-05).
+Payload yalnız başlık ve iç bağlantı taşır; 404/410 yanıtında `NotificationDeviceToken.disabledAt`
+set edilir. `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` veya `VAPID_SUBJECT` eksikse worker gönderim
+yapmaz ve raporu `PUSH_VAPID_NOT_CONFIGURED` ile `failed` yazar.
+
+Anahtar çifti ortam başına bir kez, repo dışında ve ürün sahibi onayıyla üretilir (KV-7 VAPID secret
+onayı). Bu runbook adımı secret üretmez veya ayarlamaz; operatör çalıştırır:
+
+```sh
+# Worker imajındaki web-push ile; çıktı yalnız operatör terminalinde kalır, repoya/loga yazılmaz.
+docker compose run --rm --no-deps worker node -e \
+  "const k=require('web-push').generateVAPIDKeys();console.log('VAPID_PUBLIC_KEY='+k.publicKey);console.log('VAPID_PRIVATE_KEY='+k.privateKey)"
+```
+
+Runtime `.env` içinde `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` ve `VAPID_SUBJECT=mailto:destek@o-okul.com`
+worker'a verilir; `NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY` aynı public key ile web build'ine girer ve
+`NEXT_PUBLIC_WEB_PUSH_ENABLED=true` yalnız anahtar kurulduktan sonra açılır. Private key yalnız
+worker'da tutulur. Anahtar döndürmek mevcut tüm abonelikleri geçersiz kılar; kullanıcıların push iznini
+yeniden açması gerekir. `apps/web/public/push-sw.js` yalnız bildirim gösterir ve tıklamada iç
+bağlantıyı açar; fetch/cache işleyicisi yoktur.
+
 Gateway içinde WhatsApp Meta Cloud API ve `/webhooks/whatsapp` temeli de bulunur; Wrangler
 varsayılanı `WHATSAPP_ENABLED=false` olduğu için gönderim provider'a gitmeden fail-closed olur ve
 webhook yolu capability sunmaz. Yerel testler yalnız utility template istek biçimini, ham request

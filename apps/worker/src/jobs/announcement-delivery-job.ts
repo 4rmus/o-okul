@@ -1,8 +1,17 @@
 import type { AnnouncementDeliveryChannel, AnnouncementDeliveryStatus } from "@o-okul/shared-types";
 import { runWithJobContext } from "../context/job-context.js";
 import { assertTenantJobPayload, type QueueJob, type TenantJobPayload } from "../queue/queues.js";
+import {
+  assertAnnouncementPushSendPayload,
+  isAnnouncementPushSendPayload,
+  processAnnouncementPushChunk,
+  type AnnouncementPushDeps,
+  type AnnouncementPushSendJobPayload,
+} from "./announcement-push-delivery.js";
 
-export interface AnnouncementDeliveryJobPayload extends TenantJobPayload {
+export type AnnouncementDeliveryJobPayload = AnnouncementDeliveryReportJobPayload | AnnouncementPushSendJobPayload;
+
+export interface AnnouncementDeliveryReportJobPayload extends TenantJobPayload {
   channel: AnnouncementDeliveryChannel;
   recipientCount: number;
   deliveredCount: number;
@@ -32,12 +41,22 @@ export interface AnnouncementDeliveryReporter {
 export async function processAnnouncementDeliveryJob(
   job: QueueJob<AnnouncementDeliveryJobPayload>,
   reporter: AnnouncementDeliveryReporter,
+  push?: AnnouncementPushDeps,
 ): Promise<AnnouncementDeliveryJobResult> {
   if (job.name !== "announcement-delivery") {
     throw new Error("ANNOUNCEMENT_DELIVERY_JOB_NAME_INVALID");
   }
-  assertTenantJobPayload(job.payload);
-  assertAnnouncementDeliveryPayload(job.payload);
+  const payload = job.payload;
+  assertTenantJobPayload(payload);
+  if (isAnnouncementPushSendPayload(payload)) {
+    assertAnnouncementPushSendPayload(payload);
+    if (!push) throw new Error("ANNOUNCEMENT_PUSH_DEPS_MISSING");
+    return runWithJobContext(
+      { tenantId: payload.tenantId, userId: payload.userId, jobId: job.id },
+      () => processAnnouncementPushChunk(payload, push),
+    );
+  }
+  assertAnnouncementDeliveryPayload(payload);
 
   return runWithJobContext(
     {
@@ -47,24 +66,24 @@ export async function processAnnouncementDeliveryJob(
     },
     async () => {
       const result: AnnouncementDeliveryJobResult = {
-        tenantId: job.payload.tenantId,
-        announcementId: job.payload.entityId,
-        channel: job.payload.channel,
-        recipientCount: job.payload.recipientCount,
-        deliveredCount: job.payload.deliveredCount,
-        failedCount: job.payload.failedCount,
-        status: job.payload.status,
+        tenantId: payload.tenantId,
+        announcementId: payload.entityId,
+        channel: payload.channel,
+        recipientCount: payload.recipientCount,
+        deliveredCount: payload.deliveredCount,
+        failedCount: payload.failedCount,
+        status: payload.status,
       };
       await reporter.upsert({
         ...result,
-        providerErrorCode: job.payload.providerErrorCode,
+        providerErrorCode: payload.providerErrorCode,
       });
       return result;
     },
   );
 }
 
-function assertAnnouncementDeliveryPayload(payload: AnnouncementDeliveryJobPayload): void {
+function assertAnnouncementDeliveryPayload(payload: AnnouncementDeliveryReportJobPayload): void {
   if (payload.channel !== "EMAIL" && payload.channel !== "PUSH") {
     throw new Error("ANNOUNCEMENT_DELIVERY_CHANNEL_INVALID");
   }
