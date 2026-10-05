@@ -43,6 +43,7 @@ import { formatNetNumber, OutcomeNetTable } from "../../_shared/outcome-net-tabl
 import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
 import { formatPercentNumber, formatStudentProgressSummary, isComparableStudentProgress, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import { readReportExamId } from "../../_shared/report-exam-selection.js";
+import { GuardianLinkRetryAlert, isGuardianLinkConcurrentUpdate } from "../_shared/guardian-link-retry.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 interface StudentBaseDetail {
@@ -679,6 +680,14 @@ function StudentContactPanel({
  */
 type GuardianLinkTarget = "guardian" | "user";
 
+interface GuardianLinkRequest {
+  action: "link" | "unlink";
+  body: string;
+  contactId: string;
+  idempotencyKey: string;
+  successText: string;
+}
+
 interface GuardianLinkUserOption {
   id: string;
   name: string;
@@ -697,6 +706,7 @@ function StudentContactGuardianLinkControls({ detail, studentId }: { detail: Stu
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ tone: "danger" | "success"; text: string } | null>(null);
   const pending = useRef<{ request: string; idempotencyKey: string } | null>(null);
+  const [retryRequest, setRetryRequest] = useState<GuardianLinkRequest | null>(null);
   const contact = legalContacts.find((candidate) => candidate.id === contactId) ?? legalContacts[0];
   const searchTerm = search.trim();
   const canSearch = Boolean(auth && contact && !contact.guardianId);
@@ -766,29 +776,42 @@ function StudentContactGuardianLinkControls({ detail, studentId }: { detail: Stu
     const body = action === "link" ? JSON.stringify(target === "guardian" ? { guardianId: selectedId } : { userId: selectedId }) : "";
     const request = `${action}:${contact.id}:${body}`;
     if (pending.current?.request !== request) pending.current = { request, idempotencyKey: crypto.randomUUID() };
+    await send({
+      action,
+      body,
+      contactId: contact.id,
+      idempotencyKey: pending.current.idempotencyKey,
+      successText: action === "unlink"
+        ? "Veli bağı ve portal erişimi kaldırıldı."
+        : target === "guardian" ? "İletişim kaydı veliye bağlandı." : "Kullanıcıya veli rolü eklendi ve iletişim kaydı bağlandı.",
+    });
+  }
+
+  // KV-3e: "Tekrar dene" resends the exact failed request with the same Idempotency-Key (no new confirmation).
+  async function send(request: GuardianLinkRequest) {
+    if (!auth) return;
     setSaving(true);
     setMessage(null);
+    // The retry alert stays (with its button disabled) until the resent request settles.
     try {
       await apiRequest<StudentContactGuardianLinkResult>(
         auth.accessToken,
-        `${apiBaseUrl}/students/${encodeURIComponent(studentId)}/contacts/${encodeURIComponent(contact.id)}/guardian`,
+        `${apiBaseUrl}/students/${encodeURIComponent(studentId)}/contacts/${encodeURIComponent(request.contactId)}/guardian`,
         {
-          ...(action === "link" ? { body } : {}),
-          headers: { "content-type": "application/json", "Idempotency-Key": pending.current.idempotencyKey },
-          method: action === "link" ? "PUT" : "DELETE",
+          ...(request.action === "link" ? { body: request.body } : {}),
+          headers: { "content-type": "application/json", "Idempotency-Key": request.idempotencyKey },
+          method: request.action === "link" ? "PUT" : "DELETE",
         },
       );
       pending.current = null;
+      setRetryRequest(null);
       setSelectedId("");
-      setMessage({
-        tone: "success",
-        text: action === "unlink"
-          ? "Veli bağı ve portal erişimi kaldırıldı."
-          : target === "guardian" ? "İletişim kaydı veliye bağlandı." : "Kullanıcıya veli rolü eklendi ve iletişim kaydı bağlandı.",
-      });
+      setMessage({ tone: "success", text: request.successText });
       await queryClient.invalidateQueries({ queryKey: ["next-student-detail-page-data"] });
     } catch (error) {
-      setMessage({ tone: "danger", text: formatGuardianLinkError(error) });
+      const concurrent = isGuardianLinkConcurrentUpdate(error);
+      setRetryRequest(concurrent ? request : null);
+      if (!concurrent) setMessage({ tone: "danger", text: formatGuardianLinkError(error) });
     } finally {
       setSaving(false);
     }
@@ -799,7 +822,7 @@ function StudentContactGuardianLinkControls({ detail, studentId }: { detail: Stu
       <p className="next-form-section-title">Veli bağı</p>
       <div className="next-list-controls" aria-label="Veli bağı">
         <Field label="Yasal temsilci">
-          <Select value={contact.id} onChange={(event) => { setContactId(event.target.value); setSelectedId(""); setMessage(null); }}>
+          <Select value={contact.id} onChange={(event) => { setContactId(event.target.value); setSelectedId(""); setMessage(null); setRetryRequest(null); }}>
             {legalContacts.map((candidate) => (
               <option key={candidate.id} value={candidate.id}>{candidate.firstName} {candidate.lastName}</option>
             ))}
@@ -813,7 +836,7 @@ function StudentContactGuardianLinkControls({ detail, studentId }: { detail: Stu
         ) : (
           <>
             <Field label="Bağlanacak kişi">
-              <Select value={target} onChange={(event) => { setTarget(event.target.value as GuardianLinkTarget); setSelectedId(""); setMessage(null); }}>
+              <Select value={target} onChange={(event) => { setTarget(event.target.value as GuardianLinkTarget); setSelectedId(""); setMessage(null); setRetryRequest(null); }}>
                 <option value="guardian">Mevcut veli</option>
                 <option value="user">Mevcut kullanıcı (personel)</option>
               </Select>
@@ -834,6 +857,7 @@ function StudentContactGuardianLinkControls({ detail, studentId }: { detail: Stu
         )}
       </div>
       {message ? <Alert tone={message.tone}>{message.text}</Alert> : null}
+      {retryRequest ? <GuardianLinkRetryAlert retrying={saving} onRetry={() => void send(retryRequest)} /> : null}
       {confirmationDialog}
     </div>
   );

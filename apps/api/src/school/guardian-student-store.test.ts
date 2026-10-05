@@ -253,6 +253,8 @@ describe("PostgresGuardianStudentStore", () => {
     for (const call of [
       (store: PostgresGuardianStudentStore) => store.create({ tenantId: "tenant-a", guardianId: "guardian-a", studentId: "student-a" }),
       (store: PostgresGuardianStudentStore) => store.delete("guardian-a", "student-a"),
+      // KV-3e: permission update is wrapped too.
+      (store: PostgresGuardianStudentStore) => store.update("guardian-a", "student-a", { canReceiveSms: true }),
     ]) {
       for (const code of ["40P01", "40001"]) {
         const { outcome, sqls } = await run(code, call);

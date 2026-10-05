@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -30,6 +30,7 @@ import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
 import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
+import { GuardianLinkRetryAlert, isGuardianLinkConcurrentUpdate } from "../_shared/guardian-link-retry.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 import { RevealablePhone } from "../_shared/revealable-phone.js";
 
@@ -60,6 +61,9 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
   });
   const [linkForm, setLinkForm] = useState(emptyLinkForm);
   const [linkError, setLinkError] = useState("");
+  const [linkSaving, setLinkSaving] = useState(false);
+  const [linkRetry, setLinkRetry] = useState<LinkAttempt | null>(null);
+  const pendingLink = useRef<LinkAttempt | null>(null);
   const [activeSection, setActiveSection] = useState<"links" | "new-link">("links");
   const detail = detailQuery.data;
   const guardianName = detail ? `${detail.guardian.firstName} ${detail.guardian.lastName}` : "Veli detayı";
@@ -72,16 +76,37 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
 
   async function handleLinkSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!auth || !linkForm.studentId) return;
+    if (!auth || !linkForm.studentId || linkSaving) return;
+    const body = JSON.stringify({
+      canOpenSupportTickets: linkForm.canOpenSupportTickets,
+      canReceiveAnnouncements: linkForm.canReceiveAnnouncements,
+      canReceiveSms: linkForm.canReceiveSms,
+      canViewFinance: linkForm.canViewFinance,
+      studentId: linkForm.studentId,
+    });
+    if (pendingLink.current?.body !== body) pendingLink.current = { body, idempotencyKey: crypto.randomUUID() };
+    await sendLink(pendingLink.current);
+  }
 
+  // KV-3e: "Tekrar dene" resends the failed link request with the same Idempotency-Key.
+  async function sendLink(attempt: LinkAttempt) {
+    if (!auth) return;
+    setLinkSaving(true);
     setLinkError("");
+    // The retry alert stays (with its button disabled) until the resent request settles.
     try {
-      await linkGuardianStudent(auth.accessToken, guardianId, linkForm);
+      await linkGuardianStudent(auth.accessToken, guardianId, attempt);
+      pendingLink.current = null;
+      setLinkRetry(null);
       setLinkForm(emptyLinkForm);
       void queryClient.invalidateQueries({ queryKey: ["next-guardian-detail", tenantId, guardianId] });
       void queryClient.invalidateQueries({ queryKey: ["next-setup-progress", tenantId] });
-    } catch {
-      setLinkError("Öğrenci bağlantısı kurulamadı.");
+    } catch (error) {
+      const concurrent = isGuardianLinkConcurrentUpdate(error);
+      setLinkRetry(concurrent ? attempt : null);
+      if (!concurrent) setLinkError("Öğrenci bağlantısı kurulamadı.");
+    } finally {
+      setLinkSaving(false);
     }
   }
 
@@ -186,7 +211,8 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
                   ))}
                 </fieldset>
                 {linkError ? <p className="uh-crud-page__error">{linkError}</p> : null}
-                <Button disabled={availableStudents.length === 0} type="submit">
+                {linkRetry ? <GuardianLinkRetryAlert retrying={linkSaving} onRetry={() => void sendLink(linkRetry)} /> : null}
+                <Button disabled={availableStudents.length === 0 || linkSaving} type="submit">
                   <Link2 size={17} aria-hidden="true" />
                   Bağla
                 </Button>
@@ -215,20 +241,15 @@ async function loadGuardianDetail(accessToken: string, guardianId: string) {
   };
 }
 
-async function linkGuardianStudent(
-  accessToken: string,
-  guardianId: string,
-  input: typeof emptyLinkForm,
-) {
+interface LinkAttempt {
+  body: string;
+  idempotencyKey: string;
+}
+
+async function linkGuardianStudent(accessToken: string, guardianId: string, attempt: LinkAttempt) {
   return apiRequest<GuardianStudentRecord>(accessToken, `${apiBaseUrl}/guardians/${encodeURIComponent(guardianId)}/students`, {
-    body: JSON.stringify({
-      canOpenSupportTickets: input.canOpenSupportTickets,
-      canReceiveAnnouncements: input.canReceiveAnnouncements,
-      canReceiveSms: input.canReceiveSms,
-      canViewFinance: input.canViewFinance,
-      studentId: input.studentId,
-    }),
-    headers: { "content-type": "application/json" },
+    body: attempt.body,
+    headers: { "content-type": "application/json", "Idempotency-Key": attempt.idempotencyKey },
     method: "POST",
   });
 }

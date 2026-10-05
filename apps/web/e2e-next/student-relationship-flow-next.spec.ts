@@ -203,8 +203,56 @@ test.describe("Öğrenci ilişki haritası", () => {
         { method: "PUT", path: "/students/student-a/contacts/contact-legal/guardian", search: "", body: JSON.stringify({ userId: "user-teacher-parent" }), idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/) },
       ]);
     });
+
+    test(`eşzamanlı güncelleme 409'unda "Tekrar dene" aynı Idempotency-Key ile yeniden gönderir (KV-3e, ${viewport.name})`, async ({ page }) => {
+      let releaseRetry = () => {};
+      const guardianLink = {
+        concurrentConflicts: 1,
+        guardianId: undefined as string | undefined,
+        holdWrite: new Promise<void>((resolve) => { releaseRetry = resolve; }),
+        requests: [] as GuardianLinkRequest[],
+      };
+      await openStudentDetail(page, viewport, { guardianLink });
+
+      const controls = page.getByLabel("Veli bağı", { exact: true });
+      const section = page.locator(".next-form-section").filter({ has: controls });
+      await controls.getByLabel("Veli ara").fill("Selin");
+      await controls.getByLabel("Veli seçimi").selectOption("guardian-sibling");
+      await controls.getByRole("button", { name: "Mevcut veliye bağla" }).click();
+      await page.getByRole("dialog", { name: "Mevcut veliye bağla" }).getByRole("button", { name: "Bağla" }).click();
+
+      const alert = section.getByRole("alert");
+      await expect(alert).toContainText("eşzamanlı bir işlem");
+      const retry = alert.getByRole("button", { name: "Tekrar dene" });
+      await expect(retry).toBeVisible();
+      await expectNoHorizontalOverflow(page, `student-guardian-link-retry-${viewport.name}`);
+      const box = await retry.boundingBox();
+      expect(box && box.x >= 0 && box.x + box.width <= viewport.width).toBe(true);
+
+      await retry.click();
+      // The retry stays disabled while the resent request is in flight.
+      await expect(retry).toBeDisabled();
+      releaseRetry();
+
+      await expect(controls.getByRole("status")).toHaveText("Bağlı veli: Selin Ak");
+      await expect(page.getByText("İletişim kaydı veliye bağlandı.")).toBeVisible();
+      await expect(section.getByRole("button", { name: "Tekrar dene" })).toHaveCount(0);
+      const writes = guardianLink.requests.filter((request) => request.method !== "GET");
+      expect(writes).toHaveLength(2);
+      expect(writes[1]).toEqual(writes[0]);
+      expect(writes[0]?.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
+    });
   }
 });
+
+interface GuardianLinkMock {
+  /** KV-3e: the first N link writes answer 409 GUARDIAN_LINK_CONCURRENT_UPDATE. */
+  concurrentConflicts?: number;
+  guardianId?: string;
+  /** KV-3e: writes after the conflicts wait for this promise, so the test can see the in-flight state. */
+  holdWrite?: Promise<void>;
+  requests: GuardianLinkRequest[];
+}
 
 interface GuardianLinkRequest {
   body: string;
@@ -221,7 +269,7 @@ async function openStudentDetail(
     auditLogRequests?: URL[];
     contactCreateRequests?: Array<{ body: string; idempotencyKey: string }>;
     failFirstContactCreate?: boolean;
-    guardianLink?: { guardianId?: string; requests: GuardianLinkRequest[] };
+    guardianLink?: GuardianLinkMock;
     requestedPaths?: string[];
     roles?: string[];
   } = {},
@@ -244,7 +292,7 @@ async function installStudentApiMocks(
     auditLogRequests?: URL[];
     contactCreateRequests?: Array<{ body: string; idempotencyKey: string }>;
     failFirstContactCreate?: boolean;
-    guardianLink?: { guardianId?: string; requests: GuardianLinkRequest[] };
+    guardianLink?: GuardianLinkMock;
     requestedPaths?: string[];
     roles?: string[];
   } = {},
@@ -293,6 +341,16 @@ async function installStudentApiMocks(
         ]);
         return;
       }
+      if (guardianLink.concurrentConflicts) {
+        guardianLink.concurrentConflicts -= 1;
+        await route.fulfill({
+          body: JSON.stringify({ error: { code: "GUARDIAN_LINK_CONCURRENT_UPDATE", message: "Aynı kayıt üzerinde eşzamanlı bir işlem var, lütfen tekrar deneyin." } }),
+          headers: { ...corsHeadersFor(route), "content-type": "application/json" },
+          status: 409,
+        });
+        return;
+      }
+      await guardianLink.holdWrite;
       guardianLink.guardianId = method === "PUT" ? "guardian-sibling" : undefined;
       await fulfillData(route, {
         changed: true,

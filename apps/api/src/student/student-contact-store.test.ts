@@ -527,6 +527,8 @@ describe("StudentContactStore", () => {
       return { outcome: await call(new PostgresStudentContactStore(pool)).then(() => undefined, (error: unknown) => error), sqls };
     };
     const writes: Array<(store: PostgresStudentContactStore) => Promise<unknown>> = [
+      // KV-3e: the plain linkGuardian path (guardian invitation accept) is wrapped too.
+      (store) => store.linkGuardian("tenant-a", "contact-a", "guardian-a"),
       (store) => store.linkGuardianWithStudentLink("tenant-a", "contact-a", "guardian-a"),
       (store) => store.linkUserAsGuardianWithStudentLink("tenant-a", "contact-a", "user-a"),
       (store) => store.unlinkGuardian("tenant-a", "contact-a", "guardian-a"),
