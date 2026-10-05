@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { ConflictException } from "@nestjs/common";
 import type { GuardianStudentRecord } from "@o-okul/shared-types";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
@@ -202,7 +203,7 @@ export class PostgresGuardianStudentStore implements GuardianStudentStore {
 
   async create(input: GuardianStudentInput): Promise<GuardianStudentCreateWrite> {
     const recordInput = withGuardianStudentDefaults(input);
-    return withTenantQuery(this.pool, async (client) => {
+    return guardianLinkConcurrencyAs409(withTenantQuery(this.pool, async (client) => {
       // User before link row: the same order as delete and the StudentContact flow, so they serialize.
       const guardianUser = await lockGuardianUser(client, recordInput.guardianId);
       // KV-3c: an existing link returned here is adopted by this (API) flow; its permissions stay as they are.
@@ -238,7 +239,7 @@ export class PostgresGuardianStudentStore implements GuardianStudentStore {
         throw new Error("GUARDIAN_STUDENT_LINK_CREATE_FAILED");
       }
       return { link: toGuardianStudentRecord(row), ...await restoreGuardianRoleWhenRelinked(client, guardianUser) };
-    });
+    }));
   }
 
   async update(
@@ -274,7 +275,7 @@ export class PostgresGuardianStudentStore implements GuardianStudentStore {
   }
 
   async delete(guardianId: string, studentId: string): Promise<GuardianRoleEndWrite | undefined> {
-    return withTenantQuery(this.pool, async (client) => {
+    return guardianLinkConcurrencyAs409(withTenantQuery(this.pool, async (client) => {
       const guardianUser = await lockGuardianUser(client, guardianId);
       const result = await client.query<GuardianStudentRow>(
         `DELETE FROM "GuardianStudent"
@@ -285,7 +286,7 @@ export class PostgresGuardianStudentStore implements GuardianStudentStore {
       );
       if (result.rows.length === 0) return undefined;
       return endGuardianRoleWhenUnlinked(client, guardianId, guardianUser);
-    });
+    }));
   }
 }
 
@@ -293,6 +294,23 @@ export function createGuardianStudentStore(guardians?: GuardianStore): GuardianS
   return resolvePersistenceDriver(process.env.GUARDIAN_STUDENT_STORE) === "postgres"
     ? new PostgresGuardianStudentStore()
     : new InMemoryGuardianStudentStore(guardians);
+}
+
+/**
+ * KV-3d: a Postgres deadlock (40P01) or serialization failure (40001) on a guardian link write reaches here after the
+ * transaction helper already ran ROLLBACK, so nothing was written; answer a controlled 409 instead of a 500.
+ * ponytail: no server-side retry; the required Idempotency-Key releases on error, so the client retry is safe.
+ */
+export async function guardianLinkConcurrencyAs409<T>(write: Promise<T>): Promise<T> {
+  try {
+    return await write;
+  } catch (error) {
+    const code = (error as { code?: unknown } | null)?.code;
+    if (code !== "40P01" && code !== "40001") throw error;
+    throw new ConflictException({
+      error: { code: "GUARDIAN_LINK_CONCURRENT_UPDATE", message: "Aynı kayıt üzerinde eşzamanlı bir işlem var, lütfen tekrar deneyin." },
+    });
+  }
 }
 
 /** Only a user that keeps another ACTIVE membership loses GUARDIAN; a guardian-only account keeps its role. */

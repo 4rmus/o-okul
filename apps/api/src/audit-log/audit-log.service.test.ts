@@ -167,6 +167,61 @@ describe("AuditLogService", () => {
     expect(JSON.stringify(record)).not.toContain("private@example.test");
   });
 
+  it("KV-3d: veli bağı audit'lerindeki PII olmayan boolean/enum/sayı anahtarlarını saklar; PII anahtarları redakte kalır", async () => {
+    const service = new AuditLogService(new FakeAuditLogStore([]));
+    const kept = {
+      guardianId: "guardian-a",
+      studentId: "student-a",
+      guardianStudentCreated: true,
+      guardianStudentRemoved: false,
+      guardianCreated: true,
+      source: "student_contact.guardian_linked",
+      sessionsRevoked: 2,
+      existingRolesKept: true,
+      otherRolesKept: true,
+      previousEndedReason: "LAST_GUARDIAN_STUDENT_LINK_REMOVED",
+      userBound: true,
+    };
+    const record = await service.record({
+      action: "student_contact.guardian_linked",
+      actorUserId: "user-a",
+      entityId: "contact-a",
+      entityType: "StudentContact",
+      tenantId: "tenant-a",
+      diff: {
+        ...kept,
+        firstName: "Ayse",
+        lastName: "Veli",
+        phone: "+905551110001",
+        email: "veli@example.test",
+        nationalId: "12345678901",
+        address: "Gizli Sokak No 1",
+        guardianName: "Ayse Veli",
+      },
+    });
+
+    expect(record.diff).toEqual({
+      ...kept,
+      firstName: "[REDACTED]",
+      lastName: "[REDACTED]",
+      phone: "[REDACTED]",
+      email: "[REDACTED]",
+      nationalId: "[REDACTED]",
+      address: "[REDACTED]",
+      guardianName: "[REDACTED]",
+    });
+    // An allow-listed key still cannot carry a phone, email or national ID value.
+    const leaked = await service.record({
+      action: "guardian_student.linked",
+      actorUserId: "user-a",
+      entityId: "link-a",
+      entityType: "GuardianStudent",
+      tenantId: "tenant-a",
+      diff: { source: "veli@example.test", previousEndedReason: "+905551110001", userBound: "12345678901" },
+    });
+    expect(leaked.diff).toEqual({ source: "[REDACTED]", previousEndedReason: "[REDACTED]", userBound: "[REDACTED]" });
+  });
+
   it("audit diff değerlerini yazarken ve okurken redakte eder", async () => {
     const service = new AuditLogService(new FakeAuditLogStore([]));
 

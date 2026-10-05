@@ -1,3 +1,4 @@
+import { ConflictException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
 import { runWithRequestContext } from "../context/request-context.js";
 import { InMemoryAuthUserStore, resetInMemoryAuthUsers, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
@@ -232,7 +233,42 @@ describe("PostgresGuardianStudentStore", () => {
       expect(queries[order[4]!]?.values).toEqual(["tenant-a", "membership-guardian", 9]);
     }
   });
+
+  it("KV-3d: GuardianStudent create/delete deadlock/serileştirme hatasında ROLLBACK edip 409 döner; diğer hatalar değişmez", async () => {
+    const run = async (code: string, call: (store: PostgresGuardianStudentStore) => Promise<unknown>) => {
+      const sqls: string[] = [];
+      const pool = {
+        async query<T>(sql: string) {
+          sqls.push(sql);
+          if (sql.includes('"GuardianStudent"')) throw Object.assign(new Error("pg failure"), { code });
+          return { rows: [] as T[] };
+        },
+      };
+      const outcome = await runWithRequestContext(
+        { userId: "user-tenant-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+        () => call(new PostgresGuardianStudentStore(pool)).then(() => undefined, (error: unknown) => error),
+      );
+      return { outcome, sqls };
+    };
+    for (const call of [
+      (store: PostgresGuardianStudentStore) => store.create({ tenantId: "tenant-a", guardianId: "guardian-a", studentId: "student-a" }),
+      (store: PostgresGuardianStudentStore) => store.delete("guardian-a", "student-a"),
+    ]) {
+      for (const code of ["40P01", "40001"]) {
+        const { outcome, sqls } = await run(code, call);
+        expect(outcome).toBeInstanceOf(ConflictException);
+        expect((outcome as ConflictException).getResponse()).toEqual({
+          error: { code: "GUARDIAN_LINK_CONCURRENT_UPDATE", message: "Aynı kayıt üzerinde eşzamanlı bir işlem var, lütfen tekrar deneyin." },
+        });
+        expect(sqls).toContain("ROLLBACK");
+      }
+      const other = await run("XX000", call);
+      expect(other.outcome).not.toBeInstanceOf(ConflictException);
+      expect(other.outcome).toMatchObject({ code: "XX000", message: "pg failure" });
+    }
+  });
 });
+
 
 describe("InMemoryGuardianStudentStore (KV-3c)", () => {
   it("son bağ silinince personel+veli kullanıcının GUARDIAN rolü biter; birden fazla bağ varken ve yalnız-veli hesabında kalır", async () => {

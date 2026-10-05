@@ -11,6 +11,7 @@ import {
   type GuardianStudentStore,
   InMemoryGuardianStudentStore,
   endGuardianRoleWhenUnlinked,
+  guardianLinkConcurrencyAs409,
   lockGuardianUser,
   restoreGuardianRoleWhenRelinked,
 } from "../school/guardian-student-store.js";
@@ -350,7 +351,7 @@ export class PostgresStudentContactStore implements StudentContactStore {
   }
 
   async linkGuardianWithStudentLink(tenantId: string, id: string, guardianId: string): Promise<StudentContactGuardianLinkWrite> {
-    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+    return guardianLinkConcurrencyAs409(withExplicitTenantQuery(this.pool, tenantId, async (client) => {
       const contact = await lockUnlinkedContact(client, tenantId, id);
       if (!contact) return { linked: false, guardianStudentCreated: false };
       // Lock order contact -> user -> GuardianStudent (same as unlink and the KV-3b user path).
@@ -358,11 +359,11 @@ export class PostgresStudentContactStore implements StudentContactStore {
       const write = await linkLockedContact(client, tenantId, id, guardianId, contact.studentId);
       const restored = await restoreGuardianRoleWhenRelinked(client, guardianUser);
       return restored.guardianRoleRestoredUserId ? { ...write, ...restored } : write;
-    });
+    }));
   }
 
   async linkUserAsGuardianWithStudentLink(tenantId: string, id: string, userId: string): Promise<StudentContactUserGuardianLinkWrite> {
-    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+    return guardianLinkConcurrencyAs409(withExplicitTenantQuery(this.pool, tenantId, async (client) => {
       const notLinked = { linked: false, guardianCreated: false, guardianRoleAdded: false, guardianStudentCreated: false, sessionsRevoked: 0 };
       const contact = await lockUnlinkedContact(client, tenantId, id);
       if (!contact) return notLinked;
@@ -447,11 +448,11 @@ export class PostgresStudentContactStore implements StudentContactStore {
 
       const write = await linkLockedContact(client, tenantId, id, guardianId, contact.studentId);
       return { ...write, guardianId, guardianCreated: !existing.rows[0], guardianRoleAdded, sessionsRevoked };
-    });
+    }));
   }
 
   async unlinkGuardian(tenantId: string, id: string, expectedGuardianId: string): Promise<StudentContactGuardianUnlinkWrite> {
-    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+    return guardianLinkConcurrencyAs409(withExplicitTenantQuery(this.pool, tenantId, async (client) => {
       const updated = await client.query<{ studentId: string }>(
         `UPDATE "StudentContact" SET "guardianId"=NULL, "updatedAt"=now()
          WHERE "tenantId"=$1 AND "id"=$2 AND "deletedAt" IS NULL AND "guardianId"=$3 RETURNING "studentId"`,
@@ -460,11 +461,11 @@ export class PostgresStudentContactStore implements StudentContactStore {
       const studentId = updated.rows[0]?.studentId;
       if (!studentId) return { unlinked: false, guardianStudentRemoved: false };
       return { unlinked: true, studentId, ...await removeContactGuardianLink(client, tenantId, studentId, expectedGuardianId) };
-    });
+    }));
   }
 
   async softDelete(tenantId: string, id: string): Promise<StudentContactDeleteWrite | undefined> {
-    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+    return guardianLinkConcurrencyAs409(withExplicitTenantQuery(this.pool, tenantId, async (client) => {
       // prev locks the row and keeps the guardian it pointed at; the unlink rule then runs in this transaction.
       const result = await client.query<{ id: string; studentId: string; previousGuardianId: string | null }>(
         `UPDATE "StudentContact" AS c SET ${anonymizedContactSet}
@@ -484,11 +485,11 @@ export class PostgresStudentContactStore implements StudentContactStore {
         guardianId: row.previousGuardianId,
         ...await removeContactGuardianLink(client, tenantId, row.studentId, row.previousGuardianId),
       };
-    });
+    }));
   }
 
   async purgeByStudent(tenantId: string, studentId: string): Promise<StudentContactPurgeWrite> {
-    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+    return guardianLinkConcurrencyAs409(withExplicitTenantQuery(this.pool, tenantId, async (client) => {
       const result = await client.query<{ id: string; previousGuardianId: string | null }>(
         `UPDATE "StudentContact" AS c SET ${anonymizedContactSet}
          FROM (
@@ -506,7 +507,7 @@ export class PostgresStudentContactStore implements StudentContactStore {
         guardianUnlinks.push({ studentId, guardianId, ...await removeContactGuardianLink(client, tenantId, studentId, guardianId) });
       }
       return { purged: result.rows.length, guardianUnlinks };
-    });
+    }));
   }
 }
 

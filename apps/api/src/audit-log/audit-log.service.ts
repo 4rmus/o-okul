@@ -275,6 +275,17 @@ const allowedAuditDiffKeys = new Set([
   "previouslifecycleversion",
   "target",
   "visibility",
+  // KV-3d: non-PII booleans, counts and fixed enum codes written by the KV-3b/KV-3c guardian link audits.
+  // Never add name/phone/email/national ID/address keys here; string values still pass sensitiveAuditValue().
+  "existingroleskept",
+  "guardiancreated",
+  "guardianstudentcreated",
+  "guardianstudentremoved",
+  "otherroleskept",
+  "previousendedreason",
+  "sessionsrevoked",
+  "source",
+  "userbound",
 ]);
 
 function sensitiveAuditKey(key: string): boolean {
