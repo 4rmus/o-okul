@@ -760,13 +760,28 @@ veli oluşturma/bağlama ve veli davetinde 2xx doğrular; `app.e2e.test.ts` öğ
 seçili öğrencilerin `LEGAL_GUARDIAN` iletişiminden veli hesabı + e-posta daveti üretir, bağlı iletişime
 ikinci davet açmaz, otomatik eşleme yapmaz (e-postası kullanımda olan satır `EMAIL_IN_USE` ile atlanır),
 izinleri değiştirmez ve yalnız sayım/id döner (`student-guardian-invitation.e2e.test.ts`). Veli daveti
-kabulü T.C. numarası istemez. KV-3b (ürün sahibi kararı 2026-10-05): yönetici `LEGAL_GUARDIAN`
-iletişimini `PUT /students/{studentId}/contacts/{id}/guardian` ile elle seçtiği MEVCUT veliye bağlar,
+kabulü T.C. numarası istemez. KV-3b (ürün sahibi kararları 2026-10-05): yönetici `LEGAL_GUARDIAN`
+iletişimini `PUT /students/{studentId}/contacts/{id}/guardian` ile elle seçtiği MEVCUT veliye
+(`guardianId`) veya aynı tenant'taki MEVCUT kullanıcıya (`userId`, ör. veli olan öğretmen/personel) bağlar,
 `DELETE` aynı yolla bağı kaldırır (`student:manage` + `user:manage`, kampüs kapsamlı personel 403, zorunlu
-`Idempotency-Key`, yanıt yalnız id). Eksik `GuardianStudent` izinler kapalı olarak iletişim yazımıyla aynı
-transaction'da açılır; aynı veliye tekrar bağlama değişiklik yapmaz, başka veliye bağlama 409, veli kaydı
-olmayan/başka tenant'taki veli 422; bağ kaldırma `GuardianStudent`'a dokunmaz; yeni hesap açılmaz
-(`student-contact-guardian-link.e2e.test.ts`, `student-relationship-flow-next.spec.ts`). Kanıt sınıfı
+`Idempotency-Key`, yanıt yalnız id). (1) Her bağlama tek transaction'dır: eksik `GuardianStudent` izinler
+kapalı açılır; aynı hedefe tekrar bağlama değişiklik yapmaz, başka veliye bağlama 409, veli kaydı
+olmayan/başka tenant'taki veli 422. (2) Hem personel/öğretmen hem veli olan kişiye ayrı hesap açılmaz:
+kullanıcı yolu aynı transaction'da kullanıcının `Guardian` kaydını (yoksa iletişim adıyla) oluşturur,
+mevcut üyeliklere dokunmadan `GUARDIAN` üyeliği ekler (kullanıcı sürümü artar, açık oturumlar kapanır) ve
+`GUARDIAN` ayrı persona olarak açılır (`STAFF`/`TEACHER` ile yetki birleşimi yok; persona geçişi;
+`AuthSession_activePersona_check` migration'ı `20261007120000_auth_session_guardian_persona`). Başka
+tenant'ın, platformun (`SYSTEM_ADMIN`) ve var olmayan kullanıcı aynı 422 (`STUDENT_CONTACT_USER_NOT_FOUND`);
+öğrenci hesabı ve kanonik üyeliği olmayan eski personel hesabı 422 (`STUDENT_CONTACT_USER_NOT_ELIGIBLE`).
+Audit: `guardian.created`, `user.guardian_role_added`, `guardian_student.linked`,
+`student_contact.guardian_linked`. Çalışan erişim güncellemesi ve profil kapatma `GUARDIAN` üyeliğini
+silmez/sürümünü eşitler. (3) Yalnız `LEGAL_GUARDIAN` bağlanır; `MOTHER`/`FATHER` 422 (değişiklik yok).
+(4) Bağ kaldırma erişimi de keser: aynı transaction'da `StudentContact.guardianId` NULL olur ve
+öğrencinin başka canlı iletişim kaydı aynı veliye bağlı değilse `GuardianStudent` silinir
+(`guardian_student.unlinked`); veli portalında öğrenci listeden düşer, overview 403
+(`student-contact-guardian-link.e2e.test.ts`, `student-contact-store.test.ts`,
+`student-relationship-flow-next.spec.ts`, `persona-switch-next.spec.ts`). Postgres yolları yalnız sahte
+havuz SQL sırası testleriyle doğrulandı (LOCAL_STATIC); migration canlı Postgres'te koşulmadı. Kanıt sınıfı
 LOCAL_TEST; CI, STAGING ve PRODUCTION UNPROVEN.
 Ürün sahibi kararı (2026-10-05): veli daveti kabulünde T.C. şartının kaldırılması onaylandı; e-postası
 olmayan `LEGAL_GUARDIAN` satırının `EMAIL_MISSING` ile atlanması kabul edildi. Toplu davette

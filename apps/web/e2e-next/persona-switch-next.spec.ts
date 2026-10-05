@@ -8,11 +8,17 @@ const corsHeaders = {
   "access-control-allow-origin": webOrigin,
 };
 
-test("çift personalı çalışan staff ve teacher çalışma alanları arasında ayrı session ile geçer", async ({ page }) => {
+type Persona = "STAFF" | "TEACHER" | "GUARDIAN";
+
+// KV-3b: a staff member who is also a parent keeps one account; GUARDIAN is a third persona next to STAFF/TEACHER.
+for (const target of [
+  { persona: "TEACHER" as const, button: "Öğretmen alanına geç", url: /\/ogretmen$/u, roleLabel: "Öğretmen" },
+  { persona: "GUARDIAN" as const, button: "Veli alanına geç", url: /\/veli$/u, roleLabel: "Veli" },
+]) test(`çok personalı çalışan staff ve ${target.persona} çalışma alanları arasında ayrı session ile geçer`, async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.stack ?? error.message));
   let activeSession = false;
-  let persona: "STAFF" | "TEACHER" = "STAFF";
+  let persona: Persona = "STAFF";
   let switchRequest: { body?: unknown; authorization?: string; csrf?: string } = {};
   await page.context().addCookies([{ name: "csrfToken", value: "csrf-a", url: webOrigin }]);
 
@@ -43,7 +49,7 @@ test("çift personalı çalışan staff ve teacher çalışma alanları arasınd
         authorization: request.headers().authorization,
         csrf: request.headers()["x-csrf-token"],
       };
-      persona = "TEACHER";
+      persona = (request.postDataJSON() as { activePersona: Persona }).activePersona;
       await json(route, authResponse(persona));
       return;
     }
@@ -58,10 +64,10 @@ test("çift personalı çalışan staff ve teacher çalışma alanları arasınd
         membershipId: "membership-a",
         membership: { id: "membership-a", version: 3 },
         activePersona: persona,
-        availablePersonas: ["STAFF", "TEACHER"],
+        availablePersonas: ["STAFF", "TEACHER", "GUARDIAN"],
         capabilities: [],
-        roles: persona === "STAFF" ? ["TENANT_ADMIN"] : ["TEACHER"],
-        ...(persona === "TEACHER" ? { subjectType: "TEACHER", subjectId: "teacher-a" } : {}),
+        roles: persona === "STAFF" ? ["TENANT_ADMIN"] : [persona],
+        ...subjectFor(persona),
       });
       return;
     }
@@ -109,16 +115,25 @@ test("çift personalı çalışan staff ve teacher çalışma alanları arasınd
   const topBar = page.locator('header[aria-label="Üst gezinme"]');
   await expect(topBar).toBeVisible({ timeout: 5_000 });
   expect(pageErrors).toEqual([]);
-  await topBar.getByRole("button", { name: "Öğretmen alanına geç" }).click();
-  await expect(page).toHaveURL(/\/ogretmen$/u);
+  await expect(topBar.getByRole("button", { name: "Öğretmen alanına geç" })).toBeVisible();
+  await expect(topBar.getByRole("button", { name: "Veli alanına geç" })).toBeVisible();
+  await topBar.getByRole("button", { name: target.button }).click();
+  await expect(page).toHaveURL(target.url);
   expect(switchRequest).toEqual({
-    body: { activePersona: "TEACHER" },
+    body: { activePersona: target.persona },
     authorization: "Bearer staff-access-token",
     csrf: "csrf-a",
   });
-  await expect(topBar.getByText("Öğretmen", { exact: true })).toBeVisible();
+  await expect(topBar.getByText(target.roleLabel, { exact: true })).toBeVisible();
   await expect(topBar.getByRole("button", { name: "Kurum alanına geç" })).toBeVisible();
+  await expect(topBar.getByRole("button", { name: target.button })).toHaveCount(0);
 });
+
+function subjectFor(persona: Persona) {
+  if (persona === "TEACHER") return { subjectType: "TEACHER", subjectId: "teacher-a" };
+  if (persona === "GUARDIAN") return { subjectType: "GUARDIAN", subjectId: "guardian-a" };
+  return {};
+}
 
 async function json(route: Parameters<Parameters<Page["route"]>[1]>[0], data: unknown) {
   await route.fulfill({
@@ -129,19 +144,19 @@ async function json(route: Parameters<Parameters<Page["route"]>[1]>[0], data: un
   });
 }
 
-function authResponse(activePersona: "STAFF" | "TEACHER") {
+function authResponse(activePersona: Persona) {
   return {
-    accessToken: activePersona === "STAFF" ? "staff-access-token" : "teacher-access-token",
+    accessToken: `${activePersona.toLowerCase()}-access-token`,
     session: {
-      id: activePersona === "STAFF" ? "session-staff" : "session-teacher",
+      id: `session-${activePersona.toLowerCase()}`,
       membershipId: "membership-a",
       activePersona,
       membershipVersion: 3,
-      roles: activePersona === "STAFF" ? ["TENANT_ADMIN"] : ["TEACHER"],
+      roles: activePersona === "STAFF" ? ["TENANT_ADMIN"] : [activePersona],
       status: "ACTIVE",
       tenantId: "tenant-a",
       userId: "dual-user-a",
-      ...(activePersona === "TEACHER" ? { subjectType: "TEACHER", subjectId: "teacher-a" } : {}),
+      ...subjectFor(activePersona),
     },
   };
 }

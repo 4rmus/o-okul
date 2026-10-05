@@ -111,12 +111,19 @@ describe("StudentContactStore", () => {
     })]);
     expect(await store.linkGuardianWithStudentLink("tenant-a", created.id, "guardian-2")).toEqual({ linked: false, guardianStudentCreated: false });
 
-    expect(await store.unlinkGuardian("tenant-a", created.id, "guardian-2")).toBe(false);
-    expect(await store.unlinkGuardian("tenant-a", created.id, "guardian-1")).toBe(true);
+    // A second contact of the same student pointing at the same guardian keeps the access link alive.
+    const sibling = await store.create({ ...contact, studentId: "student-kv3b", firstName: "Ikinci" });
+    expect(await store.linkGuardianWithStudentLink("tenant-a", sibling.id, "guardian-1"))
+      .toEqual({ linked: true, guardianStudentId: first.guardianStudentId, guardianStudentCreated: false });
+
+    expect(await store.unlinkGuardian("tenant-a", created.id, "guardian-2")).toEqual({ unlinked: false, guardianStudentRemoved: false });
+    expect(await store.unlinkGuardian("tenant-a", created.id, "guardian-1"))
+      .toEqual({ unlinked: true, studentId: "student-kv3b", guardianStudentRemoved: false });
     expect((await store.findById("tenant-a", created.id))?.guardianId).toBeUndefined();
     expect(await guardianStudents.listByStudent("student-kv3b")).toHaveLength(1);
-    expect(await store.linkGuardianWithStudentLink("tenant-a", created.id, "guardian-1"))
-      .toEqual({ linked: true, guardianStudentId: first.guardianStudentId, guardianStudentCreated: false });
+    expect(await store.unlinkGuardian("tenant-a", sibling.id, "guardian-1"))
+      .toEqual({ unlinked: true, studentId: "student-kv3b", guardianStudentRemoved: true });
+    expect(await guardianStudents.listByStudent("student-kv3b")).toHaveLength(0);
   });
 
   it("Postgres elle bağı tek transaction'da kilitli iletişim, GuardianStudent insert ve koşullu güncelleme ile yazar", async () => {
@@ -125,7 +132,7 @@ describe("StudentContactStore", () => {
     const pool = {
       async query<T>(sql: string, values?: unknown[]) {
         queries.push({ sql, values });
-        if (sql.includes('SELECT "studentId" FROM "StudentContact"')) return { rows: [{ studentId: "student-a" }] as T[] };
+        if (sql.includes('SELECT "studentId", "firstName", "lastName" FROM "StudentContact"')) return { rows: [{ studentId: "student-a" }] as T[] };
         if (sql.includes('INSERT INTO "GuardianStudent"')) return { rows: [{ id: "link-a" }] as T[] };
         if (sql.includes('UPDATE "StudentContact"')) return { rows: updateRows as T[] };
         return { rows: [] as T[] };
@@ -154,11 +161,108 @@ describe("StudentContactStore", () => {
     expect(queries.map((query) => query.sql)).not.toContain("COMMIT");
 
     queries.length = 0;
-    expect(await store.unlinkGuardian("tenant-a", "contact-a", "guardian-a")).toBe(false);
+    expect(await store.unlinkGuardian("tenant-a", "contact-a", "guardian-a")).toEqual({ unlinked: false, guardianStudentRemoved: false });
     const unlink = queries.find((query) => query.sql.includes('UPDATE "StudentContact"'));
     expect(unlink?.sql).toContain('"guardianId"=NULL');
     expect(unlink?.sql).toContain('"guardianId"=$3');
-    expect(unlink?.sql).not.toContain("GuardianStudent");
     expect(unlink?.values).toEqual(["tenant-a", "contact-a", "guardian-a"]);
+    expect(queries.some((query) => query.sql.includes('DELETE FROM "GuardianStudent"'))).toBe(false);
+  });
+
+  it("Postgres bağ kaldırma iletişimi boşaltır, erişim bağını kilitler ve yalnız başka iletişim bağlı değilse siler", async () => {
+    for (const stillReferenced of [false, true]) {
+      const queries: Array<{ sql: string; values?: unknown[] }> = [];
+      const pool = {
+        async query<T>(sql: string, values?: unknown[]) {
+          queries.push({ sql, values });
+          if (sql.includes('UPDATE "StudentContact"')) return { rows: [{ studentId: "student-a" }] as T[] };
+          if (sql.includes('SELECT "id" FROM "GuardianStudent"')) return { rows: [{ id: "link-a" }] as T[] };
+          if (sql.includes("SELECT 1 FROM \"StudentContact\"")) return { rows: (stillReferenced ? [{ "?column?": 1 }] : []) as T[] };
+          if (sql.includes('DELETE FROM "GuardianStudent"')) return { rows: [{ id: "link-a" }] as T[] };
+          return { rows: [] as T[] };
+        },
+      };
+
+      expect(await new PostgresStudentContactStore(pool).unlinkGuardian("tenant-a", "contact-a", "guardian-a"))
+        .toEqual({ unlinked: true, studentId: "student-a", guardianStudentRemoved: !stillReferenced });
+      const sqls = queries.map((query) => query.sql);
+      const update = sqls.findIndex((sql) => sql.includes('UPDATE "StudentContact"'));
+      const lock = sqls.findIndex((sql) => sql.includes('FROM "GuardianStudent"') && sql.includes("FOR UPDATE"));
+      const check = sqls.findIndex((sql) => sql.includes('SELECT 1 FROM "StudentContact"'));
+      const remove = sqls.findIndex((sql) => sql.includes('DELETE FROM "GuardianStudent"'));
+      expect(sqls.indexOf("BEGIN") < update && update < lock && lock < check).toBe(true);
+      expect(check < sqls.indexOf("COMMIT")).toBe(true);
+      if (stillReferenced) expect(remove).toBe(-1);
+      else expect(check < remove && remove < sqls.indexOf("COMMIT")).toBe(true);
+      expect(queries[check]?.values).toEqual(["tenant-a", "student-a", "guardian-a"]);
+      expect(queries[check]?.sql).toContain('"deletedAt" IS NULL');
+    }
+  });
+
+  it("Postgres kullanıcı bağı tek transaction'da veli profili, GUARDIAN üyeliği ve erişim bağını yazar; mevcut üyelikleri silmez", async () => {
+    const run = async (memberships: Array<{ role: string; staffRole: string | null; hasTeacherPersona: boolean; hasStudentPersona: boolean }>, guardianRow?: { id: string }) => {
+      const queries: Array<{ sql: string; values?: unknown[] }> = [];
+      const pool = {
+        async query<T>(sql: string, values?: unknown[]) {
+          queries.push({ sql, values });
+          if (sql.includes('SELECT "studentId", "firstName", "lastName" FROM "StudentContact"')) {
+            return { rows: [{ studentId: "student-a", firstName: "Ayse", lastName: "Veli" }] as T[] };
+          }
+          if (sql.includes('SELECT "id" FROM "User"')) return { rows: [{ id: "user-a" }] as T[] };
+          if (sql.includes('FROM "TenantMembership"') && sql.startsWith("SELECT")) return { rows: memberships as T[] };
+          if (sql.includes('SELECT "id" FROM "Guardian"')) return { rows: (guardianRow ? [guardianRow] : []) as T[] };
+          if (sql.includes('INSERT INTO "Guardian"')) return { rows: [{ id: "guardian-new" }] as T[] };
+          if (sql.includes('UPDATE "User"')) return { rows: [{ membershipVersion: 5 }] as T[] };
+          if (sql.includes('UPDATE "AuthSession"')) return { rows: [{ id: "session-a" }, { id: "session-b" }] as T[] };
+          if (sql.includes('INSERT INTO "GuardianStudent"')) return { rows: [{ id: "link-a" }] as T[] };
+          if (sql.includes('UPDATE "StudentContact"')) return { rows: [{ id: "contact-a" }] as T[] };
+          return { rows: [] as T[] };
+        },
+      };
+      const result = await new PostgresStudentContactStore(pool).linkUserAsGuardianWithStudentLink("tenant-a", "contact-a", "user-a");
+      return { result, queries, sqls: queries.map((query) => query.sql) };
+    };
+    const staff = { role: "TENANT_ADMIN", staffRole: "TENANT_ADMIN", hasTeacherPersona: true, hasStudentPersona: false };
+    const teacherRow = { role: "TEACHER", staffRole: null, hasTeacherPersona: false, hasStudentPersona: false };
+
+    const added = await run([staff, teacherRow]);
+    expect(added.result).toEqual({
+      linked: true, guardianId: "guardian-new", guardianStudentId: "link-a", guardianStudentCreated: true,
+      guardianCreated: true, guardianRoleAdded: true, sessionsRevoked: 2,
+    });
+    const order = [
+      'SELECT "studentId", "firstName", "lastName" FROM "StudentContact"',
+      'SELECT "id" FROM "User"',
+      'FROM "TenantMembership"',
+      'INSERT INTO "Guardian"',
+      'UPDATE "User"',
+      'INSERT INTO "TenantMembership"',
+      'UPDATE "TenantMembership"',
+      'UPDATE "AuthSession"',
+      'INSERT INTO "GuardianStudent"',
+      'UPDATE "StudentContact"',
+    ].map((fragment) => added.sqls.findIndex((sql) => sql.includes(fragment)));
+    expect(order.every((index, position) => index > 0 && (position === 0 || index > order[position - 1]!))).toBe(true);
+    expect(added.sqls.indexOf("BEGIN")).toBeLessThan(order[0]!);
+    expect(added.sqls.indexOf("COMMIT")).toBeGreaterThan(order.at(-1)!);
+    expect(added.sqls.some((sql) => sql.includes('DELETE FROM "TenantMembership"'))).toBe(false);
+    const membershipInsert = added.queries[order[5]!];
+    expect(membershipInsert?.sql).toContain("'GUARDIAN', NULL, false, false, 'ACTIVE'");
+    expect(membershipInsert?.values?.slice(1)).toEqual(["tenant-a", "user-a", 5]);
+    expect(added.queries[order[3]!]?.values?.slice(1)).toEqual(["tenant-a", "Ayse", "Veli", "user-a"]);
+
+    // An existing guardian profile and role are reused: no membership or session writes.
+    const reused = await run([staff, { role: "GUARDIAN", staffRole: null, hasTeacherPersona: false, hasStudentPersona: false }], { id: "guardian-old" });
+    expect(reused.result).toMatchObject({ linked: true, guardianId: "guardian-old", guardianCreated: false, guardianRoleAdded: false, sessionsRevoked: 0 });
+    for (const fragment of ['INSERT INTO "Guardian"', 'UPDATE "User"', 'INSERT INTO "TenantMembership"', 'UPDATE "AuthSession"']) {
+      expect(reused.sqls.some((sql) => sql.includes(fragment))).toBe(false);
+    }
+
+    // Student accounts and users without an active membership are refused before any write.
+    for (const memberships of [[{ role: "STUDENT", staffRole: null, hasTeacherPersona: false, hasStudentPersona: true }], []]) {
+      const refused = await run(memberships);
+      expect(refused.result).toMatchObject({ linked: false, userNotEligible: true });
+      expect(refused.sqls.some((sql) => /INSERT|UPDATE "User"|UPDATE "AuthSession"/.test(sql))).toBe(false);
+    }
   });
 });

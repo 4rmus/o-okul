@@ -8,13 +8,21 @@ import {
   Optional,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import type { StudentContactGuardianLinkResult } from "@o-okul/shared-types";
+import type { StudentContactGuardianLinkRequest, StudentContactGuardianLinkResult } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
+import { type AuthUserStore, authUserStoreToken } from "../auth/auth-user-store.js";
+import { canAttachGuardianRole } from "../auth/tenant-membership-projection.js";
 import type { RequestContext } from "../context/request-context.js";
 import { GuardianService } from "../guardian/guardian.service.js";
 import { IdempotencyService } from "../http/idempotency.js";
+import { type GuardianStore, guardianStoreToken } from "../school/guardian-store.js";
 import { requireTenantWideStaffContext } from "../tenant/tenant-access.js";
-import { type StudentContactStorageRecord, type StudentContactStore, studentContactStoreToken } from "./student-contact-store.js";
+import {
+  type StudentContactGuardianLinkWrite,
+  type StudentContactStorageRecord,
+  type StudentContactStore,
+  studentContactStoreToken,
+} from "./student-contact-store.js";
 import { StudentService } from "./student.service.js";
 
 /**
@@ -22,6 +30,12 @@ import { StudentService } from "./student.service.js";
  * (sibling guardian, or a contact whose email the bulk invite skipped as EMAIL_IN_USE). No automatic matching and no
  * new guardian account here: a guardianId that is not a live guardian of this tenant is a 422. The GuardianStudent link
  * is created with every permission off when missing, in the same transaction as the contact write.
+ *
+ * Product owner decision (2026-10-05): a person who is both staff/teacher and guardian keeps ONE account. Instead of a
+ * guardian the admin may pick an existing user of the tenant (userId); the same transaction then reuses or creates that
+ * user's Guardian profile and adds the GUARDIAN role beside the existing memberships (opened as its own persona, no
+ * capability merge). Unlinking also closes the access: the GuardianStudent link is removed unless another contact of
+ * the same student still points at that guardian. Only LEGAL_GUARDIAN contacts are linked.
  */
 @Injectable()
 export class StudentContactGuardianLinkService {
@@ -29,6 +43,8 @@ export class StudentContactGuardianLinkService {
     private readonly students: StudentService,
     private readonly guardians: GuardianService,
     @Inject(studentContactStoreToken) private readonly contacts: StudentContactStore,
+    @Inject(guardianStoreToken) private readonly guardianStore: GuardianStore,
+    @Inject(authUserStoreToken) private readonly users: AuthUserStore,
     @Optional() private readonly idempotency?: IdempotencyService,
     @Optional() private readonly auditLogs?: AuditLogService,
   ) {}
@@ -37,13 +53,15 @@ export class StudentContactGuardianLinkService {
     context: RequestContext,
     studentId: string,
     contactId: string,
-    guardianId: string,
+    target: StudentContactGuardianLinkRequest,
     idempotencyKey?: string,
   ): Promise<StudentContactGuardianLinkResult> {
     if (!idempotencyKey?.trim()) throw new BadRequestException("IDEMPOTENCY_KEY_REQUIRED");
-    const run = () => this.linkOnce(context, studentId, contactId, guardianId);
+    const run = () => target.userId !== undefined
+      ? this.linkUserOnce(context, studentId, contactId, target.userId)
+      : this.linkOnce(context, studentId, contactId, target.guardianId);
     return this.idempotency
-      ? this.idempotency.run(context, { key: idempotencyKey, operation: "student.contact.guardian-link", request: { studentId, contactId, guardianId } }, run)
+      ? this.idempotency.run(context, { key: idempotencyKey, operation: "student.contact.guardian-link", request: { studentId, contactId, ...target } }, run)
       : run();
   }
 
@@ -81,6 +99,78 @@ export class StudentContactGuardianLinkService {
       throw new ConflictException("STUDENT_CONTACT_GUARDIAN_ALREADY_LINKED");
     }
 
+    await this.recordLinkAudits(context, contact, guardianId, write, "guardian");
+    return { ...unchanged, changed: true, guardianStudentCreated: write.guardianStudentCreated };
+  }
+
+  private async linkUserOnce(
+    context: RequestContext,
+    studentId: string,
+    contactId: string,
+    userId: string,
+  ): Promise<StudentContactGuardianLinkResult> {
+    const contact = await this.findContact(context, studentId, contactId);
+    if (contact.relationType !== "LEGAL_GUARDIAN") throw new UnprocessableEntityException("STUDENT_CONTACT_NOT_LEGAL_GUARDIAN");
+    // Missing, platform (SYSTEM_ADMIN) and other-tenant users answer the same 422 (no cross-tenant existence leak).
+    const user = await this.users.findById(userId);
+    if (!user || user.tenantId !== contact.tenantId) throw new UnprocessableEntityException("STUDENT_CONTACT_USER_NOT_FOUND");
+    if (!canAttachGuardianRole(user)) throw new UnprocessableEntityException("STUDENT_CONTACT_USER_NOT_ELIGIBLE");
+    const unchanged = (guardianId: string) => ({
+      studentId: contact.studentId, contactId: contact.id, guardianId, changed: false, guardianStudentCreated: false,
+      guardianCreated: false, guardianRoleAdded: false,
+    });
+    const userGuardianId = async () => (await this.guardianStore.findByUserId(contact.tenantId, userId))?.id;
+    if (contact.guardianId) {
+      if (contact.guardianId === await userGuardianId()) return unchanged(contact.guardianId);
+      throw new ConflictException("STUDENT_CONTACT_GUARDIAN_ALREADY_LINKED");
+    }
+
+    const write = await this.contacts.linkUserAsGuardianWithStudentLink(contact.tenantId, contact.id, userId);
+    if (write.userNotEligible) throw new UnprocessableEntityException("STUDENT_CONTACT_USER_NOT_ELIGIBLE");
+    if (!write.linked || !write.guardianId) {
+      const current = await this.contacts.findById(contact.tenantId, contact.id);
+      if (!current) throw new NotFoundException("STUDENT_CONTACT_NOT_FOUND");
+      if (current.guardianId && current.guardianId === await userGuardianId()) return unchanged(current.guardianId);
+      throw new ConflictException("STUDENT_CONTACT_GUARDIAN_ALREADY_LINKED");
+    }
+
+    if (write.guardianCreated) {
+      await this.auditLogs?.record({
+        tenantId: contact.tenantId,
+        actorUserId: context.userId,
+        entityType: "Guardian",
+        entityId: write.guardianId,
+        action: "guardian.created",
+        diff: { source: "student_contact.guardian_linked", userBound: true },
+      });
+    }
+    if (write.guardianRoleAdded) {
+      await this.auditLogs?.record({
+        tenantId: contact.tenantId,
+        actorUserId: context.userId,
+        entityType: "User",
+        entityId: userId,
+        action: "user.guardian_role_added",
+        diff: { role: "GUARDIAN", guardianId: write.guardianId, existingRolesKept: true, sessionsRevoked: write.sessionsRevoked },
+      });
+    }
+    await this.recordLinkAudits(context, contact, write.guardianId, write, "user");
+    return {
+      ...unchanged(write.guardianId),
+      changed: true,
+      guardianStudentCreated: write.guardianStudentCreated,
+      guardianCreated: write.guardianCreated,
+      guardianRoleAdded: write.guardianRoleAdded,
+    };
+  }
+
+  private async recordLinkAudits(
+    context: RequestContext,
+    contact: StudentContactStorageRecord,
+    guardianId: string,
+    write: StudentContactGuardianLinkWrite,
+    source: "guardian" | "user",
+  ): Promise<void> {
     if (write.guardianStudentCreated && write.guardianStudentId) {
       await this.auditLogs?.record({
         tenantId: contact.tenantId,
@@ -97,20 +187,31 @@ export class StudentContactGuardianLinkService {
       entityType: "StudentContact",
       entityId: contact.id,
       action: "student_contact.guardian_linked",
-      diff: { studentId: contact.studentId, guardianId, guardianStudentCreated: write.guardianStudentCreated },
+      diff: { studentId: contact.studentId, guardianId, guardianStudentCreated: write.guardianStudentCreated, target: source },
     });
-    return { ...unchanged, changed: true, guardianStudentCreated: write.guardianStudentCreated };
   }
 
   private async unlinkOnce(context: RequestContext, studentId: string, contactId: string): Promise<StudentContactGuardianLinkResult> {
     const contact = await this.findContact(context, studentId, contactId);
-    const result = { studentId: contact.studentId, contactId: contact.id, changed: false, guardianStudentCreated: false };
+    const result = { studentId: contact.studentId, contactId: contact.id, changed: false, guardianStudentCreated: false, guardianStudentRemoved: false };
     if (!contact.guardianId) return result;
-    if (!await this.contacts.unlinkGuardian(contact.tenantId, contact.id, contact.guardianId)) {
+    const guardianId = contact.guardianId;
+    const write = await this.contacts.unlinkGuardian(contact.tenantId, contact.id, guardianId);
+    if (!write.unlinked) {
       const current = await this.contacts.findById(contact.tenantId, contact.id);
       if (!current) throw new NotFoundException("STUDENT_CONTACT_NOT_FOUND");
       if (!current.guardianId) return result;
       throw new ConflictException("STUDENT_CONTACT_GUARDIAN_LINK_CONFLICT");
+    }
+    if (write.guardianStudentRemoved) {
+      await this.auditLogs?.record({
+        tenantId: contact.tenantId,
+        actorUserId: context.userId,
+        entityType: "GuardianStudent",
+        entityId: `${guardianId}:${contact.studentId}`,
+        action: "guardian_student.unlinked",
+        diff: { guardianId, studentId: contact.studentId, source: "student_contact.guardian_unlinked" },
+      });
     }
     await this.auditLogs?.record({
       tenantId: contact.tenantId,
@@ -118,9 +219,9 @@ export class StudentContactGuardianLinkService {
       entityType: "StudentContact",
       entityId: contact.id,
       action: "student_contact.guardian_unlinked",
-      diff: { studentId: contact.studentId, guardianId: contact.guardianId },
+      diff: { studentId: contact.studentId, guardianId, guardianStudentRemoved: write.guardianStudentRemoved },
     });
-    return { ...result, changed: true };
+    return { ...result, changed: true, guardianStudentRemoved: write.guardianStudentRemoved };
   }
 
   private async findContact(context: RequestContext, studentId: string, contactId: string): Promise<StudentContactStorageRecord> {

@@ -5,6 +5,8 @@ import { IdentityInvitationModule } from "../identity-invitation/identity-invita
 import { IdentityProvisioningModule } from "../identity-provisioning/identity-provisioning.module.js";
 import { LicensePersistenceModule } from "../license/license-persistence.module.js";
 import { ReportModule } from "../report/report.module.js";
+import { AuthPersistenceModule } from "../auth/auth-persistence.module.js";
+import { guardianStoreToken } from "../school/guardian-store.js";
 import { guardianStudentStoreToken } from "../school/guardian-student-store.js";
 import { SchoolModule } from "../school/school.module.js";
 import { TeacherModule } from "../teacher/teacher.module.js";
@@ -20,7 +22,7 @@ import { StudentPersistenceModule } from "./student-persistence.module.js";
 import { StudentService } from "./student.service.js";
 
 @Module({
-  imports: [AuditLogModule, GuardianModule, IdentityInvitationModule, IdentityProvisioningModule, LicensePersistenceModule, ReportModule, SchoolModule, StudentPersistenceModule, TeacherModule, UserManagementPersistenceModule],
+  imports: [AuditLogModule, AuthPersistenceModule, GuardianModule, IdentityInvitationModule, IdentityProvisioningModule, LicensePersistenceModule, ReportModule, SchoolModule, StudentPersistenceModule, TeacherModule, UserManagementPersistenceModule],
   controllers: [StudentController, StudentContactController],
   providers: [
     StudentImportService,
@@ -30,7 +32,7 @@ import { StudentService } from "./student.service.js";
     {
       provide: studentContactStoreToken,
       useFactory: createStudentContactStore,
-      inject: [guardianStudentStoreToken],
+      inject: [guardianStudentStoreToken, guardianStoreToken],
     },
     StudentService,
   ],

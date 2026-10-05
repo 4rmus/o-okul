@@ -31,10 +31,18 @@ describe("buildTenantMembershipDualWriteRows", () => {
     ]);
   });
 
+  it("KV-3b: personel/öğretmen veli satırını ayrı ve personasız tutar", () => {
+    expect(buildTenantMembershipDualWriteRows(["TENANT_ADMIN", "TEACHER", "GUARDIAN"])).toEqual([
+      { role: "TENANT_ADMIN", staffRole: "TENANT_ADMIN", hasTeacherPersona: true, hasStudentPersona: false },
+      { role: "TEACHER", staffRole: null, hasTeacherPersona: false, hasStudentPersona: false },
+      { role: "GUARDIAN", staffRole: null, hasTeacherPersona: false, hasStudentPersona: false },
+    ]);
+  });
+
   it.each([
     [["TENANT_ADMIN", "ASSISTANT_ADMIN"], "INVALID_TENANT_ROLE_COMBINATION"],
     [["STUDENT", "TEACHER"], "INVALID_TENANT_ROLE_COMBINATION"],
-    [["GUARDIAN", "TENANT_ADMIN"], "INVALID_TENANT_ROLE_COMBINATION"],
+    [["GUARDIAN", "STUDENT"], "INVALID_TENANT_ROLE_COMBINATION"],
     [["SYSTEM_ADMIN"], "TENANT_ROLE_INVALID"],
   ])("geçersiz kombinasyonu reddeder: %j", (roles, expected) => {
     expect(() => buildTenantMembershipDualWriteRows(roles)).toThrow(expected);

@@ -609,7 +609,7 @@ export class AuthService {
       subjectId: context.subjectId,
       membershipId: context.membershipId,
       activePersona: context.activePersona,
-      availablePersonas: user.membership ? availablePersonasForMembership(user.membership) : undefined,
+      availablePersonas: user.membership ? availablePersonasForUser(user) : undefined,
       capabilities: [...(context.capabilities ?? [])],
       membership: user.membership ? { id: user.membership.id, version: user.membership.version } : undefined,
     };
@@ -849,7 +849,8 @@ export class AuthService {
     return {
       ...payload,
       roles: [...session.roles],
-      campusScope: user.membership?.scopeMode
+      // The campus scope belongs to the staff/teacher membership; a guardian persona sees its own linked students.
+      campusScope: user.membership?.scopeMode && session.activePersona !== "GUARDIAN"
         ? { scopeMode: user.membership.scopeMode, campusIds: [...(user.membership.campusIds ?? [])] }
         : undefined,
       subjectType: session.subjectType,
@@ -1073,7 +1074,7 @@ function resolvePersonaSessionContext(
 ): { membershipId: string; activePersona: ActivePersona; roles: string[] } | null {
   const membership = user.membership;
   if (!membership) return null;
-  const available = availablePersonasForMembership(membership);
+  const available = availablePersonasForUser(user);
   const activePersona = requestedPersona ?? available[0];
   if (!activePersona || !available.includes(activePersona)) return null;
   const roles = activePersona === "STAFF"
@@ -1083,11 +1084,16 @@ function resolvePersonaSessionContext(
   return { membershipId: membership.id, activePersona, roles };
 }
 
-function availablePersonasForMembership(membership: NonNullable<AuthUser["membership"]>): ActivePersona[] {
+function availablePersonasForUser(user: Pick<AuthUser, "roles" | "membership">): ActivePersona[] {
+  const membership = user.membership;
+  if (!membership) return [];
   return [
     ...(membership.staffRole ? ["STAFF" as const] : []),
     ...(membership.hasTeacherPersona ? ["TEACHER" as const] : []),
     ...(membership.hasStudentPersona ? ["STUDENT" as const] : []),
+    // KV-3b: the GUARDIAN membership row sits beside the canonical one and opens as its own persona (last, so login
+    // still defaults to the staff/teacher workspace).
+    ...(!membership.hasStudentPersona && user.roles.includes("GUARDIAN") ? ["GUARDIAN" as const] : []),
   ];
 }
 

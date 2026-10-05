@@ -52,7 +52,7 @@ const tenantSelectionBodySchema = z.object({
 }).strict() satisfies z.ZodType<TenantSelectionRequest>;
 const refreshBodySchema = z.preprocess((value) => value ?? {}, z.object({}).strict()) satisfies z.ZodType<AuthRefreshRequest>;
 const personaSwitchBodySchema = z.object({
-  activePersona: z.enum(["STAFF", "TEACHER", "STUDENT"]),
+  activePersona: z.enum(["STAFF", "TEACHER", "STUDENT", "GUARDIAN"]),
 }).strict() satisfies z.ZodType<PersonaSwitchRequest>;
 const passwordResetRequestBodySchema = z.object({
   tenantSlug: optionalTrimmedString,
@@ -223,7 +223,7 @@ export class AuthController {
 
   @Post("persona/switch")
   @HttpCode(200)
-  @Roles("TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF", "TEACHER", "STUDENT")
+  @Roles("TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF", "TEACHER", "STUDENT", "GUARDIAN")
   async switchPersona(
     @Body(zodBody(personaSwitchBodySchema)) body: PersonaSwitchRequest,
     @Headers("cookie") cookieHeader: string | undefined,

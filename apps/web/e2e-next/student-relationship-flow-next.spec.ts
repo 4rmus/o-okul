@@ -148,7 +148,7 @@ test.describe("Öğrenci ilişki haritası", () => {
       await expect(controls.getByLabel("Yasal temsilci")).toHaveValue("contact-legal");
       await controls.getByLabel("Veli ara").fill("Selin");
       await expect.poll(() => guardianLink.requests.some((request) => request.method === "GET" && request.search.includes("q=Selin"))).toBe(true);
-      await controls.getByLabel("Mevcut veli").selectOption("guardian-sibling");
+      await controls.getByLabel("Veli seçimi").selectOption("guardian-sibling");
       await controls.getByRole("button", { name: "Mevcut veliye bağla" }).click();
       const linkDialog = page.getByRole("dialog", { name: "Mevcut veliye bağla" });
       await expect(linkDialog).toContainText("Veli hesabı açılmaz");
@@ -166,10 +166,42 @@ test.describe("Öğrenci ilişki haritası", () => {
 
       const writes = guardianLink.requests.filter((request) => request.method !== "GET");
       expect(writes).toEqual([
-        { method: "PUT", search: "", body: JSON.stringify({ guardianId: "guardian-sibling" }), idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/) },
-        { method: "DELETE", search: "", body: "", idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/) },
+        { method: "PUT", path: "/students/student-a/contacts/contact-legal/guardian", search: "", body: JSON.stringify({ guardianId: "guardian-sibling" }), idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/) },
+        { method: "DELETE", path: "/students/student-a/contacts/contact-legal/guardian", search: "", body: "", idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/) },
       ]);
       expect(writes[0]?.idempotencyKey).not.toBe(writes[1]?.idempotencyKey);
+    });
+
+    test(`öğretmen/personel olan veli mevcut kullanıcı seçilerek ayrı hesap açılmadan bağlanır (KV-3b, ${viewport.name})`, async ({ page }) => {
+      const guardianLink = { guardianId: undefined as string | undefined, requests: [] as GuardianLinkRequest[] };
+      await openStudentDetail(page, viewport, { guardianLink });
+
+      const controls = page.getByLabel("Veli bağı", { exact: true });
+      const targetSelect = controls.getByLabel("Bağlanacak kişi");
+      await expect(targetSelect.locator("option")).toHaveText(["Mevcut veli", "Mevcut kullanıcı (personel)"]);
+      await targetSelect.selectOption("user");
+      await controls.getByLabel("Kullanıcı ara").fill("Selin");
+      await expect.poll(() => guardianLink.requests.some((request) => request.path === "/tenant-users" && request.search.includes("q=Selin"))).toBe(true);
+      const userSelect = controls.getByLabel("Kullanıcı seçimi");
+      // Student accounts are never offered (the API refuses them as well).
+      await expect(userSelect.locator("option")).toHaveText(["Kullanıcı seçin", "Selin Ak"]);
+      await userSelect.selectOption("user-teacher-parent");
+      await controls.getByRole("button", { name: "Mevcut kullanıcıya bağla" }).click();
+      const linkDialog = page.getByRole("dialog", { name: "Mevcut kullanıcıya bağla" });
+      await expect(linkDialog).toContainText("Ayrı hesap açılmaz");
+      await expect(linkDialog).toContainText("Veli rolü eklenir");
+      await expectNoHorizontalOverflow(page, `student-guardian-user-link-dialog-${viewport.name}`);
+      await linkDialog.getByRole("button", { name: "Bağla" }).click();
+
+      await expect(controls.getByRole("status")).toHaveText("Bağlı veli: Selin Ak");
+      await expect(page.getByText("Kullanıcıya veli rolü eklendi ve iletişim kaydı bağlandı.")).toBeVisible();
+      await expectNoHorizontalOverflow(page, `student-guardian-user-link-${viewport.name}`);
+      await expectNoUnlabeledControls(page, `student-guardian-user-link-${viewport.name}`);
+
+      const writes = guardianLink.requests.filter((request) => request.method !== "GET");
+      expect(writes).toEqual([
+        { method: "PUT", path: "/students/student-a/contacts/contact-legal/guardian", search: "", body: JSON.stringify({ userId: "user-teacher-parent" }), idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/) },
+      ]);
     });
   }
 });
@@ -178,6 +210,7 @@ interface GuardianLinkRequest {
   body: string;
   idempotencyKey: string;
   method: string;
+  path: string;
   search: string;
 }
 
@@ -240,16 +273,24 @@ async function installStudentApiMocks(
       }
     }
     const guardianLink = options.guardianLink;
-    if (guardianLink && (pathName === "/guardians" || pathName === "/students/student-a/contacts/contact-legal/guardian")) {
+    if (guardianLink && (pathName === "/guardians" || pathName === "/tenant-users" || pathName === "/students/student-a/contacts/contact-legal/guardian")) {
       const method = route.request().method();
       guardianLink.requests.push({
         body: route.request().postData() ?? "",
         idempotencyKey: route.request().headers()["idempotency-key"] ?? "",
         method,
+        path: pathName,
         search: url.search,
       });
       if (pathName === "/guardians") {
         await fulfillData(route, [{ firstName: "Selin", id: "guardian-sibling", lastName: "Ak", tenantId: "tenant-flow" }]);
+        return;
+      }
+      if (pathName === "/tenant-users") {
+        await fulfillData(route, [
+          { id: "user-teacher-parent", name: "Selin Ak", roles: ["TEACHER"] },
+          { id: "user-student", name: "Ogrenci Hesap", roles: ["STUDENT"] },
+        ]);
         return;
       }
       guardianLink.guardianId = method === "PUT" ? "guardian-sibling" : undefined;

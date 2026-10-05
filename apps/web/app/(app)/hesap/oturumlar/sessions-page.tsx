@@ -183,6 +183,7 @@ function personaLabel(session: MeSessionRecord) {
   if (session.activePersona === "STAFF") return "Kurum";
   if (session.activePersona === "TEACHER") return "Öğretmen";
   if (session.activePersona === "STUDENT") return "Öğrenci";
+  if (session.activePersona === "GUARDIAN") return "Veli";
   if (session.roles.includes("SYSTEM_ADMIN")) return "Sistem";
   if (session.roles.includes("GUARDIAN")) return "Veli";
   return "Hesap";

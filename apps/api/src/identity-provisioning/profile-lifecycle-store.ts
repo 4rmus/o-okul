@@ -148,6 +148,17 @@ export class PostgresProfileLifecycleStore implements ProfileLifecycleStore {
          WHERE "tenantId" = $1 AND "id" = $2`,
         [input.tenantId, row.userId],
       );
+      // KV-3b: a staff/teacher account may also hold the GUARDIAN role; the memberships that stay must carry the new
+      // user version or the canonical membership fails the auth parity check and locks the account out.
+      await client.query(
+        `UPDATE "TenantMembership" AS m
+         SET "version" = u."membershipVersion",
+             "updatedAt" = now()
+         FROM "User" AS u
+         WHERE m."tenantId" = $1 AND m."userId" = $2 AND m."status" = 'ACTIVE'
+           AND u."tenantId" = m."tenantId" AND u."id" = m."userId"`,
+        [input.tenantId, row.userId],
+      );
       await client.query(
         `UPDATE "AuthSession"
          SET "status" = 'REVOKED',

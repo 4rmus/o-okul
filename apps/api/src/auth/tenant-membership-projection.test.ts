@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertTenantMembershipParity, type CanonicalMembershipProjection } from "./tenant-membership-projection.js";
+import { assertTenantMembershipParity, canAttachGuardianRole, type CanonicalMembershipProjection } from "./tenant-membership-projection.js";
 
 describe("tenant membership auth projection", () => {
   it.each([
@@ -7,6 +7,8 @@ describe("tenant membership auth projection", () => {
     [["ASSISTANT_ADMIN", "TEACHER"], membership("OPERATIONS_STAFF", true), ["ASSISTANT_ADMIN", "TEACHER"]],
     [["FINANCE_STAFF"], membership("FINANCE_STAFF"), ["FINANCE_STAFF"]],
     [["STUDENT"], membership(null, false, true), ["STUDENT"]],
+    // KV-3b: a staff/teacher who is also a parent keeps one account; GUARDIAN sits beside the canonical membership.
+    [["GUARDIAN", "TENANT_ADMIN", "TEACHER"], membership("TENANT_ADMIN", true), ["GUARDIAN", "TEACHER", "TENANT_ADMIN"]],
   ])("canonical alanlarla uyumlu legacy oturum rolünü korur: %j", (roles, canonical, expected) => {
     expect(assertTenantMembershipParity(roles, canonical)).toEqual(expected);
   });
@@ -15,10 +17,25 @@ describe("tenant membership auth projection", () => {
     [["TENANT_ADMIN", "ASSISTANT_ADMIN"], membership("TENANT_ADMIN")],
     [["ASSISTANT_ADMIN"], membership("OPERATIONS_STAFF", true)],
     [["TEACHER"], membership(null, false)],
-    [["GUARDIAN"], membership(null)],
+    [["GUARDIAN", "STUDENT"], membership(null, false, true)],
     [["STUDENT", "TEACHER"], membership(null, true, true)],
   ])("canonical/legacy yetki sapmasını fail-closed reddeder: %j", (roles, canonical) => {
     expect(() => assertTenantMembershipParity(roles, canonical)).toThrow("AUTH_MEMBERSHIP_PARITY_MISMATCH");
+  });
+});
+
+describe("canAttachGuardianRole (KV-3b)", () => {
+  it.each([
+    [{ roles: ["TENANT_ADMIN"], membership: membership("TENANT_ADMIN") }, true],
+    [{ roles: ["TEACHER"], membership: membership(null, true) }, true],
+    [{ roles: ["GUARDIAN"] }, true],
+    [{ roles: ["STUDENT"], membership: membership(null, false, true) }, false],
+    [{ roles: ["SYSTEM_ADMIN"] }, false],
+    // Legacy staff without a canonical membership would union staff and guardian capabilities in one session.
+    [{ roles: ["TENANT_ADMIN"] }, false],
+    [{ roles: [] }, false],
+  ])("%j → %s", (user, expected) => {
+    expect(canAttachGuardianRole(user)).toBe(expected);
   });
 });
 

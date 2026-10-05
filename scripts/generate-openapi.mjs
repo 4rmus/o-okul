@@ -1889,7 +1889,7 @@ const requiredOperationContracts = [
     responseDataRequired: ["accessToken", "session"],
     responseDataForbiddenDeep: authResponseForbiddenDeep,
     fieldChecks: [
-      { path: ["requestBody", "activePersona"], enum: ["STAFF", "TEACHER", "STUDENT"] },
+      { path: ["requestBody", "activePersona"], enum: ["STAFF", "TEACHER", "STUDENT", "GUARDIAN"] },
     ],
   },
   {

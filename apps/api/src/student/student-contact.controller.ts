@@ -30,9 +30,11 @@ const studentContactCreateSchema = z.object({
 const studentContactUpdateSchema = studentContactCreateSchema.partial().refine((input) => Object.keys(input).length > 0, {
   message: "STUDENT_CONTACT_UPDATE_REQUIRED",
 });
-const studentContactGuardianLinkSchema = z.object({
-  guardianId: requiredTrimmedString,
-}).strict() satisfies z.ZodType<StudentContactGuardianLinkRequest>;
+// Exactly one target: an existing guardian, or an existing user of the tenant who gets the GUARDIAN role (KV-3b).
+const studentContactGuardianLinkSchema = z.union([
+  z.object({ guardianId: requiredTrimmedString }).strict(),
+  z.object({ userId: requiredTrimmedString }).strict(),
+]) satisfies z.ZodType<StudentContactGuardianLinkRequest>;
 
 @Controller("students/:studentId/contacts")
 @UseGuards(RolesGuard)
@@ -83,7 +85,7 @@ export class StudentContactController {
     @Body(zodBody(studentContactGuardianLinkSchema)) body: StudentContactGuardianLinkRequest,
     @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<StudentContactGuardianLinkResult> {
-    return this.guardianLinks.link(getRequestContext(), studentId, id, body.guardianId, idempotencyKey);
+    return this.guardianLinks.link(getRequestContext(), studentId, id, body, idempotencyKey);
   }
 
   @Delete(":id/guardian")

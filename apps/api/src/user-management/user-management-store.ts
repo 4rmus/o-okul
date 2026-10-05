@@ -789,10 +789,18 @@ export class PostgresUserManagementStore implements UserManagementStore {
 
       const nextVersion = current.version + 1;
       const canonicalRole = input.staffRole ?? "TEACHER";
+      // KV-3b: the GUARDIAN membership (staff/teacher who is also a parent) is not part of the employee access row;
+      // it is kept and only re-versioned below.
       await client.query(
         `DELETE FROM "TenantMembership"
-         WHERE "tenantId" = $1 AND "userId" = $2 AND "id" <> $3`,
+         WHERE "tenantId" = $1 AND "userId" = $2 AND "id" <> $3 AND "role" <> 'GUARDIAN'`,
         [tenantId, current.userId, membershipId],
+      );
+      await client.query(
+        `UPDATE "TenantMembership"
+         SET "version" = $3, "updatedAt" = now()
+         WHERE "tenantId" = $1 AND "userId" = $2 AND "role" = 'GUARDIAN'`,
+        [tenantId, current.userId, nextVersion],
       );
       const updatedMembership = await client.query<{ id: string }>(
         `UPDATE "TenantMembership"
