@@ -13,7 +13,7 @@ import {
   UserRoundCheck,
   WalletCards,
 } from "lucide-react";
-import { appBrand, appBrandHomeAriaLabel } from "../src/brand.js";
+import { appBrand, appBrandHomeAriaLabel, trialOfferPublished } from "../src/brand.js";
 
 const optikSteps = [
   ["01", "Dosyayı alın", "TXT veya DAT optik verisini sınav kaydına aktarın."],
@@ -93,15 +93,17 @@ const boundaries = [
   },
 ] as const;
 
+const trialFaq = {
+  question: "Deneme hesabı açılabilir mi?",
+  answer: "Evet. Kart bilgisi istemeden 7 gün ve en fazla 100 aktif öğrenciyle deneme hesabı açıyoruz. Deneme hesabını talebiniz üzerine ekibimiz açar.",
+};
+
 const faqs = [
   {
     question: "Fiyat nasıl hesaplanır?",
-    answer: "Yıllık fiyat, aktif öğrenci sayınızın düştüğü kademenin öğrenci başı birim fiyatıyla hesaplanır. Fiyatlar KDV hariçtir; kurulum ücreti yoktur ve tüm modüller dahildir.",
+    answer: "Fiyat kademelidir: ilk 250 öğrenci 280 TL, sonraki 250 öğrenci 250 TL, sonraki 500 öğrenci 220 TL, sonraki 2000 öğrenci 190 TL, sonraki 4000 öğrenci 160 TL üzerinden hesaplanır ve kademe tutarları toplanır. Yıllık en az 25.000 TL'dir; fiyatlar KDV hariçtir, kurulum ücreti yoktur ve tüm modüller dahildir.",
   },
-  {
-    question: "Deneme hesabı açılabilir mi?",
-    answer: "Evet. Kart bilgisi istemeden 7 gün ve en fazla 100 aktif öğrenciyle deneme hesabı açıyoruz. Deneme hesabını talebiniz üzerine ekibimiz açar.",
-  },
+  ...(trialOfferPublished ? [trialFaq] : []),
   {
     question: "Hangi optik dosyalarla başlanabilir?",
     answer: "Demo hazırlığında kullandığınız TXT veya DAT dosya biçimini belirtmeniz yeterlidir. İlk e-postada gerçek öğrenci verisi ya da dosya göndermeyin.",
@@ -227,8 +229,8 @@ export default function HomePage() {
           <div className="next-marketing-section__header">
             <div><p className="next-marketing-kicker">Yayınlanmış fiyat</p><h2 id="pricing-title">Fiyatı aktif öğrenci sayınız belirler.</h2></div>
             <p>
-              Yıllık ve KDV hariç: 1–250 öğrenci için öğrenci başı 280 TL (yıllık en az 25.000 TL); kademe büyüdükçe
-              birim fiyat düşer. Kurulum ücreti yok, tüm modüller dahil.
+              Yıllık ve KDV hariç, kademeli: ilk 250 öğrenci için öğrenci başı 280 TL, sonraki öğrenciler daha düşük
+              birim fiyattan hesaplanır (yıllık en az 25.000 TL). Kurulum ücreti yok, tüm modüller dahil.
             </p>
             <Link className="next-marketing-text-link" href="/fiyatlar">Kademeleri ve hesaplayıcıyı aç<ArrowRight size={17} aria-hidden="true" /></Link>
           </div>

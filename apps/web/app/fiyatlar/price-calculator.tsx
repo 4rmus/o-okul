@@ -24,7 +24,7 @@ export function PriceCalculator() {
             <small>
               {estimate.minimumApplied
                 ? `Yıllık en az ${formatTl(minimumAnnualPrice)} uygulanır.`
-                : `Öğrenci başı ${formatTl(estimate.unitPrice)} × ${new Intl.NumberFormat("tr-TR").format(Number(trimmed))} öğrenci`}
+                : estimate.lines.map((line) => `${new Intl.NumberFormat("tr-TR").format(line.students)} × ${formatTl(line.unitPrice)}`).join(" + ")}
             </small>
           </>
         ) : estimate?.kind === "quote" ? (

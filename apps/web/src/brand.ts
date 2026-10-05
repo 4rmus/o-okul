@@ -25,11 +25,25 @@ Demo görüşmesinde görmek istediğimiz kullanıcı ekranları:
 
 Not: İlk talepte öğrenci bilgisi, TCKN veya dosya göndermeyin.`);
 
-export const quoteRequestHref = mailtoHref(appBrand.demoEmail, `Teklif veya deneme talebi - ${appBrand.name}`, `Merhaba,
+// Ürün sahibi kararı (2026-10-05): kartsız deneme çağrısı şimdilik yayında değil (staging deneme UAT'ı bekleniyor).
+// Fiyat, landing ve /iletisim deneme metinleri yalnız bu sabitle açılır; geri açarken docs/marketing-claims.md'yi de güncelleyin.
+export const trialOfferPublished = false;
+
+export const quoteRequestHref = trialOfferPublished
+  ? mailtoHref(appBrand.demoEmail, `Teklif veya deneme talebi - ${appBrand.name}`, `Merhaba,
 
 ${appBrand.name} için teklif / kartsız deneme talep ediyoruz.
 
 Talep türü (teklif / 7 günlük kartsız deneme):
+Kurum türü ve kademeler:
+Kampüs sayısı:
+Yaklaşık aktif öğrenci sayısı:
+
+Not: İlk talepte öğrenci bilgisi, TCKN veya dosya göndermeyin.`)
+  : mailtoHref(appBrand.demoEmail, `Teklif talebi - ${appBrand.name}`, `Merhaba,
+
+${appBrand.name} için teklif talep ediyoruz.
+
 Kurum türü ve kademeler:
 Kampüs sayısı:
 Yaklaşık aktif öğrenci sayısı:

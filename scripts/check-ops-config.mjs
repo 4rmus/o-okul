@@ -5497,6 +5497,10 @@ for (const token of [
 ]) {
   if (!pricingSource.includes(token)) failures.push(`apps/web/app/fiyatlar/pricing.ts DEC-20261005-01 fiyatından sapmamalı: ${token}`);
 }
+// Ürün sahibi kararı (2026-10-05): kartsız deneme çağrısı staging deneme UAT'ına kadar yayında değil.
+if (!readFileSync("apps/web/src/brand.ts", "utf8").includes("export const trialOfferPublished = false;")) {
+  failures.push("apps/web/src/brand.ts trialOfferPublished = false kalmalı; deneme çağrısı staging UAT ve docs/marketing-claims.md güncellemesiyle açılır.");
+}
 
 if (files[".github/workflows/staging-deploy.yml"].includes("pnpm run ci")) {
   failures.push("staging-deploy workflow tam CI'yi tekrar çalıştırmamalı; başarılı CI run'ı deploy kapısıdır.");

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { CheckCircle2, ShieldCheck } from "lucide-react";
-import { appBrand, appBrandHomeAriaLabel, demoRequestHref, platformSupportHref, privacyRequestHref, quoteRequestHref } from "../../src/brand.js";
+import { appBrand, appBrandHomeAriaLabel, demoRequestHref, platformSupportHref, privacyRequestHref, quoteRequestHref, trialOfferPublished } from "../../src/brand.js";
 import { DemoActions } from "./demo-actions.js";
 
 const preparation = [
@@ -24,7 +24,7 @@ export default function ContactPage() {
       <div id="main-content" tabIndex={-1}>
         <section id="demo" className="next-marketing-section next-marketing-faq" aria-labelledby="contact-title">
           <div className="next-marketing-section__header">
-            <p className="next-marketing-kicker">Demo, teklif ve deneme</p>
+            <p className="next-marketing-kicker">{trialOfferPublished ? "Demo, teklif ve deneme" : "Demo ve teklif"}</p>
             <h1 id="contact-title">Demo veya teklif talebinizi hazırlayın.</h1>
             <p>Görüşme öncesinde aşağıdaki başlıkları düşünmeniz yeterli. Bu sayfa bilgi göndermez, kaydetmez veya ölçüm yapmaz.</p>
           </div>
@@ -45,9 +45,19 @@ export default function ContactPage() {
               <DemoActions email={appBrand.demoEmail} mailtoHref={demoRequestHref} />
             </section>
             <section id="teklif" aria-labelledby="quote-title">
-              <h2 id="quote-title">Teklif veya kartsız deneme</h2>
-              <p>7001 ve üzeri aktif öğrenci için teklif hazırlarız. Kartsız deneme 7 gün ve en fazla 100 aktif öğrenciyle açılır; deneme hesabını ekibimiz kurar.</p>
-              <a className="uh-button uh-button--secondary uh-button--md" href={quoteRequestHref}>Teklif veya deneme iste</a>
+              {trialOfferPublished ? (
+                <>
+                  <h2 id="quote-title">Teklif veya kartsız deneme</h2>
+                  <p>7001 ve üzeri aktif öğrenci için teklif hazırlarız. Kartsız deneme 7 gün ve en fazla 100 aktif öğrenciyle açılır; deneme hesabını ekibimiz kurar.</p>
+                  <a className="uh-button uh-button--secondary uh-button--md" href={quoteRequestHref}>Teklif veya deneme iste</a>
+                </>
+              ) : (
+                <>
+                  <h2 id="quote-title">Teklif</h2>
+                  <p>7001 ve üzeri aktif öğrenci için teklif hazırlarız. Daha küçük kurumlar fiyatı fiyat sayfasındaki hesaplayıcıyla görebilir.</p>
+                  <a className="uh-button uh-button--secondary uh-button--md" href={quoteRequestHref}>Teklif iste</a>
+                </>
+              )}
             </section>
           </div>
         </section>
