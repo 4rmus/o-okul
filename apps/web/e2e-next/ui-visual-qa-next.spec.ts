@@ -94,17 +94,17 @@ test.describe("Faz 9 UI görsel smoke", () => {
     for (const viewport of landingViewports) {
       await page.setViewportSize(viewport);
       await page.goto("/");
-      await expect(page.getByRole("heading", { level: 1, name: /Optik veriyi kontrol edin/ })).toBeVisible();
-      await expect(page.getByRole("region", { name: "Örnek optik işleme akışı" })).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1, name: /Öğrenci takibini tek platformda toplayın/ })).toBeVisible();
+      await expect(page.getByRole("region", { name: "Öğrenci kaydında toplanan bilgiler" })).toBeVisible();
       await expect(page.locator(".next-marketing-product")).toHaveCount(0);
       await expectUiStable(page, `aurora-ops-landing-${viewport.width}`, consoleErrors);
       if (viewport.width === 1280) {
-        await expect(page.getByRole("heading", { level: 1, name: /Optik veriyi kontrol edin/ })).toBeInViewport();
+        await expect(page.getByRole("heading", { level: 1, name: /Öğrenci takibini tek platformda toplayın/ })).toBeInViewport();
         await expect(page.getByRole("link", { name: "Demo talep et" }).first()).toBeInViewport();
-        await expect(page.getByRole("region", { name: "Örnek optik işleme akışı" })).toBeInViewport();
+        await expect(page.getByRole("region", { name: "Öğrenci kaydında toplanan bilgiler" })).toBeInViewport();
         await expectRouteFamilyGolden(
           page,
-          page.getByRole("heading", { level: 1, name: /Optik veriyi kontrol edin/ }),
+          page.getByRole("heading", { level: 1, name: /Öğrenci takibini tek platformda toplayın/ }),
           "route-family-landing-1280.png",
         );
       }

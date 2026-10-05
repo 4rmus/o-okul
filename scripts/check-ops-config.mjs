@@ -2324,7 +2324,10 @@ const expectations = {
   ],
   "apps/web/app/page.tsx": [
     "next-marketing-workflow",
+    "Özel okullar ve eğitim kurumları için",
+    "Öğrenci takibini tek platformda toplayın.",
     "Optik veriyi kontrol edin, rapora dönüştürün.",
+    'href="/fiyatlar"',
     "Dosyayı alın",
     "Eşleşmeleri kontrol edin",
     "Sonucu doğrulayın",
@@ -5462,6 +5465,41 @@ for (const retiredLandingAsset of [
   if (files["apps/web/app/page.tsx"].includes(retiredLandingAsset)) {
     failures.push(`apps/web/app/page.tsx eski sentetik hero asset'ini render etmemeli: ${retiredLandingAsset}`);
   }
+}
+
+// KF-9: public pazarlama yüzeyi kanıtsız iddia taşımaz (docs/marketing-claims.md, DEC-20261004-03/05, DEC-20261005-02).
+const marketingSurfaceFiles = ["apps/web/app/page.tsx", "apps/web/app/fiyatlar/page.tsx", "apps/web/app/iletisim/page.tsx"];
+for (const marketingFile of marketingSurfaceFiles) {
+  const source = readFileSync(marketingFile, "utf8");
+  for (const forbiddenClaim of [
+    /e-Okul/i,
+    /yurt ?dışına çıkmaz/i,
+    /KVKK uyumlu/i,
+    /yüzde yüz güvenli/i,
+    /production-ready/i,
+    /veli uygulaması/i,
+    /otomatik aktarım|senkron/i,
+  ]) {
+    if (forbiddenClaim.test(source)) {
+      failures.push(`${marketingFile} kanıtsız pazarlama iddiası içermemeli: ${forbiddenClaim}`);
+    }
+  }
+}
+const pricingSource = readFileSync("apps/web/app/fiyatlar/pricing.ts", "utf8");
+for (const token of [
+  "{ min: 1, max: 250, unitPrice: 280 }",
+  "{ min: 251, max: 500, unitPrice: 250 }",
+  "{ min: 501, max: 1000, unitPrice: 220 }",
+  "{ min: 1001, max: 3000, unitPrice: 190 }",
+  "{ min: 3001, max: 7000, unitPrice: 160 }",
+  "minimumAnnualPrice = 25_000",
+  "quoteFromStudents = 7001",
+]) {
+  if (!pricingSource.includes(token)) failures.push(`apps/web/app/fiyatlar/pricing.ts DEC-20261005-01 fiyatından sapmamalı: ${token}`);
+}
+// Ürün sahibi kararı (2026-10-05): kartsız deneme çağrısı staging deneme UAT'ına kadar yayında değil.
+if (!readFileSync("apps/web/src/brand.ts", "utf8").includes("export const trialOfferPublished = false;")) {
+  failures.push("apps/web/src/brand.ts trialOfferPublished = false kalmalı; deneme çağrısı staging UAT ve docs/marketing-claims.md güncellemesiyle açılır.");
 }
 
 if (files[".github/workflows/staging-deploy.yml"].includes("pnpm run ci")) {

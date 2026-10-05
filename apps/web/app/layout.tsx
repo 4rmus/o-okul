@@ -19,7 +19,7 @@ export const metadata = {
   applicationName: appBrand.name,
   metadataBase: new URL(appBrand.siteUrl),
   description:
-    "TXT ve DAT optik verisini kontrol ederek Başarı % raporuna dönüştürmek ve öğrenci takibini sürdürmek isteyen eğitim kurumları için.",
+    "Özel okullar ve eğitim kurumları için deneme sonuçları, okul notu, devamsızlık, ödev ve ödeme planını tek öğrenci kaydında toplayan öğrenci takibi.",
   icons: {
     icon: "/icon.svg",
     apple: "/icons/apple-touch-icon.png",

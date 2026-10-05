@@ -205,7 +205,7 @@ function escapeRegExp(value) {
 }
 
 function isMarketingSource(file) {
-  return file.endsWith("/apps/web/app/page.tsx") || file.includes("/apps/web/app/iletisim/");
+  return file.endsWith("/apps/web/app/page.tsx") || file.includes("/apps/web/app/iletisim/") || file.includes("/apps/web/app/fiyatlar/");
 }
 
 function isPortalSource(file) {
