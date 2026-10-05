@@ -8,11 +8,12 @@ import {
   GraduationCap,
   LockKeyhole,
   MessageSquareText,
+  ServerCog,
   ShieldCheck,
   UserRoundCheck,
   WalletCards,
 } from "lucide-react";
-import { appBrand, appBrandHomeAriaLabel } from "../src/brand.js";
+import { appBrand, appBrandHomeAriaLabel, trialOfferPublished } from "../src/brand.js";
 
 const optikSteps = [
   ["01", "Dosyayı alın", "TXT veya DAT optik verisini sınav kaydına aktarın."],
@@ -20,6 +21,14 @@ const optikSteps = [
   ["03", "Sonucu doğrulayın", "Eksik veya hatalı satırları sonuç yayımlanmadan önce inceleyin."],
   ["04", "Raporu oluşturun", "Başarı % karşılaştırmasını Net ve Soru bilgileriyle değerlendirin."],
   ["05", "Takibi planlayın", "Öğrenciye verilecek akademik desteği gelişim geçmişi üzerinden izleyin."],
+] as const;
+
+const studentRecord = [
+  ["01", "Deneme sonuçları", "Optik TXT/DAT denemelerinde Başarı %, Net ve Soru bilgisi."],
+  ["02", "Okul notu", "Yazılı, sözlü ve proje notları denemelerden ayrı kayıtta."],
+  ["03", "Devamsızlık", "Günlük sınıf yoklaması öğrencinin geçmişinde kalır."],
+  ["04", "Ödev", "Atanan ödev ve teslim durumu aynı yerde görünür."],
+  ["05", "Ödeme planı", "Taksit planı ve ödeme durumu takip edilir."],
 ] as const;
 
 const roles = [
@@ -47,7 +56,7 @@ const operations = [
   {
     icon: BookOpenCheck,
     title: "Kurum operasyonu",
-    description: "Öğrenci kayıtları, devam bilgisi ve öğretmen notlarını kurumun günlük işleyişi içinde takip edin.",
+    description: "Öğrenci kayıtları, yoklama, okul notu ve ödevleri kurumun günlük işleyişi içinde takip edin.",
   },
   {
     icon: WalletCards,
@@ -57,7 +66,7 @@ const operations = [
   {
     icon: MessageSquareText,
     title: "İletişim takibi",
-    description: "Kurum içi iletişim kayıtlarını öğrencinin eğitim sürecinden koparmadan düzenleyin.",
+    description: "Duyuru ve destek taleplerini öğrencinin eğitim sürecinden koparmadan düzenleyin.",
   },
 ] as const;
 
@@ -77,9 +86,24 @@ const boundaries = [
     title: "Rapor sürümü korunur",
     description: "Farklı soru sayılarını Başarı % ile karşılaştırırken Net ve Soru bilgisi raporda kalır.",
   },
+  {
+    icon: ServerCog,
+    title: "Türkiye'de barındırma",
+    description: "Verileriniz Türkiye'deki sunucularda barındırılır.",
+  },
 ] as const;
 
+const trialFaq = {
+  question: "Deneme hesabı açılabilir mi?",
+  answer: "Evet. Kart bilgisi istemeden 7 gün ve en fazla 100 aktif öğrenciyle deneme hesabı açıyoruz. Deneme hesabını talebiniz üzerine ekibimiz açar.",
+};
+
 const faqs = [
+  {
+    question: "Fiyat nasıl hesaplanır?",
+    answer: "Fiyat kademelidir: ilk 250 öğrenci 280 TL, sonraki 250 öğrenci 250 TL, sonraki 500 öğrenci 220 TL, sonraki 2000 öğrenci 190 TL, sonraki 4000 öğrenci 160 TL üzerinden hesaplanır ve kademe tutarları toplanır. Yıllık en az 25.000 TL'dir; fiyatlar KDV hariçtir, kurulum ücreti yoktur ve tüm modüller dahildir.",
+  },
+  ...(trialOfferPublished ? [trialFaq] : []),
   {
     question: "Hangi optik dosyalarla başlanabilir?",
     answer: "Demo hazırlığında kullandığınız TXT veya DAT dosya biçimini belirtmeniz yeterlidir. İlk e-postada gerçek öğrenci verisi ya da dosya göndermeyin.",
@@ -109,8 +133,9 @@ export default function HomePage() {
             <span className="next-brand-mark">{appBrand.mark}</span>
             <span>{appBrand.name}</span>
           </Link>
-          <p className="next-marketing-nav__statement">Optik sınav raporlama ve kurum takibi.</p>
+          <p className="next-marketing-nav__statement">Özel okullar için bütüncül öğrenci takibi.</p>
           <div className="next-marketing-nav__actions">
+            <Link className="next-marketing-login next-marketing-nav__wide-link" href="/fiyatlar">Fiyatlar</Link>
             <Link className="next-marketing-login" href="/login">Giriş yap</Link>
             <Link className="uh-button uh-button--primary uh-button--md" href="/iletisim#demo">Demo talep et</Link>
           </div>
@@ -120,21 +145,21 @@ export default function HomePage() {
       <div id="main-content" tabIndex={-1}>
         <section className="next-marketing-hero" aria-labelledby="home-title">
           <div className="next-marketing-hero__copy">
-            <p className="next-marketing-eyebrow">Optik sınavdan öğrenci takibine</p>
-            <h1 id="home-title">Optik veriyi kontrol edin, rapora dönüştürün.</h1>
+            <p className="next-marketing-eyebrow">Özel okullar ve eğitim kurumları için</p>
+            <h1 id="home-title">Öğrenci takibini tek platformda toplayın.</h1>
             <p className="next-marketing-hero__lead">
-              Dershane ve özel öğretim kurumları için TXT/DAT yükleme, hatalı kayıtları ayırma,
-              Başarı % odaklı rapor ve öğrenci takibi.
+              Deneme sonuçları, okul notu, devamsızlık, ödev ve ödeme planı aynı öğrenci kaydında.
+              Yönetici, öğretmen ve öğrenci yalnızca yetkili olduğu bilgiyi görür.
             </p>
             <div className="next-marketing-actions">
               <Link className="uh-button uh-button--primary uh-button--lg" href="/iletisim#demo">
                 <span>Demo talep et</span>
                 <ArrowRight size={18} aria-hidden="true" />
               </Link>
-              <a className="next-marketing-text-link" href="#optik-akis">
-                Optikten rapora akışı gör
+              <Link className="next-marketing-text-link" href="/fiyatlar">
+                Fiyatları gör
                 <ArrowRight size={17} aria-hidden="true" />
-              </a>
+              </Link>
             </div>
             <p className="next-marketing-hero__note">
               <CheckCircle2 size={17} aria-hidden="true" />
@@ -142,11 +167,11 @@ export default function HomePage() {
             </p>
           </div>
 
-          <section className="next-marketing-workflow" aria-label="Örnek optik işleme akışı">
-            <header><span>Örnek çalışma akışı</span><strong>Dosyadan öğrenci takibine</strong></header>
+          <section className="next-marketing-workflow" aria-label="Öğrenci kaydında toplanan bilgiler">
+            <header><span>Tek öğrenci kaydı</span><strong>Öğrencinin bütün takibi</strong></header>
             <ol>
-              {optikSteps.map(([number, title, description], index) => (
-                <li data-current={index === 1 ? "true" : undefined} key={number}>
+              {studentRecord.map(([number, title, description], index) => (
+                <li data-current={index === 0 ? "true" : undefined} key={number}>
                   <span>{number}</span>
                   <div><strong>{title}</strong><small>{description}</small></div>
                   <CheckCircle2 size={18} aria-hidden="true" />
@@ -158,8 +183,8 @@ export default function HomePage() {
 
         <section id="optik-akis" className="next-marketing-section" aria-labelledby="flow-title">
           <div className="next-marketing-section__header">
-            <div><p className="next-marketing-kicker">Beş adımda kontrollü akış</p><h2 id="flow-title">Sonucu yayımlamadan önce veriyi görün ve doğrulayın.</h2></div>
-            <p>Optik dosyanın alınmasından öğrenci takibine kadar her adım aynı sınav kaydı üzerinden ilerler.</p>
+            <div><p className="next-marketing-kicker">Deneme sınavı yapan kurumlar için</p><h2 id="flow-title">Optik veriyi kontrol edin, rapora dönüştürün.</h2></div>
+            <p>TXT/DAT yüklemeden öğrenci takibine kadar her adım aynı sınav kaydı üzerinden ilerler; sonuç yayımlanmadan önce veri doğrulanır.</p>
           </div>
           <div className="next-marketing-steps">
             {optikSteps.map(([number, title, description]) => (
@@ -200,6 +225,17 @@ export default function HomePage() {
           </div>
         </section>
 
+        <section id="fiyat" className="next-marketing-section" aria-labelledby="pricing-title">
+          <div className="next-marketing-section__header">
+            <div><p className="next-marketing-kicker">Yayınlanmış fiyat</p><h2 id="pricing-title">Fiyatı aktif öğrenci sayınız belirler.</h2></div>
+            <p>
+              Yıllık ve KDV hariç, kademeli: ilk 250 öğrenci için öğrenci başı 280 TL, sonraki öğrenciler daha düşük
+              birim fiyattan hesaplanır (yıllık en az 25.000 TL). Kurulum ücreti yok, tüm modüller dahil.
+            </p>
+            <Link className="next-marketing-text-link" href="/fiyatlar">Kademeleri ve hesaplayıcıyı aç<ArrowRight size={17} aria-hidden="true" /></Link>
+          </div>
+        </section>
+
         <section id="sinirlar" className="next-marketing-trust" aria-labelledby="boundaries-title">
           <div className="next-marketing-trust__intro">
             <p className="next-marketing-kicker">Doğrulanabilir kapsam</p>
@@ -222,7 +258,7 @@ export default function HomePage() {
         </section>
 
         <section className="next-marketing-cta" aria-labelledby="demo-title">
-          <div><h2 id="demo-title">Kendi optik sınav akışınızı birlikte değerlendirelim.</h2><p>Kullandığınız dosya biçimini, kontrol adımlarını ve görmek istediğiniz raporları konuşalım. İlk talepte öğrenci verisi paylaşmayın.</p></div>
+          <div><h2 id="demo-title">Kurumunuzun öğrenci takibini birlikte değerlendirelim.</h2><p>Kademelerinizi, öğrenci sayınızı ve öncelikli takip alanlarınızı konuşalım. İlk talepte öğrenci verisi paylaşmayın.</p></div>
           <div className="next-marketing-cta__actions">
             <Link className="uh-button uh-button--primary uh-button--lg" href="/iletisim#demo"><span>Demo talep et</span><ArrowRight size={18} aria-hidden="true" /></Link>
             <Link className="next-marketing-text-link" href="/login">Mevcut kullanıcı girişi</Link>
@@ -231,8 +267,8 @@ export default function HomePage() {
       </div>
 
       <footer className="next-marketing-footer">
-        <div><Link className="next-brand" href="/" aria-label={appBrandHomeAriaLabel}><span className="next-brand-mark">{appBrand.mark}</span><span>{appBrand.name}</span></Link><p>Optik sınav raporlama ve kurum takibi.</p></div>
-        <nav aria-label="Alt navigasyon"><a href="#optik-akis">Optik akış</a><a href="#roller">Kullanıcılar</a><a href="#operasyon">Kurum takibi</a><a href="#sinirlar">Kapsam</a><Link href="/iletisim">İletişim</Link><Link href="/iletisim#kvkk">KVKK başvurusu</Link><Link href="/login">Giriş</Link></nav>
+        <div><Link className="next-brand" href="/" aria-label={appBrandHomeAriaLabel}><span className="next-brand-mark">{appBrand.mark}</span><span>{appBrand.name}</span></Link><p>Özel okullar için bütüncül öğrenci takibi.</p></div>
+        <nav aria-label="Alt navigasyon"><a href="#optik-akis">Optik akış</a><a href="#roller">Kullanıcılar</a><a href="#operasyon">Kurum takibi</a><a href="#sinirlar">Kapsam</a><Link href="/fiyatlar">Fiyatlar</Link><Link href="/iletisim">İletişim</Link><Link href="/iletisim#kvkk">KVKK başvurusu</Link><Link href="/login">Giriş</Link></nav>
         <p className="next-marketing-footer__copyright">© 2026 {appBrand.name}</p>
       </footer>
     </main>

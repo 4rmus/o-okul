@@ -116,7 +116,7 @@ function validateBudgets() {
 
   const landingTokens = [
     "next-marketing-workflow",
-    'aria-label="Örnek optik işleme akışı"',
+    'aria-label="Öğrenci kaydında toplanan bilgiler"',
     "Dosyayı alın",
     "Eşleşmeleri kontrol edin",
     "Sonucu doğrulayın",

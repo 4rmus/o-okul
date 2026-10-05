@@ -7,14 +7,25 @@ durumu `docs/product-journeys-v1.md`, canlılık kanıtı `docs/phase-6-producti
 
 ## Ana Mesaj
 
-**Başlık:** Optik veriyi kontrol edin, rapora dönüştürün.
+**Üst satır:** Özel okullar ve eğitim kurumları için
 
-**Destek metni:** Dershane ve özel öğretim kurumları için TXT/DAT yükleme, hatalı kayıtları ayırma,
-Başarı % odaklı rapor ve öğrenci takibi.
+**Başlık:** Öğrenci takibini tek platformda toplayın.
 
-**CTA:** `Demo talep et`, `Optikten rapora akışı gör` ve mevcut kullanıcılar için `Giriş yap`.
-Ücretsiz deneme, anında kurulum veya canlıya hazır olma iddiası ancak bunları doğrulayan güncel ürün
-ve ortam kanıtı varsa eklenir.
+**Destek metni:** Deneme sonuçları, okul notu, devamsızlık, ödev ve ödeme planı aynı öğrenci kaydında.
+Yönetici, öğretmen ve öğrenci yalnızca yetkili olduğu bilgiyi görür.
+
+Birincil segment tek veya çok kampüslü özel K12 okuldur; dershane ve özel öğretim kurumu ikincil
+segmenttir ve optik TXT/DAT → rapor/karne akışı landing'de ikinci bölüm olarak kalır
+(DEC-20261004-03). Başlık metni KF-9 PR'ında kilitlenir: `scripts/check-ops-config.mjs`,
+`scripts/check-prod-readiness.mjs`, `scripts/check-web-ux-baseline.mjs` ve landing e2e/golden aynı
+PR'da güncellenmeden değiştirilmez.
+
+**CTA:** `Demo talep et`, `Fiyatları gör` (`/fiyatlar`) ve mevcut kullanıcılar için `Giriş yap`.
+Fiyat sayfasında 7001+ için `Teklif talebi hazırla` `/iletisim#teklif` e-posta taslağına gider;
+self-servis kayıt, kart bilgisi veya online ödeme yoktur (DEC-20261004-04). Kartsız deneme çağrısı
+ürün sahibi kararıyla (2026-10-05) staging deneme UAT'ına kadar yayında değildir; fiyat, landing ve
+`/iletisim` deneme metinleri yalnız `apps/web/src/brand.ts` içindeki `trialOfferPublished` sabitiyle
+açılır. Anında kurulum veya canlıya hazır olma iddiası eklenmez.
 
 Hedef pazarlama personaları kurum sahibi, kurum yöneticisi, operasyon çalışanı, finans çalışanı,
 öğretmen ve öğrencidir. `SYSTEM_ADMIN` platform operasyonudur. `GUARDIAN` kurumun açtığı ve öğrenciye
@@ -50,6 +61,10 @@ bağladığı veli hesabıdır (DEC-20261003-01); veli cümlesi staging veli UAT
 | Rapor karşılaştırması | `DEC-20260713-02`, `DEC-20260727-01`; UAT-KURUM-05/06 `CONTRACT_READY_EXTERNAL_NOT_RUN` | "Başarı %, Net/Soru ve standart sapmasız deneme puanıyla gelişimi inceleyin." | "Resmî MEB/ÖSYM puanı" veya farklı soru sayılarında yalnız ham net karşılaştırması |
 | Veli/guardian | `DEC-20261003-01`; KV-1 veli yazma/bağlama/davet yolları LOCAL_TEST; UAT-GUARDIAN-01/02 staging yeniden koşumu `EXTERNAL_NOT_RUN` | Staging `PASS` sonrası: "Veli, kurumun açtığı hesapla yalnız bağlı öğrencisinin kurumun yetkilendirdiği verilerini görür." | "Veli uygulaması", "veliyle mesajlaşma", "anlık bildirim", "online ödeme", veli self-service eşleştirme |
 | Sistem yönetimi | `DEC-20260801-01`; mevcut UAT-SYS-01/02 `PARTIAL`; control-plane geçişi açık | Yalnız iç dokümanda: "Platform operasyonu kurum rollerinden ayrıdır." | `SYSTEM_ADMIN`i müşteri personası veya sınırsız tenant yöneticisi gibi anlatmak |
+| Bütüncül öğrenci takibi (landing başlığı) | `DEC-20261004-03`, `DEC-20261004-06`; UAT-STUDENT-01, UAT-KURUM-04, UAT-KURUM-07, UAT-TEACHER-02 `PASS` (repo içi); okul notu LOCAL_TEST | "Deneme sonuçları, okul notu, devamsızlık, ödev ve ödeme planı aynı öğrenci kaydında." | "e-Okul entegrasyonu", "e-Okul'la otomatik aktarım/senkron", "tüm okul yönetimi tek tuşla" |
+| Fiyat | `DEC-20261005-01`, `DEC-20261004-04`; `apps/web/app/fiyatlar/pricing.ts` + `marketing-context-next.spec.ts` LOCAL_TEST | Ürün sahibi kararı (2026-10-05): kademeli hesap. "Yıllık, KDV hariç, kademeli: ilk 250 öğrenci 280 TL, sonraki 250 öğrenci 250 TL, sonraki 500 öğrenci 220 TL, sonraki 2000 öğrenci 190 TL, sonraki 4000 öğrenci 160 TL; toplam yıllık en az 25.000 TL; 7001+ teklif. Örnek: 1000 öğrenci 242.500 TL. Kurulum ücreti yok, tüm modüller dahil." | Aylık fiyat, indirim/kampanya vaadi, online ödeme veya otomatik fatura; "bütün öğrencilere düşen kademe fiyatı" gibi kademesiz hesap |
+| Kartsız deneme | `DEC-20261004-02`; deneme lisansı LOCAL_TEST, STAGING `EXTERNAL_NOT_RUN`; ürün sahibi kararı (2026-10-05): staging deneme UAT'ına kadar **yayında değil** (`trialOfferPublished = false`) | Şimdilik yok. Staging `PASS` ve sabit açıldıktan sonra: "Kart bilgisi olmadan 7 gün, en fazla 100 aktif öğrenci; deneme hesabını ekibimiz açar." | Sabit kapalıyken fiyat, landing veya `/iletisim`te herhangi bir deneme/kartsız deneme vaadi; "Hemen kendiniz kaydolun", "anında hesap", "deneme bitince verileriniz silinmez" gibi süre/saklama vaadi |
+| Türkiye'de barındırma | `DEC-20261005-02` (K-6; hukukçu teyidi bekliyor, sunucu envanteri STAGING) | "Verileriniz Türkiye'deki sunucularda barındırılır." | "Hiçbir veri yurt dışına çıkmaz", "KVKK uyumlu", "yüzde yüz güvenli" |
 | Canlılık ve hazır olma | UAT-SYS-04 `EXTERNAL_NOT_RUN`; production/pilot/go-live evidence zinciri açık | "Demo isteyin" veya kanıtlanan ortam adıyla sınırlı durum cümlesi | "Production-ready", "go-live onaylı" veya health `200` üzerinden tam hazır iddiası |
 
 `PASS` bu tabloda repo içi davranış kanıtıdır; tek başına staging, provider teslimi, production veya
@@ -62,6 +77,10 @@ satırlarda sonuç garantisi verilmez.
   normal pazarlama metnine taşınmaz.
 - "Anlık", "otomatik", "hatasız", "tam güvenli", "resmî" ve "uyumlu" gibi mutlak nitelemeler
   ölçülebilir, güncel ve ilgili ortama bağlı kanıt olmadan kullanılmaz.
+- Fiyat rakamları yalnız `DEC-20261005-01`'den alınır ve `apps/web/app/fiyatlar/pricing.ts` tek kaynaktır;
+  DEC değişirse sayfa, `scripts/check-ops-config.mjs` fiyat kilidi ve bu matris aynı PR'da güncellenir.
+- Hukukçu K-6 için farklı görüş verirse "Türkiye'deki sunucularda barındırılır" cümlesi landing'den aynı
+  gün kaldırılır (DEC-20261005-02).
 - Veli yalnız kurumun açtığı hesap olarak anılır; veli cümlesi staging veli UAT kanıtı gelmeden landing,
   demo ve satış metnine girmez.
 - Kurumlar arası veri izolasyonu UI görünürlüğüne değil API guard, subject/scope ve RLS kanıtına
