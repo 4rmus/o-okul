@@ -670,7 +670,7 @@ runFinancialRetentionNegativeCheck({
 runFinancialRetentionNegativeCheck({
   label: "Financial retention extra policy field negative",
   path: "docs/evidence-templates/financial-retention.extra-policy-field.tmp.json",
-  expectedFailure: "policyDecision tam 5 alan içermeli.",
+  expectedFailure: "policyDecision tam 6 alan içermeli.",
   mutate: (fixture) => {
     fixture.policyDecision.unexpectedField = true;
   },
@@ -686,7 +686,7 @@ runFinancialRetentionNegativeCheck({
 runFinancialRetentionNegativeCheck({
   label: "Financial retention extra purge behavior negative",
   path: "docs/evidence-templates/financial-retention.extra-purge-behavior.tmp.json",
-  expectedFailure: "purgeBehaviorVerified tam 2 doğrulama içermeli.",
+  expectedFailure: "purgeBehaviorVerified tam 3 doğrulama içermeli.",
   mutate: (fixture) => {
     fixture.purgeBehaviorVerified.push("unexpected_financial_purge_verification");
   },

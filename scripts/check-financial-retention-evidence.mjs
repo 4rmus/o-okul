@@ -13,11 +13,15 @@ const financialRetentionTopLevelKeys = [
   "purgeBehaviorVerified",
   "gaps",
 ];
-const policyDecisionKeys = ["approvedBy", "approvalReference", "retentionPeriodYears", "legalBasis", "purgeException"];
+// Product owner decision (2026-10-05): the institution's own accounting retention (retentionPeriodYears) is met by
+// the handover export delivered before the license-expiry purge; O-Okul keeps no finance record after license end + 91 days.
+const policyDecisionKeys = ["approvedBy", "approvalReference", "retentionPeriodYears", "legalBasis", "purgeException", "platformRetentionDaysAfterLicenseEnd"];
+const platformRetentionDaysAfterLicenseEnd = 91;
 const financialRecordKeys = ["paymentPlans", "installments"];
 const expectedPurgeBehaviorVerifications = [
   "privacy.me.purge_preserves_payment_plans",
   "payment_plan_records_excluded_from_pii_purge",
+  "license_expiry_purge_requires_delivered_export",
 ];
 
 if (!target) {
@@ -187,6 +191,9 @@ function requirePolicyDecision(policy, failures) {
   }
   if (policy.purgeException !== true) {
     failures.push("policyDecision.purgeException true olmalı.");
+  }
+  if (policy.platformRetentionDaysAfterLicenseEnd !== platformRetentionDaysAfterLicenseEnd) {
+    failures.push(`policyDecision.platformRetentionDaysAfterLicenseEnd ${platformRetentionDaysAfterLicenseEnd} olmalı.`);
   }
 }
 

@@ -785,9 +785,15 @@ Minimum kanıt içeriği:
   artifact yazmadan durur.
 - Hedefli payment e2e testi canlı `DATABASE_URL`/`DIRECT_DATABASE_URL`/`NODE_ENV`/`ADMIN_MFA_MODE`/`PERSISTENCE_DRIVER`/`IDEMPOTENCY_STORE`
   ortamından izole edilir; finans kayıt sayımı yine gerçek staging/prod DB bağlantısından okunur.
-- `purgeBehaviorVerified` iki canonical doğrulamayı içerir: ödeme planları self-purge sonrası
-  korunur ve payment plan kayıtları PII purge kapsamı dışında kalır.
-- Rapor top-level 7 alanı, `policyDecision`/`financialRecords` blok shape'leri, iki
+- `purgeBehaviorVerified` üç canonical doğrulamayı içerir: ödeme planları self-purge sonrası
+  korunur, payment plan kayıtları PII purge kapsamı dışında kalır ve lisans sonu imhası teslim edilmiş
+  export olmadan başlamaz (`license_expiry_purge_requires_delivered_export`; generator
+  `src/tenant-fresh-reset-purge.test.ts` db testini de koşar).
+- Ürün sahibi kararı (2026-10-05): finans kayıtları lisans süresince saklanır; `retentionPeriodYears`
+  kurumun kendi muhasebe saklama yükümlülüğüdür ve lisans sonu imhasından önce kuruma teslim edilen
+  dışa aktarımla karşılanır. `policyDecision.platformRetentionDaysAfterLicenseEnd` tam `91` olmalıdır:
+  O-Okul lisans sonu + 91 günden sonra finans kaydı tutmaz.
+- Rapor top-level 7 alanı, `policyDecision` (6 alan)/`financialRecords` blok shape'leri, üç
   `purgeBehaviorVerified` seti ve boş `gaps` listesi template invalid/non-empty gaps negatifleriyle korunur.
 - Gerçek kanıtta karar sahibi ve karar referansı placeholder, `.test`, localhost veya redacted değer
   içeremez; bu gevşetme yalnız template kontrolünde `FINANCIAL_RETENTION_ALLOW_EXAMPLE_EVIDENCE=1`
@@ -2589,33 +2595,63 @@ log satırına tenant id + gün sayısı yazar (`READ ONLY` transaction; silme y
 ekranındaki "İmha adayları" panelinde görünür (kurum adı/kodu, lisans bitişi, gün, tahmini kayıt;
 kişisel veri yok).
 
-Prosedür (staging/prod; her kurum ayrı onaydır, deploy/secret/DB değişikliği değildir):
+Prosedür (staging/prod; her kurum ayrı onaydır, deploy/secret/DB değişikliği değildir). Ürün sahibi
+kararı (2026-10-05): finans, rıza ve AuditLog dahil her şey silinir, ama önce kurumun bütün verisi
+kuruma teslim edilir; tek SYSTEM_ADMIN onayı (step-up + kurum kodu teyidi) yeterlidir.
 
-1. Ürün sahibinden kurum bazında yazılı imha onayı alınır; kurumun yeni lisans talebi olmadığı
-   satış/destek kaydıyla doğrulanır.
-2. Kurum askıya alınır (mevcut lifecycle akışı, `TENANT_LIFECYCLE_CHANGE` step-up). İmha yalnız
+1. Kurumun yeni lisans talebi olmadığı satış/destek kaydıyla doğrulanır.
+2. Veri teslimi: Sistem → Kurumlar → İmha adayları → "Dışa aktar"
+   (`POST /api/v1/tenants/{id}/purge-exports`, yalnız SYSTEM_ADMIN). Dosya kurumun kendi dışa aktarımıyla
+   aynı tablo ve maskeleme kurallarını, ek olarak ödeme hareketlerini (`paymentTransactions`) içerir ve
+   satır sınırı yoktur. Ayrı bir `tenant.data-export.created` AuditLog satırı (export id, SHA-256, tablo
+   sayıları) yazılır. Dosya kuruma güvenli kanalla verilir; O-Okul tarafında kopyası tutulmaz.
+3. Teslim işareti: "Teslimi işaretle" (`POST /api/v1/tenants/{id}/purge-exports/{exportId}/delivery`,
+   yalnız SYSTEM_ADMIN): teslim tarihi, kanal (`SECURE_DOWNLOAD`, `ENCRYPTED_EMAIL`, `PHYSICAL_MEDIA`,
+   `OTHER`) ve isteğe bağlı not. Not kişisel veri içeremez (e-posta, telefon/kimlik benzeri rakam dizisi
+   reddedilir). Her export bir kez işaretlenir; `tenant.data-export.delivered` AuditLog satırı yazılır.
+   Aday listesindeki "Veri teslimi" sütunu teslim tarihini gösterir. Yalnız lisans bitişinden SONRA
+   oluşturulmuş ve teslim edildi işaretlenmiş export imhayı açar; yoksa ön kontrol
+   `EXPORT_RECEIPT_REQUIRED` gösterir ve istek `409 TENANT_PURGE_EXPORT_RECEIPT_REQUIRED` döner.
+   Kurumun muhasebe saklama yükümlülüğü bu teslimle karşılanır; O-Okul lisans sonu + 91 günden sonra
+   finans kaydı tutmaz (`pnpm financial-retention:check`).
+4. Kurum askıya alınır (mevcut lifecycle akışı, `TENANT_LIFECYCLE_CHANGE` step-up). İmha yalnız
    `SUSPENDED` kurumda başlar.
-3. Sistem → Kurumlar → İmha adayları → "İmha onayı": ön kontrol (`clean-reset-preview?preset=LICENSE_EXPIRY_PURGE_V1`)
+5. Sistem → Kurumlar → İmha adayları → "İmha onayı": ön kontrol (`clean-reset-preview?preset=LICENSE_EXPIRY_PURGE_V1`)
    engel göstermemelidir; kurum kodu aynen yazılır, TOTP/yedek kod ile `TENANT_CLEAN_RESET`
    step-up alınır (hedef `preset=LICENSE_EXPIRY_PURGE_V1`, sürüm ve ön kontrol özetine bağlı).
-   İstek `POST /tenants/{id}/clean-reset-jobs` + `Idempotency-Key` ile tek kez gönderilir.
-4. İşlem mevcut sıfırlama motorunda (`tenant-fresh-reset` kuyruğu, `o_okul_reset_worker`) çalışır:
+   İstek `POST /tenants/{id}/clean-reset-jobs` + `Idempotency-Key` ile tek kez gönderilir. İkinci bir
+   platform onayı aranmaz.
+6. İşlem mevcut sıfırlama motorunda (`tenant-fresh-reset` kuyruğu, `o_okul_reset_worker`) çalışır:
    kilit, mutasyon/kuyruk/yazma sessizliği kapıları, şifreli yedek + restore doğrulama makbuzu,
    veritabanı silme, nesne depolama silme ve son kontroller aynen uygulanır. Yazma sessizliği kapısı
    (`RESET_WRITE_QUIESCENCE_UNVERIFIED`) kapalı olduğu sürece imha da başlamaz; bu kapı açılmadan
-   üretimde imha yapılamaz.
-5. Lisans her aşamada yeniden kontrol edilir: oluştururken ve veritabanı aşamasında `Tenant` satır
-   kilidi altında (`o_okul_license_expiry_purge`), lisans dönemi eklemek de önce aynı kilidi alır.
-   Veritabanı aşaması tamamlanmadan lisans yenilenirse işlem `CANCELLED` olur ve hiçbir şey silinmez.
-6. Tamamlanınca kurum `SUSPENDED` bir iz kaydı olarak kalır (ad "İmha edildi", kod `imha-…`, iletişim
+   üretimde imha yapılamaz. İmhada `TENANT_RESET_BACKUP_S3` bucket'ı sürümlü (versioning açık/askıda)
+   ise ön kontrol `RESET_VERSIONED_BACKUP_UNVERIFIED` ile durur; silinen yedek eski sürüm olarak kalmamalıdır.
+7. Lisans ve teslim edilmiş export her aşamada yeniden kontrol edilir (oluştururken `Tenant` satır kilidi
+   altında, worker'da her aşama başında ve veritabanı silmesiyle aynı transaction'da). Lisans ayrıca
+   veritabanı aşamasında `o_okul_license_expiry_purge` içinde aynı kilit altında denetlenir; lisans
+   dönemi eklemek de önce aynı kilidi alır. Export kayıtları append-only AuditLog'dadır, geri alınamaz. Veritabanı aşaması tamamlanmadan lisans yenilenirse işlem `CANCELLED` olur ve
+   hiçbir şey silinmez; iptal edilen işlem kurumun yeniden açılmasını ve cihaz yedeğinden geri yüklemeyi
+   engellemez.
+8. VERIFY: nesnelerin yokluğu ve veritabanı son koşulları doğrulanınca işlem `VERIFY` aşamasına geçer
+   ve hemen ardından `tenant-reset-backups/{operationId}.bin` paketi ile `.restore-verified.json`
+   doğrulaması silinir; her iki anahtarın 404 döndüğü doğrulanır. VERIFY başarısızsa yedek silinmez ve
+   işlem `FAILED` kalır (geri dönüş yedeği korunur). Silme doğrulanamazsa işlem `BLOCKED`/`VERIFY`
+   kalır, makbuz yazılmaz; yeniden deneme paketi okumadan silmeyi tekrarlar.
+9. Tamamlanınca kurum `SUSPENDED` bir iz kaydı olarak kalır (ad "İmha edildi", kod `imha-…`, iletişim
    alanları boş) ve yeniden açılamaz (`TENANT_PURGED`). Lisans dönemleri ve işlem defteri kalır;
-   kuruma ait finans, destek, izin, kullanım, yedekleme işi ve AuditLog satırları silinir. Sistem
-   kapsamında (tenantId NULL) tek bir `tenant.license-expiry-purge.completed` makbuzu kalır: tenant id,
-   kurum kodu SHA-256 özeti, zaman ve silinen kayıt/dosya sayıları.
-7. Kanıt: işlem durumu (`GET /tenants/{id}/clean-reset-jobs/{operationId}` = `COMPLETED`), makbuz
-   AuditLog satırı ve aday listesinden düşme. Gecelik yedeklerdeki kopyalar `BACKUP_RETENTION_DAYS`
-   (7 gün) sonunda düşer; `TENANT_RESET_BACKUP_S3` içindeki `tenant-reset-backups/` paketi için de
-   aynı süreli bucket yaşam döngüsü kuralı tanımlı olmalıdır (doğrulanmadıkça UNPROVEN).
+   kuruma ait finans, destek, izin, kullanım, yedekleme işi ve AuditLog satırları (export kayıtları
+   dahil) silinir. Sistem kapsamında (tenantId NULL) tek bir `tenant.license-expiry-purge.completed`
+   makbuzu kalır: tenant id, kurum kodu SHA-256 özeti, zaman, silinen kayıt/dosya sayıları, teslim
+   edilen export id + teslim tarihi ve `backupDeleted: true` (SQL fonksiyonu bu bayrak olmadan makbuz
+   yazmaz).
+10. Ops sonrası: işlemin geçici restore hedefleri (`o_okul_reset_drill_{operationId}` veritabanı ve
+   `o-okul-reset-drill-{operationId}` bucket'ı) da kurum verisinin tam kopyasını taşır; imha
+   tamamlanınca ikisi de silinir ve silindiği ops kaydına yazılır (bugün otomatik değildir).
+11. Kanıt: işlem durumu (`GET /tenants/{id}/clean-reset-jobs/{operationId}` = `COMPLETED`), makbuz
+   AuditLog satırı (`backupDeleted: true`) ve aday listesinden düşme. Gecelik yedeklerdeki kopyalar
+   `BACKUP_RETENTION_DAYS` (7 gün) sonunda düşer.
 
 Kanıt sınıfı: kod ve testler LOCAL_TEST; `o_okul_license_expiry_purge` fonksiyonunun gerçek
-PostgreSQL üzerinde çalıştırılması EXTERNAL_NOT_RUN; staging/prod imha kanıtı yok.
+PostgreSQL üzerinde ve yedek silmenin gerçek S3 üzerinde çalıştırılması EXTERNAL_NOT_RUN; staging/prod
+imha kanıtı yok.

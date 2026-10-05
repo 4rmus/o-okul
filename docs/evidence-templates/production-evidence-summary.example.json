@@ -649,8 +649,9 @@
         "approvedBy": "finance-ops@example.test",
         "approvalReference": "KVKK-FIN-RET-2026-05",
         "retentionPeriodYears": 10,
-        "legalBasis": "Finansal kayıtlar yasal saklama yükümlülüğü nedeniyle PII purge dışında tutulur.",
-        "purgeException": true
+        "legalBasis": "Finansal kayıtlar lisans süresince PII purge dışında tutulur; kurumun yasal saklama yükümlülüğü lisans sonu imhasından önce kuruma teslim edilen dışa aktarımla karşılanır.",
+        "purgeException": true,
+        "platformRetentionDaysAfterLicenseEnd": 91
       },
       "financialRecords": {
         "paymentPlans": 10,
@@ -658,7 +659,8 @@
       },
       "purgeBehaviorVerified": [
         "privacy.me.purge_preserves_payment_plans",
-        "payment_plan_records_excluded_from_pii_purge"
+        "payment_plan_records_excluded_from_pii_purge",
+        "license_expiry_purge_requires_delivered_export"
       ]
     },
     "uploadAv": {

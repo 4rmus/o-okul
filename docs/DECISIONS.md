@@ -1089,6 +1089,15 @@ Etkilenen ADR: ADR-0010 (imha bir control plane eylemidir)
 İmha otomatik yapılmaz (ürün sahibi kararı, 2026-10-05): sistem 91. günü geçmiş ve yeni lisans dönemi
 olmayan kurumları günlük olarak imha adayı listeler; sistem yöneticisi listeyi görüp her kurum için ayrı
 onay verir ve imha mevcut kurum sıfırlama motoruyla yapılır.
+Ek (ürün sahibi kararı, 2026-10-05): (1) Finans, rıza ve `AuditLog` dahil her şey silinir; ancak imhadan
+önce kurumun bütün verisinin dışa aktarımı kuruma teslim edilmiş olmalıdır. İmha yalnız lisans bitişinden
+sonra alınmış ve sistem yöneticisinin teslim tarihi + kanal (+ kişisel veri içermeyen not) ile "teslim
+edildi" olarak işaretlediği bir dışa aktarım varsa başlar; yoksa `409 TENANT_PURGE_EXPORT_RECEIPT_REQUIRED`.
+Kurumun kendi muhasebe saklama yükümlülüğü bu dışa aktarımla karşılanır; O-Okul lisans sonu + 91 günden
+sonra finans kaydı tutmaz. (2) İmhadan önce alınan şifreli sıfırlama yedeği (`TENANT_RESET_BACKUP_S3`)
+imhanın son kontrolü (VERIFY) başarıyla bitince hemen silinir, yokluğu doğrulanır ve imha makbuzuna
+`backupDeleted: true` yazılır; VERIFY başarısızsa yedek silinmez ve işlem hata durumunda kalır. (3) Tek
+sistem yöneticisi onayı (step-up + kurum kodu teyidi) yeterlidir; çift platform onayı aranmaz.
 Açık soru: Yok.
 Son kontrol: 2026-10-05
 
