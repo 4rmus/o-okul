@@ -1035,8 +1035,12 @@ Karar: Fiyat yıllık, KDV hariç ve TL olarak public fiyat sayfasında yayınla
 sayısı × kademenin öğrenci başı yıllık birim fiyatıdır (DEC-20260801-01 aktif öğrenci kotası; çalışan
 hesapları ücretli koltuk değildir). Kademeler ve birim fiyatlar: 1–250 öğrenci 280 TL (yıllık en az
 25.000 TL), 251–500 öğrenci 250 TL, 501–1000 öğrenci 220 TL, 1001–3000 öğrenci 190 TL, 3001–7000 öğrenci
-160 TL, 7001 ve üzeri teklifle. Birim fiyat kurumun toplam aktif öğrenci sayısının düştüğü kademeden
-uygulanır. Kurulum ücreti ve ek ücret yoktur; tüm modüller dahildir; satış yalnız yıllıktır, aylık
+160 TL, 7001 ve üzeri teklifle. Hesap kademelidir (ürün sahibi kararı, 2026-10-05): her birim fiyat
+yalnız kendi aralığındaki öğrencilere uygulanır, yani ilk 250 öğrenci 280 TL'den, sonraki 250 öğrenci
+250 TL'den, sonraki 500 öğrenci 220 TL'den, sonraki 2000 öğrenci 190 TL'den, sonraki 4000 öğrenci 160 TL'den
+hesaplanır ve toplam yıllık en az 25.000 TL'dir. Böylece öğrenci sayısı arttıkça tutar hiçbir sınırda
+düşmez (ör. 250 öğrenci 70.000 TL, 251 öğrenci 70.250 TL, 1000 öğrenci 242.500 TL). Kartsız deneme
+çağrısı fiyat sayfasında ancak deneme akışı staging'de doğrulandıktan sonra gösterilir. Kurulum ücreti ve ek ücret yoktur; tüm modüller dahildir; satış yalnız yıllıktır, aylık
 gösterim yapılmaz. Kartsız deneme DEC-20261004-02 ile aynıdır (7 gün, en fazla 100 öğrenci).
 Kaynak: Ürün sahibi kararı (2026-10-05). Rakip referansı: K12 dörtlüsü fiyat yayınlamıyor; yayınlayan
 küçük/kurs ürünleri öğrenci başına yaklaşık 180–300 TL/yıl (k12.net.tr/fiyatlar 50 öğrenci 15.000 TL/yıl;
@@ -1082,8 +1086,10 @@ Kaynak: Ürün sahibi kararı (2026-10-05; K-8 sorusu).
 Kanıt: `apps/api/src/license/license-state.ts` (READ_ONLY 14 gün, FROZEN 91. güne kadar, sonra EXPIRED);
 bugün EXPIRED yalnız erişimi kapatır, otomatik veri silme yoktur. Kanıt sınıfı LOCAL_STATIC.
 Etkilenen ADR: ADR-0010 (imha bir control plane eylemidir)
-Açık soru: İmha tamamen otomatik mi, yoksa sistem yöneticisinin onayladığı bir imha listesi üzerinden mi
-çalışır — ayrı dilimde kararlaştırılır.
+İmha otomatik yapılmaz (ürün sahibi kararı, 2026-10-05): sistem 91. günü geçmiş ve yeni lisans dönemi
+olmayan kurumları günlük olarak imha adayı listeler; sistem yöneticisi listeyi görüp her kurum için ayrı
+onay verir ve imha mevcut kurum sıfırlama motoruyla yapılır.
+Açık soru: Yok.
 Son kontrol: 2026-10-05
 
 ### DEC-20261005-04 — Otomatik veli bildirimlerinin varsayılanları (KV-8)
@@ -1097,7 +1103,8 @@ ayrıca bir kez uyarı; eşik kurum ayarıdır, varsayılan 10 gün. (2) Ödeme 
 `canViewFinance=true` bağlı veliye. (3) Not yayını: okul notu yayınlandığında veya düzeltildiğinde
 yayın sürümü başına bir kez. Kanal: push ve e-posta; SMS kapsam dışı. Gönderim mevcut
 `announcement-delivery` kuyruğu ve `notifiedAt` tekilleştirmesiyle yapılır (outbox tablosu yok,
-DEC-20261004-07). Dayanak DEC-20261005-02 (açık rıza aranmaz, tercih ve görünürlük uygulanır).
+DEC-20261004-07). Dayanak DEC-20261005-02 (açık rıza aranmaz, tercih ve görünürlük uygulanır). Lisansı salt okunur, dondurulmuş veya süresi
+dolmuş kurumlara otomatik bildirim gönderilmez (ürün sahibi kararı, 2026-10-05).
 Kaynak: Ürün sahibi kararı (2026-10-05; eşik ve zaman değerleri Claude önerisi, ürün sahibi değiştirebilir).
 Kanıt: KV-8 PR'ında. Kanıt sınıfı LOCAL_STATIC.
 Etkilenen ADR: Yok
