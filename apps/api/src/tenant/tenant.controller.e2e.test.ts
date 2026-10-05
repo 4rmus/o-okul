@@ -122,7 +122,7 @@ describe("TenantController", () => {
     const day = 86_400_000;
     const query = vi.fn(async (sql: string) => ({ rows:
       sql.includes('FROM "Tenant" t') ? [{ id: "tenant-old", name: "Eski Kurum", slug: "eski-kurum", status: "SUSPENDED", lifecycleVersion: 2 }, { id: "tenant-90", name: "Sinir", slug: "sinir", status: "ACTIVE", lifecycleVersion: 0 }]
-        : sql.includes('FROM "LicenseTerm"') ? [{ tenantId: "tenant-old", startsAt: new Date(Date.now() - 500 * day), endsAt: new Date(Date.now() - 92 * day), cancelledAt: null }, { tenantId: "tenant-90", startsAt: new Date(Date.now() - 500 * day), endsAt: new Date(Date.now() - 90 * day), cancelledAt: null }]
+        : sql.includes('FROM "LicenseTerm"') ? [{ tenantId: "tenant-old", startsAt: new Date(Date.now() - 500 * day), endsAt: new Date(Date.now() - 92.5 * day), cancelledAt: null }, { tenantId: "tenant-90", startsAt: new Date(Date.now() - 500 * day), endsAt: new Date(Date.now() - 90 * day), cancelledAt: null }]
           : sql.includes("AS count") ? [{ count: "42" }] : [] }));
     Object.defineProperty(service, "pool", { value: { connect: async () => ({ query, release: vi.fn() }) }, configurable: true });
     try {

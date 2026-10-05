@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { PostgresFreshResetStore, purgeResetDatabase, requireResetLegalClearance, type FreshResetOperation, type FreshResetRequest } from "./tenant-fresh-reset.js";
 import { runFreshReset, type FreshResetServices } from "./tenant-fresh-reset-runner.js";
@@ -11,6 +11,9 @@ const day = 24 * 60 * 60 * 1_000;
 const now = new Date("2026-10-05T12:00:00.000Z");
 const endedDaysAgo = (days: number) => new Date(now.getTime() - days * day).toISOString();
 const term = (days: number, extra: Record<string, unknown> = {}) => ({ startsAt: endedDaysAgo(days + 365), endsAt: endedDaysAgo(days), cancelledAt: null, ...extra });
+// Clearance reads the wall clock; pin it so the day-90/91 boundaries never drift.
+beforeEach(() => { vi.useFakeTimers({ toFake: ["Date"], now }); });
+afterEach(() => { vi.useRealTimers(); });
 const blockOrUsageTables = ["PaymentTransaction", "PaymentInstallment", "PaymentPlan", "SupportTicketComment", "SupportTicketAttachment", "SupportTicket", "WhatsAppConsentEvent", "WhatsAppConsent", "LicenseUsage", "BackupRestoreJob"] as const;
 
 describe("license-expiry purge candidate selection (DEC-20261005-03)", () => {
