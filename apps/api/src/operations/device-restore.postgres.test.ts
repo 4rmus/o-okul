@@ -69,6 +69,8 @@ if(process.env.DEVICE_EXISTING_OBJECTS_REQUIRED==="1"&&(!appUrl||!workerUrl||!ad
       await admin.query('INSERT INTO "TenantFreshResetOperation" (id,"tenantId","actorUserId","idempotencyKey","requestHash","expectedLifecycleVersion","preflightDigest",reason,status) VALUES ($1,$2,$3,$1,$4,0,$4,\'OPERATIONS_REVIEW\',\'BLOCKED\')',[resetId,tenantId,actorId,"a".repeat(64)]);
       await expect(restores.approve(system,tenantId,op.operationId,proof)).rejects.toThrow("DEVICE_RESTORE_RESET_IN_PROGRESS");
       await admin.query('UPDATE "TenantFreshResetOperation" SET status=\'COMPLETED\',phase=\'DONE\' WHERE id=$1',[resetId]);
+      // A cancelled license-expiry purge deleted nothing; it must not lock the device restore forever.
+      await admin.query('INSERT INTO "TenantFreshResetOperation" (id,"tenantId","actorUserId","idempotencyKey","requestHash","expectedLifecycleVersion","preflightDigest",reason,status,preset,phase) VALUES ($1,$2,$3,$1,$4,0,$4,\'LICENSE_EXPIRED\',\'CANCELLED\',\'LICENSE_EXPIRY_PURGE_V1\',\'BACKUP\')',[randomBytes(16).toString("hex"),tenantId,actorId,"b".repeat(64)]);
       await expect(restores.current(owner,other)).rejects.toMatchObject({status:403});
       expect((await restores.approve(system,tenantId,op.operationId,proof)).state).toBe("QUEUED");
       expect((await restores.approve(system,tenantId,op.operationId,proof)).state).toBe("QUEUED");
