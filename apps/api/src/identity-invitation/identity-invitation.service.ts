@@ -239,7 +239,9 @@ export class IdentityInvitationService {
     this.assertStudentPortalEligible(invitation.subjectType, subject);
     const nationalIdEncrypted = "nationalIdEncrypted" in subject ? subject.nationalIdEncrypted : undefined;
     const nationalIdHash = "nationalIdHash" in subject ? subject.nationalIdHash : undefined;
-    if (invitation.subjectType !== "EMPLOYEE" && (!nationalIdEncrypted || !nationalIdHash)) {
+    // DEC-20261003-01: guardian accounts are invited from StudentContact rows, which never carry a T.C. number;
+    // login is tenant code + login name, so a guardian account does not need one.
+    if (invitation.subjectType !== "EMPLOYEE" && invitation.subjectType !== "GUARDIAN" && (!nationalIdEncrypted || !nationalIdHash)) {
       throw new BadRequestException("SUBJECT_NATIONAL_ID_REQUIRED");
     }
 

@@ -906,6 +906,9 @@ model StudentContact {
   canReceiveFinance        Boolean  @default(false)
   consentSource            String?
   consentRecordedAt        DateTime? @db.Timestamptz(6)
+  /// DEC-20261003-01 (KV-3): admin-set link to the guardian account. A raw `(tenantId, guardianId, studentId)`
+  /// FK to `GuardianStudent` in 20261006120000 uses `ON DELETE SET NULL ("guardianId")`, which Prisma cannot model.
+  guardianId               String?
   deletedAt                DateTime? @db.Timestamptz(6)
   createdAt                DateTime @default(now()) @db.Timestamptz(6)
   updatedAt                DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -917,6 +920,7 @@ model StudentContact {
   @@index([tenantId, studentId, deletedAt])
   @@index([tenantId, phoneHash])
   @@index([tenantId, emailHash])
+  @@index([tenantId, guardianId])
 }
 
 model WhatsAppConsent {

@@ -11,6 +11,7 @@ import { TeacherService } from "../teacher/teacher.service.js";
 import {
   StudentImportService,
 } from "./student-import.service.js";
+import { StudentGuardianInvitationService } from "./student-guardian-invitation.service.js";
 import {
   StudentService,
   type StudentBulkEnrollmentInput,
@@ -27,6 +28,8 @@ import type {
   PublicStudentRecord,
   StudentEnrollmentRecord,
   StudentExportResult,
+  StudentGuardianInvitationBulkRequest,
+  StudentGuardianInvitationBulkResult,
   StudentImportDryRunResult,
   StudentImportRequest,
   StudentImportResult,
@@ -110,6 +113,9 @@ const studentBulkEnrollmentBodySchema = studentEnrollmentActionBodySchema.extend
   studentIds: z.array(requiredTrimmedString).optional(),
   useAutomaticClassMapping: z.boolean().optional(),
 }).strict();
+const studentGuardianInvitationBulkBodySchema = z.object({
+  studentIds: z.array(requiredTrimmedString).min(1).max(500),
+}).strict() satisfies z.ZodType<StudentGuardianInvitationBulkRequest>;
 const studentImportBodySchema = z.object({
   fileBase64: requiredTrimmedString,
 }).strict() satisfies z.ZodType<StudentImportRequest>;
@@ -125,6 +131,7 @@ export class StudentController {
     private readonly imports: StudentImportService,
     private readonly guardianService: GuardianService,
     private readonly teacherService: TeacherService,
+    private readonly guardianInvitations: StudentGuardianInvitationService,
   ) {}
 
   @Get()
@@ -220,6 +227,15 @@ export class StudentController {
     @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<StudentBulkEnrollmentResult> {
     return this.students.bulkRenewEnrollments(getRequestContext(), body, idempotencyKey);
+  }
+
+  @Post("guardian-invitations")
+  @RequireCapability("student:manage", "user:manage")
+  inviteGuardians(
+    @Body(zodBody(studentGuardianInvitationBulkBodySchema)) body: StudentGuardianInvitationBulkRequest,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<StudentGuardianInvitationBulkResult> {
+    return this.guardianInvitations.inviteBulk(getRequestContext(), body, idempotencyKey);
   }
 
   @Post("imports/dry-run")

@@ -1960,6 +1960,7 @@ const studentContactRecordSchema = objectSchema({
   canReceiveFinance: { type: "boolean" },
   consentSource: stringSchema(),
   consentRecordedAt: stringSchema({ format: "date-time" }),
+  guardianId: stringSchema(),
   createdAt: stringSchema({ format: "date-time" }),
   updatedAt: stringSchema({ format: "date-time" }),
 }, [
@@ -2803,6 +2804,24 @@ const studentOverviewRecordSchema = objectSchema({
   "teacherNoteCount", "teacherNotes", "contacts", "guardians", "guardianLinks",
   "teacherAssignments", "teachers", "classes", "courses", "terms", "canViewFinance", "activity",
 ]);
+
+const studentGuardianInvitationBulkRequestSchema = objectSchema({
+  studentIds: arraySchema(stringSchema({ minLength: 1 }), { minItems: 1, maxItems: 500 }),
+}, ["studentIds"]);
+
+const studentGuardianInvitationBulkResultSchema = objectSchema({
+  createdCount: integerSchema({ minimum: 0 }),
+  alreadyExistsCount: integerSchema({ minimum: 0 }),
+  skippedCount: integerSchema({ minimum: 0 }),
+  results: arraySchema(objectSchema({
+    studentId: stringSchema(),
+    contactId: stringSchema(),
+    status: { type: "string", enum: ["CREATED", "ALREADY_EXISTS", "SKIPPED"] },
+    reason: { type: "string", enum: ["NO_LEGAL_GUARDIAN_CONTACT", "EMAIL_MISSING", "EMAIL_IN_USE"] },
+    guardianId: stringSchema(),
+    invitationId: stringSchema(),
+  }, ["studentId", "status"])),
+}, ["createdCount", "alreadyExistsCount", "skippedCount", "results"]);
 
 const studentBulkEnrollmentResultSchema = objectSchema({
   updatedCount: integerSchema({ minimum: 0 }),
@@ -4618,6 +4637,12 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/students/imports/dry-run": {
     requestBody: studentImportRequestSchema,
     responseBody: studentImportDryRunResultSchema,
+  },
+  "post /api/v1/students/guardian-invitations": {
+    idempotent: true,
+    idempotencyRequired: true,
+    requestBody: studentGuardianInvitationBulkRequestSchema,
+    responseBody: studentGuardianInvitationBulkResultSchema,
   },
   "post /api/v1/students/enrollments/bulk-renew": {
     idempotent: true,

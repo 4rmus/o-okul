@@ -17,6 +17,7 @@ import type {
   ReportStudentProgress,
   ReportStudentSnapshot,
   StudentEnrollmentRecord,
+  StudentGuardianInvitationBulkResult,
   StudentImportDryRunResult,
   StudentImportResult,
   StudentProfileRecord,
@@ -146,6 +147,7 @@ const emptyBulkEnrollmentAction: BulkEnrollmentActionState = {
 export function StudentsPage() {
   const { auth } = useAuth();
   const canRevealPhone = hasCapabilityForRoles(auth?.session.roles ?? [], "privacy:manage");
+  const canInviteGuardians = hasCapabilityForRoles(auth?.session.roles ?? [], "user:manage");
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { confirm, confirmationDialog } = useConfirmDialog();
@@ -181,6 +183,9 @@ export function StudentsPage() {
     ...emptyBulkEnrollmentAction,
     startsAt: new Date().toISOString().slice(0, 10),
   });
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [isGuardianInviting, setIsGuardianInviting] = useState(false);
+  const [guardianInvitationResult, setGuardianInvitationResult] = useState<StudentGuardianInvitationBulkResult | null>(null);
   const [error, setError] = useState("");
   const rows = studentsQuery.data?.data ?? [];
   const sourceClassIds = [...new Set(rows.map((student) => student.classId).filter((classId): classId is string => Boolean(classId)))].sort();
@@ -277,7 +282,25 @@ export function StudentsPage() {
       ),
     },
   ];
-  const visibleColumns = columns.filter((column) => visibleColumnKeys.includes(column.key));
+  const selectionColumn: DataTableColumn<StudentRecord> = {
+    key: "select",
+    header: "Seç",
+    priority: "primary",
+    render: (student) => (
+      <Checkbox
+        aria-label={`${student.firstName} ${student.lastName} seç`}
+        checked={selectedStudentIds.includes(student.id)}
+        label="Seç"
+        onChange={(event) => setSelectedStudentIds((current) => event.target.checked
+          ? [...current, student.id]
+          : current.filter((id) => id !== student.id))}
+      />
+    ),
+  };
+  const visibleColumns = [
+    ...(canInviteGuardians ? [selectionColumn] : []),
+    ...columns.filter((column) => visibleColumnKeys.includes(column.key)),
+  ];
   const pageClassName = tableDensity === "compact"
     ? "next-students-page next-students-page--compact next-student-growth-list"
     : "next-students-page next-student-growth-list";
@@ -574,6 +597,30 @@ export function StudentsPage() {
     }
   }
 
+  async function handleBulkGuardianInvitation() {
+    if (!auth || isGuardianInviting || selectedStudentIds.length === 0) return;
+
+    const confirmed = await confirm({
+      confirmLabel: "Davet et",
+      description: "Seçili öğrencilerin yasal veli iletişim kayıtlarından veli hesabı açılır ve e-posta daveti gönderilir. Zaten bağlı veliye ikinci davet gönderilmez; SMS ve duyuru izinleri değişmez.",
+      message: `${selectedStudentIds.length} öğrencinin velisi davet edilsin mi?`,
+      title: "Toplu veli davetini onayla",
+    });
+    if (!confirmed) return;
+
+    setError("");
+    setGuardianInvitationResult(null);
+    setIsGuardianInviting(true);
+    try {
+      setGuardianInvitationResult(await inviteStudentGuardians(auth.accessToken, selectedStudentIds, globalThis.crypto.randomUUID()));
+      setSelectedStudentIds([]);
+    } catch {
+      setError("Toplu veli daveti yapılamadı.");
+    } finally {
+      setIsGuardianInviting(false);
+    }
+  }
+
   async function handleStudentImportFile(file: File | undefined) {
     setImportFileBase64("");
     setImportFileLabel("");
@@ -797,6 +844,21 @@ export function StudentsPage() {
                     Listelenenleri geçir
                   </Button>
                 </div>
+                {canInviteGuardians ? (
+                  <div className="next-list-controls" aria-label="Toplu veli daveti">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => void handleBulkGuardianInvitation()}
+                      disabled={isGuardianInviting || selectedStudentIds.length === 0}
+                    >
+                      Seçili öğrencilerin velilerini davet et ({selectedStudentIds.length})
+                    </Button>
+                    {guardianInvitationResult ? (
+                      <p role="status">{formatGuardianInvitationSummary(guardianInvitationResult)}</p>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </details>
             <Button type="button" variant="secondary" onClick={openImportModal}>
@@ -1460,6 +1522,29 @@ async function bulkRenewStudentEnrollments(accessToken: string, input: BulkEnrol
     headers: { "content-type": "application/json" },
     method: "POST",
   });
+}
+
+async function inviteStudentGuardians(accessToken: string, studentIds: string[], idempotencyKey: string) {
+  return apiRequest<StudentGuardianInvitationBulkResult>(accessToken, `${apiBaseUrl}/students/guardian-invitations`, {
+    body: JSON.stringify({ studentIds }),
+    headers: { "content-type": "application/json", "Idempotency-Key": idempotencyKey },
+    method: "POST",
+  });
+}
+
+const guardianInvitationSkipLabels: Record<string, string> = {
+  EMAIL_IN_USE: "e-posta başka hesapta/davette",
+  EMAIL_MISSING: "e-posta yok",
+  NO_LEGAL_GUARDIAN_CONTACT: "yasal veli iletişimi yok",
+};
+
+function formatGuardianInvitationSummary(result: StudentGuardianInvitationBulkResult): string {
+  const reasons = new Map<string, number>();
+  for (const row of result.results) {
+    if (row.status === "SKIPPED" && row.reason) reasons.set(row.reason, (reasons.get(row.reason) ?? 0) + 1);
+  }
+  const reasonText = [...reasons].map(([reason, count]) => `${guardianInvitationSkipLabels[reason] ?? reason}: ${count}`).join(", ");
+  return `Davet gönderildi: ${result.createdCount} · Zaten var: ${result.alreadyExistsCount} · Atlandı: ${result.skippedCount}${reasonText ? ` (${reasonText})` : ""}`;
 }
 
 async function dryRunStudentImport(accessToken: string, fileBase64: string) {
