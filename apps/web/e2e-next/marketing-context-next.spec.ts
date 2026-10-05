@@ -58,7 +58,7 @@ test.describe("Public marketing context", () => {
     await page.goto("/iletisim#demo");
 
     await expect(page.getByRole("heading", { level: 1, name: "Demo veya teklif talebinizi hazırlayın." })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Teklif veya deneme e-postası oluştur" })).toHaveAttribute("href", /^mailto:demo@o-okul\.com\?subject=Teklif/);
+    await expect(page.getByRole("link", { name: "Teklif veya deneme iste" })).toHaveAttribute("href", /^mailto:demo@o-okul\.com\?subject=Teklif/);
     await expect(page.getByRole("heading", { name: "Hazırlık listesi" })).toBeVisible();
     await expect(page.getByRole("heading", { name: /Kişisel veri göndermeyin/ })).toBeVisible();
     await expect(page.getByRole("link", { name: "E-posta taslağı oluştur" })).toHaveAttribute("href", /^mailto:demo@o-okul\.com/);

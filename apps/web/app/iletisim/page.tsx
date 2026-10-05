@@ -47,7 +47,7 @@ export default function ContactPage() {
             <section id="teklif" aria-labelledby="quote-title">
               <h2 id="quote-title">Teklif veya kartsız deneme</h2>
               <p>7001 ve üzeri aktif öğrenci için teklif hazırlarız. Kartsız deneme 7 gün ve en fazla 100 aktif öğrenciyle açılır; deneme hesabını ekibimiz kurar.</p>
-              <a className="uh-button uh-button--secondary uh-button--md" href={quoteRequestHref}>Teklif veya deneme e-postası oluştur</a>
+              <a className="uh-button uh-button--secondary uh-button--md" href={quoteRequestHref}>Teklif veya deneme iste</a>
             </section>
           </div>
         </section>
