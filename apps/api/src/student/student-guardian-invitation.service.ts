@@ -123,7 +123,7 @@ export class StudentGuardianInvitationService {
       }
       guardianId = guardian.id;
     }
-    await this.fillGuardianPhone(context, guardianId, contact);
+    await this.guardians.fillEmptyPhone(context, guardianId, contact.phoneEncrypted && decryptStudentContactValue(contact.phoneEncrypted));
 
     const issued = await this.invitations.create(context, {
       subjectType: "GUARDIAN",
@@ -142,17 +142,6 @@ export class StudentGuardianInvitationService {
       diff: { studentId: contact.studentId, guardianId, invitationId: issued.invitation.id, guardianCreated: !contact.guardianId },
     });
     return { ...row, status: "CREATED", guardianId, invitationId: issued.invitation.id };
-  }
-
-  /**
-   * Product owner decision (2026-10-05): the guardian gets the LEGAL_GUARDIAN contact phone as a contact
-   * field only (never a login name, DEC-20261003-01). A phone already on the guardian is never overwritten.
-   * Set through updateGuardian, not createGuardian, because createGuardian matches existing guardians by phone.
-   */
-  private async fillGuardianPhone(context: RequestContext, guardianId: string, contact: StudentContactStorageRecord): Promise<void> {
-    if (!contact.phoneEncrypted) return;
-    if ((await this.guardians.findGuardian(context, guardianId)).phone) return;
-    await this.guardians.updateGuardian(context, guardianId, { phone: decryptStudentContactValue(contact.phoneEncrypted) });
   }
 
   private async hasAccountOrPendingInvitation(

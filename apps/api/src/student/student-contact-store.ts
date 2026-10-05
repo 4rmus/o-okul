@@ -6,7 +6,12 @@ import { InMemoryAuthUserStore, addInMemoryAuthUserRole } from "../auth/auth-use
 import { canAttachGuardianRole } from "../auth/tenant-membership-projection.js";
 import { type Queryable, type TenantQueryable, withExplicitTenantQuery } from "../db/tenant-query.js";
 import type { GuardianStore } from "../school/guardian-store.js";
-import type { GuardianStudentStore } from "../school/guardian-student-store.js";
+import {
+  type GuardianRoleEndWrite,
+  type GuardianStudentStore,
+  endGuardianRoleWhenUnlinked,
+  lockGuardianUser,
+} from "../school/guardian-student-store.js";
 
 export interface StudentContactStorageRecord {
   id: string;
@@ -58,6 +63,8 @@ export interface StudentContactStore {
    * Clears guardianId only while it still equals expectedGuardianId and, in the same transaction, removes the
    * GuardianStudent access link when this contact flow created it (KV-3c) and no other live contact of the same
    * student still points at that guardian. A pre-existing link (guardian API, bulk invite) keeps its row and permissions.
+   * When that removal was the guardian's last link, the GUARDIAN role of a staff+guardian user ends in the same
+   * transaction (GuardianStudentStore.delete rule, product owner decision 2026-10-05).
    */
   unlinkGuardian(tenantId: string, id: string, expectedGuardianId: string): Promise<StudentContactGuardianUnlinkWrite>;
   softDelete(tenantId: string, id: string): Promise<boolean>;
@@ -78,7 +85,7 @@ export interface StudentContactUserGuardianLinkWrite extends StudentContactGuard
   sessionsRevoked: number;
 }
 
-export interface StudentContactGuardianUnlinkWrite {
+export interface StudentContactGuardianUnlinkWrite extends Partial<GuardianRoleEndWrite> {
   unlinked: boolean;
   studentId?: string;
   guardianStudentRemoved: boolean;
@@ -169,10 +176,11 @@ export class InMemoryStudentContactStore implements StudentContactStore {
     ));
     const link = (await this.guardianStudents?.listByStudent(record.studentId))
       ?.find((candidate) => candidate.tenantId === tenantId && candidate.guardianId === expectedGuardianId);
-    const guardianStudentRemoved = !stillLinked && Boolean(link && this.createdLinkIds.has(link.id))
-      && Boolean(await this.guardianStudents?.delete(expectedGuardianId, record.studentId));
-    if (guardianStudentRemoved && link) this.createdLinkIds.delete(link.id);
-    return { unlinked: true, studentId: record.studentId, guardianStudentRemoved };
+    const removed = !stillLinked && link && this.createdLinkIds.has(link.id)
+      ? await this.guardianStudents?.delete(expectedGuardianId, record.studentId)
+      : undefined;
+    if (removed && link) this.createdLinkIds.delete(link.id);
+    return { unlinked: true, studentId: record.studentId, guardianStudentRemoved: Boolean(removed), ...roleEnd(removed) };
   }
 
   async softDelete(tenantId: string, id: string): Promise<boolean> {
@@ -401,6 +409,7 @@ export class PostgresStudentContactStore implements StudentContactStore {
       );
       const studentId = updated.rows[0]?.studentId;
       if (!studentId) return { unlinked: false, guardianStudentRemoved: false };
+      const guardianUser = await lockGuardianUser(client, expectedGuardianId);
       // Lock the access link first so a concurrent link of a sibling contact commits (and becomes visible) before
       // the "still referenced" check; deleting it while referenced would SET NULL that contact through the FK.
       const link = await client.query<{ id: string; createdByStudentContact: boolean }>(
@@ -420,7 +429,9 @@ export class PostgresStudentContactStore implements StudentContactStore {
         `DELETE FROM "GuardianStudent" WHERE "tenantId"=$1 AND "guardianId"=$2 AND "studentId"=$3 RETURNING "id"`,
         [tenantId, expectedGuardianId, studentId],
       );
-      return { unlinked: true, studentId, guardianStudentRemoved: Boolean(removed.rows[0]) };
+      if (!removed.rows[0]) return { unlinked: true, studentId, guardianStudentRemoved: false };
+      const ended = await endGuardianRoleWhenUnlinked(client, expectedGuardianId, guardianUser);
+      return { unlinked: true, studentId, guardianStudentRemoved: true, ...roleEnd(ended) };
     });
   }
 
@@ -460,6 +471,11 @@ export function createStudentContactStore(guardianStudents?: GuardianStudentStor
   return resolvePersistenceDriver(process.env.STUDENT_CONTACT_STORE) === "postgres"
     ? new PostgresStudentContactStore()
     : new InMemoryStudentContactStore(guardianStudents, guardians);
+}
+
+/** Only carries the role-end fields when the GUARDIAN membership actually ended (keeps the plain unlink shape). */
+function roleEnd(write: GuardianRoleEndWrite | undefined): Partial<GuardianRoleEndWrite> {
+  return write?.guardianRoleRemovedUserId ? write : {};
 }
 
 async function lockUnlinkedContact(

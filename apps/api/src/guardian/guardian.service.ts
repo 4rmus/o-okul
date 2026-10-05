@@ -16,7 +16,12 @@ import { encryptTcIdentity, hashTcIdentity, normalizeTcIdentity } from "../stude
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
 import { type ClassStore, classStoreToken } from "../school/class-store.js";
 import { type GuardianStore, guardianStoreToken } from "../school/guardian-store.js";
-import { type GuardianStudentStore, guardianStudentStoreToken } from "../school/guardian-student-store.js";
+import {
+  type GuardianRoleEndWrite,
+  type GuardianStudentStore,
+  guardianRoleEndedReason,
+  guardianStudentStoreToken,
+} from "../school/guardian-student-store.js";
 import {
   type TeacherAssignmentStore,
   teacherAssignmentStoreToken,
@@ -432,6 +437,31 @@ export class GuardianService {
       action: "guardian_student.unlinked",
       diff: { guardianId: guardian.id, studentId: student.id },
     });
+    await this.recordGuardianRoleRemoved(context, guardian.tenantId, guardian.id, deleted);
+  }
+
+  /** KV-3c audit for the GuardianStudentStore.delete rule: the last link of a staff+guardian user ended GUARDIAN. */
+  async recordGuardianRoleRemoved(context: RequestContext, tenantId: string, guardianId: string, write: GuardianRoleEndWrite): Promise<void> {
+    if (!write.guardianRoleRemovedUserId) return;
+    await this.auditLogs?.record({
+      tenantId,
+      actorUserId: context.userId,
+      entityType: "User",
+      entityId: write.guardianRoleRemovedUserId,
+      action: "user.guardian_role_removed",
+      diff: { role: "GUARDIAN", guardianId, reason: guardianRoleEndedReason, otherRolesKept: true, sessionsRevoked: write.sessionsRevoked },
+    });
+  }
+
+  /**
+   * Product owner decision (2026-10-05, DEC-20261003-01): a LEGAL_GUARDIAN contact phone (already normalized) fills an
+   * empty Guardian.phone as a contact field only, never a login name; a phone already on the guardian is never
+   * overwritten. Set through updateGuardian, not createGuardian, because createGuardian matches guardians by phone.
+   */
+  async fillEmptyPhone(context: RequestContext, guardianId: string, phone: string | undefined): Promise<void> {
+    if (!phone) return;
+    if ((await this.findGuardian(context, guardianId)).phone) return;
+    await this.updateGuardian(context, guardianId, { phone });
   }
 
   private listScopedGuardianIds(context: RequestContext): Promise<Set<string>> {

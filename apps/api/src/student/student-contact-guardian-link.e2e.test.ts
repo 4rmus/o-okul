@@ -5,6 +5,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 import { resetInMemoryAuthUsers, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
+import { maskContactPhone } from "../privacy/contact-mask.js";
 import { registerTestLoginIdentity, testLoginBody } from "../test-auth.js";
 
 describe("Manual StudentContact → existing guardian link API (KV-3b)", () => {
@@ -322,7 +323,7 @@ describe("Manual StudentContact → existing guardian link API (KV-3b)", () => {
     const contactId = await createContact(studentId, {
       firstName: "Personel", lastName: "Veli", relationType: "LEGAL_GUARDIAN", email: "kv3b.personel@example.test", phone: "5551000105",
     });
-    const siblingContactId = await createContact(siblingId, { firstName: "Personel", lastName: "Veli", relationType: "LEGAL_GUARDIAN" });
+    const siblingContactId = await createContact(siblingId, { firstName: "Personel", lastName: "Veli", relationType: "LEGAL_GUARDIAN", phone: "5551000106" });
     const mother = await createContact(studentId, { firstName: "Anne", lastName: "Kayit", relationType: "MOTHER" });
     const staleStaffToken = await login("kv3b-staff-parent@example.test");
 
@@ -356,11 +357,17 @@ describe("Manual StudentContact → existing guardian link API (KV-3b)", () => {
     });
     for (const pii of ["kv3b.personel@example.test", "5551000105", "Personel Veli"]) expect(JSON.stringify(first.body)).not.toContain(pii);
     expect(await guardianLinks(guardianId)).toEqual([expect.objectContaining({ studentId, canViewFinance: false, canReceiveSms: false })]);
+    // Product owner decision (2026-10-05, ek): the empty Guardian.phone gets the contact phone (contact field only).
+    const guardianPhoneMasked = async () => ((await request(server).get(`/guardians/${guardianId}`).set("Authorization", `Bearer ${adminToken}`)
+      .expect(200)).body as { phoneMasked?: string }).phoneMasked;
+    expect(await guardianPhoneMasked()).toBe(maskContactPhone("5551000105"));
     // Same user again is a no-op; a second child reuses the guardian profile and the role.
     await linkUser(contactId, studentId, staffParentId, "kv3b-user-link-b").expect(200)
       .expect(({ body }) => expect(body).toMatchObject({ guardianId, changed: false, guardianCreated: false, guardianRoleAdded: false }));
     await linkUser(siblingContactId, siblingId, staffParentId, "kv3b-user-link-sibling").expect(200)
       .expect(({ body }) => expect(body).toMatchObject({ guardianId, changed: true, guardianCreated: false, guardianRoleAdded: false }));
+    // A phone already on the guardian is never overwritten by another contact's phone.
+    expect(await guardianPhoneMasked()).toBe(maskContactPhone("5551000105"));
 
     // The membership change closes the open session; the next login keeps the staff workspace and offers GUARDIAN.
     await request(server).get("/me/profile").set("Authorization", `Bearer ${staleStaffToken}`).expect(401);
@@ -394,7 +401,7 @@ describe("Manual StudentContact → existing guardian link API (KV-3b)", () => {
     await request(server).get(`/me/guardian/students/${studentId}/overview`).set("Authorization", `Bearer ${guardianToken}`).expect(403);
 
     // The existing staff role is untouched: switching back opens the staff workspace again.
-    await request(server)
+    const staffAgain = await request(server)
       .post("/auth/persona/switch")
       .set("Authorization", `Bearer ${guardianToken}`)
       .set("Cookie", ["csrfToken=kv3b-csrf"])
@@ -402,6 +409,26 @@ describe("Manual StudentContact → existing guardian link API (KV-3b)", () => {
       .send({ activePersona: "STAFF" })
       .expect(200)
       .expect(({ body }) => expect((body as { session: { roles: string[] } }).session.roles).toEqual(["OPERATIONS_STAFF"]));
+    const staffAgainToken = (staffAgain.body as { accessToken: string }).accessToken;
+
+    // KV-3c (product owner decision 2026-10-05, ek): the last link goes, so the GUARDIAN membership ends; staff stays.
+    await unlink(adminToken, siblingId, siblingContactId, "kv3c-user-unlink-last").expect(200)
+      .expect(({ body }) => expect(body).toMatchObject({ changed: true, guardianStudentRemoved: true }));
+    expect(await guardianLinks(guardianId)).toEqual([]);
+    await request(server).get("/me/profile").set("Authorization", `Bearer ${staffAgainToken}`).expect(401);
+    const staffOnlyToken = await login("kv3b-staff-parent@example.test");
+    const staffOnly = await request(server).get("/me/profile").set("Authorization", `Bearer ${staffOnlyToken}`).expect(200);
+    expect(staffOnly.body).toMatchObject({ activePersona: "STAFF", roles: ["OPERATIONS_STAFF"] });
+    expect((staffOnly.body as { availablePersonas?: string[] }).availablePersonas ?? []).not.toContain("GUARDIAN");
+    await request(server)
+      .post("/auth/persona/switch")
+      .set("Authorization", `Bearer ${staffOnlyToken}`)
+      .set("Cookie", ["csrfToken=kv3c-csrf"])
+      .set("X-CSRF-Token", "kv3c-csrf")
+      .send({ activePersona: "GUARDIAN" })
+      .expect(400)
+      .expect(({ body }) => expect(JSON.stringify(body)).toContain("PERSONA_NOT_AVAILABLE"));
+    await request(server).get("/me/profile").set("Authorization", `Bearer ${staffOnlyToken}`).expect(200);
 
     await request(server)
       .get("/audit-logs")
@@ -410,11 +437,26 @@ describe("Manual StudentContact → existing guardian link API (KV-3b)", () => {
       .expect(({ body: logs }) => {
         const rows = (Array.isArray(logs) ? logs : (logs as { items?: unknown[] }).items ?? []) as Array<{ action: string; entityId: string }>;
         expect(rows.filter((row) => row.entityId === guardianId).map((row) => row.action)).toContain("guardian.created");
-        expect(rows.filter((row) => row.entityId === staffParentId).map((row) => row.action)).toContain("user.guardian_role_added");
+        expect(rows.filter((row) => row.entityId === staffParentId).map((row) => row.action))
+          .toEqual(expect.arrayContaining(["user.guardian_role_added", "user.guardian_role_removed"]));
         expect(rows.filter((row) => row.entityId === `${guardianId}:${studentId}`).map((row) => row.action)).toContain("guardian_student.unlinked");
         expect(JSON.stringify(rows)).not.toContain("kv3b.personel@example.test");
         expect(JSON.stringify(rows)).not.toContain("5551000105");
+        expect(JSON.stringify(rows)).not.toContain("5551000106");
       });
+  });
+
+  it("KV-3c: yalnız-veli hesabı guardian API'siyle son bağı kalksa da rolünü ve Guardian kaydını korur", async () => {
+    for (const row of await guardianLinks("guardian-a")) {
+      await request(server).delete(`/guardians/guardian-a/students/${String(row.studentId)}`).set("Authorization", `Bearer ${adminToken}`).expect(204);
+    }
+    expect(await guardianLinks("guardian-a")).toEqual([]);
+    await request(server).get("/guardians/guardian-a").set("Authorization", `Bearer ${adminToken}`).expect(200);
+    const guardianToken = await login("guardian-a@example.test");
+    const profile = await request(server).get("/me/profile").set("Authorization", `Bearer ${guardianToken}`).expect(200);
+    expect(profile.body).toMatchObject({ roles: ["GUARDIAN"], subjectType: "GUARDIAN", subjectId: "guardian-a" });
+    await request(server).get("/me/guardian/students").set("Authorization", `Bearer ${guardianToken}`).expect(200)
+      .expect(({ body }) => expect(body).toEqual([]));
   });
 
   it("kurum sahibine veli rolü eklemek owner:manage ister; yetkisiz yönetici hiçbir şey yazmaz ve oturum kapatmaz", async () => {

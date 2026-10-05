@@ -795,6 +795,23 @@ artar ve tüm açık oturumlar kapanır; sonraki giriş yalnız `GUARDIAN` rolü
 (`student-contact-guardian-link.e2e.test.ts`, `student-contact-store.test.ts`,
 `user-management-store.test.ts`). Kanıt sınıfı LOCAL_TEST (Postgres yolları sahte havuzla LOCAL_STATIC);
 CI, STAGING ve PRODUCTION UNPROVEN.
+KV-3c ek (ürün sahibi kararı 2026-10-05): (6) Bir velinin SON `GuardianStudent` bağı kalktığında (iletişim
+bağını kaldırma `DELETE /students/{studentId}/contacts/{id}/guardian` ve guardian API'si
+`DELETE /guardians/{id}/students/{studentId}`; ikisi de `GuardianStudentStore.delete` kuralı) aynı
+transaction'da: veliye bağlı kullanıcı `GUARDIAN` dışında başka bir `ACTIVE` üyeliğe (personel/öğretmen)
+sahipse `GUARDIAN` üyeliği `ENDED` olur (`endedReason=LAST_GUARDIAN_STUDENT_LINK_REMOVED`), diğer üyelikler
+yalnız ortak sürümü alır, `User.membershipVersion` artar ve açık oturumlar kapanır; `User.accountStatus` ve
+`Guardian` kaydı değişmez. Yalnız-veli hesabı (başka `ACTIVE` üyeliği olmayan; toplu davetle açılmış veli
+ve personel üyeliği sona ermiş eski personel+veli dahil) rolünü ve `Guardian` kaydını korur, boş listeyle
+kalır. Kilit sırası iletişim → kullanıcı → `GuardianStudent` (KV-3b kullanıcı bağlama ile aynı). Audit:
+`user.guardian_role_removed`. Yeniden bağlama rolü KV-3b yoluyla tekrar açar. (7) Personel yolundan
+(`userId`) bağlanan velinin `Guardian.phone` alanı boşsa `LEGAL_GUARDIAN` iletişim telefonu toplu davetteki
+kuralla kopyalanır (`GuardianService.fillEmptyPhone`: şifreli telefon çözülür, mevcut normalizasyon, dolu
+telefon ezilmez, yanıtta telefon yok); telefonla eşleştirme yapılmaz. Kanıt: `guardian-student-store.test.ts`,
+`student-contact-store.test.ts`, `student-contact-guardian-link.e2e.test.ts`,
+`student-guardian-invitation.service.test.ts`. Kanıt sınıfı LOCAL_TEST (Postgres yolları sahte havuzla
+LOCAL_STATIC); CI, STAGING ve PRODUCTION UNPROVEN. Açık soru: yalnız-veli tanımına `ENDED` personel
+üyeliği olan eski personelin dahil edilmesi (rol korunur) ürün sahibi onayı bekliyor.
 Ürün sahibi kararı (2026-10-05): veli daveti kabulünde T.C. şartının kaldırılması onaylandı; e-postası
 olmayan `LEGAL_GUARDIAN` satırının `EMAIL_MISSING` ile atlanması kabul edildi. Toplu davette
 `LEGAL_GUARDIAN` iletişiminin telefonu yalnız iletişim alanı olarak `Guardian.phone` alanına kopyalanır

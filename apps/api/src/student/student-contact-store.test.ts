@@ -216,6 +216,9 @@ describe("StudentContactStore", () => {
       const check = sqls.findIndex((sql) => sql.includes('SELECT 1 FROM "StudentContact"'));
       const remove = sqls.findIndex((sql) => sql.includes('DELETE FROM "GuardianStudent"'));
       expect(sqls.indexOf("BEGIN") < update && update < lock && lock < sqls.indexOf("COMMIT")).toBe(true);
+      // KV-3c: the guardian's user row is locked before the link row (contact -> user -> GuardianStudent order).
+      const userLock = sqls.findIndex((sql) => sql.includes("FOR UPDATE OF u"));
+      expect(update < userLock && userLock < lock).toBe(true);
       if (!createdByStudentContact) {
         expect(remove).toBe(-1);
         continue;

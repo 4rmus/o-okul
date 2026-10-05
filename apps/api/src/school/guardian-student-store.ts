@@ -3,6 +3,8 @@ import type { GuardianStudentRecord } from "@o-okul/shared-types";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type Queryable, type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
+import { InMemoryAuthUserStore, removeInMemoryAuthUserRole } from "../auth/auth-user-store.js";
+import type { GuardianStore } from "./guardian-store.js";
 
 export type GuardianStudentInput = Pick<GuardianStudentRecord, "tenantId" | "guardianId" | "studentId"> &
   Partial<Pick<
@@ -15,8 +17,21 @@ export interface GuardianStudentStore {
   listByStudent(studentId: string): Promise<GuardianStudentRecord[]>;
   create(input: GuardianStudentInput): Promise<GuardianStudentRecord>;
   update(guardianId: string, studentId: string, input: Partial<GuardianStudentInput>): Promise<GuardianStudentRecord | undefined>;
-  delete(guardianId: string, studentId: string): Promise<boolean>;
+  /**
+   * Removes the link; undefined when there was none. Product owner decision (2026-10-05, KV-3c): when this was the
+   * guardian's last link and the user behind the guardian also holds another ACTIVE (staff/teacher) membership, the
+   * GUARDIAN membership ends in the same transaction (version bump, sessions closed). A guardian-only user keeps it.
+   */
+  delete(guardianId: string, studentId: string): Promise<GuardianRoleEndWrite | undefined>;
 }
+
+export interface GuardianRoleEndWrite {
+  /** Set only when the GUARDIAN membership of this user ended because its last GuardianStudent link went. */
+  guardianRoleRemovedUserId?: string;
+  sessionsRevoked: number;
+}
+
+export const guardianRoleEndedReason = "LAST_GUARDIAN_STUDENT_LINK_REMOVED";
 
 export const guardianStudentStoreToken = Symbol("GuardianStudentStore");
 
@@ -45,6 +60,9 @@ const demoLinks: GuardianStudentRecord[] = [
 
 export class InMemoryGuardianStudentStore implements GuardianStudentStore {
   private readonly links = demoLinks.map((record) => ({ ...record }));
+
+  /** guardians is only needed to end the GUARDIAN role after the last link (the module wires the shared store). */
+  constructor(private readonly guardians?: GuardianStore) {}
 
   async listByGuardian(guardianId: string): Promise<GuardianStudentRecord[]> {
     return this.links.filter((link) => link.guardianId === guardianId);
@@ -90,14 +108,21 @@ export class InMemoryGuardianStudentStore implements GuardianStudentStore {
     return updated;
   }
 
-  async delete(guardianId: string, studentId: string): Promise<boolean> {
+  async delete(guardianId: string, studentId: string): Promise<GuardianRoleEndWrite | undefined> {
     const index = this.links.findIndex((link) => link.guardianId === guardianId && link.studentId === studentId);
     if (index === -1) {
-      return false;
+      return undefined;
     }
 
     this.links.splice(index, 1);
-    return true;
+    const none = { sessionsRevoked: 0 };
+    if (this.links.some((link) => link.guardianId === guardianId)) return none;
+    const guardian = await this.guardians?.findById(guardianId);
+    const user = guardian?.userId ? await new InMemoryAuthUserStore().findById(guardian.userId) : undefined;
+    if (!user || user.tenantId !== guardian?.tenantId || !keepsOtherRole(user.roles)) return none;
+    // The in-memory version bump makes every open session fail the membership check (same effect as revoking).
+    removeInMemoryAuthUserRole(user.tenantId, user.id, "GUARDIAN");
+    return { guardianRoleRemovedUserId: user.id, sessionsRevoked: 0 };
   }
 }
 
@@ -190,8 +215,9 @@ export class PostgresGuardianStudentStore implements GuardianStudentStore {
     });
   }
 
-  async delete(guardianId: string, studentId: string): Promise<boolean> {
+  async delete(guardianId: string, studentId: string): Promise<GuardianRoleEndWrite | undefined> {
     return withTenantQuery(this.pool, async (client) => {
+      const guardianUser = await lockGuardianUser(client, guardianId);
       const result = await client.query<GuardianStudentRow>(
         `DELETE FROM "GuardianStudent"
          WHERE "guardianId" = $1
@@ -199,15 +225,88 @@ export class PostgresGuardianStudentStore implements GuardianStudentStore {
          RETURNING *`,
         [guardianId, studentId],
       );
-      return result.rows.length > 0;
+      if (result.rows.length === 0) return undefined;
+      return endGuardianRoleWhenUnlinked(client, guardianId, guardianUser);
     });
   }
 }
 
-export function createGuardianStudentStore(): GuardianStudentStore {
+export function createGuardianStudentStore(guardians?: GuardianStore): GuardianStudentStore {
   return resolvePersistenceDriver(process.env.GUARDIAN_STUDENT_STORE) === "postgres"
     ? new PostgresGuardianStudentStore()
-    : new InMemoryGuardianStudentStore();
+    : new InMemoryGuardianStudentStore(guardians);
+}
+
+/** Only a user that keeps another ACTIVE membership loses GUARDIAN; a guardian-only account keeps its role. */
+function keepsOtherRole(activeRoles: readonly string[]): boolean {
+  return activeRoles.includes("GUARDIAN") && activeRoles.some((role) => role !== "GUARDIAN");
+}
+
+/**
+ * Locks the User row behind a guardian profile before any GuardianStudent row, the same order as the KV-3b user link
+ * (contact -> user -> GuardianStudent), so a concurrent link and unlink of the same person serialize instead of
+ * deadlocking. undefined for a guardian without a user.
+ */
+export async function lockGuardianUser(client: Queryable, guardianId: string): Promise<{ tenantId: string; userId: string } | undefined> {
+  const result = await client.query<{ tenantId: string; userId: string }>(
+    `SELECT u."tenantId", u."id" AS "userId"
+     FROM "Guardian" g
+     JOIN "User" u ON u."tenantId" = g."tenantId" AND u."id" = g."userId"
+     WHERE g."id" = $1
+     FOR UPDATE OF u`,
+    [guardianId],
+  );
+  return result.rows[0];
+}
+
+/**
+ * Product owner decision (2026-10-05, KV-3c): after a GuardianStudent delete in the same transaction, ends the
+ * GUARDIAN membership when the guardian has no link left and the (locked) user keeps another ACTIVE membership. Other
+ * memberships are not changed beyond the shared version (same pattern as the KV-3b role add); open sessions close.
+ */
+export async function endGuardianRoleWhenUnlinked(
+  client: Queryable,
+  guardianId: string,
+  user: { tenantId: string; userId: string } | undefined,
+): Promise<GuardianRoleEndWrite> {
+  const none = { sessionsRevoked: 0 };
+  if (!user) return none;
+  const remaining = await client.query(
+    `SELECT 1 FROM "GuardianStudent" WHERE "tenantId" = $1 AND "guardianId" = $2 LIMIT 1`,
+    [user.tenantId, guardianId],
+  );
+  if (remaining.rows[0]) return none;
+  const memberships = await client.query<{ role: string }>(
+    `SELECT "role"::text AS role FROM "TenantMembership"
+     WHERE "tenantId" = $1 AND "userId" = $2 AND "status" = 'ACTIVE'
+     FOR UPDATE`,
+    [user.tenantId, user.userId],
+  );
+  if (!keepsOtherRole(memberships.rows.map((row) => row.role))) return none;
+
+  const version = (await client.query<{ membershipVersion: number }>(
+    `UPDATE "User" SET "membershipVersion" = "membershipVersion" + 1, "updatedAt" = now()
+     WHERE "tenantId" = $1 AND "id" = $2 RETURNING "membershipVersion"`,
+    [user.tenantId, user.userId],
+  )).rows[0]?.membershipVersion;
+  if (version === undefined) throw new Error("GUARDIAN_ROLE_END_FAILED");
+  await client.query(
+    `UPDATE "TenantMembership"
+     SET "status" = 'ENDED', "endsAt" = now(), "endedReason" = $4, "version" = $3, "updatedAt" = now()
+     WHERE "tenantId" = $1 AND "userId" = $2 AND "role" = 'GUARDIAN' AND "status" = 'ACTIVE'`,
+    [user.tenantId, user.userId, version, guardianRoleEndedReason],
+  );
+  await client.query(
+    `UPDATE "TenantMembership" SET "version" = $3, "updatedAt" = now()
+     WHERE "tenantId" = $1 AND "userId" = $2 AND "status" = 'ACTIVE'`,
+    [user.tenantId, user.userId, version],
+  );
+  const sessions = await client.query(
+    `UPDATE "AuthSession" SET "status" = 'REVOKED', "updatedAt" = now()
+     WHERE "tenantId" = $1 AND "userId" = $2 AND "status" = 'ACTIVE' RETURNING "id"`,
+    [user.tenantId, user.userId],
+  );
+  return { guardianRoleRemovedUserId: user.userId, sessionsRevoked: sessions.rows.length };
 }
 
 interface GuardianStudentRow {

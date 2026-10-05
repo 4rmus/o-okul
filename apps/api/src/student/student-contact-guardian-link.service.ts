@@ -27,6 +27,7 @@ import {
   type StudentContactStore,
   studentContactStoreToken,
 } from "./student-contact-store.js";
+import { decryptStudentContactValue } from "./student-contact-pii.js";
 import { StudentService } from "./student.service.js";
 
 /**
@@ -164,6 +165,8 @@ export class StudentContactGuardianLinkService {
       });
     }
     await this.recordLinkAudits(context, contact, write.guardianId, write, "user");
+    // Same contact-phone rule as the bulk invite (empty Guardian.phone only, never a login name, no phone matching).
+    await this.guardians.fillEmptyPhone(context, write.guardianId, contact.phoneEncrypted && decryptStudentContactValue(contact.phoneEncrypted));
     return {
       ...unchanged(write.guardianId),
       changed: true,
@@ -230,6 +233,7 @@ export class StudentContactGuardianLinkService {
       action: "student_contact.guardian_unlinked",
       diff: { studentId: contact.studentId, guardianId, guardianStudentRemoved: write.guardianStudentRemoved },
     });
+    await this.guardians.recordGuardianRoleRemoved(context, contact.tenantId, guardianId, { sessionsRevoked: 0, ...write });
     return { ...result, changed: true, guardianStudentRemoved: write.guardianStudentRemoved };
   }
 
