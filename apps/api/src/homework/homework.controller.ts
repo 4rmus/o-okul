@@ -5,6 +5,7 @@ import type {
   HomeworkMaterialFileRecord,
   HomeworkMaterialRecord,
   HomeworkRecord,
+  HomeworkSubmissionRecord,
 } from "@o-okul/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
@@ -21,6 +22,7 @@ import {
   homeworkMaterialCreateBodySchema,
   homeworkMaterialFileCreateBodySchema,
   homeworkMaterialUpdateBodySchema,
+  homeworkSubmissionCheckBodySchema,
   homeworkUpdateBodySchema,
   type HomeworkCheckStatusBody,
   type HomeworkCreateBody,
@@ -29,6 +31,7 @@ import {
   type HomeworkMaterialCreateBody,
   type HomeworkMaterialFileCreateBody,
   type HomeworkMaterialUpdateBody,
+  type HomeworkSubmissionCheckBody,
   type HomeworkUpdateBody,
 } from "./homework-validation.js";
 
@@ -164,6 +167,22 @@ export class HomeworkController {
     @Body(zodBody(homeworkCheckStatusBodySchema)) body: HomeworkCheckStatusBody,
   ): Promise<HomeworkRecord> {
     return this.homework.updateCheckStatus(getRequestContext(), id, body.checked);
+  }
+
+  @Get(":id/submissions")
+  @Roles("TEACHER")
+  listSubmissions(@Param("id") id: string): Promise<HomeworkSubmissionRecord[]> {
+    return this.homework.listSubmissions(getRequestContext(), id);
+  }
+
+  @Post(":id/submissions/check")
+  @Roles("TEACHER")
+  checkSubmissions(
+    @Param("id") id: string,
+    @Body(zodBody(homeworkSubmissionCheckBodySchema)) body: HomeworkSubmissionCheckBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<HomeworkSubmissionRecord[]> {
+    return this.homework.checkSubmissions(getRequestContext(), id, body.studentIds, idempotencyKey);
   }
 
   @Delete(":id")

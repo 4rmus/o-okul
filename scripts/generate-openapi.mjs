@@ -661,6 +661,22 @@ const portalStudentProfilePaths = [
   "/api/v1/me/student/profile",
   "/api/v1/me/guardian/students/{studentId}/profile",
 ];
+// KV-4: the guardian overview is an allow-list; teacher notes, contacts and other guardians never appear.
+const guardianStudentOverviewForbiddenDeep = [
+  "contacts",
+  "email",
+  "guardianLinks",
+  "guardians",
+  "nationalId",
+  "nationalIdEncrypted",
+  "nationalIdHash",
+  "note",
+  "phone",
+  "phoneMasked",
+  "teacherNotes",
+  "token",
+  "userId",
+];
 const kvkkInventoryKinds = ["guardian", "student", "teacher", "user"];
 const kvkkInventoryRecordRequired = ["id", "kind", "displayRef", "piiCategories", "purgeAvailable"];
 const kvkkInventoryForbiddenDeep = [
@@ -1542,6 +1558,13 @@ const requiredOperationContracts = [
       { path: ["responseDataItem", "status"], enum: studentStatuses },
     ],
   },
+  {
+    method: "get",
+    path: "/api/v1/me/guardian/students/{studentId}/overview",
+    responseEnvelope: true,
+    responseDataRequired: ["student", "attendance", "homework", "announcements", "examSeries", "schoolGrades"],
+    responseDataForbiddenDeep: guardianStudentOverviewForbiddenDeep,
+  },
   ...portalStudentProfilePaths.map((path) => ({
     method: "get",
     path,
@@ -2130,6 +2153,19 @@ const requiredOperationContracts = [
     fieldChecks: [
       { path: ["requestBody", "contactEmail"], format: "email" },
     ],
+  },
+  {
+    method: "get",
+    path: "/api/v1/me/student/homework",
+    responseListEnvelope: true,
+    responseDataItemsRequired: ["id", "classId", "title", "submission"],
+  },
+  {
+    method: "post",
+    path: "/api/v1/me/student/homework/{homeworkId}/submission",
+    responseEnvelope: true,
+    idempotencyHeader: true,
+    responseDataRequired: ["homeworkId", "studentId", "status"],
   },
   {
     method: "get",
@@ -3626,6 +3662,21 @@ const requiredOperationContracts = [
     requestProperties: ["classId", "description", "dueAt", "title"],
     requestMinProperties: 1,
     responseDataRequired: ["id", "tenantId", "classId", "title"],
+  },
+  {
+    method: "get",
+    path: "/api/v1/homework/{id}/submissions",
+    responseListEnvelope: true,
+    responseDataItemsRequired: ["homeworkId", "studentId", "status"],
+  },
+  {
+    method: "post",
+    path: "/api/v1/homework/{id}/submissions/check",
+    requestBody: true,
+    responseListEnvelope: true,
+    idempotencyHeader: true,
+    requestRequired: ["studentIds"],
+    responseDataItemsRequired: ["homeworkId", "studentId", "status"],
   },
   {
     method: "patch",

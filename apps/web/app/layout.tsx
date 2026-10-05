@@ -22,6 +22,7 @@ export const metadata = {
     "TXT ve DAT optik verisini kontrol ederek Başarı % raporuna dönüştürmek ve öğrenci takibini sürdürmek isteyen eğitim kurumları için.",
   icons: {
     icon: "/icon.svg",
+    apple: "/icons/apple-touch-icon.png",
   },
 };
 

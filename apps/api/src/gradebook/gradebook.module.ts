@@ -9,5 +9,6 @@ import { GradebookService } from "./gradebook.service.js";
   imports: [AuditLogModule, SchoolModule],
   controllers: [GradebookController],
   providers: [GradebookService, { provide: gradebookStoreToken, useFactory: createGradebookStore }],
+  exports: [GradebookService],
 })
 export class GradebookModule {}

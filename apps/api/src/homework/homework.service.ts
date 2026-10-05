@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type {
   HomeworkMaterialAssignmentRecord as SharedHomeworkMaterialAssignmentRecord,
   HomeworkMaterialFileDownloadResult,
   HomeworkMaterialFileRecord as SharedHomeworkMaterialFileRecord,
   HomeworkMaterialRecord as SharedHomeworkMaterialRecord,
   HomeworkRecord as SharedHomeworkRecord,
+  HomeworkSubmissionRecord,
+  StudentHomeworkRecord,
   UploadContentType,
 } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
@@ -48,6 +50,16 @@ export interface HomeworkMaterialAssignmentRecord extends SharedHomeworkMaterial
 }
 
 export type HomeworkMaterialFileContentType = UploadContentType;
+
+export interface HomeworkSubmissionRow {
+  id: string;
+  tenantId: string;
+  homeworkId: string;
+  studentId: string;
+  submittedAt?: string;
+  checkedAt?: string;
+  checkedById?: string;
+}
 
 export interface CreateHomeworkMaterialFileInput {
   fileName?: string;
@@ -565,6 +577,158 @@ export class HomeworkService {
     return homework;
   }
 
+  /** Teacher view: every student of the homework's class, with a derived status (missing row = not submitted). */
+  async listSubmissions(context: RequestContext, homeworkId: string): Promise<HomeworkSubmissionRecord[]> {
+    const homework = await this.findOne(context, homeworkId);
+    const [students, rows] = await Promise.all([
+      this.listClassStudentIds(context, homework.classId),
+      this.store.listSubmissions(homework.id),
+    ]);
+    const rowByStudent = new Map(filterTenantResources(context, rows).map((row) => [row.studentId, row]));
+    return students.map((studentId) => toSubmissionRecord(homework.id, studentId, rowByStudent.get(studentId)));
+  }
+
+  async checkSubmissions(
+    context: RequestContext,
+    homeworkId: string,
+    studentIds: string[],
+    idempotencyKey?: string,
+  ): Promise<HomeworkSubmissionRecord[]> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "homework.submission.check", request: { homeworkId, studentIds } },
+        () => this.checkSubmissionsOnce(context, homeworkId, studentIds),
+      );
+    }
+
+    return this.checkSubmissionsOnce(context, homeworkId, studentIds);
+  }
+
+  private async checkSubmissionsOnce(
+    context: RequestContext,
+    homeworkId: string,
+    studentIdsInput: string[],
+  ): Promise<HomeworkSubmissionRecord[]> {
+    // Body size (1..500) is enforced by homeworkSubmissionCheckBodySchema.
+    const studentIds = [...new Set(studentIdsInput)];
+
+    const homework = await this.findOne(context, homeworkId);
+    await assertTeacherAssigned(context, this.teacherAssignmentStore, {
+      tenantId: homework.tenantId,
+      classId: homework.classId,
+    });
+    const classStudentIds = new Set(await this.listClassStudentIds(context, homework.classId));
+    if (studentIds.some((studentId) => !classStudentIds.has(studentId))) {
+      throw new BadRequestException("HOMEWORK_SUBMISSION_STUDENT_NOT_IN_CLASS");
+    }
+    // ponytail: read-then-update is race-safe because submittedAt only ever goes from NULL to set
+    // (no unsubmit path); a concurrent submit can only make more students eligible.
+    const submittedStudentIds = new Set(
+      filterTenantResources(context, await this.store.listSubmissions(homework.id))
+        .filter((row) => row.submittedAt)
+        .map((row) => row.studentId),
+    );
+    const notSubmittedStudentIds = studentIds.filter((studentId) => !submittedStudentIds.has(studentId));
+    if (notSubmittedStudentIds.length > 0) {
+      throw new ConflictException({
+        error: {
+          code: "HOMEWORK_SUBMISSION_NOT_SUBMITTED",
+          message: "Teslim etmemiş öğrenci kontrol edilemez.",
+          details: { studentIds: notSubmittedStudentIds },
+        },
+      });
+    }
+
+    const rows = await this.store.markChecked({
+      tenantId: homework.tenantId,
+      homeworkId: homework.id,
+      studentIds,
+      checkedAt: new Date().toISOString(),
+      checkedById: context.userId,
+    });
+    await this.auditLogs?.record({
+      tenantId: homework.tenantId,
+      actorUserId: context.userId,
+      entityType: "Homework",
+      entityId: homework.id,
+      action: "homework_submission.checked",
+      diff: { studentIds },
+    });
+    const rowByStudent = new Map(rows.map((row) => [row.studentId, row]));
+    return studentIds.map((studentId) => toSubmissionRecord(homework.id, studentId, rowByStudent.get(studentId)));
+  }
+
+  /** Student view: the homework of the student's own class with the student's own derived status. */
+  async listCurrentStudentHomework(context: RequestContext): Promise<StudentHomeworkRecord[]> {
+    const student = await this.students.findCurrentStudent(context);
+    if (!student.classId) {
+      return [];
+    }
+    const [homework, rows] = await Promise.all([this.store.list(), this.store.listSubmissionsByStudent(student.id)]);
+    const rowByHomework = new Map(filterTenantResources(context, rows).map((row) => [row.homeworkId, row]));
+    return filterTenantResources(context, homework)
+      .filter((record) => !record.deletedAt && record.classId === student.classId)
+      .map((record) => ({
+        id: record.id,
+        classId: record.classId,
+        title: record.title,
+        description: record.description,
+        sourceMaterialTitle: record.sourceMaterialTitle,
+        dueAt: record.dueAt,
+        submission: toSubmissionRecord(record.id, student.id, rowByHomework.get(record.id)),
+      }));
+  }
+
+  async submitCurrentStudentHomework(
+    context: RequestContext,
+    homeworkId: string,
+    idempotencyKey?: string,
+  ): Promise<HomeworkSubmissionRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "homework.submission.submit", request: { homeworkId } },
+        () => this.submitCurrentStudentHomeworkOnce(context, homeworkId),
+      );
+    }
+
+    return this.submitCurrentStudentHomeworkOnce(context, homeworkId);
+  }
+
+  private async submitCurrentStudentHomeworkOnce(context: RequestContext, homeworkId: string): Promise<HomeworkSubmissionRecord> {
+    // The student id always comes from the session: a student can only ever mark their own row.
+    const student = await this.students.findCurrentStudent(context);
+    const homework = await this.store.findById(homeworkId);
+    if (!homework || homework.deletedAt || !student.classId || homework.classId !== student.classId) {
+      throw new NotFoundException("HOMEWORK_NOT_FOUND");
+    }
+    this.assertAccess(context, homework);
+
+    const row = await this.store.markSubmitted({
+      tenantId: homework.tenantId,
+      homeworkId: homework.id,
+      studentId: student.id,
+      submittedAt: new Date().toISOString(),
+    });
+    if (!row) {
+      throw new ConflictException("HOMEWORK_SUBMISSION_ALREADY_CHECKED");
+    }
+    await this.auditLogs?.record({
+      tenantId: row.tenantId,
+      actorUserId: context.userId,
+      entityType: "HomeworkSubmission",
+      entityId: row.id,
+      action: "homework_submission.submitted",
+      diff: { homeworkId: row.homeworkId, studentId: row.studentId },
+    });
+    return toSubmissionRecord(homework.id, student.id, row);
+  }
+
+  private async listClassStudentIds(context: RequestContext, classId: string): Promise<string[]> {
+    return (await this.students.list(context)).filter((student) => student.classId === classId).map((student) => student.id);
+  }
+
   private resolveTenantId(context: RequestContext, tenantId: string | undefined): string {
     const resolvedTenantId = tenantId ?? context.tenantId;
     if (!resolvedTenantId) {
@@ -666,6 +830,16 @@ export class HomeworkService {
       throw new ForbiddenException(message);
     }
   }
+}
+
+export function toSubmissionRecord(homeworkId: string, studentId: string, row: HomeworkSubmissionRow | undefined): HomeworkSubmissionRecord {
+  return {
+    homeworkId,
+    studentId,
+    status: row?.checkedAt ? "CHECKED" : row?.submittedAt ? "SUBMITTED" : "NOT_SUBMITTED",
+    submittedAt: row?.submittedAt,
+    checkedAt: row?.checkedAt,
+  };
 }
 
 function isIsoDateTimeString(value: string): boolean {

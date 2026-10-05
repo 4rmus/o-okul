@@ -26,6 +26,8 @@ const inventory = [
   entry("exam.publish", "POST", "/api/v1/exams/{examId}/publish", "covered", "apps/api/src/exam/exam.controller.ts", "apps/api/src/exam/exam.service.ts", "apps/api/src/exam/exam.controller.e2e.test.ts", ["@Post(\":examId/publish\")", "@Headers(\"idempotency-key\")"], ["exam-publish-idempotency-a"]),
   entry("grade-assessment.publish", "POST", "/api/v1/grade-assessments/{id}/publish", "covered", "apps/api/src/gradebook/gradebook.controller.ts", "apps/api/src/gradebook/gradebook.service.ts", "apps/api/src/gradebook/gradebook.e2e.test.ts", ["@Post(\":id/publish\")", "@Headers(\"idempotency-key\")"], ["grade-publish-idempotency-a"]),
   entry("homework.material-assignment.create", "POST", "/api/v1/homework/materials/{id}/assignments", "covered", "apps/api/src/homework/homework.controller.ts", "apps/api/src/homework/homework.service.ts", "apps/api/src/homework/homework.e2e.test.ts", ["@Post(\"materials/:id/assignments\")", "@Headers(\"idempotency-key\")"], ["homework-material-assignment-idempotency-a"]),
+  entry("homework.submission.check", "POST", "/api/v1/homework/{id}/submissions/check", "covered", "apps/api/src/homework/homework.controller.ts", "apps/api/src/homework/homework.service.ts", "apps/api/src/homework/homework.e2e.test.ts", ["@Post(\":id/submissions/check\")", "@Headers(\"idempotency-key\")"], ["homework-submission-check-idempotency-a"]),
+  entry("homework.submission.submit", "POST", "/api/v1/me/student/homework/{homeworkId}/submission", "covered", "apps/api/src/me/me.controller.ts", "apps/api/src/homework/homework.service.ts", "apps/api/src/homework/homework.e2e.test.ts", ["@Post(\"student/homework/:homeworkId/submission\")", "@Headers(\"idempotency-key\")"], ["homework-submission-idempotency-a"]),
   entry("homework.material-file.create", "POST", "/api/v1/homework/materials/{id}/files", "covered", "apps/api/src/homework/homework.controller.ts", "apps/api/src/homework/homework.service.ts", "apps/api/src/homework/homework.e2e.test.ts", ["@Post(\"materials/:id/files\")", "@Headers(\"idempotency-key\")"], ["homework-material-file-idempotency-a"]),
   entry("learning-outcome.import.commit", "POST", "/api/v1/learning-outcomes/imports", "covered", "apps/api/src/school/learning-outcomes.controller.ts", "apps/api/src/school/learning-outcome-import.service.ts", "apps/api/src/school/school.e2e.test.ts", ["@Post(\"imports\")", "@Headers(\"idempotency-key\")"], ["learning-outcome-import-idempotency-a"]),
   entry("optical-form-template.apply", "POST", "/api/v1/optical-form-templates/{templateId}/apply", "covered", "apps/api/src/exam/optical-form-template.controller.ts", "apps/api/src/exam/optical-form-template.service.ts", "apps/api/src/exam/optical-form-template.controller.e2e.test.ts", ["@Post(\":templateId/apply\")", "@Headers(\"idempotency-key\")"], ["optical-form-template-apply-idempotency-a"]),
@@ -70,6 +72,7 @@ const inventoryOperations = new Set(inventory.map((item) => item.operation));
 const operationsWithoutRequestBody = new Set([
   "answer-key.publish",
   "grade-assessment.publish",
+  "homework.submission.submit",
   "exam.publish",
   "payment.plan.cancel",
 ]);

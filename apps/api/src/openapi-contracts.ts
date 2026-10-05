@@ -1272,6 +1272,29 @@ const homeworkCheckStatusRequestSchema = objectSchema({
   checked: { type: "boolean" },
 }, ["checked"]);
 
+// DEC-20261004-10: status is derived from the submission timestamps; a missing row is NOT_SUBMITTED.
+const homeworkSubmissionRecordSchema = objectSchema({
+  homeworkId: stringSchema(),
+  studentId: stringSchema(),
+  status: stringSchema({ enum: ["NOT_SUBMITTED", "SUBMITTED", "CHECKED"] }),
+  submittedAt: stringSchema({ format: "date-time" }),
+  checkedAt: stringSchema({ format: "date-time" }),
+}, ["homeworkId", "studentId", "status"]);
+
+const homeworkSubmissionCheckRequestSchema = objectSchema({
+  studentIds: arraySchema(stringSchema(), { minItems: 1, maxItems: 500 }),
+}, ["studentIds"]);
+
+const studentHomeworkRecordSchema = objectSchema({
+  id: stringSchema(),
+  classId: stringSchema(),
+  title: stringSchema(),
+  description: stringSchema(),
+  sourceMaterialTitle: stringSchema(),
+  dueAt: stringSchema({ format: "date-time" }),
+  submission: homeworkSubmissionRecordSchema,
+}, ["id", "classId", "title", "submission"]);
+
 const homeworkMaterialRecordSchema = objectSchema({
   id: stringSchema(),
   tenantId: stringSchema(),
@@ -3077,6 +3100,61 @@ const gradeAssessmentRecordSchema = objectSchema({
   createdById: stringSchema(),
   createdAt: stringSchema({ format: "date-time" }),
 }, ["id", "tenantId", "classId", "courseId", "termId", "kind", "title", "heldOn", "maxScore", "createdById", "createdAt"]);
+const guardianStudentOverviewSchema = objectSchema({
+  student: objectSchema({
+    id: stringSchema(),
+    firstName: stringSchema(),
+    lastName: stringSchema(),
+    className: stringSchema(),
+  }, ["id", "firstName", "lastName"]),
+  attendance: objectSchema({
+    total: integerSchema({ minimum: 0 }),
+    present: integerSchema({ minimum: 0 }),
+    absent: integerSchema({ minimum: 0 }),
+    late: integerSchema({ minimum: 0 }),
+    excused: integerSchema({ minimum: 0 }),
+  }, ["total", "present", "absent", "late", "excused"]),
+  homework: objectSchema({
+    assignmentCount: integerSchema({ minimum: 0 }),
+    upcoming: arraySchema(objectSchema({
+      id: stringSchema(),
+      title: stringSchema(),
+      courseId: stringSchema(),
+      dueAt: stringSchema({ format: "date-time" }),
+    }, ["id"]), { maxItems: 5 }),
+  }, ["assignmentCount", "upcoming"]),
+  announcements: objectSchema({ unreadCount: integerSchema({ minimum: 0 }) }, ["unreadCount"]),
+  finance: objectSchema({
+    currency: stringSchema(),
+    pendingAmount: integerSchema({ minimum: 0 }),
+    overdueAmount: integerSchema({ minimum: 0 }),
+    overdueInstallmentCount: integerSchema({ minimum: 0 }),
+    nextDueDate: stringSchema({ format: "date" }),
+  }, ["currency", "pendingAmount", "overdueAmount", "overdueInstallmentCount"]),
+  examSeries: arraySchema(objectSchema({
+    snapshotId: stringSchema(),
+    generatedAt: stringSchema({ format: "date-time" }),
+    successRate: { type: "number", description: "Başarı % on a 0-100 scale." },
+    net: { type: "number" },
+    questionCount: { type: "number" },
+    correct: { type: "number" },
+    wrong: { type: "number" },
+    blank: { type: "number" },
+  }, ["snapshotId"])),
+  schoolGrades: arraySchema(objectSchema({
+    assessmentId: stringSchema(),
+    courseId: stringSchema(),
+    courseName: stringSchema(),
+    kind: gradeAssessmentKindSchema,
+    title: stringSchema(),
+    heldOn: stringSchema({ format: "date" }),
+    score: { type: "number", nullable: true, description: "On the assessment's own 0..maxScore scale; null when absent." },
+    absent: { type: "boolean" },
+    maxScore: { type: "number" },
+    version: integerSchema({ minimum: 1 }),
+  }, ["assessmentId", "courseId", "kind", "title", "heldOn", "score", "absent", "maxScore", "version"])),
+}, ["student", "attendance", "homework", "announcements", "examSeries", "schoolGrades"]);
+
 const gradeEntryRecordSchema = objectSchema({
   id: stringSchema(),
   assessmentId: stringSchema(),
@@ -3439,6 +3517,9 @@ const operationContracts: Record<string, OperationContract> = {
   "get /api/v1/me/guardian/students/{studentId}/profile": {
     responseBody: publicStudentProfileRecordSchema,
   },
+  "get /api/v1/me/guardian/students/{studentId}/overview": {
+    responseBody: guardianStudentOverviewSchema,
+  },
   "get /api/v1/me/teacher": {
     responseBody: teacherRecordSchema,
   },
@@ -3484,6 +3565,14 @@ const operationContracts: Record<string, OperationContract> = {
   "get /api/v1/me/student/homework/material-assignments": {
     responseBody: arraySchema(homeworkMaterialAssignmentRecordSchema),
     listResponse: true,
+  },
+  "get /api/v1/me/student/homework": {
+    responseBody: arraySchema(studentHomeworkRecordSchema),
+    listResponse: true,
+  },
+  "post /api/v1/me/student/homework/{homeworkId}/submission": {
+    idempotent: true,
+    responseBody: homeworkSubmissionRecordSchema,
   },
   "get /api/v1/me/student/attendance": {
     responseBody: arraySchema(attendanceRecordSchema),
@@ -4369,6 +4458,16 @@ const operationContracts: Record<string, OperationContract> = {
   "patch /api/v1/homework/{id}": {
     requestBody: homeworkUpdateRequestSchema,
     responseBody: homeworkRecordSchema,
+  },
+  "get /api/v1/homework/{id}/submissions": {
+    responseBody: arraySchema(homeworkSubmissionRecordSchema),
+    listResponse: true,
+  },
+  "post /api/v1/homework/{id}/submissions/check": {
+    idempotent: true,
+    requestBody: homeworkSubmissionCheckRequestSchema,
+    responseBody: arraySchema(homeworkSubmissionRecordSchema),
+    listResponse: true,
   },
   "patch /api/v1/homework/{id}/check-status": {
     requestBody: homeworkCheckStatusRequestSchema,

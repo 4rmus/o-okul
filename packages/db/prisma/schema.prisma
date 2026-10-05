@@ -81,6 +81,7 @@ model Tenant {
   homeworkMaterialFiles HomeworkMaterialFile[]
   homeworkMaterialAssignments HomeworkMaterialAssignment[]
   homework    Homework[]
+  homeworkSubmissions HomeworkSubmission[]
   exams       Exam[]
   parserConfigs ParserConfig[]
   opticalFormTemplates OpticalFormTemplate[]
@@ -307,6 +308,7 @@ model User {
   createdStudents Student[]      @relation("StudentCreatedBy")
   updatedStudents Student[]      @relation("StudentUpdatedBy")
   checkedHomework Homework[]      @relation("HomeworkCheckedBy")
+  checkedHomeworkSubmissions HomeworkSubmission[] @relation("HomeworkSubmissionCheckedBy")
 
   @@unique([tenantId, id])
   @@unique([tenantId, nationalIdHash])
@@ -807,6 +809,7 @@ model Student {
   examParticipants ExamParticipant[]
   examResults ExamResult[]
   homeworkMaterialAssignments HomeworkMaterialAssignment[]
+  homeworkSubmissions HomeworkSubmission[]
   attendance Attendance[]
   teacherNotes TeacherNote[]
   developmentAssessments DevelopmentAssessment[]
@@ -1311,11 +1314,36 @@ model Homework {
   class               Class     @relation(fields: [tenantId, classId], references: [tenantId, id], onDelete: Cascade)
   sourceMaterial      HomeworkMaterial? @relation(fields: [tenantId, sourceMaterialId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   checkedBy           User?     @relation("HomeworkCheckedBy", fields: [tenantId, checkedById], references: [tenantId, id], onDelete: NoAction)
+  submissions         HomeworkSubmission[]
 
+  @@unique([tenantId, id])
   @@index([tenantId, deletedAt])
   @@index([tenantId, classId, dueAt, deletedAt])
   @@index([tenantId, sourceMaterialId])
   @@index([tenantId, checkedAt])
+}
+
+// DEC-20261004-10: one row per (homework, student), created lazily on the first mark; status is derived
+// (checkedAt -> checked, submittedAt -> submitted, no row -> not submitted). No status column, no file.
+model HomeworkSubmission {
+  id          String    @id @default(uuid())
+  tenantId    String
+  homeworkId  String
+  studentId   String
+  submittedAt DateTime? @db.Timestamptz(6)
+  checkedAt   DateTime? @db.Timestamptz(6)
+  checkedById String?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @db.Timestamptz(6)
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "HomeworkSubmission_tenantId_fkey")
+  homework  Homework @relation(fields: [tenantId, homeworkId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction, map: "HomeworkSubmission_homework_fkey")
+  student   Student  @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction, map: "HomeworkSubmission_student_fkey")
+  checkedBy User?    @relation("HomeworkSubmissionCheckedBy", fields: [tenantId, checkedById], references: [tenantId, id], onDelete: NoAction, onUpdate: NoAction, map: "HomeworkSubmission_checkedBy_fkey")
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, homeworkId, studentId])
+  @@index([tenantId, studentId])
 }
 
 model Exam {

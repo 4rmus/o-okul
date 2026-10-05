@@ -6,11 +6,17 @@ import {
   type AnnouncementDeliveryJobResult,
   type AnnouncementDeliveryReporter,
 } from "./announcement-delivery-job.js";
+import { createWebPushSenderFromEnv, type AnnouncementPushStore, type PushSender, type VapidEnvironment } from "./announcement-push-delivery.js";
 import { PostgresAnnouncementDeliveryReporter } from "./postgres-announcement-delivery-reporter.js";
+import { PostgresAnnouncementPushStore } from "./postgres-announcement-push-store.js";
 
 export interface AnnouncementDeliveryProcessorOptions {
   pool?: TenantQueryable;
   reporter?: AnnouncementDeliveryReporter;
+  pushStore?: AnnouncementPushStore;
+  /** null forces the "VAPID missing" path; undefined reads VAPID_* from env. */
+  pushSender?: PushSender | null;
+  env?: VapidEnvironment;
 }
 
 export type AnnouncementDeliveryProcessor = (
@@ -20,7 +26,16 @@ export type AnnouncementDeliveryProcessor = (
 export function createAnnouncementDeliveryProcessor(
   options: AnnouncementDeliveryProcessorOptions = {},
 ): AnnouncementDeliveryProcessor {
-  const reporter = options.reporter
-    ?? new PostgresAnnouncementDeliveryReporter(options.pool ?? createTenantPgPool());
-  return (job) => processAnnouncementDeliveryJob(job, reporter);
+  let pool = options.pool;
+  const sharedPool = () => (pool ??= createTenantPgPool());
+  const reporter = options.reporter ?? new PostgresAnnouncementDeliveryReporter(sharedPool());
+  let pushStore = options.pushStore;
+  const push = {
+    sender: options.pushSender === null ? undefined : options.pushSender ?? createWebPushSenderFromEnv(options.env ?? process.env),
+    // Lazy so report-only callers (and tests) never open a pool they do not use.
+    get store() {
+      return (pushStore ??= new PostgresAnnouncementPushStore(sharedPool()));
+    },
+  };
+  return (job) => processAnnouncementDeliveryJob(job, reporter, push);
 }

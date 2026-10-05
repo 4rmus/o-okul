@@ -7,6 +7,7 @@ import type {
   GradeAssessmentRecord,
   GradeEntriesSaveRequest,
   GradeEntryRecord,
+  GuardianSchoolGradeItem,
   TeacherAssignmentRole,
 } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
@@ -135,6 +136,28 @@ export class GradebookService {
       diff: { publishedVersion: result.assessment.publishedVersion, publishedCount: result.publishedCount },
     });
     return result;
+  }
+
+  /**
+   * KV-4 read: the published school grade series of one student, oldest first.
+   * The caller must have authorised the student (guardian link helper); this only enforces the tenant.
+   */
+  async listPublishedForStudent(context: RequestContext, studentId: string): Promise<GuardianSchoolGradeItem[]> {
+    const tenantId = requireTenantId(context);
+    return (await this.store.listPublishedByStudent(studentId))
+      .filter(({ assessment }) => assessment.tenantId === tenantId)
+      .map(({ assessment, entry }) => ({
+        assessmentId: assessment.id,
+        courseId: assessment.courseId,
+        kind: assessment.kind,
+        title: assessment.title,
+        heldOn: assessment.heldOn,
+        score: entry.absent ? null : entry.score,
+        absent: entry.absent,
+        maxScore: assessment.maxScore,
+        version: entry.version,
+      }))
+      .sort((left, right) => left.heldOn.localeCompare(right.heldOn) || left.assessmentId.localeCompare(right.assessmentId));
   }
 
   private async assertCanWriteEntries(context: RequestContext, assessment: GradeAssessmentRecord): Promise<void> {

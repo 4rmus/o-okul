@@ -664,12 +664,25 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
   }
   if (pathName === "/me/guardian/students") return { data: [studentFixture] };
   if (pathName === "/me/guardian/students/student-a/notification-preferences") return { data: guardianLinkFixture };
+  if (pathName === "/me/guardian/students/student-a/overview") {
+    return {
+      data: {
+        student: { id: studentFixture.id, firstName: studentFixture.firstName, lastName: studentFixture.lastName },
+        attendance: { total: 0, present: 0, absent: 0, late: 0, excused: 0 },
+        homework: { assignmentCount: 0, upcoming: [] },
+        announcements: { unreadCount: 0 },
+        examSeries: [],
+        schoolGrades: [],
+      },
+    };
+  }
   if (pathName === "/students/portal-access") return { data: [createPortalAccessMock().record], meta: { limit: 20 } };
 
   const portalArrayPaths = new Set([
     "/me/student/announcements",
     "/me/student/attendance",
     "/me/student/development-assessments",
+    "/me/student/homework",
     "/me/student/homework/material-assignments",
     "/me/student/reports",
     "/me/student/support-tickets",

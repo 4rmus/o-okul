@@ -3768,7 +3768,7 @@ const expectations = {
     "isolation tam 8 alan icermeli.",
     "loadSmoke tam 6 alan icermeli.",
     "commandsPassed tam 4 komut icermeli.",
-    "schema.tablesVerified tam 68 tablo icermeli.",
+    "schema.tablesVerified tam 69 tablo icermeli.",
     "evidenceReferences rls-load-smoke kanıt artifact'ini içermeli.",
     "gaps listesi zorunlu.",
     "uat tam 11 alan içermeli.",

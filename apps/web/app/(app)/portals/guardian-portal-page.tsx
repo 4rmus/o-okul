@@ -10,6 +10,7 @@ import type {
   AttendanceRecord,
   AttendanceSummaryRecord,
   CourseRecord,
+  GuardianStudentOverview,
   GuardianStudentRecord,
   HomeworkMaterialAssignmentRecord,
   PaymentPlanWithInstallmentsRecord,
@@ -43,6 +44,7 @@ import {
   type PortalActionItem,
   readRolePreviewToken,
 } from "./_shared/portal-shell.js";
+import { ProgressSeriesPanel } from "./_shared/progress-series-panel.js";
 import { ReportPanel } from "./_shared/report-panel.js";
 import { ProfilePanel, StudentFocusPanel, StudentHistoryPanel } from "./_shared/student-panels.js";
 import { SupportTicketsPanel } from "./_shared/support-tickets-panel.js";
@@ -381,6 +383,13 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
                 termNames={termNameById}
               />
             </div> : null}
+            {view === "overview" ? <div id="portal-progress-series">
+              <ProgressSeriesPanel
+                examSeries={data?.overview?.examSeries ?? []}
+                schoolGrades={data?.overview?.schoolGrades ?? []}
+                unavailable={!data?.overview}
+              />
+            </div> : null}
             {view === "overview" || view === "payments" ? <div id="portal-payments">
               <PaymentPlansPanel canViewFinance={canViewFinance} plans={data?.paymentPlans ?? []} />
             </div> : null}
@@ -507,6 +516,8 @@ async function loadGuardianStudentPortal(
         rolePreviewToken,
       )
     : Promise.resolve(null);
+  // KV-4 read model: optical and school-grade series. The legacy per-panel endpoints stay (strangler).
+  const overviewRequest = showOverview ? loadGuardianOverview(accessToken, studentId, rolePreviewToken) : Promise.resolve(null);
   const [profile, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, paymentPlans, report, errorBooklet, progress, courses, terms] = await Promise.all([
     readOnlyRequest<StudentProfileRecord>(accessToken, `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/profile`, rolePreviewToken),
     showStudent ? readOnlyRequest<StudentEnrollmentRecord[]>(
@@ -552,6 +563,7 @@ async function loadGuardianStudentPortal(
   ]);
 
   return {
+    overview: await overviewRequest,
     profile,
     enrollments,
     notificationPreferences,
@@ -571,6 +583,20 @@ async function loadGuardianStudentPortal(
     reportIndex,
     selectedReportExamId,
   };
+}
+
+async function loadGuardianOverview(accessToken: string, studentId: string, rolePreviewToken = ""): Promise<GuardianStudentOverview | null> {
+  try {
+    const overview = await readOnlyRequest<GuardianStudentOverview>(
+      accessToken,
+      `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/overview`,
+      rolePreviewToken,
+    );
+    return overview && Array.isArray(overview.examSeries) && Array.isArray(overview.schoolGrades) ? overview : null;
+  } catch {
+    // The series panel shows its own "unavailable" note; the rest of the portal keeps working.
+    return null;
+  }
 }
 
 async function markAnnouncementRead(accessToken: string, path: string) {

@@ -6,7 +6,10 @@ import type {
   HomeworkMaterialAssignmentRecord,
   HomeworkMaterialRecord,
   HomeworkRecord,
+  HomeworkSubmissionRecord,
+  StudentHomeworkRecord,
   GuardianRecord,
+  GuardianStudentOverview,
   InstitutionDashboardSummary,
   MeProfileResponse,
   MePasswordChangeRequest,
@@ -80,6 +83,7 @@ import { TenantService } from "../tenant/tenant.service.js";
 import type { TenantRecord } from "../tenant/tenant-store.js";
 import { tenantCurrentProfileBodySchema, type TenantCurrentProfileBody } from "../tenant/tenant-validation.js";
 import { passwordMaxLength, passwordMinLength, passwordPolicyViolation } from "../auth/password-policy.js";
+import { MeGuardianOverviewService } from "./me-guardian-overview.service.js";
 import { MeInstitutionDashboardService } from "./me-institution-dashboard.service.js";
 import { MeReportIndexService } from "./me-report-index.service.js";
 import { MeTeacherTodayService } from "./me-teacher-today.service.js";
@@ -102,6 +106,7 @@ export class MeController {
     private readonly homework: HomeworkService,
     private readonly notificationDevices: NotificationDeviceService,
     private readonly payments: PaymentService,
+    private readonly guardianOverview: MeGuardianOverviewService,
     private readonly institutionDashboard: MeInstitutionDashboardService,
     private readonly reportIndex: MeReportIndexService,
     private readonly teacherTodaySummary: MeTeacherTodayService,
@@ -227,6 +232,21 @@ export class MeController {
   @Roles("STUDENT")
   studentHomeworkMaterialAssignments(): Promise<HomeworkMaterialAssignmentRecord[]> {
     return this.homework.listCurrentStudentMaterialAssignments(getRequestContext());
+  }
+
+  @Get("student/homework")
+  @Roles("STUDENT")
+  studentHomework(): Promise<StudentHomeworkRecord[]> {
+    return this.homework.listCurrentStudentHomework(getRequestContext());
+  }
+
+  @Post("student/homework/:homeworkId/submission")
+  @Roles("STUDENT")
+  submitStudentHomework(
+    @Param("homeworkId") homeworkId: string,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<HomeworkSubmissionRecord> {
+    return this.homework.submitCurrentStudentHomework(getRequestContext(), homeworkId, idempotencyKey);
   }
 
   @Get("student/attendance")
@@ -358,6 +378,16 @@ export class MeController {
   @Roles("GUARDIAN")
   guardianStudents(): Promise<StudentRecord[]> {
     return this.students.listCurrentGuardianStudents(getRequestContext());
+  }
+
+  /** KV-4: one allow-list read model for a linked student; ward:read is the guardian scope capability. */
+  @Get("guardian/students/:studentId/overview")
+  @Roles("GUARDIAN")
+  @RequireCapability("ward:read")
+  guardianStudentOverview(@Param("studentId") studentId: string): Promise<GuardianStudentOverview> {
+    const context = getRequestContext();
+    assertGuardianContext(context);
+    return this.guardianOverview.get(context, studentId);
   }
 
   @Get("guardian/students/:studentId/profile")

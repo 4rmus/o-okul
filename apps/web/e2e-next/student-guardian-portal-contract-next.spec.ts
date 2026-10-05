@@ -162,6 +162,38 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
     await expect(page.getByRole("region", { name: "Portal rapor özeti" })).toContainText("Rapor bekleniyor");
   });
 
+  test("öğrenci sınıf ödevini dosyasız teslim ettim olarak işaretler (DEC-20261004-10)", async ({ page }) => {
+    await openStudentPortal(page, { height: 900, width: 1024 }, { path: "/ogrenci/odevler" });
+    const submissions: string[] = [];
+    let status: "NOT_SUBMITTED" | "SUBMITTED" = "NOT_SUBMITTED";
+    await page.route("**/api/v1/me/student/homework**", async (route) => {
+      const pathName = new URL(route.request().url()).pathname.replace(/^\/api\/v1/, "");
+      const method = route.request().method();
+      if (method === "OPTIONS") return route.fulfill({ headers: corsHeadersFor(route), status: 204 });
+      if (pathName === "/me/student/homework/homework-a/submission" && method === "POST") {
+        submissions.push(pathName);
+        status = "SUBMITTED";
+        return fulfillData(route, { homeworkId: "homework-a", studentId: "student-a", status, submittedAt: "2026-06-17T09:00:00.000Z" });
+      }
+      if (pathName === "/me/student/homework") {
+        return fulfillData(route, [
+          { id: "homework-a", classId: "class-a", title: "Kesirler", dueAt: "2026-06-20T12:00:00.000Z", submission: { homeworkId: "homework-a", studentId: "student-a", status } },
+        ]);
+      }
+      return route.fallback();
+    });
+    await page.reload();
+
+    const panel = page.getByRole("region", { exact: true, name: "Sınıf ödevleri" });
+    await expect(panel).toContainText("Kesirler");
+    await expect(panel).toContainText("Teslim edilmedi");
+    await panel.getByRole("button", { name: "Teslim ettim" }).click();
+    await expect(panel).toContainText("Teslim edildi");
+    await expect(panel.getByRole("button", { name: "Teslim ettim" })).toHaveCount(0);
+    expect(submissions).toEqual(["/me/student/homework/homework-a/submission"]);
+    await expect(page.locator("body")).not.toContainText("student-a");
+  });
+
   test("öğrenci sidebar alt rotaları gerçek sayfaları açar", async ({ page }) => {
     await openStudentPortal(page, { height: 900, width: 1024 });
 
