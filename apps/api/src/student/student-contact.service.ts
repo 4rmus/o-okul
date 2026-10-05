@@ -174,6 +174,7 @@ function toStudentContactRecord(record: StudentContactStorageRecord): StudentCon
     canReceiveFinance: record.canReceiveFinance,
     consentSource: record.consentSource,
     consentRecordedAt: record.consentRecordedAt,
+    guardianId: record.guardianId,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };

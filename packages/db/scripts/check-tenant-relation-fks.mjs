@@ -52,6 +52,7 @@ const requiredCompositeRelations = new Set([
 const requiredRawConstraints = [
   "Class_tenantId_id_gradeLevelId_key",
   "Student_tenantId_classId_gradeLevelId_fkey",
+  "StudentContact_tenantId_guardianId_studentId_fkey",
 ];
 
 const schema = readFileSync(schemaPath, "utf8");

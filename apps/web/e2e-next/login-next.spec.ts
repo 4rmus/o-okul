@@ -562,6 +562,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     { id: "student-b", tenantId: "tenant-a", firstName: "Bora", lastName: "B", studentNo: "201", status: "ACTIVE" },
     { id: "student-c", tenantId: "tenant-a", firstName: "Can", lastName: "C", studentNo: "305", status: "PASSIVE" },
   ];
+  const guardianInvitationRequests: Array<{ idempotencyKey?: string; studentIds: string[] }> = [];
   let studentEnrollments: StudentEnrollmentFixture[] = [
     {
       id: "student-enrollment-a",
@@ -3713,6 +3714,26 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       return;
     }
 
+    if (path === "/students/guardian-invitations" && request.method() === "POST") {
+      const body = request.postDataJSON() as { studentIds?: string[] };
+      guardianInvitationRequests.push({ idempotencyKey: request.headers()["idempotency-key"], studentIds: body.studentIds ?? [] });
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 201,
+        body: JSON.stringify(envelope({
+          createdCount: 1,
+          alreadyExistsCount: 0,
+          skippedCount: 1,
+          results: [
+            { studentId: "student-a", contactId: "contact-a", status: "CREATED", guardianId: "guardian-new", invitationId: "invitation-new" },
+            { studentId: "student-a", contactId: "contact-b", status: "SKIPPED", reason: "EMAIL_MISSING" },
+          ],
+        })),
+      });
+      return;
+    }
+
     if (path === "/students/enrollments/bulk-renew" && request.method() === "POST") {
       const body = request.postDataJSON() as {
         studentIds?: string[];
@@ -4575,6 +4596,13 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     record.classId === "class-c" &&
     record.startsAt === "2026-06-09",
   )).toBe(true);
+  const guardianInvitation = page.getByLabel("Toplu veli daveti");
+  await expect(guardianInvitation.getByRole("button", { name: "Seçili öğrencilerin velilerini davet et (0)" })).toBeDisabled();
+  await page.getByRole("checkbox", { name: "Ada A seç" }).check();
+  await guardianInvitation.getByRole("button", { name: "Seçili öğrencilerin velilerini davet et (1)" }).click();
+  await page.getByRole("dialog", { name: "Toplu veli davetini onayla" }).getByRole("button", { name: "Davet et" }).click();
+  await expect(guardianInvitation.getByRole("status")).toHaveText("Davet gönderildi: 1 · Zaten var: 0 · Atlandı: 1 (e-posta yok: 1)");
+  expect(guardianInvitationRequests).toEqual([{ idempotencyKey: expect.any(String), studentIds: ["student-a"] }]);
 
   await page.getByRole("button", { name: "Öğrenci ekle" }).click();
   await expect(page.getByRole("dialog", { name: "Öğrenci ekle" })).toContainText("Ad, soyad ve seviye zorunludur. Sınıf ve diğer alanlar opsiyoneldir.");

@@ -20,18 +20,22 @@ export interface StudentContactStorageRecord {
   canReceiveFinance: boolean;
   consentSource?: string;
   consentRecordedAt?: string;
+  guardianId?: string;
   deletedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
 
-export type StudentContactStoreInput = Omit<StudentContactStorageRecord, "id" | "createdAt" | "updatedAt" | "deletedAt">;
+/** guardianId is written only through linkGuardian, never through create/update. */
+export type StudentContactStoreInput = Omit<StudentContactStorageRecord, "id" | "createdAt" | "updatedAt" | "deletedAt" | "guardianId">;
 
 export interface StudentContactStore {
   listByStudent(tenantId: string, studentId: string): Promise<StudentContactStorageRecord[]>;
   findById(tenantId: string, id: string): Promise<StudentContactStorageRecord | undefined>;
   create(input: StudentContactStoreInput): Promise<StudentContactStorageRecord>;
   update(id: string, input: StudentContactStoreInput): Promise<StudentContactStorageRecord | undefined>;
+  /** Sets guardianId only while it is still empty; false when the contact is gone or already linked. */
+  linkGuardian(tenantId: string, id: string, guardianId: string): Promise<boolean>;
   softDelete(tenantId: string, id: string): Promise<boolean>;
   purgeByStudent(tenantId: string, studentId: string): Promise<number>;
 }
@@ -63,6 +67,14 @@ export class InMemoryStudentContactStore implements StudentContactStore {
     return record;
   }
 
+  async linkGuardian(tenantId: string, id: string, guardianId: string): Promise<boolean> {
+    const record = this.records.find((candidate) => candidate.tenantId === tenantId && candidate.id === id && !candidate.deletedAt);
+    if (!record || record.guardianId) return false;
+    record.guardianId = guardianId;
+    record.updatedAt = new Date().toISOString();
+    return true;
+  }
+
   async softDelete(tenantId: string, id: string): Promise<boolean> {
     const index = this.records.findIndex((record) => record.tenantId === tenantId && record.id === id && !record.deletedAt);
     const record = this.records[index];
@@ -82,6 +94,7 @@ export class InMemoryStudentContactStore implements StudentContactStore {
       canReceiveFinance: false,
       consentSource: undefined,
       consentRecordedAt: undefined,
+      guardianId: undefined,
       deletedAt,
       updatedAt: deletedAt,
     };
@@ -105,6 +118,7 @@ export class InMemoryStudentContactStore implements StudentContactStore {
         canReceiveFinance: false,
         consentSource: undefined,
         consentRecordedAt: undefined,
+        guardianId: undefined,
         deletedAt: purgedAt,
         updatedAt: purgedAt,
       });
@@ -170,6 +184,17 @@ export class PostgresStudentContactStore implements StudentContactStore {
     });
   }
 
+  async linkGuardian(tenantId: string, id: string, guardianId: string): Promise<boolean> {
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const result = await client.query(
+        `UPDATE "StudentContact" SET "guardianId"=$3, "updatedAt"=now()
+         WHERE "tenantId"=$1 AND "id"=$2 AND "deletedAt" IS NULL AND "guardianId" IS NULL RETURNING "id"`,
+        [tenantId, id, guardianId],
+      );
+      return Boolean(result.rows[0]);
+    });
+  }
+
   async softDelete(tenantId: string, id: string): Promise<boolean> {
     return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
       const result = await client.query(
@@ -177,7 +202,7 @@ export class PostgresStudentContactStore implements StudentContactStore {
            "firstName"='Anonim', "lastName"='İletişim', "relationType"='OTHER',
            "phoneEncrypted"=NULL, "phoneHash"=NULL, "emailEncrypted"=NULL, "emailHash"=NULL,
            "canReceiveSms"=false, "canReceiveAnnouncements"=false, "canReceiveFinance"=false,
-           "consentSource"=NULL, "consentRecordedAt"=NULL, "deletedAt"=now(), "updatedAt"=now()
+           "consentSource"=NULL, "consentRecordedAt"=NULL, "guardianId"=NULL, "deletedAt"=now(), "updatedAt"=now()
          WHERE "tenantId"=$1 AND "id"=$2 AND "deletedAt" IS NULL RETURNING "id"`,
         [tenantId, id],
       );
@@ -192,7 +217,7 @@ export class PostgresStudentContactStore implements StudentContactStore {
            "firstName"='Anonim', "lastName"='İletişim', "relationType"='OTHER',
            "phoneEncrypted"=NULL, "phoneHash"=NULL, "emailEncrypted"=NULL, "emailHash"=NULL,
            "canReceiveSms"=false, "canReceiveAnnouncements"=false, "canReceiveFinance"=false,
-           "consentSource"=NULL, "consentRecordedAt"=NULL, "deletedAt"=now(), "updatedAt"=now()
+           "consentSource"=NULL, "consentRecordedAt"=NULL, "guardianId"=NULL, "deletedAt"=now(), "updatedAt"=now()
          WHERE "tenantId"=$1 AND "studentId"=$2
          RETURNING "id"`,
         [tenantId, studentId],
@@ -233,6 +258,7 @@ interface StudentContactRow {
   canReceiveFinance: boolean;
   consentSource: string | null;
   consentRecordedAt: Date | null;
+  guardianId: string | null;
   deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -255,6 +281,7 @@ function toStudentContactStorageRecord(row: StudentContactRow): StudentContactSt
     canReceiveFinance: row.canReceiveFinance,
     consentSource: row.consentSource ?? undefined,
     consentRecordedAt: row.consentRecordedAt?.toISOString(),
+    guardianId: row.guardianId ?? undefined,
     deletedAt: row.deletedAt?.toISOString(),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

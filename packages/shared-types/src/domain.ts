@@ -1173,8 +1173,37 @@ export interface StudentContactRecord {
   canReceiveFinance: boolean;
   consentSource?: string;
   consentRecordedAt?: string;
+  /** Guardian account the institution admin linked to this contact (DEC-20261003-01). */
+  guardianId?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface StudentGuardianInvitationBulkRequest {
+  studentIds: string[];
+}
+
+export type StudentGuardianInvitationRowStatus = "CREATED" | "ALREADY_EXISTS" | "SKIPPED";
+export type StudentGuardianInvitationSkipReason =
+  | "NO_LEGAL_GUARDIAN_CONTACT"
+  | "EMAIL_MISSING"
+  | "EMAIL_IN_USE";
+
+/** Row result of the bulk guardian invitation; ids only, never names, email or phone. */
+export interface StudentGuardianInvitationRowResult {
+  studentId: string;
+  contactId?: string;
+  status: StudentGuardianInvitationRowStatus;
+  reason?: StudentGuardianInvitationSkipReason;
+  guardianId?: string;
+  invitationId?: string;
+}
+
+export interface StudentGuardianInvitationBulkResult {
+  createdCount: number;
+  alreadyExistsCount: number;
+  skippedCount: number;
+  results: StudentGuardianInvitationRowResult[];
 }
 
 export interface StudentOverviewLatestExamRecord {

@@ -711,7 +711,7 @@ Son kontrol: 2026-10-01
 
 ### DEC-20261003-01 — Veli hesabı korunur; StudentContact iletişim ve rıza kaydı olarak kalır
 
-Durum: Onaylı; iki flag KV-1 ile kodla kaldırıldı (LOCAL_TEST); staging veli UAT kanıtı ve Guardian–StudentContact bağlantı dilimi (KV-3) bekliyor
+Durum: Onaylı; iki flag KV-1 ile kodla kaldırıldı (LOCAL_TEST); Guardian–StudentContact bağı ve toplu veli daveti KV-3 ile eklendi (LOCAL_TEST; migration canlı Postgres'te koşulmadı); staging veli UAT kanıtı bekliyor
 Karar: `GUARDIAN` rolü, hesabı, session'ı ve veli portalı emekliye ayrılmaz; geliştirilir. Giriş
 kuralı DEC-20260801-01'deki gibidir: kurum kodu + kurum içi kullanıcı kimliği; T.C. kimlik numarası ve
 telefon kullanıcı adı veya parola olamaz; aynı kişi farklı tenantlarda ayrı hesap kullanır.
@@ -753,8 +753,14 @@ veli oluşturma/bağlama ve veli davetinde 2xx doğrular; `app.e2e.test.ts` öğ
 `GET /students` registry yolunu, sayfalamasız çağrılar tam listeyi kullanır.
 `packages/db/prisma/schema.prisma` (`StudentContact`, `Guardian`, `GuardianStudent`),
 `packages/shared-types/src/role-capabilities.ts` (`GUARDIAN` seti), `status.md` guardian durumu,
-`docs/product-journeys-v1.md` persona tablosu. Kanıt sınıfı LOCAL_TEST; CI, STAGING ve PRODUCTION
-UNPROVEN.
+`docs/product-journeys-v1.md` persona tablosu. KV-3: `StudentContact.guardianId` raw SQL bileşik FK
+(`StudentContact_tenantId_guardianId_studentId_fkey` → `GuardianStudent(tenantId, guardianId, studentId)`,
+`ON DELETE SET NULL ("guardianId")`, migration `20261006120000_student_contact_guardian_link`);
+`POST /students/guardian-invitations` (`student:manage` + `user:manage`, zorunlu `Idempotency-Key`)
+seçili öğrencilerin `LEGAL_GUARDIAN` iletişiminden veli hesabı + e-posta daveti üretir, bağlı iletişime
+ikinci davet açmaz, otomatik eşleme yapmaz (e-postası kullanımda olan satır `EMAIL_IN_USE` ile atlanır),
+izinleri değiştirmez ve yalnız sayım/id döner (`student-guardian-invitation.e2e.test.ts`). Veli daveti
+kabulü T.C. numarası istemez. Kanıt sınıfı LOCAL_TEST; CI, STAGING ve PRODUCTION UNPROVEN.
 Etkilenen ADR: ADR-0001 (Guardian–StudentContact bağı bileşik FK ve RLS ile kurulur), ADR-0008 (iki
 anahtar katalogdan çıkar, kaldırma kaydı eklenir). Yeni ADR başlığı: veli kimliği ve rıza kaynağı
 ayrımı.
