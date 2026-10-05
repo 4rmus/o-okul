@@ -21,6 +21,7 @@ import type {
   ReportStudentSnapshot,
   StudentEnrollmentRecord,
   StudentAuditSummaryRecord,
+  StudentContactGuardianLinkResult,
   StudentContactRecord,
   StudentOverviewRecord,
   StudentProfileRecord,
@@ -29,9 +30,9 @@ import type {
   TeacherRecord,
 } from "@o-okul/shared-types";
 import { ArrowLeft, BarChart3, ChevronRight, LayoutDashboard } from "lucide-react";
-import { ActionCard, Alert, Button, DataTable, Field, InfoGrid, InfoItem, Input, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
+import { ActionCard, Alert, Button, DataTable, Field, InfoGrid, InfoItem, Input, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn, type StatusBadgeProps, useConfirmDialog } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
-import { ApiRequestError, apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
+import { ApiRequestError, apiBaseUrl, apiRequest, withQueryParams } from "../../../../src/api-client.js";
 import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
@@ -593,6 +594,7 @@ function StudentContactPanel({
 }) {
   const { auth } = useAuth();
   const queryClient = useQueryClient();
+  const canLinkGuardian = canManageStudent && hasCapabilityForRoles(auth?.session.roles ?? [], "user:manage");
   const [form, setForm] = useState({ firstName: "", lastName: "", relationType: "OTHER", phone: "", email: "" });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -644,6 +646,7 @@ function StudentContactPanel({
         emptyText="İletişim kaydı yok"
         rows={buildContactRows(detail)}
       />
+      {canLinkGuardian ? <StudentContactGuardianLinkControls detail={detail} studentId={studentId} /> : null}
       {canManageStudent ? (
         <form className="next-form-section" onSubmit={(event) => void submit(event)}>
           <p className="next-form-section-title">İletişim kişisi ekle</p>
@@ -669,6 +672,186 @@ function StudentContactPanel({
   );
 }
 
+/**
+ * KV-3b (DEC-20261003-01): the admin links a LEGAL_GUARDIAN contact to an existing guardian picked from the guardian
+ * search, or (product owner decision 2026-10-05) to an existing staff/teacher user of the institution who is also a
+ * parent: no second account, the GUARDIAN role is added to that user. Removing the link also removes the portal access.
+ */
+type GuardianLinkTarget = "guardian" | "user";
+
+interface GuardianLinkUserOption {
+  id: string;
+  name: string;
+  roles: string[];
+}
+
+function StudentContactGuardianLinkControls({ detail, studentId }: { detail: StudentBaseDetail; studentId: string }) {
+  const { auth } = useAuth();
+  const queryClient = useQueryClient();
+  const { confirm, confirmationDialog } = useConfirmDialog();
+  const legalContacts = detail.contacts.filter((contact) => contact.relationType === "LEGAL_GUARDIAN");
+  const [contactId, setContactId] = useState("");
+  const [target, setTarget] = useState<GuardianLinkTarget>("guardian");
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ tone: "danger" | "success"; text: string } | null>(null);
+  const pending = useRef<{ request: string; idempotencyKey: string } | null>(null);
+  const contact = legalContacts.find((candidate) => candidate.id === contactId) ?? legalContacts[0];
+  const searchTerm = search.trim();
+  const canSearch = Boolean(auth && contact && !contact.guardianId);
+  const guardiansQuery = useQuery({
+    queryKey: ["next-student-contact-guardian-search", auth?.session.tenantId ?? "anonymous", searchTerm],
+    queryFn: () => apiRequest<GuardianRecord[]>(
+      auth?.accessToken ?? "",
+      withQueryParams(`${apiBaseUrl}/guardians`, { q: searchTerm, limit: "20", page: "1" }),
+    ),
+    enabled: canSearch && target === "guardian",
+    refetchOnWindowFocus: false,
+  });
+  const usersQuery = useQuery({
+    queryKey: ["next-student-contact-guardian-user-search", auth?.session.tenantId ?? "anonymous", searchTerm],
+    queryFn: () => apiRequest<GuardianLinkUserOption[]>(
+      auth?.accessToken ?? "",
+      withQueryParams(`${apiBaseUrl}/tenant-users`, { q: searchTerm, limit: "20", page: "1" }),
+    ),
+    enabled: canSearch && target === "user",
+    refetchOnWindowFocus: false,
+  });
+  const options = target === "guardian"
+    ? (guardiansQuery.data ?? []).map((guardian) => ({ id: guardian.id, label: `${guardian.firstName} ${guardian.lastName}` }))
+    : (usersQuery.data ?? [])
+      // Staff/teacher accounts only; student accounts can never hold the guardian role (the API refuses them too).
+      .filter((user) => !user.roles.includes("STUDENT") && user.roles.some((role) => role !== "GUARDIAN"))
+      .map((user) => ({ id: user.id, label: user.name }));
+  const optionsPending = target === "guardian" ? guardiansQuery.isPending : usersQuery.isPending;
+  const linkedGuardianName = contact?.guardianId
+    ? detail.guardians.find((guardian) => guardian.id === contact.guardianId)
+    : undefined;
+
+  if (legalContacts.length === 0 || !contact) return null;
+  const contactName = `${contact.firstName} ${contact.lastName}`;
+  const searchLabel = target === "guardian" ? "Veli ara" : "Kullanıcı ara";
+  const selectLabel = target === "guardian" ? "Veli seçimi" : "Kullanıcı seçimi";
+  const linkLabel = target === "guardian" ? "Mevcut veliye bağla" : "Mevcut kullanıcıya bağla";
+
+  async function submit(action: "link" | "unlink") {
+    if (!auth || saving || !contact) return;
+    const selected = options.find((option) => option.id === selectedId);
+    if (action === "link" && !selected) return;
+    const confirmed = await confirm(action === "link"
+      ? target === "guardian"
+        ? {
+          confirmLabel: "Bağla",
+          confirmVariant: "primary",
+          description: "Veli hesabı açılmaz; öğrenci–veli bağı yoksa tüm izinler kapalı olarak eklenir.",
+          message: `${contactName} iletişim kaydı ${selected?.label ?? ""} velisine bağlansın mı?`,
+          title: "Mevcut veliye bağla",
+        }
+        : {
+          confirmLabel: "Bağla",
+          confirmVariant: "primary",
+          description: "Ayrı hesap açılmaz; kullanıcının mevcut rolleri korunur, Veli rolü eklenir ve açık oturumları kapanır. Öğrenci–veli bağı tüm izinler kapalı olarak eklenir.",
+          message: `${contactName} iletişim kaydı ${selected?.label ?? ""} kullanıcısına bağlansın mı?`,
+          title: "Mevcut kullanıcıya bağla",
+        }
+      : {
+        confirmLabel: "Bağı kaldır",
+        description: "İletişim kaydındaki bağ ve öğrencinin veli portalı erişimi kaldırılır (öğrencinin başka bir iletişim kaydı aynı veliye bağlıysa erişim kalır).",
+        message: `${contactName} iletişim kaydının veli bağı kaldırılsın mı?`,
+        title: "Veli bağını kaldır",
+      });
+    if (!confirmed) return;
+
+    const body = action === "link" ? JSON.stringify(target === "guardian" ? { guardianId: selectedId } : { userId: selectedId }) : "";
+    const request = `${action}:${contact.id}:${body}`;
+    if (pending.current?.request !== request) pending.current = { request, idempotencyKey: crypto.randomUUID() };
+    setSaving(true);
+    setMessage(null);
+    try {
+      await apiRequest<StudentContactGuardianLinkResult>(
+        auth.accessToken,
+        `${apiBaseUrl}/students/${encodeURIComponent(studentId)}/contacts/${encodeURIComponent(contact.id)}/guardian`,
+        {
+          ...(action === "link" ? { body } : {}),
+          headers: { "content-type": "application/json", "Idempotency-Key": pending.current.idempotencyKey },
+          method: action === "link" ? "PUT" : "DELETE",
+        },
+      );
+      pending.current = null;
+      setSelectedId("");
+      setMessage({
+        tone: "success",
+        text: action === "unlink"
+          ? "Veli bağı ve portal erişimi kaldırıldı."
+          : target === "guardian" ? "İletişim kaydı veliye bağlandı." : "Kullanıcıya veli rolü eklendi ve iletişim kaydı bağlandı.",
+      });
+      await queryClient.invalidateQueries({ queryKey: ["next-student-detail-page-data"] });
+    } catch (error) {
+      setMessage({ tone: "danger", text: formatGuardianLinkError(error) });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="next-form-section">
+      <p className="next-form-section-title">Veli bağı</p>
+      <div className="next-list-controls" aria-label="Veli bağı">
+        <Field label="Yasal temsilci">
+          <Select value={contact.id} onChange={(event) => { setContactId(event.target.value); setSelectedId(""); setMessage(null); }}>
+            {legalContacts.map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>{candidate.firstName} {candidate.lastName}</option>
+            ))}
+          </Select>
+        </Field>
+        {contact.guardianId ? (
+          <>
+            <p role="status">Bağlı veli: {linkedGuardianName ? `${linkedGuardianName.firstName} ${linkedGuardianName.lastName}` : "Veli kaydı"}</p>
+            <Button disabled={saving} type="button" variant="secondary" onClick={() => void submit("unlink")}>Bağı kaldır</Button>
+          </>
+        ) : (
+          <>
+            <Field label="Bağlanacak kişi">
+              <Select value={target} onChange={(event) => { setTarget(event.target.value as GuardianLinkTarget); setSelectedId(""); setMessage(null); }}>
+                <option value="guardian">Mevcut veli</option>
+                <option value="user">Mevcut kullanıcı (personel)</option>
+              </Select>
+            </Field>
+            <Field label={searchLabel}>
+              <Input type="search" value={search} onChange={(event) => setSearch(event.target.value)} />
+            </Field>
+            <Field label={selectLabel}>
+              <Select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
+                <option value="">{optionsPending ? "Yükleniyor…" : options.length > 0 ? (target === "guardian" ? "Veli seçin" : "Kullanıcı seçin") : (target === "guardian" ? "Veli bulunamadı" : "Kullanıcı bulunamadı")}</option>
+                {options.map((option) => (
+                  <option key={option.id} value={option.id}>{option.label}</option>
+                ))}
+              </Select>
+            </Field>
+            <Button disabled={saving || !selectedId} type="button" onClick={() => void submit("link")}>{linkLabel}</Button>
+          </>
+        )}
+      </div>
+      {message ? <Alert tone={message.tone}>{message.text}</Alert> : null}
+      {confirmationDialog}
+    </div>
+  );
+}
+
+const guardianLinkErrorMessages: Record<string, string> = {
+  STUDENT_CONTACT_GUARDIAN_ALREADY_LINKED: "İletişim kaydı başka bir veliye bağlı; önce bağı kaldırın.",
+  STUDENT_CONTACT_GUARDIAN_NOT_FOUND: "Seçilen veli kaydı bulunamadı. Personel veya öğretmen için \"Mevcut kullanıcı (personel)\" seçeneğini kullanın.",
+  STUDENT_CONTACT_NOT_LEGAL_GUARDIAN: "Yalnız yasal temsilci iletişim kaydı veliye bağlanabilir.",
+  STUDENT_CONTACT_USER_NOT_ELIGIBLE: "Bu kullanıcıya veli rolü eklenemez (öğrenci hesabı veya kurum üyeliği eksik).",
+  STUDENT_CONTACT_USER_NOT_FOUND: "Seçilen kullanıcı bu kurumda bulunamadı.",
+};
+
+function formatGuardianLinkError(error: unknown): string {
+  const code = error instanceof ApiRequestError ? error.code : undefined;
+  return (code && guardianLinkErrorMessages[code]) || "Veli bağı güncellenemedi.";
+}
+
 function buildContactRows(detail: StudentBaseDetail): StudentDetailTableRow[] {
   return [
     {
@@ -692,8 +875,8 @@ function buildContactRows(detail: StudentBaseDetail): StudentDetailTableRow[] {
       id: `student-contact-${contact.id}`,
       meta: formatStudentContactRelation(contact.relationType),
       primary: `${contact.firstName} ${contact.lastName}`,
-      status: "İletişim kişisi",
-      tone: "info",
+      status: contact.guardianId ? "Veliye bağlı" : "İletişim kişisi",
+      tone: contact.guardianId ? "success" : "info",
     })),
   ];
 }

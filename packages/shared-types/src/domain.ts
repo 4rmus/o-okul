@@ -6,7 +6,8 @@ import type {
 } from "./format-analyzer.js";
 import type { PortalSubjectRoleName, TenantAssignableRoleName } from "./role-capabilities.js";
 
-export type ActivePersona = "STAFF" | "TEACHER" | "STUDENT";
+/** GUARDIAN: a staff/teacher account that was also given the guardian role (KV-3b) opens it as its own persona. */
+export type ActivePersona = "STAFF" | "TEACHER" | "STUDENT" | "GUARDIAN";
 
 export interface Session {
   id: string;
@@ -1204,6 +1205,30 @@ export interface StudentGuardianInvitationBulkResult {
   alreadyExistsCount: number;
   skippedCount: number;
   results: StudentGuardianInvitationRowResult[];
+}
+
+/**
+ * KV-3b: the institution admin links a LEGAL_GUARDIAN contact by hand (no automatic matching) to exactly one of an
+ * existing guardian (guardianId) or an existing user of the same tenant, e.g. a teacher who is also a parent (userId).
+ * The user path never opens a second account: it adds the GUARDIAN role to that user's existing membership set.
+ */
+export type StudentContactGuardianLinkRequest =
+  | { guardianId: string; userId?: never }
+  | { userId: string; guardianId?: never };
+
+/** Link/unlink result; ids only, never names, email or phone. guardianId is absent after an unlink. */
+export interface StudentContactGuardianLinkResult {
+  studentId: string;
+  contactId: string;
+  guardianId?: string;
+  changed: boolean;
+  guardianStudentCreated: boolean;
+  /** User path only: a Guardian profile was created for the picked user. */
+  guardianCreated?: boolean;
+  /** User path only: the GUARDIAN role was added; the user's active sessions were closed so the next login offers it. */
+  guardianRoleAdded?: boolean;
+  /** Unlink only: the GuardianStudent access link was removed (no other contact of the student still points at it). */
+  guardianStudentRemoved?: boolean;
 }
 
 export interface StudentOverviewLatestExamRecord {

@@ -598,7 +598,8 @@
   @media (max-width: 414px) {
     .next-list-controls[aria-label="Günlük yoklama kontrolleri"],
     .next-list-controls[aria-label="Toplu dönem geçişi"],
-    .next-list-controls[aria-label="Toplu veli daveti"] {
+    .next-list-controls[aria-label="Toplu veli daveti"],
+    .next-list-controls[aria-label="Veli bağı"] {
       grid-template-columns: minmax(0, 1fr);
     }
 

@@ -409,6 +409,9 @@ describe("PostgresUserManagementStore", () => {
     });
 
     expect(queries.some((query) => query.sql.includes('DELETE FROM "TenantMembership"') && query.sql.includes('"id" <> $3'))).toBe(true);
+    // KV-3b: a GUARDIAN membership of a staff member who is also a parent survives an access change.
+    expect(queries.filter((query) => query.sql.includes('DELETE FROM "TenantMembership"')).every((query) => query.sql.includes(`"role" <> 'GUARDIAN'`))).toBe(true);
+    expect(queries.some((query) => query.sql.includes('UPDATE "TenantMembership"') && query.sql.includes(`"role" = 'GUARDIAN'`))).toBe(true);
     expect(queries.some((query) => query.sql.includes('UPDATE "TenantMembership"') && query.sql.includes('"version" = $8'))).toBe(true);
     expect(queries.some((query) => query.sql.includes('INSERT INTO "TenantMembership"') && query.sql.includes("'TEACHER'"))).toBe(true);
     expect(queries.some((query) => query.sql.includes('UPDATE "AuthSession"') && query.sql.includes("RETURNING \"id\""))).toBe(true);

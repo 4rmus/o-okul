@@ -104,7 +104,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     refetchOnWindowFocus: false,
   });
   const tenantBrand = safeTenantBrand(tenantBrandQuery.data);
-  const personaSwitchTarget = resolvePersonaSwitchTarget(profileQuery.data);
+  const personaSwitchTargets = resolvePersonaSwitchTargets(profileQuery.data);
   const isAuthorizedPath = auth ? canAccessPath(auth.session, pathname, searchParams) : false;
   const portalBottomNavRoot = auth && !hasInstitutionAccess(auth.session.roles)
     ? hasSubjectPortalAccess(auth.session, "TEACHER", "TEACHER") ? "/ogretmen" as const
@@ -207,12 +207,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     router.replace(loginPathFor(pathname));
   }
 
-  async function handlePersonaSwitch() {
-    if (!personaSwitchTarget || isPersonaSwitching) return;
+  async function handlePersonaSwitch(target: ActivePersona) {
+    if (isPersonaSwitching) return;
     setIsPersonaSwitching(true);
     setPersonaSwitchError("");
     try {
-      await switchPersona(personaSwitchTarget);
+      await switchPersona(target);
       closeMobileNav();
     } catch {
       setPersonaSwitchError("Çalışma alanı değiştirilemedi. Tekrar deneyin.");
@@ -383,11 +383,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                 />
               ))
             : null}
-          {personaSwitchTarget ? (
-            <Button variant="secondary" type="button" disabled={isPersonaSwitching} onClick={() => void handlePersonaSwitch()}>
-              {personaSwitchLabel(personaSwitchTarget, isPersonaSwitching)}
+          {personaSwitchTargets.map((target) => (
+            <Button key={target} variant="secondary" type="button" disabled={isPersonaSwitching} onClick={() => void handlePersonaSwitch(target)}>
+              {personaSwitchLabel(target, isPersonaSwitching)}
             </Button>
-          ) : null}
+          ))}
           {personaSwitchError ? <p className="next-status-note" role="alert">{personaSwitchError}</p> : null}
           <Link className="next-sidebar-link" href="/hesap/oturumlar" aria-current={navCurrent("/hesap/oturumlar")}>
             <ShieldCheck className="next-sidebar-link-icon" size={16} aria-hidden="true" />
@@ -420,8 +420,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         <DesktopTopBar
           canUseShellSearch={canUseShellSearch}
           onLogout={() => void handleLogout()}
-          onPersonaSwitch={personaSwitchTarget ? () => void handlePersonaSwitch() : undefined}
-          personaSwitchLabel={personaSwitchTarget ? personaSwitchLabel(personaSwitchTarget, isPersonaSwitching) : undefined}
+          personaSwitches={personaSwitchTargets.map((target) => ({
+            label: personaSwitchLabel(target, isPersonaSwitching),
+            onSelect: () => void handlePersonaSwitch(target),
+            target,
+          }))}
           personaSwitching={isPersonaSwitching}
           onSearch={openCommandSearch}
           session={auth.session}
@@ -456,16 +459,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-function resolvePersonaSwitchTarget(profile: MeProfileResponse | undefined): ActivePersona | undefined {
-  if (!profile?.activePersona || !profile.availablePersonas?.includes("STAFF") || !profile.availablePersonas.includes("TEACHER")) {
-    return undefined;
-  }
-  return profile.activePersona === "STAFF" ? "TEACHER" : "STAFF";
+/** One button per other persona of the same account (STAFF / TEACHER / GUARDIAN, KV-3b); never a capability merge. */
+function resolvePersonaSwitchTargets(profile: MeProfileResponse | undefined): ActivePersona[] {
+  const available = profile?.availablePersonas ?? [];
+  if (!profile?.activePersona || available.length < 2) return [];
+  return available.filter((persona) => persona !== profile.activePersona && persona !== "STUDENT");
 }
 
+const personaSwitchLabels: Record<ActivePersona, string> = {
+  GUARDIAN: "Veli alanına geç",
+  STAFF: "Kurum alanına geç",
+  STUDENT: "Öğrenci alanına geç",
+  TEACHER: "Öğretmen alanına geç",
+};
+
 function personaSwitchLabel(target: ActivePersona, pending: boolean) {
-  if (pending) return "Çalışma alanı değiştiriliyor";
-  return target === "TEACHER" ? "Öğretmen alanına geç" : "Kurum alanına geç";
+  return pending ? "Çalışma alanı değiştiriliyor" : personaSwitchLabels[target];
 }
 
 function isPortalRootPath(pathname: string) {

@@ -4,7 +4,7 @@ const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const corsHeaders = {
   "access-control-allow-credentials": "true",
   "access-control-allow-headers": "authorization,content-type,idempotency-key,x-csrf-token",
-  "access-control-allow-methods": "DELETE,GET,PATCH,POST,OPTIONS",
+  "access-control-allow-methods": "DELETE,GET,PATCH,POST,PUT,OPTIONS",
   "access-control-allow-origin": appOrigin,
 };
 
@@ -138,7 +138,81 @@ test.describe("Öğrenci ilişki haritası", () => {
     expect(contactCreateRequests[1]?.idempotencyKey).toBe(contactCreateRequests[0]?.idempotencyKey);
     expect(contactCreateRequests[1]?.body).toBe(contactCreateRequests[0]?.body);
   });
+
+  for (const viewport of [{ name: "masaüstü", width: 1280, height: 900 }, { name: "mobil", width: 390, height: 844 }]) {
+    test(`yasal temsilci iletişimi onayla mevcut veliye bağlanır ve bağı kaldırılır (KV-3b, ${viewport.name})`, async ({ page }) => {
+      const guardianLink = { guardianId: undefined as string | undefined, requests: [] as GuardianLinkRequest[] };
+      await openStudentDetail(page, viewport, { guardianLink });
+
+      const controls = page.getByLabel("Veli bağı", { exact: true });
+      await expect(controls.getByLabel("Yasal temsilci")).toHaveValue("contact-legal");
+      await controls.getByLabel("Veli ara").fill("Selin");
+      await expect.poll(() => guardianLink.requests.some((request) => request.method === "GET" && request.search.includes("q=Selin"))).toBe(true);
+      await controls.getByLabel("Veli seçimi").selectOption("guardian-sibling");
+      await controls.getByRole("button", { name: "Mevcut veliye bağla" }).click();
+      const linkDialog = page.getByRole("dialog", { name: "Mevcut veliye bağla" });
+      await expect(linkDialog).toContainText("Veli hesabı açılmaz");
+      await expectNoHorizontalOverflow(page, `student-guardian-link-dialog-${viewport.name}`);
+      await linkDialog.getByRole("button", { name: "Bağla" }).click();
+
+      await expect(controls.getByRole("status")).toHaveText("Bağlı veli: Selin Ak");
+      await expect(page.getByLabel("Öğrenci iletişim kişileri", { exact: true })).toContainText("Veliye bağlı");
+      await expectNoHorizontalOverflow(page, `student-guardian-link-${viewport.name}`);
+      await expectNoUnlabeledControls(page, `student-guardian-link-${viewport.name}`);
+
+      await controls.getByRole("button", { name: "Bağı kaldır" }).click();
+      await page.getByRole("dialog", { name: "Veli bağını kaldır" }).getByRole("button", { name: "Bağı kaldır" }).click();
+      await expect(controls.getByRole("button", { name: "Mevcut veliye bağla" })).toBeVisible();
+
+      const writes = guardianLink.requests.filter((request) => request.method !== "GET");
+      expect(writes).toEqual([
+        { method: "PUT", path: "/students/student-a/contacts/contact-legal/guardian", search: "", body: JSON.stringify({ guardianId: "guardian-sibling" }), idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/) },
+        { method: "DELETE", path: "/students/student-a/contacts/contact-legal/guardian", search: "", body: "", idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/) },
+      ]);
+      expect(writes[0]?.idempotencyKey).not.toBe(writes[1]?.idempotencyKey);
+    });
+
+    test(`öğretmen/personel olan veli mevcut kullanıcı seçilerek ayrı hesap açılmadan bağlanır (KV-3b, ${viewport.name})`, async ({ page }) => {
+      const guardianLink = { guardianId: undefined as string | undefined, requests: [] as GuardianLinkRequest[] };
+      await openStudentDetail(page, viewport, { guardianLink });
+
+      const controls = page.getByLabel("Veli bağı", { exact: true });
+      const targetSelect = controls.getByLabel("Bağlanacak kişi");
+      await expect(targetSelect.locator("option")).toHaveText(["Mevcut veli", "Mevcut kullanıcı (personel)"]);
+      await targetSelect.selectOption("user");
+      await controls.getByLabel("Kullanıcı ara").fill("Selin");
+      await expect.poll(() => guardianLink.requests.some((request) => request.path === "/tenant-users" && request.search.includes("q=Selin"))).toBe(true);
+      const userSelect = controls.getByLabel("Kullanıcı seçimi");
+      // Student accounts are never offered (the API refuses them as well).
+      await expect(userSelect.locator("option")).toHaveText(["Kullanıcı seçin", "Selin Ak"]);
+      await userSelect.selectOption("user-teacher-parent");
+      await controls.getByRole("button", { name: "Mevcut kullanıcıya bağla" }).click();
+      const linkDialog = page.getByRole("dialog", { name: "Mevcut kullanıcıya bağla" });
+      await expect(linkDialog).toContainText("Ayrı hesap açılmaz");
+      await expect(linkDialog).toContainText("Veli rolü eklenir");
+      await expectNoHorizontalOverflow(page, `student-guardian-user-link-dialog-${viewport.name}`);
+      await linkDialog.getByRole("button", { name: "Bağla" }).click();
+
+      await expect(controls.getByRole("status")).toHaveText("Bağlı veli: Selin Ak");
+      await expect(page.getByText("Kullanıcıya veli rolü eklendi ve iletişim kaydı bağlandı.")).toBeVisible();
+      await expectNoHorizontalOverflow(page, `student-guardian-user-link-${viewport.name}`);
+      await expectNoUnlabeledControls(page, `student-guardian-user-link-${viewport.name}`);
+
+      const writes = guardianLink.requests.filter((request) => request.method !== "GET");
+      expect(writes).toEqual([
+        { method: "PUT", path: "/students/student-a/contacts/contact-legal/guardian", search: "", body: JSON.stringify({ userId: "user-teacher-parent" }), idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/) },
+      ]);
+    });
+  }
 });
+
+interface GuardianLinkRequest {
+  body: string;
+  idempotencyKey: string;
+  method: string;
+  path: string;
+  search: string;
+}
 
 async function openStudentDetail(
   page: Page,
@@ -147,6 +221,7 @@ async function openStudentDetail(
     auditLogRequests?: URL[];
     contactCreateRequests?: Array<{ body: string; idempotencyKey: string }>;
     failFirstContactCreate?: boolean;
+    guardianLink?: { guardianId?: string; requests: GuardianLinkRequest[] };
     requestedPaths?: string[];
     roles?: string[];
   } = {},
@@ -169,6 +244,7 @@ async function installStudentApiMocks(
     auditLogRequests?: URL[];
     contactCreateRequests?: Array<{ body: string; idempotencyKey: string }>;
     failFirstContactCreate?: boolean;
+    guardianLink?: { guardianId?: string; requests: GuardianLinkRequest[] };
     requestedPaths?: string[];
     roles?: string[];
   } = {},
@@ -196,6 +272,37 @@ async function installStudentApiMocks(
         return;
       }
     }
+    const guardianLink = options.guardianLink;
+    if (guardianLink && (pathName === "/guardians" || pathName === "/tenant-users" || pathName === "/students/student-a/contacts/contact-legal/guardian")) {
+      const method = route.request().method();
+      guardianLink.requests.push({
+        body: route.request().postData() ?? "",
+        idempotencyKey: route.request().headers()["idempotency-key"] ?? "",
+        method,
+        path: pathName,
+        search: url.search,
+      });
+      if (pathName === "/guardians") {
+        await fulfillData(route, [{ firstName: "Selin", id: "guardian-sibling", lastName: "Ak", tenantId: "tenant-flow" }]);
+        return;
+      }
+      if (pathName === "/tenant-users") {
+        await fulfillData(route, [
+          { id: "user-teacher-parent", name: "Selin Ak", roles: ["TEACHER"] },
+          { id: "user-student", name: "Ogrenci Hesap", roles: ["STUDENT"] },
+        ]);
+        return;
+      }
+      guardianLink.guardianId = method === "PUT" ? "guardian-sibling" : undefined;
+      await fulfillData(route, {
+        changed: true,
+        contactId: "contact-legal",
+        guardianId: guardianLink.guardianId,
+        guardianStudentCreated: method === "PUT",
+        studentId: "student-a",
+      });
+      return;
+    }
     const response = mockApiResponse(pathName, url, options);
     await fulfillData(route, response.data, response.meta);
   });
@@ -204,12 +311,12 @@ async function installStudentApiMocks(
 function mockApiResponse(
   pathName: string,
   url: URL,
-  options: { auditLogRequests?: URL[]; roles?: string[] },
+  options: { auditLogRequests?: URL[]; guardianLink?: { guardianId?: string }; roles?: string[] },
 ): { data: unknown; meta?: { limit: number; page: number; total: number; totalPages: number } } {
   if (pathName === "/auth/refresh") return { data: createAuthResponse(options.roles) };
   if (pathName === "/me/tenant") return { data: createTenantResponse() };
   if (pathName === "/me/notification-devices") return { data: [] };
-  if (pathName === "/students/student-a/overview") return { data: createStudentOverview(options.roles) };
+  if (pathName === "/students/student-a/overview") return { data: createStudentOverview(options.roles, options.guardianLink) };
   if (pathName === "/students/student-a/profile") return { data: createStudentProfile() };
   if (pathName === "/students/student-a/guardian-links") return { data: createGuardianLinks() };
   if (pathName === "/students/student-a/guardians") return { data: createGuardians() };
@@ -287,7 +394,7 @@ function createStudentProfile() {
   };
 }
 
-function createStudentOverview(roles = ["TENANT_ADMIN"]) {
+function createStudentOverview(roles = ["TENANT_ADMIN"], guardianLink?: { guardianId?: string }) {
   const enrollments = createEnrollments();
   return {
     profile: createStudentProfile(),
@@ -312,8 +419,24 @@ function createStudentOverview(roles = ["TENANT_ADMIN"]) {
       canReceiveFinance: false,
       createdAt: "2026-06-18T08:00:00.000Z",
       updatedAt: "2026-06-18T08:00:00.000Z",
-    }],
-    guardians: createGuardians().map(({ phone: _phone, ...guardian }) => ({ ...guardian, phoneMasked: "••• ••• ••01" })),
+    }, ...(guardianLink ? [{
+      id: "contact-legal",
+      tenantId: "tenant-flow",
+      studentId: "student-a",
+      firstName: "Deniz",
+      lastName: "Temsilci",
+      relationType: "LEGAL_GUARDIAN",
+      canReceiveSms: false,
+      canReceiveAnnouncements: false,
+      canReceiveFinance: false,
+      guardianId: guardianLink.guardianId,
+      createdAt: "2026-06-18T08:00:00.000Z",
+      updatedAt: "2026-06-18T08:00:00.000Z",
+    }] : [])],
+    guardians: [
+      ...createGuardians().map(({ phone: _phone, ...guardian }) => ({ ...guardian, phoneMasked: "••• ••• ••01" })),
+      ...(guardianLink?.guardianId ? [{ firstName: "Selin", id: "guardian-sibling", lastName: "Ak", tenantId: "tenant-flow" }] : []),
+    ],
     guardianLinks: createGuardianLinks(),
     teacherAssignments: createTeacherAssignments(),
     teachers: createTeachers(),

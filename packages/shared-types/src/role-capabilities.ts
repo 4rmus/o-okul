@@ -96,7 +96,7 @@ export function hasCapabilityForRoles(
 
 export function canAccessExamWorkspace(
   roles: readonly string[],
-  activePersona?: "STAFF" | "TEACHER" | "STUDENT",
+  activePersona?: "STAFF" | "TEACHER" | "STUDENT" | "GUARDIAN",
 ): boolean {
   const allowedRoles = ["TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN"];
   const hasAllowedRole = roles.some((role) => allowedRoles.includes(role));

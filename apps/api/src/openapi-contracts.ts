@@ -62,7 +62,7 @@ const sessionSchema = objectSchema({
   userId: stringSchema(),
   tenantId: stringSchema(),
   membershipId: stringSchema(),
-  activePersona: { type: "string", enum: ["STAFF", "TEACHER", "STUDENT"] },
+  activePersona: { type: "string", enum: ["STAFF", "TEACHER", "STUDENT", "GUARDIAN"] },
   roles: arraySchema(stringSchema(), { minItems: 1 }),
   membershipVersion: integerSchema({ minimum: 0 }),
   status: stringSchema(),
@@ -79,8 +79,8 @@ const meProfileResponseSchema = objectSchema({
   subjectType: { type: "string", enum: ["STUDENT", "GUARDIAN", "TEACHER"] },
   subjectId: stringSchema(),
   membershipId: stringSchema(),
-  activePersona: { type: "string", enum: ["STAFF", "TEACHER", "STUDENT"] },
-  availablePersonas: arraySchema({ type: "string", enum: ["STAFF", "TEACHER", "STUDENT"] }),
+  activePersona: { type: "string", enum: ["STAFF", "TEACHER", "STUDENT", "GUARDIAN"] },
+  availablePersonas: arraySchema({ type: "string", enum: ["STAFF", "TEACHER", "STUDENT", "GUARDIAN"] }),
   capabilities: arraySchema(stringSchema()),
   membership: objectSchema({
     id: stringSchema(),
@@ -89,12 +89,12 @@ const meProfileResponseSchema = objectSchema({
 }, ["userId", "tenantId", "roles"]);
 
 const personaSwitchRequestSchema = objectSchema({
-  activePersona: { type: "string", enum: ["STAFF", "TEACHER", "STUDENT"] },
+  activePersona: { type: "string", enum: ["STAFF", "TEACHER", "STUDENT", "GUARDIAN"] },
 }, ["activePersona"]);
 
 const meSessionRecordSchema = objectSchema({
   id: stringSchema(),
-  activePersona: { type: "string", enum: ["STAFF", "TEACHER", "STUDENT"] },
+  activePersona: { type: "string", enum: ["STAFF", "TEACHER", "STUDENT", "GUARDIAN"] },
   deviceLabel: stringSchema(),
   clientIpPrefix: stringSchema(),
   roles: arraySchema(stringSchema(), { minItems: 1 }),
@@ -2823,6 +2823,24 @@ const studentGuardianInvitationBulkResultSchema = objectSchema({
   }, ["studentId", "status"])),
 }, ["createdCount", "alreadyExistsCount", "skippedCount", "results"]);
 
+const studentContactGuardianLinkRequestSchema = {
+  oneOf: [
+    objectSchema({ guardianId: stringSchema({ minLength: 1 }) }, ["guardianId"]),
+    objectSchema({ userId: stringSchema({ minLength: 1 }) }, ["userId"]),
+  ],
+};
+
+const studentContactGuardianLinkResultSchema = objectSchema({
+  studentId: stringSchema(),
+  contactId: stringSchema(),
+  guardianId: stringSchema(),
+  changed: { type: "boolean" },
+  guardianStudentCreated: { type: "boolean" },
+  guardianCreated: { type: "boolean" },
+  guardianRoleAdded: { type: "boolean" },
+  guardianStudentRemoved: { type: "boolean" },
+}, ["studentId", "contactId", "changed", "guardianStudentCreated"]);
+
 const studentBulkEnrollmentResultSchema = objectSchema({
   updatedCount: integerSchema({ minimum: 0 }),
   enrollments: arraySchema(studentEnrollmentRecordSchema),
@@ -4633,6 +4651,17 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "delete /api/v1/students/{studentId}/contacts/{id}": {
     noContent: true,
+  },
+  "put /api/v1/students/{studentId}/contacts/{id}/guardian": {
+    idempotent: true,
+    idempotencyRequired: true,
+    requestBody: studentContactGuardianLinkRequestSchema,
+    responseBody: studentContactGuardianLinkResultSchema,
+  },
+  "delete /api/v1/students/{studentId}/contacts/{id}/guardian": {
+    idempotent: true,
+    idempotencyRequired: true,
+    responseBody: studentContactGuardianLinkResultSchema,
   },
   "post /api/v1/students/imports/dry-run": {
     requestBody: studentImportRequestSchema,

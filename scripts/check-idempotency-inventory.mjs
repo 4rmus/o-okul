@@ -47,6 +47,8 @@ const inventory = [
   entry("sms.batch.enqueue", "POST", "/api/v1/sms-batches", "covered", "apps/api/src/sms-batch/sms-batch.controller.ts", "apps/api/src/sms-batch/sms-batch.service.ts", "apps/api/src/sms-batch/sms-batch.e2e.test.ts", ["@Post()", "@Headers(\"idempotency-key\")"], ["sms-batch-idempotency-a"]),
   entry("student.create", "POST", "/api/v1/students", "covered", "apps/api/src/student/student.controller.ts", "apps/api/src/student/student.service.ts", "apps/api/src/app.e2e.test.ts", ["@Post()", "@Headers(\"idempotency-key\")"], ["student-create-idempotency-a"]),
   entry("student.contact.create", "POST", "/api/v1/students/{studentId}/contacts", "covered", "apps/api/src/student/student-contact.controller.ts", "apps/api/src/student/student-contact.service.ts", "apps/api/src/student/student-contact.e2e.test.ts", ["@Post()", "@Headers(\"idempotency-key\")"], ["student-contact-create-idempotency-a"]),
+  entry("student.contact.guardian-link", "PUT", "/api/v1/students/{studentId}/contacts/{id}/guardian", "covered", "apps/api/src/student/student-contact.controller.ts", "apps/api/src/student/student-contact-guardian-link.service.ts", "apps/api/src/student/student-contact-guardian-link.e2e.test.ts", ["@Put(\":id/guardian\")", "@Headers(\"idempotency-key\")"], ["kv3b-link-a"]),
+  entry("student.contact.guardian-unlink", "DELETE", "/api/v1/students/{studentId}/contacts/{id}/guardian", "covered", "apps/api/src/student/student-contact.controller.ts", "apps/api/src/student/student-contact-guardian-link.service.ts", "apps/api/src/student/student-contact-guardian-link.e2e.test.ts", ["@Delete(\":id/guardian\")", "@Headers(\"idempotency-key\")"], ["kv3b-unlink-a"]),
   entry("student.guardian-invitation.bulk", "POST", "/api/v1/students/guardian-invitations", "covered", "apps/api/src/student/student.controller.ts", "apps/api/src/student/student-guardian-invitation.service.ts", "apps/api/src/student/student-guardian-invitation.e2e.test.ts", ["@Post(\"guardian-invitations\")", "@Headers(\"idempotency-key\")"], ["kv3-guardian-invite-a"]),
   entry("student.enrollment.bulk-renew", "POST", "/api/v1/students/enrollments/bulk-renew", "covered", "apps/api/src/student/student.controller.ts", "apps/api/src/student/student.service.ts", "apps/api/src/school/school.e2e.test.ts", ["@Post(\"enrollments/bulk-renew\")", "@Headers(\"idempotency-key\")"], ["student-bulk-renew-"]),
   entry("student.enrollment.renew", "POST", "/api/v1/students/{id}/enrollments/renew", "covered", "apps/api/src/student/student.controller.ts", "apps/api/src/student/student.service.ts", "apps/api/src/school/school.e2e.test.ts", ["@Post(\":id/enrollments/renew\")", "@Headers(\"idempotency-key\")"], ["student-renew-"]),
@@ -76,6 +78,7 @@ const operationsWithoutRequestBody = new Set([
   "homework.submission.submit",
   "exam.publish",
   "payment.plan.cancel",
+  "student.contact.guardian-unlink",
 ]);
 
 for (const operation of operationsInCode) {

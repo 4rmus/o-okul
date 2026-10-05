@@ -77,8 +77,7 @@ function withSelectedOption(options: Array<{ id: string; name: string }>, select
 export function DesktopTopBar({
   canUseShellSearch,
   onLogout,
-  onPersonaSwitch,
-  personaSwitchLabel,
+  personaSwitches = [],
   personaSwitching,
   onSearch,
   session,
@@ -86,8 +85,7 @@ export function DesktopTopBar({
 }: {
   canUseShellSearch: boolean;
   onLogout(): void;
-  onPersonaSwitch?: () => void;
-  personaSwitchLabel?: string;
+  personaSwitches?: Array<{ label: string; onSelect(): void; target: string }>;
   personaSwitching: boolean;
   onSearch(value: string): void;
   session: Session;
@@ -109,11 +107,11 @@ export function DesktopTopBar({
       <div className="next-desktop-topbar__account">
         <UserRound size={16} aria-hidden="true" />
         <span>{roleLabel}</span>
-        {onPersonaSwitch && personaSwitchLabel ? (
-          <Button type="button" variant="secondary" disabled={personaSwitching} onClick={onPersonaSwitch}>
-            {personaSwitchLabel}
+        {personaSwitches.map((personaSwitch) => (
+          <Button key={personaSwitch.target} type="button" variant="secondary" disabled={personaSwitching} onClick={personaSwitch.onSelect}>
+            {personaSwitch.label}
           </Button>
-        ) : null}
+        ))}
         <ThemeToggle />
         <Button type="button" variant="secondary" onClick={onLogout}>
           <LogOut size={16} aria-hidden="true" />

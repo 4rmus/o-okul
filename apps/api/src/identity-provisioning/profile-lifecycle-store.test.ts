@@ -108,6 +108,11 @@ describe("ProfileLifecycleStore", () => {
     ))).toBe(true);
     expect(queries.some(({ sql }) => sql.includes('DELETE FROM "TenantMembership"') && sql.includes("\"role\" = 'TEACHER'"))).toBe(true);
     expect(queries.some(({ sql }) => sql.includes('"membershipVersion" = "membershipVersion" + 1'))).toBe(true);
+    // KV-3b: memberships that stay (e.g. staff beside a removed guardian role) follow the new user version.
+    const userBump = queries.findIndex(({ sql }) => sql.includes('"membershipVersion" = "membershipVersion" + 1'));
+    const versionSync = queries.findIndex(({ sql }) => sql.includes('SET "version" = u."membershipVersion"'));
+    expect(versionSync).toBeGreaterThan(userBump);
+    expect(queries[versionSync]?.sql).toContain(`m."status" = 'ACTIVE'`);
     expect(queries.some(({ sql }) => sql.includes('UPDATE "AuthSession"'))).toBe(true);
     expect(queries.some(({ sql }) => sql.includes('UPDATE "NotificationDeviceToken"'))).toBe(true);
     expect(queries.some(({ sql }) => sql.includes('UPDATE "IdentityInvitation"'))).toBe(true);

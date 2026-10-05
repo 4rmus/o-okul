@@ -309,6 +309,8 @@ export type {
   StudentProfileRecord,
   StudentContactCreateRequest,
   StudentContactRecord,
+  StudentContactGuardianLinkRequest,
+  StudentContactGuardianLinkResult,
   StudentGuardianInvitationBulkRequest,
   StudentGuardianInvitationBulkResult,
   StudentGuardianInvitationRowResult,

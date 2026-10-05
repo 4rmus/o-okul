@@ -226,6 +226,21 @@ export function removeInMemoryAuthUserRole(
   return cloneRequiredUser(user);
 }
 
+/** KV-3b: adds a role next to the existing ones (never replaces them); the version bump closes open sessions. */
+export function addInMemoryAuthUserRole(
+  tenantId: string,
+  userId: string,
+  role: string,
+): AuthUser | undefined {
+  const user = inMemoryUsers.find((candidate) => candidate.tenantId === tenantId && candidate.id === userId);
+  if (!user) return undefined;
+  if (!user.roles.includes(role)) {
+    user.roles = [...user.roles, role];
+    user.membershipVersion += 1;
+  }
+  return cloneRequiredUser(user);
+}
+
 export function upsertInMemoryAuthUser(input: {
   id: string;
   email?: string;

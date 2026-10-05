@@ -28,7 +28,7 @@ export function buildTenantMembershipDualWriteRows(roles: readonly string[]): Te
   if (
     staffRoles.length > 1 ||
     (hasStudentPersona && uniqueRoles.length > 1) ||
-    (hasGuardianRole && uniqueRoles.length > 1)
+    (hasGuardianRole && hasStudentPersona)
   ) {
     throw new Error("INVALID_TENANT_ROLE_COMBINATION");
   }

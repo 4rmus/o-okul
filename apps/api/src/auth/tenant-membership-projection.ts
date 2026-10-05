@@ -37,7 +37,8 @@ export function assertTenantMembershipParity(
     : legacyStaffRoles.length === 0;
   const teacherParity = roles.includes("TEACHER") === canonical.hasTeacherPersona;
   const studentParity = roles.includes("STUDENT") === canonical.hasStudentPersona;
-  const guardianParity = !roles.includes("GUARDIAN");
+  // KV-3b: GUARDIAN may sit next to a staff/teacher membership as its own persona, never next to STUDENT.
+  const guardianParity = !(roles.includes("GUARDIAN") && canonical.hasStudentPersona);
 
   if (!staffParity || !teacherParity || !studentParity || !guardianParity) {
     throw new Error("AUTH_MEMBERSHIP_PARITY_MISMATCH");
@@ -47,4 +48,19 @@ export function assertTenantMembershipParity(
   }
 
   return roles;
+}
+
+/**
+ * KV-3b (DEC-20261003-01, 2026-10-05): who may receive the GUARDIAN role from the student contact link. A canonical
+ * staff/teacher account (GUARDIAN becomes a separate persona, capabilities never merge) or an existing guardian
+ * account. Student accounts, platform (SYSTEM_ADMIN) accounts and legacy accounts without a canonical membership
+ * (whose roles would be unioned into one session) are refused.
+ */
+export function canAttachGuardianRole(user: {
+  roles: readonly string[];
+  membership?: Pick<CanonicalMembershipProjection, "hasStudentPersona">;
+}): boolean {
+  if (user.roles.some((role) => role === "STUDENT" || role === "SYSTEM_ADMIN")) return false;
+  if (user.membership) return !user.membership.hasStudentPersona;
+  return user.roles.length === 1 && user.roles[0] === "GUARDIAN";
 }
