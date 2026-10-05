@@ -87,7 +87,7 @@ export function StudentClassHomeworkPanel({
   );
 }
 
-/** Teacher view of one homework: each student of the class with a derived status; checking is one-way. */
+/** Teacher view of one homework: each student of the class with a derived status; checking is one-way and needs a submission. */
 export function TeacherHomeworkSubmissionsPanel({
   homework,
   loadSubmissions,
@@ -119,7 +119,12 @@ export function TeacherHomeworkSubmissionsPanel({
     try {
       await onCheck(homeworkId, studentIds);
       await query.refetch();
-    } catch {
+    } catch (caught) {
+      if ((caught as { code?: string }).code === "HOMEWORK_SUBMISSION_NOT_SUBMITTED") {
+        setError("Teslim etmemiş öğrenci kontrol edilemez; liste yenilendi.");
+        await query.refetch();
+        return;
+      }
       setError("Kontrol kaydedilemedi.");
     }
   }
@@ -144,7 +149,12 @@ export function TeacherHomeworkSubmissionsPanel({
         ) : row.status === "CHECKED" ? (
           "-"
         ) : (
-          <Button onClick={() => void check([row.studentId])} variant="secondary">
+          <Button
+            disabled={row.status === "NOT_SUBMITTED"}
+            onClick={() => void check([row.studentId])}
+            title={row.status === "NOT_SUBMITTED" ? "Öğrenci teslim etmeden kontrol edilemez." : undefined}
+            variant="secondary"
+          >
             Kontrol et
           </Button>
         ),

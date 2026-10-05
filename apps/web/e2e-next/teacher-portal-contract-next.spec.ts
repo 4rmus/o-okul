@@ -250,6 +250,8 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
     await expect(panel).toContainText("Ada Kaya");
     await expect(panel).toContainText("Teslim edildi");
     await expect(panel).toContainText("Teslim edilmedi");
+    await expect(panel.getByRole("row").filter({ hasText: "Teslim edilmedi" }).getByRole("button", { name: "Kontrol et" })).toBeDisabled();
+    await expect(panel.getByRole("row").filter({ hasText: "Teslim edildi" }).getByRole("button", { name: "Kontrol et" })).toBeEnabled();
     await panel.getByRole("button", { name: "Teslim edenlerin hepsini kontrol et (1)" }).click();
     await expect(panel).toContainText("Kontrol edildi");
     expect(checks).toEqual([{ studentIds: ["student-a"] }]);

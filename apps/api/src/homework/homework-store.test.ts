@@ -285,7 +285,7 @@ describe("PostgresHomeworkStore", () => {
         }
         if (sql.startsWith('SELECT * FROM "HomeworkSubmission"')) {
           return {
-            rows: [{ id: "submission-a", tenantId: "tenant-a", homeworkId: "homework-a", studentId: "student-a", submittedAt: null, checkedAt: new Date("2026-06-04T09:00:00.000Z"), checkedById: "teacher-user-a" }] as T[],
+            rows: [{ id: "submission-a", tenantId: "tenant-a", homeworkId: "homework-a", studentId: "student-a", submittedAt: new Date("2026-06-04T08:00:00.000Z"), checkedAt: new Date("2026-06-04T09:00:00.000Z"), checkedById: "teacher-user-a" }] as T[],
           };
         }
         return { rows: [] as T[] };
@@ -303,18 +303,21 @@ describe("PostgresHomeworkStore", () => {
         await expect(
           store.markChecked({ tenantId: "tenant-a", homeworkId: "homework-a", studentIds: ["student-a"], checkedAt: "2026-06-04T09:00:00.000Z", checkedById: "teacher-user-a" }),
         ).resolves.toEqual([
-          { id: "submission-a", tenantId: "tenant-a", homeworkId: "homework-a", studentId: "student-a", submittedAt: undefined, checkedAt: "2026-06-04T09:00:00.000Z", checkedById: "teacher-user-a" },
+          { id: "submission-a", tenantId: "tenant-a", homeworkId: "homework-a", studentId: "student-a", submittedAt: "2026-06-04T08:00:00.000Z", checkedAt: "2026-06-04T09:00:00.000Z", checkedById: "teacher-user-a" },
         ]);
       },
     );
 
     const writes = queries.filter((query) => query.sql.includes('INSERT INTO "HomeworkSubmission"'));
-    expect(writes).toHaveLength(3);
+    expect(writes).toHaveLength(2);
     for (const write of writes) {
       expect(write.sql).toContain('ON CONFLICT ("tenantId", "homeworkId", "studentId") DO UPDATE');
       expect(write.sql).toContain('WHERE "HomeworkSubmission"."checkedAt" IS NULL');
     }
     expect(writes[0]?.sql).toContain('COALESCE("HomeworkSubmission"."submittedAt", EXCLUDED."submittedAt")');
-    expect(writes[2]?.values).toEqual(["tenant-a", "homework-a", ["student-a"], [expect.any(String)], "2026-06-04T09:00:00.000Z", "teacher-user-a"]);
+    // The check path never creates rows: it only updates submitted, unchecked rows.
+    const check = queries.find((query) => query.sql.includes('UPDATE "HomeworkSubmission"'));
+    expect(check?.sql).toContain('"submittedAt" IS NOT NULL AND "checkedAt" IS NULL');
+    expect(check?.values).toEqual(["tenant-a", "homework-a", ["student-a"], "2026-06-04T09:00:00.000Z", "teacher-user-a"]);
   });
 });

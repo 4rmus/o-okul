@@ -622,6 +622,23 @@ export class HomeworkService {
     if (studentIds.some((studentId) => !classStudentIds.has(studentId))) {
       throw new BadRequestException("HOMEWORK_SUBMISSION_STUDENT_NOT_IN_CLASS");
     }
+    // ponytail: read-then-update is race-safe because submittedAt only ever goes from NULL to set
+    // (no unsubmit path); a concurrent submit can only make more students eligible.
+    const submittedStudentIds = new Set(
+      filterTenantResources(context, await this.store.listSubmissions(homework.id))
+        .filter((row) => row.submittedAt)
+        .map((row) => row.studentId),
+    );
+    const notSubmittedStudentIds = studentIds.filter((studentId) => !submittedStudentIds.has(studentId));
+    if (notSubmittedStudentIds.length > 0) {
+      throw new ConflictException({
+        error: {
+          code: "HOMEWORK_SUBMISSION_NOT_SUBMITTED",
+          message: "Teslim etmemiş öğrenci kontrol edilemez.",
+          details: { studentIds: notSubmittedStudentIds },
+        },
+      });
+    }
 
     const rows = await this.store.markChecked({
       tenantId: homework.tenantId,

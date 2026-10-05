@@ -37,7 +37,7 @@ export interface HomeworkStore {
   listSubmissionsByStudent(studentId: string): Promise<HomeworkSubmissionRow[]>;
   /** Lazily creates the row; returns undefined when the row is already checked (DEC-20261004-10). */
   markSubmitted(input: SubmissionKey & { submittedAt: string }): Promise<HomeworkSubmissionRow | undefined>;
-  /** Checks each student's row, creating it when missing; already checked rows keep their first check. */
+  /** Checks existing submitted rows only (never creates rows); already checked rows keep their first check. */
   markChecked(input: Omit<SubmissionKey, "studentId"> & { studentIds: string[]; checkedAt: string; checkedById: string }): Promise<HomeworkSubmissionRow[]>;
 }
 
@@ -284,14 +284,16 @@ export class InMemoryHomeworkStore implements HomeworkStore {
   async markChecked(
     input: Omit<SubmissionKey, "studentId"> & { studentIds: string[]; checkedAt: string; checkedById: string },
   ): Promise<HomeworkSubmissionRow[]> {
-    return input.studentIds.map((studentId) => {
-      const row = this.findOrCreateSubmission({ ...input, studentId });
-      if (!row.checkedAt) {
+    const rows = this.submissions.filter(
+      (row) => row.tenantId === input.tenantId && row.homeworkId === input.homeworkId && input.studentIds.includes(row.studentId),
+    );
+    for (const row of rows) {
+      if (row.submittedAt && !row.checkedAt) {
         row.checkedAt = input.checkedAt;
         row.checkedById = input.checkedById;
       }
-      return { ...row };
-    });
+    }
+    return rows.map((row) => ({ ...row }));
   }
 
   private findOrCreateSubmission(key: SubmissionKey): HomeworkSubmissionRow {
@@ -614,15 +616,11 @@ export class PostgresHomeworkStore implements HomeworkStore {
   ): Promise<HomeworkSubmissionRow[]> {
     return withTenantQuery(this.pool, async (client) => {
       await client.query(
-        `INSERT INTO "HomeworkSubmission" ("id", "tenantId", "homeworkId", "studentId", "checkedAt", "checkedById", "updatedAt")
-         SELECT pick."id", $1, $2, pick."studentId", $5, $6, now()
-         FROM unnest($3::text[], $4::text[]) AS pick("studentId", "id")
-         ON CONFLICT ("tenantId", "homeworkId", "studentId") DO UPDATE
-           SET "checkedAt" = EXCLUDED."checkedAt",
-               "checkedById" = EXCLUDED."checkedById",
-               "updatedAt" = now()
-           WHERE "HomeworkSubmission"."checkedAt" IS NULL`,
-        [input.tenantId, input.homeworkId, input.studentIds, input.studentIds.map(() => randomUUID()), input.checkedAt, input.checkedById],
+        `UPDATE "HomeworkSubmission"
+         SET "checkedAt" = $4, "checkedById" = $5, "updatedAt" = now()
+         WHERE "tenantId" = $1 AND "homeworkId" = $2 AND "studentId" = ANY($3::text[])
+           AND "submittedAt" IS NOT NULL AND "checkedAt" IS NULL`,
+        [input.tenantId, input.homeworkId, input.studentIds, input.checkedAt, input.checkedById],
       );
       const result = await client.query<HomeworkSubmissionDbRow>(
         `SELECT * FROM "HomeworkSubmission" WHERE "homeworkId" = $1 AND "studentId" = ANY($2::text[])`,
