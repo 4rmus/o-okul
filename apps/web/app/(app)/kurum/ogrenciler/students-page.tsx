@@ -852,7 +852,7 @@ export function StudentsPage() {
                       onClick={() => void handleBulkGuardianInvitation()}
                       disabled={isGuardianInviting || selectedStudentIds.length === 0}
                     >
-                      Seçili öğrencilerin velilerini davet et ({selectedStudentIds.length})
+                      Velileri davet et ({selectedStudentIds.length})
                     </Button>
                     {guardianInvitationResult ? (
                       <p role="status">{formatGuardianInvitationSummary(guardianInvitationResult)}</p>
