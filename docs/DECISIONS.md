@@ -812,6 +812,33 @@ telefon ezilmez, yanıtta telefon yok); telefonla eşleştirme yapılmaz. Kanıt
 `student-guardian-invitation.service.test.ts`. Kanıt sınıfı LOCAL_TEST (Postgres yolları sahte havuzla
 LOCAL_STATIC); CI, STAGING ve PRODUCTION UNPROVEN. Açık soru: yalnız-veli tanımına `ENDED` personel
 üyeliği olan eski personelin dahil edilmesi (rol korunur) ürün sahibi onayı bekliyor.
+KV-3c güvenlik incelemesi düzeltmeleri (2026-10-05): (R1) Guardian API'si mevcut bir bağı yeniden
+oluşturduğunda (`ON CONFLICT ... DO UPDATE`) veya yönetici bağ izinlerini güncellediğinde
+`createdByStudentContact=false` olur; bağ yönetici bağı sayılır ve iletişim bağı kaldırma onu ve izinlerini
+korur. Velinin kendi bildirim tercihi işareti değiştirmez. (R2) Guardian API'si bağ oluşturmada (ve iletişim
+akışı `guardianId` ile bağlamada) önce veli kullanıcısını kilitler (kullanıcı → `GuardianStudent`, iletişim
+akışında iletişim → kullanıcı → `GuardianStudent`); `GUARDIAN` üyeliği
+`LAST_GUARDIAN_STUDENT_LINK_REMOVED` ile `ENDED` ise aynı transaction'da yeniden `ACTIVE` olur (sürüm artar,
+açık oturumlar kapanır, audit `user.guardian_role_added`). Başka nedenle biten/askıdaki üyelik açılmaz. (R3)
+`account-management:backfill` ve preflight personel/öğretmen + `GUARDIAN` kümesini geçersiz rol saymaz;
+backfill son bağ kuralıyla biten `GUARDIAN` üyeliği olan `Guardian` profilini orphan saymaz. (R4) Bağlı
+iletişim silinince (`DELETE /students/{studentId}/contacts/{id}`) ve öğrenci KVKK temizliğinde
+(`purgeByStudent`) bağ kaldırma kuralı aynı transaction'da uygulanır: akışın açtığı ve başka canlı iletişimin
+tutmadığı bağ silinir, son bağsa personel+velinin `GUARDIAN` üyeliği biter; önceden var olan bağ korunur.
+Audit `guardian_student.unlinked`, `user.guardian_role_removed`. (R5) KV-3b'nin bu deploy'dan önce koştuğu
+ortamda işaretsiz kalan akış bağları için salt okunur sayım runbook'tadır; geri doldurma kararı ürün
+sahibinindir. Kanıt: `guardian-student-store.test.ts`, `student-contact-store.test.ts`,
+`student-contact-guardian-link.e2e.test.ts`, `profile-lifecycle-store.test.ts`,
+`check-account-management-{backfill,preflight}-contract.mjs` (her düzeltme için bir kez geri alınıp testin
+kırıldığı görüldü). Kanıt sınıfı LOCAL_TEST (Postgres yolları sahte havuzla LOCAL_STATIC); CI, STAGING ve
+PRODUCTION UNPROVEN.
+Ürün sahibi kararı (2026-10-05, son): (K3) KV-3c öncesi personel bitişiyle `DISABLED` olmuş personel+veli
+hesapları açılır; kod DB'yi değiştirmez, runbook KV-3c bölümünde tenant bazlı salt okunur sayım ve onaylı,
+tek transaction'lı, idempotent açma SQL'i (yalnız bu küme `ACTIVE`, sürüm artışı, `user.account_reopened`
+audit) vardır. KV-3b hiçbir ortama deploy edilmediği için beklenen sayı 0; adım deploy sırasında ürün sahibi
+onayıyla koşar. (K4) B kuralı profil kapatma yoluna da uygulanır: öğretmen profili kapatma yalnız öğretmen
+personasını/üyeliğini keser, `User.accountStatus` yazmaz, `GUARDIAN` üyeliğine yalnız ortak sürümü verir ve
+açık oturumları kapatır; yalnız personel olan kullanıcıda davranış aynıdır (`profile-lifecycle-store.test.ts`).
 Ürün sahibi kararı (2026-10-05): veli daveti kabulünde T.C. şartının kaldırılması onaylandı; e-postası
 olmayan `LEGAL_GUARDIAN` satırının `EMAIL_MISSING` ile atlanması kabul edildi. Toplu davette
 `LEGAL_GUARDIAN` iletişiminin telefonu yalnız iletişim alanı olarak `Guardian.phone` alanına kopyalanır

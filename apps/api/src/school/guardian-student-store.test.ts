@@ -10,6 +10,8 @@ describe("PostgresGuardianStudentStore", () => {
     const pool = {
       async query<T>(sql: string, values?: unknown[]) {
         queries.push({ sql, values });
+        // No user behind the guardian: create/delete skip the GUARDIAN role rules.
+        if (sql.includes("FOR UPDATE OF u")) return { rows: [] as T[] };
         return {
           rows: [
             {
@@ -54,6 +56,9 @@ describe("PostgresGuardianStudentStore", () => {
     expect(businessQueries[0]?.values).toEqual(["guardian-a"]);
     expect(businessQueries[1]?.sql).toContain('FROM "GuardianStudent"');
     expect(businessQueries[1]?.values).toEqual(["student-a"]);
+    // KV-3c R2: the user behind the guardian is locked before the link row on create too.
+    expect(businessQueries[2]?.sql).toContain("FOR UPDATE OF u");
+    businessQueries.splice(2, 1);
     expect(businessQueries[2]?.sql).toContain('INSERT INTO "GuardianStudent"');
     expect(businessQueries[2]?.values).toEqual([
       expect.any(String),
@@ -66,7 +71,8 @@ describe("PostgresGuardianStudentStore", () => {
       false,
     ]);
     expect(businessQueries[3]?.sql).toContain('UPDATE "GuardianStudent"');
-    expect(businessQueries[3]?.values).toEqual(["guardian-a", "student-a", false, false, undefined, undefined]);
+    // Guardian self-service / default update keeps the StudentContact flow marker ($7 false).
+    expect(businessQueries[3]?.values).toEqual(["guardian-a", "student-a", false, false, undefined, undefined, false]);
     // KV-3c: the user behind the guardian is locked before the link row (same order as the KV-3b user link).
     expect(businessQueries[4]?.sql).toContain("FOR UPDATE OF u");
     expect(businessQueries[5]?.sql).toContain('DELETE FROM "GuardianStudent"');
@@ -121,14 +127,14 @@ describe("PostgresGuardianStudentStore", () => {
     }
   });
 
-  it("mevcut bağlantı tekrar istenirse mevcut kaydı döndürür", async () => {
+  it("mevcut bağlantı tekrar istenirse mevcut kaydı döndürür ve akış işaretini temizler (KV-3c R1)", async () => {
     const queries: Array<{ sql: string; values?: unknown[] }> = [];
     const pool = {
       async query<T>(sql: string, values?: unknown[]) {
         queries.push({ sql, values });
-        const isInsert = sql.includes('INSERT INTO "GuardianStudent"');
+        const isUpsert = sql.includes('INSERT INTO "GuardianStudent"');
         return {
-          rows: isInsert
+          rows: !isUpsert
             ? []
             : [
                 {
@@ -149,8 +155,8 @@ describe("PostgresGuardianStudentStore", () => {
       () => store.create({ tenantId: "tenant-a", guardianId: "guardian-a", studentId: "student-a" }),
     );
 
-    expect(record.id).toBe("guardian-student-a");
-    expect(record).toEqual(expect.objectContaining({
+    expect(record).toEqual({ link: expect.objectContaining({ id: "guardian-student-a" }), sessionsRevoked: 0 });
+    expect(record.link).toEqual(expect.objectContaining({
       canViewFinance: false,
       canReceiveSms: false,
       canReceiveAnnouncements: false,
@@ -166,8 +172,65 @@ describe("PostgresGuardianStudentStore", () => {
       false,
       false,
     ]);
-    expect(queries.some((query) => query.sql.includes("ON CONFLICT"))).toBe(true);
-    expect(queries.some((query) => query.sql.includes("LIMIT 1"))).toBe(true);
+    // An existing link answered here is adopted by the guardian API: a later contact unlink keeps it.
+    const upsert = queries.find((query) => query.sql.includes('INSERT INTO "GuardianStudent"'))?.sql;
+    expect(upsert).toContain('ON CONFLICT ("tenantId", "guardianId", "studentId") DO UPDATE');
+    expect(upsert).toContain('SET "createdByStudentContact" = false');
+    expect(upsert).toContain("RETURNING *");
+  });
+
+  it("KV-3c R1: yönetici izin güncellemesi akış işaretini temizler", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const pool = {
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        return { rows: [] as T[] };
+      },
+    };
+    await runWithRequestContext(
+      { userId: "user-tenant-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      () => new PostgresGuardianStudentStore(pool).update("guardian-a", "student-a", { canViewFinance: true }, { clearStudentContactOrigin: true }),
+    );
+    const update = queries.find((query) => query.sql.includes('UPDATE "GuardianStudent"'));
+    expect(update?.sql).toContain('"createdByStudentContact" = CASE WHEN $7 THEN false ELSE "createdByStudentContact" END');
+    expect(update?.values?.[6]).toBe(true);
+  });
+
+  it("KV-3c R2 Postgres: yeniden bağlama, son bağ kuralıyla biten GUARDIAN üyeliğini aynı transaction'da yeniden açar", async () => {
+    for (const ended of [true, false]) {
+      const queries: Array<{ sql: string; values?: unknown[] }> = [];
+      const pool = {
+        async query<T>(sql: string, values?: unknown[]) {
+          queries.push({ sql, values });
+          const rows = sql.includes("FOR UPDATE OF u") ? [{ tenantId: "tenant-a", userId: "user-staff-parent" }]
+            : sql.includes('INSERT INTO "GuardianStudent"') ? [{ id: "link-a", tenantId: "tenant-a", guardianId: "guardian-a", studentId: "student-a" }]
+              : sql.includes(`"status" = 'ENDED' AND "endedReason"`) ? (ended ? [{ id: "membership-guardian" }] : [])
+                : sql.includes('UPDATE "User"') ? [{ membershipVersion: 9 }]
+                  : sql.includes('UPDATE "AuthSession"') ? [{ id: "session-a" }]
+                    : [];
+          return { rows: rows as T[] };
+        },
+      };
+      const write = await runWithRequestContext(
+        { userId: "user-tenant-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+        () => new PostgresGuardianStudentStore(pool).create({ tenantId: "tenant-a", guardianId: "guardian-a", studentId: "student-a" }),
+      );
+      const sqls = queries.map((query) => query.sql);
+      const find = sqls.findIndex((sql) => sql.includes("\"status\" = 'ENDED' AND \"endedReason\""));
+      expect(queries[find]?.values).toEqual(["tenant-a", "user-staff-parent", "LAST_GUARDIAN_STUDENT_LINK_REMOVED"]);
+      if (!ended) {
+        expect(write).toEqual({ link: expect.objectContaining({ id: "link-a" }), sessionsRevoked: 0 });
+        expect(sqls.some((sql) => sql.includes('UPDATE "User"') || sql.includes('UPDATE "AuthSession"'))).toBe(false);
+        continue;
+      }
+      expect(write).toEqual({ link: expect.objectContaining({ id: "link-a" }), guardianRoleRestoredUserId: "user-staff-parent", sessionsRevoked: 1 });
+      const order = ["FOR UPDATE OF u", 'INSERT INTO "GuardianStudent"', "\"endedReason\" = $3", 'UPDATE "User"', "SET \"status\" = 'ACTIVE'", 'SET "version" = $3', 'UPDATE "AuthSession"']
+        .map((fragment) => sqls.findIndex((sql) => sql.includes(fragment)));
+      expect(order.every((index, position) => index > 0 && (position === 0 || index > order[position - 1]!))).toBe(true);
+      expect(sqls.indexOf("BEGIN")).toBeLessThan(order[0]!);
+      expect(sqls.indexOf("COMMIT")).toBeGreaterThan(order.at(-1)!);
+      expect(queries[order[4]!]?.values).toEqual(["tenant-a", "membership-guardian", 9]);
+    }
   });
 });
 
@@ -182,7 +245,8 @@ describe("InMemoryGuardianStudentStore (KV-3c)", () => {
       const guardians = new InMemoryGuardianStore();
       const store = new InMemoryGuardianStudentStore(guardians);
       const staffGuardian = await guardians.create({ tenantId: "tenant-a", firstName: "Personel", lastName: "Veli", userId: "user-kv3c-staff-parent" });
-      await store.create({ tenantId: "tenant-a", guardianId: staffGuardian.id, studentId: "student-1" });
+      const first = await store.create({ tenantId: "tenant-a", guardianId: staffGuardian.id, studentId: "student-1" });
+      expect(first).toEqual({ link: expect.objectContaining({ studentId: "student-1" }), sessionsRevoked: 0 });
       await store.create({ tenantId: "tenant-a", guardianId: staffGuardian.id, studentId: "student-2" });
       const users = new InMemoryAuthUserStore();
       const before = await users.findById("user-kv3c-staff-parent");
@@ -196,6 +260,15 @@ describe("InMemoryGuardianStudentStore (KV-3c)", () => {
       expect(after?.membershipVersion).toBe((before?.membershipVersion ?? 0) + 1);
       expect(await guardians.findById(staffGuardian.id)).toBeDefined();
       expect(await store.delete(staffGuardian.id, "student-2")).toBeUndefined();
+
+      // KV-3c R2: relinking reopens the GUARDIAN role the last-link rule ended (version bump, once).
+      expect(await store.create({ tenantId: "tenant-a", guardianId: staffGuardian.id, studentId: "student-3" }))
+        .toEqual({ link: expect.objectContaining({ studentId: "student-3" }), guardianRoleRestoredUserId: "user-kv3c-staff-parent", sessionsRevoked: 0 });
+      const restored = await users.findById("user-kv3c-staff-parent");
+      expect(restored?.roles).toEqual(["OPERATIONS_STAFF", "GUARDIAN"]);
+      expect(restored?.membershipVersion).toBe((after?.membershipVersion ?? 0) + 1);
+      expect(await store.create({ tenantId: "tenant-a", guardianId: staffGuardian.id, studentId: "student-4" }))
+        .toEqual({ link: expect.objectContaining({ studentId: "student-4" }), sessionsRevoked: 0 });
 
       // guardian-a is a guardian-only demo account: its last link goes, the role and Guardian profile stay.
       expect(await store.delete("guardian-a", "student-a")).toEqual({ sessionsRevoked: 0 });

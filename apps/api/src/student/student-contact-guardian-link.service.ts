@@ -105,6 +105,7 @@ export class StudentContactGuardianLinkService {
     }
 
     await this.recordLinkAudits(context, contact, guardianId, write, "guardian");
+    await this.guardians.recordGuardianRoleRestored(context, contact.tenantId, guardianId, write);
     return { ...unchanged, changed: true, guardianStudentCreated: write.guardianStudentCreated };
   }
 
@@ -233,7 +234,7 @@ export class StudentContactGuardianLinkService {
       action: "student_contact.guardian_unlinked",
       diff: { studentId: contact.studentId, guardianId, guardianStudentRemoved: write.guardianStudentRemoved },
     });
-    await this.guardians.recordGuardianRoleRemoved(context, contact.tenantId, guardianId, { sessionsRevoked: 0, ...write });
+    await this.guardians.recordGuardianRoleRemoved(context, contact.tenantId, guardianId, write);
     return { ...result, changed: true, guardianStudentRemoved: write.guardianStudentRemoved };
   }
 

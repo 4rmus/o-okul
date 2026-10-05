@@ -129,17 +129,16 @@ async function collectChecks(client) {
                WHERE "role"::text IN ('TENANT_OWNER', 'TENANT_ADMIN', 'ASSISTANT_ADMIN', 'OPERATIONS_STAFF', 'FINANCE_STAFF')
              )::int AS staff_role_count,
              bool_or("role"::text = 'SYSTEM_ADMIN') AS has_system,
-             bool_or("role"::text = 'STUDENT') AS has_student,
-             bool_or("role"::text = 'GUARDIAN') AS has_guardian
+             bool_or("role"::text = 'STUDENT') AS has_student
       FROM "TenantMembership"
       GROUP BY "tenantId", "userId"
     ), invalid AS (
+      -- KV-3b/KV-3c: GUARDIAN beside one staff/teacher membership (ACTIVE or ended by the last-link rule) is valid.
       SELECT "tenantId", "userId"
       FROM role_sets
       WHERE (has_system AND ("tenantId" <> 'system' OR role_count > 1))
          OR staff_role_count > 1
          OR (has_student AND role_count > 1)
-         OR (has_guardian AND role_count > 1)
     )
     SELECT count(*)::int AS accounts,
            count(DISTINCT "tenantId")::int AS "tenantsAffected"

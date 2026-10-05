@@ -243,14 +243,15 @@ async function collectPreconditions(queryable) {
              count(DISTINCT m."role") FILTER (
                WHERE m."role"::text IN ('TENANT_OWNER', 'TENANT_ADMIN', 'ASSISTANT_ADMIN', 'OPERATIONS_STAFF', 'FINANCE_STAFF')
              )::int AS staff_role_count,
-             bool_or(m."role"::text = 'STUDENT') AS has_student,
-             bool_or(m."role"::text = 'GUARDIAN') AS has_guardian
+             bool_or(m."role"::text = 'STUDENT') AS has_student
       FROM "TenantMembership" m
       WHERE m."tenantId" IN (${activeTenantIdsSql}) AND m."status" = 'ACTIVE' AND m."role"::text <> 'SYSTEM_ADMIN'
       GROUP BY m."tenantId", m."userId"
     ), invalid_roles AS (
+      -- KV-3b/KV-3c: GUARDIAN beside one staff/teacher membership is a valid staff+guardian account; a student
+      -- account still may not hold another role.
       SELECT "tenantId", "userId" FROM role_sets
-      WHERE staff_role_count > 1 OR (has_student AND role_count > 1) OR (has_guardian AND role_count > 1)
+      WHERE staff_role_count > 1 OR (has_student AND role_count > 1)
     ), profile_links AS (
       SELECT "tenantId", "userId", 'STUDENT'::text AS role FROM "Student" WHERE "tenantId" IN (${activeTenantIdsSql}) AND "deletedAt" IS NULL AND "userId" IS NOT NULL
       UNION ALL
@@ -264,7 +265,15 @@ async function collectPreconditions(queryable) {
       LEFT JOIN "TenantMembership" membership
         ON membership."tenantId" = profile."tenantId" AND membership."userId" = profile."userId"
        AND membership."role"::text = profile.role AND membership."status" = 'ACTIVE'
-      WHERE account."id" IS NULL OR membership."id" IS NULL
+      WHERE (account."id" IS NULL OR membership."id" IS NULL)
+        -- KV-3c: a staff+guardian user whose last GuardianStudent link went keeps the Guardian profile with an
+        -- ENDED GUARDIAN membership (LAST_GUARDIAN_STUDENT_LINK_REMOVED); relinking reopens it, so it is not orphaned.
+        AND NOT (profile.role = 'GUARDIAN' AND account."id" IS NOT NULL AND EXISTS (
+          SELECT 1 FROM "TenantMembership" ended
+          WHERE ended."tenantId" = profile."tenantId" AND ended."userId" = profile."userId"
+            AND ended."role"::text = 'GUARDIAN' AND ended."status" = 'ENDED'
+            AND ended."endedReason" = 'LAST_GUARDIAN_STUDENT_LINK_REMOVED'
+        ))
     ), subject_memberships AS (
       SELECT "tenantId", "userId", "role"::text AS role
       FROM "TenantMembership"

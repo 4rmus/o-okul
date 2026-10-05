@@ -8,6 +8,7 @@ rmSync(root, { recursive: true, force: true });
 mkdirSync(root, { recursive: true });
 const fixture = JSON.parse(readFileSync("docs/evidence-templates/account-management-preflight.example.json", "utf8"));
 
+expectGuardianRoleRules();
 expectPass("valid", fixture, { ACCOUNT_MANAGEMENT_PREFLIGHT_ALLOW_EXAMPLE: "1" });
 expectPass("teacher-backfill-remains-report-only", {
   ...fixture,
@@ -41,6 +42,16 @@ expectRawFail("malformed-json", "{", "geçerli JSON olmalı");
 
 rmSync(root, { recursive: true, force: true });
 console.log("Account management preflight contract kontrolü geçti.");
+
+// KV-3c (security review R3): staff+guardian is a valid role set; the preflight must not report it as invalid.
+function expectGuardianRoleRules() {
+  const source = readFileSync("scripts/generate-account-management-preflight.mjs", "utf8");
+  const invalid = source.match(/invalidRoleCombinations = await one\(client, `([\s\S]*?)`\);/)?.[1] ?? "";
+  if (invalid.includes("has_guardian") || !invalid.includes("(has_student AND role_count > 1)") || !invalid.includes("staff_role_count > 1")) {
+    console.error("invalidRoleCombinations staff+guardian hesabını bloklamamalı, öğrenci ve çoklu personel kuralını korumalı");
+    process.exit(1);
+  }
+}
 
 function expectPass(name, report, extraEnv = { ACCOUNT_MANAGEMENT_PREFLIGHT_ALLOW_EXAMPLE: "1" }) {
   const result = run(name, report, extraEnv);

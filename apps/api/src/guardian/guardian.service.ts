@@ -19,9 +19,9 @@ import { type GuardianStore, guardianStoreToken } from "../school/guardian-store
 import {
   type GuardianRoleEndWrite,
   type GuardianStudentStore,
-  guardianRoleEndedReason,
   guardianStudentStoreToken,
 } from "../school/guardian-student-store.js";
+import { recordGuardianRoleRemoved, recordGuardianRoleRestored } from "./guardian-role-audit.js";
 import {
   type TeacherAssignmentStore,
   teacherAssignmentStoreToken,
@@ -339,7 +339,7 @@ export class GuardianService {
     assertTenantAccess(context, student);
     const relation = resolveGuardianStudentRelation(input);
 
-    const link = await this.guardianStudentStore.create({
+    const { link, ...roleRestore } = await this.guardianStudentStore.create({
       tenantId: guardian.tenantId,
       guardianId: guardian.id,
       studentId: student.id,
@@ -353,6 +353,7 @@ export class GuardianService {
       action: "guardian_student.linked",
       diff: { guardianId: link.guardianId, studentId: link.studentId, fieldsSet: presentFields(relation, guardianStudentRelationFields) },
     });
+    await recordGuardianRoleRestored(this.auditLogs, context, link.tenantId, link.guardianId, roleRestore);
     return link;
   }
 
@@ -370,7 +371,8 @@ export class GuardianService {
     assertTenantAccess(context, student);
 
     const relation = resolveGuardianStudentRelation(input, false);
-    const updated = await this.guardianStudentStore.update(guardian.id, student.id, relation);
+    // KV-3c: an admin permission change adopts a link the StudentContact flow created; a contact unlink keeps it.
+    const updated = await this.guardianStudentStore.update(guardian.id, student.id, relation, { clearStudentContactOrigin: true });
     if (!updated) {
       throw new NotFoundException("GUARDIAN_STUDENT_NOT_FOUND");
     }
@@ -441,16 +443,18 @@ export class GuardianService {
   }
 
   /** KV-3c audit for the GuardianStudentStore.delete rule: the last link of a staff+guardian user ended GUARDIAN. */
-  async recordGuardianRoleRemoved(context: RequestContext, tenantId: string, guardianId: string, write: GuardianRoleEndWrite): Promise<void> {
-    if (!write.guardianRoleRemovedUserId) return;
-    await this.auditLogs?.record({
-      tenantId,
-      actorUserId: context.userId,
-      entityType: "User",
-      entityId: write.guardianRoleRemovedUserId,
-      action: "user.guardian_role_removed",
-      diff: { role: "GUARDIAN", guardianId, reason: guardianRoleEndedReason, otherRolesKept: true, sessionsRevoked: write.sessionsRevoked },
-    });
+  recordGuardianRoleRemoved(context: RequestContext, tenantId: string, guardianId: string, write: Partial<GuardianRoleEndWrite>): Promise<void> {
+    return recordGuardianRoleRemoved(this.auditLogs, context, tenantId, guardianId, write);
+  }
+
+  /** KV-3c R2 audit: relinking made the GUARDIAN membership ended by the last-link rule ACTIVE again. */
+  recordGuardianRoleRestored(
+    context: RequestContext,
+    tenantId: string,
+    guardianId: string,
+    write: { guardianRoleRestoredUserId?: string; sessionsRevoked?: number },
+  ): Promise<void> {
+    return recordGuardianRoleRestored(this.auditLogs, context, tenantId, guardianId, write);
   }
 
   /**

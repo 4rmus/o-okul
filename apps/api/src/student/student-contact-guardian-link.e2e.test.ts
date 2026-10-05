@@ -232,6 +232,71 @@ describe("Manual StudentContact → existing guardian link API (KV-3b)", () => {
     await request(server).get(`/me/guardian/students/${studentId}/overview`).set("Authorization", `Bearer ${guardianToken}`).expect(200);
   });
 
+  it("KV-3c R1: akışın açtığı bağ guardian API'siyle yeniden oluşturulur veya izni güncellenirse iletişim bağı kaldırma bağı ve izinleri korur", async () => {
+    for (const adopt of ["create", "update"] as const) {
+      const studentId = await createStudent(`kv3c-r1-${adopt}`);
+      const contactId = await createContact(studentId, { firstName: "Akis", lastName: `Benimseme${adopt}`, relationType: "LEGAL_GUARDIAN" });
+      await link(adminToken, studentId, contactId, "guardian-a", `kv3c-r1-link-${adopt}`).expect(200)
+        .expect(({ body }) => expect(body).toMatchObject({ guardianStudentCreated: true }));
+      if (adopt === "create") {
+        await request(server)
+          .post("/guardians/guardian-a/students")
+          .set("Authorization", `Bearer ${adminToken}`)
+          .set("Idempotency-Key", `kv3c-r1-api-${adopt}`)
+          .send({ studentId })
+          .expect(201);
+      } else {
+        await request(server)
+          .patch(`/guardians/guardian-a/students/${studentId}`)
+          .set("Authorization", `Bearer ${adminToken}`)
+          .send({ canViewFinance: true })
+          .expect(200);
+      }
+      await unlink(adminToken, studentId, contactId, `kv3c-r1-unlink-${adopt}`).expect(200)
+        .expect(({ body }) => expect(body).toMatchObject({ changed: true, guardianStudentRemoved: false }));
+      expect((await guardianLinks("guardian-a")).find((row) => row.studentId === studentId))
+        .toMatchObject({ canViewFinance: adopt === "update" });
+    }
+  });
+
+  it("KV-3c R4: bağlı iletişim silinince akışın açtığı bağ kalkar ve veli öğrenciyi görmez; önceden var olan bağ korunur", async () => {
+    const studentId = await createStudent("kv3c-r4-1");
+    const contactId = await createContact(studentId, { firstName: "Silinen", lastName: "BagliIletisim", relationType: "LEGAL_GUARDIAN" });
+    await link(adminToken, studentId, contactId, "guardian-a", "kv3c-r4-link").expect(200)
+      .expect(({ body }) => expect(body).toMatchObject({ guardianStudentCreated: true }));
+    const guardianToken = await login("guardian-a@example.test");
+    await request(server).get(`/me/guardian/students/${studentId}/overview`).set("Authorization", `Bearer ${guardianToken}`).expect(200);
+
+    await request(server).delete(`/students/${studentId}/contacts/${contactId}`).set("Authorization", `Bearer ${adminToken}`).expect(204);
+    expect((await guardianLinks("guardian-a")).some((row) => row.studentId === studentId)).toBe(false);
+    const wards = await request(server).get("/me/guardian/students").set("Authorization", `Bearer ${guardianToken}`).expect(200);
+    expect((wards.body as Array<{ id: string }>).map((ward) => ward.id)).not.toContain(studentId);
+    await request(server).get(`/me/guardian/students/${studentId}/overview`).set("Authorization", `Bearer ${guardianToken}`).expect(403);
+
+    const keptStudentId = await createStudent("kv3c-r4-2");
+    const keptContactId = await createContact(keptStudentId, { firstName: "Silinen", lastName: "OncekiBag", relationType: "LEGAL_GUARDIAN" });
+    await request(server)
+      .post("/guardians/guardian-a/students")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .set("Idempotency-Key", "kv3c-r4-preexisting")
+      .send({ studentId: keptStudentId, canViewFinance: true })
+      .expect(201);
+    await link(adminToken, keptStudentId, keptContactId, "guardian-a", "kv3c-r4-link-pre").expect(200);
+    await request(server).delete(`/students/${keptStudentId}/contacts/${keptContactId}`).set("Authorization", `Bearer ${adminToken}`).expect(204);
+    expect((await guardianLinks("guardian-a")).find((row) => row.studentId === keptStudentId)).toMatchObject({ canViewFinance: true });
+    await request(server).get(`/me/guardian/students/${keptStudentId}/overview`).set("Authorization", `Bearer ${guardianToken}`).expect(200);
+
+    await request(server)
+      .get("/audit-logs")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200)
+      .expect(({ body: logs }) => {
+        const rows = (Array.isArray(logs) ? logs : (logs as { items?: unknown[] }).items ?? []) as Array<{ action: string; entityId: string }>;
+        expect(rows.some((row) => row.entityId === `guardian-a:${studentId}` && row.action === "guardian_student.unlinked")).toBe(true);
+        expect(rows.some((row) => row.entityId === `guardian-a:${keptStudentId}` && row.action === "guardian_student.unlinked")).toBe(false);
+      });
+  });
+
   it("KV-3c: personel üyeliği sona eren personel+veli kullanıcısı veli olarak girer, personel erişimi kesilir", async () => {
     upsertInMemoryAuthUser({
       id: "user-operations-a",
@@ -430,6 +495,20 @@ describe("Manual StudentContact → existing guardian link API (KV-3b)", () => {
       .expect(({ body }) => expect(JSON.stringify(body)).toContain("PERSONA_NOT_AVAILABLE"));
     await request(server).get("/me/profile").set("Authorization", `Bearer ${staffOnlyToken}`).expect(200);
 
+    // KV-3c security review (R2): relinking through the guardian API reopens the GUARDIAN role the last-link rule
+    // ended (version bump, open sessions closed); the response is the plain link record.
+    await request(server)
+      .post(`/guardians/${guardianId}/students`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .set("Idempotency-Key", "kv3c-r2-relink")
+      .send({ studentId })
+      .expect(201)
+      .expect(({ body }) => expect(Object.keys(body as object)).not.toContain("guardianRoleRestoredUserId"));
+    await request(server).get("/me/profile").set("Authorization", `Bearer ${staffOnlyToken}`).expect(401);
+    const relinkedToken = await login("kv3b-staff-parent@example.test");
+    await request(server).get("/me/profile").set("Authorization", `Bearer ${relinkedToken}`).expect(200)
+      .expect(({ body }) => expect(body).toMatchObject({ activePersona: "STAFF", availablePersonas: ["STAFF", "GUARDIAN"] }));
+
     await request(server)
       .get("/audit-logs")
       .set("Authorization", `Bearer ${adminToken}`)
@@ -439,6 +518,8 @@ describe("Manual StudentContact → existing guardian link API (KV-3b)", () => {
         expect(rows.filter((row) => row.entityId === guardianId).map((row) => row.action)).toContain("guardian.created");
         expect(rows.filter((row) => row.entityId === staffParentId).map((row) => row.action))
           .toEqual(expect.arrayContaining(["user.guardian_role_added", "user.guardian_role_removed"]));
+        // KV-3b add + KV-3c R2 restore.
+        expect(rows.filter((row) => row.entityId === staffParentId && row.action === "user.guardian_role_added")).toHaveLength(2);
         expect(rows.filter((row) => row.entityId === `${guardianId}:${studentId}`).map((row) => row.action)).toContain("guardian_student.unlinked");
         expect(JSON.stringify(rows)).not.toContain("kv3b.personel@example.test");
         expect(JSON.stringify(rows)).not.toContain("5551000105");

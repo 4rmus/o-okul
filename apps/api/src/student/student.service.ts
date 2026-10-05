@@ -55,6 +55,7 @@ import {
 } from "./student-enrollment-store.js";
 import { decryptTcIdentity, encryptTcIdentity, hashTcIdentity, isValidTcIdentity, maskTcIdentity, normalizeTcIdentity } from "./tc-identity.js";
 import { buildStudentContactStorageInput } from "./student-contact-input.js";
+import { recordContactGuardianRemoval } from "../guardian/guardian-role-audit.js";
 import { type StudentContactStore, type StudentContactStoreInput, studentContactStoreToken } from "./student-contact-store.js";
 
 export interface StudentRecord extends SharedStudentRecord {
@@ -1048,7 +1049,7 @@ export class StudentService {
     if (!this.studentContactStore?.purgeByStudent) {
       throw new Error("STUDENT_CONTACT_PURGE_UNAVAILABLE");
     }
-    const studentContactsPurged = await this.studentContactStore.purgeByStudent(student.tenantId, student.id);
+    const { purged: studentContactsPurged, guardianUnlinks } = await this.studentContactStore.purgeByStudent(student.tenantId, student.id);
     const purged = await this.store.purgePii(id);
     if (!purged) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
@@ -1064,6 +1065,9 @@ export class StudentService {
         recordCount: studentContactsPurged,
       },
     });
+    for (const unlink of guardianUnlinks) {
+      await recordContactGuardianRemoval(this.auditLogs, context, purged.tenantId, unlink, "kvkk.student_contact_pii_purged");
+    }
     await this.auditLogs?.record({
       tenantId: purged.tenantId,
       actorUserId: context.userId,

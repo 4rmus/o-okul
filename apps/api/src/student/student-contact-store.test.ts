@@ -26,7 +26,7 @@ describe("StudentContactStore", () => {
     const store = new InMemoryStudentContactStore();
     const created = await store.create(contact);
 
-    expect(await store.softDelete("tenant-a", created.id)).toBe(true);
+    expect(await store.softDelete("tenant-a", created.id)).toEqual({ studentId: "student-a", guardianStudentRemoved: false });
     const stored = (store as unknown as { records: Array<typeof created> }).records[0];
     expect(stored).toMatchObject({
       firstName: "Anonim",
@@ -50,13 +50,15 @@ describe("StudentContactStore", () => {
     const pool = {
       async query<T>(sql: string, values?: unknown[]) {
         queries.push({ sql, values });
-        if (sql.includes("RETURNING \"id\"")) return { rows: [{ id: "contact-a" }] as T[] };
+        if (sql.includes('UPDATE "StudentContact"')) return { rows: [{ id: "contact-a", studentId: "student-a", previousGuardianId: null }] as T[] };
         return { rows: [] as T[] };
       },
     };
     const store = new PostgresStudentContactStore(pool);
 
-    expect(await store.softDelete("tenant-a", "contact-a")).toBe(true);
+    expect(await store.softDelete("tenant-a", "contact-a")).toEqual({ studentId: "student-a", guardianStudentRemoved: false });
+    // An unlinked contact touches no guardian rows.
+    expect(queries.some((query) => query.sql.includes('"GuardianStudent"') || query.sql.includes("FOR UPDATE OF u"))).toBe(false);
 
     const update = queries.find((query) => query.sql.includes('UPDATE "StudentContact"'));
     expect(update?.values).toEqual(["tenant-a", "contact-a"]);
@@ -131,7 +133,7 @@ describe("StudentContactStore", () => {
   it("KV-3c bağ kaldırma, akıştan önce var olan GuardianStudent bağını ve izinlerini korur", async () => {
     const guardianStudents = new InMemoryGuardianStudentStore();
     const store = new InMemoryStudentContactStore(guardianStudents);
-    const preexisting = await guardianStudents.create({
+    const { link: preexisting } = await guardianStudents.create({
       tenantId: "tenant-a", guardianId: "guardian-pre", studentId: "student-kv3c", canViewFinance: true, canReceiveSms: true,
     });
     const created = await store.create({ ...contact, studentId: "student-kv3c" });
@@ -143,6 +145,108 @@ describe("StudentContactStore", () => {
     expect(await guardianStudents.listByStudent("student-kv3c")).toEqual([
       expect.objectContaining({ id: preexisting.id, guardianId: "guardian-pre", canViewFinance: true, canReceiveSms: true }),
     ]);
+  });
+
+  it("KV-3c R1: akışın açtığı bağı yönetici guardian API'siyle yeniden oluşturur ya da izinlerini günceller ise iletişim bağı kaldırma onu korur", async () => {
+    for (const adopt of ["create", "update", "self-service"] as const) {
+      const guardianStudents = new InMemoryGuardianStudentStore();
+      const store = new InMemoryStudentContactStore(guardianStudents);
+      const created = await store.create({ ...contact, studentId: `student-r1-${adopt}` });
+      expect(await store.linkGuardianWithStudentLink("tenant-a", created.id, "guardian-r1"))
+        .toMatchObject({ linked: true, guardianStudentCreated: true });
+      if (adopt === "create") await guardianStudents.create({ tenantId: "tenant-a", guardianId: "guardian-r1", studentId: created.studentId });
+      if (adopt === "update") await guardianStudents.update("guardian-r1", created.studentId, { canViewFinance: true }, { clearStudentContactOrigin: true });
+      // A guardian's own notification preference change does not adopt the link.
+      if (adopt === "self-service") await guardianStudents.update("guardian-r1", created.studentId, { canReceiveSms: true });
+
+      const unlinked = await store.unlinkGuardian("tenant-a", created.id, "guardian-r1");
+      expect(unlinked.guardianStudentRemoved).toBe(adopt === "self-service");
+      const links = await guardianStudents.listByStudent(created.studentId);
+      if (adopt === "self-service") expect(links).toEqual([]);
+      else expect(links).toEqual([expect.objectContaining({ guardianId: "guardian-r1", canViewFinance: adopt === "update" })]);
+    }
+  });
+
+  it("KV-3c R4: bağlı iletişim silinince akışın açtığı bağ aynı kuralla kalkar; önceden var olan bağ ve başka iletişimin bağı korunur", async () => {
+    const guardianStudents = new InMemoryGuardianStudentStore();
+    const store = new InMemoryStudentContactStore(guardianStudents);
+    const flow = await store.create({ ...contact, studentId: "student-r4" });
+    await store.linkGuardianWithStudentLink("tenant-a", flow.id, "guardian-r4");
+    expect(await store.softDelete("tenant-a", flow.id))
+      .toEqual({ studentId: "student-r4", guardianId: "guardian-r4", guardianStudentRemoved: true });
+    expect(await guardianStudents.listByStudent("student-r4")).toEqual([]);
+
+    const { link: preexisting } = await guardianStudents.create({ tenantId: "tenant-a", guardianId: "guardian-r4", studentId: "student-r4-pre", canViewFinance: true });
+    const pre = await store.create({ ...contact, studentId: "student-r4-pre" });
+    await store.linkGuardianWithStudentLink("tenant-a", pre.id, "guardian-r4");
+    expect(await store.softDelete("tenant-a", pre.id))
+      .toEqual({ studentId: "student-r4-pre", guardianId: "guardian-r4", guardianStudentRemoved: false });
+    expect(await guardianStudents.listByStudent("student-r4-pre")).toEqual([expect.objectContaining({ id: preexisting.id, canViewFinance: true })]);
+
+    const first = await store.create({ ...contact, studentId: "student-r4-shared" });
+    const second = await store.create({ ...contact, studentId: "student-r4-shared", firstName: "Ikinci" });
+    await store.linkGuardianWithStudentLink("tenant-a", first.id, "guardian-r4");
+    await store.linkGuardianWithStudentLink("tenant-a", second.id, "guardian-r4");
+    expect((await store.softDelete("tenant-a", first.id))?.guardianStudentRemoved).toBe(false);
+    expect(await guardianStudents.listByStudent("student-r4-shared")).toHaveLength(1);
+
+    // KVKK purge of the student: every contact goes, so the flow link goes with them (one entry per guardian).
+    expect(await store.purgeByStudent("tenant-a", "student-r4-shared")).toEqual({
+      purged: 2,
+      guardianUnlinks: [{ studentId: "student-r4-shared", guardianId: "guardian-r4", guardianStudentRemoved: true }],
+    });
+    expect(await guardianStudents.listByStudent("student-r4-shared")).toEqual([]);
+  });
+
+  it("KV-3c R4 Postgres: bağlı iletişim silme ve KVKK temizleme, bağ kaldırma kuralını aynı transaction'da ve kilit sırasıyla uygular", async () => {
+    const run = async (call: (store: PostgresStudentContactStore) => Promise<unknown>) => {
+      const queries: Array<{ sql: string; values?: unknown[] }> = [];
+      const pool = {
+        async query<T>(sql: string, values?: unknown[]) {
+          queries.push({ sql, values });
+          if (sql.includes('UPDATE "StudentContact"')) {
+            return { rows: [
+              { id: "contact-a", studentId: "student-a", previousGuardianId: "guardian-a" },
+              ...(sql.includes('"studentId"=$2') ? [{ id: "contact-b", previousGuardianId: "guardian-a" }, { id: "contact-c", previousGuardianId: null }] : []),
+            ] as T[] };
+          }
+          if (sql.includes("FOR UPDATE OF u")) return { rows: [{ tenantId: "tenant-a", userId: "user-a" }] as T[] };
+          if (sql.includes('SELECT "id", "createdByStudentContact" FROM "GuardianStudent"')) return { rows: [{ id: "link-a", createdByStudentContact: true }] as T[] };
+          if (sql.includes('DELETE FROM "GuardianStudent"')) return { rows: [{ id: "link-a" }] as T[] };
+          if (sql.includes('FROM "TenantMembership"')) return { rows: [{ role: "TEACHER" }, { role: "GUARDIAN" }] as T[] };
+          if (sql.includes('UPDATE "User"')) return { rows: [{ membershipVersion: 4 }] as T[] };
+          return { rows: [] as T[] };
+        },
+      };
+      const result = await call(new PostgresStudentContactStore(pool));
+      return { result, sqls: queries.map((query) => query.sql), queries };
+    };
+
+    const deleted = await run((store) => store.softDelete("tenant-a", "contact-a"));
+    expect(deleted.result).toEqual({
+      studentId: "student-a", guardianId: "guardian-a", guardianStudentRemoved: true, guardianRoleRemovedUserId: "user-a", sessionsRevoked: 0,
+    });
+    const order = ['UPDATE "StudentContact"', "FOR UPDATE OF u", 'SELECT "id", "createdByStudentContact"', 'SELECT 1 FROM "StudentContact"', 'DELETE FROM "GuardianStudent"', "'ENDED'"]
+      .map((fragment) => deleted.sqls.findIndex((sql) => sql.includes(fragment)));
+    expect(order.every((index, position) => index > 0 && (position === 0 || index > order[position - 1]!))).toBe(true);
+    expect(deleted.sqls.indexOf("BEGIN")).toBeLessThan(order[0]!);
+    expect(deleted.sqls.indexOf("COMMIT")).toBeGreaterThan(order.at(-1)!);
+    // The contact row is locked and anonymized in one statement that returns the guardian it pointed at.
+    expect(deleted.sqls[order[0]!]).toContain('"guardianId"=NULL');
+    expect(deleted.sqls[order[0]!]).toContain("FOR UPDATE");
+    expect(deleted.sqls[order[0]!]).toContain('prev."guardianId" AS "previousGuardianId"');
+    expect(deleted.queries[order[0]!]?.values).toEqual(["tenant-a", "contact-a"]);
+
+    const purged = await run((store) => store.purgeByStudent("tenant-a", "student-a"));
+    expect(purged.result).toEqual({
+      purged: 3,
+      guardianUnlinks: [{
+        studentId: "student-a", guardianId: "guardian-a", guardianStudentRemoved: true, guardianRoleRemovedUserId: "user-a", sessionsRevoked: 0,
+      }],
+    });
+    expect(purged.sqls.filter((sql) => sql.includes('DELETE FROM "GuardianStudent"'))).toHaveLength(1);
+    expect(purged.sqls.findIndex((sql) => sql.includes('UPDATE "StudentContact"')))
+      .toBeLessThan(purged.sqls.findIndex((sql) => sql.includes("FOR UPDATE OF u")));
   });
 
   it("Postgres elle bağı tek transaction'da kilitli iletişim, GuardianStudent insert ve koşullu güncelleme ile yazar", async () => {
@@ -173,6 +277,9 @@ describe("StudentContactStore", () => {
     expect(sqls[insert]).toContain('ON CONFLICT ("tenantId", "guardianId", "studentId") DO NOTHING');
     expect(queries[insert]?.values?.slice(1)).toEqual(["tenant-a", "guardian-a", "student-a"]);
     expect(sqls[update]).toContain('"guardianId" IS NULL');
+    // KV-3c: contact -> user -> GuardianStudent lock order; the restore check runs after the link write.
+    const userLock = sqls.findIndex((sql) => sql.includes("FOR UPDATE OF u"));
+    expect(select < userLock && userLock < insert).toBe(true);
 
     queries.length = 0;
     updateRows = [];
@@ -338,6 +445,30 @@ describe("StudentContactStore", () => {
     expect(clash.queries.map((query) => query.sql)).toContain("ROLLBACK");
     const other = await run({ code: "XX000" });
     await expect(other.result).rejects.toThrow("duplicate key");
+  });
+
+  it("KV-3c R2 Postgres: iletişim bağı, son bağ kuralıyla biten GUARDIAN üyeliğini aynı transaction'da yeniden açar", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const pool = {
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        if (sql.includes('SELECT "studentId", "firstName", "lastName" FROM "StudentContact"')) return { rows: [{ studentId: "student-a" }] as T[] };
+        if (sql.includes("FOR UPDATE OF u")) return { rows: [{ tenantId: "tenant-a", userId: "user-a" }] as T[] };
+        if (sql.includes('INSERT INTO "GuardianStudent"')) return { rows: [{ id: "link-a" }] as T[] };
+        if (sql.includes('UPDATE "StudentContact"')) return { rows: [{ id: "contact-a" }] as T[] };
+        if (sql.includes(`"status" = 'ENDED' AND "endedReason"`)) return { rows: [{ id: "membership-guardian" }] as T[] };
+        if (sql.includes('UPDATE "User"')) return { rows: [{ membershipVersion: 3 }] as T[] };
+        if (sql.includes('UPDATE "AuthSession"')) return { rows: [{ id: "session-a" }] as T[] };
+        return { rows: [] as T[] };
+      },
+    };
+    expect(await new PostgresStudentContactStore(pool).linkGuardianWithStudentLink("tenant-a", "contact-a", "guardian-a")).toEqual({
+      linked: true, guardianStudentId: "link-a", guardianStudentCreated: true, guardianRoleRestoredUserId: "user-a", sessionsRevoked: 1,
+    });
+    const sqls = queries.map((query) => query.sql);
+    const restore = sqls.findIndex((sql) => sql.includes("SET \"status\" = 'ACTIVE'"));
+    expect(sqls.findIndex((sql) => sql.includes('UPDATE "StudentContact"'))).toBeLessThan(restore);
+    expect(restore).toBeLessThan(sqls.indexOf("COMMIT"));
   });
 
   it("Postgres bağ, eşzamanlı bağ kaldırma erişim bağını sildiyse 409 koduyla geri alınır", async () => {

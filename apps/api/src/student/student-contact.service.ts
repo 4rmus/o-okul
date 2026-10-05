@@ -5,6 +5,7 @@ import type {
   StudentContactUpdateRequest,
 } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
+import { recordContactGuardianRemoval } from "../guardian/guardian-role-audit.js";
 import { normalizeTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
@@ -94,8 +95,10 @@ export class StudentContactService {
     const student = await this.students.findOne(context, studentId);
     const existing = await this.store.findById(student.tenantId, id);
     if (!existing || existing.studentId !== student.id) throw new NotFoundException("STUDENT_CONTACT_NOT_FOUND");
-    if (!await this.store.softDelete(student.tenantId, id)) throw new NotFoundException("STUDENT_CONTACT_NOT_FOUND");
+    const deleted = await this.store.softDelete(student.tenantId, id);
+    if (!deleted) throw new NotFoundException("STUDENT_CONTACT_NOT_FOUND");
     await this.recordMutation(context, existing, "student_contact.deleted");
+    await recordContactGuardianRemoval(this.auditLogs, context, student.tenantId, deleted, "student_contact.deleted");
   }
 
   private requireTenantId(context: RequestContext): string {

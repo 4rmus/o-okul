@@ -3,7 +3,7 @@ import type { GuardianStudentRecord } from "@o-okul/shared-types";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type Queryable, type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
-import { InMemoryAuthUserStore, removeInMemoryAuthUserRole } from "../auth/auth-user-store.js";
+import { InMemoryAuthUserStore, addInMemoryAuthUserRole, removeInMemoryAuthUserRole } from "../auth/auth-user-store.js";
 import type { GuardianStore } from "./guardian-store.js";
 
 export type GuardianStudentInput = Pick<GuardianStudentRecord, "tenantId" | "guardianId" | "studentId"> &
@@ -15,8 +15,20 @@ export type GuardianStudentInput = Pick<GuardianStudentRecord, "tenantId" | "gua
 export interface GuardianStudentStore {
   listByGuardian(guardianId: string): Promise<GuardianStudentRecord[]>;
   listByStudent(studentId: string): Promise<GuardianStudentRecord[]>;
-  create(input: GuardianStudentInput): Promise<GuardianStudentRecord>;
-  update(guardianId: string, studentId: string, input: Partial<GuardianStudentInput>): Promise<GuardianStudentRecord | undefined>;
+  /**
+   * Creates the link or returns the existing one. KV-3c security review: a link this call returns is no longer
+   * "created by the StudentContact flow" (an admin/API link is kept by a contact unlink). The User behind the guardian
+   * is locked before the link row; a GUARDIAN membership ended by LAST_GUARDIAN_STUDENT_LINK_REMOVED becomes ACTIVE
+   * again (version bump, sessions closed), the same way as the KV-3b role add.
+   */
+  create(input: GuardianStudentInput): Promise<GuardianStudentCreateWrite>;
+  /** clearStudentContactOrigin: an admin permission change adopts the link (KV-3c); guardian self-service does not. */
+  update(
+    guardianId: string,
+    studentId: string,
+    input: Partial<GuardianStudentInput>,
+    options?: { clearStudentContactOrigin?: boolean },
+  ): Promise<GuardianStudentRecord | undefined>;
   /**
    * Removes the link; undefined when there was none. Product owner decision (2026-10-05, KV-3c): when this was the
    * guardian's last link and the user behind the guardian also holds another ACTIVE (staff/teacher) membership, the
@@ -28,6 +40,13 @@ export interface GuardianStudentStore {
 export interface GuardianRoleEndWrite {
   /** Set only when the GUARDIAN membership of this user ended because its last GuardianStudent link went. */
   guardianRoleRemovedUserId?: string;
+  sessionsRevoked: number;
+}
+
+export interface GuardianStudentCreateWrite {
+  link: GuardianStudentRecord;
+  /** Set only when the GUARDIAN membership ended by LAST_GUARDIAN_STUDENT_LINK_REMOVED became ACTIVE again. */
+  guardianRoleRestoredUserId?: string;
   sessionsRevoked: number;
 }
 
@@ -60,6 +79,10 @@ const demoLinks: GuardianStudentRecord[] = [
 
 export class InMemoryGuardianStudentStore implements GuardianStudentStore {
   private readonly links = demoLinks.map((record) => ({ ...record }));
+  /** KV-3c: ids of links the StudentContact flow created (the Postgres column "createdByStudentContact"). */
+  private readonly contactCreatedIds = new Set<string>();
+  /** Users whose GUARDIAN role this store ended after their last link (the Postgres endedReason). */
+  private readonly endedGuardianRoleUserIds = new Set<string>();
 
   /** guardians is only needed to end the GUARDIAN role after the last link (the module wires the shared store). */
   constructor(private readonly guardians?: GuardianStore) {}
@@ -72,30 +95,42 @@ export class InMemoryGuardianStudentStore implements GuardianStudentStore {
     return this.links.filter((link) => link.studentId === studentId);
   }
 
-  async create(input: GuardianStudentInput): Promise<GuardianStudentRecord> {
+  async create(input: GuardianStudentInput): Promise<GuardianStudentCreateWrite> {
     const existing = this.links.find(
       (link) =>
         link.tenantId === input.tenantId &&
         link.guardianId === input.guardianId &&
         link.studentId === input.studentId,
     );
-    if (existing) {
-      return existing;
-    }
-
-    const record = {
+    const link = existing ?? {
       id: `guardian-student-${this.links.length + 1}`,
       ...withGuardianStudentDefaults(input),
     };
-    this.links.push(record);
-    return record;
+    if (existing) this.contactCreatedIds.delete(existing.id);
+    else this.links.push(link);
+    return { link, ...await this.restoreGuardianRole(input.guardianId) };
   }
 
-  async update(guardianId: string, studentId: string, input: Partial<GuardianStudentInput>): Promise<GuardianStudentRecord | undefined> {
+  /** In-memory side of the StudentContact flow marker (the Postgres flow writes the column itself). */
+  markCreatedByStudentContact(linkId: string): void {
+    this.contactCreatedIds.add(linkId);
+  }
+
+  isCreatedByStudentContact(linkId: string): boolean {
+    return this.contactCreatedIds.has(linkId);
+  }
+
+  async update(
+    guardianId: string,
+    studentId: string,
+    input: Partial<GuardianStudentInput>,
+    options: { clearStudentContactOrigin?: boolean } = {},
+  ): Promise<GuardianStudentRecord | undefined> {
     const index = this.links.findIndex((link) => link.guardianId === guardianId && link.studentId === studentId);
     if (index === -1) {
       return undefined;
     }
+    if (options.clearStudentContactOrigin) this.contactCreatedIds.delete(this.links[index]!.id);
 
     const updated = {
       ...this.links[index]!,
@@ -114,7 +149,8 @@ export class InMemoryGuardianStudentStore implements GuardianStudentStore {
       return undefined;
     }
 
-    this.links.splice(index, 1);
+    const [removed] = this.links.splice(index, 1);
+    if (removed) this.contactCreatedIds.delete(removed.id);
     const none = { sessionsRevoked: 0 };
     if (this.links.some((link) => link.guardianId === guardianId)) return none;
     const guardian = await this.guardians?.findById(guardianId);
@@ -122,7 +158,18 @@ export class InMemoryGuardianStudentStore implements GuardianStudentStore {
     if (!user || user.tenantId !== guardian?.tenantId || !keepsOtherRole(user.roles)) return none;
     // The in-memory version bump makes every open session fail the membership check (same effect as revoking).
     removeInMemoryAuthUserRole(user.tenantId, user.id, "GUARDIAN");
+    this.endedGuardianRoleUserIds.add(user.id);
     return { guardianRoleRemovedUserId: user.id, sessionsRevoked: 0 };
+  }
+
+  private async restoreGuardianRole(guardianId: string): Promise<Omit<GuardianStudentCreateWrite, "link">> {
+    const guardian = await this.guardians?.findById(guardianId);
+    if (!guardian?.userId || !this.endedGuardianRoleUserIds.delete(guardian.userId)) return { sessionsRevoked: 0 };
+    // The KV-3b user path may have added the role back already.
+    if ((await new InMemoryAuthUserStore().findById(guardian.userId))?.roles.includes("GUARDIAN")) return { sessionsRevoked: 0 };
+    // Same effect as the KV-3b role add: the version bump makes every open session fail the membership check.
+    addInMemoryAuthUserRole(guardian.tenantId, guardian.userId, "GUARDIAN");
+    return { guardianRoleRestoredUserId: guardian.userId, sessionsRevoked: 0 };
   }
 }
 
@@ -153,10 +200,13 @@ export class PostgresGuardianStudentStore implements GuardianStudentStore {
     });
   }
 
-  async create(input: GuardianStudentInput): Promise<GuardianStudentRecord> {
+  async create(input: GuardianStudentInput): Promise<GuardianStudentCreateWrite> {
     const recordInput = withGuardianStudentDefaults(input);
     return withTenantQuery(this.pool, async (client) => {
-      const inserted = await client.query<GuardianStudentRow>(
+      // User before link row: the same order as delete and the StudentContact flow, so they serialize.
+      const guardianUser = await lockGuardianUser(client, recordInput.guardianId);
+      // KV-3c: an existing link returned here is adopted by this (API) flow; its permissions stay as they are.
+      const upserted = await client.query<GuardianStudentRow>(
         `INSERT INTO "GuardianStudent" (
            "id",
            "tenantId",
@@ -169,7 +219,8 @@ export class PostgresGuardianStudentStore implements GuardianStudentStore {
            "updatedAt"
          )
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
-         ON CONFLICT ("tenantId", "guardianId", "studentId") DO NOTHING
+         ON CONFLICT ("tenantId", "guardianId", "studentId") DO UPDATE
+         SET "createdByStudentContact" = false
          RETURNING *`,
         [
           randomUUID(),
@@ -182,15 +233,20 @@ export class PostgresGuardianStudentStore implements GuardianStudentStore {
           recordInput.canOpenSupportTickets,
         ],
       );
-      const row = inserted.rows[0] ?? await findExisting(client, recordInput);
+      const row = upserted.rows[0];
       if (!row) {
         throw new Error("GUARDIAN_STUDENT_LINK_CREATE_FAILED");
       }
-      return toGuardianStudentRecord(row);
+      return { link: toGuardianStudentRecord(row), ...await restoreGuardianRoleWhenRelinked(client, guardianUser) };
     });
   }
 
-  async update(guardianId: string, studentId: string, input: Partial<GuardianStudentInput>): Promise<GuardianStudentRecord | undefined> {
+  async update(
+    guardianId: string,
+    studentId: string,
+    input: Partial<GuardianStudentInput>,
+    options: { clearStudentContactOrigin?: boolean } = {},
+  ): Promise<GuardianStudentRecord | undefined> {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<GuardianStudentRow>(
         `UPDATE "GuardianStudent"
@@ -198,6 +254,7 @@ export class PostgresGuardianStudentStore implements GuardianStudentStore {
              "canReceiveSms" = COALESCE($4, "canReceiveSms"),
              "canReceiveAnnouncements" = COALESCE($5, "canReceiveAnnouncements"),
              "canOpenSupportTickets" = COALESCE($6, "canOpenSupportTickets"),
+             "createdByStudentContact" = CASE WHEN $7 THEN false ELSE "createdByStudentContact" END,
              "updatedAt" = now()
          WHERE "guardianId" = $1
            AND "studentId" = $2
@@ -209,6 +266,7 @@ export class PostgresGuardianStudentStore implements GuardianStudentStore {
           input.canReceiveSms,
           input.canReceiveAnnouncements,
           input.canOpenSupportTickets,
+          options.clearStudentContactOrigin === true,
         ],
       );
       return result.rows[0] ? toGuardianStudentRecord(result.rows[0]) : undefined;
@@ -284,18 +342,58 @@ export async function endGuardianRoleWhenUnlinked(
   );
   if (!keepsOtherRole(memberships.rows.map((row) => row.role))) return none;
 
+  const sessionsRevoked = await changeGuardianMembership(client, user, (version) => client.query(
+    `UPDATE "TenantMembership"
+     SET "status" = 'ENDED', "endsAt" = now(), "endedReason" = $4, "version" = $3, "updatedAt" = now()
+     WHERE "tenantId" = $1 AND "userId" = $2 AND "role" = 'GUARDIAN' AND "status" = 'ACTIVE'`,
+    [user.tenantId, user.userId, version, guardianRoleEndedReason],
+  ));
+  return { guardianRoleRemovedUserId: user.userId, sessionsRevoked };
+}
+
+/**
+ * KV-3c security review (R2): relinking a guardian whose GUARDIAN membership ended only because its last link went
+ * (LAST_GUARDIAN_STUDENT_LINK_REMOVED) makes it ACTIVE again in the same transaction, like the KV-3b role add. Any
+ * other ended/suspended GUARDIAN membership stays as it is. The caller holds the User row lock.
+ */
+export async function restoreGuardianRoleWhenRelinked(
+  client: Queryable,
+  user: { tenantId: string; userId: string } | undefined,
+): Promise<Omit<GuardianStudentCreateWrite, "link">> {
+  if (!user) return { sessionsRevoked: 0 };
+  const ended = await client.query<{ id: string }>(
+    `SELECT "id" FROM "TenantMembership"
+     WHERE "tenantId" = $1 AND "userId" = $2 AND "role" = 'GUARDIAN' AND "status" = 'ENDED' AND "endedReason" = $3
+     FOR UPDATE`,
+    [user.tenantId, user.userId, guardianRoleEndedReason],
+  );
+  const membershipId = ended.rows[0]?.id;
+  if (!membershipId) return { sessionsRevoked: 0 };
+  const sessionsRevoked = await changeGuardianMembership(client, user, (version) => client.query(
+    `UPDATE "TenantMembership"
+     SET "status" = 'ACTIVE', "endsAt" = NULL, "endedReason" = NULL, "version" = $3, "updatedAt" = now()
+     WHERE "tenantId" = $1 AND "id" = $2`,
+    [user.tenantId, membershipId, version],
+  ));
+  return { guardianRoleRestoredUserId: user.userId, sessionsRevoked };
+}
+
+/**
+ * Shared GUARDIAN membership change: bumps User.membershipVersion, applies the change with the new version, gives every
+ * ACTIVE membership that version (other memberships change nothing else) and closes open sessions.
+ */
+async function changeGuardianMembership(
+  client: Queryable,
+  user: { tenantId: string; userId: string },
+  change: (version: number) => Promise<unknown>,
+): Promise<number> {
   const version = (await client.query<{ membershipVersion: number }>(
     `UPDATE "User" SET "membershipVersion" = "membershipVersion" + 1, "updatedAt" = now()
      WHERE "tenantId" = $1 AND "id" = $2 RETURNING "membershipVersion"`,
     [user.tenantId, user.userId],
   )).rows[0]?.membershipVersion;
-  if (version === undefined) throw new Error("GUARDIAN_ROLE_END_FAILED");
-  await client.query(
-    `UPDATE "TenantMembership"
-     SET "status" = 'ENDED', "endsAt" = now(), "endedReason" = $4, "version" = $3, "updatedAt" = now()
-     WHERE "tenantId" = $1 AND "userId" = $2 AND "role" = 'GUARDIAN' AND "status" = 'ACTIVE'`,
-    [user.tenantId, user.userId, version, guardianRoleEndedReason],
-  );
+  if (version === undefined) throw new Error("GUARDIAN_ROLE_CHANGE_FAILED");
+  await change(version);
   await client.query(
     `UPDATE "TenantMembership" SET "version" = $3, "updatedAt" = now()
      WHERE "tenantId" = $1 AND "userId" = $2 AND "status" = 'ACTIVE'`,
@@ -306,7 +404,7 @@ export async function endGuardianRoleWhenUnlinked(
      WHERE "tenantId" = $1 AND "userId" = $2 AND "status" = 'ACTIVE' RETURNING "id"`,
     [user.tenantId, user.userId],
   );
-  return { guardianRoleRemovedUserId: user.userId, sessionsRevoked: sessions.rows.length };
+  return sessions.rows.length;
 }
 
 interface GuardianStudentRow {
@@ -322,21 +420,6 @@ interface GuardianStudentRow {
   updatedAt?: Date | string;
 }
 
-async function findExisting(
-  client: Queryable,
-  input: GuardianStudentInput,
-): Promise<GuardianStudentRow | undefined> {
-  const existing = await client.query<GuardianStudentRow>(
-    `SELECT *
-     FROM "GuardianStudent"
-     WHERE "tenantId" = $1
-       AND "guardianId" = $2
-       AND "studentId" = $3
-     LIMIT 1`,
-    [input.tenantId, input.guardianId, input.studentId],
-  );
-  return existing.rows[0];
-}
 
 function toGuardianStudentRecord(row: GuardianStudentRow): GuardianStudentRecord {
   return {

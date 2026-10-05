@@ -21,6 +21,7 @@ const readyFixture = {
   },
 };
 
+expectGuardianRoleRules();
 expectPass("valid-pass", fixture);
 expectPass("valid-ready", readyFixture, { ACCOUNT_MANAGEMENT_BACKFILL_ALLOW_READY: "1" });
 expectFail("blocked", { ...fixture, result: "BLOCKED", databaseMutationApplied: false }, "result PASS veya izinli READY olmalı");
@@ -61,6 +62,25 @@ expectRawFail("malformed-json", "{", "geçerli JSON olmalı");
 
 rmSync(root, { recursive: true, force: true });
 console.log("Account management backfill contract kontrolü geçti.");
+
+// KV-3c (security review R3): a staff+guardian account and a Guardian profile whose GUARDIAN membership ended by the
+// last-link rule are valid states of the runtime; the backfill precondition SQL must not block on them.
+function expectGuardianRoleRules() {
+  const source = readFileSync("scripts/backfill-account-management.mjs", "utf8");
+  const failures = [];
+  if (/has_guardian AND role_count > 1/.test(source)) failures.push("invalid_roles staff+guardian hesabını bloklamamalı");
+  if (!/invalid_roles AS \([\s\S]*?staff_role_count > 1 OR \(has_student AND role_count > 1\)/.test(source)) {
+    failures.push("invalid_roles çoklu personel rolü ve öğrenci+başka rol kuralını korumalı");
+  }
+  const orphan = source.match(/orphan_profiles AS \(([\s\S]*?)\), subject_memberships/)?.[1] ?? "";
+  if (!orphan.includes("'LAST_GUARDIAN_STUDENT_LINK_REMOVED'") || !orphan.includes("ended.\"status\" = 'ENDED'")) {
+    failures.push("orphan_profiles son bağ kuralıyla biten GUARDIAN üyeliğini hariç tutmalı");
+  }
+  if (failures.length > 0) {
+    console.error(failures.join("\n"));
+    process.exit(1);
+  }
+}
 
 function expectPass(name, report, extraEnv = {}) {
   const result = run(name, report, { ACCOUNT_MANAGEMENT_BACKFILL_ALLOW_EXAMPLE: "1", ...extraEnv });
