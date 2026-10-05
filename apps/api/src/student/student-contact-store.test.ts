@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { resetInMemoryAuthUsers, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
+import { InMemoryGuardianStore } from "../school/guardian-store.js";
 import { InMemoryGuardianStudentStore } from "../school/guardian-student-store.js";
 import { InMemoryStudentContactStore, PostgresStudentContactStore } from "./student-contact-store.js";
 
@@ -263,6 +265,88 @@ describe("StudentContactStore", () => {
       const refused = await run(memberships);
       expect(refused.result).toMatchObject({ linked: false, userNotEligible: true });
       expect(refused.sqls.some((sql) => /INSERT|UPDATE "User"|UPDATE "AuthSession"/.test(sql))).toBe(false);
+    }
+  });
+
+  it("Postgres kullanıcı bağı silinmiş veli profilinin userId'sini boşaltıp yeni profil açar; kalan unique çakışması 409 kodudur", async () => {
+    const run = async (insertError?: { code: string }) => {
+      const queries: Array<{ sql: string; values?: unknown[] }> = [];
+      const pool = {
+        async query<T>(sql: string, values?: unknown[]) {
+          queries.push({ sql, values });
+          if (sql.includes('SELECT "studentId", "firstName", "lastName" FROM "StudentContact"')) {
+            return { rows: [{ studentId: "student-a", firstName: "Ayse", lastName: "Veli" }] as T[] };
+          }
+          if (sql.includes('SELECT "id" FROM "User"')) return { rows: [{ id: "user-a" }] as T[] };
+          if (sql.includes('FROM "TenantMembership"') && sql.startsWith("SELECT")) {
+            return { rows: [{ role: "GUARDIAN", staffRole: null, hasTeacherPersona: false, hasStudentPersona: false }] as T[] };
+          }
+          if (sql.includes('INSERT INTO "Guardian"')) {
+            if (insertError) throw Object.assign(new Error("duplicate key"), insertError);
+            return { rows: [{ id: "guardian-new" }] as T[] };
+          }
+          if (sql.includes('INSERT INTO "GuardianStudent"')) return { rows: [{ id: "link-a" }] as T[] };
+          if (sql.includes('UPDATE "StudentContact"')) return { rows: [{ id: "contact-a" }] as T[] };
+          return { rows: [] as T[] };
+        },
+      };
+      const result = new PostgresStudentContactStore(pool).linkUserAsGuardianWithStudentLink("tenant-a", "contact-a", "user-a");
+      return { result, queries };
+    };
+
+    const ok = await run();
+    expect(await ok.result).toMatchObject({ linked: true, guardianId: "guardian-new", guardianCreated: true });
+    const sqls = ok.queries.map((query) => query.sql);
+    const detach = sqls.findIndex((sql) => sql.includes('UPDATE "Guardian" SET "userId"=NULL'));
+    expect(detach).toBeGreaterThan(0);
+    expect(detach).toBeLessThan(sqls.findIndex((sql) => sql.includes('INSERT INTO "Guardian"')));
+    expect(sqls[detach]).toContain('"tenantId"=$1 AND "userId"=$2 AND "deletedAt" IS NOT NULL');
+    expect(ok.queries[detach]?.values).toEqual(["tenant-a", "user-a"]);
+
+    const clash = await run({ code: "23505" });
+    await expect(clash.result).rejects.toThrow("STUDENT_CONTACT_GUARDIAN_LINK_CONFLICT");
+    expect(clash.queries.map((query) => query.sql)).toContain("ROLLBACK");
+    const other = await run({ code: "XX000" });
+    await expect(other.result).rejects.toThrow("duplicate key");
+  });
+
+  it("Postgres bağ, eşzamanlı bağ kaldırma erişim bağını sildiyse 409 koduyla geri alınır", async () => {
+    const queries: string[] = [];
+    const pool = {
+      async query<T>(sql: string) {
+        queries.push(sql);
+        if (sql.includes('SELECT "studentId", "firstName", "lastName" FROM "StudentContact"')) return { rows: [{ studentId: "student-a" }] as T[] };
+        return { rows: [] as T[] };
+      },
+    };
+    await expect(new PostgresStudentContactStore(pool).linkGuardianWithStudentLink("tenant-a", "contact-a", "guardian-a"))
+      .rejects.toThrow("STUDENT_CONTACT_GUARDIAN_LINK_CONFLICT");
+    expect(queries).toContain("ROLLBACK");
+    expect(queries.some((sql) => sql.includes('UPDATE "StudentContact"'))).toBe(false);
+  });
+
+  it("in-memory kullanıcı bağı silinmiş veli profilinden sonra aynı kullanıcıyı yeni profille yeniden bağlar (Postgres ile eş)", async () => {
+    resetInMemoryAuthUsers();
+    upsertInMemoryAuthUser({
+      id: "user-kv3b-relink", email: "kv3b-relink@example.test", name: "Personel", password: "password", tenantId: "tenant-a",
+      roles: ["OPERATIONS_STAFF"],
+      membership: { id: "membership-kv3b-relink", staffRole: "OPERATIONS_STAFF", hasTeacherPersona: false, hasStudentPersona: false, version: 1 },
+    });
+    try {
+      const guardians = new InMemoryGuardianStore();
+      const store = new InMemoryStudentContactStore(new InMemoryGuardianStudentStore(), guardians);
+      const first = await store.create({ ...contact, relationType: "LEGAL_GUARDIAN", studentId: "student-relink" });
+      const linked = await store.linkUserAsGuardianWithStudentLink("tenant-a", first.id, "user-kv3b-relink");
+      expect(linked).toMatchObject({ linked: true, guardianCreated: true });
+      await guardians.softDelete(linked.guardianId!, new Date().toISOString());
+
+      const second = await store.create({ ...contact, relationType: "LEGAL_GUARDIAN", studentId: "student-relink-2" });
+      const relinked = await store.linkUserAsGuardianWithStudentLink("tenant-a", second.id, "user-kv3b-relink");
+      expect(relinked).toMatchObject({ linked: true, guardianCreated: true });
+      expect(relinked.guardianId).not.toBe(linked.guardianId);
+      expect((await guardians.findByUserId("tenant-a", "user-kv3b-relink"))?.id).toBe(relinked.guardianId);
+    } finally {
+      resetInMemoryAuthUsers();
     }
   });
 });

@@ -326,4 +326,35 @@ describe("Manual StudentContact → existing guardian link API (KV-3b)", () => {
         expect(JSON.stringify(rows)).not.toContain("5551000105");
       });
   });
+
+  it("kurum sahibine veli rolü eklemek owner:manage ister; yetkisiz yönetici hiçbir şey yazmaz ve oturum kapatmaz", async () => {
+    for (const [id, email] of [["user-kv3b-owner-parent", "kv3b-owner-parent@example.test"], ["user-kv3b-owner-actor", "kv3b-owner-actor@example.test"]] as const) {
+      upsertInMemoryAuthUser({
+        id, email, name: "Kurum Sahibi", password: "password", tenantId: "tenant-a", roles: ["TENANT_OWNER"],
+        membership: { id: `membership-${id}`, staffRole: "TENANT_OWNER", hasTeacherPersona: false, hasStudentPersona: false, version: 1, scopeMode: "TENANT", campusIds: [] },
+      });
+      registerTestLoginIdentity(email, { tenantSlug: "dna-egitim" });
+    }
+    const ownerParentToken = await login("kv3b-owner-parent@example.test");
+    const ownerActorToken = await login("kv3b-owner-actor@example.test");
+    const studentId = await createStudent("kv3b-6");
+    const contactId = await createContact(studentId, { firstName: "Sahip", lastName: "Veli", relationType: "LEGAL_GUARDIAN" });
+    const linkOwner = (token: string, key: string) => request(server)
+      .put(`/students/${studentId}/contacts/${contactId}/guardian`)
+      .set("Authorization", `Bearer ${token}`)
+      .set("Idempotency-Key", key)
+      .send({ userId: "user-kv3b-owner-parent" });
+
+    await linkOwner(adminToken, "kv3b-owner-by-admin").expect(403)
+      .expect(({ body }) => expect(JSON.stringify(body)).toContain("TENANT_OWNER_MANAGE_REQUIRED"));
+    expect(await contactGuardianId(studentId, contactId)).toBeUndefined();
+    // No role was added, so the owner's session is still open and offers no guardian persona.
+    await request(server).get("/me/profile").set("Authorization", `Bearer ${ownerParentToken}`).expect(200)
+      .expect(({ body }) => expect((body as { availablePersonas?: string[] }).availablePersonas ?? []).not.toContain("GUARDIAN"));
+
+    await linkOwner(ownerActorToken, "kv3b-owner-by-owner").expect(200)
+      .expect(({ body }) => expect(body).toMatchObject({ changed: true, guardianCreated: true, guardianRoleAdded: true }));
+    await request(server).get("/me/profile").set("Authorization", `Bearer ${ownerParentToken}`).expect(401);
+  });
 });
+

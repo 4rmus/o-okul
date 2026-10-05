@@ -8,7 +8,11 @@ import {
   Optional,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import type { StudentContactGuardianLinkRequest, StudentContactGuardianLinkResult } from "@o-okul/shared-types";
+import {
+  hasCapabilityForRoles,
+  type StudentContactGuardianLinkRequest,
+  type StudentContactGuardianLinkResult,
+} from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import { type AuthUserStore, authUserStoreToken } from "../auth/auth-user-store.js";
 import { canAttachGuardianRole } from "../auth/tenant-membership-projection.js";
@@ -91,7 +95,7 @@ export class StudentContactGuardianLinkService {
     if (contact.guardianId) throw new ConflictException("STUDENT_CONTACT_GUARDIAN_ALREADY_LINKED");
     await this.requireGuardian(context, guardianId);
 
-    const write = await this.contacts.linkGuardianWithStudentLink(contact.tenantId, contact.id, guardianId);
+    const write = await linkConflictAs409(this.contacts.linkGuardianWithStudentLink(contact.tenantId, contact.id, guardianId));
     if (!write.linked) {
       const current = await this.contacts.findById(contact.tenantId, contact.id);
       if (!current) throw new NotFoundException("STUDENT_CONTACT_NOT_FOUND");
@@ -115,6 +119,11 @@ export class StudentContactGuardianLinkService {
     const user = await this.users.findById(userId);
     if (!user || user.tenantId !== contact.tenantId) throw new UnprocessableEntityException("STUDENT_CONTACT_USER_NOT_FOUND");
     if (!canAttachGuardianRole(user)) throw new UnprocessableEntityException("STUDENT_CONTACT_USER_NOT_ELIGIBLE");
+    // Adding a role to an owner revokes the owner's sessions: same owner:manage rule as a membership change.
+    const isOwner = user.roles.includes("TENANT_OWNER") || user.membership?.staffRole === "TENANT_OWNER";
+    if (isOwner && !hasCapabilityForRoles(context.roles, "owner:manage", context.capabilities)) {
+      throw new ForbiddenException("TENANT_OWNER_MANAGE_REQUIRED");
+    }
     const unchanged = (guardianId: string) => ({
       studentId: contact.studentId, contactId: contact.id, guardianId, changed: false, guardianStudentCreated: false,
       guardianCreated: false, guardianRoleAdded: false,
@@ -125,7 +134,7 @@ export class StudentContactGuardianLinkService {
       throw new ConflictException("STUDENT_CONTACT_GUARDIAN_ALREADY_LINKED");
     }
 
-    const write = await this.contacts.linkUserAsGuardianWithStudentLink(contact.tenantId, contact.id, userId);
+    const write = await linkConflictAs409(this.contacts.linkUserAsGuardianWithStudentLink(contact.tenantId, contact.id, userId));
     if (write.userNotEligible) throw new UnprocessableEntityException("STUDENT_CONTACT_USER_NOT_ELIGIBLE");
     if (!write.linked || !write.guardianId) {
       const current = await this.contacts.findById(contact.tenantId, contact.id);
@@ -246,5 +255,15 @@ export class StudentContactGuardianLinkService {
       }
       throw error;
     }
+  }
+}
+
+/** The store reports a lost link/unlink race (or a Guardian.userId unique clash) as this code; answer 409, not 500. */
+async function linkConflictAs409<T>(write: Promise<T>): Promise<T> {
+  try {
+    return await write;
+  } catch (error) {
+    if (error instanceof Error && error.message === "STUDENT_CONTACT_GUARDIAN_LINK_CONFLICT") throw new ConflictException(error.message);
+    throw error;
   }
 }

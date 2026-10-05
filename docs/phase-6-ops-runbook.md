@@ -606,6 +606,28 @@ pnpm account-management:license-backfill
 - Bu sözleşme local/statik veya staging artifact'ı birbirinden ayırır. Exact-SHA staging deploy, gerçek
   backfill PASS, login/read-only/frozen smoke ve rollback kanıtı olmadan canlı capability sayılmaz.
 
+### KV-3b personel+veli tek hesap deploy sırası
+
+- Sıra: önce `20261007120000_auth_session_guardian_persona` migration'ı, sonra API. Migration yalnız
+  `AuthSession.activePersona` izin listesine `GUARDIAN` ekler; eski API ile uyumludur. Migration'ı API'den
+  önce uygulamazsanız GUARDIAN persona geçişi check constraint hatasıyla başarısız olur.
+- Migration geri alınmaz: `activePersona='GUARDIAN'` oturum satırları eski check'i ihlal eder.
+- API geri alınacaksa önce personel/öğretmen üyeliği yanında `GUARDIAN` üyeliği olan kullanıcıları sayın
+  (read-only). `main`'deki eski parity kontrolü bu kullanıcılarda `AUTH_MEMBERSHIP_PARITY_MISMATCH` verir ve
+  girişleri fail-closed kapanır:
+
+  ```sql
+  SELECT count(DISTINCT g."userId") FROM "TenantMembership" g
+  JOIN "TenantMembership" s ON s."tenantId"=g."tenantId" AND s."userId"=g."userId" AND s."status"='ACTIVE'
+    AND (s."staffRole" IS NOT NULL OR s."hasTeacherPersona")
+  WHERE g."role"='GUARDIAN' AND g."status"='ACTIVE';
+  ```
+
+- Sayı 0 ise API doğrudan geri alınabilir. Değilse karar sahibine iki seçenek sunulur: (a) bu kullanıcılar
+  geri alma süresince giriş yapamaz, (b) açık onayla bu `GUARDIAN` üyelikleri `ENDED` yapılır ve kullanıcının
+  `membershipVersion` değeri artırılır (veli erişimi kesilir; `Guardian`/`GuardianStudent` satırları kalır,
+  ileri deploy'dan sonra elle yeniden bağlama ile açılır). DB mutasyonu onaysız yapılmaz.
+
 ## Financial Retention Evidence
 
 Kanıt sözleşmesi: `docs/evidence-templates/financial-retention.example.json`.

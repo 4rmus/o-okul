@@ -325,12 +325,26 @@ export class PostgresStudentContactStore implements StudentContactStore {
         `SELECT "id" FROM "Guardian" WHERE "tenantId"=$1 AND "userId"=$2 AND "deletedAt" IS NULL FOR UPDATE`,
         [tenantId, userId],
       );
-      const guardianId = existing.rows[0]?.id ?? (await client.query<{ id: string }>(
-        `INSERT INTO "Guardian" ("id", "tenantId", "firstName", "lastName", "userId", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, now())
-         RETURNING "id"`,
-        [randomUUID(), tenantId, contact.firstName, contact.lastName, userId],
-      )).rows[0]?.id;
+      let guardianId = existing.rows[0]?.id;
+      if (!guardianId) {
+        // Guardian.userId is globally unique and a soft-deleted profile keeps it here; free it the way the in-memory
+        // soft delete does instead of reviving the old profile (its old access links and purged PII stay retired).
+        await client.query(
+          `UPDATE "Guardian" SET "userId"=NULL, "updatedAt"=now()
+           WHERE "tenantId"=$1 AND "userId"=$2 AND "deletedAt" IS NOT NULL`,
+          [tenantId, userId],
+        );
+        guardianId = (await client.query<{ id: string }>(
+          `INSERT INTO "Guardian" ("id", "tenantId", "firstName", "lastName", "userId", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, now())
+           RETURNING "id"`,
+          [randomUUID(), tenantId, contact.firstName, contact.lastName, userId],
+        ).catch((error: unknown) => {
+          // Any remaining Guardian.userId clash rolls the transaction back as a controlled 409 instead of a 500.
+          if ((error as { code?: string }).code === "23505") throw new Error("STUDENT_CONTACT_GUARDIAN_LINK_CONFLICT");
+          throw error;
+        })).rows[0]?.id;
+      }
       if (!guardianId) throw new Error("STUDENT_CONTACT_GUARDIAN_CREATE_FAILED");
 
       const guardianRoleAdded = !rows.some((row) => row.role === "GUARDIAN");
@@ -475,7 +489,8 @@ async function linkLockedContact(
     `SELECT "id" FROM "GuardianStudent" WHERE "tenantId"=$1 AND "guardianId"=$2 AND "studentId"=$3 LIMIT 1 FOR KEY SHARE`,
     [tenantId, guardianId, studentId],
   )).rows[0];
-  if (!link) throw new Error("STUDENT_CONTACT_GUARDIAN_LINK_FAILED");
+  // A concurrent unlink removed the access link between the conflict and this read: a 409 the caller can retry.
+  if (!link) throw new Error("STUDENT_CONTACT_GUARDIAN_LINK_CONFLICT");
   const updated = await client.query(
     `UPDATE "StudentContact" SET "guardianId"=$3, "updatedAt"=now()
      WHERE "tenantId"=$1 AND "id"=$2 AND "deletedAt" IS NULL AND "guardianId" IS NULL RETURNING "id"`,
