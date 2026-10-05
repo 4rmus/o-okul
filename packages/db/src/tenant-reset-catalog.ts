@@ -120,7 +120,7 @@ export const tenantResetColumns: Record<TenantResetTable, readonly string[]> = {
   WhatsAppConsentEvent: ["commandKeyHash", "createdAt", "eventType", "id", "noticeVersion", "purpose", "recordedAt", "requestHash", "sequence", "source", "studentContactId", "tenantId", "whatsappConsentId"],
   TeacherAssignment: ["classId", "courseId", "createdAt", "endsAt", "id", "role", "startsAt", "studentId", "teacherId", "tenantId", "termId", "updatedAt"],
   Guardian: ["createdAt", "deletedAt", "firstName", "id", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "tenantId", "updatedAt", "userId"],
-  GuardianStudent: ["canOpenSupportTickets", "canReceiveAnnouncements", "canReceiveSms", "canViewFinance", "createdAt", "guardianId", "id", "studentId", "tenantId", "updatedAt"],
+  GuardianStudent: ["canOpenSupportTickets", "canReceiveAnnouncements", "canReceiveSms", "canViewFinance", "createdAt", "createdByStudentContact", "guardianId", "id", "studentId", "tenantId", "updatedAt"],
   Attendance: ["courseId", "createdAt", "date", "deletedAt", "id", "status", "studentId", "tenantId", "termId", "updatedAt"],
   TeacherNote: ["body", "courseId", "createdAt", "deletedAt", "developmentStatus", "id", "studentId", "teacherId", "tenantId", "termId", "updatedAt", "visibility"],
   PaymentPlan: ["campusId", "classId", "courseId", "createdAt", "currency", "deletedAt", "gradeLevelId", "id", "studentId", "tenantId", "termId", "title", "totalAmount", "updatedAt"],

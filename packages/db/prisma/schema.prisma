@@ -1028,6 +1028,9 @@ model GuardianStudent {
   canReceiveSms           Boolean  @default(false)
   canReceiveAnnouncements Boolean  @default(false)
   canOpenSupportTickets   Boolean  @default(false)
+  /// KV-3c (DEC-20261003-01): true only when the StudentContact guardian link flow created this row; a contact unlink
+  /// removes only such rows. false = created elsewhere (guardian API, bulk invite, seed) and kept on unlink.
+  createdByStudentContact Boolean  @default(false)
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
   tenant                  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)

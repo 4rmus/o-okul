@@ -530,6 +530,37 @@ describe("PostgresUserManagementStore", () => {
     })).rejects.toThrow("TENANT_MEMBERSHIP_ENDED");
   });
 
+  it("KV-3c: aktif GUARDIAN üyeliği olan personelin üyeliği bitince hesap açık kalır; yalnız personel ise kapanır", async () => {
+    for (const [status, otherMemberships, expected] of [
+      ["ENDED", [{ role: "GUARDIAN", status: "ACTIVE" }], "ACTIVE"],
+      ["SUSPENDED", [{ role: "GUARDIAN", status: "ACTIVE" }], "ACTIVE"],
+      ["ENDED", [{ role: "GUARDIAN", status: "ENDED" }], "DISABLED"],
+      ["ENDED", [], "DISABLED"],
+      ["SUSPENDED", [], "DISABLED"],
+    ] as const) {
+      const queries: Array<{ sql: string; values?: unknown[] }> = [];
+      const store = new PostgresUserManagementStore(membershipLifecyclePool(queries, false, "ACTIVE", [...otherMemberships]));
+
+      await expect(store.updateTenantMembership("tenant-a", "membership-a", {
+        actorCanManageOwners: false,
+        campusIds: [],
+        endedReason: status === "ENDED" ? "İşten ayrıldı" : undefined,
+        expectedVersion: 4,
+        hasTeacherPersona: false,
+        scopeMode: "TENANT",
+        staffRole: "TENANT_ADMIN",
+        status,
+      })).resolves.toMatchObject({ sessionsRevoked: 2 });
+
+      const accountUpdate = queries.find((query) => query.sql.includes('UPDATE "User"') && query.sql.includes('"accountStatus" = $3'));
+      expect(accountUpdate?.values?.[2]).toBe(expected);
+      // The staff membership row itself always stops; the GUARDIAN row is never deleted.
+      const membershipUpdate = queries.find((query) => query.sql.includes('UPDATE "TenantMembership"') && query.sql.includes('"status" = $7'));
+      expect(membershipUpdate?.values?.[6]).toBe(status);
+      expect(queries.filter((query) => query.sql.includes('DELETE FROM "TenantMembership"')).every((query) => query.sql.includes(`"role" <> 'GUARDIAN'`))).toBe(true);
+    }
+  });
+
   it("aktif üyelik rolü değişirken güvenlik kilitli hesabı açmaz", async () => {
     const queries: Array<{ sql: string; values?: unknown[] }> = [];
     const store = new PostgresUserManagementStore(membershipLifecyclePool(queries, false, "LOCKED"));
@@ -591,6 +622,7 @@ function membershipLifecyclePool(
   queries: Array<{ sql: string; values?: unknown[] }>,
   failSessionRevoke = false,
   accountStatus = "ACTIVE",
+  otherMemberships: Array<{ role: string; status: string }> = [],
 ) {
   return {
     async query<T>() {
@@ -615,6 +647,9 @@ function membershipLifecyclePool(
               employeeStatus: "ACTIVE",
               campusIds: [],
             }] as T[] };
+          }
+          if (sql.includes('SELECT "role"::text AS role, "status"')) {
+            return { rows: [{ role: "TENANT_ADMIN", status: "ACTIVE" }, ...otherMemberships] as T[] };
           }
           if (sql.includes('"staffRole" = \'TENANT_OWNER\'')) return { rows: [] as T[] };
           if (sql.includes('FROM "Campus"')) return { rows: [{ id: "campus-main" }] as T[] };

@@ -56,7 +56,8 @@ export interface StudentContactStore {
   linkUserAsGuardianWithStudentLink(tenantId: string, id: string, userId: string): Promise<StudentContactUserGuardianLinkWrite>;
   /**
    * Clears guardianId only while it still equals expectedGuardianId and, in the same transaction, removes the
-   * GuardianStudent access link unless another live contact of the same student still points at that guardian.
+   * GuardianStudent access link when this contact flow created it (KV-3c) and no other live contact of the same
+   * student still points at that guardian. A pre-existing link (guardian API, bulk invite) keeps its row and permissions.
    */
   unlinkGuardian(tenantId: string, id: string, expectedGuardianId: string): Promise<StudentContactGuardianUnlinkWrite>;
   softDelete(tenantId: string, id: string): Promise<boolean>;
@@ -87,6 +88,8 @@ export const studentContactStoreToken = Symbol("StudentContactStore");
 
 export class InMemoryStudentContactStore implements StudentContactStore {
   private readonly records: StudentContactStorageRecord[] = [];
+  /** KV-3c: ids of GuardianStudent links this flow created (the Postgres column "createdByStudentContact"). */
+  private readonly createdLinkIds = new Set<string>();
 
   /** The guardian stores are only needed by the KV-3b link methods (the module wires the shared stores). */
   constructor(
@@ -133,6 +136,7 @@ export class InMemoryStudentContactStore implements StudentContactStore {
     const existing = (await this.guardianStudents.listByStudent(record.studentId))
       .find((link) => link.tenantId === tenantId && link.guardianId === guardianId);
     const link = existing ?? await this.guardianStudents.create({ tenantId, guardianId, studentId: record.studentId });
+    if (!existing) this.createdLinkIds.add(link.id);
     record.guardianId = guardianId;
     record.updatedAt = new Date().toISOString();
     return { linked: true, guardianStudentId: link.id, guardianStudentCreated: !existing };
@@ -163,7 +167,11 @@ export class InMemoryStudentContactStore implements StudentContactStore {
     const stillLinked = this.records.some((candidate) => (
       candidate.tenantId === tenantId && candidate.studentId === record.studentId && candidate.guardianId === expectedGuardianId && !candidate.deletedAt
     ));
-    const guardianStudentRemoved = !stillLinked && Boolean(await this.guardianStudents?.delete(expectedGuardianId, record.studentId));
+    const link = (await this.guardianStudents?.listByStudent(record.studentId))
+      ?.find((candidate) => candidate.tenantId === tenantId && candidate.guardianId === expectedGuardianId);
+    const guardianStudentRemoved = !stillLinked && Boolean(link && this.createdLinkIds.has(link.id))
+      && Boolean(await this.guardianStudents?.delete(expectedGuardianId, record.studentId));
+    if (guardianStudentRemoved && link) this.createdLinkIds.delete(link.id);
     return { unlinked: true, studentId: record.studentId, guardianStudentRemoved };
   }
 
@@ -395,11 +403,13 @@ export class PostgresStudentContactStore implements StudentContactStore {
       if (!studentId) return { unlinked: false, guardianStudentRemoved: false };
       // Lock the access link first so a concurrent link of a sibling contact commits (and becomes visible) before
       // the "still referenced" check; deleting it while referenced would SET NULL that contact through the FK.
-      const link = await client.query<{ id: string }>(
-        `SELECT "id" FROM "GuardianStudent" WHERE "tenantId"=$1 AND "guardianId"=$2 AND "studentId"=$3 FOR UPDATE`,
+      const link = await client.query<{ id: string; createdByStudentContact: boolean }>(
+        `SELECT "id", "createdByStudentContact" FROM "GuardianStudent"
+         WHERE "tenantId"=$1 AND "guardianId"=$2 AND "studentId"=$3 FOR UPDATE`,
         [tenantId, expectedGuardianId, studentId],
       );
-      if (!link.rows[0]) return { unlinked: true, studentId, guardianStudentRemoved: false };
+      // KV-3c: a link that existed before this flow (guardian API, bulk invite) keeps its row and permissions.
+      if (!link.rows[0]?.createdByStudentContact) return { unlinked: true, studentId, guardianStudentRemoved: false };
       const stillReferenced = await client.query(
         `SELECT 1 FROM "StudentContact"
          WHERE "tenantId"=$1 AND "studentId"=$2 AND "guardianId"=$3 AND "deletedAt" IS NULL LIMIT 1`,
@@ -474,12 +484,13 @@ async function linkLockedContact(
   guardianId: string,
   studentId: string,
 ): Promise<StudentContactGuardianLinkWrite> {
-  // Same defaults as GuardianStudentStore.create: every permission stays off.
+  // Same defaults as GuardianStudentStore.create: every permission stays off. KV-3c marks the row as created here,
+  // so only an unlink of this flow may remove it; ON CONFLICT leaves an existing link (and its marker) untouched.
   const inserted = await client.query<{ id: string }>(
     `INSERT INTO "GuardianStudent" (
        "id", "tenantId", "guardianId", "studentId",
-       "canViewFinance", "canReceiveSms", "canReceiveAnnouncements", "canOpenSupportTickets", "updatedAt"
-     ) VALUES ($1, $2, $3, $4, false, false, false, false, now())
+       "canViewFinance", "canReceiveSms", "canReceiveAnnouncements", "canOpenSupportTickets", "createdByStudentContact", "updatedAt"
+     ) VALUES ($1, $2, $3, $4, false, false, false, false, true, now())
      ON CONFLICT ("tenantId", "guardianId", "studentId") DO NOTHING
      RETURNING "id"`,
     [randomUUID(), tenantId, guardianId, studentId],

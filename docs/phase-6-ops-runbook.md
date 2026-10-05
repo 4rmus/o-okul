@@ -628,6 +628,28 @@ pnpm account-management:license-backfill
   `membershipVersion` değeri artırılır (veli erişimi kesilir; `Guardian`/`GuardianStudent` satırları kalır,
   ileri deploy'dan sonra elle yeniden bağlama ile açılır). DB mutasyonu onaysız yapılmaz.
 
+### KV-3c veli erişim kuralları deploy sırası
+
+- Sıra: önce `20261008120000_guardian_student_contact_origin` migration'ı, sonra API. Migration yalnız
+  `GuardianStudent."createdByStudentContact" BOOLEAN NOT NULL DEFAULT false` ekler; eski API sütunu
+  okumaz, uyumludur. Migration'ı API'den önce uygulamazsanız iletişim bağlama ve bağ kaldırma 500 verir.
+- Mevcut satırlar `false` alır, yani önceden var olan bağ sayılır ve iletişim bağı kaldırılınca silinmez.
+  KV-3b API'si bu deploy'dan önce canlıda çalıştıysa onun açtığı bağlar da korunur (geri doldurma yok;
+  gerekirse ürün sahibi kararıyla `guardian_student.linked` audit kaydına bakılarak elle karar verilir).
+- Personel+veli kullanıcısında personel üyeliği `ENDED`/`SUSPENDED` yapılınca hesap artık `DISABLED`
+  olmaz. KV-3c öncesi bu yolla kapanmış (`DISABLED`) personel+veli hesapları kendiliğinden açılmaz;
+  read-only sayım:
+
+  ```sql
+  SELECT count(DISTINCT u."id") FROM "User" u
+  JOIN "TenantMembership" g ON g."tenantId"=u."tenantId" AND g."userId"=u."id" AND g."role"='GUARDIAN' AND g."status"='ACTIVE'
+  WHERE u."accountStatus"='DISABLED';
+  ```
+
+  Sayı 0 değilse açma kararı ürün sahibinindir; DB mutasyonu onaysız yapılmaz.
+- Geri alma: API geri alınabilir; eski API sütunu yok sayar, bağ kaldırmada önceden var olan bağı da siler
+  ve personel bitişinde hesabı yine kapatır. Migration geri alınmaz; sütun zararsızdır.
+
 ## Financial Retention Evidence
 
 Kanıt sözleşmesi: `docs/evidence-templates/financial-retention.example.json`.

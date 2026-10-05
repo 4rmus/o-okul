@@ -128,6 +128,23 @@ describe("StudentContactStore", () => {
     expect(await guardianStudents.listByStudent("student-kv3b")).toHaveLength(0);
   });
 
+  it("KV-3c bağ kaldırma, akıştan önce var olan GuardianStudent bağını ve izinlerini korur", async () => {
+    const guardianStudents = new InMemoryGuardianStudentStore();
+    const store = new InMemoryStudentContactStore(guardianStudents);
+    const preexisting = await guardianStudents.create({
+      tenantId: "tenant-a", guardianId: "guardian-pre", studentId: "student-kv3c", canViewFinance: true, canReceiveSms: true,
+    });
+    const created = await store.create({ ...contact, studentId: "student-kv3c" });
+
+    expect(await store.linkGuardianWithStudentLink("tenant-a", created.id, "guardian-pre"))
+      .toEqual({ linked: true, guardianStudentId: preexisting.id, guardianStudentCreated: false });
+    expect(await store.unlinkGuardian("tenant-a", created.id, "guardian-pre"))
+      .toEqual({ unlinked: true, studentId: "student-kv3c", guardianStudentRemoved: false });
+    expect(await guardianStudents.listByStudent("student-kv3c")).toEqual([
+      expect.objectContaining({ id: preexisting.id, guardianId: "guardian-pre", canViewFinance: true, canReceiveSms: true }),
+    ]);
+  });
+
   it("Postgres elle bağı tek transaction'da kilitli iletişim, GuardianStudent insert ve koşullu güncelleme ile yazar", async () => {
     const queries: Array<{ sql: string; values?: unknown[] }> = [];
     let updateRows: Array<{ id: string }> = [{ id: "contact-a" }];
@@ -151,7 +168,8 @@ describe("StudentContactStore", () => {
     const update = sqls.findIndex((sql) => sql.includes('UPDATE "StudentContact"'));
     expect(begin).toBeGreaterThanOrEqual(0);
     expect(begin < select && select < insert && insert < update && update < sqls.indexOf("COMMIT")).toBe(true);
-    expect(sqls[insert]).toContain("false, false, false, false");
+    expect(sqls[insert]).toContain("false, false, false, false, true, now()");
+    expect(sqls[insert]).toContain('"createdByStudentContact"');
     expect(sqls[insert]).toContain('ON CONFLICT ("tenantId", "guardianId", "studentId") DO NOTHING');
     expect(queries[insert]?.values?.slice(1)).toEqual(["tenant-a", "guardian-a", "student-a"]);
     expect(sqls[update]).toContain('"guardianId" IS NULL');
@@ -171,14 +189,19 @@ describe("StudentContactStore", () => {
     expect(queries.some((query) => query.sql.includes('DELETE FROM "GuardianStudent"'))).toBe(false);
   });
 
-  it("Postgres bağ kaldırma iletişimi boşaltır, erişim bağını kilitler ve yalnız başka iletişim bağlı değilse siler", async () => {
-    for (const stillReferenced of [false, true]) {
+  it("Postgres bağ kaldırma iletişimi boşaltır, erişim bağını kilitler ve yalnız bu akışın açtığı, başka iletişimin bağlı olmadığı bağı siler", async () => {
+    for (const { stillReferenced, createdByStudentContact } of [
+      { stillReferenced: false, createdByStudentContact: true },
+      { stillReferenced: true, createdByStudentContact: true },
+      // KV-3c: a link that existed before the contact flow (guardian API, bulk invite) is never removed.
+      { stillReferenced: false, createdByStudentContact: false },
+    ]) {
       const queries: Array<{ sql: string; values?: unknown[] }> = [];
       const pool = {
         async query<T>(sql: string, values?: unknown[]) {
           queries.push({ sql, values });
           if (sql.includes('UPDATE "StudentContact"')) return { rows: [{ studentId: "student-a" }] as T[] };
-          if (sql.includes('SELECT "id" FROM "GuardianStudent"')) return { rows: [{ id: "link-a" }] as T[] };
+          if (sql.includes('SELECT "id", "createdByStudentContact" FROM "GuardianStudent"')) return { rows: [{ id: "link-a", createdByStudentContact }] as T[] };
           if (sql.includes("SELECT 1 FROM \"StudentContact\"")) return { rows: (stillReferenced ? [{ "?column?": 1 }] : []) as T[] };
           if (sql.includes('DELETE FROM "GuardianStudent"')) return { rows: [{ id: "link-a" }] as T[] };
           return { rows: [] as T[] };
@@ -186,14 +209,18 @@ describe("StudentContactStore", () => {
       };
 
       expect(await new PostgresStudentContactStore(pool).unlinkGuardian("tenant-a", "contact-a", "guardian-a"))
-        .toEqual({ unlinked: true, studentId: "student-a", guardianStudentRemoved: !stillReferenced });
+        .toEqual({ unlinked: true, studentId: "student-a", guardianStudentRemoved: createdByStudentContact && !stillReferenced });
       const sqls = queries.map((query) => query.sql);
       const update = sqls.findIndex((sql) => sql.includes('UPDATE "StudentContact"'));
       const lock = sqls.findIndex((sql) => sql.includes('FROM "GuardianStudent"') && sql.includes("FOR UPDATE"));
       const check = sqls.findIndex((sql) => sql.includes('SELECT 1 FROM "StudentContact"'));
       const remove = sqls.findIndex((sql) => sql.includes('DELETE FROM "GuardianStudent"'));
-      expect(sqls.indexOf("BEGIN") < update && update < lock && lock < check).toBe(true);
-      expect(check < sqls.indexOf("COMMIT")).toBe(true);
+      expect(sqls.indexOf("BEGIN") < update && update < lock && lock < sqls.indexOf("COMMIT")).toBe(true);
+      if (!createdByStudentContact) {
+        expect(remove).toBe(-1);
+        continue;
+      }
+      expect(lock < check && check < sqls.indexOf("COMMIT")).toBe(true);
       if (stillReferenced) expect(remove).toBe(-1);
       else expect(check < remove && remove < sqls.indexOf("COMMIT")).toBe(true);
       expect(queries[check]?.values).toEqual(["tenant-a", "student-a", "guardian-a"]);

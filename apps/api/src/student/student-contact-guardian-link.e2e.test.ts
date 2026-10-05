@@ -207,6 +207,96 @@ describe("Manual StudentContact → existing guardian link API (KV-3b)", () => {
     expect(await guardianLinks(guardianId)).toEqual([]);
   });
 
+  it("KV-3c: bağ kaldırma, guardian API'siyle önceden açılmış bağı ve izinlerini korur; veli öğrenciyi görmeye devam eder", async () => {
+    const studentId = await createStudent("kv3c-1");
+    const contactId = await createContact(studentId, { firstName: "Onceki", lastName: "BagVelisi", relationType: "LEGAL_GUARDIAN" });
+    await request(server)
+      .post("/guardians/guardian-a/students")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .set("Idempotency-Key", "kv3c-preexisting-link")
+      .send({ studentId, canViewFinance: true, canReceiveAnnouncements: true })
+      .expect(201);
+
+    await link(adminToken, studentId, contactId, "guardian-a", "kv3c-link-preexisting").expect(200)
+      .expect(({ body }) => expect(body).toMatchObject({ changed: true, guardianStudentCreated: false }));
+    await unlink(adminToken, studentId, contactId, "kv3c-unlink-preexisting").expect(200)
+      .expect(({ body }) => expect(body).toEqual({ studentId, contactId, changed: true, guardianStudentCreated: false, guardianStudentRemoved: false }));
+    expect(await contactGuardianId(studentId, contactId)).toBeUndefined();
+    expect((await guardianLinks("guardian-a")).find((row) => row.studentId === studentId))
+      .toMatchObject({ canViewFinance: true, canReceiveAnnouncements: true });
+
+    const guardianToken = await login("guardian-a@example.test");
+    const wards = await request(server).get("/me/guardian/students").set("Authorization", `Bearer ${guardianToken}`).expect(200);
+    expect((wards.body as Array<{ id: string }>).map((ward) => ward.id)).toContain(studentId);
+    await request(server).get(`/me/guardian/students/${studentId}/overview`).set("Authorization", `Bearer ${guardianToken}`).expect(200);
+  });
+
+  it("KV-3c: personel üyeliği sona eren personel+veli kullanıcısı veli olarak girer, personel erişimi kesilir", async () => {
+    upsertInMemoryAuthUser({
+      id: "user-operations-a",
+      email: "kv3c-staff-parent@example.test",
+      name: "Biten Personel Veli",
+      password: "password",
+      tenantId: "tenant-a",
+      roles: ["OPERATIONS_STAFF"],
+      membership: {
+        id: "membership-operations-a",
+        staffRole: "OPERATIONS_STAFF",
+        hasTeacherPersona: false,
+        hasStudentPersona: false,
+        version: 1,
+        scopeMode: "TENANT",
+        campusIds: [],
+      },
+    });
+    registerTestLoginIdentity("kv3c-staff-parent@example.test", { tenantSlug: "dna-egitim" });
+    const studentId = await createStudent("kv3c-2");
+    const contactId = await createContact(studentId, { firstName: "Biten", lastName: "PersonelVeli", relationType: "LEGAL_GUARDIAN" });
+    const linked = await request(server)
+      .put(`/students/${studentId}/contacts/${contactId}/guardian`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .set("Idempotency-Key", "kv3c-staff-parent-link")
+      .send({ userId: "user-operations-a" })
+      .expect(200);
+    expect(linked.body).toMatchObject({ guardianRoleAdded: true });
+    const guardianId = (linked.body as { guardianId: string }).guardianId;
+    const staffToken = await login("kv3c-staff-parent@example.test");
+    await request(server).get("/me/profile").set("Authorization", `Bearer ${staffToken}`).expect(200)
+      .expect(({ body }) => expect(body).toMatchObject({ activePersona: "STAFF", availablePersonas: ["STAFF", "GUARDIAN"] }));
+
+    const ended = await request(server)
+      .patch("/tenant-memberships/membership-operations-a")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        campusIds: [], endedReason: "İşten ayrıldı", expectedVersion: 1, hasTeacherPersona: false,
+        scopeMode: "TENANT", staffRole: "OPERATIONS_STAFF", status: "ENDED",
+      })
+      .expect(200);
+    // The account stays open for the guardian persona; only the staff membership ends.
+    expect(ended.body).toMatchObject({ employee: { accountStatus: "ACTIVE", access: { status: "ENDED" } } });
+
+    // The open staff session is gone; the next login is a guardian-only session.
+    await request(server).get("/me/profile").set("Authorization", `Bearer ${staffToken}`).expect(401);
+    const guardianToken = await login("kv3c-staff-parent@example.test");
+    const profile = await request(server).get("/me/profile").set("Authorization", `Bearer ${guardianToken}`).expect(200);
+    expect(profile.body).toMatchObject({ roles: ["GUARDIAN"], subjectType: "GUARDIAN", subjectId: guardianId });
+    expect((profile.body as { availablePersonas?: string[] }).availablePersonas ?? []).not.toContain("STAFF");
+    const wards = await request(server).get("/me/guardian/students").set("Authorization", `Bearer ${guardianToken}`).expect(200);
+    expect((wards.body as Array<{ id: string }>).map((ward) => ward.id)).toEqual([studentId]);
+    await request(server).get(`/students/${studentId}/contacts`).set("Authorization", `Bearer ${guardianToken}`).expect(403);
+    await request(server).get("/employees").set("Authorization", `Bearer ${guardianToken}`).expect(403);
+    await request(server)
+      .post("/auth/persona/switch")
+      .set("Authorization", `Bearer ${guardianToken}`)
+      .set("Cookie", ["csrfToken=kv3c-csrf"])
+      .set("X-CSRF-Token", "kv3c-csrf")
+      .send({ activePersona: "STAFF" })
+      .expect(401)
+      .expect(({ body }) => expect(JSON.stringify(body)).toContain("PERSONA_SWITCH_UNAVAILABLE"));
+    // The rejected switch leaves the guardian session usable.
+    await request(server).get("/me/guardian/students").set("Authorization", `Bearer ${guardianToken}`).expect(200);
+  });
+
   it("öğretmen/personel olan veli için ayrı hesap açılmaz; mevcut kullanıcıya GUARDIAN rolü eklenir ve bağ kaldırma erişimi keser", async () => {
     upsertInMemoryAuthUser({
       id: "user-kv3b-staff-parent",

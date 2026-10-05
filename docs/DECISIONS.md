@@ -783,6 +783,18 @@ silmez/sürümünü eşitler. (3) Yalnız `LEGAL_GUARDIAN` bağlanır; `MOTHER`/
 `student-relationship-flow-next.spec.ts`, `persona-switch-next.spec.ts`). Postgres yolları yalnız sahte
 havuz SQL sırası testleriyle doğrulandı (LOCAL_STATIC); migration canlı Postgres'te koşulmadı. Kanıt sınıfı
 LOCAL_TEST; CI, STAGING ve PRODUCTION UNPROVEN.
+KV-3c (ürün sahibi kararları 2026-10-05): (4) daraltıldı: bağ kaldırma yalnız iletişim bağlama akışının
+OLUŞTURDUĞU `GuardianStudent` satırını siler; işaret `GuardianStudent.createdByStudentContact`
+(migration `20261008120000_guardian_student_contact_origin`, additive, varsayılan `false`; RLS/FK değişmez,
+reset kolon kataloğu güncellendi). Akıştan önce var olan bağ (guardian API'si, toplu davet, seed; KV-3c
+öncesi tüm satırlar) ve izinleri korunur, veli öğrenciyi görmeye devam eder; başka iletişim aynı veliye
+bağlıysa yine silinmez. (5) Personel üyeliği `ENDED`/`SUSPENDED` olduğunda kullanıcının `ACTIVE`
+`GUARDIAN` üyeliği varsa `User.accountStatus` `DISABLED` yapılmaz: yalnız personel üyeliği durur, sürüm
+artar ve tüm açık oturumlar kapanır; sonraki giriş yalnız `GUARDIAN` rolüyle açılır, personel uçları 403,
+`STAFF` persona geçişi reddedilir. `GUARDIAN` üyeliği yoksa davranış aynıdır (`DISABLED`)
+(`student-contact-guardian-link.e2e.test.ts`, `student-contact-store.test.ts`,
+`user-management-store.test.ts`). Kanıt sınıfı LOCAL_TEST (Postgres yolları sahte havuzla LOCAL_STATIC);
+CI, STAGING ve PRODUCTION UNPROVEN.
 Ürün sahibi kararı (2026-10-05): veli daveti kabulünde T.C. şartının kaldırılması onaylandı; e-postası
 olmayan `LEGAL_GUARDIAN` satırının `EMAIL_MISSING` ile atlanması kabul edildi. Toplu davette
 `LEGAL_GUARDIAN` iletişiminin telefonu yalnız iletişim alanı olarak `Guardian.phone` alanına kopyalanır
