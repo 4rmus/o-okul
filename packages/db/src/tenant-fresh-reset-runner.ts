@@ -2,7 +2,8 @@ import { requireNoTenantMutationActivity } from "./tenant-mutation-activity.js";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import pg from "pg";
 import { DeleteObjectCommand, GetObjectCommand, GetBucketVersioningCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
-import { assertResetWorkerRole, freshResetStatus, purgeResetDatabase, requireResetLegalClearance, requireResetWriteQuiescence, resetAudit, verifyResetPostconditions, type FreshResetOperation } from "./tenant-fresh-reset.js";
+import { licenseExpiryPurgeRowCount } from "./tenant-expiry-purge.js";
+import { assertResetWorkerRole, freshResetFinished, freshResetStatus, isLicenseExpiryPurge, purgeResetDatabase, requireResetLegalClearance, requireResetWriteQuiescence, resetAudit, verifyResetPostconditions, type FreshResetOperation } from "./tenant-fresh-reset.js";
 import { withTenantDb, tenantDatabaseLockKey, type Queryable, type TenantQueryable } from "./tenant-db.js";
 import { createAndVerifyTenantResetBackup, recoverTenantResetBackup, decryptResetPackage, resetBytesHash, verifyResetPackage, type TenantResetBackupConfig, type TenantResetPackage } from "./tenant-reset-backup.js";
 import { resetDigest } from "./tenant-reset-catalog.js";
@@ -38,7 +39,7 @@ export async function runFreshReset(pool: TenantQueryable, tenantId: string, ope
     tenantLocked = true;
     let op = await read();
     if (!op) throw new Error("RESET_OPERATION_NOT_FOUND");
-    if (op.status === "COMPLETED") return freshResetStatus(op);
+    if (freshResetFinished(op)) return freshResetStatus(op);
     await tx(async (db) => { await requireNoTenantMutationActivity(db, tenantId); await services.clearance(tenantId, db, op); });
     await services.quiescence(tenantId);
     if (!["OBJECTS", "VERIFY"].includes(op.phase)) {
@@ -56,7 +57,7 @@ export async function runFreshReset(pool: TenantQueryable, tenantId: string, ope
       await services.preflight(op);
       await tx(async (db) => {
         const count = await purgeResetDatabase(db, op!, pkg.manifest.dataDigest, services.clearance, services.quiescence);
-        const result = { preservedOwnerCount: count, deletedObjectCount: pkg.manifest.objects.length };
+        const result = { preservedOwnerCount: count, deletedObjectCount: pkg.manifest.objects.length, ...(isLicenseExpiryPurge(op!) ? { deletedRowCount: licenseExpiryPurgeRowCount(pkg.manifest.tables) } : {}) };
         await db.query('UPDATE "TenantFreshResetOperation" SET "result" = $3::jsonb WHERE "id" = $1 AND "tenantId" = $2', [operationId, tenantId, JSON.stringify(result)]);
         await updatePhase(db, op!, "RUNNING", "OBJECTS");
       });
@@ -76,6 +77,11 @@ export async function runFreshReset(pool: TenantQueryable, tenantId: string, ope
     await services.quiescence(tenantId);
       // Completed first inside the SAME transaction satisfies the activation trigger.
       await updatePhase(db, op!, "COMPLETED", "DONE");
+      if (isLicenseExpiryPurge(op!)) {
+        // The purged tenant stays a SUSPENDED tombstone. Phase records go; one system-scope receipt remains.
+        await db.query("SELECT o_okul_license_expiry_purge($1, $2, true)", [tenantId, operationId]);
+        return;
+      }
       await db.query('UPDATE "Tenant" SET "resetRequest" = jsonb_set("resetRequest", \'{status}\', \'"COMPLETED"\'::jsonb) WHERE "id" = $1', [tenantId]);
       const activated = await db.query('UPDATE "Tenant" SET "status" = \'ACTIVE\', "lifecycleVersion" = "lifecycleVersion" + 1, "suspendedAt" = NULL, "suspendedReason" = NULL, "updatedAt" = now() WHERE "id" = $1 AND "status" = \'SUSPENDED\' AND "lifecycleVersion" = $2 RETURNING "id"', [tenantId, op!.expectedLifecycleVersion]);
       if (!activated.rows.length) throw new Error("RESET_SOURCE_CHANGED");
@@ -88,7 +94,9 @@ export async function runFreshReset(pool: TenantQueryable, tenantId: string, ope
     if (locked && tenantLocked) {
       try { await tx(async (db) => {
         const current = (await db.query<FreshResetOperation>('SELECT * FROM "TenantFreshResetOperation" WHERE "id" = $1 AND "tenantId" = $2 FOR UPDATE', [operationId, tenantId])).rows[0];
-        if (current && current.status !== "COMPLETED") await updatePhase(db, current, /UNVERIFIED|REQUIRED|INVALID|BLOCKED/.test(code) ? "BLOCKED" : "FAILED", current.phase, code);
+        // A renewed license stops a purge whose database phase has not committed; the tenant can be reactivated.
+        const cancel = current && code === "RESET_LICENSE_NOT_EXPIRED" && isLicenseExpiryPurge(current) && ["PREFLIGHT", "BACKUP", "DATABASE"].includes(current.phase);
+        if (current && !freshResetFinished(current)) await updatePhase(db, current, cancel ? "CANCELLED" : /UNVERIFIED|REQUIRED|INVALID|BLOCKED/.test(code) ? "BLOCKED" : "FAILED", current.phase, code);
       }); } catch { /* A lost DB connection is reconciled by the same durable operation. */ }
     }
     throw new Error(code);
@@ -100,7 +108,7 @@ export async function runFreshReset(pool: TenantQueryable, tenantId: string, ope
   }
 }
 async function updatePhase(db: Queryable, op: FreshResetOperation, status: FreshResetOperation["status"], phase: FreshResetOperation["phase"], errorCode: string | null = null) {
-  const updated = await db.query('UPDATE "TenantFreshResetOperation" SET "status" = $3, "phase" = $4, "errorCode" = $5, "updatedAt" = now() WHERE "id" = $1 AND "tenantId" = $2 AND "status" <> \'COMPLETED\' RETURNING "id"', [op.id, op.tenantId, status, phase, errorCode]);
+  const updated = await db.query('UPDATE "TenantFreshResetOperation" SET "status" = $3, "phase" = $4, "errorCode" = $5, "updatedAt" = now() WHERE "id" = $1 AND "tenantId" = $2 AND "status" NOT IN (\'COMPLETED\', \'CANCELLED\') RETURNING "id"', [op.id, op.tenantId, status, phase, errorCode]);
   if (!updated.rows.length) throw new Error("RESET_OPERATION_CHANGED");
   await resetAudit(db, op, "tenant.reset.phase", { status, phase, errorCode });
 }
@@ -112,8 +120,9 @@ export function resetWorkerDatabaseUrl(): string {
 export function createFreshResetServices(queueCheck: (tenantId: string, operationId: string) => Promise<void>): FreshResetServices {
   const required = (name: string) => { const value = process.env[name]; if (!value) throw new Error("RESET_OPERATIONS_PREREQUISITE_REQUIRED"); return value; };
   const config = (op: FreshResetOperation): TenantResetBackupConfig => {
-    if (!op.institutionRequestId || !/^[a-f0-9]{32}$/.test(op.institutionRequestId)) throw new Error("RESET_INSTITUTION_REQUEST_REQUIRED");
-    return ({ tenantId: op.tenantId, operationId: op.id, excludeCurrentOperation: true, approvalReference: `institution-request:${op.institutionRequestId}`, encryptionKey: Buffer.from(required("TENANT_RESET_BACKUP_KEY_BASE64"), "base64"), sourceDatabaseUrl: required("TENANT_RESET_BACKUP_SOURCE_DATABASE_URL"), restoreDatabaseUrl: required("TENANT_RESET_RESTORE_DATABASE_URL"), sourceObjects: resetS3Config("TENANT_RESET_SOURCE_S3"), backupObjects: resetS3Config("TENANT_RESET_BACKUP_S3"), restoreObjects: resetS3Config("TENANT_RESET_RESTORE_S3") });
+    const purge = isLicenseExpiryPurge(op);
+    if (!purge && (!op.institutionRequestId || !/^[a-f0-9]{32}$/.test(op.institutionRequestId))) throw new Error("RESET_INSTITUTION_REQUEST_REQUIRED");
+    return ({ tenantId: op.tenantId, operationId: op.id, excludeCurrentOperation: true, approvalReference: purge ? `license-expiry-purge:${op.id}` : `institution-request:${op.institutionRequestId}`, encryptionKey: Buffer.from(required("TENANT_RESET_BACKUP_KEY_BASE64"), "base64"), sourceDatabaseUrl: required("TENANT_RESET_BACKUP_SOURCE_DATABASE_URL"), restoreDatabaseUrl: required("TENANT_RESET_RESTORE_DATABASE_URL"), sourceObjects: resetS3Config("TENANT_RESET_SOURCE_S3"), backupObjects: resetS3Config("TENANT_RESET_BACKUP_S3"), restoreObjects: resetS3Config("TENANT_RESET_RESTORE_S3") });
   };
   const sign = signResetRestoreReceipt;
   async function sourceCheck(op: FreshResetOperation) {
