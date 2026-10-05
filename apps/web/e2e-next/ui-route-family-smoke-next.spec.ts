@@ -556,6 +556,9 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
     };
   }
   if (pathName === "/me/tenant") return { data: tenantFixture };
+  if (pathName === "/me/tenant/guardian-notification-settings") {
+    return { absenceEnabled: true, paymentDueEnabled: true, gradePublishEnabled: true, absenceThreshold: 10 };
+  }
   if (pathName === "/exams/exam-demo-isem-lgs-1/workspace") return { data: examWorkspaceFixture };
   if (pathName === "/me/institution-dashboard") {
     return {
