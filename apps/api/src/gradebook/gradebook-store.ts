@@ -15,6 +15,13 @@ export interface GradebookStore {
   saveDrafts(assessment: GradeAssessmentRecord, entries: readonly GradeEntryDraftInput[], enteredById: string): Promise<GradeEntryRecord[]>;
   /** Publishes every draft and moves publishedVersion to max(version) in the same transaction. */
   publish(assessment: GradeAssessmentRecord): Promise<{ assessment: GradeAssessmentRecord; publishedCount: number }>;
+  /** Per assessment, the student's highest published version only; drafts and superseded versions are excluded. */
+  listPublishedByStudent(studentId: string): Promise<PublishedStudentGrade[]>;
+}
+
+export interface PublishedStudentGrade {
+  assessment: GradeAssessmentRecord;
+  entry: GradeEntryRecord;
 }
 
 export const gradebookStoreToken = Symbol("GradebookStore");
@@ -78,6 +85,19 @@ export class InMemoryGradebookStore implements GradebookStore {
     const versions = this.entries.filter((entry) => entry.assessmentId === assessment.id && entry.publishedAt).map((entry) => entry.version);
     if (versions.length > 0) stored.publishedVersion = Math.max(...versions);
     return { assessment: { ...stored }, publishedCount: drafts.length };
+  }
+
+  async listPublishedByStudent(studentId: string): Promise<PublishedStudentGrade[]> {
+    const latest = new Map<string, GradeEntryRecord & { tenantId: string }>();
+    for (const entry of this.entries) {
+      if (entry.studentId !== studentId || !entry.publishedAt) continue;
+      const current = latest.get(entry.assessmentId);
+      if (!current || entry.version > current.version) latest.set(entry.assessmentId, entry);
+    }
+    return [...latest.values()].flatMap(({ tenantId: _tenantId, ...entry }) => {
+      const assessment = this.assessments.find((item) => item.id === entry.assessmentId);
+      return assessment ? [{ assessment: { ...assessment }, entry: { ...entry } }] : [];
+    });
   }
 }
 
@@ -161,6 +181,20 @@ export class PostgresGradebookStore implements GradebookStore {
         [assessment.id],
       );
       return { assessment: toAssessmentRecord(result.rows[0]!), publishedCount: published.rowCount ?? 0 };
+    });
+  }
+
+  async listPublishedByStudent(studentId: string): Promise<PublishedStudentGrade[]> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<{ assessment: GradeAssessmentRow; entry: GradeEntryRow }>(
+        `SELECT DISTINCT ON (e."assessmentId") row_to_json(a) AS "assessment", row_to_json(e) AS "entry"
+         FROM "GradeEntry" e
+         JOIN "GradeAssessment" a ON a."id" = e."assessmentId" AND a."tenantId" = e."tenantId"
+         WHERE e."studentId" = $1 AND e."publishedAt" IS NOT NULL
+         ORDER BY e."assessmentId", e."version" DESC`,
+        [studentId],
+      );
+      return result.rows.map((row) => ({ assessment: toAssessmentRecord(row.assessment), entry: toEntryRecord(row.entry) }));
     });
   }
 }

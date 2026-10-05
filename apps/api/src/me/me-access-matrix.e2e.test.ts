@@ -99,6 +99,7 @@ describe("Me access matrix", () => {
     const guardianEndpoints = [
       "/me/guardian/students",
       "/me/guardian/homework/material-assignments",
+      "/me/guardian/students/student-a/overview",
       "/me/guardian/students/student-a/profile",
       "/me/guardian/students/student-a/enrollments",
       "/me/guardian/students/student-a/homework/material-assignments",
@@ -127,6 +128,7 @@ describe("Me access matrix", () => {
 
   it("veli başka tenant veya bağlı olmayan öğrenci IDOR denemesinde kayıt alamaz", async () => {
     const idorEndpoints = [
+      "/me/guardian/students/student-b/overview",
       "/me/guardian/students/student-b/profile",
       "/me/guardian/students/student-b/enrollments",
       "/me/guardian/students/student-b/homework/material-assignments",
@@ -180,6 +182,7 @@ describe("Me access matrix", () => {
     const otherStudentId = (otherStudent.body as { id: string }).id;
     const endpointPrefix = `/me/guardian/students/${otherStudentId}`;
     const idorEndpoints: PortalEndpoint[] = [
+      { method: "get", path: `${endpointPrefix}/overview` },
       { method: "get", path: `${endpointPrefix}/profile` },
       { method: "get", path: `${endpointPrefix}/enrollments` },
       { method: "get", path: `${endpointPrefix}/homework/material-assignments` },

@@ -3017,3 +3017,47 @@ export interface GradeAssessmentPublishResult {
   assessment: GradeAssessmentRecord;
   publishedCount: number;
 }
+
+/** One published school grade: the student's highest published version only (ADR-0011); drafts never appear. */
+export interface GuardianSchoolGradeItem {
+  assessmentId: string;
+  courseId: string;
+  courseName?: string;
+  kind: GradeAssessmentKind;
+  title: string;
+  heldOn: string;
+  /** Score on the assessment's own scale (0..maxScore); null when absent. */
+  score: number | null;
+  absent: boolean;
+  maxScore: number;
+  version: number;
+}
+
+/** One optical exam point. successRate is Başarı % on a 0-100 scale; net/questionCount are context. */
+export interface GuardianExamSeriesPoint {
+  snapshotId: string;
+  generatedAt?: string;
+  successRate?: number;
+  net?: number;
+  questionCount?: number;
+  correct?: number;
+  wrong?: number;
+  blank?: number;
+}
+
+/**
+ * KV-4 guardian overview: an allow-list read model for one linked student.
+ * Teacher notes, contacts (StudentContact) and other guardians' fields are deliberately absent.
+ * finance is present only when the guardian link has canViewFinance.
+ */
+export interface GuardianStudentOverview {
+  student: { id: string; firstName: string; lastName: string; className?: string };
+  attendance: { total: number; present: number; absent: number; late: number; excused: number };
+  homework: { assignmentCount: number; upcoming: Array<{ id: string; title?: string; courseId?: string; dueAt?: string }> };
+  announcements: { unreadCount: number };
+  finance?: { currency: string; pendingAmount: number; overdueAmount: number; overdueInstallmentCount: number; nextDueDate?: string };
+  /** Optical exam series (Başarı %, 0-100). Kept separate from schoolGrades; never merged into one line. */
+  examSeries: GuardianExamSeriesPoint[];
+  /** School grade series on each assessment's own scale (score / maxScore). */
+  schoolGrades: GuardianSchoolGradeItem[];
+}
