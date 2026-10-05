@@ -1,5 +1,11 @@
 import type { NotificationAdapter } from "@o-okul/notification-adapter";
-import { addCalendarDays, isPaymentInstallmentOverdue, type PaymentInstallmentRecord } from "@o-okul/shared-types";
+import {
+  addCalendarDays,
+  hasActiveLicenseTerm,
+  isPaymentInstallmentOverdue,
+  type LicenseTermWindow,
+  type PaymentInstallmentRecord,
+} from "@o-okul/shared-types";
 import type { TenantJobPayload } from "../queue/queues.js";
 import type { PushDevice, PushSender, PushSendOutcome } from "./announcement-push-delivery.js";
 
@@ -9,6 +15,9 @@ import type { PushDevice, PushSender, PushSendOutcome } from "./announcement-pus
  * only then sends, so a second run of the same job (or a same-day correction) finds nothing to claim: at most once.
  * Gates applied at send time: institution switch, guardian's own preference (GuardianStudent.canReceiveAutoNotifications),
  * finance visibility (canViewFinance, payment only), device disabledAt. Push payload = title + internal link, no PII.
+ * License gate (product owner, 2026-10-05): a tenant without an ACTIVE license term (READ_ONLY, FROZEN, EXPIRED,
+ * CANCELLED, SCHEDULED) gets nothing. Checked before the claim, like the institution switch, so the source row's marker
+ * is left untouched; nothing rescans old rows, so a renewal does not flush a backlog.
  */
 export type GuardianNotifyKind = "ABSENCE" | "PAYMENT_DUE" | "GRADE_PUBLISHED";
 
@@ -40,6 +49,7 @@ export interface AbsenceClaim {
 export interface GuardianNotificationStore {
   /** undefined: tenant missing or not ACTIVE. */
   loadSettings(tenantId: string): Promise<GuardianNotifySettings | undefined>;
+  listLicenseTerms(tenantId: string): Promise<LicenseTermWindow[]>;
   claimAbsence(tenantId: string, attendanceId: string, threshold: number): Promise<AbsenceClaim | undefined>;
   claimPaymentDue(tenantId: string, installmentId: string, day: string): Promise<{ studentId: string; dueDate: string } | undefined>;
   /** Published entries after the assessment's watermark; moves the watermark. version > 1 means a correction. */
@@ -64,7 +74,7 @@ export interface GuardianNotifyJobResult {
   recipientCount: number;
   pushSentCount: number;
   emailSentCount: number;
-  skipped?: "DISABLED";
+  skipped?: "DISABLED" | "LICENSE_INACTIVE";
 }
 
 interface GuardianNotice {
@@ -112,6 +122,7 @@ export async function processGuardianNotifyJob(
   };
   const settings = await deps.store.loadSettings(payload.tenantId);
   if (!settings || !isEnabled(settings, payload.kind)) return { ...result, skipped: "DISABLED" };
+  if (!hasActiveLicenseTerm(await deps.store.listLicenseTerms(payload.tenantId))) return { ...result, skipped: "LICENSE_INACTIVE" };
 
   const notices = await claimNotices(payload, settings, deps.store);
   for (const notice of notices) {

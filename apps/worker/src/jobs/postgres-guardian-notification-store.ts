@@ -1,4 +1,5 @@
 import { type TenantQueryable, withTenantDb } from "@o-okul/db";
+import type { LicenseTermWindow } from "@o-okul/shared-types";
 import type { PushDevice } from "./announcement-push-delivery.js";
 import {
   type AbsenceClaim,
@@ -35,6 +36,20 @@ export class PostgresGuardianNotificationStore implements GuardianNotificationSt
             absenceThreshold: row.guardianAbsenceThreshold,
           }
         : undefined;
+    });
+  }
+
+  async listLicenseTerms(tenantId: string): Promise<LicenseTermWindow[]> {
+    return withTenantDb(this.pool, { tenantId, readOnly: true }, async (client) => {
+      const result = await client.query<{ startsAt: Date; endsAt: Date; cancelledAt: Date | null }>(
+        `SELECT "startsAt", "endsAt", "cancelledAt" FROM "LicenseTerm" WHERE "tenantId" = $1`,
+        [tenantId],
+      );
+      return result.rows.map((row) => ({
+        startsAt: row.startsAt.toISOString(),
+        endsAt: row.endsAt.toISOString(),
+        ...(row.cancelledAt ? { cancelledAt: row.cancelledAt.toISOString() } : {}),
+      }));
     });
   }
 

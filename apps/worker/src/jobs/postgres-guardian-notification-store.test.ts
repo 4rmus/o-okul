@@ -3,6 +3,24 @@ import type { Queryable, TenantQueryable } from "@o-okul/db";
 import { PostgresGuardianNotificationStore } from "./postgres-guardian-notification-store.js";
 
 describe("PostgresGuardianNotificationStore (KV-8 claims)", () => {
+  it("lisans dönemleri tenant bağlamında okunur ve ISO metne çevrilir", async () => {
+    const client = new ScriptedClient({
+      licenseTerms: [
+        { startsAt: new Date("2026-01-01T00:00:00.000Z"), endsAt: new Date("2027-01-01T00:00:00.000Z"), cancelledAt: null },
+        { startsAt: new Date("2025-01-01T00:00:00.000Z"), endsAt: new Date("2026-01-01T00:00:00.000Z"), cancelledAt: new Date("2025-06-01T00:00:00.000Z") },
+      ],
+    });
+    const store = new PostgresGuardianNotificationStore(new FakePool(client));
+
+    await expect(store.listLicenseTerms("tenant-a")).resolves.toEqual([
+      { startsAt: "2026-01-01T00:00:00.000Z", endsAt: "2027-01-01T00:00:00.000Z" },
+      { startsAt: "2025-01-01T00:00:00.000Z", endsAt: "2026-01-01T00:00:00.000Z", cancelledAt: "2025-06-01T00:00:00.000Z" },
+    ]);
+    const query = client.queries.find((entry) => entry.sql.includes("FROM \"LicenseTerm\""));
+    expect(query?.values).toEqual(["tenant-a"]);
+    expect(client.queries.some((entry) => entry.values?.includes("tenant-a") && entry.sql.includes("set_config"))).toBe(true);
+  });
+
   it("devamsızlık: notifiedAt boşsa claim eder; aynı gün düzeltme sonrası tekrar ABSENT ikinci bildirim üretmez", async () => {
     const client = new ScriptedClient({ attendance: { status: "ABSENT", notified: false }, term: { absentCount: 1, warned: false } });
     const store = new PostgresGuardianNotificationStore(new FakePool(client));
@@ -97,6 +115,7 @@ interface ScriptState {
   term?: { absentCount: number; warned: boolean };
   installment?: { dueDate: string; status: string; notifiedOn: string | null };
   gradeEntries?: Array<{ studentId: string; version: number }>;
+  licenseTerms?: Array<{ startsAt: Date; endsAt: Date; cancelledAt: Date | null }>;
 }
 
 class FakePool implements TenantQueryable {
@@ -136,6 +155,7 @@ class ScriptedClient implements Queryable {
     if (sql.includes("FROM \"PaymentInstallment\" i") && sql.includes("FOR UPDATE OF i")) {
       return rows(this.state.installment ? [{ studentId: "student-a", deletedAt: null, planDeleted: false, ...this.state.installment }] : []);
     }
+    if (sql.includes("FROM \"LicenseTerm\"")) return rows(this.state.licenseTerms ?? []);
     if (sql.startsWith("SELECT 1 FROM \"GradeAssessment\"")) return rows([{ "?column?": 1 }]);
     if (sql.includes("FROM \"GradeEntry\" e\n")) return rows(this.state.gradeEntries ?? []);
     return rows([]);

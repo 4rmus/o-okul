@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { LicenseTermWindow } from "@o-okul/shared-types";
 import type { JobsOptions } from "bullmq";
 import type { GuardianNotifyJobPayload } from "./guardian-auto-notification.js";
 import { isGuardianNotifyBusinessHour, scanPaymentDueReminders, type GuardianNotifyQueue, type PaymentDueScanStore } from "./guardian-payment-due-scanner.js";
@@ -16,6 +17,9 @@ describe("KV-8 payment due scanner", () => {
       scannedDays: [],
       async listEnabledTenants() {
         return [{ id: "tenant-a", lifecycleVersion: 3 }];
+      },
+      async listLicenseTerms() {
+        return [activeTerm];
       },
       async listDueInstallmentIds(_tenantId, day) {
         this.scannedDays.push(day);
@@ -45,7 +49,35 @@ describe("KV-8 payment due scanner", () => {
       kind: "PAYMENT_DUE",
     });
   });
+
+  it("ACTIVE lisanslı olmayan kurum (READ_ONLY/FROZEN/EXPIRED/CANCELLED) için iş üretmez", async () => {
+    const now = new Date("2026-10-05T10:00:00+03:00");
+    const terms: Record<string, LicenseTermWindow[]> = {
+      "tenant-active": [activeTerm],
+      "tenant-read-only": [{ startsAt: "2025-09-01T00:00:00.000Z", endsAt: "2026-10-01T00:00:00.000Z" }],
+      "tenant-frozen": [{ startsAt: "2025-09-01T00:00:00.000Z", endsAt: "2026-09-01T00:00:00.000Z" }],
+      "tenant-expired": [{ startsAt: "2025-01-01T00:00:00.000Z", endsAt: "2026-06-01T00:00:00.000Z" }],
+      "tenant-cancelled": [{ ...activeTerm, cancelledAt: "2026-09-01T00:00:00.000Z" }],
+    };
+    const store: PaymentDueScanStore = {
+      async listEnabledTenants() {
+        return Object.keys(terms).map((id) => ({ id, lifecycleVersion: 1 }));
+      },
+      async listLicenseTerms(tenantId) {
+        return terms[tenantId]!;
+      },
+      async listDueInstallmentIds(tenantId) {
+        return [`installment-${tenantId}`];
+      },
+    };
+    const queue = new DedupingQueue();
+
+    await expect(scanPaymentDueReminders(store, queue, now)).resolves.toBe(1);
+    expect([...queue.jobs.values()].map((job) => job.tenantId)).toEqual(["tenant-active"]);
+  });
 });
+
+const activeTerm: LicenseTermWindow = { startsAt: "2026-09-01T00:00:00.000Z", endsAt: "2027-09-01T00:00:00.000Z" };
 
 /** BullMQ semantics that matter here: adding an existing jobId is a no-op. */
 class DedupingQueue implements GuardianNotifyQueue {

@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { resolveLicenseState, type LicenseState } from "@o-okul/shared-types";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withBypassRlsQuery, withExplicitTenantQuery } from "../db/tenant-query.js";
-import { resolveLicenseState, type LicenseState } from "./license-state.js";
 
 export interface LicenseTermRecord {
   id: string;

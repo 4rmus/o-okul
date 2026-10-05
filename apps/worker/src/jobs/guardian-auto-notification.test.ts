@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { NotificationAdapter, NotificationMessage } from "@o-okul/notification-adapter";
+import type { LicenseTermWindow } from "@o-okul/shared-types";
 import type { PushDevice, PushSender, PushSendOutcome } from "./announcement-push-delivery.js";
 import {
   isPaymentDueReminderDay,
@@ -37,6 +38,44 @@ describe("KV-8 guardian auto notification job", () => {
     expect(store.calls).toEqual([]);
     expect(deps.pushes).toEqual([]);
     expect(deps.emails).toEqual([]);
+  });
+
+  it.each([
+    ["READ_ONLY", 1],
+    ["FROZEN", 30],
+    ["EXPIRED", 100],
+  ] as const)("lisans %s iken claim etmez ve göndermez (kaynak işaret tüketilmez)", async (_state, daysSinceEnd) => {
+    const store = new FakeStore();
+    store.licenseTerms = [licenseTermEndingDaysAgo(daysSinceEnd)];
+    store.absenceClaim = { studentId: "student-a", notifiedDate: "2026-10-05", thresholdReached: false };
+    const deps = createDeps(store);
+
+    const result = await processGuardianNotifyJob(payload("ABSENCE", "attendance-a"), deps);
+
+    expect(result.skipped).toBe("LICENSE_INACTIVE");
+    expect(store.calls).toEqual([]);
+    expect(deps.pushes).toEqual([]);
+    expect(deps.emails).toEqual([]);
+  });
+
+  it("iptal edilmiş veya lisans dönemi olmayan kurumda gönderim yok; ACTIVE lisansta var", async () => {
+    for (const terms of [[{ ...licenseTermEndingDaysAgo(-30), cancelledAt: "2026-01-01T00:00:00.000Z" }], []]) {
+      const store = new FakeStore();
+      store.licenseTerms = terms;
+      store.paymentClaim = { studentId: "student-a", dueDate: "2026-10-05" };
+      const deps = createDeps(store);
+      const result = await processGuardianNotifyJob({ ...payload("PAYMENT_DUE", "installment-a"), contentHash: "2026-10-05" }, deps);
+      expect(result.skipped).toBe("LICENSE_INACTIVE");
+      expect(store.calls).toEqual([]);
+    }
+
+    const store = new FakeStore();
+    store.licenseTerms = [licenseTermEndingDaysAgo(-30)];
+    store.paymentClaim = { studentId: "student-a", dueDate: "2026-10-05" };
+    const deps = createDeps(store);
+    const result = await processGuardianNotifyJob({ ...payload("PAYMENT_DUE", "installment-a"), contentHash: "2026-10-05" }, deps);
+    expect(result.skipped).toBeUndefined();
+    expect(result.pushSentCount).toBe(2);
   });
 
   it("devamsızlık: günlük bildirim + eşik uyarısı push ve e-postayla gider; payload öğrenci kişisel verisi taşımaz", async () => {
@@ -132,8 +171,17 @@ function payload(kind: GuardianNotifyKind, entityId: string): GuardianNotifyJobP
   return { tenantId: "tenant-a", lifecycleVersion: 0, userId: "user-a", entityId, contentHash: "k1", mode: "GUARDIAN_NOTIFY", kind };
 }
 
+const dayMs = 24 * 60 * 60 * 1000;
+
+/** Negative daysAgo: the term ends in the future (ACTIVE). */
+function licenseTermEndingDaysAgo(daysAgo: number): LicenseTermWindow {
+  const endsAt = Date.now() - daysAgo * dayMs;
+  return { startsAt: new Date(endsAt - 365 * dayMs).toISOString(), endsAt: new Date(endsAt).toISOString() };
+}
+
 class FakeStore implements GuardianNotificationStore {
   readonly calls: unknown[][] = [];
+  licenseTerms: LicenseTermWindow[] = [licenseTermEndingDaysAgo(-30)];
   absenceClaim: AbsenceClaim | undefined;
   paymentClaim: { studentId: string; dueDate: string } | undefined;
   gradeClaim: Array<{ studentId: string; version: number }> = [];
@@ -146,6 +194,10 @@ class FakeStore implements GuardianNotificationStore {
 
   async loadSettings(): Promise<GuardianNotifySettings> {
     return this.settings;
+  }
+
+  async listLicenseTerms(): Promise<LicenseTermWindow[]> {
+    return this.licenseTerms;
   }
 
   async claimAbsence(tenantId: string, attendanceId: string, threshold: number): Promise<AbsenceClaim | undefined> {

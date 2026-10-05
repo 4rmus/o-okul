@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveLicenseState } from "./license-state.js";
+import { hasActiveLicenseTerm, resolveLicenseState } from "@o-okul/shared-types";
 
 const term = {
   startsAt: "2026-01-01T00:00:00.000Z",
@@ -31,5 +31,15 @@ describe("resolveLicenseState", () => {
     { ...term, cancelledAt: "invalid" },
   ])("geçersiz dönem verisini fail-closed reddeder", (invalidTerm) => {
     expect(() => resolveLicenseState(invalidTerm)).toThrow("LICENSE_TERM_INVALID");
+  });
+
+  it.each([
+    ["2026-06-01T00:00:00.000Z", true],
+    ["2027-01-01T00:00:00.000Z", false],
+    ["2027-02-01T00:00:00.000Z", false],
+    ["2027-05-01T00:00:00.000Z", false],
+  ])("hasActiveLicenseTerm %s anında %s döner", (at, expected) => {
+    expect(hasActiveLicenseTerm([term], new Date(at))).toBe(expected);
+    expect(hasActiveLicenseTerm([{ ...term, cancelledAt: "2026-02-01T00:00:00.000Z" }], new Date(at))).toBe(false);
   });
 });

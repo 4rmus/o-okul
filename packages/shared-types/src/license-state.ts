@@ -1,13 +1,4 @@
-export const licenseStates = [
-  "SCHEDULED",
-  "ACTIVE",
-  "READ_ONLY",
-  "FROZEN",
-  "EXPIRED",
-  "CANCELLED",
-] as const;
-
-export type LicenseState = (typeof licenseStates)[number];
+import type { LicenseState } from "./domain.js";
 
 export interface LicenseTermWindow {
   startsAt: string;
@@ -35,6 +26,11 @@ export function resolveLicenseState(term: LicenseTermWindow, at = new Date()): L
   if (current < endsAt + readOnlyDays * dayInMilliseconds) return "READ_ONLY";
   if (current < endsAt + expiryDays * dayInMilliseconds) return "FROZEN";
   return "EXPIRED";
+}
+
+/** KV-8 guardian notifications: any term resolving to ACTIVE, the same ACTIVE the API request gate allows. */
+export function hasActiveLicenseTerm(terms: readonly LicenseTermWindow[], at = new Date()): boolean {
+  return terms.some((term) => resolveLicenseState(term, at) === "ACTIVE");
 }
 
 function parseInstant(value: string): number {

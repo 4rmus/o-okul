@@ -1,5 +1,5 @@
 import { createTenantPgPool } from "@o-okul/db";
-import { istanbulDate } from "@o-okul/shared-types";
+import { hasActiveLicenseTerm, istanbulDate, type LicenseTermWindow } from "@o-okul/shared-types";
 import { Queue, type ConnectionOptions, type JobsOptions } from "bullmq";
 import { workerLogger } from "../observability/logging.js";
 import type { GuardianNotifyJobPayload } from "./guardian-auto-notification.js";
@@ -9,11 +9,13 @@ import { PostgresGuardianNotificationStore } from "./postgres-guardian-notificat
  * KV-8 payment due reminders (DEC-20261005-04): during business hours the worker scans for PENDING installments due
  * today or in 3 days and enqueues one announcement-delivery job per installment and day. Deterministic jobId plus the
  * PaymentInstallment.notifiedOn claim keep it to one reminder per installment and day, however often the scan runs.
+ * Tenants without an ACTIVE license term are skipped (the job re-checks at send time).
  * ponytail: an in-process timer, not a BullMQ job scheduler; the fresh-reset worker refuses repeatable jobs on tenant
  * queues, and every replica scanning is harmless because the jobId and the claim dedupe.
  */
 export interface PaymentDueScanStore {
   listEnabledTenants(): Promise<Array<{ id: string; lifecycleVersion: number }>>;
+  listLicenseTerms(tenantId: string): Promise<LicenseTermWindow[]>;
   listDueInstallmentIds(tenantId: string, day: string): Promise<string[]>;
 }
 
@@ -43,6 +45,7 @@ export async function scanPaymentDueReminders(store: PaymentDueScanStore, queue:
   const day = istanbulDate(now);
   let enqueued = 0;
   for (const tenant of await store.listEnabledTenants()) {
+    if (!hasActiveLicenseTerm(await store.listLicenseTerms(tenant.id), now)) continue;
     for (const installmentId of await store.listDueInstallmentIds(tenant.id, day)) {
       await queue.add("announcement-delivery", {
         tenantId: tenant.id,

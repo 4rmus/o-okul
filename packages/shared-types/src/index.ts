@@ -1,7 +1,7 @@
 export type TenantId = string;
 export { FormatAnalyzerService, getParserConfigPresetSuggestion } from "./format-analyzer.js";
 export { licensePlanCodes, trialLicenseLimits } from "./domain.js";
-export type { LicensePlanCode } from "./domain.js";
+export type { LicensePlanCode, LicenseState } from "./domain.js";
 export {
   assertProductEvent,
   productEventCatalog,
@@ -17,6 +17,8 @@ export type {
   ProductEventValidationContext,
   TenantPseudonym,
 } from "./product-analytics.js";
+export { hasActiveLicenseTerm, resolveLicenseState } from "./license-state.js";
+export type { LicenseTermWindow } from "./license-state.js";
 export { addCalendarDays, isPaymentInstallmentOverdue, istanbulDate } from "./payment-due.js";
 export {
   reportCourseMatchesScoreType,

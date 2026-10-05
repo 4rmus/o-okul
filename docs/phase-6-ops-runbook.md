@@ -1737,6 +1737,10 @@ varsayılan açık + eşik 10, `GuardianStudent.canReceiveAutoNotifications` var
 - Worker göndermeden önce kaynak satırdaki işareti aynı transaction'da alır; job iki kez koşsa veya aynı
   gün yoklama düzeltilse ikinci gönderim olmaz. İşaret alındıktan sonraki gönderim hatası yeniden
   denenmez (en fazla bir kez).
+- Lisansı ACTIVE olmayan kurum (READ_ONLY, FROZEN, EXPIRED, CANCELLED, SCHEDULED) hiç bildirim almaz:
+  vade taraması o kurum için job üretmez, worker job'u `LICENSE_INACTIVE` ile atlar. Kontrol işaret
+  alınmadan önce yapılır (kurum anahtarı kapalıyken olduğu gibi); eski satırları yeniden tarayan bir yol
+  olmadığından lisans yenilenince birikmiş bildirim topluca gitmez.
 - `NOTIFICATION_*` ayarı eksik/geçersizse e-posta kanalı atlanır; VAPID eksikse push atlanır. Bu
   bildirimler için `AnnouncementDeliveryReport` satırı yazılmaz; worker logunda yalnız sayılar vardır.
 - Eski sınıf geneli "Devamsızlık eşiği uyarısı" duyurusu ve `ATTENDANCE_ABSENCE_WARNING_THRESHOLD`

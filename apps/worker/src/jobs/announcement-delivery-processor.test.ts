@@ -11,6 +11,7 @@ describe("createAnnouncementDeliveryProcessor", () => {
       pushSender: { send: async (_token, body) => { sent.push(body); return "sent"; } },
       guardianStore: {
         loadSettings: async () => ({ absenceEnabled: true, paymentDueEnabled: true, gradePublishEnabled: true, absenceThreshold: 10 }),
+        listLicenseTerms: async () => [{ startsAt: "2000-01-01T00:00:00.000Z", endsAt: "2999-01-01T00:00:00.000Z" }],
         claimAbsence: async () => ({ studentId: "student-a", notifiedDate: "2026-10-05", thresholdReached: false }),
         claimPaymentDue: async () => undefined,
         claimGradePublished: async () => [],
