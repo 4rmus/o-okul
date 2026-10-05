@@ -1,7 +1,7 @@
 import { TenantFreshResetService, tenantCleanResetBodySchema, tenantResetRequestBodySchema, tenantResetRevokeBodySchema } from "./tenant-fresh-reset.service.js";
-import type { TenantCleanResetRequest } from "@o-okul/shared-types";
+import type { TenantCleanResetRequest, TenantResetPreset } from "@o-okul/shared-types";
 import { TenantResetPreviewService } from "./tenant-reset-preview.service.js";
-import { Body, Controller, Delete, Get, GoneException, HttpCode, Header, Headers, Param, Patch, Post, Query } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, GoneException, HttpCode, Header, Headers, Param, Patch, Post, Query } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
@@ -46,6 +46,12 @@ export class TenantController {
     return this.freshReset.changeInstitutionRequest(getRequestContext(), body.expectedRequestId, true);
   }
 
+  @Get("license-expiry-purge-candidates")
+  @RequireCapability("tenant:clean-reset")
+  licenseExpiryPurgeCandidates() {
+    return this.freshReset.purgeCandidates(getRequestContext());
+  }
+
   @Get(":id/reset-diagnostics")
   @RequireCapability("tenant:clean-reset")
   resetDiagnostics(@Param("id") id: string, @Query("activityAfter") activityAfter?: string, @Query("deliveryAfter") deliveryAfter?: string) {
@@ -61,8 +67,9 @@ export class TenantController {
 
   @Get(":id/clean-reset-preview")
   @RequireCapability("tenant:clean-reset")
-  previewCleanReset(@Param("id") id: string) {
-    return this.resetPreview.preview(id);
+  previewCleanReset(@Param("id") id: string, @Query("preset") preset?: string) {
+    if (preset !== undefined && preset !== "CLEAN_SETUP_V1" && preset !== "LICENSE_EXPIRY_PURGE_V1") throw new BadRequestException("RESET_PRESET_INVALID");
+    return this.resetPreview.preview(id, preset as TenantResetPreset | undefined);
   }
 
   @Post(":id/clean-reset-jobs")

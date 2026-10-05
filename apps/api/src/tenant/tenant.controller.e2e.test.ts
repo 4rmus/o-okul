@@ -112,6 +112,43 @@ describe("TenantController", () => {
     } finally { Object.defineProperty(service, "store", { value: originalStore, configurable: true }); add.mockRestore(); }
   });
 
+  it("license-expiry purge candidates are SYSTEM_ADMIN-only, read-only and carry no personal data", async () => {
+    const route = "/tenants/license-expiry-purge-candidates";
+    await request(server).get(route).expect(401);
+    await request(server).get(route).set("Authorization", `Bearer ${adminToken}`).expect(403);
+    await request(server).get(route).set("Authorization", `Bearer ${systemToken}`).expect(503);
+    const service = app.get(TenantFreshResetService);
+    const originalPool = (service as unknown as { pool: unknown }).pool;
+    const day = 86_400_000;
+    const query = vi.fn(async (sql: string) => ({ rows:
+      sql.includes('FROM "Tenant" t') ? [{ id: "tenant-old", name: "Eski Kurum", slug: "eski-kurum", status: "SUSPENDED", lifecycleVersion: 2 }, { id: "tenant-90", name: "Sinir", slug: "sinir", status: "ACTIVE", lifecycleVersion: 0 }]
+        : sql.includes('FROM "LicenseTerm"') ? [{ tenantId: "tenant-old", startsAt: new Date(Date.now() - 500 * day), endsAt: new Date(Date.now() - 92 * day), cancelledAt: null }, { tenantId: "tenant-90", startsAt: new Date(Date.now() - 500 * day), endsAt: new Date(Date.now() - 90 * day), cancelledAt: null }]
+          : sql.includes("AS count") ? [{ count: "42" }] : [] }));
+    Object.defineProperty(service, "pool", { value: { connect: async () => ({ query, release: vi.fn() }) }, configurable: true });
+    try {
+      const response = await request(server).get(route).set("Authorization", `Bearer ${systemToken}`).expect(200);
+      expect(response.body).toEqual([expect.objectContaining({ tenantId: "tenant-old", slug: "eski-kurum", daysSinceLicenseEnd: 92, estimatedRowCount: 42 })]);
+      expect(Object.keys(response.body[0]).sort()).toEqual(["daysSinceLicenseEnd", "estimatedRowCount", "licenseEndsAt", "lifecycleVersion", "name", "slug", "status", "tenantId"]);
+      expect(query.mock.calls.every(([sql]) => !/^\s*(INSERT|UPDATE|DELETE)/.test(sql))).toBe(true);
+    } finally { Object.defineProperty(service, "pool", { value: originalPool, configurable: true }); }
+  });
+
+  it("license-expiry purge reuses the reset job endpoint with a preset-bound step-up", async () => {
+    const body = { preset: "LICENSE_EXPIRY_PURGE_V1", expectedLifecycleVersion: 0, preflightDigest: "a".repeat(64), reason: "LICENSE_EXPIRED", confirmationText: "dna-egitim" };
+    const post = (token = systemToken) => request(server).post("/tenants/tenant-a/clean-reset-jobs").set("Authorization", `Bearer ${token}`).set("Idempotency-Key", "purge-a");
+    await post(adminToken).send(body).expect(403);
+    await post().send(body).expect(401).expect(({ body }) => expect(body.error.code).toBe("MFA_STEP_UP_REQUIRED"));
+    await post().send({ ...body, reason: "OPERATIONS_REVIEW" }).expect(422);
+    const actor = JSON.parse(Buffer.from(systemToken.split(".")[0]!, "base64url").toString());
+    const bound = (preset: "CLEAN_SETUP_V1" | "LICENSE_EXPIRY_PURGE_V1") => createAdminMfaStepUpProof({ userId: actor.sub, sessionId: actor.sessionId, membershipVersion: actor.membershipVersion,
+      purpose: "TENANT_CLEAN_RESET", target: { tenantId: "tenant-a", preset, expectedLifecycleVersion: 0, preflightDigest: body.preflightDigest } }).stepUpToken;
+    await post().set("X-Step-Up-Token", bound("CLEAN_SETUP_V1")).send(body).expect(401).expect(({ body }) => expect(body.error.code).toBe("MFA_STEP_UP_INVALID"));
+    await post().set("X-Step-Up-Token", bound("LICENSE_EXPIRY_PURGE_V1")).send(body).expect(503).expect(({ body }) => expect(body.error.code).toBe("RESET_SOURCE_UNVERIFIED"));
+    await request(server).get("/tenants/tenant-a/clean-reset-preview?preset=DROP_ALL").set("Authorization", `Bearer ${systemToken}`).expect(400);
+    const preview = await request(server).get("/tenants/tenant-a/clean-reset-preview?preset=LICENSE_EXPIRY_PURGE_V1").set("Authorization", `Bearer ${systemToken}`).expect(200);
+    expect(preview.body).toMatchObject({ preset: "LICENSE_EXPIRY_PURGE_V1", allowed: false });
+  });
+
   it("reset preview is platform-only, PII-safe and remains blocked without verified sources", async () => {
     await request(server).get("/tenants/tenant-a/clean-reset-preview").set("Authorization", `Bearer ${adminToken}`).expect(403);
     await request(server).get("/tenants/system/clean-reset-preview").set("Authorization", `Bearer ${systemToken}`).expect(404);

@@ -2942,9 +2942,20 @@ export interface TenantResetInstitutionRequestCreate { expectedRequestId: string
 export interface TenantResetInstitutionRequestRevoke { expectedRequestId: string; }
 export interface TenantResetRequestState { request: TenantResetInstitutionRequest | null; }
 
+/** License-expiry purge candidate; institution name/slug only, no personal data. */
+export interface LicenseExpiryPurgeCandidate {
+  tenantId: string;
+  name: string;
+  slug: string;
+  status: TenantAccessStatus;
+  lifecycleVersion: number;
+  licenseEndsAt: string;
+  daysSinceLicenseEnd: number;
+  estimatedRowCount: number;
+}
 export interface TenantResetPreview {
   institutionRequest?: TenantResetInstitutionRequest | null;
-  preset: "CLEAN_SETUP_V1";
+  preset: TenantResetPreset;
   lifecycleVersion: number;
   preservedOwnerCount: number;
   categories: Array<{ category: string; preserved: number; deleted: number; blocked: number }>;
@@ -2956,22 +2967,26 @@ export interface TenantResetPreview {
   blockerCounts: Array<{ code: string; count: number | null }>;
 }
 
+/** LICENSE_EXPIRY_PURGE_V1 destroys every institution record after license expiry (DEC-20261005-03). */
+export type TenantResetPreset = "CLEAN_SETUP_V1" | "LICENSE_EXPIRY_PURGE_V1";
 export interface TenantCleanResetMfaTarget {
   tenantId: string;
-  preset: "CLEAN_SETUP_V1";
+  preset: TenantResetPreset;
   expectedLifecycleVersion: number;
   preflightDigest: string;
 }
 export interface TenantCleanResetRequest {
-  preset: "CLEAN_SETUP_V1";
+  preset: TenantResetPreset;
   expectedLifecycleVersion: number;
   preflightDigest: string;
   confirmationText: string;
-  reason: TenantLifecycleReason;
+  /** LICENSE_EXPIRED exactly when preset is LICENSE_EXPIRY_PURGE_V1. */
+  reason: TenantLifecycleReason | "LICENSE_EXPIRED";
 }
 export interface TenantCleanResetStatus {
   operationId: string;
-  status: "QUEUED" | "RUNNING" | "BLOCKED" | "FAILED" | "COMPLETED";
+  /** CANCELLED: a license-expiry purge stopped before deleting anything because the license was renewed. */
+  status: "QUEUED" | "RUNNING" | "BLOCKED" | "FAILED" | "COMPLETED" | "CANCELLED";
   phase: "PREFLIGHT" | "BACKUP" | "DATABASE" | "OBJECTS" | "VERIFY" | "DONE";
   errorCode: string | null;
   result: { preservedOwnerCount: number; deletedObjectCount: number } | null;

@@ -4,10 +4,11 @@ import { freshResetStatus, type FreshResetOperation } from "@o-okul/db";
 import { TenantFreshResetService } from "./tenant-fresh-reset.service.js";
 import { createAdminMfaStepUpProof } from "../auth/totp-mfa.js";
 import type { RequestContext } from "../context/request-context.js";
+import type { TenantCleanResetMfaTarget } from "@o-okul/shared-types";
 
 const context: RequestContext = { userId: "platform", tenantId: null, roles: ["SYSTEM_ADMIN"], bypassRls: false, sessionId: "system-session", membershipVersion: 1 };
 const body = { preset: "CLEAN_SETUP_V1" as const, expectedLifecycleVersion: 3, preflightDigest: "a".repeat(64), confirmationText: "alpha", reason: "OPERATIONS_REVIEW" as const };
-const proof = (target = { tenantId: "tenant-a", preset: body.preset, expectedLifecycleVersion: body.expectedLifecycleVersion, preflightDigest: body.preflightDigest }) => createAdminMfaStepUpProof({ userId: context.userId, sessionId: context.sessionId!, membershipVersion: 1, purpose: "TENANT_CLEAN_RESET", target }).stepUpToken;
+const proof = (target: TenantCleanResetMfaTarget = { tenantId: "tenant-a", preset: body.preset, expectedLifecycleVersion: body.expectedLifecycleVersion, preflightDigest: body.preflightDigest }) => createAdminMfaStepUpProof({ userId: context.userId, sessionId: context.sessionId!, membershipVersion: 1, purpose: "TENANT_CLEAN_RESET", target }).stepUpToken;
 function fixture() {
   const service = new TenantFreshResetService({ preview: vi.fn() } as never);
   const op = { id: "a".repeat(32), status: "QUEUED", phase: "PREFLIGHT", errorCode: null, result: null, actorUserId: "private", backupReceipt: { private: "hidden" } } as unknown as FreshResetOperation;
@@ -58,6 +59,29 @@ describe("reset admission and read-only reconciliation", () => {
     f.create.mockImplementation(async (...args: unknown[]) => { await (args[3] as () => Promise<void>)(); return f.op; });
     await expect(f.service.create(context, "tenant-a", body, "reset-idempotency-a", proof())).rejects.toMatchObject({ status: 409, message: "RESET_WRITE_QUIESCENCE_UNVERIFIED" });
   });
+  it("license-expiry purge: proof must be bound to the purge preset; clean-reset proof is rejected; quiescence still blocks", async () => {
+    const f = fixture();
+    const purge = { ...body, preset: "LICENSE_EXPIRY_PURGE_V1" as const, reason: "LICENSE_EXPIRED" as const };
+    const purgeProof = proof({ tenantId: "tenant-a", preset: purge.preset, expectedLifecycleVersion: 3, preflightDigest: body.preflightDigest });
+    await expect(f.service.create(context, "tenant-a", purge, "purge-key", proof())).rejects.toMatchObject({ status: 401, message: "MFA_STEP_UP_INVALID" });
+    await expect(f.service.create(context, "tenant-a", body, "reset-key", purgeProof)).rejects.toMatchObject({ status: 401, message: "MFA_STEP_UP_INVALID" });
+    await expect(f.service.create(context, "tenant-a", { ...purge, reason: "OPERATIONS_REVIEW" }, "purge-key", purgeProof)).rejects.toMatchObject({ status: 400, message: "RESET_REQUEST_INVALID" });
+    await expect(f.service.create({ ...context, roles: ["TENANT_ADMIN"] }, "tenant-a", purge, "purge-key", purgeProof)).rejects.toMatchObject({ status: 403 });
+    expect(f.create).not.toHaveBeenCalled();
+    const preview = vi.fn(async () => { throw new Error("RESET_WRITE_QUIESCENCE_UNVERIFIED"); });
+    Object.defineProperty(f.service, "preview", { value: { preview } });
+    f.create.mockImplementation(async (...args: unknown[]) => { await (args[3] as () => Promise<void>)(); return f.op; });
+    await expect(f.service.create(context, "tenant-a", purge, "purge-key", purgeProof)).rejects.toMatchObject({ status: 409, message: "RESET_WRITE_QUIESCENCE_UNVERIFIED" });
+    for (const [code, status] of [["RESET_LICENSE_NOT_EXPIRED", 409], ["RESET_CONFIRMATION_MISMATCH", 400]] as const) {
+      f.create.mockRejectedValueOnce(new Error(code));
+      await expect(f.service.create(context, "tenant-a", purge, "purge-key", purgeProof)).rejects.toMatchObject({ status, message: code });
+    }
+  });
+  it("purge candidate list is SYSTEM_ADMIN-only and needs the verified database", async () => {
+    const f = fixture();
+    await expect(f.service.purgeCandidates({ ...context, roles: ["TENANT_OWNER"] })).rejects.toMatchObject({ status: 403 });
+    await expect(f.service.purgeCandidates(context)).rejects.toMatchObject({ status: 503 });
+  });
   it("returns the accepted durable operation despite queue failure; status GET does no writes", async () => {
     const f = fixture();
     expect(await f.service.create(context, "tenant-a", body, "reset-idempotency-a", proof())).toEqual(freshResetStatus(f.op));
@@ -79,6 +103,15 @@ describe("tenant management read metadata", () => {
     expect(result).toMatchObject({ verified: true, currentReset: { status }, allowedActions: { suspend: false, reactivate: false, cleanReset: false } });
     expect(query.mock.calls.some(([sql]) => sql.includes('WHERE "tenantId" = $1') && sql.includes("LIMIT 1"))).toBe(true);
     expect(query.mock.calls.every(([sql]) => !/INSERT|UPDATE|DELETE FROM/.test(sql))).toBe(true);
+  });
+  it.each([
+    ["COMPLETED", null, { suspend: false, reactivate: false, cleanReset: false }],
+    ["CANCELLED", null, { suspend: false, reactivate: true, cleanReset: true }],
+  ])("license-expiry purge %s: completed is a tombstone, cancelled no longer holds the tenant", async (status, currentReset, allowedActions) => {
+    const service = new TenantFreshResetService({} as never);
+    const query = vi.fn(async (sql: string) => ({ rows: sql.startsWith("SELECT \"id\"") ? [{ id: "a".repeat(32), preset: "LICENSE_EXPIRY_PURGE_V1", status, phase: status === "COMPLETED" ? "DONE" : "BACKUP", errorCode: null, result: null }] : [] }));
+    Object.defineProperty(service, "pool", { value: { connect: async () => ({ query, release: vi.fn() }) } });
+    expect(await service.management(context, tenant)).toEqual({ verified: true, currentReset, allowedActions });
   });
   it("fails closed when operation metadata cannot be read", async () => {
     const service = new TenantFreshResetService({} as never);

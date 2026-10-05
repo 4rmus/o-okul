@@ -1,4 +1,4 @@
-import type { TenantResetDeliveryReceipt, TenantResetDiagnostics, TenantResetRequestState, TenantManagement } from "@o-okul/shared-types";
+import type { LicenseExpiryPurgeCandidate, TenantResetDeliveryReceipt, TenantResetDiagnostics, TenantResetRequestState, TenantManagement } from "@o-okul/shared-types";
 import { lookupNotificationReceiptFromEnv } from "@o-okul/notification-adapter";
 import { createHash } from "node:crypto";
 import type { TenantRecord } from "./tenant-store.js";
@@ -7,7 +7,7 @@ import { withTenantDb } from "@o-okul/db";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
 import { Queue } from "bullmq";
 import pg from "pg";
-import { PostgresInstitutionResetRequests, freshResetJobId, freshResetQueue, freshResetStatus, PostgresFreshResetStore, requireResetWriteQuiescence, type FreshResetRequest, type FreshResetOperation } from "@o-okul/db";
+import { PostgresInstitutionResetRequests, freshResetFinished, freshResetJobId, freshResetQueue, freshResetStatus, isLicenseExpiryPurge, listLicenseExpiryPurgeCandidates, PostgresFreshResetStore, requireResetWriteQuiescence, type FreshResetRequest, type FreshResetOperation } from "@o-okul/db";
 import { z } from "zod";
 import type { RequestContext } from "../context/request-context.js";
 import { verifyAdminMfaStepUpProof } from "../auth/totp-mfa.js";
@@ -20,7 +20,9 @@ import { waitForApiMutations } from "../context/tenant-mutation-activity.js";
 export const tenantResetRequestBodySchema = z.object({ expectedRequestId: z.string().regex(/^[a-f0-9]{32}$/).nullable(), preset: z.literal("CLEAN_SETUP_V1") }).strict();
 export const tenantResetRevokeBodySchema = z.object({ expectedRequestId: z.string().regex(/^[a-f0-9]{32}$/) }).strict();
 
-export const tenantCleanResetBodySchema = z.object({ preset: z.literal("CLEAN_SETUP_V1"), expectedLifecycleVersion: z.number().int().min(0).max(2147483646), preflightDigest: z.string().regex(/^[a-f0-9]{64}$/), confirmationText: z.string().min(1).max(128), reason: z.enum(["SECURITY_REVIEW", "INSTITUTION_REQUEST", "OPERATIONS_REVIEW"]) }).strict();
+// LICENSE_EXPIRY_PURGE_V1 (DEC-20261005-03) reuses this endpoint, step-up purpose and engine; it always carries LICENSE_EXPIRED.
+export const tenantCleanResetBodySchema = z.object({ preset: z.enum(["CLEAN_SETUP_V1", "LICENSE_EXPIRY_PURGE_V1"]), expectedLifecycleVersion: z.number().int().min(0).max(2147483646), preflightDigest: z.string().regex(/^[a-f0-9]{64}$/), confirmationText: z.string().min(1).max(128), reason: z.enum(["SECURITY_REVIEW", "INSTITUTION_REQUEST", "OPERATIONS_REVIEW", "LICENSE_EXPIRED"]) }).strict()
+  .refine((body) => (body.preset === "LICENSE_EXPIRY_PURGE_V1") === (body.reason === "LICENSE_EXPIRED"), { message: "RESET_REQUEST_INVALID", path: ["reason"] });
 @Injectable()
 export class TenantFreshResetService {
   private readonly pool = resolvePersistenceDriver(process.env.TENANT_STORE) === "postgres" ? new pg.Pool({ connectionString: process.env.DATABASE_URL }) : undefined;
@@ -73,7 +75,7 @@ export class TenantFreshResetService {
       if (!this.store) throw new Error("RESET_SOURCE_UNVERIFIED");
       const operation = await this.store.create(tenantId, parsed.data, { userId: context.userId, sessionId: context.sessionId, membershipVersion: context.membershipVersion, key, requestHash: hashIdempotencyRequest("tenant.clean-reset.enqueue", { tenantId, ...parsed.data }) }, async () => {
         await requireResetWriteQuiescence(tenantId);
-        const preview = await this.preview.preview(tenantId);
+        const preview = await this.preview.preview(tenantId, input.preset);
         if (!preview.allowed) throw new Error("RESET_PREFLIGHT_BLOCKED");
         if (preview.preflightDigest !== input.preflightDigest || preview.lifecycleVersion !== input.expectedLifecycleVersion) throw new Error("RESET_PREFLIGHT_CHANGED");
       });
@@ -88,10 +90,12 @@ export class TenantFreshResetService {
     try {
       // A bounded read, independent of the slower object/queue inventory. Never enqueue from GET.
       const current = this.pool ? await withTenantDb(this.pool, { bypassRls: true, tenantId: tenant.id, readOnly: true }, async (db) => {
-        return (await db.query<FreshResetOperation>(`SELECT "id", "status", "phase", "errorCode", "result" FROM "TenantFreshResetOperation" WHERE "tenantId" = $1 ORDER BY ("status" <> 'COMPLETED') DESC, "createdAt" DESC LIMIT 1`, [tenant.id])).rows[0];
+        return (await db.query<FreshResetOperation>(`SELECT "id", "preset", "status", "phase", "errorCode", "result" FROM "TenantFreshResetOperation" WHERE "tenantId" = $1 ORDER BY ("status" NOT IN ('COMPLETED', 'CANCELLED')) DESC, ("preset" = 'LICENSE_EXPIRY_PURGE_V1' AND "status" = 'COMPLETED') DESC, "createdAt" DESC LIMIT 1`, [tenant.id])).rows[0];
       }) : undefined;
-      const currentReset = current ? freshResetStatus(current) : null;
-      const idle = !current || current.status === "COMPLETED";
+      // A purged tenant is a tombstone: no lifecycle or reset action is offered.
+      if (current && isLicenseExpiryPurge(current) && current.status === "COMPLETED") return { verified: true, currentReset: null, allowedActions: { suspend: false, reactivate: false, cleanReset: false } };
+      const currentReset = current && current.status !== "CANCELLED" ? freshResetStatus(current) : null;
+      const idle = !current || freshResetFinished(current);
       const valid = Number.isInteger(tenant.lifecycleVersion) && tenant.lifecycleVersion >= 0 && tenant.lifecycleVersion < 2147483647;
       return { verified: true, currentReset, allowedActions: {
         suspend: idle && valid && tenant.status === "ACTIVE" && hasCapability(context, "tenant:lifecycle"),
@@ -128,6 +132,12 @@ export class TenantFreshResetService {
     }
     return { deliveryId: row.id, lifecycleVersion: row.lifecycleVersion!, status, correlation, createdAt: receipt.createdAt, expiresAt: receipt.expiresAt, providerReceiptHash: status === "PROVIDER_ACCEPTED" ? receipt.providerReceiptHash : null, reconciliation: "EXTERNAL_PROOF_REQUIRED" };
   }
+  async purgeCandidates(context: RequestContext): Promise<LicenseExpiryPurgeCandidate[]> {
+    if (!context.roles.includes("SYSTEM_ADMIN")) throw new ForbiddenException("SYSTEM_ADMIN_REQUIRED");
+    if (!this.pool) throw new ServiceUnavailableException("RESET_SOURCE_UNVERIFIED");
+    // Read-only list; deletion is a separate, per-institution approved operation.
+    return (await listLicenseExpiryPurgeCandidates(this.pool)) as LicenseExpiryPurgeCandidate[];
+  }
   async statusByKey(context: RequestContext, tenantId: string, key?: string) {
     assertResetAdmin(context, tenantId);
     if (!key) throw new BadRequestException("IDEMPOTENCY_KEY_REQUIRED");
@@ -151,7 +161,7 @@ export function assertResetAdmin(context: RequestContext, tenantId: string) {
   if (tenantId === "system") throw new ForbiddenException("SYSTEM_TENANT_PROTECTED");
 }
 export async function enqueueFreshReset(op: FreshResetOperation) {
-  if (op.status === "COMPLETED") return;
+  if (freshResetFinished(op)) return;
   if (!process.env.REDIS_URL) throw new Error("RESET_QUEUE_UNVERIFIED");
   const queue = new Queue(freshResetQueue, { connection: parseRedisUrl(), prefix: process.env.QUEUE_PREFIX });
   try {
@@ -169,7 +179,7 @@ export async function enqueueFreshReset(op: FreshResetOperation) {
 }
 function resetHttpError(error: unknown) {
   const code = error instanceof Error ? error.message : "";
-  if (["IDEMPOTENCY_KEY_BODY_MISMATCH", "TENANT_LIFECYCLE_VERSION_CONFLICT", "RESET_OPERATION_IN_PROGRESS", "RESET_PREFLIGHT_CHANGED", "RESET_REQUIRES_SUSPENDED", "RESET_PREFLIGHT_BLOCKED", "RESET_INSTITUTION_REQUEST_REQUIRED", "RESET_INSTITUTION_REQUEST_INVALID", "RESET_WRITE_QUIESCENCE_UNVERIFIED"].includes(code)) return new ConflictException(code);
+  if (["IDEMPOTENCY_KEY_BODY_MISMATCH", "TENANT_LIFECYCLE_VERSION_CONFLICT", "RESET_OPERATION_IN_PROGRESS", "RESET_PREFLIGHT_CHANGED", "RESET_REQUIRES_SUSPENDED", "RESET_PREFLIGHT_BLOCKED", "RESET_INSTITUTION_REQUEST_REQUIRED", "RESET_INSTITUTION_REQUEST_INVALID", "RESET_WRITE_QUIESCENCE_UNVERIFIED", "RESET_LICENSE_NOT_EXPIRED"].includes(code)) return new ConflictException(code);
   if (code === "MFA_STEP_UP_CONTEXT_INVALID") return new UnauthorizedException(code);
   if (["RESET_CONFIRMATION_MISMATCH", "RESET_TARGET_INVALID"].includes(code)) return new BadRequestException(code);
   return new ServiceUnavailableException("RESET_SOURCE_UNVERIFIED");

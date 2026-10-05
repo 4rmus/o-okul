@@ -163,7 +163,7 @@ export class TenantService {
     } catch (error) {
       const code = error instanceof Error ? error.message : "";
       if (code === "TENANT_NOT_FOUND") throw new NotFoundException(code);
-      if (["TENANT_LIFECYCLE_VERSION_CONFLICT", "IDEMPOTENCY_KEY_BODY_MISMATCH", "IDEMPOTENCY_KEY_IN_PROGRESS", "RESET_OPERATION_IN_PROGRESS"].includes(code)) throw new ConflictException(code);
+      if (["TENANT_LIFECYCLE_VERSION_CONFLICT", "IDEMPOTENCY_KEY_BODY_MISMATCH", "IDEMPOTENCY_KEY_IN_PROGRESS", "RESET_OPERATION_IN_PROGRESS", "TENANT_PURGED"].includes(code)) throw new ConflictException(code);
       if (["TENANT_CONFIRMATION_MISMATCH", "TENANT_STATUS_UNSUPPORTED"].includes(code)) throw new BadRequestException(code);
       if (code === "MFA_STEP_UP_CONTEXT_INVALID") throw new UnauthorizedException(code);
       throw error;

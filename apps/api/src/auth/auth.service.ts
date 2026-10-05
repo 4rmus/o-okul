@@ -462,7 +462,7 @@ export class AuthService {
       throw new UnauthorizedException("MFA_STEP_UP_CONTEXT_INVALID");
     }
     if (purpose === "TENANT_LIFECYCLE_CHANGE" || purpose === "TENANT_CLEAN_RESET" || purpose === "TENANT_DEVICE_RESTORE") {
-      if (!target || target.tenantId === "system" || (purpose === "TENANT_DEVICE_RESTORE" ? !("operationId" in target) || !/^[a-f0-9]{32}$/.test(target.operationId) || !/^[a-f0-9]{64}$/.test(target.archiveDigest) : purpose === "TENANT_LIFECYCLE_CHANGE" ? !("status" in target) || !["ACTIVE", "SUSPENDED"].includes(target.status) : !("preset" in target) || target.preset !== "CLEAN_SETUP_V1" || !/^[a-f0-9]{64}$/.test(target.preflightDigest)) ||
+      if (!target || target.tenantId === "system" || (purpose === "TENANT_DEVICE_RESTORE" ? !("operationId" in target) || !/^[a-f0-9]{32}$/.test(target.operationId) || !/^[a-f0-9]{64}$/.test(target.archiveDigest) : purpose === "TENANT_LIFECYCLE_CHANGE" ? !("status" in target) || !["ACTIVE", "SUSPENDED"].includes(target.status) : !("preset" in target) || !["CLEAN_SETUP_V1", "LICENSE_EXPIRY_PURGE_V1"].includes(target.preset) || !/^[a-f0-9]{64}$/.test(target.preflightDigest)) ||
         !Number.isInteger(target.expectedLifecycleVersion) || target.expectedLifecycleVersion < 0 || target.expectedLifecycleVersion > 2147483646) {
         throw new BadRequestException("MFA_STEP_UP_TARGET_INVALID");
       }

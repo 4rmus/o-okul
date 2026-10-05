@@ -95,7 +95,7 @@ const mfaStepUpBodySchema = z.object({
     status: z.enum(["ACTIVE", "SUSPENDED"]),
     expectedLifecycleVersion: z.number().int().min(0).max(2147483646),
   }).strict(), z.object({
-    tenantId: z.string().min(1).max(128), preset: z.literal("CLEAN_SETUP_V1"),
+    tenantId: z.string().min(1).max(128), preset: z.enum(["CLEAN_SETUP_V1", "LICENSE_EXPIRY_PURGE_V1"]),
     expectedLifecycleVersion: z.number().int().min(0).max(2147483646), preflightDigest: z.string().regex(/^[a-f0-9]{64}$/),
   }).strict(),z.object({tenantId:z.string().min(1).max(128),operationId:z.string().regex(/^[a-f0-9]{32}$/),archiveDigest:z.string().regex(/^[a-f0-9]{64}$/),expectedLifecycleVersion:z.number().int().min(0).max(2147483646)}).strict()]).optional(),
   totpCode: optionalTrimmedString,
