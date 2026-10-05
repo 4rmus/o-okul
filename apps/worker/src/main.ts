@@ -1,4 +1,5 @@
 import { createTenantFreshResetWorker } from "./jobs/tenant-fresh-reset-worker.js";
+import { createLicenseExpiryPurgeCandidateReporter } from "./jobs/license-expiry-purge-candidates.js";
 import {
   createAnnouncementDeliveryBullWorker,
   closeWorkerMutationPool,
@@ -34,8 +35,11 @@ const queueNames = [
   "sms-batch",
 ];
 const resetWorker = createTenantFreshResetWorker(connection);
+// Reports only; never deletes (DEC-20261005-03).
+const purgeCandidateReporter = createLicenseExpiryPurgeCandidateReporter();
 const workers = [
   ...(resetWorker ? [resetWorker] : []),
+  ...(purgeCandidateReporter ? [purgeCandidateReporter] : []),
   createSecretDeliveryOutboxRunner(),
   createAnnouncementDeliveryBullWorker({
     connection,
