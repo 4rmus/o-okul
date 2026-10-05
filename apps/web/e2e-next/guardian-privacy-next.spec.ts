@@ -5,12 +5,19 @@ const smsEnabled = process.env.NEXT_PUBLIC_SMS_ENABLED === "true";
 
 const corsHeaders = {
   "access-control-allow-credentials": "true",
-  "access-control-allow-headers": "authorization,content-type,x-csrf-token",
+  "access-control-allow-headers": "authorization,content-type,idempotency-key,x-csrf-token",
   "access-control-allow-methods": "DELETE,GET,PATCH,POST,OPTIONS",
   "access-control-allow-origin": appOrigin,
 };
 
 type TenantRole = "ASSISTANT_ADMIN" | "TENANT_ADMIN";
+
+/** KV-3e: the first `conflicts` link writes answer 409 GUARDIAN_LINK_CONCURRENT_UPDATE; later ones wait for `hold`. */
+interface GuardianLinkWrites {
+  conflicts: number;
+  hold?: Promise<void>;
+  requests: Array<{ body: string; idempotencyKey: string }>;
+}
 
 interface GuardianLinkBody {
   canOpenSupportTickets?: boolean;
@@ -69,6 +76,43 @@ test.describe("Veli gizlilik ve izin UX'i", () => {
     await expect.poll(() => forbiddenBulkCalls).toEqual([]);
   });
 
+  for (const viewport of [{ name: "masaüstü", width: 1280, height: 900 }, { name: "mobil", width: 390, height: 844 }]) {
+    test(`eşzamanlı güncelleme 409'unda "Tekrar dene" bağlama isteğini aynı Idempotency-Key ile yeniden gönderir (KV-3e, ${viewport.name})`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      let releaseRetry = () => {};
+      const writes: GuardianLinkWrites = { conflicts: 1, hold: new Promise<void>((resolve) => { releaseRetry = resolve; }), requests: [] };
+      const capturedLinks: GuardianLinkBody[] = [];
+      await openGuardianDetail(page, "TENANT_ADMIN", capturedLinks, writes);
+
+      await page.getByRole("tab", { name: "Öğrenci bağla", exact: true }).click();
+      const linkRegion = page.getByLabel("Veli öğrenci bağı ekle");
+      await linkRegion.getByLabel("Öğrenci", { exact: true }).selectOption("student-b");
+      await linkRegion.getByRole("checkbox", { name: /Duyuru görebilir/ }).check();
+      await linkRegion.getByRole("button", { name: "Bağla" }).click();
+
+      const retry = linkRegion.getByRole("alert").getByRole("button", { name: "Tekrar dene" });
+      await expect(retry).toBeVisible();
+      await expect(linkRegion.getByRole("alert")).toContainText("eşzamanlı bir işlem");
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow).toBeLessThanOrEqual(1);
+      const box = await retry.boundingBox();
+      expect(box && box.x >= 0 && box.x + box.width <= viewport.width).toBe(true);
+
+      await retry.click();
+      await expect(retry).toBeDisabled();
+      releaseRetry();
+
+      await expect(retry).toHaveCount(0);
+      // The list is refreshed: the new link shows up in the links tab.
+      await page.getByRole("tab", { name: "Öğrenci bağlantıları", exact: true }).click();
+      await expect(page.getByRole("table", { name: "Veli öğrenci bağlantıları" })).toContainText("Bora Yılmaz");
+      expect(writes.requests).toHaveLength(2);
+      expect(writes.requests[1]).toEqual(writes.requests[0]);
+      expect(writes.requests[0]?.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
+      expect(capturedLinks).toEqual([expect.objectContaining({ canReceiveAnnouncements: true, studentId: "student-b" })]);
+    });
+  }
+
   test("yardımcı yönetici user:manage gerektiren veli portal davetini görmez", async ({ page }) => {
     const forbiddenBulkCalls = await openGuardianDetail(page, "ASSISTANT_ADMIN", []);
 
@@ -95,8 +139,8 @@ test.describe("Veli gizlilik ve izin UX'i", () => {
   }
 });
 
-async function openGuardianDetail(page: Page, role: TenantRole, capturedLinks: GuardianLinkBody[]) {
-  const forbiddenBulkCalls = await installGuardianPrivacyMocks(page, role, capturedLinks);
+async function openGuardianDetail(page: Page, role: TenantRole, capturedLinks: GuardianLinkBody[], writes?: GuardianLinkWrites) {
+  const forbiddenBulkCalls = await installGuardianPrivacyMocks(page, role, capturedLinks, writes);
   await page.addInitScript(() => {
     document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
   });
@@ -116,7 +160,7 @@ async function openGuardianPortal(page: Page, visibility: "false" | "omitted") {
   return paymentPlanRequests;
 }
 
-async function installGuardianPrivacyMocks(page: Page, role: TenantRole, capturedLinks: GuardianLinkBody[]) {
+async function installGuardianPrivacyMocks(page: Page, role: TenantRole, capturedLinks: GuardianLinkBody[], writes?: GuardianLinkWrites) {
   const links = [createGuardianLink("guardian-link-a", "student-a")];
   const forbiddenBulkCalls: string[] = [];
 
@@ -143,6 +187,18 @@ async function installGuardianPrivacyMocks(page: Page, role: TenantRole, capture
     }
 
     if (path === "/guardians/guardian-a/students" && route.request().method() === "POST") {
+      if (writes) {
+        writes.requests.push({ body: route.request().postData() ?? "", idempotencyKey: route.request().headers()["idempotency-key"] ?? "" });
+        if (writes.conflicts > 0) {
+          writes.conflicts -= 1;
+          return route.fulfill({
+            body: JSON.stringify({ error: { code: "GUARDIAN_LINK_CONCURRENT_UPDATE", message: "Aynı kayıt üzerinde eşzamanlı bir işlem var, lütfen tekrar deneyin." } }),
+            headers: { ...corsHeadersFor(route), "content-type": "application/json" },
+            status: 409,
+          });
+        }
+        await writes.hold;
+      }
       const body = route.request().postDataJSON() as GuardianLinkBody;
       capturedLinks.push(body);
       links.push(createGuardianLink("guardian-link-created", body.studentId ?? "student-b", body));

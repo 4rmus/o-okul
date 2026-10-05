@@ -248,7 +248,7 @@ export class PostgresGuardianStudentStore implements GuardianStudentStore {
     input: Partial<GuardianStudentInput>,
     options: { clearStudentContactOrigin?: boolean } = {},
   ): Promise<GuardianStudentRecord | undefined> {
-    return withTenantQuery(this.pool, async (client) => {
+    return guardianLinkConcurrencyAs409(withTenantQuery(this.pool, async (client) => {
       const result = await client.query<GuardianStudentRow>(
         `UPDATE "GuardianStudent"
          SET "canViewFinance" = COALESCE($3, "canViewFinance"),
@@ -271,7 +271,7 @@ export class PostgresGuardianStudentStore implements GuardianStudentStore {
         ],
       );
       return result.rows[0] ? toGuardianStudentRecord(result.rows[0]) : undefined;
-    });
+    }));
   }
 
   async delete(guardianId: string, studentId: string): Promise<GuardianRoleEndWrite | undefined> {

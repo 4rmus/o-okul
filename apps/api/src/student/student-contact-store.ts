@@ -340,14 +340,14 @@ export class PostgresStudentContactStore implements StudentContactStore {
   }
 
   async linkGuardian(tenantId: string, id: string, guardianId: string): Promise<boolean> {
-    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+    return guardianLinkConcurrencyAs409(withExplicitTenantQuery(this.pool, tenantId, async (client) => {
       const result = await client.query(
         `UPDATE "StudentContact" SET "guardianId"=$3, "updatedAt"=now()
          WHERE "tenantId"=$1 AND "id"=$2 AND "deletedAt" IS NULL AND "guardianId" IS NULL RETURNING "id"`,
         [tenantId, id, guardianId],
       );
       return Boolean(result.rows[0]);
-    });
+    }));
   }
 
   async linkGuardianWithStudentLink(tenantId: string, id: string, guardianId: string): Promise<StudentContactGuardianLinkWrite> {

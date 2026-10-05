@@ -286,6 +286,14 @@ const allowedAuditDiffKeys = new Set([
   "sessionsrevoked",
   "source",
   "userbound",
+  // KV-3e: booleans/counts written by contact, profile lifecycle and portal activation audits (no PII values).
+  "accountaccessclosed",
+  "hasemail",
+  "hasphone",
+  "invitationsrevoked",
+  "loginnameassigned",
+  "roleremoved",
+  "sessionsclosed",
 ]);
 
 function sensitiveAuditKey(key: string): boolean {

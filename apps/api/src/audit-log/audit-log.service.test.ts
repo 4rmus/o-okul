@@ -222,6 +222,56 @@ describe("AuditLogService", () => {
     expect(leaked.diff).toEqual({ source: "[REDACTED]", previousEndedReason: "[REDACTED]", userBound: "[REDACTED]" });
   });
 
+  it("KV-3e: iletişim/profil yaşam döngüsü/portal aktivasyon audit'lerindeki PII olmayan anahtarları saklar; PII redakte kalır", async () => {
+    const service = new AuditLogService(new FakeAuditLogStore([]));
+    const kept = {
+      studentId: "student-a",
+      hasPhone: true,
+      hasEmail: false,
+      accountAccessClosed: true,
+      roleRemoved: true,
+      sessionsClosed: true,
+      invitationsRevoked: 2,
+      loginNameAssigned: true,
+    };
+    const record = await service.record({
+      action: "guardian.lifecycle_ended",
+      actorUserId: "user-a",
+      entityId: "guardian-a",
+      entityType: "Guardian",
+      tenantId: "tenant-a",
+      diff: {
+        ...kept,
+        firstName: "Ayse",
+        lastName: "Veli",
+        phone: "+905551110001",
+        email: "veli@example.test",
+        nationalId: "12345678901",
+        address: "Gizli Sokak No 1",
+      },
+    });
+
+    expect(record.diff).toEqual({
+      ...kept,
+      firstName: "[REDACTED]",
+      lastName: "[REDACTED]",
+      phone: "[REDACTED]",
+      email: "[REDACTED]",
+      nationalId: "[REDACTED]",
+      address: "[REDACTED]",
+    });
+    // The value check still applies under the new allow-listed keys.
+    const leaked = await service.record({
+      action: "student_contact.updated",
+      actorUserId: "user-a",
+      entityId: "contact-a",
+      entityType: "StudentContact",
+      tenantId: "tenant-a",
+      diff: { hasPhone: "+905551110001", hasEmail: "veli@example.test", loginNameAssigned: "12345678901" },
+    });
+    expect(leaked.diff).toEqual({ hasPhone: "[REDACTED]", hasEmail: "[REDACTED]", loginNameAssigned: "[REDACTED]" });
+  });
+
   it("audit diff değerlerini yazarken ve okurken redakte eder", async () => {
     const service = new AuditLogService(new FakeAuditLogStore([]));
 
