@@ -27,7 +27,7 @@ import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import { NotificationDeviceService } from "../notification-device/notification-device.service.js";
-import type { ProducedJob, TenantQueueJobInput } from "../queue/job-producer.js";
+import { chunkAnnouncementPushDevices, type ProducedJob, type TenantQueueJobInput } from "../queue/job-producer.js";
 import { requiredText } from "../shared/required-text.js";
 import { assertTenantResourceAccess, filterTenantResources } from "../tenant/tenant-access.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
@@ -194,6 +194,9 @@ export class AnnouncementService {
   ): Promise<AnnouncementDeliveryQueueResult> {
     const announcement = await this.findOne(context, id);
     const channel = resolveDeliveryChannel(input.channel);
+    if (channel === "PUSH") {
+      return this.enqueuePushDelivery(context, announcement);
+    }
     const messages = await this.resolveNotificationMessages(context, announcement, channel);
     const results = await this.notificationAdapter.sendBatch(messages);
     if (results.some((result, index) => result.status !== "sent" || result.channel !== messages[index]?.channel || result.to !== messages[index]?.to || !result.providerMessageId?.trim() || result.providerMessageId.length > 512 || result.errorCode)) throw new Error("NOTIFICATION_PROVIDER_OUTCOME_UNCERTAIN");
@@ -202,6 +205,64 @@ export class AnnouncementService {
     }
 
     return this.enqueueDeliveryReport(context, announcement, summarizeNotificationResults(channel, results));
+  }
+
+  private async enqueuePushDelivery(
+    context: RequestContext,
+    announcement: AnnouncementRecord,
+  ): Promise<AnnouncementDeliveryQueueResult> {
+    const deviceIds = await this.resolvePushDeviceIds(context, announcement);
+    if (deviceIds.length === 0) {
+      return this.enqueueDeliveryReport(context, announcement, {
+        channel: "PUSH",
+        recipientCount: 0,
+        deliveredCount: 0,
+        failedCount: 0,
+        status: "completed",
+      });
+    }
+
+    const jobIds: string[] = [];
+    for (const [chunkIndex, chunk] of chunkAnnouncementPushDevices(deviceIds).entries()) {
+      const job = await this.deliveryProducer.enqueue({
+        queueName: "announcement-delivery",
+        tenantId: announcement.tenantId,
+        userId: context.userId,
+        entityId: announcement.id,
+        contentHash: `push-${chunkIndex}`,
+        channel: "PUSH",
+        mode: "PUSH_SEND",
+        chunkIndex,
+        deviceIds: chunk,
+        title: announcement.title,
+      });
+      jobIds.push(job.options.jobId);
+    }
+    await this.auditLogs?.record({
+      tenantId: announcement.tenantId,
+      actorUserId: context.userId,
+      entityType: "AnnouncementDeliveryReport",
+      entityId: jobIds[0]!,
+      action: "announcement_delivery.push_queued",
+      diff: {
+        announcementId: announcement.id,
+        channel: "PUSH",
+        recipientCount: deviceIds.length,
+        chunkCount: jobIds.length,
+        jobIds,
+      },
+    });
+    return {
+      tenantId: announcement.tenantId,
+      announcementId: announcement.id,
+      channel: "PUSH",
+      recipientCount: deviceIds.length,
+      deliveredCount: 0,
+      failedCount: 0,
+      queueName: "announcement-delivery",
+      jobId: jobIds[0]!,
+      status: "queued",
+    };
   }
 
   private async enqueueDeliveryReport(
@@ -489,10 +550,6 @@ export class AnnouncementService {
     channel: AnnouncementDeliveryChannel,
   ): Promise<NotificationMessage[]> {
     const recipients = await this.resolveRecipients(context, announcement);
-    if (channel === "PUSH") {
-      return this.resolvePushMessages(announcement, recipients);
-    }
-
     const messages = new Map<string, NotificationMessage>();
     for (const recipient of recipients) {
       const to = await this.resolveRecipientEmail(announcement.tenantId, recipient);
@@ -507,22 +564,17 @@ export class AnnouncementService {
     return [...messages.values()];
   }
 
-  private async resolvePushMessages(
-    announcement: AnnouncementRecord,
-    recipients: AnnouncementRecipientRecord[],
-  ): Promise<NotificationMessage[]> {
+  private async resolvePushDeviceIds(context: RequestContext, announcement: AnnouncementRecord): Promise<string[]> {
+    const recipients = await this.resolveRecipients(context, announcement);
     const userIds = [...new Set(recipients.map((recipient) => recipient.userId).filter((userId): userId is string => Boolean(userId)))];
     const devices = await this.notificationDevices.listActiveByUsers(announcement.tenantId, userIds);
-    const messages = new Map<string, NotificationMessage>();
+    const deviceIdByToken = new Map<string, string>();
     for (const device of devices) {
-      messages.set(device.token, {
-        channel: "PUSH",
-        to: device.token,
-        subject: announcement.title,
-        body: announcement.body,
-      });
+      if (device.provider !== "web-push" || deviceIdByToken.has(device.token)) continue;
+      deviceIdByToken.set(device.token, device.id);
     }
-    return [...messages.values()];
+    // Stable order keeps chunk membership deterministic for the chunk jobIds.
+    return [...deviceIdByToken.values()].sort();
   }
 
   private async resolveRecipientEmail(tenantId: string, recipient: AnnouncementRecipientRecord): Promise<string | undefined> {

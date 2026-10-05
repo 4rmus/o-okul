@@ -6,7 +6,7 @@ import request from "supertest";
 import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
-import type { ProducedJob, TenantQueueJobInput } from "../queue/job-producer.js";
+import { createTenantQueueJob, type ProducedJob, type TenantQueueJobInput } from "../queue/job-producer.js";
 import {
   announcementDeliveryQueueProducerToken,
   notificationAdapterToken,
@@ -66,6 +66,7 @@ describe("Announcement API", () => {
 
   beforeEach(() => {
     producer.inputs = [];
+    producer.added = [];
     notificationAdapter.messages = [];
     notificationAdapter.sendCalls = [];
     notificationAdapter.results = [];
@@ -450,21 +451,27 @@ describe("Announcement API", () => {
     expect(producer.inputs).toHaveLength(1);
   });
 
-  it("tenant admin duyuru alıcılarına push gönderir ve sonucu rapor kuyruğuna bağlar", async () => {
+  it("tenant admin duyuru push'unu 25'lik chunk job'larıyla worker kuyruğuna verir; payload PII taşımaz", async () => {
+    const subscription = (name: string) => JSON.stringify({ endpoint: `https://push.example.test/${name}`, keys: { p256dh: "p256dh", auth: "auth" } });
     await request(server)
       .post("/me/notification-devices")
       .set("Authorization", `Bearer ${guardianAAccessToken}`)
-      .send({ provider: "fcm", token: "guardian-device-token", platform: "ios" })
+      .send({ provider: "web-push", token: subscription("guardian"), platform: "web" })
       .expect(201);
     await request(server)
       .post("/me/notification-devices")
       .set("Authorization", `Bearer ${studentAAccessToken}`)
-      .send({ provider: "fcm", token: "student-device-token", platform: "android" })
+      .send({ provider: "web-push", token: subscription("student"), platform: "web" })
       .expect(201);
     await request(server)
       .post("/me/notification-devices")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
-      .send({ provider: "fcm", token: "teacher-device-token", platform: "web" })
+      .send({ provider: "web-push", token: subscription("teacher"), platform: "web" })
+      .expect(201);
+    await request(server)
+      .post("/me/notification-devices")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({ provider: "fcm", token: "teacher-fcm-token", platform: "android" })
       .expect(201);
 
     const response = await request(server)
@@ -474,30 +481,41 @@ describe("Announcement API", () => {
       .send({ channel: "PUSH" })
       .expect(201);
 
-    expect(notificationAdapter.messages).toEqual(expect.arrayContaining([
-      expect.objectContaining({ channel: "PUSH", to: "guardian-device-token" }),
-      expect.objectContaining({ channel: "PUSH", to: "student-device-token" }),
-      expect.objectContaining({ channel: "PUSH", to: "teacher-device-token" }),
-    ]));
+    expect(notificationAdapter.sendCalls).toHaveLength(0);
     expect(producer.inputs).toHaveLength(1);
-    expect(producer.inputs[0]).toMatchObject({
+    const job = producer.inputs[0] as TenantQueueJobInput & { deviceIds: string[] };
+    expect(job).toMatchObject({
       queueName: "announcement-delivery",
       tenantId: "tenant-a",
       entityId: "announcement-a",
       channel: "PUSH",
-      recipientCount: 3,
-      deliveredCount: 3,
-      failedCount: 0,
-      status: "completed",
+      mode: "PUSH_SEND",
+      chunkIndex: 0,
+      title: "Veli toplantısı",
     });
+    expect(job.deviceIds).toHaveLength(3);
+    const serialized = JSON.stringify(job);
+    expect(serialized).not.toContain("veli toplantısı yapılacaktır");
+    expect(serialized).not.toContain("push.example.test");
+    expect(serialized).not.toMatch(/"(body|firstName|lastName|displayName|phone|tcKimlikNo|nationalId|email)"/i);
+    expect(producer.added).toEqual(["announcement_announcement-a_PUSH_0"]);
     expect(response.body).toEqual(expect.objectContaining({
       announcementId: "announcement-a",
       channel: "PUSH",
       recipientCount: 3,
-      deliveredCount: 3,
+      deliveredCount: 0,
       failedCount: 0,
+      jobId: "announcement_announcement-a_PUSH_0",
       status: "queued",
     }));
+
+    await request(server)
+      .post("/announcements/announcement-a/deliveries")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", "announcement-delivery-send-push-a-again")
+      .send({ channel: "PUSH" })
+      .expect(201);
+    expect(producer.added).toEqual(["announcement_announcement-a_PUSH_0"]);
   });
 
   it("duyuru teslim sonucu sayıları ve erişimi doğrular", async () => {
@@ -640,25 +658,16 @@ describe("Announcement API", () => {
   });
 });
 
+/** Mirrors BullMQ: adding a jobId that is still stored is a no-op. */
 class FakeProducer implements AnnouncementDeliveryQueueProducer {
   inputs: TenantQueueJobInput[] = [];
+  added: string[] = [];
 
   async enqueue(input: TenantQueueJobInput): Promise<ProducedJob> {
     this.inputs.push(input);
-    return {
-      queueName: input.queueName,
-      name: input.queueName,
-      payload: input,
-      options: {
-        attempts: 5,
-        backoff: {
-          type: "exponential",
-          delay: 1000,
-        },
-        jobId: `${input.entityId}_${input.contentHash}`,
-        removeOnFail: false,
-      },
-    } as ProducedJob;
+    const job = createTenantQueueJob(input);
+    if (!this.added.includes(job.options.jobId)) this.added.push(job.options.jobId);
+    return job;
   }
 }
 

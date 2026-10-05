@@ -448,7 +448,7 @@ async function runObservedWorkerJob<TResult>(
       entityId: job.data.entityId,
       contentHash: job.data.contentHash,
     });
-    if (error instanceof Error && ["TENANT_ACTIVITY_UNRESOLVED", "SMS_PROVIDER_OUTCOME_UNCERTAIN", "SMS_DELIVERY_RECEIPT_UNVERIFIED"].includes(error.message)) throw new UnrecoverableError(error.message);
+    if (error instanceof Error && ["TENANT_ACTIVITY_UNRESOLVED", "SMS_PROVIDER_OUTCOME_UNCERTAIN", "SMS_DELIVERY_RECEIPT_UNVERIFIED", "ANNOUNCEMENT_PUSH_REPORT_FAILED", "ANNOUNCEMENT_PUSH_PAYLOAD_INVALID"].includes(error.message)) throw new UnrecoverableError(error.message);
     throw error;
   }
 }

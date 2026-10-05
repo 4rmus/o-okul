@@ -41,7 +41,7 @@ export interface SmsBatchQueueJobInput extends BaseTenantQueueJobInput {
   recipients: Array<{ to: string }>;
 }
 
-export interface AnnouncementDeliveryQueueJobInput extends BaseTenantQueueJobInput {
+export interface AnnouncementDeliveryReportQueueJobInput extends BaseTenantQueueJobInput {
   queueName: "announcement-delivery";
   channel: "EMAIL" | "PUSH";
   recipientCount: number;
@@ -49,6 +49,34 @@ export interface AnnouncementDeliveryQueueJobInput extends BaseTenantQueueJobInp
   failedCount: number;
   status: "completed" | "failed";
   providerErrorCode?: string;
+}
+
+/** Worker sends web push to these devices; payload carries only the title, never body or PII. */
+export interface AnnouncementPushSendQueueJobInput extends BaseTenantQueueJobInput {
+  queueName: "announcement-delivery";
+  channel: "PUSH";
+  mode: "PUSH_SEND";
+  chunkIndex: number;
+  deviceIds: string[];
+  title: string;
+}
+
+export type AnnouncementDeliveryQueueJobInput = AnnouncementDeliveryReportQueueJobInput | AnnouncementPushSendQueueJobInput;
+
+export const announcementPushChunkSize = 25;
+
+export function chunkAnnouncementPushDevices(deviceIds: string[]): string[][] {
+  const chunks: string[][] = [];
+  for (let index = 0; index < deviceIds.length; index += announcementPushChunkSize) {
+    chunks.push(deviceIds.slice(index, index + announcementPushChunkSize));
+  }
+  return chunks;
+}
+
+// ponytail: BullMQ rejects custom ids containing ":" (beyond 3 parts), so the
+// sourceType:sourceId:channel:chunkIndex key uses "_" as separator.
+export function announcementPushJobId(announcementId: string, chunkIndex: number): string {
+  return `announcement_${announcementId}_PUSH_${chunkIndex}`;
 }
 
 export interface BackupRestoreQueueJobInput extends BaseTenantQueueJobInput {
@@ -110,6 +138,21 @@ export function createTenantQueueJob(input: TenantQueueJobInput): ProducedJob {
     throw new Error("BACKUP_RESTORE_JOB_PAYLOAD_INVALID");
   }
 
+  if (input.queueName === "announcement-delivery" && "mode" in input) {
+    // Completed push jobs are kept so re-adding the same chunk jobId is a BullMQ no-op (no second send).
+    return {
+      queueName: input.queueName,
+      name: input.queueName,
+      payload: createPayload(input),
+      options: {
+        attempts: 5,
+        backoff: { type: "exponential", delay: 1000 },
+        jobId: announcementPushJobId(input.entityId, input.chunkIndex),
+        removeOnFail: false,
+      },
+    };
+  }
+
   return {
     queueName: input.queueName,
     name: input.queueName,
@@ -128,6 +171,14 @@ export function createTenantQueueJob(input: TenantQueueJobInput): ProducedJob {
 }
 
 function isAnnouncementDeliveryInputValid(input: AnnouncementDeliveryQueueJobInput): boolean {
+  if ("mode" in input) {
+    return input.mode === "PUSH_SEND" &&
+      input.channel === "PUSH" &&
+      Number.isInteger(input.chunkIndex) && input.chunkIndex >= 0 &&
+      input.deviceIds.length > 0 && input.deviceIds.length <= announcementPushChunkSize &&
+      input.deviceIds.every((id) => typeof id === "string" && id.length > 0) &&
+      typeof input.title === "string" && input.title.trim().length > 0;
+  }
   if (input.channel !== "EMAIL" && input.channel !== "PUSH") return false;
   if (input.status !== "completed" && input.status !== "failed") return false;
   const counts = [input.recipientCount, input.deliveredCount, input.failedCount];

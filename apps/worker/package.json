@@ -18,13 +18,14 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1056.0",
-    "@o-okul/notification-adapter": "workspace:*",
-    "@sentry/node": "10.57.0",
     "@o-okul/db": "workspace:*",
+    "@o-okul/notification-adapter": "workspace:*",
     "@o-okul/shared-types": "workspace:*",
     "@o-okul/sms-adapter": "workspace:*",
+    "@sentry/node": "10.57.0",
     "bullmq": "^5.77.6",
     "pino": "10.3.1",
-    "puppeteer-core": "25.1.0"
+    "puppeteer-core": "25.1.0",
+    "web-push": "3.6.7"
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createTenantQueueJob } from "./job-producer.js";
+import { chunkAnnouncementPushDevices, createTenantQueueJob } from "./job-producer.js";
 
 describe("createTenantQueueJob", () => {
   it("planlanan BullMQ defaultlarını üretir", () => {
@@ -272,6 +272,52 @@ describe("createTenantQueueJob", () => {
         status: "completed",
       }),
     ).toThrow("ANNOUNCEMENT_DELIVERY_JOB_PAYLOAD_INVALID");
+  });
+
+  it("duyuru push'unu 25'lik chunk'lara böler ve deterministik, kalıcı jobId verir", () => {
+    const deviceIds = Array.from({ length: 60 }, (_, index) => `device-${String(index).padStart(2, "0")}`);
+    const chunks = chunkAnnouncementPushDevices(deviceIds);
+    expect(chunks.map((chunk) => chunk.length)).toEqual([25, 25, 10]);
+
+    const jobs = chunks.map((chunk, chunkIndex) => createTenantQueueJob({
+      queueName: "announcement-delivery",
+      tenantId: "tenant-a",
+      userId: "user-a",
+      entityId: "announcement-a",
+      contentHash: `push-${chunkIndex}`,
+      channel: "PUSH",
+      mode: "PUSH_SEND",
+      chunkIndex,
+      deviceIds: chunk,
+      title: "Veli toplantısı",
+    }));
+
+    expect(jobs.map((job) => job.options.jobId)).toEqual([
+      "announcement_announcement-a_PUSH_0",
+      "announcement_announcement-a_PUSH_1",
+      "announcement_announcement-a_PUSH_2",
+    ]);
+    // Completed push jobs stay in Redis so BullMQ ignores a re-add of the same jobId.
+    expect(jobs.every((job) => job.options.removeOnComplete === undefined)).toBe(true);
+    expect(jobs.every((job) => !job.options.jobId.includes(":"))).toBe(true);
+  });
+
+  it("duyuru push chunk'ı 25'i aşarsa veya başlık boşsa payload üretmez", () => {
+    const base = {
+      queueName: "announcement-delivery" as const,
+      tenantId: "tenant-a",
+      userId: "user-a",
+      entityId: "announcement-a",
+      contentHash: "push-0",
+      channel: "PUSH" as const,
+      mode: "PUSH_SEND" as const,
+      chunkIndex: 0,
+      title: "Veli toplantısı",
+    };
+    expect(() => createTenantQueueJob({ ...base, deviceIds: Array.from({ length: 26 }, (_, index) => `device-${index}`) }))
+      .toThrow("ANNOUNCEMENT_DELIVERY_JOB_PAYLOAD_INVALID");
+    expect(() => createTenantQueueJob({ ...base, deviceIds: ["device-1"], title: " " }))
+      .toThrow("ANNOUNCEMENT_DELIVERY_JOB_PAYLOAD_INVALID");
   });
 
   it("backup-restore hedefi eksikse payload üretmez", () => {
