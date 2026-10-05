@@ -152,6 +152,30 @@ describe("IdentityInvitationService", () => {
     expect(issued.invitation).toMatchObject({ subjectType: "EMPLOYEE", role: "OPERATIONS_STAFF" });
   });
 
+  it("T.C. kimlik numarası olmayan veli hesabını davetle bağlar, öğrenci için T.C. şartı sürer", async () => {
+    const guardians = new InMemoryGuardianStore();
+    const students = new InMemoryStudentStore();
+    const guardian = await guardians.create({ tenantId: "tenant-a", firstName: "Toplu", lastName: "Veli" });
+    const student = await students.create({ tenantId: "tenant-a", firstName: "Tcsiz", lastName: "Ogrenci" });
+    const service = new IdentityInvitationService(
+      new InMemoryIdentityInvitationStore(),
+      new InMemoryUserManagementStore(),
+      students,
+      guardians,
+      new InMemoryTeacherStore(),
+      new InMemoryTenantStore(),
+    );
+    const context: RequestContext = { tenantId: "tenant-a", userId: "admin-a", roles: ["TENANT_ADMIN"], bypassRls: false };
+
+    const issued = await service.create(context, { subjectType: "GUARDIAN", subjectId: guardian.id, email: "kv3.veli@example.test" });
+    await service.accept({ token: issued.activationToken, password: "Secure-password-123" });
+    await expect(guardians.findById(guardian.id)).resolves.toMatchObject({ userId: expect.any(String) });
+
+    const studentInvite = await service.create(context, { subjectType: "STUDENT", subjectId: student.id, email: "kv3.ogrenci@example.test" });
+    await expect(service.accept({ token: studentInvite.activationToken, password: "Secure-password-123" }))
+      .rejects.toThrow("SUBJECT_NATIONAL_ID_REQUIRED");
+  });
+
   it("kampüs kapsamlı çalışan yeni hesap daveti üretemez", async () => {
     const invitations = new InMemoryIdentityInvitationStore();
     const users = new InMemoryUserManagementStore();

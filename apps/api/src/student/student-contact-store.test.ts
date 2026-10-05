@@ -66,4 +66,34 @@ describe("StudentContactStore", () => {
     expect(update?.sql).toContain('"consentRecordedAt"=NULL');
     expect(update?.sql).toContain('WHERE "tenantId"=$1 AND "id"=$2 AND "deletedAt" IS NULL');
   });
+
+  it("veli bağını yalnız boşken yazar; genel güncelleme ve silme bağı korumaz/temizler", async () => {
+    const store = new InMemoryStudentContactStore();
+    const created = await store.create(contact);
+
+    expect(await store.linkGuardian("tenant-b", created.id, "guardian-x")).toBe(false);
+    expect(await store.linkGuardian("tenant-a", created.id, "guardian-1")).toBe(true);
+    expect(await store.linkGuardian("tenant-a", created.id, "guardian-2")).toBe(false);
+    await store.update(created.id, { ...contact, firstName: "Ayse" });
+    expect(await store.findById("tenant-a", created.id)).toMatchObject({ firstName: "Ayse", guardianId: "guardian-1" });
+
+    await store.softDelete("tenant-a", created.id);
+    const stored = (store as unknown as { records: Array<typeof created> }).records[0];
+    expect(stored?.guardianId).toBeUndefined();
+  });
+
+  it("Postgres veli bağını tenant kapsamında ve yalnız boş guardianId üzerine yazar", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const pool = {
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        return { rows: [] as T[] };
+      },
+    };
+
+    expect(await new PostgresStudentContactStore(pool).linkGuardian("tenant-a", "contact-a", "guardian-a")).toBe(false);
+    const update = queries.find((query) => query.sql.includes('UPDATE "StudentContact"'));
+    expect(update?.values).toEqual(["tenant-a", "contact-a", "guardian-a"]);
+    expect(update?.sql).toContain('"tenantId"=$1 AND "id"=$2 AND "deletedAt" IS NULL AND "guardianId" IS NULL');
+  });
 });
