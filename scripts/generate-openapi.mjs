@@ -961,9 +961,12 @@ const portalHomeworkMaterialAssignmentFieldChecks = [
 const guardianNotificationPreferenceRequestProperties = [
   "canOpenSupportTickets",
   "canReceiveAnnouncements",
+  "canReceiveAutoNotifications",
   "canReceiveSms",
   "canViewFinance",
 ];
+const guardianAutoNotificationSettingsProperties = ["absenceEnabled", "absenceThreshold", "gradePublishEnabled", "paymentDueEnabled"];
+const guardianAutoNotificationSettingsForbidden = ["contactEmail", "email", "id", "nationalId", "phone", "tenantId", "token", "userId"];
 const guardianNotificationPreferenceRequestForbidden = [
   "contentBase64",
   "email",
@@ -2154,6 +2157,23 @@ const requiredOperationContracts = [
     fieldChecks: [
       { path: ["requestBody", "contactEmail"], format: "email" },
     ],
+  },
+  {
+    method: "get",
+    path: "/api/v1/me/tenant/guardian-notification-settings",
+    responseEnvelope: true,
+    responseDataRequired: guardianAutoNotificationSettingsProperties,
+    responseDataForbiddenDeep: guardianAutoNotificationSettingsForbidden,
+  },
+  {
+    method: "patch",
+    path: "/api/v1/me/tenant/guardian-notification-settings",
+    requestBody: true,
+    responseEnvelope: true,
+    requestProperties: guardianAutoNotificationSettingsProperties,
+    requestForbidden: guardianAutoNotificationSettingsForbidden,
+    responseDataRequired: guardianAutoNotificationSettingsProperties,
+    responseDataForbiddenDeep: guardianAutoNotificationSettingsForbidden,
   },
   {
     method: "get",

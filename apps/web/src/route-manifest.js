@@ -92,7 +92,7 @@ const authRoutes = new Set([
 ]);
 
 export function resolveRouteArchitecture(routeTemplate) {
-  if (routeTemplate === "/" || routeTemplate === "/iletisim") {
+  if (routeTemplate === "/" || routeTemplate === "/iletisim" || routeTemplate === "/fiyatlar") {
     return architecture("MARKETING", "marketing", "PUBLIC");
   }
   if (authRoutes.has(routeTemplate)) {

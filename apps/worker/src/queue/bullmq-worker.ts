@@ -6,7 +6,7 @@ import {
 } from "../jobs/announcement-delivery-processor.js";
 import {
   type AnnouncementDeliveryJobPayload,
-  type AnnouncementDeliveryJobResult,
+  type AnnouncementDeliveryQueueJobResult,
 } from "../jobs/announcement-delivery-job.js";
 import {
   type BackupRestoreJobPayload,
@@ -164,7 +164,7 @@ export interface AnnouncementDeliveryBullWorkerOptions {
   processor?: AnnouncementDeliveryProcessor;
   workerOptions?: Omit<WorkerOptions, "connection">;
   activityRunner?: TenantMutationRunner;
-  createWorker?: BullWorkerFactory<BullAnnouncementDeliveryJob, AnnouncementDeliveryJobResult>;
+  createWorker?: BullWorkerFactory<BullAnnouncementDeliveryJob, AnnouncementDeliveryQueueJobResult>;
 }
 
 export interface BackupRestoreBullWorkerOptions {
@@ -448,7 +448,7 @@ async function runObservedWorkerJob<TResult>(
       entityId: job.data.entityId,
       contentHash: job.data.contentHash,
     });
-    if (error instanceof Error && ["TENANT_ACTIVITY_UNRESOLVED", "SMS_PROVIDER_OUTCOME_UNCERTAIN", "SMS_DELIVERY_RECEIPT_UNVERIFIED", "ANNOUNCEMENT_PUSH_REPORT_FAILED", "ANNOUNCEMENT_PUSH_PAYLOAD_INVALID"].includes(error.message)) throw new UnrecoverableError(error.message);
+    if (error instanceof Error && ["TENANT_ACTIVITY_UNRESOLVED", "SMS_PROVIDER_OUTCOME_UNCERTAIN", "SMS_DELIVERY_RECEIPT_UNVERIFIED", "ANNOUNCEMENT_PUSH_REPORT_FAILED", "ANNOUNCEMENT_PUSH_PAYLOAD_INVALID", "GUARDIAN_NOTIFY_PAYLOAD_INVALID"].includes(error.message)) throw new UnrecoverableError(error.message);
     throw error;
   }
 }
@@ -562,10 +562,10 @@ function createDefaultSmsBatchWorker(
 
 function createDefaultAnnouncementDeliveryWorker(
   name: string,
-  processor: (job: BullAnnouncementDeliveryJob) => Promise<AnnouncementDeliveryJobResult>,
+  processor: (job: BullAnnouncementDeliveryJob) => Promise<AnnouncementDeliveryQueueJobResult>,
   options: WorkerOptions,
 ): BullWorkerInstance {
-  return new Worker<AnnouncementDeliveryJobPayload, AnnouncementDeliveryJobResult>(
+  return new Worker<AnnouncementDeliveryJobPayload, AnnouncementDeliveryQueueJobResult>(
     name,
     processor,
     options,

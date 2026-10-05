@@ -73,7 +73,8 @@ describe("PostgresGuardianStudentStore", () => {
     ]);
     expect(businessQueries[3]?.sql).toContain('UPDATE "GuardianStudent"');
     // Guardian self-service / default update keeps the StudentContact flow marker ($7 false).
-    expect(businessQueries[3]?.values).toEqual(["guardian-a", "student-a", false, false, undefined, undefined, false]);
+    // KV-8: $8 is canReceiveAutoNotifications (undefined keeps the stored value).
+    expect(businessQueries[3]?.values).toEqual(["guardian-a", "student-a", false, false, undefined, undefined, false, undefined]);
     // KV-3c: the user behind the guardian is locked before the link row (same order as the KV-3b user link).
     expect(businessQueries[4]?.sql).toContain("FOR UPDATE OF u");
     expect(businessQueries[5]?.sql).toContain('DELETE FROM "GuardianStudent"');

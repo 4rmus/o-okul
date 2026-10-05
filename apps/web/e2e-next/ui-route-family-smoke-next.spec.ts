@@ -41,11 +41,12 @@ interface PrimaryTask {
 }
 
 const routeCases = [
-  route("/", "Optik veriyi kontrol edin, rapora dönüştürün.", "anonymous", { role: "region", name: "Örnek optik işleme akışı" }),
+  route("/", "Öğrenci takibini tek platformda toplayın.", "anonymous", { role: "region", name: "Öğrenci kaydında toplanan bilgiler" }),
+  route("/fiyatlar", "Aktif öğrenci sayınıza göre yıllık fiyat.", "anonymous", { role: "region", name: "Öğrenci başı yıllık fiyat kademeleri kaydırma alanı" }),
   route("/k/[tenantSlug]/giris", "Giriş", "anonymous", { role: "form", name: "Giriş formu" }),
   route("/giris", "Giriş", "anonymous", { role: "form", name: "Giriş formu" }),
   route("/login", "Giriş", "anonymous", { role: "form", name: "Giriş formu" }),
-  route("/iletisim", "Demo görüşmesini kendi optik akışınıza göre hazırlayın.", "anonymous", { role: "link", name: "E-posta taslağı oluştur" }),
+  route("/iletisim", "Demo veya teklif talebinizi hazırlayın.", "anonymous", { role: "link", name: "E-posta taslağı oluştur" }),
   route("/aktivasyon", "Hesabı etkinleştir", "anonymous", { role: "button", name: "Hesabı etkinleştir" }, { query: "token=activation-token" }),
   route("/parola-sifirla", "Yeni şifre", "anonymous", { role: "button", name: "Şifreyi yenile" }, { query: "token=reset-token" }),
   route("/parolami-unuttum", "Şifremi unuttum", "anonymous", { role: "button", name: "Yenileme bağlantısı gönder" }, { query: "tenant=dna-egitim" }),
@@ -386,7 +387,7 @@ function assertRouteManifestParity(manifest: readonly RouteCase[]) {
   const fileSystemRoutes = collectPageRoutes(appDirectory).sort();
   const manifestRoutes = manifest.map((entry) => entry.routeTemplate).sort();
   const duplicates = manifestRoutes.filter((routeTemplate, index) => manifestRoutes.indexOf(routeTemplate) !== index);
-  if (manifest.length !== 95) throw new Error(`Route manifest must contain exactly 95 entries; found ${manifest.length}.`);
+  if (manifest.length !== 96) throw new Error(`Route manifest must contain exactly 96 entries; found ${manifest.length}.`);
   if (duplicates.length > 0) throw new Error(`Route manifest contains duplicates: ${[...new Set(duplicates)].join(", ")}`);
   if (JSON.stringify(manifestRoutes) !== JSON.stringify(fileSystemRoutes)) {
     throw new Error(`Route manifest does not match page.tsx inventory.\nmanifest=${manifestRoutes.join(",")}\nfilesystem=${fileSystemRoutes.join(",")}`);
@@ -556,6 +557,9 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
     };
   }
   if (pathName === "/me/tenant") return { data: tenantFixture };
+  if (pathName === "/me/tenant/guardian-notification-settings") {
+    return { data: { absenceEnabled: true, paymentDueEnabled: true, gradePublishEnabled: true, absenceThreshold: 10 } };
+  }
   if (pathName === "/exams/exam-demo-isem-lgs-1/workspace") return { data: examWorkspaceFixture };
   if (pathName === "/me/institution-dashboard") {
     return {

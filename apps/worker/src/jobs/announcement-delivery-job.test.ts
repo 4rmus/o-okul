@@ -7,6 +7,23 @@ import {
 } from "./announcement-delivery-job.js";
 
 describe("processAnnouncementDeliveryJob", () => {
+  it("KV-8 GUARDIAN_NOTIFY işini veli bildirim akışına yönlendirir; vade işi gün anahtarı ister", async () => {
+    const reporter = new FakeDeliveryReporter();
+    const job = (kind: "ABSENCE" | "PAYMENT_DUE", contentHash: string) => ({
+      id: `guardian-notify_${kind}_row-a_${contentHash}`,
+      name: "announcement-delivery" as const,
+      payload: { tenantId: "tenant-a", userId: "user-a", entityId: "row-a", contentHash, mode: "GUARDIAN_NOTIFY" as const, kind },
+    });
+
+    await expect(processAnnouncementDeliveryJob(job("ABSENCE", "k1"), reporter)).rejects.toThrow("GUARDIAN_NOTIFY_DEPS_MISSING");
+    await expect(processAnnouncementDeliveryJob(job("PAYMENT_DUE", "not-a-day"), reporter, undefined, {} as never))
+      .rejects.toThrow("GUARDIAN_NOTIFY_PAYLOAD_INVALID");
+    const store = { loadSettings: async () => undefined };
+    await expect(processAnnouncementDeliveryJob(job("ABSENCE", "k1"), reporter, undefined, { store, pushSender: undefined, email: undefined } as never))
+      .resolves.toMatchObject({ kind: "ABSENCE", entityId: "row-a", skipped: "DISABLED" });
+    expect(reporter.inputs).toEqual([]);
+  });
+
   it("duyuru teslim sonucunu raporlayıcıya yazar", async () => {
     const reporter = new FakeDeliveryReporter();
 

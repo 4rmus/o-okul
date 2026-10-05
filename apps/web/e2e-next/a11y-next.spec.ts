@@ -35,11 +35,15 @@ test.describe("Next erişilebilirlik smoke", () => {
   test("public landing ve login sayfalarında yüksek etkili axe ihlali yok", async ({ page }) => {
     await page.goto("/");
     await expectFirstFocusableElement(page, "İçeriğe geç");
-    await expect(page.getByRole("heading", { name: "Optik veriyi kontrol edin, rapora dönüştürün." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Öğrenci takibini tek platformda toplayın." })).toBeVisible();
     await expectNoHighImpactA11yViolations(page, "landing");
 
+    await page.goto("/fiyatlar");
+    await expect(page.getByRole("heading", { level: 1, name: "Aktif öğrenci sayınıza göre yıllık fiyat." })).toBeVisible();
+    await expectNoHighImpactA11yViolations(page, "fiyatlar");
+
     await page.goto("/iletisim");
-    await expect(page.getByRole("heading", { name: "Demo görüşmesini kendi optik akışınıza göre hazırlayın." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Demo veya teklif talebinizi hazırlayın." })).toBeVisible();
     await expect(page.getByRole("link", { name: "O-Okul desteğine e-posta gönder" })).toHaveAttribute("href", /mailto:destek@o-okul\.com/);
     await expect(page.getByRole("link", { name: "KVKK başvurusu gönder" })).toHaveAttribute("href", /mailto:kvkk@o-okul\.com/);
     await expectNoHighImpactA11yViolations(page, "iletisim");
@@ -75,9 +79,13 @@ test.describe("Next erişilebilirlik smoke", () => {
     for (const viewport of hallmarkResponsiveViewports) {
       await page.setViewportSize(viewport);
       await page.goto("/");
-      await expect(page.getByRole("heading", { name: "Optik veriyi kontrol edin, rapora dönüştürün." })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Öğrenci takibini tek platformda toplayın." })).toBeVisible();
       await expectNoHorizontalOverflow(page, `landing-${viewport.width}`);
       await expectNoHighImpactA11yViolations(page, `landing-${viewport.width}`);
+      await page.goto("/fiyatlar");
+      await expect(page.getByRole("heading", { level: 1, name: "Aktif öğrenci sayınıza göre yıllık fiyat." })).toBeVisible();
+      await expectNoHorizontalOverflow(page, `fiyatlar-${viewport.width}`);
+      await expectNoHighImpactA11yViolations(page, `fiyatlar-${viewport.width}`);
     }
   });
 

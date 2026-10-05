@@ -4867,7 +4867,7 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   'toHaveScreenshot("report-status-1440.png"',
   "hideNextDevIndicator",
   "landing 320/375/414/768/1024/1280/1440 görünümde gerçek ürün akışını taşmadan gösterir",
-  'getByRole("region", { name: "Örnek optik işleme akışı" })',
+  'getByRole("region", { name: "Öğrenci kaydında toplanan bilgiler" })',
   'page.locator(".next-marketing-product")).toHaveCount(0)',
   "aurora-ops-landing-${viewport.width}",
   "`aurora-ops-landing-${viewport.width}.png`",
@@ -5095,13 +5095,13 @@ requireTokens("scripts/profile-web-performance.mjs", [
   "Landing route server component",
   "Landing route useQuery",
   "next-marketing-workflow",
-  "Örnek optik işleme akışı",
+  "Öğrenci kaydında toplanan bilgiler",
   "Takibi planlayın",
 ]);
 
 requireTokens("apps/web/app/page.tsx", [
   "next-marketing-workflow",
-  'aria-label="Örnek optik işleme akışı"',
+  'aria-label="Öğrenci kaydında toplanan bilgiler"',
   "Dosyayı alın",
   "Eşleşmeleri kontrol edin",
   "Sonucu doğrulayın",
@@ -5248,8 +5248,8 @@ function validateRouteFamilySmokeContract() {
   const manifestRoutes = [...manifestSource.matchAll(/^\s*route\("([^"]+)"/gm)].map((match) => match[1]);
   const duplicateRoutes = manifestRoutes.filter((route, index) => manifestRoutes.indexOf(route) !== index);
   const fileSystemRoutes = collectRoutePageTemplates("apps/web/app").sort();
-  if (manifestRoutes.length !== 95) {
-    failures.push(`${path} route manifest must contain exactly 95 route tests; found ${manifestRoutes.length}.`);
+  if (manifestRoutes.length !== 96) {
+    failures.push(`${path} route manifest must contain exactly 96 route tests; found ${manifestRoutes.length}.`);
   }
   if (duplicateRoutes.length > 0) {
     failures.push(`${path} route manifest contains duplicate routes: ${[...new Set(duplicateRoutes)].join(", ")}.`);
@@ -5259,8 +5259,8 @@ function validateRouteFamilySmokeContract() {
   }
 
   const primaryTaskCount = manifestSource.match(/\{ role: "(?:button|form|link|region)", name: "[^"]+" \}/g)?.length ?? 0;
-  if (primaryTaskCount !== 95) {
-    failures.push(`${path} must give all 95 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
+  if (primaryTaskCount !== 96) {
+    failures.push(`${path} must give all 96 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
   }
 
   const viewportStart = source.indexOf("const routeViewports = [");

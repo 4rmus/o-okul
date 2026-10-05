@@ -506,6 +506,16 @@
       display: none;
     }
 
+    .next-marketing-nav__wide-link,
+    .next-marketing-nav .next-marketing-nav__wide-link {
+      display: none;
+    }
+
+    .next-pricing-calculator {
+      grid-template-columns: minmax(0, 1fr);
+      padding: var(--space-sm);
+    }
+
   .next-marketing-nav {
     grid-template-columns: minmax(0, 1fr) auto;
   }

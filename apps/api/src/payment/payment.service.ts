@@ -11,6 +11,7 @@ import type {
   PaymentTransactionRecord,
   PaymentTransactionVoidRequest,
 } from "@o-okul/shared-types";
+import { isPaymentInstallmentOverdue, istanbulDate } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
@@ -606,22 +607,13 @@ function toPublicPaymentTransaction(record: PaymentTransactionRecord): PaymentTr
   return publicRecord;
 }
 
-// KF-3: the single source of "overdue". Never stored; every read path routes through withDerivedOverdue.
-export function isPaymentInstallmentOverdue(
-  installment: Pick<PaymentInstallmentRecord, "dueDate" | "status" | "deletedAt">,
-  today: string = istanbulDate(new Date()),
-): boolean {
-  return installment.status === "PENDING" && !installment.deletedAt && installment.dueDate < today;
-}
+// KF-3: the single source of "overdue" lives in shared-types (the KV-8 worker reads it too); every API read path
+// routes through withDerivedOverdue.
+export { isPaymentInstallmentOverdue };
 
 function withDerivedOverdue<T extends PaymentPlanWithInstallmentsRecord>(plan: T, today: string = istanbulDate(new Date())): T {
   return {
     ...plan,
     installments: plan.installments.map((installment) => ({ ...installment, overdue: isPaymentInstallmentOverdue(installment, today) })),
   };
-}
-
-function istanbulDate(now: Date): string {
-  // en-CA formats as YYYY-MM-DD; dueDate is a calendar date in the school's timezone.
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Istanbul", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 }

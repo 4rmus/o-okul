@@ -1,7 +1,7 @@
 import { runVerifiedTenantMutation } from "../context/tenant-mutation-activity.js";
 import { randomUUID } from "node:crypto";
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, Optional, UnauthorizedException } from "@nestjs/common";
-import type { LicenseTermListRecord, TenantStatusUpdateRequest, TenantCreateResponse, TenantStatusUpdateResult } from "@o-okul/shared-types";
+import { resolveLicenseState, type LicenseTermListRecord, type TenantStatusUpdateRequest, type TenantCreateResponse, type TenantStatusUpdateResult } from "@o-okul/shared-types";
 import { verifyAdminMfaStepUpProof } from "../auth/totp-mfa.js";
 import { tenantStatusUpdateBodySchema } from "./tenant-validation.js";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
@@ -15,7 +15,6 @@ import {
   licenseTermStoreToken,
 } from "../license/license-term-store.js";
 import { licenseTermCreateBodySchema, type LicenseTermCreateBody } from "../license/license-validation.js";
-import { resolveLicenseState } from "../license/license-state.js";
 import { normalizeTcIdentity } from "../student/tc-identity.js";
 import { assertValidTenantSlug, TenantHostError } from "../http/tenant-host.js";
 import {

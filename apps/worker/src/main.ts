@@ -1,3 +1,4 @@
+import { createGuardianPaymentDueScanner } from "./jobs/guardian-payment-due-scanner.js";
 import { createTenantFreshResetWorker } from "./jobs/tenant-fresh-reset-worker.js";
 import { createLicenseExpiryPurgeCandidateReporter } from "./jobs/license-expiry-purge-candidates.js";
 import {
@@ -41,6 +42,8 @@ const workers = [
   ...(resetWorker ? [resetWorker] : []),
   ...(purgeCandidateReporter ? [purgeCandidateReporter] : []),
   createSecretDeliveryOutboxRunner(),
+  // KV-8: business-hours payment due reminders, enqueued onto announcement-delivery.
+  createGuardianPaymentDueScanner({ connection, prefix: process.env.QUEUE_PREFIX }),
   createAnnouncementDeliveryBullWorker({
     connection,
     workerOptions,

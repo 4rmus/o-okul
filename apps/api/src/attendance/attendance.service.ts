@@ -9,8 +9,8 @@ import type {
   AttendanceSummaryRecord,
   StudentEnrollmentRecord,
 } from "@o-okul/shared-types";
-import { AnnouncementService } from "../announcement/announcement.service.js";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
+import { GuardianAutoNotificationService } from "../guardian-notification/guardian-auto-notification.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { requiredText } from "../shared/required-text.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
@@ -46,7 +46,6 @@ export interface AttendanceListFilters {
 }
 
 const attendanceStatuses: AttendanceStatus[] = ["PRESENT", "ABSENT", "LATE", "EXCUSED"];
-const absenceWarningThreshold = Number.parseInt(process.env.ATTENDANCE_ABSENCE_WARNING_THRESHOLD ?? "", 10) || 5;
 
 @Injectable()
 export class AttendanceService {
@@ -57,8 +56,8 @@ export class AttendanceService {
     @Inject(studentEnrollmentStoreToken) private readonly studentEnrollmentStore: StudentEnrollmentStore,
     @Inject(guardianStudentStoreToken) private readonly guardianStudentStore: GuardianStudentStore,
     @Inject(teacherAssignmentStoreToken) private readonly teacherAssignmentStore: TeacherAssignmentStore,
-    private readonly announcements: AnnouncementService,
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional() private readonly guardianNotifications?: GuardianAutoNotificationService,
   ) {}
 
   async list(context: RequestContext, filters: AttendanceListFilters = {}): Promise<AttendanceRecord[]> {
@@ -233,10 +232,6 @@ export class AttendanceService {
     const existingByStudentId = new Map(
       attendance.filter((record) => record.date === date).map((record) => [record.studentId, { ...record }]),
     );
-    const previousAbsenceCounts = new Map(students.map((student) => [
-      student.id,
-      countAbsences(attendance.filter((record) => record.studentId === student.id)),
-    ]));
     const studentByEntryId = new Map(students.map((student) => [student.id, student]));
     const records = await this.store.upsertDaily(input.entries.map((entry) => {
       const student = studentByEntryId.get(entry.studentId)!;
@@ -261,14 +256,9 @@ export class AttendanceService {
           ? { before: { status: previous.status }, after: { status: record.status }, classId, date }
           : { studentId: record.studentId, classId, termId: term.id, date, status: record.status },
       });
-      const student = studentByEntryId.get(record.studentId)!;
-      await this.warnIfAbsenceThresholdCrossed(
-        context,
-        { ...student, classId },
-        previousAbsenceCounts.get(student.id) ?? 0,
-        nextAbsenceCount(previousAbsenceCounts.get(student.id) ?? 0, existingByStudentId.get(student.id)?.status, record.status),
-      );
     }
+    // KV-8: per-student absence and term threshold notifications replace the old class-wide threshold announcement.
+    await this.guardianNotifications?.notifyAbsences(context, records);
 
     return { records, summary: summarizeRecords(records) };
   }
@@ -402,45 +392,6 @@ export class AttendanceService {
     const studentIds = [...new Set(records.map((record) => record.studentId))];
     return filterTenantResources(context, await this.studentEnrollmentStore.listByStudents(studentIds));
   }
-
-  private async warnIfAbsenceThresholdCrossed(
-    context: RequestContext,
-    student: { tenantId: string; id: string; firstName?: string; lastName?: string; classId?: string },
-    previousAbsenceCount: number,
-    currentAbsenceCount: number,
-  ): Promise<void> {
-    if (absenceWarningThreshold <= 0 || previousAbsenceCount >= absenceWarningThreshold || currentAbsenceCount < absenceWarningThreshold) {
-      return;
-    }
-
-    let announcementId: string | undefined;
-    if (student.classId) {
-      const announcement = await this.announcements.create(context, {
-        tenantId: student.tenantId,
-        audience: "GUARDIANS",
-        classId: student.classId,
-        title: "Devamsızlık eşiği uyarısı",
-        body: "Sınıfınızda devamsızlık eşiğine ulaşan öğrenci bulunmaktadır. Lütfen veli panelinizden öğrencinizin devamsızlık özetini kontrol edin.",
-      });
-      announcementId = announcement.id;
-    }
-
-    await this.auditLogs?.record({
-      tenantId: student.tenantId,
-      actorUserId: context.userId,
-      entityType: "Attendance",
-      entityId: student.id,
-      action: "attendance.threshold_warned",
-      diff: {
-        studentId: student.id,
-        classId: student.classId,
-        previousAbsenceCount,
-        currentAbsenceCount,
-        threshold: absenceWarningThreshold,
-        announcementId,
-      },
-    });
-  }
 }
 
 function summarize(studentId: string, records: AttendanceRecord[]): AttendanceSummaryRecord {
@@ -459,18 +410,6 @@ function summarizeRecords(records: AttendanceRecord[]): AttendanceAggregateRecor
     },
     { total: 0, present: 0, absent: 0, late: 0, excused: 0 },
   );
-}
-
-function countAbsences(records: AttendanceRecord[]): number {
-  return records.filter((record) => !record.deletedAt && record.status === "ABSENT").length;
-}
-
-function nextAbsenceCount(
-  previousCount: number,
-  previousStatus: AttendanceStatus | undefined,
-  nextStatus: AttendanceStatus,
-): number {
-  return previousCount - (previousStatus === "ABSENT" ? 1 : 0) + (nextStatus === "ABSENT" ? 1 : 0);
 }
 
 function enrollmentContainsDate(enrollment: StudentEnrollmentRecord, date: string): boolean {

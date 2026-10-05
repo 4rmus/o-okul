@@ -11,12 +11,12 @@ export function NotificationPreferencesPanel({
   readOnly = false,
 }: {
   preferences?: GuardianStudentRecord;
-  onUpdate?: (input: Partial<Pick<GuardianStudentRecord, "canReceiveSms" | "canReceiveAnnouncements" | "canOpenSupportTickets">>) => void | Promise<unknown>;
+  onUpdate?: (input: Partial<Pick<GuardianStudentRecord, "canReceiveSms" | "canReceiveAnnouncements" | "canOpenSupportTickets" | "canReceiveAutoNotifications">>) => void | Promise<unknown>;
   readOnly?: boolean;
 }) {
   const [error, setError] = useState("");
 
-  async function update(input: Partial<Pick<GuardianStudentRecord, "canReceiveSms" | "canReceiveAnnouncements" | "canOpenSupportTickets">>) {
+  async function update(input: Partial<Pick<GuardianStudentRecord, "canReceiveSms" | "canReceiveAnnouncements" | "canOpenSupportTickets" | "canReceiveAutoNotifications">>) {
     if (!onUpdate) return;
 
     setError("");
@@ -43,6 +43,12 @@ export function NotificationPreferencesPanel({
         disabled={readOnly || !preferences || !onUpdate}
         label="Duyuru al"
         onChange={(event) => void update({ canReceiveAnnouncements: event.target.checked })}
+      />
+      <Checkbox
+        checked={preferences?.canReceiveAutoNotifications ?? true}
+        disabled={readOnly || !preferences || !onUpdate}
+        label="Otomatik bildirim al (devamsızlık, ödeme, not)"
+        onChange={(event) => void update({ canReceiveAutoNotifications: event.target.checked })}
       />
       <Checkbox
         checked={preferences?.canOpenSupportTickets ?? false}

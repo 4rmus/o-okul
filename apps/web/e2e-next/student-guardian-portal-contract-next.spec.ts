@@ -339,7 +339,7 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       "/veli/raporlar?rolePreview=1",
     ]);
     const preferenceCheckboxes = page.getByLabel("Bildirim tercihleri").locator('input[type="checkbox"]');
-    const preferenceCheckboxCount = smsEnabled ? 3 : 2;
+    const preferenceCheckboxCount = smsEnabled ? 4 : 3; // + KV-8 otomatik bildirim tercihi
     await expect(preferenceCheckboxes).toHaveCount(preferenceCheckboxCount);
     for (let index = 0; index < preferenceCheckboxCount; index += 1) {
       await expect(preferenceCheckboxes.nth(index)).toBeDisabled();

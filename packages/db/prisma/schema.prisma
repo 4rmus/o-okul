@@ -43,6 +43,11 @@ model Tenant {
   suspendedReason String?
   /// ACTIVE or SUSPENDED; enforced by Tenant_status_check.
   status      String             @default("ACTIVE")
+  /// KV-8 (DEC-20261005-04): automatic guardian notification triggers and the term absence threshold (days).
+  guardianNotifyAbsence      Boolean @default(true)
+  guardianNotifyPaymentDue   Boolean @default(true)
+  guardianNotifyGradePublish Boolean @default(true)
+  guardianAbsenceThreshold   Int     @default(10)
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
   users       User[]
@@ -222,6 +227,8 @@ model GradeAssessment {
   maxScore         Decimal  @default(100) @db.Decimal(5, 2)
   publishedVersion Int?
   notifiedVersion  Int?
+  /// KV-8: publishedAt watermark of the last guardian notification for this assessment.
+  notifiedAt       DateTime? @db.Timestamptz(6)
   createdById      String
   createdAt        DateTime @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -1031,6 +1038,8 @@ model GuardianStudent {
   /// KV-3c (DEC-20261003-01): true only when the StudentContact guardian link flow created this row; a contact unlink
   /// removes only such rows. false = created elsewhere (guardian API, bulk invite, seed) and kept on unlink.
   createdByStudentContact Boolean  @default(false)
+  /// KV-8: the guardian's own opt-out for automatic notifications about this student.
+  canReceiveAutoNotifications Boolean @default(true)
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
   tenant                  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -1049,6 +1058,10 @@ model Attendance {
   termId    String?
   date      DateTime  @db.Date
   status    String
+  /// KV-8: the daily absence notification went out (once per student and day).
+  notifiedAt DateTime? @db.Timestamptz(6)
+  /// KV-8: the term absence threshold warning went out on this row.
+  thresholdNotifiedAt DateTime? @db.Timestamptz(6)
   deletedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -1132,6 +1145,8 @@ model PaymentInstallment {
   dueDate       DateTime  @db.Date
   status        String    @default("PENDING")
   paidAt        DateTime?
+  /// KV-8: Istanbul calendar day of the last due-date reminder (idempotency key installment + day).
+  notifiedOn    DateTime? @db.Date
   deletedAt     DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -1142,6 +1157,7 @@ model PaymentInstallment {
   @@unique([tenantId, planId, installmentNo])
   @@unique([tenantId, id])
   @@index([tenantId, planId, dueDate, deletedAt])
+  @@index([tenantId, dueDate])
 }
 
 model PaymentTransaction {
