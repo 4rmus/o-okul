@@ -415,6 +415,7 @@ pnpm account-management:preflight:generate
 - Generator repeatable-read/read-only transaction kullanır ve yalnız sayısal envanter yazar.
 - Tenant içi case-insensitive e-posta çakışması, birden çok açık enrollment, geçersiz rol
   kombinasyonu, orphan profil/membership veya doğrulanmamış guardian verisi `BLOCKED` üretir.
+  Personel/öğretmen + `GUARDIAN` (KV-3b/KV-3c personel+veli hesabı) geçersiz rol kombinasyonu değildir.
 - `system` tenant'ındaki yalnız `SYSTEM_ADMIN` üyeliği control-plane backfill kaynağıdır;
   başka tenant'taki veya başka rolle birleşmiş `SYSTEM_ADMIN` üyeliği `BLOCKED` üretir.
 - Öğretmen→Employee eksikleri backfill kapsamını sayar; additive migration'ı tek başına bloklamaz.
@@ -627,6 +628,124 @@ pnpm account-management:license-backfill
   geri alma süresince giriş yapamaz, (b) açık onayla bu `GUARDIAN` üyelikleri `ENDED` yapılır ve kullanıcının
   `membershipVersion` değeri artırılır (veli erişimi kesilir; `Guardian`/`GuardianStudent` satırları kalır,
   ileri deploy'dan sonra elle yeniden bağlama ile açılır). DB mutasyonu onaysız yapılmaz.
+
+### KV-3c veli erişim kuralları deploy sırası
+
+- Sıra: önce `20261008120000_guardian_student_contact_origin` migration'ı, sonra API. Migration yalnız
+  `GuardianStudent."createdByStudentContact" BOOLEAN NOT NULL DEFAULT false` ekler; eski API sütunu
+  okumaz, uyumludur. Migration'ı API'den önce uygulamazsanız iletişim bağlama ve bağ kaldırma 500 verir.
+- Mevcut satırlar `false` alır, yani önceden var olan bağ sayılır ve iletişim bağı kaldırılınca silinmez.
+  Guardian API'sinin aynı bağı yeniden oluşturması veya yöneticinin izin güncellemesi işareti `false` yapar
+  (bağ yönetici bağı sayılır); velinin kendi bildirim tercihi işareti değiştirmez.
+- Adım R5 (salt okunur, mutasyon yok): KV-3b API'si bu deploy'dan önce bir ortamda çalıştıysa onun iletişim
+  akışıyla açtığı bağlar işaretsiz (`false`) kalır ve bağ kaldırmada korunur. Sayım, iletişim akışının
+  `guardian_student.linked` audit kaydı (yalnız bu akış `diff.source` anahtarını yazar; değer audit
+  sanitizasyonunda `[REDACTED]` olur, anahtar kalır; `student_contact.guardian_linked` kaydındaki
+  `guardianStudentCreated` alanı da aynı sanitizasyonla saklanmadığı için eşleme `source` anahtarı ve
+  `student_contact.guardian_linked` kaydının `studentId`/`guardianId` alanlarıyla yapılır) ile sonradan
+  guardian API'sinin bağı benimsemediği satırları bulur:
+
+  ```sql
+  SELECT gs."tenantId", count(*)::int AS "unmarkedContactFlowLinks"
+  FROM "GuardianStudent" gs
+  WHERE gs."createdByStudentContact" = false
+    AND EXISTS (
+      SELECT 1 FROM "AuditLog" a
+      WHERE a."tenantId" = gs."tenantId" AND a."entityType" = 'GuardianStudent' AND a."entityId" = gs."id"
+        AND a."action" = 'guardian_student.linked' AND a."diff" ? 'source')
+    AND EXISTS (
+      SELECT 1 FROM "AuditLog" c
+      WHERE c."tenantId" = gs."tenantId" AND c."entityType" = 'StudentContact'
+        AND c."action" = 'student_contact.guardian_linked'
+        AND c."diff"->>'studentId' = gs."studentId" AND c."diff"->>'guardianId' = gs."guardianId")
+    AND NOT EXISTS (
+      SELECT 1 FROM "AuditLog" b
+      WHERE b."tenantId" = gs."tenantId" AND b."entityType" = 'GuardianStudent' AND b."entityId" = gs."id"
+        AND ((b."action" = 'guardian_student.linked' AND NOT (b."diff" ? 'source')) OR b."action" = 'guardian_student.updated'))
+  GROUP BY gs."tenantId"
+  ORDER BY gs."tenantId";
+  ```
+
+  KV-3b hiçbir ortama deploy edilmediyse sonuç boştur (0). Satır dönerse geri doldurma (işaretleme) kararı
+  ürün sahibinindir; bu adım veri değiştirmez.
+- Personel+veli kullanıcısında personel üyeliği `ENDED`/`SUSPENDED` yapılınca (veya öğretmen profili
+  kapatılınca) hesap `DISABLED` olmaz. KV-3c öncesi bu yolla kapanmış (`DISABLED`) personel+veli hesapları
+  kendiliğinden açılmaz. Ürün sahibi kararı (2026-10-05, K3): bu hesaplar açılır. KV-3b henüz hiçbir ortama
+  deploy edilmediği için beklenen sayı 0'dır; adım deploy sırasında ürün sahibi onayıyla koşar.
+  - Adım K3-1 (salt okunur, tenant bazlı sayım): `DISABLED`, PII'si temizlenmemiş (`passwordHash` boş
+    değil), en az bir `ENDED`/`SUSPENDED` personel üyeliği (`staffRole` veya öğretmen personası), `ACTIVE`
+    `GUARDIAN` üyeliği olan ve `GUARDIAN` dışında `ACTIVE` üyeliği olmayan kullanıcılar:
+
+    ```sql
+    SELECT u."tenantId", count(*)::int AS "disabledStaffGuardianAccounts"
+    FROM "User" u
+    WHERE u."accountStatus" = 'DISABLED' AND u."passwordHash" <> ''
+      AND EXISTS (SELECT 1 FROM "TenantMembership" g
+                  WHERE g."tenantId" = u."tenantId" AND g."userId" = u."id" AND g."role" = 'GUARDIAN' AND g."status" = 'ACTIVE')
+      AND EXISTS (SELECT 1 FROM "TenantMembership" s
+                  WHERE s."tenantId" = u."tenantId" AND s."userId" = u."id" AND s."status" IN ('ENDED', 'SUSPENDED')
+                    AND (s."staffRole" IS NOT NULL OR s."hasTeacherPersona"))
+      AND NOT EXISTS (SELECT 1 FROM "TenantMembership" o
+                      WHERE o."tenantId" = u."tenantId" AND o."userId" = u."id" AND o."status" = 'ACTIVE' AND o."role" <> 'GUARDIAN')
+    GROUP BY u."tenantId"
+    ORDER BY u."tenantId";
+    ```
+
+  - Adım K3-2 (yalnız ürün sahibinin açık onayıyla; tek transaction, idempotent): yalnız K3-1 kümesini
+    `ACTIVE` yapar, `membershipVersion` artırır, `ACTIVE` üyeliklere aynı sürümü verir ve kullanıcı başına
+    `user.account_reopened` audit kaydı yazar. Tekrar koşulursa küme boş olduğu için hiçbir şey yazmaz.
+    Önce K3-1 sayısı onay kaydına yazılır; dönen satır sayısı K3-1 toplamıyla eşleşmezse `ROLLBACK`.
+
+    ```sql
+    BEGIN;
+    SELECT set_config('app.bypass_rls', 'true', true);
+    WITH target AS (
+      SELECT u."tenantId", u."id"
+      FROM "User" u
+      WHERE u."accountStatus" = 'DISABLED' AND u."passwordHash" <> ''
+        AND EXISTS (SELECT 1 FROM "TenantMembership" g
+                    WHERE g."tenantId" = u."tenantId" AND g."userId" = u."id" AND g."role" = 'GUARDIAN' AND g."status" = 'ACTIVE')
+        AND EXISTS (SELECT 1 FROM "TenantMembership" s
+                    WHERE s."tenantId" = u."tenantId" AND s."userId" = u."id" AND s."status" IN ('ENDED', 'SUSPENDED')
+                      AND (s."staffRole" IS NOT NULL OR s."hasTeacherPersona"))
+        AND NOT EXISTS (SELECT 1 FROM "TenantMembership" o
+                        WHERE o."tenantId" = u."tenantId" AND o."userId" = u."id" AND o."status" = 'ACTIVE' AND o."role" <> 'GUARDIAN')
+      FOR UPDATE OF u
+    ), reopened AS (
+      UPDATE "User" u
+      SET "accountStatus" = 'ACTIVE', "membershipVersion" = u."membershipVersion" + 1, "updatedAt" = now()
+      FROM target t
+      WHERE u."tenantId" = t."tenantId" AND u."id" = t."id" AND u."accountStatus" = 'DISABLED'
+      RETURNING u."tenantId", u."id", u."membershipVersion"
+    ), synced AS (
+      UPDATE "TenantMembership" m
+      SET "version" = r."membershipVersion", "updatedAt" = now()
+      FROM reopened r
+      WHERE m."tenantId" = r."tenantId" AND m."userId" = r."id" AND m."status" = 'ACTIVE'
+      RETURNING m."id"
+    )
+    INSERT INTO "AuditLog" ("id", "tenantId", "actorUserId", "entityType", "entityId", "action", "diff", "createdAt")
+    SELECT gen_random_uuid()::text, r."tenantId", NULL, 'User', r."id", 'user.account_reopened',
+           jsonb_build_object('reason', 'KV3C_STAFF_EXIT_GUARDIAN_KEPT', 'previousStatus', 'DISABLED', 'status', 'ACTIVE'),
+           now()
+    FROM reopened r
+    RETURNING "tenantId", "entityId";
+    -- Dönen satır sayısı K3-1 toplamına eşitse COMMIT; değilse ROLLBACK.
+    COMMIT;
+    ```
+
+    Açılan hesapta açık oturum yoktur (`DISABLED` iken kapanmıştı; sürüm artışı eskileri de geçersiz kılar);
+    sonraki giriş yalnız `GUARDIAN` rolüyle açılır. DB mutasyonu onaysız yapılmaz.
+- R3: `account-management:backfill` ve `account-management:preflight:generate` personel/öğretmen +
+  `GUARDIAN` üyelik kümesini artık geçersiz rol saymaz (öğrenci + başka rol ve birden çok personel rolü
+  bloklamaya devam eder). Backfill, `Guardian` profili kalan ve `GUARDIAN` üyeliği
+  `LAST_GUARDIAN_STUDENT_LINK_REMOVED` ile `ENDED` olan kullanıcıyı orphan profil saymaz. Kanıt şablonlarının
+  alanları değişmez; `pnpm account-management:backfill:contract` ve `pnpm account-management:preflight:contract`
+  bu kuralları kaynak üzerinden de doğrular.
+- Geri alma: API geri alınabilir; eski API sütunu yok sayar, bağ kaldırmada önceden var olan bağı da siler,
+  bağlı iletişim silinince erişim bağını bırakır ve personel bitişinde hesabı yine kapatır. K3-2 ile açılmış
+  hesaplar eski API'de de açık kalır (yalnız sonraki personel değişikliği yeniden kapatır). Migration geri
+  alınmaz; sütun zararsızdır.
 
 ## Financial Retention Evidence
 

@@ -783,6 +783,62 @@ silmez/sürümünü eşitler. (3) Yalnız `LEGAL_GUARDIAN` bağlanır; `MOTHER`/
 `student-relationship-flow-next.spec.ts`, `persona-switch-next.spec.ts`). Postgres yolları yalnız sahte
 havuz SQL sırası testleriyle doğrulandı (LOCAL_STATIC); migration canlı Postgres'te koşulmadı. Kanıt sınıfı
 LOCAL_TEST; CI, STAGING ve PRODUCTION UNPROVEN.
+KV-3c (ürün sahibi kararları 2026-10-05): (4) daraltıldı: bağ kaldırma yalnız iletişim bağlama akışının
+OLUŞTURDUĞU `GuardianStudent` satırını siler; işaret `GuardianStudent.createdByStudentContact`
+(migration `20261008120000_guardian_student_contact_origin`, additive, varsayılan `false`; RLS/FK değişmez,
+reset kolon kataloğu güncellendi). Akıştan önce var olan bağ (guardian API'si, toplu davet, seed; KV-3c
+öncesi tüm satırlar) ve izinleri korunur, veli öğrenciyi görmeye devam eder; başka iletişim aynı veliye
+bağlıysa yine silinmez. (5) Personel üyeliği `ENDED`/`SUSPENDED` olduğunda kullanıcının `ACTIVE`
+`GUARDIAN` üyeliği varsa `User.accountStatus` `DISABLED` yapılmaz: yalnız personel üyeliği durur, sürüm
+artar ve tüm açık oturumlar kapanır; sonraki giriş yalnız `GUARDIAN` rolüyle açılır, personel uçları 403,
+`STAFF` persona geçişi reddedilir. `GUARDIAN` üyeliği yoksa davranış aynıdır (`DISABLED`)
+(`student-contact-guardian-link.e2e.test.ts`, `student-contact-store.test.ts`,
+`user-management-store.test.ts`). Kanıt sınıfı LOCAL_TEST (Postgres yolları sahte havuzla LOCAL_STATIC);
+CI, STAGING ve PRODUCTION UNPROVEN.
+KV-3c ek (ürün sahibi kararı 2026-10-05): (6) Bir velinin SON `GuardianStudent` bağı kalktığında (iletişim
+bağını kaldırma `DELETE /students/{studentId}/contacts/{id}/guardian` ve guardian API'si
+`DELETE /guardians/{id}/students/{studentId}`; ikisi de `GuardianStudentStore.delete` kuralı) aynı
+transaction'da: veliye bağlı kullanıcı `GUARDIAN` dışında başka bir `ACTIVE` üyeliğe (personel/öğretmen)
+sahipse `GUARDIAN` üyeliği `ENDED` olur (`endedReason=LAST_GUARDIAN_STUDENT_LINK_REMOVED`), diğer üyelikler
+yalnız ortak sürümü alır, `User.membershipVersion` artar ve açık oturumlar kapanır; `User.accountStatus` ve
+`Guardian` kaydı değişmez. Yalnız-veli hesabı (başka `ACTIVE` üyeliği olmayan; toplu davetle açılmış veli
+ve personel üyeliği sona ermiş eski personel+veli dahil) rolünü ve `Guardian` kaydını korur, boş listeyle
+kalır. Kilit sırası iletişim → kullanıcı → `GuardianStudent` (KV-3b kullanıcı bağlama ile aynı). Audit:
+`user.guardian_role_removed`. Yeniden bağlama rolü KV-3b yoluyla tekrar açar. (7) Personel yolundan
+(`userId`) bağlanan velinin `Guardian.phone` alanı boşsa `LEGAL_GUARDIAN` iletişim telefonu toplu davetteki
+kuralla kopyalanır (`GuardianService.fillEmptyPhone`: şifreli telefon çözülür, mevcut normalizasyon, dolu
+telefon ezilmez, yanıtta telefon yok); telefonla eşleştirme yapılmaz. Kanıt: `guardian-student-store.test.ts`,
+`student-contact-store.test.ts`, `student-contact-guardian-link.e2e.test.ts`,
+`student-guardian-invitation.service.test.ts`. Kanıt sınıfı LOCAL_TEST (Postgres yolları sahte havuzla
+LOCAL_STATIC); CI, STAGING ve PRODUCTION UNPROVEN. Açık soru: yalnız-veli tanımına `ENDED` personel
+üyeliği olan eski personelin dahil edilmesi (rol korunur) ürün sahibi onayı bekliyor.
+KV-3c güvenlik incelemesi düzeltmeleri (2026-10-05): (R1) Guardian API'si mevcut bir bağı yeniden
+oluşturduğunda (`ON CONFLICT ... DO UPDATE`) veya yönetici bağ izinlerini güncellediğinde
+`createdByStudentContact=false` olur; bağ yönetici bağı sayılır ve iletişim bağı kaldırma onu ve izinlerini
+korur. Velinin kendi bildirim tercihi işareti değiştirmez. (R2) Guardian API'si bağ oluşturmada (ve iletişim
+akışı `guardianId` ile bağlamada) önce veli kullanıcısını kilitler (kullanıcı → `GuardianStudent`, iletişim
+akışında iletişim → kullanıcı → `GuardianStudent`); `GUARDIAN` üyeliği
+`LAST_GUARDIAN_STUDENT_LINK_REMOVED` ile `ENDED` ise aynı transaction'da yeniden `ACTIVE` olur (sürüm artar,
+açık oturumlar kapanır, audit `user.guardian_role_added`). Başka nedenle biten/askıdaki üyelik açılmaz. (R3)
+`account-management:backfill` ve preflight personel/öğretmen + `GUARDIAN` kümesini geçersiz rol saymaz;
+backfill son bağ kuralıyla biten `GUARDIAN` üyeliği olan `Guardian` profilini orphan saymaz. (R4) Bağlı
+iletişim silinince (`DELETE /students/{studentId}/contacts/{id}`) ve öğrenci KVKK temizliğinde
+(`purgeByStudent`) bağ kaldırma kuralı aynı transaction'da uygulanır: akışın açtığı ve başka canlı iletişimin
+tutmadığı bağ silinir, son bağsa personel+velinin `GUARDIAN` üyeliği biter; önceden var olan bağ korunur.
+Audit `guardian_student.unlinked`, `user.guardian_role_removed`. (R5) KV-3b'nin bu deploy'dan önce koştuğu
+ortamda işaretsiz kalan akış bağları için salt okunur sayım runbook'tadır; geri doldurma kararı ürün
+sahibinindir. Kanıt: `guardian-student-store.test.ts`, `student-contact-store.test.ts`,
+`student-contact-guardian-link.e2e.test.ts`, `profile-lifecycle-store.test.ts`,
+`check-account-management-{backfill,preflight}-contract.mjs` (her düzeltme için bir kez geri alınıp testin
+kırıldığı görüldü). Kanıt sınıfı LOCAL_TEST (Postgres yolları sahte havuzla LOCAL_STATIC); CI, STAGING ve
+PRODUCTION UNPROVEN.
+Ürün sahibi kararı (2026-10-05, son): (K3) KV-3c öncesi personel bitişiyle `DISABLED` olmuş personel+veli
+hesapları açılır; kod DB'yi değiştirmez, runbook KV-3c bölümünde tenant bazlı salt okunur sayım ve onaylı,
+tek transaction'lı, idempotent açma SQL'i (yalnız bu küme `ACTIVE`, sürüm artışı, `user.account_reopened`
+audit) vardır. KV-3b hiçbir ortama deploy edilmediği için beklenen sayı 0; adım deploy sırasında ürün sahibi
+onayıyla koşar. (K4) B kuralı profil kapatma yoluna da uygulanır: öğretmen profili kapatma yalnız öğretmen
+personasını/üyeliğini keser, `User.accountStatus` yazmaz, `GUARDIAN` üyeliğine yalnız ortak sürümü verir ve
+açık oturumları kapatır; yalnız personel olan kullanıcıda davranış aynıdır (`profile-lifecycle-store.test.ts`).
 Ürün sahibi kararı (2026-10-05): veli daveti kabulünde T.C. şartının kaldırılması onaylandı; e-postası
 olmayan `LEGAL_GUARDIAN` satırının `EMAIL_MISSING` ile atlanması kabul edildi. Toplu davette
 `LEGAL_GUARDIAN` iletişiminin telefonu yalnız iletişim alanı olarak `Guardian.phone` alanına kopyalanır

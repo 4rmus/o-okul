@@ -14,7 +14,7 @@ import { ClassesController } from "./classes.controller.js";
 import { courseStoreToken, createCourseStore } from "./course-store.js";
 import { CoursesController } from "./courses.controller.js";
 import { createGuardianStudentStore, guardianStudentStoreToken } from "./guardian-student-store.js";
-import { createGuardianStore, guardianStoreToken } from "./guardian-store.js";
+import { type GuardianStore, createGuardianStore, guardianStoreToken } from "./guardian-store.js";
 import { createGradeLevelCourseStore, gradeLevelCourseStoreToken } from "./grade-level-course-store.js";
 import { createGradeLevelStore, gradeLevelStoreToken } from "./grade-level-store.js";
 import { GradeLevelsController } from "./grade-levels.controller.js";
@@ -53,7 +53,8 @@ const schoolStoreProviders = [
   },
   {
     provide: guardianStudentStoreToken,
-    useFactory: createGuardianStudentStore,
+    inject: [guardianStoreToken].slice(),
+    useFactory: (guardians: GuardianStore) => createGuardianStudentStore(guardians),
   },
   {
     provide: gradeLevelStoreToken,

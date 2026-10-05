@@ -241,6 +241,21 @@ export function addInMemoryAuthUserRole(
   return cloneRequiredUser(user);
 }
 
+/** KV-3c: replaces the active roles and canonical membership of a user (the version bump closes open sessions). */
+export function setInMemoryAuthUserAccess(
+  tenantId: string,
+  userId: string,
+  roles: string[],
+  membership: CanonicalMembershipProjection | undefined,
+): AuthUser | undefined {
+  const user = inMemoryUsers.find((candidate) => candidate.tenantId === tenantId && candidate.id === userId);
+  if (!user) return undefined;
+  user.roles = [...roles];
+  user.membership = membership ? cloneCanonicalMembership(membership) : undefined;
+  user.membershipVersion += 1;
+  return cloneRequiredUser(user);
+}
+
 export function upsertInMemoryAuthUser(input: {
   id: string;
   email?: string;

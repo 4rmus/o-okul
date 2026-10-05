@@ -113,6 +113,8 @@ export class PostgresProfileLifecycleStore implements ProfileLifecycleStore {
       }
 
       let rolesRemoved = 0;
+      // KV-3c rule B (product owner decision 2026-10-05): closing a staff/teacher profile cuts only that persona and
+      // never writes User.accountStatus, so an ACTIVE GUARDIAN membership keeps logging in; sessions close below.
       if (input.subjectType === "TEACHER") {
         const canonical = await client.query<{ id: string }>(
           `UPDATE "TenantMembership"

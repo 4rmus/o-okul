@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
-import type { GuardianService } from "../guardian/guardian.service.js";
+import { GuardianService } from "../guardian/guardian.service.js";
 import type { IdentityInvitationService } from "../identity-invitation/identity-invitation.service.js";
 import type { UserManagementStore } from "../user-management/user-management-store.js";
 import { encryptStudentContactValue } from "./student-contact-pii.js";
@@ -21,6 +21,8 @@ function setup(existingPhone: string | undefined) {
   const guardians = {
     findGuardian: vi.fn(async () => ({ id: "guardian-1", tenantId: "tenant-a", firstName: "Veli", lastName: "Yasal", phone: existingPhone })),
     updateGuardian: vi.fn(async () => ({})),
+    // The real shared rule, running against the mocked findGuardian/updateGuardian above.
+    fillEmptyPhone: GuardianService.prototype.fillEmptyPhone,
   };
   const service = new StudentGuardianInvitationService(
     { findOne: async () => ({ id: "student-1" }) } as unknown as StudentService,

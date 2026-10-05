@@ -16,7 +16,12 @@ import { encryptTcIdentity, hashTcIdentity, normalizeTcIdentity } from "../stude
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
 import { type ClassStore, classStoreToken } from "../school/class-store.js";
 import { type GuardianStore, guardianStoreToken } from "../school/guardian-store.js";
-import { type GuardianStudentStore, guardianStudentStoreToken } from "../school/guardian-student-store.js";
+import {
+  type GuardianRoleEndWrite,
+  type GuardianStudentStore,
+  guardianStudentStoreToken,
+} from "../school/guardian-student-store.js";
+import { recordGuardianRoleRemoved, recordGuardianRoleRestored } from "./guardian-role-audit.js";
 import {
   type TeacherAssignmentStore,
   teacherAssignmentStoreToken,
@@ -334,7 +339,7 @@ export class GuardianService {
     assertTenantAccess(context, student);
     const relation = resolveGuardianStudentRelation(input);
 
-    const link = await this.guardianStudentStore.create({
+    const { link, ...roleRestore } = await this.guardianStudentStore.create({
       tenantId: guardian.tenantId,
       guardianId: guardian.id,
       studentId: student.id,
@@ -348,6 +353,7 @@ export class GuardianService {
       action: "guardian_student.linked",
       diff: { guardianId: link.guardianId, studentId: link.studentId, fieldsSet: presentFields(relation, guardianStudentRelationFields) },
     });
+    await recordGuardianRoleRestored(this.auditLogs, context, link.tenantId, link.guardianId, roleRestore);
     return link;
   }
 
@@ -365,7 +371,8 @@ export class GuardianService {
     assertTenantAccess(context, student);
 
     const relation = resolveGuardianStudentRelation(input, false);
-    const updated = await this.guardianStudentStore.update(guardian.id, student.id, relation);
+    // KV-3c: an admin permission change adopts a link the StudentContact flow created; a contact unlink keeps it.
+    const updated = await this.guardianStudentStore.update(guardian.id, student.id, relation, { clearStudentContactOrigin: true });
     if (!updated) {
       throw new NotFoundException("GUARDIAN_STUDENT_NOT_FOUND");
     }
@@ -432,6 +439,33 @@ export class GuardianService {
       action: "guardian_student.unlinked",
       diff: { guardianId: guardian.id, studentId: student.id },
     });
+    await this.recordGuardianRoleRemoved(context, guardian.tenantId, guardian.id, deleted);
+  }
+
+  /** KV-3c audit for the GuardianStudentStore.delete rule: the last link of a staff+guardian user ended GUARDIAN. */
+  recordGuardianRoleRemoved(context: RequestContext, tenantId: string, guardianId: string, write: Partial<GuardianRoleEndWrite>): Promise<void> {
+    return recordGuardianRoleRemoved(this.auditLogs, context, tenantId, guardianId, write);
+  }
+
+  /** KV-3c R2 audit: relinking made the GUARDIAN membership ended by the last-link rule ACTIVE again. */
+  recordGuardianRoleRestored(
+    context: RequestContext,
+    tenantId: string,
+    guardianId: string,
+    write: { guardianRoleRestoredUserId?: string; sessionsRevoked?: number },
+  ): Promise<void> {
+    return recordGuardianRoleRestored(this.auditLogs, context, tenantId, guardianId, write);
+  }
+
+  /**
+   * Product owner decision (2026-10-05, DEC-20261003-01): a LEGAL_GUARDIAN contact phone (already normalized) fills an
+   * empty Guardian.phone as a contact field only, never a login name; a phone already on the guardian is never
+   * overwritten. Set through updateGuardian, not createGuardian, because createGuardian matches guardians by phone.
+   */
+  async fillEmptyPhone(context: RequestContext, guardianId: string, phone: string | undefined): Promise<void> {
+    if (!phone) return;
+    if ((await this.findGuardian(context, guardianId)).phone) return;
+    await this.updateGuardian(context, guardianId, { phone });
   }
 
   private listScopedGuardianIds(context: RequestContext): Promise<Set<string>> {

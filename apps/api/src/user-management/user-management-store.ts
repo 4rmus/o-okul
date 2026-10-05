@@ -12,7 +12,13 @@ import type {
 } from "@o-okul/shared-types";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type Queryable, type TenantQueryable, withExplicitTenantQuery } from "../db/tenant-query.js";
-import { hashPassword, removeInMemoryAuthUserRole, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
+import {
+  InMemoryAuthUserStore,
+  hashPassword,
+  removeInMemoryAuthUserRole,
+  setInMemoryAuthUserAccess,
+  upsertInMemoryAuthUser,
+} from "../auth/auth-user-store.js";
 import { buildTenantMembershipDualWriteRows } from "../identity-provisioning/tenant-membership-dual-write.js";
 import { assertTenantSeatCapacity } from "../tenant/tenant-seat-limit.js";
 
@@ -342,7 +348,9 @@ export class InMemoryUserManagementStore implements UserManagementStore {
       throw new Error("LAST_ACTIVE_TENANT_OWNER_REQUIRED");
     }
 
-    const nextAccountStatus = desiredAccountStatus(employee.access.status, employee.accountStatus, input.status);
+    const authUser = await new InMemoryAuthUserStore().findById(employee.userId);
+    const keepsGuardian = authUser?.tenantId === tenantId && authUser.roles.includes("GUARDIAN");
+    const nextAccountStatus = desiredAccountStatus(employee.access.status, employee.accountStatus, input.status, keepsGuardian);
     const changed =
       employee.access.staffRole !== input.staffRole ||
       employee.access.hasTeacherPersona !== input.hasTeacherPersona ||
@@ -361,6 +369,23 @@ export class InMemoryUserManagementStore implements UserManagementStore {
         campusIds: [...input.campusIds].sort(),
       };
       employee.accountStatus = nextAccountStatus;
+      // ponytail: the in-memory auth projection is only mirrored for a staff+guardian user (KV-3c); only ACTIVE
+      // memberships reach it, exactly like the Postgres login query. Staff-only users keep the older demo behavior.
+      if (keepsGuardian) {
+        const staffRoles = [input.staffRole ?? "TEACHER", ...(input.staffRole && input.hasTeacherPersona ? ["TEACHER"] : [])];
+        setInMemoryAuthUserAccess(tenantId, employee.userId, input.status === "ACTIVE" ? [...staffRoles, "GUARDIAN"] : ["GUARDIAN"],
+          input.status === "ACTIVE"
+            ? {
+              id: membershipId,
+              staffRole: input.staffRole ?? null,
+              hasTeacherPersona: input.hasTeacherPersona,
+              hasStudentPersona: false,
+              version: employee.access.version,
+              scopeMode: input.scopeMode,
+              campusIds: [...input.campusIds].sort(),
+            }
+            : undefined);
+      }
     }
     return { employee: cloneEmployeeAccessRecord(employee), sessionsRevoked: 0 };
   }
@@ -733,13 +758,16 @@ export class PostgresUserManagementStore implements UserManagementStore {
         throw new Error("EMPLOYEE_PROFILE_NOT_ACTIVE");
       }
 
-      await client.query(
-        `SELECT "id"
+      const userMemberships = await client.query<{ role: string; status: string }>(
+        `SELECT "role"::text AS role, "status"
          FROM "TenantMembership"
          WHERE "tenantId" = $1 AND "userId" = $2
          FOR UPDATE`,
         [tenantId, current.userId],
       );
+      // KV-3c: an ACTIVE GUARDIAN membership keeps the account open when the staff membership stops.
+      const keepsGuardian = userMemberships.rows.some((row) => row.role === "GUARDIAN" && row.status === "ACTIVE");
+      const nextAccountStatus = desiredAccountStatus(current.membershipStatus, current.accountStatus, input.status, keepsGuardian);
 
       const ownerRows = await client.query<{ id: string }>(
         `SELECT "id"
@@ -780,7 +808,7 @@ export class PostgresUserManagementStore implements UserManagementStore {
         current.membershipStatus !== input.status ||
         current.scopeMode !== input.scopeMode ||
         !sameStringSet(current.campusIds, input.campusIds) ||
-        current.accountStatus !== desiredAccountStatus(current.membershipStatus, current.accountStatus, input.status);
+        current.accountStatus !== nextAccountStatus;
       if (!changed) {
         const employee = await this.findEmployeeByMembershipWithClient(client, tenantId, membershipId);
         if (!employee) throw new Error("TENANT_MEMBERSHIP_PROJECTION_FAILED");
@@ -864,13 +892,10 @@ export class PostgresUserManagementStore implements UserManagementStore {
              "membershipVersion" = $4,
              "updatedAt" = now()
          WHERE "tenantId" = $1 AND "id" = $2`,
-        [
-          tenantId,
-          current.userId,
-          desiredAccountStatus(current.membershipStatus, current.accountStatus, input.status),
-          nextVersion,
-        ],
+        [tenantId, current.userId, nextAccountStatus, nextVersion],
       );
+      // Every open session closes (the membershipVersion bump would reject it anyway), the guardian persona too;
+      // a staff+guardian user whose staff membership stopped logs in again as GUARDIAN only.
       const sessions = await client.query<{ id: string }>(
         `UPDATE "AuthSession"
          SET "status" = 'REVOKED', "updatedAt" = now()
@@ -1357,7 +1382,17 @@ function sameStringSet(left: readonly string[], right: readonly string[]): boole
   return left.every((value) => rightSet.has(value));
 }
 
-function desiredAccountStatus(currentMembershipStatus: string, currentAccountStatus: string | undefined, nextMembershipStatus: string): string {
-  if (nextMembershipStatus !== "ACTIVE") return "DISABLED";
+/**
+ * A non-ACTIVE staff membership disables the account, unless the user also holds an ACTIVE GUARDIAN membership
+ * (KV-3c, product owner decision 2026-10-05): then only the staff membership stops and the account stays as it is,
+ * so the guardian persona keeps logging in.
+ */
+function desiredAccountStatus(
+  currentMembershipStatus: string,
+  currentAccountStatus: string | undefined,
+  nextMembershipStatus: string,
+  keepsGuardian = false,
+): string {
+  if (nextMembershipStatus !== "ACTIVE") return keepsGuardian ? (currentAccountStatus ?? "ACTIVE") : "DISABLED";
   return currentMembershipStatus === "ACTIVE" ? (currentAccountStatus ?? "ACTIVE") : "ACTIVE";
 }
