@@ -1028,10 +1028,87 @@ Etkilenen ADR: ADR-0001
 Açık soru: Geç teslim durumu pilot geri bildirimine kalır.
 Son kontrol: 2026-10-05
 
+### DEC-20261005-01 — Yayınlanmış fiyat: aktif öğrenci kademesine göre öğrenci başı yıllık TL
+
+Durum: Onaylı; fiyat sayfası KF-9 diliminde bekliyor
+Karar: Fiyat yıllık, KDV hariç ve TL olarak public fiyat sayfasında yayınlanır. Fiyat aktif öğrenci
+sayısı × kademenin öğrenci başı yıllık birim fiyatıdır (DEC-20260801-01 aktif öğrenci kotası; çalışan
+hesapları ücretli koltuk değildir). Kademeler ve birim fiyatlar: 1–250 öğrenci 280 TL (yıllık en az
+25.000 TL), 251–500 öğrenci 250 TL, 501–1000 öğrenci 220 TL, 1001–3000 öğrenci 190 TL, 3001–7000 öğrenci
+160 TL, 7001 ve üzeri teklifle. Birim fiyat kurumun toplam aktif öğrenci sayısının düştüğü kademeden
+uygulanır. Kurulum ücreti ve ek ücret yoktur; tüm modüller dahildir; satış yalnız yıllıktır, aylık
+gösterim yapılmaz. Kartsız deneme DEC-20261004-02 ile aynıdır (7 gün, en fazla 100 öğrenci).
+Kaynak: Ürün sahibi kararı (2026-10-05). Rakip referansı: K12 dörtlüsü fiyat yayınlamıyor; yayınlayan
+küçük/kurs ürünleri öğrenci başına yaklaşık 180–300 TL/yıl (k12.net.tr/fiyatlar 50 öğrenci 15.000 TL/yıl;
+onlinekurum ve kurspro strateji eki §F1.2) — KAYNAKLI, 2026-10-05 kontrolü; büyük rakiplerin gerçek
+fiyatı UNPROVEN.
+Kanıt: `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §3 (tez), DEC-20261004-04. Kanıt sınıfı
+LOCAL_STATIC.
+Etkilenen ADR: Yok
+Açık soru: Çok kampüslü zincirler için kampüs başına ayrı kota mı toplam kota mı kullanılacağı ilk teklif
+talebinde netleşir; bu DEC toplam kotayı varsayar.
+Son kontrol: 2026-10-05
+
+### DEC-20261005-02 — Hukuki varsayımlar: TR barındırma beyanı, bildirim dayanağı, standart VİS, 5580
+
+Durum: Onaylı; TR barındırma beyanı hukukçu teyidi bekliyor (ürün sahibi soruyor)
+Karar: Ürün sahibi kararıyla (hukuk görüşü harcaması ertelendi, OPEN-20261003-01) aşağıdaki varsayımlarla
+ilerlenir. (K-6) Kurum verisi, dosyalar ve yedekler Türkiye'de (Dünyam) barındırılır; ürün dili
+"Verileriniz Türkiye'deki sunucularda barındırılır." der. E-posta bildirimleri Cloudflare üzerindeki
+gateway'den (`notify.o-okul.com`) geçer; "hiçbir veri yurt dışına çıkmaz" denmez. Sentry veya yurt dışı
+SMS/e-posta sağlayıcısı açılırsa beyan yeniden değerlendirilir. (K-1, F4.4 #24) Operasyonel veli
+bildirimleri (devamsızlık, ödeme vadesi, not yayını) için açık rıza aranmaz; dayanak kurum ile veli
+arasındaki eğitim hizmeti ilişkisidir. Kullanıcının bildirim tercihi (kapatma), cihazın `disabledAt`
+durumu ve görünürlük bayrakları (ör. `canViewFinance`) yine gönderim anında uygulanır. (K-2) Her kurumla
+tek standart veri işleme sözleşmesi (kurum veri sorumlusu, O-Okul veri işleyen) kullanılır. (K-5) 5580
+sayılı Kanun yazılım için onay veya bildirim istemez.
+Kaynak: Ürün sahibi kararı (2026-10-05).
+Kanıt: Sunucu ve sağlayıcı envanteri 2026-10-05 (staging `.env` anahtar adları; DB/MinIO/yedek aynı TR
+sunucusunda, `SENTRY_DSN` boş, `SMS_PROVIDER=noop`, e-posta `NOTIFICATION_PROVIDER=http` → Cloudflare
+gateway). Kanıt sınıfı STAGING (envanter); hukuki doğruluk UNPROVEN.
+Etkilenen ADR: Yok
+Açık soru: Hukukçu K-6 için farklı görüş verirse fiyat sayfası ve landing cümlesi aynı gün düzeltilir.
+Son kontrol: 2026-10-05
+
+### DEC-20261005-03 — Lisans bitince veri 91. günde audit kayıtlarıyla birlikte imha edilir
+
+Durum: Onaylı; imha mekanizması bekliyor (bugün kod yalnız erişimi kapatıyor)
+Karar: Lisans dönemi bitince mevcut `resolveLicenseState` akışı korunur: 14 gün salt okunur, 91. güne
+kadar dondurulmuş. 91. günden sonra kurumun bütün verisi imha edilir; kuruma ait `AuditLog` satırları da
+imhaya dahildir (yasal saklama gerekçesiyle süresiz tutulmaz). Kurum bu süre içinde yeni lisans dönemi
+alırsa imha yapılmaz. İmha geri alınamaz; gecelik yedeklerdeki kopyalar yedek saklama süresi
+(`BACKUP_RETENTION_DAYS`, 7 gün) sonunda kendiliğinden düşer.
+Kaynak: Ürün sahibi kararı (2026-10-05; K-8 sorusu).
+Kanıt: `apps/api/src/license/license-state.ts` (READ_ONLY 14 gün, FROZEN 91. güne kadar, sonra EXPIRED);
+bugün EXPIRED yalnız erişimi kapatır, otomatik veri silme yoktur. Kanıt sınıfı LOCAL_STATIC.
+Etkilenen ADR: ADR-0010 (imha bir control plane eylemidir)
+Açık soru: İmha tamamen otomatik mi, yoksa sistem yöneticisinin onayladığı bir imha listesi üzerinden mi
+çalışır — ayrı dilimde kararlaştırılır.
+Son kontrol: 2026-10-05
+
+### DEC-20261005-04 — Otomatik veli bildirimlerinin varsayılanları (KV-8)
+
+Durum: Onaylı; KV-8 dilimi bekliyor
+Karar: Personel müdahalesi olmadan üç tetikleyici çalışır; her biri kurum ayarından açılıp kapatılır,
+varsayılan açık. (1) Devamsızlık: günlük yoklamada öğrenci gelmedi işaretlenince bağlı veliye o gün için
+bir kez bildirim; aynı gün düzeltmeler ikinci bildirim üretmez. Dönem içi devamsızlık eşiği aşılınca
+ayrıca bir kez uyarı; eşik kurum ayarıdır, varsayılan 10 gün. (2) Ödeme vadesi: taksit vadesinden 3 gün
+önce ve vade günü birer hatırlatma; ödenmiş veya iptal edilmiş taksit için gönderilmez; yalnız
+`canViewFinance=true` bağlı veliye. (3) Not yayını: okul notu yayınlandığında veya düzeltildiğinde
+yayın sürümü başına bir kez. Kanal: push ve e-posta; SMS kapsam dışı. Gönderim mevcut
+`announcement-delivery` kuyruğu ve `notifiedAt` tekilleştirmesiyle yapılır (outbox tablosu yok,
+DEC-20261004-07). Dayanak DEC-20261005-02 (açık rıza aranmaz, tercih ve görünürlük uygulanır).
+Kaynak: Ürün sahibi kararı (2026-10-05; eşik ve zaman değerleri Claude önerisi, ürün sahibi değiştirebilir).
+Kanıt: KV-8 PR'ında. Kanıt sınıfı LOCAL_STATIC.
+Etkilenen ADR: Yok
+Açık soru: Bildirim saati (ör. gece gönderim yapılmaması) ilk sürümde kapsam dışı; worker zamanlaması
+mesai saatinde çalışır.
+Son kontrol: 2026-10-05
+
 ## Faz Öncesi Onay Gerektirenler
 
 | ID | Faz | Bloklar mı? | Soru | Beklenen kanıt |
 |---|---|---|---|---|
 | OPEN-20260529-03 | Faz 4 / Faz 10 | Hayır | iSEM fixture geldi; pilot sınav döngüsü kabulü üretildi mi? | Gerçek iSEM fixture testleri + staging `pnpm live:exam-cycle:check` artifact'i tamam; kalan pilot UAT kanıtı |
 | OPEN-20260529-04 | Faz 5 | Hayır | Netgsm test credential/canlı hesap doğrulaması nasıl yapılacak? | Test hesabı secretları + `pnpm sms:smoke` canlı/staging sonucu |
-| OPEN-20261003-01 | H1–H3 / KF-9, KV-8 | Ertelendi (2026-10-04) | VİS şablonu, veli bildirimi hukuki sebebi, 5580, saklama, md.9 ve TR barındırma beyanı için tek seferlik hukuk görüşüne dış harcama onaylanıyor mu? Ürün sahibi 2026-10-04'te erteledi. Ertelenme süresince K-2 sonucu UNPROVEN kalır, KV-8 otomatik veli bildirimi kodlanmaz ve KF-9'da TR barındırma iddiası yazılmaz. | Ürün sahibi onayı + tek soru listesi (K-1, K-2, K-4, K-5, K-6, K-8) + yazılı görüş |
+| OPEN-20261003-01 | H1–H3 / KF-9, KV-8 | Kısmen kapandı (2026-10-05) | Hukuk görüşü harcaması ertelendi; ürün sahibi K-1, K-2, K-5 ve K-8'i karara bağladı (DEC-20261005-02, DEC-20261005-03). K-6 (TR barındırma beyanı) ürün sahibince hukukçuya soruluyor; o gelene kadar DEC-20261005-02 varsayımıyla ilerlenir. | Hukukçunun K-6 yazılı cevabı |
