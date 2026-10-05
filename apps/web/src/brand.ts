@@ -10,7 +10,7 @@ export const appBrand = {
   notificationEmail: "bildirim@o-okul.com",
 } as const;
 
-export const appBrandTitle = "O-Okul | Optik Sınav Raporlama ve Kurum Takibi";
+export const appBrandTitle = "O-Okul | Özel Okullar için Bütüncül Öğrenci Takibi";
 export const appBrandHomeAriaLabel = `${appBrand.name} ana sayfa`;
 
 export const demoRequestHref = mailtoHref(appBrand.demoEmail, `Demo talebi - ${appBrand.name}`, `Merhaba,
@@ -22,6 +22,17 @@ Kurum türü:
 Yaklaşık öğrenci sayısı:
 Öncelikli gelişim veya başarı takip ihtiyacımız:
 Demo görüşmesinde görmek istediğimiz kullanıcı ekranları:
+
+Not: İlk talepte öğrenci bilgisi, TCKN veya dosya göndermeyin.`);
+
+export const quoteRequestHref = mailtoHref(appBrand.demoEmail, `Teklif veya deneme talebi - ${appBrand.name}`, `Merhaba,
+
+${appBrand.name} için teklif / kartsız deneme talep ediyoruz.
+
+Talep türü (teklif / 7 günlük kartsız deneme):
+Kurum türü ve kademeler:
+Kampüs sayısı:
+Yaklaşık aktif öğrenci sayısı:
 
 Not: İlk talepte öğrenci bilgisi, TCKN veya dosya göndermeyin.`);
 

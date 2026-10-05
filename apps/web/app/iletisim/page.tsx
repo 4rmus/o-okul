@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { CheckCircle2, ShieldCheck } from "lucide-react";
-import { appBrand, appBrandHomeAriaLabel, demoRequestHref, platformSupportHref, privacyRequestHref } from "../../src/brand.js";
+import { appBrand, appBrandHomeAriaLabel, demoRequestHref, platformSupportHref, privacyRequestHref, quoteRequestHref } from "../../src/brand.js";
 import { DemoActions } from "./demo-actions.js";
 
 const preparation = [
-  "Kullandığınız optik dosya biçimi: TXT veya DAT",
-  "Sınav sonucunu yayımlamadan önce uyguladığınız kontrol adımları",
+  "Kurum türü, kademeler (ilkokul, ortaokul, lise), kampüs sayısı ve yaklaşık aktif öğrenci sayısı",
+  "Öncelikle takip etmek istediğiniz alanlar: deneme, okul notu, devamsızlık, ödev veya ödeme planı",
+  "Optik deneme kullanıyorsanız dosya biçimi: TXT veya DAT",
   "Görmek istediğiniz Başarı %, Net ve Soru raporları",
-  "Kurum türü, kampüs sayısı ve yaklaşık öğrenci sayısı",
 ] as const;
 
 export default function ContactPage() {
@@ -17,15 +17,15 @@ export default function ContactPage() {
       <header className="next-marketing-header">
         <nav className="next-marketing-nav" aria-label="İletişim navigasyonu">
           <Link className="next-brand" href="/" aria-label={appBrandHomeAriaLabel}><span className="next-brand-mark">{appBrand.mark}</span><span>{appBrand.name}</span></Link>
-          <div className="next-marketing-nav__actions"><Link className="next-marketing-login" href="/login">Giriş yap</Link><Link className="next-marketing-text-link" href="/#optik-akis">Optik akışa dön</Link></div>
+          <div className="next-marketing-nav__actions"><Link className="next-marketing-login" href="/login">Giriş yap</Link><Link className="next-marketing-text-link" href="/fiyatlar">Fiyatlar</Link></div>
         </nav>
       </header>
 
       <div id="main-content" tabIndex={-1}>
         <section id="demo" className="next-marketing-section next-marketing-faq" aria-labelledby="contact-title">
           <div className="next-marketing-section__header">
-            <p className="next-marketing-kicker">Yönlendirmeli demo hazırlığı</p>
-            <h1 id="contact-title">Demo görüşmesini kendi optik akışınıza göre hazırlayın.</h1>
+            <p className="next-marketing-kicker">Demo, teklif ve deneme</p>
+            <h1 id="contact-title">Demo veya teklif talebinizi hazırlayın.</h1>
             <p>Görüşme öncesinde aşağıdaki başlıkları düşünmeniz yeterli. Bu sayfa bilgi göndermez, kaydetmez veya ölçüm yapmaz.</p>
           </div>
           <div className="next-marketing-faq__list">
@@ -44,6 +44,11 @@ export default function ContactPage() {
               <p>Hazır taslağı e-posta uygulamanızda açabilir veya adresi kopyalayabilirsiniz.</p>
               <DemoActions email={appBrand.demoEmail} mailtoHref={demoRequestHref} />
             </section>
+            <section id="teklif" aria-labelledby="quote-title">
+              <h2 id="quote-title">Teklif veya kartsız deneme</h2>
+              <p>7001 ve üzeri aktif öğrenci için teklif hazırlarız. Kartsız deneme 7 gün ve en fazla 100 aktif öğrenciyle açılır; deneme hesabını ekibimiz kurar.</p>
+              <a className="uh-button uh-button--secondary uh-button--md" href={quoteRequestHref}>Teklif veya deneme e-postası oluştur</a>
+            </section>
           </div>
         </section>
 
@@ -57,8 +62,8 @@ export default function ContactPage() {
       </div>
 
       <footer className="next-marketing-footer">
-        <div><Link className="next-brand" href="/" aria-label={appBrandHomeAriaLabel}><span className="next-brand-mark">{appBrand.mark}</span><span>{appBrand.name}</span></Link><p>Optik sınav raporlama ve kurum takibi.</p></div>
-        <nav aria-label="Alt navigasyon"><Link href="/">Ana sayfa</Link><Link href="/login">Giriş</Link></nav>
+        <div><Link className="next-brand" href="/" aria-label={appBrandHomeAriaLabel}><span className="next-brand-mark">{appBrand.mark}</span><span>{appBrand.name}</span></Link><p>Özel okullar için bütüncül öğrenci takibi.</p></div>
+        <nav aria-label="Alt navigasyon"><Link href="/">Ana sayfa</Link><Link href="/fiyatlar">Fiyatlar</Link><Link href="/login">Giriş</Link></nav>
         <p className="next-marketing-footer__copyright">© 2026 {appBrand.name}</p>
       </footer>
     </main>
