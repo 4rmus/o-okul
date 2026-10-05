@@ -6,9 +6,10 @@ export default function manifest(): MetadataRoute.Manifest {
     name: appBrand.name,
     short_name: appBrand.name,
     description: "Eğitim kurumları için öğrenci takip ve kurum yönetim platformu.",
-    // KV-5: installable guardian app. No service-worker cache (offline is out of scope); push-sw.js only shows pushes.
-    id: "/veli",
-    start_url: "/veli",
+    // KV-5: installable app for every role; "/" lets the post-login role redirect pick the portal.
+    // No service-worker cache (offline is out of scope); push-sw.js only shows pushes.
+    id: "/",
+    start_url: "/",
     scope: "/",
     display: "standalone",
     background_color: "#eef2ff",

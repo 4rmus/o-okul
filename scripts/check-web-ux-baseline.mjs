@@ -4269,8 +4269,8 @@ requireNoTokens("apps/web/app/(app)/portals/_shared/portal-shell.tsx", [
 
 // KV-5: installable PWA (id, start_url, PNG + maskable icons) without any service-worker cache.
 requireTokens("apps/web/app/manifest.ts", [
-  'id: "/veli"',
-  'start_url: "/veli"',
+  'id: "/"',
+  'start_url: "/"',
   'src: "/icons/icon-192.png"',
   'src: "/icons/icon-512.png"',
   'purpose: "maskable"',
