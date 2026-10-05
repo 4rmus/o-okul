@@ -3077,6 +3077,61 @@ const gradeAssessmentRecordSchema = objectSchema({
   createdById: stringSchema(),
   createdAt: stringSchema({ format: "date-time" }),
 }, ["id", "tenantId", "classId", "courseId", "termId", "kind", "title", "heldOn", "maxScore", "createdById", "createdAt"]);
+const guardianStudentOverviewSchema = objectSchema({
+  student: objectSchema({
+    id: stringSchema(),
+    firstName: stringSchema(),
+    lastName: stringSchema(),
+    className: stringSchema(),
+  }, ["id", "firstName", "lastName"]),
+  attendance: objectSchema({
+    total: integerSchema({ minimum: 0 }),
+    present: integerSchema({ minimum: 0 }),
+    absent: integerSchema({ minimum: 0 }),
+    late: integerSchema({ minimum: 0 }),
+    excused: integerSchema({ minimum: 0 }),
+  }, ["total", "present", "absent", "late", "excused"]),
+  homework: objectSchema({
+    assignmentCount: integerSchema({ minimum: 0 }),
+    upcoming: arraySchema(objectSchema({
+      id: stringSchema(),
+      title: stringSchema(),
+      courseId: stringSchema(),
+      dueAt: stringSchema({ format: "date-time" }),
+    }, ["id"]), { maxItems: 5 }),
+  }, ["assignmentCount", "upcoming"]),
+  announcements: objectSchema({ unreadCount: integerSchema({ minimum: 0 }) }, ["unreadCount"]),
+  finance: objectSchema({
+    currency: stringSchema(),
+    pendingAmount: integerSchema({ minimum: 0 }),
+    overdueAmount: integerSchema({ minimum: 0 }),
+    overdueInstallmentCount: integerSchema({ minimum: 0 }),
+    nextDueDate: stringSchema({ format: "date" }),
+  }, ["currency", "pendingAmount", "overdueAmount", "overdueInstallmentCount"]),
+  examSeries: arraySchema(objectSchema({
+    snapshotId: stringSchema(),
+    generatedAt: stringSchema({ format: "date-time" }),
+    successRate: { type: "number", description: "Başarı % on a 0-100 scale." },
+    net: { type: "number" },
+    questionCount: { type: "number" },
+    correct: { type: "number" },
+    wrong: { type: "number" },
+    blank: { type: "number" },
+  }, ["snapshotId"])),
+  schoolGrades: arraySchema(objectSchema({
+    assessmentId: stringSchema(),
+    courseId: stringSchema(),
+    courseName: stringSchema(),
+    kind: gradeAssessmentKindSchema,
+    title: stringSchema(),
+    heldOn: stringSchema({ format: "date" }),
+    score: { type: "number", nullable: true, description: "On the assessment's own 0..maxScore scale; null when absent." },
+    absent: { type: "boolean" },
+    maxScore: { type: "number" },
+    version: integerSchema({ minimum: 1 }),
+  }, ["assessmentId", "courseId", "kind", "title", "heldOn", "score", "absent", "maxScore", "version"])),
+}, ["student", "attendance", "homework", "announcements", "examSeries", "schoolGrades"]);
+
 const gradeEntryRecordSchema = objectSchema({
   id: stringSchema(),
   assessmentId: stringSchema(),
@@ -3438,6 +3493,9 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/me/guardian/students/{studentId}/profile": {
     responseBody: publicStudentProfileRecordSchema,
+  },
+  "get /api/v1/me/guardian/students/{studentId}/overview": {
+    responseBody: guardianStudentOverviewSchema,
   },
   "get /api/v1/me/teacher": {
     responseBody: teacherRecordSchema,

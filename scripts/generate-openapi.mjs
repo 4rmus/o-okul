@@ -661,6 +661,22 @@ const portalStudentProfilePaths = [
   "/api/v1/me/student/profile",
   "/api/v1/me/guardian/students/{studentId}/profile",
 ];
+// KV-4: the guardian overview is an allow-list; teacher notes, contacts and other guardians never appear.
+const guardianStudentOverviewForbiddenDeep = [
+  "contacts",
+  "email",
+  "guardianLinks",
+  "guardians",
+  "nationalId",
+  "nationalIdEncrypted",
+  "nationalIdHash",
+  "note",
+  "phone",
+  "phoneMasked",
+  "teacherNotes",
+  "token",
+  "userId",
+];
 const kvkkInventoryKinds = ["guardian", "student", "teacher", "user"];
 const kvkkInventoryRecordRequired = ["id", "kind", "displayRef", "piiCategories", "purgeAvailable"];
 const kvkkInventoryForbiddenDeep = [
@@ -1541,6 +1557,13 @@ const requiredOperationContracts = [
     fieldChecks: [
       { path: ["responseDataItem", "status"], enum: studentStatuses },
     ],
+  },
+  {
+    method: "get",
+    path: "/api/v1/me/guardian/students/{studentId}/overview",
+    responseEnvelope: true,
+    responseDataRequired: ["student", "attendance", "homework", "announcements", "examSeries", "schoolGrades"],
+    responseDataForbiddenDeep: guardianStudentOverviewForbiddenDeep,
   },
   ...portalStudentProfilePaths.map((path) => ({
     method: "get",

@@ -438,7 +438,8 @@ export class GuardianService {
     return listTeacherScopedGuardianIds(context, this.studentStore, this.teacherAssignmentStore, this.guardianStudentStore);
   }
 
-  private async findCurrentGuardianStudentLink(context: RequestContext, studentId: string): Promise<GuardianStudentRecord> {
+  /** The single guardian→student link check: 404 for an unknown or other-tenant student, 403 when not linked. */
+  async findCurrentGuardianStudentLink(context: RequestContext, studentId: string): Promise<GuardianStudentRecord> {
     if (context.subjectType !== "GUARDIAN" || !context.subjectId) {
       throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
     }
