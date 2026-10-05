@@ -1714,7 +1714,12 @@ Runtime `.env` içinde `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` ve `VAPID_SUBJECT
 worker'a verilir; `NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY` aynı public key ile web build'ine girer ve
 `NEXT_PUBLIC_WEB_PUSH_ENABLED=true` yalnız anahtar kurulduktan sonra açılır. Private key yalnız
 worker'da tutulur. Anahtar döndürmek mevcut tüm abonelikleri geçersiz kılar; kullanıcıların push iznini
-yeniden açması gerekir. `apps/web/public/push-sw.js` yalnız bildirim gösterir ve tıklamada iç
+yeniden açması gerekir. Web imajı public anahtarı build sırasında alır: `Dockerfile` `build-web`
+`ARG NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY`, `docker-compose.yml` web build arg ve `staging-deploy.yml` web
+build adımı `vars.STAGING_NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY` (repo değişkeni, secret değil) kullanır;
+runtime env değeri istemci paketine girmez. Staging kurulumu 2026-10-05: anahtar çifti sunucuda worker
+imajıyla üretildi, `/root/o-okul/.env`'e yazıldı (`VAPID_SUBJECT=https://o-okul.com`, önceki hali
+`.env.bak-20261005-vapid`), public anahtar repo değişkenine kondu. `apps/web/public/push-sw.js` yalnız bildirim gösterir ve tıklamada iç
 bağlantıyı açar; fetch/cache işleyicisi yoktur.
 
 Gateway içinde WhatsApp Meta Cloud API ve `/webhooks/whatsapp` temeli de bulunur; Wrangler
