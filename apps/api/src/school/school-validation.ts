@@ -241,6 +241,7 @@ export const guardianStudentRelationBodySchema = z.object(guardianStudentRelatio
 export const guardianNotificationPreferenceBodySchema = z.object({
   canOpenSupportTickets: z.boolean().optional(),
   canReceiveAnnouncements: z.boolean().optional(),
+  canReceiveAutoNotifications: z.boolean().optional(),
   canReceiveSms: z.boolean().optional(),
 }).strict();
 

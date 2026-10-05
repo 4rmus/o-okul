@@ -63,7 +63,32 @@ export interface AnnouncementPushSendQueueJobInput extends BaseTenantQueueJobInp
   title: string;
 }
 
-export type AnnouncementDeliveryQueueJobInput = AnnouncementDeliveryReportQueueJobInput | AnnouncementPushSendQueueJobInput;
+export type GuardianNotifyKind = "ABSENCE" | "PAYMENT_DUE" | "GRADE_PUBLISHED";
+
+/**
+ * KV-8 (DEC-20261005-04): automatic guardian notification. entityId is the source row (Attendance, PaymentInstallment,
+ * GradeAssessment); the worker claims that row's notified marker and only then sends push + e-mail. Ids only, no PII.
+ */
+export interface GuardianNotifyQueueJobInput extends BaseTenantQueueJobInput {
+  queueName: "announcement-delivery";
+  mode: "GUARDIAN_NOTIFY";
+  kind: GuardianNotifyKind;
+}
+
+export type AnnouncementDeliveryQueueJobInput =
+  | AnnouncementDeliveryReportQueueJobInput
+  | AnnouncementPushSendQueueJobInput
+  | GuardianNotifyQueueJobInput;
+
+const guardianNotifyKinds: readonly GuardianNotifyKind[] = ["ABSENCE", "PAYMENT_DUE", "GRADE_PUBLISHED"];
+
+/** Same shape as the worker's payment scanner jobId (contentHash is the reminder day there). */
+export function guardianNotifyJobId(kind: GuardianNotifyKind, entityId: string, contentHash: string): string {
+  return `guardian-notify_${kind}_${entityId}_${contentHash}`;
+}
+
+/** Guardian notify jobs are dropped after this; the source row's notified marker is the durable dedupe. */
+export const guardianNotifyJobRetentionSeconds = 2 * 24 * 60 * 60;
 
 export const announcementPushChunkSize = 25;
 
@@ -145,7 +170,22 @@ export function createTenantQueueJob(input: TenantQueueJobInput): ProducedJob {
     throw new Error("BACKUP_RESTORE_JOB_PAYLOAD_INVALID");
   }
 
-  if (input.queueName === "announcement-delivery" && "mode" in input) {
+  if (input.queueName === "announcement-delivery" && "mode" in input && input.mode === "GUARDIAN_NOTIFY") {
+    return {
+      queueName: input.queueName,
+      name: input.queueName,
+      payload: createPayload(input),
+      options: {
+        attempts: 5,
+        backoff: { type: "exponential", delay: 1000 },
+        jobId: guardianNotifyJobId(input.kind, input.entityId, input.contentHash),
+        removeOnFail: { age: guardianNotifyJobRetentionSeconds },
+        removeOnComplete: { age: guardianNotifyJobRetentionSeconds },
+      },
+    };
+  }
+
+  if (input.queueName === "announcement-delivery" && "mode" in input && input.mode === "PUSH_SEND") {
     // Push jobs are kept for 30 days so re-adding the same send's chunk jobId is a BullMQ no-op (no second send).
     return {
       queueName: input.queueName,
@@ -179,6 +219,9 @@ export function createTenantQueueJob(input: TenantQueueJobInput): ProducedJob {
 }
 
 function isAnnouncementDeliveryInputValid(input: AnnouncementDeliveryQueueJobInput): boolean {
+  if ("mode" in input && input.mode === "GUARDIAN_NOTIFY") {
+    return guardianNotifyKinds.includes(input.kind) && /^[A-Za-z0-9-]{1,64}$/.test(input.contentHash);
+  }
   if ("mode" in input) {
     return input.mode === "PUSH_SEND" &&
       input.channel === "PUSH" &&

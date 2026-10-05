@@ -617,7 +617,7 @@ async function createPortalSupportTicket(accessToken: string, path: string, inpu
 async function updateGuardianNotificationPreferences(
   accessToken: string,
   studentId: string,
-  input: Partial<Pick<GuardianStudentRecord, "canReceiveSms" | "canReceiveAnnouncements" | "canOpenSupportTickets">>,
+  input: Partial<Pick<GuardianStudentRecord, "canReceiveSms" | "canReceiveAnnouncements" | "canOpenSupportTickets" | "canReceiveAutoNotifications">>,
 ) {
   return apiRequest<GuardianStudentRecord>(
     accessToken,

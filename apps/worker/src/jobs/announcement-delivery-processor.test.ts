@@ -3,6 +3,31 @@ import type { AnnouncementDeliveryReportInput, AnnouncementDeliveryReporter } fr
 import { createAnnouncementDeliveryProcessor } from "./announcement-delivery-processor.js";
 
 describe("createAnnouncementDeliveryProcessor", () => {
+  it("KV-8: e-posta ayarı eksikse e-posta kanalı atlanır, push yine gider", async () => {
+    const sent: string[] = [];
+    const processor = createAnnouncementDeliveryProcessor({
+      reporter: new FakeDeliveryReporter(),
+      env: { NODE_ENV: "production", NOTIFICATION_PROVIDER: "noop" },
+      pushSender: { send: async (_token, body) => { sent.push(body); return "sent"; } },
+      guardianStore: {
+        loadSettings: async () => ({ absenceEnabled: true, paymentDueEnabled: true, gradePublishEnabled: true, absenceThreshold: 10 }),
+        claimAbsence: async () => ({ studentId: "student-a", notifiedDate: "2026-10-05", thresholdReached: false }),
+        claimPaymentDue: async () => undefined,
+        claimGradePublished: async () => [],
+        listRecipients: async () => [{ userId: "user-guardian-a", email: "veli-a@example.test" }],
+        listActiveDevices: async () => [{ id: "device-1", token: "token-1" }],
+        disableDevices: async () => undefined,
+      },
+    });
+
+    await expect(processor({
+      id: "guardian-notify_ABSENCE_attendance-a_k1",
+      name: "announcement-delivery",
+      payload: { tenantId: "tenant-a", userId: "user-a", entityId: "attendance-a", contentHash: "k1", mode: "GUARDIAN_NOTIFY", kind: "ABSENCE" },
+    })).resolves.toMatchObject({ pushSentCount: 1, emailSentCount: 0 });
+    expect(sent).toHaveLength(1);
+  });
+
   it("verilen reporter ile announcement-delivery job'unu işler", async () => {
     const reporter = new FakeDeliveryReporter();
     const processor = createAnnouncementDeliveryProcessor({ reporter });

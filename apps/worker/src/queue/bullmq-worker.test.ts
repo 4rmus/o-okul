@@ -17,7 +17,7 @@ import {
   type BullSmsBatchJob,
   type BullWorkerFactory,
 } from "./bullmq-worker.js";
-import type { AnnouncementDeliveryJobPayload, AnnouncementDeliveryJobResult } from "../jobs/announcement-delivery-job.js";
+import type { AnnouncementDeliveryJobPayload, AnnouncementDeliveryJobResult, AnnouncementDeliveryQueueJobResult } from "../jobs/announcement-delivery-job.js";
 import type { BackupRestoreJobPayload, BackupRestoreJobResult } from "../jobs/backup-restore-job.js";
 import type { ExcelImportJobResult } from "../jobs/excel-import-job.js";
 import type { ExamEvaluationJobPayload, ExamEvaluationJobResult } from "../jobs/exam-evaluation-job.js";
@@ -339,10 +339,10 @@ describe("BullMQ announcement delivery worker", () => {
   it("BullMQ job'unu announcement delivery processor imzasına çevirir", async () => {
     const calls: Array<{
       name: string;
-      processor: (job: BullAnnouncementDeliveryJob) => Promise<AnnouncementDeliveryJobResult>;
+      processor: (job: BullAnnouncementDeliveryJob) => Promise<AnnouncementDeliveryQueueJobResult>;
       options: unknown;
     }> = [];
-    const createWorker: BullWorkerFactory<BullAnnouncementDeliveryJob, AnnouncementDeliveryJobResult> = (name, processor, options) => {
+    const createWorker: BullWorkerFactory<BullAnnouncementDeliveryJob, AnnouncementDeliveryQueueJobResult> = (name, processor, options) => {
       calls.push({ name, processor, options });
       return { close: async () => undefined };
     };
@@ -375,7 +375,7 @@ describe("BullMQ announcement delivery worker", () => {
   });
 
   it("announcement-delivery BullMQ job adı yanlışsa işi başlatmaz", async () => {
-    let processor: ((job: BullAnnouncementDeliveryJob) => Promise<AnnouncementDeliveryJobResult>) | undefined;
+    let processor: ((job: BullAnnouncementDeliveryJob) => Promise<AnnouncementDeliveryQueueJobResult>) | undefined;
     createAnnouncementDeliveryBullWorker({
       activityRunner: async (_admission, run) => run(),
       connection: { host: "127.0.0.1", port: 6379 },

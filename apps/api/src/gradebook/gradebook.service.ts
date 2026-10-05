@@ -12,6 +12,7 @@ import type {
 } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { GuardianAutoNotificationService } from "../guardian-notification/guardian-auto-notification.service.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import { hasCapability } from "../rbac/role-capabilities.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
@@ -37,6 +38,7 @@ export class GradebookService {
     @Inject(teacherAssignmentStoreToken) private readonly teacherAssignments: TeacherAssignmentStore,
     @Optional() private readonly idempotency?: IdempotencyService,
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional() private readonly guardianNotifications?: GuardianAutoNotificationService,
   ) {}
 
   async createAssessment(context: RequestContext, input: GradeAssessmentCreateRequest): Promise<GradeAssessmentRecord> {
@@ -135,6 +137,7 @@ export class GradebookService {
       action: "grade_assessment.published",
       diff: { publishedVersion: result.assessment.publishedVersion, publishedCount: result.publishedCount },
     });
+    await this.guardianNotifications?.notifyGradePublished(context, result.assessment);
     return result;
   }
 

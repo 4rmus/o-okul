@@ -1722,6 +1722,26 @@ imajıyla üretildi, `/root/o-okul/.env`'e yazıldı (`VAPID_SUBJECT=https://o-o
 `.env.bak-20261005-vapid`), public anahtar repo değişkenine kondu. `apps/web/public/push-sw.js` yalnız bildirim gösterir ve tıklamada iç
 bağlantıyı açar; fetch/cache işleyicisi yoktur.
 
+### Otomatik veli bildirimleri (KV-8)
+
+DEC-20261005-04: devamsızlık, ödeme vadesi ve not yayını bildirimleri personel müdahalesi olmadan
+`announcement-delivery` kuyruğundan push (KV-7 yolu) ve e-postayla gider; SMS yoktur, outbox tablosu
+yoktur. Migration `20261009120000_guardian_auto_notifications` yalnız sütun ekler (Tenant ayarları
+varsayılan açık + eşik 10, `GuardianStudent.canReceiveAutoNotifications` varsayılan açık,
+`Attendance.notifiedAt/thresholdNotifiedAt`, `PaymentInstallment.notifiedOn`,
+`GradeAssessment.notifiedAt`); deploy sırası: önce migration, sonra API ve worker.
+
+- Devamsızlık ve not yayını API'den `guardian-notify_<tür>_<kaynakId>_<anahtar>` job'u ile kuyruğa
+  girer; vade taraması worker içinde 09:00-18:00 (Europe/Istanbul) arasında 30 dakikada bir çalışır,
+  jobId `guardian-notify_PAYMENT_DUE_<taksitId>_<gün>`. Job'lar 2 gün saklanır.
+- Worker göndermeden önce kaynak satırdaki işareti aynı transaction'da alır; job iki kez koşsa veya aynı
+  gün yoklama düzeltilse ikinci gönderim olmaz. İşaret alındıktan sonraki gönderim hatası yeniden
+  denenmez (en fazla bir kez).
+- `NOTIFICATION_*` ayarı eksik/geçersizse e-posta kanalı atlanır; VAPID eksikse push atlanır. Bu
+  bildirimler için `AnnouncementDeliveryReport` satırı yazılmaz; worker logunda yalnız sayılar vardır.
+- Eski sınıf geneli "Devamsızlık eşiği uyarısı" duyurusu ve `ATTENDANCE_ABSENCE_WARNING_THRESHOLD`
+  env'i kaldırıldı; eşik kurum ayarıdır (`/kurum/kurulum/genel` → Otomatik veli bildirimleri).
+
 Gateway içinde WhatsApp Meta Cloud API ve `/webhooks/whatsapp` temeli de bulunur; Wrangler
 varsayılanı `WHATSAPP_ENABLED=false` olduğu için gönderim provider'a gitmeden fail-closed olur ve
 webhook yolu capability sunmaz. Yerel testler yalnız utility template istek biçimini, ham request

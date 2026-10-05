@@ -17,6 +17,7 @@ export type {
   ProductEventValidationContext,
   TenantPseudonym,
 } from "./product-analytics.js";
+export { addCalendarDays, isPaymentInstallmentOverdue, istanbulDate } from "./payment-due.js";
 export {
   reportCourseMatchesScoreType,
   reportCourseShortName,
@@ -142,6 +143,8 @@ export type {
   GuardianStudentDetailStudentRecord,
   GuardianStudentDetailsResponse,
   GuardianStudentRecord,
+  GuardianAutoNotificationSettingsRecord,
+  GuardianAutoNotificationSettingsUpdateRequest,
   GuardianRecord,
   GuardianUpdateRequest,
   InstitutionDashboardClassSummary,

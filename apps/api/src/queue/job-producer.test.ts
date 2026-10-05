@@ -2,6 +2,36 @@ import { describe, expect, it } from "vitest";
 import { chunkAnnouncementPushDevices, createTenantQueueJob } from "./job-producer.js";
 
 describe("createTenantQueueJob", () => {
+  it("KV-8 veli bildirim işi: kaynak satır kimliğiyle jobId, yalnız id taşıyan payload ve sınırlı saklama", () => {
+    const job = createTenantQueueJob({
+      queueName: "announcement-delivery",
+      mode: "GUARDIAN_NOTIFY",
+      kind: "ABSENCE",
+      tenantId: "tenant-a",
+      userId: "user-a",
+      entityId: "attendance-1",
+      contentHash: "lz3k9",
+    });
+
+    expect(job.options).toEqual({
+      attempts: 5,
+      backoff: { type: "exponential", delay: 1000 },
+      jobId: "guardian-notify_ABSENCE_attendance-1_lz3k9",
+      removeOnFail: { age: 2 * 24 * 60 * 60 },
+      removeOnComplete: { age: 2 * 24 * 60 * 60 },
+    });
+    expect(job.payload).toEqual({ mode: "GUARDIAN_NOTIFY", kind: "ABSENCE", tenantId: "tenant-a", userId: "user-a", entityId: "attendance-1", contentHash: "lz3k9" });
+    expect(() => createTenantQueueJob({
+      queueName: "announcement-delivery",
+      mode: "GUARDIAN_NOTIFY",
+      kind: "SMS" as never,
+      tenantId: "tenant-a",
+      userId: "user-a",
+      entityId: "attendance-1",
+      contentHash: "lz3k9",
+    })).toThrow("ANNOUNCEMENT_DELIVERY_JOB_PAYLOAD_INVALID");
+  });
+
   it("planlanan BullMQ defaultlarını üretir", () => {
     const job = createTenantQueueJob({
       queueName: "excel-import",

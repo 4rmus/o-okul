@@ -900,9 +900,22 @@ export interface GuardianStudentRecord {
   canReceiveSms: boolean;
   canReceiveAnnouncements: boolean;
   canOpenSupportTickets: boolean;
+  /** KV-8: the guardian's own opt-out for automatic notifications; undefined means on (the column default). */
+  canReceiveAutoNotifications?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
+
+/** KV-8 (DEC-20261005-04): institution switches for automatic guardian notifications, all on by default. */
+export interface GuardianAutoNotificationSettingsRecord {
+  absenceEnabled: boolean;
+  paymentDueEnabled: boolean;
+  gradePublishEnabled: boolean;
+  /** Absent days in one term that trigger the one-time threshold warning (default 10). */
+  absenceThreshold: number;
+}
+
+export type GuardianAutoNotificationSettingsUpdateRequest = Partial<GuardianAutoNotificationSettingsRecord>;
 
 export interface StudentRecord {
   id: string;
