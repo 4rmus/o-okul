@@ -6,6 +6,8 @@ import type {
   HomeworkMaterialAssignmentRecord,
   HomeworkMaterialRecord,
   HomeworkRecord,
+  HomeworkSubmissionRecord,
+  StudentHomeworkRecord,
   GuardianRecord,
   InstitutionDashboardSummary,
   MeProfileResponse,
@@ -227,6 +229,21 @@ export class MeController {
   @Roles("STUDENT")
   studentHomeworkMaterialAssignments(): Promise<HomeworkMaterialAssignmentRecord[]> {
     return this.homework.listCurrentStudentMaterialAssignments(getRequestContext());
+  }
+
+  @Get("student/homework")
+  @Roles("STUDENT")
+  studentHomework(): Promise<StudentHomeworkRecord[]> {
+    return this.homework.listCurrentStudentHomework(getRequestContext());
+  }
+
+  @Post("student/homework/:homeworkId/submission")
+  @Roles("STUDENT")
+  submitStudentHomework(
+    @Param("homeworkId") homeworkId: string,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<HomeworkSubmissionRecord> {
+    return this.homework.submitCurrentStudentHomework(getRequestContext(), homeworkId, idempotencyKey);
   }
 
   @Get("student/attendance")

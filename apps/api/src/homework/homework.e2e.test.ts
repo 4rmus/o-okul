@@ -1031,6 +1031,173 @@ describe("Homework API", () => {
     await request(server).delete("/homework/homework-a").set("Authorization", `Bearer ${teacherAAccessToken}`).expect(403);
   });
 
+  describe("ödev teslimi (DEC-20261004-10)", () => {
+    let studentAAccessToken: string;
+
+    beforeAll(async () => {
+      const login = await request(server).post("/auth/login").send(testLoginBody("student-a@example.test")).expect(200);
+      studentAAccessToken = (login.body as { accessToken: string }).accessToken;
+    });
+
+    async function createClassAHomework(title: string): Promise<string> {
+      const created = await request(server)
+        .post("/homework")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ classId: "class-a", title })
+        .expect(201);
+      return (created.body as { id: string }).id;
+    }
+
+    it("öğrenci dosyasız teslim eder, öğretmen kontrol eder, kontrol edilmiş satırda işaret 409 döner", async () => {
+      const homeworkId = await createClassAHomework("Teslim Akışı");
+
+      const before = await request(server).get("/me/student/homework").set("Authorization", `Bearer ${studentAAccessToken}`).expect(200);
+      expect(before.body).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: homeworkId, submission: { homeworkId, studentId: "student-a", status: "NOT_SUBMITTED" } }),
+      ]));
+      expect(JSON.stringify(before.body)).not.toContain("homework-b");
+
+      const submitted = await request(server)
+        .post(`/me/student/homework/${homeworkId}/submission`)
+        .set("Authorization", `Bearer ${studentAAccessToken}`)
+        .expect(201);
+      expect(submitted.body).toMatchObject({ homeworkId, studentId: "student-a", status: "SUBMITTED" });
+      const submittedAt = (submitted.body as { submittedAt: string }).submittedAt;
+      expect(typeof submittedAt).toBe("string");
+
+      // Re-marking an unchecked row keeps the first timestamp.
+      const again = await request(server)
+        .post(`/me/student/homework/${homeworkId}/submission`)
+        .set("Authorization", `Bearer ${studentAAccessToken}`)
+        .expect(201);
+      expect(again.body).toMatchObject({ status: "SUBMITTED", submittedAt });
+
+      const teacherView = await request(server)
+        .get(`/homework/${homeworkId}/submissions`)
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .expect(200);
+      expect(teacherView.body).toEqual(expect.arrayContaining([
+        expect.objectContaining({ studentId: "student-a", status: "SUBMITTED", submittedAt }),
+      ]));
+
+      const checked = await request(server)
+        .post(`/homework/${homeworkId}/submissions/check`)
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .send({ studentIds: ["student-a"] })
+        .expect(201);
+      expect(checked.body).toEqual([expect.objectContaining({ studentId: "student-a", status: "CHECKED", submittedAt })]);
+
+      const conflict = await request(server)
+        .post(`/me/student/homework/${homeworkId}/submission`)
+        .set("Authorization", `Bearer ${studentAAccessToken}`)
+        .expect(409);
+      expect(JSON.stringify(conflict.body)).toContain("HOMEWORK_SUBMISSION_ALREADY_CHECKED");
+
+      const after = await request(server).get("/me/student/homework").set("Authorization", `Bearer ${studentAAccessToken}`).expect(200);
+      expect(after.body).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: homeworkId, submission: expect.objectContaining({ status: "CHECKED", submittedAt }) }),
+      ]));
+
+      // The legacy class-level check PATCH is untouched by submissions.
+      const homework = await request(server).get(`/homework/${homeworkId}`).set("Authorization", `Bearer ${teacherAAccessToken}`).expect(200);
+      expect(homework.body.checkedAt).toBeUndefined();
+    });
+
+    it("öğretmen teslim etmemiş öğrenciyi de kontrol edebilir; satır tembel oluşur", async () => {
+      const homeworkId = await createClassAHomework("Defter Kontrolü");
+
+      const checked = await request(server)
+        .post(`/homework/${homeworkId}/submissions/check`)
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .send({ studentIds: ["student-a"] })
+        .expect(201);
+      expect(checked.body).toEqual([{ homeworkId, studentId: "student-a", status: "CHECKED", checkedAt: expect.any(String) }]);
+    });
+
+    it("öğrenci yalnız kendi sınıfının ödevini, yalnız kendi adına işaretler", async () => {
+      await request(server).post("/me/student/homework/homework-b/submission").set("Authorization", `Bearer ${studentAAccessToken}`).expect(404);
+      await request(server).post("/me/student/homework/missing/submission").set("Authorization", `Bearer ${studentAAccessToken}`).expect(404);
+      await request(server).post("/me/student/homework/homework-a/submission").set("Authorization", `Bearer ${teacherAAccessToken}`).expect(403);
+      await request(server).post("/me/student/homework/homework-a/submission").set("Authorization", `Bearer ${tenantAAccessToken}`).expect(403);
+      await request(server)
+        .post("/homework/homework-a/submissions/check")
+        .set("Authorization", `Bearer ${studentAAccessToken}`)
+        .send({ studentIds: ["student-a"] })
+        .expect(403);
+      await request(server).get("/homework/homework-a/submissions").set("Authorization", `Bearer ${studentAAccessToken}`).expect(403);
+    });
+
+    it("öğretmen atanmadığı sınıfın veya tenantın teslimini kontrol edemez", async () => {
+      const classD = await request(server).post("/classes").set("Authorization", `Bearer ${tenantAAccessToken}`).send({ name: "11-Z" }).expect(201);
+      const unassigned = await request(server)
+        .post("/homework")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ classId: classD.body.id, title: "Atanmamış Sınıf Ödevi" })
+        .expect(201);
+
+      await request(server)
+        .post(`/homework/${unassigned.body.id}/submissions/check`)
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .send({ studentIds: ["student-a"] })
+        .expect(403);
+      await request(server).get(`/homework/${unassigned.body.id}/submissions`).set("Authorization", `Bearer ${teacherAAccessToken}`).expect(403);
+      await request(server)
+        .post("/homework/homework-b/submissions/check")
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .send({ studentIds: ["student-b"] })
+        .expect(403);
+
+      const outsider = await request(server)
+        .post("/homework/homework-a/submissions/check")
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .send({ studentIds: ["student-b"] })
+        .expect(400);
+      expect(JSON.stringify(outsider.body)).toContain("HOMEWORK_SUBMISSION_STUDENT_NOT_IN_CLASS");
+      await request(server)
+        .post("/homework/homework-a/submissions/check")
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .send({ studentIds: [] })
+        .expect(422);
+    });
+
+    it("teslim ve kontrol Idempotency-Key ile tekilleşir", async () => {
+      const homeworkId = await createClassAHomework("Idempotent Teslim");
+
+      const first = await request(server)
+        .post(`/me/student/homework/${homeworkId}/submission`)
+        .set("Authorization", `Bearer ${studentAAccessToken}`)
+        .set("Idempotency-Key", "homework-submission-idempotency-a")
+        .expect(201);
+      const replay = await request(server)
+        .post(`/me/student/homework/${homeworkId}/submission`)
+        .set("Authorization", `Bearer ${studentAAccessToken}`)
+        .set("Idempotency-Key", "homework-submission-idempotency-a")
+        .expect(201);
+      expect(replay.body).toEqual(first.body);
+
+      const checked = await request(server)
+        .post(`/homework/${homeworkId}/submissions/check`)
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .set("Idempotency-Key", "homework-submission-check-idempotency-a")
+        .send({ studentIds: ["student-a"] })
+        .expect(201);
+      const checkedReplay = await request(server)
+        .post(`/homework/${homeworkId}/submissions/check`)
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .set("Idempotency-Key", "homework-submission-check-idempotency-a")
+        .send({ studentIds: ["student-a"] })
+        .expect(201);
+      expect(checkedReplay.body).toEqual(checked.body);
+      await request(server)
+        .post(`/homework/${homeworkId}/submissions/check`)
+        .set("Authorization", `Bearer ${teacherAAccessToken}`)
+        .set("Idempotency-Key", "homework-submission-check-idempotency-a")
+        .send({ studentIds: ["student-a", "student-a2"] })
+        .expect(409)
+        .expect(({ body }) => expect(JSON.stringify(body)).toContain("IDEMPOTENCY_KEY_BODY_MISMATCH"));
+    });
+  });
+
   it("yetkisiz request ödev endpointine erişemez", async () => {
     await request(server).get("/homework").expect(401);
   });

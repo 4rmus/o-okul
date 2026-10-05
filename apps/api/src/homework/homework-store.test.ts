@@ -269,4 +269,52 @@ describe("PostgresHomeworkStore", () => {
     expect((created as { contentBase64?: string }).contentBase64).toBeUndefined();
     expect((created as { storageKey?: string }).storageKey).toBeUndefined();
   });
+
+  it("teslim işaretini kontrol edilmemiş satıra yazar; kontrol edilmiş satırda satır dönmez (DEC-20261004-10)", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    let checked = false;
+    const pool = {
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        if (sql.includes('INSERT INTO "HomeworkSubmission"') && sql.includes('"submittedAt"')) {
+          return {
+            rows: (checked
+              ? []
+              : [{ id: "submission-a", tenantId: "tenant-a", homeworkId: "homework-a", studentId: "student-a", submittedAt: new Date("2026-06-04T08:00:00.000Z"), checkedAt: null, checkedById: null }]) as T[],
+          };
+        }
+        if (sql.startsWith('SELECT * FROM "HomeworkSubmission"')) {
+          return {
+            rows: [{ id: "submission-a", tenantId: "tenant-a", homeworkId: "homework-a", studentId: "student-a", submittedAt: null, checkedAt: new Date("2026-06-04T09:00:00.000Z"), checkedById: "teacher-user-a" }] as T[],
+          };
+        }
+        return { rows: [] as T[] };
+      },
+    };
+    const store = new PostgresHomeworkStore(pool);
+
+    await runWithRequestContext(
+      { userId: "user-tenant-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      async () => {
+        const key = { tenantId: "tenant-a", homeworkId: "homework-a", studentId: "student-a" };
+        await expect(store.markSubmitted({ ...key, submittedAt: "2026-06-04T08:00:00.000Z" })).resolves.toMatchObject({ submittedAt: "2026-06-04T08:00:00.000Z" });
+        checked = true;
+        await expect(store.markSubmitted({ ...key, submittedAt: "2026-06-04T10:00:00.000Z" })).resolves.toBeUndefined();
+        await expect(
+          store.markChecked({ tenantId: "tenant-a", homeworkId: "homework-a", studentIds: ["student-a"], checkedAt: "2026-06-04T09:00:00.000Z", checkedById: "teacher-user-a" }),
+        ).resolves.toEqual([
+          { id: "submission-a", tenantId: "tenant-a", homeworkId: "homework-a", studentId: "student-a", submittedAt: undefined, checkedAt: "2026-06-04T09:00:00.000Z", checkedById: "teacher-user-a" },
+        ]);
+      },
+    );
+
+    const writes = queries.filter((query) => query.sql.includes('INSERT INTO "HomeworkSubmission"'));
+    expect(writes).toHaveLength(3);
+    for (const write of writes) {
+      expect(write.sql).toContain('ON CONFLICT ("tenantId", "homeworkId", "studentId") DO UPDATE');
+      expect(write.sql).toContain('WHERE "HomeworkSubmission"."checkedAt" IS NULL');
+    }
+    expect(writes[0]?.sql).toContain('COALESCE("HomeworkSubmission"."submittedAt", EXCLUDED."submittedAt")');
+    expect(writes[2]?.values).toEqual(["tenant-a", "homework-a", ["student-a"], [expect.any(String)], "2026-06-04T09:00:00.000Z", "teacher-user-a"]);
+  });
 });

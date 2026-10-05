@@ -670,6 +670,7 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
     "/me/student/announcements",
     "/me/student/attendance",
     "/me/student/development-assessments",
+    "/me/student/homework",
     "/me/student/homework/material-assignments",
     "/me/student/reports",
     "/me/student/support-tickets",

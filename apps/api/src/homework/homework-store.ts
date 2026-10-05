@@ -7,6 +7,7 @@ import type {
   HomeworkMaterialFileRecord,
   HomeworkMaterialRecord,
   HomeworkRecord,
+  HomeworkSubmissionRow,
 } from "./homework.service.js";
 
 export interface HomeworkStore {
@@ -32,6 +33,18 @@ export interface HomeworkStore {
   update(id: string, input: Partial<Pick<HomeworkRecord, "classId" | "title" | "description" | "dueAt">>): Promise<HomeworkRecord | undefined>;
   softDelete(id: string, deletedAt: string): Promise<HomeworkRecord | undefined>;
   updateCheckStatus(id: string, checkedAt: string | undefined, checkedBy: string | undefined): Promise<HomeworkRecord | undefined>;
+  listSubmissions(homeworkId: string): Promise<HomeworkSubmissionRow[]>;
+  listSubmissionsByStudent(studentId: string): Promise<HomeworkSubmissionRow[]>;
+  /** Lazily creates the row; returns undefined when the row is already checked (DEC-20261004-10). */
+  markSubmitted(input: SubmissionKey & { submittedAt: string }): Promise<HomeworkSubmissionRow | undefined>;
+  /** Checks each student's row, creating it when missing; already checked rows keep their first check. */
+  markChecked(input: Omit<SubmissionKey, "studentId"> & { studentIds: string[]; checkedAt: string; checkedById: string }): Promise<HomeworkSubmissionRow[]>;
+}
+
+interface SubmissionKey {
+  tenantId: string;
+  homeworkId: string;
+  studentId: string;
 }
 
 export const homeworkStoreToken = Symbol("HomeworkStore");
@@ -126,6 +139,7 @@ export class InMemoryHomeworkStore implements HomeworkStore {
   private readonly materialFiles = demoMaterialFiles.map((record) => ({ ...record }));
   private readonly materialAssignments = demoMaterialAssignments.map((record) => ({ ...record }));
   private readonly homework = demoHomework.map((record) => ({ ...record }));
+  private readonly submissions: HomeworkSubmissionRow[] = [];
 
   async listMaterials(): Promise<HomeworkMaterialRecord[]> {
     return this.materials;
@@ -250,6 +264,45 @@ export class InMemoryHomeworkStore implements HomeworkStore {
     record.checkedAt = checkedAt;
     record.checkedBy = checkedBy;
     return record;
+  }
+
+  async listSubmissions(homeworkId: string): Promise<HomeworkSubmissionRow[]> {
+    return this.submissions.filter((row) => row.homeworkId === homeworkId);
+  }
+
+  async listSubmissionsByStudent(studentId: string): Promise<HomeworkSubmissionRow[]> {
+    return this.submissions.filter((row) => row.studentId === studentId);
+  }
+
+  async markSubmitted(input: SubmissionKey & { submittedAt: string }): Promise<HomeworkSubmissionRow | undefined> {
+    const row = this.findOrCreateSubmission(input);
+    if (row.checkedAt) return undefined;
+    row.submittedAt ??= input.submittedAt;
+    return { ...row };
+  }
+
+  async markChecked(
+    input: Omit<SubmissionKey, "studentId"> & { studentIds: string[]; checkedAt: string; checkedById: string },
+  ): Promise<HomeworkSubmissionRow[]> {
+    return input.studentIds.map((studentId) => {
+      const row = this.findOrCreateSubmission({ ...input, studentId });
+      if (!row.checkedAt) {
+        row.checkedAt = input.checkedAt;
+        row.checkedById = input.checkedById;
+      }
+      return { ...row };
+    });
+  }
+
+  private findOrCreateSubmission(key: SubmissionKey): HomeworkSubmissionRow {
+    let row = this.submissions.find(
+      (candidate) => candidate.tenantId === key.tenantId && candidate.homeworkId === key.homeworkId && candidate.studentId === key.studentId,
+    );
+    if (!row) {
+      row = { id: `homework-submission-${this.submissions.length + 1}`, tenantId: key.tenantId, homeworkId: key.homeworkId, studentId: key.studentId };
+      this.submissions.push(row);
+    }
+    return row;
   }
 }
 
@@ -524,6 +577,60 @@ export class PostgresHomeworkStore implements HomeworkStore {
       return result.rows[0] ? toHomeworkRecord(result.rows[0]) : undefined;
     });
   }
+
+  async listSubmissions(homeworkId: string): Promise<HomeworkSubmissionRow[]> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<HomeworkSubmissionDbRow>(`SELECT * FROM "HomeworkSubmission" WHERE "homeworkId" = $1`, [homeworkId]);
+      return result.rows.map(toHomeworkSubmissionRow);
+    });
+  }
+
+  async listSubmissionsByStudent(studentId: string): Promise<HomeworkSubmissionRow[]> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<HomeworkSubmissionDbRow>(`SELECT * FROM "HomeworkSubmission" WHERE "studentId" = $1`, [studentId]);
+      return result.rows.map(toHomeworkSubmissionRow);
+    });
+  }
+
+  async markSubmitted(input: SubmissionKey & { submittedAt: string }): Promise<HomeworkSubmissionRow | undefined> {
+    return withTenantQuery(this.pool, async (client) => {
+      // 0 rows back means the conflicting row is already checked: the caller answers 409.
+      const result = await client.query<HomeworkSubmissionDbRow>(
+        `INSERT INTO "HomeworkSubmission" ("id", "tenantId", "homeworkId", "studentId", "submittedAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, now())
+         ON CONFLICT ("tenantId", "homeworkId", "studentId") DO UPDATE
+           SET "submittedAt" = COALESCE("HomeworkSubmission"."submittedAt", EXCLUDED."submittedAt"),
+               "updatedAt" = now()
+           WHERE "HomeworkSubmission"."checkedAt" IS NULL
+         RETURNING *`,
+        [randomUUID(), input.tenantId, input.homeworkId, input.studentId, input.submittedAt],
+      );
+      return result.rows[0] ? toHomeworkSubmissionRow(result.rows[0]) : undefined;
+    });
+  }
+
+  async markChecked(
+    input: Omit<SubmissionKey, "studentId"> & { studentIds: string[]; checkedAt: string; checkedById: string },
+  ): Promise<HomeworkSubmissionRow[]> {
+    return withTenantQuery(this.pool, async (client) => {
+      await client.query(
+        `INSERT INTO "HomeworkSubmission" ("id", "tenantId", "homeworkId", "studentId", "checkedAt", "checkedById", "updatedAt")
+         SELECT pick."id", $1, $2, pick."studentId", $5, $6, now()
+         FROM unnest($3::text[], $4::text[]) AS pick("studentId", "id")
+         ON CONFLICT ("tenantId", "homeworkId", "studentId") DO UPDATE
+           SET "checkedAt" = EXCLUDED."checkedAt",
+               "checkedById" = EXCLUDED."checkedById",
+               "updatedAt" = now()
+           WHERE "HomeworkSubmission"."checkedAt" IS NULL`,
+        [input.tenantId, input.homeworkId, input.studentIds, input.studentIds.map(() => randomUUID()), input.checkedAt, input.checkedById],
+      );
+      const result = await client.query<HomeworkSubmissionDbRow>(
+        `SELECT * FROM "HomeworkSubmission" WHERE "homeworkId" = $1 AND "studentId" = ANY($2::text[])`,
+        [input.homeworkId, input.studentIds],
+      );
+      return result.rows.map(toHomeworkSubmissionRow);
+    });
+  }
 }
 
 export function createHomeworkStore(): HomeworkStore {
@@ -637,6 +744,28 @@ function toHomeworkRecord(record: HomeworkRow): HomeworkRecord {
     checkedAt: record.checkedAt?.toISOString(),
     checkedBy: record.checkedById ?? undefined,
     deletedAt: record.deletedAt?.toISOString(),
+  };
+}
+
+interface HomeworkSubmissionDbRow {
+  id: string;
+  tenantId: string;
+  homeworkId: string;
+  studentId: string;
+  submittedAt: Date | null;
+  checkedAt: Date | null;
+  checkedById: string | null;
+}
+
+function toHomeworkSubmissionRow(record: HomeworkSubmissionDbRow): HomeworkSubmissionRow {
+  return {
+    id: record.id,
+    tenantId: record.tenantId,
+    homeworkId: record.homeworkId,
+    studentId: record.studentId,
+    submittedAt: record.submittedAt?.toISOString(),
+    checkedAt: record.checkedAt?.toISOString(),
+    checkedById: record.checkedById ?? undefined,
   };
 }
 

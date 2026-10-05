@@ -1405,6 +1405,31 @@ export interface HomeworkCheckStatusRequest {
   checked: boolean;
 }
 
+/** DEC-20261004-10: derived from HomeworkSubmission timestamps (checkedAt, then submittedAt); never stored. */
+export type HomeworkSubmissionStatus = "NOT_SUBMITTED" | "SUBMITTED" | "CHECKED";
+
+export interface HomeworkSubmissionRecord {
+  homeworkId: string;
+  studentId: string;
+  status: HomeworkSubmissionStatus;
+  submittedAt?: string;
+  checkedAt?: string;
+}
+
+export interface HomeworkSubmissionCheckRequest {
+  studentIds: string[];
+}
+
+export interface StudentHomeworkRecord {
+  id: string;
+  classId: string;
+  title: string;
+  description?: string;
+  sourceMaterialTitle?: string;
+  dueAt?: string;
+  submission: HomeworkSubmissionRecord;
+}
+
 export type AnnouncementAudience = "SCHOOL" | "TEACHERS" | "STUDENTS" | "GUARDIANS";
 
 export interface AnnouncementCreateRequest {

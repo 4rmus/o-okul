@@ -927,7 +927,7 @@ Son kontrol: 2026-10-04
 
 ### DEC-20261004-10 — Ödev teslimi zaman damgalı ve dosyasızdır
 
-Durum: Onaylı; AK-6 dilimi bekliyor
+Durum: Onaylı; AK-6 ile kodlandı (LOCAL_TEST); staging teslim UAT kanıtı bekliyor
 Karar: Ödev teslimi `HomeworkSubmission` zaman damgalı satırıdır (`submittedAt`, `checkedAt`,
 `checkedById`); satırlar tembel oluşur, durum türetilir. Öğrenci yalnız dosyasız teslim işareti koyar;
 işaret `ON CONFLICT ... WHERE checkedAt IS NULL` ile yazılır, kontrol edilmiş satırda 409 döner. Dosya
@@ -936,7 +936,7 @@ Kaynak: Ürün sahibi kararı (2026-10-03, D9).
 Kanıt: `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §7.4. Kanıt sınıfı LOCAL_STATIC.
 Etkilenen ADR: ADR-0001
 Açık soru: Geç teslim durumu pilot geri bildirimine kalır.
-Son kontrol: 2026-10-04
+Son kontrol: 2026-10-05
 
 ## Faz Öncesi Onay Gerektirenler
 
