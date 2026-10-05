@@ -31,6 +31,9 @@ const files = {
   "apps/web/app/(app)/_shared/report-chart-panel.tsx": readFileSync("apps/web/app/(app)/_shared/report-chart-panel.tsx", "utf8"),
   "apps/web/app/(app)/_shared/navigation.ts": readFileSync("apps/web/app/(app)/_shared/navigation.ts", "utf8"),
   "apps/web/src/route-manifest.js": readFileSync("apps/web/src/route-manifest.js", "utf8"),
+  "apps/web/app/manifest.ts": readFileSync("apps/web/app/manifest.ts", "utf8"),
+  "apps/web/public/push-sw.js": readFileSync("apps/web/public/push-sw.js", "utf8"),
+  "apps/web/app/(app)/portals/_shared/progress-series-panel.tsx": readFileSync("apps/web/app/(app)/portals/_shared/progress-series-panel.tsx", "utf8"),
   // Shell v3 (Berrak G5) app-shell.tsx + _shell/* dosyalarına bölündü; pin'ler shell kaynağının bütününe uygulanır.
   "apps/web/app/(app)/app-shell.tsx": ["apps/web/app/(app)/app-shell.tsx", ...readdirSync("apps/web/app/(app)/_shell").sort().map((name) => `apps/web/app/(app)/_shell/${name}`)]
     .map((path) => readFileSync(path, "utf8"))
@@ -4262,6 +4265,31 @@ requireNoTokens("apps/web/app/(app)/portals/_shared/portal-shell.tsx", [
   "MetricGrid as UiMetricGrid",
   "export function MetricGrid(",
   "<Skeleton />",
+]);
+
+// KV-5: installable PWA (id, start_url, PNG + maskable icons) without any service-worker cache.
+requireTokens("apps/web/app/manifest.ts", [
+  'id: "/veli"',
+  'start_url: "/veli"',
+  'src: "/icons/icon-192.png"',
+  'src: "/icons/icon-512.png"',
+  'purpose: "maskable"',
+]);
+for (const icon of ["icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png"]) {
+  if (!existsSync(`apps/web/public/icons/${icon}`)) failures.push(`apps/web/public/icons/${icon} missing`);
+}
+requireNoTokens("apps/web/public/push-sw.js", ["caches.", "addEventListener(\"fetch\"", "addEventListener('fetch'"]);
+
+// KV-4: optical Başarı % and school grades are two separate, scale-labelled series.
+requireTokens("apps/web/app/(app)/portals/_shared/progress-series-panel.tsx", [
+  'caption="Deneme sınavları: Başarı %"',
+  'caption="Okul notları: puan / tam puan"',
+  "Ölçek 0-100 Başarı %",
+  "Ölçek her sınavın kendi tam puanıdır",
+]);
+requireTokens("apps/web/app/(app)/portals/guardian-portal-page.tsx", [
+  "/overview`",
+  "<ProgressSeriesPanel",
 ]);
 
 requireNoTokens("apps/web/app/(app)/portals/guardian-portal-page.tsx", [
