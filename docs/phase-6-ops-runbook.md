@@ -1548,7 +1548,11 @@ Gateway PUSH mesajını gönderilmiş gibi işaretlemez; ayrı push sağlayıcı
 ### Web push VAPID anahtarları (KV-7)
 
 Duyuru push'u gateway'den geçmez; API cihazları 25'lik parçalara bölüp `announcement-delivery`
-kuyruğuna `announcement_<duyuruId>_PUSH_<chunkIndex>` jobId ile verir, worker `web-push` ile gönderir.
+kuyruğuna `announcement_<duyuruId>_PUSH_<sendKey>_<chunkIndex>` jobId ile verir (`sendKey` =
+Idempotency-Key'in SHA-256 önekidir), worker `web-push` ile gönderir. Push job'ları tamamlansa da
+başarısız olsa da 30 gün saklanır (`removeOnComplete`/`removeOnFail` `age`): aynı gönderim isteğinin
+yeniden denenmesi bu pencerede ikinci push üretmez; yeni gönderim yeni cihazlara da ulaşır. FCM
+cihazlarına push gitmez (ürün sahibi kabulü, 2026-10-05).
 Payload yalnız başlık ve iç bağlantı taşır; 404/410 yanıtında `NotificationDeviceToken.disabledAt`
 set edilir. `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` veya `VAPID_SUBJECT` eksikse worker gönderim
 yapmaz ve raporu `PUSH_VAPID_NOT_CONFIGURED` ile `failed` yazar.

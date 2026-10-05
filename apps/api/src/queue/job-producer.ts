@@ -56,6 +56,8 @@ export interface AnnouncementPushSendQueueJobInput extends BaseTenantQueueJobInp
   queueName: "announcement-delivery";
   channel: "PUSH";
   mode: "PUSH_SEND";
+  /** Per send request (hash of its Idempotency-Key): a new send reaches new devices, a retried send dedupes. */
+  sendKey: string;
   chunkIndex: number;
   deviceIds: string[];
   title: string;
@@ -74,10 +76,15 @@ export function chunkAnnouncementPushDevices(deviceIds: string[]): string[][] {
 }
 
 // ponytail: BullMQ rejects custom ids containing ":" (beyond 3 parts), so the
-// sourceType:sourceId:channel:chunkIndex key uses "_" as separator.
-export function announcementPushJobId(announcementId: string, chunkIndex: number): string {
-  return `announcement_${announcementId}_PUSH_${chunkIndex}`;
+// sourceType:sourceId:channel:sendKey:chunkIndex key uses "_" as separator.
+export function announcementPushJobId(announcementId: string, sendKey: string, chunkIndex: number): string {
+  return `announcement_${announcementId}_PUSH_${sendKey}_${chunkIndex}`;
 }
+
+/** Dedupe window for push sends: a retried send within this window is a BullMQ no-op. */
+export const announcementPushJobRetentionSeconds = 30 * 24 * 60 * 60;
+
+const announcementPushSendKeyPattern = /^[a-f0-9]{16,64}$/;
 
 export interface BackupRestoreQueueJobInput extends BaseTenantQueueJobInput {
   queueName: "backup-restore";
@@ -107,8 +114,8 @@ export interface ProducedJob<TInput extends TenantQueueJobInput = TenantQueueJob
       delay: 1000;
     };
     jobId: string;
-    removeOnFail: false;
-    removeOnComplete?: true;
+    removeOnFail: false | { age: number };
+    removeOnComplete?: true | { age: number };
   };
 }
 
@@ -139,7 +146,7 @@ export function createTenantQueueJob(input: TenantQueueJobInput): ProducedJob {
   }
 
   if (input.queueName === "announcement-delivery" && "mode" in input) {
-    // Completed push jobs are kept so re-adding the same chunk jobId is a BullMQ no-op (no second send).
+    // Push jobs are kept for 30 days so re-adding the same send's chunk jobId is a BullMQ no-op (no second send).
     return {
       queueName: input.queueName,
       name: input.queueName,
@@ -147,8 +154,9 @@ export function createTenantQueueJob(input: TenantQueueJobInput): ProducedJob {
       options: {
         attempts: 5,
         backoff: { type: "exponential", delay: 1000 },
-        jobId: announcementPushJobId(input.entityId, input.chunkIndex),
-        removeOnFail: false,
+        jobId: announcementPushJobId(input.entityId, input.sendKey, input.chunkIndex),
+        removeOnFail: { age: announcementPushJobRetentionSeconds },
+        removeOnComplete: { age: announcementPushJobRetentionSeconds },
       },
     };
   }
@@ -174,6 +182,7 @@ function isAnnouncementDeliveryInputValid(input: AnnouncementDeliveryQueueJobInp
   if ("mode" in input) {
     return input.mode === "PUSH_SEND" &&
       input.channel === "PUSH" &&
+      typeof input.sendKey === "string" && announcementPushSendKeyPattern.test(input.sendKey) &&
       Number.isInteger(input.chunkIndex) && input.chunkIndex >= 0 &&
       input.deviceIds.length > 0 && input.deviceIds.length <= announcementPushChunkSize &&
       input.deviceIds.every((id) => typeof id === "string" && id.length > 0) &&

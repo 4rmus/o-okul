@@ -183,7 +183,7 @@ export class AnnouncementService {
         operation: "announcement.delivery.send",
         request: { announcementId: id, ...input },
       },
-      () => this.sendExternalDeliveryOnce(context, id, input),
+      () => this.sendExternalDeliveryOnce(context, id, input, key),
     ));
   }
 
@@ -191,11 +191,14 @@ export class AnnouncementService {
     context: RequestContext,
     id: string,
     input: Partial<AnnouncementDeliverySendRequest>,
+    idempotencyKey: string,
   ): Promise<AnnouncementDeliveryQueueResult> {
     const announcement = await this.findOne(context, id);
     const channel = resolveDeliveryChannel(input.channel);
     if (channel === "PUSH") {
-      return this.enqueuePushDelivery(context, announcement);
+      // ponytail: hashed key keeps the raw header out of Redis and free of ":".
+      const sendKey = createHash("sha256").update(idempotencyKey).digest("hex").slice(0, 24);
+      return this.enqueuePushDelivery(context, announcement, sendKey);
     }
     const messages = await this.resolveNotificationMessages(context, announcement, channel);
     const results = await this.notificationAdapter.sendBatch(messages);
@@ -210,6 +213,7 @@ export class AnnouncementService {
   private async enqueuePushDelivery(
     context: RequestContext,
     announcement: AnnouncementRecord,
+    sendKey: string,
   ): Promise<AnnouncementDeliveryQueueResult> {
     const deviceIds = await this.resolvePushDeviceIds(context, announcement);
     if (deviceIds.length === 0) {
@@ -232,6 +236,7 @@ export class AnnouncementService {
         contentHash: `push-${chunkIndex}`,
         channel: "PUSH",
         mode: "PUSH_SEND",
+        sendKey,
         chunkIndex,
         deviceIds: chunk,
         title: announcement.title,

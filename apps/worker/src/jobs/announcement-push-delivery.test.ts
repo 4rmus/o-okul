@@ -23,7 +23,7 @@ const subscription = JSON.stringify({
 
 function pushJob(payload: Partial<AnnouncementPushSendJobPayload> = {}) {
   return {
-    id: "announcement_announcement-a_PUSH_0",
+    id: "announcement_announcement-a_PUSH_aaaaaaaaaaaaaaaaaaaaaaaa_0",
     name: "announcement-delivery" as const,
     payload: {
       tenantId: "tenant-a",

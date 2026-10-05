@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import { createHash } from "node:crypto";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { NotificationAdapter, NotificationMessage, NotificationSendResult } from "@o-okul/notification-adapter";
@@ -498,24 +499,42 @@ describe("Announcement API", () => {
     expect(serialized).not.toContain("veli toplantısı yapılacaktır");
     expect(serialized).not.toContain("push.example.test");
     expect(serialized).not.toMatch(/"(body|firstName|lastName|displayName|phone|tcKimlikNo|nationalId|email)"/i);
-    expect(producer.added).toEqual(["announcement_announcement-a_PUSH_0"]);
+    const firstJobId = `announcement_announcement-a_PUSH_${sendKeyOf("announcement-delivery-send-push-a")}_0`;
+    expect(producer.added).toEqual([firstJobId]);
     expect(response.body).toEqual(expect.objectContaining({
       announcementId: "announcement-a",
       channel: "PUSH",
       recipientCount: 3,
       deliveredCount: 0,
       failedCount: 0,
-      jobId: "announcement_announcement-a_PUSH_0",
+      jobId: firstJobId,
       status: "queued",
     }));
 
+    // Retry of the same send request (same Idempotency-Key) must not produce a second push job.
+    await request(server)
+      .post("/announcements/announcement-a/deliveries")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", "announcement-delivery-send-push-a")
+      .send({ channel: "PUSH" })
+      .expect(201);
+    expect(producer.added).toEqual([firstJobId]);
+
+    // A new send of the same announcement is a new job set and reaches devices registered after the first send.
+    await request(server)
+      .post("/me/notification-devices")
+      .set("Authorization", `Bearer ${guardianAAccessToken}`)
+      .send({ provider: "web-push", token: subscription("guardian-new"), platform: "web" })
+      .expect(201);
     await request(server)
       .post("/announcements/announcement-a/deliveries")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .set("Idempotency-Key", "announcement-delivery-send-push-a-again")
       .send({ channel: "PUSH" })
       .expect(201);
-    expect(producer.added).toEqual(["announcement_announcement-a_PUSH_0"]);
+    const secondJobId = `announcement_announcement-a_PUSH_${sendKeyOf("announcement-delivery-send-push-a-again")}_0`;
+    expect(producer.added).toEqual([firstJobId, secondJobId]);
+    expect((producer.inputs.at(-1) as TenantQueueJobInput & { deviceIds: string[] }).deviceIds).toHaveLength(4);
   });
 
   it("duyuru teslim sonucu sayıları ve erişimi doğrular", async () => {
@@ -657,6 +676,10 @@ describe("Announcement API", () => {
     await request(server).get("/announcements").expect(401);
   });
 });
+
+function sendKeyOf(idempotencyKey: string): string {
+  return createHash("sha256").update(idempotencyKey).digest("hex").slice(0, 24);
+}
 
 /** Mirrors BullMQ: adding a jobId that is still stored is a no-op. */
 class FakeProducer implements AnnouncementDeliveryQueueProducer {

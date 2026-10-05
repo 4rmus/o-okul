@@ -274,12 +274,12 @@ describe("createTenantQueueJob", () => {
     ).toThrow("ANNOUNCEMENT_DELIVERY_JOB_PAYLOAD_INVALID");
   });
 
-  it("duyuru push'unu 25'lik chunk'lara böler ve deterministik, kalıcı jobId verir", () => {
+  it("duyuru push'unu 25'lik chunk'lara böler ve gönderim başına deterministik jobId verir", () => {
     const deviceIds = Array.from({ length: 60 }, (_, index) => `device-${String(index).padStart(2, "0")}`);
     const chunks = chunkAnnouncementPushDevices(deviceIds);
     expect(chunks.map((chunk) => chunk.length)).toEqual([25, 25, 10]);
 
-    const jobs = chunks.map((chunk, chunkIndex) => createTenantQueueJob({
+    const jobsFor = (sendKey: string) => chunks.map((chunk, chunkIndex) => createTenantQueueJob({
       queueName: "announcement-delivery",
       tenantId: "tenant-a",
       userId: "user-a",
@@ -287,18 +287,26 @@ describe("createTenantQueueJob", () => {
       contentHash: `push-${chunkIndex}`,
       channel: "PUSH",
       mode: "PUSH_SEND",
+      sendKey,
       chunkIndex,
       deviceIds: chunk,
       title: "Veli toplantısı",
     }));
+    const jobs = jobsFor("aaaaaaaaaaaaaaaaaaaaaaaa");
 
     expect(jobs.map((job) => job.options.jobId)).toEqual([
-      "announcement_announcement-a_PUSH_0",
-      "announcement_announcement-a_PUSH_1",
-      "announcement_announcement-a_PUSH_2",
+      "announcement_announcement-a_PUSH_aaaaaaaaaaaaaaaaaaaaaaaa_0",
+      "announcement_announcement-a_PUSH_aaaaaaaaaaaaaaaaaaaaaaaa_1",
+      "announcement_announcement-a_PUSH_aaaaaaaaaaaaaaaaaaaaaaaa_2",
     ]);
-    // Completed push jobs stay in Redis so BullMQ ignores a re-add of the same jobId.
-    expect(jobs.every((job) => job.options.removeOnComplete === undefined)).toBe(true);
+    // Same send request -> same jobIds (BullMQ no-op re-add); a new send -> a disjoint job set.
+    expect(jobsFor("aaaaaaaaaaaaaaaaaaaaaaaa").map((job) => job.options.jobId)).toEqual(jobs.map((job) => job.options.jobId));
+    const otherSend = jobsFor("bbbbbbbbbbbbbbbbbbbbbbbb").map((job) => job.options.jobId);
+    expect(otherSend.some((id) => jobs.some((job) => job.options.jobId === id))).toBe(false);
+    // Push jobs are retained 30 days: that is the dedupe window for a retried send.
+    const thirtyDays = 30 * 24 * 60 * 60;
+    expect(jobs.every((job) => JSON.stringify(job.options.removeOnComplete) === JSON.stringify({ age: thirtyDays }))).toBe(true);
+    expect(jobs.every((job) => JSON.stringify(job.options.removeOnFail) === JSON.stringify({ age: thirtyDays }))).toBe(true);
     expect(jobs.every((job) => !job.options.jobId.includes(":"))).toBe(true);
   });
 
@@ -311,12 +319,15 @@ describe("createTenantQueueJob", () => {
       contentHash: "push-0",
       channel: "PUSH" as const,
       mode: "PUSH_SEND" as const,
+      sendKey: "aaaaaaaaaaaaaaaaaaaaaaaa",
       chunkIndex: 0,
       title: "Veli toplantısı",
     };
     expect(() => createTenantQueueJob({ ...base, deviceIds: Array.from({ length: 26 }, (_, index) => `device-${index}`) }))
       .toThrow("ANNOUNCEMENT_DELIVERY_JOB_PAYLOAD_INVALID");
     expect(() => createTenantQueueJob({ ...base, deviceIds: ["device-1"], title: " " }))
+      .toThrow("ANNOUNCEMENT_DELIVERY_JOB_PAYLOAD_INVALID");
+    expect(() => createTenantQueueJob({ ...base, deviceIds: ["device-1"], sendKey: "raw:key" }))
       .toThrow("ANNOUNCEMENT_DELIVERY_JOB_PAYLOAD_INVALID");
   });
 
