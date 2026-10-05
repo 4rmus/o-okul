@@ -17,6 +17,7 @@ import type {
   ReportStudentProgress,
   ReportStudentSnapshot,
   StudentEnrollmentRecord,
+  StudentHomeworkRecord,
   StudentProfileRecord,
   SupportTicketRecord,
   TeacherNoteRecord,
@@ -27,7 +28,7 @@ import { useAuth } from "../../providers.js";
 import { AttendancePanel, TeacherNotesPanel } from "./_shared/activity-panels.js";
 import { AnnouncementsPanel } from "./_shared/announcements-panel.js";
 import { DevelopmentTrendPanel, type DevelopmentTrendItem } from "./_shared/development-panel.js";
-import { HomeworkAssignmentsPanel } from "./_shared/homework-panels.js";
+import { HomeworkAssignmentsPanel, StudentClassHomeworkPanel } from "./_shared/homework-panels.js";
 import {
   AccessPanel,
   PortalActionStrip,
@@ -252,6 +253,17 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
         ariaLabel="Öğrenci portal çalışma alanı"
         main={
           <>
+            {view === "homework" ? <div id="portal-class-homework">
+              <StudentClassHomeworkPanel
+                homework={data?.classHomework ?? []}
+                onSubmit={
+                  auth && !isRolePreview
+                    ? (homeworkId) => submitHomework(auth.accessToken, homeworkId).then(() => query.refetch())
+                    : undefined
+                }
+                readOnly={isRolePreview}
+              />
+            </div> : null}
             {view === "overview" || view === "homework" ? <div id="portal-homework">
               <HomeworkAssignmentsPanel
                 assignments={data?.homeworkAssignments ?? []}
@@ -376,8 +388,15 @@ async function loadStudentPortal(
     showProfile || showReports || showHomework || showAttendance ? readOnlyRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`, rolePreviewToken) : Promise.resolve([]),
     showProfile || showReports || showHomework || showAttendance ? readOnlyRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`, rolePreviewToken) : Promise.resolve([]),
   ]);
+  const classHomework = view === "homework"
+    ? await readOnlyRequest<StudentHomeworkRecord[]>(accessToken, `${apiBaseUrl}/me/student/homework`, rolePreviewToken)
+    : [];
 
-  return { profile, guardians, guardianLinks, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, report, errorBooklet, progress, courses, terms, reportIndex, selectedReportExamId };
+  return { profile, guardians, guardianLinks, enrollments, announcements, homeworkAssignments, classHomework, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, report, errorBooklet, progress, courses, terms, reportIndex, selectedReportExamId };
+}
+
+async function submitHomework(accessToken: string, homeworkId: string) {
+  return apiRequest(accessToken, `${apiBaseUrl}/me/student/homework/${encodeURIComponent(homeworkId)}/submission`, { method: "POST" });
 }
 
 async function markAnnouncementRead(accessToken: string, path: string) {

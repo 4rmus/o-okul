@@ -19,6 +19,7 @@ import type {
   HomeworkMaterialAssignmentRecord,
   HomeworkMaterialRecord,
   HomeworkRecord,
+  HomeworkSubmissionRecord,
   PortalReportIndexItem,
   ReportErrorBooklet,
   ReportSnapshotRecord,
@@ -44,7 +45,7 @@ import {
 import { useAuth } from "../../providers.js";
 import { TeacherAttendancePanel, TeacherNotesPanel } from "./_shared/activity-panels.js";
 import { AnnouncementsPanel } from "./_shared/announcements-panel.js";
-import { TeacherHomeworkPanel, TeacherMaterialAssignmentsPanel } from "./_shared/homework-panels.js";
+import { TeacherHomeworkPanel, TeacherHomeworkSubmissionsPanel, TeacherMaterialAssignmentsPanel } from "./_shared/homework-panels.js";
 import {
   AccessPanel,
   PortalFrame,
@@ -829,6 +830,13 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
         </div> : null}
         {view === "homework" ? <div id="portal-teacher-homework">
           <TeacherHomeworkPanel homework={data?.homework ?? []} onToggle={(homework) => void toggleHomeworkCheck(homework)} readOnly={isRolePreview} />
+          {auth ? <TeacherHomeworkSubmissionsPanel
+            homework={data?.homework ?? []}
+            loadSubmissions={(homeworkId) => listHomeworkSubmissions(auth.accessToken, homeworkId, rolePreviewToken)}
+            onCheck={(homeworkId, studentIds) => checkHomeworkSubmissions(auth.accessToken, homeworkId, studentIds)}
+            readOnly={isRolePreview}
+            students={students}
+          /> : null}
         </div> : null}
         {view === "homework" || view === "schedule" || view === "student" ? <TeacherMaterialAssignmentsPanel
           assignments={(data?.materialAssignments ?? []).filter((assignment) => assignment.studentId === selectedStudentId)}
@@ -976,6 +984,18 @@ async function loadTeacherDailyAttendance(accessToken: string, classId: string, 
 async function createTeacherNote(accessToken: string, input: TeacherNoteFormPayload) {
   return apiRequest<TeacherNoteRecord>(accessToken, `${apiBaseUrl}/teacher-notes`, {
     body: JSON.stringify(input),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+}
+
+async function listHomeworkSubmissions(accessToken: string, homeworkId: string, rolePreviewToken: string) {
+  return readOnlyRequest<HomeworkSubmissionRecord[]>(accessToken, `${apiBaseUrl}/homework/${encodeURIComponent(homeworkId)}/submissions`, rolePreviewToken);
+}
+
+async function checkHomeworkSubmissions(accessToken: string, homeworkId: string, studentIds: string[]) {
+  return apiRequest<HomeworkSubmissionRecord[]>(accessToken, `${apiBaseUrl}/homework/${encodeURIComponent(homeworkId)}/submissions/check`, {
+    body: JSON.stringify({ studentIds }),
     headers: { "content-type": "application/json" },
     method: "POST",
   });

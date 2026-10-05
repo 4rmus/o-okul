@@ -31,6 +31,7 @@ const deviceBackupCatalog = {
   TeacherAssignment: "DATA", Guardian: "DATA", GuardianStudent: "DATA", Attendance: "DATA",
   TeacherNote: "DATA", ScheduleLesson: "DATA", StudySession: "DATA", StudySessionStudent: "DATA",
   HomeworkMaterial: "DATA", HomeworkMaterialFile: "DATA", HomeworkMaterialAssignment: "DATA", Homework: "DATA",
+  HomeworkSubmission: "DATA",
   Exam: "DATA", ParserConfig: "DATA", OpticalFormTemplate: "DATA", ExamParticipant: "DATA",
   RawImport: "DATA", AnswerKey: "DATA", ExamBookletVariant: "DATA", LearningOutcome: "DATA",
   ParsedAnswer: "DATA", ExamResult: "DATA", ImportQuarantine: "DATA", ReportSnapshot: "DATA",

@@ -3,7 +3,7 @@
   "environment": "staging",
   "checkedAt": "2026-05-31T11:30:00.000Z",
   "schema": {
-    "tenantScopedTables": 68,
+    "tenantScopedTables": 69,
     "derivedFromSchema": true,
     "staticCheckPassed": true,
     "liveCheckPassed": true,
@@ -12,6 +12,7 @@
       "DevelopmentAssessment",
       "GradeAssessment",
       "GradeEntry",
+      "HomeworkSubmission",
       "DevelopmentScore",
       "User",
       "NotificationDeviceToken",
@@ -82,7 +83,7 @@
     "tenantAHash": "tenant-a-redacted",
     "tenantBHash": "tenant-b-redacted",
     "crossTenantReadRows": 0,
-    "crossTenantReadChecks": 68,
+    "crossTenantReadChecks": 69,
     "withCheckRejects": [
       "Student wrong tenant insert",
       "Homework wrong tenant insert",

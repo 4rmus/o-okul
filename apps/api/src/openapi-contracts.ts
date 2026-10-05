@@ -1272,6 +1272,29 @@ const homeworkCheckStatusRequestSchema = objectSchema({
   checked: { type: "boolean" },
 }, ["checked"]);
 
+// DEC-20261004-10: status is derived from the submission timestamps; a missing row is NOT_SUBMITTED.
+const homeworkSubmissionRecordSchema = objectSchema({
+  homeworkId: stringSchema(),
+  studentId: stringSchema(),
+  status: stringSchema({ enum: ["NOT_SUBMITTED", "SUBMITTED", "CHECKED"] }),
+  submittedAt: stringSchema({ format: "date-time" }),
+  checkedAt: stringSchema({ format: "date-time" }),
+}, ["homeworkId", "studentId", "status"]);
+
+const homeworkSubmissionCheckRequestSchema = objectSchema({
+  studentIds: arraySchema(stringSchema(), { minItems: 1, maxItems: 500 }),
+}, ["studentIds"]);
+
+const studentHomeworkRecordSchema = objectSchema({
+  id: stringSchema(),
+  classId: stringSchema(),
+  title: stringSchema(),
+  description: stringSchema(),
+  sourceMaterialTitle: stringSchema(),
+  dueAt: stringSchema({ format: "date-time" }),
+  submission: homeworkSubmissionRecordSchema,
+}, ["id", "classId", "title", "submission"]);
+
 const homeworkMaterialRecordSchema = objectSchema({
   id: stringSchema(),
   tenantId: stringSchema(),
@@ -3543,6 +3566,14 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: arraySchema(homeworkMaterialAssignmentRecordSchema),
     listResponse: true,
   },
+  "get /api/v1/me/student/homework": {
+    responseBody: arraySchema(studentHomeworkRecordSchema),
+    listResponse: true,
+  },
+  "post /api/v1/me/student/homework/{homeworkId}/submission": {
+    idempotent: true,
+    responseBody: homeworkSubmissionRecordSchema,
+  },
   "get /api/v1/me/student/attendance": {
     responseBody: arraySchema(attendanceRecordSchema),
     listResponse: true,
@@ -4427,6 +4458,16 @@ const operationContracts: Record<string, OperationContract> = {
   "patch /api/v1/homework/{id}": {
     requestBody: homeworkUpdateRequestSchema,
     responseBody: homeworkRecordSchema,
+  },
+  "get /api/v1/homework/{id}/submissions": {
+    responseBody: arraySchema(homeworkSubmissionRecordSchema),
+    listResponse: true,
+  },
+  "post /api/v1/homework/{id}/submissions/check": {
+    idempotent: true,
+    requestBody: homeworkSubmissionCheckRequestSchema,
+    responseBody: arraySchema(homeworkSubmissionRecordSchema),
+    listResponse: true,
   },
   "patch /api/v1/homework/{id}/check-status": {
     requestBody: homeworkCheckStatusRequestSchema,

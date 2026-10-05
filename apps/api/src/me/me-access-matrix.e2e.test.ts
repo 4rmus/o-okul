@@ -74,6 +74,7 @@ describe("Me access matrix", () => {
       "/me/student/guardian-links",
       "/me/student/enrollments",
       "/me/student/homework/material-assignments",
+      "/me/student/homework",
       "/me/student/attendance",
       "/me/student/attendance/summary",
       "/me/student/teacher-notes",

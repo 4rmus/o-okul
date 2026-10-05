@@ -2156,6 +2156,19 @@ const requiredOperationContracts = [
   },
   {
     method: "get",
+    path: "/api/v1/me/student/homework",
+    responseListEnvelope: true,
+    responseDataItemsRequired: ["id", "classId", "title", "submission"],
+  },
+  {
+    method: "post",
+    path: "/api/v1/me/student/homework/{homeworkId}/submission",
+    responseEnvelope: true,
+    idempotencyHeader: true,
+    responseDataRequired: ["homeworkId", "studentId", "status"],
+  },
+  {
+    method: "get",
     path: "/api/v1/me/student/homework/material-assignments",
     responseListEnvelope: true,
     responseDataItemsRequired: portalHomeworkMaterialAssignmentRequired,
@@ -3649,6 +3662,21 @@ const requiredOperationContracts = [
     requestProperties: ["classId", "description", "dueAt", "title"],
     requestMinProperties: 1,
     responseDataRequired: ["id", "tenantId", "classId", "title"],
+  },
+  {
+    method: "get",
+    path: "/api/v1/homework/{id}/submissions",
+    responseListEnvelope: true,
+    responseDataItemsRequired: ["homeworkId", "studentId", "status"],
+  },
+  {
+    method: "post",
+    path: "/api/v1/homework/{id}/submissions/check",
+    requestBody: true,
+    responseListEnvelope: true,
+    idempotencyHeader: true,
+    requestRequired: ["studentIds"],
+    responseDataItemsRequired: ["homeworkId", "studentId", "status"],
   },
   {
     method: "patch",

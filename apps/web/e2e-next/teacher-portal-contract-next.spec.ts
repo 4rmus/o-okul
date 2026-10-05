@@ -227,6 +227,39 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
     }
   });
 
+  test("öğretmen teslim edenleri toplu kontrol eder (DEC-20261004-10)", async ({ page }) => {
+    await openTeacherPortal(page, { height: 900, width: 1024 }, { path: "/ogretmen/odevler" });
+    const checks: unknown[] = [];
+    let checked = false;
+    await page.route("**/api/v1/homework/homework-a/submissions**", async (route) => {
+      const method = route.request().method();
+      if (method === "OPTIONS") return route.fulfill({ headers: corsHeadersFor(route), status: 204 });
+      if (method === "POST") {
+        checks.push(route.request().postDataJSON());
+        checked = true;
+        return fulfillData(route, [{ homeworkId: "homework-a", studentId: "student-a", status: "CHECKED", submittedAt: "2026-06-17T07:00:00.000Z", checkedAt: "2026-06-17T08:00:00.000Z" }]);
+      }
+      return fulfillData(route, [
+        { homeworkId: "homework-a", studentId: "student-a", status: checked ? "CHECKED" : "SUBMITTED", submittedAt: "2026-06-17T07:00:00.000Z" },
+        { homeworkId: "homework-a", studentId: "student-b", status: "NOT_SUBMITTED" },
+      ]);
+    });
+    await page.reload();
+
+    const panel = page.getByRole("region", { exact: true, name: "Ödev teslim durumu" });
+    await expect(panel).toContainText("Ada Kaya");
+    await expect(panel).toContainText("Teslim edildi");
+    await expect(panel).toContainText("Teslim edilmedi");
+    await expect(panel.getByRole("row").filter({ hasText: "Teslim edilmedi" }).getByRole("button", { name: "Kontrol et" })).toBeDisabled();
+    await expect(panel.getByRole("row").filter({ hasText: "Teslim edildi" }).getByRole("button", { name: "Kontrol et" })).toBeEnabled();
+    await panel.getByRole("button", { name: "Teslim edenlerin hepsini kontrol et (1)" }).click();
+    await expect(panel).toContainText("Kontrol edildi");
+    expect(checks).toEqual([{ studentIds: ["student-a"] }]);
+    for (const value of rawInternalValues) {
+      await expect(panel).not.toContainText(value);
+    }
+  });
+
   test("öğretmen işlem hatasını alert olarak duyurur", async ({ page }) => {
     const mutationRequests: string[] = [];
     await openTeacherPortal(page, { height: 844, width: 390 }, { failMutationPath: "/attendance/daily", mutationRequests, path: "/ogretmen/ders-akisi" });

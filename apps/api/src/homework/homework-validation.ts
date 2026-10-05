@@ -7,6 +7,7 @@ import type {
   HomeworkMaterialCreateRequest,
   HomeworkMaterialFileCreateRequest,
   HomeworkMaterialUpdateRequest,
+  HomeworkSubmissionCheckRequest,
   HomeworkUpdateRequest,
 } from "@o-okul/shared-types";
 import { optionalIsoDateTime, optionalTrimmedString, requiredTrimmedString } from "../http/zod-validation.js";
@@ -69,6 +70,10 @@ export const homeworkCheckStatusBodySchema = z.object({
   checked: z.boolean(),
 }).strict() satisfies z.ZodType<HomeworkCheckStatusRequest>;
 
+export const homeworkSubmissionCheckBodySchema = z.object({
+  studentIds: z.array(requiredTrimmedString).min(1).max(500),
+}).strict() satisfies z.ZodType<HomeworkSubmissionCheckRequest>;
+
 export type HomeworkMaterialFileCreateBody = HomeworkMaterialFileCreateRequest;
 export type HomeworkMaterialAssignmentCreateBody = HomeworkMaterialAssignmentCreateRequest;
 export type HomeworkMaterialCreateBody = HomeworkMaterialCreateRequest;
@@ -77,6 +82,7 @@ export type HomeworkCreateBody = HomeworkCreateRequest;
 export type HomeworkFromMaterialCreateBody = HomeworkFromMaterialCreateRequest;
 export type HomeworkUpdateBody = HomeworkUpdateRequest;
 export type HomeworkCheckStatusBody = HomeworkCheckStatusRequest;
+export type HomeworkSubmissionCheckBody = HomeworkSubmissionCheckRequest;
 
 function hasAtLeastOneField(value: Record<string, unknown>): boolean {
   return Object.keys(value).length > 0;
