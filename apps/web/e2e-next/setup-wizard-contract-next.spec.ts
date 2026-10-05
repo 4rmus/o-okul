@@ -488,6 +488,28 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     expect(unexpectedMutations).toEqual([]);
   });
 
+  test("KV-8 otomatik veli bildirim ayarını genel adımda kaydeder ve 414px'te taşmaz", async ({ page }) => {
+    const bodies: Array<Record<string, unknown>> = [];
+    await openSetupWizard(page, { height: 896, width: 414 }, { roles: ["TENANT_ADMIN"], guardianNotificationSettingsBodies: bodies });
+
+    const section = page.getByRole("region", { name: "Otomatik veli bildirimleri" });
+    const threshold = section.getByLabel("Devamsızlık dönem eşiği (gün)");
+    const save = section.getByRole("button", { name: "Bildirim ayarlarını kaydet" });
+    await expect(threshold).toHaveValue("10");
+    await expect(section.getByLabel(/Devamsızlık bildirimi/)).toBeChecked();
+    await section.getByLabel(/Ödeme vadesi hatırlatması/).uncheck();
+    await threshold.fill("0");
+    await expect(save).toBeDisabled();
+    await threshold.fill("12");
+    await save.click();
+
+    await expect(section.getByText("Bildirim ayarları kaydedildi.")).toBeVisible();
+    expect(bodies).toEqual([{ absenceEnabled: true, paymentDueEnabled: false, gradePublishEnabled: true, absenceThreshold: 12 }]);
+    await expectNoHorizontalOverflow(page, "setup-guardian-notifications-414");
+    await expectNoUnlabeledControls(page, "setup-guardian-notifications-414");
+    await expectNoClippedVisibleText(page, "setup-guardian-notifications-414");
+  });
+
   test("tablette taşma üretmez ve assistant rolünde kurulum yüzeyini açar", async ({ page }) => {
     const unexpectedMutations: string[] = [];
     await openSetupWizard(page, { height: 1024, width: 768 }, { roles: ["TENANT_ADMIN"], unexpectedMutations });
@@ -872,6 +894,9 @@ async function installSetupApiMocks(
       await fulfillData(route, { id: `grade-${body.code}`, tenantId: "tenant-setup", ...body });
       return;
     }
+    if (request.method() === "PATCH" && pathName === "/me/tenant/guardian-notification-settings") {
+      options.guardianNotificationSettingsBodies?.push(request.postDataJSON() as Record<string, unknown>);
+    }
     const response = mockSetupApiResponse(pathName, request.method(), options);
     await fulfillData(route, response);
   });
@@ -885,6 +910,10 @@ function mockSetupApiResponse(
   if (pathName === "/auth/refresh") return createAuthResponse(options.roles ?? ["TENANT_ADMIN"]);
   if (pathName === "/setup/readiness") return createSetupReadiness(options.readiness ?? "ready", options.legacyReadiness);
   if (pathName === "/me/tenant") return createTenantResponse();
+  if (pathName === "/me/tenant/guardian-notification-settings") {
+    const stored = { absenceEnabled: true, paymentDueEnabled: true, gradePublishEnabled: true, absenceThreshold: 10 };
+    return method === "PATCH" ? { ...stored, ...options.guardianNotificationSettingsBodies?.at(-1) } : stored;
+  }
   if (pathName === "/me/notification-devices") return [];
   if (method === "GET" && pathName === "/campuses") {
     return options.campuses ?? [{ id: "campus-setup", tenantId: "tenant-setup", name: "Merkez Kampüs", code: "MRK" }];
@@ -1056,6 +1085,7 @@ function mockSetupApiResponse(
 }
 
 interface SetupMockOptions {
+  guardianNotificationSettingsBodies?: Array<Record<string, unknown>>;
   academicTermPatchBodies?: Array<Record<string, unknown>>;
   academicYearPatchBodies?: Array<Record<string, unknown>>;
   campuses?: Array<{ id: string; tenantId: string; name: string; code?: string }>;

@@ -8,8 +8,22 @@ import {
   type AnnouncementPushDeps,
   type AnnouncementPushSendJobPayload,
 } from "./announcement-push-delivery.js";
+import {
+  assertGuardianNotifyPayload,
+  isGuardianNotifyPayload,
+  processGuardianNotifyJob,
+  type GuardianNotifyDeps,
+  type GuardianNotifyJobPayload,
+  type GuardianNotifyJobResult,
+} from "./guardian-auto-notification.js";
 
-export type AnnouncementDeliveryJobPayload = AnnouncementDeliveryReportJobPayload | AnnouncementPushSendJobPayload;
+export type AnnouncementDeliveryJobPayload =
+  | AnnouncementDeliveryReportJobPayload
+  | AnnouncementPushSendJobPayload
+  | GuardianNotifyJobPayload;
+
+/** What one announcement-delivery job returns: a delivery report or (KV-8) a guardian notification summary. */
+export type AnnouncementDeliveryQueueJobResult = AnnouncementDeliveryJobResult | GuardianNotifyJobResult;
 
 export interface AnnouncementDeliveryReportJobPayload extends TenantJobPayload {
   channel: AnnouncementDeliveryChannel;
@@ -42,12 +56,21 @@ export async function processAnnouncementDeliveryJob(
   job: QueueJob<AnnouncementDeliveryJobPayload>,
   reporter: AnnouncementDeliveryReporter,
   push?: AnnouncementPushDeps,
-): Promise<AnnouncementDeliveryJobResult> {
+  guardian?: GuardianNotifyDeps,
+): Promise<AnnouncementDeliveryQueueJobResult> {
   if (job.name !== "announcement-delivery") {
     throw new Error("ANNOUNCEMENT_DELIVERY_JOB_NAME_INVALID");
   }
   const payload = job.payload;
   assertTenantJobPayload(payload);
+  if (isGuardianNotifyPayload(payload)) {
+    assertGuardianNotifyPayload(payload);
+    if (!guardian) throw new Error("GUARDIAN_NOTIFY_DEPS_MISSING");
+    return runWithJobContext(
+      { tenantId: payload.tenantId, userId: payload.userId, jobId: job.id },
+      () => processGuardianNotifyJob(payload, guardian),
+    );
+  }
   if (isAnnouncementPushSendPayload(payload)) {
     assertAnnouncementPushSendPayload(payload);
     if (!push) throw new Error("ANNOUNCEMENT_PUSH_DEPS_MISSING");

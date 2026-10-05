@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
+import { GuardianAutoNotificationService, InMemoryGuardianNotifyQueueProducer } from "../guardian-notification/guardian-auto-notification.service.js";
+import { InMemoryGuardianNotificationSettingsStore } from "../guardian-notification/guardian-notification-settings-store.js";
 import { InMemoryAcademicCalendarStore } from "../school/academic-calendar-store.js";
 import { InMemoryGuardianStudentStore } from "../school/guardian-student-store.js";
 import { InMemoryTeacherAssignmentStore } from "../school/teacher-assignment-store.js";
@@ -9,59 +11,42 @@ import { InMemoryAttendanceStore } from "./attendance-store.js";
 import { AttendanceService } from "./attendance.service.js";
 
 describe("AttendanceService", () => {
-  it("devamsizlik esigi ilk kez asilinca veli duyurusu ve audit kaydi uretir", async () => {
-    const announcements: unknown[] = [];
-    const auditRecords: unknown[] = [];
-    const service = new AttendanceService(
-      new InMemoryAttendanceStore(),
-      new InMemoryAcademicCalendarStore(),
-      new InMemoryStudentStore(),
-      new InMemoryStudentEnrollmentStore(),
-      new InMemoryGuardianStudentStore(),
-      new InMemoryTeacherAssignmentStore(),
-      {
-        create: async (_context: RequestContext, input: unknown) => {
-          announcements.push(input);
-          return { id: "announcement-threshold" };
-        },
-      } as never,
-      {
-        record: async (input: unknown) => {
-          auditRecords.push(input);
-        },
-      } as never,
-    );
+  it("KV-8: bugün gelmedi işaretlenen öğrenci için veli bildirim işi kuyruğa girer; geçmiş gün ve PRESENT girmez", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-05T09:00:00+03:00"));
+    try {
+      const producer = new InMemoryGuardianNotifyQueueProducer();
+      const notifications = new GuardianAutoNotificationService(new InMemoryGuardianNotificationSettingsStore(), producer);
+      const service = new AttendanceService(
+        new InMemoryAttendanceStore(),
+        new InMemoryAcademicCalendarStore(),
+        new InMemoryStudentStore(),
+        new InMemoryStudentEnrollmentStore(),
+        new InMemoryGuardianStudentStore(),
+        new InMemoryTeacherAssignmentStore(),
+        undefined,
+        notifications,
+      );
+      const mark = (date: string, status: "ABSENT" | "PRESENT") =>
+        service.upsertDaily(adminContext, { classId: "class-a", date, entries: [{ studentId: "student-a", status }] });
 
-    for (const date of ["2026-06-04", "2026-06-05", "2026-06-06", "2026-06-07"]) {
-      await service.upsertDaily(adminContext, {
-        classId: "class-a",
-        date,
-        entries: [{ studentId: "student-a", status: "ABSENT" }],
+      await mark("2026-06-04", "ABSENT");
+      expect(producer.jobs).toEqual([]);
+
+      const { records } = await mark("2026-06-05", "ABSENT");
+      await mark("2026-06-05", "PRESENT");
+      await mark("2026-06-05", "ABSENT");
+
+      // Every same-day ABSENT save enqueues; the worker's Attendance.notifiedAt claim sends only once.
+      expect(producer.jobs).toHaveLength(2);
+      expect(producer.jobs[0]).toMatchObject({
+        queueName: "announcement-delivery",
+        payload: { mode: "GUARDIAN_NOTIFY", kind: "ABSENCE", tenantId: "tenant-a", entityId: records[0]!.id },
       });
+      expect(JSON.stringify(producer.jobs)).not.toMatch(/Ada|firstName|nationalId|phone/);
+    } finally {
+      vi.useRealTimers();
     }
-
-    expect(announcements).toEqual([
-      expect.objectContaining({
-        tenantId: "tenant-a",
-        audience: "GUARDIANS",
-        classId: "class-a",
-        title: "Devamsızlık eşiği uyarısı",
-      }),
-    ]);
-    expect(auditRecords).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        action: "attendance.threshold_warned",
-        entityType: "Attendance",
-        entityId: "student-a",
-        diff: expect.objectContaining({
-          studentId: "student-a",
-          previousAbsenceCount: 4,
-          currentAbsenceCount: 5,
-          threshold: 5,
-          announcementId: "announcement-threshold",
-        }),
-      }),
-    ]));
   });
 
   it("takvim dışı devamsızlık tarihini servis katmanında reddeder", async () => {
@@ -72,7 +57,7 @@ describe("AttendanceService", () => {
       new InMemoryStudentEnrollmentStore(),
       new InMemoryGuardianStudentStore(),
       new InMemoryTeacherAssignmentStore(),
-      {} as never,
+      undefined,
     );
 
     await expect(
@@ -298,7 +283,7 @@ function createService(
     enrollmentStore,
     new InMemoryGuardianStudentStore(),
     assignmentStore,
-    {} as never,
+    undefined,
   );
 }
 

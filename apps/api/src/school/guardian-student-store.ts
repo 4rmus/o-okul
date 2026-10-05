@@ -10,7 +10,7 @@ import type { GuardianStore } from "./guardian-store.js";
 export type GuardianStudentInput = Pick<GuardianStudentRecord, "tenantId" | "guardianId" | "studentId"> &
   Partial<Pick<
     GuardianStudentRecord,
-    "canViewFinance" | "canReceiveSms" | "canReceiveAnnouncements" | "canOpenSupportTickets"
+    "canViewFinance" | "canReceiveSms" | "canReceiveAnnouncements" | "canOpenSupportTickets" | "canReceiveAutoNotifications"
   >>;
 
 export interface GuardianStudentStore {
@@ -256,6 +256,7 @@ export class PostgresGuardianStudentStore implements GuardianStudentStore {
              "canReceiveAnnouncements" = COALESCE($5, "canReceiveAnnouncements"),
              "canOpenSupportTickets" = COALESCE($6, "canOpenSupportTickets"),
              "createdByStudentContact" = CASE WHEN $7 THEN false ELSE "createdByStudentContact" END,
+             "canReceiveAutoNotifications" = COALESCE($8, "canReceiveAutoNotifications"),
              "updatedAt" = now()
          WHERE "guardianId" = $1
            AND "studentId" = $2
@@ -268,6 +269,7 @@ export class PostgresGuardianStudentStore implements GuardianStudentStore {
           input.canReceiveAnnouncements,
           input.canOpenSupportTickets,
           options.clearStudentContactOrigin === true,
+          input.canReceiveAutoNotifications,
         ],
       );
       return result.rows[0] ? toGuardianStudentRecord(result.rows[0]) : undefined;
@@ -434,6 +436,7 @@ interface GuardianStudentRow {
   canReceiveSms?: boolean;
   canReceiveAnnouncements?: boolean;
   canOpenSupportTickets?: boolean;
+  canReceiveAutoNotifications?: boolean;
   createdAt?: Date | string;
   updatedAt?: Date | string;
 }
@@ -449,6 +452,7 @@ function toGuardianStudentRecord(row: GuardianStudentRow): GuardianStudentRecord
     canReceiveSms: row.canReceiveSms ?? false,
     canReceiveAnnouncements: row.canReceiveAnnouncements ?? false,
     canOpenSupportTickets: row.canOpenSupportTickets ?? false,
+    canReceiveAutoNotifications: row.canReceiveAutoNotifications ?? true,
     createdAt: row.createdAt ? toIsoString(row.createdAt) : undefined,
     updatedAt: row.updatedAt ? toIsoString(row.updatedAt) : undefined,
   };
@@ -463,6 +467,7 @@ function withGuardianStudentDefaults(input: GuardianStudentInput): Omit<Guardian
     canReceiveSms: input.canReceiveSms ?? false,
     canReceiveAnnouncements: input.canReceiveAnnouncements ?? false,
     canOpenSupportTickets: input.canOpenSupportTickets ?? false,
+    canReceiveAutoNotifications: input.canReceiveAutoNotifications ?? true,
   };
 }
 

@@ -1850,6 +1850,26 @@ const guardianStudentRelationRequestProperties: Record<string, JsonSchema> = {
 
 const guardianStudentRelationRequestSchema = objectSchema(guardianStudentRelationRequestProperties);
 
+// The guardian's own preference body (KV-8 adds canReceiveAutoNotifications; staff relation writes do not take it).
+const guardianNotificationPreferenceRequestSchema = objectSchema({
+  ...guardianStudentRelationRequestProperties,
+  canReceiveAutoNotifications: { type: "boolean" },
+});
+
+const guardianAutoNotificationSettingsProperties: Record<string, JsonSchema> = {
+  absenceEnabled: { type: "boolean" },
+  paymentDueEnabled: { type: "boolean" },
+  gradePublishEnabled: { type: "boolean" },
+  absenceThreshold: integerSchema({ minimum: 1, maximum: 365 }),
+};
+
+const guardianAutoNotificationSettingsRecordSchema = objectSchema(
+  guardianAutoNotificationSettingsProperties,
+  ["absenceEnabled", "paymentDueEnabled", "gradePublishEnabled", "absenceThreshold"],
+);
+
+const guardianAutoNotificationSettingsUpdateRequestSchema = objectSchema(guardianAutoNotificationSettingsProperties);
+
 const guardianStudentLinkRequestSchema = objectSchema({
   ...guardianStudentRelationRequestProperties,
   studentId: stringSchema(),
@@ -1864,6 +1884,7 @@ const guardianStudentRecordSchema = objectSchema({
   canReceiveSms: { type: "boolean" },
   canReceiveAnnouncements: { type: "boolean" },
   canOpenSupportTickets: { type: "boolean" },
+  canReceiveAutoNotifications: { type: "boolean" },
   createdAt: stringSchema({ format: "date-time" }),
   updatedAt: stringSchema({ format: "date-time" }),
 }, [
@@ -3499,6 +3520,13 @@ const operationContracts: Record<string, OperationContract> = {
     requestBody: tenantCurrentProfileUpdateRequestSchema,
     responseBody: tenantRecordSchema,
   },
+  "get /api/v1/me/tenant/guardian-notification-settings": {
+    responseBody: guardianAutoNotificationSettingsRecordSchema,
+  },
+  "patch /api/v1/me/tenant/guardian-notification-settings": {
+    requestBody: guardianAutoNotificationSettingsUpdateRequestSchema,
+    responseBody: guardianAutoNotificationSettingsRecordSchema,
+  },
   "get /api/v1/me/notification-devices": {
     responseBody: arraySchema(publicNotificationDeviceRecordSchema),
     listResponse: true,
@@ -3653,7 +3681,7 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: guardianStudentRecordSchema,
   },
   "patch /api/v1/me/guardian/students/{studentId}/notification-preferences": {
-    requestBody: guardianStudentRelationRequestSchema,
+    requestBody: guardianNotificationPreferenceRequestSchema,
     responseBody: guardianStudentRecordSchema,
   },
   "get /api/v1/me/guardian/students/{studentId}/payment-plans": {

@@ -22,6 +22,7 @@ import { Button, Field, Input, MetricCard, MetricGrid, Panel, SegmentedControl, 
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError, apiBaseUrl, apiListRequest, apiRequest, queryClient } from "../../../../src/api-client.js";
 import { ImportTemplatePanel } from "../_shared/import-template-panel.js";
+import { GuardianAutoNotificationSettings } from "./_shared/guardian-auto-notification-settings.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { useSetupProgress } from "./_shared/use-setup-progress.js";
 import { setupFlowSteps, type SetupFlowStep } from "./_shared/wizard-steps.js";
@@ -781,7 +782,10 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
             <p>{activeStep.description}</p>
           </header>
           {activeStep.id === "general" ? (
-            <GeneralStep draft={draft} errors={errors} updateDraft={updateDraft} />
+            <>
+              <GeneralStep draft={draft} errors={errors} updateDraft={updateDraft} />
+              <GuardianAutoNotificationSettings />
+            </>
           ) : null}
           {activeStep.id === "term" ? (
             <TermStep draft={draft} errors={errors} updateDraft={updateDraft} />

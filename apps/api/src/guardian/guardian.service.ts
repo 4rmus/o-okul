@@ -56,7 +56,7 @@ export type GuardianStudentRelationInput = Partial<Pick<
 
 export type GuardianNotificationPreferenceInput = Partial<Pick<
   GuardianStudentRecord,
-  "canReceiveSms" | "canReceiveAnnouncements" | "canOpenSupportTickets"
+  "canReceiveSms" | "canReceiveAnnouncements" | "canOpenSupportTickets" | "canReceiveAutoNotifications"
 >>;
 
 const guardianStudentRelationFields: Array<keyof GuardianStudentRelationInput> = [
@@ -70,6 +70,7 @@ const guardianNotificationPreferenceFields: Array<keyof GuardianNotificationPref
   "canReceiveSms",
   "canReceiveAnnouncements",
   "canOpenSupportTickets",
+  "canReceiveAutoNotifications",
 ];
 
 @Injectable()
@@ -621,6 +622,9 @@ function resolveGuardianNotificationPreference(input: GuardianNotificationPrefer
   }
   if (input.canOpenSupportTickets !== undefined) {
     relation.canOpenSupportTickets = resolveBoolean(input.canOpenSupportTickets, false);
+  }
+  if (input.canReceiveAutoNotifications !== undefined) {
+    relation.canReceiveAutoNotifications = resolveBoolean(input.canReceiveAutoNotifications, true);
   }
   return relation;
 }
