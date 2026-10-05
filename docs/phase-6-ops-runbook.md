@@ -639,11 +639,14 @@ pnpm account-management:license-backfill
   (bağ yönetici bağı sayılır); velinin kendi bildirim tercihi işareti değiştirmez.
 - Adım R5 (salt okunur, mutasyon yok): KV-3b API'si bu deploy'dan önce bir ortamda çalıştıysa onun iletişim
   akışıyla açtığı bağlar işaretsiz (`false`) kalır ve bağ kaldırmada korunur. Sayım, iletişim akışının
-  `guardian_student.linked` audit kaydı (yalnız bu akış `diff.source` anahtarını yazar; değer audit
-  sanitizasyonunda `[REDACTED]` olur, anahtar kalır; `student_contact.guardian_linked` kaydındaki
-  `guardianStudentCreated` alanı da aynı sanitizasyonla saklanmadığı için eşleme `source` anahtarı ve
-  `student_contact.guardian_linked` kaydının `studentId`/`guardianId` alanlarıyla yapılır) ile sonradan
-  guardian API'sinin bağı benimsemediği satırları bulur:
+  `guardian_student.linked` audit kaydı (yalnız bu akış `diff.source` anahtarını yazar; KV-3d öncesi
+  yazılan kayıtlarda değer audit sanitizasyonunda `[REDACTED]` olur, anahtar kalır; aynı kayıtlarda
+  `student_contact.guardian_linked` kaydının `guardianStudentCreated` alanı da `[REDACTED]` olduğu için
+  eşleme `source` anahtarı ve `student_contact.guardian_linked` kaydının `studentId`/`guardianId`
+  alanlarıyla yapılır) ile sonradan guardian API'sinin bağı benimsemediği satırları bulur. R5'in aradığı
+  satırlar KV-3c deploy'undan önce, yani KV-3d'den önce yazıldığı için sorgu anahtar varlığıyla kalır; KV-3d
+  ile yazılan yeni kayıtlarda `source` (`student_contact.guardian_linked`) ve `guardianStudentCreated`
+  (`true`/`false`) değer olarak saklanır ve doğrudan okunabilir (sorgu bu kayıtlarda da aynı sonucu verir):
 
   ```sql
   SELECT gs."tenantId", count(*)::int AS "unmarkedContactFlowLinks"

@@ -1,3 +1,4 @@
+import { ConflictException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
 import { resetInMemoryAuthUsers, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
 import { InMemoryGuardianStore } from "../school/guardian-store.js";
@@ -509,5 +510,49 @@ describe("StudentContactStore", () => {
     } finally {
       resetInMemoryAuthUsers();
     }
+  });
+
+  it("KV-3d Postgres: veli bağı yazılarında deadlock/serileştirme hatası ROLLBACK sonrası 409 GUARDIAN_LINK_CONCURRENT_UPDATE olur", async () => {
+    const run = async (code: string, failOn: (sql: string) => boolean, call: (store: PostgresStudentContactStore) => Promise<unknown>) => {
+      const sqls: string[] = [];
+      const pool = {
+        async query<T>(sql: string) {
+          sqls.push(sql);
+          if (failOn(sql)) throw Object.assign(new Error("pg failure"), { code });
+          // softDelete/purge/unlink find a contact that pointed at a guardian; COMMIT-time failures need a full run.
+          if (sql.includes('"StudentContact"')) return { rows: [{ id: "contact-a", studentId: "student-a", previousGuardianId: null }] as T[] };
+          return { rows: [] as T[] };
+        },
+      };
+      return { outcome: await call(new PostgresStudentContactStore(pool)).then(() => undefined, (error: unknown) => error), sqls };
+    };
+    const writes: Array<(store: PostgresStudentContactStore) => Promise<unknown>> = [
+      (store) => store.linkGuardianWithStudentLink("tenant-a", "contact-a", "guardian-a"),
+      (store) => store.linkUserAsGuardianWithStudentLink("tenant-a", "contact-a", "user-a"),
+      (store) => store.unlinkGuardian("tenant-a", "contact-a", "guardian-a"),
+      (store) => store.softDelete("tenant-a", "contact-a"),
+      (store) => store.purgeByStudent("tenant-a", "student-a"),
+    ];
+    for (const write of writes) {
+      for (const code of ["40P01", "40001"]) {
+        const { outcome, sqls } = await run(code, (sql) => sql.includes('"StudentContact"'), write);
+        expect(outcome).toBeInstanceOf(ConflictException);
+        expect((outcome as ConflictException).getStatus()).toBe(409);
+        expect((outcome as ConflictException).getResponse()).toEqual({
+          error: { code: "GUARDIAN_LINK_CONCURRENT_UPDATE", message: "Aynı kayıt üzerinde eşzamanlı bir işlem var, lütfen tekrar deneyin." },
+        });
+        expect(sqls).toContain("ROLLBACK");
+        expect(sqls).not.toContain("COMMIT");
+      }
+      // Any other database error passes through unchanged (still a 500 path).
+      const other = await run("23503", (sql) => sql.includes('"StudentContact"'), write);
+      expect(other.outcome).not.toBeInstanceOf(ConflictException);
+      expect(other.outcome).toMatchObject({ code: "23503", message: "pg failure" });
+      expect(other.sqls).toContain("ROLLBACK");
+    }
+    // A serialization failure raised by COMMIT is mapped too (the helper wraps the whole transaction).
+    const atCommit = await run("40001", (sql) => sql === "COMMIT", (store) => store.softDelete("tenant-a", "contact-a"));
+    expect(atCommit.outcome).toBeInstanceOf(ConflictException);
+    expect(atCommit.sqls).toContain("ROLLBACK");
   });
 });
