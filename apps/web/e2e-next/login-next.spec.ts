@@ -4630,9 +4630,9 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     record.startsAt === "2026-06-09",
   )).toBe(true);
   const guardianInvitation = page.getByLabel("Toplu veli daveti");
-  await expect(guardianInvitation.getByRole("button", { name: "Seçili öğrencilerin velilerini davet et (0)" })).toBeDisabled();
+  await expect(guardianInvitation.getByRole("button", { name: "Velileri davet et (0)" })).toBeDisabled();
   await page.getByRole("checkbox", { name: "Ada A seç" }).check();
-  await guardianInvitation.getByRole("button", { name: "Seçili öğrencilerin velilerini davet et (1)" }).click();
+  await guardianInvitation.getByRole("button", { name: "Velileri davet et (1)" }).click();
   await page.getByRole("dialog", { name: "Toplu veli davetini onayla" }).getByRole("button", { name: "Davet et" }).click();
   await expect(guardianInvitation.getByRole("status")).toHaveText("Davet gönderildi: 1 · Zaten var: 0 · Atlandı: 1 (e-posta yok: 1)");
   expect(guardianInvitationRequests).toEqual([{ idempotencyKey: expect.any(String), studentIds: ["student-a"] }]);
