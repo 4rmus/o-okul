@@ -2823,6 +2823,18 @@ const studentGuardianInvitationBulkResultSchema = objectSchema({
   }, ["studentId", "status"])),
 }, ["createdCount", "alreadyExistsCount", "skippedCount", "results"]);
 
+const studentContactGuardianLinkRequestSchema = objectSchema({
+  guardianId: stringSchema({ minLength: 1 }),
+}, ["guardianId"]);
+
+const studentContactGuardianLinkResultSchema = objectSchema({
+  studentId: stringSchema(),
+  contactId: stringSchema(),
+  guardianId: stringSchema(),
+  changed: { type: "boolean" },
+  guardianStudentCreated: { type: "boolean" },
+}, ["studentId", "contactId", "changed", "guardianStudentCreated"]);
+
 const studentBulkEnrollmentResultSchema = objectSchema({
   updatedCount: integerSchema({ minimum: 0 }),
   enrollments: arraySchema(studentEnrollmentRecordSchema),
@@ -4633,6 +4645,17 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "delete /api/v1/students/{studentId}/contacts/{id}": {
     noContent: true,
+  },
+  "put /api/v1/students/{studentId}/contacts/{id}/guardian": {
+    idempotent: true,
+    idempotencyRequired: true,
+    requestBody: studentContactGuardianLinkRequestSchema,
+    responseBody: studentContactGuardianLinkResultSchema,
+  },
+  "delete /api/v1/students/{studentId}/contacts/{id}/guardian": {
+    idempotent: true,
+    idempotencyRequired: true,
+    responseBody: studentContactGuardianLinkResultSchema,
   },
   "post /api/v1/students/imports/dry-run": {
     requestBody: studentImportRequestSchema,

@@ -760,7 +760,14 @@ veli oluşturma/bağlama ve veli davetinde 2xx doğrular; `app.e2e.test.ts` öğ
 seçili öğrencilerin `LEGAL_GUARDIAN` iletişiminden veli hesabı + e-posta daveti üretir, bağlı iletişime
 ikinci davet açmaz, otomatik eşleme yapmaz (e-postası kullanımda olan satır `EMAIL_IN_USE` ile atlanır),
 izinleri değiştirmez ve yalnız sayım/id döner (`student-guardian-invitation.e2e.test.ts`). Veli daveti
-kabulü T.C. numarası istemez. Kanıt sınıfı LOCAL_TEST; CI, STAGING ve PRODUCTION UNPROVEN.
+kabulü T.C. numarası istemez. KV-3b (ürün sahibi kararı 2026-10-05): yönetici `LEGAL_GUARDIAN`
+iletişimini `PUT /students/{studentId}/contacts/{id}/guardian` ile elle seçtiği MEVCUT veliye bağlar,
+`DELETE` aynı yolla bağı kaldırır (`student:manage` + `user:manage`, kampüs kapsamlı personel 403, zorunlu
+`Idempotency-Key`, yanıt yalnız id). Eksik `GuardianStudent` izinler kapalı olarak iletişim yazımıyla aynı
+transaction'da açılır; aynı veliye tekrar bağlama değişiklik yapmaz, başka veliye bağlama 409, veli kaydı
+olmayan/başka tenant'taki veli 422; bağ kaldırma `GuardianStudent`'a dokunmaz; yeni hesap açılmaz
+(`student-contact-guardian-link.e2e.test.ts`, `student-relationship-flow-next.spec.ts`). Kanıt sınıfı
+LOCAL_TEST; CI, STAGING ve PRODUCTION UNPROVEN.
 Ürün sahibi kararı (2026-10-05): veli daveti kabulünde T.C. şartının kaldırılması onaylandı; e-postası
 olmayan `LEGAL_GUARDIAN` satırının `EMAIL_MISSING` ile atlanması kabul edildi. Toplu davette
 `LEGAL_GUARDIAN` iletişiminin telefonu yalnız iletişim alanı olarak `Guardian.phone` alanına kopyalanır

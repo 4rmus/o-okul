@@ -3,6 +3,7 @@ import pg from "pg";
 import type { StudentContactRelationType } from "@o-okul/shared-types";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withExplicitTenantQuery } from "../db/tenant-query.js";
+import type { GuardianStudentStore } from "../school/guardian-student-store.js";
 
 export interface StudentContactStorageRecord {
   id: string;
@@ -36,14 +37,31 @@ export interface StudentContactStore {
   update(id: string, input: StudentContactStoreInput): Promise<StudentContactStorageRecord | undefined>;
   /** Sets guardianId only while it is still empty; false when the contact is gone or already linked. */
   linkGuardian(tenantId: string, id: string, guardianId: string): Promise<boolean>;
+  /**
+   * KV-3b: in one transaction ensures GuardianStudent(tenantId, guardianId, contact.studentId) (permissions off when
+   * created, an existing link is left untouched) and sets guardianId while it is still empty. Nothing is written
+   * when the contact is gone or already linked (linked: false).
+   */
+  linkGuardianWithStudentLink(tenantId: string, id: string, guardianId: string): Promise<StudentContactGuardianLinkWrite>;
+  /** Clears guardianId only while it still equals expectedGuardianId; GuardianStudent is never touched. */
+  unlinkGuardian(tenantId: string, id: string, expectedGuardianId: string): Promise<boolean>;
   softDelete(tenantId: string, id: string): Promise<boolean>;
   purgeByStudent(tenantId: string, studentId: string): Promise<number>;
+}
+
+export interface StudentContactGuardianLinkWrite {
+  linked: boolean;
+  guardianStudentId?: string;
+  guardianStudentCreated: boolean;
 }
 
 export const studentContactStoreToken = Symbol("StudentContactStore");
 
 export class InMemoryStudentContactStore implements StudentContactStore {
   private readonly records: StudentContactStorageRecord[] = [];
+
+  /** guardianStudents is only needed by linkGuardianWithStudentLink (the module wires the shared store). */
+  constructor(private readonly guardianStudents?: GuardianStudentStore) {}
 
   async listByStudent(tenantId: string, studentId: string): Promise<StudentContactStorageRecord[]> {
     return this.records.filter((record) => record.tenantId === tenantId && record.studentId === studentId && !record.deletedAt);
@@ -71,6 +89,28 @@ export class InMemoryStudentContactStore implements StudentContactStore {
     const record = this.records.find((candidate) => candidate.tenantId === tenantId && candidate.id === id && !candidate.deletedAt);
     if (!record || record.guardianId) return false;
     record.guardianId = guardianId;
+    record.updatedAt = new Date().toISOString();
+    return true;
+  }
+
+  async linkGuardianWithStudentLink(tenantId: string, id: string, guardianId: string): Promise<StudentContactGuardianLinkWrite> {
+    if (!this.guardianStudents) throw new Error("GUARDIAN_STUDENT_STORE_REQUIRED");
+    const record = this.records.find((candidate) => candidate.tenantId === tenantId && candidate.id === id && !candidate.deletedAt);
+    if (!record || record.guardianId) return { linked: false, guardianStudentCreated: false };
+    // ponytail: in-memory driver has no rollback; nothing awaits between the check above and the write below
+    // except the link create, which is itself idempotent.
+    const existing = (await this.guardianStudents.listByStudent(record.studentId))
+      .find((link) => link.tenantId === tenantId && link.guardianId === guardianId);
+    const link = existing ?? await this.guardianStudents.create({ tenantId, guardianId, studentId: record.studentId });
+    record.guardianId = guardianId;
+    record.updatedAt = new Date().toISOString();
+    return { linked: true, guardianStudentId: link.id, guardianStudentCreated: !existing };
+  }
+
+  async unlinkGuardian(tenantId: string, id: string, expectedGuardianId: string): Promise<boolean> {
+    const record = this.records.find((candidate) => candidate.tenantId === tenantId && candidate.id === id && !candidate.deletedAt);
+    if (!record || record.guardianId !== expectedGuardianId) return false;
+    record.guardianId = undefined;
     record.updatedAt = new Date().toISOString();
     return true;
   }
@@ -195,6 +235,52 @@ export class PostgresStudentContactStore implements StudentContactStore {
     });
   }
 
+  async linkGuardianWithStudentLink(tenantId: string, id: string, guardianId: string): Promise<StudentContactGuardianLinkWrite> {
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const contact = await client.query<{ studentId: string }>(
+        `SELECT "studentId" FROM "StudentContact"
+         WHERE "tenantId"=$1 AND "id"=$2 AND "deletedAt" IS NULL AND "guardianId" IS NULL
+         FOR UPDATE`,
+        [tenantId, id],
+      );
+      const studentId = contact.rows[0]?.studentId;
+      if (!studentId) return { linked: false, guardianStudentCreated: false };
+      // Same defaults as GuardianStudentStore.create: every permission stays off.
+      const inserted = await client.query<{ id: string }>(
+        `INSERT INTO "GuardianStudent" (
+           "id", "tenantId", "guardianId", "studentId",
+           "canViewFinance", "canReceiveSms", "canReceiveAnnouncements", "canOpenSupportTickets", "updatedAt"
+         ) VALUES ($1, $2, $3, $4, false, false, false, false, now())
+         ON CONFLICT ("tenantId", "guardianId", "studentId") DO NOTHING
+         RETURNING "id"`,
+        [randomUUID(), tenantId, guardianId, studentId],
+      );
+      const link = inserted.rows[0] ?? (await client.query<{ id: string }>(
+        `SELECT "id" FROM "GuardianStudent" WHERE "tenantId"=$1 AND "guardianId"=$2 AND "studentId"=$3 LIMIT 1`,
+        [tenantId, guardianId, studentId],
+      )).rows[0];
+      const updated = await client.query(
+        `UPDATE "StudentContact" SET "guardianId"=$3, "updatedAt"=now()
+         WHERE "tenantId"=$1 AND "id"=$2 AND "deletedAt" IS NULL AND "guardianId" IS NULL RETURNING "id"`,
+        [tenantId, id, guardianId],
+      );
+      // The row is locked above; a miss here rolls the GuardianStudent insert back with it.
+      if (!updated.rows[0]) throw new Error("STUDENT_CONTACT_GUARDIAN_LINK_FAILED");
+      return { linked: true, guardianStudentId: link?.id, guardianStudentCreated: Boolean(inserted.rows[0]) };
+    });
+  }
+
+  async unlinkGuardian(tenantId: string, id: string, expectedGuardianId: string): Promise<boolean> {
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const result = await client.query(
+        `UPDATE "StudentContact" SET "guardianId"=NULL, "updatedAt"=now()
+         WHERE "tenantId"=$1 AND "id"=$2 AND "deletedAt" IS NULL AND "guardianId"=$3 RETURNING "id"`,
+        [tenantId, id, expectedGuardianId],
+      );
+      return Boolean(result.rows[0]);
+    });
+  }
+
   async softDelete(tenantId: string, id: string): Promise<boolean> {
     return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
       const result = await client.query(
@@ -227,10 +313,10 @@ export class PostgresStudentContactStore implements StudentContactStore {
   }
 }
 
-export function createStudentContactStore(): StudentContactStore {
+export function createStudentContactStore(guardianStudents?: GuardianStudentStore): StudentContactStore {
   return resolvePersistenceDriver(process.env.STUDENT_CONTACT_STORE) === "postgres"
     ? new PostgresStudentContactStore()
-    : new InMemoryStudentContactStore();
+    : new InMemoryStudentContactStore(guardianStudents);
 }
 
 function contactParams(id: string, input: StudentContactStoreInput): unknown[] {

@@ -1206,6 +1206,20 @@ export interface StudentGuardianInvitationBulkResult {
   results: StudentGuardianInvitationRowResult[];
 }
 
+/** KV-3b: the institution admin links a LEGAL_GUARDIAN contact to an existing guardian (no automatic matching). */
+export interface StudentContactGuardianLinkRequest {
+  guardianId: string;
+}
+
+/** Link/unlink result; ids only, never names, email or phone. guardianId is absent after an unlink. */
+export interface StudentContactGuardianLinkResult {
+  studentId: string;
+  contactId: string;
+  guardianId?: string;
+  changed: boolean;
+  guardianStudentCreated: boolean;
+}
+
 export interface StudentOverviewLatestExamRecord {
   examId: string;
   snapshotId: string;
