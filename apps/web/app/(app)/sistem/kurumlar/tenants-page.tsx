@@ -30,6 +30,7 @@ import { ListControls, useUrlListState, type ListQueryState } from "../../../../
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../../kurum/_shared/operation-summary.js";
 import { PageFrame } from "../../_shared/page-frame.js";
 import { createTenant, loadTenants, type TenantRecord } from "../_shared/system-api.js";
+import { PurgeCandidatesPanel } from "./purge-candidates-panel.js";
 
 const emptyForm: TenantFormState = {
   name: "",
@@ -237,6 +238,7 @@ export function TenantsPage() {
         tableDescription="Kurumların plan, lisans, kullanıcı sınırı ve erişim durumu."
         title="Kurumlar"
       />
+      {auth ? <PurgeCandidatesPanel auth={auth} /> : null}
       <TenantFormModal
         error={error}
         form={form}

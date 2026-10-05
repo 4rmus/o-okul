@@ -2554,3 +2554,44 @@ Bu sıranın mock Docker ile çalıştırılan kontrolü
 `node --test scripts/tenant-reset-release-cutover.test.mjs` ve `pnpm ops:check` içindedir.
 Test başarısı gerçek drain, backup, provider terminal sonucu veya canlı cutover kanıtı
 değildir. Bekleyen/belirsiz işler korunur; toplu retry, epoch damgalama veya temizleme yok.
+
+## Lisans sonu veri imhası — onaylı liste (DEC-20261005-03)
+
+Lisans dönemi bittikten 91 gün sonra (`resolveLicenseState` = `EXPIRED`) ve aktif ya da ileri
+tarihli lisans dönemi olmayan kurumlar imha adayıdır. Sistem tenant'ı hiçbir zaman aday olmaz.
+İmha otomatik değildir: worker günde bir kez adayları yalnız hesaplar ve `license_expiry_purge_candidates`
+log satırına tenant id + gün sayısı yazar (`READ ONLY` transaction; silme yok). Aynı liste
+`GET /api/v1/tenants/license-expiry-purge-candidates` (yalnız SYSTEM_ADMIN) ve Sistem → Kurumlar
+ekranındaki "İmha adayları" panelinde görünür (kurum adı/kodu, lisans bitişi, gün, tahmini kayıt;
+kişisel veri yok).
+
+Prosedür (staging/prod; her kurum ayrı onaydır, deploy/secret/DB değişikliği değildir):
+
+1. Ürün sahibinden kurum bazında yazılı imha onayı alınır; kurumun yeni lisans talebi olmadığı
+   satış/destek kaydıyla doğrulanır.
+2. Kurum askıya alınır (mevcut lifecycle akışı, `TENANT_LIFECYCLE_CHANGE` step-up). İmha yalnız
+   `SUSPENDED` kurumda başlar.
+3. Sistem → Kurumlar → İmha adayları → "İmha onayı": ön kontrol (`clean-reset-preview?preset=LICENSE_EXPIRY_PURGE_V1`)
+   engel göstermemelidir; kurum kodu aynen yazılır, TOTP/yedek kod ile `TENANT_CLEAN_RESET`
+   step-up alınır (hedef `preset=LICENSE_EXPIRY_PURGE_V1`, sürüm ve ön kontrol özetine bağlı).
+   İstek `POST /tenants/{id}/clean-reset-jobs` + `Idempotency-Key` ile tek kez gönderilir.
+4. İşlem mevcut sıfırlama motorunda (`tenant-fresh-reset` kuyruğu, `o_okul_reset_worker`) çalışır:
+   kilit, mutasyon/kuyruk/yazma sessizliği kapıları, şifreli yedek + restore doğrulama makbuzu,
+   veritabanı silme, nesne depolama silme ve son kontroller aynen uygulanır. Yazma sessizliği kapısı
+   (`RESET_WRITE_QUIESCENCE_UNVERIFIED`) kapalı olduğu sürece imha da başlamaz; bu kapı açılmadan
+   üretimde imha yapılamaz.
+5. Lisans her aşamada yeniden kontrol edilir: oluştururken ve veritabanı aşamasında `Tenant` satır
+   kilidi altında (`o_okul_license_expiry_purge`), lisans dönemi eklemek de önce aynı kilidi alır.
+   Veritabanı aşaması tamamlanmadan lisans yenilenirse işlem `CANCELLED` olur ve hiçbir şey silinmez.
+6. Tamamlanınca kurum `SUSPENDED` bir iz kaydı olarak kalır (ad "İmha edildi", kod `imha-…`, iletişim
+   alanları boş) ve yeniden açılamaz (`TENANT_PURGED`). Lisans dönemleri ve işlem defteri kalır;
+   kuruma ait finans, destek, izin, kullanım, yedekleme işi ve AuditLog satırları silinir. Sistem
+   kapsamında (tenantId NULL) tek bir `tenant.license-expiry-purge.completed` makbuzu kalır: tenant id,
+   kurum kodu SHA-256 özeti, zaman ve silinen kayıt/dosya sayıları.
+7. Kanıt: işlem durumu (`GET /tenants/{id}/clean-reset-jobs/{operationId}` = `COMPLETED`), makbuz
+   AuditLog satırı ve aday listesinden düşme. Gecelik yedeklerdeki kopyalar `BACKUP_RETENTION_DAYS`
+   (7 gün) sonunda düşer; `TENANT_RESET_BACKUP_S3` içindeki `tenant-reset-backups/` paketi için de
+   aynı süreli bucket yaşam döngüsü kuralı tanımlı olmalıdır (doğrulanmadıkça UNPROVEN).
+
+Kanıt sınıfı: kod ve testler LOCAL_TEST; `o_okul_license_expiry_purge` fonksiyonunun gerçek
+PostgreSQL üzerinde çalıştırılması EXTERNAL_NOT_RUN; staging/prod imha kanıtı yok.

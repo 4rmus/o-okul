@@ -746,6 +746,7 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
     "/teachers": [teacherFixture],
     "/tenant-users": [],
     "/tenants/current/license-terms": [],
+    "/tenants/license-expiry-purge-candidates": [],
     "/tenants": [tenantFixture],
   };
   if (pathName in directArrays) {
