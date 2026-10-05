@@ -128,6 +128,12 @@ describe("Bulk guardian invitation API (KV-3)", () => {
     for (const pii of ["kv3.veli@example.test", "5551000001", "Yasal", "Veli"]) expect(serialized).not.toContain(pii);
 
     const guardianId = results[0]!.guardianId!;
+    // Product owner decision (2026-10-05): the new guardian gets the contact phone as a contact field.
+    await request(server)
+      .get(`/guardians/${guardianId}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200)
+      .expect(({ body: guardian }) => expect(guardian).toMatchObject({ phone: "5551000001" }));
     const invitationsAfterFirst = await guardianInvitations();
     expect(invitationsAfterFirst.length).toBe(invitationsBefore.length + 1);
     expect(invitationsAfterFirst.filter((row) => row.subjectId === guardianId)).toHaveLength(1);

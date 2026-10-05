@@ -761,12 +761,18 @@ seçili öğrencilerin `LEGAL_GUARDIAN` iletişiminden veli hesabı + e-posta da
 ikinci davet açmaz, otomatik eşleme yapmaz (e-postası kullanımda olan satır `EMAIL_IN_USE` ile atlanır),
 izinleri değiştirmez ve yalnız sayım/id döner (`student-guardian-invitation.e2e.test.ts`). Veli daveti
 kabulü T.C. numarası istemez. Kanıt sınıfı LOCAL_TEST; CI, STAGING ve PRODUCTION UNPROVEN.
+Ürün sahibi kararı (2026-10-05): veli daveti kabulünde T.C. şartının kaldırılması onaylandı; e-postası
+olmayan `LEGAL_GUARDIAN` satırının `EMAIL_MISSING` ile atlanması kabul edildi. Toplu davette
+`LEGAL_GUARDIAN` iletişiminin telefonu yalnız iletişim alanı olarak `Guardian.phone` alanına kopyalanır
+(yeni veli alır; dolu telefon ezilmez, yalnız boşsa doldurulur; yanıtta telefon dönmez;
+`student-guardian-invitation.service.test.ts`, `student-guardian-invitation.e2e.test.ts`). Tenant
+yöneticisinin `/kurum/denetim` erişimi mevcut RBAC olarak korunur.
 Etkilenen ADR: ADR-0001 (Guardian–StudentContact bağı bileşik FK ve RLS ile kurulur), ADR-0008 (iki
 anahtar katalogdan çıkar, kaldırma kaydı eklenir). Yeni ADR başlığı: veli kimliği ve rıza kaynağı
 ayrımı.
 Açık soru: Veli yazma yollarının staging kanıtı (`UAT-GUARDIAN-01/02/03` yeniden koşumu) flag
 kaldırma PR'ının kapanış kapısıdır; pazarlama cümlesi bu kanıt gelmeden kullanılmaz.
-Son kontrol: 2026-10-03
+Son kontrol: 2026-10-05
 
 ### DEC-20261004-01 — Feature rollout mekanizması emekliye ayrılır
 

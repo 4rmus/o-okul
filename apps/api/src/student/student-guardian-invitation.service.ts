@@ -18,7 +18,8 @@ import { StudentService } from "./student.service.js";
 /**
  * DEC-20261003-01 (KV-3): the institution admin invites guardians in bulk from the selected students'
  * LEGAL_GUARDIAN contacts. A contact already linked to a guardian account is never invited twice; the
- * account login stays tenant code + email login name (never T.C. or phone). Contact consent fields and
+ * account login stays tenant code + email login name (never T.C. or phone); the contact phone is copied to an
+ * empty Guardian.phone as a contact field only. Contact consent fields and
  * GuardianStudent permissions are left untouched (link permissions default to false).
  */
 @Injectable()
@@ -122,6 +123,7 @@ export class StudentGuardianInvitationService {
       }
       guardianId = guardian.id;
     }
+    await this.fillGuardianPhone(context, guardianId, contact);
 
     const issued = await this.invitations.create(context, {
       subjectType: "GUARDIAN",
@@ -140,6 +142,17 @@ export class StudentGuardianInvitationService {
       diff: { studentId: contact.studentId, guardianId, invitationId: issued.invitation.id, guardianCreated: !contact.guardianId },
     });
     return { ...row, status: "CREATED", guardianId, invitationId: issued.invitation.id };
+  }
+
+  /**
+   * Product owner decision (2026-10-05): the guardian gets the LEGAL_GUARDIAN contact phone as a contact
+   * field only (never a login name, DEC-20261003-01). A phone already on the guardian is never overwritten.
+   * Set through updateGuardian, not createGuardian, because createGuardian matches existing guardians by phone.
+   */
+  private async fillGuardianPhone(context: RequestContext, guardianId: string, contact: StudentContactStorageRecord): Promise<void> {
+    if (!contact.phoneEncrypted) return;
+    if ((await this.guardians.findGuardian(context, guardianId)).phone) return;
+    await this.guardians.updateGuardian(context, guardianId, { phone: decryptStudentContactValue(contact.phoneEncrypted) });
   }
 
   private async hasAccountOrPendingInvitation(
