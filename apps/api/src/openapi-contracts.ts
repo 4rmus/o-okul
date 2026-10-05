@@ -3425,8 +3425,21 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: arraySchema(objectSchema({
       tenantId: stringSchema(), name: stringSchema(), slug: stringSchema(), status: stringSchema({ enum: ["ACTIVE", "SUSPENDED"] }), lifecycleVersion: integerSchema({ minimum: 0 }),
       licenseEndsAt: stringSchema({ format: "date-time" }), daysSinceLicenseEnd: integerSchema({ minimum: 91 }), estimatedRowCount: integerSchema({ minimum: 0 }),
-    }, ["tenantId", "name", "slug", "status", "lifecycleVersion", "licenseEndsAt", "daysSinceLicenseEnd", "estimatedRowCount"])),
+      exportId: stringSchema({ pattern: "^[a-f0-9]{32}$", nullable: true }), exportDeliveredOn: stringSchema({ format: "date", nullable: true }),
+    }, ["tenantId", "name", "slug", "status", "lifecycleVersion", "licenseEndsAt", "daysSinceLicenseEnd", "estimatedRowCount", "exportId", "exportDeliveredOn"])),
     listResponse: true,
+  },
+  // Product owner decision (2026-10-05): handover export + SYSTEM_ADMIN delivery mark precede every purge.
+  "post /api/v1/tenants/{id}/purge-exports": {
+    responseBody: objectSchema({
+      exportId: stringSchema({ pattern: "^[a-f0-9]{32}$" }), formatVersion: { type: "string", enum: ["tenant-export-v1"] }, tenantId: stringSchema(), generatedByUserId: stringSchema(),
+      exportedAt: stringSchema({ format: "date-time" }), scope: { type: "string", enum: ["license-expiry-purge-handover"] }, rowLimitPerTable: { type: "integer", nullable: true, enum: [null] },
+      tables: looseObjectSchema(), warnings: arraySchema(stringSchema()),
+    }, ["exportId", "formatVersion", "tenantId", "generatedByUserId", "exportedAt", "scope", "rowLimitPerTable", "tables", "warnings"]),
+  },
+  "post /api/v1/tenants/{id}/purge-exports/{exportId}/delivery": {
+    requestBody: objectSchema({ deliveredOn: stringSchema({ format: "date" }), channel: stringSchema({ enum: ["SECURE_DOWNLOAD", "ENCRYPTED_EMAIL", "PHYSICAL_MEDIA", "OTHER"] }), note: stringSchema({ maxLength: 200 }) }, ["deliveredOn", "channel"]),
+    responseBody: objectSchema({ exportId: stringSchema({ pattern: "^[a-f0-9]{32}$" }), deliveredOn: stringSchema({ format: "date" }), channel: stringSchema({ enum: ["SECURE_DOWNLOAD", "ENCRYPTED_EMAIL", "PHYSICAL_MEDIA", "OTHER"] }), recordedAt: stringSchema({ format: "date-time" }) }, ["exportId", "deliveredOn", "channel", "recordedAt"]),
   },
   "get /api/v1/tenants/{id}/clean-reset-preview": {
     queryParameters: [{ name: "preset", schema: stringSchema({ enum: ["CLEAN_SETUP_V1", "LICENSE_EXPIRY_PURGE_V1"] }) }],

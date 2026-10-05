@@ -80,7 +80,7 @@ export const resetCategoryLabels: Record<string, string> = {
   Exam: "Sınavlar", ParserConfig: "Optik okuma ayarları", OpticalFormTemplate: "Optik form şablonları", ExamParticipant: "Sınav katılımcıları", RawImport: "İçe aktarılan kayıtlar", AnswerKey: "Cevap anahtarları", ExamBookletVariant: "Sınav kitapçıkları", LearningOutcome: "Kazanımlar", ParsedAnswer: "Okunan cevaplar", ExamResult: "Sınav sonuçları", ImportQuarantine: "İnceleme bekleyen kayıtlar", ReportSnapshot: "Raporlar", Announcement: "Duyurular", AnnouncementReceipt: "Duyuru okumaları", AnnouncementDeliveryReport: "Duyuru teslimatları", MessageTemplate: "Mesaj şablonları", SmsBatchDeliveryReport: "SMS teslimatları",
 };
 export const resetBlockerLabels: Record<string, string> = {
-  MUTATION_ACTIVITY_PRESENT: "Devam eden veya sonucu belirsiz kurum işlemi var", SOURCE_UNVERIFIED: "Veri kaynağı doğrulanamadı", INSTITUTION_REQUEST_REQUIRED: "Kurum yöneticisinin geçerli yenileme talebi gerekiyor", LEGAL_HOLD_UNVERIFIED: "Yasal saklama engeli kontrolü doğrulanamadı", WRITE_QUIESCENCE_UNVERIFIED: "Kurumdaki yazma işlemlerinin durduğu doğrulanamadı", OBJECT_INVENTORY_UNVERIFIED: "Dosya envanteri doğrulanamadı", QUEUE_STATE_UNVERIFIED: "Arka plan işleri doğrulanamadı", QUEUE_SCHEDULE_UNVERIFIED: "Planlı işler doğrulanamadı", QUEUE_WORK_PRESENT: "Bekleyen arka plan işleri var", FINANCE_RECORDS_PRESENT: "Finans kayıtları var", SUPPORT_RECORDS_PRESENT: "Destek kayıtları var", CONSENT_RECORDS_PRESENT: "İzin kayıtları var", CONSENT_HISTORY_UNVERIFIED: "İzin geçmişi doğrulanamadı", OWNER_PROJECTION_MISMATCH: "Kurum sahibi hesapları tutarsız", NO_ACTIVE_OWNER: "Aktif kurum sahibi yok", DELIVERY_WORK_PRESENT: "Bekleyen teslimatlar var", BACKUP_WORK_PRESENT: "Devam eden yedekleme var", IMPORT_WORK_PRESENT: "Devam eden içe aktarma var", TENANT_STATUS_UNSUPPORTED: "Kurum erişim durumu doğrulanamadı", LICENSE_NOT_EXPIRED: "Lisans bitişinden 91 gün geçmedi veya yeni lisans dönemi var",
+  MUTATION_ACTIVITY_PRESENT: "Devam eden veya sonucu belirsiz kurum işlemi var", SOURCE_UNVERIFIED: "Veri kaynağı doğrulanamadı", INSTITUTION_REQUEST_REQUIRED: "Kurum yöneticisinin geçerli yenileme talebi gerekiyor", LEGAL_HOLD_UNVERIFIED: "Yasal saklama engeli kontrolü doğrulanamadı", WRITE_QUIESCENCE_UNVERIFIED: "Kurumdaki yazma işlemlerinin durduğu doğrulanamadı", OBJECT_INVENTORY_UNVERIFIED: "Dosya envanteri doğrulanamadı", QUEUE_STATE_UNVERIFIED: "Arka plan işleri doğrulanamadı", QUEUE_SCHEDULE_UNVERIFIED: "Planlı işler doğrulanamadı", QUEUE_WORK_PRESENT: "Bekleyen arka plan işleri var", FINANCE_RECORDS_PRESENT: "Finans kayıtları var", SUPPORT_RECORDS_PRESENT: "Destek kayıtları var", CONSENT_RECORDS_PRESENT: "İzin kayıtları var", CONSENT_HISTORY_UNVERIFIED: "İzin geçmişi doğrulanamadı", OWNER_PROJECTION_MISMATCH: "Kurum sahibi hesapları tutarsız", NO_ACTIVE_OWNER: "Aktif kurum sahibi yok", DELIVERY_WORK_PRESENT: "Bekleyen teslimatlar var", BACKUP_WORK_PRESENT: "Devam eden yedekleme var", IMPORT_WORK_PRESENT: "Devam eden içe aktarma var", TENANT_STATUS_UNSUPPORTED: "Kurum erişim durumu doğrulanamadı", LICENSE_NOT_EXPIRED: "Lisans bitişinden 91 gün geçmedi veya yeni lisans dönemi var", EXPORT_RECEIPT_REQUIRED: "Lisans bitişinden sonra alınmış veri dışa aktarımı kuruma teslim edilmedi",
 };
 const resetCount = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const resetStatusObject = z.object({
@@ -121,8 +121,20 @@ export async function startReset(token: string, expected: { userId: string; sess
 const purgeCandidateSchema = z.object({
   tenantId: z.string().min(1), name: z.string(), slug: z.string().min(1), status: z.enum(["ACTIVE", "SUSPENDED"]), lifecycleVersion: z.number().int().min(0).max(2147483646),
   licenseEndsAt: z.string().refine((value) => Number.isFinite(Date.parse(value))), daysSinceLicenseEnd: z.number().int().min(91), estimatedRowCount: resetCount,
+  exportId: z.string().regex(/^[a-f0-9]{32}$/).nullable(), exportDeliveredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
 }).strict();
 export type PurgeCandidate = z.infer<typeof purgeCandidateSchema>;
 export async function loadPurgeCandidates(token: string): Promise<PurgeCandidate[]> {
   return z.array(purgeCandidateSchema).parse(await apiRequest<unknown>(token, `${apiBaseUrl}/tenants/license-expiry-purge-candidates`));
+}
+
+// Product owner decision (2026-10-05): the institution receives a full handover export before any purge.
+const purgeExportSchema = z.object({ exportId: z.string().regex(/^[a-f0-9]{32}$/), tenantId: z.string().min(1), exportedAt: z.string() }).passthrough();
+export async function createPurgeExport(token: string, tenantId: string) {
+  return purgeExportSchema.parse(await apiRequest<unknown>(token, `${apiBaseUrl}/tenants/${encodeURIComponent(tenantId)}/purge-exports`, { method: "POST" }));
+}
+export const purgeExportChannelLabels = { SECURE_DOWNLOAD: "Güvenli indirme bağlantısı", ENCRYPTED_EMAIL: "Şifreli e-posta", PHYSICAL_MEDIA: "Fiziksel ortam", OTHER: "Diğer" } as const;
+export type PurgeExportChannel = keyof typeof purgeExportChannelLabels;
+export async function markPurgeExportDelivered(token: string, tenantId: string, exportId: string, body: { deliveredOn: string; channel: PurgeExportChannel; note?: string }) {
+  return apiRequest<unknown>(token, `${apiBaseUrl}/tenants/${encodeURIComponent(tenantId)}/purge-exports/${encodeURIComponent(exportId)}/delivery`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 }

@@ -47,4 +47,19 @@ describe("PostgreSQL preview composition (injected sources)", () => {
     expect(result.allowed).toBe(false);
     expect(JSON.stringify(result)).not.toContain("secret object key");
   });
+  it("license-expiry purge: FINANCE_RECORDS_PRESENT becomes the delivered post-expiry export precondition", async () => {
+    const tables = state.snapshot!.tables;
+    tables.LicenseTerm = [{ startsAt: "2025-01-01T00:00:00.000Z", endsAt: "2026-05-01T00:00:00.000Z", cancelledAt: null }];
+    const ledger = (createdAt: string, delivered: boolean) => [
+      { entityType: "TenantDataExport", entityId: "e".repeat(32), action: "tenant.data-export.created", createdAt, diff: {} },
+      ...(delivered ? [{ entityType: "TenantDataExport", entityId: "e".repeat(32), action: "tenant.data-export.delivered", createdAt, diff: { deliveredOn: createdAt.slice(0, 10), channel: "OTHER" } }] : []),
+    ];
+    const purgePreview = () => runWithRequestContext({ userId: "system-admin", roles: ["SYSTEM_ADMIN"], tenantId: null, bypassRls: false }, () => new TenantResetPreviewService({ findOne: async () => ({ lifecycleVersion: 2 }) } as never).preview("tenant-a", "LICENSE_EXPIRY_PURGE_V1"));
+    for (const [rows, required] of [[[], true], [ledger("2026-04-30T00:00:00.000Z", true), true], [ledger("2026-09-01T00:00:00.000Z", false), true], [ledger("2026-09-01T00:00:00.000Z", true), false]] as const) {
+      tables.AuditLog = [...rows];
+      const result = await purgePreview();
+      expect(result.blockers).not.toContain("FINANCE_RECORDS_PRESENT");
+      expect(result.blockers.includes("EXPORT_RECEIPT_REQUIRED")).toBe(required);
+    }
+  });
 });

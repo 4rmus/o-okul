@@ -76,6 +76,9 @@ describe("reset admission and read-only reconciliation", () => {
       f.create.mockRejectedValueOnce(new Error(code));
       await expect(f.service.create(context, "tenant-a", purge, "purge-key", purgeProof)).rejects.toMatchObject({ status, message: code });
     }
+    // Product owner decision (2026-10-05): no delivered post-expiry handover export -> 409.
+    f.create.mockRejectedValueOnce(new Error("RESET_EXPORT_RECEIPT_REQUIRED"));
+    await expect(f.service.create(context, "tenant-a", purge, "purge-key", purgeProof)).rejects.toMatchObject({ status: 409, message: "TENANT_PURGE_EXPORT_RECEIPT_REQUIRED" });
   });
   it("purge candidate list is SYSTEM_ADMIN-only and needs the verified database", async () => {
     const f = fixture();

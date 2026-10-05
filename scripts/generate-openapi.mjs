@@ -285,6 +285,8 @@ const sharedTypeDriftContracts = [
   { interfaceName: "TenantCleanResetStatus", method: "get", path: "/api/v1/tenants/{id}/clean-reset-jobs/{operationId}", schemaPath: ["responseData"] },
   { interfaceName: "TenantResetPreview", method: "get", path: "/api/v1/tenants/{id}/clean-reset-preview", schemaPath: ["responseData"] },
   { interfaceName: "LicenseExpiryPurgeCandidate", method: "get", path: "/api/v1/tenants/license-expiry-purge-candidates", schemaPath: ["responseDataItem"] },
+  { interfaceName: "TenantPurgeExportDeliveryRequest", method: "post", path: "/api/v1/tenants/{id}/purge-exports/{exportId}/delivery", schemaPath: ["requestBody"] },
+  { interfaceName: "TenantPurgeExportDelivery", method: "post", path: "/api/v1/tenants/{id}/purge-exports/{exportId}/delivery", schemaPath: ["responseData"] },
   { interfaceName: "TenantRecord", method: "get", path: "/api/v1/tenants/{id}", schemaPath: ["responseData"] },
   { interfaceName: "TenantCreateRequest", method: "post", path: "/api/v1/tenants", schemaPath: ["requestBody"] },
   { interfaceName: "TenantUserRecord", method: "get", path: "/api/v1/tenant-users", schemaPath: ["responseDataItem"] },

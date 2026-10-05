@@ -2965,6 +2965,22 @@ export interface LicenseExpiryPurgeCandidate {
   licenseEndsAt: string;
   daysSinceLicenseEnd: number;
   estimatedRowCount: number;
+  /** Latest handover export created after the license end; null when none. */
+  exportId: string | null;
+  /** Delivery date recorded by a SYSTEM_ADMIN; null until the export is marked delivered. */
+  exportDeliveredOn: string | null;
+}
+/** Handover of the purge export to the institution (product owner decision 2026-10-05); no personal data. */
+export interface TenantPurgeExportDeliveryRequest {
+  deliveredOn: string;
+  channel: "SECURE_DOWNLOAD" | "ENCRYPTED_EMAIL" | "PHYSICAL_MEDIA" | "OTHER";
+  note?: string;
+}
+export interface TenantPurgeExportDelivery {
+  exportId: string;
+  deliveredOn: string;
+  channel: TenantPurgeExportDeliveryRequest["channel"];
+  recordedAt: string;
 }
 export interface TenantResetPreview {
   institutionRequest?: TenantResetInstitutionRequest | null;

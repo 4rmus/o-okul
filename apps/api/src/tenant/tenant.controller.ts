@@ -1,7 +1,8 @@
-import { TenantFreshResetService, tenantCleanResetBodySchema, tenantResetRequestBodySchema, tenantResetRevokeBodySchema } from "./tenant-fresh-reset.service.js";
+import { TenantFreshResetService, tenantCleanResetBodySchema, tenantPurgeExportDeliveryBodySchema, tenantResetRequestBodySchema, tenantResetRevokeBodySchema } from "./tenant-fresh-reset.service.js";
 import type { TenantCleanResetRequest, TenantResetPreset } from "@o-okul/shared-types";
 import { TenantResetPreviewService } from "./tenant-reset-preview.service.js";
 import { BadRequestException, Body, Controller, Delete, Get, GoneException, HttpCode, Header, Headers, Param, Patch, Post, Query } from "@nestjs/common";
+import type { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
@@ -50,6 +51,19 @@ export class TenantController {
   @RequireCapability("tenant:clean-reset")
   licenseExpiryPurgeCandidates() {
     return this.freshReset.purgeCandidates(getRequestContext());
+  }
+
+  // Product owner decision (2026-10-05): a delivered handover export precedes every license-expiry purge.
+  @Post(":id/purge-exports")
+  @RequireCapability("tenant:clean-reset")
+  createPurgeExport(@Param("id") id: string) {
+    return this.freshReset.createPurgeExport(getRequestContext(), id);
+  }
+
+  @Post(":id/purge-exports/:exportId/delivery")
+  @RequireCapability("tenant:clean-reset")
+  markPurgeExportDelivered(@Param("id") id: string, @Param("exportId") exportId: string, @Body(zodBody(tenantPurgeExportDeliveryBodySchema)) body: z.infer<typeof tenantPurgeExportDeliveryBodySchema>) {
+    return this.freshReset.markPurgeExportDelivered(getRequestContext(), id, exportId, body);
   }
 
   @Get(":id/reset-diagnostics")

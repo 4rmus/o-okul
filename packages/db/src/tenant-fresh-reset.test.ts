@@ -91,7 +91,7 @@ async function runnerFixture() {
   const snapshot = await readResetSnapshot(f.db, "tenant-a", f.op.id);
   const pkg = { manifest: { tenantId: "tenant-a", lifecycleVersion: 3, dataDigest: snapshot.dataDigest, objects: [{ key: "owned-object", size: 1, sha256: "hash" }] } } as TenantResetPackage;
   let objectPresent = true;
-  const services: FreshResetServices = { clearance: vi.fn(async () => {}), quiescence: vi.fn(async () => {}), preflight: vi.fn(async () => {}), backup: vi.fn(async () => ({ verified: "fixture-only" })), package: vi.fn(async () => pkg), deleteObjects: vi.fn(async (_pkg, fence) => { await fence(); objectPresent = false; }), verifyObjects: vi.fn(async () => { if (objectPresent) throw new Error("RESET_OBJECT_STILL_PRESENT"); }) };
+  const services: FreshResetServices = { deleteBackup: vi.fn(async () => {}), clearance: vi.fn(async () => {}), quiescence: vi.fn(async () => {}), preflight: vi.fn(async () => {}), backup: vi.fn(async () => ({ verified: "fixture-only" })), package: vi.fn(async () => pkg), deleteObjects: vi.fn(async (_pkg, fence) => { await fence(); objectPresent = false; }), verifyObjects: vi.fn(async () => { if (objectPresent) throw new Error("RESET_OBJECT_STILL_PRESENT"); }) };
   return { ...f, services };
 }
 describe("fresh reset PostgreSQL adapter and phase runner (injected SQL)", () => {
@@ -107,6 +107,8 @@ describe("fresh reset PostgreSQL adapter and phase runner (injected SQL)", () =>
     const result = await runFreshReset(f.pool, "tenant-a", f.op.id, f.services);
     expect(result).toMatchObject({ status: "COMPLETED", phase: "DONE", result: { preservedOwnerCount: 2, deletedObjectCount: 1 } });
     expect(f.state().Tenant[0]).toMatchObject({ status: "ACTIVE", lifecycleVersion: 4 });
+    // Clean reset keeps its backup package (7-day lifecycle); only a license-expiry purge deletes it.
+    expect(f.services.deleteBackup).not.toHaveBeenCalled();
     expect(f.state().User.map((row) => row.id)).toEqual(["owner-1", "owner-2", "unrelated"]);
     expect(f.state().User.slice(0,2).every((row) => row.mustChangePassword === true && row.membershipVersion === 2)).toBe(true);
     expect(f.state().Employee).toHaveLength(2); expect(f.state().TenantMembership).toHaveLength(2);

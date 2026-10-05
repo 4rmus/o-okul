@@ -1,13 +1,13 @@
-import type { LicenseExpiryPurgeCandidate, TenantResetDeliveryReceipt, TenantResetDiagnostics, TenantResetRequestState, TenantManagement } from "@o-okul/shared-types";
+import type { LicenseExpiryPurgeCandidate, TenantPurgeExportDelivery, TenantResetDeliveryReceipt, TenantResetDiagnostics, TenantResetRequestState, TenantManagement } from "@o-okul/shared-types";
 import { lookupNotificationReceiptFromEnv } from "@o-okul/notification-adapter";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { TenantRecord } from "./tenant-store.js";
 import { hasCapability } from "../rbac/role-capabilities.js";
 import { withTenantDb } from "@o-okul/db";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
 import { Queue } from "bullmq";
 import pg from "pg";
-import { PostgresInstitutionResetRequests, freshResetFinished, freshResetJobId, freshResetQueue, freshResetStatus, isLicenseExpiryPurge, listLicenseExpiryPurgeCandidates, PostgresFreshResetStore, requireResetWriteQuiescence, type FreshResetRequest, type FreshResetOperation } from "@o-okul/db";
+import { PostgresInstitutionResetRequests, freshResetFinished, freshResetJobId, freshResetQueue, freshResetStatus, isLicenseExpiryPurge, licenseExpiryPurgeExportCreated, licenseExpiryPurgeExportDelivered, licenseExpiryPurgeExportEntity, listLicenseExpiryPurgeCandidates, PostgresFreshResetStore, requireResetWriteQuiescence, type FreshResetRequest, type FreshResetOperation } from "@o-okul/db";
 import { z } from "zod";
 import type { RequestContext } from "../context/request-context.js";
 import { verifyAdminMfaStepUpProof } from "../auth/totp-mfa.js";
@@ -16,6 +16,7 @@ import { parseRedisUrl } from "../config/env.js";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { TenantResetPreviewService } from "./tenant-reset-preview.service.js";
 import { waitForApiMutations } from "../context/tenant-mutation-activity.js";
+import { createTenantHandoverExport, type TenantHandoverExportPayload } from "../operations/tenant-data-export-store.js";
 
 export const tenantResetRequestBodySchema = z.object({ expectedRequestId: z.string().regex(/^[a-f0-9]{32}$/).nullable(), preset: z.literal("CLEAN_SETUP_V1") }).strict();
 export const tenantResetRevokeBodySchema = z.object({ expectedRequestId: z.string().regex(/^[a-f0-9]{32}$/) }).strict();
@@ -23,6 +24,12 @@ export const tenantResetRevokeBodySchema = z.object({ expectedRequestId: z.strin
 // LICENSE_EXPIRY_PURGE_V1 (DEC-20261005-03) reuses this endpoint, step-up purpose and engine; it always carries LICENSE_EXPIRED.
 export const tenantCleanResetBodySchema = z.object({ preset: z.enum(["CLEAN_SETUP_V1", "LICENSE_EXPIRY_PURGE_V1"]), expectedLifecycleVersion: z.number().int().min(0).max(2147483646), preflightDigest: z.string().regex(/^[a-f0-9]{64}$/), confirmationText: z.string().min(1).max(128), reason: z.enum(["SECURITY_REVIEW", "INSTITUTION_REQUEST", "OPERATIONS_REVIEW", "LICENSE_EXPIRED"]) }).strict()
   .refine((body) => (body.preset === "LICENSE_EXPIRY_PURGE_V1") === (body.reason === "LICENSE_EXPIRED"), { message: "RESET_REQUEST_INVALID", path: ["reason"] });
+// Product owner decision (2026-10-05): the handover note is free text for ops, never personal data.
+export const tenantPurgeExportDeliveryBodySchema = z.object({
+  deliveredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  channel: z.enum(["SECURE_DOWNLOAD", "ENCRYPTED_EMAIL", "PHYSICAL_MEDIA", "OTHER"]),
+  note: z.string().trim().max(200).optional(),
+}).strict();
 @Injectable()
 export class TenantFreshResetService {
   private readonly pool = resolvePersistenceDriver(process.env.TENANT_STORE) === "postgres" ? new pg.Pool({ connectionString: process.env.DATABASE_URL }) : undefined;
@@ -138,6 +145,48 @@ export class TenantFreshResetService {
     // Read-only list; deletion is a separate, per-institution approved operation.
     return (await listLicenseExpiryPurgeCandidates(this.pool)) as LicenseExpiryPurgeCandidate[];
   }
+  /** Full handover export for the institution; the AuditLog "created" row is written only after it succeeded. */
+  async createPurgeExport(context: RequestContext, tenantId: string): Promise<TenantHandoverExportPayload> {
+    assertResetAdmin(context, tenantId);
+    if (!this.pool) throw new ServiceUnavailableException("RESET_SOURCE_UNVERIFIED");
+    const pool = this.pool;
+    const exists = await withTenantDb(pool, { bypassRls: true, tenantId: null, readOnly: true }, async (db) => (await db.query('SELECT "id" FROM "Tenant" WHERE "id" = $1', [tenantId])).rows.length > 0);
+    if (!exists) throw new NotFoundException("TENANT_NOT_FOUND");
+    const payload = await createTenantHandoverExport(pool, tenantId, context.userId, randomBytes(16).toString("hex"));
+    const rowCounts = Object.fromEntries(Object.entries(payload.tables).map(([key, rows]) => [key, rows.length]));
+    await withTenantDb(pool, { bypassRls: true, tenantId: null }, async (db) => {
+      await db.query('INSERT INTO "AuditLog" ("id", "tenantId", "actorUserId", "entityType", "entityId", "action", "diff") VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)',
+        [randomUUID(), tenantId, context.userId, licenseExpiryPurgeExportEntity, payload.exportId, licenseExpiryPurgeExportCreated,
+          JSON.stringify({ formatVersion: payload.formatVersion, scope: payload.scope, exportedAt: payload.exportedAt, sha256: createHash("sha256").update(JSON.stringify(payload)).digest("hex"), rowCounts })]);
+    });
+    return payload;
+  }
+  /** SYSTEM_ADMIN records that the institution received the export; appended once to the AuditLog. */
+  async markPurgeExportDelivered(context: RequestContext, tenantId: string, exportId: string, input: z.infer<typeof tenantPurgeExportDeliveryBodySchema>): Promise<TenantPurgeExportDelivery> {
+    assertResetAdmin(context, tenantId);
+    if (!/^[a-f0-9]{32}$/.test(exportId)) throw new BadRequestException("TENANT_PURGE_EXPORT_INVALID");
+    const parsed = tenantPurgeExportDeliveryBodySchema.safeParse(input);
+    if (!parsed.success) throw new BadRequestException("TENANT_PURGE_EXPORT_DELIVERY_INVALID");
+    const body = parsed.data;
+    const deliveredAt = Date.parse(`${body.deliveredOn}T00:00:00.000Z`);
+    if (!Number.isFinite(deliveredAt) || new Date(deliveredAt).toISOString().slice(0, 10) !== body.deliveredOn || deliveredAt > Date.now()) throw new BadRequestException("TENANT_PURGE_EXPORT_DELIVERY_INVALID");
+    // ponytail: coarse PII guard (e-mail, phone/ID-like digit runs); the note is a reference, not a record.
+    if (body.note && /@|\d{7,}/.test(body.note.replace(/[\s.-]/g, ""))) throw new BadRequestException("TENANT_PURGE_EXPORT_NOTE_INVALID");
+    if (!this.pool) throw new ServiceUnavailableException("RESET_SOURCE_UNVERIFIED");
+    return withTenantDb(this.pool, { bypassRls: true, tenantId: null }, async (db) => {
+      // Tenant row lock serializes concurrent delivery marks for the same institution.
+      if (!(await db.query('SELECT "id" FROM "Tenant" WHERE "id" = $1 FOR UPDATE', [tenantId])).rows.length) throw new NotFoundException("TENANT_NOT_FOUND");
+      const ledger = (await db.query<{ action: string; createdAt: Date | string }>('SELECT "action", "createdAt" FROM "AuditLog" WHERE "tenantId" = $1 AND "entityType" = $2 AND "entityId" = $3', [tenantId, licenseExpiryPurgeExportEntity, exportId])).rows;
+      const created = ledger.find((row) => row.action === licenseExpiryPurgeExportCreated);
+      if (!created) throw new NotFoundException("TENANT_PURGE_EXPORT_NOT_FOUND");
+      if (ledger.some((row) => row.action === licenseExpiryPurgeExportDelivered)) throw new ConflictException("TENANT_PURGE_EXPORT_ALREADY_DELIVERED");
+      if (body.deliveredOn < new Date(created.createdAt).toISOString().slice(0, 10)) throw new BadRequestException("TENANT_PURGE_EXPORT_DELIVERY_INVALID");
+      const recordedAt = new Date().toISOString();
+      await db.query('INSERT INTO "AuditLog" ("id", "tenantId", "actorUserId", "entityType", "entityId", "action", "diff") VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)',
+        [randomUUID(), tenantId, context.userId, licenseExpiryPurgeExportEntity, exportId, licenseExpiryPurgeExportDelivered, JSON.stringify({ deliveredOn: body.deliveredOn, channel: body.channel, ...(body.note ? { note: body.note } : {}) })]);
+      return { exportId, deliveredOn: body.deliveredOn, channel: body.channel, recordedAt };
+    });
+  }
   async statusByKey(context: RequestContext, tenantId: string, key?: string) {
     assertResetAdmin(context, tenantId);
     if (!key) throw new BadRequestException("IDEMPOTENCY_KEY_REQUIRED");
@@ -180,6 +229,7 @@ export async function enqueueFreshReset(op: FreshResetOperation) {
 function resetHttpError(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   if (["IDEMPOTENCY_KEY_BODY_MISMATCH", "TENANT_LIFECYCLE_VERSION_CONFLICT", "RESET_OPERATION_IN_PROGRESS", "RESET_PREFLIGHT_CHANGED", "RESET_REQUIRES_SUSPENDED", "RESET_PREFLIGHT_BLOCKED", "RESET_INSTITUTION_REQUEST_REQUIRED", "RESET_INSTITUTION_REQUEST_INVALID", "RESET_WRITE_QUIESCENCE_UNVERIFIED", "RESET_LICENSE_NOT_EXPIRED"].includes(code)) return new ConflictException(code);
+  if (code === "RESET_EXPORT_RECEIPT_REQUIRED") return new ConflictException("TENANT_PURGE_EXPORT_RECEIPT_REQUIRED");
   if (code === "MFA_STEP_UP_CONTEXT_INVALID") return new UnauthorizedException(code);
   if (["RESET_CONFIRMATION_MISMATCH", "RESET_TARGET_INVALID"].includes(code)) return new BadRequestException(code);
   return new ServiceUnavailableException("RESET_SOURCE_UNVERIFIED");

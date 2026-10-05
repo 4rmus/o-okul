@@ -42,6 +42,8 @@ interface CapturedSystemRequests {
   purgeCandidates?: unknown[];
   purgePreview?: unknown;
   purgePosts: Array<{ body: unknown; key?: string; proof?: string }>;
+  purgeExports: string[];
+  purgeDeliveries: Array<{ body: unknown; path: string }>;
 }
 
 interface SystemTenantFixture {
@@ -379,6 +381,7 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
   for (const [name, change] of [
     ["engelli önizleme", (captured: CapturedSystemRequests) => { captured.purgePreview = { ...purgePreviewFixture(), allowed: false, blockers: ["WRITE_QUIESCENCE_UNVERIFIED"], blockerCounts: [{ code: "WRITE_QUIESCENCE_UNVERIFIED", count: null }] }; }],
     ["askıya alınmamış kurum", (captured: CapturedSystemRequests) => { captured.purgeCandidates = [{ ...purgeCandidateFixture, status: "ACTIVE" }]; }],
+    ["teslim edilmemiş dışa aktarım", (captured: CapturedSystemRequests) => { captured.purgeCandidates = [{ ...purgeCandidateFixture, exportDeliveredOn: null }]; captured.purgePreview = { ...purgePreviewFixture(), allowed: false, blockers: ["EXPORT_RECEIPT_REQUIRED"], blockerCounts: [{ code: "EXPORT_RECEIPT_REQUIRED", count: 0 }] }; }],
   ] as const) test(`imha onayı ${name} durumunda step-up ve istek göndermez`, async ({ page }) => {
     const captured = createCapturedSystemRequests(); captured.purgeCandidates = [purgeCandidateFixture]; change(captured);
     await openWithSystemTenantMocks(page, captured, "/sistem/kurumlar");
@@ -386,10 +389,38 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     const dialog = page.getByRole("dialog", { name: "Kurum verisini imha et" });
     await dialog.getByLabel("Kurum kodu onayı").fill("eski-kurum");
     await dialog.getByLabel("Doğrulama kodu").fill("123456");
-    await expect(dialog).toContainText(name === "engelli önizleme" ? "Kurumdaki yazma işlemlerinin durduğu doğrulanamadı" : "Önce kurumu askıya alın");
+    await expect(dialog).toContainText(name === "engelli önizleme" ? "Kurumdaki yazma işlemlerinin durduğu doğrulanamadı" : name === "teslim edilmemiş dışa aktarım" ? "veri dışa aktarımı kuruma teslim edilmedi" : "Önce kurumu askıya alın");
     await expect(dialog.getByRole("button", { name: "İmhayı onayla" })).toBeDisabled();
     expect(captured.stepUps).toEqual([]); expect(captured.purgePosts).toEqual([]);
   });
+
+  for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
+    test(`imha adayı için veri dışa aktarılır ve teslimi kişisel veri olmadan işaretlenir ${viewport.width}`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      const captured = createCapturedSystemRequests(); captured.purgeCandidates = [{ ...purgeCandidateFixture, exportId: null, exportDeliveredOn: null }];
+      await openWithSystemTenantMocks(page, captured, "/sistem/kurumlar");
+      const panel = page.getByLabel("İmha adayları", { exact: true }).first();
+      await expect(panel).toContainText("Teslim edilmedi");
+      await expect(page.getByRole("button", { name: "Eski Kurum Koleji teslimini işaretle" })).toHaveCount(0);
+      const download = page.waitForEvent("download");
+      await page.getByRole("button", { name: "Eski Kurum Koleji verisini dışa aktar" }).click();
+      expect((await download).suggestedFilename()).toBe("o-okul-eski-kurum-teslim-2026-10-05.json");
+      expect(captured.purgeExports).toEqual(["/tenants/tenant-eski/purge-exports"]);
+      await expect(panel).toContainText("Dışa aktarıldı, teslim bekliyor");
+      await page.getByRole("button", { name: "Eski Kurum Koleji teslimini işaretle" }).click();
+      const dialog = page.getByRole("dialog", { name: "Veri teslimini işaretle" });
+      await dialog.getByLabel("Teslim tarihi").fill("2026-10-04");
+      await dialog.getByLabel("Teslim kanalı").selectOption("ENCRYPTED_EMAIL");
+      await dialog.getByLabel("Not (isteğe bağlı)").fill("Kurum müdürüne teslim, tutanak 12");
+      await expectNoHorizontalOverflow(page, `purge-delivery-${viewport.width}`);
+      await dialog.getByRole("button", { name: "Teslimi kaydet" }).click();
+      await expect(dialog).toHaveCount(0);
+      expect(captured.purgeDeliveries).toEqual([{ path: `/tenants/tenant-eski/purge-exports/${"f".repeat(32)}/delivery`, body: { deliveredOn: "2026-10-04", channel: "ENCRYPTED_EMAIL", note: "Kurum müdürüne teslim, tutanak 12" } }]);
+      await expect(panel).toContainText("Teslim edildi");
+      await expect(page.getByRole("button", { name: "Eski Kurum Koleji verisini dışa aktar" })).toHaveCount(0);
+      expect(captured.purgePosts).toEqual([]);
+    });
+  }
 
   test("sistem denetim referans ekranı statik kanıtı kontrol listesi olarak gösterir", async ({ page }) => {
     const captured = createCapturedSystemRequests();
@@ -511,6 +542,8 @@ function createCapturedSystemRequests(): CapturedSystemRequests {
     tenantStatusUpdates: [],
     tenantUpdates: [],
     purgePosts: [],
+    purgeExports: [],
+    purgeDeliveries: [],
   };
 }
 
@@ -593,6 +626,20 @@ async function installSystemTenantApiMocks(page: Page, captured: CapturedSystemR
     if (pathName === "/tenants/tenant-eski/clean-reset-preview" && method === "GET") {
       if (url.searchParams.get("preset") !== "LICENSE_EXPIRY_PURGE_V1") { await fulfillError(route, "RESET_PRESET_INVALID", 400); return; }
       await fulfillData(route, captured.purgePreview ?? purgePreviewFixture());
+      return;
+    }
+    if (pathName === "/tenants/tenant-eski/purge-exports" && method === "POST") {
+      captured.purgeExports.push(pathName);
+      // The next candidate read reflects the new (not yet delivered) handover export.
+      captured.purgeCandidates = (captured.purgeCandidates ?? []).map((row) => ({ ...(row as object), exportId: "f".repeat(32), exportDeliveredOn: null }));
+      await fulfillData(route, { exportId: "f".repeat(32), formatVersion: "tenant-export-v1", tenantId: "tenant-eski", generatedByUserId: "system-admin", exportedAt: "2026-10-05T09:00:00.000Z", scope: "license-expiry-purge-handover", rowLimitPerTable: null, tables: { students: [] }, warnings: [] });
+      return;
+    }
+    if (pathName === `/tenants/tenant-eski/purge-exports/${"f".repeat(32)}/delivery` && method === "POST") {
+      const body = route.request().postDataJSON() as { deliveredOn: string; channel: string };
+      captured.purgeDeliveries.push({ body, path: pathName });
+      captured.purgeCandidates = (captured.purgeCandidates ?? []).map((row) => ({ ...(row as object), exportDeliveredOn: body.deliveredOn }));
+      await fulfillData(route, { exportId: "f".repeat(32), deliveredOn: body.deliveredOn, channel: body.channel, recordedAt: "2026-10-05T09:05:00.000Z" });
       return;
     }
     if (pathName === "/tenants/tenant-eski/clean-reset-jobs" && method === "POST") {
@@ -737,7 +784,7 @@ function corsHeadersFor(route: Route) {
 
 
 const resetDigestFixture = "a".repeat(64);
-const purgeCandidateFixture = { tenantId: "tenant-eski", name: "Eski Kurum Koleji", slug: "eski-kurum", status: "SUSPENDED", lifecycleVersion: 4, licenseEndsAt: "2026-07-05T00:00:00.000Z", daysSinceLicenseEnd: 92, estimatedRowCount: 1234 };
+const purgeCandidateFixture = { tenantId: "tenant-eski", name: "Eski Kurum Koleji", slug: "eski-kurum", status: "SUSPENDED", lifecycleVersion: 4, licenseEndsAt: "2026-07-05T00:00:00.000Z", daysSinceLicenseEnd: 92, estimatedRowCount: 1234, exportId: "e".repeat(32), exportDeliveredOn: "2026-10-01" };
 function purgePreviewFixture() {
   return { institutionRequest: null, preset: "LICENSE_EXPIRY_PURGE_V1", lifecycleVersion: 4, preservedOwnerCount: 0, categories: Object.keys(resetCategoryLabels).map((category) => ({ category, preserved: 0, deleted: category === "Student" ? 1200 : category === "AuditLog" ? 34 : 0, blocked: 0 })), objectCount: 5, objectBytes: 500, blockers: [], blockerCounts: [], allowed: true, preflightDigest: resetDigestFixture };
 }

@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { PostgresFreshResetStore, purgeResetDatabase, requireResetLegalClearance, type FreshResetOperation, type FreshResetRequest } from "./tenant-fresh-reset.js";
-import { runFreshReset, type FreshResetServices } from "./tenant-fresh-reset-runner.js";
+import { deleteResetBackupPackage, runFreshReset, type FreshResetServices } from "./tenant-fresh-reset-runner.js";
 import { readResetSnapshot } from "./tenant-reset-snapshot.js";
 import { tenantResetColumns, tenantResetTableNames, type ResetTables } from "./tenant-reset-catalog.js";
-import { licenseExpiryPurgeBlockers, licenseExpiryPurgeEndsAt, listLicenseExpiryPurgeCandidates, requireLicenseExpiryPurgeClearance } from "./tenant-expiry-purge.js";
+import { licenseExpiryPurgeBlockers, licenseExpiryPurgeEndsAt, licenseExpiryPurgeExportState, listLicenseExpiryPurgeCandidates, requireLicenseExpiryPurgeClearance } from "./tenant-expiry-purge.js";
 import type { TenantResetPackage } from "./tenant-reset-backup.js";
 
 const day = 24 * 60 * 60 * 1_000;
@@ -14,6 +14,12 @@ const term = (days: number, extra: Record<string, unknown> = {}) => ({ startsAt:
 // Clearance reads the wall clock; pin it so the day-90/91 boundaries never drift.
 beforeEach(() => { vi.useFakeTimers({ toFake: ["Date"], now }); });
 afterEach(() => { vi.useRealTimers(); });
+// Handover export ledger rows (AuditLog): created after the license end, then marked delivered by a SYSTEM_ADMIN.
+const exportId = "e".repeat(32);
+const exportLedger = (tenantId: string, createdDaysAgo = 10, delivered = true) => [
+  { id: `export-created-${tenantId}`, tenantId, entityType: "TenantDataExport", entityId: exportId, action: "tenant.data-export.created", createdAt: endedDaysAgo(createdDaysAgo), diff: { tableCount: 31 } },
+  ...(delivered ? [{ id: `export-delivered-${tenantId}`, tenantId, entityType: "TenantDataExport", entityId: exportId, action: "tenant.data-export.delivered", createdAt: endedDaysAgo(createdDaysAgo - 1), diff: { deliveredOn: endedDaysAgo(createdDaysAgo - 1).slice(0, 10), channel: "SECURE_DOWNLOAD" } }] : []),
+];
 const blockOrUsageTables = ["PaymentTransaction", "PaymentInstallment", "PaymentPlan", "SupportTicketComment", "SupportTicketAttachment", "SupportTicket", "WhatsAppConsentEvent", "WhatsAppConsent", "LicenseUsage", "BackupRestoreJob"] as const;
 
 describe("license-expiry purge candidate selection (DEC-20261005-03)", () => {
@@ -41,10 +47,11 @@ describe("license-expiry purge candidate selection (DEC-20261005-03)", () => {
       if (sql.includes('FROM "Tenant" t')) return rows([{ id: "system", name: "System", slug: "system", status: "ACTIVE", lifecycleVersion: 0 }, { id: "t-old", name: "Eski Kurum", slug: "eski", status: "SUSPENDED", lifecycleVersion: 4 }, { id: "t-new", name: "Yeni", slug: "yeni", status: "ACTIVE", lifecycleVersion: 0 }, { id: "t-90", name: "Sinir", slug: "sinir", status: "ACTIVE", lifecycleVersion: 0 }]);
       if (sql.includes('FROM "LicenseTerm"')) return rows([{ tenantId: "system", ...term(500) }, { tenantId: "t-old", ...term(92) }, { tenantId: "t-new", ...term(-100) }, { tenantId: "t-90", ...term(90) }]);
       if (sql.includes("AS count")) return rows([{ count: "1234" }]);
+      if (sql.includes('FROM "AuditLog"')) return rows(exportLedger("t-old", 10, false));
       return rows([]);
     }, release() {} };
     const result = await listLicenseExpiryPurgeCandidates({ query: db.query, connect: async () => db }, now);
-    expect(result).toEqual([{ tenantId: "t-old", name: "Eski Kurum", slug: "eski", status: "SUSPENDED", lifecycleVersion: 4, licenseEndsAt: endedDaysAgo(92), daysSinceLicenseEnd: 92, estimatedRowCount: 1234 }]);
+    expect(result).toEqual([{ tenantId: "t-old", name: "Eski Kurum", slug: "eski", status: "SUSPENDED", lifecycleVersion: 4, licenseEndsAt: endedDaysAgo(92), daysSinceLicenseEnd: 92, estimatedRowCount: 1234, exportId, exportDeliveredOn: null }]);
     expect(calls).toContain("BEGIN READ ONLY");
     expect(calls.find((sql) => sql.includes('FROM "Tenant" t'))).toContain(`t."id" <> 'system'`);
     expect(calls.filter((sql) => /^(INSERT|UPDATE|DELETE)/.test(sql.trim()))).toEqual([]);
@@ -56,7 +63,7 @@ describe("license-expiry purge candidate selection (DEC-20261005-03)", () => {
 });
 
 // Injected SQL: mirrors o_okul_license_expiry_purge so the runner orchestration is tested without PostgreSQL.
-function fixture(terms: Array<Record<string, unknown>> = [{ id: "license", tenantId: "tenant-a", ...term(120) }]) {
+function fixture(terms: Array<Record<string, unknown>> = [{ id: "license", tenantId: "tenant-a", ...term(120) }], exports = true) {
   const tables = Object.fromEntries(tenantResetTableNames.map((name) => [name, []])) as unknown as ResetTables;
   tables.Tenant = [{ id: "tenant-a", slug: "alpha", name: "Alfa Koleji", contactEmail: "alfa@example.com", status: "SUSPENDED", lifecycleVersion: 3 }, { id: "tenant-b", slug: "beta", name: "Beta", status: "ACTIVE", lifecycleVersion: 0 }];
   for (const tenantId of ["tenant-a", "tenant-b"]) {
@@ -70,6 +77,7 @@ function fixture(terms: Array<Record<string, unknown>> = [{ id: "license", tenan
     tables.Guardian.push({ id: `guardian-${p}`, tenantId, phone: "5550000000" });
     for (const name of blockOrUsageTables) tables[name].push({ id: `${name}-${p}`, tenantId });
     tables.AuditLog.push({ id: `audit-${p}`, tenantId, action: "student.created", diff: { firstName: "Ayse" } });
+    if (exports) tables.AuditLog.push(...exportLedger(tenantId));
   }
   tables.PlatformIdempotencyKey.push({ id: "tenant-create", responseBody: { tenant: { id: "tenant-a", contactEmail: "alfa@example.com" } } });
   tables.LicenseTerm.push(...terms);
@@ -99,13 +107,14 @@ function fixture(terms: Array<Record<string, unknown>> = [{ id: "license", tenan
     if (sql.includes('SELECT "id" FROM "Tenant"')) return rows(state.Tenant.map((row) => ({ id: row.id })));
     if (sql.includes('SELECT "id", "tenantId" FROM "Student"')) return rows(state.Student);
     if (sql.includes('SELECT "startsAt", "endsAt", "cancelledAt" FROM "LicenseTerm"')) return rows(state.LicenseTerm.filter((row) => row.tenantId === values[0]));
+    if (sql.includes(`FROM "AuditLog" WHERE "tenantId" = $1 AND "entityType" = 'TenantDataExport'`)) return rows(state.AuditLog.filter((row) => row.tenantId === values[0] && row.entityType === "TenantDataExport"));
     if (sql.includes("AS row FROM")) { const name = sql.match(/AS row FROM "(\w+)"/)![1] as keyof ResetTables; return rows(owned(name).map((row) => ({ row: JSON.stringify(row) })).sort((a, b) => a.row.localeCompare(b.row))); }
     if (sql.includes('SELECT "status", "lifecycleVersion" FROM "Tenant"')) return rows(owned("Tenant"));
     if (sql.includes('SELECT * FROM "TenantFreshResetOperation"')) return rows(state.TenantFreshResetOperation.filter((row) => row.id === values[0]));
     if (sql.startsWith("SELECT o_okul_license_expiry_purge")) {
       const [tenantId, operationId] = values as [string, string]; const final = sql.includes(", true)");
       const current = state.TenantFreshResetOperation.find((row) => row.id === operationId)!;
-      if (final ? current.status !== "COMPLETED" : current.status !== "RUNNING" || current.phase !== "DATABASE") throw new Error("RESET_OPERATION_CHANGED");
+      if (final ? current.status !== "COMPLETED" || (current.result as { backupDeleted?: boolean }).backupDeleted !== true : current.status !== "RUNNING" || current.phase !== "DATABASE") throw new Error("RESET_OPERATION_CHANGED");
       if (!final) {
         const live = state.LicenseTerm.filter((row) => row.tenantId === tenantId && row.cancelledAt == null);
         if (!live.length || live.some((row) => Date.parse(String(row.endsAt)) + 91 * day > Date.now())) throw new Error("RESET_LICENSE_NOT_EXPIRED");
@@ -115,7 +124,8 @@ function fixture(terms: Array<Record<string, unknown>> = [{ id: "license", tenan
       state.AuditLog = state.AuditLog.filter((row) => row.tenantId !== tenantId);
       if (final) {
         const tenant = state.Tenant.find((row) => row.id === tenantId)!;
-        state.AuditLog.push({ id: "receipt", tenantId: null, actorUserId: current.actorUserId, entityType: "TenantLicenseExpiryPurge", entityId: operationId, action: "tenant.license-expiry-purge.completed", diff: { tenantId, slugSha256: "sha256-of-slug", deletedRowCount: (current.result as { deletedRowCount: number }).deletedRowCount } });
+        const { deletedRowCount, exportId: handoverId, exportDeliveredOn, backupDeleted } = current.result as Record<string, unknown>;
+        state.AuditLog.push({ id: "receipt", tenantId: null, actorUserId: current.actorUserId, entityType: "TenantLicenseExpiryPurge", entityId: operationId, action: "tenant.license-expiry-purge.completed", diff: { tenantId, slugSha256: "sha256-of-slug", deletedRowCount, exportId: handoverId, exportDeliveredOn, backupDeleted } });
         Object.assign(tenant, { name: "İmha edildi", slug: "imha-0123456789abcdef", contactEmail: null });
       }
       return rows([{ o_okul_license_expiry_purge: 0 }]);
@@ -124,6 +134,7 @@ function fixture(terms: Array<Record<string, unknown>> = [{ id: "license", tenan
       const row = state.TenantFreshResetOperation[0]!;
       if (sql.includes('"status" = $3')) { if (["COMPLETED", "CANCELLED"].includes(String(row.status))) return rows([]); Object.assign(row, { status: values[2], phase: values[3], errorCode: values[4] }); }
       else if (sql.includes('"backupReceipt" =')) row.backupReceipt = JSON.parse(String(values[2]));
+      else if (sql.includes('"result" = "result" ||')) row.result = { ...(row.result as object), backupDeleted: true };
       else if (sql.includes('"result" =')) row.result = JSON.parse(String(values[2]));
       return rows([{ id: row.id }]);
     }
@@ -140,11 +151,11 @@ function fixture(terms: Array<Record<string, unknown>> = [{ id: "license", tenan
   }, release() {} };
   return { db, pool: { query: db.query, connect: async () => db }, calls, state: () => state, op };
 }
-async function runnerFixture(terms?: Array<Record<string, unknown>>) {
-  const f = fixture(terms);
+async function runnerFixture(terms?: Array<Record<string, unknown>>, exports = true) {
+  const f = fixture(terms, exports);
   const snapshot = await readResetSnapshot(f.db, "tenant-a", f.op.id);
   const pkg = { manifest: { tenantId: "tenant-a", lifecycleVersion: 3, dataDigest: snapshot.dataDigest, objects: [{ key: "student-photo", size: 1, sha256: "hash" }], tables: tenantResetTableNames.map((table) => ({ table, count: snapshot.tables[table].length })) } } as unknown as TenantResetPackage;
-  const services: FreshResetServices = { clearance: requireResetLegalClearance, quiescence: vi.fn(async () => {}), preflight: vi.fn(async () => {}), backup: vi.fn(async () => ({ verified: "fixture-only" })), package: vi.fn(async () => pkg), deleteObjects: vi.fn(async () => {}), verifyObjects: vi.fn(async () => {}) };
+  const services: FreshResetServices = { clearance: requireResetLegalClearance, quiescence: vi.fn(async () => {}), preflight: vi.fn(async () => {}), backup: vi.fn(async () => ({ verified: "fixture-only" })), package: vi.fn(async () => pkg), deleteObjects: vi.fn(async () => {}), verifyObjects: vi.fn(async () => {}), deleteBackup: vi.fn(async () => {}) };
   return { ...f, services };
 }
 const rowsOf = (state: ResetTables, tenantId: string) => Object.fromEntries(tenantResetTableNames.map((name) => [name, state[name].filter((row) => row.tenantId === tenantId).length]).filter(([, count]) => count)) as Record<string, number>;
@@ -164,9 +175,13 @@ describe("license-expiry purge through the reset engine (injected SQL)", () => {
     expect(receipts).toHaveLength(1);
     expect(receipts[0]).toMatchObject({ tenantId: null, action: "tenant.license-expiry-purge.completed", entityId: f.op.id });
     expect(JSON.stringify(receipts[0])).not.toMatch(/alpha|Alfa|alfa@example|Ayse|10000000146|555/);
-    expect((receipts[0]!.diff as { deletedRowCount: number }).deletedRowCount).toBe(18);
+    // 18 institution rows + 2 handover-ledger rows, all purged.
+    expect(receipts[0]!.diff).toMatchObject({ deletedRowCount: 20, exportId, exportDeliveredOn: endedDaysAgo(9).slice(0, 10), backupDeleted: true });
+    // VERIFY (objects gone + postconditions) strictly precedes the single backup deletion.
+    expect(f.services.deleteBackup).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(f.services.deleteBackup).mock.invocationCallOrder[0]).toBeGreaterThan(vi.mocked(f.services.verifyObjects).mock.invocationCallOrder[0]!);
     // Other tenant untouched, including its AuditLog and finance rows.
-    expect(rowsOf(state, "tenant-b")).toMatchObject({ User: 1, Student: 1, AuditLog: 1, PaymentPlan: 1, LicenseUsage: 1, WhatsAppConsent: 1 });
+    expect(rowsOf(state, "tenant-b")).toMatchObject({ User: 1, Student: 1, AuditLog: 3, PaymentPlan: 1, LicenseUsage: 1, WhatsAppConsent: 1 });
     expect(f.services.deleteObjects).toHaveBeenCalledTimes(1);
     expect(f.calls).not.toContain('UPDATE "Tenant" SET "status" = \'ACTIVE\'');
     expect(f.calls.filter((sql) => sql.startsWith("SELECT o_okul_license_expiry_purge"))).toHaveLength(2);
@@ -209,7 +224,7 @@ describe("license-expiry purge through the reset engine (injected SQL)", () => {
 });
 
 describe("purge operation creation", () => {
-  function storeFixture(options: { terms?: Array<Record<string, unknown>>; status?: string; purged?: boolean } = {}) {
+  function storeFixture(options: { terms?: Array<Record<string, unknown>>; status?: string; purged?: boolean; exports?: Array<Record<string, unknown>> } = {}) {
     const tenant = { slug: "alpha", status: options.status ?? "SUSPENDED", lifecycleVersion: 3, resetRequest: { id: "untouched" } };
     const inserted: unknown[][] = []; const calls: string[] = [];
     const db = { async query<T>(sql: string, values: unknown[] = []): Promise<{ rows: T[] }> {
@@ -220,6 +235,7 @@ describe("purge operation creation", () => {
       if (sql.includes('FROM "Tenant" WHERE "id" = $1 FOR UPDATE')) return rows([tenant]);
       if (sql.startsWith('SELECT "status" FROM "TenantFreshResetOperation"')) return rows(options.purged ? [{ status: "COMPLETED" }] : []);
       if (sql.includes('FROM "LicenseTerm"')) return rows(options.terms ?? [term(100)]);
+      if (sql.includes('FROM "AuditLog"')) return rows(options.exports ?? exportLedger("tenant-a"));
       if (sql.startsWith('INSERT INTO "TenantFreshResetOperation"')) { inserted.push(values); return rows([{ id: values[0] }]); }
       return rows([]);
     }, release() {} };
@@ -240,6 +256,10 @@ describe("purge operation creation", () => {
     ["renewed license", { terms: [term(200), term(-100)] }, "RESET_LICENSE_NOT_EXPIRED"],
     ["tenant not suspended", { status: "ACTIVE" }, "RESET_REQUIRES_SUSPENDED"],
     ["already purged", { purged: true }, "RESET_TARGET_INVALID"],
+    // Product owner decision (2026-10-05): a delivered handover export created after the license end.
+    ["no handover export", { exports: [] }, "RESET_EXPORT_RECEIPT_REQUIRED"],
+    ["export created before the license end", { exports: exportLedger("tenant-a", 101) }, "RESET_EXPORT_RECEIPT_REQUIRED"],
+    ["export not marked delivered", { exports: exportLedger("tenant-a", 10, false) }, "RESET_EXPORT_RECEIPT_REQUIRED"],
     ["purge preset with another reason", { body: { ...body, reason: "OPERATIONS_REVIEW" as const } }, "RESET_TARGET_INVALID"],
   ])("rejects %s before any write", async (_name, options, code) => {
     const f = storeFixture(options as never); const validate = vi.fn(async () => {});
@@ -269,11 +289,76 @@ describe("purge database boundary (static migration contract; live PostgreSQL ru
     const receipt = sql.slice(sql.indexOf('INSERT INTO "AuditLog"'), sql.indexOf('UPDATE "Tenant"'));
     const fields = receipt.slice(receipt.indexOf("jsonb_build_object("));
     expect(receipt).toContain("NULL, op_row.\"actorUserId\"");
-    expect([...new Set(fields.match(/'(\w+)', /g)?.map((key) => key.slice(1, -3)))]).toEqual(["tenantId", "slugSha256", "purgedAt", "deletedRowCount", "deletedObjectCount"]);
+    expect([...new Set(fields.match(/'(\w+)', /g)?.map((key) => key.slice(1, -3)))]).toEqual(["tenantId", "slugSha256", "purgedAt", "deletedRowCount", "deletedObjectCount", "exportId", "exportDeliveredOn", "backupDeleted"]);
     expect(receipt).not.toMatch(/"name"|contactEmail/);
+    // The receipt is refused unless the worker recorded the proven backup deletion.
+    expect(sql).toContain(`op_row."result" ->> 'backupDeleted' IS DISTINCT FROM 'true'`);
   });
   it("a purged tenant is never reactivated and a cancelled purge does not hold the tenant", () => {
     expect(sql).toContain("RAISE EXCEPTION USING MESSAGE = 'TENANT_PURGED'");
     expect(sql).toContain(`WHERE "status" NOT IN ('COMPLETED', 'CANCELLED')`);
+  });
+});
+
+describe("handover export precondition and backup deletion (product owner decision 2026-10-05)", () => {
+  it("only a delivered export created after the license end counts", () => {
+    const end = endedDaysAgo(120);
+    expect(licenseExpiryPurgeExportState(exportLedger("t"), end)).toEqual({ exportId, deliveredOn: endedDaysAgo(9).slice(0, 10) });
+    expect(licenseExpiryPurgeExportState(exportLedger("t", 10, false), end)).toEqual({ exportId, deliveredOn: null });
+    expect(licenseExpiryPurgeExportState(exportLedger("t", 121), end)).toEqual({ exportId: null, deliveredOn: null });
+    expect(licenseExpiryPurgeExportState([], end)).toEqual({ exportId: null, deliveredOn: null });
+    // A delivery row for an export id that was never created after the end proves nothing.
+    expect(licenseExpiryPurgeExportState(exportLedger("t").filter((row) => row.action !== "tenant.data-export.created"), end)).toEqual({ exportId: null, deliveredOn: null });
+  });
+  it("the worker re-checks the delivered export: without it the purge is blocked and nothing is deleted", async () => {
+    const f = await runnerFixture(undefined, false);
+    await expect(runFreshReset(f.pool, "tenant-a", f.op.id, f.services)).rejects.toThrow("RESET_EXPORT_RECEIPT_REQUIRED");
+    expect(f.state().TenantFreshResetOperation[0]).toMatchObject({ status: "BLOCKED", errorCode: "RESET_EXPORT_RECEIPT_REQUIRED" });
+    expect(f.calls.some((sql) => sql.startsWith("DELETE") || sql.startsWith("SELECT o_okul_license_expiry_purge"))).toBe(false);
+    expect(f.services.backup).not.toHaveBeenCalled(); expect(f.services.deleteBackup).not.toHaveBeenCalled();
+  });
+  it.each([
+    ["objects still present", (f: Awaited<ReturnType<typeof runnerFixture>>) => { f.services.verifyObjects = vi.fn(async () => { throw new Error("RESET_OBJECT_STILL_PRESENT"); }); }],
+    ["database postcondition fails", (f: Awaited<ReturnType<typeof runnerFixture>>) => { f.services.deleteObjects = vi.fn(async () => { f.state().Student.push({ id: "late", tenantId: "tenant-a" }); }); }],
+  ])("VERIFY failure (%s) keeps the backup package and leaves the operation failed", async (_name, breakVerify) => {
+    const f = await runnerFixture(); breakVerify(f);
+    await expect(runFreshReset(f.pool, "tenant-a", f.op.id, f.services)).rejects.toThrow();
+    expect(f.services.deleteBackup).not.toHaveBeenCalled();
+    expect(f.state().TenantFreshResetOperation[0]).toMatchObject({ status: "FAILED", phase: "OBJECTS" });
+    expect(f.state().AuditLog.some((row) => row.action === "tenant.license-expiry-purge.completed")).toBe(false);
+  });
+  it("a failed backup deletion is not completed; the retry from VERIFY deletes again without reading the package", async () => {
+    const f = await runnerFixture();
+    vi.mocked(f.services.deleteBackup).mockRejectedValueOnce(new Error("RESET_BACKUP_DELETE_UNVERIFIED"));
+    await expect(runFreshReset(f.pool, "tenant-a", f.op.id, f.services)).rejects.toThrow("RESET_BACKUP_DELETE_UNVERIFIED");
+    expect(f.state().TenantFreshResetOperation[0]).toMatchObject({ status: "BLOCKED", phase: "VERIFY" });
+    expect(f.state().AuditLog.some((row) => row.action === "tenant.license-expiry-purge.completed")).toBe(false);
+    vi.mocked(f.services.package).mockClear();
+    expect(await runFreshReset(f.pool, "tenant-a", f.op.id, f.services)).toMatchObject({ status: "COMPLETED" });
+    expect(f.services.package).not.toHaveBeenCalled();
+    expect(f.services.deleteBackup).toHaveBeenCalledTimes(2);
+    expect(f.state().AuditLog.find((row) => row.action === "tenant.license-expiry-purge.completed")?.diff).toMatchObject({ backupDeleted: true });
+  });
+  it("backup deletion removes package and attestation, then proves both are gone", async () => {
+    const present = new Set([`tenant-reset-backups/${"c".repeat(32)}.bin`, `tenant-reset-backups/${"c".repeat(32)}.restore-verified.json`]);
+    const sent: string[] = [];
+    const s3 = (options: { versioned?: boolean; stuck?: boolean } = {}) => ({ async send(command: unknown) {
+      const name = (command as object).constructor.name; const input = (command as { input: { Key?: string } }).input; sent.push(`${name}:${input.Key ?? ""}`);
+      if (name === "GetBucketVersioningCommand") return options.versioned ? { Status: "Suspended" } : {};
+      if (name === "DeleteObjectCommand") { if (!options.stuck) present.delete(input.Key!); return {}; }
+      if (name === "HeadObjectCommand") { if (present.has(input.Key!)) return { ETag: "x" }; throw Object.assign(new Error("NotFound"), { $metadata: { httpStatusCode: 404 } }); }
+      throw new Error(`unexpected ${name}`);
+    } });
+    await expect(deleteResetBackupPackage(s3({ versioned: true }), "backup", "c".repeat(32))).rejects.toThrow("RESET_VERSIONED_BACKUP_UNVERIFIED");
+    expect(sent.filter((entry) => entry.startsWith("DeleteObject"))).toEqual([]);
+    await expect(deleteResetBackupPackage(s3({ stuck: true }), "backup", "c".repeat(32))).rejects.toThrow("RESET_BACKUP_DELETE_UNVERIFIED");
+    sent.length = 0;
+    await deleteResetBackupPackage(s3(), "backup", "c".repeat(32));
+    expect(present.size).toBe(0);
+    expect(sent.filter((entry) => !entry.startsWith("GetBucket"))).toEqual([
+      `DeleteObjectCommand:tenant-reset-backups/${"c".repeat(32)}.bin`, `HeadObjectCommand:tenant-reset-backups/${"c".repeat(32)}.bin`,
+      `DeleteObjectCommand:tenant-reset-backups/${"c".repeat(32)}.restore-verified.json`, `HeadObjectCommand:tenant-reset-backups/${"c".repeat(32)}.restore-verified.json`,
+    ]);
+    await expect(deleteResetBackupPackage(s3(), "backup", "../other")).rejects.toThrow("RESET_TARGET_INVALID");
   });
 });

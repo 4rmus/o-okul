@@ -1,7 +1,7 @@
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import type { RequestContext } from "../context/request-context.js";
-import { type Queryable, type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
+import { type Queryable, type TenantQueryable, withExplicitTenantQuery, withTenantQuery } from "../db/tenant-query.js";
 
 export interface TenantDataExportPayload {
   formatVersion: "tenant-export-v1";
@@ -106,7 +106,25 @@ class PostgresTenantDataExportStore implements TenantDataExportStore {
   }
 }
 
-async function readExportRows(client: Queryable, config: ExportTableConfig): Promise<unknown[]> {
+export interface TenantHandoverExportPayload extends Omit<TenantDataExportPayload, "scope" | "rowLimitPerTable"> {
+  exportId: string;
+  scope: "license-expiry-purge-handover";
+  rowLimitPerTable: null;
+}
+
+// Product owner decision (2026-10-05): before a license-expiry purge the institution receives its data.
+// Same tables and column redaction as the institution's own export, plus payment transactions (its
+// accounting retention moves to this file), and no row limit so nothing is silently truncated.
+const handoverTables = [...exportTables, table("paymentTransactions", "PaymentTransaction", [], false)];
+export async function createTenantHandoverExport(pool: TenantQueryable, tenantId: string, actorUserId: string, exportId: string): Promise<TenantHandoverExportPayload> {
+  return withExplicitTenantQuery(pool, tenantId, async (client) => {
+    const tables: Record<string, unknown[]> = {};
+    for (const config of handoverTables) tables[config.key] = await readExportRows(client, config, null);
+    return { exportId, formatVersion: "tenant-export-v1", tenantId, generatedByUserId: actorUserId, exportedAt: new Date().toISOString(), scope: "license-expiry-purge-handover", rowLimitPerTable: null, tables, warnings: [] };
+  });
+}
+
+async function readExportRows(client: Queryable, config: ExportTableConfig, limit: number | null = rowLimitPerTable): Promise<unknown[]> {
   const where = [`"tenantId" = current_setting('app.current_tenant_id', true)`];
   if (config.hasDeletedAt) {
     where.push(`"deletedAt" IS NULL`);
@@ -121,7 +139,8 @@ async function readExportRows(client: Queryable, config: ExportTableConfig): Pro
        ORDER BY "createdAt", "id"
        LIMIT $1
      ) t`,
-    [rowLimitPerTable, config.omittedColumns],
+    // LIMIT NULL is LIMIT ALL in PostgreSQL.
+    [limit, config.omittedColumns],
   );
 
   return result.rows[0]?.rows ?? [];

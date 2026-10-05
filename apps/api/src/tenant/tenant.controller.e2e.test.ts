@@ -128,8 +128,56 @@ describe("TenantController", () => {
     try {
       const response = await request(server).get(route).set("Authorization", `Bearer ${systemToken}`).expect(200);
       expect(response.body).toEqual([expect.objectContaining({ tenantId: "tenant-old", slug: "eski-kurum", daysSinceLicenseEnd: 92, estimatedRowCount: 42 })]);
-      expect(Object.keys(response.body[0]).sort()).toEqual(["daysSinceLicenseEnd", "estimatedRowCount", "licenseEndsAt", "lifecycleVersion", "name", "slug", "status", "tenantId"]);
+      expect(Object.keys(response.body[0]).sort()).toEqual(["daysSinceLicenseEnd", "estimatedRowCount", "exportDeliveredOn", "exportId", "licenseEndsAt", "lifecycleVersion", "name", "slug", "status", "tenantId"]);
       expect(query.mock.calls.every(([sql]) => !/^\s*(INSERT|UPDATE|DELETE)/.test(sql))).toBe(true);
+    } finally { Object.defineProperty(service, "pool", { value: originalPool, configurable: true }); }
+  });
+
+  it("purge handover export and delivery mark are SYSTEM_ADMIN-only, validated and audited (product owner decision 2026-10-05)", async () => {
+    const exportRoute = "/tenants/tenant-a/purge-exports";
+    const exportId = "e".repeat(32);
+    const delivery = (id = exportId) => `/tenants/tenant-a/purge-exports/${id}/delivery`;
+    const body = { deliveredOn: "2026-10-01", channel: "SECURE_DOWNLOAD", note: "Kurum müdürüne şifreli bağlantı" };
+    const system = (route: string) => request(server).post(route).set("Authorization", `Bearer ${systemToken}`);
+    await request(server).post(exportRoute).expect(401);
+    await request(server).post(exportRoute).set("Authorization", `Bearer ${adminToken}`).expect(403);
+    await system("/tenants/system/purge-exports").expect(403);
+    await system(exportRoute).expect(503);
+    await request(server).post(delivery()).set("Authorization", `Bearer ${adminToken}`).send(body).expect(403);
+    await system(delivery()).send({ ...body, channel: "FAX" }).expect(422);
+    await system(delivery()).send({ ...body, studentName: "x" }).expect(422);
+    await system(delivery("not-an-export")).send(body).expect(400).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_INVALID"));
+    await system(delivery()).send({ ...body, note: "veli ali@example.com" }).expect(400).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_NOTE_INVALID"));
+    await system(delivery()).send({ ...body, note: "tel 0555 123 45 67" }).expect(400).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_NOTE_INVALID"));
+    await system(delivery()).send({ ...body, deliveredOn: "2999-01-01" }).expect(400).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_DELIVERY_INVALID"));
+    await system(delivery()).send(body).expect(503);
+
+    const service = app.get(TenantFreshResetService);
+    const originalPool = (service as unknown as { pool: unknown }).pool;
+    const audit: Array<{ tenantId: string; actorUserId: string; entityType: string; entityId: string; action: string; diff: Record<string, unknown>; createdAt: string }> = [];
+    const query = vi.fn(async (sql: string, values: unknown[] = []) => {
+      if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] };
+      if (sql.includes('FROM "Tenant" WHERE "id" = $1')) return { rows: values[0] === "tenant-a" ? [{ id: "tenant-a" }] : [] };
+      if (sql.includes("jsonb_agg")) return { rows: [{ rows: sql.includes('"PaymentTransaction"') ? [{ id: "tx-1", amount: 100 }] : [] }] };
+      if (sql.startsWith('INSERT INTO "AuditLog"')) { audit.push({ tenantId: String(values[1]), actorUserId: String(values[2]), entityType: String(values[3]), entityId: String(values[4]), action: String(values[5]), diff: JSON.parse(String(values[6])), createdAt: "2026-09-30T10:00:00.000Z" }); return { rows: [] }; }
+      if (sql.includes('FROM "AuditLog"')) return { rows: audit.filter((row) => row.tenantId === values[0] && row.entityType === values[1] && row.entityId === values[2]) };
+      return { rows: [] };
+    });
+    Object.defineProperty(service, "pool", { value: { query, connect: async () => ({ query, release: vi.fn() }) }, configurable: true });
+    try {
+      const created = await system(exportRoute).expect(201);
+      expect(created.body).toMatchObject({ exportId: expect.stringMatching(/^[a-f0-9]{32}$/), tenantId: "tenant-a", scope: "license-expiry-purge-handover", rowLimitPerTable: null });
+      expect(created.body.tables.paymentTransactions).toEqual([{ id: "tx-1", amount: 100 }]);
+      // Handover export has no row limit; the institution's own export keeps its limit.
+      expect(query.mock.calls.filter(([sql]) => sql.includes("jsonb_agg")).every(([, values]) => (values as unknown[])[0] === null)).toBe(true);
+      expect(audit).toEqual([expect.objectContaining({ entityType: "TenantDataExport", entityId: created.body.exportId, action: "tenant.data-export.created", diff: expect.objectContaining({ sha256: expect.stringMatching(/^[a-f0-9]{64}$/) }) })]);
+      await system("/tenants/missing/purge-exports").expect(404);
+      await system(delivery()).send(body).expect(404).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_NOT_FOUND"));
+      await system(delivery(created.body.exportId)).send({ ...body, deliveredOn: "2026-09-29" }).expect(400);
+      const marked = await system(delivery(created.body.exportId)).send(body).expect(201);
+      expect(marked.body).toMatchObject({ exportId: created.body.exportId, deliveredOn: "2026-10-01", channel: "SECURE_DOWNLOAD" });
+      expect(audit.at(-1)).toMatchObject({ action: "tenant.data-export.delivered", diff: { deliveredOn: "2026-10-01", channel: "SECURE_DOWNLOAD", note: body.note } });
+      await system(delivery(created.body.exportId)).send(body).expect(409).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_ALREADY_DELIVERED"));
     } finally { Object.defineProperty(service, "pool", { value: originalPool, configurable: true }); }
   });
 

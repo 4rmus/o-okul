@@ -24,11 +24,12 @@ export function freshResetStatus(op: FreshResetOperation) {
 export const freshResetJobId = (operationId: string) => `tenant-fresh-reset-${operationId}`;
 export const freshResetQueue = "tenant-fresh-reset";
 // Authority is the persisted institution request, never an environment flag.
-export async function requireResetLegalClearance(tenantId: string, db?: Queryable, operation?: Pick<FreshResetOperation, "id" | "institutionRequestId"> & Partial<Pick<FreshResetOperation, "preset" | "phase">>): Promise<void> {
+export async function requireResetLegalClearance(tenantId: string, db?: Queryable, operation?: Pick<FreshResetOperation, "id" | "institutionRequestId"> & Partial<Pick<FreshResetOperation, "preset" | "phase">>): Promise<{ exportId: string; deliveredOn: string } | void> {
   if (!db) throw new Error("RESET_INSTITUTION_REQUEST_REQUIRED");
   if (operation && isLicenseExpiryPurge(operation)) {
     // DEC-20261005-03 is the authority. Once the database purge committed, remaining objects must still go.
     if (operation.phase === "OBJECTS" || operation.phase === "VERIFY" || operation.phase === "DONE") return;
+    // Returns the delivered handover export so the worker can carry it into the receipt.
     return requireLicenseExpiryPurgeClearance(db, tenantId);
   }
   await requireResetInstitutionRequest(db, tenantId, operation);

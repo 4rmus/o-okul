@@ -18,6 +18,8 @@ export interface FreshResetServices {
   package(op: FreshResetOperation): Promise<TenantResetPackage>;
   deleteObjects(pkg: TenantResetPackage, fence: () => Promise<void>): Promise<void>;
   verifyObjects(pkg: TenantResetPackage, fence: () => Promise<void>): Promise<void>;
+  /** License-expiry purge only: removes the encrypted reset backup package and proves it is gone. */
+  deleteBackup(op: FreshResetOperation): Promise<void>;
 }
 // Advisory session lock covers backup and all phases. A crashed connection releases
 // it; DB phase checkpoint and purge commit together, so retries never repeat purge.
@@ -56,28 +58,43 @@ export async function runFreshReset(pool: TenantQueryable, tenantId: string, ope
       const pkg = await services.package(op);
       await services.preflight(op);
       await tx(async (db) => {
+        // The handover export ledger lives in the tenant AuditLog, which the purge deletes: read it first.
+        const handover = (isLicenseExpiryPurge(op!) ? await services.clearance(tenantId, db, op) : undefined) as { exportId: string; deliveredOn: string } | undefined;
         const count = await purgeResetDatabase(db, op!, pkg.manifest.dataDigest, services.clearance, services.quiescence);
-        const result = { preservedOwnerCount: count, deletedObjectCount: pkg.manifest.objects.length, ...(isLicenseExpiryPurge(op!) ? { deletedRowCount: licenseExpiryPurgeRowCount(pkg.manifest.tables) } : {}) };
+        const result = { preservedOwnerCount: count, deletedObjectCount: pkg.manifest.objects.length, ...(isLicenseExpiryPurge(op!) ? { deletedRowCount: licenseExpiryPurgeRowCount(pkg.manifest.tables), exportId: handover?.exportId ?? null, exportDeliveredOn: handover?.deliveredOn ?? null } : {}) };
         await db.query('UPDATE "TenantFreshResetOperation" SET "result" = $3::jsonb WHERE "id" = $1 AND "tenantId" = $2', [operationId, tenantId, JSON.stringify(result)]);
         await updatePhase(db, op!, "RUNNING", "OBJECTS");
       });
       op = (await read())!;
     }
-    const pkg = await services.package(op);
-    await tx(async (db) => { await requireNoTenantMutationActivity(db, tenantId); await services.clearance(tenantId, db, op); });
-    await services.quiescence(tenantId);
-    await services.deleteObjects(pkg, async () => { await db.query("SELECT 1"); });
-    await services.verifyObjects(pkg, async () => { await db.query("SELECT 1"); });
-    await tx(async (db) => {
+    const purge = isLicenseExpiryPurge(op);
+    const verify = async (db: Queryable) => {
       const tenant = await db.query<{ status: string; lifecycleVersion: number }>('SELECT "status", "lifecycleVersion" FROM "Tenant" WHERE "id" = $1 FOR UPDATE', [tenantId]);
       if (tenant.rows[0]?.status !== "SUSPENDED" || tenant.rows[0].lifecycleVersion !== op!.expectedLifecycleVersion) throw new Error("RESET_SOURCE_CHANGED");
       await verifyResetPostconditions(db, op!, op!.result?.preservedOwnerCount ?? 0);
       await requireNoTenantMutationActivity(db, tenantId);
       await services.clearance(tenantId, db, op);
-    await services.quiescence(tenantId);
+      await services.quiescence(tenantId);
+    };
+    // A purge at VERIFY already proved its objects gone and may have deleted the backup package it would read.
+    if (!(purge && op.phase === "VERIFY")) {
+      const pkg = await services.package(op);
+      await tx(async (db) => { await requireNoTenantMutationActivity(db, tenantId); await services.clearance(tenantId, db, op); });
+      await services.quiescence(tenantId);
+      await services.deleteObjects(pkg, async () => { await db.query("SELECT 1"); });
+      await services.verifyObjects(pkg, async () => { await db.query("SELECT 1"); });
+      // Purge VERIFY passed: committed before the backup package goes. A failure above keeps the package.
+      if (purge) await tx(async (db) => { await verify(db); await updatePhase(db, op!, "RUNNING", "VERIFY"); });
+    }
+    // Product owner decision (2026-10-05): the encrypted reset backup is deleted right after a successful
+    // purge VERIFY; deleteBackup proves absence. Idempotent, so a retry at VERIFY simply repeats it.
+    if (purge) await services.deleteBackup(op);
+    await tx(async (db) => {
+      await verify(db);
+      if (purge) await db.query('UPDATE "TenantFreshResetOperation" SET "result" = "result" || \'{"backupDeleted": true}\'::jsonb WHERE "id" = $1 AND "tenantId" = $2', [operationId, tenantId]);
       // Completed first inside the SAME transaction satisfies the activation trigger.
       await updatePhase(db, op!, "COMPLETED", "DONE");
-      if (isLicenseExpiryPurge(op!)) {
+      if (purge) {
         // The purged tenant stays a SUSPENDED tombstone. Phase records go; one system-scope receipt remains.
         await db.query("SELECT o_okul_license_expiry_purge($1, $2, true)", [tenantId, operationId]);
         return;
@@ -133,6 +150,8 @@ export function createFreshResetServices(queueCheck: (tenantId: string, operatio
       const role = await source.query<{ valid: boolean }>(`SELECT NOT rolsuper AND NOT rolbypassrls AND NOT rolcreaterole AND NOT rolcreatedb AND NOT has_schema_privilege(current_user, 'public', 'CREATE') AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind IN ('r','p') AND (c.relowner = r.oid OR has_table_privilege(current_user, c.oid, 'INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER'))) AS valid FROM pg_roles r WHERE rolname = current_user`);
       if (role.rows[0]?.valid !== true) throw new Error("RESET_BACKUP_SOURCE_ROLE_INVALID");
       if ((await s3.send(new GetBucketVersioningCommand({ Bucket: cfg.sourceObjects.bucket }))).Status) throw new Error("RESET_VERSIONED_SOURCE_UNVERIFIED");
+      // A purge deletes its backup after VERIFY; a versioned bucket would keep the data as an old version.
+      if (isLicenseExpiryPurge(op)) await assertUnversionedBackupBucket(cfg.backupObjects);
       await queueCheck(op.tenantId, op.id);
       await withResetSnapshot(source, op.tenantId, async (snapshot) => {
         const objects = await resetObjectInventory(snapshot, s3, cfg.sourceObjects.bucket);
@@ -190,7 +209,26 @@ export function createFreshResetServices(queueCheck: (tenantId: string, operatio
       } finally { s3.destroy(); }
     },
     deleteObjects: (pkg, fence) => objects(pkg, true, fence), verifyObjects: (pkg, fence) => objects(pkg, false, fence),
+    async deleteBackup(op) {
+      const cfg = config(op).backupObjects; const s3 = resetS3Client(cfg);
+      try { await deleteResetBackupPackage(s3, cfg.bucket, op.id); } finally { s3.destroy(); }
+    },
   };
+}
+async function assertUnversionedBackupBucket(cfg: ReturnType<typeof resetS3Config>) {
+  const s3 = resetS3Client(cfg);
+  try { if ((await s3.send(new GetBucketVersioningCommand({ Bucket: cfg.bucket }))).Status) throw new Error("RESET_VERSIONED_BACKUP_UNVERIFIED"); } finally { s3.destroy(); }
+}
+/** Deletes the encrypted package and its restore attestation, then proves both keys answer 404. */
+export async function deleteResetBackupPackage(s3: { send(command: unknown): Promise<unknown> }, bucket: string, operationId: string): Promise<void> {
+  if (!/^[a-f0-9]{32}$/.test(operationId)) throw new Error("RESET_TARGET_INVALID");
+  if ((await s3.send(new GetBucketVersioningCommand({ Bucket: bucket })) as { Status?: string }).Status) throw new Error("RESET_VERSIONED_BACKUP_UNVERIFIED");
+  for (const key of [`tenant-reset-backups/${operationId}.bin`, `tenant-reset-backups/${operationId}.restore-verified.json`]) {
+    await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+    try { await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key })); }
+    catch (error) { if ((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) continue; throw new Error("RESET_BACKUP_DELETE_UNVERIFIED"); }
+    throw new Error("RESET_BACKUP_DELETE_UNVERIFIED");
+  }
 }
 
 export function signResetRestoreReceipt(body: object, key: Buffer): string { return createHmac("sha256", key).update(`TENANT_RESET_RESTORE_RECEIPT_V1:${resetDigest(body)}`).digest("hex"); }

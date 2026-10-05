@@ -1,7 +1,7 @@
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { Queue } from "bullmq";
 import pg from "pg";
-import { licenseExpiryPurgeBlockers, licenseExpiryPurgeEndsAt, licenseExpiryPurgeTables, parseInstitutionResetRequest, resetDigest, resetSnapshotBlockers, resetTableCounts, resetOwnerIds, resetOwnerMemberships, tenantResetQueues, withResetPreviewSnapshot } from "@o-okul/db";
+import { licenseExpiryPurgeBlockers, licenseExpiryPurgeEndsAt, licenseExpiryPurgeExportState, licenseExpiryPurgeTables, parseInstitutionResetRequest, resetDigest, resetSnapshotBlockers, resetTableCounts, resetOwnerIds, resetOwnerMemberships, tenantResetQueues, withResetPreviewSnapshot } from "@o-okul/db";
 import type { TenantResetPreset, TenantResetPreview } from "@o-okul/shared-types";
 import { parseRedisUrl } from "../config/env.js";
 import { resolvePersistenceDriver } from "../config/persistence.js";
@@ -23,7 +23,10 @@ export class TenantResetPreviewService {
     try {
       return await withResetPreviewSnapshot(pool, tenantId, async (snapshot, db) => {
         const blockers = purge ? licenseExpiryPurgeBlockers(resetSnapshotBlockers(snapshot)) : resetSnapshotBlockers(snapshot);
-        if (purge && !licenseExpiryPurgeEndsAt(snapshot.tables.LicenseTerm as never[], new Date(snapshot.capturedAt))) blockers.push("LICENSE_NOT_EXPIRED");
+        const licenseEndsAt = purge ? licenseExpiryPurgeEndsAt(snapshot.tables.LicenseTerm as never[], new Date(snapshot.capturedAt)) : null;
+        if (purge && !licenseEndsAt) blockers.push("LICENSE_NOT_EXPIRED");
+        // Product owner decision (2026-10-05): a delivered post-expiry handover export precedes every purge.
+        if (licenseEndsAt && !licenseExpiryPurgeExportState(snapshot.tables.AuditLog, licenseEndsAt).deliveredOn) blockers.push("EXPORT_RECEIPT_REQUIRED");
         let objects: Awaited<ReturnType<typeof resetObjectInventory>> = [];
         try {
           const config = resetS3Config();
@@ -52,6 +55,7 @@ export class TenantResetPreviewService {
           BACKUP_WORK_PRESENT: snapshot.tables.BackupRestoreJob.filter((row) => /queued|running/i.test(String(row.status))).length,
           IMPORT_WORK_PRESENT: snapshot.tables.RawImport.filter((row) => /queued|running|processing/i.test(String((row.metadata as Record<string, unknown> | null)?.status ?? ""))).length,
           LICENSE_NOT_EXPIRED: 0,
+          EXPORT_RECEIPT_REQUIRED: 0,
 
         };
         return { institutionRequest: purge ? null : parseInstitutionResetRequest(snapshot.tables.Tenant[0]?.resetRequest), preset, lifecycleVersion: snapshot.lifecycleVersion, preservedOwnerCount: purge ? 0 : resetOwnerIds(snapshot.tables, new Date(snapshot.capturedAt)).size,
