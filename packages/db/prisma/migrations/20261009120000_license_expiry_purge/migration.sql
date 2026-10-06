@@ -32,7 +32,7 @@ END $$;
 -- reset worker for its own RUNNING purge operation, removes them after re-checking the license under
 -- the Tenant row lock. p_final removes phase records written after the database purge, scrubs the
 -- tombstone and writes the single system-scope receipt (tenant id, slug hash, time, counts, handover export
--- id + delivery date, backupDeleted; no PII).
+-- id + delivery date, backupPackageDeleted and drillTargetsDeleted; no PII).
 CREATE FUNCTION o_okul_license_expiry_purge(p_tenant_id TEXT, p_operation_id TEXT, p_final BOOLEAN)
 RETURNS INTEGER
 LANGUAGE plpgsql
@@ -55,8 +55,9 @@ BEGIN
   IF NOT FOUND OR tenant_row."status" <> 'SUSPENDED' THEN RAISE EXCEPTION USING MESSAGE = 'RESET_SOURCE_CHANGED'; END IF;
   SELECT "status", "phase", "actorUserId", "result" INTO op_row FROM "TenantFreshResetOperation"
   WHERE "id" = p_operation_id AND "tenantId" = p_tenant_id AND "preset" = 'LICENSE_EXPIRY_PURGE_V1' FOR UPDATE;
-  -- The final receipt is only written after the worker proved the reset backup package deleted.
-  IF NOT FOUND OR (p_final AND (op_row."status" <> 'COMPLETED' OR op_row."result" ->> 'backupDeleted' IS DISTINCT FROM 'true')) OR (NOT p_final AND (op_row."status" <> 'RUNNING' OR op_row."phase" <> 'DATABASE')) THEN
+  -- The final receipt is only written after the worker proved, separately, the encrypted backup package and
+  -- the restore-verify drill copies (database + restore bucket) deleted.
+  IF NOT FOUND OR (p_final AND (op_row."status" <> 'COMPLETED' OR op_row."result" ->> 'backupPackageDeleted' IS DISTINCT FROM 'true' OR op_row."result" ->> 'drillTargetsDeleted' IS DISTINCT FROM 'true')) OR (NOT p_final AND (op_row."status" <> 'RUNNING' OR op_row."phase" <> 'DATABASE')) THEN
     RAISE EXCEPTION USING MESSAGE = 'RESET_OPERATION_CHANGED';
   END IF;
 
@@ -86,7 +87,7 @@ BEGIN
       jsonb_build_object('tenantId', p_tenant_id, 'slugSha256', encode(sha256(convert_to(tenant_row."slug", 'UTF8')), 'hex'), 'purgedAt', now(),
         'deletedRowCount', op_row."result" -> 'deletedRowCount', 'deletedObjectCount', op_row."result" -> 'deletedObjectCount',
         'exportId', op_row."result" -> 'exportId', 'exportDeliveredOn', op_row."result" -> 'exportDeliveredOn',
-        'backupDeleted', op_row."result" -> 'backupDeleted'));
+        'backupPackageDeleted', op_row."result" -> 'backupPackageDeleted', 'drillTargetsDeleted', op_row."result" -> 'drillTargetsDeleted'));
     UPDATE "Tenant" SET "name" = 'İmha edildi', "slug" = 'imha-' || substr(md5("id"), 1, 16), "contactEmail" = NULL, "logoUrl" = NULL,
       "institutionType" = NULL, "resetRequest" = NULL, "updatedAt" = now()
     WHERE "id" = p_tenant_id;

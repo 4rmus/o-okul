@@ -42,7 +42,7 @@ interface CapturedSystemRequests {
   purgeCandidates?: unknown[];
   purgePreview?: unknown;
   purgePosts: Array<{ body: unknown; key?: string; proof?: string }>;
-  purgeExports: string[];
+  purgeExports: Array<{ path: string; proof?: string }>;
   purgeDeliveries: Array<{ body: unknown; path: string }>;
 }
 
@@ -378,6 +378,18 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     });
   }
 
+  test("dışa aktarım ikinci doğrulama başarısızsa veri isteği göndermez", async ({ page }) => {
+    const captured = createCapturedSystemRequests(); captured.purgeCandidates = [{ ...purgeCandidateFixture, exportId: null, exportDeliveredOn: null }]; captured.failNextMfa = true;
+    await openWithSystemTenantMocks(page, captured, "/sistem/kurumlar");
+    await page.getByRole("button", { name: "Eski Kurum Koleji verisini dışa aktar" }).click();
+    const dialog = page.getByRole("dialog", { name: "Kurum verisini dışa aktar" });
+    await dialog.getByLabel("Doğrulama kodu").fill("000000");
+    await dialog.getByRole("button", { name: "Doğrula ve indir" }).click();
+    await expect(dialog).toContainText("İkinci doğrulama tamamlanamadı");
+    expect(captured.stepUps).toHaveLength(1);
+    expect(captured.purgeExports).toEqual([]);
+  });
+
   for (const [name, change] of [
     ["engelli önizleme", (captured: CapturedSystemRequests) => { captured.purgePreview = { ...purgePreviewFixture(), allowed: false, blockers: ["WRITE_QUIESCENCE_UNVERIFIED"], blockerCounts: [{ code: "WRITE_QUIESCENCE_UNVERIFIED", count: null }] }; }],
     ["askıya alınmamış kurum", (captured: CapturedSystemRequests) => { captured.purgeCandidates = [{ ...purgeCandidateFixture, status: "ACTIVE" }]; }],
@@ -402,10 +414,19 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
       const panel = page.getByLabel("İmha adayları", { exact: true }).first();
       await expect(panel).toContainText("Teslim edilmedi");
       await expect(page.getByRole("button", { name: "Eski Kurum Koleji teslimini işaretle" })).toHaveCount(0);
-      const download = page.waitForEvent("download");
       await page.getByRole("button", { name: "Eski Kurum Koleji verisini dışa aktar" }).click();
+      // Security review 2026-10-06: the full export needs a step-up bound to this institution.
+      const exportDialog = page.getByRole("dialog", { name: "Kurum verisini dışa aktar" });
+      await expect(exportDialog.getByRole("button", { name: "Doğrula ve indir" })).toBeDisabled();
+      expect(captured.purgeExports).toEqual([]);
+      await exportDialog.getByLabel("Doğrulama kodu").fill("123456");
+      await expectNoHorizontalOverflow(page, `purge-export-${viewport.width}`);
+      const download = page.waitForEvent("download");
+      await exportDialog.getByRole("button", { name: "Doğrula ve indir" }).click();
       expect((await download).suggestedFilename()).toBe("o-okul-eski-kurum-teslim-2026-10-05.json");
-      expect(captured.purgeExports).toEqual(["/tenants/tenant-eski/purge-exports"]);
+      await expect(exportDialog).toHaveCount(0);
+      expect(captured.stepUps).toEqual([{ purpose: "TENANT_PURGE_EXPORT", target: { tenantId: "tenant-eski" }, totpCode: "123456" }]);
+      expect(captured.purgeExports).toEqual([{ path: "/tenants/tenant-eski/purge-exports", proof: "lifecycle-proof" }]);
       await expect(panel).toContainText("Dışa aktarıldı, teslim bekliyor");
       await page.getByRole("button", { name: "Eski Kurum Koleji teslimini işaretle" }).click();
       const dialog = page.getByRole("dialog", { name: "Veri teslimini işaretle" });
@@ -570,7 +591,7 @@ async function installSystemTenantApiMocks(page: Page, captured: CapturedSystemR
     if (pathName === "/auth/step-up") {
       captured.stepUps.push(route.request().postDataJSON());
       if (captured.failNextMfa) { captured.failNextMfa = false; await fulfillError(route, "MFA_CODE_INVALID", 403); return; }
-      await fulfillData(route, { purpose: "TENANT_LIFECYCLE_CHANGE", stepUpToken: "lifecycle-proof", expiresAt: new Date(Date.now() + 300000).toISOString() });
+      await fulfillData(route, { purpose: (route.request().postDataJSON() as { purpose?: string }).purpose ?? "TENANT_LIFECYCLE_CHANGE", stepUpToken: "lifecycle-proof", expiresAt: new Date(Date.now() + 300000).toISOString() });
       return;
     }
     if (pathName === "/me/notification-devices") {
@@ -629,7 +650,7 @@ async function installSystemTenantApiMocks(page: Page, captured: CapturedSystemR
       return;
     }
     if (pathName === "/tenants/tenant-eski/purge-exports" && method === "POST") {
-      captured.purgeExports.push(pathName);
+      captured.purgeExports.push({ path: pathName, proof: route.request().headers()["x-step-up-token"] });
       // The next candidate read reflects the new (not yet delivered) handover export.
       captured.purgeCandidates = (captured.purgeCandidates ?? []).map((row) => ({ ...(row as object), exportId: "f".repeat(32), exportDeliveredOn: null }));
       await fulfillData(route, { exportId: "f".repeat(32), formatVersion: "tenant-export-v1", tenantId: "tenant-eski", generatedByUserId: "system-admin", exportedAt: "2026-10-05T09:00:00.000Z", scope: "license-expiry-purge-handover", rowLimitPerTable: null, tables: { students: [] }, warnings: [] });

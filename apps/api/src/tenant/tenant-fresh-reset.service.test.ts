@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
+const queue = vi.hoisted(() => ({ jobs: new Map<string, { name: string; data: unknown; opts: Record<string, unknown> }>() }));
+vi.mock("bullmq", () => ({ Queue: class {
+  async getJob(id: string) { return queue.jobs.get(id); }
+  async add(name: string, data: unknown, opts: { jobId: string }) { queue.jobs.set(opts.jobId, { name, data, opts }); }
+  async close() {}
+} }));
 import { freshResetStatus, type FreshResetOperation } from "@o-okul/db";
 import { TenantFreshResetService } from "./tenant-fresh-reset.service.js";
 import { createAdminMfaStepUpProof } from "../auth/totp-mfa.js";
@@ -21,7 +27,7 @@ describe("reset admission and read-only reconciliation", () => {
     vi.useFakeTimers(); vi.stubEnv("REDIS_URL", "redis://localhost:6379");
     const f = fixture(); let finish!: (value: FreshResetOperation[]) => void, fail!: (error: Error) => void;
     const pending = vi.fn(() => new Promise<FreshResetOperation[]>((resolve, reject) => { finish = resolve; fail = reject; }));
-    Object.assign(f.service.store!, { pending });
+    Object.assign(f.service.store!, { pending, backupCleanupDue: vi.fn(async () => []) });
     const end = vi.fn(async () => {}); Object.defineProperty(f.service, "pool", { value: { end } });
     try {
       f.service.onModuleInit(); expect(pending).toHaveBeenCalledOnce();
@@ -35,6 +41,18 @@ describe("reset admission and read-only reconciliation", () => {
       if (!rejectDispatch) { await f.service.onApplicationShutdown(); expect(end).toHaveBeenCalledOnce(); }
       else expect(end).not.toHaveBeenCalled();
     } finally { vi.useRealTimers(); vi.unstubAllEnvs(); }
+  });
+  it("the dispatcher enqueues one backup cleanup job per ended purge (security review 2026-10-06)", async () => {
+    vi.stubEnv("REDIS_URL", "redis://localhost:6379"); queue.jobs.clear();
+    const f = fixture();
+    const due = { ...f.op, id: "d".repeat(32), tenantId: "tenant-a", preset: "LICENSE_EXPIRY_PURGE_V1", status: "CANCELLED", phase: "BACKUP" } as FreshResetOperation;
+    const backupCleanupDue = vi.fn(async () => [due]);
+    Object.assign(f.service.store!, { pending: vi.fn(async () => []), backupCleanupDue });
+    try {
+      f.service.onModuleInit(); await f.service.onModuleDestroy();
+      expect(backupCleanupDue).toHaveBeenCalledOnce();
+      expect([...queue.jobs]).toEqual([[`tenant-fresh-reset-backup-cleanup-${due.id}`, { name: "tenant-fresh-reset-backup-cleanup", data: { tenantId: "tenant-a", operationId: due.id }, opts: expect.objectContaining({ jobId: `tenant-fresh-reset-backup-cleanup-${due.id}`, attempts: 1, removeOnComplete: true, removeOnFail: true }) }]]);
+    } finally { vi.unstubAllEnvs(); queue.jobs.clear(); }
   });
   it.each(["TENANT_OWNER", "TENANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN"])("rejects %s before storage", async (role) => {
     const f = fixture();
@@ -159,6 +177,17 @@ describe("reset metadata diagnosis", () => {
     expect(calls[0]?.sql).toBe("BEGIN READ ONLY"); expect(calls.some(({ sql }) => /^(INSERT|UPDATE|DELETE)/.test(sql))).toBe(false);
     expect(calls.filter(({ sql }) => sql.includes('FROM "TenantMutationActivity"')).every(({ sql }) => sql.includes('"tenantId" = $1') && sql.includes('LIMIT 51'))).toBe(true);
     expect(JSON.stringify(result)).not.toMatch(/payload|referenceId|token|email/i);
+  });
+  it("lists ended purges whose backup package or drill copies are not proven deleted (security review 2026-10-06)", async () => {
+    const f = fixture(); const calls: string[] = [];
+    const pendingCleanup = { operationId: "d".repeat(32), status: "CANCELLED", phase: "BACKUP", backupPackageDeleted: true, drillTargetsDeleted: false, updatedAt: new Date("2026-10-06T08:00:00.000Z") };
+    const db = { async query<T>(sql: string, values?: unknown[]) { calls.push(sql); return { rows: (sql.includes('FROM "TenantFreshResetOperation"') && values?.[0] === "tenant-a" ? [pendingCleanup] : []) as T[] }; }, release() {} };
+    Object.defineProperty(f.service, "pool", { value: { query: db.query, connect: async () => db } });
+    expect((await f.service.diagnostics(context, "tenant-a")).backupCleanup).toEqual([{ ...pendingCleanup, updatedAt: "2026-10-06T08:00:00.000Z" }]);
+    expect((await f.service.diagnostics(context, "tenant-b")).backupCleanup).toEqual([]);
+    const sql = calls.find((text) => text.includes('FROM "TenantFreshResetOperation"'))!;
+    for (const part of [`"tenantId" = $1`, `"preset" = 'LICENSE_EXPIRY_PURGE_V1'`, `"phase" IN ('PREFLIGHT', 'BACKUP', 'DATABASE')`, `"status" IN ('CANCELLED', 'FAILED', 'BLOCKED')`]) expect(sql).toContain(part);
+    expect(sql).not.toMatch(/backupReceipt|SELECT \*/);
   });
 });
 

@@ -14,15 +14,19 @@ export interface FreshResetOperation {
   /** CANCELLED: a license-expiry purge stopped before its database phase committed (license renewed). */
   status: "QUEUED" | "RUNNING" | "BLOCKED" | "FAILED" | "COMPLETED" | "CANCELLED";
   phase: "PREFLIGHT" | "BACKUP" | "DATABASE" | "OBJECTS" | "VERIFY" | "DONE";
-  errorCode: string | null; backupReceipt: Record<string, unknown> | null; result: { preservedOwnerCount: number; deletedObjectCount: number; deletedRowCount?: number } | null;
+  errorCode: string | null; backupReceipt: Record<string, unknown> | null; /** A purge that ended before its database phase may carry only the backup deletion flags. */
+  result: { preservedOwnerCount?: number; deletedObjectCount?: number; deletedRowCount?: number; backupPackageDeleted?: boolean; drillTargetsDeleted?: boolean } | null;
 }
 export const isLicenseExpiryPurge = (op: { preset?: string }) => op.preset === licenseExpiryPurgePreset;
 export const freshResetFinished = (op: { status: string }) => op.status === "COMPLETED" || op.status === "CANCELLED";
 export function freshResetStatus(op: FreshResetOperation) {
-  return { operationId: op.id, status: op.status, phase: op.phase, errorCode: op.errorCode == null ? null : /^RESET_[A-Z_]+$/.test(op.errorCode) ? op.errorCode : "RESET_EXECUTION_FAILED", result: op.result ? { preservedOwnerCount: op.result.preservedOwnerCount, deletedObjectCount: op.result.deletedObjectCount } : null };
+  return { operationId: op.id, status: op.status, phase: op.phase, errorCode: op.errorCode == null ? null : /^RESET_[A-Z_]+$/.test(op.errorCode) ? op.errorCode : "RESET_EXECUTION_FAILED", result: op.result && typeof op.result.preservedOwnerCount === "number" && typeof op.result.deletedObjectCount === "number" ? { preservedOwnerCount: op.result.preservedOwnerCount, deletedObjectCount: op.result.deletedObjectCount } : null };
 }
 export const freshResetJobId = (operationId: string) => `tenant-fresh-reset-${operationId}`;
 export const freshResetQueue = "tenant-fresh-reset";
+// Security review 2026-10-06: backup/drill cleanup for a purge that ended before its database phase, same queue.
+export const freshResetBackupCleanupJob = "tenant-fresh-reset-backup-cleanup";
+export const freshResetBackupCleanupJobId = (operationId: string) => `${freshResetBackupCleanupJob}-${operationId}`;
 // Authority is the persisted institution request, never an environment flag.
 export async function requireResetLegalClearance(tenantId: string, db?: Queryable, operation?: Pick<FreshResetOperation, "id" | "institutionRequestId"> & Partial<Pick<FreshResetOperation, "preset" | "phase">>): Promise<{ exportId: string; deliveredOn: string } | void> {
   if (!db) throw new Error("RESET_INSTITUTION_REQUEST_REQUIRED");
@@ -77,6 +81,11 @@ export class PostgresFreshResetStore {
   }
   async findByKey(tenantId: string, actorUserId: string, key: string): Promise<FreshResetOperation | undefined> {
     return withTenantDb(this.pool, { bypassRls: true, tenantId, readOnly: true }, async (db) => (await db.query<FreshResetOperation>('SELECT * FROM "TenantFreshResetOperation" WHERE "tenantId" = $1 AND "actorUserId" = $2 AND "idempotencyKey" = $3', [tenantId, actorUserId, key])).rows[0]);
+  }
+  /** Purges that ended before the database phase with backup/drill copies not yet proven deleted (mirrors
+   * purgeBackupCleanupDue). One hour after the last change: job retries are over, and failed cleanups retry hourly. */
+  async backupCleanupDue(): Promise<FreshResetOperation[]> {
+    return withTenantDb(this.pool, { bypassRls: true, tenantId: null, readOnly: true }, async (db) => (await db.query<FreshResetOperation>(`SELECT * FROM "TenantFreshResetOperation" WHERE "preset" = '${licenseExpiryPurgePreset}' AND "phase" IN ('PREFLIGHT', 'BACKUP', 'DATABASE') AND ("status" IN ('CANCELLED', 'BLOCKED') OR ("status" = 'FAILED' AND "errorCode" IS DISTINCT FROM 'RESET_EXECUTION_FAILED')) AND NOT (coalesce("result" ->> 'backupPackageDeleted', '') = 'true' AND coalesce("result" ->> 'drillTargetsDeleted', '') = 'true') AND "updatedAt" < now() - interval '1 hour' ORDER BY "updatedAt" LIMIT 100`)).rows);
   }
   async pending(): Promise<FreshResetOperation[]> {
     return withTenantDb(this.pool, { bypassRls: true, tenantId: null }, async (db) => (await db.query<FreshResetOperation>('SELECT * FROM "TenantFreshResetOperation" WHERE "status" IN (\'QUEUED\', \'RUNNING\') OR ("status" = \'FAILED\' AND "errorCode" = \'RESET_EXECUTION_FAILED\') ORDER BY "updatedAt" LIMIT 100')).rows);

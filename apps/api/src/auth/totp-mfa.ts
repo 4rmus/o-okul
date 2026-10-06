@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import type { TenantLifecycleMfaTarget, TenantCleanResetMfaTarget, TenantDeviceRestoreMfaTarget } from "@o-okul/shared-types";
+import type { TenantLifecycleMfaTarget, TenantCleanResetMfaTarget, TenantDeviceRestoreMfaTarget, TenantPurgeExportMfaTarget } from "@o-okul/shared-types";
 import { authenticator } from "otplib";
 
 const defaultTestEncryptionKey = "33333333333333333333333333333333";
@@ -13,7 +13,7 @@ const stepUpTtlSeconds = 5 * 60;
 
 export type AdminMfaMode = "off" | "optional" | "required";
 export type AdminMfaTokenType = "admin-mfa-login" | "admin-mfa-setup" | "admin-mfa-step-up";
-export type AdminMfaStepUpPurpose = "OWNER_ADMIN_CHANGE" | "TENANT_LIFECYCLE_CHANGE" | "TENANT_CLEAN_RESET" | "TENANT_DEVICE_RESTORE";
+export type AdminMfaStepUpPurpose = "OWNER_ADMIN_CHANGE" | "TENANT_LIFECYCLE_CHANGE" | "TENANT_CLEAN_RESET" | "TENANT_DEVICE_RESTORE" | "TENANT_PURGE_EXPORT";
 type AuthenticatorOptionOverrides = {
   epoch?: number;
   step?: number;
@@ -47,7 +47,7 @@ export interface AdminMfaTokenPayload {
   membershipVersion?: number;
   sessionId?: string;
   purpose?: AdminMfaStepUpPurpose;
-  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget;
+  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget | TenantPurgeExportMfaTarget;
 }
 
 export interface AdminMfaStepUpBinding {
@@ -55,7 +55,7 @@ export interface AdminMfaStepUpBinding {
   sessionId: string;
   membershipVersion: number;
   purpose: AdminMfaStepUpPurpose;
-  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget;
+  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget | TenantPurgeExportMfaTarget;
 }
 
 export interface AdminMfaStepUpProof {
@@ -114,11 +114,14 @@ export function verifyAdminMfaStepUpProof(token: string, expected: AdminMfaStepU
     payload.purpose !== expected.purpose ||
     payload.target?.tenantId !== expected.target?.tenantId ||
     JSON.stringify(payload.target ? Object.entries(payload.target).sort() : null) !== JSON.stringify(expected.target ? Object.entries(expected.target).sort() : null) ||
-    payload.target?.expectedLifecycleVersion !== expected.target?.expectedLifecycleVersion
+    lifecycleVersionOf(payload.target) !== lifecycleVersionOf(expected.target)
   ) {
     throw new Error("ADMIN_MFA_STEP_UP_CONTEXT_INVALID");
   }
 }
+
+// A purge handover export target carries no lifecycle version; every other tenant target does.
+function lifecycleVersionOf(target: AdminMfaStepUpBinding["target"]) { return target && "expectedLifecycleVersion" in target ? target.expectedLifecycleVersion : undefined; }
 
 export function createTotpEnrollmentDraft(
   email: string,

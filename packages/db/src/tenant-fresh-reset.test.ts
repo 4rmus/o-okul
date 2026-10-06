@@ -91,7 +91,7 @@ async function runnerFixture() {
   const snapshot = await readResetSnapshot(f.db, "tenant-a", f.op.id);
   const pkg = { manifest: { tenantId: "tenant-a", lifecycleVersion: 3, dataDigest: snapshot.dataDigest, objects: [{ key: "owned-object", size: 1, sha256: "hash" }] } } as TenantResetPackage;
   let objectPresent = true;
-  const services: FreshResetServices = { deleteBackup: vi.fn(async () => {}), clearance: vi.fn(async () => {}), quiescence: vi.fn(async () => {}), preflight: vi.fn(async () => {}), backup: vi.fn(async () => ({ verified: "fixture-only" })), package: vi.fn(async () => pkg), deleteObjects: vi.fn(async (_pkg, fence) => { await fence(); objectPresent = false; }), verifyObjects: vi.fn(async () => { if (objectPresent) throw new Error("RESET_OBJECT_STILL_PRESENT"); }) };
+  const services: FreshResetServices = { deleteBackup: vi.fn(async () => ({ backupPackageDeleted: true, drillTargetsDeleted: true })), clearance: vi.fn(async () => {}), quiescence: vi.fn(async () => {}), preflight: vi.fn(async () => {}), backup: vi.fn(async () => ({ verified: "fixture-only" })), package: vi.fn(async () => pkg), deleteObjects: vi.fn(async (_pkg, fence) => { await fence(); objectPresent = false; }), verifyObjects: vi.fn(async () => { if (objectPresent) throw new Error("RESET_OBJECT_STILL_PRESENT"); }) };
   return { ...f, services };
 }
 describe("fresh reset PostgreSQL adapter and phase runner (injected SQL)", () => {

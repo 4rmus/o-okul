@@ -1238,6 +1238,17 @@ describe("AuthService", () => {
     const purgeBinding = { userId: user.id, sessionId: context.sessionId, membershipVersion: context.membershipVersion, purpose: "TENANT_CLEAN_RESET" as const };
     expect(() => verifyAdminMfaStepUpProof(purge.stepUpToken, { ...purgeBinding, target: purgeTarget })).not.toThrow();
     expect(() => verifyAdminMfaStepUpProof(purge.stepUpToken, { ...purgeBinding, target: { ...purgeTarget, preset: "CLEAN_SETUP_V1" } })).toThrow("ADMIN_MFA_STEP_UP_CONTEXT_INVALID");
+    // Security review 2026-10-06: the purge handover export step-up binds exactly { tenantId }.
+    await expect(auth.createMfaStepUp(context, "TENANT_PURGE_EXPORT", { recoveryCode: setup.recoveryCodes[4] })).rejects.toThrow("MFA_STEP_UP_TARGET_INVALID");
+    await expect(auth.createMfaStepUp(context, "TENANT_PURGE_EXPORT", { recoveryCode: setup.recoveryCodes[4] }, { tenantId: "system" })).rejects.toThrow("MFA_STEP_UP_TARGET_INVALID");
+    await expect(auth.createMfaStepUp(context, "TENANT_PURGE_EXPORT", { recoveryCode: setup.recoveryCodes[4] }, purgeTarget)).rejects.toThrow("MFA_STEP_UP_TARGET_INVALID");
+    const exported = await auth.createMfaStepUp(context, "TENANT_PURGE_EXPORT", { recoveryCode: setup.recoveryCodes[4] }, { tenantId: "tenant-a" });
+    expect(exported.purpose).toBe("TENANT_PURGE_EXPORT");
+    const exportBinding = { userId: user.id, sessionId: context.sessionId, membershipVersion: context.membershipVersion, purpose: "TENANT_PURGE_EXPORT" as const };
+    expect(() => verifyAdminMfaStepUpProof(exported.stepUpToken, { ...exportBinding, target: { tenantId: "tenant-a" } })).not.toThrow();
+    expect(() => verifyAdminMfaStepUpProof(exported.stepUpToken, { ...exportBinding, target: { tenantId: "tenant-b" } })).toThrow("ADMIN_MFA_STEP_UP_CONTEXT_INVALID");
+    expect(() => verifyAdminMfaStepUpProof(exported.stepUpToken, { ...purgeBinding, target: { tenantId: "tenant-a" } as never })).toThrow("ADMIN_MFA_STEP_UP_CONTEXT_INVALID");
+    expect(() => verifyAdminMfaStepUpProof(purge.stepUpToken, { ...exportBinding, target: { tenantId: "tenant-a" } })).toThrow("ADMIN_MFA_STEP_UP_CONTEXT_INVALID");
     await auth.logout(issued.refreshToken);
     await expect(auth.createMfaStepUp(context, "TENANT_LIFECYCLE_CHANGE", { recoveryCode: setup.recoveryCodes[3] }, target)).rejects.toThrow("MFA_STEP_UP_CONTEXT_INVALID");
 

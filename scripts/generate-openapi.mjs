@@ -2008,8 +2008,8 @@ const requiredOperationContracts = [
     requestForbidden: ["sessionId", "membershipVersion", "stepUpToken", "userId"],
     responseDataRequired: ["purpose", "stepUpToken", "expiresAt"],
     fieldChecks: [
-      { path: ["requestBody", "purpose"], enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET", "TENANT_DEVICE_RESTORE"] },
-      { path: ["responseData", "purpose"], enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET", "TENANT_DEVICE_RESTORE"] },
+      { path: ["requestBody", "purpose"], enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET", "TENANT_DEVICE_RESTORE", "TENANT_PURGE_EXPORT"] },
+      { path: ["responseData", "purpose"], enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET", "TENANT_DEVICE_RESTORE", "TENANT_PURGE_EXPORT"] },
       { path: ["responseData", "expiresAt"], format: "date-time" },
     ],
   },

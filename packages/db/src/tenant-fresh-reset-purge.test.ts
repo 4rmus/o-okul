@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { PostgresFreshResetStore, purgeResetDatabase, requireResetLegalClearance, type FreshResetOperation, type FreshResetRequest } from "./tenant-fresh-reset.js";
-import { deleteResetBackupPackage, runFreshReset, type FreshResetServices } from "./tenant-fresh-reset-runner.js";
+import { cleanupPurgeBackup, deleteResetBackupPackage, deleteResetDrillTargets, purgeBackupCleanupDue, runFreshReset, type FreshResetServices } from "./tenant-fresh-reset-runner.js";
 import { readResetSnapshot } from "./tenant-reset-snapshot.js";
 import { tenantResetColumns, tenantResetTableNames, type ResetTables } from "./tenant-reset-catalog.js";
 import { licenseExpiryPurgeBlockers, licenseExpiryPurgeEndsAt, licenseExpiryPurgeExportState, listLicenseExpiryPurgeCandidates, requireLicenseExpiryPurgeClearance } from "./tenant-expiry-purge.js";
@@ -114,7 +114,8 @@ function fixture(terms: Array<Record<string, unknown>> = [{ id: "license", tenan
     if (sql.startsWith("SELECT o_okul_license_expiry_purge")) {
       const [tenantId, operationId] = values as [string, string]; const final = sql.includes(", true)");
       const current = state.TenantFreshResetOperation.find((row) => row.id === operationId)!;
-      if (final ? current.status !== "COMPLETED" || (current.result as { backupDeleted?: boolean }).backupDeleted !== true : current.status !== "RUNNING" || current.phase !== "DATABASE") throw new Error("RESET_OPERATION_CHANGED");
+      const flags = current.result as { backupPackageDeleted?: boolean; drillTargetsDeleted?: boolean };
+      if (final ? current.status !== "COMPLETED" || flags.backupPackageDeleted !== true || flags.drillTargetsDeleted !== true : current.status !== "RUNNING" || current.phase !== "DATABASE") throw new Error("RESET_OPERATION_CHANGED");
       if (!final) {
         const live = state.LicenseTerm.filter((row) => row.tenantId === tenantId && row.cancelledAt == null);
         if (!live.length || live.some((row) => Date.parse(String(row.endsAt)) + 91 * day > Date.now())) throw new Error("RESET_LICENSE_NOT_EXPIRED");
@@ -124,8 +125,8 @@ function fixture(terms: Array<Record<string, unknown>> = [{ id: "license", tenan
       state.AuditLog = state.AuditLog.filter((row) => row.tenantId !== tenantId);
       if (final) {
         const tenant = state.Tenant.find((row) => row.id === tenantId)!;
-        const { deletedRowCount, exportId: handoverId, exportDeliveredOn, backupDeleted } = current.result as Record<string, unknown>;
-        state.AuditLog.push({ id: "receipt", tenantId: null, actorUserId: current.actorUserId, entityType: "TenantLicenseExpiryPurge", entityId: operationId, action: "tenant.license-expiry-purge.completed", diff: { tenantId, slugSha256: "sha256-of-slug", deletedRowCount, exportId: handoverId, exportDeliveredOn, backupDeleted } });
+        const { deletedRowCount, exportId: handoverId, exportDeliveredOn, backupPackageDeleted, drillTargetsDeleted } = current.result as Record<string, unknown>;
+        state.AuditLog.push({ id: "receipt", tenantId: null, actorUserId: current.actorUserId, entityType: "TenantLicenseExpiryPurge", entityId: operationId, action: "tenant.license-expiry-purge.completed", diff: { tenantId, slugSha256: "sha256-of-slug", deletedRowCount, exportId: handoverId, exportDeliveredOn, backupPackageDeleted, drillTargetsDeleted } });
         Object.assign(tenant, { name: "İmha edildi", slug: "imha-0123456789abcdef", contactEmail: null });
       }
       return rows([{ o_okul_license_expiry_purge: 0 }]);
@@ -134,7 +135,7 @@ function fixture(terms: Array<Record<string, unknown>> = [{ id: "license", tenan
       const row = state.TenantFreshResetOperation[0]!;
       if (sql.includes('"status" = $3')) { if (["COMPLETED", "CANCELLED"].includes(String(row.status))) return rows([]); Object.assign(row, { status: values[2], phase: values[3], errorCode: values[4] }); }
       else if (sql.includes('"backupReceipt" =')) row.backupReceipt = JSON.parse(String(values[2]));
-      else if (sql.includes('"result" = "result" ||')) row.result = { ...(row.result as object), backupDeleted: true };
+      else if (sql.includes('"result" = coalesce("result"')) row.result = { ...(row.result as object | null), ...JSON.parse(String(values[2])) };
       else if (sql.includes('"result" =')) row.result = JSON.parse(String(values[2]));
       return rows([{ id: row.id }]);
     }
@@ -155,7 +156,7 @@ async function runnerFixture(terms?: Array<Record<string, unknown>>, exports = t
   const f = fixture(terms, exports);
   const snapshot = await readResetSnapshot(f.db, "tenant-a", f.op.id);
   const pkg = { manifest: { tenantId: "tenant-a", lifecycleVersion: 3, dataDigest: snapshot.dataDigest, objects: [{ key: "student-photo", size: 1, sha256: "hash" }], tables: tenantResetTableNames.map((table) => ({ table, count: snapshot.tables[table].length })) } } as unknown as TenantResetPackage;
-  const services: FreshResetServices = { clearance: requireResetLegalClearance, quiescence: vi.fn(async () => {}), preflight: vi.fn(async () => {}), backup: vi.fn(async () => ({ verified: "fixture-only" })), package: vi.fn(async () => pkg), deleteObjects: vi.fn(async () => {}), verifyObjects: vi.fn(async () => {}), deleteBackup: vi.fn(async () => {}) };
+  const services: FreshResetServices = { clearance: requireResetLegalClearance, quiescence: vi.fn(async () => {}), preflight: vi.fn(async () => {}), backup: vi.fn(async () => ({ verified: "fixture-only" })), package: vi.fn(async () => pkg), deleteObjects: vi.fn(async () => {}), verifyObjects: vi.fn(async () => {}), deleteBackup: vi.fn(async () => ({ backupPackageDeleted: true, drillTargetsDeleted: true })) };
   return { ...f, services };
 }
 const rowsOf = (state: ResetTables, tenantId: string) => Object.fromEntries(tenantResetTableNames.map((name) => [name, state[name].filter((row) => row.tenantId === tenantId).length]).filter(([, count]) => count)) as Record<string, number>;
@@ -176,7 +177,7 @@ describe("license-expiry purge through the reset engine (injected SQL)", () => {
     expect(receipts[0]).toMatchObject({ tenantId: null, action: "tenant.license-expiry-purge.completed", entityId: f.op.id });
     expect(JSON.stringify(receipts[0])).not.toMatch(/alpha|Alfa|alfa@example|Ayse|10000000146|555/);
     // 18 institution rows + 2 handover-ledger rows, all purged.
-    expect(receipts[0]!.diff).toMatchObject({ deletedRowCount: 20, exportId, exportDeliveredOn: endedDaysAgo(9).slice(0, 10), backupDeleted: true });
+    expect(receipts[0]!.diff).toMatchObject({ deletedRowCount: 20, exportId, exportDeliveredOn: endedDaysAgo(9).slice(0, 10), backupPackageDeleted: true, drillTargetsDeleted: true });
     // VERIFY (objects gone + postconditions) strictly precedes the single backup deletion.
     expect(f.services.deleteBackup).toHaveBeenCalledTimes(1);
     expect(vi.mocked(f.services.deleteBackup).mock.invocationCallOrder[0]).toBeGreaterThan(vi.mocked(f.services.verifyObjects).mock.invocationCallOrder[0]!);
@@ -190,7 +191,9 @@ describe("license-expiry purge through the reset engine (injected SQL)", () => {
     const f = await runnerFixture();
     vi.mocked(f.services.backup).mockImplementationOnce(async () => { f.state().LicenseTerm.push({ id: "renewal", tenantId: "tenant-a", ...term(-300) }); return { verified: "fixture-only" }; });
     await expect(runFreshReset(f.pool, "tenant-a", f.op.id, f.services)).rejects.toThrow("RESET_LICENSE_NOT_EXPIRED");
-    expect(f.state().TenantFreshResetOperation[0]).toMatchObject({ status: "CANCELLED", errorCode: "RESET_LICENSE_NOT_EXPIRED" });
+    expect(f.state().TenantFreshResetOperation[0]).toMatchObject({ status: "CANCELLED", errorCode: "RESET_LICENSE_NOT_EXPIRED", result: { backupPackageDeleted: true, drillTargetsDeleted: true } });
+    // Security review 2026-10-06: the cancelled purge keeps no backup package or drill copy.
+    expect(f.services.deleteBackup).toHaveBeenCalledTimes(1);
     expect(f.calls.some((sql) => sql.startsWith("DELETE") || sql.startsWith("SELECT o_okul_license_expiry_purge"))).toBe(false);
     expect(tenantA(f.state()).Student).toBe(1); expect(tenantA(f.state()).PaymentPlan).toBe(1);
     expect(f.services.deleteObjects).not.toHaveBeenCalled();
@@ -289,10 +292,12 @@ describe("purge database boundary (static migration contract; live PostgreSQL ru
     const receipt = sql.slice(sql.indexOf('INSERT INTO "AuditLog"'), sql.indexOf('UPDATE "Tenant"'));
     const fields = receipt.slice(receipt.indexOf("jsonb_build_object("));
     expect(receipt).toContain("NULL, op_row.\"actorUserId\"");
-    expect([...new Set(fields.match(/'(\w+)', /g)?.map((key) => key.slice(1, -3)))]).toEqual(["tenantId", "slugSha256", "purgedAt", "deletedRowCount", "deletedObjectCount", "exportId", "exportDeliveredOn", "backupDeleted"]);
+    expect([...new Set(fields.match(/'(\w+)', /g)?.map((key) => key.slice(1, -3)))]).toEqual(["tenantId", "slugSha256", "purgedAt", "deletedRowCount", "deletedObjectCount", "exportId", "exportDeliveredOn", "backupPackageDeleted", "drillTargetsDeleted"]);
     expect(receipt).not.toMatch(/"name"|contactEmail/);
-    // The receipt is refused unless the worker recorded the proven backup deletion.
-    expect(sql).toContain(`op_row."result" ->> 'backupDeleted' IS DISTINCT FROM 'true'`);
+    // The receipt is refused unless the worker recorded each proven deletion separately.
+    expect(sql).toContain(`op_row."result" ->> 'backupPackageDeleted' IS DISTINCT FROM 'true'`);
+    expect(sql).toContain(`op_row."result" ->> 'drillTargetsDeleted' IS DISTINCT FROM 'true'`);
+    expect(sql).not.toContain("'backupDeleted'");
   });
   it("a purged tenant is never reactivated and a cancelled purge does not hold the tenant", () => {
     expect(sql).toContain("RAISE EXCEPTION USING MESSAGE = 'TENANT_PURGED'");
@@ -337,7 +342,7 @@ describe("handover export precondition and backup deletion (product owner decisi
     expect(await runFreshReset(f.pool, "tenant-a", f.op.id, f.services)).toMatchObject({ status: "COMPLETED" });
     expect(f.services.package).not.toHaveBeenCalled();
     expect(f.services.deleteBackup).toHaveBeenCalledTimes(2);
-    expect(f.state().AuditLog.find((row) => row.action === "tenant.license-expiry-purge.completed")?.diff).toMatchObject({ backupDeleted: true });
+    expect(f.state().AuditLog.find((row) => row.action === "tenant.license-expiry-purge.completed")?.diff).toMatchObject({ backupPackageDeleted: true, drillTargetsDeleted: true });
   });
   it("backup deletion removes package and attestation, then proves both are gone", async () => {
     const present = new Set([`tenant-reset-backups/${"c".repeat(32)}.bin`, `tenant-reset-backups/${"c".repeat(32)}.restore-verified.json`]);
@@ -360,5 +365,105 @@ describe("handover export precondition and backup deletion (product owner decisi
       `DeleteObjectCommand:tenant-reset-backups/${"c".repeat(32)}.restore-verified.json`, `HeadObjectCommand:tenant-reset-backups/${"c".repeat(32)}.restore-verified.json`,
     ]);
     await expect(deleteResetBackupPackage(s3(), "backup", "../other")).rejects.toThrow("RESET_TARGET_INVALID");
+  });
+});
+
+describe("backup package and drill copies are deleted with the purge (security review 2026-10-06)", () => {
+  it.each([
+    ["package", { backupPackageDeleted: false, drillTargetsDeleted: true }],
+    ["drill copies", { backupPackageDeleted: true, drillTargetsDeleted: false }],
+  ])("an unproven %s deletion is recorded separately and never completes the purge", async (_name, deleted) => {
+    const f = await runnerFixture();
+    vi.mocked(f.services.deleteBackup).mockResolvedValueOnce(deleted);
+    await expect(runFreshReset(f.pool, "tenant-a", f.op.id, f.services)).rejects.toThrow("RESET_BACKUP_DELETE_UNVERIFIED");
+    expect(f.state().TenantFreshResetOperation[0]).toMatchObject({ status: "BLOCKED", phase: "VERIFY", result: deleted });
+    expect(f.state().AuditLog.some((row) => row.action === "tenant.license-expiry-purge.completed")).toBe(false);
+    expect(await runFreshReset(f.pool, "tenant-a", f.op.id, f.services)).toMatchObject({ status: "COMPLETED" });
+    expect(f.state().TenantFreshResetOperation[0]!.result).toMatchObject({ backupPackageDeleted: true, drillTargetsDeleted: true });
+  });
+  it("a cancelled purge whose cleanup fails stays CANCELLED, records false flags and is due for the cleanup job", async () => {
+    const f = await runnerFixture();
+    vi.mocked(f.services.backup).mockImplementationOnce(async () => { f.state().LicenseTerm.push({ id: "renewal", tenantId: "tenant-a", ...term(-300) }); return { verified: "fixture-only" }; });
+    vi.mocked(f.services.deleteBackup).mockRejectedValueOnce(new Error("RESET_OPERATIONS_PREREQUISITE_REQUIRED"));
+    await expect(runFreshReset(f.pool, "tenant-a", f.op.id, f.services)).rejects.toThrow("RESET_LICENSE_NOT_EXPIRED");
+    const op = f.state().TenantFreshResetOperation[0] as unknown as FreshResetOperation;
+    expect(op).toMatchObject({ status: "CANCELLED", result: { backupPackageDeleted: false, drillTargetsDeleted: false } });
+    expect(purgeBackupCleanupDue(op)).toBe(true);
+    expect(await cleanupPurgeBackup(f.pool, "tenant-a", f.op.id, f.services)).toEqual({ backupPackageDeleted: true, drillTargetsDeleted: true });
+    expect(f.state().TenantFreshResetOperation[0]).toMatchObject({ status: "CANCELLED", result: { backupPackageDeleted: true, drillTargetsDeleted: true } });
+    expect(purgeBackupCleanupDue(f.state().TenantFreshResetOperation[0] as unknown as FreshResetOperation)).toBe(false);
+    expect(f.calls.some((sql) => sql.startsWith("DELETE") || sql.startsWith("SELECT o_okul_license_expiry_purge"))).toBe(false);
+  });
+  it("a purge blocked before its database phase is cleaned up and then never resumes", async () => {
+    const f = await runnerFixture();
+    f.services.quiescence = vi.fn(async () => { throw new Error("RESET_WRITE_QUIESCENCE_UNVERIFIED"); });
+    await expect(runFreshReset(f.pool, "tenant-a", f.op.id, f.services)).rejects.toThrow("RESET_WRITE_QUIESCENCE_UNVERIFIED");
+    expect(f.state().TenantFreshResetOperation[0]).toMatchObject({ status: "BLOCKED", phase: "PREFLIGHT" });
+    // The run itself never deletes the backup of a blocked purge; the cleanup job does, after retries are over.
+    expect(f.services.deleteBackup).not.toHaveBeenCalled();
+    expect(await cleanupPurgeBackup(f.pool, "tenant-a", f.op.id, f.services)).toEqual({ backupPackageDeleted: true, drillTargetsDeleted: true });
+    f.services.quiescence = vi.fn(async () => {});
+    await expect(runFreshReset(f.pool, "tenant-a", f.op.id, f.services)).rejects.toThrow("RESET_BACKUP_DELETED");
+    expect(f.state().TenantFreshResetOperation[0]).toMatchObject({ status: "FAILED", errorCode: "RESET_BACKUP_DELETED" });
+    expect(f.services.backup).not.toHaveBeenCalled();
+    expect(f.calls.some((sql) => sql.startsWith("DELETE") || sql.startsWith("SELECT o_okul_license_expiry_purge"))).toBe(false);
+  });
+  it("a purge that failed after its database phase committed keeps its backup package (the only way back)", async () => {
+    const f = await runnerFixture();
+    f.services.verifyObjects = vi.fn(async () => { throw new Error("RESET_OBJECT_STILL_PRESENT"); });
+    await expect(runFreshReset(f.pool, "tenant-a", f.op.id, f.services)).rejects.toThrow();
+    const op = f.state().TenantFreshResetOperation[0] as unknown as FreshResetOperation;
+    expect(op).toMatchObject({ status: "FAILED", phase: "OBJECTS" });
+    expect(purgeBackupCleanupDue(op)).toBe(false);
+    expect(await cleanupPurgeBackup(f.pool, "tenant-a", f.op.id, f.services)).toBeUndefined();
+    expect(f.services.deleteBackup).not.toHaveBeenCalled();
+  });
+  it("cleanup is due only for purges that ended before the database phase and are not auto-retried", () => {
+    const base = { ...fixture().op, result: null } as FreshResetOperation;
+    const due = (patch: Partial<FreshResetOperation>) => purgeBackupCleanupDue({ ...base, ...patch });
+    expect(due({ status: "CANCELLED", phase: "DATABASE" })).toBe(true);
+    expect(due({ status: "BLOCKED", phase: "PREFLIGHT" })).toBe(true);
+    expect(due({ status: "FAILED", phase: "BACKUP", errorCode: "RESET_SOURCE_CHANGED" })).toBe(true);
+    expect(due({ status: "FAILED", phase: "BACKUP", errorCode: "RESET_EXECUTION_FAILED" })).toBe(false);
+    for (const phase of ["OBJECTS", "VERIFY", "DONE"] as const) expect(due({ status: "FAILED", phase, errorCode: "RESET_OBJECT_STILL_PRESENT" })).toBe(false);
+    expect(due({ status: "RUNNING", phase: "BACKUP" })).toBe(false);
+    expect(due({ status: "CANCELLED", phase: "BACKUP", preset: "CLEAN_SETUP_V1" })).toBe(false);
+    expect(due({ status: "CANCELLED", phase: "BACKUP", result: { backupPackageDeleted: true, drillTargetsDeleted: false } })).toBe(true);
+    expect(due({ status: "CANCELLED", phase: "BACKUP", result: { backupPackageDeleted: true, drillTargetsDeleted: true } })).toBe(false);
+  });
+  it("the dispatcher query mirrors the predicate and waits out job retries", async () => {
+    const sql: string[] = [];
+    const db = { async query(text: string) { sql.push(text); return { rows: [] }; }, release() {} };
+    await new PostgresFreshResetStore({ query: db.query, connect: async () => db }).backupCleanupDue();
+    const query = sql.find((text) => text.includes('FROM "TenantFreshResetOperation"'))!;
+    for (const part of [`"preset" = 'LICENSE_EXPIRY_PURGE_V1'`, `"phase" IN ('PREFLIGHT', 'BACKUP', 'DATABASE')`, `"status" IN ('CANCELLED', 'BLOCKED')`, `"errorCode" IS DISTINCT FROM 'RESET_EXECUTION_FAILED'`, `"updatedAt" < now() - interval '1 hour'`, "backupPackageDeleted", "drillTargetsDeleted"]) expect(query).toContain(part);
+  });
+  it("drill deletion drops the per-operation database and every object version, then proves both absent", async () => {
+    const op = "c".repeat(32);
+    let databases = [`o_okul_reset_drill_${op}`];
+    const adminSql: string[] = [];
+    const admin = { async query<T>(text: string, values: unknown[] = []) { adminSql.push(text); if (text.startsWith("DROP DATABASE")) databases = []; return { rows: (text.includes("pg_database") ? databases.filter((name) => name === values[0]).map(() => ({ "?column?": 1 })) : []) as T[] }; } };
+    const objects = new Map([["a", ["v1", "v2"]], ["b", ["null"]]]);
+    const deletes: Array<{ Bucket: string; Key: string; VersionId?: string }> = [];
+    const s3 = (options: { missingBucket?: boolean; stuck?: boolean } = {}) => ({ async send(command: unknown) {
+      const name = (command as object).constructor.name; const input = (command as { input: { Bucket: string; Key: string; VersionId?: string } }).input;
+      if (input.Bucket !== `o-okul-reset-drill-${op}`) throw new Error("wrong bucket");
+      if (options.missingBucket) throw Object.assign(new Error("NoSuchBucket"), { name: "NoSuchBucket", $metadata: { httpStatusCode: 404 } });
+      if (name === "ListObjectVersionsCommand") return { Versions: [...objects].flatMap(([Key, versions]) => versions.map((VersionId) => ({ Key, VersionId }))) };
+      if (name === "ListObjectsV2Command") return { Contents: [...objects.keys()].map((Key) => ({ Key })) };
+      if (name === "DeleteObjectCommand") { deletes.push(input); if (!options.stuck) { const left = (objects.get(input.Key) ?? []).filter((v) => input.VersionId ? v !== input.VersionId : v !== "null"); if (left.length) objects.set(input.Key, left); else objects.delete(input.Key); } return {}; }
+      throw new Error(`unexpected ${name}`);
+    } });
+    await deleteResetDrillTargets(admin, s3(), op);
+    expect(adminSql[0]).toBe(`DROP DATABASE IF EXISTS "o_okul_reset_drill_${op}" WITH (FORCE)`);
+    expect(objects.size).toBe(0);
+    expect(deletes).toEqual(expect.arrayContaining([expect.objectContaining({ Key: "a", VersionId: "v1" }), expect.objectContaining({ Key: "a", VersionId: "v2" }), { Bucket: `o-okul-reset-drill-${op}`, Key: "b" }]));
+    // Idempotent: a missing bucket and an already dropped database are absent, not an error.
+    await deleteResetDrillTargets(admin, s3({ missingBucket: true }), op);
+    objects.set("c", ["v9"]);
+    await expect(deleteResetDrillTargets(admin, s3({ stuck: true }), op)).rejects.toThrow("RESET_DRILL_DELETE_UNVERIFIED");
+    const stubborn = { async query<T>(text: string) { return { rows: (text.includes("pg_database") ? [{ "?column?": 1 }] : []) as T[] }; } };
+    await expect(deleteResetDrillTargets(stubborn, s3(), op)).rejects.toThrow("RESET_DRILL_DELETE_UNVERIFIED");
+    await expect(deleteResetDrillTargets(admin, s3(), "../other")).rejects.toThrow("RESET_TARGET_INVALID");
   });
 });

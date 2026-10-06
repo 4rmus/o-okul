@@ -54,10 +54,13 @@ export class TenantController {
   }
 
   // Product owner decision (2026-10-05): a delivered handover export precedes every license-expiry purge.
+  // Security review 2026-10-06: tenant-bound step-up; the full institution dataset is never cached.
   @Post(":id/purge-exports")
+  @Header("Cache-Control", "no-store")
+  @Header("Pragma", "no-cache")
   @RequireCapability("tenant:clean-reset")
-  createPurgeExport(@Param("id") id: string) {
-    return this.freshReset.createPurgeExport(getRequestContext(), id);
+  createPurgeExport(@Param("id") id: string, @Headers("x-step-up-token") proof?: string) {
+    return this.freshReset.createPurgeExport(getRequestContext(), id, proof);
   }
 
   @Post(":id/purge-exports/:exportId/delivery")

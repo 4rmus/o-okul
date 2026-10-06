@@ -139,10 +139,19 @@ describe("TenantController", () => {
     const delivery = (id = exportId) => `/tenants/tenant-a/purge-exports/${id}/delivery`;
     const body = { deliveredOn: "2026-10-01", channel: "SECURE_DOWNLOAD", note: "Kurum müdürüne şifreli bağlantı" };
     const system = (route: string) => request(server).post(route).set("Authorization", `Bearer ${systemToken}`);
+    // Security review 2026-10-06: the full institution export needs a step-up bound to { tenantId, TENANT_PURGE_EXPORT }.
+    const actor = JSON.parse(Buffer.from(systemToken.split(".")[0]!, "base64url").toString());
+    const exportProof = (tenantId = "tenant-a", purpose: "TENANT_PURGE_EXPORT" | "TENANT_CLEAN_RESET" = "TENANT_PURGE_EXPORT") => createAdminMfaStepUpProof({ userId: actor.sub, sessionId: actor.sessionId, membershipVersion: actor.membershipVersion, purpose,
+      target: purpose === "TENANT_PURGE_EXPORT" ? { tenantId } : { tenantId, preset: "LICENSE_EXPIRY_PURGE_V1", expectedLifecycleVersion: 0, preflightDigest: "a".repeat(64) } }).stepUpToken;
+    const exportWith = (proof: string, route = exportRoute) => system(route).set("X-Step-Up-Token", proof);
     await request(server).post(exportRoute).expect(401);
-    await request(server).post(exportRoute).set("Authorization", `Bearer ${adminToken}`).expect(403);
-    await system("/tenants/system/purge-exports").expect(403);
-    await system(exportRoute).expect(503);
+    await request(server).post(exportRoute).set("Authorization", `Bearer ${adminToken}`).set("X-Step-Up-Token", exportProof()).expect(403);
+    await exportWith(exportProof("system"), "/tenants/system/purge-exports").expect(403);
+    await system(exportRoute).expect(401).expect(({ body: error }) => expect(error.error.code).toBe("MFA_STEP_UP_REQUIRED"));
+    await exportWith("invalid-proof").expect(401).expect(({ body: error }) => expect(error.error.code).toBe("MFA_STEP_UP_INVALID"));
+    await exportWith(exportProof("tenant-b")).expect(401).expect(({ body: error }) => expect(error.error.code).toBe("MFA_STEP_UP_INVALID"));
+    await exportWith(exportProof("tenant-a", "TENANT_CLEAN_RESET")).expect(401).expect(({ body: error }) => expect(error.error.code).toBe("MFA_STEP_UP_INVALID"));
+    await exportWith(exportProof()).expect(503);
     await request(server).post(delivery()).set("Authorization", `Bearer ${adminToken}`).send(body).expect(403);
     await system(delivery()).send({ ...body, channel: "FAX" }).expect(422);
     await system(delivery()).send({ ...body, studentName: "x" }).expect(422);
@@ -155,8 +164,12 @@ describe("TenantController", () => {
     const service = app.get(TenantFreshResetService);
     const originalPool = (service as unknown as { pool: unknown }).pool;
     const audit: Array<{ tenantId: string; actorUserId: string; entityType: string; entityId: string; action: string; diff: Record<string, unknown>; createdAt: string }> = [];
+    const day = 86_400_000;
+    let licenseEndedDaysAgo = 120; let purged = false;
     const query = vi.fn(async (sql: string, values: unknown[] = []) => {
       if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] };
+      if (sql.includes('FROM "LicenseTerm"')) return { rows: [{ startsAt: new Date(Date.now() - (licenseEndedDaysAgo + 365) * day), endsAt: new Date(Date.now() - licenseEndedDaysAgo * day), cancelledAt: null }] };
+      if (sql.includes('FROM "TenantFreshResetOperation"')) return { rows: purged ? [{ "?column?": 1 }] : [] };
       if (sql.includes('FROM "Tenant" WHERE "id" = $1')) return { rows: values[0] === "tenant-a" ? [{ id: "tenant-a" }] : [] };
       if (sql.includes("jsonb_agg")) return { rows: [{ rows: sql.includes('"PaymentTransaction"') ? [{ id: "tx-1", amount: 100 }] : [] }] };
       if (sql.startsWith('INSERT INTO "AuditLog"')) { audit.push({ tenantId: String(values[1]), actorUserId: String(values[2]), entityType: String(values[3]), entityId: String(values[4]), action: String(values[5]), diff: JSON.parse(String(values[6])), createdAt: "2026-09-30T10:00:00.000Z" }); return { rows: [] }; }
@@ -165,15 +178,36 @@ describe("TenantController", () => {
     });
     Object.defineProperty(service, "pool", { value: { query, connect: async () => ({ query, release: vi.fn() }) }, configurable: true });
     try {
-      const created = await system(exportRoute).expect(201);
+      // Only a purge candidate: license ended 91+ days ago, no live or future term, not purged yet.
+      licenseEndedDaysAgo = 90;
+      await exportWith(exportProof()).expect(409).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_NOT_CANDIDATE"));
+      licenseEndedDaysAgo = -30;
+      await exportWith(exportProof()).expect(409).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_NOT_CANDIDATE"));
+      licenseEndedDaysAgo = 120; purged = true;
+      await exportWith(exportProof()).expect(409).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_NOT_CANDIDATE"));
+      purged = false;
+      expect(query.mock.calls.some(([sql]) => sql.includes("jsonb_agg"))).toBe(false);
+      expect(audit).toEqual([]);
+      const created = await exportWith(exportProof()).expect(201);
+      expect(created.headers["cache-control"]).toBe("no-store");
+      expect(created.headers.pragma).toBe("no-cache");
       expect(created.body).toMatchObject({ exportId: expect.stringMatching(/^[a-f0-9]{32}$/), tenantId: "tenant-a", scope: "license-expiry-purge-handover", rowLimitPerTable: null });
       expect(created.body.tables.paymentTransactions).toEqual([{ id: "tx-1", amount: 100 }]);
       // Handover export has no row limit; the institution's own export keeps its limit.
       expect(query.mock.calls.filter(([sql]) => sql.includes("jsonb_agg")).every(([, values]) => (values as unknown[])[0] === null)).toBe(true);
-      expect(audit).toEqual([expect.objectContaining({ entityType: "TenantDataExport", entityId: created.body.exportId, action: "tenant.data-export.created", diff: expect.objectContaining({ sha256: expect.stringMatching(/^[a-f0-9]{64}$/) }) })]);
-      await system("/tenants/missing/purge-exports").expect(404);
+      expect(audit).toEqual([expect.objectContaining({ actorUserId: actor.sub, entityType: "TenantDataExport", entityId: created.body.exportId, action: "tenant.data-export.created", diff: expect.objectContaining({ sha256: expect.stringMatching(/^[a-f0-9]{64}$/) }) })]);
+      // Who, when and row counts only; no row content.
+      expect(Object.keys(audit[0]!.diff).sort()).toEqual(["exportedAt", "exportedByUserId", "formatVersion", "rowCounts", "scope", "sha256"]);
+      expect(audit[0]!.diff).toMatchObject({ exportedByUserId: actor.sub, exportedAt: created.body.exportedAt, rowCounts: expect.objectContaining({ paymentTransactions: 1 }) });
+      expect(Object.values(audit[0]!.diff.rowCounts as Record<string, unknown>).every((count) => Number.isInteger(count))).toBe(true);
+      expect(JSON.stringify(audit[0]!.diff)).not.toContain("tx-1");
+      await exportWith(exportProof("missing"), "/tenants/missing/purge-exports").expect(404);
       await system(delivery()).send(body).expect(404).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_NOT_FOUND"));
       await system(delivery(created.body.exportId)).send({ ...body, deliveredOn: "2026-09-29" }).expect(400);
+      // The delivery mark applies the same candidate rule.
+      licenseEndedDaysAgo = -30;
+      await system(delivery(created.body.exportId)).send(body).expect(409).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_NOT_CANDIDATE"));
+      licenseEndedDaysAgo = 120;
       const marked = await system(delivery(created.body.exportId)).send(body).expect(201);
       expect(marked.body).toMatchObject({ exportId: created.body.exportId, deliveredOn: "2026-10-01", channel: "SECURE_DOWNLOAD" });
       expect(audit.at(-1)).toMatchObject({ action: "tenant.data-export.delivered", diff: { deliveredOn: "2026-10-01", channel: "SECURE_DOWNLOAD", note: body.note } });

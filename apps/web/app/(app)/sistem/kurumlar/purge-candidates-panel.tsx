@@ -16,23 +16,9 @@ const countFormat = new Intl.NumberFormat("tr-TR");
 
 export function PurgeCandidatesPanel({ auth }: { auth: AuthResponse }) {
   const candidates = useQuery({ queryKey: ["license-expiry-purge-candidates"], queryFn: () => loadPurgeCandidates(auth.accessToken), retry: false, refetchOnWindowFocus: false });
-  const client = useQueryClient();
   const [target, setTarget] = useState<PurgeCandidate | null>(null);
   const [deliveryTarget, setDeliveryTarget] = useState<PurgeCandidate | null>(null);
-  const [exporting, setExporting] = useState<string | null>(null);
-  const [exportError, setExportError] = useState("");
-  // Product owner decision (2026-10-05): the institution gets its full data before any purge.
-  async function exportData(row: PurgeCandidate) {
-    setExporting(row.tenantId); setExportError("");
-    try {
-      const payload = await createPurgeExport(auth.accessToken, row.tenantId);
-      const url = URL.createObjectURL(new Blob([JSON.stringify(payload)], { type: "application/json" }));
-      const link = document.createElement("a");
-      link.href = url; link.download = `o-okul-${row.slug}-teslim-${payload.exportedAt.slice(0, 10)}.json`;
-      document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
-    } catch { setExportError("Dışa aktarım oluşturulamadı. Yeniden deneyin."); }
-    finally { setExporting(null); void client.invalidateQueries({ queryKey: ["license-expiry-purge-candidates"] }); }
-  }
+  const [exportTarget, setExportTarget] = useState<PurgeCandidate | null>(null);
   const columns: Array<DataTableColumn<PurgeCandidate>> = [
     { key: "name", header: "Kurum", priority: "primary", render: (row) => row.name },
     { key: "slug", header: "Kurum kodu", priority: "secondary", render: (row) => row.slug },
@@ -44,18 +30,60 @@ export function PurgeCandidatesPanel({ auth }: { auth: AuthResponse }) {
       ? <StatusBadge tone="success">{`Teslim edildi · ${dateFormat.format(new Date(`${row.exportDeliveredOn}T12:00:00Z`))}`}</StatusBadge>
       : <StatusBadge tone="warning">{row.exportId ? "Dışa aktarıldı, teslim bekliyor" : "Teslim edilmedi"}</StatusBadge> },
     { key: "actions", header: "İşlem", priority: "primary", render: (row) => <span className="next-row-actions">
-      {row.exportDeliveredOn ? null : <Button variant="secondary" aria-label={`${row.name} verisini dışa aktar`} disabled={exporting !== null} onClick={() => void exportData(row)}>{exporting === row.tenantId ? "Hazırlanıyor…" : "Dışa aktar"}</Button>}
+      {row.exportDeliveredOn ? null : <Button variant="secondary" aria-label={`${row.name} verisini dışa aktar`} onClick={() => setExportTarget(row)}>Dışa aktar</Button>}
       {row.exportId && !row.exportDeliveredOn ? <Button variant="secondary" aria-label={`${row.name} teslimini işaretle`} onClick={() => setDeliveryTarget(row)}>Teslimi işaretle</Button> : null}
       <Button variant="danger" aria-label={`${row.name} imha onayı`} onClick={() => setTarget(row)}>İmha onayı</Button>
     </span> },
   ];
   return <Panel title="İmha adayları" aria-label="İmha adayları" description="Lisansı bittikten 91 gün sonra yeni lisans dönemi almamış kurumlar. Bu liste hiçbir veriyi silmez. İmhadan önce kurumun bütün verisi dışa aktarılıp kuruma teslim edilmeli; her kurum ayrı onayla imha edilir.">
     {candidates.isError ? <Alert tone="danger" title="İmha adayları doğrulanamadı">Liste okunamadı. İmha başlatılamaz.</Alert> : null}
-    {exportError ? <Alert tone="danger" title="Dışa aktarım başarısız">{exportError}</Alert> : null}
     <DataTable caption="İmha adayları" description="Kurum adı, lisans bitişi, geçen gün ve tahmini kayıt sayısı; kişisel veri gösterilmez." columns={columns} getRowKey={(row) => row.tenantId} loading={candidates.isPending} rows={candidates.data ?? []} emptyText="İmha adayı kurum yok" />
     {target ? <PurgeApprovalModal key={target.tenantId} auth={auth} candidate={target} onClose={() => setTarget(null)} /> : null}
+    {exportTarget ? <PurgeExportModal key={exportTarget.tenantId} auth={auth} candidate={exportTarget} onClose={() => setExportTarget(null)} /> : null}
     {deliveryTarget ? <ExportDeliveryModal key={deliveryTarget.tenantId} auth={auth} candidate={deliveryTarget} onClose={() => setDeliveryTarget(null)} /> : null}
   </Panel>;
+}
+
+// Product owner decision (2026-10-05): the institution gets its full data before any purge.
+// Security review 2026-10-06: the export needs a TOTP/recovery step-up bound to this institution.
+function PurgeExportModal({ auth, candidate, onClose }: { auth: AuthResponse; candidate: PurgeCandidate; onClose(): void }) {
+  const client = useQueryClient();
+  const expectedActor = { userId: auth.session.userId, sessionId: auth.session.id, membershipVersion: auth.session.membershipVersion };
+  const [method, setMethod] = useState<"totp" | "recovery">("totp");
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy || !code.trim()) return;
+    setBusy(true); setError("");
+    let proof: string;
+    try {
+      const response = await authenticatedFetchOnce(auth.accessToken, expectedActor, `${apiBaseUrl}/auth/step-up`, { method: "POST", headers: { authorization: `Bearer ${auth.accessToken}`, "content-type": "application/json" }, body: JSON.stringify({ purpose: "TENANT_PURGE_EXPORT", target: { tenantId: candidate.tenantId }, ...(method === "totp" ? { totpCode: code } : { recoveryCode: code }) }) });
+      const data: unknown = response.ok ? (await response.json()).data : null;
+      if (!data || typeof data !== "object" || !("purpose" in data) || data.purpose !== "TENANT_PURGE_EXPORT" || !("stepUpToken" in data) || typeof data.stepUpToken !== "string" || !data.stepUpToken) throw new Error("MFA");
+      proof = data.stepUpToken;
+    } catch { setCode(""); setError("İkinci doğrulama tamamlanamadı. Kodu kontrol edip yeniden deneyin."); setBusy(false); return; }
+    setCode("");
+    try {
+      const payload = await createPurgeExport(auth.accessToken, expectedActor, candidate.tenantId, proof);
+      const url = URL.createObjectURL(new Blob([JSON.stringify(payload)], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = url; link.download = `o-okul-${candidate.slug}-teslim-${payload.exportedAt.slice(0, 10)}.json`;
+      document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+      void client.invalidateQueries({ queryKey: ["license-expiry-purge-candidates"] });
+      onClose();
+    } catch (failure) {
+      setError(failure instanceof ApiRequestError && failure.code === "TENANT_PURGE_EXPORT_NOT_CANDIDATE" ? "Kurum artık imha adayı değil; dışa aktarım yapılmadı." : "Dışa aktarım oluşturulamadı. Yeniden deneyin.");
+      void client.invalidateQueries({ queryKey: ["license-expiry-purge-candidates"] });
+      setBusy(false);
+    }
+  }
+  return <FormModal open title="Kurum verisini dışa aktar" description={`${candidate.name} kurumunun bütün verisi tek dosya olarak indirilir. Dosyayı yalnız güvenli kanalla kuruma teslim edin; O-Okul tarafında kopya tutmayın.`}
+    onCancel={onClose} onSubmit={(event) => void submit(event)} submitLabel={busy ? "Hazırlanıyor…" : "Doğrula ve indir"} submitDisabled={busy || !code.trim()} submitError={error || undefined}>
+    <Field label="Doğrulama yöntemi"><Select disabled={busy} value={method} onChange={(event) => { setMethod(event.target.value as "totp" | "recovery"); setCode(""); }}><option value="totp">Doğrulama uygulaması</option><option value="recovery">Yedek kod</option></Select></Field>
+    <Field label={method === "totp" ? "Doğrulama kodu" : "Yedek kod"}><Input type="password" autoComplete="one-time-code" disabled={busy} value={code} onChange={(event) => setCode(event.target.value)} /></Field>
+  </FormModal>;
 }
 
 function ExportDeliveryModal({ auth, candidate, onClose }: { auth: AuthResponse; candidate: PurgeCandidate; onClose(): void }) {

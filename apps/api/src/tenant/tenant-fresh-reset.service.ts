@@ -7,7 +7,7 @@ import { withTenantDb } from "@o-okul/db";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
 import { Queue } from "bullmq";
 import pg from "pg";
-import { PostgresInstitutionResetRequests, freshResetFinished, freshResetJobId, freshResetQueue, freshResetStatus, isLicenseExpiryPurge, licenseExpiryPurgeExportCreated, licenseExpiryPurgeExportDelivered, licenseExpiryPurgeExportEntity, listLicenseExpiryPurgeCandidates, PostgresFreshResetStore, requireResetWriteQuiescence, type FreshResetRequest, type FreshResetOperation } from "@o-okul/db";
+import { PostgresInstitutionResetRequests, freshResetBackupCleanupJob, freshResetBackupCleanupJobId, freshResetFinished, freshResetJobId, freshResetQueue, freshResetStatus, isLicenseExpiryPurge, licenseExpiryPurgeExportCreated, licenseExpiryPurgeExportDelivered, licenseExpiryPurgeExportEntity, listLicenseExpiryPurgeCandidates, readLicenseExpiryPurgeCandidateEndsAt, PostgresFreshResetStore, requireResetWriteQuiescence, type FreshResetRequest, type FreshResetOperation, type Queryable } from "@o-okul/db";
 import { z } from "zod";
 import type { RequestContext } from "../context/request-context.js";
 import { verifyAdminMfaStepUpProof } from "../auth/totp-mfa.js";
@@ -42,7 +42,10 @@ export class TenantFreshResetService {
     if (!this.store || !process.env.REDIS_URL) return;
     const dispatch = () => {
       if (this.stopping || this.dispatching) return;
-      this.dispatching = (async () => { for (const op of await this.store!.pending()) await enqueueFreshReset(op); })();
+      this.dispatching = (async () => {
+        for (const op of await this.store!.pending()) await enqueueFreshReset(op);
+        for (const op of await this.store!.backupCleanupDue()) await enqueueFreshResetBackupCleanup(op);
+      })();
       // Keep the original rejection visible to shutdown; background failures remain durable and retryable.
       void this.dispatching.catch(() => {}).finally(() => { this.dispatching = undefined; });
     };
@@ -118,8 +121,11 @@ export class TenantFreshResetService {
     return withTenantDb(this.pool, { tenantId, bypassRls: true, readOnly: true }, async (db) => {
       const activities = (await db.query<TenantResetDiagnostics["activities"]["items"][number]>(`SELECT "id", "kind", "status", "lifecycleVersion", "createdAt" FROM "TenantMutationActivity" WHERE "tenantId" = $1 AND "id" > $2 ORDER BY "id" LIMIT 51`, [tenantId, activityAfter])).rows;
       const deliveries = (await db.query<TenantResetDiagnostics["deliveries"]["items"][number]>(`SELECT o."id", o."purpose", o."status", o."sourceScope", o."tenantLifecycleVersion" AS "lifecycleVersion", o."createdAt", (o."attempts" > 0) AS "attempted", (o."providerMessageId" IS NOT NULL) AS "hasProviderReceipt" FROM "SecretDeliveryOutbox" o WHERE o."id" > $2 AND (o."tenantId" = $1 OR (o."sourceScope" IS NULL AND ((o."purpose" = 'PASSWORD_RESET' AND o."sourceId" IN (SELECT p."id" FROM "PasswordResetToken" p JOIN "User" u ON u."id" = p."userId" WHERE u."tenantId" = $1)) OR (o."purpose" = 'IDENTITY_INVITATION' AND o."sourceId" IN (SELECT "id" FROM "IdentityInvitation" WHERE "tenantId" = $1))))) AND (o."status" IN ('PENDING','PROCESSING','UNCERTAIN') OR (o."sourceScope" IS NULL AND o."attempts" > 0 AND o."status" <> 'DELIVERED')) ORDER BY o."id" LIMIT 51`, [tenantId, deliveryAfter])).rows;
+      // Security review 2026-10-06: a purge that ended before its database phase must not keep backup or drill copies.
+      const backupCleanup = (await db.query<{ operationId: string; status: "CANCELLED" | "FAILED" | "BLOCKED"; phase: "PREFLIGHT" | "BACKUP" | "DATABASE"; backupPackageDeleted: boolean; drillTargetsDeleted: boolean; updatedAt: Date | string }>(`SELECT "id" AS "operationId", "status", "phase", coalesce("result" ->> 'backupPackageDeleted', '') = 'true' AS "backupPackageDeleted", coalesce("result" ->> 'drillTargetsDeleted', '') = 'true' AS "drillTargetsDeleted", "updatedAt" FROM "TenantFreshResetOperation" WHERE "tenantId" = $1 AND "preset" = 'LICENSE_EXPIRY_PURGE_V1' AND "phase" IN ('PREFLIGHT', 'BACKUP', 'DATABASE') AND "status" IN ('CANCELLED', 'FAILED', 'BLOCKED') AND NOT (coalesce("result" ->> 'backupPackageDeleted', '') = 'true' AND coalesce("result" ->> 'drillTargetsDeleted', '') = 'true') ORDER BY "updatedAt" LIMIT 50`, [tenantId])).rows
+        .map((row) => ({ ...row, updatedAt: new Date(row.updatedAt).toISOString() }));
       const page = <T extends { id: string }>(rows: T[]) => ({ items: rows.slice(0, 50), nextCursor: rows.length > 50 ? rows[49]!.id : null });
-      return { activities: page(activities), deliveries: page(deliveries), reconciliation: "EXTERNAL_PROOF_REQUIRED" };
+      return { activities: page(activities), deliveries: page(deliveries), backupCleanup, reconciliation: "EXTERNAL_PROOF_REQUIRED" };
     });
   }
   async deliveryReceipt(context: RequestContext, tenantId: string, deliveryId: string): Promise<TenantResetDeliveryReceipt> {
@@ -145,19 +151,23 @@ export class TenantFreshResetService {
     // Read-only list; deletion is a separate, per-institution approved operation.
     return (await listLicenseExpiryPurgeCandidates(this.pool)) as LicenseExpiryPurgeCandidate[];
   }
-  /** Full handover export for the institution; the AuditLog "created" row is written only after it succeeded. */
-  async createPurgeExport(context: RequestContext, tenantId: string): Promise<TenantHandoverExportPayload> {
+  /** Full handover export for the institution; the AuditLog "created" row is written only after it succeeded.
+   * Security review 2026-10-06: only for a purge candidate and only with a tenant-bound TENANT_PURGE_EXPORT step-up. */
+  async createPurgeExport(context: RequestContext, tenantId: string, proof?: string): Promise<TenantHandoverExportPayload> {
     assertResetAdmin(context, tenantId);
+    if (!proof || !context.sessionId || context.membershipVersion === undefined) throw new UnauthorizedException("MFA_STEP_UP_REQUIRED");
+    try { verifyAdminMfaStepUpProof(proof, { userId: context.userId, sessionId: context.sessionId, membershipVersion: context.membershipVersion, purpose: "TENANT_PURGE_EXPORT", target: { tenantId } }); }
+    catch { throw new UnauthorizedException("MFA_STEP_UP_INVALID"); }
     if (!this.pool) throw new ServiceUnavailableException("RESET_SOURCE_UNVERIFIED");
     const pool = this.pool;
-    const exists = await withTenantDb(pool, { bypassRls: true, tenantId: null, readOnly: true }, async (db) => (await db.query('SELECT "id" FROM "Tenant" WHERE "id" = $1', [tenantId])).rows.length > 0);
-    if (!exists) throw new NotFoundException("TENANT_NOT_FOUND");
+    await withTenantDb(pool, { bypassRls: true, tenantId: null, readOnly: true }, (db) => requirePurgeExportCandidate(db, tenantId));
     const payload = await createTenantHandoverExport(pool, tenantId, context.userId, randomBytes(16).toString("hex"));
     const rowCounts = Object.fromEntries(Object.entries(payload.tables).map(([key, rows]) => [key, rows.length]));
     await withTenantDb(pool, { bypassRls: true, tenantId: null }, async (db) => {
+      // Who, when and how many rows; never row content. actorUserId also carries the exporter.
       await db.query('INSERT INTO "AuditLog" ("id", "tenantId", "actorUserId", "entityType", "entityId", "action", "diff") VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)',
         [randomUUID(), tenantId, context.userId, licenseExpiryPurgeExportEntity, payload.exportId, licenseExpiryPurgeExportCreated,
-          JSON.stringify({ formatVersion: payload.formatVersion, scope: payload.scope, exportedAt: payload.exportedAt, sha256: createHash("sha256").update(JSON.stringify(payload)).digest("hex"), rowCounts })]);
+          JSON.stringify({ formatVersion: payload.formatVersion, scope: payload.scope, exportedByUserId: context.userId, exportedAt: payload.exportedAt, sha256: createHash("sha256").update(JSON.stringify(payload)).digest("hex"), rowCounts })]);
     });
     return payload;
   }
@@ -176,6 +186,7 @@ export class TenantFreshResetService {
     return withTenantDb(this.pool, { bypassRls: true, tenantId: null }, async (db) => {
       // Tenant row lock serializes concurrent delivery marks for the same institution.
       if (!(await db.query('SELECT "id" FROM "Tenant" WHERE "id" = $1 FOR UPDATE', [tenantId])).rows.length) throw new NotFoundException("TENANT_NOT_FOUND");
+      await requirePurgeExportCandidate(db, tenantId);
       const ledger = (await db.query<{ action: string; createdAt: Date | string }>('SELECT "action", "createdAt" FROM "AuditLog" WHERE "tenantId" = $1 AND "entityType" = $2 AND "entityId" = $3', [tenantId, licenseExpiryPurgeExportEntity, exportId])).rows;
       const created = ledger.find((row) => row.action === licenseExpiryPurgeExportCreated);
       if (!created) throw new NotFoundException("TENANT_PURGE_EXPORT_NOT_FOUND");
@@ -205,6 +216,10 @@ export class TenantFreshResetService {
     return freshResetStatus(operation);
   }
 }
+async function requirePurgeExportCandidate(db: Queryable, tenantId: string) {
+  if (!(await db.query('SELECT "id" FROM "Tenant" WHERE "id" = $1', [tenantId])).rows.length) throw new NotFoundException("TENANT_NOT_FOUND");
+  if (!(await readLicenseExpiryPurgeCandidateEndsAt(db, tenantId))) throw new ConflictException("TENANT_PURGE_EXPORT_NOT_CANDIDATE");
+}
 export function assertResetAdmin(context: RequestContext, tenantId: string) {
   if (!context.roles.includes("SYSTEM_ADMIN")) throw new ForbiddenException("SYSTEM_ADMIN_REQUIRED");
   if (tenantId === "system") throw new ForbiddenException("SYSTEM_TENANT_PROTECTED");
@@ -224,6 +239,16 @@ export async function enqueueFreshReset(op: FreshResetOperation) {
       if (state === "failed") return;
     }
     await queue.add(freshResetQueue, { tenantId: op.tenantId, operationId: op.id }, { jobId: id, attempts: 3, backoff: { type: "exponential", delay: 10000 }, removeOnComplete: false, removeOnFail: false });
+  } finally { await queue.close(); }
+}
+/** One cleanup job per operation; removed when done, so a failed cleanup is re-enqueued by the dispatcher. */
+export async function enqueueFreshResetBackupCleanup(op: FreshResetOperation) {
+  if (!process.env.REDIS_URL) throw new Error("RESET_QUEUE_UNVERIFIED");
+  const queue = new Queue(freshResetQueue, { connection: parseRedisUrl(), prefix: process.env.QUEUE_PREFIX });
+  try {
+    const id = freshResetBackupCleanupJobId(op.id);
+    if (await queue.getJob(id)) return;
+    await queue.add(freshResetBackupCleanupJob, { tenantId: op.tenantId, operationId: op.id }, { jobId: id, attempts: 1, removeOnComplete: true, removeOnFail: true });
   } finally { await queue.close(); }
 }
 function resetHttpError(error: unknown) {

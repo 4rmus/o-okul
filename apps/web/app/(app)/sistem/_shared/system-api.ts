@@ -130,8 +130,15 @@ export async function loadPurgeCandidates(token: string): Promise<PurgeCandidate
 
 // Product owner decision (2026-10-05): the institution receives a full handover export before any purge.
 const purgeExportSchema = z.object({ exportId: z.string().regex(/^[a-f0-9]{32}$/), tenantId: z.string().min(1), exportedAt: z.string() }).passthrough();
-export async function createPurgeExport(token: string, tenantId: string) {
-  return purgeExportSchema.parse(await apiRequest<unknown>(token, `${apiBaseUrl}/tenants/${encodeURIComponent(tenantId)}/purge-exports`, { method: "POST" }));
+// Security review 2026-10-06: tenant-bound TENANT_PURGE_EXPORT step-up; one attempt, never cached.
+export async function createPurgeExport(token: string, expected: { userId: string; sessionId: string; membershipVersion: number }, tenantId: string, proof: string) {
+  const response = await authenticatedFetchOnce(token, expected, `${apiBaseUrl}/tenants/${encodeURIComponent(tenantId)}/purge-exports`, { method: "POST", cache: "no-store", headers: { authorization: `Bearer ${token}`, "X-Step-Up-Token": proof } });
+  if (!response.ok) {
+    let code: string | undefined;
+    try { const body = await response.json(); if (typeof body?.error?.code === "string") code = body.error.code; } catch { /* Unknown response stays unresolved. */ }
+    throw new ApiRequestError("PURGE_EXPORT_FAILED", response.status, code);
+  }
+  return purgeExportSchema.parse((await response.json()).data);
 }
 export const purgeExportChannelLabels = { SECURE_DOWNLOAD: "Güvenli indirme bağlantısı", ENCRYPTED_EMAIL: "Şifreli e-posta", PHYSICAL_MEDIA: "Fiziksel ortam", OTHER: "Diğer" } as const;
 export type PurgeExportChannel = keyof typeof purgeExportChannelLabels;

@@ -546,16 +546,18 @@ const mfaStepUpRequestSchema = objectSchema({
     operationId:stringSchema({pattern:"^[a-f0-9]{32}$"}),archiveDigest:stringSchema({pattern:"^[a-f0-9]{64}$"}),
     preset: stringSchema({ enum: ["CLEAN_SETUP_V1", "LICENSE_EXPIRY_PURGE_V1"] }), preflightDigest: stringSchema({ pattern: "^[a-f0-9]{64}$" }),
     expectedLifecycleVersion: integerSchema({ minimum: 0, maximum: 2147483646 }),
-  }, ["tenantId", "expectedLifecycleVersion"]),
-  purpose: { type: "string", enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET", "TENANT_DEVICE_RESTORE"] },
+  }, ["tenantId"]),
+  purpose: { type: "string", enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET", "TENANT_DEVICE_RESTORE", "TENANT_PURGE_EXPORT"] },
   totpCode: stringSchema(),
   recoveryCode: stringSchema(),
 }, ["purpose"], {
   oneOf: [
     { properties: { purpose: { enum: ["OWNER_ADMIN_CHANGE"] } }, not: { required: ["target"] } },
-    { properties: { purpose: { enum: ["TENANT_LIFECYCLE_CHANGE"] }, target: { required: ["status"], not: { anyOf: [{ required: ["preset"] }, { required: ["preflightDigest"] }] } } }, required: ["target"] },
-    { properties: { purpose: { enum: ["TENANT_CLEAN_RESET"] }, target: { required: ["preset", "preflightDigest"], not: { anyOf:[{required:["status"]},{required:["operationId"]},{required:["archiveDigest"]}] } } }, required: ["target"] },
-    { properties: {purpose:{enum:["TENANT_DEVICE_RESTORE"]},target:{required:["operationId","archiveDigest"],not:{anyOf:[{required:["status"]},{required:["preset"]},{required:["preflightDigest"]}]}}},required:["target"]},
+    { properties: { purpose: { enum: ["TENANT_LIFECYCLE_CHANGE"] }, target: { required: ["status", "expectedLifecycleVersion"], not: { anyOf: [{ required: ["preset"] }, { required: ["preflightDigest"] }] } } }, required: ["target"] },
+    { properties: { purpose: { enum: ["TENANT_CLEAN_RESET"] }, target: { required: ["preset", "preflightDigest", "expectedLifecycleVersion"], not: { anyOf:[{required:["status"]},{required:["operationId"]},{required:["archiveDigest"]}] } } }, required: ["target"] },
+    { properties: {purpose:{enum:["TENANT_DEVICE_RESTORE"]},target:{required:["operationId","archiveDigest","expectedLifecycleVersion"],not:{anyOf:[{required:["status"]},{required:["preset"]},{required:["preflightDigest"]}]}}},required:["target"]},
+    // A purge handover export binds the institution only.
+    { properties: { purpose: { enum: ["TENANT_PURGE_EXPORT"] }, target: { not: { anyOf: [{ required: ["status"] }, { required: ["preset"] }, { required: ["preflightDigest"] }, { required: ["operationId"] }, { required: ["archiveDigest"] }, { required: ["expectedLifecycleVersion"] }] } } }, required: ["target"] },
   ],
   anyOf: [
     { required: ["totpCode"] },
@@ -564,7 +566,7 @@ const mfaStepUpRequestSchema = objectSchema({
 });
 
 const mfaStepUpResponseSchema = objectSchema({
-  purpose: { type: "string", enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET", "TENANT_DEVICE_RESTORE"] },
+  purpose: { type: "string", enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET", "TENANT_DEVICE_RESTORE", "TENANT_PURGE_EXPORT"] },
   stepUpToken: stringSchema(),
   expiresAt: stringSchema({ format: "date-time" }),
 }, ["purpose", "stepUpToken", "expiresAt"]);
@@ -3415,8 +3417,9 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: objectSchema({
       activities: objectSchema({ items: arraySchema(objectSchema({ id: stringSchema(), kind: stringSchema(), status: stringSchema(), lifecycleVersion: integerSchema(), createdAt: stringSchema({ format: "date-time" }) }, ["id", "kind", "status", "lifecycleVersion", "createdAt"])), nextCursor: stringSchema({ nullable: true }) }, ["items", "nextCursor"]),
       deliveries: objectSchema({ items: arraySchema(objectSchema({ id: stringSchema(), purpose: stringSchema(), status: stringSchema(), sourceScope: stringSchema({ nullable: true }), lifecycleVersion: integerSchema({ nullable: true }), createdAt: stringSchema({ format: "date-time" }), attempted: { type: "boolean" }, hasProviderReceipt: { type: "boolean" } }, ["id", "purpose", "status", "sourceScope", "lifecycleVersion", "createdAt", "attempted", "hasProviderReceipt"])), nextCursor: stringSchema({ nullable: true }) }, ["items", "nextCursor"]),
+      backupCleanup: arraySchema(objectSchema({ operationId: stringSchema({ pattern: "^[a-f0-9]{32}$" }), status: stringSchema({ enum: ["CANCELLED", "FAILED", "BLOCKED"] }), phase: stringSchema({ enum: ["PREFLIGHT", "BACKUP", "DATABASE"] }), backupPackageDeleted: { type: "boolean" }, drillTargetsDeleted: { type: "boolean" }, updatedAt: stringSchema({ format: "date-time" }) }, ["operationId", "status", "phase", "backupPackageDeleted", "drillTargetsDeleted", "updatedAt"])),
       reconciliation: stringSchema({ enum: ["EXTERNAL_PROOF_REQUIRED"] }),
-    }, ["activities", "deliveries", "reconciliation"]),
+    }, ["activities", "deliveries", "backupCleanup", "reconciliation"]),
   },
   "get /api/v1/tenants/{id}/reset-diagnostics/deliveries/{deliveryId}/receipt": {
     responseBody: objectSchema({ deliveryId: stringSchema(), lifecycleVersion: integerSchema({ minimum: 0 }), status: stringSchema({ enum: ["PROVIDER_ACCEPTED", "UNCERTAIN", "NOT_FOUND", "EXPIRED", "UNVERIFIED", "UNAVAILABLE"] }), correlation: stringSchema({ enum: ["KEY_ONLY", "LOCAL_RECEIPT_MATCH", "UNVERIFIED"] }), createdAt: stringSchema({ format: "date-time", nullable: true }), expiresAt: stringSchema({ format: "date-time", nullable: true }), providerReceiptHash: stringSchema({ pattern: "^[a-f0-9]{64}$", nullable: true }), reconciliation: stringSchema({ enum: ["EXTERNAL_PROOF_REQUIRED"] }) }, ["deliveryId", "lifecycleVersion", "status", "correlation", "createdAt", "expiresAt", "providerReceiptHash", "reconciliation"]),

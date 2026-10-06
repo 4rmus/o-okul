@@ -182,7 +182,7 @@ export interface TotpAdminResetResponse {
   resetAt: string;
 }
 
-export type MfaStepUpPurpose = "OWNER_ADMIN_CHANGE" | "TENANT_LIFECYCLE_CHANGE" | "TENANT_CLEAN_RESET" | "TENANT_DEVICE_RESTORE";
+export type MfaStepUpPurpose = "OWNER_ADMIN_CHANGE" | "TENANT_LIFECYCLE_CHANGE" | "TENANT_CLEAN_RESET" | "TENANT_DEVICE_RESTORE" | "TENANT_PURGE_EXPORT";
 
 export interface TenantLifecycleMfaTarget {
   tenantId: string;
@@ -192,7 +192,7 @@ export interface TenantLifecycleMfaTarget {
 
 export interface MfaStepUpRequest {
   purpose: MfaStepUpPurpose;
-  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget;
+  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget | TenantPurgeExportMfaTarget;
   totpCode?: string;
   recoveryCode?: string;
 }
@@ -2998,6 +2998,10 @@ export interface TenantResetPreview {
 
 /** LICENSE_EXPIRY_PURGE_V1 destroys every institution record after license expiry (DEC-20261005-03). */
 export type TenantResetPreset = "CLEAN_SETUP_V1" | "LICENSE_EXPIRY_PURGE_V1";
+/** A license-expiry purge handover export is bound to the institution only (security review 2026-10-06). */
+export interface TenantPurgeExportMfaTarget {
+  tenantId: string;
+}
 export interface TenantCleanResetMfaTarget {
   tenantId: string;
   preset: TenantResetPreset;
@@ -3024,6 +3028,8 @@ export interface TenantCleanResetStatus {
 export interface TenantResetDiagnostics {
   activities: { items: Array<{ id: string; kind: string; status: string; lifecycleVersion: number; createdAt: string }>; nextCursor: string | null };
   deliveries: { items: Array<{ id: string; purpose: string; status: string; sourceScope: string | null; lifecycleVersion: number | null; createdAt: string; attempted: boolean; hasProviderReceipt: boolean }>; nextCursor: string | null };
+  /** License-expiry purges that ended before the database phase whose backup package or drill copies are not proven deleted yet. */
+  backupCleanup: Array<{ operationId: string; status: "CANCELLED" | "FAILED" | "BLOCKED"; phase: "PREFLIGHT" | "BACKUP" | "DATABASE"; backupPackageDeleted: boolean; drillTargetsDeleted: boolean; updatedAt: string }>;
   reconciliation: "EXTERNAL_PROOF_REQUIRED";
 }
 

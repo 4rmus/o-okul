@@ -67,6 +67,16 @@ export async function readLicenseExpiryPurgeExportState(db: Queryable, tenantId:
   return licenseExpiryPurgeExportState(rows.rows, licenseEndsAt);
 }
 
+/** Purge candidate: not the system tenant, not purged yet, and every live license term ended 91+ days ago.
+ * Returns that license end, or null. Security review 2026-10-06: the handover export endpoints require it. */
+export async function readLicenseExpiryPurgeCandidateEndsAt(db: Queryable, tenantId: string, at = new Date()): Promise<string | null> {
+  if (!tenantId || tenantId === "system") return null;
+  const purged = await db.query(`SELECT 1 FROM "TenantFreshResetOperation" WHERE "tenantId" = $1 AND "preset" = '${licenseExpiryPurgePreset}' AND "status" = 'COMPLETED' LIMIT 1`, [tenantId]);
+  if (purged.rows.length) return null;
+  const terms = await db.query<TermRow>('SELECT "startsAt", "endsAt", "cancelledAt" FROM "LicenseTerm" WHERE "tenantId" = $1', [tenantId]);
+  return licenseExpiryPurgeEndsAt(terms.rows, at);
+}
+
 /** License expired 91+ days ago AND a post-expiry export was delivered. Returns that delivery for the receipt. */
 export async function requireLicenseExpiryPurgeClearance(db: Queryable, tenantId: string, at = new Date()): Promise<{ exportId: string; deliveredOn: string }> {
   if (!tenantId || tenantId === "system") throw new Error("RESET_TARGET_INVALID");
