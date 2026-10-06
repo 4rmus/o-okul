@@ -1098,8 +1098,18 @@ sonra finans kaydı tutmaz. (2) İmhadan önce alınan şifreli sıfırlama yede
 imhanın son kontrolü (VERIFY) başarıyla bitince hemen silinir, yokluğu doğrulanır ve imha makbuzuna
 `backupDeleted: true` yazılır; VERIFY başarısızsa yedek silinmez ve işlem hata durumunda kalır. (3) Tek
 sistem yöneticisi onayı (step-up + kurum kodu teyidi) yeterlidir; çift platform onayı aranmaz.
+Ek (güvenlik incelemesi, 2026-10-06; "imha tam olsun" kararının uygulanması): (a) Teslim dışa aktarımı
+yalnız imha adayı kurum için (lisans bitişinden 91+ gün, aktif/ileri dönem yok, imha edilmemiş, sistem
+kurumu değil; değilse `409 TENANT_PURGE_EXPORT_NOT_CANDIDATE`) ve `{tenantId}` hedefine bağlı
+`TENANT_PURGE_EXPORT` step-up ile alınır; yanıt `Cache-Control: no-store` döner; teslim işareti aynı aday
+kuralını uygular. (b) VERIFY sonrası şifreli paketle birlikte restore doğrulama kopyaları
+(`o_okul_reset_drill_{operationId}` veritabanı ve restore bucket nesneleri) da silinir; makbuz ve SQL
+fonksiyonu `backupPackageDeleted` ve `drillTargetsDeleted` alanlarını ayrı ayrı ister. (c) Veritabanı
+fazından önce biten (CANCELLED, ya da otomatik yeniden denenmeyen FAILED/BLOCKED) imhaların paketi ve
+kopyaları da silinir; silinemeyenler sıfırlama tanılamasında listelenir. Veritabanı fazı commit edildikten
+sonra FAILED olan imhada paket geri dönüş için tutulur.
 Açık soru: Yok.
-Son kontrol: 2026-10-05
+Son kontrol: 2026-10-06
 
 ### DEC-20261005-04 — Otomatik veli bildirimlerinin varsayılanları (KV-8)
 

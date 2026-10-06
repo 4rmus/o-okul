@@ -2600,15 +2600,20 @@ kararı (2026-10-05): finans, rıza ve AuditLog dahil her şey silinir, ama önc
 kuruma teslim edilir; tek SYSTEM_ADMIN onayı (step-up + kurum kodu teyidi) yeterlidir.
 
 1. Kurumun yeni lisans talebi olmadığı satış/destek kaydıyla doğrulanır.
-2. Veri teslimi: Sistem → Kurumlar → İmha adayları → "Dışa aktar"
-   (`POST /api/v1/tenants/{id}/purge-exports`, yalnız SYSTEM_ADMIN). Dosya kurumun kendi dışa aktarımıyla
+2. Veri teslimi: Sistem → Kurumlar → İmha adayları → "Dışa aktar" → TOTP/yedek kod
+   (`POST /api/v1/tenants/{id}/purge-exports`, yalnız SYSTEM_ADMIN; `X-Step-Up-Token` = yalnız `{tenantId}`
+   hedefine bağlı `TENANT_PURGE_EXPORT` step-up). Kurum imha adayı değilse (lisans bitişinden 91 gün
+   geçmemiş, aktif/ileri dönem var, zaten imha edilmiş ya da sistem kurumu) istek
+   `409 TENANT_PURGE_EXPORT_NOT_CANDIDATE` döner ve hiçbir veri okunmaz. Yanıt `Cache-Control: no-store`
+   ve `Pragma: no-cache` taşır. Dosya kurumun kendi dışa aktarımıyla
    aynı tablo ve maskeleme kurallarını, ek olarak ödeme hareketlerini (`paymentTransactions`) içerir ve
-   satır sınırı yoktur. Ayrı bir `tenant.data-export.created` AuditLog satırı (export id, SHA-256, tablo
-   sayıları) yazılır. Dosya kuruma güvenli kanalla verilir; O-Okul tarafında kopyası tutulmaz.
+   satır sınırı yoktur. Ayrı bir `tenant.data-export.created` AuditLog satırı (export id, dışa aktaran
+   kullanıcı id, zaman, SHA-256, tablo satır sayıları; satır içeriği yok) yazılır. Dosya kuruma güvenli kanalla verilir; O-Okul tarafında kopyası tutulmaz.
 3. Teslim işareti: "Teslimi işaretle" (`POST /api/v1/tenants/{id}/purge-exports/{exportId}/delivery`,
    yalnız SYSTEM_ADMIN): teslim tarihi, kanal (`SECURE_DOWNLOAD`, `ENCRYPTED_EMAIL`, `PHYSICAL_MEDIA`,
    `OTHER`) ve isteğe bağlı not. Not kişisel veri içeremez (e-posta, telefon/kimlik benzeri rakam dizisi
-   reddedilir). Her export bir kez işaretlenir; `tenant.data-export.delivered` AuditLog satırı yazılır.
+   reddedilir). Teslim işareti de aynı aday kuralını uygular (`409 TENANT_PURGE_EXPORT_NOT_CANDIDATE`).
+   Her export bir kez işaretlenir; `tenant.data-export.delivered` AuditLog satırı yazılır.
    Aday listesindeki "Veri teslimi" sütunu teslim tarihini gösterir. Yalnız lisans bitişinden SONRA
    oluşturulmuş ve teslim edildi işaretlenmiş export imhayı açar; yoksa ön kontrol
    `EXPORT_RECEIPT_REQUIRED` gösterir ve istek `409 TENANT_PURGE_EXPORT_RECEIPT_REQUIRED` döner.
@@ -2631,27 +2636,39 @@ kuruma teslim edilir; tek SYSTEM_ADMIN onayı (step-up + kurum kodu teyidi) yete
    altında, worker'da her aşama başında ve veritabanı silmesiyle aynı transaction'da). Lisans ayrıca
    veritabanı aşamasında `o_okul_license_expiry_purge` içinde aynı kilit altında denetlenir; lisans
    dönemi eklemek de önce aynı kilidi alır. Export kayıtları append-only AuditLog'dadır, geri alınamaz. Veritabanı aşaması tamamlanmadan lisans yenilenirse işlem `CANCELLED` olur ve
-   hiçbir şey silinmez; iptal edilen işlem kurumun yeniden açılmasını ve cihaz yedeğinden geri yüklemeyi
-   engellemez.
+   hiçbir kurum verisi silinmez; yalnız o işlemin şifreli yedek paketi ve restore doğrulama kopyaları
+   silinir (sonuç işlem kaydında `backupPackageDeleted`/`drillTargetsDeleted`). İptal edilen işlem kurumun
+   yeniden açılmasını ve cihaz yedeğinden geri yüklemeyi engellemez. Veritabanı fazından önce `BLOCKED`
+   ya da otomatik yeniden denenmeyen `FAILED` (`RESET_EXECUTION_FAILED` dışı) biten imhaların paketi ve
+   kopyaları, son değişiklikten bir saat sonra API dağıtıcısının kuyruğa koyduğu temizlik işiyle silinir;
+   böyle bir işlem artık devam ettirilemez (`RESET_BACKUP_DELETED`). Silinemeyenler
+   `GET /tenants/{id}/reset-diagnostics` yanıtındaki `backupCleanup` listesinde görünür ve saatlik yeniden
+   denenir. Veritabanı fazı commit edildikten sonra `FAILED` olan imhada paket silinmez (geri dönüş).
 8. VERIFY: nesnelerin yokluğu ve veritabanı son koşulları doğrulanınca işlem `VERIFY` aşamasına geçer
    ve hemen ardından `tenant-reset-backups/{operationId}.bin` paketi ile `.restore-verified.json`
-   doğrulaması silinir; her iki anahtarın 404 döndüğü doğrulanır. VERIFY başarısızsa yedek silinmez ve
-   işlem `FAILED` kalır (geri dönüş yedeği korunur). Silme doğrulanamazsa işlem `BLOCKED`/`VERIFY`
-   kalır, makbuz yazılmaz; yeniden deneme paketi okumadan silmeyi tekrarlar.
+   doğrulaması silinir (her iki anahtarın 404 döndüğü doğrulanır), ayrıca restore doğrulama kopyaları
+   silinir: `o_okul_reset_drill_{operationId}` veritabanı restore sunucusunun `postgres` bakım
+   veritabanından `DROP DATABASE … WITH (FORCE)` ile düşürülür ve `pg_database`'de yokluğu doğrulanır;
+   `o-okul-reset-drill-{operationId}` bucket'ındaki bütün nesne sürümleri ve silme işaretleri silinir ve
+   boşluğu doğrulanır. Bunun için restore rolü drill veritabanının sahibi olmalı ve `postgres`
+   veritabanına bağlanabilmelidir. İki sonuç ayrı ayrı kaydedilir. VERIFY başarısızsa yedek silinmez ve
+   işlem `FAILED` kalır (geri dönüş yedeği korunur). Paket ya da drill silmesi doğrulanamazsa işlem
+   `BLOCKED`/`VERIFY` kalır, makbuz yazılmaz; yeniden deneme paketi okumadan silmeyi tekrarlar.
 9. Tamamlanınca kurum `SUSPENDED` bir iz kaydı olarak kalır (ad "İmha edildi", kod `imha-…`, iletişim
    alanları boş) ve yeniden açılamaz (`TENANT_PURGED`). Lisans dönemleri ve işlem defteri kalır;
    kuruma ait finans, destek, izin, kullanım, yedekleme işi ve AuditLog satırları (export kayıtları
    dahil) silinir. Sistem kapsamında (tenantId NULL) tek bir `tenant.license-expiry-purge.completed`
    makbuzu kalır: tenant id, kurum kodu SHA-256 özeti, zaman, silinen kayıt/dosya sayıları, teslim
-   edilen export id + teslim tarihi ve `backupDeleted: true` (SQL fonksiyonu bu bayrak olmadan makbuz
-   yazmaz).
-10. Ops sonrası: işlemin geçici restore hedefleri (`o_okul_reset_drill_{operationId}` veritabanı ve
-   `o-okul-reset-drill-{operationId}` bucket'ı) da kurum verisinin tam kopyasını taşır; imha
-   tamamlanınca ikisi de silinir ve silindiği ops kaydına yazılır (bugün otomatik değildir).
+   edilen export id + teslim tarihi, `backupPackageDeleted: true` ve `drillTargetsDeleted: true` (SQL
+   fonksiyonu iki bayrak da `true` olmadan makbuz yazmaz).
+10. Yalnız arıza durumu: otomatik drill silmesi sürekli başarısızsa (`backupCleanup` listesinde kalıyor ya
+   da işlem `BLOCKED`/`VERIFY`), `o_okul_reset_drill_{operationId}` veritabanı ve
+   `o-okul-reset-drill-{operationId}` bucket'ı onaylı ops erişimiyle elle silinir, ardından işlem yeniden
+   denenir; silme otomatik doğrulamayla kaydedilir, elle yazılmaz.
 11. Kanıt: işlem durumu (`GET /tenants/{id}/clean-reset-jobs/{operationId}` = `COMPLETED`), makbuz
-   AuditLog satırı (`backupDeleted: true`) ve aday listesinden düşme. Gecelik yedeklerdeki kopyalar
+   AuditLog satırı (`backupPackageDeleted: true`, `drillTargetsDeleted: true`) ve aday listesinden düşme. Gecelik yedeklerdeki kopyalar
    `BACKUP_RETENTION_DAYS` (7 gün) sonunda düşer.
 
 Kanıt sınıfı: kod ve testler LOCAL_TEST; `o_okul_license_expiry_purge` fonksiyonunun gerçek
-PostgreSQL üzerinde ve yedek silmenin gerçek S3 üzerinde çalıştırılması EXTERNAL_NOT_RUN; staging/prod
+PostgreSQL üzerinde, yedek ve drill silmenin gerçek S3/PostgreSQL üzerinde çalıştırılması EXTERNAL_NOT_RUN; staging/prod
 imha kanıtı yok.
