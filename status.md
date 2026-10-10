@@ -244,7 +244,7 @@ Korunan aktif sözleşmeler:
 
 ## Açık İşler
 
-Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-20261010-01, önerildi) içindedir.
+Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-20261010-01, onaylı) içindedir.
 `docs/account-management-architecture-plan.md` bölüm 6'daki eski Gate E/F listesi bu planla yer değiştirdi.
 
 1. S1: staging rol UAT'ı (§11.3 senaryoları; staging veri değişikliği ürün sahibi onayıyla).

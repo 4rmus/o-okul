@@ -607,7 +607,7 @@ Kurallar `AGENTS.md` "Subagent Orchestration" bölümünden gelir; bu plan onlar
 
 ---
 
-## 11. 2026-10-10 yeniden planlama (DEC-20261010-01, önerildi)
+## 11. 2026-10-10 yeniden planlama (DEC-20261010-01, onaylı)
 
 §10.3'teki "H1 sonunda yeniden çiz" kuralı erken tetiklendi: H1'in 6 dilimi, H2'nin KF-1/KV-4/KV-3/KF-2 dilimleri ve H3'ün KF-9/KV-9/KV-7/AK-6/KV-8 dilimleri 2026-10-03 ile 2026-10-05 arasında main'e girdi (CI PASS, staging'e otomatik deploy). Ölçülen şey **kodun main'e girme hızıdır**; dilimlerin kabul metrikleri (ör. "30 kişilik sınıf <5 dk") STAGING'de ölçülmedi ve UNPROVEN'dır. C-1 sütunları `status.md` "Dilim kapanış kaydı"ndadır.
 

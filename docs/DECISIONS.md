@@ -1153,14 +1153,14 @@ Son kontrol: 2026-10-05
 
 ### DEC-20261010-01 — Kod dilimleri bitti; kalan takvim staging kabulü ve doğrulama odaklıdır
 
-Durum: Önerildi; ürün sahibi onayı bekliyor
+Durum: Onaylı (ürün sahibi, 2026-10-10)
 Karar: H1, H2 ve H3 kod dilimleri (PO-2, PO-10 ve PO-3 hariç) 2026-10-03 ile 2026-10-05 arasında
 main'e girdi ve staging'e otomatik deploy edildi. Mayıs 2027 satış başlangıcı ve Eylül 2027 production
 go-live değişmez (DEC-20261004-08). Kalan sıra: (S1) staging rol UAT'ı, (S2) #153 imha merge'i,
 (S3) PO-2 sağlayıcı seçimi ve uygulaması, (S4) §3.4 doğrulama planı, (S5) PO-3 ölçümü, (S6) PO-10.
 PO-3, Nisan 2027 yerine S1'den sonra başlayabilir. Yeni özellik dilimi yalnız UAT veya görüşme
 bulgusundan açılır.
-Kaynak: Claude önerisi (2026-10-10), ürün sahibi "önerdiğin gibi devam et" talimatıyla yazıldı; onay bekliyor.
+Kaynak: Claude önerisi (2026-10-10); ürün sahibi 2026-10-10'da onayladı.
 Kanıt: `status.md` dilim kapanış kaydı (CI ve staging deploy run'ları). Kabul metrikleri UNPROVEN.
 Etkilenen ADR: Yok
 Açık soru: PO-10 tarihi. Pilot kurum gerçek veriyle çalışacaksa production Eylül'den önce gerekir,
