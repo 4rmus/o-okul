@@ -607,6 +607,55 @@ Kurallar `AGENTS.md` "Subagent Orchestration" bölümünden gelir; bu plan onlar
 
 ---
 
+## 11. 2026-10-10 yeniden planlama (DEC-20261010-01, önerildi)
+
+§10.3'teki "H1 sonunda yeniden çiz" kuralı erken tetiklendi: H1'in 6 dilimi, H2'nin KF-1/KV-4/KV-3/KF-2 dilimleri ve H3'ün KF-9/KV-9/KV-7/AK-6/KV-8 dilimleri 2026-10-03 ile 2026-10-05 arasında main'e girdi (CI PASS, staging'e otomatik deploy). Ölçülen şey **kodun main'e girme hızıdır**; dilimlerin kabul metrikleri (ör. "30 kişilik sınıf <5 dk") STAGING'de ölçülmedi ve UNPROVEN'dır. C-1 sütunları `status.md` "Dilim kapanış kaydı"ndadır.
+
+### 11.1 Değişmeyenler
+
+- Mayıs 2027 satış başlangıcı (STAGING kanıtı) ve Eylül 2027 PRODUCTION go-live (DEC-20261004-08).
+- §4.2'deki 4 koşul, kesim sıraları ve onaylı DEC'ler.
+
+### 11.2 Kalan iş (kod dışı ağırlıklı)
+
+| Sıra | İş | Kabul | Onay / girdi |
+|---|---|---|---|
+| S1 | **Staging rol UAT'ı** (§11.3 senaryoları) | Her senaryo STAGING'de bir kez uçtan uca PASS; süre metrikleri ölçülüp yazılır; bulgu varsa dilim olarak açılır | Staging'de veri değişikliği ve test kullanıcıları ürün sahibi onayıyla |
+| S2 | #153 lisans sonu imhası merge | CI PASS; export kapsamı 2026-10-10 kararıyla (rıza, AuditLog, dosya içerikleri dahil) | Merge onayı |
+| S3 | PO-2 off-host TR yedek | Sağlayıcı seçilir, `restore:drill:check` STAGING'de PASS | Sağlayıcı ve aylık bütçe; aday karşılaştırması `docs/po-2-tr-s3-karsilastirma.md` |
+| S4 | F3 doğrulama planı (§3.4: dosya talebi, görüşmeler, ödeme isteği, pilot taahhüdü) | §3.4 eşikleri | Ürün sahibi işi; kod yalnız bulgu çıkarsa |
+| S5 | PO-3 kapasite ölçümü | §7.4 PO-3 kabulü | Nisan 2027 yerine S1'den sonra başlayabilir |
+| S6 | PO-10 production kanıt zinciri | §7.4 PO-10 kabulü | Tarih kararı: pilot kurum gerçek veriyle çalışacaksa production Eylül'den önce gerekir (staging'e gerçek kişisel veri girmez) |
+
+Yeni özellik dilimi yalnız S1 veya S4 bulgusundan açılır; açılan her dilim DEC veya ürün sahibi onayıyla yazılır.
+
+### 11.3 Staging UAT senaryoları
+
+Her satır ilgili dilimin plan metriğini taşır. Test verisi kuralı geçerlidir (TC 1000000xxxx, telefon 555/500).
+
+| Senaryo | Rol | Ölçüt |
+|---|---|---|
+| Kartsız deneme açma, 7 gün / 100 öğrenci sınırı, süre sonunda salt okunur (KF-5) | SYSTEM_ADMIN, OWNER | Akış hatasız; sınır aşımı reddedilir |
+| Öğrenci içe aktarma: `veli_*` → StudentContact, TC okunmaz, çakışmada `CONTACT_COLUMNS_CONFLICT` (KV-1) | ADMIN | Satır sayıları dosyayla eşleşir |
+| Not girişi, yayın, düzeltme v2; veli yalnız yayınlanmış sürümü görür (AK-3/AK-4, KV-4) | Öğretmen, ADMIN, veli | 30 kişilik sınıf girişi <5 dk; düzeltme yeni sürüm |
+| Toplu veli daveti ve elle bağlama (KV-3, KV-3b–e) | ADMIN, veli | E-postasız veli atlanır; ikinci davet oluşmaz |
+| Veli PWA kurulumu ve özet ekranı (KV-4) | Veli (gerçek telefon) | Kurulur, özet açılır |
+| Duyuru push'u gerçek cihazda (KV-7) ve 300 alıcılı duyuru (KV-6) | ADMIN, veli | Push ulaşır; sahte "sent" 0 |
+| Otomatik bildirimler: devamsızlık, vade, not yayını (KV-8) | Öğretmen, muhasebe, veli | Tetikleyici başına bir bildirim |
+| Muhasebe parola değişimi ve `/kurum/finans` (KF-1), ödeme planı ve gecikme (KF-2) | Muhasebe | 403 yok; gecikme doğru türetilir |
+| OWNER/ADMIN MFA kurulumu ve SYSTEM_ADMIN destekli sıfırlama (KV-9) | OWNER, SYSTEM_ADMIN | Akış hatasız |
+| Ödev teslimi ve kontrol (AK-6) | Öğrenci, öğretmen | Teslimsiz kontrol 409 |
+| Fiyat sayfası kademeli hesap (KF-9) | Ziyaretçi | Sınır değerlerde (250/251, 500/501) fiyat düşmez |
+| Kendi dosyanla doğrulama kiti (KF-10) | Operatör | Anonimleştirilmiş dosya karneye ulaşır |
+
+### 11.4 Kontrol noktaları
+
+- **2026-11-14:** S1 kapanışı ve bulgu listesi. 2026-11-07 flag bitişi artık risk değildir: rollout mekanizması #130 ile kaldırıldı ve kod `FEATURE_ROLLOUTS_JSON` okumuyor.
+- **2027-01-03:** F3 60./90. gün sonuçları ve S6 (PO-10) tarihi.
+- PO-3 S1'den sonra başlar; Eylül go-live öncesi kapanır.
+
+---
+
 ## Ek A. DEC taslakları (özet)
 
 Dokuz kayıt 2026-10-03 F0–F6 strateji çalışmasında hazırlandı; hiçbiri henüz `docs/DECISIONS.md`'de değildir. Tam metinler (`docs/DECISIONS.md` satır 6-12 biçimi: Durum, Karar, Kaynak, Kanıt, Etkilenen ADR, Açık soru, Son kontrol): bkz. docs/ozel-k12-strateji-ekleri.md §F6.4. Çelişkide bu özet ve onaylı kararlar geçerlidir. Bütün kayıtların Kaynak satırı: ürün sahibi kararı (2026-10-03 F0–F6 strateji çalışması). ID'ler yer tutucudur: Taslak; docs/DECISIONS.md'ye ayrı PR ile; aynı gün yazılırsa D1 → 02 … D9 → 10. `docs/DECISIONS.md`'de "Durum: Taslak" kullanan kayıt yoktur; kayıtlar ya "Onaylı" ile yazılır ya da D9 gibi "Faz Öncesi Onay Gerektirenler" tablosuna OPEN satırı olarak girer (seçim ayrı PR'da).
