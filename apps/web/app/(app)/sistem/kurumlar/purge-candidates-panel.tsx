@@ -74,7 +74,11 @@ function PurgeExportModal({ auth, candidate, onClose }: { auth: AuthResponse; ca
       void client.invalidateQueries({ queryKey: ["license-expiry-purge-candidates"] });
       onClose();
     } catch (failure) {
-      setError(failure instanceof ApiRequestError && failure.code === "TENANT_PURGE_EXPORT_NOT_CANDIDATE" ? "Kurum artık imha adayı değil; dışa aktarım yapılmadı." : "Dışa aktarım oluşturulamadı. Yeniden deneyin.");
+      const code = failure instanceof ApiRequestError ? failure.code : "";
+      // Product owner decision (2026-10-10): a file that cannot be read or verified stops the handover.
+      setError(code === "TENANT_PURGE_EXPORT_NOT_CANDIDATE" ? "Kurum artık imha adayı değil; dışa aktarım yapılmadı."
+        : code === "TENANT_PURGE_EXPORT_FILE_UNREADABLE" || code === "TENANT_PURGE_EXPORT_FILE_HASH_MISMATCH" || code === "TENANT_PURGE_EXPORT_CONTACT_UNREADABLE" ? "Kurumun bir dosyası ya da iletişim kaydı okunamadı veya doğrulanamadı; eksik dosya verilmez, dışa aktarım yapılmadı. Teknik ekibe bildirin."
+        : "Dışa aktarım oluşturulamadı. Yeniden deneyin.");
       void client.invalidateQueries({ queryKey: ["license-expiry-purge-candidates"] });
       setBusy(false);
     }
