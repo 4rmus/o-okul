@@ -244,15 +244,22 @@ Korunan aktif sözleşmeler:
 
 ## Açık İşler
 
-Güncel sıralama `docs/account-management-architecture-plan.md` bölüm 6 içindedir:
+Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-20261010-01, önerildi) içindedir.
+`docs/account-management-architecture-plan.md` bölüm 6'daki eski Gate E/F listesi bu planla yer değiştirdi.
 
-1. Mevcut öğrenci tutarlılığı/tekrar güvenliği dilimini main ve staging exact-SHA kanıtına bağlama.
-2. P0: kalan 22 controller/146 `@Roles` envanterini route ailesi bazında exact capability + persona +
-   scope modeline kesme; ayrı platform auth realm ve süreli/MFA'lı breakglass akışını kurma.
-3. P1: StudentContact, guardian emekliliği, offboarding/import/cursor ve outbox grant revoke dilimleri.
-4. Gate E için gerçek provider/inbox ve MFA; aynı-snapshot rapor, rol bazlı UAT, pull edilebilir image
-   rollback/restore ve izleme kanıtlarını kapatma.
-5. Gate E kapandıktan sonra en az 14 günlük Gate F pilotu ve go-live karar paketi.
+1. S1: staging rol UAT'ı (§11.3 senaryoları; staging veri değişikliği ürün sahibi onayıyla).
+2. S2: PR #153 lisans sonu veri imhası (export kapsamı 2026-10-10 kararıyla genişletildi); merge onayı bekliyor.
+3. S3: PO-2 off-host TR yedek; sağlayıcı seçimi bekliyor (`docs/po-2-tr-s3-karsilastirma.md`).
+4. S4: §3.4 doğrulama planı (dosya talebi, görüşmeler, pilot taahhüdü); ürün sahibi işi.
+5. S5/S6: PO-3 kapasite ölçümü ve PO-10 production kanıt zinciri; PO-10 tarihi 2027-01-03'te.
+
+Önceki plandan devralınan kalemler (`docs/account-management-architecture-plan.md` bölüm 6; 2026-10-10'da
+durumları yeniden doğrulanmadı, S1 bulgularıyla birlikte ele alınır):
+
+- Mevcut öğrenci tutarlılığı/tekrar güvenliği dilimini main ve staging exact-SHA kanıtına bağlama.
+- P0: kalan `@Roles` envanterini exact capability + persona + scope modeline kesme; ayrı platform auth
+  realm ve süreli/MFA'lı breakglass akışı.
+- P1: offboarding/import/cursor ve outbox grant revoke dilimleri.
 
 ### Dilim kapanış kaydı
 
@@ -260,7 +267,19 @@ Plan `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §10.1 uyarınca her dilim
 
 | Tarih | Dilim | Kanıt sınıfı | SHA / PR | Plan gün / gerçek gün |
 |---|---|---|---|---|
+| 2026-10-04 | KV-1 veli kimlik flag kaldırma | CI `37230972132` + STAGING_DEPLOY `37232029614` PASS | `44b93ed` / PR #125 | 5–10 / 2 |
+| 2026-10-04 | Hijyen PO-1 + KV-6 | CI `37233050361` + STAGING_DEPLOY `37234136071` PASS (toplu merge #137) | `b424444` / PR #126 | 2,5–5 / 2 |
+| 2026-10-04 | AK-1 + AK-2 tenant kapıları ve not şeması | aynı (#137) | `b767d38` / PR #127 | 5–10 / 2 |
+| 2026-10-04 | AK-3 + AK-4 gradebook API ve not ekranı | aynı (#137) | `5c27298` / PR #128 | 15–25 / 2 |
+| 2026-10-04 | KF-5 kartsız deneme + gecelik yedek | aynı (#137); staging restore drill PASS 2026-10-05 | `dd11ba2` / PR #131 | 2,5–7,5 / 2 |
+| 2026-10-04 | KF-10 doğrulama kiti | aynı (#137) | `f641860` / PR #132 | 5–10 / 2 |
+| 2026-10-04 | KF-1 muhasebe 403, KF-2 ödeme planı, KV-9 MFA | aynı (#137) | PR #136, #135, #134 | 5–10, 10–20, – / 1 |
+| 2026-10-05 | KV-7 push, KV-4 veli özeti + PWA, AK-6 ödev teslimi | CI `37275036320` + STAGING_DEPLOY `37276592056` PASS (toplu merge #141) | PR #138, #139, #140 | 10–15, –, – / 1 |
+| 2026-10-05 | KV-3, KV-3b–e veli daveti ve bağlama | son: CI `37307143622` + STAGING_DEPLOY `37308747203` PASS | PR #143, #145–#148 | – / 1 |
+| 2026-10-05 | KF-9 fiyat sayfası, KV-8 otomatik veli bildirimleri | Kendi run'ları runner almadığı için düştü (kod hatası değil); kod `f712fda` ile CI `38048883293` + STAGING_DEPLOY `38049664810` PASS | PR #151, #152 | 7,5–15, 15–25 / 1 |
 | 2026-10-10 | Ajan/skill yönetişimi: Claude Code kanonik yüzey, Codex kaldırıldı, `.claude/settings.json` subagent sınırları, `pnpm agents:check` sahiplik/gate/roster denetimi (plan dışı araç dilimi) | CI (main `38048883293` PASS) + STAGING_DEPLOY (Staging Deploy #188 `38049664810` PASS; dört servis `f712fda` imajı, cutover artifact'i yayınlandı) | `f712fda` / PR #154 | – / 1 |
+
+Tüm satırlarda plan günü efor haftası × 5 iş günüdür; gerçek gün dilim başlangıcından merge'e takvim günüdür. Kanıt main'e girme ve deploy kanıtıdır; dilimlerin kabul metrikleri STAGING'de ölçülmedi (UNPROVEN, S1).
 
 Guardian fiziksel silme, grant revoke, production deploy veya go-live; ilgili teknik güvenlik kapıları
 ve gerçek ortam kanıtı olmadan yapılamaz. Workspace mailbox/alias testi tamamlanmıştır; exact-SHA
