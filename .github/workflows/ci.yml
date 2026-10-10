@@ -214,4 +214,5 @@ jobs:
           src/student/student-license-concurrency.postgres.test.ts
           src/tenant/tenant-reset-preview.postgres.test.ts
           src/operations/device-backup.postgres.test.ts
+          src/operations/tenant-handover-export.postgres.test.ts
           src/exam/exam-workspace-progress-store.postgres.test.ts
