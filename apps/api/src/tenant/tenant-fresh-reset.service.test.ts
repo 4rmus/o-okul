@@ -1,13 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
+const queue = vi.hoisted(() => ({ jobs: new Map<string, { name: string; data: unknown; opts: Record<string, unknown> }>() }));
+vi.mock("bullmq", () => ({ Queue: class {
+  async getJob(id: string) { return queue.jobs.get(id); }
+  async add(name: string, data: unknown, opts: { jobId: string }) { queue.jobs.set(opts.jobId, { name, data, opts }); }
+  async close() {}
+} }));
 import { freshResetStatus, type FreshResetOperation } from "@o-okul/db";
 import { TenantFreshResetService } from "./tenant-fresh-reset.service.js";
 import { createAdminMfaStepUpProof } from "../auth/totp-mfa.js";
 import type { RequestContext } from "../context/request-context.js";
+import type { TenantCleanResetMfaTarget } from "@o-okul/shared-types";
 
 const context: RequestContext = { userId: "platform", tenantId: null, roles: ["SYSTEM_ADMIN"], bypassRls: false, sessionId: "system-session", membershipVersion: 1 };
 const body = { preset: "CLEAN_SETUP_V1" as const, expectedLifecycleVersion: 3, preflightDigest: "a".repeat(64), confirmationText: "alpha", reason: "OPERATIONS_REVIEW" as const };
-const proof = (target = { tenantId: "tenant-a", preset: body.preset, expectedLifecycleVersion: body.expectedLifecycleVersion, preflightDigest: body.preflightDigest }) => createAdminMfaStepUpProof({ userId: context.userId, sessionId: context.sessionId!, membershipVersion: 1, purpose: "TENANT_CLEAN_RESET", target }).stepUpToken;
+const proof = (target: TenantCleanResetMfaTarget = { tenantId: "tenant-a", preset: body.preset, expectedLifecycleVersion: body.expectedLifecycleVersion, preflightDigest: body.preflightDigest }) => createAdminMfaStepUpProof({ userId: context.userId, sessionId: context.sessionId!, membershipVersion: 1, purpose: "TENANT_CLEAN_RESET", target }).stepUpToken;
 function fixture() {
   const service = new TenantFreshResetService({ preview: vi.fn() } as never);
   const op = { id: "a".repeat(32), status: "QUEUED", phase: "PREFLIGHT", errorCode: null, result: null, actorUserId: "private", backupReceipt: { private: "hidden" } } as unknown as FreshResetOperation;
@@ -20,7 +27,7 @@ describe("reset admission and read-only reconciliation", () => {
     vi.useFakeTimers(); vi.stubEnv("REDIS_URL", "redis://localhost:6379");
     const f = fixture(); let finish!: (value: FreshResetOperation[]) => void, fail!: (error: Error) => void;
     const pending = vi.fn(() => new Promise<FreshResetOperation[]>((resolve, reject) => { finish = resolve; fail = reject; }));
-    Object.assign(f.service.store!, { pending });
+    Object.assign(f.service.store!, { pending, backupCleanupDue: vi.fn(async () => []) });
     const end = vi.fn(async () => {}); Object.defineProperty(f.service, "pool", { value: { end } });
     try {
       f.service.onModuleInit(); expect(pending).toHaveBeenCalledOnce();
@@ -34,6 +41,18 @@ describe("reset admission and read-only reconciliation", () => {
       if (!rejectDispatch) { await f.service.onApplicationShutdown(); expect(end).toHaveBeenCalledOnce(); }
       else expect(end).not.toHaveBeenCalled();
     } finally { vi.useRealTimers(); vi.unstubAllEnvs(); }
+  });
+  it("the dispatcher enqueues one backup cleanup job per ended purge (security review 2026-10-06)", async () => {
+    vi.stubEnv("REDIS_URL", "redis://localhost:6379"); queue.jobs.clear();
+    const f = fixture();
+    const due = { ...f.op, id: "d".repeat(32), tenantId: "tenant-a", preset: "LICENSE_EXPIRY_PURGE_V1", status: "CANCELLED", phase: "BACKUP" } as FreshResetOperation;
+    const backupCleanupDue = vi.fn(async () => [due]);
+    Object.assign(f.service.store!, { pending: vi.fn(async () => []), backupCleanupDue });
+    try {
+      f.service.onModuleInit(); await f.service.onModuleDestroy();
+      expect(backupCleanupDue).toHaveBeenCalledOnce();
+      expect([...queue.jobs]).toEqual([[`tenant-fresh-reset-backup-cleanup-${due.id}`, { name: "tenant-fresh-reset-backup-cleanup", data: { tenantId: "tenant-a", operationId: due.id }, opts: expect.objectContaining({ jobId: `tenant-fresh-reset-backup-cleanup-${due.id}`, attempts: 1, removeOnComplete: true, removeOnFail: true }) }]]);
+    } finally { vi.unstubAllEnvs(); queue.jobs.clear(); }
   });
   it.each(["TENANT_OWNER", "TENANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN"])("rejects %s before storage", async (role) => {
     const f = fixture();
@@ -58,6 +77,32 @@ describe("reset admission and read-only reconciliation", () => {
     f.create.mockImplementation(async (...args: unknown[]) => { await (args[3] as () => Promise<void>)(); return f.op; });
     await expect(f.service.create(context, "tenant-a", body, "reset-idempotency-a", proof())).rejects.toMatchObject({ status: 409, message: "RESET_WRITE_QUIESCENCE_UNVERIFIED" });
   });
+  it("license-expiry purge: proof must be bound to the purge preset; clean-reset proof is rejected; quiescence still blocks", async () => {
+    const f = fixture();
+    const purge = { ...body, preset: "LICENSE_EXPIRY_PURGE_V1" as const, reason: "LICENSE_EXPIRED" as const };
+    const purgeProof = proof({ tenantId: "tenant-a", preset: purge.preset, expectedLifecycleVersion: 3, preflightDigest: body.preflightDigest });
+    await expect(f.service.create(context, "tenant-a", purge, "purge-key", proof())).rejects.toMatchObject({ status: 401, message: "MFA_STEP_UP_INVALID" });
+    await expect(f.service.create(context, "tenant-a", body, "reset-key", purgeProof)).rejects.toMatchObject({ status: 401, message: "MFA_STEP_UP_INVALID" });
+    await expect(f.service.create(context, "tenant-a", { ...purge, reason: "OPERATIONS_REVIEW" }, "purge-key", purgeProof)).rejects.toMatchObject({ status: 400, message: "RESET_REQUEST_INVALID" });
+    await expect(f.service.create({ ...context, roles: ["TENANT_ADMIN"] }, "tenant-a", purge, "purge-key", purgeProof)).rejects.toMatchObject({ status: 403 });
+    expect(f.create).not.toHaveBeenCalled();
+    const preview = vi.fn(async () => { throw new Error("RESET_WRITE_QUIESCENCE_UNVERIFIED"); });
+    Object.defineProperty(f.service, "preview", { value: { preview } });
+    f.create.mockImplementation(async (...args: unknown[]) => { await (args[3] as () => Promise<void>)(); return f.op; });
+    await expect(f.service.create(context, "tenant-a", purge, "purge-key", purgeProof)).rejects.toMatchObject({ status: 409, message: "RESET_WRITE_QUIESCENCE_UNVERIFIED" });
+    for (const [code, status] of [["RESET_LICENSE_NOT_EXPIRED", 409], ["RESET_CONFIRMATION_MISMATCH", 400]] as const) {
+      f.create.mockRejectedValueOnce(new Error(code));
+      await expect(f.service.create(context, "tenant-a", purge, "purge-key", purgeProof)).rejects.toMatchObject({ status, message: code });
+    }
+    // Product owner decision (2026-10-05): no delivered post-expiry handover export -> 409.
+    f.create.mockRejectedValueOnce(new Error("RESET_EXPORT_RECEIPT_REQUIRED"));
+    await expect(f.service.create(context, "tenant-a", purge, "purge-key", purgeProof)).rejects.toMatchObject({ status: 409, message: "TENANT_PURGE_EXPORT_RECEIPT_REQUIRED" });
+  });
+  it("purge candidate list is SYSTEM_ADMIN-only and needs the verified database", async () => {
+    const f = fixture();
+    await expect(f.service.purgeCandidates({ ...context, roles: ["TENANT_OWNER"] })).rejects.toMatchObject({ status: 403 });
+    await expect(f.service.purgeCandidates(context)).rejects.toMatchObject({ status: 503 });
+  });
   it("returns the accepted durable operation despite queue failure; status GET does no writes", async () => {
     const f = fixture();
     expect(await f.service.create(context, "tenant-a", body, "reset-idempotency-a", proof())).toEqual(freshResetStatus(f.op));
@@ -79,6 +124,15 @@ describe("tenant management read metadata", () => {
     expect(result).toMatchObject({ verified: true, currentReset: { status }, allowedActions: { suspend: false, reactivate: false, cleanReset: false } });
     expect(query.mock.calls.some(([sql]) => sql.includes('WHERE "tenantId" = $1') && sql.includes("LIMIT 1"))).toBe(true);
     expect(query.mock.calls.every(([sql]) => !/INSERT|UPDATE|DELETE FROM/.test(sql))).toBe(true);
+  });
+  it.each([
+    ["COMPLETED", null, { suspend: false, reactivate: false, cleanReset: false }],
+    ["CANCELLED", null, { suspend: false, reactivate: true, cleanReset: true }],
+  ])("license-expiry purge %s: completed is a tombstone, cancelled no longer holds the tenant", async (status, currentReset, allowedActions) => {
+    const service = new TenantFreshResetService({} as never);
+    const query = vi.fn(async (sql: string) => ({ rows: sql.startsWith("SELECT \"id\"") ? [{ id: "a".repeat(32), preset: "LICENSE_EXPIRY_PURGE_V1", status, phase: status === "COMPLETED" ? "DONE" : "BACKUP", errorCode: null, result: null }] : [] }));
+    Object.defineProperty(service, "pool", { value: { connect: async () => ({ query, release: vi.fn() }) } });
+    expect(await service.management(context, tenant)).toEqual({ verified: true, currentReset, allowedActions });
   });
   it("fails closed when operation metadata cannot be read", async () => {
     const service = new TenantFreshResetService({} as never);
@@ -123,6 +177,17 @@ describe("reset metadata diagnosis", () => {
     expect(calls[0]?.sql).toBe("BEGIN READ ONLY"); expect(calls.some(({ sql }) => /^(INSERT|UPDATE|DELETE)/.test(sql))).toBe(false);
     expect(calls.filter(({ sql }) => sql.includes('FROM "TenantMutationActivity"')).every(({ sql }) => sql.includes('"tenantId" = $1') && sql.includes('LIMIT 51'))).toBe(true);
     expect(JSON.stringify(result)).not.toMatch(/payload|referenceId|token|email/i);
+  });
+  it("lists ended purges whose backup package or drill copies are not proven deleted (security review 2026-10-06)", async () => {
+    const f = fixture(); const calls: string[] = [];
+    const pendingCleanup = { operationId: "d".repeat(32), status: "CANCELLED", phase: "BACKUP", backupPackageDeleted: true, drillTargetsDeleted: false, updatedAt: new Date("2026-10-06T08:00:00.000Z") };
+    const db = { async query<T>(sql: string, values?: unknown[]) { calls.push(sql); return { rows: (sql.includes('FROM "TenantFreshResetOperation"') && values?.[0] === "tenant-a" ? [pendingCleanup] : []) as T[] }; }, release() {} };
+    Object.defineProperty(f.service, "pool", { value: { query: db.query, connect: async () => db } });
+    expect((await f.service.diagnostics(context, "tenant-a")).backupCleanup).toEqual([{ ...pendingCleanup, updatedAt: "2026-10-06T08:00:00.000Z" }]);
+    expect((await f.service.diagnostics(context, "tenant-b")).backupCleanup).toEqual([]);
+    const sql = calls.find((text) => text.includes('FROM "TenantFreshResetOperation"'))!;
+    for (const part of [`"tenantId" = $1`, `"preset" = 'LICENSE_EXPIRY_PURGE_V1'`, `"phase" IN ('PREFLIGHT', 'BACKUP', 'DATABASE')`, `"status" IN ('CANCELLED', 'FAILED', 'BLOCKED')`]) expect(sql).toContain(part);
+    expect(sql).not.toMatch(/backupReceipt|SELECT \*/);
   });
 });
 

@@ -121,6 +121,10 @@ describe("LicenseTermStore", () => {
 
     expect(queries[0]?.sql).toBe("BEGIN");
     expect(queries.some((query) => query.sql.includes('INSERT INTO "LicenseTerm"'))).toBe(true);
+    // Tenant row lock precedes the insert so the license-expiry purge re-check serializes with a renewal.
+    const lock = queries.findIndex((query) => query.sql.includes('FROM "Tenant" WHERE "id" = $1 FOR UPDATE') && query.values?.[0] === "tenant-a");
+    expect(lock).toBeGreaterThan(0);
+    expect(lock).toBeLessThan(queries.findIndex((query) => query.sql.includes('INSERT INTO "LicenseTerm"')));
     expect(queries.some((query) => query.sql.includes('UPDATE "Tenant"') && query.sql.includes('"seatLimit" = $5'))).toBe(true);
     expect(queries.at(-1)?.sql).toBe("COMMIT");
   });

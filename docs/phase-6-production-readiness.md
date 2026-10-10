@@ -870,7 +870,10 @@ pnpm backup:restore:smoke
   seti, dört verification seti ve boş `gaps` listesi `prod:evidence:templates:check`
   içindeki fazla alan/madde ve invalid/non-empty gaps negatifleriyle korunur.
 - Finansal saklama kanıtı: finansal kayıtların saklama süresi ve purge istisnası `pnpm financial-retention:check`
-  üzerinden doğrulanır. Gerçek kanıtta karar sahibi ve referans alanları örnek/placeholder/redacted
+  üzerinden doğrulanır. Ürün sahibi kararı (2026-10-05, DEC-20261005-03): kurumun muhasebe saklama
+  yükümlülüğü lisans sonu imhasından önce kuruma teslim edilen dışa aktarımla karşılanır; O-Okul lisans
+  sonu + 91 günden sonra finans kaydı tutmaz (`policyDecision.platformRetentionDaysAfterLicenseEnd=91`,
+  `license_expiry_purge_requires_delivered_export` doğrulaması). Gerçek kanıtta karar sahibi ve referans alanları örnek/placeholder/redacted
   değer içeremez; bu gevşetme yalnız template kontrolünde `FINANCIAL_RETENTION_ALLOW_EXAMPLE_EVIDENCE=1`
   ile açılır.
   Staging artifact'i üretmek için `STAGING_ENVIRONMENT=staging FINANCIAL_RETENTION_OUTPUT=artifacts/staging/reports/financial-retention.json FINANCIAL_RETENTION_APPROVED_BY=... FINANCIAL_RETENTION_APPROVAL_REFERENCE=... FINANCIAL_RETENTION_LEGAL_BASIS=... FINANCIAL_RETENTION_PERIOD_YEARS=10 FINANCIAL_RETENTION_PURGE_EXCEPTION=true pnpm financial-retention:generate`

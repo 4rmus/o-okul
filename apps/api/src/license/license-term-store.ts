@@ -129,6 +129,8 @@ export class PostgresLicenseTermStore implements LicenseTermStore {
 
   async create(input: CreateLicenseTermInput): Promise<LicenseTermRecord> {
     return withBypassRlsQuery(this.pool, async (client) => {
+      // Tenant row lock first: serializes with the license-expiry purge, which re-checks terms under the same lock.
+      await client.query(`SELECT "id" FROM "Tenant" WHERE "id" = $1 FOR UPDATE`, [input.tenantId]);
       const inserted = await client.query<LicenseTermRow>(
         `INSERT INTO "LicenseTerm" (
            "tenantId", "planCode", "startsAt", "endsAt", "activeStudentLimit",

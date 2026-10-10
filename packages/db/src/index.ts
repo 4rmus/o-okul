@@ -15,3 +15,5 @@ export * from "./tenant-fresh-reset-runner.js";
 export { PostgresInstitutionResetRequests, parseInstitutionResetRequest, assertInstitutionResetRequest, requireResetInstitutionRequest, type InstitutionResetRequest } from "./tenant-reset-request.js";
 
 export { runTenantMutationActivity, requireNoTenantMutationActivity, type TenantMutationAdmission, type TenantMutationRunner } from "./tenant-mutation-activity.js";
+export * from "./license-state.js";
+export * from "./tenant-expiry-purge.js";

@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createAdminMfaStepUpProof } from "../auth/totp-mfa.js";
 import type { TenantStatusUpdateRequest } from "@o-okul/shared-types";
 import { Queue } from "bullmq";
+import { createHash } from "node:crypto";
 import { TenantFreshResetService } from "./tenant-fresh-reset.service.js";
 import { AppModule } from "../app.module.js";
 
@@ -110,6 +111,134 @@ describe("TenantController", () => {
       await get().set("Idempotency-Key", operation.idempotencyKey).expect(404);
       expect(create).not.toHaveBeenCalled(); expect(add).not.toHaveBeenCalled();
     } finally { Object.defineProperty(service, "store", { value: originalStore, configurable: true }); add.mockRestore(); }
+  });
+
+  it("license-expiry purge candidates are SYSTEM_ADMIN-only, read-only and carry no personal data", async () => {
+    const route = "/tenants/license-expiry-purge-candidates";
+    await request(server).get(route).expect(401);
+    await request(server).get(route).set("Authorization", `Bearer ${adminToken}`).expect(403);
+    await request(server).get(route).set("Authorization", `Bearer ${systemToken}`).expect(503);
+    const service = app.get(TenantFreshResetService);
+    const originalPool = (service as unknown as { pool: unknown }).pool;
+    const day = 86_400_000;
+    const query = vi.fn(async (sql: string) => ({ rows:
+      sql.includes('FROM "Tenant" t') ? [{ id: "tenant-old", name: "Eski Kurum", slug: "eski-kurum", status: "SUSPENDED", lifecycleVersion: 2 }, { id: "tenant-90", name: "Sinir", slug: "sinir", status: "ACTIVE", lifecycleVersion: 0 }]
+        : sql.includes('FROM "LicenseTerm"') ? [{ tenantId: "tenant-old", startsAt: new Date(Date.now() - 500 * day), endsAt: new Date(Date.now() - 92.5 * day), cancelledAt: null }, { tenantId: "tenant-90", startsAt: new Date(Date.now() - 500 * day), endsAt: new Date(Date.now() - 90 * day), cancelledAt: null }]
+          : sql.includes("AS count") ? [{ count: "42" }] : [] }));
+    Object.defineProperty(service, "pool", { value: { connect: async () => ({ query, release: vi.fn() }) }, configurable: true });
+    try {
+      const response = await request(server).get(route).set("Authorization", `Bearer ${systemToken}`).expect(200);
+      expect(response.body).toEqual([expect.objectContaining({ tenantId: "tenant-old", slug: "eski-kurum", daysSinceLicenseEnd: 92, estimatedRowCount: 42 })]);
+      expect(Object.keys(response.body[0]).sort()).toEqual(["daysSinceLicenseEnd", "estimatedRowCount", "exportDeliveredOn", "exportId", "licenseEndsAt", "lifecycleVersion", "name", "slug", "status", "tenantId"]);
+      expect(query.mock.calls.every(([sql]) => !/^\s*(INSERT|UPDATE|DELETE)/.test(sql))).toBe(true);
+    } finally { Object.defineProperty(service, "pool", { value: originalPool, configurable: true }); }
+  });
+
+  it("purge handover export and delivery mark are SYSTEM_ADMIN-only, validated and audited (product owner decision 2026-10-05)", async () => {
+    const exportRoute = "/tenants/tenant-a/purge-exports";
+    const exportId = "e".repeat(32);
+    const delivery = (id = exportId) => `/tenants/tenant-a/purge-exports/${id}/delivery`;
+    const body = { deliveredOn: "2026-10-01", channel: "SECURE_DOWNLOAD", note: "Kurum müdürüne şifreli bağlantı" };
+    const system = (route: string) => request(server).post(route).set("Authorization", `Bearer ${systemToken}`);
+    // Security review 2026-10-06: the full institution export needs a step-up bound to { tenantId, TENANT_PURGE_EXPORT }.
+    const actor = JSON.parse(Buffer.from(systemToken.split(".")[0]!, "base64url").toString());
+    const exportProof = (tenantId = "tenant-a", purpose: "TENANT_PURGE_EXPORT" | "TENANT_CLEAN_RESET" = "TENANT_PURGE_EXPORT") => createAdminMfaStepUpProof({ userId: actor.sub, sessionId: actor.sessionId, membershipVersion: actor.membershipVersion, purpose,
+      target: purpose === "TENANT_PURGE_EXPORT" ? { tenantId } : { tenantId, preset: "LICENSE_EXPIRY_PURGE_V1", expectedLifecycleVersion: 0, preflightDigest: "a".repeat(64) } }).stepUpToken;
+    const exportWith = (proof: string, route = exportRoute) => system(route).set("X-Step-Up-Token", proof);
+    await request(server).post(exportRoute).expect(401);
+    await request(server).post(exportRoute).set("Authorization", `Bearer ${adminToken}`).set("X-Step-Up-Token", exportProof()).expect(403);
+    await exportWith(exportProof("system"), "/tenants/system/purge-exports").expect(403);
+    await system(exportRoute).expect(401).expect(({ body: error }) => expect(error.error.code).toBe("MFA_STEP_UP_REQUIRED"));
+    await exportWith("invalid-proof").expect(401).expect(({ body: error }) => expect(error.error.code).toBe("MFA_STEP_UP_INVALID"));
+    await exportWith(exportProof("tenant-b")).expect(401).expect(({ body: error }) => expect(error.error.code).toBe("MFA_STEP_UP_INVALID"));
+    await exportWith(exportProof("tenant-a", "TENANT_CLEAN_RESET")).expect(401).expect(({ body: error }) => expect(error.error.code).toBe("MFA_STEP_UP_INVALID"));
+    await exportWith(exportProof()).expect(503);
+    await request(server).post(delivery()).set("Authorization", `Bearer ${adminToken}`).send(body).expect(403);
+    await system(delivery()).send({ ...body, channel: "FAX" }).expect(422);
+    await system(delivery()).send({ ...body, studentName: "x" }).expect(422);
+    await system(delivery("not-an-export")).send(body).expect(400).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_INVALID"));
+    await system(delivery()).send({ ...body, note: "veli ali@example.com" }).expect(400).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_NOTE_INVALID"));
+    await system(delivery()).send({ ...body, note: "tel 0555 123 45 67" }).expect(400).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_NOTE_INVALID"));
+    await system(delivery()).send({ ...body, deliveredOn: "2999-01-01" }).expect(400).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_DELIVERY_INVALID"));
+    await system(delivery()).send(body).expect(503);
+
+    const service = app.get(TenantFreshResetService);
+    const originalPool = (service as unknown as { pool: unknown }).pool;
+    const audit: Array<{ tenantId: string; actorUserId: string; entityType: string; entityId: string; action: string; diff: Record<string, unknown>; createdAt: string }> = [];
+    const day = 86_400_000;
+    let licenseEndedDaysAgo = 120; let purged = false;
+    const fileBytes = Buffer.from("homework sheet"); let fileSha = createHash("sha256").update(fileBytes).digest("hex");
+    const query = vi.fn(async (sql: string, values: unknown[] = []) => {
+      if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] };
+      if (sql.includes('FROM "LicenseTerm"')) return { rows: [{ startsAt: new Date(Date.now() - (licenseEndedDaysAgo + 365) * day), endsAt: new Date(Date.now() - licenseEndedDaysAgo * day), cancelledAt: null }] };
+      if (sql.includes('FROM "TenantFreshResetOperation"')) return { rows: purged ? [{ "?column?": 1 }] : [] };
+      if (sql.includes('FROM "Tenant" WHERE "id" = $1')) return { rows: values[0] === "tenant-a" ? [{ id: "tenant-a" }] : [] };
+      if (sql.includes("jsonb_agg")) return { rows: [{ rows: sql.includes('"PaymentTransaction"') ? [{ id: "tx-1", amount: 100 }] : [] }] };
+      if (sql.startsWith('SELECT "id", ') && sql.includes('FROM "HomeworkMaterialFile"')) return { rows: [{ id: "hf-1", fileName: "sheet.pdf", contentType: "application/pdf", byteSize: fileBytes.length, sha256: fileSha, contentBase64: fileBytes.toString("base64"), objectKey: null }] };
+      if (sql.startsWith('INSERT INTO "AuditLog"')) { audit.push({ tenantId: String(values[1]), actorUserId: String(values[2]), entityType: String(values[3]), entityId: String(values[4]), action: String(values[5]), diff: JSON.parse(String(values[6])), createdAt: "2026-09-30T10:00:00.000Z" }); return { rows: [] }; }
+      if (sql.includes('FROM "AuditLog"')) return { rows: audit.filter((row) => row.tenantId === values[0] && row.entityType === values[1] && row.entityId === values[2]) };
+      return { rows: [] };
+    });
+    Object.defineProperty(service, "pool", { value: { query, connect: async () => ({ query, release: vi.fn() }) }, configurable: true });
+    try {
+      // Only a purge candidate: license ended 91+ days ago, no live or future term, not purged yet.
+      licenseEndedDaysAgo = 90;
+      await exportWith(exportProof()).expect(409).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_NOT_CANDIDATE"));
+      licenseEndedDaysAgo = -30;
+      await exportWith(exportProof()).expect(409).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_NOT_CANDIDATE"));
+      licenseEndedDaysAgo = 120; purged = true;
+      await exportWith(exportProof()).expect(409).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_NOT_CANDIDATE"));
+      purged = false;
+      expect(query.mock.calls.some(([sql]) => sql.includes("jsonb_agg"))).toBe(false);
+      expect(audit).toEqual([]);
+      // Product owner decision (2026-10-10): an altered file fails the export loudly and writes no "created" row.
+      const goodSha = fileSha; fileSha = "0".repeat(64);
+      await exportWith(exportProof()).expect(409).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_FILE_HASH_MISMATCH"));
+      expect(audit).toEqual([]);
+      fileSha = goodSha;
+      const created = await exportWith(exportProof()).expect(201);
+      expect(created.headers["cache-control"]).toBe("no-store");
+      expect(created.headers.pragma).toBe("no-cache");
+      expect(created.body).toMatchObject({ exportId: expect.stringMatching(/^[a-f0-9]{32}$/), tenantId: "tenant-a", scope: "license-expiry-purge-handover", rowLimitPerTable: null });
+      expect(created.body.tables.paymentTransactions).toEqual([{ id: "tx-1", amount: 100 }]);
+      // Handover export has no row limit; the institution's own export keeps its limit.
+      expect(query.mock.calls.filter(([sql]) => sql.includes("jsonb_agg")).every(([, values]) => (values as unknown[])[0] === null)).toBe(true);
+      expect(audit).toEqual([expect.objectContaining({ actorUserId: actor.sub, entityType: "TenantDataExport", entityId: created.body.exportId, action: "tenant.data-export.created", diff: expect.objectContaining({ sha256: expect.stringMatching(/^[a-f0-9]{64}$/) }) })]);
+      // Who, when and row counts only; no row content.
+      expect(Object.keys(audit[0]!.diff).sort()).toEqual(["exportedAt", "exportedByUserId", "fileCount", "formatVersion", "rowCounts", "scope", "sha256"]);
+      expect(audit[0]!.diff).toMatchObject({ exportedByUserId: actor.sub, exportedAt: created.body.exportedAt, fileCount: 1, rowCounts: expect.objectContaining({ paymentTransactions: 1, auditLogs: 0, studentContacts: 0, whatsAppConsents: 0, whatsAppConsentEvents: 0 }) });
+      expect(created.body.files).toEqual([expect.objectContaining({ table: "HomeworkMaterialFile", rowId: "hf-1", sha256: fileSha, contentBase64: fileBytes.toString("base64") })]);
+      expect(JSON.stringify(audit[0]!.diff)).not.toContain(fileBytes.toString("base64"));
+      expect(Object.values(audit[0]!.diff.rowCounts as Record<string, unknown>).every((count) => Number.isInteger(count))).toBe(true);
+      expect(JSON.stringify(audit[0]!.diff)).not.toContain("tx-1");
+      await exportWith(exportProof("missing"), "/tenants/missing/purge-exports").expect(404);
+      await system(delivery()).send(body).expect(404).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_NOT_FOUND"));
+      await system(delivery(created.body.exportId)).send({ ...body, deliveredOn: "2026-09-29" }).expect(400);
+      // The delivery mark applies the same candidate rule.
+      licenseEndedDaysAgo = -30;
+      await system(delivery(created.body.exportId)).send(body).expect(409).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_NOT_CANDIDATE"));
+      licenseEndedDaysAgo = 120;
+      const marked = await system(delivery(created.body.exportId)).send(body).expect(201);
+      expect(marked.body).toMatchObject({ exportId: created.body.exportId, deliveredOn: "2026-10-01", channel: "SECURE_DOWNLOAD" });
+      expect(audit.at(-1)).toMatchObject({ action: "tenant.data-export.delivered", diff: { deliveredOn: "2026-10-01", channel: "SECURE_DOWNLOAD", note: body.note } });
+      await system(delivery(created.body.exportId)).send(body).expect(409).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_ALREADY_DELIVERED"));
+    } finally { Object.defineProperty(service, "pool", { value: originalPool, configurable: true }); }
+  });
+
+  it("license-expiry purge reuses the reset job endpoint with a preset-bound step-up", async () => {
+    const body = { preset: "LICENSE_EXPIRY_PURGE_V1", expectedLifecycleVersion: 0, preflightDigest: "a".repeat(64), reason: "LICENSE_EXPIRED", confirmationText: "dna-egitim" };
+    const post = (token = systemToken) => request(server).post("/tenants/tenant-a/clean-reset-jobs").set("Authorization", `Bearer ${token}`).set("Idempotency-Key", "purge-a");
+    await post(adminToken).send(body).expect(403);
+    await post().send(body).expect(401).expect(({ body }) => expect(body.error.code).toBe("MFA_STEP_UP_REQUIRED"));
+    await post().send({ ...body, reason: "OPERATIONS_REVIEW" }).expect(422);
+    const actor = JSON.parse(Buffer.from(systemToken.split(".")[0]!, "base64url").toString());
+    const bound = (preset: "CLEAN_SETUP_V1" | "LICENSE_EXPIRY_PURGE_V1") => createAdminMfaStepUpProof({ userId: actor.sub, sessionId: actor.sessionId, membershipVersion: actor.membershipVersion,
+      purpose: "TENANT_CLEAN_RESET", target: { tenantId: "tenant-a", preset, expectedLifecycleVersion: 0, preflightDigest: body.preflightDigest } }).stepUpToken;
+    await post().set("X-Step-Up-Token", bound("CLEAN_SETUP_V1")).send(body).expect(401).expect(({ body }) => expect(body.error.code).toBe("MFA_STEP_UP_INVALID"));
+    await post().set("X-Step-Up-Token", bound("LICENSE_EXPIRY_PURGE_V1")).send(body).expect(503).expect(({ body }) => expect(body.error.code).toBe("RESET_SOURCE_UNVERIFIED"));
+    await request(server).get("/tenants/tenant-a/clean-reset-preview?preset=DROP_ALL").set("Authorization", `Bearer ${systemToken}`).expect(400);
+    const preview = await request(server).get("/tenants/tenant-a/clean-reset-preview?preset=LICENSE_EXPIRY_PURGE_V1").set("Authorization", `Bearer ${systemToken}`).expect(200);
+    expect(preview.body).toMatchObject({ preset: "LICENSE_EXPIRY_PURGE_V1", allowed: false });
   });
 
   it("reset preview is platform-only, PII-safe and remains blocked without verified sources", async () => {

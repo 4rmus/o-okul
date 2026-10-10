@@ -243,6 +243,19 @@ describe("PostgresTenantStore", () => {
     expect(queries.at(-1)?.sql).toBe("COMMIT");
   });
 
+  it.each([
+    [[{ status: "COMPLETED" }], "TENANT_PURGED"],
+    [[{ status: "RUNNING" }], "RESET_OPERATION_IN_PROGRESS"],
+  ] as const)("imha edilmiş veya işlemdeki kurum yeniden açılmaz (%j)", async (resetRows, code) => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const store = new PostgresTenantStore(lifecyclePool(queries, undefined, "SUSPENDED", { resetRows: [...resetRows] }));
+    await expect(store.transitionStatus("tenant-a", { ...transitionInput, status: "ACTIVE" })).rejects.toThrow(code);
+    const check = queries.find((query) => query.sql.includes('FROM "TenantFreshResetOperation"'))!;
+    expect(check.sql).toContain(`"status" NOT IN ('COMPLETED', 'CANCELLED')`);
+    expect(check.sql).toContain(`"preset" = 'LICENSE_EXPIRY_PURGE_V1' AND "status" = 'COMPLETED'`);
+    expect(queries.some((query) => query.sql.includes('UPDATE "Tenant"'))).toBe(false);
+  });
+
   it.each(["session", "audit", "idempotency"] as const)("%s yazımı başarısızsa durum transaction'ını geri alır", async (failureAt) => {
     const queries: Array<{ sql: string; values?: unknown[] }> = [];
     const store = new PostgresTenantStore(lifecyclePool(queries, failureAt));
@@ -297,7 +310,7 @@ describe("PostgresTenantStore", () => {
   });
 });
 
-function lifecyclePool(queries: Array<{ sql: string; values?: unknown[] }>, failureAt?: "session" | "audit" | "idempotency", status = "ACTIVE", options: { invalidActor?: boolean; previous?: unknown } = {}) {
+function lifecyclePool(queries: Array<{ sql: string; values?: unknown[] }>, failureAt?: "session" | "audit" | "idempotency", status = "ACTIVE", options: { invalidActor?: boolean; previous?: unknown; resetRows?: Array<{ status: string }> } = {}) {
   return {
     async query<T>() {
       return { rows: [] as T[] };
@@ -309,6 +322,7 @@ function lifecyclePool(queries: Array<{ sql: string; values?: unknown[] }>, fail
           if (sql.includes('FROM "AuthSession"') && sql.includes('FOR SHARE')) return { rows: (options.invalidActor ? [] : [{ id: "system-session" }]) as T[] };
           if (sql.includes('INSERT INTO "PlatformIdempotencyKey"')) return { rows: (options.previous ? [] : [{ id: "idem" }]) as T[] };
           if (sql.includes('FROM "PlatformIdempotencyKey"')) return { rows: [options.previous] as T[] };
+          if (sql.includes('FROM "TenantFreshResetOperation"')) return { rows: (options.resetRows ?? []) as T[] };
           if (sql.includes('UPDATE "PlatformIdempotencyKey"')) {
             if (failureAt === "idempotency") throw new Error("IDEMPOTENCY_WRITE_FAILED");
             return { rows: [{ id: "idem" }] as T[] };

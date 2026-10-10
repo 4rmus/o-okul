@@ -1,8 +1,8 @@
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { Queue } from "bullmq";
 import pg from "pg";
-import { parseInstitutionResetRequest, resetDigest, resetSnapshotBlockers, resetTableCounts, resetOwnerIds, resetOwnerMemberships, tenantResetQueues, withResetPreviewSnapshot } from "@o-okul/db";
-import type { TenantResetPreview } from "@o-okul/shared-types";
+import { licenseExpiryPurgeBlockers, licenseExpiryPurgeEndsAt, licenseExpiryPurgeExportState, licenseExpiryPurgeTables, parseInstitutionResetRequest, resetDigest, resetSnapshotBlockers, resetTableCounts, resetOwnerIds, resetOwnerMemberships, tenantResetQueues, withResetPreviewSnapshot } from "@o-okul/db";
+import type { TenantResetPreset, TenantResetPreview } from "@o-okul/shared-types";
 import { parseRedisUrl } from "../config/env.js";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { getRequestContext } from "../context/request-context.js";
@@ -13,15 +13,20 @@ import { resetObjectInventory, resetPreflightDigest, resetS3Client, resetS3Confi
 export class TenantResetPreviewService {
   constructor(private readonly tenants: TenantService) {}
 
-  async preview(tenantId: string): Promise<TenantResetPreview> {
+  async preview(tenantId: string, preset: TenantResetPreset = "CLEAN_SETUP_V1"): Promise<TenantResetPreview> {
     const tenant = await this.tenants.findOne(getRequestContext(), tenantId);
+    const purge = preset === "LICENSE_EXPIRY_PURGE_V1";
     if (resolvePersistenceDriver(process.env.TENANT_STORE) !== "postgres") {
-      return { preset: "CLEAN_SETUP_V1", lifecycleVersion: tenant.lifecycleVersion, preservedOwnerCount: 0, categories: [], objectCount: 0, objectBytes: 0, blockers: ["SOURCE_UNVERIFIED", "INSTITUTION_REQUEST_REQUIRED", "WRITE_QUIESCENCE_UNVERIFIED"], blockerCounts: [{ code: "SOURCE_UNVERIFIED", count: null }, { code: "INSTITUTION_REQUEST_REQUIRED", count: null }, { code: "WRITE_QUIESCENCE_UNVERIFIED", count: null }], allowed: false, preflightDigest: resetDigest({ tenantId, lifecycleVersion: tenant.lifecycleVersion, source: "UNVERIFIED" }) };
+      return { preset, lifecycleVersion: tenant.lifecycleVersion, preservedOwnerCount: 0, categories: [], objectCount: 0, objectBytes: 0, blockers: ["SOURCE_UNVERIFIED", "INSTITUTION_REQUEST_REQUIRED", "WRITE_QUIESCENCE_UNVERIFIED"], blockerCounts: [{ code: "SOURCE_UNVERIFIED", count: null }, { code: "INSTITUTION_REQUEST_REQUIRED", count: null }, { code: "WRITE_QUIESCENCE_UNVERIFIED", count: null }], allowed: false, preflightDigest: resetDigest({ tenantId, lifecycleVersion: tenant.lifecycleVersion, source: "UNVERIFIED" }) };
     }
     const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
     try {
       return await withResetPreviewSnapshot(pool, tenantId, async (snapshot, db) => {
-        const blockers = resetSnapshotBlockers(snapshot);
+        const blockers = purge ? licenseExpiryPurgeBlockers(resetSnapshotBlockers(snapshot)) : resetSnapshotBlockers(snapshot);
+        const licenseEndsAt = purge ? licenseExpiryPurgeEndsAt(snapshot.tables.LicenseTerm as never[], new Date(snapshot.capturedAt)) : null;
+        if (purge && !licenseEndsAt) blockers.push("LICENSE_NOT_EXPIRED");
+        // Product owner decision (2026-10-05): a delivered post-expiry handover export precedes every purge.
+        if (licenseEndsAt && !licenseExpiryPurgeExportState(snapshot.tables.AuditLog, licenseEndsAt).deliveredOn) blockers.push("EXPORT_RECEIPT_REQUIRED");
         let objects: Awaited<ReturnType<typeof resetObjectInventory>> = [];
         try {
           const config = resetS3Config();
@@ -32,7 +37,10 @@ export class TenantResetPreviewService {
         const queue = await resetQueueBlockers(tenantId);
         blockers.push(...queue.blockers);
         const uniqueBlockers = [...new Set(blockers)].sort();
-        const categories = resetTableCounts(snapshot.tables, new Date(snapshot.capturedAt));
+        const purged = new Set(licenseExpiryPurgeTables());
+        const categories = purge
+          ? resetTableCounts(snapshot.tables, new Date(snapshot.capturedAt)).map(({ category }) => { const rows = snapshot.tables[category].length; return purged.has(category) ? { category, preserved: 0, deleted: rows, blocked: 0 } : { category, preserved: rows, deleted: 0, blocked: 0 }; })
+          : resetTableCounts(snapshot.tables, new Date(snapshot.capturedAt));
         const preservedOwners = resetOwnerIds(snapshot.tables, new Date(snapshot.capturedAt));
         const counts: Record<string, number | null> = {
           MUTATION_ACTIVITY_PRESENT: snapshot.tables.TenantMutationActivity.length,
@@ -46,9 +54,11 @@ export class TenantResetPreviewService {
           DELIVERY_WORK_PRESENT: snapshot.tables.SecretDeliveryOutbox.filter((row) => (["PENDING", "PROCESSING", "UNCERTAIN"].includes(String(row.status)) || (row.sourceScope == null && Number(row.attempts ?? 0) > 0 && row.status !== "DELIVERED"))).length,
           BACKUP_WORK_PRESENT: snapshot.tables.BackupRestoreJob.filter((row) => /queued|running/i.test(String(row.status))).length,
           IMPORT_WORK_PRESENT: snapshot.tables.RawImport.filter((row) => /queued|running|processing/i.test(String((row.metadata as Record<string, unknown> | null)?.status ?? ""))).length,
+          LICENSE_NOT_EXPIRED: 0,
+          EXPORT_RECEIPT_REQUIRED: 0,
 
         };
-        return { institutionRequest: parseInstitutionResetRequest(snapshot.tables.Tenant[0]?.resetRequest), preset: "CLEAN_SETUP_V1", lifecycleVersion: snapshot.lifecycleVersion, preservedOwnerCount: resetOwnerIds(snapshot.tables, new Date(snapshot.capturedAt)).size,
+        return { institutionRequest: purge ? null : parseInstitutionResetRequest(snapshot.tables.Tenant[0]?.resetRequest), preset, lifecycleVersion: snapshot.lifecycleVersion, preservedOwnerCount: purge ? 0 : resetOwnerIds(snapshot.tables, new Date(snapshot.capturedAt)).size,
           categories, blockerCounts: uniqueBlockers.map((code) => ({ code, count: counts[code] ?? null })), objectCount: objects.length, objectBytes: objects.reduce((sum, object) => sum + object.size, 0),
           blockers: uniqueBlockers, allowed: false, preflightDigest: resetPreflightDigest(snapshot, objects, uniqueBlockers, !blockers.includes("OBJECT_INVENTORY_UNVERIFIED") ? resetS3Config() : undefined) };
       });

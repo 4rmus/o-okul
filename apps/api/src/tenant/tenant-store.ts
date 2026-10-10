@@ -558,7 +558,9 @@ export class PostgresTenantStore implements TenantStore {
       assertTenantAccessStatus(input.status);
       assertLifecycleRequest(current, input);
       if (input.status === "ACTIVE") {
-        const reset = await client.query('SELECT "id" FROM "TenantFreshResetOperation" WHERE "tenantId" = $1 AND "status" <> \'COMPLETED\'', [id]);
+        const reset = await client.query<{ status: string }>('SELECT "status" FROM "TenantFreshResetOperation" WHERE "tenantId" = $1 AND ("status" NOT IN (\'COMPLETED\', \'CANCELLED\') OR ("preset" = \'LICENSE_EXPIRY_PURGE_V1\' AND "status" = \'COMPLETED\'))', [id]);
+        // A purged institution stays a suspended tombstone (DEC-20261005-03).
+        if (reset.rows.some((row) => row.status === "COMPLETED")) throw new Error("TENANT_PURGED");
         if (reset.rows.length) throw new Error("RESET_OPERATION_IN_PROGRESS");
       }
       let response: TenantStatusTransitionResult = { tenant: current, sessionsRevoked: 0 };

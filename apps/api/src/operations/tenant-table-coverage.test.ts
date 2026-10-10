@@ -2,7 +2,7 @@ import { getTenantScopedTables } from "@o-okul/db";
 import { describe, expect, it } from "vitest";
 import { deviceRestoreTablePolicy } from "./device-backup-impact.js";
 import { deviceBackupTables } from "./device-backup.service.js";
-import { tenantDataExportTableNames } from "./tenant-data-export-store.js";
+import { tenantDataExportTableNames, tenantHandoverExportTableNames } from "./tenant-data-export-store.js";
 
 // Strategy plan condition 3: a new tenant table enters the KVKK export in the same PR, or is listed here with a reason.
 const exportExceptions = {
@@ -25,6 +25,15 @@ const exportExceptions = {
   ImportQuarantine: "OPEN_KVKK_DECISION", AnnouncementReceipt: "OPEN_KVKK_DECISION",
 } as const satisfies Record<string, "AUTH" | "PLATFORM" | "TECHNICAL" | "OPEN_KVKK_DECISION">;
 
+// Product owner decision (2026-10-10): the license-expiry purge handover holds everything the purge destroys.
+// Only accounts/sessions and platform operation records stay out; AuditLog is included.
+const handoverExceptions = {
+  User: "AUTH", TenantMembership: "AUTH", MembershipCampusScope: "AUTH", AuthSession: "AUTH",
+  IdempotencyKey: "AUTH", IdentityInvitation: "AUTH", NotificationDeviceToken: "AUTH",
+  LicenseTerm: "PLATFORM", LicenseUsage: "PLATFORM", BackupRestoreJob: "PLATFORM",
+  TenantFreshResetOperation: "PLATFORM", TenantMutationActivity: "PLATFORM",
+} as const satisfies Record<string, "AUTH" | "PLATFORM">;
+
 describe("tenant table coverage", () => {
   const scoped = getTenantScopedTables();
   const exported = new Set(tenantDataExportTableNames);
@@ -35,6 +44,13 @@ describe("tenant table coverage", () => {
 
   it("exceptions stay current: none is exported and none names a removed table", () => {
     expect(Object.keys(exportExceptions).filter((table) => exported.has(table) || !scoped.includes(table))).toEqual([]);
+  });
+
+  it("every tenant table is in the purge handover export or is an account/platform exception", () => {
+    const handover = new Set(tenantHandoverExportTableNames);
+    expect(scoped.filter((table) => !handover.has(table) && !(table in handoverExceptions))).toEqual([]);
+    expect(Object.keys(handoverExceptions).filter((table) => handover.has(table) || !scoped.includes(table))).toEqual([]);
+    expect(tenantHandoverExportTableNames.length).toBe(new Set(tenantHandoverExportTableNames).size);
   });
 
   it("every device-backed-up table has a restore policy", () => {

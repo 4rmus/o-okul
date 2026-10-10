@@ -146,7 +146,7 @@ Sabit role paketleri:
   `docs/system-admin-tenant-lifecycle-fresh-reset-plan.md` içindedir.
 - `POST /tenants/:id/license-terms` yenileme veya planlı dönem ekleyecek.
 - `DELETE /tenants/:id` kaldırılacak ve geçiş sürümünde `410 TENANT_HARD_DELETE_RETIRED` döndürecek.
-- Yerine `POST /tenants/:id/offboarding` durum geçişini başlatacak. Fiziksel purge yalnız ayrı privileged worker, çift platform onayı, retention bitişi ve yedek/export makbuzuyla çalışacak.
+- Yerine `POST /tenants/:id/offboarding` durum geçişini başlatacak. Fiziksel purge yalnız ayrı privileged worker, tek SYSTEM_ADMIN onayı (step-up + kurum kodu teyidi; ürün sahibi kararı 2026-10-05, DEC-20261005-03), retention bitişi ve kuruma teslim edilmiş export makbuzuyla çalışacak.
 - `/tenant-users` eski sözleşmesi kullanımdan kaldırılacak:
   - `GET /tenant-memberships` cursor sayfalama, rol, durum, kampüs ve arama filtreleri;
   - `POST /employees`;

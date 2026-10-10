@@ -82,7 +82,7 @@ export class DeviceRestoreService {
       await assertSourceActor(db,{tenantId,userId:op.request.actorUserId,sessionId:op.request.sessionId,membershipId:op.request.membershipId,membershipVersion:op.request.membershipVersion,roles:["TENANT_ADMIN"],activePersona:"STAFF",bypassRls:false});
       if(await readDeviceRestoreSourceDigest(db,tenantId)!==op.request.sourceDigest)throw new ConflictException("DEVICE_RESTORE_SOURCE_CHANGED");
       await requireNoTenantMutationActivity(db,tenantId);
-      if((await db.query('SELECT id FROM "TenantFreshResetOperation" WHERE "tenantId"=$1 AND status<>\'COMPLETED\' LIMIT 1',[tenantId])).rows.length)throw new ConflictException("DEVICE_RESTORE_RESET_IN_PROGRESS");
+      await assertNoUnfinishedFreshReset(db,tenantId);
       await assertDeviceRestoreQueuesEmpty(tenantId);
       const projection=await projectDeviceBackup(tenantId,await readTenantBackupSchema(db),db),policies=Object.fromEntries(Object.keys(projection.tables).map(table=>[table,{policy:deviceRestoreTablePolicy(table)!,added:0,changed:0,removed:0,unchanged:0}]));
       const domain=deviceDomainLinks(projection,projection,policies,await readDeviceDomainRows(db,tenantId));
@@ -96,4 +96,8 @@ export class DeviceRestoreService {
     });
   }
   async onApplicationShutdown(){await waitForApiMutations();await this.pool?.end();}
+}
+// A CANCELLED purge/reset deleted nothing and is finished; only an unfinished one blocks a device restore.
+export async function assertNoUnfinishedFreshReset(db:{query(sql:string,values?:unknown[]):Promise<{rows:unknown[]}>},tenantId:string){
+  if((await db.query('SELECT id FROM "TenantFreshResetOperation" WHERE "tenantId"=$1 AND status NOT IN (\'COMPLETED\',\'CANCELLED\') LIMIT 1',[tenantId])).rows.length)throw new ConflictException("DEVICE_RESTORE_RESET_IN_PROGRESS");
 }

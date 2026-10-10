@@ -182,7 +182,7 @@ export interface TotpAdminResetResponse {
   resetAt: string;
 }
 
-export type MfaStepUpPurpose = "OWNER_ADMIN_CHANGE" | "TENANT_LIFECYCLE_CHANGE" | "TENANT_CLEAN_RESET" | "TENANT_DEVICE_RESTORE";
+export type MfaStepUpPurpose = "OWNER_ADMIN_CHANGE" | "TENANT_LIFECYCLE_CHANGE" | "TENANT_CLEAN_RESET" | "TENANT_DEVICE_RESTORE" | "TENANT_PURGE_EXPORT";
 
 export interface TenantLifecycleMfaTarget {
   tenantId: string;
@@ -192,7 +192,7 @@ export interface TenantLifecycleMfaTarget {
 
 export interface MfaStepUpRequest {
   purpose: MfaStepUpPurpose;
-  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget;
+  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget | TenantPurgeExportMfaTarget;
   totpCode?: string;
   recoveryCode?: string;
 }
@@ -2955,9 +2955,36 @@ export interface TenantResetInstitutionRequestCreate { expectedRequestId: string
 export interface TenantResetInstitutionRequestRevoke { expectedRequestId: string; }
 export interface TenantResetRequestState { request: TenantResetInstitutionRequest | null; }
 
+/** License-expiry purge candidate; institution name/slug only, no personal data. */
+export interface LicenseExpiryPurgeCandidate {
+  tenantId: string;
+  name: string;
+  slug: string;
+  status: TenantAccessStatus;
+  lifecycleVersion: number;
+  licenseEndsAt: string;
+  daysSinceLicenseEnd: number;
+  estimatedRowCount: number;
+  /** Latest handover export created after the license end; null when none. */
+  exportId: string | null;
+  /** Delivery date recorded by a SYSTEM_ADMIN; null until the export is marked delivered. */
+  exportDeliveredOn: string | null;
+}
+/** Handover of the purge export to the institution (product owner decision 2026-10-05); no personal data. */
+export interface TenantPurgeExportDeliveryRequest {
+  deliveredOn: string;
+  channel: "SECURE_DOWNLOAD" | "ENCRYPTED_EMAIL" | "PHYSICAL_MEDIA" | "OTHER";
+  note?: string;
+}
+export interface TenantPurgeExportDelivery {
+  exportId: string;
+  deliveredOn: string;
+  channel: TenantPurgeExportDeliveryRequest["channel"];
+  recordedAt: string;
+}
 export interface TenantResetPreview {
   institutionRequest?: TenantResetInstitutionRequest | null;
-  preset: "CLEAN_SETUP_V1";
+  preset: TenantResetPreset;
   lifecycleVersion: number;
   preservedOwnerCount: number;
   categories: Array<{ category: string; preserved: number; deleted: number; blocked: number }>;
@@ -2969,22 +2996,30 @@ export interface TenantResetPreview {
   blockerCounts: Array<{ code: string; count: number | null }>;
 }
 
+/** LICENSE_EXPIRY_PURGE_V1 destroys every institution record after license expiry (DEC-20261005-03). */
+export type TenantResetPreset = "CLEAN_SETUP_V1" | "LICENSE_EXPIRY_PURGE_V1";
+/** A license-expiry purge handover export is bound to the institution only (security review 2026-10-06). */
+export interface TenantPurgeExportMfaTarget {
+  tenantId: string;
+}
 export interface TenantCleanResetMfaTarget {
   tenantId: string;
-  preset: "CLEAN_SETUP_V1";
+  preset: TenantResetPreset;
   expectedLifecycleVersion: number;
   preflightDigest: string;
 }
 export interface TenantCleanResetRequest {
-  preset: "CLEAN_SETUP_V1";
+  preset: TenantResetPreset;
   expectedLifecycleVersion: number;
   preflightDigest: string;
   confirmationText: string;
-  reason: TenantLifecycleReason;
+  /** LICENSE_EXPIRED exactly when preset is LICENSE_EXPIRY_PURGE_V1. */
+  reason: TenantLifecycleReason | "LICENSE_EXPIRED";
 }
 export interface TenantCleanResetStatus {
   operationId: string;
-  status: "QUEUED" | "RUNNING" | "BLOCKED" | "FAILED" | "COMPLETED";
+  /** CANCELLED: a license-expiry purge stopped before deleting anything because the license was renewed. */
+  status: "QUEUED" | "RUNNING" | "BLOCKED" | "FAILED" | "COMPLETED" | "CANCELLED";
   phase: "PREFLIGHT" | "BACKUP" | "DATABASE" | "OBJECTS" | "VERIFY" | "DONE";
   errorCode: string | null;
   result: { preservedOwnerCount: number; deletedObjectCount: number } | null;
@@ -2993,6 +3028,8 @@ export interface TenantCleanResetStatus {
 export interface TenantResetDiagnostics {
   activities: { items: Array<{ id: string; kind: string; status: string; lifecycleVersion: number; createdAt: string }>; nextCursor: string | null };
   deliveries: { items: Array<{ id: string; purpose: string; status: string; sourceScope: string | null; lifecycleVersion: number | null; createdAt: string; attempted: boolean; hasProviderReceipt: boolean }>; nextCursor: string | null };
+  /** License-expiry purges that ended before the database phase whose backup package or drill copies are not proven deleted yet. */
+  backupCleanup: Array<{ operationId: string; status: "CANCELLED" | "FAILED" | "BLOCKED"; phase: "PREFLIGHT" | "BACKUP" | "DATABASE"; backupPackageDeleted: boolean; drillTargetsDeleted: boolean; updatedAt: string }>;
   reconciliation: "EXTERNAL_PROOF_REQUIRED";
 }
 

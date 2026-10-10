@@ -535,7 +535,7 @@ const tenantResetInstitutionRequestSchema = objectSchema({
 const tenantResetRequestStateSchema = objectSchema({ request: { ...tenantResetInstitutionRequestSchema, nullable: true } }, ["request"]);
 
 const tenantCleanResetStatusSchema = objectSchema({
-  operationId: stringSchema(), status: stringSchema({ enum: ["QUEUED", "RUNNING", "BLOCKED", "FAILED", "COMPLETED"] }),
+  operationId: stringSchema(), status: stringSchema({ enum: ["QUEUED", "RUNNING", "BLOCKED", "FAILED", "COMPLETED", "CANCELLED"] }),
   phase: stringSchema({ enum: ["PREFLIGHT", "BACKUP", "DATABASE", "OBJECTS", "VERIFY", "DONE"] }), errorCode: stringSchema({ nullable: true }),
   result: objectSchema({ preservedOwnerCount: integerSchema({ minimum: 0 }), deletedObjectCount: integerSchema({ minimum: 0 }) }, ["preservedOwnerCount", "deletedObjectCount"], { nullable: true }),
 }, ["operationId", "status", "phase", "errorCode", "result"]);
@@ -544,18 +544,20 @@ const mfaStepUpRequestSchema = objectSchema({
     tenantId: stringSchema({ minLength: 1, maxLength: 128 }),
     status: { type: "string", enum: ["ACTIVE", "SUSPENDED"] },
     operationId:stringSchema({pattern:"^[a-f0-9]{32}$"}),archiveDigest:stringSchema({pattern:"^[a-f0-9]{64}$"}),
-    preset: stringSchema({ enum: ["CLEAN_SETUP_V1"] }), preflightDigest: stringSchema({ pattern: "^[a-f0-9]{64}$" }),
+    preset: stringSchema({ enum: ["CLEAN_SETUP_V1", "LICENSE_EXPIRY_PURGE_V1"] }), preflightDigest: stringSchema({ pattern: "^[a-f0-9]{64}$" }),
     expectedLifecycleVersion: integerSchema({ minimum: 0, maximum: 2147483646 }),
-  }, ["tenantId", "expectedLifecycleVersion"]),
-  purpose: { type: "string", enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET", "TENANT_DEVICE_RESTORE"] },
+  }, ["tenantId"]),
+  purpose: { type: "string", enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET", "TENANT_DEVICE_RESTORE", "TENANT_PURGE_EXPORT"] },
   totpCode: stringSchema(),
   recoveryCode: stringSchema(),
 }, ["purpose"], {
   oneOf: [
     { properties: { purpose: { enum: ["OWNER_ADMIN_CHANGE"] } }, not: { required: ["target"] } },
-    { properties: { purpose: { enum: ["TENANT_LIFECYCLE_CHANGE"] }, target: { required: ["status"], not: { anyOf: [{ required: ["preset"] }, { required: ["preflightDigest"] }] } } }, required: ["target"] },
-    { properties: { purpose: { enum: ["TENANT_CLEAN_RESET"] }, target: { required: ["preset", "preflightDigest"], not: { anyOf:[{required:["status"]},{required:["operationId"]},{required:["archiveDigest"]}] } } }, required: ["target"] },
-    { properties: {purpose:{enum:["TENANT_DEVICE_RESTORE"]},target:{required:["operationId","archiveDigest"],not:{anyOf:[{required:["status"]},{required:["preset"]},{required:["preflightDigest"]}]}}},required:["target"]},
+    { properties: { purpose: { enum: ["TENANT_LIFECYCLE_CHANGE"] }, target: { required: ["status", "expectedLifecycleVersion"], not: { anyOf: [{ required: ["preset"] }, { required: ["preflightDigest"] }] } } }, required: ["target"] },
+    { properties: { purpose: { enum: ["TENANT_CLEAN_RESET"] }, target: { required: ["preset", "preflightDigest", "expectedLifecycleVersion"], not: { anyOf:[{required:["status"]},{required:["operationId"]},{required:["archiveDigest"]}] } } }, required: ["target"] },
+    { properties: {purpose:{enum:["TENANT_DEVICE_RESTORE"]},target:{required:["operationId","archiveDigest","expectedLifecycleVersion"],not:{anyOf:[{required:["status"]},{required:["preset"]},{required:["preflightDigest"]}]}}},required:["target"]},
+    // A purge handover export binds the institution only.
+    { properties: { purpose: { enum: ["TENANT_PURGE_EXPORT"] }, target: { not: { anyOf: [{ required: ["status"] }, { required: ["preset"] }, { required: ["preflightDigest"] }, { required: ["operationId"] }, { required: ["archiveDigest"] }, { required: ["expectedLifecycleVersion"] }] } } }, required: ["target"] },
   ],
   anyOf: [
     { required: ["totpCode"] },
@@ -564,7 +566,7 @@ const mfaStepUpRequestSchema = objectSchema({
 });
 
 const mfaStepUpResponseSchema = objectSchema({
-  purpose: { type: "string", enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET", "TENANT_DEVICE_RESTORE"] },
+  purpose: { type: "string", enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET", "TENANT_DEVICE_RESTORE", "TENANT_PURGE_EXPORT"] },
   stepUpToken: stringSchema(),
   expiresAt: stringSchema({ format: "date-time" }),
 }, ["purpose", "stepUpToken", "expiresAt"]);
@@ -3401,7 +3403,8 @@ const operationContracts: Record<string, OperationContract> = {
     idempotent: true, idempotencyRequired: true,
     requiredHeaders: [{ name: "X-Step-Up-Token", description: "MFA proof bound to actor/session, tenant, preset, version and preflight digest.", schema: stringSchema() }],
 
-    requestBody: objectSchema({ preset: stringSchema({ enum: ["CLEAN_SETUP_V1"] }), expectedLifecycleVersion: integerSchema({ minimum: 0, maximum: 2147483646 }), preflightDigest: stringSchema({ pattern: "^[a-f0-9]{64}$" }), confirmationText: stringSchema({ minLength: 1, maxLength: 128 }), reason: stringSchema({ enum: ["SECURITY_REVIEW", "INSTITUTION_REQUEST", "OPERATIONS_REVIEW"] }) }, ["preset", "expectedLifecycleVersion", "preflightDigest", "confirmationText", "reason"]),
+    // LICENSE_EXPIRY_PURGE_V1 (DEC-20261005-03) requires reason LICENSE_EXPIRED; the other presets never use it.
+    requestBody: objectSchema({ preset: stringSchema({ enum: ["CLEAN_SETUP_V1", "LICENSE_EXPIRY_PURGE_V1"] }), expectedLifecycleVersion: integerSchema({ minimum: 0, maximum: 2147483646 }), preflightDigest: stringSchema({ pattern: "^[a-f0-9]{64}$" }), confirmationText: stringSchema({ minLength: 1, maxLength: 128 }), reason: stringSchema({ enum: ["SECURITY_REVIEW", "INSTITUTION_REQUEST", "OPERATIONS_REVIEW", "LICENSE_EXPIRED"] }) }, ["preset", "expectedLifecycleVersion", "preflightDigest", "confirmationText", "reason"]),
     responseBody: tenantCleanResetStatusSchema,
   },
   "get /api/v1/tenants/{id}/clean-reset-jobs": {
@@ -3414,16 +3417,43 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: objectSchema({
       activities: objectSchema({ items: arraySchema(objectSchema({ id: stringSchema(), kind: stringSchema(), status: stringSchema(), lifecycleVersion: integerSchema(), createdAt: stringSchema({ format: "date-time" }) }, ["id", "kind", "status", "lifecycleVersion", "createdAt"])), nextCursor: stringSchema({ nullable: true }) }, ["items", "nextCursor"]),
       deliveries: objectSchema({ items: arraySchema(objectSchema({ id: stringSchema(), purpose: stringSchema(), status: stringSchema(), sourceScope: stringSchema({ nullable: true }), lifecycleVersion: integerSchema({ nullable: true }), createdAt: stringSchema({ format: "date-time" }), attempted: { type: "boolean" }, hasProviderReceipt: { type: "boolean" } }, ["id", "purpose", "status", "sourceScope", "lifecycleVersion", "createdAt", "attempted", "hasProviderReceipt"])), nextCursor: stringSchema({ nullable: true }) }, ["items", "nextCursor"]),
+      backupCleanup: arraySchema(objectSchema({ operationId: stringSchema({ pattern: "^[a-f0-9]{32}$" }), status: stringSchema({ enum: ["CANCELLED", "FAILED", "BLOCKED"] }), phase: stringSchema({ enum: ["PREFLIGHT", "BACKUP", "DATABASE"] }), backupPackageDeleted: { type: "boolean" }, drillTargetsDeleted: { type: "boolean" }, updatedAt: stringSchema({ format: "date-time" }) }, ["operationId", "status", "phase", "backupPackageDeleted", "drillTargetsDeleted", "updatedAt"])),
       reconciliation: stringSchema({ enum: ["EXTERNAL_PROOF_REQUIRED"] }),
-    }, ["activities", "deliveries", "reconciliation"]),
+    }, ["activities", "deliveries", "backupCleanup", "reconciliation"]),
   },
   "get /api/v1/tenants/{id}/reset-diagnostics/deliveries/{deliveryId}/receipt": {
     responseBody: objectSchema({ deliveryId: stringSchema(), lifecycleVersion: integerSchema({ minimum: 0 }), status: stringSchema({ enum: ["PROVIDER_ACCEPTED", "UNCERTAIN", "NOT_FOUND", "EXPIRED", "UNVERIFIED", "UNAVAILABLE"] }), correlation: stringSchema({ enum: ["KEY_ONLY", "LOCAL_RECEIPT_MATCH", "UNVERIFIED"] }), createdAt: stringSchema({ format: "date-time", nullable: true }), expiresAt: stringSchema({ format: "date-time", nullable: true }), providerReceiptHash: stringSchema({ pattern: "^[a-f0-9]{64}$", nullable: true }), reconciliation: stringSchema({ enum: ["EXTERNAL_PROOF_REQUIRED"] }) }, ["deliveryId", "lifecycleVersion", "status", "correlation", "createdAt", "expiresAt", "providerReceiptHash", "reconciliation"]),
   },
+  "get /api/v1/tenants/license-expiry-purge-candidates": {
+    responseBody: arraySchema(objectSchema({
+      tenantId: stringSchema(), name: stringSchema(), slug: stringSchema(), status: stringSchema({ enum: ["ACTIVE", "SUSPENDED"] }), lifecycleVersion: integerSchema({ minimum: 0 }),
+      licenseEndsAt: stringSchema({ format: "date-time" }), daysSinceLicenseEnd: integerSchema({ minimum: 91 }), estimatedRowCount: integerSchema({ minimum: 0 }),
+      exportId: stringSchema({ pattern: "^[a-f0-9]{32}$", nullable: true }), exportDeliveredOn: stringSchema({ format: "date", nullable: true }),
+    }, ["tenantId", "name", "slug", "status", "lifecycleVersion", "licenseEndsAt", "daysSinceLicenseEnd", "estimatedRowCount", "exportId", "exportDeliveredOn"])),
+    listResponse: true,
+  },
+  // Product owner decision (2026-10-05): handover export + SYSTEM_ADMIN delivery mark precede every purge.
+  "post /api/v1/tenants/{id}/purge-exports": {
+    responseBody: objectSchema({
+      exportId: stringSchema({ pattern: "^[a-f0-9]{32}$" }), formatVersion: { type: "string", enum: ["tenant-export-v1"] }, tenantId: stringSchema(), generatedByUserId: stringSchema(),
+      exportedAt: stringSchema({ format: "date-time" }), scope: { type: "string", enum: ["license-expiry-purge-handover"] }, rowLimitPerTable: { type: "integer", nullable: true, enum: [null] },
+      tables: looseObjectSchema(), warnings: arraySchema(stringSchema()),
+      // Product owner decision (2026-10-10): file bytes travel with the handover, sha256-verified on read.
+      files: arraySchema(objectSchema({
+        table: stringSchema({ enum: ["HomeworkMaterialFile", "SupportTicketAttachment", "RawImport", "Student"] }), rowId: stringSchema(), fileName: stringSchema(),
+        contentType: stringSchema({ nullable: true }), byteSize: integerSchema({ minimum: 0 }), sha256: stringSchema({ pattern: "^[a-f0-9]{64}$" }), contentBase64: stringSchema(),
+      }, ["table", "rowId", "fileName", "contentType", "byteSize", "sha256", "contentBase64"])),
+    }, ["exportId", "formatVersion", "tenantId", "generatedByUserId", "exportedAt", "scope", "rowLimitPerTable", "tables", "files", "warnings"]),
+  },
+  "post /api/v1/tenants/{id}/purge-exports/{exportId}/delivery": {
+    requestBody: objectSchema({ deliveredOn: stringSchema({ format: "date" }), channel: stringSchema({ enum: ["SECURE_DOWNLOAD", "ENCRYPTED_EMAIL", "PHYSICAL_MEDIA", "OTHER"] }), note: stringSchema({ maxLength: 200 }) }, ["deliveredOn", "channel"]),
+    responseBody: objectSchema({ exportId: stringSchema({ pattern: "^[a-f0-9]{32}$" }), deliveredOn: stringSchema({ format: "date" }), channel: stringSchema({ enum: ["SECURE_DOWNLOAD", "ENCRYPTED_EMAIL", "PHYSICAL_MEDIA", "OTHER"] }), recordedAt: stringSchema({ format: "date-time" }) }, ["exportId", "deliveredOn", "channel", "recordedAt"]),
+  },
   "get /api/v1/tenants/{id}/clean-reset-preview": {
+    queryParameters: [{ name: "preset", schema: stringSchema({ enum: ["CLEAN_SETUP_V1", "LICENSE_EXPIRY_PURGE_V1"] }) }],
     responseBody: objectSchema({
       institutionRequest: { ...tenantResetInstitutionRequestSchema, nullable: true },
-      preset: stringSchema({ enum: ["CLEAN_SETUP_V1"] }), lifecycleVersion: integerSchema({ minimum: 0 }),
+      preset: stringSchema({ enum: ["CLEAN_SETUP_V1", "LICENSE_EXPIRY_PURGE_V1"] }), lifecycleVersion: integerSchema({ minimum: 0 }),
       preservedOwnerCount: integerSchema({ minimum: 0 }),
       categories: arraySchema(objectSchema({ category: stringSchema(), preserved: integerSchema({ minimum: 0 }), deleted: integerSchema({ minimum: 0 }), blocked: integerSchema({ minimum: 0 }) }, ["category", "preserved", "deleted", "blocked"])),
       objectCount: integerSchema({ minimum: 0 }), objectBytes: integerSchema({ minimum: 0 }),

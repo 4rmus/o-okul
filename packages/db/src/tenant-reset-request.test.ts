@@ -18,7 +18,7 @@ function fixture(initial: InstitutionResetRequest | null = null) {
     if (sql.includes('FROM "AuthSession"')) return rows([{ id: "system-session" }]);
     if (sql.includes('FROM "Tenant"')) return rows(values[0] === tenant.id ? [tenant] : []);
     if (sql.startsWith('SELECT * FROM "TenantFreshResetOperation"')) return rows(operations.filter((op) => op.actorUserId === values[0] && op.idempotencyKey === values[1]));
-    if (sql.startsWith('SELECT "id" FROM "TenantFreshResetOperation"')) return rows(operations.filter((op) => op.status !== "COMPLETED"));
+    if (sql.startsWith('SELECT "status" FROM "TenantFreshResetOperation"')) return rows(operations.filter((op) => op.status !== "COMPLETED" && op.status !== "CANCELLED"));
     if (sql.startsWith('INSERT INTO "TenantFreshResetOperation"')) { const op = { id: values[0], tenantId: values[1], actorUserId: values[2], idempotencyKey: values[3], requestHash: values[4], status: "QUEUED", institutionRequestId: values[9] } as FreshResetOperation; operations.push(op); return rows([op]); }
     if (sql.startsWith('UPDATE "Tenant"')) tenant.resetRequest = JSON.parse(String(values[1]));
     return rows([]);

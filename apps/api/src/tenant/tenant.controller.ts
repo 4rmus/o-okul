@@ -1,7 +1,8 @@
-import { TenantFreshResetService, tenantCleanResetBodySchema, tenantResetRequestBodySchema, tenantResetRevokeBodySchema } from "./tenant-fresh-reset.service.js";
-import type { TenantCleanResetRequest } from "@o-okul/shared-types";
+import { TenantFreshResetService, tenantCleanResetBodySchema, tenantPurgeExportDeliveryBodySchema, tenantResetRequestBodySchema, tenantResetRevokeBodySchema } from "./tenant-fresh-reset.service.js";
+import type { TenantCleanResetRequest, TenantResetPreset } from "@o-okul/shared-types";
 import { TenantResetPreviewService } from "./tenant-reset-preview.service.js";
-import { Body, Controller, Delete, Get, GoneException, HttpCode, Header, Headers, Param, Patch, Post, Query } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, GoneException, HttpCode, Header, Headers, Param, Patch, Post, Query } from "@nestjs/common";
+import type { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
@@ -46,6 +47,28 @@ export class TenantController {
     return this.freshReset.changeInstitutionRequest(getRequestContext(), body.expectedRequestId, true);
   }
 
+  @Get("license-expiry-purge-candidates")
+  @RequireCapability("tenant:clean-reset")
+  licenseExpiryPurgeCandidates() {
+    return this.freshReset.purgeCandidates(getRequestContext());
+  }
+
+  // Product owner decision (2026-10-05): a delivered handover export precedes every license-expiry purge.
+  // Security review 2026-10-06: tenant-bound step-up; the full institution dataset is never cached.
+  @Post(":id/purge-exports")
+  @Header("Cache-Control", "no-store")
+  @Header("Pragma", "no-cache")
+  @RequireCapability("tenant:clean-reset")
+  createPurgeExport(@Param("id") id: string, @Headers("x-step-up-token") proof?: string) {
+    return this.freshReset.createPurgeExport(getRequestContext(), id, proof);
+  }
+
+  @Post(":id/purge-exports/:exportId/delivery")
+  @RequireCapability("tenant:clean-reset")
+  markPurgeExportDelivered(@Param("id") id: string, @Param("exportId") exportId: string, @Body(zodBody(tenantPurgeExportDeliveryBodySchema)) body: z.infer<typeof tenantPurgeExportDeliveryBodySchema>) {
+    return this.freshReset.markPurgeExportDelivered(getRequestContext(), id, exportId, body);
+  }
+
   @Get(":id/reset-diagnostics")
   @RequireCapability("tenant:clean-reset")
   resetDiagnostics(@Param("id") id: string, @Query("activityAfter") activityAfter?: string, @Query("deliveryAfter") deliveryAfter?: string) {
@@ -61,8 +84,9 @@ export class TenantController {
 
   @Get(":id/clean-reset-preview")
   @RequireCapability("tenant:clean-reset")
-  previewCleanReset(@Param("id") id: string) {
-    return this.resetPreview.preview(id);
+  previewCleanReset(@Param("id") id: string, @Query("preset") preset?: string) {
+    if (preset !== undefined && preset !== "CLEAN_SETUP_V1" && preset !== "LICENSE_EXPIRY_PURGE_V1") throw new BadRequestException("RESET_PRESET_INVALID");
+    return this.resetPreview.preview(id, preset as TenantResetPreset | undefined);
   }
 
   @Post(":id/clean-reset-jobs")

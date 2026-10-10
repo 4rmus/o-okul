@@ -89,21 +89,21 @@ const totpAdminResetBodySchema = z.object({
   userId: z.string().trim().min(1).max(128),
 }).strict() satisfies z.ZodType<TotpAdminResetRequest>;
 const mfaStepUpBodySchema = z.object({
-  purpose: z.enum(["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET", "TENANT_DEVICE_RESTORE"]),
+  purpose: z.enum(["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET", "TENANT_DEVICE_RESTORE", "TENANT_PURGE_EXPORT"]),
   target: z.union([z.object({
     tenantId: z.string().min(1).max(128),
     status: z.enum(["ACTIVE", "SUSPENDED"]),
     expectedLifecycleVersion: z.number().int().min(0).max(2147483646),
   }).strict(), z.object({
-    tenantId: z.string().min(1).max(128), preset: z.literal("CLEAN_SETUP_V1"),
+    tenantId: z.string().min(1).max(128), preset: z.enum(["CLEAN_SETUP_V1", "LICENSE_EXPIRY_PURGE_V1"]),
     expectedLifecycleVersion: z.number().int().min(0).max(2147483646), preflightDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  }).strict(),z.object({tenantId:z.string().min(1).max(128),operationId:z.string().regex(/^[a-f0-9]{32}$/),archiveDigest:z.string().regex(/^[a-f0-9]{64}$/),expectedLifecycleVersion:z.number().int().min(0).max(2147483646)}).strict()]).optional(),
+  }).strict(),z.object({tenantId:z.string().min(1).max(128),operationId:z.string().regex(/^[a-f0-9]{32}$/),archiveDigest:z.string().regex(/^[a-f0-9]{64}$/),expectedLifecycleVersion:z.number().int().min(0).max(2147483646)}).strict(), z.object({ tenantId: z.string().min(1).max(128) }).strict()]).optional(),
   totpCode: optionalTrimmedString,
   recoveryCode: optionalTrimmedString,
 }).strict().refine((value) => Boolean(value.totpCode || value.recoveryCode), {
   message: "TOTP kodu veya recovery code zorunlu.",
   path: ["totpCode"],
-}).refine((value) => value.purpose === "OWNER_ADMIN_CHANGE" ? !value.target : Boolean(value.target && (value.purpose === "TENANT_DEVICE_RESTORE" ? "operationId" in value.target : value.purpose === "TENANT_CLEAN_RESET" ? "preset" in value.target : "status" in value.target)), {
+}).refine((value) => value.purpose === "OWNER_ADMIN_CHANGE" ? !value.target : Boolean(value.target && (value.purpose === "TENANT_PURGE_EXPORT" ? Object.keys(value.target).length === 1 : value.purpose === "TENANT_DEVICE_RESTORE" ? "operationId" in value.target : value.purpose === "TENANT_CLEAN_RESET" ? "preset" in value.target : "status" in value.target)), {
   message: "MFA_STEP_UP_TARGET_INVALID", path: ["target"],
 }) satisfies z.ZodType<MfaStepUpRequest>;
 

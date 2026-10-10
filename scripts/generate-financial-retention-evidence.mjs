@@ -14,6 +14,8 @@ const retentionPeriodYears = Number(process.env.FINANCIAL_RETENTION_PERIOD_YEARS
 const purgeException = process.env.FINANCIAL_RETENTION_PURGE_EXCEPTION;
 
 const paymentTestCommand = "pnpm --filter @o-okul/api exec vitest run src/payment/payment.e2e.test.ts";
+// Product owner decision (2026-10-05): the license-expiry purge requires a delivered handover export.
+const purgeExportTestCommand = "pnpm --filter @o-okul/db exec vitest run src/tenant-fresh-reset-purge.test.ts";
 
 const failures = [];
 requireValue(outputPath, "FINANCIAL_RETENTION_OUTPUT veya --output", failures);
@@ -32,6 +34,7 @@ if (failures.length > 0) fail(failures);
 const outputFile = resolve(outputPath);
 validateOutputTarget(outputFile);
 runCommand(paymentTestCommand);
+runCommand(purgeExportTestCommand);
 
 const pool = new pg.Pool({ connectionString: directDatabaseUrl });
 try {
@@ -46,11 +49,13 @@ try {
       retentionPeriodYears,
       legalBasis,
       purgeException: true,
+      platformRetentionDaysAfterLicenseEnd: 91,
     },
     financialRecords,
     purgeBehaviorVerified: [
       "privacy.me.purge_preserves_payment_plans",
       "payment_plan_records_excluded_from_pii_purge",
+      "license_expiry_purge_requires_delivered_export",
     ],
     gaps: [],
   };

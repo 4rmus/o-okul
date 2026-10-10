@@ -3,6 +3,7 @@ import { readFileSync, statSync } from "node:fs";
 
 // KF-10 guard: no real T.C. kimlik or mobile number may enter the repository with a sample file or fixture.
 // Test data uses the reserved fake ranges below; anything else fails with file:line and only the last 4 digits.
+// Digit runs glued to hex letters (SHA-256 values such as sourceTreeSha256) are not numbers and are skipped.
 const fakeNationalId = /^1000000\d{4}$/;
 const fictionalMobilePrefixes = ["555", "500"];
 const allowedNumbers = new Map([
@@ -22,13 +23,13 @@ for (const file of files) {
   if (content.includes(0)) continue;
   const lines = content.toString("utf8").split("\n");
   lines.forEach((line, index) => {
-    for (const match of line.matchAll(/(?<!\d)[1-9]\d{10}(?!\d)/g)) {
+    for (const match of line.matchAll(/(?<![\da-fA-F])[1-9]\d{10}(?![\da-fA-F])/g)) {
       const id = match[0];
       if (isValidNationalId(id) && !fakeNationalId.test(id) && !allowedNumbers.has(id)) {
         failures.push(`${file}:${index + 1}: T.C. kimlik geçerli numara (…${id.slice(-4)}); test için 1000000xxxx aralığını kullanın`);
       }
     }
-    for (const match of line.matchAll(/(?<![\d#/=.\-])(?:\+90|0)?5\d{2}[ -]?\d{3}[ -]?\d{2}[ -]?\d{2}(?!\d)/g)) {
+    for (const match of line.matchAll(/(?<![\da-fA-F#/=.\-])(?:\+90|0)?5\d{2}[ -]?\d{3}[ -]?\d{2}[ -]?\d{2}(?![\da-fA-F])/g)) {
       const mobile = match[0].replace(/\D/g, "").replace(/^90/, "").replace(/^0/, "");
       if (mobile.length !== 10 || fictionalMobilePrefixes.includes(mobile.slice(0, 3)) || allowedNumbers.has(mobile)) continue;
       failures.push(`${file}:${index + 1}: cep telefonu (…${mobile.slice(-4)}); test için 555 veya 500 ile başlayan numara kullanın`);

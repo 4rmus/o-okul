@@ -7,7 +7,7 @@ import type { AuthResponse, TenantCleanResetStatus, TenantLifecycleReason } from
 import { ApiRequestError, authenticatedFetchOnce, apiBaseUrl } from "../../../../../src/api-client.js";
 import { loadResetPreview, loadResetStatus, loadTenant, resetBlockerLabels, resetCategoryLabels, startReset, tenantManagementSchema, type TenantRecord } from "../../_shared/system-api.js";
 
-const statusLabels = { QUEUED: "Sırada", RUNNING: "Çalışıyor", BLOCKED: "Engellendi", FAILED: "Başarısız", COMPLETED: "Tamamlandı" };
+const statusLabels = { QUEUED: "Sırada", RUNNING: "Çalışıyor", BLOCKED: "Engellendi", FAILED: "Başarısız", COMPLETED: "Tamamlandı", CANCELLED: "İptal edildi" };
 const phaseLabels = { PREFLIGHT: "Ön kontrol", BACKUP: "Yedek ve geri yükleme kontrolü", DATABASE: "Kurum verileri temizleniyor", OBJECTS: "Dosyalar temizleniyor", VERIFY: "Son kontroller", DONE: "Tamamlandı" };
 
 export function TenantResetPanel({ tenant, auth, scope, authoritative, onPendingChange }: { tenant: TenantRecord; auth: AuthResponse; scope: string; authoritative: boolean; onPendingChange(value: boolean): void }) {
