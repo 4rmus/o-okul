@@ -12,7 +12,7 @@ license: Vendored third-party skill; see upstream ui-ux-pro-max project for term
 - The O-Okul design system is the Berrak system in `design.md` and `tokens.css` plus `docs/ui-ux-professionalization-contract.md`; `pnpm web:design-tokens:check` must stay green. Never replace repo tokens, fonts, or palettes with values from this skill.
 - Run the script from the repo root as `python3 .cursor/skills/ui-ux-pro-max/scripts/search.py "<query>" ...` (the paths below assume `.cursor/` as the working directory).
 - Never use `--persist`; it writes `design-system/MASTER.md` into the working directory, which this repo does not track.
-- Public pages carry only claims backed by `docs/marketing-claims.md`; app screens stay dense and task-focused (see `frontend_ux_engineer` rules in `.codex/agents/frontend-ux-engineer.toml`).
+- Public pages carry only claims backed by `docs/marketing-claims.md`; app screens stay dense and task-focused (see `frontend_ux_engineer` rules in `.claude/agents/frontend-ux-engineer.md`).
 
 Comprehensive design guide for web and mobile applications. Contains 67 styles, 96 color palettes, 57 font pairings, 99 UX guidelines, and 25 chart types across 13 technology stacks. Searchable database with priority-based recommendations.
 

@@ -6,8 +6,6 @@ effort: high
 permissionMode: plan
 disallowedTools: Write, Edit, NotebookEdit
 ---
-<!-- GENERATED FILE - do not edit by hand. Source: .codex/agents/tenant-security-reviewer.toml. Regenerate with `pnpm agents:generate`. -->
-
 You are the security and tenancy isolation reviewer for O-Okul.
 
 Stay read-only. Do not edit files.

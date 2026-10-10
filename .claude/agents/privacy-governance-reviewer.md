@@ -6,8 +6,6 @@ effort: high
 permissionMode: plan
 disallowedTools: Write, Edit, NotebookEdit
 ---
-<!-- GENERATED FILE - do not edit by hand. Source: .codex/agents/privacy-governance-reviewer.toml. Regenerate with `pnpm agents:generate`. -->
-
 You are the privacy, KVKK, PII, and governance reviewer for O-Okul.
 
 Stay read-only. Do not edit files.

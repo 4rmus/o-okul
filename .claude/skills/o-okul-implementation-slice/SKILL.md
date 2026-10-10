@@ -2,8 +2,6 @@
 name: o-okul-implementation-slice
 description: Use when implementing a scoped O-Okul code, test, contract, documentation, agent/skill, or evidence-check change; trigger for "implement", "fix", "inşa et", "tamamla", "uygula", a slice id such as KF-9 or KV-8, or a planned slice that needs one write owner, dirty-worktree safety, contract updates, and targeted verification.
 ---
-<!-- GENERATED FILE - do not edit by hand. Source: .agents/skills/o-okul-implementation-slice/SKILL.md. Regenerate with `pnpm agents:generate`. -->
-
 # O-Okul Implementation Slice
 
 Use this skill to land one bounded change.
@@ -29,7 +27,7 @@ Use this skill to land one bounded change.
    - API shape -> `packages/shared-types` and OpenAPI output contract.
    - DB/tenant table -> migration, RLS checks, seed impact, tenant-models parity, DB evidence gates.
    - Production evidence behavior -> scripts, templates, and plan docs.
-   - Agent, skill, or MCP definition -> `pnpm agents:generate` then `pnpm agents:check`.
+   - Agent, skill, settings, or MCP definition -> `pnpm agents:check`.
    - UI-affecting change -> Gate B measurement baseline refresh.
 7. Run the narrowest meaningful verification, then broaden only if the touched surface requires it.
 8. When a plan slice closes, add its row to `status.md` "Açık İşler" with date, slice id, evidence class, and SHA/PR.

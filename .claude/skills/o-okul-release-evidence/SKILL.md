@@ -2,8 +2,6 @@
 name: o-okul-release-evidence
 description: Use when checking O-Okul staging, production, deploy, GitHub parity, running image tags, four-service image parity, live health, release evidence, env/secrets, GitHub environment contracts, rollback or forward-only cutover, pilot, go-live, or "main ile senkron mu"; separates static repo gates from real CI, staging, and production runtime evidence.
 ---
-<!-- GENERATED FILE - do not edit by hand. Source: .agents/skills/o-okul-release-evidence/SKILL.md. Regenerate with `pnpm agents:generate`. -->
-
 # O-Okul Release Evidence
 
 Use this skill for deploy truth and production-readiness evidence.
@@ -16,7 +14,7 @@ Use this skill for deploy truth and production-readiness evidence.
    - Production runtime truth.
    - Evidence/env/secret gap.
    - Rollback, forward-only cutover, pilot, or go-live gate.
-2. Read `AGENTS.md`, `docs/codex-agent-architecture.md`, `docs/phase-6-production-readiness.md`, and the release sections of `status.md`.
+2. Read `AGENTS.md`, `docs/agent-architecture.md`, `docs/phase-6-production-readiness.md`, and the release sections of `status.md`.
 3. Keep evidence classes separate and name them explicitly:
    - `LOCAL_STATIC` / `LOCAL_TEST`: repo scripts, templates, typecheck, contract checks, local test runs.
    - `CI`: branch, PR, workflow run, artifact (`ci.yml`, `staging-deploy.yml`, `staging-role-uat.yml`, `staging-outbox-verify.yml`).

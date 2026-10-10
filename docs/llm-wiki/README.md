@@ -265,7 +265,7 @@ açık yazılır. Ana agent entegrasyon ve nihai doğrulamadan sorumludur.
 3. [`docs/DECISIONS.md`](../DECISIONS.md)
 4. [`docs/product-journeys-v1.md`](../product-journeys-v1.md)
 5. [`docs/marketing-claims.md`](../marketing-claims.md)
-6. [`docs/codex-agent-architecture.md`](../codex-agent-architecture.md)
+6. [`docs/agent-architecture.md`](../agent-architecture.md)
 7. [`docs/phase-6-production-readiness.md`](../phase-6-production-readiness.md)
 8. Değişecek modülün kodu ve yakın testleri
 

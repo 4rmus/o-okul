@@ -1,9 +1,7 @@
 ---
 name: o-okul-pr-review
-description: Use when reviewing an O-Okul PR, branch, commit, working tree diff, or final change set for correctness, tenant isolation, RBAC capabilities, auth/session and license gating, PII/KVKK and consent leakage, report and gradebook correctness, idempotency, missing tests, evidence-class honesty, and release-evidence or agent-adapter drift.
+description: Use when reviewing an O-Okul PR, branch, commit, working tree diff, or final change set for correctness, tenant isolation, RBAC capabilities, auth/session and license gating, PII/KVKK and consent leakage, report and gradebook correctness, idempotency, missing tests, evidence-class honesty, and release-evidence or agent-contract drift.
 ---
-<!-- GENERATED FILE - do not edit by hand. Source: .agents/skills/o-okul-pr-review/SKILL.md. Regenerate with `pnpm agents:generate`. -->
-
 # O-Okul PR Review
 
 Use this skill for findings-first review.
@@ -11,7 +9,7 @@ Use this skill for findings-first review.
 ## Workflow
 
 1. Identify the diff scope: PR, branch against `main`, commit, or working tree.
-2. Read `AGENTS.md`, `docs/codex-agent-architecture.md`, and nearby tests for changed files.
+2. Read `AGENTS.md`, `docs/agent-architecture.md`, and nearby tests for changed files.
 3. Prioritize P0/P1 risks:
    - Cross-tenant exposure, RLS/RBAC bypass, tenant-host or control-plane boundary break, `withBypassRlsQuery` outside the allow-list.
    - Auth/session, CSRF, MFA, rate-limit, token-storage, identity provisioning, or license-state regression.
@@ -23,7 +21,7 @@ Use this skill for findings-first review.
    - Shared types and OpenAPI output contract for API changes.
    - Migration, RLS, seed, tenant-models parity, and DB checks for schema changes.
    - Evidence scripts/templates/docs for release behavior changes.
-   - `pnpm agents:generate` output for agent, skill, or MCP definition changes.
+   - `pnpm agents:check` for agent, skill, settings, or MCP definition changes.
    - Gate B measurement baseline for UI-affecting changes.
 5. Ask for a targeted fix only when a concrete finding exists.
 

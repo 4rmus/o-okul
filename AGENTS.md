@@ -15,18 +15,20 @@
 
 ## Subagent Orchestration
 
-- Project custom agents live in `.codex/agents`.
-- Project repo skills live in `.agents/skills`; Codex is the canonical agent/skill source for this repo.
+- Project subagents live in `.claude/agents/*.md` and project skills in `.claude/skills/*/SKILL.md`. Claude Code is the canonical agent/skill source for this repo; both are edited by hand and verified by `pnpm agents:check`.
+- `.claude/settings.json` is the shared subagent policy: `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=3` and `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1`. Keep it committed; personal overrides go to `.claude/settings.local.json`.
+- Claude Code reads this `AGENTS.md` as project instructions because the repo has no `CLAUDE.md`. Do not add a `CLAUDE.md` or `CLAUDE.local.md`; either would replace this file for Claude Code.
+- Cursor reads `.claude/agents` and `.claude/skills` natively; `.cursor/skills` holds only vendored third-party skills and is not a source of truth. Do not recreate `.codex` or `.agents` directories; they would duplicate agent and skill names.
+- Project MCP servers belong in `.mcp.json` only for trusted systems with an explicit tool allowlist and no inline secrets; none is configured today.
 - Use the narrowest repo skill first: `o-okul-planning`, `o-okul-implementation-slice`, `o-okul-release-evidence`, or `o-okul-pr-review`.
-- `.claude/agents`, `.claude/skills`, and `.mcp.json` are generated adapter surfaces. Run `pnpm agents:generate` after editing any agent, skill, or MCP definition and never edit them by hand; `pnpm agents:check` fails on drift.
-- Cursor reads `.agents/skills`, `.codex/agents`, and `.claude/agents` natively; `.cursor/skills` holds only vendored third-party skills and is not a source of truth.
 - Use subagents only when the user asks for agents, delegation, parallel review, or a large task that benefits from isolated exploration.
-- `.codex/config.toml` sets `agents.max_concurrent_threads_per_session = 3`; it limits subagents and excludes the main agent, so the main agent and at most three subagents may participate concurrently.
-- Keep `agents.max_depth = 1`; the main agent is the sole scope and integration owner and retains conflict resolution and final delivery. Subagents never spawn subagents.
+- The concurrent-subagent cap limits subagents and excludes the main agent, so the main agent and at most three subagents may participate concurrently.
+- Keep spawn depth at 1; the main agent is the sole scope and integration owner and retains conflict resolution and final delivery. Subagents never spawn subagents.
 - Each active gate may have only one write-capable participant.
 - If the main agent writes, no subagent may write.
 - If a subagent writes, the main agent changes no files except for integration.
 - Use no more than three subagents total. If one subagent writes, at most two read-only subagents may remain.
+- Read-only reviewers run with `permissionMode: plan` and without Write/Edit tools; they still carry Bash, so they must not run state-changing commands.
 - Before every gate starts, define its objective, owned paths, forbidden paths, acceptance criteria, and validation commands.
 - When a gate completes, report its result and stop; do not automatically continue to the next gate.
 - Report `LOCAL_STATIC`, `LOCAL_TEST`, `CI`, `STAGING`, `PRODUCTION`, `EXTERNAL_NOT_RUN`, and `UNPROVEN` as separate evidence classes.
@@ -34,6 +36,7 @@
 - Every delegated task needs: objective, owned paths, forbidden paths, expected output, and validation commands.
 - Subagent summaries should return findings and changed files, not raw logs.
 - When a plan slice closes, record it in `status.md` "Açık İşler" with date, slice id, evidence class, and SHA/PR.
+- After editing any agent, skill, settings, or MCP file, run `pnpm agents:check` in the same change.
 
 ## Agent Roster
 
@@ -55,7 +58,7 @@
 
 ## Validation By Scope
 
-- Agents/skills/adapters: `pnpm agents:generate`, `pnpm agents:check`.
+- Agents/skills/settings: `pnpm agents:check`.
 - API: `pnpm --filter @o-okul/api typecheck`, `pnpm --filter @o-okul/api test`, `pnpm openapi:generate`, `pnpm openapi:output-contract`, `pnpm idempotency:inventory:check`.
 - Web/UI: `pnpm --filter @o-okul/web typecheck`, `pnpm web:a11y:check`, `pnpm web:design-tokens:check`, `pnpm web:architecture:check`, `pnpm route-manifest:check`, `pnpm web:ux-baseline:check`, `pnpm web:measurement-baseline:check`; `pnpm web:ux-rc:check` for UI-affecting release candidates.
 - Worker/report: `pnpm --filter @o-okul/worker test`, `pnpm raw-import:smoke`, `pnpm report-generation:smoke`, `pnpm karne:visual-contract:check`, `pnpm isem-optical-pipeline:evidence-check`.

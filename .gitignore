@@ -14,6 +14,7 @@ playwright-report/
 .claude/*
 !.claude/agents/
 !.claude/skills/
+!.claude/settings.json
 __pycache__/
 *.pyc
 optik-form-ornek/
