@@ -2,6 +2,7 @@
 name: o-okul-pr-review
 description: Use when reviewing an O-Okul PR, branch, commit, working tree diff, or final change set for correctness, tenant isolation, RBAC capabilities, auth/session and license gating, PII/KVKK and consent leakage, report and gradebook correctness, idempotency, missing tests, evidence-class honesty, and release-evidence or agent-adapter drift.
 ---
+<!-- GENERATED FILE - do not edit by hand. Source: .agents/skills/o-okul-pr-review/SKILL.md. Regenerate with `pnpm agents:generate`. -->
 
 # O-Okul PR Review
 

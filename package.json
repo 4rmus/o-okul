@@ -8,6 +8,7 @@
   },
   "scripts": {
     "agents:check": "node scripts/check-agent-skill-contract.mjs",
+    "agents:generate": "node scripts/generate-agent-adapters.mjs",
     "account-management:backfill": "node scripts/backfill-account-management.mjs",
     "account-management:backfill:check": "node scripts/check-account-management-backfill.mjs",
     "account-management:backfill:contract": "node scripts/check-account-management-backfill-contract.mjs",

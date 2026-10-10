@@ -2,6 +2,7 @@
 name: o-okul-agent-orchestration
 description: Use when coordinating O-Okul Codex, Claude Code, or Cursor subagent work, choosing between the repo skills, routing agent ownership, writing delegation prompts, regenerating adapter surfaces, or summarizing multi-agent handoffs for planning, implementation, release evidence, or PR review.
 ---
+<!-- GENERATED FILE - do not edit by hand. Source: .agents/skills/o-okul-agent-orchestration/SKILL.md. Regenerate with `pnpm agents:generate`. -->
 
 # O-Okul Agent Orchestration
 

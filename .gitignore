@@ -11,7 +11,11 @@ coverage/
 .DS_Store
 test-results/
 playwright-report/
-.claude/
+.claude/*
+!.claude/agents/
+!.claude/skills/
+__pycache__/
+*.pyc
 optik-form-ornek/
 ornek-veriler/
 artifacts/

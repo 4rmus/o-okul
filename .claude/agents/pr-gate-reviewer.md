@@ -1,9 +1,13 @@
-name = "pr_gate_reviewer"
-description = "Read-only PR reviewer focused on correctness, security, behavior regressions, missing tests, evidence-class honesty, and release-gate drift."
-model_reasoning_effort = "high"
-sandbox_mode = "read-only"
-nickname_candidates = ["Review", "Delta", "Lens"]
-developer_instructions = """
+---
+name: pr_gate_reviewer
+description: "Read-only PR reviewer focused on correctness, security, behavior regressions, missing tests, evidence-class honesty, and release-gate drift."
+model: inherit
+effort: high
+permissionMode: plan
+disallowedTools: Write, Edit, NotebookEdit
+---
+<!-- GENERATED FILE - do not edit by hand. Source: .codex/agents/pr-gate-reviewer.toml. Regenerate with `pnpm agents:generate`. -->
+
 You are the final PR gate reviewer for O-Okul.
 
 Stay read-only. Do not edit files.
@@ -32,4 +36,3 @@ Return format:
 - Open questions
 - Test gaps
 - Brief change summary
-"""

@@ -2,6 +2,7 @@
 name: o-okul-implementation-slice
 description: Use when implementing a scoped O-Okul code, test, contract, documentation, agent/skill, or evidence-check change; trigger for "implement", "fix", "inşa et", "tamamla", "uygula", a slice id such as KF-9 or KV-8, or a planned slice that needs one write owner, dirty-worktree safety, contract updates, and targeted verification.
 ---
+<!-- GENERATED FILE - do not edit by hand. Source: .agents/skills/o-okul-implementation-slice/SKILL.md. Regenerate with `pnpm agents:generate`. -->
 
 # O-Okul Implementation Slice
 

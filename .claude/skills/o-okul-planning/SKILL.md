@@ -2,6 +2,7 @@
 name: o-okul-planning
 description: Use when turning O-Okul product, private K12 roadmap, architecture, production-readiness, modernization, UI/UX, security, or operations requests into repo-grounded plans; trigger for "analiz et", "planla", "production", "prod seviyesine getir", roadmap, UAT/DEC alignment, H1-H3 slice sizing, risk slicing, or smallest safe first PR before coding.
 ---
+<!-- GENERATED FILE - do not edit by hand. Source: .agents/skills/o-okul-planning/SKILL.md. Regenerate with `pnpm agents:generate`. -->
 
 # O-Okul Planning
 
