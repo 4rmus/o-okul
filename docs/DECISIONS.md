@@ -39,7 +39,7 @@ Son kontrol: 2026-08-04
 Durum: Onaylı
 Karar: Ana agent kritik yolu yürütür; subagent'lar ayrık inceleme, uygulama ve doğrulama işlerini alır.
 Kaynak: Kullanıcı isteği.
-Kanıt: `AGENTS.md`, `docs/codex-agent-architecture.md`, `pnpm agents:check`.
+Kanıt: `AGENTS.md`, `docs/agent-architecture.md`, `pnpm agents:check`.
 Etkilenen ADR: Yok
 Açık soru: Yok
 Son kontrol: 2026-05-29

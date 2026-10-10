@@ -234,6 +234,7 @@ pnpm live:smoke
 - [`docs/almanac-2-architecture-plan.md`](docs/almanac-2-architecture-plan.md) — onaylı hedef mimari, fazlar ve güncel ilerleme
 - [`docs/almanac-2-legacy-removal-inventory.md`](docs/almanac-2-legacy-removal-inventory.md) — eski ekran ve veri yapısı temizlik envanteri
 - [`docs/llm-wiki/README.md`](docs/llm-wiki/README.md) — kod ajanları için hızlı yön bulma
+- [`AGENTS.md`](AGENTS.md) ve [`docs/agent-architecture.md`](docs/agent-architecture.md) — ajan/skill yönetişimi; kanonik kaynak `.claude/agents`, `.claude/skills` ve `.claude/settings.json`, sözleşme `pnpm agents:check` ile denetlenir
 - [`docs/product-journeys-v1.md`](docs/product-journeys-v1.md) — ürün kapsamı ve UAT matrisi
 - [`docs/DECISIONS.md`](docs/DECISIONS.md) — mimari karar kayıtları (ADR)
 - [`docs/ADR-0001-multi-tenancy.md`](docs/ADR-0001-multi-tenancy.md) — çok kiracılılık kararı
