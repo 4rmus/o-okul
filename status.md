@@ -1,6 +1,6 @@
 # O-Okul Durum
 
-Son güncelleme: 2026-09-02
+Son güncelleme: 2026-10-10
 
 Güncel GitHub `main` snapshotı `937b32c6bd510183d9e5fccfbbe29be1e0acb697`dir. CI
 `33509083048` ve Staging Deploy `33510589276` `PASS`; deployment-cutover artifact'i web, API,
@@ -253,6 +253,14 @@ Güncel sıralama `docs/account-management-architecture-plan.md` bölüm 6 için
 4. Gate E için gerçek provider/inbox ve MFA; aynı-snapshot rapor, rol bazlı UAT, pull edilebilir image
    rollback/restore ve izleme kanıtlarını kapatma.
 5. Gate E kapandıktan sonra en az 14 günlük Gate F pilotu ve go-live karar paketi.
+
+### Dilim kapanış kaydı
+
+Plan `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §10.1 uyarınca her dilim kapanışında bir satır eklenir.
+
+| Tarih | Dilim | Kanıt sınıfı | SHA / PR | Plan gün / gerçek gün |
+|---|---|---|---|---|
+| 2026-10-10 | Ajan/skill yönetişimi: Claude Code kanonik yüzey, Codex kaldırıldı, `.claude/settings.json` subagent sınırları, `pnpm agents:check` sahiplik/gate/roster denetimi (plan dışı araç dilimi) | CI (main `38048883293` PASS) + STAGING_DEPLOY (Staging Deploy #188 `38049664810` PASS; dört servis `f712fda` imajı, cutover artifact'i yayınlandı) | `f712fda` / PR #154 | – / 1 |
 
 Guardian fiziksel silme, grant revoke, production deploy veya go-live; ilgili teknik güvenlik kapıları
 ve gerçek ortam kanıtı olmadan yapılamaz. Workspace mailbox/alias testi tamamlanmıştır; exact-SHA
