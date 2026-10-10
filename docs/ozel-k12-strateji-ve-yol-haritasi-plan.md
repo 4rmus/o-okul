@@ -631,6 +631,8 @@ Yeni özellik dilimi yalnız S1 veya S4 bulgusundan açılır; açılan her dili
 
 ### 11.3 Staging UAT senaryoları
 
+Adım adım kit, test kullanıcıları ve sonuç tablosu: `docs/staging-uat-s1.md` (S1 onayı 2026-10-10).
+
 Her satır ilgili dilimin plan metriğini taşır. Test verisi kuralı geçerlidir (TC 1000000xxxx, telefon 555/500).
 
 | Senaryo | Rol | Ölçüt |

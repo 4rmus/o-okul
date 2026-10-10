@@ -1126,7 +1126,8 @@ doğrulanır. Okunamayan ya da özeti tutmayan bir dosya dışa aktarımı `409 
 değeri/özeti, arama özetleri (`phoneHash`, `emailHash`, `commandKeyHash`, `requestHash`) ve nesne anahtarları
 verilmez. Biçim `tenant-export-v1` olarak kalır; kurumun kendi dışa aktarımı (satır sınırı 5000) değişmez.
 `tenant.data-export.created` satırı tablo satır sayılarına ek olarak `fileCount` yazar. Yumuşak silinmiş
-(`deletedAt` dolu) satırlar önceki davranış gibi dışa aktarıma girmez.
+(`deletedAt` dolu) satırlar ve dosyaları dışa aktarıma girmez; kurumun sildiği veri geri gelmez (ürün sahibi
+onayı, 2026-10-10, PR #153 merge onayıyla birlikte).
 Açık soru: Yok.
 Son kontrol: 2026-10-10
 
