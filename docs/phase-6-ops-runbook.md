@@ -2605,10 +2605,21 @@ kuruma teslim edilir; tek SYSTEM_ADMIN onayı (step-up + kurum kodu teyidi) yete
    hedefine bağlı `TENANT_PURGE_EXPORT` step-up). Kurum imha adayı değilse (lisans bitişinden 91 gün
    geçmemiş, aktif/ileri dönem var, zaten imha edilmiş ya da sistem kurumu) istek
    `409 TENANT_PURGE_EXPORT_NOT_CANDIDATE` döner ve hiçbir veri okunmaz. Yanıt `Cache-Control: no-store`
-   ve `Pragma: no-cache` taşır. Dosya kurumun kendi dışa aktarımıyla
-   aynı tablo ve maskeleme kurallarını, ek olarak ödeme hareketlerini (`paymentTransactions`) içerir ve
-   satır sınırı yoktur. Ayrı bir `tenant.data-export.created` AuditLog satırı (export id, dışa aktaran
-   kullanıcı id, zaman, SHA-256, tablo satır sayıları; satır içeriği yok) yazılır. Dosya kuruma güvenli kanalla verilir; O-Okul tarafında kopyası tutulmaz.
+   ve `Pragma: no-cache` taşır. Ürün sahibi kararı (2026-10-10): dosya imhanın yok edeceği her şeyi
+   içerir: kurumun kendi dışa aktarımındaki tablolar, ödeme hareketleri, iletişim ve rıza tabloları
+   (`studentContacts`, `whatsAppConsents`, `whatsAppConsentEvents`), kurumun kendi `auditLogs` satırları,
+   personel ve kalan bütün kurum tabloları (yalnız hesap/oturum ve platform kayıtları hariç). Satır
+   sınırı yoktur. Dosya içerikleri `files` dizisindedir (tablo, satır id, dosya adı, içerik türü, boyut,
+   SHA-256, base64); ödev dosyası, destek eki, ham optik dosya ve öğrenci fotoğrafı dahil. Nesne
+   depolamadaki dosyalar imhanın nesne envanteriyle aynı `S3_*` ayarıyla okunur. Kayıtlı SHA-256 veya
+   boyut tutmazsa ya da dosya okunamazsa istek `409 TENANT_PURGE_EXPORT_FILE_HASH_MISMATCH` /
+   `409 TENANT_PURGE_EXPORT_FILE_UNREADABLE` döner, AuditLog satırı yazılmaz ve dosya verilmez; nesne
+   depolama düzeltilmeden imhaya geçilmez. İletişim telefon/e-postası çözülmüş verilir; kimlik numarası
+   şifreli değeri/özeti, arama özetleri ve nesne anahtarları verilmez. Yanıt tek JSON'dur ve bütün dosyalar
+   API belleğinde base64 tutulur: dosya hacmi yüzlerce MB'a çıkan kurumda önce API bellek sınırı
+   kontrol edilir (bkz. `tenant-data-export-store.ts` ponytail notu). Ayrı bir `tenant.data-export.created`
+   AuditLog satırı (export id, dışa aktaran kullanıcı id, zaman, SHA-256, tablo satır sayıları,
+   `fileCount`; satır içeriği yok) yazılır. Dosya kuruma güvenli kanalla verilir; O-Okul tarafında kopyası tutulmaz.
 3. Teslim işareti: "Teslimi işaretle" (`POST /api/v1/tenants/{id}/purge-exports/{exportId}/delivery`,
    yalnız SYSTEM_ADMIN): teslim tarihi, kanal (`SECURE_DOWNLOAD`, `ENCRYPTED_EMAIL`, `PHYSICAL_MEDIA`,
    `OTHER`) ve isteğe bağlı not. Not kişisel veri içeremez (e-posta, telefon/kimlik benzeri rakam dizisi

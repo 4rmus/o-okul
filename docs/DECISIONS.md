@@ -1108,8 +1108,27 @@ fonksiyonu `backupPackageDeleted` ve `drillTargetsDeleted` alanlarını ayrı ay
 fazından önce biten (CANCELLED, ya da otomatik yeniden denenmeyen FAILED/BLOCKED) imhaların paketi ve
 kopyaları da silinir; silinemeyenler sıfırlama tanılamasında listelenir. Veritabanı fazı commit edildikten
 sonra FAILED olan imhada paket geri dönüş için tutulur.
+Ek (ürün sahibi kararı, 2026-10-10; teslim dışa aktarımının kapsamı): Teslim dışa aktarımı imhanın
+yok edeceği her şeyi içerir. Kurumun kendi dışa aktarımındaki tablolara ek olarak iletişim ve rıza
+tabloları (`StudentContact`, `WhatsAppConsent`, `WhatsAppConsentEvent`), kurumun kendi `AuditLog` satırları
+(`tenantId` = kurum; başka kurumun satırı yok), personel (`Employee`) ve kalan bütün kurum tabloları
+(ödev, gelişim, ders programı, etüt, ham optik içe aktarım, ayrıştırılmış cevap, karantina, optik form
+şablonu, kazanım, duyuru okunma/teslim raporları) dahildir. Dışarıda kalan tek tablolar hesap/oturum ve
+platform işletim kayıtlarıdır (`User`, `TenantMembership`, `MembershipCampusScope`, `AuthSession`,
+`IdempotencyKey`, `IdentityInvitation`, `NotificationDeviceToken`, `LicenseTerm`, `LicenseUsage`,
+`BackupRestoreJob`, `TenantFreshResetOperation`, `TenantMutationActivity`); bu liste
+`tenant-table-coverage.test.ts` ile korunur. Dosya içerikleri (`HomeworkMaterialFile`,
+`SupportTicketAttachment`, `RawImport` ham dosyası, `Student.photoKey` fotoğrafı) aynı JSON içindeki `files`
+dizisinde dosya adı, içerik türü, boyut, SHA-256 ve base64 içerikle verilir; kayıtlı SHA-256/boyut okumada
+doğrulanır. Okunamayan ya da özeti tutmayan bir dosya dışa aktarımı `409 TENANT_PURGE_EXPORT_FILE_UNREADABLE`
+/ `TENANT_PURGE_EXPORT_FILE_HASH_MISMATCH` ile durdurur; sessizce atlanmaz. İletişim telefon/e-postası kuruma
+çözülmüş olarak verilir (çözülemezse `TENANT_PURGE_EXPORT_CONTACT_UNREADABLE`). Kimlik numarası şifreli
+değeri/özeti, arama özetleri (`phoneHash`, `emailHash`, `commandKeyHash`, `requestHash`) ve nesne anahtarları
+verilmez. Biçim `tenant-export-v1` olarak kalır; kurumun kendi dışa aktarımı (satır sınırı 5000) değişmez.
+`tenant.data-export.created` satırı tablo satır sayılarına ek olarak `fileCount` yazar. Yumuşak silinmiş
+(`deletedAt` dolu) satırlar önceki davranış gibi dışa aktarıma girmez.
 Açık soru: Yok.
-Son kontrol: 2026-10-06
+Son kontrol: 2026-10-10
 
 ### DEC-20261005-04 — Otomatik veli bildirimlerinin varsayılanları (KV-8)
 
