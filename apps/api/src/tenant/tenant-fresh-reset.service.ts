@@ -6,8 +6,9 @@ import { hasCapability } from "../rbac/role-capabilities.js";
 import { withTenantDb } from "@o-okul/db";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
 import { Queue } from "bullmq";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import pg from "pg";
-import { PostgresInstitutionResetRequests, freshResetBackupCleanupJob, freshResetBackupCleanupJobId, freshResetFinished, freshResetJobId, freshResetQueue, freshResetStatus, isLicenseExpiryPurge, licenseExpiryPurgeExportCreated, licenseExpiryPurgeExportDelivered, licenseExpiryPurgeExportEntity, listLicenseExpiryPurgeCandidates, readLicenseExpiryPurgeCandidateEndsAt, PostgresFreshResetStore, requireResetWriteQuiescence, type FreshResetRequest, type FreshResetOperation, type Queryable } from "@o-okul/db";
+import { PostgresInstitutionResetRequests, freshResetBackupCleanupJob, freshResetBackupCleanupJobId, freshResetFinished, freshResetJobId, freshResetQueue, freshResetStatus, isLicenseExpiryPurge, licenseExpiryPurgeExportCreated, licenseExpiryPurgeExportDelivered, licenseExpiryPurgeExportEntity, listLicenseExpiryPurgeCandidates, readLicenseExpiryPurgeCandidateEndsAt, PostgresFreshResetStore, requireResetWriteQuiescence, resetS3Client, resetS3Config, type FreshResetRequest, type FreshResetOperation, type Queryable } from "@o-okul/db";
 import { z } from "zod";
 import type { RequestContext } from "../context/request-context.js";
 import { verifyAdminMfaStepUpProof } from "../auth/totp-mfa.js";
@@ -161,13 +162,20 @@ export class TenantFreshResetService {
     if (!this.pool) throw new ServiceUnavailableException("RESET_SOURCE_UNVERIFIED");
     const pool = this.pool;
     await withTenantDb(pool, { bypassRls: true, tenantId: null, readOnly: true }, (db) => requirePurgeExportCandidate(db, tenantId));
-    const payload = await createTenantHandoverExport(pool, tenantId, context.userId, randomBytes(16).toString("hex"));
+    let payload: TenantHandoverExportPayload;
+    try { payload = await createTenantHandoverExport(pool, tenantId, context.userId, randomBytes(16).toString("hex"), readPurgeExportObject()); }
+    catch (error) {
+      // Product owner decision (2026-10-10): an unreadable or altered file fails the export; nothing is omitted silently.
+      const code = error instanceof Error ? error.message : "";
+      if (["TENANT_PURGE_EXPORT_FILE_UNREADABLE", "TENANT_PURGE_EXPORT_FILE_HASH_MISMATCH", "TENANT_PURGE_EXPORT_CONTACT_UNREADABLE"].includes(code)) throw new ConflictException(code);
+      throw error;
+    }
     const rowCounts = Object.fromEntries(Object.entries(payload.tables).map(([key, rows]) => [key, rows.length]));
     await withTenantDb(pool, { bypassRls: true, tenantId: null }, async (db) => {
       // Who, when and how many rows; never row content. actorUserId also carries the exporter.
       await db.query('INSERT INTO "AuditLog" ("id", "tenantId", "actorUserId", "entityType", "entityId", "action", "diff") VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)',
         [randomUUID(), tenantId, context.userId, licenseExpiryPurgeExportEntity, payload.exportId, licenseExpiryPurgeExportCreated,
-          JSON.stringify({ formatVersion: payload.formatVersion, scope: payload.scope, exportedByUserId: context.userId, exportedAt: payload.exportedAt, sha256: createHash("sha256").update(JSON.stringify(payload)).digest("hex"), rowCounts })]);
+          JSON.stringify({ formatVersion: payload.formatVersion, scope: payload.scope, exportedByUserId: context.userId, exportedAt: payload.exportedAt, sha256: createHash("sha256").update(JSON.stringify(payload)).digest("hex"), rowCounts, fileCount: payload.files.length })]);
     });
     return payload;
   }
@@ -215,6 +223,16 @@ export class TenantFreshResetService {
     if (!operation) throw new NotFoundException("RESET_OPERATION_NOT_FOUND");
     return freshResetStatus(operation);
   }
+}
+/** Object reader for handover files, on the same S3 configuration the purge's object inventory uses. */
+function readPurgeExportObject() {
+  let source: { client: ReturnType<typeof resetS3Client>; bucket: string } | undefined;
+  return async (key: string) => {
+    if (!source) { const config = resetS3Config(); source = { client: resetS3Client(config), bucket: config.bucket }; }
+    const result = await source.client.send(new GetObjectCommand({ Bucket: source.bucket, Key: key }));
+    if (!result.Body) throw new Error("RESET_OBJECT_MISSING");
+    return Buffer.from(await result.Body.transformToByteArray());
+  };
 }
 async function requirePurgeExportCandidate(db: Queryable, tenantId: string) {
   if (!(await db.query('SELECT "id" FROM "Tenant" WHERE "id" = $1', [tenantId])).rows.length) throw new NotFoundException("TENANT_NOT_FOUND");

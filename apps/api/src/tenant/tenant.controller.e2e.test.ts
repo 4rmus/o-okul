@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createAdminMfaStepUpProof } from "../auth/totp-mfa.js";
 import type { TenantStatusUpdateRequest } from "@o-okul/shared-types";
 import { Queue } from "bullmq";
+import { createHash } from "node:crypto";
 import { TenantFreshResetService } from "./tenant-fresh-reset.service.js";
 import { AppModule } from "../app.module.js";
 
@@ -166,12 +167,14 @@ describe("TenantController", () => {
     const audit: Array<{ tenantId: string; actorUserId: string; entityType: string; entityId: string; action: string; diff: Record<string, unknown>; createdAt: string }> = [];
     const day = 86_400_000;
     let licenseEndedDaysAgo = 120; let purged = false;
+    const fileBytes = Buffer.from("homework sheet"); let fileSha = createHash("sha256").update(fileBytes).digest("hex");
     const query = vi.fn(async (sql: string, values: unknown[] = []) => {
       if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] };
       if (sql.includes('FROM "LicenseTerm"')) return { rows: [{ startsAt: new Date(Date.now() - (licenseEndedDaysAgo + 365) * day), endsAt: new Date(Date.now() - licenseEndedDaysAgo * day), cancelledAt: null }] };
       if (sql.includes('FROM "TenantFreshResetOperation"')) return { rows: purged ? [{ "?column?": 1 }] : [] };
       if (sql.includes('FROM "Tenant" WHERE "id" = $1')) return { rows: values[0] === "tenant-a" ? [{ id: "tenant-a" }] : [] };
       if (sql.includes("jsonb_agg")) return { rows: [{ rows: sql.includes('"PaymentTransaction"') ? [{ id: "tx-1", amount: 100 }] : [] }] };
+      if (sql.startsWith('SELECT "id", ') && sql.includes('FROM "HomeworkMaterialFile"')) return { rows: [{ id: "hf-1", fileName: "sheet.pdf", contentType: "application/pdf", byteSize: fileBytes.length, sha256: fileSha, contentBase64: fileBytes.toString("base64"), objectKey: null }] };
       if (sql.startsWith('INSERT INTO "AuditLog"')) { audit.push({ tenantId: String(values[1]), actorUserId: String(values[2]), entityType: String(values[3]), entityId: String(values[4]), action: String(values[5]), diff: JSON.parse(String(values[6])), createdAt: "2026-09-30T10:00:00.000Z" }); return { rows: [] }; }
       if (sql.includes('FROM "AuditLog"')) return { rows: audit.filter((row) => row.tenantId === values[0] && row.entityType === values[1] && row.entityId === values[2]) };
       return { rows: [] };
@@ -188,6 +191,11 @@ describe("TenantController", () => {
       purged = false;
       expect(query.mock.calls.some(([sql]) => sql.includes("jsonb_agg"))).toBe(false);
       expect(audit).toEqual([]);
+      // Product owner decision (2026-10-10): an altered file fails the export loudly and writes no "created" row.
+      const goodSha = fileSha; fileSha = "0".repeat(64);
+      await exportWith(exportProof()).expect(409).expect(({ body: error }) => expect(error.error.code).toBe("TENANT_PURGE_EXPORT_FILE_HASH_MISMATCH"));
+      expect(audit).toEqual([]);
+      fileSha = goodSha;
       const created = await exportWith(exportProof()).expect(201);
       expect(created.headers["cache-control"]).toBe("no-store");
       expect(created.headers.pragma).toBe("no-cache");
@@ -197,8 +205,10 @@ describe("TenantController", () => {
       expect(query.mock.calls.filter(([sql]) => sql.includes("jsonb_agg")).every(([, values]) => (values as unknown[])[0] === null)).toBe(true);
       expect(audit).toEqual([expect.objectContaining({ actorUserId: actor.sub, entityType: "TenantDataExport", entityId: created.body.exportId, action: "tenant.data-export.created", diff: expect.objectContaining({ sha256: expect.stringMatching(/^[a-f0-9]{64}$/) }) })]);
       // Who, when and row counts only; no row content.
-      expect(Object.keys(audit[0]!.diff).sort()).toEqual(["exportedAt", "exportedByUserId", "formatVersion", "rowCounts", "scope", "sha256"]);
-      expect(audit[0]!.diff).toMatchObject({ exportedByUserId: actor.sub, exportedAt: created.body.exportedAt, rowCounts: expect.objectContaining({ paymentTransactions: 1 }) });
+      expect(Object.keys(audit[0]!.diff).sort()).toEqual(["exportedAt", "exportedByUserId", "fileCount", "formatVersion", "rowCounts", "scope", "sha256"]);
+      expect(audit[0]!.diff).toMatchObject({ exportedByUserId: actor.sub, exportedAt: created.body.exportedAt, fileCount: 1, rowCounts: expect.objectContaining({ paymentTransactions: 1, auditLogs: 0, studentContacts: 0, whatsAppConsents: 0, whatsAppConsentEvents: 0 }) });
+      expect(created.body.files).toEqual([expect.objectContaining({ table: "HomeworkMaterialFile", rowId: "hf-1", sha256: fileSha, contentBase64: fileBytes.toString("base64") })]);
+      expect(JSON.stringify(audit[0]!.diff)).not.toContain(fileBytes.toString("base64"));
       expect(Object.values(audit[0]!.diff.rowCounts as Record<string, unknown>).every((count) => Number.isInteger(count))).toBe(true);
       expect(JSON.stringify(audit[0]!.diff)).not.toContain("tx-1");
       await exportWith(exportProof("missing"), "/tenants/missing/purge-exports").expect(404);

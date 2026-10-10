@@ -3438,7 +3438,12 @@ const operationContracts: Record<string, OperationContract> = {
       exportId: stringSchema({ pattern: "^[a-f0-9]{32}$" }), formatVersion: { type: "string", enum: ["tenant-export-v1"] }, tenantId: stringSchema(), generatedByUserId: stringSchema(),
       exportedAt: stringSchema({ format: "date-time" }), scope: { type: "string", enum: ["license-expiry-purge-handover"] }, rowLimitPerTable: { type: "integer", nullable: true, enum: [null] },
       tables: looseObjectSchema(), warnings: arraySchema(stringSchema()),
-    }, ["exportId", "formatVersion", "tenantId", "generatedByUserId", "exportedAt", "scope", "rowLimitPerTable", "tables", "warnings"]),
+      // Product owner decision (2026-10-10): file bytes travel with the handover, sha256-verified on read.
+      files: arraySchema(objectSchema({
+        table: stringSchema({ enum: ["HomeworkMaterialFile", "SupportTicketAttachment", "RawImport", "Student"] }), rowId: stringSchema(), fileName: stringSchema(),
+        contentType: stringSchema({ nullable: true }), byteSize: integerSchema({ minimum: 0 }), sha256: stringSchema({ pattern: "^[a-f0-9]{64}$" }), contentBase64: stringSchema(),
+      }, ["table", "rowId", "fileName", "contentType", "byteSize", "sha256", "contentBase64"])),
+    }, ["exportId", "formatVersion", "tenantId", "generatedByUserId", "exportedAt", "scope", "rowLimitPerTable", "tables", "files", "warnings"]),
   },
   "post /api/v1/tenants/{id}/purge-exports/{exportId}/delivery": {
     requestBody: objectSchema({ deliveredOn: stringSchema({ format: "date" }), channel: stringSchema({ enum: ["SECURE_DOWNLOAD", "ENCRYPTED_EMAIL", "PHYSICAL_MEDIA", "OTHER"] }), note: stringSchema({ maxLength: 200 }) }, ["deliveredOn", "channel"]),
