@@ -21,7 +21,6 @@ import { type TenantStore, tenantStoreToken } from "../tenant/tenant-store.js";
 import { tenantWebUrl } from "../http/tenant-origin.js";
 import { requireTenantWideStaffContext } from "../tenant/tenant-access.js";
 import {
-  type TenantUserRecord,
   type UserManagementStore,
   userManagementStoreToken,
 } from "../user-management/user-management-store.js";
