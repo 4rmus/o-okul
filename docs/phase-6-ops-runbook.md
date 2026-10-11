@@ -1961,6 +1961,21 @@ Minimum kanıt içeriği:
 - `SUSPENDED` tenant'lar read-only moda alınmaz; request context kurulmadan
   `TENANT_INACTIVE_OR_EXPIRED` ile reddedilir.
 
+## Öğretmene Hesap Açma
+
+Öğretmen portalı yalnız öğretmen profili bir kullanıcıya bağlıyken (`Teacher.userId`) açılır; bağ
+yalnız `TEACHER` kimlik daveti kabul edilince kurulur. TC + telefon ile hesap açma modeli kullanılmaz.
+
+1. Kurum yöneticisi (`user:manage`) Öğretmenler → öğretmen ekle → ayrıntı → **Hesap daveti gönder**
+   adımıyla öğretmenin e-postasını girer (`POST /identity-invitations`, `subjectType: "TEACHER"`).
+2. Ayrıntı ve liste ekranı durumu gösterir: "Hesap yok", "Davet bekliyor" (bu durumda **Yeniden gönder**
+   mevcut daveti yeni bağlantıyla yeniler; ikinci davet açılmaz) veya "Portal bağlı".
+3. Öğretmen e-postadaki bağlantıdan parolasını belirler; sonraki girişte öğretmen portalı açılır.
+   Koltuk limiti davet kabulünde kontrol edilir (bkz. Tenant Koltuk Limiti Runtime).
+
+Yardımcı yönetici ve operasyon çalışanı öğretmen ekranını görür ama `user:manage` yetkisi olmadığı
+için davet işlemi gösterilmez.
+
 ## Kurum Veri Export ve Opsiyonel Backup Smoke
 
 İlk pilotta off-host yedek hedefi release planından çıkarılmıştır: kurum yetkilisi `/kurum/yedek-restore`
