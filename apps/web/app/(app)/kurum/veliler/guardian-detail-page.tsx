@@ -297,7 +297,7 @@ function buildGuardianSummaryBadges(detail: GuardianDetailData): OperationSummar
     },
     {
       key: "portal",
-      label: detail.guardian.userId ? "Portal bağlı" : "TC + telefon bekliyor",
+      label: detail.guardian.userId ? "Portal bağlı" : "Hesap yok",
       tone: detail.guardian.userId ? "success" : "warning",
     },
     {
@@ -332,9 +332,9 @@ function buildGuardianSummaryActions(detail: GuardianDetailData): OperationSumma
       detail: "Veli portal erişimi",
       key: "portal-link",
       label: "Portal bağlantısı",
-      status: detail.guardian.userId ? "Bağlı" : "TC + telefon",
+      status: detail.guardian.userId ? "Bağlı" : "Hesap yok",
       tone: detail.guardian.userId ? "success" : "warning",
-      value: detail.guardian.userId ? "Hesap bağlı" : "Bilgi bekliyor",
+      value: detail.guardian.userId ? "Hesap bağlı" : "Davetle açılır",
     },
   ];
 }
