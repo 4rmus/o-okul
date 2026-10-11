@@ -2,7 +2,7 @@
 
 Plan: `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11.3. Onay: ürün sahibi, 2026-10-10 (staging'de test
 kurumu, test kullanıcıları ve test verisi oluşturma). Ortam: https://o-okul.com, kurum adresi
-`https://uat-s1.o-okul.com`. Staging sürümü UAT başında `/health` veya deploy run'ından not edilir; sürüm
+`https://uat-s1-okulu.o-okul.com` (kurum kodu `uat-s1-okulu`). Staging sürümü UAT başında `/health` veya deploy run'ından not edilir; sürüm
 değişirse etkilenen senaryo yeniden koşulur.
 
 Senaryoları bir insan koşar. Claude staging'e parolayla giriş yapmaz; sonuçları bu dokümandaki tabloya
@@ -38,8 +38,8 @@ FAIL olan her senaryo için bulgu satırı açılır.
 
 | Sıra | Senaryo | Rol | Adımlar | Beklenen | Sonuç / kanıt |
 |---|---|---|---|---|---|
-| S1-01 | Kartsız deneme (KF-5) | U-SYS, U-OWN | Sistem → Kurumlar'da `uat-s1` kurumunu deneme lisansıyla aç; U-OWN daveti kabul edip MFA kursun | 7 günlük deneme, 100 öğrenci sınırı görünür; OWNER MFA zorunlu | |
-| S1-02 | MFA ve destekli sıfırlama (KV-9) | U-OWN, U-ADM, U-SYS | U-ADM MFA kursun; U-SYS U-ADM'nin MFA'sını sıfırlasın; U-ADM yeniden kursun | Akış hatasız, audit kaydı var | |
+| S1-01 | Kartsız deneme (KF-5) | U-SYS, U-OWN | Sistem → Kurumlar'da `uat-s1-okulu` kurumunu deneme lisansıyla aç; U-OWN daveti kabul edip MFA kursun | 7 günlük deneme, 100 öğrenci sınırı görünür; OWNER MFA zorunlu | PASS 2026-10-10: TRIAL 10-10→10-17, 100 öğrenci; MFA kurulmadan giriş yok (`auth.totp_enrollment_required`); bkz. F-01 |
+| S1-02 | MFA ve destekli sıfırlama (KV-9) | U-OWN, U-ADM, U-SYS | U-OWN, U-ADM'yi Yeni çalışan + hesap daveti ile Kurum yöneticisi olarak eklesin; U-ADM MFA kursun; U-SYS U-ADM'nin MFA'sını sıfırlasın; U-ADM yeniden kursun | Akış hatasız, audit kaydı var | |
 | S1-03 | Öğrenci içe aktarma (KV-1) | U-ADM | `ogrenciler-8a-30.csv` önizle ve içe aktar; sonra `cakisma-tek-satir.csv` önizle | 30 öğrenci, 29 yasal veli iletişimi (izinler kapalı); ikinci dosyada `CONTACT_COLUMNS_CONFLICT` | |
 | S1-04 | Personel ve atama | U-ADM | U-FIN ve U-TCH'yi davet et; U-TCH'yi 8-A sınıf öğretmeni ve Matematik branşına ata | Davetler ulaşır, girişte rol doğru | |
 | S1-05 | Veli daveti ve bağlama (KV-3, KV-3b) | U-ADM | 2–3 veli iletişimine e-posta ekle; toplu davet gönder; U-GRD2'yi elle bağla; aynı daveti tekrar gönder | E-postasız veliler atlanır; ikinci davet oluşmaz; elle bağlama yalnız yasal veliye açık | |
@@ -64,9 +64,12 @@ geçmez, Gate E kanıt zincirini besler.
 
 | ID | Senaryo | Özet | Önem | Karar |
 |---|---|---|---|---|
+| F-01 | S1-01 | Kurum sahibi davet e-postası Gmail'de spama düştü. DNS kayıtları (cf-bounce SPF, `cf-bounce._domainkey` DKIM, bounce MX) mevcut; SPF/DKIM/DMARC sonucu henüz okunmadı | Yüksek (satış) | Ürün sahibi: sonra bakılacak |
+| F-02 | S1-02 | Yönetici eklemek iki adımlı ve keşfedilmesi zor: önce "Yeni çalışan" profili, sonra satırdaki zarf ikonuyla hesap daveti; tek "yönetici ekle" akışı yok | Orta | Açık |
+| F-03 | S1-02 | Gönderilmiş davet iptal edilemiyor (API'de yalnız oluştur/kabul/yeniden gönder); süresi dolmamış davet varken aynı çalışana yeni davet `EMPLOYEE_INVITATION_ALREADY_PENDING`. Yanlış rolle giden davet kabul edilip rol sonradan değiştirildi | Orta | Açık |
 
 ## Bitiş
 
 - Tüm senaryolar PASS ya da bulgusu karara bağlanmış olunca S1 kapanır; `status.md` kapanış kaydına satır
   eklenir (kanıt sınıfı STAGING).
-- UAT sonunda `uat-s1` kurumu askıya alınır. Silme, lisans sonu imhası akışıyla ve ayrı onayla yapılır.
+- UAT sonunda `uat-s1-okulu` kurumu askıya alınır. Silme, lisans sonu imhası akışıyla ve ayrı onayla yapılır.

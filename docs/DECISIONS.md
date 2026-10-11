@@ -177,21 +177,25 @@ Açık soru: Pilot kurum farklı optik format veya fatura entegrasyonu isterse F
 kapısında ayrı DEC açılır.
 Son kontrol: 2026-10-04
 
-### DEC-20260613-02 — Sistem admini MFA ikinci faktörü
+### DEC-20260613-02 — Yönetici hesaplarında MFA ikinci faktörü
 
-Durum: Onaylı
-Karar: Yalnız SYSTEM_ADMIN hesapları için ikinci faktör TOTP + tek kullanımlık recovery code olarak
-uygulanır. Kurum sahibi, kurum yöneticisi ve kurum alt kullanıcıları MFA kapsamı dışındadır. SMS OTP
+Durum: Onaylı; kapsam 2026-10-04'te KV-9 ile genişletildi, 2026-10-11'de ürün sahibince teyit edildi
+Karar: SYSTEM_ADMIN, kurum sahibi (TENANT_OWNER) ve kurum yöneticisi (TENANT_ADMIN) hesapları için ikinci
+faktör TOTP + tek kullanımlık recovery code olarak zorunludur (`adminMfaRoles`). Kurum yöneticisi kurum
+sahibine yakın yetki taşıdığı için kapsamdadır (ürün sahibi teyidi, 2026-10-11, staging UAT S1-02).
+Diğer kurum kullanıcıları (operasyon, finans, öğretmen, öğrenci, veli) MFA kapsamı dışındadır. Kurum
+sahibi ve yöneticisinin MFA'sını SYSTEM_ADMIN sıfırlayabilir (`POST /auth/totp/admin-reset`). SMS OTP
 v1'de ikinci faktör olarak kullanılmaz; SIM-swap ve maliyet riski
 nedeniyle reddedilir. TOTP secret'ları AES-GCM ile şifreli saklanır, recovery code'lar HMAC hash
 olarak tutulur ve MFA enable/disable işlemleri mevcut refresh session'ları iptal eder.
 Kaynak: Güvenlik ve ürün kararı.
 Kanıt: `apps/api/src/auth/totp-mfa.ts`, `apps/api/src/auth/auth.service.ts`,
-`docs/evidence-templates/admin-mfa.example.json`, `scripts/check-admin-mfa-evidence.mjs`.
+`docs/evidence-templates/admin-mfa.example.json`, `scripts/check-admin-mfa-evidence.mjs` (requiredRoles),
+KV-9 PR #134.
 Etkilenen ADR: Yok
-Açık soru: Production'da `ADMIN_MFA_MODE=required` geçişi bütün SYSTEM_ADMIN enrollment'ları tamamlandıktan
+Açık soru: Production'da `ADMIN_MFA_MODE=required` geçişi bütün yönetici enrollment'ları tamamlandıktan
 sonra ayrı go-live kararıyla yapılır; repo sözleşmesi staging için `optional` POC'yi kabul eder.
-Son kontrol: 2026-08-10
+Son kontrol: 2026-10-11
 
 ### DEC-20260613-04 — V1 karne görsel kabul eşiği
 
