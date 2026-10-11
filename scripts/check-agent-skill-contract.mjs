@@ -145,7 +145,9 @@ function checkGovernanceContracts() {
     "Use no more than three subagents total.",
     "If one subagent writes, at most two read-only subagents may remain.",
     "Each active gate may have only one write-capable participant.",
-    "When a gate completes, report its result and stop; do not automatically continue to the next gate.",
+    "Gates are commits, not PRs.",
+    "One milestone, one branch, one PR",
+    "When the user asks for step-by-step work, stop after each gate.",
     "LOCAL_STATIC`, `LOCAL_TEST`, `CI`, `STAGING`, `PRODUCTION`, `EXTERNAL_NOT_RUN`, and `UNPROVEN",
     "pnpm agents:check",
   ]) {

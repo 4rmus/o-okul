@@ -124,7 +124,7 @@ Use the narrowest repo skill before spawning agents:
 8. Use small handoffs. Each agent gets a concrete objective, owned paths, forbidden paths, expected output, and validation commands.
 9. Subagent output must be a summary: findings, changed files, tests run with evidence class, residual risk. Long logs stay out of the main thread unless an exact error is needed.
 10. The final review should run after integration for high-risk work: security/RLS, report generation, gradebook publication, production evidence, schema migrations, and broad UI changes.
-11. When a gate completes, report its result and stop; do not automatically continue to the next gate.
+11. Gates are commits, not PRs. When a gate completes, commit it on the milestone branch and continue; stop only for an approval-required action, an ambiguity that changes the deliverable, or a failure that cannot be diagnosed, or when the user asks for step-by-step work. One milestone, one branch, one PR.
 12. Report `LOCAL_STATIC`, `LOCAL_TEST`, `CI`, `STAGING`, `PRODUCTION`, `EXTERNAL_NOT_RUN`, and `UNPROVEN` separately.
 13. Deploys, provider actions, secret/config changes, DB/data mutations, and mutating smokes require explicit user approval.
 14. A scope change needs a DEC record first; a closed plan slice is recorded in `status.md` "Açık İşler" (plan section 10.1).

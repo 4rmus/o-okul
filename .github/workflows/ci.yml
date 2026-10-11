@@ -12,7 +12,62 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.detect.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect docs-only changes
+        id: detect
+        shell: bash
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          docs_only=false
+          reason="manual run"
+          if [ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]; then
+            if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+              base_sha="$PR_BASE_SHA"
+              head_sha="$PR_HEAD_SHA"
+            else
+              base_sha="$BEFORE_SHA"
+              head_sha="$CURRENT_SHA"
+            fi
+
+            changed_files="$RUNNER_TEMP/ci-changed-files.txt"
+            if [ -n "$base_sha" ] &&
+              [ "$base_sha" != "0000000000000000000000000000000000000000" ] &&
+              git diff --name-only "$base_sha" "$head_sha" > "$changed_files" &&
+              [ -s "$changed_files" ]
+            then
+              if grep -Evq '^(docs/.*|README\.md|status\.md)$' "$changed_files"; then
+                reason="non-docs files changed"
+              else
+                docs_only=true
+                reason="only docs/, README.md or status.md changed"
+              fi
+            else
+              reason="change range unavailable; fail-open to full CI"
+            fi
+          fi
+
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+          echo "### CI scope" >> "$GITHUB_STEP_SUMMARY"
+          echo "- docs_only: \`$docs_only\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- reason: $reason" >> "$GITHUB_STEP_SUMMARY"
+
   verify:
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -40,8 +95,26 @@ jobs:
             turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @o-okul/web exec playwright install --with-deps chromium
-      - run: pnpm run ci
+      - if: needs.changes.outputs.docs_only != 'true'
+        run: pnpm --filter @o-okul/web exec playwright install --with-deps chromium
+      - if: needs.changes.outputs.docs_only != 'true'
+        run: pnpm run ci
+      # Docs-only fast path: the node checks that read docs/ and status.md; no Playwright, build or Postgres.
+      - name: Docs-only checks
+        if: needs.changes.outputs.docs_only == 'true'
+        run: |
+          pnpm agents:check
+          pnpm ui-ux-professionalization:completion:contract
+          pnpm docker:check
+          pnpm ops:check
+          pnpm prod:evidence:templates:check
+          pnpm account-management:preflight:contract
+          pnpm account-management:backfill:contract
+          pnpm account-management:license-backfill:contract
+          node scripts/check-karne-visual-contract.mjs
+          pnpm web:design-tokens:check
+          pnpm web:ux-baseline:check
+          pnpm web:measurement-baseline:check
 
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -131,6 +204,8 @@ jobs:
           retention-days: 7
 
   account-management-postgres:
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
