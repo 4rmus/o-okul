@@ -529,6 +529,15 @@ const totpAdminResetResponseSchema = objectSchema({
   resetAt: stringSchema({ format: "date-time" }),
 }, ["resetAt"]);
 
+const tenantAdminAccountSchema = objectSchema({
+  userId: stringSchema(),
+  name: stringSchema(),
+  emailMasked: stringSchema({ nullable: true }),
+  roles: arraySchema(stringSchema({ enum: ["TENANT_OWNER", "TENANT_ADMIN"] })),
+  mfaEnabled: { type: "boolean" },
+  mfaEnabledAt: stringSchema({ format: "date-time", nullable: true }),
+}, ["userId", "name", "emailMasked", "roles", "mfaEnabled", "mfaEnabledAt"]);
+
 const tenantResetInstitutionRequestSchema = objectSchema({
   id: stringSchema(), tenantId: stringSchema(), requestedBy: stringSchema(), requestedAt: stringSchema({ format: "date-time" }), lifecycleVersion: integerSchema({ minimum: 0 }), status: stringSchema({ enum: ["PENDING", "REVOKED", "ACCEPTED", "COMPLETED"] }), operationId: stringSchema({ nullable: true }),
 }, ["id", "tenantId", "requestedBy", "requestedAt", "lifecycleVersion", "status", "operationId"]);
@@ -3461,6 +3470,7 @@ const operationContracts: Record<string, OperationContract> = {
       blockers: arraySchema(stringSchema()), allowed: { type: "boolean" }, preflightDigest: stringSchema(),
     }, ["preset", "lifecycleVersion", "preservedOwnerCount", "categories", "objectCount", "objectBytes", "blockers", "blockerCounts", "allowed", "preflightDigest"]),
   },
+  "get /api/v1/tenants/{id}/admin-accounts": { responseBody: arraySchema(tenantAdminAccountSchema) },
   "get /api/v1/tenants/{id}": {
     responseBody: { ...tenantRecordSchema, properties: { ...(tenantRecordSchema.properties as Record<string, unknown>), management: objectSchema({ verified: { type: "boolean" }, allowedActions: objectSchema({ suspend: { type: "boolean" }, reactivate: { type: "boolean" }, cleanReset: { type: "boolean" } }, ["suspend", "reactivate", "cleanReset"]), currentReset: { ...tenantCleanResetStatusSchema, nullable: true } }, ["verified", "allowedActions", "currentReset"]) }, required: [...(tenantRecordSchema.required as string[]), "management"] },
   },

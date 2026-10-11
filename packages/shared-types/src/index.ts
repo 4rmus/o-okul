@@ -392,6 +392,7 @@ export type {
   TenantSelectionRequest,
   TenantSelectionRequiredResponse,
   TenantFirstOwnerCreateRequest,
+  TenantAdminAccountRecord,
   TenantCampusCreateRequest,
   TenantOnboardingOwnerRecord,
   TenantRecord,

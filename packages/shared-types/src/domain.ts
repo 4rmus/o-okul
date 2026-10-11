@@ -182,6 +182,16 @@ export interface TotpAdminResetResponse {
   resetAt: string;
 }
 
+/** KV-9b: SYSTEM_ADMIN view of a tenant's MFA-scope accounts; minimal fields only. */
+export interface TenantAdminAccountRecord {
+  userId: string;
+  name: string;
+  emailMasked: string | null;
+  roles: Array<"TENANT_OWNER" | "TENANT_ADMIN">;
+  mfaEnabled: boolean;
+  mfaEnabledAt: string | null;
+}
+
 export type MfaStepUpPurpose = "OWNER_ADMIN_CHANGE" | "TENANT_LIFECYCLE_CHANGE" | "TENANT_CLEAN_RESET" | "TENANT_DEVICE_RESTORE" | "TENANT_PURGE_EXPORT";
 
 export interface TenantLifecycleMfaTarget {

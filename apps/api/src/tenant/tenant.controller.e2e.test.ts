@@ -10,6 +10,7 @@ import { Queue } from "bullmq";
 import { createHash } from "node:crypto";
 import { TenantFreshResetService } from "./tenant-fresh-reset.service.js";
 import { AppModule } from "../app.module.js";
+import { authUserStoreToken, type AuthUserStore } from "../auth/auth-user-store.js";
 
 describe("TenantController", () => {
   let app: INestApplication;
@@ -664,6 +665,35 @@ describe("TenantController", () => {
           roles: ["TENANT_ADMIN"],
         });
       });
+  });
+
+  // KV-9b (staging UAT F-04): runs last because enabling TOTP bumps the target's membership version.
+  it("admin-accounts SYSTEM_ADMIN-only, PII-safe and reflects a system-admin MFA reset", async () => {
+    const route = "/tenants/tenant-a/admin-accounts";
+    await request(server).get(route).expect(401);
+    await request(server).get(route).set("Authorization", `Bearer ${adminToken}`).expect(403);
+    await request(server).get("/tenants/system/admin-accounts").set("Authorization", `Bearer ${systemToken}`).expect(404);
+    await request(server).get("/tenants/tenant-missing/admin-accounts").set("Authorization", `Bearer ${systemToken}`).expect(404);
+    const users = app.get<AuthUserStore>(authUserStoreToken);
+    const target = (await users.findById("user-finance-privacy"))!;
+    await users.enableTotp({ userId: target.id, source: { tenantId: "tenant-a", membershipVersion: target.membershipVersion }, secretEncrypted: "enc", enabledAt: "2026-10-01T00:00:00.000Z", recoveryCodeHashes: [] });
+
+    const list = async () => (await request(server).get(route).set("Authorization", `Bearer ${systemToken}`).expect(200).expect("Cache-Control", "no-store")).body as Array<Record<string, unknown>>;
+    const accounts = await list();
+    expect(accounts.length).toBeGreaterThan(0);
+    for (const account of accounts) {
+      expect(Object.keys(account).sort()).toEqual(["emailMasked", "mfaEnabled", "mfaEnabledAt", "name", "roles", "userId"]);
+      expect(account.roles).toEqual(expect.arrayContaining([expect.stringMatching(/^TENANT_(OWNER|ADMIN)$/)]));
+    }
+    expect(JSON.stringify(accounts)).not.toMatch(/@example\.test|assistant-tenant-a|teacher-tenant-a|user-tenant-b/);
+    expect(accounts.find((account) => account.userId === "user-finance-privacy")).toMatchObject({ mfaEnabled: true, mfaEnabledAt: "2026-10-01T00:00:00.000Z" });
+    expect(accounts.find((account) => account.userId === "user-tenant-a")).toMatchObject({ roles: ["TENANT_ADMIN"], mfaEnabled: false, mfaEnabledAt: null });
+
+    const actor = JSON.parse(Buffer.from(systemToken.split(".")[0]!, "base64url").toString());
+    const proof = createAdminMfaStepUpProof({ userId: actor.sub, sessionId: actor.sessionId, membershipVersion: actor.membershipVersion, purpose: "OWNER_ADMIN_CHANGE" });
+    await request(server).post("/auth/totp/admin-reset").set("Authorization", `Bearer ${systemToken}`).set("X-Step-Up-Token", proof.stepUpToken)
+      .send({ tenantId: "tenant-a", userId: "user-finance-privacy" }).expect(200);
+    expect((await list()).find((account) => account.userId === "user-finance-privacy")).toMatchObject({ mfaEnabled: false, mfaEnabledAt: null });
   });
 });
 

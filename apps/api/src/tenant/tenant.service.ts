@@ -1,8 +1,10 @@
 import { runVerifiedTenantMutation } from "../context/tenant-mutation-activity.js";
 import { randomUUID } from "node:crypto";
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, Optional, UnauthorizedException } from "@nestjs/common";
-import { resolveLicenseState, type LicenseTermListRecord, type TenantStatusUpdateRequest, type TenantCreateResponse, type TenantStatusUpdateResult } from "@o-okul/shared-types";
+import { resolveLicenseState, type LicenseTermListRecord, type TenantAdminAccountRecord, type TenantStatusUpdateRequest, type TenantCreateResponse, type TenantStatusUpdateResult } from "@o-okul/shared-types";
 import { verifyAdminMfaStepUpProof } from "../auth/totp-mfa.js";
+import { authUserStoreToken, type AuthUserStore } from "../auth/auth-user-store.js";
+import { maskContactEmail } from "../privacy/contact-mask.js";
 import { tenantStatusUpdateBodySchema } from "./tenant-validation.js";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import { hashIdempotencyRequest } from "../http/idempotency.js";
@@ -52,6 +54,7 @@ export class TenantService {
     @Inject(tenantStoreToken) private readonly tenants: TenantStore,
     @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() @Inject(licenseTermStoreToken) private readonly licenseTerms?: LicenseTermStore,
+    @Optional() @Inject(authUserStoreToken) private readonly users?: AuthUserStore,
   ) {}
 
   async list(context: RequestContext): Promise<TenantRecord[]> {
@@ -67,6 +70,18 @@ export class TenantService {
       throw new NotFoundException("TENANT_NOT_FOUND");
     }
     return tenant;
+  }
+
+  /** KV-9b: the OWNER/ADMIN accounts `POST /auth/totp/admin-reset` can target; no secrets, hashes, phone or national ID. */
+  async listAdminAccounts(context: RequestContext, id: string): Promise<TenantAdminAccountRecord[]> {
+    const tenant = await this.findOne(context, id);
+    if (!this.users) throw new BadRequestException("AUTH_USER_STORE_REQUIRED");
+    return (await this.users.listByTenant(tenant.id)).flatMap((user) => {
+      const roles = user.roles.filter((role): role is "TENANT_OWNER" | "TENANT_ADMIN" => role === "TENANT_OWNER" || role === "TENANT_ADMIN");
+      if (user.tenantId !== tenant.id || user.purgedAt || isSystemAdmin(user.roles) || roles.length === 0) return [];
+      const mfaEnabled = Boolean(user.totpSecretEncrypted && user.totpEnabledAt);
+      return [{ userId: user.id, name: user.name, emailMasked: user.email ? maskContactEmail(user.email) : null, roles, mfaEnabled, mfaEnabledAt: mfaEnabled ? user.totpEnabledAt! : null }];
+    });
   }
 
   async findCurrent(context: RequestContext): Promise<TenantRecord> {

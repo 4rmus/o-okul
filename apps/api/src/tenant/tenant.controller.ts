@@ -8,7 +8,7 @@ import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import type { LicenseTermRecord } from "../license/license-term-store.js";
-import type { LicenseTermListRecord, TenantStatusUpdateResult } from "@o-okul/shared-types";
+import type { LicenseTermListRecord, TenantAdminAccountRecord, TenantStatusUpdateResult } from "@o-okul/shared-types";
 import { licenseTermCreateBodySchema, type LicenseTermCreateBody } from "../license/license-validation.js";
 import type { TenantRecord } from "./tenant-store.js";
 import { TenantService, type TenantCreateResponse } from "./tenant.service.js";
@@ -107,6 +107,14 @@ export class TenantController {
   @RequireCapability("tenant:clean-reset")
   cleanResetStatus(@Param("id") id: string, @Param("operationId") operationId: string) {
     return this.freshReset.status(getRequestContext(), id, operationId);
+  }
+
+  // KV-9b (staging UAT F-04): lets the system admin find the target of POST /auth/totp/admin-reset.
+  @Get(":id/admin-accounts")
+  @Header("Cache-Control", "no-store")
+  @RequireCapability("tenant:manage")
+  listAdminAccounts(@Param("id") id: string): Promise<TenantAdminAccountRecord[]> {
+    return this.tenants.listAdminAccounts(getRequestContext(), id);
   }
 
   @Get(":id")
