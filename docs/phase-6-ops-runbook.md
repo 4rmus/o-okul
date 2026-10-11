@@ -335,7 +335,8 @@ Minimum kanıt içeriği:
   kabul edilmez.
 - `ADMIN_MFA_SECRET_ENCRYPTION_KEY`, `ADMIN_MFA_RECOVERY_HASH_KEY` ve
   `ADMIN_MFA_CHALLENGE_SECRET` gerçek ve birbirinden/JWT secret'tan farklı secret değerlerdir.
-- Yalnız SYSTEM_ADMIN hesapları TOTP enrollment kapsamındadır; kurum hesapları ve alt kullanıcıları MFA kapsamı dışındadır. Recovery code sayısı
+- SYSTEM_ADMIN, kurum sahibi (TENANT_OWNER) ve kurum yöneticisi (TENANT_ADMIN) hesapları TOTP enrollment
+  kapsamındadır (DEC-20260613-02, KV-9); diğer kurum kullanıcıları kapsam dışıdır. Recovery code sayısı
   enrollment başına en az 8'dir.
 - Password-only admin login auth session üretmez; TOTP login başarılı, invalid TOTP reddedilmiş,
   TOTP reuse reddedilmiş, recovery code login başarılı ve recovery code reuse reddedilmiş olmalıdır.

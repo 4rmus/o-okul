@@ -177,7 +177,7 @@ Sabit role paketleri:
   - yaygın/ele geçirilmiş parola blocklist'i, paste ve password manager desteği;
   - async, sürümlü ve rastgele salt'lı `scrypt`; mevcut hashler başarılı login sırasında kademeli rehash edilir.
 - Sekiz karakter ve büyük/küçük harf zorunluluğu ürün tercihidir; NIST kompozisyon kuralı önermediği için tam uyum iddiası taşımaz. Kaynak: [NIST SP 800-63B](https://pages.nist.gov/800-63-4/sp800-63b.html).
-- MFA yalnız `SYSTEM_ADMIN` hesabının aktivasyon ve giriş politikasının parçasıdır. Kurum sahibi, kurum yöneticisi ve kurum alt kullanıcıları MFA kurmaz veya MFA challenge almaz.
+- MFA `SYSTEM_ADMIN`, kurum sahibi ve kurum yöneticisi hesaplarının aktivasyon ve giriş politikasının parçasıdır (DEC-20260613-02, KV-9). Diğer kurum kullanıcıları MFA kurmaz veya MFA challenge almaz.
 - Kurum sahibi/yöneticisi değişiklikleri MFA'ya değil `owner:manage`, tenant kapsamı, optimistic version ve son aktif sahip korumalarına dayanır.
 - Refresh rotation DB row lock/CAS ile yapılacak; aynı tokenla paralel N istekte tam bir başarı olmalı.
 - Session doğrulaması canlı account/membership durumu ve membership version kontrolü yapacak. Yetkilendirme doğruluğu Redis cache'e bağlanmayacak.
