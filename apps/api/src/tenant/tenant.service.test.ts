@@ -6,6 +6,27 @@ import { TenantService } from "./tenant.service.js";
 import { InMemoryLicenseTermStore } from "../license/license-term-store.js";
 
 describe("TenantService", () => {
+  it("KV-9b: admin-accounts yalnız OWNER/ADMIN hesaplarını alan allow-list'i ve maskeli e-posta ile döner", async () => {
+    const secretish = { passwordHash: "hash", phone: "5550000000", nationalIdHash: "nid-hash", nationalIdEncrypted: "nid-enc", totpRecoveryCodeHashes: ["r"], totpLastUsedCounter: "1", membershipVersion: 1 };
+    const users = { listByTenant: async () => [
+      { ...secretish, id: "owner", tenantId: "tenant-a", name: "SAHİP", email: "owner@example.test", roles: ["TENANT_OWNER", "TEACHER"], totpSecretEncrypted: "secret", totpEnabledAt: "2026-10-01T00:00:00.000Z" },
+      { ...secretish, id: "admin", tenantId: "tenant-a", name: "YÖNETİCİ", roles: ["TENANT_ADMIN"], totpEnabledAt: "2026-10-01T00:00:00.000Z" },
+      { ...secretish, id: "teacher", tenantId: "tenant-a", name: "ÖĞRETMEN", roles: ["TEACHER"] },
+      { ...secretish, id: "sys", tenantId: "tenant-a", name: "SİSTEM", roles: ["SYSTEM_ADMIN", "TENANT_ADMIN"] },
+      { ...secretish, id: "other", tenantId: "tenant-b", name: "BAŞKA", roles: ["TENANT_ADMIN"] },
+      { ...secretish, id: "purged", tenantId: "tenant-a", name: "SİLİNDİ", roles: ["TENANT_ADMIN"], purgedAt: "2026-10-01T00:00:00.000Z" },
+    ] };
+    const service = new TenantService(new InMemoryTenantStore(), undefined, undefined, users as never);
+
+    await expect(service.listAdminAccounts(systemContext, "tenant-a")).resolves.toEqual([
+      { userId: "owner", name: "SAHİP", emailMasked: "ow••@•••.test", roles: ["TENANT_OWNER"], mfaEnabled: true, mfaEnabledAt: "2026-10-01T00:00:00.000Z" },
+      { userId: "admin", name: "YÖNETİCİ", emailMasked: null, roles: ["TENANT_ADMIN"], mfaEnabled: false, mfaEnabledAt: null },
+    ]);
+    await expect(service.listAdminAccounts(systemContext, "system")).rejects.toThrow("TENANT_NOT_FOUND");
+    await expect(service.listAdminAccounts(systemContext, "missing")).rejects.toThrow("TENANT_NOT_FOUND");
+    await expect(service.listAdminAccounts(tenantAdminContext, "tenant-a")).rejects.toThrow("SYSTEM_ADMIN_CONTEXT_REQUIRED");
+  });
+
   it("SystemAdmin tenant oluşturur ve listeler", async () => {
     const store = new InMemoryTenantStore();
     const service = new TenantService(store);

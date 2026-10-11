@@ -44,6 +44,9 @@ interface CapturedSystemRequests {
   purgePosts: Array<{ body: unknown; key?: string; proof?: string }>;
   purgeExports: Array<{ path: string; proof?: string }>;
   purgeDeliveries: Array<{ body: unknown; path: string }>;
+  adminAccounts: Array<{ userId: string; name: string; emailMasked: string | null; roles: string[]; mfaEnabled: boolean; mfaEnabledAt: string | null }>;
+  adminMfaResets: Array<{ body: unknown; proof?: string }>;
+  failNextAdminReset?: string;
 }
 
 interface SystemTenantFixture {
@@ -352,6 +355,45 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
   });
 
   for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }, { width: 320, height: 720 }]) {
+    test(`KV-9b yönetici MFA sıfırlama step-up ister ve listeyi yeniler ${viewport.width}`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      const captured = createCapturedSystemRequests();
+      await openWithSystemTenantMocks(page, captured, "/sistem/kurumlar/tenant-faz9");
+      await page.getByRole("tab", { name: "Kurum yönetimi" }).click();
+      const panel = page.getByLabel("Yönetici hesapları ve MFA", { exact: true });
+      await expect(panel).toContainText("AYŞE SAHİP");
+      await expect(panel).toContainText("ay••@•••.test");
+      await expect(panel).toContainText("Kurum sahibi");
+      await expect(panel).toContainText("MEHMET YÖNETİCİ");
+      await expect(panel.getByRole("button", { name: /MFA'yı sıfırla/ })).toHaveCount(1);
+      await expect(panel.getByRole("button", { name: "MEHMET YÖNETİCİ için MFA'yı sıfırla" })).toHaveCount(0);
+      await expectNoHorizontalOverflow(page, `admin-mfa-panel-${viewport.width}`);
+      if (viewport.width === 1280) expect((await new AxeBuilder({ page }).include(".uh-data-table-scroll").analyze()).violations).toEqual([]);
+
+      captured.failNextAdminReset = "MFA_STEP_UP_INVALID";
+      await panel.getByRole("button", { name: "AYŞE SAHİP için MFA'yı sıfırla" }).click();
+      const dialog = page.getByRole("dialog", { name: "MFA'yı sıfırla" });
+      await expect(dialog).toContainText("açık oturumları kapatılır");
+      await expect(dialog).toContainText("MFA'yı yeniden kurması gerekir");
+      await expect(dialog.getByRole("button", { name: "MFA'yı sıfırla" })).toBeDisabled();
+      await expectNoHorizontalOverflow(page, `admin-mfa-dialog-${viewport.width}`);
+      await dialog.getByLabel("Doğrulama kodu").fill("123456");
+      await dialog.getByRole("button", { name: "MFA'yı sıfırla" }).click();
+      await expect(dialog).toContainText("Doğrulama kodunuz geçersiz veya süresi dolmuş.");
+      await dialog.getByLabel("Doğrulama kodu").fill("654321");
+      await dialog.getByRole("button", { name: "MFA'yı sıfırla" }).click();
+      await expect(dialog).toBeHidden();
+      await expect(panel).toContainText("AYŞE SAHİP için MFA sıfırlandı");
+      await expect(panel.getByRole("button", { name: /MFA'yı sıfırla/ })).toHaveCount(0);
+      expect(captured.stepUps).toEqual([{ purpose: "OWNER_ADMIN_CHANGE", totpCode: "123456" }, { purpose: "OWNER_ADMIN_CHANGE", totpCode: "654321" }]);
+      expect(captured.adminMfaResets).toEqual([
+        { body: { tenantId: "tenant-faz9", userId: "owner-faz9" }, proof: "lifecycle-proof" },
+        { body: { tenantId: "tenant-faz9", userId: "owner-faz9" }, proof: "lifecycle-proof" },
+      ]);
+    });
+  }
+
+  for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }, { width: 320, height: 720 }]) {
     test(`imha adayları listesi kurum başına step-up ve kod onayıyla tek imha isteği gönderir ${viewport.width}`, async ({ page }) => {
       await page.setViewportSize(viewport);
       const captured = createCapturedSystemRequests(); captured.purgeCandidates = [purgeCandidateFixture];
@@ -565,6 +607,11 @@ function createCapturedSystemRequests(): CapturedSystemRequests {
     purgePosts: [],
     purgeExports: [],
     purgeDeliveries: [],
+    adminAccounts: [
+      { userId: "owner-faz9", name: "AYŞE SAHİP", emailMasked: "ay••@•••.test", roles: ["TENANT_OWNER"], mfaEnabled: true, mfaEnabledAt: "2026-09-01T09:00:00.000Z" },
+      { userId: "admin-faz9", name: "MEHMET YÖNETİCİ", emailMasked: null, roles: ["TENANT_ADMIN"], mfaEnabled: false, mfaEnabledAt: null },
+    ],
+    adminMfaResets: [],
   };
 }
 
@@ -666,6 +713,18 @@ async function installSystemTenantApiMocks(page: Page, captured: CapturedSystemR
     if (pathName === "/tenants/tenant-eski/clean-reset-jobs" && method === "POST") {
       captured.purgePosts.push({ body: route.request().postDataJSON(), key: route.request().headers()["idempotency-key"], proof: route.request().headers()["x-step-up-token"] });
       await fulfillData(route, { operationId: "c".repeat(32), status: "QUEUED", phase: "PREFLIGHT", errorCode: null, result: null });
+      return;
+    }
+    if (/^\/tenants\/[^/]+\/admin-accounts$/.test(pathName) && method === "GET") {
+      await fulfillData(route, captured.adminAccounts);
+      return;
+    }
+    if (pathName === "/auth/totp/admin-reset" && method === "POST") {
+      const body = route.request().postDataJSON() as { userId: string };
+      captured.adminMfaResets.push({ body, proof: route.request().headers()["x-step-up-token"] });
+      if (captured.failNextAdminReset) { const code = captured.failNextAdminReset; captured.failNextAdminReset = undefined; await fulfillError(route, code, code === "MFA_STEP_UP_INVALID" ? 401 : 409); return; }
+      captured.adminAccounts = captured.adminAccounts.map((row) => row.userId === body.userId ? { ...row, mfaEnabled: false, mfaEnabledAt: null } : row);
+      await fulfillData(route, { resetAt: new Date().toISOString() });
       return;
     }
     if (pathName.startsWith("/tenants/") && method === "GET") {

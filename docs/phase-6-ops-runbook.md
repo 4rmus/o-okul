@@ -335,7 +335,8 @@ Minimum kanıt içeriği:
   kabul edilmez.
 - `ADMIN_MFA_SECRET_ENCRYPTION_KEY`, `ADMIN_MFA_RECOVERY_HASH_KEY` ve
   `ADMIN_MFA_CHALLENGE_SECRET` gerçek ve birbirinden/JWT secret'tan farklı secret değerlerdir.
-- Yalnız SYSTEM_ADMIN hesapları TOTP enrollment kapsamındadır; kurum hesapları ve alt kullanıcıları MFA kapsamı dışındadır. Recovery code sayısı
+- SYSTEM_ADMIN, kurum sahibi (TENANT_OWNER) ve kurum yöneticisi (TENANT_ADMIN) hesapları TOTP enrollment
+  kapsamındadır (DEC-20260613-02, KV-9); diğer kurum kullanıcıları kapsam dışıdır. Recovery code sayısı
   enrollment başına en az 8'dir.
 - Password-only admin login auth session üretmez; TOTP login başarılı, invalid TOTP reddedilmiş,
   TOTP reuse reddedilmiş, recovery code login başarılı ve recovery code reuse reddedilmiş olmalıdır.
@@ -349,6 +350,22 @@ Minimum kanıt içeriği:
   okur, bütün zorunlu adminler TOTP enrollment'lı değilse veya gerçek login/recovery/session log
   referansları verilmezse dosya yazmadan kırılır. Komut auth MFA testlerini ve API typecheck'i
   çalıştırır, ardından çıktıyı `pnpm admin-mfa:check` ile tekrar doğrular.
+
+### Kurum sahibi/yöneticisi MFA sıfırlama
+
+Telefonunu veya doğrulama uygulamasını kaybeden ve yedek kodu da olmayan kurum sahibi/yöneticisi için
+destek akışı (KV-9b, staging UAT F-04):
+
+1. Talebi kurumun kayıtlı iletişim kanalından doğrulayın; kimlik doğrulanmadan sıfırlama yapılmaz.
+2. SYSTEM_ADMIN hesabıyla **Sistem → Kurumlar → kurum ayrıntısı → Kurum yönetimi** sekmesini açın.
+   "Yönetici hesapları ve MFA" tablosu kurumun kurum sahibi/yöneticisi hesaplarını ad, maskeli e-posta,
+   rol ve MFA durumu ile listeler (`GET /tenants/:id/admin-accounts`, yalnız SYSTEM_ADMIN).
+3. İlgili satırda "MFA'yı sıfırla" düğmesine basın ve kendi doğrulama kodunuzla (veya yedek kodla) onaylayın.
+   Ekran `OWNER_ADMIN_CHANGE` amaçlı step-up alır ve `POST /auth/totp/admin-reset` çağırır.
+4. Sonuç: kişinin MFA kaydı silinir, bütün açık oturumları kapatılır ve satır "Kapalı" görünür. Kişi bir
+   sonraki girişte MFA'yı yeniden kurar. İşlem `auth.totp_reset_by_system_admin` denetim kaydı bırakır.
+5. "Hesap bilgisi değişmiş" hatasında listeyi yenileyip tekrar deneyin; "Hesap bulunamadı" hatası hesabın
+   artık kurum sahibi/yöneticisi olmadığını veya kurumun erişime kapalı olduğunu gösterir.
 
 ## Identity Migration Evidence
 

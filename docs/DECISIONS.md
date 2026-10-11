@@ -184,7 +184,8 @@ Karar: SYSTEM_ADMIN, kurum sahibi (TENANT_OWNER) ve kurum yöneticisi (TENANT_AD
 faktör TOTP + tek kullanımlık recovery code olarak zorunludur (`adminMfaRoles`). Kurum yöneticisi kurum
 sahibine yakın yetki taşıdığı için kapsamdadır (ürün sahibi teyidi, 2026-10-11, staging UAT S1-02).
 Diğer kurum kullanıcıları (operasyon, finans, öğretmen, öğrenci, veli) MFA kapsamı dışındadır. Kurum
-sahibi ve yöneticisinin MFA'sını SYSTEM_ADMIN sıfırlayabilir (`POST /auth/totp/admin-reset`). SMS OTP
+sahibi ve yöneticisinin MFA'sını SYSTEM_ADMIN sıfırlayabilir (`POST /auth/totp/admin-reset`; ekran: Sistem →
+Kurumlar → kurum ayrıntısı → Yönetici hesapları ve MFA, KV-9b). SMS OTP
 v1'de ikinci faktör olarak kullanılmaz; SIM-swap ve maliyet riski
 nedeniyle reddedilir. TOTP secret'ları AES-GCM ile şifreli saklanır, recovery code'lar HMAC hash
 olarak tutulur ve MFA enable/disable işlemleri mevcut refresh session'ları iptal eder.

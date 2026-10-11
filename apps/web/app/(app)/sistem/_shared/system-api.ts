@@ -70,6 +70,25 @@ export function createLifecycleStepUp(accessToken: string, input: MfaStepUpReque
   });
 }
 
+// KV-9b (staging UAT F-04): a tenant's OWNER/ADMIN accounts and the system-admin MFA reset (POST /auth/totp/admin-reset).
+const adminAccountSchema = z.object({
+  userId: z.string().min(1), name: z.string(), emailMasked: z.string().nullable(), roles: z.array(z.enum(["TENANT_OWNER", "TENANT_ADMIN"])).min(1),
+  mfaEnabled: z.boolean(), mfaEnabledAt: z.string().nullable(),
+}).strict();
+export type TenantAdminAccount = z.infer<typeof adminAccountSchema>;
+export async function loadTenantAdminAccounts(token: string, tenantId: string): Promise<TenantAdminAccount[]> {
+  return z.array(adminAccountSchema).parse(await apiRequest<unknown>(token, `${apiBaseUrl}/tenants/${encodeURIComponent(tenantId)}/admin-accounts`, { cache: "no-store" }));
+}
+export async function resetTenantAdminMfa(token: string, expected: { userId: string; sessionId: string; membershipVersion: number }, tenantId: string, userId: string, proof: string): Promise<void> {
+  // One attempt: authenticatedFetch retries 401s, which is inappropriate for a step-up approved reset.
+  const response = await authenticatedFetchOnce(token, expected, `${apiBaseUrl}/auth/totp/admin-reset`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "X-Step-Up-Token": proof }, body: JSON.stringify({ tenantId, userId }) });
+  if (!response.ok) {
+    let code: string | undefined;
+    try { const body = await response.json(); if (typeof body?.error?.code === "string") code = body.error.code; } catch { /* Unknown response keeps a generic message. */ }
+    throw new ApiRequestError("MFA_RESET_FAILED", response.status, code);
+  }
+}
+
 export const resetCategoryLabels: Record<string, string> = {
   TenantMutationActivity: "Devam eden kurum işlemleri", TenantFreshResetOperation: "Temizleme işlemleri", Tenant: "Kurum profili", LicenseTerm: "Lisans dönemleri", LicenseUsage: "Lisans kullanımı", AuditLog: "Denetim kayıtları", BackupRestoreJob: "Yedekleme kayıtları",
   PlatformAccount: "Platform hesapları", PlatformIdempotencyKey: "Platform işlem kayıtları", PlatformSession: "Platform oturumları", User: "Kullanıcı hesapları", TenantMembership: "Kurum üyelikleri", Employee: "Çalışan kayıtları",

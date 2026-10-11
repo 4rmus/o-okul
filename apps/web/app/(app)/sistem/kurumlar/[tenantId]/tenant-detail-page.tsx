@@ -30,6 +30,7 @@ import {
   type TenantUpdateFormState,
 } from "../../../../../src/form-validation.js";
 import { PageFrame } from "../../../_shared/page-frame.js";
+import { AdminMfaPanel } from "./admin-mfa-panel.js";
 import { DeviceRestorePanel } from "./device-restore-panel.js";
 import { TenantResetPanel } from "./tenant-reset-panel.js";
 import { tenantManagementSchema, createLifecycleStepUp, loadTenant, updateTenant, updateTenantStatus, type TenantRecord } from "../../_shared/system-api.js";
@@ -305,6 +306,7 @@ function ScopedTenantDetailPage({ tenantId, scope }: { tenantId: string; scope: 
             title="Kurum yönetimi"
             tone="muted"
           />
+          {auth ? <AdminMfaPanel key={scope} auth={auth} tenantId={tenant.id} /> : null}
           {auth ? <DeviceRestorePanel key={scope} tenantId={tenant.id} auth={auth} onPendingChange={setRestorePending} onChange={()=>void tenantQuery.refetch()}/> : null}
           {auth ? <TenantResetPanel tenant={tenant} auth={auth} scope={scope} authoritative={!tenantQuery.isError && !tenantQuery.isFetching && tenantQuery.isFetchedAfterMount} onPendingChange={setResetPending} /> : null}
         </div>
