@@ -157,7 +157,6 @@ const files = {
     "apps/web/app/(app)/kurum/yedek-restore/backup-restore-page.tsx",
     "utf8",
   ),
-  "apps/api/src/tenant/tenant-seat-limit.ts": readFileSync("apps/api/src/tenant/tenant-seat-limit.ts", "utf8"),
   "apps/worker/src/jobs/secret-delivery-outbox.ts": readFileSync("apps/worker/src/jobs/secret-delivery-outbox.ts", "utf8"),
   "packages/db/prisma/migrations/20260801170000_add_secret_delivery_outbox/migration.sql": readFileSync(
     "packages/db/prisma/migrations/20260801170000_add_secret_delivery_outbox/migration.sql",
@@ -592,7 +591,6 @@ const expectations = {
     "INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true",
     "UPLOAD_AV_SCANNER=clamav",
     "CLAMAV_HOST",
-    "TENANT_SEAT_LIMIT_EXCEEDED",
     "TENANT_LICENSE_EXPIRED_READ_ONLY",
     "Idempotency-Key",
     "x-rls-bypass-reason",
@@ -1068,7 +1066,6 @@ const expectations = {
     "crossTenantReadRows=0",
     "RATE_LIMITED",
     "LOGIN_LOCKED",
-    "TENANT_SEAT_LIMIT_EXCEEDED",
     "TENANT_LICENSE_EXPIRED_READ_ONLY",
     "/webhooks/whatsapp",
     "X-Hub-Signature-256",
@@ -1583,11 +1580,6 @@ const expectations = {
     "downloadMode: \"signed-url\"",
     "downloadUrlExpiresInSeconds",
   ],
-  "apps/api/src/identity-invitation/identity-invitation.service.ts": [
-    "assertTenantSeatAvailable",
-    "tenantSeatLimitExceededCode",
-    "listTenantUsers",
-  ],
   "apps/api/src/payment/payment.controller.ts": ["idempotency-key", "@Headers(\"idempotency-key\")"],
   "apps/api/src/report/report-generation.service.ts": [
     "REPORT_PDF_RENDERER",
@@ -1787,13 +1779,7 @@ const expectations = {
     `UPDATE "IdentityInvitation"`,
     `"payloadEncrypted" = NULL`,
   ],
-  "apps/api/src/tenant/tenant-seat-limit.ts": ["TENANT_SEAT_LIMIT_EXCEEDED", "assertTenantSeatCapacity"],
-  "apps/api/src/user-management/user-management-store.ts": [
-    "assertTenantSeatCapacity",
-    "SELECT \"seatLimit\" FROM \"Tenant\"",
-    "FOR UPDATE",
-    "COUNT(DISTINCT \"userId\")",
-  ],
+  "apps/api/src/user-management/user-management-store.ts": ["FOR UPDATE"],
   "apps/api/package.json": ["@nestjs/swagger", "@aws-sdk/s3-request-presigner"],
   "scripts/migrate-inline-upload-content-to-s3-live.mjs": [
     "INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED",

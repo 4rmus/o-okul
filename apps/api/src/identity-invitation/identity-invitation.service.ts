@@ -17,11 +17,6 @@ import type { RequestContext } from "../context/request-context.js";
 import { type GuardianStore, guardianStoreToken } from "../school/guardian-store.js";
 import { type TeacherStore, teacherStoreToken } from "../school/teacher-store.js";
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
-import {
-  assertTenantSeatCapacity,
-  isTenantSeatLimitExceededError,
-  tenantSeatLimitExceededCode,
-} from "../tenant/tenant-seat-limit.js";
 import { type TenantStore, tenantStoreToken } from "../tenant/tenant-store.js";
 import { tenantWebUrl } from "../http/tenant-origin.js";
 import { requireTenantWideStaffContext } from "../tenant/tenant-access.js";
@@ -245,25 +240,16 @@ export class IdentityInvitationService {
       throw new BadRequestException("SUBJECT_NATIONAL_ID_REQUIRED");
     }
 
-    const existingUsers = await this.users.listTenantUsers(invitation.tenantId);
-    if (!existingUsers.some((user) => user.email?.toLowerCase() === invitation.email)) {
-      await this.assertTenantSeatAvailable(invitation.tenantId);
-    }
-
-    let user: TenantUserRecord;
-    try {
-      user = await this.users.createOrAttachTenantUser({
-        tenantId: invitation.tenantId,
-        email: invitation.email,
-        name: body.name?.trim() || invitation.name,
-        nationalIdEncrypted,
-        nationalIdHash,
-        passwordHash,
-        roles: [invitation.role],
-      });
-    } catch (error) {
-      throwTenantSeatLimitBadRequest(error);
-    }
+    // UAT F-06: user accounts are not capacity-limited; only LicenseTerm.activeStudentLimit is (DEC-20260801-01).
+    const user = await this.users.createOrAttachTenantUser({
+      tenantId: invitation.tenantId,
+      email: invitation.email,
+      name: body.name?.trim() || invitation.name,
+      nationalIdEncrypted,
+      nationalIdHash,
+      passwordHash,
+      roles: [invitation.role],
+    });
     const boundSubject = await this.bindSubject(invitation.tenantId, invitation.subjectType, invitation.subjectId, user.id);
     if (!boundSubject) {
       await this.users.removeTenantRole(invitation.tenantId, user.id, invitation.role);
@@ -307,18 +293,6 @@ export class IdentityInvitationService {
     const tenant = await this.tenants.findById(tenantId);
     if (!tenant) throw new NotFoundException("TENANT_NOT_FOUND");
     return tenant.slug;
-  }
-
-  private async assertTenantSeatAvailable(tenantId: string): Promise<void> {
-    const tenant = await this.tenants.findById(tenantId);
-    if (!tenant) {
-      throw new NotFoundException("TENANT_NOT_FOUND");
-    }
-    try {
-      assertTenantSeatCapacity(tenant);
-    } catch (error) {
-      throwTenantSeatLimitBadRequest(error);
-    }
   }
 
   private async findSubject(tenantId: string, subjectType: InvitationSubjectType, subjectId: string) {
@@ -372,13 +346,6 @@ function requireAcceptedEmployeeActivation(outcome: EmployeeAccountActivationOut
   }
   if (outcome.status === "LICENSE_INACTIVE") throw new BadRequestException("TENANT_LICENSE_INACTIVE");
   throw new BadRequestException("EMPLOYEE_ACCOUNT_LIMIT_EXCEEDED");
-}
-
-function throwTenantSeatLimitBadRequest(error: unknown): never {
-  if (isTenantSeatLimitExceededError(error)) {
-    throw new BadRequestException(tenantSeatLimitExceededCode);
-  }
-  throw error;
 }
 
 function parseSubjectType(input: string | undefined): PortalSubjectRoleName {

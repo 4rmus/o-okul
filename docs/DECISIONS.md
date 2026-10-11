@@ -407,6 +407,9 @@ guardian runtime, fixture ve UAT sözleşmeleri additive model, veri envanteri, 
 veri sahibi onayı ve gözlem süresi tamamlanmadan kaldırılmaz. Bu karar DEC-20260531-01'in tamamının
 ve DEC-20260627-01'in TC/telefon girişi ile guardian kapsamının yerine geçer; ikinci karardaki
 akademik taksonomi ve SMS varsayımları değişmez.
+2026-10-11: `Tenant.seatLimit` hiçbir planda uygulanmaz; sütun veri olarak kalır; kapasite yalnız
+`LicenseTerm.activeStudentLimit`tır (UAT F-06). Sütun lisans dönemi aynası olarak yazılmaya devam eder
+(lisans parity kontrolleri buna dayanır), kullanıcı hesabı sayısını sınırlamaz.
 Kaynak: Ürün sahibinin onayladığı kurum ve hesap yönetimi mimarisi.
 Kanıt: `docs/account-management-architecture-plan.md`, `packages/db/prisma/schema.prisma`,
 `packages/shared-types/src/role-capabilities.ts`,
@@ -416,7 +419,7 @@ Kanıt: `docs/account-management-architecture-plan.md`, `packages/db/prisma/sche
 Etkilenen ADR: ADR-0001, ADR-0002
 Açık soru: Yok. Runtime geçişi DEC'te tanımlanan güvenlik ve geri dönüş kapılarıyla PR-1–PR-8
 dilimlerinde yapılacaktır; bu karar tek başına staging veya production capability kanıtı değildir.
-Son kontrol: 2026-08-01
+Son kontrol: 2026-10-11
 
 ### DEC-20260804-01 — Kurum subdomaini tenant giriş bağlamıdır
 

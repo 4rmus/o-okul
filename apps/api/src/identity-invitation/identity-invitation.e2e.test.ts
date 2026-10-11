@@ -195,7 +195,7 @@ describe("Identity invitations", () => {
       .expect(201);
   });
 
-  it("koltuk limiti dolu tenantta davet kabulünü engeller", async () => {
+  it("eski koltuk limitini aşan tenantta da davet kabulüne izin verir (UAT F-06)", async () => {
     const system = await login("system@example.test");
     const created = await request(server)
       .post("/tenants")
@@ -258,9 +258,9 @@ describe("Identity invitations", () => {
     await request(server)
       .post("/identity-invitations/accept")
       .send({ token: activationToken, password: "Secure-password-123" })
-      .expect(400)
+      .expect(201)
       .expect(({ body }) => {
-        expect(JSON.stringify(body)).toContain("TENANT_SEAT_LIMIT_EXCEEDED");
+        expect(body).toMatchObject({ status: "ACCEPTED" });
       });
   });
 

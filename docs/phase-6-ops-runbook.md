@@ -1493,7 +1493,7 @@ pnpm live:onboarding:smoke
 ```
 
 `LIVE_ONBOARDING_EVIDENCE_PATH` JSON'u system admin credential'ları ile Base32 `totpSecret` değerini,
-ilk tenant admin credential'larını, tenant adı/slug/plan/koltuk limitini ve opsiyonel kurulum alanlarını
+ilk tenant admin credential'larını, tenant adı/slug/plan/aktif öğrenci limitini (`tenant.seatLimit` alanı) ve opsiyonel kurulum alanlarını
 exact shape ile taşır. Sistem admin MFA kaydı ve bilinen seed parolasının private güçlü parolaya dönüşümü
 smoke öncesinde bir kez tamamlanmış olmalıdır; smoke enrollment ekranı görürse fail-closed durur.
 Parola ve TOTP anahtarı yalnız repo dışındaki `0600` private girdide tutulur, artifact veya loga yazılmaz. Gerçek staging
@@ -1944,13 +1944,12 @@ Minimum kanıt içeriği:
   taşıyamaz; Provider/Sentry smoke artifact'lerinde canonical `commandsPassed` tek komut olmalı ve
   `gaps` boş kalmalıdır.
 
-## Tenant Koltuk Limiti Runtime
+## Tenant Kapasitesi Runtime
 
-- `seatLimit` tenant admin kullanıcı oluşturma ve kimlik daveti kabul akışlarında kontrol edilir.
-- Aynı tenant içindeki mevcut e-posta/rol güncellemeleri yeni koltuk tüketmez.
-- Dolu tenant yeni üyelik yazımlarında `TENANT_SEAT_LIMIT_EXCEEDED` döner.
-- Postgres üyelik yazımı yeni kullanıcı üyeliği eklemeden önce tenant satırını kilitler ve distinct
-  `TenantMembership.userId` sayımıyla limiti doğrular.
+- Kullanıcı hesabı (personel, öğretmen, veli, öğrenci portalı) sayısı hiçbir planda sınırlanmaz
+  (DEC-20260801-01, UAT F-06); `Tenant.seatLimit` yalnız lisans dönemi aynasıdır.
+- Tek kapasite güncel `LicenseTerm.activeStudentLimit` aktif öğrenci kotasıdır; öğrenci oluşturma ve
+  içe aktarma bu kotayı uygular. Sistem kurum listesi/detayı aktif öğrenciyi bu limite karşı gösterir.
 
 ## Tenant Lisans Read-only Runtime
 
