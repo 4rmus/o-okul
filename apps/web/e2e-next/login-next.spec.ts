@@ -5648,6 +5648,8 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
     status: string;
     seatLimit: number;
     activeSeatCount?: number;
+    activeStudentCount?: number;
+    activeStudentLimit?: number;
     lifecycleVersion: number;
   }> = [];
   let tenantCreateCount = 0;
@@ -5766,6 +5768,8 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
         licenseEndsAt: body.licenseTerm.endsAt,
         seatLimit: body.licenseTerm.activeStudentLimit,
         activeSeatCount: 1,
+        activeStudentCount: 0,
+        activeStudentLimit: body.licenseTerm.activeStudentLimit,
         lifecycleVersion: 0,
       };
       tenants = [created, ...tenants];
@@ -5879,7 +5883,7 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
   await expect(createDialog.getByLabel("İlk kurum sahibi ad soyad")).toHaveValue("Yeni Yönetici");
   await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
   await expect(page.getByText("Yeni Kurum")).toBeVisible();
-  await expect(page.getByText("1 / 50")).toBeVisible();
+  await expect(page.getByText("0 / 50")).toBeVisible();
 
   await page.getByRole("button", { name: "Kurum oluştur" }).click();
   await createDialog.getByLabel("Kurum adı").fill("Davetli Kurum");
@@ -5905,7 +5909,7 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
   await suspendDialog.getByRole("button", { name: "Askıya al" }).click();
   await expect(page.getByLabel("Kurum detayı").getByText("Pro", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Kurum detayı").getByText("Askıda")).toBeVisible();
-  await expect(page.getByLabel("Kurum detayı").getByText("1 / 50")).toBeVisible();
+  await expect(page.getByLabel("Kurum detayı").getByText("0 / 50")).toBeVisible();
 
   await page.getByRole("button", { name: "Yeniden aç", exact: true }).click();
   const reopenDialog = page.getByRole("dialog", { name: "Kurum erişimini yeniden aç" });

@@ -51,6 +51,14 @@ test.describe("Kartsız deneme (DEC-20261004-02)", () => {
     await dialog.getByRole("button", { name: "Oluştur", exact: true }).click();
     await expect(dialog).toContainText("Denemede en fazla 100 aktif öğrenci olabilir.");
     expect(posts).toEqual([]);
+
+    // UAT F-06: the trial's 100 is the license term's student limit, never a tenant-wide user cap.
+    await dialog.getByLabel("Aktif öğrenci limiti").fill("100");
+    const createRequest = page.waitForRequest((request) => request.method() === "POST" && new URL(request.url()).pathname.endsWith("/tenants"));
+    await dialog.getByRole("button", { name: "Oluştur", exact: true }).click();
+    const body = (await createRequest).postDataJSON() as Record<string, unknown>;
+    expect(body).not.toHaveProperty("seatLimit");
+    expect(body.licenseTerm).toMatchObject({ planCode: "TRIAL", activeStudentLimit: 100 });
   });
 });
 
