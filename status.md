@@ -247,11 +247,11 @@ Korunan aktif sözleşmeler:
 Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-20261010-01, onaylı) içindedir.
 `docs/account-management-architecture-plan.md` bölüm 6'daki eski Gate E/F listesi bu planla yer değiştirdi.
 
-1. S1: staging rol UAT'ı (§11.3 senaryoları; staging veri değişikliği ürün sahibi onayıyla).
-2. S2: PR #153 lisans sonu veri imhası (export kapsamı 2026-10-10 kararıyla genişletildi); merge onayı bekliyor.
-3. S3: PO-2 off-host TR yedek; sağlayıcı seçimi bekliyor (`docs/po-2-tr-s3-karsilastirma.md`).
-4. S4: §3.4 doğrulama planı (dosya talebi, görüşmeler, pilot taahhüdü); ürün sahibi işi.
-5. S5/S6: PO-3 kapasite ölçümü ve PO-10 production kanıt zinciri; PO-10 tarihi 2027-01-03'te.
+1. S1: staging rol UAT'ı sürüyor (`docs/staging-uat-s1.md`; S1-01 PASS, bulgular F-01..F-03).
+2. S2: PR #153 lisans sonu veri imhası main'de (`2b0ef97`, staging deploy PASS); imha, sıfırlama motorunun yazma sessizliği kapısı açılana kadar çalışmaz.
+3. S4: §3.4 doğrulama planı (dosya talebi, görüşmeler, pilot taahhüdü); ürün sahibi işi.
+4. S5/S6: PO-3 kapasite ölçümü ve PO-10 production kanıt zinciri; PO-10 tarihi 2027-01-03'te.
+5. S3: PO-2 off-host TR yedek; ürün sahibi kararıyla en sona kaldı (2026-10-10). Aday karşılaştırması `docs/po-2-tr-s3-karsilastirma.md`.
 
 Önceki plandan devralınan kalemler (`docs/account-management-architecture-plan.md` bölüm 6; 2026-10-10'da
 durumları yeniden doğrulanmadı, S1 bulgularıyla birlikte ele alınır):
