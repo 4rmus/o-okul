@@ -1971,6 +1971,12 @@ yalnız `TEACHER` kimlik daveti kabul edilince kurulur. TC + telefon ile hesap a
    mevcut daveti yeni bağlantıyla yeniler; ikinci davet açılmaz) veya "Portal bağlı".
 3. Öğretmen e-postadaki bağlantıdan parolasını belirler; sonraki girişte öğretmen portalı açılır.
    Koltuk limiti davet kabulünde kontrol edilir (bkz. Tenant Koltuk Limiti Runtime).
+4. Öğretmen hesabı T.C. kimlik numarası istemez; giriş kurum kodu + e-posta/kullanıcı adıdır
+   (DEC-20261003-01, 2026-10-12 notu). Aktivasyon ekranı hata kodunu ayrı mesajla gösterir: süre doldu,
+   daha önce kullanıldı, geçersiz bağlantı, "kurum yöneticinizden yeni davet isteyin" veya beklenmeyen hata.
+   "Yeni davet isteyin" mesajı `TENANT_ACTIVITY_UNRESOLVED` ise (UAT F-08 öncesi 500 dönen kabullerden kalan
+   `UNCERTAIN` `TenantMutationActivity` satırı, referans `invitation:<id>`) yeniden gönderme de reddedilir;
+   satırın çözümü onaylı bir DB işlemidir, bu runbook'ta otomatik adım yoktur.
 
 Yardımcı yönetici ve operasyon çalışanı öğretmen ekranını görür ama `user:manage` yetkisi olmadığı
 için davet işlemi gösterilmez.
