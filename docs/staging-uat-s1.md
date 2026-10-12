@@ -39,9 +39,9 @@ FAIL olan her senaryo için bulgu satırı açılır.
 | Sıra | Senaryo | Rol | Adımlar | Beklenen | Sonuç / kanıt |
 |---|---|---|---|---|---|
 | S1-01 | Kartsız deneme (KF-5) | U-SYS, U-OWN | Sistem → Kurumlar'da `uat-s1-okulu` kurumunu deneme lisansıyla aç; U-OWN daveti kabul edip MFA kursun | 7 günlük deneme, 100 öğrenci sınırı görünür; OWNER MFA zorunlu | PASS 2026-10-10: TRIAL 10-10→10-17, 100 öğrenci; MFA kurulmadan giriş yok (`auth.totp_enrollment_required`); bkz. F-01 |
-| S1-02 | MFA ve destekli sıfırlama (KV-9) | U-OWN, U-ADM, U-SYS | U-OWN, U-ADM'yi Yeni çalışan + hesap daveti ile Kurum yöneticisi olarak eklesin; U-ADM MFA kursun; U-SYS U-ADM'nin MFA'sını sıfırlasın; U-ADM yeniden kursun | Akış hatasız, audit kaydı var | |
-| S1-03 | Öğrenci içe aktarma (KV-1) | U-ADM | `ogrenciler-8a-30.csv` önizle ve içe aktar; sonra `cakisma-tek-satir.csv` önizle | 30 öğrenci, 29 yasal veli iletişimi (izinler kapalı); ikinci dosyada `CONTACT_COLUMNS_CONFLICT` | |
-| S1-04 | Personel ve atama | U-ADM | U-FIN'i Çalışanlar → Yeni çalışan + hesap daveti ile davet et; U-TCH için Öğretmenler → öğretmen ekle → ayrıntı → Hesap daveti gönder; U-TCH'yi 8-A sınıf öğretmeni ve Matematik branşına ata | Davetler ulaşır; ayrıntıda "Davet bekliyor", kabulden sonra "Portal bağlı"; girişte rol doğru | |
+| S1-02 | MFA ve destekli sıfırlama (KV-9) | U-OWN, U-ADM, U-SYS | U-OWN, U-ADM'yi Yeni çalışan + hesap daveti ile Kurum yöneticisi olarak eklesin; U-ADM MFA kursun; U-SYS U-ADM'nin MFA'sını sıfırlasın; U-ADM yeniden kursun | Akış hatasız, audit kaydı var | PASS 2026-10-11: U-SYS KV-9b ekranıyla U-ADM'nin MFA'sını sıfırladı, U-ADM yeniden MFA kurdu; bkz. F-04 |
+| S1-03 | Öğrenci içe aktarma (KV-1) | U-ADM | `ogrenciler-8a-30.csv` önizle ve içe aktar; sonra `cakisma-tek-satir.csv` önizle | 30 öğrenci, 29 yasal veli iletişimi (izinler kapalı); ikinci dosyada `CONTACT_COLUMNS_CONFLICT` | PASS 2026-10-11: 30 öğrenci, 29 LEGAL_GUARDIAN iletişimi izinler kapalı; çakışma dosyası reddedildi. Ön koşul: seviye ve sınıf önceden açılmalı (bkz. F-05) |
+| S1-04 | Personel ve atama | U-ADM | U-FIN'i Çalışanlar → Yeni çalışan + hesap daveti ile davet et; U-TCH için Öğretmenler → öğretmen ekle → ayrıntı → Hesap daveti gönder; U-TCH'yi 8-A sınıf öğretmeni ve Matematik branşına ata. Ön koşul: Ders, sınıfın seviyesine bağlı olmalı (Seviyeler → ders bağla veya Kurulum 4. adım) | Davetler ulaşır; ayrıntıda "Davet bekliyor", kabulden sonra "Portal bağlı"; girişte rol doğru | Bkz. F-07..F-11 |
 | S1-05 | Veli daveti ve bağlama (KV-3, KV-3b) | U-ADM | 2–3 veli iletişimine e-posta ekle; toplu davet gönder; U-GRD2'yi elle bağla; aynı daveti tekrar gönder | E-postasız veliler atlanır; ikinci davet oluşmaz; elle bağlama yalnız yasal veliye açık | |
 | S1-06 | Not girişi, yayın, düzeltme (AK-3/AK-4) | U-TCH, U-ADM | 8-A Matematik yazılısı oluştur; 30 öğrencinin notunu gir (süreyi tut); yayınla; bir notu düzelt | Giriş <5 dk; düzeltme v2 açar; v1 değişmez | Süre: |
 | S1-07 | Veli özeti ve PWA (KV-4) | U-GRD1 (gerçek telefon) | Daveti kabul et; uygulamayı ana ekrana ekle; özeti aç | Yalnız yayınlanmış not (v2) görünür; öğretmen notu ve diğer veli bilgisi yok | |
@@ -67,6 +67,14 @@ geçmez, Gate E kanıt zincirini besler.
 | F-01 | S1-01 | Kurum sahibi davet e-postası Gmail'de spama düştü. DNS kayıtları (cf-bounce SPF, `cf-bounce._domainkey` DKIM, bounce MX) mevcut; SPF/DKIM/DMARC sonucu henüz okunmadı | Yüksek (satış) | Ürün sahibi: sonra bakılacak |
 | F-02 | S1-02 | Yönetici eklemek iki adımlı ve keşfedilmesi zor: önce "Yeni çalışan" profili, sonra satırdaki zarf ikonuyla hesap daveti; tek "yönetici ekle" akışı yok | Orta | Açık |
 | F-03 | S1-02 | Gönderilmiş davet iptal edilemiyor (API'de yalnız oluştur/kabul/yeniden gönder); süresi dolmamış davet varken aynı çalışana yeni davet `EMPLOYEE_INVITATION_ALREADY_PENDING`. Yanlış rolle giden davet kabul edilip rol sonradan değiştirildi | Orta | Açık |
+| F-04 | S1-02 | Sistem yöneticisi için kurum yöneticisinin MFA'sını sıfırlama ekranı yoktu | - | Kapandı: KV-9b (#159) |
+| F-05 | S1-03 | İçe aktarma seviye/sınıf oluşturmaz; eksik sınıf hatası kullanıcıyı seviye/sınıf ekranına yönlendirmez | Düşük | Açık |
+| F-06 | S1-03 | Deneme lisansında `seatLimit` hesap sınırı olarak uygulanıyordu | - | Kapandı: #161 |
+| F-07 | S1-04 | Öğretmen için hesap daveti ekranı yoktu | - | Kapandı: #162 |
+| F-08 | S1-04 | Davet kabulü 500 döndü ve kilitli UNCERTAIN kayıt bıraktı | - | Kapandı: #163 |
+| F-09 | S1-04 | Öğretmen listesinde hesap durumu yanlış gösteriliyordu | - | Kapandı: #164 |
+| F-10 | S1-04 | Öğretmen atama hatası (`TEACHER_ASSIGNMENT_COURSE_GRADE_LEVEL_MISMATCH` vb.) düzenleme penceresinde görünmüyordu | - | Bu PR: hata kodu başına Türkçe mesaj, seviye uyuşmazlığında Seviyeler bağlantısı |
+| F-11 | S1-04 | Ders-seviye bağı yalnız Kurulum sihirbazının 4. adımında kurulabiliyordu; Dersler/Seviyeler ekranından eklenen ders atanamıyordu | - | Bu PR: Seviyeler → "derslerini yönet" ile mevcut dersi seviyeye bağlama. Bağı kaldırma API'de yok (izleyen iş) |
 
 ## Bitiş
 
