@@ -82,6 +82,20 @@ function expectGuardianRoleRules() {
     || !carry.includes("NOT EXISTS")) {
     failures.push("Teacher→Employee hesap taşıma yalnız hesapsız bağlı çalışan kaydına ve çakışmasız yazmalı");
   }
+  // UAT F-16: every staging deploy runs APPLY, so the membership step must preserve state and be a no-op when repeated.
+  const apply = source.match(/async function applyBackfill\(([\s\S]*?)\nfunction deriveBlockers/)?.[1] ?? "";
+  if (/(?<!\.)"scopeMode" = 'TENANT'/.test(apply)) failures.push("backfill scopeMode'u TENANT'a çekmemeli (kampüs kapsamı korunmalı)");
+  if (/DELETE FROM "MembershipCampusScope"/.test(apply)) failures.push("backfill MembershipCampusScope satırlarını silmemeli");
+  if (/SET "staffRole" = NULL/.test(apply)) failures.push("backfill üyelik bayraklarını toptan sıfırlamamalı");
+  if (!/membership\."staffRole"::text IS DISTINCT FROM desired\.staff_role/.test(apply)) {
+    failures.push("canonical üyelik yalnız farklıysa yazılmalı (ikinci APPLY no-op)");
+  }
+  if (!/"status" IN \('SUSPENDED', 'ENDED'\)[\s\S]*?NOT roles\.has_flags/.test(apply)) {
+    failures.push("SUSPENDED/ENDED üyelik onarımı yalnız bayrağı olmayan satırlara yazmalı");
+  }
+  if (!/SET "scopeMode" = 'CAMPUSES'[\s\S]*?campusCount[\s\S]*?'tenant_membership\.updated'/.test(apply)) {
+    failures.push("kampüs kapsamı geri yükleme audit kanıtı (campusCount) şartına bağlı olmalı");
+  }
   if (failures.length > 0) {
     console.error(failures.join("\n"));
     process.exit(1);

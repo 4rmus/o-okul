@@ -534,7 +534,12 @@ async function applyBackfill(queryable, owners) {
         "accountStatus" = planned.account_status,
         "updatedAt" = now()
     FROM planned
-    WHERE account."tenantId" = planned."tenantId" AND account."id" = planned."id"`);
+    WHERE account."tenantId" = planned."tenantId" AND account."id" = planned."id"
+      AND (account."emailNormalized" IS DISTINCT FROM planned.email_normalized
+        OR nullif(btrim(account."loginName"), '') IS NULL
+        OR account."loginNameNormalized" IS DISTINCT FROM planned.login_normalized
+        OR account."passwordHashVersion" IS DISTINCT FROM planned.hash_version
+        OR account."accountStatus" IS DISTINCT FROM planned.account_status)`);
 
   await queryable.query(`
     UPDATE "Teacher" teacher
@@ -577,11 +582,9 @@ async function applyBackfill(queryable, owners) {
         SELECT 1 FROM "Employee" other WHERE other."tenantId" = teacher."tenantId" AND other."userId" = teacher."userId"
       )`);
 
-  await queryable.query(`
-    UPDATE "TenantMembership"
-    SET "staffRole" = NULL, "hasTeacherPersona" = false, "hasStudentPersona" = false, "updatedAt" = now()
-    WHERE "tenantId" IN (${activeTenantIdsSql}) AND "role"::text <> 'SYSTEM_ADMIN'
-      AND ("staffRole" IS NOT NULL OR "hasTeacherPersona" OR "hasStudentPersona")`);
+  // UAT F-16: the canonical persona row is re-derived only where it differs, so a second APPLY writes nothing.
+  // scopeMode and MembershipCampusScope rows are never touched here (campus-scoped staff stay campus-scoped), and
+  // SUSPENDED/ENDED rows keep their staffRole/persona flags; ACTIVE rows are the only ones re-derived.
   await queryable.query(`
     WITH owners AS (
       SELECT * FROM unnest($1::text[], $2::text[]) AS owner("tenantId", "userId")
@@ -609,22 +612,103 @@ async function applyBackfill(queryable, owners) {
                membership."createdAt", membership."id") AS rank
       FROM "TenantMembership" membership
       WHERE membership."tenantId" IN (${activeTenantIdsSql}) AND membership."status" = 'ACTIVE' AND membership."role"::text <> 'SYSTEM_ADMIN'
-    ), targets AS (
-      SELECT roles.*, ranked."id"
-      FROM role_sets roles JOIN ranked ON ranked."tenantId" = roles."tenantId" AND ranked."userId" = roles."userId" AND ranked.rank = 1
-      WHERE roles.staff_role IS NOT NULL OR roles.has_teacher OR roles.has_student
+    ), desired AS (
+      SELECT ranked."id", ranked."tenantId", ranked."userId",
+             CASE WHEN ranked.rank = 1 THEN roles.staff_role END AS staff_role,
+             ranked.rank = 1 AND roles.has_teacher AS has_teacher,
+             ranked.rank = 1 AND roles.has_student AS has_student,
+             ranked.rank = 1 AND (roles.staff_role IS NOT NULL OR roles.has_teacher OR roles.has_student) AS is_target
+      FROM ranked JOIN role_sets roles ON roles."tenantId" = ranked."tenantId" AND roles."userId" = ranked."userId"
     )
     UPDATE "TenantMembership" membership
-    SET "staffRole" = targets.staff_role::"StaffRole",
-        "hasTeacherPersona" = targets.has_teacher,
-        "hasStudentPersona" = targets.has_student,
-        "status" = 'ACTIVE', "version" = account."membershipVersion", "scopeMode" = 'TENANT',
-        "endsAt" = NULL, "endedReason" = NULL, "updatedAt" = now()
-    FROM targets
-    JOIN "User" account ON account."tenantId" = targets."tenantId" AND account."id" = targets."userId"
-    WHERE membership."id" = targets."id"`,
+    SET "staffRole" = desired.staff_role::"StaffRole",
+        "hasTeacherPersona" = desired.has_teacher,
+        "hasStudentPersona" = desired.has_student,
+        "version" = CASE WHEN desired.is_target THEN account."membershipVersion" ELSE membership."version" END,
+        "endsAt" = CASE WHEN desired.is_target THEN NULL ELSE membership."endsAt" END,
+        "endedReason" = CASE WHEN desired.is_target THEN NULL ELSE membership."endedReason" END,
+        "updatedAt" = now()
+    FROM desired
+    JOIN "User" account ON account."tenantId" = desired."tenantId" AND account."id" = desired."userId"
+    WHERE membership."id" = desired."id"
+      AND (membership."staffRole"::text IS DISTINCT FROM desired.staff_role
+        OR membership."hasTeacherPersona" IS DISTINCT FROM desired.has_teacher
+        OR membership."hasStudentPersona" IS DISTINCT FROM desired.has_student
+        OR (desired.is_target AND (membership."version" IS DISTINCT FROM account."membershipVersion"
+          OR membership."endsAt" IS NOT NULL OR membership."endedReason" IS NOT NULL)))`,
     [ownerTenantIds, ownerUserIds],
   );
+  // UAT F-16 repair: earlier APPLY runs cleared the flags of SUSPENDED/ENDED rows. A user without an ACTIVE persona row
+  // whose rows of one status carry no flags at all gets them back from the legacy role column (same mapping, no owner
+  // promotion). Rows that already carry flags are never changed, so this is a one-time, idempotent repair.
+  await queryable.query(`
+    WITH inactive AS (
+      SELECT membership.*
+      FROM "TenantMembership" membership
+      WHERE membership."tenantId" IN (${activeTenantIdsSql}) AND membership."status" IN ('SUSPENDED', 'ENDED')
+        AND membership."role"::text <> 'SYSTEM_ADMIN'
+        AND NOT EXISTS (
+          SELECT 1 FROM "TenantMembership" active
+          WHERE active."tenantId" = membership."tenantId" AND active."userId" = membership."userId" AND active."status" = 'ACTIVE'
+            AND (active."staffRole" IS NOT NULL OR active."hasTeacherPersona" OR active."hasStudentPersona")
+        )
+    ), role_sets AS (
+      SELECT "tenantId", "userId", "status",
+             bool_or("role"::text = 'TEACHER') AS has_teacher,
+             bool_or("role"::text = 'STUDENT') AS has_student,
+             max(CASE "role"::text
+               WHEN 'TENANT_OWNER' THEN 'TENANT_OWNER'
+               WHEN 'TENANT_ADMIN' THEN 'TENANT_ADMIN'
+               WHEN 'ASSISTANT_ADMIN' THEN 'OPERATIONS_STAFF'
+               WHEN 'OPERATIONS_STAFF' THEN 'OPERATIONS_STAFF'
+               WHEN 'FINANCE_STAFF' THEN 'FINANCE_STAFF'
+             END) AS staff_role,
+             bool_or("staffRole" IS NOT NULL OR "hasTeacherPersona" OR "hasStudentPersona") AS has_flags
+      FROM inactive
+      GROUP BY "tenantId", "userId", "status"
+    ), ranked AS (
+      SELECT "tenantId", "userId", "status", "id",
+             row_number() OVER (PARTITION BY "tenantId", "userId", "status" ORDER BY
+               CASE WHEN "role"::text IN ('TENANT_OWNER','TENANT_ADMIN','ASSISTANT_ADMIN','OPERATIONS_STAFF','FINANCE_STAFF') THEN 1
+                    WHEN "role"::text = 'STUDENT' THEN 2
+                    WHEN "role"::text = 'TEACHER' THEN 3 ELSE 99 END,
+               "createdAt", "id") AS rank
+      FROM inactive
+    )
+    UPDATE "TenantMembership" membership
+    SET "staffRole" = roles.staff_role::"StaffRole",
+        "hasTeacherPersona" = roles.has_teacher,
+        "hasStudentPersona" = roles.has_student,
+        "updatedAt" = now()
+    FROM ranked
+    JOIN role_sets roles ON roles."tenantId" = ranked."tenantId" AND roles."userId" = ranked."userId" AND roles."status" = ranked."status"
+    WHERE membership."id" = ranked."id" AND ranked.rank = 1 AND NOT roles.has_flags
+      AND (roles.staff_role IS NOT NULL OR roles.has_teacher OR roles.has_student)`);
+  // UAT F-16 repair: earlier APPLY runs set scopeMode = 'TENANT' on campus-scoped staff and left their
+  // MembershipCampusScope rows. The runtime never keeps campus rows on a TENANT membership, so a TENANT row that still
+  // has campus rows, whose latest tenant_membership.updated audit recorded the same non-zero campusCount, was
+  // campus-scoped before the backfill widened it. Without that audit evidence the row is left as is.
+  const restoredScopes = await queryable.query(`
+    UPDATE "TenantMembership" membership
+    SET "scopeMode" = 'CAMPUSES', "updatedAt" = now()
+    WHERE membership."tenantId" IN (${activeTenantIdsSql}) AND membership."scopeMode" = 'TENANT'
+      AND EXISTS (
+        SELECT 1 FROM "MembershipCampusScope" scope
+        WHERE scope."tenantId" = membership."tenantId" AND scope."membershipId" = membership."id"
+      )
+      AND (
+        SELECT CASE WHEN jsonb_typeof(audit."diff"->'campusCount') = 'number' THEN (audit."diff"->>'campusCount')::int END
+        FROM "AuditLog" audit
+        WHERE audit."tenantId" = membership."tenantId" AND audit."entityType" = 'TenantMembership'
+          AND audit."entityId" = membership."id" AND audit."action" = 'tenant_membership.updated'
+        ORDER BY audit."createdAt" DESC, audit."id" DESC
+        LIMIT 1
+      ) = (
+        SELECT count(*)::int FROM "MembershipCampusScope" scope
+        WHERE scope."tenantId" = membership."tenantId" AND scope."membershipId" = membership."id"
+      )
+    RETURNING membership."id"`);
+  console.log(`Account management backfill: kampüs kapsamı geri yüklenen üyelik sayısı ${restoredScopes.rowCount ?? 0}`);
 
   await queryable.query(`
     INSERT INTO "PlatformAccount" (
@@ -645,7 +729,14 @@ async function applyBackfill(queryable, owners) {
         "email" = EXCLUDED."email", "emailNormalized" = EXCLUDED."emailNormalized", "name" = EXCLUDED."name",
         "passwordHash" = EXCLUDED."passwordHash", "passwordHashVersion" = EXCLUDED."passwordHashVersion",
         "status" = EXCLUDED."status", "totpSecretEncrypted" = EXCLUDED."totpSecretEncrypted",
-        "totpEnabledAt" = EXCLUDED."totpEnabledAt", "updatedAt" = now()`);
+        "totpEnabledAt" = EXCLUDED."totpEnabledAt", "updatedAt" = now()
+    WHERE ("PlatformAccount"."loginName", "PlatformAccount"."loginNameNormalized", "PlatformAccount"."email",
+           "PlatformAccount"."emailNormalized", "PlatformAccount"."name", "PlatformAccount"."passwordHash",
+           "PlatformAccount"."passwordHashVersion", "PlatformAccount"."status", "PlatformAccount"."totpSecretEncrypted",
+           "PlatformAccount"."totpEnabledAt")
+      IS DISTINCT FROM (EXCLUDED."loginName", EXCLUDED."loginNameNormalized", EXCLUDED."email", EXCLUDED."emailNormalized",
+           EXCLUDED."name", EXCLUDED."passwordHash", EXCLUDED."passwordHashVersion", EXCLUDED."status",
+           EXCLUDED."totpSecretEncrypted", EXCLUDED."totpEnabledAt")`);
   await queryable.query(`
     INSERT INTO "PlatformSession" (
       "id", "platformAccountId", "tokenFamilyId", "refreshTokenHash", "status", "expiresAt", "updatedAt"
@@ -659,7 +750,11 @@ async function applyBackfill(queryable, owners) {
     ON CONFLICT ("id") DO UPDATE
     SET "platformAccountId" = EXCLUDED."platformAccountId", "tokenFamilyId" = EXCLUDED."tokenFamilyId",
         "refreshTokenHash" = EXCLUDED."refreshTokenHash", "status" = EXCLUDED."status",
-        "expiresAt" = EXCLUDED."expiresAt", "updatedAt" = now()`);
+        "expiresAt" = EXCLUDED."expiresAt", "updatedAt" = now()
+    WHERE ("PlatformSession"."platformAccountId", "PlatformSession"."tokenFamilyId", "PlatformSession"."refreshTokenHash",
+           "PlatformSession"."status", "PlatformSession"."expiresAt")
+      IS DISTINCT FROM (EXCLUDED."platformAccountId", EXCLUDED."tokenFamilyId", EXCLUDED."refreshTokenHash",
+           EXCLUDED."status", EXCLUDED."expiresAt")`);
 }
 
 function deriveBlockers(foundation, preconditions, owners, readiness) {
