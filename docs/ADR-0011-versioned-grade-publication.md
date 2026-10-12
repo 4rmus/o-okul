@@ -52,14 +52,17 @@ yüzey açar.
 
 - `GET/POST /grade-assessments`, `GET /grade-assessments/:id` (bütün sürümler),
   `PUT /grade-assessments/:id/entries` (taslak), `POST /grade-assessments/:id/publish`.
-- Tanım ve yayın `academic:manage` ister; yayında Idempotency-Key zorunludur (anahtarsız 400) ve aynı
+- Tanım ve yayın `academic:manage` veya (DEC-20261012-01) o sınıfı adıyla taşıyan geçerli
+  `CLASS_TEACHER`/`BRANCH_TEACHER` ataması ister; atanmış ders ve dönem varsa onlarla sınırlıdır.
+  `GET /grade-assessments/teacher-scopes` öğretmenin açabileceği kapsamları döner. Yayında Idempotency-Key zorunludur (anahtarsız 400) ve aynı
   anahtar tek yayın üretir. Yayın, taslakları ve `publishedVersion`'ı tek transaction'da, değerlendirme
   satır kilidi altında yazar; `grade_assessment.published` audit kaydı düşer.
-- Not girişi: sınıf, ders ve dönem için atanmış `CLASS_TEACHER`/`BRANCH_TEACHER` veya
-  `academic:manage`. Yayınlanmış nota yazmak yeni taslak sürüm açar. Kampüs kapsamı dışındaki kayıt
+- Not girişi: tanım ve yayınla aynı kural; sınıfı adıyla taşıyan atanmış `CLASS_TEACHER`/`BRANCH_TEACHER`
+  veya `academic:manage`. Yayınlanmış nota yazmak yeni taslak sürüm açar. Kampüs kapsamı dışındaki kayıt
   ve diğer tenant 404 alır; atanmamış öğretmen 403.
 - Ekranlar: `/kurum/not-defteri` (tanım, not kontrolü, sürüm geçmişi, değişmezlik uyarılı yayın) ve
-  `/ogretmen/not-defteri` (atanan değerlendirmelere taslak giriş). Yayınlanmış hücre salt okunurdur;
+  `/ogretmen/not-defteri` (atanan sınıf ve derste değerlendirme oluşturma, taslak giriş ve onaylı yayın
+  veya düzeltme yayını). Yayınlanmış hücre salt okunurdur;
   "Düzelt" yeni sürüm taslağı açar.
 - Öğretmen not defteri rol önizlemesinde açılmaz; API önizleme başlığını desteklemez.
 
