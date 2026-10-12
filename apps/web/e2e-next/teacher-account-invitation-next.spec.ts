@@ -213,8 +213,9 @@ function authResponse(roles: string[]) {
   };
 }
 
+// The API never returns userId for teachers; it exposes only hasAccount (UAT F-09).
 function teacher(id: string, firstName: string, lastName: string, userId?: string): TeacherRecord {
-  return { id, tenantId: "tenant-a", firstName, lastName, branch: "Matematik", ...(userId ? { userId } : {}) };
+  return { id, tenantId: "tenant-a", firstName, lastName, branch: "Matematik", hasAccount: Boolean(userId) };
 }
 
 function invitation(id: string, subjectId: string): IdentityInvitationRecord {

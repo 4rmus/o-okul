@@ -51,7 +51,7 @@ export function TeacherDetailPage({ teacherId }: { teacherId: string }) {
   const invitationsQuery = useQuery({
     queryKey: invitationsQueryKey,
     queryFn: () => loadPendingTeacherInvitations(auth?.accessToken ?? ""),
-    enabled: Boolean(auth && canManageAccounts && detail && !detail.teacher.userId),
+    enabled: Boolean(auth && canManageAccounts && detail && !detail.teacher.hasAccount),
     refetchOnWindowFocus: false,
   });
   const pendingInvitation = invitationsQuery.data?.get(teacherId);

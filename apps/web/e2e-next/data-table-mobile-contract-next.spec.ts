@@ -1464,7 +1464,7 @@ function createTeachers() {
       id: "teacher-a",
       lastName: "Arslan",
       tenantId: "tenant-datatable",
-      userId: "user-teacher-a",
+      hasAccount: true,
     },
   ];
 }

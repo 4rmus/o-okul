@@ -91,7 +91,7 @@ export function TeachersPage() {
   const invitationsQuery = useQuery({
     queryKey: ["next-teacher-invitations", auth?.session.tenantId ?? "anonymous"],
     queryFn: () => loadPendingTeacherInvitations(auth?.accessToken ?? ""),
-    enabled: Boolean(auth && canManageAccounts && rows.some((teacher) => !teacher.userId)),
+    enabled: Boolean(auth && canManageAccounts && rows.some((teacher) => !teacher.hasAccount)),
     refetchOnWindowFocus: false,
   });
   const pendingInvitations = invitationsQuery.data ?? new Map();
@@ -112,7 +112,7 @@ export function TeachersPage() {
   const students = references.students;
   const studentNameById = new Map(students.map((student) => [student.id, `${student.firstName} ${student.lastName}`]));
   const branchReadyCount = rows.filter((teacher) => Boolean(teacher.branch)).length;
-  const teacherPortalReadyCount = rows.filter((teacher) => Boolean(teacher.userId)).length;
+  const teacherPortalReadyCount = rows.filter((teacher) => Boolean(teacher.hasAccount)).length;
   const teacherSummaryItems: OperationSummaryItem[] = [
     {
       description: "Filtrelenmiş toplam kayıt",

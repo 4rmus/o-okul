@@ -1296,7 +1296,7 @@ function createTeachers() {
 }
 
 function createTeacherDetailTeacher() {
-  return { ...createTeachers()[1], userId: "user-teacher-math" };
+  return { ...createTeachers()[1], hasAccount: true };
 }
 
 function createTeacherDetailAssignments() {
