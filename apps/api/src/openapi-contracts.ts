@@ -122,6 +122,8 @@ const tenantRecordSchema = objectSchema({
   logoUrl: stringSchema(),
   seatLimit: integerSchema({ minimum: 1 }),
   activeSeatCount: integerSchema({ minimum: 0 }),
+  activeStudentCount: integerSchema({ minimum: 0 }),
+  activeStudentLimit: integerSchema({ minimum: 1 }),
   status: { type: "string", enum: ["ACTIVE", "SUSPENDED"] },
   lifecycleVersion: integerSchema({ minimum: 0 }),
   suspendedAt: stringSchema({ format: "date-time" }),
@@ -1180,6 +1182,7 @@ const teacherRecordSchema = objectSchema({
   branch: stringSchema(),
   phone: stringSchema(),
   phoneMasked: stringSchema(),
+  hasAccount: { type: "boolean" },
   provisioning: { type: "string", enum: ["PROVISIONED", "INVITED", "SKIPPED"] },
 }, ["id", "tenantId", "firstName", "lastName"]);
 
@@ -3264,6 +3267,13 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/grade-assessments": {
     requestBody: gradeAssessmentCreateRequestSchema,
     responseBody: gradeAssessmentRecordSchema,
+  },
+  "get /api/v1/grade-assessments/teacher-scopes": {
+    responseBody: arraySchema(objectSchema({
+      classId: stringSchema({ minLength: 1 }),
+      courseId: stringSchema({ minLength: 1 }),
+      termId: stringSchema({ minLength: 1 }),
+    }, ["classId"])),
   },
   "get /api/v1/grade-assessments/{id}": {
     responseBody: objectSchema({ assessment: gradeAssessmentRecordSchema, entries: arraySchema(gradeEntryRecordSchema) }, ["assessment", "entries"]),

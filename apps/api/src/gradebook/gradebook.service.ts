@@ -9,6 +9,7 @@ import type {
   GradeEntryRecord,
   GuardianSchoolGradeItem,
   TeacherAssignmentRole,
+  TeacherAuthoringScope,
 } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
@@ -16,7 +17,7 @@ import { GuardianAutoNotificationService } from "../guardian-notification/guardi
 import { IdempotencyService } from "../http/idempotency.js";
 import { hasCapability } from "../rbac/role-capabilities.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
-import { assertTeacherAssigned, hasTeacherAssignmentForScope } from "../school/assert-teacher-assigned.js";
+import { assertTeacherAssignedFromRecords, hasTeacherAssignmentForScope } from "../school/assert-teacher-assigned.js";
 import { type ClassStore, classStoreToken } from "../school/class-store.js";
 import { type CourseStore, courseStoreToken } from "../school/course-store.js";
 import { type TeacherAssignmentStore, teacherAssignmentStoreToken } from "../school/teacher-assignment-store.js";
@@ -25,6 +26,7 @@ import { isTeacherSubjectContext } from "../tenant/tenant-access.js";
 import { type GradebookStore, gradebookStoreToken } from "./gradebook-store.js";
 
 // Plan §4.5: grades are written by the class's branch or class teacher; guidance counsellors only read elsewhere.
+// DEC-20261012-01: the same roles may also create assessments, publish grades and create homework.
 const gradeWriterRoles: readonly TeacherAssignmentRole[] = ["CLASS_TEACHER", "BRANCH_TEACHER"];
 
 @Injectable()
@@ -51,6 +53,7 @@ export class GradebookService {
     const maxScore = input.maxScore ?? 100;
     assertScoreScale(maxScore, "GRADE_MAX_SCORE_INVALID");
     if (maxScore <= 0) throw new BadRequestException("GRADE_MAX_SCORE_INVALID");
+    await this.assertCanAuthor(context, { tenantId, classId: klass.id, courseId: course.id, termId: term.id });
 
     const record = await this.store.createAssessment({
       tenantId,
@@ -69,7 +72,7 @@ export class GradebookService {
       entityType: "GradeAssessment",
       entityId: record.id,
       action: "grade_assessment.created",
-      diff: { classId: record.classId, courseId: record.courseId, termId: record.termId, kind: record.kind, maxScore },
+      diff: { classId: record.classId, courseId: record.courseId, termId: record.termId, kind: record.kind, maxScore, roles: context.roles },
     });
     return record;
   }
@@ -94,7 +97,7 @@ export class GradebookService {
   async saveEntries(context: RequestContext, id: string, input: GradeEntriesSaveRequest): Promise<GradeEntryRecord[]> {
     const tenantId = requireTenantId(context);
     const assessment = await this.requireAssessment(context, tenantId, id);
-    await this.assertCanWriteEntries(context, assessment);
+    await this.assertCanAuthor(context, assignmentScope(assessment));
     const studentIds = new Set<string>();
     for (const entry of input.entries) {
       if (studentIds.has(entry.studentId)) throw new BadRequestException("GRADE_ENTRY_STUDENT_DUPLICATE");
@@ -115,6 +118,8 @@ export class GradebookService {
   async publish(context: RequestContext, id: string, idempotencyKey?: string): Promise<GradeAssessmentPublishResult> {
     if (!idempotencyKey?.trim()) throw new BadRequestException("IDEMPOTENCY_KEY_REQUIRED");
     if (!this.idempotency) throw new BadRequestException("IDEMPOTENCY_SERVICE_UNAVAILABLE");
+    // Authorise before the idempotency lookup so a replayed key never hands a result to an unassigned caller.
+    await this.assertCanAuthor(context, assignmentScope(await this.requireAssessment(context, requireTenantId(context), id)));
     return this.idempotency.run(
       context,
       { key: idempotencyKey.trim(), operation: "grade-assessment.publish", request: { id } },
@@ -135,7 +140,7 @@ export class GradebookService {
       entityType: "GradeAssessment",
       entityId: assessment.id,
       action: "grade_assessment.published",
-      diff: { publishedVersion: result.assessment.publishedVersion, publishedCount: result.publishedCount },
+      diff: { publishedVersion: result.assessment.publishedVersion, publishedCount: result.publishedCount, roles: context.roles },
     });
     await this.guardianNotifications?.notifyGradePublished(context, result.assessment);
     return result;
@@ -163,9 +168,26 @@ export class GradebookService {
       .sort((left, right) => left.heldOn.localeCompare(right.heldOn) || left.assessmentId.localeCompare(right.assessmentId));
   }
 
-  private async assertCanWriteEntries(context: RequestContext, assessment: GradeAssessmentRecord): Promise<void> {
+  /** DEC-20261012-01: classes the signed-in teacher may author for; staff get an empty list and use the full references. */
+  async listTeacherAuthoringScopes(context: RequestContext): Promise<TeacherAuthoringScope[]> {
+    const tenantId = requireTenantId(context);
+    if (!isTeacherSubjectContext(context)) return [];
+    const today = todayIso();
+    return (await this.teacherAssignments.listByTeacher(context.subjectId))
+      .filter((assignment) => assignment.tenantId === tenantId && assignment.classId && gradeWriterRoles.includes(assignment.role))
+      .filter((assignment) => (!assignment.startsAt || assignment.startsAt <= today) && (!assignment.endsAt || assignment.endsAt >= today))
+      .map(({ classId, courseId, termId }) => ({ classId: classId as string, ...(courseId ? { courseId } : {}), ...(termId ? { termId } : {}) }));
+  }
+
+  /**
+   * Entry writes, assessment creation and publish (DEC-20261012-01): management always; a teacher only through an active
+   * CLASS_TEACHER/BRANCH_TEACHER assignment that names this class. Course-only or student-only assignments never grant it.
+   */
+  private async assertCanAuthor(context: RequestContext, scope: ReturnType<typeof assignmentScope>): Promise<void> {
     if (hasCapability(context, "academic:manage")) return;
-    await assertTeacherAssigned(context, this.teacherAssignments, { ...assignmentScope(assessment), roles: gradeWriterRoles }, todayIso());
+    if (!isTeacherSubjectContext(context)) throw new ForbiddenException("TEACHER_CONTEXT_REQUIRED");
+    const classAssignments = (await this.teacherAssignments.listByTeacher(context.subjectId)).filter((assignment) => assignment.classId === scope.classId);
+    assertTeacherAssignedFromRecords(context, classAssignments, { ...scope, roles: gradeWriterRoles }, todayIso());
   }
 
   private async requireReadableAssessment(context: RequestContext, id: string): Promise<GradeAssessmentRecord> {

@@ -499,6 +499,18 @@ pnpm account-management:backfill
 - Parity; login normalize alanları, membership/persona, aktif session membershipVersion/legacy rol,
   platform hesap/oturum ve çalışan bağlarını sayısal olarak doğrular. Ham e-posta, telefon, T.C.,
   ad, tenant veya kullanıcı ID artifact'a yazılmaz.
+- `staging-deploy.yml` APPLY'ı her deploy'da migration'dan sonra, uygulama başlamadan önce fail-closed gate
+  olarak çalıştırır; adımlar idempotenttir. UAT F-13 (2026-10-12): öğretmen hesabı, `Teacher.employeeId` ile
+  bağlı hesapsız `Employee` satırına taşınır (çalışan kaydı başka hesaba bağlıysa dokunulmaz).
+- UAT F-16 (2026-10-12) korunan değişmezler: backfill `scopeMode`'u ve `MembershipCampusScope` satırlarını
+  değiştirmez; canonical persona yalnız `ACTIVE` satırlarda ve yalnız farklıysa yazılır; `SUSPENDED`/`ENDED`
+  satırların `staffRole`/persona alanları korunur; aynı veride ikinci `APPLY` hiçbir satırı yazmaz
+  (`account-management-backfill.postgres.test.ts`). Önceki deploy'ların bozduğu staging durumu için iki tek
+  seferlik, idempotent onarım vardır: hiç bayrağı kalmamış askıdaki/biten üyelik grubu (aktif persona satırı
+  olmayan kullanıcıda) legacy `role` sütunundan yeniden türetilir; `TENANT` olup kampüs satırı kalan üyelik,
+  son `tenant_membership.updated` audit'inin `campusCount` değeri kampüs satırı sayısına eşitse `CAMPUSES`'a
+  döner. APPLY logu geri yüklenen kapsam sayısını yazar. Audit kanıtı olmayan (ör. partisyonu silinmiş) satır
+  `TENANT` kalır; kampüs satırı olan `TENANT` üyelikler deploy sonrası elle gözden geçirilir.
 - Runtime cutover yalnız `PASS` backfill artifact'ından sonra başlar. Login
   `(tenantId, loginNameNormalized)` okur ve yalnız aktif hesap + aktif membership + aktif/geçerli
   lisanslı tenant birleşimini kabul eder. T.C. kimlik login tanımlayıcısı değildir.
@@ -1119,6 +1131,15 @@ doküman veya ajan metadata dosyaları değiştiyse runtime-etkisiz run, image b
 başarılı biçimde atlanır. Daha yeni SHA'nın başarılı CI'ı veya PR değişiklik aralığı doğrulanamazsa seçim
 fail-open çalışır. Manuel `workflow_dispatch` bu filtreden etkilenmez ve her zaman deploy akışına girer.
 
+2026-10-12'den itibaren otomatik deploy isteğe bağlıdır: `workflow_run` yalnız repo değişkeni
+`STAGING_AUTO_DEPLOY=true` iken deploy eder; değişken yoksa preflight "automatic staging deploy disabled"
+gerekçesiyle başarılı biçimde atlar. Staging, birikmiş değişiklikler denenecekken
+`gh workflow run staging-deploy.yml -f rollback_image_tag=<son başarılı deploy SHA'sı>` ile elle deploy
+edilir (deploy her seferinde ürün sahibi onayı ister). CI'da yalnız doküman değişen PR'lar (`docs/`,
+`status.md`, `README.md`, `PLAN.md`; `docs/evidence-manifests` ve `docs/measurement-baselines` hariç)
+tam paket yerine `docs-check` işini (ops, plan, readiness, evidence şablonları, örnek PII, agents)
+koşar; `main` push'u her zaman tam CI koşar ve CI kanıtı yalnız çalışan (atlanmamış) işleri içerir.
+
 Linux runner için base64 değeri:
 
 ```sh
@@ -1493,7 +1514,7 @@ pnpm live:onboarding:smoke
 ```
 
 `LIVE_ONBOARDING_EVIDENCE_PATH` JSON'u system admin credential'ları ile Base32 `totpSecret` değerini,
-ilk tenant admin credential'larını, tenant adı/slug/plan/koltuk limitini ve opsiyonel kurulum alanlarını
+ilk tenant admin credential'larını, tenant adı/slug/plan/aktif öğrenci limitini (`tenant.seatLimit` alanı) ve opsiyonel kurulum alanlarını
 exact shape ile taşır. Sistem admin MFA kaydı ve bilinen seed parolasının private güçlü parolaya dönüşümü
 smoke öncesinde bir kez tamamlanmış olmalıdır; smoke enrollment ekranı görürse fail-closed durur.
 Parola ve TOTP anahtarı yalnız repo dışındaki `0600` private girdide tutulur, artifact veya loga yazılmaz. Gerçek staging
@@ -1944,13 +1965,12 @@ Minimum kanıt içeriği:
   taşıyamaz; Provider/Sentry smoke artifact'lerinde canonical `commandsPassed` tek komut olmalı ve
   `gaps` boş kalmalıdır.
 
-## Tenant Koltuk Limiti Runtime
+## Tenant Kapasitesi Runtime
 
-- `seatLimit` tenant admin kullanıcı oluşturma ve kimlik daveti kabul akışlarında kontrol edilir.
-- Aynı tenant içindeki mevcut e-posta/rol güncellemeleri yeni koltuk tüketmez.
-- Dolu tenant yeni üyelik yazımlarında `TENANT_SEAT_LIMIT_EXCEEDED` döner.
-- Postgres üyelik yazımı yeni kullanıcı üyeliği eklemeden önce tenant satırını kilitler ve distinct
-  `TenantMembership.userId` sayımıyla limiti doğrular.
+- Kullanıcı hesabı (personel, öğretmen, veli, öğrenci portalı) sayısı hiçbir planda sınırlanmaz
+  (DEC-20260801-01, UAT F-06); `Tenant.seatLimit` yalnız lisans dönemi aynasıdır.
+- Tek kapasite güncel `LicenseTerm.activeStudentLimit` aktif öğrenci kotasıdır; öğrenci oluşturma ve
+  içe aktarma bu kotayı uygular. Sistem kurum listesi/detayı aktif öğrenciyi bu limite karşı gösterir.
 
 ## Tenant Lisans Read-only Runtime
 
@@ -1960,6 +1980,27 @@ Minimum kanıt içeriği:
   koduyla 403 olarak durdurulur.
 - `SUSPENDED` tenant'lar read-only moda alınmaz; request context kurulmadan
   `TENANT_INACTIVE_OR_EXPIRED` ile reddedilir.
+
+## Öğretmene Hesap Açma
+
+Öğretmen portalı yalnız öğretmen profili bir kullanıcıya bağlıyken (`Teacher.userId`) açılır; bağ
+yalnız `TEACHER` kimlik daveti kabul edilince kurulur. TC + telefon ile hesap açma modeli kullanılmaz.
+
+1. Kurum yöneticisi (`user:manage`) Öğretmenler → öğretmen ekle → ayrıntı → **Hesap daveti gönder**
+   adımıyla öğretmenin e-postasını girer (`POST /identity-invitations`, `subjectType: "TEACHER"`).
+2. Ayrıntı ve liste ekranı durumu gösterir: "Hesap yok", "Davet bekliyor" (bu durumda **Yeniden gönder**
+   mevcut daveti yeni bağlantıyla yeniler; ikinci davet açılmaz) veya "Portal bağlı".
+3. Öğretmen e-postadaki bağlantıdan parolasını belirler; sonraki girişte öğretmen portalı açılır.
+   Hesap sayısı sınırlanmaz; kapasite yalnız lisansın aktif öğrenci sınırıdır (DEC-20260801-01, UAT F-06).
+4. Öğretmen hesabı T.C. kimlik numarası istemez; giriş kurum kodu + e-posta/kullanıcı adıdır
+   (DEC-20261003-01, 2026-10-12 notu). Aktivasyon ekranı hata kodunu ayrı mesajla gösterir: süre doldu,
+   daha önce kullanıldı, geçersiz bağlantı, "kurum yöneticinizden yeni davet isteyin" veya beklenmeyen hata.
+   "Yeni davet isteyin" mesajı `TENANT_ACTIVITY_UNRESOLVED` ise (UAT F-08 öncesi 500 dönen kabullerden kalan
+   `UNCERTAIN` `TenantMutationActivity` satırı, referans `invitation:<id>`) yeniden gönderme de reddedilir;
+   satırın çözümü onaylı bir DB işlemidir, bu runbook'ta otomatik adım yoktur.
+
+Yardımcı yönetici ve operasyon çalışanı öğretmen ekranını görür ama `user:manage` yetkisi olmadığı
+için davet işlemi gösterilmez.
 
 ## Kurum Veri Export ve Opsiyonel Backup Smoke
 
@@ -2601,6 +2642,35 @@ Bu sıranın mock Docker ile çalıştırılan kontrolü
 `node --test scripts/tenant-reset-release-cutover.test.mjs` ve `pnpm ops:check` içindedir.
 Test başarısı gerçek drain, backup, provider terminal sonucu veya canlı cutover kanıtı
 değildir. Bekleyen/belirsiz işler korunur; toplu retry, epoch damgalama veya temizleme yok.
+
+### Mutasyon etkinlik kaydı ve istemci hataları (UAT F-12)
+
+`TenantMutationActivity` satırı, reset ve imhanın devam eden tenant yazısı olmadığını kanıtlaması
+için tutulur (`RESET_MUTATION_ACTIVITY_PRESENT`). 2026-10-12'den itibaren:
+
+- Tenant HTTP isteği başarıyla ya da Nest `HttpException` 4xx (ör. `400 EMPLOYEE_INVITATION_ALREADY_PENDING`)
+  ile biterse dış `HTTP_MUTATION` satırı silinir; reseti engellemez.
+- 5xx veya bilinmeyen hata dış satırı `UNCERTAIN` bırakır. İç S3/kuyruk/sağlayıcı/auth/admin/worker
+  satırları hata sonrası her zaman `UNCERTAIN` kalır (örn. SMS gönderildikten sonra dönen 400).
+- Silme doğrulanamazsa satır `RUNNING` kalır, istemci özgün hatayı alır, reset engeli sürer.
+
+**Staging/prod'da kalmış eski UNCERTAIN satırları.** Bu düzeltmeden önce 4xx ile biten isteklerin
+`HTTP_MUTATION` satırları `UNCERTAIN` kalmıştır ve kendiliğinden silinmez. Her satır için önce
+uygulama logundan isteğin 4xx ile bittiği ve iç (S3/kuyruk/sağlayıcı) satırı olmadığı doğrulanır;
+silme onaylı operatör işlemidir ve tek satırlık korumalı biçimde, bir transaction içinde yapılır:
+
+```sql
+BEGIN;
+DELETE FROM "TenantMutationActivity"
+ WHERE "tenantId" = '<tenantId>' AND "id" = '<activityId>'
+   AND "kind" = 'HTTP_MUTATION' AND "status" = 'UNCERTAIN';
+-- Etkilenen satır sayısı (ROW_COUNT / "DELETE 1") tam 1 değilse ROLLBACK; aksi halde COMMIT.
+COMMIT;
+```
+
+Toplu silme, `kind`/`status` filtresiz silme veya iç türlerin (`S3_MUTATION`, `QUEUE_ADMISSION`,
+`PROVIDER_MUTATION`, `AUTH_MUTATION`, `ADMIN_MUTATION`, `WORKER_JOB`) bu yolla silinmesi yapılmaz;
+onlar gerçek dış sonuç doğrulanarak uzlaştırılır.
 
 ## Lisans sonu veri imhası — onaylı liste (DEC-20261005-03)
 

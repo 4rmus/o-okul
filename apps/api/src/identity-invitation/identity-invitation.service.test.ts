@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import * as tenantMutationActivity from "../context/tenant-mutation-activity.js";
 import { InMemoryGuardianStore } from "../school/guardian-store.js";
 import { InMemoryTeacherStore } from "../school/teacher-store.js";
 import { InMemorySessionStore } from "../auth/session-store.js";
@@ -9,6 +10,11 @@ import type { RequestContext } from "../context/request-context.js";
 import { IdentityInvitationService, createInvitationDeliveryUrl, hashActivationToken } from "./identity-invitation.service.js";
 import { InMemoryIdentityInvitationStore, type IdentityInvitationStore } from "./identity-invitation-store.js";
 import { InMemoryEmployeeAccountActivationStore } from "./employee-account-activation-store.js";
+
+vi.mock("../context/tenant-mutation-activity.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../context/tenant-mutation-activity.js")>();
+  return { ...actual, runVerifiedTenantMutation: vi.fn(actual.runVerifiedTenantMutation) };
+});
 
 describe("IdentityInvitationService", () => {
   it("çalışan davet tokenını yalnız URL fragmentinde taşır", () => {
@@ -320,6 +326,109 @@ describe("IdentityInvitationService", () => {
       ownerEmployee.id,
       { email: "oya.owner@example.test", role: "TENANT_OWNER" },
     )).rejects.toThrow("TENANT_OWNER_MANAGE_REQUIRED");
+  });
+
+
+  it("T.C. kimlik numarası olmayan öğretmeni davetle bağlar ve konuyu davetin kurumu ile arar (UAT F-08)", async () => {
+    const teachers = new InMemoryTeacherStore();
+    const teacher = await teachers.create({ tenantId: "tenant-a", firstName: "Tcsiz", lastName: "Ogretmen" });
+    const findById = vi.spyOn(teachers, "findById");
+    const service = new IdentityInvitationService(
+      new InMemoryIdentityInvitationStore(),
+      new InMemoryUserManagementStore(),
+      new InMemoryStudentStore(),
+      new InMemoryGuardianStore(),
+      teachers,
+      new InMemoryTenantStore(),
+    );
+    const context: RequestContext = { tenantId: "tenant-a", userId: "admin-a", roles: ["TENANT_ADMIN"], bypassRls: false };
+
+    const issued = await service.create(context, { subjectType: "TEACHER", subjectId: teacher.id, email: "f08.ogretmen@example.test" });
+    findById.mockClear();
+    await expect(service.accept({ token: issued.activationToken, password: "Secure-password-123" }))
+      .resolves.toMatchObject({ status: "ACCEPTED", subjectType: "TEACHER" });
+    expect(findById).toHaveBeenCalledWith(teacher.id, "tenant-a");
+    await expect(teachers.findById(teacher.id)).resolves.toMatchObject({ userId: expect.any(String) });
+  });
+
+  it("öğretmeni hesaplı çalışan kaydına ikinci hesap daveti üretmez (UAT F-13)", async () => {
+    const users = new InMemoryUserManagementStore();
+    const employee = await users.createEmployee("tenant-a", { firstName: "Uat", lastName: "Ogretmen", status: "ACTIVE" });
+    const teachers = new InMemoryTeacherStore();
+    vi.spyOn(teachers, "findByEmployeeId").mockResolvedValue({
+      id: "teacher-f13", tenantId: "tenant-a", firstName: "Uat", lastName: "Ogretmen", userId: "teacher-user-f13",
+    });
+    const service = new IdentityInvitationService(
+      new InMemoryIdentityInvitationStore(),
+      users,
+      new InMemoryStudentStore(),
+      new InMemoryGuardianStore(),
+      teachers,
+      new InMemoryTenantStore(),
+    );
+
+    await expect(service.createEmployeeInvitation(
+      { tenantId: "tenant-a", userId: "admin-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      employee.id,
+      { email: "f13.ogretmen@example.test", role: "OPERATIONS_STAFF" },
+    )).rejects.toThrow("EMPLOYEE_ALREADY_LINKED_VIA_TEACHER");
+    expect(teachers.findByEmployeeId).toHaveBeenCalledWith("tenant-a", employee.id);
+  });
+
+  it.each([
+    ["LINKED", "teacher.employee_account_linked"],
+    ["CONFLICT", "teacher.employee_account_link_conflict"],
+    ["NO_EMPLOYEE", undefined],
+  ] as const)("öğretmen daveti kabulünde bağlı çalışan kaydını aynı hesaba bağlar: %s (UAT F-13)", async (link, action) => {
+    const teachers = new InMemoryTeacherStore();
+    const teacher = await teachers.create({ tenantId: "tenant-a", firstName: "Uat", lastName: "Ogretmen" });
+    const linkEmployeeUser = vi.spyOn(teachers, "linkEmployeeUser").mockResolvedValue(link);
+    const auditLogs = { record: vi.fn() };
+    const service = new IdentityInvitationService(
+      new InMemoryIdentityInvitationStore(),
+      new InMemoryUserManagementStore(),
+      new InMemoryStudentStore(),
+      new InMemoryGuardianStore(),
+      teachers,
+      new InMemoryTenantStore(),
+      auditLogs as never,
+    );
+    const context: RequestContext = { tenantId: "tenant-a", userId: "admin-a", roles: ["TENANT_ADMIN"], bypassRls: false };
+    const issued = await service.create(context, { subjectType: "TEACHER", subjectId: teacher.id, email: "f13.ogretmen@example.test" });
+
+    const accepted = await service.accept({ token: issued.activationToken, password: "Secure-password-123" });
+
+    expect(linkEmployeeUser).toHaveBeenCalledWith("tenant-a", teacher.id, accepted.acceptedUserId);
+    const actions = auditLogs.record.mock.calls.map(([entry]) => (entry as { action: string }).action);
+    if (action) expect(actions).toContain(action);
+    expect(actions.filter((candidate) => candidate.startsWith("teacher.employee_account"))).toHaveLength(action ? 1 : 0);
+  });
+
+  it("4xx ön koşul hatasında tenant mutation activity açmaz (UAT F-08)", async () => {
+    const students = new InMemoryStudentStore();
+    const teachers = new InMemoryTeacherStore();
+    const student = await students.create({ tenantId: "tenant-a", firstName: "Tcsiz", lastName: "Ogrenci" });
+    const teacher = await teachers.create({ tenantId: "tenant-a", firstName: "Silinen", lastName: "Ogretmen" });
+    const service = new IdentityInvitationService(
+      new InMemoryIdentityInvitationStore(),
+      new InMemoryUserManagementStore(),
+      students,
+      new InMemoryGuardianStore(),
+      teachers,
+      new InMemoryTenantStore(),
+    );
+    const context: RequestContext = { tenantId: "tenant-a", userId: "admin-a", roles: ["TENANT_ADMIN"], bypassRls: false };
+    const studentInvite = await service.create(context, { subjectType: "STUDENT", subjectId: student.id, email: "f08.ogrenci@example.test" });
+    const teacherInvite = await service.create(context, { subjectType: "TEACHER", subjectId: teacher.id, email: "f08.silinen@example.test" });
+    await teachers.softDelete(teacher.id, new Date().toISOString());
+    const runMutation = vi.mocked(tenantMutationActivity.runVerifiedTenantMutation);
+    runMutation.mockClear();
+
+    await expect(service.accept({ token: studentInvite.activationToken, password: "Secure-password-123" }))
+      .rejects.toThrow("SUBJECT_NATIONAL_ID_REQUIRED");
+    await expect(service.accept({ token: teacherInvite.activationToken, password: "Secure-password-123" }))
+      .rejects.toThrow("SUBJECT_NOT_FOUND");
+    expect(runMutation).not.toHaveBeenCalled();
   });
 
 });

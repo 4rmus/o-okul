@@ -23,6 +23,10 @@ function setup() {
     assignment("teacher-math", "BRANCH_TEACHER", { courseId: "course-math" }),
     assignment("teacher-other-course", "BRANCH_TEACHER", { courseId: "course-other" }),
     assignment("teacher-counsellor", "GUIDANCE_COUNSELOR"),
+    // Course-only (student-bound) branch assignment: never grants authoring in a class it does not name.
+    assignment("teacher-course-only", "BRANCH_TEACHER", { classId: undefined, studentId: "student-z", courseId: "course-math" }),
+    assignment("teacher-other-class", "BRANCH_TEACHER", { classId: "class-z", courseId: "course-math" }),
+    assignment("teacher-expired", "BRANCH_TEACHER", { courseId: "course-math", endsAt: "2020-01-01" }),
   ];
   const teacherAssignments = { listByTeacher: async (id: string) => assignments.filter((item) => item.teacherId === id) } as unknown as TeacherAssignmentStore;
   const audit = { record: vi.fn(async (_entry: { action: string }) => undefined) };
@@ -115,5 +119,64 @@ describe("GradebookService", () => {
       .rejects.toMatchObject({ response: { message: "GRADE_ENTRY_STUDENT_DUPLICATE" } });
     await expect(save([{ studentId: "student-b", score: 1, absent: false }])).rejects.toMatchObject({ response: { message: "GRADE_ENTRY_STUDENT_NOT_IN_CLASS" } });
     await expect(save([{ studentId: "student-a", score: null, absent: true }])).resolves.toEqual([expect.objectContaining({ absent: true, score: null })]);
+  });
+
+  describe("DEC-20261012-01 teacher authoring", () => {
+    const input = { classId: "class-a", courseId: "course-math", termId: "term-2026-spring", kind: "WRITTEN" as const, title: "1. Yazılı", heldOn: "2026-03-10" };
+    const student: RequestContext = { userId: "user-student", tenantId: "tenant-a", roles: ["STUDENT"], activePersona: "STUDENT", subjectType: "STUDENT", subjectId: "student-a", bypassRls: false };
+
+    it("assigned branch teacher creates, publishes and publishes a correction as v2; v1 stays and audit shows the role", async () => {
+      const { service, audit } = setup();
+      const math = teacher("teacher-math");
+      const assessment = await service.createAssessment(math, input);
+      await service.saveEntries(math, assessment.id, { entries: [{ studentId: "student-a", score: 60, absent: false }] });
+      await expect(service.publish(math, assessment.id, "teacher-key-1")).resolves.toMatchObject({ publishedCount: 1, assessment: { publishedVersion: 1 } });
+      await service.saveEntries(math, assessment.id, { entries: [{ studentId: "student-a", score: 65, absent: false }] });
+      await expect(service.publish(math, assessment.id, "teacher-key-2")).resolves.toMatchObject({ publishedCount: 1, assessment: { publishedVersion: 2 } });
+
+      const detail = await service.getAssessment(admin, assessment.id);
+      expect(detail.entries.map(({ version, score }) => ({ version, score }))).toEqual([{ version: 1, score: 60 }, { version: 2, score: 65 }]);
+      const actions = audit.record.mock.calls.map(([entry]) => entry as { action: string; actorUserId: string; diff: { roles: string[] } });
+      expect(actions.filter((entry) => entry.action === "grade_assessment.created")).toEqual([
+        expect.objectContaining({ actorUserId: "user-teacher-math", diff: expect.objectContaining({ roles: ["TEACHER"] }) }),
+      ]);
+      expect(actions.filter((entry) => entry.action === "grade_assessment.published")).toHaveLength(2);
+      expect(actions.filter((entry) => entry.action === "grade_assessment.published").every((entry) => entry.diff.roles.includes("TEACHER"))).toBe(true);
+    });
+
+    it.each([
+      ["unassigned teacher", "teacher-nobody"],
+      ["teacher of another course in the class", "teacher-other-course"],
+      ["guidance counsellor of the class", "teacher-counsellor"],
+      ["course-only assignment without the class", "teacher-course-only"],
+      ["branch teacher of another class", "teacher-other-class"],
+      ["expired assignment", "teacher-expired"],
+    ])("%s gets 403 on create and publish", async (_name, teacherId) => {
+      const { service } = setup();
+      await expect(service.createAssessment(teacher(teacherId), input)).rejects.toMatchObject({ status: 403 });
+      const assessment = await createAssessment(service);
+      await service.saveEntries(admin, assessment.id, { entries: [{ studentId: "student-a", score: 50, absent: false }] });
+      await expect(service.publish(teacher(teacherId), assessment.id, "foreign-key")).rejects.toMatchObject({ status: 403 });
+    });
+
+    it("an unassigned teacher cannot replay management's publish key, and students are refused", async () => {
+      const { service } = setup();
+      const assessment = await createAssessment(service);
+      await service.saveEntries(admin, assessment.id, { entries: [{ studentId: "student-a", score: 50, absent: false }] });
+      await service.publish(admin, assessment.id, "admin-key");
+      await expect(service.publish(teacher("teacher-other-course"), assessment.id, "admin-key")).rejects.toMatchObject({ status: 403 });
+      await expect(service.createAssessment(student, input)).rejects.toMatchObject({ status: 403, response: { message: "TEACHER_CONTEXT_REQUIRED" } });
+    });
+
+    it("lists only active class/branch scopes that name a class", async () => {
+      const { service } = setup();
+      await expect(service.listTeacherAuthoringScopes(teacher("teacher-math"))).resolves.toEqual([
+        { classId: "class-a", courseId: "course-math", termId: "term-2026-spring" },
+      ]);
+      for (const teacherId of ["teacher-counsellor", "teacher-course-only", "teacher-expired"]) {
+        await expect(service.listTeacherAuthoringScopes(teacher(teacherId))).resolves.toEqual([]);
+      }
+      await expect(service.listTeacherAuthoringScopes(admin)).resolves.toEqual([]);
+    });
   });
 });

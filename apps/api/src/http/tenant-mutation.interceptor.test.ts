@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { lastValueFrom, Observable, of, throwError } from "rxjs";
-import { Controller, Post, type ExecutionContext } from "@nestjs/common";
+import { defer, lastValueFrom, Observable, of, throwError } from "rxjs";
+import { BadRequestException, Controller, InternalServerErrorException, Post, type ExecutionContext } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { readOnlyOperationMetadata } from "./read-only-operation.js";
 import { request as httpRequest } from "node:http";
-const state = vi.hoisted(() => ({ end: vi.fn(), version: 2, status: "ACTIVE", actorActive: true, rows: new Map<string, { id: string; tenantId: string; version: number; status: string }>() }));
+const state = vi.hoisted(() => ({ end: vi.fn(), version: 2, status: "ACTIVE", actorActive: true, failDelete: false, rows: new Map<string, { id: string; tenantId: string; version: number; status: string; kind?: string }>() }));
 const pdfQueue = vi.hoisted(() => ({ ready: vi.fn(async () => {}), complete: vi.fn(async () => ({})), close: vi.fn(async () => {}) }));
 vi.mock("bullmq", () => ({ Queue: class { async add() { return { waitUntilFinished: pdfQueue.complete }; } close = pdfQueue.close; }, QueueEvents: class { waitUntilReady = pdfQueue.ready; close = pdfQueue.close; } }));
 vi.mock("pg", () => ({ default: { Pool: class {
@@ -16,8 +16,9 @@ vi.mock("pg", () => ({ default: { Pool: class {
     if (sql.includes("pg_try_advisory_xact_lock_shared")) return rows([{ locked: true }]);
     if (sql.includes('FROM "AuthSession"')) return rows(state.actorActive ? [{ id: "session" }] : []);
     if (sql.includes('FROM "Tenant"')) return rows([{ lifecycleVersion: state.version, status: state.status }]);
-    if (sql.startsWith('INSERT INTO "TenantMutationActivity"')) { const record = { id: String(values[0]), tenantId: String(values[1]), version: Number(values[2]), status: "RUNNING" }; state.rows.set(record.id, record); return rows([{ id: record.id }]); }
+    if (sql.startsWith('INSERT INTO "TenantMutationActivity"')) { const record = { id: String(values[0]), tenantId: String(values[1]), version: Number(values[2]), status: "RUNNING", kind: String(values[3]) }; state.rows.set(record.id, record); return rows([{ id: record.id }]); }
     if (sql.startsWith('UPDATE "TenantMutationActivity"')) { const record = state.rows.get(String(values[0])); if (record) { record.status = "UNCERTAIN"; return rows([{ id: record.id }]); } }
+    if (sql.startsWith('DELETE FROM "TenantMutationActivity"') && state.failDelete) throw new Error("SETTLE_QUERY_FAILED");
     if (sql.startsWith('DELETE FROM "TenantMutationActivity"')) { const record = state.rows.get(String(values[0])); if (record) { state.rows.delete(record.id); return rows([{ id: record.id }]); } }
     return rows([]);
   }
@@ -25,14 +26,14 @@ vi.mock("pg", () => ({ default: { Pool: class {
   async end() { this.ended = true; state.end(); }
 } } }));
 import { TenantMutationInterceptor } from "./tenant-mutation.interceptor.js";
-import { closeTenantMutationPool, openApiMutationAdmission, runApiTenantMutation, stopApiMutationAdmission, trackApiMutation, waitForApiMutations } from "../context/tenant-mutation-activity.js";
+import { closeTenantMutationPool, openApiMutationAdmission, runApiTenantMutation, runVerifiedTenantMutation, stopApiMutationAdmission, trackApiMutation, waitForApiMutations } from "../context/tenant-mutation-activity.js";
 import { runWithRequestContext } from "../context/request-context.js";
 import { S3RawImportArchiveStore } from "../exam/s3-raw-import-archive-store.js";
 import { createBullTenantQueueProducer } from "../queue/bullmq-producer.js";
 import { createReportPdfRenderer, ReportGenerationService } from "../report/report-generation.service.js";
 const context = { sessionId: "session", membershipVersion: 1, userId: "admin", tenantId: "tenant-a", tenantLifecycleVersion: 2, roles: ["TENANT_ADMIN"], bypassRls: false };
 const execution = { switchToHttp: () => ({ getRequest: () => ({ method: "POST" }) }) } as ExecutionContext;
-beforeEach(() => { openApiMutationAdmission(); state.end.mockClear(); state.version = 2; state.status = "ACTIVE"; state.actorActive = true; state.rows.clear(); vi.stubEnv("NODE_ENV", "production"); vi.stubEnv("PERSISTENCE_DRIVER", "memory"); vi.stubEnv("TENANT_STORE", "memory"); });
+beforeEach(() => { openApiMutationAdmission(); state.end.mockClear(); state.version = 2; state.status = "ACTIVE"; state.actorActive = true; state.failDelete = false; state.rows.clear(); vi.stubEnv("NODE_ENV", "production"); vi.stubEnv("PERSISTENCE_DRIVER", "memory"); vi.stubEnv("TENANT_STORE", "memory"); });
 afterEach(async () => { await closeTenantMutationPool(); vi.unstubAllEnvs(); });
 describe("HTTP durable lifetime with real activity adapter and injected SQL", () => {
   it("tracks an explicitly read-only POST without creating durable mutation uncertainty", async () => {
@@ -160,6 +161,27 @@ describe("HTTP durable lifetime with real activity adapter and injected SQL", ()
   it("controller rejection leaves uncertainty instead of assuming no side effect", async () => {
     await expect(runWithRequestContext(context, () => lastValueFrom(new TenantMutationInterceptor().intercept(execution, { handle: () => throwError(() => new Error("REMOTE_UNKNOWN")) })))).rejects.toThrow("REMOTE_UNKNOWN");
     expect([...state.rows.values()]).toMatchObject([{ status: "UNCERTAIN" }]);
+  });
+  // UAT F-12: staging tenant kept UNCERTAIN rows from these two ordinary 400 responses and could not be reset.
+  it.each(["EMPLOYEE_INVITATION_ALREADY_PENDING", "TEACHER_ASSIGNMENT_COURSE_GRADE_LEVEL_MISMATCH"])("a settled 4xx (%s) closes the outer HTTP row", async (code) => {
+    await expect(runWithRequestContext(context, () => lastValueFrom(new TenantMutationInterceptor().intercept(execution, { handle: () => throwError(() => new BadRequestException(code)) })))).rejects.toThrow(code);
+    expect(state.rows.size).toBe(0);
+  });
+  it("a 5xx HttpException still leaves the outer HTTP row UNCERTAIN", async () => {
+    await expect(runWithRequestContext(context, () => lastValueFrom(new TenantMutationInterceptor().intercept(execution, { handle: () => throwError(() => new InternalServerErrorException("BOOM")) })))).rejects.toThrow("BOOM");
+    expect([...state.rows.values()]).toMatchObject([{ kind: "HTTP_MUTATION", status: "UNCERTAIN" }]);
+  });
+  it("a 4xx whose close cannot be confirmed keeps the RUNNING row and returns the original error", async () => {
+    state.failDelete = true;
+    await expect(runWithRequestContext(context, () => lastValueFrom(new TenantMutationInterceptor().intercept(execution, { handle: () => throwError(() => new BadRequestException("EMPLOYEE_INVITATION_ALREADY_PENDING")) })))).rejects.toThrow("EMPLOYEE_INVITATION_ALREADY_PENDING");
+    expect([...state.rows.values()]).toMatchObject([{ kind: "HTTP_MUTATION", status: "RUNNING" }]);
+  });
+  it("provider send followed by a 400 keeps the nested PROVIDER_MUTATION row UNCERTAIN", async () => {
+    const send = vi.fn(async () => {});
+    const handle = () => defer(() => runVerifiedTenantMutation({ tenantId: "tenant-a", lifecycleVersion: 2, kind: "PROVIDER_MUTATION", referenceId: "notification:hash", actor: { userId: "admin", sessionId: "session", membershipVersion: 1 } }, async () => { await send(); throw new BadRequestException("ANNOUNCEMENT_DELIVERY_RESULT_COUNT_INVALID"); }));
+    await expect(runWithRequestContext(context, () => lastValueFrom(new TenantMutationInterceptor().intercept(execution, { handle })))).rejects.toThrow("ANNOUNCEMENT_DELIVERY_RESULT_COUNT_INVALID");
+    expect(send).toHaveBeenCalledTimes(1);
+    expect([...state.rows.values()]).toMatchObject([{ kind: "PROVIDER_MUTATION", status: "UNCERTAIN" }]);
   });
   it("raw archive key must belong to the activity's trusted tenant before S3 PUT or DELETE", async () => {
     const send = vi.fn(async () => ({})); const archive = new S3RawImportArchiveStore({ bucket: "private", client: { send } });

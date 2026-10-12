@@ -4,9 +4,9 @@ import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { GradeLevelRecord } from "@o-okul/shared-types";
-import { Button, CrudPage, EmptyState, Field, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@o-okul/ui";
-import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import type { CourseRecord, GradeLevelCourseRecord, GradeLevelRecord } from "@o-okul/shared-types";
+import { Button, CrudPage, EmptyState, Field, FormModal, Input, Select, type DataTableColumn, useConfirmDialog } from "@o-okul/ui";
+import { BookOpen, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import {
@@ -16,6 +16,8 @@ import {
   type GradeLevelFormState,
 } from "../../../../src/form-validation.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
+import { formatCourseName } from "../../_shared/academic-labels.js";
+import { hasCapabilityForRoles } from "../../_shared/access.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 const emptyForm: GradeLevelFormState = {
@@ -41,6 +43,8 @@ export function GradeLevelsPage() {
   const [form, setForm] = useState<GradeLevelFormState>(emptyForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
+  const [courseLevel, setCourseLevel] = useState<GradeLevelRecord | null>(null);
+  const canManageCourses = auth ? hasCapabilityForRoles(auth.session.roles, "academic:manage") : false;
   const rows = gradeLevelsQuery.data?.data ?? [];
   const codedGradeLevelCount = rows.filter((record) => Boolean(record.code)).length;
   const gradeLevelSummaryItems: OperationSummaryItem[] = [
@@ -135,6 +139,11 @@ export function GradeLevelsPage() {
           <Link href={`/kurum/ogrenciler?level=${encodeURIComponent(record.id)}`} aria-label={`${record.name} öğrencilerini gör`}>
             <Eye size={17} aria-hidden="true" />
           </Link>
+          {canManageCourses ? (
+            <Button size="icon" variant="ghost" type="button" onClick={() => setCourseLevel(record)} aria-label={`${record.name} derslerini yönet`}>
+              <BookOpen size={17} aria-hidden="true" />
+            </Button>
+          ) : null}
           <Button size="icon" variant="ghost" type="button" onClick={() => openEditForm(record)} aria-label={`${record.name} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
           </Button>
@@ -276,8 +285,96 @@ export function GradeLevelsPage() {
           />
         </Field>
       </FormModal>
+      {courseLevel && auth && canManageCourses ? (
+        <GradeLevelCoursesModal accessToken={auth.accessToken} gradeLevel={courseLevel} onClose={() => setCourseLevel(null)} tenantId={auth.session.tenantId} />
+      ) : null}
       {confirmationDialog}
     </>
+  );
+}
+
+// UAT F-11: links an existing course to a level so teacher assignments for that level's classes pass the API rule.
+// ponytail: no unlink here; the API has no DELETE /grade-levels/:id/courses/:courseId yet.
+function GradeLevelCoursesModal({ accessToken, gradeLevel, onClose, tenantId }: { accessToken: string; gradeLevel: GradeLevelRecord; onClose(): void; tenantId: string }) {
+  const queryClient = useQueryClient();
+  const linkedQueryKey = ["next-grade-level-courses", tenantId, gradeLevel.id];
+  const linkedQuery = useQuery({
+    queryKey: linkedQueryKey,
+    queryFn: () => apiRequest<GradeLevelCourseRecord[]>(accessToken, `${apiBaseUrl}/grade-levels/${encodeURIComponent(gradeLevel.id)}/courses`),
+    refetchOnWindowFocus: false,
+  });
+  const coursesQuery = useQuery({
+    queryKey: ["next-courses-all", tenantId],
+    queryFn: () => apiRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`),
+    refetchOnWindowFocus: false,
+  });
+  const [courseId, setCourseId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const linked = linkedQuery.data ?? [];
+  const linkedCourseIds = new Set(linked.map((record) => record.courseId));
+  const available = (coursesQuery.data ?? []).filter((course) => !linkedCourseIds.has(course.id));
+  const loadError = linkedQuery.isError || coursesQuery.isError ? "Dersler alınamadı. Pencereyi kapatıp tekrar deneyin." : "";
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!courseId || busy) return;
+    setBusy(true);
+    setSubmitError("");
+    try {
+      await apiRequest<void>(
+        accessToken,
+        `${apiBaseUrl}/grade-levels/${encodeURIComponent(gradeLevel.id)}/courses/${encodeURIComponent(courseId)}`,
+        { method: "PUT" },
+      );
+      setCourseId("");
+      await queryClient.invalidateQueries({ queryKey: linkedQueryKey });
+    } catch {
+      setSubmitError("Ders seviyeye bağlanamadı. Tekrar deneyin.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <FormModal
+      cancelLabel="Kapat"
+      description="Öğretmen ataması yalnız seviyeye bağlı dersler için yapılabilir."
+      onCancel={onClose}
+      onSubmit={(event) => void handleSubmit(event)}
+      open
+      submitDisabled={!courseId}
+      submitError={submitError || loadError || undefined}
+      submitLabel="Dersi bağla"
+      submitting={busy}
+      title={`${gradeLevel.name} dersleri`}
+    >
+      <section aria-label="Bağlı dersler">
+        <h3>Bağlı dersler</h3>
+        {linkedQuery.isPending ? <p className="next-status-note">Dersler yükleniyor</p> : null}
+        {!linkedQuery.isPending && linked.length === 0 ? <p className="next-status-note">Bu seviyeye bağlı ders yok.</p> : null}
+        {linked.length > 0 ? (
+          <ul>
+            {linked.map((record) => (
+              <li key={record.id}>
+                {formatCourseName(record.courseName)}
+                {record.alanName ? ` (${record.alanName})` : ""}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
+      <Field label="Bağlanacak ders" description={coursesQuery.isSuccess && available.length === 0 ? "Bağlanmamış ders kalmadı. Yeni dersi Dersler ekranından ekleyin." : undefined}>
+        <Select value={courseId} onChange={(event) => setCourseId(event.target.value)} disabled={busy}>
+          <option value="">Ders seçin</option>
+          {available.map((course) => (
+            <option key={course.id} value={course.id}>
+              {formatCourseName(course.name)}
+            </option>
+          ))}
+        </Select>
+      </Field>
+    </FormModal>
   );
 }
 

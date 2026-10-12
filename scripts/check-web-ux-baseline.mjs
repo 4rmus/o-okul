@@ -261,7 +261,7 @@ if (webPackageJson.scripts?.a11y !== "playwright test -c playwright.next.config.
   failures.push("apps/web/package.json a11y script must run e2e-next/a11y-next.spec.ts.");
 }
 
-if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=2 e2e-next/ui-primitives-state-next.spec.ts e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/app-context-next.spec.ts e2e-next/marketing-context-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/employee-access-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts e2e-next/gate-c-exam-workspace-next.spec.ts && pnpm ux-route-family-smoke") {
+if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=2 e2e-next/ui-primitives-state-next.spec.ts e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/app-context-next.spec.ts e2e-next/marketing-context-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/employee-access-next.spec.ts e2e-next/teacher-account-invitation-next.spec.ts e2e-next/course-grade-level-link-next.spec.ts e2e-next/gradebook-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts e2e-next/gate-c-exam-workspace-next.spec.ts && pnpm ux-route-family-smoke") {
   failures.push("apps/web/package.json ux-contract script must run the primitive state, no-artifact DataTable, portal report, and report workspace specs.");
 }
 if (!webPackageJson.scripts?.["ux-rc"]?.includes("--workers=2")) {
@@ -575,7 +575,7 @@ requireTokens("apps/web/e2e-next/list-url-state-next.spec.ts", [
   "Branş kapsamı",
   "Atama bağlamı",
   "Telefon varsayılan maskeli",
-  "TC + telefon bekliyor",
+  "Hesap yok",
   'not.toContainText("academic-year-2026")',
   "createAcademicYear",
   "createAcademicTerm",
@@ -2488,7 +2488,7 @@ requireTokens("apps/web/app/(app)/kurum/ogretmenler/teacher-detail-page.tsx", [
   'mobilePriority: "hidden"',
   'priority: "optional"',
   'sticky: "left"',
-  "TC + telefon bekliyor",
+  "Hesap daveti gönder",
   "Sınıf eşleşmedi",
   "Öğrenci eşleşmedi",
   "Ders eşleşmedi",
@@ -2882,7 +2882,8 @@ requireTokens("apps/web/app/(app)/sistem/kurumlar/tenants-page.tsx", [
   "Sistem yöneticisi görünümü",
   "useUrlListState",
   "Yaklaşan lisans bitişi",
-  "Kullanıcı sınırı",
+  "Öğrenci kotası",
+  "formatStudentUsage",
 ]);
 
 requireTokens("apps/web/app/(app)/sistem/system-dashboard.tsx", [
@@ -2911,19 +2912,19 @@ requireTokens("apps/web/app/(app)/sistem/kurumlar/[tenantId]/tenant-detail-page.
   "next-system-summary-card",
   "metricPlanTone",
   "metricStatusTone",
-  "Aktif kullanıcı / sınır",
+  "Aktif öğrenci / lisans limiti",
   'aria-label="Lisans ve kapasite"',
   '<InfoGrid className="next-tenant-capacity-grid">',
   '<InfoItem label="Lisans penceresi" value={formatLicenseWindow(tenant)} />',
   '<InfoItem label="Kalan gün" value={formatLicenseDays(licenseDays)} />',
-  'label="Kullanıcı sayısı"',
+  'label="Aktif öğrenci"',
   'label="Önerilen işlem"',
   "Lisans penceresi",
   "Kalan gün",
-  "Kullanıcı sayısı",
+  "Kullanıcı hesabı",
   "Önerilen işlem",
   "tenantRecommendedAction",
-  "seatUsagePercent",
+  "studentUsagePercent",
   "tenantUpdateFormSchema",
   "Kurum adı ve erişim durumu yalnız sistem yöneticisi tarafından değiştirilir.",
   "updateTenantStatus",
@@ -2938,6 +2939,8 @@ requireNoTokens("apps/web/app/(app)/sistem/kurumlar/[tenantId]/tenant-detail-pag
   "<span>Lisans penceresi</span>",
   "Lisans tarihi kontrolü",
   "Kullanıcı sınırı kontrolü",
+  "Kullanıcı sınırını yükselt",
+  "seatLimit",
 ]);
 
 requireTokens("apps/web/app/(app)/sistem/system-reference-page.tsx", [
@@ -4908,7 +4911,7 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   "tenantDetail).toHaveClass(/uh-metric-grid/)",
   'tenantDetail.locator(".uh-metric-card")).toHaveCount(5)',
   'tenantCapacity.locator(".next-tenant-capacity-grid")).toHaveClass(/uh-info-grid/)',
-  'tenantCapacity.locator(".uh-info-item")).toHaveCount(4)',
+  'tenantCapacity.locator(".uh-info-item")).toHaveCount(5)',
   'selectedFormSummary).toHaveClass(/uh-info-grid/)',
   'selectedFormSummary.locator(".uh-info-item")).toHaveCount(2)',
   ".next-portal-summary-card",

@@ -328,6 +328,7 @@ export type {
   GradeAssessmentDetail,
   GradeAssessmentKind,
   GradeAssessmentPublishResult,
+  TeacherAuthoringScope,
   GradeAssessmentRecord,
   GradeEntriesSaveRequest,
   GradeEntryDraftInput,

@@ -407,6 +407,9 @@ guardian runtime, fixture ve UAT sözleşmeleri additive model, veri envanteri, 
 veri sahibi onayı ve gözlem süresi tamamlanmadan kaldırılmaz. Bu karar DEC-20260531-01'in tamamının
 ve DEC-20260627-01'in TC/telefon girişi ile guardian kapsamının yerine geçer; ikinci karardaki
 akademik taksonomi ve SMS varsayımları değişmez.
+2026-10-11: `Tenant.seatLimit` hiçbir planda uygulanmaz; sütun veri olarak kalır; kapasite yalnız
+`LicenseTerm.activeStudentLimit`tır (UAT F-06). Sütun lisans dönemi aynası olarak yazılmaya devam eder
+(lisans parity kontrolleri buna dayanır), kullanıcı hesabı sayısını sınırlamaz.
 Kaynak: Ürün sahibinin onayladığı kurum ve hesap yönetimi mimarisi.
 Kanıt: `docs/account-management-architecture-plan.md`, `packages/db/prisma/schema.prisma`,
 `packages/shared-types/src/role-capabilities.ts`,
@@ -416,7 +419,7 @@ Kanıt: `docs/account-management-architecture-plan.md`, `packages/db/prisma/sche
 Etkilenen ADR: ADR-0001, ADR-0002
 Açık soru: Yok. Runtime geçişi DEC'te tanımlanan güvenlik ve geri dönüş kapılarıyla PR-1–PR-8
 dilimlerinde yapılacaktır; bu karar tek başına staging veya production capability kanıtı değildir.
-Son kontrol: 2026-08-01
+Son kontrol: 2026-10-11
 
 ### DEC-20260804-01 — Kurum subdomaini tenant giriş bağlamıdır
 
@@ -855,7 +858,10 @@ anahtar katalogdan çıkar, kaldırma kaydı eklenir). Yeni ADR başlığı: vel
 ayrımı.
 Açık soru: Veli yazma yollarının staging kanıtı (`UAT-GUARDIAN-01/02/03` yeniden koşumu) flag
 kaldırma PR'ının kapanış kapısıdır; pazarlama cümlesi bu kanıt gelmeden kullanılmaz.
-Son kontrol: 2026-10-05
+2026-10-12: öğretmen hesabı için T.C. kimlik istenmez; giriş kurum kodu + e-posta/kullanıcı adıdır
+(UAT F-08). Davet kabulü yalnız öğrenci hesabı için T.C. numarası ister; çalışan, veli ve öğretmen
+kabulü istemez (`identity-invitation.service.ts`, `identity-invitation-accept.postgres.test.ts`).
+Son kontrol: 2026-10-12
 
 ### DEC-20261004-01 — Feature rollout mekanizması emekliye ayrılır
 
@@ -1133,8 +1139,13 @@ verilmez. Biçim `tenant-export-v1` olarak kalır; kurumun kendi dışa aktarım
 `tenant.data-export.created` satırı tablo satır sayılarına ek olarak `fileCount` yazar. Yumuşak silinmiş
 (`deletedAt` dolu) satırlar ve dosyaları dışa aktarıma girmez; kurumun sildiği veri geri gelmez (ürün sahibi
 onayı, 2026-10-10, PR #153 merge onayıyla birlikte).
+2026-10-12: istemci hatasıyla (Nest `HttpException`, durum < 500) biten tenant HTTP isteği dış
+`HTTP_MUTATION` etkinlik kaydını kapatır; UNCERTAIN yalnız 5xx/bilinmeyen hatada veya kapanış
+doğrulanamazsa kalır. İç S3/kuyruk/sağlayıcı/auth/admin/worker kayıtları değişmez; hata sonrası UNCERTAIN
+kalır (ürün sahibi kararı, UAT F-12; Gate 6C "4xx otomatik güvenli sayılmaz" kuralı yalnız dış HTTP
+kaydı için değişti). Kanıt: `tenant-mutation.interceptor.ts`, `tenant-mutation-settle.postgres.test.ts`.
 Açık soru: Yok.
-Son kontrol: 2026-10-10
+Son kontrol: 2026-10-12
 
 ### DEC-20261005-04 — Otomatik veli bildirimlerinin varsayılanları (KV-8)
 
@@ -1171,6 +1182,27 @@ Etkilenen ADR: Yok
 Açık soru: PO-10 tarihi. Pilot kurum gerçek veriyle çalışacaksa production Eylül'den önce gerekir,
 çünkü staging'e gerçek kişisel veri girmez. Karar 2027-01-03 kontrol noktasında verilir.
 Son kontrol: 2026-10-10
+
+### DEC-20261012-01 — Öğretmen atandığı sınıf ve derste değerlendirme açar, not yayınlar ve ödev verir
+
+Durum: Onaylı; AK-7 ile kodlandı (LOCAL_TEST); staging UAT kanıtı bekliyor
+Karar: `TEACHER`, yalnız `CLASS_TEACHER` veya `BRANCH_TEACHER` rolüyle o sınıfa atandığı ve atamanın
+bugün geçerli olduğu kapsamda (a) `GradeAssessment` oluşturur, (b) notları ve düzeltmeleri yayınlar,
+(c) o sınıfa ödev (`POST /homework`) verir. Atama sınıfı adıyla içermelidir; yalnız ders veya öğrenci
+taşıyan atama yetki vermez. Atamada ders veya dönem varsa yalnız o ders ve dönem açılır; boşsa sınıfın
+bütün dersleri ve dönemleri açılır. Kontrol servis katmanında yapılır, not girişiyle aynı kuraldır.
+`academic:manage` (yönetim) yetkileri değişmez. Atanmamış sınıf veya ders 403, diğer tenant 404,
+öğrenci ve veli 403 alır. Oluşturma ve yayın audit kaydına aktörün rolleri (`roles`) yazılır. Yayında
+Idempotency-Key zorunluluğu sürer; yetki kontrolü idempotency tekrarından önce yapılır.
+DEC-20261004-06 ve ADR-0011 değişmez: yayınlanan satır güncellenmez, düzeltme yeni `version` yazar.
+Ödev materyali oluşturma, materyalden ödev, ödev düzenleme ve silme yönetimde kalır.
+Kaynak: Ürün sahibi kararı (2026-10-12, staging UAT S1-06).
+Kanıt: `apps/api/src/gradebook/gradebook.service.test.ts`, `gradebook.e2e.test.ts`,
+`apps/api/src/homework/homework.e2e.test.ts`, `apps/web/e2e-next/gradebook-next.spec.ts`. Kanıt sınıfı
+LOCAL_TEST; CI, STAGING ve PRODUCTION UNPROVEN.
+Etkilenen ADR: ADR-0011
+Açık soru: Ödev kaydında ders alanı yoktur; ders bazlı ödev gerekirse şema değişikliği ve ayrı DEC ister.
+Son kontrol: 2026-10-12
 
 ## Faz Öncesi Onay Gerektirenler
 

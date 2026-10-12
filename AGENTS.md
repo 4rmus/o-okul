@@ -37,7 +37,7 @@
 - Every delegated task needs: objective, owned paths, forbidden paths, expected output, and validation commands.
 - Subagent summaries should return findings and changed files, not raw logs.
 - When a plan slice closes, record it in `status.md` "Açık İşler" with date, slice id, evidence class, and SHA/PR, in the same PR as the slice. Decision, status, and UAT records that belong to a feature ride in that feature's PR; standalone doc records are batched into one docs PR.
-- CI takes a docs-only fast path (the `Docs-only checks` step in `.github/workflows/ci.yml`; no Playwright, build, or Postgres job) when every changed file is under `docs/` or is `README.md` or `status.md`; any other file triggers full CI.
+- Pull requests that change only `docs/`, `status.md`, `README.md`, or `PLAN.md` run the light `docs-check` job in `.github/workflows/ci.yml` instead of full CI; `docs/evidence-manifests/` and `docs/measurement-baselines/` still trigger full CI, and pushes to main always run it.
 - After editing any agent, skill, settings, or MCP file, run `pnpm agents:check` in the same change.
 
 ## Agent Roster

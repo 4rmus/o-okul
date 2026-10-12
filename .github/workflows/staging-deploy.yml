@@ -57,6 +57,7 @@ jobs:
           DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
           WORKFLOW_RUN_EVENT: ${{ github.event.workflow_run.event }}
           WORKFLOW_RUN_HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+          STAGING_AUTO_DEPLOY: ${{ vars.STAGING_AUTO_DEPLOY }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -146,6 +147,13 @@ jobs:
                 fi
               fi
             fi
+          fi
+
+          # Automatic deploys after main CI are opt-in (repo variable STAGING_AUTO_DEPLOY=true).
+          # Otherwise staging is deployed on demand with workflow_dispatch (2026-10-12, UAT batching).
+          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ] && [ "${STAGING_AUTO_DEPLOY:-}" != "true" ]; then
+            deploy_required=false
+            deploy_reason="automatic staging deploy disabled (vars.STAGING_AUTO_DEPLOY is not true); run Staging Deploy with workflow_dispatch"
           fi
 
           echo "deploy-required=$deploy_required" >> "$GITHUB_OUTPUT"

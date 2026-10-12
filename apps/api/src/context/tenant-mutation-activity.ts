@@ -40,14 +40,14 @@ export function currentTenantMutationVersion(tenantId?: string): number {
   if (!context.tenantId || (tenantId !== undefined && tenantId !== context.tenantId) || !Number.isInteger(context.tenantLifecycleVersion)) throw new Error("TENANT_ACTIVITY_CONTEXT_INVALID");
   return context.tenantLifecycleVersion!;
 }
-export async function runApiTenantMutation<T>(kind: TenantMutationAdmission["kind"], run: () => Promise<T>, tenantId?: string): Promise<T> {
+export async function runApiTenantMutation<T>(kind: TenantMutationAdmission["kind"], run: () => Promise<T>, tenantId?: string, settledError?: (error: unknown) => boolean): Promise<T> {
   return trackApiMutation(() => {
     // The existing resolver forces PostgreSQL in production regardless of memory flags.
     if (resolvePersistenceDriver(process.env.TENANT_STORE) !== "postgres") return run();
     const version = currentTenantMutationVersion(tenantId);
     const context = getRequestContext();
     pool ??= new pg.Pool({ connectionString: process.env.DATABASE_URL });
-    return runTenantMutationActivity(pool, { tenantId: context.tenantId!, lifecycleVersion: version, kind, actor: { userId: context.userId, sessionId: context.sessionId!, membershipVersion: context.membershipVersion! } }, run);
+    return runTenantMutationActivity(pool, { tenantId: context.tenantId!, lifecycleVersion: version, kind, actor: { userId: context.userId, sessionId: context.sessionId!, membershipVersion: context.membershipVersion! } }, run, settledError);
   });
 }
 export async function closeTenantMutationPool(): Promise<void> { await waitForApiMutations(); const previous = pool; pool = undefined; await previous?.end(); }

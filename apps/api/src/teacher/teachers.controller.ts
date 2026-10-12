@@ -145,6 +145,8 @@ function toTeacherResponse(record: TeacherRecord, context: ReturnType<typeof get
   delete response.nationalIdEncrypted;
   delete response.nationalIdHash;
   delete response.userId;
+  // UAT F-09: the account id stays private; the screen only needs to know whether the portal account is bound.
+  response.hasAccount = Boolean(record.userId);
   if (record.phone) response.phoneMasked = maskContactPhone(record.phone);
   if (!hasCapability(context, "privacy:manage")) delete response.phone;
   return response;

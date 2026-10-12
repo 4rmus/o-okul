@@ -17,16 +17,11 @@ import type { RequestContext } from "../context/request-context.js";
 import { type GuardianStore, guardianStoreToken } from "../school/guardian-store.js";
 import { type TeacherStore, teacherStoreToken } from "../school/teacher-store.js";
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
-import {
-  assertTenantSeatCapacity,
-  isTenantSeatLimitExceededError,
-  tenantSeatLimitExceededCode,
-} from "../tenant/tenant-seat-limit.js";
 import { type TenantStore, tenantStoreToken } from "../tenant/tenant-store.js";
 import { tenantWebUrl } from "../http/tenant-origin.js";
 import { requireTenantWideStaffContext } from "../tenant/tenant-access.js";
+import { buildTenantMembershipDualWriteRows } from "../identity-provisioning/tenant-membership-dual-write.js";
 import {
-  type TenantUserRecord,
   type UserManagementStore,
   userManagementStoreToken,
 } from "../user-management/user-management-store.js";
@@ -119,6 +114,10 @@ export class IdentityInvitationService {
     if (!employee) throw new NotFoundException("EMPLOYEE_NOT_FOUND");
     if (employee.status !== "ACTIVE") throw new BadRequestException("EMPLOYEE_INVITATION_REQUIRES_ACTIVE_PROFILE");
     if (employee.userId) throw new BadRequestException("EMPLOYEE_ALREADY_LINKED");
+    // UAT F-13: a teacher-backed Employee whose teacher already has an account must not get a second account.
+    if ((await this.teachers.findByEmployeeId(tenantId, employee.id))?.userId) {
+      throw new BadRequestException("EMPLOYEE_ALREADY_LINKED_VIA_TEACHER");
+    }
     const pending = (await this.invitations.list(tenantId)).find((invitation) => (
       invitation.subjectType === "EMPLOYEE" && invitation.subjectId === employeeId && invitation.status === "PENDING"
     ));
@@ -211,68 +210,65 @@ export class IdentityInvitationService {
     if (!invitation) throw new NotFoundException("IDENTITY_INVITATION_NOT_FOUND");
     if (invitation.status !== "PENDING") throw new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
     if (Date.parse(invitation.expiresAt) <= Date.now()) throw new BadRequestException("IDENTITY_INVITATION_EXPIRED");
+    const employeeActivation = invitation.subjectType === "EMPLOYEE" && this.employeeActivations;
+    // UAT F-08: every check that can reject a bad request runs before runVerifiedTenantMutation;
+    // a 4xx thrown inside it would leave an UNCERTAIN activity row that blocks every later accept/resend.
+    const subject = employeeActivation ? undefined : await this.requireAcceptableSubject(invitation);
+    // UAT F-16 (KV-3b): an existing account with this e-mail keeps its roles and gains the invited one; a combination
+    // the membership model cannot hold (student + anything) is refused here, before the mutation is admitted.
+    const existingUser = subject ? await this.users.findTenantUserByEmail(invitation.tenantId, subject.email) : undefined;
+    if (existingUser && !canAddTenantRole(existingUser.roles, invitation.role)) {
+      throw new BadRequestException("IDENTITY_INVITATION_EMAIL_ACCOUNT_INCOMPATIBLE");
+    }
+    const roleAdded = !existingUser?.roles.includes(invitation.role);
     const passwordHash = await hashPasswordAsync(password);
-    return runVerifiedTenantMutation({ tenantId: invitation.tenantId, lifecycleVersion: invitation.tenantLifecycleVersion!, kind: "AUTH_MUTATION", referenceId: `invitation:${invitation.id}`, source: { type: "INVITATION", id: invitation.id, tokenHash: hashActivationToken(token) } }, async () => {
-    if (invitation.subjectType === "EMPLOYEE" && this.employeeActivations) {
-      const outcome = await this.employeeActivations.accept({
-        tokenHash: hashActivationToken(token),
-        passwordHash,
-        name: body.name?.trim(),
-        acceptedAt: new Date().toISOString(),
+    const admission = { tenantId: invitation.tenantId, lifecycleVersion: invitation.tenantLifecycleVersion!, kind: "AUTH_MUTATION" as const, referenceId: `invitation:${invitation.id}`, source: { type: "INVITATION" as const, id: invitation.id, tokenHash: hashActivationToken(token) } };
+    if (employeeActivation) {
+      // A non-ACCEPTED outcome is a known, committed result, so it is mapped to a 4xx only after the activity settles.
+      const outcome = await runVerifiedTenantMutation(admission, async () => {
+        const result = await employeeActivation.accept({
+          tokenHash: hashActivationToken(token),
+          passwordHash,
+          name: body.name?.trim(),
+          acceptedAt: new Date().toISOString(),
+        });
+        if (result.status === "ACCEPTED") {
+          const accepted = result.invitation;
+          await this.auditLogs?.record({
+            tenantId: accepted.tenantId,
+            actorUserId: accepted.acceptedUserId,
+            entityType: "IdentityInvitation",
+            entityId: accepted.id,
+            action: "identity_invitation.accepted",
+            diff: { subjectType: accepted.subjectType, subjectId: accepted.subjectId, userId: accepted.acceptedUserId },
+          });
+        }
+        return result;
       });
-      const accepted = requireAcceptedEmployeeActivation(outcome);
-      await this.auditLogs?.record({
-        tenantId: accepted.tenantId,
-        actorUserId: accepted.acceptedUserId,
-        entityType: "IdentityInvitation",
-        entityId: accepted.id,
-        action: "identity_invitation.accepted",
-        diff: { subjectType: accepted.subjectType, subjectId: accepted.subjectId, userId: accepted.acceptedUserId },
-      });
-      return accepted;
+      return requireAcceptedEmployeeActivation(outcome);
     }
-    if (invitation.kind !== "EMAIL_LINK" || !invitation.email) throw new BadRequestException("IDENTITY_INVITATION_KIND_INVALID");
-    if (invitation.status !== "PENDING") throw new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
-    if (Date.parse(invitation.expiresAt) <= Date.now()) throw new BadRequestException("IDENTITY_INVITATION_EXPIRED");
-    const subject = await this.findSubject(invitation.tenantId, invitation.subjectType, invitation.subjectId);
-    if (!subject) throw new NotFoundException("SUBJECT_NOT_FOUND");
-    this.assertStudentPortalEligible(invitation.subjectType, subject);
-    const nationalIdEncrypted = "nationalIdEncrypted" in subject ? subject.nationalIdEncrypted : undefined;
-    const nationalIdHash = "nationalIdHash" in subject ? subject.nationalIdHash : undefined;
-    // DEC-20261003-01: guardian accounts are invited from StudentContact rows, which never carry a T.C. number;
-    // login is tenant code + login name, so a guardian account does not need one.
-    if (invitation.subjectType !== "EMPLOYEE" && invitation.subjectType !== "GUARDIAN" && (!nationalIdEncrypted || !nationalIdHash)) {
-      throw new BadRequestException("SUBJECT_NATIONAL_ID_REQUIRED");
-    }
+    return runVerifiedTenantMutation(admission, async () => {
+    const { email, nationalIdEncrypted, nationalIdHash } = subject!;
 
-    const existingUsers = await this.users.listTenantUsers(invitation.tenantId);
-    if (!existingUsers.some((user) => user.email?.toLowerCase() === invitation.email)) {
-      await this.assertTenantSeatAvailable(invitation.tenantId);
-    }
-
-    let user: TenantUserRecord;
-    try {
-      user = await this.users.createOrAttachTenantUser({
-        tenantId: invitation.tenantId,
-        email: invitation.email,
-        name: body.name?.trim() || invitation.name,
-        nationalIdEncrypted,
-        nationalIdHash,
-        passwordHash,
-        roles: [invitation.role],
-      });
-    } catch (error) {
-      throwTenantSeatLimitBadRequest(error);
-    }
+    // UAT F-06: user accounts are not capacity-limited; only LicenseTerm.activeStudentLimit is (DEC-20260801-01).
+    const user = await this.users.createOrAttachTenantUser({
+      tenantId: invitation.tenantId,
+      email,
+      name: body.name?.trim() || invitation.name,
+      nationalIdEncrypted,
+      nationalIdHash,
+      passwordHash,
+      roles: [invitation.role],
+    });
     const boundSubject = await this.bindSubject(invitation.tenantId, invitation.subjectType, invitation.subjectId, user.id);
     if (!boundSubject) {
-      await this.users.removeTenantRole(invitation.tenantId, user.id, invitation.role);
+      if (roleAdded) await this.users.removeTenantRole(invitation.tenantId, user.id, invitation.role);
       throw new NotFoundException("SUBJECT_NOT_FOUND");
     }
 
     const accepted = await this.invitations.markAccepted(invitation.id, user.id, new Date().toISOString());
     if (!accepted) {
-      await this.users.removeTenantRole(invitation.tenantId, user.id, invitation.role);
+      if (roleAdded) await this.users.removeTenantRole(invitation.tenantId, user.id, invitation.role);
       throw new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
     }
     await this.auditLogs?.record({
@@ -283,8 +279,40 @@ export class IdentityInvitationService {
       action: "identity_invitation.accepted",
       diff: { subjectType: invitation.subjectType, subjectId: invitation.subjectId, userId: user.id },
     });
+    if (invitation.subjectType === "TEACHER") await this.linkTeacherEmployee(invitation.tenantId, invitation.subjectId, user.id);
     return accepted;
     });
+  }
+
+  // UAT F-13: the teacher's Employee row (Teacher.employeeId) gets the same account, so Çalışanlar ve Yetkiler
+  // shows it as linked and offers no second account. An Employee already bound to another account is left alone.
+  private async linkTeacherEmployee(tenantId: string, teacherId: string, userId: string): Promise<void> {
+    const link = await this.teachers.linkEmployeeUser(tenantId, teacherId, userId);
+    if (link !== "LINKED" && link !== "CONFLICT") return;
+    await this.auditLogs?.record({
+      tenantId,
+      actorUserId: userId,
+      entityType: "Teacher",
+      entityId: teacherId,
+      action: link === "LINKED" ? "teacher.employee_account_linked" : "teacher.employee_account_link_conflict",
+      diff: { teacherId, userId },
+    });
+  }
+
+  private async requireAcceptableSubject(invitation: IdentityInvitationRecord) {
+    if (invitation.kind !== "EMAIL_LINK" || !invitation.email) throw new BadRequestException("IDENTITY_INVITATION_KIND_INVALID");
+    const subject = await this.findSubject(invitation.tenantId, invitation.subjectType, invitation.subjectId);
+    if (!subject) throw new NotFoundException("SUBJECT_NOT_FOUND");
+    this.assertStudentPortalEligible(invitation.subjectType, subject);
+    const nationalIdEncrypted = "nationalIdEncrypted" in subject ? subject.nationalIdEncrypted : undefined;
+    const nationalIdHash = "nationalIdHash" in subject ? subject.nationalIdHash : undefined;
+    // DEC-20261003-01: guardian accounts are invited from StudentContact rows, which never carry a T.C. number.
+    // 2026-10-12 (UAT F-08): teacher accounts do not need one either. Guardian and teacher login is
+    // tenant code + e-mail/login name; only student portal accounts still require a T.C. number.
+    if (invitation.subjectType === "STUDENT" && (!nationalIdEncrypted || !nationalIdHash)) {
+      throw new BadRequestException("SUBJECT_NATIONAL_ID_REQUIRED");
+    }
+    return { email: invitation.email, nationalIdEncrypted, nationalIdHash };
   }
 
   private requireTenantId(context: RequestContext): string {
@@ -309,27 +337,15 @@ export class IdentityInvitationService {
     return tenant.slug;
   }
 
-  private async assertTenantSeatAvailable(tenantId: string): Promise<void> {
-    const tenant = await this.tenants.findById(tenantId);
-    if (!tenant) {
-      throw new NotFoundException("TENANT_NOT_FOUND");
-    }
-    try {
-      assertTenantSeatCapacity(tenant);
-    } catch (error) {
-      throwTenantSeatLimitBadRequest(error);
-    }
-  }
-
   private async findSubject(tenantId: string, subjectType: InvitationSubjectType, subjectId: string) {
     const subject =
       subjectType === "EMPLOYEE"
         ? await this.users.findEmployee(tenantId, subjectId)
         : subjectType === "STUDENT"
-        ? await this.students.findProfileById(subjectId)
+        ? await this.students.findProfileById(subjectId, tenantId)
         : subjectType === "GUARDIAN"
-          ? await this.guardians.findById(subjectId)
-          : await this.teachers.findById(subjectId);
+          ? await this.guardians.findById(subjectId, tenantId)
+          : await this.teachers.findById(subjectId, tenantId);
     return subject?.tenantId === tenantId ? subject : undefined;
   }
 
@@ -374,13 +390,6 @@ function requireAcceptedEmployeeActivation(outcome: EmployeeAccountActivationOut
   throw new BadRequestException("EMPLOYEE_ACCOUNT_LIMIT_EXCEEDED");
 }
 
-function throwTenantSeatLimitBadRequest(error: unknown): never {
-  if (isTenantSeatLimitExceededError(error)) {
-    throw new BadRequestException(tenantSeatLimitExceededCode);
-  }
-  throw error;
-}
-
 function parseSubjectType(input: string | undefined): PortalSubjectRoleName {
   if (input && isPortalSubjectRoleName(input)) return input;
   throw new BadRequestException("SUBJECT_TYPE_INVALID");
@@ -421,4 +430,13 @@ export function createInvitationDeliveryUrl(token: string, tenantSlug?: string):
     : new URL("/aktivasyon", process.env.WEB_URL ?? "http://localhost:3000");
   url.hash = new URLSearchParams({ token }).toString();
   return url;
+}
+
+function canAddTenantRole(roles: readonly string[], role: string): boolean {
+  try {
+    buildTenantMembershipDualWriteRows([...roles, role]);
+    return true;
+  } catch {
+    return false;
+  }
 }

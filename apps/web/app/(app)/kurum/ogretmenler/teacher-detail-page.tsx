@@ -1,16 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { type FormEvent, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, TeacherAssignmentRecord, TeacherRecord } from "@o-okul/shared-types";
-import { ArrowLeft, BookOpen, ClipboardList, FileText, NotebookTabs } from "lucide-react";
-import { DataTable, InfoGrid, InfoItem, Panel, StatusBadge, TabButton, Tabs, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
+import { ArrowLeft, BookOpen, ClipboardList, FileText, MailPlus, NotebookTabs, RotateCw } from "lucide-react";
+import { Button, DataTable, Field, FormModal, InfoGrid, InfoItem, Input, Panel, StatusBadge, TabButton, Tabs, useToast, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
+import { hasCapabilityForRoles } from "../../_shared/access.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+import {
+  createTeacherInvitation,
+  loadPendingTeacherInvitations,
+  resendTeacherInvitation,
+  teacherAccountLabels,
+  teacherAccountState,
+  teacherAccountTones,
+  teacherInvitationErrorMessage,
+  type TeacherAccountState,
+} from "./teacher-account.js";
+
+const invitationSentMessage = "Davet gönderildi; kabul edilince öğretmen portalı açılır.";
 
 interface TeacherDetailData {
   assignments: TeacherAssignmentRecord[];
@@ -31,10 +44,69 @@ export function TeacherDetailPage({ teacherId }: { teacherId: string }) {
     refetchOnWindowFocus: false,
   });
   const detail = detailQuery.data;
+  const queryClient = useQueryClient();
+  const { notify } = useToast();
+  const canManageAccounts = auth ? hasCapabilityForRoles(auth.session.roles, "user:manage") : false;
+  const invitationsQueryKey = ["next-teacher-invitations", auth?.session.tenantId ?? "anonymous"];
+  const invitationsQuery = useQuery({
+    queryKey: invitationsQueryKey,
+    queryFn: () => loadPendingTeacherInvitations(auth?.accessToken ?? ""),
+    enabled: Boolean(auth && canManageAccounts && detail && !detail.teacher.hasAccount),
+    refetchOnWindowFocus: false,
+  });
+  const pendingInvitation = invitationsQuery.data?.get(teacherId);
+  const accountState: TeacherAccountState = detail ? teacherAccountState(detail.teacher, invitationsQuery.data ?? new Map()) : "none";
+  const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteError, setInviteError] = useState("");
+  const [isInviting, setIsInviting] = useState(false);
+  const [actionError, setActionError] = useState("");
+
+  async function handleInvite(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!auth) return;
+    setIsInviting(true);
+    setInviteError("");
+    try {
+      await createTeacherInvitation(auth.accessToken, teacherId, inviteEmail);
+      await queryClient.invalidateQueries({ queryKey: invitationsQueryKey });
+      setIsInviteOpen(false);
+      notify(invitationSentMessage);
+    } catch (error) {
+      setInviteError(teacherInvitationErrorMessage(error));
+    } finally {
+      setIsInviting(false);
+    }
+  }
+
+  async function handleResend() {
+    if (!auth || !pendingInvitation) return;
+    setIsInviting(true);
+    setActionError("");
+    try {
+      await resendTeacherInvitation(auth.accessToken, pendingInvitation.id);
+      await queryClient.invalidateQueries({ queryKey: invitationsQueryKey });
+      notify(invitationSentMessage);
+    } catch (error) {
+      setActionError(teacherInvitationErrorMessage(error));
+    } finally {
+      setIsInviting(false);
+    }
+  }
+
+  const accountAction = !canManageAccounts || accountState === "linked" || invitationsQuery.isLoading ? null : accountState === "pending" ? (
+    <Button disabled={isInviting} onClick={() => void handleResend()} type="button" variant="secondary">
+      <RotateCw aria-hidden="true" size={17} /> Yeniden gönder
+    </Button>
+  ) : (
+    <Button onClick={() => { setInviteEmail(""); setInviteError(""); setIsInviteOpen(true); }} type="button">
+      <MailPlus aria-hidden="true" size={17} /> Hesap daveti gönder
+    </Button>
+  );
   const teacherName = detail ? `${detail.teacher.firstName} ${detail.teacher.lastName}` : "Öğretmen detayı";
   const teacherBranch = detail?.teacher.branch?.trim() || "Branş bilgisi yok";
   const teacherSummaryItems = detail ? buildTeacherSummaryItems(detail) : [];
-  const teacherSummaryBadges = detail ? buildTeacherSummaryBadges(detail) : [];
+  const teacherSummaryBadges = detail ? buildTeacherSummaryBadges(detail, accountState) : [];
   const teacherSummaryActions = detail ? buildTeacherSummaryActions(detail) : [];
   const assignmentColumns = detail ? buildAssignmentColumns(detail) : [];
 
@@ -61,15 +133,17 @@ export function TeacherDetailPage({ teacherId }: { teacherId: string }) {
               items={teacherSummaryItems}
             />
             <Panel
+              actions={accountAction}
               aria-label="Öğretmen profil kartı"
               description="Branş, portal ve görev alanı tek görünümde okunur; teknik kurum veya kayıt bilgisi gösterilmez."
               title="Profil"
             >
               <InfoGrid className="next-teacher-profile-info" aria-label="Öğretmen profil özeti" role="region">
                 <InfoItem label="Branş" value={teacherBranch} />
-                <InfoItem label="Portal" value={detail.teacher.userId ? "Bağlı" : "Yok"} />
+                <InfoItem label="Portal" value={teacherAccountLabels[accountState]} />
                 <InfoItem label="Görev kapsamı" value={`${formatCount(detail.assignments.length)} atama`} />
               </InfoGrid>
+              {actionError ? <p className="uh-crud-page__error" role="alert">{actionError}</p> : null}
             </Panel>
             <Tabs label="Öğretmen detay bölümleri">
               <TabButton aria-controls="teacher-detail-panel-assignments" id="teacher-detail-tab-assignments" selected={activeSection === "assignments"} onClick={() => setActiveSection("assignments")}>Atama ilişkileri</TabButton>
@@ -121,6 +195,18 @@ export function TeacherDetailPage({ teacherId }: { teacherId: string }) {
           </>
         ) : null}
       </section>
+      <FormModal
+        description="Davet e-posta ile iletilir; öğretmen bağlantıdan parolasını belirleyince öğretmen portalı açılır."
+        onCancel={() => { if (!isInviting) setIsInviteOpen(false); }}
+        onSubmit={(event) => void handleInvite(event)}
+        open={isInviteOpen}
+        submitError={inviteError}
+        submitLabel="Daveti gönder"
+        submitting={isInviting}
+        title={`${teacherName} hesap daveti`}
+      >
+        <Field label="E-posta"><Input autoComplete="off" required type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} /></Field>
+      </FormModal>
     </PageFrame>
   );
 }
@@ -173,13 +259,13 @@ function buildTeacherSummaryItems(detail: TeacherDetailData): OperationSummaryIt
   ];
 }
 
-function buildTeacherSummaryBadges(detail: TeacherDetailData): OperationSummaryBadge[] {
+function buildTeacherSummaryBadges(detail: TeacherDetailData, accountState: TeacherAccountState): OperationSummaryBadge[] {
   const missingReferenceCount = countMissingAssignmentReferences(detail);
   return [
     {
       key: "portal",
-      label: detail.teacher.userId ? "Portal bağlı" : "TC + telefon bekliyor",
-      tone: detail.teacher.userId ? "success" : "warning",
+      label: teacherAccountLabels[accountState],
+      tone: teacherAccountTones[accountState],
     },
     {
       key: "references",

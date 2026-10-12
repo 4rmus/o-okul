@@ -608,6 +608,7 @@ function inviteEmployee(
 
 function employeeWriteErrorMessage(error: unknown) {
   if (error instanceof ApiRequestError && error.code === "EMPLOYEE_INVITATION_ALREADY_PENDING") return "Bu çalışan için zaten bekleyen bir davet var.";
+  if (error instanceof ApiRequestError && error.code === "EMPLOYEE_ALREADY_LINKED_VIA_TEACHER") return "Bu çalışan öğretmen hesabıyla zaten bağlı; ikinci hesap açılamaz.";
   if (error instanceof ApiRequestError && error.code === "EMPLOYEE_UNIQUE_CONFLICT") return "Sicil numarası veya hesap bağı başka bir çalışan tarafından kullanılıyor.";
   if (error instanceof ApiRequestError && error.code === "TENANT_OWNER_MANAGE_REQUIRED") return "Kurum sahibi davetini yalnız başka bir kurum sahibi gönderebilir.";
   return "İşlem tamamlanamadı. Bilgileri kontrol edip tekrar deneyin.";

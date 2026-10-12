@@ -250,8 +250,12 @@ export interface TenantRecord {
   institutionType?: string;
   contactEmail?: string;
   logoUrl?: string;
+  /** License mirror of the latest LicenseTerm; never a user-account cap (UAT F-06). */
   seatLimit?: number;
   activeSeatCount?: number;
+  /** System admin list/detail only: active students vs the current LicenseTerm limit. */
+  activeStudentCount?: number;
+  activeStudentLimit?: number;
   status: TenantAccessStatus;
   lifecycleVersion: number;
   suspendedAt?: string;
@@ -758,6 +762,8 @@ export interface TeacherRecord {
   phone?: string;
   phoneMasked?: string;
   userId?: string;
+  /** Read model only: true when a portal account is bound (the user id itself is not returned). */
+  hasAccount?: boolean;
   provisioning?: IdentityProvisioningStatus;
 }
 
@@ -3155,6 +3161,16 @@ export interface GradeEntriesSaveRequest {
 export interface GradeAssessmentPublishResult {
   assessment: GradeAssessmentRecord;
   publishedCount: number;
+}
+
+/**
+ * DEC-20261012-01: a class the signed-in teacher may create assessments, publish grades and create homework for.
+ * No courseId/termId means the assignment covers every course/term of that class.
+ */
+export interface TeacherAuthoringScope {
+  classId: string;
+  courseId?: string;
+  termId?: string;
 }
 
 /** One published school grade: the student's highest published version only (ADR-0011); drafts never appear. */

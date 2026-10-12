@@ -15,7 +15,7 @@ import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import { requiredText } from "../shared/required-text.js";
 import { type ScheduleStore, scheduleStoreToken } from "../program/schedule-store.js";
-import { assertTeacherAssigned } from "../school/assert-teacher-assigned.js";
+import { assertTeacherAssigned, assertTeacherAssignedFromRecords } from "../school/assert-teacher-assigned.js";
 import { SchoolService } from "../school/school.service.js";
 import {
   type TeacherAssignmentStore,
@@ -442,10 +442,11 @@ export class HomeworkService {
   async create(context: RequestContext, input: Partial<HomeworkRecord>): Promise<HomeworkRecord> {
     const tenantId = this.resolveTenantId(context, input.tenantId);
     await this.assertClassAccess(context, input.classId);
-    await assertTeacherAssigned(context, this.teacherAssignmentStore, {
-      tenantId,
-      classId: input.classId,
-    });
+    // DEC-20261012-01: a teacher needs an assignment naming this class as its class or branch teacher.
+    const classAssignments = isTeacherSubjectContext(context)
+      ? (await this.teacherAssignmentStore.listByTeacher(context.subjectId)).filter((assignment) => assignment.classId === input.classId)
+      : [];
+    assertTeacherAssignedFromRecords(context, classAssignments, { tenantId, classId: input.classId, roles: ["CLASS_TEACHER", "BRANCH_TEACHER"] });
     const dueAt = this.resolveOptionalDate(input.dueAt);
 
     const record = await this.store.create({
@@ -461,7 +462,7 @@ export class HomeworkService {
       entityType: "Homework",
       entityId: record.id,
       action: "homework.created",
-      diff: { classId: record.classId, fieldsSet: presentFields(record, ["title", "description", "dueAt"]) },
+      diff: { classId: record.classId, fieldsSet: presentFields(record, ["title", "description", "dueAt"]), roles: context.roles },
     });
     return record;
   }

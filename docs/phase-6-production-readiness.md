@@ -608,8 +608,8 @@ pnpm backup:restore:smoke
   provider'ları davranış değiştirmeden sonraki modül ayrımı turlarına bırakılır.
 - PDF export production'da API sürecinde render edilmez: `REPORT_PDF_RENDERER=worker` ve
   `REPORT_PDF_RENDER_TIMEOUT_MS` pozitif değer olmalıdır; API boot guard'ı `memory` modunu reddeder.
-- Tenant koltuk limiti tenant admin kullanıcı oluşturma ve kimlik daveti kabul akışlarında uygulanır;
-  dolu tenant yeni üyelik yazımlarında `TENANT_SEAT_LIMIT_EXCEEDED` döner.
+- Kullanıcı hesabı sayısı sınırlanmaz; tenant kapasitesi yalnız güncel `LicenseTerm.activeStudentLimit`
+  aktif öğrenci kotasıdır (DEC-20260801-01, UAT F-06).
 - Lisansı bitmiş ama `ACTIVE` tenant kullanıcıları login olup GET/HEAD/OPTIONS istekleriyle read-only
   veri okuyabilir; POST/PATCH/PUT/DELETE gibi yazma istekleri `TENANT_LICENSE_EXPIRED_READ_ONLY`
   koduyla 403 döner.

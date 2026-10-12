@@ -66,7 +66,7 @@ function ScopedTenantDetailPage({ tenantId, scope }: { tenantId: string; scope: 
   const management = tenantManagementSchema.safeParse(tenant?.management);
   const canChangeStatus = !restorePending && !resetPending && !tenantQuery.isError && tenantQuery.isFetchedAfterMount && management.success && management.data.verified && (tenant?.status === "ACTIVE" ? management.data.allowedActions.suspend : management.data.allowedActions.reactivate) && (!management.data.currentReset || management.data.currentReset.status === "COMPLETED") && tenant?.id !== "system" && Number.isInteger(tenant?.lifecycleVersion) && (tenant?.lifecycleVersion ?? -1) >= 0 && (tenant?.lifecycleVersion ?? -1) < 2147483647 && (tenant?.status === "ACTIVE" || tenant?.status === "SUSPENDED");
   const licenseDays = tenant ? licenseDaysRemaining(tenant.licenseEndsAt) : null;
-  const seatPercent = tenant ? seatUsagePercent(tenant) : null;
+  const studentPercent = tenant ? studentUsagePercent(tenant) : null;
   const [form, setForm] = useState<TenantUpdateFormState>(emptyForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
@@ -238,10 +238,10 @@ function ScopedTenantDetailPage({ tenantId, scope }: { tenantId: string; scope: 
           />
           <MetricCard
             className="next-system-summary-card"
-            description="Aktif kullanıcı / sınır"
-            label="Kullanıcı"
-            tone={isSeatLimitExceeded(tenant) ? "warning" : "default"}
-            value={formatSeatUsage(tenant)}
+            description="Aktif öğrenci / lisans limiti"
+            label="Aktif öğrenci"
+            tone={isStudentQuotaFull(tenant) ? "warning" : "default"}
+            value={formatStudentUsage(tenant)}
           />
           <MetricCard
             className="next-system-summary-card"
@@ -262,7 +262,7 @@ function ScopedTenantDetailPage({ tenantId, scope }: { tenantId: string; scope: 
         <div aria-labelledby="tenant-detail-tab-license" id="tenant-detail-panel-license" role="tabpanel" tabIndex={0}>
           <Panel
             aria-label="Lisans ve kapasite"
-            description="Lisans süresi, aktif kullanıcı sayısı ve önerilen işlem."
+            description="Lisans süresi, aktif öğrenci kotası ve önerilen işlem."
             title="Lisans ve kapasite"
             tone={tenantCapacityTone(tenant)}
           >
@@ -270,14 +270,15 @@ function ScopedTenantDetailPage({ tenantId, scope }: { tenantId: string; scope: 
               <InfoItem label="Lisans penceresi" value={formatLicenseWindow(tenant)} />
               <InfoItem label="Kalan gün" value={formatLicenseDays(licenseDays)} />
               <InfoItem
-                label="Kullanıcı sayısı"
+                label="Aktif öğrenci"
                 value={
                   <>
-                    {formatSeatUsage(tenant)}
-                    {seatPercent === null ? "" : ` · %${seatPercent}`}
+                    {formatStudentUsage(tenant)}
+                    {studentPercent === null ? "" : ` · %${studentPercent}`}
                   </>
                 }
               />
+              <InfoItem label="Kullanıcı hesabı" value={String(tenant.activeSeatCount ?? 0)} />
               <InfoItem
                 label="Önerilen işlem"
                 value={<StatusBadge tone={tenantCapacityTone(tenant)}>{tenantRecommendedAction(tenant)}</StatusBadge>}
@@ -390,15 +391,13 @@ function formatDate(value: string | undefined) {
   return value ? new Date(value).toLocaleDateString("tr-TR") : "-";
 }
 
-function formatSeatUsage(tenant: TenantRecord) {
-  const used = tenant.activeSeatCount ?? 0;
-  return tenant.seatLimit ? `${used} / ${tenant.seatLimit}` : `${used} / Sınırsız`;
+function formatStudentUsage(tenant: TenantRecord) {
+  return `${tenant.activeStudentCount ?? 0} / ${tenant.activeStudentLimit ?? "Lisans yok"}`;
 }
 
-function seatUsagePercent(tenant: TenantRecord) {
-  const used = tenant.activeSeatCount ?? 0;
-  if (!tenant.seatLimit) return null;
-  return Math.round((used / tenant.seatLimit) * 100);
+function studentUsagePercent(tenant: TenantRecord) {
+  if (!tenant.activeStudentLimit) return null;
+  return Math.round(((tenant.activeStudentCount ?? 0) / tenant.activeStudentLimit) * 100);
 }
 
 function formatLicenseWindow(tenant: TenantRecord) {
@@ -423,21 +422,21 @@ function formatLicenseDays(days: number | null) {
 function tenantCapacityTone(tenant: TenantRecord): "danger" | "success" | "warning" {
   if (tenant.status === "SUSPENDED") return "danger";
   const days = licenseDaysRemaining(tenant.licenseEndsAt);
-  if ((days !== null && days <= 30) || isSeatLimitExceeded(tenant)) return "warning";
+  if ((days !== null && days <= 30) || isStudentQuotaFull(tenant)) return "warning";
   return "success";
 }
 
 function tenantRecommendedAction(tenant: TenantRecord) {
   if (tenant.status === "SUSPENDED") return "Askı durumunu incele";
-  if (isSeatLimitExceeded(tenant)) return "Kullanıcı sınırını yükselt";
+  if (isStudentQuotaFull(tenant)) return "Öğrenci kotasını yükselt";
   const days = licenseDaysRemaining(tenant.licenseEndsAt);
   if (days !== null && days < 0) return "Lisansı yenile";
   if (days !== null && days <= 30) return "Yenileme planla";
   return "Operasyon normal";
 }
 
-function isSeatLimitExceeded(tenant: TenantRecord) {
-  return Boolean(tenant.seatLimit && (tenant.activeSeatCount ?? 0) > tenant.seatLimit);
+function isStudentQuotaFull(tenant: TenantRecord) {
+  return Boolean(tenant.activeStudentLimit && (tenant.activeStudentCount ?? 0) >= tenant.activeStudentLimit);
 }
 
 function statusLabel(status: string) {

@@ -95,6 +95,7 @@ describe("Student profile + TC API", () => {
         expect(body).toMatchObject({
           id: "student-a",
           tenantId: "tenant-a",
+          studentNo: "100",
           className: "8-A",
           campusName: "Merkez Kampus",
           gradeLevelName: "8. Sınıf",
@@ -290,6 +291,7 @@ describe("Student profile + TC API", () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body.nationalIdMasked).toBe("*******2362");
+        expect(body.studentNo).toBe("100");
         expect(body.className).toBe("8-A");
         expect(body.campusName).toBe("Merkez Kampus");
         expect(body.gradeLevelName).toBe("8. Sınıf");
@@ -317,6 +319,7 @@ describe("Student profile + TC API", () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body.nationalIdMasked).toBe("*******2362");
+        expect(body.studentNo).toBe("100");
         expect(body.className).toBe("8-A");
         expect(body.campusName).toBe("Merkez Kampus");
         expect(body.gradeLevelName).toBe("8. Sınıf");
@@ -351,6 +354,7 @@ describe("Student profile + TC API", () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body.nationalIdMasked).toBe("*******2362");
+        expect(body.studentNo).toBe("100");
         expect(body.className).toBe("8-A");
         expect(body.campusName).toBe("Merkez Kampus");
         expect(body.gradeLevelName).toBe("8. Sınıf");

@@ -1,4 +1,4 @@
-import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from "@nestjs/common";
+import { CallHandler, ExecutionContext, HttpException, Injectable, NestInterceptor } from "@nestjs/common";
 import { defer, lastValueFrom, type Observable } from "rxjs";
 import type { Request } from "express";
 import { getRequestContext } from "../context/request-context.js";
@@ -21,7 +21,16 @@ export class TenantMutationInterceptor implements NestInterceptor {
     // The inner subscription lives until the actual controller settles. Disconnecting
     // the HTTP subscriber must not prematurely delete the durable activity.
     const run = () => lastValueFrom(next.handle());
-    return defer(() => trackApiMutation(() => tenantId ? runApiTenantMutation("HTTP_MUTATION", run, tenantId) : run()));
+    return defer(() => trackApiMutation(() => tenantId ? runApiTenantMutation("HTTP_MUTATION", run, tenantId, isClientHttpError) : run()));
   }
   async onApplicationShutdown() { await closeTenantMutationPool(); }
+}
+
+/**
+ * UAT F-12: a handler that threw a Nest 4xx has settled, so only this outer HTTP row is closed.
+ * Remote effects (S3/queue/provider) keep their own nested rows and stay UNCERTAIN on failure;
+ * 5xx and unknown errors still leave this row UNCERTAIN.
+ */
+export function isClientHttpError(error: unknown): boolean {
+  return error instanceof HttpException && error.getStatus() < 500;
 }

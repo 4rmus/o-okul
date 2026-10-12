@@ -1403,6 +1403,7 @@ export class StudentService {
   private async toStudentProfile(student: {
     id: string;
     tenantId: string;
+    studentNo?: string;
     firstName: string;
     lastName: string;
     gradeLevelId?: string;
@@ -1526,6 +1527,7 @@ function omitStudentId(input: StudentContactStoreInput): Omit<StudentContactStor
 function toStudentProfile(student: {
   id: string;
   tenantId: string;
+  studentNo?: string;
   firstName: string;
   lastName: string;
   gradeLevelId?: string;
@@ -1540,6 +1542,8 @@ function toStudentProfile(student: {
   return {
     id: student.id,
     tenantId: student.tenantId,
+    // Same visibility as the list record (toPublicStudentRecord): every viewer of the student sees the school number.
+    studentNo: student.studentNo,
     firstName: student.firstName,
     lastName: student.lastName,
     gradeLevelId: student.gradeLevelId,
