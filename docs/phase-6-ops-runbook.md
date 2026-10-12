@@ -1970,7 +1970,7 @@ yalnız `TEACHER` kimlik daveti kabul edilince kurulur. TC + telefon ile hesap a
 2. Ayrıntı ve liste ekranı durumu gösterir: "Hesap yok", "Davet bekliyor" (bu durumda **Yeniden gönder**
    mevcut daveti yeni bağlantıyla yeniler; ikinci davet açılmaz) veya "Portal bağlı".
 3. Öğretmen e-postadaki bağlantıdan parolasını belirler; sonraki girişte öğretmen portalı açılır.
-   Koltuk limiti davet kabulünde kontrol edilir (bkz. Tenant Koltuk Limiti Runtime).
+   Hesap sayısı sınırlanmaz; kapasite yalnız lisansın aktif öğrenci sınırıdır (DEC-20260801-01, UAT F-06).
 4. Öğretmen hesabı T.C. kimlik numarası istemez; giriş kurum kodu + e-posta/kullanıcı adıdır
    (DEC-20261003-01, 2026-10-12 notu). Aktivasyon ekranı hata kodunu ayrı mesajla gösterir: süre doldu,
    daha önce kullanıldı, geçersiz bağlantı, "kurum yöneticinizden yeni davet isteyin" veya beklenmeyen hata.
