@@ -3,7 +3,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { Button, Field, Input } from "@o-okul/ui";
-import { acceptIdentityInvitation, activateStudentPortal } from "../../../src/api-client.js";
+import { ApiRequestError, acceptIdentityInvitation, activateStudentPortal } from "../../../src/api-client.js";
 import { appBrand } from "../../../src/brand.js";
 import { browserTenantSlug } from "../../../src/tenant-host.js";
 import { ContactSupportLink } from "../contact-support-link.js";
@@ -77,9 +77,9 @@ export default function ActivationPage() {
         setLoginName(accepted.loginName);
       }
       setIsComplete(true);
-    } catch {
+    } catch (caught) {
       setError(isEmployeeInvitation
-        ? "Bağlantı geçersiz, kullanılmış veya süresi dolmuş."
+        ? invitationAcceptErrorMessage(caught)
         : "Aktivasyon bilgileri geçersiz, kullanılmış veya süresi dolmuş.");
     } finally {
       setIsSubmitting(false);
@@ -180,4 +180,18 @@ export default function ActivationPage() {
       </aside>
     </section>
   );
+}
+
+const askAdminForNewInvitation = "İşlem tamamlanamadı. Kurum yöneticinizden yeni davet isteyin.";
+
+// UAT F-08: a server error must never read as an expired link.
+function invitationAcceptErrorMessage(error: unknown): string {
+  const status = error instanceof ApiRequestError ? error.status : 0;
+  const code = error instanceof ApiRequestError ? error.code : undefined;
+  if (code === "IDENTITY_INVITATION_EXPIRED") return "Davet bağlantısının süresi doldu. Kurum yöneticinizden yeni davet isteyin.";
+  if (code === "IDENTITY_INVITATION_NOT_PENDING") return "Bu davet bağlantısı daha önce kullanılmış. Hesabınız etkinse giriş yapın.";
+  if (code === "IDENTITY_INVITATION_NOT_FOUND") return "Davet bağlantısı geçersiz.";
+  if (code?.startsWith("PASSWORD_")) return "Şifre kabul edilmedi. Daha güçlü ve tahmin edilmesi zor bir şifre seçin.";
+  if (code === "TENANT_ACTIVITY_UNRESOLVED" || (status >= 400 && status < 500)) return askAdminForNewInvitation;
+  return "Beklenmeyen bir hata oluştu. Lütfen biraz sonra tekrar deneyin.";
 }
