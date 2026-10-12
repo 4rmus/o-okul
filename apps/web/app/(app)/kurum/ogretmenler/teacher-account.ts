@@ -2,7 +2,7 @@ import type { IdentityInvitationRecord, TeacherRecord } from "@o-okul/shared-typ
 import type { StatusBadgeProps } from "@o-okul/ui";
 import { ApiRequestError, apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
 
-// Öğretmen portalı yalnız TEACHER kimlik daveti kabul edilince açılır (Teacher.userId bağı).
+// Öğretmen portalı yalnız TEACHER kimlik daveti kabul edilince açılır (Teacher.userId bağı; API yalnız `hasAccount` döner, UAT F-09).
 export type TeacherAccountState = "linked" | "pending" | "none";
 
 export const teacherAccountLabels: Record<TeacherAccountState, string> = {
@@ -17,8 +17,8 @@ export const teacherAccountTones: Record<TeacherAccountState, StatusBadgeProps["
   pending: "info",
 };
 
-export function teacherAccountState(teacher: Pick<TeacherRecord, "id" | "userId">, pendingBySubject: ReadonlyMap<string, IdentityInvitationRecord>): TeacherAccountState {
-  if (teacher.userId) return "linked";
+export function teacherAccountState(teacher: Pick<TeacherRecord, "id" | "hasAccount">, pendingBySubject: ReadonlyMap<string, IdentityInvitationRecord>): TeacherAccountState {
+  if (teacher.hasAccount) return "linked";
   return pendingBySubject.has(teacher.id) ? "pending" : "none";
 }
 
