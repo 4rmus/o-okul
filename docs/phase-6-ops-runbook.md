@@ -1119,6 +1119,15 @@ doküman veya ajan metadata dosyaları değiştiyse runtime-etkisiz run, image b
 başarılı biçimde atlanır. Daha yeni SHA'nın başarılı CI'ı veya PR değişiklik aralığı doğrulanamazsa seçim
 fail-open çalışır. Manuel `workflow_dispatch` bu filtreden etkilenmez ve her zaman deploy akışına girer.
 
+2026-10-12'den itibaren otomatik deploy isteğe bağlıdır: `workflow_run` yalnız repo değişkeni
+`STAGING_AUTO_DEPLOY=true` iken deploy eder; değişken yoksa preflight "automatic staging deploy disabled"
+gerekçesiyle başarılı biçimde atlar. Staging, birikmiş değişiklikler denenecekken
+`gh workflow run staging-deploy.yml -f rollback_image_tag=<son başarılı deploy SHA'sı>` ile elle deploy
+edilir (deploy her seferinde ürün sahibi onayı ister). CI'da yalnız doküman değişen PR'lar (`docs/`,
+`status.md`, `README.md`, `PLAN.md`; `docs/evidence-manifests` ve `docs/measurement-baselines` hariç)
+tam paket yerine `docs-check` işini (ops, plan, readiness, evidence şablonları, örnek PII, agents)
+koşar; `main` push'u her zaman tam CI koşar ve CI kanıtı yalnız çalışan (atlanmamış) işleri içerir.
+
 Linux runner için base64 değeri:
 
 ```sh
