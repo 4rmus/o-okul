@@ -725,6 +725,7 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
     "/audit-logs": [],
     "/audit-logs/safe-list": [],
     "/grade-assessments": [],
+    "/grade-assessments/teacher-scopes": [{ classId: classFixture.id }],
     "/backup-restore-jobs": [],
     "/campuses": [campusFixture],
     "/classes": [classFixture],

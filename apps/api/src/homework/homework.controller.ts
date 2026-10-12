@@ -137,8 +137,9 @@ export class HomeworkController {
     return this.homework.findOne(getRequestContext(), id);
   }
 
+  /** Management, or a class/branch teacher of the class (DEC-20261012-01); the service enforces the assignment. */
   @Post()
-  @RequireCapability("academic:manage")
+  @Roles("TEACHER")
   create(@Body(zodBody(homeworkCreateBodySchema)) body: HomeworkCreateBody): Promise<HomeworkRecord> {
     return this.homework.create(getRequestContext(), body);
   }

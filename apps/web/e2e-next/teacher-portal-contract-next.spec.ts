@@ -260,6 +260,37 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
     }
   });
 
+  // DEC-20261012-01: only classes from the teacher's class/branch scopes are offered; the API enforces the rest.
+  for (const viewport of [{ height: 900, width: 1280 }, { height: 844, width: 390 }, { height: 812, width: 320 }]) {
+    test(`öğretmen ${viewport.width}px görünümde atandığı sınıfa ödev oluşturur`, async ({ page }) => {
+      const created: unknown[] = [];
+      await openTeacherPortal(page, viewport, { path: "/ogretmen/odevler" });
+      await page.route("**/api/v1/grade-assessments/teacher-scopes", async (route) => {
+        if (route.request().method() === "OPTIONS") return route.fulfill({ headers: corsHeadersFor(route), status: 204 });
+        return fulfillData(route, [{ classId: "class-8a", courseId: "course-math" }]);
+      });
+      await page.route("**/api/v1/homework", async (route) => {
+        if (route.request().method() === "OPTIONS") return route.fulfill({ headers: corsHeadersFor(route), status: 204 });
+        created.push(route.request().postDataJSON());
+        return fulfillData(route, { id: "homework-new", tenantId: "tenant-teacher", classId: "class-8a", title: "Kesirler" });
+      });
+      await page.reload();
+
+      const panel = page.getByRole("region", { exact: true, name: "Ödev oluştur" });
+      await expect(panel.getByRole("combobox", { name: /^Sınıf/ }).locator("option")).toHaveText(["Seçin", "8-A"]);
+      await panel.getByRole("button", { name: "Ödev oluştur" }).click();
+      await expect(panel.getByRole("alert")).toHaveText("Sınıf ve ödev başlığı zorunludur.");
+      await panel.getByRole("combobox", { name: /^Sınıf/ }).selectOption("class-8a");
+      await panel.getByLabel("Ödev başlığı").fill("Kesirler");
+      await panel.getByLabel("Teslim tarihi").fill("2026-06-20");
+      await expectNoHorizontalOverflow(page, `öğretmen ödev oluştur ${viewport.width}px`);
+      await panel.getByRole("button", { name: "Ödev oluştur" }).click();
+      await expect(panel.getByRole("status")).toHaveText("“Kesirler” ödevi oluşturuldu.");
+      expect(created).toEqual([{ classId: "class-8a", title: "Kesirler", dueAt: "2026-06-20T20:59:00.000Z" }]);
+      await expectNoHorizontalOverflow(page, `öğretmen ödev oluştur ${viewport.width}px`);
+    });
+  }
+
   test("öğretmen işlem hatasını alert olarak duyurur", async ({ page }) => {
     const mutationRequests: string[] = [];
     await openTeacherPortal(page, { height: 844, width: 390 }, { failMutationPath: "/attendance/daily", mutationRequests, path: "/ogretmen/ders-akisi" });

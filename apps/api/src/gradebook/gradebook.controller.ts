@@ -6,6 +6,7 @@ import type {
   GradeAssessmentRecord,
   GradeEntriesSaveRequest,
   GradeEntryRecord,
+  TeacherAuthoringScope,
 } from "@o-okul/shared-types";
 import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
@@ -51,10 +52,17 @@ export class GradebookController {
     return this.gradebook.listAssessments(getRequestContext(), query);
   }
 
+  /** Management, or a teacher for an assigned class and course (DEC-20261012-01); the service enforces the scope. */
   @Post()
-  @RequireCapability("academic:manage")
+  @RequireCapability("academic:read")
   create(@Body(zodBody(assessmentCreateSchema)) body: GradeAssessmentCreateRequest): Promise<GradeAssessmentRecord> {
     return this.gradebook.createAssessment(getRequestContext(), body);
+  }
+
+  @Get("teacher-scopes")
+  @RequireCapability("academic:read")
+  teacherScopes(): Promise<TeacherAuthoringScope[]> {
+    return this.gradebook.listTeacherAuthoringScopes(getRequestContext());
   }
 
   @Get(":id")
@@ -70,8 +78,9 @@ export class GradebookController {
     return this.gradebook.saveEntries(getRequestContext(), id, body);
   }
 
+  /** Management, or a teacher for the assessment's assigned class and course (DEC-20261012-01); the service enforces it. */
   @Post(":id/publish")
-  @RequireCapability("academic:manage")
+  @RequireCapability("academic:read")
   publish(@Param("id") id: string, @Headers("idempotency-key") idempotencyKey?: string): Promise<GradeAssessmentPublishResult> {
     return this.gradebook.publish(getRequestContext(), id, idempotencyKey);
   }

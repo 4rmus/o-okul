@@ -1183,6 +1183,27 @@ Açık soru: PO-10 tarihi. Pilot kurum gerçek veriyle çalışacaksa production
 çünkü staging'e gerçek kişisel veri girmez. Karar 2027-01-03 kontrol noktasında verilir.
 Son kontrol: 2026-10-10
 
+### DEC-20261012-01 — Öğretmen atandığı sınıf ve derste değerlendirme açar, not yayınlar ve ödev verir
+
+Durum: Onaylı; AK-7 ile kodlandı (LOCAL_TEST); staging UAT kanıtı bekliyor
+Karar: `TEACHER`, yalnız `CLASS_TEACHER` veya `BRANCH_TEACHER` rolüyle o sınıfa atandığı ve atamanın
+bugün geçerli olduğu kapsamda (a) `GradeAssessment` oluşturur, (b) notları ve düzeltmeleri yayınlar,
+(c) o sınıfa ödev (`POST /homework`) verir. Atama sınıfı adıyla içermelidir; yalnız ders veya öğrenci
+taşıyan atama yetki vermez. Atamada ders veya dönem varsa yalnız o ders ve dönem açılır; boşsa sınıfın
+bütün dersleri ve dönemleri açılır. Kontrol servis katmanında yapılır, not girişiyle aynı kuraldır.
+`academic:manage` (yönetim) yetkileri değişmez. Atanmamış sınıf veya ders 403, diğer tenant 404,
+öğrenci ve veli 403 alır. Oluşturma ve yayın audit kaydına aktörün rolleri (`roles`) yazılır. Yayında
+Idempotency-Key zorunluluğu sürer; yetki kontrolü idempotency tekrarından önce yapılır.
+DEC-20261004-06 ve ADR-0011 değişmez: yayınlanan satır güncellenmez, düzeltme yeni `version` yazar.
+Ödev materyali oluşturma, materyalden ödev, ödev düzenleme ve silme yönetimde kalır.
+Kaynak: Ürün sahibi kararı (2026-10-12, staging UAT S1-06).
+Kanıt: `apps/api/src/gradebook/gradebook.service.test.ts`, `gradebook.e2e.test.ts`,
+`apps/api/src/homework/homework.e2e.test.ts`, `apps/web/e2e-next/gradebook-next.spec.ts`. Kanıt sınıfı
+LOCAL_TEST; CI, STAGING ve PRODUCTION UNPROVEN.
+Etkilenen ADR: ADR-0011
+Açık soru: Ödev kaydında ders alanı yoktur; ders bazlı ödev gerekirse şema değişikliği ve ayrı DEC ister.
+Son kontrol: 2026-10-12
+
 ## Faz Öncesi Onay Gerektirenler
 
 | ID | Faz | Bloklar mı? | Soru | Beklenen kanıt |
