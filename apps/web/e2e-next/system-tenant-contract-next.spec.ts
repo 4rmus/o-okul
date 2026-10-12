@@ -51,6 +51,8 @@ interface CapturedSystemRequests {
 
 interface SystemTenantFixture {
   activeSeatCount: number;
+  activeStudentCount?: number;
+  activeStudentLimit?: number;
   id: string;
   licenseEndsAt?: string;
   licenseStartsAt?: string;
@@ -110,7 +112,8 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     await expect(summary).toContainText("Kurum toplamı");
     await expect(summary).toContainText("Durum dağılımı");
     await expect(summary).toContainText("Yaklaşan lisans bitişi");
-    await expect(summary).toContainText("Kullanıcı sınırı");
+    await expect(summary).toContainText("Öğrenci kotası");
+    await expect(summary).not.toContainText("Kullanıcı sınırı");
     await expect(summary).toContainText("Sistem yöneticisi görünümü");
     await expect(tenantsRegion.getByLabel("Ara")).toHaveValue("faz");
     await expect(tenantsRegion.getByLabel("Sırala")).toHaveValue("-name");
@@ -173,6 +176,20 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     await expect(page.getByRole("row", { name: /Davetli Kurum/ }).getByRole("button", { name: "Sil" })).toHaveCount(0);
     await expect(page.getByLabel("İlk admin aktivasyon tokenı")).toHaveCount(0);
     expect(captured.forbiddenTenantScopedPaths).toEqual([]);
+  });
+
+  test("kurum detayı aktif öğrenciyi lisans limitine karşı, kullanıcı hesabını sınırsız gösterir (UAT F-06)", async ({ page }) => {
+    const captured = createCapturedSystemRequests();
+    await openWithSystemTenantMocks(page, captured, "/sistem/kurumlar/tenant-faz9");
+
+    const metrics = page.getByRole("region", { name: "Kurum detayı" });
+    await expect(metrics).toContainText("Aktif öğrenci");
+    await expect(metrics).toContainText("30 / 120");
+    const capacity = page.getByRole("region", { name: "Lisans ve kapasite" });
+    await expect(capacity).toContainText("30 / 120 · %25");
+    await expect(capacity).toContainText("Kullanıcı hesabı140");
+    await expect(capacity).toContainText("Operasyon normal");
+    await expect(page.getByText(/Kullanıcı sınırı|140 \/ 120/)).toHaveCount(0);
   });
 
   test("kurum adı ve erişim durumunu ayrı strict PATCH çağrılarıyla günceller", async ({ page }) => {
@@ -783,7 +800,10 @@ function createSystemAuthResponse() {
 function createSystemTenants(): SystemTenantFixture[] {
   return [
     {
-      activeSeatCount: 42,
+      // UAT F-06: 140 accounts above the old seatLimit 120 is fine; capacity is active students vs the license term.
+      activeSeatCount: 140,
+      activeStudentCount: 30,
+      activeStudentLimit: 120,
       id: "tenant-faz9",
       licenseEndsAt: "2027-06-17T00:00:00.000Z",
       licenseStartsAt: "2026-06-17T00:00:00.000Z",
@@ -796,6 +816,8 @@ function createSystemTenants(): SystemTenantFixture[] {
     },
     {
       activeSeatCount: 8,
+      activeStudentCount: 25,
+      activeStudentLimit: 25,
       id: "tenant-deneme",
       licenseEndsAt: "2026-09-01T00:00:00.000Z",
       licenseStartsAt: "2026-06-01T00:00:00.000Z",

@@ -21,8 +21,11 @@ export interface TenantRecord {
   institutionType?: string;
   contactEmail?: string;
   logoUrl?: string;
+  /** License mirror of the latest LicenseTerm (parity checks); never a user-account cap (UAT F-06). */
   seatLimit?: number;
   activeSeatCount?: number;
+  activeStudentCount?: number;
+  activeStudentLimit?: number;
   status: TenantAccessStatus;
   lifecycleVersion: number;
   suspendedAt?: string;
@@ -188,6 +191,16 @@ export class InMemoryTenantStore implements TenantStore {
 
 }
 
+// UAT F-06: system list/detail capacity is active students vs the current LicenseTerm, mirroring o_okul_refresh_license_usage.
+const licenseStudentUsageColumns = `(SELECT term."activeStudentLimit" FROM "LicenseTerm" term
+             WHERE term."tenantId" = t."id" AND term."cancelledAt" IS NULL AND term."startsAt" <= now() AND now() < term."endsAt"
+             ORDER BY term."startsAt" DESC, term."id" ASC LIMIT 1) AS "activeStudentLimit",
+           (SELECT count(*)::int FROM "Student" student
+             WHERE student."tenantId" = t."id" AND student."deletedAt" IS NULL AND student."status" = 'ACTIVE'
+               AND 1 = (SELECT count(*) FROM "StudentEnrollment" enrollment
+                        WHERE enrollment."tenantId" = student."tenantId" AND enrollment."studentId" = student."id"
+                          AND enrollment."status" = 'ACTIVE' AND enrollment."endsAt" IS NULL)) AS "activeStudentCount"`;
+
 export class PostgresTenantStore implements TenantStore {
   constructor(private readonly pool: TenantQueryable = new pg.Pool({ connectionString: process.env.DATABASE_URL })) {}
 
@@ -206,6 +219,7 @@ export class PostgresTenantStore implements TenantStore {
            t."logoUrl",
            t."seatLimit",
            COUNT(DISTINCT m."userId")::int AS "activeSeatCount",
+           ${licenseStudentUsageColumns},
            t."status", t."lifecycleVersion", t."suspendedAt", t."suspendedReason"
          FROM "Tenant" t
          LEFT JOIN "TenantMembership" m ON m."tenantId" = t."id"
@@ -288,6 +302,7 @@ export class PostgresTenantStore implements TenantStore {
            t."logoUrl",
            t."seatLimit",
            COUNT(DISTINCT m."userId")::int AS "activeSeatCount",
+           ${licenseStudentUsageColumns},
            t."status", t."lifecycleVersion", t."suspendedAt", t."suspendedReason"
          FROM "Tenant" t
          LEFT JOIN "TenantMembership" m ON m."tenantId" = t."id"
@@ -608,6 +623,8 @@ interface TenantRow {
   logoUrl: string | null;
   seatLimit: number | null;
   activeSeatCount?: number | string | null;
+  activeStudentCount?: number | string | null;
+  activeStudentLimit?: number | null;
   status: TenantAccessStatus;
   lifecycleVersion: number;
   suspendedAt: Date | string | null;
@@ -682,6 +699,8 @@ function mapTenantRow(row: TenantRow): TenantRecord {
     logoUrl: row.logoUrl ?? undefined,
     seatLimit: row.seatLimit ?? undefined,
     activeSeatCount: optionalNumber(row.activeSeatCount),
+    activeStudentCount: optionalNumber(row.activeStudentCount),
+    activeStudentLimit: row.activeStudentLimit ?? undefined,
     status: row.status,
     lifecycleVersion: row.lifecycleVersion,
     suspendedAt: optionalDateString(row.suspendedAt),

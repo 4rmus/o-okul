@@ -250,8 +250,12 @@ export interface TenantRecord {
   institutionType?: string;
   contactEmail?: string;
   logoUrl?: string;
+  /** License mirror of the latest LicenseTerm; never a user-account cap (UAT F-06). */
   seatLimit?: number;
   activeSeatCount?: number;
+  /** System admin list/detail only: active students vs the current LicenseTerm limit. */
+  activeStudentCount?: number;
+  activeStudentLimit?: number;
   status: TenantAccessStatus;
   lifecycleVersion: number;
   suspendedAt?: string;

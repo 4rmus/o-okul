@@ -20,7 +20,6 @@ import {
   upsertInMemoryAuthUser,
 } from "../auth/auth-user-store.js";
 import { buildTenantMembershipDualWriteRows } from "../identity-provisioning/tenant-membership-dual-write.js";
-import { assertTenantSeatCapacity } from "../tenant/tenant-seat-limit.js";
 
 export type TenantUserRole = TenantAssignableRoleName;
 
@@ -990,10 +989,6 @@ export class PostgresUserManagementStore implements UserManagementStore {
        FOR UPDATE`,
       [tenantId, userId],
     );
-    if (!existing.rows[0]) {
-      await this.assertTenantSeatAvailableForNewMembership(client, tenantId);
-    }
-
     const membershipVersion = existing.rows.length > 0
       ? Math.max(...existing.rows.map((row) => optionalNumber(row.version) ?? 1)) + 1
       : 1;
@@ -1026,24 +1021,6 @@ export class PostgresUserManagementStore implements UserManagementStore {
         [tenantId, userId],
       );
     }
-  }
-
-  private async assertTenantSeatAvailableForNewMembership(client: Queryable, tenantId: string): Promise<void> {
-    const tenant = await client.query<{ seatLimit: number | null }>(
-      `SELECT "seatLimit" FROM "Tenant" WHERE "id" = $1 FOR NO KEY UPDATE`,
-      [tenantId],
-    );
-    const seatLimit = tenant.rows[0]?.seatLimit;
-    if (seatLimit === undefined || seatLimit === null) return;
-
-    const usage = await client.query<{ activeSeatCount: number | string | null }>(
-      `SELECT COUNT(DISTINCT "userId")::int AS "activeSeatCount" FROM "TenantMembership" WHERE "tenantId" = $1`,
-      [tenantId],
-    );
-    assertTenantSeatCapacity({
-      seatLimit,
-      activeSeatCount: optionalNumber(usage.rows[0]?.activeSeatCount),
-    });
   }
 }
 

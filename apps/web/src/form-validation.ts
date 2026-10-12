@@ -112,13 +112,13 @@ export const tenantFormSchema = tenantUpdateFormSchema.extend({
   plan: z.enum(["TRIAL", "PRO", "ENTERPRISE"]),
   licenseStartsAt: optionalDate,
   licenseEndsAt: optionalDate,
-  seatLimit: optionalText().transform((value, context) => {
+  activeStudentLimit: optionalText().transform((value, context) => {
     if (!value) return undefined;
     const parsed = Number(value);
     if (!Number.isInteger(parsed) || parsed <= 0) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Koltuk limiti pozitif tam sayı olmalıdır.",
+        message: "Aktif öğrenci limiti pozitif tam sayı olmalıdır.",
       });
       return z.NEVER;
     }
@@ -148,14 +148,14 @@ export const tenantCreateFormSchema = tenantFormSchema.and(z.object({
 })).superRefine((value, context) => {
   if (!value.licenseStartsAt) context.addIssue({ code: "custom", path: ["licenseStartsAt"], message: "Lisans başlangıcı zorunludur." });
   if (!value.licenseEndsAt) context.addIssue({ code: "custom", path: ["licenseEndsAt"], message: "Lisans bitişi zorunludur." });
-  if (!value.seatLimit) context.addIssue({ code: "custom", path: ["seatLimit"], message: "Aktif öğrenci limiti zorunludur." });
+  if (!value.activeStudentLimit) context.addIssue({ code: "custom", path: ["activeStudentLimit"], message: "Aktif öğrenci limiti zorunludur." });
   if (value.plan !== "TRIAL") return;
   if (value.licenseStartsAt && value.licenseEndsAt
     && Date.parse(value.licenseEndsAt) - Date.parse(value.licenseStartsAt) > trialLicenseLimits.maxDays * 24 * 60 * 60 * 1000) {
     context.addIssue({ code: "custom", path: ["licenseEndsAt"], message: `Deneme en fazla ${trialLicenseLimits.maxDays} gün olabilir.` });
   }
-  if (value.seatLimit && value.seatLimit > trialLicenseLimits.maxActiveStudents) {
-    context.addIssue({ code: "custom", path: ["seatLimit"], message: `Denemede en fazla ${trialLicenseLimits.maxActiveStudents} aktif öğrenci olabilir.` });
+  if (value.activeStudentLimit && value.activeStudentLimit > trialLicenseLimits.maxActiveStudents) {
+    context.addIssue({ code: "custom", path: ["activeStudentLimit"], message: `Denemede en fazla ${trialLicenseLimits.maxActiveStudents} aktif öğrenci olabilir.` });
   }
 }).transform((value) => ({
   name: value.name,
@@ -174,7 +174,7 @@ export const tenantCreateFormSchema = tenantFormSchema.and(z.object({
     planCode: value.plan,
     startsAt: calendarDateToIso(value.licenseStartsAt),
     endsAt: calendarDateToIso(value.licenseEndsAt),
-    activeStudentLimit: value.seatLimit!,
+    activeStudentLimit: value.activeStudentLimit!,
   },
 }));
 
