@@ -51,3 +51,31 @@ test("öğrenci aktivasyon kodu URL'den silinir ve öğrenci numarasıyla hesab�
     password: "YeniAb12",
   });
 });
+
+// UAT F-08: only an expiry error may say the link expired.
+for (const { status, code, message } of [
+  { status: 400, code: "IDENTITY_INVITATION_EXPIRED", message: "Davet bağlantısının süresi doldu." },
+  { status: 400, code: "IDENTITY_INVITATION_NOT_PENDING", message: "daha önce kullanılmış" },
+  { status: 404, code: "IDENTITY_INVITATION_NOT_FOUND", message: "Davet bağlantısı geçersiz." },
+  { status: 400, code: "SUBJECT_NATIONAL_ID_REQUIRED", message: "Kurum yöneticinizden yeni davet isteyin." },
+  { status: 503, code: "TENANT_ACTIVITY_UNRESOLVED", message: "Kurum yöneticinizden yeni davet isteyin." },
+  { status: 400, code: "PASSWORD_COMMON_REJECTED", message: "Şifre kabul edilmedi." },
+  { status: 500, code: "INTERNAL_SERVER_ERROR", message: "Beklenmeyen bir hata oluştu." },
+]) {
+  test(`davet kabul hatası ${code} için doğru mesajı gösterir`, async ({ page }) => {
+    await page.route("**/api/v1/identity-invitations/accept", (route) => route.fulfill({
+      contentType: "application/json",
+      status,
+      body: JSON.stringify({ error: { code } }),
+    }));
+
+    await page.goto("/aktivasyon#token=activation-secret");
+    await page.getByRole("textbox", { name: "Şifre", exact: true }).fill("YeniAb12");
+    await page.getByRole("textbox", { name: "Şifre tekrar" }).fill("YeniAb12");
+    await page.getByRole("button", { name: "Hesabı etkinleştir" }).click();
+
+    const alert = page.locator(".next-form-error");
+    await expect(alert).toContainText(message);
+    if (code !== "IDENTITY_INVITATION_EXPIRED") await expect(alert).not.toContainText("süresi");
+  });
+}

@@ -858,7 +858,10 @@ anahtar katalogdan çıkar, kaldırma kaydı eklenir). Yeni ADR başlığı: vel
 ayrımı.
 Açık soru: Veli yazma yollarının staging kanıtı (`UAT-GUARDIAN-01/02/03` yeniden koşumu) flag
 kaldırma PR'ının kapanış kapısıdır; pazarlama cümlesi bu kanıt gelmeden kullanılmaz.
-Son kontrol: 2026-10-05
+2026-10-12: öğretmen hesabı için T.C. kimlik istenmez; giriş kurum kodu + e-posta/kullanıcı adıdır
+(UAT F-08). Davet kabulü yalnız öğrenci hesabı için T.C. numarası ister; çalışan, veli ve öğretmen
+kabulü istemez (`identity-invitation.service.ts`, `identity-invitation-accept.postgres.test.ts`).
+Son kontrol: 2026-10-12
 
 ### DEC-20261004-01 — Feature rollout mekanizması emekliye ayrılır
 

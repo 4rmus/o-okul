@@ -179,7 +179,7 @@ export async function acceptIdentityInvitation(input: IdentityInvitationAcceptRe
     headers: { "content-type": "application/json" },
     method: "POST",
   });
-  if (!response.ok) throw new Error("IDENTITY_INVITATION_ACCEPT_FAILED");
+  if (!response.ok) throw new ApiRequestError("IDENTITY_INVITATION_ACCEPT_FAILED", response.status, await readErrorCode(response));
   return readData<IdentityInvitationAcceptResponse>(response);
 }
 

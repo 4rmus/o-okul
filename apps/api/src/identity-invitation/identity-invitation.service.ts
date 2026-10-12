@@ -205,44 +205,43 @@ export class IdentityInvitationService {
     if (!invitation) throw new NotFoundException("IDENTITY_INVITATION_NOT_FOUND");
     if (invitation.status !== "PENDING") throw new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
     if (Date.parse(invitation.expiresAt) <= Date.now()) throw new BadRequestException("IDENTITY_INVITATION_EXPIRED");
+    const employeeActivation = invitation.subjectType === "EMPLOYEE" && this.employeeActivations;
+    // UAT F-08: every check that can reject a bad request runs before runVerifiedTenantMutation;
+    // a 4xx thrown inside it would leave an UNCERTAIN activity row that blocks every later accept/resend.
+    const subject = employeeActivation ? undefined : await this.requireAcceptableSubject(invitation);
     const passwordHash = await hashPasswordAsync(password);
-    return runVerifiedTenantMutation({ tenantId: invitation.tenantId, lifecycleVersion: invitation.tenantLifecycleVersion!, kind: "AUTH_MUTATION", referenceId: `invitation:${invitation.id}`, source: { type: "INVITATION", id: invitation.id, tokenHash: hashActivationToken(token) } }, async () => {
-    if (invitation.subjectType === "EMPLOYEE" && this.employeeActivations) {
-      const outcome = await this.employeeActivations.accept({
-        tokenHash: hashActivationToken(token),
-        passwordHash,
-        name: body.name?.trim(),
-        acceptedAt: new Date().toISOString(),
+    const admission = { tenantId: invitation.tenantId, lifecycleVersion: invitation.tenantLifecycleVersion!, kind: "AUTH_MUTATION" as const, referenceId: `invitation:${invitation.id}`, source: { type: "INVITATION" as const, id: invitation.id, tokenHash: hashActivationToken(token) } };
+    if (employeeActivation) {
+      // A non-ACCEPTED outcome is a known, committed result, so it is mapped to a 4xx only after the activity settles.
+      const outcome = await runVerifiedTenantMutation(admission, async () => {
+        const result = await employeeActivation.accept({
+          tokenHash: hashActivationToken(token),
+          passwordHash,
+          name: body.name?.trim(),
+          acceptedAt: new Date().toISOString(),
+        });
+        if (result.status === "ACCEPTED") {
+          const accepted = result.invitation;
+          await this.auditLogs?.record({
+            tenantId: accepted.tenantId,
+            actorUserId: accepted.acceptedUserId,
+            entityType: "IdentityInvitation",
+            entityId: accepted.id,
+            action: "identity_invitation.accepted",
+            diff: { subjectType: accepted.subjectType, subjectId: accepted.subjectId, userId: accepted.acceptedUserId },
+          });
+        }
+        return result;
       });
-      const accepted = requireAcceptedEmployeeActivation(outcome);
-      await this.auditLogs?.record({
-        tenantId: accepted.tenantId,
-        actorUserId: accepted.acceptedUserId,
-        entityType: "IdentityInvitation",
-        entityId: accepted.id,
-        action: "identity_invitation.accepted",
-        diff: { subjectType: accepted.subjectType, subjectId: accepted.subjectId, userId: accepted.acceptedUserId },
-      });
-      return accepted;
+      return requireAcceptedEmployeeActivation(outcome);
     }
-    if (invitation.kind !== "EMAIL_LINK" || !invitation.email) throw new BadRequestException("IDENTITY_INVITATION_KIND_INVALID");
-    if (invitation.status !== "PENDING") throw new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
-    if (Date.parse(invitation.expiresAt) <= Date.now()) throw new BadRequestException("IDENTITY_INVITATION_EXPIRED");
-    const subject = await this.findSubject(invitation.tenantId, invitation.subjectType, invitation.subjectId);
-    if (!subject) throw new NotFoundException("SUBJECT_NOT_FOUND");
-    this.assertStudentPortalEligible(invitation.subjectType, subject);
-    const nationalIdEncrypted = "nationalIdEncrypted" in subject ? subject.nationalIdEncrypted : undefined;
-    const nationalIdHash = "nationalIdHash" in subject ? subject.nationalIdHash : undefined;
-    // DEC-20261003-01: guardian accounts are invited from StudentContact rows, which never carry a T.C. number;
-    // login is tenant code + login name, so a guardian account does not need one.
-    if (invitation.subjectType !== "EMPLOYEE" && invitation.subjectType !== "GUARDIAN" && (!nationalIdEncrypted || !nationalIdHash)) {
-      throw new BadRequestException("SUBJECT_NATIONAL_ID_REQUIRED");
-    }
+    return runVerifiedTenantMutation(admission, async () => {
+    const { email, nationalIdEncrypted, nationalIdHash } = subject!;
 
     // UAT F-06: user accounts are not capacity-limited; only LicenseTerm.activeStudentLimit is (DEC-20260801-01).
     const user = await this.users.createOrAttachTenantUser({
       tenantId: invitation.tenantId,
-      email: invitation.email,
+      email,
       name: body.name?.trim() || invitation.name,
       nationalIdEncrypted,
       nationalIdHash,
@@ -272,6 +271,22 @@ export class IdentityInvitationService {
     });
   }
 
+  private async requireAcceptableSubject(invitation: IdentityInvitationRecord) {
+    if (invitation.kind !== "EMAIL_LINK" || !invitation.email) throw new BadRequestException("IDENTITY_INVITATION_KIND_INVALID");
+    const subject = await this.findSubject(invitation.tenantId, invitation.subjectType, invitation.subjectId);
+    if (!subject) throw new NotFoundException("SUBJECT_NOT_FOUND");
+    this.assertStudentPortalEligible(invitation.subjectType, subject);
+    const nationalIdEncrypted = "nationalIdEncrypted" in subject ? subject.nationalIdEncrypted : undefined;
+    const nationalIdHash = "nationalIdHash" in subject ? subject.nationalIdHash : undefined;
+    // DEC-20261003-01: guardian accounts are invited from StudentContact rows, which never carry a T.C. number.
+    // 2026-10-12 (UAT F-08): teacher accounts do not need one either. Guardian and teacher login is
+    // tenant code + e-mail/login name; only student portal accounts still require a T.C. number.
+    if (invitation.subjectType === "STUDENT" && (!nationalIdEncrypted || !nationalIdHash)) {
+      throw new BadRequestException("SUBJECT_NATIONAL_ID_REQUIRED");
+    }
+    return { email: invitation.email, nationalIdEncrypted, nationalIdHash };
+  }
+
   private requireTenantId(context: RequestContext): string {
     if (!context.tenantId || context.bypassRls) {
       throw new BadRequestException("TENANT_CONTEXT_REQUIRED");
@@ -299,10 +314,10 @@ export class IdentityInvitationService {
       subjectType === "EMPLOYEE"
         ? await this.users.findEmployee(tenantId, subjectId)
         : subjectType === "STUDENT"
-        ? await this.students.findProfileById(subjectId)
+        ? await this.students.findProfileById(subjectId, tenantId)
         : subjectType === "GUARDIAN"
-          ? await this.guardians.findById(subjectId)
-          : await this.teachers.findById(subjectId);
+          ? await this.guardians.findById(subjectId, tenantId)
+          : await this.teachers.findById(subjectId, tenantId);
     return subject?.tenantId === tenantId ? subject : undefined;
   }
 

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { TeacherRecord as SharedTeacherRecord } from "@o-okul/shared-types";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
-import { type TenantQueryable, withExplicitTenantQuery, withTenantQuery } from "../db/tenant-query.js";
+import { type Queryable, type TenantQueryable, withExplicitTenantQuery, withTenantQuery } from "../db/tenant-query.js";
 
 export interface TeacherRecord extends SharedTeacherRecord {
   deletedAt?: string;
@@ -12,7 +12,8 @@ export interface TeacherRecord extends SharedTeacherRecord {
 
 export interface TeacherStore {
   list(): Promise<TeacherRecord[]>;
-  findById(id: string): Promise<TeacherRecord | undefined>;
+  /** Pass tenantId when there is no request tenant (unauthenticated invitation accept). */
+  findById(id: string, tenantId?: string): Promise<TeacherRecord | undefined>;
   findByNationalIdHash(tenantId: string, nationalIdHash: string): Promise<TeacherRecord | undefined>;
   findByUserId(tenantId: string, userId: string): Promise<TeacherRecord | undefined>;
   create(input: Omit<TeacherRecord, "id">): Promise<TeacherRecord>;
@@ -123,13 +124,14 @@ export class PostgresTeacherStore implements TeacherStore {
     });
   }
 
-  async findById(id: string): Promise<TeacherRecord | undefined> {
+  async findById(id: string, tenantId?: string): Promise<TeacherRecord | undefined> {
+    if (tenantId) {
+      return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+        return selectTeacherById(client, id);
+      });
+    }
     return withTenantQuery(this.pool, async (client) => {
-      const result = await client.query<TeacherRow>(
-        `SELECT * FROM "Teacher" WHERE "id" = $1 AND "deletedAt" IS NULL LIMIT 1`,
-        [id],
-      );
-      return result.rows[0] ? toTeacherRecord(result.rows[0]) : undefined;
+      return selectTeacherById(client, id);
     });
   }
 
@@ -303,4 +305,12 @@ function toTeacherRecord(row: TeacherRow): TeacherRecord {
     userId: row.userId ?? undefined,
     deletedAt: row.deletedAt?.toISOString(),
   };
+}
+
+async function selectTeacherById(client: Queryable, id: string): Promise<TeacherRecord | undefined> {
+  const result = await client.query<TeacherRow>(
+    `SELECT * FROM "Teacher" WHERE "id" = $1 AND "deletedAt" IS NULL LIMIT 1`,
+    [id],
+  );
+  return result.rows[0] ? toTeacherRecord(result.rows[0]) : undefined;
 }

@@ -104,7 +104,8 @@ export interface StudentStore {
     input: StudentPortalAccessUpdateRequest,
   ): Promise<StudentPortalAccessUpdateResult | undefined>;
   findById(id: string): Promise<StudentRecord | undefined>;
-  findProfileById(id: string): Promise<StudentProfileStorageRecord | undefined>;
+  /** Pass tenantId when there is no request tenant (unauthenticated invitation accept). */
+  findProfileById(id: string, tenantId?: string): Promise<StudentProfileStorageRecord | undefined>;
   findByUserId(tenantId: string, userId: string): Promise<StudentRecord | undefined>;
   findByNationalIdHash(tenantId: string, nationalIdHash: string): Promise<StudentProfileStorageRecord | undefined>;
   updateGradeLevelForClass(classId: string, gradeLevelId: string | undefined): Promise<number>;
@@ -709,13 +710,14 @@ export class PostgresStudentStore implements StudentStore {
     });
   }
 
-  async findProfileById(id: string): Promise<StudentProfileStorageRecord | undefined> {
+  async findProfileById(id: string, tenantId?: string): Promise<StudentProfileStorageRecord | undefined> {
+    if (tenantId) {
+      return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+        return selectStudentProfileById(client, id);
+      });
+    }
     return withTenantQuery(this.pool, async (client) => {
-      const result = await client.query<StudentRow>(
-        `SELECT * FROM "Student" WHERE "id" = $1 AND "deletedAt" IS NULL LIMIT 1`,
-        [id],
-      );
-      return result.rows[0] ? toStudentProfileStorageRecord(result.rows[0]) : undefined;
+      return selectStudentProfileById(client, id);
     });
   }
 
@@ -1581,4 +1583,12 @@ function maskEmail(value: string): string {
   const [localPart = "", domain = ""] = value.split("@");
   if (!domain) return "E-posta kayıtlı";
   return `${localPart.slice(0, 2) || "••"}••@${domain.replace(/^[^.]*/, "•••")}`;
+}
+
+async function selectStudentProfileById(client: Queryable, id: string): Promise<StudentProfileStorageRecord | undefined> {
+  const result = await client.query<StudentRow>(
+    `SELECT * FROM "Student" WHERE "id" = $1 AND "deletedAt" IS NULL LIMIT 1`,
+    [id],
+  );
+  return result.rows[0] ? toStudentProfileStorageRecord(result.rows[0]) : undefined;
 }
