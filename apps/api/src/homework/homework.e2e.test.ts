@@ -981,7 +981,7 @@ describe("Homework API", () => {
     });
   });
 
-  it("teacher ödevleri okuyabilir ama yazamaz", async () => {
+  it("teacher yalnız atandığı sınıfa ödev oluşturur, diğer yazma işlemleri yönetimde kalır", async () => {
     const classC = await request(server)
       .post("/classes")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
@@ -1010,11 +1010,31 @@ describe("Homework API", () => {
       .send({ checked: true })
       .expect(403);
 
-    await request(server)
+    // DEC-20261012-01: the class teacher of class-a may create homework there, never in an unassigned class.
+    const teacherCreated = await request(server)
       .post("/homework")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
       .send({ classId: "class-a", title: "Teacher Ödevi" })
+      .expect(201);
+    expect(teacherCreated.body).toMatchObject({ classId: "class-a", tenantId: "tenant-a", title: "Teacher Ödevi" });
+    await request(server)
+      .post("/homework")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({ classId: classC.body.id, title: "Kapsam Dışı Teacher Ödevi" })
       .expect(403);
+    await request(server)
+      .post("/homework")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({ classId: "class-b", title: "Başka Kurum" })
+      .expect(404);
+    for (const email of ["student-a@example.test", "guardian-a@example.test"]) {
+      const login = await request(server).post("/auth/login").send(testLoginBody(email)).expect(200);
+      await request(server)
+        .post("/homework")
+        .set("Authorization", `Bearer ${(login.body as { accessToken: string }).accessToken}`)
+        .send({ classId: "class-a", title: "Yetkisiz" })
+        .expect(403);
+    }
 
     await request(server)
       .post("/homework/from-material")

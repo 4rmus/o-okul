@@ -431,6 +431,20 @@ describe("PostgresUserManagementStore", () => {
     expect(queries.some((query) => query.sql === "COMMIT")).toBe(false);
   });
 
+  it("mevcut hesaba rol eklerken diğer rolleri silmez (UAT F-16, KV-3b)", async () => {
+    const store = new InMemoryUserManagementStore();
+    const record = await store.createOrAttachTenantUser({
+      tenantId: "tenant-a",
+      email: "guardian-a@example.test",
+      name: "Guardian A",
+      password: "password1",
+      roles: ["TEACHER"],
+    });
+
+    expect(record.roles.slice().sort()).toEqual(["GUARDIAN", "TEACHER"]);
+    expect((await store.findTenantUserByEmail("tenant-a", " GUARDIAN-A@example.test "))?.id).toBe(record.id);
+  });
+
   it("son aktif kurum sahibinin rolünü düşürmez", async () => {
     const store = new InMemoryUserManagementStore();
     const promoted = await store.updateTenantMembership("tenant-a", "membership-admin-a", {

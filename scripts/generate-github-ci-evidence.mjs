@@ -155,7 +155,8 @@ function buildReport(run, jobs) {
       command: "pnpm run ci",
       localCiParity: true,
     },
-    jobs: jobs.map((job) => ({
+    // Jobs skipped by the docs-only classifier (e.g. docs-check on main pushes) did not run; only executed jobs are evidence.
+    jobs: jobs.filter((job) => job.conclusion !== "skipped").map((job) => ({
       name: job.name,
       conclusion: job.conclusion,
       startedAt: job.started_at,

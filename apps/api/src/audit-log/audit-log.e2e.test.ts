@@ -739,7 +739,7 @@ describe("Audit log API", () => {
         entityType: "Homework",
         entityId: homeworkId,
         action: "homework.created",
-        diff: { classId: "class-a", fieldsSet: ["title", "description", "dueAt"] },
+        diff: { classId: "class-a", fieldsSet: ["title", "description", "dueAt"], roles: ["TENANT_ADMIN"] },
       }),
       expect.objectContaining({
         entityType: "Homework",

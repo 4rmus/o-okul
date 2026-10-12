@@ -499,6 +499,18 @@ pnpm account-management:backfill
 - Parity; login normalize alanları, membership/persona, aktif session membershipVersion/legacy rol,
   platform hesap/oturum ve çalışan bağlarını sayısal olarak doğrular. Ham e-posta, telefon, T.C.,
   ad, tenant veya kullanıcı ID artifact'a yazılmaz.
+- `staging-deploy.yml` APPLY'ı her deploy'da migration'dan sonra, uygulama başlamadan önce fail-closed gate
+  olarak çalıştırır; adımlar idempotenttir. UAT F-13 (2026-10-12): öğretmen hesabı, `Teacher.employeeId` ile
+  bağlı hesapsız `Employee` satırına taşınır (çalışan kaydı başka hesaba bağlıysa dokunulmaz).
+- UAT F-16 (2026-10-12) korunan değişmezler: backfill `scopeMode`'u ve `MembershipCampusScope` satırlarını
+  değiştirmez; canonical persona yalnız `ACTIVE` satırlarda ve yalnız farklıysa yazılır; `SUSPENDED`/`ENDED`
+  satırların `staffRole`/persona alanları korunur; aynı veride ikinci `APPLY` hiçbir satırı yazmaz
+  (`account-management-backfill.postgres.test.ts`). Önceki deploy'ların bozduğu staging durumu için iki tek
+  seferlik, idempotent onarım vardır: hiç bayrağı kalmamış askıdaki/biten üyelik grubu (aktif persona satırı
+  olmayan kullanıcıda) legacy `role` sütunundan yeniden türetilir; `TENANT` olup kampüs satırı kalan üyelik,
+  son `tenant_membership.updated` audit'inin `campusCount` değeri kampüs satırı sayısına eşitse `CAMPUSES`'a
+  döner. APPLY logu geri yüklenen kapsam sayısını yazar. Audit kanıtı olmayan (ör. partisyonu silinmiş) satır
+  `TENANT` kalır; kampüs satırı olan `TENANT` üyelikler deploy sonrası elle gözden geçirilir.
 - Runtime cutover yalnız `PASS` backfill artifact'ından sonra başlar. Login
   `(tenantId, loginNameNormalized)` okur ve yalnız aktif hesap + aktif membership + aktif/geçerli
   lisanslı tenant birleşimini kabul eder. T.C. kimlik login tanımlayıcısı değildir.
@@ -1118,6 +1130,15 @@ başarılı daha yeni bir `main` SHA'sı varsa eski run; GitHub'ın ilişkilendi
 doküman veya ajan metadata dosyaları değiştiyse runtime-etkisiz run, image build/SSH/evidence başlamadan
 başarılı biçimde atlanır. Daha yeni SHA'nın başarılı CI'ı veya PR değişiklik aralığı doğrulanamazsa seçim
 fail-open çalışır. Manuel `workflow_dispatch` bu filtreden etkilenmez ve her zaman deploy akışına girer.
+
+2026-10-12'den itibaren otomatik deploy isteğe bağlıdır: `workflow_run` yalnız repo değişkeni
+`STAGING_AUTO_DEPLOY=true` iken deploy eder; değişken yoksa preflight "automatic staging deploy disabled"
+gerekçesiyle başarılı biçimde atlar. Staging, birikmiş değişiklikler denenecekken
+`gh workflow run staging-deploy.yml -f rollback_image_tag=<son başarılı deploy SHA'sı>` ile elle deploy
+edilir (deploy her seferinde ürün sahibi onayı ister). CI'da yalnız doküman değişen PR'lar (`docs/`,
+`status.md`, `README.md`, `PLAN.md`; `docs/evidence-manifests` ve `docs/measurement-baselines` hariç)
+tam paket yerine `docs-check` işini (ops, plan, readiness, evidence şablonları, örnek PII, agents)
+koşar; `main` push'u her zaman tam CI koşar ve CI kanıtı yalnız çalışan (atlanmamış) işleri içerir.
 
 Linux runner için base64 değeri:
 

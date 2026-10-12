@@ -288,6 +288,8 @@ const expectations = {
   ],
   ".github/workflows/staging-deploy.yml": [
     "workflow_dispatch:",
+    "STAGING_AUTO_DEPLOY: ${{ vars.STAGING_AUTO_DEPLOY }}",
+    "automatic staging deploy disabled (vars.STAGING_AUTO_DEPLOY is not true)",
     "workflow_run:",
     "workflows:",
     "- CI",

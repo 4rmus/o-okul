@@ -3163,6 +3163,16 @@ export interface GradeAssessmentPublishResult {
   publishedCount: number;
 }
 
+/**
+ * DEC-20261012-01: a class the signed-in teacher may create assessments, publish grades and create homework for.
+ * No courseId/termId means the assignment covers every course/term of that class.
+ */
+export interface TeacherAuthoringScope {
+  classId: string;
+  courseId?: string;
+  termId?: string;
+}
+
 /** One published school grade: the student's highest published version only (ADR-0011); drafts never appear. */
 export interface GuardianSchoolGradeItem {
   assessmentId: string;

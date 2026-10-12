@@ -20,6 +20,7 @@ import { type StudentStore, studentStoreToken } from "../student/student-store.j
 import { type TenantStore, tenantStoreToken } from "../tenant/tenant-store.js";
 import { tenantWebUrl } from "../http/tenant-origin.js";
 import { requireTenantWideStaffContext } from "../tenant/tenant-access.js";
+import { buildTenantMembershipDualWriteRows } from "../identity-provisioning/tenant-membership-dual-write.js";
 import {
   type UserManagementStore,
   userManagementStoreToken,
@@ -113,6 +114,10 @@ export class IdentityInvitationService {
     if (!employee) throw new NotFoundException("EMPLOYEE_NOT_FOUND");
     if (employee.status !== "ACTIVE") throw new BadRequestException("EMPLOYEE_INVITATION_REQUIRES_ACTIVE_PROFILE");
     if (employee.userId) throw new BadRequestException("EMPLOYEE_ALREADY_LINKED");
+    // UAT F-13: a teacher-backed Employee whose teacher already has an account must not get a second account.
+    if ((await this.teachers.findByEmployeeId(tenantId, employee.id))?.userId) {
+      throw new BadRequestException("EMPLOYEE_ALREADY_LINKED_VIA_TEACHER");
+    }
     const pending = (await this.invitations.list(tenantId)).find((invitation) => (
       invitation.subjectType === "EMPLOYEE" && invitation.subjectId === employeeId && invitation.status === "PENDING"
     ));
@@ -209,6 +214,13 @@ export class IdentityInvitationService {
     // UAT F-08: every check that can reject a bad request runs before runVerifiedTenantMutation;
     // a 4xx thrown inside it would leave an UNCERTAIN activity row that blocks every later accept/resend.
     const subject = employeeActivation ? undefined : await this.requireAcceptableSubject(invitation);
+    // UAT F-16 (KV-3b): an existing account with this e-mail keeps its roles and gains the invited one; a combination
+    // the membership model cannot hold (student + anything) is refused here, before the mutation is admitted.
+    const existingUser = subject ? await this.users.findTenantUserByEmail(invitation.tenantId, subject.email) : undefined;
+    if (existingUser && !canAddTenantRole(existingUser.roles, invitation.role)) {
+      throw new BadRequestException("IDENTITY_INVITATION_EMAIL_ACCOUNT_INCOMPATIBLE");
+    }
+    const roleAdded = !existingUser?.roles.includes(invitation.role);
     const passwordHash = await hashPasswordAsync(password);
     const admission = { tenantId: invitation.tenantId, lifecycleVersion: invitation.tenantLifecycleVersion!, kind: "AUTH_MUTATION" as const, referenceId: `invitation:${invitation.id}`, source: { type: "INVITATION" as const, id: invitation.id, tokenHash: hashActivationToken(token) } };
     if (employeeActivation) {
@@ -250,13 +262,13 @@ export class IdentityInvitationService {
     });
     const boundSubject = await this.bindSubject(invitation.tenantId, invitation.subjectType, invitation.subjectId, user.id);
     if (!boundSubject) {
-      await this.users.removeTenantRole(invitation.tenantId, user.id, invitation.role);
+      if (roleAdded) await this.users.removeTenantRole(invitation.tenantId, user.id, invitation.role);
       throw new NotFoundException("SUBJECT_NOT_FOUND");
     }
 
     const accepted = await this.invitations.markAccepted(invitation.id, user.id, new Date().toISOString());
     if (!accepted) {
-      await this.users.removeTenantRole(invitation.tenantId, user.id, invitation.role);
+      if (roleAdded) await this.users.removeTenantRole(invitation.tenantId, user.id, invitation.role);
       throw new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
     }
     await this.auditLogs?.record({
@@ -267,7 +279,23 @@ export class IdentityInvitationService {
       action: "identity_invitation.accepted",
       diff: { subjectType: invitation.subjectType, subjectId: invitation.subjectId, userId: user.id },
     });
+    if (invitation.subjectType === "TEACHER") await this.linkTeacherEmployee(invitation.tenantId, invitation.subjectId, user.id);
     return accepted;
+    });
+  }
+
+  // UAT F-13: the teacher's Employee row (Teacher.employeeId) gets the same account, so Çalışanlar ve Yetkiler
+  // shows it as linked and offers no second account. An Employee already bound to another account is left alone.
+  private async linkTeacherEmployee(tenantId: string, teacherId: string, userId: string): Promise<void> {
+    const link = await this.teachers.linkEmployeeUser(tenantId, teacherId, userId);
+    if (link !== "LINKED" && link !== "CONFLICT") return;
+    await this.auditLogs?.record({
+      tenantId,
+      actorUserId: userId,
+      entityType: "Teacher",
+      entityId: teacherId,
+      action: link === "LINKED" ? "teacher.employee_account_linked" : "teacher.employee_account_link_conflict",
+      diff: { teacherId, userId },
     });
   }
 
@@ -402,4 +430,13 @@ export function createInvitationDeliveryUrl(token: string, tenantSlug?: string):
     : new URL("/aktivasyon", process.env.WEB_URL ?? "http://localhost:3000");
   url.hash = new URLSearchParams({ token }).toString();
   return url;
+}
+
+function canAddTenantRole(roles: readonly string[], role: string): boolean {
+  try {
+    buildTenantMembershipDualWriteRows([...roles, role]);
+    return true;
+  } catch {
+    return false;
+  }
 }

@@ -48,9 +48,24 @@ describePostgres("IdentityInvitationService.accept on PostgreSQL without request
     process.env.DATABASE_URL = appDatabaseUrl;
     await cleanupFixtures(admin);
     await seedTenant(admin);
+    // UAT F-13: teacher-backed Employee rows as created by the account-management backfill.
     await admin.query(
-      `INSERT INTO "Teacher" ("id", "tenantId", "firstName", "lastName", "updatedAt")
-       VALUES ('invitation-accept-teacher', $1, 'Tcsiz', 'Ogretmen', now())`,
+      `INSERT INTO "User" ("id", "tenantId", "name", "passwordHash", "updatedAt")
+       VALUES ('invitation-accept-other-user', $1, 'Baska Hesap', 'FIXTURE_HASH', now())`,
+      [tenantId],
+    );
+    await admin.query(
+      `INSERT INTO "Employee" ("id", "tenantId", "userId", "firstName", "lastName", "status", "updatedAt")
+       VALUES ('invitation-accept-teacher-employee', $1, NULL, 'Tcsiz', 'Ogretmen', 'ACTIVE', now()),
+              ('invitation-accept-conflict-employee', $1, 'invitation-accept-other-user', 'Cakisan', 'Ogretmen', 'ACTIVE', now()),
+              ('invitation-accept-legacy-employee', $1, NULL, 'Eski', 'Ogretmen', 'ACTIVE', now())`,
+      [tenantId],
+    );
+    await admin.query(
+      `INSERT INTO "Teacher" ("id", "tenantId", "employeeId", "userId", "firstName", "lastName", "updatedAt")
+       VALUES ('invitation-accept-teacher', $1, 'invitation-accept-teacher-employee', NULL, 'Tcsiz', 'Ogretmen', now()),
+              ('invitation-accept-conflict-teacher', $1, 'invitation-accept-conflict-employee', NULL, 'Cakisan', 'Ogretmen', now()),
+              ('invitation-accept-legacy-teacher', $1, 'invitation-accept-legacy-employee', 'invitation-accept-other-user', 'Eski', 'Ogretmen', now())`,
       [tenantId],
     );
     await admin.query(
@@ -72,6 +87,11 @@ describePostgres("IdentityInvitationService.accept on PostgreSQL without request
     await seedInvitation(admin, "TEACHER", "invitation-accept-teacher", "f08.ogretmen@example.test");
     await seedInvitation(admin, "GUARDIAN", "invitation-accept-guardian", "f08.veli@example.test");
     await seedInvitation(admin, "STUDENT", "invitation-accept-student", "f08.ogrenci@example.test");
+    await seedInvitation(admin, "TEACHER", "invitation-accept-conflict-teacher", "f13.cakisan@example.test", "TEACHER", "conflict-teacher");
+    await seedInvitation(admin, "EMPLOYEE", "invitation-accept-legacy-employee", "f13.eski@example.test", "OPERATIONS_STAFF", "legacy-employee");
+    await seedExistingAccounts(admin);
+    await seedInvitation(admin, "TEACHER", "f16-teacher", "f16.veli@example.test", "TEACHER", "f16-guardian-teacher");
+    await seedInvitation(admin, "TEACHER", "f16-teacher-2", "f16.ogrenci@example.test", "TEACHER", "f16-student-teacher");
   });
 
   afterAll(async () => {
@@ -91,6 +111,69 @@ describePostgres("IdentityInvitationService.accept on PostgreSQL without request
     expect(accepted).toMatchObject({ status: "ACCEPTED", subjectType, subjectId, acceptedUserId: expect.any(String) });
     const bound = await admin.query<{ userId: string | null }>(`SELECT "userId" FROM "${table}" WHERE "id" = $1`, [subjectId]);
     expect(bound.rows[0]?.userId).toBe(accepted.acceptedUserId);
+    await expectNoActivity(admin);
+  });
+
+  it("öğretmen daveti kabulü bağlı çalışan kaydını aynı hesaba bağlar (UAT F-13)", async () => {
+    const teacher = await admin.query<{ userId: string | null }>(`SELECT "userId" FROM "Teacher" WHERE "id" = 'invitation-accept-teacher'`);
+    const employee = await admin.query<{ userId: string | null }>(`SELECT "userId" FROM "Employee" WHERE "id" = 'invitation-accept-teacher-employee'`);
+    expect(teacher.rows[0]?.userId).toEqual(expect.any(String));
+    expect(employee.rows[0]?.userId).toBe(teacher.rows[0]?.userId);
+  });
+
+  it("başka hesaba bağlı çalışan kaydını öğretmen kabulünde ezmez (UAT F-13)", async () => {
+    const accepted = await service.accept({ token: tokenFor("conflict-teacher"), password });
+
+    expect(accepted).toMatchObject({ status: "ACCEPTED", subjectId: "invitation-accept-conflict-teacher" });
+    const employee = await admin.query<{ userId: string | null }>(`SELECT "userId" FROM "Employee" WHERE "id" = 'invitation-accept-conflict-employee'`);
+    expect(employee.rows[0]?.userId).toBe("invitation-accept-other-user");
+    await expectNoActivity(admin);
+  });
+
+  it("öğretmeni hesaplı çalışan kaydına ikinci hesap daveti ve kabulü yok (UAT F-13)", async () => {
+    const context = { tenantId, userId: "invitation-accept-admin", roles: ["TENANT_ADMIN" as const], bypassRls: false };
+    await expect(service.createEmployeeInvitation(context, "invitation-accept-legacy-employee", { email: "f13.yeni@example.test", role: "OPERATIONS_STAFF" }))
+      .rejects.toThrow("EMPLOYEE_ALREADY_LINKED_VIA_TEACHER");
+    // An invitation issued before the guard existed is refused at accept and no second account is created.
+    await expect(service.accept({ token: tokenFor("legacy-employee"), password })).rejects.toThrow("EMPLOYEE_ALREADY_LINKED");
+    const users = await admin.query(`SELECT 1 FROM "User" WHERE "tenantId" = $1 AND "emailNormalized" = 'f13.eski@example.test'`, [tenantId]);
+    expect(users.rows).toEqual([]);
+    const employee = await admin.query<{ userId: string | null }>(`SELECT "userId" FROM "Employee" WHERE "id" = 'invitation-accept-legacy-employee'`);
+    expect(employee.rows[0]?.userId).toBeNull();
+  });
+
+  it("veli hesabı öğretmen davetini kabul edince veli üyeliği ve bağları kalır (UAT F-16, KV-3b)", async () => {
+    const accepted = await service.accept({ token: tokenFor("f16-guardian-teacher"), password });
+
+    expect(accepted).toMatchObject({ status: "ACCEPTED", subjectId: "f16-teacher", acceptedUserId: "f16-guardian-user" });
+    const memberships = await admin.query<{ role: string; status: string; hasTeacherPersona: boolean; version: number }>(
+      `SELECT "role"::text AS role, "status", "hasTeacherPersona", "version"
+       FROM "TenantMembership" WHERE "tenantId" = $1 AND "userId" = 'f16-guardian-user' ORDER BY "role"`,
+      [tenantId],
+    );
+    expect(memberships.rows).toEqual([
+      { role: "GUARDIAN", status: "ACTIVE", hasTeacherPersona: false, version: 2 },
+      { role: "TEACHER", status: "ACTIVE", hasTeacherPersona: true, version: 2 },
+    ]);
+    const guardian = await admin.query(`SELECT "userId" FROM "Guardian" WHERE "id" = 'f16-guardian'`);
+    expect(guardian.rows).toEqual([{ userId: "f16-guardian-user" }]);
+    const links = await admin.query(`SELECT "studentId" FROM "GuardianStudent" WHERE "guardianId" = 'f16-guardian'`);
+    expect(links.rows).toEqual([{ studentId: "f16-child" }]);
+    const teacher = await admin.query(`SELECT "userId" FROM "Teacher" WHERE "id" = 'f16-teacher'`);
+    expect(teacher.rows).toEqual([{ userId: "f16-guardian-user" }]);
+    const sessions = await admin.query(`SELECT "status" FROM "AuthSession" WHERE "userId" = 'f16-guardian-user'`);
+    expect(sessions.rows).toEqual([{ status: "REVOKED" }]);
+    await expectNoActivity(admin);
+  });
+
+  it("öğrenci hesabının e-postasıyla öğretmen davetini 4xx ile reddeder ve öğrenci üyeliğine dokunmaz (UAT F-16)", async () => {
+    await expect(service.accept({ token: tokenFor("f16-student-teacher"), password }))
+      .rejects.toThrow("IDENTITY_INVITATION_EMAIL_ACCOUNT_INCOMPATIBLE");
+    const memberships = await admin.query(
+      `SELECT "role"::text AS role, "status" FROM "TenantMembership" WHERE "tenantId" = $1 AND "userId" = 'f16-student-user'`,
+      [tenantId],
+    );
+    expect(memberships.rows).toEqual([{ role: "STUDENT", status: "ACTIVE" }]);
     await expectNoActivity(admin);
   });
 
@@ -147,12 +230,59 @@ async function seedTenant(pool: pg.Pool): Promise<void> {
   );
 }
 
-async function seedInvitation(pool: pg.Pool, subjectType: string, subjectId: string, email: string, role = subjectType): Promise<void> {
+// UAT F-16: an existing guardian account (profile, student link, open session) and an existing student account.
+async function seedExistingAccounts(pool: pg.Pool): Promise<void> {
+  await pool.query(
+    `INSERT INTO "User" ("id", "tenantId", "name", "email", "emailNormalized", "passwordHash", "updatedAt")
+     VALUES ('f16-guardian-user', $1, 'F16 Veli', 'f16.veli@example.test', 'f16.veli@example.test', 'FIXTURE_HASH', now()),
+            ('f16-student-user', $1, 'F16 Ogrenci', 'f16.ogrenci@example.test', 'f16.ogrenci@example.test', 'FIXTURE_HASH', now())`,
+    [tenantId],
+  );
+  await pool.query(
+    `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "hasStudentPersona", "updatedAt")
+     VALUES ('f16-guardian-membership', $1, 'f16-guardian-user', 'GUARDIAN', false, now()),
+            ('f16-student-membership', $1, 'f16-student-user', 'STUDENT', true, now())`,
+    [tenantId],
+  );
+  await pool.query(
+    `INSERT INTO "AuthSession" ("id", "tenantId", "userId", "tokenFamilyId", "refreshTokenHash", "roles", "membershipVersion", "expiresAt", "updatedAt")
+     VALUES ('f16-guardian-session', $1, 'f16-guardian-user', 'f16-family', 'f16-refresh-hash', ARRAY['GUARDIAN'], 1, now() + interval '1 day', now())`,
+    [tenantId],
+  );
+  await pool.query(
+    `INSERT INTO "Guardian" ("id", "tenantId", "userId", "firstName", "lastName", "updatedAt")
+     VALUES ('f16-guardian', $1, 'f16-guardian-user', 'F16', 'Veli', now())`,
+    [tenantId],
+  );
+  await pool.query(
+    `INSERT INTO "Student" ("id", "tenantId", "studentNo", "firstName", "lastName", "status", "updatedAt")
+     VALUES ('f16-child', $1, 'F16-1', 'F16', 'Cocuk', 'ACTIVE', now())`,
+    [tenantId],
+  );
+  await pool.query(
+    `INSERT INTO "GuardianStudent" ("id", "tenantId", "guardianId", "studentId", "updatedAt") VALUES ('f16-link', $1, 'f16-guardian', 'f16-child', now())`,
+    [tenantId],
+  );
+  await pool.query(
+    `INSERT INTO "Teacher" ("id", "tenantId", "firstName", "lastName", "updatedAt")
+     VALUES ('f16-teacher', $1, 'F16', 'Ogretmen', now()), ('f16-teacher-2', $1, 'F16', 'Ogretmen Iki', now())`,
+    [tenantId],
+  );
+}
+
+async function seedInvitation(
+  pool: pg.Pool,
+  subjectType: string,
+  subjectId: string,
+  email: string,
+  role = subjectType,
+  key = subjectType,
+): Promise<void> {
   await pool.query(
     `INSERT INTO "IdentityInvitation" (
        "id", "tenantId", "subjectType", "subjectId", "email", "name", "role", "kind",
        "tokenHash", "status", "expiresAt", "updatedAt"
      ) VALUES ($1, $2, $3, $4, $5, 'F08 Davet', $6, 'EMAIL_LINK', $7, 'PENDING', now() + interval '1 day', now())`,
-    [`invitation-accept-${subjectType.toLowerCase()}`, tenantId, subjectType, subjectId, email, role, hashActivationToken(tokenFor(subjectType))],
+    [`invitation-accept-${key.toLowerCase()}`, tenantId, subjectType, subjectId, email, role, hashActivationToken(tokenFor(key))],
   );
 }

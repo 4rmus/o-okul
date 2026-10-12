@@ -57,6 +57,9 @@ export interface UserManagementStore {
   createEmployee(tenantId: string, input: EmployeeCreateRequest): Promise<EmployeeAccessRecord>;
   bindEmployeeUser(tenantId: string, employeeId: string, userId: string): Promise<boolean>;
   findTenantUser(tenantId: string, userId: string): Promise<TenantUserRecord | undefined>;
+  /** The account with this e-mail and its ACTIVE membership roles; used to refuse an incompatible invitation early. */
+  findTenantUserByEmail(tenantId: string, email: string): Promise<TenantUserRecord | undefined>;
+  /** A new account gets `roles`; an existing account keeps every membership and only gains the missing roles (KV-3b). */
   createOrAttachTenantUser(input: CreateTenantUserInput): Promise<TenantUserRecord>;
   setTenantRoles(tenantId: string, userId: string, roles: TenantUserRole[]): Promise<TenantUserRecord | undefined>;
   removeTenantRole(tenantId: string, userId: string, role: TenantUserRole): Promise<TenantUserRecord | undefined>;
@@ -251,11 +254,17 @@ export class InMemoryUserManagementStore implements UserManagementStore {
     return cloneTenantUser(this.users.find((user) => user.tenantId === tenantId && user.id === userId && user.roles.length > 0));
   }
 
+  async findTenantUserByEmail(tenantId: string, email: string): Promise<TenantUserRecord | undefined> {
+    const normalized = email.trim().toLowerCase();
+    return cloneTenantUser(this.users.find((user) => user.tenantId === tenantId && user.email?.toLowerCase() === normalized));
+  }
+
   async createOrAttachTenantUser(input: CreateTenantUserInput): Promise<TenantUserRecord> {
     const existing = this.users.find((user) => user.tenantId === input.tenantId && user.email === input.email);
     if (existing) {
       existing.name = input.name;
-      existing.roles = [...input.roles];
+      // UAT F-16 (KV-3b): adding a role never removes the roles the account already has.
+      existing.roles = [...new Set([...existing.roles, ...input.roles])];
       existing.updatedAt = new Date().toISOString();
       upsertInMemoryAuthUser({
         id: existing.id,
@@ -624,6 +633,29 @@ export class PostgresUserManagementStore implements UserManagementStore {
     });
   }
 
+  async findTenantUserByEmail(tenantId: string, email: string): Promise<TenantUserRecord | undefined> {
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const result = await client.query<TenantUserRow>(
+        `SELECT
+           u."id",
+           u."email",
+           u."name",
+           u."tenantId",
+           coalesce(array_agg(m."role"::text ORDER BY m."role"::text) FILTER (WHERE m."id" IS NOT NULL), ARRAY[]::text[]) AS roles,
+           min(u."createdAt") AS "createdAt",
+           max(u."updatedAt") AS "updatedAt"
+         FROM "User" u
+         LEFT JOIN "TenantMembership" m
+           ON m."tenantId" = u."tenantId" AND m."userId" = u."id" AND m."status" = 'ACTIVE'
+         WHERE u."tenantId" = $1 AND coalesce(u."emailNormalized", lower(btrim(u."email"))) = $2
+         GROUP BY u."id", u."email", u."name", u."tenantId"
+         LIMIT 1`,
+        [tenantId, email.trim().toLowerCase()],
+      );
+      return result.rows[0] ? toTenantUserRecord(result.rows[0]) : undefined;
+    });
+  }
+
   async createOrAttachTenantUser(input: CreateTenantUserInput): Promise<TenantUserRecord> {
     return withExplicitTenantQuery(this.pool, input.tenantId, async (client) => {
       await client.query<{ id: string }>(
@@ -688,7 +720,7 @@ export class PostgresUserManagementStore implements UserManagementStore {
         throw new Error("USER_CREATE_FAILED");
       }
 
-      await this.replaceMemberships(client, input.tenantId, userId, input.roles);
+      await this.addMemberships(client, input.tenantId, userId, input.roles);
       const record = await this.findTenantUserWithClient(client, input.tenantId, userId);
       if (!record) {
         throw new Error("USER_MEMBERSHIP_CREATE_FAILED");
@@ -981,6 +1013,80 @@ export class PostgresUserManagementStore implements UserManagementStore {
     return result.rows[0] ? toEmployeeAccessRecord(result.rows[0]) : undefined;
   }
 
+  // UAT F-16 (KV-3b): an existing account keeps every membership row, its status, scope and campus rows; only the
+  // missing roles are added (an ENDED/SUSPENDED row of that role is reopened), like the guardian "existing user" link.
+  private async addMemberships(client: Queryable, tenantId: string, userId: string, roles: TenantUserRole[]): Promise<void> {
+    const existing = await client.query<MembershipRoleRow>(
+      `SELECT "role"::text AS role, "status", "staffRole"::text AS "staffRole", "hasTeacherPersona", "hasStudentPersona"
+       FROM "TenantMembership"
+       WHERE "tenantId" = $1 AND "userId" = $2
+       FOR UPDATE`,
+      [tenantId, userId],
+    );
+    if (existing.rows.length === 0) {
+      await this.replaceMemberships(client, tenantId, userId, roles);
+      return;
+    }
+    const active = existing.rows.filter((row) => row.status === "ACTIVE");
+    const added = [...new Set(roles)].filter((role) => !active.some((row) => row.role === role));
+    if (added.length === 0) return;
+
+    // Throws INVALID_TENANT_ROLE_COMBINATION (two staff roles, student + anything) before anything is written.
+    const desired = buildTenantMembershipDualWriteRows([...active.map((row) => row.role), ...added]);
+    const desiredCanonical = desired.find(isCanonicalMembership);
+    const currentCanonical = active.filter(isCanonicalMembership);
+    // Moving the persona row would leave its campus scope behind and widen access; that is an access change, not an add.
+    if (currentCanonical.length > 1 || (currentCanonical[0] && currentCanonical[0].role !== desiredCanonical?.role)) {
+      throw new Error("INVALID_TENANT_ROLE_COMBINATION");
+    }
+
+    const version = (await client.query<{ membershipVersion: number }>(
+      `UPDATE "User" SET "membershipVersion" = "membershipVersion" + 1, "updatedAt" = now()
+       WHERE "tenantId" = $1 AND "id" = $2
+       RETURNING "membershipVersion"`,
+      [tenantId, userId],
+    )).rows[0]?.membershipVersion;
+    if (version === undefined) throw new Error("USER_MEMBERSHIP_CREATE_FAILED");
+
+    for (const row of desired) {
+      if (added.includes(row.role as TenantUserRole)) {
+        await client.query(
+          `INSERT INTO "TenantMembership" (
+             "id", "tenantId", "userId", "role", "staffRole", "hasTeacherPersona", "hasStudentPersona",
+             "status", "version", "scopeMode", "updatedAt"
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', $8, 'TENANT', now())
+           ON CONFLICT ("tenantId", "userId", "role") DO UPDATE
+           SET "staffRole" = EXCLUDED."staffRole", "hasTeacherPersona" = EXCLUDED."hasTeacherPersona",
+               "hasStudentPersona" = EXCLUDED."hasStudentPersona", "status" = 'ACTIVE', "endsAt" = NULL,
+               "endedReason" = NULL, "version" = EXCLUDED."version", "updatedAt" = now()`,
+          [randomUUID(), tenantId, userId, row.role, row.staffRole, row.hasTeacherPersona, row.hasStudentPersona, version],
+        );
+      } else if (row === desiredCanonical) {
+        // The existing persona row only gains flags (e.g. staff + TEACHER); its scope and campus rows stay.
+        await client.query(
+          `UPDATE "TenantMembership"
+           SET "staffRole" = coalesce("staffRole", $4::"StaffRole"),
+               "hasTeacherPersona" = "hasTeacherPersona" OR $5,
+               "hasStudentPersona" = "hasStudentPersona" OR $6,
+               "updatedAt" = now()
+           WHERE "tenantId" = $1 AND "userId" = $2 AND "role" = $3 AND "status" = 'ACTIVE'`,
+          [tenantId, userId, row.role, row.staffRole, row.hasTeacherPersona, row.hasStudentPersona],
+        );
+      }
+    }
+    await client.query(
+      `UPDATE "TenantMembership" SET "version" = $3, "updatedAt" = now()
+       WHERE "tenantId" = $1 AND "userId" = $2 AND "status" = 'ACTIVE'`,
+      [tenantId, userId, version],
+    );
+    // Same as the guardian link: open sessions close and the next login offers the new persona.
+    await client.query(
+      `UPDATE "AuthSession" SET "status" = 'REVOKED', "updatedAt" = now()
+       WHERE "tenantId" = $1 AND "userId" = $2 AND "status" = 'ACTIVE'`,
+      [tenantId, userId],
+    );
+  }
+
   private async replaceMemberships(client: Queryable, tenantId: string, userId: string, roles: TenantUserRole[]): Promise<void> {
     const existing = await client.query<{ id: string; version: number }>(
       `SELECT "id", "version"
@@ -1218,6 +1324,18 @@ function employeeCursorContext(tenantId: string, query: string, sort: EmployeeAc
 
 function isEmployeeAccessSort(value: unknown): value is EmployeeAccessSort {
   return value === "lastName" || value === "-lastName" || value === "firstName" || value === "employeeNo";
+}
+
+interface MembershipRoleRow {
+  role: string;
+  status: string;
+  staffRole: string | null;
+  hasTeacherPersona: boolean;
+  hasStudentPersona: boolean;
+}
+
+function isCanonicalMembership(row: { staffRole: string | null; hasTeacherPersona: boolean; hasStudentPersona: boolean }): boolean {
+  return row.staffRole !== null || row.hasTeacherPersona || row.hasStudentPersona;
 }
 
 interface TenantUserRow {
