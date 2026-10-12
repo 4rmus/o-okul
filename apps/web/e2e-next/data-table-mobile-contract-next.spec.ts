@@ -624,7 +624,7 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(detailSummary.getByLabel("Öğretmen detay operasyon özeti önerilen işlemler")).toBeVisible();
     const teacherProfile = page.getByLabel("Öğretmen profil kartı");
     await expect(teacherProfile).toContainText("Matematik");
-    await expect(teacherProfile).toContainText("Bağlı");
+    await expect(teacherProfile).toContainText("Portal bağlı");
     const teacherProfileInfo = teacherProfile.getByRole("region", { name: "Öğretmen profil özeti" });
     await expect(teacherProfileInfo).toHaveClass(/uh-info-grid/);
     await expect(teacherProfileInfo.locator(".uh-info-item")).toHaveCount(3);

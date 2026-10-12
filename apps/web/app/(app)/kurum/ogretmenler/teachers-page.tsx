@@ -34,6 +34,8 @@ import {
 } from "../../../../src/form-validation.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+import { hasCapabilityForRoles } from "../../_shared/access.js";
+import { loadPendingTeacherInvitations, teacherAccountLabels, teacherAccountState, teacherAccountTones } from "./teacher-account.js";
 
 interface TeacherAssignmentReferences {
   classes: ClassRecord[];
@@ -85,6 +87,14 @@ export function TeachersPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
   const rows = teachersQuery.data?.data ?? [];
+  const canManageAccounts = auth ? hasCapabilityForRoles(auth.session.roles, "user:manage") : false;
+  const invitationsQuery = useQuery({
+    queryKey: ["next-teacher-invitations", auth?.session.tenantId ?? "anonymous"],
+    queryFn: () => loadPendingTeacherInvitations(auth?.accessToken ?? ""),
+    enabled: Boolean(auth && canManageAccounts && rows.some((teacher) => !teacher.userId)),
+    refetchOnWindowFocus: false,
+  });
+  const pendingInvitations = invitationsQuery.data ?? new Map();
 
   const referencesQuery = useQuery({
     queryKey: ["next-teacher-assignment-refs", auth?.session.tenantId ?? "anonymous"],
@@ -151,7 +161,7 @@ export function TeachersPage() {
       detail: "Öğretmen portal hesabı bağlantısı",
       key: "portal-account",
       label: "Portal hesabı",
-      status: teacherPortalReadyCount > 0 ? "Hazır" : "TC + telefon bekliyor",
+      status: teacherPortalReadyCount > 0 ? "Hazır" : "Hesap yok",
       tone: teacherPortalReadyCount > 0 ? "success" : "neutral",
       value: `${teacherPortalReadyCount}/${rows.length}`,
     },
@@ -201,9 +211,10 @@ export function TeachersPage() {
       key: "portal",
       header: "Portal",
       priority: "secondary",
-      render: (teacher) => (
-        <StatusBadge tone={teacher.userId ? "success" : "neutral"}>{teacher.userId ? "Bağlı" : "TC + telefon bekliyor"}</StatusBadge>
-      ),
+      render: (teacher) => {
+        const state = teacherAccountState(teacher, pendingInvitations);
+        return <StatusBadge tone={teacherAccountTones[state]}>{teacherAccountLabels[state]}</StatusBadge>;
+      },
     },
     {
       key: "actions",

@@ -468,7 +468,7 @@ test.describe("Liste URL state", () => {
       await expect(teacherSummary).toContainText("Atama referansı");
       const teachersTable = teachersRegion.getByRole("table", { name: "Öğretmen operasyon listesi" });
       await expect(teachersTable).toBeVisible();
-      await expect(teachersTable.getByText("TC + telefon bekliyor")).toBeVisible();
+      await expect(teachersTable.getByText("Hesap yok")).toBeVisible();
       await expect(teachersRegion.getByRole("link", { name: "Zeynep detay" })).toBeVisible();
 
       for (const value of ["12345678901", "+905551234567", "ada.kaya@example.test", "5554443322"]) {
