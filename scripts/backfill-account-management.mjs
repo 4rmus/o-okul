@@ -565,6 +565,17 @@ async function applyBackfill(queryable, owners) {
       AND (employee."id" = 'employee-' || md5(teacher."tenantId" || ':' || teacher."id")
         OR (teacher."userId" IS NOT NULL AND employee."userId" = teacher."userId")
         OR (teacher."nationalIdHash" IS NOT NULL AND employee."nationalIdHash" = teacher."nationalIdHash"))`);
+  // UAT F-13: a teacher account opened after its Employee row was created is carried onto that row (idempotent).
+  await queryable.query(`
+    UPDATE "Employee" employee
+    SET "userId" = teacher."userId", "updatedAt" = now()
+    FROM "Teacher" teacher
+    WHERE teacher."tenantId" IN (${activeTenantIdsSql}) AND teacher."deletedAt" IS NULL AND teacher."userId" IS NOT NULL
+      AND employee."tenantId" = teacher."tenantId" AND employee."id" = teacher."employeeId"
+      AND employee."userId" IS NULL AND employee."deletedAt" IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM "Employee" other WHERE other."tenantId" = teacher."tenantId" AND other."userId" = teacher."userId"
+      )`);
 
   await queryable.query(`
     UPDATE "TenantMembership"

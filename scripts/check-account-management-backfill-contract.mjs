@@ -76,6 +76,12 @@ function expectGuardianRoleRules() {
   if (!orphan.includes("'LAST_GUARDIAN_STUDENT_LINK_REMOVED'") || !orphan.includes("ended.\"status\" = 'ENDED'")) {
     failures.push("orphan_profiles son bağ kuralıyla biten GUARDIAN üyeliğini hariç tutmalı");
   }
+  // UAT F-13: a teacher account is carried onto its linked Employee row only when that row has none.
+  const carry = source.match(/UPDATE "Employee" employee\s+SET "userId" = teacher."userId"([\s\S]*?)`\);/)?.[1] ?? "";
+  if (!carry.includes('employee."id" = teacher."employeeId"') || !carry.includes('employee."userId" IS NULL')
+    || !carry.includes("NOT EXISTS")) {
+    failures.push("Teacher→Employee hesap taşıma yalnız hesapsız bağlı çalışan kaydına ve çakışmasız yazmalı");
+  }
   if (failures.length > 0) {
     console.error(failures.join("\n"));
     process.exit(1);
