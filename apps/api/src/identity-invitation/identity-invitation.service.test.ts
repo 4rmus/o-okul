@@ -351,6 +351,59 @@ describe("IdentityInvitationService", () => {
     await expect(teachers.findById(teacher.id)).resolves.toMatchObject({ userId: expect.any(String) });
   });
 
+  it("öğretmeni hesaplı çalışan kaydına ikinci hesap daveti üretmez (UAT F-13)", async () => {
+    const users = new InMemoryUserManagementStore();
+    const employee = await users.createEmployee("tenant-a", { firstName: "Uat", lastName: "Ogretmen", status: "ACTIVE" });
+    const teachers = new InMemoryTeacherStore();
+    vi.spyOn(teachers, "findByEmployeeId").mockResolvedValue({
+      id: "teacher-f13", tenantId: "tenant-a", firstName: "Uat", lastName: "Ogretmen", userId: "teacher-user-f13",
+    });
+    const service = new IdentityInvitationService(
+      new InMemoryIdentityInvitationStore(),
+      users,
+      new InMemoryStudentStore(),
+      new InMemoryGuardianStore(),
+      teachers,
+      new InMemoryTenantStore(),
+    );
+
+    await expect(service.createEmployeeInvitation(
+      { tenantId: "tenant-a", userId: "admin-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      employee.id,
+      { email: "f13.ogretmen@example.test", role: "OPERATIONS_STAFF" },
+    )).rejects.toThrow("EMPLOYEE_ALREADY_LINKED_VIA_TEACHER");
+    expect(teachers.findByEmployeeId).toHaveBeenCalledWith("tenant-a", employee.id);
+  });
+
+  it.each([
+    ["LINKED", "teacher.employee_account_linked"],
+    ["CONFLICT", "teacher.employee_account_link_conflict"],
+    ["NO_EMPLOYEE", undefined],
+  ] as const)("öğretmen daveti kabulünde bağlı çalışan kaydını aynı hesaba bağlar: %s (UAT F-13)", async (link, action) => {
+    const teachers = new InMemoryTeacherStore();
+    const teacher = await teachers.create({ tenantId: "tenant-a", firstName: "Uat", lastName: "Ogretmen" });
+    const linkEmployeeUser = vi.spyOn(teachers, "linkEmployeeUser").mockResolvedValue(link);
+    const auditLogs = { record: vi.fn() };
+    const service = new IdentityInvitationService(
+      new InMemoryIdentityInvitationStore(),
+      new InMemoryUserManagementStore(),
+      new InMemoryStudentStore(),
+      new InMemoryGuardianStore(),
+      teachers,
+      new InMemoryTenantStore(),
+      auditLogs as never,
+    );
+    const context: RequestContext = { tenantId: "tenant-a", userId: "admin-a", roles: ["TENANT_ADMIN"], bypassRls: false };
+    const issued = await service.create(context, { subjectType: "TEACHER", subjectId: teacher.id, email: "f13.ogretmen@example.test" });
+
+    const accepted = await service.accept({ token: issued.activationToken, password: "Secure-password-123" });
+
+    expect(linkEmployeeUser).toHaveBeenCalledWith("tenant-a", teacher.id, accepted.acceptedUserId);
+    const actions = auditLogs.record.mock.calls.map(([entry]) => (entry as { action: string }).action);
+    if (action) expect(actions).toContain(action);
+    expect(actions.filter((candidate) => candidate.startsWith("teacher.employee_account"))).toHaveLength(action ? 1 : 0);
+  });
+
   it("4xx ön koşul hatasında tenant mutation activity açmaz (UAT F-08)", async () => {
     const students = new InMemoryStudentStore();
     const teachers = new InMemoryTeacherStore();

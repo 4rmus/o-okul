@@ -3,14 +3,14 @@
   "result": "BASELINE_RECORDED",
   "evidenceLevel": "LOCAL_SYNTHETIC",
   "externalStatus": "EXTERNAL_NOT_RUN",
-  "generatedAt": "2026-10-12T20:29:46.140Z",
-  "baseCommitSha": "485e5820fbf621c818097aa4304846c7a89e1b17",
+  "generatedAt": "2026-10-12T20:33:45.388Z",
+  "baseCommitSha": "65f93dcaa3622cf766cec92dd7d7f0774f613c74",
   "sourceWorktreeDirty": true,
-  "sourceTreeSha256": "112c790b133980457a745fcf0c446ab20e6f109c0ccbbc9ad910ba778568aafb",
+  "sourceTreeSha256": "e4d2d0633c88999bedd29282b1c2cb6e07e831ad4969be2417736c52a46ae783",
   "measurementRun": {
-    "runId": "eab58e78-9746-4b66-82cc-a0774d72d2b5",
-    "startedAt": "2026-10-12T20:29:20.704Z",
-    "completedAt": "2026-10-12T20:29:46.140Z"
+    "runId": "ec0aa7b2-5082-419a-87f5-2143947d74ed",
+    "startedAt": "2026-10-12T20:33:22.943Z",
+    "completedAt": "2026-10-12T20:33:45.388Z"
   },
   "environment": {
     "browser": "chromium",
@@ -44,60 +44,60 @@
       "samples": [
         {
           "cls": 0.005,
-          "fcpMs": 48,
-          "lcpMs": 76,
-          "ttfbMs": 2.5,
-          "durationMs": 230.983
+          "fcpMs": 60,
+          "lcpMs": 60,
+          "ttfbMs": 1.8,
+          "durationMs": 183.068
         },
         {
           "cls": 0.005,
-          "fcpMs": 112,
-          "lcpMs": 112,
-          "ttfbMs": 5.9,
-          "durationMs": 265.926
+          "fcpMs": 60,
+          "lcpMs": 60,
+          "ttfbMs": 1.5,
+          "durationMs": 197.846
         },
         {
           "cls": 0.005,
-          "fcpMs": 76,
-          "lcpMs": 76,
-          "ttfbMs": 2.8,
-          "durationMs": 245.273
-        },
-        {
-          "cls": 0.005,
-          "fcpMs": 96,
-          "lcpMs": 96,
-          "ttfbMs": 1.7,
-          "durationMs": 250.571
-        },
-        {
-          "cls": 0.005,
-          "fcpMs": 88,
-          "lcpMs": 88,
+          "fcpMs": 60,
+          "lcpMs": 60,
           "ttfbMs": 2.1,
-          "durationMs": 242.336
+          "durationMs": 180.483
+        },
+        {
+          "cls": 0.005,
+          "fcpMs": 56,
+          "lcpMs": 56,
+          "ttfbMs": 1.6,
+          "durationMs": 180.803
+        },
+        {
+          "cls": 0.005,
+          "fcpMs": 56,
+          "lcpMs": 56,
+          "ttfbMs": 1.6,
+          "durationMs": 182.04
         }
       ],
       "summary": {
         "durationMs": {
-          "p50": 245.273,
-          "p95": 265.926
+          "p50": 182.04,
+          "p95": 197.846
         },
         "fcpMs": {
-          "p50": 88,
-          "p95": 112
+          "p50": 60,
+          "p95": 60
         },
         "lcpMs": {
-          "p50": 88,
-          "p95": 112
+          "p50": 60,
+          "p95": 60
         },
         "cls": {
           "p50": 0.005,
           "p95": 0.005
         },
         "ttfbMs": {
-          "p50": 2.5,
-          "p95": 5.9
+          "p50": 1.6,
+          "p95": 2.1
         }
       },
       "taskId": "optical_workbench_ready"
@@ -115,60 +115,60 @@
       "samples": [
         {
           "cls": 0.007,
-          "fcpMs": 92,
-          "lcpMs": 92,
-          "ttfbMs": 4.7,
-          "durationMs": 242.687
+          "fcpMs": 56,
+          "lcpMs": 56,
+          "ttfbMs": 1.8,
+          "durationMs": 183.635
         },
         {
           "cls": 0.007,
-          "fcpMs": 80,
-          "lcpMs": 80,
-          "ttfbMs": 2,
-          "durationMs": 247.759
+          "fcpMs": 60,
+          "lcpMs": 60,
+          "ttfbMs": 1.5,
+          "durationMs": 198.056
         },
         {
           "cls": 0.007,
-          "fcpMs": 80,
-          "lcpMs": 80,
-          "ttfbMs": 3.2,
-          "durationMs": 262.163
+          "fcpMs": 56,
+          "lcpMs": 56,
+          "ttfbMs": 1.8,
+          "durationMs": 181.029
         },
         {
           "cls": 0.007,
-          "fcpMs": 80,
-          "lcpMs": 80,
-          "ttfbMs": 1.7,
-          "durationMs": 230.75
+          "fcpMs": 56,
+          "lcpMs": 56,
+          "ttfbMs": 1.5,
+          "durationMs": 182.501
         },
         {
           "cls": 0.007,
-          "fcpMs": 64,
-          "lcpMs": 64,
-          "ttfbMs": 1.2,
-          "durationMs": 199.892
+          "fcpMs": 56,
+          "lcpMs": 56,
+          "ttfbMs": 1.5,
+          "durationMs": 180.215
         }
       ],
       "summary": {
         "durationMs": {
-          "p50": 242.687,
-          "p95": 262.163
+          "p50": 182.501,
+          "p95": 198.056
         },
         "fcpMs": {
-          "p50": 80,
-          "p95": 92
+          "p50": 56,
+          "p95": 60
         },
         "lcpMs": {
-          "p50": 80,
-          "p95": 92
+          "p50": 56,
+          "p95": 60
         },
         "cls": {
           "p50": 0.007,
           "p95": 0.007
         },
         "ttfbMs": {
-          "p50": 2,
-          "p95": 4.7
+          "p50": 1.5,
+          "p95": 1.8
         }
       },
       "taskId": "report_workspace_ready"
@@ -185,61 +185,61 @@
       "routeTemplate": "/ogrenci",
       "samples": [
         {
-          "cls": 0.024,
-          "fcpMs": 56,
-          "lcpMs": 92,
-          "ttfbMs": 2.4,
-          "durationMs": 216.655
+          "cls": 0,
+          "fcpMs": 36,
+          "lcpMs": 60,
+          "ttfbMs": 1.2,
+          "durationMs": 183.836
         },
         {
           "cls": 0.024,
-          "fcpMs": 56,
-          "lcpMs": 76,
-          "ttfbMs": 1.3,
-          "durationMs": 197.941
-        },
-        {
-          "cls": 0.024,
-          "fcpMs": 76,
-          "lcpMs": 96,
-          "ttfbMs": 2.1,
-          "durationMs": 216.484
+          "fcpMs": 52,
+          "lcpMs": 72,
+          "ttfbMs": 1.5,
+          "durationMs": 196.881
         },
         {
           "cls": 0,
-          "fcpMs": 48,
-          "lcpMs": 80,
-          "ttfbMs": 2,
-          "durationMs": 229.838
+          "fcpMs": 56,
+          "lcpMs": 56,
+          "ttfbMs": 1.5,
+          "durationMs": 182.576
         },
         {
           "cls": 0.024,
+          "fcpMs": 52,
+          "lcpMs": 72,
+          "ttfbMs": 1,
+          "durationMs": 198.886
+        },
+        {
+          "cls": 0,
           "fcpMs": 56,
-          "lcpMs": 92,
-          "ttfbMs": 1.1,
-          "durationMs": 214.513
+          "lcpMs": 56,
+          "ttfbMs": 1.4,
+          "durationMs": 181.157
         }
       ],
       "summary": {
         "durationMs": {
-          "p50": 216.484,
-          "p95": 229.838
+          "p50": 183.836,
+          "p95": 198.886
         },
         "fcpMs": {
-          "p50": 56,
-          "p95": 76
+          "p50": 52,
+          "p95": 56
         },
         "lcpMs": {
-          "p50": 92,
-          "p95": 96
+          "p50": 60,
+          "p95": 72
         },
         "cls": {
-          "p50": 0.024,
+          "p50": 0,
           "p95": 0.024
         },
         "ttfbMs": {
-          "p50": 2,
-          "p95": 2.4
+          "p50": 1.4,
+          "p95": 1.5
         }
       },
       "taskId": "student_portal_ready"
