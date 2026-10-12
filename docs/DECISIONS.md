@@ -1139,8 +1139,13 @@ verilmez. Biçim `tenant-export-v1` olarak kalır; kurumun kendi dışa aktarım
 `tenant.data-export.created` satırı tablo satır sayılarına ek olarak `fileCount` yazar. Yumuşak silinmiş
 (`deletedAt` dolu) satırlar ve dosyaları dışa aktarıma girmez; kurumun sildiği veri geri gelmez (ürün sahibi
 onayı, 2026-10-10, PR #153 merge onayıyla birlikte).
+2026-10-12: istemci hatasıyla (Nest `HttpException`, durum < 500) biten tenant HTTP isteği dış
+`HTTP_MUTATION` etkinlik kaydını kapatır; UNCERTAIN yalnız 5xx/bilinmeyen hatada veya kapanış
+doğrulanamazsa kalır. İç S3/kuyruk/sağlayıcı/auth/admin/worker kayıtları değişmez; hata sonrası UNCERTAIN
+kalır (ürün sahibi kararı, UAT F-12; Gate 6C "4xx otomatik güvenli sayılmaz" kuralı yalnız dış HTTP
+kaydı için değişti). Kanıt: `tenant-mutation.interceptor.ts`, `tenant-mutation-settle.postgres.test.ts`.
 Açık soru: Yok.
-Son kontrol: 2026-10-10
+Son kontrol: 2026-10-12
 
 ### DEC-20261005-04 — Otomatik veli bildirimlerinin varsayılanları (KV-8)
 

@@ -383,6 +383,14 @@ okuyabilmesi için yalnız bağlı sistem API etiketleri eklendi.
   işlemlerini sarar. Gerçek controller observable/promise bitene dek kayıt kalır;
   istemci bağlantısının kapanması kaydı erkenden çözmez. Callback hatası UNCERTAIN bırakır;
   hata 4xx olsa bile daha önce yan etki olmuş olabileceği için otomatik olarak güvenli sayılmaz.
+  **2026-10-12 güncellemesi (UAT F-12, ürün sahibi kararı):** bu kural artık yalnız iç kayıtlar
+  (S3/queue/provider/auth/admin/worker) için geçerlidir. Interceptor'ın dış `HTTP_MUTATION` kaydı,
+  controller Nest `HttpException` ile 500'ün altında bir durum attığında başarıdaki gibi silinir:
+  istek bitmiştir, DB yazısı commit ya da rollback olmuştur, dış etkilerin kendi iç kaydı vardır.
+  5xx/bilinmeyen hata UNCERTAIN bırakır; silme doğrulanamazsa RUNNING kayıt engel olarak kalır ve
+  özgün hata döner. Denetim: tenant bağlamlı her dış etki (S3 PUT/DELETE, BullMQ admission, PDF
+  queue, notification `sendBatch`) kendi kaydında çalışıyor; sistem yöneticisi isteklerinde
+  (`tenantId: null`) dış kayıt yoktur.
 - Doğrulanmış callback başarısında kayıt transaction içinde silinir; kalıcı her-istek geçmişi
   birikmez. DELETE commit yanıtı kaybolursa başarı dönülmez. Kayıt kalmış olabilir veya
   commit olmuş olabilir; ikinci durumda yokluğu güvenlidir çünkü beklenen iş zaten bitmiştir.
@@ -428,7 +436,7 @@ Sonraki Gate 6D'nin somut kapsamı:
    doğrulamak. Ancak tüm yazma yolları bağlandıktan sonra quiescence guard açılabilir.
 
 Temkinli sınır: doğrulanmış tenant HTTP hataları, hiç dış etki olmamış olsa bile
-UNCERTAIN kayıt bırakabilir. Bu kayıtları güvenli sonuç kanıtı olmadan otomatik temizleyen
+UNCERTAIN kayıt bırakabilir (2026-10-12'den beri 4xx için değil; yukarıdaki UAT F-12 notu). Bu kayıtları güvenli sonuç kanıtı olmadan otomatik temizleyen
 bir kestirme eklenmedi. Geçmiş/legacy queued job'ların versionsız olması da otomatik olarak
 geçerli kabul edilmez; release öncesi uzlaştırılmalıdır.
 
