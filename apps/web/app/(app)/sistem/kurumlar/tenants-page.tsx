@@ -38,7 +38,7 @@ const emptyForm: TenantFormState = {
   plan: "TRIAL",
   licenseStartsAt: "",
   licenseEndsAt: "",
-  seatLimit: "",
+  activeStudentLimit: "",
 };
 
 // Trials open with "Deneme aç"; a regular institution starts as a paid plan.
@@ -78,7 +78,7 @@ export function TenantsPage() {
   const activeTenantCount = rows.filter((tenant) => tenant.status === "ACTIVE").length;
   const suspendedTenantCount = rows.filter((tenant) => tenant.status === "SUSPENDED").length;
   const expiringTenantCount = rows.filter((tenant) => licenseDaysRemaining(tenant.licenseEndsAt) <= 30).length;
-  const overSeatLimitCount = rows.filter((tenant) => isSeatLimitExceeded(tenant)).length;
+  const fullStudentQuotaCount = rows.filter((tenant) => isStudentQuotaFull(tenant)).length;
   const tenantSummaryItems: OperationSummaryItem[] = [
     {
       description: "Filtreye uyan kurumlar",
@@ -101,11 +101,11 @@ export function TenantsPage() {
       value: formatCount(expiringTenantCount),
     },
     {
-      description: "Kullanıcı sınırını aşan kurumlar",
-      key: "seats",
-      label: "Kullanıcı sınırı",
-      tone: overSeatLimitCount > 0 ? "danger" : "success",
-      value: formatCount(overSeatLimitCount),
+      description: "Aktif öğrenci kotası dolan kurumlar",
+      key: "students",
+      label: "Öğrenci kotası",
+      tone: fullStudentQuotaCount > 0 ? "warning" : "success",
+      value: formatCount(fullStudentQuotaCount),
     },
   ];
   const tenantSummaryBadges: OperationSummaryBadge[] = [
@@ -131,7 +131,8 @@ export function TenantsPage() {
       render: (tenant) => <StatusBadge tone={planTone(tenant.plan)}>{planLabel(tenant.plan)}</StatusBadge>,
     },
     { key: "licenseEndsAt", header: "Lisans bitişi", priority: "optional", render: (tenant) => formatDate(tenant.licenseEndsAt) },
-    { key: "seatLimit", header: "Kullanıcı", priority: "secondary", render: (tenant) => formatSeatUsage(tenant) },
+    { key: "activeStudents", header: "Aktif öğrenci", priority: "secondary", render: (tenant) => formatStudentUsage(tenant) },
+    { key: "accounts", header: "Kullanıcı", priority: "optional", render: (tenant) => formatCount(tenant.activeSeatCount ?? 0) },
     {
       key: "status",
       header: "Durum",
@@ -235,7 +236,7 @@ export function TenantsPage() {
           <OperationSummary ariaLabel="Kurum listesi özeti" badges={tenantSummaryBadges} items={tenantSummaryItems} />
         }
         tableCaption="Kurum listesi"
-        tableDescription="Kurumların plan, lisans, kullanıcı sınırı ve erişim durumu."
+        tableDescription="Kurumların plan, lisans, aktif öğrenci kotası ve erişim durumu."
         title="Kurumlar"
       />
       {auth ? <PurgeCandidatesPanel auth={auth} /> : null}
@@ -310,8 +311,8 @@ function TenantFormModal({
           min={1}
           required
           type="number"
-          value={form.seatLimit ?? ""}
-          onChange={(event) => onChange({ ...form, seatLimit: event.target.value })}
+          value={form.activeStudentLimit ?? ""}
+          onChange={(event) => onChange({ ...form, activeStudentLimit: event.target.value })}
         />
       </Field>
       <Field label="İlk kampüs adı">
@@ -370,9 +371,8 @@ function formatDate(value: string | undefined) {
   return value ? new Date(value).toLocaleDateString("tr-TR") : "-";
 }
 
-function formatSeatUsage(tenant: TenantRecord) {
-  const used = tenant.activeSeatCount ?? 0;
-  return tenant.seatLimit ? `${used} / ${tenant.seatLimit}` : `${used} / Sınırsız`;
+function formatStudentUsage(tenant: TenantRecord) {
+  return `${formatCount(tenant.activeStudentCount ?? 0)} / ${tenant.activeStudentLimit ? formatCount(tenant.activeStudentLimit) : "Lisans yok"}`;
 }
 
 function formatCount(value: number) {
@@ -387,8 +387,8 @@ function licenseDaysRemaining(value: string | undefined) {
   return Math.ceil((end - Date.now()) / dayMs);
 }
 
-function isSeatLimitExceeded(tenant: TenantRecord) {
-  return Boolean(tenant.seatLimit && (tenant.activeSeatCount ?? 0) > tenant.seatLimit);
+function isStudentQuotaFull(tenant: TenantRecord) {
+  return Boolean(tenant.activeStudentLimit && (tenant.activeStudentCount ?? 0) >= tenant.activeStudentLimit);
 }
 
 function statusLabel(status: string) {
@@ -441,7 +441,7 @@ function withPlanDefaults<TForm extends TenantFormState>(form: TForm, plan: Tena
   if (plan !== "TRIAL") return { ...form, plan };
   const today = new Date();
   const end = new Date(today.getFullYear(), today.getMonth(), today.getDate() + trialLicenseLimits.maxDays);
-  return { ...form, plan, licenseStartsAt: localDate(today), licenseEndsAt: localDate(end), seatLimit: String(trialLicenseLimits.maxActiveStudents) };
+  return { ...form, plan, licenseStartsAt: localDate(today), licenseEndsAt: localDate(end), activeStudentLimit: String(trialLicenseLimits.maxActiveStudents) };
 }
 
 function localDate(value: Date): string {

@@ -281,7 +281,7 @@ describe("PostgresUserManagementStore", () => {
     expect(record).toMatchObject({ id: "user-existing", tenantId: "tenant-a", roles: ["TEACHER"] });
   });
 
-  it("yeni üyelik eklerken koltuk limiti doluysa transaction'ı geri alır", async () => {
+  it("yeni üyelik eklerken Tenant.seatLimit kontrol etmez (UAT F-06)", async () => {
     const queries: Array<{ sql: string; values?: unknown[] }> = [];
     const pool = {
       async query<T>() {
@@ -312,24 +312,19 @@ describe("PostgresUserManagementStore", () => {
     };
     const store = new PostgresUserManagementStore(pool);
 
-    await expect(
-      store.createOrAttachTenantUser({
-        tenantId: "tenant-full",
-        email: "new-seat@example.test",
-        name: "New Seat",
-        nationalIdEncrypted: "encrypted-new-seat",
-        nationalIdHash: "hash-new-seat",
-        password: "password1",
-        roles: ["TEACHER"],
-      }),
-    ).rejects.toThrow("TENANT_SEAT_LIMIT_EXCEEDED");
+    // The mock never returns the re-read user, so the flow ends after the membership insert.
+    await expect(store.createOrAttachTenantUser({
+      tenantId: "tenant-full",
+      email: "new-seat@example.test",
+      name: "New Seat",
+      nationalIdEncrypted: "encrypted-new-seat",
+      nationalIdHash: "hash-new-seat",
+      password: "password1",
+      roles: ["TEACHER"],
+    })).rejects.toThrow("USER_MEMBERSHIP_CREATE_FAILED");
 
-    expect(queries.some((query) => query.sql.includes('SELECT "seatLimit" FROM "Tenant"') && query.sql.includes("FOR NO KEY UPDATE"))).toBe(
-      true,
-    );
-    expect(queries.some((query) => query.sql.includes('DELETE FROM "TenantMembership"'))).toBe(false);
-    expect(queries.some((query) => query.sql.includes('INSERT INTO "TenantMembership"'))).toBe(false);
-    expect(queries.at(-1)?.sql).toBe("ROLLBACK");
+    expect(queries.some((query) => query.sql.includes('"seatLimit"'))).toBe(false);
+    expect(queries.some((query) => query.sql.includes('INSERT INTO "TenantMembership"'))).toBe(true);
   });
 
   it("canonical rol satırı kaldırılınca kalan teacher satırına persona alanlarını yeniden yazar", async () => {

@@ -286,9 +286,9 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(tenantDetail).toContainText("Aktif");
     const tenantCapacity = page.getByRole("region", { name: "Lisans ve kapasite" });
     await expect(tenantCapacity.locator(".next-tenant-capacity-grid")).toHaveClass(/uh-info-grid/);
-    await expect(tenantCapacity.locator(".uh-info-item")).toHaveCount(4);
+    await expect(tenantCapacity.locator(".uh-info-item")).toHaveCount(5);
     await expect(tenantCapacity).toContainText("Lisans penceresi");
-    await expect(tenantCapacity).toContainText("Kullanıcı sayısı");
+    await expect(tenantCapacity).toContainText("Aktif öğrenci");
     await expect(tenantCapacity).toContainText("Operasyon normal");
     await page.getByRole("tab", { name: "Kurum yönetimi" }).click();
     await expect(page.getByRole("button", { name: "Askıya al" })).toBeVisible();
@@ -298,7 +298,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(editDialog.getByLabel("Plan")).toHaveCount(0);
     await expect(editDialog.getByLabel("Lisans başlangıç")).toHaveCount(0);
     await expect(editDialog.getByLabel("Lisans bitiş")).toHaveCount(0);
-    await expect(editDialog.getByLabel("Kullanıcı sınırı")).toHaveCount(0);
+    await expect(editDialog.getByLabel("Aktif öğrenci limiti")).toHaveCount(0);
     await expect(editDialog.getByLabel("Durum")).toHaveCount(0);
     await expectUiStable(page, "faz9-system-tenant-detail", consoleErrors);
   });
@@ -1256,6 +1256,8 @@ function createSystemTenants() {
   return [
     {
       activeSeatCount: 42,
+      activeStudentCount: 30,
+      activeStudentLimit: 120,
       id: "tenant-faz9",
       licenseEndsAt: "2027-06-17T00:00:00.000Z",
       licenseStartsAt: "2026-06-17T00:00:00.000Z",

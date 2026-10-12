@@ -224,6 +224,38 @@ describe("PostgresTenantStore", () => {
     expect(queries.at(-1)?.sql).toBe("COMMIT");
   });
 
+  it("sistem detayı aktif öğrenci kullanımını güncel lisans dönemi limitiyle döner (UAT F-06)", async () => {
+    const queries: string[] = [];
+    const pool = {
+      async query<T>() {
+        return { rows: [] as T[] };
+      },
+      async connect() {
+        return {
+          async query<T>(sql: string) {
+            queries.push(sql);
+            if (!sql.includes('FROM "Tenant" t')) return { rows: [] as T[] };
+            return { rows: [{
+              id: "tenant-usage", name: "Usage Tenant", slug: "usage-tenant", plan: "TRIAL",
+              licenseStartsAt: null, licenseEndsAt: null, institutionType: null, contactEmail: null, logoUrl: null,
+              seatLimit: 100, activeSeatCount: "140", activeStudentCount: "30", activeStudentLimit: 100,
+              status: "ACTIVE", lifecycleVersion: 0, suspendedAt: null, suspendedReason: null,
+            }] as T[] };
+          },
+          release() {},
+        };
+      },
+    };
+    const store = new PostgresTenantStore(pool);
+
+    await expect(store.findForAdmin("tenant-usage")).resolves.toMatchObject({ activeSeatCount: 140, activeStudentCount: 30, activeStudentLimit: 100 });
+    const sql = queries.find((query) => query.includes('FROM "Tenant" t'))!;
+    expect(sql).toContain('term."activeStudentLimit" FROM "LicenseTerm" term');
+    expect(sql).toContain('term."startsAt" <= now() AND now() < term."endsAt"');
+    expect(sql).toContain('student."status" = \'ACTIVE\'');
+    expect(sql).toContain('enrollment."endsAt" IS NULL');
+  });
+
   it("durum, session iptali ve audit kaydını tek transaction'da yazar", async () => {
     const queries: Array<{ sql: string; values?: unknown[] }> = [];
     const store = new PostgresTenantStore(lifecyclePool(queries));

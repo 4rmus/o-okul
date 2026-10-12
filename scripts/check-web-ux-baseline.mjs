@@ -2882,7 +2882,8 @@ requireTokens("apps/web/app/(app)/sistem/kurumlar/tenants-page.tsx", [
   "Sistem yöneticisi görünümü",
   "useUrlListState",
   "Yaklaşan lisans bitişi",
-  "Kullanıcı sınırı",
+  "Öğrenci kotası",
+  "formatStudentUsage",
 ]);
 
 requireTokens("apps/web/app/(app)/sistem/system-dashboard.tsx", [
@@ -2911,19 +2912,19 @@ requireTokens("apps/web/app/(app)/sistem/kurumlar/[tenantId]/tenant-detail-page.
   "next-system-summary-card",
   "metricPlanTone",
   "metricStatusTone",
-  "Aktif kullanıcı / sınır",
+  "Aktif öğrenci / lisans limiti",
   'aria-label="Lisans ve kapasite"',
   '<InfoGrid className="next-tenant-capacity-grid">',
   '<InfoItem label="Lisans penceresi" value={formatLicenseWindow(tenant)} />',
   '<InfoItem label="Kalan gün" value={formatLicenseDays(licenseDays)} />',
-  'label="Kullanıcı sayısı"',
+  'label="Aktif öğrenci"',
   'label="Önerilen işlem"',
   "Lisans penceresi",
   "Kalan gün",
-  "Kullanıcı sayısı",
+  "Kullanıcı hesabı",
   "Önerilen işlem",
   "tenantRecommendedAction",
-  "seatUsagePercent",
+  "studentUsagePercent",
   "tenantUpdateFormSchema",
   "Kurum adı ve erişim durumu yalnız sistem yöneticisi tarafından değiştirilir.",
   "updateTenantStatus",
@@ -2938,6 +2939,8 @@ requireNoTokens("apps/web/app/(app)/sistem/kurumlar/[tenantId]/tenant-detail-pag
   "<span>Lisans penceresi</span>",
   "Lisans tarihi kontrolü",
   "Kullanıcı sınırı kontrolü",
+  "Kullanıcı sınırını yükselt",
+  "seatLimit",
 ]);
 
 requireTokens("apps/web/app/(app)/sistem/system-reference-page.tsx", [
@@ -4908,7 +4911,7 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   "tenantDetail).toHaveClass(/uh-metric-grid/)",
   'tenantDetail.locator(".uh-metric-card")).toHaveCount(5)',
   'tenantCapacity.locator(".next-tenant-capacity-grid")).toHaveClass(/uh-info-grid/)',
-  'tenantCapacity.locator(".uh-info-item")).toHaveCount(4)',
+  'tenantCapacity.locator(".uh-info-item")).toHaveCount(5)',
   'selectedFormSummary).toHaveClass(/uh-info-grid/)',
   'selectedFormSummary.locator(".uh-info-item")).toHaveCount(2)',
   ".next-portal-summary-card",

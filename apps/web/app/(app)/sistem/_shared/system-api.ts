@@ -14,8 +14,9 @@ export interface TenantRecord {
   plan: string;
   licenseStartsAt?: string;
   licenseEndsAt?: string;
-  seatLimit?: number;
   activeSeatCount?: number;
+  activeStudentCount?: number;
+  activeStudentLimit?: number;
   status: TenantAccessStatus;
   lifecycleVersion: number;
 }
