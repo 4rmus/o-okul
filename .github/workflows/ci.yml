@@ -217,3 +217,4 @@ jobs:
           src/operations/device-backup.postgres.test.ts
           src/operations/tenant-handover-export.postgres.test.ts
           src/exam/exam-workspace-progress-store.postgres.test.ts
+          src/http/tenant-mutation-settle.postgres.test.ts

@@ -3,7 +3,12 @@ import { withTenantDb, type Queryable, type TenantQueryable } from "./tenant-db.
 export interface TenantMutationAdmission { tenantId: string; lifecycleVersion: number; referenceId?: string; kind: "HTTP_MUTATION" | "S3_MUTATION" | "QUEUE_ADMISSION" | "WORKER_JOB" | "AUTH_MUTATION" | "ADMIN_MUTATION" | "PROVIDER_MUTATION"; source?: { type: "INVITATION" | "PASSWORD_RESET"; id: string; tokenHash: string; membershipVersion?: number }; actor?: { userId: string; sessionId: string; membershipVersion: number; platform?: boolean }; }
 export type TenantMutationRunner = <T>(admission: TenantMutationAdmission, run: () => Promise<T>) => Promise<T>;
 /** Durable in-flight evidence has no lease expiry: lost processes and uncertain remote effects require reconciliation. */
-export async function runTenantMutationActivity<T>(pool: TenantQueryable, admission: TenantMutationAdmission, run: () => Promise<T>): Promise<T> {
+/**
+ * `settledError` (UAT F-12): the caller may declare that a thrown error proves the callback
+ * settled without an uncertain effect of this row's own. Such a row is closed like success.
+ * Every other error records UNCERTAIN. A failed close leaves the row (RUNNING) as a blocker.
+ */
+export async function runTenantMutationActivity<T>(pool: TenantQueryable, admission: TenantMutationAdmission, run: () => Promise<T>, settledError?: (error: unknown) => boolean): Promise<T> {
   if (!pool.connect) throw new Error("TENANT_ACTIVITY_TRANSACTION_REQUIRED");
   if (!admission.tenantId || admission.tenantId === "system" || !Number.isInteger(admission.lifecycleVersion) || admission.lifecycleVersion < 0 || admission.lifecycleVersion > 2147483646 || !["HTTP_MUTATION", "S3_MUTATION", "QUEUE_ADMISSION", "WORKER_JOB", "AUTH_MUTATION", "ADMIN_MUTATION", "PROVIDER_MUTATION"].includes(admission.kind)) throw new Error("TENANT_ACTIVITY_CONTEXT_INVALID");
   if (admission.referenceId !== undefined && (typeof admission.referenceId !== "string" || !admission.referenceId || admission.referenceId.length > 512)) throw new Error("TENANT_ACTIVITY_CONTEXT_INVALID");
@@ -46,6 +51,10 @@ export async function runTenantMutationActivity<T>(pool: TenantQueryable, admiss
   let result: T;
   try { result = await run(); }
   catch (error) {
+    if (settledError?.(error)) {
+      try { await settleTenantMutationActivity(pool, admission, id); } catch { /* The durable RUNNING row still blocks reset. */ }
+      throw error;
+    }
     try { await withTenantDb(pool, { tenantId: admission.tenantId }, async (db) => {
       const marked = await db.query<{ id: string }>('UPDATE "TenantMutationActivity" SET "status" = \'UNCERTAIN\' WHERE "id" = $1 AND "tenantId" = $2 AND "lifecycleVersion" = $3 RETURNING "id"', [id, admission.tenantId, admission.lifecycleVersion]);
       if (marked.rows[0]?.id !== id) throw new Error("TENANT_ACTIVITY_SETTLEMENT_UNVERIFIED");
@@ -54,11 +63,15 @@ export async function runTenantMutationActivity<T>(pool: TenantQueryable, admiss
   }
   // Only known callback completion permits deletion. Lost cleanup ACK is an error,
   // but if COMMIT succeeded then absence is safe: the awaited work has already ended.
+  await settleTenantMutationActivity(pool, admission, id);
+  return result;
+}
+
+async function settleTenantMutationActivity(pool: TenantQueryable, admission: TenantMutationAdmission, id: string): Promise<void> {
   await withTenantDb(pool, { tenantId: admission.tenantId }, async (db) => {
     const removed = await db.query<{ id: string }>('DELETE FROM "TenantMutationActivity" WHERE "id" = $1 AND "tenantId" = $2 AND "lifecycleVersion" = $3 AND "status" = \'RUNNING\' RETURNING "id"', [id, admission.tenantId, admission.lifecycleVersion]);
     if (removed.rows[0]?.id !== id) throw new Error("TENANT_ACTIVITY_SETTLEMENT_UNVERIFIED");
   });
-  return result;
 }
 
 export async function requireNoTenantMutationActivity(db: Queryable, tenantId: string): Promise<void> {

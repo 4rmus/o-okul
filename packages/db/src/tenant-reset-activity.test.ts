@@ -4,7 +4,7 @@ const admission: TenantMutationAdmission = { tenantId: "tenant-a", lifecycleVers
 function fixture() {
   let rows = new Map<string, { id: string; tenantId: string; lifecycleVersion: number; kind: string; status: string; referenceId?: string | null }>();
   const tenant = { status: "ACTIVE", lifecycleVersion: 2 }; const calls: string[] = [];
-  let sourceValid = true;
+  let sourceValid = true; let failDelete = false;
   const bypass: unknown[] = [];
   let failCommit = 0; let commits = 0; let shared = true;
   const pool = { async query<T>() { return { rows: [] as T[] }; }, async connect() {
@@ -21,13 +21,14 @@ function fixture() {
       if (sql.includes('FROM "Tenant"')) return result(values[0] === admission.tenantId ? [tenant] : []);
       if (sql.startsWith('INSERT INTO "TenantMutationActivity"')) { const row = { id: String(values[0]), tenantId: String(values[1]), lifecycleVersion: Number(values[2]), kind: String(values[3]), status: "RUNNING", referenceId: values[4] == null ? null : String(values[4]) }; rows.set(row.id, row); return result([{ id: row.id }]); }
       if (sql.startsWith('UPDATE "TenantMutationActivity"')) { const row = rows.get(String(values[0])); if (row && row.tenantId === values[1] && row.lifecycleVersion === values[2]) { row.status = "UNCERTAIN"; return result([{ id: row.id }]); } }
+      if (sql.startsWith('DELETE FROM "TenantMutationActivity"') && failDelete) throw new Error("SETTLE_QUERY_FAILED");
       if (sql.startsWith('DELETE FROM "TenantMutationActivity"')) { const row = rows.get(String(values[0])); if (row && row.tenantId === values[1] && row.lifecycleVersion === values[2] && row.status === "RUNNING") { rows.delete(row.id); return result([{ id: row.id }]); } }
       if (sql.includes('"referenceId" = $4')) return result([...rows.values()].filter((row) => row.tenantId === values[0] && row.lifecycleVersion === values[1] && row.kind === values[2] && row.referenceId === values[3]));
       if (sql.startsWith('SELECT "id" FROM "TenantMutationActivity"')) return result([...rows.values()].filter((row) => row.tenantId === values[0]).slice(0, 1));
       return result([]);
     }, release() {} };
   } };
-  return { pool, tenant, calls, bypass, denySource() { sourceValid = false; }, rows: () => [...rows.values()], failCommit: (at: number) => { failCommit = at; }, denyShared: () => { shared = false; } };
+  return { pool, tenant, calls, bypass, denySource() { sourceValid = false; }, rows: () => [...rows.values()], failCommit: (at: number) => { failCommit = at; }, denyShared: () => { shared = false; }, failDelete: () => { failDelete = true; } };
 }
 describe("durable tenant mutation admission and uncertainty", () => {
   it.each(["inactive", "stale", "legacy", "other-tenant", "exclusive"])("rejects %s before callback and activity insertion", async (mode) => {
@@ -66,6 +67,33 @@ describe("durable tenant mutation admission and uncertainty", () => {
     const f = fixture(); f.failCommit(2); const run = vi.fn(async () => "finished");
     await expect(runTenantMutationActivity(f.pool, admission, run)).rejects.toThrow("COMMIT_ACK_LOST");
     expect(run).toHaveBeenCalledTimes(1); expect(f.rows()).toEqual([]);
+  });
+  // UAT F-12: staging 400s (EMPLOYEE_INVITATION_ALREADY_PENDING, TEACHER_ASSIGNMENT_COURSE_GRADE_LEVEL_MISMATCH) left UNCERTAIN rows.
+  const settled = (error: unknown) => error instanceof Error && error.message.startsWith("CLIENT_");
+  it("a caller-declared settled error closes the row like success and rethrows the original error", async () => {
+    const f = fixture();
+    await expect(runTenantMutationActivity(f.pool, admission, async () => { throw new Error("CLIENT_EMPLOYEE_INVITATION_ALREADY_PENDING"); }, settled)).rejects.toThrow("CLIENT_EMPLOYEE_INVITATION_ALREADY_PENDING");
+    expect(f.rows()).toEqual([]);
+    await expect(requireNoTenantMutationActivity(await f.pool.connect(), "tenant-a")).resolves.toBeUndefined();
+  });
+  it("an error the caller does not declare settled still records UNCERTAIN", async () => {
+    const f = fixture();
+    await expect(runTenantMutationActivity(f.pool, admission, async () => { throw new Error("REMOTE_UNKNOWN"); }, settled)).rejects.toThrow("REMOTE_UNKNOWN");
+    expect(f.rows()).toMatchObject([{ status: "UNCERTAIN" }]);
+    await expect(requireNoTenantMutationActivity(await f.pool.connect(), "tenant-a")).rejects.toThrow("RESET_MUTATION_ACTIVITY_PRESENT");
+  });
+  it("a failed close after a settled error keeps the RUNNING row as a blocker and rethrows the original error", async () => {
+    const f = fixture(); f.failDelete();
+    await expect(runTenantMutationActivity(f.pool, admission, async () => { throw new Error("CLIENT_TEACHER_ASSIGNMENT_COURSE_GRADE_LEVEL_MISMATCH"); }, settled)).rejects.toThrow("CLIENT_TEACHER_ASSIGNMENT_COURSE_GRADE_LEVEL_MISMATCH");
+    expect(f.rows()).toMatchObject([{ status: "RUNNING" }]);
+    await expect(requireNoTenantMutationActivity(await f.pool.connect(), "tenant-a")).rejects.toThrow("RESET_MUTATION_ACTIVITY_PRESENT");
+  });
+  it("a settled outer error does not close an inner remote row that failed", async () => {
+    const f = fixture();
+    await expect(runTenantMutationActivity(f.pool, admission, async () => {
+      await runTenantMutationActivity(f.pool, { ...admission, kind: "PROVIDER_MUTATION", referenceId: "notification:x" }, async () => { throw new Error("CLIENT_AFTER_SEND"); });
+    }, settled)).rejects.toThrow("CLIENT_AFTER_SEND");
+    expect(f.rows()).toMatchObject([{ kind: "PROVIDER_MUTATION", status: "UNCERTAIN" }]);
   });
 });
 
