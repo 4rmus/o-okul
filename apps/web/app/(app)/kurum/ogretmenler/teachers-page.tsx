@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Alert,
   Button,
   CrudPage,
   DataTable,
@@ -21,7 +22,7 @@ import {
 import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, TeacherAssignmentRecord, TeacherRecord } from "@o-okul/shared-types";
 import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { ApiRequestError, apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
 import {
   firstFormError,
@@ -86,6 +87,7 @@ export function TeachersPage() {
   const [assignmentForm, setAssignmentForm] = useState<TeacherAssignmentFormState>(emptyAssignmentForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
+  const [assignmentError, setAssignmentError] = useState<string | null>(null);
   const rows = teachersQuery.data?.data ?? [];
   const canManageAccounts = auth ? hasCapabilityForRoles(auth.session.roles, "user:manage") : false;
   const invitationsQuery = useQuery({
@@ -242,6 +244,7 @@ export function TeachersPage() {
     setEditingTeacher(null);
     setForm(emptyForm);
     setAssignmentForm(emptyAssignmentForm);
+    setAssignmentError(null);
     setError("");
     setIsFormOpen(true);
   }
@@ -254,6 +257,7 @@ export function TeachersPage() {
       branch: teacher.branch ?? "",
     });
     setAssignmentForm(emptyAssignmentForm);
+    setAssignmentError(null);
     setError("");
     setIsFormOpen(true);
   }
@@ -263,6 +267,7 @@ export function TeachersPage() {
     setEditingTeacher(null);
     setForm(emptyForm);
     setAssignmentForm(emptyAssignmentForm);
+    setAssignmentError(null);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -309,10 +314,10 @@ export function TeachersPage() {
   async function handleAssignmentSubmit() {
     if (!auth || !editingTeacher) return;
 
-    setError("");
+    setAssignmentError(null);
     const parsedForm = teacherAssignmentFormSchema.safeParse(assignmentForm);
     if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
+      setAssignmentError(firstFormError(parsedForm.error));
       return;
     }
 
@@ -320,19 +325,19 @@ export function TeachersPage() {
       await createTeacherAssignment(auth.accessToken, editingTeacher.id, parsedForm.data);
       setAssignmentForm(emptyAssignmentForm);
       void queryClient.invalidateQueries({ queryKey: assignmentsQueryKey });
-    } catch {
-      setError("Öğretmen ataması kaydedilemedi.");
+    } catch (failure) {
+      setAssignmentError(teacherAssignmentErrorMessage(failure));
     }
   }
 
   async function handleAssignmentDelete(assignment: TeacherAssignmentRecord) {
     if (!auth || !editingTeacher) return;
-    setError("");
+    setAssignmentError(null);
     try {
       await deleteTeacherAssignment(auth.accessToken, editingTeacher.id, assignment.id);
       void queryClient.invalidateQueries({ queryKey: assignmentsQueryKey });
-    } catch {
-      setError("Öğretmen ataması silinemedi.");
+    } catch (failure) {
+      setAssignmentError(teacherAssignmentErrorMessage(failure));
     }
   }
 
@@ -569,6 +574,7 @@ export function TeachersPage() {
               <Plus size={17} aria-hidden="true" />
               Atama ekle
             </Button>
+            {assignmentError ? <TeacherAssignmentError message={assignmentError} /> : null}
           </Panel>
         ) : null}
       </FormModal>
@@ -637,15 +643,11 @@ async function createTeacherAssignment(accessToken: string, teacherId: string, i
 }
 
 async function deleteTeacherAssignment(accessToken: string, teacherId: string, assignmentId: string) {
-  const response = await authenticatedFetch(
+  await apiRequest<void>(
     accessToken,
     `${apiBaseUrl}/teachers/${encodeURIComponent(teacherId)}/assignments/${encodeURIComponent(assignmentId)}`,
     { method: "DELETE" },
   );
-
-  if (!response.ok) {
-    throw new Error("TEACHER_ASSIGNMENT_DELETE_FAILED");
-  }
 }
 
 async function deleteTeacher(accessToken: string, id: string) {
@@ -656,6 +658,43 @@ async function deleteTeacher(accessToken: string, id: string) {
   if (!response.ok) {
     throw new Error("TEACHER_DELETE_FAILED");
   }
+}
+
+// Codes thrown by TeacherService assignment create/update/delete (apps/api/src/teacher/teacher.service.ts) and the
+// SchoolService lookups it calls. COURSE_GRADE_LEVEL_MISMATCH is rendered with a link in TeacherAssignmentError.
+const teacherAssignmentErrors: Record<string, string> = {
+  TEACHER_ASSIGNMENT_COURSE_GRADE_LEVEL_MISMATCH: "Bu ders bu sınıfın seviyesine bağlı değil. Seviyeler ekranından dersi seviyeye bağlayın.",
+  TEACHER_ASSIGNMENT_TARGET_REQUIRED: "Atama için sınıf veya öğrenci seçilmelidir.",
+  TEACHER_ASSIGNMENT_ROLE_INVALID: "Atama rolü geçersiz. Listeden bir rol seçin.",
+  TEACHER_ASSIGNMENT_STARTS_AT_INVALID: "Başlangıç tarihi geçersiz.",
+  TEACHER_ASSIGNMENT_ENDS_AT_INVALID: "Bitiş tarihi geçersiz.",
+  TEACHER_ASSIGNMENT_NOT_FOUND: "Atama bulunamadı; başka bir kullanıcı silmiş olabilir. Listeyi yenileyin.",
+  TEACHER_NOT_FOUND: "Öğretmen kaydı bulunamadı. Sayfayı yenileyin.",
+  CLASS_NOT_FOUND: "Seçilen sınıf bulunamadı. Sayfayı yenileyip yeniden seçin.",
+  STUDENT_NOT_FOUND: "Seçilen öğrenci bulunamadı. Sayfayı yenileyip yeniden seçin.",
+  COURSE_NOT_FOUND: "Seçilen ders bulunamadı. Sayfayı yenileyip yeniden seçin.",
+  ACADEMIC_TERM_NOT_FOUND: "Seçilen dönem bulunamadı. Sayfayı yenileyip yeniden seçin.",
+  FORBIDDEN_TENANT: "Bu kayıt kurumunuza ait değil.",
+};
+const teacherAssignmentFallbackError = "Atama kaydedilemedi. Bilgileri kontrol edip tekrar deneyin.";
+
+function teacherAssignmentErrorMessage(failure: unknown) {
+  const code = failure instanceof ApiRequestError ? failure.code ?? "" : "";
+  return teacherAssignmentErrors[code] ?? teacherAssignmentFallbackError;
+}
+
+function TeacherAssignmentError({ message }: { message: string }) {
+  return (
+    <Alert tone="danger">
+      {message}
+      {message === teacherAssignmentErrors.TEACHER_ASSIGNMENT_COURSE_GRADE_LEVEL_MISMATCH ? (
+        <>
+          {" "}
+          <Link href="/kurum/seviyeler">Seviyeler ekranına git</Link>
+        </>
+      ) : null}
+    </Alert>
+  );
 }
 
 function formatTeacherAssignmentRole(role: TeacherAssignmentRecord["role"]) {
