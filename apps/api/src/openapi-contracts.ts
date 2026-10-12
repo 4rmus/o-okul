@@ -1182,6 +1182,7 @@ const teacherRecordSchema = objectSchema({
   branch: stringSchema(),
   phone: stringSchema(),
   phoneMasked: stringSchema(),
+  hasAccount: { type: "boolean" },
   provisioning: { type: "string", enum: ["PROVISIONED", "INVITED", "SKIPPED"] },
 }, ["id", "tenantId", "firstName", "lastName"]);
 

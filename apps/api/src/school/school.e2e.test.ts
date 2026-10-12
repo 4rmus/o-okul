@@ -977,6 +977,39 @@ describe("School management API", () => {
     await request(server).delete(`/teachers/${teacherId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
   });
 
+  it("öğretmen yanıtı hesap bağını yalnız hasAccount ile bildirir (UAT F-09)", async () => {
+    await request(server)
+      .get("/teachers/teacher-a")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.hasAccount).toBe(true);
+        expect(body).not.toHaveProperty("userId");
+      });
+
+    const created = await request(server)
+      .post("/teachers")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Hesapsiz", lastName: "Ogretmen" })
+      .expect(201);
+    try {
+      expect(created.body.hasAccount).toBe(false);
+      await request(server)
+        .get("/teachers")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .expect(200)
+        .expect(({ body }) => {
+          expect(body).toEqual(expect.arrayContaining([
+            expect.objectContaining({ id: "teacher-a", hasAccount: true }),
+            expect.objectContaining({ id: created.body.id, hasAccount: false }),
+          ]));
+          expect(JSON.stringify(body)).not.toContain("teacher-tenant-a");
+        });
+    } finally {
+      await request(server).delete(`/teachers/${created.body.id}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
+    }
+  });
+
   it("tenant A tenant B teacher kaydına erişemez", async () => {
     await request(server)
       .get("/teachers/teacher-b")

@@ -762,6 +762,8 @@ export interface TeacherRecord {
   phone?: string;
   phoneMasked?: string;
   userId?: string;
+  /** Read model only: true when a portal account is bound (the user id itself is not returned). */
+  hasAccount?: boolean;
   provisioning?: IdentityProvisioningStatus;
 }
 
