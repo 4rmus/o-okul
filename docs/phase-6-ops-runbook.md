@@ -2622,6 +2622,35 @@ Bu sıranın mock Docker ile çalıştırılan kontrolü
 Test başarısı gerçek drain, backup, provider terminal sonucu veya canlı cutover kanıtı
 değildir. Bekleyen/belirsiz işler korunur; toplu retry, epoch damgalama veya temizleme yok.
 
+### Mutasyon etkinlik kaydı ve istemci hataları (UAT F-12)
+
+`TenantMutationActivity` satırı, reset ve imhanın devam eden tenant yazısı olmadığını kanıtlaması
+için tutulur (`RESET_MUTATION_ACTIVITY_PRESENT`). 2026-10-12'den itibaren:
+
+- Tenant HTTP isteği başarıyla ya da Nest `HttpException` 4xx (ör. `400 EMPLOYEE_INVITATION_ALREADY_PENDING`)
+  ile biterse dış `HTTP_MUTATION` satırı silinir; reseti engellemez.
+- 5xx veya bilinmeyen hata dış satırı `UNCERTAIN` bırakır. İç S3/kuyruk/sağlayıcı/auth/admin/worker
+  satırları hata sonrası her zaman `UNCERTAIN` kalır (örn. SMS gönderildikten sonra dönen 400).
+- Silme doğrulanamazsa satır `RUNNING` kalır, istemci özgün hatayı alır, reset engeli sürer.
+
+**Staging/prod'da kalmış eski UNCERTAIN satırları.** Bu düzeltmeden önce 4xx ile biten isteklerin
+`HTTP_MUTATION` satırları `UNCERTAIN` kalmıştır ve kendiliğinden silinmez. Her satır için önce
+uygulama logundan isteğin 4xx ile bittiği ve iç (S3/kuyruk/sağlayıcı) satırı olmadığı doğrulanır;
+silme onaylı operatör işlemidir ve tek satırlık korumalı biçimde, bir transaction içinde yapılır:
+
+```sql
+BEGIN;
+DELETE FROM "TenantMutationActivity"
+ WHERE "tenantId" = '<tenantId>' AND "id" = '<activityId>'
+   AND "kind" = 'HTTP_MUTATION' AND "status" = 'UNCERTAIN';
+-- Etkilenen satır sayısı (ROW_COUNT / "DELETE 1") tam 1 değilse ROLLBACK; aksi halde COMMIT.
+COMMIT;
+```
+
+Toplu silme, `kind`/`status` filtresiz silme veya iç türlerin (`S3_MUTATION`, `QUEUE_ADMISSION`,
+`PROVIDER_MUTATION`, `AUTH_MUTATION`, `ADMIN_MUTATION`, `WORKER_JOB`) bu yolla silinmesi yapılmaz;
+onlar gerçek dış sonuç doğrulanarak uzlaştırılır.
+
 ## Lisans sonu veri imhası — onaylı liste (DEC-20261005-03)
 
 Lisans dönemi bittikten 91 gün sonra (`resolveLicenseState` = `EXPIRED`) ve aktif ya da ileri
