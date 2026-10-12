@@ -46,6 +46,7 @@ import { useAuth } from "../../providers.js";
 import { TeacherAttendancePanel, TeacherNotesPanel } from "./_shared/activity-panels.js";
 import { AnnouncementsPanel } from "./_shared/announcements-panel.js";
 import { TeacherHomeworkPanel, TeacherHomeworkSubmissionsPanel, TeacherMaterialAssignmentsPanel } from "./_shared/homework-panels.js";
+import { TeacherHomeworkCreatePanel } from "./teacher-homework-create.js";
 import {
   AccessPanel,
   PortalFrame,
@@ -829,6 +830,7 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
           />
         </div> : null}
         {view === "homework" ? <div id="portal-teacher-homework">
+          {auth && !isRolePreview ? <TeacherHomeworkCreatePanel accessToken={auth.accessToken} onCreated={() => void query.refetch()} /> : null}
           <TeacherHomeworkPanel homework={data?.homework ?? []} onToggle={(homework) => void toggleHomeworkCheck(homework)} readOnly={isRolePreview} />
           {auth ? <TeacherHomeworkSubmissionsPanel
             homework={data?.homework ?? []}
