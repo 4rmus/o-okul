@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { GuardianRecord as SharedGuardianRecord } from "@o-okul/shared-types";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
-import { type TenantQueryable, withExplicitTenantQuery, withTenantQuery } from "../db/tenant-query.js";
+import { type Queryable, type TenantQueryable, withExplicitTenantQuery, withTenantQuery } from "../db/tenant-query.js";
 
 export interface GuardianRecord extends SharedGuardianRecord {
   deletedAt?: string;
@@ -12,7 +12,8 @@ export interface GuardianRecord extends SharedGuardianRecord {
 
 export interface GuardianStore {
   list(): Promise<GuardianRecord[]>;
-  findById(id: string): Promise<GuardianRecord | undefined>;
+  /** Pass tenantId when there is no request tenant (unauthenticated invitation accept). */
+  findById(id: string, tenantId?: string): Promise<GuardianRecord | undefined>;
   findByNationalIdHash(tenantId: string, nationalIdHash: string): Promise<GuardianRecord | undefined>;
   findByPhone(tenantId: string, phone: string): Promise<GuardianRecord | undefined>;
   findByUserId(tenantId: string, userId: string): Promise<GuardianRecord | undefined>;
@@ -127,13 +128,14 @@ export class PostgresGuardianStore implements GuardianStore {
     });
   }
 
-  async findById(id: string): Promise<GuardianRecord | undefined> {
+  async findById(id: string, tenantId?: string): Promise<GuardianRecord | undefined> {
+    if (tenantId) {
+      return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+        return selectGuardianById(client, id);
+      });
+    }
     return withTenantQuery(this.pool, async (client) => {
-      const result = await client.query<GuardianRow>(
-        `SELECT * FROM "Guardian" WHERE "id" = $1 AND "deletedAt" IS NULL LIMIT 1`,
-        [id],
-      );
-      return result.rows[0] ? toGuardianRecord(result.rows[0]) : undefined;
+      return selectGuardianById(client, id);
     });
   }
 
@@ -315,4 +317,12 @@ function toGuardianRecord(row: GuardianRow): GuardianRecord {
     userId: row.userId ?? undefined,
     deletedAt: row.deletedAt?.toISOString(),
   };
+}
+
+async function selectGuardianById(client: Queryable, id: string): Promise<GuardianRecord | undefined> {
+  const result = await client.query<GuardianRow>(
+    `SELECT * FROM "Guardian" WHERE "id" = $1 AND "deletedAt" IS NULL LIMIT 1`,
+    [id],
+  );
+  return result.rows[0] ? toGuardianRecord(result.rows[0]) : undefined;
 }
