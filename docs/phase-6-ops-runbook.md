@@ -499,6 +499,12 @@ pnpm account-management:backfill
 - Parity; login normalize alanları, membership/persona, aktif session membershipVersion/legacy rol,
   platform hesap/oturum ve çalışan bağlarını sayısal olarak doğrular. Ham e-posta, telefon, T.C.,
   ad, tenant veya kullanıcı ID artifact'a yazılmaz.
+- `staging-deploy.yml` APPLY'ı her deploy'da migration'dan sonra, uygulama başlamadan önce fail-closed gate
+  olarak çalıştırır; adımlar idempotenttir. UAT F-13 (2026-10-12): öğretmen hesabı, `Teacher.employeeId` ile
+  bağlı hesapsız `Employee` satırına taşınır (çalışan kaydı başka hesaba bağlıysa dokunulmaz). Bilinen
+  risk (açık, ayrı gate): membership yeniden hesaplaması hedef satırda `scopeMode`'u `TENANT` yapar (kampüs
+  kapsamlı personel her deploy'da kurum geneline genişler) ve `ACTIVE` olmayan üyeliklerin
+  `staffRole`/persona alanlarını boşaltır.
 - Runtime cutover yalnız `PASS` backfill artifact'ından sonra başlar. Login
   `(tenantId, loginNameNormalized)` okur ve yalnız aktif hesap + aktif membership + aktif/geçerli
   lisanslı tenant birleşimini kabul eder. T.C. kimlik login tanımlayıcısı değildir.

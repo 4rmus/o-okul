@@ -276,6 +276,11 @@ fail-closed olur. Access ve refresh canlı membership sürüm/rol kontrolü yapa
 PostgreSQL 17 kanıtıdır; exact-SHA staging aktivasyonu, 14 günlük gözlem ve rollback tatbikatı henüz kanıtlanmış
 değildir.
 
+**Not (12 Ekim 2026, UAT F-13):** Backfill tek seferlik değil; staging deploy'da her sürümde APPLY gate'i olarak
+çalışır. Teacher→Employee adımı artık sonradan açılan öğretmen hesabını hesapsız bağlı `Employee` satırına da
+taşır; davet kabulü aynı bağı çalışma anında kurar. Membership yeniden hesaplamasının kampüs kapsamını ve
+`ACTIVE` olmayan üyelikleri bozma riski runbook'ta açık iş olarak kayıtlıdır.
+
 ### PR-5 - Lisans, kota ve kurum onboarding
 
 - Mevcut tenant lisans snapshot'larından ilk LicenseTerm backfill edilir.
