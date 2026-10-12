@@ -501,10 +501,16 @@ pnpm account-management:backfill
   ad, tenant veya kullanıcı ID artifact'a yazılmaz.
 - `staging-deploy.yml` APPLY'ı her deploy'da migration'dan sonra, uygulama başlamadan önce fail-closed gate
   olarak çalıştırır; adımlar idempotenttir. UAT F-13 (2026-10-12): öğretmen hesabı, `Teacher.employeeId` ile
-  bağlı hesapsız `Employee` satırına taşınır (çalışan kaydı başka hesaba bağlıysa dokunulmaz). Bilinen
-  risk (açık, ayrı gate): membership yeniden hesaplaması hedef satırda `scopeMode`'u `TENANT` yapar (kampüs
-  kapsamlı personel her deploy'da kurum geneline genişler) ve `ACTIVE` olmayan üyeliklerin
-  `staffRole`/persona alanlarını boşaltır.
+  bağlı hesapsız `Employee` satırına taşınır (çalışan kaydı başka hesaba bağlıysa dokunulmaz).
+- UAT F-16 (2026-10-12) korunan değişmezler: backfill `scopeMode`'u ve `MembershipCampusScope` satırlarını
+  değiştirmez; canonical persona yalnız `ACTIVE` satırlarda ve yalnız farklıysa yazılır; `SUSPENDED`/`ENDED`
+  satırların `staffRole`/persona alanları korunur; aynı veride ikinci `APPLY` hiçbir satırı yazmaz
+  (`account-management-backfill.postgres.test.ts`). Önceki deploy'ların bozduğu staging durumu için iki tek
+  seferlik, idempotent onarım vardır: hiç bayrağı kalmamış askıdaki/biten üyelik grubu (aktif persona satırı
+  olmayan kullanıcıda) legacy `role` sütunundan yeniden türetilir; `TENANT` olup kampüs satırı kalan üyelik,
+  son `tenant_membership.updated` audit'inin `campusCount` değeri kampüs satırı sayısına eşitse `CAMPUSES`'a
+  döner. APPLY logu geri yüklenen kapsam sayısını yazar. Audit kanıtı olmayan (ör. partisyonu silinmiş) satır
+  `TENANT` kalır; kampüs satırı olan `TENANT` üyelikler deploy sonrası elle gözden geçirilir.
 - Runtime cutover yalnız `PASS` backfill artifact'ından sonra başlar. Login
   `(tenantId, loginNameNormalized)` okur ve yalnız aktif hesap + aktif membership + aktif/geçerli
   lisanslı tenant birleşimini kabul eder. T.C. kimlik login tanımlayıcısı değildir.

@@ -79,6 +79,7 @@ geçmez, Gate E kanıt zincirini besler.
 | F-13 | S1-04 | Öğretmenin çalışan kaydı hesaba bağlı değildi: davet kabulü `Teacher.userId`'yi yazdı, deploy backfill'inin önceden açtığı `Employee` satırı hesapsız kaldı; Çalışanlar ve Yetkiler aynı kişiye ikinci hesap daveti önerdi | Yüksek | Bu PR: kabulde bağlı çalışan kaydı aynı hesaba bağlanır, ikinci hesap daveti `EMPLOYEE_ALREADY_LINKED_VIA_TEACHER` ile reddedilir, backfill mevcut kayıtları düzeltir |
 | F-14 | - | E-posta yalnız doğrulanmış hedeflere gidebiliyor | Yüksek | Açık: Cloudflare plan kontrolü bekliyor |
 | F-15 | S1-03 | Öğrenci ayrıntısında öğrenci numarası varken "Öğrenci no yok" görünüyordu | Düşük | Bu PR: profil yanıtı `studentNo` taşır |
+| F-16 | - | Her deploy'daki backfill `APPLY` kampüs kapsamlı personeli kurum geneline genişletiyor (`scopeMode` → `TENANT`) ve `SUSPENDED`/`ENDED` üyeliklerin `staffRole`/persona alanlarını boşaltıyordu; davet kabulü mevcut hesabın üyeliklerini silip yeniden yazıyordu (VELİ hesabı ÖĞRETMEN davetini kabul edince veli üyeliği kayboluyordu) | Yüksek | Bu dal (`uat-s1/duzeltmeler`): backfill yalnız farklı olan `ACTIVE` satırları yazar, ikinci `APPLY` no-op; boşaltılmış askıdaki/biten üyelik alanları legacy rol sütunundan, genişletilmiş kapsam yalnız `tenant_membership.updated` audit'indeki `campusCount` kanıtıyla geri yüklenir (kanıtsız satırlar `TENANT` kalır, elle kontrol). Davet kabulü mevcut hesaba yalnız davet edilen rolü ekler; uyumsuz hesap (öğrenci + başka rol) `IDENTITY_INVITATION_EMAIL_ACCOUNT_INCOMPATIBLE` ile reddedilir |
 
 ## Bitiş
 
