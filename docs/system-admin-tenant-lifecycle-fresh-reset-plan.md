@@ -387,7 +387,9 @@ aynı transaction'da doğrulanmadan callback başlamamasını sağlar. HTTP subs
 ayrılsa da controller gerçekten bitene dek kayıt kalır. Üç S3 sink'i, BullMQ/PDF üreticisi
 ve normal/PDF worker girişleri bağlandı; başka tenant key'i, eski Redis payload'ı ve
 legacy/stale worker job'ı reddedilir. Başarı kaydı siler; reject veya kayıp süreç
-RUNNING/UNCERTAIN bırakır. TTL/otomatik belirsizlik temizliği yoktur.
+RUNNING/UNCERTAIN bırakır. 2026-10-12 (UAT F-12): dış `HTTP_MUTATION` kaydında 4xx istemci hatası
+da kaydı siler; iç S3/kuyruk/sağlayıcı/auth kayıtları ve 5xx hatalar UNCERTAIN kalır (Gate 6C güncellemesi).
+TTL/otomatik belirsizlik temizliği yoktur.
 
 Yeni tablo RLS/katalog ve örnek evidence sayımlarına eklendi (66 tenant, 73 toplam tablo).
 Tam API 1195 PASS / 4 SKIP, DB 87/87, worker 222/222, Playwright 38/38 PASS;
