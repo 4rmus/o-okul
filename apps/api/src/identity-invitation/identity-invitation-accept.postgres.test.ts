@@ -48,9 +48,24 @@ describePostgres("IdentityInvitationService.accept on PostgreSQL without request
     process.env.DATABASE_URL = appDatabaseUrl;
     await cleanupFixtures(admin);
     await seedTenant(admin);
+    // UAT F-13: teacher-backed Employee rows as created by the account-management backfill.
     await admin.query(
-      `INSERT INTO "Teacher" ("id", "tenantId", "firstName", "lastName", "updatedAt")
-       VALUES ('invitation-accept-teacher', $1, 'Tcsiz', 'Ogretmen', now())`,
+      `INSERT INTO "User" ("id", "tenantId", "name", "passwordHash", "updatedAt")
+       VALUES ('invitation-accept-other-user', $1, 'Baska Hesap', 'FIXTURE_HASH', now())`,
+      [tenantId],
+    );
+    await admin.query(
+      `INSERT INTO "Employee" ("id", "tenantId", "userId", "firstName", "lastName", "status", "updatedAt")
+       VALUES ('invitation-accept-teacher-employee', $1, NULL, 'Tcsiz', 'Ogretmen', 'ACTIVE', now()),
+              ('invitation-accept-conflict-employee', $1, 'invitation-accept-other-user', 'Cakisan', 'Ogretmen', 'ACTIVE', now()),
+              ('invitation-accept-legacy-employee', $1, NULL, 'Eski', 'Ogretmen', 'ACTIVE', now())`,
+      [tenantId],
+    );
+    await admin.query(
+      `INSERT INTO "Teacher" ("id", "tenantId", "employeeId", "userId", "firstName", "lastName", "updatedAt")
+       VALUES ('invitation-accept-teacher', $1, 'invitation-accept-teacher-employee', NULL, 'Tcsiz', 'Ogretmen', now()),
+              ('invitation-accept-conflict-teacher', $1, 'invitation-accept-conflict-employee', NULL, 'Cakisan', 'Ogretmen', now()),
+              ('invitation-accept-legacy-teacher', $1, 'invitation-accept-legacy-employee', 'invitation-accept-other-user', 'Eski', 'Ogretmen', now())`,
       [tenantId],
     );
     await admin.query(
@@ -72,6 +87,8 @@ describePostgres("IdentityInvitationService.accept on PostgreSQL without request
     await seedInvitation(admin, "TEACHER", "invitation-accept-teacher", "f08.ogretmen@example.test");
     await seedInvitation(admin, "GUARDIAN", "invitation-accept-guardian", "f08.veli@example.test");
     await seedInvitation(admin, "STUDENT", "invitation-accept-student", "f08.ogrenci@example.test");
+    await seedInvitation(admin, "TEACHER", "invitation-accept-conflict-teacher", "f13.cakisan@example.test", "TEACHER", "conflict-teacher");
+    await seedInvitation(admin, "EMPLOYEE", "invitation-accept-legacy-employee", "f13.eski@example.test", "OPERATIONS_STAFF", "legacy-employee");
   });
 
   afterAll(async () => {
@@ -92,6 +109,34 @@ describePostgres("IdentityInvitationService.accept on PostgreSQL without request
     const bound = await admin.query<{ userId: string | null }>(`SELECT "userId" FROM "${table}" WHERE "id" = $1`, [subjectId]);
     expect(bound.rows[0]?.userId).toBe(accepted.acceptedUserId);
     await expectNoActivity(admin);
+  });
+
+  it("öğretmen daveti kabulü bağlı çalışan kaydını aynı hesaba bağlar (UAT F-13)", async () => {
+    const teacher = await admin.query<{ userId: string | null }>(`SELECT "userId" FROM "Teacher" WHERE "id" = 'invitation-accept-teacher'`);
+    const employee = await admin.query<{ userId: string | null }>(`SELECT "userId" FROM "Employee" WHERE "id" = 'invitation-accept-teacher-employee'`);
+    expect(teacher.rows[0]?.userId).toEqual(expect.any(String));
+    expect(employee.rows[0]?.userId).toBe(teacher.rows[0]?.userId);
+  });
+
+  it("başka hesaba bağlı çalışan kaydını öğretmen kabulünde ezmez (UAT F-13)", async () => {
+    const accepted = await service.accept({ token: tokenFor("conflict-teacher"), password });
+
+    expect(accepted).toMatchObject({ status: "ACCEPTED", subjectId: "invitation-accept-conflict-teacher" });
+    const employee = await admin.query<{ userId: string | null }>(`SELECT "userId" FROM "Employee" WHERE "id" = 'invitation-accept-conflict-employee'`);
+    expect(employee.rows[0]?.userId).toBe("invitation-accept-other-user");
+    await expectNoActivity(admin);
+  });
+
+  it("öğretmeni hesaplı çalışan kaydına ikinci hesap daveti ve kabulü yok (UAT F-13)", async () => {
+    const context = { tenantId, userId: "invitation-accept-admin", roles: ["TENANT_ADMIN" as const], bypassRls: false };
+    await expect(service.createEmployeeInvitation(context, "invitation-accept-legacy-employee", { email: "f13.yeni@example.test", role: "OPERATIONS_STAFF" }))
+      .rejects.toThrow("EMPLOYEE_ALREADY_LINKED_VIA_TEACHER");
+    // An invitation issued before the guard existed is refused at accept and no second account is created.
+    await expect(service.accept({ token: tokenFor("legacy-employee"), password })).rejects.toThrow("EMPLOYEE_ALREADY_LINKED");
+    const users = await admin.query(`SELECT 1 FROM "User" WHERE "tenantId" = $1 AND "emailNormalized" = 'f13.eski@example.test'`, [tenantId]);
+    expect(users.rows).toEqual([]);
+    const employee = await admin.query<{ userId: string | null }>(`SELECT "userId" FROM "Employee" WHERE "id" = 'invitation-accept-legacy-employee'`);
+    expect(employee.rows[0]?.userId).toBeNull();
   });
 
   it("T.C. kimliği olmayan öğrenci davetini 4xx ile reddeder ve activity satırı bırakmaz", async () => {
@@ -147,12 +192,19 @@ async function seedTenant(pool: pg.Pool): Promise<void> {
   );
 }
 
-async function seedInvitation(pool: pg.Pool, subjectType: string, subjectId: string, email: string, role = subjectType): Promise<void> {
+async function seedInvitation(
+  pool: pg.Pool,
+  subjectType: string,
+  subjectId: string,
+  email: string,
+  role = subjectType,
+  key = subjectType,
+): Promise<void> {
   await pool.query(
     `INSERT INTO "IdentityInvitation" (
        "id", "tenantId", "subjectType", "subjectId", "email", "name", "role", "kind",
        "tokenHash", "status", "expiresAt", "updatedAt"
      ) VALUES ($1, $2, $3, $4, $5, 'F08 Davet', $6, 'EMAIL_LINK', $7, 'PENDING', now() + interval '1 day', now())`,
-    [`invitation-accept-${subjectType.toLowerCase()}`, tenantId, subjectType, subjectId, email, role, hashActivationToken(tokenFor(subjectType))],
+    [`invitation-accept-${key.toLowerCase()}`, tenantId, subjectType, subjectId, email, role, hashActivationToken(tokenFor(key))],
   );
 }

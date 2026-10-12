@@ -113,6 +113,10 @@ export class IdentityInvitationService {
     if (!employee) throw new NotFoundException("EMPLOYEE_NOT_FOUND");
     if (employee.status !== "ACTIVE") throw new BadRequestException("EMPLOYEE_INVITATION_REQUIRES_ACTIVE_PROFILE");
     if (employee.userId) throw new BadRequestException("EMPLOYEE_ALREADY_LINKED");
+    // UAT F-13: a teacher-backed Employee whose teacher already has an account must not get a second account.
+    if ((await this.teachers.findByEmployeeId(tenantId, employee.id))?.userId) {
+      throw new BadRequestException("EMPLOYEE_ALREADY_LINKED_VIA_TEACHER");
+    }
     const pending = (await this.invitations.list(tenantId)).find((invitation) => (
       invitation.subjectType === "EMPLOYEE" && invitation.subjectId === employeeId && invitation.status === "PENDING"
     ));
@@ -267,7 +271,23 @@ export class IdentityInvitationService {
       action: "identity_invitation.accepted",
       diff: { subjectType: invitation.subjectType, subjectId: invitation.subjectId, userId: user.id },
     });
+    if (invitation.subjectType === "TEACHER") await this.linkTeacherEmployee(invitation.tenantId, invitation.subjectId, user.id);
     return accepted;
+    });
+  }
+
+  // UAT F-13: the teacher's Employee row (Teacher.employeeId) gets the same account, so Çalışanlar ve Yetkiler
+  // shows it as linked and offers no second account. An Employee already bound to another account is left alone.
+  private async linkTeacherEmployee(tenantId: string, teacherId: string, userId: string): Promise<void> {
+    const link = await this.teachers.linkEmployeeUser(tenantId, teacherId, userId);
+    if (link !== "LINKED" && link !== "CONFLICT") return;
+    await this.auditLogs?.record({
+      tenantId,
+      actorUserId: userId,
+      entityType: "Teacher",
+      entityId: teacherId,
+      action: link === "LINKED" ? "teacher.employee_account_linked" : "teacher.employee_account_link_conflict",
+      diff: { teacherId, userId },
     });
   }
 

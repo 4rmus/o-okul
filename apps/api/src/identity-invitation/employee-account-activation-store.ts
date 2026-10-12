@@ -147,11 +147,15 @@ export class PostgresEmployeeAccountActivationStore implements EmployeeAccountAc
       if (!currentTenant.rows[0]) return { status: "LICENSE_INACTIVE" };
 
       const employeeResult = await client.query<EmployeeActivationProfileRow>(
-        `SELECT "id", "status", "userId"
-         FROM "Employee"
-         WHERE "tenantId" = $1 AND "id" = $2 AND "deletedAt" IS NULL
+        // UAT F-13: an Employee whose linked teacher already has an account counts as linked, so a pending
+        // invitation cannot create a second account for the same person.
+        `SELECT e."id", e."status", coalesce(e."userId", t."userId") AS "userId"
+         FROM "Employee" e
+         LEFT JOIN "Teacher" t
+           ON t."tenantId" = e."tenantId" AND t."employeeId" = e."id" AND t."deletedAt" IS NULL
+         WHERE e."tenantId" = $1 AND e."id" = $2 AND e."deletedAt" IS NULL
          LIMIT 1
-         FOR UPDATE`,
+         FOR UPDATE OF e`,
         [invitation.tenantId, invitation.subjectId],
       );
       const employee = employeeResult.rows[0];
