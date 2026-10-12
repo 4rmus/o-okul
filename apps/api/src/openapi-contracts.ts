@@ -3268,6 +3268,13 @@ const operationContracts: Record<string, OperationContract> = {
     requestBody: gradeAssessmentCreateRequestSchema,
     responseBody: gradeAssessmentRecordSchema,
   },
+  "get /api/v1/grade-assessments/teacher-scopes": {
+    responseBody: arraySchema(objectSchema({
+      classId: stringSchema({ minLength: 1 }),
+      courseId: stringSchema({ minLength: 1 }),
+      termId: stringSchema({ minLength: 1 }),
+    }, ["classId"])),
+  },
   "get /api/v1/grade-assessments/{id}": {
     responseBody: objectSchema({ assessment: gradeAssessmentRecordSchema, entries: arraySchema(gradeEntryRecordSchema) }, ["assessment", "entries"]),
   },
