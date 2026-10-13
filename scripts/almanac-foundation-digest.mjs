@@ -55,6 +55,17 @@ export function almanacFoundationSourceDigest() {
   return hash.digest("hex");
 }
 
+// The measured code is identified by sourceTreeSha256. baseCommitSha only has to stay reachable in CI,
+// so it records where the branch left main instead of HEAD: a squash merge with branch deletion makes
+// HEAD of a baseline-refresh branch unreachable, but the merge base stays on main.
+export function almanacMeasurementBaseCommitSha() {
+  try {
+    return execFileSync("git", ["merge-base", "HEAD", "origin/main"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+    throw new Error("ALMANAC_MEASUREMENT_BASE_COMMIT_UNAVAILABLE: fetch origin/main before collecting the baseline");
+  }
+}
+
 export function almanacFoundationSourceDirty() {
   assertAlmanacFoundationSourceContract(almanacFoundationSourceFiles, almanacFoundationSourceRoots);
   return execFileSync("git", ["status", "--porcelain", "--", ...almanacFoundationSourceRoots, ...almanacFoundationRequiredFiles], {
