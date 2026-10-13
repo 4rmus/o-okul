@@ -31,12 +31,14 @@
 - Read-only reviewers run with `permissionMode: plan` and without Write/Edit tools; they still carry Bash, so they must not run state-changing commands.
 - Before every gate starts, define its objective, owned paths, forbidden paths, acceptance criteria, and validation commands.
 - Gates are commits, not PRs. When a gate completes, commit it on the milestone branch and continue to the next gate; stop only for an approval-required action, an ambiguity that changes the deliverable, or a failure you cannot diagnose. When the user asks for step-by-step work, stop after each gate.
-- One milestone, one branch, one PR: push and open the PR once the milestone is done. Review findings and follow-up fixes found before merge go on the same branch, not a new PR.
+- One milestone, one branch, one PR: push and open the PR once the milestone is done. Review findings, UAT findings, and follow-up fixes found before merge go on the same branch as new commits, not a new PR. A CI fix for a PR goes on that PR's branch.
+- Do not push between gates; every push runs full CI (about 20 minutes) and a push to main runs it again plus the staging preflight. Push once per milestone, or as a draft PR when staging needs the branch early: draft PRs skip CI until marked ready for review.
+- `main` is protected on GitHub (2026-10-13): the `changes`, `docs-check`, `verify`, `ui-ux-rc`, and `account-management-postgres` checks are required, skipped jobs count as passing, force pushes are blocked. Repo auto-merge is enabled; after opening a PR that is meant to land, run `gh pr merge <number> --auto --squash`.
 - Report `LOCAL_STATIC`, `LOCAL_TEST`, `CI`, `STAGING`, `PRODUCTION`, `EXTERNAL_NOT_RUN`, and `UNPROVEN` as separate evidence classes.
 - Deploys, provider actions, secret/config changes, DB/data mutations, and mutating smokes require explicit user approval.
 - Every delegated task needs: objective, owned paths, forbidden paths, expected output, and validation commands.
 - Subagent summaries should return findings and changed files, not raw logs.
-- When a plan slice closes, record it in `status.md` "Açık İşler" with date, slice id, evidence class, and SHA/PR, in the same PR as the slice. Decision, status, and UAT records that belong to a feature ride in that feature's PR; standalone doc records are batched into one docs PR.
+- When a plan slice closes, record it in `status.md` "Açık İşler" with date, slice id, evidence class, and SHA/PR, in the same PR as the slice. Decision, status, and UAT records that belong to a feature ride in that feature's PR; standalone doc records are batched into one docs PR at most once a week, never one PR per record.
 - Pull requests that change only `docs/`, `status.md`, `README.md`, or `PLAN.md` run the light `docs-check` job in `.github/workflows/ci.yml` instead of full CI; `docs/evidence-manifests/` and `docs/measurement-baselines/` still trigger full CI, and pushes to main always run it.
 - After editing any agent, skill, settings, or MCP file, run `pnpm agents:check` in the same change.
 
