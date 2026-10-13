@@ -42,6 +42,11 @@ export const gradeLevelFormSchema = z.object({
   code: optionalText(),
 });
 
+// Code is required on create so a retried create hits the (tenantId, code) unique index instead of
+// adding a second row. Edit keeps it optional for older records that have no code.
+export const campusCreateFormSchema = campusFormSchema.extend({ code: requiredText("Kod") });
+export const gradeLevelCreateFormSchema = gradeLevelFormSchema.extend({ code: requiredText("Kod") });
+
 export const academicYearFormSchema = z.object({
   name: requiredText("Akademik yıl adı"),
   startsAt: optionalDate.refine((value) => Boolean(value), { message: "Başlangıç zorunludur." }),

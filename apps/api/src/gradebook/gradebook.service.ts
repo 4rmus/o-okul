@@ -43,7 +43,18 @@ export class GradebookService {
     @Optional() private readonly guardianNotifications?: GuardianAutoNotificationService,
   ) {}
 
-  async createAssessment(context: RequestContext, input: GradeAssessmentCreateRequest): Promise<GradeAssessmentRecord> {
+  async createAssessment(context: RequestContext, input: GradeAssessmentCreateRequest, idempotencyKey?: string): Promise<GradeAssessmentRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "grade-assessment.create", request: { actorUserId: context.userId, input } },
+        () => this.createAssessmentOnce(context, input),
+      );
+    }
+    return this.createAssessmentOnce(context, input);
+  }
+
+  private async createAssessmentOnce(context: RequestContext, input: GradeAssessmentCreateRequest): Promise<GradeAssessmentRecord> {
     const tenantId = requireTenantId(context);
     const klass = await this.requireClass(context, tenantId, input.classId);
     const course = await this.courses.findById(input.courseId);

@@ -9,6 +9,7 @@ import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import {
+  campusCreateFormSchema,
   campusFormSchema,
   firstFormError,
   type CampusFormPayload,
@@ -174,7 +175,7 @@ export function CampusesPage() {
     if (!auth) return;
 
     setError("");
-    const parsedForm = campusFormSchema.safeParse(form);
+    const parsedForm = (editingCampus ? campusFormSchema : campusCreateFormSchema).safeParse(form);
     if (!parsedForm.success) {
       setError(firstFormError(parsedForm.error));
       return;

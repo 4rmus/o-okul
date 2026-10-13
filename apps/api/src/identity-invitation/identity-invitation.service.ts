@@ -1,5 +1,6 @@
 import { runVerifiedTenantMutation } from "../context/tenant-mutation-activity.js";
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { IdempotencyService } from "../http/idempotency.js";
 import {
   hasCapabilityForRoles,
   isPortalSubjectRoleName,
@@ -58,6 +59,7 @@ export class IdentityInvitationService {
     @Optional()
     @Inject(employeeAccountActivationStoreToken)
     private readonly employeeActivations?: EmployeeAccountActivationStore,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
   async list(context: RequestContext): Promise<IdentityInvitationRecord[]> {
@@ -172,7 +174,21 @@ export class IdentityInvitationService {
     }
   }
 
-  async resend(context: RequestContext, id: string): Promise<IdentityInvitationIssueResult> {
+  // Returns only the invitation: the replay cache stores this response, and the activation token must
+  // never be persisted outside the outbox.
+  async resend(context: RequestContext, id: string, idempotencyKey?: string): Promise<IdentityInvitationRecord> {
+    const run = async () => (await this.resendOnce(context, id)).invitation;
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "identity-invitation.resend", request: { actorUserId: context.userId, id } },
+        run,
+      );
+    }
+    return run();
+  }
+
+  private async resendOnce(context: RequestContext, id: string): Promise<IdentityInvitationIssueResult> {
     const tenantId = this.requireTenantWideContext(context);
     const existing = await this.invitations.findById(tenantId, id);
     if (!existing) throw new NotFoundException("IDENTITY_INVITATION_NOT_FOUND");

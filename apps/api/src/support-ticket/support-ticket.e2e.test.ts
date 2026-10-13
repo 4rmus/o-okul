@@ -845,6 +845,28 @@ describe("Support ticket API", () => {
   it("yetkisiz request destek endpointine erişemez", async () => {
     await request(server).get("/support-tickets").expect(401);
   });
+
+  it("destek talebi oluşturmayı dört uçta da Idempotency-Key ile tekilleştirir", async () => {
+    const cases = [
+      { path: "/support-tickets", token: teacherAAccessToken, key: "support-ticket-create-idempotency-a" },
+      { path: "/me/teacher/support-tickets", token: teacherAAccessToken, key: "teacher-support-ticket-create-idempotency-a" },
+      { path: "/me/student/support-tickets", token: studentAAccessToken, key: "student-support-ticket-create-idempotency-a" },
+      { path: "/me/guardian/students/student-a/support-tickets", token: guardianAAccessToken, key: "guardian-support-ticket-create-idempotency-a" },
+    ];
+    for (const { path, token, key } of cases) {
+      const body = { subject: "Tekil talep", message: "Aynı istek iki kez gönderildi.", priority: "NORMAL" };
+      const first = await request(server).post(path).set("Authorization", `Bearer ${token}`).set("Idempotency-Key", key).send(body).expect(201);
+      const second = await request(server).post(path).set("Authorization", `Bearer ${token}`).set("Idempotency-Key", key).send(body).expect(201);
+      expect(second.body).toEqual(first.body);
+      await request(server)
+        .post(path)
+        .set("Authorization", `Bearer ${token}`)
+        .set("Idempotency-Key", key)
+        .send({ ...body, message: "Farklı içerik." })
+        .expect(409)
+        .expect(({ body: error }) => expect(error.error.code).toBe("IDEMPOTENCY_KEY_BODY_MISMATCH"));
+    }
+  });
 });
 
 function expectPortalSupportTicketResponseIsPublic(body: unknown): void {

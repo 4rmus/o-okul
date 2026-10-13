@@ -536,7 +536,7 @@ export interface CampusRecord {
 export interface CampusCreateRequest {
   tenantId?: string;
   name: string;
-  code?: string;
+  code: string;
   unitType?: "SCHOOL" | "COURSE" | "MIXED";
 }
 
@@ -556,7 +556,7 @@ export interface GradeLevelRecord {
 export interface GradeLevelCreateRequest {
   tenantId?: string;
   name: string;
-  code?: string;
+  code: string;
 }
 
 export interface GradeLevelUpdateRequest {
@@ -576,7 +576,7 @@ export interface AlanCreateRequest {
   tenantId?: string;
   gradeLevelId?: string;
   name: string;
-  code?: string;
+  code: string;
 }
 
 export interface AlanUpdateRequest {

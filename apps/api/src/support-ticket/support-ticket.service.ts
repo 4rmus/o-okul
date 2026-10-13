@@ -128,7 +128,18 @@ export class SupportTicketService {
     return ticket;
   }
 
-  async create(
+  async create(context: RequestContext, input: Partial<SupportTicketRecord>, idempotencyKey?: string): Promise<SupportTicketRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "support-ticket.create", request: { actorUserId: context.userId, input } },
+        () => this.createOnce(context, input),
+      );
+    }
+    return this.createOnce(context, input);
+  }
+
+  private async createOnce(
     context: RequestContext,
     input: Partial<SupportTicketRecord>,
   ): Promise<SupportTicketRecord> {
@@ -174,9 +185,10 @@ export class SupportTicketService {
   async createCurrentStudent(
     context: RequestContext,
     input: Partial<SupportTicketRecord>,
+    idempotencyKey?: string,
   ): Promise<SupportTicketRecord> {
     const student = await this.findCurrentStudent(context);
-    return this.create(context, { ...input, tenantId: student.tenantId, studentId: student.id });
+    return this.create(context, { ...input, tenantId: student.tenantId, studentId: student.id }, idempotencyKey);
   }
 
   async listCurrentStudentComments(context: RequestContext, ticketId: string): Promise<PortalSupportTicketCommentsResult> {
@@ -203,9 +215,10 @@ export class SupportTicketService {
     context: RequestContext,
     studentId: string,
     input: Partial<SupportTicketRecord>,
+    idempotencyKey?: string,
   ): Promise<SupportTicketRecord> {
     const student = await this.findGuardianSupportStudent(context, studentId);
-    return this.create(context, { ...input, tenantId: student.tenantId, studentId: student.id });
+    return this.create(context, { ...input, tenantId: student.tenantId, studentId: student.id }, idempotencyKey);
   }
 
   async listCurrentTeacher(context: RequestContext): Promise<SupportTicketRecord[]> {
@@ -216,10 +229,11 @@ export class SupportTicketService {
   async createCurrentTeacher(
     context: RequestContext,
     input: Partial<SupportTicketRecord>,
+    idempotencyKey?: string,
   ): Promise<SupportTicketRecord> {
     this.assertTeacherContext(context);
     await this.assertTeacherTicketScope(context, input);
-    return this.create(context, input);
+    return this.create(context, input, idempotencyKey);
   }
 
   async listCurrentTeacherComments(context: RequestContext, ticketId: string): Promise<PortalSupportTicketCommentsResult> {

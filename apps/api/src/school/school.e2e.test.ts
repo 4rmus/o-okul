@@ -278,6 +278,33 @@ describe("School management API", () => {
 
     expectValidationFields(
       await request(server)
+        .post("/campuses")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ name: "Kodsuz Kampüs" })
+        .expect(422),
+      ["code"],
+    );
+
+    expectValidationFields(
+      await request(server)
+        .post("/grade-levels")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ name: "Kodsuz Seviye" })
+        .expect(422),
+      ["code"],
+    );
+
+    expectValidationFields(
+      await request(server)
+        .post("/alanlar")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ name: "Kodsuz Alan" })
+        .expect(422),
+      ["code"],
+    );
+
+    expectValidationFields(
+      await request(server)
         .post("/learning-outcomes")
         .set("Authorization", `Bearer ${tenantAAccessToken}`)
         .send({ code: " ", branch: 123, title: " " })

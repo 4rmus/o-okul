@@ -295,8 +295,9 @@ export class MeController {
   @Roles("STUDENT")
   async createStudentSupportTicket(
     @Body(zodBody(portalSupportTicketCreateBodySchema)) body: PortalSupportTicketCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<PublicPortalSupportTicketRecord> {
-    return toPublicPortalSupportTicketResponse(await this.supportTickets.createCurrentStudent(getRequestContext(), body));
+    return toPublicPortalSupportTicketResponse(await this.supportTickets.createCurrentStudent(getRequestContext(), body, idempotencyKey));
   }
 
   @Get("student/support-tickets/:ticketId/comments")
@@ -491,8 +492,9 @@ export class MeController {
   async createGuardianStudentSupportTicket(
     @Param("studentId") studentId: string,
     @Body(zodBody(portalSupportTicketCreateBodySchema)) body: PortalSupportTicketCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<PublicPortalSupportTicketRecord> {
-    return toPublicPortalSupportTicketResponse(await this.supportTickets.createCurrentGuardianStudent(getRequestContext(), studentId, body));
+    return toPublicPortalSupportTicketResponse(await this.supportTickets.createCurrentGuardianStudent(getRequestContext(), studentId, body, idempotencyKey));
   }
 
   @Get("teacher/support-tickets")
@@ -505,8 +507,9 @@ export class MeController {
   @Roles("TEACHER")
   async createTeacherSupportTicket(
     @Body(zodBody(teacherPortalSupportTicketCreateBodySchema)) body: TeacherPortalSupportTicketCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<PublicPortalSupportTicketRecord> {
-    return toPublicPortalSupportTicketResponse(await this.supportTickets.createCurrentTeacher(getRequestContext(), body));
+    return toPublicPortalSupportTicketResponse(await this.supportTickets.createCurrentTeacher(getRequestContext(), body, idempotencyKey));
   }
 
   @Get("teacher/support-tickets/:ticketId/comments")

@@ -920,6 +920,11 @@ const namedSchoolReferenceCreateRequestSchema = objectSchema({
   tenantId: stringSchema(),
 }, ["name"]);
 
+const gradeLevelCreateRequestSchema = objectSchema(
+  namedSchoolReferenceCreateRequestSchema.properties as Record<string, JsonSchema>,
+  ["name", "code"],
+);
+
 const namedSchoolReferenceUpdateRequestSchema = objectSchema({
   code: stringSchema(),
   name: stringSchema(),
@@ -933,7 +938,7 @@ const campusRecordSchema = objectSchema({
 const campusCreateRequestSchema = objectSchema({
   ...(namedSchoolReferenceCreateRequestSchema.properties as Record<string, JsonSchema>),
   unitType: { type: "string", enum: ["SCHOOL", "COURSE", "MIXED"] },
-}, ["name"]);
+}, ["name", "code"]);
 
 const campusUpdateRequestSchema = objectSchema({
   ...(namedSchoolReferenceUpdateRequestSchema.properties as Record<string, JsonSchema>),
@@ -953,7 +958,7 @@ const alanCreateRequestSchema = objectSchema({
   gradeLevelId: stringSchema(),
   name: stringSchema(),
   tenantId: stringSchema(),
-}, ["name"]);
+}, ["name", "code"]);
 
 const alanUpdateRequestSchema = objectSchema({
   code: stringSchema(),
@@ -3267,6 +3272,7 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/grade-assessments": {
     requestBody: gradeAssessmentCreateRequestSchema,
     responseBody: gradeAssessmentRecordSchema,
+    idempotent: true,
   },
   "get /api/v1/grade-assessments/teacher-scopes": {
     responseBody: arraySchema(objectSchema({
@@ -3531,6 +3537,7 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/employees": {
     requestBody: employeeCreateRequestSchema,
     responseBody: employeeAccessSchema,
+    idempotent: true,
   },
   "post /api/v1/employees/{id}/account-invitations": {
     requestBody: employeeAccountInvitationRequestSchema,
@@ -3602,6 +3609,7 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/development/criteria": {
     requestBody: developmentCriterionCreateRequestSchema,
     responseBody: developmentCriterionRecordSchema,
+    idempotent: true,
   },
   "get /api/v1/development/assessments": {
     responseBody: arraySchema(developmentAssessmentRecordSchema),
@@ -3610,6 +3618,7 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/development/assessments": {
     requestBody: developmentAssessmentCreateRequestSchema,
     responseBody: developmentAssessmentRecordSchema,
+    idempotent: true,
   },
   "get /api/v1/me/student/development-assessments": {
     responseBody: arraySchema(developmentTrendItemSchema),
@@ -4252,7 +4261,7 @@ const operationContracts: Record<string, OperationContract> = {
     listResponse: true,
   },
   "post /api/v1/grade-levels": {
-    requestBody: namedSchoolReferenceCreateRequestSchema,
+    requestBody: gradeLevelCreateRequestSchema,
     responseBody: namedSchoolReferenceRecordSchema,
   },
   "get /api/v1/grade-levels/{id}": {
@@ -4393,6 +4402,7 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/teacher-notes": {
     requestBody: teacherNoteCreateRequestSchema,
     responseBody: teacherNoteRecordSchema,
+    idempotent: true,
   },
   "patch /api/v1/teacher-notes/{id}": {
     requestBody: teacherNoteUpdateRequestSchema,
@@ -4430,6 +4440,7 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/support-tickets": {
     requestBody: supportTicketCreateRequestSchema,
     responseBody: supportTicketRecordSchema,
+    idempotent: true,
   },
   "patch /api/v1/support-tickets/{id}": {
     requestBody: supportTicketUpdateRequestSchema,
@@ -4449,6 +4460,7 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/me/student/support-tickets": {
     requestBody: portalSupportTicketCreateRequestSchema,
     responseBody: portalStudentSupportTicketRecordSchema,
+    idempotent: true,
   },
   "get /api/v1/me/guardian/students/{studentId}/support-tickets": {
     responseBody: arraySchema(portalStudentSupportTicketRecordSchema),
@@ -4457,6 +4469,7 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/me/guardian/students/{studentId}/support-tickets": {
     requestBody: portalSupportTicketCreateRequestSchema,
     responseBody: portalStudentSupportTicketRecordSchema,
+    idempotent: true,
   },
   "get /api/v1/me/teacher/support-tickets": {
     responseBody: arraySchema(portalSupportTicketRecordSchema),
@@ -4465,6 +4478,7 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/me/teacher/support-tickets": {
     requestBody: teacherPortalSupportTicketCreateRequestSchema,
     responseBody: portalSupportTicketRecordSchema,
+    idempotent: true,
   },
   "get /api/v1/me/student/support-tickets/{ticketId}/comments": {
     responseBody: arraySchema(portalSupportTicketCommentRecordSchema),
@@ -4517,6 +4531,7 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/homework/materials": {
     requestBody: homeworkMaterialCreateRequestSchema,
     responseBody: homeworkMaterialRecordSchema,
+    idempotent: true,
   },
   "patch /api/v1/homework/materials/{id}": {
     requestBody: homeworkMaterialUpdateRequestSchema,
@@ -4565,10 +4580,12 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/homework": {
     requestBody: homeworkCreateRequestSchema,
     responseBody: homeworkRecordSchema,
+    idempotent: true,
   },
   "post /api/v1/homework/from-material": {
     requestBody: homeworkFromMaterialCreateRequestSchema,
     responseBody: homeworkRecordSchema,
+    idempotent: true,
   },
   "patch /api/v1/homework/{id}": {
     requestBody: homeworkUpdateRequestSchema,
@@ -4809,6 +4826,7 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "post /api/v1/identity-invitations/{id}/resend": {
     responseBody: identityInvitationRecordSchema,
+    idempotent: true,
   },
   "get /api/v1/message-templates": {
     responseBody: arraySchema(messageTemplateRecordSchema),
@@ -4817,6 +4835,7 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/message-templates": {
     requestBody: messageTemplateCreateRequestSchema,
     responseBody: messageTemplateRecordSchema,
+    idempotent: true,
   },
   "get /api/v1/message-templates/{id}": {
     responseBody: messageTemplateRecordSchema,

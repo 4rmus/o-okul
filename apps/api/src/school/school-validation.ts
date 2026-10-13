@@ -46,7 +46,7 @@ const optionalDateString = optionalCalendarDateString("DATE_INVALID");
 const teacherAssignmentRoleSchema = z.enum(["CLASS_TEACHER", "BRANCH_TEACHER", "GUIDANCE_COUNSELOR", "RESPONSIBLE_TEACHER"]);
 
 export const campusCreateBodySchema = z.object({
-  code: optionalTrimmedString,
+  code: requiredTrimmedString,
   unitType: z.enum(["SCHOOL", "COURSE", "MIXED"]).optional(),
   name: requiredUppercaseString,
   tenantId: optionalNonEmptyString,
@@ -59,7 +59,7 @@ export const campusUpdateBodySchema = z.object({
 }).strict() satisfies z.ZodType<CampusUpdateRequest>;
 
 export const gradeLevelCreateBodySchema = z.object({
-  code: optionalTrimmedString,
+  code: requiredTrimmedString,
   name: requiredUppercaseString,
   tenantId: optionalNonEmptyString,
 }).strict() satisfies z.ZodType<GradeLevelCreateRequest>;
@@ -70,7 +70,7 @@ export const gradeLevelUpdateBodySchema = z.object({
 }).strict() satisfies z.ZodType<GradeLevelUpdateRequest>;
 
 export const alanCreateBodySchema = z.object({
-  code: optionalTrimmedString,
+  code: requiredTrimmedString,
   gradeLevelId: optionalNonEmptyString,
   name: requiredUppercaseString,
   tenantId: optionalNonEmptyString,

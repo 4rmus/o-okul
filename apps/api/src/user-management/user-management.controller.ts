@@ -1,4 +1,4 @@
-import { Body, Controller, Get, GoneException, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, GoneException, Param, Patch, Post, Query, UseGuards, Headers } from "@nestjs/common";
 import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
 import { optionalTrimmedString, zodBody, zodQuery } from "../http/zod-validation.js";
@@ -67,8 +67,8 @@ export class EmployeeAccessController {
 
   @Post()
   @RequireCapability("user:manage")
-  create(@Body(zodBody(employeeCreateBodySchema)) body: EmployeeCreateBody): Promise<EmployeeAccessRecord> {
-    return this.users.createEmployee(getRequestContext(), body);
+  create(@Body(zodBody(employeeCreateBodySchema)) body: EmployeeCreateBody, @Headers("idempotency-key") idempotencyKey?: string): Promise<EmployeeAccessRecord> {
+    return this.users.createEmployee(getRequestContext(), body, idempotencyKey);
   }
 
   @Post(":id/account-invitations")

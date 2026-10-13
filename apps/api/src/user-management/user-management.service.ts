@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { IdempotencyService } from "../http/idempotency.js";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { authSessionStoreToken, type SessionStore } from "../auth/session-store.js";
@@ -30,6 +31,7 @@ export class UserManagementService {
     @Inject(userManagementStoreToken) private readonly store: UserManagementStore,
     @Inject(authSessionStoreToken) private readonly sessions: SessionStore,
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
   async list(context: RequestContext): Promise<TenantUserRecord[]> {
@@ -49,7 +51,18 @@ export class UserManagementService {
     }
   }
 
-  async createEmployee(context: RequestContext, input: EmployeeCreateRequest): Promise<EmployeeAccessRecord> {
+  async createEmployee(context: RequestContext, input: EmployeeCreateRequest, idempotencyKey?: string): Promise<EmployeeAccessRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "employee.create", request: { actorUserId: context.userId, input } },
+        () => this.createEmployeeOnce(context, input),
+      );
+    }
+    return this.createEmployeeOnce(context, input);
+  }
+
+  private async createEmployeeOnce(context: RequestContext, input: EmployeeCreateRequest): Promise<EmployeeAccessRecord> {
     const tenantId = this.requireTenantWideContext(context);
     try {
       const employee = await this.store.createEmployee(tenantId, input);

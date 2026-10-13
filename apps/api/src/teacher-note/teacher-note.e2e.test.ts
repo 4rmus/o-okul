@@ -250,4 +250,19 @@ describe("TeacherNote API", () => {
     await request(server).get("/teacher-notes").set("Authorization", `Bearer ${studentAAccessToken}`).expect(403);
     await request(server).get("/teacher-notes").set("Authorization", `Bearer ${guardianAAccessToken}`).expect(403);
   });
+
+  it("öğretmen notu oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
+    const body = { studentId: "student-a", visibility: "INTERNAL", body: "Tekil not.", developmentStatus: "FOLLOW_UP" };
+    const send = (payload: object) => request(server)
+      .post("/teacher-notes")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .set("Idempotency-Key", "teacher-note-create-idempotency-a")
+      .send(payload);
+    const first = await send(body).expect(201);
+    const second = await send(body).expect(201);
+    expect(second.body).toEqual(first.body);
+    await send({ ...body, body: "Başka not." })
+      .expect(409)
+      .expect(({ body: error }) => expect(error.error.code).toBe("IDEMPOTENCY_KEY_BODY_MISMATCH"));
+  });
 });

@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { IdempotencyService } from "../http/idempotency.js";
 import type { TeacherNoteRecord, TeacherNoteVisibility } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
@@ -43,6 +44,7 @@ export class TeacherNoteService {
     @Inject(guardianStudentStoreToken) private readonly guardianStudentStore: GuardianStudentStore,
     @Inject(teacherAssignmentStoreToken) private readonly teacherAssignmentStore: TeacherAssignmentStore,
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
   async list(context: RequestContext, filters: TeacherNoteListFilters = {}): Promise<TeacherNoteRecord[]> {
@@ -68,7 +70,18 @@ export class TeacherNoteService {
     return this.listVisibleForSubjectStudent(context, studentId);
   }
 
-  async create(context: RequestContext, input: Partial<TeacherNoteInput>): Promise<TeacherNoteRecord> {
+  async create(context: RequestContext, input: Partial<TeacherNoteInput>, idempotencyKey?: string): Promise<TeacherNoteRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "teacher-note.create", request: { actorUserId: context.userId, input } },
+        () => this.createOnce(context, input),
+      );
+    }
+    return this.createOnce(context, input);
+  }
+
+  private async createOnce(context: RequestContext, input: Partial<TeacherNoteInput>): Promise<TeacherNoteRecord> {
     const student = await this.findStudentForTeacherScope(context, requiredText(input.studentId, "TEACHER_NOTE_STUDENT_REQUIRED"));
     const teacher = await this.findTeacherForTenant(context, await this.resolveTeacherId(context, input.teacherId));
     const academicContext = await this.resolveAcademicContext(context, student.tenantId, input);

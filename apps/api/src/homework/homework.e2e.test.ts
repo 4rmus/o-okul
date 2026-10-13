@@ -1263,4 +1263,49 @@ describe("Homework API", () => {
   it("yetkisiz request ödev endpointine erişemez", async () => {
     await request(server).get("/homework").expect(401);
   });
+
+  it("materyal oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
+    const body = { title: "Tekil föy", description: "Aynı istek" };
+    const send = (payload: object) => request(server)
+      .post("/homework/materials")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", "homework-material-create-idempotency-a")
+      .send(payload);
+    const first = await send(body).expect(201);
+    const second = await send(body).expect(201);
+    expect(second.body).toEqual(first.body);
+    await send({ ...body, title: "Başka föy" })
+      .expect(409)
+      .expect(({ body: error }) => expect(error.error.code).toBe("IDEMPOTENCY_KEY_BODY_MISMATCH"));
+  });
+
+  it("ödev oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
+    const body = { classId: "class-a", title: "Tekil ödev", description: "Sayfa 10", dueAt: "2026-06-08T12:00:00.000Z" };
+    const send = (payload: object) => request(server)
+      .post("/homework")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", "homework-create-idempotency-a")
+      .send(payload);
+    const first = await send(body).expect(201);
+    const second = await send(body).expect(201);
+    expect(second.body).toEqual(first.body);
+    await send({ ...body, title: "Başka ödev" })
+      .expect(409)
+      .expect(({ body: error }) => expect(error.error.code).toBe("IDEMPOTENCY_KEY_BODY_MISMATCH"));
+  });
+
+  it("materyalden ödev oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
+    const body = { classId: "class-a", materialId: "material-a", dueAt: "2026-06-09T12:00:00.000Z" };
+    const send = (payload: object) => request(server)
+      .post("/homework/from-material")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", "homework-from-material-create-idempotency-a")
+      .send(payload);
+    const first = await send(body).expect(201);
+    const second = await send(body).expect(201);
+    expect(second.body).toEqual(first.body);
+    await send({ ...body, dueAt: "2026-06-10T12:00:00.000Z" })
+      .expect(409)
+      .expect(({ body: error }) => expect(error.error.code).toBe("IDEMPOTENCY_KEY_BODY_MISMATCH"));
+  });
 });

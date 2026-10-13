@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Post, Query, UseGuards, Headers } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
@@ -28,8 +28,9 @@ export class DevelopmentController {
   @RequireCapability("academic:manage")
   createCriterion(
     @Body(zodBody(developmentCriterionBodySchema)) body: DevelopmentCriterionBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<DevelopmentCriterionRecord> {
-    return this.development.createCriterion(getRequestContext(), body);
+    return this.development.createCriterion(getRequestContext(), body, idempotencyKey);
   }
 
   @Get("assessments")
@@ -42,7 +43,8 @@ export class DevelopmentController {
   @Roles("TEACHER")
   createAssessment(
     @Body(zodBody(developmentAssessmentBodySchema)) body: DevelopmentAssessmentBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<DevelopmentAssessmentWithScores> {
-    return this.development.createAssessment(getRequestContext(), body);
+    return this.development.createAssessment(getRequestContext(), body, idempotencyKey);
   }
 }

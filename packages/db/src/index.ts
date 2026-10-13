@@ -16,4 +16,5 @@ export { PostgresInstitutionResetRequests, parseInstitutionResetRequest, assertI
 
 export { runTenantMutationActivity, requireNoTenantMutationActivity, type TenantMutationAdmission, type TenantMutationRunner } from "./tenant-mutation-activity.js";
 export * from "./license-state.js";
+export * from "./idempotency-retention.js";
 export * from "./tenant-expiry-purge.js";

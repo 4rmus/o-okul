@@ -49,8 +49,9 @@ export class SupportTicketController {
   @Roles("TEACHER")
   create(
     @Body(zodBody(supportTicketCreateBodySchema)) body: SupportTicketCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<SupportTicketRecord> {
-    return this.tickets.create(getRequestContext(), body);
+    return this.tickets.create(getRequestContext(), body, idempotencyKey);
   }
 
   @Patch(":id")

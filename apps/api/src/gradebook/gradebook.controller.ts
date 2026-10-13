@@ -55,8 +55,8 @@ export class GradebookController {
   /** Management, or a teacher for an assigned class and course (DEC-20261012-01); the service enforces the scope. */
   @Post()
   @RequireCapability("academic:read")
-  create(@Body(zodBody(assessmentCreateSchema)) body: GradeAssessmentCreateRequest): Promise<GradeAssessmentRecord> {
-    return this.gradebook.createAssessment(getRequestContext(), body);
+  create(@Body(zodBody(assessmentCreateSchema)) body: GradeAssessmentCreateRequest, @Headers("idempotency-key") idempotencyKey?: string): Promise<GradeAssessmentRecord> {
+    return this.gradebook.createAssessment(getRequestContext(), body, idempotencyKey);
   }
 
   @Get("teacher-scopes")

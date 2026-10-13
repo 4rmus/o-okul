@@ -49,6 +49,7 @@ describe("DevelopmentService", () => {
       periodLabel: "2026 Haziran",
       scores: [{ criterionId: criterion.id, score: 5 }],
     })).rejects.toThrow(BadRequestException);
+    expect(await setup.store.listAssessments("student-a")).toEqual([]);
   });
 
   it("ogrenci ve veli gorunumunde sadece GUARDIAN gorunurlukteki degerlendirmeleri dondurur", async () => {
@@ -120,8 +121,9 @@ describe("DevelopmentService", () => {
 
 function createService() {
   const auditRecords: unknown[] = [];
+  const store = new InMemoryDevelopmentStore();
   const service = new DevelopmentService(
-    new InMemoryDevelopmentStore(),
+    store,
     {
       findById: async (id: string) => {
         if (id === "student-a") {
@@ -153,7 +155,7 @@ function createService() {
       },
     } as never,
   );
-  return { service, auditRecords };
+  return { service, auditRecords, store };
 }
 
 const adminContext: RequestContext = {

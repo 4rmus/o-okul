@@ -11,6 +11,7 @@ import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import {
   firstFormError,
+  gradeLevelCreateFormSchema,
   gradeLevelFormSchema,
   type GradeLevelFormPayload,
   type GradeLevelFormState,
@@ -180,7 +181,7 @@ export function GradeLevelsPage() {
     if (!auth) return;
 
     setError("");
-    const parsedForm = gradeLevelFormSchema.safeParse(form);
+    const parsedForm = (editingGradeLevel ? gradeLevelFormSchema : gradeLevelCreateFormSchema).safeParse(form);
     if (!parsedForm.success) {
       setError(firstFormError(parsedForm.error));
       return;
