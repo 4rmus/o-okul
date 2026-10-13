@@ -256,8 +256,6 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
 3. S4: §3.4 doğrulama planı (dosya talebi, görüşmeler, pilot taahhüdü); ürün sahibi işi.
 4. S5/S6: PO-3 kapasite ölçümü ve PO-10 production kanıt zinciri; PO-10 tarihi 2027-01-03'te.
 5. S3: PO-2 off-host TR yedek; ürün sahibi kararıyla en sona kaldı (2026-10-10). Aday karşılaştırması `docs/po-2-tr-s3-karsilastirma.md`.
-6. Idempotency kapsamı Dilim 1.1: öğretmen, öğrenci ve veli davetleri için bekleyen davet tekil indeksi.
-   Staging'de salt okunur çift davet sayımı bekleniyor (`docs/idempotency-kapsam-plani.md` Dilim 1.1).
 
 Önceki plandan devralınan kalemler (`docs/account-management-architecture-plan.md` bölüm 6; 2026-10-10'da
 durumları yeniden doğrulanmadı, S1 bulgularıyla birlikte ele alınır):
@@ -284,7 +282,8 @@ Plan `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §10.1 uyarınca her dilim
 | 2026-10-05 | KV-3, KV-3b–e veli daveti ve bağlama | son: CI `37307143622` + STAGING_DEPLOY `37308747203` PASS | PR #143, #145–#148 | – / 1 |
 | 2026-10-05 | KF-9 fiyat sayfası, KV-8 otomatik veli bildirimleri | Kendi run'ları runner almadığı için düştü (kod hatası değil); kod `f712fda` ile CI `38048883293` + STAGING_DEPLOY `38049664810` PASS | PR #151, #152 | 7,5–15, 15–25 / 1 |
 | 2026-10-10 | Ajan/skill yönetişimi: Claude Code kanonik yüzey, Codex kaldırıldı, `.claude/settings.json` subagent sınırları, `pnpm agents:check` sahiplik/gate/roster denetimi (plan dışı araç dilimi) | CI (main `38048883293` PASS) + STAGING_DEPLOY (Staging Deploy #188 `38049664810` PASS; dört servis `f712fda` imajı, cutover artifact'i yayınlandı) | `f712fda` / PR #154 | – / 1 |
-| 2026-10-13 | Idempotency kapsamı: 23505→409, `code` zorunlu, 14 uca anahtar, gerekçeli istisna listesi, 24 saat saklama (Dilim 1.1 hariç) | LOCAL_TEST; CI ve STAGING bekliyor | branch `quality/idempotency-kapsami` | – / 1 |
+| 2026-10-13 | Idempotency kapsamı: 23505→409, `code` zorunlu, 14 uca anahtar, gerekçeli istisna listesi, 24 saat saklama (Dilim 1.1 hariç) | CI `38393601309` PASS + STAGING_DEPLOY `38402654154` PASS (dört servis `0accd7d2d`); saklama sweep'i staging worker log'unda saatlik çalışıyor | `5e03fc163` / PR #173, baseline düzeltmesi `0accd7d2d` / PR #174 | – / 1 |
+| 2026-10-13 | Idempotency Dilim 1.1: bekleyen e-posta daveti tekil indeksi, otomatik davette yeniden kullanım | LOCAL_TEST (yerel Postgres 17 migration + davet testleri); staging çift davet sayımı 0 (STAGING, salt okunur); CI ve STAGING_DEPLOY bekliyor | branch `quality/bekleyen-davet-tekilligi` | – / 1 |
 
 Tüm satırlarda plan günü efor haftası × 5 iş günüdür; gerçek gün dilim başlangıcından merge'e takvim günüdür. Kanıt main'e girme ve deploy kanıtıdır; dilimlerin kabul metrikleri STAGING'de ölçülmedi (UNPROVEN, S1).
 

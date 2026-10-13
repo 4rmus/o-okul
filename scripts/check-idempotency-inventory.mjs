@@ -135,7 +135,7 @@ const knownNonIdempotentMutations = {
     "@Delete(\":id\")": "C: Soft delete",
   },
   "apps/api/src/identity-invitation/identity-invitation.controller.ts": {
-    "@Post()": "AÇIK: Tekrar ikinci davet ve e-posta açar; bekleyen davet tekil indeksi staging sayımından sonra eklenecek (docs/idempotency-kapsam-plani.md Dilim 1.1)",
+    "@Post()": "B: Kişi başına tek bekleyen e-posta daveti (IdentityInvitation_one_pending_email_link_key); aynı adrese tekrar IDENTITY_INVITATION_ALREADY_PENDING alır",
     "@Post(\"accept\")": "D: Tek kullanımlık token; status='PENDING' CAS",
   },
   "apps/api/src/identity-invitation/student-portal-activation.controller.ts": {
@@ -243,7 +243,7 @@ const knownNonIdempotentMutations = {
   },
   "apps/api/src/teacher/teachers.controller.ts": {
     "@Post(\"imports/dry-run\")": "D: Yazmaz",
-    "@Patch(\":id\")": "AÇIK: Hesapsız öğretmende email ile her tekrar yeni davet ve e-posta açar; bekleyen davet tekil indeksi bekleniyor (Dilim 1.1)",
+    "@Patch(\":id\")": "B: Otomatik davet bekleyen daveti yeniden kullanır (ensureEmailInvitation); tekil indeks ikinci e-postayı engeller",
     "@Patch(\":id/assignments/:assignmentId\")": "C: Değere set eder",
     "@Post(\":id/purge-pii\")": "C: Sabitle üzerine yazar",
     "@Delete(\":id\")": "C: Durum korumalı soft delete",
