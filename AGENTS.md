@@ -30,12 +30,14 @@
 - Use no more than three subagents total. If one subagent writes, at most two read-only subagents may remain.
 - Read-only reviewers run with `permissionMode: plan` and without Write/Edit tools; they still carry Bash, so they must not run state-changing commands.
 - Before every gate starts, define its objective, owned paths, forbidden paths, acceptance criteria, and validation commands.
-- When a gate completes, report its result and stop; do not automatically continue to the next gate.
+- Gates are commits, not PRs. When a gate completes, commit it on the milestone branch and continue to the next gate; stop only for an approval-required action, an ambiguity that changes the deliverable, or a failure you cannot diagnose. When the user asks for step-by-step work, stop after each gate.
+- One milestone, one branch, one PR: push and open the PR once the milestone is done. Review findings and follow-up fixes found before merge go on the same branch, not a new PR.
 - Report `LOCAL_STATIC`, `LOCAL_TEST`, `CI`, `STAGING`, `PRODUCTION`, `EXTERNAL_NOT_RUN`, and `UNPROVEN` as separate evidence classes.
 - Deploys, provider actions, secret/config changes, DB/data mutations, and mutating smokes require explicit user approval.
 - Every delegated task needs: objective, owned paths, forbidden paths, expected output, and validation commands.
 - Subagent summaries should return findings and changed files, not raw logs.
-- When a plan slice closes, record it in `status.md` "Açık İşler" with date, slice id, evidence class, and SHA/PR.
+- When a plan slice closes, record it in `status.md` "Açık İşler" with date, slice id, evidence class, and SHA/PR, in the same PR as the slice. Decision, status, and UAT records that belong to a feature ride in that feature's PR; standalone doc records are batched into one docs PR.
+- Pull requests that change only `docs/`, `status.md`, `README.md`, or `PLAN.md` run the light `docs-check` job in `.github/workflows/ci.yml` instead of full CI; `docs/evidence-manifests/` and `docs/measurement-baselines/` still trigger full CI, and pushes to main always run it.
 - After editing any agent, skill, settings, or MCP file, run `pnpm agents:check` in the same change.
 
 ## Agent Roster
