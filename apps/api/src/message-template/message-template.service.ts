@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { IdempotencyService } from "../http/idempotency.js";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { requiredText } from "../shared/required-text.js";
@@ -21,6 +22,7 @@ export class MessageTemplateService {
   constructor(
     @Inject(messageTemplateStoreToken) private readonly store: MessageTemplateStore,
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
   async list(context: RequestContext): Promise<MessageTemplateRecord[]> {
@@ -37,7 +39,18 @@ export class MessageTemplateService {
     return template;
   }
 
-  async create(context: RequestContext, input: Partial<MessageTemplateRecord>): Promise<MessageTemplateRecord> {
+  async create(context: RequestContext, input: Partial<MessageTemplateRecord>, idempotencyKey?: string): Promise<MessageTemplateRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "message-template.create", request: { actorUserId: context.userId, input } },
+        () => this.createOnce(context, input),
+      );
+    }
+    return this.createOnce(context, input);
+  }
+
+  private async createOnce(context: RequestContext, input: Partial<MessageTemplateRecord>): Promise<MessageTemplateRecord> {
     const tenantId = this.resolveTenantId(context, input.tenantId);
 
     const record = await this.store.create({

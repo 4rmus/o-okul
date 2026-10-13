@@ -192,4 +192,19 @@ describe("MessageTemplate API", () => {
   it("yetkisiz request mesaj şablonu endpointine erişemez", async () => {
     await request(server).get("/message-templates").expect(401);
   });
+
+  it("mesaj şablonu oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
+    const body = { name: "Tekil şablon", channel: "SMS", body: "Aynı şablon iki kez gönderildi." };
+    const send = (payload: object) => request(server)
+      .post("/message-templates")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", "message-template-create-idempotency-a")
+      .send(payload);
+    const first = await send(body).expect(201);
+    const second = await send(body).expect(201);
+    expect(second.body).toEqual(first.body);
+    await send({ ...body, name: "Başka şablon" })
+      .expect(409)
+      .expect(({ body: error }) => expect(error.error.code).toBe("IDEMPOTENCY_KEY_BODY_MISMATCH"));
+  });
 });

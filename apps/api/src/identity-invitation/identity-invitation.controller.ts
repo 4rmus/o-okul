@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query, UseGuards, Headers } from "@nestjs/common";
 import type {
   IdentityInvitationAcceptResponse,
   IdentityInvitationRecord as PublicIdentityInvitationRecord,
@@ -51,8 +51,8 @@ export class IdentityInvitationController {
 
   @Post(":id/resend")
   @RequireCapability("user:manage")
-  async resend(@Param("id") id: string): Promise<PublicIdentityInvitationRecord> {
-    return toPublicIdentityInvitationRecord((await this.invitations.resend(getRequestContext(), id)).invitation);
+  async resend(@Param("id") id: string, @Headers("idempotency-key") idempotencyKey?: string): Promise<PublicIdentityInvitationRecord> {
+    return toPublicIdentityInvitationRecord(await this.invitations.resend(getRequestContext(), id, idempotencyKey));
   }
 }
 

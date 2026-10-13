@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards, Headers } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
@@ -34,8 +34,9 @@ export class MessageTemplateController {
   @RequireCapability("announcement:manage")
   create(
     @Body(zodBody(messageTemplateCreateBodySchema)) body: MessageTemplateCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<MessageTemplateRecord> {
-    return this.templates.create(getRequestContext(), body);
+    return this.templates.create(getRequestContext(), body, idempotencyKey);
   }
 
   @Patch(":id")

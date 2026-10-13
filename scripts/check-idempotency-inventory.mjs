@@ -64,6 +64,20 @@ const inventory = [
   entry("teacher.assignment.create", "POST", "/api/v1/teachers/{id}/assignments", "covered", "apps/api/src/teacher/teachers.controller.ts", "apps/api/src/teacher/teacher.service.ts", "apps/api/src/school/school.e2e.test.ts", ["@Post(\":id/assignments\")", "@Headers(\"idempotency-key\")"], ["teacher-assignment-create-idempotency-a"]),
   entry("teacher.create", "POST", "/api/v1/teachers", "covered", "apps/api/src/teacher/teachers.controller.ts", "apps/api/src/teacher/teacher.service.ts", "apps/api/src/school/school.e2e.test.ts", ["@Post()", "@Headers(\"idempotency-key\")"], ["teacher-create-idempotency-a"]),
   entry("teacher.import.commit", "POST", "/api/v1/teachers/imports", "covered", "apps/api/src/teacher/teachers.controller.ts", "apps/api/src/teacher/teacher-import.service.ts", "apps/api/src/school/school.e2e.test.ts", ["@Post(\"imports\")", "@Headers(\"idempotency-key\")"], ["teacher-import-idempotency-a"]),
+  entry("support-ticket.create", "POST", "/api/v1/support-tickets", "covered", "apps/api/src/support-ticket/support-ticket.controller.ts", "apps/api/src/support-ticket/support-ticket.service.ts", "apps/api/src/support-ticket/support-ticket.e2e.test.ts", ["@Post()", "@Headers(\"idempotency-key\")"], ["support-ticket-create-idempotency-a"]),
+  entry("support-ticket.create", "POST", "/api/v1/me/teacher/support-tickets", "covered", "apps/api/src/me/me.controller.ts", "apps/api/src/support-ticket/support-ticket.service.ts", "apps/api/src/support-ticket/support-ticket.e2e.test.ts", ["@Post(\"teacher/support-tickets\")", "@Headers(\"idempotency-key\")"], ["teacher-support-ticket-create-idempotency-a"]),
+  entry("support-ticket.create", "POST", "/api/v1/me/student/support-tickets", "covered", "apps/api/src/me/me.controller.ts", "apps/api/src/support-ticket/support-ticket.service.ts", "apps/api/src/support-ticket/support-ticket.e2e.test.ts", ["@Post(\"student/support-tickets\")", "@Headers(\"idempotency-key\")"], ["student-support-ticket-create-idempotency-a"]),
+  entry("support-ticket.create", "POST", "/api/v1/me/guardian/students/{studentId}/support-tickets", "covered", "apps/api/src/me/me.controller.ts", "apps/api/src/support-ticket/support-ticket.service.ts", "apps/api/src/support-ticket/support-ticket.e2e.test.ts", ["@Post(\"guardian/students/:studentId/support-tickets\")", "@Headers(\"idempotency-key\")"], ["guardian-support-ticket-create-idempotency-a"]),
+  entry("identity-invitation.resend", "POST", "/api/v1/identity-invitations/{id}/resend", "covered", "apps/api/src/identity-invitation/identity-invitation.controller.ts", "apps/api/src/identity-invitation/identity-invitation.service.ts", "apps/api/src/identity-invitation/identity-invitation.e2e.test.ts", ["@Post(\":id/resend\")", "@Headers(\"idempotency-key\")"], ["identity-invitation-resend-idempotency-a"]),
+  entry("employee.create", "POST", "/api/v1/employees", "covered", "apps/api/src/user-management/user-management.controller.ts", "apps/api/src/user-management/user-management.service.ts", "apps/api/src/user-management/user-management.e2e.test.ts", ["@Post()", "@Headers(\"idempotency-key\")"], ["employee-create-idempotency-a"]),
+  entry("message-template.create", "POST", "/api/v1/message-templates", "covered", "apps/api/src/message-template/message-template.controller.ts", "apps/api/src/message-template/message-template.service.ts", "apps/api/src/message-template/message-template.e2e.test.ts", ["@Post()", "@Headers(\"idempotency-key\")"], ["message-template-create-idempotency-a"]),
+  entry("teacher-note.create", "POST", "/api/v1/teacher-notes", "covered", "apps/api/src/teacher-note/teacher-note.controller.ts", "apps/api/src/teacher-note/teacher-note.service.ts", "apps/api/src/teacher-note/teacher-note.e2e.test.ts", ["@Post()", "@Headers(\"idempotency-key\")"], ["teacher-note-create-idempotency-a"]),
+  entry("grade-assessment.create", "POST", "/api/v1/grade-assessments", "covered", "apps/api/src/gradebook/gradebook.controller.ts", "apps/api/src/gradebook/gradebook.service.ts", "apps/api/src/gradebook/gradebook.e2e.test.ts", ["@Post()", "@Headers(\"idempotency-key\")"], ["grade-assessment-create-idempotency-a"]),
+  entry("homework.material.create", "POST", "/api/v1/homework/materials", "covered", "apps/api/src/homework/homework.controller.ts", "apps/api/src/homework/homework.service.ts", "apps/api/src/homework/homework.e2e.test.ts", ["@Post(\"materials\")", "@Headers(\"idempotency-key\")"], ["homework-material-create-idempotency-a"]),
+  entry("homework.create", "POST", "/api/v1/homework", "covered", "apps/api/src/homework/homework.controller.ts", "apps/api/src/homework/homework.service.ts", "apps/api/src/homework/homework.e2e.test.ts", ["@Post()", "@Headers(\"idempotency-key\")"], ["homework-create-idempotency-a"]),
+  entry("homework.from-material.create", "POST", "/api/v1/homework/from-material", "covered", "apps/api/src/homework/homework.controller.ts", "apps/api/src/homework/homework.service.ts", "apps/api/src/homework/homework.e2e.test.ts", ["@Post(\"from-material\")", "@Headers(\"idempotency-key\")"], ["homework-from-material-create-idempotency-a"]),
+  entry("development.criterion.create", "POST", "/api/v1/development/criteria", "covered", "apps/api/src/development/development.controller.ts", "apps/api/src/development/development.service.ts", "apps/api/src/development/development.controller.e2e.test.ts", ["@Post(\"criteria\")", "@Headers(\"idempotency-key\")"], ["development-criterion-create-idempotency-a"]),
+  entry("development.assessment.create", "POST", "/api/v1/development/assessments", "covered", "apps/api/src/development/development.controller.ts", "apps/api/src/development/development.service.ts", "apps/api/src/development/development.controller.e2e.test.ts", ["@Post(\"assessments\")", "@Headers(\"idempotency-key\")"], ["development-assessment-create-idempotency-a"]),
 ];
 
 // Controller'daki her @Post/@Patch/@Put/@Delete endpoint'i ya envanterde ya bu listede olmalı; yeni bir
@@ -73,18 +87,17 @@ const inventory = [
 const knownNonIdempotentMutations = {
   "apps/api/src/attendance/attendance.controller.ts": ['@Put("daily")'],
   "apps/api/src/auth/auth.controller.ts": ['@Post("login")', '@Post("login/select")', '@Post("totp/verify")', '@Post("totp/enrollment/confirm")', '@Post("refresh")', '@Post("persona/switch")', '@Post("logout")', '@Post("password-reset/request")', '@Post("password-reset/confirm")', '@Post("totp/setup")', '@Post("totp/confirm")', '@Post("totp/disable")', '@Post("totp/admin-reset")', '@Post("step-up")'],
-  "apps/api/src/development/development.controller.ts": ['@Post("criteria")', '@Post("assessments")'],
   "apps/api/src/exam/answer-key.controller.ts": ['@Post("imports/dry-run")'],
   "apps/api/src/exam/exam.controller.ts": ['@Patch(":examId")', '@Delete(":examId")'],
   "apps/api/src/exam/parser-config.controller.ts": ['@Post("suggestions")'],
-  "apps/api/src/gradebook/gradebook.controller.ts": ['@Post()', '@Put(":id/entries")'],
+  "apps/api/src/gradebook/gradebook.controller.ts": ['@Put(":id/entries")'],
   "apps/api/src/guardian-notification/guardian-notification-settings.controller.ts": ['@Patch()'],
   "apps/api/src/guardian/guardians.controller.ts": ['@Patch(":id")', '@Post(":id/purge-pii")', '@Patch(":id/students/:studentId")', '@Delete(":id/students/:studentId")', '@Delete(":id")'],
-  "apps/api/src/homework/homework.controller.ts": ['@Post("materials")', '@Patch("materials/:id")', '@Delete("materials/:id")', '@Post()', '@Post("from-material")', '@Patch(":id")', '@Patch(":id/check-status")', '@Delete(":id")'],
-  "apps/api/src/identity-invitation/identity-invitation.controller.ts": ['@Post()', '@Post("accept")', '@Post(":id/resend")'],
+  "apps/api/src/homework/homework.controller.ts": ['@Patch("materials/:id")', '@Delete("materials/:id")', '@Patch(":id")', '@Patch(":id/check-status")', '@Delete(":id")'],
+  "apps/api/src/identity-invitation/identity-invitation.controller.ts": ['@Post()', '@Post("accept")'],
   "apps/api/src/identity-invitation/student-portal-activation.controller.ts": ['@Post("activate")'],
-  "apps/api/src/me/me.controller.ts": ['@Post("password")', '@Delete("sessions/:id")', '@Delete("sessions")', '@Patch("tenant")', '@Post("notification-devices")', '@Delete("notification-devices/:id")', '@Post("student/announcements/:id/read")', '@Post("student/support-tickets")', '@Post("guardian/students/:studentId/announcements/:id/read")', '@Patch("guardian/students/:studentId/notification-preferences")', '@Post("guardian/students/:studentId/support-tickets")', '@Post("teacher/support-tickets")', '@Post("teacher/announcements/:id/read")'],
-  "apps/api/src/message-template/message-template.controller.ts": ['@Post()', '@Patch(":id")', '@Delete(":id")'],
+  "apps/api/src/me/me.controller.ts": ['@Post("password")', '@Delete("sessions/:id")', '@Delete("sessions")', '@Patch("tenant")', '@Post("notification-devices")', '@Delete("notification-devices/:id")', '@Post("student/announcements/:id/read")', '@Post("guardian/students/:studentId/announcements/:id/read")', '@Patch("guardian/students/:studentId/notification-preferences")', '@Post("teacher/announcements/:id/read")'],
+  "apps/api/src/message-template/message-template.controller.ts": ['@Patch(":id")', '@Delete(":id")'],
   "apps/api/src/operations/device-backup.controller.ts": ['@Post("download")', '@Post("preview")'],
   "apps/api/src/operations/device-restore.controller.ts": ['@Post(":operationId/cancel")', '@Post("tenants/:tenantId/:operationId/approve")'],
   "apps/api/src/privacy/privacy.controller.ts": ['@Post("me/purge-pii")'],
@@ -101,11 +114,11 @@ const knownNonIdempotentMutations = {
   "apps/api/src/sms-batch/sms-batch.controller.ts": ['@Post("recipients/preview")'],
   "apps/api/src/student/student-contact.controller.ts": ['@Patch(":id")', '@Delete(":id")'],
   "apps/api/src/student/student.controller.ts": ['@Post("imports/dry-run")', '@Patch(":id")', '@Patch(":id/profile")', '@Patch(":id/portal-access")', '@Post(":id/portal-invitations")', '@Post(":id/purge-pii")', '@Delete(":id")', '@Patch(":id/tenant")'],
-  "apps/api/src/support-ticket/support-ticket.controller.ts": ['@Post()', '@Patch(":id")'],
-  "apps/api/src/teacher-note/teacher-note.controller.ts": ['@Post()', '@Patch(":id")', '@Delete(":id")'],
+  "apps/api/src/support-ticket/support-ticket.controller.ts": ['@Patch(":id")'],
+  "apps/api/src/teacher-note/teacher-note.controller.ts": ['@Patch(":id")', '@Delete(":id")'],
   "apps/api/src/teacher/teachers.controller.ts": ['@Post("imports/dry-run")', '@Patch(":id")', '@Patch(":id/assignments/:assignmentId")', '@Post(":id/purge-pii")', '@Delete(":id")', '@Delete(":id/assignments/:assignmentId")'],
   "apps/api/src/tenant/tenant.controller.ts": ['@Post("current/reset-request")', '@Post("current/reset-request/revoke")', '@Post(":id/purge-exports")', '@Post(":id/purge-exports/:exportId/delivery")', '@Post()', '@Patch(":id")', '@Post(":id/license-terms")', '@Delete(":id")'],
-  "apps/api/src/user-management/user-management.controller.ts": ['@Patch(":userId/roles")', '@Post()', '@Post(":id/account-invitations")', '@Patch(":id")'],
+  "apps/api/src/user-management/user-management.controller.ts": ['@Patch(":userId/roles")', '@Post(":id/account-invitations")', '@Patch(":id")'],
 };
 
 const failures = [];
@@ -115,6 +128,7 @@ if (readFileSync("apps/api/src/tenant/tenant-fresh-reset.service.ts", "utf8").in
 if (readFileSync("apps/api/src/operations/device-restore.service.ts", "utf8").includes('hashIdempotencyRequest("tenant.device-restore.request"')) operationsInCode.add("tenant.device-restore.request");
 const inventoryOperations = new Set(inventory.map((item) => item.operation));
 const operationsWithoutRequestBody = new Set([
+  "identity-invitation.resend",
   "answer-key.publish",
   "grade-assessment.publish",
   "homework.submission.submit",

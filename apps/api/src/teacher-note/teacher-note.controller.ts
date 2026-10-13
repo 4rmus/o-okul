@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards, Headers } from "@nestjs/common";
 import type { TeacherNoteRecord } from "@o-okul/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
@@ -34,8 +34,8 @@ export class TeacherNoteController {
 
   @Post()
   @Roles("TEACHER")
-  create(@Body(zodBody(teacherNoteCreateBodySchema)) body: TeacherNoteCreateBody): Promise<TeacherNoteRecord> {
-    return this.notes.create(getRequestContext(), body);
+  create(@Body(zodBody(teacherNoteCreateBodySchema)) body: TeacherNoteCreateBody, @Headers("idempotency-key") idempotencyKey?: string): Promise<TeacherNoteRecord> {
+    return this.notes.create(getRequestContext(), body, idempotencyKey);
   }
 
   @Patch(":id")

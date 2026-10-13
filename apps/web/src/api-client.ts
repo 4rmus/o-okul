@@ -313,8 +313,33 @@ export async function authenticatedFetch(accessToken: string, input: RequestInfo
   }
 }
 
+// A POST without its own Idempotency-Key reuses one key per user, URL and body until a 2xx arrives, so a
+// double click or a resubmit after a lost response replays on endpoints in the idempotency inventory
+// instead of creating a second record. After a success the next identical POST gets a fresh key.
+const pendingIdempotencyKeys = new Map<string, string>();
+
+export function idempotencyFingerprint(userId: string, input: RequestInfo | URL, init: RequestInit): string | undefined {
+  if ((init.method ?? "GET").toUpperCase() !== "POST" || typeof init.body !== "string") return undefined;
+  if (new Headers(init.headers).has("idempotency-key")) return undefined;
+  const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  return `${userId} ${url} ${init.body}`;
+}
+
+function withPendingIdempotencyKey(init: RequestInit, fingerprint: string): RequestInit {
+  let key = pendingIdempotencyKeys.get(fingerprint);
+  if (!key) {
+    key = globalThis.crypto.randomUUID();
+    pendingIdempotencyKeys.set(fingerprint, key);
+  }
+  const headers = new Headers(init.headers);
+  headers.set("Idempotency-Key", key);
+  return { ...init, headers };
+}
+
 export async function apiRequest<T>(accessToken: string, input: RequestInfo | URL, init: RequestInit = {}): Promise<T> {
-  const response = await authenticatedFetch(accessToken, input, init);
+  const fingerprint = idempotencyFingerprint(activeAuth?.session.userId ?? "", input, init);
+  const response = await authenticatedFetch(accessToken, input, fingerprint ? withPendingIdempotencyKey(init, fingerprint) : init);
+  if (fingerprint && response.ok) pendingIdempotencyKeys.delete(fingerprint);
   if (!response.ok) {
     throw new ApiRequestError("API_REQUEST_FAILED", response.status, await readErrorCode(response));
   }

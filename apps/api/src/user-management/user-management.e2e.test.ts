@@ -334,4 +334,20 @@ describe("Tenant user management", () => {
         expect(responseBody.employee.access).toMatchObject({ staffRole: "TENANT_ADMIN", version: 3 });
       });
   });
+
+  it("çalışan oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
+    const token = await login("admin-a@example.test");
+    const body = { firstName: "Tekil", lastName: "Çalışan", workEmail: "tekil.calisan@example.test", status: "ACTIVE" };
+    const send = (payload: object) => request(server)
+      .post("/employees")
+      .set("Authorization", `Bearer ${token}`)
+      .set("Idempotency-Key", "employee-create-idempotency-a")
+      .send(payload);
+    const first = await send(body).expect(201);
+    const second = await send(body).expect(201);
+    expect(second.body).toEqual(first.body);
+    await send({ ...body, firstName: "Başka" })
+      .expect(409)
+      .expect(({ body: error }) => expect(error.error.code).toBe("IDEMPOTENCY_KEY_BODY_MISMATCH"));
+  });
 });

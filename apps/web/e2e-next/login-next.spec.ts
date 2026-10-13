@@ -1553,6 +1553,8 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
 
     if (path === "/campuses" && request.method() === "POST") {
       const body = request.postDataJSON() as { name: string; code?: string };
+      // apiRequest attaches a stable Idempotency-Key to POSTs that do not set one.
+      expect(request.headers()["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/);
       const created: CampusFixture = {
         id: "campus-created",
         tenantId: "tenant-a",

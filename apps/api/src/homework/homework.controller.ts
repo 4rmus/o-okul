@@ -111,8 +111,9 @@ export class HomeworkController {
   @RequireCapability("academic:manage")
   createMaterial(
     @Body(zodBody(homeworkMaterialCreateBodySchema)) body: HomeworkMaterialCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<HomeworkMaterialRecord> {
-    return this.homework.createMaterial(getRequestContext(), body);
+    return this.homework.createMaterial(getRequestContext(), body, idempotencyKey);
   }
 
   @Patch("materials/:id")
@@ -140,16 +141,17 @@ export class HomeworkController {
   /** Management, or a class/branch teacher of the class (DEC-20261012-01); the service enforces the assignment. */
   @Post()
   @Roles("TEACHER")
-  create(@Body(zodBody(homeworkCreateBodySchema)) body: HomeworkCreateBody): Promise<HomeworkRecord> {
-    return this.homework.create(getRequestContext(), body);
+  create(@Body(zodBody(homeworkCreateBodySchema)) body: HomeworkCreateBody, @Headers("idempotency-key") idempotencyKey?: string): Promise<HomeworkRecord> {
+    return this.homework.create(getRequestContext(), body, idempotencyKey);
   }
 
   @Post("from-material")
   @RequireCapability("academic:manage")
   createFromMaterial(
     @Body(zodBody(homeworkFromMaterialCreateBodySchema)) body: HomeworkFromMaterialCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<HomeworkRecord> {
-    return this.homework.createFromMaterial(getRequestContext(), body);
+    return this.homework.createFromMaterial(getRequestContext(), body, idempotencyKey);
   }
 
   @Patch(":id")

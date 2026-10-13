@@ -151,4 +151,39 @@ describe("Development API", () => {
       },
     });
   });
+
+  it("gelişim kriteri oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
+    const body = { name: "Tekil kriter", scaleMin: 1, scaleMax: 5, sortOrder: 20 };
+    const send = (payload: object) => request(server)
+      .post("/development/criteria")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", "development-criterion-create-idempotency-a")
+      .send(payload);
+    const first = await send(body).expect(201);
+    const second = await send(body).expect(201);
+    expect(second.body).toEqual(first.body);
+    await send({ ...body, name: "Başka kriter" })
+      .expect(409)
+      .expect(({ body: error }) => expect(error.error.code).toBe("IDEMPOTENCY_KEY_BODY_MISMATCH"));
+  });
+
+  it("gelişim değerlendirmesi oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
+    const criterion = await request(server)
+      .post("/development/criteria")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "Tekil değerlendirme kriteri", scaleMin: 1, scaleMax: 5, sortOrder: 30 })
+      .expect(201);
+    const body = { periodLabel: "2026 Temmuz", scores: [{ criterionId: criterion.body.id, score: 3 }], studentId: "student-a", visibility: "GUARDIAN" };
+    const send = (payload: object) => request(server)
+      .post("/development/assessments")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .set("Idempotency-Key", "development-assessment-create-idempotency-a")
+      .send(payload);
+    const first = await send(body).expect(201);
+    const second = await send(body).expect(201);
+    expect(second.body).toEqual(first.body);
+    await send({ ...body, periodLabel: "2026 Ağustos" })
+      .expect(409)
+      .expect(({ body: error }) => expect(error.error.code).toBe("IDEMPOTENCY_KEY_BODY_MISMATCH"));
+  });
 });

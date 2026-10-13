@@ -111,4 +111,19 @@ describe("Gradebook API", () => {
     await request(server).post(`/grade-assessments/${id}/publish`).set("Authorization", `Bearer ${tenantB}`)
       .set("Idempotency-Key", "ak7-tenant-b").expect(404);
   });
+
+  it("değerlendirme oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
+    const body = { classId: "class-a", courseId: "course-math", termId: "term-2026-spring", kind: "WRITTEN", title: "Tekil yazılı", heldOn: "2026-03-20" };
+    const send = (payload: object) => request(server)
+      .post("/grade-assessments")
+      .set("Authorization", `Bearer ${teacher}`)
+      .set("Idempotency-Key", "grade-assessment-create-idempotency-a")
+      .send(payload);
+    const first = await send(body).expect(201);
+    const second = await send(body).expect(201);
+    expect(second.body).toEqual(first.body);
+    await send({ ...body, title: "Başka yazılı" })
+      .expect(409)
+      .expect(({ body: error }) => expect(error.error.code).toBe("IDEMPOTENCY_KEY_BODY_MISMATCH"));
+  });
 });

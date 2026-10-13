@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { IdempotencyService } from "../http/idempotency.js";
 import type { DevelopmentAssessmentVisibility, DevelopmentTrendItem } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
@@ -53,13 +54,25 @@ export class DevelopmentService {
     @Inject(teacherAssignmentStoreToken) private readonly teacherAssignments: TeacherAssignmentStore,
     @Inject(guardianStudentStoreToken) private readonly guardianStudents: GuardianStudentStore,
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
   async listCriteria(context: RequestContext): Promise<DevelopmentCriterionRecord[]> {
     return filterTenantResources(context, await this.store.listCriteria());
   }
 
-  async createCriterion(context: RequestContext, input: DevelopmentCriterionInput): Promise<DevelopmentCriterionRecord> {
+  async createCriterion(context: RequestContext, input: DevelopmentCriterionInput, idempotencyKey?: string): Promise<DevelopmentCriterionRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "development.criterion.create", request: { actorUserId: context.userId, input } },
+        () => this.createCriterionOnce(context, input),
+      );
+    }
+    return this.createCriterionOnce(context, input);
+  }
+
+  private async createCriterionOnce(context: RequestContext, input: DevelopmentCriterionInput): Promise<DevelopmentCriterionRecord> {
     const tenantId = requireTenantId(context);
     const scaleMin = optionalInt(input.scaleMin, 1, "DEVELOPMENT_CRITERION_SCALE_INVALID");
     const scaleMax = optionalInt(input.scaleMax, 5, "DEVELOPMENT_CRITERION_SCALE_INVALID");
@@ -117,7 +130,18 @@ export class DevelopmentService {
     return this.listVisibleForStudent(context, student.id);
   }
 
-  async createAssessment(context: RequestContext, input: DevelopmentAssessmentInput): Promise<DevelopmentAssessmentWithScores> {
+  async createAssessment(context: RequestContext, input: DevelopmentAssessmentInput, idempotencyKey?: string): Promise<DevelopmentAssessmentWithScores> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "development.assessment.create", request: { actorUserId: context.userId, input } },
+        () => this.createAssessmentOnce(context, input),
+      );
+    }
+    return this.createAssessmentOnce(context, input);
+  }
+
+  private async createAssessmentOnce(context: RequestContext, input: DevelopmentAssessmentInput): Promise<DevelopmentAssessmentWithScores> {
     const tenantId = requireTenantId(context);
     const studentId = requiredText(input.studentId, "DEVELOPMENT_ASSESSMENT_STUDENT_REQUIRED");
     const student = await this.students.findById(studentId);
@@ -146,6 +170,16 @@ export class DevelopmentService {
     const criteria = await Promise.all(scoreInputs.map((score) =>
       this.requireCriterion(tenantId, requiredText(score.criterionId, "DEVELOPMENT_SCORE_CRITERION_REQUIRED")),
     ));
+    // Validate every score before the first write so an out-of-range score no longer leaves an
+    // assessment without scores behind.
+    const validatedScores = scoreInputs.map((scoreInput, index) => {
+      const criterion = criteria[index]!;
+      const score = requiredInt(scoreInput.score, "DEVELOPMENT_SCORE_REQUIRED");
+      if (score < criterion.scaleMin || score > criterion.scaleMax) {
+        throw new BadRequestException("DEVELOPMENT_SCORE_OUT_OF_RANGE");
+      }
+      return { criterionId: criterion.id, score };
+    });
     const assessment = await this.store.createAssessment({
       tenantId,
       studentId: student.id,
@@ -155,19 +189,12 @@ export class DevelopmentService {
       mentorNote: optionalText(input.mentorNote),
       visibility: resolveVisibility(input.visibility),
     });
-    const scores = await Promise.all(scoreInputs.map((scoreInput, index) => {
-      const criterion = criteria[index]!;
-      const score = requiredInt(scoreInput.score, "DEVELOPMENT_SCORE_REQUIRED");
-      if (score < criterion.scaleMin || score > criterion.scaleMax) {
-        throw new BadRequestException("DEVELOPMENT_SCORE_OUT_OF_RANGE");
-      }
-      return this.store.createScore({
-        tenantId,
-        assessmentId: assessment.id,
-        criterionId: criterion.id,
-        score,
-      });
-    }));
+    const scores = await Promise.all(validatedScores.map(({ criterionId, score }) => this.store.createScore({
+      tenantId,
+      assessmentId: assessment.id,
+      criterionId,
+      score,
+    })));
 
     await this.auditLogs?.record({
       tenantId,

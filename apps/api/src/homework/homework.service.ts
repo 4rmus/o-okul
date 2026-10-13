@@ -113,7 +113,18 @@ export class HomeworkService {
     return material;
   }
 
-  async createMaterial(
+  async createMaterial(context: RequestContext, input: Partial<HomeworkMaterialRecord>, idempotencyKey?: string): Promise<HomeworkMaterialRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "homework.material.create", request: { actorUserId: context.userId, input } },
+        () => this.createMaterialOnce(context, input),
+      );
+    }
+    return this.createMaterialOnce(context, input);
+  }
+
+  private async createMaterialOnce(
     context: RequestContext,
     input: Partial<HomeworkMaterialRecord>,
   ): Promise<HomeworkMaterialRecord> {
@@ -439,7 +450,18 @@ export class HomeworkService {
     return homework;
   }
 
-  async create(context: RequestContext, input: Partial<HomeworkRecord>): Promise<HomeworkRecord> {
+  async create(context: RequestContext, input: Partial<HomeworkRecord>, idempotencyKey?: string): Promise<HomeworkRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "homework.create", request: { actorUserId: context.userId, input } },
+        () => this.createOnce(context, input),
+      );
+    }
+    return this.createOnce(context, input);
+  }
+
+  private async createOnce(context: RequestContext, input: Partial<HomeworkRecord>): Promise<HomeworkRecord> {
     const tenantId = this.resolveTenantId(context, input.tenantId);
     await this.assertClassAccess(context, input.classId);
     // DEC-20261012-01: a teacher needs an assignment naming this class as its class or branch teacher.
@@ -467,7 +489,18 @@ export class HomeworkService {
     return record;
   }
 
-  async createFromMaterial(
+  async createFromMaterial(context: RequestContext, input: { tenantId?: string; classId?: string; materialId?: string; dueAt?: string }, idempotencyKey?: string): Promise<HomeworkRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "homework.from-material.create", request: { actorUserId: context.userId, input } },
+        () => this.createFromMaterialOnce(context, input),
+      );
+    }
+    return this.createFromMaterialOnce(context, input);
+  }
+
+  private async createFromMaterialOnce(
     context: RequestContext,
     input: { tenantId?: string; classId?: string; materialId?: string; dueAt?: string },
   ): Promise<HomeworkRecord> {

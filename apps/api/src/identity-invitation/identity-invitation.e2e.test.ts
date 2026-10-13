@@ -57,9 +57,13 @@ describe("Identity invitations", () => {
     response: request.Response;
     activationToken: string;
   }> {
-    const originalResend = invitations.resend.bind(invitations);
+    // The public resend returns only the invitation; the token is issued by the private resendOnce.
+    const issuer = invitations as unknown as {
+      resendOnce(context: unknown, id: string): Promise<{ activationToken: string }>;
+    };
+    const originalResend = issuer.resendOnce.bind(invitations);
     let activationToken: string | undefined;
-    const spy = vi.spyOn(invitations, "resend").mockImplementation(async (context, id) => {
+    const spy = vi.spyOn(issuer, "resendOnce").mockImplementation(async (context, id) => {
       const result = await originalResend(context, id);
       activationToken = result.activationToken;
       return result;
@@ -325,5 +329,34 @@ describe("Identity invitations", () => {
         email: "already-linked@example.test",
       })
       .expect(400);
+  });
+
+  it("davet yeniden göndermeyi Idempotency-Key ile tekilleştirir ve yeni token üretmez", async () => {
+    const admin = await login("admin-a@example.test");
+    const teacher = await request(server)
+      .post("/teachers")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ firstName: "Tekil", lastName: "Davet", branch: "Fen", nationalId: "10000002810" })
+      .expect(201);
+    const invite = await request(server)
+      .post("/identity-invitations")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ subjectType: "TEACHER", subjectId: (teacher.body as { id: string }).id, email: "tekil-davet@example.test" })
+      .expect(201);
+    const resend = () => request(server)
+      .post(`/identity-invitations/${invite.body.id}/resend`)
+      .set("Authorization", `Bearer ${admin}`)
+      .set("Idempotency-Key", "identity-invitation-resend-idempotency-a");
+
+    const { response: first } = await captureResendActivationToken(() => resend().expect(201));
+    const issuer = invitations as unknown as { resendOnce(context: unknown, id: string): Promise<unknown> };
+    const spy = vi.spyOn(issuer, "resendOnce");
+    try {
+      const second = await resend().expect(201);
+      expect(second.body).toEqual(first.body);
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
