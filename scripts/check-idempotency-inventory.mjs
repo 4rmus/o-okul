@@ -66,6 +66,48 @@ const inventory = [
   entry("teacher.import.commit", "POST", "/api/v1/teachers/imports", "covered", "apps/api/src/teacher/teachers.controller.ts", "apps/api/src/teacher/teacher-import.service.ts", "apps/api/src/school/school.e2e.test.ts", ["@Post(\"imports\")", "@Headers(\"idempotency-key\")"], ["teacher-import-idempotency-a"]),
 ];
 
+// Controller'daki her @Post/@Patch/@Put/@Delete endpoint'i ya envanterde ya bu listede olmalı; yeni bir
+// değiştiren endpoint sınıflandırılana kadar kontrol düşer. Liste 2026-10-13 main durumundan üretilmiş
+// bir baseline'dır: buradaki her endpoint'in Idempotency-Key gerektirmediği tek tek doğrulanmadı
+// (UNPROVEN). Bir endpoint envantere taşınınca buradan silinir; liste yalnız küçülmelidir.
+const knownNonIdempotentMutations = {
+  "apps/api/src/attendance/attendance.controller.ts": ['@Put("daily")'],
+  "apps/api/src/auth/auth.controller.ts": ['@Post("login")', '@Post("login/select")', '@Post("totp/verify")', '@Post("totp/enrollment/confirm")', '@Post("refresh")', '@Post("persona/switch")', '@Post("logout")', '@Post("password-reset/request")', '@Post("password-reset/confirm")', '@Post("totp/setup")', '@Post("totp/confirm")', '@Post("totp/disable")', '@Post("totp/admin-reset")', '@Post("step-up")'],
+  "apps/api/src/development/development.controller.ts": ['@Post("criteria")', '@Post("assessments")'],
+  "apps/api/src/exam/answer-key.controller.ts": ['@Post("imports/dry-run")'],
+  "apps/api/src/exam/exam.controller.ts": ['@Patch(":examId")', '@Delete(":examId")'],
+  "apps/api/src/exam/parser-config.controller.ts": ['@Post("suggestions")'],
+  "apps/api/src/gradebook/gradebook.controller.ts": ['@Post()', '@Put(":id/entries")'],
+  "apps/api/src/guardian-notification/guardian-notification-settings.controller.ts": ['@Patch()'],
+  "apps/api/src/guardian/guardians.controller.ts": ['@Patch(":id")', '@Post(":id/purge-pii")', '@Patch(":id/students/:studentId")', '@Delete(":id/students/:studentId")', '@Delete(":id")'],
+  "apps/api/src/homework/homework.controller.ts": ['@Post("materials")', '@Patch("materials/:id")', '@Delete("materials/:id")', '@Post()', '@Post("from-material")', '@Patch(":id")', '@Patch(":id/check-status")', '@Delete(":id")'],
+  "apps/api/src/identity-invitation/identity-invitation.controller.ts": ['@Post()', '@Post("accept")', '@Post(":id/resend")'],
+  "apps/api/src/identity-invitation/student-portal-activation.controller.ts": ['@Post("activate")'],
+  "apps/api/src/me/me.controller.ts": ['@Post("password")', '@Delete("sessions/:id")', '@Delete("sessions")', '@Patch("tenant")', '@Post("notification-devices")', '@Delete("notification-devices/:id")', '@Post("student/announcements/:id/read")', '@Post("student/support-tickets")', '@Post("guardian/students/:studentId/announcements/:id/read")', '@Patch("guardian/students/:studentId/notification-preferences")', '@Post("guardian/students/:studentId/support-tickets")', '@Post("teacher/support-tickets")', '@Post("teacher/announcements/:id/read")'],
+  "apps/api/src/message-template/message-template.controller.ts": ['@Post()', '@Patch(":id")', '@Delete(":id")'],
+  "apps/api/src/operations/device-backup.controller.ts": ['@Post("download")', '@Post("preview")'],
+  "apps/api/src/operations/device-restore.controller.ts": ['@Post(":operationId/cancel")', '@Post("tenants/:tenantId/:operationId/approve")'],
+  "apps/api/src/privacy/privacy.controller.ts": ['@Post("me/purge-pii")'],
+  "apps/api/src/program/schedule.controller.ts": ['@Patch(":id")', '@Delete(":id")'],
+  "apps/api/src/program/study-session.controller.ts": ['@Patch(":id")', '@Delete(":id")'],
+  "apps/api/src/role-preview/role-preview.controller.ts": ['@Post()'],
+  "apps/api/src/school/academic-calendar.controller.ts": ['@Post("academic-years")', '@Patch("academic-years/:id")', '@Delete("academic-years/:id")', '@Post("academic-terms")', '@Patch("academic-terms/:id")', '@Delete("academic-terms/:id")'],
+  "apps/api/src/school/alanlar.controller.ts": ['@Post()', '@Patch(":id")', '@Delete(":id")'],
+  "apps/api/src/school/campuses.controller.ts": ['@Post()', '@Patch(":id")', '@Delete(":id")'],
+  "apps/api/src/school/classes.controller.ts": ['@Patch(":id")', '@Delete(":id")'],
+  "apps/api/src/school/courses.controller.ts": ['@Patch(":id")', '@Delete(":id")'],
+  "apps/api/src/school/grade-levels.controller.ts": ['@Put(":id/courses/:courseId")', '@Post()', '@Patch(":id")', '@Delete(":id")'],
+  "apps/api/src/school/learning-outcomes.controller.ts": ['@Post()', '@Post("imports/dry-run")', '@Patch(":id")', '@Delete(":id")'],
+  "apps/api/src/sms-batch/sms-batch.controller.ts": ['@Post("recipients/preview")'],
+  "apps/api/src/student/student-contact.controller.ts": ['@Patch(":id")', '@Delete(":id")'],
+  "apps/api/src/student/student.controller.ts": ['@Post("imports/dry-run")', '@Patch(":id")', '@Patch(":id/profile")', '@Patch(":id/portal-access")', '@Post(":id/portal-invitations")', '@Post(":id/purge-pii")', '@Delete(":id")', '@Patch(":id/tenant")'],
+  "apps/api/src/support-ticket/support-ticket.controller.ts": ['@Post()', '@Patch(":id")'],
+  "apps/api/src/teacher-note/teacher-note.controller.ts": ['@Post()', '@Patch(":id")', '@Delete(":id")'],
+  "apps/api/src/teacher/teachers.controller.ts": ['@Post("imports/dry-run")', '@Patch(":id")', '@Patch(":id/assignments/:assignmentId")', '@Post(":id/purge-pii")', '@Delete(":id")', '@Delete(":id/assignments/:assignmentId")'],
+  "apps/api/src/tenant/tenant.controller.ts": ['@Post("current/reset-request")', '@Post("current/reset-request/revoke")', '@Post(":id/purge-exports")', '@Post(":id/purge-exports/:exportId/delivery")', '@Post()', '@Patch(":id")', '@Post(":id/license-terms")', '@Delete(":id")'],
+  "apps/api/src/user-management/user-management.controller.ts": ['@Patch(":userId/roles")', '@Post()', '@Post(":id/account-invitations")', '@Patch(":id")'],
+};
+
 const failures = [];
 const operationsInCode = extractOperations("apps/api/src");
 if (readFileSync("apps/api/src/tenant/tenant.service.ts", "utf8").includes('hashIdempotencyRequest("tenant.lifecycle.change"')) operationsInCode.add("tenant.lifecycle.change");
@@ -109,6 +151,27 @@ for (const item of inventory) {
   }
 }
 
+const controllerMutations = listControllerMutations("apps/api/src");
+const controllerMutationKeys = new Set(controllerMutations.map(({ path, token }) => `${path}::${token}`));
+const inventoryControllerKeys = new Set(inventory.map((item) => `${item.controllerFile}::${item.controllerTokens[0]}`));
+for (const key of controllerMutationKeys) {
+  const [path, token] = key.split("::");
+  const allowlisted = knownNonIdempotentMutations[path]?.includes(token) ?? false;
+  if (!inventoryControllerKeys.has(key) && !allowlisted) {
+    failures.push(`Mutation endpoint ne idempotency envanterinde ne istisna listesinde: ${path} ${token}`);
+  }
+  if (inventoryControllerKeys.has(key) && allowlisted) {
+    failures.push(`Mutation endpoint hem envanterde hem istisna listesinde (birini kaldır): ${path} ${token}`);
+  }
+}
+for (const [path, tokens] of Object.entries(knownNonIdempotentMutations)) {
+  for (const token of tokens) {
+    if (!controllerMutationKeys.has(`${path}::${token}`)) {
+      failures.push(`İstisna listesi bayat, endpoint kodda yok: ${path} ${token}`);
+    }
+  }
+}
+
 const uatKurums07 = findTableRow(files.journeys, "UAT-KURUM-07");
 for (const token of [
   "idempotent calisir",
@@ -128,7 +191,7 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`Idempotency envanter kontrolu gecti: ${inventory.length} operation, tamaminda OpenAPI Idempotency-Key header ve response envelope covered.`);
+console.log(`Idempotency envanter kontrolu gecti: ${inventory.length} operation, tamaminda OpenAPI Idempotency-Key header ve response envelope covered; ${controllerMutationKeys.size} controller mutation endpoint envanter/istisna siniflandirmasiyla tarandi.`);
 
 function entry(operation, method, path, openApi, controllerFile, serviceFile, testFile, controllerTokens, testTokens) {
   return { operation, method, path, openApi, controllerFile, serviceFile, testFile, controllerTokens, testTokens };
@@ -137,6 +200,20 @@ function entry(operation, method, path, openApi, controllerFile, serviceFile, te
 function extractOperations(root) {
   const source = readFileSyncRecursiveManifest(root);
   return new Set([...source.matchAll(/operation:\s*"([^"]+)"/g)].map((match) => match[1]));
+}
+
+// Endpoint anahtarı dosya + decorator token'ıdır; aynı dosyada aynı token iki kez geçerse
+// tek endpoint sayılır. O durumda tam route çözümlemesi gerekir.
+function listControllerMutations(root) {
+  const mutations = [];
+  for (const fileEntry of readdirSync(root, { withFileTypes: true, recursive: true })) {
+    if (!fileEntry.isFile() || !fileEntry.name.endsWith(".controller.ts")) continue;
+    const path = join(fileEntry.parentPath ?? fileEntry.path, fileEntry.name);
+    for (const match of readFileSync(path, "utf8").matchAll(/@(Post|Patch|Put|Delete)\((?:"([^"]*)")?\)/g)) {
+      mutations.push({ path, token: `@${match[1]}(${match[2] !== undefined ? JSON.stringify(match[2]) : ""})` });
+    }
+  }
+  return mutations;
 }
 
 function readFileSyncRecursiveManifest(root) {
