@@ -3,7 +3,8 @@
 Tarih: 2026-10-13
 Başlangıç sürümü: `main` / `26b3bb8da`
 Durum: Dilim 1.2, 2, 3 ve 4 #173 ile main'de ve staging'de (`0accd7d2d`, run `38402654154`). Dilim 1.1
-ayrı PR'da uygulandı (LOCAL_TEST; CI ve STAGING bekliyor). Yeni özellik değildir; mevcut değiştiren endpoint'lerin tekrar dayanıklılığını düzeltir.
+#175 ile main'de (`8ca26e768`); main CI'ı ilgisiz bir test kapanış yarışıyla düştüğü için staging deploy'u atlandı,
+staging kanıtı düzeltme PR'ının merge'inden sonra `status.md` kapanış kaydına yazılır. Yeni özellik değildir; mevcut değiştiren endpoint'lerin tekrar dayanıklılığını düzeltir.
 
 Ürün sahibi kararları (2026-10-13):
 - `IdempotencyKey` kayıtları 24 saat saklanır (açık soru 6.1).

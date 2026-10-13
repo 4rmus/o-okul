@@ -31,6 +31,8 @@ describePostgres("account-management backfill on PostgreSQL (UAT F-16)", () => {
     await server.query(`CREATE DATABASE ${databaseName}`);
     await server.query(`GRANT CONNECT ON DATABASE ${databaseName} TO app, migration`);
     admin = new pg.Pool({ connectionString: databaseUrl });
+    // An idle client the server closes after end() must not become an uncaught exception; queries report their own errors.
+    admin.on("error", () => {});
     // Same bootstrap as docker/postgres/init (001 roles, 004 extensions, 006 device restore schema).
     await admin.query("ALTER SCHEMA public OWNER TO migration");
     await admin.query("CREATE EXTENSION IF NOT EXISTS pg_trgm");
@@ -47,7 +49,12 @@ describePostgres("account-management backfill on PostgreSQL (UAT F-16)", () => {
   }, 180_000);
 
   afterAll(async () => {
+    // pg-pool's end() resolves before its client sockets close. A FORCE drop at that moment terminates
+    // the still-open backends, the dropped clients emit a pool "error" and vitest fails the run with
+    // "terminating connection due to administrator command" (main CI 2026-10-13, twice). Wait until the
+    // server no longer sees those sessions before dropping the database.
     await admin?.end();
+    await waitForSessionsToClose(server, databaseName);
     await server.query(`DROP DATABASE IF EXISTS ${databaseName} WITH (FORCE)`);
     await server.end();
     rmSync(outputRoot, { recursive: true, force: true });
@@ -128,6 +135,18 @@ async function snapshot(pool: pg.Pool): Promise<unknown> {
     pool.query(`SELECT * FROM "User" WHERE "tenantId" = $1 ORDER BY "id"`, [tenantId]),
   ]);
   return { members: members.rows, scopes: scopes.rows, users: users.rows };
+}
+
+async function waitForSessionsToClose(server: pg.Pool, database: string, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const { rows } = await server.query<{ count: number }>(
+      `SELECT count(*)::int AS count FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()`,
+      [database],
+    );
+    if (rows[0]?.count === 0) return;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+  }
 }
 
 function withDatabase(url: string, database: string): string {
