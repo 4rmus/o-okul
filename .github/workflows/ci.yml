@@ -2,6 +2,7 @@ name: CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches:
       - main
@@ -14,7 +15,9 @@ concurrency:
 jobs:
   # Docs-only pull requests run the light doc checks instead of the full suite (2026-10-12, UAT batching).
   # Pushes to main always run the full suite so deploy evidence stays complete.
+  # Draft pull requests skip CI entirely; marking the PR ready for review triggers the full run (2026-10-13).
   changes:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
