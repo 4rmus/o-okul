@@ -47,6 +47,8 @@ export interface IdentityInvitationStore {
   findByTokenHash(tokenHash: string): Promise<(IdentityInvitationRecord & { tenantLifecycleVersion?: number }) | undefined>;
   resend(tenantId: string, id: string, input: { tokenHash: string; expiresAt: string; delivery: SecretDeliveryOutboxInput }): Promise<IdentityInvitationRecord | undefined>;
   markAccepted(id: string, userId: string, acceptedAt: string): Promise<IdentityInvitationRecord | undefined>;
+  /** UAT F-03: withdraws one PENDING invitation; returns undefined when it is not pending any more. */
+  revoke(tenantId: string, id: string): Promise<IdentityInvitationRecord | undefined>;
   revokePendingForSubject(tenantId: string, subjectType: InvitationSubjectType, subjectId: string, kind?: string): Promise<number>;
 }
 
@@ -138,6 +140,14 @@ export class InMemoryIdentityInvitationStore implements IdentityInvitationStore 
     invitation.acceptedAt = acceptedAt;
     invitation.acceptedUserId = userId;
     invitation.updatedAt = acceptedAt;
+    return stripTokenHash(invitation);
+  }
+
+  async revoke(tenantId: string, id: string): Promise<IdentityInvitationRecord | undefined> {
+    const invitation = this.invitations.find((candidate) => candidate.tenantId === tenantId && candidate.id === id && candidate.status === "PENDING");
+    if (!invitation) return undefined;
+    invitation.status = "REVOKED";
+    invitation.updatedAt = new Date().toISOString();
     return stripTokenHash(invitation);
   }
 
@@ -263,6 +273,22 @@ export class PostgresIdentityInvitationStore implements IdentityInvitationStore 
            AND "expiresAt" > $2
          RETURNING *`,
         [id, acceptedAt, userId],
+      );
+      if (!result.rows[0]) return undefined;
+      await clearInvitationDeliveries(client, id);
+      return toIdentityInvitationRecord(result.rows[0]);
+    });
+  }
+
+  async revoke(tenantId: string, id: string): Promise<IdentityInvitationRecord | undefined> {
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const result = await client.query<IdentityInvitationRow>(
+        `UPDATE "IdentityInvitation"
+         SET "status" = 'REVOKED',
+             "updatedAt" = now()
+         WHERE "tenantId" = $1 AND "id" = $2 AND "status" = 'PENDING'
+         RETURNING *`,
+        [tenantId, id],
       );
       if (!result.rows[0]) return undefined;
       await clearInvitationDeliveries(client, id);

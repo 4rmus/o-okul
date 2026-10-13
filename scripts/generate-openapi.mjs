@@ -3987,6 +3987,19 @@ const requiredOperationContracts = [
     ],
   },
   {
+    method: "post",
+    path: "/api/v1/identity-invitations/{id}/revoke",
+    responseEnvelope: true,
+    responseDataRequired: identityInvitationRecordRequired,
+    responseDataForbiddenDeep: identityInvitationResponseForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseData", "subjectType"], enum: identityInvitationSubjectTypes },
+      { path: ["responseData", "role"], enum: tenantAssignableRoles },
+      { path: ["responseData", "status"], enum: identityInvitationStatuses },
+      { path: ["responseData", "expiresAt"], format: "date-time" },
+    ],
+  },
+  {
     method: "get",
     path: "/api/v1/attendance",
     queryParameters: ["classId", "studentId", "date", "dateFrom", "dateTo"].map((name) => ({

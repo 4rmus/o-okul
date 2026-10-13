@@ -27,7 +27,7 @@ export async function loadPendingTeacherInvitations(accessToken: string): Promis
   const invitations = await apiRequest<IdentityInvitationRecord[]>(accessToken, `${apiBaseUrl}/identity-invitations?q=TEACHER`);
   return new Map(
     invitations
-      .filter((invitation) => invitation.subjectType === "TEACHER" && invitation.status === "PENDING")
+      .filter((invitation) => invitation.subjectType === "TEACHER" && invitation.status === "PENDING" && Date.parse(invitation.expiresAt) > Date.now())
       .map((invitation) => [invitation.subjectId, invitation]),
   );
 }
@@ -42,6 +42,13 @@ export function createTeacherInvitation(accessToken: string, teacherId: string, 
 
 export function resendTeacherInvitation(accessToken: string, invitationId: string) {
   return apiRequest<IdentityInvitationRecord>(accessToken, `${apiBaseUrl}/identity-invitations/${encodeURIComponent(invitationId)}/resend`, {
+    method: "POST",
+  });
+}
+
+// UAT F-03: a sent invitation can be withdrawn; the teacher drops back to "Hesap yok" and can be invited again.
+export function revokeTeacherInvitation(accessToken: string, invitationId: string) {
+  return apiRequest<IdentityInvitationRecord>(accessToken, `${apiBaseUrl}/identity-invitations/${encodeURIComponent(invitationId)}/revoke`, {
     method: "POST",
   });
 }

@@ -54,6 +54,13 @@ export class IdentityInvitationController {
   async resend(@Param("id") id: string, @Headers("idempotency-key") idempotencyKey?: string): Promise<PublicIdentityInvitationRecord> {
     return toPublicIdentityInvitationRecord(await this.invitations.resend(getRequestContext(), id, idempotencyKey));
   }
+
+  // UAT F-03: state-guarded (PENDING -> REVOKED); a repeat gets IDENTITY_INVITATION_NOT_PENDING, so no Idempotency-Key.
+  @Post(":id/revoke")
+  @RequireCapability("user:manage")
+  async revoke(@Param("id") id: string): Promise<PublicIdentityInvitationRecord> {
+    return toPublicIdentityInvitationRecord(await this.invitations.revoke(getRequestContext(), id));
+  }
 }
 
 const identityInvitationListFields = [

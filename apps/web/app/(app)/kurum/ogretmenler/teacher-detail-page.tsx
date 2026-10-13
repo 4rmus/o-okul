@@ -4,7 +4,7 @@ import { type FormEvent, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, TeacherAssignmentRecord, TeacherRecord } from "@o-okul/shared-types";
-import { ArrowLeft, BookOpen, ClipboardList, FileText, MailPlus, NotebookTabs, RotateCw } from "lucide-react";
+import { ArrowLeft, BookOpen, ClipboardList, FileText, MailPlus, MailX, NotebookTabs, RotateCw } from "lucide-react";
 import { Button, DataTable, Field, FormModal, InfoGrid, InfoItem, Input, Panel, StatusBadge, TabButton, Tabs, useToast, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../../../src/api-client.js";
@@ -16,6 +16,7 @@ import {
   createTeacherInvitation,
   loadPendingTeacherInvitations,
   resendTeacherInvitation,
+  revokeTeacherInvitation,
   teacherAccountLabels,
   teacherAccountState,
   teacherAccountTones,
@@ -24,6 +25,7 @@ import {
 } from "./teacher-account.js";
 
 const invitationSentMessage = "Davet gönderildi; kabul edilince öğretmen portalı açılır.";
+const invitationRevokedMessage = "Davet iptal edildi; bağlantı artık çalışmaz. Gerekirse yeni davet gönderin.";
 
 interface TeacherDetailData {
   assignments: TeacherAssignmentRecord[];
@@ -94,10 +96,30 @@ export function TeacherDetailPage({ teacherId }: { teacherId: string }) {
     }
   }
 
+  async function handleRevoke() {
+    if (!auth || !pendingInvitation) return;
+    setIsInviting(true);
+    setActionError("");
+    try {
+      await revokeTeacherInvitation(auth.accessToken, pendingInvitation.id);
+      await queryClient.invalidateQueries({ queryKey: invitationsQueryKey });
+      notify(invitationRevokedMessage);
+    } catch (error) {
+      setActionError(teacherInvitationErrorMessage(error));
+    } finally {
+      setIsInviting(false);
+    }
+  }
+
   const accountAction = !canManageAccounts || accountState === "linked" || invitationsQuery.isLoading ? null : accountState === "pending" ? (
-    <Button disabled={isInviting} onClick={() => void handleResend()} type="button" variant="secondary">
-      <RotateCw aria-hidden="true" size={17} /> Yeniden gönder
-    </Button>
+    <>
+      <Button disabled={isInviting} onClick={() => void handleResend()} type="button" variant="secondary">
+        <RotateCw aria-hidden="true" size={17} /> Yeniden gönder
+      </Button>
+      <Button disabled={isInviting} onClick={() => void handleRevoke()} type="button" variant="ghost">
+        <MailX aria-hidden="true" size={17} /> Daveti iptal et
+      </Button>
+    </>
   ) : (
     <Button onClick={() => { setInviteEmail(""); setInviteError(""); setIsInviteOpen(true); }} type="button">
       <MailPlus aria-hidden="true" size={17} /> Hesap daveti gönder

@@ -394,4 +394,158 @@ describe("Identity invitations", () => {
     await invite("yeni.adres@example.test").expect(201);
     expect((await pendingForTeacher()).map((invitation) => invitation.email)).toEqual(["yeni.adres@example.test"]);
   });
+
+  it("bekleyen davet iptal edilince bağlantı ölür, tekrar iptal ve yeniden gönderme reddedilir, yeni davet açılabilir (UAT F-03)", async () => {
+    const admin = await login("admin-a@example.test");
+    const teacher = await request(server)
+      .post("/teachers")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ firstName: "Iptal", lastName: "Ogretmen", branch: "Fen", nationalId: "10000001823" })
+      .expect(201);
+    const teacherId = (teacher.body as { id: string }).id;
+    const { response: invite, activationToken } = await captureCreateActivationToken(() =>
+      request(server)
+        .post("/identity-invitations")
+        .set("Authorization", `Bearer ${admin}`)
+        .send({ subjectType: "TEACHER", subjectId: teacherId, email: "iptal.ogretmen@example.test" })
+        .expect(201),
+    );
+    const invitationId = (invite.body as { id: string }).id;
+
+    const revoked = await request(server)
+      .post(`/identity-invitations/${invitationId}/revoke`)
+      .set("Authorization", `Bearer ${admin}`)
+      .expect(201);
+    expect(revoked.body).toMatchObject({ id: invitationId, status: "REVOKED", subjectId: teacherId });
+    expect(revoked.body).not.toHaveProperty("activationToken");
+    expect(revoked.body).not.toHaveProperty("tokenHash");
+    expect(revoked.body).not.toHaveProperty("acceptedUserId");
+
+    await request(server)
+      .post("/identity-invitations/accept")
+      .send({ token: activationToken, password: "Secure-password-123" })
+      .expect(400)
+      .expect(({ body }) => expect(body.error.code).toBe("IDENTITY_INVITATION_NOT_PENDING"));
+    await request(server)
+      .post(`/identity-invitations/${invitationId}/revoke`)
+      .set("Authorization", `Bearer ${admin}`)
+      .expect(400)
+      .expect(({ body }) => expect(body.error.code).toBe("IDENTITY_INVITATION_NOT_PENDING"));
+    await request(server)
+      .post(`/identity-invitations/${invitationId}/resend`)
+      .set("Authorization", `Bearer ${admin}`)
+      .expect(400);
+    await request(server)
+      .post("/identity-invitations/missing-invitation/revoke")
+      .set("Authorization", `Bearer ${admin}`)
+      .expect(404);
+
+    // The teacher can be invited again right away, with a new address, instead of waiting for the expiry.
+    const again = await request(server)
+      .post("/identity-invitations")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ subjectType: "TEACHER", subjectId: teacherId, email: "iptal.ogretmen.yeni@example.test" })
+      .expect(201);
+    expect(again.body).toMatchObject({ status: "PENDING", subjectId: teacherId });
+    expect(again.body.id).not.toBe(invitationId);
+  });
+
+  it("öğretmen rolü daveti iptal edemez", async () => {
+    const admin = await login("admin-a@example.test");
+    const teacher = await request(server)
+      .post("/teachers")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ firstName: "Yetkisiz", lastName: "Iptal", branch: "Fen", nationalId: "10000001824" })
+      .expect(201);
+    const invite = await request(server)
+      .post("/identity-invitations")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ subjectType: "TEACHER", subjectId: (teacher.body as { id: string }).id, email: "yetkisiz.iptal@example.test" })
+      .expect(201);
+    const teacherSession = await login("teacher-a@example.test");
+    await request(server)
+      .post(`/identity-invitations/${(invite.body as { id: string }).id}/revoke`)
+      .set("Authorization", `Bearer ${teacherSession}`)
+      .expect(403);
+  });
+
+  it("çalışan daveti iptal edilince aynı çalışana yeni rolle davet açılır (UAT F-03)", async () => {
+    const admin = await login("admin-a@example.test");
+    const employee = await request(server)
+      .post("/employees")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ employeeNo: "A-F03-1", firstName: "Yanlis", lastName: "Rol", workEmail: "yanlis.rol@example.test", status: "ACTIVE" })
+      .expect(201);
+    const employeeId = (employee.body as { id: string }).id;
+    const first = await request(server)
+      .post(`/employees/${employeeId}/account-invitations`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ email: "yanlis.rol@example.test", role: "OPERATIONS_STAFF" })
+      .expect(201);
+    await request(server)
+      .post(`/employees/${employeeId}/account-invitations`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ email: "yanlis.rol@example.test", role: "TENANT_ADMIN" })
+      .expect(400)
+      .expect(({ body }) => expect(body.error.code).toBe("EMPLOYEE_INVITATION_ALREADY_PENDING"));
+
+    await request(server)
+      .post(`/identity-invitations/${(first.body as { id: string }).id}/revoke`)
+      .set("Authorization", `Bearer ${admin}`)
+      .expect(201)
+      .expect(({ body }) => expect(body).toMatchObject({ status: "REVOKED", subjectType: "EMPLOYEE", subjectId: employeeId }));
+
+    const second = await request(server)
+      .post(`/employees/${employeeId}/account-invitations`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ email: "yanlis.rol@example.test", role: "TENANT_ADMIN" })
+      .expect(201);
+    expect(second.body).toMatchObject({ role: "TENANT_ADMIN", status: "PENDING", subjectId: employeeId });
+    expect(second.body.id).not.toBe(first.body.id);
+  });
+
+  it("kurum sahibi davetini yalnız kurum sahibi iptal eder (UAT F-03)", async () => {
+    registerTestLoginIdentity("owner-f03@example.test", { tenantSlug: "dna-egitim" });
+    upsertInMemoryAuthUser({
+      id: "user-owner-f03",
+      email: "owner-f03@example.test",
+      name: "Tenant Owner",
+      password: "password",
+      tenantId: "tenant-a",
+      roles: ["TENANT_OWNER"],
+      membership: {
+        id: "membership-owner-f03",
+        staffRole: "TENANT_OWNER",
+        hasTeacherPersona: false,
+        hasStudentPersona: false,
+        version: 1,
+        scopeMode: "TENANT",
+        campusIds: [],
+      },
+    });
+    const owner = await login("owner-f03@example.test");
+    const admin = await login("admin-a@example.test");
+    const employee = await request(server)
+      .post("/employees")
+      .set("Authorization", `Bearer ${owner}`)
+      .send({ employeeNo: "A-F03-2", firstName: "Ikinci", lastName: "Sahip", workEmail: "ikinci.sahip@example.test", status: "ACTIVE" })
+      .expect(201);
+    const invite = await request(server)
+      .post(`/employees/${(employee.body as { id: string }).id}/account-invitations`)
+      .set("Authorization", `Bearer ${owner}`)
+      .send({ email: "ikinci.sahip@example.test", role: "TENANT_OWNER" })
+      .expect(201);
+    const invitationId = (invite.body as { id: string }).id;
+
+    await request(server)
+      .post(`/identity-invitations/${invitationId}/revoke`)
+      .set("Authorization", `Bearer ${admin}`)
+      .expect(403)
+      .expect(({ body }) => expect(body.error.code).toBe("TENANT_OWNER_MANAGE_REQUIRED"));
+    await request(server)
+      .post(`/identity-invitations/${invitationId}/revoke`)
+      .set("Authorization", `Bearer ${owner}`)
+      .expect(201)
+      .expect(({ body }) => expect(body).toMatchObject({ id: invitationId, status: "REVOKED", role: "TENANT_OWNER" }));
+  });
 });

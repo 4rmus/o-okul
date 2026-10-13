@@ -738,6 +738,7 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
     "/homework": [],
     "/homework/material-assignments": [],
     "/homework/materials": [],
+    "/identity-invitations": [],
     "/learning-outcomes": [],
     "/message-templates": [],
     "/optical-form-templates": [],

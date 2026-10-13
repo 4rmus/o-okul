@@ -1665,6 +1665,7 @@ export interface IdentityInvitationAcceptRequest {
 
 export type IdentityInvitationCreateResponse = IdentityInvitationRecord;
 export type IdentityInvitationResendResponse = IdentityInvitationRecord;
+export type IdentityInvitationRevokeResponse = IdentityInvitationRecord;
 
 export interface IdentityInvitationAcceptResponse {
   status: "ACCEPTED";

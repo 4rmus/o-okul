@@ -184,6 +184,41 @@ describePostgres("IdentityInvitationService.accept on PostgreSQL without request
     await expect(service.accept({ token: tokenFor("STUDENT"), password })).rejects.toThrow("SUBJECT_NATIONAL_ID_REQUIRED");
   });
 
+  it("davet iptali bekleyen outbox satırını EXPIRED ve payload'sız bırakır, talep edilmiş satır UNCERTAIN olur (UAT F-03)", async () => {
+    await admin.query(
+      `INSERT INTO "Teacher" ("id", "tenantId", "firstName", "lastName", "updatedAt")
+       VALUES ('invitation-accept-revoke-teacher', $1, 'Iptal', 'Ogretmen', now())`,
+      [tenantId],
+    );
+    await seedInvitation(admin, "TEACHER", "invitation-accept-revoke-teacher", "f03.iptal@example.test", "TEACHER", "revoke-teacher");
+    await admin.query(
+      `INSERT INTO "SecretDeliveryOutbox" (
+         "id", "tenantId", "purpose", "sourceId", "payloadEncrypted", "status", "attempts", "claimedAt", "claimToken", "expiresAt", "updatedAt"
+       ) VALUES
+         ('outbox-revoke-unclaimed', $1, 'IDENTITY_INVITATION', 'invitation-accept-revoke-teacher', 'encrypted-test-payload', 'PENDING', 0, NULL, NULL, now() + interval '1 day', now()),
+         ('outbox-revoke-claimed', $1, 'IDENTITY_INVITATION', 'invitation-accept-revoke-teacher', 'encrypted-test-payload', 'PENDING', 1, now(), 'claim-token', now() + interval '1 day', now())`,
+      [tenantId],
+    );
+
+    const revoked = await service.revoke({ tenantId, userId: "admin-f03", roles: ["TENANT_ADMIN"], bypassRls: false }, "invitation-accept-revoke-teacher");
+    expect(revoked).toMatchObject({ id: "invitation-accept-revoke-teacher", status: "REVOKED" });
+    expect(revoked).not.toHaveProperty("tokenHash");
+
+    const invitation = await admin.query(`SELECT "status" FROM "IdentityInvitation" WHERE "id" = 'invitation-accept-revoke-teacher'`);
+    expect(invitation.rows).toEqual([{ status: "REVOKED" }]);
+    const outbox = await admin.query(
+      `SELECT "id", "status", "payloadEncrypted", "claimToken" FROM "SecretDeliveryOutbox" WHERE "sourceId" = 'invitation-accept-revoke-teacher' ORDER BY "id"`,
+    );
+    expect(outbox.rows).toEqual([
+      { id: "outbox-revoke-claimed", status: "UNCERTAIN", payloadEncrypted: null, claimToken: "claim-token" },
+      { id: "outbox-revoke-unclaimed", status: "EXPIRED", payloadEncrypted: null, claimToken: null },
+    ]);
+    await expect(service.accept({ token: tokenFor("revoke-teacher"), password })).rejects.toThrow("IDENTITY_INVITATION_NOT_PENDING");
+    // A second revoke is refused; the row stays REVOKED and no activity row is opened.
+    await expect(service.revoke({ tenantId, userId: "admin-f03", roles: ["TENANT_ADMIN"], bypassRls: false }, "invitation-accept-revoke-teacher"))
+      .rejects.toThrow("IDENTITY_INVITATION_NOT_PENDING");
+  });
+
   it("çalışan aktivasyonunun reddedilen sonucu activity satırı bırakmaz", async () => {
     await expect(service.accept({ token: tokenFor("EMPLOYEE"), password })).rejects.toThrow("EMPLOYEE_INVITATION_REQUIRES_ACTIVE_PROFILE");
     await expectNoActivity(admin);

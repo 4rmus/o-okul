@@ -12,6 +12,7 @@ import type {
   EmployeeCreateRequest,
   EmployeeInvitationRole,
   EmployeeStaffRole,
+  IdentityInvitationRecord,
   TenantMembershipLifecycleStatus,
   TenantMembershipScopeMode,
   TenantMembershipUpdateRequest,
@@ -33,7 +34,7 @@ import {
   type DataTableColumn,
   type StatusBadgeProps,
 } from "@o-okul/ui";
-import { ChevronLeft, ChevronRight, MailPlus, Pencil, Plus, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, MailPlus, MailX, Pencil, Plus, Search } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError, apiBaseUrl, apiCursorListRequest, apiListRequest, apiRequest, type CursorListMeta } from "../../../../src/api-client.js";
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
@@ -67,6 +68,15 @@ export function EmployeesPage() {
     refetchOnWindowFocus: false,
   });
   const campuses = campusesQuery.data?.data ?? [];
+  // UAT F-03: pending account invitations are shown on the row and can be withdrawn before they expire.
+  const invitationsQueryKey = ["employee-invitations", tenantId];
+  const invitationsQuery = useQuery({
+    queryKey: invitationsQueryKey,
+    queryFn: () => loadPendingEmployeeInvitations(auth?.accessToken ?? ""),
+    enabled: Boolean(auth),
+    refetchOnWindowFocus: false,
+  });
+  const pendingInvitations = invitationsQuery.data ?? new Map<string, IdentityInvitationRecord>();
   const [editingEmployee, setEditingEmployee] = useState<EmployeeAccessRecord | null>(null);
   const [invitingEmployee, setInvitingEmployee] = useState<EmployeeAccessRecord | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -98,7 +108,10 @@ export function EmployeesPage() {
       key: "status",
       header: "Durum",
       priority: "primary",
-      render: (employee) => <StatusBadge tone={statusTone(employee)}>{statusLabel(employee)}</StatusBadge>,
+      render: (employee) => {
+        const pending = !employee.userId && pendingInvitations.has(employee.id);
+        return <StatusBadge tone={pending ? "info" : statusTone(employee)}>{pending ? "Davet bekliyor" : statusLabel(employee)}</StatusBadge>;
+      },
     },
     {
       key: "scope",
@@ -117,9 +130,24 @@ export function EmployeesPage() {
       render: (employee) => {
         const ownerLocked = employee.access?.staffRole === "TENANT_OWNER" && !canManageOwners;
         const endedLocked = employee.access?.status === "ENDED";
+        const pendingInvitation = employee.userId ? undefined : pendingInvitations.get(employee.id);
+        // An owner invitation is withdrawn under the same capability that issued it (owner:manage).
+        const revokeLocked = pendingInvitation?.role === "TENANT_OWNER" && !canManageOwners;
         return (
           <span className="next-row-actions">
-            {!employee.userId ? (
+            {pendingInvitation ? (
+              <Button
+                aria-label={`${employee.firstName} ${employee.lastName} hesap davetini iptal et`}
+                disabled={isSaving || revokeLocked}
+                onClick={() => void handleRevokeInvitation(employee, pendingInvitation)}
+                size="icon"
+                title={revokeLocked ? "Kurum sahibi davetini yalnız başka bir kurum sahibi iptal edebilir." : "Daveti iptal et"}
+                type="button"
+                variant="ghost"
+              >
+                <MailX aria-hidden="true" size={17} />
+              </Button>
+            ) : !employee.userId ? (
               <Button
                 aria-label={`${employee.firstName} ${employee.lastName} için hesap daveti gönder`}
                 disabled={employee.status !== "ACTIVE"}
@@ -214,10 +242,25 @@ export function EmployeesPage() {
     setSubmitError("");
     try {
       await inviteEmployee(auth.accessToken, invitingEmployee.id, invitationForm);
+      await queryClient.invalidateQueries({ queryKey: invitationsQueryKey });
       setInvitingEmployee(null);
       notify("Hesap daveti gönderime alındı. Hesabı açma bağlantısı 24 saat geçerlidir.");
     } catch (error) {
       setSubmitError(employeeWriteErrorMessage(error));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleRevokeInvitation(employee: EmployeeAccessRecord, invitation: IdentityInvitationRecord) {
+    if (!auth) return;
+    setIsSaving(true);
+    try {
+      await revokeInvitation(auth.accessToken, invitation.id);
+      await queryClient.invalidateQueries({ queryKey: invitationsQueryKey });
+      notify(`${employee.firstName} ${employee.lastName} için hesap daveti iptal edildi; satırdan yeni davet gönderebilirsiniz.`);
+    } catch (error) {
+      notify(employeeWriteErrorMessage(error));
     } finally {
       setIsSaving(false);
     }
@@ -606,11 +649,28 @@ function inviteEmployee(
   });
 }
 
+async function loadPendingEmployeeInvitations(accessToken: string): Promise<Map<string, IdentityInvitationRecord>> {
+  const invitations = await apiRequest<IdentityInvitationRecord[]>(accessToken, `${apiBaseUrl}/identity-invitations?q=EMPLOYEE`);
+  return new Map(
+    invitations
+      // Expiry is not materialised in the database; an expired PENDING row is replaced by the next invitation.
+      .filter((invitation) => invitation.subjectType === "EMPLOYEE" && invitation.status === "PENDING" && Date.parse(invitation.expiresAt) > Date.now())
+      .map((invitation) => [invitation.subjectId, invitation]),
+  );
+}
+
+function revokeInvitation(accessToken: string, invitationId: string) {
+  return apiRequest<IdentityInvitationRecord>(accessToken, `${apiBaseUrl}/identity-invitations/${encodeURIComponent(invitationId)}/revoke`, {
+    method: "POST",
+  });
+}
+
 function employeeWriteErrorMessage(error: unknown) {
-  if (error instanceof ApiRequestError && error.code === "EMPLOYEE_INVITATION_ALREADY_PENDING") return "Bu çalışan için zaten bekleyen bir davet var.";
+  if (error instanceof ApiRequestError && (error.code === "IDENTITY_INVITATION_NOT_PENDING" || error.code === "IDENTITY_INVITATION_NOT_FOUND")) return "Davet artık beklemede değil. Sayfayı yenileyin.";
+  if (error instanceof ApiRequestError && error.code === "EMPLOYEE_INVITATION_ALREADY_PENDING") return "Bu çalışan için zaten bekleyen bir davet var; önce satırdan daveti iptal edin.";
   if (error instanceof ApiRequestError && error.code === "EMPLOYEE_ALREADY_LINKED_VIA_TEACHER") return "Bu çalışan öğretmen hesabıyla zaten bağlı; ikinci hesap açılamaz.";
   if (error instanceof ApiRequestError && error.code === "EMPLOYEE_UNIQUE_CONFLICT") return "Sicil numarası veya hesap bağı başka bir çalışan tarafından kullanılıyor.";
-  if (error instanceof ApiRequestError && error.code === "TENANT_OWNER_MANAGE_REQUIRED") return "Kurum sahibi davetini yalnız başka bir kurum sahibi gönderebilir.";
+  if (error instanceof ApiRequestError && error.code === "TENANT_OWNER_MANAGE_REQUIRED") return "Kurum sahibi davetini yalnız başka bir kurum sahibi gönderebilir veya iptal edebilir.";
   return "İşlem tamamlanamadı. Bilgileri kontrol edip tekrar deneyin.";
 }
 

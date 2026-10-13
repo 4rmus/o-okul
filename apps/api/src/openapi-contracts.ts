@@ -4828,6 +4828,9 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: identityInvitationRecordSchema,
     idempotent: true,
   },
+  "post /api/v1/identity-invitations/{id}/revoke": {
+    responseBody: identityInvitationRecordSchema,
+  },
   "get /api/v1/message-templates": {
     responseBody: arraySchema(messageTemplateRecordSchema),
     listResponse: true,

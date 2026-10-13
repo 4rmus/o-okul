@@ -48,6 +48,7 @@ describe("IdentityInvitationService", () => {
       ),
       resend: vi.fn(),
       markAccepted: vi.fn(),
+      revoke: vi.fn(),
       revokePendingForSubject: vi.fn(),
     };
     const service = new IdentityInvitationService(
@@ -431,4 +432,31 @@ describe("IdentityInvitationService", () => {
     expect(runMutation).not.toHaveBeenCalled();
   });
 
+  it("daveti iptal eder, audit kaydında ham e-posta tutmaz ve bekleyen olmayan daveti reddeder (UAT F-03)", async () => {
+    const students = new InMemoryStudentStore();
+    const student = await students.create({ tenantId: "tenant-a", firstName: "Iptal", lastName: "Ogrenci" });
+    const auditLogs = { record: vi.fn() };
+    const service = new IdentityInvitationService(
+      new InMemoryIdentityInvitationStore(),
+      new InMemoryUserManagementStore(),
+      students,
+      new InMemoryGuardianStore(),
+      new InMemoryTeacherStore(),
+      new InMemoryTenantStore(),
+      auditLogs as never,
+    );
+    const context: RequestContext = { tenantId: "tenant-a", userId: "admin-a", roles: ["TENANT_ADMIN"], bypassRls: false };
+    const issued = await service.create(context, { subjectType: "STUDENT", subjectId: student.id, email: "Iptal.Ogrenci@example.test" });
+
+    const revoked = await service.revoke(context, issued.invitation.id);
+    expect(revoked).toMatchObject({ id: issued.invitation.id, status: "REVOKED" });
+    const audit = auditLogs.record.mock.calls.at(-1)?.[0];
+    expect(audit).toMatchObject({ action: "identity_invitation.revoked", entityId: issued.invitation.id, actorUserId: "admin-a" });
+    expect(JSON.stringify(audit.diff)).not.toContain("iptal.ogrenci@example.test");
+
+    await expect(service.revoke(context, issued.invitation.id)).rejects.toThrow("IDENTITY_INVITATION_NOT_PENDING");
+    await expect(service.revoke(context, "missing")).rejects.toThrow("IDENTITY_INVITATION_NOT_FOUND");
+    await expect(service.revoke({ ...context, tenantId: "tenant-b" }, issued.invitation.id)).rejects.toThrow("IDENTITY_INVITATION_NOT_FOUND");
+    await expect(service.accept({ token: issued.activationToken, password: "Secure-password-123" })).rejects.toThrow("IDENTITY_INVITATION_NOT_PENDING");
+  });
 });
