@@ -359,4 +359,39 @@ describe("Identity invitations", () => {
       spy.mockRestore();
     }
   });
+
+  it("öğretmene tek bekleyen e-posta daveti açılır; tekrar reddedilir, güncelleme yeni davet açmaz, yeni adres eskisinin yerine geçer", async () => {
+    const admin = await login("admin-a@example.test");
+    const teacher = await request(server)
+      .post("/teachers")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ firstName: "Tekil", lastName: "Bekleyen", branch: "Fen", nationalId: "10000003734" })
+      .expect(201);
+    const teacherId = (teacher.body as { id: string }).id;
+    const invite = (email: string) => request(server)
+      .post("/identity-invitations")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ subjectType: "TEACHER", subjectId: teacherId, email });
+    const pendingForTeacher = async () => ((await request(server)
+      .get("/identity-invitations")
+      .set("Authorization", `Bearer ${admin}`)
+      .expect(200)).body as Array<{ subjectId: string; status: string; email: string }>)
+      .filter((invitation) => invitation.subjectId === teacherId && invitation.status === "PENDING");
+
+    await invite("tekil.bekleyen@example.test").expect(201);
+    await invite("tekil.bekleyen@example.test")
+      .expect(400)
+      .expect(({ body }) => expect(body.error.code).toBe("IDENTITY_INVITATION_ALREADY_PENDING"));
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await request(server)
+        .patch(`/teachers/${teacherId}`)
+        .set("Authorization", `Bearer ${admin}`)
+        .send({ email: "tekil.bekleyen@example.test" })
+        .expect(200);
+    }
+    expect(await pendingForTeacher()).toHaveLength(1);
+
+    await invite("yeni.adres@example.test").expect(201);
+    expect((await pendingForTeacher()).map((invitation) => invitation.email)).toEqual(["yeni.adres@example.test"]);
+  });
 });

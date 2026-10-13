@@ -35,13 +35,13 @@ export class IdentityProvisioningService {
   async provisionOrInvite(context: RequestContext, input: ProvisionTenantSubjectInput): Promise<ProvisionOrInviteResult> {
     const email = input.email?.trim().toLowerCase();
     if (email && this.identityInvitations) {
-      const issued = await this.identityInvitations.create(context, {
+      const invitation = await this.identityInvitations.ensureEmailInvitation(context, {
         subjectType: input.subjectType,
         subjectId: input.subjectId,
         email,
         name: input.displayName,
       });
-      return { status: "INVITED", invitationId: issued.invitation.id };
+      return { status: "INVITED", invitationId: invitation.id };
     }
 
     return { status: "SKIPPED" };
