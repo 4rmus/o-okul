@@ -46,6 +46,13 @@ export function resendTeacherInvitation(accessToken: string, invitationId: strin
   });
 }
 
+// UAT F-03: a sent invitation can be withdrawn; the teacher drops back to "Hesap yok" and can be invited again.
+export function revokeTeacherInvitation(accessToken: string, invitationId: string) {
+  return apiRequest<IdentityInvitationRecord>(accessToken, `${apiBaseUrl}/identity-invitations/${encodeURIComponent(invitationId)}/revoke`, {
+    method: "POST",
+  });
+}
+
 export function teacherInvitationErrorMessage(error: unknown) {
   const code = error instanceof ApiRequestError ? error.code : undefined;
   if (code === "SUBJECT_ALREADY_LINKED") return "Bu öğretmenin portal hesabı zaten bağlı.";

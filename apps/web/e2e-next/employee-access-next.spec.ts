@@ -13,6 +13,8 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
   let activeSession = false;
   let capturedUpdate: Record<string, unknown> | undefined;
   let capturedInvitation: Record<string, unknown> | undefined;
+  const pendingInvitations: Array<Record<string, unknown>> = [];
+  const revokedInvitations: string[] = [];
   const employeeRequests: URL[] = [];
   let employee = employeeFixture();
   const unlinkedEmployee = unlinkedEmployeeFixture();
@@ -54,10 +56,22 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
       await json(route, [employee, unlinkedEmployee], { limit: 50, nextCursor: "employee-page-2" });
       return;
     }
+    if (path === "/identity-invitations" && request.method() === "GET") {
+      await json(route, pendingInvitations);
+      return;
+    }
+    const revoke = /^\/identity-invitations\/([^/]+)\/revoke$/u.exec(path);
+    if (revoke && request.method() === "POST") {
+      revokedInvitations.push(revoke[1]!);
+      const revoked = pendingInvitations.find((candidate) => candidate.id === revoke[1]);
+      pendingInvitations.splice(0, pendingInvitations.length);
+      await json(route, { ...revoked, status: "REVOKED" });
+      return;
+    }
     if (path === "/employees/employee-unlinked-a/account-invitations" && request.method() === "POST") {
       capturedInvitation = request.postDataJSON() as Record<string, unknown>;
       expect(request.headers()).not.toHaveProperty("x-step-up-token");
-      await json(route, {
+      const created = {
         id: "invitation-admin-a",
         tenantId: "tenant-a",
         subjectType: "EMPLOYEE",
@@ -70,7 +84,9 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
         expiresAt: "2026-08-02T10:00:00.000Z",
         createdAt: "2026-08-01T10:00:00.000Z",
         updatedAt: "2026-08-01T10:00:00.000Z",
-      });
+      };
+      pendingInvitations.push(created);
+      await json(route, created);
       return;
     }
     if (path === "/campuses" && request.method() === "GET") {
@@ -162,6 +178,17 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
   await expect(toastRegion).toContainText("Hesap daveti gönderime alındı.");
   await page.getByRole("button", { name: "Bildirimi kapat" }).click();
   await expect(toastRegion).not.toContainText("Hesap daveti gönderime alındı.");
+
+  // UAT F-03: the row shows the pending invitation and lets the admin withdraw it before the 24-hour expiry.
+  const unlinkedRow = page.getByRole("row", { name: /Yeni Admin/ });
+  await expect(unlinkedRow).toContainText("Davet bekliyor");
+  await expect(page.getByRole("button", { name: "Yeni Admin için hesap daveti gönder" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Yeni Admin hesap davetini iptal et" }).click();
+  await expect.poll(() => revokedInvitations).toEqual(["invitation-admin-a"]);
+  await expect(toastRegion).toContainText("Yeni Admin için hesap daveti iptal edildi");
+  await expect(unlinkedRow).toContainText("Hesap bağlı değil");
+  await expect(page.getByRole("button", { name: "Yeni Admin hesap davetini iptal et" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Yeni Admin için hesap daveti gönder" })).toBeVisible();
 });
 
 async function login(page: Page) {

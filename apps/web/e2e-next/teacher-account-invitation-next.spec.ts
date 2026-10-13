@@ -16,6 +16,7 @@ interface MockState {
   invitationListRequests: number;
   invitations: IdentityInvitationRecord[];
   resends: string[];
+  revokes: string[];
   roles: string[];
   teachers: TeacherRecord[];
 }
@@ -26,6 +27,7 @@ function mockState(overrides: Partial<MockState> = {}): MockState {
     invitationListRequests: 0,
     invitations: [],
     resends: [],
+    revokes: [],
     roles: ["TENANT_ADMIN"],
     teachers: [teacher("teacher-a", "Ayşe", "Demir")],
     ...overrides,
@@ -66,6 +68,13 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 
     await profile.getByRole("button", { name: "Yeniden gönder" }).click();
     await expect.poll(() => state.resends).toEqual(["invitation-created"]);
     await expectNoHorizontalOverflow(page, `teacher detail pending ${viewport.width}`);
+    // UAT F-03: the pending invitation can be withdrawn; the teacher drops back to "Hesap yok" and can be invited again.
+    await profile.getByRole("button", { name: "Daveti iptal et" }).click();
+    await expect.poll(() => state.revokes).toEqual(["invitation-created"]);
+    await expect(page.locator('.uh-toast-region[aria-live="polite"]')).toContainText("Davet iptal edildi; bağlantı artık çalışmaz.");
+    await expect(profile.getByText("Hesap yok", { exact: true })).toBeVisible();
+    await expect(profile.getByRole("button", { name: "Daveti iptal et" })).toHaveCount(0);
+    await expect(profile.getByRole("button", { name: "Hesap daveti gönder" })).toBeVisible();
   });
 }
 
@@ -95,6 +104,7 @@ test("bağlı öğretmende davet işlemi görünmez ve davet listesi istenmez", 
   await expect(page.getByRole("region", { name: "Öğretmen detay operasyon özeti" })).toContainText("Portal bağlı");
   await expect(profile.getByRole("button", { name: "Hesap daveti gönder" })).toHaveCount(0);
   await expect(profile.getByRole("button", { name: "Yeniden gönder" })).toHaveCount(0);
+  await expect(profile.getByRole("button", { name: "Daveti iptal et" })).toHaveCount(0);
   expect(state.invitationListRequests).toBe(0);
 });
 
@@ -163,6 +173,13 @@ async function openTeacherDetail(page: Page, state: MockState, teacherId: string
     if (resend && request.method() === "POST") {
       state.resends.push(resend[1]!);
       await json(route, invitation(resend[1]!, "teacher-a"));
+      return;
+    }
+    const revoke = /^\/identity-invitations\/([^/]+)\/revoke$/u.exec(path);
+    if (revoke && request.method() === "POST") {
+      state.revokes.push(revoke[1]!);
+      state.invitations = state.invitations.filter((candidate) => candidate.id !== revoke[1]);
+      await json(route, { ...invitation(revoke[1]!, "teacher-a"), status: "REVOKED" });
       return;
     }
     if (path === "/teachers" && request.method() === "GET") {
