@@ -81,44 +81,189 @@ const inventory = [
 ];
 
 // Controller'daki her @Post/@Patch/@Put/@Delete endpoint'i ya envanterde ya bu listede olmalı; yeni bir
-// değiştiren endpoint sınıflandırılana kadar kontrol düşer. Liste 2026-10-13 main durumundan üretilmiş
-// bir baseline'dır: buradaki her endpoint'in Idempotency-Key gerektirmediği tek tek doğrulanmadı
-// (UNPROVEN). Bir endpoint envantere taşınınca buradan silinir; liste yalnız küçülmelidir.
+// değiştiren endpoint sınıflandırılana kadar kontrol düşer. Her kayıt sınıfını ve gerekçesini taşır
+// (docs/idempotency-kapsam-plani.md): B veritabanı tekrarı engeller, C tekrar zararsızdır, D kapsam
+// dışıdır, AÇIK bilinen ve planlanmış bir açıktır. Gerekçeler kod okumasına dayanır (LOCAL_STATIC).
 const knownNonIdempotentMutations = {
-  "apps/api/src/attendance/attendance.controller.ts": ['@Put("daily")'],
-  "apps/api/src/auth/auth.controller.ts": ['@Post("login")', '@Post("login/select")', '@Post("totp/verify")', '@Post("totp/enrollment/confirm")', '@Post("refresh")', '@Post("persona/switch")', '@Post("logout")', '@Post("password-reset/request")', '@Post("password-reset/confirm")', '@Post("totp/setup")', '@Post("totp/confirm")', '@Post("totp/disable")', '@Post("totp/admin-reset")', '@Post("step-up")'],
-  "apps/api/src/exam/answer-key.controller.ts": ['@Post("imports/dry-run")'],
-  "apps/api/src/exam/exam.controller.ts": ['@Patch(":examId")', '@Delete(":examId")'],
-  "apps/api/src/exam/parser-config.controller.ts": ['@Post("suggestions")'],
-  "apps/api/src/gradebook/gradebook.controller.ts": ['@Put(":id/entries")'],
-  "apps/api/src/guardian-notification/guardian-notification-settings.controller.ts": ['@Patch()'],
-  "apps/api/src/guardian/guardians.controller.ts": ['@Patch(":id")', '@Post(":id/purge-pii")', '@Patch(":id/students/:studentId")', '@Delete(":id/students/:studentId")', '@Delete(":id")'],
-  "apps/api/src/homework/homework.controller.ts": ['@Patch("materials/:id")', '@Delete("materials/:id")', '@Patch(":id")', '@Patch(":id/check-status")', '@Delete(":id")'],
-  "apps/api/src/identity-invitation/identity-invitation.controller.ts": ['@Post()', '@Post("accept")'],
-  "apps/api/src/identity-invitation/student-portal-activation.controller.ts": ['@Post("activate")'],
-  "apps/api/src/me/me.controller.ts": ['@Post("password")', '@Delete("sessions/:id")', '@Delete("sessions")', '@Patch("tenant")', '@Post("notification-devices")', '@Delete("notification-devices/:id")', '@Post("student/announcements/:id/read")', '@Post("guardian/students/:studentId/announcements/:id/read")', '@Patch("guardian/students/:studentId/notification-preferences")', '@Post("teacher/announcements/:id/read")'],
-  "apps/api/src/message-template/message-template.controller.ts": ['@Patch(":id")', '@Delete(":id")'],
-  "apps/api/src/operations/device-backup.controller.ts": ['@Post("download")', '@Post("preview")'],
-  "apps/api/src/operations/device-restore.controller.ts": ['@Post(":operationId/cancel")', '@Post("tenants/:tenantId/:operationId/approve")'],
-  "apps/api/src/privacy/privacy.controller.ts": ['@Post("me/purge-pii")'],
-  "apps/api/src/program/schedule.controller.ts": ['@Patch(":id")', '@Delete(":id")'],
-  "apps/api/src/program/study-session.controller.ts": ['@Patch(":id")', '@Delete(":id")'],
-  "apps/api/src/role-preview/role-preview.controller.ts": ['@Post()'],
-  "apps/api/src/school/academic-calendar.controller.ts": ['@Post("academic-years")', '@Patch("academic-years/:id")', '@Delete("academic-years/:id")', '@Post("academic-terms")', '@Patch("academic-terms/:id")', '@Delete("academic-terms/:id")'],
-  "apps/api/src/school/alanlar.controller.ts": ['@Post()', '@Patch(":id")', '@Delete(":id")'],
-  "apps/api/src/school/campuses.controller.ts": ['@Post()', '@Patch(":id")', '@Delete(":id")'],
-  "apps/api/src/school/classes.controller.ts": ['@Patch(":id")', '@Delete(":id")'],
-  "apps/api/src/school/courses.controller.ts": ['@Patch(":id")', '@Delete(":id")'],
-  "apps/api/src/school/grade-levels.controller.ts": ['@Put(":id/courses/:courseId")', '@Post()', '@Patch(":id")', '@Delete(":id")'],
-  "apps/api/src/school/learning-outcomes.controller.ts": ['@Post()', '@Post("imports/dry-run")', '@Patch(":id")', '@Delete(":id")'],
-  "apps/api/src/sms-batch/sms-batch.controller.ts": ['@Post("recipients/preview")'],
-  "apps/api/src/student/student-contact.controller.ts": ['@Patch(":id")', '@Delete(":id")'],
-  "apps/api/src/student/student.controller.ts": ['@Post("imports/dry-run")', '@Patch(":id")', '@Patch(":id/profile")', '@Patch(":id/portal-access")', '@Post(":id/portal-invitations")', '@Post(":id/purge-pii")', '@Delete(":id")', '@Patch(":id/tenant")'],
-  "apps/api/src/support-ticket/support-ticket.controller.ts": ['@Patch(":id")'],
-  "apps/api/src/teacher-note/teacher-note.controller.ts": ['@Patch(":id")', '@Delete(":id")'],
-  "apps/api/src/teacher/teachers.controller.ts": ['@Post("imports/dry-run")', '@Patch(":id")', '@Patch(":id/assignments/:assignmentId")', '@Post(":id/purge-pii")', '@Delete(":id")', '@Delete(":id/assignments/:assignmentId")'],
-  "apps/api/src/tenant/tenant.controller.ts": ['@Post("current/reset-request")', '@Post("current/reset-request/revoke")', '@Post(":id/purge-exports")', '@Post(":id/purge-exports/:exportId/delivery")', '@Post()', '@Patch(":id")', '@Post(":id/license-terms")', '@Delete(":id")'],
-  "apps/api/src/user-management/user-management.controller.ts": ['@Patch(":userId/roles")', '@Post(":id/account-invitations")', '@Patch(":id")'],
+  "apps/api/src/attendance/attendance.controller.ts": {
+    "@Put(\"daily\")": "B: Doğal anahtarla upsert; worker notifiedAt ile tek bildirim gönderir",
+  },
+  "apps/api/src/auth/auth.controller.ts": {
+    "@Post(\"login\")": "D: Giriş akışı; tenant bağlamı yok (idempotency.ts:49), fazladan oturum /me/sessions'da görünür",
+    "@Post(\"login/select\")": "D: İmzalı seçim token'lı giriş akışı",
+    "@Post(\"totp/verify\")": "D: TOTP sayacı tekrarı reddeder (auth-user-store.ts:905)",
+    "@Post(\"totp/enrollment/confirm\")": "D: Tek kullanımlık kurulum token'ı + CAS güncelleme (auth-user-store.ts:699)",
+    "@Post(\"refresh\")": "D: Token rotasyonu kendi tekrar tespitini yapar (token-service.ts:91); bkz. 5.2",
+    "@Post(\"persona/switch\")": "D: Eski oturum değişir; tekrar PERSONA_ALREADY_ACTIVE",
+    "@Post(\"logout\")": "D: İkinci çağrı iptal edecek oturum bulmaz",
+    "@Post(\"password-reset/request\")": "D: Yeniden gönderme penceresi ikinci e-postayı engeller (password-reset-store.ts:172)",
+    "@Post(\"password-reset/confirm\")": "D: Tek kullanımlık token; tekrar 400",
+    "@Post(\"totp/setup\")": "D: Yalnız audit; taslak sır imzalı token'da",
+    "@Post(\"totp/confirm\")": "D: Tek kullanımlık token + CAS",
+    "@Post(\"totp/disable\")": "D: Tekrar edilemeyen ikinci faktör gerekir",
+    "@Post(\"totp/admin-reset\")": "D: Step-up + durum kontrolü; tekrar 400/409",
+    "@Post(\"step-up\")": "D: Yalnız imzalı kanıt üretir, satır yazmaz",
+  },
+  "apps/api/src/exam/answer-key.controller.ts": {
+    "@Post(\"imports/dry-run\")": "D: Yazmadan döner",
+  },
+  "apps/api/src/exam/exam.controller.ts": {
+    "@Patch(\":examId\")": "C: Değere set eder",
+    "@Delete(\":examId\")": "C: Silme; tekrar 404",
+  },
+  "apps/api/src/exam/parser-config.controller.ts": {
+    "@Post(\"suggestions\")": "D: Yazmaz",
+  },
+  "apps/api/src/gradebook/gradebook.controller.ts": {
+    "@Put(\":id/entries\")": "C: Öğrenci başına değere set; kilit altında taslak günceller",
+  },
+  "apps/api/src/guardian-notification/guardian-notification-settings.controller.ts": {
+    "@Patch()": "C: Sabit değerlere set eder",
+  },
+  "apps/api/src/guardian/guardians.controller.ts": {
+    "@Patch(\":id\")": "C: Değere set eder",
+    "@Post(\":id/purge-pii\")": "C: Sabitle üzerine yazar",
+    "@Patch(\":id/students/:studentId\")": "C: Değere set eder",
+    "@Delete(\":id/students/:studentId\")": "C: Silme; tekrar 404",
+    "@Delete(\":id\")": "C: Durum korumalı soft delete",
+  },
+  "apps/api/src/homework/homework.controller.ts": {
+    "@Patch(\"materials/:id\")": "C: Değere set eder",
+    "@Delete(\"materials/:id\")": "C: Soft delete",
+    "@Patch(\":id\")": "C: Değere set eder",
+    "@Patch(\":id/check-status\")": "C: Açık durum seçimi; bildirim yok",
+    "@Delete(\":id\")": "C: Soft delete",
+  },
+  "apps/api/src/identity-invitation/identity-invitation.controller.ts": {
+    "@Post()": "AÇIK: Tekrar ikinci davet ve e-posta açar; bekleyen davet tekil indeksi staging sayımından sonra eklenecek (docs/idempotency-kapsam-plani.md Dilim 1.1)",
+    "@Post(\"accept\")": "D: Tek kullanımlık token; status='PENDING' CAS",
+  },
+  "apps/api/src/identity-invitation/student-portal-activation.controller.ts": {
+    "@Post(\"activate\")": "D: Satır kilidi altında aktivasyon kodu; tekrar 409",
+  },
+  "apps/api/src/me/me.controller.ts": {
+    "@Post(\"password\")": "D: Kimlik bilgisi akışı; tekrar 401",
+    "@Delete(\"sessions/:id\")": "C: Silme; tekrar 404",
+    "@Delete(\"sessions\")": "C: Tümünü iptal; tekrar etkisiz",
+    "@Patch(\"tenant\")": "C: Değere set eder",
+    "@Post(\"notification-devices\")": "B: ON CONFLICT DO UPDATE (notification-device-store.ts:126)",
+    "@Delete(\"notification-devices/:id\")": "C: disabledAt set eder",
+    "@Post(\"student/announcements/:id/read\")": "C: Okundu upsert'i",
+    "@Post(\"guardian/students/:studentId/announcements/:id/read\")": "C: Okundu upsert'i",
+    "@Patch(\"guardian/students/:studentId/notification-preferences\")": "C: Değere set eder",
+    "@Post(\"teacher/announcements/:id/read\")": "C: Okundu upsert'i",
+  },
+  "apps/api/src/message-template/message-template.controller.ts": {
+    "@Patch(\":id\")": "C: Değere set eder",
+    "@Delete(\":id\")": "C: Soft delete",
+  },
+  "apps/api/src/operations/device-backup.controller.ts": {
+    "@Post(\"download\")": "D: Salt okunur işlem",
+    "@Post(\"preview\")": "D: Salt okunur işlem",
+  },
+  "apps/api/src/operations/device-restore.controller.ts": {
+    "@Post(\":operationId/cancel\")": "D: Durum korumalı tek seferlik geçiş",
+    "@Post(\"tenants/:tenantId/:operationId/approve\")": "D: Kilit + durum makinesi + step-up; tekrar mevcut durumu döndürür",
+  },
+  "apps/api/src/privacy/privacy.controller.ts": {
+    "@Post(\"me/purge-pii\")": "C: Sabit değerle üzerine yazar; tekrar yalnız bir audit satırı ekler",
+  },
+  "apps/api/src/program/schedule.controller.ts": {
+    "@Patch(\":id\")": "C: Değere set eder",
+    "@Delete(\":id\")": "C: Soft delete",
+  },
+  "apps/api/src/program/study-session.controller.ts": {
+    "@Patch(\":id\")": "C: Değere set ve öğrenci setini değiştirir",
+    "@Delete(\":id\")": "C: Soft delete",
+  },
+  "apps/api/src/role-preview/role-preview.controller.ts": {
+    "@Post()": "D: Yalnız 15 dakikalık imzalı token üretir",
+  },
+  "apps/api/src/school/academic-calendar.controller.ts": {
+    "@Post(\"academic-years\")": "B: @@unique([tenantId, name]); tekrar bugün 500, Dilim 1.2 sonrası 409",
+    "@Patch(\"academic-years/:id\")": "C: Değere set eder",
+    "@Delete(\"academic-years/:id\")": "C: Soft delete",
+    "@Post(\"academic-terms\")": "B: @@unique([tenantId, academicYearId, name]); Dilim 1.2",
+    "@Patch(\"academic-terms/:id\")": "C: Değere set eder",
+    "@Delete(\"academic-terms/:id\")": "C: Soft delete",
+  },
+  "apps/api/src/school/alanlar.controller.ts": {
+    "@Post()": "B: code zorunlu; (tenantId, code) tekil indeksi tekrarı 409 ile reddeder",
+    "@Patch(\":id\")": "C: Değere set eder",
+    "@Delete(\":id\")": "C: Soft delete",
+  },
+  "apps/api/src/school/campuses.controller.ts": {
+    "@Post()": "B: code zorunlu; (tenantId, code) tekil indeksi tekrarı 409 ile reddeder",
+    "@Patch(\":id\")": "C: Değere set eder",
+    "@Delete(\":id\")": "C: Soft delete",
+  },
+  "apps/api/src/school/classes.controller.ts": {
+    "@Patch(\":id\")": "C: Değere set eder",
+    "@Delete(\":id\")": "C: Soft delete",
+  },
+  "apps/api/src/school/courses.controller.ts": {
+    "@Patch(\":id\")": "C: Değere set eder",
+    "@Delete(\":id\")": "C: Soft delete",
+  },
+  "apps/api/src/school/grade-levels.controller.ts": {
+    "@Put(\":id/courses/:courseId\")": "B: ON CONFLICT DO NOTHING ile bağ oluşturur",
+    "@Post()": "B: code zorunlu; (tenantId, code) tekil indeksi tekrarı 409 ile reddeder",
+    "@Patch(\":id\")": "C: Değere set eder",
+    "@Delete(\":id\")": "C: Soft delete",
+  },
+  "apps/api/src/school/learning-outcomes.controller.ts": {
+    "@Post()": "B: @@unique([tenantId, code]), kod zorunlu; Dilim 1.2",
+    "@Post(\"imports/dry-run\")": "D: Yazmaz",
+    "@Patch(\":id\")": "C: Değere set eder",
+    "@Delete(\":id\")": "C: Soft delete",
+  },
+  "apps/api/src/sms-batch/sms-batch.controller.ts": {
+    "@Post(\"recipients/preview\")": "D: Yalnız okur",
+  },
+  "apps/api/src/student/student-contact.controller.ts": {
+    "@Patch(\":id\")": "C: Değere set eder",
+    "@Delete(\":id\")": "C: Soft delete; tekrar 404",
+  },
+  "apps/api/src/student/student.controller.ts": {
+    "@Post(\"imports/dry-run\")": "D: Yazmaz",
+    "@Patch(\":id\")": "C: Mevcut durumla fark alır; bkz. 5.3",
+    "@Patch(\":id/profile\")": "C: Değere set eder",
+    "@Patch(\":id/portal-access\")": "C: Hedef durum + sürüm kontrolü",
+    "@Post(\":id/portal-invitations\")": "D: Kod döndürür, tek kod geçerli; yanıt saklanmamalı (Dilim 4)",
+    "@Post(\":id/purge-pii\")": "C: Sabitle üzerine yazar",
+    "@Delete(\":id\")": "C: Durum korumalı soft delete",
+    "@Patch(\":id/tenant\")": "C: Yazmaz; her zaman 409",
+  },
+  "apps/api/src/support-ticket/support-ticket.controller.ts": {
+    "@Patch(\":id\")": "C: Öncelik/durum set eder; bildirim yok",
+  },
+  "apps/api/src/teacher-note/teacher-note.controller.ts": {
+    "@Patch(\":id\")": "C: Değere set eder",
+    "@Delete(\":id\")": "C: Soft delete",
+  },
+  "apps/api/src/teacher/teachers.controller.ts": {
+    "@Post(\"imports/dry-run\")": "D: Yazmaz",
+    "@Patch(\":id\")": "AÇIK: Hesapsız öğretmende email ile her tekrar yeni davet ve e-posta açar; bekleyen davet tekil indeksi bekleniyor (Dilim 1.1)",
+    "@Patch(\":id/assignments/:assignmentId\")": "C: Değere set eder",
+    "@Post(\":id/purge-pii\")": "C: Sabitle üzerine yazar",
+    "@Delete(\":id\")": "C: Durum korumalı soft delete",
+    "@Delete(\":id/assignments/:assignmentId\")": "C: Silme; tekrar 404",
+  },
+  "apps/api/src/tenant/tenant.controller.ts": {
+    "@Post(\"current/reset-request\")": "D: FOR UPDATE altında CAS; tekrar mevcut talebi döndürür",
+    "@Post(\"current/reset-request/revoke\")": "D: Aynı CAS; tekrar REVOKED döndürür",
+    "@Post(\":id/purge-exports\")": "D: Step-up korumalı indirme; yanıt saklanmamalı (Dilim 4)",
+    "@Post(\":id/purge-exports/:exportId/delivery\")": "B: Satır kilidi altında varlık kontrolü; tekrar 409",
+    "@Post()": "D: Kendi platform düzeyi idempotency'si var (PlatformIdempotencyKey, tenant.service.ts:355)",
+    "@Patch(\":id\")": "C: Değere set eder",
+    "@Post(\":id/license-terms\")": "B: EXCLUDE kısıtı çakışan dönemi engeller",
+    "@Delete(\":id\")": "C: Emekli; her zaman 410",
+  },
+  "apps/api/src/user-management/user-management.controller.ts": {
+    "@Patch(\":userId/roles\")": "D: Emekli; her zaman 410",
+    "@Post(\":id/account-invitations\")": "B: Çalışan başına tek bekleyen davet indeksi",
+    "@Patch(\":id\")": "C: Değere set + iyimser sürüm kontrolü",
+  },
 };
 
 const failures = [];
@@ -170,7 +315,7 @@ const controllerMutationKeys = new Set(controllerMutations.map(({ path, token })
 const inventoryControllerKeys = new Set(inventory.map((item) => `${item.controllerFile}::${item.controllerTokens[0]}`));
 for (const key of controllerMutationKeys) {
   const [path, token] = key.split("::");
-  const allowlisted = knownNonIdempotentMutations[path]?.includes(token) ?? false;
+  const allowlisted = Object.hasOwn(knownNonIdempotentMutations[path] ?? {}, token);
   if (!inventoryControllerKeys.has(key) && !allowlisted) {
     failures.push(`Mutation endpoint ne idempotency envanterinde ne istisna listesinde: ${path} ${token}`);
   }
@@ -178,10 +323,13 @@ for (const key of controllerMutationKeys) {
     failures.push(`Mutation endpoint hem envanterde hem istisna listesinde (birini kaldır): ${path} ${token}`);
   }
 }
-for (const [path, tokens] of Object.entries(knownNonIdempotentMutations)) {
-  for (const token of tokens) {
+for (const [path, reasons] of Object.entries(knownNonIdempotentMutations)) {
+  for (const [token, reason] of Object.entries(reasons)) {
     if (!controllerMutationKeys.has(`${path}::${token}`)) {
       failures.push(`İstisna listesi bayat, endpoint kodda yok: ${path} ${token}`);
+    }
+    if (!/^(B|C|D|AÇIK): \S/.test(reason)) {
+      failures.push(`İstisna kaydı sınıf ve gerekçe taşımalı ("B|C|D|AÇIK: gerekçe"): ${path} ${token}`);
     }
   }
 }
