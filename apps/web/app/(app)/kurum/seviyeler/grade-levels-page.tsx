@@ -11,6 +11,7 @@ import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import {
   firstFormError,
+  gradeLevelCreateFormSchema,
   gradeLevelFormSchema,
   type GradeLevelFormPayload,
   type GradeLevelFormState,
@@ -180,7 +181,7 @@ export function GradeLevelsPage() {
     if (!auth) return;
 
     setError("");
-    const parsedForm = gradeLevelFormSchema.safeParse(form);
+    const parsedForm = (editingGradeLevel ? gradeLevelFormSchema : gradeLevelCreateFormSchema).safeParse(form);
     if (!parsedForm.success) {
       setError(firstFormError(parsedForm.error));
       return;
@@ -280,6 +281,7 @@ export function GradeLevelsPage() {
         </Field>
         <Field label="Kod" description="Kısa kod sınıf eşleşmesi ve rapor filtrelerinde kullanılır.">
           <Input
+            required={!editingGradeLevel}
             value={form.code ?? ""}
             onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
           />

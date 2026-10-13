@@ -920,6 +920,11 @@ const namedSchoolReferenceCreateRequestSchema = objectSchema({
   tenantId: stringSchema(),
 }, ["name"]);
 
+const gradeLevelCreateRequestSchema = objectSchema(
+  namedSchoolReferenceCreateRequestSchema.properties as Record<string, JsonSchema>,
+  ["name", "code"],
+);
+
 const namedSchoolReferenceUpdateRequestSchema = objectSchema({
   code: stringSchema(),
   name: stringSchema(),
@@ -933,7 +938,7 @@ const campusRecordSchema = objectSchema({
 const campusCreateRequestSchema = objectSchema({
   ...(namedSchoolReferenceCreateRequestSchema.properties as Record<string, JsonSchema>),
   unitType: { type: "string", enum: ["SCHOOL", "COURSE", "MIXED"] },
-}, ["name"]);
+}, ["name", "code"]);
 
 const campusUpdateRequestSchema = objectSchema({
   ...(namedSchoolReferenceUpdateRequestSchema.properties as Record<string, JsonSchema>),
@@ -953,7 +958,7 @@ const alanCreateRequestSchema = objectSchema({
   gradeLevelId: stringSchema(),
   name: stringSchema(),
   tenantId: stringSchema(),
-}, ["name"]);
+}, ["name", "code"]);
 
 const alanUpdateRequestSchema = objectSchema({
   code: stringSchema(),
@@ -4252,7 +4257,7 @@ const operationContracts: Record<string, OperationContract> = {
     listResponse: true,
   },
   "post /api/v1/grade-levels": {
-    requestBody: namedSchoolReferenceCreateRequestSchema,
+    requestBody: gradeLevelCreateRequestSchema,
     responseBody: namedSchoolReferenceRecordSchema,
   },
   "get /api/v1/grade-levels/{id}": {
