@@ -64,6 +64,23 @@ describe("ApiErrorFilter Sentry reporting", () => {
       },
     });
   });
+
+  it("veritabanı tekillik ihlalini 409 olarak ve kısıt ayrıntısı sızdırmadan döner", () => {
+    const response = createResponse();
+    const host = createHost(response, { method: "POST", path: "/api/v1/academic-years" });
+    const filter = new TestApiErrorFilter();
+
+    filter.catch({ code: "23505", constraint: "AcademicYear_tenantId_name_key", detail: "Key (name)=(2026)" }, host);
+
+    expect(filter.reports).toEqual([]);
+    expect(response.status).toHaveBeenCalledWith(409);
+    expect(response.json).toHaveBeenCalledWith({
+      error: {
+        code: "UNIQUE_CONSTRAINT_CONFLICT",
+        message: "Çakışma oluştu.",
+      },
+    });
+  });
 });
 
 function createResponse() {

@@ -75,6 +75,9 @@ function knownDatabaseBusinessCode(exception: unknown): string | undefined {
   if (candidate.code === "P0001" && candidate.message === "ACTIVE_STUDENT_LIMIT_REACHED") {
     return candidate.message;
   }
+  // A unique violation means the row already exists, typically a retried create. The constraint name
+  // and detail stay out of the response.
+  if (candidate.code === "23505") return "UNIQUE_CONSTRAINT_CONFLICT";
   return undefined;
 }
 
