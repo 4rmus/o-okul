@@ -39,7 +39,7 @@
 - Every delegated task needs: objective, owned paths, forbidden paths, expected output, and validation commands.
 - Subagent summaries should return findings and changed files, not raw logs.
 - When a plan slice closes, record it in `status.md` "Açık İşler" with date, slice id, evidence class, and SHA/PR, in the same PR as the slice. Decision, status, and UAT records that belong to a feature ride in that feature's PR; standalone doc records are batched into one docs PR at most once a week, never one PR per record.
-- Pull requests that change only `docs/`, `status.md`, `README.md`, or `PLAN.md` run the light `docs-check` job in `.github/workflows/ci.yml` instead of full CI; `docs/evidence-manifests/` and `docs/measurement-baselines/` still trigger full CI, and pushes to main always run it.
+- Pull requests that change only `docs/`, `status.md`, `README.md`, or `PLAN.md` run the light `docs-check` job in `.github/workflows/ci.yml` instead of full CI; `docs/evidence-manifests/` and `docs/measurement-baselines/` still trigger full CI, and pushes to main always run it. Pull requests that change no UI-affecting files run `pnpm run ci:core` (`scripts/run-ci-core.mjs`: the `ci` chain without the six Playwright-backed web checks) in `verify`; UI pull requests and main run the single `pnpm run ci` that deploy evidence requires.
 - After editing any agent, skill, settings, or MCP file, run `pnpm agents:check` in the same change.
 
 ## Agent Roster

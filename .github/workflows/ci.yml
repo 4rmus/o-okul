@@ -22,6 +22,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       code: ${{ steps.classify.outputs.code }}
+      ui: ${{ steps.classify.outputs.ui }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,6 +34,7 @@ jobs:
         run: |
           set -euo pipefail
           code=true
+          ui=true
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ -n "${BASE_SHA:-}" ]; then
             changed="$(git diff --name-only "$BASE_SHA" "$GITHUB_SHA")"
             non_docs="$(printf '%s\n' "$changed" | grep -Ev '^(docs/|status\.md$|README\.md$|PLAN\.md$)' | grep -v '^$' || true)"
@@ -40,9 +42,16 @@ jobs:
             if [ -n "$changed" ] && [ -z "$non_docs" ] && [ -z "$pinned_docs" ]; then
               code=false
             fi
+            # Same UI-affecting file set as the ui-ux-rc job; non-UI pull requests run `pnpm run ci:core`
+            # (the ci chain without the Playwright-backed web checks, scripts/run-ci-core.mjs).
+            if ! printf '%s\n' "$changed" | grep -Eq '^(apps/web/|packages/ui/|packages/shared-types/|\.github/workflows/ci\.yml$|scripts/(check-(web-ux-baseline|karne-visual-contract)|run-ci-core)\.mjs$|docs/ui-ux-professionalization-contract\.md$|design\.md$|tokens\.css$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|turbo\.json$|\.node-version$)'; then
+              ui=false
+            fi
           fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "ui=$ui" >> "$GITHUB_OUTPUT"
           echo "full CI required: $code" >> "$GITHUB_STEP_SUMMARY"
+          echo "Playwright web checks required: $ui" >> "$GITHUB_STEP_SUMMARY"
 
   docs-check:
     needs: changes
@@ -98,8 +107,13 @@ jobs:
             turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @o-okul/web exec playwright install --with-deps chromium
-      - run: pnpm run ci
+      - if: needs.changes.outputs.ui == 'true'
+        run: pnpm --filter @o-okul/web exec playwright install --with-deps chromium
+      # Pushes to main and UI pull requests run the single `pnpm run ci` command that deploy evidence requires.
+      - if: needs.changes.outputs.ui == 'true'
+        run: pnpm run ci
+      - if: needs.changes.outputs.ui != 'true'
+        run: pnpm run ci:core
 
       - uses: actions/upload-artifact@v4
         if: failure()
