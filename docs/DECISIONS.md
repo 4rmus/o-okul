@@ -1204,6 +1204,53 @@ Etkilenen ADR: ADR-0011
 Açık soru: Ödev kaydında ders alanı yoktur; ders bazlı ödev gerekirse şema değişikliği ve ayrı DEC ister.
 Son kontrol: 2026-10-12
 
+## Öneri Halindeki Kararlar
+
+Bu bölümdeki kayıtlar ürün sahibi onayı bekler ve yol haritasını değiştirmez. DEC-20261010-01 gereği
+yeni özellik dilimi yalnız UAT veya görüşme bulgusundan açılır; aşağıdaki öneriler bu yüzden pilot
+sonrasına konur ve pilot bulgusuyla doğrulanmadan dilime dönüşmez.
+
+### DEC-20261013-01 — Pilot sonrası aday: deneme madde analizi
+
+Durum: Öneri; ürün sahibi onayı bekliyor
+Karar: Pilot sonrasında, yayınlanmış bir deneme için soru bazında madde analizi raporu eklenmesi
+önerilir: her soru için doğru cevaplama oranı (zorluk), alt ve üst grup farkı ile ayırt edicilik,
+şık dağılımı (çeldirici analizi) ve test için KR-20 güvenirlik katsayısı. Analiz yeni veri toplamaz;
+mevcut `ParsedAnswer.answers` ve sürümlü `AnswerKey` üzerinden worker'da hesaplanır, kitapçık
+varyantı (`ExamBookletVariant`) soru eşlemesine uygulanır ve sonuç rapor snapshot'ı gibi cevap
+anahtarı ile motor sürümüne bağlanarak tekrar üretilebilir tutulur. Rapor tenant ve kampüs
+kapsamında yönetim ve atanmış öğretmen rollerine açılır; öğrenci ve veliye gösterilmez.
+Gerekçe: ölçme çekirdeğini derinleştirir, dış sağlayıcı ve ek kişisel veri gerektirmez, sınırlı ve
+test edilebilir bir rapor dilimidir.
+Kaynak: Claude önerisi (2026-10-13); 2026-10-02 iş, pazar ve rakip analizi taslağı ("En önemli 10
+eksik" #6). Taslak main'e alınmadı; güncel rakip analizi `docs/ozel-k12-strateji-ekleri.md` Ek 1'dedir.
+Kanıt: Kodda madde analizi yok (LOCAL_STATIC, `apps` ve `packages` araması). Kullanıcı talebi ve
+pilot değeri UNPROVEN.
+Etkilenen ADR: Yok; rapor snapshot kuralları değişmez.
+Açık soru: (a) Pilotta öğretmen veya yönetici bu raporu istiyor mu? (b) Alt/üst grup oranı (%27
+geleneksel) sabit mi, ayar mı? (c) Boş bırakılan ve iptal edilen sorular nasıl sayılır?
+Son kontrol: 2026-10-13
+
+### DEC-20261013-02 — Pilot sonrası aday: tekrarlayan haftalık ders programı
+
+Durum: Öneri; ürün sahibi onayı bekliyor
+Karar: Pilot sonrasında, sınıf için haftalık ders programı şablonu eklenmesi önerilir: gün, saat
+aralığı, ders ve öğretmenden oluşan haftalık satırlar bir dönem (`AcademicTerm`) için tanımlanır ve
+dönem tarihleri içinde `ScheduleLesson` kayıtlarına açılır. Tek bir dersi taşıma veya iptal etme
+mevcut tekil kayıt üzerinde kalır; şablon değişikliği yalnız gelecekteki ve düzenlenmemiş kayıtları
+günceller. Yoklama modeli (`Attendance`, öğrenci başına gün) değişmez.
+Gerekçe: özel K12 okulunda ders programı haftalık ve dönem boyunca sabittir; bugün her ders tek tek
+başlangıç ve bitiş zamanıyla girilir.
+Kaynak: Claude önerisi (2026-10-13); 2026-10-02 iş, pazar ve rakip analizi taslağı ("En önemli 10
+eksik" #9).
+Kanıt: `ScheduleLesson` yalnız `startsAt` ve `endsAt` taşır, tekrar kuralı yok
+(`packages/db/prisma/schema.prisma`, LOCAL_STATIC). Okulların bu sürtünmeyi yaşadığı UNPROVEN.
+Etkilenen ADR: Yok; şema değişikliği uygulanırsa migration, RLS kontrolü ve seed etkisi aynı
+değişiklikte güncellenir.
+Açık soru: (a) Pilot okul programını O-Okul'da mı tutacak, yoksa başka sistemden mi bakıyor?
+(b) A/B haftası veya dönem içi program değişikliği gerekiyor mu? (c) Resmî tatiller nasıl düşülür?
+Son kontrol: 2026-10-13
+
 ## Faz Öncesi Onay Gerektirenler
 
 | ID | Faz | Bloklar mı? | Soru | Beklenen kanıt |
