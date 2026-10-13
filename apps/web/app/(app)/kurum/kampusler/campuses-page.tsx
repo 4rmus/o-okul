@@ -275,7 +275,6 @@ export function CampusesPage() {
         </Field>
         <Field label="Kod" description="Kısa kod sınıf, rapor ve kampüs filtrelerinde hızlı tanıma sağlar.">
           <Input
-            required={!editingCampus}
             value={form.code ?? ""}
             onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
           />

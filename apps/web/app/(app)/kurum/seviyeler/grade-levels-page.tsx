@@ -281,7 +281,6 @@ export function GradeLevelsPage() {
         </Field>
         <Field label="Kod" description="Kısa kod sınıf eşleşmesi ve rapor filtrelerinde kullanılır.">
           <Input
-            required={!editingGradeLevel}
             value={form.code ?? ""}
             onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
           />
