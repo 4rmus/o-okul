@@ -20,11 +20,7 @@ describe("IdentityProvisioningService", () => {
 
   it("TC ve telefon yoksa e-posta davetine düşer", async () => {
     const invitations = {
-      create: async (context: RequestContext, body: unknown) => ({
-        context,
-        invitation: { id: "invite-teacher-a" },
-        body,
-      }),
+      ensureEmailInvitation: async (_context: RequestContext, _body: unknown) => ({ id: "invite-teacher-a" }),
     };
     const service = new IdentityProvisioningService(invitations as never);
 
@@ -41,11 +37,7 @@ describe("IdentityProvisioningService", () => {
 
   it("TC var ama telefon yoksa kullanıcı üretmez, e-posta davetine düşer", async () => {
     const invitations = {
-      create: async (context: RequestContext, body: unknown) => ({
-        context,
-        invitation: { id: "invite-teacher-without-phone" },
-        body,
-      }),
+      ensureEmailInvitation: async (_context: RequestContext, _body: unknown) => ({ id: "invite-teacher-without-phone" }),
     };
     const service = new IdentityProvisioningService(invitations as never);
 

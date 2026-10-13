@@ -80,20 +80,35 @@ export class IdentityInvitationService {
     this.assertStudentPortalEligible(subjectType, subject);
     if (subject.userId) throw new BadRequestException("SUBJECT_ALREADY_LINKED");
 
+    // One pending email invitation per subject (IdentityInvitation_one_pending_email_link_key). A live one
+    // for the same address is a duplicate request; a new address or an expired link replaces it.
+    const pending = await this.findPendingEmailInvitation(tenantId, subjectType, subjectId);
+    if (pending && pending.email === email && Date.parse(pending.expiresAt) > Date.now()) {
+      throw new BadRequestException("IDENTITY_INVITATION_ALREADY_PENDING");
+    }
+    if (pending) await this.invitations.revokePendingForSubject(tenantId, subjectType, subjectId, "EMAIL_LINK");
+
     const token = createActivationToken();
     const expiresAt = nextExpiry();
     const tenantSlug = await this.requireTenantSlug(tenantId);
-    const invitation = await this.invitations.create({
-      tenantId,
-      subjectType,
-      subjectId,
-      email,
-      name: body.name?.trim() || `${subject.firstName} ${subject.lastName}`,
-      role: subjectType,
-      tokenHash: hashActivationToken(token),
-      expiresAt,
-      delivery: createInvitationDelivery(tenantId, tenantSlug, email, token, expiresAt, context.tenantLifecycleVersion),
-    });
+    let invitation: IdentityInvitationRecord;
+    try {
+      invitation = await this.invitations.create({
+        tenantId,
+        subjectType,
+        subjectId,
+        email,
+        name: body.name?.trim() || `${subject.firstName} ${subject.lastName}`,
+        role: subjectType,
+        tokenHash: hashActivationToken(token),
+        expiresAt,
+        delivery: createInvitationDelivery(tenantId, tenantSlug, email, token, expiresAt, context.tenantLifecycleVersion),
+      });
+    } catch (error) {
+      // A concurrent request created the pending invitation first.
+      if (isUniqueViolation(error)) throw new BadRequestException("IDENTITY_INVITATION_ALREADY_PENDING");
+      throw error;
+    }
     await this.auditLogs?.record({
       tenantId,
       actorUserId: context.userId,
@@ -103,6 +118,34 @@ export class IdentityInvitationService {
       diff: { subjectType, subjectId, emailProvided: true, role: invitation.role },
     });
     return { invitation, activationToken: token };
+  }
+
+  // Automatic invitations from saving a teacher, student or guardian: reuse a live pending invitation for the
+  // same address instead of sending another e-mail.
+  async ensureEmailInvitation(context: RequestContext, body: CreateIdentityInvitationBody): Promise<IdentityInvitationRecord> {
+    try {
+      return (await this.create(context, body)).invitation;
+    } catch (error) {
+      if (!(error instanceof BadRequestException) || error.message !== "IDENTITY_INVITATION_ALREADY_PENDING") throw error;
+      const tenantId = this.requireTenantWideContext(context);
+      const pending = await this.findPendingEmailInvitation(tenantId, parseSubjectType(body.subjectType), body.subjectId?.trim() ?? "");
+      if (!pending) throw error;
+      return pending;
+    }
+  }
+
+  private async findPendingEmailInvitation(
+    tenantId: string,
+    subjectType: InvitationSubjectType,
+    subjectId: string,
+  ): Promise<IdentityInvitationRecord | undefined> {
+    // ponytail: scans the tenant's invitations like the employee path; add a store lookup if lists grow large.
+    return (await this.invitations.list(tenantId)).find((invitation) => (
+      invitation.subjectType === subjectType
+      && invitation.subjectId === subjectId
+      && invitation.kind === "EMAIL_LINK"
+      && invitation.status === "PENDING"
+    ));
   }
 
   async createEmployeeInvitation(
@@ -380,6 +423,10 @@ export class IdentityInvitationService {
       throw new BadRequestException("STUDENT_PORTAL_ACCESS_REQUIRES_ACTIVE_PROFILE");
     }
   }
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "23505";
 }
 
 function isEmployeePendingInvitationConflict(error: unknown): boolean {

@@ -2,8 +2,8 @@
 
 Tarih: 2026-10-13
 Başlangıç sürümü: `main` / `26b3bb8da`
-Durum: Dilim 1.2, 2, 3 ve 4 uygulandı (LOCAL_TEST; CI ve STAGING bekliyor). Dilim 1.1 staging sayımını
-bekliyor. Yeni özellik değildir; mevcut değiştiren endpoint'lerin tekrar dayanıklılığını düzeltir.
+Durum: Dilim 1.2, 2, 3 ve 4 #173 ile main'de ve staging'de (`0accd7d2d`, run `38402654154`). Dilim 1.1
+ayrı PR'da uygulandı (LOCAL_TEST; CI ve STAGING bekliyor). Yeni özellik değildir; mevcut değiştiren endpoint'lerin tekrar dayanıklılığını düzeltir.
 
 Ürün sahibi kararları (2026-10-13):
 - `IdempotencyKey` kayıtları 24 saat saklanır (açık soru 6.1).
@@ -70,7 +70,19 @@ Dilimler tek branch'te ayrı commit'lerdir ve tek PR'da birleşir.
    ```
 
    Boş sonuç migration'ın staging'de satır değiştirmeyeceğini gösterir. Satır dönerse eski davetlerin
-   `REVOKED` yapılması veri değişikliğidir ve ayrı onay ister. Durum: sayım bekleniyor.
+   `REVOKED` yapılması veri değişikliğidir ve ayrı onay ister.
+
+   Sayım sonucu (STAGING, 2026-10-13, salt okunur): çift bekleyen davet yok. Bekleyen toplam: EMPLOYEE
+   EMAIL_LINK 1, STUDENT EMAIL_LINK 2. Migration staging'de satır değiştirmez.
+
+   Uygulama: migration `20261013160000_pending_email_invitation_unique`, `("tenantId", "subjectType",
+   "subjectId")` üzerinde `kind = 'EMAIL_LINK' AND subjectType <> 'EMPLOYEE' AND status = 'PENDING'` kısmi
+   tekil indeksi. `IdentityInvitationService.create` aynı adrese canlı bekleyen davette
+   `IDENTITY_INVITATION_ALREADY_PENDING` döner; yeni adres veya süresi geçmiş davette yalnız e-posta davetini
+   iptal edip yenisini açar (öğrenci aktivasyon kodu korunur). Öğretmen, öğrenci ve veli kaydından gelen
+   otomatik davet `ensureEmailInvitation` ile canlı bekleyen daveti yeniden kullanır. Yerel Postgres 17'de
+   tüm migration'lar, indeksin ikinci daveti reddetmesi ve çift kayıtta eskisinin iptali doğrulandı
+   (LOCAL_TEST). Durum: uygulandı.
 2. **Tekillik ihlali 500 yerine 409.** B sınıfı okul oluşturma uçları tekrar edildiğinde tekil
    indekse çarpıyor ve istemci 500 alıyor (`http/api-error.filter.ts` yalnız `P0001`'i eşliyor).
    Veri doğru kalıyor ama kullanıcı başarılı bir işlemden sonra hata görüyor. `23505` filtrede

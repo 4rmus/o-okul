@@ -47,7 +47,7 @@ export interface IdentityInvitationStore {
   findByTokenHash(tokenHash: string): Promise<(IdentityInvitationRecord & { tenantLifecycleVersion?: number }) | undefined>;
   resend(tenantId: string, id: string, input: { tokenHash: string; expiresAt: string; delivery: SecretDeliveryOutboxInput }): Promise<IdentityInvitationRecord | undefined>;
   markAccepted(id: string, userId: string, acceptedAt: string): Promise<IdentityInvitationRecord | undefined>;
-  revokePendingForSubject(tenantId: string, subjectType: InvitationSubjectType, subjectId: string): Promise<number>;
+  revokePendingForSubject(tenantId: string, subjectType: InvitationSubjectType, subjectId: string, kind?: string): Promise<number>;
 }
 
 export const identityInvitationStoreToken = Symbol("IdentityInvitationStore");
@@ -70,6 +70,20 @@ export class InMemoryIdentityInvitationStore implements IdentityInvitationStore 
       ))
     ) {
       throw new Error("EMPLOYEE_INVITATION_ALREADY_PENDING");
+    }
+    // Mirrors IdentityInvitation_one_pending_email_link_key.
+    if (
+      input.subjectType !== "EMPLOYEE"
+      && (input.kind ?? "EMAIL_LINK") === "EMAIL_LINK"
+      && this.invitations.some((invitation) => (
+        invitation.tenantId === input.tenantId
+        && invitation.subjectType === input.subjectType
+        && invitation.subjectId === input.subjectId
+        && invitation.kind === "EMAIL_LINK"
+        && invitation.status === "PENDING"
+      ))
+    ) {
+      throw Object.assign(new Error("IDENTITY_INVITATION_ALREADY_PENDING"), { code: "23505" });
     }
     const now = new Date().toISOString();
     const invitation = {
@@ -127,7 +141,7 @@ export class InMemoryIdentityInvitationStore implements IdentityInvitationStore 
     return stripTokenHash(invitation);
   }
 
-  async revokePendingForSubject(tenantId: string, subjectType: InvitationSubjectType, subjectId: string): Promise<number> {
+  async revokePendingForSubject(tenantId: string, subjectType: InvitationSubjectType, subjectId: string, kind?: string): Promise<number> {
     let revoked = 0;
     const now = new Date().toISOString();
     for (const invitation of this.invitations) {
@@ -135,7 +149,8 @@ export class InMemoryIdentityInvitationStore implements IdentityInvitationStore 
         invitation.tenantId === tenantId &&
         invitation.subjectType === subjectType &&
         invitation.subjectId === subjectId &&
-        invitation.status === "PENDING"
+        invitation.status === "PENDING" &&
+        (kind === undefined || invitation.kind === kind)
       ) {
         invitation.status = "REVOKED";
         invitation.updatedAt = now;
@@ -255,7 +270,7 @@ export class PostgresIdentityInvitationStore implements IdentityInvitationStore 
     });
   }
 
-  async revokePendingForSubject(tenantId: string, subjectType: InvitationSubjectType, subjectId: string): Promise<number> {
+  async revokePendingForSubject(tenantId: string, subjectType: InvitationSubjectType, subjectId: string, kind?: string): Promise<number> {
     return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
       const revoked = await client.query<{ id: string }>(
         `UPDATE "IdentityInvitation"
@@ -265,8 +280,9 @@ export class PostgresIdentityInvitationStore implements IdentityInvitationStore 
            AND "subjectType" = $2
            AND "subjectId" = $3
            AND "status" = 'PENDING'
+           AND ($4::text IS NULL OR "kind" = $4)
          RETURNING "id"`,
-        [tenantId, subjectType, subjectId],
+        [tenantId, subjectType, subjectId, kind ?? null],
       );
       for (const invitation of revoked.rows) {
         await clearInvitationDeliveries(client, invitation.id);
