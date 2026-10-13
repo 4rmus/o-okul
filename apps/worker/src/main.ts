@@ -1,5 +1,6 @@
 import { createGuardianPaymentDueScanner } from "./jobs/guardian-payment-due-scanner.js";
 import { createTenantFreshResetWorker } from "./jobs/tenant-fresh-reset-worker.js";
+import { createIdempotencyKeyRetentionSweeper } from "./jobs/idempotency-key-retention.js";
 import { createLicenseExpiryPurgeCandidateReporter } from "./jobs/license-expiry-purge-candidates.js";
 import {
   createAnnouncementDeliveryBullWorker,
@@ -38,9 +39,12 @@ const queueNames = [
 const resetWorker = createTenantFreshResetWorker(connection);
 // Reports only; never deletes (DEC-20261005-03).
 const purgeCandidateReporter = createLicenseExpiryPurgeCandidateReporter();
+// Deletes idempotency replay records older than 24 hours (docs/idempotency-kapsam-plani.md).
+const idempotencyKeySweeper = createIdempotencyKeyRetentionSweeper();
 const workers = [
   ...(resetWorker ? [resetWorker] : []),
   ...(purgeCandidateReporter ? [purgeCandidateReporter] : []),
+  ...(idempotencyKeySweeper ? [idempotencyKeySweeper] : []),
   createSecretDeliveryOutboxRunner(),
   // KV-8: business-hours payment due reminders, enqueued onto announcement-delivery.
   createGuardianPaymentDueScanner({ connection, prefix: process.env.QUEUE_PREFIX }),
