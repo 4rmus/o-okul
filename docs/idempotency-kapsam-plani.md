@@ -2,9 +2,15 @@
 
 Tarih: 2026-10-13
 Başlangıç sürümü: `main` / `26b3bb8da`
-Durum: Plan. Uygulama ürün sahibi onayı bekler. Yeni özellik değildir; mevcut değiştiren
-endpoint'lerin tekrar dayanıklılığını düzeltir. DEC-20261010-01 kapsamında güvenilirlik işi olarak
-önerilir.
+Durum: Dilim 1.2, 2, 3 ve 4 uygulandı (LOCAL_TEST; CI ve STAGING bekliyor). Dilim 1.1 staging sayımını
+bekliyor. Yeni özellik değildir; mevcut değiştiren endpoint'lerin tekrar dayanıklılığını düzeltir.
+
+Ürün sahibi kararları (2026-10-13):
+- `IdempotencyKey` kayıtları 24 saat saklanır (açık soru 6.1).
+- Bekleyen davet indeksi öncesinde staging'de sayım yapılır (açık soru 6.2). Sorgu bölüm 3'te; sonuç
+  gelene kadar Dilim 1.1 uygulanmaz.
+- Alan, kampüs ve seviye oluştururken `code` zorunludur (açık soru 6.3). Bu üç endpoint anahtar yerine
+  `(tenantId, code)` tekil indeksiyle korunur ve B sınıfına geçer.
 Kanıt sınıfı: Aksi yazılmadıkça LOCAL_STATIC (kod ve şema okuması). Hiçbir test çalıştırılmadı.
 
 ## 1. Bağlam
@@ -47,15 +53,40 @@ Dilimler tek branch'te ayrı commit'lerdir ve tek PR'da birleşir.
    - `identity-invitation @Post()`: tekrar ikinci davet ve ikinci aktivasyon e-postası açıyor.
    - `teachers @Patch(":id")`: hesabı olmayan öğretmende gövdede `email` varsa her PATCH yeni davet
      ve e-posta oluşturuyor (`teacher.service.ts:178` → `identity-invitation-store.ts:165-188`).
-   Ön koşul: staging verisinde aynı kişiye ait birden fazla `PENDING` davet varsa migration düşer.
-   Migration'dan önce sayım yapılır; temizlik gerekiyorsa ayrı onay alınır.
+   Ön koşul: staging verisinde aynı kişiye ait birden fazla `PENDING` davet varsa indeks kurulamaz.
+   Çalışan indeksi migration'ı (`20260810114500`) eskileri `REVOKED` yapıp bekleyen e-postalarını
+   geçersiz kılarak kurulmuştu; aynı yol izlenir. Staging'de salt okunur sayım:
+
+   ```sql
+   BEGIN READ ONLY;
+   SELECT "subjectType", "kind", count(*) AS "subjectsWithDuplicates", sum("pending" - 1) AS "extraPendingInvitations"
+   FROM (
+     SELECT "tenantId", "subjectType", "subjectId", "kind", count(*) AS "pending"
+     FROM "IdentityInvitation" WHERE "status" = 'PENDING'
+     GROUP BY 1, 2, 3, 4 HAVING count(*) > 1
+   ) d
+   GROUP BY 1, 2 ORDER BY 1, 2;
+   ROLLBACK;
+   ```
+
+   Boş sonuç migration'ın staging'de satır değiştirmeyeceğini gösterir. Satır dönerse eski davetlerin
+   `REVOKED` yapılması veri değişikliğidir ve ayrı onay ister. Durum: sayım bekleniyor.
 2. **Tekillik ihlali 500 yerine 409.** B sınıfı okul oluşturma uçları tekrar edildiğinde tekil
    indekse çarpıyor ve istemci 500 alıyor (`http/api-error.filter.ts` yalnız `P0001`'i eşliyor).
    Veri doğru kalıyor ama kullanıcı başarılı bir işlemden sonra hata görüyor. `23505` filtrede
    409 `CONFLICT` olarak eşlenir. Tek merkezi değişiklik; mevcut özel `23505` yakalamaları
-   (`class-store.ts`, `school.service.ts:877`) korunur.
+   (`class-store.ts`, `school.service.ts:877`) korunur. Durum: uygulandı (`UNIQUE_CONSTRAINT_CONFLICT`).
 
-### Dilim 2. Idempotency-Key eklenecek 17 endpoint
+### Dilim 2. Idempotency-Key eklenen 14 endpoint
+
+Durum: uygulandı. 1–14 envantere taşındı (55 → 69 operation); her biri için tekrar ve gövde uyuşmazlığı
+e2e testi var. Destek talebinin dört ucu tek `support-ticket.create` işleminden geçer. İsteğin özetine
+çağıran kullanıcı (`actorUserId`) girer; başka bir kullanıcı aynı anahtarı kullanırsa 409 alır. Davet
+yeniden gönderme yalnız daveti önbelleğe alır; aktivasyon token'ı replay kaydına yazılmaz. Web
+`apiRequest`, kendi anahtarı olmayan her POST'a kullanıcı + URL + gövde başına bir anahtar ekler ve
+2xx gelince siler; çift tıklama ve yeniden gönderme tüm formlarda bu yolla korunur. 15–17 `code`
+zorunluluğuyla B sınıfına geçti. Gelişim değerlendirmesi (#14) artık tüm puanları ilk yazmadan önce
+doğrular (5.1); yazma sırasındaki veritabanı hatası için tek işlem hâlâ yok.
 
 Mevcut kalıp kullanılır (`IdempotencyService.run`, `@Headers("idempotency-key")`, OpenAPI
 `idempotent: true`, web istemcisinde anahtar üretimi, bir e2e tekrar testi). Her endpoint envantere
@@ -81,13 +112,14 @@ taşınır ve istisna listesinden çıkar.
 | 16 | `campuses @Post()` | `code` boşsa çift kampüs | Aynı |
 | 17 | `grade-levels @Post()` | `code` boşsa çift seviye | Aynı |
 
-15–17 için alternatif: `code` zorunlu yapılır ve endpoint B'ye geçer. Bu, mevcut formları ve
-içe aktarmayı etkiler; ürün kararı gerekir (açık soru 6.3).
+15–17: ürün kararıyla `code` zorunlu yapıldı; anahtar eklenmedi. Düzenleme formu eski kayıtlar için kodu
+isteğe bağlı bırakır.
 
 ### Dilim 3. İstisna listesine gerekçe
 
-`knownNonIdempotentMutations` dizi yerine `{ token: "B|C|D: gerekçe" }` haritasına çevrilir. Kontrol
-gerekçesiz kaydı reddeder. Gerekçeler bu plandaki 4. bölümden alınır.
+`knownNonIdempotentMutations` dizi yerine `{ token: "B|C|D|AÇIK: gerekçe" }` haritasına çevrilir. Kontrol
+gerekçesiz kaydı reddeder. Gerekçeler bu plandaki 4. bölümden alınır. `AÇIK`, planlanmış ama henüz
+kapanmamış açıktır (Dilim 1.1'in iki endpoint'i). Durum: uygulandı.
 
 ### Dilim 4. `IdempotencyKey` saklama süresi
 
@@ -97,8 +129,11 @@ kayıtlar `responseBody` ile birlikte kurum lisans sonu imhasına kadar kalıyor
 `docs/DECISIONS.md:1129`). `responseBody` kişisel veri içerebilir ve öğrenci/öğretmen/veli
 `purge-pii` işlemleri bu kopyalara dokunmuyor.
 
-Öneri: `expiresAt` başlangıçta yazılır ve worker süresi geçmiş kayıtları siler. Süre ürün ve KVKK
-kararıdır (açık soru 6.1). Dilim 2 kapsamı genişlettiği için bu dilim onunla birlikte gelmelidir.
+Uygulama: worker saatlik olarak `createdAt` değeri 24 saatten eski kayıtları siler (RLS bypass bağlamı,
+`packages/db/src/idempotency-retention.ts`). `expiresAt` kullanılmaz; böylece alanı hiç doldurulmamış
+eski kayıtlar da silinir. Bir kayıt en fazla yaklaşık 25 saat yaşar. Durum: uygulandı (birim testi
+LOCAL_TEST; gerçek Postgres üzerinde silme UNPROVEN). `PlatformIdempotencyKey` (kurum oluşturma) bu
+kapsamda değildir.
 
 İki endpoint bilerek anahtarsız kalır, çünkü yanıtı saklamak zararlı olur:
 - `student @Post(":id/portal-invitations")` düz metin aktivasyon kodu döndürür.
@@ -289,7 +324,7 @@ Bu plana dahil değildir; her biri ayrı kayıt ister.
 ## 7. Doğrulama
 
 - `pnpm --filter @o-okul/api typecheck`, `pnpm --filter @o-okul/api test`, `pnpm openapi:generate`
-- `node scripts/check-idempotency-inventory.mjs` (envanter 55 → 72; istisna 125 → 108, çünkü Dilim 1.1'in iki endpoint'i B olarak listede kalır)
+- `node scripts/check-idempotency-inventory.mjs` (envanter 55 → 69; istisna 125 → 111, gerekçeli)
 - Dilim 1.1 migration'ı için `pnpm --filter @o-okul/db test`, `pnpm db:rls:check`,
   `pnpm tenant-db:check`
 - Web istemcisinde anahtar üretimi için `pnpm --filter @o-okul/web typecheck`
