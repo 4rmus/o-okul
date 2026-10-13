@@ -137,6 +137,7 @@ const knownNonIdempotentMutations = {
   "apps/api/src/identity-invitation/identity-invitation.controller.ts": {
     "@Post()": "B: Kişi başına tek bekleyen e-posta daveti (IdentityInvitation_one_pending_email_link_key); aynı adrese tekrar IDENTITY_INVITATION_ALREADY_PENDING alır",
     "@Post(\"accept\")": "D: Tek kullanımlık token; status='PENDING' CAS",
+    "@Post(\":id/revoke\")": "C: Durum korumalı (status='PENDING' CAS); tekrar IDENTITY_INVITATION_NOT_PENDING",
   },
   "apps/api/src/identity-invitation/student-portal-activation.controller.ts": {
     "@Post(\"activate\")": "D: Satır kilidi altında aktivasyon kodu; tekrar 409",

@@ -183,6 +183,7 @@ export type {
   IdentityInvitationCreateResponse,
   IdentityInvitationRecord,
   IdentityInvitationResendResponse,
+  IdentityInvitationRevokeResponse,
   IdentityInvitationStatus,
   IdentityInvitationSubjectType,
   LearningOutcomeRecord,

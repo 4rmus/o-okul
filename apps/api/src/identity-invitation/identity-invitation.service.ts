@@ -217,6 +217,29 @@ export class IdentityInvitationService {
     }
   }
 
+  // UAT F-03: an admin can withdraw a sent invitation (wrong role, wrong address, left before accepting) and
+  // issue a new one instead of waiting for the 24-hour expiry. The outbox payload is cleared so an unsent
+  // e-mail never carries a dead link; an already delivered link fails with IDENTITY_INVITATION_NOT_PENDING.
+  async revoke(context: RequestContext, id: string): Promise<IdentityInvitationRecord> {
+    const tenantId = this.requireTenantWideContext(context);
+    const existing = await this.invitations.findById(tenantId, id);
+    if (!existing) throw new NotFoundException("IDENTITY_INVITATION_NOT_FOUND");
+    if (existing.status !== "PENDING") throw new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
+    // An owner invitation is withdrawn under the same capability that could issue it.
+    if (existing.subjectType === "EMPLOYEE") this.assertElevatedEmployeeInvitationAllowed(context, existing.role as EmployeeInvitationRole);
+    const revoked = await this.invitations.revoke(tenantId, id);
+    if (!revoked) throw new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
+    await this.auditLogs?.record({
+      tenantId,
+      actorUserId: context.userId,
+      entityType: "IdentityInvitation",
+      entityId: revoked.id,
+      action: "identity_invitation.revoked",
+      diff: { subjectType: revoked.subjectType, subjectId: revoked.subjectId, role: revoked.role, kind: revoked.kind },
+    });
+    return revoked;
+  }
+
   // Returns only the invitation: the replay cache stores this response, and the activation token must
   // never be persisted outside the outbox.
   async resend(context: RequestContext, id: string, idempotencyKey?: string): Promise<IdentityInvitationRecord> {
