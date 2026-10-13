@@ -1,9 +1,9 @@
-import { execFileSync } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import {
   almanacFoundationSourceDigest,
   almanacFoundationSourceDirty,
+  almanacMeasurementBaseCommitSha,
 } from "./almanac-foundation-digest.mjs";
 
 const output = "docs/measurement-baselines/gate-b-local-synthetic.json";
@@ -15,7 +15,7 @@ if (JSON.stringify(readdirSync(partsRoot).sort()) !== JSON.stringify(expectedPar
 }
 const measurementRun = JSON.parse(readFileSync(partsRoot + "/.run.json", "utf8"));
 const tasks = taskIds.map((taskId) => JSON.parse(readFileSync(partsRoot + "/" + taskId + ".json", "utf8")));
-const currentBaseCommitSha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+const currentBaseCommitSha = almanacMeasurementBaseCommitSha();
 const currentSourceTreeSha256 = almanacFoundationSourceDigest();
 const runIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
