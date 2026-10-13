@@ -13,7 +13,21 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
   let activeSession = false;
   let capturedUpdate: Record<string, unknown> | undefined;
   let capturedInvitation: Record<string, unknown> | undefined;
-  const pendingInvitations: Array<Record<string, unknown>> = [];
+  // An expired PENDING invitation is still in the list; the row must keep offering a fresh invitation (UAT F-03).
+  const pendingInvitations: Array<Record<string, unknown>> = [{
+    id: "invitation-expired-a",
+    tenantId: "tenant-a",
+    subjectType: "EMPLOYEE",
+    subjectId: "employee-unlinked-a",
+    email: "eski@example.test",
+    name: "Yeni Admin",
+    role: "OPERATIONS_STAFF",
+    kind: "EMAIL_LINK",
+    status: "PENDING",
+    expiresAt: "2026-01-01T00:00:00.000Z",
+    createdAt: "2025-12-31T10:00:00.000Z",
+    updatedAt: "2025-12-31T10:00:00.000Z",
+  }];
   const revokedInvitations: string[] = [];
   const employeeRequests: URL[] = [];
   let employee = employeeFixture();
@@ -81,7 +95,7 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
         role: "TENANT_ADMIN",
         kind: "EMAIL_LINK",
         status: "PENDING",
-        expiresAt: "2026-08-02T10:00:00.000Z",
+        expiresAt: "2099-08-02T10:00:00.000Z",
         createdAt: "2026-08-01T10:00:00.000Z",
         updatedAt: "2026-08-01T10:00:00.000Z",
       };

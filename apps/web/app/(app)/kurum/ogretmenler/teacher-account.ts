@@ -27,7 +27,7 @@ export async function loadPendingTeacherInvitations(accessToken: string): Promis
   const invitations = await apiRequest<IdentityInvitationRecord[]>(accessToken, `${apiBaseUrl}/identity-invitations?q=TEACHER`);
   return new Map(
     invitations
-      .filter((invitation) => invitation.subjectType === "TEACHER" && invitation.status === "PENDING")
+      .filter((invitation) => invitation.subjectType === "TEACHER" && invitation.status === "PENDING" && Date.parse(invitation.expiresAt) > Date.now())
       .map((invitation) => [invitation.subjectId, invitation]),
   );
 }

@@ -503,4 +503,49 @@ describe("Identity invitations", () => {
     expect(second.body).toMatchObject({ role: "TENANT_ADMIN", status: "PENDING", subjectId: employeeId });
     expect(second.body.id).not.toBe(first.body.id);
   });
+
+  it("kurum sahibi davetini yalnız kurum sahibi iptal eder (UAT F-03)", async () => {
+    registerTestLoginIdentity("owner-f03@example.test", { tenantSlug: "dna-egitim" });
+    upsertInMemoryAuthUser({
+      id: "user-owner-f03",
+      email: "owner-f03@example.test",
+      name: "Tenant Owner",
+      password: "password",
+      tenantId: "tenant-a",
+      roles: ["TENANT_OWNER"],
+      membership: {
+        id: "membership-owner-f03",
+        staffRole: "TENANT_OWNER",
+        hasTeacherPersona: false,
+        hasStudentPersona: false,
+        version: 1,
+        scopeMode: "TENANT",
+        campusIds: [],
+      },
+    });
+    const owner = await login("owner-f03@example.test");
+    const admin = await login("admin-a@example.test");
+    const employee = await request(server)
+      .post("/employees")
+      .set("Authorization", `Bearer ${owner}`)
+      .send({ employeeNo: "A-F03-2", firstName: "Ikinci", lastName: "Sahip", workEmail: "ikinci.sahip@example.test", status: "ACTIVE" })
+      .expect(201);
+    const invite = await request(server)
+      .post(`/employees/${(employee.body as { id: string }).id}/account-invitations`)
+      .set("Authorization", `Bearer ${owner}`)
+      .send({ email: "ikinci.sahip@example.test", role: "TENANT_OWNER" })
+      .expect(201);
+    const invitationId = (invite.body as { id: string }).id;
+
+    await request(server)
+      .post(`/identity-invitations/${invitationId}/revoke`)
+      .set("Authorization", `Bearer ${admin}`)
+      .expect(403)
+      .expect(({ body }) => expect(body.error.code).toBe("TENANT_OWNER_MANAGE_REQUIRED"));
+    await request(server)
+      .post(`/identity-invitations/${invitationId}/revoke`)
+      .set("Authorization", `Bearer ${owner}`)
+      .expect(201)
+      .expect(({ body }) => expect(body).toMatchObject({ id: invitationId, status: "REVOKED", role: "TENANT_OWNER" }));
+  });
 });

@@ -118,8 +118,13 @@ test("kullanıcı yönetimi yetkisi olmayan rol davet göndermez", async ({ page
 });
 
 test("öğretmen listesi hesap durumunu bağlı, davet bekliyor ve hesap yok olarak gösterir", async ({ page }) => {
+  // teacher-c also carries an expired PENDING invitation; it must not count as "Davet bekliyor".
   const state = mockState({
-    invitations: [invitation("invitation-b", "teacher-b"), { ...invitation("invitation-guardian", "teacher-c"), subjectType: "GUARDIAN", role: "GUARDIAN" }],
+    invitations: [
+      invitation("invitation-b", "teacher-b"),
+      { ...invitation("invitation-guardian", "teacher-c"), subjectType: "GUARDIAN", role: "GUARDIAN" },
+      { ...invitation("invitation-expired", "teacher-c"), expiresAt: "2026-01-01T00:00:00.000Z" },
+    ],
     teachers: [
       teacher("teacher-a", "Ayşe", "Demir", "user-teacher-a"),
       teacher("teacher-b", "Burak", "Kaya"),
@@ -246,7 +251,7 @@ function invitation(id: string, subjectId: string): IdentityInvitationRecord {
     role: "TEACHER",
     kind: "EMAIL_LINK",
     status: "PENDING",
-    expiresAt: "2026-10-12T10:00:00.000Z",
+    expiresAt: "2099-10-12T10:00:00.000Z",
     createdAt: "2026-10-11T10:00:00.000Z",
     updatedAt: "2026-10-11T10:00:00.000Z",
   };

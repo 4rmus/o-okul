@@ -131,15 +131,17 @@ export function EmployeesPage() {
         const ownerLocked = employee.access?.staffRole === "TENANT_OWNER" && !canManageOwners;
         const endedLocked = employee.access?.status === "ENDED";
         const pendingInvitation = employee.userId ? undefined : pendingInvitations.get(employee.id);
+        // An owner invitation is withdrawn under the same capability that issued it (owner:manage).
+        const revokeLocked = pendingInvitation?.role === "TENANT_OWNER" && !canManageOwners;
         return (
           <span className="next-row-actions">
             {pendingInvitation ? (
               <Button
                 aria-label={`${employee.firstName} ${employee.lastName} hesap davetini iptal et`}
-                disabled={isSaving}
+                disabled={isSaving || revokeLocked}
                 onClick={() => void handleRevokeInvitation(employee, pendingInvitation)}
                 size="icon"
-                title="Daveti iptal et"
+                title={revokeLocked ? "Kurum sahibi davetini yalnız başka bir kurum sahibi iptal edebilir." : "Daveti iptal et"}
                 type="button"
                 variant="ghost"
               >
@@ -651,7 +653,8 @@ async function loadPendingEmployeeInvitations(accessToken: string): Promise<Map<
   const invitations = await apiRequest<IdentityInvitationRecord[]>(accessToken, `${apiBaseUrl}/identity-invitations?q=EMPLOYEE`);
   return new Map(
     invitations
-      .filter((invitation) => invitation.subjectType === "EMPLOYEE" && invitation.status === "PENDING")
+      // Expiry is not materialised in the database; an expired PENDING row is replaced by the next invitation.
+      .filter((invitation) => invitation.subjectType === "EMPLOYEE" && invitation.status === "PENDING" && Date.parse(invitation.expiresAt) > Date.now())
       .map((invitation) => [invitation.subjectId, invitation]),
   );
 }
@@ -667,7 +670,7 @@ function employeeWriteErrorMessage(error: unknown) {
   if (error instanceof ApiRequestError && error.code === "EMPLOYEE_INVITATION_ALREADY_PENDING") return "Bu çalışan için zaten bekleyen bir davet var; önce satırdan daveti iptal edin.";
   if (error instanceof ApiRequestError && error.code === "EMPLOYEE_ALREADY_LINKED_VIA_TEACHER") return "Bu çalışan öğretmen hesabıyla zaten bağlı; ikinci hesap açılamaz.";
   if (error instanceof ApiRequestError && error.code === "EMPLOYEE_UNIQUE_CONFLICT") return "Sicil numarası veya hesap bağı başka bir çalışan tarafından kullanılıyor.";
-  if (error instanceof ApiRequestError && error.code === "TENANT_OWNER_MANAGE_REQUIRED") return "Kurum sahibi davetini yalnız başka bir kurum sahibi gönderebilir.";
+  if (error instanceof ApiRequestError && error.code === "TENANT_OWNER_MANAGE_REQUIRED") return "Kurum sahibi davetini yalnız başka bir kurum sahibi gönderebilir veya iptal edebilir.";
   return "İşlem tamamlanamadı. Bilgileri kontrol edip tekrar deneyin.";
 }
 
