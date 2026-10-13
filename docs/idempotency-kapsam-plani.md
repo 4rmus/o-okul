@@ -199,6 +199,7 @@ Yol `apps/api/src` göreli. Dosya:satır kanıtları alt ajan incelemesinden; LO
 | `identity-invitation @Post()` | A | Dilim 1.1 (bekleyen davet tekilliği) |
 | `identity-invitation @Post("accept")` | D | Tek kullanımlık token; `status='PENDING'` CAS |
 | `identity-invitation @Post(":id/resend")` | A | Dilim 2 #1 |
+| `identity-invitation @Post(":id/revoke")` | C | UAT F-03 (2026-10-14); `status='PENDING'` CAS, tekrar `IDENTITY_INVITATION_NOT_PENDING` |
 | `student-portal-activation @Post("activate")` | D | Satır kilidi altında aktivasyon kodu; tekrar 409 |
 | `user-management @Patch(":userId/roles")` | D | Emekli; her zaman 410 |
 | `user-management @Post()` | A | Dilim 2 #6 |
