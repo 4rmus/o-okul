@@ -1029,6 +1029,10 @@ Gerekli GitHub `staging` environment secret/var değerleri:
 - IP/self-signed edge yalnız teşhis içindir: `TRAEFIK_HTTPS_SMOKE_ALLOW_INSECURE_TLS=true`
   kullanıldığında `pnpm traefik:https:smoke` PASS evidence artifact'i yazamaz. Release bundle,
   production summary ve go-live kanıtı için gerçek domain/public TLS kullanılmalıdır.
+- `pnpm traefik:https:smoke` ağ hatası, zaman aşımı veya beklenmeyen HTTP durumunda
+  `TRAEFIK_HTTPS_SMOKE_ATTEMPTS` (varsayılan 3, en çok 5) kez, `TRAEFIK_HTTPS_SMOKE_RETRY_DELAY_MS` (varsayılan
+  10000) arayla dener; HSTS ve `/health` gövde kontrolleri yeniden denenmez. Kullanılan deneme sayısı kanıtta
+  `attempts` alanına yazılır (IMG-2c; Cloudflare–origin yolunda 1,5–3,5 sn ek gecikme ölçüldü, 2026-10-15).
 - Domain/IP edge geçişi sırasında `docker-compose.traefik.yml` ve `docker-compose.traefik-ip.yml`
   birlikte config edilebilir; router'lar explicit `service=` label taşıdığı için Traefik service
   ambiguity üretmemelidir. Bu config doğrulaması first-gates yerine geçmez.
@@ -1182,7 +1186,9 @@ Beklenen akış:
   uzak shell komut satırına gömülmez, `GHCR_READ_TOKEN` env adıyla SSH stdin üzerinden `0600` benzeri izinli
   `.ghcr_read_token` dosyasına aktarılır, `docker login --password-stdin` sonrası trap ile silinir.
 - Pull öncesinde workflow, aktif release ve rollback tag'i dışındaki eski `ghcr.io/4rmus/o-okul/*`
-  imajlarını temizler, en az 2048MB boş disk alanı ister ve image pull adımını 20 dakika ile sınırlar.
+  imajlarını temizler, en az 2048MB boş disk alanı ister ve image pull adımını servisleri durdurmadan önce
+  toplam 30 dakikalık bütçeyle en çok üç kez dener (IMG-2c, 2026-10-15). Tamamlanan katmanlar containerd
+  deposunda kalır; çekme düşerse eski sürüm çalışmaya devam eder. Deploy işinin süre sınırı 50 dakikadır.
 - `docker compose --env-file .env --env-file .env.release.next -f docker-compose.yml
   -f docker-compose.release.yml -f docker-compose.traefik.yml pull web api worker queue-board` ile imajlar çekilir.
 - `docker compose ... run --rm api sh -lc 'cd packages/db && ./node_modules/.bin/prisma migrate deploy --config prisma.config.ts'`
