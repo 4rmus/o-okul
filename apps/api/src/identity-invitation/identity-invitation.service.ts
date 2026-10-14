@@ -299,6 +299,11 @@ export class IdentityInvitationService {
     // UAT F-16 (KV-3b): an existing account with this e-mail keeps its roles and gains the invited one; a combination
     // the membership model cannot hold (student + anything) is refused here, before the mutation is admitted.
     const existingUser = subject ? await this.users.findTenantUserByEmail(invitation.tenantId, subject.email) : undefined;
+    // A subject already linked to another account (e.g. a student who activated with a code meanwhile) is not
+    // relinked by an e-mail invitation; refused before the mutation is admitted (UAT F-08 pattern).
+    if (subject?.previousUserId && subject.previousUserId !== existingUser?.id) {
+      throw new BadRequestException("SUBJECT_ALREADY_LINKED");
+    }
     if (existingUser && !canAddTenantRole(existingUser.roles, invitation.role)) {
       throw new BadRequestException("IDENTITY_INVITATION_EMAIL_ACCOUNT_INCOMPATIBLE");
     }
@@ -329,6 +334,9 @@ export class IdentityInvitationService {
       });
       return requireAcceptedEmployeeActivation(outcome);
     }
+    // A refusal thrown only after its own writes were undone is a known outcome: the activity row is closed
+    // instead of left UNCERTAIN (UAT F-12 pattern). A failing compensation throws something else and stays UNCERTAIN.
+    let compensatedRefusal: unknown;
     return runVerifiedTenantMutation(admission, async () => {
     const { email, nationalIdEncrypted, nationalIdHash } = subject!;
 
@@ -345,13 +353,16 @@ export class IdentityInvitationService {
     const boundSubject = await this.bindSubject(invitation.tenantId, invitation.subjectType, invitation.subjectId, user.id);
     if (!boundSubject) {
       if (roleAdded) await this.users.removeTenantRole(invitation.tenantId, user.id, invitation.role);
-      throw new NotFoundException("SUBJECT_NOT_FOUND");
+      throw (compensatedRefusal = new NotFoundException("SUBJECT_NOT_FOUND"));
     }
 
     const accepted = await this.invitations.markAccepted(invitation.id, user.id, new Date().toISOString());
     if (!accepted) {
+      // The invitation was revoked or expired while this accept was running (UAT F-03 review): undo the
+      // link this call made, so the subject is not left bound to an account without the role.
+      if (subject!.previousUserId !== user.id) await this.unbindSubject(invitation.tenantId, invitation.subjectType, invitation.subjectId, user.id);
       if (roleAdded) await this.users.removeTenantRole(invitation.tenantId, user.id, invitation.role);
-      throw new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
+      throw (compensatedRefusal = new BadRequestException("IDENTITY_INVITATION_NOT_PENDING"));
     }
     await this.auditLogs?.record({
       tenantId: invitation.tenantId,
@@ -363,7 +374,7 @@ export class IdentityInvitationService {
     });
     if (invitation.subjectType === "TEACHER") await this.linkTeacherEmployee(invitation.tenantId, invitation.subjectId, user.id);
     return accepted;
-    });
+    }, (error) => error !== undefined && error === compensatedRefusal);
   }
 
   // UAT F-13: the teacher's Employee row (Teacher.employeeId) gets the same account, so Çalışanlar ve Yetkiler
@@ -394,7 +405,8 @@ export class IdentityInvitationService {
     if (invitation.subjectType === "STUDENT" && (!nationalIdEncrypted || !nationalIdHash)) {
       throw new BadRequestException("SUBJECT_NATIONAL_ID_REQUIRED");
     }
-    return { email: invitation.email, nationalIdEncrypted, nationalIdHash };
+    const previousUserId = "userId" in subject && typeof subject.userId === "string" ? subject.userId : undefined;
+    return { email: invitation.email, nationalIdEncrypted, nationalIdHash, previousUserId };
   }
 
   private requireTenantId(context: RequestContext): string {
@@ -436,6 +448,14 @@ export class IdentityInvitationService {
     if (subjectType === "STUDENT") return this.students.bindUser(tenantId, subjectId, userId);
     if (subjectType === "GUARDIAN") return this.guardians.bindUser(tenantId, subjectId, userId);
     return this.teachers.bindUser(tenantId, subjectId, userId);
+  }
+
+  private async unbindSubject(tenantId: string, subjectType: InvitationSubjectType, subjectId: string, userId: string): Promise<void> {
+    if (subjectType === "STUDENT") await this.students.unbindUser(tenantId, subjectId, userId);
+    else if (subjectType === "GUARDIAN") await this.guardians.unbindUser(tenantId, subjectId, userId);
+    else if (subjectType === "TEACHER") await this.teachers.unbindUser(tenantId, subjectId, userId);
+    // EMPLOYEE accepts take the EmployeeAccountActivationStore path (row lock) whenever that store is injected,
+    // which the module always does; without it an employee subject has no unbind and keeps the link.
   }
 
   private assertStudentPortalEligible(subjectType: InvitationSubjectType, subject: unknown): void {

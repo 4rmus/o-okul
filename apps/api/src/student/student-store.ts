@@ -127,6 +127,8 @@ export interface StudentStore {
   update(id: string, input: Partial<Pick<StudentRecord, "firstName" | "lastName" | "gradeLevelId" | "classId" | "responsibleTeacherId" | "status">>): Promise<StudentRecord | undefined>;
   updateProfile(id: string, input: StudentProfileUpdate): Promise<StudentProfileStorageRecord | undefined>;
   bindUser(tenantId: string, id: string, userId: string): Promise<StudentRecord | undefined>;
+  /** Clears the account link only while it still points at userId (invitation accept rollback). */
+  unbindUser(tenantId: string, id: string, userId: string): Promise<boolean>;
   softDelete(id: string, deletedAt: string): Promise<StudentRecord | undefined>;
   purgePii(id: string): Promise<StudentRecord | undefined>;
   updateTenant(id: string, tenantId: string): Promise<StudentRecord | undefined>;
@@ -343,6 +345,13 @@ export class InMemoryStudentStore implements StudentStore {
 
     student.userId = userId;
     return student;
+  }
+
+  async unbindUser(tenantId: string, id: string, userId: string): Promise<boolean> {
+    const student = this.students.find((candidate) => candidate.tenantId === tenantId && candidate.id === id && candidate.userId === userId);
+    if (!student) return false;
+    student.userId = undefined;
+    return true;
   }
 
   async softDelete(id: string, deletedAt: string): Promise<StudentRecord | undefined> {
@@ -910,6 +919,22 @@ export class PostgresStudentStore implements StudentStore {
         [tenantId, id, userId],
       );
       return result.rows[0] ? toStudentRecord(result.rows[0]) : undefined;
+    });
+  }
+
+  async unbindUser(tenantId: string, id: string, userId: string): Promise<boolean> {
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const result = await client.query<{ id: string }>(
+        `UPDATE "Student"
+         SET "userId" = NULL,
+             "updatedAt" = now()
+         WHERE "tenantId" = $1
+           AND "id" = $2
+           AND "userId" = $3
+         RETURNING "id"`,
+        [tenantId, id, userId],
+      );
+      return result.rows.length > 0;
     });
   }
 

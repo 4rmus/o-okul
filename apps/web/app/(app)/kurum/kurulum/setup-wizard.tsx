@@ -2057,7 +2057,7 @@ function studentImportErrorMessage(dryRun: StudentImportDryRunResult) {
 
   const classError = dryRun.errors.find((error) => error.code === "CLASS_NOT_FOUND");
   if (classError) {
-    return `Öğrenci dosyasında sistemde olmayan sınıf var. Satır: ${classError.row}.`;
+    return `Öğrenci dosyasında sistemde olmayan sınıf var. Satır: ${classError.row}. İçe aktarma sınıf oluşturmaz; sınıfı bu sihirbazın sınıf adımında veya Sınıflar ekranında ekleyip dosyayı yeniden kontrol edin.`;
   }
 
   const contactColumnsConflict = dryRun.errors.find((error) => error.code === "CONTACT_COLUMNS_CONFLICT");

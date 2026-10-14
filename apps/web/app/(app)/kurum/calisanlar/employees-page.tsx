@@ -81,6 +81,8 @@ export function EmployeesPage() {
   const [invitingEmployee, setInvitingEmployee] = useState<EmployeeAccessRecord | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<EmployeeCreateRequest>(emptyEmployeeCreateForm);
+  // UAT F-02: an account invitation can be sent together with the new profile (one "yönetici ekle" flow).
+  const [createInviteRole, setCreateInviteRole] = useState<EmployeeInvitationRole | "">("");
   const [invitationForm, setInvitationForm] = useState<EmployeeAccountInvitationRequest>({ email: "", role: "OPERATIONS_STAFF" });
   const [form, setForm] = useState<EmployeeAccessFormState>(emptyAccessForm);
   const [isSaving, setIsSaving] = useState(false);
@@ -222,13 +224,39 @@ export function EmployeesPage() {
     if (!auth) return;
     setIsSaving(true);
     setSubmitError("");
+    const inviteRole = createInviteRole;
+    const inviteEmail = createForm.workEmail?.trim() ?? "";
+    if (inviteRole && !inviteEmail) {
+      setSubmitError("Hesap daveti için iş e-postası zorunludur.");
+      setIsSaving(false);
+      return;
+    }
+    let created: EmployeeAccessRecord;
     try {
-      await createEmployee(auth.accessToken, createForm);
-      await queryClient.invalidateQueries({ queryKey: ["employees", tenantId] });
-      setIsCreateOpen(false);
-      setCreateForm(emptyEmployeeCreateForm);
-      notify("Çalışan profili oluşturuldu. Hesap gerektiğinde satırdaki davet işlemini kullanın.");
+      created = await createEmployee(auth.accessToken, inviteRole ? { ...createForm, status: "ACTIVE" } : createForm);
     } catch (error) {
+      setSubmitError(employeeWriteErrorMessage(error));
+      setIsSaving(false);
+      return;
+    }
+    await queryClient.invalidateQueries({ queryKey: ["employees", tenantId] });
+    setIsCreateOpen(false);
+    setCreateForm(emptyEmployeeCreateForm);
+    setCreateInviteRole("");
+    if (!inviteRole) {
+      notify("Çalışan profili oluşturuldu. Hesap gerektiğinde satırdaki davet işlemini kullanın.");
+      setIsSaving(false);
+      return;
+    }
+    try {
+      await inviteEmployee(auth.accessToken, created.id, { email: inviteEmail, role: inviteRole });
+      await queryClient.invalidateQueries({ queryKey: invitationsQueryKey });
+      notify("Çalışan profili oluşturuldu ve hesap daveti gönderime alındı. Bağlantı 24 saat geçerlidir.");
+    } catch (error) {
+      // The profile exists; reopen the invitation dialog with the chosen role so the retry is one click.
+      notify("Çalışan profili oluşturuldu; hesap daveti gönderilemedi.");
+      setInvitingEmployee(created);
+      setInvitationForm({ email: inviteEmail, role: inviteRole });
       setSubmitError(employeeWriteErrorMessage(error));
     } finally {
       setIsSaving(false);
@@ -350,12 +378,12 @@ export function EmployeesPage() {
         title="Çalışanlar ve Yetkiler"
       />
       <FormModal
-        description="Profil, hesap ve yetkiden bağımsız oluşturulur. Planlı çalışan daha sonra aktifleştirilebilir."
-        onCancel={() => { if (!isSaving) { setIsCreateOpen(false); setSubmitError(""); } }}
+        description="Profil hesaptan bağımsız oluşturulur. Yönetici veya çalışan hesabı için aynı adımda hesap daveti rolünü seçin."
+        onCancel={() => { if (!isSaving) { setIsCreateOpen(false); setCreateInviteRole(""); setSubmitError(""); } }}
         onSubmit={(event) => void handleCreateEmployee(event)}
         open={isCreateOpen}
         submitError={submitError}
-        submitLabel="Profili oluştur"
+        submitLabel={createInviteRole ? "Oluştur ve davet gönder" : "Profili oluştur"}
         submitting={isSaving}
         title="Yeni çalışan"
       >
@@ -364,10 +392,19 @@ export function EmployeesPage() {
         <Field label="Sicil no"><Input value={createForm.employeeNo ?? ""} onChange={(event) => setCreateForm((current) => ({ ...current, employeeNo: event.target.value || undefined }))} /></Field>
         <Field label="İş e-postası"><Input type="email" value={createForm.workEmail ?? ""} onChange={(event) => setCreateForm((current) => ({ ...current, workEmail: event.target.value || undefined }))} /></Field>
         <Field label="İşe başlama tarihi"><Input type="date" value={createForm.employmentStartsAt ?? ""} onChange={(event) => setCreateForm((current) => ({ ...current, employmentStartsAt: event.target.value || undefined }))} /></Field>
-        <Field label="Profil durumu">
-          <Select value={createForm.status} onChange={(event) => setCreateForm((current) => ({ ...current, status: event.target.value as EmployeeCreateRequest["status"] }))}>
+        <Field label="Profil durumu" description={createInviteRole ? "Hesap daveti için profil aktif oluşturulur." : undefined}>
+          <Select disabled={Boolean(createInviteRole)} value={createInviteRole ? "ACTIVE" : createForm.status} onChange={(event) => setCreateForm((current) => ({ ...current, status: event.target.value as EmployeeCreateRequest["status"] }))}>
             <option value="PLANNED">Planlı</option>
             <option value="ACTIVE">Aktif</option>
+          </Select>
+        </Field>
+        <Field label="Hesap daveti" description="Rol seçerseniz profil oluşturulunca iş e-postasına hesap açma bağlantısı gider.">
+          <Select value={createInviteRole} onChange={(event) => setCreateInviteRole(event.target.value as EmployeeInvitationRole | "")}>
+            <option value="">Şimdi gönderme</option>
+            {canManageOwners ? <option value="TENANT_OWNER">Kurum sahibi</option> : null}
+            <option value="TENANT_ADMIN">Kurum yöneticisi</option>
+            <option value="OPERATIONS_STAFF">Operasyon çalışanı</option>
+            <option value="FINANCE_STAFF">Finans çalışanı</option>
           </Select>
         </Field>
       </FormModal>

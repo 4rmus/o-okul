@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import pg from "pg";
 import { closeTenantMutationPool } from "../context/tenant-mutation-activity.js";
 import { PostgresGuardianStore } from "../school/guardian-store.js";
@@ -217,6 +217,32 @@ describePostgres("IdentityInvitationService.accept on PostgreSQL without request
     // A second revoke is refused; the row stays REVOKED and no activity row is opened.
     await expect(service.revoke({ tenantId, userId: "admin-f03", roles: ["TENANT_ADMIN"], bypassRls: false }, "invitation-accept-revoke-teacher"))
       .rejects.toThrow("IDENTITY_INVITATION_NOT_PENDING");
+  });
+
+  it("kabul sırasında iptal edilen davette öğretmen bağı PostgreSQL'de geri alınır (UAT F-03 inceleme)", async () => {
+    await admin.query(
+      `INSERT INTO "Teacher" ("id", "tenantId", "firstName", "lastName", "updatedAt")
+       VALUES ('invitation-accept-race-teacher', $1, 'Yaris', 'Ogretmen', now())`,
+      [tenantId],
+    );
+    await seedInvitation(admin, "TEACHER", "invitation-accept-race-teacher", "f03.yaris@example.test", "TEACHER", "race-teacher");
+    const store = (service as unknown as { invitations: PostgresIdentityInvitationStore }).invitations;
+    const markAccepted = store.markAccepted.bind(store);
+    const spy = vi.spyOn(store, "markAccepted").mockImplementation(async (id, userId, acceptedAt) => {
+      await service.revoke({ tenantId, userId: "admin-f03", roles: ["TENANT_ADMIN"], bypassRls: false }, "invitation-accept-race-teacher");
+      return markAccepted(id, userId, acceptedAt);
+    });
+    try {
+      await expect(service.accept({ token: tokenFor("race-teacher"), password })).rejects.toThrow("IDENTITY_INVITATION_NOT_PENDING");
+    } finally {
+      spy.mockRestore();
+    }
+    const teacher = await admin.query(`SELECT "userId" FROM "Teacher" WHERE "id" = 'invitation-accept-race-teacher'`);
+    expect(teacher.rows).toEqual([{ userId: null }]);
+    const invitation = await admin.query(`SELECT "status" FROM "IdentityInvitation" WHERE "id" = 'invitation-accept-race-teacher'`);
+    expect(invitation.rows).toEqual([{ status: "REVOKED" }]);
+    // The refusal is a known, compensated outcome: no UNCERTAIN activity row is left behind.
+    await expectNoActivity(admin);
   });
 
   it("çalışan aktivasyonunun reddedilen sonucu activity satırı bırakmaz", async () => {

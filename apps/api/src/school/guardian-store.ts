@@ -23,6 +23,8 @@ export interface GuardianStore {
     input: Partial<Pick<GuardianRecord, "firstName" | "lastName" | "phone" | "nationalIdEncrypted" | "nationalIdHash">>,
   ): Promise<GuardianRecord | undefined>;
   bindUser(tenantId: string, id: string, userId: string): Promise<GuardianRecord | undefined>;
+  /** Clears the account link only while it still points at userId (invitation accept rollback). */
+  unbindUser(tenantId: string, id: string, userId: string): Promise<boolean>;
   softDelete(id: string, deletedAt: string): Promise<GuardianRecord | undefined>;
   purgePii(id: string): Promise<GuardianRecord | undefined>;
 }
@@ -94,6 +96,13 @@ export class InMemoryGuardianStore implements GuardianStore {
 
     record.userId = userId;
     return record;
+  }
+
+  async unbindUser(tenantId: string, id: string, userId: string): Promise<boolean> {
+    const record = this.guardians.find((candidate) => candidate.tenantId === tenantId && candidate.id === id && candidate.userId === userId);
+    if (!record) return false;
+    record.userId = undefined;
+    return true;
   }
 
   async softDelete(id: string, deletedAt: string): Promise<GuardianRecord | undefined> {
@@ -247,6 +256,22 @@ export class PostgresGuardianStore implements GuardianStore {
         [tenantId, id, userId],
       );
       return result.rows[0] ? toGuardianRecord(result.rows[0]) : undefined;
+    });
+  }
+
+  async unbindUser(tenantId: string, id: string, userId: string): Promise<boolean> {
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const result = await client.query<{ id: string }>(
+        `UPDATE "Guardian"
+         SET "userId" = NULL,
+             "updatedAt" = now()
+         WHERE "tenantId" = $1
+           AND "id" = $2
+           AND "userId" = $3
+         RETURNING "id"`,
+        [tenantId, id, userId],
+      );
+      return result.rows.length > 0;
     });
   }
 

@@ -52,10 +52,10 @@ export async function runApiTenantMutation<T>(kind: TenantMutationAdmission["kin
 }
 export async function closeTenantMutationPool(): Promise<void> { await waitForApiMutations(); const previous = pool; pool = undefined; await previous?.end(); }
 
-export async function runVerifiedTenantMutation<T>(admission: TenantMutationAdmission, run: () => Promise<T>): Promise<T> {
+export async function runVerifiedTenantMutation<T>(admission: TenantMutationAdmission, run: () => Promise<T>, settledError?: (error: unknown) => boolean): Promise<T> {
   return trackApiMutation(() => {
     if (resolvePersistenceDriver(process.env.TENANT_STORE) !== "postgres" || admission.tenantId === "system") return run();
     pool ??= new pg.Pool({ connectionString: process.env.DATABASE_URL });
-    return runTenantMutationActivity(pool, admission, run);
+    return runTenantMutationActivity(pool, admission, run, settledError);
   });
 }
