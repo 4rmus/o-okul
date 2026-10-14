@@ -205,7 +205,7 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
   await expect(page.getByRole("button", { name: "Yeni Admin için hesap daveti gönder" })).toBeVisible();
 });
 
-test("UAT F-02 yeni çalışan formundan aynı adımda yönetici daveti gönderilir", async ({ page }) => {
+for (const failInvite of [false, true]) test(`UAT F-02 yeni çalışan formundan aynı adımda yönetici daveti gönderilir${failInvite ? " (davet hatası)" : ""}`, async ({ page }) => {
   let activeSession = false;
   const createdBodies: Array<Record<string, unknown>> = [];
   const invitationBodies: Array<Record<string, unknown>> = [];
@@ -242,6 +242,10 @@ test("UAT F-02 yeni çalışan formundan aynı adımda yönetici daveti gönderi
     }
     if (path === "/employees/employee-new-admin/account-invitations" && request.method() === "POST") {
       invitationBodies.push(request.postDataJSON() as Record<string, unknown>);
+      if (failInvite && invitationBodies.length === 1) {
+        await route.fulfill({ body: JSON.stringify({ error: { code: "EMPLOYEE_INVITATION_ALREADY_PENDING" } }), contentType: "application/json", headers: corsHeaders, status: 400 });
+        return;
+      }
       await json(route, {
         id: "invitation-new-admin", tenantId: "tenant-a", subjectType: "EMPLOYEE", subjectId: "employee-new-admin",
         email: "mudur@example.test", name: "Müdür Yardımcısı", role: "TENANT_ADMIN", kind: "EMAIL_LINK", status: "PENDING",
@@ -292,6 +296,18 @@ test("UAT F-02 yeni çalışan formundan aynı adımda yönetici daveti gönderi
   await expect(dialog).toBeHidden();
   expect(createdBodies).toEqual([expect.objectContaining({ firstName: "Müdür", lastName: "Yardımcısı", workEmail: "mudur@example.test", status: "ACTIVE" })]);
   expect(invitationBodies).toEqual([{ email: "mudur@example.test", role: "TENANT_ADMIN" }]);
+  if (failInvite) {
+    // The profile stays; the invitation dialog reopens with the chosen role so the retry is one click.
+    const retry = page.getByRole("dialog", { name: "Müdür Yardımcısı hesap daveti" });
+    await expect(retry).toContainText("Bu çalışan için zaten bekleyen bir davet var");
+    await expect(retry.getByLabel("Başlangıç rolü")).toHaveValue("TENANT_ADMIN");
+    await expect(retry.getByLabel("İş e-postası")).toHaveValue("mudur@example.test");
+    await retry.getByRole("button", { name: "Daveti gönder" }).click();
+    await expect(retry).toBeHidden();
+    expect(invitationBodies).toHaveLength(2);
+    expect(createdBodies).toHaveLength(1);
+    return;
+  }
   await expect(page.locator('.uh-toast-region[aria-live="polite"]')).toContainText("Çalışan profili oluşturuldu ve hesap daveti gönderime alındı.");
 });
 

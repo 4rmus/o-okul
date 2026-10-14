@@ -253,8 +253,11 @@ export function EmployeesPage() {
       await queryClient.invalidateQueries({ queryKey: invitationsQueryKey });
       notify("Çalışan profili oluşturuldu ve hesap daveti gönderime alındı. Bağlantı 24 saat geçerlidir.");
     } catch (error) {
-      // The profile exists; the admin retries the invitation from the row.
-      notify(`Çalışan profili oluşturuldu ancak hesap daveti gönderilemedi: ${employeeWriteErrorMessage(error)} Satırdaki davet işlemiyle yeniden deneyin.`);
+      // The profile exists; reopen the invitation dialog with the chosen role so the retry is one click.
+      notify("Çalışan profili oluşturuldu; hesap daveti gönderilemedi.");
+      setInvitingEmployee(created);
+      setInvitationForm({ email: inviteEmail, role: inviteRole });
+      setSubmitError(employeeWriteErrorMessage(error));
     } finally {
       setIsSaving(false);
     }

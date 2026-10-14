@@ -250,8 +250,12 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
 1. S1: staging rol UAT'ı sürüyor (`docs/staging-uat-s1.md`). S1-01..S1-03 PASS (2026-10-10/11); S1-04 sürüyor,
    S1-05..S1-14 başlamadı. Kapanan bulgular: F-04, F-06..F-13, F-15, F-16 (#159, #161–#166, #168). Açık: F-14
    e-posta yalnız doğrulanmış hedeflere gidiyor (Yüksek; S1-05 davet akışını bekletir, Cloudflare plan kontrolü),
-   F-01 davet e-postası spama düşüyor (Yüksek; ürün sahibi: sonra), F-02, F-05 (Düşük); F-03 davet iptali
-   main ve staging'de (#180, `adcca4617`, 2026-10-14). Deneme lisansı 2026-10-17 00:00 UTC'de biter; S1-05..S1-13 için
+   F-01 davet e-postası spama düşüyor (Yüksek; ürün sahibi: sonra). F-03 davet iptali (#180) ve F-11 bağ kaldırma
+   (#182) main ve staging'de; F-02 tek adımda yönetici daveti, F-05 içe aktarmada sınıf yönlendirmesi ve
+   kabul/iptal yarışı telafisi `fix/uat-s1-f02-f05` dalında (2026-10-14, LOCAL_TEST). İzleyen iş: yarışta
+   geri alınan kabulün yeni oluşturduğu üyeliksiz `User` satırı silinmez (aynı adrese yeni kabul eski parolayı
+   korur; parola sertleştirmesi bilinçli), öğrenci kodu/veli daveti için iptal ekranı, öğrenci kabulünde ulusal
+   kimlikle eşleşen hesapta rol geri alma. Deneme lisansı 2026-10-17 00:00 UTC'de biter; S1-05..S1-13 için
    ürün sahibi S1-14 gözlemi sonrası yeni lisans dönemi açar. Kontrol noktası 2026-11-14.
 2. S2: PR #153 lisans sonu veri imhası main'de (`2b0ef97`, staging deploy PASS); imha, sıfırlama motorunun yazma sessizliği kapısı açılana kadar çalışmaz.
 3. S4: §3.4 doğrulama planı (dosya talebi, görüşmeler, pilot taahhüdü); ürün sahibi işi.

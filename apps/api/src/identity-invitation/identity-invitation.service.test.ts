@@ -493,4 +493,22 @@ describe("IdentityInvitationService", () => {
     await expect(teachers.unbindUser("tenant-a", teacher.id, "user-b")).resolves.toBe(true);
     await expect(teachers.findById(teacher.id)).resolves.toMatchObject({ userId: undefined });
   });
+
+  it("başka hesaba bağlı konunun e-posta daveti kabul edilmez, bağ değişmez", async () => {
+    const teachers = new InMemoryTeacherStore();
+    const invitations = new InMemoryIdentityInvitationStore();
+    const teacher = await teachers.create({ tenantId: "tenant-a", firstName: "Bagli", lastName: "Ogretmen" });
+    const service = new IdentityInvitationService(invitations, new InMemoryUserManagementStore(), new InMemoryStudentStore(), new InMemoryGuardianStore(), teachers, new InMemoryTenantStore());
+    const context: RequestContext = { tenantId: "tenant-a", userId: "admin-a", roles: ["TENANT_ADMIN"], bypassRls: false };
+    const issued = await service.create(context, { subjectType: "TEACHER", subjectId: teacher.id, email: "bagli.ogretmen@example.test" });
+    // Linked to another account after the invitation was sent (e.g. another accept path).
+    await teachers.bindUser("tenant-a", teacher.id, "user-other");
+    const runMutation = vi.mocked(tenantMutationActivity.runVerifiedTenantMutation);
+    runMutation.mockClear();
+
+    await expect(service.accept({ token: issued.activationToken, password: "Secure-password-123" })).rejects.toThrow("SUBJECT_ALREADY_LINKED");
+    await expect(teachers.findById(teacher.id)).resolves.toMatchObject({ userId: "user-other" });
+    expect(runMutation).not.toHaveBeenCalled();
+    await expect(invitations.findById("tenant-a", issued.invitation.id)).resolves.toMatchObject({ status: "PENDING" });
+  });
 });

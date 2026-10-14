@@ -299,6 +299,11 @@ export class IdentityInvitationService {
     // UAT F-16 (KV-3b): an existing account with this e-mail keeps its roles and gains the invited one; a combination
     // the membership model cannot hold (student + anything) is refused here, before the mutation is admitted.
     const existingUser = subject ? await this.users.findTenantUserByEmail(invitation.tenantId, subject.email) : undefined;
+    // A subject already linked to another account (e.g. a student who activated with a code meanwhile) is not
+    // relinked by an e-mail invitation; refused before the mutation is admitted (UAT F-08 pattern).
+    if (subject?.previousUserId && subject.previousUserId !== existingUser?.id) {
+      throw new BadRequestException("SUBJECT_ALREADY_LINKED");
+    }
     if (existingUser && !canAddTenantRole(existingUser.roles, invitation.role)) {
       throw new BadRequestException("IDENTITY_INVITATION_EMAIL_ACCOUNT_INCOMPATIBLE");
     }
@@ -449,7 +454,8 @@ export class IdentityInvitationService {
     if (subjectType === "STUDENT") await this.students.unbindUser(tenantId, subjectId, userId);
     else if (subjectType === "GUARDIAN") await this.guardians.unbindUser(tenantId, subjectId, userId);
     else if (subjectType === "TEACHER") await this.teachers.unbindUser(tenantId, subjectId, userId);
-    // EMPLOYEE accepts run through EmployeeAccountActivationStore under a row lock and never reach this path.
+    // EMPLOYEE accepts take the EmployeeAccountActivationStore path (row lock) whenever that store is injected,
+    // which the module always does; without it an employee subject has no unbind and keeps the link.
   }
 
   private assertStudentPortalEligible(subjectType: InvitationSubjectType, subject: unknown): void {
