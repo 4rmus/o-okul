@@ -459,4 +459,38 @@ describe("IdentityInvitationService", () => {
     await expect(service.revoke({ ...context, tenantId: "tenant-b" }, issued.invitation.id)).rejects.toThrow("IDENTITY_INVITATION_NOT_FOUND");
     await expect(service.accept({ token: issued.activationToken, password: "Secure-password-123" })).rejects.toThrow("IDENTITY_INVITATION_NOT_PENDING");
   });
+
+  it("kabul sırasında davet iptal edilirse öğretmen bağı ve rol geri alınır (UAT F-03 inceleme)", async () => {
+    const teachers = new InMemoryTeacherStore();
+    const users = new InMemoryUserManagementStore();
+    const invitations = new InMemoryIdentityInvitationStore();
+    const teacher = await teachers.create({ tenantId: "tenant-a", firstName: "Yaris", lastName: "Ogretmen" });
+    const service = new IdentityInvitationService(invitations, users, new InMemoryStudentStore(), new InMemoryGuardianStore(), teachers, new InMemoryTenantStore());
+    const context: RequestContext = { tenantId: "tenant-a", userId: "admin-a", roles: ["TENANT_ADMIN"], bypassRls: false };
+    const issued = await service.create(context, { subjectType: "TEACHER", subjectId: teacher.id, email: "yaris.ogretmen@example.test" });
+
+    // The admin's revoke commits between bindSubject and markAccepted.
+    const markAccepted = invitations.markAccepted.bind(invitations);
+    vi.spyOn(invitations, "markAccepted").mockImplementation(async (id, userId, acceptedAt) => {
+      await service.revoke(context, issued.invitation.id);
+      return markAccepted(id, userId, acceptedAt);
+    });
+    const removeTenantRole = vi.spyOn(users, "removeTenantRole");
+
+    await expect(service.accept({ token: issued.activationToken, password: "Secure-password-123" })).rejects.toThrow("IDENTITY_INVITATION_NOT_PENDING");
+    await expect(teachers.findById(teacher.id)).resolves.toMatchObject({ userId: undefined });
+    expect(removeTenantRole).toHaveBeenCalledWith("tenant-a", expect.any(String), "TEACHER");
+    await expect(invitations.findById("tenant-a", issued.invitation.id)).resolves.toMatchObject({ status: "REVOKED" });
+  });
+
+  it("unbindUser yalnız bağ hâlâ aynı hesabı gösteriyorsa çözer", async () => {
+    const teachers = new InMemoryTeacherStore();
+    const teacher = await teachers.create({ tenantId: "tenant-a", firstName: "Bag", lastName: "Ogretmen" });
+    await teachers.bindUser("tenant-a", teacher.id, "user-b");
+    await expect(teachers.unbindUser("tenant-a", teacher.id, "user-a")).resolves.toBe(false);
+    await expect(teachers.findById(teacher.id)).resolves.toMatchObject({ userId: "user-b" });
+    await expect(teachers.unbindUser("tenant-b", teacher.id, "user-b")).resolves.toBe(false);
+    await expect(teachers.unbindUser("tenant-a", teacher.id, "user-b")).resolves.toBe(true);
+    await expect(teachers.findById(teacher.id)).resolves.toMatchObject({ userId: undefined });
+  });
 });

@@ -22,6 +22,8 @@ export interface TeacherStore {
     input: Partial<Pick<TeacherRecord, "firstName" | "lastName" | "branch" | "nationalIdEncrypted" | "nationalIdHash" | "phone">>,
   ): Promise<TeacherRecord | undefined>;
   bindUser(tenantId: string, id: string, userId: string): Promise<TeacherRecord | undefined>;
+  /** Clears the account link only while it still points at userId (invitation accept rollback). */
+  unbindUser(tenantId: string, id: string, userId: string): Promise<boolean>;
   /**
    * UAT F-13: carry the teacher's account onto the Employee row linked by Teacher.employeeId when that row has
    * no account yet. Never overwrites an Employee that already has a different account.
@@ -99,6 +101,13 @@ export class InMemoryTeacherStore implements TeacherStore {
 
     record.userId = userId;
     return record;
+  }
+
+  async unbindUser(tenantId: string, id: string, userId: string): Promise<boolean> {
+    const record = this.teachers.find((candidate) => candidate.tenantId === tenantId && candidate.id === id && candidate.userId === userId);
+    if (!record) return false;
+    record.userId = undefined;
+    return true;
   }
 
   // ponytail: the in-memory driver has no Teacher -> Employee link; the PostgreSQL store owns this behaviour.
@@ -251,6 +260,22 @@ export class PostgresTeacherStore implements TeacherStore {
         [tenantId, id, userId],
       );
       return result.rows[0] ? toTeacherRecord(result.rows[0]) : undefined;
+    });
+  }
+
+  async unbindUser(tenantId: string, id: string, userId: string): Promise<boolean> {
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const result = await client.query<{ id: string }>(
+        `UPDATE "Teacher"
+         SET "userId" = NULL,
+             "updatedAt" = now()
+         WHERE "tenantId" = $1
+           AND "id" = $2
+           AND "userId" = $3
+         RETURNING "id"`,
+        [tenantId, id, userId],
+      );
+      return result.rows.length > 0;
     });
   }
 
