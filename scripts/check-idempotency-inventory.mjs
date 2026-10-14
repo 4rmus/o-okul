@@ -208,6 +208,7 @@ const knownNonIdempotentMutations = {
   },
   "apps/api/src/school/grade-levels.controller.ts": {
     "@Put(\":id/courses/:courseId\")": "B: ON CONFLICT DO NOTHING ile bağ oluşturur",
+    "@Delete(\":id/courses/:courseId\")": "C: Silme; tekrar 404, aktif atamada 409",
     "@Post()": "B: code zorunlu; (tenantId, code) tekil indeksi tekrarı 409 ile reddeder",
     "@Patch(\":id\")": "C: Değere set eder",
     "@Delete(\":id\")": "C: Soft delete",

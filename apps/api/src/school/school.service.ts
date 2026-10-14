@@ -96,6 +96,7 @@ export class SchoolService {
     @Inject(gradeLevelCourseStoreToken) private readonly gradeLevelCourseStore: GradeLevelCourseStore,
     @Inject(gradeLevelStoreToken) private readonly gradeLevelStore: GradeLevelStore,
     @Inject(learningOutcomeStoreToken) private readonly learningOutcomeStore: LearningOutcomeStore,
+    @Inject(teacherAssignmentStoreToken) private readonly teacherAssignmentStore: TeacherAssignmentStore,
     @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
@@ -290,6 +291,48 @@ export class SchoolService {
         diff: { gradeLevelId: gradeLevel.id, courseId: course.id },
       });
     }
+  }
+
+  // UAT F-11 follow-up: a level-wide link can be removed from Seviyeler. Classes of the level that still carry an
+  // active teacher assignment for the course keep the link, otherwise the assignment rule
+  // (TEACHER_ASSIGNMENT_COURSE_GRADE_LEVEL_MISMATCH) would contradict existing rows.
+  async removeGradeLevelCourse(context: RequestContext, gradeLevelId: string, courseId: string): Promise<void> {
+    const [gradeLevel, course] = await Promise.all([
+      this.findGradeLevel(context, gradeLevelId),
+      this.findCourse(context, courseId),
+    ]);
+    if (gradeLevel.tenantId !== course.tenantId) throw new ForbiddenException("FORBIDDEN_TENANT");
+    // A class whose alan-scoped template row still carries the course keeps passing the assignment rule
+    // without the level-wide row, so it does not block the removal.
+    const levelClasses = filterTenantResources(context, await this.classStore.list())
+      .filter((record) => record.gradeLevelId === gradeLevel.id && !record.deletedAt);
+    const blockingClassIds = new Set<string>();
+    for (const levelClass of levelClasses) {
+      const alanCovered = levelClass.alanId
+        ? (await this.gradeLevelCourseStore.listByGradeLevel(gradeLevel.id, levelClass.alanId))
+          .some((record) => record.courseId === course.id && record.alanId === levelClass.alanId)
+        : false;
+      if (!alanCovered) blockingClassIds.add(levelClass.id);
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const activeAssignments = filterTenantResources(context, await this.teacherAssignmentStore.list()).filter((assignment) =>
+      assignment.courseId === course.id
+      && assignment.classId !== undefined
+      && blockingClassIds.has(assignment.classId)
+      && (!assignment.endsAt || assignment.endsAt >= today),
+    );
+    if (activeAssignments.length > 0) throw new ConflictException("GRADE_LEVEL_COURSE_IN_USE");
+    const removed = await this.gradeLevelCourseStore.remove({ tenantId: gradeLevel.tenantId, gradeLevelId: gradeLevel.id, courseId: course.id });
+    if (removed.outcome === "IN_USE") throw new ConflictException("GRADE_LEVEL_COURSE_IN_USE");
+    if (removed.outcome === "NOT_FOUND") throw new NotFoundException("GRADE_LEVEL_COURSE_NOT_FOUND");
+    await this.auditLogs?.record({
+      tenantId: gradeLevel.tenantId,
+      actorUserId: context.userId,
+      entityType: "GradeLevelCourse",
+      entityId: removed.id,
+      action: "grade_level_course.deleted",
+      diff: { gradeLevelId: gradeLevel.id, courseId: course.id },
+    });
   }
 
   async createGradeLevel(context: RequestContext, input: Partial<GradeLevelRecord>): Promise<GradeLevelRecord> {

@@ -301,6 +301,7 @@ Yol `apps/api/src` göreli. Dosya:satır kanıtları alt ajan incelemesinden; LO
 | `courses @Patch(":id")` | C | Değere set eder |
 | `courses @Delete(":id")` | C | Soft delete |
 | `grade-levels @Put(":id/courses/:courseId")` | B | `ON CONFLICT DO NOTHING` ile bağ oluşturur |
+| `grade-levels @Delete(":id/courses/:courseId")` | C | UAT F-11 izleyen iş (2026-10-14); silme, tekrar 404, aktif atamada 409 |
 | `grade-levels @Post()` | A | Dilim 2 #17 |
 | `grade-levels @Patch(":id")` | C | Değere set eder |
 | `grade-levels @Delete(":id")` | C | Soft delete |

@@ -6,9 +6,9 @@ import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CourseRecord, GradeLevelCourseRecord, GradeLevelRecord } from "@o-okul/shared-types";
 import { Button, CrudPage, EmptyState, Field, FormModal, Input, Select, type DataTableColumn, useConfirmDialog } from "@o-okul/ui";
-import { BookOpen, Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import { BookOpen, Eye, Pencil, Plus, Trash2, Unlink } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { ApiRequestError, apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import {
   firstFormError,
   gradeLevelCreateFormSchema,
@@ -295,7 +295,7 @@ export function GradeLevelsPage() {
 }
 
 // UAT F-11: links an existing course to a level so teacher assignments for that level's classes pass the API rule.
-// ponytail: no unlink here; the API has no DELETE /grade-levels/:id/courses/:courseId yet.
+// A level-wide link can be removed again; the API refuses while a class of the level has an active assignment for it.
 function GradeLevelCoursesModal({ accessToken, gradeLevel, onClose, tenantId }: { accessToken: string; gradeLevel: GradeLevelRecord; onClose(): void; tenantId: string }) {
   const queryClient = useQueryClient();
   const linkedQueryKey = ["next-grade-level-courses", tenantId, gradeLevel.id];
@@ -312,6 +312,7 @@ function GradeLevelCoursesModal({ accessToken, gradeLevel, onClose, tenantId }: 
   const [courseId, setCourseId] = useState("");
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [unlinkingId, setUnlinkingId] = useState("");
   const linked = linkedQuery.data ?? [];
   const linkedCourseIds = new Set(linked.map((record) => record.courseId));
   const available = (coursesQuery.data ?? []).filter((course) => !linkedCourseIds.has(course.id));
@@ -337,6 +338,27 @@ function GradeLevelCoursesModal({ accessToken, gradeLevel, onClose, tenantId }: 
     }
   }
 
+  async function handleUnlink(record: GradeLevelCourseRecord) {
+    if (busy) return;
+    setBusy(true);
+    setUnlinkingId(record.id);
+    setSubmitError("");
+    try {
+      await apiRequest<void>(
+        accessToken,
+        `${apiBaseUrl}/grade-levels/${encodeURIComponent(gradeLevel.id)}/courses/${encodeURIComponent(record.courseId)}`,
+        { method: "DELETE" },
+      );
+    } catch (error) {
+      setSubmitError(unlinkErrorMessage(error, record));
+    } finally {
+      // Refetch on every outcome: a 404 means the row is already gone and must leave the list too.
+      await queryClient.invalidateQueries({ queryKey: linkedQueryKey });
+      setUnlinkingId("");
+      setBusy(false);
+    }
+  }
+
   return (
     <FormModal
       cancelLabel="Kapat"
@@ -357,9 +379,24 @@ function GradeLevelCoursesModal({ accessToken, gradeLevel, onClose, tenantId }: 
         {linked.length > 0 ? (
           <ul>
             {linked.map((record) => (
-              <li key={record.id}>
-                {formatCourseName(record.courseName)}
-                {record.alanName ? ` (${record.alanName})` : ""}
+              <li key={record.id} className="next-row-actions">
+                <span>
+                  {formatCourseName(record.courseName)}
+                  {record.alanName ? ` (${record.alanName})` : ""}
+                </span>
+                {record.alanId ? null : (
+                  <Button
+                    aria-label={`${formatCourseName(record.courseName)} bağını kaldır`}
+                    disabled={busy}
+                    onClick={() => void handleUnlink(record)}
+                    size="icon"
+                    title={unlinkingId === record.id ? "Kaldırılıyor" : "Bağı kaldır"}
+                    type="button"
+                    variant="ghost"
+                  >
+                    <Unlink aria-hidden="true" size={17} />
+                  </Button>
+                )}
               </li>
             ))}
           </ul>
@@ -377,6 +414,15 @@ function GradeLevelCoursesModal({ accessToken, gradeLevel, onClose, tenantId }: 
       </Field>
     </FormModal>
   );
+}
+
+function unlinkErrorMessage(error: unknown, record: GradeLevelCourseRecord) {
+  const code = error instanceof ApiRequestError ? error.code : undefined;
+  if (code === "GRADE_LEVEL_COURSE_IN_USE") {
+    return `${formatCourseName(record.courseName)} için bu seviyenin sınıflarında aktif öğretmen ataması var; önce Öğretmenler ekranından atamayı sonlandırın veya kaldırın.`;
+  }
+  if (code === "GRADE_LEVEL_COURSE_NOT_FOUND") return "Bağ zaten kaldırılmış. Liste yenilendi.";
+  return "Ders bağı kaldırılamadı. Tekrar deneyin.";
 }
 
 const gradeLevelSortOptions = [

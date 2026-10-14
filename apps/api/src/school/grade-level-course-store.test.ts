@@ -42,4 +42,36 @@ describe("GradeLevelCourseStore", () => {
     expect(businessQueries[0]?.sql).toContain('ON CONFLICT ("tenantId", "gradeLevelId", "courseId") WHERE "alanId" IS NULL DO NOTHING');
     expect(businessQueries[0]?.values).toEqual([expect.any(String), "tenant-a", "grade-8", "course-science"]);
   });
+
+  it("postgres adapter bağı tek sorguda aktif atama korumasıyla siler, 0 satırda IN_USE/NOT_FOUND ayırır", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    let deletedRows: Array<{ id: string }> = [{ id: "grade-course-science" }];
+    let existingRows: Array<{ id: string }> = [];
+    const pool = {
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        if (sql.includes('DELETE FROM "GradeLevelCourse"')) return { rows: deletedRows as T[] };
+        if (sql.includes('SELECT "id" FROM "GradeLevelCourse"')) return { rows: existingRows as T[] };
+        return { rows: [] as T[] };
+      },
+    };
+    const store = new PostgresGradeLevelCourseStore(pool);
+    const input = { tenantId: "tenant-a", gradeLevelId: "grade-8", courseId: "course-science" };
+
+    await expect(runWithRequestContext({ userId: "user-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false }, () => store.remove(input))).resolves.toEqual({ outcome: "REMOVED", id: "grade-course-science" });
+    const business = queries.filter((query) => !query.sql.includes("set_config") && !["BEGIN", "COMMIT", "ROLLBACK"].includes(query.sql));
+    expect(business).toHaveLength(1);
+    expect(business[0]?.sql).toContain('"alanId" IS NULL');
+    expect(business[0]?.sql).toContain('FROM "TeacherAssignment" ta');
+    expect(business[0]?.sql).toContain('ta."endsAt" >= CURRENT_DATE');
+    expect(business[0]?.sql).toContain('alt."alanId" = c."alanId"');
+    expect(business[0]?.sql).toContain('RETURNING glc."id"');
+    expect(business[0]?.values).toEqual(["tenant-a", "grade-8", "course-science"]);
+
+    deletedRows = [];
+    existingRows = [{ id: "grade-course-science" }];
+    await expect(runWithRequestContext({ userId: "user-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false }, () => store.remove(input))).resolves.toEqual({ outcome: "IN_USE" });
+    existingRows = [];
+    await expect(runWithRequestContext({ userId: "user-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false }, () => store.remove(input))).resolves.toEqual({ outcome: "NOT_FOUND" });
+  });
 });
