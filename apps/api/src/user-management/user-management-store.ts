@@ -63,6 +63,11 @@ export interface UserManagementStore {
   createOrAttachTenantUser(input: CreateTenantUserInput): Promise<TenantUserRecord>;
   setTenantRoles(tenantId: string, userId: string, roles: TenantUserRole[]): Promise<TenantUserRecord | undefined>;
   removeTenantRole(tenantId: string, userId: string, role: TenantUserRole): Promise<TenantUserRecord | undefined>;
+  /**
+   * Deletes an account only while nothing uses it: no membership, session or bound profile, and no row that
+   * references it (a foreign key refusal keeps it). Used to undo an invitation accept that created the account.
+   */
+  deleteUnusedTenantUser(tenantId: string, userId: string): Promise<boolean>;
   updateTenantMembership(
     tenantId: string,
     membershipId: string,
@@ -320,6 +325,13 @@ export class InMemoryUserManagementStore implements UserManagementStore {
     user.updatedAt = new Date().toISOString();
     removeInMemoryAuthUserRole(tenantId, userId, role);
     return cloneTenantUser(user);
+  }
+
+  async deleteUnusedTenantUser(tenantId: string, userId: string): Promise<boolean> {
+    const index = this.users.findIndex((candidate) => candidate.tenantId === tenantId && candidate.id === userId && candidate.roles.length === 0);
+    if (index < 0) return false;
+    this.users.splice(index, 1);
+    return true;
   }
 
   async updateTenantMembership(
@@ -960,6 +972,30 @@ export class PostgresUserManagementStore implements UserManagementStore {
       );
       return this.findTenantUserWithClient(client, tenantId, userId);
     });
+  }
+
+  async deleteUnusedTenantUser(tenantId: string, userId: string): Promise<boolean> {
+    try {
+      return await withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+        const deleted = await client.query<{ id: string }>(
+          `DELETE FROM "User" u
+           WHERE u."tenantId" = $1 AND u."id" = $2
+             AND NOT EXISTS (SELECT 1 FROM "TenantMembership" m WHERE m."tenantId" = $1 AND m."userId" = $2)
+             AND NOT EXISTS (SELECT 1 FROM "AuthSession" s WHERE s."userId" = $2)
+             AND NOT EXISTS (SELECT 1 FROM "Student" x WHERE x."tenantId" = $1 AND x."userId" = $2)
+             AND NOT EXISTS (SELECT 1 FROM "Teacher" x WHERE x."tenantId" = $1 AND x."userId" = $2)
+             AND NOT EXISTS (SELECT 1 FROM "Guardian" x WHERE x."tenantId" = $1 AND x."userId" = $2)
+             AND NOT EXISTS (SELECT 1 FROM "Employee" x WHERE x."tenantId" = $1 AND x."userId" = $2)
+           RETURNING u."id"`,
+          [tenantId, userId],
+        );
+        return deleted.rows.length > 0;
+      });
+    } catch (error) {
+      // Another row still references the account (foreign key): keep it.
+      if ((error as { code?: string })?.code === "23503") return false;
+      throw error;
+    }
   }
 
   private async findTenantUserWithClient(

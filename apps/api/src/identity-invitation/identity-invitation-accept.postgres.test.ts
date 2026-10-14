@@ -243,6 +243,26 @@ describePostgres("IdentityInvitationService.accept on PostgreSQL without request
     expect(invitation.rows).toEqual([{ status: "REVOKED" }]);
     // The refusal is a known, compensated outcome: no UNCERTAIN activity row is left behind.
     await expectNoActivity(admin);
+    // The account this accept created is removed again.
+    const orphan = await admin.query(`SELECT "id" FROM "User" WHERE "tenantId" = $1 AND "emailNormalized" = 'f03.yaris@example.test'`, [tenantId]);
+    expect(orphan.rows).toEqual([]);
+
+    // A new invitation to the same address now accepts with the new password and links the teacher.
+    await seedInvitation(admin, "TEACHER", "invitation-accept-race-teacher", "f03.yaris@example.test", "TEACHER", "race-teacher-again");
+    await expect(service.accept({ token: tokenFor("race-teacher-again"), password: "Another-password-456" }))
+      .resolves.toMatchObject({ status: "ACCEPTED" });
+    const relinked = await admin.query<{ userId: string | null }>(`SELECT "userId" FROM "Teacher" WHERE "id" = 'invitation-accept-race-teacher'`);
+    expect(relinked.rows[0]?.userId).toEqual(expect.any(String));
+    await expectNoActivity(admin);
+  });
+
+  it("kullanılan hesap deleteUnusedTenantUser ile silinmez", async () => {
+    const users = new PostgresUserManagementStore(app);
+    const used = await admin.query<{ userId: string }>(`SELECT "userId" FROM "TenantMembership" WHERE "tenantId" = $1 LIMIT 1`, [tenantId]);
+    const userId = used.rows[0]!.userId;
+    await expect(users.deleteUnusedTenantUser(tenantId, userId)).resolves.toBe(false);
+    const still = await admin.query(`SELECT "id" FROM "User" WHERE "id" = $1`, [userId]);
+    expect(still.rows).toHaveLength(1);
   });
 
   it("çalışan aktivasyonunun reddedilen sonucu activity satırı bırakmaz", async () => {

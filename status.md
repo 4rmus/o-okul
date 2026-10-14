@@ -252,10 +252,10 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
    e-posta yalnız doğrulanmış hedeflere gidiyor (Yüksek; S1-05 davet akışını bekletir, Cloudflare plan kontrolü),
    F-01 davet e-postası spama düşüyor (Yüksek; ürün sahibi: sonra). F-03 davet iptali (#180) ve F-11 bağ kaldırma
    (#182) main ve staging'de; F-02 tek adımda yönetici daveti, F-05 içe aktarmada sınıf yönlendirmesi ve
-   kabul/iptal yarışı telafisi `fix/uat-s1-f02-f05` dalında (2026-10-14, LOCAL_TEST). İzleyen iş: yarışta
-   geri alınan kabulün yeni oluşturduğu üyeliksiz `User` satırı silinmez (aynı adrese yeni kabul eski parolayı
-   korur; parola sertleştirmesi bilinçli), öğrenci kodu/veli daveti için iptal ekranı, öğrenci kabulünde ulusal
-   kimlikle eşleşen hesapta rol geri alma. Deneme lisansı 2026-10-17 00:00 UTC'de biter; S1-05..S1-13 için
+   kabul/iptal yarışı telafisi #184 ile main'de (`52ce7d03e`, 2026-10-14). Yarışta geri alınan kabulün
+   oluşturduğu hesap kullanılmıyorsa silinir (dal `fix/kabul-geri-alma-hesap-temizligi`; var olan hesabın parolası
+   değişmez). İzleyen iş: öğrenci kodu/veli daveti için iptal ekranı, öğrenci kabulünde ulusal kimlikle eşleşen
+   hesapta rol geri alma. Deneme lisansı 2026-10-17 00:00 UTC'de biter; S1-05..S1-13 için
    ürün sahibi S1-14 gözlemi sonrası yeni lisans dönemi açar. Kontrol noktası 2026-11-14.
 2. S2: PR #153 lisans sonu veri imhası main'de (`2b0ef97`, staging deploy PASS); imha, sıfırlama motorunun yazma sessizliği kapısı açılana kadar çalışmaz.
 3. S4: §3.4 doğrulama planı (dosya talebi, görüşmeler, pilot taahhüdü); ürün sahibi işi.
