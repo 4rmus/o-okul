@@ -480,6 +480,8 @@ describe("IdentityInvitationService", () => {
     await expect(service.accept({ token: issued.activationToken, password: "Secure-password-123" })).rejects.toThrow("IDENTITY_INVITATION_NOT_PENDING");
     await expect(teachers.findById(teacher.id)).resolves.toMatchObject({ userId: undefined });
     expect(removeTenantRole).toHaveBeenCalledWith("tenant-a", expect.any(String), "TEACHER");
+    // The account the accept created is removed again.
+    await expect(users.findTenantUserByEmail("tenant-a", "yaris.ogretmen@example.test")).resolves.toBeUndefined();
     await expect(invitations.findById("tenant-a", issued.invitation.id)).resolves.toMatchObject({ status: "REVOKED" });
   });
 

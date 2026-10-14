@@ -353,6 +353,7 @@ export class IdentityInvitationService {
     const boundSubject = await this.bindSubject(invitation.tenantId, invitation.subjectType, invitation.subjectId, user.id);
     if (!boundSubject) {
       if (roleAdded) await this.users.removeTenantRole(invitation.tenantId, user.id, invitation.role);
+      if (!existingUser) await this.users.deleteUnusedTenantUser(invitation.tenantId, user.id);
       throw (compensatedRefusal = new NotFoundException("SUBJECT_NOT_FOUND"));
     }
 
@@ -362,6 +363,9 @@ export class IdentityInvitationService {
       // link this call made, so the subject is not left bound to an account without the role.
       if (subject!.previousUserId !== user.id) await this.unbindSubject(invitation.tenantId, invitation.subjectType, invitation.subjectId, user.id);
       if (roleAdded) await this.users.removeTenantRole(invitation.tenantId, user.id, invitation.role);
+      // An account this accept created (no e-mail match before) is removed again, so a later invitation to the
+      // same address creates it with the password chosen then; an existing account's password is never changed.
+      if (!existingUser) await this.users.deleteUnusedTenantUser(invitation.tenantId, user.id);
       throw (compensatedRefusal = new BadRequestException("IDENTITY_INVITATION_NOT_PENDING"));
     }
     await this.auditLogs?.record({
