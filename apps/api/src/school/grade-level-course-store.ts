@@ -20,11 +20,21 @@ export interface RemoveGradeLevelCourseInput {
   courseId: string;
 }
 
+export type RemoveGradeLevelCourseResult =
+  | { outcome: "REMOVED"; id: string }
+  | { outcome: "IN_USE" }
+  | { outcome: "NOT_FOUND" };
+
 export interface GradeLevelCourseStore {
   listByGradeLevel(gradeLevelId: string, alanId?: string): Promise<GradeLevelCourseRecord[]>;
   ensure(input: EnsureGradeLevelCourseInput): Promise<string | undefined>;
-  /** UAT F-11: removes the level-wide (alan-less) link; alan-scoped template rows are left untouched. */
-  remove(input: RemoveGradeLevelCourseInput): Promise<string | undefined>;
+  /**
+   * UAT F-11: removes the level-wide (alan-less) link; alan-scoped template rows are left untouched.
+   * The Postgres adapter refuses (IN_USE) in the same statement when a class of the level still has an
+   * active teacher assignment for the course that no alan-scoped row covers; the memory adapter relies on
+   * the service pre-check.
+   */
+  remove(input: RemoveGradeLevelCourseInput): Promise<RemoveGradeLevelCourseResult>;
 }
 
 export const gradeLevelCourseStoreToken = Symbol("GradeLevelCourseStore");
@@ -70,16 +80,16 @@ export class InMemoryGradeLevelCourseStore implements GradeLevelCourseStore {
     return record.id;
   }
 
-  async remove(input: RemoveGradeLevelCourseInput): Promise<string | undefined> {
+  async remove(input: RemoveGradeLevelCourseInput): Promise<RemoveGradeLevelCourseResult> {
     const index = this.records.findIndex((record) =>
       record.tenantId === input.tenantId
       && record.gradeLevelId === input.gradeLevelId
       && record.courseId === input.courseId
       && !record.alanId,
     );
-    if (index < 0) return undefined;
+    if (index < 0) return { outcome: "NOT_FOUND" };
     const [removed] = this.records.splice(index, 1);
-    return removed?.id;
+    return { outcome: "REMOVED", id: removed!.id };
   }
 }
 
@@ -131,15 +141,36 @@ export class PostgresGradeLevelCourseStore implements GradeLevelCourseStore {
     });
   }
 
-  async remove(input: RemoveGradeLevelCourseInput): Promise<string | undefined> {
+  async remove(input: RemoveGradeLevelCourseInput): Promise<RemoveGradeLevelCourseResult> {
     return withTenantQuery(this.pool, async (client) => {
+      const values = [input.tenantId, input.gradeLevelId, input.courseId];
+      // Guard and delete in one statement so an assignment created between a separate check and the
+      // delete cannot end up pointing at a course the level no longer offers.
       const deleted = await client.query<{ id: string }>(
-        `DELETE FROM "GradeLevelCourse"
-         WHERE "tenantId" = $1 AND "gradeLevelId" = $2 AND "courseId" = $3 AND "alanId" IS NULL
-         RETURNING "id"`,
-        [input.tenantId, input.gradeLevelId, input.courseId],
+        `DELETE FROM "GradeLevelCourse" glc
+         WHERE glc."tenantId" = $1 AND glc."gradeLevelId" = $2 AND glc."courseId" = $3 AND glc."alanId" IS NULL
+           AND NOT EXISTS (
+             SELECT 1
+             FROM "TeacherAssignment" ta
+             JOIN "Class" c ON c."tenantId" = ta."tenantId" AND c."id" = ta."classId" AND c."deletedAt" IS NULL
+             WHERE ta."tenantId" = $1 AND ta."courseId" = $3 AND c."gradeLevelId" = $2
+               AND (ta."endsAt" IS NULL OR ta."endsAt" >= CURRENT_DATE)
+               AND NOT EXISTS (
+                 SELECT 1 FROM "GradeLevelCourse" alt
+                 WHERE alt."tenantId" = c."tenantId" AND alt."gradeLevelId" = c."gradeLevelId"
+                   AND alt."courseId" = ta."courseId" AND alt."alanId" IS NOT NULL AND alt."alanId" = c."alanId"
+               )
+           )
+         RETURNING glc."id"`,
+        values,
       );
-      return deleted.rows[0]?.id;
+      if (deleted.rows[0]) return { outcome: "REMOVED", id: deleted.rows[0].id };
+      const existing = await client.query<{ id: string }>(
+        `SELECT "id" FROM "GradeLevelCourse"
+         WHERE "tenantId" = $1 AND "gradeLevelId" = $2 AND "courseId" = $3 AND "alanId" IS NULL`,
+        values,
+      );
+      return existing.rows[0] ? { outcome: "IN_USE" } : { outcome: "NOT_FOUND" };
     });
   }
 }

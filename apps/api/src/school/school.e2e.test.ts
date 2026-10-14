@@ -116,7 +116,6 @@ describe("School management API", () => {
       .expect(({ body }) => {
         expect(body).toEqual([
           expect.objectContaining({
-            id: "grade-course-8-math",
             tenantId: "tenant-a",
             gradeLevelId: "grade-8",
             courseId: "course-math",

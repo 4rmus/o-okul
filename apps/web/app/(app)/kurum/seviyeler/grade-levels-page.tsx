@@ -349,10 +349,11 @@ function GradeLevelCoursesModal({ accessToken, gradeLevel, onClose, tenantId }: 
         `${apiBaseUrl}/grade-levels/${encodeURIComponent(gradeLevel.id)}/courses/${encodeURIComponent(record.courseId)}`,
         { method: "DELETE" },
       );
-      await queryClient.invalidateQueries({ queryKey: linkedQueryKey });
     } catch (error) {
       setSubmitError(unlinkErrorMessage(error, record));
     } finally {
+      // Refetch on every outcome: a 404 means the row is already gone and must leave the list too.
+      await queryClient.invalidateQueries({ queryKey: linkedQueryKey });
       setUnlinkingId("");
       setBusy(false);
     }
@@ -418,7 +419,7 @@ function GradeLevelCoursesModal({ accessToken, gradeLevel, onClose, tenantId }: 
 function unlinkErrorMessage(error: unknown, record: GradeLevelCourseRecord) {
   const code = error instanceof ApiRequestError ? error.code : undefined;
   if (code === "GRADE_LEVEL_COURSE_IN_USE") {
-    return `${formatCourseName(record.courseName)} için bu seviyenin sınıflarında aktif öğretmen ataması var; önce Öğretmenler ekranından atamayı kaldırın.`;
+    return `${formatCourseName(record.courseName)} için bu seviyenin sınıflarında aktif öğretmen ataması var; önce Öğretmenler ekranından atamayı sonlandırın veya kaldırın.`;
   }
   if (code === "GRADE_LEVEL_COURSE_NOT_FOUND") return "Bağ zaten kaldırılmış. Liste yenilendi.";
   return "Ders bağı kaldırılamadı. Tekrar deneyin.";

@@ -106,8 +106,22 @@ test("F-11 aktif atamalı dersin bağı kaldırılamaz ve pencere yönlendirir",
   const dialog = page.getByRole("dialog", { name: "5. Sınıf dersleri" });
   await dialog.getByRole("button", { name: "Matematik bağını kaldır" }).click();
   await expect.poll(() => state.deletes).toEqual(["level-5/course-mat"]);
-  await expect(dialog.getByRole("alert")).toHaveText("Matematik için bu seviyenin sınıflarında aktif öğretmen ataması var; önce Öğretmenler ekranından atamayı kaldırın.");
+  await expect(dialog.getByRole("alert")).toHaveText("Matematik için bu seviyenin sınıflarında aktif öğretmen ataması var; önce Öğretmenler ekranından atamayı sonlandırın veya kaldırın.");
   await expect(dialog.getByRole("region", { name: "Bağlı dersler" }).getByRole("listitem")).toHaveText(["Matematik"]);
+});
+
+test("F-11 zaten kaldırılmış bağda liste yenilenir", async ({ page }) => {
+  const state = mockState({ unlinkError: { code: "GRADE_LEVEL_COURSE_NOT_FOUND", status: 404 } });
+  await openGradeLevels(page, state);
+  await page.getByRole("button", { name: "5. Sınıf derslerini yönet" }).click();
+  const dialog = page.getByRole("dialog", { name: "5. Sınıf dersleri" });
+  // The server already dropped the row; the mock list reflects that after the first (failed) delete.
+  state.links = [];
+  await dialog.getByRole("button", { name: "Matematik bağını kaldır" }).click();
+  await expect.poll(() => state.deletes).toEqual(["level-5/course-mat"]);
+  await expect(dialog.getByRole("alert")).toHaveText("Bağ zaten kaldırılmış. Liste yenilendi.");
+  await expect(dialog.getByRole("region", { name: "Bağlı dersler" })).toContainText("Bu seviyeye bağlı ders yok.");
+  await expect(dialog.getByRole("button", { name: "Matematik bağını kaldır" })).toHaveCount(0);
 });
 
 test("F-11 bağlama hatası pencerede görünür", async ({ page }) => {

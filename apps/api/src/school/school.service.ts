@@ -302,26 +302,34 @@ export class SchoolService {
       this.findCourse(context, courseId),
     ]);
     if (gradeLevel.tenantId !== course.tenantId) throw new ForbiddenException("FORBIDDEN_TENANT");
-    const classIds = new Set(
-      filterTenantResources(context, await this.classStore.list())
-        .filter((record) => record.gradeLevelId === gradeLevel.id && !record.deletedAt)
-        .map((record) => record.id),
-    );
+    // A class whose alan-scoped template row still carries the course keeps passing the assignment rule
+    // without the level-wide row, so it does not block the removal.
+    const levelClasses = filterTenantResources(context, await this.classStore.list())
+      .filter((record) => record.gradeLevelId === gradeLevel.id && !record.deletedAt);
+    const blockingClassIds = new Set<string>();
+    for (const levelClass of levelClasses) {
+      const alanCovered = levelClass.alanId
+        ? (await this.gradeLevelCourseStore.listByGradeLevel(gradeLevel.id, levelClass.alanId))
+          .some((record) => record.courseId === course.id && record.alanId === levelClass.alanId)
+        : false;
+      if (!alanCovered) blockingClassIds.add(levelClass.id);
+    }
     const today = new Date().toISOString().slice(0, 10);
     const activeAssignments = filterTenantResources(context, await this.teacherAssignmentStore.list()).filter((assignment) =>
       assignment.courseId === course.id
       && assignment.classId !== undefined
-      && classIds.has(assignment.classId)
+      && blockingClassIds.has(assignment.classId)
       && (!assignment.endsAt || assignment.endsAt >= today),
     );
     if (activeAssignments.length > 0) throw new ConflictException("GRADE_LEVEL_COURSE_IN_USE");
-    const removedId = await this.gradeLevelCourseStore.remove({ tenantId: gradeLevel.tenantId, gradeLevelId: gradeLevel.id, courseId: course.id });
-    if (!removedId) throw new NotFoundException("GRADE_LEVEL_COURSE_NOT_FOUND");
+    const removed = await this.gradeLevelCourseStore.remove({ tenantId: gradeLevel.tenantId, gradeLevelId: gradeLevel.id, courseId: course.id });
+    if (removed.outcome === "IN_USE") throw new ConflictException("GRADE_LEVEL_COURSE_IN_USE");
+    if (removed.outcome === "NOT_FOUND") throw new NotFoundException("GRADE_LEVEL_COURSE_NOT_FOUND");
     await this.auditLogs?.record({
       tenantId: gradeLevel.tenantId,
       actorUserId: context.userId,
       entityType: "GradeLevelCourse",
-      entityId: removedId,
+      entityId: removed.id,
       action: "grade_level_course.deleted",
       diff: { gradeLevelId: gradeLevel.id, courseId: course.id },
     });
