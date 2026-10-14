@@ -205,6 +205,96 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
   await expect(page.getByRole("button", { name: "Yeni Admin için hesap daveti gönder" })).toBeVisible();
 });
 
+test("UAT F-02 yeni çalışan formundan aynı adımda yönetici daveti gönderilir", async ({ page }) => {
+  let activeSession = false;
+  const createdBodies: Array<Record<string, unknown>> = [];
+  const invitationBodies: Array<Record<string, unknown>> = [];
+  await page.route("**/*", async (route) => {
+    if (route.request().method() === "OPTIONS") {
+      await route.fulfill({ headers: corsHeaders, status: 204 });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route("**/auth/refresh", async (route) => {
+    if (!activeSession) {
+      await route.fulfill({ headers: corsHeaders, status: 401 });
+      return;
+    }
+    await json(route, authResponse());
+  });
+  await page.route("**/auth/login", async (route) => {
+    activeSession = true;
+    await json(route, authResponse());
+  });
+  await page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname.replace("/api/v1", "");
+    if (path.startsWith("/auth/")) {
+      await route.fallback();
+      return;
+    }
+    if (path === "/employees" && request.method() === "POST") {
+      const body = request.postDataJSON() as Record<string, unknown>;
+      createdBodies.push(body);
+      await json(route, { id: "employee-new-admin", tenantId: "tenant-a", firstName: body.firstName, lastName: body.lastName, workEmail: body.workEmail, status: body.status });
+      return;
+    }
+    if (path === "/employees/employee-new-admin/account-invitations" && request.method() === "POST") {
+      invitationBodies.push(request.postDataJSON() as Record<string, unknown>);
+      await json(route, {
+        id: "invitation-new-admin", tenantId: "tenant-a", subjectType: "EMPLOYEE", subjectId: "employee-new-admin",
+        email: "mudur@example.test", name: "Müdür Yardımcısı", role: "TENANT_ADMIN", kind: "EMAIL_LINK", status: "PENDING",
+        expiresAt: "2099-01-02T10:00:00.000Z", createdAt: "2099-01-01T10:00:00.000Z", updatedAt: "2099-01-01T10:00:00.000Z",
+      });
+      return;
+    }
+    if (path === "/employees" && request.method() === "GET") {
+      await json(route, [], { limit: 50 });
+      return;
+    }
+    if (path === "/me/tenant") {
+      await json(route, { id: "tenant-a", name: "DNA Eğitim", plan: "TRIAL", slug: "dna-egitim", status: "ACTIVE" });
+      return;
+    }
+    if (path === "/me/institution-dashboard") {
+      await json(route, {
+        activeStudentCount: 0,
+        attention: { attendanceAlertCount: 0, openImportQuarantineCount: 0, openSupportTicketCount: 0 },
+        generatedAt: "2026-08-01T10:00:00.000Z",
+        institution: { name: "DNA Eğitim" },
+      });
+      return;
+    }
+    await json(route, []);
+  });
+
+  await login(page);
+  const managementGroup = page.getByRole("button", { name: "Kişiler", exact: true });
+  if ((await managementGroup.getAttribute("aria-expanded")) !== "true") await managementGroup.click();
+  await page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Personel", exact: true }).click();
+  await page.getByRole("navigation", { name: "Personel bölümleri" }).getByRole("link", { name: "Çalışanlar ve yetkiler", exact: true }).click();
+  await expect(page).toHaveURL(/\/kurum\/calisanlar$/u);
+  await page.getByRole("button", { name: "Yeni çalışan" }).click();
+  const dialog = page.getByRole("dialog", { name: "Yeni çalışan" });
+  await dialog.getByLabel("Ad", { exact: true }).fill("Müdür");
+  await dialog.getByLabel("Soyad", { exact: true }).fill("Yardımcısı");
+  await dialog.getByLabel("Hesap daveti").selectOption("TENANT_ADMIN");
+  await expect(dialog.getByLabel("Profil durumu")).toBeDisabled();
+  await expect(dialog.getByLabel("Profil durumu")).toHaveValue("ACTIVE");
+  // Without a work e-mail the invitation cannot be sent; nothing is created.
+  await dialog.getByRole("button", { name: "Oluştur ve davet gönder" }).click();
+  await expect(dialog).toContainText("Hesap daveti için iş e-postası zorunludur.");
+  expect(createdBodies).toHaveLength(0);
+
+  await dialog.getByLabel("İş e-postası").fill("mudur@example.test");
+  await dialog.getByRole("button", { name: "Oluştur ve davet gönder" }).click();
+  await expect(dialog).toBeHidden();
+  expect(createdBodies).toEqual([expect.objectContaining({ firstName: "Müdür", lastName: "Yardımcısı", workEmail: "mudur@example.test", status: "ACTIVE" })]);
+  expect(invitationBodies).toEqual([{ email: "mudur@example.test", role: "TENANT_ADMIN" }]);
+  await expect(page.locator('.uh-toast-region[aria-live="polite"]')).toContainText("Çalışan profili oluşturuldu ve hesap daveti gönderime alındı.");
+});
+
 async function login(page: Page) {
   await page.goto("/login");
   await page.locator('input[name="tenantSlug"]').fill("dna-egitim");

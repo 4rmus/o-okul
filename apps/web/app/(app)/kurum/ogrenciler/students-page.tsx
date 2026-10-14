@@ -148,6 +148,7 @@ export function StudentsPage() {
   const { auth } = useAuth();
   const canRevealPhone = hasCapabilityForRoles(auth?.session.roles ?? [], "privacy:manage");
   const canInviteGuardians = hasCapabilityForRoles(auth?.session.roles ?? [], "user:manage");
+  const canManageClasses = hasCapabilityForRoles(auth?.session.roles ?? [], "class:manage");
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { confirm, confirmationDialog } = useConfirmDialog();
@@ -946,6 +947,17 @@ export function StudentsPage() {
                 <li key={`${item.row}-${item.field}-${item.code}-${index}`}>{formatStudentImportError(item)}</li>
               ))}
             </ul>
+            {/* UAT F-05: import never creates levels or classes; point to the screens that do. */}
+            {importDryRun.errors.some((item) => schoolStructureImportErrorCodes.has(item.code)) ? (
+              <p className="next-field-hint">
+                İçe aktarma seviye ve sınıf oluşturmaz.{" "}
+                {canManageClasses ? (
+                  <>
+                    Eksik kayıtları <Link href="/kurum/seviyeler">Seviyeler</Link> ve <Link href="/kurum/siniflar">Sınıflar</Link> ekranlarından ekleyip dosyayı yeniden kontrol edin.
+                  </>
+                ) : "Eksik seviye veya sınıfı kurum yöneticisine açtırın."}
+              </p>
+            ) : null}
           </div>
         ) : null}
         {importError ? <p className="uh-crud-page__error">{importError}</p> : null}
@@ -1637,6 +1649,8 @@ function formatGradeLevelDistribution(dryRun: StudentImportDryRunResult) {
     .map(([label, count]) => `${label}: ${formatCount(count)}`)
     .join(" · ");
 }
+
+const schoolStructureImportErrorCodes = new Set(["CLASS_NOT_FOUND", "GRADE_LEVEL_NOT_FOUND", "CLASS_GRADE_LEVEL_MISMATCH"]);
 
 function formatStudentImportError(error: StudentImportDryRunResult["errors"][number]) {
   const row = error.row > 0 ? `${error.row}. satır` : "Kota";

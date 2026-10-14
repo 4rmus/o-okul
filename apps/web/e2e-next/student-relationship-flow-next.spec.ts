@@ -110,6 +110,44 @@ test.describe("Öğrenci ilişki haritası", () => {
     await expectNoUnlabeledControls(page, "student-relationship-tablet");
   });
 
+  // Every role that can import students also holds class:*, so the link branch is the one users see.
+  for (const roles of [["TENANT_ADMIN"]] as const) {
+    test(`UAT F-05 eksik sınıf hatası seviye/sınıf ekranlarına yönlendirir (${roles[0]})`, async ({ page }) => {
+      await installStudentApiMocks(page, { roles: [...roles] });
+      // Registered after the shared mocks, so it takes priority for this one path.
+      await page.route("**/api/v1/students/imports/dry-run", async (route) => {
+        if (route.request().method() === "OPTIONS") {
+          await route.fulfill({ headers: corsHeadersFor(route), status: 204 });
+          return;
+        }
+        await fulfillData(route, {
+          dryRun: true,
+          errors: [{ code: "CLASS_NOT_FOUND", field: "className", row: 2, value: "9-Z" }],
+          quota: { current: 1, incoming: 1, limit: 100, wouldExceed: false },
+          totalRows: 1,
+          validRows: [],
+          wouldImport: false,
+        });
+      });
+      await page.addInitScript(() => {
+        document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
+      });
+      await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
+      await page.goto("/kurum/ogrenciler");
+      await page.getByRole("button", { name: "Toplu aktar" }).first().click();
+      const dialog = page.getByRole("dialog", { name: "Toplu öğrenci aktar" });
+      await dialog.getByLabel("Aktarım dosyası").setInputFiles({
+        buffer: Buffer.from("\uFEFFokul_no;ad;soyad;sinif\n100;Ada;Kaya;9-Z\n", "utf8"),
+        mimeType: "text/csv",
+        name: "ogrenciler.csv",
+      });
+      await expect(dialog).toContainText("2. satır: sınıf bulunamadı (9-Z)");
+      await expect(dialog).toContainText("İçe aktarma seviye ve sınıf oluşturmaz.");
+      await expect(dialog.getByRole("link", { name: "Seviyeler" })).toHaveAttribute("href", "/kurum/seviyeler");
+      await expect(dialog.getByRole("link", { name: "Sınıflar" })).toHaveAttribute("href", "/kurum/siniflar");
+    });
+  }
+
   test("finance yetkisi olmayan rolde ödeme ve finans görünürlüğü açılmaz", async ({ page }) => {
     const requestedPaths: string[] = [];
     await openStudentDetail(page, { width: 768, height: 1024 }, { requestedPaths, roles: ["ASSISTANT_ADMIN"] });
