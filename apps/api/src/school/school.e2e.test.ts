@@ -159,8 +159,49 @@ describe("School management API", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(403);
 
+    // UAT F-11 follow-up: the link can be removed again; a repeat is 404 and the teacher role may not remove it.
+    await request(server).delete(path).set("Authorization", `Bearer ${teacherAAccessToken}`).expect(403);
+    await request(server).delete(path).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
+    await request(server)
+      .get(`/grade-levels/${gradeLevel.body.id}/courses`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => expect(body).toEqual([]));
+    await request(server).delete(path).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(404);
+    await request(server)
+      .delete(`/grade-levels/${gradeLevel.body.id}/courses/course-turkish`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(403);
+
     await request(server).delete(`/courses/${course.body.id}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
     await request(server).delete(`/grade-levels/${gradeLevel.body.id}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
+  });
+
+  it("seviyenin sınıfında aktif öğretmen ataması olan dersin bağı kaldırılamaz (UAT F-11)", async () => {
+    const assignment = await request(server)
+      .post("/teachers/teacher-a/assignments")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ classId: "class-a", courseId: "course-math", role: "BRANCH_TEACHER" })
+      .expect(201);
+    const link = "/grade-levels/grade-8/courses/course-math";
+    await request(server)
+      .delete(link)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(409)
+      .expect(({ body }) => expect(body.error.code).toBe("GRADE_LEVEL_COURSE_IN_USE"));
+    await request(server)
+      .get("/grade-levels/grade-8/courses")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => expect(body).toEqual([expect.objectContaining({ courseId: "course-math" })]));
+
+    await request(server)
+      .delete(`/teachers/teacher-a/assignments/${(assignment.body as { id: string }).id}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(204);
+    await request(server).delete(link).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
+    // Restore the demo link for the remaining tests.
+    await request(server).put(link).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
   });
 
   it("tenant A sadece kendi ders kayıtlarını listeler", async () => {

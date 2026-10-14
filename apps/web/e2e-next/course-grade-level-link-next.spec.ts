@@ -16,13 +16,15 @@ const viewports = [{ width: 1280, height: 900 }, { width: 390, height: 844 }, { 
 interface MockState {
   assignmentError?: { code: string; status: number };
   assignmentPosts: Array<Record<string, unknown>>;
+  deletes: string[];
   links: GradeLevelCourseRecord[];
   puts: string[];
   roles: string[];
+  unlinkError?: { code: string; status: number };
 }
 
 function mockState(overrides: Partial<MockState> = {}): MockState {
-  return { assignmentPosts: [], links: [link("level-5", course("course-mat", "Matematik"))], puts: [], roles: ["TENANT_ADMIN"], ...overrides };
+  return { assignmentPosts: [], deletes: [], links: [link("level-5", course("course-mat", "Matematik"))], puts: [], roles: ["TENANT_ADMIN"], ...overrides };
 }
 
 for (const viewport of viewports) {
@@ -87,8 +89,26 @@ for (const viewport of viewports) {
     await expect.poll(() => state.puts).toEqual(["level-5/course-fen"]);
     await expect(linked.getByRole("listitem")).toHaveText(["Matematik", "Fen Bilimleri"]);
     await expect(select.locator("option")).toHaveText(["Ders seçin"]);
+
+    // F-11 follow-up: the link can be removed again from the same dialog.
+    await linked.getByRole("button", { name: "Fen Bilimleri bağını kaldır" }).click();
+    await expect.poll(() => state.deletes).toEqual(["level-5/course-fen"]);
+    await expect(linked.getByRole("listitem")).toHaveText(["Matematik"]);
+    await expect(select.locator("option")).toHaveText(["Ders seçin", "Fen Bilimleri"]);
+    await expectNoHorizontalOverflow(page, `grade level courses after unlink ${viewport.width}`);
   });
 }
+
+test("F-11 aktif atamalı dersin bağı kaldırılamaz ve pencere yönlendirir", async ({ page }) => {
+  const state = mockState({ unlinkError: { code: "GRADE_LEVEL_COURSE_IN_USE", status: 409 } });
+  await openGradeLevels(page, state);
+  await page.getByRole("button", { name: "5. Sınıf derslerini yönet" }).click();
+  const dialog = page.getByRole("dialog", { name: "5. Sınıf dersleri" });
+  await dialog.getByRole("button", { name: "Matematik bağını kaldır" }).click();
+  await expect.poll(() => state.deletes).toEqual(["level-5/course-mat"]);
+  await expect(dialog.getByRole("alert")).toHaveText("Matematik için bu seviyenin sınıflarında aktif öğretmen ataması var; önce Öğretmenler ekranından atamayı kaldırın.");
+  await expect(dialog.getByRole("region", { name: "Bağlı dersler" }).getByRole("listitem")).toHaveText(["Matematik"]);
+});
 
 test("F-11 bağlama hatası pencerede görünür", async ({ page }) => {
   const state = mockState();
@@ -173,6 +193,16 @@ async function installRoutes(page: Page, state: MockState, options: { failPut?: 
       }
       const linkedCourse = courses.find((candidate) => candidate.id === levelCourse[2])!;
       state.links = [...state.links, link(levelCourse[1]!, linkedCourse)];
+      await route.fulfill({ headers: corsHeaders, status: 204 });
+      return;
+    }
+    if (levelCourse && method === "DELETE") {
+      state.deletes.push(`${levelCourse[1]}/${levelCourse[2]}`);
+      if (state.unlinkError) {
+        await route.fulfill({ body: JSON.stringify({ error: { code: state.unlinkError.code } }), contentType: "application/json", headers: corsHeaders, status: state.unlinkError.status });
+        return;
+      }
+      state.links = state.links.filter((record) => !(record.gradeLevelId === levelCourse[1] && record.courseId === levelCourse[2]));
       await route.fulfill({ headers: corsHeaders, status: 204 });
       return;
     }

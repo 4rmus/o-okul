@@ -4274,6 +4274,9 @@ const operationContracts: Record<string, OperationContract> = {
   "put /api/v1/grade-levels/{id}/courses/{courseId}": {
     noContent: true,
   },
+  "delete /api/v1/grade-levels/{id}/courses/{courseId}": {
+    noContent: true,
+  },
   "patch /api/v1/grade-levels/{id}": {
     requestBody: namedSchoolReferenceUpdateRequestSchema,
     responseBody: namedSchoolReferenceRecordSchema,

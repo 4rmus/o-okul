@@ -44,6 +44,14 @@ export class GradeLevelsController {
     return this.school.ensureGradeLevelCourse(getRequestContext(), id, courseId);
   }
 
+  // UAT F-11 follow-up: state-guarded removal; a repeat gets 404, an in-use link 409 GRADE_LEVEL_COURSE_IN_USE.
+  @Delete(":id/courses/:courseId")
+  @HttpCode(204)
+  @RequireCapability("academic:manage")
+  removeCourse(@Param("id") id: string, @Param("courseId") courseId: string): Promise<void> {
+    return this.school.removeGradeLevelCourse(getRequestContext(), id, courseId);
+  }
+
   @Post()
   @RequireCapability("class:manage")
   create(@Body(zodBody(gradeLevelCreateBodySchema)) body: GradeLevelCreateBody): Promise<GradeLevelRecord> {

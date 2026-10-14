@@ -14,9 +14,17 @@ interface EnsureGradeLevelCourseInput {
   courseCode?: string;
 }
 
+export interface RemoveGradeLevelCourseInput {
+  tenantId: string;
+  gradeLevelId: string;
+  courseId: string;
+}
+
 export interface GradeLevelCourseStore {
   listByGradeLevel(gradeLevelId: string, alanId?: string): Promise<GradeLevelCourseRecord[]>;
   ensure(input: EnsureGradeLevelCourseInput): Promise<string | undefined>;
+  /** UAT F-11: removes the level-wide (alan-less) link; alan-scoped template rows are left untouched. */
+  remove(input: RemoveGradeLevelCourseInput): Promise<string | undefined>;
 }
 
 export const gradeLevelCourseStoreToken = Symbol("GradeLevelCourseStore");
@@ -60,6 +68,18 @@ export class InMemoryGradeLevelCourseStore implements GradeLevelCourseStore {
     };
     this.records.push(record);
     return record.id;
+  }
+
+  async remove(input: RemoveGradeLevelCourseInput): Promise<string | undefined> {
+    const index = this.records.findIndex((record) =>
+      record.tenantId === input.tenantId
+      && record.gradeLevelId === input.gradeLevelId
+      && record.courseId === input.courseId
+      && !record.alanId,
+    );
+    if (index < 0) return undefined;
+    const [removed] = this.records.splice(index, 1);
+    return removed?.id;
   }
 }
 
@@ -108,6 +128,18 @@ export class PostgresGradeLevelCourseStore implements GradeLevelCourseStore {
         [randomUUID(), input.tenantId, input.gradeLevelId, input.courseId],
       );
       return inserted.rows[0]?.id;
+    });
+  }
+
+  async remove(input: RemoveGradeLevelCourseInput): Promise<string | undefined> {
+    return withTenantQuery(this.pool, async (client) => {
+      const deleted = await client.query<{ id: string }>(
+        `DELETE FROM "GradeLevelCourse"
+         WHERE "tenantId" = $1 AND "gradeLevelId" = $2 AND "courseId" = $3 AND "alanId" IS NULL
+         RETURNING "id"`,
+        [input.tenantId, input.gradeLevelId, input.courseId],
+      );
+      return deleted.rows[0]?.id;
     });
   }
 }
