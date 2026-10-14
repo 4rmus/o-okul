@@ -4,6 +4,10 @@ import { redactedUrl, validateSmokeEvidenceOutputTarget, writeSmokeEvidence } fr
 const smokeUrl = process.env.TRAEFIK_HTTPS_SMOKE_URL ?? defaultSmokeUrl();
 const expectedStatus = Number(process.env.TRAEFIK_HTTPS_SMOKE_EXPECTED_STATUS ?? "200");
 const timeoutMs = Number(process.env.TRAEFIK_HTTPS_SMOKE_TIMEOUT_MS ?? "10000");
+// IMG-2c: a just-restarted release behind Cloudflare can miss one 10s window; a bounded retry keeps the gate
+// meaningful (HSTS/body checks never retry) and the attempt count is written to the evidence.
+const maxAttempts = Number(process.env.TRAEFIK_HTTPS_SMOKE_ATTEMPTS ?? "3");
+const retryDelayMs = Number(process.env.TRAEFIK_HTTPS_SMOKE_RETRY_DELAY_MS ?? "10000");
 const allowLocal = process.env.TRAEFIK_HTTPS_SMOKE_ALLOW_LOCAL === "true";
 const allowInsecureTls = process.env.TRAEFIK_HTTPS_SMOKE_ALLOW_INSECURE_TLS === "true";
 const evidenceFile = process.env.TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE ?? process.env.SMOKE_EVIDENCE_FILE;
@@ -40,10 +44,39 @@ if (!Number.isInteger(expectedStatus) || expectedStatus < 100 || expectedStatus 
   fail("TRAEFIK_HTTPS_SMOKE_EXPECTED_STATUS geçerli HTTP status olmalı.");
 }
 
-const response = await get(url).catch((error) => fail(`Traefik HTTPS smoke isteği başarısız: ${error.message}`));
+if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 5) {
+  fail("TRAEFIK_HTTPS_SMOKE_ATTEMPTS 1 ile 5 arasında tam sayı olmalı.");
+}
+
+if (!Number.isInteger(retryDelayMs) || retryDelayMs < 0 || retryDelayMs > 60000) {
+  fail("TRAEFIK_HTTPS_SMOKE_RETRY_DELAY_MS 0 ile 60000 arasında tam sayı olmalı.");
+}
+
+let response;
+let attempts = 0;
+let lastProblem = "";
+while (attempts < maxAttempts) {
+  attempts += 1;
+  try {
+    response = await get(url);
+    if (response.statusCode === expectedStatus) break;
+    lastProblem = `HTTP ${response.statusCode}, beklenen ${expectedStatus}`;
+  } catch (error) {
+    response = undefined;
+    lastProblem = error.message;
+  }
+  if (attempts < maxAttempts) {
+    console.error(`Traefik HTTPS smoke denemesi ${attempts}/${maxAttempts} başarısız (${lastProblem}); ${retryDelayMs}ms sonra yeniden denenecek.`);
+    await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+  }
+}
+
+if (!response) {
+  fail(`Traefik HTTPS smoke isteği başarısız: ${lastProblem} (${attempts} deneme).`);
+}
 
 if (response.statusCode !== expectedStatus) {
-  fail(`Traefik HTTPS smoke başarısız: HTTP ${response.statusCode}, beklenen ${expectedStatus}.`);
+  fail(`Traefik HTTPS smoke başarısız: ${lastProblem} (${attempts} deneme).`);
 }
 
 if (!response.headers["strict-transport-security"]) {
@@ -63,11 +96,12 @@ await writeSmokeEvidence(evidenceFile, {
   expectedStatus,
   statusCode: response.statusCode,
   strictTransportSecurity: response.headers["strict-transport-security"],
+  attempts,
   commandsPassed: ["pnpm traefik:https:smoke"],
   gaps: [],
 });
 
-console.log(`Traefik HTTPS smoke geçti: ${url.href} HTTP ${response.statusCode}`);
+console.log(`Traefik HTTPS smoke geçti: ${url.href} HTTP ${response.statusCode} (${attempts} deneme)`);
 
 function defaultSmokeUrl() {
   if (!process.env.API_URL) {

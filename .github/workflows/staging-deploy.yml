@@ -436,7 +436,9 @@ jobs:
     needs: build-images
     runs-on: ubuntu-latest
     environment: staging
-    timeout-minutes: 25
+    # IMG-2c: the release image pull may use up to 30 minutes (before any service is stopped); the rest of the
+    # budget covers migration, backfills and the cutover. Previously 25 minutes with a 20-minute pull.
+    timeout-minutes: 50
     outputs:
       rollback-image-tag: ${{ steps.deploy-stack.outputs.rollback-image-tag }}
     steps:
@@ -745,14 +747,37 @@ jobs:
             -f docker-compose.observability.yml \
             config --quiet
 
-          timeout 20m docker compose \
-            --env-file .env \
-            --env-file "$release_env_file" \
-            -f docker-compose.yml \
-            -f docker-compose.release.yml \
-            -f "$EDGE_COMPOSE_FILE" \
-            -f docker-compose.observability.yml \
-            pull web api worker queue-board alertmanager-secrets-init alertmanager prometheus loki alloy grafana
+          # IMG-2c: the pull runs before anything is stopped, so a failed pull leaves the old release serving.
+          # Layers that finished downloading stay in the containerd content store, so a retry only fetches the rest.
+          pull_release_images() {
+            local budget_seconds=1800
+            local max_attempts=3
+            local deadline=$((SECONDS + budget_seconds))
+            local attempt=1
+            local remaining
+            while true; do
+              remaining=$((deadline - SECONDS))
+              if timeout "${remaining}s" docker compose \
+                --env-file .env \
+                --env-file "$release_env_file" \
+                -f docker-compose.yml \
+                -f docker-compose.release.yml \
+                -f "$EDGE_COMPOSE_FILE" \
+                -f docker-compose.observability.yml \
+                pull web api worker queue-board alertmanager-secrets-init alertmanager prometheus loki alloy grafana; then
+                echo "Release images pulled in attempt ${attempt} after $((SECONDS - deadline + budget_seconds))s."
+                return 0
+              fi
+              if [ "$attempt" -ge "$max_attempts" ] || [ $((deadline - SECONDS)) -lt 60 ]; then
+                echo "Release image pull did not finish in ${attempt} attempt(s) within ${budget_seconds}s; no service was stopped." >&2
+                return 1
+              fi
+              attempt=$((attempt + 1))
+              echo "Release image pull failed; retrying (attempt ${attempt}/${max_attempts})." >&2
+              sleep 10
+            done
+          }
+          pull_release_images
 
           # BEGIN LIFECYCLE RELEASE CUTOVER
           backend_compose=(
