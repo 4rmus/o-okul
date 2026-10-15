@@ -64,7 +64,7 @@ export const roleCapabilities: Record<TenantRoleName, readonly RoleCapability[]>
     "staff:*", "student:*", "support:*",
   ],
   FINANCE_STAFF: ["finance:*"],
-  TEACHER: ["academic:read", "attendance:write-assigned", "homework:write-assigned", "note:write-assigned", "search:read", "student:list", "student:read"],
+  TEACHER: ["academic:read", "attendance:write-assigned", "homework:write-assigned", "note:read-assigned", "note:write-assigned", "search:read", "student:list", "student:read"],
   STUDENT: ["self:read", "student:read"],
   GUARDIAN: ["student:read", "ward:read"],
 };

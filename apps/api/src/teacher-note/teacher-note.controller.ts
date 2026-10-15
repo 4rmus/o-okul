@@ -1,10 +1,9 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards, Headers } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Headers } from "@nestjs/common";
 import type { TeacherNoteRecord } from "@o-okul/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
-import { Roles } from "../rbac/roles.decorator.js";
-import { RolesGuard } from "../rbac/roles.guard.js";
+import { RequireCapability } from "../rbac/capability.decorator.js";
 import { TeacherNoteService } from "./teacher-note.service.js";
 import {
   type TeacherNoteCreateBody,
@@ -18,13 +17,15 @@ interface TeacherNoteListQuery extends ListQuery {
   studentId?: string;
 }
 
+// Capability + persona + scope (P0 legacy-role cutover, docs/account-management-architecture-plan.md section 6):
+// the global CapabilityGuard admits staff with note:* and the TEACHER persona with note:*-assigned; the session
+// carries exactly one persona role, and the service narrows a teacher to own notes on assigned students.
 @Controller("teacher-notes")
-@UseGuards(RolesGuard)
 export class TeacherNoteController {
   constructor(private readonly notes: TeacherNoteService) {}
 
   @Get()
-  @Roles("TEACHER")
+  @RequireCapability("note:read-assigned")
   async list(@Query() query: TeacherNoteListQuery): Promise<TeacherNoteRecord[]> {
     return applyListQuery(await this.notes.list(getRequestContext(), {
       classId: query.classId,
@@ -33,13 +34,13 @@ export class TeacherNoteController {
   }
 
   @Post()
-  @Roles("TEACHER")
+  @RequireCapability("note:write-assigned")
   create(@Body(zodBody(teacherNoteCreateBodySchema)) body: TeacherNoteCreateBody, @Headers("idempotency-key") idempotencyKey?: string): Promise<TeacherNoteRecord> {
     return this.notes.create(getRequestContext(), body, idempotencyKey);
   }
 
   @Patch(":id")
-  @Roles("TEACHER")
+  @RequireCapability("note:write-assigned")
   update(
     @Param("id") id: string,
     @Body(zodBody(teacherNoteUpdateBodySchema)) body: TeacherNoteUpdateBody,
@@ -49,7 +50,7 @@ export class TeacherNoteController {
 
   @Delete(":id")
   @HttpCode(204)
-  @Roles("TEACHER")
+  @RequireCapability("note:write-assigned")
   async delete(@Param("id") id: string): Promise<void> {
     await this.notes.delete(getRequestContext(), id);
   }

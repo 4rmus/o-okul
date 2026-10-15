@@ -2,7 +2,8 @@ import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
-import { testLoginBody } from "../test-auth.js";
+import { resetInMemoryAuthUsers, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
+import { registerTestLoginIdentity, testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 
@@ -13,8 +14,30 @@ describe("TeacherNote API", () => {
   let teacherAAccessToken: string;
   let studentAAccessToken: string;
   let guardianAAccessToken: string;
+  let assistantAccessToken: string;
+  let financeAccessToken: string;
+  let systemAccessToken: string;
 
   beforeAll(async () => {
+    resetInMemoryAuthUsers();
+    upsertInMemoryAuthUser({
+      id: "user-finance-teacher-note",
+      email: "finance-teacher-note@example.test",
+      name: "Finance Teacher Note",
+      password: "password",
+      tenantId: "tenant-a",
+      roles: ["FINANCE_STAFF"],
+      membership: {
+        id: "membership-finance-teacher-note",
+        staffRole: "FINANCE_STAFF",
+        hasTeacherPersona: false,
+        hasStudentPersona: false,
+        version: 1,
+        scopeMode: "TENANT",
+        campusIds: [],
+      },
+    });
+    registerTestLoginIdentity("finance-teacher-note@example.test", { tenantSlug: "dna-egitim" });
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -27,10 +50,14 @@ describe("TeacherNote API", () => {
     teacherAAccessToken = await login("teacher-a@example.test");
     studentAAccessToken = await login("student-a@example.test");
     guardianAAccessToken = await login("guardian-a@example.test");
+    assistantAccessToken = await login("assistant-a@example.test");
+    financeAccessToken = await login("finance-teacher-note@example.test");
+    systemAccessToken = await login("system@example.test");
   });
 
   afterAll(async () => {
     await app.close();
+    resetInMemoryAuthUsers();
   });
 
   async function login(email: string): Promise<string> {
@@ -249,6 +276,20 @@ describe("TeacherNote API", () => {
   it("öğrenci ve veli genel not endpointine erişemez", async () => {
     await request(server).get("/teacher-notes").set("Authorization", `Bearer ${studentAAccessToken}`).expect(403);
     await request(server).get("/teacher-notes").set("Authorization", `Bearer ${guardianAAccessToken}`).expect(403);
+  });
+
+  // Legacy-role cutover: the capability guard must admit exactly the roles the old @Roles("TEACHER") rank check admitted.
+  it("yetki matrisi: personel note:* ve öğretmen persona kabul edilir; finans, öğrenci, veli ve sistem yöneticisi 403", async () => {
+    await request(server).get("/teacher-notes").set("Authorization", `Bearer ${assistantAccessToken}`).expect(200);
+    await request(server).get("/teacher-notes").set("Authorization", `Bearer ${teacherAAccessToken}`).expect(200);
+    for (const token of [financeAccessToken, studentAAccessToken, guardianAAccessToken, systemAccessToken]) {
+      await request(server).get("/teacher-notes").set("Authorization", `Bearer ${token}`).expect(403);
+      await request(server).post("/teacher-notes").set("Authorization", `Bearer ${token}`)
+        .send({ studentId: "student-a", body: "Yetkisiz not" }).expect(403);
+      await request(server).patch("/teacher-notes/teacher-note-visible-a").set("Authorization", `Bearer ${token}`)
+        .send({ body: "Yetkisiz düzenleme" }).expect(403);
+      await request(server).delete("/teacher-notes/teacher-note-visible-a").set("Authorization", `Bearer ${token}`).expect(403);
+    }
   });
 
   it("öğretmen notu oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
