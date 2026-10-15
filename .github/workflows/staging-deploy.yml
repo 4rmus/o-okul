@@ -361,6 +361,10 @@ jobs:
           GHCR_TOKEN: ${{ github.token }}
         run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
 
+      # IMG-2d: build cache lives in GHCR (`buildcache:<target>`). The previous `type=gha` cache was never written:
+      # an inline `docker buildx` step must expose ACTIONS_RUNTIME_TOKEN/ACTIONS_RESULTS_URL itself (Docker docs,
+      # cache backends/gha), so every deploy rebuilt `pnpm install` and Chromium and changed their layer digests.
+      # `ignore-error=true`: a failed cache export never fails the release build.
       - name: Build and push web image
         shell: bash
         env:
@@ -373,8 +377,8 @@ jobs:
         run: |
           docker buildx build \
             --push \
-            --cache-from type=gha,scope=web \
-            --cache-to type=gha,mode=max,scope=web \
+            --cache-from "type=registry,ref=$IMAGE_PREFIX/buildcache:web" \
+            --cache-to "type=registry,ref=$IMAGE_PREFIX/buildcache:web,mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true" \
             --target web \
             --build-arg NEXT_PUBLIC_API_URL="$NEXT_PUBLIC_API_URL" \
             --build-arg NEXT_PUBLIC_SMS_ENABLED="$NEXT_PUBLIC_SMS_ENABLED" \
@@ -392,8 +396,8 @@ jobs:
         run: |
           docker buildx build \
             --push \
-            --cache-from type=gha,scope=api \
-            --cache-to type=gha,mode=max,scope=api \
+            --cache-from "type=registry,ref=$IMAGE_PREFIX/buildcache:api" \
+            --cache-to "type=registry,ref=$IMAGE_PREFIX/buildcache:api,mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true" \
             --target api \
             --build-arg NEXT_PUBLIC_API_URL="$NEXT_PUBLIC_API_URL" \
             --tag "$IMAGE_PREFIX/api:$IMAGE_TAG" \
@@ -409,8 +413,8 @@ jobs:
         run: |
           docker buildx build \
             --push \
-            --cache-from type=gha,scope=worker \
-            --cache-to type=gha,mode=max,scope=worker \
+            --cache-from "type=registry,ref=$IMAGE_PREFIX/buildcache:worker" \
+            --cache-to "type=registry,ref=$IMAGE_PREFIX/buildcache:worker,mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true" \
             --target worker \
             --build-arg NEXT_PUBLIC_API_URL="$NEXT_PUBLIC_API_URL" \
             --tag "$IMAGE_PREFIX/worker:$IMAGE_TAG" \
@@ -425,8 +429,8 @@ jobs:
         run: |
           docker buildx build \
             --push \
-            --cache-from type=gha,scope=queue-board \
-            --cache-to type=gha,mode=max,scope=queue-board \
+            --cache-from "type=registry,ref=$IMAGE_PREFIX/buildcache:queue-board" \
+            --cache-to "type=registry,ref=$IMAGE_PREFIX/buildcache:queue-board,mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true" \
             --target queue-board \
             --tag "$IMAGE_PREFIX/queue-board:$IMAGE_TAG" \
             --tag "$IMAGE_PREFIX/queue-board:staging-latest" \
