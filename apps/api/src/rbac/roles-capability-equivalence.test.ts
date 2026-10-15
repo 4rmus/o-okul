@@ -24,6 +24,12 @@ const replacedRoles: Array<{ route: string; roles: Role[]; capability: Capabilit
     roles: ["TEACHER", "STUDENT", "GUARDIAN"],
     capability: "academic:read-catalog",
   },
+  { route: "GET /announcements[/:id], /message-templates[/:id]", roles: ["TENANT_ADMIN", "TEACHER"], capability: "announcement:read" },
+  { route: "GET /attendance, /attendance/aggregate, /attendance/summary, /attendance/daily", roles: ["TEACHER"], capability: "attendance:read-assigned" },
+  { route: "GET /study-sessions[/:id], /development/criteria, /development/assessments", roles: ["TEACHER"], capability: "academic:read" },
+  { route: "POST /development/assessments", roles: ["TEACHER"], capability: "academic:write-assigned" },
+  { route: "GET /guardians[/:id], /guardians/:id/students", roles: ["TEACHER"], capability: "student:read-guardians" },
+  { route: "GET /teachers[/:id], /teachers/:id/assignments", roles: ["TEACHER"], capability: "staff:read-teachers" },
 ];
 
 const roleSets: string[][] = [

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import type {
   GuardianRecord,
   GuardianStudentDetailsResponse,
@@ -9,8 +9,6 @@ import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { hasCapability } from "../rbac/role-capabilities.js";
-import { Roles } from "../rbac/roles.decorator.js";
-import { RolesGuard } from "../rbac/roles.guard.js";
 import { GuardianService } from "./guardian.service.js";
 import { toGuardianResponse } from "./guardian-response.js";
 import {
@@ -25,12 +23,11 @@ import {
 } from "../school/school-validation.js";
 
 @Controller("guardians")
-@UseGuards(RolesGuard)
 export class GuardiansController {
   constructor(private readonly guardians: GuardianService) {}
 
   @Get()
-  @Roles("TEACHER")
+  @RequireCapability("student:read-guardians")
   async list(@Query() query: ListQuery): Promise<GuardianRecord[]> {
     const context = getRequestContext();
     const fields = hasCapability(context, "privacy:manage") ? guardianListFields : guardianPublicListFields;
@@ -38,14 +35,14 @@ export class GuardiansController {
   }
 
   @Get(":id")
-  @Roles("TEACHER")
+  @RequireCapability("student:read-guardians")
   async findOne(@Param("id") id: string): Promise<GuardianRecord> {
     const context = getRequestContext();
     return toGuardianResponse(await this.guardians.findGuardian(context, id), context);
   }
 
   @Get(":id/students")
-  @Roles("TEACHER")
+  @RequireCapability("student:read-guardians")
   listStudents(@Param("id") id: string): Promise<GuardianStudentRecord[]> {
     return this.guardians.listGuardianStudents(getRequestContext(), id);
   }

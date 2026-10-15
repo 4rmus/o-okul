@@ -10,19 +10,14 @@ import { join } from "node:path";
 // 2026-10-15: six @Roles that only duplicated an existing @RequireCapability removed (150 -> 144, 19 files);
 //   equivalence proof in apps/api/src/rbac/roles-capability-equivalence.test.ts.
 // 2026-10-15: school read routes moved to academic:read, class:read and academic:read-catalog (144 -> 127, 12 files).
+// 2026-10-16: announcement, message-template, attendance, study-session, development, guardians and teachers moved
+//   to capabilities (127 -> 108, 5 files).
 const baseline = {
-  "apps/api/src/announcement/announcement.controller.ts": 2,
-  "apps/api/src/attendance/attendance.controller.ts": 4,
   "apps/api/src/auth/auth.controller.ts": 7,
-  "apps/api/src/development/development.controller.ts": 3,
-  "apps/api/src/guardian/guardians.controller.ts": 3,
   "apps/api/src/homework/homework.controller.ts": 13,
   "apps/api/src/me/me.controller.ts": 79,
-  "apps/api/src/message-template/message-template.controller.ts": 2,
   "apps/api/src/privacy/privacy.controller.ts": 1,
-  "apps/api/src/program/study-session.controller.ts": 2,
   "apps/api/src/support-ticket/support-ticket.controller.ts": 8,
-  "apps/api/src/teacher/teachers.controller.ts": 3,
 };
 
 export function countRoles(root = "apps/api/src") {

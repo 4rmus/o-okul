@@ -1,11 +1,9 @@
-import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import type { StudySessionRecord } from "@o-okul/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
-import { Roles } from "../rbac/roles.decorator.js";
-import { RolesGuard } from "../rbac/roles.guard.js";
 import {
   studySessionCreateBodySchema,
   studySessionUpdateBodySchema,
@@ -15,18 +13,17 @@ import {
 import { StudySessionService } from "./study-session.service.js";
 
 @Controller("study-sessions")
-@UseGuards(RolesGuard)
 export class StudySessionController {
   constructor(private readonly studySessions: StudySessionService) {}
 
   @Get()
-  @Roles("TEACHER")
+  @RequireCapability("academic:read")
   async list(@Query() query: ListQuery): Promise<StudySessionRecord[]> {
     return applyListQuery(await this.studySessions.list(getRequestContext()), query, studySessionListFields);
   }
 
   @Get(":id")
-  @Roles("TEACHER")
+  @RequireCapability("academic:read")
   findOne(@Param("id") id: string): Promise<StudySessionRecord> {
     return this.studySessions.findOne(getRequestContext(), id);
   }

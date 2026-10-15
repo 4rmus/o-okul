@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import type {
   TeacherAssignmentRecord,
   TeacherImportDryRunResult,
@@ -11,8 +11,6 @@ import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { hasCapability } from "../rbac/role-capabilities.js";
 import { maskContactPhone } from "../privacy/contact-mask.js";
-import { Roles } from "../rbac/roles.decorator.js";
-import { RolesGuard } from "../rbac/roles.guard.js";
 import {
   teacherAssignmentCreateBodySchema,
   teacherAssignmentUpdateBodySchema,
@@ -29,7 +27,6 @@ import { TeacherImportService } from "./teacher-import.service.js";
 import { TeacherService } from "./teacher.service.js";
 
 @Controller("teachers")
-@UseGuards(RolesGuard)
 export class TeachersController {
   constructor(
     private readonly teachers: TeacherService,
@@ -37,21 +34,21 @@ export class TeachersController {
   ) {}
 
   @Get()
-  @Roles("TEACHER")
+  @RequireCapability("staff:read-teachers")
   async list(@Query() query: ListQuery): Promise<TeacherRecord[]> {
     const context = getRequestContext();
     return applyListQuery(await this.teachers.listTeachers(context), query, teacherListFields).map((record) => toTeacherResponse(record, context));
   }
 
   @Get(":id")
-  @Roles("TEACHER")
+  @RequireCapability("staff:read-teachers")
   async findOne(@Param("id") id: string): Promise<TeacherRecord> {
     const context = getRequestContext();
     return toTeacherResponse(await this.teachers.findTeacher(context, id), context);
   }
 
   @Get(":id/assignments")
-  @Roles("TEACHER")
+  @RequireCapability("staff:read-teachers")
   assignments(@Param("id") id: string): Promise<TeacherAssignmentRecord[]> {
     return this.teachers.listTeacherAssignments(getRequestContext(), id);
   }
