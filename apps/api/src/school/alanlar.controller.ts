@@ -1,27 +1,24 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import type { AlanRecord } from "@o-okul/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
-import { Roles } from "../rbac/roles.decorator.js";
-import { RolesGuard } from "../rbac/roles.guard.js";
 import { SchoolService } from "./school.service.js";
 import { alanCreateBodySchema, alanUpdateBodySchema, type AlanCreateBody, type AlanUpdateBody } from "./school-validation.js";
 
 @Controller("alanlar")
-@UseGuards(RolesGuard)
 export class AlanlarController {
   constructor(private readonly school: SchoolService) {}
 
   @Get()
-  @Roles("TEACHER")
+  @RequireCapability("class:read")
   async list(@Query() query: ListQuery): Promise<AlanRecord[]> {
     return applyListQuery(await this.school.listAlanlar(getRequestContext()), query, alanListFields);
   }
 
   @Get(":id")
-  @Roles("TEACHER")
+  @RequireCapability("class:read")
   findOne(@Param("id") id: string): Promise<AlanRecord> {
     return this.school.findAlan(getRequestContext(), id);
   }

@@ -9,6 +9,7 @@ import { join } from "node:path";
 // 2026-10-15: teacher-note moved to note:read-assigned / note:write-assigned (154 -> 150, 21 files).
 // 2026-10-15: six @Roles that only duplicated an existing @RequireCapability removed (150 -> 144, 19 files);
 //   equivalence proof in apps/api/src/rbac/roles-capability-equivalence.test.ts.
+// 2026-10-15: school read routes moved to academic:read, class:read and academic:read-catalog (144 -> 127, 12 files).
 const baseline = {
   "apps/api/src/announcement/announcement.controller.ts": 2,
   "apps/api/src/attendance/attendance.controller.ts": 4,
@@ -20,13 +21,6 @@ const baseline = {
   "apps/api/src/message-template/message-template.controller.ts": 2,
   "apps/api/src/privacy/privacy.controller.ts": 1,
   "apps/api/src/program/study-session.controller.ts": 2,
-  "apps/api/src/school/academic-calendar.controller.ts": 4,
-  "apps/api/src/school/alanlar.controller.ts": 2,
-  "apps/api/src/school/campuses.controller.ts": 2,
-  "apps/api/src/school/classes.controller.ts": 2,
-  "apps/api/src/school/courses.controller.ts": 2,
-  "apps/api/src/school/grade-levels.controller.ts": 3,
-  "apps/api/src/school/learning-outcomes.controller.ts": 2,
   "apps/api/src/support-ticket/support-ticket.controller.ts": 8,
   "apps/api/src/teacher/teachers.controller.ts": 3,
 };

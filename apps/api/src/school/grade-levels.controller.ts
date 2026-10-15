@@ -1,11 +1,9 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query } from "@nestjs/common";
 import type { GradeLevelCourseRecord, GradeLevelRecord } from "@o-okul/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
-import { Roles } from "../rbac/roles.decorator.js";
-import { RolesGuard } from "../rbac/roles.guard.js";
 import { SchoolService } from "./school.service.js";
 import {
   gradeLevelCreateBodySchema,
@@ -15,24 +13,23 @@ import {
 } from "./school-validation.js";
 
 @Controller("grade-levels")
-@UseGuards(RolesGuard)
 export class GradeLevelsController {
   constructor(private readonly school: SchoolService) {}
 
   @Get()
-  @Roles("TEACHER")
+  @RequireCapability("class:read")
   async list(@Query() query: ListQuery): Promise<GradeLevelRecord[]> {
     return applyListQuery(await this.school.listGradeLevels(getRequestContext()), query, gradeLevelListFields);
   }
 
   @Get(":id")
-  @Roles("TEACHER")
+  @RequireCapability("class:read")
   findOne(@Param("id") id: string): Promise<GradeLevelRecord> {
     return this.school.findGradeLevel(getRequestContext(), id);
   }
 
   @Get(":id/courses")
-  @Roles("TEACHER", "STUDENT", "GUARDIAN")
+  @RequireCapability("academic:read-catalog")
   listCourses(@Param("id") id: string, @Query("alanId") alanId?: string): Promise<GradeLevelCourseRecord[]> {
     return this.school.listGradeLevelCourses(getRequestContext(), id, alanId);
   }

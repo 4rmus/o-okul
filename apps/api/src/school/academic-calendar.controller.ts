@@ -1,11 +1,9 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import type { AcademicTermRecord, AcademicYearRecord } from "@o-okul/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
-import { Roles } from "../rbac/roles.decorator.js";
-import { RolesGuard } from "../rbac/roles.guard.js";
 import { SchoolService } from "./school.service.js";
 import {
   academicTermCreateBodySchema,
@@ -19,18 +17,17 @@ import {
 } from "./school-validation.js";
 
 @Controller()
-@UseGuards(RolesGuard)
 export class AcademicCalendarController {
   constructor(private readonly school: SchoolService) {}
 
   @Get("academic-years")
-  @Roles("TEACHER")
+  @RequireCapability("academic:read")
   async listYears(@Query() query: ListQuery): Promise<AcademicYearRecord[]> {
     return applyListQuery(await this.school.listAcademicYears(getRequestContext()), query, academicYearListFields);
   }
 
   @Get("academic-years/:id")
-  @Roles("TEACHER")
+  @RequireCapability("academic:read")
   findYear(@Param("id") id: string): Promise<AcademicYearRecord> {
     return this.school.findAcademicYear(getRequestContext(), id);
   }
@@ -58,13 +55,13 @@ export class AcademicCalendarController {
   }
 
   @Get("academic-terms")
-  @Roles("TEACHER", "STUDENT", "GUARDIAN")
+  @RequireCapability("academic:read-catalog")
   async listTerms(@Query() query: ListQuery): Promise<AcademicTermRecord[]> {
     return applyListQuery(await this.school.listAcademicTerms(getRequestContext()), query, academicTermListFields);
   }
 
   @Get("academic-terms/:id")
-  @Roles("TEACHER", "STUDENT", "GUARDIAN")
+  @RequireCapability("academic:read-catalog")
   findTerm(@Param("id") id: string): Promise<AcademicTermRecord> {
     return this.school.findAcademicTerm(getRequestContext(), id);
   }

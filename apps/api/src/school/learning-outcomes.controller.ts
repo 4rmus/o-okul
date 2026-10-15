@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import type {
   LearningOutcomeImportDryRunResult,
   LearningOutcomeImportRequest,
@@ -9,8 +9,6 @@ import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
-import { Roles } from "../rbac/roles.decorator.js";
-import { RolesGuard } from "../rbac/roles.guard.js";
 import { SchoolService } from "./school.service.js";
 import { LearningOutcomeImportService } from "./learning-outcome-import.service.js";
 import {
@@ -22,7 +20,6 @@ import {
 } from "./school-validation.js";
 
 @Controller("learning-outcomes")
-@UseGuards(RolesGuard)
 export class LearningOutcomesController {
   constructor(
     private readonly school: SchoolService,
@@ -30,13 +27,13 @@ export class LearningOutcomesController {
   ) {}
 
   @Get()
-  @Roles("TEACHER", "STUDENT", "GUARDIAN")
+  @RequireCapability("academic:read-catalog")
   async list(@Query() query: ListQuery): Promise<LearningOutcomeRecord[]> {
     return applyListQuery(await this.school.listLearningOutcomes(getRequestContext()), query, learningOutcomeListFields);
   }
 
   @Get(":id")
-  @Roles("TEACHER", "STUDENT", "GUARDIAN")
+  @RequireCapability("academic:read-catalog")
   findOne(@Param("id") id: string): Promise<LearningOutcomeRecord> {
     return this.school.findLearningOutcome(getRequestContext(), id);
   }
