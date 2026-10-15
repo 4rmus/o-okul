@@ -249,9 +249,10 @@ describePostgres("IdentityInvitationService.accept on PostgreSQL without request
     } finally {
       spy.mockRestore();
     }
-    // The pre-existing account keeps its STUDENT membership and is not deleted; the student is not left linked.
-    const account = await admin.query(`SELECT "id" FROM "User" WHERE "id" = 'p23-student-user'`);
-    expect(account.rows).toHaveLength(1);
+    // The pre-existing account keeps its STUDENT membership, e-mail and password and is not deleted; the student is
+    // not left linked.
+    const account = await admin.query(`SELECT "id", "emailNormalized", "passwordHash" FROM "User" WHERE "id" = 'p23-student-user'`);
+    expect(account.rows).toEqual([{ id: "p23-student-user", emailNormalized: "p23.eski@example.test", passwordHash: "FIXTURE_HASH" }]);
     const membership = await admin.query(`SELECT "role" FROM "TenantMembership" WHERE "userId" = 'p23-student-user' AND "status" = 'ACTIVE'`);
     expect(membership.rows).toEqual([{ role: "STUDENT" }]);
     const student = await admin.query(`SELECT "userId" FROM "Student" WHERE "id" = 'p23-student'`);

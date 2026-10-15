@@ -114,7 +114,7 @@ test.describe("Veli gizlilik ve izin UX'i", () => {
   }
 
   test("UAT F-03: bekleyen veli hesap daveti görünür ve iptal edilir", async ({ page }) => {
-    const invitations = { pending: true, revoked: [] as string[] };
+    const invitations = { pending: true, revoked: [] as string[], queries: [] as string[] };
     await openGuardianDetail(page, "TENANT_ADMIN", [], undefined, invitations);
     const region = page.getByRole("region", { name: "Veli hesap daveti" });
     await expect(region).toContainText("Hesap daveti bekliyor (z***@example.test).");
@@ -124,6 +124,8 @@ test.describe("Veli gizlilik ve izin UX'i", () => {
     await expect.poll(() => invitations.revoked).toEqual(["guardian-invitation-a"]);
     await expect(page.getByRole("region", { name: "Veli hesap daveti" })).toHaveCount(0);
     await expect(page.getByRole("region", { name: "Veli detay özeti" })).toContainText("Hesap yok");
+    // Only this guardian's invitations are requested, never the tenant-wide list.
+    expect(new Set(invitations.queries)).toEqual(new Set(["guardian-a"]));
   });
 
   test("yardımcı yönetici user:manage gerektiren veli portal davetini görmez", async ({ page }) => {
@@ -176,6 +178,7 @@ async function openGuardianPortal(page: Page, visibility: "false" | "omitted") {
 interface GuardianInvitationMock {
   pending: boolean;
   revoked: string[];
+  queries?: string[];
 }
 
 async function installGuardianPrivacyMocks(page: Page, role: TenantRole, capturedLinks: GuardianLinkBody[], writes?: GuardianLinkWrites, invitations?: GuardianInvitationMock) {
@@ -200,6 +203,7 @@ async function installGuardianPrivacyMocks(page: Page, role: TenantRole, capture
     }
     if (path === "/guardians/guardian-a" && route.request().method() === "GET") return fulfillData(route, createGuardian());
     if (path === "/identity-invitations" && route.request().method() === "GET") {
+      invitations?.queries?.push(url.searchParams.get("q") ?? "");
       return fulfillData(route, invitations?.pending ? [{
         id: "guardian-invitation-a", tenantId: "tenant-guardian-privacy", subjectType: "GUARDIAN", subjectId: "guardian-a",
         email: "zeynep.veli@example.test", name: "Zeynep Veli", role: "GUARDIAN", kind: "EMAIL_LINK", status: "PENDING",

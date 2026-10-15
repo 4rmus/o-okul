@@ -263,7 +263,8 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
 }
 
 async function loadPendingGuardianInvitation(accessToken: string, guardianId: string): Promise<IdentityInvitationRecord | null> {
-  const invitations = await apiRequest<IdentityInvitationRecord[]>(accessToken, `${apiBaseUrl}/identity-invitations?q=GUARDIAN`);
+  // q matches the subjectId list field, so only this guardian's invitations leave the API.
+  const invitations = await apiRequest<IdentityInvitationRecord[]>(accessToken, `${apiBaseUrl}/identity-invitations?q=${encodeURIComponent(guardianId)}`);
   return invitations.find((invitation) =>
     invitation.subjectType === "GUARDIAN"
     && invitation.subjectId === guardianId

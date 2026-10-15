@@ -306,14 +306,20 @@ export class IdentityInvitationService {
       ? await this.users.findTenantUserByNationalIdHash(invitation.tenantId, subject.nationalIdHash)
       : undefined);
     // A subject already linked to another account (e.g. a student who activated with a code meanwhile) is not
-    // relinked by an e-mail invitation; refused before the mutation is admitted (UAT F-08 pattern).
-    if (subject?.previousUserId && subject.previousUserId !== priorAccount?.id) {
+    // relinked by an e-mail invitation; refused before the mutation is admitted (UAT F-08 pattern). Compared with the
+    // e-mail account only, as before: a national-ID match must not widen which subjects an invitation may relink.
+    if (subject?.previousUserId && subject.previousUserId !== existingUser?.id) {
       throw new BadRequestException("SUBJECT_ALREADY_LINKED");
     }
     if (priorAccount && !canAddTenantRole(priorAccount.roles, invitation.role)) {
       throw new BadRequestException("IDENTITY_INVITATION_EMAIL_ACCOUNT_INCOMPATIBLE");
     }
     const roleAdded = !priorAccount?.roles.includes(invitation.role);
+    // A national-ID attach overwrites the existing account's e-mail and password (createOrAttachTenantUser); keep the
+    // previous values so a rolled-back accept puts them back instead of leaving the invitee's password on it.
+    const attachedCredentials = priorAccount && !existingUser
+      ? await this.users.readAttachableCredentials(invitation.tenantId, priorAccount.id)
+      : undefined;
     const passwordHash = await hashPasswordAsync(password);
     const admission = { tenantId: invitation.tenantId, lifecycleVersion: invitation.tenantLifecycleVersion!, kind: "AUTH_MUTATION" as const, referenceId: `invitation:${invitation.id}`, source: { type: "INVITATION" as const, id: invitation.id, tokenHash: hashActivationToken(token) } };
     if (employeeActivation) {
@@ -359,6 +365,7 @@ export class IdentityInvitationService {
     const boundSubject = await this.bindSubject(invitation.tenantId, invitation.subjectType, invitation.subjectId, user.id);
     if (!boundSubject) {
       if (roleAdded) await this.users.removeTenantRole(invitation.tenantId, user.id, invitation.role);
+      if (attachedCredentials) await this.users.restoreAttachableCredentials(invitation.tenantId, user.id, attachedCredentials);
       if (!priorAccount) await this.users.deleteUnusedTenantUser(invitation.tenantId, user.id);
       throw (compensatedRefusal = new NotFoundException("SUBJECT_NOT_FOUND"));
     }
@@ -369,8 +376,9 @@ export class IdentityInvitationService {
       // link this call made, so the subject is not left bound to an account without the role.
       if (subject!.previousUserId !== user.id) await this.unbindSubject(invitation.tenantId, invitation.subjectType, invitation.subjectId, user.id);
       if (roleAdded) await this.users.removeTenantRole(invitation.tenantId, user.id, invitation.role);
-      // An account this accept created (no e-mail match before) is removed again, so a later invitation to the
-      // same address creates it with the password chosen then; an existing account's password is never changed.
+      // An account this accept created is removed again; an existing account (e-mail or national-ID match) keeps its
+      // roles, and a national-ID match gets its previous e-mail and password back.
+      if (attachedCredentials) await this.users.restoreAttachableCredentials(invitation.tenantId, user.id, attachedCredentials);
       if (!priorAccount) await this.users.deleteUnusedTenantUser(invitation.tenantId, user.id);
       throw (compensatedRefusal = new BadRequestException("IDENTITY_INVITATION_NOT_PENDING"));
     }
