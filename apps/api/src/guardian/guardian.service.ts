@@ -6,6 +6,7 @@ import type {
   GuardianStudentRecord,
   StudentRecord as SharedStudentRecord,
 } from "@o-okul/shared-types";
+import { AccountPiiPurgeService } from "../account-pii/account-pii-purge.service.js";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import { optionalTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
@@ -84,6 +85,7 @@ export class GuardianService {
     @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() private readonly identityProvisioning?: IdentityProvisioningService,
     @Optional() private readonly idempotency?: IdempotencyService,
+    @Optional() private readonly accountPii?: AccountPiiPurgeService,
   ) {}
 
   async listGuardians(context: RequestContext): Promise<GuardianRecord[]> {
@@ -220,6 +222,8 @@ export class GuardianService {
     if (!record) {
       throw new NotFoundException("GUARDIAN_NOT_FOUND");
     }
+    // DEC-20261016-01: the bound login account is purged with the record unless it carries another identity.
+    const linkedAccount = await this.accountPii?.purgeLinkedAccount(context, existing.userId, "GUARDIAN") ?? "NONE";
     await this.auditLogs?.record({
       tenantId: record.tenantId,
       actorUserId: context.userId,
@@ -229,6 +233,7 @@ export class GuardianService {
       diff: {
         fieldsPurged: ["firstName", "lastName", "phone"],
         before: { firstNamePresent: hadFirstName, lastNamePresent: hadLastName, phonePresent: hadPhone },
+        linkedAccount,
       },
     });
     return record;

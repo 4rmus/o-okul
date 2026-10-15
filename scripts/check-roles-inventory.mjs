@@ -12,11 +12,11 @@ import { join } from "node:path";
 // 2026-10-15: school read routes moved to academic:read, class:read and academic:read-catalog (144 -> 127, 12 files).
 // 2026-10-16: announcement, message-template, attendance, study-session, development, guardians and teachers moved
 //   to capabilities (127 -> 108, 5 files).
+// 2026-10-16: POST /privacy/me/purge-pii removed (DEC-20261016-01) (108 -> 107, 4 files).
 const baseline = {
   "apps/api/src/auth/auth.controller.ts": 7,
   "apps/api/src/homework/homework.controller.ts": 13,
   "apps/api/src/me/me.controller.ts": 79,
-  "apps/api/src/privacy/privacy.controller.ts": 1,
   "apps/api/src/support-ticket/support-ticket.controller.ts": 8,
 };
 

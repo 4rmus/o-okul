@@ -2,7 +2,7 @@ import { runVerifiedTenantMutation } from "../context/tenant-mutation-activity.j
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { BadRequestException, ConflictException, HttpException, HttpStatus, Inject, Injectable, NotFoundException, Optional, UnauthorizedException } from "@nestjs/common";
 import { encryptSecretDeliveryPayload } from "@o-okul/db";
-import type { ActivePersona, MeProfileResponse, MeSessionRecord, MeSessionRevokeAllResponse, MfaEnrollmentRequiredResponse, MfaStepUpPurpose, MfaStepUpResponse, TenantLifecycleMfaTarget, TenantCleanResetMfaTarget, TenantDeviceRestoreMfaTarget, TenantPurgeExportMfaTarget, SelfPurgeResult, TenantLoginContextResponse, TenantSelectionOption, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
+import type { ActivePersona, MeProfileResponse, MeSessionRecord, MeSessionRevokeAllResponse, MfaEnrollmentRequiredResponse, MfaStepUpPurpose, MfaStepUpResponse, TenantLifecycleMfaTarget, TenantCleanResetMfaTarget, TenantDeviceRestoreMfaTarget, TenantPurgeExportMfaTarget, TenantLoginContextResponse, TenantSelectionOption, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { licenseTermStoreToken, type LicenseTermStore } from "../license/license-term-store.js";
@@ -49,7 +49,6 @@ import {
 } from "./totp-mfa.js";
 import { isSystemAdmin } from "../rbac/roles.js";
 
-export type { SelfPurgeResult };
 
 export interface PasswordResetRequestResult {
   status: "ISSUED" | "IGNORED";
@@ -769,44 +768,6 @@ export class AuthService {
     });
     return { resetAt };
     });
-  }
-
-  async purgeCurrentUserPii(context: RequestContext): Promise<SelfPurgeResult> {
-    const user = await this.users.findById(context.userId);
-    if (!user) {
-      throw new NotFoundException("USER_NOT_FOUND");
-    }
-
-    const hadEmail = (user.email ?? "").length > 0;
-    const hadName = user.name.length > 0;
-    const purgedAt = new Date().toISOString();
-    const purged = await this.users.purgePii(user.id, {
-      email: `purged-${user.id}@example.invalid`,
-      name: "Anonim Kullanici",
-      purgedAt,
-    });
-    if (!purged) {
-      throw new NotFoundException("USER_NOT_FOUND");
-    }
-    await this.tokens.revokeUser(user.id, { tenantId: user.tenantId, membershipVersion: user.membershipVersion });
-
-    await this.auditLogs?.record({
-      tenantId: context.tenantId ?? undefined,
-      actorUserId: user.id,
-      entityType: "Auth",
-      entityId: user.id,
-      action: "kvkk.user_pii_purged",
-      diff: {
-        fieldsPurged: ["email", "name"],
-        before: { emailPresent: hadEmail, namePresent: hadName },
-      },
-    });
-
-    return {
-      userId: user.id,
-      tenantId: context.tenantId ?? undefined,
-      purgedAt,
-    };
   }
 
   verifyAccessToken(accessToken: string): AccessTokenPayload {

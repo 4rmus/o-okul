@@ -1010,33 +1010,28 @@ describe("Audit log API", () => {
             nationalIdPresent: false,
             phonePresent: false,
           },
+          linkedAccount: "NONE",
         },
       }),
     ]));
     expect(JSON.stringify(response.body)).not.toContain("Sakli");
   });
 
-  it("kullanıcı kendi hesap PII temizleme işlemini self-service yapar ve ham email/ad audit'e yazılmaz", async () => {
-    const login = await request(server)
-      .post("/auth/login")
-      .send(testLoginBody("privacy@example.test"))
-      .expect(200);
-    const accessToken = (login.body as { accessToken: string }).accessToken;
-
-    const purge = await request(server)
+  // DEC-20261016-01: the self-service purge route is gone; the bound account is purged with the guardian record.
+  it("yönetici veli PII temizliğinde bağlı hesap da anonimleşir ve ham email/ad audit'e yazılmaz", async () => {
+    await request(server)
       .post("/privacy/me/purge-pii")
-      .set("Authorization", `Bearer ${accessToken}`)
-      .expect(200);
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(404);
 
-    expect(purge.body).toMatchObject({
-      userId: "user-privacy",
-      tenantId: "tenant-a",
-    });
-    expect(typeof (purge.body as { purgedAt?: unknown }).purgedAt).toBe("string");
+    await request(server)
+      .post("/guardians/guardian-a/purge-pii")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(201);
 
     await request(server)
       .post("/auth/login")
-      .send(testLoginBody("privacy@example.test"))
+      .send(testLoginBody("guardian-a@example.test"))
       .expect(401);
 
     const response = await request(server)
@@ -1047,18 +1042,25 @@ describe("Audit log API", () => {
     expect(response.body).toEqual(expect.arrayContaining([
       expect.objectContaining({
         tenantId: "tenant-a",
-        actorUserId: "user-privacy",
+        actorUserId: "user-tenant-a",
         entityType: "Auth",
-        entityId: "user-privacy",
+        entityId: "guardian-tenant-a",
         action: "kvkk.user_pii_purged",
         diff: {
           fieldsPurged: ["email", "name"],
           before: { emailPresent: true, namePresent: true },
+          triggerType: "GUARDIAN_PII_PURGE",
         },
       }),
+      expect.objectContaining({
+        entityType: "Guardian",
+        entityId: "guardian-a",
+        action: "kvkk.guardian_pii_purged",
+        diff: expect.objectContaining({ linkedAccount: "PURGED" }),
+      }),
     ]));
-    expect(JSON.stringify(response.body)).not.toContain("privacy@example.test");
-    expect(JSON.stringify(response.body)).not.toContain("Privacy User");
+    expect(JSON.stringify(response.body)).not.toContain("guardian-a@example.test");
+    expect(JSON.stringify(response.body)).not.toContain("Guardian A");
   });
 
   it("normal system admin tenant audit rota ailesine giremez", async () => {

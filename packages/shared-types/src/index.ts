@@ -287,7 +287,6 @@ export type {
   ScheduleLessonCreateRequest,
   ScheduleLessonRecord,
   ScheduleLessonUpdateRequest,
-  SelfPurgeResult,
   Session,
   SetupReadinessKey,
   SetupReadinessReadModel,

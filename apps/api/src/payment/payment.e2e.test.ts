@@ -680,24 +680,17 @@ describe("PaymentPlan API", () => {
       .expect(403);
   });
 
-  it("KVKK self-service hesap temizliği ödeme planlarını silmez", async () => {
+  // DEC-20261016-01: the KVKK account purge now runs from the admin guardian purge; payment plans must survive it.
+  it("KVKK veli ve bağlı hesap temizliği ödeme planlarını silmez", async () => {
     const before = await request(server)
       .get("/payment-plans")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(200);
 
-    const privacyToken = await login("finance-privacy@example.test");
-
     await request(server)
-      .post("/privacy/me/purge-pii")
-      .set("Authorization", `Bearer ${privacyToken}`)
-      .expect(200)
-      .expect(({ body }) => {
-        expect(body).toMatchObject({
-          userId: "user-finance-privacy",
-          tenantId: "tenant-a",
-        });
-      });
+      .post("/guardians/guardian-a/purge-pii")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(201);
 
     await request(server)
       .get("/payment-plans")

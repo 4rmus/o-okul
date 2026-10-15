@@ -189,7 +189,6 @@ Yol `apps/api/src` göreli. Dosya:satır kanıtları alt ajan incelemesinden; LO
 | `me @Post("student/support-tickets")` | A | Dilim 2 #3 |
 | `me @Post("guardian/students/:studentId/support-tickets")` | A | Dilim 2 #4 |
 | `me @Post("teacher/support-tickets")` | A | Dilim 2 #5 |
-| `privacy @Post("me/purge-pii")` | C | Sabit değerle üzerine yazar; tekrar yalnız bir audit satırı ekler |
 | `role-preview @Post()` | D | Yalnız 15 dakikalık imzalı token üretir |
 
 ### 4.2 Davet, kullanıcı yönetimi, bildirim, destek

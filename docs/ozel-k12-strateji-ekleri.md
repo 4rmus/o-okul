@@ -556,7 +556,7 @@ Bu akışların staging rol UAT'ı güncel SHA `fd01a5c63` için UNPROVEN (`BP:6
 - **Finans referans yüklemesi:** Finans sayfası `/courses`, `/grade-levels`, `/students` ve `/academic-terms` çağırıyor. Saf FINANCE_STAFF'ta bu çağrılar 403 ile kırılabilir (`W/kurum/finans/finance-page.tsx:713`). Runtime'da doğrulanmadı.
 - **Push paneli:** FINANCE_STAFF, ASSISTANT_ADMIN ve OPERATIONS_STAFF paneli görüyor, API 403 veriyor (`W/app-shell.tsx:73`, `ME:180`).
 - **Bildirim teslimi:** `apps/hooks-worker` `/notification` hiçbir şey göndermeden "sent" dönüyor (`apps/hooks-worker/src/index.js:29`).
-- **Kendi verisini silme:** `/privacy/me/purge-pii` rütbe kalıtımıyla öğretmen, öğrenci ve yöneticiye de açık (`A/privacy/privacy.controller.ts:46`, `RO:24`).
+- **Kendi verisini silme:** `/privacy/me/purge-pii` rütbe kalıtımıyla öğretmen, öğrenci ve yöneticiye de açık (`A/privacy/privacy.controller.ts:46`, `RO:24`). 2026-10-16: uç kaldırıldı, hesap silmesi yönetici silmesine bağlandı (DEC-20261016-01).
 - **Etüt kampüs kapsamı:** Etüt listesinde OPERATIONS_STAFF için kampüs filtresi yok (`A/program/study-session.service.ts:265`). Ders programında bu filtre var (`A/program/schedule.service.ts:30`).
 - **Reset talebi:** OPERATIONS_STAFF sayfayı görüyor, API `INSTITUTION_ADMIN_REQUIRED` ile reddediyor (`A/tenant/tenant-fresh-reset.service.ts:179`).
 - **Veli destek talebi:** Read-only rollout veli destek talebi POST'unu kapatmıyor (`ME:459`).

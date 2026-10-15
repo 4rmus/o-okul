@@ -86,29 +86,11 @@ describe("PrivacyController", () => {
       .expect(403);
   });
 
-  it("veli kendi hesap PII temizliği response'unda ham PII veya token döndürmez", async () => {
-    const guardianToken = await login("privacy@example.test");
-
-    const response = await request(server)
-      .post("/privacy/me/purge-pii")
-      .set("Authorization", `Bearer ${guardianToken}`)
-      .expect(200);
-
-    expect(response.body).toMatchObject({
-      userId: "user-privacy",
-      tenantId: "tenant-a",
-      purgedAt: expect.any(String),
-    });
-    const serialized = JSON.stringify(response.body);
-    for (const forbidden of [
-      "privacy@example.test",
-      "Privacy User",
-      "password",
-      "passwordHash",
-      "refreshToken",
-      "token",
-    ]) {
-      expect(serialized).not.toContain(forbidden);
+  // DEC-20261016-01: self-service account purge was removed; account PII is purged with the guardian/teacher record.
+  it("kendi hesabını temizleme ucu kaldırıldı", async () => {
+    for (const email of ["privacy@example.test", "guardian-a@example.test"]) {
+      const token = await login(email);
+      await request(server).post("/privacy/me/purge-pii").set("Authorization", `Bearer ${token}`).expect(404);
     }
   });
 });
