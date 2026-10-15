@@ -14,6 +14,7 @@ interface MockState {
   createError?: string;
   creates: Array<Record<string, unknown>>;
   invitationListRequests: number;
+  invitationQueries: string[];
   invitations: IdentityInvitationRecord[];
   resends: string[];
   revokes: string[];
@@ -25,6 +26,7 @@ function mockState(overrides: Partial<MockState> = {}): MockState {
   return {
     creates: [],
     invitationListRequests: 0,
+    invitationQueries: [],
     invitations: [],
     resends: [],
     revokes: [],
@@ -75,6 +77,9 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 
     await expect(profile.getByText("Hesap yok", { exact: true })).toBeVisible();
     await expect(profile.getByRole("button", { name: "Daveti iptal et" })).toHaveCount(0);
     await expect(profile.getByRole("button", { name: "Hesap daveti gönder" })).toBeVisible();
+    // The detail page asks only for this teacher's invitations, never the tenant-wide teacher list.
+    expect(state.invitationQueries.length).toBeGreaterThan(0);
+    expect(new Set(state.invitationQueries)).toEqual(new Set(["teacher-a"]));
   });
 }
 
@@ -137,6 +142,7 @@ test("öğretmen listesi hesap durumunu bağlı, davet bekliyor ve hesap yok ola
   await expect(table.getByRole("row", { name: /Burak Kaya/ })).toContainText("Davet bekliyor");
   await expect(table.getByRole("row", { name: /Cem Ak/ })).toContainText("Hesap yok");
   await expect(page.locator("body")).not.toContainText("TC + telefon");
+  expect(new Set(state.invitationQueries)).toEqual(new Set(["TEACHER"]));
 });
 
 async function openTeacherDetail(page: Page, state: MockState, teacherId: string | undefined) {
@@ -159,6 +165,7 @@ async function openTeacherDetail(page: Page, state: MockState, teacherId: string
     }
     if (path === "/identity-invitations" && request.method() === "GET") {
       state.invitationListRequests += 1;
+      state.invitationQueries.push(new URL(request.url()).searchParams.get("q") ?? "");
       await json(route, state.invitations);
       return;
     }

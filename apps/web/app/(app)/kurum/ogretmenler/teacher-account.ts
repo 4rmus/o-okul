@@ -22,12 +22,14 @@ export function teacherAccountState(teacher: Pick<TeacherRecord, "id" | "hasAcco
   return pendingBySubject.has(teacher.id) ? "pending" : "none";
 }
 
-export async function loadPendingTeacherInvitations(accessToken: string): Promise<Map<string, IdentityInvitationRecord>> {
-  // ponytail: q=TEACHER narrows the tenant-wide list server-side; add a subjectId filter to the API if teacher invitations grow large.
-  const invitations = await apiRequest<IdentityInvitationRecord[]>(accessToken, `${apiBaseUrl}/identity-invitations?q=TEACHER`);
+// The list page needs every teacher's state (q=TEACHER); the detail page passes teacherId so q matches the subjectId list field
+// and only that teacher's invitations leave the API (same pattern as the guardian detail page).
+export async function loadPendingTeacherInvitations(accessToken: string, teacherId?: string): Promise<Map<string, IdentityInvitationRecord>> {
+  const query = encodeURIComponent(teacherId ?? "TEACHER");
+  const invitations = await apiRequest<IdentityInvitationRecord[]>(accessToken, `${apiBaseUrl}/identity-invitations?q=${query}`);
   return new Map(
     invitations
-      .filter((invitation) => invitation.subjectType === "TEACHER" && invitation.status === "PENDING" && Date.parse(invitation.expiresAt) > Date.now())
+      .filter((invitation) => invitation.subjectType === "TEACHER" && (teacherId === undefined || invitation.subjectId === teacherId) && invitation.status === "PENDING" && Date.parse(invitation.expiresAt) > Date.now())
       .map((invitation) => [invitation.subjectId, invitation]),
   );
 }
