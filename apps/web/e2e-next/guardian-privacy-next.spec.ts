@@ -113,6 +113,19 @@ test.describe("Veli gizlilik ve izin UX'i", () => {
     });
   }
 
+  test("UAT F-03: bekleyen veli hesap daveti görünür ve iptal edilir", async ({ page }) => {
+    const invitations = { pending: true, revoked: [] as string[] };
+    await openGuardianDetail(page, "TENANT_ADMIN", [], undefined, invitations);
+    const region = page.getByRole("region", { name: "Veli hesap daveti" });
+    await expect(region).toContainText("Hesap daveti bekliyor (z***@example.test).");
+    await expect(page.getByRole("region", { name: "Veli detay özeti" })).toContainText("Davet bekliyor");
+    await expect(page.locator("body")).not.toContainText("zeynep.veli@example.test");
+    await region.getByRole("button", { name: "Daveti iptal et" }).click();
+    await expect.poll(() => invitations.revoked).toEqual(["guardian-invitation-a"]);
+    await expect(page.getByRole("region", { name: "Veli hesap daveti" })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Veli detay özeti" })).toContainText("Hesap yok");
+  });
+
   test("yardımcı yönetici user:manage gerektiren veli portal davetini görmez", async ({ page }) => {
     const forbiddenBulkCalls = await openGuardianDetail(page, "ASSISTANT_ADMIN", []);
 
@@ -139,8 +152,8 @@ test.describe("Veli gizlilik ve izin UX'i", () => {
   }
 });
 
-async function openGuardianDetail(page: Page, role: TenantRole, capturedLinks: GuardianLinkBody[], writes?: GuardianLinkWrites) {
-  const forbiddenBulkCalls = await installGuardianPrivacyMocks(page, role, capturedLinks, writes);
+async function openGuardianDetail(page: Page, role: TenantRole, capturedLinks: GuardianLinkBody[], writes?: GuardianLinkWrites, invitations?: GuardianInvitationMock) {
+  const forbiddenBulkCalls = await installGuardianPrivacyMocks(page, role, capturedLinks, writes, invitations);
   await page.addInitScript(() => {
     document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
   });
@@ -160,7 +173,12 @@ async function openGuardianPortal(page: Page, visibility: "false" | "omitted") {
   return paymentPlanRequests;
 }
 
-async function installGuardianPrivacyMocks(page: Page, role: TenantRole, capturedLinks: GuardianLinkBody[], writes?: GuardianLinkWrites) {
+interface GuardianInvitationMock {
+  pending: boolean;
+  revoked: string[];
+}
+
+async function installGuardianPrivacyMocks(page: Page, role: TenantRole, capturedLinks: GuardianLinkBody[], writes?: GuardianLinkWrites, invitations?: GuardianInvitationMock) {
   const links = [createGuardianLink("guardian-link-a", "student-a")];
   const forbiddenBulkCalls: string[] = [];
 
@@ -181,6 +199,18 @@ async function installGuardianPrivacyMocks(page: Page, role: TenantRole, capture
       return fulfillData(route, []);
     }
     if (path === "/guardians/guardian-a" && route.request().method() === "GET") return fulfillData(route, createGuardian());
+    if (path === "/identity-invitations" && route.request().method() === "GET") {
+      return fulfillData(route, invitations?.pending ? [{
+        id: "guardian-invitation-a", tenantId: "tenant-guardian-privacy", subjectType: "GUARDIAN", subjectId: "guardian-a",
+        email: "zeynep.veli@example.test", name: "Zeynep Veli", role: "GUARDIAN", kind: "EMAIL_LINK", status: "PENDING",
+        expiresAt: "2099-01-01T00:00:00.000Z", createdAt: "2026-10-15T10:00:00.000Z", updatedAt: "2026-10-15T10:00:00.000Z",
+      }] : []);
+    }
+    if (path === "/identity-invitations/guardian-invitation-a/revoke" && route.request().method() === "POST" && invitations) {
+      invitations.revoked.push("guardian-invitation-a");
+      invitations.pending = false;
+      return fulfillData(route, { id: "guardian-invitation-a", status: "REVOKED" });
+    }
 
     if (path === "/guardians/guardian-a/student-details" && route.request().method() === "GET") {
       return fulfillData(route, createGuardianStudentDetails(links));

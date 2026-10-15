@@ -19,14 +19,15 @@ import {
   type StatusBadgeProps,
 } from "@o-okul/ui";
 import type {
+  IdentityInvitationRecord,
   GuardianRecord,
   GuardianStudentDetailStudentRecord,
   GuardianStudentDetailsResponse,
   GuardianStudentRecord,
 } from "@o-okul/shared-types";
-import { ArrowLeft, Link2 } from "lucide-react";
+import { ArrowLeft, Link2, MailX } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";
 import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
@@ -69,9 +70,35 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
   const guardianName = detail ? `${detail.guardian.firstName} ${detail.guardian.lastName}` : "Veli detayı";
   const availableStudents = detail?.availableStudents ?? [];
   const canRevealPhone = hasCapabilityForRoles(auth?.session.roles ?? [], "privacy:manage");
+  // UAT F-03 follow-up: a guardian's pending account invitation is shown and can be withdrawn (user:manage).
+  const canManageAccounts = hasCapabilityForRoles(auth?.session.roles ?? [], "user:manage");
+  const invitationQueryKey = ["next-guardian-invitation", tenantId, guardianId];
+  const invitationQuery = useQuery({
+    queryKey: invitationQueryKey,
+    queryFn: () => loadPendingGuardianInvitation(auth?.accessToken ?? "", guardianId),
+    enabled: Boolean(auth) && canManageAccounts && Boolean(detail) && !detail?.guardian.userId,
+    refetchOnWindowFocus: false,
+  });
+  const pendingInvitation = detail?.guardian.userId ? undefined : invitationQuery.data ?? undefined;
+  const [invitationError, setInvitationError] = useState("");
+  const [revoking, setRevoking] = useState(false);
   const guardianSummaryItems = detail ? buildGuardianSummaryItems(detail, { canRevealPhone }) : [];
   const guardianSummaryBadges = detail ? buildGuardianSummaryBadges(detail) : [];
-  const guardianSummaryActions = detail ? buildGuardianSummaryActions(detail) : [];
+  const guardianSummaryActions = detail ? buildGuardianSummaryActions(detail, Boolean(pendingInvitation)) : [];
+
+  async function handleRevokeInvitation() {
+    if (!auth || !pendingInvitation || revoking) return;
+    setRevoking(true);
+    setInvitationError("");
+    try {
+      await apiRequest(auth.accessToken, `${apiBaseUrl}/identity-invitations/${encodeURIComponent(pendingInvitation.id)}/revoke`, { method: "POST" });
+    } catch (error) {
+      setInvitationError(apiErrorMessage(error, "Davet iptal edilemedi; davet artık beklemede olmayabilir."));
+    } finally {
+      await queryClient.invalidateQueries({ queryKey: invitationQueryKey });
+      setRevoking(false);
+    }
+  }
   const guardianStudentColumns = detail ? buildGuardianStudentColumns(detail) : [];
 
   async function handleLinkSubmit(event: FormEvent<HTMLFormElement>) {
@@ -132,6 +159,15 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
               badges={guardianSummaryBadges}
               items={guardianSummaryItems}
             />
+            {pendingInvitation ? (
+              <div className="next-list-controls" role="region" aria-label="Veli hesap daveti">
+                <span>Hesap daveti bekliyor{pendingInvitation.email ? ` (${maskInvitationEmail(pendingInvitation.email)})` : ""}.</span>
+                <Button disabled={revoking} onClick={() => void handleRevokeInvitation()} type="button" variant="ghost">
+                  <MailX aria-hidden="true" size={17} /> Daveti iptal et
+                </Button>
+              </div>
+            ) : null}
+            {invitationError ? <p className="uh-crud-page__error" role="alert">{invitationError}</p> : null}
             <Panel
               aria-label="Veli profili"
               description="Telefon varsayılan maskeli gösterilir; yetkili kullanıcı aynı satırda açıp tekrar gizleyebilir."
@@ -226,6 +262,21 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
   );
 }
 
+async function loadPendingGuardianInvitation(accessToken: string, guardianId: string): Promise<IdentityInvitationRecord | null> {
+  const invitations = await apiRequest<IdentityInvitationRecord[]>(accessToken, `${apiBaseUrl}/identity-invitations?q=GUARDIAN`);
+  return invitations.find((invitation) =>
+    invitation.subjectType === "GUARDIAN"
+    && invitation.subjectId === guardianId
+    && invitation.status === "PENDING"
+    && Date.parse(invitation.expiresAt) > Date.now(),
+  ) ?? null;
+}
+
+function maskInvitationEmail(value: string) {
+  const [local = "", domain = ""] = value.split("@");
+  return `${local.slice(0, 1)}***@${domain}`;
+}
+
 async function loadGuardianDetail(accessToken: string, guardianId: string) {
   const [guardian, studentDetails] = await Promise.all([
     apiRequest<GuardianRecord>(accessToken, `${apiBaseUrl}/guardians/${encodeURIComponent(guardianId)}`),
@@ -308,7 +359,7 @@ function buildGuardianSummaryBadges(detail: GuardianDetailData): OperationSummar
   ];
 }
 
-function buildGuardianSummaryActions(detail: GuardianDetailData): OperationSummaryAction[] {
+function buildGuardianSummaryActions(detail: GuardianDetailData, invitationPending = false): OperationSummaryAction[] {
   const enabledPermissionCount = guardianEnabledPermissionCount(detail.links);
   const totalPermissionCount = detail.links.length * guardianPermissionOptions.length;
   return [
@@ -332,9 +383,9 @@ function buildGuardianSummaryActions(detail: GuardianDetailData): OperationSumma
       detail: "Veli portal erişimi",
       key: "portal-link",
       label: "Portal bağlantısı",
-      status: detail.guardian.userId ? "Bağlı" : "Hesap yok",
-      tone: detail.guardian.userId ? "success" : "warning",
-      value: detail.guardian.userId ? "Hesap bağlı" : "Davetle açılır",
+      status: detail.guardian.userId ? "Bağlı" : invitationPending ? "Davet bekliyor" : "Hesap yok",
+      tone: detail.guardian.userId ? "success" : invitationPending ? "info" : "warning",
+      value: detail.guardian.userId ? "Hesap bağlı" : invitationPending ? "Davet gönderildi" : "Davetle açılır",
     },
   ];
 }

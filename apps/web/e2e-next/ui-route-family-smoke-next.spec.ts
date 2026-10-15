@@ -357,6 +357,12 @@ test("öğrenci portal aktivasyon kodunu yalnız sonuç penceresinde gösterir",
   expect(portalAccess.invitationIssued).toBe(true);
   await page.getByRole("button", { name: "Tamam" }).click();
   await expect(page.getByText("ABCDEFGHJKL2")).toHaveCount(0);
+
+  // UAT F-03 follow-up: the pending code can be withdrawn; the row returns to "Hesap yok".
+  await page.getByRole("button", { name: "Ada A: Daveti iptal et" }).click();
+  await expect.poll(() => portalAccess.revokedInvitationId).toBe("student-code-invitation");
+  await expect(page.getByRole("button", { name: "Ada A: Daveti iptal et" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Ada A: Aktivasyon kodu üret" })).toBeVisible();
   expect(unknownApiRequests).toEqual([]);
 });
 
@@ -479,6 +485,25 @@ async function installRouteApiMocks(
       });
       return;
     }
+    if (options.portalAccess && pathName === "/identity-invitations/student-code-invitation/revoke" && request.method() === "POST") {
+      options.portalAccess.revokedInvitationId = "student-code-invitation";
+      options.portalAccess.record.accessState = "NOT_INVITED";
+      options.portalAccess.record.invitation = undefined;
+      await fulfillData(route, {
+        id: "student-code-invitation",
+        tenantId: "tenant-a",
+        subjectType: "STUDENT",
+        subjectId: "student-a",
+        name: "Ada A",
+        role: "STUDENT",
+        kind: "STUDENT_CODE",
+        status: "REVOKED",
+        expiresAt: "2026-08-02T12:00:00.000Z",
+        createdAt: "2026-08-01T12:00:00.000Z",
+        updatedAt: "2026-08-01T12:05:00.000Z",
+      });
+      return;
+    }
     if (options.portalAccess && pathName === "/students/student-a/portal-invitations" && request.method() === "POST") {
       options.portalAccess.invitationIssued = true;
       options.portalAccess.record.accessState = "INVITED";
@@ -520,6 +545,7 @@ async function installRouteApiMocks(
 function createPortalAccessMock() {
   return {
     invitationIssued: false,
+    revokedInvitationId: undefined as string | undefined,
     lastRequest: undefined as { expectedVersion: number; status: "ACTIVE" | "SUSPENDED" } | undefined,
     record: {
       studentId: "student-a",
