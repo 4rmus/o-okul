@@ -103,6 +103,7 @@ function fixture(terms: Array<Record<string, unknown>> = [{ id: "license", tenan
     if (sql.includes("SELECT c.relname AS name")) return rows(tenantResetTableNames.map((name) => ({ name })));
     if (sql.includes("FROM pg_inherits")) return rows([{ count: "0" }]);
     if (sql.includes('FROM "_prisma_migrations"')) return rows([{ row: '{"migration_name":"fixture","finished_at":"2026-01-01"}' }]);
+    if (sql.includes('SELECT now() AS "capturedAt"')) return rows([{ capturedAt: new Date() }]);
     if (sql.includes('SELECT "id" FROM "TenantMutationActivity"')) return rows(owned("TenantMutationActivity"));
     if (sql.includes('SELECT "id" FROM "Tenant"')) return rows(state.Tenant.map((row) => ({ id: row.id })));
     if (sql.includes('SELECT "id", "tenantId" FROM "Student"')) return rows(state.Student);
