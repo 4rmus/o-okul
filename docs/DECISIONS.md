@@ -1204,6 +1204,27 @@ Etkilenen ADR: ADR-0011
 Açık soru: Ödev kaydında ders alanı yoktur; ders bazlı ödev gerekirse şema değişikliği ve ayrı DEC ister.
 Son kontrol: 2026-10-12
 
+### DEC-20261016-01 — Kendi hesabını silme ucu kaldırılır; hesap KVKK silmesi yönetici silmesine bağlanır
+
+Durum: Onaylı; kodlandı (LOCAL_TEST); CI ve staging kanıtı bekliyor
+Karar: `POST /privacy/me/purge-pii` kaldırılır. Uç `@Roles("GUARDIAN")` ile korunuyordu ama rol
+sıralaması yüzünden finans ve sistem yöneticisi dışındaki her kurum kullanıcısı kendi hesabını
+anonimleştirip kapatabiliyordu; hiçbir ekran çağırmıyordu. Giriş hesabının ad ve e-postasını silmenin
+tek yolu oydu; bu iş yönetici KVKK silmesine taşınır: `POST /guardians/:id/purge-pii` ve
+`POST /teachers/:id/purge-pii` kaydı anonimleştirdikten sonra bağlı hesabı da anonimleştirir, devre
+dışı bırakır, oturumlarını kapatır ve `kvkk.user_pii_purged` audit kaydını (aktör yönetici) yazar.
+Hesap başka bir kimlik de taşıyorsa (personel rolü, öğretmen, öğrenci veya veli kimliği) korunur;
+kaydın audit satırındaki `linkedAccount` alanı `PURGED`, `KEPT_OTHER_IDENTITY` veya `NONE` yazar.
+Ödeme planları ve finans kayıtları bu silmenin kapsamı dışında kalır.
+Kaynak: Ürün sahibi kararı (2026-10-16).
+Kanıt: `apps/api/src/account-pii/account-pii-purge.service.test.ts`,
+`apps/api/src/audit-log/audit-log.e2e.test.ts`, `apps/api/src/payment/payment.e2e.test.ts`,
+`apps/api/src/privacy/privacy.controller.e2e.test.ts`. Kanıt sınıfı LOCAL_TEST.
+Etkilenen ADR: Yok
+Açık soru: Başka kimlik taşıyan hesabın ad ve e-postası için ayrı bir silme akışı gerekir mi; KVKK
+talebi gelirse yönetici diğer kimliği kapattıktan sonra silmeyi tekrarlar.
+Son kontrol: 2026-10-16
+
 ## Öneri Halindeki Kararlar
 
 Bu bölümdeki kayıtlar ürün sahibi onayı bekler ve yol haritasını değiştirmez. DEC-20261010-01 gereği

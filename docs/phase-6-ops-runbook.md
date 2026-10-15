@@ -126,7 +126,7 @@ Kontroller:
   `RolePreviewModule`, okul katalog/ilişki yüzeyleri `SchoolModule`, öğrenci ana store provider'ı
   `StudentPersistenceModule`, öğrenci kayıt/import yüzeyi `StudentModule`, gelişim gözlemleri
   `DevelopmentModule`, sınav/optik/raw import yüzeyi `ExamModule`, sınav repository provider'ları
-  `ExamPersistenceModule`, `/me` self-service yüzeyi `MeModule`, ödeme planları `PaymentModule`, KVKK self-purge yüzeyi `PrivacyModule`, rapor üretim yüzeyi `ReportModule`, ders
+  `ExamPersistenceModule`, `/me` self-service yüzeyi `MeModule`, ödeme planları `PaymentModule`, KVKK envanter yüzeyi `PrivacyModule` (hesap silmesi DEC-20261016-01 ile veli/öğretmen silmesinde), rapor üretim yüzeyi `ReportModule`, ders
   programı yüzeyi `ScheduleModule`, etüt yüzeyi `StudySessionModule`, SMS batch yüzeyi `SmsBatchModule`,
   öğretmen notları `TeacherNoteModule`, destek talebi yüzeyi `SupportTicketModule`, upload AV scanner
   provider'ı `UploadModule`, tenant yönetimi yüzeyi `TenantModule`, tenant ana store provider'ı
@@ -814,7 +814,7 @@ Minimum kanıt içeriği:
   artifact yazmadan durur.
 - Hedefli payment e2e testi canlı `DATABASE_URL`/`DIRECT_DATABASE_URL`/`NODE_ENV`/`ADMIN_MFA_MODE`/`PERSISTENCE_DRIVER`/`IDEMPOTENCY_STORE`
   ortamından izole edilir; finans kayıt sayımı yine gerçek staging/prod DB bağlantısından okunur.
-- `purgeBehaviorVerified` üç canonical doğrulamayı içerir: ödeme planları self-purge sonrası
+- `purgeBehaviorVerified` üç canonical doğrulamayı içerir: ödeme planları veli ve bağlı hesap KVKK silmesi sonrası (DEC-20261016-01)
   korunur, payment plan kayıtları PII purge kapsamı dışında kalır ve lisans sonu imhası teslim edilmiş
   export olmadan başlamaz (`license_expiry_purge_requires_delivered_export`; generator
   `src/tenant-fresh-reset-purge.test.ts` db testini de koşar).
