@@ -1,9 +1,7 @@
-import { Body, Controller, Get, Post, Query, UseGuards, Headers } from "@nestjs/common";
+import { Body, Controller, Get, Post, Query, Headers } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
-import { Roles } from "../rbac/roles.decorator.js";
-import { RolesGuard } from "../rbac/roles.guard.js";
 import { DevelopmentService, type DevelopmentAssessmentWithScores } from "./development.service.js";
 import type { DevelopmentCriterionRecord } from "./development-store.js";
 import {
@@ -14,12 +12,11 @@ import {
 } from "./development-validation.js";
 
 @Controller("development")
-@UseGuards(RolesGuard)
 export class DevelopmentController {
   constructor(private readonly development: DevelopmentService) {}
 
   @Get("criteria")
-  @Roles("TEACHER")
+  @RequireCapability("academic:read")
   listCriteria(): Promise<DevelopmentCriterionRecord[]> {
     return this.development.listCriteria(getRequestContext());
   }
@@ -34,13 +31,13 @@ export class DevelopmentController {
   }
 
   @Get("assessments")
-  @Roles("TEACHER")
+  @RequireCapability("academic:read")
   listAssessments(@Query("studentId") studentId?: string): Promise<DevelopmentAssessmentWithScores[]> {
     return this.development.listAssessments(getRequestContext(), studentId);
   }
 
   @Post("assessments")
-  @Roles("TEACHER")
+  @RequireCapability("academic:write-assigned")
   createAssessment(
     @Body(zodBody(developmentAssessmentBodySchema)) body: DevelopmentAssessmentBody,
     @Headers("idempotency-key") idempotencyKey?: string,

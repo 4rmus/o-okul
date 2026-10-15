@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Put, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Put, Query } from "@nestjs/common";
 import type {
   AttendanceAggregateRecord,
   AttendanceDailyRosterResponse,
@@ -9,9 +9,7 @@ import type {
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
-import { Roles } from "../rbac/roles.decorator.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
-import { RolesGuard } from "../rbac/roles.guard.js";
 import { AttendanceService } from "./attendance.service.js";
 import {
   type AttendanceDailyUpsertBody,
@@ -27,12 +25,11 @@ interface AttendanceListQuery extends ListQuery {
 }
 
 @Controller("attendance")
-@UseGuards(RolesGuard)
 export class AttendanceController {
   constructor(private readonly attendance: AttendanceService) {}
 
   @Get()
-  @Roles("TEACHER")
+  @RequireCapability("attendance:read-assigned")
   async list(@Query() query: AttendanceListQuery): Promise<AttendanceRecord[]> {
     const records = await this.attendance.list(getRequestContext(), {
       classId: query.classId,
@@ -45,7 +42,7 @@ export class AttendanceController {
   }
 
   @Get("aggregate")
-  @Roles("TEACHER")
+  @RequireCapability("attendance:read-assigned")
   aggregate(@Query() query: AttendanceListQuery): Promise<AttendanceAggregateRecord> {
     return this.attendance.aggregate(getRequestContext(), {
       classId: query.classId,
@@ -57,13 +54,13 @@ export class AttendanceController {
   }
 
   @Get("summary")
-  @Roles("TEACHER")
+  @RequireCapability("attendance:read-assigned")
   summary(@Query("studentId") studentId: string): Promise<AttendanceSummaryRecord> {
     return this.attendance.summarizeForTenantStudent(getRequestContext(), studentId);
   }
 
   @Get("daily")
-  @Roles("TEACHER")
+  @RequireCapability("attendance:read-assigned")
   daily(
     @Query("classId") classId: string,
     @Query("date") date: string,

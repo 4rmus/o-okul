@@ -1,10 +1,8 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Post, Query } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
-import { Roles } from "../rbac/roles.decorator.js";
-import { RolesGuard } from "../rbac/roles.guard.js";
 import type {
   AnnouncementDeliveryQueueResult,
   AnnouncementDeliveryReportRecord,
@@ -24,18 +22,17 @@ import {
 } from "./announcement-validation.js";
 
 @Controller("announcements")
-@UseGuards(RolesGuard)
 export class AnnouncementController {
   constructor(private readonly announcements: AnnouncementService) {}
 
   @Get()
-  @Roles("TENANT_ADMIN", "TEACHER")
+  @RequireCapability("announcement:read")
   async list(@Query() query: ListQuery): Promise<AnnouncementRecord[]> {
     return applyListQuery(await this.announcements.list(getRequestContext()), query, announcementListFields);
   }
 
   @Get(":id")
-  @Roles("TENANT_ADMIN", "TEACHER")
+  @RequireCapability("announcement:read")
   findOne(@Param("id") id: string): Promise<AnnouncementRecord> {
     return this.announcements.findOne(getRequestContext(), id);
   }
