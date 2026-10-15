@@ -253,7 +253,7 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
    F-01 davet e-postası spama düşüyor (Yüksek; ürün sahibi: sonra). F-03 davet iptali (#180) ve F-11 bağ kaldırma
    (#182) main ve staging'de; F-02 tek adımda yönetici daveti, F-05 içe aktarmada sınıf yönlendirmesi ve
    kabul/iptal yarışı telafisi #184 ile main'de (`52ce7d03e`, 2026-10-14). Yarışta geri alınan kabulün
-   oluşturduğu hesap kullanılmıyorsa silinir (dal `fix/kabul-geri-alma-hesap-temizligi`; var olan hesabın parolası
+   oluşturduğu hesap kullanılmıyorsa silinir (#185, `78a0e0bdd`; var olan hesabın parolası
    değişmez). İzleyen iş: öğrenci kodu/veli daveti için iptal ekranı, öğrenci kabulünde ulusal kimlikle eşleşen
    hesapta rol geri alma. Deneme lisansı 2026-10-17 00:00 UTC'de biter; S1-05..S1-13 için
    ürün sahibi S1-14 gözlemi sonrası yeni lisans dönemi açar. Kontrol noktası 2026-11-14.
@@ -261,6 +261,17 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
 3. S4: §3.4 doğrulama planı (dosya talebi, görüşmeler, pilot taahhüdü); ürün sahibi işi.
 4. S5/S6: PO-3 kapasite ölçümü ve PO-10 production kanıt zinciri; PO-10 tarihi 2027-01-03'te.
 5. S3: PO-2 off-host TR yedek; ürün sahibi kararıyla en sona kaldı (2026-10-10). Aday karşılaştırması `docs/po-2-tr-s3-karsilastirma.md`.
+6. Staging deploy altyapısı (IMG, 2026-10-14/15): imaj çekme 20 dk sınırına takılıyordu. IMG-1 (#186) bağımlılık
+   katmanını kaynaktan ayırdı ve dört imaja tek `node_modules` katmanı verdi; IMG-2c (#187, düzeltme #188) çekmeyi
+   servisler durmadan 30 dk bütçeyle üç denemeye ve deploy işini 50 dk'ya aldı, Traefik smoke'a sınırlı yeniden
+   deneme ekledi; IMG-2d (#189) derleme önbelleğini GHCR `buildcache:<hedef>`'e taşıdı (`type=gha` hiç
+   yazılmıyordu). Açık kabul ölçümü (STAGING): bağımlılık değişmeyen bir sonraki deploy'da `node_modules`
+   `bd106670c2e0` ve Chromium `9209bd9dd1bd` katman özetleri aynı kalmalı. Ağ teşhisi (STAGING, salt okunur;
+   hiçbir ayar değişmedi): Cloudflare Origin Analytics'te TCP el sıkışması 1,2 sn; sunucu her Cloudflare
+   bağlantısında tek SYN görüp hemen yanıtlıyor, sunucuda düşürme yok (UFW, conntrack, listen kuyruğu),
+   doğrudan bağlantılar 30–70 ms. En tutarlı açıklama Cloudflare'in ilk SYN'inin sağlayıcı ağında düşmesi
+   (UNPROVEN; sağlayıcıya sorulacak). Seçenek: Cloudflare Tunnel. `*.o-okul.com` ve `staging.o-okul.com`
+   Cloudflare'i atlıyor (DNS only). Ürün sahibi kararı bekliyor.
 
 Önceki plandan devralınan kalemler (`docs/account-management-architecture-plan.md` bölüm 6; 2026-10-10'da
 durumları yeniden doğrulanmadı, S1 bulgularıyla birlikte ele alınır):
@@ -292,6 +303,12 @@ Plan `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §10.1 uyarınca her dilim
 | 2026-10-13 | UAT F-03 davet iptali: `POST /identity-invitations/:id/revoke`, Çalışanlar ve öğretmen ayrıntısında "Daveti iptal et", süresi dolmuş davet bekleyen sayılmaz (S1 bulgu dilimi) | CI `38479108671` PASS + STAGING_DEPLOY `38481232415` PASS (elle dispatch, dört servis `adcca4617`). Staging doğrulama (23:13 UTC, salt okunur): kimliksiz `POST …/revoke` 401 (deploy öncesi 404), `…/resend` 401, bilinmeyen rota 404, `/health` ve `/health/ready` 200; migration sayısı 126 değişmedi, UAT kurumu davet durumları değişmedi | `adcca4617` / PR #180 | – / 1 |
 | 2026-10-14 | UAT F-11 izleyen iş: `DELETE /grade-levels/:id/courses/:courseId` (academic:manage, 204; aktif öğretmen ataması varsa 409 `GRADE_LEVEL_COURSE_IN_USE`), Seviyeler penceresinde "Bağı kaldır" (S1 bulgu dilimi) | CI `38554098464` PASS + STAGING_DEPLOY `38561474048` PASS (elle dispatch, rollback etiketi `adcca4617`; preflight 0,4 / evidence 0,4 / build 3,5 / deploy 8,2 / evidence 1,2 dk; dört servis `6b97e107c` imajı, web/api/queue-board healthy). Staging doğrulama (12:25 UTC, salt okunur, API konteyneri içinden `uat-s1-okulu` host'u ile): kimliksiz `DELETE /api/v1/grade-levels/x/courses/y` 401 (rota yayında), `…/revoke` 401, bilinmeyen rota 404, `/health` ve `/health/ready` 200; migration sayısı 126 değişmedi (PR migration içermiyor). Not: otomatik deploy koşusu `38556291332` yalnız preflight koştu (`STAGING_AUTO_DEPLOY` kapalı) | `6b97e107c` / PR #182 | – / 1 |
 | 2026-10-14 | UAT F-02 tek adımda yönetici daveti, F-05 içe aktarmada sınıf yönlendirmesi, davet kabul/iptal yarışı telafisi (S1 bulgu dilimi) | CI `38574242758` PASS + STAGING_DEPLOY `38576635724` PASS (elle dispatch, rollback etiketi `6b97e107c`; dört servis `52ce7d03e`). Staging doğrulama (14:15 UTC, salt okunur): `/health`, `/health/ready` ve `/kurum/calisanlar` 200, migration sayısı 126 değişmedi; tek UNCERTAIN activity kaydı 2026-10-01 tarihli sentetik `rls-tenant-b` worker işi, bu dilimle ilgisiz | `52ce7d03e` / PR #184 | – / 1 |
+| 2026-10-14 | #184 incelemesi P2-2: geri alınan davet kabulünün oluşturduğu kullanılmayan hesabın silinmesi (`deleteUnusedTenantUser`; var olan hesabın parolası değişmez) | CI `38581254778` PASS + STAGING_DEPLOY `38599058389` PASS (ilk dispatch `38594341634` imaj çekmede 20 dk zaman aşımı, staging değişmedi, onaylı yeniden deneme); dört servis `78a0e0bdd`, kimliksiz revoke 401, health 200, migration 126 (STAGING, salt okunur) | `78a0e0bdd` / PR #185 | – / 1 |
+| 2026-10-14 | IMG-1: Dockerfile'da bağımlılık katmanı kaynaktan ayrıldı, worker ortak `node_modules` katmanına bağlandı (çalışma zamanı değişmedi) | CI `38625807972` PASS + STAGING_DEPLOY `38632974369` PASS (ilk dispatch `38628169361` çekmede 20 dk zaman aşımı; yeniden denemede deploy adımı 16 dk 13 sn; evidence işi Traefik smoke zaman aşımıyla düştü, onaylı yeniden çalıştırmayla deneme 2'de PASS); dört imaj tek `node_modules` katmanı (`d496e9d271d5`), migration 126 | `342ea5ac6` / PR #186 | – / 1 |
+| 2026-10-15 | IMG-2c: imaj çekme servisler durmadan 30 dk bütçeyle üç deneme, deploy işi 50 dk, Traefik smoke'a sınırlı yeniden deneme | CI `38642349815` PASS; STAGING_DEPLOY `38686591623` deploy adımı PASS (çekme tek denemede 343 sn, adım 8 dk 20 sn) ama evidence işi FAIL: smoke kanıtına eklenen `attempts` alanı sabit 11 alanlı şemayı bozdu (SMOKE_EVIDENCE_PAYLOAD_INVALID); staging çalışır kaldı | `ab3a42cf7` / PR #187 | – / 1 |
+| 2026-10-15 | IMG-2c gerilemesi düzeltmesi (`attempts` kanıttan çıkarıldı) ve IMG-2d: derleme önbelleği GHCR `buildcache:<hedef>` (önceki `type=gha` cache hiç yazılmıyordu) | CI `38705116032` (#188) ve `38711336549` (#189) PASS + STAGING_DEPLOY `38713167161` beş işte PASS (kanıt işi dahil), deploy adımı 8 dk; dört önbellek manifesti GHCR'a yazıldı; dört servis `de0bbced0`, migration 126, health 200. Kalıcılık kabulü açık: bir sonraki bağımlılık değişmeyen deploy | `7419f4731` / PR #188, `de0bbced0` / PR #189 | – / 1 |
+
+Not: `38565136132` (2026-10-14, `82ae7be74`) boş bir Staging Deploy koşusudur. Aynı commit başka bir oturumca deploy edilmişti (`38561474048`). Araya giren docs merge'i yüzünden `github-ci-evidence` işinde düştü; staging değişmedi.
 
 Tüm satırlarda plan günü efor haftası × 5 iş günüdür; gerçek gün dilim başlangıcından merge'e takvim günüdür. Kanıt main'e girme ve deploy kanıtıdır; dilimlerin kabul metrikleri STAGING'de ölçülmedi (UNPROVEN, S1).
 
