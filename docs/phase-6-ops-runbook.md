@@ -1140,11 +1140,14 @@ doküman veya ajan metadata dosyaları değiştiyse runtime-etkisiz run, image b
 başarılı biçimde atlanır. Daha yeni SHA'nın başarılı CI'ı veya PR değişiklik aralığı doğrulanamazsa seçim
 fail-open çalışır. Manuel `workflow_dispatch` bu filtreden etkilenmez ve her zaman deploy akışına girer.
 
-2026-10-12'den itibaren otomatik deploy isteğe bağlıdır: `workflow_run` yalnız repo değişkeni
-`STAGING_AUTO_DEPLOY=true` iken deploy eder; değişken yoksa preflight "automatic staging deploy disabled"
-gerekçesiyle başarılı biçimde atlar. Staging, birikmiş değişiklikler denenecekken
-`gh workflow run staging-deploy.yml -f rollback_image_tag=<son başarılı deploy SHA'sı>` ile elle deploy
-edilir (deploy her seferinde ürün sahibi onayı ister). CI'da yalnız doküman değişen PR'lar (`docs/`,
+Otomatik deploy repo değişkeni `STAGING_AUTO_DEPLOY` ile açılıp kapanır: `workflow_run` yalnız değişken
+`true` iken deploy eder; değişken yoksa preflight "automatic staging deploy disabled" gerekçesiyle başarılı
+biçimde atlar. 2026-10-12–15 arasında kapalıydı ve staging elle deploy edildi. 2026-10-15'te ürün sahibi
+kararıyla açıldı (kalıcı onay): `main` CI'ı başarılı biten ve runtime dosyası değiştiren her push staging'e
+gider, rollback etiketi sunucudaki `.env.release` `SENTRY_RELEASE` değerinden okunur, eşzamanlı koşular
+sıraya girer (`cancel-in-progress: false`). Elle deploy hâlâ
+`gh workflow run staging-deploy.yml -f rollback_image_tag=<son başarılı deploy SHA'sı>` ile yapılır ve onay
+ister; geri almak için `gh variable delete STAGING_AUTO_DEPLOY`. CI'da yalnız doküman değişen PR'lar (`docs/`,
 `status.md`, `README.md`, `PLAN.md`; `docs/evidence-manifests` ve `docs/measurement-baselines` hariç)
 tam paket yerine `docs-check` işini (ops, plan, readiness, evidence şablonları, örnek PII, agents)
 koşar; `main` push'u her zaman tam CI koşar ve CI kanıtı yalnız çalışan (atlanmamış) işleri içerir.

@@ -71,6 +71,8 @@ describe("CLEAN_SETUP_V1 catalog", () => {
         if (sql.includes("pg_inherits")) return { rows: [{ count: "0" }] as T[] };
         if (sql.includes("c.relname AS name")) return { rows: tenantResetTableNames.map((name) => ({ name })) as T[] };
         if (sql.includes('FROM "_prisma_migrations"')) return { rows: [{ row: '{"migration_name":"migration","checksum":"hash","finished_at":"2026-01-01"}' }] as T[] };
+        // The snapshot clock comes from the database, not the Node process (validity windows use the DB clock).
+        if (sql.includes('SELECT now() AS "capturedAt"')) return { rows: [{ capturedAt: new Date("2026-09-06T00:00:05.000Z") }] as T[] };
         const table = sql.match(/FROM "(\w+)" t/)?.[1] as keyof ResetTables;
         if (table) return { rows: source.rawTables[table].map((row) => ({ row })) as T[] };
         return { rows: [] as T[] };
@@ -78,6 +80,7 @@ describe("CLEAN_SETUP_V1 catalog", () => {
     }; } };
     const snapshot = await withResetSnapshot(db, "tenant-a", async (value) => value);
     expect(snapshot.rawTables.PaymentTransaction).toHaveLength(5001);
+    expect(snapshot.capturedAt).toBe("2026-09-06T00:00:05.000Z");
     expect(snapshot.rawTables.PaymentTransaction[0]).toContain("9007199254740993123.1234");
     expect(snapshot.dataDigest).toBe(resetDigest({ schemaDigest: snapshot.schemaDigest, rawTables: snapshot.rawTables }));
     expect(queries[0]).toBe("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");

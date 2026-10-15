@@ -49,10 +49,10 @@ export function TeacherDetailPage({ teacherId }: { teacherId: string }) {
   const queryClient = useQueryClient();
   const { notify } = useToast();
   const canManageAccounts = auth ? hasCapabilityForRoles(auth.session.roles, "user:manage") : false;
-  const invitationsQueryKey = ["next-teacher-invitations", auth?.session.tenantId ?? "anonymous"];
+  const invitationsQueryKey = ["next-teacher-invitations", auth?.session.tenantId ?? "anonymous", teacherId];
   const invitationsQuery = useQuery({
     queryKey: invitationsQueryKey,
-    queryFn: () => loadPendingTeacherInvitations(auth?.accessToken ?? ""),
+    queryFn: () => loadPendingTeacherInvitations(auth?.accessToken ?? "", teacherId),
     enabled: Boolean(auth && canManageAccounts && detail && !detail.teacher.hasAccount),
     refetchOnWindowFocus: false,
   });

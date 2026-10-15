@@ -121,8 +121,12 @@ async function readResetRows(client: Queryable, tenantId: string, schemaDigest: 
   const objectOwnerTenants = await client.query<{ id: string }>('SELECT "id" FROM "Tenant"');
   const objectOwnerStudents = await client.query<{ id: string; tenantId: string }>('SELECT "id", "tenantId" FROM "Student"');
   const objectOwners = { tenantIds: objectOwnerTenants.rows.map((row) => row.id), students: objectOwnerStudents.rows };
-  const capturedAt = new Date().toISOString();
-  const snapshot = { tenantId, lifecycleVersion: Number(tenant.lifecycleVersion), capturedAt, schemaDigest, tables, rawTables, migrationRows, objectOwners, dataDigest: resetDataDigest(schemaDigest, rawTables, operationId) };
+  // Validity windows (startsAt/endsAt/expiresAt) are written with the database clock; evaluate them against the same clock.
+  // A Node clock that runs behind Postgres would otherwise hide a just-created owner membership (startsAt > capturedAt).
+  const clock = await client.query<{ capturedAt: Date | string }>('SELECT now() AS "capturedAt"');
+  const capturedAt = new Date(clock.rows[0]?.capturedAt ?? Number.NaN);
+  if (Number.isNaN(capturedAt.getTime())) throw new Error("RESET_CLOCK_UNVERIFIED");
+  const snapshot = { tenantId, lifecycleVersion: Number(tenant.lifecycleVersion), capturedAt: capturedAt.toISOString(), schemaDigest, tables, rawTables, migrationRows, objectOwners, dataDigest: resetDataDigest(schemaDigest, rawTables, operationId) };
   return snapshot;
 }
 
