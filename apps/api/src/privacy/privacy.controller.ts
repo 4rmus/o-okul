@@ -22,7 +22,6 @@ export class PrivacyController {
   ) {}
 
   @Get("inventory")
-  @Roles("TENANT_ADMIN", "ASSISTANT_ADMIN")
   @RequireCapability("privacy:manage")
   async inventory(): Promise<KvkkInventoryRecord[]> {
     const context = getRequestContext();

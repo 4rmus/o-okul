@@ -167,7 +167,6 @@ export class MeController {
   }
 
   @Patch("tenant")
-  @Roles("TENANT_ADMIN", "ASSISTANT_ADMIN")
   @RequireCapability("setup:manage")
   updateTenant(
     @Body(zodBody(tenantCurrentProfileBodySchema)) body: TenantCurrentProfileBody,
@@ -383,7 +382,6 @@ export class MeController {
 
   /** KV-4: one allow-list read model for a linked student; ward:read is the guardian scope capability. */
   @Get("guardian/students/:studentId/overview")
-  @Roles("GUARDIAN")
   @RequireCapability("ward:read")
   guardianStudentOverview(@Param("studentId") studentId: string): Promise<GuardianStudentOverview> {
     const context = getRequestContext();
