@@ -6,6 +6,7 @@ import { join } from "node:path";
 // roleRank, so a @Roles("TEACHER") route also admits higher-ranked admin roles. New code must not add @Roles;
 // when a route family moves to capabilities, lower its count here in the same change.
 // Baseline taken on main c619b8f7e (2026-10-15): 154 usages in 22 files (the plan recorded 146 earlier).
+// 2026-10-15: teacher-note moved to note:read-assigned / note:write-assigned (154 -> 150, 21 files).
 const baseline = {
   "apps/api/src/announcement/announcement.controller.ts": 2,
   "apps/api/src/attendance/attendance.controller.ts": 4,
@@ -27,7 +28,6 @@ const baseline = {
   "apps/api/src/school/learning-outcomes.controller.ts": 2,
   "apps/api/src/search/search.controller.ts": 1,
   "apps/api/src/support-ticket/support-ticket.controller.ts": 8,
-  "apps/api/src/teacher-note/teacher-note.controller.ts": 4,
   "apps/api/src/teacher/teachers.controller.ts": 3,
 };
 

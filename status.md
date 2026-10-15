@@ -288,8 +288,10 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
   `38767657174` + STAGING_DEPLOY `38770379316`, `c619b8f7e`). Staging'de davranış ölçümü UNPROVEN.
 - P0 `@Roles` kesimi KISMİ: 22 controller'da 154 `@Roles` (plan 146 diyordu), 208 `@RequireCapability`.
   `@Roles` `roleRank` ile çalıştığı için `@Roles("TEACHER")` route'larından yönetici rolleri de geçer.
-  Artış 2026-10-15'ten beri `pnpm api:roles-inventory:check` ile CI'da engellenir; sıradaki dilim tek bir
-  route ailesini (ör. `teacher-note`) capability + persona + scope modeline taşımak.
+  Artış 2026-10-15'ten beri `pnpm api:roles-inventory:check` ile CI'da engellenir. İlk route ailesi
+  `teacher-note` taşındı (`note:read-assigned` / `note:write-assigned`; kabul edilen rol kümesi değişmedi):
+  21 dosyada 150 `@Roles` kaldı. Sıradaki aileler küçükten büyüğe: `search`, `announcement`, okul
+  controller'ları; en büyüğü `me.controller.ts` (81).
 - P0 ayrı platform auth realm KISMİ: `PlatformAccount`/`PlatformSession` şeması ve backfill var, runtime
   kullanımı yok; sistem yöneticisi hâlâ `system` tenant oturumuyla girer.
 - P0 süreli/MFA'lı breakglass AÇIK: `RlsBypassGuard` rol, kapsam, gerekçe ve audit ister ama süre ve MFA
@@ -327,6 +329,7 @@ Plan `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §10.1 uyarınca her dilim
 | 2026-10-15 | IMG-2c gerilemesi düzeltmesi (`attempts` kanıttan çıkarıldı) ve IMG-2d: derleme önbelleği GHCR `buildcache:<hedef>` (önceki `type=gha` cache hiç yazılmıyordu) | CI `38705116032` (#188) ve `38711336549` (#189) PASS + STAGING_DEPLOY `38713167161` beş işte PASS (kanıt işi dahil), deploy adımı 8 dk; dört önbellek manifesti GHCR'a yazıldı; dört servis `de0bbced0`, migration 126, health 200. Kalıcılık kabulü açık: bir sonraki bağımlılık değişmeyen deploy | `7419f4731` / PR #188, `de0bbced0` / PR #189 | – / 1 |
 | 2026-10-15 | Öğrenci kodu ve veli daveti iptal ekranları; öğrenci kabulünde ulusal kimlikle eşleşen hesabın geri almada korunması (S1 bulgu dilimi) | CI `38747200244` PASS + STAGING_DEPLOY `38750057836` beş işte PASS (elle dispatch); derleme 3 dk 27 sn, deploy adımı 2 dk 41 sn, IMG katman özetleri aynı (kabul karşılandı); dört servis `df86002b7`, migration 126, health 200, kimliksiz revoke 401 | `df86002b7` / PR #191 | – / 1 |
 | 2026-10-15 | K7 öğretmen ayrıntısı yalnız o öğretmenin davetlerini ister (`q=<teacherId>`); K8 sıfırlama anlık görüntüsü saati veritabanından (`now()`); staging otomatik deploy açıldı | CI `38767657174` PASS (ilk PR koşusu `verify`'da Gate B baseline kaynak özeti yüzünden düştü, baseline temiz ağaçta yenilendi) + ilk OTOMATİK STAGING_DEPLOY `38770379316` (`workflow_run`, elle dispatch yok) beş işte PASS: preflight 0,5 / evidence 0,5 / build 3,6 / deploy 2,6 / evidence 1,4 dk. Staging salt okunur doğrulama (2026-10-15 16:47 UTC): web/api/worker/queue-board `c619b8f7e` imajı, web/api/queue-board healthy, migration 126 (PR migration içermiyor), api `/health` ve `/health/ready` 200 | `c619b8f7e` / PR #192 | – / 1 |
+| 2026-10-15 | P0 legacy-rol kesimi, ilk aile: `/teacher-notes` uçları `@Roles("TEACHER")` yerine `note:read-assigned` / `note:write-assigned` (kabul edilen rol kümesi aynı); `@Roles` 154 → 150 | LOCAL_TEST: api 1413 test PASS; yetki matrisi e2e testi eski ve yeni controller'da aynı sonuç; rol-yetki birim testi. CI ve otomatik staging deploy merge sonrası | bu PR | – / 1 |
 
 Not: `38565136132` (2026-10-14, `82ae7be74`) boş bir Staging Deploy koşusudur. Aynı commit başka bir oturumca deploy edilmişti (`38561474048`). Araya giren docs merge'i yüzünden `github-ci-evidence` işinde düştü; staging değişmedi.
 

@@ -82,6 +82,18 @@ describe("role capabilities", () => {
     expect(hasCapability(context, "finance:manage")).toBe(false);
   });
 
+  // Teacher-note routes: the same role set the legacy @Roles("TEACHER") rank check admitted.
+  it("öğretmen notu yetkileri yalnız personel note:* ve öğretmen personasına verilir", () => {
+    for (const role of ["TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF", "TEACHER"]) {
+      expect(hasCapability({ roles: [role] }, "note:read-assigned")).toBe(true);
+      expect(hasCapability({ roles: [role] }, "note:write-assigned")).toBe(true);
+    }
+    for (const role of ["SYSTEM_ADMIN", "FINANCE_STAFF", "STUDENT", "GUARDIAN"]) {
+      expect(hasCapability({ roles: [role] }, "note:read-assigned")).toBe(false);
+      expect(hasCapability({ roles: [role] }, "note:write-assigned")).toBe(false);
+    }
+  });
+
   it("öğrenci ve veli yalnız scope kontrollü öğrenci okuma capability'sini alır", () => {
     expect(hasCapability({ roles: ["STUDENT"] }, "student:read")).toBe(true);
     expect(hasCapability({ roles: ["GUARDIAN"] }, "student:read")).toBe(true);
