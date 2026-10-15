@@ -299,15 +299,21 @@ export class IdentityInvitationService {
     // UAT F-16 (KV-3b): an existing account with this e-mail keeps its roles and gains the invited one; a combination
     // the membership model cannot hold (student + anything) is refused here, before the mutation is admitted.
     const existingUser = subject ? await this.users.findTenantUserByEmail(invitation.tenantId, subject.email) : undefined;
+    // #184 review P2-3: without an e-mail match, a student accept attaches to the account that already holds the
+    // student's national ID hash (createOrAttachTenantUser ON CONFLICT). Rollback decisions use that account too,
+    // so a refused accept never removes a role or deletes an account it did not create.
+    const priorAccount = existingUser ?? (subject?.nationalIdHash && invitation.subjectType === "STUDENT"
+      ? await this.users.findTenantUserByNationalIdHash(invitation.tenantId, subject.nationalIdHash)
+      : undefined);
     // A subject already linked to another account (e.g. a student who activated with a code meanwhile) is not
     // relinked by an e-mail invitation; refused before the mutation is admitted (UAT F-08 pattern).
-    if (subject?.previousUserId && subject.previousUserId !== existingUser?.id) {
+    if (subject?.previousUserId && subject.previousUserId !== priorAccount?.id) {
       throw new BadRequestException("SUBJECT_ALREADY_LINKED");
     }
-    if (existingUser && !canAddTenantRole(existingUser.roles, invitation.role)) {
+    if (priorAccount && !canAddTenantRole(priorAccount.roles, invitation.role)) {
       throw new BadRequestException("IDENTITY_INVITATION_EMAIL_ACCOUNT_INCOMPATIBLE");
     }
-    const roleAdded = !existingUser?.roles.includes(invitation.role);
+    const roleAdded = !priorAccount?.roles.includes(invitation.role);
     const passwordHash = await hashPasswordAsync(password);
     const admission = { tenantId: invitation.tenantId, lifecycleVersion: invitation.tenantLifecycleVersion!, kind: "AUTH_MUTATION" as const, referenceId: `invitation:${invitation.id}`, source: { type: "INVITATION" as const, id: invitation.id, tokenHash: hashActivationToken(token) } };
     if (employeeActivation) {
@@ -353,7 +359,7 @@ export class IdentityInvitationService {
     const boundSubject = await this.bindSubject(invitation.tenantId, invitation.subjectType, invitation.subjectId, user.id);
     if (!boundSubject) {
       if (roleAdded) await this.users.removeTenantRole(invitation.tenantId, user.id, invitation.role);
-      if (!existingUser) await this.users.deleteUnusedTenantUser(invitation.tenantId, user.id);
+      if (!priorAccount) await this.users.deleteUnusedTenantUser(invitation.tenantId, user.id);
       throw (compensatedRefusal = new NotFoundException("SUBJECT_NOT_FOUND"));
     }
 
@@ -365,7 +371,7 @@ export class IdentityInvitationService {
       if (roleAdded) await this.users.removeTenantRole(invitation.tenantId, user.id, invitation.role);
       // An account this accept created (no e-mail match before) is removed again, so a later invitation to the
       // same address creates it with the password chosen then; an existing account's password is never changed.
-      if (!existingUser) await this.users.deleteUnusedTenantUser(invitation.tenantId, user.id);
+      if (!priorAccount) await this.users.deleteUnusedTenantUser(invitation.tenantId, user.id);
       throw (compensatedRefusal = new BadRequestException("IDENTITY_INVITATION_NOT_PENDING"));
     }
     await this.auditLogs?.record({

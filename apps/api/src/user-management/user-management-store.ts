@@ -59,6 +59,8 @@ export interface UserManagementStore {
   findTenantUser(tenantId: string, userId: string): Promise<TenantUserRecord | undefined>;
   /** The account with this e-mail and its ACTIVE membership roles; used to refuse an incompatible invitation early. */
   findTenantUserByEmail(tenantId: string, email: string): Promise<TenantUserRecord | undefined>;
+  /** Student accounts can be matched by national ID hash when the e-mail does not match (createOrAttachTenantUser). */
+  findTenantUserByNationalIdHash(tenantId: string, nationalIdHash: string): Promise<TenantUserRecord | undefined>;
   /** A new account gets `roles`; an existing account keeps every membership and only gains the missing roles (KV-3b). */
   createOrAttachTenantUser(input: CreateTenantUserInput): Promise<TenantUserRecord>;
   setTenantRoles(tenantId: string, userId: string, roles: TenantUserRole[]): Promise<TenantUserRecord | undefined>;
@@ -262,6 +264,11 @@ export class InMemoryUserManagementStore implements UserManagementStore {
   async findTenantUserByEmail(tenantId: string, email: string): Promise<TenantUserRecord | undefined> {
     const normalized = email.trim().toLowerCase();
     return cloneTenantUser(this.users.find((user) => user.tenantId === tenantId && user.email?.toLowerCase() === normalized));
+  }
+
+  // The memory adapter keys accounts by e-mail only (createOrAttachTenantUser), so it never attaches by national ID.
+  async findTenantUserByNationalIdHash(_tenantId: string, _nationalIdHash: string): Promise<TenantUserRecord | undefined> {
+    return undefined;
   }
 
   async createOrAttachTenantUser(input: CreateTenantUserInput): Promise<TenantUserRecord> {
@@ -663,6 +670,29 @@ export class PostgresUserManagementStore implements UserManagementStore {
          GROUP BY u."id", u."email", u."name", u."tenantId"
          LIMIT 1`,
         [tenantId, email.trim().toLowerCase()],
+      );
+      return result.rows[0] ? toTenantUserRecord(result.rows[0]) : undefined;
+    });
+  }
+
+  async findTenantUserByNationalIdHash(tenantId: string, nationalIdHash: string): Promise<TenantUserRecord | undefined> {
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const result = await client.query<TenantUserRow>(
+        `SELECT
+           u."id",
+           u."email",
+           u."name",
+           u."tenantId",
+           coalesce(array_agg(m."role"::text ORDER BY m."role"::text) FILTER (WHERE m."id" IS NOT NULL), ARRAY[]::text[]) AS roles,
+           min(u."createdAt") AS "createdAt",
+           max(u."updatedAt") AS "updatedAt"
+         FROM "User" u
+         LEFT JOIN "TenantMembership" m
+           ON m."tenantId" = u."tenantId" AND m."userId" = u."id" AND m."status" = 'ACTIVE'
+         WHERE u."tenantId" = $1 AND u."nationalIdHash" = $2
+         GROUP BY u."id", u."email", u."name", u."tenantId"
+         LIMIT 1`,
+        [tenantId, nationalIdHash],
       );
       return result.rows[0] ? toTenantUserRecord(result.rows[0]) : undefined;
     });
