@@ -249,14 +249,19 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
 
 1. S1: staging rol UAT'ı sürüyor (`docs/staging-uat-s1.md`). S1-01..S1-03 PASS (2026-10-10/11); S1-04 sürüyor,
    S1-05..S1-14 başlamadı. Kapanan bulgular: F-04, F-06..F-13, F-15, F-16 (#159, #161–#166, #168). Açık: F-14
-   e-posta yalnız doğrulanmış hedeflere gidiyor (Yüksek; S1-05 davet akışını bekletir, Cloudflare plan kontrolü),
-   F-01 davet e-postası spama düşüyor (Yüksek; ürün sahibi: sonra). F-03 davet iptali (#180) ve F-11 bağ kaldırma
+   e-posta yalnız doğrulanmış hedeflere gidiyor (Yüksek; S1-05 davet akışını bekletir). 2026-10-15 panel
+   kontrolü: `o-okul.com` Email Sending'de Enabled ve DNS Configured, yani kısıt kalkmış olabilir (UNPROVEN);
+   ürün sahibi kararıyla S1-04'te finans davetini doğrulanmamış bir adrese yeniden göndererek doğrulanacak.
+   F-01 davet e-postası spama düşüyor (Yüksek): DMARC `p=none`, SPF `softfail`; karar: önce Cloudflare DMARC
+   Management raporları, politika sonra. Etkinleştirme panelden yapılmadı (ajan için DNS değişikliği izni
+   yok); ürün sahibi Email > DMARC Management'tan açacak. F-03 davet iptali (#180) ve F-11 bağ kaldırma
    (#182) main ve staging'de; F-02 tek adımda yönetici daveti, F-05 içe aktarmada sınıf yönlendirmesi ve
    kabul/iptal yarışı telafisi #184 ile main'de (`52ce7d03e`, 2026-10-14). Yarışta geri alınan kabulün
    oluşturduğu hesap kullanılmıyorsa silinir (#185, `78a0e0bdd`; var olan hesabın parolası
    değişmez). Öğrenci kodu ve veli daveti iptal ekranları ile öğrenci kabulünde ulusal kimlikle eşleşen hesabın
-   korunması dal `fix/kabul-ulusal-kimlik-hesabi`'nda (2026-10-15, LOCAL_TEST). Deneme lisansı 2026-10-17 00:00 UTC'de biter; S1-05..S1-13 için
-   ürün sahibi S1-14 gözlemi sonrası yeni lisans dönemi açar. Kontrol noktası 2026-11-14.
+   korunması #191 ile main ve staging'de (`df86002b7`); ulusal kimlikle eşleşmede kabulün parolayı
+   sıfırlaması ürün sahibi kararıyla korunur (2026-10-15). Deneme lisansı 2026-10-17 00:00 UTC'de biter;
+   ürün sahibi S1-14'te salt okunur geçişi gözler, ardından sistem yöneticisi olarak PRO dönem açar. Kontrol noktası 2026-11-14.
 2. S2: PR #153 lisans sonu veri imhası main'de (`2b0ef97`, staging deploy PASS); imha, sıfırlama motorunun yazma sessizliği kapısı açılana kadar çalışmaz.
 3. S4: §3.4 doğrulama planı (dosya talebi, görüşmeler, pilot taahhüdü); ürün sahibi işi.
 4. S5/S6: PO-3 kapasite ölçümü ve PO-10 production kanıt zinciri; PO-10 tarihi 2027-01-03'te.
@@ -265,13 +270,15 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
    katmanını kaynaktan ayırdı ve dört imaja tek `node_modules` katmanı verdi; IMG-2c (#187, düzeltme #188) çekmeyi
    servisler durmadan 30 dk bütçeyle üç denemeye ve deploy işini 50 dk'ya aldı, Traefik smoke'a sınırlı yeniden
    deneme ekledi; IMG-2d (#189) derleme önbelleğini GHCR `buildcache:<hedef>`'e taşıdı (`type=gha` hiç
-   yazılmıyordu). Açık kabul ölçümü (STAGING): bağımlılık değişmeyen bir sonraki deploy'da `node_modules`
-   `bd106670c2e0` ve Chromium `9209bd9dd1bd` katman özetleri aynı kalmalı. Ağ teşhisi (STAGING, salt okunur;
+   yazılmıyordu). Kabul ölçümü karşılandı (STAGING, #191 deploy `38750057836`): `node_modules`
+   `bd106670c2e0` ve Chromium `9209bd9dd1bd` aynı kaldı, dört derlemede `pnpm install` önbellekten geldi,
+   deploy adımı 2 dk 41 sn. Staging otomatik deploy 2026-10-15'te açıldı (`STAGING_AUTO_DEPLOY=true`). Ağ teşhisi (STAGING, salt okunur;
    hiçbir ayar değişmedi): Cloudflare Origin Analytics'te TCP el sıkışması 1,2 sn; sunucu her Cloudflare
    bağlantısında tek SYN görüp hemen yanıtlıyor, sunucuda düşürme yok (UFW, conntrack, listen kuyruğu),
    doğrudan bağlantılar 30–70 ms. En tutarlı açıklama Cloudflare'in ilk SYN'inin sağlayıcı ağında düşmesi
-   (UNPROVEN; sağlayıcıya sorulacak). Seçenek: Cloudflare Tunnel. `*.o-okul.com` ve `staging.o-okul.com`
-   Cloudflare'i atlıyor (DNS only). Ürün sahibi kararı bekliyor.
+   (UNPROVEN). Seçenek: Cloudflare Tunnel (belgeye göre tüm planlarda var); ürün sahibi maliyet ve süre
+   sordu, karar açık. `*.o-okul.com` ve `staging.o-okul.com` pilot edge kararına kadar DNS only kalır
+   (2026-10-15 kararı); bu yüzden Tunnel yalnız `o-okul.com`'u etkiler.
 
 Önceki plandan devralınan kalemler (`docs/account-management-architecture-plan.md` bölüm 6; 2026-10-10'da
 durumları yeniden doğrulanmadı, S1 bulgularıyla birlikte ele alınır):
@@ -307,6 +314,8 @@ Plan `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §10.1 uyarınca her dilim
 | 2026-10-14 | IMG-1: Dockerfile'da bağımlılık katmanı kaynaktan ayrıldı, worker ortak `node_modules` katmanına bağlandı (çalışma zamanı değişmedi) | CI `38625807972` PASS + STAGING_DEPLOY `38632974369` PASS (ilk dispatch `38628169361` çekmede 20 dk zaman aşımı; yeniden denemede deploy adımı 16 dk 13 sn; evidence işi Traefik smoke zaman aşımıyla düştü, onaylı yeniden çalıştırmayla deneme 2'de PASS); dört imaj tek `node_modules` katmanı (`d496e9d271d5`), migration 126 | `342ea5ac6` / PR #186 | – / 1 |
 | 2026-10-15 | IMG-2c: imaj çekme servisler durmadan 30 dk bütçeyle üç deneme, deploy işi 50 dk, Traefik smoke'a sınırlı yeniden deneme | CI `38642349815` PASS; STAGING_DEPLOY `38686591623` deploy adımı PASS (çekme tek denemede 343 sn, adım 8 dk 20 sn) ama evidence işi FAIL: smoke kanıtına eklenen `attempts` alanı sabit 11 alanlı şemayı bozdu (SMOKE_EVIDENCE_PAYLOAD_INVALID); staging çalışır kaldı | `ab3a42cf7` / PR #187 | – / 1 |
 | 2026-10-15 | IMG-2c gerilemesi düzeltmesi (`attempts` kanıttan çıkarıldı) ve IMG-2d: derleme önbelleği GHCR `buildcache:<hedef>` (önceki `type=gha` cache hiç yazılmıyordu) | CI `38705116032` (#188) ve `38711336549` (#189) PASS + STAGING_DEPLOY `38713167161` beş işte PASS (kanıt işi dahil), deploy adımı 8 dk; dört önbellek manifesti GHCR'a yazıldı; dört servis `de0bbced0`, migration 126, health 200. Kalıcılık kabulü açık: bir sonraki bağımlılık değişmeyen deploy | `7419f4731` / PR #188, `de0bbced0` / PR #189 | – / 1 |
+| 2026-10-15 | Öğrenci kodu ve veli daveti iptal ekranları; öğrenci kabulünde ulusal kimlikle eşleşen hesabın geri almada korunması (S1 bulgu dilimi) | CI `38747200244` PASS + STAGING_DEPLOY `38750057836` beş işte PASS (elle dispatch); derleme 3 dk 27 sn, deploy adımı 2 dk 41 sn, IMG katman özetleri aynı (kabul karşılandı); dört servis `df86002b7`, migration 126, health 200, kimliksiz revoke 401 | `df86002b7` / PR #191 | – / 1 |
+| 2026-10-15 | K7 öğretmen ayrıntısı yalnız o öğretmenin davetlerini ister (`q=<teacherId>`); K8 sıfırlama anlık görüntüsü saati veritabanından (`now()`); staging otomatik deploy açıldı | LOCAL_TEST: db 140 test, api tenant 110 test, öğretmen davet Playwright 10 test PASS; Postgres önizleme testi CI'da. Merge sonrası staging otomatik deploy ile gider | bu PR | – / 1 |
 
 Not: `38565136132` (2026-10-14, `82ae7be74`) boş bir Staging Deploy koşusudur. Aynı commit başka bir oturumca deploy edilmişti (`38561474048`). Araya giren docs merge'i yüzünden `github-ci-evidence` işinde düştü; staging değişmedi.
 
