@@ -21,7 +21,7 @@ import {
   type DataTableColumn,
   type StatusBadgeProps,
 } from "@o-okul/ui";
-import { ChevronLeft, ChevronRight, Copy, KeyRound, Search, ShieldCheck, ShieldOff } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, KeyRound, MailX, Search, ShieldCheck, ShieldOff } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiCursorListRequest, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
@@ -83,6 +83,22 @@ export function StudentPortalAccessPage() {
     },
     onError: (error) => setActionError(apiErrorMessage(error, "Aktivasyon kodu üretilemedi. Listeyi yenileyip tekrar deneyin.")),
   });
+  // UAT F-03 follow-up: a pending activation code or e-mail invitation can be withdrawn before it is used.
+  const revokeMutation = useMutation({
+    mutationFn: (invitationId: string) => apiRequest(
+      auth?.accessToken ?? "",
+      `${apiBaseUrl}/identity-invitations/${encodeURIComponent(invitationId)}/revoke`,
+      { method: "POST" },
+    ),
+    onSuccess: () => {
+      setActionError("");
+      void accessQuery.refetch();
+    },
+    onError: (error) => {
+      setActionError(apiErrorMessage(error, "Davet iptal edilemedi; davet artık beklemede olmayabilir. Listeyi yenileyip tekrar deneyin."));
+      void accessQuery.refetch();
+    },
+  });
   const columns: Array<DataTableColumn<StudentPortalAccessRecord>> = [
     {
       key: "name",
@@ -130,17 +146,33 @@ export function StudentPortalAccessPage() {
         if (!record.membership) {
           if (record.studentStatus !== "ACTIVE") return "-";
           const label = record.invitation ? "Yeni aktivasyon kodu üret" : "Aktivasyon kodu üret";
+          const pendingInvitation = record.invitation?.status === "PENDING" ? record.invitation : undefined;
           return (
-            <Button
-              aria-label={`${record.firstName} ${record.lastName}: ${label}`}
-              disabled={invitationMutation.isPending}
-              onClick={() => invitationMutation.mutate(record)}
-              size="icon"
-              type="button"
-              variant="ghost"
-            >
-              <KeyRound size={17} aria-hidden="true" />
-            </Button>
+            <span className="next-row-actions">
+              <Button
+                aria-label={`${record.firstName} ${record.lastName}: ${label}`}
+                disabled={invitationMutation.isPending || revokeMutation.isPending}
+                onClick={() => invitationMutation.mutate(record)}
+                size="icon"
+                type="button"
+                variant="ghost"
+              >
+                <KeyRound size={17} aria-hidden="true" />
+              </Button>
+              {pendingInvitation ? (
+                <Button
+                  aria-label={`${record.firstName} ${record.lastName}: Daveti iptal et`}
+                  disabled={invitationMutation.isPending || revokeMutation.isPending}
+                  onClick={() => revokeMutation.mutate(pendingInvitation.id)}
+                  size="icon"
+                  title="Daveti iptal et"
+                  type="button"
+                  variant="ghost"
+                >
+                  <MailX size={17} aria-hidden="true" />
+                </Button>
+              ) : null}
+            </span>
           );
         }
         if (record.membership.status === "ENDED") return "-";

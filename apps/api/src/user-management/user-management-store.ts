@@ -49,6 +49,18 @@ export interface EmployeeAccessPage {
   meta: ApiCursorListMeta;
 }
 
+export interface TenantUserCredentialSnapshot {
+  email: string | null;
+  emailNormalized: string | null;
+  loginName: string | null;
+  loginNameNormalized: string | null;
+  name: string;
+  nationalIdEncrypted: string | null;
+  passwordHash: string;
+  passwordHashVersion: number;
+  accountStatus: string;
+}
+
 export interface UserManagementStore {
   listTenantUsers(tenantId: string): Promise<TenantUserRecord[]>;
   listEmployees(tenantId: string): Promise<EmployeeAccessRecord[]>;
@@ -59,6 +71,14 @@ export interface UserManagementStore {
   findTenantUser(tenantId: string, userId: string): Promise<TenantUserRecord | undefined>;
   /** The account with this e-mail and its ACTIVE membership roles; used to refuse an incompatible invitation early. */
   findTenantUserByEmail(tenantId: string, email: string): Promise<TenantUserRecord | undefined>;
+  /** Student accounts can be matched by national ID hash when the e-mail does not match (createOrAttachTenantUser). */
+  findTenantUserByNationalIdHash(tenantId: string, nationalIdHash: string): Promise<TenantUserRecord | undefined>;
+  /**
+   * Credentials a national-ID attach (createOrAttachTenantUser ON CONFLICT) overwrites; read before an accept and
+   * restored if that accept is rolled back, so a refused accept never leaves its password on an existing account.
+   */
+  readAttachableCredentials(tenantId: string, userId: string): Promise<TenantUserCredentialSnapshot | undefined>;
+  restoreAttachableCredentials(tenantId: string, userId: string, snapshot: TenantUserCredentialSnapshot): Promise<boolean>;
   /** A new account gets `roles`; an existing account keeps every membership and only gains the missing roles (KV-3b). */
   createOrAttachTenantUser(input: CreateTenantUserInput): Promise<TenantUserRecord>;
   setTenantRoles(tenantId: string, userId: string, roles: TenantUserRole[]): Promise<TenantUserRecord | undefined>;
@@ -262,6 +282,20 @@ export class InMemoryUserManagementStore implements UserManagementStore {
   async findTenantUserByEmail(tenantId: string, email: string): Promise<TenantUserRecord | undefined> {
     const normalized = email.trim().toLowerCase();
     return cloneTenantUser(this.users.find((user) => user.tenantId === tenantId && user.email?.toLowerCase() === normalized));
+  }
+
+  // The memory adapter keys accounts by e-mail only (createOrAttachTenantUser), so it never attaches by national ID
+  // and never overwrites another account's credentials.
+  async findTenantUserByNationalIdHash(_tenantId: string, _nationalIdHash: string): Promise<TenantUserRecord | undefined> {
+    return undefined;
+  }
+
+  async readAttachableCredentials(_tenantId: string, _userId: string): Promise<TenantUserCredentialSnapshot | undefined> {
+    return undefined;
+  }
+
+  async restoreAttachableCredentials(_tenantId: string, _userId: string, _snapshot: TenantUserCredentialSnapshot): Promise<boolean> {
+    return false;
   }
 
   async createOrAttachTenantUser(input: CreateTenantUserInput): Promise<TenantUserRecord> {
@@ -663,6 +697,57 @@ export class PostgresUserManagementStore implements UserManagementStore {
          GROUP BY u."id", u."email", u."name", u."tenantId"
          LIMIT 1`,
         [tenantId, email.trim().toLowerCase()],
+      );
+      return result.rows[0] ? toTenantUserRecord(result.rows[0]) : undefined;
+    });
+  }
+
+  async readAttachableCredentials(tenantId: string, userId: string): Promise<TenantUserCredentialSnapshot | undefined> {
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const result = await client.query<TenantUserCredentialSnapshot>(
+        `SELECT "email", "emailNormalized", "loginName", "loginNameNormalized", "name", "nationalIdEncrypted",
+                "passwordHash", "passwordHashVersion", "accountStatus"
+         FROM "User" WHERE "tenantId" = $1 AND "id" = $2`,
+        [tenantId, userId],
+      );
+      return result.rows[0];
+    });
+  }
+
+  async restoreAttachableCredentials(tenantId: string, userId: string, snapshot: TenantUserCredentialSnapshot): Promise<boolean> {
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const result = await client.query<{ id: string }>(
+        `UPDATE "User"
+         SET "email" = $3, "emailNormalized" = $4, "loginName" = $5, "loginNameNormalized" = $6, "name" = $7,
+             "nationalIdEncrypted" = $8, "passwordHash" = $9, "passwordHashVersion" = $10, "accountStatus" = $11,
+             "updatedAt" = now()
+         WHERE "tenantId" = $1 AND "id" = $2
+         RETURNING "id"`,
+        [tenantId, userId, snapshot.email, snapshot.emailNormalized, snapshot.loginName, snapshot.loginNameNormalized,
+          snapshot.name, snapshot.nationalIdEncrypted, snapshot.passwordHash, snapshot.passwordHashVersion, snapshot.accountStatus],
+      );
+      return result.rows.length > 0;
+    });
+  }
+
+  async findTenantUserByNationalIdHash(tenantId: string, nationalIdHash: string): Promise<TenantUserRecord | undefined> {
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const result = await client.query<TenantUserRow>(
+        `SELECT
+           u."id",
+           u."email",
+           u."name",
+           u."tenantId",
+           coalesce(array_agg(m."role"::text ORDER BY m."role"::text) FILTER (WHERE m."id" IS NOT NULL), ARRAY[]::text[]) AS roles,
+           min(u."createdAt") AS "createdAt",
+           max(u."updatedAt") AS "updatedAt"
+         FROM "User" u
+         LEFT JOIN "TenantMembership" m
+           ON m."tenantId" = u."tenantId" AND m."userId" = u."id" AND m."status" = 'ACTIVE'
+         WHERE u."tenantId" = $1 AND u."nationalIdHash" = $2
+         GROUP BY u."id", u."email", u."name", u."tenantId"
+         LIMIT 1`,
+        [tenantId, nationalIdHash],
       );
       return result.rows[0] ? toTenantUserRecord(result.rows[0]) : undefined;
     });

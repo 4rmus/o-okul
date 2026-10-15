@@ -219,6 +219,47 @@ describePostgres("IdentityInvitationService.accept on PostgreSQL without request
       .rejects.toThrow("IDENTITY_INVITATION_NOT_PENDING");
   });
 
+  it("ulusal kimlikle eşleşen öğrenci hesabında geri alma rolü silmez, hesabı silmez (#184 inceleme P2-3)", async () => {
+    const nidHash = "a".repeat(64);
+    // An existing student account with the same national ID hash but another e-mail address.
+    await admin.query(
+      `INSERT INTO "User" ("id", "tenantId", "name", "email", "emailNormalized", "nationalIdEncrypted", "nationalIdHash", "passwordHash", "updatedAt")
+       VALUES ('p23-student-user', $1, 'P23 Ogrenci', 'p23.eski@example.test', 'p23.eski@example.test', 'enc-p23', $2, 'FIXTURE_HASH', now())`,
+      [tenantId, nidHash],
+    );
+    await admin.query(
+      `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "hasStudentPersona", "updatedAt")
+       VALUES ('p23-student-membership', $1, 'p23-student-user', 'STUDENT', true, now())`,
+      [tenantId],
+    );
+    await admin.query(
+      `INSERT INTO "Student" ("id", "tenantId", "studentNo", "firstName", "lastName", "status", "nationalIdEncrypted", "nationalIdHash", "updatedAt")
+       VALUES ('p23-student', $1, 'P23-1', 'P23', 'Ogrenci', 'ACTIVE', 'enc-p23', $2, now())`,
+      [tenantId, nidHash],
+    );
+    await seedInvitation(admin, "STUDENT", "p23-student", "p23.yeni@example.test", "STUDENT", "p23-student");
+    const store = (service as unknown as { invitations: PostgresIdentityInvitationStore }).invitations;
+    const markAccepted = store.markAccepted.bind(store);
+    const spy = vi.spyOn(store, "markAccepted").mockImplementation(async (id, userId, acceptedAt) => {
+      await service.revoke({ tenantId, userId: "admin-p23", roles: ["TENANT_ADMIN"], bypassRls: false }, "invitation-accept-p23-student");
+      return markAccepted(id, userId, acceptedAt);
+    });
+    try {
+      await expect(service.accept({ token: tokenFor("p23-student"), password })).rejects.toThrow("IDENTITY_INVITATION_NOT_PENDING");
+    } finally {
+      spy.mockRestore();
+    }
+    // The pre-existing account keeps its STUDENT membership, e-mail and password and is not deleted; the student is
+    // not left linked.
+    const account = await admin.query(`SELECT "id", "emailNormalized", "passwordHash" FROM "User" WHERE "id" = 'p23-student-user'`);
+    expect(account.rows).toEqual([{ id: "p23-student-user", emailNormalized: "p23.eski@example.test", passwordHash: "FIXTURE_HASH" }]);
+    const membership = await admin.query(`SELECT "role" FROM "TenantMembership" WHERE "userId" = 'p23-student-user' AND "status" = 'ACTIVE'`);
+    expect(membership.rows).toEqual([{ role: "STUDENT" }]);
+    const student = await admin.query(`SELECT "userId" FROM "Student" WHERE "id" = 'p23-student'`);
+    expect(student.rows).toEqual([{ userId: null }]);
+    await expectNoActivity(admin);
+  });
+
   it("kabul sırasında iptal edilen davette öğretmen bağı PostgreSQL'de geri alınır (UAT F-03 inceleme)", async () => {
     await admin.query(
       `INSERT INTO "Teacher" ("id", "tenantId", "firstName", "lastName", "updatedAt")

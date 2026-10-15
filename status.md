@@ -254,8 +254,8 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
    (#182) main ve staging'de; F-02 tek adımda yönetici daveti, F-05 içe aktarmada sınıf yönlendirmesi ve
    kabul/iptal yarışı telafisi #184 ile main'de (`52ce7d03e`, 2026-10-14). Yarışta geri alınan kabulün
    oluşturduğu hesap kullanılmıyorsa silinir (#185, `78a0e0bdd`; var olan hesabın parolası
-   değişmez). İzleyen iş: öğrenci kodu/veli daveti için iptal ekranı, öğrenci kabulünde ulusal kimlikle eşleşen
-   hesapta rol geri alma. Deneme lisansı 2026-10-17 00:00 UTC'de biter; S1-05..S1-13 için
+   değişmez). Öğrenci kodu ve veli daveti iptal ekranları ile öğrenci kabulünde ulusal kimlikle eşleşen hesabın
+   korunması dal `fix/kabul-ulusal-kimlik-hesabi`'nda (2026-10-15, LOCAL_TEST). Deneme lisansı 2026-10-17 00:00 UTC'de biter; S1-05..S1-13 için
    ürün sahibi S1-14 gözlemi sonrası yeni lisans dönemi açar. Kontrol noktası 2026-11-14.
 2. S2: PR #153 lisans sonu veri imhası main'de (`2b0ef97`, staging deploy PASS); imha, sıfırlama motorunun yazma sessizliği kapısı açılana kadar çalışmaz.
 3. S4: §3.4 doğrulama planı (dosya talebi, görüşmeler, pilot taahhüdü); ürün sahibi işi.
