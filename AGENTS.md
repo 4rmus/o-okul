@@ -63,7 +63,7 @@
 ## Validation By Scope
 
 - Agents/skills/settings: `pnpm agents:check`.
-- API: `pnpm --filter @o-okul/api typecheck`, `pnpm --filter @o-okul/api test`, `pnpm openapi:generate`, `pnpm openapi:output-contract`, `pnpm idempotency:inventory:check`.
+- API: `pnpm --filter @o-okul/api typecheck`, `pnpm --filter @o-okul/api test`, `pnpm openapi:generate`, `pnpm openapi:output-contract`, `pnpm idempotency:inventory:check`, `pnpm api:roles-inventory:check`.
 - Web/UI: `pnpm --filter @o-okul/web typecheck`, `pnpm web:a11y:check`, `pnpm web:design-tokens:check`, `pnpm web:architecture:check`, `pnpm route-manifest:check`, `pnpm web:ux-baseline:check`, `pnpm web:measurement-baseline:check`; `pnpm web:ux-rc:check` for UI-affecting release candidates.
 - Worker/report: `pnpm --filter @o-okul/worker test`, `pnpm raw-import:smoke`, `pnpm report-generation:smoke`, `pnpm karne:visual-contract:check`, `pnpm isem-optical-pipeline:evidence-check`.
 - DB/RLS: `pnpm --filter @o-okul/db test`, `pnpm db:rls:check`, `pnpm db:account-management:check`, `pnpm audit-log-partition:check`, `pnpm audit-log-freshness:check`, `pnpm tenant-db:check`.

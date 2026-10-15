@@ -280,13 +280,24 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
    sordu, karar açık. `*.o-okul.com` ve `staging.o-okul.com` pilot edge kararına kadar DNS only kalır
    (2026-10-15 kararı); bu yüzden Tunnel yalnız `o-okul.com`'u etkiler.
 
-Önceki plandan devralınan kalemler (`docs/account-management-architecture-plan.md` bölüm 6; 2026-10-10'da
-durumları yeniden doğrulanmadı, S1 bulgularıyla birlikte ele alınır):
+Önceki plandan devralınan kalemler (`docs/account-management-architecture-plan.md` bölüm 6). Durumlar
+2026-10-15'te main `c619b8f7e` üzerinde kod okumayla yeniden doğrulandı (LOCAL_STATIC):
 
-- Mevcut öğrenci tutarlılığı/tekrar güvenliği dilimini main ve staging exact-SHA kanıtına bağlama.
-- P0: kalan `@Roles` envanterini exact capability + persona + scope modeline kesme; ayrı platform auth
-  realm ve süreli/MFA'lı breakglass akışı.
-- P1: offboarding/import/cursor ve outbox grant revoke dilimleri.
+- Öğrenci tutarlılığı/tekrar güvenliği dilimi (`8b9cf6be8`, #99; sınıf temizlemede açık kayıt da sınıfsız,
+  toplu yenilemede öğrenci başına anahtar) KAPANDI: main'de ve sonraki exact-SHA kanıtlarında var (CI
+  `38767657174` + STAGING_DEPLOY `38770379316`, `c619b8f7e`). Staging'de davranış ölçümü UNPROVEN.
+- P0 `@Roles` kesimi KISMİ: 22 controller'da 154 `@Roles` (plan 146 diyordu), 208 `@RequireCapability`.
+  `@Roles` `roleRank` ile çalıştığı için `@Roles("TEACHER")` route'larından yönetici rolleri de geçer.
+  Artış 2026-10-15'ten beri `pnpm api:roles-inventory:check` ile CI'da engellenir; sıradaki dilim tek bir
+  route ailesini (ör. `teacher-note`) capability + persona + scope modeline taşımak.
+- P0 ayrı platform auth realm KISMİ: `PlatformAccount`/`PlatformSession` şeması ve backfill var, runtime
+  kullanımı yok; sistem yöneticisi hâlâ `system` tenant oturumuyla girer.
+- P0 süreli/MFA'lı breakglass AÇIK: `RlsBypassGuard` rol, kapsam, gerekçe ve audit ister ama süre ve MFA
+  step-up istemez; `@AllowBreakGlassRlsBypass()` hiçbir route'ta yok.
+- P1 offboarding KISMİ (lisans sonu imhası #153 var, `POST /tenants/:id/offboarding` yok, imha yazma
+  sessizliği kapısını bekler); cursor KISMİ (`/employees`, `/students/portal-access` var; `/students`,
+  `/tenant-users`, `/identity-invitations` yok); staging tablolu toplu import AÇIK; outbox grant revoke AÇIK
+  (gerçek sağlayıcı teslim kanıtını bekler).
 
 ### Dilim kapanış kaydı
 
