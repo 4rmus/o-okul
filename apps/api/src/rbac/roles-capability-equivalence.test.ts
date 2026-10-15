@@ -14,6 +14,18 @@ const removedPairs: Array<{ route: string; roles: Role[]; capability: Capability
   { route: "GET /search", roles: ["TEACHER"], capability: "search:read" },
 ];
 
+// Routes whose @Roles(...) was replaced by a single @RequireCapability(...): the capability must admit exactly the role
+// combinations the legacy rank check admitted.
+const replacedRoles: Array<{ route: string; roles: Role[]; capability: Capability }> = [
+  { route: "GET /academic-years[/:id]", roles: ["TEACHER"], capability: "academic:read" },
+  { route: "GET /alanlar, /campuses, /classes, /grade-levels [/:id]", roles: ["TEACHER"], capability: "class:read" },
+  {
+    route: "GET /courses, /learning-outcomes, /academic-terms [/:id], /grade-levels/:id/courses",
+    roles: ["TEACHER", "STUDENT", "GUARDIAN"],
+    capability: "academic:read-catalog",
+  },
+];
+
 const roleSets: string[][] = [
   ...tenantRoles.map((role) => [role]),
   ...tenantRoles.flatMap((left, index) => tenantRoles.slice(index + 1).map((right) => [left, right])),
@@ -23,6 +35,13 @@ describe("@Roles + @RequireCapability eşdeğerliği", () => {
   it.each(removedPairs)("$route: capability tek başına eski ikiliyle aynı rolleri kabul eder", ({ roles, capability }) => {
     for (const userRoles of roleSets) {
       const legacy = roles.some((role) => hasRole(userRoles, role)) && hasCapability({ roles: userRoles }, capability);
+      expect({ userRoles, admitted: hasCapability({ roles: userRoles }, capability) }).toEqual({ userRoles, admitted: legacy });
+    }
+  });
+
+  it.each(replacedRoles)("$route: capability eski @Roles kontrolüyle aynı rolleri kabul eder", ({ roles, capability }) => {
+    for (const userRoles of roleSets) {
+      const legacy = roles.some((role) => hasRole(userRoles, role));
       expect({ userRoles, admitted: hasCapability({ roles: userRoles }, capability) }).toEqual({ userRoles, admitted: legacy });
     }
   });
