@@ -166,9 +166,6 @@ const knownNonIdempotentMutations = {
     "@Post(\":operationId/cancel\")": "D: Durum korumalı tek seferlik geçiş",
     "@Post(\"tenants/:tenantId/:operationId/approve\")": "D: Kilit + durum makinesi + step-up; tekrar mevcut durumu döndürür",
   },
-  "apps/api/src/privacy/privacy.controller.ts": {
-    "@Post(\"me/purge-pii\")": "C: Sabit değerle üzerine yazar; tekrar yalnız bir audit satırı ekler",
-  },
   "apps/api/src/program/schedule.controller.ts": {
     "@Patch(\":id\")": "C: Değere set eder",
     "@Delete(\":id\")": "C: Soft delete",

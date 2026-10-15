@@ -4,6 +4,7 @@ import type {
   TeacherAssignmentRole,
   TeacherRecord as SharedTeacherRecord,
 } from "@o-okul/shared-types";
+import { AccountPiiPurgeService } from "../account-pii/account-pii-purge.service.js";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import { optionalTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
@@ -66,6 +67,7 @@ export class TeacherService {
     @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() private readonly identityProvisioning?: IdentityProvisioningService,
     @Optional() private readonly idempotency?: IdempotencyService,
+    @Optional() private readonly accountPii?: AccountPiiPurgeService,
   ) {}
 
   async listTeachers(context: RequestContext): Promise<TeacherRecord[]> {
@@ -215,6 +217,8 @@ export class TeacherService {
     if (!record) {
       throw new NotFoundException("TEACHER_NOT_FOUND");
     }
+    // DEC-20261016-01: the bound login account is purged with the record unless it carries another identity.
+    const linkedAccount = await this.accountPii?.purgeLinkedAccount(context, existing.userId, "TEACHER") ?? "NONE";
     await this.auditLogs?.record({
       tenantId: record.tenantId,
       actorUserId: context.userId,
@@ -229,6 +233,7 @@ export class TeacherService {
           nationalIdPresent: Boolean(existing.nationalIdEncrypted || existing.nationalIdHash),
           phonePresent: Boolean(existing.phone),
         },
+        linkedAccount,
       },
     });
     return record;

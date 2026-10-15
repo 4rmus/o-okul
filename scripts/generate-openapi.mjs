@@ -706,33 +706,6 @@ const kvkkInventoryForbiddenDeep = [
   "tokenHash",
   "userId",
 ];
-const selfPurgeResultRequired = ["userId", "purgedAt"];
-const selfPurgeForbiddenDeep = [
-  "accessToken",
-  "birthDate",
-  "contentBase64",
-  "downloadUrl",
-  "email",
-  "fileBase64",
-  "firstName",
-  "lastName",
-  "name",
-  "nationalId",
-  "nationalIdEncrypted",
-  "nationalIdHash",
-  "objectKey",
-  "password",
-  "passwordHash",
-  "phone",
-  "photoKey",
-  "rawRow",
-  "refreshToken",
-  "refreshTokenHash",
-  "s3Key",
-  "storageKey",
-  "token",
-  "tokenHash",
-];
 const meProfileForbiddenDeep = [
   "birthDate",
   "contentBase64",
@@ -1627,16 +1600,6 @@ const requiredOperationContracts = [
     responseDataForbiddenDeep: kvkkInventoryForbiddenDeep,
     fieldChecks: [
       { path: ["responseDataItem", "kind"], enum: kvkkInventoryKinds },
-    ],
-  },
-  {
-    method: "post",
-    path: "/api/v1/privacy/me/purge-pii",
-    responseEnvelope: true,
-    responseDataRequired: selfPurgeResultRequired,
-    responseDataForbiddenDeep: selfPurgeForbiddenDeep,
-    fieldChecks: [
-      { path: ["responseData", "purgedAt"], format: "date-time" },
     ],
   },
   ...portalSupportTicketStudentPaths.map((path) => ({

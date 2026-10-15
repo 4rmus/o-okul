@@ -1,20 +1,15 @@
-import { Controller, Get, HttpCode, Inject, Post, UseGuards } from "@nestjs/common";
+import { Controller, Get, Inject } from "@nestjs/common";
 import type { GuardianRecord, KvkkInventoryKind, KvkkInventoryRecord } from "@o-okul/shared-types";
 import { authUserStoreToken, type AuthUser, type AuthUserStore } from "../auth/auth-user-store.js";
-import { AuthService, type SelfPurgeResult } from "../auth/auth.service.js";
 import { getRequestContext } from "../context/request-context.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
-import { Roles } from "../rbac/roles.decorator.js";
-import { RolesGuard } from "../rbac/roles.guard.js";
 import { GuardianService } from "../guardian/guardian.service.js";
 import { StudentService, type StudentPiiPresenceRecord } from "../student/student.service.js";
 import { TeacherService, type TeacherRecord } from "../teacher/teacher.service.js";
 
 @Controller("privacy")
-@UseGuards(RolesGuard)
 export class PrivacyController {
   constructor(
-    private readonly auth: AuthService,
     private readonly guardians: GuardianService,
     private readonly students: StudentService,
     private readonly teachers: TeacherService,
@@ -38,13 +33,6 @@ export class PrivacyController {
       ...guardians.map((record, index) => guardianInventoryRecord(record, index)),
       ...users.map((record, index) => userInventoryRecord(record, index)),
     ];
-  }
-
-  @Post("me/purge-pii")
-  @HttpCode(200)
-  @Roles("GUARDIAN")
-  purgeMyPii(): Promise<SelfPurgeResult> {
-    return this.auth.purgeCurrentUserPii(getRequestContext());
   }
 }
 

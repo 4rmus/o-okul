@@ -475,12 +475,6 @@ export interface KvkkInventoryRecord {
   purgeAvailable: boolean;
 }
 
-export interface SelfPurgeResult {
-  userId: string;
-  tenantId?: string;
-  purgedAt: string;
-}
-
 export interface NotificationDeviceTokenRecord {
   id: string;
   tenantId: string;

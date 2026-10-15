@@ -609,12 +609,6 @@ const kvkkInventoryRecordSchema = objectSchema({
   purgeAvailable: { type: "boolean" },
 }, ["id", "kind", "displayRef", "piiCategories", "purgeAvailable"]);
 
-const selfPurgeResultSchema = objectSchema({
-  userId: stringSchema(),
-  tenantId: stringSchema(),
-  purgedAt: stringSchema({ format: "date-time" }),
-}, ["userId", "purgedAt"]);
-
 const answerChoiceSchema = {
   type: "string",
   enum: ["A", "B", "C", "D", "E"],
@@ -3598,9 +3592,6 @@ const operationContracts: Record<string, OperationContract> = {
   "get /api/v1/privacy/inventory": {
     responseBody: arraySchema(kvkkInventoryRecordSchema),
     listResponse: true,
-  },
-  "post /api/v1/privacy/me/purge-pii": {
-    responseBody: selfPurgeResultSchema,
   },
   "get /api/v1/development/criteria": {
     responseBody: arraySchema(developmentCriterionRecordSchema),
