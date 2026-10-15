@@ -1127,8 +1127,12 @@ artifacts/local/remote-staging-snapshot --remote-gap-report-file artifacts/local
 --max-age-minutes 30` kullanılır.
 
 Workflow aynı branch için tek staging deploy'u sıraya alır, job timeout'ları tanımlıdır ve Docker
-imaj build'leri buildx `type=gha` cache kullanır. Bu yüzden tekrar deploy'da bağımlılık ve layer
-cache'i korunur; evidence job'u yine ayrı artifact üretmeye devam eder.
+imaj build'leri GHCR'daki buildx registry cache'ini kullanır (`ghcr.io/4rmus/o-okul/buildcache:<hedef>`,
+`mode=max`, `ignore-error=true`; IMG-2d, 2026-10-15). Önceki `type=gha` cache hiç yazılmıyordu: inline
+`docker buildx` adımı `ACTIONS_RUNTIME_TOKEN`/`ACTIONS_RESULTS_URL` değişkenlerini kendisi açmalıdır.
+Bağımlılıklar değişmedikçe `pnpm install`, `node_modules` ve Chromium katmanları aynı özetle kalır ve
+sunucuya yeniden inmez. Cache export hatası release build'ini düşürmez; evidence job'u yine ayrı
+artifact üretmeye devam eder.
 
 Otomatik `workflow_run` preflight'ı deploy SHA'sını uzak `main` ile karşılaştırır. Kuyrukta kendi CI'ı
 başarılı daha yeni bir `main` SHA'sı varsa eski run; GitHub'ın ilişkilendirdiği PR base aralığında yalnız
