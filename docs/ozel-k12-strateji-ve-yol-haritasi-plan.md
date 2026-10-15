@@ -263,7 +263,7 @@ Efor UNPROVEN.
 Rol × modül tablosunun tamamı: bkz. docs/ozel-k12-strateji-ekleri.md §F4.1.
 
 - Yeni tenant rolü eklenmez. Rehber ayrı rol değildir; `TeacherAssignment.role=GUIDANCE_COUNSELOR` (`apps/api/src/school/school-validation.ts:46`).
-- Yeni uçlarda `@RequireCapability` kullanılır. Tüketilmeyen `note:write-assigned`, `homework:write-assigned`, `self:read` silinir (`role-capabilities.ts:69-70`). `homework:write-assigned` teslim uçlarına bağlanırsa kalır. `ward:read` silinmez, veli kapsamı uçlarına bağlanır (KV-4).
+- Yeni uçlarda `@RequireCapability` kullanılır. Tüketilmeyen `homework:write-assigned`, `self:read` silinir (`role-capabilities.ts:69-70`); `note:write-assigned` 2026-10-15'te öğretmen notu uçlarına bağlandı (`note:read-assigned` ile), silinmez. `homework:write-assigned` teslim uçlarına bağlanırsa kalır. `ward:read` silinmez, veli kapsamı uçlarına bağlanır (KV-4).
 
 Alan modelinde eklenenler:
 
