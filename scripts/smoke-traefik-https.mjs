@@ -5,7 +5,8 @@ const smokeUrl = process.env.TRAEFIK_HTTPS_SMOKE_URL ?? defaultSmokeUrl();
 const expectedStatus = Number(process.env.TRAEFIK_HTTPS_SMOKE_EXPECTED_STATUS ?? "200");
 const timeoutMs = Number(process.env.TRAEFIK_HTTPS_SMOKE_TIMEOUT_MS ?? "10000");
 // IMG-2c: a just-restarted release behind Cloudflare can miss one 10s window; a bounded retry keeps the gate
-// meaningful (HSTS/body checks never retry) and the attempt count is written to the evidence.
+// meaningful (HSTS/body checks never retry). The smoke evidence schema is a fixed 11-field set
+// (scripts/smoke-evidence.mjs), so the attempt count goes to the log, not the evidence file.
 const maxAttempts = Number(process.env.TRAEFIK_HTTPS_SMOKE_ATTEMPTS ?? "3");
 const retryDelayMs = Number(process.env.TRAEFIK_HTTPS_SMOKE_RETRY_DELAY_MS ?? "10000");
 const allowLocal = process.env.TRAEFIK_HTTPS_SMOKE_ALLOW_LOCAL === "true";
@@ -96,7 +97,6 @@ await writeSmokeEvidence(evidenceFile, {
   expectedStatus,
   statusCode: response.statusCode,
   strictTransportSecurity: response.headers["strict-transport-security"],
-  attempts,
   commandsPassed: ["pnpm traefik:https:smoke"],
   gaps: [],
 });

@@ -1031,8 +1031,9 @@ Gerekli GitHub `staging` environment secret/var değerleri:
   production summary ve go-live kanıtı için gerçek domain/public TLS kullanılmalıdır.
 - `pnpm traefik:https:smoke` ağ hatası, zaman aşımı veya beklenmeyen HTTP durumunda
   `TRAEFIK_HTTPS_SMOKE_ATTEMPTS` (varsayılan 3, en çok 5) kez, `TRAEFIK_HTTPS_SMOKE_RETRY_DELAY_MS` (varsayılan
-  10000) arayla dener; HSTS ve `/health` gövde kontrolleri yeniden denenmez. Kullanılan deneme sayısı kanıtta
-  `attempts` alanına yazılır (IMG-2c; Cloudflare–origin yolunda 1,5–3,5 sn ek gecikme ölçüldü, 2026-10-15).
+  10000) arayla dener; HSTS ve `/health` gövde kontrolleri yeniden denenmez. Kullanılan deneme sayısı yalnız
+  komut çıktısına yazılır; kanıt şeması (`scripts/smoke-evidence.mjs`, 11 alan) değişmez (IMG-2c;
+  Cloudflare–origin yolunda 1,5–3,5 sn ek gecikme ölçüldü, 2026-10-15).
 - Domain/IP edge geçişi sırasında `docker-compose.traefik.yml` ve `docker-compose.traefik-ip.yml`
   birlikte config edilebilir; router'lar explicit `service=` label taşıdığı için Traefik service
   ambiguity üretmemelidir. Bu config doğrulaması first-gates yerine geçmez.
