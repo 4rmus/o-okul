@@ -13,11 +13,10 @@ import { join } from "node:path";
 // 2026-10-16: announcement, message-template, attendance, study-session, development, guardians and teachers moved
 //   to capabilities (127 -> 108, 5 files).
 // 2026-10-16: POST /privacy/me/purge-pii removed (DEC-20261016-01) (108 -> 107, 4 files).
+// 2026-10-16: homework and support-ticket moved to homework:* / support:* capabilities (107 -> 86, 2 files).
 const baseline = {
   "apps/api/src/auth/auth.controller.ts": 7,
-  "apps/api/src/homework/homework.controller.ts": 13,
   "apps/api/src/me/me.controller.ts": 79,
-  "apps/api/src/support-ticket/support-ticket.controller.ts": 8,
 };
 
 export function countRoles(root = "apps/api/src") {
