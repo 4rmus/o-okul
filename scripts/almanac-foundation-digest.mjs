@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import ts from "typescript";
 
 export const almanacFoundationSourceRoots = [
   "apps/web/app",
@@ -49,10 +50,28 @@ export function almanacFoundationSourceDigest() {
   for (const file of almanacFoundationSourceFiles) {
     hash.update(relative(".", file));
     hash.update("\0");
-    hash.update(readFileSync(file));
+    hash.update(almanacFoundationDigestInput(file, readFileSync(file)));
     hash.update("\0");
   }
   return hash.digest("hex");
+}
+
+// Only the parts of an input that can reach the measured web bundle are hashed. Shared-types sources are
+// type-erased first, so a type-only API contract edit keeps the baseline; any runtime export change still breaks it.
+// Root package.json scripts do not run inside the measured build, except the collect command that drives the run;
+// dependency, engine and pnpm fields still count.
+export function almanacFoundationDigestInput(file, content) {
+  if (file === "package.json") {
+    const { scripts = {}, ...rest } = JSON.parse(content.toString("utf8"));
+    return JSON.stringify({ ...rest, measurementCollectScript: scripts["web:measurement-baseline:collect"] ?? null });
+  }
+  if (file.startsWith("packages/shared-types/src/") && /\.tsx?$/.test(file) && !file.endsWith(".d.ts")) {
+    return ts.transpileModule(content.toString("utf8"), {
+      fileName: file,
+      compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ESNext, isolatedModules: true, removeComments: true },
+    }).outputText;
+  }
+  return content;
 }
 
 // The measured code is identified by sourceTreeSha256. baseCommitSha only has to stay reachable in CI,
