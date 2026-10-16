@@ -144,9 +144,11 @@ forbidRegex(
 forbidRegex("tokens.css", files.tokens, /oklch\((?:0|100)%\s+0(?:\s|%)/gi, "saf siyah/beyaz uç değer");
 
 requireTokens("apps/web/app/layout.tsx", files.layout, [
-  'import { IBM_Plex_Sans } from "next/font/google";',
+  'import localFont from "next/font/local";',
   'variable: "--font-ibm-plex-sans"',
-  'subsets: ["latin", "latin-ext"]',
+  '"./fonts/IBMPlexSans-Regular.woff2"',
+  '"./fonts/IBMPlexSans-Medium.woff2"',
+  '"./fonts/IBMPlexSans-SemiBold.woff2"',
   "bodyFont.variable",
   'data-theme="light"',
   "suppressHydrationWarning",
@@ -156,6 +158,7 @@ requireTokens("apps/web/app/layout.tsx", files.layout, [
   "<script dangerouslySetInnerHTML={{ __html: themeScript }} />",
 ]);
 forbidRegex("apps/web/app/layout.tsx", files.layout, /Source_Serif_4|font-source-serif/g, "serif display fontu");
+forbidRegex("apps/web/app/layout.tsx", files.layout, /next\/font\/google/g, "build zamanı Google Fonts bağımlılığı");
 validateBerrakDarkTheme(files.tokens, files.darkTheme);
 validateKarnePins(files.tokens, read("apps/web/app/_styles/73-almanac-report.css"));
 
