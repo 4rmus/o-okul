@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Patch, Post, Query } from "@nestjs/common";
 import type {
   SupportTicketAttachmentDownloadResult,
   SupportTicketAttachmentRecord,
@@ -9,8 +9,6 @@ import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
-import { Roles } from "../rbac/roles.decorator.js";
-import { RolesGuard } from "../rbac/roles.guard.js";
 import {
   SupportTicketService,
   type SupportTicketListFilters,
@@ -29,24 +27,23 @@ import {
 interface SupportTicketListQuery extends ListQuery, SupportTicketListFilters {}
 
 @Controller("support-tickets")
-@UseGuards(RolesGuard)
 export class SupportTicketController {
   constructor(private readonly tickets: SupportTicketService) {}
 
   @Get()
-  @Roles("TEACHER")
+  @RequireCapability("support:read-own")
   async list(@Query() query: SupportTicketListQuery): Promise<SupportTicketRecord[]> {
     return applyListQuery(await this.tickets.list(getRequestContext(), query), query, supportTicketListFields);
   }
 
   @Get(":id")
-  @Roles("TEACHER")
+  @RequireCapability("support:read-own")
   findOne(@Param("id") id: string): Promise<SupportTicketRecord> {
     return this.tickets.findOne(getRequestContext(), id);
   }
 
   @Post()
-  @Roles("TEACHER")
+  @RequireCapability("support:write-own")
   create(
     @Body(zodBody(supportTicketCreateBodySchema)) body: SupportTicketCreateBody,
     @Headers("idempotency-key") idempotencyKey?: string,
@@ -64,13 +61,13 @@ export class SupportTicketController {
   }
 
   @Get(":id/attachments")
-  @Roles("TEACHER")
+  @RequireCapability("support:read-own")
   listAttachments(@Param("id") id: string): Promise<SupportTicketAttachmentRecord[]> {
     return this.tickets.listAttachments(getRequestContext(), id);
   }
 
   @Get(":id/attachments/:attachmentId/download")
-  @Roles("TEACHER")
+  @RequireCapability("support:read-own")
   downloadAttachment(
     @Param("id") id: string,
     @Param("attachmentId") attachmentId: string,
@@ -79,7 +76,7 @@ export class SupportTicketController {
   }
 
   @Post(":id/attachments")
-  @Roles("TEACHER")
+  @RequireCapability("support:write-own")
   addAttachment(
     @Param("id") id: string,
     @Body(zodBody(supportTicketAttachmentCreateBodySchema)) body: SupportTicketAttachmentCreateBody,
@@ -89,13 +86,13 @@ export class SupportTicketController {
   }
 
   @Get(":id/comments")
-  @Roles("TEACHER")
+  @RequireCapability("support:read-own")
   listComments(@Param("id") id: string): Promise<SupportTicketCommentRecord[]> {
     return this.tickets.listComments(getRequestContext(), id);
   }
 
   @Post(":id/comments")
-  @Roles("TEACHER")
+  @RequireCapability("support:write-own")
   addComment(
     @Param("id") id: string,
     @Body(zodBody(supportTicketCommentCreateBodySchema)) body: SupportTicketCommentCreateBody,

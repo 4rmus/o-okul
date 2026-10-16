@@ -22,7 +22,7 @@ export const tenantRoleLabels: Record<TenantRoleName, string> = {
 export const roleCapabilities: Record<TenantRoleName, readonly RoleCapability[]> = {
   SYSTEM_ADMIN: ["system:*", "tenant:manage", "tenant:lifecycle", "tenant:clean-reset", "audit:*"],
   TENANT_OWNER: [
-    "academic:*", "announcement:*", "attendance:*", "audit:*", "class:*", "finance:*", "note:*",
+    "academic:*", "announcement:*", "attendance:*", "audit:*", "class:*", "finance:*", "homework:*", "note:*",
     "observability:*", "operation:*", "privacy:*", "role-preview:*", "security:*", "search:*", "setup:*",
     "staff:*", "student:*", "support:*", "tenant-audit:read", "user:*", "owner:*",
   ],
@@ -33,6 +33,7 @@ export const roleCapabilities: Record<TenantRoleName, readonly RoleCapability[]>
     "audit:*",
     "class:*",
     "finance:*",
+    "homework:*",
     "note:*",
     "observability:*",
     "operation:*",
@@ -52,6 +53,7 @@ export const roleCapabilities: Record<TenantRoleName, readonly RoleCapability[]>
     "announcement:*",
     "attendance:*",
     "class:*",
+    "homework:*",
     "note:*",
     "search:*",
     "setup:manage",
@@ -60,14 +62,15 @@ export const roleCapabilities: Record<TenantRoleName, readonly RoleCapability[]>
     "support:*",
   ],
   OPERATIONS_STAFF: [
-    "academic:*", "announcement:*", "attendance:*", "class:*", "note:*", "search:*", "setup:manage",
+    "academic:*", "announcement:*", "attendance:*", "class:*", "homework:*", "note:*", "search:*", "setup:manage",
     "staff:*", "student:*", "support:*",
   ],
   FINANCE_STAFF: ["finance:*"],
   TEACHER: [
     "academic:read", "academic:read-catalog", "academic:write-assigned", "announcement:read", "attendance:read-assigned",
-    "attendance:write-assigned", "class:read", "homework:write-assigned", "note:read-assigned", "note:write-assigned", "search:read",
-    "staff:read-teachers", "student:list", "student:read", "student:read-guardians",
+    "attendance:write-assigned", "class:read", "homework:read-assigned", "homework:write-assigned", "note:read-assigned",
+    "note:write-assigned", "search:read", "staff:read-teachers", "student:list", "student:read", "student:read-guardians",
+    "support:read-own", "support:write-own",
   ],
   STUDENT: ["academic:read-catalog", "self:read", "student:read"],
   GUARDIAN: ["academic:read-catalog", "student:read", "ward:read"],

@@ -30,6 +30,10 @@ const replacedRoles: Array<{ route: string; roles: Role[]; capability: Capabilit
   { route: "POST /development/assessments", roles: ["TEACHER"], capability: "academic:write-assigned" },
   { route: "GET /guardians[/:id], /guardians/:id/students", roles: ["TEACHER"], capability: "student:read-guardians" },
   { route: "GET /teachers[/:id], /teachers/:id/assignments", roles: ["TEACHER"], capability: "staff:read-teachers" },
+  { route: "GET /homework reads (list, materials, files, assignments, submissions)", roles: ["TEACHER"], capability: "homework:read-assigned" },
+  { route: "POST /homework, materials/:id/assignments, :id/submissions/check; PATCH :id/check-status", roles: ["TEACHER"], capability: "homework:write-assigned" },
+  { route: "GET /support-tickets reads (list, detail, attachments, comments)", roles: ["TEACHER"], capability: "support:read-own" },
+  { route: "POST /support-tickets, :id/attachments, :id/comments", roles: ["TEACHER"], capability: "support:write-own" },
 ];
 
 const roleSets: string[][] = [
