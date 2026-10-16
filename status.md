@@ -282,8 +282,8 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
 7. Gate B baseline yenileme yükü (CI, 2026-10-16): 2026-10-14..16 arasındaki 11 yenilemenin 2'si yalnızca tip
    (#198) veya kök script (#193) değişikliğindendi. Digest artık shared-types'ı tipleri silinmiş JS olarak, kök
    `package.json`'ı collect dışındaki script'ler olmadan hash'liyor (LOCAL_TEST: `web:measurement-baseline:check`
-   fixture'ları). `roleCapabilities` gibi runtime değişiklikleri web paketine girdiği için yenileme ister; bunlar
-   için katmanlı bağ (UI sert, shared-types runtime yumuşak uyarı) ayrı karar olarak açık.
+   fixture'ları). Katmanlı bağ (DEC-20261016-02): web kaynağı sert, shared-types runtime yumuşak; ikincisi
+   kayarsa CI düşmez, `BASELINE_STALE_SHARED_CONTRACT` uyarısı verir (LOCAL_TEST: drift fixture'ları).
 
 Önceki plandan devralınan kalemler (`docs/account-management-architecture-plan.md` bölüm 6). Durumlar
 2026-10-15'te main `c619b8f7e` üzerinde kod okumayla yeniden doğrulandı (LOCAL_STATIC):

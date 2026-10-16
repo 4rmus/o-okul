@@ -5,13 +5,16 @@ import {
   almanacFoundationSourceFiles,
   almanacFoundationSourceRoots,
   assertAlmanacFoundationSourceContract,
+  almanacFoundationCompositeDigest,
   almanacFoundationDigestInput,
-  almanacFoundationSourceDigest,
+  almanacFoundationSourceDigests,
+  classifyAlmanacBaselineDrift,
 } from "./almanac-foundation-digest.mjs";
 
 const path = "docs/measurement-baselines/gate-b-local-synthetic.json";
 const artifact = JSON.parse(readFileSync(path, "utf8"));
 const failures = [];
+const warnings = [];
 const expectedTasks = ["optical_workbench_ready", "report_workspace_ready", "student_portal_ready"];
 const metrics = ["durationMs", "fcpMs", "lcpMs", "cls", "ttfbMs"];
 
@@ -55,6 +58,17 @@ for (const [label, file, before, after, expectSame] of digestInputFixtures) {
   }
 }
 
+const driftBase = { ui: "a".repeat(64), sharedRuntime: "b".repeat(64) };
+for (const [label, current, expected] of [
+  ["both tiers match", driftBase, "fresh"],
+  ["only sharedRuntime drifted", { ...driftBase, sharedRuntime: "c".repeat(64) }, "stale-shared"],
+  ["only ui drifted", { ...driftBase, ui: "c".repeat(64) }, "stale-ui"],
+  ["both tiers drifted", { ui: "c".repeat(64), sharedRuntime: "d".repeat(64) }, "stale-ui"],
+]) {
+  if (classifyAlmanacBaselineDrift(driftBase, current) !== expected) failures.push("drift sınıflandırma fixture'ı başarısız: " + label);
+}
+if (classifyAlmanacBaselineDrift(undefined, driftBase) !== "stale-ui") failures.push("drift sınıflandırma fixture'ı başarısız: kayıt yok");
+
 const playwrightConfigSource = readFileSync("apps/web/playwright.next.config.ts", "utf8");
 const runtimeConfigFailures = validateMeasurementRuntimeConfig(playwrightConfigSource);
 failures.push(...runtimeConfigFailures);
@@ -68,7 +82,7 @@ for (const invalidConfigSource of [
   }
 }
 
-if (artifact.schemaVersion !== 2) failures.push("schemaVersion 2 olmalı");
+if (artifact.schemaVersion !== 3) failures.push("schemaVersion 3 olmalı");
 if (artifact.result !== "BASELINE_RECORDED") failures.push("result BASELINE_RECORDED olmalı");
 if (artifact.evidenceLevel !== "LOCAL_SYNTHETIC") failures.push("evidenceLevel LOCAL_SYNTHETIC olmalı");
 if (artifact.externalStatus !== "EXTERNAL_NOT_RUN") failures.push("externalStatus EXTERNAL_NOT_RUN olmalı");
@@ -76,7 +90,18 @@ const commitPattern = /^[0-9a-f]{40}$/;
 const runIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 if (!isCommit(artifact.baseCommitSha)) failures.push("baseCommitSha geçerli ve erişilebilir git commit olmalı");
 if (typeof artifact.sourceWorktreeDirty !== "boolean") failures.push("sourceWorktreeDirty boolean olmalı");
-if (artifact.sourceTreeSha256 !== almanacFoundationSourceDigest()) failures.push("sourceTreeSha256 güncel kaynakla eşleşmiyor");
+const digestPattern = /^[0-9a-f]{64}$/;
+const recordedDigests = artifact.sourceDigests ?? {};
+if (!digestPattern.test(recordedDigests.ui ?? "") || !digestPattern.test(recordedDigests.sharedRuntime ?? "")) {
+  failures.push("sourceDigests.ui ve sourceDigests.sharedRuntime sha256 olmalı");
+} else if (artifact.sourceTreeSha256 !== almanacFoundationCompositeDigest(recordedDigests)) {
+  failures.push("sourceTreeSha256 sourceDigests bileşimiyle eşleşmiyor");
+}
+const drift = classifyAlmanacBaselineDrift(recordedDigests, almanacFoundationSourceDigests());
+if (drift === "stale-ui") failures.push("sourceDigests.ui güncel web kaynağıyla eşleşmiyor; baseline'ı temiz ağaçta yeniden toplayın");
+if (drift === "stale-shared") {
+  warnings.push("BASELINE_STALE_SHARED_CONTRACT: shared-types runtime kaynağı baseline'dan sonra değişti; bir sonraki web değişikliğinde baseline yenilenecek (DEC-20261016-02)");
+}
 if (Number.isNaN(Date.parse(artifact.generatedAt))) failures.push("generatedAt geçersiz");
 const measurementRun = artifact.measurementRun ?? {};
 if (!runIdPattern.test(measurementRun.runId ?? "")) failures.push("measurementRun.runId geçersiz");
@@ -148,6 +173,9 @@ if (JSON.stringify(artifact).match(/example|placeholder|staging|production/i)) {
   failures.push("baseline placeholder veya dış ortam iddiası içeriyor");
 }
 
+for (const warning of warnings) {
+  console.warn((process.env.GITHUB_ACTIONS === "true" ? "::warning title=Gate B baseline::" : "UYARI: ") + warning);
+}
 if (failures.length > 0) {
   console.error("Gate B measurement baseline kontrolü başarısız:");
   for (const failure of failures) console.error("- " + failure);

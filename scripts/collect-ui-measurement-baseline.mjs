@@ -1,7 +1,8 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import {
-  almanacFoundationSourceDigest,
+  almanacFoundationCompositeDigest,
+  almanacFoundationSourceDigests,
   almanacFoundationSourceDirty,
   almanacMeasurementBaseCommitSha,
 } from "./almanac-foundation-digest.mjs";
@@ -16,7 +17,8 @@ if (JSON.stringify(readdirSync(partsRoot).sort()) !== JSON.stringify(expectedPar
 const measurementRun = JSON.parse(readFileSync(partsRoot + "/.run.json", "utf8"));
 const tasks = taskIds.map((taskId) => JSON.parse(readFileSync(partsRoot + "/" + taskId + ".json", "utf8")));
 const currentBaseCommitSha = almanacMeasurementBaseCommitSha();
-const currentSourceTreeSha256 = almanacFoundationSourceDigest();
+const currentSourceDigests = almanacFoundationSourceDigests();
+const currentSourceTreeSha256 = almanacFoundationCompositeDigest(currentSourceDigests);
 const runIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 if (
@@ -47,7 +49,7 @@ for (const task of tasks) {
 
 const completedAt = new Date().toISOString();
 const artifact = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   result: "BASELINE_RECORDED",
   evidenceLevel: "LOCAL_SYNTHETIC",
   externalStatus: "EXTERNAL_NOT_RUN",
@@ -55,6 +57,7 @@ const artifact = {
   baseCommitSha: currentBaseCommitSha,
   sourceWorktreeDirty: almanacFoundationSourceDirty(),
   sourceTreeSha256: currentSourceTreeSha256,
+  sourceDigests: currentSourceDigests,
   measurementRun: {
     runId: measurementRun.runId,
     startedAt: measurementRun.startedAt,
