@@ -290,7 +290,7 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
    Next yükseltmesi çözmüyor. IBM Plex Sans (IBM/plex complete woff2, OFL) `apps/web/app/fonts` altından
    `next/font/local` ile sunuluyor; build Google'a gitmiyor (LOCAL_TEST: web build çıktısında gstatic referansı
    yok, darwin görsel QA 31/31). Linux snapshot'ları ve staging imajı PR CI'ı ile deploy'da doğrulanacak (UNPROVEN).
-   14 Ekim'deki iki `Deploy compose stack` zaman aşımı ayrı nedenli (imaj çekme) ve madde 6'daki IMG işiyle kapandı.
+   PR #202. 14 Ekim'deki iki `Deploy compose stack` zaman aşımı ayrı nedenli (imaj çekme) ve madde 6'daki IMG işiyle kapandı.
 
 Önceki plandan devralınan kalemler (`docs/account-management-architecture-plan.md` bölüm 6). Durumlar
 2026-10-15'te main `c619b8f7e` üzerinde kod okumayla yeniden doğrulandı (LOCAL_STATIC):
