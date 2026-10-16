@@ -284,6 +284,13 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
    `package.json`'ı collect dışındaki script'ler olmadan hash'liyor (LOCAL_TEST: `web:measurement-baseline:check`
    fixture'ları). Katmanlı bağ (DEC-20261016-02): web kaynağı sert, shared-types runtime yumuşak; ikincisi
    kayarsa CI düşmez, `BASELINE_STALE_SHARED_CONTRACT` uyarısı verir (LOCAL_TEST: drift fixture'ları).
+8. Web imajı build kırılganlığı (2026-10-16): Staging Deploy `38807296442` (#196, `d8fa9c214`) web imajında
+   `next/font/google queries have exactly one entry` ile düştü, aynı SHA'nın main CI'ı yeşildi. Kök neden
+   vercel/next.js#99114: Google Fonts bazen uzantısız `/l/font?kit=` URL'si döndürüyor; düzeltme PR'ı açık,
+   Next yükseltmesi çözmüyor. IBM Plex Sans (IBM/plex complete woff2, OFL) `apps/web/app/fonts` altından
+   `next/font/local` ile sunuluyor; build Google'a gitmiyor (LOCAL_TEST: web build çıktısında gstatic referansı
+   yok, darwin görsel QA 31/31). Linux snapshot'ları ve staging imajı PR CI'ı ile deploy'da doğrulanacak (UNPROVEN).
+   14 Ekim'deki iki `Deploy compose stack` zaman aşımı ayrı nedenli (imaj çekme) ve madde 6'daki IMG işiyle kapandı.
 
 Önceki plandan devralınan kalemler (`docs/account-management-architecture-plan.md` bölüm 6). Durumlar
 2026-10-15'te main `c619b8f7e` üzerinde kod okumayla yeniden doğrulandı (LOCAL_STATIC):
