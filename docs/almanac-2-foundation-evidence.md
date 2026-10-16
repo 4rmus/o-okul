@@ -29,7 +29,10 @@ performansı PASS iddiası değildir. Artifact base commit'i, kaynak worktree du
 harness/config/collector/checker kaynak digest'ini ve tek kullanımlık run kimliğini taşır. Digest,
 `packages/shared-types/src` dosyalarını tipleri silinmiş JS olarak, kök `package.json` dosyasını da
 `web:measurement-baseline:collect` dışındaki script'leri olmadan hash'ler; böylece yalnızca tip veya kök
-script değiştiren API PR'ları baseline yenilemesi gerektirmez, runtime export değişikliği ise hâlâ gerektirir. Toplayıcı
+script değiştiren API PR'ları baseline yenilemesi gerektirmez. Bağ iki katmanlıdır (DEC-20261016-02):
+`sourceDigests.ui` (web, ui paketi, araç zinciri ve ölçüm harness'i) sert bağdır ve kayması kontrolü düşürür;
+`sourceDigests.sharedRuntime` (tipleri silinmiş shared-types) yumuşak bağdır ve kayması kontrolü düşürmeden
+`BASELINE_STALE_SHARED_CONTRACT` uyarısı verir. `sourceTreeSha256` iki katmanın bileşimidir. Toplayıcı
 önce eski parçaları temizler ve farklı run parçalarını birleştirmez. Ölçüm modu dış base URL'leri
 yok sayar; `43119` portunda server reuse kapalı olarak koşulsuz dedicated Next build çalıştırır.
 Yeniden üretim komutu:

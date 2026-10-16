@@ -1231,6 +1231,24 @@ Bu bölümdeki kayıtlar ürün sahibi onayı bekler ve yol haritasını değiş
 yeni özellik dilimi yalnız UAT veya görüşme bulgusundan açılır; aşağıdaki öneriler bu yüzden pilot
 sonrasına konur ve pilot bulgusuyla doğrulanmadan dilime dönüşmez.
 
+### DEC-20261016-02 — Gate B ölçüm baseline'ı shared-types runtime değişikliğine yumuşak bağlanır
+
+Durum: Onaylı
+Karar: Gate B LOCAL_SYNTHETIC ölçüm baseline'ı iki digest taşır. `ui` (apps/web, packages/ui, web ve araç
+zinciri yapılandırması, lockfile, ölçüm script'leri) sert bağdır: kayarsa `web:measurement-baseline:check`
+düşer. `sharedRuntime` (tipleri silinmiş `packages/shared-types/src`) yumuşak bağdır: kayarsa kontrol geçer,
+`BASELINE_STALE_SHARED_CONTRACT` uyarısı verir ve baseline bir sonraki web değişikliğinde yenilenir.
+Gerekçe: 2026-10-14..16 arasındaki 11 elle baseline yenilemesinin 4'ü yalnız `roleCapabilities`
+haritasındaki API kaynaklı değişikliklerdendi (#194, #196, #197, #199); bunlar mocked API ile ölçülen üç
+görevin süresini anlamlı etkilemez, ama paralel PR'larda main'i bozuyordu.
+Kaynak: Ürün sahibi onayı (2026-10-16, "önerdiğin gibi devam et").
+Kanıt: `scripts/almanac-foundation-digest.mjs`, `scripts/check-ui-measurement-baseline.mjs` drift fixture'ları
+(LOCAL_TEST). Ölçüm sonuçlarına etkisizlik iddiası UNPROVEN; baseline yine LOCAL_SYNTHETIC'tir ve performans
+PASS iddiası taşımaz.
+Etkilenen ADR: Yok.
+Açık soru: Yok.
+Son kontrol: 2026-10-16
+
 ### DEC-20261013-01 — Pilot sonrası aday: deneme madde analizi
 
 Durum: Öneri; ürün sahibi onayı bekliyor

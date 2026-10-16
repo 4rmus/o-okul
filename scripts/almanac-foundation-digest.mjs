@@ -44,16 +44,38 @@ export const almanacFoundationSourceFiles = [
   ...almanacFoundationRequiredFiles,
 ].sort();
 
-export function almanacFoundationSourceDigest() {
+// The baseline binds to two tiers. The ui tier (web, ui package, toolchain and harness) is a hard binding: any drift
+// fails the check. The sharedRuntime tier (type-erased shared-types sources) is a soft binding: drift there is reported
+// as BASELINE_STALE_SHARED_CONTRACT and refreshed with the next ui change (DEC-20261016-02).
+export const almanacSharedRuntimeRoot = "packages/shared-types/src";
+
+export function almanacFoundationSourceDigests() {
   assertAlmanacFoundationSourceContract(almanacFoundationSourceFiles, almanacFoundationSourceRoots);
-  const hash = createHash("sha256");
+  const ui = createHash("sha256");
+  const sharedRuntime = createHash("sha256");
   for (const file of almanacFoundationSourceFiles) {
+    const hash = file.startsWith(almanacSharedRuntimeRoot + "/") ? sharedRuntime : ui;
     hash.update(relative(".", file));
     hash.update("\0");
     hash.update(almanacFoundationDigestInput(file, readFileSync(file)));
     hash.update("\0");
   }
-  return hash.digest("hex");
+  return { ui: ui.digest("hex"), sharedRuntime: sharedRuntime.digest("hex") };
+}
+
+export function almanacFoundationCompositeDigest({ ui, sharedRuntime }) {
+  return createHash("sha256").update("ui\0" + ui + "\0sharedRuntime\0" + sharedRuntime).digest("hex");
+}
+
+export function almanacFoundationSourceDigest() {
+  return almanacFoundationCompositeDigest(almanacFoundationSourceDigests());
+}
+
+// fresh: both tiers match. stale-shared: only the soft tier drifted. stale-ui: the hard tier drifted.
+export function classifyAlmanacBaselineDrift(recorded, current) {
+  if (recorded?.ui !== current.ui) return "stale-ui";
+  if (recorded?.sharedRuntime !== current.sharedRuntime) return "stale-shared";
+  return "fresh";
 }
 
 // Only the parts of an input that can reach the measured web bundle are hashed. Shared-types sources are
