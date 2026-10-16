@@ -289,7 +289,8 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
    vercel/next.js#99114: Google Fonts bazen uzantısız `/l/font?kit=` URL'si döndürüyor; düzeltme PR'ı açık,
    Next yükseltmesi çözmüyor. IBM Plex Sans (IBM/plex complete woff2, OFL) `apps/web/app/fonts` altından
    `next/font/local` ile sunuluyor; build Google'a gitmiyor (LOCAL_TEST: web build çıktısında gstatic referansı
-   yok, darwin görsel QA 31/31). Linux snapshot'ları ve staging imajı PR CI'ı ile deploy'da doğrulanacak (UNPROVEN).
+   yok, darwin görsel QA 31/31). Linux karne golden'ı CI çıktısından yenilendi (run `38886582357`: içerik aynı,
+   glifler daha dar, %4 fark); staging imajı deploy'da doğrulanacak (UNPROVEN).
    PR #202. 14 Ekim'deki iki `Deploy compose stack` zaman aşımı ayrı nedenli (imaj çekme) ve madde 6'daki IMG işiyle kapandı.
 
 Önceki plandan devralınan kalemler (`docs/account-management-architecture-plan.md` bölüm 6). Durumlar
