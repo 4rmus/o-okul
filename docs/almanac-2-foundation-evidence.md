@@ -26,7 +26,10 @@ pnpm web:measurement-baseline:check
 için sabit Chromium/viewport, mocked API, tek worker, sıfır retry ve görev başına beş ham örnek taşır.
 Artifact `LOCAL_SYNTHETIC` ve `BASELINE_RECORDED` olarak etiketlenir; süre eşiği veya gerçek kullanıcı
 performansı PASS iddiası değildir. Artifact base commit'i, kaynak worktree durumunu, ölçüm
-harness/config/collector/checker kaynak digest'ini ve tek kullanımlık run kimliğini taşır. Toplayıcı
+harness/config/collector/checker kaynak digest'ini ve tek kullanımlık run kimliğini taşır. Digest,
+`packages/shared-types/src` dosyalarını tipleri silinmiş JS olarak, kök `package.json` dosyasını da
+`web:measurement-baseline:collect` dışındaki script'leri olmadan hash'ler; böylece yalnızca tip veya kök
+script değiştiren API PR'ları baseline yenilemesi gerektirmez, runtime export değişikliği ise hâlâ gerektirir. Toplayıcı
 önce eski parçaları temizler ve farklı run parçalarını birleştirmez. Ölçüm modu dış base URL'leri
 yok sayar; `43119` portunda server reuse kapalı olarak koşulsuz dedicated Next build çalıştırır.
 Yeniden üretim komutu:

@@ -5,6 +5,7 @@ import {
   almanacFoundationSourceFiles,
   almanacFoundationSourceRoots,
   assertAlmanacFoundationSourceContract,
+  almanacFoundationDigestInput,
   almanacFoundationSourceDigest,
 } from "./almanac-foundation-digest.mjs";
 
@@ -34,6 +35,24 @@ for (const requiredRoot of almanacFoundationSourceRoots) {
     rejected = true;
   }
   if (!rejected) failures.push("required dirty source root çıkarımı reddedilmedi: " + requiredRoot);
+}
+
+const digestInputOf = (file, content) => String(almanacFoundationDigestInput(file, Buffer.from(content)));
+const sharedTypesFixture = 'export interface A { id: string }\nexport const roles = ["A"] as const;\n';
+const packageJsonFixture = { name: "root", packageManager: "pnpm@11.5.0", scripts: { lint: "a", "web:measurement-baseline:collect": "c" }, devDependencies: { typescript: "^5.9.3" } };
+const digestInputFixtures = [
+  ["shared-types type-only edit", "packages/shared-types/src/domain.ts", sharedTypesFixture, sharedTypesFixture.replace("id: string", "id: string; extra?: number") + "export type B = A;\n", true],
+  ["shared-types comment edit", "packages/shared-types/src/domain.ts", sharedTypesFixture, "// note\n" + sharedTypesFixture, true],
+  ["shared-types runtime edit", "packages/shared-types/src/domain.ts", sharedTypesFixture, sharedTypesFixture.replace('["A"]', '["A", "B"]'), false],
+  ["root package.json unrelated script", "package.json", JSON.stringify(packageJsonFixture), JSON.stringify({ ...packageJsonFixture, scripts: { ...packageJsonFixture.scripts, lint: "b", extra: "x" } }), true],
+  ["root package.json collect script", "package.json", JSON.stringify(packageJsonFixture), JSON.stringify({ ...packageJsonFixture, scripts: { ...packageJsonFixture.scripts, "web:measurement-baseline:collect": "d" } }), false],
+  ["root package.json devDependency", "package.json", JSON.stringify(packageJsonFixture), JSON.stringify({ ...packageJsonFixture, devDependencies: { typescript: "^6.0.0" } }), false],
+  ["web source type-only edit", "apps/web/src/a.ts", sharedTypesFixture, sharedTypesFixture.replace("id: string", "id: number"), false],
+];
+for (const [label, file, before, after, expectSame] of digestInputFixtures) {
+  if ((digestInputOf(file, before) === digestInputOf(file, after)) !== expectSame) {
+    failures.push("digest input fixture beklenmeyen sonuç verdi: " + label);
+  }
 }
 
 const playwrightConfigSource = readFileSync("apps/web/playwright.next.config.ts", "utf8");
