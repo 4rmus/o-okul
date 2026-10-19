@@ -1,5 +1,21 @@
-declare module "next/font/google" {
-  export {
-    IBM_Plex_Sans,
-  } from "next/dist/compiled/@next/font/dist/google/index.js";
+declare module "next/font/local" {
+  import type { CssVariable, Display, NextFont, NextFontWithVariable } from "next/dist/compiled/@next/font/dist/types.js";
+
+  // Mirrors next/dist/compiled/@next/font/dist/local/index.d.ts; re-exporting its CommonJS default is not
+  // callable under NodeNext resolution.
+  type LocalFont<T extends CssVariable | undefined = undefined> = {
+    src: string | Array<{ path: string; weight?: string; style?: string }>;
+    display?: Display;
+    weight?: string;
+    style?: string;
+    adjustFontFallback?: "Arial" | "Times New Roman" | false;
+    fallback?: string[];
+    preload?: boolean;
+    variable?: T;
+    declarations?: Array<{ prop: string; value: string }>;
+  };
+
+  export default function localFont<T extends CssVariable | undefined = undefined>(
+    options: LocalFont<T>,
+  ): T extends undefined ? NextFont : NextFontWithVariable;
 }
