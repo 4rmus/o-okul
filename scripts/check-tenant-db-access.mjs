@@ -28,6 +28,27 @@ const bypassRlsFunctionAllowlist = new Map([
   ["apps/api/src/identity-invitation/employee-account-activation-store.ts", new Set(["accept"])],
   ["apps/api/src/identity-invitation/student-portal-activation-store.ts", new Set(["accept"])],
 ]);
+// Every other way to switch RLS off — withTenantDb(..., { bypassRls: true }) and a raw
+// set_config('app.bypass_rls', ...) that is not the literal 'false' — is pinned per file and function the same way
+// (baseline 2026-10-20). A new bypass path fails CI until it is reviewed and added here.
+const rawBypassFunctionAllowlist = new Map([
+  // Audit writes without a tenant (system/control-plane events) run with bypass; tenant writes set it to false.
+  ["apps/api/src/audit-log/audit-log-store.ts", new Set(["applyAuditWriteSettings"])],
+  // Pre-auth stores: password reset tokens and refresh sessions are read before a tenant context exists.
+  ["apps/api/src/auth/password-reset-store.ts", new Set(["withClient"])],
+  ["apps/api/src/auth/session-store.ts", new Set(["withClient"])],
+  // Invitation acceptance and delivery bookkeeping run before the invitee has a tenant session.
+  ["apps/api/src/identity-invitation/identity-invitation-store.ts", new Set(["withBypassQuery"])],
+  // MFA step-up gated control-plane operations (device restore approval, clean reset, purge export).
+  ["apps/api/src/operations/device-restore.service.ts", new Set(["approve"])],
+  ["apps/api/src/tenant/tenant-fresh-reset.service.ts", new Set([
+    "management",
+    "diagnostics",
+    "deliveryReceipt",
+    "createPurgeExport",
+    "markPurgeExportDelivered",
+  ])],
+]);
 const tenantScopedTables = getTenantScopedTables();
 
 const failures = [];
@@ -43,6 +64,7 @@ for (const file of sourceRoots.flatMap(listTsFiles)) {
   }
   const functions = parseFunctionRanges(contents);
   requireAllowlistedBypassCalls(file, contents, functions, failures);
+  requireAllowlistedRawBypass(file, contents, functions, failures);
   if (!usesSql(contents)) {
     continue;
   }
@@ -78,6 +100,27 @@ function requireAllowlistedBypassCalls(file, contents, functions, output) {
     const owner = functions.find((range) => index >= range.start && index <= range.end);
     if (!owner || !allowedFunctions.has(owner.name)) {
       output.push(`${file}:${lineNumber(contents, index)}: withBypassRlsQuery çağrısı izinli fonksiyon listesinde değil (${owner?.name ?? "module"}).`);
+    }
+  }
+}
+
+function requireAllowlistedRawBypass(file, contents, functions, output) {
+  const allowedFunctions = rawBypassFunctionAllowlist.get(file) ?? new Set();
+  const sites = [];
+  for (const match of contents.matchAll(/withTenantDb\s*\(/g)) {
+    const call = readCallSource(contents, match.index ?? 0);
+    if (/bypassRls\s*:\s*true/.test(call)) sites.push({ index: match.index ?? 0, kind: "withTenantDb bypassRls:true" });
+  }
+  for (const match of contents.matchAll(/set_config\(\s*'app\.bypass_rls'\s*,\s*('false'|[^,)]+)/g)) {
+    if (match[1] === "'false'") continue;
+    sites.push({ index: match.index ?? 0, kind: "set_config app.bypass_rls" });
+  }
+  for (const site of sites) {
+    const owner = functions
+      .filter((range) => site.index >= range.start && site.index <= range.end)
+      .sort((left, right) => (left.end - left.start) - (right.end - right.start))[0];
+    if (!owner || !allowedFunctions.has(owner.name)) {
+      output.push(`${file}:${lineNumber(contents, site.index)}: ${site.kind} izinli fonksiyon listesinde değil (${owner?.name ?? "module"}).`);
     }
   }
 }
