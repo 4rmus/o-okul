@@ -402,7 +402,10 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
       await expect(dialog).toBeHidden();
       await expect(panel).toContainText("AYŞE SAHİP için MFA sıfırlandı");
       await expect(panel.getByRole("button", { name: /MFA'yı sıfırla/ })).toHaveCount(0);
-      expect(captured.stepUps).toEqual([{ purpose: "OWNER_ADMIN_CHANGE", totpCode: "123456" }, { purpose: "OWNER_ADMIN_CHANGE", totpCode: "654321" }]);
+      expect(captured.stepUps).toEqual([
+        { purpose: "OWNER_ADMIN_CHANGE", target: { tenantId: "tenant-faz9", userId: "owner-faz9" }, totpCode: "123456" },
+        { purpose: "OWNER_ADMIN_CHANGE", target: { tenantId: "tenant-faz9", userId: "owner-faz9" }, totpCode: "654321" },
+      ]);
       expect(captured.adminMfaResets).toEqual([
         { body: { tenantId: "tenant-faz9", userId: "owner-faz9" }, proof: "lifecycle-proof" },
         { body: { tenantId: "tenant-faz9", userId: "owner-faz9" }, proof: "lifecycle-proof" },

@@ -200,9 +200,15 @@ export interface TenantLifecycleMfaTarget {
   expectedLifecycleVersion: number;
 }
 
+/** OWNER_ADMIN_CHANGE proof binds the exact tenant OWNER/ADMIN account it may reset. */
+export interface TenantAdminMfaResetTarget {
+  tenantId: string;
+  userId: string;
+}
+
 export interface MfaStepUpRequest {
   purpose: MfaStepUpPurpose;
-  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget | TenantPurgeExportMfaTarget;
+  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget | TenantPurgeExportMfaTarget | TenantAdminMfaResetTarget;
   totpCode?: string;
   recoveryCode?: string;
 }

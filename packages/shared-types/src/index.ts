@@ -426,7 +426,7 @@ export type {
 export type { PortalSubjectRoleName, RoleCapability, TenantAssignableRoleName, TenantRoleName } from "./role-capabilities.js";
 
 export type { LicenseExpiryPurgeCandidate, TenantPurgeExportDelivery, TenantPurgeExportDeliveryRequest, TenantResetPreset, TenantResetPreview } from "./domain.js";
-export type { TenantCleanResetMfaTarget, TenantCleanResetRequest, TenantCleanResetStatus, TenantPurgeExportMfaTarget } from "./domain.js";
+export type { TenantCleanResetMfaTarget, TenantCleanResetRequest, TenantCleanResetStatus, TenantPurgeExportMfaTarget, TenantAdminMfaResetTarget } from "./domain.js";
 
 export type { TenantManagement } from "./domain.js";
 

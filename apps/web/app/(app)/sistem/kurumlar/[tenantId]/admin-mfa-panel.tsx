@@ -52,7 +52,7 @@ function AdminMfaResetModal({ auth, tenantId, account, onClose, onDone }: { auth
     if (busy || !code.trim()) return;
     setBusy(true); setError("");
     try {
-      const proof = await createLifecycleStepUp(auth.accessToken, { purpose: "OWNER_ADMIN_CHANGE", ...(method === "totp" ? { totpCode: code } : { recoveryCode: code }) });
+      const proof = await createLifecycleStepUp(auth.accessToken, { purpose: "OWNER_ADMIN_CHANGE", target: { tenantId, userId: account.userId }, ...(method === "totp" ? { totpCode: code } : { recoveryCode: code }) });
       setCode("");
       if (proof.purpose !== "OWNER_ADMIN_CHANGE" || !proof.stepUpToken) throw new ApiRequestError("MFA", 401, "MFA_STEP_UP_INVALID");
       await resetTenantAdminMfa(auth.accessToken, { userId: auth.session.userId, sessionId: auth.session.id, membershipVersion: auth.session.membershipVersion }, tenantId, account.userId, proof.stepUpToken);

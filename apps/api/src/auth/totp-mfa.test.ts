@@ -60,10 +60,17 @@ describe("Admin MFA TOTP helpers", () => {
       sessionId: "session-a",
       membershipVersion: 7,
       purpose: "OWNER_ADMIN_CHANGE" as const,
+      target: { tenantId: "tenant-a", userId: "owner-a" },
     };
     const proof = createAdminMfaStepUpProof(binding);
 
     expect(() => verifyAdminMfaStepUpProof(proof.stepUpToken, binding)).not.toThrow();
+    // One reset proof resets exactly one account: another user, another tenant or no target is rejected.
+    for (const target of [{ tenantId: "tenant-a", userId: "owner-b" }, { tenantId: "tenant-b", userId: "owner-a" }, undefined]) {
+      expect(() => verifyAdminMfaStepUpProof(proof.stepUpToken, { ...binding, target })).toThrow("ADMIN_MFA_STEP_UP_CONTEXT_INVALID");
+    }
+    const untargeted = { ...binding, target: undefined };
+    expect(() => verifyAdminMfaStepUpProof(createAdminMfaStepUpProof(untargeted).stepUpToken, untargeted)).toThrow("ADMIN_MFA_STEP_UP_CONTEXT_INVALID");
     expect(() => verifyAdminMfaStepUpProof(proof.stepUpToken, { ...binding, sessionId: "session-b" }))
       .toThrow("ADMIN_MFA_STEP_UP_CONTEXT_INVALID");
     expect(() => verifyAdminMfaStepUpProof(proof.stepUpToken, { ...binding, membershipVersion: 8 }))

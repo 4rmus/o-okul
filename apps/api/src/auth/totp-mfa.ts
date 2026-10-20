@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import type { TenantLifecycleMfaTarget, TenantCleanResetMfaTarget, TenantDeviceRestoreMfaTarget, TenantPurgeExportMfaTarget } from "@o-okul/shared-types";
+import type { TenantLifecycleMfaTarget, TenantCleanResetMfaTarget, TenantDeviceRestoreMfaTarget, TenantPurgeExportMfaTarget, TenantAdminMfaResetTarget } from "@o-okul/shared-types";
 import { authenticator } from "otplib";
 
 const defaultTestEncryptionKey = "33333333333333333333333333333333";
@@ -47,7 +47,7 @@ export interface AdminMfaTokenPayload {
   membershipVersion?: number;
   sessionId?: string;
   purpose?: AdminMfaStepUpPurpose;
-  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget | TenantPurgeExportMfaTarget;
+  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget | TenantPurgeExportMfaTarget | TenantAdminMfaResetTarget;
 }
 
 export interface AdminMfaStepUpBinding {
@@ -55,7 +55,7 @@ export interface AdminMfaStepUpBinding {
   sessionId: string;
   membershipVersion: number;
   purpose: AdminMfaStepUpPurpose;
-  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget | TenantPurgeExportMfaTarget;
+  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget | TenantPurgeExportMfaTarget | TenantAdminMfaResetTarget;
 }
 
 export interface AdminMfaStepUpProof {
@@ -106,7 +106,8 @@ export function createAdminMfaStepUpProof(binding: AdminMfaStepUpBinding, now = 
 
 export function verifyAdminMfaStepUpProof(token: string, expected: AdminMfaStepUpBinding): void {
   const payload = verifyAdminMfaToken(token, "admin-mfa-step-up");
-  if (expected.purpose !== "OWNER_ADMIN_CHANGE" && (!expected.target || !payload.target)) throw new Error("ADMIN_MFA_STEP_UP_CONTEXT_INVALID");
+  // Every proof is target-bound; OWNER_ADMIN_CHANGE binds { tenantId, userId } so one proof resets exactly one account.
+  if (!expected.target || !payload.target) throw new Error("ADMIN_MFA_STEP_UP_CONTEXT_INVALID");
   if (
     payload.userId !== expected.userId ||
     payload.sessionId !== expected.sessionId ||
