@@ -14,9 +14,10 @@ import { join } from "node:path";
 //   to capabilities (127 -> 108, 5 files).
 // 2026-10-16: POST /privacy/me/purge-pii removed (DEC-20261016-01) (108 -> 107, 4 files).
 // 2026-10-16: homework and support-ticket moved to homework:* / support:* capabilities (107 -> 86, 2 files).
+// 2026-10-20: me.controller moved to account:self, setup:read, notification:device and portal:student|guardian|teacher;
+//   persona portals admit only their own persona (86 -> 7, 1 file; auth MFA routes wait for the platform realm).
 const baseline = {
   "apps/api/src/auth/auth.controller.ts": 7,
-  "apps/api/src/me/me.controller.ts": 79,
 };
 
 export function countRoles(root = "apps/api/src") {
