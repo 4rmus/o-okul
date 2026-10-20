@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, ForbiddenException, Get, Headers, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, ForbiddenException, Get, Headers, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import { z } from "zod";
 import type { TeacherTodaySummary } from "@o-okul/shared-types";
 import type {
@@ -57,8 +57,6 @@ import {
 import { PaymentService } from "../payment/payment.service.js";
 import { ScheduleService } from "../program/schedule.service.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
-import { Roles } from "../rbac/roles.decorator.js";
-import { RolesGuard } from "../rbac/roles.guard.js";
 import { ReportGenerationService, type ReportSnapshotListFilters } from "../report/report-generation.service.js";
 import { GuardianService } from "../guardian/guardian.service.js";
 import { toGuardianResponse } from "../guardian/guardian-response.js";
@@ -96,7 +94,6 @@ const mePasswordChangeBodySchema = z.object({
 }).strict() satisfies z.ZodType<MePasswordChangeRequest>;
 
 @Controller("me")
-@UseGuards(RolesGuard)
 export class MeController {
   constructor(
     private readonly announcements: AnnouncementService,
@@ -122,46 +119,46 @@ export class MeController {
   ) {}
 
   @Get("profile")
-  @Roles("SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF", "TEACHER", "STUDENT", "GUARDIAN")
+  @RequireCapability("account:self")
   profile(): Promise<MeProfileResponse> {
     return this.auth.getCurrentProfile(getRequestContext());
   }
 
   @Post("password")
   @HttpCode(200)
-  @Roles("SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF", "TEACHER", "STUDENT", "GUARDIAN")
+  @RequireCapability("account:self")
   changePassword(@Body(zodBody(mePasswordChangeBodySchema)) body: MePasswordChangeRequest): Promise<MePasswordChangeResponse> {
     return this.auth.changeCurrentPassword(getRequestContext(), body.currentPassword, body.newPassword);
   }
 
   @Get("sessions")
-  @Roles("SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF", "TEACHER", "STUDENT", "GUARDIAN")
+  @RequireCapability("account:self")
   sessions(): Promise<MeSessionRecord[]> {
     return this.auth.listCurrentSessions(getRequestContext());
   }
 
   @Delete("sessions/:id")
   @HttpCode(204)
-  @Roles("SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF", "TEACHER", "STUDENT", "GUARDIAN")
+  @RequireCapability("account:self")
   revokeSession(@Param("id") sessionId: string): Promise<void> {
     return this.auth.revokeCurrentSession(getRequestContext(), sessionId);
   }
 
   @Delete("sessions")
   @HttpCode(200)
-  @Roles("SYSTEM_ADMIN", "TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN", "OPERATIONS_STAFF", "FINANCE_STAFF", "TEACHER", "STUDENT", "GUARDIAN")
+  @RequireCapability("account:self")
   revokeAllSessions(): Promise<MeSessionRevokeAllResponse> {
     return this.auth.revokeAllCurrentSessions(getRequestContext());
   }
 
   @Get("tenant")
-  @Roles("TENANT_ADMIN", "ASSISTANT_ADMIN")
+  @RequireCapability("setup:read")
   tenant(): Promise<TenantRecord> {
     return this.tenants.findCurrent(getRequestContext());
   }
 
   @Get("institution-dashboard")
-  @Roles("TENANT_ADMIN", "ASSISTANT_ADMIN")
+  @RequireCapability("setup:read")
   institutionDashboardSummary(): Promise<InstitutionDashboardSummary> {
     return this.institutionDashboard.get(getRequestContext());
   }
@@ -175,13 +172,13 @@ export class MeController {
   }
 
   @Get("notification-devices")
-  @Roles("TENANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN")
+  @RequireCapability("notification:device")
   async notificationDevicesList(): Promise<PublicNotificationDeviceTokenRecord[]> {
     return (await this.notificationDevices.listCurrentUser(getRequestContext())).map(toPublicNotificationDeviceResponse);
   }
 
   @Post("notification-devices")
-  @Roles("TENANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN")
+  @RequireCapability("notification:device")
   async registerNotificationDevice(
     @Body(zodBody(notificationDeviceRegisterBodySchema)) body: NotificationDeviceRegisterBody,
   ): Promise<PublicNotificationDeviceTokenRecord> {
@@ -189,38 +186,38 @@ export class MeController {
   }
 
   @Delete("notification-devices/:id")
-  @Roles("TENANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN")
+  @RequireCapability("notification:device")
   async disableNotificationDevice(@Param("id") id: string): Promise<PublicNotificationDeviceTokenRecord> {
     return toPublicNotificationDeviceResponse(await this.notificationDevices.disableCurrentUser(getRequestContext(), id));
   }
 
   @Get("student")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   student(): Promise<StudentRecord> {
     return this.students.findCurrentStudent(getRequestContext());
   }
 
   @Get("student/profile")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   studentProfile(): Promise<StudentProfileRecord> {
     return this.students.findCurrentStudentProfile(getRequestContext());
   }
 
   @Get("student/guardians")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   async studentGuardians(): Promise<GuardianRecord[]> {
     const context = getRequestContext();
     return (await this.guardians.listCurrentStudentGuardians(context)).map((record) => toGuardianResponse(record, context));
   }
 
   @Get("student/guardian-links")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   studentGuardianLinks(): Promise<GuardianStudentRecord[]> {
     return this.guardians.listCurrentStudentGuardianLinks(getRequestContext());
   }
 
   @Get("student/enrollments")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   studentEnrollments(): Promise<StudentEnrollmentRecord[]> {
     const context = getRequestContext();
     assertStudentContext(context);
@@ -228,19 +225,19 @@ export class MeController {
   }
 
   @Get("student/homework/material-assignments")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   studentHomeworkMaterialAssignments(): Promise<HomeworkMaterialAssignmentRecord[]> {
     return this.homework.listCurrentStudentMaterialAssignments(getRequestContext());
   }
 
   @Get("student/homework")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   studentHomework(): Promise<StudentHomeworkRecord[]> {
     return this.homework.listCurrentStudentHomework(getRequestContext());
   }
 
   @Post("student/homework/:homeworkId/submission")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   submitStudentHomework(
     @Param("homeworkId") homeworkId: string,
     @Headers("idempotency-key") idempotencyKey?: string,
@@ -249,49 +246,49 @@ export class MeController {
   }
 
   @Get("student/attendance")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   studentAttendance(): Promise<AttendanceRecord[]> {
     return this.attendance.listCurrentStudent(getRequestContext());
   }
 
   @Get("student/attendance/summary")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   studentAttendanceSummary(): Promise<AttendanceSummaryRecord> {
     return this.attendance.summarizeCurrentStudent(getRequestContext());
   }
 
   @Get("student/teacher-notes")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   studentTeacherNotes(): Promise<TeacherNoteRecord[]> {
     return this.teacherNotes.listCurrentStudent(getRequestContext());
   }
 
   @Get("student/development-assessments")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   studentDevelopmentAssessments(): Promise<DevelopmentTrendItem[]> {
     return this.development.listCurrentStudent(getRequestContext());
   }
 
   @Get("student/announcements")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   studentAnnouncements(): Promise<AnnouncementRecord[]> {
     return this.announcements.listCurrentStudent(getRequestContext());
   }
 
   @Post("student/announcements/:id/read")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   markStudentAnnouncementRead(@Param("id") id: string): Promise<AnnouncementRecord> {
     return this.announcements.markCurrentStudentRead(getRequestContext(), id);
   }
 
   @Get("student/support-tickets")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   async studentSupportTickets(): Promise<PublicPortalSupportTicketRecord[]> {
     return (await this.supportTickets.listCurrentStudent(getRequestContext())).map(toPublicPortalSupportTicketResponse);
   }
 
   @Post("student/support-tickets")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   async createStudentSupportTicket(
     @Body(zodBody(portalSupportTicketCreateBodySchema)) body: PortalSupportTicketCreateBody,
     @Headers("idempotency-key") idempotencyKey?: string,
@@ -300,14 +297,14 @@ export class MeController {
   }
 
   @Get("student/support-tickets/:ticketId/comments")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   async studentSupportTicketComments(@Param("ticketId") ticketId: string): Promise<PublicPortalSupportTicketCommentRecord[]> {
     const result = await this.supportTickets.listCurrentStudentComments(getRequestContext(), ticketId);
     return result.comments.map((comment) => toPublicPortalSupportTicketCommentResponse(comment, result.ticket));
   }
 
   @Post("student/support-tickets/:ticketId/comments")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   async addStudentSupportTicketComment(
     @Param("ticketId") ticketId: string,
     @Body(zodBody(supportTicketCommentCreateBodySchema)) body: SupportTicketCommentCreateBody,
@@ -319,7 +316,7 @@ export class MeController {
   }
 
   @Get("student/reports")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   async studentReportIndex(): Promise<PortalReportIndexItem[]> {
     const context = getRequestContext();
     const student = await this.students.findCurrentStudent(context);
@@ -327,7 +324,7 @@ export class MeController {
   }
 
   @Get("student/reports/:examId/snapshots/:snapshotId")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   async studentReport(
     @Param("examId") examId: string,
     @Param("snapshotId") snapshotId: string,
@@ -338,7 +335,7 @@ export class MeController {
   }
 
   @Get("student/reports/:examId/latest")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   async latestStudentReport(@Param("examId") examId: string): Promise<ReportStudentSnapshot> {
     const context = getRequestContext();
     const student = await this.students.findCurrentStudent(context);
@@ -346,7 +343,7 @@ export class MeController {
   }
 
   @Get("student/reports/:examId/snapshots/:snapshotId/error-booklet")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   async studentErrorBooklet(
     @Param("examId") examId: string,
     @Param("snapshotId") snapshotId: string,
@@ -357,7 +354,7 @@ export class MeController {
   }
 
   @Get("student/reports/:examId/latest/error-booklet")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   async latestStudentErrorBooklet(@Param("examId") examId: string): Promise<ReportErrorBooklet> {
     const context = getRequestContext();
     const student = await this.students.findCurrentStudent(context);
@@ -365,7 +362,7 @@ export class MeController {
   }
 
   @Get("student/reports/:examId/progress")
-  @Roles("STUDENT")
+  @RequireCapability("portal:student")
   async studentProgress(@Param("examId") examId: string, @Query("scope") scope?: string): Promise<ReportStudentProgress> {
     const context = getRequestContext();
     const student = await this.students.findCurrentStudent(context);
@@ -375,7 +372,7 @@ export class MeController {
   }
 
   @Get("guardian/students")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   guardianStudents(): Promise<StudentRecord[]> {
     return this.students.listCurrentGuardianStudents(getRequestContext());
   }
@@ -390,7 +387,7 @@ export class MeController {
   }
 
   @Get("guardian/students/:studentId/profile")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   guardianStudentProfile(@Param("studentId") studentId: string): Promise<StudentProfileRecord> {
     const context = getRequestContext();
     assertGuardianContext(context);
@@ -398,7 +395,7 @@ export class MeController {
   }
 
   @Get("guardian/students/:studentId/enrollments")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   guardianStudentEnrollments(@Param("studentId") studentId: string): Promise<StudentEnrollmentRecord[]> {
     const context = getRequestContext();
     assertGuardianContext(context);
@@ -406,13 +403,13 @@ export class MeController {
   }
 
   @Get("guardian/homework/material-assignments")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   guardianHomeworkMaterialAssignments(): Promise<HomeworkMaterialAssignmentRecord[]> {
     return this.homework.listCurrentGuardianMaterialAssignments(getRequestContext());
   }
 
   @Get("guardian/students/:studentId/homework/material-assignments")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   guardianStudentHomeworkMaterialAssignments(@Param("studentId") studentId: string): Promise<HomeworkMaterialAssignmentRecord[]> {
     const context = getRequestContext();
     assertGuardianContext(context);
@@ -420,37 +417,37 @@ export class MeController {
   }
 
   @Get("guardian/students/:studentId/attendance")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   guardianStudentAttendance(@Param("studentId") studentId: string): Promise<AttendanceRecord[]> {
     return this.attendance.listCurrentGuardianStudent(getRequestContext(), studentId);
   }
 
   @Get("guardian/students/:studentId/attendance/summary")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   guardianStudentAttendanceSummary(@Param("studentId") studentId: string): Promise<AttendanceSummaryRecord> {
     return this.attendance.summarizeCurrentGuardianStudent(getRequestContext(), studentId);
   }
 
   @Get("guardian/students/:studentId/teacher-notes")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   guardianStudentTeacherNotes(@Param("studentId") studentId: string): Promise<TeacherNoteRecord[]> {
     return this.teacherNotes.listCurrentGuardianStudent(getRequestContext(), studentId);
   }
 
   @Get("guardian/students/:studentId/development-assessments")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   guardianStudentDevelopmentAssessments(@Param("studentId") studentId: string): Promise<DevelopmentTrendItem[]> {
     return this.development.listCurrentGuardianStudent(getRequestContext(), studentId);
   }
 
   @Get("guardian/students/:studentId/announcements")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   guardianStudentAnnouncements(@Param("studentId") studentId: string): Promise<AnnouncementRecord[]> {
     return this.announcements.listCurrentGuardianStudent(getRequestContext(), studentId);
   }
 
   @Post("guardian/students/:studentId/announcements/:id/read")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   markGuardianStudentAnnouncementRead(
     @Param("studentId") studentId: string,
     @Param("id") id: string,
@@ -459,13 +456,13 @@ export class MeController {
   }
 
   @Get("guardian/students/:studentId/notification-preferences")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   guardianStudentNotificationPreferences(@Param("studentId") studentId: string): Promise<GuardianStudentRecord> {
     return this.guardians.findCurrentGuardianNotificationPreferences(getRequestContext(), studentId);
   }
 
   @Patch("guardian/students/:studentId/notification-preferences")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   updateGuardianStudentNotificationPreferences(
     @Param("studentId") studentId: string,
     @Body(zodBody(guardianNotificationPreferenceBodySchema)) body: GuardianNotificationPreferenceBody,
@@ -474,19 +471,19 @@ export class MeController {
   }
 
   @Get("guardian/students/:studentId/payment-plans")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   guardianStudentPaymentPlans(@Param("studentId") studentId: string): Promise<PaymentPlanWithInstallmentsRecord[]> {
     return this.payments.listCurrentGuardianStudent(getRequestContext(), studentId);
   }
 
   @Get("guardian/students/:studentId/support-tickets")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   async guardianStudentSupportTickets(@Param("studentId") studentId: string): Promise<PublicPortalSupportTicketRecord[]> {
     return (await this.supportTickets.listCurrentGuardianStudent(getRequestContext(), studentId)).map(toPublicPortalSupportTicketResponse);
   }
 
   @Post("guardian/students/:studentId/support-tickets")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   async createGuardianStudentSupportTicket(
     @Param("studentId") studentId: string,
     @Body(zodBody(portalSupportTicketCreateBodySchema)) body: PortalSupportTicketCreateBody,
@@ -496,13 +493,13 @@ export class MeController {
   }
 
   @Get("teacher/support-tickets")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   async teacherSupportTickets(): Promise<PublicPortalSupportTicketRecord[]> {
     return (await this.supportTickets.listCurrentTeacher(getRequestContext())).map(toPublicPortalSupportTicketResponse);
   }
 
   @Post("teacher/support-tickets")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   async createTeacherSupportTicket(
     @Body(zodBody(teacherPortalSupportTicketCreateBodySchema)) body: TeacherPortalSupportTicketCreateBody,
     @Headers("idempotency-key") idempotencyKey?: string,
@@ -511,14 +508,14 @@ export class MeController {
   }
 
   @Get("teacher/support-tickets/:ticketId/comments")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   async teacherSupportTicketComments(@Param("ticketId") ticketId: string): Promise<PublicPortalSupportTicketCommentRecord[]> {
     const result = await this.supportTickets.listCurrentTeacherComments(getRequestContext(), ticketId);
     return result.comments.map((comment) => toPublicPortalSupportTicketCommentResponse(comment, result.ticket));
   }
 
   @Post("teacher/support-tickets/:ticketId/comments")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   async addTeacherSupportTicketComment(
     @Param("ticketId") ticketId: string,
     @Body(zodBody(supportTicketCommentCreateBodySchema)) body: SupportTicketCommentCreateBody,
@@ -530,7 +527,7 @@ export class MeController {
   }
 
   @Get("teacher/students")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   teacherStudents(): Promise<PublicStudentRecord[]> {
     const context = getRequestContext();
     assertTeacherContext(context);
@@ -538,7 +535,7 @@ export class MeController {
   }
 
   @Get("teacher/students/:studentId/enrollments")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   teacherStudentEnrollments(@Param("studentId") studentId: string): Promise<StudentEnrollmentRecord[]> {
     const context = getRequestContext();
     assertTeacherContext(context);
@@ -546,7 +543,7 @@ export class MeController {
   }
 
   @Get("teacher/attendance")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   teacherAttendance(): Promise<AttendanceRecord[]> {
     const context = getRequestContext();
     assertTeacherContext(context);
@@ -554,7 +551,7 @@ export class MeController {
   }
 
   @Get("teacher/homework")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   teacherHomework(): Promise<HomeworkRecord[]> {
     const context = getRequestContext();
     assertTeacherContext(context);
@@ -562,7 +559,7 @@ export class MeController {
   }
 
   @Get("teacher/homework/materials")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   teacherHomeworkMaterials(): Promise<HomeworkMaterialRecord[]> {
     const context = getRequestContext();
     assertTeacherContext(context);
@@ -570,7 +567,7 @@ export class MeController {
   }
 
   @Get("teacher/homework/materials/:id/assignments")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   teacherHomeworkMaterialAssignments(@Param("id") id: string): Promise<HomeworkMaterialAssignmentRecord[]> {
     const context = getRequestContext();
     assertTeacherContext(context);
@@ -578,7 +575,7 @@ export class MeController {
   }
 
   @Get("teacher/homework/material-assignments")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   teacherHomeworkAllMaterialAssignments(): Promise<HomeworkMaterialAssignmentRecord[]> {
     const context = getRequestContext();
     assertTeacherContext(context);
@@ -586,7 +583,7 @@ export class MeController {
   }
 
   @Get("teacher/teacher-notes")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   teacherTeacherNotes(): Promise<TeacherNoteRecord[]> {
     const context = getRequestContext();
     assertTeacherContext(context);
@@ -594,7 +591,7 @@ export class MeController {
   }
 
   @Get("teacher/lookups")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   async teacherLookups(): Promise<TeacherPortalLookupsResponse> {
     const context = getRequestContext();
     assertTeacherContext(context);
@@ -652,7 +649,7 @@ export class MeController {
   }
 
   @Get("teacher/reports/:examId/snapshots")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   teacherReportSnapshots(
     @Param("examId") examId: string,
     @Query() query: ReportSnapshotListFilters,
@@ -663,7 +660,7 @@ export class MeController {
   }
 
   @Get("teacher/reports")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   teacherReportIndex(): Promise<PortalReportIndexItem[]> {
     const context = getRequestContext();
     assertTeacherContext(context);
@@ -671,7 +668,7 @@ export class MeController {
   }
 
   @Get("teacher/reports/:examId/snapshots/:snapshotId/students/:studentId")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   teacherStudentReport(
     @Param("examId") examId: string,
     @Param("snapshotId") snapshotId: string,
@@ -683,7 +680,7 @@ export class MeController {
   }
 
   @Get("teacher/reports/:examId/snapshots/:snapshotId/students/:studentId/error-booklet")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   teacherStudentErrorBooklet(
     @Param("examId") examId: string,
     @Param("snapshotId") snapshotId: string,
@@ -695,7 +692,7 @@ export class MeController {
   }
 
   @Get("teacher/reports/:examId/students/:studentId/progress")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   teacherStudentProgress(
     @Param("examId") examId: string,
     @Param("studentId") studentId: string,
@@ -709,7 +706,7 @@ export class MeController {
   }
 
   @Get("guardian/students/:studentId/reports")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   async guardianStudentReportIndex(@Param("studentId") studentId: string): Promise<PortalReportIndexItem[]> {
     const context = getRequestContext();
     assertGuardianContext(context);
@@ -718,7 +715,7 @@ export class MeController {
   }
 
   @Get("guardian/students/:studentId/reports/:examId/snapshots/:snapshotId")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   async guardianStudentReport(
     @Param("studentId") studentId: string,
     @Param("examId") examId: string,
@@ -731,7 +728,7 @@ export class MeController {
   }
 
   @Get("guardian/students/:studentId/reports/:examId/latest")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   async latestGuardianStudentReport(
     @Param("studentId") studentId: string,
     @Param("examId") examId: string,
@@ -743,7 +740,7 @@ export class MeController {
   }
 
   @Get("guardian/students/:studentId/reports/:examId/snapshots/:snapshotId/error-booklet")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   async guardianStudentErrorBooklet(
     @Param("studentId") studentId: string,
     @Param("examId") examId: string,
@@ -756,7 +753,7 @@ export class MeController {
   }
 
   @Get("guardian/students/:studentId/reports/:examId/latest/error-booklet")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   async latestGuardianStudentErrorBooklet(
     @Param("studentId") studentId: string,
     @Param("examId") examId: string,
@@ -768,7 +765,7 @@ export class MeController {
   }
 
   @Get("guardian/students/:studentId/reports/:examId/progress")
-  @Roles("GUARDIAN")
+  @RequireCapability("portal:guardian")
   async guardianStudentProgress(
     @Param("studentId") studentId: string,
     @Param("examId") examId: string,
@@ -783,13 +780,13 @@ export class MeController {
   }
 
   @Get("teacher")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   async teacher(): Promise<TeacherRecord> {
     return toPublicTeacherResponse(await this.teachers.findCurrentTeacher(getRequestContext()));
   }
 
   @Get("teacher/today")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   teacherToday(): Promise<TeacherTodaySummary> {
     const context = getRequestContext();
     assertTeacherContext(context);
@@ -797,19 +794,19 @@ export class MeController {
   }
 
   @Get("teacher/schedule")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   teacherSchedule(): Promise<ScheduleLessonRecord[]> {
     return this.schedules.listCurrentTeacherLessons(getRequestContext());
   }
 
   @Get("teacher/announcements")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   teacherAnnouncements(): Promise<AnnouncementRecord[]> {
     return this.announcements.listCurrentTeacher(getRequestContext());
   }
 
   @Post("teacher/announcements/:id/read")
-  @Roles("TEACHER")
+  @RequireCapability("portal:teacher")
   markTeacherAnnouncementRead(@Param("id") id: string): Promise<AnnouncementRecord> {
     return this.announcements.markCurrentTeacherRead(getRequestContext(), id);
   }
