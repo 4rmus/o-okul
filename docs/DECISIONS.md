@@ -1225,6 +1225,24 @@ Açık soru: Başka kimlik taşıyan hesabın ad ve e-postası için ayrı bir s
 talebi gelirse yönetici diğer kimliği kapattıktan sonra silmeyi tekrarlar.
 Son kontrol: 2026-10-16
 
+### DEC-20261020-01 — Platform girişi ve acil erişim ayrıntıları
+
+Durum: Onaylı; CP-01 ve CP-03 kodlanmadı
+Karar: DEC-20260809-01 ve ADR-0010'daki hedef tasarım geçerli; belgelerde açık kalan ayrıntılar şöyle
+kapanır: (1) acil erişim oturumu sabit 30 dakikadır, süre seçimi yoktur; (2) ilk sürümde acil erişim
+yalnız salt okunurdur, kurum verisine yazma yoktur, yazma gereken işler mevcut MFA'lı akışlardan
+(sıfırlama, yaşam döngüsü, cihaz geri yükleme) yapılır; ikinci onaylayıcı tanımlanmaz; (3) kurum sahibi
+ve yöneticisinin MFA sıfırlaması sistem tenant'ında kalır, CP-01 bu ucu taşımaz (KV-9 notu geçerli);
+(4) CP-01 ve CP-03 staging UAT S1 kapanışından sonra başlar; MFA sıfırlama kanıtının tek hesaba
+bağlanması (2026-10-20) bunlardan bağımsız olarak hemen yapılır.
+Kaynak: Ürün sahibi kararı (2026-10-20).
+Kanıt: Plan notu; MFA sıfırlama kanıtı için `apps/api/src/auth/auth.service.test.ts`,
+`apps/api/src/auth/totp-mfa.test.ts`, `apps/api/src/tenant/tenant.controller.e2e.test.ts` (LOCAL_TEST).
+Etkilenen ADR: ADR-0010
+Açık soru: MFA kaydının ilk girişte yalnız parolayla tamamlanması (sıfırlama sonrası) ayrı bir dilimde
+ele alınacak; sistem yöneticisinin TOTP kaybında kurtarma prosedürü runbook'a yazılacak.
+Son kontrol: 2026-10-20
+
 ## Öneri Halindeki Kararlar
 
 Bu bölümdeki kayıtlar ürün sahibi onayı bekler ve yol haritasını değiştirmez. DEC-20261010-01 gereği
