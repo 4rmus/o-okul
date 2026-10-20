@@ -557,18 +557,20 @@ const mfaStepUpRequestSchema = objectSchema({
     operationId:stringSchema({pattern:"^[a-f0-9]{32}$"}),archiveDigest:stringSchema({pattern:"^[a-f0-9]{64}$"}),
     preset: stringSchema({ enum: ["CLEAN_SETUP_V1", "LICENSE_EXPIRY_PURGE_V1"] }), preflightDigest: stringSchema({ pattern: "^[a-f0-9]{64}$" }),
     expectedLifecycleVersion: integerSchema({ minimum: 0, maximum: 2147483646 }),
+    userId: stringSchema({ minLength: 1, maxLength: 128 }),
   }, ["tenantId"]),
   purpose: { type: "string", enum: ["OWNER_ADMIN_CHANGE", "TENANT_LIFECYCLE_CHANGE", "TENANT_CLEAN_RESET", "TENANT_DEVICE_RESTORE", "TENANT_PURGE_EXPORT"] },
   totpCode: stringSchema(),
   recoveryCode: stringSchema(),
 }, ["purpose"], {
   oneOf: [
-    { properties: { purpose: { enum: ["OWNER_ADMIN_CHANGE"] } }, not: { required: ["target"] } },
+    // The reset proof binds exactly one tenant account: target { tenantId, userId }.
+    { properties: { purpose: { enum: ["OWNER_ADMIN_CHANGE"] }, target: { required: ["userId"], not: { anyOf: [{ required: ["status"] }, { required: ["preset"] }, { required: ["preflightDigest"] }, { required: ["operationId"] }, { required: ["archiveDigest"] }, { required: ["expectedLifecycleVersion"] }] } } }, required: ["target"] },
     { properties: { purpose: { enum: ["TENANT_LIFECYCLE_CHANGE"] }, target: { required: ["status", "expectedLifecycleVersion"], not: { anyOf: [{ required: ["preset"] }, { required: ["preflightDigest"] }] } } }, required: ["target"] },
     { properties: { purpose: { enum: ["TENANT_CLEAN_RESET"] }, target: { required: ["preset", "preflightDigest", "expectedLifecycleVersion"], not: { anyOf:[{required:["status"]},{required:["operationId"]},{required:["archiveDigest"]}] } } }, required: ["target"] },
     { properties: {purpose:{enum:["TENANT_DEVICE_RESTORE"]},target:{required:["operationId","archiveDigest","expectedLifecycleVersion"],not:{anyOf:[{required:["status"]},{required:["preset"]},{required:["preflightDigest"]}]}}},required:["target"]},
     // A purge handover export binds the institution only.
-    { properties: { purpose: { enum: ["TENANT_PURGE_EXPORT"] }, target: { not: { anyOf: [{ required: ["status"] }, { required: ["preset"] }, { required: ["preflightDigest"] }, { required: ["operationId"] }, { required: ["archiveDigest"] }, { required: ["expectedLifecycleVersion"] }] } } }, required: ["target"] },
+    { properties: { purpose: { enum: ["TENANT_PURGE_EXPORT"] }, target: { not: { anyOf: [{ required: ["status"] }, { required: ["preset"] }, { required: ["preflightDigest"] }, { required: ["operationId"] }, { required: ["archiveDigest"] }, { required: ["expectedLifecycleVersion"] }, { required: ["userId"] }] } } }, required: ["target"] },
   ],
   anyOf: [
     { required: ["totpCode"] },

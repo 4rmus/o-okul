@@ -2,7 +2,7 @@ import { runVerifiedTenantMutation } from "../context/tenant-mutation-activity.j
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { BadRequestException, ConflictException, HttpException, HttpStatus, Inject, Injectable, NotFoundException, Optional, UnauthorizedException } from "@nestjs/common";
 import { encryptSecretDeliveryPayload } from "@o-okul/db";
-import type { ActivePersona, MeProfileResponse, MeSessionRecord, MeSessionRevokeAllResponse, MfaEnrollmentRequiredResponse, MfaStepUpPurpose, MfaStepUpResponse, TenantLifecycleMfaTarget, TenantCleanResetMfaTarget, TenantDeviceRestoreMfaTarget, TenantPurgeExportMfaTarget, TenantLoginContextResponse, TenantSelectionOption, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
+import type { ActivePersona, MeProfileResponse, MeSessionRecord, MeSessionRevokeAllResponse, MfaEnrollmentRequiredResponse, MfaStepUpPurpose, MfaStepUpResponse, TenantLifecycleMfaTarget, TenantCleanResetMfaTarget, TenantDeviceRestoreMfaTarget, TenantPurgeExportMfaTarget, TenantAdminMfaResetTarget, TenantLoginContextResponse, TenantSelectionOption, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { licenseTermStoreToken, type LicenseTermStore } from "../license/license-term-store.js";
@@ -419,6 +419,7 @@ export class AuthService {
     try {
       verifyAdminMfaStepUpProof(stepUpToken, {
         userId: context.userId, sessionId: context.sessionId, membershipVersion: context.membershipVersion, purpose: "OWNER_ADMIN_CHANGE",
+        target: { tenantId: target.tenantId, userId: target.userId },
       });
     } catch {
       throw new UnauthorizedException("MFA_STEP_UP_INVALID");
@@ -449,7 +450,7 @@ export class AuthService {
     context: RequestContext,
     purpose: MfaStepUpPurpose,
     input: TotpVerificationInput,
-    target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget | TenantPurgeExportMfaTarget,
+    target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget | TenantPurgeExportMfaTarget | TenantAdminMfaResetTarget,
   ): Promise<MfaStepUpResponse> {
     this.assertAdminMfaManageable(context);
     this.assertSystemStepUpContext(context);
@@ -471,6 +472,12 @@ export class AuthService {
         session.userId !== currentUser.id || session.tenantId !== "system" || currentUser.tenantId !== "system" ||
         !isAdminMfaRole(currentUser.roles) || session.membershipVersion !== context.membershipVersion) {
         throw new UnauthorizedException("MFA_STEP_UP_CONTEXT_INVALID");
+      }
+    } else if (purpose === "OWNER_ADMIN_CHANGE") {
+      // The reset proof names exactly one tenant account; it cannot reset a second account or a system account.
+      if (!target || Object.keys(target).sort().join(",") !== "tenantId,userId" || !("userId" in target) ||
+        typeof target.tenantId !== "string" || !target.tenantId || target.tenantId === "system" || typeof target.userId !== "string" || !target.userId) {
+        throw new BadRequestException("MFA_STEP_UP_TARGET_INVALID");
       }
     } else if (target) {
       throw new BadRequestException("MFA_STEP_UP_TARGET_INVALID");

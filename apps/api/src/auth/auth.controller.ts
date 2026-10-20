@@ -97,13 +97,13 @@ const mfaStepUpBodySchema = z.object({
   }).strict(), z.object({
     tenantId: z.string().min(1).max(128), preset: z.enum(["CLEAN_SETUP_V1", "LICENSE_EXPIRY_PURGE_V1"]),
     expectedLifecycleVersion: z.number().int().min(0).max(2147483646), preflightDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  }).strict(),z.object({tenantId:z.string().min(1).max(128),operationId:z.string().regex(/^[a-f0-9]{32}$/),archiveDigest:z.string().regex(/^[a-f0-9]{64}$/),expectedLifecycleVersion:z.number().int().min(0).max(2147483646)}).strict(), z.object({ tenantId: z.string().min(1).max(128) }).strict()]).optional(),
+  }).strict(),z.object({tenantId:z.string().min(1).max(128),operationId:z.string().regex(/^[a-f0-9]{32}$/),archiveDigest:z.string().regex(/^[a-f0-9]{64}$/),expectedLifecycleVersion:z.number().int().min(0).max(2147483646)}).strict(), z.object({ tenantId: z.string().min(1).max(128) }).strict(), z.object({ tenantId: z.string().min(1).max(128), userId: z.string().min(1).max(128) }).strict()]).optional(),
   totpCode: optionalTrimmedString,
   recoveryCode: optionalTrimmedString,
 }).strict().refine((value) => Boolean(value.totpCode || value.recoveryCode), {
   message: "TOTP kodu veya recovery code zorunlu.",
   path: ["totpCode"],
-}).refine((value) => value.purpose === "OWNER_ADMIN_CHANGE" ? !value.target : Boolean(value.target && (value.purpose === "TENANT_PURGE_EXPORT" ? Object.keys(value.target).length === 1 : value.purpose === "TENANT_DEVICE_RESTORE" ? "operationId" in value.target : value.purpose === "TENANT_CLEAN_RESET" ? "preset" in value.target : "status" in value.target)), {
+}).refine((value) => value.purpose === "OWNER_ADMIN_CHANGE" ? Boolean(value.target && "userId" in value.target) : Boolean(value.target && !("userId" in value.target) && (value.purpose === "TENANT_PURGE_EXPORT" ? Object.keys(value.target).length === 1 : value.purpose === "TENANT_DEVICE_RESTORE" ? "operationId" in value.target : value.purpose === "TENANT_CLEAN_RESET" ? "preset" in value.target : "status" in value.target)), {
   message: "MFA_STEP_UP_TARGET_INVALID", path: ["target"],
 }) satisfies z.ZodType<MfaStepUpRequest>;
 

@@ -958,12 +958,16 @@ describe("AuthService", () => {
       new InMemoryTenantStore(),
     );
     const admin = { userId: "system-admin-reset", tenantId: null, roles: ["SYSTEM_ADMIN"], membershipVersion: 1, sessionId: "system-session", bypassRls: true };
-    const proof = createAdminMfaStepUpProof({ userId: admin.userId, sessionId: admin.sessionId, membershipVersion: 1, purpose: "OWNER_ADMIN_CHANGE" }).stepUpToken;
+    const proof = createAdminMfaStepUpProof({ userId: admin.userId, sessionId: admin.sessionId, membershipVersion: 1, purpose: "OWNER_ADMIN_CHANGE", target: { tenantId: "tenant-a", userId: owner.id } }).stepUpToken;
     const ownerContext = { userId: owner.id, tenantId: owner.tenantId, roles: owner.roles, membershipVersion: 3, sessionId: "owner-session", bypassRls: false };
 
     await expect(auth.resetTotpBySystemAdmin(admin, { tenantId: "tenant-a", userId: owner.id })).rejects.toThrow("MFA_STEP_UP_REQUIRED");
     await expect(auth.resetTotpBySystemAdmin(ownerContext, { tenantId: "tenant-a", userId: owner.id }, proof)).rejects.toThrow("MFA_STEP_UP_CONTEXT_INVALID");
-    await expect(auth.resetTotpBySystemAdmin(admin, { tenantId: "tenant-b", userId: owner.id }, proof)).rejects.toThrow("MFA_RESET_TARGET_NOT_FOUND");
+    // The proof is bound to { tenant-a, owner }: it cannot reset the same id in another tenant or another account.
+    await expect(auth.resetTotpBySystemAdmin(admin, { tenantId: "tenant-b", userId: owner.id }, proof)).rejects.toThrow("MFA_STEP_UP_INVALID");
+    await expect(auth.resetTotpBySystemAdmin(admin, { tenantId: "tenant-a", userId: "other-owner" }, proof)).rejects.toThrow("MFA_STEP_UP_INVALID");
+    const otherTenantProof = createAdminMfaStepUpProof({ userId: admin.userId, sessionId: admin.sessionId, membershipVersion: 1, purpose: "OWNER_ADMIN_CHANGE", target: { tenantId: "tenant-b", userId: owner.id } }).stepUpToken;
+    await expect(auth.resetTotpBySystemAdmin(admin, { tenantId: "tenant-b", userId: owner.id }, otherTenantProof)).rejects.toThrow("MFA_RESET_TARGET_NOT_FOUND");
 
     await expect(auth.resetTotpBySystemAdmin(admin, { tenantId: "tenant-a", userId: owner.id }, proof)).resolves.toMatchObject({ resetAt: expect.any(String) });
     expect(owner.totpSecretEncrypted).toBeUndefined();
@@ -1110,21 +1114,22 @@ describe("AuthService", () => {
       totpCode: createTotpCodeForTest(setup.secret, Date.now() + 30_000),
     })).rejects.toThrow("MFA_SECOND_FACTOR_LOCKED");
 
-    await expect(auth.createMfaStepUp(actionContext, "OWNER_ADMIN_CHANGE", { totpCode: "invalid" })).rejects.toThrow(
+    const resetTarget = { tenantId: "tenant-a", userId: "owner-a" };
+    await expect(auth.createMfaStepUp(actionContext, "OWNER_ADMIN_CHANGE", { totpCode: "invalid" }, resetTarget)).rejects.toThrow(
       "MFA_CODE_INVALID",
     );
     await expect(auth.createMfaStepUp(actionContext, "OWNER_ADMIN_CHANGE", {
       recoveryCode: setup.recoveryCodes[0],
-    })).resolves.toMatchObject({ purpose: "OWNER_ADMIN_CHANGE" });
+    }, resetTarget)).resolves.toMatchObject({ purpose: "OWNER_ADMIN_CHANGE" });
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      await expect(auth.createMfaStepUp(actionContext, "OWNER_ADMIN_CHANGE", { totpCode: "invalid" })).rejects.toThrow(
+      await expect(auth.createMfaStepUp(actionContext, "OWNER_ADMIN_CHANGE", { totpCode: "invalid" }, resetTarget)).rejects.toThrow(
         "MFA_CODE_INVALID",
       );
     }
     await expect(auth.createMfaStepUp(actionContext, "OWNER_ADMIN_CHANGE", {
       totpCode: createTotpCodeForTest(setup.secret, Date.now() + 30_000),
-    })).rejects.toThrow("MFA_SECOND_FACTOR_LOCKED");
+    }, resetTarget)).rejects.toThrow("MFA_SECOND_FACTOR_LOCKED");
   });
 
   it("admin recovery code'u tek kullanımlık tüketir", async () => {
@@ -1209,9 +1214,14 @@ describe("AuthService", () => {
       roles: user.roles,
       bypassRls: false,
     };
+    const resetTarget = { tenantId: "tenant-a", userId: "owner-a" };
+    // A reset proof without its target account, or naming the system tenant, is refused before the second factor is spent.
+    for (const target of [undefined, { tenantId: "tenant-a" }, { tenantId: "system", userId: "owner-a" }]) {
+      await expect(auth.createMfaStepUp(context, "OWNER_ADMIN_CHANGE", { recoveryCode: setup.recoveryCodes[0] }, target as never)).rejects.toThrow("MFA_STEP_UP_TARGET_INVALID");
+    }
     const proof = await auth.createMfaStepUp(context, "OWNER_ADMIN_CHANGE", {
       recoveryCode: setup.recoveryCodes[0],
-    });
+    }, resetTarget);
 
     expect(proof).toMatchObject({ purpose: "OWNER_ADMIN_CHANGE", stepUpToken: expect.any(String), expiresAt: expect.any(String) });
     expect(() => verifyAdminMfaStepUpProof(proof.stepUpToken, {
@@ -1219,10 +1229,11 @@ describe("AuthService", () => {
       sessionId: issued.session.id,
       membershipVersion: issued.session.membershipVersion,
       purpose: "OWNER_ADMIN_CHANGE",
+      target: resetTarget,
     })).not.toThrow();
     await expect(auth.createMfaStepUp({ ...context, membershipVersion: context.membershipVersion + 1 }, "OWNER_ADMIN_CHANGE", {
       recoveryCode: setup.recoveryCodes[1],
-    })).rejects.toThrow("MFA_STEP_UP_CONTEXT_INVALID");
+    }, resetTarget)).rejects.toThrow("MFA_STEP_UP_CONTEXT_INVALID");
     const target = { tenantId: "tenant-a", status: "SUSPENDED" as const, expectedLifecycleVersion: 0 };
     await expect(auth.createMfaStepUp(context, "TENANT_LIFECYCLE_CHANGE", { recoveryCode: "wrong" }, target)).rejects.toThrow("MFA_RECOVERY_CODE_INVALID");
     await expect(auth.createMfaStepUp(context, "TENANT_LIFECYCLE_CHANGE", { recoveryCode: setup.recoveryCodes[1] })).rejects.toThrow("MFA_STEP_UP_TARGET_INVALID");
