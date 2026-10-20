@@ -289,9 +289,10 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
    vercel/next.js#99114: Google Fonts bazen uzantısız `/l/font?kit=` URL'si döndürüyor; düzeltme PR'ı açık,
    Next yükseltmesi çözmüyor. IBM Plex Sans (IBM/plex complete woff2, OFL) `apps/web/app/fonts` altından
    `next/font/local` ile sunuluyor; build Google'a gitmiyor (LOCAL_TEST: web build çıktısında gstatic referansı
-   yok, darwin görsel QA 31/31). Linux karne golden'ı CI çıktısından yenilendi (run `38886582357`: içerik aynı,
-   glifler daha dar, %4 fark); staging imajı deploy'da doğrulanacak (UNPROVEN).
-   PR #202. 14 Ekim'deki iki `Deploy compose stack` zaman aşımı ayrı nedenli (imaj çekme) ve madde 6'daki IMG işiyle kapandı.
+   yok, darwin görsel QA 31/31). 14 Linux görsel golden'ının tamamı CI çıktısından yenilendi (içerik ve düzen aynı,
+   glifler daha dar, %1–6 fark; golden testi ilk düşen ekran görüntüsünde durduğu için dört CI turu sürdü).
+   KAPANDI: PR #202 main'de (`9e08979d1`, CI `39295142470`); Staging Deploy `39296927873` web imajını yeniden
+   derledi ve deploy etti (STAGING). 14 Ekim'deki iki `Deploy compose stack` zaman aşımı ayrı nedenli (imaj çekme) ve madde 6'daki IMG işiyle kapandı.
 9. Bağımlılık katmanı kök betiklerle bozuluyor (2026-10-20, STAGING ölçümü): Dockerfile `deps` aşaması kök
    `package.json`'ı olduğu gibi kopyalıyor; #205'te yalnız `ci` betiği değişti ama 1,1 GB `node_modules`
    katmanı yeniden oluştu ve deploy adımı 3 dk'dan 9 dk'ya çıktı. Kökte `preinstall`/`postinstall`/`prepare`
