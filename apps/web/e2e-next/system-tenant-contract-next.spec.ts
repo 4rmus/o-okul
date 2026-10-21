@@ -47,6 +47,8 @@ interface CapturedSystemRequests {
   adminAccounts: Array<{ userId: string; name: string; emailMasked: string | null; roles: string[]; mfaEnabled: boolean; mfaEnabledAt: string | null }>;
   adminMfaResets: Array<{ body: unknown; proof?: string }>;
   failNextAdminReset?: string;
+  licenseTerms: unknown[];
+  failNextLicenseTerm?: string;
 }
 
 interface SystemTenantFixture {
@@ -190,6 +192,40 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     await expect(capacity).toContainText("Kullanıcı hesabı140");
     await expect(capacity).toContainText("Operasyon normal");
     await expect(page.getByText(/Kullanıcı sınırı|140 \/ 120/)).toHaveCount(0);
+  });
+
+  // UAT F-18: the licence tab offers a way to open or renew a licence term.
+  test("lisans sekmesinden yeni lisans dönemi açar; deneme ve sınır kurallarını formda, çakışmayı sunucudan gösterir (UAT F-18)", async ({ page }) => {
+    const captured = createCapturedSystemRequests();
+    await openWithSystemTenantMocks(page, captured, "/sistem/kurumlar/tenant-faz9");
+    const capacity = page.getByRole("region", { name: "Lisans ve kapasite" });
+    await capacity.getByRole("button", { name: "Lisans dönemi aç" }).click();
+    const dialog = page.getByRole("dialog", { name: "Lisans dönemi aç" });
+    // A renewal starts at the current term's end (terms never overlap).
+    await expect(dialog.getByLabel("Başlangıç tarihi")).toHaveValue("2027-06-17");
+    await expect(dialog.getByLabel("Bitiş tarihi")).toHaveValue("2028-06-16");
+
+    await dialog.getByLabel("Plan").selectOption("TRIAL");
+    await dialog.getByLabel("Aktif öğrenci sınırı").fill("50");
+    await dialog.getByRole("button", { name: "Dönemi aç" }).click();
+    await expect(dialog).toContainText("Deneme dönemi en çok 7 gün olabilir.");
+    await dialog.getByLabel("Plan").selectOption("PRO");
+    await dialog.getByLabel("Aktif öğrenci sınırı").fill("0");
+    await dialog.getByRole("button", { name: "Dönemi aç" }).click();
+    await expect(dialog.getByLabel("Aktif öğrenci sınırı")).toHaveJSProperty("validity.rangeUnderflow", true);
+    expect(captured.licenseTerms).toEqual([]);
+
+    await dialog.getByLabel("Aktif öğrenci sınırı").fill("150");
+    captured.failNextLicenseTerm = "LICENSE_TERM_OVERLAP";
+    await dialog.getByRole("button", { name: "Dönemi aç" }).click();
+    await expect(dialog).toContainText("Bu tarihler mevcut bir lisans dönemiyle çakışıyor.");
+    await dialog.getByRole("button", { name: "Dönemi aç" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(capacity).toContainText("Faz 9 Akademi için");
+    await expect(capacity).toContainText("lisans dönemi açıldı");
+    const expected = { planCode: "PRO", startsAt: "2027-06-17T00:00:00.000Z", endsAt: "2028-06-16T00:00:00.000Z", activeStudentLimit: 150 };
+    expect(captured.licenseTerms).toEqual([expected, expected]);
+    expect(captured.forbiddenTenantScopedPaths).toEqual([]);
   });
 
   test("kurum adı ve erişim durumunu ayrı strict PATCH çağrılarıyla günceller", async ({ page }) => {
@@ -632,6 +668,7 @@ function createCapturedSystemRequests(): CapturedSystemRequests {
       { userId: "admin-faz9", name: "MEHMET YÖNETİCİ", emailMasked: null, roles: ["TENANT_ADMIN"], mfaEnabled: false, mfaEnabledAt: null },
     ],
     adminMfaResets: [],
+    licenseTerms: [],
   };
 }
 
@@ -745,6 +782,16 @@ async function installSystemTenantApiMocks(page: Page, captured: CapturedSystemR
       if (captured.failNextAdminReset) { const code = captured.failNextAdminReset; captured.failNextAdminReset = undefined; await fulfillError(route, code, code === "MFA_STEP_UP_INVALID" ? 401 : 409); return; }
       captured.adminAccounts = captured.adminAccounts.map((row) => row.userId === body.userId ? { ...row, mfaEnabled: false, mfaEnabledAt: null } : row);
       await fulfillData(route, { resetAt: new Date().toISOString() });
+      return;
+    }
+    if (/^\/tenants\/[^/]+\/license-terms$/.test(pathName) && method === "POST") {
+      const id = decodeURIComponent(pathName.split("/")[2] ?? "");
+      const body = route.request().postDataJSON() as { planCode: string; startsAt: string; endsAt: string; activeStudentLimit: number };
+      captured.licenseTerms.push(body);
+      if (captured.failNextLicenseTerm) { const code = captured.failNextLicenseTerm; captured.failNextLicenseTerm = undefined; await fulfillError(route, code, 400); return; }
+      const tenant = tenants.find((item) => item.id === id);
+      if (tenant) Object.assign(tenant, { plan: body.planCode, licenseStartsAt: body.startsAt, licenseEndsAt: body.endsAt, activeStudentLimit: body.activeStudentLimit });
+      await fulfillData(route, { id: "term-new", tenantId: id, ...body });
       return;
     }
     if (pathName.startsWith("/tenants/") && method === "GET") {
