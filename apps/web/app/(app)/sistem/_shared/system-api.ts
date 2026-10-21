@@ -2,7 +2,7 @@ import { institutionResetRequestSchema } from "../../../../src/tenant-reset-requ
 import { z } from "zod";
 import type { TenantCleanResetRequest, TenantManagement } from "@o-okul/shared-types";
 import type { TenantCreateFormPayload, TenantFormPayload } from "../../../../src/form-validation.js";
-import type { TenantAccessStatus, TenantStatusUpdateResult, TenantStatusUpdateRequest, MfaStepUpRequest, MfaStepUpResponse } from "@o-okul/shared-types";
+import type { LicenseTermCreateRequest, LicenseTermRecord, TenantAccessStatus, TenantStatusUpdateResult, TenantStatusUpdateRequest, MfaStepUpRequest, MfaStepUpResponse } from "@o-okul/shared-types";
 import { ApiRequestError, authenticatedFetchOnce, apiBaseUrl, apiListRequest, apiRequest, type ListResult } from "../../../../src/api-client.js";
 import { buildListUrl, type ListQueryState } from "../../../../src/list-controls.js";
 
@@ -54,6 +54,15 @@ export function updateTenant(accessToken: string, id: string, input: TenantFormP
     body: JSON.stringify(input),
     headers: { "content-type": "application/json" },
     method: "PATCH",
+  });
+}
+
+// UAT F-18: the system admin opens or renews a tenant licence term from the tenant detail screen.
+export function createLicenseTerm(accessToken: string, tenantId: string, input: LicenseTermCreateRequest): Promise<LicenseTermRecord> {
+  return apiRequest<LicenseTermRecord>(accessToken, `${apiBaseUrl}/tenants/${encodeURIComponent(tenantId)}/license-terms`, {
+    body: JSON.stringify(input),
+    headers: { "content-type": "application/json" },
+    method: "POST",
   });
 }
 

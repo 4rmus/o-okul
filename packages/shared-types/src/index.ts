@@ -387,6 +387,7 @@ export type {
   TenantCreateResponse,
   LicenseTermRecord,
   LicenseTermListRecord,
+  LicenseTermCreateRequest,
   TenantDataExportPayload,
   TenantCurrentProfileUpdateRequest,
   TenantSelectionOption,

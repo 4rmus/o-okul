@@ -31,6 +31,7 @@ import {
 } from "../../../../../src/form-validation.js";
 import { PageFrame } from "../../../_shared/page-frame.js";
 import { AdminMfaPanel } from "./admin-mfa-panel.js";
+import { LicenseTermAction, LicenseTermNotice } from "./license-term-panel.js";
 import { DeviceRestorePanel } from "./device-restore-panel.js";
 import { TenantResetPanel } from "./tenant-reset-panel.js";
 import { tenantManagementSchema, createLifecycleStepUp, loadTenant, updateTenant, updateTenantStatus, type TenantRecord } from "../../_shared/system-api.js";
@@ -80,6 +81,7 @@ function ScopedTenantDetailPage({ tenantId, scope }: { tenantId: string; scope: 
   const [mfaMethod, setMfaMethod] = useState<"totp" | "recovery">("totp");
   const [statusRequest, setStatusRequest] = useState<{ id: string; body: TenantStatusUpdateRequest; key: string; proof?: string; expiresAt?: string } | null>(null);
   const [activeSection, setActiveSection] = useState<"license" | "management">("license");
+  const [licenseNotice, setLicenseNotice] = useState("");
 
   useEffect(() => {
     if (tenant) setForm(toTenantForm(tenant));
@@ -261,11 +263,14 @@ function ScopedTenantDetailPage({ tenantId, scope }: { tenantId: string; scope: 
       {tenant && activeSection === "license" ? (
         <div aria-labelledby="tenant-detail-tab-license" id="tenant-detail-panel-license" role="tabpanel" tabIndex={0}>
           <Panel
+            actions={tenant.id !== "system" && auth ? <LicenseTermAction accessToken={auth.accessToken} tenantId={tenant.id} tenantName={tenant.name} currentEndsAt={tenant.licenseEndsAt}
+              onCreated={async (term) => { setLicenseNotice(`${tenant.name} için ${formatDate(term.startsAt)} - ${formatDate(term.endsAt)} lisans dönemi açıldı.`); await queryClient.invalidateQueries({ queryKey: ["next-tenant", tenantId] }); }} /> : undefined}
             aria-label="Lisans ve kapasite"
             description="Lisans süresi, aktif öğrenci kotası ve önerilen işlem."
             title="Lisans ve kapasite"
             tone={tenantCapacityTone(tenant)}
           >
+            <LicenseTermNotice message={licenseNotice} />
             <InfoGrid className="next-tenant-capacity-grid">
               <InfoItem label="Lisans penceresi" value={formatLicenseWindow(tenant)} />
               <InfoItem label="Kalan gün" value={formatLicenseDays(licenseDays)} />
