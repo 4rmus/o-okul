@@ -40,6 +40,8 @@ FAIL olan her senaryo için bulgu satırı açılır.
 salt okunur, sonra dondurulur (`packages/shared-types/src/license-state.ts`). S1-14 gözlemi biter bitmez U-SYS PRO
 dönem açar. PRO açılmadan S1-04..S1-11'deki yazma adımları, davet kabulü ve parola değiştirme 403
 `TENANT_LICENSE_EXPIRED_READ_ONLY` alır ve otomatik bildirim gitmez; bu ürün hatası değildir.
+Durum (2026-10-21 14:43 UTC): S1-14 gözlemlendi ve PRO dönem açıldı (2027-01-31'e kadar, 100 öğrenci); S1-04..S1-13
+yazma adımları artık koşulabilir.
 
 | Sıra | Senaryo | Rol | Adımlar | Beklenen | Sonuç / kanıt |
 |---|---|---|---|---|---|
@@ -56,7 +58,7 @@ dönem açar. PRO açılmadan S1-04..S1-11'deki yazma adımları, davet kabulü 
 | S1-11 | Ödev teslimi (AK-6, AK-7) | U-TCH, U-STU | U-TCH Öğretmen → Ödevler'de 8-A için "Ödev oluştur" ile ödev verir; öğrenci teslim etmeden "kontrol edildi" dene; öğrenci teslim etsin; kontrol et | Teslimsiz kontrol 409 `HOMEWORK_SUBMISSION_NOT_SUBMITTED`; teslim sonrası kontrol başarılı | |
 | S1-12 | Fiyat sayfası (KF-9) | Ziyaretçi | https://o-okul.com/fiyatlar'da 250, 251, 500, 501, 1000, 1001 öğrenciyi hesapla | Sınırda toplam fiyat düşmez (kademeli hesap); kartsız deneme düğmesi görünmez | |
 | S1-13 | Doğrulama kiti (KF-10) | Operatör | Anonimleştirme betiğini bir örnek optik dosyada çalıştır; sonucu `uat-s1` kurumuna yükle | Kimlik alanları ezilmiş; dosya karneye ulaşır | |
-| S1-14 | Lisans sonu (KF-5) | U-SYS, U-ADM | Kurum ayrıntısında lisans durumunun salt okunur olduğunu gör; U-ADM ile bir listeyi aç, bir kayıt oluşturmayı dene; ardından U-SYS PRO dönem açar | 2026-10-17 00:00 UTC'den 2026-10-31'e kadar salt okunur: giriş ve okuma çalışır, yazma 403 `TENANT_LICENSE_EXPIRED_READ_ONLY`; sonra dondurulur (giriş kapanır) || PASS 2026-10-21: kurum özeti "Deneme süresi doldu… görüntülenebilir; yeni kayıt girmek için lisansın yenilenmesi gerekir" uyarısını gösterdi, okuma çalıştı (30 aktif öğrenci); U-OWN/U-ADM oturumuyla "S1-14 TEST" sınıfı oluşturma `POST /api/v1/classes` → 403 `TENANT_LICENSE_EXPIRED_READ_ONLY`, kayıt oluşmadı (DB salt okunur: sınıf sayısı 1). Bkz. F-17 |
+| S1-14 | Lisans sonu (KF-5) | U-SYS, U-ADM | Kurum ayrıntısında lisans durumunun salt okunur olduğunu gör; U-ADM ile bir listeyi aç, bir kayıt oluşturmayı dene; ardından U-SYS PRO dönem açar | 2026-10-17 00:00 UTC'den 2026-10-31'e kadar salt okunur: giriş ve okuma çalışır, yazma 403 `TENANT_LICENSE_EXPIRED_READ_ONLY`; sonra dondurulur (giriş kapanır) || PASS 2026-10-21: kurum özeti "Deneme süresi doldu… görüntülenebilir; yeni kayıt girmek için lisansın yenilenmesi gerekir" uyarısını gösterdi, okuma çalıştı (30 aktif öğrenci); U-OWN/U-ADM oturumuyla "S1-14 TEST" sınıfı oluşturma `POST /api/v1/classes` → 403 `TENANT_LICENSE_EXPIRED_READ_ONLY`, kayıt oluşmadı (DB salt okunur: sınıf sayısı 1). Ardından U-SYS oturumuyla PRO dönem açıldı: 2026-10-21 00:00 UTC → 2027-01-31 00:00 UTC, 100 öğrenci (`POST /api/v1/tenants/:id/license-terms` 201, audit `license_term.created`); sistem paneli Plan Pro, 30 / 100, kurum özetindeki salt okunur uyarısı kalktı. Bkz. F-17, F-18 |
 
 ## Operatör smoke'ları (opsiyonel, mevcut kanıt zinciri)
 
@@ -86,6 +88,8 @@ geçmez, Gate E kanıt zincirini besler.
 | F-15 | S1-03 | Öğrenci ayrıntısında öğrenci numarası varken "Öğrenci no yok" görünüyordu | Düşük | Kapandı: #168 (`b71d4997d`). profil yanıtı `studentNo` taşır |
 | F-16 | - | Her deploy'daki backfill `APPLY` kampüs kapsamlı personeli kurum geneline genişletiyor (`scopeMode` → `TENANT`) ve `SUSPENDED`/`ENDED` üyeliklerin `staffRole`/persona alanlarını boşaltıyordu; davet kabulü mevcut hesabın üyeliklerini silip yeniden yazıyordu (VELİ hesabı ÖĞRETMEN davetini kabul edince veli üyeliği kayboluyordu) | Yüksek | Kapandı: #168 (`b71d4997d`). backfill yalnız farklı olan `ACTIVE` satırları yazar, ikinci `APPLY` no-op; boşaltılmış askıdaki/biten üyelik alanları legacy rol sütunundan, genişletilmiş kapsam yalnız `tenant_membership.updated` audit'indeki `campusCount` kanıtıyla geri yüklenir (kanıtsız satırlar `TENANT` kalır, elle kontrol). Davet kabulü mevcut hesaba yalnız davet edilen rolü ekler; uyumsuz hesap (öğrenci + başka rol) `IDENTITY_INVITATION_EMAIL_ACCOUNT_INCOMPATIBLE` ile reddedilir |
 | F-17 | S1-14 | Salt okunur kurumda yazma reddedilince formda yalnız genel "Sınıf kaydedilemedi." uyarısı çıkıyor; nedenin lisans süresi olduğu ve ne yapılacağı söylenmiyor (API kodu `TENANT_LICENSE_EXPIRED_READ_ONLY`) | Düşük | Açık |
+| F-18 | S1-14 | Sistem panelinde lisans dönemi açma/yenileme ekranı yok: kurum ayrıntısı "Önerilen işlem: Lisansı yenile" diyor ama düğme yok; deneme sonrası PRO dönem yalnız `POST /api/v1/tenants/:id/license-terms` ile açılabildi | Orta (satış sonrası operasyon) | Açık |
+| F-19 | - | Sistem giriş sayfası (`sistem.o-okul.com/giris`) "KURUM GİRİŞİ" başlığını gösteriyor | Düşük | Açık |
 
 ## Bitiş
 

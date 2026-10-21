@@ -261,8 +261,10 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
    değişmez). Öğrenci kodu ve veli daveti iptal ekranları ile öğrenci kabulünde ulusal kimlikle eşleşen hesabın
    korunması #191 ile main ve staging'de (`df86002b7`); ulusal kimlikle eşleşmede kabulün parolayı
    sıfırlaması ürün sahibi kararıyla korunur (2026-10-15). Deneme lisansı 2026-10-17 00:00 UTC'de bitti; kurum
-   2026-10-31'e kadar salt okunur, sonra dondurulur. Ürün sahibi S1-14'te salt okunur geçişi gözler, ardından sistem
-   yöneticisi olarak PRO dönem açar. UAT kiti 2026-10-21'de son değişikliklere göre güncellendi (ön koşul satırı). Kontrol noktası 2026-11-14.
+   2026-10-31'e kadar salt okunur, sonra dondurulur. S1-14 PASS (2026-10-21, STAGING): salt okunur kurumda yazma
+   403 `TENANT_LICENSE_EXPIRED_READ_ONLY`, kayıt oluşmadı; ardından PRO dönem açıldı (2026-10-21 → 2027-01-31, 100
+   öğrenci). Yeni bulgular F-17 (genel hata mesajı), F-18 (sistem panelinde lisans yenileme ekranı yok, PRO API ile
+   açıldı), F-19 (sistem girişinde "KURUM GİRİŞİ" başlığı). UAT kiti 2026-10-21'de güncellendi. Kontrol noktası 2026-11-14.
 2. S2: PR #153 lisans sonu veri imhası main'de (`2b0ef97`, staging deploy PASS); imha, sıfırlama motorunun yazma sessizliği kapısı açılana kadar çalışmaz.
 3. S4: §3.4 doğrulama planı (dosya talebi, görüşmeler, pilot taahhüdü); ürün sahibi işi.
 4. S5/S6: PO-3 kapasite ölçümü ve PO-10 production kanıt zinciri; PO-10 tarihi 2027-01-03'te.
