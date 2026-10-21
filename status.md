@@ -248,7 +248,7 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
 `docs/account-management-architecture-plan.md` bölüm 6'daki eski Gate E/F listesi bu planla yer değiştirdi.
 
 1. S1: staging rol UAT'ı sürüyor (`docs/staging-uat-s1.md`). S1-01..S1-03 PASS (2026-10-10/11); S1-04 sürüyor,
-   S1-05..S1-14 başlamadı. Kapanan bulgular: F-04, F-06..F-13, F-15, F-16 (#159, #161–#166, #168). Açık: F-14
+   S1-05..S1-14 başlamadı. Kapanan bulgular: F-02..F-13, F-15, F-16 (#159, #161–#166, #168, #180, #182, #184). Açık: F-14
    e-posta yalnız doğrulanmış hedeflere gidiyor (Yüksek; S1-05 davet akışını bekletir). 2026-10-15 panel
    kontrolü: `o-okul.com` Email Sending'de Enabled ve DNS Configured, yani kısıt kalkmış olabilir (UNPROVEN);
    ürün sahibi kararıyla S1-04'te finans davetini doğrulanmamış bir adrese yeniden göndererek doğrulanacak.
@@ -260,8 +260,11 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
    oluşturduğu hesap kullanılmıyorsa silinir (#185, `78a0e0bdd`; var olan hesabın parolası
    değişmez). Öğrenci kodu ve veli daveti iptal ekranları ile öğrenci kabulünde ulusal kimlikle eşleşen hesabın
    korunması #191 ile main ve staging'de (`df86002b7`); ulusal kimlikle eşleşmede kabulün parolayı
-   sıfırlaması ürün sahibi kararıyla korunur (2026-10-15). Deneme lisansı 2026-10-17 00:00 UTC'de biter;
-   ürün sahibi S1-14'te salt okunur geçişi gözler, ardından sistem yöneticisi olarak PRO dönem açar. Kontrol noktası 2026-11-14.
+   sıfırlaması ürün sahibi kararıyla korunur (2026-10-15). Deneme lisansı 2026-10-17 00:00 UTC'de bitti; kurum
+   2026-10-31'e kadar salt okunur, sonra dondurulur. S1-14 PASS (2026-10-21, STAGING): salt okunur kurumda yazma
+   403 `TENANT_LICENSE_EXPIRED_READ_ONLY`, kayıt oluşmadı; ardından PRO dönem açıldı (2026-10-21 → 2027-01-31, 100
+   öğrenci). Yeni bulgular F-17 (genel hata mesajı), F-18 (sistem panelinde lisans yenileme ekranı yok, PRO API ile
+   açıldı), F-19 (sistem girişinde "KURUM GİRİŞİ" başlığı). UAT kiti 2026-10-21'de güncellendi. Kontrol noktası 2026-11-14.
 2. S2: PR #153 lisans sonu veri imhası main'de (`2b0ef97`, staging deploy PASS); imha, sıfırlama motorunun yazma sessizliği kapısı açılana kadar çalışmaz.
 3. S4: §3.4 doğrulama planı (dosya talebi, görüşmeler, pilot taahhüdü); ürün sahibi işi.
 4. S5/S6: PO-3 kapasite ölçümü ve PO-10 production kanıt zinciri; PO-10 tarihi 2027-01-03'te.
@@ -289,9 +292,10 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
    vercel/next.js#99114: Google Fonts bazen uzantısız `/l/font?kit=` URL'si döndürüyor; düzeltme PR'ı açık,
    Next yükseltmesi çözmüyor. IBM Plex Sans (IBM/plex complete woff2, OFL) `apps/web/app/fonts` altından
    `next/font/local` ile sunuluyor; build Google'a gitmiyor (LOCAL_TEST: web build çıktısında gstatic referansı
-   yok, darwin görsel QA 31/31). Linux karne golden'ı CI çıktısından yenilendi (run `38886582357`: içerik aynı,
-   glifler daha dar, %4 fark); staging imajı deploy'da doğrulanacak (UNPROVEN).
-   PR #202. 14 Ekim'deki iki `Deploy compose stack` zaman aşımı ayrı nedenli (imaj çekme) ve madde 6'daki IMG işiyle kapandı.
+   yok, darwin görsel QA 31/31). 14 Linux görsel golden'ının tamamı CI çıktısından yenilendi (içerik ve düzen aynı,
+   glifler daha dar, %1–6 fark; golden testi ilk düşen ekran görüntüsünde durduğu için dört CI turu sürdü).
+   KAPANDI: PR #202 main'de (`9e08979d1`, CI `39295142470`); Staging Deploy `39296927873` web imajını yeniden
+   derledi ve deploy etti (STAGING). 14 Ekim'deki iki `Deploy compose stack` zaman aşımı ayrı nedenli (imaj çekme) ve madde 6'daki IMG işiyle kapandı.
 9. Bağımlılık katmanı kök betiklerle bozuluyor (2026-10-20, STAGING ölçümü): Dockerfile `deps` aşaması kök
    `package.json`'ı olduğu gibi kopyalıyor; #205'te yalnız `ci` betiği değişti ama 1,1 GB `node_modules`
    katmanı yeniden oluştu ve deploy adımı 3 dk'dan 9 dk'ya çıktı. Kökte `preinstall`/`postinstall`/`prepare`
@@ -300,7 +304,7 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
    `package.json`'lar derleme aşamalarında kopyalanıyor. LOCAL_TEST: kök ve `apps/api` `package.json`'a betik
    eklenince `pnpm install` CACHED, `deps` katman özetleri aynı; api imajı uçtan uca derlendi. Bu PR'ın kendi
    deploy'u Dockerfile değiştiği için katmanı bir kez yeniden oluşturur; kabul ölçümü (STAGING) yalnız betik
-   değişen bir sonraki deploy'da katman özetinin aynı kalması.
+   değişen bir sonraki deploy'da katman özetinin aynı kalması. Referans özet (#206, `ee6e36422`): `4506b86ac601`.
 
 Önceki plandan devralınan kalemler (`docs/account-management-architecture-plan.md` bölüm 6). Durumlar
 2026-10-15'te main `c619b8f7e` üzerinde kod okumayla yeniden doğrulandı (LOCAL_STATIC):
@@ -380,7 +384,7 @@ Plan `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §10.1 uyarınca her dilim
 | 2026-10-20 | P0 legacy-rol kesimi: `me.controller.ts` (79) → `account:self`, `setup:read`, `notification:device`, `portal:student|guardian|teacher`; persona portalları yalnız kendi personasını kabul eder; `@Roles` 86 → 7 | LOCAL_TEST: api 1436 test PASS; 78 rota × 8 rol ölçümünde tek fark 19 destek talebi POST'unda persona dışı rolün 422 yerine 403 alması; yeni persona erişim testi her rota ve rolde guard sonucunu doğrular. CI `39451197963` PASS + otomatik STAGING_DEPLOY `39454253761` (`workflow_run`) beş işte PASS, cutover yayınlandı; build 3,1 / deploy 2,8 / evidence 1,5 dk. Staging salt okunur doğrulama (2026-10-20 16:15 UTC): dört servis `122943abf` imajı, web/api/queue-board healthy, migration 126, `/health` ve `/health/ready` 200; kimliksiz `GET /api/v1/me/profile`, `/me/student`, `/me/guardian/students`, `/me/teacher`, `/me/tenant`, `/me/notification-devices` 401. Rol bazlı erişim staging'de UAT girişiyle doğrulanacak (UNPROVEN) | `122943abf` / PR #203 | – / 1 |
 | 2026-10-20 | MFA sıfırlama step-up kanıtı (`OWNER_ADMIN_CHANGE`) tek hesaba bağlandı (`{ tenantId, userId }`); DEC-20261020-01 platform girişi/acil erişim kararları | LOCAL_TEST: api 1436 test PASS (bir hesabın kanıtı başka hesapta ve başka kurumda reddedilir), sistem paneli Playwright 52 test PASS. CI `39467191243` PASS + otomatik STAGING_DEPLOY `39470059631` (`workflow_run`) beş işte PASS, cutover yayınlandı; build 3,1 / deploy 3,2 / evidence 1,3 dk. Staging salt okunur doğrulama (2026-10-20 18:05 UTC): dört servis `6b2bc57f7` imajı, web/api/queue-board healthy, migration 126, `/health` ve `/health/ready` 200; `sistem` host'unda kimliksiz `POST /api/v1/auth/step-up` ve `/auth/totp/admin-reset` 401. Kanıtın hesaba bağlı sıfırlama akışı staging'de sistem yöneticisi MFA oturumuyla denenmedi (UNPROVEN) | `6b2bc57f7` / PR #204 | – / 1 |
 | 2026-10-20 | RLS bypass izin listesi: `withTenantDb({ bypassRls: true })` ve ham `set_config('app.bypass_rls', ...)` dosya+fonksiyon bazında kilitlendi (12 kullanım, gerekçeli); `tenant-db:check` CI zincirine eklendi | LOCAL_TEST: kontrol mevcut kodda PASS, kopyada eklenen yeni bypass yolunun iki biçimi de FAIL. CI `39478761141` PASS + otomatik STAGING_DEPLOY `39480569223` (`workflow_run`) beş işte PASS, cutover yayınlandı; dört servis `929f82d12`, migration 126, health 200 (STAGING). Deploy adımı 9,1 dk (önceki ~3 dk): yalnız kök `package.json` betik satırı değiştiği halde 1,1 GB `node_modules` katmanı yeniden oluştu (api katmanı `8c70689fb0fb` → `3e3a437e7d67`), çünkü kök `package.json` Dockerfile `deps` aşamasının girdisi | `929f82d12` / PR #205 | – / 1 |
-| 2026-10-20 | IMG-3: Docker `deps` aşaması betikleri çıkarılmış manifestlerle kuruyor (betik değişikliği 1,1 GB `node_modules` katmanını bozmaz) | LOCAL_TEST: iki derlemede `pnpm install` CACHED ve katman özetleri aynı, api imajı derlendi; `docker:check` PASS. CI ve otomatik staging deploy merge sonrası; kabul bir sonraki betik-only deploy'da | bu PR | – / 1 |
+| 2026-10-20 | IMG-3: Docker `deps` aşaması betikleri çıkarılmış manifestlerle kuruyor (betik değişikliği 1,1 GB `node_modules` katmanını bozmaz) | LOCAL_TEST: iki derlemede `pnpm install` CACHED ve katman özetleri aynı, api imajı derlendi; `docker:check` PASS. CI `39491058600` PASS + otomatik STAGING_DEPLOY `39493069538` (`workflow_run`) beş işte PASS, cutover yayınlandı; build 4,9 / deploy 8,4 dk (Dockerfile değiştiği için katman beklendiği gibi bir kez yeniden oluştu). Staging salt okunur doğrulama: dört servis `ee6e36422`, web/api/queue-board healthy, migration 126, health 200; dört imaj ortak `node_modules` katmanı `4506b86ac601`. Kabul (STAGING) açık: yalnız betik değişen bir sonraki deploy'da bu özet aynı kalmalı | `ee6e36422` / PR #206 | – / 1 |
 
 Not: `38565136132` (2026-10-14, `82ae7be74`) boş bir Staging Deploy koşusudur. Aynı commit başka bir oturumca deploy edilmişti (`38561474048`). Araya giren docs merge'i yüzünden `github-ci-evidence` işinde düştü; staging değişmedi.
 
