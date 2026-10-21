@@ -13,6 +13,7 @@ import {
   changePassword as requestChangePassword,
   clearAuthForSession,
   confirmMfaEnrollment as requestConfirmMfaEnrollment,
+  licenseReadOnlyEvent,
   login as requestLogin,
   logout as requestLogout,
   queryClient,
@@ -22,7 +23,7 @@ import {
   verifyMfa as requestVerifyMfa,
 } from "../src/api-client.js";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { ToastProvider } from "@o-okul/ui";
+import { ToastProvider, useToast } from "@o-okul/ui";
 
 interface AuthStore {
   auth: AuthResponse | null;
@@ -94,7 +95,7 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthContext.Provider value={value}>
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider><LicenseReadOnlyNotice />{children}</ToastProvider>
       </AuthContext.Provider>
     </QueryClientProvider>
   );
@@ -111,4 +112,22 @@ export function useAuth() {
 
 function hasCookie(name: string): boolean {
   return document.cookie.split(";").some((part) => part.trim().startsWith(`${name}=`));
+}
+
+export const licenseReadOnlyMessage = "Lisans süresi dolduğu için kurum salt okunur: kayıtlar görüntülenebilir, yeni kayıt ve değişiklik için lisansın yenilenmesi gerekir.";
+
+// UAT F-17: one warning per burst of rejected writes (a form may retry or fire several requests).
+function LicenseReadOnlyNotice() {
+  const { notify } = useToast();
+  useEffect(() => {
+    let lastShown = 0;
+    const onReadOnly = () => {
+      if (Date.now() - lastShown < 8000) return;
+      lastShown = Date.now();
+      notify(licenseReadOnlyMessage, "warning");
+    };
+    window.addEventListener(licenseReadOnlyEvent, onReadOnly);
+    return () => window.removeEventListener(licenseReadOnlyEvent, onReadOnly);
+  }, [notify]);
+  return null;
 }
