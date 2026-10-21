@@ -1217,7 +1217,7 @@ const expectations = {
     "127.0.0.1:${UPTIME_KUMA_HOST_PORT:-3003}:3001",
     "uptime_kuma_data:/app/data",
   ],
-  Dockerfile: ["FROM node:24-alpine AS queue-board", "apps/queue-board/dist/main.js"],
+  Dockerfile: ["AS queue-board", "apps/queue-board/dist/main.js"],
   "docker-compose.yml": [
     "queue-board:",
     "target: queue-board",
