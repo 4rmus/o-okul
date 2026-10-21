@@ -1195,7 +1195,7 @@ const expectations = {
     "LIVE_ONBOARDING_EVIDENCE_PATH",
     "NOT_RUN",
   ],
-  Dockerfile: ["FROM node:24-alpine AS queue-board", "apps/queue-board/dist/main.js"],
+  Dockerfile: ["AS queue-board", "apps/queue-board/dist/main.js"],
   "docker-compose.yml": [
     "queue-board:",
     "target: queue-board",

@@ -1,4 +1,8 @@
-FROM node:24-alpine AS base
+# IMG-4: every Node stage is pinned to one image digest (node:24-alpine, Node 24.22.1, linux/amd64 diff IDs
+# 74d97c428c51…690c35962e57 as of 2026-10-21). A floating tag rebuilt every layer, including the 1.1 GB
+# node_modules layer, whenever upstream published a patch, and changed the runtime Node version unannounced.
+# Update the digest deliberately in its own PR (docker buildx imagetools inspect node:24-alpine).
+FROM node:24-alpine@sha256:6a1c190e17215d844926b0677f4bf87273ff7d5e54db06d3b5b5863ab0b09a3d AS base
 WORKDIR /app
 RUN corepack enable
 
@@ -52,7 +56,7 @@ COPY apps ./apps
 COPY packages ./packages
 RUN pnpm turbo run build --filter=@o-okul/queue-board...
 
-FROM node:24-alpine AS web
+FROM node:24-alpine@sha256:6a1c190e17215d844926b0677f4bf87273ff7d5e54db06d3b5b5863ab0b09a3d AS web
 WORKDIR /app
 ENV NODE_ENV=production
 RUN corepack enable
@@ -64,7 +68,7 @@ WORKDIR /app/apps/web
 EXPOSE 3001
 CMD ["./node_modules/.bin/next", "start", "-H", "0.0.0.0", "-p", "3001"]
 
-FROM node:24-alpine AS api
+FROM node:24-alpine@sha256:6a1c190e17215d844926b0677f4bf87273ff7d5e54db06d3b5b5863ab0b09a3d AS api
 WORKDIR /app
 ENV NODE_ENV=production
 RUN corepack enable
@@ -75,7 +79,7 @@ COPY package.json pnpm-workspace.yaml turbo.json ./
 EXPOSE 3100
 CMD ["node", "apps/api/dist/main.js"]
 
-FROM node:24-alpine AS worker
+FROM node:24-alpine@sha256:6a1c190e17215d844926b0677f4bf87273ff7d5e54db06d3b5b5863ab0b09a3d AS worker
 WORKDIR /app
 ENV NODE_ENV=production
 RUN corepack enable
@@ -89,7 +93,7 @@ COPY --from=build-worker /app/packages ./packages
 COPY package.json pnpm-workspace.yaml turbo.json ./
 CMD ["node", "apps/worker/dist/main.js"]
 
-FROM node:24-alpine AS queue-board
+FROM node:24-alpine@sha256:6a1c190e17215d844926b0677f4bf87273ff7d5e54db06d3b5b5863ab0b09a3d AS queue-board
 WORKDIR /app
 ENV NODE_ENV=production
 RUN corepack enable
