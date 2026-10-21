@@ -45,6 +45,7 @@ import {
   apiRequest,
   type CursorListMeta,
 } from "../../../../src/api-client.js";
+import { loadCursorPageWithRecovery } from "../../../../src/cursor-list-controls.js";
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 export function EmployeesPage() {
@@ -64,7 +65,8 @@ export function EmployeesPage() {
   };
   const employeesQuery = useQuery({
     queryKey: ["employees", tenantId, listQuery],
-    queryFn: () => loadEmployees(auth?.accessToken ?? "", listQuery),
+    // A stale cursor (for example from a bookmarked URL) is dropped and the first page is shown instead.
+    queryFn: () => loadCursorPageWithRecovery(listQuery, (state) => loadEmployees(auth?.accessToken ?? "", state), updateListQuery),
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });

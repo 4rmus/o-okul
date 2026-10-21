@@ -19,6 +19,7 @@ import {
 import {
   type TenantUserRecord,
   type UserManagementStore,
+  employeeCursorInvalid,
   tenantUserCursorInvalid,
   userManagementStoreToken,
 } from "./user-management-store.js";
@@ -59,7 +60,7 @@ export class UserManagementService {
       const page = await this.store.listEmployeeAccessPage(this.requireTenantWideContext(context), query);
       return withCursorListMeta(page.records, page.meta);
     } catch (error) {
-      if (error instanceof Error && error.message === "EMPLOYEE_CURSOR_INVALID") {
+      if (error instanceof Error && error.message === employeeCursorInvalid) {
         throw new BadRequestException(error.message);
       }
       throw error;

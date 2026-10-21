@@ -116,6 +116,7 @@ describe("PostgresUserManagementStore", () => {
     const employeeQuery = queries.find((query) => query.sql.includes('ORDER BY lower(e."lastName") ASC, e."id" ASC'));
     expect(employeeQuery?.values).toEqual(["tenant-a", "%ada%", 51]);
     expect(employeeQuery?.sql).toContain('LIKE $2 ESCAPE');
+    expect(employeeQuery?.sql).toContain("lower(translate(");
     expect(employeeQuery?.sql).toContain('LIMIT $3');
   });
 
@@ -624,6 +625,37 @@ describe("InMemoryUserManagementStore çalışan cursor listesi", () => {
     await expect(store.listEmployeeAccessPage("tenant-a", { ...query, q: "ADMIN-A@EXAMPLE.TEST" })).resolves.toMatchObject({
       records: [expect.objectContaining({ id: "employee-admin-a" })],
     });
+  });
+});
+
+describe("InMemoryUserManagementStore çalışan cursor dayanıklılığı ve Türkçe arama", () => {
+  const query = { direction: "next" as const, limit: 1, sort: "lastName" as const };
+  const employee = (firstName: string, lastName: string) => ({ firstName, lastName, status: "ACTIVE" as const });
+
+  it("sınır çalışanın adı değişse de sonraki sayfa atlamadan gelir; v1 cursor reddedilir", async () => {
+    const store = new InMemoryUserManagementStore();
+    const first = await store.listEmployeeAccessPage("tenant-a", query);
+    expect(first.records.map((record) => record.id)).toEqual(["employee-admin-a"]);
+    // Rename the boundary row in place (the in-memory store has no rename API).
+    (store as unknown as { employees: Array<{ id: string; lastName: string }> }).employees
+      .find((record) => record.id === "employee-admin-a")!.lastName = "Zorlu";
+
+    const second = await store.listEmployeeAccessPage("tenant-a", { ...query, cursor: first.meta.nextCursor });
+    expect(second.records.map((record) => record.id)).toEqual(["employee-operations-a"]);
+
+    const legacy = Buffer.from(JSON.stringify({ v: 1, context: "x", sort: "lastName", id: "employee-admin-a" }), "utf8").toString("base64url");
+    await expect(store.listEmployeeAccessPage("tenant-a", { ...query, cursor: legacy })).rejects.toThrow("EMPLOYEE_CURSOR_INVALID");
+  });
+
+  it("I/İ/ı/i varyantlarını ad ve soyadda eşler", async () => {
+    const store = new InMemoryUserManagementStore();
+    await store.createEmployee("tenant-a", employee("AYŞE", "IŞIK"));
+    await store.createEmployee("tenant-a", employee("İSMAİL", "KAYA"));
+    const lastNames = async (q: string) =>
+      (await store.listEmployeeAccessPage("tenant-a", { ...query, limit: 10, q })).records.map((record) => record.lastName);
+
+    for (const q of ["ışık", "IŞIK", "Işık"]) expect(await lastNames(q), q).toEqual(["IŞIK"]);
+    for (const q of ["ismail", "İsmail", "ISMAIL"]) expect(await lastNames(q), q).toEqual(["KAYA"]);
   });
 });
 

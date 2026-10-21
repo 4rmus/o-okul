@@ -2,13 +2,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 import type {
   ApiCursorListMeta,
+  EmployeeAccessSort,
   IdentityInvitationListQuery,
   StudentListSort,
   TenantUserListSort,
 } from "@o-okul/shared-types";
 import { PostgresIdentityInvitationStore, identityInvitationCursorInvalid } from "../identity-invitation/identity-invitation-store.js";
 import { PostgresStudentStore, studentCursorInvalid, type StudentRegistryQuery } from "../student/student-store.js";
-import { PostgresUserManagementStore, tenantUserCursorInvalid } from "../user-management/user-management-store.js";
+import { PostgresUserManagementStore, employeeCursorInvalid, tenantUserCursorInvalid } from "../user-management/user-management-store.js";
 import type { CursorDirection } from "./cursor-pagination.js";
 
 // Keyset cursor lists of f2609c04f (GET /students, /tenant-users, /identity-invitations) on real PostgreSQL under
@@ -29,6 +30,7 @@ const tenantIds = [tenantA, tenantB, tenantC];
 const studentSorts: StudentListSort[] = ["lastName", "-lastName", "firstName", "-firstName", "studentNo", "-studentNo", "classId", "-classId"];
 const tenantUserSorts: TenantUserListSort[] = ["email", "-email", "name", "-name"];
 const invitationSorts: IdentityInvitationListQuery["sort"][] = ["-createdAt", "createdAt"];
+const employeeSorts: EmployeeAccessSort[] = ["lastName", "-lastName", "firstName", "employeeNo"];
 
 type Page<T> = { records: T[]; meta: ApiCursorListMeta };
 type FetchPage<T> = (cursor: string | undefined, direction: CursorDirection) => Promise<Page<T>>;
@@ -52,6 +54,9 @@ describePostgres("cursor list keyset pagination on PostgreSQL", () => {
     await seedInvitations(admin, tenantA, 19);
     await seedInvitations(admin, tenantB, 5);
     await seedTurkishFixtures(admin, tenantC);
+    await seedEmployees(admin, tenantA, 14);
+    await seedEmployees(admin, tenantB, 4);
+    await seedTurkishEmployees(admin, tenantC);
   });
 
   afterAll(async () => {
@@ -261,6 +266,73 @@ describePostgres("cursor list keyset pagination on PostgreSQL", () => {
     ])("matches q=%s to the stored Turkish-uppercase name", async (q, expected) => {
       const page = await users.listTenantUserPage(tenantC, { direction: "next", limit: 10, sort: "name", q });
       expect(page.records.map((record) => record.id)).toEqual([`${tenantC}-user-${expected}`]);
+    });
+  });
+
+  describe("GET /employees (PostgresUserManagementStore.listEmployeeAccessPage)", () => {
+    const fetchEmployees = (tenantId: string, sort: EmployeeAccessSort, q?: string): FetchPage<{ id: string; tenantId: string }> =>
+      (cursor, direction) => users.listEmployeeAccessPage(tenantId, { cursor, direction, limit: 4, sort, q });
+
+    it.each(employeeSorts)("walks sort=%s forward to the end and back to the start", async (sort) => {
+      const expected = await employeeReferenceOrder(admin, tenantA, sort);
+      expect(expected).toHaveLength(14);
+      const walk = await walkBothWays(fetchEmployees(tenantA, sort), 4);
+      expect(walk.forward).toEqual(expected);
+      expect(walk.backward).toEqual(expected);
+      expect(walk.forwardPages.length).toBeGreaterThanOrEqual(3);
+      expect(walk.backwardPages).toEqual(walk.forwardPages);
+      expect(walk.records.every((record) => record.tenantId === tenantA)).toBe(true);
+    });
+
+    it("never returns tenant B employees and rejects foreign, re-sorted and re-searched cursors", async () => {
+      const tenantBWalk = await walkBothWays(fetchEmployees(tenantB, "lastName"), 4);
+      expect(tenantBWalk.forward).toEqual(await employeeReferenceOrder(admin, tenantB, "lastName"));
+
+      const tenantBCursor = (await users.listEmployeeAccessPage(tenantB, { direction: "next", limit: 2, sort: "lastName" })).meta.nextCursor!;
+      await expect(users.listEmployeeAccessPage(tenantA, { cursor: tenantBCursor, direction: "next", limit: 4, sort: "lastName" }))
+        .rejects.toThrow(employeeCursorInvalid);
+      const tenantACursor = (await users.listEmployeeAccessPage(tenantA, { direction: "next", limit: 4, sort: "lastName" })).meta.nextCursor!;
+      await expect(users.listEmployeeAccessPage(tenantA, { cursor: tenantACursor, direction: "next", limit: 4, sort: "firstName" }))
+        .rejects.toThrow(employeeCursorInvalid);
+      await expect(users.listEmployeeAccessPage(tenantA, { cursor: tenantACursor, direction: "next", limit: 4, sort: "lastName", q: "kaya" }))
+        .rejects.toThrow(employeeCursorInvalid);
+      const foreignRowPage = await users.listEmployeeAccessPage(tenantA, {
+        cursor: retargetCursor(tenantACursor, tenantBWalk.forward[0]!), direction: "next", limit: 4, sort: "lastName",
+      });
+      expect(foreignRowPage.records.every((record) => record.tenantId === tenantA)).toBe(true);
+      const legacy = Buffer.from(JSON.stringify({ v: 1, context: "legacy", sort: "lastName", id: `${tenantA}-employee-000` }), "utf8").toString("base64url");
+      await expect(users.listEmployeeAccessPage(tenantA, { cursor: legacy, direction: "next", limit: 4, sort: "lastName" }))
+        .rejects.toThrow(employeeCursorInvalid);
+    });
+
+    it.each(["soft-deleted", "renamed"] as const)("continues after a boundary employee %s between pages", async (change) => {
+      const query = { direction: "next" as const, limit: 2, sort: "lastName" as const };
+      const before = await employeeReferenceOrder(admin, tenantC, "lastName");
+      expect(before.length).toBeGreaterThanOrEqual(5);
+      const first = await users.listEmployeeAccessPage(tenantC, query);
+      expect(first.records.map((record) => record.id)).toEqual(before.slice(0, 2));
+      const boundaryId = before[1]!;
+      const original = (await admin.query<{ lastName: string }>(`SELECT "lastName" FROM "Employee" WHERE "id" = $1`, [boundaryId])).rows[0]!;
+      await admin.query(
+        change === "soft-deleted"
+          ? `UPDATE "Employee" SET "deletedAt" = now() WHERE "id" = $1`
+          : `UPDATE "Employee" SET "lastName" = 'ZZZ SONRA' WHERE "id" = $1`,
+        [boundaryId],
+      );
+      try {
+        const second = await users.listEmployeeAccessPage(tenantC, { ...query, cursor: first.meta.nextCursor });
+        expect(second.records.map((record) => record.id)).toEqual(before.slice(2, 4));
+      } finally {
+        await admin.query(`UPDATE "Employee" SET "deletedAt" = NULL, "lastName" = $2 WHERE "id" = $1`, [boundaryId, original.lastName]);
+      }
+    });
+
+    it.each([
+      ["ışık", "isik"], ["IŞIK", "isik"], ["Işık", "isik"],
+      ["ismail", "ismail"], ["İsmail", "ismail"], ["ISMAIL", "ismail"],
+    ])("matches q=%s to the stored Turkish-uppercase employee", async (q, expected) => {
+      const page = await users.listEmployeeAccessPage(tenantC, { direction: "next", limit: 10, sort: "lastName", q });
+      expect(page.records.map((record) => record.id)).toEqual([`${tenantC}-employee-${expected}`]);
     });
   });
 
@@ -584,8 +656,68 @@ async function seedTurkishFixtures(pool: pg.Pool, tenantId: string): Promise<voi
   }
 }
 
+const employeeSortSql: Record<string, string> = {
+  lastName: `lower("lastName")`,
+  firstName: `lower("firstName")`,
+  employeeNo: `lower(coalesce("employeeNo", ''))`,
+};
+
+async function employeeReferenceOrder(pool: pg.Pool, tenantId: string, sort: EmployeeAccessSort): Promise<string[]> {
+  const direction = sort.startsWith("-") ? "DESC" : "ASC";
+  const result = await pool.query<{ id: string }>(
+    `SELECT "id" FROM "Employee"
+     WHERE "tenantId" = $1 AND "deletedAt" IS NULL
+     ORDER BY ${employeeSortSql[sort.replace(/^-/, "")]} ${direction}, "id" ${direction}`,
+    [tenantId],
+  );
+  return result.rows.map((row) => row.id);
+}
+
+/** `count` employees plus one soft-deleted; last names repeat case-insensitively and every third has no number. */
+async function seedEmployees(pool: pg.Pool, tenantId: string, count: number): Promise<void> {
+  const prefix = tenantId === tenantA ? "A" : "B";
+  for (let index = 0; index < count; index += 1) {
+    await pool.query(
+      `INSERT INTO "Employee" ("id", "tenantId", "employeeNo", "firstName", "lastName", "workEmail", "status", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE', now())`,
+      [
+        `${tenantId}-employee-${String(index).padStart(3, "0")}`,
+        tenantId,
+        index % 3 === 0 ? null : `${prefix}-E${String(index).padStart(3, "0")}`,
+        firstNames[index % firstNames.length],
+        lastNames[(index * 3) % lastNames.length],
+        `employee-${index}@${tenantId}.example.test`,
+      ],
+    );
+  }
+  await pool.query(
+    `INSERT INTO "Employee" ("id", "tenantId", "firstName", "lastName", "status", "deletedAt", "updatedAt")
+     VALUES ($1, $2, 'Silinmis', 'Aksoy', 'ACTIVE', now(), now())`,
+    [`${tenantId}-employee-deleted`, tenantId],
+  );
+}
+
+async function seedTurkishEmployees(pool: pg.Pool, tenantId: string): Promise<void> {
+  const people = [
+    { key: "isik", firstName: "AYŞE", lastName: "IŞIK" },
+    { key: "ismail", firstName: "İSMAİL", lastName: "KAYA" },
+    { key: "aksoy", firstName: "CEM", lastName: "AKSOY" },
+    { key: "bulut", firstName: "DENİZ", lastName: "BULUT" },
+    { key: "demir", firstName: "ECE", lastName: "DEMİR" },
+    { key: "ozturk", firstName: "FATMA", lastName: "ÖZTÜRK" },
+  ];
+  for (const person of people) {
+    await pool.query(
+      `INSERT INTO "Employee" ("id", "tenantId", "firstName", "lastName", "status", "updatedAt")
+       VALUES ($1, $2, $3, $4, 'ACTIVE', now())`,
+      [`${tenantId}-employee-${person.key}`, tenantId, person.firstName, person.lastName],
+    );
+  }
+}
+
 async function cleanup(pool: pg.Pool): Promise<void> {
   await pool.query(`DELETE FROM "IdentityInvitation" WHERE "tenantId" = ANY($1::text[])`, [tenantIds]);
+  await pool.query(`DELETE FROM "Employee" WHERE "tenantId" = ANY($1::text[])`, [tenantIds]);
   await pool.query(`DELETE FROM "Student" WHERE "tenantId" = ANY($1::text[])`, [tenantIds]);
   await pool.query(`DELETE FROM "Class" WHERE "tenantId" = ANY($1::text[])`, [tenantIds]);
   await pool.query(`DELETE FROM "TenantMembership" WHERE "tenantId" = ANY($1::text[])`, [tenantIds]);

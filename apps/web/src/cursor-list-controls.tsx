@@ -61,16 +61,16 @@ export function isCursorInvalidError(error: unknown): boolean {
  * Loads a cursor page; when the API refuses the cursor (for example a stale one kept in the URL), reports the
  * cursor-free state through `onReset` so the screen drops it from state and URL, and returns the first page.
  */
-export async function loadCursorPageWithRecovery<T>(
-  state: CursorListQueryState,
-  load: (state: CursorListQueryState) => Promise<T>,
-  onReset: (state: CursorListQueryState) => void,
+export async function loadCursorPageWithRecovery<TState extends { cursor?: string; direction: "next" | "previous" }, T>(
+  state: TState,
+  load: (state: TState) => Promise<T>,
+  onReset: (state: TState) => void,
 ): Promise<T> {
   try {
     return await load(state);
   } catch (error) {
     if (!state.cursor || !isCursorInvalidError(error)) throw error;
-    const firstPage = resetListCursor(state);
+    const firstPage: TState = { ...state, cursor: undefined, direction: "next" };
     onReset(firstPage);
     return load(firstPage);
   }
