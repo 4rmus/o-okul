@@ -542,6 +542,16 @@ type PaymentPlanFixture = {
   installments: PaymentInstallmentFixture[];
 };
 
+// UAT F-19: the system login page names itself, the tenant login page keeps "Kurum girişi".
+test("sistem giriş sayfası Sistem girişi, kurum giriş sayfası Kurum girişi başlığını gösterir (UAT F-19)", async ({ page }) => {
+  await page.goto("/sistem/giris");
+  const aside = page.getByRole("complementary", { name: "Güvenli giriş bilgisi" });
+  await expect(aside).toContainText("Sistem girişi");
+  await expect(aside).not.toContainText("Kurum girişi");
+  await page.goto(tenantLoginUrl(appOrigin, "dna-egitim"));
+  await expect(page.getByRole("complementary", { name: "Güvenli giriş bilgisi" })).toContainText("Kurum girişi");
+});
+
 test("Next login gerçek auth store ile kurum paneline geçer", async ({ page }) => {
   test.setTimeout(300_000);
   page.setDefaultTimeout(5_000);

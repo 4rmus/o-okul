@@ -261,7 +261,7 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
         </Button>
       </form>
       <aside className="next-auth-context" aria-label="Güvenli giriş bilgisi">
-        <p className="next-section-eyebrow">{lockedTenantSlug ? "Kurum girişi" : "Güvenli oturum"}</p>
+        <p className="next-section-eyebrow">{lockedTenantSlug === "system" ? "Sistem girişi" : lockedTenantSlug ? "Kurum girişi" : "Güvenli oturum"}</p>
         <h2>Görevinize ait çalışma alanına ilerleyin.</h2>
         <p>Kurumunuz ve kullanıcı göreviniz girişten sonra doğrulanır; yalnız görmeye yetkili olduğunuz bilgiler gösterilir.</p>
         <ul>

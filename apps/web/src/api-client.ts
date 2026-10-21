@@ -458,10 +458,16 @@ async function readEnvelope<T, TMeta = ListMeta>(response: Response): Promise<Ap
   return (await response.json()) as ApiEnvelope<T, TMeta>;
 }
 
+// UAT F-17: a write rejected because the licence expired shows one clear app-wide notice instead of each form's
+// generic "could not save" text. Every failed request funnels through readErrorCode, so the signal is raised here.
+export const licenseReadOnlyEvent = "o-okul:license-read-only";
+
 async function readErrorCode(response: Response): Promise<string | undefined> {
   try {
     const body = (await response.clone().json()) as { error?: { code?: string } };
-    return body.error?.code;
+    const code = body.error?.code;
+    if (code === "TENANT_LICENSE_EXPIRED_READ_ONLY" && typeof window !== "undefined") window.dispatchEvent(new Event(licenseReadOnlyEvent));
+    return code;
   } catch {
     return undefined;
   }
