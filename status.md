@@ -248,7 +248,7 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
 `docs/account-management-architecture-plan.md` bölüm 6'daki eski Gate E/F listesi bu planla yer değiştirdi.
 
 1. S1: staging rol UAT'ı sürüyor (`docs/staging-uat-s1.md`). S1-01..S1-03 PASS (2026-10-10/11); S1-04 sürüyor,
-   S1-05..S1-14 başlamadı. Kapanan bulgular: F-04, F-06..F-13, F-15, F-16 (#159, #161–#166, #168). Açık: F-14
+   S1-05..S1-14 başlamadı. Kapanan bulgular: F-02..F-13, F-15, F-16 (#159, #161–#166, #168, #180, #182, #184). Açık: F-14
    e-posta yalnız doğrulanmış hedeflere gidiyor (Yüksek; S1-05 davet akışını bekletir). 2026-10-15 panel
    kontrolü: `o-okul.com` Email Sending'de Enabled ve DNS Configured, yani kısıt kalkmış olabilir (UNPROVEN);
    ürün sahibi kararıyla S1-04'te finans davetini doğrulanmamış bir adrese yeniden göndererek doğrulanacak.
@@ -260,8 +260,9 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
    oluşturduğu hesap kullanılmıyorsa silinir (#185, `78a0e0bdd`; var olan hesabın parolası
    değişmez). Öğrenci kodu ve veli daveti iptal ekranları ile öğrenci kabulünde ulusal kimlikle eşleşen hesabın
    korunması #191 ile main ve staging'de (`df86002b7`); ulusal kimlikle eşleşmede kabulün parolayı
-   sıfırlaması ürün sahibi kararıyla korunur (2026-10-15). Deneme lisansı 2026-10-17 00:00 UTC'de biter;
-   ürün sahibi S1-14'te salt okunur geçişi gözler, ardından sistem yöneticisi olarak PRO dönem açar. Kontrol noktası 2026-11-14.
+   sıfırlaması ürün sahibi kararıyla korunur (2026-10-15). Deneme lisansı 2026-10-17 00:00 UTC'de bitti; kurum
+   2026-10-31'e kadar salt okunur, sonra dondurulur. Ürün sahibi S1-14'te salt okunur geçişi gözler, ardından sistem
+   yöneticisi olarak PRO dönem açar. UAT kiti 2026-10-21'de son değişikliklere göre güncellendi (ön koşul satırı). Kontrol noktası 2026-11-14.
 2. S2: PR #153 lisans sonu veri imhası main'de (`2b0ef97`, staging deploy PASS); imha, sıfırlama motorunun yazma sessizliği kapısı açılana kadar çalışmaz.
 3. S4: §3.4 doğrulama planı (dosya talebi, görüşmeler, pilot taahhüdü); ürün sahibi işi.
 4. S5/S6: PO-3 kapasite ölçümü ve PO-10 production kanıt zinciri; PO-10 tarihi 2027-01-03'te.
