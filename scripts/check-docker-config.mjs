@@ -400,9 +400,9 @@ const expectations = {
     "staging-deployment-cutover-${{ github.run_id }}",
   ],
   Dockerfile: [
-    "FROM node:24-alpine AS api",
-    "FROM node:24-alpine AS worker",
-    "FROM node:24-alpine AS queue-board",
+    "AS api",
+    "AS worker",
+    "AS queue-board",
     "apk add --no-cache chromium",
     "REPORT_PDF_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium-browser",
     "CMD [\"node\", \"apps/worker/dist/main.js\"]",
@@ -460,6 +460,12 @@ for (const [file, tokens] of Object.entries(expectations)) {
 }
 
 const dockerfileLines = dockerfile.split(/\r?\n/).map((line) => line.trim());
+// IMG-4: Node stages must be pinned to one digest; a floating tag silently rebuilds every layer.
+const nodeFromLines = dockerfileLines.filter((line) => /^FROM node:/.test(line));
+const nodeDigests = new Set(nodeFromLines.map((line) => line.match(/^FROM node:[^@\s]+@(sha256:[a-f0-9]{64}) AS /)?.[1] ?? "UNPINNED"));
+if (nodeFromLines.length === 0 || nodeDigests.has("UNPINNED") || nodeDigests.size !== 1) {
+  failures.push("Dockerfile: her FROM node: satırı aynı @sha256 özetine sabitlenmeli (IMG-4)");
+}
 const buildWebStageIndex = dockerfileLines.indexOf("FROM deps AS build-web");
 const buildApiStageIndex = dockerfileLines.indexOf("FROM deps AS build-api");
 const webBuildIndex = dockerfileLines.indexOf("RUN pnpm turbo run build --filter=@o-okul/web...");
