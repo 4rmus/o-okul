@@ -165,7 +165,9 @@ async function openTeacherDetail(page: Page, state: MockState, teacherId: string
     }
     if (path === "/identity-invitations" && request.method() === "GET") {
       state.invitationListRequests += 1;
-      state.invitationQueries.push(new URL(request.url()).searchParams.get("q") ?? "");
+      // Exact cursor-list filters: the detail page asks for one subjectId, the list page for the TEACHER subject type.
+      const params = new URL(request.url()).searchParams;
+      state.invitationQueries.push(params.get("subjectId") ?? params.get("subjectType") ?? "");
       await json(route, state.invitations);
       return;
     }

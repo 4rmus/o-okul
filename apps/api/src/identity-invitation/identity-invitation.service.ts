@@ -8,7 +8,9 @@ import {
   type PortalSubjectRoleName,
   type IdentityInvitationAcceptRequest,
   type IdentityInvitationCreateRequest,
+  type IdentityInvitationListQuery,
 } from "@o-okul/shared-types";
+import type { CursorPage } from "../listing/cursor-pagination.js";
 import { createHash, randomBytes } from "node:crypto";
 import { encryptSecretDeliveryPayload, type SecretDeliveryOutboxInput } from "@o-okul/db";
 import { passwordPolicyViolation } from "../auth/password-policy.js";
@@ -30,6 +32,7 @@ import {
   type IdentityInvitationRecord,
   type IdentityInvitationStore,
   type InvitationSubjectType,
+  identityInvitationCursorInvalid,
   identityInvitationStoreToken,
 } from "./identity-invitation-store.js";
 import {
@@ -65,6 +68,18 @@ export class IdentityInvitationService {
   async list(context: RequestContext): Promise<IdentityInvitationRecord[]> {
     const tenantId = this.requireTenantWideContext(context);
     return this.invitations.list(tenantId);
+  }
+
+  async listPage(context: RequestContext, query: IdentityInvitationListQuery): Promise<CursorPage<IdentityInvitationRecord>> {
+    const tenantId = this.requireTenantWideContext(context);
+    try {
+      return await this.invitations.listPage(tenantId, query);
+    } catch (error) {
+      if (error instanceof Error && error.message === identityInvitationCursorInvalid) {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
   }
 
   async create(context: RequestContext, body: CreateIdentityInvitationBody): Promise<IdentityInvitationIssueResult> {

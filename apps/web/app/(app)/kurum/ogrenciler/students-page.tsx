@@ -27,14 +27,22 @@ import type {
 } from "@o-okul/shared-types";
 import { Eye, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { ApiRequestError, apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch, withQueryParams } from "../../../../src/api-client.js";
+import { ApiRequestError, apiBaseUrl, apiCursorListRequest, apiRequest, authenticatedFetch, withQueryParams } from "../../../../src/api-client.js";
 import {
   firstFormError,
   studentFormSchema,
   type StudentFormPayload,
   type StudentFormState,
 } from "../../../../src/form-validation.js";
-import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
+import {
+  buildCursorListUrl,
+  CursorListControls,
+  initialCursorListQuery,
+  readCursorListQueryFromUrl,
+  resetListCursor,
+  writeCursorListQueryParams,
+  type CursorListQueryState,
+} from "../../../../src/cursor-list-controls.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
 import { formatPercentNumber, formatStudentProgressSummary, isComparableStudentProgress, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import { readReportExamId } from "../../_shared/report-exam-selection.js";
@@ -96,7 +104,6 @@ interface QueryParamReader {
 
 const requiredStudentColumnKeys = new Set<StudentColumnKey>(["name", "actions"]);
 const defaultVisibleStudentColumnKeys = [...studentColumnKeys];
-const studentPageLimits = [5, 10, 20];
 const studentImportMaxBytes = 5 * 1024 * 1024;
 const studentImportAllowedExtensions = new Set(["CSV", "XLSX"]);
 
@@ -153,7 +160,7 @@ export function StudentsPage() {
   const queryClient = useQueryClient();
   const { confirm, confirmationDialog } = useConfirmDialog();
   const reportExamId = readReportExamId(searchParams);
-  const [listQuery, setListQuery] = useState<ListQueryState>(() => readStudentListQuery(searchParams));
+  const [listQuery, setListQuery] = useState<CursorListQueryState>(() => readStudentListQuery(searchParams));
   const [filters, setFilters] = useState<StudentListFilters>(() => readStudentFilters(searchParams));
   const [tableDensity, setTableDensity] = useState<StudentTableDensity>(() => readStudentTableDensity(searchParams));
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<StudentColumnKey[]>(() => readVisibleStudentColumnKeys(searchParams));
@@ -393,7 +400,7 @@ export function StudentsPage() {
 
   function updateFilters(nextFilters: StudentListFilters) {
     setFilters(nextFilters);
-    setListQuery((current) => ({ ...current, page: 1 }));
+    setListQuery((current) => resetListCursor(current));
   }
 
   function openEditForm(student: StudentRecord) {
@@ -690,7 +697,7 @@ export function StudentsPage() {
       <CrudPage
         actions={
           <>
-            <ListControls
+            <CursorListControls
               meta={studentsQuery.data?.meta}
               onChange={setListQuery}
               searchPlaceholder="Ad, soyad veya okul no ara"
@@ -1264,20 +1271,10 @@ const studentSortOptions = [
   { label: "Sınıf A-Z", value: "classId" },
   { label: "Sınıf Z-A", value: "-classId" },
 ];
+const studentSortValues: ReadonlySet<string> = new Set(studentSortOptions.map((option) => option.value));
 
-function readStudentListQuery(searchParams: QueryParamReader): ListQueryState {
-  const page = Number(searchParams.get("page"));
-  const limit = Number(searchParams.get("limit"));
-  return {
-    page: Number.isFinite(page) && page > 0 ? page : initialListQuery.page,
-    limit: studentPageLimits.includes(limit) ? limit : initialListQuery.limit,
-    q: searchParams.get("q") ?? initialListQuery.q,
-    sort: readStudentSort(searchParams.get("sort")),
-  };
-}
-
-function readStudentSort(value: string | null): string {
-  return value && studentSortOptions.some((option) => option.value === value) ? value : initialListQuery.sort;
+function readStudentListQuery(searchParams: QueryParamReader): CursorListQueryState {
+  return readCursorListQueryFromUrl(searchParams, { sortValues: studentSortValues });
 }
 
 function readStudentFilters(searchParams: QueryParamReader): StudentListFilters {
@@ -1325,17 +1322,14 @@ function writeStudentListQuery({
   visibleColumnKeys,
 }: {
   filters: StudentListFilters;
-  listQuery: ListQueryState;
+  listQuery: CursorListQueryState;
   tableDensity: StudentTableDensity;
   visibleColumnKeys: StudentColumnKey[];
 }) {
   if (typeof window === "undefined") return;
 
   const params = new URLSearchParams(window.location.search);
-  setQueryParam(params, "page", listQuery.page === initialListQuery.page ? "" : String(listQuery.page));
-  setQueryParam(params, "limit", listQuery.limit === initialListQuery.limit ? "" : String(listQuery.limit));
-  setQueryParam(params, "q", listQuery.q.trim());
-  setQueryParam(params, "sort", listQuery.sort);
+  writeCursorListQueryParams(params, listQuery, { defaultState: initialCursorListQuery });
   setQueryParam(params, "classId", filters.classId);
   setQueryParam(params, "level", filters.level);
   setQueryParam(params, "responsibleTeacherId", filters.responsibleTeacherId);
@@ -1368,12 +1362,13 @@ function isDefaultStudentColumnSet(keys: StudentColumnKey[]) {
   return keys.length === defaultVisibleStudentColumnKeys.length && defaultVisibleStudentColumnKeys.every((key) => keys.includes(key));
 }
 
-async function loadStudents(accessToken: string, listQuery: ListQueryState, filters: StudentListFilters) {
-  return apiListRequest<StudentRecord>(accessToken, buildStudentListUrl(`${apiBaseUrl}/students`, listQuery, filters));
+async function loadStudents(accessToken: string, listQuery: CursorListQueryState, filters: StudentListFilters) {
+  return apiCursorListRequest<StudentRecord>(accessToken, buildStudentListUrl(`${apiBaseUrl}/students`, listQuery, filters));
 }
 
-function buildStudentListUrl(baseUrl: string, state: ListQueryState, filters: StudentListFilters): string {
-  return withQueryParams(buildListUrl(baseUrl, state), filters);
+// limit is always sent, so GET /students runs in cursor mode (SQL registry) rather than the unpaged lookup list.
+function buildStudentListUrl(baseUrl: string, state: CursorListQueryState, filters: StudentListFilters): string {
+  return withQueryParams(buildCursorListUrl(baseUrl, state), filters);
 }
 
 async function loadStudentReferences(accessToken: string): Promise<StudentReferences> {

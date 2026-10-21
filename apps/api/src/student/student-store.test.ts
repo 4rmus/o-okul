@@ -8,7 +8,7 @@ describe("PostgresStudentStore", () => {
     await store.create({ tenantId: "tenant-a", firstName: "Sınıfsız", lastName: "Sekiz", gradeLevelId: "grade-8", status: "ACTIVE" });
     await store.create({ tenantId: "tenant-a", firstName: "Sınıfsız", lastName: "Yedi", gradeLevelId: "grade-7", status: "ACTIVE" });
 
-    const page = await store.listRegistryPage("tenant-a", { page: 1, limit: 20, gradeLevelId: "grade-8" });
+    const page = await store.listRegistryPage("tenant-a", { direction: "next", limit: 20, sort: "lastName", gradeLevelId: "grade-8" });
 
     const classlessStudent = page.records.find((student) => student.firstName === "Sınıfsız" && student.lastName === "Sekiz");
     expect(classlessStudent).toMatchObject({ gradeLevelId: "grade-8" });
@@ -16,7 +16,7 @@ describe("PostgresStudentStore", () => {
     expect(page.records.every((student) => student.gradeLevelId === "grade-8")).toBe(true);
   });
 
-  it("10 bin kayıtlı sentetik registry'de yalnız istenen sunucu sayfasını 500 ms altında döndürür", async () => {
+  it("10 bin kayıtlı sentetik registry'de cursor ile ilerleyip yalnız istenen sayfayı 500 ms altında döndürür", async () => {
     const store = new InMemoryStudentStore();
     await store.createMany(Array.from({ length: 10_000 }, (_, index) => ({
       tenantId: "tenant-a",
@@ -26,27 +26,36 @@ describe("PostgresStudentStore", () => {
       status: "ACTIVE",
     })));
 
+    const first = await store.listRegistryPage("tenant-a", { direction: "next", limit: 50, sort: "lastName" });
     const startedAt = performance.now();
     const page = await store.listRegistryPage("tenant-a", {
-      page: 100,
+      cursor: first.meta.nextCursor,
+      direction: "next",
       limit: 50,
       sort: "lastName",
     });
     const durationMs = performance.now() - startedAt;
 
     expect(page.records).toHaveLength(50);
-    expect(page.meta).toEqual({ total: 10_001, page: 100, limit: 50, totalPages: 201 });
+    expect(page.meta).toEqual({
+      limit: 50,
+      total: 10_001,
+      nextCursor: expect.any(String),
+      previousCursor: expect.any(String),
+    });
+    expect(page.records[0]?.id).not.toBe(first.records.at(-1)?.id);
     expect(durationMs).toBeLessThan(500);
     expect(page.records.every((student) => student.tenantId === "tenant-a")).toBe(true);
   });
 
-  it("v2 registry arama/filtre/sayfalamayı SQL içinde tenant ve contact scope ile uygular", async () => {
+  it("v2 registry arama/filtre/cursor sayfalamayı SQL içinde tenant ve contact scope ile uygular", async () => {
     const queries: Array<{ sql: string; values?: unknown[] }> = [];
     const pool = {
       async query<T>(sql: string, values?: unknown[]) {
         queries.push({ sql, values });
         if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
         if (sql.includes("COUNT(*)::int AS total")) return { rows: [{ total: 2 }] as T[] };
+        if (sql.includes('SELECT 1 FROM "Student" student')) return { rows: [{ "?column?": 1 }] as T[] };
         if (sql.includes('SELECT student.*')) {
           return { rows: [{
             id: "student-a",
@@ -64,37 +73,54 @@ describe("PostgresStudentStore", () => {
             photoKey: null,
             userId: null,
             deletedAt: null,
+          }, {
+            id: "student-b",
+            tenantId: "tenant-a",
+            studentNo: "101",
+            firstName: "Ada",
+            lastName: "B",
+            classId: "class-a",
+            responsibleTeacherId: "teacher-a",
+            status: "ACTIVE",
+            nationalIdEncrypted: null,
+            nationalIdHash: null,
+            phone: null,
+            email: null,
+            photoKey: null,
+            userId: null,
+            deletedAt: null,
           }] as T[] };
         }
         return { rows: [] as T[] };
       },
     };
     const store = new PostgresStudentStore(pool);
-
-    const page = await store.listRegistryPage("tenant-a", {
-      page: 2,
+    const registryQuery = {
+      direction: "next" as const,
       limit: 1,
       q: "Ada",
-      sort: "-lastName",
+      sort: "-lastName" as const,
       gradeLevelId: "grade-8",
       classIds: ["class-a"],
       hasContact: true,
       teacherId: "teacher-a",
       teacherStudentIds: ["student-a"],
       teacherClassIds: ["class-a"],
-    });
+    };
 
-    expect(page).toEqual({
+    const first = await store.listRegistryPage("tenant-a", registryQuery);
+    expect(first).toEqual({
       records: [expect.objectContaining({ id: "student-a", tenantId: "tenant-a" })],
-      meta: { total: 2, page: 2, limit: 1, totalPages: 2 },
+      meta: { limit: 1, total: 2, nextCursor: expect.any(String) },
     });
-    const listQuery = queries.find((query) => query.sql.includes('SELECT student.*'));
-    expect(listQuery?.sql).toContain('FROM "StudentContact" contact');
-    expect(listQuery?.sql).toContain('student."tenantId" = $1');
-    expect(listQuery?.sql).toContain('student."gradeLevelId" = $2');
-    expect(listQuery?.sql).toContain('ORDER BY lower(student."lastName") DESC');
-    expect(listQuery?.sql).toContain("LIMIT 1 OFFSET 1");
-    expect(listQuery?.values).toEqual([
+    const firstListQuery = queries.find((query) => query.sql.includes('SELECT student.*'));
+    expect(firstListQuery?.sql).toContain('FROM "StudentContact" contact');
+    expect(firstListQuery?.sql).toContain('student."tenantId" = $1');
+    expect(firstListQuery?.sql).toContain('student."gradeLevelId" = $2');
+    expect(firstListQuery?.sql).toContain('ORDER BY lower(student."lastName") DESC, student."id" DESC');
+    expect(firstListQuery?.sql).toContain("LIMIT $8");
+    expect(firstListQuery?.sql).not.toContain("OFFSET");
+    expect(firstListQuery?.values).toEqual([
       "tenant-a",
       "grade-8",
       ["class-a"],
@@ -102,7 +128,25 @@ describe("PostgresStudentStore", () => {
       ["student-a"],
       ["class-a"],
       "%ada%",
+      2,
     ]);
+
+    queries.length = 0;
+    const second = await store.listRegistryPage("tenant-a", { ...registryQuery, cursor: first.meta.nextCursor });
+    expect(second.meta.previousCursor).toEqual(expect.any(String));
+    const anchorQuery = queries.find((query) => query.sql.includes('SELECT 1 FROM "Student" student'));
+    expect(anchorQuery?.values?.at(-1)).toBe("student-a");
+    const secondListQuery = queries.find((query) => query.sql.includes('SELECT student.*'));
+    expect(secondListQuery?.sql).toContain('(lower(student."lastName"), student."id") <');
+    expect(secondListQuery?.sql).toContain('SELECT lower(anchor."lastName"), anchor."id" FROM "Student" anchor');
+    expect(secondListQuery?.values?.slice(-2)).toEqual(["student-a", 2]);
+
+    queries.length = 0;
+    await expect(store.listRegistryPage("tenant-b", { ...registryQuery, cursor: first.meta.nextCursor }))
+      .rejects.toThrow("STUDENT_CURSOR_INVALID");
+    await expect(store.listRegistryPage("tenant-a", { ...registryQuery, status: "PASSIVE", cursor: first.meta.nextCursor }))
+      .rejects.toThrow("STUDENT_CURSOR_INVALID");
+    expect(queries.some((query) => query.sql.includes('SELECT student.*'))).toBe(false);
   });
 
   it("portal erişimini tenant RLS, SQL arama ve cursor meta ile listeler; e-postayı maskeler", async () => {
@@ -632,5 +676,62 @@ describe("PostgresStudentStore", () => {
     expect(queries.some(({ sql, values }) => sql.includes('UPDATE "User"') && values?.[3] === 5)).toBe(true);
     expect(queries.some(({ sql }) => sql.includes('UPDATE "AuthSession"'))).toBe(true);
     expect(queries.at(-1)?.sql).toBe("COMMIT");
+  });
+});
+
+describe("InMemoryStudentStore registry cursor listesi", () => {
+  async function seededStore() {
+    const store = new InMemoryStudentStore();
+    await store.createMany([
+      { tenantId: "tenant-a", firstName: "Cem", lastName: "Cursor", status: "ACTIVE" },
+      { tenantId: "tenant-a", firstName: "Deniz", lastName: "Durum", status: "PASSIVE" },
+      { tenantId: "tenant-a", firstName: "Ece", lastName: "Ekin", status: "ACTIVE" },
+    ]);
+    return store;
+  }
+  const query = { direction: "next" as const, limit: 2, sort: "lastName" as const };
+
+  it("ileri ve geri cursor ile sayfalar, toplamı filtreli sayımdan verir", async () => {
+    const store = await seededStore();
+
+    const first = await store.listRegistryPage("tenant-a", query);
+    expect(first.records.map((student) => student.lastName)).toEqual(["A", "Cursor"]);
+    expect(first.meta).toEqual({ limit: 2, total: 4, nextCursor: expect.any(String) });
+
+    const second = await store.listRegistryPage("tenant-a", { ...query, cursor: first.meta.nextCursor });
+    expect(second.records.map((student) => student.lastName)).toEqual(["Durum", "Ekin"]);
+    expect(second.meta.nextCursor).toBeUndefined();
+    expect(second.meta.previousCursor).toEqual(expect.any(String));
+
+    const back = await store.listRegistryPage("tenant-a", {
+      ...query,
+      cursor: second.meta.previousCursor,
+      direction: "previous",
+    });
+    expect(back.records.map((student) => student.lastName)).toEqual(["A", "Cursor"]);
+    expect(back.meta.previousCursor).toBeUndefined();
+    expect(back.meta.nextCursor).toEqual(expect.any(String));
+  });
+
+  it("başka filtre, sıralama veya tenant için verilen cursor'ı reddeder", async () => {
+    const store = await seededStore();
+    const first = await store.listRegistryPage("tenant-a", query);
+    const cursor = first.meta.nextCursor;
+
+    await expect(store.listRegistryPage("tenant-a", { ...query, cursor, status: "ACTIVE" })).rejects.toThrow("STUDENT_CURSOR_INVALID");
+    await expect(store.listRegistryPage("tenant-a", { ...query, cursor, q: "ece" })).rejects.toThrow("STUDENT_CURSOR_INVALID");
+    await expect(store.listRegistryPage("tenant-a", { ...query, cursor, sort: "-lastName" })).rejects.toThrow("STUDENT_CURSOR_INVALID");
+    await expect(store.listRegistryPage("tenant-b", { ...query, cursor })).rejects.toThrow("STUDENT_CURSOR_INVALID");
+    await expect(store.listRegistryPage("tenant-a", { ...query, cursor: "bm90LWEtY3Vyc29y" })).rejects.toThrow("STUDENT_CURSOR_INVALID");
+  });
+
+  it("ad, soyad ve okul numarasında büyük/küçük harfe duyarsız arar", async () => {
+    const store = await seededStore();
+
+    const byName = await store.listRegistryPage("tenant-a", { ...query, q: "DENİZ" });
+    expect(byName.records.map((student) => student.firstName)).toEqual(["Deniz"]);
+    expect(byName.meta.total).toBe(1);
+    const byNo = await store.listRegistryPage("tenant-a", { ...query, q: "100" });
+    expect(byNo.records.map((student) => student.id)).toEqual(["student-a"]);
   });
 });

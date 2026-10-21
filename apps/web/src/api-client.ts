@@ -43,6 +43,8 @@ export interface CursorListMeta {
   limit: number;
   nextCursor?: string;
   previousCursor?: string;
+  /** Filtered row count, on lists whose screens show a total. */
+  total?: number;
 }
 
 export interface CursorListResult<TItem> {
@@ -385,6 +387,33 @@ export async function apiCursorListRequest<TItem>(
     data: envelope.data,
     meta: envelope.meta ?? { limit: envelope.data.length },
   };
+}
+
+/**
+ * Follows `meta.nextCursor` until the filtered cursor list is exhausted. Only for narrow, bounded filters
+ * (for example one subject type's pending invitations); screen lists page with `apiCursorListRequest`.
+ */
+export async function apiCursorListAll<TItem>(
+  accessToken: string,
+  url: string,
+  init: RequestInit = {},
+  maxPages = 50,
+): Promise<TItem[]> {
+  const items: TItem[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < maxPages; page += 1) {
+    const pageUrl = new URL(url, "http://cursor.invalid");
+    if (cursor) pageUrl.searchParams.set("cursor", cursor);
+    const result = await apiCursorListRequest<TItem>(
+      accessToken,
+      url.startsWith("http") ? pageUrl.toString() : `${pageUrl.pathname}${pageUrl.search}`,
+      init,
+    );
+    items.push(...result.data);
+    cursor = result.meta.nextCursor;
+    if (!cursor) return items;
+  }
+  throw new ApiRequestError("API_CURSOR_LIST_TOO_LARGE", 0);
 }
 
 export async function checkHealth(): Promise<"ok" | "limited"> {

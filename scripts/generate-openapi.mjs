@@ -2071,7 +2071,14 @@ const requiredOperationContracts = [
   {
     method: "get",
     path: "/api/v1/tenant-users",
-    responseListEnvelope: true,
+    responseCursorListEnvelope: true,
+    queryParameters: [
+      { name: "cursor", type: "string" },
+      { name: "direction", type: "string" },
+      { name: "limit", type: "integer" },
+      { name: "q", type: "string" },
+      { name: "sort", type: "string" },
+    ],
     responseDataItemsRequired: tenantUserRecordRequired,
     responseDataForbiddenDeep: tenantUserResponseForbiddenDeep,
     fieldChecks: tenantUserRecordListFieldChecks,
@@ -2679,14 +2686,15 @@ const requiredOperationContracts = [
     queryParameters: path === "/api/v1/students"
       ? [
           { name: "ids", type: "string" },
-          { name: "page", type: "integer" },
+          { name: "cursor", type: "string" },
+          { name: "direction", type: "string" },
           { name: "limit", type: "integer" },
           { name: "q", type: "string" },
           { name: "sort", type: "string" },
           { name: "guardianLinked", type: "boolean" },
         ]
       : undefined,
-    responseListEnvelope: true,
+    responseCursorListEnvelope: true,
     responseDataItemsRequired: studentCoreRequired,
     responseDataForbiddenDeep: studentCoreForbiddenDeep,
     fieldChecks: [
@@ -3872,7 +3880,17 @@ const requiredOperationContracts = [
   {
     method: "get",
     path: "/api/v1/identity-invitations",
-    responseListEnvelope: true,
+    responseCursorListEnvelope: true,
+    queryParameters: [
+      { name: "cursor", type: "string" },
+      { name: "direction", type: "string" },
+      { name: "limit", type: "integer" },
+      { name: "q", type: "string" },
+      { name: "subjectType", type: "string" },
+      { name: "subjectId", type: "string" },
+      { name: "status", type: "string" },
+      { name: "sort", type: "string" },
+    ],
     responseDataItemsRequired: identityInvitationRecordRequired,
     responseDataForbiddenDeep: identityInvitationResponseForbiddenDeep,
     fieldChecks: [
@@ -4256,6 +4274,9 @@ function validateOpenApiDocument(document) {
     if (contract.responseListEnvelope && !hasRequiredListEnvelope(successSchema)) {
       failures.push(`OpenAPI list response meta schema eksik: ${contract.method.toUpperCase()} ${contract.path}`);
     }
+    if (contract.responseCursorListEnvelope && !hasRequiredCursorListEnvelope(successSchema)) {
+      failures.push(`OpenAPI cursor list response meta schema eksik: ${contract.method.toUpperCase()} ${contract.path}`);
+    }
     if (contract.responseDataOneOfRequired) {
       requireOneOfSchemaFields(successSchema?.properties?.data, contract.responseDataOneOfRequired, failures, `${contract.method.toUpperCase()} ${contract.path} response data`);
     }
@@ -4484,6 +4505,21 @@ function hasRequiredDataEnvelope(schema) {
     schema?.properties?.data &&
     Array.isArray(schema.required) &&
     schema.required.includes("data"),
+  );
+}
+
+function hasRequiredCursorListEnvelope(schema) {
+  const meta = schema?.properties?.meta;
+  return Boolean(
+    hasRequiredDataEnvelope(schema) &&
+    meta &&
+    Array.isArray(schema.required) &&
+    schema.required.includes("meta") &&
+    schema?.properties?.data?.type === "array" &&
+    schema?.properties?.data?.items &&
+    Array.isArray(meta.required) &&
+    meta.required.includes("limit") &&
+    ["limit", "nextCursor", "previousCursor"].every((field) => meta.properties?.[field]),
   );
 }
 

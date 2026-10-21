@@ -1,6 +1,6 @@
 import type { IdentityInvitationRecord, TeacherRecord } from "@o-okul/shared-types";
 import type { StatusBadgeProps } from "@o-okul/ui";
-import { ApiRequestError, apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
+import { ApiRequestError, apiBaseUrl, apiCursorListAll, apiRequest } from "../../../../src/api-client.js";
 
 // Öğretmen portalı yalnız TEACHER kimlik daveti kabul edilince açılır (Teacher.userId bağı; API yalnız `hasAccount` döner, UAT F-09).
 export type TeacherAccountState = "linked" | "pending" | "none";
@@ -22,11 +22,12 @@ export function teacherAccountState(teacher: Pick<TeacherRecord, "id" | "hasAcco
   return pendingBySubject.has(teacher.id) ? "pending" : "none";
 }
 
-// The list page needs every teacher's state (q=TEACHER); the detail page passes teacherId so q matches the subjectId list field
-// and only that teacher's invitations leave the API (same pattern as the guardian detail page).
+// The list page needs every teacher's pending invitation; the detail page passes teacherId so only that teacher's
+// invitations leave the API (same pattern as the guardian detail page). The cursor list is followed to its end.
 export async function loadPendingTeacherInvitations(accessToken: string, teacherId?: string): Promise<Map<string, IdentityInvitationRecord>> {
-  const query = encodeURIComponent(teacherId ?? "TEACHER");
-  const invitations = await apiRequest<IdentityInvitationRecord[]>(accessToken, `${apiBaseUrl}/identity-invitations?q=${query}`);
+  const query = new URLSearchParams({ limit: "100", status: "PENDING", subjectType: "TEACHER" });
+  if (teacherId) query.set("subjectId", teacherId);
+  const invitations = await apiCursorListAll<IdentityInvitationRecord>(accessToken, `${apiBaseUrl}/identity-invitations?${query.toString()}`);
   return new Map(
     invitations
       .filter((invitation) => invitation.subjectType === "TEACHER" && (teacherId === undefined || invitation.subjectId === teacherId) && invitation.status === "PENDING" && Date.parse(invitation.expiresAt) > Date.now())

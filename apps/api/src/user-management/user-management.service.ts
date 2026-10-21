@@ -14,10 +14,12 @@ import {
   type TenantAssignableRoleName,
   type TenantMembershipUpdateRequest,
   type TenantMembershipUpdateResult,
+  type TenantUserListQuery,
 } from "@o-okul/shared-types";
 import {
   type TenantUserRecord,
   type UserManagementStore,
+  tenantUserCursorInvalid,
   userManagementStoreToken,
 } from "./user-management-store.js";
 
@@ -37,6 +39,19 @@ export class UserManagementService {
   async list(context: RequestContext): Promise<TenantUserRecord[]> {
     const tenantId = this.requireTenantWideContext(context);
     return this.store.listTenantUsers(tenantId);
+  }
+
+  async listPage(context: RequestContext, query: TenantUserListQuery): Promise<TenantUserRecord[]> {
+    const tenantId = this.requireTenantWideContext(context);
+    try {
+      const page = await this.store.listTenantUserPage(tenantId, query);
+      return withCursorListMeta(page.records, page.meta);
+    } catch (error) {
+      if (error instanceof Error && error.message === tenantUserCursorInvalid) {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
   }
 
   async listEmployees(context: RequestContext, query: EmployeeAccessListQuery): Promise<EmployeeAccessRecord[]> {

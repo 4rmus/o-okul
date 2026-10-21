@@ -67,7 +67,7 @@ test.describe("Liste URL state", () => {
     await openWithListMocks(
       page,
       captured,
-      "/kurum/kullanicilar?usersPage=2&usersLimit=20&usersQ=admin&usersSort=email",
+      "/kurum/kullanicilar?usersCursor=users-cursor-2&usersLimit=20&usersQ=admin&usersSort=email",
     );
 
     const usersRegion = page.getByLabel("Kullanıcı ve rol yönetimi");
@@ -75,10 +75,20 @@ test.describe("Liste URL state", () => {
     await expect(usersRegion.getByLabel("Sırala")).toHaveValue("email");
     await expect(usersRegion.getByLabel("Göster")).toHaveValue("20");
     await expect.poll(() => captured.users.at(-1)?.get("q")).toBe("admin");
+    await expect.poll(() => captured.users.at(-1)?.get("cursor")).toBe("users-cursor-2");
+    expect(captured.users.some((params) => params.has("page"))).toBe(false);
+
+    await usersRegion.getByRole("button", { name: "Sonraki sayfa" }).click();
+    await expect.poll(() => new URL(page.url()).searchParams.get("usersCursor")).toBe("cursor-next");
+    await expect.poll(() => captured.users.at(-1)?.get("cursor")).toBe("cursor-next");
+    await usersRegion.getByRole("button", { name: "Önceki sayfa" }).click();
+    await expect.poll(() => new URL(page.url()).searchParams.get("usersDirection")).toBe("previous");
+    await expect.poll(() => captured.users.at(-1)?.get("direction")).toBe("previous");
 
     await usersRegion.getByLabel("Ara").fill("yardımcı");
     await expect.poll(() => new URL(page.url()).searchParams.get("usersQ")).toBe("yardımcı");
-    await expect.poll(() => new URL(page.url()).searchParams.get("usersPage")).toBe("1");
+    await expect.poll(() => new URL(page.url()).searchParams.get("usersCursor")).toBeNull();
+    await expect.poll(() => captured.users.at(-1)?.has("cursor")).toBe(false);
   });
 
   test("mevcut kullanıcı listesini salt okunur tutup çalışan yönetimine yönlendirir", async ({ page }) => {
@@ -122,13 +132,19 @@ test.describe("Liste URL state", () => {
     await openWithListMocks(
       page,
       captured,
-      "/kurum/ogrenciler?page=2&limit=20&q=ada&sort=-lastName&classId=class-11a&level=grade-11&responsibleTeacherId=teacher-a&status=ACTIVE&guardianLinked=true&density=compact&columns=name,class,status,actions",
+      "/kurum/ogrenciler?cursor=students-cursor-2&limit=20&q=ada&sort=-lastName&classId=class-11a&level=grade-11&responsibleTeacherId=teacher-a&status=ACTIVE&guardianLinked=true&density=compact&columns=name,class,status,actions",
     );
 
     const studentsRegion = page.getByLabel("Öğrenci yönetimi");
     const studentSummary = studentsRegion.getByRole("region", { exact: true, name: "Öğrenci operasyon özeti" });
     const filters = page.getByLabel("Öğrenci filtreleri");
     const tableView = page.getByLabel("Öğrenci tablo görünümü");
+    await expect.poll(() => captured.students.at(-1)?.get("cursor")).toBe("students-cursor-2");
+    await expect(studentsRegion.getByRole("button", { name: "Önceki sayfa" })).toBeEnabled();
+    await studentsRegion.getByRole("button", { name: "Sonraki sayfa" }).click();
+    await expect.poll(() => new URL(page.url()).searchParams.get("cursor")).toBe("cursor-next");
+    await expect.poll(() => captured.students.at(-1)?.get("cursor")).toBe("cursor-next");
+    expect(captured.students.some((params) => params.has("page"))).toBe(false);
     await page.getByText("Filtreler ve görünüm", { exact: true }).click();
     await expect(studentSummary).toContainText("Öğrenci toplamı");
     await expect(studentSummary).toContainText("Yoğun");
@@ -158,6 +174,8 @@ test.describe("Liste URL state", () => {
 
     await filters.getByLabel("İletişim kişisi").selectOption("false");
     await expect.poll(() => new URL(page.url()).searchParams.get("guardianLinked")).toBe("false");
+    await expect.poll(() => new URL(page.url()).searchParams.get("cursor")).toBeNull();
+    await expect.poll(() => captured.students.at(-1)?.has("cursor")).toBe(false);
 
     await tableView.getByLabel("Okul No").check();
     await expect.poll(() => new URL(page.url()).searchParams.get("columns")).toContain("studentNo");
@@ -375,7 +393,7 @@ test.describe("Liste URL state", () => {
     await openWithListMocks(
       page,
       captured,
-      "/kurum/ogrenciler?page=2&limit=20&q=ada&sort=-lastName&classId=class-11a&level=grade-11&responsibleTeacherId=teacher-a&status=ACTIVE&guardianLinked=true&density=compact&columns=name,class,status,actions",
+      "/kurum/ogrenciler?cursor=students-cursor-2&limit=20&q=ada&sort=-lastName&classId=class-11a&level=grade-11&responsibleTeacherId=teacher-a&status=ACTIVE&guardianLinked=true&density=compact&columns=name,class,status,actions",
     );
 
     const studentsRegion = page.getByLabel("Öğrenci yönetimi");
@@ -653,7 +671,7 @@ test.describe("Liste URL state", () => {
 
   test("öğrenci edit formu kayıtlı PII değerlerini ham göstermeden maskeler", async ({ page }) => {
     const captured = createCapturedRequests();
-    await openWithListMocks(page, captured, "/kurum/ogrenciler?page=1&limit=10&q=ada");
+    await openWithListMocks(page, captured, "/kurum/ogrenciler?limit=10&q=ada");
 
     const studentsRegion = page.getByLabel("Öğrenci yönetimi");
     await studentsRegion.getByRole("button", { name: "Ada düzenle" }).click();
@@ -875,7 +893,7 @@ async function installListApiMocks(page: Page, captured: CapturedRequests) {
     }
     if (pathName === "/tenant-users") {
       captured.users.push(new URLSearchParams(url.search));
-      await fulfillList(route, [createTenantUser()], url.searchParams);
+      await fulfillCursorList(route, [createTenantUser()], url.searchParams);
       return;
     }
     if (pathName === "/identity-invitations" && route.request().method() === "POST") {
@@ -910,13 +928,14 @@ async function installListApiMocks(page: Page, captured: CapturedRequests) {
     }
     if (pathName === "/identity-invitations") {
       captured.invitations.push(new URLSearchParams(url.search));
-      await fulfillList(route, [createInvitation()], url.searchParams);
+      await fulfillCursorList(route, [createInvitation()], url.searchParams, false);
       return;
     }
     if (pathName === "/students") {
-      if (url.searchParams.has("page")) {
+      // The student list screen always sends limit (cursor mode); selector screens use the unpaged lookup.
+      if (url.searchParams.has("limit")) {
         captured.students.push(new URLSearchParams(url.search));
-        await fulfillList(route, [createStudent()], url.searchParams);
+        await fulfillCursorList(route, [createStudent()], url.searchParams);
         return;
       }
       await fulfillData(route, [createStudent()]);
@@ -1359,7 +1378,18 @@ async function fulfillList(route: Route, data: unknown[], searchParams: URLSearc
   });
 }
 
-async function fulfillData(route: Route, data: unknown, meta?: { limit: number; page: number; total: number; totalPages: number }) {
+// GET /employees cursor contract: a next page always exists in the mock, a previous one once a cursor was sent.
+async function fulfillCursorList(route: Route, data: unknown[], searchParams: URLSearchParams, hasNext = true) {
+  const limit = Number(searchParams.get("limit") ?? "50");
+  await fulfillData(route, data, {
+    limit,
+    total: 30,
+    ...(hasNext ? { nextCursor: "cursor-next" } : {}),
+    ...(searchParams.has("cursor") ? { previousCursor: "cursor-previous" } : {}),
+  });
+}
+
+async function fulfillData(route: Route, data: unknown, meta?: Record<string, unknown>) {
   await route.fulfill({
     body: JSON.stringify(meta ? { data, meta } : { data }),
     headers: {

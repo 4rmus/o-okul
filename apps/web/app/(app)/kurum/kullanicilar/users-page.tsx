@@ -11,8 +11,13 @@ import {
 } from "@o-okul/ui";
 import { tenantRoleLabel, type TenantAssignableRoleName } from "@o-okul/shared-types";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiErrorMessage, apiListRequest } from "../../../../src/api-client.js";
-import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
+import { apiBaseUrl, apiCursorListRequest, apiErrorMessage } from "../../../../src/api-client.js";
+import {
+  buildCursorListUrl,
+  CursorListControls,
+  useUrlCursorListState,
+  type CursorListQueryState,
+} from "../../../../src/cursor-list-controls.js";
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 type Role = TenantAssignableRoleName;
@@ -31,7 +36,7 @@ export function UsersPage() {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const tenantId = auth?.session.tenantId ?? "anonymous";
-  const [userListQuery, setUserListQuery] = useUrlListState(searchParams, { namespace: "users", sortOptions: tenantUserSortOptions });
+  const [userListQuery, setUserListQuery] = useUrlCursorListState(searchParams, { namespace: "users", sortOptions: tenantUserSortOptions });
   const usersQueryKey = ["next-tenant-users", tenantId, userListQuery];
   const usersQuery = useQuery({
     queryKey: usersQueryKey,
@@ -101,7 +106,7 @@ export function UsersPage() {
       <CrudPage
         actions={
           <>
-            <ListControls
+            <CursorListControls
               meta={usersQuery.data?.meta}
               onChange={setUserListQuery}
               sortOptions={tenantUserSortOptions}
@@ -157,6 +162,6 @@ const tenantUserSortOptions = [
   { label: "E-posta Z-A", value: "-email" },
 ];
 
-async function loadTenantUsers(accessToken: string, listQuery: ListQueryState) {
-  return apiListRequest<TenantUserRecord>(accessToken, buildListUrl(`${apiBaseUrl}/tenant-users`, listQuery));
+async function loadTenantUsers(accessToken: string, listQuery: CursorListQueryState) {
+  return apiCursorListRequest<TenantUserRecord>(accessToken, buildCursorListUrl(`${apiBaseUrl}/tenant-users`, listQuery));
 }

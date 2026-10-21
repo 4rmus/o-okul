@@ -9,9 +9,22 @@ import type {
   TenantAssignableRoleName,
   TenantMembershipUpdateRequest,
   TenantMembershipUpdateResult,
+  TenantUserListQuery,
 } from "@o-okul/shared-types";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type Queryable, type TenantQueryable, withExplicitTenantQuery } from "../db/tenant-query.js";
+import {
+  type CursorPage,
+  type CursorSortDirection,
+  cursorComparison,
+  cursorPageFromRows,
+  cursorQueryOrder,
+  decodeListCursor,
+  likeSearchPattern,
+  listCursorContext,
+  normalizeSearchTerm,
+  paginateCursorRecords,
+} from "../listing/cursor-pagination.js";
 import {
   InMemoryAuthUserStore,
   hashPassword,
@@ -61,8 +74,13 @@ export interface TenantUserCredentialSnapshot {
   accountStatus: string;
 }
 
+export const tenantUserCursorInvalid = "TENANT_USER_CURSOR_INVALID";
+
 export interface UserManagementStore {
+  /** Whole-tenant list for internal lookups; the HTTP list uses `listTenantUserPage`. */
   listTenantUsers(tenantId: string): Promise<TenantUserRecord[]>;
+  /** Cursor page with SQL-side search and the filtered total; throws TENANT_USER_CURSOR_INVALID for a foreign cursor. */
+  listTenantUserPage(tenantId: string, query: TenantUserListQuery): Promise<CursorPage<TenantUserRecord>>;
   listEmployees(tenantId: string): Promise<EmployeeAccessRecord[]>;
   listEmployeeAccessPage(tenantId: string, query: EmployeeAccessListQuery): Promise<EmployeeAccessPage>;
   findEmployee(tenantId: string, employeeId: string): Promise<EmployeeAccessRecord | undefined>;
@@ -214,6 +232,24 @@ export class InMemoryUserManagementStore implements UserManagementStore {
 
   async listTenantUsers(tenantId: string): Promise<TenantUserRecord[]> {
     return this.users.filter((user) => user.tenantId === tenantId && user.roles.length > 0).map(cloneRequiredTenantUser);
+  }
+
+  async listTenantUserPage(tenantId: string, query: TenantUserListQuery): Promise<CursorPage<TenantUserRecord>> {
+    const search = normalizeSearchTerm(query.q);
+    const direction = query.sort.startsWith("-") ? -1 : 1;
+    const records = (await this.listTenantUsers(tenantId))
+      .filter((user) => !search || [user.name, user.email ?? "", user.roles.join(" ")].join(" ").toLowerCase().includes(search))
+      .sort((left, right) => direction * (
+        tenantUserSortKey(left, query.sort).localeCompare(tenantUserSortKey(right, query.sort)) || left.id.localeCompare(right.id)
+      ));
+    return paginateCursorRecords(
+      records,
+      query,
+      tenantUserCursorContext(tenantId, query),
+      (record) => record.id,
+      tenantUserCursorInvalid,
+      { total: records.length },
+    );
   }
 
   async listEmployees(tenantId: string): Promise<EmployeeAccessRecord[]> {
@@ -467,6 +503,45 @@ export class PostgresUserManagementStore implements UserManagementStore {
         [tenantId],
       );
       return result.rows.map(toTenantUserRecord);
+    });
+  }
+
+  async listTenantUserPage(tenantId: string, query: TenantUserListQuery): Promise<CursorPage<TenantUserRecord>> {
+    const context = tenantUserCursorContext(tenantId, query);
+    const cursorId = query.cursor ? decodeListCursor(query.cursor, context, tenantUserCursorInvalid) : undefined;
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const sort = tenantUserSortDefinition(query.sort);
+      const values: unknown[] = [tenantId];
+      const pattern = likeSearchPattern(query.q);
+      if (pattern) values.push(pattern);
+      const listed = tenantUserListCte(sort.keySql, pattern ? "$2" : undefined);
+      const total = await client.query<{ total: number | string }>(
+        `${listed} SELECT COUNT(*)::int AS total FROM listed`,
+        values,
+      );
+      const conditions: string[] = [];
+      if (cursorId) {
+        values.push(cursorId);
+        const anchor = await client.query(`${listed} SELECT 1 FROM listed WHERE "id" = $${values.length} LIMIT 1`, values);
+        if (!anchor.rows[0]) throw new Error(tenantUserCursorInvalid);
+        conditions.push(`(l."cursorKey", l."id") ${cursorComparison(sort.direction, query.direction)} (
+          SELECT a."cursorKey", a."id" FROM listed a WHERE a."id" = $${values.length}
+        )`);
+      }
+      values.push(query.limit + 1);
+      const order = cursorQueryOrder(sort.direction, query.direction);
+      const result = await client.query<TenantUserRow>(
+        `${listed}
+         SELECT l."id", l."email", l."name", l."tenantId", l."roles", l."createdAt", l."updatedAt"
+         FROM listed l
+         ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""}
+         ORDER BY l."cursorKey" ${order}, l."id" ${order}
+         LIMIT $${values.length}`,
+        values,
+      );
+      return cursorPageFromRows(result.rows, query, context, (record) => record.id, toTenantUserRecord, {
+        total: Number(total.rows[0]?.total ?? 0),
+      });
     });
   }
 
@@ -1255,6 +1330,45 @@ export function createUserManagementStore(): UserManagementStore {
   return resolvePersistenceDriver(process.env.USER_MANAGEMENT_STORE ?? process.env.AUTH_USER_STORE) === "postgres"
     ? new PostgresUserManagementStore()
     : new InMemoryUserManagementStore();
+}
+
+/** One aggregated row per account, as the legacy list returned; `cursorKey` is the keyset sort key. */
+function tenantUserListCte(keySql: string, searchParameter: string | undefined): string {
+  return `WITH tenant_users AS (
+     SELECT
+       u."id",
+       u."email",
+       u."name",
+       m."tenantId",
+       array_agg(m."role"::text ORDER BY m."role"::text) AS roles,
+       min(u."createdAt") AS "createdAt",
+       max(u."updatedAt") AS "updatedAt"
+     FROM "TenantMembership" m
+     JOIN "User" u ON u."id" = m."userId"
+     WHERE m."tenantId" = $1
+     GROUP BY u."id", u."email", u."name", m."tenantId"
+   ), listed AS (
+     SELECT tu.*, ${keySql} AS "cursorKey"
+     FROM tenant_users tu
+     ${searchParameter ? `WHERE lower(
+       coalesce(tu."name", '') || ' ' ||
+       coalesce(tu."email", '') || ' ' ||
+       array_to_string(tu.roles, ' ')
+     ) LIKE ${searchParameter} ESCAPE '\\'` : ""}
+   )`;
+}
+
+function tenantUserSortDefinition(sort: TenantUserListQuery["sort"]): { keySql: string; direction: CursorSortDirection } {
+  const keySql = sort === "name" || sort === "-name" ? 'lower(tu."name")' : 'lower(coalesce(tu."email", tu."name"))';
+  return { keySql, direction: sort.startsWith("-") ? "DESC" : "ASC" };
+}
+
+function tenantUserSortKey(user: TenantUserRecord, sort: TenantUserListQuery["sort"]): string {
+  return (sort === "name" || sort === "-name" ? user.name : user.email ?? user.name).toLowerCase();
+}
+
+function tenantUserCursorContext(tenantId: string, query: TenantUserListQuery): string {
+  return listCursorContext("tenant-users", tenantId, { q: normalizeSearchTerm(query.q), sort: query.sort });
 }
 
 type EmployeeSortDirection = "ASC" | "DESC";

@@ -2,6 +2,7 @@ import { BadRequestException, Body, Controller, Delete, Get, Headers, HttpCode, 
 import { getRequestContext } from "../context/request-context.js";
 import { z } from "zod";
 import { applyListQuery } from "../listing/list-query.js";
+import { optionalQueryEnum } from "../listing/cursor-query-schema.js";
 import { optionalDateString, optionalTrimmedString, optionalUppercaseString, requiredTrimmedString, requiredUppercaseString, zodBody, zodQuery } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
@@ -47,17 +48,26 @@ const studentStatusSchema = z.enum(["ACTIVE", "PASSIVE", "GRADUATED", "TRANSFERR
 const optionalStudentStatusQuerySchema = z.preprocess((value) => value === "" ? undefined : value, studentStatusSchema.optional());
 const optionalGuardianLinkedQuerySchema = z.preprocess((value) => value === "" ? undefined : value, z.enum(["true", "false"]).optional());
 const optionalStudentEnrollmentStartsAtSchema = z.preprocess((value) => value === "" ? undefined : value, optionalDateString("STUDENT_ENROLLMENT_STARTS_AT_INVALID"));
+// Cursor mode (any of cursor, direction, limit) pages the registry in SQL like GET /employees; without them the
+// endpoint keeps its unpaged lookup list for selector screens. `.strict()` refuses the retired `page` with 422.
 const studentListQuerySchema = z.object({
   classId: optionalTrimmedString,
+  cursor: optionalTrimmedString,
+  direction: optionalQueryEnum(["next", "previous"]),
   guardianLinked: optionalGuardianLinkedQuerySchema,
   ids: optionalTrimmedString,
   level: optionalTrimmedString,
-  limit: optionalTrimmedString,
-  page: optionalTrimmedString,
+  limit: z.preprocess(
+    (value) => value === undefined || value === "" ? undefined : Number(value),
+    z.number().int().min(1).max(100).optional(),
+  ),
   q: optionalTrimmedString,
   responsibleTeacherId: optionalTrimmedString,
   sort: optionalTrimmedString,
   status: optionalStudentStatusQuerySchema,
+}).strict().refine((query) => query.direction !== "previous" || Boolean(query.cursor), {
+  message: "STUDENT_CURSOR_REQUIRED",
+  path: ["cursor"],
 });
 type StudentListQuery = z.infer<typeof studentListQuerySchema>;
 const studentPortalAccessQuerySchema = z.object({
@@ -138,11 +148,12 @@ export class StudentController {
   @RequireCapability("student:list")
   async list(@Query(zodQuery(studentListQuerySchema)) query: StudentListQuery): Promise<PublicStudentRecord[]> {
     const context = getRequestContext();
-    // ponytail: paged requests (öğrenci listesi) use the DB registry; unpaged lookups across pages keep the full list.
-    if (query.page !== undefined || query.limit !== undefined) {
+    // Cursor requests (öğrenci listesi) page the DB registry; unpaged lookups for selector screens keep the full list.
+    if (query.cursor !== undefined || query.direction !== undefined || query.limit !== undefined) {
       return this.students.listRegistryPageForViewer(context, {
-        page: positiveListInt(query.page, 1, "LIST_PAGE_INVALID"),
-        limit: positiveListInt(query.limit, 20, "LIST_LIMIT_INVALID"),
+        cursor: query.cursor || undefined,
+        direction: query.direction ?? "next",
+        limit: query.limit ?? 50,
         q: query.q,
         sort: query.sort,
         ids: parseStudentIds(query.ids),
@@ -154,7 +165,7 @@ export class StudentController {
       });
     }
     const records = await this.filterStudents(await this.students.listForViewer(getRequestContext()), query);
-    return applyListQuery(records, query, studentListFields);
+    return applyListQuery(records, { q: query.q, sort: query.sort }, studentListFields);
   }
 
   @Get("export")
@@ -371,9 +382,3 @@ function parseStudentIds(value: string | undefined): string[] | undefined {
   return ids;
 }
 
-function positiveListInt(value: string | undefined, fallback: number, errorCode: string): number {
-  if (value === undefined) return fallback;
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1) throw new BadRequestException(errorCode);
-  return parsed;
-}

@@ -1,9 +1,21 @@
 import { randomUUID } from "node:crypto";
 import type { SecretDeliveryOutboxInput } from "@o-okul/db";
 import pg from "pg";
-import type { PortalSubjectRoleName, TenantAssignableRoleName } from "@o-okul/shared-types";
+import type { IdentityInvitationListQuery, PortalSubjectRoleName, TenantAssignableRoleName } from "@o-okul/shared-types";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type Queryable, type TenantQueryable, withExplicitTenantQuery } from "../db/tenant-query.js";
+import {
+  type CursorPage,
+  type CursorSortDirection,
+  cursorComparison,
+  cursorPageFromRows,
+  cursorQueryOrder,
+  decodeListCursor,
+  likeSearchPattern,
+  listCursorContext,
+  normalizeSearchTerm,
+  paginateCursorRecords,
+} from "../listing/cursor-pagination.js";
 
 export type InvitationSubjectType = PortalSubjectRoleName | "EMPLOYEE";
 export type InvitationStatus = "PENDING" | "ACCEPTED" | "REVOKED";
@@ -40,8 +52,13 @@ export interface CreateIdentityInvitationInput {
   delivery?: SecretDeliveryOutboxInput;
 }
 
+export const identityInvitationCursorInvalid = "IDENTITY_INVITATION_CURSOR_INVALID";
+
 export interface IdentityInvitationStore {
+  /** Whole-tenant list for internal lookups; the HTTP list uses `listPage`. */
   list(tenantId: string): Promise<IdentityInvitationRecord[]>;
+  /** Cursor page with SQL-side filters and search; throws IDENTITY_INVITATION_CURSOR_INVALID for a foreign cursor. */
+  listPage(tenantId: string, query: IdentityInvitationListQuery): Promise<CursorPage<IdentityInvitationRecord>>;
   create(input: CreateIdentityInvitationInput): Promise<IdentityInvitationRecord>;
   findById(tenantId: string, id: string): Promise<IdentityInvitationRecord | undefined>;
   findByTokenHash(tokenHash: string): Promise<(IdentityInvitationRecord & { tenantLifecycleVersion?: number }) | undefined>;
@@ -59,6 +76,26 @@ export class InMemoryIdentityInvitationStore implements IdentityInvitationStore 
 
   async list(tenantId: string): Promise<IdentityInvitationRecord[]> {
     return this.invitations.filter((invitation) => invitation.tenantId === tenantId).map(stripRequiredTokenHash);
+  }
+
+  async listPage(tenantId: string, query: IdentityInvitationListQuery): Promise<CursorPage<IdentityInvitationRecord>> {
+    const search = normalizeSearchTerm(query.q);
+    const direction = query.sort === "createdAt" ? 1 : -1;
+    const records = this.invitations
+      .filter((invitation) => invitation.tenantId === tenantId)
+      .filter((invitation) => !query.subjectType || invitation.subjectType === query.subjectType)
+      .filter((invitation) => !query.subjectId || invitation.subjectId === query.subjectId)
+      .filter((invitation) => !query.status || invitation.status === query.status)
+      .filter((invitation) => !search || identityInvitationSearchText(invitation).includes(search))
+      .map(stripRequiredTokenHash)
+      .sort((left, right) => direction * (left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id)));
+    return paginateCursorRecords(
+      records,
+      query,
+      identityInvitationCursorContext(tenantId, query),
+      (record) => record.id,
+      identityInvitationCursorInvalid,
+    );
   }
 
   async create(input: CreateIdentityInvitationInput): Promise<IdentityInvitationRecord> {
@@ -181,6 +218,39 @@ export class PostgresIdentityInvitationStore implements IdentityInvitationStore 
         [tenantId],
       );
       return result.rows.map(toIdentityInvitationRecord);
+    });
+  }
+
+  async listPage(tenantId: string, query: IdentityInvitationListQuery): Promise<CursorPage<IdentityInvitationRecord>> {
+    const context = identityInvitationCursorContext(tenantId, query);
+    const cursorId = query.cursor ? decodeListCursor(query.cursor, context, identityInvitationCursorInvalid) : undefined;
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const sort = identityInvitationSortDefinition(query.sort);
+      const values: unknown[] = [tenantId];
+      const conditions = identityInvitationListConditions(query, values);
+      if (cursorId) {
+        const anchor = await client.query(
+          `SELECT 1 FROM "IdentityInvitation" i WHERE ${conditions.join(" AND ")} AND i."id" = $${values.length + 1} LIMIT 1`,
+          [...values, cursorId],
+        );
+        if (!anchor.rows[0]) throw new Error(identityInvitationCursorInvalid);
+        values.push(cursorId);
+        conditions.push(`(${sort.key("i")}, i."id") ${cursorComparison(sort.direction, query.direction)} (
+          SELECT ${sort.key("anchor")}, anchor."id" FROM "IdentityInvitation" anchor
+          WHERE anchor."tenantId" = $1 AND anchor."id" = $${values.length}
+        )`);
+      }
+      values.push(query.limit + 1);
+      const order = cursorQueryOrder(sort.direction, query.direction);
+      const result = await client.query<IdentityInvitationRow>(
+        `SELECT ${identityInvitationColumns}
+         FROM "IdentityInvitation" i
+         WHERE ${conditions.join(" AND ")}
+         ORDER BY ${sort.key("i")} ${order}, i."id" ${order}
+         LIMIT $${values.length}`,
+        values,
+      );
+      return cursorPageFromRows(result.rows, query, context, (record) => record.id, toIdentityInvitationRecord);
     });
   }
 
@@ -371,6 +441,61 @@ export function createIdentityInvitationStore(): IdentityInvitationStore {
   return resolvePersistenceDriver(process.env.IDENTITY_INVITATION_STORE ?? process.env.AUTH_USER_STORE) === "postgres"
     ? new PostgresIdentityInvitationStore()
     : new InMemoryIdentityInvitationStore();
+}
+
+const identityInvitationColumns = [
+  "id", "tenantId", "subjectType", "subjectId", "email", "name", "role", "kind", "status",
+  "expiresAt", "acceptedAt", "acceptedUserId", "createdAt", "updatedAt",
+].map((column) => `i."${column}"`).join(", ");
+
+// Same fields the legacy in-memory `q` matched (subjectId keeps `q=<subjectId>` detail lookups working).
+const identityInvitationSearchSql = `lower(
+  coalesce(i."name", '') || ' ' ||
+  coalesce(i."email", '') || ' ' ||
+  i."subjectType"::text || ' ' ||
+  i."subjectId" || ' ' ||
+  i."role"::text || ' ' ||
+  i."status"::text
+)`;
+
+function identityInvitationListConditions(query: IdentityInvitationListQuery, values: unknown[]): string[] {
+  const conditions = ['i."tenantId" = $1'];
+  const add = (sql: (parameter: string) => string, value: unknown) => {
+    values.push(value);
+    conditions.push(sql(`$${values.length}`));
+  };
+  if (query.subjectType) add((parameter) => `i."subjectType"::text = ${parameter}`, query.subjectType);
+  if (query.subjectId) add((parameter) => `i."subjectId" = ${parameter}`, query.subjectId);
+  if (query.status) add((parameter) => `i."status"::text = ${parameter}`, query.status);
+  const pattern = likeSearchPattern(query.q);
+  if (pattern) add((parameter) => `${identityInvitationSearchSql} LIKE ${parameter} ESCAPE '\\'`, pattern);
+  return conditions;
+}
+
+function identityInvitationSortDefinition(sort: IdentityInvitationListQuery["sort"]): {
+  key(alias: string): string;
+  direction: CursorSortDirection;
+} {
+  return {
+    key: (alias) => `${alias}."createdAt"`,
+    direction: sort === "createdAt" ? "ASC" : "DESC",
+  };
+}
+
+function identityInvitationCursorContext(tenantId: string, query: IdentityInvitationListQuery): string {
+  return listCursorContext("identity-invitations", tenantId, {
+    q: normalizeSearchTerm(query.q),
+    sort: query.sort,
+    status: query.status,
+    subjectId: query.subjectId || undefined,
+    subjectType: query.subjectType,
+  });
+}
+
+function identityInvitationSearchText(invitation: IdentityInvitationRecord): string {
+  return [invitation.name, invitation.email ?? "", invitation.subjectType, invitation.subjectId, invitation.role, invitation.status]
+    .join(" ")
+    .toLowerCase();
 }
 
 interface IdentityInvitationRow {

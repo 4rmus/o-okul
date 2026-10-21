@@ -723,7 +723,7 @@ function StudentContactGuardianLinkControls({ detail, studentId }: { detail: Stu
     queryKey: ["next-student-contact-guardian-user-search", auth?.session.tenantId ?? "anonymous", searchTerm],
     queryFn: () => apiRequest<GuardianLinkUserOption[]>(
       auth?.accessToken ?? "",
-      withQueryParams(`${apiBaseUrl}/tenant-users`, { q: searchTerm, limit: "20", page: "1" }),
+      withQueryParams(`${apiBaseUrl}/tenant-users`, { q: searchTerm, limit: "20" }),
     ),
     enabled: canSearch && target === "user",
     refetchOnWindowFocus: false,

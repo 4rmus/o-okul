@@ -2,12 +2,18 @@ import { Body, Controller, Get, GoneException, Param, Patch, Post, Query, UseGua
 import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
 import { optionalTrimmedString, zodBody, zodQuery } from "../http/zod-validation.js";
-import { applyListQuery, type ListQuery } from "../listing/list-query.js";
+import { cursorListQueryShape, defaultedQueryEnum, previousNeedsCursor } from "../listing/cursor-query-schema.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { UserManagementService } from "./user-management.service.js";
 import type { TenantUserRecord } from "./user-management-store.js";
-import type { EmployeeAccessListQuery, EmployeeAccessRecord, IdentityInvitationRecord, TenantMembershipUpdateResult } from "@o-okul/shared-types";
+import type {
+  EmployeeAccessListQuery,
+  EmployeeAccessRecord,
+  IdentityInvitationRecord,
+  TenantMembershipUpdateResult,
+  TenantUserListQuery,
+} from "@o-okul/shared-types";
 import { IdentityInvitationService } from "../identity-invitation/identity-invitation.service.js";
 import {
   type TenantMembershipUpdateBody,
@@ -32,6 +38,15 @@ const employeeAccessListQuerySchema = z.object({
   path: ["cursor"],
 });
 
+// Read-only legacy account list, cursor-paged like GET /employees; `.strict()` refuses the retired `page` with 422.
+const tenantUserListQuerySchema = z.object({
+  ...cursorListQueryShape({ defaultLimit: 50, maxLimit: 100 }),
+  sort: defaultedQueryEnum(["email", "-email", "name", "-name"], "email"),
+}).strict().refine(previousNeedsCursor, {
+  message: "TENANT_USER_CURSOR_REQUIRED",
+  path: ["cursor"],
+}) satisfies z.ZodType<TenantUserListQuery>;
+
 @Controller("tenant-users")
 @UseGuards(RolesGuard)
 export class UserManagementController {
@@ -39,8 +54,8 @@ export class UserManagementController {
 
   @Get()
   @RequireCapability("user:manage")
-  async list(@Query() query: ListQuery): Promise<TenantUserRecord[]> {
-    return applyListQuery(await this.users.list(getRequestContext()), query, tenantUserListFields);
+  list(@Query(zodQuery(tenantUserListQuerySchema)) query: TenantUserListQuery): Promise<TenantUserRecord[]> {
+    return this.users.listPage(getRequestContext(), query);
   }
 
   @Patch(":userId/roles")
@@ -97,11 +112,3 @@ export class TenantMembershipController {
     return this.users.updateMembership(getRequestContext(), id, body);
   }
 }
-
-const tenantUserListFields = [
-  { name: "name", read: (record: TenantUserRecord) => record.name },
-  { name: "email", read: (record: TenantUserRecord) => record.email ?? "" },
-  { name: "roles", read: (record: TenantUserRecord) => record.roles.join(",") },
-  { name: "createdAt", read: (record: TenantUserRecord) => record.createdAt },
-  { name: "updatedAt", read: (record: TenantUserRecord) => record.updatedAt },
-];

@@ -477,7 +477,7 @@ describe("School management API", () => {
       });
     await request(server)
       .get("/students")
-      .query({ q: "cem", sort: "-lastName", page: "1", limit: "1" })
+      .query({ q: "cem", sort: "-lastName", limit: "1" })
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(200)
       .expect(({ body }) => {
