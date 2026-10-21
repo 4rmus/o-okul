@@ -101,6 +101,14 @@ describe("Cursor list endpoints", () => {
       const foreignTenant = await list(endpoint.path, { ...endpoint.query, limit: 1, cursor: firstCursor }, tenantBToken).expect(400);
       // The web recognises *_CURSOR_INVALID, drops the cursor and reloads the first page.
       expect(foreignTenant.body.error.code).toMatch(/_CURSOR_INVALID$/u);
+      const tampered = Buffer.from(firstCursor, "base64url");
+      tampered[tampered.length - 1] = tampered[tampered.length - 1]! ^ 0x01;
+      const tamperedResponse = await list(endpoint.path, { ...endpoint.query, limit: 1, cursor: tampered.toString("base64url") }, tenantAToken)
+        .expect(400);
+      expect(tamperedResponse.body.error.code).toMatch(/_CURSOR_INVALID$/u);
+      // The sealed cursor does not expose the boundary row (ADR-0009: no personal values in URLs).
+      const boundaryId = first.body.data[0].id as string;
+      expect(Buffer.from(firstCursor, "base64url").toString("latin1")).not.toContain(boundaryId);
       await list(endpoint.path, { ...endpoint.query, ...endpoint.changedFilter, limit: 1, cursor: firstCursor }, tenantAToken).expect(400);
       await list(endpoint.path, { ...endpoint.query, limit: 1, direction: "previous" }, tenantAToken).expect(422);
       await list(endpoint.path, { ...endpoint.query, page: 1, limit: 1 }, tenantAToken).expect(422);

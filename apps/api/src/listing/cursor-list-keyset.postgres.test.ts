@@ -10,7 +10,7 @@ import type {
 import { PostgresIdentityInvitationStore, identityInvitationCursorInvalid } from "../identity-invitation/identity-invitation-store.js";
 import { PostgresStudentStore, studentCursorInvalid, type StudentRegistryQuery } from "../student/student-store.js";
 import { PostgresUserManagementStore, employeeCursorInvalid, tenantUserCursorInvalid } from "../user-management/user-management-store.js";
-import type { CursorDirection } from "./cursor-pagination.js";
+import { type CursorDirection, cursorTimestampKeySql } from "./cursor-pagination.js";
 
 // Keyset cursor lists of f2609c04f (GET /students, /tenant-users, /identity-invitations) on real PostgreSQL under
 // the `app` role and FORCE RLS: every sort is walked to the end and back, against an ORDER BY reference query.
@@ -122,11 +122,11 @@ describePostgres("cursor list keyset pagination on PostgreSQL", () => {
         .rejects.toThrow(studentCursorInvalid);
 
       const tenantACursor = (await students.listRegistryPage(tenantA, { direction: "next", limit: 5, sort: "lastName" })).meta.nextCursor!;
-      // A cursor only carries a keyset position; pointing it at a tenant B id still pages tenant A rows only.
-      const foreignRowCursor = retargetCursor(tenantACursor, tenantBWalk.forward[0]!);
-      const foreignRowPage = await students.listRegistryPage(tenantA, { cursor: foreignRowCursor, direction: "next", limit: 5, sort: "lastName" });
-      expect(foreignRowPage.records.length).toBeGreaterThan(0);
-      expect(foreignRowPage.records.every((record) => record.tenantId === tenantA)).toBe(true);
+      // The sealed cursor carries the boundary student's last name and id, but neither is readable or editable.
+      const boundary = (await students.listRegistryPage(tenantA, { direction: "next", limit: 5, sort: "lastName" })).records.at(-1)!;
+      expectNoPlaintext(tenantACursor, [boundary.lastName, boundary.lastName.toLowerCase(), boundary.id]);
+      await expect(students.listRegistryPage(tenantA, { cursor: tamperCursor(tenantACursor), direction: "next", limit: 5, sort: "lastName" }))
+        .rejects.toThrow(studentCursorInvalid);
       await expect(students.listRegistryPage(tenantA, { cursor: tenantACursor, direction: "next", limit: 5, sort: "firstName" }))
         .rejects.toThrow(studentCursorInvalid);
       await expect(students.listRegistryPage(tenantA, { cursor: tenantACursor, direction: "next", limit: 5, sort: "lastName", q: "bulut" }))
@@ -160,6 +160,23 @@ describePostgres("cursor list keyset pagination on PostgreSQL", () => {
         }
       },
     );
+
+    it("pages backward after the first row of the current page was soft-deleted", async () => {
+      const query = { direction: "next" as const, limit: 2, sort: "lastName" as const };
+      const before = await studentReferenceOrder(admin, tenantC, "lastName");
+      const first = await students.listRegistryPage(tenantC, query);
+      const second = await students.listRegistryPage(tenantC, { ...query, cursor: first.meta.nextCursor });
+      expect(second.records.map((record) => record.id)).toEqual(before.slice(2, 4));
+      const boundaryId = before[2]!;
+      await admin.query(`UPDATE "Student" SET "deletedAt" = now() WHERE "id" = $1`, [boundaryId]);
+      try {
+        const back = await students.listRegistryPage(tenantC, { ...query, cursor: second.meta.previousCursor, direction: "previous" });
+        expect(back.records.map((record) => record.id)).toEqual(before.slice(0, 2));
+        expect(back.meta.previousCursor).toBeUndefined();
+      } finally {
+        await admin.query(`UPDATE "Student" SET "deletedAt" = NULL WHERE "id" = $1`, [boundaryId]);
+      }
+    });
 
     it.each(["ışık", "IŞIK", "Işık", "işık"])("finds the stored IŞIK student for q=%s (registry and portal access)", async (q) => {
       const registry = await students.listRegistryPage(tenantC, { direction: "next", limit: 10, sort: "lastName", q });
@@ -236,8 +253,10 @@ describePostgres("cursor list keyset pagination on PostgreSQL", () => {
         .rejects.toThrow(tenantUserCursorInvalid);
 
       const tenantACursor = (await users.listTenantUserPage(tenantA, { direction: "next", limit: 4, sort: "name" })).meta.nextCursor!;
-      const foreignRowPage = await users.listTenantUserPage(tenantA, { cursor: retargetCursor(tenantACursor, tenantBWalk.forward[0]!), direction: "next", limit: 4, sort: "name" });
-      expect(foreignRowPage.records.every((record) => record.tenantId === tenantA)).toBe(true);
+      const boundary = (await users.listTenantUserPage(tenantA, { direction: "next", limit: 4, sort: "name" })).records.at(-1)!;
+      expectNoPlaintext(tenantACursor, [boundary.name, boundary.name.toLowerCase(), boundary.id, ...(boundary.email ? [boundary.email] : [])]);
+      await expect(users.listTenantUserPage(tenantA, { cursor: tamperCursor(tenantACursor), direction: "next", limit: 4, sort: "name" }))
+        .rejects.toThrow(tenantUserCursorInvalid);
       await expect(users.listTenantUserPage(tenantA, { cursor: tenantACursor, direction: "next", limit: 4, sort: "email" }))
         .rejects.toThrow(tenantUserCursorInvalid);
     });
@@ -296,13 +315,16 @@ describePostgres("cursor list keyset pagination on PostgreSQL", () => {
         .rejects.toThrow(employeeCursorInvalid);
       await expect(users.listEmployeeAccessPage(tenantA, { cursor: tenantACursor, direction: "next", limit: 4, sort: "lastName", q: "kaya" }))
         .rejects.toThrow(employeeCursorInvalid);
-      const foreignRowPage = await users.listEmployeeAccessPage(tenantA, {
-        cursor: retargetCursor(tenantACursor, tenantBWalk.forward[0]!), direction: "next", limit: 4, sort: "lastName",
-      });
-      expect(foreignRowPage.records.every((record) => record.tenantId === tenantA)).toBe(true);
-      const legacy = Buffer.from(JSON.stringify({ v: 1, context: "legacy", sort: "lastName", id: `${tenantA}-employee-000` }), "utf8").toString("base64url");
-      await expect(users.listEmployeeAccessPage(tenantA, { cursor: legacy, direction: "next", limit: 4, sort: "lastName" }))
+      await expect(users.listEmployeeAccessPage(tenantA, { cursor: tamperCursor(tenantACursor), direction: "next", limit: 4, sort: "lastName" }))
         .rejects.toThrow(employeeCursorInvalid);
+      for (const legacy of [
+        { v: 1, context: "legacy", sort: "lastName", id: `${tenantA}-employee-000` },
+        { v: 2, c: "legacy", k: "aksoy", id: `${tenantA}-employee-000` },
+      ]) {
+        const cursor = Buffer.from(JSON.stringify(legacy), "utf8").toString("base64url");
+        await expect(users.listEmployeeAccessPage(tenantA, { cursor, direction: "next", limit: 4, sort: "lastName" }))
+          .rejects.toThrow(employeeCursorInvalid);
+      }
     });
 
     it.each(["soft-deleted", "renamed"] as const)("continues after a boundary employee %s between pages", async (change) => {
@@ -355,6 +377,31 @@ describePostgres("cursor list keyset pagination on PostgreSQL", () => {
       expect(walk.records.every((record) => record.tenantId === tenantA)).toBe(true);
     });
 
+    // node-pg itself only parses ISO timestamps, so this checks the cursor key SQL pair directly: the text key and its
+    // ::timestamp(3) cast back must round-trip with milliseconds under a non-ISO DateStyle.
+    it("round-trips the createdAt cursor key under a non-ISO session DateStyle", async () => {
+      const dmyPool = new pg.Pool({ connectionString: adminDatabaseUrl, max: 1, options: "-c DateStyle=SQL,DMY" });
+      try {
+        const keys = await dmyPool.query<{ id: string; cursorKey: string; legacyText: string }>(
+          `SELECT "id", ${cursorTimestampKeySql('"createdAt"')} AS "cursorKey", "createdAt"::text AS "legacyText"
+           FROM "IdentityInvitation" WHERE "tenantId" = $1`,
+          [tenantA],
+        );
+        expect(keys.rows.length).toBe(19);
+        for (const row of keys.rows) {
+          expect(row.cursorKey).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.257$/u);
+          expect(row.legacyText).not.toBe(row.cursorKey);
+          const match = await dmyPool.query(
+            `SELECT 1 FROM "IdentityInvitation" WHERE "id" = $1 AND "createdAt" = $2::timestamp(3)`,
+            [row.id, row.cursorKey],
+          );
+          expect(match.rows).toHaveLength(1);
+        }
+      } finally {
+        await dmyPool.end();
+      }
+    });
+
     it("applies exact filters and q in SQL, with LIKE wildcards escaped", async () => {
       const teacherPending = await walkBothWays(fetchInvitations(tenantA, "-createdAt", { subjectType: "TEACHER", status: "PENDING" }), 4);
       const expectedTeacherPending = await invitationReferenceOrder(admin, tenantA, "-createdAt", `"subjectType" = 'TEACHER' AND "status" = 'PENDING'`);
@@ -390,8 +437,8 @@ describePostgres("cursor list keyset pagination on PostgreSQL", () => {
         .rejects.toThrow(identityInvitationCursorInvalid);
 
       const tenantACursor = (await invitations.listPage(tenantA, { direction: "next", limit: 4, sort: "-createdAt" })).meta.nextCursor!;
-      const foreignRowPage = await invitations.listPage(tenantA, { cursor: retargetCursor(tenantACursor, tenantBWalk.forward[0]!), direction: "next", limit: 4, sort: "-createdAt" });
-      expect(foreignRowPage.records.every((record) => record.tenantId === tenantA)).toBe(true);
+      await expect(invitations.listPage(tenantA, { cursor: tamperCursor(tenantACursor), direction: "next", limit: 4, sort: "-createdAt" }))
+        .rejects.toThrow(identityInvitationCursorInvalid);
       await expect(invitations.listPage(tenantA, { cursor: tenantACursor, direction: "next", limit: 4, sort: "-createdAt", status: "PENDING" }))
         .rejects.toThrow(identityInvitationCursorInvalid);
     });
@@ -463,10 +510,21 @@ async function walkBothWays<T extends { id: string }>(fetchPage: FetchPage<T>, l
   return { forward, backward, forwardPages, backwardPages, records, totals };
 }
 
-/** Same opaque cursor (tenant, filter and sort binding intact) pointing at a different anchor id. */
-function retargetCursor(cursor: string, id: string): string {
-  const payload = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as Record<string, unknown>;
-  return Buffer.from(JSON.stringify({ ...payload, id }), "utf8").toString("base64url");
+/** The same sealed cursor with one ciphertext bit flipped; GCM authentication must refuse it. */
+function tamperCursor(cursor: string): string {
+  const sealed = Buffer.from(cursor, "base64url");
+  sealed[sealed.length - 1]! ^= 0x01;
+  return sealed.toString("base64url");
+}
+
+/** Neither the cursor text nor its decoded bytes contain the boundary row's values (ADR-0009: no PII in URLs). */
+function expectNoPlaintext(cursor: string, values: string[]): void {
+  const decoded = Buffer.from(cursor, "base64url").toString("latin1");
+  for (const value of values.filter(Boolean)) {
+    expect(cursor).not.toContain(value);
+    expect(decoded).not.toContain(Buffer.from(value, "utf8").toString("latin1"));
+    expect(cursor).not.toContain(Buffer.from(value, "utf8").toString("base64url").slice(0, 8));
+  }
 }
 
 // Reference orders: one full ORDER BY per sort, read as the superuser without any keyset predicate.
@@ -591,7 +649,7 @@ async function seedInvitations(pool: pg.Pool, tenantId: string, count: number): 
          "id", "tenantId", "subjectType", "subjectId", "email", "name", "role", "kind", "tokenHash", "status",
          "expiresAt", "createdAt", "updatedAt"
        ) VALUES ($1, $2, $3, $4, $5, $6, $7::"TenantRole", 'EMAIL_LINK', $8, $9, now() + interval '1 day',
-         timestamp '2026-10-01 09:00:00' + make_interval(mins => $10), now())`,
+         timestamp '2026-10-01 09:00:00.257' + make_interval(mins => $10), now())`,
       [
         `${tenantId}-invitation-${suffix}`,
         tenantId,

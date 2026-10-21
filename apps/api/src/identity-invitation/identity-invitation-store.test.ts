@@ -125,7 +125,7 @@ describe("PostgresIdentityInvitationStore cursor listesi", () => {
             queries.push({ sql, values });
             if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
             if (sql.includes('FROM "IdentityInvitation" i')) {
-              const cursorKey = "2026-08-01 12:00:00";
+              const cursorKey = "2026-08-01T12:00:00.000";
               return { rows: [{ ...invitationRow(), cursorKey }, { ...invitationRow(), id: "invitation-b", cursorKey }] as T[] };
             }
             return { rows: [] as T[] };
@@ -152,6 +152,7 @@ describe("PostgresIdentityInvitationStore cursor listesi", () => {
     expect(listQuery?.sql).toContain("LIKE $5 ESCAPE");
     expect(listQuery?.sql).toContain('ORDER BY i."createdAt" DESC, i."id" DESC');
     expect(listQuery?.sql).toContain('lower(translate(');
+    expect(listQuery?.sql).toContain(`to_char(i."createdAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS') AS "cursorKey"`);
     expect(listQuery?.sql).not.toContain("tokenHash");
     expect(listQuery?.sql).not.toContain("OFFSET");
   });
@@ -168,7 +169,7 @@ describe("PostgresIdentityInvitationStore cursor listesi", () => {
     expect(queries.filter((entry) => entry.sql.includes('FROM "IdentityInvitation"'))).toHaveLength(1);
     const listQuery = queries.find((entry) => entry.sql.includes("ORDER BY"));
     expect(listQuery?.sql).toContain('(i."createdAt", i."id") < ($3::timestamp(3), $4::text)');
-    expect(listQuery?.values).toEqual(["tenant-a", "TEACHER", "2026-08-01 12:00:00", "invitation-a", 2]);
+    expect(listQuery?.values).toEqual(["tenant-a", "TEACHER", "2026-08-01T12:00:00.000", "invitation-a", 2]);
   });
 
   it("başka tenant veya filtre için cursor'ı reddeder", async () => {

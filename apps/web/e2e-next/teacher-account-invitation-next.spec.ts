@@ -16,6 +16,8 @@ interface MockState {
   invitationListRequests: number;
   invitationQueries: string[];
   invitations: IdentityInvitationRecord[];
+  /** Serve invitations one per cursor page; the first request for page 2 answers 400 *_CURSOR_INVALID once. */
+  pagedInvitations?: { staleOnce: boolean; cursors: string[] };
   resends: string[];
   revokes: string[];
   roles: string[];
@@ -162,6 +164,21 @@ test("öğretmen listesi hesap durumunu bağlı, davet bekliyor ve hesap yok ola
   expect(new Set(state.invitationQueries)).toEqual(new Set(["TEACHER"]));
 });
 
+test("öğretmen listesi davet cursor'ı reddedilince taramayı bir kez baştan başlatır", async ({ page }) => {
+  const state = mockState({
+    invitations: [invitation("invitation-b", "teacher-b"), invitation("invitation-c", "teacher-c")],
+    pagedInvitations: { staleOnce: true, cursors: [] },
+    teachers: [teacher("teacher-a", "Ayşe", "Demir"), teacher("teacher-b", "Burak", "Kaya"), teacher("teacher-c", "Cem", "Ak")],
+  });
+  await openTeacherDetail(page, state, undefined);
+  const table = page.getByRole("table", { name: "Öğretmen operasyon listesi" });
+  await expect(table.getByRole("row", { name: /Burak Kaya/ })).toContainText("Davet bekliyor");
+  await expect(table.getByRole("row", { name: /Cem Ak/ })).toContainText("Davet bekliyor");
+  await expect(table.getByRole("row", { name: /Ayşe Demir/ })).toContainText("Hesap yok");
+  // First page, refused page-2 cursor, restarted first page, page 2: one restart, no error state.
+  expect(state.pagedInvitations?.cursors).toEqual(["", "page-1", "", "page-1"]);
+});
+
 async function openTeacherDetail(page: Page, state: MockState, teacherId: string | undefined) {
   await page.route("**/*", async (route) => {
     if (route.request().method() === "OPTIONS") {
@@ -185,6 +202,24 @@ async function openTeacherDetail(page: Page, state: MockState, teacherId: string
       // Exact cursor-list filters: the detail page asks for one subjectId, the list page for the TEACHER subject type.
       const params = new URL(request.url()).searchParams;
       state.invitationQueries.push(params.get("subjectId") ?? params.get("subjectType") ?? "");
+      if (state.pagedInvitations) {
+        const cursor = params.get("cursor");
+        state.pagedInvitations.cursors.push(cursor ?? "");
+        if (cursor && state.pagedInvitations.staleOnce) {
+          state.pagedInvitations.staleOnce = false;
+          await route.fulfill({
+            body: JSON.stringify({ error: { code: "IDENTITY_INVITATION_CURSOR_INVALID", message: "İstek geçersiz." } }),
+            contentType: "application/json",
+            headers: corsHeaders,
+            status: 400,
+          });
+          return;
+        }
+        const index = cursor ? Number(cursor.replace("page-", "")) : 0;
+        const next = index + 1 < state.invitations.length ? `page-${index + 1}` : undefined;
+        await json(route, state.invitations.slice(index, index + 1), { limit: 1, ...(next ? { nextCursor: next } : {}) });
+        return;
+      }
       await json(route, state.invitations);
       return;
     }

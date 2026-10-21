@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, hkdfSync, randomBytes } from "node:crypto";
 import type { ApiCursorListMeta } from "@o-okul/shared-types";
 
 export type CursorDirection = "next" | "previous";
@@ -21,14 +21,24 @@ export interface CursorPosition {
   id: string;
 }
 
-interface ListCursorPayload {
-  v: 2;
-  c: string;
+/**
+ * How a decoded sort key is validated before it reaches SQL: free text (no NUL, bounded) or a millisecond
+ * ISO-8601 timestamp without zone (`YYYY-MM-DDTHH:MM:SS.mmm`, see `cursorTimestampKeySql`).
+ */
+export type CursorKeyFormat = "text" | "timestamp-ms";
+
+interface SealedCursorPayload {
   k: string;
   id: string;
 }
 
 type CursorContextPart = string | number | boolean | null | undefined | readonly string[];
+
+const cursorVersion = 3;
+const cursorIvLength = 12;
+const cursorTagLength = 16;
+const cursorKeyMaxLength = 512;
+const cursorIdMaxLength = 200;
 
 /**
  * Binds a cursor to the list it came from: tenant, every request filter and the sort. A cursor issued for another
@@ -45,35 +55,94 @@ export function listCursorContext(list: string, tenantId: string, parts: Record<
 /**
  * The cursor carries the boundary row's sort key and id, so the next page is `(key, id) > (cursor.key, cursor.id)`
  * without re-reading that row: a boundary row that is deleted, filtered out or renamed between requests does not
- * break paging. Key and id are client-controlled values, but the page query keeps every tenant and scope filter,
- * so a forged position can only move within rows the caller may already list.
+ * break paging. The sort key is a personal value (a student's name or number, an e-mail), and cursors travel in API
+ * query strings and screen URLs, so the payload is sealed with AES-256-GCM: version byte, random 96-bit IV, tag and
+ * ciphertext, base64url. The list context is the GCM additional data, so a cursor from another tenant, filter or
+ * sort fails authentication like a tampered one. The page query still applies every tenant and scope filter.
  */
 export function encodeListCursor(context: string, position: CursorPosition): string {
-  const payload: ListCursorPayload = { v: 2, c: context, k: position.key, id: position.id };
-  return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+  const iv = randomBytes(cursorIvLength);
+  const cipher = createCipheriv("aes-256-gcm", listCursorKey(), iv, { authTagLength: cursorTagLength });
+  cipher.setAAD(Buffer.from(context, "utf8"));
+  const payload: SealedCursorPayload = { k: position.key, id: position.id };
+  const encrypted = Buffer.concat([cipher.update(JSON.stringify(payload), "utf8"), cipher.final()]);
+  return Buffer.concat([Buffer.from([cursorVersion]), iv, cipher.getAuthTag(), encrypted]).toString("base64url");
 }
 
-/** Returns the keyset position; throws `errorCode` for a malformed cursor or one bound to another context. */
-export function decodeListCursor(cursor: string, context: string, errorCode: string): CursorPosition {
-  let payload: Partial<ListCursorPayload>;
+/**
+ * Returns the keyset position; throws `errorCode` for a malformed, tampered or earlier-format (v1/v2) cursor, one
+ * bound to another context, or a key that does not match `keyFormat` (so it never reaches SQL as a 500).
+ */
+export function decodeListCursor(
+  cursor: string,
+  context: string,
+  errorCode: string,
+  keyFormat: CursorKeyFormat = "text",
+): CursorPosition {
+  let payload: Partial<SealedCursorPayload>;
   try {
-    const decoded = Buffer.from(cursor, "base64url");
-    if (!decoded.length || decoded.toString("base64url") !== cursor) throw new Error(errorCode);
-    payload = JSON.parse(decoded.toString("utf8")) as Partial<ListCursorPayload>;
+    const sealed = Buffer.from(cursor, "base64url");
+    if (sealed.toString("base64url") !== cursor) throw new Error(errorCode);
+    if (sealed.length <= 1 + cursorIvLength + cursorTagLength || sealed[0] !== cursorVersion) throw new Error(errorCode);
+    const iv = sealed.subarray(1, 1 + cursorIvLength);
+    const tag = sealed.subarray(1 + cursorIvLength, 1 + cursorIvLength + cursorTagLength);
+    const decipher = createDecipheriv("aes-256-gcm", listCursorKey(), iv, { authTagLength: cursorTagLength });
+    decipher.setAAD(Buffer.from(context, "utf8"));
+    decipher.setAuthTag(tag);
+    const plaintext = Buffer.concat([decipher.update(sealed.subarray(1 + cursorIvLength + cursorTagLength)), decipher.final()]);
+    payload = JSON.parse(plaintext.toString("utf8")) as Partial<SealedCursorPayload>;
   } catch {
     throw new Error(errorCode);
   }
-  if (
-    payload.v !== 2 ||
-    typeof payload.c !== "string" ||
-    typeof payload.k !== "string" ||
-    typeof payload.id !== "string" ||
-    !payload.id ||
-    payload.c !== context
-  ) {
+  if (!isValidCursorText(payload.id, cursorIdMaxLength) || !payload.id || !isValidCursorKey(payload.k, keyFormat)) {
     throw new Error(errorCode);
   }
-  return { key: payload.k, id: payload.id };
+  return { key: payload.k as string, id: payload.id };
+}
+
+function isValidCursorKey(value: unknown, format: CursorKeyFormat): boolean {
+  if (!isValidCursorText(value, cursorKeyMaxLength)) return false;
+  if (format === "text") return true;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.(\d{3})$/u.exec(value);
+  if (!match) return false;
+  const [, year, month, day, hour, minute, second] = match.map(Number);
+  const date = new Date(Date.UTC(year!, month! - 1, day!, hour!, minute!, second!));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month! - 1 && date.getUTCDate() === day
+    && date.getUTCHours() === hour && date.getUTCMinutes() === minute && date.getUTCSeconds() === second;
+}
+
+function isValidCursorText(value: unknown, maxLength: number): value is string {
+  return typeof value === "string" && value.length <= maxLength && !value.includes("\u0000");
+}
+
+/**
+ * Text form of a timestamp(3) sort key that does not depend on the session DateStyle; the matching parameter is cast
+ * back with `::timestamp(3)`, and PostgreSQL reads an ISO-8601 literal the same way under every DateStyle.
+ */
+export function cursorTimestampKeySql(column: string): string {
+  return `to_char(${column}, 'YYYY-MM-DD"T"HH24:MI:SS.MS')`;
+}
+
+// Key material: a dedicated AES-256 key derived with HKDF-SHA256 from JWT_ACCESS_SECRET, the server secret the API
+// already requires in every environment (auth refuses a missing or default value in production) and that role
+// preview and tenant selection tokens already build on. Rotating it only invalidates short-lived list cursors, which
+// the web recovers from. Outside production and staging the same development default as auth is used.
+const listCursorKeyInfo = "o-okul:list-cursor:v3";
+const defaultDevelopmentAccessSecret = "test-access-secret";
+let cachedCursorKey: { secret: string; key: Buffer } | undefined;
+
+function listCursorKey(): Buffer {
+  const configured = process.env.JWT_ACCESS_SECRET;
+  const productionLike = process.env.NODE_ENV === "production" || process.env.NODE_ENV === "staging";
+  if (productionLike && (!configured || configured === defaultDevelopmentAccessSecret)) {
+    throw new Error("JWT_ACCESS_SECRET_REQUIRED");
+  }
+  const secret = configured ?? defaultDevelopmentAccessSecret;
+  if (cachedCursorKey?.secret !== secret) {
+    const key = Buffer.from(hkdfSync("sha256", secret, Buffer.alloc(0), listCursorKeyInfo, 32));
+    cachedCursorKey = { secret, key };
+  }
+  return cachedCursorKey.key;
 }
 
 /** `>` or `<` for a keyset predicate `(key, id) <op> (cursorKey, cursorId)`. */

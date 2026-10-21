@@ -10,6 +10,7 @@ import {
   cursorKeysetCondition,
   cursorPageFromRows,
   cursorQueryOrder,
+  cursorTimestampKeySql,
   decodeListCursor,
   foldSearchText,
   foldedSearchSql,
@@ -93,7 +94,8 @@ export class InMemoryIdentityInvitationStore implements IdentityInvitationStore 
       records,
       query,
       identityInvitationCursorContext(tenantId, query),
-      (record) => ({ key: record.createdAt, id: record.id }),
+      // Same `YYYY-MM-DDTHH:MM:SS.mmm` form the PostgreSQL store puts in its cursors (ISO string without the zone).
+      (record) => ({ key: record.createdAt.slice(0, 23), id: record.id }),
       identityInvitationSortDefinition(query.sort).direction,
       identityInvitationCursorInvalid,
     );
@@ -224,7 +226,9 @@ export class PostgresIdentityInvitationStore implements IdentityInvitationStore 
 
   async listPage(tenantId: string, query: IdentityInvitationListQuery): Promise<CursorPage<IdentityInvitationRecord>> {
     const context = identityInvitationCursorContext(tenantId, query);
-    const position = query.cursor ? decodeListCursor(query.cursor, context, identityInvitationCursorInvalid) : undefined;
+    const position = query.cursor
+      ? decodeListCursor(query.cursor, context, identityInvitationCursorInvalid, "timestamp-ms")
+      : undefined;
     return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
       const sort = identityInvitationSortDefinition(query.sort);
       const values: unknown[] = [tenantId];
@@ -235,7 +239,7 @@ export class PostgresIdentityInvitationStore implements IdentityInvitationStore 
       values.push(query.limit + 1);
       const order = cursorQueryOrder(sort.direction, query.direction);
       const result = await client.query<IdentityInvitationRow & { cursorKey: string }>(
-        `SELECT ${identityInvitationColumns}, ${sort.keySql}::text AS "cursorKey"
+        `SELECT ${identityInvitationColumns}, ${cursorTimestampKeySql(sort.keySql)} AS "cursorKey"
          FROM "IdentityInvitation" i
          WHERE ${conditions.join(" AND ")}
          ORDER BY ${sort.keySql} ${order}, i."id" ${order}
@@ -470,7 +474,8 @@ function identityInvitationListConditions(query: IdentityInvitationListQuery, va
   return conditions;
 }
 
-// "createdAt" is timestamp(3) without time zone; its ::text form round-trips through the cursor exactly.
+// "createdAt" is timestamp(3) without time zone. The cursor stores it as `to_char(..., 'YYYY-MM-DD"T"HH24:MI:SS.MS')`
+// (cursorTimestampKeySql) and the keyset parameter is cast back with ::timestamp(3); neither depends on DateStyle.
 function identityInvitationSortDefinition(sort: IdentityInvitationListQuery["sort"]): {
   keySql: string;
   keyType: string;
