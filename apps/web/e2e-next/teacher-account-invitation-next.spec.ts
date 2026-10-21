@@ -101,6 +101,23 @@ for (const [code, message] of [
   });
 }
 
+// UAT F-17: a write rejected for an expired licence shows one app-wide warning that names the reason.
+test("lisans süresi dolan kurumda reddedilen yazma işlemi nedeni açıklayan uyarı gösterir (UAT F-17)", async ({ page }) => {
+  const state = mockState({ createError: "TENANT_LICENSE_EXPIRED_READ_ONLY" });
+  await openTeacherDetail(page, state, "teacher-a");
+  await page.getByRole("button", { name: "Hesap daveti gönder" }).click();
+  const dialog = page.getByRole("dialog", { name: "Ayşe Demir hesap daveti" });
+  await dialog.getByLabel("E-posta").fill("ayse.demir@example.test");
+  await dialog.getByRole("button", { name: "Daveti gönder" }).click();
+  const toast = page.locator(".uh-toast-region");
+  await expect(toast).toContainText("Lisans süresi dolduğu için kurum salt okunur");
+  await expect(toast).toContainText("lisansın yenilenmesi gerekir");
+  // A second rejected attempt right away does not stack another copy of the same warning.
+  await dialog.getByRole("button", { name: "Daveti gönder" }).click();
+  await expect.poll(() => state.creates.length).toBe(2);
+  await expect(toast.getByText("Lisans süresi dolduğu için kurum salt okunur", { exact: false })).toHaveCount(1);
+});
+
 test("bağlı öğretmende davet işlemi görünmez ve davet listesi istenmez", async ({ page }) => {
   const state = mockState({ teachers: [teacher("teacher-a", "Ayşe", "Demir", "user-teacher-a")] });
   await openTeacherDetail(page, state, "teacher-a");
