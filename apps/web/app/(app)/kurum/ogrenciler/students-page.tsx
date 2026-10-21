@@ -38,6 +38,7 @@ import {
   buildCursorListUrl,
   CursorListControls,
   initialCursorListQuery,
+  loadCursorPageWithRecovery,
   readCursorListQueryFromUrl,
   resetListCursor,
   writeCursorListQueryParams,
@@ -168,7 +169,12 @@ export function StudentsPage() {
   const listQueryKey = ["next-students", auth?.session.tenantId ?? "anonymous"];
   const studentsQuery = useQuery({
     queryKey,
-    queryFn: () => loadStudents(auth?.accessToken ?? "", listQuery, filters),
+    // A stale cursor (for example from a bookmarked URL) is dropped and the first page is shown instead.
+    queryFn: () => loadCursorPageWithRecovery(
+      listQuery,
+      (state) => loadStudents(auth?.accessToken ?? "", state, filters),
+      setListQuery,
+    ),
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });

@@ -22,7 +22,9 @@ const describePostgres = appDatabaseUrl && adminDatabaseUrl ? describe : describ
 
 const tenantA = "cursor-keyset-tenant-a";
 const tenantB = "cursor-keyset-tenant-b";
-const tenantIds = [tenantA, tenantB];
+// Tenant C holds the Turkish-name fixtures and the rows the boundary-mutation tests change between pages.
+const tenantC = "cursor-keyset-tenant-c";
+const tenantIds = [tenantA, tenantB, tenantC];
 
 const studentSorts: StudentListSort[] = ["lastName", "-lastName", "firstName", "-firstName", "studentNo", "-studentNo", "classId", "-classId"];
 const tenantUserSorts: TenantUserListSort[] = ["email", "-email", "name", "-name"];
@@ -49,6 +51,7 @@ describePostgres("cursor list keyset pagination on PostgreSQL", () => {
     await seedTenantUsers(admin, tenantB, 5);
     await seedInvitations(admin, tenantA, 19);
     await seedInvitations(admin, tenantB, 5);
+    await seedTurkishFixtures(admin, tenantC);
   });
 
   afterAll(async () => {
@@ -114,23 +117,61 @@ describePostgres("cursor list keyset pagination on PostgreSQL", () => {
         .rejects.toThrow(studentCursorInvalid);
 
       const tenantACursor = (await students.listRegistryPage(tenantA, { direction: "next", limit: 5, sort: "lastName" })).meta.nextCursor!;
+      // A cursor only carries a keyset position; pointing it at a tenant B id still pages tenant A rows only.
       const foreignRowCursor = retargetCursor(tenantACursor, tenantBWalk.forward[0]!);
-      await expect(students.listRegistryPage(tenantA, { cursor: foreignRowCursor, direction: "next", limit: 5, sort: "lastName" }))
-        .rejects.toThrow(studentCursorInvalid);
+      const foreignRowPage = await students.listRegistryPage(tenantA, { cursor: foreignRowCursor, direction: "next", limit: 5, sort: "lastName" });
+      expect(foreignRowPage.records.length).toBeGreaterThan(0);
+      expect(foreignRowPage.records.every((record) => record.tenantId === tenantA)).toBe(true);
       await expect(students.listRegistryPage(tenantA, { cursor: tenantACursor, direction: "next", limit: 5, sort: "firstName" }))
         .rejects.toThrow(studentCursorInvalid);
       await expect(students.listRegistryPage(tenantA, { cursor: tenantACursor, direction: "next", limit: 5, sort: "lastName", q: "bulut" }))
         .rejects.toThrow(studentCursorInvalid);
     });
 
-    it("rejects a cursor whose anchor row was soft-deleted", async () => {
-      const deletedId = (await admin.query<{ id: string }>(
-        `SELECT "id" FROM "Student" WHERE "tenantId" = $1 AND "deletedAt" IS NOT NULL LIMIT 1`,
-        [tenantA],
-      )).rows[0]!.id;
-      const cursor = (await students.listRegistryPage(tenantA, { direction: "next", limit: 5, sort: "lastName" })).meta.nextCursor!;
-      await expect(students.listRegistryPage(tenantA, { cursor: retargetCursor(cursor, deletedId), direction: "next", limit: 5, sort: "lastName" }))
-        .rejects.toThrow(studentCursorInvalid);
+    it.each(["soft-deleted", "filtered out", "renamed"] as const)(
+      "continues after a boundary row that was %s between pages",
+      async (change) => {
+        const query = { direction: "next" as const, limit: 2, sort: "lastName" as const, status: "ACTIVE" as const };
+        const before = await studentReferenceOrder(admin, tenantC, "lastName", `"status" = 'ACTIVE'`);
+        expect(before.length).toBeGreaterThanOrEqual(5);
+        const first = await students.listRegistryPage(tenantC, query);
+        expect(first.records.map((record) => record.id)).toEqual(before.slice(0, 2));
+        const boundaryId = before[1]!;
+        const original = (await admin.query<{ lastName: string }>(`SELECT "lastName" FROM "Student" WHERE "id" = $1`, [boundaryId])).rows[0]!;
+        const mutation = {
+          "soft-deleted": `UPDATE "Student" SET "deletedAt" = now() WHERE "id" = $1`,
+          "filtered out": `UPDATE "Student" SET "status" = 'PASSIVE' WHERE "id" = $1`,
+          renamed: `UPDATE "Student" SET "lastName" = 'ZZZ SONRA' WHERE "id" = $1`,
+        }[change];
+        await admin.query(mutation, [boundaryId]);
+        try {
+          const second = await students.listRegistryPage(tenantC, { ...query, cursor: first.meta.nextCursor });
+          expect(second.records.map((record) => record.id)).toEqual(before.slice(2, 4));
+        } finally {
+          await admin.query(
+            `UPDATE "Student" SET "deletedAt" = NULL, "status" = 'ACTIVE', "lastName" = $2 WHERE "id" = $1`,
+            [boundaryId, original.lastName],
+          );
+        }
+      },
+    );
+
+    it.each(["ışık", "IŞIK", "Işık", "işık"])("finds the stored IŞIK student for q=%s (registry and portal access)", async (q) => {
+      const registry = await students.listRegistryPage(tenantC, { direction: "next", limit: 10, sort: "lastName", q });
+      expect(registry.records.map((record) => record.id)).toEqual([`${tenantC}-student-isik`]);
+      expect(registry.meta.total).toBe(1);
+      const portal = await students.listPortalAccess(tenantC, { direction: "next", limit: 10, q });
+      expect(portal.records.map((record) => record.studentId)).toEqual([`${tenantC}-student-isik`]);
+    });
+
+    it.each(["ismail", "İsmail", "ISMAIL", "İSMAİL"])("finds the stored İSMAİL student for q=%s", async (q) => {
+      const registry = await students.listRegistryPage(tenantC, { direction: "next", limit: 10, sort: "lastName", q });
+      expect(registry.records.map((record) => record.id)).toEqual([`${tenantC}-student-ismail`]);
+    });
+
+    it("folds only I variants: an ASCII 'isik' does not match IŞIK", async () => {
+      const registry = await students.listRegistryPage(tenantC, { direction: "next", limit: 10, sort: "lastName", q: "isik" });
+      expect(registry.records).toEqual([]);
     });
   });
 
@@ -190,10 +231,36 @@ describePostgres("cursor list keyset pagination on PostgreSQL", () => {
         .rejects.toThrow(tenantUserCursorInvalid);
 
       const tenantACursor = (await users.listTenantUserPage(tenantA, { direction: "next", limit: 4, sort: "name" })).meta.nextCursor!;
-      await expect(users.listTenantUserPage(tenantA, { cursor: retargetCursor(tenantACursor, tenantBWalk.forward[0]!), direction: "next", limit: 4, sort: "name" }))
-        .rejects.toThrow(tenantUserCursorInvalid);
+      const foreignRowPage = await users.listTenantUserPage(tenantA, { cursor: retargetCursor(tenantACursor, tenantBWalk.forward[0]!), direction: "next", limit: 4, sort: "name" });
+      expect(foreignRowPage.records.every((record) => record.tenantId === tenantA)).toBe(true);
       await expect(users.listTenantUserPage(tenantA, { cursor: tenantACursor, direction: "next", limit: 4, sort: "email" }))
         .rejects.toThrow(tenantUserCursorInvalid);
+    });
+  });
+
+  describe("GET /tenant-users boundary changes and Turkish search", () => {
+    it("continues after a boundary account renamed between pages", async () => {
+      const query = { direction: "next" as const, limit: 2, sort: "name" as const };
+      const before = await tenantUserReferenceOrder(admin, tenantC, "name");
+      const first = await users.listTenantUserPage(tenantC, query);
+      expect(first.records.map((record) => record.id)).toEqual(before.slice(0, 2));
+      const boundaryId = before[1]!;
+      const original = (await admin.query<{ name: string }>(`SELECT "name" FROM "User" WHERE "id" = $1`, [boundaryId])).rows[0]!;
+      await admin.query(`UPDATE "User" SET "name" = 'ZZZ SONRA' WHERE "id" = $1`, [boundaryId]);
+      try {
+        const second = await users.listTenantUserPage(tenantC, { ...query, cursor: first.meta.nextCursor });
+        expect(second.records.map((record) => record.id)).toEqual(before.slice(2, 4));
+      } finally {
+        await admin.query(`UPDATE "User" SET "name" = $2 WHERE "id" = $1`, [boundaryId, original.name]);
+      }
+    });
+
+    it.each([
+      ["ışık", "isik"], ["IŞIK", "isik"], ["Işık", "isik"],
+      ["ismail", "ismail"], ["İsmail", "ismail"], ["ISMAIL", "ismail"],
+    ])("matches q=%s to the stored Turkish-uppercase name", async (q, expected) => {
+      const page = await users.listTenantUserPage(tenantC, { direction: "next", limit: 10, sort: "name", q });
+      expect(page.records.map((record) => record.id)).toEqual([`${tenantC}-user-${expected}`]);
     });
   });
 
@@ -251,10 +318,33 @@ describePostgres("cursor list keyset pagination on PostgreSQL", () => {
         .rejects.toThrow(identityInvitationCursorInvalid);
 
       const tenantACursor = (await invitations.listPage(tenantA, { direction: "next", limit: 4, sort: "-createdAt" })).meta.nextCursor!;
-      await expect(invitations.listPage(tenantA, { cursor: retargetCursor(tenantACursor, tenantBWalk.forward[0]!), direction: "next", limit: 4, sort: "-createdAt" }))
-        .rejects.toThrow(identityInvitationCursorInvalid);
+      const foreignRowPage = await invitations.listPage(tenantA, { cursor: retargetCursor(tenantACursor, tenantBWalk.forward[0]!), direction: "next", limit: 4, sort: "-createdAt" });
+      expect(foreignRowPage.records.every((record) => record.tenantId === tenantA)).toBe(true);
       await expect(invitations.listPage(tenantA, { cursor: tenantACursor, direction: "next", limit: 4, sort: "-createdAt", status: "PENDING" }))
         .rejects.toThrow(identityInvitationCursorInvalid);
+    });
+
+    it("continues the PENDING walk after the boundary invitation is accepted between pages", async () => {
+      const query = { direction: "next" as const, limit: 2, sort: "createdAt" as const, status: "PENDING" as const };
+      const before = await invitationReferenceOrder(admin, tenantC, "createdAt", `"status" = 'PENDING'`);
+      expect(before.length).toBeGreaterThanOrEqual(4);
+      const first = await invitations.listPage(tenantC, query);
+      expect(first.records.map((record) => record.id)).toEqual(before.slice(0, 2));
+      await admin.query(`UPDATE "IdentityInvitation" SET "status" = 'ACCEPTED', "acceptedAt" = now() WHERE "id" = $1`, [before[1]]);
+      try {
+        const second = await invitations.listPage(tenantC, { ...query, cursor: first.meta.nextCursor });
+        expect(second.records.map((record) => record.id)).toEqual(before.slice(2, 4));
+      } finally {
+        await admin.query(`UPDATE "IdentityInvitation" SET "status" = 'PENDING', "acceptedAt" = NULL WHERE "id" = $1`, [before[1]]);
+      }
+    });
+
+    it.each([
+      ["ışık", "isik"], ["IŞIK", "isik"], ["Işık", "isik"],
+      ["ismail", "ismail"], ["İsmail", "ismail"], ["ISMAIL", "ismail"],
+    ])("matches q=%s to the stored Turkish-uppercase invitation name", async (q, expected) => {
+      const page = await invitations.listPage(tenantC, { direction: "next", limit: 10, sort: "createdAt", q });
+      expect(page.records.map((record) => record.id)).toEqual([`${tenantC}-invitation-${expected}`]);
     });
   });
 });
@@ -441,6 +531,54 @@ async function seedInvitations(pool: pg.Pool, tenantId: string, count: number): 
         `cursor-keyset-token-${tenantId}-${suffix}`,
         statuses[(index + Math.floor(index / 4)) % statuses.length],
         Math.floor(index / 3),
+      ],
+    );
+  }
+}
+
+/**
+ * Tenant C: students, accounts and invitations named with Turkish capitals ("IŞIK", "İSMAİL") plus plain names, so
+ * search folding and between-page boundary changes are checked on rows no other test walks.
+ */
+async function seedTurkishFixtures(pool: pg.Pool, tenantId: string): Promise<void> {
+  const people = [
+    { key: "isik", firstName: "AYŞE", lastName: "IŞIK" },
+    { key: "ismail", firstName: "İSMAİL", lastName: "KAYA" },
+    { key: "aksoy", firstName: "CEM", lastName: "AKSOY" },
+    { key: "bulut", firstName: "DENİZ", lastName: "BULUT" },
+    { key: "demir", firstName: "ECE", lastName: "DEMİR" },
+    { key: "ozturk", firstName: "FATMA", lastName: "ÖZTÜRK" },
+  ];
+  for (const [index, person] of people.entries()) {
+    await pool.query(
+      `INSERT INTO "Student" ("id", "tenantId", "studentNo", "firstName", "lastName", "status", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, 'ACTIVE', now())`,
+      [`${tenantId}-student-${person.key}`, tenantId, `C-${String(index).padStart(4, "0")}`, person.firstName, person.lastName],
+    );
+    const userId = `${tenantId}-user-${person.key}`;
+    await pool.query(
+      `INSERT INTO "User" ("id", "tenantId", "name", "email", "emailNormalized", "passwordHash", "updatedAt")
+       VALUES ($1, $2, $3, $4, $4, 'FIXTURE_HASH', now())`,
+      [userId, tenantId, `${person.firstName} ${person.lastName}`, `${person.key}@${tenantId}.example.test`],
+    );
+    await pool.query(
+      `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt") VALUES ($1, $2, $3, 'TEACHER', now())`,
+      [`${userId}-teacher`, tenantId, userId],
+    );
+    await pool.query(
+      `INSERT INTO "IdentityInvitation" (
+         "id", "tenantId", "subjectType", "subjectId", "email", "name", "role", "kind", "tokenHash", "status",
+         "expiresAt", "createdAt", "updatedAt"
+       ) VALUES ($1, $2, 'TEACHER', $3, $4, $5, 'TEACHER'::"TenantRole", 'EMAIL_LINK', $6, 'PENDING', now() + interval '1 day',
+         timestamp '2026-10-02 09:00:00' + make_interval(mins => $7), now())`,
+      [
+        `${tenantId}-invitation-${person.key}`,
+        tenantId,
+        `${tenantId}-subject-${person.key}`,
+        `invite-${person.key}@${tenantId}.example.test`,
+        `${person.firstName} ${person.lastName}`,
+        `cursor-keyset-token-${tenantId}-${person.key}`,
+        index,
       ],
     );
   }

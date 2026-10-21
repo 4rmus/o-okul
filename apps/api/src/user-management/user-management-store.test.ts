@@ -671,6 +671,7 @@ describe("tenant kullanıcı cursor listesi", () => {
       roles: ["TEACHER"],
       createdAt: new Date("2026-06-01T00:00:00.000Z"),
       updatedAt: new Date("2026-06-01T00:00:00.000Z"),
+      cursorKey: `${id}@example.test`,
     });
     const pool = {
       async query<T>() {
@@ -682,7 +683,6 @@ describe("tenant kullanıcı cursor listesi", () => {
             queries.push({ sql, values });
             if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
             if (sql.includes("COUNT(*)::int AS total FROM listed")) return { rows: [{ total: 3 }] as T[] };
-            if (sql.includes("SELECT 1 FROM listed")) return { rows: [{ found: 1 }] as T[] };
             if (sql.includes("FROM listed l")) return { rows: [row("user-a"), row("user-b")] as T[] };
             return { rows: [] as T[] };
           },
@@ -697,6 +697,7 @@ describe("tenant kullanıcı cursor listesi", () => {
     const firstPage = queries.find((entry) => entry.sql.includes("FROM listed l"));
     expect(firstPage?.values).toEqual(["tenant-a", "%ada%", 2]);
     expect(firstPage?.sql).toContain("LIKE $2 ESCAPE");
+    expect(firstPage?.sql).toContain("lower(translate(");
     expect(firstPage?.sql).toContain('m."tenantId" = $1');
     expect(firstPage?.sql).toContain('ORDER BY l."cursorKey" ASC, l."id" ASC');
 
@@ -704,13 +705,40 @@ describe("tenant kullanıcı cursor listesi", () => {
     const second = await store.listTenantUserPage("tenant-a", { ...query, limit: 1, q: "Ada", cursor: first.meta.nextCursor });
     expect(second.meta.previousCursor).toEqual(expect.any(String));
     const secondPage = queries.find((entry) => entry.sql.includes("FROM listed l"));
-    expect(secondPage?.sql).toContain('(l."cursorKey", l."id") >');
-    expect(secondPage?.values).toEqual(["tenant-a", "%ada%", "user-a", 2]);
+    expect(secondPage?.sql).toContain('(l."cursorKey", l."id") > ($3::text, $4::text)');
+    expect(secondPage?.values).toEqual(["tenant-a", "%ada%", "user-a@example.test", "user-a", 2]);
+    expect(queries.some((entry) => entry.sql.includes("SELECT 1 FROM listed"))).toBe(false);
 
     queries.length = 0;
     await expect(store.listTenantUserPage("tenant-b", { ...query, limit: 1, q: "Ada", cursor: first.meta.nextCursor }))
       .rejects.toThrow("TENANT_USER_CURSOR_INVALID");
     expect(queries).toEqual([]);
+  });
+});
+
+describe("InMemory tenant kullanıcı cursor dayanıklılığı ve Türkçe arama", () => {
+  const query = { direction: "next" as const, limit: 2, sort: "email" as const };
+
+  it("önceki sayfanın son hesabı listeden çıksa da sonraki sayfa atlamadan gelir", async () => {
+    const store = new InMemoryUserManagementStore();
+    const first = await store.listTenantUserPage("tenant-a", query);
+    expect(first.records.map((user) => user.id)).toEqual(["user-tenant-a", "guardian-tenant-a"]);
+    await store.removeTenantRole("tenant-a", "guardian-tenant-a", "GUARDIAN");
+
+    const second = await store.listTenantUserPage("tenant-a", { ...query, cursor: first.meta.nextCursor });
+    expect(second.records.map((user) => user.id)).toEqual(["student-tenant-a", "teacher-tenant-a"]);
+    expect(second.meta.total).toBe(3);
+  });
+
+  it("ad aramasında I/İ/ı/i varyantlarını eşler", async () => {
+    const store = new InMemoryUserManagementStore();
+    await store.createOrAttachTenantUser({ tenantId: "tenant-a", email: "isik@example.test", name: "AYŞE IŞIK", password: "Secure-password-1", roles: ["TEACHER"] });
+    await store.createOrAttachTenantUser({ tenantId: "tenant-a", email: "kaya@example.test", name: "İSMAİL KAYA", password: "Secure-password-1", roles: ["TEACHER"] });
+    const emails = async (q: string) =>
+      (await store.listTenantUserPage("tenant-a", { ...query, limit: 10, q })).records.map((user) => user.email);
+
+    for (const q of ["ışık", "IŞIK", "Işık"]) expect(await emails(q), q).toEqual(["isik@example.test"]);
+    for (const q of ["ismail", "İsmail", "ISMAIL"]) expect(await emails(q), q).toEqual(["kaya@example.test"]);
   });
 });
 

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button, Field, FilterBar, Input, Select } from "@o-okul/ui";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
-import type { CursorListMeta } from "./api-client.js";
+import { ApiRequestError, type CursorListMeta } from "./api-client.js";
 import type { SortOption } from "./list-controls.js";
 
 /** Cursor-paged list state (GET /employees contract): the opaque cursor replaces the page number. */
@@ -50,6 +50,30 @@ export function resetListCursor(
   changes: Partial<Pick<CursorListQueryState, "limit" | "q" | "sort">> = {},
 ): CursorListQueryState {
   return { ...state, ...changes, cursor: undefined, direction: "next" };
+}
+
+/** A 400 *_CURSOR_INVALID: the cursor belongs to another tenant, filter, sort or an earlier cursor format. */
+export function isCursorInvalidError(error: unknown): boolean {
+  return error instanceof ApiRequestError && error.status === 400 && /_CURSOR_INVALID$/u.test(error.code ?? "");
+}
+
+/**
+ * Loads a cursor page; when the API refuses the cursor (for example a stale one kept in the URL), reports the
+ * cursor-free state through `onReset` so the screen drops it from state and URL, and returns the first page.
+ */
+export async function loadCursorPageWithRecovery<T>(
+  state: CursorListQueryState,
+  load: (state: CursorListQueryState) => Promise<T>,
+  onReset: (state: CursorListQueryState) => void,
+): Promise<T> {
+  try {
+    return await load(state);
+  } catch (error) {
+    if (!state.cursor || !isCursorInvalidError(error)) throw error;
+    const firstPage = resetListCursor(state);
+    onReset(firstPage);
+    return load(firstPage);
+  }
 }
 
 export function readCursorListQueryFromUrl(
@@ -174,9 +198,11 @@ export function CursorListControls({
               ))}
             </Select>
           </Field>
-          <span className="next-list-status" aria-live="polite" aria-atomic="true">
-            {meta?.total ?? 0} kayıt
-          </span>
+          {meta?.total === undefined ? null : (
+            <span className="next-list-status" aria-live="polite" aria-atomic="true">
+              {meta.total} kayıt
+            </span>
+          )}
           <div aria-label="Sayfalama" className="uh-pagination next-list-pagination" role="navigation">
             <Button
               aria-label="Önceki sayfa"

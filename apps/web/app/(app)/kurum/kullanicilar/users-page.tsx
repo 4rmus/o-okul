@@ -15,6 +15,7 @@ import { apiBaseUrl, apiCursorListRequest, apiErrorMessage } from "../../../../s
 import {
   buildCursorListUrl,
   CursorListControls,
+  loadCursorPageWithRecovery,
   useUrlCursorListState,
   type CursorListQueryState,
 } from "../../../../src/cursor-list-controls.js";
@@ -40,7 +41,12 @@ export function UsersPage() {
   const usersQueryKey = ["next-tenant-users", tenantId, userListQuery];
   const usersQuery = useQuery({
     queryKey: usersQueryKey,
-    queryFn: () => loadTenantUsers(auth?.accessToken ?? "", userListQuery),
+    // A stale cursor (for example from a bookmarked URL) is dropped and the first page is shown instead.
+    queryFn: () => loadCursorPageWithRecovery(
+      userListQuery,
+      (state) => loadTenantUsers(auth?.accessToken ?? "", state),
+      setUserListQuery,
+    ),
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });

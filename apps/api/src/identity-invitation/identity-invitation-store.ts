@@ -7,10 +7,12 @@ import { type Queryable, type TenantQueryable, withExplicitTenantQuery } from ".
 import {
   type CursorPage,
   type CursorSortDirection,
-  cursorComparison,
+  cursorKeysetCondition,
   cursorPageFromRows,
   cursorQueryOrder,
   decodeListCursor,
+  foldSearchText,
+  foldedSearchSql,
   likeSearchPattern,
   listCursorContext,
   normalizeSearchTerm,
@@ -80,20 +82,19 @@ export class InMemoryIdentityInvitationStore implements IdentityInvitationStore 
 
   async listPage(tenantId: string, query: IdentityInvitationListQuery): Promise<CursorPage<IdentityInvitationRecord>> {
     const search = normalizeSearchTerm(query.q);
-    const direction = query.sort === "createdAt" ? 1 : -1;
     const records = this.invitations
       .filter((invitation) => invitation.tenantId === tenantId)
       .filter((invitation) => !query.subjectType || invitation.subjectType === query.subjectType)
       .filter((invitation) => !query.subjectId || invitation.subjectId === query.subjectId)
       .filter((invitation) => !query.status || invitation.status === query.status)
       .filter((invitation) => !search || identityInvitationSearchText(invitation).includes(search))
-      .map(stripRequiredTokenHash)
-      .sort((left, right) => direction * (left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id)));
+      .map(stripRequiredTokenHash);
     return paginateCursorRecords(
       records,
       query,
       identityInvitationCursorContext(tenantId, query),
-      (record) => record.id,
+      (record) => ({ key: record.createdAt, id: record.id }),
+      identityInvitationSortDefinition(query.sort).direction,
       identityInvitationCursorInvalid,
     );
   }
@@ -223,34 +224,31 @@ export class PostgresIdentityInvitationStore implements IdentityInvitationStore 
 
   async listPage(tenantId: string, query: IdentityInvitationListQuery): Promise<CursorPage<IdentityInvitationRecord>> {
     const context = identityInvitationCursorContext(tenantId, query);
-    const cursorId = query.cursor ? decodeListCursor(query.cursor, context, identityInvitationCursorInvalid) : undefined;
+    const position = query.cursor ? decodeListCursor(query.cursor, context, identityInvitationCursorInvalid) : undefined;
     return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
       const sort = identityInvitationSortDefinition(query.sort);
       const values: unknown[] = [tenantId];
       const conditions = identityInvitationListConditions(query, values);
-      if (cursorId) {
-        const anchor = await client.query(
-          `SELECT 1 FROM "IdentityInvitation" i WHERE ${conditions.join(" AND ")} AND i."id" = $${values.length + 1} LIMIT 1`,
-          [...values, cursorId],
-        );
-        if (!anchor.rows[0]) throw new Error(identityInvitationCursorInvalid);
-        values.push(cursorId);
-        conditions.push(`(${sort.key("i")}, i."id") ${cursorComparison(sort.direction, query.direction)} (
-          SELECT ${sort.key("anchor")}, anchor."id" FROM "IdentityInvitation" anchor
-          WHERE anchor."tenantId" = $1 AND anchor."id" = $${values.length}
-        )`);
+      if (position) {
+        conditions.push(cursorKeysetCondition(sort.keySql, 'i."id"', sort.direction, query.direction, position, values, sort.keyType));
       }
       values.push(query.limit + 1);
       const order = cursorQueryOrder(sort.direction, query.direction);
-      const result = await client.query<IdentityInvitationRow>(
-        `SELECT ${identityInvitationColumns}
+      const result = await client.query<IdentityInvitationRow & { cursorKey: string }>(
+        `SELECT ${identityInvitationColumns}, ${sort.keySql}::text AS "cursorKey"
          FROM "IdentityInvitation" i
          WHERE ${conditions.join(" AND ")}
-         ORDER BY ${sort.key("i")} ${order}, i."id" ${order}
+         ORDER BY ${sort.keySql} ${order}, i."id" ${order}
          LIMIT $${values.length}`,
         values,
       );
-      return cursorPageFromRows(result.rows, query, context, (record) => record.id, toIdentityInvitationRecord);
+      return cursorPageFromRows(
+        result.rows,
+        query,
+        context,
+        (row) => ({ key: row.cursorKey, id: row.id }),
+        toIdentityInvitationRecord,
+      );
     });
   }
 
@@ -449,14 +447,14 @@ const identityInvitationColumns = [
 ].map((column) => `i."${column}"`).join(", ");
 
 // Same fields the legacy in-memory `q` matched (subjectId keeps `q=<subjectId>` detail lookups working).
-const identityInvitationSearchSql = `lower(
+const identityInvitationSearchSql = foldedSearchSql(`
   coalesce(i."name", '') || ' ' ||
   coalesce(i."email", '') || ' ' ||
   i."subjectType"::text || ' ' ||
   i."subjectId" || ' ' ||
   i."role"::text || ' ' ||
   i."status"::text
-)`;
+`);
 
 function identityInvitationListConditions(query: IdentityInvitationListQuery, values: unknown[]): string[] {
   const conditions = ['i."tenantId" = $1'];
@@ -472,12 +470,15 @@ function identityInvitationListConditions(query: IdentityInvitationListQuery, va
   return conditions;
 }
 
+// "createdAt" is timestamp(3) without time zone; its ::text form round-trips through the cursor exactly.
 function identityInvitationSortDefinition(sort: IdentityInvitationListQuery["sort"]): {
-  key(alias: string): string;
+  keySql: string;
+  keyType: string;
   direction: CursorSortDirection;
 } {
   return {
-    key: (alias) => `${alias}."createdAt"`,
+    keySql: 'i."createdAt"',
+    keyType: "timestamp(3)",
     direction: sort === "createdAt" ? "ASC" : "DESC",
   };
 }
@@ -493,9 +494,9 @@ function identityInvitationCursorContext(tenantId: string, query: IdentityInvita
 }
 
 function identityInvitationSearchText(invitation: IdentityInvitationRecord): string {
-  return [invitation.name, invitation.email ?? "", invitation.subjectType, invitation.subjectId, invitation.role, invitation.status]
-    .join(" ")
-    .toLowerCase();
+  return foldSearchText(
+    [invitation.name, invitation.email ?? "", invitation.subjectType, invitation.subjectId, invitation.role, invitation.status].join(" "),
+  );
 }
 
 interface IdentityInvitationRow {

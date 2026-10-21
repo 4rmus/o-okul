@@ -16,10 +16,13 @@ import type { StudentContactStoreInput } from "./student-contact-store.js";
 import {
   type CursorPage,
   type CursorSortDirection,
-  cursorComparison,
+  cursorKeysetCondition,
   cursorPageFromRows,
   cursorQueryOrder,
   decodeListCursor,
+  foldSearchText,
+  foldedSearchSql,
+  likeSearchPattern,
   listCursorContext,
   normalizeSearchTerm,
   paginateCursorRecords,
@@ -67,6 +70,8 @@ export interface StudentRegistryQuery {
   sort: StudentListSort;
   ids?: string[];
   gradeLevelId?: string;
+  /** The requested class filter, bound to the cursor; `classIds` is the derived scope the query applies. */
+  classId?: string;
   classIds?: string[];
   responsibleTeacherId?: string;
   status?: StudentRecord["status"];
@@ -189,7 +194,8 @@ export class InMemoryStudentStore implements StudentStore {
   }
 
   async listRegistryPage(tenantId: string, query: StudentRegistryQuery): Promise<StudentRegistryPage> {
-    const normalizedQuery = normalizeSearchTerm(query.q, "tr-TR");
+    const normalizedQuery = normalizeSearchTerm(query.q);
+    const sort = studentRegistrySortDefinition(query.sort);
     const records = this.students
       .filter((student) => student.tenantId === tenantId && !student.deletedAt)
       .filter((student) => !query.ids || query.ids.includes(student.id))
@@ -201,13 +207,13 @@ export class InMemoryStudentStore implements StudentStore {
       .filter((student) => !query.teacherId || student.responsibleTeacherId === query.teacherId
         || Boolean(query.teacherStudentIds?.includes(student.id))
         || Boolean(student.classId && query.teacherClassIds?.includes(student.classId)))
-      .filter((student) => !normalizedQuery || `${student.firstName} ${student.lastName} ${student.studentNo ?? ""}`.toLocaleLowerCase("tr-TR").includes(normalizedQuery))
-      .sort(studentRegistryComparator(query.sort));
+      .filter((student) => !normalizedQuery || foldSearchText(`${student.firstName} ${student.lastName} ${student.studentNo ?? ""}`).includes(normalizedQuery));
     return paginateCursorRecords(
       records,
       query,
       studentRegistryCursorContext(tenantId, query),
-      (record) => record.id,
+      (record) => ({ key: sort.keyOf(record), id: record.id }),
+      sort.direction,
       studentCursorInvalid,
       { total: records.length },
     );
@@ -220,11 +226,11 @@ export class InMemoryStudentStore implements StudentStore {
   }
 
   async listPortalAccess(tenantId: string, query: StudentPortalAccessQuery): Promise<StudentPortalAccessPage> {
-    const normalizedQuery = query.q?.trim().toLocaleLowerCase("tr-TR");
+    const normalizedQuery = normalizeSearchTerm(query.q);
     const records = this.students
       .filter((student) => student.tenantId === tenantId && !student.deletedAt)
       .filter((student) => !query.studentIds || query.studentIds.includes(student.id))
-      .filter((student) => !normalizedQuery || `${student.firstName} ${student.lastName} ${student.studentNo}`.toLocaleLowerCase("tr-TR").includes(normalizedQuery))
+      .filter((student) => !normalizedQuery || foldSearchText(`${student.firstName} ${student.lastName} ${student.studentNo}`).includes(normalizedQuery))
       .sort(compareStudentPortalRecords)
       .map((student) => toInMemoryStudentPortalAccessRecord(student, this.portalMemberships.get(student.id)));
     return paginateStudentPortalAccess(records, query);
@@ -413,7 +419,7 @@ export class PostgresStudentStore implements StudentStore {
 
   async listRegistryPage(tenantId: string, query: StudentRegistryQuery): Promise<StudentRegistryPage> {
     const context = studentRegistryCursorContext(tenantId, query);
-    const cursorId = query.cursor ? decodeListCursor(query.cursor, context, studentCursorInvalid) : undefined;
+    const position = query.cursor ? decodeListCursor(query.cursor, context, studentCursorInvalid) : undefined;
     return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
       const values: unknown[] = [tenantId];
       const filters = [`student."tenantId" = $1`, `student."deletedAt" IS NULL`];
@@ -455,13 +461,13 @@ export class PostgresStudentStore implements StudentStore {
             AND contact."deletedAt" IS NULL
         )`);
       }
-      const pattern = searchPattern(query.q);
+      const pattern = likeSearchPattern(query.q);
       if (pattern) {
-        addFilter((parameter) => `lower(
+        addFilter((parameter) => `${foldedSearchSql(`
           coalesce(student."firstName", '') || ' ' ||
           coalesce(student."lastName", '') || ' ' ||
           coalesce(student."studentNo", '')
-        ) LIKE ${parameter} ESCAPE '\\'`, pattern);
+        `)} LIKE ${parameter} ESCAPE '\\'`, pattern);
       }
 
       const totalResult = await client.query<{ total: number | string }>(
@@ -469,29 +475,20 @@ export class PostgresStudentStore implements StudentStore {
         values,
       );
       const sort = studentRegistrySortDefinition(query.sort);
-      if (cursorId) {
-        const anchor = await client.query(
-          `SELECT 1 FROM "Student" student WHERE ${filters.join(" AND ")} AND student."id" = $${values.length + 1} LIMIT 1`,
-          [...values, cursorId],
-        );
-        if (!anchor.rows[0]) throw new Error(studentCursorInvalid);
-        values.push(cursorId);
-        filters.push(`(${sort.key("student")}, student."id") ${cursorComparison(sort.direction, query.direction)} (
-          SELECT ${sort.key("anchor")}, anchor."id" FROM "Student" anchor
-          WHERE anchor."tenantId" = $1 AND anchor."id" = $${values.length}
-        )`);
+      if (position) {
+        filters.push(cursorKeysetCondition(sort.keySql, 'student."id"', sort.direction, query.direction, position, values));
       }
       values.push(query.limit + 1);
       const order = cursorQueryOrder(sort.direction, query.direction);
-      const result = await client.query<StudentRow>(
-        `SELECT student.*
+      const result = await client.query<StudentRow & { cursorKey: string }>(
+        `SELECT student.*, ${sort.keySql} AS "cursorKey"
          FROM "Student" student
          WHERE ${filters.join(" AND ")}
-         ORDER BY ${sort.key("student")} ${order}, student."id" ${order}
+         ORDER BY ${sort.keySql} ${order}, student."id" ${order}
          LIMIT $${values.length}`,
         values,
       );
-      return cursorPageFromRows(result.rows, query, context, (record) => record.id, toStudentRecord, {
+      return cursorPageFromRows(result.rows, query, context, (row) => ({ key: row.cursorKey, id: row.id }), toStudentRecord, {
         total: Number(totalResult.rows[0]?.total ?? 0),
       });
     });
@@ -539,11 +536,11 @@ export class PostgresStudentStore implements StudentStore {
            FROM "Student" search_student
            WHERE search_student."tenantId" = $1
              AND search_student."deletedAt" IS NULL
-             AND lower(
+             AND ${foldedSearchSql(`
                coalesce(search_student."firstName", '') || ' ' ||
                coalesce(search_student."lastName", '') || ' ' ||
                coalesce(search_student."studentNo", '')
-             ) LIKE $2 ESCAPE '\\'
+             `)} LIKE $2 ESCAPE '\\'
            UNION ALL
            SELECT email_student."id"
            FROM "User" email_user
@@ -617,7 +614,7 @@ export class PostgresStudentStore implements StudentStore {
            )
          ORDER BY lower(s."lastName") ${order}, lower(s."firstName") ${order}, s."id" ${order}
          LIMIT $4`,
-        [tenantId, searchPattern(query.q), cursorId ?? null, query.limit + 1, query.studentIds ?? null],
+        [tenantId, likeSearchPattern(query.q), cursorId ?? null, query.limit + 1, query.studentIds ?? null],
       );
       const hasMore = result.rows.length > query.limit;
       const pageRows = result.rows.slice(0, query.limit);
@@ -1586,46 +1583,39 @@ function decodeStudentPortalCursor(cursor: string): string {
   return studentId;
 }
 
-function searchPattern(value: string | undefined): string | null {
-  const normalized = value?.trim().toLocaleLowerCase("tr-TR");
-  return normalized ? `%${normalized.replace(/[\\%_]/g, "\\$&")}%` : null;
-}
-
 /**
  * Keyset sort keys. Nullable columns sort as '' so the key is never NULL (a NULL key would break the
- * `(key, id) > (anchorKey, anchorId)` predicate); students without a number or class come first in ascending order.
+ * `(key, id) > (cursorKey, cursorId)` predicate); students without a number or class come first in ascending order.
+ * `keyOf` is the in-memory counterpart of `keySql`.
  */
-function studentRegistrySortDefinition(sort: StudentListSort): { key(alias: string): string; direction: CursorSortDirection } {
+function studentRegistrySortDefinition(sort: StudentListSort): {
+  keySql: string;
+  keyOf(student: StudentRecord): string;
+  direction: CursorSortDirection;
+} {
   const field = sort.replace(/^-/, "");
   const direction: CursorSortDirection = sort.startsWith("-") ? "DESC" : "ASC";
-  if (field === "firstName") return { key: (alias) => `lower(${alias}."firstName")`, direction };
-  if (field === "studentNo") return { key: (alias) => `coalesce(${alias}."studentNo", '')`, direction };
-  if (field === "classId") return { key: (alias) => `coalesce(${alias}."classId", '')`, direction };
-  return { key: (alias) => `lower(${alias}."lastName")`, direction };
+  if (field === "firstName") return { keySql: 'lower(student."firstName")', keyOf: (student) => student.firstName.toLowerCase(), direction };
+  if (field === "studentNo") return { keySql: `coalesce(student."studentNo", '')`, keyOf: (student) => student.studentNo ?? "", direction };
+  if (field === "classId") return { keySql: `coalesce(student."classId", '')`, keyOf: (student) => student.classId ?? "", direction };
+  return { keySql: 'lower(student."lastName")', keyOf: (student) => student.lastName.toLowerCase(), direction };
 }
 
 function studentRegistryCursorContext(tenantId: string, query: StudentRegistryQuery): string {
+  // Binds the request filters only. The derived scope lists (classIds from campus scope, teacher student/class ids)
+  // are re-applied by every page query, so a scope change between pages narrows or widens the next page instead of
+  // invalidating the cursor; it can never return a row outside the caller's current scope.
   return listCursorContext("students", tenantId, {
-    campusIds: query.campusIds,
-    classIds: query.classIds,
+    classId: query.classId,
     gradeLevelId: query.gradeLevelId,
     hasContact: query.hasContact,
     ids: query.ids,
-    q: normalizeSearchTerm(query.q, "tr-TR"),
+    q: normalizeSearchTerm(query.q),
     responsibleTeacherId: query.responsibleTeacherId,
     sort: query.sort,
     status: query.status,
     teacherId: query.teacherId,
   });
-}
-
-function studentRegistryComparator(sort: StudentListSort): (left: StudentRecord, right: StudentRecord) => number {
-  const direction = sort.startsWith("-") ? -1 : 1;
-  const field = sort.replace(/^-/, "") as "studentNo" | "firstName" | "lastName" | "classId";
-  return (left, right) => direction * String(left[field] ?? "").localeCompare(String(right[field] ?? ""), "tr-TR", {
-    numeric: field === "studentNo",
-    sensitivity: "base",
-  }) || left.id.localeCompare(right.id);
 }
 
 function maskEmail(value: string): string {

@@ -392,6 +392,7 @@ export async function apiCursorListRequest<TItem>(
 /**
  * Follows `meta.nextCursor` until the filtered cursor list is exhausted. Only for narrow, bounded filters
  * (for example one subject type's pending invitations); screen lists page with `apiCursorListRequest`.
+ * If the API refuses a cursor mid-walk (400 *_CURSOR_INVALID), the walk restarts once from the first page.
  */
 export async function apiCursorListAll<TItem>(
   accessToken: string,
@@ -399,6 +400,15 @@ export async function apiCursorListAll<TItem>(
   init: RequestInit = {},
   maxPages = 50,
 ): Promise<TItem[]> {
+  try {
+    return await walkCursorList<TItem>(accessToken, url, init, maxPages);
+  } catch (error) {
+    if (!(error instanceof ApiRequestError && error.status === 400 && /_CURSOR_INVALID$/u.test(error.code ?? ""))) throw error;
+    return walkCursorList<TItem>(accessToken, url, init, maxPages);
+  }
+}
+
+async function walkCursorList<TItem>(accessToken: string, url: string, init: RequestInit, maxPages: number): Promise<TItem[]> {
   const items: TItem[] = [];
   let cursor: string | undefined;
   for (let page = 0; page < maxPages; page += 1) {

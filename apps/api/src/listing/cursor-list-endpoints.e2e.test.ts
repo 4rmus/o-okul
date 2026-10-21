@@ -98,7 +98,9 @@ describe("Cursor list endpoints", () => {
 
       const first = await list(endpoint.path, { ...endpoint.query, limit: 1 }, tenantAToken).expect(200);
       const firstCursor = first.body.meta.nextCursor as string;
-      await list(endpoint.path, { ...endpoint.query, limit: 1, cursor: firstCursor }, tenantBToken).expect(400);
+      const foreignTenant = await list(endpoint.path, { ...endpoint.query, limit: 1, cursor: firstCursor }, tenantBToken).expect(400);
+      // The web recognises *_CURSOR_INVALID, drops the cursor and reloads the first page.
+      expect(foreignTenant.body.error.code).toMatch(/_CURSOR_INVALID$/u);
       await list(endpoint.path, { ...endpoint.query, ...endpoint.changedFilter, limit: 1, cursor: firstCursor }, tenantAToken).expect(400);
       await list(endpoint.path, { ...endpoint.query, limit: 1, direction: "previous" }, tenantAToken).expect(422);
       await list(endpoint.path, { ...endpoint.query, page: 1, limit: 1 }, tenantAToken).expect(422);

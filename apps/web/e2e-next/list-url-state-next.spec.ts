@@ -91,6 +91,31 @@ test.describe("Liste URL state", () => {
     await expect.poll(() => captured.users.at(-1)?.has("cursor")).toBe(false);
   });
 
+  test("kullanıcı listesinde URL'deki geçersiz cursor düşürülür ve hata göstermeden ilk sayfa açılır", async ({ page }) => {
+    const captured = createCapturedRequests();
+    await openWithListMocks(page, captured, "/kurum/kullanicilar?usersCursor=stale-cursor&usersQ=admin");
+
+    const usersRegion = page.getByLabel("Kullanıcı ve rol yönetimi");
+    await expect(usersRegion.getByLabel("Admin Kullanıcı rolleri", { exact: true })).toBeVisible();
+    await expect.poll(() => new URL(page.url()).searchParams.get("usersCursor")).toBeNull();
+    await expect.poll(() => captured.users.at(-1)?.has("cursor")).toBe(false);
+    expect(captured.users.at(-1)?.get("q")).toBe("admin");
+    expect(captured.users.some((params) => params.get("cursor") === "stale-cursor")).toBe(true);
+    await expect(page.locator(".uh-crud-page__error")).toHaveCount(0);
+    await expect(usersRegion.getByLabel("Ara")).toHaveValue("admin");
+  });
+
+  test("öğrenci listesinde URL'deki geçersiz cursor düşürülür ve ilk sayfa açılır", async ({ page }) => {
+    const captured = createCapturedRequests();
+    await openWithListMocks(page, captured, "/kurum/ogrenciler?cursor=stale-cursor&q=ada");
+    const studentsRegion = page.getByLabel("Öğrenci yönetimi");
+    await expect(studentsRegion.getByRole("button", { name: "Ada düzenle" })).toBeVisible();
+    await expect.poll(() => new URL(page.url()).searchParams.get("cursor")).toBeNull();
+    await expect.poll(() => captured.students.at(-1)?.has("cursor")).toBe(false);
+    expect(captured.students.some((params) => params.get("cursor") === "stale-cursor")).toBe(true);
+    await expect(page.locator(".uh-crud-page__error")).toHaveCount(0);
+  });
+
   test("mevcut kullanıcı listesini salt okunur tutup çalışan yönetimine yönlendirir", async ({ page }) => {
     const captured = createCapturedRequests();
     await openWithListMocks(page, captured, "/kurum/kullanicilar");
@@ -893,6 +918,10 @@ async function installListApiMocks(page: Page, captured: CapturedRequests) {
     }
     if (pathName === "/tenant-users") {
       captured.users.push(new URLSearchParams(url.search));
+      if (url.searchParams.get("cursor") === "stale-cursor") {
+        await fulfillError(route, 400, "TENANT_USER_CURSOR_INVALID");
+        return;
+      }
       await fulfillCursorList(route, [createTenantUser()], url.searchParams);
       return;
     }
@@ -935,6 +964,10 @@ async function installListApiMocks(page: Page, captured: CapturedRequests) {
       // The student list screen always sends limit (cursor mode); selector screens use the unpaged lookup.
       if (url.searchParams.has("limit")) {
         captured.students.push(new URLSearchParams(url.search));
+        if (url.searchParams.get("cursor") === "stale-cursor") {
+          await fulfillError(route, 400, "STUDENT_CURSOR_INVALID");
+          return;
+        }
         await fulfillCursorList(route, [createStudent()], url.searchParams);
         return;
       }
@@ -1375,6 +1408,17 @@ async function fulfillList(route: Route, data: unknown[], searchParams: URLSearc
     page,
     total: 30,
     totalPages: Math.ceil(30 / limit),
+  });
+}
+
+async function fulfillError(route: Route, status: number, code: string) {
+  await route.fulfill({
+    body: JSON.stringify({ error: { code, message: "İstek geçersiz." } }),
+    headers: {
+      ...corsHeadersFor(route),
+      "content-type": "application/json",
+    },
+    status,
   });
 }
 

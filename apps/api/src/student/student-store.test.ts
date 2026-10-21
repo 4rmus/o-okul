@@ -55,7 +55,6 @@ describe("PostgresStudentStore", () => {
         queries.push({ sql, values });
         if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
         if (sql.includes("COUNT(*)::int AS total")) return { rows: [{ total: 2 }] as T[] };
-        if (sql.includes('SELECT 1 FROM "Student" student')) return { rows: [{ "?column?": 1 }] as T[] };
         if (sql.includes('SELECT student.*')) {
           return { rows: [{
             id: "student-a",
@@ -73,6 +72,7 @@ describe("PostgresStudentStore", () => {
             photoKey: null,
             userId: null,
             deletedAt: null,
+            cursorKey: "a",
           }, {
             id: "student-b",
             tenantId: "tenant-a",
@@ -89,6 +89,7 @@ describe("PostgresStudentStore", () => {
             photoKey: null,
             userId: null,
             deletedAt: null,
+            cursorKey: "b",
           }] as T[] };
         }
         return { rows: [] as T[] };
@@ -134,12 +135,10 @@ describe("PostgresStudentStore", () => {
     queries.length = 0;
     const second = await store.listRegistryPage("tenant-a", { ...registryQuery, cursor: first.meta.nextCursor });
     expect(second.meta.previousCursor).toEqual(expect.any(String));
-    const anchorQuery = queries.find((query) => query.sql.includes('SELECT 1 FROM "Student" student'));
-    expect(anchorQuery?.values?.at(-1)).toBe("student-a");
+    expect(queries.some((query) => query.sql.includes('SELECT 1 FROM "Student"'))).toBe(false);
     const secondListQuery = queries.find((query) => query.sql.includes('SELECT student.*'));
-    expect(secondListQuery?.sql).toContain('(lower(student."lastName"), student."id") <');
-    expect(secondListQuery?.sql).toContain('SELECT lower(anchor."lastName"), anchor."id" FROM "Student" anchor');
-    expect(secondListQuery?.values?.slice(-2)).toEqual(["student-a", 2]);
+    expect(secondListQuery?.sql).toContain('(lower(student."lastName"), student."id") < ($8::text, $9::text)');
+    expect(secondListQuery?.values?.slice(-3)).toEqual(["a", "student-a", 2]);
 
     queries.length = 0;
     await expect(store.listRegistryPage("tenant-b", { ...registryQuery, cursor: first.meta.nextCursor }))
@@ -733,5 +732,53 @@ describe("InMemoryStudentStore registry cursor listesi", () => {
     expect(byName.meta.total).toBe(1);
     const byNo = await store.listRegistryPage("tenant-a", { ...query, q: "100" });
     expect(byNo.records.map((student) => student.id)).toEqual(["student-a"]);
+  });
+});
+
+describe("InMemoryStudentStore cursor dayanıklılığı ve Türkçe arama", () => {
+  const query = { direction: "next" as const, limit: 2, sort: "lastName" as const };
+
+  async function seeded() {
+    const store = new InMemoryStudentStore();
+    const created = await store.createMany([
+      { tenantId: "tenant-a", firstName: "B", lastName: "BETA", status: "ACTIVE" },
+      { tenantId: "tenant-a", firstName: "C", lastName: "CEYLAN", status: "ACTIVE" },
+      { tenantId: "tenant-a", firstName: "D", lastName: "DEMİR", status: "ACTIVE" },
+      { tenantId: "tenant-a", firstName: "E", lastName: "EKİN", status: "ACTIVE" },
+    ]);
+    return { store, created };
+  }
+
+  it("önceki sayfanın son satırı silinse, pasife alınsa veya adı değişse de sonraki sayfa doğru gelir", async () => {
+    for (const change of ["delete", "deactivate", "rename"] as const) {
+      const { store } = await seeded();
+      const active = { ...query, status: "ACTIVE" as const };
+      const first = await store.listRegistryPage("tenant-a", active);
+      expect(first.records.map((student) => student.lastName)).toEqual(["A", "BETA"]);
+      const boundary = first.records.at(-1)!;
+      if (change === "delete") await store.softDelete(boundary.id, "2026-10-21T00:00:00.000Z");
+      if (change === "deactivate") await store.update(boundary.id, { status: "PASSIVE" });
+      if (change === "rename") await store.update(boundary.id, { lastName: "ZORLU" });
+
+      const second = await store.listRegistryPage("tenant-a", { ...active, cursor: first.meta.nextCursor });
+      expect(second.records.map((student) => student.lastName), change).toEqual(["CEYLAN", "DEMİR"]);
+    }
+  });
+
+  it("IŞIK ve İSMAİL kayıtlarını I/İ/ı/i varyantlarıyla bulur", async () => {
+    const store = new InMemoryStudentStore();
+    await store.createMany([
+      { tenantId: "tenant-a", firstName: "AYŞE", lastName: "IŞIK", status: "ACTIVE" },
+      { tenantId: "tenant-a", firstName: "İSMAİL", lastName: "KAYA", status: "ACTIVE" },
+    ]);
+    const lastNames = async (q: string) =>
+      (await store.listRegistryPage("tenant-a", { ...query, limit: 10, q })).records.map((student) => student.lastName);
+
+    for (const q of ["ışık", "IŞIK", "Işık", "işık"]) expect(await lastNames(q), q).toEqual(["IŞIK"]);
+    for (const q of ["ismail", "İsmail", "ISMAIL", "ısmaıl"]) expect(await lastNames(q), q).toEqual(["KAYA"]);
+    // Only I variants fold: ş stays ş, so an ASCII "isik" does not match "IŞIK".
+    expect(await lastNames("isik")).toEqual([]);
+    const portal = await store.listPortalAccess("tenant-a", { direction: "next", limit: 10, q: "ışık" });
+    expect(portal.records.map((record) => record.lastName)).toEqual(["IŞIK"]);
   });
 });

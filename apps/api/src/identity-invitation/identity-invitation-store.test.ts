@@ -117,16 +117,16 @@ describe("PostgresIdentityInvitationStore", () => {
 });
 
 describe("PostgresIdentityInvitationStore cursor listesi", () => {
-  function listPool(queries: Array<{ sql: string; values?: unknown[] }>, anchorFound = true) {
+  function listPool(queries: Array<{ sql: string; values?: unknown[] }>) {
     return {
       async connect() {
         return {
           async query<T>(sql: string, values?: unknown[]) {
             queries.push({ sql, values });
             if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
-            if (sql.includes('SELECT 1 FROM "IdentityInvitation" i')) return { rows: (anchorFound ? [{ found: 1 }] : []) as T[] };
             if (sql.includes('FROM "IdentityInvitation" i')) {
-              return { rows: [invitationRow(), { ...invitationRow(), id: "invitation-b" }] as T[] };
+              const cursorKey = "2026-08-01 12:00:00";
+              return { rows: [{ ...invitationRow(), cursorKey }, { ...invitationRow(), id: "invitation-b", cursorKey }] as T[] };
             }
             return { rows: [] as T[] };
           },
@@ -151,11 +151,12 @@ describe("PostgresIdentityInvitationStore cursor listesi", () => {
     expect(listQuery?.sql).toContain('i."tenantId" = $1');
     expect(listQuery?.sql).toContain("LIKE $5 ESCAPE");
     expect(listQuery?.sql).toContain('ORDER BY i."createdAt" DESC, i."id" DESC');
+    expect(listQuery?.sql).toContain('lower(translate(');
     expect(listQuery?.sql).not.toContain("tokenHash");
     expect(listQuery?.sql).not.toContain("OFFSET");
   });
 
-  it("cursor anchor'ını aynı filtrelerle doğrular ve keyset koşuluyla sonraki sayfayı okur", async () => {
+  it("sonraki sayfayı cursor içindeki sıralama değeriyle okur; anchor satırını yeniden sorgulamaz", async () => {
     const queries: Array<{ sql: string; values?: unknown[] }> = [];
     const store = new PostgresIdentityInvitationStore(listPool(queries));
     const first = await store.listPage("tenant-a", { ...query, subjectType: "TEACHER" });
@@ -164,14 +165,13 @@ describe("PostgresIdentityInvitationStore cursor listesi", () => {
     const second = await store.listPage("tenant-a", { ...query, subjectType: "TEACHER", cursor: first.meta.nextCursor });
 
     expect(second.meta.previousCursor).toEqual(expect.any(String));
-    const anchor = queries.find((entry) => entry.sql.includes('SELECT 1 FROM "IdentityInvitation" i'));
-    expect(anchor?.values).toEqual(["tenant-a", "TEACHER", "invitation-a"]);
+    expect(queries.filter((entry) => entry.sql.includes('FROM "IdentityInvitation"'))).toHaveLength(1);
     const listQuery = queries.find((entry) => entry.sql.includes("ORDER BY"));
-    expect(listQuery?.sql).toContain('(i."createdAt", i."id") <');
-    expect(listQuery?.values).toEqual(["tenant-a", "TEACHER", "invitation-a", 2]);
+    expect(listQuery?.sql).toContain('(i."createdAt", i."id") < ($3::timestamp(3), $4::text)');
+    expect(listQuery?.values).toEqual(["tenant-a", "TEACHER", "2026-08-01 12:00:00", "invitation-a", 2]);
   });
 
-  it("başka tenant, filtre veya bulunamayan anchor için cursor'ı reddeder", async () => {
+  it("başka tenant veya filtre için cursor'ı reddeder", async () => {
     const queries: Array<{ sql: string; values?: unknown[] }> = [];
     const store = new PostgresIdentityInvitationStore(listPool(queries));
     const first = await store.listPage("tenant-a", { ...query, subjectType: "TEACHER" });
@@ -182,10 +182,6 @@ describe("PostgresIdentityInvitationStore cursor listesi", () => {
     await expect(store.listPage("tenant-a", { ...query, subjectType: "GUARDIAN", cursor: first.meta.nextCursor }))
       .rejects.toThrow("IDENTITY_INVITATION_CURSOR_INVALID");
     expect(queries).toEqual([]);
-
-    const missingAnchor = new PostgresIdentityInvitationStore(listPool([], false));
-    await expect(missingAnchor.listPage("tenant-a", { ...query, subjectType: "TEACHER", cursor: first.meta.nextCursor }))
-      .rejects.toThrow("IDENTITY_INVITATION_CURSOR_INVALID");
   });
 });
 
@@ -234,6 +230,37 @@ describe("InMemoryIdentityInvitationStore cursor listesi", () => {
     expect((await store.listPage("tenant-a", { ...all, subjectType: "TEACHER", subjectId: "teacher-1" })).records.map((record) => record.id))
       .toEqual(["inv-1"]);
     expect((await store.listPage("tenant-a", { ...all, status: "REVOKED" })).records).toEqual([]);
+  });
+});
+
+describe("InMemoryIdentityInvitationStore cursor dayanıklılığı ve Türkçe arama", () => {
+  it("bekleyen davet listesi gezilirken sınır davet kabul edilse de kalan davetler atlanmadan gelir", async () => {
+    const store = new InMemoryIdentityInvitationStore();
+    for (const index of [1, 2, 3, 4]) {
+      await store.create({
+        id: `inv-${index}`, tenantId: "tenant-a", role: "TEACHER", tokenHash: `hash-${index}`, expiresAt: "2099-01-01T00:00:00.000Z",
+        subjectType: "TEACHER", subjectId: `teacher-${index}`, name: `Öğretmen ${index}`,
+      });
+    }
+    const pending = { direction: "next" as const, limit: 2, sort: "createdAt" as const, status: "PENDING" as const };
+    const first = await store.listPage("tenant-a", pending);
+    expect(first.records.map((record) => record.id)).toEqual(["inv-1", "inv-2"]);
+    await store.markAccepted("inv-2", "user-2", "2026-10-21T00:00:00.000Z");
+
+    const second = await store.listPage("tenant-a", { ...pending, cursor: first.meta.nextCursor });
+    expect(second.records.map((record) => record.id)).toEqual(["inv-3", "inv-4"]);
+  });
+
+  it("ad aramasında I/İ/ı/i varyantlarını eşler", async () => {
+    const store = new InMemoryIdentityInvitationStore();
+    const base = { tenantId: "tenant-a", role: "TEACHER" as const, tokenHash: "hash", expiresAt: "2099-01-01T00:00:00.000Z", subjectType: "TEACHER" as const };
+    await store.create({ ...base, id: "inv-isik", subjectId: "teacher-1", name: "AYŞE IŞIK" });
+    await store.create({ ...base, id: "inv-ismail", subjectId: "teacher-2", name: "İSMAİL KAYA" });
+    const ids = async (q: string) =>
+      (await store.listPage("tenant-a", { direction: "next", limit: 10, sort: "createdAt", q })).records.map((record) => record.id);
+
+    for (const q of ["ışık", "IŞIK", "Işık"]) expect(await ids(q), q).toEqual(["inv-isik"]);
+    for (const q of ["ismail", "İsmail", "ISMAIL"]) expect(await ids(q), q).toEqual(["inv-ismail"]);
   });
 });
 

@@ -261,6 +261,7 @@ export class StudentService {
       sort,
       ids: input.ids,
       gradeLevelId: input.level,
+      classId: input.classId,
       classIds: classFilterRequested ? requestedClassIds : undefined,
       responsibleTeacherId: input.responsibleTeacherId,
       status: input.status,

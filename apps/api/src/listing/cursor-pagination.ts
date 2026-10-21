@@ -15,16 +15,23 @@ export interface CursorPage<TRecord> {
   meta: ApiCursorListMeta;
 }
 
+/** Keyset position: the row's sort-key value (as text) and its id tie-breaker. */
+export interface CursorPosition {
+  key: string;
+  id: string;
+}
+
 interface ListCursorPayload {
-  v: 1;
+  v: 2;
   c: string;
+  k: string;
   id: string;
 }
 
 type CursorContextPart = string | number | boolean | null | undefined | readonly string[];
 
 /**
- * Binds a cursor to the list it came from: tenant, every filter and the sort. A cursor issued for another
+ * Binds a cursor to the list it came from: tenant, every request filter and the sort. A cursor issued for another
  * tenant, filter set or sort fails `decodeListCursor` instead of silently paging a different result set.
  */
 export function listCursorContext(list: string, tenantId: string, parts: Record<string, CursorContextPart>): string {
@@ -35,13 +42,19 @@ export function listCursorContext(list: string, tenantId: string, parts: Record<
   return createHash("sha256").update(JSON.stringify([list, tenantId, normalized])).digest("base64url");
 }
 
-export function encodeListCursor(context: string, id: string): string {
-  const payload: ListCursorPayload = { v: 1, c: context, id };
+/**
+ * The cursor carries the boundary row's sort key and id, so the next page is `(key, id) > (cursor.key, cursor.id)`
+ * without re-reading that row: a boundary row that is deleted, filtered out or renamed between requests does not
+ * break paging. Key and id are client-controlled values, but the page query keeps every tenant and scope filter,
+ * so a forged position can only move within rows the caller may already list.
+ */
+export function encodeListCursor(context: string, position: CursorPosition): string {
+  const payload: ListCursorPayload = { v: 2, c: context, k: position.key, id: position.id };
   return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
 }
 
-/** Returns the anchor record id; throws `errorCode` for a malformed cursor or one bound to another context. */
-export function decodeListCursor(cursor: string, context: string, errorCode: string): string {
+/** Returns the keyset position; throws `errorCode` for a malformed cursor or one bound to another context. */
+export function decodeListCursor(cursor: string, context: string, errorCode: string): CursorPosition {
   let payload: Partial<ListCursorPayload>;
   try {
     const decoded = Buffer.from(cursor, "base64url");
@@ -50,13 +63,20 @@ export function decodeListCursor(cursor: string, context: string, errorCode: str
   } catch {
     throw new Error(errorCode);
   }
-  if (payload.v !== 1 || typeof payload.c !== "string" || typeof payload.id !== "string" || !payload.id || payload.c !== context) {
+  if (
+    payload.v !== 2 ||
+    typeof payload.c !== "string" ||
+    typeof payload.k !== "string" ||
+    typeof payload.id !== "string" ||
+    !payload.id ||
+    payload.c !== context
+  ) {
     throw new Error(errorCode);
   }
-  return payload.id;
+  return { key: payload.k, id: payload.id };
 }
 
-/** `>` or `<` for a keyset predicate `(key, id) <op> (anchorKey, anchorId)`. */
+/** `>` or `<` for a keyset predicate `(key, id) <op> (cursorKey, cursorId)`. */
 export function cursorComparison(sortDirection: CursorSortDirection, direction: CursorDirection): ">" | "<" {
   return (direction === "next") === (sortDirection === "ASC") ? ">" : "<";
 }
@@ -68,6 +88,25 @@ export function cursorQueryOrder(sortDirection: CursorSortDirection, direction: 
 }
 
 /**
+ * Keyset predicate against a decoded cursor. `keySql` must be the same expression the query orders by and selects
+ * as text for the next cursor; `keyType` casts the text key back (for example `timestamp(3)`).
+ */
+export function cursorKeysetCondition(
+  keySql: string,
+  idSql: string,
+  sortDirection: CursorSortDirection,
+  direction: CursorDirection,
+  position: CursorPosition,
+  values: unknown[],
+  keyType = "text",
+): string {
+  values.push(position.key, position.id);
+  const keyParameter = `$${values.length - 1}`;
+  const idParameter = `$${values.length}`;
+  return `(${keySql}, ${idSql}) ${cursorComparison(sortDirection, direction)} (${keyParameter}::${keyType}, ${idParameter}::text)`;
+}
+
+/**
  * Builds a page from `limit + 1` rows read in query order. `hasMore` is whether a row past the page exists in the
  * read direction; the opposite neighbour exists whenever a cursor was supplied.
  */
@@ -75,65 +114,113 @@ export function cursorPageFromRows<TRow, TRecord>(
   rows: TRow[],
   query: CursorPageQuery,
   context: string,
-  idOf: (record: TRecord) => string,
+  positionOf: (row: TRow) => CursorPosition,
   toRecord: (row: TRow) => TRecord,
   extraMeta: Partial<ApiCursorListMeta> = {},
 ): CursorPage<TRecord> {
   const hasMore = rows.length > query.limit;
   const pageRows = rows.slice(0, query.limit);
   if (query.direction === "previous") pageRows.reverse();
-  const records = pageRows.map(toRecord);
-  return { records, meta: cursorListMeta(records, query, context, idOf, hasMore, extraMeta) };
+  return {
+    records: pageRows.map(toRecord),
+    meta: cursorListMeta(pageRows.map(positionOf), query, context, hasMore, extraMeta),
+  };
 }
 
-/** In-memory counterpart for stores that already hold the filtered, sorted list (tests and local driver). */
+/**
+ * In-memory counterpart for stores holding the filtered list (tests and the local driver). Rows are ordered by the
+ * same `(key, id)` code-point order the cursor compares with, so a missing boundary row does not matter here either.
+ */
 export function paginateCursorRecords<TRecord>(
   records: TRecord[],
   query: CursorPageQuery,
   context: string,
-  idOf: (record: TRecord) => string,
+  positionOf: (record: TRecord) => CursorPosition,
+  sortDirection: CursorSortDirection,
   errorCode: string,
   extraMeta: Partial<ApiCursorListMeta> = {},
 ): CursorPage<TRecord> {
-  const cursorId = query.cursor ? decodeListCursor(query.cursor, context, errorCode) : undefined;
-  const anchorIndex = cursorId ? records.findIndex((record) => idOf(record) === cursorId) : -1;
-  if (cursorId && anchorIndex < 0) throw new Error(errorCode);
-  const start = query.direction === "previous"
-    ? Math.max(0, anchorIndex - query.limit)
-    : cursorId ? anchorIndex + 1 : 0;
-  const end = query.direction === "previous" ? anchorIndex : start + query.limit;
-  const page = records.slice(start, end);
-  const hasMore = query.direction === "previous" ? start > 0 : end < records.length;
-  return { records: page, meta: cursorListMeta(page, query, context, idOf, hasMore, extraMeta) };
+  const cursor = query.cursor ? decodeListCursor(query.cursor, context, errorCode) : undefined;
+  const sign = sortDirection === "ASC" ? 1 : -1;
+  const ordered = records
+    .map((record) => ({ record, position: positionOf(record) }))
+    .sort((left, right) => sign * comparePositions(left.position, right.position));
+  const beforeCursor = (position: CursorPosition) => cursor !== undefined && sign * comparePositions(position, cursor) < 0;
+  const afterCursor = (position: CursorPosition) => cursor !== undefined && sign * comparePositions(position, cursor) > 0;
+
+  let page: typeof ordered;
+  let hasMore: boolean;
+  if (query.direction === "previous" && cursor) {
+    const candidates = ordered.filter((entry) => beforeCursor(entry.position));
+    page = candidates.slice(-query.limit);
+    hasMore = candidates.length > query.limit;
+  } else {
+    const candidates = cursor ? ordered.filter((entry) => afterCursor(entry.position)) : ordered;
+    page = candidates.slice(0, query.limit);
+    hasMore = candidates.length > query.limit;
+  }
+  return {
+    records: page.map((entry) => entry.record),
+    meta: cursorListMeta(page.map((entry) => entry.position), query, context, hasMore, extraMeta),
+  };
 }
 
-function cursorListMeta<TRecord>(
-  records: TRecord[],
+function comparePositions(left: CursorPosition, right: CursorPosition): number {
+  return compareCodePoints(left.key, right.key) || compareCodePoints(left.id, right.id);
+}
+
+function compareCodePoints(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function cursorListMeta(
+  positions: CursorPosition[],
   query: CursorPageQuery,
   context: string,
-  idOf: (record: TRecord) => string,
   hasMore: boolean,
   extraMeta: Partial<ApiCursorListMeta>,
 ): ApiCursorListMeta {
-  const first = records[0];
-  const last = records.at(-1);
+  const first = positions[0];
+  const last = positions.at(-1);
   const meta: ApiCursorListMeta = { limit: query.limit, ...extraMeta };
   if (first && (query.direction === "previous" ? hasMore : Boolean(query.cursor))) {
-    meta.previousCursor = encodeListCursor(context, idOf(first));
+    meta.previousCursor = encodeListCursor(context, first);
   }
   if (last && (query.direction === "next" ? hasMore : Boolean(query.cursor))) {
-    meta.nextCursor = encodeListCursor(context, idOf(last));
+    meta.nextCursor = encodeListCursor(context, last);
   }
   return meta;
 }
 
-/** Lower-cased `%term%` LIKE pattern with `\`, `%` and `_` escaped (pair with `ESCAPE '\'`). */
-export function likeSearchPattern(value: string | undefined, locale?: string): string | null {
-  const normalized = normalizeSearchTerm(value, locale);
-  return normalized ? `%${normalized.replace(/[\\%_]/g, "\\$&")}%` : null;
+// Turkish-aware search folding, applied identically to the stored column (SQL) and the search term (JS). Names are
+// stored Turkish-uppercased ("IŞIK", "İSMAİL"); PostgreSQL lower() maps I to i and İ to i̇, while a tr-TR lowercase
+// maps I to ı. Folding every I variant to a plain i on both sides makes "ışık", "IŞIK" and "Işık" match each other
+// and "ismail"/"İsmail" match "İSMAİL". The remaining Turkish capitals are translated explicitly so the match does
+// not depend on the database's ctype. The folded expression does not use the existing lower(...) trigram indexes.
+const turkishFoldFrom = "İIıŞĞÇÖÜ";
+const turkishFoldTo = "iiişğçöü";
+
+/** SQL counterpart of `foldSearchText`: `lower(translate(<expr>, 'İIıŞĞÇÖÜ', 'iiişğçöü'))`. */
+export function foldedSearchSql(expression: string): string {
+  return `lower(translate(${expression}, '${turkishFoldFrom}', '${turkishFoldTo}'))`;
 }
 
-export function normalizeSearchTerm(value: string | undefined, locale?: string): string {
-  const trimmed = value?.trim() ?? "";
-  return locale ? trimmed.toLocaleLowerCase(locale) : trimmed.toLowerCase();
+export function foldSearchText(value: string): string {
+  let folded = "";
+  for (const character of value) {
+    const index = turkishFoldFrom.indexOf(character);
+    folded += index >= 0 ? turkishFoldTo[index] : character;
+  }
+  return folded.toLowerCase();
+}
+
+/** Trimmed, folded search term ("" when absent); also the value cursor contexts bind `q` to. */
+export function normalizeSearchTerm(value: string | undefined): string {
+  return foldSearchText(value?.trim() ?? "");
+}
+
+/** Folded `%term%` LIKE pattern with `\`, `%` and `_` escaped (pair with `ESCAPE '\'` and `foldedSearchSql`). */
+export function likeSearchPattern(value: string | undefined): string | null {
+  const normalized = normalizeSearchTerm(value);
+  return normalized ? `%${normalized.replace(/[\\%_]/g, "\\$&")}%` : null;
 }

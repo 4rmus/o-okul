@@ -16,10 +16,12 @@ import { type Queryable, type TenantQueryable, withExplicitTenantQuery } from ".
 import {
   type CursorPage,
   type CursorSortDirection,
-  cursorComparison,
+  cursorKeysetCondition,
   cursorPageFromRows,
   cursorQueryOrder,
   decodeListCursor,
+  foldSearchText,
+  foldedSearchSql,
   likeSearchPattern,
   listCursorContext,
   normalizeSearchTerm,
@@ -236,17 +238,14 @@ export class InMemoryUserManagementStore implements UserManagementStore {
 
   async listTenantUserPage(tenantId: string, query: TenantUserListQuery): Promise<CursorPage<TenantUserRecord>> {
     const search = normalizeSearchTerm(query.q);
-    const direction = query.sort.startsWith("-") ? -1 : 1;
     const records = (await this.listTenantUsers(tenantId))
-      .filter((user) => !search || [user.name, user.email ?? "", user.roles.join(" ")].join(" ").toLowerCase().includes(search))
-      .sort((left, right) => direction * (
-        tenantUserSortKey(left, query.sort).localeCompare(tenantUserSortKey(right, query.sort)) || left.id.localeCompare(right.id)
-      ));
+      .filter((user) => !search || foldSearchText([user.name, user.email ?? "", user.roles.join(" ")].join(" ")).includes(search));
     return paginateCursorRecords(
       records,
       query,
       tenantUserCursorContext(tenantId, query),
-      (record) => record.id,
+      (record) => ({ key: tenantUserSortKey(record, query.sort), id: record.id }),
+      tenantUserSortDefinition(query.sort).direction,
       tenantUserCursorInvalid,
       { total: records.length },
     );
@@ -508,7 +507,7 @@ export class PostgresUserManagementStore implements UserManagementStore {
 
   async listTenantUserPage(tenantId: string, query: TenantUserListQuery): Promise<CursorPage<TenantUserRecord>> {
     const context = tenantUserCursorContext(tenantId, query);
-    const cursorId = query.cursor ? decodeListCursor(query.cursor, context, tenantUserCursorInvalid) : undefined;
+    const position = query.cursor ? decodeListCursor(query.cursor, context, tenantUserCursorInvalid) : undefined;
     return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
       const sort = tenantUserSortDefinition(query.sort);
       const values: unknown[] = [tenantId];
@@ -520,26 +519,21 @@ export class PostgresUserManagementStore implements UserManagementStore {
         values,
       );
       const conditions: string[] = [];
-      if (cursorId) {
-        values.push(cursorId);
-        const anchor = await client.query(`${listed} SELECT 1 FROM listed WHERE "id" = $${values.length} LIMIT 1`, values);
-        if (!anchor.rows[0]) throw new Error(tenantUserCursorInvalid);
-        conditions.push(`(l."cursorKey", l."id") ${cursorComparison(sort.direction, query.direction)} (
-          SELECT a."cursorKey", a."id" FROM listed a WHERE a."id" = $${values.length}
-        )`);
+      if (position) {
+        conditions.push(cursorKeysetCondition('l."cursorKey"', 'l."id"', sort.direction, query.direction, position, values));
       }
       values.push(query.limit + 1);
       const order = cursorQueryOrder(sort.direction, query.direction);
-      const result = await client.query<TenantUserRow>(
+      const result = await client.query<TenantUserRow & { cursorKey: string }>(
         `${listed}
-         SELECT l."id", l."email", l."name", l."tenantId", l."roles", l."createdAt", l."updatedAt"
+         SELECT l."id", l."email", l."name", l."tenantId", l."roles", l."createdAt", l."updatedAt", l."cursorKey"
          FROM listed l
          ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""}
          ORDER BY l."cursorKey" ${order}, l."id" ${order}
          LIMIT $${values.length}`,
         values,
       );
-      return cursorPageFromRows(result.rows, query, context, (record) => record.id, toTenantUserRecord, {
+      return cursorPageFromRows(result.rows, query, context, (row) => ({ key: row.cursorKey, id: row.id }), toTenantUserRecord, {
         total: Number(total.rows[0]?.total ?? 0),
       });
     });
@@ -1350,11 +1344,11 @@ function tenantUserListCte(keySql: string, searchParameter: string | undefined):
    ), listed AS (
      SELECT tu.*, ${keySql} AS "cursorKey"
      FROM tenant_users tu
-     ${searchParameter ? `WHERE lower(
+     ${searchParameter ? `WHERE ${foldedSearchSql(`
        coalesce(tu."name", '') || ' ' ||
        coalesce(tu."email", '') || ' ' ||
        array_to_string(tu.roles, ' ')
-     ) LIKE ${searchParameter} ESCAPE '\\'` : ""}
+     `)} LIKE ${searchParameter} ESCAPE '\\'` : ""}
    )`;
 }
 
