@@ -491,6 +491,20 @@ describe("PostgresStudentStore", () => {
     expect(queries).toHaveLength(0);
   });
 
+  it("bellek içi createMany dosyada sonra gelen açık okul no'yu ayırır ve numaraları metin olarak karşılaştırır", async () => {
+    const store = new InMemoryStudentStore();
+    await store.createMany([{ tenantId: "tenant-c", studentNo: "0101", firstName: "Sıfırlı", lastName: "No" }]);
+
+    const created = await store.createMany([
+      { tenantId: "tenant-c", firstName: "Numarasız", lastName: "Bir" },
+      { tenantId: "tenant-c", studentNo: "100", firstName: "Numaralı", lastName: "İki" },
+      { tenantId: "tenant-c", firstName: "Numarasız", lastName: "Üç" },
+    ]);
+
+    // "0101" does not hold 101 (Postgres compares text), and the file's own "100" is skipped.
+    expect(created.map((student) => student.studentNo)).toEqual(["101", "100", "102"]);
+  });
+
   it("bellek içi store TC aramasında silinmiş öğrenciyi yalnız includeDeleted ile döndürür ve okul no'yu kırparak eşler", async () => {
     const store = new InMemoryStudentStore();
     const [kept, removed] = await store.createMany([

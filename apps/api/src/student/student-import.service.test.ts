@@ -12,6 +12,7 @@ import { InMemoryStudentEnrollmentStore } from "./student-enrollment-store.js";
 import { StudentImportService } from "./student-import.service.js";
 import { InMemoryStudentStore } from "./student-store.js";
 import { StudentService } from "./student.service.js";
+import { hashTcIdentity } from "./tc-identity.js";
 
 const context: RequestContext = {
   userId: "operations-a",
@@ -290,6 +291,34 @@ describe("StudentImportService Gate D", () => {
       .resolves.toEqual(JSON.parse(JSON.stringify(result)));
   });
 
+  it("silinmiş öğrencide kayıtlı TC'yi ön izlemede satır hatası olarak gösterir; commit hiçbir satırı yazmaz", async () => {
+    const setup = createRealImport();
+    const [removed] = await setup.studentStore.createMany([{
+      tenantId: "tenant-a", studentNo: "900", firstName: "SİLİNMİŞ", lastName: "ÖĞRENCİ", nationalIdHash: hashTcIdentity("10000002277"),
+    }]);
+    await setup.studentStore.softDelete(removed!.id, "2026-10-01T00:00:00.000Z");
+    const before = await setup.studentStore.list();
+    const fileBase64 = csv([
+      "okul_no;ad;soyad;seviye;sinif;tc",
+      "3001;Deniz;Er;8. Sınıf;8-A;10000003001",
+      "3002;Ece;Ek;8. Sınıf;8-A;10000002277",
+    ].join("\n"));
+
+    const preview = await runWithRequestContext(context, () => setup.service.dryRun(context, { fileBase64 }));
+    expect(preview).toMatchObject({
+      wouldImport: false,
+      errors: [{ row: 3, field: "nationalId", code: "STUDENT_NATIONAL_ID_DUPLICATE", value: "*******2277" }],
+    });
+    expect(preview.validRows.map((row) => row.row)).toEqual([2]);
+    await expect(runWithRequestContext(context, () => setup.service.import(context, { fileBase64 }, "soft-deleted-tc")))
+      .rejects.toMatchObject({
+        status: 400,
+        response: { code: "STUDENT_IMPORT_INVALID", errors: [{ row: 3, field: "nationalId", code: "STUDENT_NATIONAL_ID_DUPLICATE", value: "*******2277" }] },
+      });
+    await expect(setup.studentStore.list()).resolves.toEqual(before);
+    expect(setup.audits).toEqual([]);
+  });
+
   it("S1-03 çakışma dosyasını CONTACT_COLUMNS_CONFLICT ile reddeder ve hiçbir şey yazmaz", async () => {
     const setup = createRealImport();
     const fileBase64 = readFileSync("../../docs/examples/staging-uat-s1/cakisma-tek-satir.csv").toString("base64");
@@ -314,8 +343,9 @@ function createRealImport() {
   const gradeLevelStore = new InMemoryGradeLevelStore();
   const contacts = new InMemoryStudentContactStore();
   const idempotency = new IdempotencyService(new InMemoryIdempotencyStore());
+  const studentStore = new InMemoryStudentStore();
   const students = new StudentService(
-    new InMemoryStudentStore(),
+    studentStore,
     new InMemoryGuardianStudentStore(),
     {} as never,
     new InMemoryStudentEnrollmentStore(),
@@ -336,7 +366,7 @@ function createRealImport() {
     listClasses: async () => (await classStore.list()).filter((record) => record.tenantId === "tenant-a" && record.campusId === "campus-main"),
     listGradeLevels: async () => (await gradeLevelStore.list()).filter((record) => record.tenantId === "tenant-a"),
   };
-  return { service: new StudentImportService(students, school as unknown as SchoolService, idempotency), audits, contacts };
+  return { service: new StudentImportService(students, school as unknown as SchoolService, idempotency), audits, contacts, studentStore };
 }
 
 function createService(options: {

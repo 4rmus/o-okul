@@ -37,7 +37,7 @@ const header = "okul_no,ad,soyad,seviye,sinif,email,tc_kimlik_no,telefon,veli_ad
 describePostgres("student import batch on PostgreSQL", () => {
   const admin = new pg.Pool({ connectionString: adminDatabaseUrl });
   const app = new pg.Pool({ connectionString: appDatabaseUrl, max: 4 });
-  const fault: { sqlIncludes?: string } = {};
+  const fault: { sqlIncludes?: string; before?: { sqlIncludes: string; run: () => Promise<void> } } = {};
   const faultyPool = {
     query: (sql: string, values?: unknown[]) => app.query(sql, values),
     connect: async () => {
@@ -45,6 +45,11 @@ describePostgres("student import batch on PostgreSQL", () => {
       return {
         query: async (sql: string, values?: unknown[]) => {
           if (fault.sqlIncludes && sql.includes(fault.sqlIncludes)) throw new Error("INJECTED_IMPORT_FAILURE");
+          if (fault.before && sql.includes(fault.before.sqlIncludes)) {
+            const before = fault.before;
+            fault.before = undefined;
+            await before.run();
+          }
           return client.query(sql, values);
         },
         release: (destroy?: boolean) => client.release(destroy),
@@ -65,6 +70,7 @@ describePostgres("student import batch on PostgreSQL", () => {
 
   beforeEach(() => {
     fault.sqlIncludes = undefined;
+    fault.before = undefined;
   });
 
   afterAll(async () => {
@@ -140,7 +146,7 @@ describePostgres("student import batch on PostgreSQL", () => {
     expect(key.rows).toEqual([{ status: "COMPLETED" }]);
   });
 
-  it("son satırın TC'si silinmiş bir öğrencide kayıtlıysa tüm import'u geri alır ve diğer tenant'a dokunmaz", async () => {
+  it("silinmiş öğrencide kayıtlı TC'yi ön izlemede satır hatası yapar; commit hiçbir satırı yazmaz ve diğer tenant'a dokunmaz", async () => {
     await seedSoftDeletedStudentWithTc(admin, tenantA, "a-deleted", "900", "10000002277");
     const before = await countTenantRows(admin, tenantA);
     const tenantBBefore = await tenantSnapshot(admin, tenantB);
@@ -149,13 +155,41 @@ describePostgres("student import batch on PostgreSQL", () => {
       "3001,Deniz,Er,8. Sınıf,8-A,,10000003001,,Veli,Er,05550003001,",
       "3002,Ece,Ek,8. Sınıf,8-A,,10000002277,,Veli,Ek,05550003002,",
     ]);
+    const rowError = { row: 3, field: "nationalId", code: "STUDENT_NATIONAL_ID_DUPLICATE", value: "*******2277" };
+
+    const context = staffContext(tenantA);
+    const preview = await runWithRequestContext(context, () => service.dryRun(context, { fileBase64 }));
+    expect(preview).toMatchObject({ wouldImport: false, errors: [rowError] });
+    expect(preview.validRows.map((row) => row.row)).toEqual([2]);
 
     await expect(importAs(tenantA, fileBase64, "batch-deleted-tc-a"))
-      .rejects.toMatchObject({ status: 409, message: "STUDENT_NATIONAL_ID_CONFLICT" });
+      .rejects.toMatchObject({ status: 400, response: { code: "STUDENT_IMPORT_INVALID", errors: [rowError] } });
     await expect(countTenantRows(admin, tenantA)).resolves.toEqual(before);
+    const students = await admin.query(`SELECT 1 FROM "Student" WHERE "tenantId" = $1 AND "studentNo" = '3001'`, [tenantA]);
+    expect(students.rows).toHaveLength(0);
     const keys = await admin.query(`SELECT 1 FROM "IdempotencyKey" WHERE "tenantId" = $1 AND "key" = 'batch-deleted-tc-a'`, [tenantA]);
     expect(keys.rows).toHaveLength(0);
     await expect(tenantSnapshot(admin, tenantB)).resolves.toEqual(tenantBBefore);
+  });
+
+  it("doğrulamadan sonra aynı TC başka kayıtta belirirse transaction içi kontrol 409 ile tüm import'u geri alır", async () => {
+    const before = await countTenantRows(admin, tenantA);
+    const fileBase64 = csv([
+      header,
+      "3101,Fırat,Fil,8. Sınıf,8-A,,10000003101,,Veli,Fil,05550003101,",
+      "3102,Gaye,Göl,8. Sınıf,8-A,,10000003102,,Veli,Göl,05550003102,",
+    ]);
+    // Runs on the import transaction's first locked query, after the file was validated.
+    fault.before = {
+      sqlIncludes: "FOR SHARE",
+      run: () => seedSoftDeletedStudentWithTc(admin, tenantA, "a-race-deleted", "910", "10000003102"),
+    };
+
+    await expect(importAs(tenantA, fileBase64, "batch-race-tc-a"))
+      .rejects.toMatchObject({ status: 409, message: "STUDENT_NATIONAL_ID_CONFLICT" });
+    await expect(countTenantRows(admin, tenantA)).resolves.toEqual(before);
+    const keys = await admin.query(`SELECT 1 FROM "IdempotencyKey" WHERE "tenantId" = $1 AND "key" = 'batch-race-tc-a'`, [tenantA]);
+    expect(keys.rows).toHaveLength(0);
   });
 
   it("başarılı import diğer tenant'ın öğrencilerini ve LicenseUsage satırını değiştirmez", async () => {

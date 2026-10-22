@@ -220,7 +220,13 @@ for (const token of [
 }
 // DEC-20261021-02: INSERT refreshes license usage once per tenant per statement; UPDATE/DELETE stay per row.
 for (const token of [
-  `CREATE OR REPLACE FUNCTION o_okul_sync_license_usage_insert_statement()`,
+  `CREATE OR REPLACE FUNCTION o_okul_sync_license_usage_insert_statement()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp`,
+  // Deterministic LicenseTerm lock order when one statement touches several tenants.
+  `ORDER BY inserted."tenantId"`,
   `PERFORM o_okul_refresh_license_usage(inserted_tenant_id);`,
   `REVOKE ALL ON FUNCTION o_okul_sync_license_usage_insert_statement() FROM PUBLIC;`,
   `CREATE TRIGGER "Student_sync_license_usage"

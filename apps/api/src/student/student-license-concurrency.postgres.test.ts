@@ -110,3 +110,123 @@ async function seedTenant(pool: pg.Pool, tenantId: string, slug: string, activeS
     [`license-${tenantId}`, tenantId, activeStudentLimit],
   );
 }
+
+// DEC-20261021-02 (20261022190000): INSERT refreshes license usage once per tenant per statement.
+const statementTenantAId = "student-license-statement-a";
+const statementTenantBId = "student-license-statement-b";
+const statementNoTermTenantId = "student-license-statement-no-term";
+const statementTenantIds = [statementTenantAId, statementTenantBId, statementNoTermTenantId];
+
+describePostgres("license usage statement-level INSERT triggers", () => {
+  const admin = new pg.Pool({ connectionString: adminDatabaseUrl });
+  const app = new pg.Pool({ connectionString: appDatabaseUrl, max: 2 });
+  const startsAt = new Date().toISOString().slice(0, 10);
+
+  beforeAll(async () => {
+    await admin.query(`DELETE FROM "Tenant" WHERE "id" = ANY($1::text[])`, [statementTenantIds]);
+    await seedTenant(admin, statementTenantAId, "student-license-statement-a", 3);
+    await seedTenant(admin, statementTenantBId, "student-license-statement-b", 10);
+    await admin.query(
+      `INSERT INTO "Tenant" ("id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", "status", "updatedAt")
+       VALUES ($1, $1, $1, 'TEST', now() - interval '1 day', now() + interval '1 day', 10, 'ACTIVE', now())`,
+      [statementNoTermTenantId],
+    );
+  });
+
+  afterAll(async () => {
+    await admin.query(`DELETE FROM "Tenant" WHERE "id" = ANY($1::text[])`, [statementTenantIds]);
+    await Promise.all([admin.end(), app.end()]);
+  });
+
+  it("limiti tek başına aşan çok satırlı unnest INSERT'ü P0001 ACTIVE_STUDENT_LIMIT_REACHED ile reddeder ve hiçbir satır bırakmaz", async () => {
+    const ids = ["over-1", "over-2", "over-3", "over-4"].map((id) => `${statementTenantAId}-${id}`);
+    const client = await app.connect();
+    let failure: { code?: string; message?: string } | undefined;
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.bypass_rls', 'false', true)");
+      await client.query("SELECT set_config('app.current_tenant_id', $1, true)", [statementTenantAId]);
+      await insertStudents(client, statementTenantAId, ids);
+      await insertEnrollments(client, statementTenantAId, ids, startsAt);
+      await client.query("COMMIT");
+    } catch (error) {
+      failure = error as { code?: string; message?: string };
+      await client.query("ROLLBACK");
+    } finally {
+      client.release();
+    }
+
+    expect(failure).toMatchObject({ code: "P0001", message: "ACTIVE_STUDENT_LIMIT_REACHED" });
+    const rows = await admin.query<{ students: number; enrollments: number; usage: number }>(
+      `SELECT (SELECT count(*)::int FROM "Student" WHERE "tenantId" = $1) AS students,
+              (SELECT count(*)::int FROM "StudentEnrollment" WHERE "tenantId" = $1) AS enrollments,
+              (SELECT count(*)::int FROM "LicenseUsage" WHERE "tenantId" = $1) AS usage`,
+      [statementTenantAId],
+    );
+    expect(rows.rows[0]).toEqual({ students: 0, enrollments: 0, usage: 0 });
+  });
+
+  it("iki tenant'a satır ekleyen tek statement LicenseUsage'ı her tenant için ayrı yeniler; LicenseTerm'süz tenant'ta no-op olur", async () => {
+    const aIds = [`${statementTenantAId}-mixed-1`, `${statementTenantAId}-mixed-2`];
+    const bIds = [`${statementTenantBId}-mixed-1`, `${statementTenantBId}-mixed-2`, `${statementTenantBId}-mixed-3`];
+    const noTermIds = [`${statementNoTermTenantId}-mixed-1`];
+    const all = [...aIds.map((id) => [statementTenantAId, id]), ...bIds.map((id) => [statementTenantBId, id]), ...noTermIds.map((id) => [statementNoTermTenantId, id])];
+    // A cross-tenant writer runs with app.bypass_rls (as backfill/restore paths do); the SECURITY DEFINER refresh
+    // reads LicenseTerm and Student under the same RLS settings, so without them it sees no term and does nothing.
+    const client = await admin.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.bypass_rls', 'true', true)");
+      await client.query(
+        `INSERT INTO "Student" ("id", "tenantId", "studentNo", "firstName", "lastName", "status", "updatedAt")
+         SELECT input."id", input."tenantId", input."id", 'ÇOK', 'TENANT', 'ACTIVE', now()
+         FROM unnest($1::text[], $2::text[]) AS input("tenantId", "id")`,
+        [all.map(([tenantId]) => tenantId), all.map(([, id]) => id)],
+      );
+      await client.query(
+        `INSERT INTO "StudentEnrollment" ("id", "tenantId", "studentId", "status", "startsAt", "reason", "updatedAt")
+         SELECT input."id" || '-enrollment', input."tenantId", input."id", 'ACTIVE', $3::date, 'STATEMENT_TRIGGER_TEST', now()
+         FROM unnest($1::text[], $2::text[]) AS input("tenantId", "id")`,
+        [all.map(([tenantId]) => tenantId), all.map(([, id]) => id), startsAt],
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    const usage = await admin.query<{ tenantId: string; activeStudentCount: number; peakActiveStudentCount: number }>(
+      `SELECT "tenantId", "activeStudentCount", "peakActiveStudentCount"
+       FROM "LicenseUsage"
+       WHERE "tenantId" = ANY($1::text[]) AND "usageDate" = timezone('UTC', now())::date
+       ORDER BY "tenantId"`,
+      [statementTenantIds],
+    );
+    expect(usage.rows).toEqual([
+      { tenantId: statementTenantAId, activeStudentCount: 2, peakActiveStudentCount: 2 },
+      { tenantId: statementTenantBId, activeStudentCount: 3, peakActiveStudentCount: 3 },
+    ]);
+    const noTermStudents = await admin.query(`SELECT 1 FROM "StudentEnrollment" WHERE "tenantId" = $1`, [statementNoTermTenantId]);
+    expect(noTermStudents.rows).toHaveLength(1);
+  });
+});
+
+async function insertStudents(client: pg.PoolClient, tenantId: string, ids: string[]): Promise<void> {
+  await client.query(
+    `INSERT INTO "Student" ("id", "tenantId", "studentNo", "firstName", "lastName", "status", "updatedAt")
+     SELECT input."id", $1, input."id", 'LİMİT', 'AŞIMI', 'ACTIVE', now()
+     FROM unnest($2::text[]) AS input("id")`,
+    [tenantId, ids],
+  );
+}
+
+async function insertEnrollments(client: pg.PoolClient, tenantId: string, ids: string[], startsAt: string): Promise<void> {
+  await client.query(
+    `INSERT INTO "StudentEnrollment" ("id", "tenantId", "studentId", "status", "startsAt", "reason", "updatedAt")
+     SELECT input."id" || '-enrollment', $1, input."id", 'ACTIVE', $3::date, 'STATEMENT_TRIGGER_TEST', now()
+     FROM unnest($2::text[]) AS input("id")`,
+    [tenantId, ids, startsAt],
+  );
+}

@@ -26,7 +26,8 @@ export interface IdempotencyStore {
   complete(input: IdempotencyStartInput & { responseBody: unknown }): Promise<void>;
   /**
    * Completes an IN_PROGRESS key on the caller's open tenant transaction, so the business write and the replay
-   * record commit or roll back together. Throws when no IN_PROGRESS row matches, which rolls the caller back.
+   * record commit or roll back together. Throws 409 IDEMPOTENCY_KEY_COMPLETION_CONFLICT when no IN_PROGRESS row matches,
+   * which rolls the caller back.
    */
   completeInTransaction?(client: Queryable, input: IdempotencyStartInput & { responseBody: unknown }): Promise<void>;
   release(input: IdempotencyStartInput): Promise<void>;
@@ -187,7 +188,9 @@ export class PostgresIdempotencyStore implements IdempotencyStore {
          RETURNING "key"`,
         [input.tenantId, input.key, input.operation, input.requestHash, serializeJson(input.responseBody)],
       );
-      if (!result.rows[0]) throw new Error("IDEMPOTENCY_COMPLETION_FAILED");
+      // The IN_PROGRESS row this request started is gone or changed: roll the business write back and answer 409
+      // like the other IDEMPOTENCY_KEY_* conflicts; a retry with the same key starts cleanly.
+      if (!result.rows[0]) throw new ConflictException("IDEMPOTENCY_KEY_COMPLETION_CONFLICT");
     });
   }
 

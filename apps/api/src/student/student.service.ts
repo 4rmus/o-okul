@@ -733,7 +733,10 @@ export class StudentService {
     return students.filter((student) => openActiveByStudent.get(student.id) === 1).length;
   }
 
-  /** Returns the normalized national IDs that an active student of the tenant already holds. */
+  /**
+   * Returns the normalized national IDs already stored for the tenant, soft-deleted students included:
+   * `Student_tenantId_nationalIdHash_key` keeps those hashes, so the import preview must flag them per row.
+   */
   async findExistingNationalIds(context: RequestContext, nationalIds: string[]): Promise<Set<string>> {
     const tenantId = context.tenantId;
     if (!tenantId) {
@@ -744,7 +747,7 @@ export class StudentService {
     const byHash = new Map([...new Set(nationalIds.map((nationalId) => normalizeTcIdentity(nationalId)))]
       .map((nationalId) => [hashTcIdentity(nationalId), nationalId] as const));
     if (byHash.size === 0) return new Set();
-    const existing = await this.store.findExistingNationalIdHashes(tenantId, [...byHash.keys()]);
+    const existing = await this.store.findExistingNationalIdHashes(tenantId, [...byHash.keys()], { includeDeleted: true });
     return new Set(existing.map((hash) => byHash.get(hash)).filter((nationalId): nationalId is string => Boolean(nationalId)));
   }
 

@@ -211,6 +211,10 @@ const files = {
     "packages/db/prisma/migrations/20260801210000_enforce_active_student_license_usage/migration.sql",
     "utf8",
   ),
+  "packages/db/prisma/migrations/20261022190000_license_usage_insert_statement_triggers/migration.sql": readFileSync(
+    "packages/db/prisma/migrations/20261022190000_license_usage_insert_statement_triggers/migration.sql",
+    "utf8",
+  ),
   "packages/db/prisma/migrations/20260801220000_add_platform_idempotency_key/migration.sql": readFileSync(
     "packages/db/prisma/migrations/20260801220000_add_platform_idempotency_key/migration.sql",
     "utf8",
@@ -1663,6 +1667,15 @@ const expectations = {
     "peakActiveStudentCount",
     "Student_sync_license_usage",
     "StudentEnrollment_sync_license_usage",
+  ],
+  "packages/db/prisma/migrations/20261022190000_license_usage_insert_statement_triggers/migration.sql": [
+    "o_okul_sync_license_usage_insert_statement",
+    "SECURITY DEFINER",
+    "SET search_path = public, pg_temp",
+    "REFERENCING NEW TABLE AS inserted_rows",
+    "FOR EACH STATEMENT",
+    "Student_sync_license_usage_insert",
+    "StudentEnrollment_sync_license_usage_insert",
   ],
   "packages/db/prisma/migrations/20260801220000_add_platform_idempotency_key/migration.sql": [
     "PlatformIdempotencyKey",

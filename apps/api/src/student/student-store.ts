@@ -356,8 +356,10 @@ export class InMemoryStudentStore implements StudentStore {
 
   async createMany(inputs: StudentCreateManyInput[]): Promise<StudentRecord[]> {
     const created: StudentProfileStorageRecord[] = [];
+    // Same rule as PostgresStudentStore.importBatch: allocation skips every explicit number in the batch.
+    const reserved = inputs.map((input) => normalizeStudentNo(input.studentNo)).filter((studentNo): studentNo is string => Boolean(studentNo));
     for (const input of inputs) {
-      const studentNo = normalizeStudentNo(input.studentNo) ?? this.nextStudentNo(input.tenantId, created);
+      const studentNo = normalizeStudentNo(input.studentNo) ?? this.nextStudentNo(input.tenantId, created, reserved);
       const student = {
         id: `student-${this.students.length + created.length + 1}`,
         status: "ACTIVE" as const,
@@ -370,15 +372,16 @@ export class InMemoryStudentStore implements StudentStore {
     return created;
   }
 
-  private nextStudentNo(tenantId: string, pending: StudentRecord[] = []): string {
-    const activeNumbers = new Set(
-      [...this.students, ...pending]
-        .filter((student) => student.tenantId === tenantId && !student.deletedAt)
-        .map((student) => Number(student.studentNo))
-        .filter((studentNo) => Number.isInteger(studentNo) && studentNo >= studentNoStart),
-    );
+  /** Text comparison like the Postgres allocator: "0100" does not hold 100. */
+  private nextStudentNo(tenantId: string, pending: StudentRecord[] = [], reserved: string[] = []): string {
+    const used = new Set([
+      ...[...this.students, ...pending]
+        .filter((student) => student.tenantId === tenantId && !student.deletedAt && Boolean(student.studentNo))
+        .map((student) => student.studentNo!),
+      ...reserved,
+    ]);
     let candidate = studentNoStart;
-    while (activeNumbers.has(candidate)) {
+    while (used.has(String(candidate))) {
       candidate += 1;
     }
     return String(candidate);

@@ -1,6 +1,6 @@
 import { ConflictException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
-import type { RequestContext } from "../context/request-context.js";
+import { type RequestContext, runWithRequestContext } from "../context/request-context.js";
 import {
   IdempotencyService,
   InMemoryIdempotencyStore,
@@ -10,6 +10,54 @@ import {
 } from "./idempotency.js";
 
 describe("IdempotencyService", () => {
+  it("completes the key on the caller's transaction and skips the separate completion", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const pool = {
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        if (sql.includes('INSERT INTO "IdempotencyKey"')) return { rows: [{ requestHash: "x", status: "IN_PROGRESS", responseBody: null }] as T[] };
+        return { rows: [] as T[] };
+      },
+    };
+    const store = new PostgresIdempotencyStore(pool);
+    const service = new IdempotencyService(store);
+    const transaction = {
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql: `tx:${sql}`, values });
+        return { rows: (sql.includes('UPDATE "IdempotencyKey"') ? [{ key: "import-1" }] : []) as T[] };
+      },
+    };
+
+    const body = await runWithRequestContext(context, () => service.run(
+      context,
+      { key: "import-1", operation: "student.import.commit", request: { fileSha256: "a" } },
+      async (completion) => {
+        await completion!.complete(transaction, { importedRows: 1 });
+        return { importedRows: 1 };
+      },
+    ));
+
+    expect(body).toEqual({ importedRows: 1 });
+    const transactional = queries.filter((query) => query.sql.startsWith("tx:"));
+    expect(transactional.map((query) => query.sql.replace(/\s+/g, " ").slice(0, 60))).toEqual([
+      "tx:SELECT set_config('app.bypass_rls', $1, true)",
+      "tx:SELECT set_config('app.current_tenant_id', $1, true)",
+      expect.stringContaining('tx:UPDATE "IdempotencyKey"'),
+    ]);
+    expect(transactional[2]?.sql).toContain(`"status" = 'IN_PROGRESS'`);
+    expect(transactional[2]?.values?.[4]).toBe(JSON.stringify({ importedRows: 1 }));
+    expect(queries.filter((query) => !query.sql.startsWith("tx:") && query.sql.includes('UPDATE "IdempotencyKey"'))).toHaveLength(0);
+  });
+
+  it("answers 409 IDEMPOTENCY_KEY_COMPLETION_CONFLICT when the IN_PROGRESS row is gone at in-transaction completion", async () => {
+    const store = new PostgresIdempotencyStore({ async query<T>() { return { rows: [] as T[] }; } });
+    const transaction = { async query<T>() { return { rows: [] as T[] }; } };
+
+    await expect(store.completeInTransaction(transaction, {
+      tenantId: "tenant-a", key: "import-1", operation: "student.import.commit", requestHash: "x", responseBody: {},
+    })).rejects.toMatchObject({ status: 409, message: "IDEMPOTENCY_KEY_COMPLETION_CONFLICT" });
+  });
+
   it("replays a completed response for the same key and request body", async () => {
     const service = new IdempotencyService(new InMemoryIdempotencyStore());
     let calls = 0;

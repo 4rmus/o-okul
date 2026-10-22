@@ -460,6 +460,17 @@ describe("StudentService", () => {
     await expect(setup.studentStore.list()).resolves.toEqual(before);
   });
 
+  it("içe aktarma TC aramasında silinmiş öğrencileri de kayıtlı sayar", async () => {
+    const setup = createService();
+    const [removed] = await setup.studentStore.createMany([{
+      tenantId: "tenant-a", firstName: "Eski", lastName: "Kayıt", nationalIdHash: hashTcIdentity("10000000146"),
+    }]);
+    await setup.studentStore.softDelete(removed!.id, "2026-10-01T00:00:00.000Z");
+
+    await expect(setup.service.findExistingNationalIds(adminContext, ["10000000146", "10000000147"]))
+      .resolves.toEqual(new Set(["10000000146"]));
+  });
+
   it("importBatch destekleyen store'a profil, iletişim ve temizlenmiş audit satırlarını tek çağrıda verir", async () => {
     const setup = createService();
     const importBatch = vi.fn(async (input: StudentImportBatchInput) => input.rows.map((row) => ({
