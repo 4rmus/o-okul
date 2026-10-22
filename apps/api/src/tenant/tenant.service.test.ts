@@ -11,6 +11,7 @@ describe("TenantService", () => {
     const users = { listByTenant: async () => [
       { ...secretish, id: "owner", tenantId: "tenant-a", name: "SAHİP", email: "owner@example.test", roles: ["TENANT_OWNER", "TEACHER"], totpSecretEncrypted: "secret", totpEnabledAt: "2026-10-01T00:00:00.000Z" },
       { ...secretish, id: "admin", tenantId: "tenant-a", name: "YÖNETİCİ", roles: ["TENANT_ADMIN"], totpEnabledAt: "2026-10-01T00:00:00.000Z" },
+      { ...secretish, id: "pending", tenantId: "tenant-a", name: "BEKLEYEN", roles: ["TENANT_ADMIN"], totpReenrollmentCodeHash: "v1:4:hash", totpReenrollmentExpiresAt: "2026-10-23T00:00:00.000Z" },
       { ...secretish, id: "teacher", tenantId: "tenant-a", name: "ÖĞRETMEN", roles: ["TEACHER"] },
       { ...secretish, id: "sys", tenantId: "tenant-a", name: "SİSTEM", roles: ["SYSTEM_ADMIN", "TENANT_ADMIN"] },
       { ...secretish, id: "other", tenantId: "tenant-b", name: "BAŞKA", roles: ["TENANT_ADMIN"] },
@@ -19,8 +20,10 @@ describe("TenantService", () => {
     const service = new TenantService(new InMemoryTenantStore(), undefined, undefined, users as never);
 
     await expect(service.listAdminAccounts(systemContext, "tenant-a")).resolves.toEqual([
-      { userId: "owner", name: "SAHİP", emailMasked: "ow••@•••.test", roles: ["TENANT_OWNER"], mfaEnabled: true, mfaEnabledAt: "2026-10-01T00:00:00.000Z" },
-      { userId: "admin", name: "YÖNETİCİ", emailMasked: null, roles: ["TENANT_ADMIN"], mfaEnabled: false, mfaEnabledAt: null },
+      { userId: "owner", name: "SAHİP", emailMasked: "ow••@•••.test", roles: ["TENANT_OWNER"], mfaEnabled: true, mfaEnabledAt: "2026-10-01T00:00:00.000Z", mfaReenrollmentPending: false, mfaReenrollmentExpiresAt: null },
+      { userId: "admin", name: "YÖNETİCİ", emailMasked: null, roles: ["TENANT_ADMIN"], mfaEnabled: false, mfaEnabledAt: null, mfaReenrollmentPending: false, mfaReenrollmentExpiresAt: null },
+      // DEC-20261021-01: the pending state and expiry are listed, never the code hash.
+      { userId: "pending", name: "BEKLEYEN", emailMasked: null, roles: ["TENANT_ADMIN"], mfaEnabled: false, mfaEnabledAt: null, mfaReenrollmentPending: true, mfaReenrollmentExpiresAt: "2026-10-23T00:00:00.000Z" },
     ]);
     await expect(service.listAdminAccounts(systemContext, "system")).rejects.toThrow("TENANT_NOT_FOUND");
     await expect(service.listAdminAccounts(systemContext, "missing")).rejects.toThrow("TENANT_NOT_FOUND");

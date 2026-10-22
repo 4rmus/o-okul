@@ -84,12 +84,18 @@ export function createLifecycleStepUp(accessToken: string, input: MfaStepUpReque
 const adminAccountSchema = z.object({
   userId: z.string().min(1), name: z.string(), emailMasked: z.string().nullable(), roles: z.array(z.enum(["TENANT_OWNER", "TENANT_ADMIN"])).min(1),
   mfaEnabled: z.boolean(), mfaEnabledAt: z.string().nullable(),
+  mfaReenrollmentPending: z.boolean(), mfaReenrollmentExpiresAt: z.string().nullable(),
 }).strict();
 export type TenantAdminAccount = z.infer<typeof adminAccountSchema>;
 export async function loadTenantAdminAccounts(token: string, tenantId: string): Promise<TenantAdminAccount[]> {
   return z.array(adminAccountSchema).parse(await apiRequest<unknown>(token, `${apiBaseUrl}/tenants/${encodeURIComponent(tenantId)}/admin-accounts`, { cache: "no-store" }));
 }
-export async function resetTenantAdminMfa(token: string, expected: { userId: string; sessionId: string; membershipVersion: number }, tenantId: string, userId: string, proof: string): Promise<void> {
+// DEC-20261021-01: the response carries the one-time re-enrollment code; it is shown once and never stored.
+const adminMfaResetSchema = z.object({
+  resetAt: z.string(), reenrollmentCode: z.string().regex(/^\d{4}-\d{4}$/), reenrollmentExpiresAt: z.string(), notificationQueued: z.boolean(),
+}).strict();
+export type TenantAdminMfaReset = z.infer<typeof adminMfaResetSchema>;
+export async function resetTenantAdminMfa(token: string, expected: { userId: string; sessionId: string; membershipVersion: number }, tenantId: string, userId: string, proof: string): Promise<TenantAdminMfaReset> {
   // One attempt: authenticatedFetch retries 401s, which is inappropriate for a step-up approved reset.
   const response = await authenticatedFetchOnce(token, expected, `${apiBaseUrl}/auth/totp/admin-reset`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "X-Step-Up-Token": proof }, body: JSON.stringify({ tenantId, userId }) });
   if (!response.ok) {
@@ -97,6 +103,7 @@ export async function resetTenantAdminMfa(token: string, expected: { userId: str
     try { const body = await response.json(); if (typeof body?.error?.code === "string") code = body.error.code; } catch { /* Unknown response keeps a generic message. */ }
     throw new ApiRequestError("MFA_RESET_FAILED", response.status, code);
   }
+  return adminMfaResetSchema.parse(((await response.json()) as { data?: unknown }).data);
 }
 
 export const resetCategoryLabels: Record<string, string> = {

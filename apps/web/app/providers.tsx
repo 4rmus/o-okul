@@ -31,7 +31,7 @@ interface AuthStore {
   login(credentials: LoginRequest): Promise<void>;
   selectTenant(selectionToken: string, tenantId: string): Promise<void>;
   changePassword(input: MePasswordChangeRequest): Promise<void>;
-  confirmMfaEnrollment(setupToken: string, totpCode: string): Promise<void>;
+  confirmMfaEnrollment(setupToken: string, totpCode: string, reenrollmentCode?: string): Promise<void>;
   verifyMfa(challengeToken: string, input: { totpCode?: string; recoveryCode?: string }): Promise<void>;
   logout(): Promise<void>;
   switchPersona(activePersona: ActivePersona): Promise<void>;
@@ -69,8 +69,8 @@ export function Providers({ children }: { children: ReactNode }) {
       async verifyMfa(challengeToken, input) {
         setAuth(await requestVerifyMfa(challengeToken, input));
       },
-      async confirmMfaEnrollment(setupToken, totpCode) {
-        setAuth(await requestConfirmMfaEnrollment(setupToken, totpCode));
+      async confirmMfaEnrollment(setupToken, totpCode, reenrollmentCode) {
+        setAuth(await requestConfirmMfaEnrollment(setupToken, totpCode, reenrollmentCode));
       },
       async changePassword(input) {
         if (!auth) throw new Error("AUTH_REQUIRED");

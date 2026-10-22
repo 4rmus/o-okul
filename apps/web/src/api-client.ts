@@ -115,7 +115,8 @@ export async function login(body: LoginRequest): Promise<AuthResponse> {
   });
 
   if (!response.ok) {
-    throw new Error("LOGIN_FAILED");
+    // The code lets the login screen tell an expired MFA reset (MFA_RESET_EXPIRED) apart from wrong credentials.
+    throw new ApiRequestError("LOGIN_FAILED", response.status, await readErrorCode(response));
   }
 
   const result = await readData<LoginResponse>(response);
@@ -214,14 +215,15 @@ export async function verifyMfa(challengeToken: string, input: { totpCode?: stri
   return rememberAuth(await readData<AuthResponse>(response));
 }
 
-export async function confirmMfaEnrollment(setupToken: string, totpCode: string): Promise<AuthResponse> {
+export async function confirmMfaEnrollment(setupToken: string, totpCode: string, reenrollmentCode?: string): Promise<AuthResponse> {
   const response = await fetch(`${apiBaseUrl}/auth/totp/enrollment/confirm`, {
-    body: JSON.stringify({ setupToken, totpCode }),
+    // DEC-20261021-01: the one-time code read over the phone, sent only after a support reset.
+    body: JSON.stringify(reenrollmentCode === undefined ? { setupToken, totpCode } : { setupToken, totpCode, reenrollmentCode }),
     credentials: "include",
     headers: { "content-type": "application/json" },
     method: "POST",
   });
-  if (!response.ok) throw new Error("MFA_ENROLLMENT_FAILED");
+  if (!response.ok) throw new ApiRequestError("MFA_ENROLLMENT_FAILED", response.status, await readErrorCode(response));
   return rememberAuth(await readData<AuthResponse>(response));
 }
 

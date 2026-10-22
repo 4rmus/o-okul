@@ -225,8 +225,13 @@ export function resolveEncryptedTotpCounter(secretEncrypted: string, token: stri
   return resolveTotpCounter(decryptAdminMfaSecret(secretEncrypted), token, now);
 }
 
+/** The keyed-hash secret of MFA one-time codes; production and staging refuse a missing value (KV-9). */
+export function adminMfaRecoveryHashKey(): Buffer {
+  return keyFromEnv("ADMIN_MFA_RECOVERY_HASH_KEY", defaultTestHashKey);
+}
+
 export function hashRecoveryCode(code: string): string {
-  return createHmac("sha256", keyFromEnv("ADMIN_MFA_RECOVERY_HASH_KEY", defaultTestHashKey))
+  return createHmac("sha256", adminMfaRecoveryHashKey())
     .update(normalizeRecoveryCode(code))
     .digest("hex");
 }

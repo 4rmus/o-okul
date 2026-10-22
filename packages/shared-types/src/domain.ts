@@ -75,6 +75,11 @@ export interface MfaChallengeResponse {
 
 export interface MfaEnrollmentRequiredResponse extends TotpSetupResponse {
   status: "MFA_ENROLLMENT_REQUIRED";
+  /**
+   * DEC-20261021-01: set after a SYSTEM_ADMIN MFA reset; the enrollment confirm then also needs the one-time
+   * re-enrollment code read to the person over the phone. Absent for a first enrollment.
+   */
+  reenrollmentCodeRequired?: true;
 }
 
 export type LoginResponse = AuthResponse | MfaChallengeResponse | MfaEnrollmentRequiredResponse | TenantSelectionRequiredResponse;
@@ -150,7 +155,10 @@ export interface TotpSetupConfirmRequest {
   totpCode: string;
 }
 
-export type TotpEnrollmentConfirmRequest = TotpSetupConfirmRequest;
+export interface TotpEnrollmentConfirmRequest extends TotpSetupConfirmRequest {
+  /** Required while a SYSTEM_ADMIN reset is pending (`reenrollmentCodeRequired`); "1234-5678" or "12345678". */
+  reenrollmentCode?: string;
+}
 
 export interface TotpSetupConfirmResponse {
   enabledAt: string;
@@ -180,6 +188,11 @@ export interface TotpAdminResetRequest {
 
 export interface TotpAdminResetResponse {
   resetAt: string;
+  /** Shown once: the SYSTEM_ADMIN reads it to the person by calling the institution's registered phone number. */
+  reenrollmentCode: string;
+  reenrollmentExpiresAt: string;
+  /** Whether the "bu işlemi siz yapmadıysanız" e-mail was queued (false: no registered e-mail or queueing failed). */
+  notificationQueued: boolean;
 }
 
 /** KV-9b: SYSTEM_ADMIN view of a tenant's MFA-scope accounts; minimal fields only. */
@@ -190,6 +203,9 @@ export interface TenantAdminAccountRecord {
   roles: Array<"TENANT_OWNER" | "TENANT_ADMIN">;
   mfaEnabled: boolean;
   mfaEnabledAt: string | null;
+  /** A SYSTEM_ADMIN reset is waiting for the person to re-enroll with the one-time code (DEC-20261021-01). */
+  mfaReenrollmentPending: boolean;
+  mfaReenrollmentExpiresAt: string | null;
 }
 
 export type MfaStepUpPurpose = "OWNER_ADMIN_CHANGE" | "TENANT_LIFECYCLE_CHANGE" | "TENANT_CLEAN_RESET" | "TENANT_DEVICE_RESTORE" | "TENANT_PURGE_EXPORT";

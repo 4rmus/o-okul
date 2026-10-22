@@ -7,7 +7,8 @@ export interface SecretDeliveryPayload {
   body: string;
 }
 
-export type SecretDeliveryPurpose = "IDENTITY_INVITATION" | "PASSWORD_RESET";
+// MFA_SECURITY_NOTICE (DEC-20261021-01) carries no secret: a system-scoped "if this was not you" notice.
+export type SecretDeliveryPurpose = "IDENTITY_INVITATION" | "PASSWORD_RESET" | "MFA_SECURITY_NOTICE";
 
 export interface SecretDeliveryOutboxInput {
   tenantId?: string;

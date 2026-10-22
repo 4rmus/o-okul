@@ -33,6 +33,15 @@ export interface AuthUser {
   totpEnabledAt?: string;
   totpRecoveryCodeHashes?: string[];
   totpLastUsedCounter?: string;
+  /** DEC-20261021-01: keyed hash of the one-time code a SYSTEM_ADMIN reset left behind (never the code itself). */
+  totpReenrollmentCodeHash?: string;
+  totpReenrollmentExpiresAt?: string;
+}
+
+/** A pending re-enrollment written by a SYSTEM_ADMIN MFA reset in the same statement that clears TOTP. */
+export interface TotpReenrollmentGrant {
+  codeHash: string;
+  expiresAt: string;
 }
 
 export interface AuthUserMutationSource { tenantId: string; membershipVersion: number; }
@@ -55,8 +64,11 @@ export interface AuthUserStore {
     enabledAt: string;
     recoveryCodeHashes: string[];
     lastUsedCounter?: string;
+    /** The pending re-enrollment hash the caller verified; null/undefined means none may be pending. */
+    reenrollmentCodeHash?: string | null;
   }): Promise<AuthUser | undefined>;
-  disableTotp(userId: string, source: AuthUserMutationSource): Promise<AuthUser | undefined>;
+  /** Clears TOTP; with `reenrollment` (SYSTEM_ADMIN reset only) the code hash and expiry are written atomically. */
+  disableTotp(userId: string, source: AuthUserMutationSource, reenrollment?: TotpReenrollmentGrant): Promise<AuthUser | undefined>;
   markTotpCounterUsed(userId: string, counter: string, source: AuthUserMutationSource): Promise<boolean>;
   consumeTotpRecoveryCode(userId: string, codeHash: string, source: AuthUserMutationSource): Promise<boolean>;
   purgePii(id: string, input: { email: string; name: string; purgedAt: string }): Promise<AuthUser | undefined>;
@@ -274,6 +286,8 @@ export function upsertInMemoryAuthUser(input: {
   totpEnabledAt?: string;
   totpRecoveryCodeHashes?: string[];
   totpLastUsedCounter?: string;
+  totpReenrollmentCodeHash?: string;
+  totpReenrollmentExpiresAt?: string;
 }): AuthUser {
   const email = input.email?.toLowerCase();
   const loginName = input.loginName?.trim().toLowerCase();
@@ -298,6 +312,8 @@ export function upsertInMemoryAuthUser(input: {
     existing.totpEnabledAt = input.totpEnabledAt;
     existing.totpRecoveryCodeHashes = [...(input.totpRecoveryCodeHashes ?? existing.totpRecoveryCodeHashes ?? [])];
     existing.totpLastUsedCounter = input.totpLastUsedCounter;
+    existing.totpReenrollmentCodeHash = input.totpReenrollmentCodeHash;
+    existing.totpReenrollmentExpiresAt = input.totpReenrollmentExpiresAt;
     if (input.password !== undefined || input.passwordHash !== undefined) {
       existing.passwordHash = input.passwordHash ?? hashPassword(input.password ?? "");
     }
@@ -322,6 +338,8 @@ export function upsertInMemoryAuthUser(input: {
     totpEnabledAt: input.totpEnabledAt,
     totpRecoveryCodeHashes: [...(input.totpRecoveryCodeHashes ?? [])],
     totpLastUsedCounter: input.totpLastUsedCounter,
+    totpReenrollmentCodeHash: input.totpReenrollmentCodeHash,
+    totpReenrollmentExpiresAt: input.totpReenrollmentExpiresAt,
   };
   inMemoryUsers.push(user);
   return cloneRequiredUser(user);
@@ -416,10 +434,14 @@ export class InMemoryAuthUserStore implements AuthUserStore {
     enabledAt: string;
     recoveryCodeHashes: string[];
     lastUsedCounter?: string;
+    reenrollmentCodeHash?: string | null;
   }): Promise<AuthUser | undefined> {
     const user = this.users.find((candidate) => candidate.id === input.userId && matchesAuthSource(candidate, input.source));
     if (!user || user.totpSecretEncrypted || user.totpEnabledAt) return undefined;
+    if (!matchesPendingReenrollment(user, input.reenrollmentCodeHash ?? null, Date.now())) return undefined;
 
+    user.totpReenrollmentCodeHash = undefined;
+    user.totpReenrollmentExpiresAt = undefined;
     user.totpSecretEncrypted = input.secretEncrypted;
     user.totpEnabledAt = input.enabledAt;
     user.totpRecoveryCodeHashes = [...input.recoveryCodeHashes];
@@ -428,10 +450,12 @@ export class InMemoryAuthUserStore implements AuthUserStore {
     return cloneUser(user);
   }
 
-  async disableTotp(userId: string, source: AuthUserMutationSource): Promise<AuthUser | undefined> {
+  async disableTotp(userId: string, source: AuthUserMutationSource, reenrollment?: TotpReenrollmentGrant): Promise<AuthUser | undefined> {
     const user = this.users.find((candidate) => candidate.id === userId && matchesAuthSource(candidate, source));
     if (!user) return undefined;
 
+    user.totpReenrollmentCodeHash = reenrollment?.codeHash;
+    user.totpReenrollmentExpiresAt = reenrollment?.expiresAt;
     user.totpSecretEncrypted = undefined;
     user.totpEnabledAt = undefined;
     user.totpRecoveryCodeHashes = [];
@@ -465,6 +489,8 @@ export class InMemoryAuthUserStore implements AuthUserStore {
     user.passwordHash = "";
     user.membershipVersion += 1;
     user.purgedAt = input.purgedAt;
+    user.totpReenrollmentCodeHash = undefined;
+    user.totpReenrollmentExpiresAt = undefined;
     user.totpSecretEncrypted = undefined;
     user.totpEnabledAt = undefined;
     user.totpRecoveryCodeHashes = [];
@@ -482,7 +508,8 @@ export class PostgresAuthUserStore implements AuthUserStore {
          AND t."status" = 'ACTIVE'
        GROUP BY u."id", u."tenantId", u."email", u."nationalIdEncrypted", u."nationalIdHash", u."name", u."passwordHash",
                 u."membershipVersion", u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
-                u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", m."tenantId"
+                u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", u."totpReenrollmentCodeHash",
+                u."totpReenrollmentExpiresAt", m."tenantId"
        ORDER BY min(m."createdAt") ASC
        LIMIT 1`,
       [email],
@@ -503,7 +530,8 @@ export class PostgresAuthUserStore implements AuthUserStore {
          AND t."status" = 'ACTIVE'
        GROUP BY u."id", u."tenantId", u."email", u."nationalIdEncrypted", u."nationalIdHash", u."name", u."passwordHash",
                 u."membershipVersion", u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
-                u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", m."tenantId"
+                u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", u."totpReenrollmentCodeHash",
+                u."totpReenrollmentExpiresAt", m."tenantId"
        LIMIT 1`,
       [tenantId, loginName],
     );
@@ -518,7 +546,8 @@ export class PostgresAuthUserStore implements AuthUserStore {
          AND t."status" = 'ACTIVE'
        GROUP BY u."id", u."tenantId", u."email", u."nationalIdEncrypted", u."nationalIdHash", u."name", u."passwordHash",
                 u."membershipVersion", u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
-                u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", m."tenantId"
+                u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", u."totpReenrollmentCodeHash",
+                u."totpReenrollmentExpiresAt", m."tenantId"
        LIMIT 1`,
       [tenantId, nationalIdHash],
     );
@@ -534,7 +563,8 @@ export class PostgresAuthUserStore implements AuthUserStore {
          AND t."status" = 'ACTIVE'
        GROUP BY u."id", u."tenantId", u."email", u."nationalIdEncrypted", u."nationalIdHash", u."name", u."passwordHash",
                 u."membershipVersion", u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
-                u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", m."tenantId"
+                u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", u."totpReenrollmentCodeHash",
+                u."totpReenrollmentExpiresAt", m."tenantId"
        ORDER BY min(t."createdAt") ASC
        LIMIT 20`,
       [nationalIdHash],
@@ -547,7 +577,8 @@ export class PostgresAuthUserStore implements AuthUserStore {
          AND t."status" = 'ACTIVE'
        GROUP BY u."id", u."tenantId", u."email", u."nationalIdEncrypted", u."nationalIdHash", u."name", u."passwordHash",
                 u."membershipVersion", u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
-                u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", m."tenantId"
+                u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", u."totpReenrollmentCodeHash",
+                u."totpReenrollmentExpiresAt", m."tenantId"
        ORDER BY min(m."createdAt") ASC
        LIMIT 1`,
       [id],
@@ -561,7 +592,8 @@ export class PostgresAuthUserStore implements AuthUserStore {
          AND t."status" = 'ACTIVE'
        GROUP BY u."id", u."tenantId", u."email", u."nationalIdEncrypted", u."nationalIdHash", u."name", u."passwordHash",
                 u."membershipVersion", u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
-                u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", m."tenantId"
+                u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", u."totpReenrollmentCodeHash",
+                u."totpReenrollmentExpiresAt", m."tenantId"
        ORDER BY lower(u."name") ASC, u."id" ASC`,
       [tenantId],
     );
@@ -586,6 +618,8 @@ export class PostgresAuthUserStore implements AuthUserStore {
              "totpEnabledAt" = NULL,
              "totpRecoveryCodeHashes" = ARRAY[]::TEXT[],
              "totpLastUsedCounter" = NULL,
+             "totpReenrollmentCodeHash" = NULL,
+             "totpReenrollmentExpiresAt" = NULL,
              "membershipVersion" = "membershipVersion" + 1,
              "updatedAt" = now()
          WHERE "id" = $1
@@ -685,22 +719,29 @@ export class PostgresAuthUserStore implements AuthUserStore {
     enabledAt: string;
     recoveryCodeHashes: string[];
     lastUsedCounter?: string;
+    reenrollmentCodeHash?: string | null;
   }): Promise<AuthUser | undefined> {
     const updated = await withAuthMutationQuery(this.pool, input.source, async (client) => {
+      // First enrollment wins. A pending SYSTEM_ADMIN re-enrollment must be the exact one the caller verified and
+      // still unexpired; it is consumed (cleared) by this same statement, so the code works once.
       const update = await client.query<{ id: string; membershipVersion: number; tenantId: string | null }>(
         `UPDATE "User"
          SET "totpSecretEncrypted" = $2,
              "totpEnabledAt" = $3::timestamptz,
              "totpRecoveryCodeHashes" = $4::text[],
              "totpLastUsedCounter" = $5,
+             "totpReenrollmentCodeHash" = NULL,
+             "totpReenrollmentExpiresAt" = NULL,
              "membershipVersion" = "membershipVersion" + 1,
              "updatedAt" = now()
          WHERE "id" = $1
            AND "tenantId" = $6 AND "membershipVersion" = $7
            AND "totpSecretEncrypted" IS NULL
            AND "totpEnabledAt" IS NULL
+           AND "totpReenrollmentCodeHash" IS NOT DISTINCT FROM $8::text
+           AND ($8::text IS NULL OR "totpReenrollmentExpiresAt" > now())
          RETURNING "id", "tenantId", "membershipVersion"`,
-        [input.userId, input.secretEncrypted, input.enabledAt, input.recoveryCodeHashes, input.lastUsedCounter ?? null, input.source.tenantId, input.source.membershipVersion],
+        [input.userId, input.secretEncrypted, input.enabledAt, input.recoveryCodeHashes, input.lastUsedCounter ?? null, input.source.tenantId, input.source.membershipVersion, input.reenrollmentCodeHash ?? null],
       );
       const user = update.rows[0];
       if (!user) return false;
@@ -712,20 +753,24 @@ export class PostgresAuthUserStore implements AuthUserStore {
     return result?.membershipVersion === updated ? result : undefined;
   }
 
-  async disableTotp(userId: string, source: AuthUserMutationSource): Promise<AuthUser | undefined> {
+  async disableTotp(userId: string, source: AuthUserMutationSource, reenrollment?: TotpReenrollmentGrant): Promise<AuthUser | undefined> {
     const updated = await withAuthMutationQuery(this.pool, source, async (client) => {
+      // One statement: TOTP off, sessions fenced by the version bump and (SYSTEM_ADMIN reset only) the new
+      // re-enrollment code hash + expiry, which replaces any earlier pending code.
       const update = await client.query<{ id: string; membershipVersion: number; tenantId: string | null }>(
         `UPDATE "User"
          SET "totpSecretEncrypted" = NULL,
              "totpEnabledAt" = NULL,
              "totpRecoveryCodeHashes" = ARRAY[]::TEXT[],
              "totpLastUsedCounter" = NULL,
+             "totpReenrollmentCodeHash" = $4::text,
+             "totpReenrollmentExpiresAt" = $5::timestamptz,
              "membershipVersion" = "membershipVersion" + 1,
              "updatedAt" = now()
          WHERE "id" = $1
            AND "tenantId" = $2 AND "membershipVersion" = $3
          RETURNING "id", "tenantId", "membershipVersion"`,
-        [userId, source.tenantId, source.membershipVersion],
+        [userId, source.tenantId, source.membershipVersion, reenrollment?.codeHash ?? null, reenrollment?.expiresAt ?? null],
       );
       const user = update.rows[0];
       if (!user) return false;
@@ -852,6 +897,8 @@ export class PostgresAuthUserStore implements AuthUserStore {
            u."totpEnabledAt",
            u."totpRecoveryCodeHashes",
            u."totpLastUsedCounter",
+           u."totpReenrollmentCodeHash",
+           u."totpReenrollmentExpiresAt",
            array_agg(DISTINCT m."role"::text ORDER BY m."role"::text) AS roles,
            max(m."id") FILTER (
              WHERE m."staffRole" IS NOT NULL OR m."hasTeacherPersona" OR m."hasStudentPersona"
@@ -980,6 +1027,8 @@ interface AuthUserRow {
   totpEnabledAt: Date | string | null;
   totpRecoveryCodeHashes: string[] | null;
   totpLastUsedCounter: string | null;
+  totpReenrollmentCodeHash: string | null;
+  totpReenrollmentExpiresAt: Date | string | null;
   roles: string[];
   canonicalMembershipId: string | null;
   canonicalMembershipCount: number;
@@ -1013,6 +1062,8 @@ function toAuthUser(row: AuthUserRow): AuthUser {
     totpEnabledAt: row.totpEnabledAt ? new Date(row.totpEnabledAt).toISOString() : undefined,
     totpRecoveryCodeHashes: [...(row.totpRecoveryCodeHashes ?? [])],
     totpLastUsedCounter: row.totpLastUsedCounter ?? undefined,
+    totpReenrollmentCodeHash: row.totpReenrollmentCodeHash ?? undefined,
+    totpReenrollmentExpiresAt: row.totpReenrollmentExpiresAt ? new Date(row.totpReenrollmentExpiresAt).toISOString() : undefined,
   };
 }
 
@@ -1064,6 +1115,11 @@ function cloneCanonicalMembership(membership: CanonicalMembershipProjection): Ca
     ...membership,
     campusIds: membership.campusIds ? [...membership.campusIds] : undefined,
   };
+}
+
+function matchesPendingReenrollment(user: AuthUser, expectedCodeHash: string | null, now: number): boolean {
+  if (expectedCodeHash === null) return user.totpReenrollmentCodeHash === undefined;
+  return user.totpReenrollmentCodeHash === expectedCodeHash && Date.parse(user.totpReenrollmentExpiresAt ?? "") > now;
 }
 
 function matchesAuthSource(user: AuthUser, source: AuthUserMutationSource | undefined): boolean {

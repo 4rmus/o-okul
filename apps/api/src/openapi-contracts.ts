@@ -492,6 +492,13 @@ const totpSetupConfirmRequestSchema = objectSchema({
   totpCode: stringSchema(),
 }, ["setupToken", "totpCode"]);
 
+// DEC-20261021-01: reenrollmentCode is required by the service only while a SYSTEM_ADMIN reset is pending.
+const totpEnrollmentConfirmRequestSchema = objectSchema({
+  setupToken: stringSchema(),
+  totpCode: stringSchema(),
+  reenrollmentCode: stringSchema({ minLength: 1, maxLength: 32 }),
+}, ["setupToken", "totpCode"]);
+
 const totpSetupResponseSchema = objectSchema({
   secret: stringSchema(),
   keyUri: stringSchema(),
@@ -507,6 +514,7 @@ const mfaEnrollmentRequiredResponseSchema = objectSchema({
   setupToken: stringSchema(),
   setupExpiresAt: stringSchema({ format: "date-time" }),
   recoveryCodes: arraySchema(stringSchema(), { minItems: 1 }),
+  reenrollmentCodeRequired: { type: "boolean", enum: [true] },
 }, ["status", "secret", "keyUri", "setupToken", "setupExpiresAt", "recoveryCodes"]);
 
 const totpSetupConfirmResponseSchema = objectSchema({
@@ -542,7 +550,10 @@ const totpAdminResetRequestSchema = objectSchema({
 
 const totpAdminResetResponseSchema = objectSchema({
   resetAt: stringSchema({ format: "date-time" }),
-}, ["resetAt"]);
+  reenrollmentCode: stringSchema({ pattern: "^[0-9]{4}-[0-9]{4}$" }),
+  reenrollmentExpiresAt: stringSchema({ format: "date-time" }),
+  notificationQueued: { type: "boolean" },
+}, ["resetAt", "reenrollmentCode", "reenrollmentExpiresAt", "notificationQueued"]);
 
 const tenantAdminAccountSchema = objectSchema({
   userId: stringSchema(),
@@ -551,7 +562,9 @@ const tenantAdminAccountSchema = objectSchema({
   roles: arraySchema(stringSchema({ enum: ["TENANT_OWNER", "TENANT_ADMIN"] })),
   mfaEnabled: { type: "boolean" },
   mfaEnabledAt: stringSchema({ format: "date-time", nullable: true }),
-}, ["userId", "name", "emailMasked", "roles", "mfaEnabled", "mfaEnabledAt"]);
+  mfaReenrollmentPending: { type: "boolean" },
+  mfaReenrollmentExpiresAt: stringSchema({ format: "date-time", nullable: true }),
+}, ["userId", "name", "emailMasked", "roles", "mfaEnabled", "mfaEnabledAt", "mfaReenrollmentPending", "mfaReenrollmentExpiresAt"]);
 
 const tenantResetInstitutionRequestSchema = objectSchema({
   id: stringSchema(), tenantId: stringSchema(), requestedBy: stringSchema(), requestedAt: stringSchema({ format: "date-time" }), lifecycleVersion: integerSchema({ minimum: 0 }), status: stringSchema({ enum: ["PENDING", "REVOKED", "ACCEPTED", "COMPLETED"] }), operationId: stringSchema({ nullable: true }),
@@ -3355,7 +3368,7 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: authResponseSchema,
   },
   "post /api/v1/auth/totp/enrollment/confirm": {
-    requestBody: totpSetupConfirmRequestSchema,
+    requestBody: totpEnrollmentConfirmRequestSchema,
     responseBody: authResponseSchema,
   },
   "post /api/v1/auth/refresh": {

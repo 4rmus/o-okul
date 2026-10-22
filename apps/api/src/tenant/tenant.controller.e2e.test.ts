@@ -682,7 +682,7 @@ describe("TenantController", () => {
     const accounts = await list();
     expect(accounts.length).toBeGreaterThan(0);
     for (const account of accounts) {
-      expect(Object.keys(account).sort()).toEqual(["emailMasked", "mfaEnabled", "mfaEnabledAt", "name", "roles", "userId"]);
+      expect(Object.keys(account).sort()).toEqual(["emailMasked", "mfaEnabled", "mfaEnabledAt", "mfaReenrollmentExpiresAt", "mfaReenrollmentPending", "name", "roles", "userId"]);
       expect(account.roles).toEqual(expect.arrayContaining([expect.stringMatching(/^TENANT_(OWNER|ADMIN)$/)]));
     }
     expect(JSON.stringify(accounts)).not.toMatch(/@example\.test|assistant-tenant-a|teacher-tenant-a|user-tenant-b/);
@@ -694,9 +694,39 @@ describe("TenantController", () => {
     // A proof bound to one account cannot reset another one.
     await request(server).post("/auth/totp/admin-reset").set("Authorization", `Bearer ${systemToken}`).set("X-Step-Up-Token", proof.stepUpToken)
       .send({ tenantId: "tenant-a", userId: "user-tenant-a" }).expect(401);
-    await request(server).post("/auth/totp/admin-reset").set("Authorization", `Bearer ${systemToken}`).set("X-Step-Up-Token", proof.stepUpToken)
-      .send({ tenantId: "tenant-a", userId: "user-finance-privacy" }).expect(200);
-    expect((await list()).find((account) => account.userId === "user-finance-privacy")).toMatchObject({ mfaEnabled: false, mfaEnabledAt: null });
+    const reset = await request(server).post("/auth/totp/admin-reset").set("Authorization", `Bearer ${systemToken}`).set("X-Step-Up-Token", proof.stepUpToken)
+      .send({ tenantId: "tenant-a", userId: "user-finance-privacy" }).expect(200).expect("Cache-Control", "no-store");
+    // DEC-20261021-01: the one-time code is returned once to the SYSTEM_ADMIN; the list shows only the pending state.
+    expect(reset.body).toMatchObject({ resetAt: expect.any(String), reenrollmentCode: expect.stringMatching(/^\d{4}-\d{4}$/), notificationQueued: true });
+    const code = reset.body.reenrollmentCode as string;
+    const afterReset = await list();
+    expect(afterReset.find((account) => account.userId === "user-finance-privacy")).toMatchObject({
+      mfaEnabled: false, mfaEnabledAt: null, mfaReenrollmentPending: true, mfaReenrollmentExpiresAt: reset.body.reenrollmentExpiresAt,
+    });
+    expect(JSON.stringify(afterReset)).not.toContain(code);
+
+    const previousMode = process.env.ADMIN_MFA_MODE;
+    process.env.ADMIN_MFA_MODE = "required";
+    try {
+      const enrollment = await request(server).post("/auth/login").send(testLoginBody("finance-privacy@example.test")).expect(200);
+      expect(enrollment.body).toMatchObject({ status: "MFA_ENROLLMENT_REQUIRED", reenrollmentCodeRequired: true });
+      const { createTotpCodeForTest } = await import("../auth/totp-mfa.js");
+      const confirm = (body: Record<string, string>) => request(server).post("/auth/totp/enrollment/confirm")
+        .send({ setupToken: enrollment.body.setupToken, totpCode: createTotpCodeForTest(enrollment.body.secret), ...body });
+      const missing = await confirm({}).expect(401);
+      expect(JSON.stringify(missing.body)).toContain("MFA_REENROLLMENT_CODE_REQUIRED");
+      const wrong = await confirm({ reenrollmentCode: code === "0000-0000" ? "1111-1111" : "0000-0000" }).expect(401);
+      expect(JSON.stringify(wrong.body)).toContain("MFA_REENROLLMENT_CODE_INVALID");
+      const enrolled = await confirm({ reenrollmentCode: code }).expect(200);
+      expect(enrolled.body).toMatchObject({ accessToken: expect.any(String), session: { userId: "user-finance-privacy", tenantId: "tenant-a" } });
+      expect(JSON.stringify(enrolled.body)).not.toMatch(/reenrollment|totpReenrollmentCodeHash/i);
+      // The code is spent: the account is now challenged for TOTP and the list shows MFA on again.
+      await request(server).post("/auth/login").send(testLoginBody("finance-privacy@example.test")).expect(200)
+        .expect(({ body }) => expect(body).toMatchObject({ status: "MFA_REQUIRED" }));
+    } finally {
+      if (previousMode === undefined) delete process.env.ADMIN_MFA_MODE; else process.env.ADMIN_MFA_MODE = previousMode;
+    }
+    expect((await list()).find((account) => account.userId === "user-finance-privacy")).toMatchObject({ mfaEnabled: true, mfaReenrollmentPending: false, mfaReenrollmentExpiresAt: null });
   });
 });
 

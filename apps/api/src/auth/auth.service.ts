@@ -48,6 +48,16 @@ import {
   verifyAdminMfaToken,
 } from "./totp-mfa.js";
 import { isSystemAdmin } from "../rbac/roles.js";
+import { apiLogger } from "../observability/logging.js";
+import {
+  createReenrollmentCode,
+  hashReenrollmentCode,
+  isReenrollmentExpired,
+  reenrollmentCodeValidityMs,
+  reenrollmentResetVersion,
+  verifyReenrollmentCode,
+} from "./mfa-reenrollment-code.js";
+import { type MfaSecurityNoticeKind, type MfaSecurityNoticeStore, mfaSecurityNoticeStoreToken } from "./mfa-security-notice.js";
 
 
 export interface PasswordResetRequestResult {
@@ -85,6 +95,9 @@ export interface TotpStatusResult {
 
 export interface TotpAdminResetResult {
   resetAt: string;
+  reenrollmentCode: string;
+  reenrollmentExpiresAt: string;
+  notificationQueued: boolean;
 }
 
 export interface TotpDisableResult {
@@ -121,6 +134,7 @@ export class AuthService {
     @Optional() @Inject(loginAttemptLimiterToken) loginAttempts?: LoginAttemptLimiterStore,
     @Optional() @Inject(tenantStoreToken) private readonly tenants?: TenantStore,
     @Optional() @Inject(licenseTermStoreToken) private readonly licenseTerms?: LicenseTermStore,
+    @Optional() @Inject(mfaSecurityNoticeStoreToken) private readonly mfaNotices?: MfaSecurityNoticeStore,
   ) {
     this.tokens = new TokenService(this.sessions, getAccessSecret());
     this.loginAttempts = loginAttempts ?? createLoginAttemptLimiter();
@@ -201,6 +215,13 @@ export class AuthService {
 
   private async issueLoginForUser(user: AuthUser, clientContext: SessionClientContext): Promise<TokenPair | LoginMfaChallenge | MfaEnrollmentRequiredResponse> {
     if (this.shouldRequireTotpEnrollment(user)) {
+      // DEC-20261021-01: after a SYSTEM_ADMIN reset the password alone no longer opens enrollment material once the
+      // 24-hour window is over, and inside it the confirm step also asks for the one-time code.
+      const reenrollmentPending = Boolean(user.totpReenrollmentCodeHash);
+      if (reenrollmentPending && isReenrollmentExpired(user.totpReenrollmentExpiresAt)) {
+        await this.recordReenrollmentExpired(user, "login");
+        throw new UnauthorizedException("MFA_RESET_EXPIRED");
+      }
       const draft = createTotpEnrollmentDraft(user.email ?? user.id, user.id, user.membershipVersion);
       await this.auditLogs?.record({
         tenantId: user.tenantId === "system" ? undefined : user.tenantId,
@@ -208,7 +229,7 @@ export class AuthService {
         entityType: "Auth",
         entityId: user.id,
         action: "auth.totp_enrollment_required",
-        diff: { recoveryCodesIssued: draft.recoveryCodes.length },
+        diff: { recoveryCodesIssued: draft.recoveryCodes.length, ...(reenrollmentPending ? { reenrollmentCodeRequired: true } : {}) },
       });
       return {
         status: "MFA_ENROLLMENT_REQUIRED",
@@ -217,6 +238,7 @@ export class AuthService {
         setupToken: draft.setupToken,
         setupExpiresAt: draft.setupExpiresAt,
         recoveryCodes: draft.recoveryCodes,
+        ...(reenrollmentPending ? { reenrollmentCodeRequired: true as const } : {}),
       };
     }
     if (this.shouldChallengeWithTotp(user)) {
@@ -309,6 +331,10 @@ export class AuthService {
     if (payload.membershipVersion !== currentUser.membershipVersion) {
       throw new UnauthorizedException("MFA_SETUP_TOKEN_INVALID");
     }
+    // A pending SYSTEM_ADMIN re-enrollment is completed only through the login enrollment step with its code.
+    if (currentUser.totpReenrollmentCodeHash) {
+      throw new UnauthorizedException("MFA_REENROLLMENT_CODE_REQUIRED");
+    }
 
     const counter = resolveTotpCounter(payload.secret, totpCode);
     if (!counter) {
@@ -340,7 +366,7 @@ export class AuthService {
     };
   }
 
-  async confirmRequiredTotpEnrollment(setupToken: string, totpCode: string, clientContext: SessionClientContext = {}): Promise<TokenPair> {
+  async confirmRequiredTotpEnrollment(setupToken: string, totpCode: string, clientContext: SessionClientContext = {}, options: { reenrollmentCode?: string } = {}): Promise<TokenPair> {
     if (resolveAdminMfaMode() !== "required") {
       throw new UnauthorizedException("MFA_SETUP_TOKEN_INVALID");
     }
@@ -363,11 +389,15 @@ export class AuthService {
     ) {
       throw new UnauthorizedException("MFA_SETUP_TOKEN_INVALID");
     }
+    const reenrollmentCodeHash = currentUser.totpReenrollmentCodeHash
+      ? await this.verifyReenrollmentCodeWithAttemptLimit(currentUser, currentUser.totpReenrollmentCodeHash, options.reenrollmentCode)
+      : null;
     const counter = resolveTotpCounter(payload.secret, totpCode);
     if (!counter) {
       throw new UnauthorizedException("MFA_CODE_INVALID");
     }
     const enabledAt = new Date().toISOString();
+    // "First wins": the statement also requires the exact pending re-enrollment hash verified above and clears it.
     const user = await this.users.enableTotp({
       userId: payload.userId,
       source: { tenantId: currentUser.tenantId, membershipVersion: currentUser.membershipVersion },
@@ -375,6 +405,7 @@ export class AuthService {
       enabledAt,
       recoveryCodeHashes: payload.recoveryCodeHashes,
       lastUsedCounter: counter,
+      reenrollmentCodeHash,
     });
     if (!user) throw new UnauthorizedException("MFA_SETUP_TOKEN_INVALID");
     await this.sessions.revokeByUser(user.id, { tenantId: currentUser.tenantId, membershipVersion: currentUser.membershipVersion });
@@ -384,8 +415,9 @@ export class AuthService {
       entityType: "Auth",
       entityId: user.id,
       action: "auth.totp_enrollment_completed",
-      diff: { recoveryCodesRemaining: user.totpRecoveryCodeHashes?.length ?? 0 },
+      diff: { recoveryCodesRemaining: user.totpRecoveryCodeHashes?.length ?? 0, ...(reenrollmentCodeHash ? { reenrollmentCodeUsed: true } : {}) },
     });
+    if (reenrollmentCodeHash) await this.queueMfaNotice("MFA_REENROLLED", user);
     return this.issueTokenPairForUser(user, "auth.login_mfa_enrolled", {
       roles: user.roles,
       mustChangePassword: Boolean(user.mustChangePassword),
@@ -429,21 +461,91 @@ export class AuthService {
     if (!user || target.tenantId === "system" || user.tenantId !== target.tenantId || isSystemAdmin(user.roles) || !isAdminMfaRole(user.roles)) {
       throw new NotFoundException("MFA_RESET_TARGET_NOT_FOUND");
     }
-    if (!user.totpSecretEncrypted || !user.totpEnabledAt) throw new BadRequestException("MFA_NOT_ENABLED");
+    // A pending (or expired) re-enrollment can be re-issued: the new code replaces the earlier one.
+    const reissue = !(user.totpSecretEncrypted && user.totpEnabledAt);
+    if (reissue && !user.totpReenrollmentCodeHash) throw new BadRequestException("MFA_NOT_ENABLED");
     const source = { tenantId: user.tenantId, membershipVersion: user.membershipVersion };
-    const reset = await this.users.disableTotp(user.id, source);
+    // DEC-20261021-01: the reset statement itself bumps the version to source + 1; the code is bound to that reset.
+    const reenrollmentCode = createReenrollmentCode();
+    const reenrollmentExpiresAt = new Date(Date.now() + reenrollmentCodeValidityMs).toISOString();
+    const reset = await this.users.disableTotp(user.id, source, {
+      codeHash: hashReenrollmentCode({ userId: user.id, tenantId: user.tenantId, resetVersion: user.membershipVersion + 1 }, reenrollmentCode),
+      expiresAt: reenrollmentExpiresAt,
+    });
     if (!reset) throw new ConflictException("MFA_RESET_TARGET_STALE");
     await this.sessions.revokeByUser(user.id, source);
     const resetAt = new Date().toISOString();
+    const notificationQueued = await this.queueMfaNotice("MFA_RESET_BY_SUPPORT", user);
     await this.auditLogs?.record({
       tenantId: user.tenantId,
       actorUserId: context.userId,
       entityType: "Auth",
       entityId: user.id,
       action: "auth.totp_reset_by_system_admin",
-      diff: { resetAt, sessionsRevoked: true },
+      diff: { resetAt, sessionsRevoked: true, reenrollmentCodeIssued: true, reenrollmentExpiresAt, reissued: reissue, notificationQueued },
     });
-    return { resetAt };
+    return { resetAt, reenrollmentCode, reenrollmentExpiresAt, notificationQueued };
+  }
+
+  /** The reset already committed: a notice that cannot be queued is logged without PII and never fails the caller. */
+  private async queueMfaNotice(kind: MfaSecurityNoticeKind, user: Pick<AuthUser, "id" | "tenantId" | "email">): Promise<boolean> {
+    if (!user.email) return false;
+    if (!this.mfaNotices) {
+      apiLogger.warn({ tenantId: user.tenantId, userId: user.id, kind, errorCode: "MFA_NOTICE_STORE_MISSING" }, "mfa_security_notice_not_queued");
+      return false;
+    }
+    try {
+      const tenantName = user.tenantId === "system" ? undefined : (await this.tenants?.findById(user.tenantId))?.name;
+      await this.mfaNotices.enqueue({ kind, to: user.email, tenantName });
+      return true;
+    } catch (error) {
+      const errorCode = error instanceof Error && /^[A-Z0-9_]{1,64}$/.test(error.message) ? error.message : "MFA_NOTICE_ENQUEUE_FAILED";
+      apiLogger.warn({ tenantId: user.tenantId, userId: user.id, kind, errorCode }, "mfa_security_notice_not_queued");
+      return false;
+    }
+  }
+
+  private async verifyReenrollmentCodeWithAttemptLimit(user: AuthUser, storedHash: string, code: string | undefined): Promise<string> {
+    if (isReenrollmentExpired(user.totpReenrollmentExpiresAt)) {
+      await this.recordReenrollmentExpired(user, "enrollment_confirm");
+      throw new UnauthorizedException("MFA_RESET_EXPIRED");
+    }
+    // Bound to this reset, not to the current membership version: a password reset cannot refresh the budget.
+    const attemptKey = mfaAttemptKey(user.id, "reenrollment", user.tenantId, reenrollmentResetVersion(storedHash) ?? user.membershipVersion);
+    try {
+      await this.loginAttempts.assertAllowed(attemptKey);
+    } catch (error) {
+      if (error instanceof HttpException && error.getStatus() === HttpStatus.TOO_MANY_REQUESTS) {
+        throw new HttpException("MFA_REENROLLMENT_LOCKED", HttpStatus.TOO_MANY_REQUESTS);
+      }
+      throw error;
+    }
+    const missing = !code?.trim();
+    if (missing || !verifyReenrollmentCode(storedHash, { userId: user.id, tenantId: user.tenantId }, code)) {
+      await this.loginAttempts.recordFailure(attemptKey);
+      await this.auditLogs?.record({
+        tenantId: user.tenantId === "system" ? undefined : user.tenantId,
+        actorUserId: user.id,
+        entityType: "Auth",
+        entityId: user.id,
+        action: "auth.totp_reenrollment_code_rejected",
+        diff: { reason: missing ? "missing" : "invalid" },
+      });
+      throw new UnauthorizedException(missing ? "MFA_REENROLLMENT_CODE_REQUIRED" : "MFA_REENROLLMENT_CODE_INVALID");
+    }
+    await this.loginAttempts.recordSuccess(attemptKey);
+    return storedHash;
+  }
+
+  private async recordReenrollmentExpired(user: AuthUser, stage: "login" | "enrollment_confirm"): Promise<void> {
+    await this.auditLogs?.record({
+      tenantId: user.tenantId === "system" ? undefined : user.tenantId,
+      actorUserId: user.id,
+      entityType: "Auth",
+      entityId: user.id,
+      action: "auth.totp_reenrollment_expired",
+      diff: { stage, expiredAt: user.totpReenrollmentExpiresAt },
+    });
   }
 
   async createMfaStepUp(

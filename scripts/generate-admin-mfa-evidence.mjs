@@ -19,6 +19,7 @@ const evidenceReferenceEnvNames = [
   "ADMIN_MFA_RECOVERY_REUSE_EVIDENCE_REFERENCE",
   "ADMIN_MFA_SESSIONS_REVOKED_ENABLE_EVIDENCE_REFERENCE",
   "ADMIN_MFA_SESSIONS_REVOKED_DISABLE_EVIDENCE_REFERENCE",
+  "ADMIN_MFA_ADMIN_RESET_REENROLLMENT_EVIDENCE_REFERENCE",
 ];
 
 const commandReferences = evidenceReferenceEnvNames.map((name) => process.env[name]?.trim());
@@ -32,6 +33,7 @@ const loginVerificationFlags = [
   ["ADMIN_MFA_RECOVERY_CODE_REUSE_REJECTED", "recoveryCodeReuseRejected"],
   ["ADMIN_MFA_SESSIONS_REVOKED_ON_ENABLE", "sessionsRevokedOnEnable"],
   ["ADMIN_MFA_SESSIONS_REVOKED_ON_DISABLE", "sessionsRevokedOnDisable"],
+  ["ADMIN_MFA_ADMIN_RESET_REENROLLMENT_REQUIRES_CODE", "adminResetReenrollmentRequiresCode"],
 ];
 
 const commandsPassed = [
