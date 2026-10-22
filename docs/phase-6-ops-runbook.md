@@ -372,7 +372,8 @@ destek akışı (KV-9b, staging UAT F-04):
 Doğrulama uygulamasını kaybeden SYSTEM_ADMIN için kurtarma prosedürü (DEC-20261020-01 açık sorusu).
 `POST /auth/totp/admin-reset` sistem hesaplarını kabul etmez (`MFA_RESET_TARGET_NOT_FOUND`); başka bir
 SYSTEM_ADMIN de bu hesabı ekrandan sıfırlayamaz. SYSTEM_ADMIN rolü kullanıcı yönetiminden verilemez;
-ikinci sistem yöneticisi yalnız seed veya DB ile açılabilir.
+ikinci sistem yöneticisi yalnız seed veya DB ile açılabilir ve ürün sahibi kararıyla tutulmaz (DEC-20261021-01):
+kilitlenmede bu prosedür uygulanır, o süre boyunca platform yönetimi durur.
 
 Önkoşullar:
 

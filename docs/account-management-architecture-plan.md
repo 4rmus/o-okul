@@ -372,8 +372,8 @@ doğrulanmıştır. Bu atomik kabul kanıtından sonra `TENANT_ADMIN` başlangı
 MFA/recovery kodu toplamaz. Bu staging/canlı e-posta teslimatı kanıtı değildir.
 `GET /employees` 2 Ağustos'ta SQL aramalı, tenant/filtre/sıra bağlı opaque cursor ve ileri/geri meta
 ile dönüştürüldü; eski `page` parametresi `422` döndürür ve `/kurum/calisanlar` yerel cursor denetimini
-kullanır. Staging-tablosu tabanlı toplu import henüz tamamlanmamıştır (DEC-20261021-02 önerisi kalıcı tablo
-yerine transaction içi set tabanlı yayını önerir). Öğrenci, geçiş `tenant-users` ve identity invitation
+kullanır. Staging-tablosu tabanlı toplu import henüz tamamlanmamıştır (DEC-20261021-02, onaylı: kalıcı tablo
+yerine transaction içi set tabanlı yayın). Öğrenci, geçiş `tenant-users` ve identity invitation
 listeleri 2026-10-21'de aynı cursor sözleşmesine taşındı; dört liste sıralama değerini taşıyan ortak cursor
 yardımcısını (`apps/api/src/listing/cursor-pagination.ts`) kullanır.
 

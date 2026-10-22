@@ -354,9 +354,10 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
   hiç yaramıyor; mevcut ölçekte (kurum başına 20 bin öğrenci) aramalar 7–27 ms (LOCAL_TEST). Hız gerekirse seçenekler:
   btree ve `= ANY` ile çalışan ayrı trigram token tablosu (yeni tenant tablosu, ayrı dilim) veya önek araması
   (davranış değişikliği, ürün kararı). Yerleşik fonksiyonları süper kullanıcıyla LEAKPROOF işaretlemek restore'da
-  kaybolduğu için önerilmez. PO-3 kapasite ölçümüne bağlanır.
-- MFA sıfırlama sonrası yeniden kayıt AÇIK: kayıt yalnız parolayla tamamlanıyor; öneri DEC-20261021-01 (elden
-  verilen tek seferlik kod, son tarih, bildirim) ürün sahibi kararını bekliyor. Sistem yöneticisi TOTP kaybı
+  kaybolduğu için önerilmez. Ürün sahibi kararı (2026-10-22): şimdilik değişiklik yok, PO-3 kapasite ölçümünde eşik
+  aşılırsa dilim açılır.
+- MFA sıfırlama sonrası yeniden kayıt AÇIK: kayıt yalnız parolayla tamamlanıyor; DEC-20261021-01 onaylı (2026-10-22: kayıtlı
+  numaraya geri aramayla verilen tek seferlik kod, 24 saat, yalnız SYSTEM_ADMIN sıfırlaması, ikinci SYSTEM_ADMIN yok); kodlama bu dalda. Sistem yöneticisi TOTP kaybı
   kurtarma prosedürü `docs/phase-6-ops-runbook.md`'ye yazıldı (2026-10-21; SQL LOCAL_TEST, ortamda UNPROVEN).
 - P0 süreli/MFA'lı breakglass AÇIK: `RlsBypassGuard` rol, kapsam, gerekçe ve audit ister ama süre ve MFA
   step-up istemez; `@AllowBreakGlassRlsBypass()` hiçbir route'ta yok.
@@ -364,7 +365,8 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
   sessizliği kapısını bekler); cursor KAPANDI (2026-10-21, bu dal; `/students`, `/tenant-users`, `/identity-invitations`
   cursor'a taşındı, `/employees` ile birlikte sıralama değerini taşıyan ortak cursor ve Türkçe I araması;
   `/students` parametresiz çağrıda seçim ekranları için sayfasız kalır); staging tablolu toplu import AÇIK
-  (DEC-20261021-02 önerisi: kalıcı tablo yerine transaction içi set tabanlı yayın, S1 sonrası); outbox grant revoke AÇIK
+  (DEC-20261021-02 onaylı 2026-10-22: kalıcı tablo yerine transaction içi set tabanlı yayın, S1 sürerken;
+  kodlama bu dalda, S1-03 staging'de yeniden koşulur); outbox grant revoke AÇIK
   (gerçek sağlayıcı teslim kanıtını bekler).
 
 ### Dilim kapanış kaydı
