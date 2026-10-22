@@ -13,6 +13,10 @@ const licenseUsageMigration = readFileSync(
   new URL("../prisma/migrations/20260801210000_enforce_active_student_license_usage/migration.sql", import.meta.url),
   "utf8",
 );
+const licenseUsageStatementInsertMigration = readFileSync(
+  new URL("../prisma/migrations/20261022190000_license_usage_insert_statement_triggers/migration.sql", import.meta.url),
+  "utf8",
+);
 const gateDRuntimeGrantMigration = readFileSync(
   new URL("../prisma/migrations/20260811222500_grant_gate_d_runtime_permissions/migration.sql", import.meta.url),
   "utf8",
@@ -213,6 +217,32 @@ for (const token of [
   `CREATE TRIGGER "StudentEnrollment_sync_license_usage"`,
 ]) {
   requireToken(licenseUsageMigration, token, token);
+}
+// DEC-20261021-02: INSERT refreshes license usage once per tenant per statement; UPDATE/DELETE stay per row.
+for (const token of [
+  `CREATE OR REPLACE FUNCTION o_okul_sync_license_usage_insert_statement()`,
+  `PERFORM o_okul_refresh_license_usage(inserted_tenant_id);`,
+  `REVOKE ALL ON FUNCTION o_okul_sync_license_usage_insert_statement() FROM PUBLIC;`,
+  `CREATE TRIGGER "Student_sync_license_usage"
+AFTER UPDATE OF "tenantId", "status", "deletedAt" OR DELETE
+ON "Student"
+FOR EACH ROW`,
+  `CREATE TRIGGER "Student_sync_license_usage_insert"
+AFTER INSERT
+ON "Student"
+REFERENCING NEW TABLE AS inserted_rows
+FOR EACH STATEMENT`,
+  `CREATE TRIGGER "StudentEnrollment_sync_license_usage"
+AFTER UPDATE OF "tenantId", "studentId", "status", "endsAt" OR DELETE
+ON "StudentEnrollment"
+FOR EACH ROW`,
+  `CREATE TRIGGER "StudentEnrollment_sync_license_usage_insert"
+AFTER INSERT
+ON "StudentEnrollment"
+REFERENCING NEW TABLE AS inserted_rows
+FOR EACH STATEMENT`,
+]) {
+  requireToken(licenseUsageStatementInsertMigration, token, `license usage statement insert trigger ${token.split("\n")[0]}`);
 }
 requireToken(
   gateDRuntimeGrantMigration,
