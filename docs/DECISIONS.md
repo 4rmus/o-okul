@@ -1262,9 +1262,11 @@ yalnız görünür kılar.
 Kaynak: Claude güvenlik incelemesi (2026-10-21); ürün sahibi kararı (2026-10-22): kod kanalı kayıtlı numaraya
 geri arama, kod ve sıfırlama 24 saat geçerli, yalnız SYSTEM_ADMIN sıfırlaması kapsanır (yeni hesabın ilk kaydı
 kapsam dışı), ikinci SYSTEM_ADMIN hesabı tutulmaz (kilitlenmede `docs/phase-6-ops-runbook.md` prosedürü).
-Kanıt: Akış kod okumasıyla izlendi (LOCAL_STATIC); `auth.service.test.ts` bugünkü davranışı
-(sıfırlama sonrası parolayla girişin `MFA_ENROLLMENT_REQUIRED` döndürmesi) doğruluyor. Önerilen akış
-kodlanmadı; `scripts/check-admin-mfa-evidence.mjs` sıfırlama sonrası yeniden kaydı ölçmüyor.
+Kanıt: Uygulama bu dalda (2026-10-22): kod biçimi 8 rakam, HKDF ile `ADMIN_MFA_RECOVERY_HASH_KEY`'den türetilen
+HMAC özeti, 5 hatada 15 dk kilit (deneme doğrulamadan önce atomik ayrılır), step-up kanıtı hedefin üyelik sürümüne
+bağlı (tekrar 409), güvenlik bildirimi `SecretDeliveryOutbox` `MFA_SECURITY_NOTICE` ile. LOCAL_TEST: auth birim ve
+e2e testleri, `mfa-reenrollment.postgres.test.ts` (CI Postgres listesinde), geçici Redis'te paralel deneme testi.
+`scripts/check-admin-mfa-evidence.mjs` `adminResetReenrollmentRequiresCode` anahtarını ister. Staging UNPROVEN.
 Etkilenen ADR: ADR-0010
 Açık soru: Yok. Kodu SYSTEM_ADMIN ekranda bir kez görür ve kurumun kayıtlı numarasını arayarak sözlü verir.
 Son kontrol: 2026-10-22
@@ -1287,12 +1289,15 @@ serbest kaldığı için yeniden deneme `STUDENT_NO_DUPLICATE` alır (planın ya
 Kalıcı PII taşıyan bir staging tablosu ise RLS, sıfırlama kataloğu, devir/ihraç kapsamı, lisans sonu
 imhası ve temizlik işi gerektirir; bir istek süresince yaşayan veri için orantısızdır.
 Kaynak: Claude tasarım incelemesi (2026-10-21); ürün sahibi onayı (2026-10-22, "onayla, şimdi yap").
-Kanıt: `apps/api/src/student/student-import.service.ts`, `student.service.ts` `createMany`,
-`student-store.ts` `createManyWithEnrollmentsAndContacts` kod okuması (LOCAL_STATIC). Ölçüm yapılmadı;
-5.000 satır davranışı UNPROVEN.
+Kanıt: Uygulama bu dalda (2026-10-22). LOCAL_SYNTHETIC (PG17, 5.000 satır ve 5.000 veli, 3 koşu ortancası):
+0 öğrencili kurumda 85,5 sn → 1,17 sn, 2.000 öğrencili kurumda 117,6 sn → 1,13 sn; asıl kazanç lisans kullanım
+INSERT tetikleyicilerinin ifade başına çalışmasından (`20261022190000_license_usage_insert_statement_triggers`).
+TEMP tablo gerekmedi (`unnest`). Idempotency anahtarı import transaction'ında tamamlanır. LOCAL_TEST: CI Postgres
+listesinde yarıda hata, paralel kontenjan, tekrar ve silinmiş TC senaryoları. Staging davranışı UNPROVEN.
 Etkilenen ADR: Yok.
-Açık soru: (a) S1-03 staging PASS kanıtı bu değişiklikle yeniden koşulmalıdır. (b) `app` rolünün `TEMP` yetkisi staging Postgres'te doğrulanmalı. (c) Ön izlemedeki
-`accountPreview.willCreate: true` alanı hesap oluşturulmadığı halde dönüyor; ayrı ele alınır.
+Açık soru: (a) S1-03 staging PASS kanıtı bu değişiklikle yeniden koşulmalıdır. (b) Ön izlemedeki
+`accountPreview.willCreate: true` alanı hesap oluşturulmadığı halde dönüyor; ayrı ele alınır. (c) Tekli öğrenci
+oluşturmada silinmiş öğrencinin TC'si hâlâ commit sonrası profil yazımında tekil ihlaline düşer; ayrı dilim.
 Son kontrol: 2026-10-22
 
 ## Öneri Halindeki Kararlar

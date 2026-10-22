@@ -247,14 +247,16 @@ Korunan aktif sözleşmeler:
 Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-20261010-01, onaylı) içindedir.
 `docs/account-management-architecture-plan.md` bölüm 6'daki eski Gate E/F listesi bu planla yer değiştirdi.
 
-1. S1: staging rol UAT'ı sürüyor (`docs/staging-uat-s1.md`). S1-01..S1-03 PASS (2026-10-10/11); S1-04 sürüyor,
-   S1-05..S1-14 başlamadı. Kapanan bulgular: F-02..F-13, F-15, F-16 (#159, #161–#166, #168, #180, #182, #184). Açık: F-14
-   e-posta yalnız doğrulanmış hedeflere gidiyor (Yüksek; S1-05 davet akışını bekletir). 2026-10-15 panel
-   kontrolü: `o-okul.com` Email Sending'de Enabled ve DNS Configured, yani kısıt kalkmış olabilir (UNPROVEN);
-   ürün sahibi kararıyla S1-04'te finans davetini doğrulanmamış bir adrese yeniden göndererek doğrulanacak.
-   F-01 davet e-postası spama düşüyor (Yüksek): DMARC `p=none`, SPF `softfail`; karar: önce Cloudflare DMARC
-   Management raporları, politika sonra. Etkinleştirme panelden yapılmadı (ajan için DNS değişikliği izni
-   yok); ürün sahibi Email > DMARC Management'tan açacak. F-03 davet iptali (#180) ve F-11 bağ kaldırma
+1. S1: staging rol UAT'ı sürüyor (`docs/staging-uat-s1.md`). S1-01..S1-03 PASS (2026-10-10/11); S1-04 sürüyor
+   (U-FIN 2026-10-22'de etkinleşti: Finans çalışanı, Aktif, tüm kurum; STAGING), S1-05..S1-14 başlamadı. Kapanan
+   bulgular: F-02..F-13, F-15, F-16 (#159, #161–#166, #168, #180, #182, #184). F-14 KAPANDI (2026-10-22, STAGING):
+   `o-okul.com` hesabında Email Routing yapılandırılmamış ve doğrulanmış hedef yok, finans davetleri iki doğrulanmamış
+   adrese ulaştı. F-01 davet e-postası spama düşüyor (Yüksek): DMARC `p=none`, SPF `softfail`; karar: önce Cloudflare
+   DMARC raporları, politika sonra. DMARC Management 2026-10-22'de ürün sahibi onayıyla açıldı: `_dmarc` kaydına
+   Cloudflare RUA eklendi, `p=none` ve `operasyon@` RUA'sı korundu (1.1.1.1 ve 8.8.8.8'de doğrulandı); ilk rapor
+   ~24 saatte. Politika kararı raporlardan sonra. F-20 (davette başka çalışana bağlı e-posta uyarısız kabul
+   ediliyor, aktivasyon hatası genel mesajla görünüyor, aktivasyon sonrası tarayıcıdaki eski oturuma
+   yönleniyordu) bu dalda düzeltildi. F-03 davet iptali (#180) ve F-11 bağ kaldırma
    (#182) main ve staging'de; F-02 tek adımda yönetici daveti, F-05 içe aktarmada sınıf yönlendirmesi ve
    kabul/iptal yarışı telafisi #184 ile main'de (`52ce7d03e`, 2026-10-14). Yarışta geri alınan kabulün
    oluşturduğu hesap kullanılmıyorsa silinir (#185, `78a0e0bdd`; var olan hesabın parolası
@@ -280,8 +282,9 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
    hiçbir ayar değişmedi): Cloudflare Origin Analytics'te TCP el sıkışması 1,2 sn; sunucu her Cloudflare
    bağlantısında tek SYN görüp hemen yanıtlıyor, sunucuda düşürme yok (UFW, conntrack, listen kuyruğu),
    doğrudan bağlantılar 30–70 ms. En tutarlı açıklama Cloudflare'in ilk SYN'inin sağlayıcı ağında düşmesi
-   (UNPROVEN). Seçenek: Cloudflare Tunnel (belgeye göre tüm planlarda var); ürün sahibi maliyet ve süre
-   sordu, karar açık. `*.o-okul.com` ve `staging.o-okul.com` pilot edge kararına kadar DNS only kalır
+   (UNPROVEN). Seçenek: Cloudflare Tunnel; değerlendirme `docs/cloudflare-tunnel-degerlendirme.md` (2026-10-22):
+   belgelenmiş ek ücret yok, tek milestone, en büyük iş istemci IP zinciri; öneri önce sağlayıcıya SYN düşmesi
+   bildirimi, bir haftada düzelmezse yalnız `o-okul.com` için Tunnel. Karar ürün sahibinde. `*.o-okul.com` ve `staging.o-okul.com` pilot edge kararına kadar DNS only kalır
    (2026-10-15 kararı); bu yüzden Tunnel yalnız `o-okul.com`'u etkiler.
 7. Gate B baseline yenileme yükü (CI, 2026-10-16): 2026-10-14..16 arasındaki 11 yenilemenin 2'si yalnızca tip
    (#198) veya kök script (#193) değişikliğindendi. Digest artık shared-types'ı tipleri silinmiş JS olarak, kök
@@ -356,17 +359,19 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
   (davranış değişikliği, ürün kararı). Yerleşik fonksiyonları süper kullanıcıyla LEAKPROOF işaretlemek restore'da
   kaybolduğu için önerilmez. Ürün sahibi kararı (2026-10-22): şimdilik değişiklik yok, PO-3 kapasite ölçümünde eşik
   aşılırsa dilim açılır.
-- MFA sıfırlama sonrası yeniden kayıt AÇIK: kayıt yalnız parolayla tamamlanıyor; DEC-20261021-01 onaylı (2026-10-22: kayıtlı
-  numaraya geri aramayla verilen tek seferlik kod, 24 saat, yalnız SYSTEM_ADMIN sıfırlaması, ikinci SYSTEM_ADMIN yok); kodlama bu dalda. Sistem yöneticisi TOTP kaybı
+- MFA sıfırlama sonrası yeniden kayıt bu dalda KAPANDI (DEC-20261021-01, 2026-10-22): SYSTEM_ADMIN sıfırlaması bir kez
+  gösterilen 8 haneli kayıt kodu üretir (kayıtlı numaraya geri aramayla verilir, 24 saat, 5 hatada 15 dk kilit,
+  deneme doğrulamadan önce atomik ayrılır), kayıt kodsuz tamamlanamaz; sıfırlama ve kayıtta güvenlik bildirimi
+  e-postası; step-up kanıtı hedef hesabın üyelik sürümüne bağlı. Merge ve staging deploy sonrası UAT'ta denenir. Sistem yöneticisi TOTP kaybı
   kurtarma prosedürü `docs/phase-6-ops-runbook.md`'ye yazıldı (2026-10-21; SQL LOCAL_TEST, ortamda UNPROVEN).
 - P0 süreli/MFA'lı breakglass AÇIK: `RlsBypassGuard` rol, kapsam, gerekçe ve audit ister ama süre ve MFA
   step-up istemez; `@AllowBreakGlassRlsBypass()` hiçbir route'ta yok.
 - P1 offboarding KISMİ (lisans sonu imhası #153 var, `POST /tenants/:id/offboarding` yok, imha yazma
-  sessizliği kapısını bekler); cursor KAPANDI (2026-10-21, bu dal; `/students`, `/tenant-users`, `/identity-invitations`
+  sessizliği kapısını bekler); cursor KAPANDI (2026-10-21, #211; `/students`, `/tenant-users`, `/identity-invitations`
   cursor'a taşındı, `/employees` ile birlikte sıralama değerini taşıyan ortak cursor ve Türkçe I araması;
-  `/students` parametresiz çağrıda seçim ekranları için sayfasız kalır); staging tablolu toplu import AÇIK
-  (DEC-20261021-02 onaylı 2026-10-22: kalıcı tablo yerine transaction içi set tabanlı yayın, S1 sürerken;
-  kodlama bu dalda, S1-03 staging'de yeniden koşulur); outbox grant revoke AÇIK
+  `/students` parametresiz çağrıda seçim ekranları için sayfasız kalır); toplu import bu dalda KAPANDI
+  (DEC-20261021-02: kalıcı tablo yerine tek transaction'da set tabanlı yazma; LOCAL_SYNTHETIC 5.000 satır 85,5 sn →
+  1,17 sn; S1-03 staging'de yeniden koşulur); outbox grant revoke AÇIK
   (gerçek sağlayıcı teslim kanıtını bekler).
 
 ### Dilim kapanış kaydı
@@ -413,6 +418,9 @@ Plan `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §10.1 uyarınca her dilim
 | 2026-10-21 | UAT F-17 (lisans salt okunur reddinde uygulama geneli açıklayıcı uyarı) ve F-19 (sistem girişinde "Sistem girişi" başlığı) | LOCAL_TEST: öğretmen daveti ve giriş Playwright dosyaları 19 test PASS (yeni F-17 ve F-19 senaryoları dahil); web auth sözleşmesi, token saklama, tasarım, mimari, rota ve a11y kontrolleri PASS. CI `39661047874` PASS + otomatik STAGING_DEPLOY `39663439252` (`workflow_run`) beş işte PASS; build 3,3 / deploy 2,8 / evidence 1,3 dk. F-17'nin staging davranışı süresi dolmuş lisanslı kurum olmadığı için UNPROVEN | `4612a9108` / PR #210 | – / 1 |
 | 2026-10-21 | P1 cursor sayfalama: `/identity-invitations`, `/tenant-users`, `/students` cursor'a taşındı; dört liste (`/employees` dahil) sınır satırının sıralama değerini taşıyan ortak cursor kullanır (satır silinse veya adı değişse sonraki sayfa atlamaz), cursor AES-256-GCM ile mühürlüdür (sıralama değeri URL'de okunmaz, anahtar `JWT_ACCESS_SECRET`'tan HKDF ile türetilir, yeni sır yok), web eskimiş cursor'da ilk sayfaya döner; Türkçe I/İ/ı araması SQL ve bellek içi store'da aynı katlamayla düzeldi (öğrenci aramasında önceden de bozuktu) | LOCAL_TEST: api 1466 test PASS; yeni gerçek PostgreSQL 17 keyset testi (her sıralamada ileri/geri yürüyüş, NULL ve eşit anahtarlar, sınır satırı silme/ad değişikliği, I/İ/ı araması, cursor'da düz metin yokluğu, değiştirilmiş ve başka tenant cursor reddi, DateStyle bağımsızlığı) CI `account-management-postgres` listesiyle birlikte 94 test PASS; Playwright 167 test PASS (macOS). EXPLAIN (bilgi): `app` rolüyle trigram indeksi kullanılmıyor, davet ve hesap listelerinde seq scan (neden aşağıdaki satırda). CI `39723992064` PASS + otomatik STAGING_DEPLOY `39725807424` (`workflow_run`) beş işte PASS; build 3,0 / deploy 2,7 / evidence 1,3 dk | `93d8b176f` / PR #211 | – / 1 |
 | 2026-10-22 | Davet listesi keyset indeksi `IdentityInvitation(tenantId, createdAt, id)`; trigram araması incelemesi | LOCAL_TEST (PostgreSQL 17, `app` rolü, FORCE RLS, 2 kurum × 20 bin öğrenci, 5 bin hesap/çalışan, 10 bin davet): aramasız davet sayfası 5,5–6 ms seq scan + sıralama → 0,02–0,03 ms index scan. Trigram GIN indeksi (katlama fonksiyonuyla birebir aynı ifade) süper kullanıcıda kullanılıyor, `app` rolünde hiç seçilmiyor: RLS altında indeks koşulundaki fonksiyonların LEAKPROOF olması gerekir, `textlike`, `lower`, `translate` ve `||` değil. Bu yüzden repodaki `lower(...)` trigram indeksleri uygulama için baştan beri kullanılmıyordu (#211 öncesi de); trigram migration'ı alınmadı. Bu ölçekte aramalı sorgular 7–27 ms. db/rls/tenant-db/partition/readiness kontrolleri, api 1466 test ve CI Postgres listesi 94 test PASS. CI ve staging deploy merge sonrası (EXTERNAL_NOT_RUN); staging migration sayısı 126 → 127 beklenir | bu PR | – / 1 |
+| 2026-10-22 | DEC-20261021-01: MFA sıfırlaması sonrası tek seferlik yeniden kayıt kodu; inceleme düzeltmeleri (atomik deneme rezervasyonu, step-up kanıtının hedef sürüme bağlanması, panoya kopyalamanın kaldırılması, snapshot'ta bekleyen kodun süresinin geçmiş sayılması, `MFA_SECURITY_NOTICE` kanıt zinciri) | LOCAL_TEST: api 1493 test, PostgreSQL 17 üzerinde CI Postgres listesi 100 test, geçici Redis'te 50 paralel denemeden en fazla 5'i doğrulamaya ulaşıyor (önceki düzende 50), sistem paneli Playwright 53 test. CI ve staging deploy merge sonrası (EXTERNAL_NOT_RUN) | bu PR | – / 1 |
+| 2026-10-22 | UAT F-20: başka çalışana bağlı e-postaya davet 409 ile reddedilir; aktivasyonda bağlı/uyumsuz hesap, iptal edilmiş davet (`IDENTITY_INVITATION_REVOKED`) için ayrı mesajlar; aktivasyon sonrası açık oturum kapatılır ve giriş ekranına gidilir, çıkış başarısızsa yönlendirme yapılmaz | LOCAL_TEST: api 1539 test, CI Postgres listesi 107 test, Playwright 43 test; `tenant-db:check` ve `ops:check` PASS. Staging'de yeniden UAT merge sonrası | bu PR | – / 1 |
+| 2026-10-22 | DEC-20261021-02: toplu öğrenci import'u tek transaction'da set tabanlı (`unnest`), idempotency tamamlaması aynı transaction'da, lisans kullanım INSERT tetikleyicileri ifade başına; silinmiş öğrencinin TC'si ön izlemede satır hatası | LOCAL_SYNTHETIC (PG17, 5.000 satır, 3 koşu ortancası): 0 öğrencili kurumda 85,5 sn → 1,17 sn, 2.000 öğrencili kurumda 117,6 sn → 1,13 sn, sorgu sayısı 235.079 → 102. LOCAL_TEST: api 1544 test, CI Postgres listesi 110 test; S1-03 dosyasının ön izleme ve commit gövdeleri eski kodla aynı sha256. S1-03 staging'de yeniden koşulur (EXTERNAL_NOT_RUN) | bu PR | – / 1 |
 
 Not: `38565136132` (2026-10-14, `82ae7be74`) boş bir Staging Deploy koşusudur. Aynı commit başka bir oturumca deploy edilmişti (`38561474048`). Araya giren docs merge'i yüzünden `github-ci-evidence` işinde düştü; staging değişmedi.
 

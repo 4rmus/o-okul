@@ -318,6 +318,7 @@ ADMIN_MFA_RECOVERY_CODE_LOGIN_SUCCEEDED=true \
 ADMIN_MFA_RECOVERY_CODE_REUSE_REJECTED=true \
 ADMIN_MFA_SESSIONS_REVOKED_ON_ENABLE=true \
 ADMIN_MFA_SESSIONS_REVOKED_ON_DISABLE=true \
+ADMIN_MFA_ADMIN_RESET_REENROLLMENT_REQUIRES_CODE=true \
 ADMIN_MFA_PASSWORD_ONLY_EVIDENCE_REFERENCE=... \
 ADMIN_MFA_TOTP_SUCCESS_EVIDENCE_REFERENCE=... \
 ADMIN_MFA_INVALID_TOTP_EVIDENCE_REFERENCE=... \
@@ -326,6 +327,7 @@ ADMIN_MFA_RECOVERY_SUCCESS_EVIDENCE_REFERENCE=... \
 ADMIN_MFA_RECOVERY_REUSE_EVIDENCE_REFERENCE=... \
 ADMIN_MFA_SESSIONS_REVOKED_ENABLE_EVIDENCE_REFERENCE=... \
 ADMIN_MFA_SESSIONS_REVOKED_DISABLE_EVIDENCE_REFERENCE=... \
+ADMIN_MFA_ADMIN_RESET_REENROLLMENT_EVIDENCE_REFERENCE=... \
 pnpm admin-mfa:generate
 ```
 
@@ -361,9 +363,18 @@ destek akışı (KV-9b, staging UAT F-04):
    "Yönetici hesapları ve MFA" tablosu kurumun kurum sahibi/yöneticisi hesaplarını ad, maskeli e-posta,
    rol ve MFA durumu ile listeler (`GET /tenants/:id/admin-accounts`, yalnız SYSTEM_ADMIN).
 3. İlgili satırda "MFA'yı sıfırla" düğmesine basın ve kendi doğrulama kodunuzla (veya yedek kodla) onaylayın.
-   Ekran `OWNER_ADMIN_CHANGE` amaçlı step-up alır ve `POST /auth/totp/admin-reset` çağırır.
-4. Sonuç: kişinin MFA kaydı silinir, bütün açık oturumları kapatılır ve satır "Kapalı" görünür. Kişi bir
-   sonraki girişte MFA'yı yeniden kurar. İşlem `auth.totp_reset_by_system_admin` denetim kaydı bırakır.
+   Ekran `OWNER_ADMIN_CHANGE` amaçlı step-up alır ve `POST /auth/totp/admin-reset` çağırır. Step-up kanıtı hedef
+   hesabın o anki sürümüne bağlıdır; aynı kanıtla ikinci istek 409 `MFA_RESET_TARGET_STALE` alır.
+4. Sonuç: kişinin MFA kaydı silinir, bütün açık oturumları kapatılır ve satır "Kapalı" görünür. Ekran 8 haneli
+   **yeniden kayıt kodunu bir kez** gösterir (DEC-20261021-01). Kodu kopyalamayın, e-posta veya mesajla
+   göndermeyin: kurumun kayıtlı telefon numarasını arayın ve kişiye sözlü okuyun. Kod 24 saat geçerlidir. Kişi
+   bir sonraki girişte MFA'yı bu kodla yeniden kurar; kodsuz kayıt tamamlanmaz, süre dolarsa giriş
+   `MFA_RESET_EXPIRED` alır. Sıfırlamada ve kayıt tamamlandığında hesabın e-postasına güvenlik bildirimi gider.
+   İşlem `auth.totp_reset_by_system_admin` denetim kaydı bırakır.
+   Kod kaybolur veya süresi dolarsa aynı satırdan taze step-up ile "Yeni kod üret" yapılır; önceki kod geçersiz olur.
+   Kişi kayıt sırasında kilitlendiğini (5 hatalı kod, 15 dk) bildirirse destek, kurumun kayıtlı telefonunu arayıp
+   kişiyi doğruladıktan sonra yeni bir kayıt kodu üretir ve kişiye parolasını da sıfırlamasını önerir; kilit,
+   birinin parolayı bilip kodu tahmin etmeye çalıştığını gösterebilir.
 5. "Hesap bilgisi değişmiş" hatasında listeyi yenileyip tekrar deneyin; "Hesap bulunamadı" hatası hesabın
    artık kurum sahibi/yöneticisi olmadığını veya kurumun erişime kapalı olduğunu gösterir.
 
