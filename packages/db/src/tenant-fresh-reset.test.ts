@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { PostgresFreshResetStore, freshResetStatus, purgeResetDatabase, requireResetLegalClearance, requireResetWriteQuiescence, resetDeleteOrder, type FreshResetOperation } from "./tenant-fresh-reset.js";
 import { runFreshReset, resetWorkerDatabaseUrl, signResetRestoreReceipt, type FreshResetServices } from "./tenant-fresh-reset-runner.js";
-import { readResetSnapshot, resetDataDigest } from "./tenant-reset-snapshot.js";
+import { readResetSnapshot, resetDataDigest, userResetRowProjection } from "./tenant-reset-snapshot.js";
 import { resetDigest, tenantResetCatalog, tenantResetColumns, tenantResetTableNames, type ResetTables } from "./tenant-reset-catalog.js";
 import type { TenantResetPackage } from "./tenant-reset-backup.js";
 
@@ -177,6 +177,14 @@ describe("fresh reset PostgreSQL adapter and phase runner (injected SQL)", () =>
     f.db.query = async (sql, values) => sql.includes("pg_roles") ? { rows: [{ valid: false }] as never } : query(sql, values);
     await expect(runFreshReset(f.pool, "tenant-a", f.op.id, f.services)).rejects.toThrow("RESET_DATABASE_ROLE_INVALID");
     expect(f.services.backup).not.toHaveBeenCalled();
+  });
+  it("captures User rows with a pending MFA re-enrollment grant already expired, and no other table (DEC-20261021-01)", async () => {
+    const f = fixture(); await readResetSnapshot(f.db, "tenant-a", f.op.id);
+    const projected = f.calls.filter((sql) => sql.includes(userResetRowProjection));
+    expect(projected).toHaveLength(1);
+    expect(projected[0]).toMatch(/AS row FROM "User" t/);
+    expect(userResetRowProjection).toContain(`'totpReenrollmentExpiresAt', '1970-01-01T00:00:00+00:00'::timestamptz`);
+    expect(userResetRowProjection).toMatch(/^CASE WHEN t\."totpReenrollmentCodeHash" IS NULL THEN to_jsonb\(t\) ELSE/);
   });
   it("digest excludes ONLY current bookkeeping while full archived raw rows remain present", async () => {
     const f = fixture(); const a = await readResetSnapshot(f.db, "tenant-a", f.op.id);

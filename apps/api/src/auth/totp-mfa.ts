@@ -37,6 +37,15 @@ export interface TotpEnrollmentDraft {
   setupExpiresAt: string;
 }
 
+/**
+ * The signed target of an OWNER_ADMIN_CHANGE proof. The client names { tenantId, userId }; the server adds the target
+ * account's membership version at step-up time. The reset statement bumps that version, so a proof can reset an
+ * account once: a replay (or a second request racing the first) finds a newer version and gets 409, and issuing a new
+ * code needs a fresh step-up.
+ */
+export type AdminMfaResetProofTarget = TenantAdminMfaResetTarget & { expectedMembershipVersion: number };
+type AdminMfaStepUpTarget = TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget | TenantPurgeExportMfaTarget | TenantAdminMfaResetTarget | AdminMfaResetProofTarget;
+
 export interface AdminMfaTokenPayload {
   type: AdminMfaTokenType;
   userId: string;
@@ -47,7 +56,7 @@ export interface AdminMfaTokenPayload {
   membershipVersion?: number;
   sessionId?: string;
   purpose?: AdminMfaStepUpPurpose;
-  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget | TenantPurgeExportMfaTarget | TenantAdminMfaResetTarget;
+  target?: AdminMfaStepUpTarget;
 }
 
 export interface AdminMfaStepUpBinding {
@@ -55,7 +64,7 @@ export interface AdminMfaStepUpBinding {
   sessionId: string;
   membershipVersion: number;
   purpose: AdminMfaStepUpPurpose;
-  target?: TenantLifecycleMfaTarget | TenantCleanResetMfaTarget | TenantDeviceRestoreMfaTarget | TenantPurgeExportMfaTarget | TenantAdminMfaResetTarget;
+  target?: AdminMfaStepUpTarget;
 }
 
 export interface AdminMfaStepUpProof {
@@ -119,6 +128,29 @@ export function verifyAdminMfaStepUpProof(token: string, expected: AdminMfaStepU
   ) {
     throw new Error("ADMIN_MFA_STEP_UP_CONTEXT_INVALID");
   }
+}
+
+/**
+ * Verifies an OWNER_ADMIN_CHANGE proof for { tenantId, userId } and returns the target membership version it was
+ * issued for. The caller compares that version with the account and makes the reset conditional on it.
+ */
+export function verifyAdminMfaResetStepUpProof(
+  token: string,
+  expected: Omit<AdminMfaStepUpBinding, "purpose" | "target"> & { target: TenantAdminMfaResetTarget },
+): number {
+  const payload = verifyAdminMfaToken(token, "admin-mfa-step-up");
+  const target = payload.target as Partial<AdminMfaResetProofTarget> | undefined;
+  const version = target?.expectedMembershipVersion;
+  if (!target || Object.keys(target).sort().join(",") !== "expectedMembershipVersion,tenantId,userId" ||
+    typeof version !== "number" || !Number.isInteger(version) || version < 1) {
+    throw new Error("ADMIN_MFA_STEP_UP_CONTEXT_INVALID");
+  }
+  verifyAdminMfaStepUpProof(token, {
+    ...expected,
+    purpose: "OWNER_ADMIN_CHANGE",
+    target: { tenantId: expected.target.tenantId, userId: expected.target.userId, expectedMembershipVersion: version },
+  });
+  return version;
 }
 
 // A purge handover export target carries no lifecycle version; every other tenant target does.

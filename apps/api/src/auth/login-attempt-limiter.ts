@@ -14,8 +14,20 @@ const defaultMaxAttempts = 5;
 const defaultLockMs = 15 * 60 * 1000;
 const defaultRedisTimeoutMs = 500;
 
+/**
+ * Attempt budget per key: `maxAttempts` failures lock the key for `lockMs`; a success clears it.
+ *
+ * Callers that verify a secret use `reserveAttempt` BEFORE verifying: it counts the attempt atomically (as a failure
+ * until `recordSuccess` clears the key) and refuses it with 429 once the budget is spent, so parallel requests cannot
+ * all pass a read-only check before the first failure is written. An attempt that ends without a credential verdict
+ * (a dependency error) is handed back with `releaseAttempt`. `assertAllowed`/`recordFailure` are the older
+ * check-then-record pair; they stay for callers that do not verify a guessable secret and must not be mixed with a
+ * reservation on the same attempt.
+ */
 export interface LoginAttemptLimiterStore {
   assertAllowed(key: string): Promise<void>;
+  reserveAttempt(key: string): Promise<void>;
+  releaseAttempt(key: string): Promise<void>;
   recordFailure(key: string): Promise<void>;
   recordSuccess(key: string): Promise<void>;
 }
@@ -42,6 +54,29 @@ export class LoginAttemptLimiter implements LoginAttemptLimiterStore {
     if (state.lockedUntil > 0) {
       this.attempts.delete(key);
     }
+  }
+
+  async reserveAttempt(key: string): Promise<void> {
+    // No await before the write: the check and the count happen in one turn of the event loop.
+    const state = this.attempts.get(key);
+    if (state && state.lockedUntil > 0) {
+      if (state.lockedUntil > this.now()) throw lockedError();
+      this.attempts.delete(key);
+    }
+    const count = (this.attempts.get(key)?.count ?? 0) + 1;
+    if (count > this.maxAttempts) throw lockedError();
+    this.attempts.set(key, { count, lockedUntil: count >= this.maxAttempts ? this.now() + this.lockMs : 0 });
+  }
+
+  async releaseAttempt(key: string): Promise<void> {
+    const state = this.attempts.get(key);
+    if (!state) return;
+    const count = state.count - 1;
+    if (count <= 0) {
+      this.attempts.delete(key);
+      return;
+    }
+    this.attempts.set(key, { count, lockedUntil: count >= this.maxAttempts ? state.lockedUntil : 0 });
   }
 
   async recordFailure(key: string): Promise<void> {
@@ -74,6 +109,17 @@ export class RedisLoginAttemptLimiter implements LoginAttemptLimiterStore {
     if (locked !== null) {
       throw new HttpException("LOGIN_LOCKED", HttpStatus.TOO_MANY_REQUESTS);
     }
+  }
+
+  async reserveAttempt(key: string): Promise<void> {
+    const reply = await this.redis.command(["EVAL", reserveAttemptScript, "2", failureKey(key), lockKey(key), String(this.maxAttempts), String(this.lockMs)]);
+    const count = typeof reply === "number" ? reply : Number(reply);
+    if (!Number.isInteger(count)) throw new HttpException("LOGIN_LIMITER_UNAVAILABLE", HttpStatus.SERVICE_UNAVAILABLE);
+    if (count < 0) throw lockedError();
+  }
+
+  async releaseAttempt(key: string): Promise<void> {
+    await this.redis.command(["EVAL", releaseAttemptScript, "2", failureKey(key), lockKey(key), String(this.maxAttempts)]);
   }
 
   async recordFailure(key: string): Promise<void> {
@@ -116,6 +162,37 @@ export function loginAttemptKey(identifier: string, ip = "unknown"): string {
 export function mfaAttemptKey(userId: string, purpose: string, tenantId: string, membershipVersion: number): string {
   if (!tenantId || !Number.isInteger(membershipVersion) || membershipVersion < 1) throw new Error("AUTH_MUTATION_SOURCE_REQUIRED");
   return createHash("sha256").update(JSON.stringify(["mfa", tenantId, userId, membershipVersion, purpose])).digest("hex");
+}
+
+/**
+ * One atomic step per attempt (KEYS: failures, lock; ARGV: maxAttempts, lockMs). Returns -1 when the key is locked or
+ * the budget is spent, otherwise the attempt's position. The attempt that reaches the budget sets the lock itself, so
+ * later attempts are refused even while the earlier ones are still being verified. The counter TTL is set in the
+ * same step, so a crash cannot leave a counter without expiry.
+ */
+export const reserveAttemptScript = [
+  "if redis.call('EXISTS', KEYS[2]) == 1 then return -1 end",
+  "local count = redis.call('INCR', KEYS[1])",
+  "if count == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[2]) end",
+  "if count > tonumber(ARGV[1]) then return -1 end",
+  "if count == tonumber(ARGV[1]) then",
+  "  redis.call('SET', KEYS[2], '1', 'PX', ARGV[2])",
+  "  redis.call('PEXPIRE', KEYS[1], ARGV[2])",
+  "end",
+  "return count",
+].join("\n");
+
+/** Hands back one reserved attempt that ended without a credential verdict; never creates a counter. */
+export const releaseAttemptScript = [
+  "if redis.call('EXISTS', KEYS[1]) == 0 then return 0 end",
+  "local count = redis.call('DECR', KEYS[1])",
+  "if count <= 0 then redis.call('DEL', KEYS[1], KEYS[2]) return 0 end",
+  "if count < tonumber(ARGV[1]) then redis.call('DEL', KEYS[2]) end",
+  "return count",
+].join("\n");
+
+function lockedError(): HttpException {
+  return new HttpException("LOGIN_LOCKED", HttpStatus.TOO_MANY_REQUESTS);
 }
 
 function failureKey(key: string): string {

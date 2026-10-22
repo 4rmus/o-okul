@@ -5,7 +5,8 @@ import { workerLogger } from "../observability/logging.js";
 
 export interface SecretDeliveryOutboxRecord {
   id: string;
-  purpose: "IDENTITY_INVITATION" | "PASSWORD_RESET";
+  // MFA_SECURITY_NOTICE (DEC-20261021-01) rows are always system-scoped: tenantId and lifecycle version NULL.
+  purpose: "IDENTITY_INVITATION" | "PASSWORD_RESET" | "MFA_SECURITY_NOTICE";
   payloadEncrypted: string;
   attempts: number;
   claimToken: string;

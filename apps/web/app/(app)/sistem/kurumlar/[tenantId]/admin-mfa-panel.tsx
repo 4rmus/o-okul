@@ -2,7 +2,6 @@
 
 import { type FormEvent, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Copy } from "lucide-react";
 import { Alert, Button, DataTable, Dialog, Field, FormModal, Input, Panel, Select, StatusBadge, type DataTableColumn } from "@o-okul/ui";
 import type { AuthResponse } from "@o-okul/shared-types";
 import { ApiRequestError } from "../../../../../src/api-client.js";
@@ -13,7 +12,8 @@ import { createLifecycleStepUp, loadTenantAdminAccounts, resetTenantAdminMfa, ty
 const roleLabels = { TENANT_OWNER: "Kurum sahibi", TENANT_ADMIN: "Kurum yöneticisi" } as const;
 const resetErrors: Record<string, string> = {
   MFA_NOT_ENABLED: "Bu hesapta MFA zaten kapalı.",
-  MFA_RESET_TARGET_STALE: "Hesap bilgisi değişmiş. Listeyi yenileyip tekrar deneyin.",
+  MFA_RESET_TARGET_STALE: "Hesap bilgisi değişmiş veya bu onayla işlem zaten yapıldı. Listeyi yenileyip tekrar deneyin.",
+  MFA_RESET_REQUIRES_REQUIRED_MODE: "MFA zorunlu modda değil; yeniden kayıt kodu üretilemez.",
   MFA_STEP_UP_INVALID: "Doğrulama kodunuz geçersiz veya süresi dolmuş.",
   MFA_STEP_UP_REQUIRED: "Doğrulama kodunuz geçersiz veya süresi dolmuş.",
   MFA_RESET_TARGET_NOT_FOUND: "Hesap bulunamadı veya artık kurum sahibi/yöneticisi değil.",
@@ -57,20 +57,11 @@ function MfaStatus({ account }: { account: TenantAdminAccount }) {
   return <StatusBadge tone="neutral">Kapalı</StatusBadge>;
 }
 
+// DEC-20261021-01: the code is read aloud from this screen; there is deliberately no copy-to-clipboard action.
 function ReenrollmentCodeDialog({ issued, onClose }: { issued: IssuedCode | null; onClose(): void }) {
-  const [copyStatus, setCopyStatus] = useState("");
-  async function copy() {
-    if (!issued) return;
-    try {
-      await navigator.clipboard.writeText(issued.reenrollmentCode);
-      setCopyStatus("Kod panoya kopyalandı.");
-    } catch {
-      setCopyStatus("Kod panoya kopyalanamadı; ekrandan okuyun.");
-    }
-  }
-  return <Dialog open={Boolean(issued)} onClose={() => { setCopyStatus(""); onClose(); }} title="Tek kullanımlık kayıt kodu"
+  return <Dialog open={Boolean(issued)} onClose={onClose} title="Tek kullanımlık kayıt kodu"
     description="Bu kod yalnız bu kez gösterilir; pencereyi kapattıktan sonra yeniden görüntülenemez. Gerekirse yeni kod üretin."
-    footer={<Button type="button" onClick={() => { setCopyStatus(""); onClose(); }}>Kodu ilettim, kapat</Button>}>
+    footer={<Button type="button" onClick={onClose}>Kodu ilettim, kapat</Button>}>
     {issued ? <div className="next-form">
       <Alert tone="success" title="Kayıt kodu üretildi">{`${issued.name} için MFA kaydı kapalı ve açık oturumları kapatıldı; önceki kodlar geçersiz.`}</Alert>
       <Field label="Kayıt kodu" description={`Son geçerlilik: ${dateTimeFormat.format(new Date(issued.reenrollmentExpiresAt))} (24 saat).`}>
@@ -83,11 +74,6 @@ function ReenrollmentCodeDialog({ issued, onClose }: { issued: IssuedCode | null
       <p className="next-status-note">{issued.notificationQueued
         ? "Kişinin kayıtlı e-posta adresine sıfırlama bildirimi gönderilmek üzere sıraya alındı (kod e-postada yer almaz)."
         : "Kişinin kayıtlı e-posta adresi olmadığı veya bildirim sıraya alınamadığı için e-posta bildirimi gönderilmedi."}</p>
-      <Button type="button" variant="secondary" onClick={() => void copy()}>
-        <Copy size={17} aria-hidden="true" />
-        Kodu kopyala
-      </Button>
-      {copyStatus ? <p className="next-status-note" role="status">{copyStatus}</p> : null}
     </div> : null}
   </Dialog>;
 }

@@ -648,7 +648,7 @@ function requireSecretDeliveryOutboxSmoke(value, failures) {
     failures.push(`${label}.notBefore generatedAt öncesindeki son 24 saat içinde olmalı.`);
   }
   if (typeof value.outboxRecordHash !== "string" || !/^[a-f0-9]{64}$/.test(value.outboxRecordHash)) failures.push(`${label}.outboxRecordHash SHA-256 hex olmalı.`);
-  if (!['IDENTITY_INVITATION', 'PASSWORD_RESET'].includes(value.purpose)) failures.push(`${label}.purpose geçersiz.`);
+  if (!['IDENTITY_INVITATION', 'PASSWORD_RESET', 'MFA_SECURITY_NOTICE'].includes(value.purpose)) failures.push(`${label}.purpose geçersiz.`);
   requireObjectDate(value, failures, label, "deliveredAt");
   requireObjectDate(value, failures, label, "updatedAt");
   if (Date.parse(value.deliveredAt) < Date.parse(value.notBefore) || Date.parse(value.updatedAt) < Date.parse(value.notBefore)) {

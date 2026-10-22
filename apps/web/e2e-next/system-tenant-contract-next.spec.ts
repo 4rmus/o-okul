@@ -411,12 +411,6 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     test(`KV-9b yönetici MFA sıfırlama step-up ister ve listeyi yeniler ${viewport.width}`, async ({ page }) => {
       await page.setViewportSize(viewport);
       const captured = createCapturedSystemRequests();
-      await page.addInitScript(() => {
-        Object.defineProperty(navigator, "clipboard", {
-          configurable: true,
-          value: { writeText(value: string) { (window as typeof window & { __copied?: string }).__copied = value; return Promise.resolve(); } },
-        });
-      });
       await openWithSystemTenantMocks(page, captured, "/sistem/kurumlar/tenant-faz9");
       await page.getByRole("tab", { name: "Kurum yönetimi" }).click();
       const panel = page.getByLabel("Yönetici hesapları ve MFA", { exact: true });
@@ -442,7 +436,7 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
       await dialog.getByLabel("Doğrulama kodu").fill("654321");
       await dialog.getByRole("button", { name: "MFA'yı sıfırla" }).click();
       await expect(dialog).toBeHidden();
-      // The code is shown once with the phone call-back instruction and a copy button.
+      // The code is shown once with the phone call-back instruction; it is read aloud, so there is no copy action.
       const codeDialog = page.getByRole("dialog", { name: "Tek kullanımlık kayıt kodu" });
       await expect(codeDialog).toBeVisible();
       await expect(codeDialog.getByLabel("Kayıt kodu")).toHaveValue("4821-0397");
@@ -450,9 +444,7 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
       await expect(codeDialog).toContainText("kayıtlı telefon numarasını siz arayın");
       await expect(codeDialog).toContainText("(24 saat)");
       await expect(codeDialog).toContainText("sıfırlama bildirimi gönderilmek üzere sıraya alındı");
-      await codeDialog.getByRole("button", { name: "Kodu kopyala" }).click();
-      await expect(codeDialog).toContainText("Kod panoya kopyalandı.");
-      expect(await page.evaluate(() => (window as typeof window & { __copied?: string }).__copied)).toBe("4821-0397");
+      await expect(codeDialog.getByRole("button", { name: /kopyala/i })).toHaveCount(0);
       await expectNoHorizontalOverflow(page, `admin-mfa-code-dialog-${viewport.width}`);
       if (viewport.width === 1280) expect((await new AxeBuilder({ page }).include(".uh-dialog").analyze()).violations).toEqual([]);
       await codeDialog.getByRole("button", { name: "Kodu ilettim, kapat" }).click();
@@ -469,12 +461,22 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
       await reissue.getByRole("button", { name: "Yeni kod üret" }).click();
       await expect(codeDialog.getByLabel("Kayıt kodu")).toHaveValue("5930-1486");
       await codeDialog.getByRole("button", { name: "Kodu ilettim, kapat" }).click();
+      // A proof already spent on this account (replay, or the account changed) is refused with 409, not a new code.
+      captured.failNextAdminReset = "MFA_RESET_TARGET_STALE";
+      await panel.getByRole("button", { name: "AYŞE SAHİP için yeni kayıt kodu üret" }).click();
+      await reissue.getByLabel("Doğrulama kodu").fill("445566");
+      await reissue.getByRole("button", { name: "Yeni kod üret" }).click();
+      await expect(reissue).toContainText("bu onayla işlem zaten yapıldı");
+      await expect(codeDialog).toBeHidden();
+      await reissue.getByRole("button", { name: "Vazgeç" }).click();
       expect(captured.stepUps).toEqual([
         { purpose: "OWNER_ADMIN_CHANGE", target: { tenantId: "tenant-faz9", userId: "owner-faz9" }, totpCode: "123456" },
         { purpose: "OWNER_ADMIN_CHANGE", target: { tenantId: "tenant-faz9", userId: "owner-faz9" }, totpCode: "654321" },
         { purpose: "OWNER_ADMIN_CHANGE", target: { tenantId: "tenant-faz9", userId: "owner-faz9" }, totpCode: "112233" },
+        { purpose: "OWNER_ADMIN_CHANGE", target: { tenantId: "tenant-faz9", userId: "owner-faz9" }, totpCode: "445566" },
       ]);
       expect(captured.adminMfaResets).toEqual([
+        { body: { tenantId: "tenant-faz9", userId: "owner-faz9" }, proof: "lifecycle-proof" },
         { body: { tenantId: "tenant-faz9", userId: "owner-faz9" }, proof: "lifecycle-proof" },
         { body: { tenantId: "tenant-faz9", userId: "owner-faz9" }, proof: "lifecycle-proof" },
         { body: { tenantId: "tenant-faz9", userId: "owner-faz9" }, proof: "lifecycle-proof" },

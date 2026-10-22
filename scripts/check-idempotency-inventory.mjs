@@ -101,7 +101,7 @@ const knownNonIdempotentMutations = {
     "@Post(\"totp/setup\")": "D: Yalnız audit; taslak sır imzalı token'da",
     "@Post(\"totp/confirm\")": "D: Tek kullanımlık token + CAS",
     "@Post(\"totp/disable\")": "D: Tekrar edilemeyen ikinci faktör gerekir",
-    "@Post(\"totp/admin-reset\")": "D: Step-up + durum kontrolü; tekrar 400/409",
+    "@Post(\"totp/admin-reset\")": "D: Step-up kanıtı hedef hesabın membershipVersion'una bağlı, sıfırlama o sürüme koşullu; tekrar ve eşzamanlı ikinci kullanım 409 MFA_RESET_TARGET_STALE (yeni kod üretmez), yeni kod taze step-up ister",
     "@Post(\"step-up\")": "D: Yalnız imzalı kanıt üretir, satır yazmaz",
   },
   "apps/api/src/exam/answer-key.controller.ts": {

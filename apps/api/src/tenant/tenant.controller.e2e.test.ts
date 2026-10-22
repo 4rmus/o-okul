@@ -690,7 +690,9 @@ describe("TenantController", () => {
     expect(accounts.find((account) => account.userId === "user-tenant-a")).toMatchObject({ roles: ["TENANT_ADMIN"], mfaEnabled: false, mfaEnabledAt: null });
 
     const actor = JSON.parse(Buffer.from(systemToken.split(".")[0]!, "base64url").toString());
-    const proof = createAdminMfaStepUpProof({ userId: actor.sub, sessionId: actor.sessionId, membershipVersion: actor.membershipVersion, purpose: "OWNER_ADMIN_CHANGE", target: { tenantId: "tenant-a", userId: "user-finance-privacy" } });
+    // As POST /auth/step-up does, the proof carries the target's current membership version (review P2-2).
+    const targetVersion = (await users.findById("user-finance-privacy"))!.membershipVersion;
+    const proof = createAdminMfaStepUpProof({ userId: actor.sub, sessionId: actor.sessionId, membershipVersion: actor.membershipVersion, purpose: "OWNER_ADMIN_CHANGE", target: { tenantId: "tenant-a", userId: "user-finance-privacy", expectedMembershipVersion: targetVersion } });
     // A proof bound to one account cannot reset another one.
     await request(server).post("/auth/totp/admin-reset").set("Authorization", `Bearer ${systemToken}`).set("X-Step-Up-Token", proof.stepUpToken)
       .send({ tenantId: "tenant-a", userId: "user-tenant-a" }).expect(401);
@@ -699,6 +701,11 @@ describe("TenantController", () => {
     // DEC-20261021-01: the one-time code is returned once to the SYSTEM_ADMIN; the list shows only the pending state.
     expect(reset.body).toMatchObject({ resetAt: expect.any(String), reenrollmentCode: expect.stringMatching(/^\d{4}-\d{4}$/), notificationQueued: true });
     const code = reset.body.reenrollmentCode as string;
+    // Replaying the same proof does not issue (and silently swap in) a second code.
+    const replay = await request(server).post("/auth/totp/admin-reset").set("Authorization", `Bearer ${systemToken}`).set("X-Step-Up-Token", proof.stepUpToken)
+      .send({ tenantId: "tenant-a", userId: "user-finance-privacy" }).expect(409);
+    expect(JSON.stringify(replay.body)).toContain("MFA_RESET_TARGET_STALE");
+    expect(JSON.stringify(replay.body)).not.toMatch(/\d{4}-\d{4}/);
     const afterReset = await list();
     expect(afterReset.find((account) => account.userId === "user-finance-privacy")).toMatchObject({
       mfaEnabled: false, mfaEnabledAt: null, mfaReenrollmentPending: true, mfaReenrollmentExpiresAt: reset.body.reenrollmentExpiresAt,

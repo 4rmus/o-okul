@@ -1,8 +1,15 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import pg from "pg";
+import { withResetPreviewSnapshot } from "@o-okul/db";
 import { PostgresAuthUserStore } from "./auth-user-store.js";
-import { hashReenrollmentCode } from "./mfa-reenrollment-code.js";
+import { AuthService } from "./auth.service.js";
+import type { IdentityResolver } from "./identity-resolver.js";
+import { LoginAttemptLimiter } from "./login-attempt-limiter.js";
+import { hashReenrollmentCode, isReenrollmentExpired } from "./mfa-reenrollment-code.js";
 import { PostgresMfaSecurityNoticeStore } from "./mfa-security-notice.js";
+import { InMemoryPasswordResetStore } from "./password-reset-store.js";
+import { InMemorySessionStore } from "./session-store.js";
+import { createAdminMfaStepUpProof } from "./totp-mfa.js";
 
 // DEC-20261021-01 on real PostgreSQL under the `app` role: the SYSTEM_ADMIN reset writes the re-enrollment hash and
 // expiry in the same statement that clears TOTP, enrollment consumes it "first wins", the schema keeps the pair
@@ -108,6 +115,52 @@ describePostgres("MFA re-enrollment code on PostgreSQL", () => {
       .rejects.toThrow(/User_totp_reenrollment_pair_check/);
     await expect(admin.query(`UPDATE "User" SET "totpReenrollmentCodeHash" = 'v1:9:x', "totpReenrollmentExpiresAt" = now() WHERE "id" = $1`, [ownerId]))
       .rejects.toThrow(/User_totp_reenrollment_disabled_check/);
+  });
+
+  it("one step-up proof resets the account once: a concurrent second use and a replay get 409 (review P2-2)", async () => {
+    // The owner has TOTP on after the first test.
+    const before = await row();
+    expect(before.totpEnabledAt).not.toBeNull();
+    const auth = new AuthService(users, new InMemorySessionStore(), new InMemoryPasswordResetStore(),
+      { resolve: vi.fn(async () => undefined) } as unknown as IdentityResolver, undefined, new LoginAttemptLimiter());
+    const actor = { userId: systemAdminId, tenantId: null, roles: ["SYSTEM_ADMIN"], membershipVersion: 1, sessionId: "system-session", bypassRls: true };
+    const proof = createAdminMfaStepUpProof({
+      userId: actor.userId, sessionId: actor.sessionId, membershipVersion: 1, purpose: "OWNER_ADMIN_CHANGE",
+      target: { tenantId, userId: ownerId, expectedMembershipVersion: before.membershipVersion },
+    }).stepUpToken;
+    const reset = () => auth.resetTotpBySystemAdmin(actor, { tenantId, userId: ownerId }, proof);
+    const results = await Promise.allSettled([reset(), reset()]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const rejected = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+    expect(rejected.map((result) => (result.reason as { message: string }).message)).toEqual(["MFA_RESET_TARGET_STALE"]);
+    const afterReset = await row();
+    expect(afterReset).toMatchObject({ membershipVersion: before.membershipVersion + 1, membershipVersionRow: before.membershipVersion + 1, totpEnabledAt: null });
+    expect(afterReset.totpReenrollmentCodeHash).toMatch(new RegExp(`^v1:${before.membershipVersion + 1}:`));
+    await expect(reset()).rejects.toMatchObject({ status: 409, message: "MFA_RESET_TARGET_STALE" });
+    expect((await row()).totpReenrollmentCodeHash).toBe(afterReset.totpReenrollmentCodeHash);
+  });
+
+  it("a tenant reset snapshot captures the pending grant already expired, so a restore cannot revive it (review P3-3)", async () => {
+    const pending = await row();
+    expect(pending.totpReenrollmentCodeHash).not.toBeNull();
+    expect(pending.totpReenrollmentExpiresAt!.getTime()).toBeGreaterThan(Date.now());
+    const raw = await withResetPreviewSnapshot(app, tenantId, async (snapshot) => snapshot.rawTables.User.find((entry) => JSON.parse(entry).id === ownerId));
+    expect(raw).toBeDefined();
+    const captured = JSON.parse(raw!) as { totpReenrollmentCodeHash: string | null; totpReenrollmentExpiresAt: string | null };
+    expect(captured.totpReenrollmentCodeHash).toBe(pending.totpReenrollmentCodeHash);
+    expect(Date.parse(captured.totpReenrollmentExpiresAt ?? "")).toBe(0);
+    // Restore the grant columns the way the reset restore writes rows (jsonb_populate_record of the archived row).
+    await admin.query(
+      `UPDATE "User" u SET "totpReenrollmentCodeHash" = r."totpReenrollmentCodeHash", "totpReenrollmentExpiresAt" = r."totpReenrollmentExpiresAt"
+       FROM jsonb_populate_record(NULL::"User", $2::jsonb) r WHERE u."id" = $1`, [ownerId, raw]);
+    const restored = await users.findById(ownerId);
+    expect(restored?.totpReenrollmentCodeHash).toBe(pending.totpReenrollmentCodeHash);
+    expect(isReenrollmentExpired(restored?.totpReenrollmentExpiresAt)).toBe(true);
+    // The restored grant is refused by the database clock: the code cannot complete enrollment; support re-issues.
+    expect(await enable(pending.membershipVersion, pending.totpReenrollmentCodeHash)).toBeUndefined();
+    // Leave the owner enrolled again for the tests below.
+    await admin.query(`UPDATE "User" SET "totpReenrollmentCodeHash" = NULL, "totpReenrollmentExpiresAt" = NULL WHERE "id" = $1`, [ownerId]);
+    expect(await enable(pending.membershipVersion, null)).toMatchObject({ membershipVersion: pending.membershipVersion + 1 });
   });
 
   it("queues reset notices as system-scoped outbox rows that never name the tenant or the account", async () => {

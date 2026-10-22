@@ -5,7 +5,8 @@ import { adminMfaRecoveryHashKey } from "./totp-mfa.js";
  * DEC-20261021-01: one-time re-enrollment code left by a SYSTEM_ADMIN MFA reset of a tenant OWNER/ADMIN.
  *
  * Format: 8 decimal digits shown as two groups of four ("4821-0397"), read aloud over the phone to the institution's
- * registered number. 10^8 codes (~26.6 bits). Guessing is bounded by the login-attempt limiter: 5 failures lock the
+ * registered number. 10^8 codes (~26.6 bits). Guessing is bounded by the login-attempt limiter: each attempt is
+ * reserved atomically before the code is compared (parallel requests cannot outrun the budget), 5 failures lock the
  * attempt key for 15 minutes, and the key is bound to this reset (user, tenant, reset version), not to the current
  * membership version, so a password reset cannot refresh it. Over the 24-hour validity that is at most
  * 96 x 5 = 480 guesses, a success probability of 480 / 10^8 = 4.8e-6 for an attacker who already holds the password.
