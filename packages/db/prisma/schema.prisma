@@ -526,6 +526,7 @@ model IdentityInvitation {
   @@index([tenantId, subjectType, subjectId, status])
   @@index([tenantId, email])
   @@index([tenantId, subjectId, kind, status, expiresAt], map: "IdentityInvitation_student_code_lookup_idx")
+  @@index([tenantId, createdAt, id])
 }
 
 /// Global auth altyapı tablosu: token aile takibi User üzerinden yapılır ve
