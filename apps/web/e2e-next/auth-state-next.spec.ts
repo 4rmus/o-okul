@@ -170,6 +170,79 @@ test.describe("auth state görsel sözleşmesi", () => {
   });
 });
 
+test.describe("auth state MFA sıfırlama sonrası yeniden kayıt (DEC-20261021-01)", () => {
+  test("auth state destek sıfırlamasından sonra tek kullanımlık kayıt kodunu ister ve hatalarını Türkçe gösterir", async ({ page }) => {
+    await page.setViewportSize({ height: 896, width: 414 });
+    const confirmBodies: Array<Record<string, unknown>> = [];
+    await prepareAuthPage(page, {
+      routePath: tenantLoginUrl(appOrigin, "dna-egitim"),
+      onLogin() {
+        return {
+          keyUri: "otpauth://totp/O-Okul:owner",
+          recoveryCodes: ["recovery-a", "recovery-b"],
+          secret: "SETUPSECRET",
+          setupExpiresAt: "2026-07-29T20:00:00.000Z",
+          setupToken: "setup-token",
+          status: "MFA_ENROLLMENT_REQUIRED",
+          reenrollmentCodeRequired: true,
+        };
+      },
+    });
+    const failures = ["MFA_REENROLLMENT_CODE_INVALID", "MFA_REENROLLMENT_LOCKED", "MFA_RESET_EXPIRED"];
+    await page.route("**/api/v1/auth/totp/enrollment/confirm", async (route) => {
+      confirmBodies.push(route.request().postDataJSON() as Record<string, unknown>);
+      const code = failures.shift();
+      if (code) {
+        await route.fulfill({ body: JSON.stringify({ error: { code } }), contentType: "application/json", headers: corsHeaders, status: code === "MFA_REENROLLMENT_LOCKED" ? 429 : 401 });
+        return;
+      }
+      await route.fulfill({
+        body: JSON.stringify({ data: createAuthResponse("TENANT_ADMIN") }),
+        contentType: "application/json",
+        headers: { ...corsHeaders, "set-cookie": "csrfToken=csrf-token; Path=/; SameSite=Strict" },
+        status: 200,
+      });
+    });
+
+    await submitCredentials(page);
+    const enrollment = page.getByRole("status");
+    await expect(enrollment).toContainText("destek ekibi tarafından sıfırlandı");
+    await expect(enrollment).toContainText("24 saat geçerlidir");
+    const codeInput = page.getByLabel("Tek kullanımlık kayıt kodu");
+    await expect(codeInput).toBeVisible();
+    await expectNoHorizontalOverflow(page, "mfa-reenrollment-414");
+    const alert = page.getByRole("form", { name: "Giriş formu" }).getByRole("alert");
+
+    await codeInput.fill("0000-0000");
+    await page.getByLabel("Doğrulama kodu").fill("654321");
+    await page.getByRole("button", { name: "Etkinleştir ve giriş yap" }).click();
+    await expect(alert).toHaveText("Kayıt kodu geçersiz. Destek ekibinin ilettiği kodu kontrol edip tekrar deneyin.");
+    await page.getByRole("button", { name: "Etkinleştir ve giriş yap" }).click();
+    await expect(alert).toHaveText("Çok fazla hatalı kayıt kodu denendi. 15 dakika sonra tekrar deneyin.");
+    await page.getByRole("button", { name: "Etkinleştir ve giriş yap" }).click();
+    await expect(alert).toHaveText("MFA sıfırlamasının 24 saatlik süresi doldu. Yeni kayıt kodu için O-Okul desteğine başvurun.");
+    await codeInput.fill("4821-0397");
+    await page.getByRole("button", { name: "Etkinleştir ve giriş yap" }).click();
+    await expect(page).toHaveURL(/\/kurum$/, { timeout: 15_000 });
+    expect(confirmBodies.at(-1)).toEqual({ setupToken: "setup-token", totpCode: "654321", reenrollmentCode: "4821-0397" });
+    expect(confirmBodies[0]).toEqual({ setupToken: "setup-token", totpCode: "654321", reenrollmentCode: "0000-0000" });
+  });
+
+  test("auth state süresi dolan MFA sıfırlamasında kurulum bilgisi göstermeden destek yönlendirir", async ({ page }) => {
+    await prepareAuthPage(page, { routePath: tenantLoginUrl(appOrigin, "dna-egitim"), onLogin: () => ({}) });
+    await page.unroute("**/api/v1/auth/login");
+    await page.route("**/api/v1/auth/login", async (route) => {
+      await route.fulfill({ body: JSON.stringify({ error: { code: "MFA_RESET_EXPIRED" } }), contentType: "application/json", headers: corsHeaders, status: 401 });
+    });
+    await submitCredentials(page);
+    await expect(page.getByRole("form", { name: "Giriş formu" }).getByRole("alert")).toHaveText(
+      "MFA sıfırlamasının 24 saatlik süresi doldu. Yeni kayıt kodu için O-Okul desteğine başvurun.",
+    );
+    await expect(page.getByLabel("Tek kullanımlık kayıt kodu")).toHaveCount(0);
+    await expect(page.getByRole("img", { name: "Doğrulama uygulaması kurulum QR kodu" })).toHaveCount(0);
+  });
+});
+
 async function prepareAuthPage(
   page: Page,
   options: {

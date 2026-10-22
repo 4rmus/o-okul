@@ -1,5 +1,14 @@
-import { createHash } from "node:crypto";
-import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { createHash, randomUUID } from "node:crypto";
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  HttpException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  Optional,
+} from "@nestjs/common";
 import type {
   StudentBulkEnrollmentRequest,
   StudentBulkEnrollmentResult as SharedStudentBulkEnrollmentResult,
@@ -19,8 +28,9 @@ import type {
   StudentListSort,
   StudentStatus,
 } from "@o-okul/shared-types";
-import { AuditLogService } from "../audit-log/audit-log.service.js";
+import { AuditLogService, sanitizeAuditDiff } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import type { Queryable } from "../db/tenant-query.js";
 import {
   assertSubjectResourceAccess,
   assertTeacherScopedStudentAccess,
@@ -50,21 +60,26 @@ import {
   teacherAssignmentStoreToken,
 } from "../school/teacher-assignment-store.js";
 import {
+  type StudentCreateManyInput,
+  type StudentImportBatchAudit,
+  type StudentImportBatchRow,
   type StudentPortalAccessQuery,
   type StudentProfileUpdate,
   type StudentRegistryQuery,
   type StudentStore,
   studentCursorInvalid,
+  studentImportBatchErrors,
   studentStoreToken,
 } from "./student-store.js";
 import {
+  type StudentEnrollmentInput,
   type StudentEnrollmentStore,
   studentEnrollmentStoreToken,
 } from "./student-enrollment-store.js";
 import { decryptTcIdentity, encryptTcIdentity, hashTcIdentity, isValidTcIdentity, maskTcIdentity, normalizeTcIdentity } from "./tc-identity.js";
 import { buildStudentContactStorageInput } from "./student-contact-input.js";
 import { recordContactGuardianRemoval } from "../guardian/guardian-role-audit.js";
-import { type StudentContactStore, type StudentContactStoreInput, studentContactStoreToken } from "./student-contact-store.js";
+import { type StudentContactStore, studentContactStoreToken } from "./student-contact-store.js";
 
 export interface StudentRecord extends SharedStudentRecord {
   deletedAt?: string;
@@ -124,6 +139,18 @@ export type StudentBulkCreateInput = Pick<StudentRecord, "firstName" | "lastName
   StudentProfileInput & {
     contact?: StudentContactCreateRequest;
   };
+
+/** An audit written with the bulk create (same transaction when the store supports `importBatch`). */
+export type StudentBulkCreateAudit = StudentImportBatchAudit;
+
+export interface StudentBulkCreateOptions {
+  /** Placement lookups already loaded by the caller (the import validator); loaded from the stores otherwise. */
+  classById?: ReadonlyMap<string, ClassRecord>;
+  gradeLevelById?: ReadonlyMap<string, GradeLevelRecord>;
+  extraAudits?: StudentBulkCreateAudit[];
+  /** Runs on the import transaction after every write; only called when the store supports `importBatch`. */
+  finalize?: (client: Queryable, students: StudentRecord[]) => Promise<void>;
+}
 
 @Injectable()
 export class StudentService {
@@ -285,11 +312,13 @@ export class StudentService {
     }
   }
 
-  async listStudentNosForImport(context: RequestContext): Promise<string[]> {
+  /** Returns the trimmed numbers that an active student of the tenant already uses. */
+  async findExistingStudentNos(context: RequestContext, studentNos: string[]): Promise<Set<string>> {
     if (!context.tenantId || context.bypassRls) {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
     }
-    return this.store.listStudentNos(context.tenantId);
+    const normalized = [...new Set(studentNos.map((studentNo) => studentNo.trim()).filter(Boolean))];
+    return new Set(normalized.length > 0 ? await this.store.findExistingStudentNos(context.tenantId, normalized) : []);
   }
 
   async listPiiPresence(context: RequestContext): Promise<StudentPiiPresenceRecord[]> {
@@ -532,6 +561,7 @@ export class StudentService {
   async createMany(
     context: RequestContext,
     inputs: StudentBulkCreateInput[],
+    options: StudentBulkCreateOptions = {},
   ): Promise<StudentRecord[]> {
     const tenantId = context.tenantId;
     if (!tenantId) {
@@ -539,100 +569,136 @@ export class StudentService {
     }
 
     this.assertAccess(context, { tenantId });
-    const placements = await Promise.all(inputs.map((input) => this.resolveStudentPlacement(context, tenantId, {
-      classId: input.classId,
-      gradeLevelId: input.gradeLevelId,
-    }, true)));
+    const classById = options.classById ?? new Map((await this.classStore.list()).map((record) => [record.id, record]));
+    const gradeLevelById = options.gradeLevelById
+      ?? new Map((await this.gradeLevelStore.list()).map((record) => [record.id, record]));
+    const placements = inputs.map((input) => this.resolveBulkPlacement(context, tenantId, input, classById, gradeLevelById));
     const quota = await this.previewQuota(context, placements.filter((placement) => Boolean(placement.gradeLevelId)).length);
     if (quota.wouldExceed) {
       throw new ConflictException("ACTIVE_STUDENT_LIMIT_REACHED");
     }
 
-    const nationalIdHashes = new Set<string>();
-    const profileUpdates: Array<StudentProfileUpdate | undefined> = [];
-    for (const input of inputs) {
-      profileUpdates.push(await this.resolveProfileUpdateForCreate(tenantId, input, nationalIdHashes));
-    }
-
+    const seenNationalIdHashes = new Set<string>();
+    const profiles = inputs.map((input) => resolveBulkProfile(input, seenNationalIdHashes));
     const academicContext = await this.resolveCurrentAcademicContext(context);
-    const createInputs = inputs.map((input, index) => {
+    const startsAt = todayDateString();
+    const studentInputs = inputs.map((input, index): StudentCreateManyInput => {
       const placement = placements[index]!;
       return {
-        student: {
-          tenantId,
-          studentNo: input.studentNo,
-          firstName: input.firstName,
-          lastName: input.lastName,
-          gradeLevelId: placement.gradeLevelId,
-          classId: placement.classId,
-          status: "ACTIVE" as const,
-        },
-        enrollment: placement.gradeLevelId ? {
-          gradeLevelId: placement.gradeLevelId,
-          classId: placement.classId,
-          ...academicContext,
-          startsAt: todayDateString(),
-          status: "ACTIVE" as const,
-          reason: "CREATED",
-        } : undefined,
-        contact: input.contact
-          ? omitStudentId(buildStudentContactStorageInput(tenantId, "pending", input.contact))
-          : undefined,
+        tenantId,
+        studentNo: input.studentNo,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        gradeLevelId: placement.gradeLevelId,
+        classId: placement.classId,
+        status: "ACTIVE",
+        ...profiles[index],
       };
     });
-    const includesContacts = createInputs.some((input) => Boolean(input.contact));
-    if (includesContacts && !this.store.createManyWithEnrollmentsAndContacts && !this.studentContactStore) {
+    const enrollmentFor = (index: number) => {
+      const placement = placements[index]!;
+      return placement.gradeLevelId ? {
+        gradeLevelId: placement.gradeLevelId,
+        classId: placement.classId,
+        ...academicContext,
+        startsAt,
+        status: "ACTIVE" as const,
+        reason: "CREATED",
+      } : undefined;
+    };
+    const contactAudit = (studentId: string, contact: StudentContactCreateRequest): StudentBulkCreateAudit => ({
+      entityType: "StudentContact",
+      entityId: studentId,
+      action: "student_contact.imported",
+      diff: {
+        studentId,
+        relationType: contact.relationType,
+        hasPhone: Boolean(contact.phone),
+        hasEmail: Boolean(contact.email),
+        permissionsDefaultOff: true,
+      },
+    });
+
+    if (!this.store.importBatch) {
+      return this.createManySequential(context, tenantId, inputs, studentInputs, enrollmentFor, contactAudit, options);
+    }
+
+    const rows: StudentImportBatchRow[] = studentInputs.map((student, index) => {
+      const id = randomUUID();
+      const contact = inputs[index]!.contact;
+      return {
+        id,
+        student,
+        enrollment: enrollmentFor(index),
+        contact: contact ? buildStudentContactStorageInput(tenantId, id, contact) : undefined,
+      };
+    });
+    const audits = this.auditLogs
+      ? [
+          ...rows.flatMap((row, index) => {
+            const contact = inputs[index]!.contact;
+            return contact ? [contactAudit(row.id, contact)] : [];
+          }),
+          ...(options.extraAudits ?? []),
+        ].map((audit) => ({ ...audit, diff: sanitizeAuditDiff(audit.diff) }))
+      : [];
+    try {
+      return await this.store.importBatch({
+        tenantId,
+        actorUserId: context.userId,
+        rows,
+        audits,
+        auditCreatedAt: new Date().toISOString(),
+        activeStudentLimit: quota.limit,
+        campusIds: this.isCampusRestricted(context) ? [...context.campusScope!.campusIds] : undefined,
+        finalize: options.finalize,
+      });
+    } catch (error) {
+      throw toStudentImportBatchException(error);
+    }
+  }
+
+  /** In-memory stores: same checks and records, written one store call at a time. */
+  private async createManySequential(
+    context: RequestContext,
+    tenantId: string,
+    inputs: StudentBulkCreateInput[],
+    studentInputs: StudentCreateManyInput[],
+    enrollmentFor: (index: number) => Omit<StudentEnrollmentInput, "tenantId" | "studentId"> | undefined,
+    contactAudit: (studentId: string, contact: StudentContactCreateRequest) => StudentBulkCreateAudit,
+    options: StudentBulkCreateOptions,
+  ): Promise<StudentRecord[]> {
+    const nationalIdHashes = studentInputs
+      .map((input) => input.nationalIdHash)
+      .filter((hash): hash is string => Boolean(hash));
+    if (nationalIdHashes.length > 0
+      && (await this.store.findExistingNationalIdHashes(tenantId, nationalIdHashes, { includeDeleted: true })).length > 0) {
+      throw new ConflictException("STUDENT_NATIONAL_ID_CONFLICT");
+    }
+    if (inputs.some((input) => input.contact) && !this.studentContactStore) {
       throw new Error("STUDENT_CONTACT_STORE_UNAVAILABLE");
     }
-    const students = includesContacts && this.store.createManyWithEnrollmentsAndContacts
-      ? await this.store.createManyWithEnrollmentsAndContacts(createInputs)
-      : this.store.createManyWithEnrollments
-        ? await this.store.createManyWithEnrollments(createInputs)
-        : await this.store.createMany(createInputs.map(({ student }) => student));
-    if (!this.store.createManyWithEnrollments) {
-      for (const student of students) {
-        if (!student.gradeLevelId) continue;
-        await this.enrollmentStore.create({
-          tenantId: student.tenantId,
-          studentId: student.id,
-          gradeLevelId: student.gradeLevelId,
-          classId: student.classId,
-          ...academicContext,
-          startsAt: todayDateString(),
-          status: student.status,
-          reason: "CREATED",
-        });
-      }
-    }
-    if (includesContacts && !this.store.createManyWithEnrollmentsAndContacts) {
-      for (const [index, student] of students.entries()) {
-        const contact = inputs[index]?.contact;
-        if (!contact) continue;
-        await this.studentContactStore!.create(buildStudentContactStorageInput(tenantId, student.id, contact));
-      }
+
+    const students = await this.store.createMany(studentInputs);
+    for (const [index, student] of students.entries()) {
+      const enrollment = enrollmentFor(index);
+      if (!enrollment) continue;
+      await this.enrollmentStore.create({ tenantId: student.tenantId, studentId: student.id, ...enrollment });
     }
     for (const [index, student] of students.entries()) {
       const contact = inputs[index]?.contact;
       if (!contact) continue;
-      await this.auditLogs?.record({
-        tenantId,
-        actorUserId: context.userId,
-        entityType: "StudentContact",
-        entityId: student.id,
-        action: "student_contact.imported",
-        diff: {
-          studentId: student.id,
-          relationType: contact.relationType,
-          hasPhone: Boolean(contact.phone),
-          hasEmail: Boolean(contact.email),
-          permissionsDefaultOff: true,
-        },
-      });
+      await this.studentContactStore!.create(buildStudentContactStorageInput(tenantId, student.id, contact));
     }
-    for (const [index, student] of students.entries()) {
-      const profileUpdate = profileUpdates[index];
-      if (!profileUpdate) continue;
-      await this.store.updateProfile(student.id, profileUpdate);
+    const audits = [
+      ...students.flatMap((student, index) => {
+        const contact = inputs[index]?.contact;
+        return contact ? [contactAudit(student.id, contact)] : [];
+      }),
+      ...(options.extraAudits ?? []),
+    ];
+    for (const audit of audits) {
+      await this.auditLogs?.record({ tenantId, actorUserId: context.userId, ...audit });
     }
     return students;
   }
@@ -640,15 +706,9 @@ export class StudentService {
   async previewQuota(context: RequestContext, incoming: number): Promise<StudentQuotaPreview> {
     const tenantId = context.tenantId;
     if (!tenantId) throw new ForbiddenException("TENANT_CONTEXT_MISSING");
-    const students = filterTenantResources(context, await this.store.list())
-      .filter((student) => !student.deletedAt && student.status === "ACTIVE");
-    const enrollments = await this.enrollmentStore.listByStudents(students.map((student) => student.id));
-    const openActiveByStudent = new Map<string, number>();
-    for (const enrollment of enrollments) {
-      if (enrollment.status !== "ACTIVE" || enrollment.endsAt) continue;
-      openActiveByStudent.set(enrollment.studentId, (openActiveByStudent.get(enrollment.studentId) ?? 0) + 1);
-    }
-    const current = students.filter((student) => openActiveByStudent.get(student.id) === 1).length;
+    const current = this.store.countLicensedActiveStudents
+      ? await this.store.countLicensedActiveStudents(tenantId)
+      : await this.countLicensedActiveStudentsInMemory(context);
     const license = await this.licenseTerms?.resolveForTenant(tenantId);
     const limit = process.env.NODE_ENV === "test" && this.testStudentQuota
       ? this.testStudentQuota
@@ -661,15 +721,34 @@ export class StudentService {
     };
   }
 
-  async hasNationalId(context: RequestContext, nationalId: string): Promise<boolean> {
+  private async countLicensedActiveStudentsInMemory(context: RequestContext): Promise<number> {
+    const students = filterTenantResources(context, await this.store.list())
+      .filter((student) => !student.deletedAt && student.status === "ACTIVE");
+    const enrollments = await this.enrollmentStore.listByStudents(students.map((student) => student.id));
+    const openActiveByStudent = new Map<string, number>();
+    for (const enrollment of enrollments) {
+      if (enrollment.status !== "ACTIVE" || enrollment.endsAt) continue;
+      openActiveByStudent.set(enrollment.studentId, (openActiveByStudent.get(enrollment.studentId) ?? 0) + 1);
+    }
+    return students.filter((student) => openActiveByStudent.get(student.id) === 1).length;
+  }
+
+  /**
+   * Returns the normalized national IDs already stored for the tenant, soft-deleted students included:
+   * `Student_tenantId_nationalIdHash_key` keeps those hashes, so the import preview must flag them per row.
+   */
+  async findExistingNationalIds(context: RequestContext, nationalIds: string[]): Promise<Set<string>> {
     const tenantId = context.tenantId;
     if (!tenantId) {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
     }
 
     this.assertAccess(context, { tenantId });
-    const normalized = normalizeTcIdentity(nationalId);
-    return Boolean(await this.store.findByNationalIdHash(tenantId, hashTcIdentity(normalized)));
+    const byHash = new Map([...new Set(nationalIds.map((nationalId) => normalizeTcIdentity(nationalId)))]
+      .map((nationalId) => [hashTcIdentity(nationalId), nationalId] as const));
+    if (byHash.size === 0) return new Set();
+    const existing = await this.store.findExistingNationalIdHashes(tenantId, [...byHash.keys()], { includeDeleted: true });
+    return new Set(existing.map((hash) => byHash.get(hash)).filter((nationalId): nationalId is string => Boolean(nationalId)));
   }
 
   async update(context: RequestContext, id: string, input: StudentUpdateRequest): Promise<PublicStudentRecord> {
@@ -1239,6 +1318,51 @@ export class StudentService {
     return { gradeLevelId, classId };
   }
 
+  /** Synchronous twin of `resolveStudentPlacement` over preloaded lookups; same checks, exceptions and order. */
+  private resolveBulkPlacement(
+    context: RequestContext,
+    tenantId: string,
+    input: { gradeLevelId?: string; classId?: string },
+    classById: ReadonlyMap<string, ClassRecord>,
+    gradeLevelById: ReadonlyMap<string, GradeLevelRecord>,
+  ): { gradeLevelId?: string; classId?: string } {
+    const classId = optionalText(input.classId);
+    const requestedGradeLevelId = optionalText(input.gradeLevelId);
+    let schoolClass: ClassRecord | undefined;
+
+    if (classId) {
+      schoolClass = classById.get(classId);
+      if (!schoolClass || schoolClass.deletedAt) {
+        throw new NotFoundException("CLASS_NOT_FOUND");
+      }
+      this.assertSameTenantRelationTarget(context, tenantId, schoolClass);
+    }
+    if (this.isCampusRestricted(context)) {
+      if (!schoolClass) throw new ForbiddenException("STUDENT_CAMPUS_SCOPE_FORBIDDEN");
+      this.assertAccess(context, schoolClass);
+      const campusIds = new Set(context.campusScope!.campusIds);
+      if (!schoolClass.campusId || !campusIds.has(schoolClass.campusId)) {
+        throw new ForbiddenException("STUDENT_CAMPUS_SCOPE_FORBIDDEN");
+      }
+    }
+
+    if (schoolClass && (!schoolClass.gradeLevelId || (requestedGradeLevelId && requestedGradeLevelId !== schoolClass.gradeLevelId))) {
+      throw new BadRequestException("STUDENT_CLASS_GRADE_LEVEL_MISMATCH");
+    }
+
+    const gradeLevelId = requestedGradeLevelId ?? schoolClass?.gradeLevelId;
+    if (!gradeLevelId) {
+      throw new BadRequestException("STUDENT_GRADE_LEVEL_REQUIRED");
+    }
+    const gradeLevel = gradeLevelById.get(gradeLevelId);
+    if (!gradeLevel || gradeLevel.deletedAt) {
+      throw new NotFoundException("GRADE_LEVEL_NOT_FOUND");
+    }
+    this.assertSameTenantRelationTarget(context, tenantId, gradeLevel);
+
+    return { gradeLevelId, classId };
+  }
+
   private async assertStudentRelationTargets(
     context: RequestContext,
     tenantId: string,
@@ -1539,9 +1663,49 @@ function toPublicStudentRecord(student: StudentRecord): PublicStudentRecord {
   };
 }
 
-function omitStudentId(input: StudentContactStoreInput): Omit<StudentContactStoreInput, "studentId"> {
-  const { studentId: _studentId, ...rest } = input;
-  return rest;
+/**
+ * Pure part of `resolveProfileUpdateForCreate` for bulk creates: same normalization and in-batch duplicate rule.
+ * The stored-duplicate check runs in the write transaction (no deletedAt filter, like the unique index).
+ */
+function resolveBulkProfile(
+  input: StudentBulkCreateInput,
+  seenNationalIdHashes: Set<string>,
+): Pick<StudentProfileUpdate, "nationalIdEncrypted" | "nationalIdHash" | "phone" | "email"> {
+  const profile: Pick<StudentProfileUpdate, "nationalIdEncrypted" | "nationalIdHash" | "phone" | "email"> = {};
+  const phone = input.phone !== undefined ? optionalText(input.phone) : undefined;
+  if (phone !== undefined) profile.phone = phone;
+  const email = input.email !== undefined ? optionalEmail(input.email) : undefined;
+  if (email !== undefined) profile.email = email;
+  const nationalIdInput = optionalText(input.nationalId);
+  if (nationalIdInput !== undefined) {
+    const nationalId = normalizeTcIdentity(nationalIdInput);
+    const nationalIdHash = hashTcIdentity(nationalId);
+    if (seenNationalIdHashes.has(nationalIdHash)) {
+      throw new ConflictException("STUDENT_NATIONAL_ID_CONFLICT");
+    }
+    seenNationalIdHashes.add(nationalIdHash);
+    profile.nationalIdEncrypted = encryptTcIdentity(nationalId);
+    profile.nationalIdHash = nationalIdHash;
+  }
+  return profile;
+}
+
+function toStudentImportBatchException(error: unknown): unknown {
+  if (!(error instanceof Error) || error instanceof HttpException) return error;
+  switch (error.message) {
+    case studentImportBatchErrors.classNotFound:
+      return new NotFoundException(error.message);
+    case studentImportBatchErrors.classGradeLevelMismatch:
+      return new BadRequestException(error.message);
+    case studentImportBatchErrors.campusScopeForbidden:
+      return new ForbiddenException(error.message);
+    case studentImportBatchErrors.activeStudentLimitReached:
+    case studentImportBatchErrors.nationalIdConflict:
+    case studentImportBatchErrors.studentNoConflict:
+      return new ConflictException(error.message);
+    default:
+      return error;
+  }
 }
 
 function toStudentProfile(student: {

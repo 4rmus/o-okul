@@ -2651,6 +2651,7 @@ function requireSummaryAdminMfa(report, failures) {
       "recoveryCodeReuseRejected",
       "sessionsRevokedOnEnable",
       "sessionsRevokedOnDisable",
+      "adminResetReenrollmentRequiresCode",
     ]) {
       requireObjectTrue(verification, failures, `productionEvidenceSummary.summary.reports.adminMfa.loginVerification.${key}`, key);
     }

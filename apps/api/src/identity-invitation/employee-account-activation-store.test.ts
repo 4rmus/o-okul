@@ -49,6 +49,75 @@ describe("PostgresEmployeeAccountActivationStore", () => {
     expect(queries.at(-1)?.sql).toBe("COMMIT");
   });
 
+  it("iptal edilen daveti REVOKED, kabul edilmiş daveti NOT_PENDING olarak ayırır (UAT F-20)", async () => {
+    const revokedQueries: RecordedQuery[] = [];
+    const revoked = new PostgresEmployeeAccountActivationStore(createPool(revokedQueries, { invitationStatus: "REVOKED" }));
+    await expect(revoked.accept(acceptInput())).resolves.toEqual({ status: "REVOKED" });
+    expect(revokedQueries.some(({ sql }) => sql.includes('INSERT INTO "User"'))).toBe(false);
+
+    const accepted = new PostgresEmployeeAccountActivationStore(createPool([], { invitationStatus: "ACCEPTED" }));
+    await expect(accepted.accept(acceptInput())).resolves.toEqual({ status: "NOT_PENDING" });
+  });
+
+  it("süresi geçmiş iptal edilmiş daveti servisle aynı biçimde EXPIRED olarak bildirir (UAT F-20 inceleme)", async () => {
+    const store = new PostgresEmployeeAccountActivationStore(createPool([], { invitationStatus: "REVOKED" }));
+    await expect(store.accept({ ...acceptInput(), acceptedAt: "2026-08-04T12:00:00.000Z" })).resolves.toEqual({ status: "EXPIRED" });
+  });
+
+  it("öğretmen bağlı çalışan kaydındaki hesabı da başka çalışana bağlı sayar (UAT F-20)", async () => {
+    const queries: RecordedQuery[] = [];
+    const store = new PostgresEmployeeAccountActivationStore(createPool(queries, {
+      existingUserId: "teacher-user-a",
+      boundToOtherEmployee: true,
+      memberships: [{ role: "TEACHER", hasTeacherPersona: true, hasStudentPersona: false, version: 1 }],
+    }));
+
+    await expect(store.accept(acceptInput())).resolves.toEqual({ status: "EMAIL_ACCOUNT_ALREADY_BOUND" });
+
+    const boundCheck = queries.find(({ sql }) => sql.includes('FROM "Employee" e') && sql.includes('"userId" = $2'));
+    expect(boundCheck?.sql).toContain('LEFT JOIN "Teacher" t');
+    // Activation decides under row locks (the invitation-time pre-check does not).
+    expect(boundCheck?.sql).toContain("FOR UPDATE OF e");
+    expect(queries.find(({ sql }) => sql.includes('FROM "User"'))?.sql).toContain("FOR UPDATE");
+    expect(queries.find(({ sql }) => sql.includes('FROM "TenantMembership"'))?.sql).toContain("FOR UPDATE");
+    expect(boundCheck?.sql).toContain('t."userId" = $2');
+    expect(boundCheck?.values).toEqual(["tenant-a", "teacher-user-a", "employee-a"]);
+    expect(queries.some(({ sql }) => sql.includes('UPDATE "Employee"'))).toBe(false);
+  });
+
+  it.each([
+    ["başka çalışana bağlı hesap", { existingUserId: "user-b", boundToOtherEmployee: true }, "EMAIL_ACCOUNT_ALREADY_BOUND"],
+    [
+      "öğrenci hesabı",
+      { existingUserId: "student-user-a", memberships: [{ role: "STUDENT", hasTeacherPersona: false, hasStudentPersona: true, version: 1 }] },
+      "EMAIL_ACCOUNT_INCOMPATIBLE",
+    ],
+    [
+      "veli hesabı",
+      { existingUserId: "guardian-user-a", memberships: [{ role: "GUARDIAN", hasTeacherPersona: false, hasStudentPersona: false, version: 1 }] },
+      "EMAIL_ACCOUNT_INCOMPATIBLE",
+    ],
+    [
+      "bağsız öğretmen hesabı",
+      { existingUserId: "teacher-user-a", memberships: [{ role: "TEACHER", hasTeacherPersona: true, hasStudentPersona: false, version: 1 }] },
+      undefined,
+    ],
+    ["hesabı olmayan e-posta", {}, undefined],
+  ] as const)("davet öncesi e-posta kontrolü %s için aktivasyon kuralını uygular (UAT F-20)", async (_label, options, expected) => {
+    const queries: RecordedQuery[] = [];
+    const store = new PostgresEmployeeAccountActivationStore(createPool(queries, options as PoolOptions));
+
+    await expect(store.findInvitationEmailConflict({ tenantId: "tenant-a", employeeId: "employee-a", email: " Ada@Example.test " }))
+      .resolves.toBe(expected);
+
+    // Runs in the caller's tenant with RLS on, writes nothing and takes no row locks.
+    expect(queries).toContainEqual({ sql: "SELECT set_config('app.bypass_rls', $1, true)", values: ["false"] });
+    expect(queries).toContainEqual({ sql: "SELECT set_config('app.current_tenant_id', $1, true)", values: ["tenant-a"] });
+    expect(queries.find(({ sql }) => sql.includes('FROM "User"'))?.values).toEqual(["tenant-a", "ada@example.test"]);
+    expect(queries.some(({ sql }) => /\b(INSERT|UPDATE|DELETE)\b/.test(sql))).toBe(false);
+    expect(queries.at(-1)?.sql).toBe("COMMIT");
+  });
+
   it("çalışan hesap sınırı doluysa kullanıcı oluşturmadan reddeder", async () => {
     const queries: RecordedQuery[] = [];
     const store = new PostgresEmployeeAccountActivationStore(createPool(queries, { activeEmployeeAccountCount: 1 }), 1);
@@ -110,23 +179,24 @@ function acceptInput() {
   };
 }
 
-function createPool(
-  queries: RecordedQuery[],
-  options: {
-    activeEmployeeAccountCount?: number;
-    existingUserId?: string;
-    failEmployeeBind?: boolean;
-    invitationStatus?: "PENDING" | "ACCEPTED" | "REVOKED";
-    memberships?: MembershipRow[];
-    role?: "TENANT_OWNER" | "TENANT_ADMIN" | "OPERATIONS_STAFF" | "FINANCE_STAFF";
-  } = {},
-) {
+interface PoolOptions {
+  activeEmployeeAccountCount?: number;
+  boundToOtherEmployee?: boolean;
+  existingUserId?: string;
+  failEmployeeBind?: boolean;
+  invitationStatus?: "PENDING" | "ACCEPTED" | "REVOKED";
+  memberships?: MembershipRow[];
+  role?: "TENANT_OWNER" | "TENANT_ADMIN" | "OPERATIONS_STAFF" | "FINANCE_STAFF";
+}
+
+function createPool(queries: RecordedQuery[], options: PoolOptions = {}) {
   const invitation = invitationRow(options.invitationStatus ?? "PENDING", options.role ?? "OPERATIONS_STAFF");
   return {
     async connect() {
       return {
         async query<T>(sql: string, values?: unknown[]) {
           queries.push({ sql, values });
+          if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
           if (sql.includes('FROM "IdentityInvitation"')) return { rows: [invitation] as T[] };
           if (sql.includes('FROM "Tenant" tenant')) {
             return { rows: [{ id: "tenant-a" }] as T[] };
@@ -134,7 +204,9 @@ function createPool(
           if (sql.includes('FROM "Employee"') && sql.includes('"id" = $2')) {
             return { rows: [{ id: "employee-a", status: "ACTIVE", userId: null }] as T[] };
           }
-          if (sql.includes('FROM "Employee"') && sql.includes('"userId" = $2')) return { rows: [] as T[] };
+          if (sql.includes('FROM "Employee"') && sql.includes('"userId" = $2')) {
+            return { rows: options.boundToOtherEmployee ? [{ id: "employee-other" }] as T[] : [] as T[] };
+          }
           if (sql.includes('FROM "User"')) {
             return { rows: options.existingUserId ? [{ id: options.existingUserId }] as T[] : [] as T[] };
           }

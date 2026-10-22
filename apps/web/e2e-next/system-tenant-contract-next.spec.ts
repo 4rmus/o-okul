@@ -44,7 +44,7 @@ interface CapturedSystemRequests {
   purgePosts: Array<{ body: unknown; key?: string; proof?: string }>;
   purgeExports: Array<{ path: string; proof?: string }>;
   purgeDeliveries: Array<{ body: unknown; path: string }>;
-  adminAccounts: Array<{ userId: string; name: string; emailMasked: string | null; roles: string[]; mfaEnabled: boolean; mfaEnabledAt: string | null }>;
+  adminAccounts: Array<{ userId: string; name: string; emailMasked: string | null; roles: string[]; mfaEnabled: boolean; mfaEnabledAt: string | null; mfaReenrollmentPending: boolean; mfaReenrollmentExpiresAt: string | null }>;
   adminMfaResets: Array<{ body: unknown; proof?: string }>;
   failNextAdminReset?: string;
   licenseTerms: unknown[];
@@ -427,7 +427,7 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
       await panel.getByRole("button", { name: "AYŞE SAHİP için MFA'yı sıfırla" }).click();
       const dialog = page.getByRole("dialog", { name: "MFA'yı sıfırla" });
       await expect(dialog).toContainText("açık oturumları kapatılır");
-      await expect(dialog).toContainText("MFA'yı yeniden kurması gerekir");
+      await expect(dialog).toContainText("tek kullanımlık kodu girer; kod 24 saat geçerlidir");
       await expect(dialog.getByRole("button", { name: "MFA'yı sıfırla" })).toBeDisabled();
       await expectNoHorizontalOverflow(page, `admin-mfa-dialog-${viewport.width}`);
       await dialog.getByLabel("Doğrulama kodu").fill("123456");
@@ -436,13 +436,48 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
       await dialog.getByLabel("Doğrulama kodu").fill("654321");
       await dialog.getByRole("button", { name: "MFA'yı sıfırla" }).click();
       await expect(dialog).toBeHidden();
-      await expect(panel).toContainText("AYŞE SAHİP için MFA sıfırlandı");
+      // The code is shown once with the phone call-back instruction; it is read aloud, so there is no copy action.
+      const codeDialog = page.getByRole("dialog", { name: "Tek kullanımlık kayıt kodu" });
+      await expect(codeDialog).toBeVisible();
+      await expect(codeDialog.getByLabel("Kayıt kodu")).toHaveValue("4821-0397");
+      await expect(codeDialog).toContainText("yalnız bu kez gösterilir");
+      await expect(codeDialog).toContainText("kayıtlı telefon numarasını siz arayın");
+      await expect(codeDialog).toContainText("(24 saat)");
+      await expect(codeDialog).toContainText("sıfırlama bildirimi gönderilmek üzere sıraya alındı");
+      await expect(codeDialog.getByRole("button", { name: /kopyala/i })).toHaveCount(0);
+      await expectNoHorizontalOverflow(page, `admin-mfa-code-dialog-${viewport.width}`);
+      if (viewport.width === 1280) expect((await new AxeBuilder({ page }).include(".uh-dialog").analyze()).violations).toEqual([]);
+      await codeDialog.getByRole("button", { name: "Kodu ilettim, kapat" }).click();
+      await expect(codeDialog).toBeHidden();
+      await expect(panel).not.toContainText("4821-0397");
       await expect(panel.getByRole("button", { name: /MFA'yı sıfırla/ })).toHaveCount(0);
+      await expect(panel).toContainText("Yeniden kayıt bekleniyor");
+
+      // A pending reset can be re-issued; the new code replaces the earlier one.
+      await panel.getByRole("button", { name: "AYŞE SAHİP için yeni kayıt kodu üret" }).click();
+      const reissue = page.getByRole("dialog", { name: "Yeni kayıt kodu üret" });
+      await expect(reissue).toContainText("önceki kod geçersiz olur");
+      await reissue.getByLabel("Doğrulama kodu").fill("112233");
+      await reissue.getByRole("button", { name: "Yeni kod üret" }).click();
+      await expect(codeDialog.getByLabel("Kayıt kodu")).toHaveValue("5930-1486");
+      await codeDialog.getByRole("button", { name: "Kodu ilettim, kapat" }).click();
+      // A proof already spent on this account (replay, or the account changed) is refused with 409, not a new code.
+      captured.failNextAdminReset = "MFA_RESET_TARGET_STALE";
+      await panel.getByRole("button", { name: "AYŞE SAHİP için yeni kayıt kodu üret" }).click();
+      await reissue.getByLabel("Doğrulama kodu").fill("445566");
+      await reissue.getByRole("button", { name: "Yeni kod üret" }).click();
+      await expect(reissue).toContainText("bu onayla işlem zaten yapıldı");
+      await expect(codeDialog).toBeHidden();
+      await reissue.getByRole("button", { name: "Vazgeç" }).click();
       expect(captured.stepUps).toEqual([
         { purpose: "OWNER_ADMIN_CHANGE", target: { tenantId: "tenant-faz9", userId: "owner-faz9" }, totpCode: "123456" },
         { purpose: "OWNER_ADMIN_CHANGE", target: { tenantId: "tenant-faz9", userId: "owner-faz9" }, totpCode: "654321" },
+        { purpose: "OWNER_ADMIN_CHANGE", target: { tenantId: "tenant-faz9", userId: "owner-faz9" }, totpCode: "112233" },
+        { purpose: "OWNER_ADMIN_CHANGE", target: { tenantId: "tenant-faz9", userId: "owner-faz9" }, totpCode: "445566" },
       ]);
       expect(captured.adminMfaResets).toEqual([
+        { body: { tenantId: "tenant-faz9", userId: "owner-faz9" }, proof: "lifecycle-proof" },
+        { body: { tenantId: "tenant-faz9", userId: "owner-faz9" }, proof: "lifecycle-proof" },
         { body: { tenantId: "tenant-faz9", userId: "owner-faz9" }, proof: "lifecycle-proof" },
         { body: { tenantId: "tenant-faz9", userId: "owner-faz9" }, proof: "lifecycle-proof" },
       ]);
@@ -664,8 +699,8 @@ function createCapturedSystemRequests(): CapturedSystemRequests {
     purgeExports: [],
     purgeDeliveries: [],
     adminAccounts: [
-      { userId: "owner-faz9", name: "AYŞE SAHİP", emailMasked: "ay••@•••.test", roles: ["TENANT_OWNER"], mfaEnabled: true, mfaEnabledAt: "2026-09-01T09:00:00.000Z" },
-      { userId: "admin-faz9", name: "MEHMET YÖNETİCİ", emailMasked: null, roles: ["TENANT_ADMIN"], mfaEnabled: false, mfaEnabledAt: null },
+      { userId: "owner-faz9", name: "AYŞE SAHİP", emailMasked: "ay••@•••.test", roles: ["TENANT_OWNER"], mfaEnabled: true, mfaEnabledAt: "2026-09-01T09:00:00.000Z", mfaReenrollmentPending: false, mfaReenrollmentExpiresAt: null },
+      { userId: "admin-faz9", name: "MEHMET YÖNETİCİ", emailMasked: null, roles: ["TENANT_ADMIN"], mfaEnabled: false, mfaEnabledAt: null, mfaReenrollmentPending: false, mfaReenrollmentExpiresAt: null },
     ],
     adminMfaResets: [],
     licenseTerms: [],
@@ -780,8 +815,11 @@ async function installSystemTenantApiMocks(page: Page, captured: CapturedSystemR
       const body = route.request().postDataJSON() as { userId: string };
       captured.adminMfaResets.push({ body, proof: route.request().headers()["x-step-up-token"] });
       if (captured.failNextAdminReset) { const code = captured.failNextAdminReset; captured.failNextAdminReset = undefined; await fulfillError(route, code, code === "MFA_STEP_UP_INVALID" ? 401 : 409); return; }
-      captured.adminAccounts = captured.adminAccounts.map((row) => row.userId === body.userId ? { ...row, mfaEnabled: false, mfaEnabledAt: null } : row);
-      await fulfillData(route, { resetAt: new Date().toISOString() });
+      // DEC-20261021-01: the reset answers with the one-time re-enrollment code (shown once) and its expiry.
+      const reenrollmentExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      captured.adminAccounts = captured.adminAccounts.map((row) => row.userId === body.userId ? { ...row, mfaEnabled: false, mfaEnabledAt: null, mfaReenrollmentPending: true, mfaReenrollmentExpiresAt: reenrollmentExpiresAt } : row);
+      const reenrollmentCode = captured.adminMfaResets.length % 2 === 0 ? "4821-0397" : "5930-1486";
+      await fulfillData(route, { resetAt: new Date().toISOString(), reenrollmentCode, reenrollmentExpiresAt, notificationQueued: true });
       return;
     }
     if (/^\/tenants\/[^/]+\/license-terms$/.test(pathName) && method === "POST") {

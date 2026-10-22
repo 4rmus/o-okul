@@ -2,13 +2,18 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button, Field, Input } from "@o-okul/ui";
+import { useAuth } from "../../providers.js";
 import { ApiRequestError, acceptIdentityInvitation, activateStudentPortal } from "../../../src/api-client.js";
 import { appBrand } from "../../../src/brand.js";
 import { browserTenantSlug } from "../../../src/tenant-host.js";
+import { activationNoticeHref } from "../activation-notice.js";
 import { ContactSupportLink } from "../contact-support-link.js";
 
 export default function ActivationPage() {
+  const router = useRouter();
+  const { auth, isBootstrapping, logout } = useAuth();
   const [token, setToken] = useState("");
   const [tenantSlug, setTenantSlug] = useState("");
   const [hostTenantSlug, setHostTenantSlug] = useState("");
@@ -19,8 +24,9 @@ export default function ActivationPage() {
   const [passwordAgain, setPasswordAgain] = useState("");
   const [error, setError] = useState("");
   const [isComplete, setIsComplete] = useState(false);
-  const [loginName, setLoginName] = useState("");
+  const [previousSessionOpen, setPreviousSessionOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const loginPath = hostTenantSlug ? "/giris" : "/login";
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -68,22 +74,41 @@ export default function ActivationPage() {
       if (isEmployeeInvitation) {
         await acceptIdentityInvitation({ token, password });
       } else {
-        const accepted = await activateStudentPortal({
+        await activateStudentPortal({
           ...(!hostTenantSlug ? { tenantSlug: tenantSlug.trim() } : {}),
           studentNo: studentNo.trim(),
           code: activationCode,
           password,
         });
-        setLoginName(accepted.loginName);
       }
-      setIsComplete(true);
     } catch (caught) {
       setError(isEmployeeInvitation
         ? invitationAcceptErrorMessage(caught)
         : "Aktivasyon bilgileri geçersiz, kullanılmış veya süresi dolmuş.");
-    } finally {
       setIsSubmitting(false);
+      return;
     }
+    setIsComplete(true);
+    await leaveForLogin(Boolean(auth));
+  }
+
+  // UAT F-20: the activated person must never continue in a session this browser already holds (another user's);
+  // it is ended through the normal logout (refresh cookie, CSRF), then the new account signs in on the login page.
+  // There is no auto-login after activation. The notice travels as a plain flag, never as account data. If the server
+  // does not confirm the logout, the page stays here: the login page would resume the surviving session.
+  async function leaveForLogin(hasSession: boolean) {
+    if (hasSession && !(await logout())) {
+      setPreviousSessionOpen(true);
+      setIsSubmitting(false);
+      return;
+    }
+    setPreviousSessionOpen(false);
+    router.replace(activationNoticeHref(loginPath, isEmployeeInvitation ? "invitation" : "student"));
+  }
+
+  async function retryPreviousSessionLogout() {
+    setIsSubmitting(true);
+    await leaveForLogin(true);
   }
 
   return (
@@ -94,12 +119,22 @@ export default function ActivationPage() {
       </div>
       <form className="next-form" onSubmit={(event) => void handleSubmit(event)}>
         <h1 id="activation-title">Hesabı etkinleştir</h1>
-        {isComplete ? (
+        {isComplete && previousSessionOpen ? (
+          <>
+            <p className="next-form-error" role="alert">
+              Hesabınız etkinleştirildi, ancak bu tarayıcıdaki önceki oturum kapatılamadı. Önce önceki oturumu kapatın,
+              sonra yeni şifrenizle giriş yapın.
+            </p>
+            <Button type="button" disabled={isSubmitting} loading={isSubmitting} loadingLabel="Oturum kapatılıyor" onClick={() => void retryPreviousSessionLogout()}>
+              Önceki oturumu kapat
+            </Button>
+          </>
+        ) : isComplete ? (
           <>
             <p className="next-status-note" role="status">
-              Hesabınız etkinleştirildi. {loginName ? `Öğrenci numaranız (${loginName}) ile giriş yapabilirsiniz.` : "Kurum kodunuzla giriş yapabilirsiniz."}
+              Hesabınız etkinleştirildi. Giriş sayfasına yönlendiriliyorsunuz.
             </p>
-            <Link className="uh-button uh-button--primary uh-button--md" href={hostTenantSlug ? "/giris" : "/login"}>Giriş yap</Link>
+            <Link className="uh-button uh-button--primary uh-button--md" href={activationNoticeHref(loginPath, isEmployeeInvitation ? "invitation" : "student")}>Giriş yap</Link>
           </>
         ) : (
           <>
@@ -165,7 +200,7 @@ export default function ActivationPage() {
               />
             </Field>
             {error ? <p className="next-form-error" role="alert">{error}</p> : null}
-            <Button type="submit" disabled={isSubmitting} loading={isSubmitting} loadingLabel="Etkinleştiriliyor">
+            <Button type="submit" disabled={isSubmitting || isBootstrapping} loading={isSubmitting} loadingLabel="Etkinleştiriliyor">
               Hesabı etkinleştir
             </Button>
           </>
@@ -175,7 +210,8 @@ export default function ActivationPage() {
         <p className="next-section-eyebrow">Tek kullanımlık davet</p>
         <h2>Bağlantı ve kod 24 saat geçerlidir.</h2>
         <p>Şifrenizi yalnız bu ekranda belirleyin. Süresi dolan, kullanılan veya deneme limiti dolan kod yeniden kullanılamaz.</p>
-        <Link className="next-auth-link" href={hostTenantSlug ? "/giris" : "/login"}>Girişe dön</Link>
+        {/* The login page would resume a session whose logout failed; the page offers the retry instead. */}
+        {previousSessionOpen ? null : <Link className="next-auth-link" href={loginPath}>Girişe dön</Link>}
         <ContactSupportLink />
       </aside>
     </section>
@@ -184,13 +220,24 @@ export default function ActivationPage() {
 
 const askAdminForNewInvitation = "İşlem tamamlanamadı. Kurum yöneticinizden yeni davet isteyin.";
 
+// UAT F-20: refusals the invitee cannot fix alone name the reason and the next step.
+const invitationAcceptErrorMessages: Record<string, string> = {
+  IDENTITY_INVITATION_EXPIRED: "Davet bağlantısının süresi doldu. Kurum yöneticinizden yeni davet isteyin.",
+  IDENTITY_INVITATION_NOT_PENDING: "Bu davet bağlantısı daha önce kullanılmış. Hesabınız etkinse giriş yapın.",
+  IDENTITY_INVITATION_REVOKED: "Bu davet iptal edildi. Kurum yöneticinizden yeni davet isteyin.",
+  IDENTITY_INVITATION_NOT_FOUND: "Davet bağlantısı geçersiz.",
+  EMPLOYEE_EMAIL_ACCOUNT_ALREADY_BOUND: "Bu e-posta kurumda başka bir çalışanın hesabında kullanılıyor. Kurum yöneticinizden farklı bir e-postaya yeni davet isteyin.",
+  EMPLOYEE_EMAIL_ACCOUNT_INCOMPATIBLE: "Bu e-posta çalışan hesabıyla birleştirilemeyen bir hesaba ait (ör. öğrenci veya veli). Kurum yöneticinizden farklı bir e-postaya yeni davet isteyin.",
+  EMPLOYEE_ALREADY_LINKED: "Bu çalışan kaydı zaten bir hesaba bağlı. Hesabınız etkinse giriş yapın; değilse kurum yöneticinize başvurun.",
+  EMPLOYEE_INVITATION_REQUIRES_ACTIVE_PROFILE: "Çalışan kaydınız aktif olmadığı için hesap açılamadı. Kurum yöneticinize başvurun.",
+};
+
 // UAT F-08: a server error must never read as an expired link.
 function invitationAcceptErrorMessage(error: unknown): string {
   const status = error instanceof ApiRequestError ? error.status : 0;
   const code = error instanceof ApiRequestError ? error.code : undefined;
-  if (code === "IDENTITY_INVITATION_EXPIRED") return "Davet bağlantısının süresi doldu. Kurum yöneticinizden yeni davet isteyin.";
-  if (code === "IDENTITY_INVITATION_NOT_PENDING") return "Bu davet bağlantısı daha önce kullanılmış. Hesabınız etkinse giriş yapın.";
-  if (code === "IDENTITY_INVITATION_NOT_FOUND") return "Davet bağlantısı geçersiz.";
+  const known = code ? invitationAcceptErrorMessages[code] : undefined;
+  if (known) return known;
   if (code?.startsWith("PASSWORD_")) return "Şifre kabul edilmedi. Daha güçlü ve tahmin edilmesi zor bir şifre seçin.";
   if (code === "TENANT_ACTIVITY_UNRESOLVED" || (status >= 400 && status < 500)) return askAdminForNewInvitation;
   return "Beklenmeyen bir hata oluştu. Lütfen biraz sonra tekrar deneyin.";

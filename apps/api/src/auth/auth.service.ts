@@ -40,14 +40,26 @@ import {
   encryptAdminMfaSecret,
   hashRecoveryCode,
   isAdminMfaRole,
+  type AdminMfaStepUpBinding,
   type LoginMfaChallenge,
   resolveAdminMfaMode,
   resolveEncryptedTotpCounter,
   resolveTotpCounter,
-  verifyAdminMfaStepUpProof,
+  verifyAdminMfaResetStepUpProof,
   verifyAdminMfaToken,
 } from "./totp-mfa.js";
 import { isSystemAdmin } from "../rbac/roles.js";
+import { apiLogger } from "../observability/logging.js";
+import { recordSecuritySideEffectFailure } from "../observability/security-side-effect-counters.js";
+import {
+  createReenrollmentCode,
+  hashReenrollmentCode,
+  isReenrollmentExpired,
+  reenrollmentCodeValidityMs,
+  reenrollmentResetVersion,
+  verifyReenrollmentCode,
+} from "./mfa-reenrollment-code.js";
+import { type MfaSecurityNoticeKind, type MfaSecurityNoticeStore, mfaSecurityNoticeStoreToken } from "./mfa-security-notice.js";
 
 
 export interface PasswordResetRequestResult {
@@ -85,6 +97,9 @@ export interface TotpStatusResult {
 
 export interface TotpAdminResetResult {
   resetAt: string;
+  reenrollmentCode: string;
+  reenrollmentExpiresAt: string;
+  notificationQueued: boolean;
 }
 
 export interface TotpDisableResult {
@@ -121,6 +136,7 @@ export class AuthService {
     @Optional() @Inject(loginAttemptLimiterToken) loginAttempts?: LoginAttemptLimiterStore,
     @Optional() @Inject(tenantStoreToken) private readonly tenants?: TenantStore,
     @Optional() @Inject(licenseTermStoreToken) private readonly licenseTerms?: LicenseTermStore,
+    @Optional() @Inject(mfaSecurityNoticeStoreToken) private readonly mfaNotices?: MfaSecurityNoticeStore,
   ) {
     this.tokens = new TokenService(this.sessions, getAccessSecret());
     this.loginAttempts = loginAttempts ?? createLoginAttemptLimiter();
@@ -130,15 +146,22 @@ export class AuthService {
   async login(credentials: LoginCredentials, clientIp = "unknown", clientContext: SessionClientContext = {}): Promise<TokenPair | LoginMfaChallenge | MfaEnrollmentRequiredResponse | TenantSelectionRequiredResponse> {
     const resolved = await this.resolveLoginUser(credentials, clientIp);
     const attemptKey = resolved.attemptKey;
-    await this.loginAttempts.assertAllowed(attemptKey);
+    // The attempt is counted before the password is checked, so parallel guesses cannot outrun the budget.
+    await this.reserveAttempt(attemptKey, "LOGIN_LOCKED");
 
-    const passwordMatches = await Promise.all(resolved.users.map(async (user) => ({
-      user,
-      matches: await verifyPasswordAsync(credentials.password, user.passwordHash),
-    })));
-    const users = passwordMatches.filter(({ matches }) => matches).map(({ user }) => user);
+    let users: AuthUser[];
+    try {
+      const passwordMatches = await Promise.all(resolved.users.map(async (user) => ({
+        user,
+        matches: await verifyPasswordAsync(credentials.password, user.passwordHash),
+      })));
+      users = passwordMatches.filter(({ matches }) => matches).map(({ user }) => user);
+    } catch (error) {
+      await this.releaseAttempt(attemptKey);
+      throw error;
+    }
     if (users.length === 0) {
-      await this.loginAttempts.recordFailure(attemptKey);
+      // The reserved attempt stays counted as the failure.
       throw new UnauthorizedException("LOGIN_FAILED");
     }
 
@@ -201,6 +224,13 @@ export class AuthService {
 
   private async issueLoginForUser(user: AuthUser, clientContext: SessionClientContext): Promise<TokenPair | LoginMfaChallenge | MfaEnrollmentRequiredResponse> {
     if (this.shouldRequireTotpEnrollment(user)) {
+      // DEC-20261021-01: after a SYSTEM_ADMIN reset the password alone no longer opens enrollment material once the
+      // 24-hour window is over, and inside it the confirm step also asks for the one-time code.
+      const reenrollmentPending = Boolean(user.totpReenrollmentCodeHash);
+      if (reenrollmentPending && isReenrollmentExpired(user.totpReenrollmentExpiresAt)) {
+        await this.recordReenrollmentExpired(user, "login");
+        throw new UnauthorizedException("MFA_RESET_EXPIRED");
+      }
       const draft = createTotpEnrollmentDraft(user.email ?? user.id, user.id, user.membershipVersion);
       await this.auditLogs?.record({
         tenantId: user.tenantId === "system" ? undefined : user.tenantId,
@@ -208,7 +238,7 @@ export class AuthService {
         entityType: "Auth",
         entityId: user.id,
         action: "auth.totp_enrollment_required",
-        diff: { recoveryCodesIssued: draft.recoveryCodes.length },
+        diff: { recoveryCodesIssued: draft.recoveryCodes.length, ...(reenrollmentPending ? { reenrollmentCodeRequired: true } : {}) },
       });
       return {
         status: "MFA_ENROLLMENT_REQUIRED",
@@ -217,6 +247,7 @@ export class AuthService {
         setupToken: draft.setupToken,
         setupExpiresAt: draft.setupExpiresAt,
         recoveryCodes: draft.recoveryCodes,
+        ...(reenrollmentPending ? { reenrollmentCodeRequired: true as const } : {}),
       };
     }
     if (this.shouldChallengeWithTotp(user)) {
@@ -309,6 +340,10 @@ export class AuthService {
     if (payload.membershipVersion !== currentUser.membershipVersion) {
       throw new UnauthorizedException("MFA_SETUP_TOKEN_INVALID");
     }
+    // A pending SYSTEM_ADMIN re-enrollment is completed only through the login enrollment step with its code.
+    if (currentUser.totpReenrollmentCodeHash) {
+      throw new UnauthorizedException("MFA_REENROLLMENT_CODE_REQUIRED");
+    }
 
     const counter = resolveTotpCounter(payload.secret, totpCode);
     if (!counter) {
@@ -340,7 +375,7 @@ export class AuthService {
     };
   }
 
-  async confirmRequiredTotpEnrollment(setupToken: string, totpCode: string, clientContext: SessionClientContext = {}): Promise<TokenPair> {
+  async confirmRequiredTotpEnrollment(setupToken: string, totpCode: string, clientContext: SessionClientContext = {}, options: { reenrollmentCode?: string } = {}): Promise<TokenPair> {
     if (resolveAdminMfaMode() !== "required") {
       throw new UnauthorizedException("MFA_SETUP_TOKEN_INVALID");
     }
@@ -363,11 +398,15 @@ export class AuthService {
     ) {
       throw new UnauthorizedException("MFA_SETUP_TOKEN_INVALID");
     }
+    const reenrollmentCodeHash = currentUser.totpReenrollmentCodeHash
+      ? await this.verifyReenrollmentCodeWithAttemptLimit(currentUser, currentUser.totpReenrollmentCodeHash, options.reenrollmentCode)
+      : null;
     const counter = resolveTotpCounter(payload.secret, totpCode);
     if (!counter) {
       throw new UnauthorizedException("MFA_CODE_INVALID");
     }
     const enabledAt = new Date().toISOString();
+    // "First wins": the statement also requires the exact pending re-enrollment hash verified above and clears it.
     const user = await this.users.enableTotp({
       userId: payload.userId,
       source: { tenantId: currentUser.tenantId, membershipVersion: currentUser.membershipVersion },
@@ -375,6 +414,7 @@ export class AuthService {
       enabledAt,
       recoveryCodeHashes: payload.recoveryCodeHashes,
       lastUsedCounter: counter,
+      reenrollmentCodeHash,
     });
     if (!user) throw new UnauthorizedException("MFA_SETUP_TOKEN_INVALID");
     await this.sessions.revokeByUser(user.id, { tenantId: currentUser.tenantId, membershipVersion: currentUser.membershipVersion });
@@ -384,8 +424,9 @@ export class AuthService {
       entityType: "Auth",
       entityId: user.id,
       action: "auth.totp_enrollment_completed",
-      diff: { recoveryCodesRemaining: user.totpRecoveryCodeHashes?.length ?? 0 },
+      diff: { recoveryCodesRemaining: user.totpRecoveryCodeHashes?.length ?? 0, ...(reenrollmentCodeHash ? { reenrollmentCodeUsed: true } : {}) },
     });
+    if (reenrollmentCodeHash) await this.queueMfaNotice("MFA_REENROLLED", user);
     return this.issueTokenPairForUser(user, "auth.login_mfa_enrolled", {
       roles: user.roles,
       mustChangePassword: Boolean(user.mustChangePassword),
@@ -416,34 +457,126 @@ export class AuthService {
     if (!stepUpToken || !context.sessionId || context.membershipVersion === undefined) {
       throw new UnauthorizedException("MFA_STEP_UP_REQUIRED");
     }
+    let expectedMembershipVersion: number;
     try {
-      verifyAdminMfaStepUpProof(stepUpToken, {
-        userId: context.userId, sessionId: context.sessionId, membershipVersion: context.membershipVersion, purpose: "OWNER_ADMIN_CHANGE",
+      expectedMembershipVersion = verifyAdminMfaResetStepUpProof(stepUpToken, {
+        userId: context.userId, sessionId: context.sessionId, membershipVersion: context.membershipVersion,
         target: { tenantId: target.tenantId, userId: target.userId },
       });
     } catch {
       throw new UnauthorizedException("MFA_STEP_UP_INVALID");
     }
+    // In optional mode MFA is not required at login and the login enrollment step (the only place the code is
+    // accepted) is closed, so a pending code could never be used and would block self-service setup (dev only).
+    if (resolveAdminMfaMode() === "optional") throw new ConflictException("MFA_RESET_REQUIRES_REQUIRED_MODE");
     const user = await this.users.findById(target.userId);
     // ponytail: control-plane reset is limited to tenant OWNER/ADMIN; SYSTEM_ADMIN recovery stays out of band.
     if (!user || target.tenantId === "system" || user.tenantId !== target.tenantId || isSystemAdmin(user.roles) || !isAdminMfaRole(user.roles)) {
       throw new NotFoundException("MFA_RESET_TARGET_NOT_FOUND");
     }
-    if (!user.totpSecretEncrypted || !user.totpEnabledAt) throw new BadRequestException("MFA_NOT_ENABLED");
-    const source = { tenantId: user.tenantId, membershipVersion: user.membershipVersion };
-    const reset = await this.users.disableTotp(user.id, source);
+    // The proof was issued for this account version. Any reset (including one made with this same proof) bumps it,
+    // so a replayed proof cannot silently replace the code the system admin just read out; "Yeni kod üret" asks for
+    // a fresh step-up instead.
+    if (user.membershipVersion !== expectedMembershipVersion) throw new ConflictException("MFA_RESET_TARGET_STALE");
+    // A pending (or expired) re-enrollment can be re-issued: the new code replaces the earlier one.
+    const reissue = !(user.totpSecretEncrypted && user.totpEnabledAt);
+    if (reissue && !user.totpReenrollmentCodeHash) throw new BadRequestException("MFA_NOT_ENABLED");
+    // The update is conditional on the proof's version: of two concurrent requests with one proof, one wins.
+    const source = { tenantId: user.tenantId, membershipVersion: expectedMembershipVersion };
+    // DEC-20261021-01: the reset statement itself bumps the version to source + 1; the code is bound to that reset.
+    const reenrollmentCode = createReenrollmentCode();
+    const reenrollmentExpiresAt = new Date(Date.now() + reenrollmentCodeValidityMs).toISOString();
+    const reset = await this.users.disableTotp(user.id, source, {
+      codeHash: hashReenrollmentCode({ userId: user.id, tenantId: user.tenantId, resetVersion: expectedMembershipVersion + 1 }, reenrollmentCode),
+      expiresAt: reenrollmentExpiresAt,
+    });
     if (!reset) throw new ConflictException("MFA_RESET_TARGET_STALE");
+    // A revoke failure still fails the request (as before): the system admin then repeats the reset with a fresh
+    // step-up, which issues a new code and revokes again, instead of being told sessions were closed when they were not.
     await this.sessions.revokeByUser(user.id, source);
+    // From here on the code must reach the system admin: audit and notice failures are logged and counted instead.
     const resetAt = new Date().toISOString();
-    await this.auditLogs?.record({
+    const notificationQueued = await this.queueMfaNotice("MFA_RESET_BY_SUPPORT", user);
+    await this.recordResetAuditAfterCommit(user, () => this.auditLogs?.record({
       tenantId: user.tenantId,
       actorUserId: context.userId,
       entityType: "Auth",
       entityId: user.id,
       action: "auth.totp_reset_by_system_admin",
-      diff: { resetAt, sessionsRevoked: true },
+      diff: { resetAt, sessionsRevoked: true, reenrollmentCodeIssued: true, reenrollmentExpiresAt, reissued: reissue, notificationQueued },
+    }));
+    return { resetAt, reenrollmentCode, reenrollmentExpiresAt, notificationQueued };
+  }
+
+  /**
+   * The reset audit row is written after the reset committed (the auth store has no shared transaction with the audit
+   * store). A failure is logged with ids and a fixed code only (never the code, the address or the driver message)
+   * and counted for alerting, and the reset response still carries the one-time code.
+   */
+  private async recordResetAuditAfterCommit(user: Pick<AuthUser, "id" | "tenantId">, step: () => Promise<unknown> | undefined): Promise<void> {
+    try {
+      await step();
+    } catch {
+      recordSecuritySideEffectFailure("mfa_reset_audit");
+      apiLogger.error({ tenantId: user.tenantId, userId: user.id, errorCode: "MFA_RESET_AUDIT_FAILED" }, "mfa_reset_audit_not_recorded");
+    }
+  }
+
+  /** The reset already committed: a notice that cannot be queued is logged without PII and never fails the caller. */
+  private async queueMfaNotice(kind: MfaSecurityNoticeKind, user: Pick<AuthUser, "id" | "tenantId" | "email">): Promise<boolean> {
+    if (!user.email) return false;
+    if (!this.mfaNotices) {
+      recordSecuritySideEffectFailure("mfa_notice_enqueue");
+      apiLogger.warn({ tenantId: user.tenantId, userId: user.id, kind, errorCode: "MFA_NOTICE_STORE_MISSING" }, "mfa_security_notice_not_queued");
+      return false;
+    }
+    try {
+      const tenantName = user.tenantId === "system" ? undefined : (await this.tenants?.findById(user.tenantId))?.name;
+      await this.mfaNotices.enqueue({ kind, to: user.email, tenantName });
+      return true;
+    } catch (error) {
+      const errorCode = error instanceof Error && /^[A-Z0-9_]{1,64}$/.test(error.message) ? error.message : "MFA_NOTICE_ENQUEUE_FAILED";
+      recordSecuritySideEffectFailure("mfa_notice_enqueue");
+      apiLogger.warn({ tenantId: user.tenantId, userId: user.id, kind, errorCode }, "mfa_security_notice_not_queued");
+      return false;
+    }
+  }
+
+  private async verifyReenrollmentCodeWithAttemptLimit(user: AuthUser, storedHash: string, code: string | undefined): Promise<string> {
+    if (isReenrollmentExpired(user.totpReenrollmentExpiresAt)) {
+      await this.recordReenrollmentExpired(user, "enrollment_confirm");
+      throw new UnauthorizedException("MFA_RESET_EXPIRED");
+    }
+    // Bound to this reset, not to the current membership version: a password reset cannot refresh the budget.
+    const attemptKey = mfaAttemptKey(user.id, "reenrollment", user.tenantId, reenrollmentResetVersion(storedHash) ?? user.membershipVersion);
+    // Reserved before the code is compared: parallel guesses get 429 once five attempts are in flight or spent.
+    await this.reserveAttempt(attemptKey, "MFA_REENROLLMENT_LOCKED");
+    const missing = !code?.trim();
+    if (missing || !verifyReenrollmentCode(storedHash, { userId: user.id, tenantId: user.tenantId }, code)) {
+      // The reserved attempt stays counted as the failure.
+      await this.auditLogs?.record({
+        tenantId: user.tenantId === "system" ? undefined : user.tenantId,
+        actorUserId: user.id,
+        entityType: "Auth",
+        entityId: user.id,
+        action: "auth.totp_reenrollment_code_rejected",
+        diff: { reason: missing ? "missing" : "invalid" },
+      });
+      throw new UnauthorizedException(missing ? "MFA_REENROLLMENT_CODE_REQUIRED" : "MFA_REENROLLMENT_CODE_INVALID");
+    }
+    await this.loginAttempts.recordSuccess(attemptKey);
+    return storedHash;
+  }
+
+  private async recordReenrollmentExpired(user: AuthUser, stage: "login" | "enrollment_confirm"): Promise<void> {
+    await this.auditLogs?.record({
+      tenantId: user.tenantId === "system" ? undefined : user.tenantId,
+      actorUserId: user.id,
+      entityType: "Auth",
+      entityId: user.id,
+      action: "auth.totp_reenrollment_expired",
+      diff: { stage, expiredAt: user.totpReenrollmentExpiresAt },
     });
-    return { resetAt };
   }
 
   async createMfaStepUp(
@@ -461,6 +594,7 @@ export class AuthService {
     if (!context.sessionId || context.membershipVersion !== currentUser.membershipVersion) {
       throw new UnauthorizedException("MFA_STEP_UP_CONTEXT_INVALID");
     }
+    let proofTarget: AdminMfaStepUpBinding["target"] = target;
     if (purpose === "TENANT_LIFECYCLE_CHANGE" || purpose === "TENANT_CLEAN_RESET" || purpose === "TENANT_DEVICE_RESTORE" || purpose === "TENANT_PURGE_EXPORT") {
       // A purge handover export binds the institution only: exactly { tenantId }.
       if (!target || typeof target.tenantId !== "string" || !target.tenantId || target.tenantId === "system" || (purpose === "TENANT_PURGE_EXPORT" ? Object.keys(target).length !== 1 : !("expectedLifecycleVersion" in target) || (purpose === "TENANT_DEVICE_RESTORE" ? !("operationId" in target) || !/^[a-f0-9]{32}$/.test(target.operationId) || !/^[a-f0-9]{64}$/.test(target.archiveDigest) : purpose === "TENANT_LIFECYCLE_CHANGE" ? !("status" in target) || !["ACTIVE", "SUSPENDED"].includes(target.status) : !("preset" in target) || !["CLEAN_SETUP_V1", "LICENSE_EXPIRY_PURGE_V1"].includes(target.preset) || !/^[a-f0-9]{64}$/.test(target.preflightDigest)) ||
@@ -479,6 +613,13 @@ export class AuthService {
         typeof target.tenantId !== "string" || !target.tenantId || target.tenantId === "system" || typeof target.userId !== "string" || !target.userId) {
         throw new BadRequestException("MFA_STEP_UP_TARGET_INVALID");
       }
+      // The server binds the proof to the account's current version (the admin-accounts list already shows these
+      // accounts to the system admin, so the lookup reveals nothing new); the reset consumes that version.
+      const resetTarget = await this.users.findById(target.userId);
+      if (!resetTarget || resetTarget.tenantId !== target.tenantId || isSystemAdmin(resetTarget.roles) || !isAdminMfaRole(resetTarget.roles)) {
+        throw new NotFoundException("MFA_RESET_TARGET_NOT_FOUND");
+      }
+      proofTarget = { tenantId: target.tenantId, userId: target.userId, expectedMembershipVersion: resetTarget.membershipVersion };
     } else if (target) {
       throw new BadRequestException("MFA_STEP_UP_TARGET_INVALID");
     }
@@ -493,7 +634,7 @@ export class AuthService {
       sessionId: context.sessionId,
       membershipVersion: context.membershipVersion,
       purpose,
-      ...(target ? { target } : {}),
+      ...(proofTarget ? { target: proofTarget } : {}),
     });
     await this.auditLogs?.record({
       tenantId: currentUser.tenantId === "system" ? undefined : currentUser.tenantId,
@@ -965,24 +1106,38 @@ export class AuthService {
     lockedCode: string,
   ): Promise<"totp" | "recovery_code"> {
     const attemptKey = mfaAttemptKey(user.id, purpose, user.tenantId, user.membershipVersion);
+    await this.reserveAttempt(attemptKey, lockedCode);
+
+    let method: "totp" | "recovery_code";
     try {
-      await this.loginAttempts.assertAllowed(attemptKey);
+      method = await this.verifySecondFactor(user, input);
+    } catch (error) {
+      // A rejected factor keeps the reserved attempt as the failure; any other error hands it back.
+      if (!(error instanceof UnauthorizedException)) await this.releaseAttempt(attemptKey);
+      throw error;
+    }
+    await this.loginAttempts.recordSuccess(attemptKey);
+    return method;
+  }
+
+  /** Counts the attempt atomically before a secret is verified; a spent budget becomes `lockedCode` (429). */
+  private async reserveAttempt(attemptKey: string, lockedCode: string): Promise<void> {
+    try {
+      await this.loginAttempts.reserveAttempt(attemptKey);
     } catch (error) {
       if (error instanceof HttpException && error.getStatus() === HttpStatus.TOO_MANY_REQUESTS) {
         throw new HttpException(lockedCode, HttpStatus.TOO_MANY_REQUESTS);
       }
       throw error;
     }
+  }
 
+  /** Best effort: if the limiter is down the attempt simply stays counted (fail closed). */
+  private async releaseAttempt(attemptKey: string): Promise<void> {
     try {
-      const method = await this.verifySecondFactor(user, input);
-      await this.loginAttempts.recordSuccess(attemptKey);
-      return method;
-    } catch (error) {
-      if (error instanceof UnauthorizedException) {
-        await this.loginAttempts.recordFailure(attemptKey);
-      }
-      throw error;
+      await this.loginAttempts.releaseAttempt(attemptKey);
+    } catch {
+      // The caller rethrows its own error.
     }
   }
 }

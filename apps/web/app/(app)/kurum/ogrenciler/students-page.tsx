@@ -691,8 +691,10 @@ export function StudentsPage() {
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       void queryClient.invalidateQueries({ queryKey: ["next-student-detail"] });
       closeImportModal();
-    } catch {
-      setImportError("Aktarım tamamlanamadı. Aynı okul no, kota veya profil doğrulamalarını kontrol edin.");
+    } catch (error) {
+      setImportError(error instanceof ApiRequestError && error.code === "STUDENT_NATIONAL_ID_CONFLICT"
+        ? "Dosyadaki bir T.C. kimlik no kurumda daha önce kayıtlı (silinmiş öğrenci dahil). Ön izlemeyi yeniden çalıştırın."
+        : "Aktarım tamamlanamadı. Aynı okul no, kota veya profil doğrulamalarını kontrol edin.");
     } finally {
       setIsImporting(false);
     }
@@ -1662,7 +1664,7 @@ function formatStudentImportError(error: StudentImportDryRunResult["errors"][num
   if (error.code === "GRADE_LEVEL_REQUIRED") return `${row}: seviye veya seviyeye bağlı sınıf zorunlu`;
   if (error.code === "REQUIRED") return `${row}: ${studentImportFieldLabel(error.field)} zorunlu`;
   if (error.code === "STUDENT_NO_DUPLICATE") return `${row}: okul no tekrar ediyor`;
-  if (error.code === "STUDENT_NATIONAL_ID_DUPLICATE") return `${row}: TC kimlik no tekrar ediyor`;
+  if (error.code === "STUDENT_NATIONAL_ID_DUPLICATE") return `${row}: TC kimlik no dosyada tekrar ediyor veya kurumda kayıtlı (silinmiş öğrenci dahil)`;
   if (error.code === "INVALID_EMAIL") return `${row}: e-posta geçersiz`;
   if (error.code === "INVALID_DATE") return `${row}: tarih YYYY-AA-GG olmalı`;
   if (error.code === "INVALID_NATIONAL_ID") return `${row}: TC kimlik no geçersiz`;

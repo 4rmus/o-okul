@@ -1108,9 +1108,17 @@ runAdminMfaNegativeCheck({
 runAdminMfaNegativeCheck({
   label: "Admin MFA extra login verification field negative",
   path: "docs/evidence-templates/admin-mfa.extra-login-verification-field.tmp.json",
-  expectedFailure: "loginVerification tam 8 alan içermeli.",
+  expectedFailure: "loginVerification tam 9 alan içermeli.",
   mutate: (fixture) => {
     fixture.loginVerification.unexpectedField = true;
+  },
+});
+runAdminMfaNegativeCheck({
+  label: "Admin MFA reset re-enrollment without code negative",
+  path: "docs/evidence-templates/admin-mfa.reenrollment-without-code.tmp.json",
+  expectedFailure: "loginVerification.adminResetReenrollmentRequiresCode true olmalı.",
+  mutate: (fixture) => {
+    fixture.loginVerification.adminResetReenrollmentRequiresCode = false;
   },
 });
 runAdminMfaNegativeCheck({

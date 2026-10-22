@@ -1,14 +1,14 @@
 import { createHash } from "node:crypto";
 import { BadRequestException, ConflictException, Injectable, Optional, PayloadTooLargeException } from "@nestjs/common";
 import ExcelJS from "exceljs";
-import { AuditLogService } from "../audit-log/audit-log.service.js";
 import { normalizeTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
-import { IdempotencyService } from "../http/idempotency.js";
+import { IdempotencyService, type IdempotencyTransactionCompletion } from "../http/idempotency.js";
 import { toTurkishUpperCase } from "../http/zod-validation.js";
 import { maskContactEmail, maskContactPhone } from "../privacy/contact-mask.js";
 import { SchoolService } from "../school/school.service.js";
-import { normalizeClassName } from "../school/class-store.js";
+import { type ClassRecord, normalizeClassName } from "../school/class-store.js";
+import type { GradeLevelRecord } from "../school/grade-level-store.js";
 import { StudentService, type StudentRecord } from "./student.service.js";
 import { maskTcIdentity, normalizeTcIdentity } from "./tc-identity.js";
 import type {
@@ -28,6 +28,15 @@ interface ParsedStudentContact extends StudentContactCreateRequest {
   invalidRelation?: string;
 }
 
+interface ValidatedStudentImportRows {
+  rows: ParsedStudentImportRow[];
+  errors: StudentImportError[];
+  quota: StudentImportDryRunResult["quota"];
+  /** The validator's lookups, reused by the commit so placement checks see the same records. */
+  classById: Map<string, ClassRecord>;
+  gradeLevelById: Map<string, GradeLevelRecord>;
+}
+
 type ParsedStudentImportRow = Omit<StudentImportPreviewRow, "contact"> & {
   nationalId?: string;
   phone?: string;
@@ -41,7 +50,6 @@ export class StudentImportService {
   constructor(
     private readonly students: StudentService,
     private readonly school: SchoolService,
-    @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
@@ -77,15 +85,19 @@ export class StudentImportService {
       return this.idempotency.run(
         context,
         { key: idempotencyKey, operation: "student.import.commit", request: idempotencyRequest },
-        () => this.importOnce(context, input),
+        (completion) => this.importOnce(context, input, completion),
       );
     }
 
     return this.importOnce(context, input);
   }
 
-  private async importOnce(context: RequestContext, input: StudentImportDryRunInput): Promise<StudentImportResult> {
-    const { rows, errors, quota } = await this.readAndValidateRows(context, input.fileBase64);
+  private async importOnce(
+    context: RequestContext,
+    input: StudentImportDryRunInput,
+    completion?: IdempotencyTransactionCompletion,
+  ): Promise<StudentImportResult> {
+    const { rows, errors, quota, classById, gradeLevelById } = await this.readAndValidateRows(context, input.fileBase64);
     const rowErrors = errors.filter((error) => error.code !== "ACTIVE_STUDENT_LIMIT_REACHED");
 
     if (rowErrors.length > 0) {
@@ -98,35 +110,42 @@ export class StudentImportService {
       throw new ConflictException("ACTIVE_STUDENT_LIMIT_REACHED");
     }
 
-    const students = await this.students.createMany(context, filterValidRows(rows, errors));
-    await this.auditLogs?.record({
-      tenantId: context.tenantId ?? undefined,
-      actorUserId: context.userId,
-      entityType: "StudentImport",
-      action: "student_import.completed",
-      diff: {
-        totalRows: rows.length,
-        importedRows: students.length,
-        errorCount: errors.length,
-        quota,
-      },
-    });
-    return {
+    const validRows = filterValidRows(rows, errors);
+    const importedContacts = rows.filter((row) => Boolean(row.contact)).length;
+    const toResult = (students: StudentRecord[]): StudentImportResult => ({
       importedRows: students.length,
-      importedContacts: rows.filter((row) => Boolean(row.contact)).length,
+      importedContacts,
       students: students.map(toPublicImportedStudent),
-    };
+    });
+    // DEC-20261021-02: students, profile PII, enrollments, contacts, these audits and the idempotency completion
+    // commit in one tenant transaction when the store supports it.
+    const students = await this.students.createMany(context, validRows, {
+      classById,
+      gradeLevelById,
+      extraAudits: [{
+        entityType: "StudentImport",
+        action: "student_import.completed",
+        diff: {
+          totalRows: rows.length,
+          importedRows: validRows.length,
+          errorCount: errors.length,
+          quota,
+        },
+      }],
+      finalize: completion ? (client, created) => completion.complete(client, toResult(created)) : undefined,
+    });
+    return toResult(students);
   }
 
   private async readAndValidateRows(
     context: RequestContext,
     fileBase64: string | undefined,
-  ): Promise<{ rows: ParsedStudentImportRow[]; errors: StudentImportError[]; quota: StudentImportDryRunResult["quota"] }> {
+  ): Promise<ValidatedStudentImportRows> {
     if (!fileBase64) {
       throw new BadRequestException("IMPORT_FILE_REQUIRED");
     }
     const rows = await this.readRows(fileBase64);
-    const errors = await this.validateRows(context, rows);
+    const { errors, classById, gradeLevelById } = await this.validateRows(context, rows);
     const incomingActiveStudents = filterValidRows(rows, errors).filter((row) => Boolean(row.gradeLevelId)).length;
     const quota = await this.students.previewQuota(context, incomingActiveStudents);
 
@@ -134,7 +153,7 @@ export class StudentImportService {
       errors.push({ row: 0, field: "quota", code: "ACTIVE_STUDENT_LIMIT_REACHED" });
     }
 
-    return { rows, errors, quota };
+    return { rows, errors, quota, classById, gradeLevelById };
   }
 
   async export(context: RequestContext): Promise<StudentExportResult> {
@@ -283,12 +302,26 @@ export class StudentImportService {
     return rows;
   }
 
-  private async validateRows(context: RequestContext, rows: ParsedStudentImportRow[]): Promise<StudentImportError[]> {
+  private async validateRows(
+    context: RequestContext,
+    rows: ParsedStudentImportRow[],
+  ): Promise<Pick<ValidatedStudentImportRows, "errors" | "classById" | "gradeLevelById">> {
     const errors: StudentImportError[] = [];
-    const [classes, gradeLevels, studentNos] = await Promise.all([
+    // One `= ANY` lookup each for the file's numbers and national IDs instead of a query per row.
+    const fileStudentNos = rows.flatMap((row) => (row.studentNo ? [this.normalizeStudentNo(row.studentNo)] : []));
+    const fileNationalIds = rows.flatMap((row) => {
+      if (!row.nationalId) return [];
+      try {
+        return [normalizeTcIdentity(row.nationalId)];
+      } catch {
+        return [];
+      }
+    });
+    const [classes, gradeLevels, existingStudentNos, existingNationalIds] = await Promise.all([
       this.school.listClasses(context),
       this.school.listGradeLevels(context),
-      this.students.listStudentNosForImport(context),
+      this.students.findExistingStudentNos(context, fileStudentNos),
+      fileNationalIds.length > 0 ? this.students.findExistingNationalIds(context, fileNationalIds) : new Set<string>(),
     ]);
     const classByName = new Map(classes.map((record) => [normalizeClassName(record.name), record]));
     const gradeLevelById = new Map(gradeLevels.map((record) => [record.id, record]));
@@ -302,9 +335,6 @@ export class StudentImportService {
         gradeLevelsByLookup.set(key, matches);
       }
     }
-    const existingStudentNos = new Set(
-      studentNos.map((studentNo) => this.normalizeStudentNo(studentNo)),
-    );
     const seenStudentNos = new Set<string>();
     const seenNationalIds = new Set<string>();
 
@@ -377,7 +407,7 @@ export class StudentImportService {
         }
       }
       if (row.nationalId && identityValid) {
-        if (seenNationalIds.has(row.nationalId) || await this.students.hasNationalId(context, row.nationalId)) {
+        if (seenNationalIds.has(row.nationalId) || existingNationalIds.has(row.nationalId)) {
           errors.push({
             row: row.row,
             field: "nationalId",
@@ -418,7 +448,11 @@ export class StudentImportService {
       }
     }
 
-    return errors;
+    return {
+      errors,
+      classById: new Map(classes.map((record) => [record.id, record])),
+      gradeLevelById,
+    };
   }
 
   private normalizeStudentNo(value: string): string {

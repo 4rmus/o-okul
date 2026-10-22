@@ -97,6 +97,8 @@ export function EmployeesPage() {
   const [form, setForm] = useState<EmployeeAccessFormState>(emptyAccessForm);
   const [isSaving, setIsSaving] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  // UAT F-20: an e-mail the API refuses for this employee marks the field itself invalid.
+  const [invitationEmailError, setInvitationEmailError] = useState("");
   const { notify } = useToast();
   const canManageOwners = auth?.session.roles.includes("TENANT_OWNER") ?? false;
   const linkedCount = employees.filter((employee) => employee.access).length;
@@ -227,6 +229,14 @@ export function EmployeesPage() {
     setInvitingEmployee(employee);
     setInvitationForm({ email: employee.workEmail ?? "", role: "OPERATIONS_STAFF" });
     setSubmitError("");
+    setInvitationEmailError("");
+  }
+
+  function showInvitationError(error: unknown) {
+    const emailError = invitationEmailErrorMessage(error);
+    setInvitationEmailError(emailError ?? "");
+    setSubmitError(emailError ? "" : employeeWriteErrorMessage(error));
+    if (emailError) window.requestAnimationFrame(() => document.getElementById(invitationEmailInputId)?.focus());
   }
 
   async function handleCreateEmployee(event: FormEvent<HTMLFormElement>) {
@@ -267,7 +277,7 @@ export function EmployeesPage() {
       notify("Çalışan profili oluşturuldu; hesap daveti gönderilemedi.");
       setInvitingEmployee(created);
       setInvitationForm({ email: inviteEmail, role: inviteRole });
-      setSubmitError(employeeWriteErrorMessage(error));
+      showInvitationError(error);
     } finally {
       setIsSaving(false);
     }
@@ -278,13 +288,14 @@ export function EmployeesPage() {
     if (!auth || !invitingEmployee) return;
     setIsSaving(true);
     setSubmitError("");
+    setInvitationEmailError("");
     try {
       await inviteEmployee(auth.accessToken, invitingEmployee.id, invitationForm);
       await queryClient.invalidateQueries({ queryKey: invitationsQueryKey });
       setInvitingEmployee(null);
       notify("Hesap daveti gönderime alındı. Hesabı açma bağlantısı 24 saat geçerlidir.");
     } catch (error) {
-      setSubmitError(employeeWriteErrorMessage(error));
+      showInvitationError(error);
     } finally {
       setIsSaving(false);
     }
@@ -420,7 +431,7 @@ export function EmployeesPage() {
       </FormModal>
       <FormModal
         description="Davet e-posta ile iletilir; parola veya hesap açma bilgisi bu ekranda gösterilmez."
-        onCancel={() => { if (!isSaving) { setInvitingEmployee(null); setSubmitError(""); } }}
+        onCancel={() => { if (!isSaving) { setInvitingEmployee(null); setSubmitError(""); setInvitationEmailError(""); } }}
         onSubmit={(event) => void handleInviteEmployee(event)}
         open={Boolean(invitingEmployee)}
         submitError={submitError}
@@ -428,7 +439,19 @@ export function EmployeesPage() {
         submitting={isSaving}
         title={invitingEmployee ? `${invitingEmployee.firstName} ${invitingEmployee.lastName} hesap daveti` : "Hesap daveti"}
       >
-        <Field label="İş e-postası"><Input required type="email" value={invitationForm.email} onChange={(event) => setInvitationForm((current) => ({ ...current, email: event.target.value }))} /></Field>
+        <Field error={invitationEmailError || undefined} label="İş e-postası">
+          <Input
+            id={invitationEmailInputId}
+            invalid={Boolean(invitationEmailError)}
+            required
+            type="email"
+            value={invitationForm.email}
+            onChange={(event) => {
+              setInvitationEmailError("");
+              setInvitationForm((current) => ({ ...current, email: event.target.value }));
+            }}
+          />
+        </Field>
         <Field label="Başlangıç rolü">
           <Select value={invitationForm.role} onChange={(event) => setInvitationForm((current) => ({ ...current, role: event.target.value as EmployeeInvitationRole }))}>
             {canManageOwners ? <option value="TENANT_OWNER">Kurum sahibi</option> : null}
@@ -713,6 +736,16 @@ function revokeInvitation(accessToken: string, invitationId: string) {
   return apiRequest<IdentityInvitationRecord>(accessToken, `${apiBaseUrl}/identity-invitations/${encodeURIComponent(invitationId)}/revoke`, {
     method: "POST",
   });
+}
+
+const invitationEmailInputId = "employee-invitation-email";
+
+// UAT F-20: the API refuses an address whose account cannot become this employee's account before any e-mail is sent.
+function invitationEmailErrorMessage(error: unknown): string | undefined {
+  if (!(error instanceof ApiRequestError)) return undefined;
+  if (error.code === "EMPLOYEE_EMAIL_ACCOUNT_ALREADY_BOUND") return "Bu e-posta kurumda başka bir çalışanın hesabında kullanılıyor. Farklı bir e-posta girin.";
+  if (error.code === "EMPLOYEE_EMAIL_ACCOUNT_INCOMPATIBLE") return "Bu e-posta çalışan hesabıyla birleştirilemeyen bir hesaba ait (ör. öğrenci veya veli). Farklı bir e-posta girin.";
+  return undefined;
 }
 
 function employeeWriteErrorMessage(error: unknown) {

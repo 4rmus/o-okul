@@ -440,11 +440,12 @@ describe("Identity invitations", () => {
     expect(revoked.body).not.toHaveProperty("tokenHash");
     expect(revoked.body).not.toHaveProperty("acceptedUserId");
 
+    // UAT F-20: the withdrawn link says so instead of reading as already used.
     await request(server)
       .post("/identity-invitations/accept")
       .send({ token: activationToken, password: "Secure-password-123" })
       .expect(400)
-      .expect(({ body }) => expect(body.error.code).toBe("IDENTITY_INVITATION_NOT_PENDING"));
+      .expect(({ body }) => expect(body.error.code).toBe("IDENTITY_INVITATION_REVOKED"));
     await request(server)
       .post(`/identity-invitations/${invitationId}/revoke`)
       .set("Authorization", `Bearer ${admin}`)
@@ -566,5 +567,105 @@ describe("Identity invitations", () => {
       .set("Authorization", `Bearer ${owner}`)
       .expect(201)
       .expect(({ body }) => expect(body).toMatchObject({ id: invitationId, status: "REVOKED", role: "TENANT_OWNER" }));
+  });
+
+  it("çalışan davetini bağlı veya uyumsuz hesabın e-postasına oluşturmaz, bağsız hesaba açar (UAT F-20)", async () => {
+    const admin = await login("admin-a@example.test");
+    const employee = await request(server)
+      .post("/employees")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ employeeNo: "A-F20-1", firstName: "Uat", lastName: "Muhasebe", status: "ACTIVE" })
+      .expect(201);
+    const employeeId = (employee.body as { id: string }).id;
+
+    for (const { email, code } of [
+      // admin-a's account belongs to the employee-admin-a profile.
+      { email: "admin-a@example.test", code: "EMPLOYEE_EMAIL_ACCOUNT_ALREADY_BOUND" },
+      { email: "student-a@example.test", code: "EMPLOYEE_EMAIL_ACCOUNT_INCOMPATIBLE" },
+      { email: "guardian-a@example.test", code: "EMPLOYEE_EMAIL_ACCOUNT_INCOMPATIBLE" },
+    ]) {
+      await request(server)
+        .post(`/employees/${employeeId}/account-invitations`)
+        .set("Authorization", `Bearer ${admin}`)
+        .send({ email, role: "FINANCE_STAFF" })
+        .expect(409)
+        .expect(({ body }) => expect(body.error.code).toBe(code));
+    }
+    await request(server)
+      .get("/identity-invitations")
+      .query({ subjectType: "EMPLOYEE", subjectId: employeeId })
+      .set("Authorization", `Bearer ${admin}`)
+      .expect(200)
+      .expect(({ body }) => expect(body).toEqual([]));
+
+    // Without user:manage the check is never reached (no account enumeration).
+    const teacherSession = await login("teacher-a@example.test");
+    await request(server)
+      .post(`/employees/${employeeId}/account-invitations`)
+      .set("Authorization", `Bearer ${teacherSession}`)
+      .send({ email: "admin-a@example.test", role: "FINANCE_STAFF" })
+      .expect(403);
+
+    // A teacher account that is not tied to another employee can take the staff role.
+    await request(server)
+      .post(`/employees/${employeeId}/account-invitations`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ email: "teacher-a@example.test", role: "FINANCE_STAFF" })
+      .expect(201)
+      .expect(({ body }) => expect(body).toMatchObject({ status: "PENDING", subjectId: employeeId, role: "FINANCE_STAFF" }));
+  });
+
+  it("kullanılmış daveti NOT_PENDING, iptal edilen çalışan davetini REVOKED ile reddeder (UAT F-20)", async () => {
+    const admin = await login("admin-a@example.test");
+    const employee = await request(server)
+      .post("/employees")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ employeeNo: "A-F20-2", firstName: "Iptal", lastName: "Calisan", status: "ACTIVE" })
+      .expect(201);
+    const employeeId = (employee.body as { id: string }).id;
+    const issuer = invitations as unknown as {
+      createEmployeeInvitation(...args: unknown[]): Promise<{ activationToken: string }>;
+    };
+    const original = issuer.createEmployeeInvitation.bind(invitations);
+    const tokens: string[] = [];
+    const spy = vi.spyOn(issuer, "createEmployeeInvitation").mockImplementation(async (...args: unknown[]) => {
+      const result = await original(...args);
+      tokens.push(result.activationToken);
+      return result;
+    });
+    try {
+      const first = await request(server)
+        .post(`/employees/${employeeId}/account-invitations`)
+        .set("Authorization", `Bearer ${admin}`)
+        .send({ email: "iptal.calisan.f20@example.test", role: "OPERATIONS_STAFF" })
+        .expect(201);
+      await request(server)
+        .post(`/identity-invitations/${(first.body as { id: string }).id}/revoke`)
+        .set("Authorization", `Bearer ${admin}`)
+        .expect(201);
+      await request(server)
+        .post(`/employees/${employeeId}/account-invitations`)
+        .set("Authorization", `Bearer ${admin}`)
+        .send({ email: "iptal.calisan.f20@example.test", role: "OPERATIONS_STAFF" })
+        .expect(201);
+    } finally {
+      spy.mockRestore();
+    }
+    const [revokedToken, liveToken] = tokens;
+
+    await request(server)
+      .post("/identity-invitations/accept")
+      .send({ token: revokedToken, password: "Secure-password-123" })
+      .expect(400)
+      .expect(({ body }) => expect(body.error.code).toBe("IDENTITY_INVITATION_REVOKED"));
+    await request(server)
+      .post("/identity-invitations/accept")
+      .send({ token: liveToken, password: "Secure-password-123" })
+      .expect(201);
+    await request(server)
+      .post("/identity-invitations/accept")
+      .send({ token: liveToken, password: "Secure-password-123" })
+      .expect(400)
+      .expect(({ body }) => expect(body.error.code).toBe("IDENTITY_INVITATION_NOT_PENDING"));
   });
 });

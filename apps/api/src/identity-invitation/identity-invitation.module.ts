@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { AuditLogModule } from "../audit-log/audit-log.module.js";
 import { LicensePersistenceModule } from "../license/license-persistence.module.js";
 import { SchoolModule } from "../school/school.module.js";
+import { teacherStoreToken } from "../school/teacher-store.js";
 import { studentStoreToken } from "../student/student-store.js";
 import { TenantPersistenceModule } from "../tenant/tenant-persistence.module.js";
 import { tenantStoreToken } from "../tenant/tenant-store.js";
@@ -38,7 +39,7 @@ import { userManagementStoreToken } from "../user-management/user-management-sto
     {
       provide: employeeAccountActivationStoreToken,
       useFactory: createEmployeeAccountActivationStore,
-      inject: [userManagementStoreToken, tenantStoreToken, identityInvitationStoreToken],
+      inject: [userManagementStoreToken, tenantStoreToken, identityInvitationStoreToken, teacherStoreToken],
     },
     StudentPortalActivationService,
   ],

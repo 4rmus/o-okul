@@ -301,6 +301,9 @@ model User {
   totpEnabledAt DateTime? @db.Timestamptz(6)
   totpRecoveryCodeHashes String[] @default([])
   totpLastUsedCounter String?
+  /// DEC-20261021-01: keyed hash + expiry of the one-time re-enrollment code left by a SYSTEM_ADMIN MFA reset.
+  totpReenrollmentCodeHash String?
+  totpReenrollmentExpiresAt DateTime? @db.Timestamptz(6)
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
   tenant      Tenant?            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -526,6 +529,7 @@ model IdentityInvitation {
   @@index([tenantId, subjectType, subjectId, status])
   @@index([tenantId, email])
   @@index([tenantId, subjectId, kind, status, expiresAt], map: "IdentityInvitation_student_code_lookup_idx")
+  @@index([tenantId, createdAt, id])
 }
 
 /// Global auth altyapı tablosu: token aile takibi User üzerinden yapılır ve

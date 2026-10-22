@@ -213,7 +213,7 @@ describePostgres("IdentityInvitationService.accept on PostgreSQL without request
       { id: "outbox-revoke-claimed", status: "UNCERTAIN", payloadEncrypted: null, claimToken: "claim-token" },
       { id: "outbox-revoke-unclaimed", status: "EXPIRED", payloadEncrypted: null, claimToken: null },
     ]);
-    await expect(service.accept({ token: tokenFor("revoke-teacher"), password })).rejects.toThrow("IDENTITY_INVITATION_NOT_PENDING");
+    await expect(service.accept({ token: tokenFor("revoke-teacher"), password })).rejects.toThrow("IDENTITY_INVITATION_REVOKED");
     // A second revoke is refused; the row stays REVOKED and no activity row is opened.
     await expect(service.revoke({ tenantId, userId: "admin-f03", roles: ["TENANT_ADMIN"], bypassRls: false }, "invitation-accept-revoke-teacher"))
       .rejects.toThrow("IDENTITY_INVITATION_NOT_PENDING");
@@ -245,7 +245,7 @@ describePostgres("IdentityInvitationService.accept on PostgreSQL without request
       return markAccepted(id, userId, acceptedAt);
     });
     try {
-      await expect(service.accept({ token: tokenFor("p23-student"), password })).rejects.toThrow("IDENTITY_INVITATION_NOT_PENDING");
+      await expect(service.accept({ token: tokenFor("p23-student"), password })).rejects.toThrow("IDENTITY_INVITATION_REVOKED");
     } finally {
       spy.mockRestore();
     }
@@ -274,7 +274,7 @@ describePostgres("IdentityInvitationService.accept on PostgreSQL without request
       return markAccepted(id, userId, acceptedAt);
     });
     try {
-      await expect(service.accept({ token: tokenFor("race-teacher"), password })).rejects.toThrow("IDENTITY_INVITATION_NOT_PENDING");
+      await expect(service.accept({ token: tokenFor("race-teacher"), password })).rejects.toThrow("IDENTITY_INVITATION_REVOKED");
     } finally {
       spy.mockRestore();
     }
@@ -310,7 +310,8 @@ describePostgres("IdentityInvitationService.accept on PostgreSQL without request
     await expect(service.accept({ token: tokenFor("EMPLOYEE"), password })).rejects.toThrow("EMPLOYEE_INVITATION_REQUIRES_ACTIVE_PROFILE");
     await expectNoActivity(admin);
     // The store revoked the invitation in a committed transaction; a retry sees that, not TENANT_ACTIVITY_UNRESOLVED.
-    await expect(service.accept({ token: tokenFor("EMPLOYEE"), password })).rejects.toThrow("IDENTITY_INVITATION_NOT_PENDING");
+    // UAT F-20 review: a system revoke is not reported as an admin withdrawal; the inactive profile is named again.
+    await expect(service.accept({ token: tokenFor("EMPLOYEE"), password })).rejects.toThrow("EMPLOYEE_INVITATION_REQUIRES_ACTIVE_PROFILE");
   });
 });
 

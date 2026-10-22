@@ -702,6 +702,8 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
       } else if (error instanceof Error && error.message.startsWith("SETUP_CLASS_CONTEXT_CONFLICT:")) {
         goToStep("classes");
         setSaveError(error.message.slice("SETUP_CLASS_CONTEXT_CONFLICT:".length));
+      } else if (error instanceof ApiRequestError && error.code === "STUDENT_NATIONAL_ID_CONFLICT") {
+        setSaveError("Dosyadaki bir T.C. kimlik no kurumda daha önce kayıtlı (silinmiş öğrenci dahil). Ön izlemeyi yeniden çalıştırın.");
       } else if (error instanceof ApiRequestError) {
         setSaveError("Sunucudan kesin sonuç alınamadı. Aynı bilgilerle tekrar deneyin; tamamlanan kayıtlar yeniden eklenmez.");
       } else {
@@ -2078,7 +2080,7 @@ function studentImportErrorMessage(dryRun: StudentImportDryRunResult) {
 
   const duplicateNationalId = dryRun.errors.find((error) => error.code === "STUDENT_NATIONAL_ID_DUPLICATE");
   if (duplicateNationalId) {
-    return `Öğrenci dosyasında tekrar eden veya sistemde zaten kayıtlı TC kimlik no var. Satır: ${duplicateNationalId.row}.`;
+    return `Öğrenci dosyasında tekrar eden veya kurumda daha önce kayıtlı (silinmiş öğrenci dahil) TC kimlik no var. Satır: ${duplicateNationalId.row}.`;
   }
 
   const invalidEmail = dryRun.errors.find((error) => error.code === "INVALID_EMAIL");

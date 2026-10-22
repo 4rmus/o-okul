@@ -1,4 +1,5 @@
 import { Inject, Injectable, OnModuleDestroy, Optional } from "@nestjs/common";
+import { securitySideEffectFailureCounts } from "../observability/security-side-effect-counters.js";
 import {
   queueMetricsCollectorToken,
   type QueueMetric,
@@ -65,6 +66,11 @@ export class MetricsService implements OnModuleDestroy {
       "# HELP o_okul_queue_metrics_scrape_error Queue metrics scrape error flag.",
       "# TYPE o_okul_queue_metrics_scrape_error gauge",
       `o_okul_queue_metrics_scrape_error ${queueMetricsResult.error ? 1 : 0}`,
+      "# HELP o_okul_auth_security_side_effect_failures_total Security side effects (MFA notice, audit) that failed after the action committed.",
+      "# TYPE o_okul_auth_security_side_effect_failures_total counter",
+      ...securitySideEffectFailureCounts().map(
+        (metric) => `o_okul_auth_security_side_effect_failures_total{event="${escapeLabel(metric.event)}"} ${metric.count}`,
+      ),
     ];
 
     return `${lines.join("\n")}\n`;

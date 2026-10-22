@@ -5,9 +5,12 @@ import type { IdentityResolver } from "./identity-resolver.js";
 import { InMemoryPasswordResetStore } from "./password-reset-store.js";
 import { InMemorySessionStore } from "./session-store.js";
 import { LoginAttemptLimiter } from "./login-attempt-limiter.js";
-import { createAdminMfaStepUpProof, createTotpCodeForTest, verifyAdminMfaStepUpProof } from "./totp-mfa.js";
+import { createAdminMfaStepUpProof, createTotpCodeForTest, verifyAdminMfaResetStepUpProof, verifyAdminMfaStepUpProof } from "./totp-mfa.js";
 import { hashTcIdentity } from "../student/tc-identity.js";
 import { InMemoryTenantStore } from "../tenant/tenant-store.js";
+import { InMemoryMfaSecurityNoticeStore } from "./mfa-security-notice.js";
+import { apiLogger } from "../observability/logging.js";
+import { resetSecuritySideEffectFailureCounts, securitySideEffectFailureCounts } from "../observability/security-side-effect-counters.js";
 
 const previousEnv = {
   ADMIN_MFA_MODE: process.env.ADMIN_MFA_MODE,
@@ -958,7 +961,7 @@ describe("AuthService", () => {
       new InMemoryTenantStore(),
     );
     const admin = { userId: "system-admin-reset", tenantId: null, roles: ["SYSTEM_ADMIN"], membershipVersion: 1, sessionId: "system-session", bypassRls: true };
-    const proof = createAdminMfaStepUpProof({ userId: admin.userId, sessionId: admin.sessionId, membershipVersion: 1, purpose: "OWNER_ADMIN_CHANGE", target: { tenantId: "tenant-a", userId: owner.id } }).stepUpToken;
+    const proof = createAdminMfaStepUpProof({ userId: admin.userId, sessionId: admin.sessionId, membershipVersion: 1, purpose: "OWNER_ADMIN_CHANGE", target: { tenantId: "tenant-a", userId: owner.id, expectedMembershipVersion: 3 } }).stepUpToken;
     const ownerContext = { userId: owner.id, tenantId: owner.tenantId, roles: owner.roles, membershipVersion: 3, sessionId: "owner-session", bypassRls: false };
 
     await expect(auth.resetTotpBySystemAdmin(admin, { tenantId: "tenant-a", userId: owner.id })).rejects.toThrow("MFA_STEP_UP_REQUIRED");
@@ -966,18 +969,266 @@ describe("AuthService", () => {
     // The proof is bound to { tenant-a, owner }: it cannot reset the same id in another tenant or another account.
     await expect(auth.resetTotpBySystemAdmin(admin, { tenantId: "tenant-b", userId: owner.id }, proof)).rejects.toThrow("MFA_STEP_UP_INVALID");
     await expect(auth.resetTotpBySystemAdmin(admin, { tenantId: "tenant-a", userId: "other-owner" }, proof)).rejects.toThrow("MFA_STEP_UP_INVALID");
-    const otherTenantProof = createAdminMfaStepUpProof({ userId: admin.userId, sessionId: admin.sessionId, membershipVersion: 1, purpose: "OWNER_ADMIN_CHANGE", target: { tenantId: "tenant-b", userId: owner.id } }).stepUpToken;
+    const otherTenantProof = createAdminMfaStepUpProof({ userId: admin.userId, sessionId: admin.sessionId, membershipVersion: 1, purpose: "OWNER_ADMIN_CHANGE", target: { tenantId: "tenant-b", userId: owner.id, expectedMembershipVersion: 3 } }).stepUpToken;
     await expect(auth.resetTotpBySystemAdmin(admin, { tenantId: "tenant-b", userId: owner.id }, otherTenantProof)).rejects.toThrow("MFA_RESET_TARGET_NOT_FOUND");
+    // A proof without the server-bound target version (the pre-binding shape) is not accepted.
+    const unboundProof = createAdminMfaStepUpProof({ userId: admin.userId, sessionId: admin.sessionId, membershipVersion: 1, purpose: "OWNER_ADMIN_CHANGE", target: { tenantId: "tenant-a", userId: owner.id } }).stepUpToken;
+    await expect(auth.resetTotpBySystemAdmin(admin, { tenantId: "tenant-a", userId: owner.id }, unboundProof)).rejects.toThrow("MFA_STEP_UP_INVALID");
 
-    await expect(auth.resetTotpBySystemAdmin(admin, { tenantId: "tenant-a", userId: owner.id }, proof)).resolves.toMatchObject({ resetAt: expect.any(String) });
+    const reset = await auth.resetTotpBySystemAdmin(admin, { tenantId: "tenant-a", userId: owner.id }, proof);
+    expect(reset).toMatchObject({ resetAt: expect.any(String), reenrollmentCode: expect.stringMatching(/^\d{4}-\d{4}$/), notificationQueued: false });
+    // Review P2-2: replaying the same proof inside its 5 minutes is refused and does not replace the code just issued.
+    const storedAfterFirst = owner.totpReenrollmentCodeHash;
+    await expect(auth.resetTotpBySystemAdmin(admin, { tenantId: "tenant-a", userId: owner.id }, proof)).rejects.toMatchObject({ status: 409, message: "MFA_RESET_TARGET_STALE" });
+    expect(owner.totpReenrollmentCodeHash).toBe(storedAfterFirst);
+    expect(owner.membershipVersion).toBe(4);
+    expect(Date.parse(reset.reenrollmentExpiresAt) - Date.now()).toBeGreaterThan(23 * 60 * 60 * 1000);
     expect(owner.totpSecretEncrypted).toBeUndefined();
+    // Only a keyed hash bound to the reset version (3 -> 4) is stored, never the code.
+    expect(owner.totpReenrollmentCodeHash).toMatch(/^v1:4:[A-Za-z0-9_-]{43}$/);
+    expect(owner.totpReenrollmentCodeHash).not.toContain(reset.reenrollmentCode.replace("-", ""));
+    expect(owner.totpReenrollmentExpiresAt).toBe(reset.reenrollmentExpiresAt);
     expect(revoke).toHaveBeenCalledWith(owner.id, { tenantId: "tenant-a", membershipVersion: 3 });
     expect(record).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: "tenant-a", actorUserId: admin.userId, entityId: owner.id, action: "auth.totp_reset_by_system_admin",
+      diff: expect.objectContaining({ reenrollmentExpiresAt: reset.reenrollmentExpiresAt, reenrollmentCodeIssued: true, sessionsRevoked: true }),
     }));
-    await expect(auth.resetTotpBySystemAdmin(admin, { tenantId: "tenant-a", userId: owner.id }, proof)).rejects.toThrow("MFA_NOT_ENABLED");
-    // After reset the owner is sent back through first-login enrollment instead of being locked out.
-    await expect(auth.login(loginCredentials(owner.email ?? ""))).resolves.toMatchObject({ status: "MFA_ENROLLMENT_REQUIRED" });
+    expect(JSON.stringify(record.mock.calls)).not.toContain(reset.reenrollmentCode);
+    expect(JSON.stringify(record.mock.calls)).not.toContain(owner.totpReenrollmentCodeHash!);
+    // DEC-20261021-01: the password alone no longer completes enrollment after a support reset.
+    const enrollment = await auth.login(loginCredentials(owner.email ?? ""));
+    expect(enrollment).toMatchObject({ status: "MFA_ENROLLMENT_REQUIRED", reenrollmentCodeRequired: true });
+  });
+
+  describe("SYSTEM_ADMIN reset re-enrollment code (DEC-20261021-01)", () => {
+    function setup(overrides: Partial<AuthUser> = {}) {
+      process.env.ADMIN_MFA_MODE = "required";
+      const owner: AuthUser = {
+        id: "tenant-owner-reenroll",
+        email: "owner-reenroll@example.test",
+        name: "Owner Reenroll",
+        passwordHash: hashPassword("password", "test-salt"),
+        tenantId: "tenant-a",
+        roles: ["TENANT_OWNER"],
+        membershipVersion: 5,
+        totpSecretEncrypted: "encrypted",
+        totpEnabledAt: "2026-09-01T00:00:00.000Z",
+        totpRecoveryCodeHashes: ["hash"],
+        ...overrides,
+      };
+      const users = createMutableUserStore(owner);
+      const record = vi.fn(async () => undefined);
+      const notices = new InMemoryMfaSecurityNoticeStore();
+      const limiter = new LoginAttemptLimiter(5, 60_000);
+      const auth = new AuthService(
+        users,
+        new InMemorySessionStore(),
+        new InMemoryPasswordResetStore(),
+        { resolve: vi.fn(async () => undefined) } as unknown as IdentityResolver,
+        { record } as never,
+        limiter,
+        new InMemoryTenantStore(),
+        undefined,
+        notices,
+      );
+      const admin = { userId: "system-admin-reenroll", tenantId: null, roles: ["SYSTEM_ADMIN"], membershipVersion: 1, sessionId: "system-session", bypassRls: true };
+      // A fresh step-up per reset, bound (as createMfaStepUp does) to the target's current version.
+      const proofFor = () => createAdminMfaStepUpProof({
+        userId: admin.userId, sessionId: admin.sessionId, membershipVersion: 1, purpose: "OWNER_ADMIN_CHANGE",
+        target: { tenantId: "tenant-a", userId: owner.id, expectedMembershipVersion: owner.membershipVersion },
+      }).stepUpToken;
+      const reset = (proof = proofFor()) => auth.resetTotpBySystemAdmin(admin, { tenantId: "tenant-a", userId: owner.id }, proof);
+      const loginEnrollment = async () => {
+        const result = await auth.login(loginCredentials(owner.email ?? ""));
+        if (!("status" in result) || result.status !== "MFA_ENROLLMENT_REQUIRED") throw new Error("MFA enrollment bekleniyordu.");
+        return result;
+      };
+      return { auth, owner, users, record, notices, reset, proofFor, loginEnrollment, admin };
+    }
+
+    it("requires the code, rejects a wrong or missing code under the limiter and accepts the right code once", async () => {
+      const { auth, owner, record, notices, reset, loginEnrollment } = setup();
+      const issued = await reset();
+      expect(issued.notificationQueued).toBe(true);
+      expect(notices.notices).toEqual([expect.objectContaining({ kind: "MFA_RESET_BY_SUPPORT", to: owner.email })]);
+      const enrollment = await loginEnrollment();
+      expect(enrollment.reenrollmentCodeRequired).toBe(true);
+      const totp = (offset = 0) => createTotpCodeForTest(enrollment.secret, Date.now() + offset);
+
+      await expect(auth.confirmRequiredTotpEnrollment(enrollment.setupToken, totp())).rejects.toThrow("MFA_REENROLLMENT_CODE_REQUIRED");
+      const wrong = issued.reenrollmentCode === "0000-0000" ? "1111-1111" : "0000-0000";
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        await expect(auth.confirmRequiredTotpEnrollment(enrollment.setupToken, totp(), {}, { reenrollmentCode: wrong })).rejects.toThrow("MFA_REENROLLMENT_CODE_INVALID");
+      }
+      expect(record).toHaveBeenCalledWith(expect.objectContaining({ action: "auth.totp_reenrollment_code_rejected", entityId: owner.id, diff: { reason: "invalid" } }));
+      // Five failures lock the reset-bound attempt key: even the correct code is refused until the lock expires.
+      await expect(auth.confirmRequiredTotpEnrollment(enrollment.setupToken, totp(), {}, { reenrollmentCode: issued.reenrollmentCode }))
+        .rejects.toMatchObject({ status: 429, message: "MFA_REENROLLMENT_LOCKED" });
+      expect(owner.totpEnabledAt).toBeUndefined();
+      expect(owner.totpReenrollmentCodeHash).toBeDefined();
+      expect(JSON.stringify(record.mock.calls)).not.toContain(issued.reenrollmentCode);
+    });
+
+    it("enables TOTP with the right code, clears the code atomically and the code works only once", async () => {
+      const { auth, owner, record, notices, reset, loginEnrollment } = setup();
+      const issued = await reset();
+      const enrollment = await loginEnrollment();
+      const session = await auth.confirmRequiredTotpEnrollment(enrollment.setupToken, createTotpCodeForTest(enrollment.secret), {}, {
+        reenrollmentCode: issued.reenrollmentCode.replace("-", " "),
+      });
+      expect(session.session).toMatchObject({ userId: owner.id, tenantId: "tenant-a", roles: ["TENANT_OWNER"] });
+      expect(owner.totpEnabledAt).toEqual(expect.any(String));
+      expect(owner.totpReenrollmentCodeHash).toBeUndefined();
+      expect(owner.totpReenrollmentExpiresAt).toBeUndefined();
+      expect(record).toHaveBeenCalledWith(expect.objectContaining({ action: "auth.totp_enrollment_completed", diff: expect.objectContaining({ reenrollmentCodeUsed: true }) }));
+      expect(notices.notices.map((notice) => notice.kind)).toEqual(["MFA_RESET_BY_SUPPORT", "MFA_REENROLLED"]);
+      // Replaying the same setup token and code cannot enroll a second authenticator.
+      await expect(auth.confirmRequiredTotpEnrollment(enrollment.setupToken, createTotpCodeForTest(enrollment.secret, Date.now() + 30_000), {}, {
+        reenrollmentCode: issued.reenrollmentCode,
+      })).rejects.toThrow("MFA_SETUP_TOKEN_INVALID");
+      await expect(auth.login(loginCredentials(owner.email ?? ""))).resolves.toMatchObject({ status: "MFA_REQUIRED" });
+    });
+
+    it("a second reset invalidates the first code", async () => {
+      const { auth, owner, reset, loginEnrollment } = setup();
+      const first = await reset();
+      const second = await reset();
+      expect(second.reenrollmentCode).toMatch(/^\d{4}-\d{4}$/);
+      expect(owner.totpReenrollmentCodeHash).toMatch(/^v1:7:/);
+      const enrollment = await loginEnrollment();
+      if (first.reenrollmentCode !== second.reenrollmentCode) {
+        await expect(auth.confirmRequiredTotpEnrollment(enrollment.setupToken, createTotpCodeForTest(enrollment.secret), {}, { reenrollmentCode: first.reenrollmentCode }))
+          .rejects.toThrow("MFA_REENROLLMENT_CODE_INVALID");
+      }
+      await expect(auth.confirmRequiredTotpEnrollment(enrollment.setupToken, createTotpCodeForTest(enrollment.secret), {}, { reenrollmentCode: second.reenrollmentCode }))
+        .resolves.toMatchObject({ session: { userId: owner.id } });
+    });
+
+    it("an expired reset rejects login without enrollment material and can be re-issued", async () => {
+      const { auth, owner, record, reset } = setup();
+      await reset();
+      owner.totpReenrollmentExpiresAt = new Date(Date.now() - 1000).toISOString();
+      await expect(auth.login(loginCredentials(owner.email ?? ""))).rejects.toMatchObject({ status: 401, message: "MFA_RESET_EXPIRED" });
+      expect(record).toHaveBeenCalledWith(expect.objectContaining({ action: "auth.totp_reenrollment_expired", diff: expect.objectContaining({ stage: "login" }) }));
+      expect(record).not.toHaveBeenCalledWith(expect.objectContaining({ action: "auth.totp_enrollment_required" }));
+      const reissued = await reset();
+      expect(Date.parse(reissued.reenrollmentExpiresAt)).toBeGreaterThan(Date.now());
+      expect(record).toHaveBeenCalledWith(expect.objectContaining({ action: "auth.totp_reset_by_system_admin", diff: expect.objectContaining({ reissued: true }) }));
+      await expect(auth.login(loginCredentials(owner.email ?? ""))).resolves.toMatchObject({ status: "MFA_ENROLLMENT_REQUIRED", reenrollmentCodeRequired: true });
+    });
+
+    it("a code that expires between login and confirm is rejected", async () => {
+      const { auth, owner, reset, loginEnrollment } = setup();
+      const issued = await reset();
+      const enrollment = await loginEnrollment();
+      owner.totpReenrollmentExpiresAt = new Date(Date.now() - 1000).toISOString();
+      await expect(auth.confirmRequiredTotpEnrollment(enrollment.setupToken, createTotpCodeForTest(enrollment.secret), {}, { reenrollmentCode: issued.reenrollmentCode }))
+        .rejects.toThrow("MFA_RESET_EXPIRED");
+      expect(owner.totpEnabledAt).toBeUndefined();
+    });
+
+    it("the reset still succeeds when the notice cannot be queued, and the reset is refused for a never-enrolled account", async () => {
+      const { auth, notices, reset } = setup();
+      resetSecuritySideEffectFailureCounts();
+      vi.spyOn(notices, "enqueue").mockRejectedValueOnce(new Error("connection refused for owner-reenroll@example.test"));
+      const warn = vi.spyOn(apiLogger, "warn").mockImplementation(() => undefined);
+      await expect(reset()).resolves.toMatchObject({ notificationQueued: false, reenrollmentCode: expect.any(String) });
+      // The failure is logged with ids and a fixed code only, never the address or the provider message.
+      expect(warn).toHaveBeenCalledWith(expect.objectContaining({ kind: "MFA_RESET_BY_SUPPORT", errorCode: "MFA_NOTICE_ENQUEUE_FAILED" }), "mfa_security_notice_not_queued");
+      expect(securitySideEffectFailureCounts()).toContainEqual({ event: "mfa_notice_enqueue", count: 1 });
+      expect(JSON.stringify(warn.mock.calls)).not.toContain("@");
+      warn.mockRestore();
+      await expect(auth.login(loginCredentials("owner-reenroll@example.test"))).resolves.toMatchObject({ reenrollmentCodeRequired: true });
+      const fresh = setup({ totpSecretEncrypted: undefined, totpEnabledAt: undefined });
+      await expect(fresh.reset()).rejects.toThrow("MFA_NOT_ENABLED");
+    });
+
+    it("keeps the password-only first enrollment and self-service disable paths unchanged", async () => {
+      const fresh = setup({ totpSecretEncrypted: undefined, totpEnabledAt: undefined, totpRecoveryCodeHashes: [] });
+      const enrollment = await fresh.loginEnrollment();
+      expect(enrollment).not.toHaveProperty("reenrollmentCodeRequired");
+      const enrolled = await fresh.auth.confirmRequiredTotpEnrollment(enrollment.setupToken, createTotpCodeForTest(enrollment.secret));
+      expect(enrolled.session.userId).toBe(fresh.owner.id);
+      await fresh.auth.disableTotp({
+        userId: fresh.owner.id, tenantId: fresh.owner.tenantId, roles: fresh.owner.roles, membershipVersion: fresh.owner.membershipVersion, bypassRls: false,
+      }, { totpCode: createTotpCodeForTest(enrollment.secret, Date.now() + 30_000) });
+      expect(fresh.owner.totpReenrollmentCodeHash).toBeUndefined();
+      const again = await fresh.loginEnrollment();
+      expect(again).not.toHaveProperty("reenrollmentCodeRequired");
+      await expect(fresh.auth.confirmRequiredTotpEnrollment(again.setupToken, createTotpCodeForTest(again.secret)))
+        .resolves.toMatchObject({ session: { userId: fresh.owner.id } });
+      expect(fresh.notices.notices).toEqual([]);
+    });
+
+    it("a setup token obtained before a reissued code is rejected, and the new code still works", async () => {
+      const { auth, owner, reset, loginEnrollment } = setup();
+      const first = await reset();
+      const before = await loginEnrollment();
+      const second = await reset();
+      // The reissue bumped the version: the earlier setup token is dead even with the new code.
+      await expect(auth.confirmRequiredTotpEnrollment(before.setupToken, createTotpCodeForTest(before.secret), {}, { reenrollmentCode: second.reenrollmentCode }))
+        .rejects.toThrow("MFA_SETUP_TOKEN_INVALID");
+      await expect(auth.confirmRequiredTotpEnrollment(before.setupToken, createTotpCodeForTest(before.secret), {}, { reenrollmentCode: first.reenrollmentCode }))
+        .rejects.toThrow("MFA_SETUP_TOKEN_INVALID");
+      expect(owner.totpEnabledAt).toBeUndefined();
+      const after = await loginEnrollment();
+      await expect(auth.confirmRequiredTotpEnrollment(after.setupToken, createTotpCodeForTest(after.secret), {}, { reenrollmentCode: second.reenrollmentCode }))
+        .resolves.toMatchObject({ session: { userId: owner.id } });
+    });
+
+    it("a replayed step-up proof gets 409 and never replaces the code; concurrent use of one proof resets once", async () => {
+      const { auth, owner, reset, proofFor, loginEnrollment } = setup();
+      const proof = proofFor();
+      const [a, b] = await Promise.allSettled([reset(proof), reset(proof)]);
+      const fulfilled = [a, b].filter((result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof reset>>> => result.status === "fulfilled");
+      const rejected = [a, b].filter((result): result is PromiseRejectedResult => result.status === "rejected");
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0]!.reason).toMatchObject({ status: 409, message: "MFA_RESET_TARGET_STALE" });
+      const issued = fulfilled[0]!.value;
+      const storedHash = owner.totpReenrollmentCodeHash;
+      await expect(reset(proof)).rejects.toMatchObject({ status: 409, message: "MFA_RESET_TARGET_STALE" });
+      expect(owner.totpReenrollmentCodeHash).toBe(storedHash);
+      const enrollment = await loginEnrollment();
+      await expect(auth.confirmRequiredTotpEnrollment(enrollment.setupToken, createTotpCodeForTest(enrollment.secret), {}, { reenrollmentCode: issued.reenrollmentCode }))
+        .resolves.toMatchObject({ session: { userId: owner.id } });
+    });
+
+    it("refuses a reset in optional mode, where the code could never be entered", async () => {
+      const { owner, reset } = setup();
+      process.env.ADMIN_MFA_MODE = "optional";
+      await expect(reset()).rejects.toMatchObject({ status: 409, message: "MFA_RESET_REQUIRES_REQUIRED_MODE" });
+      expect(owner.totpEnabledAt).toEqual(expect.any(String));
+      expect(owner.totpReenrollmentCodeHash).toBeUndefined();
+      expect(owner.membershipVersion).toBe(5);
+    });
+
+    it("returns the code when the post-reset audit fails, logging and counting it without PII", async () => {
+      const { owner, record, reset } = setup();
+      resetSecuritySideEffectFailureCounts();
+      record.mockImplementation((async (input: { action?: string }) => {
+        if (input.action === "auth.totp_reset_by_system_admin") throw new Error("insert failed for owner-reenroll@example.test");
+        return undefined;
+      }) as never);
+      const error = vi.spyOn(apiLogger, "error").mockImplementation(() => undefined);
+      const issued = await reset();
+      expect(issued.reenrollmentCode).toMatch(/^\d{4}-\d{4}$/);
+      expect(owner.totpReenrollmentCodeHash).toMatch(/^v1:6:/);
+      expect(error).toHaveBeenCalledWith({ tenantId: "tenant-a", userId: owner.id, errorCode: "MFA_RESET_AUDIT_FAILED" }, "mfa_reset_audit_not_recorded");
+      expect(JSON.stringify(error.mock.calls)).not.toMatch(/@|insert failed/);
+      expect(JSON.stringify(error.mock.calls)).not.toContain(issued.reenrollmentCode);
+      expect(securitySideEffectFailureCounts()).toContainEqual({ event: "mfa_reset_audit", count: 1 });
+      error.mockRestore();
+    });
+
+    it("self-service TOTP setup cannot complete a pending support reset", async () => {
+      const { auth, owner, reset } = setup();
+      await reset();
+      const context = { userId: owner.id, tenantId: owner.tenantId, roles: owner.roles, membershipVersion: owner.membershipVersion, sessionId: "owner-session", bypassRls: false };
+      const draft = await auth.createTotpSetup(context);
+      await expect(auth.confirmTotpSetup(context, draft.setupToken, createTotpCodeForTest(draft.secret))).rejects.toThrow("MFA_REENROLLMENT_CODE_REQUIRED");
+      expect(owner.totpEnabledAt).toBeUndefined();
+    });
   });
 
   it("sistem admini TOTP etkinleştikten sonra login'i MFA challenge'a böler ve TOTP reuse'u reddeder", async () => {
@@ -1092,7 +1343,7 @@ describe("AuthService", () => {
       membershipVersion: 1,
       totpRecoveryCodeHashes: [],
     };
-    const users = createMutableUserStore(user);
+    const users = withResetTarget(createMutableUserStore(user), resetTargetOwner());
     const auth = new AuthService(
       users,
       new InMemorySessionStore(),
@@ -1188,7 +1439,7 @@ describe("AuthService", () => {
       membershipVersion: 1,
       totpRecoveryCodeHashes: [],
     };
-    const users = createMutableUserStore(user);
+    const users = withResetTarget(createMutableUserStore(user), resetTargetOwner());
     const auth = new AuthService(
       users,
       new InMemorySessionStore(),
@@ -1224,13 +1475,18 @@ describe("AuthService", () => {
     }, resetTarget);
 
     expect(proof).toMatchObject({ purpose: "OWNER_ADMIN_CHANGE", stepUpToken: expect.any(String), expiresAt: expect.any(String) });
-    expect(() => verifyAdminMfaStepUpProof(proof.stepUpToken, {
+    expect(proof).not.toHaveProperty("target");
+    // The server bound the proof to the target account's current membership version.
+    expect(verifyAdminMfaResetStepUpProof(proof.stepUpToken, {
       userId: user.id,
       sessionId: issued.session.id,
       membershipVersion: issued.session.membershipVersion,
-      purpose: "OWNER_ADMIN_CHANGE",
       target: resetTarget,
-    })).not.toThrow();
+    })).toBe(resetTargetOwner().membershipVersion);
+    // An unknown target, another tenant's account or a non-admin account gets no proof.
+    for (const target of [{ tenantId: "tenant-a", userId: "missing-owner" }, { tenantId: "tenant-b", userId: "owner-a" }]) {
+      await expect(auth.createMfaStepUp(context, "OWNER_ADMIN_CHANGE", { recoveryCode: setup.recoveryCodes[1] }, target)).rejects.toThrow("MFA_RESET_TARGET_NOT_FOUND");
+    }
     await expect(auth.createMfaStepUp({ ...context, membershipVersion: context.membershipVersion + 1 }, "OWNER_ADMIN_CHANGE", {
       recoveryCode: setup.recoveryCodes[1],
     }, resetTarget)).rejects.toThrow("MFA_STEP_UP_CONTEXT_INVALID");
@@ -1350,6 +1606,13 @@ function createMutableUserStore(user: AuthUser): AuthUserStore {
     }),
     enableTotp: vi.fn(async (input) => {
       if (user.totpSecretEncrypted || user.totpEnabledAt) return undefined;
+      if (input.source.membershipVersion !== user.membershipVersion) return undefined;
+      // Mirrors the store: the pending re-enrollment must be the verified one and unexpired; it is consumed here.
+      const expected = input.reenrollmentCodeHash ?? null;
+      if (expected === null ? user.totpReenrollmentCodeHash !== undefined
+        : user.totpReenrollmentCodeHash !== expected || Date.parse(user.totpReenrollmentExpiresAt ?? "") <= Date.now()) return undefined;
+      user.totpReenrollmentCodeHash = undefined;
+      user.totpReenrollmentExpiresAt = undefined;
       user.totpSecretEncrypted = input.secretEncrypted;
       user.totpEnabledAt = input.enabledAt;
       user.totpRecoveryCodeHashes = [...input.recoveryCodeHashes];
@@ -1357,7 +1620,10 @@ function createMutableUserStore(user: AuthUser): AuthUserStore {
       user.membershipVersion += 1;
       return clone();
     }),
-    disableTotp: vi.fn(async () => {
+    disableTotp: vi.fn(async (_userId, source, reenrollment) => {
+      if (source.membershipVersion !== user.membershipVersion) return undefined;
+      user.totpReenrollmentCodeHash = reenrollment?.codeHash;
+      user.totpReenrollmentExpiresAt = reenrollment?.expiresAt;
       user.totpSecretEncrypted = undefined;
       user.totpEnabledAt = undefined;
       user.totpRecoveryCodeHashes = [];
@@ -1376,6 +1642,19 @@ function createMutableUserStore(user: AuthUser): AuthUserStore {
       return true;
     }),
     purgePii: vi.fn(),
+  };
+}
+
+/** Adds the tenant OWNER an OWNER_ADMIN_CHANGE step-up names, so the server can bind the proof to its version. */
+function withResetTarget(store: AuthUserStore, target: AuthUser): AuthUserStore {
+  const findById = store.findById;
+  return { ...store, findById: vi.fn(async (id: string) => (id === target.id ? { ...target, roles: [...target.roles] } : findById(id))) };
+}
+
+function resetTargetOwner(): AuthUser {
+  return {
+    id: "owner-a", email: "owner-a@example.test", name: "Owner A", passwordHash: "unused", tenantId: "tenant-a",
+    roles: ["TENANT_OWNER"], membershipVersion: 4, totpSecretEncrypted: "encrypted", totpEnabledAt: "2026-09-01T00:00:00.000Z",
   };
 }
 

@@ -80,7 +80,12 @@ export class TenantService {
       const roles = user.roles.filter((role): role is "TENANT_OWNER" | "TENANT_ADMIN" => role === "TENANT_OWNER" || role === "TENANT_ADMIN");
       if (user.tenantId !== tenant.id || user.purgedAt || isSystemAdmin(user.roles) || roles.length === 0) return [];
       const mfaEnabled = Boolean(user.totpSecretEncrypted && user.totpEnabledAt);
-      return [{ userId: user.id, name: user.name, emailMasked: user.email ? maskContactEmail(user.email) : null, roles, mfaEnabled, mfaEnabledAt: mfaEnabled ? user.totpEnabledAt! : null }];
+      // DEC-20261021-01: only the pending state and its expiry are shown, never the code hash.
+      const mfaReenrollmentPending = !mfaEnabled && Boolean(user.totpReenrollmentCodeHash);
+      return [{
+        userId: user.id, name: user.name, emailMasked: user.email ? maskContactEmail(user.email) : null, roles, mfaEnabled, mfaEnabledAt: mfaEnabled ? user.totpEnabledAt! : null,
+        mfaReenrollmentPending, mfaReenrollmentExpiresAt: mfaReenrollmentPending ? user.totpReenrollmentExpiresAt ?? null : null,
+      }];
     });
   }
 

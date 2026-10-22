@@ -366,6 +366,7 @@ const authResponseForbiddenDeep = [
   "tokenFamilyId",
   "totpLastUsedCounter",
   "totpRecoveryCodeHashes",
+  "totpReenrollmentCodeHash",
   "totpSecretEncrypted",
 ];
 const developmentAssessmentVisibilities = ["GUARDIAN", "INTERNAL"];
@@ -1959,7 +1960,12 @@ const requiredOperationContracts = [
     responseEnvelope: true,
     requiredHeaders: ["X-Step-Up-Token"],
     requestRequired: ["tenantId", "userId"],
-    responseDataRequired: ["resetAt"],
+    // DEC-20261021-01: the one-time code is returned once; its stored hash never is.
+    responseDataRequired: ["resetAt", "reenrollmentCode", "reenrollmentExpiresAt", "notificationQueued"],
+    responseDataForbiddenDeep: ["codeHash", "totpReenrollmentCodeHash", "totpSecretEncrypted", "totpRecoveryCodeHashes"],
+    fieldChecks: [
+      { path: ["responseData", "reenrollmentExpiresAt"], format: "date-time" },
+    ],
   },
   {
     method: "post",

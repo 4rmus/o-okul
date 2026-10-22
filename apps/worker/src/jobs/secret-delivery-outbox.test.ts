@@ -111,6 +111,25 @@ describe("secret delivery outbox", () => {
     await f.store.claimNext(new Date(Date.now() + 24 * 60 * 60 * 1000));
     expect(f.row.payloadEncrypted).toBeNull(); expect(f.row.status).toBe("UNCERTAIN");
   });
+  it("delivers a system-scoped MFA_SECURITY_NOTICE once and redacts it (DEC-20261021-01)", async () => {
+    const f = postgresFixture({ id: "outbox-mfa", purpose: "MFA_SECURITY_NOTICE", sourceScope: "SYSTEM", tenantId: null, tenantLifecycleVersion: null,
+      payloadEncrypted: encryptSecretDeliveryPayload({ channel: "EMAIL", to: "owner@example.test", subject: "O-Okul: iki adımlı doğrulamanız sıfırlandı", body: "Bu işlemi siz yapmadıysanız" }, env) });
+    // A suspended tenant does not hold back a platform notice: the row names no tenant.
+    f.tenant.status = "SUSPENDED";
+    const sendBatch = vi.fn(async () => [{ channel: "EMAIL" as const, to: "owner@example.test", status: "sent" as const, providerMessageId: "provider-mfa" }]);
+    await processNextSecretDelivery(f.store, { sendBatch }, env);
+    await processNextSecretDelivery(f.store, { sendBatch }, env);
+    expect(sendBatch).toHaveBeenCalledTimes(1);
+    expect(sendBatch).toHaveBeenCalledWith([expect.objectContaining({ to: "owner@example.test", idempotencyKey: "secret-delivery:outbox-mfa" })]);
+    expect(f.row).toMatchObject({ status: "DELIVERED", providerMessageId: "provider-mfa", payloadEncrypted: null, tenantId: null });
+    expect(f.calls.some((call) => call.sql.includes('FROM "Tenant" WHERE'))).toBe(false);
+  });
+  it("an MFA_SECURITY_NOTICE row that claims a tenant scope is never sent as a platform notice", async () => {
+    const f = postgresFixture({ purpose: "MFA_SECURITY_NOTICE", sourceScope: "SYSTEM", tenantId: "tenant-a", tenantLifecycleVersion: null });
+    const sendBatch = vi.fn(async () => []);
+    await expect(processNextSecretDelivery(f.store, { sendBatch }, env)).rejects.toThrow("SECRET_DELIVERY_PROVENANCE_UNVERIFIED");
+    expect(sendBatch).not.toHaveBeenCalled();
+  });
   it("changed claimed provenance is rejected before provider", async () => {
     const f = postgresFixture(); f.mismatchClaim(); const sendBatch = vi.fn(async () => []);
     await expect(processNextSecretDelivery(f.store, { sendBatch }, env)).rejects.toThrow("SECRET_DELIVERY_PROVENANCE_UNVERIFIED"); expect(sendBatch).not.toHaveBeenCalled();

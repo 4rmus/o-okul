@@ -6,11 +6,13 @@ import { Building2, ExternalLink } from "lucide-react";
 import { Button, Field, Input } from "@o-okul/ui";
 import { appBrand } from "../../src/brand.js";
 import { tenantLoginOrigin } from "../../src/tenant-host.js";
+import { useActivationNotice } from "./activation-notice.js";
 import { ContactSupportLink } from "./contact-support-link.js";
 
 export function TenantLocatorPage({ domain }: { domain: string }) {
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
+  const activationNotice = useActivationNotice();
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -31,6 +33,7 @@ export function TenantLocatorPage({ domain }: { domain: string }) {
       </div>
       <form className="next-form" aria-label="Kurum adresi bulma formu" onSubmit={submit}>
         <h1 id="locator-title">Kurumunuza ilerleyin</h1>
+        {activationNotice ? <p className="next-status-note" role="status">{activationNotice}</p> : null}
         <p>Okulunuzun size verdiği kurum adresini yazın.</p>
         <Field label="Kurum adresi">
           <Input

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { Body, Controller, ForbiddenException, Get, Headers, HttpCode, HttpException, Post, Req, Res } from "@nestjs/common";
+import { Body, Controller, ForbiddenException, Get, Header, Headers, HttpCode, HttpException, Post, Req, Res } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { z } from "zod";
 import type {
@@ -76,7 +76,12 @@ const totpSetupConfirmBodySchema = z.object({
   setupToken: requiredTrimmedString,
   totpCode: requiredTrimmedString,
 }).strict() satisfies z.ZodType<TotpSetupConfirmRequest>;
-const totpEnrollmentConfirmBodySchema = totpSetupConfirmBodySchema satisfies z.ZodType<TotpEnrollmentConfirmRequest>;
+const totpEnrollmentConfirmBodySchema = z.object({
+  setupToken: requiredTrimmedString,
+  totpCode: requiredTrimmedString,
+  // DEC-20261021-01: the one-time code a SYSTEM_ADMIN reset issued; the service decides whether it is required.
+  reenrollmentCode: z.string().trim().min(1).max(32).optional(),
+}).strict() satisfies z.ZodType<TotpEnrollmentConfirmRequest>;
 const totpDisableBodySchema = z.object({
   totpCode: optionalTrimmedString,
   recoveryCode: optionalTrimmedString,
@@ -197,7 +202,9 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<AuthResponse> {
-    const tokenPair = await this.auth.confirmRequiredTotpEnrollment(body.setupToken, body.totpCode, requestSessionClientContext(request));
+    const tokenPair = await this.auth.confirmRequiredTotpEnrollment(body.setupToken, body.totpCode, requestSessionClientContext(request), {
+      reenrollmentCode: body.reenrollmentCode,
+    });
     await this.assertIssuedSessionHost(request, tokenPair);
     response.cookie(refreshCookieName, tokenPair.refreshToken, refreshCookieOptions);
     response.cookie(csrfCookieName, createCsrfToken(), csrfCookieOptions);
@@ -307,6 +314,8 @@ export class AuthController {
 
   @Post("totp/admin-reset")
   @HttpCode(200)
+  // The response carries the one-time re-enrollment code (DEC-20261021-01); never cache it.
+  @Header("Cache-Control", "no-store")
   @Roles("SYSTEM_ADMIN")
   resetTotpBySystemAdmin(
     @Body(zodBody(totpAdminResetBodySchema)) body: TotpAdminResetRequest,

@@ -25,6 +25,8 @@ const bypassRlsFunctionAllowlist = new Map([
     "transitionStatus",
   ])],
   ["apps/api/src/license/license-term-store.ts", new Set(["create"])],
+  // DEC-20261021-01: MFA reset notices are system-scoped outbox rows (tenantId NULL), written outside any tenant.
+  ["apps/api/src/auth/mfa-security-notice.ts", new Set(["enqueue"])],
   ["apps/api/src/identity-invitation/employee-account-activation-store.ts", new Set(["accept"])],
   ["apps/api/src/identity-invitation/student-portal-activation-store.ts", new Set(["accept"])],
 ]);

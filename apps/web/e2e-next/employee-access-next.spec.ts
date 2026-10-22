@@ -226,7 +226,8 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
   await expect(page.locator(".uh-crud-page__error")).toHaveCount(0);
 });
 
-for (const failInvite of [false, true]) test(`UAT F-02 yeni çalışan formundan aynı adımda yönetici daveti gönderilir${failInvite ? " (davet hatası)" : ""}`, async ({ page }) => {
+// UAT F-20: the 409 e-mail refusal of the same step reopens the invitation dialog with the field marked invalid.
+for (const failInvite of [undefined, { code: "EMPLOYEE_INVITATION_ALREADY_PENDING", status: 400 }, { code: "EMPLOYEE_EMAIL_ACCOUNT_ALREADY_BOUND", status: 409 }]) test(`UAT F-02 yeni çalışan formundan aynı adımda yönetici daveti gönderilir${failInvite ? ` (davet hatası ${failInvite.code})` : ""}`, async ({ page }) => {
   let activeSession = false;
   const createdBodies: Array<Record<string, unknown>> = [];
   const invitationBodies: Array<Record<string, unknown>> = [];
@@ -264,7 +265,7 @@ for (const failInvite of [false, true]) test(`UAT F-02 yeni çalışan formundan
     if (path === "/employees/employee-new-admin/account-invitations" && request.method() === "POST") {
       invitationBodies.push(request.postDataJSON() as Record<string, unknown>);
       if (failInvite && invitationBodies.length === 1) {
-        await route.fulfill({ body: JSON.stringify({ error: { code: "EMPLOYEE_INVITATION_ALREADY_PENDING" } }), contentType: "application/json", headers: corsHeaders, status: 400 });
+        await route.fulfill({ body: JSON.stringify({ error: { code: failInvite.code } }), contentType: "application/json", headers: corsHeaders, status: failInvite.status });
         return;
       }
       await json(route, {
@@ -320,7 +321,14 @@ for (const failInvite of [false, true]) test(`UAT F-02 yeni çalışan formundan
   if (failInvite) {
     // The profile stays; the invitation dialog reopens with the chosen role so the retry is one click.
     const retry = page.getByRole("dialog", { name: "Müdür Yardımcısı hesap daveti" });
-    await expect(retry).toContainText("Bu çalışan için zaten bekleyen bir davet var");
+    if (failInvite.status === 409) {
+      const email = retry.getByLabel("İş e-postası");
+      await expect(email).toHaveAttribute("aria-invalid", "true");
+      await expect(email).toHaveAccessibleDescription("Bu e-posta kurumda başka bir çalışanın hesabında kullanılıyor. Farklı bir e-posta girin.");
+      await expect(retry.getByRole("alert")).toHaveCount(0);
+    } else {
+      await expect(retry).toContainText("Bu çalışan için zaten bekleyen bir davet var");
+    }
     await expect(retry.getByLabel("Başlangıç rolü")).toHaveValue("TENANT_ADMIN");
     await expect(retry.getByLabel("İş e-postası")).toHaveValue("mudur@example.test");
     await retry.getByRole("button", { name: "Daveti gönder" }).click();
@@ -330,6 +338,104 @@ for (const failInvite of [false, true]) test(`UAT F-02 yeni çalışan formundan
     return;
   }
   await expect(page.locator('.uh-toast-region[aria-live="polite"]')).toContainText("Çalışan profili oluşturuldu ve hesap daveti gönderime alındı.");
+});
+
+test("UAT F-20 davet penceresi bağlı veya uyumsuz e-postada açık kalır ve alanı geçersiz işaretler", async ({ page }) => {
+  let activeSession = false;
+  const invitationBodies: Array<Record<string, unknown>> = [];
+  const refusals = ["EMPLOYEE_EMAIL_ACCOUNT_ALREADY_BOUND", "EMPLOYEE_EMAIL_ACCOUNT_INCOMPATIBLE"];
+  await page.route("**/*", async (route) => {
+    if (route.request().method() === "OPTIONS") {
+      await route.fulfill({ headers: corsHeaders, status: 204 });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route("**/auth/refresh", async (route) => {
+    if (!activeSession) {
+      await route.fulfill({ headers: corsHeaders, status: 401 });
+      return;
+    }
+    await json(route, authResponse());
+  });
+  await page.route("**/auth/login", async (route) => {
+    activeSession = true;
+    await json(route, authResponse());
+  });
+  await page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname.replace("/api/v1", "");
+    if (path.startsWith("/auth/")) {
+      await route.fallback();
+      return;
+    }
+    if (path === "/employees/employee-unlinked-a/account-invitations" && request.method() === "POST") {
+      invitationBodies.push(request.postDataJSON() as Record<string, unknown>);
+      const code = refusals[invitationBodies.length - 1];
+      if (code) {
+        await route.fulfill({ body: JSON.stringify({ error: { code } }), contentType: "application/json", headers: corsHeaders, status: 409 });
+        return;
+      }
+      await json(route, {
+        id: "invitation-f20", tenantId: "tenant-a", subjectType: "EMPLOYEE", subjectId: "employee-unlinked-a",
+        email: "muhasebe@example.test", name: "Yeni Admin", role: "FINANCE_STAFF", kind: "EMAIL_LINK", status: "PENDING",
+        expiresAt: "2099-01-02T10:00:00.000Z", createdAt: "2099-01-01T10:00:00.000Z", updatedAt: "2099-01-01T10:00:00.000Z",
+      });
+      return;
+    }
+    if (path === "/employees" && request.method() === "GET") {
+      await json(route, [unlinkedEmployeeFixture()], { limit: 50 });
+      return;
+    }
+    if (path === "/me/tenant") {
+      await json(route, { id: "tenant-a", name: "DNA Eğitim", plan: "TRIAL", slug: "dna-egitim", status: "ACTIVE" });
+      return;
+    }
+    if (path === "/me/institution-dashboard") {
+      await json(route, {
+        activeStudentCount: 0,
+        attention: { attendanceAlertCount: 0, openImportQuarantineCount: 0, openSupportTicketCount: 0 },
+        generatedAt: "2026-08-01T10:00:00.000Z",
+        institution: { name: "DNA Eğitim" },
+      });
+      return;
+    }
+    await json(route, []);
+  });
+
+  await login(page);
+  const managementGroup = page.getByRole("button", { name: "Kişiler", exact: true });
+  if ((await managementGroup.getAttribute("aria-expanded")) !== "true") await managementGroup.click();
+  await page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Personel", exact: true }).click();
+  await page.getByRole("navigation", { name: "Personel bölümleri" }).getByRole("link", { name: "Çalışanlar ve yetkiler", exact: true }).click();
+  await expect(page).toHaveURL(/\/kurum\/calisanlar$/u);
+  await page.getByRole("button", { name: "Yeni Admin için hesap daveti gönder" }).click();
+  const dialog = page.getByRole("dialog", { name: "Yeni Admin hesap daveti" });
+  const email = dialog.getByLabel("İş e-postası");
+  await email.fill("ogretmen@example.test");
+  await dialog.getByLabel("Başlangıç rolü").selectOption("FINANCE_STAFF");
+  await dialog.getByRole("button", { name: "Daveti gönder" }).click();
+
+  await expect(dialog).toBeVisible();
+  await expect(email).toHaveAttribute("aria-invalid", "true");
+  await expect(email).toHaveAccessibleDescription("Bu e-posta kurumda başka bir çalışanın hesabında kullanılıyor. Farklı bir e-posta girin.");
+  await expect(email).toBeFocused();
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
+  // Editing the address clears the error.
+  await email.fill("ogrenci@example.test");
+  await expect(email).not.toHaveAttribute("aria-invalid", "true");
+  await dialog.getByRole("button", { name: "Daveti gönder" }).click();
+  await expect(email).toHaveAttribute("aria-invalid", "true");
+  await expect(dialog).toContainText("Bu e-posta çalışan hesabıyla birleştirilemeyen bir hesaba ait");
+
+  await email.fill("muhasebe@example.test");
+  await dialog.getByRole("button", { name: "Daveti gönder" }).click();
+  await expect(dialog).toBeHidden();
+  expect(invitationBodies).toEqual([
+    { email: "ogretmen@example.test", role: "FINANCE_STAFF" },
+    { email: "ogrenci@example.test", role: "FINANCE_STAFF" },
+    { email: "muhasebe@example.test", role: "FINANCE_STAFF" },
+  ]);
 });
 
 async function login(page: Page) {

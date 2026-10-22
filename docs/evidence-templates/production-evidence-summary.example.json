@@ -747,7 +747,8 @@
         "recoveryCodeLoginSucceeded": true,
         "recoveryCodeReuseRejected": true,
         "sessionsRevokedOnEnable": true,
-        "sessionsRevokedOnDisable": true
+        "sessionsRevokedOnDisable": true,
+        "adminResetReenrollmentRequiresCode": true
       },
       "commandsPassed": [
         "pnpm --filter @o-okul/api exec vitest run src/auth/auth.service.test.ts src/auth/auth-user-store.test.ts",

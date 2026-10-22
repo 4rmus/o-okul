@@ -9,8 +9,18 @@ import { isFinanceOnlyStaff, type AuthResponse, type MfaChallengeResponse, type 
 import { Button, Field, Input, SegmentedControl, Select } from "@o-okul/ui";
 import { useAuth } from "../providers.js";
 import { appBrand } from "../../src/brand.js";
-import { getTenantLoginContext, MfaEnrollmentRequiredError, MfaRequiredError, TenantSelectionRequiredError } from "../../src/api-client.js";
+import { ApiRequestError, getTenantLoginContext, MfaEnrollmentRequiredError, MfaRequiredError, TenantSelectionRequiredError } from "../../src/api-client.js";
+import { useActivationNotice } from "./activation-notice.js";
 import { ContactSupportLink } from "./contact-support-link.js";
+
+// DEC-20261021-01: after a support MFA reset the enrollment also needs the one-time code read over the phone.
+const mfaResetExpiredMessage = "MFA sıfırlamasının 24 saatlik süresi doldu. Yeni kayıt kodu için O-Okul desteğine başvurun.";
+const enrollmentErrors: Record<string, string> = {
+  MFA_REENROLLMENT_CODE_REQUIRED: "Destek ekibinin telefonla ilettiği tek kullanımlık kayıt kodunu girin.",
+  MFA_REENROLLMENT_CODE_INVALID: "Kayıt kodu geçersiz. Destek ekibinin ilettiği kodu kontrol edip tekrar deneyin.",
+  MFA_REENROLLMENT_LOCKED: "Çok fazla hatalı kayıt kodu denendi. 15 dakika sonra tekrar deneyin.",
+  MFA_RESET_EXPIRED: mfaResetExpiredMessage,
+};
 
 interface TenantLoginPageProps {
   tenantSlug?: string;
@@ -30,10 +40,12 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
   const [pendingEnrollment, setPendingEnrollment] = useState<MfaEnrollmentRequiredResponse | null>(null);
   const [mfaMethod, setMfaMethod] = useState<"totp" | "recovery_code">("totp");
   const [mfaCode, setMfaCode] = useState("");
+  const [reenrollmentCode, setReenrollmentCode] = useState("");
   const [mfaSecretCopyStatus, setMfaSecretCopyStatus] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tenantContext, setTenantContext] = useState<TenantLoginContextResponse | null>(null);
+  const activationNotice = useActivationNotice();
 
   useEffect(() => {
     if (!isBootstrapping && auth) {
@@ -57,7 +69,7 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
 
     try {
       if (pendingEnrollment) {
-        await confirmMfaEnrollment(pendingEnrollment.setupToken, mfaCode);
+        await confirmMfaEnrollment(pendingEnrollment.setupToken, mfaCode, pendingEnrollment.reenrollmentCodeRequired ? reenrollmentCode : undefined);
       } else if (pendingMfa) {
         await verifyMfa(pendingMfa.challengeToken, mfaMethod === "totp" ? { totpCode: mfaCode } : { recoveryCode: mfaCode });
       } else if (pendingTenantSelection) {
@@ -82,6 +94,7 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
         setPendingMfa(null);
         setPendingTenantSelection(null);
         setMfaCode("");
+        setReenrollmentCode("");
         setError("");
         return;
       }
@@ -91,7 +104,10 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
         setError("");
         return;
       }
-      setError(pendingMfa || pendingEnrollment ? "Doğrulama kodu geçersiz." : "Giriş bilgileri hatalı.");
+      const code = caught instanceof ApiRequestError ? caught.code ?? "" : "";
+      if (pendingEnrollment) setError(enrollmentErrors[code] ?? "Doğrulama kodu geçersiz.");
+      else if (pendingMfa) setError("Doğrulama kodu geçersiz.");
+      else setError(code === "MFA_RESET_EXPIRED" ? mfaResetExpiredMessage : "Giriş bilgileri hatalı.");
     } finally {
       setIsSubmitting(false);
     }
@@ -124,6 +140,9 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
       </div>
       <form className="next-form" aria-label="Giriş formu" onSubmit={(event) => void handleSubmit(event)}>
         <h1 id="login-title">Giriş</h1>
+        {activationNotice && !pendingMfa && !pendingEnrollment && !pendingTenantSelection ? (
+          <p className="next-status-note" role="status">{activationNotice}</p>
+        ) : null}
         {!lockedTenantSlug ? (
           <Field label="Kurum Kodu">
             <Input
@@ -238,6 +257,24 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
               Kurulum anahtarını kopyala
             </Button>
             {mfaSecretCopyStatus ? <p className="next-mfa-enrollment-help">{mfaSecretCopyStatus}</p> : null}
+            {pendingEnrollment.reenrollmentCodeRequired ? (
+              <Field
+                label="Tek kullanımlık kayıt kodu"
+                description="MFA'nız destek ekibi tarafından sıfırlandı. Ekip kurumunuzun kayıtlı telefonunu arayarak size 8 haneli bir kod iletir; kod 24 saat geçerlidir."
+              >
+                <Input
+                  name="mfaReenrollmentCode"
+                  type="text"
+                  value={reenrollmentCode}
+                  onChange={(event) => setReenrollmentCode(event.target.value)}
+                  autoComplete="off"
+                  inputMode="numeric"
+                  placeholder="1234-5678"
+                  maxLength={12}
+                  required
+                />
+              </Field>
+            ) : null}
             <Field label="Doğrulama kodu">
               <Input
                 name="mfaEnrollmentCode"

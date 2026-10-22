@@ -41,6 +41,8 @@ const adminMfaLoginVerificationKeys = [
   "recoveryCodeReuseRejected",
   "sessionsRevokedOnEnable",
   "sessionsRevokedOnDisable",
+  // DEC-20261021-01: after a SYSTEM_ADMIN reset, re-enrollment needs the one-time code, not the password alone.
+  "adminResetReenrollmentRequiresCode",
 ];
 
 if (!target) {

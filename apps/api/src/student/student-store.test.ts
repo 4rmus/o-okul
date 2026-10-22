@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { runWithRequestContext } from "../context/request-context.js";
-import { InMemoryStudentStore, PostgresStudentStore } from "./student-store.js";
+import { InMemoryStudentStore, PostgresStudentStore, type StudentImportBatchInput } from "./student-store.js";
 
 describe("PostgresStudentStore", () => {
   it("seviye filtresi sınıfsız öğrenciyi doğrudan gradeLevelId ile döndürür", async () => {
@@ -395,63 +395,130 @@ describe("PostgresStudentStore", () => {
     expect(client.releaseCalled).toBe(true);
   });
 
-  it("v2 importta öğrenci, enrollment ve StudentContact kaydını tek transactionda rollback yapar", async () => {
-    const queries: string[] = [];
-    const client = {
-      async query<T>(sql: string, values?: unknown[]) {
-        queries.push(sql);
-        if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
-        if (sql.includes('FROM "Class"') && sql.includes("FOR SHARE")) return { rows: [{ gradeLevelId: "grade-8" }] as T[] };
-        if (sql.includes('candidate::text AS "studentNo"')) return { rows: [{ studentNo: "101" }] as T[] };
-        if (sql.includes('INSERT INTO "Student"')) {
-          return { rows: [{
-            id: String(values?.[0]), tenantId: "tenant-a", studentNo: "101", firstName: "Ada", lastName: "Kaya",
-            classId: "class-a", responsibleTeacherId: null, status: "ACTIVE", nationalIdEncrypted: null,
-            nationalIdHash: null, phone: null, email: null, photoKey: null, userId: null, deletedAt: null,
-          }] as T[] };
-        }
-        if (sql.includes('INSERT INTO "StudentEnrollment"')) {
-          return { rows: [{
-            id: "enrollment-a", tenantId: "tenant-a", studentId: String(values?.[2]), classId: "class-a",
-            academicYearId: null, termId: null, status: "ACTIVE", startsAt: "2026-08-10", endsAt: null,
-            reason: "CREATED", createdAt: new Date(), updatedAt: new Date(),
-          }] as T[] };
-        }
-        if (sql.includes('INSERT INTO "StudentContact"')) throw new Error("CONTACT_INSERT_FAILED");
-        return { rows: [] as T[] };
-      },
-      release() {},
+  it("5.000 satırlık importBatch'i O(parça) sorguyla, tek BEGIN/COMMIT ve en fazla 1.000 elemanlı dizilerle yazar", async () => {
+    const { client, queries } = createImportBatchClient();
+    const store = new PostgresStudentStore({ async query<T>() { return { rows: [] as T[] }; }, async connect() { return client; } });
+    const input = importBatchInput(5_000);
+    let finalizeSawStudents = 0;
+    input.finalize = async (tx, students) => {
+      finalizeSawStudents = students.length;
+      await tx.query(`UPDATE "IdempotencyKey" SET "status" = 'COMPLETED'`, []);
     };
-    const store = new PostgresStudentStore({
-      async query<T>() { return { rows: [] as T[] }; },
-      async connect() { return client; },
-    });
 
-    await runWithRequestContext(
-      { userId: "user-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false },
-      async () => {
-        await expect(store.createManyWithEnrollmentsAndContacts!([{
-          student: { tenantId: "tenant-a", firstName: "Ada", lastName: "Kaya", gradeLevelId: "grade-8", classId: "class-a" },
-          enrollment: { gradeLevelId: "grade-8", classId: "class-a", startsAt: "2026-08-10", status: "ACTIVE" },
-          contact: {
-            tenantId: "tenant-a",
-            firstName: "Fatma",
-            lastName: "Kaya",
-            relationType: "MOTHER",
-            canReceiveSms: false,
-            canReceiveAnnouncements: false,
-            canReceiveFinance: false,
-          },
-        }])).rejects.toThrow("CONTACT_INSERT_FAILED");
-      },
-    );
+    const students = await runWithRequestContext(importBatchContext, () => store.importBatch(input));
 
-    expect(queries).toContain("BEGIN");
-    expect(queries.some((sql) => sql.includes('INSERT INTO "Student"'))).toBe(true);
-    expect(queries.some((sql) => sql.includes('INSERT INTO "StudentEnrollment"'))).toBe(true);
-    expect(queries.some((sql) => sql.includes('INSERT INTO "StudentContact"'))).toBe(true);
-    expect(queries).toContain("ROLLBACK");
-    expect(queries).not.toContain("COMMIT");
+    // BEGIN + shared tenant lock + 2 set_config, class, number lock, count, TC, number, allocation,
+    // 5 Student + 5 StudentEnrollment + 5 StudentContact + 6 AuditLog chunks, finalize, COMMIT.
+    expect(queries).toHaveLength(33);
+    expect(queries.filter((query) => query.sql === "BEGIN")).toHaveLength(1);
+    expect(queries.filter((query) => query.sql === "COMMIT")).toHaveLength(1);
+    expect(queries.some((query) => query.sql === "ROLLBACK")).toBe(false);
+    expect(queries.filter((query) => query.sql.includes('INSERT INTO "Student" ('))).toHaveLength(5);
+    expect(queries.filter((query) => query.sql.includes('INSERT INTO "StudentEnrollment"'))).toHaveLength(5);
+    expect(queries.filter((query) => query.sql.includes('INSERT INTO "StudentContact"'))).toHaveLength(5);
+    expect(queries.filter((query) => query.sql.includes('INSERT INTO "AuditLog"'))).toHaveLength(6);
+    // Insert chunks bind at most 1,000 elements per array; each lookup stays a single whole-file `= ANY` (DEC-20261021-02).
+    for (const query of queries.filter((candidate) => candidate.sql.includes("INSERT INTO"))) {
+      for (const value of query.values ?? []) {
+        if (Array.isArray(value)) expect(value.length).toBeLessThanOrEqual(1_000);
+      }
+    }
+    expect(queries.filter((query) => query.sql.includes('"nationalIdHash" = ANY'))).toHaveLength(1);
+    expect(queries.filter((query) => query.sql.includes('btrim("studentNo") = ANY'))).toHaveLength(1);
+    const allocation = queries.find((query) => query.sql.includes('candidate::text AS "studentNo"'));
+    expect(allocation?.values?.[0]).toBe("tenant-a");
+    expect(allocation?.values?.[1]).toHaveLength(2_500);
+    expect(allocation?.values?.[2]).toBe(2_500);
+    const studentInsert = queries.find((query) => query.sql.includes('INSERT INTO "Student" ('));
+    expect(studentInsert?.sql).toContain("FROM unnest(");
+    expect(studentInsert?.values?.[0]).toBe("tenant-a");
+    expect(finalizeSawStudents).toBe(5_000);
+    expect(queries.findIndex((query) => query.sql.includes('UPDATE "IdempotencyKey"')))
+      .toBe(queries.findIndex((query) => query.sql === "COMMIT") - 1);
+    // Returned in input order although the fake returns each chunk reversed; numbers fill the gaps in input order.
+    expect(students.map((student) => student.id)).toEqual(input.rows.map((row) => row.id));
+    expect(students.slice(0, 4).map((student) => student.studentNo)).toEqual(["9000", "100", "9002", "101"]);
+    const auditInsert = queries.find((query) => query.sql.includes('INSERT INTO "AuditLog"'));
+    expect(auditInsert?.values?.slice(0, 3)).toEqual(["tenant-a", "user-a", input.auditCreatedAt]);
+    expect(auditInsert?.sql).toContain('input."diff"::jsonb, $3::timestamp(3)');
+    expect(JSON.parse((auditInsert?.values?.[7] as string[])[0]!)).toEqual({ studentId: input.rows[0]!.id });
+    expect(client.releaseCalled).toBe(true);
+  });
+
+  it("importBatch parça insert'i hata alırsa tek transaction'ı ROLLBACK eder ve finalize çağrılmaz", async () => {
+    const { client, queries } = createImportBatchClient({ failOn: 'INSERT INTO "StudentContact"' });
+    const store = new PostgresStudentStore({ async query<T>() { return { rows: [] as T[] }; }, async connect() { return client; } });
+    const input = importBatchInput(1_500);
+    const finalize = vi.fn(async () => undefined);
+    input.finalize = finalize;
+
+    await expect(runWithRequestContext(importBatchContext, () => store.importBatch(input))).rejects.toThrow("CONTACT_INSERT_FAILED");
+
+    expect(queries.filter((query) => query.sql === "BEGIN")).toHaveLength(1);
+    expect(queries.some((query) => query.sql === "ROLLBACK")).toBe(true);
+    expect(queries.some((query) => query.sql === "COMMIT")).toBe(false);
+    expect(finalize).not.toHaveBeenCalled();
+    expect(client.releaseCalled).toBe(true);
+  });
+
+  it.each([
+    ["eksik sınıf", { classes: [] }, "CLASS_NOT_FOUND"],
+    ["sınıf-seviye uyuşmazlığı", { classes: [{ id: "class-a", gradeLevelId: "grade-7", campusId: "campus-a" }] }, "STUDENT_CLASS_GRADE_LEVEL_MISMATCH"],
+    ["kampüs dışı sınıf", { campusIds: ["campus-b"] }, "STUDENT_CAMPUS_SCOPE_FORBIDDEN"],
+    ["lisans limiti", { activeStudentLimit: 10, currentActive: 8 }, "ACTIVE_STUDENT_LIMIT_REACHED"],
+    ["silinmiş öğrencide kayıtlı TC", { nationalIdExists: true }, "STUDENT_NATIONAL_ID_CONFLICT"],
+    ["kayıtlı okul no", { studentNoExists: true }, "STUDENT_NO_CONFLICT"],
+    ["TC unique ihlali", { failOn: 'INSERT INTO "Student" (', failWith: { code: "23505", constraint: "Student_tenantId_nationalIdHash_key" } }, "STUDENT_NATIONAL_ID_CONFLICT"],
+    ["okul no unique ihlali", { failOn: 'INSERT INTO "Student" (', failWith: { code: "23505", constraint: "Student_tenantId_studentNo_active_key" } }, "STUDENT_NO_CONFLICT"],
+  ] as const)("importBatch %s durumunda yazmadan ROLLBACK eder", async (_name, options, code) => {
+    const { client, queries } = createImportBatchClient(options as ImportBatchClientOptions);
+    const store = new PostgresStudentStore({ async query<T>() { return { rows: [] as T[] }; }, async connect() { return client; } });
+    const input = importBatchInput(3);
+    if ("campusIds" in options) input.campusIds = [...options.campusIds];
+    if ("activeStudentLimit" in options) input.activeStudentLimit = options.activeStudentLimit;
+
+    await expect(runWithRequestContext(importBatchContext, () => store.importBatch(input))).rejects.toThrow(code);
+    expect(queries.some((query) => query.sql === "ROLLBACK")).toBe(true);
+    expect(queries.some((query) => query.sql === "COMMIT")).toBe(false);
+  });
+
+  it("importBatch başka tenant'ın request context'inde çalışmaz", async () => {
+    const { client, queries } = createImportBatchClient();
+    const store = new PostgresStudentStore({ async query<T>() { return { rows: [] as T[] }; }, async connect() { return client; } });
+
+    await expect(runWithRequestContext({ ...importBatchContext, tenantId: "tenant-b" }, () => store.importBatch(importBatchInput(1))))
+      .rejects.toThrow("FORBIDDEN_TENANT");
+    expect(queries).toHaveLength(0);
+  });
+
+  it("bellek içi createMany dosyada sonra gelen açık okul no'yu ayırır ve numaraları metin olarak karşılaştırır", async () => {
+    const store = new InMemoryStudentStore();
+    await store.createMany([{ tenantId: "tenant-c", studentNo: "0101", firstName: "Sıfırlı", lastName: "No" }]);
+
+    const created = await store.createMany([
+      { tenantId: "tenant-c", firstName: "Numarasız", lastName: "Bir" },
+      { tenantId: "tenant-c", studentNo: "100", firstName: "Numaralı", lastName: "İki" },
+      { tenantId: "tenant-c", firstName: "Numarasız", lastName: "Üç" },
+    ]);
+
+    // "0101" does not hold 101 (Postgres compares text), and the file's own "100" is skipped.
+    expect(created.map((student) => student.studentNo)).toEqual(["101", "100", "102"]);
+  });
+
+  it("bellek içi store TC aramasında silinmiş öğrenciyi yalnız includeDeleted ile döndürür ve okul no'yu kırparak eşler", async () => {
+    const store = new InMemoryStudentStore();
+    const [kept, removed] = await store.createMany([
+      { tenantId: "tenant-a", studentNo: "7001", firstName: "Ada", lastName: "Kaya", nationalIdHash: "hash-kept", phone: "5551234567" },
+      { tenantId: "tenant-a", studentNo: "7002", firstName: "Can", lastName: "Kaya", nationalIdHash: "hash-removed" },
+    ]);
+    await store.softDelete(removed!.id, "2026-10-22T00:00:00.000Z");
+
+    await expect(store.findProfileById(kept!.id)).resolves.toMatchObject({ nationalIdHash: "hash-kept", phone: "5551234567" });
+    await expect(store.findExistingNationalIdHashes("tenant-a", ["hash-kept", "hash-removed"])).resolves.toEqual(["hash-kept"]);
+    await expect(store.findExistingNationalIdHashes("tenant-a", ["hash-kept", "hash-removed"], { includeDeleted: true }))
+      .resolves.toEqual(["hash-kept", "hash-removed"]);
+    await expect(store.findExistingNationalIdHashes("tenant-b", ["hash-kept"], { includeDeleted: true })).resolves.toEqual([]);
+    await expect(store.findExistingStudentNos("tenant-a", ["7001", "7002", "9999"])).resolves.toEqual(["7001"]);
   });
 
   it("enrollment kota reddinde öğrenci oluşturmayı aynı transaction içinde rollback yapar", async () => {
@@ -782,3 +849,96 @@ describe("InMemoryStudentStore cursor dayanıklılığı ve Türkçe arama", () 
     expect(portal.records.map((record) => record.lastName)).toEqual(["IŞIK"]);
   });
 });
+
+const importBatchContext = { userId: "user-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN" as const], bypassRls: false };
+
+function importBatchInput(count: number): StudentImportBatchInput {
+  const rows = Array.from({ length: count }, (_, index) => {
+    const id = `student-${index}`;
+    return {
+      id,
+      student: {
+        tenantId: "tenant-a",
+        // Every other row brings its own number; the rest are allocated around them.
+        ...(index % 2 === 0 ? { studentNo: String(9_000 + index) } : {}),
+        firstName: `AD ${index}`,
+        lastName: "SOYAD",
+        gradeLevelId: "grade-8",
+        classId: "class-a",
+        status: "ACTIVE" as const,
+        ...(index % 3 === 0 ? { nationalIdEncrypted: `enc-${index}`, nationalIdHash: `hash-${index}` } : {}),
+      },
+      enrollment: { gradeLevelId: "grade-8", classId: "class-a", startsAt: "2026-10-22", status: "ACTIVE" as const, reason: "CREATED" },
+      contact: {
+        tenantId: "tenant-a",
+        studentId: id,
+        firstName: "VELİ",
+        lastName: "SOYAD",
+        relationType: "LEGAL_GUARDIAN" as const,
+        phoneEncrypted: `phone-enc-${index}`,
+        phoneHash: `phone-hash-${index}`,
+        canReceiveSms: false,
+        canReceiveAnnouncements: false,
+        canReceiveFinance: false,
+      },
+    };
+  });
+  return {
+    tenantId: "tenant-a",
+    actorUserId: "user-a",
+    rows,
+    audits: [
+      ...rows.map((row) => ({ entityType: "StudentContact", entityId: row.id, action: "student_contact.imported", diff: { studentId: row.id } })),
+      { entityType: "StudentImport", action: "student_import.completed", diff: { totalRows: count } },
+    ],
+    auditCreatedAt: "2026-10-22T08:00:00.000Z",
+    activeStudentLimit: 100_000,
+  };
+}
+
+interface ImportBatchClientOptions {
+  classes?: Array<{ id: string; gradeLevelId: string | null; campusId: string | null }>;
+  currentActive?: number;
+  nationalIdExists?: boolean;
+  studentNoExists?: boolean;
+  failOn?: string;
+  failWith?: Record<string, unknown>;
+}
+
+function createImportBatchClient(options: ImportBatchClientOptions = {}) {
+  const queries: Array<{ sql: string; values?: unknown[] }> = [];
+  const client = {
+    releaseCalled: false,
+    async query<T>(sql: string, values?: unknown[]) {
+      queries.push({ sql, values });
+      if (options.failOn && sql.includes(options.failOn)) {
+        throw Object.assign(new Error(options.failWith ? "duplicate key value" : "CONTACT_INSERT_FAILED"), options.failWith ?? {});
+      }
+      if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
+      if (sql.includes('FROM "Class"') && sql.includes("FOR SHARE")) {
+        return { rows: (options.classes ?? [{ id: "class-a", gradeLevelId: "grade-8", campusId: "campus-a" }]) as T[] };
+      }
+      if (sql.includes('count(*)::int AS "count"')) return { rows: [{ count: options.currentActive ?? 0 }] as T[] };
+      if (sql.includes('"nationalIdHash" = ANY')) return { rows: (options.nationalIdExists ? [{ "?column?": 1 }] : []) as T[] };
+      if (sql.includes('btrim("studentNo") = ANY')) return { rows: (options.studentNoExists ? [{ "?column?": 1 }] : []) as T[] };
+      if (sql.includes('candidate::text AS "studentNo"')) {
+        return { rows: Array.from({ length: Number(values?.[2]) }, (_, index) => ({ studentNo: String(100 + index) })) as T[] };
+      }
+      if (sql.includes('INSERT INTO "Student" (')) {
+        const [, ids, studentNos, firstNames, lastNames] = values as [string, string[], string[], string[], string[]];
+        return {
+          rows: ids.map((id, index) => ({
+            id, tenantId: "tenant-a", studentNo: studentNos[index], firstName: firstNames[index], lastName: lastNames[index],
+            gradeLevelId: "grade-8", classId: "class-a", responsibleTeacherId: null, status: "ACTIVE",
+            nationalIdEncrypted: null, nationalIdHash: null, phone: null, email: null, photoKey: null, userId: null, deletedAt: null,
+          })).reverse() as T[],
+        };
+      }
+      return { rows: [] as T[] };
+    },
+    release() {
+      this.releaseCalled = true;
+    },
+  };
+  return { client, queries };
+}

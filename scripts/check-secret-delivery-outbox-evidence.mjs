@@ -73,8 +73,9 @@ function validateEvidence(value) {
   if (typeof value.outboxRecordHash !== "string" || !/^[a-f0-9]{64}$/.test(value.outboxRecordHash)) {
     failures.push("outboxRecordHash SHA-256 hex olmalı.");
   }
-  if (!['IDENTITY_INVITATION', 'PASSWORD_RESET'].includes(value.purpose)) {
-    failures.push("purpose IDENTITY_INVITATION veya PASSWORD_RESET olmalı.");
+  // MFA_SECURITY_NOTICE: DEC-20261021-01 "bu işlemi siz yapmadıysanız" notice, system-scoped, no code or link.
+  if (!['IDENTITY_INVITATION', 'PASSWORD_RESET', 'MFA_SECURITY_NOTICE'].includes(value.purpose)) {
+    failures.push("purpose IDENTITY_INVITATION, PASSWORD_RESET veya MFA_SECURITY_NOTICE olmalı.");
   }
   if (!exactObject(value.retry, ["attempts", "retried"], "retry", failures)) return failures;
   if (value.retry.attempts !== 1) {

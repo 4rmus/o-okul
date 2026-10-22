@@ -14,6 +14,14 @@ const predicates: Partial<Record<TenantResetTable, string>> = {
   SecretDeliveryOutbox: `t."tenantId" = $1 OR (t."purpose" = 'PASSWORD_RESET' AND t."sourceId" IN (SELECT p."id" FROM "PasswordResetToken" p JOIN "User" u ON u."id" = p."userId" WHERE u."tenantId" = $1)) OR (t."purpose" = 'IDENTITY_INVITATION' AND t."sourceId" IN (SELECT "id" FROM "IdentityInvitation" WHERE "tenantId" = $1))`,
 };
 
+/**
+ * DEC-20261021-01: a pending MFA re-enrollment grant is captured already expired. A backup or snapshot restored
+ * inside the 24-hour window can then never revive a code that was used (or replaced) after the capture: the account
+ * gets MFA_RESET_EXPIRED and support issues a new code. The hash is kept (NULL would downgrade the account to
+ * password-only first enrollment) and the pair constraint stays satisfied.
+ */
+export const userResetRowProjection = `CASE WHEN t."totpReenrollmentCodeHash" IS NULL THEN to_jsonb(t) ELSE to_jsonb(t) || jsonb_build_object('totpReenrollmentExpiresAt', '1970-01-01T00:00:00+00:00'::timestamptz) END`;
+
 export function tenantResetOwnershipPredicate(table: TenantResetTable): string {
   return predicates[table] ?? 't."tenantId" = $1';
 }
@@ -106,7 +114,7 @@ async function readResetRows(client: Queryable, tenantId: string, schemaDigest: 
     const accountReferences = preview && name === "PlatformAccount";
     const relation = accountReferences ? `(SELECT "createdByPlatformAccountId" AS id FROM "LicenseTerm" WHERE "tenantId"=$1 AND "createdByPlatformAccountId" IS NOT NULL UNION SELECT "platformAccountId" AS id FROM "PlatformIdempotencyKey" WHERE "responseBody" #>> '{tenant,id}'=$1)` : `"${name}"`;
     const predicate = accountReferences ? "true" : tenantResetOwnershipPredicate(name);
-    const rows = await client.query<{ row: string }>(`SELECT (${name === "PlatformAccount" ? `jsonb_build_object('id', t."id", 'loginName', 'restore-dependency-' || md5(t."id"), 'loginNameNormalized', 'restore-dependency-' || md5(t."id"), 'email', NULL, 'emailNormalized', NULL, 'name', 'Restore dependency', 'passwordHash', '!NON_AUTHENTICATING_RESTORE_DEPENDENCY!', 'passwordHashVersion', 2, 'status', 'SUSPENDED', 'totpSecretEncrypted', NULL, 'totpEnabledAt', NULL, 'createdAt', '1970-01-01T00:00:00+00:00'::timestamptz, 'updatedAt', '1970-01-01T00:00:00+00:00'::timestamptz)` : "to_jsonb(t)"})::text AS row FROM ${relation} t WHERE ${predicate} ORDER BY ${name === "PlatformAccount" ? 't."id"' : 'to_jsonb(t)::text'} COLLATE "C"`, name === "PlatformSession" ? [] : [tenantId]);
+    const rows = await client.query<{ row: string }>(`SELECT (${name === "PlatformAccount" ? `jsonb_build_object('id', t."id", 'loginName', 'restore-dependency-' || md5(t."id"), 'loginNameNormalized', 'restore-dependency-' || md5(t."id"), 'email', NULL, 'emailNormalized', NULL, 'name', 'Restore dependency', 'passwordHash', '!NON_AUTHENTICATING_RESTORE_DEPENDENCY!', 'passwordHashVersion', 2, 'status', 'SUSPENDED', 'totpSecretEncrypted', NULL, 'totpEnabledAt', NULL, 'createdAt', '1970-01-01T00:00:00+00:00'::timestamptz, 'updatedAt', '1970-01-01T00:00:00+00:00'::timestamptz)` : name === "User" ? userResetRowProjection : "to_jsonb(t)"})::text AS row FROM ${relation} t WHERE ${predicate} ORDER BY ${name === "PlatformAccount" ? 't."id"' : 'to_jsonb(t)::text'} COLLATE "C"`, name === "PlatformSession" ? [] : [tenantId]);
     rawTables[name] = rows.rows.map((row) => row.row).sort();
     tables[name] = rawTables[name].map((row) => JSON.parse(row));
   }

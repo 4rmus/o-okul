@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { authUserStoreToken, createAuthUserStore } from "./auth-user-store.js";
 import { createLoginAttemptLimiter, loginAttemptLimiterToken } from "./login-attempt-limiter.js";
+import { createMfaSecurityNoticeStore, mfaSecurityNoticeStoreToken } from "./mfa-security-notice.js";
 import { createPasswordResetStore, passwordResetStoreToken } from "./password-reset-store.js";
 import { authSessionStoreToken, createSessionStore } from "./session-store.js";
 
@@ -22,7 +23,11 @@ import { authSessionStoreToken, createSessionStore } from "./session-store.js";
       provide: passwordResetStoreToken,
       useFactory: createPasswordResetStore,
     },
+    {
+      provide: mfaSecurityNoticeStoreToken,
+      useFactory: createMfaSecurityNoticeStore,
+    },
   ],
-  exports: [loginAttemptLimiterToken, authUserStoreToken, authSessionStoreToken, passwordResetStoreToken],
+  exports: [loginAttemptLimiterToken, authUserStoreToken, authSessionStoreToken, passwordResetStoreToken, mfaSecurityNoticeStoreToken],
 })
 export class AuthPersistenceModule {}
