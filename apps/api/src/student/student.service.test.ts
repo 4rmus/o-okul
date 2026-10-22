@@ -5,11 +5,11 @@ import { InMemoryGuardianStudentStore } from "../school/guardian-student-store.j
 import { InMemoryGuardianStore } from "../school/guardian-store.js";
 import { InMemoryClassStore } from "../school/class-store.js";
 import { InMemoryGradeLevelStore } from "../school/grade-level-store.js";
-import { InMemoryStudentStore, type StudentStore } from "./student-store.js";
+import { InMemoryStudentStore, type StudentImportBatchInput, type StudentStore } from "./student-store.js";
 import { InMemoryStudentEnrollmentStore } from "./student-enrollment-store.js";
 import { InMemoryStudentContactStore } from "./student-contact-store.js";
 import { StudentService } from "./student.service.js";
-import { hashTcIdentity, normalizeTcIdentity } from "./tc-identity.js";
+import { decryptTcIdentity, hashTcIdentity, normalizeTcIdentity } from "./tc-identity.js";
 
 describe("StudentService", () => {
   it("toplu kayıtta iletişim kişisi yazar, veli hesabı veya davet üretmez", async () => {
@@ -408,6 +408,128 @@ describe("StudentService", () => {
       firstName: "Sınıfsız",
       lastName: "Kayıt",
     })).rejects.toThrow("STUDENT_CAMPUS_SCOPE_FORBIDDEN");
+  });
+
+  it("toplu kayıtta kampüs kapsamlı çalışan sınıfsız satır gönderirse 403 verir ve hiçbir şey yazmaz", async () => {
+    const setup = createService();
+    const createMany = vi.spyOn(setup.studentStore, "createMany");
+    const updateProfile = vi.spyOn(setup.studentStore, "updateProfile");
+
+    await expect(setup.service.createMany(campusOperationsContext, [
+      { firstName: "Sınıflı", lastName: "Kayıt", gradeLevelId: "grade-8", classId: "class-a" },
+      { firstName: "Sınıfsız", lastName: "Kayıt", gradeLevelId: "grade-8" },
+    ])).rejects.toMatchObject({ status: 403, message: "STUDENT_CAMPUS_SCOPE_FORBIDDEN" });
+    expect(createMany).not.toHaveBeenCalled();
+    expect(updateProfile).not.toHaveBeenCalled();
+    expect(setup.auditRecords).toEqual([]);
+  });
+
+  it("toplu kayıt profil alanlarını kayıtla birlikte yazar; commit sonrası updateProfile çağırmaz", async () => {
+    const setup = createService();
+    const updateProfile = vi.spyOn(setup.studentStore, "updateProfile");
+
+    const [student] = await setup.service.createMany(adminContext, [{
+      firstName: "Ada",
+      lastName: "Kaya",
+      gradeLevelId: "grade-8",
+      nationalId: "10000000146",
+      phone: "5551234567",
+      email: "ada@example.test",
+    }]);
+
+    expect(updateProfile).not.toHaveBeenCalled();
+    await expect(setup.studentStore.findProfileById(student!.id)).resolves.toMatchObject({
+      nationalIdHash: hashTcIdentity("10000000146"),
+      phone: "5551234567",
+      email: "ada@example.test",
+    });
+  });
+
+  it("toplu kayıtta silinmiş öğrencide kayıtlı TC'yi 409 ile reddeder ve öğrenci oluşturmaz", async () => {
+    const setup = createService();
+    const [removed] = await setup.studentStore.createMany([{
+      tenantId: "tenant-a", firstName: "Eski", lastName: "Kayıt", nationalIdHash: hashTcIdentity("10000000146"),
+    }]);
+    await setup.studentStore.softDelete(removed!.id, "2026-10-01T00:00:00.000Z");
+    const before = await setup.studentStore.list();
+
+    await expect(setup.service.createMany(adminContext, [
+      { firstName: "Yeni", lastName: "Kayıt", gradeLevelId: "grade-8" },
+      { firstName: "Aynı", lastName: "Tc", gradeLevelId: "grade-8", nationalId: "10000000146" },
+    ])).rejects.toMatchObject({ status: 409, message: "STUDENT_NATIONAL_ID_CONFLICT" });
+    await expect(setup.studentStore.list()).resolves.toEqual(before);
+  });
+
+  it("importBatch destekleyen store'a profil, iletişim ve temizlenmiş audit satırlarını tek çağrıda verir", async () => {
+    const setup = createService();
+    const importBatch = vi.fn(async (input: StudentImportBatchInput) => input.rows.map((row) => ({
+      id: row.id, tenantId: row.student.tenantId, studentNo: row.student.studentNo ?? "100", firstName: row.student.firstName,
+      lastName: row.student.lastName, gradeLevelId: row.student.gradeLevelId, classId: row.student.classId, status: "ACTIVE" as const,
+    })));
+    Object.assign(setup.studentStore, { importBatch });
+    const updateProfile = vi.spyOn(setup.studentStore, "updateProfile");
+    const finalize = vi.fn(async () => undefined);
+
+    const students = await setup.service.createMany(adminContext, [{
+      firstName: "Ada",
+      lastName: "Kaya",
+      classId: "class-a",
+      nationalId: "10000000146",
+      phone: "5551234567",
+      contact: {
+        firstName: "FATMA",
+        lastName: "KAYA",
+        relationType: "LEGAL_GUARDIAN",
+        phone: "5557654321",
+        canReceiveSms: false,
+        canReceiveAnnouncements: false,
+        canReceiveFinance: false,
+      },
+    }], {
+      extraAudits: [{ entityType: "StudentImport", action: "student_import.completed", diff: { totalRows: 1, quota: { limit: 200 } } }],
+      finalize,
+    });
+
+    expect(updateProfile).not.toHaveBeenCalled();
+    expect(setup.auditRecords).toEqual([]);
+    const [input] = importBatch.mock.calls[0]!;
+    const row = input.rows[0]!;
+    expect(students.map((student) => student.id)).toEqual([row.id]);
+    expect(input).toMatchObject({ tenantId: "tenant-a", actorUserId: "user-tenant-a", activeStudentLimit: 200, campusIds: undefined, finalize });
+    expect(row.student).toMatchObject({
+      gradeLevelId: "grade-8",
+      classId: "class-a",
+      nationalIdHash: hashTcIdentity("10000000146"),
+      phone: "5551234567",
+    });
+    expect(decryptTcIdentity(row.student.nationalIdEncrypted!)).toBe("10000000146");
+    expect(row.enrollment).toMatchObject({ gradeLevelId: "grade-8", classId: "class-a", status: "ACTIVE", reason: "CREATED" });
+    expect(row.contact).toMatchObject({ tenantId: "tenant-a", studentId: row.id, relationType: "LEGAL_GUARDIAN", canReceiveSms: false });
+    expect(JSON.stringify(row.contact)).not.toContain("5557654321");
+    expect(input.audits).toEqual([
+      {
+        entityType: "StudentContact",
+        entityId: row.id,
+        action: "student_contact.imported",
+        diff: { studentId: row.id, relationType: "LEGAL_GUARDIAN", hasPhone: true, hasEmail: false, permissionsDefaultOff: "[REDACTED]" },
+      },
+      { entityType: "StudentImport", action: "student_import.completed", diff: { totalRows: 1, quota: "[REDACTED]" } },
+    ]);
+  });
+
+  it.each([
+    ["CLASS_NOT_FOUND", 404],
+    ["STUDENT_CLASS_GRADE_LEVEL_MISMATCH", 400],
+    ["STUDENT_CAMPUS_SCOPE_FORBIDDEN", 403],
+    ["ACTIVE_STUDENT_LIMIT_REACHED", 409],
+    ["STUDENT_NATIONAL_ID_CONFLICT", 409],
+    ["STUDENT_NO_CONFLICT", 409],
+  ] as const)("importBatch %s hatasını HTTP %i olarak döndürür", async (code, status) => {
+    const setup = createService();
+    Object.assign(setup.studentStore, { importBatch: vi.fn(async () => { throw new Error(code); }) });
+
+    await expect(setup.service.createMany(adminContext, [{ firstName: "Ada", lastName: "Kaya", gradeLevelId: "grade-8" }]))
+      .rejects.toMatchObject({ status, message: code });
   });
 
   it("operasyon çalışanında kampüs scope yoksa fail-closed davranır", async () => {

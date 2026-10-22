@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
+import { getRequestContext } from "../context/request-context.js";
 import { type Queryable, type TenantQueryable, withExplicitTenantQuery, withTenantQuery } from "../db/tenant-query.js";
 import type { StudentRecord } from "./student.service.js";
 import type {
@@ -29,7 +30,11 @@ import {
 } from "../listing/cursor-pagination.js";
 
 type StudentInput = Omit<StudentRecord, "id" | "status"> & Partial<Pick<StudentRecord, "status" | "studentNo">>;
+/** A bulk-created student with the profile columns written in the same insert (no post-commit profile update). */
+export type StudentCreateManyInput = StudentInput & Pick<StudentProfileUpdate, "nationalIdEncrypted" | "nationalIdHash" | "phone" | "email">;
 const studentNoStart = 100;
+/** Rows per multi-row INSERT; every unnest() array parameter stays at or below this length. */
+export const studentImportBatchChunkSize = 1000;
 
 export interface StudentProfileStorageRecord extends StudentRecord {
   nationalIdEncrypted?: string;
@@ -104,16 +109,58 @@ export interface StudentEnrollmentTransitionResult {
   portalAccess?: StudentPortalSuspensionResult;
 }
 
-export interface StudentBatchCreateInput {
-  student: StudentInput;
+/** Sentinel error messages thrown by `importBatch`; the service maps them to HTTP exceptions. */
+export const studentImportBatchErrors = {
+  classNotFound: "CLASS_NOT_FOUND",
+  classGradeLevelMismatch: "STUDENT_CLASS_GRADE_LEVEL_MISMATCH",
+  campusScopeForbidden: "STUDENT_CAMPUS_SCOPE_FORBIDDEN",
+  activeStudentLimitReached: "ACTIVE_STUDENT_LIMIT_REACHED",
+  nationalIdConflict: "STUDENT_NATIONAL_ID_CONFLICT",
+  studentNoConflict: "STUDENT_NO_CONFLICT",
+} as const;
+
+export interface StudentImportBatchRow {
+  /** Pre-generated so contacts, enrollments and audits can reference the student inside the same statement batch. */
+  id: string;
+  student: StudentCreateManyInput;
   enrollment?: Omit<StudentEnrollmentInput, "tenantId" | "studentId">;
-  contact?: Omit<StudentContactStoreInput, "studentId">;
+  contact?: StudentContactStoreInput;
+}
+
+export interface StudentImportBatchAudit {
+  entityType: string;
+  entityId?: string;
+  action: string;
+  /** Already passed through `sanitizeAuditDiff`. */
+  diff?: Record<string, unknown>;
+}
+
+export interface StudentImportBatchInput {
+  tenantId: string;
+  actorUserId?: string;
+  rows: StudentImportBatchRow[];
+  audits: StudentImportBatchAudit[];
+  auditCreatedAt: string;
+  /** Licensed active-student limit; checked again under the tenant student-number lock. */
+  activeStudentLimit: number;
+  /** Set for campus-restricted callers: every row needs a class on one of these campuses. */
+  campusIds?: string[];
+  /** Runs on the open transaction after every insert, e.g. to complete the idempotency key atomically. */
+  finalize?: (client: Queryable, students: StudentRecord[]) => Promise<void>;
 }
 
 export interface StudentStore {
   list(): Promise<StudentRecord[]>;
   listRegistryPage(tenantId: string, query: StudentRegistryQuery): Promise<StudentRegistryPage>;
-  listStudentNos(tenantId: string): Promise<string[]>;
+  /** Trimmed exact match against active (not soft-deleted) students; returns the matching trimmed numbers. */
+  findExistingStudentNos(tenantId: string, studentNos: string[]): Promise<string[]>;
+  /**
+   * Returns the hashes already stored for the tenant. `includeDeleted` mirrors `Student_tenantId_nationalIdHash_key`,
+   * which also covers soft-deleted rows.
+   */
+  findExistingNationalIdHashes(tenantId: string, nationalIdHashes: string[], options?: { includeDeleted?: boolean }): Promise<string[]>;
+  /** Same rule as `o_okul_refresh_license_usage`: ACTIVE, not deleted, exactly one open ACTIVE enrollment. */
+  countLicensedActiveStudents?(tenantId: string): Promise<number>;
   listPortalAccess(tenantId: string, query: StudentPortalAccessQuery): Promise<StudentPortalAccessPage>;
   updatePortalAccess(
     tenantId: string,
@@ -127,15 +174,16 @@ export interface StudentStore {
   findByNationalIdHash(tenantId: string, nationalIdHash: string): Promise<StudentProfileStorageRecord | undefined>;
   updateGradeLevelForClass(classId: string, gradeLevelId: string | undefined): Promise<number>;
   create(input: StudentInput): Promise<StudentRecord>;
-  createMany(inputs: StudentInput[]): Promise<StudentRecord[]>;
+  createMany(inputs: StudentCreateManyInput[]): Promise<StudentRecord[]>;
   createWithEnrollment?(
     input: StudentInput,
     enrollment: Omit<StudentEnrollmentInput, "tenantId" | "studentId">,
   ): Promise<StudentRecord>;
-  createManyWithEnrollments?(
-    inputs: StudentBatchCreateInput[],
-  ): Promise<StudentRecord[]>;
-  createManyWithEnrollmentsAndContacts?(inputs: StudentBatchCreateInput[]): Promise<StudentRecord[]>;
+  /**
+   * DEC-20261021-02: writes students (with profile PII), enrollments, contacts and audits in one tenant transaction
+   * with set-based statements; returns the students in input order. Throws `studentImportBatchErrors` sentinels.
+   */
+  importBatch?(input: StudentImportBatchInput): Promise<StudentRecord[]>;
   updateWithEnrollmentTransition?(
     id: string,
     input: Partial<Pick<StudentRecord, "firstName" | "lastName" | "gradeLevelId" | "classId" | "responsibleTeacherId" | "status">>,
@@ -219,10 +267,24 @@ export class InMemoryStudentStore implements StudentStore {
     );
   }
 
-  async listStudentNos(tenantId: string): Promise<string[]> {
-    return this.students
+  async findExistingStudentNos(tenantId: string, studentNos: string[]): Promise<string[]> {
+    const wanted = new Set(studentNos);
+    return [...new Set(this.students
       .filter((student) => student.tenantId === tenantId && !student.deletedAt && Boolean(student.studentNo))
-      .map((student) => student.studentNo!);
+      .map((student) => student.studentNo!.trim())
+      .filter((studentNo) => wanted.has(studentNo)))];
+  }
+
+  async findExistingNationalIdHashes(
+    tenantId: string,
+    nationalIdHashes: string[],
+    options: { includeDeleted?: boolean } = {},
+  ): Promise<string[]> {
+    const wanted = new Set(nationalIdHashes);
+    return [...new Set(this.students
+      .filter((student) => student.tenantId === tenantId && (options.includeDeleted || !student.deletedAt))
+      .map((student) => student.nationalIdHash)
+      .filter((hash): hash is string => Boolean(hash && wanted.has(hash))))];
   }
 
   async listPortalAccess(tenantId: string, query: StudentPortalAccessQuery): Promise<StudentPortalAccessPage> {
@@ -292,8 +354,8 @@ export class InMemoryStudentStore implements StudentStore {
     return student;
   }
 
-  async createMany(inputs: StudentInput[]): Promise<StudentRecord[]> {
-    const created: StudentRecord[] = [];
+  async createMany(inputs: StudentCreateManyInput[]): Promise<StudentRecord[]> {
+    const created: StudentProfileStorageRecord[] = [];
     for (const input of inputs) {
       const studentNo = normalizeStudentNo(input.studentNo) ?? this.nextStudentNo(input.tenantId, created);
       const student = {
@@ -494,18 +556,42 @@ export class PostgresStudentStore implements StudentStore {
     });
   }
 
-  async listStudentNos(tenantId: string): Promise<string[]> {
+  async findExistingStudentNos(tenantId: string, studentNos: string[]): Promise<string[]> {
+    if (studentNos.length === 0) return [];
     return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
       const result = await client.query<{ studentNo: string }>(
-        `SELECT "studentNo"
+        `SELECT DISTINCT btrim("studentNo") AS "studentNo"
          FROM "Student"
          WHERE "tenantId" = $1
            AND "deletedAt" IS NULL
-           AND "studentNo" IS NOT NULL`,
-        [tenantId],
+           AND btrim("studentNo") = ANY($2::text[])`,
+        [tenantId, [...new Set(studentNos)]],
       );
       return result.rows.map((row) => row.studentNo);
     });
+  }
+
+  async findExistingNationalIdHashes(
+    tenantId: string,
+    nationalIdHashes: string[],
+    options: { includeDeleted?: boolean } = {},
+  ): Promise<string[]> {
+    if (nationalIdHashes.length === 0) return [];
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const result = await client.query<{ nationalIdHash: string }>(
+        `SELECT DISTINCT "nationalIdHash"
+         FROM "Student"
+         WHERE "tenantId" = $1
+           AND "nationalIdHash" = ANY($2::text[])
+           AND ($3::boolean OR "deletedAt" IS NULL)`,
+        [tenantId, [...new Set(nationalIdHashes)], options.includeDeleted === true],
+      );
+      return result.rows.map((row) => row.nationalIdHash);
+    });
+  }
+
+  async countLicensedActiveStudents(tenantId: string): Promise<number> {
+    return withExplicitTenantQuery(this.pool, tenantId, (client) => countLicensedActiveStudents(client, tenantId));
   }
 
   async listPortalAccess(tenantId: string, query: StudentPortalAccessQuery): Promise<StudentPortalAccessPage> {
@@ -796,36 +882,19 @@ export class PostgresStudentStore implements StudentStore {
     });
   }
 
-  async createManyWithEnrollments(
-    inputs: StudentBatchCreateInput[],
-  ): Promise<StudentRecord[]> {
-    if (inputs.length === 0) return [];
+  async importBatch(input: StudentImportBatchInput): Promise<StudentRecord[]> {
+    if (input.rows.length === 0) return [];
+    const context = getRequestContext();
+    if (context.bypassRls || context.tenantId !== input.tenantId) throw new Error("FORBIDDEN_TENANT");
+    if (input.rows.some((row) => row.student.tenantId !== input.tenantId || (row.contact && row.contact.tenantId !== input.tenantId))) {
+      throw new Error("FORBIDDEN_TENANT");
+    }
 
-    return withTenantQuery(this.pool, async (client) => {
-      const created: StudentRecord[] = [];
-      for (const input of inputs) {
-        const student = await insertStudent(client, input.student);
-        if (input.enrollment) {
-          await insertEnrollment(client, student, input.enrollment);
-        }
-        created.push(student);
-      }
-      return created;
-    });
-  }
-
-  async createManyWithEnrollmentsAndContacts(inputs: StudentBatchCreateInput[]): Promise<StudentRecord[]> {
-    if (inputs.length === 0) return [];
-    return withTenantQuery(this.pool, async (client) => {
-      const created: StudentRecord[] = [];
-      for (const input of inputs) {
-        const student = await insertStudent(client, input.student);
-        if (input.enrollment) await insertEnrollment(client, student, input.enrollment);
-        if (input.contact) await insertStudentContact(client, { ...input.contact, studentId: student.id });
-        created.push(student);
-      }
-      return created;
-    });
+    try {
+      return await withTenantQuery(this.pool, (client) => importStudentBatch(client, input));
+    } catch (error) {
+      throw translateStudentImportBatchError(error);
+    }
   }
 
   async updateWithEnrollmentTransition(
@@ -860,7 +929,7 @@ export class PostgresStudentStore implements StudentStore {
     });
   }
 
-  async createMany(inputs: StudentInput[]): Promise<StudentRecord[]> {
+  async createMany(inputs: StudentCreateManyInput[]): Promise<StudentRecord[]> {
     if (inputs.length === 0) return [];
 
     return withTenantQuery(this.pool, async (client) => {
@@ -1029,26 +1098,53 @@ async function lockStudentNoAllocation(client: Queryable, tenantId: string): Pro
   await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [tenantId]);
 }
 
-async function insertStudent(client: Queryable, input: StudentInput): Promise<StudentRecord> {
+async function insertStudent(client: Queryable, input: StudentInput | StudentCreateManyInput): Promise<StudentRecord> {
   await assertClassPlacementMatches(client, input.tenantId, input.gradeLevelId, input.classId);
   await lockStudentNoAllocation(client, input.tenantId);
   const studentNo = normalizeStudentNo(input.studentNo) ?? await nextStudentNo(client, input.tenantId);
-  const result = await client.query<StudentRow>(
-    `INSERT INTO "Student" ("id", "tenantId", "studentNo", "firstName", "lastName", "gradeLevelId", "classId", "responsibleTeacherId", "status", "updatedAt")
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
-     RETURNING *`,
-    [
-      randomUUID(),
-      input.tenantId,
-      studentNo,
-      input.firstName,
-      input.lastName,
-      input.gradeLevelId ?? null,
-      input.classId ?? null,
-      input.responsibleTeacherId ?? null,
-      input.status ?? "ACTIVE",
-    ],
-  );
+  const profile: Partial<StudentCreateManyInput> = input;
+  const hasProfile = profile.nationalIdEncrypted !== undefined || profile.nationalIdHash !== undefined
+    || profile.phone !== undefined || profile.email !== undefined;
+  const result = hasProfile
+    ? await client.query<StudentRow>(
+      `INSERT INTO "Student" (
+         "id", "tenantId", "studentNo", "firstName", "lastName", "gradeLevelId", "classId", "responsibleTeacherId", "status",
+         "nationalIdEncrypted", "nationalIdHash", "phone", "email", "updatedAt"
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now())
+       RETURNING *`,
+      [
+        randomUUID(),
+        input.tenantId,
+        studentNo,
+        input.firstName,
+        input.lastName,
+        input.gradeLevelId ?? null,
+        input.classId ?? null,
+        input.responsibleTeacherId ?? null,
+        input.status ?? "ACTIVE",
+        profile.nationalIdEncrypted ?? null,
+        profile.nationalIdHash ?? null,
+        profile.phone ?? null,
+        profile.email ?? null,
+      ],
+    )
+    : await client.query<StudentRow>(
+      `INSERT INTO "Student" ("id", "tenantId", "studentNo", "firstName", "lastName", "gradeLevelId", "classId", "responsibleTeacherId", "status", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
+       RETURNING *`,
+      [
+        randomUUID(),
+        input.tenantId,
+        studentNo,
+        input.firstName,
+        input.lastName,
+        input.gradeLevelId ?? null,
+        input.classId ?? null,
+        input.responsibleTeacherId ?? null,
+        input.status ?? "ACTIVE",
+      ],
+    );
   const row = result.rows[0];
   if (!row) throw new Error("STUDENT_CREATE_FAILED");
   return toStudentRecord(row);
@@ -1097,25 +1193,6 @@ async function insertEnrollment(
     createdAt: row.createdAt ? toIsoString(row.createdAt) : undefined,
     updatedAt: row.updatedAt ? toIsoString(row.updatedAt) : undefined,
   };
-}
-
-async function insertStudentContact(client: Queryable, input: StudentContactStoreInput): Promise<void> {
-  const result = await client.query<{ id: string }>(
-    `INSERT INTO "StudentContact" (
-       "id", "tenantId", "studentId", "firstName", "lastName", "relationType",
-       "phoneEncrypted", "phoneHash", "emailEncrypted", "emailHash",
-       "canReceiveSms", "canReceiveAnnouncements", "canReceiveFinance",
-       "consentSource", "consentRecordedAt", "updatedAt"
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,now())
-     RETURNING "id"`,
-    [
-      randomUUID(), input.tenantId, input.studentId, input.firstName, input.lastName, input.relationType,
-      input.phoneEncrypted ?? null, input.phoneHash ?? null, input.emailEncrypted ?? null, input.emailHash ?? null,
-      input.canReceiveSms, input.canReceiveAnnouncements, input.canReceiveFinance,
-      input.consentSource ?? null, input.consentRecordedAt ?? null,
-    ],
-  );
-  if (!result.rows[0]) throw new Error("STUDENT_CONTACT_CREATE_FAILED");
 }
 
 async function suspendStudentPortalAccess(
@@ -1322,6 +1399,278 @@ async function nextStudentNo(client: Queryable, tenantId: string): Promise<strin
     throw new Error("STUDENT_NO_ALLOCATION_FAILED");
   }
   return studentNo;
+}
+
+async function countLicensedActiveStudents(client: Queryable, tenantId: string): Promise<number> {
+  // Mirrors the count in o_okul_refresh_license_usage (20260801210000).
+  const result = await client.query<{ count: number | string }>(
+    `SELECT count(*)::int AS "count"
+     FROM "Student" student
+     WHERE student."tenantId" = $1
+       AND student."deletedAt" IS NULL
+       AND student."status" = 'ACTIVE'
+       AND 1 = (
+         SELECT count(*)
+         FROM "StudentEnrollment" enrollment
+         WHERE enrollment."tenantId" = student."tenantId"
+           AND enrollment."studentId" = student."id"
+           AND enrollment."status" = 'ACTIVE'
+           AND enrollment."endsAt" IS NULL
+       )`,
+    [tenantId],
+  );
+  return Number(result.rows[0]?.count ?? 0);
+}
+
+/**
+ * DEC-20261021-02 set-based import. Runs on the caller's tenant transaction: class rows are share-locked, then the
+ * tenant student-number lock serializes concurrent creates so the license count, duplicate checks and number
+ * allocation below see every committed student. Inserts are multi-row `INSERT ... SELECT FROM unnest(...)` chunks.
+ */
+async function importStudentBatch(client: Queryable, input: StudentImportBatchInput): Promise<StudentRecord[]> {
+  const { tenantId, rows } = input;
+  const campusIds = input.campusIds ? new Set(input.campusIds) : undefined;
+  const classIds = [...new Set(rows.map((row) => row.student.classId).filter((classId): classId is string => Boolean(classId)))];
+  const classes = new Map<string, { gradeLevelId: string | null; campusId: string | null }>();
+  if (classIds.length > 0) {
+    const result = await client.query<{ id: string; gradeLevelId: string | null; campusId: string | null }>(
+      `SELECT "id", "gradeLevelId", "campusId"
+       FROM "Class"
+       WHERE "tenantId" = $1
+         AND "id" = ANY($2::text[])
+         AND "deletedAt" IS NULL
+       FOR SHARE`,
+      [tenantId, classIds],
+    );
+    for (const row of result.rows) classes.set(row.id, row);
+  }
+  for (const { student } of rows) {
+    if (!student.classId) {
+      if (campusIds) throw new Error(studentImportBatchErrors.campusScopeForbidden);
+      continue;
+    }
+    const schoolClass = classes.get(student.classId);
+    if (!schoolClass) throw new Error(studentImportBatchErrors.classNotFound);
+    if (campusIds && (!schoolClass.campusId || !campusIds.has(schoolClass.campusId))) {
+      throw new Error(studentImportBatchErrors.campusScopeForbidden);
+    }
+    if (!student.gradeLevelId || schoolClass.gradeLevelId !== student.gradeLevelId) {
+      throw new Error(studentImportBatchErrors.classGradeLevelMismatch);
+    }
+  }
+
+  await lockStudentNoAllocation(client, tenantId);
+
+  const incomingActive = rows.filter((row) => row.enrollment?.status === "ACTIVE" && !row.enrollment.endsAt
+    && (row.student.status ?? "ACTIVE") === "ACTIVE").length;
+  const currentActive = await countLicensedActiveStudents(client, tenantId);
+  if (currentActive + incomingActive > input.activeStudentLimit) {
+    throw new Error(studentImportBatchErrors.activeStudentLimitReached);
+  }
+
+  const nationalIdHashes = rows.map((row) => row.student.nationalIdHash).filter((hash): hash is string => Boolean(hash));
+  if (nationalIdHashes.length > 0) {
+    // No deletedAt filter: Student_tenantId_nationalIdHash_key also covers soft-deleted students.
+    const existing = await client.query(
+      `SELECT 1 FROM "Student" WHERE "tenantId" = $1 AND "nationalIdHash" = ANY($2::text[]) LIMIT 1`,
+      [tenantId, nationalIdHashes],
+    );
+    if (existing.rows.length > 0) throw new Error(studentImportBatchErrors.nationalIdConflict);
+  }
+
+  const explicitStudentNos = rows
+    .map((row) => normalizeStudentNo(row.student.studentNo))
+    .filter((studentNo): studentNo is string => Boolean(studentNo));
+  if (explicitStudentNos.length > 0) {
+    const existing = await client.query(
+      `SELECT 1 FROM "Student"
+       WHERE "tenantId" = $1 AND "deletedAt" IS NULL AND btrim("studentNo") = ANY($2::text[])
+       LIMIT 1`,
+      [tenantId, explicitStudentNos],
+    );
+    if (existing.rows.length > 0) throw new Error(studentImportBatchErrors.studentNoConflict);
+  }
+
+  const missingNumberCount = rows.length - explicitStudentNos.length;
+  const allocated = missingNumberCount > 0
+    ? await allocateStudentNos(client, tenantId, explicitStudentNos, missingNumberCount)
+    : [];
+  let allocatedIndex = 0;
+  const studentNos = rows.map((row) => normalizeStudentNo(row.student.studentNo) ?? allocated[allocatedIndex++]!);
+
+  const createdById = new Map<string, StudentRecord>();
+  for (const chunk of chunkIndexes(rows.length)) {
+    const chunkRows = chunk.map((index) => rows[index]!);
+    const result = await client.query<StudentRow>(
+      `INSERT INTO "Student" (
+         "id", "tenantId", "studentNo", "firstName", "lastName", "gradeLevelId", "classId", "responsibleTeacherId", "status",
+         "nationalIdEncrypted", "nationalIdHash", "phone", "email", "updatedAt"
+       )
+       SELECT input."id", $1, input."studentNo", input."firstName", input."lastName", input."gradeLevelId", input."classId",
+              input."responsibleTeacherId", input."status", input."nationalIdEncrypted", input."nationalIdHash",
+              input."phone", input."email", now()
+       FROM unnest(
+         $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[],
+         $10::text[], $11::text[], $12::text[], $13::text[]
+       ) AS input(
+         "id", "studentNo", "firstName", "lastName", "gradeLevelId", "classId", "responsibleTeacherId", "status",
+         "nationalIdEncrypted", "nationalIdHash", "phone", "email"
+       )
+       RETURNING *`,
+      [
+        tenantId,
+        chunkRows.map((row) => row.id),
+        chunk.map((index) => studentNos[index]!),
+        chunkRows.map((row) => row.student.firstName),
+        chunkRows.map((row) => row.student.lastName),
+        chunkRows.map((row) => row.student.gradeLevelId ?? null),
+        chunkRows.map((row) => row.student.classId ?? null),
+        chunkRows.map((row) => row.student.responsibleTeacherId ?? null),
+        chunkRows.map((row) => row.student.status ?? "ACTIVE"),
+        chunkRows.map((row) => row.student.nationalIdEncrypted ?? null),
+        chunkRows.map((row) => row.student.nationalIdHash ?? null),
+        chunkRows.map((row) => row.student.phone ?? null),
+        chunkRows.map((row) => row.student.email ?? null),
+      ],
+    );
+    for (const row of result.rows) createdById.set(row.id, toStudentRecord(row));
+  }
+  const students = rows.map((row) => {
+    const student = createdById.get(row.id);
+    if (!student) throw new Error("STUDENT_CREATE_FAILED");
+    return student;
+  });
+
+  const enrollments = rows.filter((row) => row.enrollment);
+  for (const chunk of chunkIndexes(enrollments.length)) {
+    const chunkRows = chunk.map((index) => enrollments[index]!);
+    await client.query(
+      `INSERT INTO "StudentEnrollment" (
+         "id", "tenantId", "studentId", "academicYearId", "termId", "gradeLevelId", "classId",
+         "status", "startsAt", "endsAt", "reason", "updatedAt"
+       )
+       SELECT input."id", $1, input."studentId", input."academicYearId", input."termId", input."gradeLevelId", input."classId",
+              input."status", input."startsAt", input."endsAt", input."reason", now()
+       FROM unnest(
+         $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::date[], $10::date[], $11::text[]
+       ) AS input(
+         "id", "studentId", "academicYearId", "termId", "gradeLevelId", "classId", "status", "startsAt", "endsAt", "reason"
+       )`,
+      [
+        tenantId,
+        chunkRows.map(() => randomUUID()),
+        chunkRows.map((row) => row.id),
+        chunkRows.map((row) => row.enrollment!.academicYearId ?? null),
+        chunkRows.map((row) => row.enrollment!.termId ?? null),
+        chunkRows.map((row) => row.enrollment!.gradeLevelId ?? null),
+        chunkRows.map((row) => row.enrollment!.classId ?? null),
+        chunkRows.map((row) => row.enrollment!.status),
+        chunkRows.map((row) => row.enrollment!.startsAt),
+        chunkRows.map((row) => row.enrollment!.endsAt ?? null),
+        chunkRows.map((row) => row.enrollment!.reason ?? null),
+      ],
+    );
+  }
+
+  const contacts = rows.map((row) => row.contact).filter((contact): contact is StudentContactStoreInput => Boolean(contact));
+  for (const chunk of chunkIndexes(contacts.length)) {
+    const chunkContacts = chunk.map((index) => contacts[index]!);
+    await client.query(
+      `INSERT INTO "StudentContact" (
+         "id", "tenantId", "studentId", "firstName", "lastName", "relationType",
+         "phoneEncrypted", "phoneHash", "emailEncrypted", "emailHash",
+         "canReceiveSms", "canReceiveAnnouncements", "canReceiveFinance",
+         "consentSource", "consentRecordedAt", "updatedAt"
+       )
+       SELECT input."id", $1, input."studentId", input."firstName", input."lastName", input."relationType",
+              input."phoneEncrypted", input."phoneHash", input."emailEncrypted", input."emailHash",
+              input."canReceiveSms", input."canReceiveAnnouncements", input."canReceiveFinance",
+              input."consentSource", input."consentRecordedAt", now()
+       FROM unnest(
+         $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::text[],
+         $11::boolean[], $12::boolean[], $13::boolean[], $14::text[], $15::timestamptz[]
+       ) AS input(
+         "id", "studentId", "firstName", "lastName", "relationType", "phoneEncrypted", "phoneHash", "emailEncrypted", "emailHash",
+         "canReceiveSms", "canReceiveAnnouncements", "canReceiveFinance", "consentSource", "consentRecordedAt"
+       )`,
+      [
+        tenantId,
+        chunkContacts.map(() => randomUUID()),
+        chunkContacts.map((contact) => contact.studentId),
+        chunkContacts.map((contact) => contact.firstName),
+        chunkContacts.map((contact) => contact.lastName),
+        chunkContacts.map((contact) => contact.relationType),
+        chunkContacts.map((contact) => contact.phoneEncrypted ?? null),
+        chunkContacts.map((contact) => contact.phoneHash ?? null),
+        chunkContacts.map((contact) => contact.emailEncrypted ?? null),
+        chunkContacts.map((contact) => contact.emailHash ?? null),
+        chunkContacts.map((contact) => contact.canReceiveSms),
+        chunkContacts.map((contact) => contact.canReceiveAnnouncements),
+        chunkContacts.map((contact) => contact.canReceiveFinance),
+        chunkContacts.map((contact) => contact.consentSource ?? null),
+        chunkContacts.map((contact) => contact.consentRecordedAt ?? null),
+      ],
+    );
+  }
+
+  for (const chunk of chunkIndexes(input.audits.length)) {
+    const chunkAudits = chunk.map((index) => input.audits[index]!);
+    // Same columns and casts as PostgresAuditLogStore.create: diff is jsonb, createdAt is the TIMESTAMP(3) partition key.
+    await client.query(
+      `INSERT INTO "AuditLog" ("id", "tenantId", "actorUserId", "entityType", "entityId", "action", "diff", "createdAt")
+       SELECT input."id", $1, $2, input."entityType", input."entityId", input."action", input."diff"::jsonb, $3::timestamp(3)
+       FROM unnest($4::text[], $5::text[], $6::text[], $7::text[], $8::text[])
+         AS input("id", "entityType", "entityId", "action", "diff")`,
+      [
+        tenantId,
+        input.actorUserId ?? null,
+        input.auditCreatedAt,
+        chunkAudits.map(() => randomUUID()),
+        chunkAudits.map((audit) => audit.entityType),
+        chunkAudits.map((audit) => audit.entityId ?? null),
+        chunkAudits.map((audit) => audit.action),
+        chunkAudits.map((audit) => (audit.diff === undefined ? null : JSON.stringify(audit.diff))),
+      ],
+    );
+  }
+
+  await input.finalize?.(client, students);
+  return students;
+}
+
+/** Allocates `count` numbers like `nextStudentNo` would one by one, skipping every explicit number in the file. */
+async function allocateStudentNos(client: Queryable, tenantId: string, reserved: string[], count: number): Promise<string[]> {
+  const result = await client.query<{ studentNo: string }>(
+    `WITH used AS (
+       SELECT "studentNo" AS "studentNo" FROM "Student" WHERE "tenantId" = $1 AND "deletedAt" IS NULL
+       UNION
+       SELECT unnest($2::text[])
+     )
+     SELECT candidate::text AS "studentNo"
+     FROM generate_series(${studentNoStart}::bigint, ${studentNoStart}::bigint + (SELECT count(*) FROM used) + $3::bigint) AS candidate
+     WHERE NOT EXISTS (SELECT 1 FROM used WHERE used."studentNo" = candidate::text)
+     ORDER BY candidate
+     LIMIT $3`,
+    [tenantId, reserved, count],
+  );
+  if (result.rows.length !== count) throw new Error("STUDENT_NO_ALLOCATION_FAILED");
+  return result.rows.map((row) => row.studentNo);
+}
+
+function chunkIndexes(length: number): number[][] {
+  const chunks: number[][] = [];
+  for (let start = 0; start < length; start += studentImportBatchChunkSize) {
+    chunks.push(Array.from({ length: Math.min(studentImportBatchChunkSize, length - start) }, (_, offset) => start + offset));
+  }
+  return chunks;
+}
+
+function translateStudentImportBatchError(error: unknown): unknown {
+  const candidate = error as { code?: unknown; constraint?: unknown } | null;
+  if (candidate?.code !== "23505") return error;
+  if (candidate.constraint === "Student_tenantId_nationalIdHash_key") return new Error(studentImportBatchErrors.nationalIdConflict);
+  if (candidate.constraint === "Student_tenantId_studentNo_active_key") return new Error(studentImportBatchErrors.studentNoConflict);
+  return error;
 }
 
 function normalizeStudentNo(value: string | undefined): string | undefined {

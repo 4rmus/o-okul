@@ -1,8 +1,17 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import type { RequestContext } from "../context/request-context.js";
+import { type RequestContext, runWithRequestContext } from "../context/request-context.js";
+import { IdempotencyService, InMemoryIdempotencyStore } from "../http/idempotency.js";
+import { InMemoryClassStore } from "../school/class-store.js";
+import { InMemoryGradeLevelStore } from "../school/grade-level-store.js";
+import { InMemoryGuardianStudentStore } from "../school/guardian-student-store.js";
 import type { SchoolService } from "../school/school.service.js";
+import { InMemoryStudentContactStore } from "./student-contact-store.js";
+import { InMemoryStudentEnrollmentStore } from "./student-enrollment-store.js";
 import { StudentImportService } from "./student-import.service.js";
-import type { StudentService } from "./student.service.js";
+import { InMemoryStudentStore } from "./student-store.js";
+import { StudentService } from "./student.service.js";
 
 const context: RequestContext = {
   userId: "operations-a",
@@ -73,7 +82,7 @@ describe("StudentImportService Gate D", () => {
 
     await expect(service.dryRun(context, { fileBase64 })).resolves.toMatchObject({ wouldImport: true, errors: [] });
     await service.import(context, { fileBase64 }, "student-email-profile-a");
-    expect(students.createMany).toHaveBeenCalledWith(context, [expect.objectContaining({ email: "ada@example.test" })]);
+    expect(students.createMany).toHaveBeenCalledWith(context, [expect.objectContaining({ email: "ada@example.test" })], expect.anything());
   });
 
   it("iletişim kişisini maskeli dry-run ve default-off izinlerle import girdisine taşır", async () => {
@@ -110,7 +119,7 @@ describe("StudentImportService Gate D", () => {
         canReceiveAnnouncements: false,
         canReceiveFinance: false,
       }),
-    })]);
+    })], expect.anything());
   });
 
   it("dry-run sınıf ve okul no kontrolünü kampüs kapsamı ile tenant benzersizliğinde yapar", async () => {
@@ -143,6 +152,7 @@ describe("StudentImportService Gate D", () => {
     expect(students.createMany).toHaveBeenCalledWith(
       context,
       [expect.objectContaining({ gradeLevelId: "grade-8", classId: "class-custom" })],
+      expect.objectContaining({ classById: expect.any(Map), gradeLevelById: expect.any(Map) }),
     );
   });
 
@@ -190,7 +200,144 @@ describe("StudentImportService Gate D", () => {
       errors: [expect.objectContaining({ code: "GRADE_LEVEL_AMBIGUOUS" })],
     });
   });
+  it("dosyadaki okul no ve TC'leri satır başına değil tek toplu sorguyla arar; hata sırası ve satır numaraları korunur", async () => {
+    const { service, students } = createService({ studentNos: ["1002"] });
+    students.findExistingNationalIds.mockResolvedValue(new Set(["10000000146"]));
+    const fileBase64 = csv([
+      "okul_no;ad;soyad;seviye;tc;telefon",
+      "1001;Ada;Kaya;8. Sınıf;10000000146;",
+      "1002;Bora;Bal;8. Sınıf;;",
+      "1001;Cem;Can;8. Sınıf;1000000014;",
+      "1003;Ece;Er;8. Sınıf;10000000146;05551234567",
+    ].join("\n"));
+
+    const preview = await service.dryRun(context, { fileBase64 });
+
+    expect(students.findExistingStudentNos).toHaveBeenCalledTimes(1);
+    expect(students.findExistingStudentNos).toHaveBeenCalledWith(context, ["1001", "1002", "1001", "1003"]);
+    expect(students.findExistingNationalIds).toHaveBeenCalledTimes(1);
+    expect(students.findExistingNationalIds).toHaveBeenCalledWith(context, ["10000000146", "10000000146"]);
+    expect(preview.errors).toEqual([
+      { row: 2, field: "nationalId", code: "STUDENT_NATIONAL_ID_DUPLICATE", value: "*******0146" },
+      { row: 3, field: "studentNo", code: "STUDENT_NO_DUPLICATE", value: "1002" },
+      { row: 4, field: "studentNo", code: "STUDENT_NO_DUPLICATE", value: "1001" },
+      { row: 4, field: "nationalId", code: "INVALID_NATIONAL_ID", value: "*******0014" },
+      { row: 5, field: "nationalId", code: "STUDENT_NATIONAL_ID_DUPLICATE", value: "*******0146" },
+    ]);
+  });
+
+  it("commit tamamlanma auditini ve idempotency tamamlamasını öğrenci yazımına aynı çağrıda devreder", async () => {
+    const { service, students } = createService();
+    const idempotencyStore = new InMemoryIdempotencyStore();
+    const completeInTransaction = vi.fn(async () => undefined);
+    Object.assign(idempotencyStore, { completeInTransaction });
+    const withIdempotency = new StudentImportService(
+      students as unknown as StudentService,
+      { listClasses: async () => [{ id: "class-main", tenantId: "tenant-a", campusId: "campus-main", gradeLevelId: "grade-8", name: "8-A" }],
+        listGradeLevels: async () => [{ id: "grade-8", tenantId: "tenant-a", code: "8", name: "8. Sınıf" }] } as unknown as SchoolService,
+      new IdempotencyService(idempotencyStore),
+    );
+    students.createMany.mockImplementation((async (_context: RequestContext, rows: unknown[], options: { finalize?: (client: unknown, created: unknown[]) => Promise<void> }) => {
+      const created = rows.map((_, index) => ({ id: `student-${index}`, tenantId: "tenant-a", studentNo: "1001", firstName: "ADA", lastName: "KAYA", status: "ACTIVE" }));
+      await options.finalize?.({ query: vi.fn() }, created);
+      return created;
+    }) as never);
+
+    const result = await withIdempotency.import(context, { fileBase64: csv("okul_no;ad;soyad;seviye\n1001;Ada;Kaya;8. Sınıf") }, "import-finalize-a");
+
+    const [, , options] = students.createMany.mock.calls[0] as unknown as [RequestContext, unknown[], Record<string, unknown>];
+    expect(options.extraAudits).toEqual([{
+      entityType: "StudentImport",
+      action: "student_import.completed",
+      diff: { totalRows: 1, importedRows: 1, errorCount: 0, quota: { limit: 200, current: 0, incoming: 1, wouldExceed: false } },
+    }]);
+    expect(completeInTransaction).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      key: "import-finalize-a",
+      operation: "student.import.commit",
+      responseBody: result,
+    }));
+    expect(result).toEqual({
+      importedRows: 1,
+      importedContacts: 0,
+      students: [{ id: "student-0", tenantId: "tenant-a", studentNo: "1001", firstName: "ADA", lastName: "KAYA", status: "ACTIVE" }],
+    });
+  });
+
+  it("S1-03 dosyası 30 öğrenci ve 29 kapalı izinli LEGAL_GUARDIAN iletişim kişisi yazar; ön izleme gövdesi değişmez", async () => {
+    const setup = createRealImport();
+    const fileBase64 = readFileSync("../../docs/examples/staging-uat-s1/ogrenciler-8a-30.csv").toString("base64");
+
+    const preview = await runWithRequestContext(context, () => setup.service.dryRun(context, { fileBase64 }));
+    // Digest of the dry-run body produced by the pre-DEC-20261021-02 code for this fixture.
+    expect(createHash("sha256").update(JSON.stringify(preview)).digest("hex"))
+      .toBe("8acfc46b172a85454171c1afab39ab10d205970d950f24bca79f053c4dce9d32");
+    expect(JSON.stringify(preview)).not.toContain("05550000001");
+
+    const result = await runWithRequestContext(context, () => setup.service.import(context, { fileBase64 }, "s1-03-fixture"));
+    expect(result).toMatchObject({ importedRows: 30, importedContacts: 29 });
+    expect(result.students.map((student) => student.studentNo)).toEqual(Array.from({ length: 30 }, (_, index) => String(1001 + index)));
+    expect(result.students[0]).toEqual({
+      id: expect.any(String), tenantId: "tenant-a", studentNo: "1001", firstName: "ADA", lastName: "AK",
+      gradeLevelId: "grade-8", classId: "class-a", status: "ACTIVE",
+    });
+    const contacts = (await Promise.all(result.students.map((student) => setup.contacts.listByStudent("tenant-a", student.id)))).flat();
+    expect(contacts).toHaveLength(29);
+    expect(contacts.every((contact) => contact.relationType === "LEGAL_GUARDIAN"
+      && !contact.canReceiveSms && !contact.canReceiveAnnouncements && !contact.canReceiveFinance)).toBe(true);
+    expect(setup.audits.filter((audit) => audit.action === "student_contact.imported")).toHaveLength(29);
+    expect(setup.audits.filter((audit) => audit.action === "student_import.completed")).toHaveLength(1);
+    await expect(runWithRequestContext(context, () => setup.service.import(context, { fileBase64 }, "s1-03-fixture")))
+      .resolves.toEqual(JSON.parse(JSON.stringify(result)));
+  });
+
+  it("S1-03 çakışma dosyasını CONTACT_COLUMNS_CONFLICT ile reddeder ve hiçbir şey yazmaz", async () => {
+    const setup = createRealImport();
+    const fileBase64 = readFileSync("../../docs/examples/staging-uat-s1/cakisma-tek-satir.csv").toString("base64");
+
+    await expect(runWithRequestContext(context, () => setup.service.dryRun(context, { fileBase64 }))).resolves.toEqual({
+      dryRun: true,
+      totalRows: 1,
+      validRows: [],
+      errors: [{ row: 2, field: "guardian", code: "CONTACT_COLUMNS_CONFLICT" }],
+      quota: { limit: 200, current: 1, incoming: 0, wouldExceed: false },
+      wouldImport: false,
+    });
+    await expect(runWithRequestContext(context, () => setup.service.import(context, { fileBase64 }, "s1-03-conflict")))
+      .rejects.toMatchObject({ response: { code: "STUDENT_IMPORT_INVALID", errors: [{ row: 2, field: "guardian", code: "CONTACT_COLUMNS_CONFLICT" }] } });
+    expect(setup.audits).toEqual([]);
+  });
 });
+
+function createRealImport() {
+  const audits: Array<{ action: string }> = [];
+  const classStore = new InMemoryClassStore();
+  const gradeLevelStore = new InMemoryGradeLevelStore();
+  const contacts = new InMemoryStudentContactStore();
+  const idempotency = new IdempotencyService(new InMemoryIdempotencyStore());
+  const students = new StudentService(
+    new InMemoryStudentStore(),
+    new InMemoryGuardianStudentStore(),
+    {} as never,
+    new InMemoryStudentEnrollmentStore(),
+    { listYears: async () => [], listTerms: async () => [] } as never,
+    {} as never,
+    classStore,
+    gradeLevelStore,
+    {} as never,
+    {} as never,
+    { record: async (input: { action: string }) => { audits.push(input); } } as never,
+    idempotency,
+    undefined,
+    undefined,
+    undefined,
+    contacts,
+  );
+  const school = {
+    listClasses: async () => (await classStore.list()).filter((record) => record.tenantId === "tenant-a" && record.campusId === "campus-main"),
+    listGradeLevels: async () => (await gradeLevelStore.list()).filter((record) => record.tenantId === "tenant-a"),
+  };
+  return { service: new StudentImportService(students, school as unknown as SchoolService, idempotency), audits, contacts };
+}
 
 function createService(options: {
   classes?: Array<{ id: string; tenantId: string; campusId?: string; gradeLevelId?: string; name: string }>;
@@ -199,9 +346,9 @@ function createService(options: {
 } = {}) {
   const students = {
     createMany: vi.fn(async () => []),
-    hasNationalId: vi.fn(async () => false),
+    findExistingNationalIds: vi.fn(async () => new Set<string>()),
     list: vi.fn(async () => []),
-    listStudentNosForImport: vi.fn(async () => options.studentNos ?? []),
+    findExistingStudentNos: vi.fn(async (_context, studentNos: string[]) => new Set(studentNos.filter((studentNo) => options.studentNos?.includes(studentNo)))),
     previewQuota: vi.fn(async (_context, incoming: number) => ({ limit: 200, current: 0, incoming, wouldExceed: false })),
   };
   const school = {

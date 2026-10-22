@@ -3,7 +3,7 @@ import { BadRequestException, ConflictException, Inject, Injectable } from "@nes
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import type { RequestContext } from "../context/request-context.js";
-import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
+import { type Queryable, type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
 export const idempotencyStoreToken = Symbol("IdempotencyStore");
 
@@ -23,7 +23,17 @@ export type IdempotencyStartResult =
 export interface IdempotencyStore {
   start(input: IdempotencyStartInput): Promise<IdempotencyStartResult>;
   complete(input: IdempotencyStartInput & { responseBody: unknown }): Promise<void>;
+  /**
+   * Completes an IN_PROGRESS key on the caller's open tenant transaction, so the business write and the replay
+   * record commit or roll back together. Throws when no IN_PROGRESS row matches, which rolls the caller back.
+   */
+  completeInTransaction?(client: Queryable, input: IdempotencyStartInput & { responseBody: unknown }): Promise<void>;
   release(input: IdempotencyStartInput): Promise<void>;
+}
+
+/** Handed to a `run` callback when the store can complete the key inside the callback's own transaction. */
+export interface IdempotencyTransactionCompletion {
+  complete(client: Queryable, responseBody: unknown): Promise<void>;
 }
 
 interface IdempotencyRecord {
@@ -42,7 +52,7 @@ export class IdempotencyService {
   async run<T>(
     context: RequestContext,
     options: { key?: string; operation: string; request: unknown },
-    callback: () => Promise<T>,
+    callback: (completion?: IdempotencyTransactionCompletion) => Promise<T>,
   ): Promise<T> {
     const key = normalizeIdempotencyKey(options.key);
     if (!key) return callback();
@@ -67,9 +77,19 @@ export class IdempotencyService {
       throw new ConflictException("IDEMPOTENCY_KEY_IN_PROGRESS");
     }
 
+    let completedInTransaction = false;
+    const store = this.store;
+    const completion: IdempotencyTransactionCompletion | undefined = store.completeInTransaction
+      ? {
+          complete: async (client, responseBody) => {
+            await store.completeInTransaction!(client, { ...input, responseBody });
+            completedInTransaction = true;
+          },
+        }
+      : undefined;
     try {
-      const responseBody = await callback();
-      await this.store.complete({ ...input, responseBody });
+      const responseBody = await callback(completion);
+      if (!completedInTransaction) await this.store.complete({ ...input, responseBody });
       return responseBody;
     } catch (error) {
       await this.store.release(input);
@@ -149,6 +169,20 @@ export class PostgresIdempotencyStore implements IdempotencyStore {
         [input.tenantId, input.key, input.operation, input.requestHash, serializeJson(input.responseBody)],
       );
     });
+  }
+
+  async completeInTransaction(client: Queryable, input: IdempotencyStartInput & { responseBody: unknown }): Promise<void> {
+    const result = await client.query<{ key: string }>(
+      `UPDATE "IdempotencyKey"
+       SET "status" = 'COMPLETED',
+           "responseBody" = $5::jsonb,
+           "completedAt" = now(),
+           "updatedAt" = now()
+       WHERE "tenantId" = $1 AND "key" = $2 AND "operation" = $3 AND "requestHash" = $4 AND "status" = 'IN_PROGRESS'
+       RETURNING "key"`,
+      [input.tenantId, input.key, input.operation, input.requestHash, serializeJson(input.responseBody)],
+    );
+    if (!result.rows[0]) throw new Error("IDEMPOTENCY_COMPLETION_FAILED");
   }
 
   async release(input: IdempotencyStartInput): Promise<void> {

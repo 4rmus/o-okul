@@ -191,7 +191,7 @@ function sanitizeAuditLogRecord(record: AuditLogRecord): AuditLogRecord {
   };
 }
 
-function sanitizeAuditDiff(diff: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+export function sanitizeAuditDiff(diff: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
   if (!diff) return undefined;
   return sanitizeAuditValue(diff, "") as Record<string, unknown>;
 }
