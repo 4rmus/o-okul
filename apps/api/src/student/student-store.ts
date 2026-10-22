@@ -591,7 +591,9 @@ export class PostgresStudentStore implements StudentStore {
   }
 
   async countLicensedActiveStudents(tenantId: string): Promise<number> {
-    return withExplicitTenantQuery(this.pool, tenantId, (client) => countLicensedActiveStudents(client, tenantId));
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      return selectLicensedActiveStudentCount(client, tenantId);
+    });
   }
 
   async listPortalAccess(tenantId: string, query: StudentPortalAccessQuery): Promise<StudentPortalAccessPage> {
@@ -891,7 +893,9 @@ export class PostgresStudentStore implements StudentStore {
     }
 
     try {
-      return await withTenantQuery(this.pool, (client) => importStudentBatch(client, input));
+      return await withTenantQuery(this.pool, async (client) => {
+        return importStudentBatch(client, input);
+      });
     } catch (error) {
       throw translateStudentImportBatchError(error);
     }
@@ -1401,7 +1405,7 @@ async function nextStudentNo(client: Queryable, tenantId: string): Promise<strin
   return studentNo;
 }
 
-async function countLicensedActiveStudents(client: Queryable, tenantId: string): Promise<number> {
+async function selectLicensedActiveStudentCount(client: Queryable, tenantId: string): Promise<number> {
   // Mirrors the count in o_okul_refresh_license_usage (20260801210000).
   const result = await client.query<{ count: number | string }>(
     `SELECT count(*)::int AS "count"
@@ -1463,7 +1467,7 @@ async function importStudentBatch(client: Queryable, input: StudentImportBatchIn
 
   const incomingActive = rows.filter((row) => row.enrollment?.status === "ACTIVE" && !row.enrollment.endsAt
     && (row.student.status ?? "ACTIVE") === "ACTIVE").length;
-  const currentActive = await countLicensedActiveStudents(client, tenantId);
+  const currentActive = await selectLicensedActiveStudentCount(client, tenantId);
   if (currentActive + incomingActive > input.activeStudentLimit) {
     throw new Error(studentImportBatchErrors.activeStudentLimitReached);
   }

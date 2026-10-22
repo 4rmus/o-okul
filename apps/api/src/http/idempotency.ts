@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { BadRequestException, ConflictException, Inject, Injectable } from "@nestjs/common";
+import { withTenantDb } from "@o-okul/db";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import type { RequestContext } from "../context/request-context.js";
@@ -172,17 +173,22 @@ export class PostgresIdempotencyStore implements IdempotencyStore {
   }
 
   async completeInTransaction(client: Queryable, input: IdempotencyStartInput & { responseBody: unknown }): Promise<void> {
-    const result = await client.query<{ key: string }>(
-      `UPDATE "IdempotencyKey"
-       SET "status" = 'COMPLETED',
-           "responseBody" = $5::jsonb,
-           "completedAt" = now(),
-           "updatedAt" = now()
-       WHERE "tenantId" = $1 AND "key" = $2 AND "operation" = $3 AND "requestHash" = $4 AND "status" = 'IN_PROGRESS'
-       RETURNING "key"`,
-      [input.tenantId, input.key, input.operation, input.requestHash, serializeJson(input.responseBody)],
-    );
-    if (!result.rows[0]) throw new Error("IDEMPOTENCY_COMPLETION_FAILED");
+    // Borrow the caller's open transaction (a connection-less adapter, so no BEGIN/COMMIT and no second connection)
+    // and pin this key's tenant settings on it before the write.
+    const transaction = { query: <T>(sql: string, values?: unknown[]) => client.query<T>(sql, values) };
+    await withTenantDb(transaction, { tenantId: input.tenantId, bypassRls: false }, async (db) => {
+      const result = await db.query<{ key: string }>(
+        `UPDATE "IdempotencyKey"
+         SET "status" = 'COMPLETED',
+             "responseBody" = $5::jsonb,
+             "completedAt" = now(),
+             "updatedAt" = now()
+         WHERE "tenantId" = $1 AND "key" = $2 AND "operation" = $3 AND "requestHash" = $4 AND "status" = 'IN_PROGRESS'
+         RETURNING "key"`,
+        [input.tenantId, input.key, input.operation, input.requestHash, serializeJson(input.responseBody)],
+      );
+      if (!result.rows[0]) throw new Error("IDEMPOTENCY_COMPLETION_FAILED");
+    });
   }
 
   async release(input: IdempotencyStartInput): Promise<void> {
