@@ -309,9 +309,9 @@ describePostgres("IdentityInvitationService.accept on PostgreSQL without request
   it("çalışan aktivasyonunun reddedilen sonucu activity satırı bırakmaz", async () => {
     await expect(service.accept({ token: tokenFor("EMPLOYEE"), password })).rejects.toThrow("EMPLOYEE_INVITATION_REQUIRES_ACTIVE_PROFILE");
     await expectNoActivity(admin);
-    // The store revoked the invitation in a committed transaction; a retry sees that (UAT F-20: as REVOKED), not
-    // TENANT_ACTIVITY_UNRESOLVED.
-    await expect(service.accept({ token: tokenFor("EMPLOYEE"), password })).rejects.toThrow("IDENTITY_INVITATION_REVOKED");
+    // The store revoked the invitation in a committed transaction; a retry sees that, not TENANT_ACTIVITY_UNRESOLVED.
+    // UAT F-20 review: a system revoke is not reported as an admin withdrawal; the inactive profile is named again.
+    await expect(service.accept({ token: tokenFor("EMPLOYEE"), password })).rejects.toThrow("EMPLOYEE_INVITATION_REQUIRES_ACTIVE_PROFILE");
   });
 });
 

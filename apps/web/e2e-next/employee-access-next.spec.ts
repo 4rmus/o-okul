@@ -226,7 +226,8 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
   await expect(page.locator(".uh-crud-page__error")).toHaveCount(0);
 });
 
-for (const failInvite of [false, true]) test(`UAT F-02 yeni çalışan formundan aynı adımda yönetici daveti gönderilir${failInvite ? " (davet hatası)" : ""}`, async ({ page }) => {
+// UAT F-20: the 409 e-mail refusal of the same step reopens the invitation dialog with the field marked invalid.
+for (const failInvite of [undefined, { code: "EMPLOYEE_INVITATION_ALREADY_PENDING", status: 400 }, { code: "EMPLOYEE_EMAIL_ACCOUNT_ALREADY_BOUND", status: 409 }]) test(`UAT F-02 yeni çalışan formundan aynı adımda yönetici daveti gönderilir${failInvite ? ` (davet hatası ${failInvite.code})` : ""}`, async ({ page }) => {
   let activeSession = false;
   const createdBodies: Array<Record<string, unknown>> = [];
   const invitationBodies: Array<Record<string, unknown>> = [];
@@ -264,7 +265,7 @@ for (const failInvite of [false, true]) test(`UAT F-02 yeni çalışan formundan
     if (path === "/employees/employee-new-admin/account-invitations" && request.method() === "POST") {
       invitationBodies.push(request.postDataJSON() as Record<string, unknown>);
       if (failInvite && invitationBodies.length === 1) {
-        await route.fulfill({ body: JSON.stringify({ error: { code: "EMPLOYEE_INVITATION_ALREADY_PENDING" } }), contentType: "application/json", headers: corsHeaders, status: 400 });
+        await route.fulfill({ body: JSON.stringify({ error: { code: failInvite.code } }), contentType: "application/json", headers: corsHeaders, status: failInvite.status });
         return;
       }
       await json(route, {
@@ -320,7 +321,14 @@ for (const failInvite of [false, true]) test(`UAT F-02 yeni çalışan formundan
   if (failInvite) {
     // The profile stays; the invitation dialog reopens with the chosen role so the retry is one click.
     const retry = page.getByRole("dialog", { name: "Müdür Yardımcısı hesap daveti" });
-    await expect(retry).toContainText("Bu çalışan için zaten bekleyen bir davet var");
+    if (failInvite.status === 409) {
+      const email = retry.getByLabel("İş e-postası");
+      await expect(email).toHaveAttribute("aria-invalid", "true");
+      await expect(email).toHaveAccessibleDescription("Bu e-posta kurumda başka bir çalışanın hesabında kullanılıyor. Farklı bir e-posta girin.");
+      await expect(retry.getByRole("alert")).toHaveCount(0);
+    } else {
+      await expect(retry).toContainText("Bu çalışan için zaten bekleyen bir davet var");
+    }
     await expect(retry.getByLabel("Başlangıç rolü")).toHaveValue("TENANT_ADMIN");
     await expect(retry.getByLabel("İş e-postası")).toHaveValue("mudur@example.test");
     await retry.getByRole("button", { name: "Daveti gönder" }).click();

@@ -33,7 +33,8 @@ interface AuthStore {
   changePassword(input: MePasswordChangeRequest): Promise<void>;
   confirmMfaEnrollment(setupToken: string, totpCode: string, reenrollmentCode?: string): Promise<void>;
   verifyMfa(challengeToken: string, input: { totpCode?: string; recoveryCode?: string }): Promise<void>;
-  logout(): Promise<void>;
+  /** Resolves false when the server did not confirm the logout (its session may survive); local state is cleared. */
+  logout(): Promise<boolean>;
   switchPersona(activePersona: ActivePersona): Promise<void>;
 }
 
@@ -85,8 +86,9 @@ export function Providers({ children }: { children: ReactNode }) {
         setAuth(nextAuth);
       },
       async logout() {
-        await requestLogout().catch(() => undefined);
+        const confirmed = await requestLogout().then(() => true, () => false);
         setAuth(null);
+        return confirmed;
       },
     }),
     [auth, isBootstrapping],

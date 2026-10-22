@@ -24,6 +24,7 @@ export default function ActivationPage() {
   const [passwordAgain, setPasswordAgain] = useState("");
   const [error, setError] = useState("");
   const [isComplete, setIsComplete] = useState(false);
+  const [previousSessionOpen, setPreviousSessionOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const loginPath = hostTenantSlug ? "/giris" : "/login";
 
@@ -88,11 +89,26 @@ export default function ActivationPage() {
       return;
     }
     setIsComplete(true);
-    // UAT F-20: the activated person must never continue in a session this browser already holds (another user's);
-    // it is ended through the normal logout (refresh cookie, CSRF), then the new account signs in on the login page.
-    // There is no auto-login after activation. The notice travels as a plain flag, never as account data.
-    if (auth) await logout();
+    await leaveForLogin(Boolean(auth));
+  }
+
+  // UAT F-20: the activated person must never continue in a session this browser already holds (another user's);
+  // it is ended through the normal logout (refresh cookie, CSRF), then the new account signs in on the login page.
+  // There is no auto-login after activation. The notice travels as a plain flag, never as account data. If the server
+  // does not confirm the logout, the page stays here: the login page would resume the surviving session.
+  async function leaveForLogin(hasSession: boolean) {
+    if (hasSession && !(await logout())) {
+      setPreviousSessionOpen(true);
+      setIsSubmitting(false);
+      return;
+    }
+    setPreviousSessionOpen(false);
     router.replace(activationNoticeHref(loginPath, isEmployeeInvitation ? "invitation" : "student"));
+  }
+
+  async function retryPreviousSessionLogout() {
+    setIsSubmitting(true);
+    await leaveForLogin(true);
   }
 
   return (
@@ -103,7 +119,17 @@ export default function ActivationPage() {
       </div>
       <form className="next-form" onSubmit={(event) => void handleSubmit(event)}>
         <h1 id="activation-title">Hesabı etkinleştir</h1>
-        {isComplete ? (
+        {isComplete && previousSessionOpen ? (
+          <>
+            <p className="next-form-error" role="alert">
+              Hesabınız etkinleştirildi, ancak bu tarayıcıdaki önceki oturum kapatılamadı. Önce önceki oturumu kapatın,
+              sonra yeni şifrenizle giriş yapın.
+            </p>
+            <Button type="button" disabled={isSubmitting} loading={isSubmitting} loadingLabel="Oturum kapatılıyor" onClick={() => void retryPreviousSessionLogout()}>
+              Önceki oturumu kapat
+            </Button>
+          </>
+        ) : isComplete ? (
           <>
             <p className="next-status-note" role="status">
               Hesabınız etkinleştirildi. Giriş sayfasına yönlendiriliyorsunuz.
@@ -184,7 +210,8 @@ export default function ActivationPage() {
         <p className="next-section-eyebrow">Tek kullanımlık davet</p>
         <h2>Bağlantı ve kod 24 saat geçerlidir.</h2>
         <p>Şifrenizi yalnız bu ekranda belirleyin. Süresi dolan, kullanılan veya deneme limiti dolan kod yeniden kullanılamaz.</p>
-        <Link className="next-auth-link" href={loginPath}>Girişe dön</Link>
+        {/* The login page would resume a session whose logout failed; the page offers the retry instead. */}
+        {previousSessionOpen ? null : <Link className="next-auth-link" href={loginPath}>Girişe dön</Link>}
         <ContactSupportLink />
       </aside>
     </section>

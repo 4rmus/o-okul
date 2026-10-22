@@ -320,7 +320,7 @@ export class IdentityInvitationService {
 
     const invitation = await this.invitations.findByTokenHash(hashActivationToken(token));
     if (!invitation) throw new NotFoundException("IDENTITY_INVITATION_NOT_FOUND");
-    if (invitation.status !== "PENDING") throw inactiveInvitationException(invitation);
+    if (invitation.status !== "PENDING") throw await this.inactiveInvitationError(invitation);
     if (Date.parse(invitation.expiresAt) <= Date.now()) throw new BadRequestException("IDENTITY_INVITATION_EXPIRED");
     const employeeActivation = invitation.subjectType === "EMPLOYEE" && this.employeeActivations;
     // UAT F-08: every check that can reject a bad request runs before runVerifiedTenantMutation;
@@ -374,6 +374,11 @@ export class IdentityInvitationService {
         }
         return result;
       });
+      if (outcome.status === "REVOKED") {
+        // Revoked between the check above and the store's row lock: same mapping as the check.
+        const current = await this.invitations.findByTokenHash(hashActivationToken(token));
+        throw current ? await this.inactiveInvitationError(current) : new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
+      }
       return requireAcceptedEmployeeActivation(outcome);
     }
     // A refusal thrown only after its own writes were undone is a known outcome: the activity row is closed
@@ -411,7 +416,7 @@ export class IdentityInvitationService {
       if (attachedCredentials) await this.users.restoreAttachableCredentials(invitation.tenantId, user.id, attachedCredentials);
       if (!priorAccount) await this.users.deleteUnusedTenantUser(invitation.tenantId, user.id);
       const current = await this.invitations.findByTokenHash(hashActivationToken(token));
-      throw (compensatedRefusal = current ? inactiveInvitationException(current) : new BadRequestException("IDENTITY_INVITATION_NOT_PENDING"));
+      throw (compensatedRefusal = current ? await this.inactiveInvitationError(current) : new BadRequestException("IDENTITY_INVITATION_NOT_PENDING"));
     }
     await this.auditLogs?.record({
       tenantId: invitation.tenantId,
@@ -439,6 +444,30 @@ export class IdentityInvitationService {
       action: link === "LINKED" ? "teacher.employee_account_linked" : "teacher.employee_account_link_conflict",
       diff: { teacherId, userId },
     });
+  }
+
+  // UAT F-20: a link withdrawn by an admin (revoke, or replaced by a newer invitation) says so with
+  // IDENTITY_INVITATION_REVOKED instead of reading as already used; an accepted one keeps IDENTITY_INVITATION_NOT_PENDING
+  // and a revoked one past its 24 hours reports the expiry. Same 400 class for every subject type on this accept path.
+  // The table records no revoke reason. The system revokes a link itself only when its subject can no longer take it
+  // (employee profile inactive or already linked, expiry: employee activation store; profile deleted: lifecycle), so the
+  // subject's current state names that case, as before the revoke; an admin withdrawal leaves the subject active and
+  // unlinked. A student portal code lock also revokes pending links of that student; it reads as REVOKED, and a new
+  // invitation is indeed the way forward there.
+  private async inactiveInvitationError(invitation: IdentityInvitationRecord): Promise<BadRequestException> {
+    if (invitation.status !== "REVOKED") return new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
+    if (Date.parse(invitation.expiresAt) <= Date.now()) return new BadRequestException("IDENTITY_INVITATION_EXPIRED");
+    if (invitation.subjectType === "EMPLOYEE") {
+      const employee = await this.users.findEmployee(invitation.tenantId, invitation.subjectId);
+      if (!employee || employee.status !== "ACTIVE") return new BadRequestException("EMPLOYEE_INVITATION_REQUIRES_ACTIVE_PROFILE");
+      if (employee.userId || (await this.teachers.findByEmployeeId(invitation.tenantId, employee.id))?.userId) {
+        return new BadRequestException("EMPLOYEE_ALREADY_LINKED");
+      }
+      return new BadRequestException("IDENTITY_INVITATION_REVOKED");
+    }
+    const subject = await this.findSubject(invitation.tenantId, invitation.subjectType, invitation.subjectId);
+    if (!subject || ("userId" in subject && subject.userId)) return new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
+    return new BadRequestException("IDENTITY_INVITATION_REVOKED");
   }
 
   private async requireAcceptableSubject(invitation: IdentityInvitationRecord) {
@@ -544,14 +573,6 @@ function requireAcceptedEmployeeActivation(outcome: EmployeeAccountActivationOut
   }
   if (outcome.status === "LICENSE_INACTIVE") throw new BadRequestException("TENANT_LICENSE_INACTIVE");
   throw new BadRequestException("EMPLOYEE_ACCOUNT_LIMIT_EXCEEDED");
-}
-
-// UAT F-20: a withdrawn link says so (IDENTITY_INVITATION_REVOKED) instead of reading as already used; an accepted one
-// keeps IDENTITY_INVITATION_NOT_PENDING. A revoked link past its 24 hours (also the automatic revoke of an expired one)
-// reports the expiry. Same 400 class for every subject type that shares this accept path.
-function inactiveInvitationException(invitation: Pick<IdentityInvitationRecord, "status" | "expiresAt">): BadRequestException {
-  if (invitation.status !== "REVOKED") return new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
-  return new BadRequestException(Date.parse(invitation.expiresAt) <= Date.now() ? "IDENTITY_INVITATION_EXPIRED" : "IDENTITY_INVITATION_REVOKED");
 }
 
 function parseSubjectType(input: string | undefined): PortalSubjectRoleName {

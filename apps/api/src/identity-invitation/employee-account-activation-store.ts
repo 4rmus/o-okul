@@ -90,7 +90,9 @@ export class InMemoryEmployeeAccountActivationStore implements EmployeeAccountAc
   }): Promise<EmployeeAccountActivationOutcome> {
     const invitation = await this.invitations.findByTokenHash(input.tokenHash);
     if (!isEmployeeEmailInvitation(invitation)) return { status: "INVALID" };
-    if (invitation.status !== "PENDING") return { status: invitation.status === "REVOKED" ? "REVOKED" : "NOT_PENDING" };
+    if (invitation.status !== "PENDING") {
+      return { status: inactiveInvitationStatus(invitation.status, Date.parse(invitation.expiresAt), Date.parse(input.acceptedAt)) };
+    }
     if (Date.parse(invitation.expiresAt) <= Date.parse(input.acceptedAt)) return { status: "EXPIRED" };
     const employee = await this.users.findEmployee(invitation.tenantId, invitation.subjectId);
     if (!employee || employee.status !== "ACTIVE") return { status: "PROFILE_NOT_ACTIVE" };
@@ -141,14 +143,22 @@ export class PostgresEmployeeAccountActivationStore implements EmployeeAccountAc
   ) {}
 
   // Read in the caller's tenant (RLS on), not with the activation's RLS bypass: the admin's request carries its tenant.
+  // A read-only answer for the admin, so it takes no row locks; activation re-checks under locks.
   async findInvitationEmailConflict(input: {
     tenantId: string;
     employeeId: string;
     email: string;
   }): Promise<EmployeeInvitationEmailConflict | undefined> {
-    return withExplicitTenantQuery(this.pool, input.tenantId, async (client) => (
-      (await resolveEmployeeEmailAccount(client, input.tenantId, input.employeeId, input.email.trim().toLowerCase())).conflict
-    ));
+    return withExplicitTenantQuery(this.pool, input.tenantId, async (client) => {
+      const account = await resolveEmployeeEmailAccount(
+        client,
+        input.tenantId,
+        input.employeeId,
+        input.email.trim().toLowerCase(),
+        { lock: false },
+      );
+      return account.conflict;
+    });
   }
 
   async accept(input: {
@@ -168,7 +178,9 @@ export class PostgresEmployeeAccountActivationStore implements EmployeeAccountAc
       );
       const invitation = invitationResult.rows[0];
       if (!isEmployeeEmailInvitationRow(invitation)) return { status: "INVALID" };
-      if (invitation.status !== "PENDING") return { status: invitation.status === "REVOKED" ? "REVOKED" : "NOT_PENDING" };
+      if (invitation.status !== "PENDING") {
+        return { status: inactiveInvitationStatus(invitation.status, invitation.expiresAt.getTime(), Date.parse(input.acceptedAt)) };
+      }
       if (invitation.expiresAt.getTime() <= Date.parse(input.acceptedAt)) {
         await revokeInvitation(client, invitation.id);
         await clearInvitationDelivery(client, invitation.id);
@@ -218,7 +230,13 @@ export class PostgresEmployeeAccountActivationStore implements EmployeeAccountAc
       }
 
       const normalizedEmail = invitation.email.trim().toLowerCase();
-      const emailAccount = await resolveEmployeeEmailAccount(client, invitation.tenantId, invitation.subjectId, normalizedEmail);
+      const emailAccount = await resolveEmployeeEmailAccount(
+        client,
+        invitation.tenantId,
+        invitation.subjectId,
+        normalizedEmail,
+        { lock: true },
+      );
       if (emailAccount.conflict) return { status: emailAccount.conflict };
       let userId = emailAccount.userId;
       let memberships = emailAccount.memberships;
@@ -239,14 +257,22 @@ export class PostgresEmployeeAccountActivationStore implements EmployeeAccountAc
            RETURNING "id"`,
           [randomUUID(), invitation.tenantId, normalizedEmail, input.name ?? invitation.name, input.passwordHash, input.acceptedAt],
         );
-        userId = created.rows[0]?.id ?? await findUserIdByEmail(client, invitation.tenantId, normalizedEmail);
+        // Inserted here, or a concurrent accept inserted the same address first: re-read it under the same rules.
+        const inserted = await resolveEmployeeEmailAccount(
+          client,
+          invitation.tenantId,
+          invitation.subjectId,
+          normalizedEmail,
+          { lock: true },
+        );
+        userId = created.rows[0]?.id ?? inserted.userId;
         if (!userId) throw new Error("EMPLOYEE_ACTIVATION_USER_CREATE_FAILED");
-        memberships = await findMemberships(client, invitation.tenantId, userId);
-        if (await isUserBoundToOtherEmployee(client, invitation.tenantId, invitation.subjectId, userId)) {
+        memberships = inserted.memberships;
+        if (inserted.conflict === "EMAIL_ACCOUNT_ALREADY_BOUND") {
           if (created.rows[0]) throw new Error("EMPLOYEE_ACTIVATION_CONCURRENT_EMAIL_ACCOUNT_BOUND");
           return { status: "EMAIL_ACCOUNT_ALREADY_BOUND" };
         }
-        if (hasIncompatiblePersona(memberships)) {
+        if (inserted.conflict === "EMAIL_ACCOUNT_INCOMPATIBLE") {
           if (created.rows[0]) throw new Error("EMPLOYEE_ACTIVATION_CONCURRENT_EMAIL_ACCOUNT_INCOMPATIBLE");
           return { status: "EMAIL_ACCOUNT_INCOMPATIBLE" };
         }
@@ -348,30 +374,43 @@ async function resolveEmployeeEmailAccount(
   tenantId: string,
   employeeId: string,
   email: string,
-): Promise<{ userId?: string; memberships: EmployeeMembershipRow[]; conflict?: EmployeeInvitationEmailConflict }> {
-  const userId = await findUserIdByEmail(client, tenantId, email);
+  options: RowLockOption,
+): Promise<EmployeeEmailAccount> {
+  const user = await client.query<{ id: string }>(
+    `SELECT "id"
+     FROM "User"
+     WHERE "tenantId" = $1 AND coalesce("emailNormalized", lower(btrim("email"))) = $2
+     LIMIT 1
+     ${options.lock ? "FOR UPDATE" : ""}`,
+    [tenantId, email],
+  );
+  const userId = user.rows[0]?.id;
   if (!userId) return { memberships: [] };
-  const memberships = await findMemberships(client, tenantId, userId);
-  if (await isUserBoundToOtherEmployee(client, tenantId, employeeId, userId)) {
+  const memberships = await findMemberships(client, tenantId, userId, options);
+  if (await isUserBoundToOtherEmployee(client, tenantId, employeeId, userId, options)) {
     return { userId, memberships, conflict: "EMAIL_ACCOUNT_ALREADY_BOUND" };
   }
   if (hasIncompatiblePersona(memberships)) return { userId, memberships, conflict: "EMAIL_ACCOUNT_INCOMPATIBLE" };
   return { userId, memberships };
 }
 
-async function findUserIdByEmail(client: Queryable, tenantId: string, email: string): Promise<string | undefined> {
-  const result = await client.query<{ id: string }>(
-    `SELECT "id"
-     FROM "User"
-     WHERE "tenantId" = $1 AND coalesce("emailNormalized", lower(btrim("email"))) = $2
-     LIMIT 1
-     FOR UPDATE`,
-    [tenantId, email],
-  );
-  return result.rows[0]?.id;
+interface EmployeeEmailAccount {
+  userId?: string;
+  memberships: EmployeeMembershipRow[];
+  conflict?: EmployeeInvitationEmailConflict;
 }
 
-async function findMemberships(client: Queryable, tenantId: string, userId: string): Promise<EmployeeMembershipRow[]> {
+/** Activation locks the rows it decides on; the invitation-time pre-check only reads. */
+interface RowLockOption {
+  lock: boolean;
+}
+
+async function findMemberships(
+  client: Queryable,
+  tenantId: string,
+  userId: string,
+  { lock }: RowLockOption,
+): Promise<EmployeeMembershipRow[]> {
   const result = await client.query<EmployeeMembershipRow>(
     `SELECT m."id", m."role"::text, m."staffRole"::text, m."hasTeacherPersona", m."hasStudentPersona",
             m."version", m."scopeMode",
@@ -384,7 +423,7 @@ async function findMemberships(client: Queryable, tenantId: string, userId: stri
      FROM "TenantMembership" m
      WHERE m."tenantId" = $1 AND m."userId" = $2
      ORDER BY (m."staffRole" IS NOT NULL OR m."hasTeacherPersona" OR m."hasStudentPersona") DESC, m."startsAt" ASC
-     FOR UPDATE`,
+     ${lock ? "FOR UPDATE" : ""}`,
     [tenantId, userId],
   );
   return result.rows;
@@ -395,6 +434,7 @@ async function isUserBoundToOtherEmployee(
   tenantId: string,
   employeeId: string,
   userId: string,
+  { lock }: RowLockOption,
 ): Promise<boolean> {
   // UAT F-20: an Employee linked to a teacher that holds the account (Teacher.employeeId, UAT F-13) counts as bound
   // even before its own userId is filled in.
@@ -406,7 +446,7 @@ async function isUserBoundToOtherEmployee(
      WHERE e."tenantId" = $1 AND e."id" <> $3 AND e."deletedAt" IS NULL
        AND (e."userId" = $2 OR t."userId" = $2)
      LIMIT 1
-     FOR UPDATE OF e`,
+     ${lock ? "FOR UPDATE OF e" : ""}`,
     [tenantId, userId, employeeId],
   );
   return Boolean(result.rows[0]);
@@ -483,6 +523,12 @@ async function clearInvitationDelivery(client: Queryable, invitationId: string):
      WHERE "purpose" = 'IDENTITY_INVITATION' AND "sourceId" = $1 AND "payloadEncrypted" IS NOT NULL`,
     [invitationId],
   );
+}
+
+// UAT F-20 review: a revoked link past its 24 hours reports the expiry, as the service does for the same row.
+function inactiveInvitationStatus(status: string, expiresAtMs: number, acceptedAtMs: number): "NOT_PENDING" | "REVOKED" | "EXPIRED" {
+  if (status !== "REVOKED") return "NOT_PENDING";
+  return expiresAtMs <= acceptedAtMs ? "EXPIRED" : "REVOKED";
 }
 
 function hasIncompatiblePersona(memberships: readonly EmployeeMembershipRow[]): boolean {

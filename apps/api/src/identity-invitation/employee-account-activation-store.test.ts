@@ -59,6 +59,11 @@ describe("PostgresEmployeeAccountActivationStore", () => {
     await expect(accepted.accept(acceptInput())).resolves.toEqual({ status: "NOT_PENDING" });
   });
 
+  it("süresi geçmiş iptal edilmiş daveti servisle aynı biçimde EXPIRED olarak bildirir (UAT F-20 inceleme)", async () => {
+    const store = new PostgresEmployeeAccountActivationStore(createPool([], { invitationStatus: "REVOKED" }));
+    await expect(store.accept({ ...acceptInput(), acceptedAt: "2026-08-04T12:00:00.000Z" })).resolves.toEqual({ status: "EXPIRED" });
+  });
+
   it("öğretmen bağlı çalışan kaydındaki hesabı da başka çalışana bağlı sayar (UAT F-20)", async () => {
     const queries: RecordedQuery[] = [];
     const store = new PostgresEmployeeAccountActivationStore(createPool(queries, {
@@ -71,6 +76,10 @@ describe("PostgresEmployeeAccountActivationStore", () => {
 
     const boundCheck = queries.find(({ sql }) => sql.includes('FROM "Employee" e') && sql.includes('"userId" = $2'));
     expect(boundCheck?.sql).toContain('LEFT JOIN "Teacher" t');
+    // Activation decides under row locks (the invitation-time pre-check does not).
+    expect(boundCheck?.sql).toContain("FOR UPDATE OF e");
+    expect(queries.find(({ sql }) => sql.includes('FROM "User"'))?.sql).toContain("FOR UPDATE");
+    expect(queries.find(({ sql }) => sql.includes('FROM "TenantMembership"'))?.sql).toContain("FOR UPDATE");
     expect(boundCheck?.sql).toContain('t."userId" = $2');
     expect(boundCheck?.values).toEqual(["tenant-a", "teacher-user-a", "employee-a"]);
     expect(queries.some(({ sql }) => sql.includes('UPDATE "Employee"'))).toBe(false);
@@ -101,11 +110,11 @@ describe("PostgresEmployeeAccountActivationStore", () => {
     await expect(store.findInvitationEmailConflict({ tenantId: "tenant-a", employeeId: "employee-a", email: " Ada@Example.test " }))
       .resolves.toBe(expected);
 
-    // Runs in the caller's tenant with RLS on and writes nothing.
+    // Runs in the caller's tenant with RLS on, writes nothing and takes no row locks.
     expect(queries).toContainEqual({ sql: "SELECT set_config('app.bypass_rls', $1, true)", values: ["false"] });
     expect(queries).toContainEqual({ sql: "SELECT set_config('app.current_tenant_id', $1, true)", values: ["tenant-a"] });
     expect(queries.find(({ sql }) => sql.includes('FROM "User"'))?.values).toEqual(["tenant-a", "ada@example.test"]);
-    expect(queries.some(({ sql }) => /\b(INSERT|UPDATE|DELETE)\b/.test(sql) && !sql.includes("FOR UPDATE"))).toBe(false);
+    expect(queries.some(({ sql }) => /\b(INSERT|UPDATE|DELETE)\b/.test(sql))).toBe(false);
     expect(queries.at(-1)?.sql).toBe("COMMIT");
   });
 

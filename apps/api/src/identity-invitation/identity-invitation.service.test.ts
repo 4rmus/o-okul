@@ -609,6 +609,45 @@ describe("IdentityInvitationService", () => {
         .rejects.toMatchObject({ message: "IDENTITY_INVITATION_NOT_PENDING", status: 400 });
     });
 
+    it("veli davetinin iptali de REVOKED ile bildirilir; sonradan bağlanan konu NOT_PENDING kalır", async () => {
+      const guardians = new InMemoryGuardianStore();
+      const teachers = new InMemoryTeacherStore();
+      const service = new IdentityInvitationService(
+        new InMemoryIdentityInvitationStore(),
+        new InMemoryUserManagementStore(),
+        new InMemoryStudentStore(),
+        guardians,
+        teachers,
+        new InMemoryTenantStore(),
+      );
+      const guardian = await guardians.create({ tenantId: "tenant-a", firstName: "Iptal", lastName: "Veli" });
+      const teacher = await teachers.create({ tenantId: "tenant-a", firstName: "Bagli", lastName: "Ogretmen" });
+      const guardianInvite = await service.create(adminContext, { subjectType: "GUARDIAN", subjectId: guardian.id, email: "iptal.veli.f20@example.test" });
+      const teacherInvite = await service.create(adminContext, { subjectType: "TEACHER", subjectId: teacher.id, email: "bagli.ogretmen.f20@example.test" });
+      await service.revoke(adminContext, guardianInvite.invitation.id);
+      await service.revoke(adminContext, teacherInvite.invitation.id);
+      await teachers.bindUser("tenant-a", teacher.id, "user-elsewhere");
+
+      await expect(service.accept({ token: guardianInvite.activationToken, password: "Secure-password-123" }))
+        .rejects.toMatchObject({ message: "IDENTITY_INVITATION_REVOKED", status: 400 });
+      await expect(service.accept({ token: teacherInvite.activationToken, password: "Secure-password-123" }))
+        .rejects.toMatchObject({ message: "IDENTITY_INVITATION_NOT_PENDING", status: 400 });
+    });
+
+    it.each([
+      ["bağlanmış çalışan", { userId: "user-elsewhere" }, "EMPLOYEE_ALREADY_LINKED"],
+      ["aktif olmayan çalışan", { status: "PLANNED" as const }, "EMPLOYEE_INVITATION_REQUIRES_ACTIVE_PROFILE"],
+    ])("sistemin iptal ettiği çalışan davetini %s için eski anlamıyla bildirir", async (_label, change, code) => {
+      const { employee, invitations, service, users } = await setup();
+      const issued = await service.createEmployeeInvitation(adminContext, employee.id, { email: "sistem.f20@example.test", role: "FINANCE_STAFF" });
+      // The activation store revokes the link itself when the profile can no longer take it.
+      await invitations.revokePendingForSubject("tenant-a", "EMPLOYEE", employee.id);
+      vi.spyOn(users, "findEmployee").mockResolvedValue({ ...employee, ...change });
+
+      await expect(service.accept({ token: issued.activationToken, password: "Secure-password-123" }))
+        .rejects.toMatchObject({ message: code, status: 400 });
+    });
+
     it("süresi geçmiş iptal edilmiş bağlantı için süre dolumunu bildirir", async () => {
       const { employee, invitations, service } = await setup();
       const issued = await service.createEmployeeInvitation(adminContext, employee.id, { email: "eski.f20@example.test", role: "FINANCE_STAFF" });

@@ -90,6 +90,72 @@ test("tek kullanımlık davet kabulü tarayıcıdaki başka kullanıcının otur
   await expect(page).toHaveURL(/\/login$/);
 });
 
+test("tek kullanımlık davet kabulünden sonra önceki oturum kapatılamazsa girişe gitmez ve uyarır (UAT F-20)", async ({ page }) => {
+  const logoutStatuses = [500, 204];
+  let logoutCalls = 0;
+  await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-owner" }]);
+  await page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") {
+      await route.fulfill({ headers: corsHeaders, status: 204 });
+      return;
+    }
+    const path = new URL(request.url()).pathname.replace(/^\/api\/v1/u, "");
+    if (path === "/auth/refresh") {
+      await route.fulfill({
+        body: JSON.stringify({ data: {
+          accessToken: "owner-access-token",
+          session: { id: "owner-session", membershipVersion: 1, roles: ["TENANT_OWNER"], status: "ACTIVE", tenantId: "tenant-a", userId: "owner-user", activePersona: "STAFF", membershipId: "owner-membership" },
+        } }),
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+      });
+      return;
+    }
+    if (path === "/auth/logout") {
+      const status = logoutStatuses[logoutCalls] ?? 204;
+      logoutCalls += 1;
+      await route.fulfill({
+        body: status === 204 ? undefined : JSON.stringify({ error: { code: "INTERNAL_SERVER_ERROR" } }),
+        contentType: "application/json",
+        headers: corsHeaders,
+        status,
+      });
+      return;
+    }
+    if (path === "/identity-invitations/accept") {
+      await route.fulfill({
+        body: JSON.stringify({ data: { status: "ACCEPTED", acceptedAt: "2026-10-22T12:00:00.000Z" } }),
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 201,
+      });
+      return;
+    }
+    await route.fulfill({ body: JSON.stringify({ data: [] }), contentType: "application/json", headers: corsHeaders, status: 200 });
+  });
+
+  await page.goto("/aktivasyon#token=activation-secret");
+  await expect(page.getByRole("button", { name: "Hesabı etkinleştir" })).toBeEnabled();
+  await page.getByRole("textbox", { name: "Şifre", exact: true }).fill("YeniAb12");
+  await page.getByRole("textbox", { name: "Şifre tekrar" }).fill("YeniAb12");
+  await page.getByRole("button", { name: "Hesabı etkinleştir" }).click();
+
+  await expect(page.getByRole("alert").filter({ hasText: "önceki oturum kapatılamadı" }))
+    .toHaveText(/Hesabınız etkinleştirildi, ancak bu tarayıcıdaki önceki oturum kapatılamadı\./u);
+  await page.waitForTimeout(300);
+  await expect(page).toHaveURL(/\/aktivasyon$/);
+  await expect(page.getByRole("link", { name: "Girişe dön" })).toHaveCount(0);
+  expect(logoutCalls).toBe(1);
+
+  // A confirmed retry continues to the login page.
+  await page.getByRole("button", { name: "Önceki oturumu kapat" }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole("status")).toHaveText("Hesabınız etkinleştirildi. Yeni şifrenizle giriş yapın.");
+  expect(logoutCalls).toBe(2);
+});
+
 test("öğrenci aktivasyon kodu URL'den silinir ve öğrenci numarasıyla hesabı etkinleştirir", async ({ page }) => {
   let activationBody: Record<string, unknown> | undefined;
   await page.route("**/api/v1/auth/activate", async (route) => {
