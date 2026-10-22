@@ -116,6 +116,7 @@ describe("PostgresUserManagementStore", () => {
     const employeeQuery = queries.find((query) => query.sql.includes('ORDER BY lower(e."lastName") ASC, e."id" ASC'));
     expect(employeeQuery?.values).toEqual(["tenant-a", "%ada%", 51]);
     expect(employeeQuery?.sql).toContain('LIKE $2 ESCAPE');
+    expect(employeeQuery?.sql).toContain("lower(translate(");
     expect(employeeQuery?.sql).toContain('LIMIT $3');
   });
 
@@ -624,6 +625,152 @@ describe("InMemoryUserManagementStore çalışan cursor listesi", () => {
     await expect(store.listEmployeeAccessPage("tenant-a", { ...query, q: "ADMIN-A@EXAMPLE.TEST" })).resolves.toMatchObject({
       records: [expect.objectContaining({ id: "employee-admin-a" })],
     });
+  });
+});
+
+describe("InMemoryUserManagementStore çalışan cursor dayanıklılığı ve Türkçe arama", () => {
+  const query = { direction: "next" as const, limit: 1, sort: "lastName" as const };
+  const employee = (firstName: string, lastName: string) => ({ firstName, lastName, status: "ACTIVE" as const });
+
+  it("sınır çalışanın adı değişse de sonraki sayfa atlamadan gelir; v1 cursor reddedilir", async () => {
+    const store = new InMemoryUserManagementStore();
+    const first = await store.listEmployeeAccessPage("tenant-a", query);
+    expect(first.records.map((record) => record.id)).toEqual(["employee-admin-a"]);
+    // Rename the boundary row in place (the in-memory store has no rename API).
+    (store as unknown as { employees: Array<{ id: string; lastName: string }> }).employees
+      .find((record) => record.id === "employee-admin-a")!.lastName = "Zorlu";
+
+    const second = await store.listEmployeeAccessPage("tenant-a", { ...query, cursor: first.meta.nextCursor });
+    expect(second.records.map((record) => record.id)).toEqual(["employee-operations-a"]);
+
+    const legacy = Buffer.from(JSON.stringify({ v: 1, context: "x", sort: "lastName", id: "employee-admin-a" }), "utf8").toString("base64url");
+    await expect(store.listEmployeeAccessPage("tenant-a", { ...query, cursor: legacy })).rejects.toThrow("EMPLOYEE_CURSOR_INVALID");
+  });
+
+  it("I/İ/ı/i varyantlarını ad ve soyadda eşler", async () => {
+    const store = new InMemoryUserManagementStore();
+    await store.createEmployee("tenant-a", employee("AYŞE", "IŞIK"));
+    await store.createEmployee("tenant-a", employee("İSMAİL", "KAYA"));
+    const lastNames = async (q: string) =>
+      (await store.listEmployeeAccessPage("tenant-a", { ...query, limit: 10, q })).records.map((record) => record.lastName);
+
+    for (const q of ["ışık", "IŞIK", "Işık"]) expect(await lastNames(q), q).toEqual(["IŞIK"]);
+    for (const q of ["ismail", "İsmail", "ISMAIL"]) expect(await lastNames(q), q).toEqual(["KAYA"]);
+  });
+});
+
+describe("tenant kullanıcı cursor listesi", () => {
+  const query = { direction: "next" as const, limit: 2, sort: "email" as const };
+
+  it("InMemory: ileri/geri sayfalar, toplamı verir ve cursor'ı tenant/arama/sıralamaya bağlar", async () => {
+    const store = new InMemoryUserManagementStore();
+
+    const first = await store.listTenantUserPage("tenant-a", query);
+    expect(first.records.map((user) => user.id)).toEqual(["user-tenant-a", "guardian-tenant-a"]);
+    expect(first.meta).toEqual({ limit: 2, total: 4, nextCursor: expect.any(String) });
+
+    const second = await store.listTenantUserPage("tenant-a", { ...query, cursor: first.meta.nextCursor });
+    expect(second.records.map((user) => user.id)).toEqual(["student-tenant-a", "teacher-tenant-a"]);
+    expect(second.meta.nextCursor).toBeUndefined();
+
+    const back = await store.listTenantUserPage("tenant-a", { ...query, cursor: second.meta.previousCursor, direction: "previous" });
+    expect(back.records.map((user) => user.id)).toEqual(["user-tenant-a", "guardian-tenant-a"]);
+
+    await expect(store.listTenantUserPage("tenant-b", { ...query, cursor: first.meta.nextCursor })).rejects.toThrow("TENANT_USER_CURSOR_INVALID");
+    await expect(store.listTenantUserPage("tenant-a", { ...query, q: "a", cursor: first.meta.nextCursor })).rejects.toThrow("TENANT_USER_CURSOR_INVALID");
+    await expect(store.listTenantUserPage("tenant-a", { ...query, sort: "-name", cursor: first.meta.nextCursor })).rejects.toThrow("TENANT_USER_CURSOR_INVALID");
+  });
+
+  it("InMemory: ad, e-posta ve rolde büyük/küçük harfe duyarsız arar", async () => {
+    const store = new InMemoryUserManagementStore();
+
+    await expect(store.listTenantUserPage("tenant-a", { ...query, q: "TEACHER A" })).resolves.toMatchObject({
+      records: [expect.objectContaining({ id: "teacher-tenant-a" })],
+      meta: { total: 1 },
+    });
+    await expect(store.listTenantUserPage("tenant-a", { ...query, q: "guardian" })).resolves.toMatchObject({
+      records: [expect.objectContaining({ id: "guardian-tenant-a" })],
+    });
+  });
+
+  it("Postgres: aramayı ve keyset koşulunu SQL'de uygular, sayımı ayrı okur", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const row = (id: string) => ({
+      id,
+      email: `${id}@example.test`,
+      name: id,
+      tenantId: "tenant-a",
+      roles: ["TEACHER"],
+      createdAt: new Date("2026-06-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-06-01T00:00:00.000Z"),
+      cursorKey: `${id}@example.test`,
+    });
+    const pool = {
+      async query<T>() {
+        return { rows: [] as T[] };
+      },
+      async connect() {
+        return {
+          async query<T>(sql: string, values?: unknown[]) {
+            queries.push({ sql, values });
+            if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
+            if (sql.includes("COUNT(*)::int AS total FROM listed")) return { rows: [{ total: 3 }] as T[] };
+            if (sql.includes("FROM listed l")) return { rows: [row("user-a"), row("user-b")] as T[] };
+            return { rows: [] as T[] };
+          },
+          release() {},
+        };
+      },
+    };
+    const store = new PostgresUserManagementStore(pool);
+
+    const first = await store.listTenantUserPage("tenant-a", { ...query, limit: 1, q: "Ada" });
+    expect(first).toMatchObject({ records: [expect.objectContaining({ id: "user-a" })], meta: { limit: 1, total: 3 } });
+    const firstPage = queries.find((entry) => entry.sql.includes("FROM listed l"));
+    expect(firstPage?.values).toEqual(["tenant-a", "%ada%", 2]);
+    expect(firstPage?.sql).toContain("LIKE $2 ESCAPE");
+    expect(firstPage?.sql).toContain("lower(translate(");
+    expect(firstPage?.sql).toContain('m."tenantId" = $1');
+    expect(firstPage?.sql).toContain('ORDER BY l."cursorKey" ASC, l."id" ASC');
+
+    queries.length = 0;
+    const second = await store.listTenantUserPage("tenant-a", { ...query, limit: 1, q: "Ada", cursor: first.meta.nextCursor });
+    expect(second.meta.previousCursor).toEqual(expect.any(String));
+    const secondPage = queries.find((entry) => entry.sql.includes("FROM listed l"));
+    expect(secondPage?.sql).toContain('(l."cursorKey", l."id") > ($3::text, $4::text)');
+    expect(secondPage?.values).toEqual(["tenant-a", "%ada%", "user-a@example.test", "user-a", 2]);
+    expect(queries.some((entry) => entry.sql.includes("SELECT 1 FROM listed"))).toBe(false);
+
+    queries.length = 0;
+    await expect(store.listTenantUserPage("tenant-b", { ...query, limit: 1, q: "Ada", cursor: first.meta.nextCursor }))
+      .rejects.toThrow("TENANT_USER_CURSOR_INVALID");
+    expect(queries).toEqual([]);
+  });
+});
+
+describe("InMemory tenant kullanıcı cursor dayanıklılığı ve Türkçe arama", () => {
+  const query = { direction: "next" as const, limit: 2, sort: "email" as const };
+
+  it("önceki sayfanın son hesabı listeden çıksa da sonraki sayfa atlamadan gelir", async () => {
+    const store = new InMemoryUserManagementStore();
+    const first = await store.listTenantUserPage("tenant-a", query);
+    expect(first.records.map((user) => user.id)).toEqual(["user-tenant-a", "guardian-tenant-a"]);
+    await store.removeTenantRole("tenant-a", "guardian-tenant-a", "GUARDIAN");
+
+    const second = await store.listTenantUserPage("tenant-a", { ...query, cursor: first.meta.nextCursor });
+    expect(second.records.map((user) => user.id)).toEqual(["student-tenant-a", "teacher-tenant-a"]);
+    expect(second.meta.total).toBe(3);
+  });
+
+  it("ad aramasında I/İ/ı/i varyantlarını eşler", async () => {
+    const store = new InMemoryUserManagementStore();
+    await store.createOrAttachTenantUser({ tenantId: "tenant-a", email: "isik@example.test", name: "AYŞE IŞIK", password: "Secure-password-1", roles: ["TEACHER"] });
+    await store.createOrAttachTenantUser({ tenantId: "tenant-a", email: "kaya@example.test", name: "İSMAİL KAYA", password: "Secure-password-1", roles: ["TEACHER"] });
+    const emails = async (q: string) =>
+      (await store.listTenantUserPage("tenant-a", { ...query, limit: 10, q })).records.map((user) => user.email);
+
+    for (const q of ["ışık", "IŞIK", "Işık"]) expect(await emails(q), q).toEqual(["isik@example.test"]);
+    for (const q of ["ismail", "İsmail", "ISMAIL"]) expect(await emails(q), q).toEqual(["kaya@example.test"]);
   });
 });
 

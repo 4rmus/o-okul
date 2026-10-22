@@ -63,12 +63,18 @@ describe("Tenant user management", () => {
 
     await request(server)
       .get("/tenant-users")
-      .query({ q: "teacher", sort: "email", page: "1", limit: "1" })
+      .query({ q: "teacher", sort: "email", limit: "1" })
       .set("Authorization", `Bearer ${tenantA}`)
       .expect(200)
       .expect(({ body }) => {
         expect(body).toEqual([expect.objectContaining({ email: "teacher-a@example.test" })]);
       });
+    // Cursor list like GET /employees: the retired page parameter is refused (cursor paging: cursor-list-endpoints.e2e).
+    await request(server)
+      .get("/tenant-users")
+      .query({ page: "1", limit: "1" })
+      .set("Authorization", `Bearer ${tenantA}`)
+      .expect(422);
 
     await request(server)
       .get("/tenant-users")

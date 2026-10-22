@@ -1,11 +1,19 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards, Headers } from "@nestjs/common";
+import { z } from "zod";
 import type {
   IdentityInvitationAcceptResponse,
+  IdentityInvitationListQuery,
   IdentityInvitationRecord as PublicIdentityInvitationRecord,
 } from "@o-okul/shared-types";
 import { getRequestContext } from "../context/request-context.js";
-import { zodBody } from "../http/zod-validation.js";
-import { applyListQuery, type ListQuery } from "../listing/list-query.js";
+import { optionalTrimmedString, zodBody, zodQuery } from "../http/zod-validation.js";
+import { withCursorListMeta } from "../listing/list-query.js";
+import {
+  cursorListQueryShape,
+  defaultedQueryEnum,
+  optionalQueryEnum,
+  previousNeedsCursor,
+} from "../listing/cursor-query-schema.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { IdentityInvitationService } from "./identity-invitation.service.js";
@@ -17,6 +25,19 @@ import {
   identityInvitationCreateBodySchema,
 } from "./identity-invitation-validation.js";
 
+// Cursor list like GET /employees: `.strict()` refuses the retired `page` parameter with 422. `q` still matches
+// subjectType/subjectId/role/status as the old in-memory list did; subjectType/subjectId/status are exact filters.
+const identityInvitationListQuerySchema = z.object({
+  ...cursorListQueryShape({ defaultLimit: 50, maxLimit: 100 }),
+  sort: defaultedQueryEnum(["-createdAt", "createdAt"], "-createdAt"),
+  status: optionalQueryEnum(["PENDING", "ACCEPTED", "REVOKED"]),
+  subjectId: optionalTrimmedString,
+  subjectType: optionalQueryEnum(["TEACHER", "STUDENT", "GUARDIAN", "EMPLOYEE"]),
+}).strict().refine(previousNeedsCursor, {
+  message: "IDENTITY_INVITATION_CURSOR_REQUIRED",
+  path: ["cursor"],
+}) satisfies z.ZodType<IdentityInvitationListQuery>;
+
 @Controller("identity-invitations")
 @UseGuards(RolesGuard)
 export class IdentityInvitationController {
@@ -24,12 +45,11 @@ export class IdentityInvitationController {
 
   @Get()
   @RequireCapability("user:manage")
-  async list(@Query() query: ListQuery): Promise<PublicIdentityInvitationRecord[]> {
-    return applyListQuery(
-      (await this.invitations.list(getRequestContext())).map(toPublicIdentityInvitationRecord),
-      query,
-      identityInvitationListFields,
-    );
+  async list(
+    @Query(zodQuery(identityInvitationListQuerySchema)) query: IdentityInvitationListQuery,
+  ): Promise<PublicIdentityInvitationRecord[]> {
+    const page = await this.invitations.listPage(getRequestContext(), query);
+    return withCursorListMeta(page.records.map(toPublicIdentityInvitationRecord), page.meta);
   }
 
   @Post()
@@ -62,18 +82,6 @@ export class IdentityInvitationController {
     return toPublicIdentityInvitationRecord(await this.invitations.revoke(getRequestContext(), id));
   }
 }
-
-const identityInvitationListFields = [
-  { name: "name", read: (record: IdentityInvitationRecord) => record.name },
-  { name: "email", read: (record: IdentityInvitationRecord) => record.email },
-  { name: "subjectType", read: (record: IdentityInvitationRecord) => record.subjectType },
-  // Lets a detail page ask for one subject's invitations (`q=<subjectId>`) instead of the whole tenant list.
-  { name: "subjectId", read: (record: IdentityInvitationRecord) => record.subjectId },
-  { name: "role", read: (record: IdentityInvitationRecord) => record.role },
-  { name: "status", read: (record: IdentityInvitationRecord) => record.status },
-  { name: "expiresAt", read: (record: IdentityInvitationRecord) => record.expiresAt },
-  { name: "createdAt", read: (record: IdentityInvitationRecord) => record.createdAt },
-];
 
 function toPublicIdentityInvitationRecord(record: IdentityInvitationRecord): PublicIdentityInvitationRecord {
   const { acceptedUserId: _acceptedUserId, ...publicRecord } = record;

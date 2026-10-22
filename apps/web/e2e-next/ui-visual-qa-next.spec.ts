@@ -346,7 +346,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
     for (const viewport of redesignViewports) {
       await openWithUiMocks(
         page,
-        "/kurum/ogrenciler?page=1&limit=10&q=ada&sort=lastName&classId=class-8a&density=compact&columns=name,class,status,actions",
+        "/kurum/ogrenciler?limit=10&q=ada&sort=lastName&classId=class-8a&density=compact&columns=name,class,status,actions",
         viewport,
       );
 

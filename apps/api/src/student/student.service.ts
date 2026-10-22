@@ -16,6 +16,7 @@ import type {
   StudentPortalAccessUpdateResult,
   StudentPortalInvitationIssueResponse,
   StudentRecord as SharedStudentRecord,
+  StudentListSort,
   StudentStatus,
 } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
@@ -34,7 +35,7 @@ import {
 import { StudentPortalActivationService } from "../identity-invitation/student-portal-activation.service.js";
 import { IdentityProvisioningService } from "../identity-provisioning/identity-provisioning.service.js";
 import { IdempotencyService } from "../http/idempotency.js";
-import { withCursorListMeta, withListMeta } from "../listing/list-query.js";
+import { withCursorListMeta } from "../listing/list-query.js";
 import { maskContactEmail, maskContactPhone } from "../privacy/contact-mask.js";
 import { hasCapability } from "../rbac/role-capabilities.js";
 import { type LicenseTermStore, licenseTermStoreToken } from "../license/license-term-store.js";
@@ -48,7 +49,14 @@ import {
   type TeacherAssignmentStore,
   teacherAssignmentStoreToken,
 } from "../school/teacher-assignment-store.js";
-import { type StudentPortalAccessQuery, type StudentProfileUpdate, type StudentRegistryQuery, type StudentStore, studentStoreToken } from "./student-store.js";
+import {
+  type StudentPortalAccessQuery,
+  type StudentProfileUpdate,
+  type StudentRegistryQuery,
+  type StudentStore,
+  studentCursorInvalid,
+  studentStoreToken,
+} from "./student-store.js";
 import {
   type StudentEnrollmentStore,
   studentEnrollmentStoreToken,
@@ -63,9 +71,13 @@ export interface StudentRecord extends SharedStudentRecord {
 }
 
 const studentStatuses: StudentStatus[] = ["ACTIVE", "PASSIVE", "GRADUATED", "TRANSFERRED"];
-const studentRegistrySorts = new Set([
+const studentRegistrySorts = new Set<string>([
   "studentNo", "-studentNo", "firstName", "-firstName", "lastName", "-lastName", "classId", "-classId",
-]);
+] satisfies StudentListSort[]);
+
+function isStudentListSort(value: string): value is StudentListSort {
+  return studentRegistrySorts.has(value);
+}
 const defaultStudentQuota = 200;
 
 export interface StudentQuotaPreview {
@@ -76,7 +88,8 @@ export interface StudentQuotaPreview {
 }
 
 export interface StudentRegistryListInput {
-  page: number;
+  cursor?: string;
+  direction: "next" | "previous";
   limit: number;
   q?: string;
   sort?: string;
@@ -226,12 +239,12 @@ export class StudentService {
       throw new ForbiddenException("STUDENT_LIST_SCOPE_FORBIDDEN");
     }
     this.assertCampusScopePresent(context);
-    if (!Number.isInteger(input.page) || input.page < 1) throw new BadRequestException("LIST_PAGE_INVALID");
     if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100) {
       throw new BadRequestException("LIST_LIMIT_INVALID");
     }
     if (input.q && input.q.length > 100) throw new BadRequestException("LIST_QUERY_INVALID");
-    if (input.sort && !studentRegistrySorts.has(input.sort)) throw new BadRequestException("LIST_SORT_INVALID");
+    const sort = input.sort || "lastName";
+    if (!isStudentListSort(sort)) throw new BadRequestException("LIST_SORT_INVALID");
 
     const classes = filterTenantResources(context, await this.classStore.list()).filter((record) => !record.deletedAt);
     const requestedClassIds = classes
@@ -241,12 +254,14 @@ export class StudentService {
       .map((record) => record.id);
     const classFilterRequested = Boolean(input.classId || context.campusScope?.scopeMode === "CAMPUSES");
     const registryQuery: StudentRegistryQuery = {
-      page: input.page,
+      cursor: input.cursor,
+      direction: input.direction,
       limit: input.limit,
       q: input.q,
-      sort: input.sort,
+      sort,
       ids: input.ids,
       gradeLevelId: input.level,
+      classId: input.classId,
       classIds: classFilterRequested ? requestedClassIds : undefined,
       responsibleTeacherId: input.responsibleTeacherId,
       status: input.status,
@@ -261,8 +276,13 @@ export class StudentService {
       registryQuery.teacherClassIds = assignments.flatMap((record) => record.classId ? [record.classId] : []);
     }
 
-    const page = await this.store.listRegistryPage(context.tenantId, registryQuery);
-    return withListMeta(page.records.map(toPublicStudentRecord), page.meta);
+    try {
+      const page = await this.store.listRegistryPage(context.tenantId, registryQuery);
+      return withCursorListMeta(page.records.map(toPublicStudentRecord), page.meta);
+    } catch (error) {
+      if (error instanceof Error && error.message === studentCursorInvalid) throw new BadRequestException(error.message);
+      throw error;
+    }
   }
 
   async listStudentNosForImport(context: RequestContext): Promise<string[]> {

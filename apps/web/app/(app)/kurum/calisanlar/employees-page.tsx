@@ -36,7 +36,16 @@ import {
 } from "@o-okul/ui";
 import { ChevronLeft, ChevronRight, MailPlus, MailX, Pencil, Plus, Search } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { ApiRequestError, apiBaseUrl, apiCursorListRequest, apiListRequest, apiRequest, type CursorListMeta } from "../../../../src/api-client.js";
+import {
+  ApiRequestError,
+  apiBaseUrl,
+  apiCursorListAll,
+  apiCursorListRequest,
+  apiListRequest,
+  apiRequest,
+  type CursorListMeta,
+} from "../../../../src/api-client.js";
+import { loadCursorPageWithRecovery } from "../../../../src/cursor-list-controls.js";
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 export function EmployeesPage() {
@@ -56,7 +65,8 @@ export function EmployeesPage() {
   };
   const employeesQuery = useQuery({
     queryKey: ["employees", tenantId, listQuery],
-    queryFn: () => loadEmployees(auth?.accessToken ?? "", listQuery),
+    // A stale cursor (for example from a bookmarked URL) is dropped and the first page is shown instead.
+    queryFn: () => loadCursorPageWithRecovery(listQuery, (state) => loadEmployees(auth?.accessToken ?? "", state), updateListQuery),
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
@@ -687,7 +697,10 @@ function inviteEmployee(
 }
 
 async function loadPendingEmployeeInvitations(accessToken: string): Promise<Map<string, IdentityInvitationRecord>> {
-  const invitations = await apiRequest<IdentityInvitationRecord[]>(accessToken, `${apiBaseUrl}/identity-invitations?q=EMPLOYEE`);
+  const invitations = await apiCursorListAll<IdentityInvitationRecord>(
+    accessToken,
+    `${apiBaseUrl}/identity-invitations?limit=100&status=PENDING&subjectType=EMPLOYEE`,
+  );
   return new Map(
     invitations
       // Expiry is not materialised in the database; an expired PENDING row is replaced by the next invitation.

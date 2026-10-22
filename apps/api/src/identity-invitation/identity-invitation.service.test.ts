@@ -41,6 +41,7 @@ describe("IdentityInvitationService", () => {
     };
     const store: IdentityInvitationStore = {
       list: vi.fn(),
+      listPage: vi.fn(),
       create: vi.fn(),
       findById: vi.fn(),
       findByTokenHash: vi.fn(async (tokenHash) =>

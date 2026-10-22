@@ -367,6 +367,110 @@ destek akışı (KV-9b, staging UAT F-04):
 5. "Hesap bilgisi değişmiş" hatasında listeyi yenileyip tekrar deneyin; "Hesap bulunamadı" hatası hesabın
    artık kurum sahibi/yöneticisi olmadığını veya kurumun erişime kapalı olduğunu gösterir.
 
+### Sistem yöneticisi TOTP kaybı
+
+Doğrulama uygulamasını kaybeden SYSTEM_ADMIN için kurtarma prosedürü (DEC-20261020-01 açık sorusu).
+`POST /auth/totp/admin-reset` sistem hesaplarını kabul etmez (`MFA_RESET_TARGET_NOT_FOUND`); başka bir
+SYSTEM_ADMIN de bu hesabı ekrandan sıfırlayamaz. SYSTEM_ADMIN rolü kullanıcı yönetiminden verilemez;
+ikinci sistem yöneticisi yalnız seed veya DB ile açılabilir.
+
+Önkoşullar:
+
+- Talep sahibinin kimliği ürün sahibi tarafından, hesabın kayıtlı iletişim kanalı dışında bir yoldan
+  doğrulanır; doğrulanmadan hiçbir adım uygulanmaz.
+- Staging/prod'da `ADMIN_MFA_MODE` her zaman `required` çalışır: MFA kapatıldıktan sonraki ilk girişte
+  yeni kayıt zorunludur ve bu kayıt bugün yalnız parolayla tamamlanır (DEC-20261021-01 önerisi). Bu
+  yüzden kapatma ile yeniden kayıt arasında zaman bırakılmaz; kayıt kapatmadan hemen sonra aynı kişi
+  tarafından yapılır.
+- Parola da unutulduysa önce sistem girişinde parola sıfırlama (`POST /api/v1/auth/password-reset/request`,
+  kurum kodu `system`) kullanılır; parola sıfırlama TOTP kaydını değiştirmez.
+
+**1. yol: kişinin en az iki kullanılmamış yedek kodu var.** Ek onay gerekmez; işlemi kişinin kendisi
+yapar. Web arayüzünde MFA kapatma ekranı yoktur; adımlar sistem host'una doğrudan API isteğidir.
+
+1. `POST /api/v1/auth/login` (`loginName`, `password`) `MFA_REQUIRED` ve `challengeToken` döner.
+2. `POST /api/v1/auth/totp/verify` gövdesi `{ "challengeToken": "...", "recoveryCode": "<1. yedek kod>" }`
+   oturum ve `accessToken` döner; kullanılan kod tüketilir.
+3. `POST /api/v1/auth/totp/disable`, `Authorization: Bearer <accessToken>`, gövde
+   `{ "recoveryCode": "<2. yedek kod>" }`. MFA kaydı silinir, hesabın bütün oturumları kapatılır.
+4. Hemen web sistem girişinden parolayla girilir; ekran MFA kurulumunu açar. Yeni doğrulama uygulaması
+   kaydedilir ve gösterilen 8 yeni yedek kod çevrimdışı saklanır.
+
+Yalnız bir yedek kod kaldıysa giriş yapılabilir ama kapatma için ikinci faktör kalmaz; 2. yola geçilir.
+
+**2. yol: yedek kod yok veya yetmiyor. Onaylı DB işlemidir.** Ortam verisinde değişiklik olduğu için
+ürün sahibinin bu hesap ve bu işlem için açık onayı gerekir. Önce hesabın `id` ve güncel
+`membershipVersion` değeri salt okuma ile alınır:
+
+```sql
+BEGIN;
+SELECT set_config('app.bypass_rls', 'true', true);
+SELECT u."id", u."membershipVersion", u."totpEnabledAt" IS NOT NULL AS mfa_enabled
+  FROM "User" u
+  JOIN "TenantMembership" m ON m."userId" = u."id" AND m."tenantId" = u."tenantId"
+ WHERE u."id" = '<userId>' AND u."tenantId" = 'system'
+   AND m."role" = 'SYSTEM_ADMIN' AND m."status" = 'ACTIVE';
+COMMIT;
+```
+
+Ardından tek ifadede MFA kaydı silinir, üyelik sürümü ilerletilir ve oturumlar kapatılır. Kullanıcı
+satırı koşula uymazsa (yanlış `id`, eski sürüm, MFA zaten kapalı) hiçbir satır değişmez:
+
+```sql
+BEGIN;
+SELECT set_config('app.bypass_rls', 'true', true);
+WITH target AS (
+  UPDATE "User"
+     SET "totpSecretEncrypted" = NULL,
+         "totpEnabledAt" = NULL,
+         "totpRecoveryCodeHashes" = ARRAY[]::TEXT[],
+         "totpLastUsedCounter" = NULL,
+         "membershipVersion" = "membershipVersion" + 1,
+         "updatedAt" = now()
+   WHERE "id" = '<userId>' AND "tenantId" = 'system'
+     AND "membershipVersion" = <beklenenSürüm>
+     AND "totpEnabledAt" IS NOT NULL
+  RETURNING "id", "membershipVersion"
+), membership AS (
+  UPDATE "TenantMembership" m
+     SET "version" = target."membershipVersion", "updatedAt" = now()
+    FROM target
+   WHERE m."tenantId" = 'system' AND m."userId" = target."id" AND m."status" = 'ACTIVE'
+  RETURNING m."id"
+), sessions AS (
+  UPDATE "AuthSession" s
+     SET "status" = 'REVOKED', "updatedAt" = now()
+    FROM target
+   WHERE s."tenantId" = 'system' AND s."userId" = target."id"
+     AND s."membershipVersion" < target."membershipVersion"
+  RETURNING s."id"
+)
+SELECT (SELECT count(*) FROM target) AS users,
+       (SELECT count(*) FROM membership) AS memberships,
+       (SELECT count(*) FROM sessions) AS sessions;
+-- users tam 1 değilse ROLLBACK; aksi halde COMMIT.
+COMMIT;
+```
+
+Ardından kişi hemen web sistem girişinden parolayla girer ve 1. yolun 4. adımını uygular. Toplu
+güncelleme yapılmaz ve bu yol kurum hesaplarına uygulanmaz; kurum sahibi/yöneticisi için yukarıdaki
+ekran akışı kullanılır.
+
+Kayıt ve kanıt:
+
+- Uygulama audit kayıtları: 1. yolda `auth.login_mfa_verified` (yöntem `recovery_code`), `auth.totp_disabled`,
+  `auth.totp_enrollment_required`, `auth.totp_enrollment_completed`, `auth.login_mfa_enrolled`. 2. yolun
+  DB adımı audit kaydı bırakmaz; yalnız sonraki kayıt adımları audit'e düşer.
+- İşlem notu: tarih, ortam, kullanılan yol, hesap `id`'si (e-posta veya ad yazılmaz), kimliği doğrulayan
+  kişi, 2. yolda onay veren ve SQL'in döndürdüğü üç sayı.
+- Kurtarmadan sonra `pnpm admin-mfa:generate` bütün zorunlu yöneticilerin kayıtlı olduğunu yeniden doğrular.
+
+Kanıt düzeyi: 2. yolun SQL'i 2026-10-21'de migration'ları uygulanmış geçici PostgreSQL 17'de `app` rolüyle
+denendi (LOCAL_TEST): doğru sürümle 1 kullanıcı, 1 üyelik ve hesabın oturumları güncellendi, yanlış sürümde
+ve RLS bypass'ı olmadan hiçbir satır değişmedi, ikinci SYSTEM_ADMIN etkilenmedi. 1. yolun API adımları ve
+iki yolun staging/production'da uygulanması denenmedi (UNPROVEN). Tek SYSTEM_ADMIN kilitlenirse platform
+yönetimi DB işlemi bitene kadar durur.
+
 ## Identity Migration Evidence
 
 Kanıt sözleşmesi: `docs/evidence-templates/identity-migration.example.json`.

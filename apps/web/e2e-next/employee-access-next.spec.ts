@@ -63,6 +63,15 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
     if (path === "/employees" && request.method() === "GET") {
       const url = new URL(request.url());
       employeeRequests.push(url);
+      if (url.searchParams.get("cursor") === "stale-cursor") {
+        await route.fulfill({
+          body: JSON.stringify({ error: { code: "EMPLOYEE_CURSOR_INVALID", message: "İstek geçersiz." } }),
+          contentType: "application/json",
+          headers: corsHeaders,
+          status: 400,
+        });
+        return;
+      }
       if (url.searchParams.get("cursor") === "employee-page-2") {
         await json(route, [unlinkedEmployee], { limit: 50, previousCursor: "employee-page-1" });
         return;
@@ -203,6 +212,18 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
   await expect(unlinkedRow).toContainText("Hesap bağlı değil");
   await expect(page.getByRole("button", { name: "Yeni Admin hesap davetini iptal et" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Yeni Admin için hesap daveti gönder" })).toBeVisible();
+
+  // A stale or earlier-format cursor kept in the URL is dropped and the first page loads without an error banner.
+  // A reload restores the session through /auth/refresh, which needs the CSRF cookie the login form would leave.
+  await page.context().addCookies([{ name: "csrfToken", url: new URL(page.url()).origin, value: "csrf-token" }]);
+  await page.goto("/kurum/calisanlar?employeesCursor=stale-cursor&employeesQ=ada");
+  await expect.poll(() => employeeRequests.some((url) => url.searchParams.get("cursor") === "stale-cursor")).toBe(true);
+  await expect(page.getByRole("button", { name: "Ada Yılmaz erişimini düzenle" })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).searchParams.get("employeesCursor")).toBeNull();
+  await expect.poll(() => employeeRequests.at(-1)?.searchParams.has("cursor")).toBe(false);
+  expect(employeeRequests.some((url) => url.searchParams.get("cursor") === "stale-cursor")).toBe(true);
+  expect(employeeRequests.at(-1)?.searchParams.get("q")).toBe("ada");
+  await expect(page.locator(".uh-crud-page__error")).toHaveCount(0);
 });
 
 for (const failInvite of [false, true]) test(`UAT F-02 yeni çalışan formundan aynı adımda yönetici daveti gönderilir${failInvite ? " (davet hatası)" : ""}`, async ({ page }) => {

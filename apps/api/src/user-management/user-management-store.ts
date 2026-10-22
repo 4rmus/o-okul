@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import pg from "pg";
 import type {
   ApiCursorListMeta,
@@ -9,9 +9,24 @@ import type {
   TenantAssignableRoleName,
   TenantMembershipUpdateRequest,
   TenantMembershipUpdateResult,
+  TenantUserListQuery,
 } from "@o-okul/shared-types";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type Queryable, type TenantQueryable, withExplicitTenantQuery } from "../db/tenant-query.js";
+import {
+  type CursorPage,
+  type CursorSortDirection,
+  cursorKeysetCondition,
+  cursorPageFromRows,
+  cursorQueryOrder,
+  decodeListCursor,
+  foldSearchText,
+  foldedSearchSql,
+  likeSearchPattern,
+  listCursorContext,
+  normalizeSearchTerm,
+  paginateCursorRecords,
+} from "../listing/cursor-pagination.js";
 import {
   InMemoryAuthUserStore,
   hashPassword,
@@ -61,8 +76,13 @@ export interface TenantUserCredentialSnapshot {
   accountStatus: string;
 }
 
+export const tenantUserCursorInvalid = "TENANT_USER_CURSOR_INVALID";
+
 export interface UserManagementStore {
+  /** Whole-tenant list for internal lookups; the HTTP list uses `listTenantUserPage`. */
   listTenantUsers(tenantId: string): Promise<TenantUserRecord[]>;
+  /** Cursor page with SQL-side search and the filtered total; throws TENANT_USER_CURSOR_INVALID for a foreign cursor. */
+  listTenantUserPage(tenantId: string, query: TenantUserListQuery): Promise<CursorPage<TenantUserRecord>>;
   listEmployees(tenantId: string): Promise<EmployeeAccessRecord[]>;
   listEmployeeAccessPage(tenantId: string, query: EmployeeAccessListQuery): Promise<EmployeeAccessPage>;
   findEmployee(tenantId: string, employeeId: string): Promise<EmployeeAccessRecord | undefined>;
@@ -216,19 +236,39 @@ export class InMemoryUserManagementStore implements UserManagementStore {
     return this.users.filter((user) => user.tenantId === tenantId && user.roles.length > 0).map(cloneRequiredTenantUser);
   }
 
+  async listTenantUserPage(tenantId: string, query: TenantUserListQuery): Promise<CursorPage<TenantUserRecord>> {
+    const search = normalizeSearchTerm(query.q);
+    const records = (await this.listTenantUsers(tenantId))
+      .filter((user) => !search || foldSearchText([user.name, user.email ?? "", user.roles.join(" ")].join(" ")).includes(search));
+    return paginateCursorRecords(
+      records,
+      query,
+      tenantUserCursorContext(tenantId, query),
+      (record) => ({ key: tenantUserSortKey(record, query.sort), id: record.id }),
+      tenantUserSortDefinition(query.sort).direction,
+      tenantUserCursorInvalid,
+      { total: records.length },
+    );
+  }
+
   async listEmployees(tenantId: string): Promise<EmployeeAccessRecord[]> {
     return this.employees.filter((employee) => employee.tenantId === tenantId).map(cloneEmployeeAccessRecord);
   }
 
   async listEmployeeAccessPage(tenantId: string, query: EmployeeAccessListQuery): Promise<EmployeeAccessPage> {
-    const normalizedQuery = normalizeEmployeeSearch(query.q);
-    const cursor = query.cursor ? decodeEmployeeCursor(query.cursor) : undefined;
-    assertEmployeeCursor(cursor, tenantId, normalizedQuery, query.sort);
+    const normalizedQuery = normalizeSearchTerm(query.q);
+    const sort = employeeSortDefinition(query.sort);
     const records = this.employees
       .filter((employee) => employee.tenantId === tenantId && matchesEmployeeSearch(employee, normalizedQuery))
-      .map(cloneEmployeeAccessRecord)
-      .sort((left, right) => compareEmployeeAccess(left, right, query.sort));
-    return paginateEmployeeAccess(records, tenantId, query, cursor?.id);
+      .map(cloneEmployeeAccessRecord);
+    return paginateCursorRecords(
+      records,
+      query,
+      employeeCursorContext(tenantId, query),
+      (record) => ({ key: sort.keyOf(record), id: record.id }),
+      sort.direction,
+      employeeCursorInvalid,
+    );
   }
 
   async findEmployee(tenantId: string, employeeId: string): Promise<EmployeeAccessRecord | undefined> {
@@ -470,6 +510,40 @@ export class PostgresUserManagementStore implements UserManagementStore {
     });
   }
 
+  async listTenantUserPage(tenantId: string, query: TenantUserListQuery): Promise<CursorPage<TenantUserRecord>> {
+    const context = tenantUserCursorContext(tenantId, query);
+    const position = query.cursor ? decodeListCursor(query.cursor, context, tenantUserCursorInvalid) : undefined;
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const sort = tenantUserSortDefinition(query.sort);
+      const values: unknown[] = [tenantId];
+      const pattern = likeSearchPattern(query.q);
+      if (pattern) values.push(pattern);
+      const listed = tenantUserListCte(sort.keySql, pattern ? "$2" : undefined);
+      const total = await client.query<{ total: number | string }>(
+        `${listed} SELECT COUNT(*)::int AS total FROM listed`,
+        values,
+      );
+      const conditions: string[] = [];
+      if (position) {
+        conditions.push(cursorKeysetCondition('l."cursorKey"', 'l."id"', sort.direction, query.direction, position, values));
+      }
+      values.push(query.limit + 1);
+      const order = cursorQueryOrder(sort.direction, query.direction);
+      const result = await client.query<TenantUserRow & { cursorKey: string }>(
+        `${listed}
+         SELECT l."id", l."email", l."name", l."tenantId", l."roles", l."createdAt", l."updatedAt", l."cursorKey"
+         FROM listed l
+         ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""}
+         ORDER BY l."cursorKey" ${order}, l."id" ${order}
+         LIMIT $${values.length}`,
+        values,
+      );
+      return cursorPageFromRows(result.rows, query, context, (row) => ({ key: row.cursorKey, id: row.id }), toTenantUserRecord, {
+        total: Number(total.rows[0]?.total ?? 0),
+      });
+    });
+  }
+
   async listEmployees(tenantId: string): Promise<EmployeeAccessRecord[]> {
     return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
       const result = await client.query<EmployeeAccessRow>(
@@ -525,16 +599,11 @@ export class PostgresUserManagementStore implements UserManagementStore {
   }
 
   async listEmployeeAccessPage(tenantId: string, query: EmployeeAccessListQuery): Promise<EmployeeAccessPage> {
+    const context = employeeCursorContext(tenantId, query);
+    const position = query.cursor ? decodeListCursor(query.cursor, context, employeeCursorInvalid) : undefined;
     return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
-      const normalizedQuery = normalizeEmployeeSearch(query.q);
-      const cursor = query.cursor ? decodeEmployeeCursor(query.cursor) : undefined;
-      assertEmployeeCursor(cursor, tenantId, normalizedQuery, query.sort);
       const sort = employeeSortDefinition(query.sort);
-      const search = employeeSearchPattern(normalizedQuery);
-      const anchor = cursor
-        ? await findEmployeeCursorAnchor(client, tenantId, cursor.id, sort, search)
-        : undefined;
-      if (cursor && !anchor) throw new Error("EMPLOYEE_CURSOR_INVALID");
+      const search = likeSearchPattern(query.q);
 
       const values: unknown[] = [tenantId];
       const conditions = ['e."tenantId" = $1', 'e."deletedAt" IS NULL'];
@@ -542,17 +611,13 @@ export class PostgresUserManagementStore implements UserManagementStore {
         values.push(search);
         conditions.push(`${employeeSearchSql} LIKE $${values.length} ESCAPE '\\'`);
       }
-      if (anchor) {
-        values.push(anchor.cursorKey, cursor!.id);
-        const cursorKeyIndex = values.length - 1;
-        const cursorIdIndex = values.length;
-        const comparison = employeeCursorComparison(sort.direction, query.direction);
-        conditions.push(`(${sort.keySql} ${comparison} $${cursorKeyIndex} OR (${sort.keySql} = $${cursorKeyIndex} AND e."id" ${comparison} $${cursorIdIndex}))`);
+      if (position) {
+        conditions.push(cursorKeysetCondition(sort.keySql, 'e."id"', sort.direction, query.direction, position, values));
       }
       values.push(query.limit + 1);
       const limitIndex = values.length;
-      const order = query.direction === "previous" ? reverseEmployeeSortDirection(sort.direction) : sort.direction;
-      const result = await client.query<EmployeeAccessRow>(
+      const order = cursorQueryOrder(sort.direction, query.direction);
+      const result = await client.query<EmployeeAccessRow & { cursorKey: string }>(
         `SELECT
            e."id",
            e."tenantId",
@@ -602,10 +667,7 @@ export class PostgresUserManagementStore implements UserManagementStore {
          LIMIT $${limitIndex}`,
         values,
       );
-      const hasMore = result.rows.length > query.limit;
-      const rows = result.rows.slice(0, query.limit);
-      if (query.direction === "previous") rows.reverse();
-      return employeeAccessPageFromRows(rows, tenantId, query, hasMore);
+      return cursorPageFromRows(result.rows, query, context, (row) => ({ key: row.cursorKey, id: row.id }), toEmployeeAccessRecord);
     });
   }
 
@@ -1257,194 +1319,81 @@ export function createUserManagementStore(): UserManagementStore {
     : new InMemoryUserManagementStore();
 }
 
-type EmployeeSortDirection = "ASC" | "DESC";
-
-interface EmployeeSortDefinition {
-  keySql: string;
-  direction: EmployeeSortDirection;
+/** One aggregated row per account, as the legacy list returned; `cursorKey` is the keyset sort key. */
+function tenantUserListCte(keySql: string, searchParameter: string | undefined): string {
+  return `WITH tenant_users AS (
+     SELECT
+       u."id",
+       u."email",
+       u."name",
+       m."tenantId",
+       array_agg(m."role"::text ORDER BY m."role"::text) AS roles,
+       min(u."createdAt") AS "createdAt",
+       max(u."updatedAt") AS "updatedAt"
+     FROM "TenantMembership" m
+     JOIN "User" u ON u."id" = m."userId"
+     WHERE m."tenantId" = $1
+     GROUP BY u."id", u."email", u."name", m."tenantId"
+   ), listed AS (
+     SELECT tu.*, ${keySql} AS "cursorKey"
+     FROM tenant_users tu
+     ${searchParameter ? `WHERE ${foldedSearchSql(`
+       coalesce(tu."name", '') || ' ' ||
+       coalesce(tu."email", '') || ' ' ||
+       array_to_string(tu.roles, ' ')
+     `)} LIKE ${searchParameter} ESCAPE '\\'` : ""}
+   )`;
 }
 
-interface EmployeeCursor {
-  v: 1;
-  context: string;
-  sort: EmployeeAccessSort;
-  id: string;
+function tenantUserSortDefinition(sort: TenantUserListQuery["sort"]): { keySql: string; direction: CursorSortDirection } {
+  const keySql = sort === "name" || sort === "-name" ? 'lower(tu."name")' : 'lower(coalesce(tu."email", tu."name"))';
+  return { keySql, direction: sort.startsWith("-") ? "DESC" : "ASC" };
 }
 
-const employeeSearchSql = `lower(
+function tenantUserSortKey(user: TenantUserRecord, sort: TenantUserListQuery["sort"]): string {
+  return (sort === "name" || sort === "-name" ? user.name : user.email ?? user.name).toLowerCase();
+}
+
+function tenantUserCursorContext(tenantId: string, query: TenantUserListQuery): string {
+  return listCursorContext("tenant-users", tenantId, { q: normalizeSearchTerm(query.q), sort: query.sort });
+}
+
+export const employeeCursorInvalid = "EMPLOYEE_CURSOR_INVALID";
+
+// Same Turkish I folding as the other cursor lists (see foldedSearchSql); matchesEmployeeSearch is its in-memory twin.
+const employeeSearchSql = foldedSearchSql(`
   coalesce(e."firstName", '') || ' ' ||
   coalesce(e."lastName", '') || ' ' ||
   coalesce(e."employeeNo", '') || ' ' ||
   coalesce(e."workEmail", '')
-)`;
+`);
 
-function employeeSortDefinition(sort: EmployeeAccessSort): EmployeeSortDefinition {
+/** Keyset sort key per sort; `keyOf` is the in-memory counterpart of `keySql`. */
+function employeeSortDefinition(sort: EmployeeAccessSort): {
+  keySql: string;
+  keyOf(employee: EmployeeAccessRecord): string;
+  direction: CursorSortDirection;
+} {
   switch (sort) {
     case "-lastName":
-      return { keySql: 'lower(e."lastName")', direction: "DESC" };
+      return { keySql: 'lower(e."lastName")', keyOf: (employee) => employee.lastName.toLowerCase(), direction: "DESC" };
     case "firstName":
-      return { keySql: 'lower(e."firstName")', direction: "ASC" };
+      return { keySql: 'lower(e."firstName")', keyOf: (employee) => employee.firstName.toLowerCase(), direction: "ASC" };
     case "employeeNo":
-      return { keySql: 'lower(coalesce(e."employeeNo", \'\'))', direction: "ASC" };
+      return { keySql: 'lower(coalesce(e."employeeNo", \'\'))', keyOf: (employee) => (employee.employeeNo ?? "").toLowerCase(), direction: "ASC" };
     case "lastName":
-      return { keySql: 'lower(e."lastName")', direction: "ASC" };
+      return { keySql: 'lower(e."lastName")', keyOf: (employee) => employee.lastName.toLowerCase(), direction: "ASC" };
   }
-}
-
-function reverseEmployeeSortDirection(direction: EmployeeSortDirection): EmployeeSortDirection {
-  return direction === "ASC" ? "DESC" : "ASC";
-}
-
-function employeeCursorComparison(sortDirection: EmployeeSortDirection, direction: EmployeeAccessListQuery["direction"]): ">" | "<" {
-  return (direction === "next") === (sortDirection === "ASC") ? ">" : "<";
-}
-
-async function findEmployeeCursorAnchor(
-  client: Queryable,
-  tenantId: string,
-  employeeId: string,
-  sort: EmployeeSortDefinition,
-  search: string | null,
-): Promise<{ cursorKey: string } | undefined> {
-  const values: unknown[] = [tenantId, employeeId];
-  const conditions = ['e."tenantId" = $1', 'e."id" = $2', 'e."deletedAt" IS NULL'];
-  if (search) {
-    values.push(search);
-    conditions.push(`${employeeSearchSql} LIKE $${values.length} ESCAPE '\\'`);
-  }
-  const result = await client.query<{ cursorKey: string }>(
-    `SELECT ${sort.keySql} AS "cursorKey"
-     FROM "Employee" e
-     WHERE ${conditions.join(" AND ")}
-     LIMIT 1`,
-    values,
-  );
-  return result.rows[0];
-}
-
-function normalizeEmployeeSearch(value: string | undefined): string {
-  return value?.trim().toLowerCase() ?? "";
-}
-
-function employeeSearchPattern(value: string): string | null {
-  return value ? `%${value.replace(/[\\%_]/g, "\\$&")}%` : null;
 }
 
 function matchesEmployeeSearch(employee: EmployeeAccessRecord, query: string): boolean {
   if (!query) return true;
-  return [employee.firstName, employee.lastName, employee.employeeNo, employee.workEmail]
-    .some((value) => normalizeEmployeeSearch(value).includes(query));
+  return foldSearchText([employee.firstName, employee.lastName, employee.employeeNo ?? "", employee.workEmail ?? ""].join(" "))
+    .includes(query);
 }
 
-function compareEmployeeAccess(left: EmployeeAccessRecord, right: EmployeeAccessRecord, sort: EmployeeAccessSort): number {
-  const direction = sort === "-lastName" ? -1 : 1;
-  const leftKey = employeeAccessSortKey(left, sort);
-  const rightKey = employeeAccessSortKey(right, sort);
-  return direction * (leftKey.localeCompare(rightKey, "tr-TR", { sensitivity: "base" }) || left.id.localeCompare(right.id));
-}
-
-function employeeAccessSortKey(employee: EmployeeAccessRecord, sort: EmployeeAccessSort): string {
-  if (sort === "firstName") return normalizeEmployeeSearch(employee.firstName);
-  if (sort === "employeeNo") return normalizeEmployeeSearch(employee.employeeNo);
-  return normalizeEmployeeSearch(employee.lastName);
-}
-
-function paginateEmployeeAccess(
-  records: EmployeeAccessRecord[],
-  tenantId: string,
-  query: EmployeeAccessListQuery,
-  cursorId: string | undefined,
-): EmployeeAccessPage {
-  const anchorIndex = cursorId ? records.findIndex((record) => record.id === cursorId) : -1;
-  if (cursorId && anchorIndex < 0) throw new Error("EMPLOYEE_CURSOR_INVALID");
-  const start = query.direction === "previous"
-    ? Math.max(0, anchorIndex - query.limit)
-    : cursorId ? anchorIndex + 1 : 0;
-  const end = query.direction === "previous" ? anchorIndex : start + query.limit;
-  const page = records.slice(start, end);
-  return {
-    records: page,
-    meta: employeeAccessCursorMeta(page, tenantId, query, query.direction === "previous" ? start > 0 : end < records.length),
-  };
-}
-
-function employeeAccessPageFromRows(
-  rows: EmployeeAccessRow[],
-  tenantId: string,
-  query: EmployeeAccessListQuery,
-  hasMore: boolean,
-): EmployeeAccessPage {
-  const records = rows.map(toEmployeeAccessRecord);
-  return { records, meta: employeeAccessCursorMeta(records, tenantId, query, hasMore) };
-}
-
-function employeeAccessCursorMeta(
-  records: EmployeeAccessRecord[],
-  tenantId: string,
-  query: EmployeeAccessListQuery,
-  hasMore: boolean,
-): ApiCursorListMeta {
-  const first = records[0];
-  const last = records.at(-1);
-  return {
-    limit: query.limit,
-    previousCursor: first && (query.direction === "previous" ? hasMore : Boolean(query.cursor))
-      ? encodeEmployeeCursor(tenantId, query, first.id)
-      : undefined,
-    nextCursor: last && (query.direction === "next" ? hasMore : Boolean(query.cursor))
-      ? encodeEmployeeCursor(tenantId, query, last.id)
-      : undefined,
-  };
-}
-
-function encodeEmployeeCursor(tenantId: string, query: EmployeeAccessListQuery, employeeId: string): string {
-  const cursor: EmployeeCursor = {
-    v: 1,
-    context: employeeCursorContext(tenantId, normalizeEmployeeSearch(query.q), query.sort),
-    sort: query.sort,
-    id: employeeId,
-  };
-  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
-}
-
-function decodeEmployeeCursor(cursor: string): EmployeeCursor {
-  try {
-    const decoded = Buffer.from(cursor, "base64url");
-    if (!decoded.length || decoded.toString("base64url") !== cursor) throw new Error("EMPLOYEE_CURSOR_INVALID");
-    const value = JSON.parse(decoded.toString("utf8")) as Partial<EmployeeCursor>;
-    if (
-      value.v !== 1 ||
-      typeof value.context !== "string" ||
-      !isEmployeeAccessSort(value.sort) ||
-      typeof value.id !== "string" ||
-      !value.id
-    ) {
-      throw new Error("EMPLOYEE_CURSOR_INVALID");
-    }
-    return value as EmployeeCursor;
-  } catch {
-    throw new Error("EMPLOYEE_CURSOR_INVALID");
-  }
-}
-
-function assertEmployeeCursor(
-  cursor: EmployeeCursor | undefined,
-  tenantId: string,
-  query: string,
-  sort: EmployeeAccessSort,
-): void {
-  if (!cursor) return;
-  if (cursor.sort !== sort || cursor.context !== employeeCursorContext(tenantId, query, sort)) {
-    throw new Error("EMPLOYEE_CURSOR_INVALID");
-  }
-}
-
-function employeeCursorContext(tenantId: string, query: string, sort: EmployeeAccessSort): string {
-  return createHash("sha256").update(`${tenantId}\u0000${query}\u0000${sort}`).digest("base64url");
-}
-
-function isEmployeeAccessSort(value: unknown): value is EmployeeAccessSort {
-  return value === "lastName" || value === "-lastName" || value === "firstName" || value === "employeeNo";
+function employeeCursorContext(tenantId: string, query: EmployeeAccessListQuery): string {
+  return listCursorContext("employees", tenantId, { q: normalizeSearchTerm(query.q), sort: query.sort });
 }
 
 interface MembershipRoleRow {

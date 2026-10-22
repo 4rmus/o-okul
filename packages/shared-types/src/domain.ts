@@ -365,6 +365,17 @@ export interface TenantUserRecord {
   updatedAt: string;
 }
 
+export type TenantUserListSort = "email" | "-email" | "name" | "-name";
+
+/** `GET /tenant-users` (read-only legacy account list): opaque cursor, bound to tenant + q + sort. */
+export interface TenantUserListQuery {
+  cursor?: string;
+  direction: "next" | "previous";
+  limit: number;
+  q?: string;
+  sort: TenantUserListSort;
+}
+
 export interface TenantUserRoleUpdateRequest {
   roles: TenantAssignableRoleName[];
 }
@@ -949,6 +960,34 @@ export interface StudentRecord {
 export type PublicStudentRecord = Omit<StudentRecord, "userId">;
 
 export type StudentStatus = "ACTIVE" | "PASSIVE" | "GRADUATED" | "TRANSFERRED";
+
+export type StudentListSort =
+  | "lastName"
+  | "-lastName"
+  | "firstName"
+  | "-firstName"
+  | "studentNo"
+  | "-studentNo"
+  | "classId"
+  | "-classId";
+
+/**
+ * Cursor mode of `GET /students` (any of cursor, direction or limit present). The cursor is bound to tenant,
+ * every filter and the sort. Without those parameters the endpoint keeps its unpaged lookup list.
+ */
+export interface StudentCursorListQuery {
+  cursor?: string;
+  direction: "next" | "previous";
+  limit: number;
+  q?: string;
+  sort: StudentListSort;
+  ids?: string;
+  classId?: string;
+  level?: string;
+  responsibleTeacherId?: string;
+  status?: StudentStatus;
+  guardianLinked?: "true" | "false";
+}
 
 export type StudentPortalAccessState = "ACTIVE" | "SUSPENDED" | "INVITED" | "NOT_INVITED" | "INCONSISTENT";
 
@@ -1615,6 +1654,8 @@ export interface ApiCursorListMeta {
   limit: number;
   nextCursor?: string;
   previousCursor?: string;
+  /** Filtered row count; only lists whose screens show a total report it. */
+  total?: number;
 }
 
 export interface ApiItemResponse<TItem> {
@@ -1633,6 +1674,19 @@ export interface ApiCursorListResponse<TItem> {
 
 export type IdentityInvitationSubjectType = "TEACHER" | "STUDENT" | "GUARDIAN" | "EMPLOYEE";
 export type IdentityInvitationStatus = "PENDING" | "ACCEPTED" | "REVOKED";
+export type IdentityInvitationListSort = "-createdAt" | "createdAt";
+
+/** `GET /identity-invitations`: opaque cursor, bound to tenant + every filter + sort. */
+export interface IdentityInvitationListQuery {
+  cursor?: string;
+  direction: "next" | "previous";
+  limit: number;
+  q?: string;
+  subjectType?: IdentityInvitationSubjectType;
+  subjectId?: string;
+  status?: IdentityInvitationStatus;
+  sort: IdentityInvitationListSort;
+}
 
 export interface IdentityInvitationRecord {
   id: string;

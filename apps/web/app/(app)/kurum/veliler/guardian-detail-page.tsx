@@ -27,7 +27,7 @@ import type {
 } from "@o-okul/shared-types";
 import { ArrowLeft, Link2, MailX } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiCursorListAll, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";
 import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
@@ -263,8 +263,9 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
 }
 
 async function loadPendingGuardianInvitation(accessToken: string, guardianId: string): Promise<IdentityInvitationRecord | null> {
-  // q matches the subjectId list field, so only this guardian's invitations leave the API.
-  const invitations = await apiRequest<IdentityInvitationRecord[]>(accessToken, `${apiBaseUrl}/identity-invitations?q=${encodeURIComponent(guardianId)}`);
+  // Exact subject filters, so only this guardian's pending invitations leave the API.
+  const query = new URLSearchParams({ limit: "100", status: "PENDING", subjectId: guardianId, subjectType: "GUARDIAN" });
+  const invitations = await apiCursorListAll<IdentityInvitationRecord>(accessToken, `${apiBaseUrl}/identity-invitations?${query.toString()}`);
   return invitations.find((invitation) =>
     invitation.subjectType === "GUARDIAN"
     && invitation.subjectId === guardianId

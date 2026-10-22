@@ -264,7 +264,8 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
    2026-10-31'e kadar salt okunur, sonra dondurulur. S1-14 PASS (2026-10-21, STAGING): salt okunur kurumda yazma
    403 `TENANT_LICENSE_EXPIRED_READ_ONLY`, kayıt oluşmadı; ardından PRO dönem açıldı (2026-10-21 → 2027-01-31, 100
    öğrenci). Yeni bulgular F-17 (genel hata mesajı), F-18 (sistem panelinde lisans yenileme ekranı yok, PRO API ile
-   açıldı), F-19 (sistem girişinde "KURUM GİRİŞİ" başlığı). UAT kiti 2026-10-21'de güncellendi. Kontrol noktası 2026-11-14.
+   açıldı), F-19 (sistem girişinde "KURUM GİRİŞİ" başlığı); F-18 #208, F-17 ve F-19 #210 ile main ve staging'de
+   (F-17'nin staging davranışı UNPROVEN). UAT kiti 2026-10-21'de güncellendi. Kontrol noktası 2026-11-14.
 2. S2: PR #153 lisans sonu veri imhası main'de (`2b0ef97`, staging deploy PASS); imha, sıfırlama motorunun yazma sessizliği kapısı açılana kadar çalışmaz.
 3. S4: §3.4 doğrulama planı (dosya talebi, görüşmeler, pilot taahhüdü); ürün sahibi işi.
 4. S5/S6: PO-3 kapasite ölçümü ve PO-10 production kanıt zinciri; PO-10 tarihi 2027-01-03'te.
@@ -312,7 +313,9 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
    bu yüzden hâlâ açık (yeni referans `5ffba34e3dbb`). IMG-4 (2026-10-21, ürün sahibi onayı): beş Node aşaması
    `node:24-alpine@sha256:6a1c190e…a3d`'ye (Node 24.22.1; amd64 temel katmanları staging'deki son imajla aynı)
    sabitlendi, `docker:check` her `FROM node:` satırında aynı özeti zorunlu kılıyor. Özet güncellemesi bilinçli, ayrı
-   PR'la yapılır. Kabul (STAGING): bu PR'ın deploy'unda `node_modules` katmanı `5ffba34e3dbb` kalmalı (IMG-3 ile ortak).
+   PR'la yapılır. Kabul karşılandı (STAGING, #209 deploy `39657755408`): `node_modules` `5ffba34e3dbb` aynı kaldı, deploy adımı
+   2,9 dk. IMG-3'ün özel kabulü (yalnız `package.json` betiği değişen deploy'da katmanın aynı kalması) staging'de hâlâ
+   ölçülmedi; LOCAL_TEST kanıtı var.
 
 Önceki plandan devralınan kalemler (`docs/account-management-architecture-plan.md` bölüm 6). Durumlar
 2026-10-15'te main `c619b8f7e` üzerinde kod okumayla yeniden doğrulandı (LOCAL_STATIC):
@@ -347,11 +350,16 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
   platform tablolarının güncel olmayan kopya olması (CP-01 yeniden backfill ile başlar). `withTenantDb`
   bypass yolları ve ham `set_config('app.bypass_rls', ...)` çağrıları 2026-10-20'den beri dosya+fonksiyon
   izin listesinde (12 kullanım); `pnpm tenant-db:check` artık `pnpm run ci` içinde (önceden CI'da koşmuyordu).
+- MFA sıfırlama sonrası yeniden kayıt AÇIK: kayıt yalnız parolayla tamamlanıyor; öneri DEC-20261021-01 (elden
+  verilen tek seferlik kod, son tarih, bildirim) ürün sahibi kararını bekliyor. Sistem yöneticisi TOTP kaybı
+  kurtarma prosedürü `docs/phase-6-ops-runbook.md`'ye yazıldı (2026-10-21; SQL LOCAL_TEST, ortamda UNPROVEN).
 - P0 süreli/MFA'lı breakglass AÇIK: `RlsBypassGuard` rol, kapsam, gerekçe ve audit ister ama süre ve MFA
   step-up istemez; `@AllowBreakGlassRlsBypass()` hiçbir route'ta yok.
 - P1 offboarding KISMİ (lisans sonu imhası #153 var, `POST /tenants/:id/offboarding` yok, imha yazma
-  sessizliği kapısını bekler); cursor KISMİ (`/employees`, `/students/portal-access` var; `/students`,
-  `/tenant-users`, `/identity-invitations` yok); staging tablolu toplu import AÇIK; outbox grant revoke AÇIK
+  sessizliği kapısını bekler); cursor KAPANDI (2026-10-21, bu dal; `/students`, `/tenant-users`, `/identity-invitations`
+  cursor'a taşındı, `/employees` ile birlikte sıralama değerini taşıyan ortak cursor ve Türkçe I araması;
+  `/students` parametresiz çağrıda seçim ekranları için sayfasız kalır); staging tablolu toplu import AÇIK
+  (DEC-20261021-02 önerisi: kalıcı tablo yerine transaction içi set tabanlı yayın, S1 sonrası); outbox grant revoke AÇIK
   (gerçek sağlayıcı teslim kanıtını bekler).
 
 ### Dilim kapanış kaydı
@@ -394,8 +402,9 @@ Plan `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §10.1 uyarınca her dilim
 | 2026-10-20 | RLS bypass izin listesi: `withTenantDb({ bypassRls: true })` ve ham `set_config('app.bypass_rls', ...)` dosya+fonksiyon bazında kilitlendi (12 kullanım, gerekçeli); `tenant-db:check` CI zincirine eklendi | LOCAL_TEST: kontrol mevcut kodda PASS, kopyada eklenen yeni bypass yolunun iki biçimi de FAIL. CI `39478761141` PASS + otomatik STAGING_DEPLOY `39480569223` (`workflow_run`) beş işte PASS, cutover yayınlandı; dört servis `929f82d12`, migration 126, health 200 (STAGING). Deploy adımı 9,1 dk (önceki ~3 dk): yalnız kök `package.json` betik satırı değiştiği halde 1,1 GB `node_modules` katmanı yeniden oluştu (api katmanı `8c70689fb0fb` → `3e3a437e7d67`), çünkü kök `package.json` Dockerfile `deps` aşamasının girdisi | `929f82d12` / PR #205 | – / 1 |
 | 2026-10-20 | IMG-3: Docker `deps` aşaması betikleri çıkarılmış manifestlerle kuruyor (betik değişikliği 1,1 GB `node_modules` katmanını bozmaz) | LOCAL_TEST: iki derlemede `pnpm install` CACHED ve katman özetleri aynı, api imajı derlendi; `docker:check` PASS. CI `39491058600` PASS + otomatik STAGING_DEPLOY `39493069538` (`workflow_run`) beş işte PASS, cutover yayınlandı; build 4,9 / deploy 8,4 dk (Dockerfile değiştiği için katman beklendiği gibi bir kez yeniden oluştu). Staging salt okunur doğrulama: dört servis `ee6e36422`, web/api/queue-board healthy, migration 126, health 200; dört imaj ortak `node_modules` katmanı `4506b86ac601`. Kabul (STAGING) açık: yalnız betik değişen bir sonraki deploy'da bu özet aynı kalmalı | `ee6e36422` / PR #206 | – / 1 |
 | 2026-10-21 | UAT F-18: sistem panelinde lisans dönemi açma ekranı (kurum ayrıntısı → Lisans ve kapasite → "Lisans dönemi aç"; mevcut `POST /tenants/:id/license-terms`) | LOCAL_TEST: sistem paneli Playwright 53 test PASS (varsayılanlar, deneme/sınır kuralları, çakışma mesajı, istek gövdesi); web tip ve UI kontrolleri PASS. CI `39623574072` PASS + otomatik STAGING_DEPLOY `39626606739` (`workflow_run`) beş işte PASS, cutover yayınlandı; deploy adımı 8,4 dk (aşağıda madde 10). Staging doğrulama (2026-10-21, U-SYS oturumu, salt okunur): dört servis `617bd38a8`, health 200, migration 126; kurum ayrıntısında "Lisans dönemi aç" görünür, form PRO / 2027-01-31 → 2028-01-31 varsayılanlarıyla açıldı ve gönderilmeden kapatıldı (lisans dönemi sayısı 2, değişmedi) | `617bd38a8` / PR #208 | – / 1 |
-| 2026-10-21 | IMG-4: Node temel imajı özetle sabitlendi (`node:24-alpine@sha256:6a1c190e…`), `docker:check` kuralı | LOCAL_TEST: `docker:check` PASS, sabitlenmemiş ve farklı özetli satır FAIL; api imajı sabit özetle derlendi (Node v24.22.1). CI ve otomatik staging deploy merge sonrası; kabul `node_modules` `5ffba34e3dbb` kalması | bu PR | – / 1 |
-| 2026-10-21 | UAT F-17 (lisans salt okunur reddinde uygulama geneli açıklayıcı uyarı) ve F-19 (sistem girişinde "Sistem girişi" başlığı) | LOCAL_TEST: öğretmen daveti ve giriş Playwright dosyaları 19 test PASS (yeni F-17 ve F-19 senaryoları dahil); web auth sözleşmesi, token saklama, tasarım, mimari, rota ve a11y kontrolleri PASS. CI ve otomatik staging deploy merge sonrası | bu PR | – / 1 |
+| 2026-10-21 | IMG-4: Node temel imajı özetle sabitlendi (`node:24-alpine@sha256:6a1c190e…`), `docker:check` kuralı | LOCAL_TEST: `docker:check` PASS, sabitlenmemiş ve farklı özetli satır FAIL; api imajı sabit özetle derlendi (Node v24.22.1). CI `39655591863` PASS + otomatik STAGING_DEPLOY `39657755408` (`workflow_run`) beş işte PASS, cutover yayınlandı; build 0,6 dk, deploy adımı 2,9 dk. Kabul karşılandı (STAGING): dört imaj `node_modules` `5ffba34e3dbb` (önceki deploy ile aynı), api Node v24.22.1; dört servis `40bad2076`, health 200, migration 126 | `40bad2076` / PR #209 | – / 1 |
+| 2026-10-21 | UAT F-17 (lisans salt okunur reddinde uygulama geneli açıklayıcı uyarı) ve F-19 (sistem girişinde "Sistem girişi" başlığı) | LOCAL_TEST: öğretmen daveti ve giriş Playwright dosyaları 19 test PASS (yeni F-17 ve F-19 senaryoları dahil); web auth sözleşmesi, token saklama, tasarım, mimari, rota ve a11y kontrolleri PASS. CI `39661047874` PASS + otomatik STAGING_DEPLOY `39663439252` (`workflow_run`) beş işte PASS; build 3,3 / deploy 2,8 / evidence 1,3 dk. F-17'nin staging davranışı süresi dolmuş lisanslı kurum olmadığı için UNPROVEN | `4612a9108` / PR #210 | – / 1 |
+| 2026-10-21 | P1 cursor sayfalama: `/identity-invitations`, `/tenant-users`, `/students` cursor'a taşındı; dört liste (`/employees` dahil) sınır satırının sıralama değerini taşıyan ortak cursor kullanır (satır silinse veya adı değişse sonraki sayfa atlamaz), cursor AES-256-GCM ile mühürlüdür (sıralama değeri URL'de okunmaz, anahtar `JWT_ACCESS_SECRET`'tan HKDF ile türetilir, yeni sır yok), web eskimiş cursor'da ilk sayfaya döner; Türkçe I/İ/ı araması SQL ve bellek içi store'da aynı katlamayla düzeldi (öğrenci aramasında önceden de bozuktu) | LOCAL_TEST: api 1466 test PASS; yeni gerçek PostgreSQL 17 keyset testi (her sıralamada ileri/geri yürüyüş, NULL ve eşit anahtarlar, sınır satırı silme/ad değişikliği, I/İ/ı araması, cursor'da düz metin yokluğu, değiştirilmiş ve başka tenant cursor reddi, DateStyle bağımsızlığı) CI `account-management-postgres` listesiyle birlikte 94 test PASS; Playwright 167 test PASS (macOS). EXPLAIN (bilgi): katlanmış arama ifadesi trigram indeksini kullanmıyor, davet ve hesap listelerinde seq scan; indeks ayrı dilim. CI ve staging deploy merge sonrası (EXTERNAL_NOT_RUN) | bu PR | – / 1 |
 
 Not: `38565136132` (2026-10-14, `82ae7be74`) boş bir Staging Deploy koşusudur. Aynı commit başka bir oturumca deploy edilmişti (`38561474048`). Araya giren docs merge'i yüzünden `github-ci-evidence` işinde düştü; staging değişmedi.
 

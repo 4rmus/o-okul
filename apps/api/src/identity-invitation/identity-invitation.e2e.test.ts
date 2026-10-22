@@ -113,7 +113,7 @@ describe("Identity invitations", () => {
 
     await request(server)
       .get("/identity-invitations")
-      .query({ q: "invite-student", sort: "email", page: "1", limit: "1" })
+      .query({ q: "invite-student", limit: "1" })
       .set("Authorization", `Bearer ${admin}`)
       .expect(200)
       .expect(({ body }) => {
@@ -123,6 +123,25 @@ describe("Identity invitations", () => {
         expect(body[0]).not.toHaveProperty("tokenHash");
         expect(body[0]).not.toHaveProperty("acceptedUserId");
       });
+    // Cursor list like GET /employees: the retired page parameter is refused, filters are exact.
+    await request(server)
+      .get("/identity-invitations")
+      .query({ q: "invite-student", page: "1", limit: "1" })
+      .set("Authorization", `Bearer ${admin}`)
+      .expect(422);
+    await request(server)
+      .get("/identity-invitations")
+      .query({ subjectType: "STUDENT", status: "PENDING", subjectId: invite.body.subjectId })
+      .set("Authorization", `Bearer ${admin}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.map((record: { id: string }) => record.id)).toEqual([invite.body.id]);
+      });
+    await request(server)
+      .get("/identity-invitations")
+      .query({ cursor: "Zm9yZWlnbg", limit: "1" })
+      .set("Authorization", `Bearer ${admin}`)
+      .expect(400);
 
     const accepted = await request(server)
       .post("/identity-invitations/accept")
@@ -143,7 +162,7 @@ describe("Identity invitations", () => {
 
     await request(server)
       .get("/identity-invitations")
-      .query({ q: "invite-student", sort: "email", page: "1", limit: "1" })
+      .query({ q: "invite-student", limit: "1" })
       .set("Authorization", `Bearer ${admin}`)
       .expect(200)
       .expect(({ body }) => {

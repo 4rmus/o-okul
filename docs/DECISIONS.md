@@ -1308,6 +1308,59 @@ Açık soru: (a) Pilot okul programını O-Okul'da mı tutacak, yoksa başka sis
 (b) A/B haftası veya dönem içi program değişikliği gerekiyor mu? (c) Resmî tatiller nasıl düşülür?
 Son kontrol: 2026-10-13
 
+### DEC-20261021-01 — Sıfırlama sonrası MFA yeniden kaydı elden verilen tek seferlik koda bağlanır
+
+Durum: Öneri; ürün sahibi onayı bekliyor (DEC-20261020-01 açık sorusu)
+Karar: SYSTEM_ADMIN'in kurum sahibi/yöneticisi için yaptığı MFA sıfırlaması (`POST /auth/totp/admin-reset`)
+kısa ömürlü, tek kullanımlık bir kayıt kodu üretir; kod yalnız sıfırlama yanıtında bir kez gösterilir,
+HMAC özeti ve son tarihiyle hesaba yazılır ve `membershipVersion`'a bağlanır (yeni sıfırlama eski kodu
+geçersiz kılar). `POST /auth/totp/enrollment/confirm` bu kayıt varken kodu da ister ve deneme sayısını
+mevcut giriş sınırlayıcısıyla kısıtlar. Kod süresi içinde kullanılmazsa giriş reddedilir. Sıfırlamada ve
+kayıt tamamlandığında hesabın kayıtlı e-postasına "bu işlemi siz yapmadıysanız" bildirimi gider.
+Gerekçe: bugün sıfırlamadan sonraki ilk girişte MFA kaydı yalnız parolayla tamamlanıyor
+(`apps/api/src/auth/auth.service.ts` `issueLoginForUser` → `MFA_ENROLLMENT_REQUIRED`,
+`confirmRequiredTotpEnrollment`). Parolayı ya da kayıtlı e-postayı (parola sıfırlama aynı kutuya gider)
+ele geçiren biri destek hattından sıfırlama isterse kendi doğrulama uygulamasını kaydedip kurum sahibi
+oturumu alabilir; sıfırlamanın son tarihi ve kişiye bildirimi yoktur. E-postaya token göndermek (seçenek A)
+e-posta kutusu ele geçmişse korumaz; yalnız son tarih ve bildirim (seçenek C) saldırıyı engellemez,
+yalnız görünür kılar.
+Kaynak: Claude güvenlik incelemesi (2026-10-21).
+Kanıt: Akış kod okumasıyla izlendi (LOCAL_STATIC); `auth.service.test.ts` bugünkü davranışı
+(sıfırlama sonrası parolayla girişin `MFA_ENROLLMENT_REQUIRED` döndürmesi) doğruluyor. Önerilen akış
+kodlanmadı; `scripts/check-admin-mfa-evidence.mjs` sıfırlama sonrası yeniden kaydı ölçmüyor.
+Etkilenen ADR: ADR-0010
+Açık soru: (a) Kod kullanıcıya hangi kanaldan verilir (kayıtlı numaraya geri arama, yüz yüze)?
+(b) SYSTEM_ADMIN kodu görebilir mi? (c) Kodun ve sıfırlamanın geçerlilik süresi? (d) Yeni kurum sahibi
+hesabının ilk MFA kaydı da (aktivasyon e-postayla yapılır) aynı korumaya alınacak mı?
+Son kontrol: 2026-10-21
+
+### DEC-20261021-02 — Toplu öğrenci import'u kalıcı staging tablosu yerine transaction içi set tabanlı yayınla yapılır
+
+Durum: Öneri; ürün sahibi onayı bekliyor; S1 kapanışından sonra
+Karar: `docs/account-management-architecture-plan.md`'deki "staging tablosuna batch insert" maddesi
+"transaction kapsamlı hazırlık ve set tabanlı yayın" olarak değiştirilir. İçe aktarma tek bir tenant
+transaction'ında çalışır: TC ve öğrenci no çakışmaları satır başına sorgu yerine tek `= ANY($1)` sorgusuyla,
+kontenjan tüm tenant'ı Node'a yüklemek yerine SQL `COUNT` ile bulunur; öğrenci, kayıt ve iletişim satırları
+parçalı çok satırlı `INSERT` ile, profil alanları (TC, telefon, e-posta) ve iletişim audit kayıtları aynı
+transaction'da yazılır. Gerekirse `CREATE TEMP TABLE ... ON COMMIT DROP` kullanılır; kalıcı yeni tenant
+tablosu açılmaz. Dosya biçimi, hata kodları (`CONTACT_COLUMNS_CONFLICT` dahil), satır sayıları ve veli
+TC'sinin okunmaması değişmez.
+Gerekçe: bugünkü import tek transaction'da ekliyor ama satır başına veritabanı çağrısı yapıyor
+(5.000 satırda kabaca 40.000 tur) ve profil alanlarını commit'ten sonra ayrı transaction'larda yazıyor;
+bu ikinci aşama yarıda kalırsa öğrenciler TC, telefon veya e-postasız kalır ve idempotency anahtarı
+serbest kaldığı için yeniden deneme `STUDENT_NO_DUPLICATE` alır (planın yasakladığı kısmi aktivasyon).
+Kalıcı PII taşıyan bir staging tablosu ise RLS, sıfırlama kataloğu, devir/ihraç kapsamı, lisans sonu
+imhası ve temizlik işi gerektirir; bir istek süresince yaşayan veri için orantısızdır.
+Kaynak: Claude tasarım incelemesi (2026-10-21).
+Kanıt: `apps/api/src/student/student-import.service.ts`, `student.service.ts` `createMany`,
+`student-store.ts` `createManyWithEnrollmentsAndContacts` kod okuması (LOCAL_STATIC). Ölçüm yapılmadı;
+5.000 satır davranışı UNPROVEN.
+Etkilenen ADR: Yok.
+Açık soru: (a) S1-03 staging PASS kanıtı bu değişiklikle yeniden koşulmalı; S1 kapanışından önce
+başlanmaz. (b) `app` rolünün `TEMP` yetkisi staging Postgres'te doğrulanmalı. (c) Ön izlemedeki
+`accountPreview.willCreate: true` alanı hesap oluşturulmadığı halde dönüyor; ayrı ele alınır.
+Son kontrol: 2026-10-21
+
 ## Faz Öncesi Onay Gerektirenler
 
 | ID | Faz | Bloklar mı? | Soru | Beklenen kanıt |

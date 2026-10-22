@@ -13,6 +13,8 @@ interface OperationContract {
   rawResponseContentType?: string;
   listResponse?: boolean;
   cursorListResponse?: boolean;
+  /** Replaces the shared cursor meta schema for an endpoint whose meta differs (GET /students lookup mode). */
+  cursorListMeta?: JsonSchema;
   noContent?: boolean;
   idempotent?: boolean;
   idempotencyRequired?: boolean;
@@ -43,7 +45,18 @@ const cursorListMetaSchema = objectSchema({
   limit: integerSchema({ minimum: 1 }),
   nextCursor: stringSchema(),
   previousCursor: stringSchema(),
+  total: integerSchema({ minimum: 0, description: "Filtered row count; only lists whose screens show a total report it." }),
 }, ["limit"]);
+
+const cursorDirectionQueryParameter = {
+  name: "direction",
+  schema: { type: "string", enum: ["next", "previous"], default: "next" },
+};
+const cursorQueryParameter = {
+  name: "cursor",
+  description: "Opaque cursor returned by the previous response; bound to tenant, filters and sort.",
+  schema: stringSchema(),
+};
 
 const healthStatusSchema = objectSchema({
   status: { type: "string", enum: ["ok"] },
@@ -3517,7 +3530,14 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/tenant-users": {
     responseBody: arraySchema(tenantUserRecordSchema),
-    listResponse: true,
+    cursorListResponse: true,
+    queryParameters: [
+      cursorQueryParameter,
+      cursorDirectionQueryParameter,
+      { name: "limit", schema: integerSchema({ minimum: 1, maximum: 100, default: 50 }) },
+      { name: "q", description: "Case-insensitive name, e-mail or role search.", schema: stringSchema() },
+      { name: "sort", schema: { type: "string", enum: ["email", "-email", "name", "-name"], default: "email" } },
+    ],
   },
   "get /api/v1/employees": {
     responseBody: arraySchema(employeeAccessSchema),
@@ -3952,18 +3972,29 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/students": {
     responseBody: arraySchema(publicStudentRecordSchema),
-    listResponse: true,
+    cursorListResponse: true,
+    // Cursor mode (cursor, direction or limit present) returns limit/total and cursors; the unpaged lookup mode
+    // (none of them) keeps total/page/limit/totalPages for one page holding every visible student.
+    cursorListMeta: objectSchema({
+      limit: integerSchema({ minimum: 0 }),
+      nextCursor: stringSchema(),
+      previousCursor: stringSchema(),
+      total: integerSchema({ minimum: 0 }),
+      page: integerSchema({ minimum: 1 }),
+      totalPages: integerSchema({ minimum: 0 }),
+    }, ["limit"]),
     queryParameters: [
       { name: "ids", description: "Comma-separated student ids to return.", schema: stringSchema() },
-      { name: "page", schema: integerSchema({ minimum: 1, default: 1 }) },
-      { name: "limit", schema: integerSchema({ minimum: 1, maximum: 100, default: 20 }) },
+      cursorQueryParameter,
+      cursorDirectionQueryParameter,
+      { name: "limit", description: "Enables cursor mode; default 50 when cursor or direction is sent alone.", schema: integerSchema({ minimum: 1, maximum: 100 }) },
       { name: "q", description: "Indexed first name, last name or student number search.", schema: stringSchema({ maxLength: 100 }) },
       { name: "sort", schema: { type: "string", enum: ["studentNo", "-studentNo", "firstName", "-firstName", "lastName", "-lastName", "classId", "-classId"] } },
       { name: "classId", schema: stringSchema() },
       { name: "level", schema: stringSchema() },
       { name: "responsibleTeacherId", schema: stringSchema() },
       { name: "status", schema: studentStatusSchema },
-      { name: "guardianLinked", description: "Paged requests filter by active StudentContact presence; unpaged requests by guardian link presence.", schema: { type: "boolean" } },
+      { name: "guardianLinked", description: "Cursor requests filter by active StudentContact presence; unpaged lookup requests by guardian link presence.", schema: { type: "boolean" } },
     ],
   },
   "get /api/v1/students/{id}": {
@@ -4810,7 +4841,17 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/identity-invitations": {
     responseBody: arraySchema(identityInvitationRecordSchema),
-    listResponse: true,
+    cursorListResponse: true,
+    queryParameters: [
+      cursorQueryParameter,
+      cursorDirectionQueryParameter,
+      { name: "limit", schema: integerSchema({ minimum: 1, maximum: 100, default: 50 }) },
+      { name: "q", description: "Case-insensitive name, e-mail, subject type, subject id, role or status search.", schema: stringSchema() },
+      { name: "subjectType", schema: { type: "string", enum: ["TEACHER", "STUDENT", "GUARDIAN", "EMPLOYEE"] } },
+      { name: "subjectId", schema: stringSchema() },
+      { name: "status", schema: { type: "string", enum: ["PENDING", "ACCEPTED", "REVOKED"] } },
+      { name: "sort", schema: { type: "string", enum: ["-createdAt", "createdAt"], default: "-createdAt" } },
+    ],
   },
   "post /api/v1/identity-invitations": {
     requestBody: identityInvitationCreateRequestSchema,
@@ -4935,7 +4976,7 @@ export function applyOpenApiContracts(document: OpenAPIObject): OpenAPIObject {
         description: operation.responses[successCode]?.description ?? "Successful response",
         content: jsonContent(
           contract.cursorListResponse
-            ? cursorListEnvelopedSchema(contract.responseBody)
+            ? cursorListEnvelopedSchema(contract.responseBody, contract.cursorListMeta)
             : contract.listResponse
               ? listEnvelopedSchema(contract.responseBody)
               : envelopedSchema(contract.responseBody),
@@ -5046,8 +5087,8 @@ function listEnvelopedSchema(dataSchema: JsonSchema): JsonSchema {
   return objectSchema({ data: dataSchema, meta: listMetaSchema }, ["data", "meta"]);
 }
 
-function cursorListEnvelopedSchema(dataSchema: JsonSchema): JsonSchema {
-  return objectSchema({ data: dataSchema, meta: cursorListMetaSchema }, ["data", "meta"]);
+function cursorListEnvelopedSchema(dataSchema: JsonSchema, metaSchema: JsonSchema = cursorListMetaSchema): JsonSchema {
+  return objectSchema({ data: dataSchema, meta: metaSchema }, ["data", "meta"]);
 }
 
 function jsonContent(schema: JsonSchema, contentType = jsonContentType): JsonContent {

@@ -203,7 +203,7 @@ async function installGuardianPrivacyMocks(page: Page, role: TenantRole, capture
     }
     if (path === "/guardians/guardian-a" && route.request().method() === "GET") return fulfillData(route, createGuardian());
     if (path === "/identity-invitations" && route.request().method() === "GET") {
-      invitations?.queries?.push(url.searchParams.get("q") ?? "");
+      invitations?.queries?.push(url.searchParams.get("subjectId") ?? "");
       return fulfillData(route, invitations?.pending ? [{
         id: "guardian-invitation-a", tenantId: "tenant-guardian-privacy", subjectType: "GUARDIAN", subjectId: "guardian-a",
         email: "zeynep.veli@example.test", name: "Zeynep Veli", role: "GUARDIAN", kind: "EMAIL_LINK", status: "PENDING",
