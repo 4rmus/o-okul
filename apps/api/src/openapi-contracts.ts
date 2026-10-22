@@ -3427,7 +3427,7 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: totpDisableResponseSchema,
   },
   "post /api/v1/auth/totp/admin-reset": {
-    requiredHeaders: [{ name: "X-Step-Up-Token", description: "SYSTEM_ADMIN OWNER_ADMIN_CHANGE MFA proof bound to actor/session.", schema: stringSchema() }],
+    requiredHeaders: [{ name: "X-Step-Up-Token", description: "SYSTEM_ADMIN OWNER_ADMIN_CHANGE MFA proof bound to actor/session and to the target account (tenant, user and its current membership version, added by the server); a stale or reused proof gets 409 MFA_RESET_TARGET_STALE.", schema: stringSchema() }],
     requestBody: totpAdminResetRequestSchema,
     responseBody: totpAdminResetResponseSchema,
   },

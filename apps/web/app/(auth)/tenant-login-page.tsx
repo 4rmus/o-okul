@@ -10,6 +10,7 @@ import { Button, Field, Input, SegmentedControl, Select } from "@o-okul/ui";
 import { useAuth } from "../providers.js";
 import { appBrand } from "../../src/brand.js";
 import { ApiRequestError, getTenantLoginContext, MfaEnrollmentRequiredError, MfaRequiredError, TenantSelectionRequiredError } from "../../src/api-client.js";
+import { useActivationNotice } from "./activation-notice.js";
 import { ContactSupportLink } from "./contact-support-link.js";
 
 // DEC-20261021-01: after a support MFA reset the enrollment also needs the one-time code read over the phone.
@@ -44,6 +45,7 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tenantContext, setTenantContext] = useState<TenantLoginContextResponse | null>(null);
+  const activationNotice = useActivationNotice();
 
   useEffect(() => {
     if (!isBootstrapping && auth) {
@@ -138,6 +140,9 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
       </div>
       <form className="next-form" aria-label="Giriş formu" onSubmit={(event) => void handleSubmit(event)}>
         <h1 id="login-title">Giriş</h1>
+        {activationNotice && !pendingMfa && !pendingEnrollment && !pendingTenantSelection ? (
+          <p className="next-status-note" role="status">{activationNotice}</p>
+        ) : null}
         {!lockedTenantSlug ? (
           <Field label="Kurum Kodu">
             <Input

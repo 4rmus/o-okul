@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import * as tenantMutationActivity from "../context/tenant-mutation-activity.js";
 import { InMemoryGuardianStore } from "../school/guardian-store.js";
-import { InMemoryTeacherStore } from "../school/teacher-store.js";
+import { InMemoryTeacherStore, type TeacherStore } from "../school/teacher-store.js";
 import { InMemorySessionStore } from "../auth/session-store.js";
 import { InMemoryStudentStore } from "../student/student-store.js";
 import { InMemoryTenantStore } from "../tenant/tenant-store.js";
@@ -458,7 +458,8 @@ describe("IdentityInvitationService", () => {
     await expect(service.revoke(context, issued.invitation.id)).rejects.toThrow("IDENTITY_INVITATION_NOT_PENDING");
     await expect(service.revoke(context, "missing")).rejects.toThrow("IDENTITY_INVITATION_NOT_FOUND");
     await expect(service.revoke({ ...context, tenantId: "tenant-b" }, issued.invitation.id)).rejects.toThrow("IDENTITY_INVITATION_NOT_FOUND");
-    await expect(service.accept({ token: issued.activationToken, password: "Secure-password-123" })).rejects.toThrow("IDENTITY_INVITATION_NOT_PENDING");
+    // UAT F-20: a withdrawn link says it was withdrawn, not that it was used.
+    await expect(service.accept({ token: issued.activationToken, password: "Secure-password-123" })).rejects.toThrow("IDENTITY_INVITATION_REVOKED");
   });
 
   it("kabul sırasında davet iptal edilirse öğretmen bağı ve rol geri alınır (UAT F-03 inceleme)", async () => {
@@ -478,7 +479,7 @@ describe("IdentityInvitationService", () => {
     });
     const removeTenantRole = vi.spyOn(users, "removeTenantRole");
 
-    await expect(service.accept({ token: issued.activationToken, password: "Secure-password-123" })).rejects.toThrow("IDENTITY_INVITATION_NOT_PENDING");
+    await expect(service.accept({ token: issued.activationToken, password: "Secure-password-123" })).rejects.toThrow("IDENTITY_INVITATION_REVOKED");
     await expect(teachers.findById(teacher.id)).resolves.toMatchObject({ userId: undefined });
     expect(removeTenantRole).toHaveBeenCalledWith("tenant-a", expect.any(String), "TEACHER");
     // The account the accept created is removed again.
@@ -513,5 +514,109 @@ describe("IdentityInvitationService", () => {
     await expect(teachers.findById(teacher.id)).resolves.toMatchObject({ userId: "user-other" });
     expect(runMutation).not.toHaveBeenCalled();
     await expect(invitations.findById("tenant-a", issued.invitation.id)).resolves.toMatchObject({ status: "PENDING" });
+  });
+
+  describe("UAT F-20: çalışan daveti e-posta çakışması ve iptal edilen bağlantı", () => {
+    const adminContext: RequestContext = { tenantId: "tenant-a", userId: "admin-a", roles: ["TENANT_ADMIN"], bypassRls: false };
+
+    async function setup(teachers = new InMemoryTeacherStore()) {
+      const invitations = new InMemoryIdentityInvitationStore();
+      const users = new InMemoryUserManagementStore();
+      const tenants = new InMemoryTenantStore();
+      const employee = await users.createEmployee("tenant-a", { firstName: "Uat", lastName: "Muhasebe", status: "ACTIVE" });
+      const service = new IdentityInvitationService(
+        invitations,
+        users,
+        new InMemoryStudentStore(),
+        new InMemoryGuardianStore(),
+        teachers,
+        tenants,
+        undefined,
+        new InMemoryEmployeeAccountActivationStore(users, tenants, invitations, teachers),
+      );
+      return { employee, invitations, service, users };
+    }
+
+    it.each([
+      ["başka çalışana bağlı hesap", "Admin-A@Example.test", "EMPLOYEE_EMAIL_ACCOUNT_ALREADY_BOUND"],
+      ["öğrenci hesabı", "student-a@example.test", "EMPLOYEE_EMAIL_ACCOUNT_INCOMPATIBLE"],
+      ["veli hesabı", "guardian-a@example.test", "EMPLOYEE_EMAIL_ACCOUNT_INCOMPATIBLE"],
+    ])("%s e-postasına davet oluşturmadan 409 ile reddeder", async (_label, email, code) => {
+      const { employee, invitations, service } = await setup();
+      const create = vi.spyOn(invitations, "create");
+
+      const rejected = service.createEmployeeInvitation(adminContext, employee.id, { email, role: "FINANCE_STAFF" });
+      await expect(rejected).rejects.toThrow(code);
+      await expect(rejected).rejects.toMatchObject({ status: 409 });
+      expect(create).not.toHaveBeenCalled();
+      await expect(invitations.list("tenant-a")).resolves.toEqual([]);
+    });
+
+    it("öğretmeni başka çalışan kaydına bağlı hesabın e-postasını reddeder", async () => {
+      const teachers = new InMemoryTeacherStore();
+      const { employee, users, service } = await setup(teachers);
+      const teacherEmployee = await users.createEmployee("tenant-a", { firstName: "Ayse", lastName: "Ogretmen", status: "ACTIVE" });
+      // The in-memory teacher store has no Teacher -> Employee link; the PostgreSQL test covers the real join.
+      vi.spyOn(teachers as TeacherStore, "findByEmployeeId").mockImplementation(async (_tenantId: string, employeeId: string) => (
+        employeeId === teacherEmployee.id
+          ? { id: "teacher-a", tenantId: "tenant-a", firstName: "Ayse", lastName: "Ogretmen", userId: "teacher-tenant-a" }
+          : undefined
+      ));
+
+      await expect(service.createEmployeeInvitation(adminContext, employee.id, { email: "teacher-a@example.test", role: "FINANCE_STAFF" }))
+        .rejects.toThrow("EMPLOYEE_EMAIL_ACCOUNT_ALREADY_BOUND");
+    });
+
+    it("çalışan kaydına bağlı olmayan öğretmen hesabına davet açar ve kabulde iki rol birleşir", async () => {
+      const { employee, service, users } = await setup();
+
+      const issued = await service.createEmployeeInvitation(adminContext, employee.id, { email: "teacher-a@example.test", role: "FINANCE_STAFF" });
+      await service.accept({ token: issued.activationToken, password: "Secure-password-123" });
+
+      await expect(users.findTenantUserByEmail("tenant-a", "teacher-a@example.test")).resolves.toMatchObject({
+        id: "teacher-tenant-a",
+        roles: expect.arrayContaining(["FINANCE_STAFF", "TEACHER"]),
+      });
+      await expect(users.findEmployee("tenant-a", employee.id)).resolves.toMatchObject({ userId: "teacher-tenant-a" });
+    });
+
+    it("sonradan bağlanan e-postaya tekrar göndermeyi reddeder; eski bağlantı aktivasyonda da reddedilir", async () => {
+      const { employee, invitations, service, users } = await setup();
+      const first = await users.createEmployee("tenant-a", { firstName: "Ilk", lastName: "Calisan", status: "ACTIVE" });
+      const firstInvite = await service.createEmployeeInvitation(adminContext, first.id, { email: "ortak@example.test", role: "OPERATIONS_STAFF" });
+      const secondInvite = await service.createEmployeeInvitation(adminContext, employee.id, { email: "ortak@example.test", role: "FINANCE_STAFF" });
+      await service.accept({ token: firstInvite.activationToken, password: "Secure-password-123" });
+      const resend = vi.spyOn(invitations, "resend");
+
+      await expect(service.resend(adminContext, secondInvite.invitation.id)).rejects.toThrow("EMPLOYEE_EMAIL_ACCOUNT_ALREADY_BOUND");
+      expect(resend).not.toHaveBeenCalled();
+      // Activation keeps its own check (race safety) and its 400 class.
+      await expect(service.accept({ token: secondInvite.activationToken, password: "Secure-password-123" }))
+        .rejects.toMatchObject({ message: "EMPLOYEE_EMAIL_ACCOUNT_ALREADY_BOUND", status: 400 });
+    });
+
+    it("iptal edilen çalışan davetini REVOKED, kullanılmış daveti NOT_PENDING ile reddeder", async () => {
+      const { employee, service, users } = await setup();
+      const other = await users.createEmployee("tenant-a", { firstName: "Diger", lastName: "Calisan", status: "ACTIVE" });
+      const revoked = await service.createEmployeeInvitation(adminContext, employee.id, { email: "iptal.f20@example.test", role: "FINANCE_STAFF" });
+      await service.revoke(adminContext, revoked.invitation.id);
+      const used = await service.createEmployeeInvitation(adminContext, other.id, { email: "kullanildi.f20@example.test", role: "FINANCE_STAFF" });
+      await service.accept({ token: used.activationToken, password: "Secure-password-123" });
+
+      await expect(service.accept({ token: revoked.activationToken, password: "Secure-password-123" }))
+        .rejects.toMatchObject({ message: "IDENTITY_INVITATION_REVOKED", status: 400 });
+      await expect(service.accept({ token: used.activationToken, password: "Secure-password-123" }))
+        .rejects.toMatchObject({ message: "IDENTITY_INVITATION_NOT_PENDING", status: 400 });
+    });
+
+    it("süresi geçmiş iptal edilmiş bağlantı için süre dolumunu bildirir", async () => {
+      const { employee, invitations, service } = await setup();
+      const issued = await service.createEmployeeInvitation(adminContext, employee.id, { email: "eski.f20@example.test", role: "FINANCE_STAFF" });
+      await service.revoke(adminContext, issued.invitation.id);
+      const stored = await invitations.findById("tenant-a", issued.invitation.id);
+      vi.spyOn(invitations, "findByTokenHash").mockResolvedValue({ ...stored!, expiresAt: "2026-01-01T00:00:00.000Z" });
+
+      await expect(service.accept({ token: issued.activationToken, password: "Secure-password-123" })).rejects.toThrow("IDENTITY_INVITATION_EXPIRED");
+    });
   });
 });

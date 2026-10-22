@@ -1,5 +1,5 @@
 import { runVerifiedTenantMutation } from "../context/tenant-mutation-activity.js";
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { IdempotencyService } from "../http/idempotency.js";
 import {
   hasCapabilityForRoles,
@@ -184,11 +184,13 @@ export class IdentityInvitationService {
     if (pending && Date.parse(pending.expiresAt) > Date.now()) {
       throw new BadRequestException("EMPLOYEE_INVITATION_ALREADY_PENDING");
     }
+    const email = input.email.trim().toLowerCase();
+    // UAT F-20: refused before anything is written or e-mailed; an expired pending invitation is left as it was.
+    await this.assertEmployeeInvitationEmailUsable(tenantId, employee.id, email);
     if (pending) {
       await this.invitations.revokePendingForSubject(tenantId, "EMPLOYEE", employeeId);
     }
 
-    const email = input.email.trim().toLowerCase();
     const token = createActivationToken();
     const expiresAt = nextExpiry();
     const tenantSlug = await this.requireTenantSlug(tenantId);
@@ -222,6 +224,16 @@ export class IdentityInvitationService {
     return { invitation, activationToken: token };
   }
 
+  // UAT F-20: the activation-time e-mail rules (account bound to another Employee, also through its linked teacher, or
+  // a student/guardian account) are checked when the invitation is created or resent, so the admin gets the conflict
+  // instead of the invitee. Activation repeats the check under row locks. Callers already hold user:manage and a
+  // tenant-wide staff context, which can list the tenant's accounts anyway, so the answer reveals nothing new.
+  private async assertEmployeeInvitationEmailUsable(tenantId: string, employeeId: string, email: string): Promise<void> {
+    const conflict = await this.employeeActivations?.findInvitationEmailConflict({ tenantId, employeeId, email });
+    if (conflict === "EMAIL_ACCOUNT_ALREADY_BOUND") throw new ConflictException("EMPLOYEE_EMAIL_ACCOUNT_ALREADY_BOUND");
+    if (conflict === "EMAIL_ACCOUNT_INCOMPATIBLE") throw new ConflictException("EMPLOYEE_EMAIL_ACCOUNT_INCOMPATIBLE");
+  }
+
   private assertElevatedEmployeeInvitationAllowed(
     context: RequestContext,
     role: EmployeeInvitationRole,
@@ -234,7 +246,7 @@ export class IdentityInvitationService {
 
   // UAT F-03: an admin can withdraw a sent invitation (wrong role, wrong address, left before accepting) and
   // issue a new one instead of waiting for the 24-hour expiry. The outbox payload is cleared so an unsent
-  // e-mail never carries a dead link; an already delivered link fails with IDENTITY_INVITATION_NOT_PENDING.
+  // e-mail never carries a dead link; an already delivered link fails with IDENTITY_INVITATION_REVOKED (UAT F-20).
   async revoke(context: RequestContext, id: string): Promise<IdentityInvitationRecord> {
     const tenantId = this.requireTenantWideContext(context);
     const existing = await this.invitations.findById(tenantId, id);
@@ -275,6 +287,9 @@ export class IdentityInvitationService {
     if (!existing) throw new NotFoundException("IDENTITY_INVITATION_NOT_FOUND");
     if (existing.status !== "PENDING") throw new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
     if (existing.kind !== "EMAIL_LINK" || !existing.email) throw new BadRequestException("IDENTITY_INVITATION_RESEND_UNSUPPORTED");
+    if (existing.subjectType === "EMPLOYEE") {
+      await this.assertEmployeeInvitationEmailUsable(tenantId, existing.subjectId, existing.email);
+    }
 
     const token = createActivationToken();
     const expiresAt = nextExpiry();
@@ -305,7 +320,7 @@ export class IdentityInvitationService {
 
     const invitation = await this.invitations.findByTokenHash(hashActivationToken(token));
     if (!invitation) throw new NotFoundException("IDENTITY_INVITATION_NOT_FOUND");
-    if (invitation.status !== "PENDING") throw new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
+    if (invitation.status !== "PENDING") throw inactiveInvitationException(invitation);
     if (Date.parse(invitation.expiresAt) <= Date.now()) throw new BadRequestException("IDENTITY_INVITATION_EXPIRED");
     const employeeActivation = invitation.subjectType === "EMPLOYEE" && this.employeeActivations;
     // UAT F-08: every check that can reject a bad request runs before runVerifiedTenantMutation;
@@ -395,7 +410,8 @@ export class IdentityInvitationService {
       // roles, and a national-ID match gets its previous e-mail and password back.
       if (attachedCredentials) await this.users.restoreAttachableCredentials(invitation.tenantId, user.id, attachedCredentials);
       if (!priorAccount) await this.users.deleteUnusedTenantUser(invitation.tenantId, user.id);
-      throw (compensatedRefusal = new BadRequestException("IDENTITY_INVITATION_NOT_PENDING"));
+      const current = await this.invitations.findByTokenHash(hashActivationToken(token));
+      throw (compensatedRefusal = current ? inactiveInvitationException(current) : new BadRequestException("IDENTITY_INVITATION_NOT_PENDING"));
     }
     await this.auditLogs?.record({
       tenantId: invitation.tenantId,
@@ -515,6 +531,7 @@ function requireAcceptedEmployeeActivation(outcome: EmployeeAccountActivationOut
   if (outcome.status === "INVALID") throw new NotFoundException("IDENTITY_INVITATION_NOT_FOUND");
   if (outcome.status === "EXPIRED") throw new BadRequestException("IDENTITY_INVITATION_EXPIRED");
   if (outcome.status === "NOT_PENDING") throw new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
+  if (outcome.status === "REVOKED") throw new BadRequestException("IDENTITY_INVITATION_REVOKED");
   if (outcome.status === "PROFILE_NOT_ACTIVE") {
     throw new BadRequestException("EMPLOYEE_INVITATION_REQUIRES_ACTIVE_PROFILE");
   }
@@ -527,6 +544,14 @@ function requireAcceptedEmployeeActivation(outcome: EmployeeAccountActivationOut
   }
   if (outcome.status === "LICENSE_INACTIVE") throw new BadRequestException("TENANT_LICENSE_INACTIVE");
   throw new BadRequestException("EMPLOYEE_ACCOUNT_LIMIT_EXCEEDED");
+}
+
+// UAT F-20: a withdrawn link says so (IDENTITY_INVITATION_REVOKED) instead of reading as already used; an accepted one
+// keeps IDENTITY_INVITATION_NOT_PENDING. A revoked link past its 24 hours (also the automatic revoke of an expired one)
+// reports the expiry. Same 400 class for every subject type that shares this accept path.
+function inactiveInvitationException(invitation: Pick<IdentityInvitationRecord, "status" | "expiresAt">): BadRequestException {
+  if (invitation.status !== "REVOKED") return new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
+  return new BadRequestException(Date.parse(invitation.expiresAt) <= Date.now() ? "IDENTITY_INVITATION_EXPIRED" : "IDENTITY_INVITATION_REVOKED");
 }
 
 function parseSubjectType(input: string | undefined): PortalSubjectRoleName {

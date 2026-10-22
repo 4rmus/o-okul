@@ -97,7 +97,85 @@ describePostgres("PostgresEmployeeAccountActivationStore integration", () => {
     );
     expect(otherTenant.rows[0]).toEqual({ users: 0, boundEmployees: 0, pendingInvitations: 1 });
   });
+
+  // UAT F-20: invitation creation runs the activation's e-mail rules (tenant RLS on, app role) before any write.
+  it("davet öncesi e-posta kontrolü bağlı, öğretmen bağlı ve uyumsuz hesapları ayırır; bağsız öğretmene izin verir", async () => {
+    const tenantId = "employee-activation-tenant-b";
+    await seedF20Accounts(admin, tenantId);
+    const check = (email: string) => store.findInvitationEmailConflict({ tenantId, employeeId: "employee-activation-b-1", email });
+
+    await expect(check("F20.Bound@example.test")).resolves.toBe("EMAIL_ACCOUNT_ALREADY_BOUND");
+    await expect(check("f20.teacher-linked@example.test")).resolves.toBe("EMAIL_ACCOUNT_ALREADY_BOUND");
+    await expect(check("f20.student@example.test")).resolves.toBe("EMAIL_ACCOUNT_INCOMPATIBLE");
+    await expect(check("f20.free-teacher@example.test")).resolves.toBeUndefined();
+    await expect(check("f20.nobody@example.test")).resolves.toBeUndefined();
+    // The teacher-linked Employee is the target itself: not "another" employee.
+    await expect(store.findInvitationEmailConflict({ tenantId, employeeId: "f20-teacher-employee", email: "f20.teacher-linked@example.test" }))
+      .resolves.toBeUndefined();
+    // Another tenant's RLS context never sees these accounts.
+    await expect(store.findInvitationEmailConflict({
+      tenantId: "employee-activation-tenant-a",
+      employeeId: "employee-activation-a-1",
+      email: "f20.bound@example.test",
+    })).resolves.toBeUndefined();
+  });
+
+  it("aktivasyon öğretmen bağlı çalışan hesabını reddeder, iptal edilen daveti REVOKED olarak bildirir", async () => {
+    const tenantId = "employee-activation-tenant-b";
+    await admin.query(
+      `UPDATE "IdentityInvitation" SET "email" = 'f20.teacher-linked@example.test' WHERE "id" = 'employee-activation-invitation-b-1'`,
+    );
+    await expect(store.accept({
+      tokenHash: "employee-activation-token-b-1",
+      passwordHash: "scrypt:v2:test-password-hash-b-1",
+      acceptedAt: new Date().toISOString(),
+    })).resolves.toEqual({ status: "EMAIL_ACCOUNT_ALREADY_BOUND" });
+    const bound = await admin.query(`SELECT "userId" FROM "Employee" WHERE "id" = 'employee-activation-b-1'`);
+    expect(bound.rows).toEqual([{ userId: null }]);
+
+    await admin.query(`UPDATE "IdentityInvitation" SET "status" = 'REVOKED' WHERE "id" = 'employee-activation-invitation-b-1'`);
+    await expect(store.accept({
+      tokenHash: "employee-activation-token-b-1",
+      passwordHash: "scrypt:v2:test-password-hash-b-1",
+      acceptedAt: new Date().toISOString(),
+    })).resolves.toEqual({ status: "REVOKED" });
+    const users = await admin.query(`SELECT count(*)::int AS count FROM "User" WHERE "tenantId" = $1`, [tenantId]);
+    expect(users.rows).toEqual([{ count: 4 }]);
+  });
 });
+
+async function seedF20Accounts(pool: pg.Pool, tenantId: string): Promise<void> {
+  const accounts = [
+    { id: "f20-bound-user", email: "f20.bound@example.test", role: "OPERATIONS_STAFF", staffRole: "OPERATIONS_STAFF", teacher: false, student: false },
+    { id: "f20-teacher-linked-user", email: "f20.teacher-linked@example.test", role: "TEACHER", staffRole: null, teacher: true, student: false },
+    { id: "f20-student-user", email: "f20.student@example.test", role: "STUDENT", staffRole: null, teacher: false, student: true },
+    { id: "f20-free-teacher-user", email: "f20.free-teacher@example.test", role: "TEACHER", staffRole: null, teacher: true, student: false },
+  ];
+  for (const account of accounts) {
+    await pool.query(
+      `INSERT INTO "User" ("id", "tenantId", "name", "email", "emailNormalized", "passwordHash", "updatedAt")
+       VALUES ($1, $2, 'F20 Hesap', $3, $3, 'FIXTURE_HASH', now())`,
+      [account.id, tenantId, account.email],
+    );
+    await pool.query(
+      `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "staffRole", "hasTeacherPersona", "hasStudentPersona", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, now())`,
+      [`membership-${account.id}`, tenantId, account.id, account.role, account.staffRole, account.teacher, account.student],
+    );
+  }
+  await pool.query(
+    `INSERT INTO "Employee" ("id", "tenantId", "firstName", "lastName", "status", "userId", "updatedAt")
+     VALUES ('f20-bound-employee', $1, 'Bagli', 'Calisan', 'ACTIVE', 'f20-bound-user', now()),
+            ('f20-teacher-employee', $1, 'Ogretmen', 'Calisan', 'ACTIVE', NULL, now())`,
+    [tenantId],
+  );
+  await pool.query(
+    `INSERT INTO "Teacher" ("id", "tenantId", "firstName", "lastName", "userId", "employeeId", "updatedAt")
+     VALUES ('f20-teacher-linked', $1, 'Bagli', 'Ogretmen', 'f20-teacher-linked-user', 'f20-teacher-employee', now()),
+            ('f20-free-teacher', $1, 'Serbest', 'Ogretmen', 'f20-free-teacher-user', NULL, now())`,
+    [tenantId],
+  );
+}
 
 async function cleanupFixtures(pool: pg.Pool): Promise<void> {
   await pool.query(
