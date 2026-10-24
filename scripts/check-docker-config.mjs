@@ -254,6 +254,8 @@ const expectations = {
     "OOkulReadinessFailing",
     "OOkulQueueFailedJobs",
     "o_okul_queue_jobs",
+    "OOkulAuthSecuritySideEffectFailed",
+    "o_okul_auth_security_side_effect_failures_total",
   ],
   "docker/grafana/provisioning/datasources/datasources.yml": [
     "uid: Prometheus",

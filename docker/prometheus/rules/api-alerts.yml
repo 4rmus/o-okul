@@ -54,3 +54,12 @@ groups:
         annotations:
           summary: Queue metrics scrape is failing
           description: The API /api/v1/metrics endpoint is reachable but cannot collect BullMQ queue counts.
+
+      - alert: OOkulAuthSecuritySideEffectFailed
+        expr: sum by (event) (increase(o_okul_auth_security_side_effect_failures_total{job="o-okul-api"}[15m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Security side effect failed after MFA reset ({{ $labels.event }})"
+          description: "A SYSTEM_ADMIN MFA reset committed but its follow-up ({{ $labels.event }}: mfa_reset_audit = audit row not written, mfa_notice_enqueue = security notice e-mail not queued) failed in the last 15 minutes. Find the API warn/error log line for the ids and complete the step by hand."
+          runbook: "docs/phase-6-ops-runbook.md - Kurum sahibi/yöneticisi MFA sıfırlama"
