@@ -1,3 +1,4 @@
+import { ConflictException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService, InMemoryIdempotencyStore } from "../http/idempotency.js";
@@ -458,6 +459,111 @@ describe("StudentService", () => {
       { firstName: "Aynı", lastName: "Tc", gradeLevelId: "grade-8", nationalId: "10000000146" },
     ])).rejects.toMatchObject({ status: 409, message: "STUDENT_NATIONAL_ID_CONFLICT" });
     await expect(setup.studentStore.list()).resolves.toEqual(before);
+  });
+
+  it("tekli kayıtta silinmiş öğrencide kayıtlı TC'yi yazımdan önce 409 ile reddeder", async () => {
+    const setup = createService();
+    const [removed] = await setup.studentStore.createMany([{
+      tenantId: "tenant-a", firstName: "Eski", lastName: "Kayıt", nationalIdHash: hashTcIdentity("10000000146"),
+    }]);
+    await setup.studentStore.softDelete(removed!.id, "2026-10-01T00:00:00.000Z");
+    const before = await setup.studentStore.list();
+    const enrollmentsBefore = await setup.enrollmentStore.listByStudents(before.map((student) => student.id));
+    const create = vi.spyOn(setup.studentStore, "create");
+    const updateProfile = vi.spyOn(setup.studentStore, "updateProfile");
+
+    await expect(setup.service.create(adminContext, {
+      firstName: "Aynı", lastName: "Tc", gradeLevelId: "grade-8", nationalId: "10000000146", phone: "5551234567",
+    })).rejects.toMatchObject({ status: 409, message: "STUDENT_NATIONAL_ID_CONFLICT" });
+
+    expect(create).not.toHaveBeenCalled();
+    expect(updateProfile).not.toHaveBeenCalled();
+    expect(setup.provisionOrInvite).not.toHaveBeenCalled();
+    expect(setup.auditRecords).toEqual([]);
+    await expect(setup.studentStore.list()).resolves.toEqual(before);
+    await expect(setup.enrollmentStore.listByStudents(before.map((student) => student.id))).resolves.toEqual(enrollmentsBefore);
+  });
+
+  it("tekli kayıt TC, telefon ve e-postayı öğrenci satırıyla birlikte yazar; commit sonrası updateProfile çağırmaz", async () => {
+    const setup = createService();
+    const updateProfile = vi.spyOn(setup.studentStore, "updateProfile");
+
+    const student = await setup.service.create(adminContext, {
+      firstName: "Ada", lastName: "Kaya", gradeLevelId: "grade-8",
+      nationalId: "10000000146", phone: "5551234567", email: "ada@example.test",
+    });
+
+    expect(updateProfile).not.toHaveBeenCalled();
+    expect(student).not.toHaveProperty("nationalIdHash");
+    expect(student).not.toHaveProperty("nationalIdEncrypted");
+    expect(student).not.toHaveProperty("phone");
+    const profile = await setup.studentStore.findProfileById(student.id);
+    expect(profile).toMatchObject({ nationalIdHash: hashTcIdentity("10000000146"), phone: "5551234567", email: "ada@example.test" });
+    expect(decryptTcIdentity(profile!.nationalIdEncrypted!)).toBe("10000000146");
+  });
+
+  it("tekli kayıtta ön kontrolden sonra yazılan aynı TC'yi (yarış) 409'a çevirir ve satır bırakmaz", async () => {
+    const setup = createService();
+    vi.spyOn(setup.studentStore, "findExistingNationalIdHashes").mockResolvedValue([]);
+    await setup.studentStore.create({ tenantId: "tenant-a", firstName: "Önce", lastName: "Gelen", nationalIdHash: hashTcIdentity("10000000146") });
+    const before = await setup.studentStore.list();
+
+    await expect(setup.service.create(adminContext, {
+      firstName: "Sonra", lastName: "Gelen", gradeLevelId: "grade-8", nationalId: "10000000146",
+    })).rejects.toMatchObject({ status: 409, message: "STUDENT_NATIONAL_ID_CONFLICT" });
+    await expect(setup.studentStore.list()).resolves.toEqual(before);
+    expect(setup.auditRecords).toEqual([]);
+  });
+
+  it("tekli kayıtta store'un tekil olmayan hatasını 409'a çevirmez", async () => {
+    const setup = createService();
+    vi.spyOn(setup.studentStore, "create").mockRejectedValue(new Error("CLASS_NOT_FOUND"));
+
+    const error = await setup.service.create(adminContext, { firstName: "Ada", lastName: "Kaya", gradeLevelId: "grade-8" })
+      .catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toMatchObject({ message: "CLASS_NOT_FOUND" });
+    expect(error).not.toBeInstanceOf(ConflictException);
+  });
+
+  it("profil güncellemede silinmiş öğrencinin TC'sini 409 ile reddeder; öğrencinin kendi TC'sini yeniden kaydetmeye izin verir", async () => {
+    const setup = createService();
+    const [removed] = await setup.studentStore.createMany([{
+      tenantId: "tenant-a", firstName: "Eski", lastName: "Kayıt", nationalIdHash: hashTcIdentity("10000000146"),
+    }]);
+    await setup.studentStore.softDelete(removed!.id, "2026-10-01T00:00:00.000Z");
+    const student = await setup.service.create(adminContext, {
+      firstName: "Ada", lastName: "Kaya", gradeLevelId: "grade-8", nationalId: "10000000147",
+    });
+    setup.auditRecords.length = 0;
+    const updateProfile = vi.spyOn(setup.studentStore, "updateProfile");
+
+    await expect(setup.service.updateProfile(adminContext, student.id, { nationalId: "10000000146", phone: "5551234567" }))
+      .rejects.toMatchObject({ status: 409, message: "STUDENT_NATIONAL_ID_CONFLICT" });
+    expect(updateProfile).not.toHaveBeenCalled();
+    expect(setup.auditRecords).toEqual([]);
+    const profile = await setup.studentStore.findProfileById(student.id);
+    expect(profile).toMatchObject({ nationalIdHash: hashTcIdentity("10000000147") });
+    expect(profile).not.toHaveProperty("phone");
+
+    await expect(setup.service.updateProfile(adminContext, student.id, { nationalId: "10000000147", phone: "5551234567" }))
+      .resolves.toMatchObject({ id: student.id });
+    await expect(setup.studentStore.findProfileById(student.id)).resolves.toMatchObject({
+      nationalIdHash: hashTcIdentity("10000000147"), phone: "5551234567",
+    });
+  });
+
+  it("profil güncellemede ön kontrolden sonra çakışan TC'yi (yarış) 409'a çevirir", async () => {
+    const setup = createService();
+    const student = await setup.service.create(adminContext, { firstName: "Ada", lastName: "Kaya", gradeLevelId: "grade-8" });
+    await setup.studentStore.create({ tenantId: "tenant-a", firstName: "Önce", lastName: "Gelen", nationalIdHash: hashTcIdentity("10000000146") });
+    vi.spyOn(setup.studentStore, "findExistingNationalIdHashes").mockResolvedValue([]);
+    setup.auditRecords.length = 0;
+
+    await expect(setup.service.updateProfile(adminContext, student.id, { nationalId: "10000000146" }))
+      .rejects.toMatchObject({ status: 409, message: "STUDENT_NATIONAL_ID_CONFLICT" });
+    expect(setup.auditRecords).toEqual([]);
+    await expect(setup.studentStore.findProfileById(student.id)).resolves.not.toHaveProperty("nationalIdHash");
   });
 
   it("içe aktarma TC aramasında silinmiş öğrencileri de kayıtlı sayar", async () => {

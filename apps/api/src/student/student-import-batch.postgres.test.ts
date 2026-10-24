@@ -57,6 +57,7 @@ describePostgres("student import batch on PostgreSQL", () => {
     },
   };
   const service = buildImportService(faultyPool as never);
+  const students = buildStudentService(faultyPool as never);
 
   beforeAll(async () => {
     await cleanup(admin);
@@ -217,6 +218,84 @@ describePostgres("student import batch on PostgreSQL", () => {
     expect(keys.rows).toHaveLength(1);
   });
 
+  // DEC-20261021-02 (c): single create and profile update use the same TC rule as the import (soft-deleted rows count).
+  it("tekli kayıtta silinmiş öğrencide kayıtlı TC'yi yazımdan önce 409 ile reddeder; hiçbir satır ve idempotency kaydı bırakmaz", async () => {
+    await seedSoftDeletedStudentWithTc(admin, tenantA, "a-single-deleted", "920", "10000009201");
+    const before = await countTenantRows(admin, tenantA);
+
+    await expect(createAs(tenantA, { firstName: "Tek", lastName: "Kayıt", gradeLevelId: `grade-${tenantA}`, nationalId: "10000009201", phone: "5559201000" }, "single-deleted-tc-a"))
+      .rejects.toMatchObject({ status: 409, message: "STUDENT_NATIONAL_ID_CONFLICT" });
+    await expect(countTenantRows(admin, tenantA)).resolves.toEqual(before);
+    const keys = await admin.query(`SELECT 1 FROM "IdempotencyKey" WHERE "tenantId" = $1 AND "key" = 'single-deleted-tc-a'`, [tenantA]);
+    expect(keys.rows).toHaveLength(0);
+  });
+
+  it("tekli kayıt TC, telefon ve e-postayı öğrenci satırıyla aynı transaction'da yazar", async () => {
+    const student = await createAs(tenantA, {
+      firstName: "Profil", lastName: "Tek", gradeLevelId: `grade-${tenantA}`, classId: `class-${tenantA}`,
+      nationalId: "10000009211", phone: "5559211000", email: "profil@example.test",
+    }, "single-profile-a");
+    expect(student).not.toHaveProperty("nationalIdHash");
+    const stored = await admin.query<{ nationalIdEncrypted: string; nationalIdHash: string; phone: string; email: string }>(
+      `SELECT "nationalIdEncrypted", "nationalIdHash", "phone", "email" FROM "Student" WHERE "id" = $1`,
+      [student.id],
+    );
+    expect(stored.rows[0]).toMatchObject({ nationalIdHash: hashTcIdentity("10000009211"), phone: "5559211000", email: "profil@example.test" });
+    expect(decryptTcIdentity(stored.rows[0]!.nationalIdEncrypted)).toBe("10000009211");
+    const enrollments = await admin.query(`SELECT 1 FROM "StudentEnrollment" WHERE "studentId" = $1`, [student.id]);
+    expect(enrollments.rows).toHaveLength(1);
+  });
+
+  it("tekli kayıtta ön kontrolden sonra aynı TC yazılırsa unique ihlalini 409'a çevirir ve öğrenci ile kaydı geri alır", async () => {
+    const before = await countTenantRows(admin, tenantA);
+    fault.before = {
+      sqlIncludes: 'INSERT INTO "Student" (',
+      run: () => seedSoftDeletedStudentWithTc(admin, tenantA, "a-single-race", "930", "10000009301"),
+    };
+
+    await expect(createAs(tenantA, { firstName: "Yarış", lastName: "Tek", gradeLevelId: `grade-${tenantA}`, nationalId: "10000009301" }, "single-race-tc-a"))
+      .rejects.toMatchObject({ status: 409, message: "STUDENT_NATIONAL_ID_CONFLICT" });
+    await expect(countTenantRows(admin, tenantA)).resolves.toEqual(before);
+    const keys = await admin.query(`SELECT 1 FROM "IdempotencyKey" WHERE "tenantId" = $1 AND "key" = 'single-race-tc-a'`, [tenantA]);
+    expect(keys.rows).toHaveLength(0);
+  });
+
+  it("profil güncellemede silinmiş öğrencinin TC'sini ve yarışta yazılan TC'yi 409 ile reddeder; satırı değiştirmez", async () => {
+    const student = await createAs(tenantA, { firstName: "Güncel", lastName: "Tek", gradeLevelId: `grade-${tenantA}`, nationalId: "10000009401" }, "single-update-a");
+    await seedSoftDeletedStudentWithTc(admin, tenantA, "a-update-deleted", "940", "10000009402");
+    const snapshot = () => admin.query(`SELECT "nationalIdHash", "phone", "updatedAt" FROM "Student" WHERE "id" = $1`, [student.id]).then((result) => result.rows);
+    const before = await snapshot();
+    const auditsBefore = (await countTenantRows(admin, tenantA))!.audits;
+
+    await expect(updateProfileAs(tenantA, student.id, { nationalId: "10000009402", phone: "5559402000" }))
+      .rejects.toMatchObject({ status: 409, message: "STUDENT_NATIONAL_ID_CONFLICT" });
+    await expect(snapshot()).resolves.toEqual(before);
+
+    fault.before = {
+      sqlIncludes: 'SET "nationalIdEncrypted" = COALESCE',
+      run: () => seedSoftDeletedStudentWithTc(admin, tenantA, "a-update-race", "941", "10000009403"),
+    };
+    await expect(updateProfileAs(tenantA, student.id, { nationalId: "10000009403" }))
+      .rejects.toMatchObject({ status: 409, message: "STUDENT_NATIONAL_ID_CONFLICT" });
+    await expect(snapshot()).resolves.toEqual(before);
+    await expect(countTenantRows(admin, tenantA).then((counts) => counts!.audits)).resolves.toBe(auditsBefore);
+
+    await expect(updateProfileAs(tenantA, student.id, { nationalId: "10000009401", phone: "5559401000" }))
+      .resolves.toMatchObject({ id: student.id });
+    const after = await admin.query(`SELECT "nationalIdHash", "phone" FROM "Student" WHERE "id" = $1`, [student.id]);
+    expect(after.rows[0]).toEqual({ nationalIdHash: hashTcIdentity("10000009401"), phone: "5559401000" });
+  });
+
+  function createAs(tenantId: string, input: Parameters<StudentService["create"]>[1], key: string) {
+    const context = staffContext(tenantId);
+    return runWithRequestContext(context, () => students.create(context, input, key));
+  }
+
+  function updateProfileAs(tenantId: string, id: string, input: Parameters<StudentService["updateProfile"]>[2]) {
+    const context = staffContext(tenantId);
+    return runWithRequestContext(context, () => students.updateProfile(context, id, input));
+  }
+
   function importAs(tenantId: string, fileBase64: string, key: string) {
     const context = staffContext(tenantId);
     return runWithRequestContext(context, () => service.import(context, { fileBase64 }, key));
@@ -226,9 +305,21 @@ describePostgres("student import batch on PostgreSQL", () => {
 function buildImportService(pool: never): StudentImportService {
   const classStore = new PostgresClassStore(pool);
   const gradeLevelStore = new PostgresGradeLevelStore(pool);
+  const idempotency = new IdempotencyService(new PostgresIdempotencyStore(pool));
+  const students = buildStudentService(pool);
+  const school = {
+    listClasses: async () => (await classStore.list()).filter((record) => !record.deletedAt),
+    listGradeLevels: async () => (await gradeLevelStore.list()).filter((record) => !record.deletedAt),
+  };
+  return new StudentImportService(students, school as unknown as SchoolService, idempotency);
+}
+
+function buildStudentService(pool: never): StudentService {
+  const classStore = new PostgresClassStore(pool);
+  const gradeLevelStore = new PostgresGradeLevelStore(pool);
   const auditLogs = new AuditLogService(new PostgresAuditLogStore(pool));
   const idempotency = new IdempotencyService(new PostgresIdempotencyStore(pool));
-  const students = new StudentService(
+  return new StudentService(
     new PostgresStudentStore(pool),
     new PostgresGuardianStudentStore(pool),
     {} as never,
@@ -246,11 +337,6 @@ function buildImportService(pool: never): StudentImportService {
     undefined,
     new PostgresStudentContactStore(pool),
   );
-  const school = {
-    listClasses: async () => (await classStore.list()).filter((record) => !record.deletedAt),
-    listGradeLevels: async () => (await gradeLevelStore.list()).filter((record) => !record.deletedAt),
-  };
-  return new StudentImportService(students, school as unknown as SchoolService, idempotency);
 }
 
 function staffContext(tenantId: string): RequestContext {

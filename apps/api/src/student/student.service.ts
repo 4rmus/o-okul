@@ -64,6 +64,7 @@ import {
   type StudentImportBatchAudit,
   type StudentImportBatchRow,
   type StudentPortalAccessQuery,
+  type StudentProfileStorageRecord,
   type StudentProfileUpdate,
   type StudentRegistryQuery,
   type StudentStore,
@@ -436,8 +437,9 @@ export class StudentService {
     if (input.nationalId !== undefined) {
       const nationalId = normalizeTcIdentity(input.nationalId);
       const nationalIdHash = hashTcIdentity(nationalId);
-      const duplicate = await this.store.findByNationalIdHash(student.tenantId, nationalIdHash);
-      if (duplicate && duplicate.id !== student.id) {
+      // Soft-deleted students count: `Student_tenantId_nationalIdHash_key` keeps their hash. Only this student may hold it.
+      if ((await this.store.findExistingNationalIdHashes(student.tenantId, [nationalIdHash], { includeDeleted: true })).length > 0
+        && (await this.store.findProfileById(student.id))?.nationalIdHash !== nationalIdHash) {
         throw new ConflictException("STUDENT_NATIONAL_ID_CONFLICT");
       }
 
@@ -445,7 +447,12 @@ export class StudentService {
       profileUpdate.nationalIdHash = nationalIdHash;
     }
 
-    const updated = await this.store.updateProfile(id, profileUpdate);
+    let updated: StudentProfileStorageRecord | undefined;
+    try {
+      updated = await this.store.updateProfile(id, profileUpdate);
+    } catch (error) {
+      throw toStudentUniqueConflictException(error);
+    }
     if (!updated) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
@@ -511,9 +518,11 @@ export class StudentService {
     await this.assertStudentRelationTargets(context, tenantId, {
       responsibleTeacherId: input.responsibleTeacherId,
     });
-    const profileUpdate = await this.resolveProfileUpdateForCreate(tenantId, input, new Set());
+    const profile = await this.resolveProfileUpdateForCreate(tenantId, input, new Set());
 
+    // Profile PII goes into the student INSERT itself: no post-commit profile write (DEC-20261021-02 (c)).
     const studentInput = {
+      ...profile,
       tenantId,
       studentNo: input.studentNo,
       firstName: input.firstName ?? "",
@@ -535,16 +544,13 @@ export class StudentService {
         reason: "CREATED",
       };
       if (this.store.createWithEnrollment) {
-        student = await this.store.createWithEnrollment(studentInput, enrollment);
+        student = await this.createStudentRow(() => this.store.createWithEnrollment!(studentInput, enrollment));
       } else {
-        student = await this.store.create(studentInput);
+        student = await this.createStudentRow(() => this.store.create(studentInput));
         await this.enrollmentStore.create({ tenantId: student.tenantId, studentId: student.id, ...enrollment });
       }
     } else {
-      student = await this.store.create(studentInput);
-    }
-    if (profileUpdate) {
-      await this.store.updateProfile(student.id, profileUpdate);
+      student = await this.createStudentRow(() => this.store.create(studentInput));
     }
     await this.autoProvisionStudentAccount(context, student, input);
     await this.auditLogs?.record({
@@ -1393,12 +1399,21 @@ export class StudentService {
 
 
 
+  /** Race safety: a unique violation that slipped past the pre-check becomes the same 409 as the pre-check. */
+  private async createStudentRow(create: () => Promise<StudentRecord>): Promise<StudentRecord> {
+    try {
+      return await create();
+    } catch (error) {
+      throw toStudentUniqueConflictException(error);
+    }
+  }
+
   private async resolveProfileUpdateForCreate(
     tenantId: string,
     input: StudentBulkCreateInput,
     seenNationalIdHashes: Set<string>,
-  ): Promise<StudentProfileUpdate | undefined> {
-    const profileUpdate: StudentProfileUpdate = {};
+  ): Promise<Pick<StudentProfileUpdate, "nationalIdEncrypted" | "nationalIdHash" | "phone" | "email"> | undefined> {
+    const profileUpdate: Pick<StudentProfileUpdate, "nationalIdEncrypted" | "nationalIdHash" | "phone" | "email"> = {};
     let hasUpdate = false;
 
     if (input.phone !== undefined) {
@@ -1422,8 +1437,8 @@ export class StudentService {
       if (seenNationalIdHashes.has(nationalIdHash)) {
         throw new ConflictException("STUDENT_NATIONAL_ID_CONFLICT");
       }
-      const duplicate = await this.store.findByNationalIdHash(tenantId, nationalIdHash);
-      if (duplicate) {
+      // Soft-deleted students count, like `Student_tenantId_nationalIdHash_key` and the import.
+      if ((await this.store.findExistingNationalIdHashes(tenantId, [nationalIdHash], { includeDeleted: true })).length > 0) {
         throw new ConflictException("STUDENT_NATIONAL_ID_CONFLICT");
       }
       seenNationalIdHashes.add(nationalIdHash);
@@ -1688,6 +1703,18 @@ function resolveBulkProfile(
     profile.nationalIdHash = nationalIdHash;
   }
   return profile;
+}
+
+/** Single create and profile update: only the unique-index conflict sentinels become 409; anything else passes through. */
+function toStudentUniqueConflictException(error: unknown): unknown {
+  if (!(error instanceof Error) || error instanceof HttpException) return error;
+  switch (error.message) {
+    case studentImportBatchErrors.nationalIdConflict:
+    case studentImportBatchErrors.studentNoConflict:
+      return new ConflictException(error.message);
+    default:
+      return error;
+  }
 }
 
 function toStudentImportBatchException(error: unknown): unknown {
