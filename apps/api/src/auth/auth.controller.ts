@@ -253,10 +253,13 @@ export class AuthController {
     @Headers("x-csrf-token") csrfHeader: string | undefined,
     @Res({ passthrough: true }) response: Response,
   ) {
-    assertCsrfToken(cookieHeader, csrfHeader);
-    await this.auth.logout(readRefreshCookie(cookieHeader));
+    // The browser loses its refresh and CSRF cookies even when the logout is refused (403 CSRF) or fails (5xx): the
+    // Set-Cookie headers stay on the error response, so no later page load can resume the session the user ended.
+    // Revoking the server session stays behind the CSRF check; a forged cross-site logout can at most clear cookies.
     response.clearCookie(refreshCookieName, refreshCookieOptions);
     response.clearCookie(csrfCookieName, csrfCookieOptions);
+    assertCsrfToken(cookieHeader, csrfHeader);
+    await this.auth.logout(readRefreshCookie(cookieHeader));
   }
 
   @Post("password-reset/request")

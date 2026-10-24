@@ -12,6 +12,7 @@ import { appBrand } from "../../src/brand.js";
 import { ApiRequestError, getTenantLoginContext, MfaEnrollmentRequiredError, MfaRequiredError, TenantSelectionRequiredError } from "../../src/api-client.js";
 import { useActivationNotice } from "./activation-notice.js";
 import { ContactSupportLink } from "./contact-support-link.js";
+import { LogoutPendingNotice } from "./logout-pending-notice.js";
 
 // DEC-20261021-01: after a support MFA reset the enrollment also needs the one-time code read over the phone.
 const mfaResetExpiredMessage = "MFA sıfırlamasının 24 saatlik süresi doldu. Yeni kayıt kodu için O-Okul desteğine başvurun.";
@@ -143,6 +144,7 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
         {activationNotice && !pendingMfa && !pendingEnrollment && !pendingTenantSelection ? (
           <p className="next-status-note" role="status">{activationNotice}</p>
         ) : null}
+        <LogoutPendingNotice />
         {!lockedTenantSlug ? (
           <Field label="Kurum Kodu">
             <Input

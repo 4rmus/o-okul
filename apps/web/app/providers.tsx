@@ -22,12 +22,15 @@ import {
   switchPersona as requestSwitchPersona,
   verifyMfa as requestVerifyMfa,
 } from "../src/api-client.js";
+import { clearLogoutPendingFlag, hasLogoutPendingFlag } from "../src/logout-pending.js";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ToastProvider, useToast } from "@o-okul/ui";
 
 interface AuthStore {
   auth: AuthResponse | null;
   isBootstrapping: boolean;
+  /** True while the last logout (or the login page's retry) was not confirmed by the server; its session may survive. */
+  logoutPending: boolean;
   login(credentials: LoginRequest): Promise<void>;
   selectTenant(selectionToken: string, tenantId: string): Promise<void>;
   changePassword(input: MePasswordChangeRequest): Promise<void>;
@@ -43,11 +46,29 @@ const AuthContext = createContext<AuthStore | null>(null);
 export function Providers({ children }: { children: ReactNode }) {
   const [auth, setAuth] = useState<AuthResponse | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [logoutPending, setLogoutPending] = useState(false);
 
   useEffect(() => {
     if (!hasCookie("csrfToken")) {
+      // Without the CSRF cookie the surviving refresh cookie cannot be used from this browser.
+      clearLogoutPendingFlag();
       setAuth(null);
       setIsBootstrapping(false);
+      return;
+    }
+
+    // A logout the server did not confirm: retry it instead of refreshing back into the session the user ended.
+    if (hasLogoutPendingFlag()) {
+      requestLogout()
+        .then(() => true, () => !hasCookie("csrfToken"))
+        .then((confirmed) => {
+          setLogoutPending(!confirmed);
+          if (confirmed) clearLogoutPendingFlag();
+        })
+        .finally(() => {
+          setAuth(null);
+          setIsBootstrapping(false);
+        });
       return;
     }
 
@@ -57,21 +78,28 @@ export function Providers({ children }: { children: ReactNode }) {
       .finally(() => setIsBootstrapping(false));
   }, []);
 
-  const value = useMemo<AuthStore>(
-    () => ({
+  const value = useMemo<AuthStore>(() => {
+    // A new sign-in replaces the browser's refresh cookie, so an earlier unconfirmed logout no longer applies here.
+    function acceptSignIn(next: AuthResponse) {
+      setLogoutPending(false);
+      setAuth(next);
+    }
+
+    return {
       auth,
       isBootstrapping,
+      logoutPending,
       async login(credentials: LoginRequest) {
-        setAuth(await requestLogin(credentials));
+        acceptSignIn(await requestLogin(credentials));
       },
       async selectTenant(selectionToken, tenantId) {
-        setAuth(await requestSelectTenant(selectionToken, tenantId));
+        acceptSignIn(await requestSelectTenant(selectionToken, tenantId));
       },
       async verifyMfa(challengeToken, input) {
-        setAuth(await requestVerifyMfa(challengeToken, input));
+        acceptSignIn(await requestVerifyMfa(challengeToken, input));
       },
       async confirmMfaEnrollment(setupToken, totpCode, reenrollmentCode) {
-        setAuth(await requestConfirmMfaEnrollment(setupToken, totpCode, reenrollmentCode));
+        acceptSignIn(await requestConfirmMfaEnrollment(setupToken, totpCode, reenrollmentCode));
       },
       async changePassword(input) {
         if (!auth) throw new Error("AUTH_REQUIRED");
@@ -86,13 +114,16 @@ export function Providers({ children }: { children: ReactNode }) {
         setAuth(nextAuth);
       },
       async logout() {
-        const confirmed = await requestLogout().then(() => true, () => false);
+        // The API clears the refresh and CSRF cookies even on a refused logout; without the CSRF cookie this browser
+        // cannot refresh into the old session, so the logout counts as done instead of retrying into 403s.
+        const confirmed = await requestLogout().then(() => true, () => !hasCookie("csrfToken"));
+        setLogoutPending(!confirmed);
+        if (confirmed) clearLogoutPendingFlag();
         setAuth(null);
         return confirmed;
       },
-    }),
-    [auth, isBootstrapping],
-  );
+    };
+  }, [auth, isBootstrapping, logoutPending]);
 
   return (
     <QueryClientProvider client={queryClient}>

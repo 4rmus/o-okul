@@ -61,6 +61,23 @@ describe("StudentImportService Gate D", () => {
     expect(inputs.every((input) => !("guardian" in input))).toBe(true);
   });
 
+  it("TC ve telefonlu satırda ön izleme hesap önizlemesi taşımaz; toplu aktarım portal hesabı açmaz", async () => {
+    const { service, students } = createService();
+    const fileBase64 = csv([
+      "ad;soyad;seviye;tc;telefon",
+      "Hesap;Ogrenci;8. Sınıf;10000000146;05551234567",
+    ].join("\n"));
+
+    const preview = await service.dryRun(context, { fileBase64 });
+    expect(preview.validRows).toHaveLength(1);
+    expect(preview.validRows[0]).not.toHaveProperty("accountPreview");
+    expect(JSON.stringify(preview)).not.toContain("willCreate");
+
+    await service.import(context, { fileBase64 }, "no-account-preview-a");
+    const [, inputs] = students.createMany.mock.calls[0] as unknown as [RequestContext, Array<Record<string, unknown>>];
+    expect(inputs[0]).not.toHaveProperty("accountPreview");
+  });
+
   it("aynı satırda veli ve iletişim sütunları doluysa satırı commit öncesinde reddeder", async () => {
     const { service, students } = createService();
     const fileBase64 = csv([

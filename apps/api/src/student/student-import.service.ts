@@ -10,7 +10,7 @@ import { SchoolService } from "../school/school.service.js";
 import { type ClassRecord, normalizeClassName } from "../school/class-store.js";
 import type { GradeLevelRecord } from "../school/grade-level-store.js";
 import { StudentService, type StudentRecord } from "./student.service.js";
-import { maskTcIdentity, normalizeTcIdentity } from "./tc-identity.js";
+import { normalizeTcIdentity } from "./tc-identity.js";
 import type {
   PublicStudentRecord,
   StudentExportResult,
@@ -416,12 +416,6 @@ export class StudentImportService {
           });
         }
         seenNationalIds.add(row.nationalId);
-      }
-      if (row.nationalId && row.phone && identityValid) {
-        row.accountPreview = {
-          usernameMasked: maskTcIdentity(row.nationalId),
-          willCreate: true,
-        };
       }
       if (row.contactColumnsConflict) {
         errors.push({ row: row.row, field: "guardian", code: "CONTACT_COLUMNS_CONFLICT" });

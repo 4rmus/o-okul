@@ -7,6 +7,7 @@ import type { MeSessionRecord, MeSessionRevokeAllResponse } from "@o-okul/shared
 import { Button, DataTable, Panel, StatusBadge, useConfirmDialog, type DataTableColumn } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { loginPathAfterLogout } from "../../../../src/logout-pending.js";
 import { PageFrame } from "../../_shared/page-frame.js";
 
 export function SessionsPage() {
@@ -136,8 +137,8 @@ export function SessionsPage() {
   }
 
   async function leaveApplication() {
-    await logout();
-    router.replace("/login");
+    const confirmed = await logout();
+    router.replace(loginPathAfterLogout("/login", !confirmed));
   }
 
   return (

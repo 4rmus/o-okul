@@ -30,7 +30,10 @@ import {
 } from "../listing/cursor-pagination.js";
 
 type StudentInput = Omit<StudentRecord, "id" | "status"> & Partial<Pick<StudentRecord, "status" | "studentNo">>;
-/** A bulk-created student with the profile columns written in the same insert (no post-commit profile update). */
+/**
+ * A created student with the profile columns written in the same insert (no post-commit profile update).
+ * Used by the bulk import and by single `POST /students` (DEC-20261021-02 open question (c)).
+ */
 export type StudentCreateManyInput = StudentInput & Pick<StudentProfileUpdate, "nationalIdEncrypted" | "nationalIdHash" | "phone" | "email">;
 const studentNoStart = 100;
 /** Rows per multi-row INSERT; every unnest() array parameter stays at or below this length. */
@@ -173,10 +176,11 @@ export interface StudentStore {
   findByUserId(tenantId: string, userId: string): Promise<StudentRecord | undefined>;
   findByNationalIdHash(tenantId: string, nationalIdHash: string): Promise<StudentProfileStorageRecord | undefined>;
   updateGradeLevelForClass(classId: string, gradeLevelId: string | undefined): Promise<number>;
-  create(input: StudentInput): Promise<StudentRecord>;
+  /** Throws the `studentImportBatchErrors` conflict sentinels when a unique index rejects the row. */
+  create(input: StudentCreateManyInput): Promise<StudentRecord>;
   createMany(inputs: StudentCreateManyInput[]): Promise<StudentRecord[]>;
   createWithEnrollment?(
-    input: StudentInput,
+    input: StudentCreateManyInput,
     enrollment: Omit<StudentEnrollmentInput, "tenantId" | "studentId">,
   ): Promise<StudentRecord>;
   /**
@@ -190,6 +194,7 @@ export interface StudentStore {
     transition: StudentEnrollmentTransition,
   ): Promise<StudentEnrollmentTransitionResult | undefined>;
   update(id: string, input: Partial<Pick<StudentRecord, "firstName" | "lastName" | "gradeLevelId" | "classId" | "responsibleTeacherId" | "status">>): Promise<StudentRecord | undefined>;
+  /** Throws `studentImportBatchErrors.nationalIdConflict` when `Student_tenantId_nationalIdHash_key` rejects the hash. */
   updateProfile(id: string, input: StudentProfileUpdate): Promise<StudentProfileStorageRecord | undefined>;
   bindUser(tenantId: string, id: string, userId: string): Promise<StudentRecord | undefined>;
   /** Clears the account link only while it still points at userId (invitation accept rollback). */
@@ -342,16 +347,20 @@ export class InMemoryStudentStore implements StudentStore {
     return this.students.find((candidate) => candidate.tenantId === tenantId && candidate.nationalIdHash === nationalIdHash && !candidate.deletedAt);
   }
 
-  async create(input: StudentInput): Promise<StudentRecord> {
+  async create(input: StudentCreateManyInput): Promise<StudentRecord> {
+    // Same rule as Student_tenantId_nationalIdHash_key: soft-deleted rows keep their hash.
+    if (input.nationalIdHash && this.students.some((candidate) => candidate.tenantId === input.tenantId && candidate.nationalIdHash === input.nationalIdHash)) {
+      throw new Error(studentImportBatchErrors.nationalIdConflict);
+    }
     const studentNo = normalizeStudentNo(input.studentNo) ?? this.nextStudentNo(input.tenantId);
-    const student = {
+    const student: StudentProfileStorageRecord = {
       id: `student-${this.students.length + 1}`,
       status: "ACTIVE" as const,
       ...input,
       studentNo,
     };
     this.students.push(student);
-    return student;
+    return withoutProfileFields(student);
   }
 
   async createMany(inputs: StudentCreateManyInput[]): Promise<StudentRecord[]> {
@@ -416,6 +425,10 @@ export class InMemoryStudentStore implements StudentStore {
   async updateProfile(id: string, input: StudentProfileUpdate): Promise<StudentProfileStorageRecord | undefined> {
     const student = await this.findProfileById(id);
     if (!student) return undefined;
+    if (input.nationalIdHash !== undefined && this.students.some((candidate) => candidate !== student
+      && candidate.tenantId === student.tenantId && candidate.nationalIdHash === input.nationalIdHash)) {
+      throw new Error(studentImportBatchErrors.nationalIdConflict);
+    }
 
     if (input.nationalIdEncrypted !== undefined) student.nationalIdEncrypted = input.nationalIdEncrypted;
     if (input.nationalIdHash !== undefined) student.nationalIdHash = input.nationalIdHash;
@@ -870,21 +883,29 @@ export class PostgresStudentStore implements StudentStore {
     });
   }
 
-  async create(input: StudentInput): Promise<StudentRecord> {
-    return withTenantQuery(this.pool, async (client) => {
-      return insertStudent(client, input);
-    });
+  async create(input: StudentCreateManyInput): Promise<StudentRecord> {
+    try {
+      return await withTenantQuery(this.pool, async (client) => {
+        return insertStudent(client, input);
+      });
+    } catch (error) {
+      throw translateStudentUniqueViolation(error);
+    }
   }
 
   async createWithEnrollment(
-    input: StudentInput,
+    input: StudentCreateManyInput,
     enrollment: Omit<StudentEnrollmentInput, "tenantId" | "studentId">,
   ): Promise<StudentRecord> {
-    return withTenantQuery(this.pool, async (client) => {
-      const student = await insertStudent(client, input);
-      await insertEnrollment(client, student, enrollment);
-      return student;
-    });
+    try {
+      return await withTenantQuery(this.pool, async (client) => {
+        const student = await insertStudent(client, input);
+        await insertEnrollment(client, student, enrollment);
+        return student;
+      });
+    } catch (error) {
+      throw translateStudentUniqueViolation(error);
+    }
   }
 
   async importBatch(input: StudentImportBatchInput): Promise<StudentRecord[]> {
@@ -900,7 +921,7 @@ export class PostgresStudentStore implements StudentStore {
         return importStudentBatch(client, input);
       });
     } catch (error) {
-      throw translateStudentImportBatchError(error);
+      throw translateStudentUniqueViolation(error);
     }
   }
 
@@ -979,32 +1000,36 @@ export class PostgresStudentStore implements StudentStore {
     const existing = await this.findById(id);
     if (!existing) return undefined;
 
-    return withTenantQuery(this.pool, async (client) => {
-      const result = await client.query<StudentRow>(
-        `UPDATE "Student"
-         SET "nationalIdEncrypted" = COALESCE($2, "nationalIdEncrypted"),
-             "nationalIdHash" = COALESCE($3, "nationalIdHash"),
-             "phone" = CASE WHEN $4 THEN $5 ELSE "phone" END,
-             "email" = CASE WHEN $6 THEN $7 ELSE "email" END,
-             "photoKey" = CASE WHEN $8 THEN $9 ELSE "photoKey" END,
-             "updatedAt" = now()
-         WHERE "id" = $1
-           AND "deletedAt" IS NULL
-         RETURNING *`,
-        [
-          id,
-          input.nationalIdEncrypted ?? null,
-          input.nationalIdHash ?? null,
-          input.phone !== undefined,
-          input.phone ?? null,
-          input.email !== undefined,
-          input.email ?? null,
-          input.photoKey !== undefined,
-          input.photoKey ?? null,
-        ],
-      );
-      return result.rows[0] ? toStudentProfileStorageRecord(result.rows[0]) : undefined;
-    });
+    try {
+      return await withTenantQuery(this.pool, async (client) => {
+        const result = await client.query<StudentRow>(
+          `UPDATE "Student"
+           SET "nationalIdEncrypted" = COALESCE($2, "nationalIdEncrypted"),
+               "nationalIdHash" = COALESCE($3, "nationalIdHash"),
+               "phone" = CASE WHEN $4 THEN $5 ELSE "phone" END,
+               "email" = CASE WHEN $6 THEN $7 ELSE "email" END,
+               "photoKey" = CASE WHEN $8 THEN $9 ELSE "photoKey" END,
+               "updatedAt" = now()
+           WHERE "id" = $1
+             AND "deletedAt" IS NULL
+           RETURNING *`,
+          [
+            id,
+            input.nationalIdEncrypted ?? null,
+            input.nationalIdHash ?? null,
+            input.phone !== undefined,
+            input.phone ?? null,
+            input.email !== undefined,
+            input.email ?? null,
+            input.photoKey !== undefined,
+            input.photoKey ?? null,
+          ],
+        );
+        return result.rows[0] ? toStudentProfileStorageRecord(result.rows[0]) : undefined;
+      });
+    } catch (error) {
+      throw translateStudentUniqueViolation(error);
+    }
   }
 
   async bindUser(tenantId: string, id: string, userId: string): Promise<StudentRecord | undefined> {
@@ -1672,12 +1697,18 @@ function chunkIndexes(length: number): number[][] {
   return chunks;
 }
 
-function translateStudentImportBatchError(error: unknown): unknown {
+/** Maps a unique violation on the student indexes to the conflict sentinels; anything else passes through. */
+function translateStudentUniqueViolation(error: unknown): unknown {
   const candidate = error as { code?: unknown; constraint?: unknown } | null;
   if (candidate?.code !== "23505") return error;
   if (candidate.constraint === "Student_tenantId_nationalIdHash_key") return new Error(studentImportBatchErrors.nationalIdConflict);
   if (candidate.constraint === "Student_tenantId_studentNo_active_key") return new Error(studentImportBatchErrors.studentNoConflict);
   return error;
+}
+
+function withoutProfileFields(student: StudentProfileStorageRecord): StudentRecord {
+  const { nationalIdEncrypted: _nationalIdEncrypted, nationalIdHash: _nationalIdHash, phone: _phone, email: _email, photoKey: _photoKey, ...record } = student;
+  return record;
 }
 
 function normalizeStudentNo(value: string | undefined): string | undefined {
