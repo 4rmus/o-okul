@@ -5,12 +5,13 @@ import { useRouter } from "next/navigation";
 import { Button, Field, Input } from "@o-okul/ui";
 import { isFinanceOnlyStaff, type AuthResponse } from "@o-okul/shared-types";
 import { appBrand } from "../../../src/brand.js";
+import { loginPathAfterLogout } from "../../../src/logout-pending.js";
 import { useAuth } from "../../providers.js";
 import { ContactSupportLink } from "../contact-support-link.js";
 
 export default function ChangePasswordPage() {
   const router = useRouter();
-  const { auth, changePassword, isBootstrapping, logout } = useAuth();
+  const { auth, changePassword, isBootstrapping, logout, logoutPending } = useAuth();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newPasswordAgain, setNewPasswordAgain] = useState("");
@@ -20,13 +21,13 @@ export default function ChangePasswordPage() {
   useEffect(() => {
     if (isBootstrapping) return;
     if (!auth) {
-      router.replace("/login");
+      router.replace(loginPathAfterLogout("/login", logoutPending));
       return;
     }
     if (!auth.session.mustChangePassword) {
       router.replace(getAuthHomePath(auth));
     }
-  }, [auth, isBootstrapping, router]);
+  }, [auth, isBootstrapping, logoutPending, router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

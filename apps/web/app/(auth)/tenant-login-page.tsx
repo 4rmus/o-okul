@@ -10,6 +10,7 @@ import { Button, Field, Input, SegmentedControl, Select } from "@o-okul/ui";
 import { useAuth } from "../providers.js";
 import { appBrand } from "../../src/brand.js";
 import { ApiRequestError, getTenantLoginContext, MfaEnrollmentRequiredError, MfaRequiredError, TenantSelectionRequiredError } from "../../src/api-client.js";
+import { logoutPendingMessage } from "../../src/logout-pending.js";
 import { useActivationNotice } from "./activation-notice.js";
 import { ContactSupportLink } from "./contact-support-link.js";
 
@@ -29,7 +30,7 @@ interface TenantLoginPageProps {
 
 export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost = false }: TenantLoginPageProps) {
   const router = useRouter();
-  const { auth, confirmMfaEnrollment, isBootstrapping, login, selectTenant, verifyMfa } = useAuth();
+  const { auth, confirmMfaEnrollment, isBootstrapping, login, logout, logoutPending, selectTenant, verifyMfa } = useAuth();
   const lockedTenantSlug = initialTenantSlug?.trim() ?? "";
   const [tenantSlug, setTenantSlug] = useState(lockedTenantSlug);
   const [loginName, setLoginName] = useState("");
@@ -46,6 +47,8 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tenantContext, setTenantContext] = useState<TenantLoginContextResponse | null>(null);
   const activationNotice = useActivationNotice();
+  const [isRetryingLogout, setIsRetryingLogout] = useState(false);
+  const [logoutRetryNote, setLogoutRetryNote] = useState("");
 
   useEffect(() => {
     if (!isBootstrapping && auth) {
@@ -113,6 +116,17 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
     }
   }
 
+  // The user tried to end a session the server did not confirm; the page retries instead of resuming it.
+  async function retryLogout() {
+    setIsRetryingLogout(true);
+    setLogoutRetryNote("");
+    try {
+      setLogoutRetryNote(await logout() ? "Oturumunuz kapatıldı." : "Çıkış yine tamamlanamadı. Bağlantınızı kontrol edip tekrar deneyin.");
+    } finally {
+      setIsRetryingLogout(false);
+    }
+  }
+
   function resetTenantSelection() {
     setPendingTenantSelection(null);
     setSelectedTenantId("");
@@ -142,6 +156,17 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
         <h1 id="login-title">Giriş</h1>
         {activationNotice && !pendingMfa && !pendingEnrollment && !pendingTenantSelection ? (
           <p className="next-status-note" role="status">{activationNotice}</p>
+        ) : null}
+        {logoutPending && !auth ? (
+          <div className="next-form-section">
+            <p className="next-form-error" role="alert">{logoutPendingMessage}</p>
+            {logoutRetryNote ? <p className="next-status-note" role="status">{logoutRetryNote}</p> : null}
+            <Button type="button" variant="secondary" disabled={isBootstrapping} loading={isRetryingLogout} loadingLabel="Çıkış deneniyor" onClick={() => void retryLogout()}>
+              Çıkışı tekrar dene
+            </Button>
+          </div>
+        ) : logoutRetryNote ? (
+          <p className="next-status-note" role="status">{logoutRetryNote}</p>
         ) : null}
         {!lockedTenantSlug ? (
           <Field label="Kurum Kodu">

@@ -8,6 +8,7 @@ import { LifeBuoy, Menu, Search, ShieldCheck, X } from "lucide-react";
 import { Button } from "@o-okul/ui";
 import { isFinanceOnlyStaff, type ActivePersona, type MeProfileResponse, type TenantRecord } from "@o-okul/shared-types";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../src/api-client.js";
+import { loginPathAfterLogout } from "../../src/logout-pending.js";
 import { useAuth } from "../providers.js";
 import { readRolePreviewToken } from "./portals/_shared/portal-shell.js";
 import { canAccessInstitutionPath, getInstitutionNavGroups, hasCapabilityForRoles, hasInstitutionAccess, hasSubjectPortalAccess, hasSystemAccess } from "./_shared/access.js";
@@ -30,7 +31,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { auth, isBootstrapping, logout, switchPersona } = useAuth();
+  const { auth, isBootstrapping, logout, logoutPending, switchPersona } = useAuth();
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
   const [expandedSidebarGroups, setExpandedSidebarGroups] = useState<Record<string, boolean>>({});
@@ -114,7 +115,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isBootstrapping && !auth) {
-      router.replace(loginPathFor(pathname));
+      // An unconfirmed logout carries its flag so the login page does not refresh back into the surviving session.
+      router.replace(loginPathAfterLogout(loginPathFor(pathname), logoutPending));
       return;
     }
 
@@ -126,7 +128,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (!isBootstrapping && auth && !isAuthorizedPath) {
       router.replace(getHomePath(auth.session));
     }
-  }, [auth, isAuthorizedPath, isBootstrapping, pathname, router]);
+  }, [auth, isAuthorizedPath, isBootstrapping, logoutPending, pathname, router]);
 
   useEffect(() => {
     if (!auth) return;
@@ -203,8 +205,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   async function handleLogout() {
-    await logout();
-    router.replace(loginPathFor(pathname));
+    const confirmed = await logout();
+    router.replace(loginPathAfterLogout(loginPathFor(pathname), !confirmed));
   }
 
   async function handlePersonaSwitch(target: ActivePersona) {
