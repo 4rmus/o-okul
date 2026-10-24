@@ -8,6 +8,7 @@ const fakeNationalId = /^1000000\d{4}$/;
 const fictionalMobilePrefixes = ["555", "500"];
 const allowedNumbers = new Map([
   ["5321234567", "apps/api/src/observability/sentry.test.ts: proves the Sentry scrubber redacts phone numbers"],
+  ["39766000078", "status.md: GitHub Actions CI run id for PR #212 that happens to pass the T.C. checksum"],
 ]);
 
 const failures = [];
