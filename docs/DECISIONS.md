@@ -1295,9 +1295,10 @@ INSERT tetikleyicilerinin ifade başına çalışmasından (`20261022190000_lice
 TEMP tablo gerekmedi (`unnest`). Idempotency anahtarı import transaction'ında tamamlanır. LOCAL_TEST: CI Postgres
 listesinde yarıda hata, paralel kontenjan, tekrar ve silinmiş TC senaryoları. Staging davranışı UNPROVEN.
 Etkilenen ADR: Yok.
-Açık soru: (a) S1-03 staging PASS kanıtı bu değişiklikle yeniden koşulmalıdır. (b) Ön izlemedeki
-`accountPreview.willCreate: true` alanı hesap oluşturulmadığı halde dönüyor; ayrı ele alınır. (c) Tekli öğrenci
-oluşturmada silinmiş öğrencinin TC'si hâlâ commit sonrası profil yazımında tekil ihlaline düşer; ayrı dilim.
+Açık soru: Yok. (a) S1-03 staging yeniden koşusu 2026-10-22'de PASS (#212). (b) Öğrenci import ön izlemesindeki
+`accountPreview` HTTP yanıtına zaten girmiyordu; içerideki hesaplama 2026-10-24'te kaldırıldı. (c) Tekli öğrenci
+oluşturma ve profil güncelleme 2026-10-24'ten beri silinmiş öğrencinin TC'sini de sayar ve TC'yi aynı transaction'da
+yazar.
 Son kontrol: 2026-10-22
 
 ## Öneri Halindeki Kararlar

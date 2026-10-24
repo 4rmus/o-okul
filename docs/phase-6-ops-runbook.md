@@ -370,7 +370,8 @@ destek akışı (KV-9b, staging UAT F-04):
    göndermeyin: kurumun kayıtlı telefon numarasını arayın ve kişiye sözlü okuyun. Kod 24 saat geçerlidir. Kişi
    bir sonraki girişte MFA'yı bu kodla yeniden kurar; kodsuz kayıt tamamlanmaz, süre dolarsa giriş
    `MFA_RESET_EXPIRED` alır. Sıfırlamada ve kayıt tamamlandığında hesabın e-postasına güvenlik bildirimi gider.
-   İşlem `auth.totp_reset_by_system_admin` denetim kaydı bırakır.
+   İşlem `auth.totp_reset_by_system_admin` denetim kaydı bırakır. Denetim kaydı yazılamaz veya bildirim kuyruğa
+   alınamazsa `OOkulAuthSecuritySideEffectFailed` alarmı çalar (`event` etiketi hangisi olduğunu söyler); kod yine verilir.
    Kod kaybolur veya süresi dolarsa aynı satırdan taze step-up ile "Yeni kod üret" yapılır; önceki kod geçersiz olur.
    Kişi kayıt sırasında kilitlendiğini (5 hatalı kod, 15 dk) bildirirse destek, kurumun kayıtlı telefonunu arayıp
    kişiyi doğruladıktan sonra yeni bir kayıt kodu üretir ve kişiye parolasını da sıfırlamasını önerir; kilit,

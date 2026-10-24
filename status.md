@@ -254,7 +254,9 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
    adrese ulaştı. F-01 davet e-postası spama düşüyor (Yüksek): DMARC `p=none`, SPF `softfail`; karar: önce Cloudflare
    DMARC raporları, politika sonra. DMARC Management 2026-10-22'de ürün sahibi onayıyla açıldı: `_dmarc` kaydına
    Cloudflare RUA eklendi, `p=none` ve `operasyon@` RUA'sı korundu (1.1.1.1 ve 8.8.8.8'de doğrulandı); ilk rapor
-   ~24 saatte. Politika kararı raporlardan sonra. F-20 (davette başka çalışana bağlı e-posta uyarısız kabul
+   ~24 saatte. İlk rapor (2026-10-22..24): 2 e-posta, 2'si DMARC PASS; tek gönderen Cloudflare, SPF ve DKIM hizalı
+   %100 (`cf-bounce` alt alanı); Google Workspace (`google._domainkey`) gönderimi henüz raporda yok. Öneri: 2–3 hafta
+   daha `p=none`, iki kaynak da hizalıysa `p=quarantine; pct=25` → 100; karar ürün sahibinde, 2026-11-14 kontrolünde. F-20 (davette başka çalışana bağlı e-posta uyarısız kabul
    ediliyor, aktivasyon hatası genel mesajla görünüyor, aktivasyon sonrası tarayıcıdaki eski oturuma
    yönleniyordu) #212 ile kapandı, staging PASS. F-03 davet iptali (#180) ve F-11 bağ kaldırma
    (#182) main ve staging'de; F-02 tek adımda yönetici daveti, F-05 içe aktarmada sınıf yönlendirmesi ve
@@ -423,6 +425,16 @@ Plan `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §10.1 uyarınca her dilim
 | 2026-10-22 | DEC-20261021-02: toplu öğrenci import'u tek transaction'da set tabanlı (`unnest`), idempotency tamamlaması aynı transaction'da, lisans kullanım INSERT tetikleyicileri ifade başına; silinmiş öğrencinin TC'si ön izlemede satır hatası | LOCAL_SYNTHETIC (PG17, 5.000 satır, 3 koşu ortancası): 0 öğrencili kurumda 85,5 sn → 1,17 sn, 2.000 öğrencili kurumda 117,6 sn → 1,13 sn, sorgu sayısı 235.079 → 102. LOCAL_TEST: api 1544 test, CI Postgres listesi 110 test; S1-03 dosyasının ön izleme ve commit gövdeleri eski kodla aynı sha256. CI `39766000078` + STAGING_DEPLOY `39768461192` PASS; S1-03 staging yeniden koşusu PASS | `d0fc36883` / PR #212 | – / 1 |
 
 Not (2026-10-22, STAGING, #212): MFA yeniden kayıt uçtan uca denendi: U-SYS step-up + `admin-reset` 200, UAT Yönetici "Yeniden kayıt bekleniyor", U-ADM parola + kayıt koduyla `totp/enrollment/confirm` 200, satır yeniden "Açık". F-20 ve S1-03 yeniden koşusu PASS (`docs/staging-uat-s1.md`). Güvenlik bildirimi e-postasının teslimi ve aynı step-up kanıtıyla tekrar isteğin 409'u staging'de gözlenmedi (UNPROVEN).
+
+Not (2026-10-24, bu dal): (1) Uygulama çıkışı başarısız olursa artık oturum sessizce sürmez: API `logout` refresh ve CSRF
+çerezlerini CSRF kontrolünden önce siler (oturum satırının iptali yine CSRF'e bağlı; sahte çıkış en fazla çerezleri
+siler), web uyarı ve tekrar deneme gösterir; sistem yöneticisinin çıkışı `sistem` host'unda 410 yerine `/giris`'e gider
+(LOCAL_TEST). (2) Tekli öğrenci oluşturma ve profil güncelleme silinmiş öğrencinin TC'sini de sayar, 409
+`STUDENT_NATIONAL_ID_CONFLICT`; TC öğrenci satırıyla aynı transaction'da yazılır (LOCAL_TEST, CI Postgres listesi 114
+test). Kalan: öğrenci formu önce TC'siz kayıt sonra profil isteği gönderir, TC çakışırsa öğrenci TC'siz kalır (ürün
+kararı: portal hesabı otomatik davetiyle bağlı); öğretmen import'u `accountPreview.willCreate: true` döndürür. (3)
+`OOkulAuthSecuritySideEffectFailed` alarmı (`docker/prometheus/rules/api-alerts.yml`, promtool testi LOCAL_TEST);
+webhook teslimi EXTERNAL_NOT_RUN.
 
 Not: `38565136132` (2026-10-14, `82ae7be74`) boş bir Staging Deploy koşusudur. Aynı commit başka bir oturumca deploy edilmişti (`38561474048`). Araya giren docs merge'i yüzünden `github-ci-evidence` işinde düştü; staging değişmedi.
 
