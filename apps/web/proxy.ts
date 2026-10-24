@@ -17,10 +17,13 @@ export function proxy(request: NextRequest) {
       return new NextResponse("LEGACY_TENANT_LOGIN_RETIRED", { status: 410 });
     }
     try {
-      const target = legacySystem
+      const tenantSlug = legacySystem ? undefined : decodeURIComponent(legacyTenant!).trim().toLowerCase();
+      const target = tenantSlug === undefined
         ? `${request.nextUrl.protocol}//sistem.${domain}/giris`
-        : tenantLoginOrigin(decodeURIComponent(legacyTenant!), domain, request.nextUrl.protocol);
-      return NextResponse.redirect(loginPathAfterLogout(target, logoutPending), 307);
+        : tenantLoginOrigin(tenantSlug, domain, request.nextUrl.protocol);
+      // The flag only helps on the origin that holds the session cookies; another host has nothing to log out.
+      const sameHost = tenantSlug === undefined ? host.kind === "system" : host.kind === "tenant" && host.slug === tenantSlug;
+      return NextResponse.redirect(loginPathAfterLogout(target, logoutPending && sameHost), 307);
     } catch {
       return new NextResponse("TENANT_HOST_UNKNOWN", { status: 404 });
     }

@@ -14,13 +14,21 @@ export function isLogoutPendingValue(value: unknown): boolean {
   return value === logoutPendingFlag || (Array.isArray(value) && value.includes(logoutPendingFlag));
 }
 
+// Only the login pages read or drop the flag; another page's own query parameter of the same name is left alone.
+const logoutPendingRoutes = new Set(["/login", "/giris", "/sistem/giris"]);
+
+export function isLogoutPendingRoute(pathname: string): boolean {
+  return logoutPendingRoutes.has(pathname.length > 1 ? pathname.replace(/\/+$/u, "") : pathname);
+}
+
 export function hasLogoutPendingFlag(): boolean {
-  return new URL(window.location.href).searchParams.get(logoutPendingParam) === logoutPendingFlag;
+  const url = new URL(window.location.href);
+  return isLogoutPendingRoute(url.pathname) && url.searchParams.get(logoutPendingParam) === logoutPendingFlag;
 }
 
 export function clearLogoutPendingFlag(): void {
   const url = new URL(window.location.href);
-  if (!url.searchParams.has(logoutPendingParam)) return;
+  if (!isLogoutPendingRoute(url.pathname) || !url.searchParams.has(logoutPendingParam)) return;
   url.searchParams.delete(logoutPendingParam);
   window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
 }

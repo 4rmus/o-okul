@@ -286,15 +286,21 @@ async function refreshSessionRequest(): Promise<AuthResponse> {
 }
 
 export async function logout(): Promise<void> {
-  const response = await fetch(`${apiBaseUrl}/auth/logout`, {
-    credentials: "include",
-    headers: { "content-type": "application/json", "x-csrf-token": readCookie("csrfToken") },
-    method: "POST",
-  });
-  activeAuth = null;
-  queryClient.clear();
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}/auth/logout`, {
+      credentials: "include",
+      headers: { "content-type": "application/json", "x-csrf-token": readCookie("csrfToken") },
+      method: "POST",
+    });
+  } finally {
+    // Local state and the query cache go even when the request throws (network error): the login page is reached by
+    // client-side navigation, so a cache left here would still hold the previous user's data for the next sign-in.
+    activeAuth = null;
+    queryClient.clear();
+  }
   // UAT F-20 review: a refused logout leaves the server session (refresh cookie) alive; callers that must not continue
-  // in that session need to know. Local state is cleared either way, as before.
+  // in that session need to know.
   if (!response.ok) throw new ApiRequestError("LOGOUT_FAILED", response.status, await readErrorCode(response));
 }
 

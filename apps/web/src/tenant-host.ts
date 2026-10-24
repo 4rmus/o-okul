@@ -53,6 +53,14 @@ export function browserTenantLoginHref(slug: string): string {
   }
 }
 
+// With DOMAIN set the proxy retires /sistem/giris (410 once the legacy window is closed); on the sistem host the
+// system login lives at /giris. Local and DOMAIN-less hosts keep the path-based /sistem/giris page.
+export function browserSystemLoginPath(): string {
+  if (typeof window === "undefined") return "/sistem/giris";
+  const host = normalizeHost(window.location.hostname);
+  return host?.startsWith("sistem.") ? "/giris" : "/sistem/giris";
+}
+
 function normalizeHost(value: string | null | undefined): string | undefined {
   const raw = value?.trim().toLowerCase();
   if (!raw || /[,/@\\\s]/.test(raw)) return undefined;

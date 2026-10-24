@@ -5,8 +5,9 @@ import { Test } from "@nestjs/testing";
 import ExcelJS from "exceljs";
 import request from "supertest";
 import { testLoginBody } from "./test-auth.js";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppModule } from "./app.module.js";
+import { AuthService } from "./auth/auth.service.js";
 
 describe("API auth + tenant isolation", () => {
   let app: INestApplication;
@@ -96,6 +97,42 @@ describe("API auth + tenant isolation", () => {
       .set("X-CSRF-Token", "wrong")
       .expect(403);
     await request(server).post("/auth/logout").set("Cookie", [issued.refreshCookie, issued.csrfCookie]).expect(403);
+  });
+
+  it("reddedilen logout da refresh ve CSRF cookie'lerini temizler ama oturumu iptal etmez", async () => {
+    const issued = await login("admin-a@example.test");
+
+    const refused = await request(server)
+      .post("/auth/logout")
+      .set("Cookie", [issued.refreshCookie, issued.csrfCookie])
+      .set("X-CSRF-Token", "wrong")
+      .expect(403);
+    expect(refused.body).toEqual({ error: expect.objectContaining({ code: "CSRF_TOKEN_INVALID" }) });
+    expectClearedSessionCookies(refused.headers["set-cookie"]);
+
+    // Revocation stays behind the CSRF check: the original cookie pair still refreshes.
+    await request(server)
+      .post("/auth/refresh")
+      .set("Cookie", [issued.refreshCookie, issued.csrfCookie])
+      .set("X-CSRF-Token", issued.csrfToken)
+      .expect(200);
+  });
+
+  it("sunucu hatasıyla biten logout da refresh ve CSRF cookie'lerini temizler", async () => {
+    const issued = await login("admin-a@example.test");
+    const logoutSpy = vi.spyOn(app.get(AuthService), "logout").mockRejectedValueOnce(new Error("SESSION_STORE_DOWN"));
+
+    try {
+      const failed = await request(server)
+        .post("/auth/logout")
+        .set("Cookie", [issued.refreshCookie, issued.csrfCookie])
+        .set("X-CSRF-Token", issued.csrfToken)
+        .expect(500);
+      expectClearedSessionCookies(failed.headers["set-cookie"]);
+      expect(logoutSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      logoutSpy.mockRestore();
+    }
   });
 
   it("refresh ve logout refresh token'ı sadece HttpOnly cookie'den okur", async () => {
@@ -1458,6 +1495,21 @@ function expectStudentCoreResponseIsPublic(body: unknown): void {
   ]) {
     expect(serialized).not.toContain(forbidden);
   }
+}
+
+function expectClearedSessionCookies(header: string | string[] | undefined): void {
+  const refresh = getCookie(header, "refreshToken");
+  const csrf = getCookie(header, "csrfToken");
+  for (const cleared of [refresh, csrf]) {
+    expect(cleared).toMatch(/^[A-Za-z]+=;/u);
+    expect(cleared).toContain("Expires=Thu, 01 Jan 1970 00:00:00 GMT");
+    expect(cleared).toContain("SameSite=Strict");
+  }
+  // Same attributes as the cookies login sets, or the browser would keep the originals.
+  expect(refresh).toContain("Path=/api/v1/auth");
+  expect(refresh).toContain("HttpOnly");
+  expect(csrf).toContain("Path=/");
+  expect(csrf).not.toContain("HttpOnly");
 }
 
 function getCookie(header: string | string[] | undefined, name: string): string {

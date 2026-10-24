@@ -8,6 +8,7 @@ import { appBrand } from "../../src/brand.js";
 import { tenantLoginOrigin } from "../../src/tenant-host.js";
 import { useActivationNotice } from "./activation-notice.js";
 import { ContactSupportLink } from "./contact-support-link.js";
+import { LogoutPendingNotice } from "./logout-pending-notice.js";
 
 export function TenantLocatorPage({ domain }: { domain: string }) {
   const [value, setValue] = useState("");
@@ -34,6 +35,7 @@ export function TenantLocatorPage({ domain }: { domain: string }) {
       <form className="next-form" aria-label="Kurum adresi bulma formu" onSubmit={submit}>
         <h1 id="locator-title">Kurumunuza ilerleyin</h1>
         {activationNotice ? <p className="next-status-note" role="status">{activationNotice}</p> : null}
+        <LogoutPendingNotice />
         <p>Okulunuzun size verdiği kurum adresini yazın.</p>
         <Field label="Kurum adresi">
           <Input

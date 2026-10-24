@@ -60,13 +60,11 @@ export function Providers({ children }: { children: ReactNode }) {
     // A logout the server did not confirm: retry it instead of refreshing back into the session the user ended.
     if (hasLogoutPendingFlag()) {
       requestLogout()
-        .then(
-          () => {
-            setLogoutPending(false);
-            clearLogoutPendingFlag();
-          },
-          () => setLogoutPending(true),
-        )
+        .then(() => true, () => !hasCookie("csrfToken"))
+        .then((confirmed) => {
+          setLogoutPending(!confirmed);
+          if (confirmed) clearLogoutPendingFlag();
+        })
         .finally(() => {
           setAuth(null);
           setIsBootstrapping(false);
@@ -116,7 +114,9 @@ export function Providers({ children }: { children: ReactNode }) {
         setAuth(nextAuth);
       },
       async logout() {
-        const confirmed = await requestLogout().then(() => true, () => false);
+        // The API clears the refresh and CSRF cookies even on a refused logout; without the CSRF cookie this browser
+        // cannot refresh into the old session, so the logout counts as done instead of retrying into 403s.
+        const confirmed = await requestLogout().then(() => true, () => !hasCookie("csrfToken"));
         setLogoutPending(!confirmed);
         if (confirmed) clearLogoutPendingFlag();
         setAuth(null);

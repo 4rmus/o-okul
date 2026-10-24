@@ -9,6 +9,7 @@ import { Button } from "@o-okul/ui";
 import { isFinanceOnlyStaff, type ActivePersona, type MeProfileResponse, type TenantRecord } from "@o-okul/shared-types";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../src/api-client.js";
 import { loginPathAfterLogout } from "../../src/logout-pending.js";
+import { browserSystemLoginPath } from "../../src/tenant-host.js";
 import { useAuth } from "../providers.js";
 import { readRolePreviewToken } from "./portals/_shared/portal-shell.js";
 import { canAccessInstitutionPath, getInstitutionNavGroups, hasCapabilityForRoles, hasInstitutionAccess, hasSubjectPortalAccess, hasSystemAccess } from "./_shared/access.js";
@@ -536,7 +537,7 @@ function getHomePath(session: AppSession) {
 }
 
 function loginPathFor(pathname: string) {
-  return pathname.startsWith("/sistem") ? "/sistem/giris" : "/login";
+  return pathname.startsWith("/sistem") ? browserSystemLoginPath() : "/login";
 }
 
 function hasShellSearchAccess(session: AppSession) {
