@@ -694,7 +694,8 @@ Son kontrol: 2026-09-30
 
 ### DEC-20260930-04 — Karne Berrak diliyle yeniden tasarlanır; görsel kabul golden ve geometriye bağlanır
 
-Durum: Onaylı; DEC-20260613-04'ün yerini alır
+Durum: Onaylı; DEC-20260613-04'ün yerini alır; worker PDF'inde `Başarı %` birincil kartı DEC-20261025-02 ile
+deneme puanına geçti (2026-10-25)
 Karar: Web karne sheet'i (`karne-sheet.tsx`, `outcome-net-table.tsx` stilleri) ve worker PDF şablonu
 (`createSnapshotPdfHtml`) birlikte Berrak diline geçer: IBM Plex (Arial yalnız yedek), tabular rakamlar,
 ≤600 ağırlık, sola hizalı accent bölüm etiketleri, 1 px kâğıt çizgisi, `Başarı %` birincil metrik kartı
@@ -1323,6 +1324,29 @@ Kanıt: `apps/worker/src/jobs/report-pdf-render-job.ts`, `apps/api/src/report/re
 Etkilenen ADR: Yok.
 Açık soru: Public sayfalarda puanın resmî olmadığına dair bir iddia gerekirse `docs/marketing-claims.md`
 üzerinden ayrıca karar verilir; bu karar yalnız ürün içi rapor yüzeylerini kapsar.
+Son kontrol: 2026-10-25
+
+### DEC-20261025-02 — Tek sınav PDF raporlarında birincil metrik deneme puanıdır; ders düzeyi nettir
+
+Durum: Onaylı (2026-10-25); DEC-20260930-04'ün PDF için `Başarı %` birincil kart maddesinin yerini alır
+Karar: Worker PDF karnesi ve kurum özeti `Başarı %` göstermez. Büyük kart deneme puanıdır (AYT'de
+Sayısal, EA, Sözel ayrı kartlar); ikinci kart net ve D/Y/B'dir. Ders düzeyinde puan üretilmediği için
+Bölüm Analizi, kazanım tablosu, ders grafiği, güçlü/öncelikli dersler, branş ve sınıf karşılaştırması
+netle (soru sayısıyla, ör. `6,67 / 20`) okunur; sınıf ve kurum karşılaştırması sınıf/kurum net
+ortalamasıdır. Çubuk uzunlukları net / soru oranıyla çizilir, oran metin olarak yazılmaz. Başarı
+dağılımı yerini puan türü başına puan dağılımına (100–200, 200–300, 300–400, 400–500) bırakır. Sınıf
+karşılaştırması puan türü başına sınıf ortalama puanını taşır; bu değer sınıftaki puanı hesaplanan
+öğrencilerin snapshot puanlarının ortalamasıdır.
+Kapsam dışı: denemeler arası gelişim (web karnesi ve portal) farklı soru sayılarında adil kıyas için
+`Başarı %` ile kalır (AGENTS.md); Excel, web ekranları ve PDF'in düz metin yedeği değişmez. Snapshot
+sözleşmesi ve sayılar değişmez.
+Gerekçe: tek sınav raporunda kurumlar ve veliler puanı ve neti okur; yüzde ikinci bir ölçek olarak
+kafa karıştırıyordu.
+Kaynak: ürün sahibi kararı (2026-10-25, "başarı yüzdesi yerine puanın eklenmesi daha doğru olur";
+kapsam: tek sınav raporları).
+Kanıt: `apps/worker/src/jobs/report-pdf-render-job.ts`, `apps/worker/src/jobs/report-pdf-render-job.test.ts`.
+Etkilenen ADR: Yok.
+Açık soru: Yok.
 Son kontrol: 2026-10-25
 
 ## Öneri Halindeki Kararlar

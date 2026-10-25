@@ -204,7 +204,9 @@ describe("report PDF render job", () => {
     expect(html).toContain("Branş Karşılaştırması");
     expect(html).toContain("Sınıf Karşılaştırması");
     expect(html).toContain("Öğrenci Sıralaması");
-    expect(html).toContain("Ders Başarı Grafiği");
+    expect(html).toContain("Ders Net Grafiği");
+    expect(html).toContain("Puan Dağılımı");
+    expect(html).not.toContain("Başarı %");
     expect(html).toContain("Puan Türü Karşılaştırması");
     expect(html).toContain("LGS puanı");
     expect(html).toContain("Kurum sırası");
@@ -300,6 +302,7 @@ describe("report PDF render job", () => {
     const student = (id: string, practiceScore: number | undefined, rank: number | undefined, correct: number) => ({
       studentId: id,
       displayName: `Öğrenci ${id}`,
+      classId: "class-8a",
       className: "8-A",
       total: { correct, wrong: 2, blank: 0, net: correct - 0.67, questionCount: correct + 2, successRate: 50 },
       branches: [
@@ -330,6 +333,7 @@ describe("report PDF render job", () => {
             pdfMode: "INSTITUTION_SUMMARY",
             examType: "LGS",
             resultCount: 3,
+            classes: [{ classId: "class-8a", className: "8-A", resultCount: 3, averages: { net: 6, questionCount: 10 } }],
             students: [student("C", undefined, undefined, 1), student("B", 310.5, 2, 8), student("A", 420, 1, 12)],
           },
         },
@@ -344,6 +348,11 @@ describe("report PDF render job", () => {
     expect(html).toContain('<td class="course-start">12</td><td>2</td><td class="net">11,33</td>');
     expect(html).toContain('<td class="score">310,5</td>');
     expect(html).toContain('<span class="status">Hesaplama koşulu sağlanmadı</span>');
+    // Sınıf ortalama puanı yalnız puanı hesaplanan öğrencilerden: (420 + 310,5) / 2.
+    expect(html).toContain("<th>LGS ortalama puan</th>");
+    expect(html).toContain("<td>365,25</td>");
+    expect(html).toMatch(/<strong>1<\/strong><span class="column-track"><span style="height:100\.00%"><\/span><\/span><span class="column-label">300–400<\/span>/u);
+    expect(html).toMatch(/<strong>1<\/strong><span class="column-track"><span style="height:100\.00%"><\/span><\/span><span class="column-label">400–500<\/span>/u);
   });
 
   it("snapshot kayitlarini kirpmadan her ogrenci icin karne uretir", async () => {
@@ -487,8 +496,8 @@ describe("report PDF render job", () => {
 
     const html = renderer.inputs[0]?.html ?? "";
     const fallback = renderer.inputs[0]?.fallbackLines.join("\n") ?? "";
-    expect(html).toContain('<p class="stat-value">%81,7</p>');
-    expect(html).toContain("<td>%73,3</td>");
+    expect(html).toContain('<p class="stat-value">440,13</p>');
+    expect(html).not.toMatch(/%\d/u);
     expect(html).toContain('<td class="course-start total">25</td><td class="total">4</td><td class="net total">24,50</td>');
     expect(html).toContain("<td>11,00</td>");
     expect(html).toContain("440,13");
@@ -544,9 +553,10 @@ describe("report PDF render job", () => {
     const html = input?.html ?? "";
     expect(html).toContain("14 Haziran 2026 09:30");
     expect(html).not.toContain("2026-06-14T06:30:00.000Z");
-    expect(html).toContain("<th>Sınıf %</th>");
-    expect(html).toContain("<td>%50,0</td>");
-    expect(html).toContain("<td>%33,3</td>");
+    expect(html).toContain("<th>Sınıf net</th>");
+    expect(html).toContain("<td>1,50</td>");
+    expect(html).toContain("<td>1,00</td>");
+    expect(html).not.toContain("Başarı %");
     expect(html).toContain('<th rowspan="2">LGS deneme puanı</th><th rowspan="2">Kurum başarı sırası</th><th rowspan="2">Sınıf başarı sırası</th><th class="course" colspan="3">Matematik</th><th class="course" colspan="3">Toplam</th>');
     expect(html).toContain('<td class="score">210</td><td class="rank">2/2</td><td class="rank">2/2</td><td class="course-start">1</td>');
     expect(html).toContain('<td class="course-start">1</td><td>1</td><td class="net">0,67</td>');
@@ -564,9 +574,9 @@ describe("report PDF render job", () => {
     expect(input?.footerLabel).not.toContain("Ada");
   });
 
-  it("öncelikli çalışma kutusu tam başarılı dersleri listelemez", async () => {
+  it("öncelikli çalışma kutusu tam netli dersleri listelemez", async () => {
     const renderer = new FakeRenderer();
-    const branch = (name: string, successRate: number) => ({ branch: name, correct: 10, wrong: 0, blank: 0, net: 10, questionCount: 10, successRate });
+    const branch = (name: string, net: number) => ({ branch: name, correct: net, wrong: 0, blank: 10 - net, net, questionCount: 10 });
     await processReportPdfRenderJob({
       name: "report-pdf-render",
       data: {
@@ -583,7 +593,7 @@ describe("report PDF render job", () => {
             students: [{
               studentId: "student-top",
               total: { net: 38, questionCount: 40, successRate: 95 },
-              branches: [branch("Türkçe", 100), branch("Matematik", 100), branch("Fen Bilimleri", 100), branch("Yabancı Dil", 80)],
+              branches: [branch("Türkçe", 10), branch("Matematik", 10), branch("Fen Bilimleri", 10), branch("Yabancı Dil", 8)],
             }],
           },
         },
@@ -592,8 +602,8 @@ describe("report PDF render job", () => {
 
     const html = renderer.inputs[0]?.html ?? "";
     const priorities = html.slice(html.indexOf("<h3>Öncelikli çalışma</h3>"));
-    expect(priorities).toContain("<span>Yabancı Dil</span><strong>%80,0</strong>");
-    expect(priorities.slice(0, priorities.indexOf("</ul>"))).not.toContain("%100,0");
+    expect(priorities).toContain("<span>Yabancı Dil</span><strong>8,00 / 10 net</strong>");
+    expect(priorities.slice(0, priorities.indexOf("</ul>"))).not.toContain("10,00 / 10");
   });
 
   it("PDF kâğıt renkleri tokens.css açık temasıyla aynı kalır", async () => {

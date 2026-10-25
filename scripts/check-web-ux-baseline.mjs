@@ -4024,7 +4024,8 @@ requireTokens("apps/worker/src/jobs/report-pdf-render-job.ts", [
   ">Kurum başarı sırası</th>",
   ">Sınıf başarı sırası</th>",
   "Puan Türü Karşılaştırması",
-  "Ders Başarı Grafiği",
+  "Ders Net Grafiği",
+  "renderPdfScoreDistribution",
   "Ortalama basari",
 ]);
 

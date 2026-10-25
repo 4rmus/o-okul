@@ -311,12 +311,12 @@ function renderPdfStudentCard(context: PdfReportContext, student: Record<string,
       calculated
         ? `Kurum ${formatV2Rank(readRecord(ranking?.institution))} · Sınıf ${formatV2Rank(readRecord(ranking?.class))}`
         : formatScoreStatus(view.status),
+      true,
     );
   }).join("");
   const kpis = `<section class="kpis" aria-label="Özet">
-    ${renderPdfStatCard("Başarı %", formatKarnePercent(scoreSuccessRate(total)), `${formatPdfValue(branchQuestionCount(total))} soru`, true)}
-    ${renderPdfStatCard("Net", formatKarneNet(total.net), renderPdfAnswerSplitText(total))}
     ${scoreCards}
+    ${renderPdfStatCard("Net", formatKarneNet(total.net), `${renderPdfAnswerSplitText(total)} · ${formatPdfValue(branchQuestionCount(total))} soru`)}
   </section>${renderPdfAnswerSplitBar(total)}`;
 
   const scoreTable = renderPdfStudentScoreTables(student, scoreViews, rankings);
@@ -325,12 +325,12 @@ function renderPdfStudentCard(context: PdfReportContext, student: Record<string,
   const hasInstitutionAverages = institutionBranches.length > 0;
   const branchTable = renderPdfTable(
     "Bölüm Analizi",
-    ["Branş", "Soru", "D", "Y", "B", "Net", "Başarı %", "Karşılaştırma", ...(hasClassAverages ? ["Sınıf %"] : []), ...(hasInstitutionAverages ? ["Kurum %"] : [])],
+    ["Branş", "Soru", "D", "Y", "B", "Net", "Karşılaştırma", ...(hasClassAverages ? ["Sınıf net"] : []), ...(hasInstitutionAverages ? ["Kurum net"] : [])],
     branches,
     (branch) => {
       const name = readText(branch.branch);
-      const classRate = scoreSuccessRate(findPdfBranch(classBranches, name));
-      const institutionRate = scoreSuccessRate(findPdfBranch(institutionBranches, name));
+      const classBranch = findPdfBranch(classBranches, name);
+      const institutionBranch = findPdfBranch(institutionBranches, name);
       return [
         name || "-",
         formatPdfValue(branchQuestionCount(branch)),
@@ -338,10 +338,9 @@ function renderPdfStudentCard(context: PdfReportContext, student: Record<string,
         formatKarneNumber(branch.wrong),
         formatKarneNumber(branch.blank),
         formatKarneNet(branch.net),
-        formatKarnePercent(scoreSuccessRate(branch)),
-        pdfHtmlCell(renderPdfComparisonBars(scoreSuccessRate(branch), hasClassAverages ? classRate : "", hasInstitutionAverages ? institutionRate : "")),
-        ...(hasClassAverages ? [formatKarnePercent(classRate)] : []),
-        ...(hasInstitutionAverages ? [formatKarnePercent(institutionRate)] : []),
+        pdfHtmlCell(renderPdfComparisonBars(pdfNetRatio(branch), hasClassAverages ? pdfNetRatio(classBranch) : "", hasInstitutionAverages ? pdfNetRatio(institutionBranch) : "")),
+        ...(hasClassAverages ? [formatKarneNet(classBranch.net)] : []),
+        ...(hasInstitutionAverages ? [formatKarneNet(institutionBranch.net)] : []),
       ];
     },
     "branch-table",
@@ -352,14 +351,15 @@ function renderPdfStudentCard(context: PdfReportContext, student: Record<string,
 
   const outcomes = selectPdfOutcomeRows(student.outcomes);
   const outcomeTopics = pdfOutcomeTopics(student.questions);
-  const outcomeTable = renderPdfTable("Öncelikli Kazanım Analizi", ["Kazanım", "Branş", "Soru", "Başarı %", "Net"], outcomes, (outcome) => {
+  const outcomeTable = renderPdfTable("Öncelikli Kazanım Analizi", ["Kazanım", "Branş", "Soru", "D", "Y", "Net"], outcomes, (outcome) => {
     const code = readText(outcome.outcomeCode);
     const topic = outcomeTopics.get(code);
     return [
       pdfHtmlCell(`${topic ? `<span class="topic">${escapeHtml(topic)}</span>` : ""}<span class="${topic ? "code" : "topic"}">${escapeHtml(code || "-")}</span>`),
       readText(outcome.branch) || "-",
       formatPdfValue(branchQuestionCount(outcome)),
-      formatKarnePercent(scoreSuccessRate(outcome)),
+      formatKarneNumber(outcome.correct),
+      formatKarneNumber(outcome.wrong),
       formatKarneNet(outcome.net),
     ];
   }, "outcome-table");
@@ -393,11 +393,11 @@ function renderPdfInstitutionSummary(context: PdfReportContext, students: Record
     `${pdfScoreTypeLabel(readText(score.type))} ortalama puan`,
     formatKarneNumber(score.practiceScore),
     `${formatKarneNumber(score.calculatedCount)} hesaplanan`,
+    true,
   )).join("");
   const kpis = `<section class="kpis" aria-label="Puan Türü Karşılaştırması"><h2 class="sr-title">Puan Türü Karşılaştırması</h2>
-    ${renderPdfStatCard("Ortalama başarı %", formatKarnePercent(scoreSuccessRate(averages)), `${formatPdfValue(branchQuestionCount(averages))} soru`, true)}
-    ${renderPdfStatCard("Ortalama net", formatKarneNet(averages.net), renderPdfAnswerSplitText(averages))}
     ${scoreCards}
+    ${renderPdfStatCard("Ortalama net", formatKarneNet(averages.net), `${renderPdfAnswerSplitText(averages)} · ${formatPdfValue(branchQuestionCount(averages))} soru`)}
   </section>`;
 
   const institutionStudentTable = context.scoreTypes
@@ -407,27 +407,26 @@ function renderPdfInstitutionSummary(context: PdfReportContext, students: Record
   return `<section class="institution-summary">${renderPdfMasthead(context, readText(data.examTitle) || "Sınav Raporu", subtitle, aside)}
       ${kpis}
       <div class="chart-grid">
-        ${renderPdfBarChart("Ders Başarı Grafiği", branches, (branch) => readText(branch.branch) || "-", (branch) => readOptionalNumber(scoreSuccessRate(branch)), 0, 100, "%")}
-        ${renderPdfSuccessDistribution(students)}
+        ${renderPdfBarChart("Ders Net Grafiği", branches, (branch) => readText(branch.branch) || "-", (branch) => readOptionalNumber(pdfNetRatio(branch)), 0, 100, "", formatPdfNetOf)}
+        <div class="distributions">${context.scoreTypes.map((type) => renderPdfScoreDistribution(students, type, context.scoreTypes.length > 1)).join("")}</div>
       </div>
-      ${renderPdfTable("Branş Karşılaştırması", ["Branş", "Soru", "D", "Y", "B", "Net", "Başarı %", "Dağılım"], branches, (branch) => [
+      ${renderPdfTable("Branş Karşılaştırması", ["Branş", "Soru", "D", "Y", "B", "Net", "Dağılım"], branches, (branch) => [
         readText(branch.branch) || "-",
         formatPdfValue(branchQuestionCount(branch)),
         formatKarneNumber(branch.correct),
         formatKarneNumber(branch.wrong),
         formatKarneNumber(branch.blank),
         formatKarneNet(branch.net),
-        formatKarnePercent(scoreSuccessRate(branch)),
-        pdfHtmlCell(renderPdfComparisonBars(scoreSuccessRate(branch), "", "")),
+        pdfHtmlCell(renderPdfComparisonBars(pdfNetRatio(branch), "", "")),
       ], "branch-table")}
-      ${renderPdfTable("Sınıf Karşılaştırması", ["Sınıf", "Sonuç", "Başarı %", "Net", "Dağılım"], classes, (klass) => {
+      ${renderPdfTable("Sınıf Karşılaştırması", ["Sınıf", "Sonuç", ...context.scoreTypes.map((type) => `${pdfScoreTypeLabel(type)} ortalama puan`), "Net", "Dağılım"], classes, (klass) => {
         const classAverages = readRecord(klass.averages);
         return [
           readText(klass.className) || "Sınıfsız",
           formatKarneNumber(klass.resultCount),
-          formatKarnePercent(scoreSuccessRate(classAverages)),
+          ...context.scoreTypes.map((type) => formatKarneNumber(pdfClassAverageScore(students, readText(klass.classId), type))),
           formatKarneNet(classAverages.net),
-          pdfHtmlCell(renderPdfComparisonBars(scoreSuccessRate(classAverages), "", readOptionalNumber(scoreSuccessRate(averages)) ?? "")),
+          pdfHtmlCell(renderPdfComparisonBars(pdfNetRatio(classAverages), "", pdfNetRatio(averages))),
         ];
       }, "class-table")}${classes.length > 0 ? `<p class="legend"><span class="key key-student"></span>Sınıf<span class="key key-institution"></span>Kurum ortalaması</p>` : ""}
       ${institutionStudentTable ? `<div class="rankings">${institutionStudentTable}</div>` : ""}</section>`;
@@ -554,13 +553,13 @@ function renderPdfComparisonBars(student: string | number, klass: string | numbe
 
 function renderPdfBranchHighlights(branches: Record<string, unknown>[]): string {
   const ranked = branches
-    .map((branch) => ({ name: readText(branch.branch), rate: readOptionalNumber(scoreSuccessRate(branch)) }))
-    .filter((branch): branch is { name: string; rate: number } => Boolean(branch.name) && branch.rate !== undefined)
+    .map((branch) => ({ branch, name: readText(branch.branch), rate: readOptionalNumber(pdfNetRatio(branch)) }))
+    .filter((item): item is { branch: Record<string, unknown>; name: string; rate: number } => Boolean(item.name) && item.rate !== undefined)
     .sort((left, right) => right.rate - left.rate || left.name.localeCompare(right.name, "tr"));
   if (ranked.length < 2) return "";
   const count = Math.min(3, Math.floor(ranked.length / 2));
-  const list = (items: typeof ranked) => items.map((item) => `<li><span>${escapeHtml(item.name)}</span><strong>${escapeHtml(formatKarnePercent(item.rate))}</strong></li>`).join("");
-  // Tam başarılı ders öncelikli çalışma sayılmaz; hiç eksik ders yoksa kutu çizilmez.
+  const list = (items: typeof ranked) => items.map((item) => `<li><span>${escapeHtml(item.name)}</span><strong>${escapeHtml(`${formatPdfNetOf(item.branch)} net`)}</strong></li>`).join("");
+  // Dersler soru sayısına göre net oranıyla dizilir; tam netli ders öncelikli çalışma sayılmaz.
   const priorities = ranked.slice(-count).reverse().filter((item) => item.rate < 100);
   return `<section class="highlights"><div><h3>Güçlü dersler</h3><ul>${list(ranked.slice(0, count))}</ul></div>${priorities.length > 0 ? `<div><h3>Öncelikli çalışma</h3><ul>${list(priorities)}</ul></div>` : ""}</section>`;
 }
@@ -584,20 +583,45 @@ function renderPdfAnswerGrid(value: unknown): string {
   return `<section class="answer-grid"><h2>Cevap Haritası</h2><p class="legend"><span class="key key-correct"></span>Doğru<span class="key key-wrong"></span>Yanlış (sağ altta doğru cevap)<span class="key key-blank"></span>Boş<span class="key key-cancelled"></span>İptal</p>${rows}</section>`;
 }
 
-function renderPdfSuccessDistribution(students: Record<string, unknown>[]): string {
-  const rates = students
-    .map((student) => readOptionalNumber(scoreSuccessRate(readRecord(student.total))))
-    .filter((rate): rate is number => rate !== undefined);
-  if (rates.length === 0) return "";
+// Puan dağılımı: hesaplanan deneme puanları 100–500 aralığında dört banda bölünür (500 son bandadır).
+function renderPdfScoreDistribution(students: Record<string, unknown>[], type: ExamScoreType, titleWithType: boolean): string {
+  const scores = students.flatMap((student) => {
+    const view = readRecords(student.scoreViews).find((candidate) => readText(candidate.type) === type);
+    const score = view?.status === "CALCULATED" ? readOptionalNumber(view.practiceScore) : undefined;
+    return score === undefined ? [] : [score];
+  });
+  if (scores.length === 0) return "";
   const bands = [
-    { label: "0–20", min: Number.NEGATIVE_INFINITY, max: 20 },
-    { label: "20–40", min: 20, max: 40 },
-    { label: "40–60", min: 40, max: 60 },
-    { label: "60–80", min: 60, max: 80 },
-    { label: "80–100", min: 80, max: Number.POSITIVE_INFINITY },
-  ].map((band) => ({ ...band, count: rates.filter((rate) => rate >= band.min && rate < band.max).length }));
+    { label: "100–200", min: Number.NEGATIVE_INFINITY, max: 200 },
+    { label: "200–300", min: 200, max: 300 },
+    { label: "300–400", min: 300, max: 400 },
+    { label: "400–500", min: 400, max: Number.POSITIVE_INFINITY },
+  ].map((band) => ({ ...band, count: scores.filter((score) => score >= band.min && score < band.max).length }));
   const peak = Math.max(1, ...bands.map((band) => band.count));
-  return `<section class="distribution"><h2>Başarı Dağılımı</h2><div class="columns">${bands.map((band) => `<div class="column"><strong>${escapeHtml(formatKarneNumber(band.count))}</strong><span class="column-track"><span style="height:${((band.count / peak) * 100).toFixed(2)}%"></span></span><span class="column-label">%${escapeHtml(band.label)}</span></div>`).join("")}</div><p class="muted">Öğrenci sayısı, toplam başarı yüzdesi aralığına göre</p></section>`;
+  const title = titleWithType ? `Puan Dağılımı · ${pdfScoreTypeLabel(type)}` : "Puan Dağılımı";
+  return `<section class="distribution${titleWithType ? " compact" : ""}"><h2>${escapeHtml(title)}</h2><div class="columns">${bands.map((band) => `<div class="column"><strong>${escapeHtml(formatKarneNumber(band.count))}</strong><span class="column-track"><span style="height:${((band.count / peak) * 100).toFixed(2)}%"></span></span><span class="column-label">${escapeHtml(band.label)}</span></div>`).join("")}</div>${titleWithType ? "" : `<p class="muted">Öğrenci sayısı, ${escapeHtml(pdfScoreTypeLabel(type))} deneme puanı aralığına göre</p>`}</section>`;
+}
+
+// Sınıfın ortalama puanı, sınıftaki puanı hesaplanan öğrencilerin snapshot puanlarının ortalamasıdır.
+function pdfClassAverageScore(students: Record<string, unknown>[], classId: string, type: ExamScoreType): number | "" {
+  const scores = students.flatMap((student) => {
+    if (!classId || readText(student.classId) !== classId) return [];
+    const view = readRecords(student.scoreViews).find((candidate) => readText(candidate.type) === type);
+    const score = view?.status === "CALCULATED" ? readOptionalNumber(view.practiceScore) : undefined;
+    return score === undefined ? [] : [score];
+  });
+  return scores.length === 0 ? "" : Number((scores.reduce((sum, score) => sum + score, 0) / scores.length).toFixed(2));
+}
+
+// Çubuk uzunluğu için net / soru oranı; metin olarak yazılmaz, yalnız görsel ölçektir.
+function pdfNetRatio(score: Record<string, unknown>): number | "" {
+  const net = readNumber(score.net);
+  const questionCount = branchQuestionCount(score);
+  return net === "" || typeof questionCount !== "number" || questionCount <= 0 ? "" : (net / questionCount) * 100;
+}
+
+function formatPdfNetOf(score: Record<string, unknown>): string {
+  return `${formatKarneNet(score.net)} / ${formatPdfValue(branchQuestionCount(score))}`;
 }
 
 function findPdfBranch(branches: Record<string, unknown>[], name: string): Record<string, unknown> {
@@ -692,6 +716,7 @@ const pdfReportCss = `
   .split-blank{background:var(--rule-strong);color:var(--ink)}
   section{break-inside:avoid}
   .institution-summary>section,.institution-summary .ranking-table{break-inside:auto}
+  .institution-summary>section.class-table{break-inside:avoid}
   table{border-collapse:collapse;width:100%}
   thead{display:table-header-group}
   tr{break-inside:avoid}
@@ -755,10 +780,13 @@ const pdfReportCss = `
   .cell-blank{background:var(--paper-muted);color:var(--ink-muted);border:1px solid var(--rule)}
   .cell-cancelled{background:var(--warning-soft);color:var(--warning);border:1px dashed var(--warning)}
   .chart-grid{display:grid;grid-template-columns:3fr 2fr;gap:14px}
-  .bar-chart{margin:0}.bar-row{display:grid;grid-template-columns:110px 1fr 44px;align-items:center;gap:8px;margin:4px 0}
+  .bar-chart{margin:0}.bar-row{display:grid;grid-template-columns:110px 1fr 64px;align-items:center;gap:8px;margin:4px 0}
   .bar-row>span:first-child{font-size:9px}
   .bar-track{background:var(--paper-muted);border-radius:3px;height:9px;overflow:hidden}.bar-fill{background:var(--accent);height:100%}
-  .bar-value{text-align:right;font-size:9px}
+  .bar-value{text-align:right;font-size:9px;white-space:nowrap}
+  .distributions{display:flex;flex-direction:column;gap:6px}
+  .distribution.compact .columns{height:52px}
+  .distribution.compact+.distribution.compact h2{margin-top:2px}
   .distribution .columns{display:flex;align-items:flex-end;gap:6px;height:96px}
   .column{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;height:100%}
   .column strong{font-size:9px}
@@ -859,12 +887,14 @@ function renderPdfBarChart(
   minimum: number,
   maximum: number,
   suffix = "",
+  display?: (row: Record<string, unknown>) => string,
 ): string {
   const chartRows = rows.flatMap((row) => {
     const numericValue = value(row);
     if (numericValue === undefined) return [];
     const ratio = Math.max(0, Math.min(1, (numericValue - minimum) / (maximum - minimum)));
-    return [`<div class="bar-row"><span>${escapeHtml(label(row))}</span><span class="bar-track"><span class="bar-fill" style="display:block;width:${(ratio * 100).toFixed(2)}%"></span></span><strong class="bar-value">${escapeHtml(suffix === "%" ? formatKarnePercent(numericValue) : `${formatKarneNumber(numericValue)}${suffix}`)}</strong></div>`];
+    const text = display ? display(row) : suffix === "%" ? formatKarnePercent(numericValue) : `${formatKarneNumber(numericValue)}${suffix}`;
+    return [`<div class="bar-row"><span>${escapeHtml(label(row))}</span><span class="bar-track"><span class="bar-fill" style="display:block;width:${(ratio * 100).toFixed(2)}%"></span></span><strong class="bar-value">${escapeHtml(text)}</strong></div>`];
   });
   return chartRows.length > 0
     ? `<section class="bar-chart"><h2>${escapeHtml(title)}</h2>${chartRows.join("")}</section>`
