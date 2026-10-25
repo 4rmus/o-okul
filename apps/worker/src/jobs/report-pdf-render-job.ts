@@ -475,22 +475,27 @@ function renderPdfScoreRanking(type: ExamScoreType, students: Record<string, unk
   return `<section class="course-table ranking-table"><h2>${escapeHtml(titleWithType ? `Öğrenci Sıralaması · ${label}` : "Öğrenci Sıralaması")}</h2><table><thead><tr><th rowspan="2">Kurum sırası</th><th rowspan="2" class="name">Öğrenci</th><th rowspan="2" class="name">Sınıf</th><th rowspan="2">${escapeHtml(`${label} puanı`)}</th><th rowspan="2">Toplam net</th>${courseHeaders}<th rowspan="2">Sınıf sırası</th></tr><tr>${splitHeaders}</tr></thead><tbody>${body}</tbody></table></section>`;
 }
 
-// Karne puan tablosu kurum sıralamasıyla aynı düzeni kullanır: her ders için D/Y/N sütunu, ardından
-// toplam, deneme puanı ve sıralar. Her puan türünün dersleri farklı olduğundan tür başına ayrı tablo çizilir.
+// Karne puan tablosu solda deneme puanı ve başarı sıralarını, sağda tam adlı dersleri ve toplamı D/Y/N
+// sütunlarıyla gösterir. Her puan türünün dersleri farklı olduğundan tür başına ayrı tablo çizilir.
 function renderPdfStudentScoreTables(student: Record<string, unknown>, scoreViews: Record<string, unknown>[], rankings: Record<string, unknown>[]): string {
   const tables = scoreViews.flatMap((view) => {
     const type = readExamScoreType(view.type);
     if (!type) return [];
     const label = pdfScoreTypeLabel(type);
-    const courses = pdfScoreCourses([student], type);
+    const branches = pdfScoreCourses([student], type).map((course) => findPdfCourse(student, type, course));
     const ranking = rankings.find((candidate) => readText(candidate.type) === type);
     const calculated = view.status === "CALCULATED";
-    const [courseHeaders, splitHeaders] = renderPdfCourseHeaders([...courses, "Toplam"]);
-    const courseCells = courses.map((course) => renderPdfCorrectWrongNetCells(findPdfCourse(student, type, course))).join("");
+    // Tire yerine bölünmeyen tire: "Coğrafya-1" başlıkta tireden kırılmaz.
+    const [courseHeaders, splitHeaders] = renderPdfCourseHeaders([...branches.map((branch) => (readText(branch?.branch) || "-").replace(/-/gu, "\u2011")), "Toplam"]);
+    // Soldaki üç sütun %8; kalan genişlik ders gruplarına eşit bölünür, grupta net D ve Y'den geniştir.
+    const groupWidth = 76 / (branches.length + 1);
+    const groupColumns = `<col style="width:${(groupWidth * 0.29).toFixed(3)}%" /><col style="width:${(groupWidth * 0.29).toFixed(3)}%" /><col style="width:${(groupWidth * 0.42).toFixed(3)}%" />`;
+    const columns = `<colgroup><col class="lead" /><col class="lead" /><col class="lead" />${groupColumns.repeat(branches.length + 1)}</colgroup>`;
+    const courseCells = branches.map((branch) => renderPdfCorrectWrongNetCells(branch)).join("");
     const score = calculated
       ? escapeHtml(formatKarneNumber(view.practiceScore))
       : `<span class="status">${escapeHtml(formatScoreStatus(view.status))}</span>`;
-    return [`<table><thead><tr>${courseHeaders}<th rowspan="2">${escapeHtml(`${label} deneme puanı`)}</th><th rowspan="2">Kurum başarı sırası</th><th rowspan="2">Sınıf başarı sırası</th></tr><tr>${splitHeaders}</tr></thead><tbody><tr>${courseCells}${renderPdfCorrectWrongNetCells(readRecord(view.metrics), "total")}<td class="score">${score}</td><td class="rank">${escapeHtml(calculated ? formatV2Rank(readRecord(ranking?.institution)) : "-")}</td><td class="rank">${escapeHtml(calculated ? formatV2Rank(readRecord(ranking?.class)) : "-")}</td></tr></tbody></table>`];
+    return [`<table>${columns}<thead><tr><th rowspan="2">${escapeHtml(`${label} deneme puanı`)}</th><th rowspan="2">Kurum başarı sırası</th><th rowspan="2">Sınıf başarı sırası</th>${courseHeaders}</tr><tr>${splitHeaders}</tr></thead><tbody><tr><td class="score">${score}</td><td class="rank">${escapeHtml(calculated ? formatV2Rank(readRecord(ranking?.institution)) : "-")}</td><td class="rank">${escapeHtml(calculated ? formatV2Rank(readRecord(ranking?.class)) : "-")}</td>${courseCells}${renderPdfCorrectWrongNetCells(readRecord(view.metrics), "total")}</tr></tbody></table>`];
   });
   return tables.length > 0 ? `<section class="course-table score-table"><h2>Deneme Puanları</h2>${tables.join("")}</section>` : "";
 }
@@ -566,7 +571,9 @@ function renderPdfBranchHighlights(branches: Record<string, unknown>[]): string 
   if (ranked.length < 2) return "";
   const count = Math.min(3, Math.floor(ranked.length / 2));
   const list = (items: typeof ranked) => items.map((item) => `<li><span>${escapeHtml(item.name)}</span><strong>${escapeHtml(formatKarnePercent(item.rate))}</strong></li>`).join("");
-  return `<section class="highlights"><div><h3>Güçlü dersler</h3><ul>${list(ranked.slice(0, count))}</ul></div><div><h3>Öncelikli çalışma</h3><ul>${list(ranked.slice(-count).reverse())}</ul></div></section>`;
+  // Tam başarılı ders öncelikli çalışma sayılmaz; hiç eksik ders yoksa kutu çizilmez.
+  const priorities = ranked.slice(-count).reverse().filter((item) => item.rate < 100);
+  return `<section class="highlights"><div><h3>Güçlü dersler</h3><ul>${list(ranked.slice(0, count))}</ul></div>${priorities.length > 0 ? `<div><h3>Öncelikli çalışma</h3><ul>${list(priorities)}</ul></div>` : ""}</section>`;
 }
 
 function renderPdfAnswerGrid(value: unknown): string {
@@ -724,7 +731,13 @@ const pdfReportCss = `
   .course-table tbody tr:nth-child(even) td{background:var(--paper-muted)}
   .score-table table+table{margin-top:4px}
   .score-table th,.score-table td,.score-table thead tr:nth-child(2) th{font-size:8px;text-align:center}
-  .score-table th[rowspan]{width:13%}
+  .score-table table{table-layout:fixed}
+  .score-table col.lead{width:8%}
+  .score-table td{padding:3px 1px}
+  .score-table th[rowspan]{white-space:normal}
+  .score-table th.course{white-space:normal;line-height:1.2;vertical-align:bottom}
+  .score-table td.score{border-left:0;font-size:10px}
+  .score-table td.rank+td.course-start{border-left:1px solid var(--rule-strong)}
   .course-table td.total{background:var(--accent-soft)}
   .bars{display:flex;flex-direction:column;gap:1px;width:100%;min-width:90px}
   .bar{display:block;background:var(--paper-muted);border-radius:2px;overflow:hidden}

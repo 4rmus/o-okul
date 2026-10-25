@@ -547,7 +547,8 @@ describe("report PDF render job", () => {
     expect(html).toContain("<th>Sınıf %</th>");
     expect(html).toContain("<td>%50,0</td>");
     expect(html).toContain("<td>%33,3</td>");
-    expect(html).toContain('<th class="course" colspan="3">Mat</th><th class="course" colspan="3">Toplam</th><th rowspan="2">LGS deneme puanı</th>');
+    expect(html).toContain('<th rowspan="2">LGS deneme puanı</th><th rowspan="2">Kurum başarı sırası</th><th rowspan="2">Sınıf başarı sırası</th><th class="course" colspan="3">Matematik</th><th class="course" colspan="3">Toplam</th>');
+    expect(html).toContain('<td class="score">210</td><td class="rank">2/2</td><td class="rank">2/2</td><td class="course-start">1</td>');
     expect(html).toContain('<td class="course-start">1</td><td>1</td><td class="net">0,67</td>');
     expect(html).not.toContain("Mat 0,67");
     expect(html).toContain("Cevap Haritası");
@@ -561,6 +562,38 @@ describe("report PDF render job", () => {
     expect(html).toContain("Deniz &lt;Koleji&gt;");
     expect(input?.footerLabel).toBe("Deniz <Koleji> · LGS Tasarım");
     expect(input?.footerLabel).not.toContain("Ada");
+  });
+
+  it("öncelikli çalışma kutusu tam başarılı dersleri listelemez", async () => {
+    const renderer = new FakeRenderer();
+    const branch = (name: string, successRate: number) => ({ branch: name, correct: 10, wrong: 0, blank: 0, net: 10, questionCount: 10, successRate });
+    await processReportPdfRenderJob({
+      name: "report-pdf-render",
+      data: {
+        snapshot: {
+          id: "snapshot-highlights",
+          tenantId: "tenant-a",
+          examId: "exam-lgs",
+          reportType: "EXAM_RESULT_SUMMARY",
+          status: "READY",
+          snapshotData: {
+            schemaVersion: 2,
+            pdfMode: "STUDENT_CARDS",
+            examType: "LGS",
+            students: [{
+              studentId: "student-top",
+              total: { net: 38, questionCount: 40, successRate: 95 },
+              branches: [branch("Türkçe", 100), branch("Matematik", 100), branch("Fen Bilimleri", 100), branch("Yabancı Dil", 80)],
+            }],
+          },
+        },
+      },
+    }, renderer);
+
+    const html = renderer.inputs[0]?.html ?? "";
+    const priorities = html.slice(html.indexOf("<h3>Öncelikli çalışma</h3>"));
+    expect(priorities).toContain("<span>Yabancı Dil</span><strong>%80,0</strong>");
+    expect(priorities.slice(0, priorities.indexOf("</ul>"))).not.toContain("%100,0");
   });
 
   it("PDF kâğıt renkleri tokens.css açık temasıyla aynı kalır", async () => {
