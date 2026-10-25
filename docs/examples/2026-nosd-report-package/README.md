@@ -18,4 +18,6 @@ pnpm reports:2026-nosd:examples
 
 Her sınav için golden snapshot JSON, kurum özeti PDF, kurum Excel’i ve seçili öğrencinin iki sayfalık karne PDF’i üretilir. Bunlar yerel/sentetik doğrulama çıktılarıdır; staging, production veya resmî sınav puanı kanıtı değildir.
 
+Karne PDF'inin ilk sayfası `Başarı %` birincil kartı, D/Y/B şeridi, puan türü kartları, ders başına öğrenci, sınıf ve kurum başarı karşılaştırması ile güçlü/öncelikli dersleri gösterir. İkinci sayfa en zayıf kazanımları ad ve kodla, bütün soruları cevap haritasında, yanlış ve boş soruları öğrencinin cevabı ve doğru cevapla listeler. Kurum özeti puan türü kartları, ders başarı grafiği, başarı dağılımı, branş, sınıf ve öğrenci tablolarını içerir. Tarihler Europe/Istanbul saatiyle yazılır, IBM Plex Sans PDF'e gömülür ve sayfa altbilgisi öğrenci adı taşımaz.
+
 Öğrenci listelerinde ders netleri ilgili LGS, TYT, Sayısal, EA ve Sözel puan bloklarının altında kısaltılmış adlarla gösterilir. Sıralar yalnız kurum ve sınıf kapsamındaki başarı sırası olarak sunulur.

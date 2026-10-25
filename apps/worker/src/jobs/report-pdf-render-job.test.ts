@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   processReportPdfRenderJob,
@@ -436,6 +438,112 @@ describe("report PDF render job", () => {
     expect(html).not.toMatch(/%81\.6667|%73\.3333|>24\.5</u);
     expect(fallback).toContain("Net 24.5");
     expect(fallback).toContain("Basari %81.6667");
+  });
+
+  it("v2 karnede sınıf/kurum karşılaştırması, cevap haritası ve kazanım adını aynı snapshot'tan gösterir", async () => {
+    const renderer = new FakeRenderer();
+    await processReportPdfRenderJob({
+      name: "report-pdf-render",
+      data: {
+        institution: { institutionName: "Deniz <Koleji>" },
+        snapshot: {
+          id: "snapshot-design",
+          tenantId: "tenant-a",
+          examId: "exam-lgs",
+          reportType: "EXAM_RESULT_SUMMARY",
+          status: "READY",
+          snapshotData: {
+            schemaVersion: 2,
+            pdfMode: "STUDENT_CARDS",
+            examType: "LGS",
+            examYear: 2026,
+            examTitle: "LGS Tasarım",
+            examStartsAt: "2026-06-14T06:30:00.000Z",
+            resultCount: 2,
+            branches: [{ branch: "Matematik", questionCount: 3, net: 1, successRate: 33.3333 }],
+            classes: [{ classId: "class-a", className: "8-A", resultCount: 2, branches: [{ branch: "Matematik", questionCount: 3, net: 1.5, successRate: 50 }] }],
+            students: [{
+              studentId: "student-design",
+              displayName: "Ada <script>alert(1)</script>",
+              classId: "class-a",
+              className: "8-A",
+              total: { correct: 1, wrong: 1, blank: 1, net: 0.67, questionCount: 3, successRate: 22.3333 },
+              branches: [{ branch: "Matematik", correct: 1, wrong: 1, blank: 1, net: 0.67, questionCount: 3, successRate: 22.3333 }],
+              outcomes: [{ outcomeCode: "M.8.1", branch: "Matematik", correct: 1, wrong: 1, blank: 1, net: 0.67, questionCount: 3, successRate: 22.3333 }],
+              questions: [
+                { questionNo: 1, branch: "Matematik", outcomeCode: "M.8.1", topic: "Çarpanlar ve katlar", answer: "A", correctAnswer: "A", status: "CORRECT" },
+                { questionNo: 2, branch: "Matematik", outcomeCode: "M.8.1", topic: "Çarpanlar ve katlar", answer: "B", correctAnswer: "C", status: "WRONG" },
+                { questionNo: 3, branch: "Matematik", outcomeCode: "M.8.1", topic: "Çarpanlar ve katlar", answer: "", correctAnswer: "D", status: "BLANK" },
+              ],
+              scoreViews: [{ type: "LGS", status: "CALCULATED", metrics: { correct: 1, wrong: 1, blank: 1, net: 0.67, questionCount: 3, successRate: 22.3333 }, practiceScore: 210, profileId: "TR-LGS-2026-NOSD-V1", officialComparable: false }],
+              scoreRankings: [{ type: "LGS", institution: { rank: 2, outOf: 2 }, class: { rank: 2, outOf: 2 } }],
+            }],
+          },
+        },
+      },
+    }, renderer);
+
+    const input = renderer.inputs[0];
+    const html = input?.html ?? "";
+    expect(html).toContain("14 Haziran 2026 09:30");
+    expect(html).not.toContain("2026-06-14T06:30:00.000Z");
+    expect(html).toContain("<th>Sınıf %</th>");
+    expect(html).toContain("<td>%50,0</td>");
+    expect(html).toContain("<td>%33,3</td>");
+    expect(html).toContain("Cevap Haritası");
+    expect(html).toContain('class="cell cell-wrong"');
+    expect(html).toContain("Çarpanlar ve katlar");
+    expect(html).toContain("<td>B</td><td>C</td><td>Yanlış</td>");
+    expect(html).toContain("@font-face");
+    expect(html).toContain("Ada &lt;script&gt;");
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("Deniz &lt;Koleji&gt;");
+    expect(input?.footerLabel).toBe("Deniz <Koleji> · LGS Tasarım");
+    expect(input?.footerLabel).not.toContain("Ada");
+  });
+
+  it("PDF kâğıt renkleri tokens.css açık temasıyla aynı kalır", async () => {
+    const renderer = new FakeRenderer();
+    await processReportPdfRenderJob({
+      name: "report-pdf-render",
+      data: {
+        snapshot: {
+          id: "snapshot-pins",
+          tenantId: "tenant-a",
+          examId: "exam-pins",
+          reportType: "EXAM_RESULT_SUMMARY",
+          status: "READY",
+          snapshotData: { schemaVersion: 2, examType: "LGS", resultCount: 0, students: [] },
+        },
+      },
+    }, renderer);
+
+    const html = renderer.inputs[0]?.html ?? "";
+    const tokens = readFileSync(resolve(__dirname, "../../../../tokens.css"), "utf8");
+    const pins: Array<[string, string]> = [
+      ["paper", "color-paper-raised"],
+      ["paper-muted", "color-paper-muted"],
+      ["ink", "color-ink"],
+      ["ink-secondary", "color-ink-secondary"],
+      ["ink-muted", "color-ink-muted"],
+      ["rule", "color-rule"],
+      ["rule-strong", "color-rule-strong"],
+      ["accent", "color-accent"],
+      ["accent-strong", "color-accent-strong"],
+      ["accent-soft", "color-accent-soft"],
+      ["success", "color-success-token"],
+      ["success-soft", "color-success-soft-token"],
+      ["warning", "color-warning-token"],
+      ["warning-soft", "color-warning-soft-token"],
+      ["danger", "color-danger-token"],
+      ["danger-soft", "color-danger-soft-token"],
+    ];
+    for (const [pdfName, tokenName] of pins) {
+      const pdfValue = html.match(new RegExp(`--${pdfName}:([^;}]+)`, "u"))?.[1]?.trim();
+      const tokenValue = tokens.match(new RegExp(`--${tokenName}:\\s*([^;]+);`, "u"))?.[1]?.trim();
+      expect(tokenValue, tokenName).toBeTruthy();
+      expect(pdfValue, pdfName).toBe(tokenValue);
+    }
   });
 });
 

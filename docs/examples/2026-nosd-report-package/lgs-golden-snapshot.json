@@ -3205,9 +3205,9 @@
               "correct": 75,
               "wrong": 3,
               "blank": 12,
-              "net": 74.01,
+              "net": 74,
               "questionCount": 90,
-              "successRate": 82.23
+              "successRate": 82.22
             },
             "practiceScore": 430.67,
             "profileId": "TR-LGS-2026-NOSD-V1",
@@ -4544,9 +4544,9 @@
               "correct": 75,
               "wrong": 3,
               "blank": 12,
-              "net": 74.01,
+              "net": 74,
               "questionCount": 90,
-              "successRate": 82.23
+              "successRate": 82.22
             },
             "practiceScore": 430.67,
             "profileId": "TR-LGS-2026-NOSD-V1",
@@ -5883,9 +5883,9 @@
               "correct": 66,
               "wrong": 6,
               "blank": 18,
-              "net": 64.02,
+              "net": 64,
               "questionCount": 90,
-              "successRate": 71.13
+              "successRate": 71.11
             },
             "practiceScore": 388,
             "profileId": "TR-LGS-2026-NOSD-V1",
@@ -8561,9 +8561,9 @@
               "correct": 48,
               "wrong": 12,
               "blank": 30,
-              "net": 44.01,
+              "net": 44,
               "questionCount": 90,
-              "successRate": 48.9
+              "successRate": 48.89
             },
             "practiceScore": 297.33,
             "profileId": "TR-LGS-2026-NOSD-V1",
@@ -9900,9 +9900,9 @@
               "correct": 45,
               "wrong": 12,
               "blank": 33,
-              "net": 41.01,
+              "net": 41,
               "questionCount": 90,
-              "successRate": 45.57
+              "successRate": 45.56
             },
             "practiceScore": 281.33,
             "profileId": "TR-LGS-2026-NOSD-V1",
@@ -13917,9 +13917,9 @@
               "correct": 12,
               "wrong": 24,
               "blank": 54,
-              "net": 3.99,
+              "net": 4,
               "questionCount": 90,
-              "successRate": 4.43
+              "successRate": 4.44
             },
             "practiceScore": 121.33,
             "profileId": "TR-LGS-2026-NOSD-V1",
@@ -15256,7 +15256,7 @@
               "correct": 0,
               "wrong": 30,
               "blank": 60,
-              "net": -9.99,
+              "net": -10,
               "questionCount": 90,
               "successRate": 0
             },
