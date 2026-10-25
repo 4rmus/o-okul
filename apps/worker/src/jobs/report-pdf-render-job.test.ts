@@ -487,9 +487,9 @@ describe("report PDF render job", () => {
 
     const html = renderer.inputs[0]?.html ?? "";
     const fallback = renderer.inputs[0]?.fallbackLines.join("\n") ?? "";
-    expect(html).toContain("<td>%81,7</td>");
+    expect(html).toContain('<p class="stat-value">%81,7</p>');
     expect(html).toContain("<td>%73,3</td>");
-    expect(html).toContain("<td>24,50</td>");
+    expect(html).toContain('<td class="course-start total">25</td><td class="total">4</td><td class="net total">24,50</td>');
     expect(html).toContain("<td>11,00</td>");
     expect(html).toContain("440,13");
     expect(html).not.toMatch(/%81\.6667|%73\.3333|>24\.5</u);
@@ -547,6 +547,9 @@ describe("report PDF render job", () => {
     expect(html).toContain("<th>Sınıf %</th>");
     expect(html).toContain("<td>%50,0</td>");
     expect(html).toContain("<td>%33,3</td>");
+    expect(html).toContain('<th class="course" colspan="3">Mat</th><th class="course" colspan="3">Toplam</th><th rowspan="2">LGS deneme puanı</th>');
+    expect(html).toContain('<td class="course-start">1</td><td>1</td><td class="net">0,67</td>');
+    expect(html).not.toContain("Mat 0,67");
     expect(html).toContain("Cevap Haritası");
     expect(html).toContain('class="cell cell-wrong"');
     expect(html).toContain("Çarpanlar ve katlar");

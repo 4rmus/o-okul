@@ -329,24 +329,7 @@ function renderPdfStudentCard(context: PdfReportContext, student: Record<string,
     ${scoreCards}
   </section>${renderPdfAnswerSplitBar(total)}`;
 
-  const scoreTable = renderPdfTable("Deneme Puanları", ["Tür", "Durum", "Deneme Puanı", "D", "Y", "B", "Net", "Soru", "Başarı %", "Kurum başarı sırası", "Sınıf başarı sırası"], scoreViews, (view) => {
-    const metrics = readRecord(view.metrics);
-    const ranking = rankings.find((candidate) => readText(candidate.type) === readText(view.type));
-    const type = readExamScoreType(view.type);
-    return [
-      pdfScoreTypeLabel(readText(view.type)),
-      formatScoreStatus(view.status),
-      type ? `${formatKarneNumber(view.practiceScore)}\n${formatPdfScoreCourseNets(student, type, formatKarneNet)}` : formatKarneNumber(view.practiceScore),
-      formatKarneNumber(metrics.correct),
-      formatKarneNumber(metrics.wrong),
-      formatKarneNumber(metrics.blank),
-      formatKarneNet(metrics.net),
-      formatKarneNumber(metrics.questionCount),
-      formatKarnePercent(scoreSuccessRate(metrics)),
-      formatV2Rank(readRecord(ranking?.institution)),
-      formatV2Rank(readRecord(ranking?.class)),
-    ];
-  }, "score-table");
+  const scoreTable = renderPdfStudentScoreTables(student, scoreViews, rankings);
 
   const hasClassAverages = classBranches.length > 0;
   const hasInstitutionAverages = institutionBranches.length > 0;
@@ -483,19 +466,47 @@ function renderPdfScoreRanking(type: ExamScoreType, students: Record<string, unk
     });
   if (rows.length === 0) return "";
 
-  const courseHeaders = courses.map((course) => `<th class="course" colspan="3">${escapeHtml(course)}</th>`).join("");
-  const splitHeaders = courses.map(() => `<th class="course-start">D</th><th>Y</th><th>N</th>`).join("");
+  const [courseHeaders, splitHeaders] = renderPdfCourseHeaders(courses);
   const body = rows.map(({ ranking, student, view }) => {
     const calculated = view?.status === "CALCULATED";
-    const courseCells = courses.map((course) => {
-      const branch = findPdfCourse(student, type, course);
-      return branch
-        ? `<td class="course-start">${escapeHtml(formatKarneNumber(branch.correct))}</td><td>${escapeHtml(formatKarneNumber(branch.wrong))}</td><td class="net">${escapeHtml(formatKarneNet(branch.net))}</td>`
-        : `<td class="course-start">-</td><td>-</td><td class="net">-</td>`;
-    }).join("");
+    const courseCells = courses.map((course) => renderPdfCorrectWrongNetCells(findPdfCourse(student, type, course))).join("");
     return `<tr><td class="rank">${escapeHtml(calculated ? formatV2Rank(readRecord(ranking?.institution)) : "-")}</td><td class="name">${escapeHtml(pdfStudentName(student))}</td><td class="name">${escapeHtml(readText(student.className) || "-")}</td><td class="score">${calculated ? escapeHtml(formatKarneNumber(view?.practiceScore)) : `<span class="status">${escapeHtml(formatScoreStatus(view?.status))}</span>`}</td><td class="total">${escapeHtml(formatKarneNet(readRecord(view?.metrics).net))}</td>${courseCells}<td class="rank">${escapeHtml(calculated ? formatV2Rank(readRecord(ranking?.class)) : "-")}</td></tr>`;
   }).join("");
-  return `<section class="ranking-table"><h2>${escapeHtml(titleWithType ? `Öğrenci Sıralaması · ${label}` : "Öğrenci Sıralaması")}</h2><table><thead><tr><th rowspan="2">Kurum sırası</th><th rowspan="2" class="name">Öğrenci</th><th rowspan="2" class="name">Sınıf</th><th rowspan="2">${escapeHtml(`${label} puanı`)}</th><th rowspan="2">Toplam net</th>${courseHeaders}<th rowspan="2">Sınıf sırası</th></tr><tr>${splitHeaders}</tr></thead><tbody>${body}</tbody></table></section>`;
+  return `<section class="course-table ranking-table"><h2>${escapeHtml(titleWithType ? `Öğrenci Sıralaması · ${label}` : "Öğrenci Sıralaması")}</h2><table><thead><tr><th rowspan="2">Kurum sırası</th><th rowspan="2" class="name">Öğrenci</th><th rowspan="2" class="name">Sınıf</th><th rowspan="2">${escapeHtml(`${label} puanı`)}</th><th rowspan="2">Toplam net</th>${courseHeaders}<th rowspan="2">Sınıf sırası</th></tr><tr>${splitHeaders}</tr></thead><tbody>${body}</tbody></table></section>`;
+}
+
+// Karne puan tablosu kurum sıralamasıyla aynı düzeni kullanır: her ders için D/Y/N sütunu, ardından
+// toplam, deneme puanı ve sıralar. Her puan türünün dersleri farklı olduğundan tür başına ayrı tablo çizilir.
+function renderPdfStudentScoreTables(student: Record<string, unknown>, scoreViews: Record<string, unknown>[], rankings: Record<string, unknown>[]): string {
+  const tables = scoreViews.flatMap((view) => {
+    const type = readExamScoreType(view.type);
+    if (!type) return [];
+    const label = pdfScoreTypeLabel(type);
+    const courses = pdfScoreCourses([student], type);
+    const ranking = rankings.find((candidate) => readText(candidate.type) === type);
+    const calculated = view.status === "CALCULATED";
+    const [courseHeaders, splitHeaders] = renderPdfCourseHeaders([...courses, "Toplam"]);
+    const courseCells = courses.map((course) => renderPdfCorrectWrongNetCells(findPdfCourse(student, type, course))).join("");
+    const score = calculated
+      ? escapeHtml(formatKarneNumber(view.practiceScore))
+      : `<span class="status">${escapeHtml(formatScoreStatus(view.status))}</span>`;
+    return [`<table><thead><tr>${courseHeaders}<th rowspan="2">${escapeHtml(`${label} deneme puanı`)}</th><th rowspan="2">Kurum başarı sırası</th><th rowspan="2">Sınıf başarı sırası</th></tr><tr>${splitHeaders}</tr></thead><tbody><tr>${courseCells}${renderPdfCorrectWrongNetCells(readRecord(view.metrics), "total")}<td class="score">${score}</td><td class="rank">${escapeHtml(calculated ? formatV2Rank(readRecord(ranking?.institution)) : "-")}</td><td class="rank">${escapeHtml(calculated ? formatV2Rank(readRecord(ranking?.class)) : "-")}</td></tr></tbody></table>`];
+  });
+  return tables.length > 0 ? `<section class="course-table score-table"><h2>Deneme Puanları</h2>${tables.join("")}</section>` : "";
+}
+
+function renderPdfCourseHeaders(courses: string[]): [string, string] {
+  return [
+    courses.map((course) => `<th class="course" colspan="3">${escapeHtml(course)}</th>`).join(""),
+    courses.map(() => `<th class="course-start">D</th><th>Y</th><th>N</th>`).join(""),
+  ];
+}
+
+function renderPdfCorrectWrongNetCells(score: Record<string, unknown> | undefined, className = ""): string {
+  const extra = className ? ` ${className}` : "";
+  return score
+    ? `<td class="course-start${extra}">${escapeHtml(formatKarneNumber(score.correct))}</td><td${className ? ` class="${className}"` : ""}>${escapeHtml(formatKarneNumber(score.wrong))}</td><td class="net${extra}">${escapeHtml(formatKarneNet(score.net))}</td>`
+    : `<td class="course-start">-</td><td>-</td><td class="net">-</td>`;
 }
 
 function pdfScoreCourses(students: Record<string, unknown>[], type: ExamScoreType): string[] {
@@ -694,23 +705,27 @@ const pdfReportCss = `
   th,td{border-bottom:1px solid var(--rule);padding:3px 5px;text-align:left;vertical-align:top}
   th{background:var(--paper-muted);color:var(--ink-secondary);font-size:8px;font-weight:600;letter-spacing:.03em;border-bottom-color:var(--rule-strong)}
   td{font-size:9px}
-  .score-table td:nth-child(n+4),.branch-table td:nth-child(n+2),.outcome-table td:nth-child(n+3),.class-table td:nth-child(n+2){white-space:nowrap}
+  .branch-table td:nth-child(n+2),.outcome-table td:nth-child(n+3),.class-table td:nth-child(n+2){white-space:nowrap}
   .branch-table td,.class-table td{vertical-align:middle}
   .rankings{break-before:page}
-  .ranking-table h2{break-after:avoid}
-  .ranking-table thead tr:nth-child(2) th{text-align:right}
-  .ranking-table table{table-layout:auto}
-  .ranking-table th,.ranking-table td{padding:3px 3px;text-align:right;white-space:nowrap}
-  .ranking-table th{text-align:center;vertical-align:middle}
-  .ranking-table td.name,.ranking-table th.name{text-align:left}
-  .ranking-table th.course{border-left:1px solid var(--rule-strong);border-bottom:1px solid var(--rule)}
-  .ranking-table .course-start{border-left:1px solid var(--rule-strong)}
-  .ranking-table td.rank{text-align:center;color:var(--ink-secondary)}
-  .ranking-table td.net{font-weight:600}
-  .ranking-table td.total{font-weight:600}
-  .ranking-table td.score{color:var(--accent-strong);font-weight:600;font-size:9.5px;border-left:1px solid var(--rule-strong)}
-  .ranking-table td.score .status{display:inline-block;max-width:72px;white-space:normal;text-align:right;color:var(--ink-muted);font-size:7px;font-weight:400;line-height:1.2}
-  .ranking-table tbody tr:nth-child(even) td{background:var(--paper-muted)}
+  .course-table h2{break-after:avoid}
+  .course-table thead tr:nth-child(2) th{text-align:right}
+  .course-table table{table-layout:auto}
+  .course-table th,.course-table td{padding:3px 3px;text-align:right;white-space:nowrap}
+  .course-table th{text-align:center;vertical-align:middle}
+  .course-table td.name,.course-table th.name{text-align:left}
+  .course-table th.course{border-left:1px solid var(--rule-strong);border-bottom:1px solid var(--rule)}
+  .course-table .course-start{border-left:1px solid var(--rule-strong)}
+  .course-table td.rank{text-align:center;color:var(--ink-secondary)}
+  .course-table td.net{font-weight:600}
+  .course-table td.total{font-weight:600}
+  .course-table td.score{color:var(--accent-strong);font-weight:600;font-size:9.5px;border-left:1px solid var(--rule-strong)}
+  .course-table td.score .status{display:inline-block;max-width:72px;white-space:normal;text-align:right;color:var(--ink-muted);font-size:7px;font-weight:400;line-height:1.2}
+  .course-table tbody tr:nth-child(even) td{background:var(--paper-muted)}
+  .score-table table+table{margin-top:4px}
+  .score-table th,.score-table td,.score-table thead tr:nth-child(2) th{font-size:8px;text-align:center}
+  .score-table th[rowspan]{width:13%}
+  .course-table td.total{background:var(--accent-soft)}
   .bars{display:flex;flex-direction:column;gap:1px;width:100%;min-width:90px}
   .bar{display:block;background:var(--paper-muted);border-radius:2px;overflow:hidden}
   .bar span{display:block;height:100%}
