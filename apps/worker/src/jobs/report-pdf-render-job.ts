@@ -390,13 +390,6 @@ function renderPdfStudentCard(context: PdfReportContext, student: Record<string,
       formatKarneNet(outcome.net),
     ];
   }, "outcome-table");
-  const questionTable = renderPdfTable("Soru Cevap Analizi", ["Soru", "Ders", "Cevap", "Doğru", "Durum"], selectPdfQuestionRows(student.questions), (question) => [
-    formatKarneNumber(question.questionNo),
-    readText(question.branch) || "-",
-    readText(question.answer) || "-",
-    readText(question.correctAnswer) || "-",
-    formatPdfQuestionStatus(question.status),
-  ], "question-table");
 
   return `<section class="karne karne-summary">${masthead("Öğrenci Karnesi")}${renderNotices ? renderPdfNotices(context) : ""}
       <h2 class="sr-title">Öğrenci Karnesi</h2>
@@ -408,7 +401,6 @@ function renderPdfStudentCard(context: PdfReportContext, student: Record<string,
     <section class="karne karne-detail">${masthead("Kazanım ve Soru Analizi")}
       ${outcomeTable}
       ${renderPdfAnswerGrid(student.questions)}
-      ${questionTable}
     </section>`;
 }
 
@@ -863,12 +855,6 @@ function renderPdfBarChart(
   return chartRows.length > 0
     ? `<section class="bar-chart"><h2>${escapeHtml(title)}</h2>${chartRows.join("")}</section>`
     : "";
-}
-
-function selectPdfQuestionRows(value: unknown): Record<string, unknown>[] {
-  const questions = readRecords(value);
-  const actionable = questions.filter((question) => question.status !== "CORRECT");
-  return (actionable.length > 0 ? actionable : questions).slice(0, 10);
 }
 
 function selectPdfOutcomeRows(value: unknown): Record<string, unknown>[] {

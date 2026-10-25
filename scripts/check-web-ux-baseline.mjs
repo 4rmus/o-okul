@@ -4019,7 +4019,7 @@ requireTokens("apps/worker/src/jobs/report-pdf-render-job.ts", [
   "renderPdfBarChart",
   "formatV2StudentScores",
   "selectPdfOutcomeRows",
-  "selectPdfQuestionRows",
+  "renderPdfAnswerGrid",
   '["Tür", "Durum", "Deneme Puanı", "D", "Y", "B", "Net", "Soru", "Başarı %", "Kurum başarı sırası", "Sınıf başarı sırası"]',
   '["Branş", "Başarı %", "Soru", "Net"]',
   '"Kurum başarı sırası"',

@@ -550,7 +550,8 @@ describe("report PDF render job", () => {
     expect(html).toContain("Cevap Haritası");
     expect(html).toContain('class="cell cell-wrong"');
     expect(html).toContain("Çarpanlar ve katlar");
-    expect(html).toContain("<td>B</td><td>C</td><td>Yanlış</td>");
+    expect(html).toContain('<span class="cell cell-wrong"><em>2</em>B<small>C</small></span>');
+    expect(html).not.toContain("Soru Cevap Analizi");
     expect(html).toContain("@font-face");
     expect(html).toContain("Ada &lt;script&gt;");
     expect(html).not.toContain("<script>");
