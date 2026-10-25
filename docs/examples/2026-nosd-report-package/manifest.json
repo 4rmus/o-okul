@@ -42,13 +42,13 @@
   "tytSummary": {
     "resultCount": 11,
     "physicalQuestionCount": 120,
-    "institutionPdfPageCount": 1,
+    "institutionPdfPageCount": 2,
     "studentPdfPageCount": 2
   },
   "aytSummary": {
     "resultCount": 12,
     "physicalQuestionCount": 160,
-    "institutionPdfPageCount": 2,
+    "institutionPdfPageCount": 4,
     "studentPdfPageCount": 2
   }
 }

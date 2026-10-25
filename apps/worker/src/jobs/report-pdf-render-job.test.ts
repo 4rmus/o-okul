@@ -207,12 +207,14 @@ describe("report PDF render job", () => {
     expect(html).toContain("Ders Başarı Grafiği");
     expect(html).toContain("Puan Türü Karşılaştırması");
     expect(html).toContain("LGS puanı");
-    expect(html).toContain("Kurum başarı sırası");
-    expect(html).toContain("Sınıf başarı sırası");
-    expect(html).toContain("Tr 18");
-    expect(html).toContain("460");
-    expect(html).toContain("LGS 1/1");
+    expect(html).toContain("Kurum sırası");
+    expect(html).toContain("Sınıf sırası");
+    expect(html).toContain('<th class="course" colspan="3">Tr</th>');
+    expect(html).toContain('<td class="net">18,00</td>');
+    expect(html).toContain('<td class="score">460</td>');
+    expect(html).toContain('<td class="rank">1/1</td>');
     expect(html).not.toContain("Öğrenci Karnesi");
+    expect(renderer.inputs[0]?.landscape).toBe(true);
   });
 
   it("AYT kurum özetinde SAY EA ve SÖZ puanlarını ayrı kolonlarda render eder", async () => {
@@ -283,10 +285,65 @@ describe("report PDF render job", () => {
     expect(html).toContain("412");
     expect(html).toContain("398");
     expect(html).toContain("376");
-    expect(html).toContain("Mat 28");
-    expect(html).toContain("Edb 17,25");
-    expect(html).toContain("Kurum başarı sırası");
-    expect(html).toContain("Sınıf başarı sırası");
+    expect(html).toContain("Öğrenci Sıralaması · Sayısal");
+    expect(html).toContain("Öğrenci Sıralaması · EA");
+    expect(html).toContain("Öğrenci Sıralaması · Sözel");
+    expect(html).toContain('<th class="course" colspan="3">Mat</th>');
+    expect(html).toContain('<td class="net">28,00</td>');
+    expect(html).toContain('<td class="net">17,25</td>');
+    expect(html).toContain("Kurum sırası");
+    expect(html).toContain("Sınıf sırası");
+  });
+
+  it("kurum sıralaması öğrencileri puana göre dizer ve her ders için D/Y/N sütunu verir", async () => {
+    const renderer = new FakeRenderer();
+    const student = (id: string, practiceScore: number | undefined, rank: number | undefined, correct: number) => ({
+      studentId: id,
+      displayName: `Öğrenci ${id}`,
+      className: "8-A",
+      total: { correct, wrong: 2, blank: 0, net: correct - 0.67, questionCount: correct + 2, successRate: 50 },
+      branches: [
+        { branch: "Türkçe", correct, wrong: 2, blank: 0, net: correct - 0.67, questionCount: correct + 2 },
+        { branch: "Matematik", correct: 3, wrong: 1, blank: 1, net: 2.67, questionCount: 5 },
+      ],
+      scoreViews: [{
+        type: "LGS",
+        status: practiceScore === undefined ? "NOT_ELIGIBLE" as const : "CALCULATED" as const,
+        metrics: { correct, wrong: 2, blank: 0, net: correct - 0.67, questionCount: correct + 2, successRate: 50 },
+        ...(practiceScore === undefined ? {} : { practiceScore }),
+        profileId: "TR-LGS-2026-NOSD-V1",
+        officialComparable: false,
+      }],
+      scoreRankings: rank === undefined ? [] : [{ type: "LGS", institution: { rank, outOf: 2 }, class: { rank, outOf: 2 } }],
+    });
+    await processReportPdfRenderJob({
+      name: "report-pdf-render",
+      data: {
+        snapshot: {
+          id: "snapshot-ranking",
+          tenantId: "tenant-a",
+          examId: "exam-lgs",
+          reportType: "EXAM_RESULT_SUMMARY",
+          status: "READY",
+          snapshotData: {
+            schemaVersion: 2,
+            pdfMode: "INSTITUTION_SUMMARY",
+            examType: "LGS",
+            resultCount: 3,
+            students: [student("C", undefined, undefined, 1), student("B", 310.5, 2, 8), student("A", 420, 1, 12)],
+          },
+        },
+      },
+    }, renderer);
+
+    const html = renderer.inputs[0]?.html ?? "";
+    const order = ["Öğrenci A", "Öğrenci B", "Öğrenci C"].map((name) => html.indexOf(`<td class="name">${name}</td>`));
+    expect(order.every((position) => position > 0)).toBe(true);
+    expect(order).toEqual([...order].sort((left, right) => left - right));
+    expect(html).toContain('<th class="course" colspan="3">Tr</th><th class="course" colspan="3">Mat</th>');
+    expect(html).toContain('<td class="course-start">12</td><td>2</td><td class="net">11,33</td>');
+    expect(html).toContain('<td class="score">310,5</td>');
+    expect(html).toContain('<span class="status">Hesaplama koşulu sağlanmadı</span>');
   });
 
   it("snapshot kayitlarini kirpmadan her ogrenci icin karne uretir", async () => {

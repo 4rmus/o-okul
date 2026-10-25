@@ -24,6 +24,7 @@ export interface ReportPdfRenderInput {
   fallbackLines: string[];
   footerLabel?: string;
   html: string;
+  landscape?: boolean;
 }
 
 export interface ReportPdfRenderer {
@@ -49,6 +50,7 @@ export async function processReportPdfRenderJob(
     fallbackLines: createSnapshotPdfLines(job.data.snapshot, job.data.institution),
     footerLabel: createSnapshotPdfFooterLabel(job.data.snapshot, job.data.institution),
     html: createSnapshotPdfHtml(job.data.snapshot, job.data.institution),
+    landscape: readText(readRecord(job.data.snapshot.snapshotData).pdfMode) === "INSTITUTION_SUMMARY",
   });
 
   return {
@@ -83,6 +85,7 @@ class PuppeteerReportPdfRenderer implements ReportPdfRenderer {
         footerTemplate: renderPdfFooterTemplate(input.footerLabel ?? ""),
         format: "A4",
         headerTemplate: "<span></span>",
+        landscape: Boolean(input.landscape),
         margin: { bottom: "16mm", left: "14mm", right: "14mm", top: "16mm" },
         printBackground: true,
       });
@@ -432,27 +435,9 @@ function renderPdfInstitutionSummary(context: PdfReportContext, students: Record
     ${scoreCards}
   </section>`;
 
-  const institutionStudentTable = renderPdfTable(
-    "Öğrenci Sıralaması",
-    [
-      "Öğrenci",
-      "Sınıf",
-      "Başarı %",
-      ...context.scoreTypes.map((type) => `${pdfScoreTypeLabel(type)} puanı`),
-      "Kurum başarı sırası",
-      "Sınıf başarı sırası",
-    ],
-    students,
-    (student) => [
-      readText(student.displayName) || readText(student.studentId) || "-",
-      readText(student.className) || "-",
-      formatKarnePercent(scoreSuccessRate(readRecord(student.total))),
-      ...context.scoreTypes.map((type) => `${formatPdfScoreByType(student, type, formatKarneNumber)}\n${formatPdfScoreCourseNets(student, type, formatKarneNet)}`),
-      formatPdfRankingsByScope(student, "institution"),
-      formatPdfRankingsByScope(student, "class"),
-    ],
-    "ranking-table",
-  );
+  const institutionStudentTable = context.scoreTypes
+    .map((type) => renderPdfScoreRanking(type, students, context.scoreTypes.length > 1))
+    .join("");
 
   return `<section class="institution-summary">${renderPdfMasthead(context, readText(data.examTitle) || "Sınav Raporu", subtitle, aside)}
       ${renderPdfNotices(context)}
@@ -481,7 +466,66 @@ function renderPdfInstitutionSummary(context: PdfReportContext, students: Record
           pdfHtmlCell(renderPdfComparisonBars(scoreSuccessRate(classAverages), "", readOptionalNumber(scoreSuccessRate(averages)) ?? "")),
         ];
       }, "class-table")}${classes.length > 0 ? `<p class="legend"><span class="key key-student"></span>Sınıf<span class="key key-institution"></span>Kurum ortalaması</p>` : ""}
-      ${institutionStudentTable}</section>`;
+      ${institutionStudentTable ? `<div class="rankings">${institutionStudentTable}</div>` : ""}</section>`;
+}
+
+// Kurum özeti listesi her puan türünde o türün puanına göre sıralanır; ders sütunları D/Y/N taşır.
+// Sıra değerleri snapshot'taki rekabet sırasıdır, şablon yeniden hesaplamaz.
+function renderPdfScoreRanking(type: ExamScoreType, students: Record<string, unknown>[], titleWithType: boolean): string {
+  const label = pdfScoreTypeLabel(type);
+  const courses = pdfScoreCourses(students, type);
+  const rows = students
+    .map((student) => ({
+      ranking: readRecords(student.scoreRankings).find((candidate) => readText(candidate.type) === type),
+      student,
+      view: readRecords(student.scoreViews).find((candidate) => readText(candidate.type) === type),
+    }))
+    .filter((row) => row.view || courses.some((course) => findPdfCourse(row.student, type, course)))
+    .sort((left, right) => {
+      const leftScore = left.view?.status === "CALCULATED" ? readOptionalNumber(left.view.practiceScore) : undefined;
+      const rightScore = right.view?.status === "CALCULATED" ? readOptionalNumber(right.view.practiceScore) : undefined;
+      if (leftScore !== undefined && rightScore !== undefined && leftScore !== rightScore) return rightScore - leftScore;
+      if (leftScore === undefined && rightScore !== undefined) return 1;
+      if (leftScore !== undefined && rightScore === undefined) return -1;
+      return pdfStudentName(left.student).localeCompare(pdfStudentName(right.student), "tr");
+    });
+  if (rows.length === 0) return "";
+
+  const courseHeaders = courses.map((course) => `<th class="course" colspan="3">${escapeHtml(course)}</th>`).join("");
+  const splitHeaders = courses.map(() => `<th class="course-start">D</th><th>Y</th><th>N</th>`).join("");
+  const body = rows.map(({ ranking, student, view }) => {
+    const calculated = view?.status === "CALCULATED";
+    const courseCells = courses.map((course) => {
+      const branch = findPdfCourse(student, type, course);
+      return branch
+        ? `<td class="course-start">${escapeHtml(formatKarneNumber(branch.correct))}</td><td>${escapeHtml(formatKarneNumber(branch.wrong))}</td><td class="net">${escapeHtml(formatKarneNet(branch.net))}</td>`
+        : `<td class="course-start">-</td><td>-</td><td class="net">-</td>`;
+    }).join("");
+    return `<tr><td class="rank">${escapeHtml(calculated ? formatV2Rank(readRecord(ranking?.institution)) : "-")}</td><td class="name">${escapeHtml(pdfStudentName(student))}</td><td class="name">${escapeHtml(readText(student.className) || "-")}</td><td class="score">${calculated ? escapeHtml(formatKarneNumber(view?.practiceScore)) : `<span class="status">${escapeHtml(formatScoreStatus(view?.status))}</span>`}</td><td class="total">${escapeHtml(formatKarneNet(readRecord(view?.metrics).net))}</td>${courseCells}<td class="rank">${escapeHtml(calculated ? formatV2Rank(readRecord(ranking?.class)) : "-")}</td></tr>`;
+  }).join("");
+  return `<section class="ranking-table"><h2>${escapeHtml(titleWithType ? `Öğrenci Sıralaması · ${label}` : "Öğrenci Sıralaması")}</h2><table><thead><tr><th rowspan="2">Kurum sırası</th><th rowspan="2" class="name">Öğrenci</th><th rowspan="2" class="name">Sınıf</th><th rowspan="2">${escapeHtml(`${label} puanı`)}</th><th rowspan="2">Toplam net</th>${courseHeaders}<th rowspan="2">Sınıf sırası</th></tr><tr>${splitHeaders}</tr></thead><tbody>${body}</tbody></table></section>`;
+}
+
+function pdfScoreCourses(students: Record<string, unknown>[], type: ExamScoreType): string[] {
+  const courses = new Set<string>();
+  for (const student of students) {
+    for (const branch of readRecords(student.branches)) {
+      const name = readText(branch.branch);
+      if (name && reportCourseMatchesScoreType(type, name)) courses.add(reportCourseShortName(name));
+    }
+  }
+  return [...courses].sort((left, right) => reportCourseSortOrder(type, left) - reportCourseSortOrder(type, right));
+}
+
+function findPdfCourse(student: Record<string, unknown>, type: ExamScoreType, course: string): Record<string, unknown> | undefined {
+  return readRecords(student.branches).find((branch) => {
+    const name = readText(branch.branch);
+    return reportCourseMatchesScoreType(type, name) && reportCourseShortName(name) === course;
+  });
+}
+
+function pdfStudentName(student: Record<string, unknown>): string {
+  return readText(student.displayName) || readText(student.studentId) || "-";
 }
 
 function renderPdfStatCard(label: string, value: string, detail: string, primary = false): string {
@@ -660,7 +704,21 @@ const pdfReportCss = `
   td{font-size:9px}
   .score-table td:nth-child(n+4),.branch-table td:nth-child(n+2),.outcome-table td:nth-child(n+3),.class-table td:nth-child(n+2){white-space:nowrap}
   .branch-table td,.class-table td{vertical-align:middle}
-  .ranking-table td:nth-child(-n+3){white-space:nowrap}
+  .rankings{break-before:page}
+  .ranking-table h2{break-after:avoid}
+  .ranking-table thead tr:nth-child(2) th{text-align:right}
+  .ranking-table table{table-layout:auto}
+  .ranking-table th,.ranking-table td{padding:3px 3px;text-align:right;white-space:nowrap}
+  .ranking-table th{text-align:center;vertical-align:middle}
+  .ranking-table td.name,.ranking-table th.name{text-align:left}
+  .ranking-table th.course{border-left:1px solid var(--rule-strong);border-bottom:1px solid var(--rule)}
+  .ranking-table .course-start{border-left:1px solid var(--rule-strong)}
+  .ranking-table td.rank{text-align:center;color:var(--ink-secondary)}
+  .ranking-table td.net{font-weight:600}
+  .ranking-table td.total{font-weight:600}
+  .ranking-table td.score{color:var(--accent-strong);font-weight:600;font-size:9.5px;border-left:1px solid var(--rule-strong)}
+  .ranking-table td.score .status{display:inline-block;max-width:72px;white-space:normal;text-align:right;color:var(--ink-muted);font-size:7px;font-weight:400;line-height:1.2}
+  .ranking-table tbody tr:nth-child(even) td{background:var(--paper-muted)}
   .bars{display:flex;flex-direction:column;gap:1px;width:100%;min-width:90px}
   .bar{display:block;background:var(--paper-muted);border-radius:2px;overflow:hidden}
   .bar span{display:block;height:100%}
@@ -779,22 +837,11 @@ function pdfScoreTypeLabel(type: string): string {
   return type || "-";
 }
 
-function formatPdfScoreByType(student: Record<string, unknown>, type: ExamScoreType, format: (value: unknown) => string = formatPdfNumber): string {
-  const view = readRecords(student.scoreViews).find((candidate) => readText(candidate.type) === type);
-  return view?.status === "CALCULATED" ? format(view.practiceScore) : formatScoreStatus(view?.status);
-}
-
 function formatPdfScoreCourseNets(student: Record<string, unknown>, type: ExamScoreType, format: (value: unknown) => string = formatPdfNumber): string {
   return readRecords(student.branches)
     .filter((branch) => reportCourseMatchesScoreType(type, readText(branch.branch)))
     .sort((left, right) => reportCourseSortOrder(type, readText(left.branch)) - reportCourseSortOrder(type, readText(right.branch)))
     .map((branch) => `${reportCourseShortName(readText(branch.branch))} ${format(branch.net)}`)
-    .join(" · ") || "-";
-}
-
-function formatPdfRankingsByScope(student: Record<string, unknown>, scope: "institution" | "class"): string {
-  return readRecords(student.scoreRankings)
-    .map((ranking) => `${readText(ranking.type)} ${formatV2Rank(readRecord(ranking[scope]))}`)
     .join(" · ") || "-";
 }
 
