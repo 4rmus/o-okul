@@ -372,8 +372,8 @@ function renderPdfStudentCard(context: PdfReportContext, student: Record<string,
       ${renderPdfBranchHighlights(branches)}
     </section>
     <section class="karne karne-detail">${masthead("Kazanım ve Soru Analizi")}
-      ${outcomeTable}
       ${renderPdfAnswerGrid(student.questions)}
+      ${outcomeTable}
     </section>`;
 }
 

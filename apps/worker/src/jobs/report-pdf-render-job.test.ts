@@ -562,6 +562,7 @@ describe("report PDF render job", () => {
     expect(html).toContain('<td class="course-start">1</td><td>1</td><td class="net">0,67</td>');
     expect(html).not.toContain("Mat 0,67");
     expect(html).toContain("Cevap Haritası");
+    expect(html.indexOf("Cevap Haritası")).toBeLessThan(html.indexOf("Öncelikli Kazanım Analizi"));
     expect(html).toContain('class="cell cell-wrong"');
     expect(html).toContain("Çarpanlar ve katlar");
     expect(html).toContain('<span class="cell cell-wrong"><em>2</em>B<small>C</small></span>');
