@@ -3856,7 +3856,6 @@ requireTokens("apps/web/app/(app)/kurum/raporlar/reports-page.tsx", [
   "Üstteki kontrol alanından sınavı ve kapsamı seçerek raporu açın veya hazırlayın.",
   '<Field label="Puan türü">',
   "Eski hesaplama",
-  "Standart sapma kullanılmadan hesaplanan deneme puanıdır.",
   "Kampüs bilgisi yok",
   "Sınıf bilgisi yok",
   "Ders bilgisi yok",
@@ -4010,7 +4009,6 @@ requireTokens("apps/worker/src/jobs/report-pdf-render-job.ts", [
   "Öğrenci Sıralaması",
   "Branş Karşılaştırması",
   "Sınıf Karşılaştırması",
-  "Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.",
   "Başarı %",
   "formatPdfNumber",
   "formatPdfScoreCourseNets",
@@ -4031,7 +4029,7 @@ requireTokens("apps/worker/src/jobs/report-pdf-render-job.ts", [
 ]);
 
 requireTokens("apps/worker/src/jobs/report-pdf-render-job.test.ts", [
-  "schema v2 scoreViews ve tür bazlı sıraları resmî değil uyarısıyla render eder",
+  "schema v2 scoreViews ve tür bazlı sıraları resmî puan uyarısı olmadan render eder",
   "kurum özeti branş, sınıf ve öğrenci sıralamasını karne sayfaları olmadan render eder",
   "Başarı %",
   "Öğrenci Sıralaması",
@@ -4044,7 +4042,6 @@ requireTokens("apps/worker/src/jobs/report-pdf-render-job.test.ts", [
   "kurum sıralaması öğrencileri puana göre dizer ve her ders için D/Y/N sütunu verir",
   'class="karne karne-(?:summary|detail)"',
   "PDF ozetinde sifir degerleri bos deger gibi gostermez",
-  "Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.",
   "Ortalama basari: %87.5",
   "Soru sayisi: 20",
   "Sonuc sayisi: 0",

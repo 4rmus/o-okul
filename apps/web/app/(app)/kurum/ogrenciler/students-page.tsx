@@ -1238,7 +1238,6 @@ function StudentDetailPanel({
           value={formatStudentProgressSummary(detail?.progress)}
         />
       </InfoGrid>
-      {isModernReport ? <p className="next-karne-score-warning">Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.</p> : null}
       {detail && detail.teacherNotes.length > 0 ? (
         <div className="next-form-guardians">
           <span className="next-field-hint">Son öğretmen notu</span>

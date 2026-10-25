@@ -1259,11 +1259,6 @@ function StudentExamDetails({
           <InfoItem label="Soru" value={formatNumber(reportQuestionCount(report?.total))} />
           <InfoItem label={scoreView ? scoreViewLabel(scoreView) : isModernReport ? "Puan hesaplanamadı" : "Eski hesaplama"} value={formatNumber(score)} />
         </InfoGrid>
-        {isModernReport ? (
-          <Alert tone="warning" title="Deneme puanı uyarısı">
-            Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.
-          </Alert>
-        ) : null}
       </Panel>
 
       {report ? (

@@ -116,11 +116,6 @@ export function ReportPanel({
           <MetricCard label="Soru" value={formatNumber(totalQuestionCount)} description="Sınav kapsamı" />
           <MetricCard label={scoreView ? scoreViewLabel(scoreView) : isModernReport ? "Puan hesaplanamadı" : "Eski hesaplama"} value={formatNumber(score)} description={formatGeneratedAt(report.generatedAt)} tone="info" />
         </MetricGrid>
-        {isModernReport ? (
-          <Alert tone="warning" title="Deneme puanı uyarısı">
-            Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.
-          </Alert>
-        ) : null}
         <DataTable
           caption="Portal branş başarıları"
           columns={branchColumns}

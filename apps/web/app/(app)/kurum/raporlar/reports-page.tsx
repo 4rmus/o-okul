@@ -1218,7 +1218,6 @@ function ReportAnalyticsPanel({
           ) : null}
         </div>
       </section>
-      {isModernSnapshot ? <PracticeScoreWarning /> : null}
       <div className="next-report-dashboard-grid">
         <ReportChartPanel
           className="next-report-chart-panel--primary"
@@ -1464,14 +1463,6 @@ function reportScoreTypeOptions(
 
 function legacyScore(total: { estimatedRawScore?: number; standardScore?: number; rawScore?: number } | undefined) {
   return total?.estimatedRawScore ?? total?.standardScore ?? total?.rawScore;
-}
-
-function PracticeScoreWarning() {
-  return (
-    <Alert tone="warning" title="Deneme puanı uyarısı">
-      Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.
-    </Alert>
-  );
 }
 
 function readRowScore(row: ReportAnalysisRow): number | undefined {

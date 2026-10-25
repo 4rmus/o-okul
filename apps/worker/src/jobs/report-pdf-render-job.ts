@@ -103,7 +103,7 @@ function renderPdfFooterTemplate(label: string): string {
 
 function createSnapshotPdfFooterLabel(snapshot: ReportPdfSnapshotRecord, institution: ReportPdfInstitution = {}): string {
   const data = readRecord(snapshot.snapshotData);
-  return [institution.institutionName?.trim() || "o-okul", readText(data.examTitle) || snapshot.examId, readText(data.exampleMarker)]
+  return [institution.institutionName?.trim() || "o-okul", readText(data.examTitle) || snapshot.examId]
     .filter(Boolean)
     .join(" · ");
 }
@@ -200,8 +200,6 @@ function createV2SnapshotPdfLines(snapshot: ReportPdfSnapshotRecord, institution
   const pdfMode = readText(data.pdfMode);
   const header = [
     `${institution.institutionName ?? "o-okul"} - Sinav Raporu`,
-    ...(readText(data.exampleMarker) ? [readText(data.exampleMarker)] : []),
-    "Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.",
     `Sinav: ${readText(data.examTitle) || snapshot.examId}`,
     `Sinav tarihi: ${readText(data.examStartsAt) || "-"}`,
     `Sinav turu/yili: ${readText(data.examType) || "-"} / ${formatPdfValue(readNumber(data.examYear))}`,
@@ -263,13 +261,12 @@ function createV2SnapshotPdfHtml(snapshot: ReportPdfSnapshotRecord, institution:
   const context: PdfReportContext = {
     data,
     examContext: [readText(data.examTitle) || snapshot.examId, formatPdfDateTime(data.examStartsAt)].filter(Boolean).join(" · "),
-    exampleMarker: readText(data.exampleMarker),
     institutionName: institution.institutionName?.trim() || "o-okul",
     scoreTypes: pdfScoreTypes(data),
   };
   const institutionHtml = renderInstitutionSummary ? renderPdfInstitutionSummary(context, students) : "";
   const studentHtml = renderStudentCards
-    ? students.map((student) => renderPdfStudentCard(context, student, pdfMode === "STUDENT_CARDS")).join("")
+    ? students.map((student) => renderPdfStudentCard(context, student)).join("")
     : "";
   return `<!doctype html><html lang="tr"><head><meta charset="utf-8" /><style>${pdfFontFaceCss()}${pdfReportCss}</style></head><body><main class="content ${pdfMode === "STUDENT_CARDS" ? "student-cards" : ""}">${institutionHtml}${studentHtml}</main></body></html>`;
 }
@@ -277,15 +274,8 @@ function createV2SnapshotPdfHtml(snapshot: ReportPdfSnapshotRecord, institution:
 interface PdfReportContext {
   data: Record<string, unknown>;
   examContext: string;
-  exampleMarker: string;
   institutionName: string;
   scoreTypes: ExamScoreType[];
-}
-
-const pdfScoreWarning = "Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.";
-
-function renderPdfNotices(context: PdfReportContext): string {
-  return `<div class="notices">${context.exampleMarker ? `<p class="warning marker">${escapeHtml(context.exampleMarker)}</p>` : ""}<p class="warning">${escapeHtml(pdfScoreWarning)}</p></div>`;
 }
 
 function renderPdfMasthead(context: PdfReportContext, title: string, subtitle: string, aside: string): string {
@@ -293,7 +283,7 @@ function renderPdfMasthead(context: PdfReportContext, title: string, subtitle: s
   return `<header class="masthead"><div class="brand"><span class="monogram" aria-hidden="true">${escapeHtml(initials)}</span><div><p class="eyebrow">${escapeHtml(context.institutionName)}</p><h1>${escapeHtml(title)}</h1><p class="muted">${escapeHtml(subtitle)}</p></div></div>${aside}</header>`;
 }
 
-function renderPdfStudentCard(context: PdfReportContext, student: Record<string, unknown>, renderNotices: boolean): string {
+function renderPdfStudentCard(context: PdfReportContext, student: Record<string, unknown>): string {
   const data = context.data;
   const rankings = readRecords(student.scoreRankings);
   const scoreViews = readRecords(student.scoreViews);
@@ -374,7 +364,7 @@ function renderPdfStudentCard(context: PdfReportContext, student: Record<string,
     ];
   }, "outcome-table");
 
-  return `<section class="karne karne-summary">${masthead("Öğrenci Karnesi")}${renderNotices ? renderPdfNotices(context) : ""}
+  return `<section class="karne karne-summary">${masthead("Öğrenci Karnesi")}
       <h2 class="sr-title">Öğrenci Karnesi</h2>
       ${kpis}
       ${scoreTable}
@@ -415,7 +405,6 @@ function renderPdfInstitutionSummary(context: PdfReportContext, students: Record
     .join("");
 
   return `<section class="institution-summary">${renderPdfMasthead(context, readText(data.examTitle) || "Sınav Raporu", subtitle, aside)}
-      ${renderPdfNotices(context)}
       ${kpis}
       <div class="chart-grid">
         ${renderPdfBarChart("Ders Başarı Grafiği", branches, (branch) => readText(branch.branch) || "-", (branch) => readOptionalNumber(scoreSuccessRate(branch)), 0, 100, "%")}
@@ -689,9 +678,6 @@ const pdfReportCss = `
   .masthead h1{font-size:19px;line-height:1.2}
   .identity{text-align:right;max-width:46%}
   .identity strong{display:block;font-size:13px}
-  .notices{display:flex;flex-direction:column;gap:3px;margin-top:8px}
-  .warning{background:var(--warning-soft);border:1px solid var(--warning);border-radius:6px;color:var(--warning);font-size:8.5px;font-weight:600;padding:4px 8px}
-  .warning.marker{text-transform:uppercase;letter-spacing:.04em}
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:6px;margin-top:10px}
   .stat{border:1px solid var(--rule);border-radius:8px;padding:7px 8px;background:var(--paper);break-inside:avoid}
   .stat-primary{background:var(--accent-soft);border-color:var(--accent)}

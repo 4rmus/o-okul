@@ -102,7 +102,7 @@ describe("report PDF render job", () => {
     expect(renderer.inputs[0]?.fallbackLines.join("\n")).not.toMatch(/LGS puani|Standart puan/u);
   });
 
-  it("schema v2 scoreViews ve tür bazlı sıraları resmî değil uyarısıyla render eder", async () => {
+  it("schema v2 scoreViews ve tür bazlı sıraları resmî puan uyarısı olmadan render eder", async () => {
     const renderer = new FakeRenderer();
     await processReportPdfRenderJob({
       name: "report-pdf-render",
@@ -145,7 +145,7 @@ describe("report PDF render job", () => {
     const html = renderer.inputs[0]?.html ?? "";
     const lines = renderer.inputs[0]?.fallbackLines.join("\n") ?? "";
     for (const output of [html, lines]) {
-      expect(output).toContain("Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.");
+      expect(output).not.toContain("MEB/ÖSYM");
       expect(output).toContain("EA");
       expect(output).toContain("420");
       expect(output).toContain("1/1");
