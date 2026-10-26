@@ -197,10 +197,10 @@ const karneRawColorBlock = readMarkedBlock(legacyGlobals, "karne-print");
 const receiptRawColorBlock = readMarkedBlock(legacyGlobals, "receipt-print");
 const karneRawColors = karneRawColorBlock.match(rawColorPattern) ?? [];
 const receiptRawColors = receiptRawColorBlock.match(rawColorPattern) ?? [];
-// DEC-20260930-04: Berrak karne kâğıdı 39 print rengi taşır (eski gradyan kenarlık kaldırıldı; iki grafik
-// serisi rengi gri tonlamada ayrışma için eklendi).
-if (karneRawColors.length !== 39) {
-  failures.push(`karne-print allowlist tam 39 Berrak kâğıt rengi içermeli: ${karneRawColors.length}`);
+// DEC-20260930-04: Berrak karne kâğıdı 36 print rengi taşır (eski gradyan kenarlık kaldırıldı; iki grafik
+// serisi rengi gri tonlamada ayrışma için eklendi; DEC-20261025-01 ile üç uyarı rengi kalktı).
+if (karneRawColors.length !== 36) {
+  failures.push(`karne-print allowlist tam 36 Berrak kâğıt rengi içermeli: ${karneRawColors.length}`);
 }
 if (receiptRawColors.length !== 4) {
   failures.push(`receipt-print allowlist tam 4 dondurulmuş ham renk içermeli: ${receiptRawColors.length}`);
@@ -282,7 +282,7 @@ validateCustomPropertyGraph(`${files.tokens}\n${files.globals}`);
   const sample = countRawPx(".a { padding: 8px -4px var(--space-sm); margin-top: 2px; font-size: 12px; border-top-left-radius: 6px; /* gap: 9px; */ }");
   if (JSON.stringify(sample) !== JSON.stringify({ spacing: 2, fontSize: 1, radius: 1 })) failures.push(`countRawPx öz denetimi başarısız: ${JSON.stringify(sample)}`);
 }
-const rawPxBaseline = { spacing: 469, fontSize: 165, radius: 28 };
+const rawPxBaseline = { spacing: 467, fontSize: 164, radius: 27 };
 const rawPxCounts = countStyleRawPx();
 for (const [group, baseline] of Object.entries(rawPxBaseline)) {
   const count = rawPxCounts[group];

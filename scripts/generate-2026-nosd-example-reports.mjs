@@ -15,7 +15,6 @@ import {
 } from "../apps/worker/dist/jobs/scoring-engine.js";
 
 const generatedAt = "2026-07-27T09:00:00.000Z";
-const exampleMarker = "ÖRNEK — RESMÎ PUAN DEĞİLDİR";
 const outputDirectory = resolve("docs/examples/2026-nosd-report-package");
 const answerChoices = ["A", "B", "C", "D", "E"];
 const students = Array.from({ length: 12 }, (_value, index) => ({
@@ -106,7 +105,6 @@ const snapshots = [
 assertScenarios(snapshots);
 
 const manifest = {
-  marker: exampleMarker,
   generatedAt,
   officialComparable: false,
   containsRealPersonalData: false,
@@ -263,10 +261,6 @@ function createSnapshotRecord(exam, results) {
   return {
     id: `${exam.id}-snapshot-v1`,
     ...candidate,
-    snapshotData: {
-      ...candidate.snapshotData,
-      exampleMarker,
-    },
     createdAt: generatedAt,
     updatedAt: generatedAt,
   };

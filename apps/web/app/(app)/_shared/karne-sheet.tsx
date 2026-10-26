@@ -144,11 +144,6 @@ export function KarneSheet({
         />
         <KarneContextStrip items={contextItems} />
         <KarneSummaryStrip items={summaryItems} />
-        {isModernReport ? (
-          <p className="next-karne-score-warning">
-            Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.
-          </p>
-        ) : null}
         <div className="next-karne-grid">
           <KarneBlock className="next-karne-block next-karne-block--wide" title="BÖLÜM ANALİZİ">
             <table className="next-karne-table">

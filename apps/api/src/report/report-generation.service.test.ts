@@ -769,9 +769,8 @@ describe("ReportGenerationService", () => {
     expect(valueForHeader("Sözel · Edb net")).toBe(17.25);
     expect(workbook.getWorksheet("Özet")?.getCell("B13").value).toBe(410);
     expect(workbook.getWorksheet("Özet")?.getCell("B14").value).toBe(390);
-    expect(workbook.getWorksheet("Özet")?.getCell("B15").value).toBe(
-      "Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.",
-    );
+    expect(workbook.getWorksheet("Özet")?.getColumn(1).values).not.toContain("Uyarı");
+    expect(JSON.stringify(workbook.getWorksheet("Özet")?.getColumn(2).values)).not.toContain("MEB/ÖSYM");
     expect(workbook.getWorksheet("Özet")?.getColumn(1).values).toContain("Ders başarı grafiği");
     expect(workbook.getWorksheet("Özet")?.getColumn(1).values).toContain("Puan türü grafiği");
 
@@ -780,9 +779,7 @@ describe("ReportGenerationService", () => {
     expect(pdfText).toContain("SAY deneme puani 410");
     expect(pdfText).toContain("EA deneme puani 390");
     expect(pdfText).toContain("SAY kurum 2/30");
-    expect(pdfText).toContain(
-      "Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.",
-    );
+    expect(pdfText).not.toContain("MEB/ÖSYM");
     expect(pdfText).not.toContain("LGS puani");
     expect(pdfText).not.toContain("Standart puan");
     expect(pdfText).not.toContain("yüzdelik");

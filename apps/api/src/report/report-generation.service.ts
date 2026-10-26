@@ -1222,7 +1222,6 @@ export async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Pr
   const scoreTypes = scoreTypesForSnapshot(snapshotData);
   const branchNames = uniqueTextValues(readRecords(snapshotData.branches).map((branch) => readText(branch.branch)));
   const isModernSnapshot = readOptionalNumber(snapshotData.schemaVersion) === 2;
-  const exampleMarker = readText((snapshotData as Record<string, unknown>).exampleMarker);
 
   summary.addRows([
     ["Sınav kimliği", snapshot.examId],
@@ -1233,7 +1232,6 @@ export async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Pr
     ["Rapor türü", snapshot.reportType],
     ["Durum", snapshot.status],
     ["Üretim zamanı", snapshot.generatedAt ?? ""],
-    ...(exampleMarker ? [["Örnek", exampleMarker]] : []),
     ["Sonuç sayısı", readNumber(snapshotData.resultCount)],
     ["Ortalama başarı %", readNumberOrFallback(averages.successRate, scoreSuccessRate(averages))],
     ["Ortalama soru sayısı", readNumberOrFallback(averages.questionCount, scoreQuestionCount(averages))],
@@ -1242,9 +1240,7 @@ export async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Pr
       `${scoreTypeLabel(average.type)} ortalama deneme puanı`,
       average.practiceScore,
     ]),
-    ...(isModernSnapshot
-      ? [["Uyarı", "Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir."]]
-      : [["Eski hesaplama", readLegacyScore(averages)]]),
+    ...(isModernSnapshot ? [] : [["Eski hesaplama", readLegacyScore(averages)]]),
     ...(readText(snapshotData.examTitle) ? [["Sınav adı", readText(snapshotData.examTitle)]] : []),
     ...(readText(snapshotData.examStartsAt) ? [["Sınav tarihi", readText(snapshotData.examStartsAt)]] : []),
     ...(branchNames.length > 0
@@ -1567,9 +1563,7 @@ function createSnapshotPdfLines(
     `Durum: ${snapshot.status}`,
     `Uretim: ${snapshot.generatedAt ?? "-"}`,
     "",
-    ...(isModernSnapshot
-      ? ["Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir."]
-      : [`Eski hesaplama: ${readLegacyScore(averages) || "-"}`]),
+    ...(isModernSnapshot ? [] : [`Eski hesaplama: ${readLegacyScore(averages) || "-"}`]),
   ];
   const institutionSummary = [
     "Genel Ozet",

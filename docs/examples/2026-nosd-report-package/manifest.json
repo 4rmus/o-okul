@@ -1,5 +1,4 @@
 {
-  "marker": "ÖRNEK — RESMÎ PUAN DEĞİLDİR",
   "generatedAt": "2026-07-27T09:00:00.000Z",
   "officialComparable": false,
   "containsRealPersonalData": false,
@@ -48,7 +47,7 @@
   "aytSummary": {
     "resultCount": 12,
     "physicalQuestionCount": 160,
-    "institutionPdfPageCount": 3,
+    "institutionPdfPageCount": 4,
     "studentPdfPageCount": 2
   }
 }

@@ -318,7 +318,7 @@ Son kontrol: 2026-07-13
 
 ### DEC-20260727-01 — Standart sapmasız LGS–YKS deneme puanı
 
-Durum: Onaylı
+Durum: Onaylı; "puan gösterilen her yüzey uyarı verir" maddesi DEC-20261025-01 ile kaldırıldı (2026-10-25)
 Karar: Yeni LGS ve YKS sonuçları, ulusal ortalama veya standart sapma kullanılmadan, sürümlü
 `TR-LGS-2026-NOSD-V1` ve `TR-YKS-2026-NOSD-V1` profilleriyle `100–500` aralığında tekrar
 üretilebilir `O-Okul Deneme Puanı` üretir. Her aktif alt test için
@@ -694,7 +694,8 @@ Son kontrol: 2026-09-30
 
 ### DEC-20260930-04 — Karne Berrak diliyle yeniden tasarlanır; görsel kabul golden ve geometriye bağlanır
 
-Durum: Onaylı; DEC-20260613-04'ün yerini alır
+Durum: Onaylı; DEC-20260613-04'ün yerini alır; worker PDF'inde `Başarı %` birincil kartı DEC-20261025-02 ile
+deneme puanına geçti (2026-10-25)
 Karar: Web karne sheet'i (`karne-sheet.tsx`, `outcome-net-table.tsx` stilleri) ve worker PDF şablonu
 (`createSnapshotPdfHtml`) birlikte Berrak diline geçer: IBM Plex (Arial yalnız yedek), tabular rakamlar,
 ≤600 ağırlık, sola hizalı accent bölüm etiketleri, 1 px kâğıt çizgisi, `Başarı %` birincil metrik kartı
@@ -707,7 +708,8 @@ linux, 595 × 842, `maxDiffPixelRatio: 0.005`) ve print geometrisini doğrular; 
 benzerlik eşiği kaldırılır. `pnpm karne:visual-diff -- --target golden --ui <png> --max-diff-ratio 0.02
 --max-mean-channel-delta 6` kanıt ekran görüntülerini yeni golden'a karşı ölçer; ADIGÜZEL PDF'leri
 `pnpm karne:visual-targets` ile sayısal doğruluk fikstürü olarak korunur (`--target iSEM` isteğe bağlı).
-`karne-print` ham renk allowlist'i 39 Berrak kâğıt rengidir; karne grafiğinin dört serisi gri tonlamada
+`karne-print` ham renk allowlist'i 39 Berrak kâğıt rengidir (DEC-20261025-01 ile uyarı kutusunun üç rengi
+kalktı: 36); karne grafiğinin dört serisi gri tonlamada
 ayrışır (öğrenci, sınıf, okul, genel ≈ 91 / 121 / 170 / 218 luma).
 Kaynak: Berrak planı (G10), karne yeniden tasarım yetkisi.
 Kanıt: `scripts/check-karne-visual-contract.mjs`, `scripts/compare-karne-visual-evidence.mjs`,
@@ -1300,6 +1302,52 @@ Açık soru: Yok. (a) S1-03 staging yeniden koşusu 2026-10-22'de PASS (#212). (
 oluşturma ve profil güncelleme 2026-10-24'ten beri silinmiş öğrencinin TC'sini de sayar ve TC'yi aynı transaction'da
 yazar.
 Son kontrol: 2026-10-22
+
+### DEC-20261025-01 — Deneme puanı yüzeyleri "resmî puan değildir" uyarısı göstermez
+
+Durum: Onaylı (2026-10-25); DEC-20260727-01'in uyarı maddesinin yerini alır
+Karar: `Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.`
+uyarısı puan gösteren bütün yüzeylerden kaldırılır: worker PDF karne ve kurum özeti, PDF'in düz metin
+yedeği, Excel özet sayfası, web karnesi, kurum raporlar sayfası, öğrenci listesi ve detayı, öğrenci/veli
+portal rapor paneli. Repodaki sentetik örnek paket de `ÖRNEK — RESMÎ PUAN DEĞİLDİR` işaretini taşımaz;
+şablonların `exampleMarker` desteği kaldırılır, paketin sentetik olduğu README ve manifest'te yazar.
+Puan hesabı, `TR-LGS-2026-NOSD-V1` / `TR-YKS-2026-NOSD-V1` profilleri, snapshot'taki
+`officialComparable:false` alanı, yalnız kurum ve sınıf içi sıra kuralı değişmez.
+Gerekçe: raporlar kurum içinde kullanılır ve resmî puan iddiası taşımaz; her sayfadaki sarı uyarı
+okuyucuya bilgi katmadan alan kaplıyordu. Puan profilinin adı Excel özetinde ve snapshot'ta durur.
+Kaynak: ürün sahibi kararı (2026-10-25, "raporlardaki ... sarı uyarıları kaldır"; kapsam: her yüzey,
+örnek işareti tamamen). Web karnesinden uyarı kutusu kalktığı için `karne-print` renk listesi 39'dan 36'ya,
+ham px ratchet'i spacing 467, fontSize 164, radius 27'ye iner.
+Kanıt: `apps/worker/src/jobs/report-pdf-render-job.ts`, `apps/api/src/report/report-generation.service.ts`,
+`apps/web/app/(app)/_shared/karne-sheet.tsx`, `apps/web/app/(app)/kurum/raporlar/reports-page.tsx`,
+`apps/web/app/(app)/portals/_shared/report-panel.tsx`, `scripts/generate-2026-nosd-example-reports.mjs`.
+Etkilenen ADR: Yok.
+Açık soru: Public sayfalarda puanın resmî olmadığına dair bir iddia gerekirse `docs/marketing-claims.md`
+üzerinden ayrıca karar verilir; bu karar yalnız ürün içi rapor yüzeylerini kapsar.
+Son kontrol: 2026-10-25
+
+### DEC-20261025-02 — Tek sınav PDF raporlarında birincil metrik deneme puanıdır; ders düzeyi nettir
+
+Durum: Onaylı (2026-10-25); DEC-20260930-04'ün PDF için `Başarı %` birincil kart maddesinin yerini alır
+Karar: Worker PDF karnesi ve kurum özeti `Başarı %` göstermez. Büyük kart deneme puanıdır (AYT'de
+Sayısal, EA, Sözel ayrı kartlar); ikinci kart net ve D/Y/B'dir. Ders düzeyinde puan üretilmediği için
+Bölüm Analizi, kazanım tablosu, ders grafiği, güçlü/öncelikli dersler, branş ve sınıf karşılaştırması
+netle (soru sayısıyla, ör. `6,67 / 20`) okunur; sınıf ve kurum karşılaştırması sınıf/kurum net
+ortalamasıdır. Çubuk uzunlukları net / soru oranıyla çizilir, oran metin olarak yazılmaz. Başarı
+dağılımı yerini puan türü başına puan dağılımına (100–200, 200–300, 300–400, 400–500) bırakır. Sınıf
+karşılaştırması puan türü başına sınıf ortalama puanını taşır; bu değer sınıftaki puanı hesaplanan
+öğrencilerin snapshot puanlarının ortalamasıdır.
+Kapsam dışı: denemeler arası gelişim (web karnesi ve portal) farklı soru sayılarında adil kıyas için
+`Başarı %` ile kalır (AGENTS.md); Excel, web ekranları ve PDF'in düz metin yedeği değişmez. Snapshot
+sözleşmesi ve sayılar değişmez.
+Gerekçe: tek sınav raporunda kurumlar ve veliler puanı ve neti okur; yüzde ikinci bir ölçek olarak
+kafa karıştırıyordu.
+Kaynak: ürün sahibi kararı (2026-10-25, "başarı yüzdesi yerine puanın eklenmesi daha doğru olur";
+kapsam: tek sınav raporları).
+Kanıt: `apps/worker/src/jobs/report-pdf-render-job.ts`, `apps/worker/src/jobs/report-pdf-render-job.test.ts`.
+Etkilenen ADR: Yok.
+Açık soru: Yok.
+Son kontrol: 2026-10-25
 
 ## Öneri Halindeki Kararlar
 
