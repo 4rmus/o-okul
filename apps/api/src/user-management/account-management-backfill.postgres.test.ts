@@ -197,6 +197,34 @@ async function seed(pool: pg.Pool): Promise<void> {
       [`f16-scope-${membershipId}`, tenantId, membershipId],
     );
   }
+  // GUARDIAN persona sessions (UAT F-25, staging deploy 2026-10-27): a staff account that is also a parent (KV-3b) on its
+  // canonical membership, and a guardian-only account on its own GUARDIAN membership row. Both must count as matching.
+  await pool.query(
+    `INSERT INTO "User" ("id", "tenantId", "name", "email", "passwordHash", "membershipVersion", "updatedAt")
+     VALUES ('f16-u-guardian', $1, 'F16 guardian', 'f16.guardian@example.test', 'scrypt:v2:fixture', 1, now())`,
+    [tenantId],
+  );
+  await pool.query(
+    `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "status", "version", "updatedAt") VALUES
+       ('f16-m-campus-guardian', $1, 'f16-u-campus', 'GUARDIAN', 'ACTIVE', 3, now() - interval '1 hour'),
+       ('f16-m-guardian', $1, 'f16-u-guardian', 'GUARDIAN', 'ACTIVE', 1, now() - interval '1 hour')`,
+    [tenantId],
+  );
+  await pool.query(
+    `INSERT INTO "Guardian" ("id", "tenantId", "userId", "firstName", "lastName", "updatedAt") VALUES
+       ('f16-guardian-a', $1, 'f16-u-campus', 'F16', 'VELİ A', now()),
+       ('f16-guardian-b', $1, 'f16-u-guardian', 'F16', 'VELİ B', now())`,
+    [tenantId],
+  );
+  await pool.query(
+    `INSERT INTO "AuthSession" ("id", "userId", "tenantId", "membershipId", "activePersona", "roles", "subjectType", "subjectId",
+       "tokenFamilyId", "refreshTokenHash", "status", "membershipVersion", "expiresAt", "updatedAt") VALUES
+       ('f16-s-campus-guardian', 'f16-u-campus', $1, 'f16-m-campus', 'GUARDIAN', ARRAY['GUARDIAN'], 'GUARDIAN', 'f16-guardian-a',
+        'f16-family-1', 'f16-hash-1', 'ACTIVE', 3, now() + interval '1 day', now()),
+       ('f16-s-guardian', 'f16-u-guardian', $1, 'f16-m-guardian', 'GUARDIAN', ARRAY['GUARDIAN'], 'GUARDIAN', 'f16-guardian-b',
+        'f16-family-2', 'f16-hash-2', 'ACTIVE', 1, now() + interval '1 day', now())`,
+    [tenantId],
+  );
   // Same shape as UserManagementService.updateMembership writes (scopeMode itself is redacted; campusCount is kept).
   await pool.query(
     `INSERT INTO "AuditLog" ("id", "tenantId", "actorUserId", "entityType", "entityId", "action", "diff", "createdAt")
