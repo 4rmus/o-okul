@@ -247,8 +247,12 @@ Korunan aktif sözleşmeler:
 Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-20261010-01, onaylı) içindedir.
 `docs/account-management-architecture-plan.md` bölüm 6'daki eski Gate E/F listesi bu planla yer değiştirdi.
 
-1. S1: staging rol UAT'ı sürüyor (`docs/staging-uat-s1.md`). S1-01..S1-03 PASS (2026-10-10/11); S1-04 sürüyor
-   (U-FIN 2026-10-22'de etkinleşti: Finans çalışanı, Aktif, tüm kurum; STAGING), S1-05..S1-14 başlamadı. Kapanan
+1. S1: staging rol UAT'ı sürüyor (`docs/staging-uat-s1.md`). S1-01..S1-03 PASS (2026-10-10/11); S1-04 PASS
+   (2026-10-27, STAGING `4de471981`: U-TCH atamaları, U-FIN aktif, F-03 iptal/yeniden davet akışı; yeni bulgular
+   F-21..F-23), S1-05 PASS (2026-10-27, STAGING: toplu veli daveti, tekrar gönderimde yeni davet yok, personel
+   hesabına elle veli bağı), S1-06 PASS (2026-10-27, STAGING: 33 not v1 yayın, düzeltme v2; insan giriş süresi ve
+   atama kapsamı reddi UNPROVEN), S1-07 BLOCKED: yalnız veli hesabı girişte 500 (F-25, Yüksek; düzeltme bu dalda,
+   LOCAL_TEST), S1-08..S1-13 başlamadı. Kapanan
    bulgular: F-02..F-13, F-15, F-16 (#159, #161–#166, #168, #180, #182, #184). F-14 KAPANDI (2026-10-22, STAGING):
    `o-okul.com` hesabında Email Routing yapılandırılmamış ve doğrulanmış hedef yok, finans davetleri iki doğrulanmamış
    adrese ulaştı. F-01 davet e-postası spama düşüyor (Yüksek): DMARC `p=none`, SPF `softfail`; karar: önce Cloudflare

@@ -654,13 +654,14 @@ export class AuthService {
     membershipVersion: number;
     mustChangePassword?: boolean;
     membership?: AuthUser["membership"];
+    guardianMembership?: AuthUser["guardianMembership"];
   }, auditAction: string, auditDiff: Record<string, unknown>, options: {
     activePersona?: ActivePersona;
     replaceSessionId?: string;
     clientContext?: SessionClientContext;
   } = {}): Promise<TokenPair> {
     const persona = resolvePersonaSessionContext(user, options.activePersona);
-    if (user.membership && !persona) {
+    if ((user.membership || user.guardianMembership) && !persona) {
       throw new UnauthorizedException(options.activePersona ? "PERSONA_NOT_AVAILABLE" : "PERSONA_CONTEXT_INVALID");
     }
     const roles = persona?.roles ?? user.roles;
@@ -1178,11 +1179,12 @@ function sessionMatchesCurrentMembership(
     subjectType?: string;
     subjectId?: string;
   },
-  user: Pick<AuthUser, "tenantId" | "membershipVersion" | "roles" | "membership">,
+  user: Pick<AuthUser, "tenantId" | "membershipVersion" | "roles" | "membership" | "guardianMembership">,
 ): boolean {
   if (session.tenantId !== user.tenantId || session.membershipVersion !== user.membershipVersion) return false;
-  if (user.membership) {
-    if (!session.activePersona || session.membershipId !== user.membership.id) return false;
+  const boundMembershipId = user.membership?.id ?? user.guardianMembership?.id;
+  if (boundMembershipId) {
+    if (!session.activePersona || session.membershipId !== boundMembershipId) return false;
     const persona = resolvePersonaSessionContext(user, session.activePersona);
     if (!persona || !sameRoles(session.roles, persona.roles)) return false;
     if (session.activePersona === "STAFF") return !session.subjectType && !session.subjectId;
@@ -1193,11 +1195,16 @@ function sessionMatchesCurrentMembership(
 }
 
 function resolvePersonaSessionContext(
-  user: Pick<AuthUser, "roles" | "membership">,
+  user: Pick<AuthUser, "roles" | "membership" | "guardianMembership">,
   requestedPersona?: ActivePersona,
 ): { membershipId: string; activePersona: ActivePersona; roles: string[] } | null {
   const membership = user.membership;
-  if (!membership) return null;
+  if (!membership) {
+    // UAT F-25: a guardian-only account opens its own GUARDIAN membership row as the GUARDIAN persona.
+    const guardianMembership = user.guardianMembership;
+    if (!guardianMembership || (requestedPersona && requestedPersona !== "GUARDIAN")) return null;
+    return { membershipId: guardianMembership.id, activePersona: "GUARDIAN", roles: ["GUARDIAN"] };
+  }
   const available = availablePersonasForUser(user);
   const activePersona = requestedPersona ?? available[0];
   if (!activePersona || !available.includes(activePersona)) return null;

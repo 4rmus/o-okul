@@ -16,6 +16,7 @@ import { LogoutPendingNotice } from "./logout-pending-notice.js";
 
 // DEC-20261021-01: after a support MFA reset the enrollment also needs the one-time code read over the phone.
 const mfaResetExpiredMessage = "MFA sıfırlamasının 24 saatlik süresi doldu. Yeni kayıt kodu için O-Okul desteğine başvurun.";
+const loginUnavailableMessage = "Giriş şu anda tamamlanamadı. Bilgileriniz doğru olabilir; parolanızı sıfırlamadan birkaç dakika sonra yeniden deneyin, sorun sürerse kurumunuza bildirin.";
 const enrollmentErrors: Record<string, string> = {
   MFA_REENROLLMENT_CODE_REQUIRED: "Destek ekibinin telefonla ilettiği tek kullanımlık kayıt kodunu girin.",
   MFA_REENROLLMENT_CODE_INVALID: "Kayıt kodu geçersiz. Destek ekibinin ilettiği kodu kontrol edip tekrar deneyin.",
@@ -108,7 +109,10 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
       const code = caught instanceof ApiRequestError ? caught.code ?? "" : "";
       if (pendingEnrollment) setError(enrollmentErrors[code] ?? "Doğrulama kodu geçersiz.");
       else if (pendingMfa) setError("Doğrulama kodu geçersiz.");
-      else setError(code === "MFA_RESET_EXPIRED" ? mfaResetExpiredMessage : "Giriş bilgileri hatalı.");
+      else if (code === "MFA_RESET_EXPIRED") setError(mfaResetExpiredMessage);
+      // UAT F-25: a server failure is not a credential error; telling the user so keeps them from resetting a correct password.
+      else if (!(caught instanceof ApiRequestError) || caught.status >= 500) setError(loginUnavailableMessage);
+      else setError("Giriş bilgileri hatalı.");
     } finally {
       setIsSubmitting(false);
     }
