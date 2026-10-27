@@ -150,6 +150,8 @@ function buildReport(run, jobs) {
       startedAt: run.run_started_at ?? run.created_at,
       completedAt: run.updated_at,
     },
+    // ci.yml runs the single `pnpm run ci` chain as named partition steps (scripts/ci-partitions.mjs); the checker
+    // accepts the command only when every partition step passed, and check-ci-partitions.mjs pins their union to `ci`.
     command: {
       workflowUsesSingleCiCommand: true,
       command: "pnpm run ci",

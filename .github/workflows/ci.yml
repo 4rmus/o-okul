@@ -68,12 +68,13 @@ jobs:
       - run: pnpm privacy:sample-pii:check
       - run: pnpm agents:check
 
-  verify:
+  # `pnpm run ci` stays one flat chain for local parity; CI runs it as parallel partitions (scripts/ci-partitions.mjs)
+  # and scripts/check-ci-partitions.mjs keeps their union equal to the chain (2026-10-27).
+  verify-static:
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    # Playwright 1.60 (lockfile) cannot install browser deps on ubuntu-latest = 26.04; pin until Playwright supports it.
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -94,28 +95,115 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .turbo
-          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          key: turbo-static-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
           restore-keys: |
-            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-static-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+
+      - run: pnpm install --frozen-lockfile
+      - name: pnpm ci:static
+        run: pnpm ci:static
+
+  verify-unit:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.0
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Restore Turbo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-unit-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-unit-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+
+      - run: pnpm install --frozen-lockfile
+      - name: pnpm ci:unit
+        run: pnpm ci:unit
+
+  verify-e2e:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    # Playwright 1.60 (lockfile) cannot install browser deps on ubuntu-latest = 26.04; pin until Playwright supports it.
+    # Stays on the host runner: the tracked *-linux screenshot goldens were rendered with this runner's fonts.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [contract, visual]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.0
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @o-okul/web exec playwright install --with-deps chromium
-      - run: pnpm run ci
+      - name: pnpm ci:e2e:${{ matrix.partition }}
+        run: pnpm ci:e2e:${{ matrix.partition }}
 
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: ci-test-results-${{ github.sha }}
+          name: ci-test-results-${{ matrix.partition }}-${{ github.sha }}
           path: apps/web/test-results
           if-no-files-found: ignore
           retention-days: 7
 
-  ui-ux-rc:
+  # Required status check: passes only when every `pnpm run ci` partition passed.
+  verify:
+    needs: [changes, verify-static, verify-unit, verify-e2e]
+    if: always() && needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every pnpm run ci partition
+        shell: bash
+        env:
+          STATIC_RESULT: ${{ needs.verify-static.result }}
+          UNIT_RESULT: ${{ needs.verify-unit.result }}
+          E2E_RESULT: ${{ needs.verify-e2e.result }}
+        run: |
+          set -euo pipefail
+          echo "ci:static=$STATIC_RESULT ci:unit=$UNIT_RESULT ci:e2e=$E2E_RESULT" >> "$GITHUB_STEP_SUMMARY"
+          for result in "$STATIC_RESULT" "$UNIT_RESULT" "$E2E_RESULT"; do
+            if [ "$result" != "success" ]; then
+              echo "pnpm run ci partition did not pass: $result" >&2
+              exit 1
+            fi
+          done
+
+  ui-ux-rc-changes:
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    # Playwright 1.60 (lockfile) cannot install browser deps on ubuntu-latest = 26.04; pin until Playwright supports it.
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      required: ${{ steps.ui-changes.outputs.required }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -164,28 +252,36 @@ jobs:
           echo "- required: \`$required\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- reason: $reason" >> "$GITHUB_STEP_SUMMARY"
 
+  ui-ux-rc:
+    needs: ui-ux-rc-changes
+    if: needs.ui-ux-rc-changes.outputs.required == 'true'
+    runs-on: ubuntu-24.04
+    # The Playwright image ships chromium and webkit with their system deps; apt installs of webkit deps took ~7 min.
+    # The tag must equal the lockfile Playwright version (scripts/check-web-ux-baseline.mjs enforces it).
+    # ux-rc has no screenshot goldens, so the container's fonts do not affect it.
+    container:
+      image: mcr.microsoft.com/playwright:v1.60.0-noble
+      options: --user 1001 --ipc=host
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
       - uses: pnpm/action-setup@v4
-        if: steps.ui-changes.outputs.required == 'true'
         with:
           version: 11.5.0
           run_install: false
 
       - uses: actions/setup-node@v4
-        if: steps.ui-changes.outputs.required == 'true'
         with:
           node-version-file: .node-version
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
-      - if: steps.ui-changes.outputs.required == 'true'
-        run: pnpm install --frozen-lockfile
-      - if: steps.ui-changes.outputs.required == 'true'
-        run: pnpm --filter @o-okul/web exec playwright install --with-deps chromium webkit
-      - if: steps.ui-changes.outputs.required == 'true'
-        run: pnpm web:ux-rc:check
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm web:ux-rc:check
 
       - uses: actions/upload-artifact@v4
-        if: ${{ failure() && steps.ui-changes.outputs.required == 'true' }}
+        if: failure()
         with:
           name: ui-ux-rc-test-results-${{ github.sha }}
           path: apps/web/test-results
