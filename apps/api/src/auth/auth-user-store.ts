@@ -24,6 +24,11 @@ export interface AuthUser {
   passwordHash: string;
   roles: string[];
   membership?: CanonicalMembershipProjection;
+  /**
+   * UAT F-25: the single GUARDIAN membership row of a guardian-only account (no canonical membership). Its session is
+   * bound to this row as the GUARDIAN persona, because the session store and the tenant mutation admission require one.
+   */
+  guardianMembership?: GuardianMembershipProjection;
   authorizationSource?: "CANONICAL_PARITY" | "LEGACY";
   membershipVersion: number;
   mustChangePassword?: boolean;
@@ -36,6 +41,11 @@ export interface AuthUser {
   /** DEC-20261021-01: keyed hash of the one-time code a SYSTEM_ADMIN reset left behind (never the code itself). */
   totpReenrollmentCodeHash?: string;
   totpReenrollmentExpiresAt?: string;
+}
+
+export interface GuardianMembershipProjection {
+  id: string;
+  version: number;
 }
 
 /** A pending re-enrollment written by a SYSTEM_ADMIN MFA reset in the same statement that clears TOTP. */
@@ -280,6 +290,7 @@ export function upsertInMemoryAuthUser(input: {
   tenantId: string;
   roles: string[];
   membership?: CanonicalMembershipProjection;
+  guardianMembership?: GuardianMembershipProjection;
   mustChangePassword?: boolean;
   passwordChangedAt?: string;
   totpSecretEncrypted?: string;
@@ -305,6 +316,7 @@ export function upsertInMemoryAuthUser(input: {
     existing.tenantId = input.tenantId;
     existing.roles = [...input.roles];
     existing.membership = input.membership ? cloneCanonicalMembership(input.membership) : existing.membership;
+    existing.guardianMembership = input.guardianMembership ? { ...input.guardianMembership } : existing.guardianMembership;
     existing.membershipVersion += 1;
     existing.mustChangePassword = input.mustChangePassword ?? existing.mustChangePassword;
     existing.passwordChangedAt = input.passwordChangedAt ?? existing.passwordChangedAt;
@@ -331,6 +343,7 @@ export function upsertInMemoryAuthUser(input: {
     tenantId: input.tenantId,
     roles: [...input.roles],
     membership: input.membership ? cloneCanonicalMembership(input.membership) : undefined,
+    guardianMembership: input.guardianMembership ? { ...input.guardianMembership } : undefined,
     membershipVersion: 1,
     mustChangePassword: input.mustChangePassword,
     passwordChangedAt: input.passwordChangedAt,
@@ -917,7 +930,10 @@ export class PostgresAuthUserStore implements AuthUserStore {
            ) AS "canonicalScopeMode",
            COALESCE(array_agg(DISTINCT scope."campusId") FILTER (
              WHERE m."staffRole" IS NOT NULL OR m."hasTeacherPersona" OR m."hasStudentPersona"
-           ), ARRAY[]::text[]) AS "canonicalCampusIds"
+           ), ARRAY[]::text[]) AS "canonicalCampusIds",
+           max(m."id") FILTER (WHERE m."role" = 'GUARDIAN') AS "guardianMembershipId",
+           count(DISTINCT m."id") FILTER (WHERE m."role" = 'GUARDIAN')::int AS "guardianMembershipCount",
+           max(m."version") FILTER (WHERE m."role" = 'GUARDIAN') AS "guardianMembershipVersion"
          FROM "User" u
          JOIN "TenantMembership" m ON m."userId" = u."id" AND m."tenantId" = u."tenantId" AND m."status" = 'ACTIVE'
          LEFT JOIN "MembershipCampusScope" scope ON scope."tenantId" = m."tenantId" AND scope."membershipId" = m."id"
@@ -1038,11 +1054,15 @@ interface AuthUserRow {
   canonicalMembershipVersion: number | null;
   canonicalScopeMode?: "TENANT" | "CAMPUSES" | null;
   canonicalCampusIds?: string[] | null;
+  guardianMembershipId?: string | null;
+  guardianMembershipCount?: number | null;
+  guardianMembershipVersion?: number | null;
 }
 
 function toAuthUser(row: AuthUserRow): AuthUser {
   const membership = toCanonicalMembership(row);
   const roles = membership ? assertTenantMembershipParity(row.roles, membership) : row.roles;
+  const guardianMembership = membership ? undefined : toGuardianMembership(row);
   return {
     id: row.id,
     email: row.email ?? undefined,
@@ -1054,6 +1074,7 @@ function toAuthUser(row: AuthUserRow): AuthUser {
     tenantId: row.tenantId ?? "system",
     roles,
     membership,
+    guardianMembership,
     authorizationSource: membership ? "CANONICAL_PARITY" : "LEGACY",
     membershipVersion: row.membershipVersion,
     mustChangePassword: row.mustChangePassword,
@@ -1072,6 +1093,7 @@ function cloneRequiredUser(user: AuthUser): AuthUser {
     ...user,
     roles: [...user.roles],
     membership: user.membership ? cloneCanonicalMembership(user.membership) : undefined,
+    guardianMembership: user.guardianMembership ? { ...user.guardianMembership } : undefined,
     totpRecoveryCodeHashes: [...(user.totpRecoveryCodeHashes ?? [])],
   };
 }
@@ -1108,6 +1130,20 @@ function toCanonicalMembership(row: AuthUserRow): CanonicalMembershipProjection 
     scopeMode,
     campusIds: scopeMode ? [...(row.canonicalCampusIds ?? [])] : undefined,
   };
+}
+
+function toGuardianMembership(row: AuthUserRow): GuardianMembershipProjection | undefined {
+  if (row.roles.length !== 1 || row.roles[0] !== "GUARDIAN") return undefined;
+  if (
+    Number(row.guardianMembershipCount ?? 0) !== 1 ||
+    !row.guardianMembershipId ||
+    row.guardianMembershipVersion === null ||
+    row.guardianMembershipVersion === undefined ||
+    row.guardianMembershipVersion !== row.membershipVersion
+  ) {
+    throw new Error("AUTH_MEMBERSHIP_PARITY_MISMATCH");
+  }
+  return { id: row.guardianMembershipId, version: row.guardianMembershipVersion };
 }
 
 function cloneCanonicalMembership(membership: CanonicalMembershipProjection): CanonicalMembershipProjection {

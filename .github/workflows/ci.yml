@@ -278,6 +278,7 @@ jobs:
           src/student/student-license-concurrency.postgres.test.ts
           src/student/student-import-batch.postgres.test.ts
           src/auth/mfa-reenrollment.postgres.test.ts
+          src/auth/guardian-login.postgres.test.ts
           src/tenant/tenant-reset-preview.postgres.test.ts
           src/operations/device-backup.postgres.test.ts
           src/operations/tenant-handover-export.postgres.test.ts

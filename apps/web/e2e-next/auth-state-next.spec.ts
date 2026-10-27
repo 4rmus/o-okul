@@ -241,6 +241,24 @@ test.describe("auth state MFA sıfırlama sonrası yeniden kayıt (DEC-20261021-
     await expect(page.getByLabel("Tek kullanımlık kayıt kodu")).toHaveCount(0);
     await expect(page.getByRole("img", { name: "Doğrulama uygulaması kurulum QR kodu" })).toHaveCount(0);
   });
+
+  test("auth state sunucu hatasını hatalı giriş bilgisi olarak göstermez (UAT F-25)", async ({ page }) => {
+    await prepareAuthPage(page, { routePath: tenantLoginUrl(appOrigin, "dna-egitim"), onLogin: () => ({}) });
+    await page.unroute("**/api/v1/auth/login");
+    let status = 500;
+    await page.route("**/api/v1/auth/login", async (route) => {
+      const code = status === 500 ? "INTERNAL_SERVER_ERROR" : "LOGIN_FAILED";
+      await route.fulfill({ body: JSON.stringify({ error: { code } }), contentType: "application/json", headers: corsHeaders, status });
+    });
+    const alert = page.getByRole("form", { name: "Giriş formu" }).getByRole("alert");
+    await submitCredentials(page);
+    await expect(alert).toHaveText(
+      "Giriş şu anda tamamlanamadı. Bilgileriniz doğru olabilir; parolanızı sıfırlamadan birkaç dakika sonra yeniden deneyin, sorun sürerse kurumunuza bildirin.",
+    );
+    status = 401;
+    await page.getByRole("button", { name: "Giriş yap" }).click();
+    await expect(alert).toHaveText("Giriş bilgileri hatalı.");
+  });
 });
 
 async function prepareAuthPage(
