@@ -483,7 +483,20 @@ async function collectReadiness(queryable, owners) {
                AND ARRAY(SELECT DISTINCT role FROM unnest(session.roles) role ORDER BY role) = ARRAY['TEACHER']::text[])
              OR (session."activePersona" = 'STUDENT' AND canonical.has_student
                AND ARRAY(SELECT DISTINCT role FROM unnest(session.roles) role ORDER BY role) = ARRAY['STUDENT']::text[])
+             -- KV-3b: a staff/teacher account that is also a parent opens GUARDIAN on its canonical membership.
+             OR (session."activePersona" = 'GUARDIAN' AND NOT canonical.has_student AND 'GUARDIAN' = ANY(legacy.roles)
+               AND ARRAY(SELECT DISTINCT role FROM unnest(session.roles) role ORDER BY role) = ARRAY['GUARDIAN']::text[])
            ))
+           OR
+           -- UAT F-25: a guardian-only account binds its session to its own GUARDIAN membership row.
+           (canonical."id" IS NULL AND session."activePersona" = 'GUARDIAN' AND legacy.roles = ARRAY['GUARDIAN']::text[]
+             AND ARRAY(SELECT DISTINCT role FROM unnest(session.roles) role ORDER BY role) = ARRAY['GUARDIAN']::text[]
+             AND EXISTS (
+               SELECT 1 FROM "TenantMembership" guardian_membership
+               WHERE guardian_membership."id" = session."membershipId" AND guardian_membership."tenantId" = session."tenantId"
+                 AND guardian_membership."userId" = session."userId" AND guardian_membership."role" = 'GUARDIAN'
+                 AND guardian_membership."status" = 'ACTIVE'
+             ))
          )) AS "sessionLegacyRoleMatches"`,
     [ownerTenantIds, ownerUserIds],
   );
