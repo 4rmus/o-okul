@@ -372,6 +372,8 @@ jobs:
           IMAGE_TAG: ${{ steps.meta.outputs.image-tag }}
           NEXT_PUBLIC_API_URL: ${{ vars.STAGING_NEXT_PUBLIC_API_URL }}
           NEXT_PUBLIC_SMS_ENABLED: "false"
+          # KV-7 web push: the "Bildirim cihazı" panel renders only with this flag and a public key (UAT F-26).
+          NEXT_PUBLIC_WEB_PUSH_ENABLED: "true"
           # Public VAPID key (not a secret); must equal VAPID_PUBLIC_KEY in the staging runtime .env.
           NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY: ${{ vars.STAGING_NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY }}
         run: |
@@ -382,6 +384,7 @@ jobs:
             --target web \
             --build-arg NEXT_PUBLIC_API_URL="$NEXT_PUBLIC_API_URL" \
             --build-arg NEXT_PUBLIC_SMS_ENABLED="$NEXT_PUBLIC_SMS_ENABLED" \
+            --build-arg NEXT_PUBLIC_WEB_PUSH_ENABLED="$NEXT_PUBLIC_WEB_PUSH_ENABLED" \
             --build-arg NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY="$NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY" \
             --tag "$IMAGE_PREFIX/web:$IMAGE_TAG" \
             --tag "$IMAGE_PREFIX/web:staging-latest" \
