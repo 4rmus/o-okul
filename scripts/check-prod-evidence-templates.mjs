@@ -9144,18 +9144,24 @@ async function runGithubCiGeneratorContractCheck() {
     updated_at: "2026-05-31T11:45:00.000Z",
     head_branch: "main",
   };
+  // Mirrors .github/workflows/ci.yml: `pnpm run ci` runs as parallel partitions plus the `verify` aggregator.
+  const mockJob = (name, jobId, stepName) => ({
+    name,
+    conclusion: "success",
+    started_at: "2026-05-31T11:01:00.000Z",
+    completed_at: "2026-05-31T11:44:00.000Z",
+    html_url: `https://github.com/owner/repo/actions/runs/1234567890/job/${jobId}`,
+    steps: [
+      { name: "Run pnpm install --frozen-lockfile", conclusion: "success" },
+      { name: stepName, conclusion: "success" },
+    ],
+  });
   const mockJobs = [
-    {
-      name: "verify",
-      conclusion: "success",
-      started_at: "2026-05-31T11:01:00.000Z",
-      completed_at: "2026-05-31T11:44:00.000Z",
-      html_url: "https://github.com/owner/repo/actions/runs/1234567890/job/9876543210",
-      steps: [
-        { name: "Run pnpm install --frozen-lockfile", conclusion: "success" },
-        { name: "Run pnpm run ci", conclusion: "success" },
-      ],
-    },
+    mockJob("verify-static", 9876543210, "pnpm ci:static"),
+    mockJob("verify-unit", 9876543211, "pnpm ci:unit"),
+    mockJob("verify-e2e (contract)", 9876543212, "pnpm ci:e2e:contract"),
+    mockJob("verify-e2e (visual)", 9876543213, "pnpm ci:e2e:visual"),
+    mockJob("verify", 9876543214, "Require every pnpm run ci partition"),
   ];
 
   const server = createServer((request, response) => {
@@ -9209,6 +9215,21 @@ async function runGithubCiGeneratorContractCheck() {
       console.error("Production evidence template kontrolü başarısız: generated GitHub CI evidence contract");
       console.error(`${check.stdout ?? ""}${check.stderr ?? ""}`);
       process.exit(check.status ?? 1);
+    }
+
+    const generated = JSON.parse(readFileSync(outputPath, "utf8"));
+    generated.jobs = generated.jobs.filter((job) => !job.stepsPassed.includes("pnpm ci:e2e:visual"));
+    writeFileSync(outputPath, `${JSON.stringify(generated, null, 2)}\n`);
+    const missingPartition = spawnSync(process.execPath, ["scripts/check-github-ci-evidence.mjs"], {
+      env: {
+        ...process.env,
+        GITHUB_CI_EVIDENCE_TARGET: pathToFileURL(outputPath).href,
+      },
+      encoding: "utf8",
+    });
+    if (missingPartition.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: eksik CI parçalı GitHub CI kanıtı kabul edildi.");
+      process.exit(1);
     }
   } finally {
     await closeServer(server);

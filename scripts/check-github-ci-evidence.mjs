@@ -1,6 +1,7 @@
 import { lstat, readFile } from "node:fs/promises";
 import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ciCommandPassedInJobs } from "./ci-partitions.mjs";
 
 const target = process.env.GITHUB_CI_EVIDENCE_TARGET;
 const allowExampleEvidence = process.env.GITHUB_CI_ALLOW_EXAMPLE_EVIDENCE === "1";
@@ -233,7 +234,6 @@ function requireJobs(jobs, failures) {
     return;
   }
 
-  let ciCommandSeen = false;
   for (const [index, job] of jobs.entries()) {
     if (!job || typeof job !== "object" || Array.isArray(job)) {
       failures.push(`jobs.${index} nesnesi zorunlu.`);
@@ -248,13 +248,10 @@ function requireJobs(jobs, failures) {
     requireDateNotAfter(job, failures, "startedAt", job, "completedAt");
     requireHttpsUrl(job, failures, `jobs.${index}.logUrl`, "logUrl");
     requireStringList(job.stepsPassed, failures, `jobs.${index}.stepsPassed`, 1);
-    if (Array.isArray(job.stepsPassed) && job.stepsPassed.includes("pnpm run ci")) {
-      ciCommandSeen = true;
-    }
   }
 
-  if (!ciCommandSeen) {
-    failures.push("jobs stepsPassed icinde pnpm run ci gorulmeli.");
+  if (!ciCommandPassedInJobs(jobs)) {
+    failures.push("jobs stepsPassed icinde pnpm run ci veya tum CI parcalari (pnpm ci:static, pnpm ci:unit, pnpm ci:e2e:*) gorulmeli.");
   }
 }
 

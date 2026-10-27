@@ -5125,13 +5125,22 @@ requireTokens(".github/workflows/ci.yml", [
   "Restore Turbo cache",
   "path: .turbo",
   "pnpm --filter @o-okul/web exec playwright install --with-deps chromium",
+  "ui-ux-rc-changes:",
   "ui-ux-rc:",
   "Detect UI-affecting changes",
   "no UI-affecting files changed",
-  "if: steps.ui-changes.outputs.required == 'true'",
-  "pnpm --filter @o-okul/web exec playwright install --with-deps chromium webkit",
+  "required: ${{ steps.ui-changes.outputs.required }}",
+  "if: needs.ui-ux-rc-changes.outputs.required == 'true'",
+  "options: --user 1001 --ipc=host",
   "pnpm web:ux-rc:check",
 ]);
+// The ui-ux-rc container ships the browsers; its tag must match the lockfile Playwright or the browsers are not found.
+const lockfilePlaywrightVersion = readFileSync("pnpm-lock.yaml", "utf8").match(/^  playwright@(\d+\.\d+\.\d+):$/m)?.[1];
+if (!lockfilePlaywrightVersion) {
+  failures.push("pnpm-lock.yaml playwright sürümü okunamadı.");
+} else if (!files[".github/workflows/ci.yml"].includes(`image: mcr.microsoft.com/playwright:v${lockfilePlaywrightVersion}-noble`)) {
+  failures.push(`.github/workflows/ci.yml ui-ux-rc container image mcr.microsoft.com/playwright:v${lockfilePlaywrightVersion}-noble olmalı.`);
+}
 requireNoTokens(".github/workflows/ci.yml", [
   "ui-ux-rc:\n    if: github.event_name == 'workflow_dispatch'",
 ]);

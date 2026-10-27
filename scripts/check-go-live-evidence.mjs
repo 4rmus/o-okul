@@ -5,6 +5,7 @@ import { getTenantScopedTables } from "../packages/db/scripts/tenant-models.mjs"
 import { validateUiUxRedesignBindings } from "./ui-ux-redesign-evidence-bindings.mjs";
 import { ISEM_OPTICAL_PIPELINE_INPUT_MANIFEST } from "./isem-optical-pipeline-contract.mjs";
 import { validateDeploymentRollbackReport } from "./check-deployment-rollback-evidence.mjs";
+import { ciCommandPassedInJobs } from "./ci-partitions.mjs";
 
 const target = process.env.GO_LIVE_EVIDENCE_TARGET;
 const allowExampleEvidence = process.env.GO_LIVE_ALLOW_EXAMPLE_EVIDENCE === "1";
@@ -2173,7 +2174,6 @@ function requireSummaryGithubCi(report, failures) {
   if (!Array.isArray(jobs) || jobs.length === 0) {
     failures.push("productionEvidenceSummary.summary.reports.githubCi.jobs bos olmayan liste olmali.");
   } else {
-    let ciCommandSeen = false;
     for (const [index, job] of jobs.entries()) {
       requireObjectString(job, failures, `productionEvidenceSummary.summary.reports.githubCi.jobs.${index}.name`, "name");
       requireObjectEqual(job, failures, `productionEvidenceSummary.summary.reports.githubCi.jobs.${index}.conclusion`, "conclusion", "success");
@@ -2189,12 +2189,9 @@ function requireSummaryGithubCi(report, failures) {
         1,
         false,
       );
-      if (Array.isArray(job.stepsPassed) && job.stepsPassed.includes("pnpm run ci")) {
-        ciCommandSeen = true;
-      }
     }
-    if (!ciCommandSeen) {
-      failures.push("productionEvidenceSummary.summary.reports.githubCi.jobs stepsPassed icinde pnpm run ci gorulmeli.");
+    if (!ciCommandPassedInJobs(jobs)) {
+      failures.push("productionEvidenceSummary.summary.reports.githubCi.jobs stepsPassed icinde pnpm run ci veya tum CI parcalari gorulmeli.");
     }
   }
 

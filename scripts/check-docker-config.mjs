@@ -286,7 +286,9 @@ const expectations = {
   ".github/workflows/ci.yml": [
     "pnpm install",
     "pnpm --filter @o-okul/web exec playwright install --with-deps chromium",
-    "pnpm run ci",
+    "name: pnpm ci:static",
+    "name: pnpm ci:unit",
+    "name: pnpm ci:e2e:${{ matrix.partition }}",
   ],
   ".github/workflows/staging-deploy.yml": [
     "workflow_dispatch:",
