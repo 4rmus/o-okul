@@ -228,6 +228,7 @@ requireTokens("apps/web/app/(auth)/tenant-login-page.tsx", [
 
 requireScript("web:ux-baseline:check", "node scripts/check-web-ux-baseline.mjs");
 requireScript("web:ux-contract:check", "pnpm --filter @o-okul/web ux-contract");
+requireScript("web:ux-route-family:check", "pnpm --filter @o-okul/web ux-route-family-smoke");
 requireScript(
   "ui-ux-redesign:visual-qa",
   "UI_VISUAL_ARTIFACT_DIR=artifacts/ui-ux-redesign/local pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts --workers=1 --update-snapshots=none e2e-next/ui-visual-qa-next.spec.ts",
@@ -238,7 +239,7 @@ requireScript(
 );
 requireScript(
   "ui-ux-redesign:local-gates",
-  "pnpm --filter @o-okul/shared-types build && pnpm --filter @o-okul/ui build && pnpm --filter @o-okul/web typecheck && pnpm web:design-tokens:check && pnpm web:a11y:check && pnpm web:auth-contract:check && pnpm web:ux-baseline:check && pnpm web:ux-contract:check && pnpm karne:visual-contract:check && pnpm ui-ux-redesign:example-fixtures && pnpm ui-ux-redesign:fixture-regression && pnpm ui-ux-redesign:evidence-generate:contract && pnpm ui-ux-redesign:visual-qa",
+  "pnpm --filter @o-okul/shared-types build && pnpm --filter @o-okul/ui build && pnpm --filter @o-okul/web typecheck && pnpm web:design-tokens:check && pnpm web:a11y:check && pnpm web:auth-contract:check && pnpm web:ux-baseline:check && pnpm web:ux-contract:check && pnpm web:ux-route-family:check && pnpm karne:visual-contract:check && pnpm ui-ux-redesign:example-fixtures && pnpm ui-ux-redesign:fixture-regression && pnpm ui-ux-redesign:evidence-generate:contract && pnpm ui-ux-redesign:visual-qa",
 );
 requireScript("ui-ux-redesign:evidence-generate", "node scripts/generate-ui-ux-redesign-evidence.mjs");
 
@@ -255,13 +256,14 @@ requireScriptIncludes("ci", "pnpm web:a11y:check");
 requireScriptIncludes("ci", "pnpm web:auth-contract:check");
 requireScriptIncludes("ci", "pnpm web:ux-baseline:check");
 requireScriptIncludes("ci", "pnpm web:ux-contract:check");
+requireScriptIncludes("ci", "pnpm web:ux-route-family:check");
 requireScriptIncludes("ci", "pnpm ui-ux-redesign:visual-qa");
 
 if (webPackageJson.scripts?.a11y !== "playwright test -c playwright.next.config.ts e2e-next/a11y-next.spec.ts") {
   failures.push("apps/web/package.json a11y script must run e2e-next/a11y-next.spec.ts.");
 }
 
-if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=2 e2e-next/ui-primitives-state-next.spec.ts e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/app-context-next.spec.ts e2e-next/marketing-context-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/employee-access-next.spec.ts e2e-next/teacher-account-invitation-next.spec.ts e2e-next/course-grade-level-link-next.spec.ts e2e-next/gradebook-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts e2e-next/gate-c-exam-workspace-next.spec.ts && pnpm ux-route-family-smoke") {
+if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=2 e2e-next/ui-primitives-state-next.spec.ts e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/app-context-next.spec.ts e2e-next/marketing-context-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/employee-access-next.spec.ts e2e-next/teacher-account-invitation-next.spec.ts e2e-next/course-grade-level-link-next.spec.ts e2e-next/gradebook-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts e2e-next/gate-c-exam-workspace-next.spec.ts") {
   failures.push("apps/web/package.json ux-contract script must run the primitive state, no-artifact DataTable, portal report, and report workspace specs.");
 }
 if (!webPackageJson.scripts?.["ux-rc"]?.includes("--workers=2")) {
