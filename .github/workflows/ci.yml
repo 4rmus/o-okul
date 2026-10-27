@@ -71,7 +71,8 @@ jobs:
   verify:
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
+    # Playwright 1.60 (lockfile) cannot install browser deps on ubuntu-latest = 26.04; pin until Playwright supports it.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -112,7 +113,8 @@ jobs:
   ui-ux-rc:
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
+    # Playwright 1.60 (lockfile) cannot install browser deps on ubuntu-latest = 26.04; pin until Playwright supports it.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
