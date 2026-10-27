@@ -334,6 +334,7 @@ const expectations = {
     "ghcr.io",
     "STAGING_SSH_PRIVATE_KEY",
     "--build-arg NEXT_PUBLIC_SMS_ENABLED=\"$NEXT_PUBLIC_SMS_ENABLED\"",
+    "--build-arg NEXT_PUBLIC_WEB_PUSH_ENABLED=\"$NEXT_PUBLIC_WEB_PUSH_ENABLED\"",
     "STAGING_DEPLOY_DIR",
     "Upload compose bundle",
     "docker-compose.observability.yml",
