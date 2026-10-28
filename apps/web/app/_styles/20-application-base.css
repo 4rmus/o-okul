@@ -256,8 +256,8 @@
   display: grid;
   flex: 0 0 auto;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-surface-muted);
@@ -704,6 +704,10 @@
 }
 
 .next-breadcrumb a {
+  display: inline-block;
+  /* 24 px WCAG 2.5.8 hedefi: satır yüksekliğini değiştirmeden dokunma alanı */
+  padding-block: var(--space-2xs);
+  margin-block: calc(-1 * var(--space-2xs));
   color: var(--color-text-muted);
   text-decoration: none;
   font-weight: 700;
@@ -1170,7 +1174,7 @@
 }
 
 .next-inline-form select {
-  min-height: 38px;
+  min-height: 44px;
 }
 
 .next-report-progress {
@@ -1212,7 +1216,7 @@
 }
 
 .next-segmented button {
-  min-height: 36px;
+  min-height: 44px;
   border: 1px solid transparent;
   border-radius: var(--radius);
   background: transparent;
@@ -1484,8 +1488,8 @@
 }
 
 .uh-button--icon {
-  width: 40px;
-  min-height: 40px;
+  width: 44px;
+  min-height: 44px;
   padding: 0;
 }
 
@@ -1527,7 +1531,7 @@
 
 .uh-input {
   width: 100%;
-  min-height: 40px;
+  min-height: 44px;
   border: 1px solid var(--color-border-input);
   border-radius: var(--radius);
   padding: 0 var(--space-xs);
@@ -1544,7 +1548,7 @@
 }
 
 .uh-select {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 var(--space-xs);
 }
 
@@ -1602,10 +1606,24 @@
 
 .uh-checkbox__input {
   flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   margin: 2px 0 0;
   accent-color: var(--color-primary);
+}
+
+/* Dokunmatik genişliklerde checkbox satırı 44 px hedef (design.md: kontroller en az 44 px). */
+@media (max-width: 1023px) {
+  .uh-checkbox {
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .uh-checkbox__input {
+    width: 20px;
+    height: 20px;
+    margin-top: 0;
+  }
 }
 
 .uh-checkbox__content {
@@ -1972,7 +1990,7 @@
 }
 
 .uh-tab-button {
-  min-height: 38px;
+  min-height: 44px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-surface);
@@ -2373,7 +2391,7 @@
 
 .next-list-controls select,
 .next-filter-field select {
-  min-height: 40px;
+  min-height: 44px;
   border: 1px solid var(--color-border-input);
   border-radius: var(--radius);
   background: var(--color-surface);
@@ -2400,7 +2418,7 @@
 }
 
 .next-list-status {
-  min-height: 40px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2415,7 +2433,7 @@
 
 .next-column-picker {
   display: flex;
-  min-height: 40px;
+  min-height: 44px;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2xs);
@@ -3710,7 +3728,7 @@
 }
 
 .next-detail-selects select {
-  min-height: 40px;
+  min-height: 44px;
   border: 1px solid var(--color-border-input);
   border-radius: var(--radius);
   background: var(--color-surface);
@@ -4076,7 +4094,7 @@
 .next-optical-upload-panel select,
 .next-optical-answer-key-panel select,
 .next-optical-format-details select {
-  min-height: 40px;
+  min-height: 44px;
   border: 1px solid var(--color-border-input);
   border-radius: var(--radius);
   background: var(--color-surface);
@@ -5697,7 +5715,7 @@
 }
 
 .uh-chart-details > summary {
-  min-height: 36px;
+  min-height: 44px;
   padding: 6px 10px;
   font-size: var(--text-xs);
 }
@@ -6243,7 +6261,7 @@
 }
 
 .uh-form-modal__form select {
-  min-height: 40px;
+  min-height: 44px;
   border: 1px solid var(--color-border-input);
   border-radius: var(--radius);
   background: var(--color-surface);
@@ -7646,7 +7664,7 @@
 }
 
 .next-list-status {
-  min-height: 38px;
+  min-height: 44px;
   border-color: var(--color-border);
   background: var(--color-surface-muted);
   color: var(--color-text-secondary);

@@ -130,7 +130,7 @@
 }
 
 .uh-context-bar select {
-  min-height: 36px;
+  min-height: 44px;
   max-width: 14rem;
   border: 1px solid var(--color-rule-strong);
   border-radius: var(--radius-control);
