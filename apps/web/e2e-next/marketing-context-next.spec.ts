@@ -12,32 +12,33 @@ function totalFor(students: number) {
 test.describe("Kademeli fiyat hesabı (pricing.ts)", () => {
   test("kademe sınırları, minimum ve teklif eşiği", () => {
     const expected: Array<[number, number]> = [
-      [1, 25_000],
-      [89, 25_000],
-      [90, 25_200],
-      [250, 70_000],
-      [251, 70_250],
-      [500, 132_500],
-      [501, 132_720],
-      [1000, 242_500],
-      [1001, 242_690],
-      [3000, 622_500],
-      [3001, 622_660],
-      [7000, 1_262_500],
+      [1, 9_900],
+      [99, 9_900],
+      [100, 9_900],
+      [101, 9_995],
+      [250, 24_150],
+      [251, 24_240],
+      [500, 46_650],
+      [501, 46_735],
+      [1000, 89_150],
+      [1001, 89_230],
+      [2000, 169_150],
+      [2001, 169_225],
+      [3000, 244_150],
     ];
     for (const [students, total] of expected) expect(totalFor(students), `${students} öğrenci`).toBe(total);
-    expect(estimateAnnualPrice(89)).toMatchObject({ minimumApplied: true });
-    expect(estimateAnnualPrice(90)).toMatchObject({ minimumApplied: false });
+    expect(estimateAnnualPrice(99)).toMatchObject({ billedStudents: 100, minimumApplied: true });
+    expect(estimateAnnualPrice(100)).toMatchObject({ billedStudents: 100, minimumApplied: false });
     expect(estimateAnnualPrice(1000)).toMatchObject({
-      lines: [{ students: 250, unitPrice: 280 }, { students: 250, unitPrice: 250 }, { students: 500, unitPrice: 220 }],
+      lines: [{ students: 100, unitPrice: 99 }, { students: 150, unitPrice: 95 }, { students: 250, unitPrice: 90 }, { students: 500, unitPrice: 85 }],
     });
-    for (const students of [7001, 7002, 100_000]) expect(estimateAnnualPrice(students)).toEqual({ kind: "quote" });
+    for (const students of [3001, 3002, 100_000]) expect(estimateAnnualPrice(students)).toEqual({ kind: "quote" });
     for (const students of [0, -1, 1.5, Number.NaN]) expect(estimateAnnualPrice(students)).toEqual({ kind: "invalid" });
   });
 
   test("öğrenci sayısı arttıkça yıllık tutar hiç düşmez", () => {
     let previous = totalFor(1);
-    for (let students = 2; students <= 7000; students += 1) {
+    for (let students = 2; students <= 3000; students += 1) {
       const current = totalFor(students);
       expect(current >= previous, `${students} öğrenci (${current}) < ${students - 1} öğrenci (${previous})`).toBe(true);
       previous = current;
@@ -79,34 +80,34 @@ test.describe("Public marketing context", () => {
 
     await expect(page.getByRole("heading", { level: 1, name: "Aktif öğrenci sayınıza göre yıllık fiyat." })).toBeVisible();
     const tiers = page.getByRole("table");
-    await expect(tiers.locator("tbody tr")).toHaveCount(6);
+    await expect(tiers.locator("tbody tr")).toHaveCount(7);
     await expect(tiers.getByRole("columnheader", { name: "Kademe" })).toBeVisible();
     await expect(tiers.getByRole("columnheader", { name: "Aralıktaki öğrenci başı" })).toBeVisible();
-    for (const [range, price] of [["1–250 (ilk 250)", "280 TL"], ["251–500 (sonraki 250)", "250 TL"], ["501–1000 (sonraki 500)", "220 TL"], ["1001–3000 (sonraki 2000)", "190 TL"], ["3001–7000 (sonraki 4000)", "160 TL"], ["7001 ve üzeri", "Teklif alın"]] as const) {
+    for (const [range, price] of [["1–100 (ilk 100)", "99 TL"], ["101–250 (sonraki 150)", "95 TL"], ["251–500 (sonraki 250)", "90 TL"], ["501–1000 (sonraki 500)", "85 TL"], ["1001–2000 (sonraki 1000)", "80 TL"], ["2001–3000 (sonraki 1000)", "75 TL"], ["3001 ve üzeri", "Teklif alın"]] as const) {
       await expect(tiers.locator("tbody tr", { hasText: range })).toContainText(price);
     }
     await expect(page.getByText("KDV hariç, yıllık", { exact: true })).toBeVisible();
     await expect(page.getByText("Kurulum ücreti yok, tüm modüller dahil.", { exact: true })).toBeVisible();
-    await expect(page.getByText("Toplam yıllık tutar en az 25.000 TL olur.", { exact: true })).toBeVisible();
+    await expect(page.getByText("En küçük paket 100 öğrencidir; daha az öğrencisi olan kurum 100 öğrenci üzerinden öder.", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Nasıl hesaplanır?" })).toBeVisible();
-    await expect(page.getByText("Örnek, 1000 öğrenci: 250 × 280 TL + 250 × 250 TL + 500 × 220 TL = 242.500 TL.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Örnek, 1000 öğrenci: 100 × 99 TL + 150 × 95 TL + 250 × 90 TL + 500 × 85 TL = 89.150 TL.", { exact: true })).toBeVisible();
 
     const input = page.getByLabel("Aktif öğrenci sayısı");
     const result = page.locator("output");
     await input.fill("50");
-    await expect(result).toContainText("25.000 TL");
-    await expect(result).toContainText("Yıllık en az 25.000 TL uygulanır.");
+    await expect(result).toContainText("9.900 TL");
+    await expect(result).toContainText("En küçük paket 100 öğrenci: 100 × 99 TL");
     await input.fill("250");
-    await expect(result).toContainText("70.000 TL");
+    await expect(result).toContainText("24.150 TL");
     await input.fill("251");
-    await expect(result).toContainText("70.250 TL");
-    await expect(result).toContainText("250 × 280 TL + 1 × 250 TL");
+    await expect(result).toContainText("24.240 TL");
+    await expect(result).toContainText("100 × 99 TL + 150 × 95 TL + 1 × 90 TL");
     await input.fill("1000");
-    await expect(result).toContainText("242.500 TL");
-    await input.fill("7000");
-    await expect(result).toContainText("1.262.500 TL");
-    await expect(result).toContainText("2.000 × 190 TL + 4.000 × 160 TL");
-    await input.fill("7001");
+    await expect(result).toContainText("89.150 TL");
+    await input.fill("3000");
+    await expect(result).toContainText("244.150 TL");
+    await expect(result).toContainText("1.000 × 80 TL + 1.000 × 75 TL");
+    await input.fill("3001");
     await expect(result).toContainText("Teklif alın");
     await expect(result.getByRole("link", { name: "Teklif talebi hazırla" })).toHaveAttribute("href", "/iletisim#teklif");
     await input.fill("0");

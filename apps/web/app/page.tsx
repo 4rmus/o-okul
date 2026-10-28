@@ -101,7 +101,7 @@ const trialFaq = {
 const faqs = [
   {
     question: "Fiyat nasıl hesaplanır?",
-    answer: "Fiyat kademelidir: ilk 250 öğrenci 280 TL, sonraki 250 öğrenci 250 TL, sonraki 500 öğrenci 220 TL, sonraki 2000 öğrenci 190 TL, sonraki 4000 öğrenci 160 TL üzerinden hesaplanır ve kademe tutarları toplanır. Yıllık en az 25.000 TL'dir; fiyatlar KDV hariçtir, kurulum ücreti yoktur ve tüm modüller dahildir.",
+    answer: "Fiyat kademelidir: ilk 100 öğrenci 99 TL, sonraki 150 öğrenci 95 TL, sonraki 250 öğrenci 90 TL, sonraki 500 öğrenci 85 TL, sonraki 1000 öğrenci 80 TL, sonraki 1000 öğrenci 75 TL üzerinden hesaplanır ve kademe tutarları toplanır. En küçük paket 100 öğrencidir; 3001 ve üzeri öğrenci için özel teklif verilir. Fiyatlar KDV hariçtir, kurulum ücreti yoktur ve tüm modüller dahildir.",
   },
   ...(trialOfferPublished ? [trialFaq] : []),
   {
@@ -229,8 +229,8 @@ export default function HomePage() {
           <div className="next-marketing-section__header">
             <div><p className="next-marketing-kicker">Yayınlanmış fiyat</p><h2 id="pricing-title">Fiyatı aktif öğrenci sayınız belirler.</h2></div>
             <p>
-              Yıllık ve KDV hariç, kademeli: ilk 250 öğrenci için öğrenci başı 280 TL, sonraki öğrenciler daha düşük
-              birim fiyattan hesaplanır (yıllık en az 25.000 TL). Kurulum ücreti yok, tüm modüller dahil.
+              Yıllık ve KDV hariç, kademeli: ilk 100 öğrenci için öğrenci başı 99 TL, sonraki öğrenciler daha düşük
+              birim fiyattan hesaplanır (en küçük paket 100 öğrenci). Kurulum ücreti yok, tüm modüller dahil.
             </p>
             <Link className="next-marketing-text-link" href="/fiyatlar">Kademeleri ve hesaplayıcıyı aç<ArrowRight size={17} aria-hidden="true" /></Link>
           </div>

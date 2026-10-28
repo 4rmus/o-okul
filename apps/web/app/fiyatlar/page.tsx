@@ -3,7 +3,7 @@ import { ArrowRight, CheckCircle2 } from "lucide-react";
 import { DataTable } from "@o-okul/ui";
 import { appBrand, appBrandHomeAriaLabel, trialOfferPublished } from "../../src/brand.js";
 import { PriceCalculator } from "./price-calculator.js";
-import { estimateAnnualPrice, formatTl, minimumAnnualPrice, pricingTiers, quoteFromStudents } from "./pricing.js";
+import { estimateAnnualPrice, formatTl, minimumBilledStudents, pricingTiers, quoteFromStudents } from "./pricing.js";
 
 const exampleStudents = 1000;
 const exampleEstimate = estimateAnnualPrice(exampleStudents);
@@ -61,7 +61,7 @@ export default function PricingPage() {
             rows={tierRows}
           />
           <ul className="next-pricing-included">
-            <li><CheckCircle2 size={17} aria-hidden="true" /> <span>Toplam yıllık tutar en az {formatTl(minimumAnnualPrice)} olur.</span></li>
+            <li><CheckCircle2 size={17} aria-hidden="true" /> <span>En küçük paket {minimumBilledStudents} öğrencidir; daha az öğrencisi olan kurum {minimumBilledStudents} öğrenci üzerinden öder.</span></li>
             {included.map((item) => <li key={item}><CheckCircle2 size={17} aria-hidden="true" /> <span>{item}</span></li>)}
           </ul>
         </section>
@@ -74,7 +74,7 @@ export default function PricingPage() {
           </div>
           <div className="next-pricing-explainer">
             <h3 id="pricing-how-title">Nasıl hesaplanır?</h3>
-            <p>Öğrencileriniz kademelere sırayla yerleşir: ilk 250 öğrenci 280 TL, sonraki 250 öğrenci 250 TL, sonraki 500 öğrenci 220 TL, sonraki 2000 öğrenci 190 TL, sonraki 4000 öğrenci 160 TL. Kademe tutarları toplanır; toplam {formatTl(minimumAnnualPrice)} altındaysa {formatTl(minimumAnnualPrice)} uygulanır.</p>
+            <p>Öğrencileriniz kademelere sırayla yerleşir: ilk 100 öğrenci 99 TL, sonraki 150 öğrenci 95 TL, sonraki 250 öğrenci 90 TL, sonraki 500 öğrenci 85 TL, sonraki 1000 öğrenci 80 TL, sonraki 1000 öğrenci 75 TL. Kademe tutarları toplanır; {minimumBilledStudents} öğrenciden azı {minimumBilledStudents} öğrenci olarak hesaplanır.</p>
             <p>Örnek, {exampleStudents} öğrenci: {exampleText}.</p>
           </div>
           <PriceCalculator />
@@ -95,7 +95,7 @@ export default function PricingPage() {
           <section className="next-marketing-cta" aria-labelledby="pricing-cta-title">
             <div>
               <h2 id="pricing-cta-title">Kurumunuz için fiyatı birlikte netleştirelim.</h2>
-              <p>Demo görüşmesinde öğrenci sayınızı ve kademelerinizi konuşalım; {quoteFromStudents} ve üzeri öğrenci için teklif hazırlarız. İlk talepte öğrenci verisi paylaşmayın.</p>
+              <p>Demo görüşmesinde öğrenci sayınızı ve kademelerinizi konuşalım; {quoteFromStudents} ve üzeri öğrencisi olan kurumlara özel fiyat teklifi hazırlarız. İlk talepte öğrenci verisi paylaşmayın.</p>
             </div>
             <div className="next-marketing-cta__actions">
               <Link className="uh-button uh-button--primary uh-button--lg" href="/iletisim#demo"><span>Demo talep et</span><ArrowRight size={18} aria-hidden="true" /></Link>

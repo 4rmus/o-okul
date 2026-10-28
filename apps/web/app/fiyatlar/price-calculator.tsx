@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Field, Input } from "@o-okul/ui";
-import { estimateAnnualPrice, formatTl, minimumAnnualPrice } from "./pricing.js";
+import { estimateAnnualPrice, formatTl, minimumBilledStudents, quoteFromStudents } from "./pricing.js";
 
 export function PriceCalculator() {
   const [value, setValue] = useState("");
@@ -22,14 +22,13 @@ export function PriceCalculator() {
             <span>Yıllık tutar (KDV hariç)</span>
             <strong>{formatTl(estimate.total)}</strong>
             <small>
-              {estimate.minimumApplied
-                ? `Yıllık en az ${formatTl(minimumAnnualPrice)} uygulanır.`
-                : estimate.lines.map((line) => `${new Intl.NumberFormat("tr-TR").format(line.students)} × ${formatTl(line.unitPrice)}`).join(" + ")}
+              {estimate.minimumApplied ? `En küçük paket ${minimumBilledStudents} öğrenci: ` : ""}
+              {estimate.lines.map((line) => `${new Intl.NumberFormat("tr-TR").format(line.students)} × ${formatTl(line.unitPrice)}`).join(" + ")}
             </small>
           </>
         ) : estimate?.kind === "quote" ? (
           <>
-            <span>7001 ve üzeri öğrenci</span>
+            <span>{quoteFromStudents} ve üzeri öğrenci</span>
             <strong>Teklif alın</strong>
             <Link className="next-marketing-text-link" href="/iletisim#teklif">Teklif talebi hazırla</Link>
           </>

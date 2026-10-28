@@ -5499,15 +5499,16 @@ for (const marketingFile of marketingSurfaceFiles) {
 }
 const pricingSource = readFileSync("apps/web/app/fiyatlar/pricing.ts", "utf8");
 for (const token of [
-  "{ min: 1, max: 250, unitPrice: 280 }",
-  "{ min: 251, max: 500, unitPrice: 250 }",
-  "{ min: 501, max: 1000, unitPrice: 220 }",
-  "{ min: 1001, max: 3000, unitPrice: 190 }",
-  "{ min: 3001, max: 7000, unitPrice: 160 }",
-  "minimumAnnualPrice = 25_000",
-  "quoteFromStudents = 7001",
+  "{ min: 1, max: 100, unitPrice: 99 }",
+  "{ min: 101, max: 250, unitPrice: 95 }",
+  "{ min: 251, max: 500, unitPrice: 90 }",
+  "{ min: 501, max: 1000, unitPrice: 85 }",
+  "{ min: 1001, max: 2000, unitPrice: 80 }",
+  "{ min: 2001, max: 3000, unitPrice: 75 }",
+  "minimumBilledStudents = 100",
+  "quoteFromStudents = 3001",
 ]) {
-  if (!pricingSource.includes(token)) failures.push(`apps/web/app/fiyatlar/pricing.ts DEC-20261005-01 fiyatından sapmamalı: ${token}`);
+  if (!pricingSource.includes(token)) failures.push(`apps/web/app/fiyatlar/pricing.ts DEC-20261028-01 fiyatından sapmamalı: ${token}`);
 }
 // Ürün sahibi kararı (2026-10-05): kartsız deneme çağrısı staging deneme UAT'ına kadar yayında değil.
 if (!readFileSync("apps/web/src/brand.ts", "utf8").includes("export const trialOfferPublished = false;")) {
