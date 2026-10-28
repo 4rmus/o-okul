@@ -2195,6 +2195,18 @@
   width: 100%;
 }
 
+/* Geniş ekranda birincil/ikincil eylem düğmeleri tam genişlik bar değil, sağa yaslı kısa düğmedir
+   (design.md CTA voice); liste kontrolleri ve açılır filtre blokları tam genişlikte kalır. */
+@media (min-width: 64rem) {
+  .uh-crud-page__actions:has(.next-list-controls) {
+    justify-content: flex-end;
+  }
+
+  .uh-crud-page__actions:has(.next-list-controls) > .uh-button {
+    width: auto;
+  }
+}
+
 .uh-crud-page__table-shell {
   min-width: 0;
   overflow-x: auto;

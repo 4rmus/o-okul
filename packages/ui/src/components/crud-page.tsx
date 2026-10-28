@@ -69,7 +69,6 @@ export function CrudPage<TRow>({
           {actions ? <div className="uh-crud-page__actions">{actions}</div> : null}
         </header>
       ) : null}
-      {summary ? <div className="uh-crud-page__summary">{summary}</div> : null}
       {!loading && error ? (
         <Alert className="uh-crud-page__error" tone="danger">
           {error}
@@ -92,6 +91,7 @@ export function CrudPage<TRow>({
           />
         </div>
       ) : null}
+      {summary ? <div className="uh-crud-page__summary">{summary}</div> : null}
     </section>
   );
 }
