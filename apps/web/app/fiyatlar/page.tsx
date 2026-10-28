@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowRight, BarChart3, BookOpen, CalendarDays, ScanLine, ShieldCheck, Wallet } from "lucide-react";
 import { appBrand, appBrandHomeAriaLabel, trialOfferPublished } from "../../src/brand.js";
 import { PriceCalculator } from "./price-calculator.js";
-import { estimateAnnualPrice, formatAverageTl, formatCount, formatTl, minimumBilledStudents, pricingTiers, quoteFromStudents } from "./pricing.js";
+import { estimateAnnualPrice, formatCount, formatTl, minimumBilledStudents, pricingTiers, quoteFromStudents } from "./pricing.js";
 
 export const metadata = {
   title: `Fiyatlar | ${appBrand.name}`,
@@ -18,19 +18,13 @@ const exampleText = exampleEstimate.kind === "price"
 const highestUnitPrice = pricingTiers[0].unitPrice;
 const lowestUnitPrice = pricingTiers[pricingTiers.length - 1]!.unitPrice;
 
-// Beş profil kademe üst sınırlarıdır; tutar pricing.ts'ten türetilir, her pakette tüm modüller vardır.
-const planProfiles = [
-  { students: 100, name: "Başlangıç", note: "En küçük paket" },
-  { students: 250, name: "Tek kampüs", note: "Tek binalı okul" },
-  { students: 500, name: "Büyüyen okul", note: "Birkaç kademe bir arada" },
-  { students: 1000, name: "Orta ölçek", note: "Anaokulundan liseye" },
-  { students: 2000, name: "Kampüs grubu", note: "Çok kampüslü kurum" },
-] as const;
+// Beş profil kademe üst sınırlarıdır; toplam pricing.ts'ten türetilir, öğrenci başı fiyat o kademenin
+// birim fiyatıdır (ürün sahibi kararı 2026-10-28). Her pakette tüm modüller vardır.
+const planProfiles = pricingTiers.slice(0, 5);
 
-const plans = planProfiles.map((profile) => {
-  const estimate = estimateAnnualPrice(profile.students);
-  const total = estimate.kind === "price" ? estimate.total : 0;
-  return { ...profile, total, average: total / profile.students };
+const plans = planProfiles.map((tier) => {
+  const estimate = estimateAnnualPrice(tier.max);
+  return { students: tier.max, unitPrice: tier.unitPrice, total: estimate.kind === "price" ? estimate.total : 0 };
 });
 
 const features = [
@@ -72,17 +66,13 @@ export default function PricingPage() {
             <ul className="next-pricing-plans__list">
               {plans.map((plan) => (
                 <li key={plan.students} className="next-pricing-plan">
-                  <div className="next-pricing-plan__head">
-                    <h2>{plan.name}</h2>
-                    <p>{plan.note}</p>
-                  </div>
-                  <p className="next-pricing-plan__students">{formatCount(plan.students)} aktif öğrenciye kadar</p>
+                  <h2 className="next-pricing-plan__students">{formatCount(plan.students)} öğrenciye kadar</h2>
                   <p className="next-pricing-plan__price">
-                    <strong>{formatAverageTl(plan.average)}</strong>
-                    <span>öğrenci / yıl</span>
+                    <strong>{formatTl(plan.total)}</strong>
+                    <span>yıllık · KDV hariç</span>
                   </p>
-                  <p className="next-pricing-plan__total">Yıllık {formatTl(plan.total)}</p>
-                  <Link className="uh-button uh-button--secondary uh-button--md" href="/iletisim#demo">Demo talep et</Link>
+                  <p className="next-pricing-plan__unit">Öğrenci başı <strong>{formatTl(plan.unitPrice)}</strong></p>
+                  <Link className="uh-button uh-button--secondary uh-button--md" href="/iletisim#teklif">Ödeme &amp; İletişim</Link>
                 </li>
               ))}
             </ul>

@@ -82,11 +82,11 @@ test.describe("Public marketing context", () => {
     await expect(page.getByText("Öğrenci başı yıllık 75 TL–99 TL, KDV hariç.", { exact: false })).toBeVisible();
     const plans = page.getByRole("region", { name: "Paketler" });
     await expect(plans.getByRole("listitem")).toHaveCount(5);
-    for (const [students, average, total] of [["100 aktif öğrenciye kadar", "99 TL", "9.900 TL"], ["250 aktif öğrenciye kadar", "96,60 TL", "24.150 TL"], ["500 aktif öğrenciye kadar", "93,30 TL", "46.650 TL"], ["1.000 aktif öğrenciye kadar", "89,15 TL", "89.150 TL"], ["2.000 aktif öğrenciye kadar", "84,58 TL", "169.150 TL"]] as const) {
-      const card = plans.getByRole("listitem").filter({ hasText: students });
-      await expect(card).toContainText(average);
-      await expect(card).toContainText(`Yıllık ${total}`);
-      await expect(card.getByRole("link", { name: "Demo talep et" })).toHaveAttribute("href", "/iletisim#demo");
+    for (const [students, unitPrice, total] of [["100 öğrenciye kadar", "99 TL", "9.900 TL"], ["250 öğrenciye kadar", "95 TL", "24.150 TL"], ["500 öğrenciye kadar", "90 TL", "46.650 TL"], ["1.000 öğrenciye kadar", "85 TL", "89.150 TL"], ["2.000 öğrenciye kadar", "80 TL", "169.150 TL"]] as const) {
+      const card = plans.getByRole("listitem").filter({ has: page.getByRole("heading", { name: students }) });
+      await expect(card).toContainText(total);
+      await expect(card).toContainText(`Öğrenci başı ${unitPrice}`);
+      await expect(card.getByRole("link", { name: "Ödeme & İletişim" })).toHaveAttribute("href", "/iletisim#teklif");
     }
     await expect(plans.getByText("1–100: 99 TL, 101–250: 95 TL, 251–500: 90 TL, 501–1.000: 85 TL, 1.001–2.000: 80 TL, 2.001–3.000: 75 TL", { exact: false })).toBeVisible();
     await expect(page.getByText("Kurulum ücreti yok, tüm modüller her pakette dahil", { exact: false })).toBeVisible();

@@ -408,35 +408,11 @@
     box-shadow: var(--shadow-xs);
   }
 
-  .next-pricing-plan__head {
-    display: grid;
-    gap: var(--space-3xs);
-  }
-
-  .next-pricing-plan__head h2 {
-    margin: 0;
-    font-size: var(--text-lg);
-    font-weight: 600;
-  }
-
-  .next-pricing-plan__head p,
-  .next-pricing-plan__students,
-  .next-pricing-plan__total {
-    margin: 0;
-    color: var(--color-ink-muted);
-    font-size: var(--text-sm);
-  }
-
-  /* Not ve öğrenci satırı iki satıra sabitlenir; beş kartta fiyat aynı hizada kalır. */
-  .next-pricing-plan__head p,
   .next-pricing-plan__students {
-    min-height: 3em;
-    line-height: 1.5;
-  }
-
-  .next-pricing-plan__students {
+    margin: 0;
     color: var(--color-ink-secondary);
-    font-weight: 500;
+    font-size: var(--text-base);
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
 
@@ -444,8 +420,7 @@
     display: grid;
     gap: var(--space-3xs);
     margin: 0;
-    border-top: 1px solid var(--color-rule-faint);
-    padding-top: var(--space-xs);
+    padding-top: var(--space-2xs);
   }
 
   .next-pricing-plan__price strong {
@@ -464,10 +439,20 @@
     font-size: var(--text-xs);
   }
 
-  .next-pricing-plan__total {
-    color: var(--color-ink-secondary);
+  .next-pricing-plan__unit {
+    margin: 0;
+    border-top: 1px solid var(--color-rule-faint);
+    padding-top: var(--space-xs);
+    color: var(--color-ink-muted);
+    font-size: var(--text-sm);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+  }
+
+  .next-pricing-plan__unit strong {
+    color: var(--color-ink);
+    font-size: var(--text-lg);
+    font-weight: 600;
   }
 
   .next-pricing-plan .uh-button {

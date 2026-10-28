@@ -145,11 +145,6 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .next-pricing-plan__head p,
-    .next-pricing-plan__students {
-      min-height: 0;
-    }
-
     .next-pricing-features {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
