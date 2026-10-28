@@ -77,9 +77,8 @@ export function TeacherTodaySchedulePanel({
       title="Bugünkü Dersler"
     >
       <DataTable
-        caption="Bugünkü dersler"
+        aria-label="Bugünkü dersler"
         columns={columns}
-        description="Öğretmenin bugünkü ders, sınıf, branş ve saat akışı."
         emptyText="Bugün planlı ders yok."
         getRowKey={(lesson) => lesson.id}
         rows={lessons}

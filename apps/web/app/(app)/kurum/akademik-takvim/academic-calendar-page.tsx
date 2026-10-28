@@ -477,6 +477,7 @@ export function AcademicCalendarPage() {
         }
         tableCaption="Akademik yıl takvimi"
         tableDescription="Yıl adı, tarih aralığı, aktiflik ve dönem bağlantısı URL durumuyla korunur."
+        hideTitle
         title="Akademik Takvim"
       />
       <CrudPage

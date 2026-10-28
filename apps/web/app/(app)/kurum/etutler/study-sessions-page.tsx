@@ -292,6 +292,7 @@ export function StudySessionsPage() {
         }
         tableCaption="Etüt operasyon listesi"
         tableDescription="Etüt adı, sınıf, kontenjan ve başlangıç bilgisi."
+        hideTitle
         title="Etütler"
       />
       <FormModal

@@ -151,6 +151,7 @@ export function KvkkPage() {
         rows={rows}
         tableCaption="KVKK kişisel bilgi temizleme kayıtları"
         tableDescription="Kayıt türü ve kişisel bilgi kategorisi gösterilir; T.C. kimlik numarası, telefon ve e-posta gibi değerler açık gösterilmez."
+        hideTitle
         title="KVKK"
       />
       {confirmationDialog}

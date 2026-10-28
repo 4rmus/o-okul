@@ -418,6 +418,7 @@ export function MessageTemplatesPage() {
       }
       tableCaption="Şablon yönetimi"
         tableDescription="SMS mesaj şablonları ve yeniden kullanılabilir gönderim metinleri."
+        hideTitle
         title="Şablonlar"
       />
       <ImportTemplatePanel />

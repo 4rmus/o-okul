@@ -293,6 +293,7 @@ export function TeacherNotesPage() {
         summary={<OperationSummary ariaLabel="Öğretmen notu operasyon özeti" badges={noteSummaryBadges} items={noteSummaryItems} />}
         tableCaption="Öğretmen notları operasyon listesi"
         tableDescription="Öğrenci, öğretmen, ders, dönem ve görünürlük kırılımıyla gelişim notu takibi."
+        hideTitle
         title="Öğretmen Notları"
       />
       <NoteFormModal

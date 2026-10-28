@@ -397,6 +397,7 @@ export function FinancePage() {
         }
         tableCaption="Ödeme taksitleri"
         tableDescription="Bekleyen, geciken ve ödenen taksitler seçili akademik bağlama göre listelenir."
+        hideTitle
         title="Finans"
       />
       <PaymentPlanFormModal

@@ -256,6 +256,7 @@ export function CampusesPage() {
         }
         tableCaption="Kampüs eğitim yapısı"
         tableDescription="Kampüs adı, kısa kod ve kampüs aksiyonları."
+        hideTitle
         title="Kampüsler"
       />
       <FormModal

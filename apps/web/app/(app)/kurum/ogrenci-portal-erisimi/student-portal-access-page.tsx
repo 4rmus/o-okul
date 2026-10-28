@@ -292,6 +292,7 @@ export function StudentPortalAccessPage() {
         summary={<OperationSummary ariaLabel="Öğrenci portal erişim özeti" badges={badges} items={summaryItems} />}
         tableCaption="Öğrenci portal erişimleri"
         tableDescription="Öğrenci, hesap, üyelik, davet ve aktif oturum durumu."
+        hideTitle
         title="Öğrenci Portal Erişimi"
       />
       <Dialog

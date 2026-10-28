@@ -237,6 +237,7 @@ export function TenantsPage() {
         }
         tableCaption="Kurum listesi"
         tableDescription="Kurumların plan, lisans, aktif öğrenci kotası ve erişim durumu."
+        hideTitle
         title="Kurumlar"
       />
       {auth ? <PurgeCandidatesPanel auth={auth} /> : null}

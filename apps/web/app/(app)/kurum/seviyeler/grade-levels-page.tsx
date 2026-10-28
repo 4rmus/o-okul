@@ -262,6 +262,7 @@ export function GradeLevelsPage() {
         }
         tableCaption="Seviye eğitim yapısı"
         tableDescription="Seviye adı, kısa kod ve seviye aksiyonları."
+        hideTitle
         title="Seviyeler"
       />
       <FormModal
