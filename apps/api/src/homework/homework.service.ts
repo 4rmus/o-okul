@@ -837,11 +837,20 @@ export class HomeworkService {
     return assignments.filter((assignment) => studentIds.has(assignment.studentId));
   }
 
+  // A teacher reads the homework of every class they may create it for (DEC-20261012-01: class or branch teacher
+  // assignment), plus classes they teach on the schedule. Lessons alone hid assignment-only classes (UAT F-34).
   private async listTeacherClassIds(context: RequestContext): Promise<Set<string>> {
     const lessons = filterTenantResources(context, await this.scheduleStore.list()).filter(
       (lesson) => !lesson.deletedAt && lesson.teacherId === context.subjectId,
     );
-    return new Set(lessons.map((lesson) => lesson.classId));
+    const today = new Date().toISOString().slice(0, 10);
+    const assignments = filterTenantResources(context, await this.teacherAssignmentStore.listByTeacher(context.subjectId ?? "")).filter(
+      (assignment) => Boolean(assignment.classId) &&
+        (assignment.role === "CLASS_TEACHER" || assignment.role === "BRANCH_TEACHER") &&
+        (!assignment.startsAt || assignment.startsAt <= today) &&
+        (!assignment.endsAt || assignment.endsAt >= today),
+    );
+    return new Set([...lessons.map((lesson) => lesson.classId), ...assignments.map((assignment) => assignment.classId!)]);
   }
 
   private resolveOptionalDate(value: string | undefined): string | undefined {

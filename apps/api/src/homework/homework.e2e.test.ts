@@ -1051,6 +1051,40 @@ describe("Homework API", () => {
     await request(server).delete("/homework/homework-a").set("Authorization", `Bearer ${teacherAAccessToken}`).expect(403);
   });
 
+  it("ders programı olmadan sınıf öğretmeni ataması olan öğretmen ödevi görür ve teslimleri okur (UAT F-34)", async () => {
+    const classD = await request(server)
+      .post("/classes")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "11-F34" })
+      .expect(201);
+    const classId = (classD.body as { id: string }).id;
+    const created = await request(server)
+      .post("/homework")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ classId, title: "Programsız Sınıf Ödevi" })
+      .expect(201);
+    const homeworkId = (created.body as { id: string }).id;
+
+    // No schedule lesson and no assignment yet: the homework stays out of the teacher's scope.
+    await request(server).get(`/homework/${homeworkId}`).set("Authorization", `Bearer ${teacherAAccessToken}`).expect(403);
+
+    await request(server)
+      .post("/teachers/teacher-a/assignments")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ classId, role: "CLASS_TEACHER" })
+      .expect(201);
+
+    await request(server)
+      .get("/me/teacher/homework")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(JSON.stringify(body)).toContain(homeworkId);
+      });
+    await request(server).get(`/homework/${homeworkId}`).set("Authorization", `Bearer ${teacherAAccessToken}`).expect(200);
+    await request(server).get(`/homework/${homeworkId}/submissions`).set("Authorization", `Bearer ${teacherAAccessToken}`).expect(200);
+  });
+
   describe("ödev teslimi (DEC-20261004-10)", () => {
     let studentAAccessToken: string;
 
