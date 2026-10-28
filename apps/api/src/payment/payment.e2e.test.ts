@@ -93,6 +93,17 @@ describe("PaymentPlan API", () => {
         expect(body).toEqual([expect.objectContaining({ id: "payment-plan-a", title: "2026 Haziran ödeme planı" })]);
       });
 
+    for (const sort of ["dueDate", "-dueDate"]) {
+      await request(server)
+        .get("/payment-plans")
+        .query({ sort })
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .expect(200)
+        .expect(({ body }) => {
+          expect(body).toEqual([expect.objectContaining({ id: "payment-plan-a" })]);
+        });
+    }
+
     await request(server)
       .get("/payment-plans")
       .query({ sort: "unknown" })

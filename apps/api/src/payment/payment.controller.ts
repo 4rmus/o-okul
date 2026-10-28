@@ -148,4 +148,13 @@ const paymentPlanListFields = [
   { name: "totalAmount", read: (record: PaymentPlanWithInstallmentsRecord) => record.totalAmount },
   { name: "currency", read: (record: PaymentPlanWithInstallmentsRecord) => record.currency },
   { name: "createdAt", read: (record: PaymentPlanWithInstallmentsRecord) => record.createdAt },
+  // The finance page opens with "Vade eski-yeni" (sort=dueDate); a plan sorts by its earliest installment (UAT F-31).
+  { name: "dueDate", read: (record: PaymentPlanWithInstallmentsRecord) => earliestInstallmentDueDate(record) },
 ];
+
+function earliestInstallmentDueDate(record: PaymentPlanWithInstallmentsRecord): string | undefined {
+  return record.installments.reduce<string | undefined>(
+    (earliest, installment) => (!earliest || installment.dueDate < earliest ? installment.dueDate : earliest),
+    undefined,
+  );
+}
