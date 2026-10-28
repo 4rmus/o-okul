@@ -282,7 +282,7 @@ validateCustomPropertyGraph(`${files.tokens}\n${files.globals}`);
   const sample = countRawPx(".a { padding: 8px -4px var(--space-sm); margin-top: 2px; font-size: 12px; border-top-left-radius: 6px; /* gap: 9px; */ }");
   if (JSON.stringify(sample) !== JSON.stringify({ spacing: 2, fontSize: 1, radius: 1 })) failures.push(`countRawPx öz denetimi başarısız: ${JSON.stringify(sample)}`);
 }
-const rawPxBaseline = { spacing: 467, fontSize: 164, radius: 27 };
+const rawPxBaseline = { spacing: 467, fontSize: 85, radius: 27 };
 const rawPxCounts = countStyleRawPx();
 for (const [group, baseline] of Object.entries(rawPxBaseline)) {
   const count = rawPxCounts[group];
