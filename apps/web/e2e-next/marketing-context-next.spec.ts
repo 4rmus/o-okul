@@ -81,12 +81,23 @@ test.describe("Public marketing context", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Aktif öğrenci sayınıza göre yıllık fiyat." })).toBeVisible();
     const tiers = page.getByRole("table");
     await expect(tiers.locator("tbody tr")).toHaveCount(7);
-    await expect(tiers.getByRole("columnheader", { name: "Kademe" })).toBeVisible();
+    await expect(tiers.getByRole("columnheader", { name: "Öğrenci aralığı" })).toBeVisible();
     await expect(tiers.getByRole("columnheader", { name: "Aralıktaki öğrenci başı" })).toBeVisible();
-    for (const [range, price] of [["1–100 (ilk 100)", "99 TL"], ["101–250 (sonraki 150)", "95 TL"], ["251–500 (sonraki 250)", "90 TL"], ["501–1000 (sonraki 500)", "85 TL"], ["1001–2000 (sonraki 1000)", "80 TL"], ["2001–3000 (sonraki 1000)", "75 TL"], ["3001 ve üzeri", "Teklif alın"]] as const) {
-      await expect(tiers.locator("tbody tr", { hasText: range })).toContainText(price);
+    await expect(tiers.getByRole("columnheader", { name: "Aralık sonunda yıllık toplam" })).toBeVisible();
+    for (const [range, price, total] of [["1–100 öğrenci", "99 TL", "9.900 TL"], ["101–250 öğrenci", "95 TL", "24.150 TL"], ["251–500 öğrenci", "90 TL", "46.650 TL"], ["501–1.000 öğrenci", "85 TL", "89.150 TL"], ["1.001–2.000 öğrenci", "80 TL", "169.150 TL"], ["2.001–3.000 öğrenci", "75 TL", "244.150 TL"], ["3.001 ve üzeri", "Teklif alın", "Teklif alın"]] as const) {
+      const row = tiers.locator("tbody tr", { hasText: range });
+      await expect(row).toContainText(price);
+      await expect(row).toContainText(total);
     }
-    await expect(page.getByText("KDV hariç, yıllık", { exact: true })).toBeVisible();
+    const packages = page.getByRole("list", { name: "Öğrenci sayısına göre yıllık toplam" });
+    await expect(packages.getByRole("listitem")).toHaveCount(7);
+    for (const [students, total, average] of [["100 öğrenci", "9.900 TL", "ort. 99 TL"], ["250 öğrenci", "24.150 TL", "ort. 96,60 TL"], ["1.000 öğrenci", "89.150 TL", "ort. 89,15 TL"], ["3.000 öğrenci", "244.150 TL", "ort. 81,38 TL"]] as const) {
+      const item = packages.getByRole("listitem").filter({ hasText: students }).first();
+      await expect(item).toContainText(total);
+      await expect(item).toContainText(average);
+    }
+    await expect(packages.getByRole("listitem").last()).toContainText("Teklif alın");
+    await expect(page.getByText("KDV hariç, yıllık. Her kademenin fiyatı yalnız o aralıktaki öğrencilere uygulanır.", { exact: true })).toBeVisible();
     await expect(page.getByText("Kurulum ücreti yok, tüm modüller dahil.", { exact: true })).toBeVisible();
     await expect(page.getByText("En küçük paket 100 öğrencidir; daha az öğrencisi olan kurum 100 öğrenci üzerinden öder.", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Nasıl hesaplanır?" })).toBeVisible();
