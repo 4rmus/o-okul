@@ -11,16 +11,33 @@ const exampleText = exampleEstimate.kind === "price"
   ? `${exampleEstimate.lines.map((line) => `${line.students} × ${formatTl(line.unitPrice)}`).join(" + ")} = ${formatTl(exampleEstimate.total)}`
   : "";
 
-type TierRow = { key: string; range: string; unitPrice: string };
+type TierRow = { key: string; range: string; unitPrice: string; total: string };
+
+// Each band's upper bound doubles as a package: the yearly total and the average per student a school of that size pays.
+const packages = pricingTiers.map((tier) => {
+  const estimate = estimateAnnualPrice(tier.max);
+  const total = estimate.kind === "price" ? estimate.total : 0;
+  return { students: tier.max, total, average: total / tier.max };
+});
 
 const tierRows: TierRow[] = [
-  ...pricingTiers.map((tier) => ({
+  ...pricingTiers.map((tier, index) => ({
     key: String(tier.min),
-    range: `${tier.min}–${tier.max} (${tier.min === 1 ? "ilk" : "sonraki"} ${tier.max - tier.min + 1})`,
+    range: `${formatCount(tier.min)}–${formatCount(tier.max)} öğrenci`,
     unitPrice: formatTl(tier.unitPrice),
+    total: formatTl(packages[index]!.total),
   })),
-  { key: "quote", range: `${quoteFromStudents} ve üzeri`, unitPrice: "Teklif alın" },
+  { key: "quote", range: `${formatCount(quoteFromStudents)} ve üzeri`, unitPrice: "Teklif alın", total: "Teklif alın" },
 ];
+
+function formatCount(value: number) {
+  return new Intl.NumberFormat("tr-TR").format(value);
+}
+
+function formatAverage(value: number) {
+  const fractionDigits = Number.isInteger(value) ? 0 : 2;
+  return `${new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2, minimumFractionDigits: fractionDigits }).format(value)} TL`;
+}
 
 const included = [
   "Kurulum ücreti yok, tüm modüller dahil.",
@@ -48,14 +65,29 @@ export default function PricingPage() {
           <div className="next-marketing-section__header">
             <p className="next-marketing-kicker">Fiyatlar</p>
             <h1 id="pricing-title">Aktif öğrenci sayınıza göre yıllık fiyat.</h1>
-            <p>Fiyatlar KDV hariç ve yıllıktır. Fiyat kademelidir: her kademenin birim fiyatı yalnız o aralıktaki öğrencilere uygulanır.</p>
+            <p>Fiyatlar KDV hariç ve yıllıktır. Öğrenci sayınız arttıkça öğrenci başı ortalama fiyat düşer.</p>
           </div>
+          <ul className="next-pricing-packages" aria-label="Öğrenci sayısına göre yıllık toplam">
+            {packages.map((item) => (
+              <li key={item.students}>
+                <span className="next-pricing-packages__students">{formatCount(item.students)} öğrenci</span>
+                <strong>{formatTl(item.total)}</strong>
+                <span>yıllık · öğrenci başı ort. {formatAverage(item.average)}</span>
+              </li>
+            ))}
+            <li>
+              <span className="next-pricing-packages__students">{formatCount(quoteFromStudents)}+ öğrenci</span>
+              <strong>Teklif alın</strong>
+              <Link className="next-marketing-text-link" href="/iletisim#teklif">Teklif talebi hazırla</Link>
+            </li>
+          </ul>
           <DataTable
-            caption="Öğrenci başı yıllık fiyat kademeleri"
-            description="KDV hariç, yıllık"
+            caption="Fiyat kademeleri"
+            description="KDV hariç, yıllık. Her kademenin fiyatı yalnız o aralıktaki öğrencilere uygulanır."
             columns={[
-              { key: "range", header: "Kademe", render: (row) => row.range },
-              { key: "unitPrice", header: "Aralıktaki öğrenci başı", align: "right", render: (row) => <strong>{row.unitPrice}</strong> },
+              { key: "range", header: "Öğrenci aralığı", render: (row) => row.range },
+              { key: "unitPrice", header: "Aralıktaki öğrenci başı", align: "right", render: (row) => row.unitPrice },
+              { key: "total", header: "Aralık sonunda yıllık toplam", align: "right", render: (row) => <strong>{row.total}</strong> },
             ]}
             getRowKey={(row) => row.key}
             rows={tierRows}
