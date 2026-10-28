@@ -254,9 +254,9 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
    atama kapsamı reddi UNPROVEN), S1-07 PASS (2026-10-27, STAGING `aa674b63e`: yalnız
    veli hesabı girişi, özette yalnız v2 notu, PWA ana ekran; F-25 #215/#216 ile kapandı), S1-08 PASS kısmi (2026-10-27,
    STAGING `838764826`: F-26 #218 ile kapandı, push telefona ulaştı ama yalnız API ile tetiklenebiliyor; F-27..F-29
-   açık), S1-09 kısmi (2026-10-27, STAGING: devamsızlık
-   bildirimi telefona geldi, aynı gün düzeltme ikinci bildirim üretmedi; not e-postası geldi; vade hatırlatması 2026-10-28'de
-   API ile kurulan taksitle bekleniyor; F-30, F-31), S1-12 PASS eski fiyatlarla (2026-10-28,
+   açık), S1-09 PASS (2026-10-28, STAGING: devamsızlık
+   bildirimi telefona geldi, aynı gün düzeltme ikinci bildirim üretmedi; not e-postası ve vade hatırlatması geldi; F-30 açık,
+   F-31 #219 ile kapandı; F-32 açık), S1-12 PASS eski fiyatlarla (2026-10-28,
    PRODUCTION; DEC-20261028-01 yeni fiyatla yeniden koşulacak), S1-10, S1-11, S1-13 başlamadı. Kapanan
    bulgular: F-02..F-13, F-15, F-16 (#159, #161–#166, #168, #180, #182, #184). F-14 KAPANDI (2026-10-22, STAGING):
    `o-okul.com` hesabında Email Routing yapılandırılmamış ve doğrulanmış hedef yok, finans davetleri iki doğrulanmamış
