@@ -396,6 +396,7 @@ export function EmployeesPage() {
         summary={<OperationSummary ariaLabel="Çalışan erişim özeti" badges={badges} items={summaryItems} />}
         tableCaption="Kurum çalışanları ve yetkileri"
         tableDescription="Çalışan, hesap, rol, çalışma alanı, çalışma durumu ve kampüs kapsamı."
+        hideTitle
         title="Çalışanlar ve Yetkiler"
       />
       <FormModal

@@ -374,6 +374,7 @@ export function LearningOutcomesPage() {
         }
         tableCaption="Kazanım katalog listesi"
         tableDescription="Kazanım kodu, branş, kazanım adı ve seviye bilgisi."
+        hideTitle
         title="Kazanımlar"
       />
       <FormModal

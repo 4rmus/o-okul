@@ -386,6 +386,7 @@ export function AnnouncementsPage() {
         }
         tableCaption="Duyuru yönetimi"
         tableDescription="Kurum duyuruları ve geçmiş hedef bilgileri."
+        hideTitle
         title="Duyurular"
       />
       <Panel

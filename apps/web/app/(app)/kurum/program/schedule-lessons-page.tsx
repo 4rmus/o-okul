@@ -276,6 +276,7 @@ export function ScheduleLessonsPage() {
         }
         tableCaption="Ders programı operasyon listesi"
         tableDescription="Ders, sınıf, branş ve başlangıç bilgisi."
+        hideTitle
         title="Ders Programı"
       />
       <FormModal

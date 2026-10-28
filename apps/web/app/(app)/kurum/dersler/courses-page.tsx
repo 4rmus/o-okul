@@ -252,6 +252,7 @@ export function CoursesPage() {
         }
         tableCaption="Ders eğitim yapısı"
         tableDescription="Ders adı, kısa kod ve ders aksiyonları."
+        hideTitle
         title="Dersler"
       />
       <FormModal

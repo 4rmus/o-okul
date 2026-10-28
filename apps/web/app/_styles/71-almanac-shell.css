@@ -150,9 +150,46 @@
     box-shadow: none;
   }
 
-  .next-list-filter-details,
+  /* `details` elemanı Chromium'da gölge slot kutusuyla çizilir: display: contents veya flex verilse de
+     çocukları düzleşmez, sağda sütun olarak yığılır ve arama alanı dikeyde ortalanır. Bu yüzden
+     geniş ekranda satır düzenini details değil, içindeki __content kutusu kurar. */
+  .uh-filter-bar.next-list-controls {
+    align-items: end;
+  }
+
+  .next-list-controls .uh-field__message:empty {
+    display: none;
+  }
+
+  .next-list-filter-details {
+    display: block;
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+
   .next-list-filter-details__content {
-    display: contents;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: var(--space-2xs);
+  }
+
+  .next-list-status {
+    white-space: nowrap;
+  }
+
+  /* details'in içsel genişliği Chromium'da min-content'e düşer; geniş ekranda tek satır için taban
+     genişlik verilir (Sırala + Göster + kayıt sayısı + sayfalama). */
+  @media (min-width: 64rem) {
+    .next-list-filter-details {
+      flex: 0 0 auto;
+      min-width: 33rem;
+    }
+
+    .next-list-filter-details__content,
+    .next-list-filter-details__content > .next-list-pagination {
+      flex-wrap: nowrap;
+    }
   }
 
   .next-list-filter-details > summary {

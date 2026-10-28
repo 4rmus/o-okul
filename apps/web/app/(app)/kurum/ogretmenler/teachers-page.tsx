@@ -433,6 +433,7 @@ export function TeachersPage() {
         }
         tableCaption="Öğretmen operasyon listesi"
         tableDescription="Ad soyad, branş, portal bağlantısı ve öğretmen aksiyonları."
+        hideTitle
         title="Öğretmenler"
       />
       <FormModal

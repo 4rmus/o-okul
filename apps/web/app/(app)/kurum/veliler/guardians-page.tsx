@@ -279,6 +279,7 @@ export function GuardiansPage() {
         }
         tableCaption="Veli kayıt listesi"
         tableDescription="Ad soyad, maskeli iletişim durumu ve veli aksiyonları."
+        hideTitle
         title="Veliler"
       />
       <FormModal

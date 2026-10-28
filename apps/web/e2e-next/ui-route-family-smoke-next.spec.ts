@@ -1016,6 +1016,8 @@ async function expectNoClippedVisibleText(
         const style = getComputedStyle(htmlElement);
         if (rect.width <= 0 || rect.height <= 0 || style.display === "none" || style.visibility === "hidden") return false;
         if (!htmlElement.textContent?.trim()) return false;
+        // Erişilebilirlik ağacında kalan, görsel olarak gizli başlıklar (uh-visually-hidden) kesik metin değildir.
+        if (htmlElement.closest(".uh-visually-hidden")) return false;
         const leafOnlyTag = ["DIV", "SPAN", "LI", "DT", "DD"].includes(element.tagName);
         if (leafOnlyTag && element.children.length > 0) return false;
         const isNamedKeyboardScrollRegion = (

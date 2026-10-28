@@ -144,6 +144,7 @@ export function UsersPage() {
         summary={
           <OperationSummary ariaLabel="Kullanıcı operasyon özeti" badges={userSummaryBadges} items={userSummaryItems} />
         }
+        hideTitle
         title="Kullanıcılar"
       />
     </div>

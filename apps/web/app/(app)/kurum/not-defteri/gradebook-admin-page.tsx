@@ -231,6 +231,7 @@ export function GradebookAdminPage() {
         rows={assessmentsQuery.data ?? []}
         tableCaption="Not değerlendirmeleri"
         tableDescription="Sınıf, ders, tür, tarih ve yayın durumuyla değerlendirme listesi."
+        hideTitle
         title="Not defteri"
       />
       {selected ? (

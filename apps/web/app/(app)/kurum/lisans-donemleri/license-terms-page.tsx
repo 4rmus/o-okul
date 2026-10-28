@@ -68,6 +68,7 @@ export function LicenseTermsPage() {
       summary={<OperationSummary ariaLabel="Lisans özeti" badges={badges} items={summaryItems} />}
       tableCaption="Kurum lisans dönemleri"
       tableDescription="Plan, tarih aralığı, aktif öğrenci limiti ve erişim durumu."
+      hideTitle
       title="Lisans Dönemleri"
     />
     {auth && auth.session.activePersona === "STAFF" && !auth.session.roles.includes("SYSTEM_ADMIN") && auth.session.roles.some((role) => ["TENANT_ADMIN", "TENANT_OWNER"].includes(role)) ? <ResetRequestPanel key={`${auth.session.tenantId}:${auth.session.userId}:${auth.session.id}`} auth={auth} /> : null}

@@ -4578,7 +4578,7 @@ requireTokens("apps/web/app/(app)/portals/_shared/teacher-panels.tsx", [
   '<InfoItem label="Sınıf kapsamı" value={classScope} />',
   'aria-label="Öğretmen sınıf raporları"',
   'title="Sınıf Raporları"',
-  'caption="Bugünkü dersler"',
+  '<DataTable\n        aria-label="Bugünkü dersler"',
   'caption="Öğretmen sınıf raporları"',
   'header: "Başarı %"',
   'header: "Net"',

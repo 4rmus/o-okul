@@ -16,6 +16,7 @@ export interface CrudPageProps<TRow> extends Omit<HTMLAttributes<HTMLElement>, "
   filteredEmptyState?: ReactNode;
   getRowKey(row: TRow): string;
   hasActiveFilters?: boolean;
+  hideTitle?: boolean;
   loading?: boolean;
   rowClassName?(row: TRow): string | undefined;
   rows: TRow[];
@@ -37,6 +38,7 @@ export function CrudPage<TRow>({
   filteredEmptyState,
   getRowKey,
   hasActiveFilters = false,
+  hideTitle = false,
   loading = false,
   rowClassName,
   rows,
@@ -61,13 +63,12 @@ export function CrudPage<TRow>({
       {title || description || actions ? (
         <header className="uh-crud-page__header">
           <div>
-            {title ? <h2>{title}</h2> : null}
+            {title ? <h2 className={hideTitle ? "uh-visually-hidden" : undefined}>{title}</h2> : null}
             {description ? <p>{description}</p> : null}
           </div>
           {actions ? <div className="uh-crud-page__actions">{actions}</div> : null}
         </header>
       ) : null}
-      {summary ? <div className="uh-crud-page__summary">{summary}</div> : null}
       {!loading && error ? (
         <Alert className="uh-crud-page__error" tone="danger">
           {error}
@@ -90,6 +91,7 @@ export function CrudPage<TRow>({
           />
         </div>
       ) : null}
+      {summary ? <div className="uh-crud-page__summary">{summary}</div> : null}
     </section>
   );
 }

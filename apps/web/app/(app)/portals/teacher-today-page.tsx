@@ -125,7 +125,7 @@ export function TeacherTodayPage() {
       />
       <PortalActionStrip ariaLabel="Öğretmen günlük aksiyonları" items={actions} />
       <Panel aria-label="Bugünkü dersler" description={`${today.date} tarihli dersler.`} title="Bugünkü dersler">
-        <DataTable caption="Bugünkü dersler" columns={lessonColumns} density="comfortable" emptyText="Bugün planlı ders yok." getRowKey={(lesson) => lesson.id} rows={today.todayLessons} />
+        <DataTable aria-label="Bugünkü dersler" columns={lessonColumns} density="comfortable" emptyText="Bugün planlı ders yok." getRowKey={(lesson) => lesson.id} rows={today.todayLessons} />
       </Panel>
       <Panel
         actions={<Link href={href("/ogretmen/odevler")}>Ödev kontrolüne git</Link>}

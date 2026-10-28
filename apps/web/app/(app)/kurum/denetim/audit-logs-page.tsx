@@ -119,6 +119,7 @@ export function AuditLogsPage() {
       summary={<OperationSummary ariaLabel="Denetim operasyon özeti" badges={auditSummaryBadges} items={auditSummaryItems} />}
       tableCaption="Denetim kayıtları"
       tableDescription="Kurum içi işlem izi; işlem yapan kişi, kayıt türü ve zaman bilgisi kişisel ayrıntıları açmadan listelenir."
+      hideTitle
       title="Denetim"
     />
   );
