@@ -34,3 +34,13 @@ export function estimateAnnualPrice(activeStudents: number): PriceEstimate {
 export function formatTl(amount: number) {
   return `${new Intl.NumberFormat("tr-TR").format(amount)} TL`;
 }
+
+export function formatCount(value: number) {
+  return new Intl.NumberFormat("tr-TR").format(value);
+}
+
+// Ortalama tam sayıysa kuruş gösterilmez (99 TL), değilse iki hane (96,60 TL).
+export function formatAverageTl(amount: number) {
+  const fractionDigits = Number.isInteger(amount) ? 0 : 2;
+  return `${new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2, minimumFractionDigits: fractionDigits }).format(amount)} TL`;
+}
