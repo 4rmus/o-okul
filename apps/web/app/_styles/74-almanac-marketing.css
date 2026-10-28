@@ -353,92 +353,314 @@
     background: var(--color-paper-raised);
   }
 
-  .next-pricing-packages {
+  /* Fiyat sayfası: beş profil kartı, ortak modül listesi, hesaplayıcı. */
+  .next-pricing {
+    gap: var(--space-lg);
+  }
+
+  .next-pricing__head {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--space-xs);
+    justify-items: center;
+    text-align: center;
+  }
+
+  .next-pricing__head h1 {
+    margin: 0;
+    max-width: 18ch;
+    color: var(--color-ink);
+    font-size: var(--text-display);
+    font-weight: 600;
+    line-height: 1.08;
+  }
+
+  .next-pricing__lead {
+    margin: 0;
+    max-width: 58ch;
+    color: var(--color-ink-muted);
+    font-size: var(--text-base);
+    line-height: 1.55;
+  }
+
+  .next-pricing-plans {
+    display: grid;
+    gap: var(--space-md);
+  }
+
+  .next-pricing-plans__list {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: var(--space-sm);
     margin: 0;
     padding: 0;
     list-style: none;
   }
 
-  .next-pricing-packages li {
+  .next-pricing-plan {
     display: grid;
     align-content: start;
-    gap: var(--space-3xs);
+    gap: var(--space-xs);
     min-width: 0;
     border: 1px solid var(--color-rule);
     border-radius: var(--radius-dialog);
     background: var(--color-paper-raised);
-    padding: var(--space-sm);
-    color: var(--color-ink-muted);
+    padding: var(--space-md) var(--space-sm);
+    box-shadow: var(--shadow-xs);
   }
 
-  .next-pricing-packages strong {
-    color: var(--color-ink);
-    font-family: var(--font-display);
-    font-size: var(--text-xl);
+  .next-pricing-plan__head {
+    display: grid;
+    gap: var(--space-3xs);
   }
 
-  .next-pricing-packages__students {
-    color: var(--color-ink-secondary);
+  .next-pricing-plan__head h2 {
+    margin: 0;
+    font-size: var(--text-lg);
     font-weight: 600;
   }
 
-  .next-pricing-included {
+  .next-pricing-plan__head p,
+  .next-pricing-plan__students,
+  .next-pricing-plan__total {
+    margin: 0;
+    color: var(--color-ink-muted);
+    font-size: var(--text-sm);
+  }
+
+  /* Not ve öğrenci satırı iki satıra sabitlenir; beş kartta fiyat aynı hizada kalır. */
+  .next-pricing-plan__head p,
+  .next-pricing-plan__students {
+    min-height: 3em;
+    line-height: 1.5;
+  }
+
+  .next-pricing-plan__students {
+    color: var(--color-ink-secondary);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .next-pricing-plan__price {
+    display: grid;
+    gap: var(--space-3xs);
+    margin: 0;
+    border-top: 1px solid var(--color-rule-faint);
+    padding-top: var(--space-xs);
+  }
+
+  .next-pricing-plan__price strong {
+    color: var(--color-ink);
+    font-family: var(--font-display);
+    font-size: var(--text-display);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .next-pricing-plan__price span {
+    color: var(--color-ink-muted);
+    font-size: var(--text-xs);
+  }
+
+  .next-pricing-plan__total {
+    color: var(--color-ink-secondary);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .next-pricing-plan .uh-button {
+    margin-top: var(--space-2xs);
+    box-shadow: none;
+  }
+
+  .next-pricing-plans__foot {
     display: grid;
     gap: var(--space-2xs);
+    max-width: 960px;
+    color: var(--color-ink-muted);
+    font-size: var(--text-sm);
+    line-height: 1.55;
+  }
+
+  .next-pricing-plans__foot p {
+    margin: 0;
+  }
+
+  .next-pricing-plans__foot .next-marketing-text-link {
+    color: var(--color-accent-hover);
+  }
+
+  .next-pricing-features {
+    --hairline: 1px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--hairline);
     margin: 0;
     padding: 0;
     list-style: none;
+    overflow: hidden;
+    border: 1px solid var(--color-rule);
+    border-radius: var(--radius-panel);
+    background: var(--color-rule);
   }
 
-  .next-pricing-included li {
+  .next-pricing-features li {
     display: flex;
     align-items: flex-start;
-    gap: var(--space-2xs);
-    color: var(--color-ink-secondary);
+    gap: var(--space-sm);
+    min-width: 0;
+    background: var(--color-paper-raised);
+    padding: var(--space-md);
   }
 
-  .next-pricing-included svg {
+  .next-pricing-features li > svg {
     flex: 0 0 auto;
-    color: var(--color-success-token);
+    color: var(--color-accent);
   }
 
-  .next-pricing-explainer {
+  .next-pricing-features li > div {
     display: grid;
-    gap: var(--space-2xs);
-    max-width: 760px;
-    color: var(--color-ink-secondary);
+    gap: var(--space-3xs);
   }
 
-  .next-pricing-explainer h3,
-  .next-pricing-explainer p {
+  .next-pricing-features h3 {
     margin: 0;
+    font-size: var(--text-base);
+    font-weight: 600;
+  }
+
+  .next-pricing-features p {
+    margin: 0;
+    color: var(--color-ink-muted);
+    font-size: var(--text-sm);
+    line-height: 1.55;
   }
 
   .next-pricing-calculator {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    align-items: start;
-    gap: var(--space-md);
-    max-width: 760px;
+    gap: var(--space-lg);
+    max-width: 960px;
+    min-width: 0;
     border: 1px solid var(--color-rule);
     border-radius: var(--radius-dialog);
     background: var(--color-paper-raised);
     padding: var(--space-md);
+    box-shadow: var(--shadow-xs);
+    scroll-margin-top: var(--space-lg);
+  }
+
+  .next-pricing-calculator__input {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .next-pricing-calculator__input h2 {
+    margin: 0;
+    font-size: var(--text-lg);
+    font-weight: 600;
+  }
+
+  .next-pricing-calculator__input .uh-input {
+    min-height: 48px;
+    font-size: var(--text-lg);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .next-pricing-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2xs);
+  }
+
+  .next-pricing-presets .uh-button {
+    border: 1px solid var(--color-rule-strong);
+    border-radius: var(--radius-pill);
+    background: var(--color-paper-raised);
+    padding: 0 var(--space-sm);
+    color: var(--color-ink-secondary);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    box-shadow: none;
+  }
+
+  .next-pricing-presets .uh-button:hover {
+    border-color: var(--color-accent);
+    background: var(--color-paper-raised);
+    color: var(--color-accent-hover);
+  }
+
+  .next-pricing-presets .uh-button[aria-pressed="true"] {
+    border-color: var(--color-accent);
+    background: var(--color-accent-soft);
+    color: var(--color-accent-hover);
+    font-weight: 600;
   }
 
   .next-pricing-calculator__result {
     display: grid;
     gap: var(--space-3xs);
     min-width: 0;
+    border-radius: var(--radius-panel);
+    background: var(--color-paper-muted);
+    padding: var(--space-sm) var(--space-md);
     color: var(--color-ink-muted);
   }
 
-  .next-pricing-calculator__result strong {
+  .next-pricing-calculator__label {
+    font-size: var(--text-sm);
+    font-weight: 500;
+  }
+
+  .next-pricing-calculator__total {
     color: var(--color-ink);
     font-family: var(--font-display);
-    font-size: var(--text-xl);
+    font-size: var(--text-display);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    white-space: nowrap;
   }
+
+  .next-pricing-calculator__average {
+    color: var(--color-ink-secondary);
+    font-size: var(--text-base);
+    font-weight: 500;
+  }
+
+  .next-pricing-calculator__result .uh-button {
+    width: fit-content;
+    margin-top: var(--space-2xs);
+  }
+
+  .next-pricing-calculator__lines {
+    display: grid;
+    gap: var(--space-3xs);
+    margin: var(--space-sm) 0 0;
+    border-top: 1px solid var(--color-rule);
+    padding: var(--space-xs) 0 0;
+    list-style: none;
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .next-pricing-calculator__lines li {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-sm);
+  }
+
+  .next-pricing-calculator__lines li span:last-child {
+    color: var(--color-ink-secondary);
+    white-space: nowrap;
+  }
+
+  .next-pricing-calculator__note {
+    color: var(--color-ink-secondary);
+  }
+
 }

@@ -79,46 +79,48 @@ test.describe("Public marketing context", () => {
     await page.goto("/fiyatlar");
 
     await expect(page.getByRole("heading", { level: 1, name: "Aktif öğrenci sayınıza göre yıllık fiyat." })).toBeVisible();
-    const tiers = page.getByRole("table");
-    await expect(tiers.locator("tbody tr")).toHaveCount(7);
-    await expect(tiers.getByRole("columnheader", { name: "Öğrenci aralığı" })).toBeVisible();
-    await expect(tiers.getByRole("columnheader", { name: "Aralıktaki öğrenci başı" })).toBeVisible();
-    await expect(tiers.getByRole("columnheader", { name: "Aralık sonunda yıllık toplam" })).toBeVisible();
-    for (const [range, price, total] of [["1–100 öğrenci", "99 TL", "9.900 TL"], ["101–250 öğrenci", "95 TL", "24.150 TL"], ["251–500 öğrenci", "90 TL", "46.650 TL"], ["501–1.000 öğrenci", "85 TL", "89.150 TL"], ["1.001–2.000 öğrenci", "80 TL", "169.150 TL"], ["2.001–3.000 öğrenci", "75 TL", "244.150 TL"], ["3.001 ve üzeri", "Teklif alın", "Teklif alın"]] as const) {
-      const row = tiers.locator("tbody tr", { hasText: range });
-      await expect(row).toContainText(price);
-      await expect(row).toContainText(total);
+    await expect(page.getByText("Öğrenci başı yıllık 75 TL–99 TL, KDV hariç.", { exact: false })).toBeVisible();
+    const plans = page.getByRole("region", { name: "Paketler" });
+    await expect(plans.getByRole("listitem")).toHaveCount(5);
+    for (const [students, average, total] of [["100 aktif öğrenciye kadar", "99 TL", "9.900 TL"], ["250 aktif öğrenciye kadar", "96,60 TL", "24.150 TL"], ["500 aktif öğrenciye kadar", "93,30 TL", "46.650 TL"], ["1.000 aktif öğrenciye kadar", "89,15 TL", "89.150 TL"], ["2.000 aktif öğrenciye kadar", "84,58 TL", "169.150 TL"]] as const) {
+      const card = plans.getByRole("listitem").filter({ hasText: students });
+      await expect(card).toContainText(average);
+      await expect(card).toContainText(`Yıllık ${total}`);
+      await expect(card.getByRole("link", { name: "Demo talep et" })).toHaveAttribute("href", "/iletisim#demo");
     }
-    const packages = page.getByRole("list", { name: "Öğrenci sayısına göre yıllık toplam" });
-    await expect(packages.getByRole("listitem")).toHaveCount(7);
-    for (const [students, total, average] of [["100 öğrenci", "9.900 TL", "ort. 99 TL"], ["250 öğrenci", "24.150 TL", "ort. 96,60 TL"], ["1.000 öğrenci", "89.150 TL", "ort. 89,15 TL"], ["3.000 öğrenci", "244.150 TL", "ort. 81,38 TL"]] as const) {
-      const item = packages.getByRole("listitem").filter({ hasText: students }).first();
-      await expect(item).toContainText(total);
-      await expect(item).toContainText(average);
-    }
-    await expect(packages.getByRole("listitem").last()).toContainText("Teklif alın");
-    await expect(page.getByText("KDV hariç, yıllık. Her kademenin fiyatı yalnız o aralıktaki öğrencilere uygulanır.", { exact: true })).toBeVisible();
-    await expect(page.getByText("Kurulum ücreti yok, tüm modüller dahil.", { exact: true })).toBeVisible();
-    await expect(page.getByText("En küçük paket 100 öğrencidir; daha az öğrencisi olan kurum 100 öğrenci üzerinden öder.", { exact: true })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Nasıl hesaplanır?" })).toBeVisible();
-    await expect(page.getByText("Örnek, 1000 öğrenci: 100 × 99 TL + 150 × 95 TL + 250 × 90 TL + 500 × 85 TL = 89.150 TL.", { exact: true })).toBeVisible();
+    await expect(plans.getByText("1–100: 99 TL, 101–250: 95 TL, 251–500: 90 TL, 501–1.000: 85 TL, 1.001–2.000: 80 TL, 2.001–3.000: 75 TL", { exact: false })).toBeVisible();
+    await expect(page.getByText("Kurulum ücreti yok, tüm modüller her pakette dahil", { exact: false })).toBeVisible();
+    await expect(page.getByRole("list", { name: "Her pakette bulunan modüller" }).getByRole("listitem")).toHaveCount(6);
+    await expect(page.getByText("En küçük paket 100 öğrencidir; daha az öğrencisi olan kurum 100 öğrenci üzerinden öder.", { exact: false })).toBeVisible();
+    await expect(page.getByText("aylık ödeme seçeneği yoktur", { exact: false })).toBeVisible();
+    await expect(page.getByText("Örnek, 1.000 öğrenci: 100 × 99 TL + 150 × 95 TL + 250 × 90 TL + 500 × 85 TL = 89.150 TL.", { exact: false })).toBeVisible();
 
     const input = page.getByLabel("Aktif öğrenci sayısı");
     const result = page.locator("output");
+    await expect(input).toHaveValue("500");
+    await expect(result).toContainText("46.650 TL");
+    await expect(result).toContainText("Öğrenci başı ortalama 93,30 TL");
     await input.fill("50");
     await expect(result).toContainText("9.900 TL");
-    await expect(result).toContainText("En küçük paket 100 öğrenci: 100 × 99 TL");
+    await expect(result).toContainText("En küçük paket 100 öğrenci: tutar 100 öğrenci üzerinden hesaplandı.");
+    await expect(result).toContainText("100 öğrenci × 99 TL");
     await input.fill("250");
     await expect(result).toContainText("24.150 TL");
+    await expect(result).toContainText("Öğrenci başı ortalama 96,60 TL");
     await input.fill("251");
     await expect(result).toContainText("24.240 TL");
-    await expect(result).toContainText("100 × 99 TL + 150 × 95 TL + 1 × 90 TL");
-    await input.fill("1000");
+    await expect(result).toContainText("1 öğrenci × 90 TL");
+    await page.getByRole("group", { name: "Hazır öğrenci sayıları" }).getByRole("button", { name: "1.000", exact: true }).click();
+    await expect(input).toHaveValue("1000");
     await expect(result).toContainText("89.150 TL");
+    await expect(result).toContainText("Öğrenci başı ortalama 89,15 TL");
     await input.fill("3000");
     await expect(result).toContainText("244.150 TL");
-    await expect(result).toContainText("1.000 × 80 TL + 1.000 × 75 TL");
-    await input.fill("3001");
+    await expect(result).toContainText("1.000 öğrenci × 80 TL");
+    await expect(result).toContainText("1.000 öğrenci × 75 TL");
+    await expect(result).toContainText("Öğrenci başı ortalama 81,38 TL");
+    await page.getByRole("group", { name: "Hazır öğrenci sayıları" }).getByRole("button", { name: "3.000+" }).click();
+    await expect(input).toHaveValue("3001");
     await expect(result).toContainText("Teklif alın");
     await expect(result.getByRole("link", { name: "Teklif talebi hazırla" })).toHaveAttribute("href", "/iletisim#teklif");
     await input.fill("0");
