@@ -48,13 +48,13 @@ export default function ContactPage() {
               {trialOfferPublished ? (
                 <>
                   <h2 id="quote-title">Teklif veya kartsız deneme</h2>
-                  <p>7001 ve üzeri aktif öğrenci için teklif hazırlarız. Kartsız deneme 7 gün ve en fazla 100 aktif öğrenciyle açılır; deneme hesabını ekibimiz kurar.</p>
+                  <p>3001 ve üzeri aktif öğrencisi olan kurumlara özel fiyat teklifi hazırlarız. Kartsız deneme 7 gün ve en fazla 100 aktif öğrenciyle açılır; deneme hesabını ekibimiz kurar.</p>
                   <a className="uh-button uh-button--secondary uh-button--md" href={quoteRequestHref}>Teklif veya deneme iste</a>
                 </>
               ) : (
                 <>
                   <h2 id="quote-title">Teklif</h2>
-                  <p>7001 ve üzeri aktif öğrenci için teklif hazırlarız. Daha küçük kurumlar fiyatı fiyat sayfasındaki hesaplayıcıyla görebilir.</p>
+                  <p>3001 ve üzeri aktif öğrencisi olan kurumlara özel fiyat teklifi hazırlarız. Daha küçük kurumlar fiyatı fiyat sayfasındaki hesaplayıcıyla görebilir.</p>
                   <a className="uh-button uh-button--secondary uh-button--md" href={quoteRequestHref}>Teklif iste</a>
                 </>
               )}

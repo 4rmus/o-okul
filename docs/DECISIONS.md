@@ -1043,7 +1043,7 @@ Son kontrol: 2026-10-05
 
 ### DEC-20261005-01 — Yayınlanmış fiyat: aktif öğrenci kademesine göre öğrenci başı yıllık TL
 
-Durum: Onaylı; fiyat sayfası KF-9 diliminde bekliyor
+Durum: Kademe, birim fiyat ve asgari tutar maddeleri DEC-20261028-01 ile değişti (2026-10-28); kademeli hesap, yıllık/KDV hariç TL ve deneme maddeleri geçerli
 Karar: Fiyat yıllık, KDV hariç ve TL olarak public fiyat sayfasında yayınlanır. Fiyat aktif öğrenci
 sayısı × kademenin öğrenci başı yıllık birim fiyatıdır (DEC-20260801-01 aktif öğrenci kotası; çalışan
 hesapları ücretli koltuk değildir). Kademeler ve birim fiyatlar: 1–250 öğrenci 280 TL (yıllık en az
@@ -1302,6 +1302,32 @@ Açık soru: Yok. (a) S1-03 staging yeniden koşusu 2026-10-22'de PASS (#212). (
 oluşturma ve profil güncelleme 2026-10-24'ten beri silinmiş öğrencinin TC'sini de sayar ve TC'yi aynı transaction'da
 yazar.
 Son kontrol: 2026-10-22
+
+### DEC-20261028-01 — Fiyat: öğrenci başı 99–75 TL kademeli, en az 100 öğrenci, 3001+ teklif
+
+Durum: Onaylı (2026-10-28); DEC-20261005-01'in kademe, birim fiyat ve asgari tutar maddelerinin yerini alır
+Karar: Fiyat yıllık, KDV hariç ve TL olarak public fiyat sayfasında yayınlanır; aktif öğrenci kotasına
+dayanır, çalışan hesapları ücretli değildir. Kademeler ve öğrenci başı yıllık birim fiyatlar: 1–100 öğrenci
+99 TL, 101–250 öğrenci 95 TL, 251–500 öğrenci 90 TL, 501–1000 öğrenci 85 TL, 1001–2000 öğrenci 80 TL,
+2001–3000 öğrenci 75 TL; 3001 ve üzeri öğrenci için kurum iletişime geçer ve teklif alır. Hesap DEC-20261005-01
+ile aynı biçimde kademelidir: her birim fiyat yalnız kendi aralığındaki öğrencilere uygulanır, kademe
+tutarları toplanır, öğrenci sayısı arttıkça tutar hiçbir sınırda düşmez. Asgari tutar kaldırıldı; en küçük
+paket 100 öğrencidir: 100'den az aktif öğrencisi olan kurum 100 öğrenci üzerinden ödeme yapar (9.900 TL).
+Örnekler: 100 öğrenci 9.900 TL, 250 öğrenci 24.150 TL, 500 öğrenci 46.650 TL, 1000 öğrenci 89.150 TL,
+2000 öğrenci 169.150 TL, 3000 öğrenci 244.150 TL. Kurulum ücreti yok, tüm modüller dahil, satış yalnız
+yıllık; kartsız deneme kuralı (DEC-20261004-02, DEC-20261005-01) değişmez. Dershane/etüt için ayrı kademe
+yoktur.
+Kaynak: Ürün sahibi kararı (2026-10-28): "minimum 100 öğrencilik paket … 3000 öğrenci 75 TL, daha fazla
+öğrencisi olan kurumlar özel fiyat teklifi için iletişime geçsin"; dershane için ayrı kademe gerekmez.
+Piyasa notu (alt ajan araştırması, erişim 2026-10-28, KAYNAKLI): k12.net.tr 50 öğrenciye kadar 15.000 TL/yıl,
+sonra ek öğrenci başı 100 TL (`k12.net.tr/assets/js/fiyat_ayar.js`); onlinekurum.com Delta Kurs 250 öğrenciye
+kadar 25.262,50 TL + KDV. K12NET, Bilsa/Okulsis, Eyotek ve OkulAile fiyat yayınlamıyor (UNPROVEN).
+Kanıt: `apps/web/app/fiyatlar/pricing.ts` tek kaynak; `marketing-context-next.spec.ts` ve
+`scripts/check-ops-config.mjs` fiyat kilidi. LOCAL_TEST.
+Etkilenen ADR: Yok
+Açık soru: Mevcut müşteri sözleşmesi yok; geçiş kuralı gerekmez. Yenilemede TÜFE endeksi maddesi ayrıca
+kararlaştırılır.
+Son kontrol: 2026-10-28
 
 ### DEC-20261025-01 — Deneme puanı yüzeyleri "resmî puan değildir" uyarısı göstermez
 
