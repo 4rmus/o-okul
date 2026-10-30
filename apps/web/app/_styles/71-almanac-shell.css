@@ -405,7 +405,8 @@
     opacity: 1;
   }
 
-  .next-attention-panel {
+  /* Uyarı zemini yalnız açık iş varken (tone="warning"); boş durum ve duyuru paneli nötr kalır. */
+  .next-attention-panel.uh-panel--warning {
     border-color: color-mix(in oklch, var(--color-warning-token) 38%, var(--color-rule));
     background: color-mix(in oklch, var(--color-warning-soft-token) 46%, var(--color-paper-raised));
   }
