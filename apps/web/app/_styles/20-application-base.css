@@ -1,3 +1,41 @@
+/* Hata ve yükleme yüzeyleri (UI/UX F9): global-error, not-found, (app)/error, (app)/loading. */
+.next-error-fallback {
+  width: min(100%, 36rem);
+  margin-inline: auto;
+  display: grid;
+  gap: var(--space-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  padding: var(--space-lg) var(--space-md);
+  text-align: left;
+}
+
+.next-error-fallback h1 {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.next-error-fallback p {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.next-error-fallback__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+  margin-top: var(--space-2xs);
+}
+
+.next-route-loading {
+  display: grid;
+  min-height: 12rem;
+  place-items: center;
+}
+
 .next-auth-panel {
   width: min(440px, 100%);
   border-radius: var(--radius-lg);
