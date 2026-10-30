@@ -314,7 +314,7 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
           {pendingEnrollment ? "Etkinleştir ve giriş yap" : pendingMfa ? "Doğrula" : pendingTenantSelection ? "Devam et" : "Giriş yap"}
         </Button>
       </form>
-      <aside className="next-auth-context" aria-label="Güvenli giriş bilgisi">
+      <section className="next-auth-context" aria-label="Güvenli giriş bilgisi">
         <p className="next-section-eyebrow">{lockedTenantSlug === "system" ? "Sistem girişi" : lockedTenantSlug ? "Kurum girişi" : "Güvenli oturum"}</p>
         <h2>Görevinize ait çalışma alanına ilerleyin.</h2>
         <p>Kurumunuz ve kullanıcı göreviniz girişten sonra doğrulanır; yalnız görmeye yetkili olduğunuz bilgiler gösterilir.</p>
@@ -332,7 +332,7 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
             Sınav sonuçları ilgili öğrenci ve velilere açılır
           </li>
         </ul>
-      </aside>
+      </section>
     </section>
   );
 }

@@ -293,6 +293,7 @@
   background: var(--color-surface);
   padding: 18px;
   min-height: 100vh;
+  min-height: 100dvh;
   min-height: 100svh;
   position: sticky;
   top: 0;
@@ -6140,6 +6141,7 @@
 .uh-dialog__panel {
   width: min(460px, 100%);
   max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
   overflow-y: auto;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -6936,6 +6938,7 @@
     width: min(320px, calc(100vw - 42px));
     border-right: 0;
     min-height: 100vh;
+    min-height: 100dvh;
     max-height: none;
     box-shadow: var(--shadow-modal);
     overflow: auto;

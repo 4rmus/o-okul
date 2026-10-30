@@ -893,7 +893,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
           {savedSummary ? <p className="next-onboarding-success" role="status">{savedSummary}</p> : null}
         </Panel>
 
-        <Panel as="aside" className="next-onboarding-aside" aria-label="Kurulum özeti">
+        <Panel as="section" className="next-onboarding-aside" aria-label="Kurulum özeti">
           <h2>Akış Özeti</h2>
           <dl>
             <div>

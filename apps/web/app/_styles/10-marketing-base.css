@@ -7,6 +7,7 @@
   --marketing-bg: var(--color-bg);
   --marketing-line: var(--color-border);
   min-height: 100vh;
+  min-height: 100dvh;
   overflow: hidden;
   background: var(--marketing-bg);
   color: var(--marketing-ink);

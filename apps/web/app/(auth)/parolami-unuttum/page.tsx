@@ -75,11 +75,11 @@ export default function ForgotPasswordPage() {
         <Link className="next-auth-link" href={loginHref}>Girişe dön</Link>
         <ContactSupportLink />
       </form>
-      <aside className="next-auth-context" aria-label="Şifre yenileme güven bilgisi">
+      <section className="next-auth-context" aria-label="Şifre yenileme güven bilgisi">
         <p className="next-section-eyebrow">{tenantSlug ? "Kurum hesabı" : "Güvenli şifre yenileme"}</p>
         <h2>Bu ekran hesabın bulunup bulunmadığını göstermez.</h2>
         <p>Kurum adresi sizi doğru hesaba yönlendirir. Güvenliğiniz için hesabın ve mesaj teslimatının durumu burada açıklanmaz.</p>
-      </aside>
+      </section>
     </section>
   );
 }

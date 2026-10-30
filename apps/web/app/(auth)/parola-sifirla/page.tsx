@@ -114,13 +114,13 @@ export default function ResetPasswordPage() {
           </>
         )}
       </form>
-      <aside className="next-auth-context" aria-label="Yeni şifre güven bilgisi">
+      <section className="next-auth-context" aria-label="Yeni şifre güven bilgisi">
         <p className="next-section-eyebrow">{tenantSlug ? "Kurum hesabı" : "Güvenli şifre yenileme"}</p>
         <h2>Tek kullanımlık bağlantıyı yalnız bu ekranda kullanın.</h2>
         <p>Şifre yenilendiğinde diğer oturumlar kapatılır. Bağlantı geçersizse giriş ekranına dönüp yeniden istek oluşturun.</p>
         <Link className="next-auth-link" href={loginHref}>Girişe dön</Link>
         <ContactSupportLink />
-      </aside>
+      </section>
     </section>
   );
 }

@@ -103,11 +103,11 @@ export default function ChangePasswordPage() {
         </Button>
         <ContactSupportLink />
       </form>
-      <aside className="next-auth-context" aria-label="Zorunlu şifre değişikliği güven bilgisi">
+      <section className="next-auth-context" aria-label="Zorunlu şifre değişikliği güven bilgisi">
         <p className="next-section-eyebrow">Doğrulanmış oturum</p>
         <h2>Devam etmeden önce geçici şifrenizi değiştirin.</h2>
         <p>Şifreniz kaydedildikten sonra yeni şifrenizle yeniden giriş yapmanız gerekir.</p>
-      </aside>
+      </section>
     </section>
   );
 }
