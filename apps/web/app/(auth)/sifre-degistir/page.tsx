@@ -1,13 +1,14 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
+import {  type FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Field, Input } from "@o-okul/ui";
+import { Button, Field } from "@o-okul/ui";
 import { isFinanceOnlyStaff, type AuthResponse } from "@o-okul/shared-types";
 import { appBrand } from "../../../src/brand.js";
 import { loginPathAfterLogout } from "../../../src/logout-pending.js";
 import { useAuth } from "../../providers.js";
 import { ContactSupportLink } from "../contact-support-link.js";
+import { PasswordField, PasswordInput } from "../password-input.js";
 
 export default function ChangePasswordPage() {
   const router = useRouter();
@@ -59,34 +60,40 @@ export default function ChangePasswordPage() {
       </div>
       <form className="next-form" aria-label="Şifre değiştirme formu" onSubmit={(event) => void handleSubmit(event)}>
         <h1 id="change-password-title">Şifre değiştir</h1>
-        <Field label="Mevcut şifre">
-          <Input
-            type="password"
-            value={currentPassword}
-            onChange={(event) => setCurrentPassword(event.target.value)}
-            autoComplete="current-password"
-          />
-        </Field>
-        <Field label="Yeni şifre">
-          <Input
-            type="password"
-            value={newPassword}
-            onChange={(event) => setNewPassword(event.target.value)}
-            autoComplete="new-password"
-            minLength={8}
-            maxLength={128}
-          />
-        </Field>
-        <Field label="Yeni şifre tekrar">
-          <Input
-            type="password"
-            value={newPasswordAgain}
-            onChange={(event) => setNewPasswordAgain(event.target.value)}
-            autoComplete="new-password"
-            minLength={8}
-            maxLength={128}
-          />
-        </Field>
+        <PasswordField>
+          <Field label="Mevcut şifre">
+            <PasswordInput
+              type="password"
+              value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)}
+              autoComplete="current-password"
+            />
+          </Field>
+        </PasswordField>
+        <PasswordField>
+          <Field label="Yeni şifre">
+            <PasswordInput
+              type="password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              autoComplete="new-password"
+              minLength={8}
+              maxLength={128}
+            />
+          </Field>
+        </PasswordField>
+        <PasswordField>
+          <Field label="Yeni şifre tekrar">
+            <PasswordInput
+              type="password"
+              value={newPasswordAgain}
+              onChange={(event) => setNewPasswordAgain(event.target.value)}
+              autoComplete="new-password"
+              minLength={8}
+              maxLength={128}
+            />
+          </Field>
+        </PasswordField>
         {error ? <p className="next-form-error">{error}</p> : null}
         <Button type="submit" disabled={isSubmitting || isBootstrapping} loading={isSubmitting} loadingLabel="Kaydediliyor">
           Kaydet
@@ -96,11 +103,11 @@ export default function ChangePasswordPage() {
         </Button>
         <ContactSupportLink />
       </form>
-      <aside className="next-auth-context" aria-label="Zorunlu şifre değişikliği güven bilgisi">
+      <section className="next-auth-context" aria-label="Zorunlu şifre değişikliği güven bilgisi">
         <p className="next-section-eyebrow">Doğrulanmış oturum</p>
         <h2>Devam etmeden önce geçici şifrenizi değiştirin.</h2>
         <p>Şifreniz kaydedildikten sonra yeni şifrenizle yeniden giriş yapmanız gerekir.</p>
-      </aside>
+      </section>
     </section>
   );
 }

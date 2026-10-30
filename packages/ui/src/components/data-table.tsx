@@ -9,6 +9,8 @@ export interface DataTableColumn<TRow> {
   mobilePriority?: "hidden" | "primary" | "secondary";
   priority?: "primary" | "secondary" | "optional";
   render(row: TRow): ReactNode;
+  /** Etkin sıralama yönü; sütun başlığına aria-sort olarak yansır (sıralama liste kontrollerinden seçilir). */
+  sortDirection?: "ascending" | "descending";
   sticky?: boolean | "left" | "right";
 }
 
@@ -61,6 +63,7 @@ export function DataTable<TRow>({
           <tr>
             {columns.map((column) => (
               <th
+                aria-sort={column.sortDirection}
                 data-align={column.align}
                 data-column-key={column.key}
                 data-mobile-priority={column.mobilePriority}

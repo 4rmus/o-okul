@@ -236,10 +236,12 @@ export function StudentsPage() {
     writeStudentListQuery({ filters, listQuery, tableDensity, visibleColumnKeys });
   }, [filters, listQuery, tableDensity, visibleColumnKeys]);
 
+  const activeSort = resolveStudentSortDirection(listQuery.sort);
   const columns: Array<DataTableColumn<StudentRecord> & { key: StudentColumnKey }> = [
     {
       key: "studentNo",
       header: "Okul No",
+      sortDirection: activeSort.columnKey === "studentNo" ? activeSort.direction : undefined,
       priority: "optional",
       render: (student) => student.studentNo ?? "—",
     },
@@ -247,6 +249,7 @@ export function StudentsPage() {
       key: "name",
       header: "Ad Soyad",
       priority: "primary",
+      sortDirection: activeSort.columnKey === "name" ? activeSort.direction : undefined,
       render: (student) => `${student.firstName} ${student.lastName}`,
       sticky: true,
     },
@@ -260,6 +263,7 @@ export function StudentsPage() {
     {
       key: "class",
       header: "Sınıf",
+      sortDirection: activeSort.columnKey === "class" ? activeSort.direction : undefined,
       priority: "secondary",
       render: (student) => (student.classId ? (classNameById.get(student.classId) ?? "—") : "—"),
     },
@@ -1266,6 +1270,17 @@ function buildProfilePayload(form: StudentFormPayload): StudentProfilePayload | 
   if (form.phone.trim()) payload.phone = form.phone.trim();
   if (form.email.trim()) payload.email = form.email.trim();
   return Object.keys(payload).length > 0 ? payload : null;
+}
+
+// Liste kontrolündeki sıralama seçimi tablo başlığına aria-sort olarak yansır (UI/UX F12).
+function resolveStudentSortDirection(sort: string): { columnKey?: StudentColumnKey; direction: "ascending" | "descending" } {
+  const direction = sort.startsWith("-") ? "descending" : "ascending";
+  const field = sort.replace(/^-/, "");
+  const columnKey: StudentColumnKey | undefined = field === "studentNo" ? "studentNo"
+    : field === "firstName" || field === "lastName" ? "name"
+      : field === "classId" ? "class"
+        : undefined;
+  return { columnKey, direction };
 }
 
 const studentSortOptions = [

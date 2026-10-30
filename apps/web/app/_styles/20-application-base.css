@@ -1,3 +1,41 @@
+/* Hata ve yükleme yüzeyleri (UI/UX F9): global-error, not-found, (app)/error, (app)/loading. */
+.next-error-fallback {
+  width: min(100%, 36rem);
+  margin-inline: auto;
+  display: grid;
+  gap: var(--space-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  padding: var(--space-lg) var(--space-md);
+  text-align: left;
+}
+
+.next-error-fallback h1 {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.next-error-fallback p {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.next-error-fallback__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+  margin-top: var(--space-2xs);
+}
+
+.next-route-loading {
+  display: grid;
+  min-height: 12rem;
+  place-items: center;
+}
+
 .next-auth-panel {
   width: min(440px, 100%);
   border-radius: var(--radius-lg);
@@ -108,6 +146,32 @@
   min-height: 42px;
 }
 
+/* Şifre alanı + göster/gizle anahtarı (UI/UX F8). Anahtar label dışında, giriş kutusunun sağ alt
+   köşesine hizalı; boş alan mesajı gizlenir ki kutu ile anahtar aynı tabanda dursun. */
+.next-password-field {
+  position: relative;
+}
+
+.next-password-field .uh-field__message:empty {
+  display: none;
+}
+
+.next-password-field .next-password-input {
+  padding-right: var(--space-xl);
+}
+
+.next-password-field .next-password-field__toggle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  color: var(--color-text-muted);
+}
+
+.next-password-field .next-password-field__toggle:hover,
+.next-password-field .next-password-field__toggle:focus-visible {
+  color: var(--color-primary);
+}
+
 .next-auth-link {
   justify-self: end;
   color: var(--color-brand);
@@ -149,7 +213,7 @@
 .next-demo-accounts > p {
   margin: 0 0 var(--space-3xs);
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .next-demo-account {
@@ -178,7 +242,7 @@
 
 .next-demo-account span:last-child {
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .next-portal-preview-action {
@@ -229,6 +293,7 @@
   background: var(--color-surface);
   padding: 18px;
   min-height: 100vh;
+  min-height: 100dvh;
   min-height: 100svh;
   position: sticky;
   top: 0;
@@ -256,8 +321,8 @@
   display: grid;
   flex: 0 0 auto;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-surface-muted);
@@ -351,7 +416,7 @@
 
 .next-push-panel .uh-button {
   justify-content: center;
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .next-push-panel .uh-status-badge {
@@ -500,7 +565,7 @@
 .next-desktop-topbar__context,
 .next-desktop-topbar__account {
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 800;
 }
 
@@ -599,7 +664,7 @@
   display: grid;
   gap: 6px;
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 800;
 }
 
@@ -626,7 +691,7 @@
   display: grid;
   gap: 6px;
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 800;
 }
 
@@ -646,7 +711,7 @@
 .next-command-results h3 {
   margin: var(--space-3xs) 0 0;
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .next-command-results a,
@@ -704,6 +769,10 @@
 }
 
 .next-breadcrumb a {
+  display: inline-block;
+  /* 24 px WCAG 2.5.8 hedefi: satır yüksekliğini değiştirmeden dokunma alanı */
+  padding-block: var(--space-2xs);
+  margin-block: calc(-1 * var(--space-2xs));
   color: var(--color-text-muted);
   text-decoration: none;
   font-weight: 700;
@@ -772,7 +841,7 @@
 .next-dashboard-overview-card .uh-metric-card__label,
 .next-dashboard-overview-card .uh-metric-card__description {
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 700;
   overflow-wrap: anywhere;
 }
@@ -824,7 +893,7 @@
 .next-portal-context-strip span,
 .next-portal-context-strip small {
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 750;
 }
 
@@ -1170,7 +1239,7 @@
 }
 
 .next-inline-form select {
-  min-height: 38px;
+  min-height: 44px;
 }
 
 .next-report-progress {
@@ -1212,7 +1281,7 @@
 }
 
 .next-segmented button {
-  min-height: 36px;
+  min-height: 44px;
   border: 1px solid transparent;
   border-radius: var(--radius);
   background: transparent;
@@ -1270,7 +1339,7 @@
 .next-teacher-workspace__header > p {
   overflow-wrap: anywhere;
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 800;
   text-align: right;
 }
@@ -1484,8 +1553,8 @@
 }
 
 .uh-button--icon {
-  width: 40px;
-  min-height: 40px;
+  width: 44px;
+  min-height: 44px;
   padding: 0;
 }
 
@@ -1527,7 +1596,7 @@
 
 .uh-input {
   width: 100%;
-  min-height: 40px;
+  min-height: 44px;
   border: 1px solid var(--color-border-input);
   border-radius: var(--radius);
   padding: 0 var(--space-xs);
@@ -1544,7 +1613,7 @@
 }
 
 .uh-select {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 var(--space-xs);
 }
 
@@ -1561,7 +1630,7 @@
 
 .uh-field__label {
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 800;
 }
 
@@ -1602,10 +1671,24 @@
 
 .uh-checkbox__input {
   flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   margin: 2px 0 0;
   accent-color: var(--color-primary);
+}
+
+/* Dokunmatik genişliklerde checkbox satırı 44 px hedef (design.md: kontroller en az 44 px). */
+@media (max-width: 1023px) {
+  .uh-checkbox {
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .uh-checkbox__input {
+    width: 20px;
+    height: 20px;
+    margin-top: 0;
+  }
 }
 
 .uh-checkbox__content {
@@ -1761,7 +1844,7 @@
   min-width: 0;
   overflow-wrap: anywhere;
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 
@@ -1810,7 +1893,7 @@
 }
 
 .uh-info-item__description {
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.35;
 }
 
@@ -1860,7 +1943,7 @@
 .uh-action-card__context {
   grid-column: 1 / -1;
   color: var(--color-text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 900;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -1906,7 +1989,7 @@
   background: var(--color-surface);
   padding: 3px var(--space-2xs);
   color: var(--color-text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 800;
   overflow-wrap: anywhere;
   text-align: center;
@@ -1972,7 +2055,7 @@
 }
 
 .uh-tab-button {
-  min-height: 38px;
+  min-height: 44px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-surface);
@@ -2373,7 +2456,7 @@
 
 .next-list-controls select,
 .next-filter-field select {
-  min-height: 40px;
+  min-height: 44px;
   border: 1px solid var(--color-border-input);
   border-radius: var(--radius);
   background: var(--color-surface);
@@ -2400,7 +2483,7 @@
 }
 
 .next-list-status {
-  min-height: 40px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2409,13 +2492,13 @@
   background: var(--color-surface);
   padding: 0 10px;
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 
 .next-column-picker {
   display: flex;
-  min-height: 40px;
+  min-height: 44px;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2xs);
@@ -2438,7 +2521,7 @@
   align-items: center;
   gap: 6px;
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 
@@ -2446,7 +2529,7 @@
   align-items: center;
   min-height: 40px;
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 
@@ -2502,7 +2585,7 @@
 }
 
 .uh-empty-state__hint {
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 
@@ -2787,7 +2870,7 @@
 
 .next-onboarding-progress .uh-tab-button strong {
   overflow-wrap: anywhere;
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .next-onboarding-progress .uh-tab-button small {
@@ -2913,7 +2996,7 @@
 .next-onboarding-upload-status strong {
   display: block;
   color: var(--color-text);
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .next-onboarding-upload-status span,
@@ -2942,7 +3025,7 @@
 .next-onboarding-course-group span,
 .next-onboarding-template-panel p {
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .next-onboarding-course-grid {
@@ -2966,7 +3049,7 @@
 }
 
 .next-onboarding-course-grid strong {
-  font-size: 13px;
+  font-size: var(--text-sm);
   line-height: 1.25;
 }
 
@@ -2978,7 +3061,7 @@
 
 .next-onboarding-course-grid small {
   color: var(--color-text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 800;
 }
 
@@ -3220,7 +3303,7 @@
   flex-wrap: wrap;
   gap: var(--space-2xs);
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 
@@ -3378,7 +3461,7 @@
 .uh-data-table__caption-description {
   margin-top: 3px;
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 
@@ -3398,7 +3481,7 @@
 .uh-data-table--compact th,
 .uh-data-table--compact td {
   padding: var(--space-2xs) 10px;
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .uh-data-table th[data-align="center"],
@@ -3443,7 +3526,7 @@
 
 .uh-data-table th {
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: var(--text-sm);
   background: var(--color-surface-muted);
   white-space: nowrap;
 }
@@ -3463,7 +3546,7 @@
 .next-students-page--compact .uh-data-table th,
 .next-students-page--compact .uh-data-table td {
   padding: var(--space-2xs) 10px;
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .next-students-page--compact .next-row-actions a,
@@ -3483,7 +3566,7 @@
   display: grid;
   gap: var(--space-3xs);
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .next-material-file-row {
@@ -3546,7 +3629,7 @@
 
 .next-revealable-phone > span {
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 
@@ -3569,7 +3652,7 @@
 
 .next-revealable-phone--empty {
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 
@@ -3630,7 +3713,7 @@
 
 .next-student-dashboard-hero span {
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 800;
 }
 
@@ -3693,7 +3776,7 @@
 .next-student-relationship-fallback li span,
 .next-student-relationship-fallback p {
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
   line-height: 1.4;
 }
 
@@ -3710,7 +3793,7 @@
 }
 
 .next-detail-selects select {
-  min-height: 40px;
+  min-height: 44px;
   border: 1px solid var(--color-border-input);
   border-radius: var(--radius);
   background: var(--color-surface);
@@ -3918,7 +4001,7 @@
 .next-material-activity h4 {
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 850;
 }
 
@@ -4076,7 +4159,7 @@
 .next-optical-upload-panel select,
 .next-optical-answer-key-panel select,
 .next-optical-format-details select {
-  min-height: 40px;
+  min-height: 44px;
   border: 1px solid var(--color-border-input);
   border-radius: var(--radius);
   background: var(--color-surface);
@@ -4218,7 +4301,7 @@
 
 .next-system-reference .uh-panel__header p {
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 800;
 }
 
@@ -4324,7 +4407,7 @@
 .next-report-analysis-table td small {
   display: block;
   color: var(--color-text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .next-report-score-detail {
@@ -4392,14 +4475,14 @@
 
 .next-report-rank-cell dt {
   color: var(--color-text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 700;
 }
 
 .next-report-rank-cell dd {
   margin: 0;
   color: var(--color-text);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 850;
   font-variant-numeric: tabular-nums;
 }
@@ -5290,7 +5373,7 @@
   padding: 9px var(--space-xs);
   cursor: pointer;
   color: var(--color-text);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 800;
   list-style: none;
 }
@@ -5357,7 +5440,7 @@
 .next-report-section-heading span,
 .next-report-insights > span {
   color: var(--color-primary);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 850;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -5388,7 +5471,7 @@
   align-items: center;
   gap: 6px;
   color: var(--color-text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 800;
 }
 
@@ -5412,7 +5495,7 @@
 
 .next-report-meta-details dt {
   color: var(--color-text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 750;
 }
 
@@ -5420,7 +5503,7 @@
   overflow-wrap: anywhere;
   margin: 0;
   color: var(--color-text);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 750;
 }
 
@@ -5448,7 +5531,7 @@
 
 .next-report-export-grid span {
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 700;
   line-height: 1.45;
 }
@@ -5482,7 +5565,7 @@
 
 .next-report-section-heading p {
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 
@@ -5575,7 +5658,7 @@
 
 .next-report-summary-metrics dt {
   color: var(--color-text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 750;
 }
 
@@ -5589,7 +5672,7 @@
 
 .next-report-summary-metrics small {
   color: var(--color-text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 700;
 }
 
@@ -5608,26 +5691,26 @@
 .next-report-insights small {
   grid-column: 1 / -1;
   color: var(--color-text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 750;
 }
 
 .next-report-insights strong {
   overflow-wrap: anywhere;
   color: var(--color-text);
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .next-report-insights b {
   color: var(--color-primary);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
 .next-report-insights p {
   margin: 0;
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .next-report-dashboard-grid {
@@ -5697,7 +5780,7 @@
 }
 
 .uh-chart-details > summary {
-  min-height: 36px;
+  min-height: 44px;
   padding: 6px 10px;
   font-size: var(--text-xs);
 }
@@ -5872,7 +5955,7 @@
 
 .next-role-preview-section-header p {
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 750;
 }
 
@@ -5896,7 +5979,7 @@
 .next-role-preview-card__body > p {
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 760;
   overflow-wrap: anywhere;
 }
@@ -5954,7 +6037,7 @@
 .next-role-preview-session-grid p {
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 800;
   overflow-wrap: anywhere;
 }
@@ -5975,7 +6058,7 @@
 .next-report-bar-row span {
   overflow: hidden;
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5983,7 +6066,7 @@
 
 .next-report-bar-row strong {
   color: var(--color-text);
-  font-size: 13px;
+  font-size: var(--text-sm);
   text-align: right;
 }
 
@@ -6058,6 +6141,7 @@
 .uh-dialog__panel {
   width: min(460px, 100%);
   max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
   overflow-y: auto;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -6225,7 +6309,7 @@
   grid-column: 1 / -1;
   margin: 0;
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 
@@ -6243,7 +6327,7 @@
 }
 
 .uh-form-modal__form select {
-  min-height: 40px;
+  min-height: 44px;
   border: 1px solid var(--color-border-input);
   border-radius: var(--radius);
   background: var(--color-surface);
@@ -6375,7 +6459,7 @@
 .next-permission-fieldset legend {
   padding: 0 var(--space-3xs);
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 800;
 }
 
@@ -6411,7 +6495,7 @@
 .next-permission-toggle .uh-checkbox__label,
 .next-permission-toggle strong {
   color: var(--color-text);
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .next-permission-toggle .uh-checkbox__description,
@@ -6473,7 +6557,7 @@
 }
 
 .next-role-grid--compact .uh-checkbox__description {
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .next-role-grid .uh-checkbox:has(.uh-checkbox__input:checked) {
@@ -6555,7 +6639,7 @@
 .next-token-panel p {
   margin: var(--space-3xs) 0 0;
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 
@@ -6676,7 +6760,7 @@
   margin-top: var(--space-xs);
   border-collapse: collapse;
   table-layout: fixed;
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--color-text);
 }
 
@@ -6854,6 +6938,7 @@
     width: min(320px, calc(100vw - 42px));
     border-right: 0;
     min-height: 100vh;
+    min-height: 100dvh;
     max-height: none;
     box-shadow: var(--shadow-modal);
     overflow: auto;
@@ -7161,7 +7246,7 @@
     display: block;
     margin-bottom: var(--space-3xs);
     color: var(--color-text-muted);
-    font-size: 11px;
+    font-size: var(--text-xs);
     font-weight: 800;
     line-height: 1.2;
   }
@@ -7197,13 +7282,13 @@
 
   .uh-data-table__mobile-detail-item dt {
     color: var(--color-text-muted);
-    font-size: 11px;
+    font-size: var(--text-xs);
     font-weight: 850;
   }
 
   .uh-data-table__mobile-detail-item dd {
     color: var(--color-text-secondary);
-    font-size: 13px;
+    font-size: var(--text-sm);
     font-weight: 700;
   }
 
@@ -7348,7 +7433,7 @@
   min-height: 34px;
   border-radius: var(--radius);
   padding: var(--space-2xs) 10px;
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 750;
 }
 
@@ -7646,7 +7731,7 @@
 }
 
 .next-list-status {
-  min-height: 38px;
+  min-height: 44px;
   border-color: var(--color-border);
   background: var(--color-surface-muted);
   color: var(--color-text-secondary);
@@ -7680,7 +7765,7 @@
 .uh-data-table th,
 .uh-data-table td {
   padding: 10px var(--space-xs);
-  font-size: 13px;
+  font-size: var(--text-sm);
   line-height: 1.42;
 }
 

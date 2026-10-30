@@ -7,6 +7,7 @@
   --marketing-bg: var(--color-bg);
   --marketing-line: var(--color-border);
   min-height: 100vh;
+  min-height: 100dvh;
   overflow: hidden;
   background: var(--marketing-bg);
   color: var(--marketing-ink);
@@ -247,7 +248,7 @@
   gap: var(--space-2xs);
   margin: -8px 0 0;
   color: color-mix(in oklab, var(--color-surface) 64%, transparent);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 600;
 }
 
@@ -296,7 +297,7 @@
 .next-marketing-product__chrome strong {
   margin-left: var(--space-2xs);
   color: color-mix(in oklab, var(--color-surface) 68%, transparent);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
 }
 
@@ -356,7 +357,7 @@
 }
 
 .next-marketing-product__signal span {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   line-height: 1.3;
 }
@@ -415,7 +416,7 @@
 
 .next-marketing-proof span {
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 600;
   line-height: 1.4;
 }
@@ -535,7 +536,7 @@
 .next-marketing-outcome-card > span {
   margin-top: 5px;
   color: var(--marketing-teal);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -579,7 +580,7 @@
   align-items: flex-start;
   gap: var(--space-2xs);
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 600;
   line-height: 1.45;
 }
@@ -676,7 +677,7 @@
 .next-marketing-reporting__header small,
 .next-marketing-reporting__summary small {
   color: var(--marketing-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
 }
 
@@ -691,7 +692,7 @@
   background: var(--color-primary-subtle);
   color: var(--marketing-blue-dark);
   padding: 7px 10px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
 }
 
@@ -856,7 +857,7 @@
 
 .next-marketing-trust__list p {
   color: color-mix(in oklab, var(--color-surface) 67%, transparent);
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .next-marketing-steps {
@@ -1013,7 +1014,7 @@
 .next-marketing-footer > div > p {
   margin: 9px 0 0;
   color: var(--marketing-muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
@@ -1028,7 +1029,7 @@
   border-radius: 9px;
   color: var(--color-text-muted);
   padding: var(--space-2xs) 9px;
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 600;
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Button, DataTable, Field, Panel, Select, type DataTableColumn } from "@o-okul/ui";
 import type {
@@ -191,12 +192,19 @@ export function TeacherHomeworkSubmissionsPanel({
 export function HomeworkAssignmentsPanel({
   assignments,
   courseNames,
+  limit,
+  moreHref,
   termNames,
 }: {
   assignments: HomeworkMaterialAssignmentRecord[];
   courseNames: ReadonlyMap<string, string>;
+  /** Portal özetinde yalnız ilk N kayıt; tamamı moreHref ile alt sayfada (UI/UX F7). */
+  limit?: number;
+  moreHref?: string;
   termNames: ReadonlyMap<string, string>;
 }) {
+  const visibleAssignments = limit ? assignments.slice(0, limit) : assignments;
+  const hiddenCount = assignments.length - visibleAssignments.length;
   const columns: Array<DataTableColumn<HomeworkMaterialAssignmentRecord>> = [
     {
       header: "Materyal",
@@ -227,8 +235,9 @@ export function HomeworkAssignmentsPanel({
 
   return (
     <Panel
+      actions={moreHref && hiddenCount > 0 ? <Link href={moreHref}>Tümünü aç ({assignments.length})</Link> : undefined}
       aria-label="Ödevler"
-      description="Öğrenciye atanmış materyal, ders ve dönem bağlamı."
+      description={hiddenCount > 0 ? `Son ${visibleAssignments.length} atama; ${hiddenCount} atama daha Ödevler sayfasında.` : "Öğrenciye atanmış materyal, ders ve dönem bağlamı."}
       title="Ödevler"
     >
       <DataTable
@@ -237,7 +246,7 @@ export function HomeworkAssignmentsPanel({
         description="Öğrenciye atanmış materyal, ders ve dönem bağlamı."
         emptyText="Ödev ataması yok."
         getRowKey={(assignment) => assignment.id}
-        rows={assignments}
+        rows={visibleAssignments}
       />
     </Panel>
   );

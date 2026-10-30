@@ -10,6 +10,7 @@ import { appBrand } from "../../../src/brand.js";
 import { browserTenantSlug } from "../../../src/tenant-host.js";
 import { activationNoticeHref } from "../activation-notice.js";
 import { ContactSupportLink } from "../contact-support-link.js";
+import { PasswordField, PasswordInput } from "../password-input.js";
 
 export default function ActivationPage() {
   const router = useRouter();
@@ -175,30 +176,34 @@ export default function ActivationPage() {
                 </Field>
               </>
             ) : null}
-            <Field label="Şifre">
-              <Input
-                name="password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete="new-password"
-                minLength={8}
-                maxLength={128}
-                required
-              />
-            </Field>
-            <Field label="Şifre tekrar">
-              <Input
-                name="passwordAgain"
-                type="password"
-                value={passwordAgain}
-                onChange={(event) => setPasswordAgain(event.target.value)}
-                autoComplete="new-password"
-                minLength={8}
-                maxLength={128}
-                required
-              />
-            </Field>
+            <PasswordField>
+              <Field label="Şifre">
+                <PasswordInput
+                  name="password"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete="new-password"
+                  minLength={8}
+                  maxLength={128}
+                  required
+                />
+              </Field>
+            </PasswordField>
+            <PasswordField>
+              <Field label="Şifre tekrar">
+                <PasswordInput
+                  name="passwordAgain"
+                  type="password"
+                  value={passwordAgain}
+                  onChange={(event) => setPasswordAgain(event.target.value)}
+                  autoComplete="new-password"
+                  minLength={8}
+                  maxLength={128}
+                  required
+                />
+              </Field>
+            </PasswordField>
             {error ? <p className="next-form-error" role="alert">{error}</p> : null}
             <Button type="submit" disabled={isSubmitting || isBootstrapping} loading={isSubmitting} loadingLabel="Etkinleştiriliyor">
               Hesabı etkinleştir
@@ -206,14 +211,14 @@ export default function ActivationPage() {
           </>
         )}
       </form>
-      <aside className="next-auth-context" aria-label="Hesap aktivasyonu güven bilgisi">
+      <section className="next-auth-context" aria-label="Hesap aktivasyonu güven bilgisi">
         <p className="next-section-eyebrow">Tek kullanımlık davet</p>
         <h2>Bağlantı ve kod 24 saat geçerlidir.</h2>
         <p>Şifrenizi yalnız bu ekranda belirleyin. Süresi dolan, kullanılan veya deneme limiti dolan kod yeniden kullanılamaz.</p>
         {/* The login page would resume a session whose logout failed; the page offers the retry instead. */}
         {previousSessionOpen ? null : <Link className="next-auth-link" href={loginPath}>Girişe dön</Link>}
         <ContactSupportLink />
-      </aside>
+      </section>
     </section>
   );
 }

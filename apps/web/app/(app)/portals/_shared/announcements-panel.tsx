@@ -1,17 +1,25 @@
 "use client";
 
+import Link from "next/link";
 import { Button, DataTable, Panel, type DataTableColumn } from "@o-okul/ui";
 import type { AnnouncementRecord } from "@o-okul/shared-types";
 
 export function AnnouncementsPanel({
   announcements,
+  limit,
+  moreHref,
   onMarkRead,
   readOnly = false,
 }: {
   announcements: AnnouncementRecord[];
+  /** Portal özetinde yalnız ilk N duyuru; tamamı moreHref ile alt sayfada (UI/UX F7). */
+  limit?: number;
+  moreHref?: string;
   onMarkRead?: (announcement: AnnouncementRecord) => void | Promise<unknown>;
   readOnly?: boolean;
 }) {
+  const visibleAnnouncements = limit ? announcements.slice(0, limit) : announcements;
+  const hiddenCount = announcements.length - visibleAnnouncements.length;
   const columns: Array<DataTableColumn<AnnouncementRecord>> = [
     {
       header: "Başlık",
@@ -52,8 +60,9 @@ export function AnnouncementsPanel({
 
   return (
     <Panel
+      actions={moreHref && hiddenCount > 0 ? <Link href={moreHref}>Tümünü aç ({announcements.length})</Link> : undefined}
       aria-label="Duyurular"
-      description="Portala görünür okul, öğrenci, veli veya öğretmen duyuruları."
+      description={hiddenCount > 0 ? `Son ${visibleAnnouncements.length} duyuru; ${hiddenCount} duyuru daha Duyurular sayfasında.` : "Portala görünür okul, öğrenci, veli veya öğretmen duyuruları."}
       title="Duyurular"
     >
       <DataTable
@@ -62,7 +71,7 @@ export function AnnouncementsPanel({
         description="Portala görünür okul, öğrenci, veli veya öğretmen duyuruları."
         emptyText="Duyuru yok."
         getRowKey={(announcement) => announcement.id}
-        rows={announcements}
+        rows={visibleAnnouncements}
       />
     </Panel>
   );
