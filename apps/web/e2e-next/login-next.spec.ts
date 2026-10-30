@@ -4613,7 +4613,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(enrollmentHistory).not.toContainText("academic-year-2026");
   await expect(page.getByLabel("Denetim özeti").getByText("Öğrenci oluşturuldu")).toBeVisible();
   await expect(page.getByLabel("Denetim özeti").getByText("Veli ilişkisi kuruldu")).toBeVisible();
-  await studentDashboard.getByRole("link", { name: "Sınav detayları" }).click();
+  await page.getByRole("link", { name: "Sınav detayları" }).click();
   await expect(page).toHaveURL(/\/kurum\/ogrenciler\/student-a\/sinavlar$/);
   const studentExamDetails = page.getByLabel("Öğrenci sınav detayları", { exact: true });
   await studentExamDetails.getByLabel("Sınav raporu", { exact: true }).selectOption("snapshot-b");

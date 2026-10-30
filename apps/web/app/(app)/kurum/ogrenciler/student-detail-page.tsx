@@ -352,12 +352,6 @@ function StudentDashboard({
         items={studentDashboardSummaryItems}
       />
       <Panel
-        actions={
-          <Link className="uh-button" href={studentExamsHref}>
-            <BarChart3 size={17} aria-hidden="true" />
-            Sınav detayları
-          </Link>
-        }
         aria-label="Öğrenci profil kartı"
         description="Kayıt durumu, sınıf, veli ve rapor bağlamı ham öğrenci anahtarı göstermeden tek yüzeyde okunur."
         title="Öğrenci profili"

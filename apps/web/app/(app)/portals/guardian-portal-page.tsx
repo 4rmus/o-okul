@@ -397,12 +397,16 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
               <HomeworkAssignmentsPanel
                 assignments={data?.homeworkAssignments ?? []}
                 courseNames={courseNameById}
+                limit={view === "overview" ? 3 : undefined}
+                moreHref={view === "overview" ? guardianPortalHref("/veli/odevler", isRolePreview) : undefined}
                 termNames={termNameById}
               />
             </div> : null}
             {view === "overview" || view === "announcements" ? <div id="portal-announcements">
               <AnnouncementsPanel
                 announcements={data?.announcements ?? []}
+                limit={view === "overview" ? 3 : undefined}
+                moreHref={view === "overview" ? guardianPortalHref("/veli/duyurular", isRolePreview) : undefined}
                 readOnly={isRolePreview}
                 onMarkRead={(announcement) =>
                   auth && resolvedStudentId && !isRolePreview
