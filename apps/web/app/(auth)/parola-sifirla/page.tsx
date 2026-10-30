@@ -1,12 +1,13 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
+import {  type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
-import { Button, Field, Input } from "@o-okul/ui";
+import { Button, Field } from "@o-okul/ui";
 import { confirmPasswordReset } from "../../../src/api-client.js";
 import { appBrand } from "../../../src/brand.js";
 import { browserTenantLoginHref, browserTenantSlug } from "../../../src/tenant-host.js";
 import { ContactSupportLink } from "../contact-support-link.js";
+import { PasswordField, PasswordInput } from "../password-input.js";
 
 export default function ResetPasswordPage() {
   const [token, setToken] = useState("");
@@ -78,30 +79,34 @@ export default function ResetPasswordPage() {
           </>
         ) : (
           <>
-            <Field label="Yeni şifre">
-              <Input
-                name="password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete="new-password"
-                minLength={8}
-                maxLength={128}
-                required
-              />
-            </Field>
-            <Field label="Yeni şifre tekrar">
-              <Input
-                name="passwordAgain"
-                type="password"
-                value={passwordAgain}
-                onChange={(event) => setPasswordAgain(event.target.value)}
-                autoComplete="new-password"
-                minLength={8}
-                maxLength={128}
-                required
-              />
-            </Field>
+            <PasswordField>
+              <Field label="Yeni şifre">
+                <PasswordInput
+                  name="password"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete="new-password"
+                  minLength={8}
+                  maxLength={128}
+                  required
+                />
+              </Field>
+            </PasswordField>
+            <PasswordField>
+              <Field label="Yeni şifre tekrar">
+                <PasswordInput
+                  name="passwordAgain"
+                  type="password"
+                  value={passwordAgain}
+                  onChange={(event) => setPasswordAgain(event.target.value)}
+                  autoComplete="new-password"
+                  minLength={8}
+                  maxLength={128}
+                  required
+                />
+              </Field>
+            </PasswordField>
             {error ? <p className="next-form-error" role="alert">{error}</p> : null}
             <Button type="submit" disabled={isSubmitting} loading={isSubmitting} loadingLabel="Yenileniyor">
               Şifreyi yenile

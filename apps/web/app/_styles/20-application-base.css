@@ -108,6 +108,32 @@
   min-height: 42px;
 }
 
+/* Şifre alanı + göster/gizle anahtarı (UI/UX F8). Anahtar label dışında, giriş kutusunun sağ alt
+   köşesine hizalı; boş alan mesajı gizlenir ki kutu ile anahtar aynı tabanda dursun. */
+.next-password-field {
+  position: relative;
+}
+
+.next-password-field .uh-field__message:empty {
+  display: none;
+}
+
+.next-password-field .next-password-input {
+  padding-right: var(--space-xl);
+}
+
+.next-password-field .next-password-field__toggle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  color: var(--color-text-muted);
+}
+
+.next-password-field .next-password-field__toggle:hover,
+.next-password-field .next-password-field__toggle:focus-visible {
+  color: var(--color-primary);
+}
+
 .next-auth-link {
   justify-self: end;
   color: var(--color-brand);
