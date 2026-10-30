@@ -157,6 +157,8 @@ export function FinancePage() {
     setFilters((current) => (isSameFinanceFilters(current, nextFilters) ? current : nextFilters));
   }, [searchParams, searchParamsKey]);
 
+  const activeSortField = listQuery.sort.replace(/^-/, "");
+  const activeSortDirection = listQuery.sort.startsWith("-") ? "descending" as const : "ascending" as const;
   const columns: Array<DataTableColumn<InstallmentRow>> = [
     {
       key: "student",
@@ -169,6 +171,7 @@ export function FinancePage() {
     {
       key: "plan",
       header: "Plan",
+      sortDirection: activeSortField === "title" ? activeSortDirection : undefined,
       mobilePriority: "secondary",
       priority: "secondary",
       render: (row) => row.plan.title,
@@ -197,6 +200,7 @@ export function FinancePage() {
     },
     {
       key: "dueDate",
+      sortDirection: activeSortField === "dueDate" ? activeSortDirection : undefined,
       header: "Vade",
       mobilePriority: "secondary",
       priority: "secondary",

@@ -315,7 +315,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
               },
               {
                 label: "Son sınav",
-                value: formatPercentNumber(reportSuccess),
+                value: reportSuccess == null ? "Sonuç yok" : formatPercentNumber(reportSuccess),
                 detail: `${formatNetNumber(reportTotal?.net)} net / ${formatNetNumber(reportQuestionCount(reportTotal))} soru`,
                 tone: (reportSuccess ?? 0) >= 75 ? "success" : "info",
               },

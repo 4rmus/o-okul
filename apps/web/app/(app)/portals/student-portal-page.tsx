@@ -212,7 +212,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
               },
               {
                 label: "Son sınav",
-                value: formatPercentNumber(reportSuccess),
+                value: reportSuccess == null ? "Sonuç yok" : formatPercentNumber(reportSuccess),
                 detail: `${progressSummary} · ${formatNumber(reportTotal?.net)} net / ${formatNumber(reportQuestionCount(reportTotal))} soru`,
                 tone: (reportSuccess ?? 0) >= 75 ? "success" : "info",
               },

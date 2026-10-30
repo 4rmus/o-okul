@@ -1009,10 +1009,11 @@ function OpticalFormatSetup({
           <InfoItem label="Seçili düzen" value={selectedPresetForm.displayName} />
           <InfoItem label="Soru sayısı" value={formatPresetQuestionCount(selectedPresetForm, examType)} />
         </InfoGrid>
-        <Button disabled={!examId} type="submit">
+        <Button aria-describedby={examId ? undefined : "optical-layout-submit-hint"} disabled={!examId} type="submit">
           <CheckCircle2 size={17} aria-hidden="true" />
           Seç ve ilerle
         </Button>
+        {!examId ? <p className="next-status-note" id="optical-layout-submit-hint">Devam etmek için önce yukarıdan cevap anahtarı hazır bir sınav seçin.</p> : null}
         {savedConfig ? <p>Optik düzen kaydedildi. Dosyanızı optik yükleme adımında yükleyebilirsiniz.</p> : null}
       </Panel>
 
@@ -1415,7 +1416,7 @@ function OpticalReportPanel({
         <MetricCard
           label="Sonuç"
           description="Değerlendirilen / eşleşen"
-          value={evaluationStatus ? `${evaluationStatus.evaluatedCount}/${evaluationStatus.matchedCount}` : "-"}
+          value={evaluationStatus ? `${evaluationStatus.evaluatedCount}/${evaluationStatus.matchedCount}` : "Analiz bekliyor"}
         />
       </MetricGrid>
       <section className="next-optical-next-step" aria-label="Optik sonraki adımı">
