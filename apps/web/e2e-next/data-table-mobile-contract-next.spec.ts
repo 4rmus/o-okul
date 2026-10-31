@@ -351,7 +351,7 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(installmentsTable.getByRole("columnheader", { name: "Tutar" })).toBeVisible();
     await expect(installmentsTable.getByRole("columnheader", { name: "Bağlam" })).toHaveCount(0);
     await expectMobileDataCells(installmentsTable, [
-      { key: "student", label: "Öğrenci", text: "Ada Kaya" },
+      { key: "student", label: "Öğrenci", text: "Ada Kaya · 176" },
       { key: "amount", label: "Tutar", text: "₺1.200,00" },
       { key: "status", label: "Durum", text: "Gecikmiş" },
     ]);
@@ -1782,6 +1782,7 @@ function createPaymentPlans() {
           tenantId: "tenant-datatable",
         },
       ],
+      student: { firstName: "Ada", id: "student-a", lastName: "Kaya", studentNo: "176" },
       studentId: "student-a",
       tenantId: "tenant-datatable",
       termId: "term-2026",

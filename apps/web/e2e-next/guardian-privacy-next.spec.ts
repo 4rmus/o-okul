@@ -27,6 +27,19 @@ interface GuardianLinkBody {
   studentId?: string;
 }
 
+/** UAT F-30: `PATCH /guardians/:id/students/:studentId` calls captured with their headers. */
+interface GuardianLinkPatch {
+  body: GuardianLinkBody;
+  idempotencyKey?: string;
+  path: string;
+}
+
+/** UAT F-29: web push flag and the browser permission state the portal sees. */
+interface PushMockOptions {
+  enabled: boolean;
+  permission: "default" | "denied" | "granted";
+}
+
 test.describe("Veli gizlilik ve izin UX'i", () => {
   test("veli bağlama hassas izinleri varsayılan kapalı gönderir", async ({ page }) => {
     const capturedLinks: GuardianLinkBody[] = [];
@@ -140,9 +153,86 @@ test.describe("Veli gizlilik ve izin UX'i", () => {
     await expect.poll(() => forbiddenBulkCalls).toEqual([]);
   });
 
+  test("UAT F-30: bağlı öğrencinin izinleri satırdan düzenlenir ve PATCH ile kaydedilir", async ({ page }) => {
+    const patches: GuardianLinkPatch[] = [];
+    await openGuardianDetail(page, "TENANT_ADMIN", [], undefined, undefined, patches);
+
+    const table = page.getByRole("table", { name: "Veli öğrenci bağlantıları" });
+    await expect(table).toContainText("Finans kapalı");
+    await table.getByRole("button", { name: "Ada Kaya izinlerini düzenle" }).click();
+
+    const dialog = page.getByRole("dialog", { name: "İzinleri düzenle" });
+    await expect(dialog).toContainText("Ada Kaya için veli portalına açılan izinler");
+    await expect(dialog.getByRole("checkbox", { name: /Finans görünürlüğü/ })).not.toBeChecked();
+    await dialog.getByRole("checkbox", { name: /Finans görünürlüğü/ }).check();
+    await dialog.getByRole("checkbox", { name: /Duyuru görebilir/ }).check();
+    await dialog.getByRole("button", { name: "İzinleri kaydet" }).click();
+
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole("status").filter({ hasText: "Ada Kaya izinleri güncellendi." })).toBeVisible();
+    await expect(table).toContainText("Finans açık");
+    await expect(table).toContainText("Duyuru açık");
+    await expect(table).toContainText("Destek kapalı");
+
+    expect(patches).toHaveLength(1);
+    expect(patches[0]?.path).toBe("/guardians/guardian-a/students/student-a");
+    expect(patches[0]?.body).toEqual({ canOpenSupportTickets: false, canReceiveAnnouncements: true, canReceiveSms: false, canViewFinance: true });
+    // The PATCH sets values (idempotency inventory class C); the client sends no Idempotency-Key for it.
+    expect(patches[0]?.idempotencyKey).toBeUndefined();
+
+    // The link form explains that an existing link is edited from its row, not re-linked.
+    await page.getByRole("tab", { name: "Öğrenci bağla", exact: true }).click();
+    await expect(page.getByLabel("Veli öğrenci bağı ekle")).toContainText("Bağlı bir öğrencinin izinleri 'Öğrenci bağlantıları' sekmesindeki satırdan düzenlenir.");
+  });
+
+  test("UAT F-30: izin güncellemesi başarısız olursa diyalog açık kalır ve hata okunur", async ({ page }) => {
+    const patches: GuardianLinkPatch[] = [];
+    await openGuardianDetail(page, "TENANT_ADMIN", [], undefined, undefined, patches, { failPatch: 404 });
+
+    await page.getByRole("table", { name: "Veli öğrenci bağlantıları" }).getByRole("button", { name: "Ada Kaya izinlerini düzenle" }).click();
+    const dialog = page.getByRole("dialog", { name: "İzinleri düzenle" });
+    await dialog.getByRole("checkbox", { name: /Destek talebi açabilir/ }).check();
+    await dialog.getByRole("button", { name: "İzinleri kaydet" }).click();
+
+    await expect(dialog.getByRole("alert")).toContainText("İzinler güncellenemedi; bağlantı silinmiş olabilir.");
+    await expect(dialog).toBeVisible();
+    expect(patches).toHaveLength(1);
+    await expect(page.getByRole("table", { name: "Veli öğrenci bağlantıları" })).toContainText("Destek kapalı");
+  });
+
+  test("UAT F-29: push açık ve izin verilmemişken veli portalı push hatırlatması gösterir", async ({ page }) => {
+    const { notificationDeviceRegistrations } = await openGuardianPortal(page, "false", { enabled: true, permission: "default" });
+
+    const prompt = page.getByRole("status", { name: "Push bildirim hatırlatması" });
+    await expect(prompt).toContainText("Push bildirimleri bu cihazda kapalı");
+    await expect(prompt).toContainText("Bildirim cihazı");
+    const enable = prompt.getByRole("button", { name: "Push iznini aç" });
+    const box = await enable.boundingBox();
+    expect(box && box.height >= 44).toBe(true);
+
+    await enable.click();
+    await expect(prompt).toContainText("Push açıldı; bu cihaz bildirim alacak.");
+    await expect(prompt.getByRole("button", { name: "Push iznini aç" })).toHaveCount(0);
+    expect(notificationDeviceRegistrations).toEqual([{ platform: "web", provider: "web-push" }]);
+  });
+
+  test("UAT F-29: izin zaten verilmişse push hatırlatması görünmez", async ({ page }) => {
+    await openGuardianPortal(page, "false", { enabled: true, permission: "granted" });
+    await expect(page.getByLabel("Bildirim tercihleri")).toBeVisible();
+    await expect(page.getByLabel("Push bildirim hatırlatması")).toHaveCount(0);
+    // The sidebar panel still exists for the device list; only the in-portal reminder is suppressed.
+    await expect(page.getByLabel("Bildirim cihazı")).toBeVisible();
+  });
+
+  test("UAT F-29: web push bayrağı kapalıyken push hatırlatması görünmez", async ({ page }) => {
+    await openGuardianPortal(page, "false", { enabled: false, permission: "default" });
+    await expect(page.getByLabel("Bildirim tercihleri")).toBeVisible();
+    await expect(page.getByLabel("Push bildirim hatırlatması")).toHaveCount(0);
+  });
+
   for (const visibility of ["false", "omitted"] as const) {
     test(`veli portal finans izni ${visibility} iken ödeme verisi istemez`, async ({ page }) => {
-      const paymentPlanRequests = await openGuardianPortal(page, visibility);
+      const { paymentPlanRequests } = await openGuardianPortal(page, visibility);
 
       await expect(page.getByRole("heading", { level: 1, name: "Veli Portalı" })).toBeVisible();
       await expect(page.getByLabel("Portal özeti")).toContainText("Kapalı");
@@ -154,8 +244,16 @@ test.describe("Veli gizlilik ve izin UX'i", () => {
   }
 });
 
-async function openGuardianDetail(page: Page, role: TenantRole, capturedLinks: GuardianLinkBody[], writes?: GuardianLinkWrites, invitations?: GuardianInvitationMock) {
-  const forbiddenBulkCalls = await installGuardianPrivacyMocks(page, role, capturedLinks, writes, invitations);
+async function openGuardianDetail(
+  page: Page,
+  role: TenantRole,
+  capturedLinks: GuardianLinkBody[],
+  writes?: GuardianLinkWrites,
+  invitations?: GuardianInvitationMock,
+  patches?: GuardianLinkPatch[],
+  options: { failPatch?: number } = {},
+) {
+  const forbiddenBulkCalls = await installGuardianPrivacyMocks(page, role, capturedLinks, writes, invitations, patches, options);
   await page.addInitScript(() => {
     document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
   });
@@ -165,14 +263,42 @@ async function openGuardianDetail(page: Page, role: TenantRole, capturedLinks: G
   return forbiddenBulkCalls;
 }
 
-async function openGuardianPortal(page: Page, visibility: "false" | "omitted") {
-  const paymentPlanRequests = await installGuardianPortalPrivacyMocks(page, visibility);
+async function openGuardianPortal(page: Page, visibility: "false" | "omitted", push?: PushMockOptions) {
+  const mocks = await installGuardianPortalPrivacyMocks(page, visibility);
   await page.addInitScript(() => {
     document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
   });
+  if (push) {
+    // The build under test has no NEXT_PUBLIC_WEB_PUSH_* values; the window overrides stand in for them,
+    // and the browser APIs are doubled so no real permission prompt or service worker is involved.
+    await page.addInitScript((options: PushMockOptions) => {
+      Object.defineProperty(window, "__O_OKUL_WEB_PUSH_ENABLED__", { configurable: true, value: options.enabled ? "true" : "false" });
+      Object.defineProperty(window, "__O_OKUL_WEB_PUSH_PUBLIC_KEY__", {
+        configurable: true,
+        value: "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      });
+      Object.defineProperty(window, "Notification", {
+        configurable: true,
+        value: { permission: options.permission, requestPermission: async () => "granted" },
+      });
+      Object.defineProperty(window, "PushManager", { configurable: true, value: function PushManager() {} });
+      Object.defineProperty(navigator, "serviceWorker", {
+        configurable: true,
+        value: {
+          register: async () => ({
+            pushManager: {
+              getSubscription: async () => null,
+              subscribe: async () => ({ toJSON: () => ({ endpoint: "https://push.example/subscription", keys: { auth: "auth-key", p256dh: "p256dh-key" } }) }),
+            },
+          }),
+        },
+      });
+    }, push);
+  }
   await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
   await page.goto("/veli");
-  return paymentPlanRequests;
+  await expect(page.getByRole("heading", { level: 1, name: "Veli Portalı" })).toBeVisible();
+  return mocks;
 }
 
 interface GuardianInvitationMock {
@@ -181,8 +307,16 @@ interface GuardianInvitationMock {
   queries?: string[];
 }
 
-async function installGuardianPrivacyMocks(page: Page, role: TenantRole, capturedLinks: GuardianLinkBody[], writes?: GuardianLinkWrites, invitations?: GuardianInvitationMock) {
-  const links = [createGuardianLink("guardian-link-a", "student-a")];
+async function installGuardianPrivacyMocks(
+  page: Page,
+  role: TenantRole,
+  capturedLinks: GuardianLinkBody[],
+  writes?: GuardianLinkWrites,
+  invitations?: GuardianInvitationMock,
+  patches?: GuardianLinkPatch[],
+  options: { failPatch?: number } = {},
+) {
+  let links = [createGuardianLink("guardian-link-a", "student-a")];
   const forbiddenBulkCalls: string[] = [];
 
   await page.route("**/api/v1/**", async (route) => {
@@ -220,6 +354,22 @@ async function installGuardianPrivacyMocks(page: Page, role: TenantRole, capture
       return fulfillData(route, createGuardianStudentDetails(links));
     }
 
+    const patchMatch = route.request().method() === "PATCH" ? /^\/guardians\/guardian-a\/students\/([^/]+)$/.exec(path) : null;
+    if (patchMatch) {
+      const body = route.request().postDataJSON() as GuardianLinkBody;
+      patches?.push({ body, idempotencyKey: route.request().headers()["idempotency-key"], path });
+      if (options.failPatch) {
+        return route.fulfill({
+          body: JSON.stringify({ error: { code: "GUARDIAN_STUDENT_NOT_FOUND" } }),
+          headers: { ...corsHeadersFor(route), "content-type": "application/json" },
+          status: options.failPatch,
+        });
+      }
+      const studentId = patchMatch[1] ?? "";
+      links = links.map((link) => (link.studentId === studentId ? { ...link, ...body } : link));
+      return fulfillData(route, links.find((link) => link.studentId === studentId));
+    }
+
     if (path === "/guardians/guardian-a/students" && route.request().method() === "POST") {
       if (writes) {
         writes.requests.push({ body: route.request().postData() ?? "", idempotencyKey: route.request().headers()["idempotency-key"] ?? "" });
@@ -247,6 +397,7 @@ async function installGuardianPrivacyMocks(page: Page, role: TenantRole, capture
 
 async function installGuardianPortalPrivacyMocks(page: Page, visibility: "false" | "omitted") {
   const paymentPlanRequests: string[] = [];
+  const notificationDeviceRegistrations: Array<{ platform?: string; provider?: string }> = [];
 
   await page.route("**/api/v1/**", async (route) => {
     if (route.request().method() === "OPTIONS") {
@@ -259,6 +410,11 @@ async function installGuardianPortalPrivacyMocks(page: Page, visibility: "false"
 
     if (path === "/auth/refresh") return fulfillData(route, createGuardianPortalAuthResponse());
     if (path === "/me/tenant") return fulfillData(route, createTenantResponse());
+    if (path === "/me/notification-devices" && route.request().method() === "POST") {
+      const body = route.request().postDataJSON() as { platform?: string; provider?: string; token?: string };
+      notificationDeviceRegistrations.push({ platform: body.platform, provider: body.provider });
+      return fulfillData(route, { createdAt: "2026-10-31T09:00:00.000Z", id: "device-a", platform: "web", provider: "web-push", tenantId: "tenant-guardian-privacy", userId: "guardian-a" });
+    }
     if (path === "/me/notification-devices") return fulfillData(route, []);
     if (path === "/me/guardian/students") return fulfillData(route, [createStudents()[0]]);
     if (path === "/me/guardian/students/student-a/notification-preferences") {
@@ -279,7 +435,7 @@ async function installGuardianPortalPrivacyMocks(page: Page, visibility: "false"
     return fulfillData(route, []);
   });
 
-  return paymentPlanRequests;
+  return { notificationDeviceRegistrations, paymentPlanRequests };
 }
 
 function createAuthResponse(role: TenantRole) {

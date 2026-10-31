@@ -1772,6 +1772,22 @@ const paymentPlanWithInstallmentsRecordSchema = objectSchema({
   transactions: arraySchema(paymentTransactionRecordSchema),
 }, ["id", "tenantId", "studentId", "title", "totalAmount", "currency", "createdAt", "installments"]);
 
+// UAT F-33: allow-listed student label on the staff finance list only; guardian views keep the schema above.
+const paymentPlanStudentSummarySchema = objectSchema({
+  id: stringSchema(),
+  firstName: stringSchema(),
+  lastName: stringSchema(),
+  studentNo: stringSchema(),
+}, ["id", "firstName", "lastName"]);
+
+const paymentPlanListRecordSchema = {
+  ...paymentPlanWithInstallmentsRecordSchema,
+  properties: {
+    ...(paymentPlanWithInstallmentsRecordSchema.properties as Record<string, JsonSchema>),
+    student: paymentPlanStudentSummarySchema,
+  },
+};
+
 const attendanceRecordSchema = objectSchema({
   id: stringSchema(),
   tenantId: stringSchema(),
@@ -4688,7 +4704,7 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: voidedPaymentTransactionRecordSchema,
   },
   "get /api/v1/payment-plans": {
-    responseBody: arraySchema(paymentPlanWithInstallmentsRecordSchema),
+    responseBody: arraySchema(paymentPlanListRecordSchema),
     listResponse: true,
   },
   "post /api/v1/exams": {

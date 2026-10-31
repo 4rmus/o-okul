@@ -2106,6 +2106,23 @@ export interface PaymentPlanWithInstallmentsRecord extends PaymentPlanRecord {
   transactions?: PaymentTransactionRecord[];
 }
 
+/**
+ * UAT F-33: the label a finance row needs to tell students apart, resolved inside the tenant-scoped plan read so
+ * FINANCE_STAFF needs no `student:list`. Allow-listed: no identity number, contact, class or guardian data.
+ */
+export interface PaymentPlanStudentSummary {
+  id: string;
+  firstName: string;
+  lastName: string;
+  studentNo?: string;
+}
+
+/** Staff `GET /payment-plans` row. Guardian payment views stay `PaymentPlanWithInstallmentsRecord`. */
+export interface PaymentPlanListRecord extends PaymentPlanWithInstallmentsRecord {
+  /** Absent when the student is soft-deleted (same rule as every other student read). */
+  student?: PaymentPlanStudentSummary;
+}
+
 export interface PaymentTransactionRecord {
   id: string;
   tenantId: string;

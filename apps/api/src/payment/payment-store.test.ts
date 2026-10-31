@@ -18,9 +18,118 @@ describe("InMemoryPaymentPlanStore", () => {
       expect.objectContaining({ id: inScope.id, campusId: "campus-main" }),
     ]);
   });
+
+  it("UAT F-33: öğrenci etiketini yalnız istenince, aynı tenant ve silinmemiş öğrenci için ekler", async () => {
+    const students = new Map([
+      ["student-a", { id: "student-a", tenantId: "tenant-a", firstName: "ADA", lastName: "AK", studentNo: "100" }],
+      ["student-foreign", { id: "student-foreign", tenantId: "tenant-b", firstName: "YABANCI", lastName: "ÖĞRENCİ", studentNo: "900" }],
+    ]);
+    // The student store lookup already hides soft-deleted students; "student-deleted" models that by returning nothing.
+    const store = new InMemoryPaymentPlanStore(async (id) => students.get(id));
+    const deletedStudentPlan = await store.create({
+      plan: { tenantId: "tenant-a", studentId: "student-deleted", title: "Silinmiş öğrenci planı", totalAmount: 1000, currency: "TRY" },
+      installments: [],
+    });
+    const foreignStudentPlan = await store.create({
+      plan: { tenantId: "tenant-a", studentId: "student-foreign", title: "Tenant uyuşmaz", totalAmount: 1000, currency: "TRY" },
+      installments: [],
+    });
+
+    const withSummary = await store.list({}, { includeStudentSummary: true });
+    expect(withSummary.find((plan) => plan.id === "payment-plan-a")?.student).toEqual({
+      id: "student-a",
+      firstName: "ADA",
+      lastName: "AK",
+      studentNo: "100",
+    });
+    expect(withSummary.find((plan) => plan.id === deletedStudentPlan.id)).not.toHaveProperty("student");
+    expect(withSummary.find((plan) => plan.id === foreignStudentPlan.id)).not.toHaveProperty("student");
+
+    for (const plan of await store.list()) expect(plan).not.toHaveProperty("student");
+    for (const plan of await store.listByStudent("student-a")) expect(plan).not.toHaveProperty("student");
+    expect((await store.listByStudent("student-a", {}, { includeStudentSummary: true }))[0]?.student?.id).toBe("student-a");
+  });
 });
 
 describe("PostgresPaymentPlanStore", () => {
+  it("UAT F-33: öğrenci etiketini plan okumasıyla aynı tenant transaction'ında allow-list kolonlarla okur", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const planRow = (id: string, studentId: string) => ({
+      id,
+      tenantId: "tenant-a",
+      studentId,
+      campusId: null,
+      gradeLevelId: null,
+      classId: null,
+      courseId: null,
+      termId: null,
+      title: id,
+      totalAmount: 1000,
+      currency: "TRY",
+      createdAt: new Date("2026-06-05T09:00:00.000Z"),
+      deletedAt: null,
+    });
+    const pool = {
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        if (sql.includes('FROM "Student"')) {
+          return {
+            rows: [
+              { id: "student-a", tenantId: "tenant-a", firstName: "ADA", lastName: "AK", studentNo: "100" },
+              { id: "student-foreign", tenantId: "tenant-b", firstName: "YABANCI", lastName: "ÖĞRENCİ", studentNo: "900" },
+            ] as T[],
+          };
+        }
+        if (sql.includes('FROM "PaymentInstallment"')) return { rows: [] as T[] };
+        if (sql.includes('FROM "PaymentPlan"')) {
+          return {
+            rows: [
+              planRow("plan-a", "student-a"),
+              planRow("plan-a-2", "student-a"),
+              planRow("plan-deleted-student", "student-deleted"),
+              planRow("plan-foreign", "student-foreign"),
+            ] as T[],
+          };
+        }
+        return { rows: [] as T[] };
+      },
+    };
+    const store = new PostgresPaymentPlanStore(pool);
+
+    const { plain, withSummary } = await runWithRequestContext(
+      { userId: "user-finance", tenantId: "tenant-a", roles: ["FINANCE_STAFF"], bypassRls: false },
+      async () => {
+        const plainRecords = await store.list();
+        const plainQueryCount = queries.length;
+        expect(queries.some((query) => query.sql.includes('FROM "Student"'))).toBe(false);
+        const summaryRecords = await store.list({}, { includeStudentSummary: true });
+        return { plain: { records: plainRecords, queryCount: plainQueryCount }, withSummary: summaryRecords };
+      },
+    );
+
+    for (const plan of plain.records) expect(plan).not.toHaveProperty("student");
+    const summaryQueries = queries.slice(plain.queryCount);
+    const studentQuery = summaryQueries.find((query) => query.sql.includes('FROM "Student"'));
+    expect(studentQuery?.sql).toContain('SELECT "id", "tenantId", "firstName", "lastName", "studentNo"');
+    expect(studentQuery?.sql).toContain('"deletedAt" IS NULL');
+    expect(studentQuery?.sql).not.toContain("national");
+    expect(studentQuery?.values).toEqual([["student-a", "student-deleted", "student-foreign"]]);
+    // One transaction: BEGIN, tenant GUCs, plan read, installments, student read, then a single COMMIT.
+    const sqlSequence = summaryQueries.map((query) => query.sql);
+    expect(sqlSequence[0]).toBe("BEGIN");
+    expect(sqlSequence.filter((sql) => sql === "COMMIT")).toHaveLength(1);
+    expect(sqlSequence.at(-1)).toBe("COMMIT");
+    expect(summaryQueries.some((query) => query.sql.includes("app.current_tenant_id") && query.values?.[0] === "tenant-a")).toBe(true);
+    expect(sqlSequence.findIndex((sql) => sql.includes('FROM "Student"'))).toBeGreaterThan(
+      sqlSequence.findIndex((sql) => sql.includes('FROM "PaymentPlan"')),
+    );
+
+    expect(withSummary.find((plan) => plan.id === "plan-a")?.student).toEqual({ id: "student-a", firstName: "ADA", lastName: "AK", studentNo: "100" });
+    expect(withSummary.find((plan) => plan.id === "plan-a-2")?.student?.id).toBe("student-a");
+    expect(withSummary.find((plan) => plan.id === "plan-deleted-student")).not.toHaveProperty("student");
+    expect(withSummary.find((plan) => plan.id === "plan-foreign")).not.toHaveProperty("student");
+  });
+
   it("ödeme planı akademik bağlamını tenant-aware SQL ile yazar ve okur", async () => {
     const queries: Array<{ sql: string; values?: unknown[] }> = [];
     const pool = {

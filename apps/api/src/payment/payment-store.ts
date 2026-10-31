@@ -5,10 +5,13 @@ import { type Queryable, type TenantQueryable, withTenantQuery } from "../db/ten
 import type {
   PaymentInstallmentRecord,
   PaymentInstallmentStatus,
+  PaymentPlanListRecord,
   PaymentPlanRecord,
+  PaymentPlanStudentSummary,
   PaymentPlanWithInstallmentsRecord,
   PaymentTransactionMethod,
   PaymentTransactionRecord,
+  StudentRecord,
 } from "@o-okul/shared-types";
 
 export interface CreatePaymentPlanStoreInput {
@@ -37,9 +40,20 @@ export interface PaymentPlanListFilters {
   termId?: string;
 }
 
+export interface PaymentPlanReadOptions {
+  /**
+   * UAT F-33: attach the allow-listed student label (`PaymentPlanStudentSummary`) inside the same tenant-scoped read.
+   * Only the staff list asks for it; guardian views never pass it.
+   */
+  includeStudentSummary?: boolean;
+}
+
+/** In-memory driver only: the Postgres driver reads "Student" under RLS in the plan transaction. */
+export type PaymentPlanStudentLookup = (studentId: string) => Promise<Pick<StudentRecord, "id" | "tenantId" | "firstName" | "lastName" | "studentNo"> | undefined>;
+
 export interface PaymentPlanStore {
-  list(filters?: PaymentPlanListFilters): Promise<PaymentPlanWithInstallmentsRecord[]>;
-  listByStudent(studentId: string, filters?: PaymentPlanListFilters): Promise<PaymentPlanWithInstallmentsRecord[]>;
+  list(filters?: PaymentPlanListFilters, options?: PaymentPlanReadOptions): Promise<PaymentPlanListRecord[]>;
+  listByStudent(studentId: string, filters?: PaymentPlanListFilters, options?: PaymentPlanReadOptions): Promise<PaymentPlanListRecord[]>;
   findById(id: string, filters?: PaymentPlanListFilters): Promise<PaymentPlanWithInstallmentsRecord | undefined>;
   create(input: CreatePaymentPlanStoreInput): Promise<PaymentPlanWithInstallmentsRecord>;
   cancelPlan(planId: string, deletedAt: string): Promise<PaymentPlanWithInstallmentsRecord | undefined>;
@@ -120,12 +134,22 @@ export class InMemoryPaymentPlanStore implements PaymentPlanStore {
   private readonly installments = demoPaymentInstallments.map((record) => ({ ...record }));
   private readonly transactions: PaymentTransactionRecord[] = [];
 
-  async list(filters: PaymentPlanListFilters = {}): Promise<PaymentPlanWithInstallmentsRecord[]> {
-    return this.withInstallments(filterPaymentPlans(this.plans.filter((record) => !record.deletedAt), filters));
+  constructor(private readonly findStudent?: PaymentPlanStudentLookup) {}
+
+  async list(filters: PaymentPlanListFilters = {}, options: PaymentPlanReadOptions = {}): Promise<PaymentPlanListRecord[]> {
+    const records = await this.withInstallments(filterPaymentPlans(this.plans.filter((record) => !record.deletedAt), filters));
+    return options.includeStudentSummary ? this.withStudentSummaries(records) : records;
   }
 
-  async listByStudent(studentId: string, filters: PaymentPlanListFilters = {}): Promise<PaymentPlanWithInstallmentsRecord[]> {
-    return this.withInstallments(filterPaymentPlans(this.plans.filter((record) => record.studentId === studentId && !record.deletedAt), filters));
+  async listByStudent(
+    studentId: string,
+    filters: PaymentPlanListFilters = {},
+    options: PaymentPlanReadOptions = {},
+  ): Promise<PaymentPlanListRecord[]> {
+    const records = await this.withInstallments(
+      filterPaymentPlans(this.plans.filter((record) => record.studentId === studentId && !record.deletedAt), filters),
+    );
+    return options.includeStudentSummary ? this.withStudentSummaries(records) : records;
   }
 
   async findById(id: string, filters: PaymentPlanListFilters = {}): Promise<PaymentPlanWithInstallmentsRecord | undefined> {
@@ -223,22 +247,35 @@ export class InMemoryPaymentPlanStore implements PaymentPlanStore {
         .sort((a, b) => a.installmentNo - b.installmentNo),
     }));
   }
+
+  private async withStudentSummaries(plans: PaymentPlanWithInstallmentsRecord[]): Promise<PaymentPlanListRecord[]> {
+    const findStudent = this.findStudent;
+    if (!findStudent) return plans;
+    const students = await Promise.all([...new Set(plans.map((plan) => plan.studentId))].map((id) => findStudent(id)));
+    return attachStudentSummaries(plans, students.filter((student): student is NonNullable<typeof student> => student !== undefined));
+  }
 }
 
 export class PostgresPaymentPlanStore implements PaymentPlanStore {
   constructor(private readonly pool: TenantQueryable = new pg.Pool({ connectionString: process.env.DATABASE_URL })) {}
 
-  async list(filters: PaymentPlanListFilters = {}): Promise<PaymentPlanWithInstallmentsRecord[]> {
+  async list(filters: PaymentPlanListFilters = {}, options: PaymentPlanReadOptions = {}): Promise<PaymentPlanListRecord[]> {
     return withTenantQuery(this.pool, async (client) => {
       const plans = await selectPlans(client, filters);
-      return withInstallments(client, plans);
+      const records = await withInstallments(client, plans);
+      return options.includeStudentSummary ? withStudentSummaries(client, records) : records;
     });
   }
 
-  async listByStudent(studentId: string, filters: PaymentPlanListFilters = {}): Promise<PaymentPlanWithInstallmentsRecord[]> {
+  async listByStudent(
+    studentId: string,
+    filters: PaymentPlanListFilters = {},
+    options: PaymentPlanReadOptions = {},
+  ): Promise<PaymentPlanListRecord[]> {
     return withTenantQuery(this.pool, async (client) => {
       const plans = await selectPlans(client, { ...filters, studentId });
-      return withInstallments(client, plans);
+      const records = await withInstallments(client, plans);
+      return options.includeStudentSummary ? withStudentSummaries(client, records) : records;
     });
   }
 
@@ -455,8 +492,10 @@ export class PostgresPaymentPlanStore implements PaymentPlanStore {
   }
 }
 
-export function createPaymentPlanStore(): PaymentPlanStore {
-  return resolvePersistenceDriver(process.env.PAYMENT_PLAN_STORE) === "postgres" ? new PostgresPaymentPlanStore() : new InMemoryPaymentPlanStore();
+export function createPaymentPlanStore(findStudent?: PaymentPlanStudentLookup): PaymentPlanStore {
+  return resolvePersistenceDriver(process.env.PAYMENT_PLAN_STORE) === "postgres"
+    ? new PostgresPaymentPlanStore()
+    : new InMemoryPaymentPlanStore(findStudent);
 }
 
 interface PaymentPlanRow {
@@ -486,6 +525,14 @@ interface PaymentInstallmentRow {
   paidAt: Date | null;
   createdAt: Date;
   deletedAt: Date | null;
+}
+
+interface PaymentPlanStudentRow {
+  id: string;
+  tenantId: string;
+  firstName: string;
+  lastName: string;
+  studentNo: string | null;
 }
 
 interface PaymentTransactionRow {
@@ -570,6 +617,42 @@ async function withInstallments(
     ...plan,
     installments: byPlan.get(plan.id) ?? [],
   }));
+}
+
+async function withStudentSummaries(
+  client: Queryable,
+  plans: PaymentPlanWithInstallmentsRecord[],
+): Promise<PaymentPlanListRecord[]> {
+  if (plans.length === 0) return [];
+
+  // Same transaction and RLS tenant context as the plan read; the column list is the allow-list (UAT F-33).
+  const result = await client.query<PaymentPlanStudentRow>(
+    `SELECT "id", "tenantId", "firstName", "lastName", "studentNo"
+     FROM "Student"
+     WHERE "id" = ANY($1::text[])
+       AND "deletedAt" IS NULL`,
+    [[...new Set(plans.map((plan) => plan.studentId))]],
+  );
+  return attachStudentSummaries(plans, result.rows);
+}
+
+function attachStudentSummaries(
+  plans: PaymentPlanWithInstallmentsRecord[],
+  students: Array<{ id: string; tenantId: string; firstName: string; lastName: string; studentNo?: string | null }>,
+): PaymentPlanListRecord[] {
+  const byId = new Map(students.map((student) => [student.id, student]));
+  return plans.map((plan) => {
+    const student = byId.get(plan.studentId);
+    // Defense in depth on top of RLS: a summary is attached only for the plan's own tenant.
+    if (!student || student.tenantId !== plan.tenantId) return plan;
+    const summary: PaymentPlanStudentSummary = {
+      id: student.id,
+      firstName: student.firstName,
+      lastName: student.lastName,
+      ...(student.studentNo ? { studentNo: student.studentNo } : {}),
+    };
+    return { ...plan, student: summary };
+  });
 }
 
 function toPaymentPlanRecord(row: PaymentPlanRow): PaymentPlanRecord {

@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, UseG
 import type {
   PaymentInstallmentUpdateRequest,
   PaymentPlanCreateRequest,
+  PaymentPlanListRecord,
   PaymentPlanWithInstallmentsRecord,
   PaymentTransactionCreateRequest,
   PaymentTransactionRecord,
@@ -74,7 +75,7 @@ export class PaymentController {
   @RequireCapability("finance:manage")
   list(
     @Query() query: PaymentPlanListQuery,
-  ): Promise<PaymentPlanWithInstallmentsRecord[]> {
+  ): Promise<PaymentPlanListRecord[]> {
     return this.payments
       .list(getRequestContext(), query)
       .then((records) => applyListQuery(records, query, paymentPlanListFields));
@@ -138,19 +139,26 @@ export class PaymentController {
 }
 
 const paymentPlanListFields = [
-  { name: "title", read: (record: PaymentPlanWithInstallmentsRecord) => record.title },
-  { name: "studentId", read: (record: PaymentPlanWithInstallmentsRecord) => record.studentId },
-  { name: "campusId", read: (record: PaymentPlanWithInstallmentsRecord) => record.campusId },
-  { name: "gradeLevelId", read: (record: PaymentPlanWithInstallmentsRecord) => record.gradeLevelId },
-  { name: "classId", read: (record: PaymentPlanWithInstallmentsRecord) => record.classId },
-  { name: "courseId", read: (record: PaymentPlanWithInstallmentsRecord) => record.courseId },
-  { name: "termId", read: (record: PaymentPlanWithInstallmentsRecord) => record.termId },
-  { name: "totalAmount", read: (record: PaymentPlanWithInstallmentsRecord) => record.totalAmount },
-  { name: "currency", read: (record: PaymentPlanWithInstallmentsRecord) => record.currency },
-  { name: "createdAt", read: (record: PaymentPlanWithInstallmentsRecord) => record.createdAt },
+  { name: "title", read: (record: PaymentPlanListRecord) => record.title },
+  { name: "studentId", read: (record: PaymentPlanListRecord) => record.studentId },
+  // UAT F-33: finance staff find a row by the student label the list now carries.
+  { name: "studentName", read: (record: PaymentPlanListRecord) => studentDisplayName(record) },
+  { name: "studentNo", read: (record: PaymentPlanListRecord) => record.student?.studentNo },
+  { name: "campusId", read: (record: PaymentPlanListRecord) => record.campusId },
+  { name: "gradeLevelId", read: (record: PaymentPlanListRecord) => record.gradeLevelId },
+  { name: "classId", read: (record: PaymentPlanListRecord) => record.classId },
+  { name: "courseId", read: (record: PaymentPlanListRecord) => record.courseId },
+  { name: "termId", read: (record: PaymentPlanListRecord) => record.termId },
+  { name: "totalAmount", read: (record: PaymentPlanListRecord) => record.totalAmount },
+  { name: "currency", read: (record: PaymentPlanListRecord) => record.currency },
+  { name: "createdAt", read: (record: PaymentPlanListRecord) => record.createdAt },
   // The finance page opens with "Vade eski-yeni" (sort=dueDate); a plan sorts by its earliest installment (UAT F-31).
-  { name: "dueDate", read: (record: PaymentPlanWithInstallmentsRecord) => earliestInstallmentDueDate(record) },
+  { name: "dueDate", read: (record: PaymentPlanListRecord) => earliestInstallmentDueDate(record) },
 ];
+
+function studentDisplayName(record: PaymentPlanListRecord): string | undefined {
+  return record.student ? `${record.student.firstName} ${record.student.lastName}` : undefined;
+}
 
 function earliestInstallmentDueDate(record: PaymentPlanWithInstallmentsRecord): string | undefined {
   return record.installments.reduce<string | undefined>(
