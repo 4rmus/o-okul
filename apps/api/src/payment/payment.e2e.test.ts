@@ -2,7 +2,8 @@ import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
-import { testLoginBody } from "../test-auth.js";
+import { resetInMemoryAuthUsers, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
+import { registerTestLoginIdentity, testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 import { isPaymentInstallmentOverdue } from "./payment.service.js";
@@ -14,8 +15,29 @@ describe("PaymentPlan API", () => {
   let teacherAAccessToken: string;
   let studentAAccessToken: string;
   let guardianAAccessToken: string;
+  let financeAccessToken: string;
 
   beforeAll(async () => {
+    resetInMemoryAuthUsers();
+    upsertInMemoryAuthUser({
+      id: "user-finance-payment-f33",
+      email: "finance-payment-f33@example.test",
+      name: "Finance F-33",
+      password: "password",
+      tenantId: "tenant-a",
+      roles: ["FINANCE_STAFF"],
+      membership: {
+        id: "membership-finance-payment-f33",
+        staffRole: "FINANCE_STAFF",
+        hasTeacherPersona: false,
+        hasStudentPersona: false,
+        version: 1,
+        scopeMode: "TENANT",
+        campusIds: [],
+      },
+    });
+    registerTestLoginIdentity("finance-payment-f33@example.test", { tenantSlug: "dna-egitim" });
+
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -28,10 +50,12 @@ describe("PaymentPlan API", () => {
     teacherAAccessToken = await login("teacher-a@example.test");
     studentAAccessToken = await login("student-a@example.test");
     guardianAAccessToken = await login("guardian-a@example.test");
+    financeAccessToken = await login("finance-payment-f33@example.test");
   });
 
   afterAll(async () => {
     await app.close();
+    resetInMemoryAuthUsers();
   });
 
   async function login(email: string): Promise<string> {
@@ -54,6 +78,7 @@ describe("PaymentPlan API", () => {
             totalAmount: 100000,
             currency: "TRY",
             createdAt: "2026-06-05T09:00:00.000Z",
+            student: { id: "student-a", firstName: "Ada", lastName: "A", studentNo: "100" },
             installments: [
               {
                 id: "payment-installment-a-1",
@@ -81,6 +106,65 @@ describe("PaymentPlan API", () => {
           },
         ]);
       });
+  });
+
+  // UAT F-33: the finance list labels each row itself; FINANCE_STAFF gets no `student:list` for it.
+  it("FINANCE_STAFF listesi kendi tenant planlarında yalnız öğrenci adı ve numarasını taşır", async () => {
+    await request(server)
+      .get("/payment-plans")
+      .set("Authorization", `Bearer ${financeAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const plans = body as Array<{ id: string; tenantId: string; student?: Record<string, unknown> }>;
+        expect(plans.map((plan) => plan.id)).toEqual(["payment-plan-a"]);
+        expect(plans.every((plan) => plan.tenantId === "tenant-a")).toBe(true);
+        expect(plans[0]?.student).toEqual({ id: "student-a", firstName: "Ada", lastName: "A", studentNo: "100" });
+        const serialized = JSON.stringify(body);
+        for (const forbidden of [
+          "userId",
+          "email",
+          "phone",
+          "nationalId",
+          "birthDate",
+          "photoKey",
+          "guardian",
+          "contact",
+          "responsibleTeacherId",
+          "Tenant B",
+          "student-b",
+        ]) {
+          expect(serialized).not.toContain(forbidden);
+        }
+      });
+
+    await request(server)
+      .get("/payment-plans")
+      .query({ q: "ada a", sort: "studentName" })
+      .set("Authorization", `Bearer ${financeAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: "payment-plan-a", student: expect.objectContaining({ studentNo: "100" }) })]);
+      });
+
+    await request(server)
+      .get("/payment-plans")
+      .query({ studentId: "student-a" })
+      .set("Authorization", `Bearer ${financeAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: "payment-plan-a", student: expect.objectContaining({ id: "student-a" }) })]);
+      });
+
+    await request(server)
+      .get("/payment-plans")
+      .query({ studentId: "student-b" })
+      .set("Authorization", `Bearer ${financeAccessToken}`)
+      .expect(403);
+
+    // The label comes with the plan read; the student registry stays closed to FINANCE_STAFF.
+    for (const path of ["/students", "/students/student-a"]) {
+      await request(server).get(path).set("Authorization", `Bearer ${financeAccessToken}`).expect(403);
+    }
   });
 
   it("ödeme planı listesinde page/limit/q/sort uygular", async () => {
@@ -285,6 +369,8 @@ describe("PaymentPlan API", () => {
             { id: "payment-installment-a-2", installmentNo: 2, status: "PENDING" },
           ],
         });
+        // UAT F-33 adds the student label to the staff list only; the guardian payload is unchanged.
+        expect(body[0]).not.toHaveProperty("student");
         const serialized = JSON.stringify(body);
         for (const forbidden of [
           "userId",
