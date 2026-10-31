@@ -1287,6 +1287,7 @@ function createPaymentPlan() {
         tenantId: "tenant-list-url",
       },
     ],
+    student: { firstName: "Ada", id: "student-a", lastName: "Kaya", studentNo: "1101" },
     studentId: "student-a",
     tenantId: "tenant-list-url",
     termId: "term-2026-spring",

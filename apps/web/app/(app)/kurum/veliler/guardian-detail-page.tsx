@@ -8,6 +8,7 @@ import {
   Checkbox,
   DataTable,
   Field,
+  FormModal,
   InfoGrid,
   InfoItem,
   Panel,
@@ -25,7 +26,7 @@ import type {
   GuardianStudentDetailsResponse,
   GuardianStudentRecord,
 } from "@o-okul/shared-types";
-import { ArrowLeft, Link2, MailX } from "lucide-react";
+import { ArrowLeft, Link2, MailX, Pencil } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiCursorListAll, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";
 import { isSmsEnabled } from "../../../../src/sms-feature.js";
@@ -50,6 +51,18 @@ const emptyLinkForm = {
   studentId: "",
 };
 
+type GuardianPermissionKey = "canOpenSupportTickets" | "canReceiveAnnouncements" | "canReceiveSms" | "canViewFinance";
+type GuardianPermissionForm = Record<GuardianPermissionKey, boolean>;
+
+function permissionFormFromLink(link: GuardianStudentRecord): GuardianPermissionForm {
+  return {
+    canOpenSupportTickets: link.canOpenSupportTickets,
+    canReceiveAnnouncements: link.canReceiveAnnouncements,
+    canReceiveSms: link.canReceiveSms,
+    canViewFinance: link.canViewFinance,
+  };
+}
+
 export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
   const { auth } = useAuth();
   const queryClient = useQueryClient();
@@ -66,10 +79,18 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
   const [linkRetry, setLinkRetry] = useState<LinkAttempt | null>(null);
   const pendingLink = useRef<LinkAttempt | null>(null);
   const [activeSection, setActiveSection] = useState<"links" | "new-link">("links");
+  // UAT F-30: an existing link's permissions are edited per row through PATCH /guardians/:id/students/:studentId.
+  const [editingLink, setEditingLink] = useState<GuardianStudentRecord | null>(null);
+  const [editForm, setEditForm] = useState<GuardianPermissionForm>(emptyLinkForm);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [editRetry, setEditRetry] = useState(false);
+  const [linkStatus, setLinkStatus] = useState("");
   const detail = detailQuery.data;
   const guardianName = detail ? `${detail.guardian.firstName} ${detail.guardian.lastName}` : "Veli detayı";
   const availableStudents = detail?.availableStudents ?? [];
   const canRevealPhone = hasCapabilityForRoles(auth?.session.roles ?? [], "privacy:manage");
+  const canManageLinks = hasCapabilityForRoles(auth?.session.roles ?? [], "student:manage");
   // UAT F-03 follow-up: a guardian's pending account invitation is shown and can be withdrawn (user:manage).
   const canManageAccounts = hasCapabilityForRoles(auth?.session.roles ?? [], "user:manage");
   const invitationQueryKey = ["next-guardian-invitation", tenantId, guardianId];
@@ -99,7 +120,50 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
       setRevoking(false);
     }
   }
-  const guardianStudentColumns = detail ? buildGuardianStudentColumns(detail) : [];
+  const guardianStudentColumns = detail ? buildGuardianStudentColumns(detail, canManageLinks ? openPermissionEditor : undefined) : [];
+
+  function openPermissionEditor(link: GuardianStudentRecord) {
+    setEditingLink(link);
+    setEditForm(permissionFormFromLink(link));
+    setEditError("");
+    setEditRetry(false);
+    setLinkStatus("");
+  }
+
+  function closePermissionEditor() {
+    if (editSaving) return;
+    setEditingLink(null);
+    setEditError("");
+    setEditRetry(false);
+  }
+
+  function handlePermissionSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void savePermissions();
+  }
+
+  // The PATCH sets the four flags to the submitted values (inventory class C), so a retry needs no Idempotency-Key.
+  async function savePermissions() {
+    if (!auth || !editingLink || editSaving) return;
+    const studentLabel = formatGuardianStudentName(detail?.studentById.get(editingLink.studentId));
+    setEditSaving(true);
+    setEditError("");
+    setEditRetry(false);
+    try {
+      await updateGuardianStudentLink(auth.accessToken, guardianId, editingLink.studentId, editForm);
+      setEditingLink(null);
+      setLinkStatus(`${studentLabel} izinleri güncellendi.`);
+      void queryClient.invalidateQueries({ queryKey: ["next-guardian-detail", tenantId, guardianId] });
+    } catch (error) {
+      if (isGuardianLinkConcurrentUpdate(error)) {
+        setEditRetry(true);
+      } else {
+        setEditError(apiErrorMessage(error, "İzinler güncellenemedi; bağlantı silinmiş olabilir."));
+      }
+    } finally {
+      setEditSaving(false);
+    }
+  }
 
   async function handleLinkSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -192,6 +256,7 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
                 description="İzinler öğrenci bazında açık/kapalı gösterilir; ödeme tutarı ve ham iletişim bilgisi bu özetlerde yer almaz."
                 title="Öğrenci bağlantıları"
               >
+                <p aria-live="polite" className="next-field-hint" role="status">{linkStatus}</p>
                 <DataTable
                   caption="Veli öğrenci bağlantıları"
                   columns={guardianStudentColumns}
@@ -203,10 +268,38 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
                 />
               </Panel>
             </div> : null}
+            <FormModal
+              description={editingLink
+                ? `${formatGuardianStudentName(detail.studentById.get(editingLink.studentId))} için veli portalına açılan izinler. Değişiklik kaydedilince hemen geçerli olur.`
+                : ""}
+              onCancel={closePermissionEditor}
+              onSubmit={handlePermissionSubmit}
+              open={Boolean(editingLink)}
+              submitError={editError || undefined}
+              submitLabel="İzinleri kaydet"
+              submitting={editSaving}
+              title="İzinleri düzenle"
+            >
+              <fieldset className="next-permission-fieldset">
+                <legend>Erişim izinleri</legend>
+                {guardianPermissionOptions.map((permission) => (
+                  <Checkbox
+                    checked={editForm[permission.key]}
+                    className="next-permission-toggle"
+                    description={permission.description}
+                    disabled={editSaving}
+                    key={permission.key}
+                    label={permission.label}
+                    onChange={(event) => setEditForm((current) => ({ ...current, [permission.key]: event.target.checked }))}
+                  />
+                ))}
+              </fieldset>
+              {editRetry ? <GuardianLinkRetryAlert retrying={editSaving} onRetry={() => void savePermissions()} /> : null}
+            </FormModal>
             {activeSection === "new-link" ? <div aria-labelledby="guardian-detail-tab-new-link" id="guardian-detail-panel-new-link" role="tabpanel" tabIndex={0}>
               <Panel
                 aria-label="Veli öğrenci bağı ekle"
-                description="Hassas izinler varsayılan kapalıdır; yalnız açıkça seçilen yetkiler veli portalına açılır."
+                description="Hassas izinler varsayılan kapalıdır; yalnız açıkça seçilen yetkiler veli portalına açılır. Bağlı bir öğrencinin izinleri 'Öğrenci bağlantıları' sekmesindeki satırdan düzenlenir."
                 title="Öğrenci bağla"
               >
               <form className="next-guardian-link-form" onSubmit={(event) => void handleLinkSubmit(event)}>
@@ -307,6 +400,19 @@ async function linkGuardianStudent(accessToken: string, guardianId: string, atte
   });
 }
 
+/** UAT F-30: PATCH /guardians/:id/students/:studentId sets all four permission flags; no Idempotency-Key (class C). */
+async function updateGuardianStudentLink(accessToken: string, guardianId: string, studentId: string, permissions: GuardianPermissionForm) {
+  return apiRequest<GuardianStudentRecord>(
+    accessToken,
+    `${apiBaseUrl}/guardians/${encodeURIComponent(guardianId)}/students/${encodeURIComponent(studentId)}`,
+    {
+      body: JSON.stringify(permissions),
+      headers: { "content-type": "application/json" },
+      method: "PATCH",
+    },
+  );
+}
+
 function buildGuardianSummaryItems(detail: GuardianDetailData, options: { canRevealPhone: boolean }): OperationSummaryItem[] {
   const activeStudentCount = activeGuardianStudentCount(detail.links, detail.studentById);
   return [
@@ -392,7 +498,32 @@ function buildGuardianSummaryActions(detail: GuardianDetailData, invitationPendi
   ];
 }
 
-function buildGuardianStudentColumns(detail: GuardianDetailData): Array<DataTableColumn<GuardianStudentRecord>> {
+function buildGuardianStudentColumns(
+  detail: GuardianDetailData,
+  onEditPermissions?: (link: GuardianStudentRecord) => void,
+): Array<DataTableColumn<GuardianStudentRecord>> {
+  const actionColumn: DataTableColumn<GuardianStudentRecord> = {
+    key: "actions",
+    align: "center",
+    header: "İşlem",
+    mobileLabel: "İşlem",
+    mobilePriority: "primary",
+    priority: "primary",
+    render: (link) => (
+      <span className="next-row-actions">
+        <Button
+          aria-label={`${formatGuardianStudentName(detail.studentById.get(link.studentId))} izinlerini düzenle`}
+          onClick={() => onEditPermissions?.(link)}
+          size="icon"
+          type="button"
+          variant="ghost"
+        >
+          <Pencil size={17} aria-hidden="true" />
+        </Button>
+      </span>
+    ),
+    sticky: "right",
+  };
   return [
     {
       key: "student",
@@ -452,6 +583,7 @@ function buildGuardianStudentColumns(detail: GuardianDetailData): Array<DataTabl
         </span>
       ),
     },
+    ...(onEditPermissions ? [actionColumn] : []),
   ];
 }
 

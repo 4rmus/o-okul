@@ -11,6 +11,7 @@ import type {
   GradeLevelRecord,
   PaymentInstallmentRecord,
   PaymentInstallmentStatus,
+  PaymentPlanListRecord,
   PaymentPlanWithInstallmentsRecord,
   PaymentTransactionCreateRequest,
   PaymentTransactionMethod,
@@ -38,9 +39,13 @@ interface FinanceFilters {
 
 interface InstallmentRow {
   id: string;
-  plan: PaymentPlanWithInstallmentsRecord;
+  plan: PaymentPlanListRecord;
   installment: PaymentInstallmentRecord;
 }
+
+// UAT F-33: the student label travels with the plan row; it is never resolved through `student:list`,
+// which FINANCE_STAFF does not carry. A plan whose student was soft-deleted has no `student`.
+const deletedStudentLabel = "Öğrenci kaydı silinmiş";
 
 interface FinanceReferences {
   campuses: CampusRecord[];
@@ -139,10 +144,6 @@ export function FinancePage() {
   const rows = useMemo(() => flattenInstallments(plans), [plans]);
   const meta = resolveInstallmentMeta(plansQuery.data?.meta, rows.length);
   const metrics = calculateMetrics(plans);
-  const studentNameById = useMemo(
-    () => new Map(references.students.map((student) => [student.id, `${student.firstName} ${student.lastName}`])),
-    [references.students],
-  );
   const campusNameById = useMemo(() => new Map(references.campuses.map((campus) => [campus.id, campus.name])), [references.campuses]);
   const gradeLevelNameById = useMemo(() => new Map(references.gradeLevels.map((level) => [level.id, level.name])), [references.gradeLevels]);
   const classNameById = useMemo(() => new Map(references.classes.map((klass) => [klass.id, klass.name])), [references.classes]);
@@ -163,7 +164,7 @@ export function FinancePage() {
       header: "Öğrenci",
       mobilePriority: "primary",
       priority: "primary",
-      render: (row) => studentNameById.get(row.plan.studentId) ?? "Öğrenci kapsamı doğrulanmadı",
+      render: (row) => formatPlanStudent(row.plan),
       sticky: true,
     },
     {
@@ -367,7 +368,7 @@ export function FinancePage() {
                 <FinanceFiltersPanel filters={filters} onChange={updateFilters} references={references} />
               </>
             ) : null}
-            <ListControls meta={meta} onChange={setListQuery} sortOptions={paymentSortOptions} state={listQuery} />
+            <ListControls meta={meta} onChange={setListQuery} searchPlaceholder="Öğrenci adı veya plan ara" sortOptions={paymentSortOptions} state={listQuery} />
           </>
         }
         aria-label="Finans yönetimi"
@@ -431,7 +432,7 @@ export function FinancePage() {
         onClose={() => setReceiptRow(null)}
         open={Boolean(receiptRow)}
         plan={receiptRow?.plan}
-        studentName={receiptRow ? (studentNameById.get(receiptRow.plan.studentId) ?? "Öğrenci kapsamı doğrulanmadı") : ""}
+        studentName={receiptRow ? formatPlanStudent(receiptRow.plan) : ""}
         transactions={transactionsQuery.data ?? []}
       />
     </>
@@ -608,7 +609,7 @@ function ReceiptDialog({
   loading: boolean;
   onClose(): void;
   open: boolean;
-  plan?: PaymentPlanWithInstallmentsRecord;
+  plan?: PaymentPlanListRecord;
   studentName: string;
   transactions: PaymentTransactionRecord[];
 }) {
@@ -715,13 +716,22 @@ function ReceiptDialog({
 const paymentSortOptions = [
   { label: "Vade eski-yeni", value: "dueDate" },
   { label: "Vade yeni-eski", value: "-dueDate" },
+  { label: "Öğrenci A-Z", value: "studentName" },
+  { label: "Öğrenci Z-A", value: "-studentName" },
+  { label: "Öğrenci no", value: "studentNo" },
   { label: "Plan A-Z", value: "title" },
   { label: "Plan Z-A", value: "-title" },
 ];
 
 async function loadPaymentPlans(accessToken: string, listQuery: ListQueryState, filters: FinanceFilters) {
   const url = withQueryParams(buildListUrl(`${apiBaseUrl}/payment-plans`, listQuery), filters);
-  return apiListRequest<PaymentPlanWithInstallmentsRecord>(accessToken, url);
+  return apiListRequest<PaymentPlanListRecord>(accessToken, url);
+}
+
+function formatPlanStudent(plan: PaymentPlanListRecord) {
+  if (!plan.student) return deletedStudentLabel;
+  const name = `${plan.student.firstName} ${plan.student.lastName}`.trim();
+  return plan.student.studentNo ? `${name} · ${plan.student.studentNo}` : name;
 }
 
 async function loadReferences(accessToken: string): Promise<FinanceReferences> {
@@ -786,7 +796,7 @@ async function createPaymentTransaction(
   );
 }
 
-function flattenInstallments(plans: PaymentPlanWithInstallmentsRecord[]): InstallmentRow[] {
+function flattenInstallments(plans: PaymentPlanListRecord[]): InstallmentRow[] {
   return plans.flatMap((plan) =>
     plan.installments.map((installment) => ({
       id: `${plan.id}-${installment.id}`,
