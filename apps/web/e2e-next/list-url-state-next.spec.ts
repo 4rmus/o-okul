@@ -323,8 +323,10 @@ test.describe("Liste URL state", () => {
 
     await announcementsRegion.getByRole("button", { name: "Duyuru ekle" }).click();
     const announcementDialog = page.getByRole("dialog", { name: "Duyuru ekle" });
-    await expect(announcementDialog.locator(".uh-field")).toHaveCount(2);
-    await expect(announcementDialog.locator(".uh-select")).toHaveCount(0);
+    // UAT F-28: title, body, audience and four optional scope selects (campus, grade level, class, term).
+    await expect(announcementDialog.locator(".uh-field")).toHaveCount(7);
+    await expect(announcementDialog.locator(".uh-select")).toHaveCount(5);
+    await expect(announcementDialog.getByLabel("Hedef kitle")).toHaveValue("SCHOOL");
     await expect(announcementDialog.locator(".uh-textarea")).toHaveCount(1);
     await expect(announcementDialog.getByRole("textbox", { name: /^Duyuru metni / })).toBeVisible();
     await announcementDialog.getByRole("button", { name: "Vazgeç" }).click();

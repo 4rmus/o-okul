@@ -24,6 +24,10 @@ import {
 } from "@o-okul/ui";
 import type {
   AcademicTermRecord,
+  AnnouncementAudience,
+  AnnouncementDeliveryChannel,
+  AnnouncementDeliveryQueueResult,
+  AnnouncementDeliveryReportRecord,
   AnnouncementRecipientRecord,
   AnnouncementRecipientReport,
   AnnouncementRecord,
@@ -33,8 +37,9 @@ import type {
   GradeLevelRecord,
   MessageTemplateRecord,
 } from "@o-okul/shared-types";
-import { Plus, Send } from "lucide-react";
+import { Bell, Mail, Plus, Send } from "lucide-react";
 import { useAuth } from "../../../providers.js";
+import { hasCapabilityForRoles } from "../../_shared/access.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
@@ -101,8 +106,13 @@ export function AnnouncementsPage() {
   const [isSendingSms, setIsSendingSms] = useState(false);
   const [error, setError] = useState("");
   const [smsError, setSmsError] = useState("");
+  const [deliveryStatus, setDeliveryStatus] = useState("");
+  const [deliveryError, setDeliveryError] = useState("");
+  const [sendingChannel, setSendingChannel] = useState<AnnouncementDeliveryChannel | null>(null);
   const announcementCreateRequest = useRef<PendingIdempotentRequest | null>(null);
   const smsCreateRequest = useRef<PendingIdempotentRequest | null>(null);
+  const deliveryRequests = useRef(new Map<string, string>());
+  const canManageAnnouncements = hasCapabilityForRoles(auth?.session.roles ?? [], "announcement:manage");
   const rows = announcementsQuery.data?.data ?? [];
   const selectedAnnouncement = rows.find((announcement) => announcement.id === selectedReportId);
   const messageTemplates = pageDataQuery.data?.messageTemplates ?? [];
@@ -116,7 +126,19 @@ export function AnnouncementsPage() {
     enabled: Boolean(auth && selectedReportId),
     refetchOnWindowFocus: false,
   });
+  const deliveryReportsQuery = useQuery({
+    queryKey: ["next-announcement-delivery-reports", auth?.session.tenantId ?? "anonymous", selectedReportId],
+    queryFn: () => loadDeliveryReports(auth?.accessToken ?? "", selectedReportId),
+    enabled: Boolean(auth && selectedReportId && canManageAnnouncements),
+    refetchOnWindowFocus: false,
+  });
   const references = pageDataQuery.data?.references ?? emptyReferences;
+  const scopedClasses = useMemo(
+    () => references.classes.filter((record) =>
+      (!form.campusId || !record.campusId || record.campusId === form.campusId) &&
+      (!form.gradeLevelId || !record.gradeLevelId || record.gradeLevelId === form.gradeLevelId)),
+    [references.classes, form.campusId, form.gradeLevelId],
+  );
   const campusNames = useMemo(() => new Map(references.campuses.map((record) => [record.id, record.name])), [references.campuses]);
   const gradeLevelNames = useMemo(() => new Map(references.gradeLevels.map((record) => [record.id, record.name])), [references.gradeLevels]);
   const classNames = useMemo(() => new Map(references.classes.map((record) => [record.id, record.name])), [references.classes]);
@@ -185,8 +207,14 @@ export function AnnouncementsPage() {
     },
   ];
 
+  function resetDeliveryState() {
+    setDeliveryStatus("");
+    setDeliveryError("");
+  }
+
   function openRecipientReport(announcementId: string) {
     setSelectedReportId(announcementId);
+    resetDeliveryState();
     setSmsDeliveryReportJobId("");
     setSmsError("");
     setSmsStatus("");
@@ -195,6 +223,7 @@ export function AnnouncementsPage() {
 
   function closeRecipientReport() {
     setSelectedReportId("");
+    resetDeliveryState();
     setSmsDeliveryReportJobId("");
     setSmsError("");
     setSmsStatus("");
@@ -231,7 +260,7 @@ export function AnnouncementsPage() {
         <span>
           <strong>Başlık:</strong> {parsedForm.data.title}<br />
           <strong>Metin:</strong> {parsedForm.data.body}<br />
-          <strong>Hedef:</strong> Kurum geneli<br />
+          <strong>Hedef:</strong> {audienceLabel(parsedForm.data.audience)} · {scopeLabel(parsedForm.data, { campusNames, gradeLevelNames, classNames, courseNames, termNames })}<br />
           <strong>Kanal:</strong> Uygulama içi duyuru<br />
           <strong>Zamanlama:</strong> Hemen<br />
           <strong>Yayın yeri:</strong> Kurum ana sayfası ve kullanıcı duyuru ekranları
@@ -341,6 +370,44 @@ export function AnnouncementsPage() {
     }
   }
 
+  async function handleSendDelivery(channel: AnnouncementDeliveryChannel) {
+    if (!auth || !selectedAnnouncement || !canManageAnnouncements || sendingChannel) return;
+
+    const channelName = deliveryChannelLabel(channel);
+    const confirmed = await confirm({
+      confirmLabel: `${channelName} gönder`,
+      confirmVariant: "primary",
+      description: "Bildirim alıcılara gönderilmek üzere kuyruğa alınacak. Gönderilen bildirim geri alınamaz.",
+      message: (
+        <span>
+          <strong>Başlık:</strong> {selectedAnnouncement.title}<br />
+          <strong>Hedef:</strong> {audienceLabel(selectedAnnouncement.audience)} · {scopeLabel(selectedAnnouncement, { campusNames, gradeLevelNames, classNames, courseNames, termNames })}<br />
+          <strong>Kanal:</strong> {channelName}<br />
+          <strong>Alıcı:</strong> {deliveryChannelAudienceNote(channel)}<br />
+          <strong>Zamanlama:</strong> Hemen
+        </span>
+      ),
+      title: `${channelName} gönderimini onayla`,
+    });
+    if (!confirmed) return;
+
+    resetDeliveryState();
+    setSendingChannel(channel);
+    const requestKey = `${selectedAnnouncement.id}:${channel}`;
+    const idempotencyKey = deliveryRequests.current.get(requestKey) ?? crypto.randomUUID();
+    deliveryRequests.current.set(requestKey, idempotencyKey);
+    try {
+      const result = await sendAnnouncementDelivery(auth.accessToken, selectedAnnouncement.id, channel, idempotencyKey);
+      deliveryRequests.current.delete(requestKey);
+      setDeliveryStatus(`${channelName} gönderimi kuyruğa alındı (${formatCount(result.recipientCount)} hedef). Teslim sonucu raporda güncellenir.`);
+      void deliveryReportsQuery.refetch();
+    } catch (sendError) {
+      setDeliveryError(apiErrorMessage(sendError, `${channelName} gönderimi başlatılamadı.`));
+    } finally {
+      setSendingChannel(null);
+    }
+  }
+
   return (
     <>
       <CrudPage
@@ -436,6 +503,47 @@ export function AnnouncementsPage() {
           ) : reportDataQuery.data?.recipientReport ? (
             <AnnouncementRecipientReportPanel report={reportDataQuery.data.recipientReport} />
           ) : null}
+          {canManageAnnouncements && selectedAnnouncement ? (
+            <Panel
+              aria-label="Duyuru bildirim gönderimi"
+              title="Push ve e-posta gönderimi"
+              description="Uygulama içi duyuruya ek olarak alıcılara bildirim gönderin. Push, kayıtlı bildirim cihazı olan alıcılara; e-posta, e-posta adresi kayıtlı alıcılara gider."
+              tone="muted"
+              actions={
+                <Button type="button" variant="secondary" onClick={() => void deliveryReportsQuery.refetch()} disabled={deliveryReportsQuery.isFetching}>
+                  Yenile
+                </Button>
+              }
+            >
+              <div className="next-row-actions">
+                <Button type="button" onClick={() => void handleSendDelivery("PUSH")} disabled={sendingChannel !== null}>
+                  <Bell size={17} aria-hidden="true" />
+                  {sendingChannel === "PUSH" ? "Push kuyruğa alınıyor..." : "Push gönder"}
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => void handleSendDelivery("EMAIL")} disabled={sendingChannel !== null}>
+                  <Mail size={17} aria-hidden="true" />
+                  {sendingChannel === "EMAIL" ? "E-posta kuyruğa alınıyor..." : "E-posta gönder"}
+                </Button>
+              </div>
+              <div aria-live="polite">
+                {deliveryStatus ? (
+                  <Alert tone="success" title="Gönderim kuyruğa alındı">
+                    {deliveryStatus}
+                  </Alert>
+                ) : null}
+              </div>
+              {deliveryError ? (
+                <Alert tone="danger" title="Gönderim başlatılamadı">
+                  {deliveryError}
+                </Alert>
+              ) : null}
+              <AnnouncementDeliveryReportTable
+                isError={deliveryReportsQuery.isError}
+                isLoading={deliveryReportsQuery.isPending}
+                reports={deliveryReportsQuery.data ?? []}
+              />
+            </Panel>
+          ) : null}
           {isSmsEnabled && selectedAnnouncement && selectedAnnouncement.audience !== "TEACHERS" ? (
             <Panel
               aria-label="Duyuru SMS gönderimi"
@@ -511,7 +619,7 @@ export function AnnouncementsPage() {
         </Panel>
       ) : null}
       <FormModal
-        description="Başlık ve duyuru metni zorunludur. Duyuru kurum genelinde yayımlanır."
+        description="Başlık ve duyuru metni zorunludur. Kapsam seçilmezse duyuru seçilen hedef kitlenin tamamına yayımlanır."
         onCancel={closeForm}
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
@@ -534,10 +642,76 @@ export function AnnouncementsPage() {
             onChange={(event) => setForm((current) => ({ ...current, body: event.target.value }))}
           />
         </Field>
+        <Field label="Hedef kitle" description="Varsayılan: tüm okul (öğrenciler, veliler ve öğretmenler).">
+          <Select
+            value={form.audience}
+            onChange={(event) => setForm((current) => ({ ...current, audience: event.target.value as AnnouncementAudience }))}
+          >
+            {audienceOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <div className="next-assignment-form-grid" role="group" aria-label="Duyuru kapsamı">
+          <Field label="Kampüs">
+            <Select
+              value={form.campusId}
+              onChange={(event) => setForm((current) => ({ ...current, campusId: event.target.value, classId: "" }))}
+            >
+              <option value="">Tüm kampüsler</option>
+              {references.campuses.map((record) => (
+                <option key={record.id} value={record.id}>
+                  {record.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Seviye">
+            <Select
+              value={form.gradeLevelId}
+              onChange={(event) => setForm((current) => ({ ...current, gradeLevelId: event.target.value, classId: "" }))}
+            >
+              <option value="">Tüm seviyeler</option>
+              {references.gradeLevels.map((record) => (
+                <option key={record.id} value={record.id}>
+                  {record.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Sınıf">
+            <Select
+              value={form.classId}
+              onChange={(event) => setForm((current) => ({ ...current, classId: event.target.value }))}
+            >
+              <option value="">Tüm sınıflar</option>
+              {scopedClasses.map((record) => (
+                <option key={record.id} value={record.id}>
+                  {record.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Dönem">
+            <Select
+              value={form.termId}
+              onChange={(event) => setForm((current) => ({ ...current, termId: event.target.value }))}
+            >
+              <option value="">Tüm dönemler</option>
+              {references.terms.map((record) => (
+                <option key={record.id} value={record.id}>
+                  {record.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
         <Panel
           aria-label="Duyuru önizleme"
           title={form.title.trim() || "Başlık girilmedi"}
-          description="Kurum geneli · Uygulama içi duyuru · Hemen"
+          description={`${audienceLabel(form.audience)} · ${scopeLabel(form, { campusNames, gradeLevelNames, classNames, courseNames, termNames })} · Uygulama içi duyuru · Hemen`}
           tone="muted"
         >
           <p>{form.body.trim() || "Duyuru metni burada görünür."}</p>
@@ -566,6 +740,26 @@ async function createAnnouncement(accessToken: string, input: AnnouncementFormPa
     headers: { "content-type": "application/json", "Idempotency-Key": idempotencyKey },
     method: "POST",
   });
+}
+
+async function sendAnnouncementDelivery(
+  accessToken: string,
+  announcementId: string,
+  channel: AnnouncementDeliveryChannel,
+  idempotencyKey: string,
+) {
+  return apiRequest<AnnouncementDeliveryQueueResult>(accessToken, `${apiBaseUrl}/announcements/${encodeURIComponent(announcementId)}/deliveries`, {
+    body: JSON.stringify({ channel }),
+    headers: { "content-type": "application/json", "Idempotency-Key": idempotencyKey },
+    method: "POST",
+  });
+}
+
+async function loadDeliveryReports(accessToken: string, announcementId: string) {
+  return apiRequest<AnnouncementDeliveryReportRecord[]>(
+    accessToken,
+    `${apiBaseUrl}/announcements/${encodeURIComponent(announcementId)}/delivery-reports`,
+  );
 }
 
 async function loadRecipientReport(accessToken: string, announcementId: string) {
@@ -641,6 +835,138 @@ async function fetchReference<T>(accessToken: string, path: string): Promise<T[]
   if (!response.ok) throw new Error(`${path.toUpperCase()}_LOAD_FAILED`);
   const payload = (await response.json()) as T[] | { data?: T[] };
   return Array.isArray(payload) ? payload : (payload.data ?? []);
+}
+
+const audienceOptions: Array<{ label: string; value: AnnouncementAudience }> = [
+  { label: "Tüm okul", value: "SCHOOL" },
+  { label: "Veliler", value: "GUARDIANS" },
+  { label: "Öğrenciler", value: "STUDENTS" },
+  { label: "Öğretmenler", value: "TEACHERS" },
+];
+
+function deliveryChannelLabel(channel: AnnouncementDeliveryChannel) {
+  return channel === "PUSH" ? "Push" : "E-posta";
+}
+
+function deliveryChannelAudienceNote(channel: AnnouncementDeliveryChannel) {
+  return channel === "PUSH"
+    ? "Alıcı raporundaki kişilerden kayıtlı bildirim cihazı olanlar"
+    : "Alıcı raporundaki kişilerden e-posta adresi kayıtlı olanlar";
+}
+
+function deliveryStatusLabel(status: AnnouncementDeliveryReportRecord["status"]) {
+  if (status === "completed") return "Tamamlandı";
+  if (status === "failed") return "Başarısız";
+  return "Kuyrukta";
+}
+
+function deliveryStatusTone(status: AnnouncementDeliveryReportRecord["status"]): StatusBadgeProps["tone"] {
+  if (status === "completed") return "success";
+  if (status === "failed") return "danger";
+  return "warning";
+}
+
+function latestDeliveryReportsByChannel(reports: AnnouncementDeliveryReportRecord[]) {
+  const latest = new Map<AnnouncementDeliveryChannel, AnnouncementDeliveryReportRecord>();
+  for (const report of reports) {
+    const current = latest.get(report.channel);
+    if (!current || deliveryReportTime(report) >= deliveryReportTime(current)) latest.set(report.channel, report);
+  }
+  return (["PUSH", "EMAIL"] as const).flatMap((channel) => {
+    const report = latest.get(channel);
+    return report ? [report] : [];
+  });
+}
+
+function deliveryReportTime(report: AnnouncementDeliveryReportRecord) {
+  return Date.parse(report.updatedAt ?? report.createdAt ?? "") || 0;
+}
+
+function AnnouncementDeliveryReportTable({
+  isError,
+  isLoading,
+  reports,
+}: {
+  isError: boolean;
+  isLoading: boolean;
+  reports: AnnouncementDeliveryReportRecord[];
+}) {
+  if (isLoading) return <Alert title="Teslim raporu yükleniyor">Gönderim durumu okunuyor.</Alert>;
+  if (isError) {
+    return (
+      <Alert tone="danger" title="Teslim raporu alınamadı">
+        Push ve e-posta teslim raporu şu anda okunamıyor.
+      </Alert>
+    );
+  }
+
+  const columns: Array<DataTableColumn<AnnouncementDeliveryReportRecord>> = [
+    {
+      key: "channel",
+      header: "Kanal",
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (report) => deliveryChannelLabel(report.channel),
+      sticky: "left",
+    },
+    {
+      key: "status",
+      header: "Durum",
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (report) => <StatusBadge tone={deliveryStatusTone(report.status)}>{deliveryStatusLabel(report.status)}</StatusBadge>,
+    },
+    {
+      key: "recipientCount",
+      header: "Hedef",
+      mobilePriority: "secondary",
+      priority: "secondary",
+      render: (report) => formatCount(report.recipientCount),
+    },
+    {
+      key: "deliveredCount",
+      header: "Teslim",
+      mobilePriority: "secondary",
+      priority: "secondary",
+      render: (report) => formatCount(report.deliveredCount),
+    },
+    {
+      key: "failedCount",
+      header: "Hata",
+      mobilePriority: "secondary",
+      priority: "secondary",
+      render: (report) => formatCount(report.failedCount),
+    },
+    {
+      key: "updatedAt",
+      header: "Son durum",
+      mobilePriority: "hidden",
+      priority: "optional",
+      render: (report) => {
+        const time = deliveryReportTime(report);
+        return time ? new Date(time).toLocaleString("tr-TR") : "-";
+      },
+    },
+  ];
+
+  const rows = latestDeliveryReportsByChannel(reports);
+  if (rows.length === 0) {
+    return <p className="next-sms-message-preview">Bu duyuru için henüz push veya e-posta gönderimi yok.</p>;
+  }
+
+  return (
+    <>
+      <p className="next-sms-message-preview">Her kanalın son gönderimi gösterilir. Kuyruktaki gönderim henüz teslim edilmiş sayılmaz.</p>
+      <DataTable
+        caption="Push ve e-posta teslim raporu"
+        columns={columns}
+        density="compact"
+        emptyText="Gönderim yok"
+        getRowKey={(report) => report.id}
+        rows={rows}
+      />
+    </>
+  );
 }
 
 function audienceLabel(audience: AnnouncementRecord["audience"]) {
