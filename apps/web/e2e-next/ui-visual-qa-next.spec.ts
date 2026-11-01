@@ -86,6 +86,10 @@ const rolePortalActionStripCases: RolePortalActionStripCase[] = [
 const rolePortalViewportContractName =
   "rol portal aksiyon şeritleri 320/375/414/768/1024/1440 görünümde taşmadan kalır";
 
+// Golden karşılaştırmaları yumuşak (soft) ve yeniden denemesiz: bir koşuda uyuşmayan tüm golden'lar görünür,
+// deterministik piksel farkı ikinci kez koşturulmaz (2026-11-01; önceki döngü golden başına 2–4 CI turuydu).
+test.describe.configure({ retries: 0 });
+
 test.describe("Faz 9 UI görsel smoke", () => {
   test("landing 320/375/414/768/1024/1280/1440 görünümde gerçek ürün akışını taşmadan gösterir", async ({ page }) => {
     test.setTimeout(90_000);
@@ -118,7 +122,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
     const loginPanel = page.getByRole("region", { exact: true, name: "Giriş" });
     await expect(loginPanel).toBeVisible();
     await hideNextDevIndicator(page);
-    await expect(loginPanel).toHaveScreenshot("login-panel-414.png", {
+    await expect.soft(loginPanel).toHaveScreenshot("login-panel-414.png", {
       animations: "disabled",
       maxDiffPixelRatio: 0.005,
     });
@@ -192,7 +196,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
           page.getByRole("heading", { level: 1, name: "Faz 9 Akademi" }),
           "route-family-dashboard-1440.png",
         );
-        await expect(page.locator(".next-sidebar")).toHaveScreenshot("institution-shell-rail-1440.png", {
+        await expect.soft(page.locator(".next-sidebar")).toHaveScreenshot("institution-shell-rail-1440.png", {
           animations: "disabled",
           maxDiffPixelRatio: 0.005,
         });
@@ -204,7 +208,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
         const drawer = page.locator(".next-sidebar");
         await expect(drawer).toHaveAttribute("data-mobile-open", "true");
         await expect(drawer.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { exact: true, name: "Özet" })).toHaveAttribute("aria-current", "page");
-        await expect(drawer).toHaveScreenshot("institution-shell-drawer-414.png", {
+        await expect.soft(drawer).toHaveScreenshot("institution-shell-drawer-414.png", {
           animations: "disabled",
           maxDiffPixelRatio: 0.005,
         });
@@ -807,7 +811,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
         await expectUiStable(page, `faz9-${portalCase.key}-action-strip-${viewport.width}`, consoleErrors);
         if (portalCase.key === "student" && viewport.width === 414) {
           await hideNextDevIndicator(page);
-          await expect(actionStrip).toHaveScreenshot("student-portal-actions-414.png", {
+          await expect.soft(actionStrip).toHaveScreenshot("student-portal-actions-414.png", {
             animations: "disabled",
             maxDiffPixelRatio: 0.005,
           });
@@ -839,7 +843,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await hideNextDevIndicator(page);
     await waitForDocumentFonts(page);
     const reportStatus = page.getByRole("region", { name: "Rapor iş akışı" });
-    await expect(reportStatus).toHaveScreenshot("report-status-1440.png", {
+    await expect.soft(reportStatus).toHaveScreenshot("report-status-1440.png", {
       animations: "disabled",
       maxDiffPixelRatio: 0.005,
     });
@@ -940,7 +944,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
         const karneClipY = process.platform === "linux" ? Math.floor(karneBox.y) : Math.round(karneBox.y);
         const karneClip = { height: 842, width: 595, x: Math.round(karneBox.x), y: karneClipY };
         await waitForDocumentFonts(page);
-        await expect(page).toHaveScreenshot("student-report-card-1024.png", {
+        await expect.soft(page).toHaveScreenshot("student-report-card-1024.png", {
           animations: "disabled",
           clip: karneClip,
           maxDiffPixelRatio: 0.005,
@@ -1965,7 +1969,7 @@ async function expectRouteFamilyGolden(page: Page, primary: Locator, screenshotN
   await waitForDocumentFonts(page);
   await hideNextDevIndicator(page);
   await expect(page.locator("nextjs-portal")).toBeHidden();
-  await expect(page).toHaveScreenshot(screenshotName, {
+  await expect.soft(page).toHaveScreenshot(screenshotName, {
     animations: "disabled",
     fullPage: false,
     maxDiffPixelRatio: 0.005,

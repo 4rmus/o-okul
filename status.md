@@ -332,6 +332,17 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
    2,9 dk. IMG-3'ün özel kabulü (yalnız `package.json` betiği değişen deploy'da katmanın aynı kalması) staging'de hâlâ
    ölçülmedi; LOCAL_TEST kanıtı var.
 
+11. CI golden döngüsü (CI ölçümü, 2026-10-31): son 100 koşuda 9 PR hatasının 6'sı Linux görsel golden
+   uyuşmazlığıydı ve her golden değişikliği 2–4 CI turu sürdü (#225'te 4 tur), çünkü `ui-visual-qa-next.spec.ts`
+   viewport döngülerinde sert `expect` ilk farkta duruyor ve `retries: 1` deterministik piksel farkını iki kez
+   koşturuyordu. 2026-11-01: golden karşılaştırmaları `expect.soft`, bu spec'te `retries: 0`; `Visual goldens`
+   workflow'u (`workflow_dispatch`, ubuntu-24.04) `--update-snapshots=changed` ile `*-linux.png` dosyalarını artifact
+   olarak üretir (commit etmez). Ayrıca `cancel-in-progress` yalnız PR'larda (main push kanıtı iptal edilmez), beş iş
+   `ubuntu-latest`'ten `ubuntu-24.04`'e sabitlendi, `web:measurement-baseline:check` `ci:static` zincirinde
+   lint/typecheck/build'den sonraya alındı (bayat taban aynı turda tip hatalarını gizlemesin). Yapılmayan: karne
+   sözleşmesinin Playwright adımı iki işte koşuyor (~48 sn; `check-karne-visual-contract.mjs` kilitliyor, ürün
+   kararı), e2e matrisini 4 parçaya bölme (kritik yol 7,2 dk → ~4 dk tahmini, UNPROVEN; `ciCommandPassedInJobs`
+   eşleşmesi gerektirir), `ui-ux-rc` fail-open koşulu (zorunlu check koşulu, ürün sahibi onayı ister).
 Önceki plandan devralınan kalemler (`docs/account-management-architecture-plan.md` bölüm 6). Durumlar
 2026-10-15'te main `c619b8f7e` üzerinde kod okumayla yeniden doğrulandı (LOCAL_STATIC):
 
