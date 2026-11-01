@@ -151,13 +151,13 @@ export function GuardiansPage() {
       sticky: "right",
       render: (guardian) => (
         <span className="next-row-actions">
-          <Link href={`/kurum/veliler/${encodeURIComponent(guardian.id)}`} aria-label={`${guardian.firstName} detay`}>
+          <Link href={`/kurum/veliler/${encodeURIComponent(guardian.id)}`} aria-label={`${guardian.firstName} ${guardian.lastName} detay`}>
             <Eye size={17} aria-hidden="true" />
           </Link>
-          <Button size="icon" variant="ghost" type="button" onClick={() => openEditForm(guardian)} aria-label={`${guardian.firstName} düzenle`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => openEditForm(guardian)} aria-label={`${guardian.firstName} ${guardian.lastName} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
           </Button>
-          <Button size="icon" variant="ghost" type="button" onClick={() => void handleDelete(guardian)} aria-label={`${guardian.firstName} sil`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void handleDelete(guardian)} aria-label={`${guardian.firstName} ${guardian.lastName} sil`}>
             <Trash2 size={17} aria-hidden="true" />
           </Button>
         </span>

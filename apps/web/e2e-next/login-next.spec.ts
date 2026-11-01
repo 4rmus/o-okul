@@ -4482,7 +4482,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await guardianSearch.fill("");
   await expect(page.getByText("Zeynep Veli")).toBeVisible();
 
-  await page.getByRole("link", { name: "Zeynep detay" }).click();
+  await page.getByRole("link", { name: "Zeynep Veli detay" }).click();
   await expect(page).toHaveURL(/\/kurum\/veliler\/guardian-a$/);
   await expect(heading(page, { name: "Zeynep Veli" })).toBeVisible();
   await expect(page.getByLabel("Veli öğrenci bağlantıları").getByRole("row", { name: /Ada A/ })).toBeVisible();
@@ -4508,13 +4508,13 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
   await expect(page.getByText("Selin Anne")).toBeVisible();
 
-  await page.getByRole("button", { name: "Selin düzenle" }).click();
+  await page.getByRole("button", { name: "Selin Anne düzenle" }).click();
   await page.getByRole("textbox", { name: /^Telefon / }).fill("5559998877");
   await page.getByRole("button", { name: "Kaydet", exact: true }).click();
   await expect(page.getByText("5559998877")).toHaveCount(0);
   await expect(page.getByText("••• ••• ••77")).toBeVisible();
 
-  await page.getByRole("button", { name: "Selin sil" }).click();
+  await page.getByRole("button", { name: "Selin Anne sil" }).click();
   await confirmDeleteDialog(page, "Veliyi sil", "Selin Anne velisi silinsin mi?");
   await expect(page.getByText("Selin Anne")).toHaveCount(0);
 
