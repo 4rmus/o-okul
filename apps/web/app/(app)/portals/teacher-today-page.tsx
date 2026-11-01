@@ -43,7 +43,8 @@ export function TeacherTodayPage() {
   if (!canRead) {
     return <AccessPanel title="Öğretmen Portalı" />;
   }
-  if (query.isError) {
+  // Odak dönüşündeki yenileme düşerse yüklü özet korunur; hata ekranı yalnız hiç veri yokken çıkar.
+  if (query.isError && !query.data) {
     return (
       <PortalFrame title="Öğretmen Portalı" subtitle="Bugün">
         <PortalStatePanel description="Günlük özet şu an gösterilemiyor. Ders akışı ve ödev ekranlarından devam edebilirsiniz." onRetry={() => void query.refetch()} state="error" title="Öğretmen günlük özeti alınamadı" />

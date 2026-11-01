@@ -189,8 +189,11 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
     const visibleTermIds = new Set(query.data.schedule.map((lesson) => lesson.termId).filter((termId): termId is string => Boolean(termId)));
     setAttendanceForm((current) => ({
       ...current,
+      // İstenen sınıf atanmış sınıflardan değilse başka bir sınıfa sessizce düşülmez; form boş kalır ve uyarı görünür.
       classId: current.classId
-        || (query.data.attendanceClassIds.includes(requestedAttendanceClassId) ? requestedAttendanceClassId : firstClassId),
+        || (requestedAttendanceClassId
+          ? (query.data.attendanceClassIds.includes(requestedAttendanceClassId) ? requestedAttendanceClassId : "")
+          : firstClassId),
     }));
     setNoteForm((current) => ({
       ...current,
@@ -211,6 +214,17 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
     setAttendanceNotice("");
   }, [attendanceForm.classId, attendanceForm.date]);
 
+  // Bugün ekranından "#portal-teacher-attendance" ile gelindiğinde form ancak veri yüklenince oluşur; tarayıcının
+  // ilk kaydırması hedefi bulamaz, bu yüzden yükleme bitince form görünür kılınıp odaklanır.
+  useEffect(() => {
+    if (!query.isSuccess || window.location.hash !== "#portal-teacher-attendance") return;
+    const target = document.getElementById("portal-teacher-attendance");
+    if (!target) return;
+    target.scrollIntoView({ block: "start" });
+    if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+    target.focus({ preventScroll: true });
+  }, [query.isSuccess]);
+
   const data = query.data;
   const students = data?.students ?? [];
   const teacherDailyAttendanceQuery = useQuery({
@@ -222,6 +236,9 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
   const attendanceRoster = teacherDailyAttendanceQuery.data?.students ?? [];
   const attendanceClassIds = new Set(data?.attendanceClassIds ?? []);
   const attendanceClassOptions = (data?.classes ?? []).filter((record) => attendanceClassIds.has(record.id));
+  const requestedAttendanceClassDenied = Boolean(
+    requestedAttendanceClassId && data && !data.attendanceClassIds.includes(requestedAttendanceClassId),
+  );
   const attendanceRosterComplete = attendanceRoster.length > 0 && attendanceRoster.every((student) => Boolean(attendanceStatuses[student.id]));
   const unmarkedAttendanceCount = attendanceRoster.filter((student) => !attendanceStatuses[student.id]).length;
   const attendanceColumns: Array<DataTableColumn<AttendanceDailyRosterStudent>> = [
@@ -651,6 +668,9 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
                   onChange={(event) => setAttendanceForm((current) => ({ ...current, date: event.target.value }))}
                 />
               </Field>
+              {requestedAttendanceClassDenied && !attendanceForm.classId ? (
+                <p className="next-field-hint" role="status">Bu dersin sınıfı için yoklama yetkiniz yok; listeden atandığınız bir sınıfı seçin.</p>
+              ) : null}
               {teacherDailyAttendanceQuery.isError ? <p className="next-form-error" role="alert">Tarihsel sınıf listesi alınamadı.</p> : null}
               {attendanceRoster.length > 0 ? (
                 <Button type="button" variant="secondary" onClick={markAttendanceRosterPresent}>Tümünü Var</Button>

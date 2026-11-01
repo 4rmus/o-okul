@@ -63,7 +63,8 @@ export function CrudPage<TRow>({
   useEffect(() => {
     if (!loading && !error) lastLoadedRowsRef.current = rows;
   }, [error, loading, rows]);
-  const tableRows = loading && rows.length === 0 ? lastLoadedRowsRef.current : rows;
+  // Yükleme sürerken (liste ya da referans sorgusu) yarım çözülmüş satırlar gösterilmez; son tam yüklenen satırlar kalır.
+  const tableRows = loading ? lastLoadedRowsRef.current : rows;
   const shouldRenderEmptyState = !loading && !error && rows.length === 0 && resolvedEmptyState;
   const shouldRenderTable = loading || (!error && !shouldRenderEmptyState);
 
