@@ -21,8 +21,9 @@ const architectureDocPath = "docs/agent-architecture.md";
 const mcpJsonPath = ".mcp.json";
 const cursorSkillsDir = ".cursor/skills";
 const expectedAgentCount = 15;
-const expectedConcurrentSubagents = "3";
+const expectedConcurrentSubagents = "6";
 const expectedSpawnDepth = "1";
+const expectedWorkflowConcurrentAgents = "6";
 const requiredAgentsApprovalLine =
   "- Deploys, provider actions, secret/config changes, DB/data mutations, and mutating smokes require explicit user approval.";
 const agentsMdMaxBytes = 32 * 1024;
@@ -124,6 +125,11 @@ function checkSettings() {
   if (env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH !== expectedSpawnDepth) {
     failures.push(`${settingsPath} env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH="${expectedSpawnDepth}" olmalı.`);
   }
+  if (env.CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS !== expectedWorkflowConcurrentAgents) {
+    failures.push(
+      `${settingsPath} env.CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS="${expectedWorkflowConcurrentAgents}" olmalı.`,
+    );
+  }
   for (const [key, value] of Object.entries(env)) {
     if (/token|secret|password|api_key/i.test(key) || /^(sk-|ghp_|xox)/.test(String(value))) {
       failures.push(`${settingsPath} env bloğu gizli değer taşıyamaz: ${key}`);
@@ -139,12 +145,16 @@ function checkGovernanceContracts() {
   for (const token of [
     ".claude/agents/*.md",
     ".claude/skills/*/SKILL.md",
-    "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=3",
+    "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=6",
     "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1",
-    "the main agent and at most three subagents may participate concurrently.",
-    "Use no more than three subagents total.",
+    "CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS=6",
+    "In a shared checkout, the main agent and at most three subagents may participate concurrently;",
+    "In a shared checkout, use no more than three subagents total.",
     "If one subagent writes, at most two read-only subagents may remain.",
     "Each active gate may have only one write-capable participant.",
+    "Parallel worktree gates:",
+    "at most six write-capable subagents and no helper subagents.",
+    "Run heavy validation (web typecheck, Playwright builds) in at most three worktrees at a time.",
     "Gates are commits, not PRs.",
     "One milestone, one branch, one PR",
     "When the user asks for step-by-step work, stop after each gate.",
@@ -176,9 +186,12 @@ function checkGovernanceContracts() {
   for (const token of [
     "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS",
     "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH",
+    "CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS",
     "permissionMode: plan",
     "at most three subagents",
     "at most two read-only subagents",
+    "### Parallel worktree gates",
+    "At most six write-capable subagents, one per gate, and no helper subagents.",
     "sole scope and integration owner",
     "one write-capable participant",
     "pnpm agents:check",
@@ -252,9 +265,11 @@ function checkOrchestrationRouter() {
   for (const token of [
     "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS",
     "at most three subagents",
-    "Use no more than three subagents total.",
+    "In a shared checkout, use no more than three subagents total.",
     "If one subagent writes, at most two read-only subagents may remain.",
     "Each active gate may have only one write-capable participant.",
+    "Parallel worktree gates:",
+    "at most six write-capable subagents with no helper subagents.",
     "If the main agent writes, every subagent must remain read-only.",
     "If a subagent writes, the main agent may change files only for integration.",
     "owned paths and forbidden paths",

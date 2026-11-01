@@ -16,18 +16,19 @@
 ## Subagent Orchestration
 
 - Project subagents live in `.claude/agents/*.md` and project skills in `.claude/skills/*/SKILL.md`. Claude Code is the canonical agent/skill source for this repo; both are edited by hand and verified by `pnpm agents:check`.
-- `.claude/settings.json` is the shared subagent policy: `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=3` and `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1`. Keep it committed; personal overrides go to `.claude/settings.local.json`.
+- `.claude/settings.json` is the shared subagent policy: `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=6`, `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1`, and `CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS=6`. Keep it committed; personal overrides go to `.claude/settings.local.json`.
 - Claude Code reads this `AGENTS.md` as project instructions because the repo has no `CLAUDE.md`. Do not add a `CLAUDE.md` or `CLAUDE.local.md`; either would replace this file for Claude Code.
 - Cursor reads `.claude/agents` and `.claude/skills` natively; `.cursor/skills` holds only vendored third-party skills and is not a source of truth. Do not recreate `.codex` or `.agents` directories; they would duplicate agent and skill names.
 - Project MCP servers belong in `.mcp.json` only for trusted systems with an explicit tool allowlist and no inline secrets; none is configured today.
 - Use the narrowest repo skill first: `o-okul-planning`, `o-okul-implementation-slice`, `o-okul-release-evidence`, or `o-okul-pr-review`.
 - Use subagents only when the user asks for agents, delegation, parallel review, or a large task that benefits from isolated exploration.
-- The concurrent-subagent cap limits subagents and excludes the main agent, so the main agent and at most three subagents may participate concurrently.
+- The concurrent-subagent cap limits subagents and excludes the main agent. In a shared checkout, the main agent and at most three subagents may participate concurrently; the cap of six exists for parallel worktree gates.
 - Keep spawn depth at 1; the main agent is the sole scope and integration owner and retains conflict resolution and final delivery. Subagents never spawn subagents.
+- Parallel worktree gates: when a milestone has independent gates, up to six may run at once, each owned by one write-capable subagent in its own git worktree (`isolation: "worktree"`) cut from the same milestone commit, with disjoint owned paths and a private `NEXT_E2E_PORT`. That allows at most six write-capable subagents and no helper subagents. Gate owners commit on their worktree branch and never push or merge; the main agent merges the gate branches into the milestone branch, resolves conflicts, refreshes the Gate B baseline once, and then runs at most three read-only reviewers on the merged diff. Run heavy validation (web typecheck, Playwright builds) in at most three worktrees at a time.
 - Each active gate may have only one write-capable participant.
 - If the main agent writes, no subagent may write.
 - If a subagent writes, the main agent changes no files except for integration.
-- Use no more than three subagents total. If one subagent writes, at most two read-only subagents may remain.
+- In a shared checkout, use no more than three subagents total. If one subagent writes, at most two read-only subagents may remain.
 - Read-only reviewers run with `permissionMode: plan` and without Write/Edit tools; they still carry Bash, so they must not run state-changing commands.
 - Before every gate starts, define its objective, owned paths, forbidden paths, acceptance criteria, and validation commands.
 - Gates are commits, not PRs. When a gate completes, commit it on the milestone branch and continue to the next gate; stop only for an approval-required action, an ambiguity that changes the deliverable, or a failure you cannot diagnose. When the user asks for step-by-step work, stop after each gate.

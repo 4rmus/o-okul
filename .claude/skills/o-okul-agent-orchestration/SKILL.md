@@ -17,7 +17,7 @@ Use this as the router for O-Okul agent work. Prefer the narrower skill when the
 ## Canonical Surfaces
 
 - `.claude/agents/*.md` is the hand-edited subagent roster (15 agents) and `.claude/skills/*/SKILL.md` is the hand-edited skill set (5 skills). There is no generated copy; edit them directly and run `pnpm agents:check`.
-- `.claude/settings.json` carries the shared subagent policy: `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=3` and `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1`. Personal overrides go to `.claude/settings.local.json`.
+- `.claude/settings.json` carries the shared subagent policy: `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=6`, `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1`, and `CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS=6`. Personal overrides go to `.claude/settings.local.json`.
 - `AGENTS.md` is the governance contract. Claude Code reads it as project instructions because the repo has no `CLAUDE.md`; never add a `CLAUDE.md` or `CLAUDE.local.md`, which would replace it.
 - Cursor reads `.claude/agents` and `.claude/skills` natively; `.cursor/skills` holds only vendored third-party skills. Do not recreate `.codex` or `.agents` directories; they would duplicate agent and skill names.
 - Project MCP servers belong in `.mcp.json` only for trusted systems with an explicit tool allowlist; none is configured today.
@@ -26,15 +26,17 @@ Use this as the router for O-Okul agent work. Prefer the narrower skill when the
 
 1. Read `AGENTS.md` and `docs/agent-architecture.md` when relevant.
 2. Decide whether subagents are useful. Prefer single-agent work for small edits.
-3. The concurrent-subagent cap in `.claude/settings.json` excludes the main agent, so the main agent and at most three subagents may participate concurrently.
-4. Use no more than three subagents total. If one subagent writes, at most two read-only subagents may remain.
+3. The concurrent-subagent cap in `.claude/settings.json` excludes the main agent. In a shared checkout, the main agent and at most three subagents may participate concurrently.
+4. In a shared checkout, use no more than three subagents total. If one subagent writes, at most two read-only subagents may remain.
 5. Each active gate may have only one write-capable participant. Give explicit owned paths and forbidden paths.
 6. If the main agent writes, every subagent must remain read-only.
 7. If a subagent writes, the main agent may change files only for integration.
 8. Keep depth at one: the spawn-depth cap withholds the Agent tool from subagents, and subagents never spawn their own subagents.
-9. Read-only agents run with `permissionMode: plan` and without Write/Edit tools. They still carry Bash, so their prompts say "Stay read-only" and they must not run state-changing commands.
-10. Keep the main agent responsible for integration, conflict resolution, final verification, and user-facing summary.
-11. Report every result with its evidence class: `LOCAL_STATIC`, `LOCAL_TEST`, `CI`, `STAGING`, `PRODUCTION`, `EXTERNAL_NOT_RUN`, or `UNPROVEN`.
+9. Parallel worktree gates: independent gates of one milestone may run at once, at most six write-capable subagents with no helper subagents. Each gate owner works in its own git worktree (`isolation: "worktree"` on the Agent tool or a workflow `agent()` call) cut from the same milestone commit, with disjoint owned paths and a private `NEXT_E2E_PORT` (3021-3026). Owners commit on their worktree branch and never push or merge. Run heavy validation (web typecheck, Playwright builds) in at most three worktrees at a time.
+10. After parallel worktree gates, the main agent merges the gate branches into the milestone branch, resolves conflicts in shared files (`globals.css` imports, shared-types, OpenAPI contract, ux-baseline pins, shared e2e specs), refreshes the Gate B baseline once on the clean tree, and then runs at most three read-only reviewers on the merged diff.
+11. Read-only agents run with `permissionMode: plan` and without Write/Edit tools. They still carry Bash, so their prompts say "Stay read-only" and they must not run state-changing commands.
+12. Keep the main agent responsible for integration, conflict resolution, final verification, and user-facing summary.
+13. Report every result with its evidence class: `LOCAL_STATIC`, `LOCAL_TEST`, `CI`, `STAGING`, `PRODUCTION`, `EXTERNAL_NOT_RUN`, or `UNPROVEN`.
 
 ## Delegation Prompt Template
 
