@@ -52,6 +52,8 @@ export function ScheduleLessonsPage() {
   const [form, setForm] = useState<ScheduleLessonFormState>(emptyForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const rows = lessonsQuery.data?.data ?? [];
   const references = referenceQuery.data ?? emptyReferences;
   const classNames = useMemo(() => new Map(references.classes.map((record) => [record.id, record.name])), [references.classes]);
@@ -159,6 +161,7 @@ export function ScheduleLessonsPage() {
     setEditingLesson(null);
     setForm(emptyForm);
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -174,6 +177,7 @@ export function ScheduleLessonsPage() {
       endsAt: toDateTimeInput(record.endsAt),
     });
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -181,19 +185,21 @@ export function ScheduleLessonsPage() {
     setIsFormOpen(false);
     setEditingLesson(null);
     setForm(emptyForm);
+    setFormError("");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!auth) return;
+    if (!auth || isSaving) return;
 
-    setError("");
+    setFormError("");
     const parsedForm = scheduleLessonFormSchema.safeParse(form);
     if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
+      setFormError(firstFormError(parsedForm.error));
       return;
     }
 
+    setIsSaving(true);
     try {
       const payload = toSchedulePayload(parsedForm.data);
       const savedLesson = editingLesson
@@ -203,7 +209,9 @@ export function ScheduleLessonsPage() {
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
     } catch (submitError) {
-      setError(apiErrorMessage(submitError, "Ders programı kaydedilemedi."));
+      setFormError(apiErrorMessage(submitError, "Ders programı kaydedilemedi."));
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -284,7 +292,9 @@ export function ScheduleLessonsPage() {
         onCancel={closeForm}
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
+        submitError={formError || undefined}
         submitLabel={editingLesson ? "Kaydet" : "Ekle"}
+        submitting={isSaving}
         title={editingLesson ? "Ders düzenle" : "Ders ekle"}
       >
         <Field label="Sınıf">

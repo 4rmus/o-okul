@@ -117,6 +117,10 @@ export function FinancePage() {
     paidAt: defaultLocalDateTime(),
   });
   const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [transactionFormError, setTransactionFormError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isTransactionSaving, setIsTransactionSaving] = useState(false);
   const listQueryKey = ["next-finance-payment-plans", tenantId];
   const plansQuery = useQuery({
     queryKey: ["next-finance-payment-plans", tenantId, listQuery, filters],
@@ -271,11 +275,13 @@ export function FinancePage() {
       status: row.installment.status,
     });
     setError("");
+    setFormError("");
   }
 
   function closeForm() {
     setEditingRow(null);
     setForm({ amount: "", dueDate: "", status: "PENDING" });
+    setFormError("");
   }
 
   function openTransactionForm(row: InstallmentRow) {
@@ -287,30 +293,33 @@ export function FinancePage() {
       paidAt: defaultLocalDateTime(),
     });
     setError("");
+    setTransactionFormError("");
   }
 
   function closeTransactionForm() {
     setCollectingRow(null);
     setTransactionForm({ amount: "", method: "CASH", note: "", paidAt: defaultLocalDateTime() });
+    setTransactionFormError("");
   }
 
   async function handleTransactionSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!auth || !collectingRow) return;
+    if (!auth || !collectingRow || isTransactionSaving) return;
 
     const amount = parseAmountInput(transactionForm.amount);
     if (!amount) {
-      setError("Tahsilat tutarı pozitif olmalıdır.");
+      setTransactionFormError("Tahsilat tutarı pozitif olmalıdır.");
       return;
     }
 
     const paidAt = toIsoDateTime(transactionForm.paidAt);
     if (!paidAt) {
-      setError("Tahsilat tarihi geçersiz.");
+      setTransactionFormError("Tahsilat tarihi geçersiz.");
       return;
     }
 
-    setError("");
+    setTransactionFormError("");
+    setIsTransactionSaving(true);
     try {
       await createPaymentTransaction(
         auth.accessToken,
@@ -328,7 +337,9 @@ export function FinancePage() {
       setReceiptRow(collectingRow);
       closeTransactionForm();
     } catch {
-      setError("Tahsilat kaydedilemedi.");
+      setTransactionFormError("Tahsilat kaydedilemedi.");
+    } finally {
+      setIsTransactionSaving(false);
     }
   }
 
@@ -345,15 +356,16 @@ export function FinancePage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!auth || !editingRow) return;
+    if (!auth || !editingRow || isSaving) return;
 
     const amount = Number(form.amount.replace(",", "."));
     if (!Number.isFinite(amount) || amount <= 0) {
-      setError("Tutar pozitif olmalıdır.");
+      setFormError("Tutar pozitif olmalıdır.");
       return;
     }
 
-    setError("");
+    setFormError("");
+    setIsSaving(true);
     try {
       await updateInstallment(auth.accessToken, editingRow.plan.id, editingRow.installment.id, {
         amount: Math.round(amount * 100),
@@ -363,7 +375,9 @@ export function FinancePage() {
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
     } catch {
-      setError("Taksit kaydedilemedi.");
+      setFormError("Taksit kaydedilemedi.");
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -431,6 +445,8 @@ export function FinancePage() {
         onChange={setForm}
         onSubmit={(event) => void handleSubmit(event)}
         open={Boolean(editingRow)}
+        submitError={formError}
+        submitting={isSaving}
       />
       <TransactionFormModal
         form={transactionForm}
@@ -438,6 +454,8 @@ export function FinancePage() {
         onChange={setTransactionForm}
         onSubmit={(event) => void handleTransactionSubmit(event)}
         open={Boolean(collectingRow)}
+        submitError={transactionFormError}
+        submitting={isTransactionSaving}
       />
       <ReceiptDialog
         installment={receiptRow?.installment}
@@ -533,12 +551,16 @@ function InstallmentFormModal({
   onChange,
   onSubmit,
   open,
+  submitError,
+  submitting,
 }: {
   form: InstallmentForm;
   onCancel(): void;
   onChange(form: InstallmentForm): void;
   onSubmit(event: FormEvent<HTMLFormElement>): void;
   open: boolean;
+  submitError: string;
+  submitting: boolean;
 }) {
   return (
     <FormModal
@@ -546,7 +568,9 @@ function InstallmentFormModal({
       onCancel={onCancel}
       onSubmit={onSubmit}
       open={open}
+      submitError={submitError || undefined}
       submitLabel="Kaydet"
+      submitting={submitting}
       title="Taksit düzenle"
     >
       <Field label="Tutar">
@@ -572,12 +596,16 @@ function TransactionFormModal({
   onChange,
   onSubmit,
   open,
+  submitError,
+  submitting,
 }: {
   form: TransactionForm;
   onCancel(): void;
   onChange(form: TransactionForm): void;
   onSubmit(event: FormEvent<HTMLFormElement>): void;
   open: boolean;
+  submitError: string;
+  submitting: boolean;
 }) {
   return (
     <FormModal
@@ -585,7 +613,9 @@ function TransactionFormModal({
       onCancel={onCancel}
       onSubmit={onSubmit}
       open={open}
+      submitError={submitError || undefined}
       submitLabel="Tahsilatı kaydet"
+      submitting={submitting}
       title="Tahsilat kaydet"
     >
       <Field label="Tutar">

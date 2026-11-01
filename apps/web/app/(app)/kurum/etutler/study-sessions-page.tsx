@@ -54,6 +54,8 @@ export function StudySessionsPage() {
   const [form, setForm] = useState<StudySessionFormState>(emptyForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const rows = sessionsQuery.data?.data ?? [];
   const references = referenceQuery.data ?? emptyReferences;
   const classNames = useMemo(() => new Map(references.classes.map((record) => [record.id, record.name])), [references.classes]);
@@ -167,6 +169,7 @@ export function StudySessionsPage() {
     setEditingSession(null);
     setForm(emptyForm);
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -184,6 +187,7 @@ export function StudySessionsPage() {
       endsAt: toDateTimeInput(record.endsAt),
     });
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -191,19 +195,21 @@ export function StudySessionsPage() {
     setIsFormOpen(false);
     setEditingSession(null);
     setForm(emptyForm);
+    setFormError("");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!auth) return;
+    if (!auth || isSaving) return;
 
-    setError("");
+    setFormError("");
     const parsedForm = studySessionFormSchema.safeParse(form);
     if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
+      setFormError(firstFormError(parsedForm.error));
       return;
     }
 
+    setIsSaving(true);
     try {
       const payload = toStudySessionPayload(parsedForm.data);
       const savedSession = editingSession
@@ -213,7 +219,9 @@ export function StudySessionsPage() {
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
     } catch (submitError) {
-      setError(apiErrorMessage(submitError, "Etüt kaydedilemedi."));
+      setFormError(apiErrorMessage(submitError, "Etüt kaydedilemedi."));
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -300,7 +308,9 @@ export function StudySessionsPage() {
         onCancel={closeForm}
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
+        submitError={formError || undefined}
         submitLabel={editingSession ? "Kaydet" : "Ekle"}
+        submitting={isSaving}
         title={editingSession ? "Etüt düzenle" : "Etüt ekle"}
       >
         <Field label="Sınıf">

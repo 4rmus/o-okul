@@ -53,6 +53,8 @@ export function GuardiansPage() {
   const [form, setForm] = useState<GuardianFormState>(emptyForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const rows = guardiansQuery.data?.data ?? [];
   const canRevealPhone = hasCapabilityForRoles(auth?.session.roles ?? [], "privacy:manage");
   const guardianPhoneReadyCount = rows.filter((guardian) => Boolean(guardian.phone || guardian.phoneMasked)).length;
@@ -169,6 +171,7 @@ export function GuardiansPage() {
     setEditingGuardian(null);
     setForm(emptyForm);
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -180,6 +183,7 @@ export function GuardiansPage() {
       phone: guardian.phone ?? "",
     });
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -187,19 +191,21 @@ export function GuardiansPage() {
     setIsFormOpen(false);
     setEditingGuardian(null);
     setForm(emptyForm);
+    setFormError("");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!auth) return;
+    if (!auth || isSaving) return;
 
-    setError("");
+    setFormError("");
     const parsedForm = guardianFormSchema.safeParse(form);
     if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
+      setFormError(firstFormError(parsedForm.error));
       return;
     }
 
+    setIsSaving(true);
     try {
       const savedGuardian = editingGuardian
         ? await updateGuardian(auth.accessToken, editingGuardian.id, {
@@ -211,7 +217,9 @@ export function GuardiansPage() {
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
     } catch {
-      setError("Veli kaydedilemedi.");
+      setFormError("Veli kaydedilemedi.");
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -287,7 +295,9 @@ export function GuardiansPage() {
         onCancel={closeForm}
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
+        submitError={formError || undefined}
         submitLabel={editingGuardian ? "Kaydet" : "Ekle"}
+        submitting={isSaving}
         title={editingGuardian ? "Veli düzenle" : "Veli ekle"}
       >
         <div className="next-guardian-form-grid">

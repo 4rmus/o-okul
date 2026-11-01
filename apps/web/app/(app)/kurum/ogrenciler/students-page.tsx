@@ -202,6 +202,7 @@ export function StudentsPage() {
   const [isGuardianInviting, setIsGuardianInviting] = useState(false);
   const [guardianInvitationResult, setGuardianInvitationResult] = useState<StudentGuardianInvitationBulkResult | null>(null);
   const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
   const rows = studentsQuery.data?.data ?? [];
   const sourceClassIds = [...new Set(rows.map((student) => student.classId).filter((classId): classId is string => Boolean(classId)))].sort();
 
@@ -408,6 +409,7 @@ export function StudentsPage() {
     setEditingStudent(null);
     setForm(emptyForm);
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -437,6 +439,7 @@ export function StudentsPage() {
       classId: student.classId ?? "",
     });
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -446,6 +449,7 @@ export function StudentsPage() {
     setForm(emptyForm);
     setEnrollmentAction(emptyEnrollmentAction);
     setError("");
+    setFormError("");
   }
 
   function openImportModal() {
@@ -471,10 +475,10 @@ export function StudentsPage() {
     if (!auth || isSaving) return;
 
     const wasEditing = editingStudent;
-    setError("");
+    setFormError("");
     const parsedForm = studentFormSchema.safeParse(form);
     if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
+      setFormError(firstFormError(parsedForm.error));
       return;
     }
 
@@ -482,7 +486,7 @@ export function StudentsPage() {
     try {
       const studentForm = parsedForm.data;
       if (!wasEditing && !studentForm.gradeLevelId) {
-        setError("Seviye seçilmelidir.");
+        setFormError("Seviye seçilmelidir.");
         return;
       }
       const savedStudent = wasEditing
@@ -517,7 +521,7 @@ export function StudentsPage() {
       void queryClient.invalidateQueries({ queryKey: ["next-student-detail"] });
       closeForm();
     } catch {
-      setError("Öğrenci kaydedilemedi. TC geçerli ve benzersiz olmalı, e-posta geçerli olmalı, kota dolmamalı.");
+      setFormError("Öğrenci kaydedilemedi. TC geçerli ve benzersiz olmalı, e-posta geçerli olmalı, kota dolmamalı.");
     } finally {
       setIsSaving(false);
     }
@@ -544,7 +548,7 @@ export function StudentsPage() {
   async function handleRenewEnrollment() {
     if (!auth || !editingStudent || isEnrollmentSaving) return;
 
-    setError("");
+    setFormError("");
     setIsEnrollmentSaving(true);
     try {
       await renewStudentEnrollment(auth.accessToken, editingStudent.id, {
@@ -555,7 +559,7 @@ export function StudentsPage() {
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       void queryClient.invalidateQueries({ queryKey: ["next-student-detail"] });
     } catch {
-      setError("Kayıt yenileme yapılamadı.");
+      setFormError("Kayıt yenileme yapılamadı.");
     } finally {
       setIsEnrollmentSaving(false);
     }
@@ -564,7 +568,7 @@ export function StudentsPage() {
   async function handleTransferEnrollment() {
     if (!auth || !editingStudent || isEnrollmentSaving) return;
 
-    setError("");
+    setFormError("");
     setIsEnrollmentSaving(true);
     try {
       await transferStudentEnrollment(auth.accessToken, editingStudent.id, {
@@ -579,7 +583,7 @@ export function StudentsPage() {
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       void queryClient.invalidateQueries({ queryKey: ["next-student-detail"] });
     } catch {
-      setError("Nakil işlemi yapılamadı.");
+      setFormError("Nakil işlemi yapılamadı.");
     } finally {
       setIsEnrollmentSaving(false);
     }
@@ -994,7 +998,9 @@ export function StudentsPage() {
         onCancel={closeForm}
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
+        submitError={formError || undefined}
         submitLabel={isSaving ? "Kaydediliyor…" : editingStudent ? "Kaydet" : "Ekle"}
+        submitting={isSaving}
         title={editingStudent ? "Öğrenci düzenle" : "Öğrenci ekle"}
       >
         <Field label="Ad">

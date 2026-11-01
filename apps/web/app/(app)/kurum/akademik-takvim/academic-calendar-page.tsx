@@ -87,6 +87,10 @@ export function AcademicCalendarPage() {
   const [isYearFormOpen, setIsYearFormOpen] = useState(false);
   const [isTermFormOpen, setIsTermFormOpen] = useState(false);
   const [error, setError] = useState("");
+  const [yearFormError, setYearFormError] = useState("");
+  const [termFormError, setTermFormError] = useState("");
+  const [isYearSaving, setIsYearSaving] = useState(false);
+  const [isTermSaving, setIsTermSaving] = useState(false);
 
   const yearSummaryItems: OperationSummaryItem[] = [
     {
@@ -297,6 +301,7 @@ export function AcademicCalendarPage() {
     setEditingYear(null);
     setYearForm(emptyYearForm);
     setError("");
+    setYearFormError("");
     setIsYearFormOpen(true);
   }
 
@@ -309,6 +314,7 @@ export function AcademicCalendarPage() {
       isActive: record.isActive,
     });
     setError("");
+    setYearFormError("");
     setIsYearFormOpen(true);
   }
 
@@ -316,6 +322,7 @@ export function AcademicCalendarPage() {
     setIsYearFormOpen(false);
     setEditingYear(null);
     setYearForm(emptyYearForm);
+    setYearFormError("");
   }
 
   function openTermCreateForm() {
@@ -326,6 +333,7 @@ export function AcademicCalendarPage() {
       academicYearId: years[0]?.id ?? "",
     });
     setError("");
+    setTermFormError("");
     setIsTermFormOpen(true);
   }
 
@@ -339,6 +347,7 @@ export function AcademicCalendarPage() {
       isActive: record.isActive,
     });
     setError("");
+    setTermFormError("");
     setIsTermFormOpen(true);
   }
 
@@ -346,19 +355,21 @@ export function AcademicCalendarPage() {
     setIsTermFormOpen(false);
     setEditingTerm(null);
     setTermForm(emptyTermForm);
+    setTermFormError("");
   }
 
   async function handleYearSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!auth) return;
+    if (!auth || isYearSaving) return;
 
-    setError("");
+    setYearFormError("");
     const parsedForm = academicYearFormSchema.safeParse(yearForm);
     if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
+      setYearFormError(firstFormError(parsedForm.error));
       return;
     }
 
+    setIsYearSaving(true);
     try {
       const savedYear = editingYear
         ? await updateAcademicYear(auth.accessToken, editingYear.id, parsedForm.data)
@@ -368,21 +379,24 @@ export function AcademicCalendarPage() {
       void queryClient.invalidateQueries({ queryKey: termListQueryKey });
       closeYearForm();
     } catch {
-      setError("Akademik yıl kaydedilemedi.");
+      setYearFormError("Akademik yıl kaydedilemedi.");
+    } finally {
+      setIsYearSaving(false);
     }
   }
 
   async function handleTermSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!auth) return;
+    if (!auth || isTermSaving) return;
 
-    setError("");
+    setTermFormError("");
     const parsedForm = academicTermFormSchema.safeParse(termForm);
     if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
+      setTermFormError(firstFormError(parsedForm.error));
       return;
     }
 
+    setIsTermSaving(true);
     try {
       const savedTerm = editingTerm
         ? await updateAcademicTerm(auth.accessToken, editingTerm.id, parsedForm.data)
@@ -391,7 +405,9 @@ export function AcademicCalendarPage() {
       void queryClient.invalidateQueries({ queryKey: termListQueryKey });
       closeTermForm();
     } catch {
-      setError("Akademik dönem kaydedilemedi.");
+      setTermFormError("Akademik dönem kaydedilemedi.");
+    } finally {
+      setIsTermSaving(false);
     }
   }
 
@@ -530,7 +546,9 @@ export function AcademicCalendarPage() {
         onCancel={closeYearForm}
         onSubmit={(event) => void handleYearSubmit(event)}
         open={isYearFormOpen}
+        submitError={yearFormError || undefined}
         submitLabel={editingYear ? "Kaydet" : "Ekle"}
+        submitting={isYearSaving}
         title={editingYear ? "Akademik yıl düzenle" : "Akademik yıl ekle"}
       >
         <Field label="Akademik yıl adı" description="Örn. 2026-2027">
@@ -570,7 +588,9 @@ export function AcademicCalendarPage() {
         onCancel={closeTermForm}
         onSubmit={(event) => void handleTermSubmit(event)}
         open={isTermFormOpen}
+        submitError={termFormError || undefined}
         submitLabel={editingTerm ? "Kaydet" : "Ekle"}
+        submitting={isTermSaving}
         title={editingTerm ? "Dönem düzenle" : "Dönem ekle"}
       >
         <Field label="Akademik yıl" description="Dönemin bağlı olduğu akademik yıl.">

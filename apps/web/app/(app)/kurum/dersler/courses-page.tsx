@@ -41,6 +41,8 @@ export function CoursesPage() {
   const [form, setForm] = useState<CourseFormState>(emptyForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const rows = coursesQuery.data?.data ?? [];
   const codedCourseCount = rows.filter((record) => Boolean(record.code)).length;
   const courseSummaryItems: OperationSummaryItem[] = [
@@ -147,6 +149,7 @@ export function CoursesPage() {
     setEditingCourse(null);
     setForm(emptyForm);
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -157,6 +160,7 @@ export function CoursesPage() {
       code: record.code ? formatOutcomeCode(record.code) : "",
     });
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -164,19 +168,21 @@ export function CoursesPage() {
     setIsFormOpen(false);
     setEditingCourse(null);
     setForm(emptyForm);
+    setFormError("");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!auth) return;
+    if (!auth || isSaving) return;
 
-    setError("");
+    setFormError("");
     const parsedForm = courseFormSchema.safeParse(form);
     if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
+      setFormError(firstFormError(parsedForm.error));
       return;
     }
 
+    setIsSaving(true);
     try {
       const savedCourse = editingCourse
         ? await updateCourse(auth.accessToken, editingCourse.id, parsedForm.data)
@@ -185,7 +191,9 @@ export function CoursesPage() {
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
     } catch {
-      setError("Ders kaydedilemedi.");
+      setFormError("Ders kaydedilemedi.");
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -260,7 +268,9 @@ export function CoursesPage() {
         onCancel={closeForm}
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
+        submitError={formError || undefined}
         submitLabel={editingCourse ? "Kaydet" : "Ekle"}
+        submitting={isSaving}
         title={editingCourse ? "Ders düzenle" : "Ders ekle"}
       >
         <Field label="Ders adı">

@@ -105,6 +105,7 @@ export function AnnouncementsPage() {
   const [isPreviewingSms, setIsPreviewingSms] = useState(false);
   const [isSendingSms, setIsSendingSms] = useState(false);
   const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
   const [smsError, setSmsError] = useState("");
   const [deliveryStatus, setDeliveryStatus] = useState("");
   const [deliveryError, setDeliveryError] = useState("");
@@ -233,22 +234,24 @@ export function AnnouncementsPage() {
   function openCreateForm() {
     setForm(emptyForm);
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
   function closeForm() {
     setIsFormOpen(false);
     setForm(emptyForm);
+    setFormError("");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!auth) return;
+    if (!auth || isPublishing) return;
 
-    setError("");
+    setFormError("");
     const parsedForm = announcementFormSchema.safeParse(form);
     if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
+      setFormError(firstFormError(parsedForm.error));
       return;
     }
 
@@ -282,7 +285,7 @@ export function AnnouncementsPage() {
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
     } catch (submitError) {
-      setError(apiErrorMessage(submitError, "Duyuru yayınlanamadı."));
+      setFormError(apiErrorMessage(submitError, "Duyuru yayınlanamadı."));
     } finally {
       setIsPublishing(false);
     }
@@ -623,6 +626,7 @@ export function AnnouncementsPage() {
         onCancel={closeForm}
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
+        submitError={formError || undefined}
         submitLabel="Yayınla"
         submitting={isPublishing}
         title="Duyuru ekle"
