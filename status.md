@@ -343,6 +343,10 @@ Güncel sıralama `docs/ozel-k12-strateji-ve-yol-haritasi-plan.md` §11 (DEC-202
    sözleşmesinin Playwright adımı iki işte koşuyor (~48 sn; `check-karne-visual-contract.mjs` kilitliyor, ürün
    kararı), e2e matrisini 4 parçaya bölme (kritik yol 7,2 dk → ~4 dk tahmini, UNPROVEN; `ciCommandPassedInJobs`
    eşleşmesi gerektirir), `ui-ux-rc` fail-open koşulu (zorunlu check koşulu, ürün sahibi onayı ister).
+   İlk koşu (CI, 2026-11-01, main `9b6c67556`, run `41300340856`): `Visual goldens` işi 3 dk 5 sn'de bitti
+   (kurulum 47 sn, Playwright 2 dk 13 sn), 31/31 test PASS, artifact'taki 14 `*-linux.png` repodakilerle bayt bayt
+   aynı (golden değişikliği yokken iş hiçbir dosyayı değiştirmiyor). Golden değişen bir PR'da tek turda yenileme
+   henüz denenmedi (UNPROVEN).
 Önceki plandan devralınan kalemler (`docs/account-management-architecture-plan.md` bölüm 6). Durumlar
 2026-10-15'te main `c619b8f7e` üzerinde kod okumayla yeniden doğrulandı (LOCAL_STATIC):
 
