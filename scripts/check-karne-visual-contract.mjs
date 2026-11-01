@@ -67,7 +67,7 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", files.visualSpec, [
   'expect(karneBox?.width).toBe(595)',
   'expect(karneBox?.height).toBeGreaterThanOrEqual(842)',
   'const karneClip = { height: 842, width: 595',
-  'expect(page).toHaveScreenshot("student-report-card-1024.png"',
+  'expect.soft(page).toHaveScreenshot("student-report-card-1024.png"',
   'clip: karneClip',
   'maxDiffPixelRatio: 0.005',
   'page.emulateMedia({ media: "print" })',
