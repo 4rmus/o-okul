@@ -97,10 +97,12 @@ export function PortalWorkspace({ ariaLabel, main, side }: PortalWorkspaceProps)
 // Portal durumları ortak LoadingState/EmptyState primitive'lerini kullanır (Berrak §6).
 export function PortalStatePanel({
   description,
+  onRetry,
   state,
   title,
 }: {
   description: string;
+  onRetry?: () => void;
   state: "empty" | "error" | "loading";
   title: string;
 }) {
@@ -114,6 +116,7 @@ export function PortalStatePanel({
       data-state={state}
       description={description}
       hint={state === "error" ? "Kontrol gerekiyor" : "Boş durum"}
+      primaryAction={state === "error" && onRetry ? { label: "Tekrar dene", onClick: onRetry } : undefined}
       role={state === "error" ? "alert" : "status"}
       title={title}
     />

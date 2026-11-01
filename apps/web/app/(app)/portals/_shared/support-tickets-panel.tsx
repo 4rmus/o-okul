@@ -46,6 +46,7 @@ export function SupportTicketsPanel({
   onTicketChange,
   readOnly = false,
   readOnlyMessage = "Yalnızca görüntüleme sırasında destek talebi açılamaz.",
+  studentOptions,
 }: {
   tickets: SupportTicketRecord[];
   onCreate?: (input: SupportTicketFormPayload) => void | Promise<unknown>;
@@ -54,6 +55,8 @@ export function SupportTicketsPanel({
   onTicketChange?: () => void | Promise<unknown>;
   readOnly?: boolean;
   readOnlyMessage?: string;
+  /** Verilirse talep isteğe bağlı olarak bir öğrenciyle ilişkilendirilebilir (öğretmen portalı). */
+  studentOptions?: Array<{ id: string; label: string }>;
 }) {
   const [form, setForm] = useState<SupportTicketFormState>(emptySupportTicketForm);
   const [error, setError] = useState("");
@@ -195,10 +198,20 @@ export function SupportTicketsPanel({
               <option value="HIGH">Yüksek</option>
             </Select>
           </Field>
+          {studentOptions ? (
+            <Field label="İlgili öğrenci">
+              <Select value={form.studentId} onChange={(event) => setForm((current) => ({ ...current, studentId: event.target.value }))}>
+                <option value="">Öğrenci seçilmedi</option>
+                {studentOptions.map((option) => (
+                  <option key={option.id} value={option.id}>{option.label}</option>
+                ))}
+              </Select>
+            </Field>
+          ) : null}
           <Button disabled={!onCreate} type="submit">Destek talebi aç</Button>
         </form>
       )}
-      {error ? <p className="next-form-error">{error}</p> : null}
+      {error ? <p className="next-form-error" role="alert">{error}</p> : null}
       <DataTable
         caption="Destek talepleri"
         columns={columns}

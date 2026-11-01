@@ -43,6 +43,7 @@ import {
   type TeacherNoteFormPayload,
 } from "../../../src/form-validation.js";
 import { useAuth } from "../../providers.js";
+import { formatDateKey, istanbulDateKey, readDateKeyParam } from "../_shared/istanbul-date.js";
 import { TeacherAttendancePanel, TeacherNotesPanel } from "./_shared/activity-panels.js";
 import { AnnouncementsPanel } from "./_shared/announcements-panel.js";
 import { TeacherHomeworkPanel, TeacherHomeworkSubmissionsPanel, TeacherMaterialAssignmentsPanel } from "./_shared/homework-panels.js";
@@ -147,11 +148,15 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
     enabled: canReadPortal,
     refetchOnWindowFocus: false,
   });
-  const today = todayInputValue();
+  // Bugün ekranındaki "Yoklama al" bağlantısı dersin sınıfını ve gününü taşır.
+  const requestedAttendanceClassId = searchParams.get("classId")?.trim() ?? "";
+  const requestedAttendanceDate = readDateKeyParam(searchParams.get("date"));
   const [attendanceForm, setAttendanceForm] = useState<TeacherAttendanceForm>({
     classId: "",
-    date: today,
+    date: requestedAttendanceDate || istanbulDateKey(),
   });
+  const [attendanceNotice, setAttendanceNotice] = useState("");
+  const [isSavingAttendance, setIsSavingAttendance] = useState(false);
   const [attendanceStatuses, setAttendanceStatuses] = useState<Record<string, AttendanceStatus | "">>({});
   const [noteForm, setNoteForm] = useState<TeacherNoteFormPayload>({
     studentId: "",
@@ -184,7 +189,8 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
     const visibleTermIds = new Set(query.data.schedule.map((lesson) => lesson.termId).filter((termId): termId is string => Boolean(termId)));
     setAttendanceForm((current) => ({
       ...current,
-      classId: current.classId || firstClassId,
+      classId: current.classId
+        || (query.data.attendanceClassIds.includes(requestedAttendanceClassId) ? requestedAttendanceClassId : firstClassId),
     }));
     setNoteForm((current) => ({
       ...current,
@@ -199,7 +205,11 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
       courseId: current.courseId && visibleCourseIds.has(current.courseId) ? current.courseId : firstCourseId,
       termId: current.termId && visibleTermIds.has(current.termId) ? current.termId : firstTermId,
     }));
-  }, [query.data, query.isSuccess, requestedStudentId]);
+  }, [query.data, query.isSuccess, requestedAttendanceClassId, requestedStudentId]);
+
+  useEffect(() => {
+    setAttendanceNotice("");
+  }, [attendanceForm.classId, attendanceForm.date]);
 
   const data = query.data;
   const students = data?.students ?? [];
@@ -213,6 +223,7 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
   const attendanceClassIds = new Set(data?.attendanceClassIds ?? []);
   const attendanceClassOptions = (data?.classes ?? []).filter((record) => attendanceClassIds.has(record.id));
   const attendanceRosterComplete = attendanceRoster.length > 0 && attendanceRoster.every((student) => Boolean(attendanceStatuses[student.id]));
+  const unmarkedAttendanceCount = attendanceRoster.filter((student) => !attendanceStatuses[student.id]).length;
   const attendanceColumns: Array<DataTableColumn<AttendanceDailyRosterStudent>> = [
     {
       key: "student",
@@ -282,7 +293,6 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
   const selectedTermId = noteForm.termId || materialForm.termId || reportQuery.data?.reportContext?.termId;
   const selectedCourseName = selectedCourseId ? courseNameById.get(selectedCourseId) : undefined;
   const selectedTermName = selectedTermId ? termNameById.get(selectedTermId) : undefined;
-  const openSupportTickets = (data?.supportTickets ?? []).filter(isOpenSupportTicket).length;
   const selectedStudentLabel = selectedStudent ? formatTeacherStudentLabel(selectedStudent, classNameById) : "Seçili öğrenci yok";
   const historyQuery = useQuery({
     queryKey: ["next-teacher-student-history", auth?.session.userId ?? "anonymous", selectedStudentId ?? "none", rolePreviewToken || "session"],
@@ -314,7 +324,7 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
         <PortalStatePanel
           state="loading"
           title="Öğretmen portal verileri hazırlanıyor"
-          description="Ders programı, öğrenci kapsamı, yoklama ve rapor bağlamı güvenli oturumdan yükleniyor."
+          description="Ders programı, öğrenciler, yoklama ve raporlar yükleniyor."
         />
       </PortalFrame>
     );
@@ -326,7 +336,8 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
         <PortalStatePanel
           state="error"
           title="Öğretmen portal verisi alınamadı"
-          description="Portal verileri gösterilemiyor. Öğrenci, yoklama ve rapor ayrıntıları hata durumunda açılmaz."
+          description="Portal bilgileri şu anda gösterilemiyor. Bağlantınızı kontrol edip tekrar deneyin."
+          onRetry={() => void query.refetch()}
         />
       </PortalFrame>
     );
@@ -357,11 +368,14 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
     }
 
     setActionError("");
+    setAttendanceNotice("");
     if (!attendanceForm.classId || !attendanceForm.date || !attendanceRosterComplete) {
       setActionError("Sınıf listesindeki tüm öğrencilerin durumu seçilmelidir.");
       return;
     }
+    if (isSavingAttendance) return;
 
+    setIsSavingAttendance(true);
     try {
       const response = await saveDailyAttendance(auth.accessToken, {
         classId: attendanceForm.classId,
@@ -387,8 +401,12 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
       await queryClient.invalidateQueries({
         queryKey: ["next-teacher-daily-attendance", auth.session.userId, attendanceForm.classId, attendanceForm.date],
       });
+      const savedClassName = attendanceClassOptions.find((record) => record.id === attendanceForm.classId)?.name ?? "Sınıf";
+      setAttendanceNotice(`${savedClassName} yoklaması kaydedildi (${formatDateKey(attendanceForm.date)}).`);
     } catch {
       setActionError("Yoklama kaydedilemedi.");
+    } finally {
+      setIsSavingAttendance(false);
     }
   }
 
@@ -597,7 +615,6 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
             gradeLevelNames={gradeLevelNameById}
             mode={isRolePreview ? "read-only" : "write"}
             net={selectedReportTotal?.net}
-            openSupportTicketCount={openSupportTickets}
             questionCount={reportQuestionCount(selectedReportTotal)}
             selectedClass={selectedClass}
             selectedStudent={selectedStudent}
@@ -647,7 +664,19 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
                 loading={teacherDailyAttendanceQuery.isPending}
                 rows={attendanceRoster}
               />
-              <Button disabled={!attendanceRosterComplete} type="submit">Yoklamayı kaydet</Button>
+              {unmarkedAttendanceCount > 0 ? (
+                <p className="next-field-hint" id="teacher-attendance-unmarked">{unmarkedAttendanceCount} öğrenci için durum seçilmedi.</p>
+              ) : null}
+              {attendanceNotice ? <p className="next-field-hint" role="status">{attendanceNotice}</p> : null}
+              <Button
+                aria-describedby={unmarkedAttendanceCount > 0 ? "teacher-attendance-unmarked" : undefined}
+                disabled={!attendanceRosterComplete}
+                loading={isSavingAttendance}
+                loadingLabel="Yoklama kaydediliyor"
+                type="submit"
+              >
+                Yoklamayı kaydet
+              </Button>
             </Panel>
             <Panel
               as="form"
@@ -814,17 +843,14 @@ export function TeacherPortalPage({ view }: { view: TeacherPortalView }) {
             readOnly={isRolePreview}
             tickets={data?.supportTickets ?? []}
             onTicketChange={() => query.refetch()}
+            studentOptions={students.map((student) => ({ id: student.id, label: formatTeacherStudentLabel(student, classNameById) }))}
             onCreate={(input) =>
               auth && !isRolePreview
-                ? createPortalSupportTicket(auth.accessToken, "me/teacher/support-tickets", {
-                    ...input,
-                    studentId: selectedStudent?.id ?? "",
-                    campusId: selectedClass?.campusId ?? "",
-                    classId: selectedClass?.id ?? "",
-                    courseId: noteForm.courseId || materialForm.courseId,
-                    gradeLevelId: selectedClass?.gradeLevelId ?? "",
-                    termId: noteForm.termId || materialForm.termId,
-                  }).then(() => query.refetch())
+                ? createPortalSupportTicket(
+                    auth.accessToken,
+                    "me/teacher/support-tickets",
+                    withTeacherTicketStudentContext(input, students, data?.classes ?? []),
+                  ).then(() => query.refetch())
                 : undefined
             }
           />
@@ -1182,10 +1208,6 @@ function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("tr-TR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
 }
 
-function isOpenSupportTicket(ticket: SupportTicketRecord) {
-  return ticket.status === "OPEN" || ticket.status === "IN_PROGRESS";
-}
-
 function teacherPortalHref(path: string, isRolePreview: boolean) {
   return isRolePreview ? `${path}?rolePreview=1` : path;
 }
@@ -1235,8 +1257,23 @@ function resolveRequestedStudentId(
   return firstStudentId;
 }
 
-function todayInputValue() {
-  return new Date().toISOString().slice(0, 10);
+// Destek talebi yalnız öğretmenin açıkça seçtiği öğrenciye bağlanır; seçilmezse öğrenci ve sınıf bağlamı gönderilmez.
+function withTeacherTicketStudentContext(
+  input: SupportTicketFormPayload,
+  students: StudentRecord[],
+  classes: ClassRecord[],
+): SupportTicketFormPayload {
+  const student = input.studentId ? students.find((record) => record.id === input.studentId) : undefined;
+  const studentClass = student?.classId ? classes.find((record) => record.id === student.classId) : undefined;
+  return {
+    ...input,
+    campusId: studentClass?.campusId ?? "",
+    classId: studentClass?.id ?? "",
+    courseId: "",
+    gradeLevelId: studentClass?.gradeLevelId ?? "",
+    studentId: student?.id ?? "",
+    termId: "",
+  };
 }
 
 function toTime(value: string | undefined) {

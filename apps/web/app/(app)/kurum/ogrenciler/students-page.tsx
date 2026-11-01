@@ -46,6 +46,7 @@ import {
 } from "../../../../src/cursor-list-controls.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
 import { formatAttendanceSummary } from "../../_shared/attendance-summary.js";
+import { istanbulDateKey } from "../../_shared/istanbul-date.js";
 import { formatPercentNumber, formatStudentProgressSummary, isComparableStudentProgress, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import { readReportExamId } from "../../_shared/report-exam-selection.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
@@ -196,7 +197,7 @@ export function StudentsPage() {
   const [enrollmentAction, setEnrollmentAction] = useState<EnrollmentActionState>(emptyEnrollmentAction);
   const [bulkEnrollmentAction, setBulkEnrollmentAction] = useState<BulkEnrollmentActionState>({
     ...emptyBulkEnrollmentAction,
-    startsAt: new Date().toISOString().slice(0, 10),
+    startsAt: istanbulDateKey(),
   });
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [isGuardianInviting, setIsGuardianInviting] = useState(false);
@@ -435,7 +436,7 @@ export function StudentsPage() {
       status: student.status,
     });
     setEnrollmentAction({
-      startsAt: new Date().toISOString().slice(0, 10),
+      startsAt: istanbulDateKey(),
       classId: student.classId ?? "",
     });
     setError("");

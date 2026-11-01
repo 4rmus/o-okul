@@ -245,7 +245,8 @@ export function TeacherFocusPanel({
   gradeLevelNames: ReadonlyMap<string, string>;
   mode: "read-only" | "write";
   net?: number;
-  openSupportTicketCount: number;
+  /** Destek talepleri yalnız Destek görünümünde yüklenir; yüklenmediyse sayı bilinmez ve "-" gösterilir. */
+  openSupportTicketCount?: number;
   questionCount?: number;
   selectedClass?: ClassRecord;
   selectedStudent?: StudentRecord;
@@ -257,7 +258,7 @@ export function TeacherFocusPanel({
   const campusName = selectedClass?.campusId ? campusNames.get(selectedClass.campusId) ?? "Kampüs bilgisi yok" : "-";
   const gradeLevelName = selectedClass?.gradeLevelId ? gradeLevelNames.get(selectedClass.gradeLevelId) ?? "Seviye bilgisi yok" : "-";
   const modeLabel = mode === "read-only" ? "Yalnızca görüntüleme" : "İşlem yapılabilir";
-  const supportTicketStatus = openSupportTicketCount > 0 ? `${openSupportTicketCount} açık` : "Açık talep yok";
+  const supportTicketStatus = openSupportTicketCount === undefined ? "-" : openSupportTicketCount > 0 ? `${openSupportTicketCount} açık` : "Açık talep yok";
 
   return (
     <Panel

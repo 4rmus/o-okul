@@ -44,6 +44,7 @@ import { ReportPanel } from "./_shared/report-panel.js";
 import { GuardianRelationsPanel, ProfilePanel, StudentFocusPanel, StudentHistoryPanel } from "./_shared/student-panels.js";
 import { SupportTicketsPanel } from "./_shared/support-tickets-panel.js";
 import { formatAttendanceSummary } from "../_shared/attendance-summary.js";
+import { istanbulDateKey } from "../_shared/istanbul-date.js";
 import { readReportExamId } from "../_shared/report-exam-selection.js";
 import { formatPercentNumber, formatStudentProgressSummary, reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
 
@@ -75,7 +76,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
         <PortalStatePanel
           state="loading"
           title="Öğrenci portal verileri hazırlanıyor"
-          description="Devamsızlık, ödev, duyuru ve son sınav bağlamı güvenli oturum kapsamından yükleniyor."
+          description="Devamsızlık, ödev, duyuru ve son sınav bilgilerin yükleniyor."
         />
       </PortalFrame>
     );
@@ -87,7 +88,8 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
         <PortalStatePanel
           state="error"
           title="Öğrenci portal verisi alınamadı"
-          description="Portal verileri şu anda gösterilemiyor. Bu ekran ham kişisel veri açmadan güvenli hata durumunda kalır."
+          description="Bilgilerin şu anda gösterilemiyor. Bağlantını kontrol edip tekrar dene."
+          onRetry={() => void query.refetch()}
         />
       </PortalFrame>
     );
@@ -492,6 +494,3 @@ function studentPortalContext(view: StudentPortalView, label: string, isRolePrev
   };
 }
 
-function istanbulDateKey(date: Date) {
-  return new Intl.DateTimeFormat("en-CA", { day: "2-digit", month: "2-digit", timeZone: "Europe/Istanbul", year: "numeric" }).format(date);
-}

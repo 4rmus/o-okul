@@ -6675,6 +6675,8 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await page.getByLabel("Destek talepleri").getByRole("textbox", { exact: true, name: "Konu" }).fill("Portal raporu");
   await page.getByLabel("Destek talepleri").getByRole("textbox", { exact: true, name: "Mesaj" }).fill("Sınıf raporu geç yükleniyor.");
   await page.getByLabel("Destek talepleri").getByRole("combobox", { exact: true, name: "Öncelik" }).selectOption("HIGH");
+  // Öğrenci bağlamı yalnız açıkça seçilince gönderilir; ders/dönem tahmin edilmez.
+  await page.getByLabel("Destek talepleri").getByRole("combobox", { exact: true, name: "İlgili öğrenci" }).selectOption("student-a");
   await page.getByLabel("Destek talepleri").getByRole("button", { name: "Destek talebi aç" }).click();
   await expect.poll(() => lastPortalTeacherSupportTicketBody?.studentId ?? "").toBe("student-a");
   expect(lastPortalTeacherSupportTicketBody).toMatchObject({
@@ -6682,9 +6684,9 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
     campusId: "campus-main",
     gradeLevelId: "grade-8",
     classId: "class-a",
-    courseId: "course-math",
-    termId: "term-2026-spring",
   });
+  expect(lastPortalTeacherSupportTicketBody?.courseId ?? "").toBe("");
+  expect(lastPortalTeacherSupportTicketBody?.termId ?? "").toBe("");
   await expect(page.getByLabel("Destek talepleri").getByRole("cell", { exact: true, name: "Portal raporu" })).toBeVisible();
   await openPortalRoute(page, "Öğretmen Paneli", "Sınav Raporu", /\/ogretmen\/raporlar$/);
   const teacherReportSummary = page.getByRole("region", { name: "Portal rapor özeti" });
