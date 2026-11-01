@@ -1,9 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, Panel, StatusBadge, type StatusBadgeProps } from "@o-okul/ui";
+import { Alert, Button, Panel, StatusBadge, type StatusBadgeProps } from "@o-okul/ui";
 import { type NotificationDeviceTokenRecord } from "@o-okul/shared-types";
 import { apiBaseUrl, apiRequest } from "../../../src/api-client.js";
+
+/** Requests the browser permission, subscribes the service worker and registers the device at `/me/notification-devices`. */
+export async function registerWebPushDevice(accessToken: string): Promise<NotificationDeviceTokenRecord> {
+  const token = await resolveWebPushToken();
+  return apiRequest<NotificationDeviceTokenRecord>(accessToken, `${apiBaseUrl}/me/notification-devices`, {
+    body: JSON.stringify({
+      provider: "web-push",
+      token,
+      platform: "web",
+    }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+}
+
 export function PushDevicePanel({ accessToken }: { accessToken: string }) {
   const [devices, setDevices] = useState<NotificationDeviceTokenRecord[]>([]);
   const [status, setStatus] = useState("Hazır");
@@ -26,16 +41,7 @@ export function PushDevicePanel({ accessToken }: { accessToken: string }) {
   async function handleRegister() {
     setIsSaving(true);
     try {
-      const token = await resolveWebPushToken();
-      const record = await apiRequest<NotificationDeviceTokenRecord>(accessToken, `${apiBaseUrl}/me/notification-devices`, {
-        body: JSON.stringify({
-          provider: "web-push",
-          token,
-          platform: "web",
-        }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      });
+      const record = await registerWebPushDevice(accessToken);
       setDevices((current) => [record, ...current.filter((device) => device.id !== record.id)]);
       setStatus("Push açık");
     } catch (error) {
@@ -93,6 +99,69 @@ export function PushDevicePanel({ accessToken }: { accessToken: string }) {
   );
 }
 
+/**
+ * UAT F-29: a compact reminder inside a portal when web push is enabled for this build but this browser has not
+ * granted the permission yet. It reuses the same registration flow as the sidebar "Bildirim cihazı" panel.
+ * Rendered only on the client; hidden when the flag is off, the browser lacks Notification, or permission is granted.
+ */
+export function PushPermissionPrompt({ accessToken }: { accessToken: string }) {
+  const [permission, setPermission] = useState<NotificationPermission | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    setPermission(readPushPermissionState());
+  }, []);
+
+  // Hidden when the flag is off / unsupported (null) or the permission was already granted before this visit.
+  if (!permission || (permission === "granted" && !message)) return null;
+
+  async function handleEnable() {
+    setIsSaving(true);
+    setMessage("");
+    try {
+      await registerWebPushDevice(accessToken);
+      setMessage("Push açıldı; bu cihaz bildirim alacak.");
+      setPermission("granted");
+    } catch (error) {
+      setMessage(error instanceof Error ? humanizePushError(error.message) : "Push açılamadı");
+      setPermission(readPushPermissionState() ?? "default");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <Alert
+      aria-label="Push bildirim hatırlatması"
+      className="next-push-prompt"
+      title={permission === "granted" ? "Push bildirimleri açık" : "Push bildirimleri bu cihazda kapalı"}
+      tone={permission === "granted" ? "success" : "info"}
+    >
+      {permission === "denied" ? (
+        <span>Tarayıcı bu adres için bildirimi engellemiş. İzni tarayıcı ayarlarından açınca sol menüdeki &quot;Bildirim cihazı&quot; bölümünden kaydedebilirsiniz.</span>
+      ) : null}
+      {permission === "default" ? (
+        <>
+          <span>Devamsızlık, ödeme ve duyuru bildirimlerini bu cihazda almak için push iznini açın. Aynı ayar sol menüdeki &quot;Bildirim cihazı&quot; bölümünde de bulunur.</span>
+          <Button disabled={isSaving} onClick={() => void handleEnable()} size="sm" type="button">
+            Push iznini aç
+          </Button>
+        </>
+      ) : null}
+      {message ? <span className="next-push-prompt__message">{message}</span> : null}
+    </Alert>
+  );
+}
+
+function readPushPermissionState(): NotificationPermission | null {
+  if (!isWebPushCapabilityEnabled()) return null;
+  if (typeof window === "undefined" || !("Notification" in window)) return null;
+  // A test double may expose `requestPermission` without `permission`; treat that as not granted yet.
+  const permission = (window.Notification as { permission?: NotificationPermission }).permission;
+  return permission ?? "default";
+}
+
 function getPushStatusTone(status: string, activeDeviceCount: number, isSaving: boolean): StatusBadgeProps["tone"] {
   if (isSaving) return "info";
   if (status === "Push açık" || (status === "Hazır" && activeDeviceCount > 0)) return "success";
@@ -127,7 +196,15 @@ function readWebPushPublicKey(): string {
 }
 
 export function isWebPushCapabilityEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_WEB_PUSH_ENABLED === "true" && Boolean(readWebPushPublicKey().trim());
+  return readWebPushEnabledFlag() === "true" && Boolean(readWebPushPublicKey().trim());
+}
+
+// Mirrors the public-key override above so e2e builds without the env flag can exercise the push UI.
+function readWebPushEnabledFlag(): string {
+  const override = typeof window === "undefined"
+    ? undefined
+    : (window as Window & { __O_OKUL_WEB_PUSH_ENABLED__?: string }).__O_OKUL_WEB_PUSH_ENABLED__;
+  return override ?? process.env.NEXT_PUBLIC_WEB_PUSH_ENABLED ?? "";
 }
 
 function urlBase64ToUint8Array(value: string): ArrayBuffer {

@@ -423,6 +423,24 @@
   justify-self: flex-start;
 }
 
+/* UAT F-29: in-portal push permission reminder; same registration flow as the sidebar panel. */
+.next-push-prompt > div {
+  display: grid;
+  gap: var(--space-2xs);
+  justify-items: start;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.next-push-prompt .uh-button {
+  min-height: 44px;
+}
+
+.next-push-prompt__message {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
 .next-sidebar-group {
   display: grid;
   gap: var(--space-3xs);

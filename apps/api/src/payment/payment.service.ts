@@ -5,6 +5,7 @@ import type {
   PaymentInstallmentUpdateRequest,
   PaymentPlanCreateRequest,
   PaymentPlanInstallmentInput,
+  PaymentPlanListRecord,
   PaymentPlanWithInstallmentsRecord,
   PaymentTransactionCreateRequest,
   PaymentTransactionMethod,
@@ -51,18 +52,23 @@ export class PaymentService {
     @Optional() private readonly auditLogs?: AuditLogService,
   ) {}
 
-  async list(context: RequestContext, filters: PaymentPlanListFilters = {}): Promise<PaymentPlanWithInstallmentsRecord[]> {
+  async list(context: RequestContext, filters: PaymentPlanListFilters = {}): Promise<PaymentPlanListRecord[]> {
     this.assertFinanceManage(context);
     const resolvedFilters = resolvePaymentPlanFilters(filters);
     const campusScopeFilters = this.financeCampusScopeFilters(context);
+    // UAT F-33: the finance list carries its own allow-listed student label, so FINANCE_STAFF needs no `student:list`.
+    const readOptions = { includeStudentSummary: true };
     if (resolvedFilters.studentId) {
       const student = await this.findStudentForTenant(context, resolvedFilters.studentId);
-      return filterTenantResources(context, await this.store.listByStudent(student.id, { ...resolvedFilters, ...campusScopeFilters }))
+      return filterTenantResources(
+        context,
+        await this.store.listByStudent(student.id, { ...resolvedFilters, ...campusScopeFilters }, readOptions),
+      )
         .filter((record) => !record.deletedAt)
         .map((record) => withDerivedOverdue(record));
     }
 
-    return filterTenantResources(context, await this.store.list({ ...resolvedFilters, ...campusScopeFilters }))
+    return filterTenantResources(context, await this.store.list({ ...resolvedFilters, ...campusScopeFilters }, readOptions))
       .filter((record) => !record.deletedAt)
       .map((record) => withDerivedOverdue(record));
   }

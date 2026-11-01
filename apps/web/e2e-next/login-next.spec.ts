@@ -540,6 +540,8 @@ type PaymentPlanFixture = {
   currency: string;
   createdAt: string;
   installments: PaymentInstallmentFixture[];
+  // UAT F-33: `GET /payment-plans` carries the student label; absent for a soft-deleted student.
+  student?: { id: string; firstName: string; lastName: string; studentNo?: string };
 };
 
 // UAT F-19: the system login page names itself, the tenant login page keeps "Kurum girişi".
@@ -1028,6 +1030,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       id: "payment-plan-a",
       tenantId: "tenant-a",
       studentId: "student-a",
+      student: { id: "student-a", firstName: "Ada", lastName: "A", studentNo: "176" },
       campusId: "campus-main",
       gradeLevelId: "grade-8",
       classId: "class-a",
@@ -4916,6 +4919,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(financeMetrics.getByText("₺1.000,00")).toBeVisible();
   await expect(financeMetrics.getByText("₺500,00")).toBeVisible();
   const firstPaymentRow = page.getByRole("row", { name: /1\. taksit/ });
+  await expect(firstPaymentRow.getByRole("cell", { name: "Ada A · 176", exact: true })).toBeVisible();
   await expect(firstPaymentRow.getByRole("cell", { name: "2026 Haziran ödeme planı", exact: true })).toBeVisible();
   await expect(firstPaymentRow.getByRole("cell", { name: "Merkez Kampüs / 8. Sınıf / 8-A / Matematik / 2. Donem", exact: true })).toBeVisible();
   await expect(firstPaymentRow.getByRole("cell", { name: "Gecikmiş", exact: true })).toBeVisible();
@@ -5342,6 +5346,7 @@ test("KF-1: yalnız finans rolü olan kullanıcı girişte finans ekranına 403 
     id: "payment-plan-a",
     tenantId: "tenant-a",
     studentId: "student-a",
+    student: { id: "student-a", firstName: "Ada", lastName: "A", studentNo: "176" },
     campusId: "campus-main",
     title: "2026 Haziran ödeme planı",
     totalAmount: 100000,
@@ -5383,6 +5388,9 @@ test("KF-1: yalnız finans rolü olan kullanıcı girişte finans ekranına 403 
 
   await expect(page).toHaveURL(/\/kurum\/finans$/, { timeout: 15_000 });
   await expect(page.getByText("2026 Haziran ödeme planı").first()).toBeVisible();
+  // UAT F-33: the student label comes with the plan row, not from `student:list`.
+  await expect(page.getByRole("cell", { name: "Ada A · 176", exact: true })).toBeVisible();
+  await expect(page.getByText("Öğrenci kapsamı doğrulanmadı")).toHaveCount(0);
   await expect(page.getByText("Seçim listeleri alınamadı.")).toHaveCount(0);
   await expect(page.getByText("Ödeme planları alınamadı.")).toHaveCount(0);
   expect(forbiddenRequests).toEqual([]);
@@ -8363,6 +8371,7 @@ function readFixture(path: string) {
         id: "payment-plan-a",
         tenantId: "tenant-a",
         studentId: "student-a",
+        student: { id: "student-a", firstName: "Ada", lastName: "A", studentNo: "176" },
         title: "2026 Haziran ödeme planı",
         totalAmount: 100000,
         currency: "TRY",

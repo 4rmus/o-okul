@@ -519,8 +519,8 @@ requireTokens("apps/web/e2e-next/list-url-state-next.spec.ts", [
   'getByRole("region", { exact: true, name: "Duyuru özeti" })',
   "Duyuru özeti önerilen işlemler",
   'getByRole("dialog", { name: "Duyuru ekle" })',
-  'announcementDialog.locator(".uh-field")).toHaveCount(2)',
-  'announcementDialog.locator(".uh-select")).toHaveCount(0)',
+  'announcementDialog.locator(".uh-field")).toHaveCount(7)',
+  'announcementDialog.locator(".uh-select")).toHaveCount(5)',
   'announcementDialog.locator(".uh-textarea")).toHaveCount(1)',
   'getByRole("textbox", { name: /^Duyuru metni / })',
   "captured.announcements",
@@ -1741,7 +1741,7 @@ requireNoTokens("apps/web/src/route-manifest.js", [
 
 requireTokens("apps/web/app/(app)/app-shell.tsx", [
   'import { Button, Dialog, Field, Input } from "@o-okul/ui";',
-  'import { Button, Panel, StatusBadge, type StatusBadgeProps } from "@o-okul/ui";',
+  'import { Alert, Button, Panel, StatusBadge, type StatusBadgeProps } from "@o-okul/ui";',
   '<Field className="next-command-search" label="Komut ara">',
   "hasInstitutionAccess(roles) && (!action.capability || hasCapabilityForRoles(roles, action.capability))",
   'action.scope === "system"\n        ? hasSystemAccess(roles)',
@@ -2570,11 +2570,18 @@ requireTokens("apps/web/app/(app)/kurum/finans/finance-page.tsx", [
   "FilterBar,",
   "Select,",
   '<FilterBar className="next-list-controls" role="group" aria-label="Finans filtreleri">',
-  "Öğrenci kapsamı doğrulanmadı",
+  "Öğrenci kaydı silinmiş",
+  "formatPlanStudent(row.plan)",
   "Bağlam doğrulanmadı",
   'tableCaption="Ödeme taksitleri"',
   'tableDescription="Bekleyen, geciken ve ödenen taksitler seçili akademik bağlama göre listelenir."',
   'mobileLabel: "İşlem"',
+]);
+
+// UAT F-33: the finance list never resolves student names through `student:list`.
+requireNoTokens("apps/web/app/(app)/kurum/finans/finance-page.tsx", [
+  "studentNameById",
+  "Öğrenci kapsamı doğrulanmadı",
 ]);
 
 requireTokens("apps/web/app/(app)/kurum/devamsizlik/attendance-page.tsx", [
@@ -2993,7 +3000,7 @@ requireTokens("apps/web/app/(app)/kurum/duyurular/announcements-page.tsx", [
   '<Field label="Başlık">',
   '<Field label="Duyuru metni" description={`Kurum kullanıcılarıyla paylaşılacak içerik · ${form.body.length} karakter`}>',
   "rows={5}",
-  'description="Kurum geneli · Uygulama içi duyuru · Hemen"',
+  '<Field label="Hedef kitle"',
   "Kurum ana sayfasında ve kullanıcı duyuru ekranlarında görünür.",
   'tone="success"',
   'tone="warning"',

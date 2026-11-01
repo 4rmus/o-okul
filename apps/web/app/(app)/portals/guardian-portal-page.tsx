@@ -27,6 +27,7 @@ import type {
 import { apiBaseUrl, apiRequest, authenticatedFetch, readData } from "../../../src/api-client.js";
 import type { SupportTicketFormPayload } from "../../../src/form-validation.js";
 import { useAuth } from "../../providers.js";
+import { PushPermissionPrompt } from "../_shell/push-devices.js";
 import { AttendancePanel, TeacherNotesPanel } from "./_shared/activity-panels.js";
 import { AnnouncementsPanel } from "./_shared/announcements-panel.js";
 import { DevelopmentTrendPanel, type DevelopmentTrendItem } from "./_shared/development-panel.js";
@@ -438,6 +439,8 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
         }
         side={
           <>
+            {/* UAT F-29: shown only when web push is enabled and this browser has not granted the permission yet. */}
+            {auth && !isRolePreview && (view === "overview" || view === "notifications") ? <PushPermissionPrompt accessToken={auth.accessToken} /> : null}
             {view === "overview" || view === "student" ? <ProfilePanel profile={data?.profile} /> : null}
             {view === "overview" || view === "student" ? <StudentHistoryPanel
               enrollments={data?.enrollments ?? []}
