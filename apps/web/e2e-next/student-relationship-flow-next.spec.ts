@@ -22,39 +22,64 @@ test.describe("Öğrenci ilişki haritası", () => {
   test("liste görünümü ilişki haritasını PII sızdırmadan gösterir", async ({ page }) => {
     const auditLogRequests: URL[] = [];
     const requestedPaths: string[] = [];
-    await openStudentDetail(page, { width: 1280, height: 900 }, { auditLogRequests, requestedPaths });
+    await openStudentDetail(page, { width: 1280, height: 900 }, { auditLogRequests, requestedPaths, section: "overview" });
 
+    // K2: sayfa Genel bakış sekmesiyle açılır; dört KPI kutusu mevcut overview alanlarından okunur.
+    await expect(page.getByRole("tab", { name: "Genel bakış" })).toHaveAttribute("aria-selected", "true");
     const operationSummary = page.getByRole("region", { exact: true, name: "Öğrenci detay özeti" });
-    await expect(operationSummary).toContainText("Kayıt durumu");
-    await expect(operationSummary).toContainText("Başarı %");
-    await expect(operationSummary).toContainText("Net - / Soru -");
+    const summaryMetrics = operationSummary.getByRole("group", { name: "Öğrenci detay özeti metrikleri" });
+    await expect(summaryMetrics.locator(".next-operation-summary__item")).toHaveCount(4);
+    await expect(summaryMetrics).toContainText("Devamsızlık");
+    await expect(summaryMetrics).toContainText("1 yok · 1 geç");
+    await expect(summaryMetrics).toContainText("30 yoklama kaydı");
+    await expect(summaryMetrics).toContainText("Son sınav Başarı %");
+    await expect(summaryMetrics).toContainText("Hazır sınav raporu yok");
+    await expect(summaryMetrics).toContainText("Açık ödev");
+    await expect(summaryMetrics).toContainText("Öğretmen notu");
     await expect(operationSummary).toContainText("Kişisel bilgiler maskeli");
-    await expect(operationSummary.getByLabel("Öğrenci detay özeti önerilen işlemler")).toBeVisible();
+    await expect(operationSummary).toContainText("2 veli bağlı");
+    await expect(operationSummary.getByLabel("Öğrenci detay özeti önerilen işlemler")).toHaveCount(0);
     const studentProfile = page.getByLabel("Öğrenci profil kartı");
     await expect(studentProfile).toContainText("Aktif");
+    await expect(studentProfile).toContainText("11-A");
     const studentProfileInfo = studentProfile.getByRole("region", { name: "Öğrenci profil özeti" });
     await expect(studentProfileInfo).toHaveClass(/uh-info-grid/);
     await expect(studentProfileInfo.locator(".uh-info-item")).toHaveCount(4);
-    const decisionCards = page.getByLabel("Öğrenci karar kartları");
-    await expect(decisionCards.locator(".next-student-decision-card.uh-action-card")).toHaveCount(4);
-    await expect(decisionCards.locator(".next-dashboard-summary-card")).toHaveCount(0);
-    await expect(decisionCards).toContainText("Sınav performansı");
+    await expect(studentProfile).not.toContainText("Veli bağlantısı");
+    await expect(page.getByLabel("Öğrenci karar kartları")).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Öğretmen notları" })).toHaveAttribute("href", "/kurum/notlar?classId=class-11a");
+    await expect(page.getByRole("link", { name: "Portal erişimi" })).toHaveAttribute("href", "/kurum/ogrenci-portal-erisimi");
+    await expect(page.getByRole("link", { name: "Sınav detayları" })).toHaveAttribute("href", "/kurum/ogrenciler/student-a/sinavlar");
+    await expect(page.locator(".next-student-detail-actions .uh-button:not(.uh-button--secondary)")).toHaveCount(1);
+    await expect(page.getByLabel("Öğretmen notları", { exact: true }).getByRole("table", { name: "Öğretmen not kayıtları" })).toBeVisible();
+    await expect(page.getByLabel("Ödevler", { exact: true }).getByRole("table", { name: "Öğrenci ödev kayıtları" })).toBeVisible();
+    await expect(page.getByLabel("Öğrenci ilişki haritası")).toHaveCount(0);
+    await expectNoVisibleTextValues(page, "student-detail-pii-overview", rawStudentDetailPiiValues);
+    await expectNoHorizontalOverflow(page, "student-overview-desktop");
+    await expectNoUnlabeledControls(page, "student-overview-desktop");
 
-    await expect(page.getByLabel("İlişki haritası liste görünümü")).toContainText("Ayşe Yılmaz");
-    await expect(page.getByLabel("İlişki haritası liste görünümü")).toContainText("Mehmet Demir");
-    await expect(page.getByLabel("İlişki haritası liste görünümü")).not.toContainText("Ödeme görür");
-    await expect(page.getByLabel("İlişki haritası liste görünümü")).not.toContainText("Ödeme kapalı");
-
-    const relationshipHistory = page.getByLabel("İlişki geçmişi");
-    await expect(relationshipHistory.getByRole("table", { name: "Veli ilişki geçmişi" })).toBeVisible();
-    await expect(relationshipHistory).toContainText("Finans görünürlüğü ve bildirim izinleri");
-    await expect(relationshipHistory).toContainText("Finans görünürlüğü: açık");
-    await expect(relationshipHistory).toContainText("Finans görünürlüğü: kapalı");
-    await expect(relationshipHistory).not.toContainText("Ödeme görür");
-    await expect(relationshipHistory).not.toContainText("Ödeme kapalı");
+    await openRecordsSection(page);
+    const relationshipMap = page.getByLabel("Öğrenci ilişki haritası");
+    await expect(relationshipMap).toContainText("Ayşe Yılmaz");
+    await expect(relationshipMap).toContainText("Mehmet Demir");
+    await expect(relationshipMap.getByRole("table", { name: "Veli bağlantıları" })).toBeVisible();
+    await expect(relationshipMap.getByRole("table", { name: "Öğretmen görevleri" })).toBeVisible();
+    await expect(relationshipMap.getByRole("table", { name: "Veli bağlantıları" }).getByRole("columnheader", { name: "İzinler" })).toBeVisible();
+    await expect(relationshipMap.getByRole("table", { name: "Öğretmen görevleri" }).getByRole("columnheader", { name: "Görev" })).toBeVisible();
+    await expect(relationshipMap).toContainText("Veli izinleri (finans, duyuru, destek)");
+    await expect(relationshipMap).toContainText("Finans görünürlüğü: açık");
+    await expect(relationshipMap).toContainText("Finans görünürlüğü: kapalı");
+    await expect(relationshipMap).not.toContainText("Ödeme görür");
+    await expect(relationshipMap).not.toContainText("Ödeme kapalı");
+    await expect(page.getByLabel("İlişki geçmişi")).toHaveCount(0);
+    await expect(page.getByLabel("Öğretmen ilişkileri")).toHaveCount(0);
+    await expect(page.locator("body")).not.toContainText("ham öğrenci anahtarı");
+    await expect(page.locator("body")).not.toContainText("güvenli referans metinleriyle");
 
     const auditSummary = page.getByLabel("Denetim özeti");
     await expect(auditSummary).toContainText("Profil güncellendi");
+    await expect(auditSummary.getByRole("columnheader", { name: "İşlem" })).toBeVisible();
+    await expect(auditSummary).not.toContainText("Ham denetim alanları gizli");
     await expect(auditSummary).toContainText("Veli ilişkisi güncellendi");
     await expect(auditSummary).not.toContainText("student.profile_updated");
     await expect(auditSummary).not.toContainText("guardian_student.updated");
@@ -84,12 +109,72 @@ test.describe("Öğrenci ilişki haritası", () => {
     await expectNoUnlabeledControls(page, "student-relationship-desktop");
   });
 
+  test("K2: son sınav KPI'ı ve Sınavlar görünümü öğrencinin sonucu olan sınavla açılır", async ({ page }) => {
+    const requestedPaths: string[] = [];
+    await openStudentDetail(page, { width: 1280, height: 900 }, { examFixtures: true, requestedPaths, section: "overview" });
+
+    const summaryMetrics = page.getByRole("group", { name: "Öğrenci detay özeti metrikleri" });
+    await expect(summaryMetrics).toContainText("%75,0");
+    await expect(summaryMetrics).toContainText("Net 15,00 / Soru 20");
+    await expect(summaryMetrics.locator(".next-operation-summary__item").filter({ hasText: "Açık ödev" })).toContainText("3");
+    await expect(summaryMetrics.locator(".next-operation-summary__item").filter({ hasText: "Öğretmen notu" })).toContainText("2");
+    await expect(page.getByRole("region", { exact: true, name: "Öğrenci detay özeti" })).toContainText("Son sınav: Deneme B");
+    // Genel bakış yalnız gelişim grafiğini yükler; rapor sürümleri Sınav detaylarında istenir.
+    await expect.poll(() => requestedPaths.includes("/exams/exam-b/reports/students/student-a/progress")).toBe(true);
+    expect(requestedPaths.some((path) => path.endsWith("/snapshots"))).toBe(false);
+    expect(requestedPaths.some((path) => path.includes("/reports/snapshots/"))).toBe(false);
+
+    await Promise.all([
+      page.waitForURL(/\/kurum\/ogrenciler\/student-a\/sinavlar$/),
+      page.getByRole("link", { name: "Sınav detayları" }).click(),
+    ]);
+    const reportContext = page.getByLabel("Öğrenci sınav rapor bağlamı");
+    const examSelect = reportContext.getByLabel("Sınav", { exact: true });
+    await expect(examSelect).toHaveValue("exam-b");
+    await expect(examSelect.locator("optgroup")).toHaveCount(3);
+    await expect(examSelect.locator("optgroup").nth(0)).toHaveAttribute("label", "Son sonucu olan sınav");
+    await expect(examSelect.locator("optgroup").nth(0).locator("option")).toHaveText(["Deneme B"]);
+    await expect(examSelect.locator("optgroup").nth(1).locator("option")).toHaveText(["Deneme A"]);
+    await expect(examSelect.locator("optgroup").nth(2)).toHaveAttribute("label", "Taslak sınavlar");
+    await expect(reportContext).toContainText("%75,0");
+    await expect(reportContext).toContainText("Puan (eski biçim)");
+    await expect(reportContext).not.toContainText("Eski hesaplama");
+
+    const versions = reportContext.locator("details", { hasText: "Önceki rapor sürümleri" });
+    await expect(versions).not.toHaveAttribute("open", "");
+    await expect(reportContext.getByLabel("Rapor sürümü")).toBeHidden();
+    await versions.locator("summary").click();
+    const versionSelect = reportContext.getByLabel("Rapor sürümü");
+    await expect(versionSelect).toBeVisible();
+    await expect(versionSelect).toHaveValue("snapshot-b2");
+    await expect(versionSelect.locator("option")).toHaveCount(2);
+    await expect(versionSelect.locator("option").first()).toContainText("(güncel)");
+    await versionSelect.selectOption("snapshot-b1");
+    await expect.poll(() => requestedPaths.includes("/exams/exam-b/reports/snapshots/snapshot-b1/students/student-a")).toBe(true);
+    expect(requestedPaths.some((path) => path.startsWith("/exams/exam-a/"))).toBe(false);
+    await expectNoHorizontalOverflow(page, "student-exam-versions-desktop");
+    await expectNoUnlabeledControls(page, "student-exam-versions-desktop");
+  });
+
+  for (const viewport of [{ width: 320, height: 720 }, { width: 375, height: 812 }, { width: 1024, height: 768 }, { width: 1440, height: 900 }]) {
+    test(`K2: genel bakış ve kayıtlar ${viewport.width}px genişlikte taşmaz`, async ({ page }) => {
+      await openStudentDetail(page, viewport, { examFixtures: true, section: "overview" });
+      await expect(page.getByRole("group", { name: "Öğrenci detay özeti metrikleri" }).locator(".next-operation-summary__item")).toHaveCount(4);
+      await expectNoHorizontalOverflow(page, `student-overview-${viewport.width}`);
+      await expectNoUnlabeledControls(page, `student-overview-${viewport.width}`);
+      await openRecordsSection(page);
+      await expectNoHorizontalOverflow(page, `student-records-${viewport.width}`);
+      await expectNoVisibleTextValues(page, `student-detail-pii-${viewport.width}`, rawStudentDetailPiiValues);
+    });
+  }
+
   test("mobilde liste görünümü taşmadan kalır", async ({ page }) => {
     await openStudentDetail(page, { width: 390, height: 844 });
 
     await expect(page.getByRole("region", { exact: true, name: "Öğrenci detay özeti" })).toBeVisible();
-    await expect(page.getByLabel("İlişki haritası liste görünümü")).toBeVisible();
-    await expect(page.getByLabel("İlişki haritası liste görünümü")).toContainText("11-A");
+    await expect(page.getByLabel("Öğrenci profil kartı")).toContainText("11-A");
+    await expect(page.getByLabel("Öğrenci ilişki haritası")).toBeVisible();
+    await expect(page.getByLabel("Öğrenci ilişki haritası")).toContainText("Ayşe Yılmaz");
     await expectNoHorizontalOverflow(page, "student-relationship-mobile");
     await expectNoUnlabeledControls(page, "student-relationship-mobile");
     await expectNoVisibleTextValues(page, "student-detail-pii-mobile", rawStudentDetailPiiValues);
@@ -103,8 +188,7 @@ test.describe("Öğrenci ilişki haritası", () => {
     await expect(studentDashboard.getByRole("region", { exact: true, name: "Öğrenci detay özeti" })).toBeVisible();
     await expect(studentDashboard.getByRole("region", { name: "Öğrenci profil özeti" })).toHaveClass(/uh-info-grid/);
     await expect(page.getByRole("heading", { name: "İlişki haritası" })).toBeVisible();
-    await expect(page.getByLabel("İlişki haritası liste görünümü")).toBeVisible();
-    await expect(page.getByLabel("Öğretmen ilişkileri").getByRole("table", { name: "Öğretmen ilişki kayıtları" })).toBeVisible();
+    await expect(page.getByLabel("Öğrenci ilişki haritası").getByRole("table", { name: "Öğretmen görevleri" })).toBeVisible();
     await expectNoVisibleTextValues(page, "student-detail-pii-tablet", rawStudentDetailPiiValues);
     await expectNoHorizontalOverflow(page, "student-relationship-tablet");
     await expectNoUnlabeledControls(page, "student-relationship-tablet");
@@ -306,10 +390,12 @@ async function openStudentDetail(
   options: {
     auditLogRequests?: URL[];
     contactCreateRequests?: Array<{ body: string; idempotencyKey: string }>;
+    examFixtures?: boolean;
     failFirstContactCreate?: boolean;
     guardianLink?: GuardianLinkMock;
     requestedPaths?: string[];
     roles?: string[];
+    section?: "overview" | "records";
   } = {},
 ) {
   await page.setViewportSize(viewport);
@@ -321,6 +407,12 @@ async function openStudentDetail(
 
   await page.goto("/kurum/ogrenciler/student-a");
   await expect(page.getByRole("heading", { level: 1, name: "Ada Kaya" })).toBeVisible();
+  await expect(page.getByRole("region", { exact: true, name: "Öğrenci detay özeti" })).toBeVisible();
+  if (options.section !== "overview") await openRecordsSection(page);
+}
+
+async function openRecordsSection(page: Page) {
+  await page.getByRole("tab", { name: "İlişkiler ve kayıtlar" }).click();
   await expect(page.getByRole("heading", { level: 2, name: "İlişki haritası" })).toBeVisible();
 }
 
@@ -329,6 +421,7 @@ async function installStudentApiMocks(
   options: {
     auditLogRequests?: URL[];
     contactCreateRequests?: Array<{ body: string; idempotencyKey: string }>;
+    examFixtures?: boolean;
     failFirstContactCreate?: boolean;
     guardianLink?: GuardianLinkMock;
     requestedPaths?: string[];
@@ -407,12 +500,19 @@ async function installStudentApiMocks(
 function mockApiResponse(
   pathName: string,
   url: URL,
-  options: { auditLogRequests?: URL[]; guardianLink?: { guardianId?: string }; roles?: string[] },
+  options: { auditLogRequests?: URL[]; examFixtures?: boolean; guardianLink?: { guardianId?: string }; roles?: string[] },
 ): { data: unknown; meta?: { limit: number; page: number; total: number; totalPages: number } } {
   if (pathName === "/auth/refresh") return { data: createAuthResponse(options.roles) };
   if (pathName === "/me/tenant") return { data: createTenantResponse() };
   if (pathName === "/me/notification-devices") return { data: [] };
-  if (pathName === "/students/student-a/overview") return { data: createStudentOverview(options.roles, options.guardianLink) };
+  if (pathName === "/students/student-a/overview") {
+    const overview = createStudentOverview(options.roles, options.guardianLink);
+    return { data: options.examFixtures ? { ...overview, latestExam: createLatestExam(), openHomeworkCount: 3, teacherNoteCount: 2 } : overview };
+  }
+  if (options.examFixtures) {
+    const examResponse = mockStudentExamResponse(pathName);
+    if (examResponse) return examResponse;
+  }
   if (pathName === "/students/student-a/profile") return { data: createStudentProfile() };
   if (pathName === "/students/student-a/guardian-links") return { data: createGuardianLinks() };
   if (pathName === "/students/student-a/guardians") return { data: createGuardians() };
@@ -436,6 +536,54 @@ function mockApiResponse(
   if (pathName.includes("/reports/")) return { data: [] };
 
   return { data: [] };
+}
+
+// K2: öğrencinin sonucu olan son sınav (exam-b) listede ikinci sırada gelse de varsayılan seçilir.
+function createLatestExam() {
+  return {
+    examId: "exam-b",
+    examTitle: "Deneme B",
+    generatedAt: "2026-10-20T09:00:00.000Z",
+    snapshotId: "snapshot-b2",
+    total: { blank: 2, correct: 16, net: 15, questionCount: 20, successRate: 75, wrong: 2 },
+  };
+}
+
+function mockStudentExamResponse(pathName: string): { data: unknown } | undefined {
+  if (pathName === "/exams") {
+    return {
+      data: [
+        { id: "exam-a", status: "PUBLISHED", tenantId: "tenant-flow", title: "Deneme A" },
+        { id: "exam-c", status: "DRAFT", tenantId: "tenant-flow", title: "Taslak C" },
+        { id: "exam-b", status: "PUBLISHED", tenantId: "tenant-flow", title: "Deneme B" },
+      ],
+    };
+  }
+  if (pathName === "/exams/exam-b/reports/students/student-a/snapshots") {
+    return {
+      data: [
+        { createdAt: "2026-10-20T09:00:00.000Z", examId: "exam-b", generatedAt: "2026-10-20T09:00:00.000Z", id: "snapshot-b2", status: "READY", tenantId: "tenant-flow" },
+        { createdAt: "2026-10-10T09:00:00.000Z", examId: "exam-b", generatedAt: "2026-10-10T09:00:00.000Z", id: "snapshot-b1", status: "READY", tenantId: "tenant-flow" },
+      ],
+    };
+  }
+  if (/^\/exams\/exam-b\/reports\/snapshots\/snapshot-b[12]\/students\/student-a$/.test(pathName)) {
+    return {
+      data: {
+        branches: [],
+        outcomes: [],
+        studentId: "student-a",
+        total: { blank: 2, correct: 16, estimatedRawScore: 410, net: 15, questionCount: 20, successRate: 75, wrong: 2 },
+      },
+    };
+  }
+  if (/^\/exams\/exam-b\/reports\/snapshots\/snapshot-b[12]\/students\/student-a\/error-booklet$/.test(pathName)) {
+    return { data: { examId: "exam-b", items: [], snapshotId: "snapshot-b2", studentId: "student-a", tenantId: "tenant-flow" } };
+  }
+  if (pathName === "/exams/exam-b/reports/students/student-a/progress") {
+    return { data: { examId: "exam-b", points: [], studentId: "student-a", tenantId: "tenant-flow" } };
+  }
+  return undefined;
 }
 
 function createAuditSummaries() {
