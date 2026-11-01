@@ -1,6 +1,6 @@
 "use client";
 
-import { DataTable, Panel, type DataTableColumn } from "@o-okul/ui";
+import { Button, DataTable, Panel, type DataTableColumn } from "@o-okul/ui";
 import type { GuardianExamSeriesPoint, GuardianSchoolGradeItem } from "@o-okul/shared-types";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 
@@ -9,12 +9,21 @@ import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../
  * separate series. They are never merged into one line because the scales differ.
  */
 export function ProgressSeriesPanel({
+  ariaLabel = "Deneme ve okul notu serileri",
+  description = "Deneme sınavları Başarı % ile, okul notları sınavın kendi tam puanıyla gösterilir; iki seri ölçekleri farklı olduğu için birleştirilmez.",
   examSeries,
+  onRetry,
   schoolGrades,
+  title = "Deneme ve Okul Notları",
   unavailable = false,
 }: {
+  ariaLabel?: string;
+  description?: string;
   examSeries: GuardianExamSeriesPoint[];
+  /** Verilirse yükleme hatasında "Tekrar dene" gösterilir; sayfanın geri kalanı yerinde kalır. */
+  onRetry?: () => void;
   schoolGrades: GuardianSchoolGradeItem[];
+  title?: string;
   unavailable?: boolean;
 }) {
   const examColumns: Array<DataTableColumn<GuardianExamSeriesPoint>> = [
@@ -31,12 +40,17 @@ export function ProgressSeriesPanel({
 
   return (
     <Panel
-      aria-label="Deneme ve okul notu serileri"
+      aria-label={ariaLabel}
       className="next-portal-progress-series-panel"
-      description="Deneme sınavları Başarı % ile, okul notları sınavın kendi tam puanıyla gösterilir; iki seri ölçekleri farklı olduğu için birleştirilmez."
-      title="Deneme ve Okul Notları"
+      description={description}
+      title={title}
     >
-      {unavailable ? <p className="next-status-note">Özet şu an alınamadı; seriler daha sonra görünecek.</p> : null}
+      {unavailable && onRetry ? (
+        <div role="alert">
+          <p className="next-status-note">Özet şu an alınamadı; seriler daha sonra görünecek.</p>
+          <Button onClick={onRetry} variant="secondary">Tekrar dene</Button>
+        </div>
+      ) : unavailable ? <p className="next-status-note">Özet şu an alınamadı; seriler daha sonra görünecek.</p> : null}
       <DataTable
         caption="Deneme sınavları: Başarı %"
         columns={examColumns}

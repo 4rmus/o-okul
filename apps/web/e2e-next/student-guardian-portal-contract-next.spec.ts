@@ -61,7 +61,8 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       ]);
       await expect(page.getByRole("region", { exact: true, name: "Öğrenci portal çalışma alanı" })).toBeVisible();
       await expect(page.getByRole("region", { name: "Portal rapor özeti" })).toContainText("Başarı %");
-      await expectHomeworkAssignmentsPanel(page);
+      await expectStudentHomeworkFeed(page);
+      await expectStudentGelisimimPanel(page);
       await expectPortalAnnouncementsTable(page, { readOnly: false });
       await expect(page.getByRole("region", { exact: true, name: "Seçili öğrenci özeti" })).toHaveCount(0);
       await expect(page.getByRole("region", { exact: true, name: "Destek talepleri" })).toHaveCount(0);
@@ -117,7 +118,7 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       "/ogrenci/odevler?rolePreview=1",
       "/ogrenci/raporlar?rolePreview=1",
     ]);
-    await expectHomeworkAssignmentsPanel(page);
+    await expectStudentHomeworkFeed(page);
     await expectPortalAnnouncementsTable(page, { readOnly: true });
 
     await page.goto("/ogrenci/profil?rolePreview=1");
@@ -184,11 +185,12 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
     });
     await page.reload();
 
-    const panel = page.getByRole("region", { exact: true, name: "Sınıf ödevleri" });
+    const panel = page.getByRole("region", { exact: true, name: "Ödevlerim" });
     await expect(panel).toContainText("Kesirler");
     await expect(panel).toContainText("Teslim edilmedi");
     await panel.getByRole("button", { name: "Teslim ettim" }).click();
     await expect(panel).toContainText("Teslim edildi");
+    await expect(panel.getByRole("table", { name: "Teslim edilenler" })).toContainText("Kesirler");
     await expect(panel.getByRole("button", { name: "Teslim ettim" })).toHaveCount(0);
     expect(submissions).toEqual(["/me/student/homework/homework-a/submission"]);
     await expect(page.locator("body")).not.toContainText("student-a");
@@ -199,7 +201,7 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
 
     const routeCases = [
       { context: "Sınav raporu", label: "Sınav Raporu", path: "/ogrenci/raporlar", panel: () => page.getByRole("region", { name: "Portal rapor özeti" }) },
-      { context: "Ödevler", label: "Ödevler", path: "/ogrenci/odevler", panel: () => page.getByRole("region", { exact: true, name: "Ödevler" }) },
+      { context: "Ödevler", label: "Ödevler", path: "/ogrenci/odevler", panel: () => page.getByRole("region", { exact: true, name: "Ödevlerim" }) },
       { context: "Duyurular", label: "Duyurular", path: "/ogrenci/duyurular", panel: () => page.getByRole("region", { exact: true, name: "Duyurular" }) },
       { context: "Devamsızlık", label: "Devamsızlık", path: "/ogrenci/devamsizlik", panel: () => page.getByRole("region", { exact: true, name: "Devamsızlık" }) },
       { context: "Profil ve kayıt bilgileri", label: "Profil", path: "/ogrenci/profil", panel: () => page.getByRole("region", { exact: true, name: "Profil" }) },
@@ -457,6 +459,27 @@ async function expectHomeworkAssignmentsPanel(page: Page) {
   }
 }
 
+async function expectStudentHomeworkFeed(page: Page) {
+  const feed = page.getByRole("region", { exact: true, name: "Ödevlerim" });
+  await expect(feed.getByRole("heading", { name: "Ödevlerim" })).toBeVisible();
+  await expect(feed).toContainText("Ada tekrar föyü");
+  await expect(feed).toContainText("Ada tekrar");
+  // Teslim edilmiş sınıf ödevi açık iş sayılmaz; özet akışında görünmez.
+  await expect(feed).not.toContainText("Teslim edilmiş sınıf ödevi");
+  for (const value of ["material-a", "course-math", "term-2026", "student-a", "student-b", "homework-done"]) {
+    await expect(feed).not.toContainText(value);
+  }
+}
+
+async function expectStudentGelisimimPanel(page: Page) {
+  const panel = page.getByRole("region", { exact: true, name: "Gelişimim" });
+  await expect(panel.getByRole("table", { name: "Deneme sınavları: Başarı %" })).toContainText("%81,7");
+  await expect(panel.getByRole("table", { name: "Okul notları: puan / tam puan" })).toContainText("42 / 50");
+  for (const value of ["snapshot-ready", "assessment-a", "course-math"]) {
+    await expect(panel).not.toContainText(value);
+  }
+}
+
 async function expectPortalActivityPanels(page: Page) {
   const notes = page.getByRole("region", { exact: true, name: "Öğretmen notları" });
   const notesTable = notes.getByRole("table", { name: "Öğretmen notları" });
@@ -628,6 +651,8 @@ function studentApiResponse(pathName: string, mode: "student" | "role-preview", 
   if (pathName === "/me/student/enrollments") return createEnrollments("student-a");
   if (pathName === "/me/student/announcements") return createAnnouncements();
   if (pathName === "/me/student/homework/material-assignments") return createHomeworkAssignments("student-a");
+  if (pathName === "/me/student/homework") return createStudentClassHomework();
+  if (pathName === "/me/student/overview") return createStudentSelfOverview();
   if (pathName === "/me/student/support-tickets") return createSupportTickets();
   if (pathName === "/me/student/support-tickets/ticket-a/comments") {
     if (method === "POST") {
@@ -827,6 +852,28 @@ function createHomeworkAssignments(studentId: "student-a" | "student-b") {
       termId: "term-2026",
     },
   ];
+}
+
+function createStudentClassHomework() {
+  return [
+    {
+      classId: "class-8a",
+      description: "Teslim edilmiş sınıf ödevi",
+      dueAt: "2026-06-19T12:00:00.000Z",
+      id: "homework-done",
+      submission: { homeworkId: "homework-done", status: "SUBMITTED", studentId: "student-a", submittedAt: "2026-06-16T12:00:00.000Z" },
+      title: "Teslim edilmiş sınıf ödevi",
+    },
+  ];
+}
+
+function createStudentSelfOverview() {
+  return {
+    attendance: { absent: 0, excused: 0, late: 0, present: 30, total: 30 },
+    examSeries: [{ generatedAt: "2026-06-17T10:00:00.000Z", net: 24.5, questionCount: 30, snapshotId: "snapshot-ready", successRate: 81.7 }],
+    homework: { materialAssignmentCount: 1, openClassHomeworkCount: 0 },
+    schoolGrades: [{ absent: false, assessmentId: "assessment-a", courseId: "course-math", courseName: "Matematik", heldOn: "2026-06-10", kind: "WRITTEN", maxScore: 50, score: 42, title: "1. Yazılı", version: 2 }],
+  };
 }
 
 function createSupportTickets() {
