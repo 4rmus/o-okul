@@ -648,4 +648,18 @@
     color: var(--color-ink-secondary);
   }
 
+  /* Pazarlama yüzeyinde odak halkası uygulama ile aynı token'dır (UI/UX F11); UA varsayılanı yerine. */
+  .next-marketing-nav__links a:focus-visible,
+  .next-marketing-login:focus-visible,
+  .next-marketing-text-link:focus-visible,
+  .next-marketing-footer nav a:focus-visible,
+  .next-marketing-faq summary:focus-visible,
+  .next-marketing-skip:focus-visible,
+  .next-marketing .next-brand:focus-visible,
+  .next-marketing-header .next-brand:focus-visible,
+  .next-marketing .uh-button:focus-visible,
+  .next-marketing a.uh-button:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
 }

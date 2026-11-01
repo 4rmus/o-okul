@@ -115,7 +115,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
   test("genel giriş kartı 414px deterministik görsel sözleşmesini korur", async ({ page }) => {
     await page.setViewportSize({ height: 896, width: 414 });
     await page.goto("/login");
-    const loginPanel = page.getByRole("region", { name: "Giriş" });
+    const loginPanel = page.getByRole("region", { exact: true, name: "Giriş" });
     await expect(loginPanel).toBeVisible();
     await hideNextDevIndicator(page);
     await expect(loginPanel).toHaveScreenshot("login-panel-414.png", {
@@ -579,7 +579,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(studentDecisionCards.locator(".next-student-decision-card.uh-action-card")).toHaveCount(4);
     await expect(studentDecisionCards.locator(".next-dashboard-summary-card")).toHaveCount(0);
     await expect(studentDecisionCards).toContainText("Sınav performansı");
-    await expect(studentDashboard.getByRole("link", { name: "Sınav detayları" })).toHaveAttribute("href", "/kurum/ogrenciler/student-a/sinavlar");
+    await expect(page.getByRole("link", { name: "Sınav detayları" })).toHaveAttribute("href", "/kurum/ogrenciler/student-a/sinavlar");
     await expectStudentDetailNoRawIds(page, "student-dashboard-desktop");
     await expectUiStable(page, "faz9-student-dashboard-desktop", consoleErrors);
     await saveScreenshot(page, "faz9-student-dashboard-desktop.png");
@@ -599,7 +599,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(studentDashboard.getByRole("tabpanel", { name: "İlişkiler ve kayıtlar" })).toBeVisible();
     await Promise.all([
       page.waitForURL(/\/kurum\/ogrenciler\/student-a\/sinavlar$/),
-      studentDashboard.getByRole("link", { name: "Sınav detayları" }).click(),
+      page.getByRole("link", { name: "Sınav detayları" }).click(),
     ]);
     const studentExamDetails = page.getByLabel("Öğrenci sınav detayları");
     const studentExamSummary = studentExamDetails.getByRole("region", { exact: true, name: "Öğrenci sınav özeti" });

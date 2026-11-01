@@ -54,12 +54,12 @@ export function TenantLocatorPage({ domain }: { domain: string }) {
         </Link>
         <ContactSupportLink />
       </form>
-      <aside className="next-auth-context" aria-label="Kurum adresi bilgisi">
+      <section className="next-auth-context" aria-label="Kurum adresi bilgisi">
         <p className="next-section-eyebrow">Kuruma özel güvenli giriş</p>
         <h2>Her kurum kendi adresinde çalışır.</h2>
         <p>Öğrenci veya personel numaranızı ve şifrenizi yalnız kurumunuzun giriş sayfasında kullanın.</p>
         <ul><li><Building2 size={17} aria-hidden="true" />Kurum adresi ve oturum birlikte doğrulanır</li></ul>
-      </aside>
+      </section>
     </section>
   );
 }

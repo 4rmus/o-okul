@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, LockKeyhole, ScanLine } from "lucide-react";
@@ -13,6 +13,7 @@ import { ApiRequestError, getTenantLoginContext, MfaEnrollmentRequiredError, Mfa
 import { useActivationNotice } from "./activation-notice.js";
 import { ContactSupportLink } from "./contact-support-link.js";
 import { LogoutPendingNotice } from "./logout-pending-notice.js";
+import { PasswordField, PasswordInput } from "./password-input.js";
 
 // DEC-20261021-01: after a support MFA reset the enrollment also needs the one-time code read over the phone.
 const mfaResetExpiredMessage = "MFA sıfırlamasının 24 saatlik süresi doldu. Yeni kayıt kodu için O-Okul desteğine başvurun.";
@@ -45,6 +46,8 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
   const [reenrollmentCode, setReenrollmentCode] = useState("");
   const [mfaSecretCopyStatus, setMfaSecretCopyStatus] = useState("");
   const [error, setError] = useState("");
+  const [failedSubmitCount, setFailedSubmitCount] = useState(0);
+  const errorRef = useRef<HTMLParagraphElement>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tenantContext, setTenantContext] = useState<TenantLoginContextResponse | null>(null);
   const activationNotice = useActivationNotice();
@@ -54,6 +57,11 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
       router.replace(getAuthHomePath(auth));
     }
   }, [auth, isBootstrapping, router]);
+
+  // UI/UX F8: başarısız gönderimden sonra odak hata mesajına taşınır (WCAG focus-management).
+  useEffect(() => {
+    if (failedSubmitCount > 0 && error) errorRef.current?.focus();
+  }, [error, failedSubmitCount]);
 
   useEffect(() => {
     if (!canonicalHost) return;
@@ -113,6 +121,7 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
       // UAT F-25: a server failure is not a credential error; telling the user so keeps them from resetting a correct password.
       else if (!(caught instanceof ApiRequestError) || caught.status >= 500) setError(loginUnavailableMessage);
       else setError("Giriş bilgileri hatalı.");
+      setFailedSubmitCount((count) => count + 1);
     } finally {
       setIsSubmitting(false);
     }
@@ -173,17 +182,19 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
             required
           />
         </Field>
-        <Field label="Şifre">
-          <Input
-            name="password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete="current-password"
-            disabled={Boolean(pendingMfa || pendingEnrollment || pendingTenantSelection)}
-            required
-          />
-        </Field>
+        <PasswordField>
+          <Field label="Şifre">
+            <PasswordInput
+              name="password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+              disabled={Boolean(pendingMfa || pendingEnrollment || pendingTenantSelection)}
+              required
+            />
+          </Field>
+        </PasswordField>
         {!pendingMfa && !pendingEnrollment && !pendingTenantSelection ? (
           <>
             <Link
@@ -298,12 +309,12 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
             </div>
           </div>
         ) : null}
-        {error ? <p className="next-form-error" role="alert">{error}</p> : null}
+        {error ? <p className="next-form-error" ref={errorRef} role="alert" tabIndex={-1}>{error}</p> : null}
         <Button type="submit" disabled={isSubmitDisabled} loading={isSubmitting} loadingLabel="Giriş yapılıyor">
           {pendingEnrollment ? "Etkinleştir ve giriş yap" : pendingMfa ? "Doğrula" : pendingTenantSelection ? "Devam et" : "Giriş yap"}
         </Button>
       </form>
-      <aside className="next-auth-context" aria-label="Güvenli giriş bilgisi">
+      <section className="next-auth-context" aria-label="Güvenli giriş bilgisi">
         <p className="next-section-eyebrow">{lockedTenantSlug === "system" ? "Sistem girişi" : lockedTenantSlug ? "Kurum girişi" : "Güvenli oturum"}</p>
         <h2>Görevinize ait çalışma alanına ilerleyin.</h2>
         <p>Kurumunuz ve kullanıcı göreviniz girişten sonra doğrulanır; yalnız görmeye yetkili olduğunuz bilgiler gösterilir.</p>
@@ -321,7 +332,7 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug, canonicalHost =
             Sınav sonuçları ilgili öğrenci ve velilere açılır
           </li>
         </ul>
-      </aside>
+      </section>
     </section>
   );
 }

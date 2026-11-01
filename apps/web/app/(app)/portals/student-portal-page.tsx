@@ -212,7 +212,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
               },
               {
                 label: "Son sınav",
-                value: formatPercentNumber(reportSuccess),
+                value: reportSuccess == null ? "Sonuç yok" : formatPercentNumber(reportSuccess),
                 detail: `${progressSummary} · ${formatNumber(reportTotal?.net)} net / ${formatNumber(reportQuestionCount(reportTotal))} soru`,
                 tone: (reportSuccess ?? 0) >= 75 ? "success" : "info",
               },
@@ -268,6 +268,8 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
               <HomeworkAssignmentsPanel
                 assignments={data?.homeworkAssignments ?? []}
                 courseNames={courseNameById}
+                limit={view === "overview" ? 3 : undefined}
+                moreHref={view === "overview" ? studentPortalHref("/ogrenci/odevler", isRolePreview) : undefined}
                 termNames={termNameById}
               />
             </div> : null}
@@ -291,6 +293,8 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
             {view === "overview" || view === "announcements" ? <div id="portal-announcements">
               <AnnouncementsPanel
                 announcements={data?.announcements ?? []}
+                limit={view === "overview" ? 3 : undefined}
+                moreHref={view === "overview" ? studentPortalHref("/ogrenci/duyurular", isRolePreview) : undefined}
                 readOnly={isRolePreview}
                 onMarkRead={(announcement) =>
                   auth && !isRolePreview ? markAnnouncementRead(auth.accessToken, `me/student/announcements/${encodeURIComponent(announcement.id)}/read`).then(() => query.refetch()) : undefined

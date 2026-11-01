@@ -87,9 +87,9 @@ export function PortalWorkspace({ ariaLabel, main, side }: PortalWorkspaceProps)
   return (
     <section className="next-portal-workspace" aria-label={ariaLabel}>
       <div className="next-portal-workspace__main">{main}</div>
-      <aside className="next-portal-workspace__side" aria-label={`${ariaLabel} ayrıntıları`}>
+      <section className="next-portal-workspace__side" aria-label={`${ariaLabel} ayrıntıları`}>
         {side}
-      </aside>
+      </section>
     </section>
   );
 }

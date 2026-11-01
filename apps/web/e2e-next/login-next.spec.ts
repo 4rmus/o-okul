@@ -547,11 +547,11 @@ type PaymentPlanFixture = {
 // UAT F-19: the system login page names itself, the tenant login page keeps "Kurum girişi".
 test("sistem giriş sayfası Sistem girişi, kurum giriş sayfası Kurum girişi başlığını gösterir (UAT F-19)", async ({ page }) => {
   await page.goto("/sistem/giris");
-  const aside = page.getByRole("complementary", { name: "Güvenli giriş bilgisi" });
+  const aside = page.getByRole("region", { name: "Güvenli giriş bilgisi" });
   await expect(aside).toContainText("Sistem girişi");
   await expect(aside).not.toContainText("Kurum girişi");
   await page.goto(tenantLoginUrl(appOrigin, "dna-egitim"));
-  await expect(page.getByRole("complementary", { name: "Güvenli giriş bilgisi" })).toContainText("Kurum girişi");
+  await expect(page.getByRole("region", { name: "Güvenli giriş bilgisi" })).toContainText("Kurum girişi");
 });
 
 test("Next login gerçek auth store ile kurum paneline geçer", async ({ page }) => {
@@ -4616,7 +4616,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(enrollmentHistory).not.toContainText("academic-year-2026");
   await expect(page.getByLabel("Denetim özeti").getByText("Öğrenci oluşturuldu")).toBeVisible();
   await expect(page.getByLabel("Denetim özeti").getByText("Veli ilişkisi kuruldu")).toBeVisible();
-  await studentDashboard.getByRole("link", { name: "Sınav detayları" }).click();
+  await page.getByRole("link", { name: "Sınav detayları" }).click();
   await expect(page).toHaveURL(/\/kurum\/ogrenciler\/student-a\/sinavlar$/);
   const studentExamDetails = page.getByLabel("Öğrenci sınav detayları", { exact: true });
   await studentExamDetails.getByLabel("Sınav raporu", { exact: true }).selectOption("snapshot-b");

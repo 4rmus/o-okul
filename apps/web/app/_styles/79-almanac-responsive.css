@@ -16,6 +16,8 @@
 
     .next-app-shell {
       grid-template-columns: minmax(0, 1fr);
+      /* Kısa içerikte fazlalık yükseklik üst çubuğa değil gövdeye gider (UI/UX F14). */
+      grid-template-rows: auto 1fr;
     }
 
     .next-desktop-topbar {

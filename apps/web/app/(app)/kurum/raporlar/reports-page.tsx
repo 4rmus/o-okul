@@ -176,12 +176,12 @@ export function ReportsPage({ routeExamId, routeTab }: { routeExamId?: string; r
           gradeLevelNameById,
           termNameById,
         })
-      : "-",
+      : "Rapor hazırlanınca kapsam burada görünür",
     [campusNameById, classNameById, courseNameById, gradeLevelNameById, latestSnapshot, termNameById],
   );
   const isSnapshotReady = latestSnapshot?.status === "READY";
   const snapshotGeneratedAt = formatSnapshotGeneratedAt(latestSnapshot);
-  const snapshotInputRefs = useMemo(() => latestSnapshot ? formatSnapshotInputRefs(latestSnapshot.inputRefs) : "-", [latestSnapshot]);
+  const snapshotInputRefs = useMemo(() => latestSnapshot ? formatSnapshotInputRefs(latestSnapshot.inputRefs) : "Henüz girdi yok", [latestSnapshot]);
   const snapshotExportReadiness = latestSnapshot
     ? isSnapshotReady
       ? "Excel/PDF hazır"
@@ -446,7 +446,7 @@ export function ReportsPage({ routeExamId, routeTab }: { routeExamId?: string; r
       subtitle="Raporu açın, gerekiyorsa yeniden hazırlayın ve Excel/PDF olarak indirin."
       context={
         <dl className="next-work-context next-report-work-context">
-          <div><dt>Sınav</dt><dd>{selectedExamLabel === "-" ? "Seçilmedi" : selectedExamLabel}</dd></div>
+          <div><dt>Sınav</dt><dd>{selectedExamLabel}</dd></div>
           <div>
             <dt>{productTerms.reportVersion}</dt>
             <dd>{latestSnapshot ? formatSnapshotStatus(latestSnapshot.status) : "Henüz oluşturulmadı"}</dd>
@@ -877,7 +877,7 @@ function formatUrlForReplaceState(url: URL) {
 }
 
 function formatSelectedExamLabel(examId: string, exams: ExamRecord[]) {
-  if (!examId) return "-";
+  if (!examId) return "Sınav seçilmedi";
   return exams.find((exam) => exam.id === examId)?.title ?? "Sınav seçildi";
 }
 
