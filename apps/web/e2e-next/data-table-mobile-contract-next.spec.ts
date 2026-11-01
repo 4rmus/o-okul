@@ -21,6 +21,10 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(student360Summary).toHaveClass(/uh-info-grid/);
     await expect(student360Summary.locator(".uh-info-item")).toHaveCount(11);
     await expect(student360.getByText("Devamsızlık")).toBeVisible();
+    // Özet 13 yoklama kaydından 1 "Yok" içerir: alan toplam kaydı değil devamsızlığı gösterir.
+    const attendanceItem = student360Summary.locator(".uh-info-item").filter({ hasText: "Devamsızlık" });
+    await expect(attendanceItem).toContainText("1 yok");
+    await expect(attendanceItem).not.toContainText("13");
     await expect(student360.getByText("Problem çözüm adımlarında takip yapılacak.")).toBeVisible();
 
     const enrollmentTable = student360.getByRole("table", { name: "Kayıt geçmişi" });

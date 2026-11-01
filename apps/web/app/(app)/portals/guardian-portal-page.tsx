@@ -49,6 +49,7 @@ import { ProgressSeriesPanel } from "./_shared/progress-series-panel.js";
 import { ReportPanel } from "./_shared/report-panel.js";
 import { ProfilePanel, StudentFocusPanel, StudentHistoryPanel } from "./_shared/student-panels.js";
 import { SupportTicketsPanel } from "./_shared/support-tickets-panel.js";
+import { formatAttendanceSummary } from "../_shared/attendance-summary.js";
 import { readReportExamId } from "../_shared/report-exam-selection.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
 
@@ -170,7 +171,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
   const canOpenSupportTickets = data?.notificationPreferences?.canOpenSupportTickets !== false;
   const announcementStatus = unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel";
   const homeworkStatus = `${data?.homeworkAssignments.length ?? 0} atama`;
-  const attendanceStatus = `${data?.attendanceSummary.total ?? 0} kayıt`;
+  const attendanceStatus = formatAttendanceSummary(data?.attendanceSummary);
   const supportStatus = canOpenSupportTickets ? (openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok") : "Kapalı";
   const financeStatus = canViewFinance ? formatPendingPayment(data?.paymentPlans ?? []) : "Kapalı";
   const supportReadOnly = isRolePreview || !canOpenSupportTickets;
@@ -331,7 +332,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
           />
           <PortalMetricGrid
             items={[
-              { label: "Devamsızlık", value: data?.attendanceSummary.total ?? 0 },
+              { label: "Devamsızlık", value: attendanceStatus },
               { label: "Öğretmen notu", value: data?.teacherNotes.length ?? 0 },
               { label: "Ödev", value: data?.homeworkAssignments.length ?? 0 },
               { label: "Başarı", value: formatPercentNumber(reportSuccessRate(reportTotal)) },

@@ -235,6 +235,10 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
         ["Devamsızlık", "Öğretmen notu", "Ödev", "Başarı", "Net", "Soru", "Ödeme planı", "Bekleyen ödeme"],
         rawPiiValues,
       );
+      // 30 yoklama kaydının hepsi "Var": devamsızlık 0'dır, kayıt sayısı devamsızlık gibi gösterilmez.
+      const attendanceMetric = portalSummary.locator(".uh-metric-card").filter({ hasText: "Devamsızlık" });
+      await expect(attendanceMetric).toContainText("0 yok");
+      await expect(attendanceMetric).not.toContainText("30");
       await expect(portalSummary).toContainText("Başarı % ana metrik");
       await expect(portalSummary).toContainText("Finans görünürlüğü izin kapsamına bağlıdır");
       await expect(portalSummary).toContainText("Kapalı");

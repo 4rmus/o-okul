@@ -43,6 +43,7 @@ import {
 import { ReportPanel } from "./_shared/report-panel.js";
 import { GuardianRelationsPanel, ProfilePanel, StudentFocusPanel, StudentHistoryPanel } from "./_shared/student-panels.js";
 import { SupportTicketsPanel } from "./_shared/support-tickets-panel.js";
+import { formatAttendanceSummary } from "../_shared/attendance-summary.js";
 import { readReportExamId } from "../_shared/report-exam-selection.js";
 import { formatPercentNumber, formatStudentProgressSummary, reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
 
@@ -101,7 +102,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
   const openSupportTickets = (data?.supportTickets ?? []).filter(isOpenSupportTicket).length;
   const announcementStatus = unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel";
   const homeworkStatus = `${data?.homeworkAssignments.length ?? 0} atama`;
-  const attendanceStatus = `${data?.attendanceSummary.total ?? 0} kayıt`;
+  const attendanceStatus = formatAttendanceSummary(data?.attendanceSummary);
   const supportStatus = openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok";
   const portalSubtitle = studentPortalSubtitle(view, "Öğrenci özeti");
   // Berrak §5: günlük özet "bugün teslimi olan ödevler → son sınav Başarı % (öncekiyle) → duyurular".
@@ -140,7 +141,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
     {
       actionLabel: "Kontrol",
       contextLabel: "Devamsızlık",
-      detail: `${data?.attendanceSummary.absent ?? 0} yok, ${data?.attendanceSummary.late ?? 0} geç`,
+      detail: `${data?.attendanceSummary.total ?? 0} yoklama kaydı`,
       href: studentPortalHref("/ogrenci/devamsizlik", isRolePreview),
       key: "attendance",
       label: "Devamsızlığı kontrol et",
