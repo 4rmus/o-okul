@@ -106,7 +106,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
         <PortalStatePanel
           state="loading"
           title="Veli öğrenci kapsamı hazırlanıyor"
-          description="Bağlı öğrenciler ve izin kapsamı güvenli oturumdan yükleniyor."
+          description="Bağlı öğrenciler ve izinler yükleniyor."
         />
       </PortalFrame>
     );
@@ -118,7 +118,8 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
         <PortalStatePanel
           state="error"
           title="Veli öğrenci kapsamı alınamadı"
-          description="Bağlı öğrenci listesi gösterilemiyor. Finans ve iletişim bilgileri hata durumunda açılmaz."
+          description="Bağlı öğrenci listesi gösterilemiyor. Bağlantınızı kontrol edip tekrar deneyin."
+          onRetry={() => void studentsQuery.refetch()}
         />
       </PortalFrame>
     );
@@ -463,7 +464,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
             /> : null}
             {view === "overview" || view === "student" ? <DevelopmentTrendPanel assessments={data?.developmentAssessments ?? []} /> : null}
             {view === "overview" || view === "student" ? <TeacherNotesPanel notes={data?.teacherNotes ?? []} courseNames={courseNameById} termNames={termNameById} /> : null}
-            {view === "overview" || view === "student" ? <AttendancePanel records={data?.attendance ?? []} /> : null}
+            {view === "overview" || view === "student" ? <AttendancePanel records={data?.attendance ?? []} summary={data?.attendanceSummary} /> : null}
           </>
         }
       />

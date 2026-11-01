@@ -98,6 +98,8 @@ export function ExamsPage() {
   const [answerKeyFileBase64, setAnswerKeyFileBase64] = useState("");
   const [selectedExamId, setSelectedExamId] = useState(requestedExamId);
   const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const rows = examsQuery.data ?? [];
   const selectedExam = rows.find((exam) => exam.id === selectedExamId) ?? rows[0];
   const activeExamId = selectedExam?.id ?? "";
@@ -329,6 +331,7 @@ export function ExamsPage() {
     setAnswerKeyFileName("");
     setAnswerKeyFileBase64("");
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -336,13 +339,14 @@ export function ExamsPage() {
     if (!auth) return;
 
     setError("");
+    setFormError("");
     setSelectedExamId(exam.id);
     let examParticipants = exam.id === activeExamId ? participants : [];
     if (exam.id !== activeExamId || !participantsQuery.data) {
       try {
         examParticipants = await loadParticipants(auth.accessToken, exam.id);
       } catch (participantsError) {
-        setError(apiErrorMessage(participantsError, "Katılımcı verisi alınamadı."));
+        setFormError(apiErrorMessage(participantsError, "Katılımcı verisi alınamadı."));
       }
     }
     setEditingExam(exam);
@@ -366,6 +370,7 @@ export function ExamsPage() {
     setClassSearch("");
     setAnswerKeyFileName("");
     setAnswerKeyFileBase64("");
+    setFormError("");
     setIsFormOpen(false);
   }
 
@@ -382,19 +387,20 @@ export function ExamsPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!auth) return;
+    if (!auth || isSaving) return;
 
-    setError("");
+    setFormError("");
     const parsedForm = examWithClassFormSchema.safeParse(form);
     if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
+      setFormError(firstFormError(parsedForm.error));
       return;
     }
     if (!editingExam && !answerKeyFileBase64) {
-      setError("Cevap anahtarı dosyası zorunludur.");
+      setFormError("Cevap anahtarı dosyası zorunludur.");
       return;
     }
 
+    setIsSaving(true);
     try {
       const savedExam = editingExam
         ? await updateExam(auth.accessToken, editingExam.id, parsedForm.data)
@@ -425,12 +431,14 @@ export function ExamsPage() {
         router.push(examWorkspaceHref(savedExam.id));
       }
     } catch (submitError) {
-      setError(apiErrorMessage(submitError, "Sınav kaydedilemedi."));
+      setFormError(apiErrorMessage(submitError, "Sınav kaydedilemedi."));
+    } finally {
+      setIsSaving(false);
     }
   }
 
   async function changeAnswerKeyFile(file: File | undefined) {
-    setError("");
+    setFormError("");
     setAnswerKeyFileName(file?.name ?? "");
     setAnswerKeyFileBase64(file ? await readFileAsBase64(file) : "");
   }
@@ -573,7 +581,9 @@ export function ExamsPage() {
         onCancel={closeForm}
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
+        submitError={formError || undefined}
         submitLabel={editingExam ? "Kaydet" : "Ekle"}
+        submitting={isSaving}
         title={editingExam ? "Sınav düzenle" : "Sınav ekle"}
       >
         <Field label="Sınav adı" description="Rapor, optik import ve karne çıktılarında görünecek sınav adı.">

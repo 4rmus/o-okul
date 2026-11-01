@@ -96,6 +96,8 @@ export function MessageTemplatesPage() {
   const [isSendingSms, setIsSendingSms] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const smsCreateRequest = useRef<PendingIdempotentRequest | null>(null);
   const rows = templatesQuery.data?.data ?? [];
   const references = referencesQuery.data ?? emptySmsReferences;
@@ -210,6 +212,7 @@ export function MessageTemplatesPage() {
     setEditingTemplate(null);
     setForm(emptyForm);
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -217,6 +220,7 @@ export function MessageTemplatesPage() {
     setEditingTemplate(template);
     setForm({ name: template.name, body: template.body });
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -224,19 +228,21 @@ export function MessageTemplatesPage() {
     setIsFormOpen(false);
     setEditingTemplate(null);
     setForm(emptyForm);
+    setFormError("");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!auth) return;
+    if (!auth || isSaving) return;
 
-    setError("");
+    setFormError("");
     const parsedForm = messageTemplateFormSchema.safeParse(form);
     if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
+      setFormError(firstFormError(parsedForm.error));
       return;
     }
 
+    setIsSaving(true);
     try {
       const savedTemplate = editingTemplate
         ? await updateMessageTemplate(auth.accessToken, editingTemplate.id, parsedForm.data)
@@ -246,7 +252,9 @@ export function MessageTemplatesPage() {
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
     } catch (submitError) {
-      setError(apiErrorMessage(submitError, "Şablon kaydedilemedi."));
+      setFormError(apiErrorMessage(submitError, "Şablon kaydedilemedi."));
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -644,7 +652,9 @@ export function MessageTemplatesPage() {
         onCancel={closeForm}
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
+        submitError={formError || undefined}
         submitLabel={editingTemplate ? "Kaydet" : "Ekle"}
+        submitting={isSaving}
         title={editingTemplate ? "Şablon düzenle" : "Şablon ekle"}
       >
         <Field label="Şablon adı">

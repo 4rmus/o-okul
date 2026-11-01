@@ -29,6 +29,12 @@ export function AnnouncementsPanel({
       sticky: "left",
     },
     {
+      header: "Tarih",
+      key: "publishedAt",
+      priority: "secondary",
+      render: (announcement) => (announcement.publishedAt ? formatDateTime(announcement.publishedAt) : "-"),
+    },
+    {
       header: "Hedef",
       key: "audience",
       priority: "secondary",
@@ -50,7 +56,7 @@ export function AnnouncementsPanel({
         ) : readOnly ? (
           "Yalnızca görüntüleme"
         ) : (
-          <Button onClick={() => void onMarkRead?.(announcement)} disabled={!onMarkRead}>
+          <Button onClick={() => void onMarkRead?.(announcement)} disabled={!onMarkRead} variant="secondary">
             Okundu işaretle
           </Button>
         ),

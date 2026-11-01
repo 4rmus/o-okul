@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { TeacherTodaySummary } from "@o-okul/shared-types";
 import { DataTable, Panel, type DataTableColumn } from "@o-okul/ui";
 import { apiBaseUrl, apiRequest } from "../../../src/api-client.js";
+import { formatDateKey } from "../_shared/istanbul-date.js";
 import { useAuth } from "../../providers.js";
 import {
   AccessPanel,
@@ -36,17 +37,17 @@ export function TeacherTodayPage() {
       rolePreviewToken ? { headers: { "x-role-preview-token": rolePreviewToken } } : {},
     ),
     enabled: canRead,
-    refetchOnWindowFocus: false,
   });
   const href = (path: string) => (isRolePreview ? `${path}${path.includes("?") ? "&" : "?"}rolePreview=1` : path);
 
   if (!canRead) {
     return <AccessPanel title="Öğretmen Portalı" />;
   }
-  if (query.isError) {
+  // Odak dönüşündeki yenileme düşerse yüklü özet korunur; hata ekranı yalnız hiç veri yokken çıkar.
+  if (query.isError && !query.data) {
     return (
       <PortalFrame title="Öğretmen Portalı" subtitle="Bugün">
-        <PortalStatePanel description="Günlük özet şu an gösterilemiyor. Ders akışı ve ödev ekranlarından devam edebilirsiniz." state="error" title="Öğretmen günlük özeti alınamadı" />
+        <PortalStatePanel description="Günlük özet şu an gösterilemiyor. Ders akışı ve ödev ekranlarından devam edebilirsiniz." onRetry={() => void query.refetch()} state="error" title="Öğretmen günlük özeti alınamadı" />
       </PortalFrame>
     );
   }
@@ -59,12 +60,18 @@ export function TeacherTodayPage() {
   }
 
   const today = query.data;
-  const nextLesson = today.todayLessons.find((lesson) => new Date(lesson.endsAt).getTime() >= Date.now()) ?? today.todayLessons[0];
+  // Biten ders "sıradaki" sayılmaz; günün dersleri bittiyse son ders bağlam olarak gösterilir.
+  const nextLesson = today.todayLessons.find((lesson) => new Date(lesson.endsAt).getTime() >= Date.now());
+  const lastLesson = today.todayLessons.at(-1);
+  const todayLabel = formatDateKey(today.date);
+  // Yoklama bağlantısı dersin sınıfını ve gününü taşır; Ders akışı yoklama formunu bu sınıfla açar.
+  const attendanceHref = (lesson: TodayLesson) =>
+    `${href(`/ogretmen/ders-akisi?classId=${encodeURIComponent(lesson.classId)}&date=${encodeURIComponent(today.date)}`)}#portal-teacher-attendance`;
   const actions: PortalActionItem[] = [
     {
       actionLabel: isRolePreview ? "Yalnızca görüntüleme" : "Yoklama al",
-      detail: nextLesson ? `${nextLesson.title} · ${formatTime(nextLesson.startsAt)}` : "Bugün planlı ders yok",
-      href: href("/ogretmen/ders-akisi"),
+      detail: nextLesson ? `${nextLesson.title} · ${formatTime(nextLesson.startsAt)}` : lastLesson ? "Bugünkü dersler bitti" : "Bugün planlı ders yok",
+      href: nextLesson ? attendanceHref(nextLesson) : href("/ogretmen/ders-akisi"),
       key: "attendance",
       label: "Yoklama al",
       statusLabel: "Bugün",
@@ -97,14 +104,15 @@ export function TeacherTodayPage() {
     { key: "time", header: "Saat", mobilePriority: "primary", priority: "primary", render: (lesson) => `${formatTime(lesson.startsAt)}–${formatTime(lesson.endsAt)}` },
     { key: "lesson", header: "Ders", mobilePriority: "primary", priority: "primary", render: (lesson) => lesson.title },
     {
-      key: "actions",
+      // "actions" anahtarı mobil detay satırından düşürülür; bu bağlantılar telefonda detay satırında kalmalı.
+      key: "lessonActions",
       header: "İşlem",
       // Mobilde işlem bağlantıları detay satırına iner; saat ve ders adı tam genişlikte kalır.
       mobilePriority: "hidden",
       priority: "primary",
-      render: () => (
+      render: (lesson) => (
         <span className="next-row-actions next-row-actions--text">
-          <Link href={href("/ogretmen/ders-akisi")}>Yoklama al</Link>
+          <Link href={attendanceHref(lesson)}>Yoklama al</Link>
           <Link href={href("/ogretmen/odevler")}>Ödev ver</Link>
         </span>
       ),
@@ -116,15 +124,20 @@ export function TeacherTodayPage() {
       {isRolePreview ? <RolePreviewNotice /> : null}
       <PortalDailyBrief
         items={[
-          { label: "Bugünkü ders", value: `${today.todayLessons.length} ders`, detail: today.date, tone: today.todayLessons.length > 0 ? "info" : "neutral" },
-          { label: "Sıradaki ders", value: nextLesson?.title ?? "Planlı ders yok", detail: nextLesson ? formatTime(nextLesson.startsAt) : "-", tone: nextLesson ? "info" : "neutral" },
+          { label: "Bugünkü ders", value: `${today.todayLessons.length} ders`, detail: todayLabel, tone: today.todayLessons.length > 0 ? "info" : "neutral" },
+          {
+            label: "Sıradaki ders",
+            value: nextLesson?.title ?? (lastLesson ? "Bugünkü dersler bitti" : "Planlı ders yok"),
+            detail: nextLesson ? formatTime(nextLesson.startsAt) : lastLesson ? `Son ders: ${lastLesson.title}` : "-",
+            tone: nextLesson ? "info" : "neutral",
+          },
           { label: "Ödev kontrolü", value: today.pendingHomeworkCount > 0 ? `${today.pendingHomeworkCount} bekliyor` : "Tamam", detail: "Kontrol edilmeyen ödevler", tone: today.pendingHomeworkCount > 0 ? "warning" : "success" },
         ]}
         summary="Bugünkü dersler, bekleyen ödevler ve son sınav raporu."
         title="Bugün"
       />
       <PortalActionStrip ariaLabel="Öğretmen günlük aksiyonları" items={actions} />
-      <Panel aria-label="Bugünkü dersler" description={`${today.date} tarihli dersler.`} title="Bugünkü dersler">
+      <Panel aria-label="Bugünkü dersler" description={`${todayLabel} tarihli dersler.`} title="Bugünkü dersler">
         <DataTable aria-label="Bugünkü dersler" columns={lessonColumns} density="comfortable" emptyText="Bugün planlı ders yok." getRowKey={(lesson) => lesson.id} rows={today.todayLessons} />
       </Panel>
       <Panel

@@ -46,6 +46,7 @@ import {
 } from "../../../../src/cursor-list-controls.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
 import { formatAttendanceSummary } from "../../_shared/attendance-summary.js";
+import { istanbulDateKey } from "../../_shared/istanbul-date.js";
 import { formatPercentNumber, formatStudentProgressSummary, isComparableStudentProgress, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import { readReportExamId } from "../../_shared/report-exam-selection.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
@@ -196,12 +197,13 @@ export function StudentsPage() {
   const [enrollmentAction, setEnrollmentAction] = useState<EnrollmentActionState>(emptyEnrollmentAction);
   const [bulkEnrollmentAction, setBulkEnrollmentAction] = useState<BulkEnrollmentActionState>({
     ...emptyBulkEnrollmentAction,
-    startsAt: new Date().toISOString().slice(0, 10),
+    startsAt: istanbulDateKey(),
   });
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [isGuardianInviting, setIsGuardianInviting] = useState(false);
   const [guardianInvitationResult, setGuardianInvitationResult] = useState<StudentGuardianInvitationBulkResult | null>(null);
   const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
   const rows = studentsQuery.data?.data ?? [];
   const sourceClassIds = [...new Set(rows.map((student) => student.classId).filter((classId): classId is string => Boolean(classId)))].sort();
 
@@ -258,7 +260,7 @@ export function StudentsPage() {
       // Ad Soyad başlığı adı sıralar; "Sırala" seçiminden soyad seçildiyse başlık soyad yönünü değiştirir.
       onSort: (direction) => sortByHeader(listQuery.sort.replace(/^-/, "") === "lastName" ? "lastName" : "firstName", direction),
       sortDirection: activeSort.columnKey === "name" ? activeSort.direction : undefined,
-      render: (student) => `${student.firstName} ${student.lastName}`,
+      render: (student) => <Link href={`/kurum/ogrenciler/${encodeURIComponent(student.id)}`}>{student.firstName} {student.lastName}</Link>,
       sticky: true,
     },
     {
@@ -295,13 +297,13 @@ export function StudentsPage() {
       priority: "primary",
       render: (student) => (
         <span className="next-row-actions">
-          <Link href={`/kurum/ogrenciler/${encodeURIComponent(student.id)}`} aria-label={`${student.firstName} öğrenci özeti`}>
+          <Link href={`/kurum/ogrenciler/${encodeURIComponent(student.id)}`} aria-label={`${student.firstName} ${student.lastName} öğrenci özeti`}>
             <Eye size={17} aria-hidden="true" />
           </Link>
-          <Button size="icon" variant="ghost" type="button" onClick={() => openEditForm(student)} aria-label={`${student.firstName} düzenle`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => openEditForm(student)} aria-label={`${student.firstName} ${student.lastName} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
           </Button>
-          <Button size="icon" variant="ghost" type="button" onClick={() => void handleDelete(student)} aria-label={`${student.firstName} sil`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void handleDelete(student)} aria-label={`${student.firstName} ${student.lastName} sil`}>
             <Trash2 size={17} aria-hidden="true" />
           </Button>
         </span>
@@ -408,6 +410,7 @@ export function StudentsPage() {
     setEditingStudent(null);
     setForm(emptyForm);
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -433,10 +436,11 @@ export function StudentsPage() {
       status: student.status,
     });
     setEnrollmentAction({
-      startsAt: new Date().toISOString().slice(0, 10),
+      startsAt: istanbulDateKey(),
       classId: student.classId ?? "",
     });
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -446,6 +450,7 @@ export function StudentsPage() {
     setForm(emptyForm);
     setEnrollmentAction(emptyEnrollmentAction);
     setError("");
+    setFormError("");
   }
 
   function openImportModal() {
@@ -471,10 +476,10 @@ export function StudentsPage() {
     if (!auth || isSaving) return;
 
     const wasEditing = editingStudent;
-    setError("");
+    setFormError("");
     const parsedForm = studentFormSchema.safeParse(form);
     if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
+      setFormError(firstFormError(parsedForm.error));
       return;
     }
 
@@ -482,7 +487,7 @@ export function StudentsPage() {
     try {
       const studentForm = parsedForm.data;
       if (!wasEditing && !studentForm.gradeLevelId) {
-        setError("Seviye seçilmelidir.");
+        setFormError("Seviye seçilmelidir.");
         return;
       }
       const savedStudent = wasEditing
@@ -517,7 +522,7 @@ export function StudentsPage() {
       void queryClient.invalidateQueries({ queryKey: ["next-student-detail"] });
       closeForm();
     } catch {
-      setError("Öğrenci kaydedilemedi. TC geçerli ve benzersiz olmalı, e-posta geçerli olmalı, kota dolmamalı.");
+      setFormError("Öğrenci kaydedilemedi. TC geçerli ve benzersiz olmalı, e-posta geçerli olmalı, kota dolmamalı.");
     } finally {
       setIsSaving(false);
     }
@@ -544,7 +549,7 @@ export function StudentsPage() {
   async function handleRenewEnrollment() {
     if (!auth || !editingStudent || isEnrollmentSaving) return;
 
-    setError("");
+    setFormError("");
     setIsEnrollmentSaving(true);
     try {
       await renewStudentEnrollment(auth.accessToken, editingStudent.id, {
@@ -555,7 +560,7 @@ export function StudentsPage() {
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       void queryClient.invalidateQueries({ queryKey: ["next-student-detail"] });
     } catch {
-      setError("Kayıt yenileme yapılamadı.");
+      setFormError("Kayıt yenileme yapılamadı.");
     } finally {
       setIsEnrollmentSaving(false);
     }
@@ -564,7 +569,7 @@ export function StudentsPage() {
   async function handleTransferEnrollment() {
     if (!auth || !editingStudent || isEnrollmentSaving) return;
 
-    setError("");
+    setFormError("");
     setIsEnrollmentSaving(true);
     try {
       await transferStudentEnrollment(auth.accessToken, editingStudent.id, {
@@ -579,7 +584,7 @@ export function StudentsPage() {
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       void queryClient.invalidateQueries({ queryKey: ["next-student-detail"] });
     } catch {
-      setError("Nakil işlemi yapılamadı.");
+      setFormError("Nakil işlemi yapılamadı.");
     } finally {
       setIsEnrollmentSaving(false);
     }
@@ -590,7 +595,7 @@ export function StudentsPage() {
 
     const confirmed = await confirm({
       confirmLabel: "Geçir",
-      description: "Bu işlem mevcut filtrede listelenen öğrencilerin kayıt dönemini toplu günceller.",
+      description: "Bu işlem yalnız bu sayfada görünen öğrencilerin kayıt dönemini günceller; filtredeki diğer sayfalar ayrıca geçirilmelidir.",
       message: `${rows.length} öğrenci ${bulkEnrollmentAction.startsAt} tarihinden itibaren ${
         bulkEnrollmentAction.useAutomaticClassMapping
           ? "otomatik seviye yükseltme ile"
@@ -994,7 +999,9 @@ export function StudentsPage() {
         onCancel={closeForm}
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
+        submitError={formError || undefined}
         submitLabel={isSaving ? "Kaydediliyor…" : editingStudent ? "Kaydet" : "Ekle"}
+        submitting={isSaving}
         title={editingStudent ? "Öğrenci düzenle" : "Öğrenci ekle"}
       >
         <Field label="Ad">

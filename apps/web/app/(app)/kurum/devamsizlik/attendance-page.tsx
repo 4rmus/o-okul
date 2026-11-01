@@ -30,6 +30,7 @@ import {
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, withQueryParams } from "../../../../src/api-client.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
+import { formatDateKey } from "../../_shared/istanbul-date.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
@@ -175,7 +176,7 @@ export function AttendancePage() {
     { key: "classId", header: "Sınıf", priority: "secondary", render: (record) => optionalLabel(record.classId, classNames, "Sınıf bilgisi yok") },
     { key: "courseId", header: "Ders", priority: "secondary", render: (record) => optionalLabel(record.courseId, courseNames, "Ders bilgisi yok") },
     { key: "termId", header: "Dönem", priority: "optional", render: (record) => optionalLabel(record.termId, termNames, "Dönem bilgisi yok") },
-    { key: "date", header: "Tarih", priority: "secondary", render: (record) => record.date },
+    { key: "date", header: "Tarih", priority: "secondary", render: (record) => formatDateKey(record.date) },
     {
       key: "status",
       header: "Durum",

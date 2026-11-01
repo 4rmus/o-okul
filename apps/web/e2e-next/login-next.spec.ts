@@ -4118,7 +4118,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   const campusDialog = page.getByRole("dialog", { name: "Kampüs ekle" });
   await campusDialog.getByLabel("Kampüs adı", { exact: true }).fill("   ");
   await campusDialog.getByRole("button", { name: "Ekle", exact: true }).click();
-  await expect(page.getByLabel("Kampüs yönetimi").getByText("Kampüs adı zorunludur.")).toBeVisible();
+  await expect(campusDialog.getByRole("alert")).toContainText("Kampüs adı zorunludur.");
   await campusDialog.getByLabel("Kampüs adı", { exact: true }).fill(" Kuzey Kampüs ");
   await campusDialog.getByRole("textbox", { name: /^Kod / }).fill(" KZY ");
   await campusDialog.getByRole("button", { name: "Ekle", exact: true }).click();
@@ -4148,7 +4148,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await calendarDialog.getByLabel("Başlangıç").fill("2026-09-01");
   await calendarDialog.getByLabel("Bitiş").fill("2027-06-30");
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
-  await expect(page.getByLabel("Akademik yıl yönetimi").getByText("Akademik yıl adı zorunludur.")).toBeVisible();
+  await expect(calendarDialog.getByRole("alert")).toContainText("Akademik yıl adı zorunludur.");
   await calendarDialog.getByLabel("Akademik yıl adı").fill("2026-2027");
   await calendarDialog.getByLabel("Aktif").check();
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
@@ -4237,7 +4237,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   const classDialog = page.getByRole("dialog", { name: "Sınıf ekle" });
   await classDialog.getByLabel("Sınıf adı", { exact: true }).fill("   ");
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
-  await expect(page.getByLabel("Sınıf yönetimi").getByText("Sınıf adı zorunludur.")).toBeVisible();
+  await expect(classDialog.getByRole("alert")).toContainText("Sınıf adı zorunludur.");
   await classDialog.getByLabel("Sınıf adı", { exact: true }).fill(" 9-A ");
   await classDialog.getByRole("combobox", { name: /^Seviye / }).selectOption("grade-8");
   await classDialog.getByLabel("Şube", { exact: true }).fill(" A ");
@@ -4269,7 +4269,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   const courseDialog = page.getByRole("dialog", { name: "Ders ekle" });
   await courseDialog.getByLabel("Ders adı", { exact: true }).fill("   ");
   await courseDialog.getByRole("button", { name: "Ekle", exact: true }).click();
-  await expect(page.getByLabel("Ders yönetimi").getByText("Ders adı zorunludur.")).toBeVisible();
+  await expect(courseDialog.getByRole("alert")).toContainText("Ders adı zorunludur.");
   await courseDialog.getByLabel("Ders adı", { exact: true }).fill(" Fen Bilimleri ");
   await courseDialog.getByRole("textbox", { name: /^Kod / }).fill(" FEN ");
   await courseDialog.getByRole("button", { name: "Ekle", exact: true }).click();
@@ -4417,7 +4417,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   dialog = page.getByRole("dialog", { name: "Not düzenle" });
   await dialog.getByRole("textbox", { name: "Not", exact: true }).fill("Problem çözümü düzenli.");
   await page.getByRole("button", { name: "Kaydet", exact: true }).click();
-  await expect(page.getByText("Problem çözümü düzenli.")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Problem çözümü düzenli.", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Bora B notunu sil" }).click();
   await confirmDeleteDialog(page, "Notu sil", "Bora B notu silinsin mi?");
@@ -4556,7 +4556,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await studentFilters.getByRole("combobox", { name: /^İletişim kişisi/ }).selectOption("");
   await expect(page.getByText("Ada A", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Ada düzenle" }).click();
+  await page.getByRole("button", { name: "Ada A düzenle" }).click();
   await expect(page.getByLabel("Öğrenci 360").getByText("Devamsızlık")).toBeVisible();
   await expect(page.getByLabel("Öğrenci 360").getByText("Aktif", { exact: true }).first()).toBeVisible();
   await expect(page.getByLabel("Öğrenci 360").getByText("Kayıt geçmişi")).toBeVisible();
@@ -4575,11 +4575,11 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByLabel("Kayıt durumu").selectOption("GRADUATED");
   await page.getByRole("button", { name: "Kaydet", exact: true }).click();
   await expect(page.getByRole("cell", { name: "Mezun" })).toBeVisible();
-  await page.getByRole("button", { name: "Ada düzenle" }).click();
+  await page.getByRole("button", { name: "Ada A düzenle" }).click();
   await page.getByLabel("Kayıt durumu").selectOption("ACTIVE");
   await page.getByRole("button", { name: "Kaydet", exact: true }).click();
 
-  await page.getByRole("link", { name: "Ada öğrenci özeti" }).click();
+  await page.getByRole("link", { name: "Ada A öğrenci özeti" }).click();
   await expect(page).toHaveURL(/\/kurum\/ogrenciler\/student-a$/);
   await expect(heading(page, { name: "Ada A" })).toBeVisible();
   const studentDashboard = page.getByLabel("Öğrenci özeti", { exact: true });
@@ -4664,13 +4664,13 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
   await expect(page.getByText("Deniz Demo")).toBeVisible();
 
-  await page.getByRole("button", { name: "Deniz düzenle" }).click();
+  await page.getByRole("button", { name: "Deniz Demo düzenle" }).click();
   await page.getByLabel("Soyad", { exact: true }).fill("Güncel");
   await page.getByRole("button", { name: "Kaydet", exact: true }).click();
   await expect(page.getByText("Deniz Güncel")).toBeVisible();
   await expect(page.getByText("Deniz Demo")).toBeHidden();
 
-  await page.getByRole("button", { name: "Deniz sil" }).click();
+  await page.getByRole("button", { name: "Deniz Güncel sil" }).click();
   await confirmDeleteDialog(page, "Öğrenciyi sil", "Deniz Güncel öğrencisi silinsin mi?");
   await expect(page.getByText("Deniz Güncel")).toHaveCount(0);
 
@@ -4690,7 +4690,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByLabel("Başlık", { exact: true }).fill("   ");
   await page.getByLabel(/^Duyuru metni/).fill("Geçici metin");
   await page.getByRole("button", { name: "Yayınla", exact: true }).click();
-  await expect(page.getByLabel("Duyuru yönetimi").getByText("Başlık zorunludur.")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Duyuru ekle" }).getByRole("alert")).toContainText("Başlık zorunludur.");
   await page.getByLabel("Başlık", { exact: true }).fill(" Sınav hazırlığı ");
   await page.getByLabel(/^Duyuru metni/).fill(" Cuma deneme sınavı yapılacaktır. ");
   await page.getByRole("button", { name: "Yayınla", exact: true }).click();
@@ -4750,7 +4750,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("button", { name: "Materyal ekle" }).click();
   await page.getByLabel("Materyal adı", { exact: true }).fill("   ");
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
-  await expect(page.getByLabel("Materyal listesi").getByText("Materyal adı zorunludur.")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Materyal ekle" }).getByRole("alert")).toContainText("Materyal adı zorunludur.");
   await page.getByLabel("Materyal adı", { exact: true }).fill(" Problemler Föyü ");
   await page.getByLabel(/^Açıklama/).fill(" Yaş ve işçi problemleri ");
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
@@ -4958,7 +4958,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     await page.getByLabel(/^Mesaj metni/).fill("Geçici metin");
     await page.getByRole("button", { name: "Ekle", exact: true }).click();
 
-    await expect(page.getByLabel("Şablon yönetimi").getByText("Şablon adı zorunludur.")).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Şablon ekle" }).getByRole("alert")).toContainText("Şablon adı zorunludur.");
     await page.getByLabel("Şablon adı", { exact: true }).fill(" Devamsızlık ");
     await page.getByLabel(/^Mesaj metni/).fill(" Bugün öğrenciniz devamsız görünmektedir. ");
     await page.getByRole("button", { name: "Ekle", exact: true }).click();
@@ -5004,7 +5004,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByLabel("Konu", { exact: true }).fill("   ");
   await supportDialog.getByRole("textbox", { name: "Mesaj" }).fill("Geçici mesaj");
   await page.getByRole("button", { name: "Aç", exact: true }).click();
-  await expect(page.getByLabel("Destek bildirimi yönetimi").getByText("Konu zorunludur.")).toBeVisible();
+  await expect(supportDialog.getByRole("alert")).toContainText("Konu zorunludur.");
   await page.getByLabel("Konu", { exact: true }).fill(" Sınav sistemi ");
   await supportDialog.getByRole("textbox", { name: "Mesaj" }).fill(" Rapor ekranı açılmıyor. ");
   await page.getByRole("combobox", { name: "Öncelik" }).selectOption("HIGH");
@@ -6636,7 +6636,7 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
       { studentId: "student-b", status: "PRESENT" },
     ],
   });
-  await expect(page.getByLabel("Öğretmen yoklama kayıtları", { exact: true })).toContainText("2026-06-11");
+  await expect(page.getByLabel("Öğretmen yoklama kayıtları", { exact: true })).toContainText("11 Haz 2026");
   await expect(page.getByLabel("Öğretmen yoklama kayıtları", { exact: true })).toContainText("Geç");
   await expect(page.getByLabel("Not branşı")).toHaveValue("course-math");
   await expect(page.getByLabel("Not dönemi")).toHaveValue("term-2026-spring");
@@ -6675,6 +6675,8 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await page.getByLabel("Destek talepleri").getByRole("textbox", { exact: true, name: "Konu" }).fill("Portal raporu");
   await page.getByLabel("Destek talepleri").getByRole("textbox", { exact: true, name: "Mesaj" }).fill("Sınıf raporu geç yükleniyor.");
   await page.getByLabel("Destek talepleri").getByRole("combobox", { exact: true, name: "Öncelik" }).selectOption("HIGH");
+  // Öğrenci bağlamı yalnız açıkça seçilince gönderilir; ders/dönem tahmin edilmez.
+  await page.getByLabel("Destek talepleri").getByRole("combobox", { exact: true, name: "İlgili öğrenci" }).selectOption("student-a");
   await page.getByLabel("Destek talepleri").getByRole("button", { name: "Destek talebi aç" }).click();
   await expect.poll(() => lastPortalTeacherSupportTicketBody?.studentId ?? "").toBe("student-a");
   expect(lastPortalTeacherSupportTicketBody).toMatchObject({
@@ -6682,9 +6684,9 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
     campusId: "campus-main",
     gradeLevelId: "grade-8",
     classId: "class-a",
-    courseId: "course-math",
-    termId: "term-2026-spring",
   });
+  expect(lastPortalTeacherSupportTicketBody?.courseId ?? "").toBe("");
+  expect(lastPortalTeacherSupportTicketBody?.termId ?? "").toBe("");
   await expect(page.getByLabel("Destek talepleri").getByRole("cell", { exact: true, name: "Portal raporu" })).toBeVisible();
   await openPortalRoute(page, "Öğretmen Paneli", "Sınav Raporu", /\/ogretmen\/raporlar$/);
   const teacherReportSummary = page.getByRole("region", { name: "Portal rapor özeti" });

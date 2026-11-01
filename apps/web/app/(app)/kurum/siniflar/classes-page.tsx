@@ -62,6 +62,8 @@ export function ClassesPage() {
   const [form, setForm] = useState<ClassFormState>(emptyForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const rows = classesQuery.data?.data ?? [];
   const campuses = campusesQuery.data?.data ?? [];
   const gradeLevels = gradeLevelsQuery.data?.data ?? [];
@@ -204,6 +206,7 @@ export function ClassesPage() {
     setEditingClass(null);
     setForm(emptyForm);
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -217,6 +220,7 @@ export function ClassesPage() {
       section: record.section ?? "",
     });
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -224,19 +228,21 @@ export function ClassesPage() {
     setIsFormOpen(false);
     setEditingClass(null);
     setForm(emptyForm);
+    setFormError("");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!auth) return;
+    if (!auth || isSaving) return;
 
-    setError("");
+    setFormError("");
     const parsedForm = classFormSchema.safeParse(form);
     if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
+      setFormError(firstFormError(parsedForm.error));
       return;
     }
 
+    setIsSaving(true);
     try {
       const savedClass = editingClass
         ? await updateClass(auth.accessToken, editingClass.id, parsedForm.data)
@@ -245,7 +251,9 @@ export function ClassesPage() {
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
     } catch {
-      setError("Sınıf kaydedilemedi.");
+      setFormError("Sınıf kaydedilemedi.");
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -322,7 +330,9 @@ export function ClassesPage() {
         onCancel={closeForm}
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
+        submitError={formError || undefined}
         submitLabel={editingClass ? "Kaydet" : "Ekle"}
+        submitting={isSaving}
         title={editingClass ? "Sınıf düzenle" : "Sınıf ekle"}
       >
         <Field label="Sınıf adı">

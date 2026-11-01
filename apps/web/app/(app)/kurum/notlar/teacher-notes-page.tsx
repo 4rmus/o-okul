@@ -65,6 +65,8 @@ export function TeacherNotesPage() {
   const [form, setForm] = useState<TeacherNoteFormState>(emptyForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const rows = notesQuery.data?.data ?? [];
   const references = referencesQuery.data ?? emptyReferences;
   const studentNames = useMemo(
@@ -170,6 +172,7 @@ export function TeacherNotesPage() {
     setEditingNote(null);
     setForm({ ...emptyForm, teacherId: references.teachers[0]?.id ?? "" });
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -185,6 +188,7 @@ export function TeacherNotesPage() {
       developmentStatus: record.developmentStatus ?? "",
     });
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -192,23 +196,25 @@ export function TeacherNotesPage() {
     setIsFormOpen(false);
     setEditingNote(null);
     setForm(emptyForm);
+    setFormError("");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!auth) return;
+    if (!auth || isSaving) return;
 
-    setError("");
+    setFormError("");
     const parsedForm = teacherNoteFormSchema.safeParse(form);
     if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
+      setFormError(firstFormError(parsedForm.error));
       return;
     }
     if (!parsedForm.data.teacherId) {
-      setError("Öğretmen zorunludur.");
+      setFormError("Öğretmen zorunludur.");
       return;
     }
 
+    setIsSaving(true);
     try {
       const savedNote = editingNote
         ? await updateNote(auth.accessToken, editingNote.id, parsedForm.data)
@@ -217,7 +223,9 @@ export function TeacherNotesPage() {
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
     } catch {
-      setError("Öğretmen notu kaydedilemedi.");
+      setFormError("Öğretmen notu kaydedilemedi.");
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -304,6 +312,8 @@ export function TeacherNotesPage() {
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
         references={references}
+        submitError={formError}
+        submitting={isSaving}
       />
       {confirmationDialog}
     </>
@@ -318,6 +328,8 @@ function NoteFormModal({
   onSubmit,
   open,
   references,
+  submitError,
+  submitting,
 }: {
   form: TeacherNoteFormState;
   isEditing: boolean;
@@ -326,6 +338,8 @@ function NoteFormModal({
   onSubmit(event: FormEvent<HTMLFormElement>): void;
   open: boolean;
   references: TeacherNoteReferences;
+  submitError: string;
+  submitting: boolean;
 }) {
   return (
     <FormModal
@@ -333,7 +347,9 @@ function NoteFormModal({
       onCancel={onCancel}
       onSubmit={onSubmit}
       open={open}
+      submitError={submitError || undefined}
       submitLabel={isEditing ? "Kaydet" : "Ekle"}
+      submitting={submitting}
       title={isEditing ? "Not düzenle" : "Not ekle"}
     >
       <Field label="Öğrenci">

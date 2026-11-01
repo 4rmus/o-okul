@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button, Field, FilterBar, Input, Select } from "@o-okul/ui";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { ApiRequestError, type CursorListMeta } from "./api-client.js";
-import type { SortOption } from "./list-controls.js";
+import { useDebouncedSearchInput, type SortOption } from "./list-controls.js";
 
 /** Cursor-paged list state (GET /employees contract): the opaque cursor replaces the page number. */
 export interface CursorListQueryState {
@@ -30,7 +30,8 @@ export const initialCursorListQuery: CursorListQueryState = {
   sort: "",
 };
 
-const cursorListLimits = [5, 10, 20];
+// Öğrenci listesi API'si en fazla 50 kayıt döndürür; bir sınıf tek sayfaya sığsın diye 50 en büyük seçenektir.
+const cursorListLimits = [5, 10, 20, 50];
 
 export function buildCursorListUrl(baseUrl: string, state: CursorListQueryState): string {
   const query = new URLSearchParams({ limit: String(state.limit) });
@@ -163,6 +164,7 @@ export function CursorListControls({
     state.sort ? "Sıralama seçili" : "",
     state.limit !== initialCursorListQuery.limit ? `${state.limit} kayıt` : "",
   ].filter(Boolean).join(" · ") || "Sıralama ve sayfalama";
+  const [searchDraft, setSearchDraft] = useDebouncedSearchInput(state.q, (q) => onChange(resetListCursor(state, { q })));
 
   return (
     <FilterBar className="next-list-controls" role="group" aria-label="Liste kontrolleri">
@@ -171,8 +173,8 @@ export function CursorListControls({
         <Input
           aria-label="Ara"
           placeholder={searchPlaceholder}
-          value={state.q}
-          onChange={(event) => onChange(resetListCursor(state, { q: event.target.value }))}
+          value={searchDraft}
+          onChange={(event) => setSearchDraft(event.target.value)}
         />
       </Field>
       <details className="next-list-filter-details" open>

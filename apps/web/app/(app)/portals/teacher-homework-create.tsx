@@ -26,7 +26,22 @@ export function TeacherHomeworkCreatePanel({ accessToken, onCreated }: { accessT
     refetchOnWindowFocus: false,
   });
   const classes = optionsQuery.data ?? [];
-  if (classes.length === 0) return null;
+  if (optionsQuery.isPending) return null;
+  // Panel sessizce kaybolmaz: sınıflar alınamadıysa ya da atanmış sınıf yoksa nedeni söylenir.
+  if (optionsQuery.isError || classes.length === 0) {
+    return (
+      <Panel aria-label="Ödev oluştur" description="Sınıf veya branş öğretmeni olarak atandığın sınıfa ödev ver." title="Ödev oluştur">
+        {optionsQuery.isError ? (
+          <div className="next-form-actions">
+            <p className="next-form-error" role="alert">Ödev verebileceğin sınıflar alınamadı.</p>
+            <Button size="sm" variant="secondary" onClick={() => void optionsQuery.refetch()}>Tekrar dene</Button>
+          </div>
+        ) : (
+          <p className="next-status-note">Ödev verebileceğin atanmış bir sınıf yok. Sınıf veya branş öğretmeni ataması için kurum yöneticinle görüş.</p>
+        )}
+      </Panel>
+    );
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

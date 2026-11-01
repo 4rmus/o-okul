@@ -101,6 +101,8 @@ export function HomeworkMaterialsPage() {
   const [assignmentNote, setAssignmentNote] = useState("");
   const [assignmentDueAt, setAssignmentDueAt] = useState("");
   const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const data = query.data ?? emptyHomeworkMaterialData();
   const checkedCount = data.homework.filter((record) => record.checkedAt).length;
   const pendingHomeworkCount = Math.max(data.homework.length - checkedCount, 0);
@@ -296,6 +298,7 @@ export function HomeworkMaterialsPage() {
     setEditingMaterial(null);
     setForm(emptyMaterialForm);
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -304,6 +307,7 @@ export function HomeworkMaterialsPage() {
     setEditingMaterial(material);
     setForm({ title: material.title, description: material.description ?? "" });
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -316,19 +320,21 @@ export function HomeworkMaterialsPage() {
     setIsFormOpen(false);
     setEditingMaterial(null);
     setForm(emptyMaterialForm);
+    setFormError("");
   }
 
   async function submitMaterial(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!auth) return;
+    if (!auth || isSaving) return;
 
-    setError("");
+    setFormError("");
     const parsedForm = homeworkMaterialFormSchema.safeParse(form);
     if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
+      setFormError(firstFormError(parsedForm.error));
       return;
     }
 
+    setIsSaving(true);
     try {
       const savedMaterial = editingMaterial
         ? await updateHomeworkMaterial(auth.accessToken, editingMaterial.id, parsedForm.data)
@@ -339,7 +345,9 @@ export function HomeworkMaterialsPage() {
       }
       closeForm();
     } catch {
-      setError("Materyal kaydedilemedi.");
+      setFormError("Materyal kaydedilemedi.");
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -669,7 +677,9 @@ export function HomeworkMaterialsPage() {
         onCancel={closeForm}
         onSubmit={(event) => void submitMaterial(event)}
         open={isFormOpen}
+        submitError={formError || undefined}
         submitLabel={editingMaterial ? "Kaydet" : "Ekle"}
+        submitting={isSaving}
         title={editingMaterial ? "Materyal düzenle" : "Materyal ekle"}
       >
         <Field label="Materyal adı">

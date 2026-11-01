@@ -319,6 +319,8 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
 
 async function expectTeacherTodaySummary(page: Page, options: { rolePreview: boolean }) {
   const suffix = options.rolePreview ? "?rolePreview=1" : "";
+  // Saat 08:00'e sabit; 09:30 dersi sıradaki derstir, yoklama bağlantısı dersin sınıfını ve gününü taşır.
+  const attendanceHref = `/ogretmen/ders-akisi?classId=class-8a&date=2026-06-17${options.rolePreview ? "&rolePreview=1" : ""}#portal-teacher-attendance`;
   const brief = page.getByRole("region", { exact: true, name: "Bugün" });
   await expectPortalSummaryMetrics(
     brief.getByRole("group", { exact: true, name: "Bugün özeti" }),
@@ -332,14 +334,14 @@ async function expectTeacherTodaySummary(page: Page, options: { rolePreview: boo
   await expect(actionStrip).toBeVisible();
   await expect(actionStrip).toContainText("Bugün yapılacaklar");
   await expect(actionStrip).toContainText("3 iş");
-  await expect(actionStrip.getByRole("link", { name: /Yoklama al: 1 ders/ })).toHaveAttribute("href", `/ogretmen/ders-akisi${suffix}`);
+  await expect(actionStrip.getByRole("link", { name: /Yoklama al: 1 ders/ })).toHaveAttribute("href", attendanceHref);
   await expect(actionStrip.getByRole("link", { name: /Ödev kontrolü: 1 ödev/ })).toHaveAttribute("href", `/ogretmen/odevler${suffix}`);
   await expect(actionStrip.getByRole("link", { name: /Son sınav raporu/ })).toHaveAttribute(
     "href",
     `/ogretmen/raporlar?examId=exam-demo-isem-lgs-1${options.rolePreview ? "&rolePreview=1" : ""}`,
   );
   await expectPortalActionHrefs(actionStrip, [
-    `/ogretmen/ders-akisi${suffix}`,
+    attendanceHref,
     `/ogretmen/odevler${suffix}`,
     `/ogretmen/raporlar?examId=exam-demo-isem-lgs-1${options.rolePreview ? "&rolePreview=1" : ""}`,
   ]);
@@ -348,6 +350,8 @@ async function expectTeacherTodaySummary(page: Page, options: { rolePreview: boo
   const lessons = page.getByRole("region", { exact: true, name: "Bugünkü dersler" });
   await expect(lessons.getByRole("table", { name: "Bugünkü dersler" })).toBeVisible();
   await expect(lessons).toContainText("Matematik problem çözümü");
+  await expect(lessons).toContainText("17 Haz 2026 tarihli dersler.");
+  await expect(lessons.getByRole("link", { name: "Yoklama al" }).first()).toHaveAttribute("href", attendanceHref);
   const homework = page.getByRole("region", { exact: true, name: "Kontrol bekleyen ödevler" });
   await expect(homework).toContainText("Kesirler tekrar");
   const report = page.getByRole("region", { exact: true, name: "Son sınav raporu" });

@@ -14,7 +14,7 @@ test.describe("DataTable mobil sözleşmesi", () => {
   test("öğrenci 360 modalı mobilde sınıf ve kayıt geçmişini tabloyla gösterir", async ({ page }) => {
     await openWithDataTableMocks(page, "/kurum/ogrenciler");
 
-    await page.getByRole("button", { name: "Ada düzenle" }).click();
+    await page.getByRole("button", { name: "Ada Kaya düzenle" }).click();
 
     const student360 = page.getByLabel("Öğrenci 360");
     const student360Summary = student360.getByRole("region", { name: "Öğrenci 360 özeti" });

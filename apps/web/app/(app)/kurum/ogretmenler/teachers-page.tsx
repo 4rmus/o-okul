@@ -88,6 +88,8 @@ export function TeachersPage() {
   const [assignmentForm, setAssignmentForm] = useState<TeacherAssignmentFormState>(emptyAssignmentForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const [assignmentError, setAssignmentError] = useState<string | null>(null);
   const rows = teachersQuery.data?.data ?? [];
   const canManageAccounts = auth ? hasCapabilityForRoles(auth.session.roles, "user:manage") : false;
@@ -218,7 +220,7 @@ export function TeachersPage() {
       priority: "primary",
       sortDirection: activeSortField === "firstName" || activeSortField === "lastName" ? activeSortDirection : undefined,
       sticky: "left",
-      render: (teacher) => `${teacher.firstName} ${teacher.lastName}`,
+      render: (teacher) => <Link href={`/kurum/ogretmenler/${encodeURIComponent(teacher.id)}`}>{teacher.firstName} {teacher.lastName}</Link>,
     },
     {
       key: "branch",
@@ -277,6 +279,7 @@ export function TeachersPage() {
     setAssignmentForm(emptyAssignmentForm);
     setAssignmentError(null);
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -290,6 +293,7 @@ export function TeachersPage() {
     setAssignmentForm(emptyAssignmentForm);
     setAssignmentError(null);
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -299,19 +303,21 @@ export function TeachersPage() {
     setForm(emptyForm);
     setAssignmentForm(emptyAssignmentForm);
     setAssignmentError(null);
+    setFormError("");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!auth) return;
+    if (!auth || isSaving) return;
 
-    setError("");
+    setFormError("");
     const parsedForm = teacherFormSchema.safeParse(form);
     if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
+      setFormError(firstFormError(parsedForm.error));
       return;
     }
 
+    setIsSaving(true);
     try {
       const savedTeacher = editingTeacher
         ? await updateTeacher(auth.accessToken, editingTeacher.id, parsedForm.data)
@@ -320,7 +326,9 @@ export function TeachersPage() {
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
     } catch {
-      setError("Öğretmen kaydedilemedi.");
+      setFormError("Öğretmen kaydedilemedi.");
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -472,7 +480,9 @@ export function TeachersPage() {
         onCancel={closeForm}
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
+        submitError={formError || undefined}
         submitLabel={editingTeacher ? "Kaydet" : "Ekle"}
+        submitting={isSaving}
         title={editingTeacher ? "Öğretmen düzenle" : "Öğretmen ekle"}
       >
         <div className="next-teacher-form-grid">

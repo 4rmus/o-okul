@@ -143,6 +143,8 @@ export function SupportTicketsPage() {
   const [commentBody, setCommentBody] = useState("");
   const [downloadingAttachmentId, setDownloadingAttachmentId] = useState("");
   const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const data = ticketsQuery.data ?? emptySupportTicketData();
   const references = referencesQuery.data ?? emptyReferences;
   const rows = data.tickets;
@@ -323,12 +325,14 @@ export function SupportTicketsPage() {
   function openCreateForm() {
     setForm(emptyForm);
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
   function closeForm() {
     setIsFormOpen(false);
     setForm(emptyForm);
+    setFormError("");
   }
 
   function updateFilters(nextFilters: SupportFilters) {
@@ -339,22 +343,25 @@ export function SupportTicketsPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!auth) return;
+    if (!auth || isSaving) return;
 
-    setError("");
+    setFormError("");
     const parsedForm = supportTicketFormSchema.safeParse(form);
     if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
+      setFormError(firstFormError(parsedForm.error));
       return;
     }
 
+    setIsSaving(true);
     try {
       const savedTicket = await createSupportTicket(auth.accessToken, parsedForm.data);
       await queryClient.invalidateQueries({ queryKey: listQueryKey });
       selectSupportTicket(savedTicket.id);
       closeForm();
     } catch (submitError) {
-      setError(apiErrorMessage(submitError, "Destek bildirimi açılamadı."));
+      setFormError(apiErrorMessage(submitError, "Destek bildirimi açılamadı."));
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -706,7 +713,9 @@ export function SupportTicketsPage() {
         onCancel={closeForm}
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
+        submitError={formError || undefined}
         submitLabel="Aç"
+        submitting={isSaving}
         title="Destek bildirimi aç"
       >
         <Field label="Konu">

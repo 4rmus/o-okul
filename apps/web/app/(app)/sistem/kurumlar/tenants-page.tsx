@@ -73,7 +73,8 @@ export function TenantsPage() {
   const [form, setForm] = useState<TenantCreateFormState>(emptyCreateForm);
   const createAttempt = useRef<{ body: string; idempotencyKey: string } | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const rows = tenantsQuery.data?.data ?? [];
   const activeTenantCount = rows.filter((tenant) => tenant.status === "ACTIVE").length;
   const suspendedTenantCount = rows.filter((tenant) => tenant.status === "SUSPENDED").length;
@@ -157,7 +158,7 @@ export function TenantsPage() {
   function openCreateForm(initial: TenantCreateFormState = emptyCreateForm) {
     createAttempt.current = null;
     setForm(initial);
-    setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -165,6 +166,7 @@ export function TenantsPage() {
     createAttempt.current = null;
     setIsFormOpen(false);
     setForm(emptyCreateForm);
+    setFormError("");
   }
 
   function updateName(value: string) {
@@ -177,12 +179,12 @@ export function TenantsPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!auth) return;
+    if (!auth || isSaving) return;
 
-    setError("");
+    setFormError("");
     const parsedForm = tenantCreateFormSchema.safeParse(form);
     if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
+      setFormError(firstFormError(parsedForm.error));
       return;
     }
 
@@ -191,13 +193,16 @@ export function TenantsPage() {
       createAttempt.current = { body: requestBody, idempotencyKey: crypto.randomUUID() };
     }
 
+    setIsSaving(true);
     try {
       const created = await createTenant(auth.accessToken, parsedForm.data, createAttempt.current.idempotencyKey);
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
       void queryClient.invalidateQueries({ queryKey: ["next-tenant", created.tenant.id] });
     } catch (createError) {
-      setError(tenantCreateErrorMessage(createError));
+      setFormError(tenantCreateErrorMessage(createError));
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -227,7 +232,7 @@ export function TenantsPage() {
           />
         }
         emptyText="Kurum kaydı yok"
-        error={!isFormOpen && error ? error : tenantsQuery.isError ? "Kurumlar alınamadı." : undefined}
+        error={tenantsQuery.isError ? "Kurumlar alınamadı." : undefined}
         getRowKey={(tenant) => tenant.id}
         hasActiveFilters={Boolean(listQuery.q.trim())}
         loading={tenantsQuery.isPending}
@@ -242,7 +247,7 @@ export function TenantsPage() {
       />
       {auth ? <PurgeCandidatesPanel auth={auth} /> : null}
       <TenantFormModal
-        error={error}
+        error={formError}
         form={form}
         onCancel={closeForm}
         onChange={setForm}
@@ -250,6 +255,7 @@ export function TenantsPage() {
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
         submitLabel="Oluştur"
+        submitting={isSaving}
         title="Kurum oluştur"
       />
     </PageFrame>
@@ -265,6 +271,7 @@ function TenantFormModal({
   onSubmit,
   open,
   submitLabel,
+  submitting,
   title,
 }: {
   form: TenantCreateFormState;
@@ -275,6 +282,7 @@ function TenantFormModal({
   onSubmit(event: FormEvent<HTMLFormElement>): void;
   open: boolean;
   submitLabel: string;
+  submitting: boolean;
   title: string;
 }) {
   return (
@@ -284,6 +292,7 @@ function TenantFormModal({
       onSubmit={onSubmit}
       open={open}
       submitLabel={submitLabel}
+      submitting={submitting}
       title={title}
     >
       {error ? <p className="next-form-error" role="alert">{error}</p> : null}

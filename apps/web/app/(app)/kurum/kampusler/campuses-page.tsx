@@ -42,6 +42,8 @@ export function CampusesPage() {
   const [form, setForm] = useState<CampusFormState>(emptyForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const rows = campusesQuery.data?.data ?? [];
   const codedCampusCount = rows.filter((record) => Boolean(record.code)).length;
   const campusSummaryItems: OperationSummaryItem[] = [
@@ -154,6 +156,7 @@ export function CampusesPage() {
     setEditingCampus(null);
     setForm(emptyForm);
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -161,6 +164,7 @@ export function CampusesPage() {
     setEditingCampus(record);
     setForm({ name: record.name, code: record.code ?? "", unitType: record.unitType ?? "SCHOOL" });
     setError("");
+    setFormError("");
     setIsFormOpen(true);
   }
 
@@ -168,19 +172,21 @@ export function CampusesPage() {
     setIsFormOpen(false);
     setEditingCampus(null);
     setForm(emptyForm);
+    setFormError("");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!auth) return;
+    if (!auth || isSaving) return;
 
-    setError("");
+    setFormError("");
     const parsedForm = (editingCampus ? campusFormSchema : campusCreateFormSchema).safeParse(form);
     if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
+      setFormError(firstFormError(parsedForm.error));
       return;
     }
 
+    setIsSaving(true);
     try {
       const savedCampus = editingCampus
         ? await updateCampus(auth.accessToken, editingCampus.id, parsedForm.data)
@@ -189,7 +195,9 @@ export function CampusesPage() {
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
     } catch {
-      setError("Kampüs kaydedilemedi.");
+      setFormError("Kampüs kaydedilemedi.");
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -264,7 +272,9 @@ export function CampusesPage() {
         onCancel={closeForm}
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
+        submitError={formError || undefined}
         submitLabel={editingCampus ? "Kaydet" : "Ekle"}
+        submitting={isSaving}
         title={editingCampus ? "Kampüs düzenle" : "Kampüs ekle"}
       >
         <Field label="Kampüs adı">
