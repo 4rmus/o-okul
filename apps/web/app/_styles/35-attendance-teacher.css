@@ -1,0 +1,218 @@
+/* Gate T1: tek dokunuşla yoklama, aranabilir öğrenci listesi, ödev seçimi ve bölüm hata satırı. */
+.next-attendance-roster {
+  display: grid;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.next-attendance-roster__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  align-items: center;
+}
+
+.next-attendance-roster__toolbar p {
+  margin: 0;
+}
+
+.next-attendance-roster__list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.next-attendance-roster__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs) var(--space-sm);
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  padding: var(--space-2xs) var(--space-xs);
+  border-bottom: 1px solid var(--color-border-faint);
+}
+
+.next-attendance-roster__row:last-child {
+  border-bottom: 0;
+}
+
+.next-attendance-roster__row[data-marked="false"] {
+  background: var(--color-surface-muted);
+}
+
+.next-attendance-roster__student {
+  display: grid;
+  flex: 1 1 10rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.next-attendance-roster__student span {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.next-attendance-status {
+  display: grid;
+  flex: 1 1 15rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3xs);
+  max-width: 24rem;
+  min-width: 0;
+}
+
+.next-attendance-status__option {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.next-attendance-status__option input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.next-attendance-status__option:has(input:focus-visible) {
+  box-shadow: var(--focus-ring);
+}
+
+.next-attendance-status__option:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.next-attendance-status__option:has(input:checked) {
+  border-color: var(--color-primary);
+  background: var(--color-primary-subtle);
+  color: var(--color-primary);
+}
+
+.next-attendance-status__option[data-status="PRESENT"]:has(input:checked) {
+  border-color: var(--color-success);
+  background: var(--color-success-subtle);
+  color: var(--color-success);
+}
+
+.next-attendance-status__option[data-status="ABSENT"]:has(input:checked) {
+  border-color: var(--color-danger);
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
+}
+
+.next-attendance-status__option[data-status="LATE"]:has(input:checked) {
+  border-color: var(--color-warning);
+  background: var(--color-warning-subtle);
+  color: var(--color-warning);
+}
+
+.next-attendance-status__option[data-status="EXCUSED"]:has(input:checked) {
+  border-color: var(--color-info);
+  background: var(--color-info-subtle);
+  color: var(--color-info);
+}
+
+.next-attendance-roster__bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.next-attendance-roster__bar p {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.next-teacher-roster__filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--space-xs);
+}
+
+.next-teacher-roster__count {
+  margin: 0;
+}
+
+.next-teacher-roster__list.uh-segmented-control {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+  max-height: 22rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-3xs);
+}
+
+.next-teacher-roster__list.uh-segmented-control button {
+  min-height: 44px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  padding: var(--space-3xs) var(--space-xs);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  text-align: left;
+  white-space: normal;
+}
+
+.next-teacher-roster__list.uh-segmented-control button[aria-pressed="true"] {
+  border-color: var(--color-primary);
+  background: var(--color-primary-subtle);
+  color: var(--color-primary);
+}
+
+.next-homework-select.uh-button {
+  justify-content: flex-start;
+  min-height: 44px;
+  padding-inline: var(--space-2xs);
+  overflow-wrap: anywhere;
+  text-align: left;
+  white-space: normal;
+}
+
+.next-homework-row--selected td {
+  background: var(--color-primary-subtle);
+}
+
+.next-section-error {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+  align-items: center;
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}

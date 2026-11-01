@@ -6622,12 +6622,14 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(page.getByLabel("Ders programı").getByRole("row", { name: /Matematik 8-A Matematik 2\. Donem/ })).toBeVisible();
   await expect(page.getByLabel("Yoklama branşı")).toHaveCount(0);
   await expect(page.getByLabel("Yoklama dönemi")).toHaveCount(0);
-  await expect(page.getByLabel("Öğretmen öğrenci kapsamı").getByRole("button", { name: "Ada A / 8-A" })).toBeVisible();
-  await expect(page.getByLabel("Öğretmen yoklama kayıtları").getByRole("cell", { name: "Yok" })).toBeVisible();
+  // Gate T1: Ders akışı program + yoklamadır; öğrenci listesi ve yoklama geçmişi Öğrenci takibindedir.
+  await expect(page.getByLabel("Öğretmen öğrenci kapsamı")).toHaveCount(0);
   await page.getByLabel("Tarih").fill("2026-06-11");
   await page.getByRole("button", { name: "Tümünü Var" }).click();
-  await page.getByLabel("Ada A yoklama durumu").selectOption("LATE");
+  await page.getByRole("radiogroup", { name: "Ada A yoklama durumu" }).getByRole("radio", { exact: true, name: "Geç" }).check();
+  await expect(page.locator(".next-attendance-roster__bar")).toContainText("1 Var · 0 Yok · 1 Geç · 0 seçilmedi");
   await page.getByRole("button", { name: "Yoklamayı kaydet" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "yoklaması kaydedildi (11 Haz 2026)." })).toBeVisible();
   expect(lastPortalAttendanceBody).toEqual({
     classId: "class-a",
     date: "2026-06-11",
@@ -6636,8 +6638,9 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
       { studentId: "student-b", status: "PRESENT" },
     ],
   });
-  await expect(page.getByLabel("Öğretmen yoklama kayıtları", { exact: true })).toContainText("11 Haz 2026");
-  await expect(page.getByLabel("Öğretmen yoklama kayıtları", { exact: true })).toContainText("Geç");
+  await openPortalRoute(page, "Öğretmen Paneli", "Öğrenci Takibi", /\/ogretmen\/ogrenci-takibi$/);
+  await expect(page.getByLabel("Öğretmen öğrenci kapsamı").getByRole("button", { name: "Ada A / 8-A" })).toBeVisible();
+  await expect(page.getByLabel("Öğretmen yoklama kayıtları").getByRole("cell", { name: "Yok" })).toBeVisible();
   await expect(page.getByLabel("Not branşı")).toHaveValue("course-math");
   await expect(page.getByLabel("Not dönemi")).toHaveValue("term-2026-spring");
   await page.getByLabel("Gelişim durumu").fill("FOCUS");

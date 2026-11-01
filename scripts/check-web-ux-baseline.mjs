@@ -48,6 +48,7 @@ const files = {
   "apps/web/app/(app)/kurum/destek/support-tickets-page.tsx": readFileSync("apps/web/app/(app)/kurum/destek/support-tickets-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/denetim/audit-logs-page.tsx": readFileSync("apps/web/app/(app)/kurum/denetim/audit-logs-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/devamsizlik/attendance-page.tsx": readFileSync("apps/web/app/(app)/kurum/devamsizlik/attendance-page.tsx", "utf8"),
+  "apps/web/app/(app)/_shared/attendance-status-picker.tsx": readFileSync("apps/web/app/(app)/_shared/attendance-status-picker.tsx", "utf8"),
   "apps/web/app/(app)/kurum/duyurular/announcements-page.tsx": readFileSync("apps/web/app/(app)/kurum/duyurular/announcements-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/etutler/study-sessions-page.tsx": readFileSync("apps/web/app/(app)/kurum/etutler/study-sessions-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/finans/finance-page.tsx": readFileSync("apps/web/app/(app)/kurum/finans/finance-page.tsx", "utf8"),
@@ -1364,7 +1365,18 @@ requireTokens("apps/web/e2e-next/teacher-portal-contract-next.spec.ts", [
   'getByRole("heading", { name: "Materyal Atamaları" })',
   'getByRole("table", { name: "Öğretmen ödev kontrol kayıtları" })',
   'getByRole("table", { name: "Öğretmen materyal atamaları" })',
-  'toHaveText(["Ödev", "Materyal", "Teslim", "Durum", "İşlem"])',
+  'toHaveText(["Ödev", "Sınıf", "Materyal", "Teslim", "Durum", "İşlem"])',
+  // Gate T1: tek dokunuşla yoklama, aranabilir öğrenci listesi, ödev seçimi ve bölüm bazlı hata.
+  "expectOneTapRollCall",
+  'getByRole("radiogroup", { name: "Ada Kaya yoklama durumu" })',
+  "1 Var · 0 Yok · 0 Geç · 1 seçilmedi",
+  'toHaveCSS("position", "sticky")',
+  'getByRole("searchbox", { name: "Öğrenci ara" })',
+  "Aramaya uyan öğrenci yok.",
+  "Oranlar · 8-B",
+  "failReadPaths",
+  "Bu bölüm yüklenemedi",
+  'getByRole("button", { name: "Tekrar dene" })',
   'toHaveText(["Öğrenci", "Materyal", "Branş", "Dönem", "Not", "Teslim"])',
   "Bilinmeyen materyal",
   "Bilinmeyen öğrenci",
@@ -2585,6 +2597,8 @@ requireNoTokens("apps/web/app/(app)/kurum/finans/finance-page.tsx", [
 ]);
 
 requireTokens("apps/web/app/(app)/kurum/devamsizlik/attendance-page.tsx", [
+  "AttendanceRoster",
+  'label="Günlük sınıf yoklama listesi"',
   "useUrlListState",
   "OperationSummary",
   "attendanceSummaryItems",
@@ -2604,7 +2618,22 @@ requireTokens("apps/web/app/(app)/kurum/devamsizlik/attendance-page.tsx", [
   "writeBrowserQueryParam",
 ]);
 
+// Gate T1: yoklama durumu öğrenci başına tek dokunuşluk radio grubudur; "Var" ilk seçenek, özet kaydet yanında.
+requireTokensInOrder("apps/web/app/(app)/_shared/attendance-status-picker.tsx", [
+  '{ label: "Var", value: "PRESENT" }',
+  '{ label: "Yok", value: "ABSENT" }',
+  '{ label: "Geç", value: "LATE" }',
+  '{ label: "İzinli", value: "EXCUSED" }',
+  'aria-label={`${studentName} yoklama durumu`}',
+  'role="radiogroup"',
+  'type="radio"',
+  ">Tümünü Var</Button>",
+  'className="next-attendance-roster__bar"',
+  "`${counts.unmarked} seçilmedi`",
+]);
+
 requireNoTokens("apps/web/app/(app)/kurum/devamsizlik/attendance-page.tsx", [
+  '<option value="">Seçiniz</option>',
   "studentNames.get(record.studentId) ?? record.studentId",
   "classNames.get(student.classId) ?? student.classId",
   "labels.get(id) ?? id",
@@ -4448,6 +4477,9 @@ requireNoTokens("apps/web/app/(app)/portals/_shared/development-panel.tsx", [
 ]);
 
 requireTokens("apps/web/app/(app)/portals/_shared/homework-panels.tsx", [
+  'header: "Sınıf"',
+  "resolveSubmissionHomeworkId",
+  'id="portal-teacher-homework-submissions"',
   "Panel,",
   "DataTable,",
   'aria-label="Ödevler"',
@@ -4502,7 +4534,14 @@ requireTokens("apps/web/app/(app)/portals/teacher-portal-page.tsx", [
   "Textarea,",
   'aria-label="Öğretmen öğrenci kapsamı"',
   'title="Öğrenciler"',
-  '<SegmentedControl className="next-segmented" label="Öğrenci seçimi">',
+  '<SegmentedControl className="next-teacher-roster__list" label="Öğrenci seçimi">',
+  '<Field label="Öğrenci ara">',
+  "filterTeacherStudents",
+  "AttendanceRoster",
+  'label="Öğretmen günlük yoklama listesi"',
+  "TeacherSectionError",
+  "failedSections",
+  'if (attempted > 0 && failed === attempted) throw new Error("TEACHER_PORTAL_UNAVAILABLE");',
   'id="portal-teacher-actions"',
   'className="next-teacher-action-grid"',
   'as="form"',
@@ -4518,7 +4557,6 @@ requireTokens("apps/web/app/(app)/portals/teacher-portal-page.tsx", [
   "<Textarea",
   'aria-label="Yoklama kaydet"',
   "Atandığınız sınıfın tam öğrenci listesini tarih için tek işlemde kaydedin.",
-  'caption="Öğretmen günlük yoklama listesi"',
   "entries: attendanceRoster.map",
   "AttendanceDailyUpsertResponse",
   "`${apiBaseUrl}/attendance/daily`",
@@ -4542,6 +4580,8 @@ requireTokens("apps/web/app/(app)/portals/teacher-portal-page.tsx", [
 ]);
 
 requireNoTokens("apps/web/app/(app)/portals/teacher-portal-page.tsx", [
+  '<option value="">Seçiniz</option>',
+  '<SegmentedControl className="next-segmented" label="Öğrenci seçimi">',
   '<div className="next-segmented">',
   '<div className="next-list-panel" aria-label="Öğretmen öğrenci kapsamı"',
   '<section className="next-list-panel" aria-label="Ders programı"',

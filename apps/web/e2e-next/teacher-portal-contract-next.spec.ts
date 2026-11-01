@@ -85,13 +85,35 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
       await expect(page.getByRole("region", { name: "Öğrenci çalışma alanı" })).toHaveCount(0);
       await expectTeacherPageClean(page, `teacher-today-${viewport.width}`);
 
+      // Gate T1: Ders akışı yalnız program ve yoklamadır; öğrenci çalışma alanı Öğrenci takibindedir.
       await page.goto("/ogretmen/ders-akisi");
       await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
       await expect(page.getByRole("heading", { level: 1, name: "Öğretmen Portalı" })).toBeVisible();
       await expect(page.getByRole("region", { exact: true, name: "Portal özeti" })).toHaveCount(0);
+      await expect(page.getByRole("region", { name: "Öğrenci çalışma alanı" })).toHaveCount(0);
+      await expect(page.getByRole("region", { exact: true, name: "Öğretmen öğrenci kapsamı" })).toHaveCount(0);
+      await expectTeacherDisplayPanels(page);
+      const rollCall = page.getByRole("region", { name: "Öğretmen günlük işlemleri" });
+      await expect(rollCall).toBeVisible();
+      await expect(rollCall.locator(".uh-field")).toHaveCount(2);
+      await expect(rollCall.locator(".uh-select")).toHaveCount(1);
+      await expect(rollCall.getByLabel("Yoklama sınıfı").locator("option")).toHaveText(["Sınıf seçiniz", "8-A"]);
+      await expect(rollCall.getByRole("button", { name: "Not ekle" })).toHaveCount(0);
+      await expect(rollCall.getByRole("button", { name: "Materyal ata" })).toHaveCount(0);
+      await expectOneTapRollCall(rollCall);
+      await expect(page.getByRole("table", { name: "Bugünkü dersler" })).toBeVisible();
+      const schedule = page.getByRole("region", { exact: true, name: "Ders programı" });
+      await expect(schedule.getByRole("heading", { name: "Program" })).toBeVisible();
+      await expect(schedule.getByRole("table", { name: "Ders programı" })).toBeVisible();
+      await expectTeacherPageClean(page, `teacher-lesson-flow-${viewport.width}`);
+
+      await page.goto("/ogretmen/ogrenci-takibi");
+      await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
       const workspace = page.getByRole("region", { name: "Öğrenci çalışma alanı" });
       await expect(workspace).toContainText("Öğrenci Takibi");
       await expect(workspace).toContainText("Ada Kaya / 8-A");
+      await expect(page.getByRole("region", { exact: true, name: "Ders programı" })).toHaveCount(0);
+      await expect(page.getByRole("list", { name: "Öğretmen günlük yoklama listesi" })).toHaveCount(0);
 
       const focus = workspace.getByRole("region", { exact: true, name: "Seçili sınıf ve öğrenci özeti" });
       await expect(focus).toContainText("Seçili Öğrenci");
@@ -107,27 +129,23 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
       await expect(focus).toContainText("Net");
       await expect(focus).toContainText("24,5");
 
-      await expectTeacherDisplayPanels(page);
       await expectTeacherActivityPanels(page);
 
       const studentScope = page.getByRole("region", { exact: true, name: "Öğretmen öğrenci kapsamı" });
       await expect(studentScope.getByRole("heading", { name: "Öğrenciler" })).toBeVisible();
+      await expect(studentScope.getByRole("searchbox", { name: "Öğrenci ara" })).toBeVisible();
       await expect(studentScope.getByRole("button", { name: "Ada Kaya / 8-A" })).toHaveAttribute("aria-pressed", "true");
       const dailyActions = page.getByRole("region", { name: "Öğretmen günlük işlemleri" });
       await expect(dailyActions).toBeVisible();
-      await expect(dailyActions.locator(".uh-field")).toHaveCount(14);
-      await expect(dailyActions.locator(".uh-select")).toHaveCount(11);
-      await expect(dailyActions.getByLabel("Yoklama sınıfı").locator("option")).toHaveText(["Sınıf seçiniz", "8-A"]);
+      await expect(dailyActions.locator(".uh-field")).toHaveCount(12);
+      await expect(dailyActions.locator(".uh-select")).toHaveCount(8);
+      await expect(dailyActions.getByLabel("Yoklama sınıfı")).toHaveCount(0);
       await expect(dailyActions.locator(".uh-textarea")).toHaveCount(2);
       await expect(dailyActions.getByRole("textbox", { name: /^Not / })).toBeVisible();
       await expect(dailyActions.getByRole("textbox", { name: /^Atama notu / })).toBeVisible();
-      await expect(page.getByRole("button", { name: "Yoklamayı kaydet" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Yoklamayı kaydet" })).toHaveCount(0);
       await expect(page.getByRole("button", { name: "Not ekle" })).toBeVisible();
       await expect(page.getByRole("button", { name: "Materyal ata" })).toBeVisible();
-      await expect(page.getByRole("table", { name: "Bugünkü dersler" })).toBeVisible();
-      const schedule = page.getByRole("region", { exact: true, name: "Ders programı" });
-      await expect(schedule.getByRole("heading", { name: "Program" })).toBeVisible();
-      await expect(schedule.getByRole("table", { name: "Ders programı" })).toBeVisible();
 
       await workspace.getByRole("button", { name: "Bora Yilmaz / 8-A" }).click();
       await expect(focus).toContainText("Bora Yilmaz");
@@ -165,7 +183,7 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
         expect(requestedPaths).toContain(path);
       }
       expect(requestedPaths.filter((path) => /^\/me\/teacher\/homework\/materials\/[^/]+\/assignments$/.test(path))).toEqual([]);
-      // Ders akışı ve Ödev kontrolü sayfaları atamaları sayfa başına tek istekle okur.
+      // Öğrenci takibi ve Ödev kontrolü sayfaları atamaları sayfa başına tek istekle okur; Ders akışı okumaz.
       expect(requestedPaths.filter((path) => path === "/me/teacher/homework/material-assignments")).toHaveLength(2);
       expect(requestedPaths.filter((path) => path === "/me/teacher/today")).toHaveLength(1);
     });
@@ -185,8 +203,14 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
     await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
     await expect(page.getByLabel("Rol önizleme bilgisi")).toContainText("Yalnızca Görüntüleme");
     await expect(page.getByRole("region", { name: "Öğretmen günlük işlemleri" })).toHaveCount(0);
-    await expect(page.getByRole("region", { exact: true, name: "Seçili sınıf ve öğrenci özeti" })).toContainText("Yalnızca görüntüleme");
+    await expect(page.getByRole("radiogroup")).toHaveCount(0);
     await expectTeacherDisplayPanels(page);
+    await expectTeacherPageClean(page, "teacher-lesson-flow-role-preview");
+
+    await page.goto("/ogretmen/ogrenci-takibi?rolePreview=1");
+    await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+    await expect(page.getByRole("region", { name: "Öğretmen günlük işlemleri" })).toHaveCount(0);
+    await expect(page.getByRole("region", { exact: true, name: "Seçili sınıf ve öğrenci özeti" })).toContainText("Yalnızca görüntüleme");
     await expectTeacherActivityPanels(page);
     await expectTeacherPageClean(page, "teacher-portal-role-preview");
 
@@ -315,7 +339,193 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
     await expect.poll(() => mutationRequests).toEqual(expect.arrayContaining(["PUT /attendance/daily"]));
     expect(mutationRequests).not.toContain("POST /attendance");
   });
+
+  // Gate T1: tek dokunuşla yoklama; durum başına iki etkileşim yerine bir dokunuş, kaydet yanında yapışkan özet.
+  for (const viewport of [{ height: 812, width: 320 }, { height: 1024, width: 768 }, { height: 900, width: 1440 }]) {
+    test(`öğretmen ${viewport.width}px görünümde yoklamayı tek dokunuşla alır`, async ({ page }) => {
+      await openTeacherPortal(page, viewport, { path: "/ogretmen/ders-akisi" });
+      const rollCall = page.getByRole("region", { name: "Öğretmen günlük işlemleri" });
+      await expectOneTapRollCall(rollCall);
+      const attendanceRequest = page.waitForRequest(
+        (request) => request.method() === "PUT" && new URL(request.url()).pathname === "/api/v1/attendance/daily",
+      );
+      await rollCall.getByRole("radiogroup", { name: "Ada Kaya yoklama durumu" }).getByRole("radio", { name: "Yok" }).check();
+      await expect(rollCall.locator(".next-attendance-roster__bar")).toHaveText(/0 Var · 1 Yok · 1 Geç · 0 seçilmedi/);
+      await rollCall.getByRole("button", { name: "Yoklamayı kaydet" }).click();
+      expect(JSON.parse((await attendanceRequest).postData() ?? "{}")).toEqual({
+        classId: "class-8a",
+        date: "2026-06-17",
+        entries: [
+          { status: "ABSENT", studentId: "student-a" },
+          { status: "LATE", studentId: "student-b" },
+        ],
+      });
+      await expect(rollCall.getByRole("status").filter({ hasText: "8-A yoklaması kaydedildi (17 Haz 2026)." })).toBeVisible();
+      await expectTeacherPageClean(page, `teacher-roll-call-${viewport.width}`);
+    });
+  }
+
+  test("öğretmen öğrenci takibinde listeyi arar ve sınıfa göre süzer", async ({ page }) => {
+    await openTeacherPortal(page, { height: 812, width: 375 }, { path: "/ogretmen/ogrenci-takibi" });
+    await page.route("**/api/v1/me/teacher/students", async (route) => {
+      if (route.request().method() === "OPTIONS") return route.fulfill({ headers: corsHeadersFor(route), status: 204 });
+      return fulfillData(route, [
+        ...createStudents(),
+        { classId: "class-visible", firstName: "Cem", id: "student-c", lastName: "Demir", responsibleTeacherId: "teacher-math", status: "ACTIVE", studentNo: "8101", tenantId: "tenant-teacher" },
+      ]);
+    });
+    await page.reload();
+    await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+
+    const scope = page.getByRole("region", { exact: true, name: "Öğretmen öğrenci kapsamı" });
+    const picker = scope.getByRole("group", { name: "Öğrenci seçimi" });
+    const count = scope.locator(".next-teacher-roster__count");
+    const search = scope.getByRole("searchbox", { name: "Öğrenci ara" });
+    await expect(picker.getByRole("button")).toHaveCount(3);
+    await expect(count).toHaveText("3 öğrenci");
+    await search.fill("BORA");
+    await expect(picker.getByRole("button")).toHaveText(["Bora Yilmaz / 8-A"]);
+    await expect(count).toHaveText("1 / 3 öğrenci");
+    await search.fill("8101");
+    await expect(picker.getByRole("button")).toHaveText(["Cem Demir / 8-B"]);
+    await search.fill("");
+    await scope.getByRole("combobox", { name: "Sınıf" }).selectOption("class-visible");
+    await expect(picker.getByRole("button")).toHaveText(["Cem Demir / 8-B"]);
+    await picker.getByRole("button", { name: "Cem Demir / 8-B" }).click();
+    await expect(picker.getByRole("button", { name: "Cem Demir / 8-B" })).toHaveAttribute("aria-pressed", "true");
+    const workspace = page.getByRole("region", { name: "Öğrenci çalışma alanı" });
+    await expect(workspace.locator(".next-teacher-workspace__header")).toContainText("Cem Demir / 8-B");
+    // Arama seçimi düşürmez; seçili öğrenci listede görünmese de çalışma alanı onu gösterir.
+    await search.fill("zzz");
+    await expect(scope).toContainText("Aramaya uyan öğrenci yok.");
+    await expect(workspace.locator(".next-teacher-workspace__header")).toContainText("Cem Demir / 8-B");
+    await expect(page.getByRole("form", { name: "Not ekle" }).getByRole("combobox", { name: "Öğrenci" })).toHaveValue("student-c");
+    await expectTeacherPageClean(page, "teacher-roster-search-375");
+  });
+
+  test("öğretmen ödev tablosu sınıfı gösterir ve satırdan teslim durumunu açar", async ({ page }) => {
+    await openTeacherPortal(page, { height: 844, width: 390 }, { path: "/ogretmen/odevler" });
+    await page.route("**/api/v1/me/teacher/homework", async (route) => {
+      if (route.request().method() === "OPTIONS") return route.fulfill({ headers: corsHeadersFor(route), status: 204 });
+      return fulfillData(route, [
+        { checkedAt: "2026-06-16T10:00:00.000Z", classId: "class-visible", dueAt: "2026-06-16T12:00:00.000Z", id: "homework-b", tenantId: "tenant-teacher", title: "Oranlar" },
+        ...createHomework(),
+      ]);
+    });
+    await page.route("**/api/v1/homework/*/submissions", async (route) => {
+      if (route.request().method() === "OPTIONS") return route.fulfill({ headers: corsHeadersFor(route), status: 204 });
+      const isB = route.request().url().includes("/homework/homework-b/");
+      return fulfillData(route, isB
+        ? [{ checkedAt: "2026-06-16T10:00:00.000Z", homeworkId: "homework-b", status: "CHECKED", studentId: "student-b", submittedAt: "2026-06-16T09:00:00.000Z" }]
+        : [{ homeworkId: "homework-a", status: "SUBMITTED", studentId: "student-a", submittedAt: "2026-06-17T07:00:00.000Z" }]);
+    });
+    await page.reload();
+    await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+
+    const homework = page.getByRole("region", { exact: true, name: "Öğretmen ödev kontrolü" });
+    const table = homework.getByRole("table", { name: "Öğretmen ödev kontrol kayıtları" });
+    await expect(table.getByRole("row").filter({ hasText: "Oranlar" })).toContainText("8-B");
+    await expect(table.getByRole("row").filter({ hasText: "Kesirler tekrar" })).toContainText("8-A");
+    const submissions = page.getByRole("region", { exact: true, name: "Ödev teslim durumu" });
+    const select = submissions.getByRole("combobox", { name: "Ödev" });
+    await expect(select.locator("option")).toHaveText(["Oranlar · 8-B", "Kesirler tekrar · 8-A"]);
+    // Varsayılan seçim kontrol bekleyen ilk ödevdir.
+    await expect(select).toHaveValue("homework-a");
+    await expect(table.getByRole("button", { name: "Kesirler tekrar" })).toHaveAttribute("aria-pressed", "true");
+    await expect(submissions).toContainText("Ada Kaya");
+    await table.getByRole("button", { name: "Oranlar" }).click();
+    await expect(table.getByRole("button", { name: "Oranlar" })).toHaveAttribute("aria-pressed", "true");
+    await expect(table.getByRole("button", { name: "Kesirler tekrar" })).toHaveAttribute("aria-pressed", "false");
+    await expect(select).toHaveValue("homework-b");
+    await expect(submissions).toContainText("Bora Yilmaz");
+    await expect(submissions).toContainText("Kontrol edildi");
+    await select.selectOption("homework-a");
+    await expect(table.getByRole("button", { name: "Kesirler tekrar" })).toHaveAttribute("aria-pressed", "true");
+    for (const value of rawInternalValues) {
+      await expect(homework).not.toContainText(value);
+      await expect(submissions).not.toContainText(value);
+    }
+    await expectTeacherPageClean(page, "teacher-homework-select-390");
+  });
+
+  test("öğretmen portalında düşen istek yalnız kendi bölümünü işaretler", async ({ page }) => {
+    const failReadPaths = new Set(["/me/teacher/teacher-notes", "/me/teacher/attendance"]);
+    await openTeacherPortal(page, { height: 844, width: 390 }, { failReadPaths, path: "/ogretmen/ogrenci-takibi" });
+
+    await expect(page.getByRole("heading", { level: 1, name: "Öğretmen Portalı" })).toBeVisible();
+    const notes = page.getByRole("region", { exact: true, name: "Öğretmen notları" });
+    const attendance = page.getByRole("region", { exact: true, name: "Öğretmen yoklama kayıtları" });
+    for (const region of [notes, attendance]) {
+      await expect(region.getByRole("alert")).toContainText("Bu bölüm yüklenemedi");
+      await expect(region.getByRole("button", { name: "Tekrar dene" })).toBeVisible();
+    }
+    await expect(page.getByRole("table", { name: "Öğretmen notları" })).toHaveCount(0);
+    // Diğer bölümler çalışmaya devam eder.
+    await expect(page.getByRole("region", { exact: true, name: "Öğretmen öğrenci kapsamı" }).getByRole("button", { name: "Ada Kaya / 8-A" })).toBeVisible();
+    await expect(page.getByRole("region", { exact: true, name: "Seçili sınıf ve öğrenci özeti" })).toContainText("%81,7");
+    await expect(page.getByRole("button", { name: "Not ekle" })).toBeVisible();
+    await expectTeacherPageClean(page, "teacher-section-error-390");
+
+    failReadPaths.clear();
+    await notes.getByRole("button", { name: "Tekrar dene" }).click();
+    await expect(page.getByRole("table", { name: "Öğretmen notları" })).toBeVisible();
+    await expect(page.getByRole("table", { name: "Öğretmen yoklama kayıtları" })).toBeVisible();
+    await expect(page.getByText("Bu bölüm yüklenemedi")).toHaveCount(0);
+
+    failReadPaths.add("/me/teacher/schedule");
+    await page.goto("/ogretmen/ders-akisi");
+    await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+    for (const name of ["Bugünkü dersler", "Ders programı"]) {
+      await expect(page.getByRole("region", { exact: true, name }).getByRole("alert")).toContainText("Bu bölüm yüklenemedi");
+    }
+    // Yoklama programdan bağımsızdır; sınıf listesi gelir ve kaydedilebilir.
+    await expect(page.getByRole("region", { exact: true, name: "Öğretmen profil özeti" })).toContainText("Zeynep Arslan");
+    await expect(page.getByRole("radiogroup", { name: "Ada Kaya yoklama durumu" })).toBeVisible();
+  });
+
+  test("tüm portal istekleri düşünce sayfa tek hata durumu gösterir", async ({ page }) => {
+    const failReadPaths = new Set([
+      "/me/teacher",
+      "/me/teacher/schedule",
+      "/me/teacher/students",
+      "/me/teacher/lookups",
+    ]);
+    await openTeacherPortal(page, { height: 844, width: 390 }, { failReadPaths, path: "/ogretmen/ders-akisi" });
+    const pageError = page.getByRole("alert").filter({ hasText: "Öğretmen portal verisi alınamadı" });
+    await expect(pageError).toBeVisible();
+    await expect(pageError.getByRole("button", { name: "Tekrar dene" })).toBeVisible();
+  });
 });
+
+async function expectOneTapRollCall(rollCall: Locator) {
+  const roster = rollCall.getByRole("list", { name: "Öğretmen günlük yoklama listesi" });
+  await expect(roster.getByRole("listitem")).toHaveCount(2);
+  // "Tümünü Var" listeden önce gelir.
+  await expect(rollCall.locator(".next-attendance-roster > *").first().getByRole("button", { name: "Tümünü Var" })).toBeVisible();
+  const ada = roster.getByRole("radiogroup", { name: "Ada Kaya yoklama durumu" });
+  const bora = roster.getByRole("radiogroup", { name: "Bora Yilmaz yoklama durumu" });
+  for (const group of [ada, bora]) {
+    await expect(group.getByRole("radio")).toHaveCount(4);
+    for (const label of ["Var", "Yok", "Geç", "İzinli"]) {
+      await expect(group.getByRole("radio", { exact: true, name: label })).toBeVisible();
+    }
+  }
+  // Kayıtlı durum radio olarak gelir; kayıtsız öğrenci seçilmemiş kalır ve kaydet kapalıdır.
+  await expect(ada.getByRole("radio", { exact: true, name: "Var" })).toBeChecked();
+  await expect(bora.getByRole("radio", { checked: true })).toHaveCount(0);
+  const bar = rollCall.locator(".next-attendance-roster__bar");
+  await expect(bar).toHaveText(/1 Var · 0 Yok · 0 Geç · 1 seçilmedi/);
+  await expect(bar).toHaveCSS("position", "sticky");
+  const save = bar.getByRole("button", { name: "Yoklamayı kaydet" });
+  await expect(save).toBeDisabled();
+  await bora.getByRole("radio", { exact: true, name: "Geç" }).check();
+  await expect(bar).toHaveText(/1 Var · 0 Yok · 1 Geç · 0 seçilmedi/);
+  await expect(save).toBeEnabled();
+  // Dokunma hedefi en az 44px.
+  const optionBox = await ada.locator("label").first().boundingBox();
+  expect(optionBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+  expect(optionBox?.width ?? 0).toBeGreaterThanOrEqual(44);
+}
 
 async function expectTeacherTodaySummary(page: Page, options: { rolePreview: boolean }) {
   const suffix = options.rolePreview ? "?rolePreview=1" : "";
@@ -462,7 +672,8 @@ async function expectTeacherHomeworkPanels(page: Page, options: { readOnly: bool
   await expect(homework.getByRole("heading", { name: "Ödev Kontrolü" })).toBeVisible();
   const homeworkTable = homework.getByRole("table", { name: "Öğretmen ödev kontrol kayıtları" });
   await expect(homeworkTable).toBeVisible();
-  await expect(homeworkTable.locator("thead th")).toHaveText(["Ödev", "Materyal", "Teslim", "Durum", "İşlem"]);
+  await expect(homeworkTable.locator("thead th")).toHaveText(["Ödev", "Sınıf", "Materyal", "Teslim", "Durum", "İşlem"]);
+  await expect(homeworkTable.getByRole("row").filter({ hasText: "Kesirler tekrar" })).toContainText("8-A");
   if (options.readOnly) {
     await expect(homework.getByRole("button", { name: "Kontrol et" })).toHaveCount(0);
     await expect(homework).toContainText("Yalnızca görüntüleme");
@@ -524,7 +735,14 @@ async function expectPortalSupportPanel(page: Page, options: { formVisible: bool
 async function openTeacherPortal(
   page: Page,
   viewport: { height: number; width: number },
-  options: { failMutationPath?: string; mode?: "teacher" | "role-preview"; mutationRequests?: string[]; path?: string; requestedPaths?: string[] } = {},
+  options: {
+    failMutationPath?: string;
+    failReadPaths?: Set<string>;
+    mode?: "teacher" | "role-preview";
+    mutationRequests?: string[];
+    path?: string;
+    requestedPaths?: string[];
+  } = {},
 ) {
   await page.setViewportSize(viewport);
   await page.clock.setFixedTime(new Date("2026-06-17T08:00:00.000Z"));
@@ -555,7 +773,7 @@ async function clickSidebarRoute(page: Page, groupName: string, linkName: string
 
 async function installTeacherApiMocks(
   page: Page,
-  options: { failMutationPath?: string; mode?: "teacher" | "role-preview"; mutationRequests?: string[]; requestedPaths?: string[] },
+  options: { failMutationPath?: string; failReadPaths?: Set<string>; mode?: "teacher" | "role-preview"; mutationRequests?: string[]; requestedPaths?: string[] },
 ) {
   await page.route("**/api/v1/**", async (route) => {
     if (route.request().method() === "OPTIONS") {
@@ -580,6 +798,17 @@ async function installTeacherApiMocks(
         });
         return;
       }
+    }
+    if (method === "GET" && options.failReadPaths?.has(pathName)) {
+      await route.fulfill({
+        body: JSON.stringify({ error: { code: "TEST_READ_FAILURE" } }),
+        headers: {
+          ...corsHeadersFor(route),
+          "content-type": "application/json",
+        },
+        status: 500,
+      });
+      return;
     }
     if (method === "GET" && forbiddenTeacherPortalReadPaths.includes(pathName)) {
       await route.fulfill({

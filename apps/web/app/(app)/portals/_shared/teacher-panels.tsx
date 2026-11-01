@@ -1,6 +1,6 @@
 "use client";
 
-import { DataTable, InfoGrid, InfoItem, Panel, StatusBadge, type DataTableColumn } from "@o-okul/ui";
+import { Button, DataTable, InfoGrid, InfoItem, Panel, StatusBadge, type DataTableColumn } from "@o-okul/ui";
 import type { ClassRecord, ScheduleLessonRecord, StudentRecord, TeacherRecord } from "@o-okul/shared-types";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 
@@ -21,6 +21,36 @@ interface TeacherClassReportSummary {
     standardScore?: number;
     successRate?: number;
   };
+}
+
+/**
+ * Portal verisinin tek bir isteği düştüğünde yalnız o bölüm bu satırla yer değiştirir; sayfa boşalmaz.
+ * Bölge adı asıl panelin adıyla aynıdır, böylece kullanıcı hangi bölümün eksik olduğunu bilir.
+ */
+export function TeacherSectionError({
+  id,
+  label,
+  onRetry,
+  retrying = false,
+  title,
+}: {
+  id?: string;
+  label: string;
+  onRetry(): void;
+  retrying?: boolean;
+  title: string;
+}) {
+  return (
+    <Panel aria-label={label} id={id} title={title} tone="danger">
+      <div className="next-section-error" role="alert">
+        <span>Bu bölüm yüklenemedi</span>
+        <span aria-hidden="true">·</span>
+        <Button loading={retrying} loadingLabel="Yeniden deneniyor" onClick={onRetry} size="sm" variant="secondary">
+          Tekrar dene
+        </Button>
+      </div>
+    </Panel>
+  );
 }
 
 export function TeacherTodaySchedulePanel({

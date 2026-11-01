@@ -6,7 +6,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AcademicTermRecord,
   AttendanceDailyRosterResponse,
-  AttendanceDailyRosterStudent,
   AttendanceDailyUpsertRequest,
   AttendanceDailyUpsertResponse,
   AttendanceRecord,
@@ -18,7 +17,6 @@ import type {
 import {
   Button,
   CrudPage,
-  DataTable,
   EmptyState,
   Field,
   Input,
@@ -30,6 +28,7 @@ import {
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, withQueryParams } from "../../../../src/api-client.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
+import { AttendanceRoster } from "../../_shared/attendance-status-picker.js";
 import { formatDateKey } from "../../_shared/istanbul-date.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
@@ -134,43 +133,6 @@ export function AttendancePage() {
     setDailyStatuses(Object.fromEntries(dailyQuery.data.students.map((student) => [student.id, statusByStudentId.get(student.id) ?? ""])));
   }, [dailyQuery.data]);
 
-  const dailyColumns: Array<DataTableColumn<AttendanceDailyRosterStudent>> = [
-    {
-      key: "student",
-      header: "Öğrenci",
-      mobilePriority: "primary",
-      priority: "primary",
-      sticky: "left",
-      render: (student) => `${student.firstName} ${student.lastName}`,
-    },
-    {
-      key: "studentNo",
-      header: "No",
-      mobilePriority: "secondary",
-      priority: "secondary",
-      render: (student) => student.studentNo ?? "-",
-    },
-    {
-      key: "status",
-      header: "Durum",
-      mobilePriority: "primary",
-      priority: "primary",
-      render: (student) => (
-        <Select
-          aria-label={`${student.firstName} ${student.lastName} yoklama durumu`}
-          value={dailyStatuses[student.id] ?? ""}
-          onChange={(event) => setDailyStatuses((current) => ({ ...current, [student.id]: event.target.value as AttendanceStatus }))}
-        >
-          <option value="">Seçiniz</option>
-          <option value="PRESENT">Var</option>
-          <option value="ABSENT">Yok</option>
-          <option value="LATE">Geç</option>
-          <option value="EXCUSED">İzinli</option>
-        </Select>
-      ),
-    },
-  ];
-
   const columns: Array<DataTableColumn<AttendanceRecord>> = [
     { key: "studentId", header: "Öğrenci", priority: "primary", render: (record) => studentLabel(record.studentId, studentNames), sticky: "left" },
     { key: "classId", header: "Sınıf", priority: "secondary", render: (record) => optionalLabel(record.classId, classNames, "Sınıf bilgisi yok") },
@@ -233,12 +195,9 @@ export function AttendancePage() {
           <Field label="Yoklama tarihi">
             <Input type="date" value={attendanceDate} onChange={(event) => setAttendanceDate(event.target.value)} />
           </Field>
-          {dailyRecords.length === 0 && dailyStudents.length > 0 ? (
-            <Button type="button" variant="secondary" onClick={markAllPresent}>Tümünü Var</Button>
+          {!classId ? (
+            <Button disabled type="button">Yoklamayı kaydet</Button>
           ) : null}
-          <Button disabled={!dailyRosterComplete || isDailySaving} type="button" onClick={() => void saveDailyAttendance()}>
-            {isDailySaving ? "Kaydediliyor" : "Yoklamayı kaydet"}
-          </Button>
         </div>
         {dailyError ? <p className="uh-crud-page__error" role="alert">{dailyError}</p> : null}
         {!classId ? (
@@ -246,16 +205,31 @@ export function AttendancePage() {
         ) : (
           <>
             <DailyAttendanceSummary aggregate={dailyAggregate} />
-            <DataTable
-              caption="Günlük sınıf yoklama listesi"
-              columns={dailyColumns}
-              density="compact"
-              description={`${attendanceDate} tarihli aktif sınıf öğrencileri ve yoklama durumları.`}
+            <AttendanceRoster
+              description={`${formatDateKey(attendanceDate)} tarihli aktif sınıf öğrencileri.`}
+              disabled={isDailySaving}
               emptyText="Seçili tarihte bu sınıfa kayıtlı öğrenci yok"
               error={dailyQuery.isError ? "Günlük yoklama listesi alınamadı." : undefined}
-              getRowKey={(student) => student.id}
+              label="Günlük sınıf yoklama listesi"
               loading={dailyQuery.isPending}
-              rows={dailyStudents}
+              onMarkAllPresent={markAllPresent}
+              onStatusChange={(studentId, status) => setDailyStatuses((current) => ({ ...current, [studentId]: status }))}
+              saveAction={(
+                <Button
+                  aria-describedby="daily-attendance-summary"
+                  disabled={!dailyRosterComplete}
+                  loading={isDailySaving}
+                  loadingLabel="Kaydediliyor"
+                  type="button"
+                  onClick={() => void saveDailyAttendance()}
+                >
+                  Yoklamayı kaydet
+                </Button>
+              )}
+              showMarkAllPresent={dailyRecords.length === 0}
+              statuses={dailyStatuses}
+              students={dailyStudents}
+              summaryId="daily-attendance-summary"
             />
           </>
         )}
