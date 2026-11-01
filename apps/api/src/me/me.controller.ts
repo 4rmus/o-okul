@@ -25,6 +25,7 @@ import type {
   StudentRecord,
   StudentEnrollmentRecord,
   StudentProfileRecord,
+  StudentSelfOverview,
   TeacherPortalLookupsResponse,
   TeacherRecord,
   AttendanceRecord,
@@ -84,6 +85,7 @@ import { passwordMaxLength, passwordMinLength, passwordPolicyViolation } from ".
 import { MeGuardianOverviewService } from "./me-guardian-overview.service.js";
 import { MeInstitutionDashboardService } from "./me-institution-dashboard.service.js";
 import { MeReportIndexService } from "./me-report-index.service.js";
+import { MeStudentOverviewService } from "./me-student-overview.service.js";
 import { MeTeacherTodayService } from "./me-teacher-today.service.js";
 
 const mePasswordChangeBodySchema = z.object({
@@ -106,6 +108,7 @@ export class MeController {
     private readonly guardianOverview: MeGuardianOverviewService,
     private readonly institutionDashboard: MeInstitutionDashboardService,
     private readonly reportIndex: MeReportIndexService,
+    private readonly studentSelfOverview: MeStudentOverviewService,
     private readonly teacherTodaySummary: MeTeacherTodayService,
     private readonly reports: ReportGenerationService,
     private readonly guardians: GuardianService,
@@ -195,6 +198,13 @@ export class MeController {
   @RequireCapability("portal:student")
   student(): Promise<StudentRecord> {
     return this.students.findCurrentStudent(getRequestContext());
+  }
+
+  /** Student 'Gelişimim': self scope only, the student id comes from the session; same KV-4 series rules as the guardian overview. */
+  @Get("student/overview")
+  @RequireCapability("portal:student")
+  studentOverview(): Promise<StudentSelfOverview> {
+    return this.studentSelfOverview.get(getRequestContext());
   }
 
   @Get("student/profile")

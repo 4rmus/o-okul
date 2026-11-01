@@ -20,6 +20,8 @@ import { TenantModule } from "../tenant/tenant.module.js";
 import { MeController } from "./me.controller.js";
 import { MeGuardianOverviewService } from "./me-guardian-overview.service.js";
 import { MeInstitutionDashboardService } from "./me-institution-dashboard.service.js";
+import { MeProgressSeriesService } from "./me-progress-series.service.js";
+import { MeStudentOverviewService } from "./me-student-overview.service.js";
 import { MeTeacherTodayService } from "./me-teacher-today.service.js";
 import {
   createInstitutionDashboardStore,
@@ -52,6 +54,8 @@ import { MeReportIndexService } from "./me-report-index.service.js";
   providers: [
     MeGuardianOverviewService,
     MeInstitutionDashboardService,
+    MeProgressSeriesService,
+    MeStudentOverviewService,
     MeTeacherTodayService,
     MeReportIndexService,
     {

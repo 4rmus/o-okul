@@ -69,6 +69,7 @@ describe("Me access matrix", () => {
   it("öğrenci /me yüzeylerini yalnız öğrenci subject'i açar", async () => {
     const studentEndpoints = [
       "/me/student",
+      "/me/student/overview",
       "/me/student/profile",
       "/me/student/guardians",
       "/me/student/guardian-links",
