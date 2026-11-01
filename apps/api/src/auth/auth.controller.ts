@@ -123,10 +123,13 @@ const refreshCookieOptions = {
   path: "/api/v1/auth",
   maxAge: resolveRefreshTokenTtlMs(),
 };
+// The CSRF cookie lives as long as the refresh cookie: /auth/refresh requires both. As a session cookie it was
+// dropped when an installed PWA (iOS home screen) closed, so every relaunch fell back to the login screen (UAT F-37).
 const csrfCookieOptions = {
   sameSite: "strict" as const,
   secure: process.env.COOKIE_SECURE === "true",
   path: "/",
+  maxAge: resolveRefreshTokenTtlMs(),
 };
 
 @Controller("auth")

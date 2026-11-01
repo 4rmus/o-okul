@@ -40,6 +40,7 @@ describe("API auth + tenant isolation", () => {
     const csrfCookie = getCookie(response.headers["set-cookie"], "csrfToken");
 
     expect(refreshCookie).toContain("HttpOnly");
+    expectPersistentCsrfCookie(csrfCookie, refreshCookie);
     expectPublicSession(response.body.session);
 
     return {
@@ -67,6 +68,7 @@ describe("API auth + tenant isolation", () => {
     const rotatedCsrfCookie = getCookie(rotated.headers["set-cookie"], "csrfToken");
     const rotatedCsrfToken = readCookieValue(rotatedCsrfCookie, "csrfToken");
     expect(rotatedCookie).toContain("HttpOnly");
+    expectPersistentCsrfCookie(rotatedCsrfCookie, rotatedCookie);
     expect(rotatedCookie).not.toBe(issued.refreshCookie);
     expectPublicSession(rotated.body.session);
 
@@ -1509,6 +1511,15 @@ function expectClearedSessionCookies(header: string | string[] | undefined): voi
   expect(refresh).toContain("Path=/api/v1/auth");
   expect(refresh).toContain("HttpOnly");
   expect(csrf).toContain("Path=/");
+  expect(csrf).not.toContain("HttpOnly");
+}
+
+// UAT F-37: /auth/refresh needs the CSRF cookie too, so it must outlive a closed PWA exactly like the refresh cookie.
+function expectPersistentCsrfCookie(csrf: string, refresh: string): void {
+  const maxAge = (cookie: string) => cookie.match(/Max-Age=(\d+)/u)?.[1];
+  expect(maxAge(refresh)).toBeDefined();
+  expect(maxAge(csrf)).toBe(maxAge(refresh));
+  expect(csrf).toContain("Expires=");
   expect(csrf).not.toContain("HttpOnly");
 }
 
