@@ -4118,7 +4118,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   const campusDialog = page.getByRole("dialog", { name: "Kampüs ekle" });
   await campusDialog.getByLabel("Kampüs adı", { exact: true }).fill("   ");
   await campusDialog.getByRole("button", { name: "Ekle", exact: true }).click();
-  await expect(campusDialog.getByText("Kampüs adı zorunludur.")).toBeVisible();
+  await expect(campusDialog.getByRole("alert")).toContainText("Kampüs adı zorunludur.");
   await campusDialog.getByLabel("Kampüs adı", { exact: true }).fill(" Kuzey Kampüs ");
   await campusDialog.getByRole("textbox", { name: /^Kod / }).fill(" KZY ");
   await campusDialog.getByRole("button", { name: "Ekle", exact: true }).click();
@@ -4148,7 +4148,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await calendarDialog.getByLabel("Başlangıç").fill("2026-09-01");
   await calendarDialog.getByLabel("Bitiş").fill("2027-06-30");
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
-  await expect(calendarDialog.getByText("Akademik yıl adı zorunludur.")).toBeVisible();
+  await expect(calendarDialog.getByRole("alert")).toContainText("Akademik yıl adı zorunludur.");
   await calendarDialog.getByLabel("Akademik yıl adı").fill("2026-2027");
   await calendarDialog.getByLabel("Aktif").check();
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
@@ -4237,7 +4237,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   const classDialog = page.getByRole("dialog", { name: "Sınıf ekle" });
   await classDialog.getByLabel("Sınıf adı", { exact: true }).fill("   ");
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
-  await expect(classDialog.getByText("Sınıf adı zorunludur.")).toBeVisible();
+  await expect(classDialog.getByRole("alert")).toContainText("Sınıf adı zorunludur.");
   await classDialog.getByLabel("Sınıf adı", { exact: true }).fill(" 9-A ");
   await classDialog.getByRole("combobox", { name: /^Seviye / }).selectOption("grade-8");
   await classDialog.getByLabel("Şube", { exact: true }).fill(" A ");
@@ -4269,7 +4269,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   const courseDialog = page.getByRole("dialog", { name: "Ders ekle" });
   await courseDialog.getByLabel("Ders adı", { exact: true }).fill("   ");
   await courseDialog.getByRole("button", { name: "Ekle", exact: true }).click();
-  await expect(courseDialog.getByText("Ders adı zorunludur.")).toBeVisible();
+  await expect(courseDialog.getByRole("alert")).toContainText("Ders adı zorunludur.");
   await courseDialog.getByLabel("Ders adı", { exact: true }).fill(" Fen Bilimleri ");
   await courseDialog.getByRole("textbox", { name: /^Kod / }).fill(" FEN ");
   await courseDialog.getByRole("button", { name: "Ekle", exact: true }).click();
@@ -4417,7 +4417,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   dialog = page.getByRole("dialog", { name: "Not düzenle" });
   await dialog.getByRole("textbox", { name: "Not", exact: true }).fill("Problem çözümü düzenli.");
   await page.getByRole("button", { name: "Kaydet", exact: true }).click();
-  await expect(page.getByText("Problem çözümü düzenli.")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Problem çözümü düzenli.", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Bora B notunu sil" }).click();
   await confirmDeleteDialog(page, "Notu sil", "Bora B notu silinsin mi?");
@@ -4690,7 +4690,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByLabel("Başlık", { exact: true }).fill("   ");
   await page.getByLabel(/^Duyuru metni/).fill("Geçici metin");
   await page.getByRole("button", { name: "Yayınla", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Duyuru ekle" }).getByText("Başlık zorunludur.")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Duyuru ekle" }).getByRole("alert")).toContainText("Başlık zorunludur.");
   await page.getByLabel("Başlık", { exact: true }).fill(" Sınav hazırlığı ");
   await page.getByLabel(/^Duyuru metni/).fill(" Cuma deneme sınavı yapılacaktır. ");
   await page.getByRole("button", { name: "Yayınla", exact: true }).click();
@@ -4750,7 +4750,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("button", { name: "Materyal ekle" }).click();
   await page.getByLabel("Materyal adı", { exact: true }).fill("   ");
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Materyal ekle" }).getByText("Materyal adı zorunludur.")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Materyal ekle" }).getByRole("alert")).toContainText("Materyal adı zorunludur.");
   await page.getByLabel("Materyal adı", { exact: true }).fill(" Problemler Föyü ");
   await page.getByLabel(/^Açıklama/).fill(" Yaş ve işçi problemleri ");
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
@@ -4958,7 +4958,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     await page.getByLabel(/^Mesaj metni/).fill("Geçici metin");
     await page.getByRole("button", { name: "Ekle", exact: true }).click();
 
-    await expect(page.getByRole("dialog", { name: "Şablon ekle" }).getByText("Şablon adı zorunludur.")).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Şablon ekle" }).getByRole("alert")).toContainText("Şablon adı zorunludur.");
     await page.getByLabel("Şablon adı", { exact: true }).fill(" Devamsızlık ");
     await page.getByLabel(/^Mesaj metni/).fill(" Bugün öğrenciniz devamsız görünmektedir. ");
     await page.getByRole("button", { name: "Ekle", exact: true }).click();
@@ -5004,7 +5004,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByLabel("Konu", { exact: true }).fill("   ");
   await supportDialog.getByRole("textbox", { name: "Mesaj" }).fill("Geçici mesaj");
   await page.getByRole("button", { name: "Aç", exact: true }).click();
-  await expect(supportDialog.getByText("Konu zorunludur.")).toBeVisible();
+  await expect(supportDialog.getByRole("alert")).toContainText("Konu zorunludur.");
   await page.getByLabel("Konu", { exact: true }).fill(" Sınav sistemi ");
   await supportDialog.getByRole("textbox", { name: "Mesaj" }).fill(" Rapor ekranı açılmıyor. ");
   await page.getByRole("combobox", { name: "Öncelik" }).selectOption("HIGH");
