@@ -1,0 +1,73 @@
+name: Visual goldens
+
+# Manual helper for the Linux screenshot goldens (2026-11-01). Runs the visual QA spec on the same host runner
+# and fonts as CI's `verify-e2e (visual)` job with `--update-snapshots=changed`, then uploads the regenerated
+# `*-linux.png` files as an artifact. It never commits: the author reviews the artifact and commits the goldens
+# on the milestone branch. Replaces the earlier loop of 2–4 CI rounds per golden change.
+
+on:
+  workflow_dispatch:
+    inputs:
+      grep:
+        description: "Optional Playwright --grep filter (default: whole visual QA spec)"
+        required: false
+        default: ""
+
+concurrency:
+  group: visual-goldens-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  refresh-linux-goldens:
+    # Same runner image as verify-e2e: the tracked *-linux goldens are rendered with this runner's fonts.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.0
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @o-okul/web exec playwright install --with-deps chromium
+
+      - name: Regenerate changed Linux goldens
+        shell: bash
+        env:
+          CI: "true"
+          GREP: ${{ inputs.grep }}
+          UI_VISUAL_ARTIFACT_DIR: artifacts/ui-ux-redesign/local
+        run: |
+          set -uo pipefail
+          args=(--workers=1 --retries=0 --update-snapshots=changed e2e-next/ui-visual-qa-next.spec.ts)
+          if [ -n "${GREP:-}" ]; then args+=(--grep "$GREP"); fi
+          pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts "${args[@]}" || true
+          cd apps/web
+          changed="$(git status --porcelain -- 'e2e-next/__screenshots__/**/*-linux.png' | sed 's/^...//')"
+          {
+            echo "## Regenerated Linux goldens"
+            if [ -z "$changed" ]; then echo "none (all goldens already matched)"; else printf -- '- %s\n' $changed; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-goldens-${{ github.sha }}
+          path: apps/web/e2e-next/__screenshots__/**/*-linux.png
+          if-no-files-found: error
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: visual-goldens-test-results-${{ github.sha }}
+          path: apps/web/test-results
+          if-no-files-found: ignore
+          retention-days: 7
