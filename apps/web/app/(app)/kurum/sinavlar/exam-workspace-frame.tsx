@@ -10,13 +10,16 @@ import {
   type ExamWorkspaceReadModel,
   type ExamWorkspaceReadinessKey,
 } from "@o-okul/shared-types";
-import { StatusBadge, Stepper, type StepperStep } from "@o-okul/ui";
+import { PageHeader, StatusBadge, Stepper, type StepperStep } from "@o-okul/ui";
 import { ArrowRight } from "lucide-react";
 import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
 import { useAuth } from "../../../providers.js";
-import { examWorkspaceHref, opticalWorkspaceHref, reportWorkspaceHref } from "./exam-workspace-routes.js";
+import { examManagementHref, examWorkspaceHref, opticalWorkspaceHref, reportWorkspaceHref } from "./exam-workspace-routes.js";
 
-export function useExamWorkspace(examId: string) {
+// Değerlendirme kuyrukta sürerken çalışma alanı 5 sn'de bir yenilenir; sonraki iş değişince yenileme durur.
+export const evaluationPollIntervalMs = 5_000;
+
+export function useExamWorkspace(examId: string, options: { pollEvaluation?: boolean } = {}) {
   const { auth } = useAuth();
   const eligible = Boolean(auth && canAccessExamWorkspace(auth.session.roles, auth.session.activePersona));
   const query = useQuery({
@@ -24,16 +27,23 @@ export function useExamWorkspace(examId: string) {
     queryFn: () => apiRequest<ExamWorkspaceReadModel>(auth?.accessToken ?? "", `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/workspace`),
     enabled: eligible,
     refetchOnWindowFocus: false,
+    // Yalnız çerçeve yoklar; alt sayfalar aynı önbellekten güncellenir, ikinci zamanlayıcı açılmaz.
+    refetchInterval: options.pollEvaluation
+      ? (current) => (isWorkspaceReadModel(current.state.data) && current.state.data.nextAction === "WAIT_EVALUATION" ? evaluationPollIntervalMs : false)
+      : false,
   });
   const workspace = isWorkspaceReadModel(query.data) ? query.data : undefined;
   return { eligible, query, workspace };
 }
 
-// Sınav çalışma alanı çerçevesi (§4): bağlam, sunucuda hesaplanan 8 adımlı Stepper ve sonraki önerilen iş.
+// Sınav çalışma alanı çerçevesi (§4): sayfa başlığı (sınav adı), sunucuda hesaplanan 8 adımlı Stepper ve tek
+// birincil sonraki iş. Alt sayfalar (genel, optik, değerlendirme, rapor) kendi başlığını ve sınav seçicisini çizmez.
 // Hazırlık okunamazsa alt sayfa yine çalışır; client hazırlık tahmini yapmaz.
 export function ExamWorkspaceFrame({ children, examId }: { children: ReactNode; examId: string }) {
   const pathname = usePathname();
-  const { eligible, query, workspace } = useExamWorkspace(examId);
+  const { eligible, query, workspace } = useExamWorkspace(examId, { pollEvaluation: true });
+  const nextHref = workspace ? nextActionHref(workspace.nextAction, examId) : "";
+  const isWaitingEvaluation = workspace?.nextAction === "WAIT_EVALUATION";
 
   return (
     <div className="next-exam-workspace" data-exam-workspace-layout="stepper">
@@ -41,26 +51,41 @@ export function ExamWorkspaceFrame({ children, examId }: { children: ReactNode; 
         <section aria-label="Sınav çalışma alanı" className="next-exam-workspace-frame">
           {workspace ? (
             <>
-              <div className="next-exam-workspace-frame__context">
-                <strong>{workspace.exam.title}</strong>
-                <span>{formatDateTime(workspace.exam.startsAt)}</span>
-                <StatusBadge tone={workspace.exam.status === "PUBLISHED" ? "success" : "warning"}>{examStatusLabel(workspace.exam.status)}</StatusBadge>
-              </div>
-              <Stepper currentHref={pathname} label="Sınav adımları" linkComponent={Link} steps={buildWorkspaceSteps(workspace, examId)} />
-              <div aria-label="Sonraki önerilen iş" className="next-exam-workspace-frame__next" role="group">
-                <p>{nextActionDescription(workspace)}</p>
-                <Link className="uh-button uh-button--primary uh-button--md" href={nextActionHref(workspace.nextAction, examId)}>
-                  <span className="uh-button__content">
-                    {nextActionLabel(workspace.nextAction)}
-                    <ArrowRight aria-hidden="true" size={17} />
+              <PageHeader
+                subtitle={(
+                  <span className="next-exam-workspace-frame__context">
+                    <span>{formatDateTime(workspace.exam.startsAt)}</span>
+                    <StatusBadge tone={workspace.exam.status === "PUBLISHED" ? "success" : "warning"}>{examStatusLabel(workspace.exam.status)}</StatusBadge>
                   </span>
-                </Link>
+                )}
+                title={workspace.exam.title}
+              />
+              <Stepper currentHref={pathname} label="Sınav adımları" linkComponent={Link} steps={buildWorkspaceSteps(workspace, examId)} />
+              <div aria-label="Sonraki önerilen iş" className="next-exam-workspace-frame__next" data-next-action={workspace.nextAction} role="group">
+                <p aria-live={isWaitingEvaluation ? "polite" : undefined} role={isWaitingEvaluation ? "status" : undefined}>
+                  {nextActionDescription(workspace)}
+                  {isWaitingEvaluation ? ` ${evaluationPercentLabel(workspace)}Durum otomatik yenilenir.` : null}
+                </p>
+                {/* Önerilen işin sayfasındaysa bağlantı kendine döner; o sayfadaki iş formu birincil kalır. */}
+                {!isSameWorkspaceStep(pathname, nextHref, examId) ? (
+                  <Link className="uh-button uh-button--primary uh-button--md" href={nextHref}>
+                    <span className="uh-button__content">
+                      {nextActionLabel(workspace.nextAction)}
+                      <ArrowRight aria-hidden="true" size={17} />
+                    </span>
+                  </Link>
+                ) : null}
               </div>
             </>
-          ) : query.isPending ? (
-            <p className="next-status-note">Sınav hazırlığı yükleniyor.</p>
           ) : (
-            <p className="next-status-note" role="status">Sınav hazırlık durumu şu an alınamadı; işlemlere aşağıdan devam edebilirsiniz.</p>
+            <>
+              <PageHeader title="Sınav çalışma alanı" />
+              {query.isPending ? (
+                <p className="next-status-note">Sınav hazırlığı yükleniyor.</p>
+              ) : (
+                <p className="next-status-note" role="status">Sınav hazırlık durumu şu an alınamadı; işlemlere aşağıdan devam edebilirsiniz.</p>
+              )}
+            </>
           )}
         </section>
       ) : null}
@@ -81,7 +106,7 @@ const stepDefinitions: Array<{ key: string; label: string; readiness: ExamWorksp
 ];
 
 function buildWorkspaceSteps(workspace: ExamWorkspaceReadModel, examId: string): StepperStep[] {
-  const managementHref = `/kurum/sinavlar?examId=${encodeURIComponent(examId)}`;
+  const managementHref = examManagementHref(examId);
   const hrefs: Record<string, string> = {
     info: examWorkspaceHref(examId),
     participants: managementHref,
@@ -102,7 +127,7 @@ function buildWorkspaceSteps(workspace: ExamWorkspaceReadModel, examId: string):
           ? "blocked"
           : "upcoming";
     return {
-      description: definition.key === "matching" && workspace.progress.openQuarantineCount > 0 ? `${workspace.progress.openQuarantineCount} satır eşleşmedi` : undefined,
+      description: stepDescription(definition.key, workspace),
       href: hrefs[definition.key],
       key: definition.key,
       label: definition.label,
@@ -125,8 +150,30 @@ function nextActionHref(nextAction: ExamWorkspaceNextAction, examId: string) {
     case "OPEN_REPORT":
       return reportWorkspaceHref(examId, "overview");
     default:
-      return `/kurum/sinavlar?examId=${encodeURIComponent(examId)}`;
+      return examManagementHref(examId);
   }
+}
+
+// Rapor sekmeleri (genel, öğrenciler, karne, çıktılar) tek "Rapor" adımıdır.
+function isSameWorkspaceStep(pathname: string, href: string, examId: string) {
+  if (pathname === href) return true;
+  const reportBase = `${examWorkspaceHref(examId)}/rapor/`;
+  return pathname.startsWith(reportBase) && href.startsWith(reportBase);
+}
+
+function stepDescription(key: string, workspace: ExamWorkspaceReadModel) {
+  if (key === "matching" && workspace.progress.openQuarantineCount > 0) return `${workspace.progress.openQuarantineCount} satır eşleşmedi`;
+  if (key === "evaluation" && workspace.nextAction === "WAIT_EVALUATION") {
+    return `${workspace.progress.evaluatedCount}/${workspace.progress.matchedCount} değerlendirildi`;
+  }
+  return undefined;
+}
+
+function evaluationPercentLabel(workspace: ExamWorkspaceReadModel) {
+  const { evaluatedCount, matchedCount } = workspace.progress;
+  if (matchedCount <= 0) return "";
+  const percent = Math.min(100, Math.floor((evaluatedCount / matchedCount) * 100));
+  return `İlerleme %${new Intl.NumberFormat("tr-TR").format(percent)}. `;
 }
 
 function nextActionLabel(nextAction: ExamWorkspaceNextAction) {

@@ -832,6 +832,7 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(examSummary).toContainText("Taslak");
     await expect(examTable).toContainText("LGS Denemesi");
     await expect(examTable).toContainText("TYT Provasi");
+    await expect(examTable.getByRole("link", { name: "LGS Denemesi" })).toHaveAttribute("href", "/kurum/sinavlar/exam-lgs");
     await expect(selectedExamDetail.getByLabel("Seçili sınav durumu")).toContainText("Yayında");
     await expect(selectedExamDetail.getByLabel("Sınav hazırlık durumu")).toContainText("1 sınıf kapsamı");
     const selectedExamMetrics = selectedExamDetail.getByRole("region", { name: "Seçili sınav metrikleri" });

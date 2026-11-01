@@ -33,6 +33,8 @@ test("Gate C sınav çalışma alanı sunucu hazırlığını 8 adımlı Stepper
     await expect(steps.getByRole("link", { name: /Rapor/ })).toHaveAttribute("href", `/kurum/sinavlar/${examId}/rapor/genel`);
     const nextStep = page.getByRole("group", { name: "Sonraki önerilen iş" });
     await expect(nextStep.getByRole("link", { name: "Optik düzeni onayla" })).toHaveAttribute("href", `/kurum/sinavlar/${examId}/optik/duzen`);
+    await expect(page.locator("main:visible h1:visible")).toHaveCount(1);
+    await expect(steps.getByRole("link", { name: /Katılımcılar/ })).toHaveAttribute("href", `/kurum/sinavlar?examId=${examId}&from=workspace`);
   }
 
   expect(evidence.workspaceRequests).toBeGreaterThan(0);
@@ -70,6 +72,9 @@ for (const sessionCase of [
     await page.goto(`/kurum/sinavlar?examId=${examId}`, { waitUntil: "domcontentloaded" });
 
     await expect(page.getByRole("link", { name: "Sınav çalışma alanını aç" })).toHaveCount(0);
+    const examTable = page.getByRole("table", { name: "Sınav yönetimi" });
+    await expect(examTable).toContainText("Gate C Denemesi");
+    await expect(examTable.getByRole("link", { name: "Gate C Denemesi" })).toHaveCount(0);
     await page.goto(`/kurum/sinavlar/${examId}`, { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(`${appOrigin}/kurum`);
     // Alt route'lar önceki /kurum/optik ile aynı erişim kuralını izler (yeni kapsam açılmaz); çalışma alanı

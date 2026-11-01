@@ -6,35 +6,46 @@ import { PageFrame } from "../_shared/page-frame.js";
 import { useExamWorkspace } from "./exam-workspace-frame.js";
 import { opticalWorkspaceHref, reportWorkspaceHref } from "./exam-workspace-routes.js";
 
-// Değerlendirme adımı: son optik yüklemenin sunucu sayımları. Değerlendirme yükleme sonrası kuyrukta başlar.
+// Değerlendirme adımı: son optik yüklemenin sunucu sayımları. Değerlendirme yükleme sonrası kuyrukta başlar;
+// çerçeve sürerken çalışma alanını yoklar, bu panel aynı önbellekten güncellenir.
 export function ExamEvaluationPage({ examId }: { examId: string }) {
-  const { query, workspace } = useExamWorkspace(examId);
+  const { eligible, query, workspace } = useExamWorkspace(examId);
   const evaluation = workspace?.readiness.find((step) => step.key === "EVALUATION");
+  const isRunning = workspace?.nextAction === "WAIT_EVALUATION";
 
-  return (
+  const panel = (
+    <Panel
+      aria-label="Değerlendirme durumu"
+      description="Son optik yüklemenin puanlama ilerlemesi."
+      title="Değerlendirme durumu"
+    >
+      {workspace ? (
+        <>
+          <InfoGrid aria-label="Değerlendirme sayıları" role="region">
+            <InfoItem label="Eşleşen satır" value={formatCount(workspace.progress.matchedCount)} />
+            <InfoItem label="Değerlendirilen" value={formatCount(workspace.progress.evaluatedCount)} />
+            <InfoItem label="Eşleşmeyen" value={formatCount(workspace.progress.openQuarantineCount)} />
+            <InfoItem label="Durum" value={evaluation?.status === "READY" ? "Tamamlandı" : evaluationBlockerLabel(evaluation?.blocker)} />
+          </InfoGrid>
+          {isRunning ? <p className="next-status-note">Sayılar değerlendirme bitene kadar otomatik yenilenir.</p> : null}
+          <div className="next-exam-workspace-actions">
+            <Link className="uh-button uh-button--secondary uh-button--md" href={opticalWorkspaceHref(examId, "upload")}>
+              <span className="uh-button__content">Optik yüklemeye dön</span>
+            </Link>
+            <Link className="uh-button uh-button--secondary uh-button--md" href={reportWorkspaceHref(examId, "overview")}>
+              <span className="uh-button__content">Rapora geç</span>
+            </Link>
+          </div>
+        </>
+      ) : (
+        <p className="next-status-note">{query.isPending ? "Değerlendirme durumu yükleniyor." : "Değerlendirme durumu şu an alınamadı."}</p>
+      )}
+    </Panel>
+  );
+
+  return eligible ? panel : (
     <PageFrame title="Değerlendirme" subtitle="Son optik yüklemenin puanlama ilerlemesi.">
-      <Panel aria-label="Değerlendirme durumu" title="Değerlendirme durumu">
-        {workspace ? (
-          <>
-            <InfoGrid aria-label="Değerlendirme sayıları" role="region">
-              <InfoItem label="Eşleşen satır" value={formatCount(workspace.progress.matchedCount)} />
-              <InfoItem label="Değerlendirilen" value={formatCount(workspace.progress.evaluatedCount)} />
-              <InfoItem label="Eşleşmeyen" value={formatCount(workspace.progress.openQuarantineCount)} />
-              <InfoItem label="Durum" value={evaluation?.status === "READY" ? "Tamamlandı" : evaluationBlockerLabel(evaluation?.blocker)} />
-            </InfoGrid>
-            <div className="next-exam-workspace-actions">
-              <Link className="uh-button uh-button--secondary uh-button--md" href={opticalWorkspaceHref(examId, "upload")}>
-                <span className="uh-button__content">Optik yüklemeye dön</span>
-              </Link>
-              <Link className="uh-button uh-button--secondary uh-button--md" href={reportWorkspaceHref(examId, "overview")}>
-                <span className="uh-button__content">Rapora geç</span>
-              </Link>
-            </div>
-          </>
-        ) : (
-          <p className="next-status-note">{query.isPending ? "Değerlendirme durumu yükleniyor." : "Değerlendirme durumu şu an alınamadı."}</p>
-        )}
-      </Panel>
+      {panel}
     </PageFrame>
   );
 }
