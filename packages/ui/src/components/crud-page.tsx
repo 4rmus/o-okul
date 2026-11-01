@@ -3,7 +3,7 @@
 import { useEffect, useRef, type HTMLAttributes, type ReactNode } from "react";
 import { classNames } from "../class-names.js";
 import { Alert } from "./alert.js";
-import { DataTable, type DataTableColumn } from "./data-table.js";
+import { DataTable, type DataTableColumn, type DataTableSelectionOptions } from "./data-table.js";
 
 type CrudPageDensity = "comfortable" | "compact";
 
@@ -22,6 +22,8 @@ export interface CrudPageProps<TRow> extends Omit<HTMLAttributes<HTMLElement>, "
   loading?: boolean;
   rowClassName?(row: TRow): string | undefined;
   rows: TRow[];
+  /** Verildiğinde tablo satır seçimi ve sabit başlık satırı taşır (S3). */
+  selection?: DataTableSelectionOptions<TRow>;
   summary?: ReactNode;
   tableCaption?: ReactNode;
   tableDescription?: ReactNode;
@@ -44,6 +46,7 @@ export function CrudPage<TRow>({
   loading = false,
   rowClassName,
   rows,
+  selection,
   summary,
   tableCaption,
   tableDescription,
@@ -98,6 +101,7 @@ export function CrudPage<TRow>({
             loading={loading}
             rowClassName={rowClassName}
             rows={tableRows}
+            {...selection}
           />
         </div>
       ) : null}

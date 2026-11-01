@@ -10,6 +10,7 @@
 @import "./_styles/73-almanac-report.css";
 @import "./_styles/74-almanac-marketing.css";
 @import "./_styles/79-almanac-responsive.css";
+@import "./_styles/86-data-table-selection.css";
 
 @media print {
   /* RAW-COLOR-ALLOWLIST receipt-print BEGIN */

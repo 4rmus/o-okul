@@ -157,7 +157,10 @@ const emptyBulkEnrollmentAction: BulkEnrollmentActionState = {
 export function StudentsPage() {
   const { auth } = useAuth();
   const canRevealPhone = hasCapabilityForRoles(auth?.session.roles ?? [], "privacy:manage");
-  const canInviteGuardians = hasCapabilityForRoles(auth?.session.roles ?? [], "user:manage");
+  // API ile hizalı: dönem geçişi student:manage, veli daveti student:manage + user:manage ister.
+  const canManageStudents = hasCapabilityForRoles(auth?.session.roles ?? [], "student:manage");
+  const canInviteGuardians = canManageStudents && hasCapabilityForRoles(auth?.session.roles ?? [], "user:manage");
+  const canSelectStudents = canManageStudents || canInviteGuardians;
   const canManageClasses = hasCapabilityForRoles(auth?.session.roles ?? [], "class:manage");
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -205,6 +208,14 @@ export function StudentsPage() {
   const [error, setError] = useState("");
   const [formError, setFormError] = useState("");
   const rows = studentsQuery.data?.data ?? [];
+  // Seçim yalnız görünen listeye aittir: arama, filtre, sıralama veya sayfa değişince temizlenir.
+  const selectionScopeKey = JSON.stringify([listQuery, filters]);
+  const [selectionScope, setSelectionScope] = useState(selectionScopeKey);
+  if (selectionScope !== selectionScopeKey) {
+    setSelectionScope(selectionScopeKey);
+    setSelectedStudentIds([]);
+  }
+  const selectedStudents = rows.filter((student) => selectedStudentIds.includes(student.id));
   const sourceClassIds = [...new Set(rows.map((student) => student.classId).filter((classId): classId is string => Boolean(classId)))].sort();
 
   const detailQuery = useQuery({
@@ -310,25 +321,7 @@ export function StudentsPage() {
       ),
     },
   ];
-  const selectionColumn: DataTableColumn<StudentRecord> = {
-    key: "select",
-    header: "Seç",
-    priority: "primary",
-    render: (student) => (
-      <Checkbox
-        aria-label={`${student.firstName} ${student.lastName} seç`}
-        checked={selectedStudentIds.includes(student.id)}
-        label="Seç"
-        onChange={(event) => setSelectedStudentIds((current) => event.target.checked
-          ? [...current, student.id]
-          : current.filter((id) => id !== student.id))}
-      />
-    ),
-  };
-  const visibleColumns = [
-    ...(canInviteGuardians ? [selectionColumn] : []),
-    ...columns.filter((column) => visibleColumnKeys.includes(column.key)),
-  ];
+  const visibleColumns = columns.filter((column) => visibleColumnKeys.includes(column.key));
   const pageClassName = tableDensity === "compact"
     ? "next-students-page next-students-page--compact next-student-growth-list"
     : "next-students-page next-student-growth-list";
@@ -591,12 +584,13 @@ export function StudentsPage() {
   }
 
   async function handleBulkRenewEnrollment() {
-    if (!auth || isBulkEnrollmentSaving || rows.length === 0) return;
+    const studentIds = selectedStudents.map((student) => student.id);
+    if (!auth || isBulkEnrollmentSaving || studentIds.length === 0) return;
 
     const confirmed = await confirm({
       confirmLabel: "Geçir",
-      description: "Bu işlem yalnız bu sayfada görünen öğrencilerin kayıt dönemini günceller; filtredeki diğer sayfalar ayrıca geçirilmelidir.",
-      message: `${rows.length} öğrenci ${bulkEnrollmentAction.startsAt} tarihinden itibaren ${
+      description: "Bu işlem yalnız seçili öğrencilerin kayıt dönemini günceller. Geçiş tarihi ve hedef sınıf Toplu işlemler bölümündeki ayarlardan alınır.",
+      message: `${studentIds.length} seçili öğrenci ${bulkEnrollmentAction.startsAt} tarihinden itibaren ${
         bulkEnrollmentAction.useAutomaticClassMapping
           ? "otomatik seviye yükseltme ile"
           : bulkEnrollmentAction.classId
@@ -616,9 +610,10 @@ export function StudentsPage() {
           Object.entries(bulkEnrollmentAction.classIdBySourceClassId).filter(([, classId]) => Boolean(classId)),
         ),
         startsAt: bulkEnrollmentAction.startsAt,
-        studentIds: rows.map((student) => student.id),
+        studentIds,
         useAutomaticClassMapping: bulkEnrollmentAction.useAutomaticClassMapping,
       });
+      setSelectedStudentIds([]);
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       void queryClient.invalidateQueries({ queryKey: ["next-student-detail"] });
     } catch {
@@ -629,12 +624,13 @@ export function StudentsPage() {
   }
 
   async function handleBulkGuardianInvitation() {
-    if (!auth || isGuardianInviting || selectedStudentIds.length === 0) return;
+    const studentIds = selectedStudents.map((student) => student.id);
+    if (!auth || isGuardianInviting || studentIds.length === 0) return;
 
     const confirmed = await confirm({
       confirmLabel: "Davet et",
       description: "Seçili öğrencilerin yasal veli iletişim kayıtlarından veli hesabı açılır ve e-posta daveti gönderilir. Zaten bağlı veliye ikinci davet gönderilmez; SMS ve duyuru izinleri değişmez.",
-      message: `${selectedStudentIds.length} öğrencinin velisi davet edilsin mi?`,
+      message: `${studentIds.length} seçili öğrencinin velisi davet edilsin mi?`,
       title: "Toplu veli davetini onayla",
     });
     if (!confirmed) return;
@@ -643,7 +639,7 @@ export function StudentsPage() {
     setGuardianInvitationResult(null);
     setIsGuardianInviting(true);
     try {
-      setGuardianInvitationResult(await inviteStudentGuardians(auth.accessToken, selectedStudentIds, globalThis.crypto.randomUUID()));
+      setGuardianInvitationResult(await inviteStudentGuardians(auth.accessToken, studentIds, globalThis.crypto.randomUUID()));
       setSelectedStudentIds([]);
     } catch {
       setError("Toplu veli daveti yapılamadı.");
@@ -826,6 +822,9 @@ export function StudentsPage() {
             <details className="next-list-disclosure">
               <summary>Toplu işlemler</summary>
               <div className="next-list-disclosure__content">
+                <p className="next-field-hint">
+                  Tablodan öğrenci seçin; seçili öğrenciler için işlem çubuğu listenin altında açılır.
+                </p>
                 <div className="next-list-controls" aria-label="Toplu dönem geçişi">
                   <Field label="Geçiş tarihi">
                     <Input
@@ -873,8 +872,8 @@ export function StudentsPage() {
                       </Select>
                     </Field>
                   ))}
-                  <Button type="button" variant="secondary" onClick={() => void handleBulkRenewEnrollment()} disabled={isBulkEnrollmentSaving || rows.length === 0}>
-                    Listelenenleri geçir
+                  <Button type="button" variant="secondary" onClick={() => void handleBulkRenewEnrollment()} disabled={isBulkEnrollmentSaving || selectedStudents.length === 0}>
+                    Seçilenleri geçir ({selectedStudents.length})
                   </Button>
                 </div>
                 {canInviteGuardians ? (
@@ -883,13 +882,10 @@ export function StudentsPage() {
                       type="button"
                       variant="secondary"
                       onClick={() => void handleBulkGuardianInvitation()}
-                      disabled={isGuardianInviting || selectedStudentIds.length === 0}
+                      disabled={isGuardianInviting || selectedStudents.length === 0}
                     >
-                      Velileri davet et ({selectedStudentIds.length})
+                      Velileri davet et ({selectedStudents.length})
                     </Button>
-                    {guardianInvitationResult ? (
-                      <p role="status">{formatGuardianInvitationSummary(guardianInvitationResult)}</p>
-                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -923,6 +919,12 @@ export function StudentsPage() {
         hasActiveFilters={Boolean(listQuery.q.trim()) || Object.values(filters).some(Boolean)}
         loading={studentsQuery.isPending}
         rows={rows}
+        selection={canSelectStudents ? {
+          getRowLabel: (student) => `${student.firstName} ${student.lastName}`,
+          onSelectionChange: setSelectedStudentIds,
+          selectAllLabel: "Bu sayfadaki tüm öğrencileri seç",
+          selectedKeys: selectedStudentIds,
+        } : undefined}
         summary={
           <OperationSummary
             actions={studentSummaryActions}
@@ -934,6 +936,41 @@ export function StudentsPage() {
         tableCaption="Öğrenci listesi"
         tableDescription="Sınıf ve kayıt durumu."
       />
+      {selectedStudents.length > 0 || guardianInvitationResult ? (
+        <section aria-label="Toplu işlem çubuğu" className="next-bulk-selection">
+          <div className="next-bulk-selection__bar">
+            {guardianInvitationResult ? (
+              <p className="next-bulk-selection__result" role="status">{formatGuardianInvitationSummary(guardianInvitationResult)}</p>
+            ) : null}
+            {selectedStudents.length > 0 ? (
+              <>
+                <p aria-live="polite" className="next-bulk-selection__count">
+                  {selectedStudents.length} öğrenci seçildi
+                </p>
+                <div className="next-bulk-selection__actions">
+                  {canInviteGuardians ? (
+                    <Button type="button" variant="secondary" onClick={() => void handleBulkGuardianInvitation()} disabled={isGuardianInviting}>
+                      Veli daveti
+                    </Button>
+                  ) : null}
+                  {canManageStudents ? (
+                    <Button type="button" variant="secondary" onClick={() => void handleBulkRenewEnrollment()} disabled={isBulkEnrollmentSaving}>
+                      Dönem geçişi
+                    </Button>
+                  ) : null}
+                  <Button type="button" variant="ghost" onClick={() => setSelectedStudentIds([])}>
+                    Seçimi temizle
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <Button type="button" variant="ghost" onClick={() => setGuardianInvitationResult(null)}>
+                Sonucu kapat
+              </Button>
+            )}
+          </div>
+        </section>
+      ) : null}
       <FormModal
         description="CSV veya XLSX dosyası seçildiğinde önce ön kontrol yapılır; hata yoksa aktarım tamamlanır."
         onCancel={closeImportModal}
