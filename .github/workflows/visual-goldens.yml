@@ -51,7 +51,7 @@ jobs:
           if [ -n "${GREP:-}" ]; then args+=(--grep "$GREP"); fi
           pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts "${args[@]}" || true
           cd apps/web
-          changed="$(git status --porcelain -- 'e2e-next/__screenshots__/**/*-linux.png' | sed 's/^...//')"
+          changed="$(git status --porcelain -- e2e-next/__screenshots__ | sed 's/^...//' | grep -- '-linux\.png$' || true)"
           {
             echo "## Regenerated Linux goldens"
             if [ -z "$changed" ]; then echo "none (all goldens already matched)"; else printf -- '- %s\n' $changed; fi
