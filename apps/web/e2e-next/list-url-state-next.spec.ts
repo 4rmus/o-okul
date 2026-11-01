@@ -497,9 +497,9 @@ test.describe("Liste URL state", () => {
       await expect(guardianSummary).toContainText("İletişim temizliği");
       await expect(guardianSummary).toContainText("Veli erişimi");
       await expect(guardiansRegion.getByRole("table", { name: "Veli kayıt listesi" })).toBeVisible();
-      await expect(guardiansRegion.getByRole("link", { name: "Zeynep detay" })).toBeVisible();
-      await expect(guardiansRegion.getByRole("button", { name: "Zeynep düzenle" })).toBeVisible();
-      await expect(guardiansRegion.getByRole("button", { name: "Zeynep sil" })).toBeVisible();
+      await expect(guardiansRegion.getByRole("link", { name: "Zeynep Veli detay" })).toBeVisible();
+      await expect(guardiansRegion.getByRole("button", { name: "Zeynep Veli düzenle" })).toBeVisible();
+      await expect(guardiansRegion.getByRole("button", { name: "Zeynep Veli sil" })).toBeVisible();
       await expect(guardiansRegion).not.toContainText("5554443322");
       await expect(guardiansRegion).toContainText("••• ••• ••22");
 
