@@ -21,6 +21,10 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(student360Summary).toHaveClass(/uh-info-grid/);
     await expect(student360Summary.locator(".uh-info-item")).toHaveCount(11);
     await expect(student360.getByText("Devamsızlık")).toBeVisible();
+    // Özet 13 yoklama kaydından 1 "Yok" içerir: alan toplam kaydı değil devamsızlığı gösterir.
+    const attendanceItem = student360Summary.locator(".uh-info-item").filter({ hasText: "Devamsızlık" });
+    await expect(attendanceItem).toContainText("1 yok");
+    await expect(attendanceItem).not.toContainText("13");
     await expect(student360.getByText("Problem çözüm adımlarında takip yapılacak.")).toBeVisible();
 
     const enrollmentTable = student360.getByRole("table", { name: "Kayıt geçmişi" });
@@ -775,12 +779,14 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(outcomesTable.getByRole("columnheader", { name: "Başarı %" })).toBeVisible();
     await expect(outcomesTable.getByRole("columnheader", { name: "Net" })).toBeVisible();
     await expect(outcomesTable.getByRole("columnheader", { name: "Soru" })).toBeVisible();
+    // Kazanımlar en düşük başarıdan başlar: ilk satır sınıf ortalaması %65 olan T.8.2'dir.
     await expectMobileDataCells(outcomesTable, [
-      { key: "outcome", label: "Kazanım", text: "Matematik / M.8.1" },
-      { key: "successRate", label: "Başarı %", text: "%80,7" },
-      { key: "net", label: "Net", text: "7,5" },
+      { key: "outcome", label: "Kazanım", text: "T.8.2" },
+      { key: "successRate", label: "Başarı %", text: "%65,0" },
+      { key: "net", label: "Net", text: "6,5" },
       { key: "questionCount", label: "Soru", text: "10" },
     ]);
+    await expect(outcomesTable.locator("tbody tr").filter({ hasText: "M.8.1" })).toContainText("%80,7");
     await expectNoVisibleTextValues(page, "class-detail-mobile", [
       "class-8a",
       "student-a",

@@ -45,6 +45,7 @@ import {
   type CursorListQueryState,
 } from "../../../../src/cursor-list-controls.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
+import { formatAttendanceSummary } from "../../_shared/attendance-summary.js";
 import { formatPercentNumber, formatStudentProgressSummary, isComparableStudentProgress, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import { readReportExamId } from "../../_shared/report-exam-selection.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
@@ -1235,7 +1236,7 @@ function StudentDetailPanel({
       <p className="next-form-section-title">Öğrenci 360</p>
       <InfoGrid className="next-student-360-summary" aria-label="Öğrenci 360 özeti" role="region">
         <InfoItem label="Kayıt durumu" value={detail?.profile.status ? formatStudentStatus(detail.profile.status) : "-"} />
-        <InfoItem label="Devamsızlık" value={detail?.attendanceSummary?.total ?? 0} />
+        <InfoItem label="Devamsızlık" value={formatAttendanceSummary(detail?.attendanceSummary)} />
         <InfoItem label="Öğretmen notu" value={detail?.teacherNotes.length ?? 0} />
         <InfoItem label="Ödev" value={detail?.homeworkAssignments.length ?? 0} />
         <InfoItem label="Bekleyen ödeme" value={formatPendingPayment(detail?.paymentPlans ?? [])} />

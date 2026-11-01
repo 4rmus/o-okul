@@ -685,6 +685,54 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     }
   });
 
+  test("kazanım ayrıntıları en düşük başarıdan başlar ve tüm kazanımlar açılabilir", async ({ page }) => {
+    const successRates = [95, 40, 88, 72, 15, 60, 99, 33, 81, 50, 67, 25, 90, 77];
+    await openWithReportMocks(page, "/kurum/raporlar?examId=exam-report-ready", { height: 960, width: 1440 });
+    await page.route("**/api/v1/exams/exam-report-ready/reports/snapshots*", async (route) => {
+      if (new URL(route.request().url()).pathname !== "/api/v1/exams/exam-report-ready/reports/snapshots") {
+        await route.fallback();
+        return;
+      }
+      const snapshot = createReportSnapshot("exam-report-ready", "READY");
+      await fulfillData(route, [{
+        ...snapshot,
+        snapshotData: {
+          ...snapshot.snapshotData,
+          outcomes: successRates.map((successRate, index) => ({
+            branch: "Matematik",
+            correct: 1,
+            net: 1,
+            outcomeCode: `M.8.${index + 1}`,
+            questionCount: 5,
+            resultCount: 2,
+            successRate,
+            wrong: 0,
+          })),
+        },
+      }]);
+    });
+
+    await page.getByRole("button", { name: "Raporu getir" }).click();
+    const outcomeDetails = page.locator(".next-report-outcome-details");
+    const outcomeSummary = outcomeDetails.locator("summary");
+    await expect(outcomeSummary).toContainText("14 kazanım · en düşük başarı önce");
+    await outcomeSummary.click();
+    const outcomeTable = outcomeDetails.getByRole("table", { name: "Rapor kazanım başarıları" });
+    const outcomeCodes = outcomeTable.locator("tbody th");
+    await expect(outcomeCodes).toHaveCount(12);
+    await expect(outcomeCodes.nth(0)).toHaveText("M.8.5");
+    await expect(outcomeCodes.nth(1)).toHaveText("M.8.12");
+    await expect(outcomeCodes.nth(11)).toHaveText("M.8.13");
+    await expect(outcomeDetails).toContainText("En düşük başarılı 12 / 14 kazanım gösteriliyor.");
+
+    await outcomeDetails.getByRole("button", { name: "Tüm kazanımları göster (14)" }).click();
+    await expect(outcomeCodes).toHaveCount(14);
+    await expect(outcomeCodes.nth(13)).toHaveText("M.8.7");
+    await expect(outcomeDetails).toContainText("14 kazanımın tamamı gösteriliyor.");
+    await outcomeDetails.getByRole("button", { name: "En düşük 12 kazanımı göster" }).click();
+    await expect(outcomeCodes).toHaveCount(12);
+  });
+
   test("STALE snapshot analizi açık bırakır ama çıktıları kilitler", async ({ page }) => {
     await openWithReportMocks(page, "/kurum/raporlar", { height: 844, width: 390 });
 
