@@ -464,7 +464,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
             /> : null}
             {view === "overview" || view === "student" ? <DevelopmentTrendPanel assessments={data?.developmentAssessments ?? []} /> : null}
             {view === "overview" || view === "student" ? <TeacherNotesPanel notes={data?.teacherNotes ?? []} courseNames={courseNameById} termNames={termNameById} /> : null}
-            {view === "overview" || view === "student" ? <AttendancePanel records={data?.attendance ?? []} /> : null}
+            {view === "overview" || view === "student" ? <AttendancePanel records={data?.attendance ?? []} summary={data?.attendanceSummary} /> : null}
           </>
         }
       />

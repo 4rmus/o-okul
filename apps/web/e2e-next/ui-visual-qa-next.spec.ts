@@ -74,7 +74,7 @@ const rolePortalActionStripCases: RolePortalActionStripCase[] = [
     authProfile: "teacher",
     count: 3,
     hrefs: [
-      { href: "/ogretmen/ders-akisi", name: /Yoklama al: 1 ders/ },
+      { href: "/ogretmen/ders-akisi?classId=class-8a&date=2026-06-17#portal-teacher-attendance", name: /Yoklama al: 1 ders/ },
       { href: "/ogretmen/odevler", name: /Ödev kontrolü: 1 ödev/ },
       { href: "/ogretmen/raporlar?examId=exam-demo-isem-lgs-1", name: /Son sınav raporu:/ },
     ],
@@ -770,7 +770,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Öğretmen Portalı" })).toBeVisible();
     await expectPortalDailyBrief(page.getByRole("region", { exact: true, name: "Bugün" }), 3);
     await expectRolePortalActionStrip(page.getByRole("region", { name: "Öğretmen günlük aksiyonları" }), 3, [
-      { href: "/ogretmen/ders-akisi", name: /Yoklama al: 1 ders/ },
+      { href: "/ogretmen/ders-akisi?classId=class-8a&date=2026-06-17#portal-teacher-attendance", name: /Yoklama al: 1 ders/ },
       { href: "/ogretmen/odevler", name: /Ödev kontrolü: 1 ödev/ },
       { href: "/ogretmen/raporlar?examId=exam-demo-isem-lgs-1", name: /Son sınav raporu:/ },
     ]);

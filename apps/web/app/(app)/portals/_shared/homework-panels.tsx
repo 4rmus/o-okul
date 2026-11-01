@@ -52,6 +52,13 @@ export function StudentClassHomeworkPanel({
 
   const columns: Array<DataTableColumn<StudentHomeworkRecord>> = [
     { header: "Ödev", key: "title", priority: "primary", render: (record) => record.title, sticky: "left" },
+    {
+      // Öğretmenin yazdığı açıklama ve materyal öğrenciye görünür; telefonda detay satırına iner.
+      header: "Açıklama",
+      key: "description",
+      priority: "optional",
+      render: (record) => [record.sourceMaterialTitle, record.description].filter(Boolean).join(" · ") || "-",
+    },
     { header: "Son tarih", key: "dueAt", priority: "secondary", render: (record) => (record.dueAt ? formatDateTime(record.dueAt) : "-") },
     { header: "Durum", key: "status", priority: "primary", render: (record) => submissionStatusLabels[record.submission.status] },
     {

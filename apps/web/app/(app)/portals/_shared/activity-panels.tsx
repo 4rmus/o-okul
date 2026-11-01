@@ -1,15 +1,17 @@
 "use client";
 
 import { DataTable, Panel, type DataTableColumn } from "@o-okul/ui";
-import type { AttendanceRecord, StudentRecord, TeacherNoteRecord } from "@o-okul/shared-types";
+import type { AttendanceRecord, AttendanceSummaryRecord, StudentRecord, TeacherNoteRecord } from "@o-okul/shared-types";
+import { formatAttendanceSummary } from "../../_shared/attendance-summary.js";
+import { formatDateKey } from "../../_shared/istanbul-date.js";
 
-export function AttendancePanel({ records }: { records: AttendanceRecord[] }) {
+export function AttendancePanel({ records, summary }: { records: AttendanceRecord[]; summary?: AttendanceSummaryRecord | null }) {
   const columns: Array<DataTableColumn<AttendanceRecord>> = [
     {
       header: "Tarih",
       key: "date",
       priority: "primary",
-      render: (record) => record.date,
+      render: (record) => formatDateKey(record.date),
       sticky: "left",
     },
     {
@@ -26,6 +28,7 @@ export function AttendancePanel({ records }: { records: AttendanceRecord[] }) {
       description="Öğrencinin portaldan görebildiği yoklama kayıtları."
       title="Devamsızlık"
     >
+      {summary ? <p className="next-status-note">Toplam: {formatAttendanceSummary(summary)}</p> : null}
       <DataTable
         caption="Devamsızlık kayıtları"
         columns={columns}
@@ -78,7 +81,7 @@ export function TeacherAttendancePanel({
       key: "date",
       mobilePriority: "secondary",
       priority: "primary",
-      render: (record) => record.date,
+      render: (record) => formatDateKey(record.date),
     },
     {
       header: "Durum",

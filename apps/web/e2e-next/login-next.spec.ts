@@ -6636,7 +6636,7 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
       { studentId: "student-b", status: "PRESENT" },
     ],
   });
-  await expect(page.getByLabel("Öğretmen yoklama kayıtları", { exact: true })).toContainText("2026-06-11");
+  await expect(page.getByLabel("Öğretmen yoklama kayıtları", { exact: true })).toContainText("11 Haz 2026");
   await expect(page.getByLabel("Öğretmen yoklama kayıtları", { exact: true })).toContainText("Geç");
   await expect(page.getByLabel("Not branşı")).toHaveValue("course-math");
   await expect(page.getByLabel("Not dönemi")).toHaveValue("term-2026-spring");

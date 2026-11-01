@@ -327,7 +327,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
               termNames={termNameById}
             /> : null}
             {view === "attendance" ? <div id="portal-attendance">
-              <AttendancePanel records={data?.attendance ?? []} />
+              <AttendancePanel records={data?.attendance ?? []} summary={data?.attendanceSummary} />
             </div> : null}
             {view === "profile" ? <DevelopmentTrendPanel assessments={data?.developmentAssessments ?? []} /> : null}
             {view === "profile" || view === "attendance" ? <TeacherNotesPanel notes={data?.teacherNotes ?? []} courseNames={courseNameById} termNames={termNameById} /> : null}

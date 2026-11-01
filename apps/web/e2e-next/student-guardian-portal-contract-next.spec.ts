@@ -213,6 +213,8 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       await expect(page.getByRole("region", { exact: true, name: "Portal görünümü" })).toContainText(routeCase.context);
       await expect(routeCase.panel()).toBeVisible();
       if (routeCase.label === "Sınav Raporu") await expect(page.getByRole("combobox", { name: "Sınav raporu" })).toBeVisible();
+      // 30 yoklama kaydının hepsi "Var": özet devamsızlığı söyler, kayıt sayısını değil.
+      if (routeCase.label === "Devamsızlık") await expect(routeCase.panel()).toContainText("Toplam: 0 yok");
       await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { exact: true, name: "Özet" })).not.toHaveAttribute("aria-current", "page");
     }
   });
