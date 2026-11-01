@@ -27,6 +27,7 @@ import type {
   StudentRecord as SharedStudentRecord,
   StudentListSort,
   StudentStatus,
+  TeacherAssignmentRecord,
 } from "@o-okul/shared-types";
 import { AuditLogService, sanitizeAuditDiff } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
@@ -255,7 +256,32 @@ export class StudentService {
   }
 
   async listForViewer(context: RequestContext): Promise<PublicStudentRecord[]> {
-    return (await this.list(context)).map(toPublicStudentRecord);
+    return this.withAssignedTeachers(context, (await this.list(context)).map(toPublicStudentRecord));
+  }
+
+  /**
+   * UAT F-22: the list column "Sorumlu öğretmen" resolves from the same active assignment rows the student detail
+   * lists (GET /students/:id/teacher-assignments). `responsibleTeacherId` stays the stored field; the fallback is a
+   * read-model field (student-level RESPONSIBLE_TEACHER first, then the class's CLASS_TEACHER).
+   */
+  private async withAssignedTeachers(context: RequestContext, records: PublicStudentRecord[]): Promise<PublicStudentRecord[]> {
+    if (records.every((record) => record.responsibleTeacherId)) return records;
+    const assignments = filterTenantResources(context, await this.teacherAssignmentStore.list()).filter(isAssignmentActive);
+    const byStudent = new Map<string, TeacherAssignmentRecord>();
+    const byClass = new Map<string, TeacherAssignmentRecord>();
+    for (const assignment of assignments) {
+      if (assignment.role === "RESPONSIBLE_TEACHER" && assignment.studentId && !byStudent.has(assignment.studentId)) {
+        byStudent.set(assignment.studentId, assignment);
+      }
+      if (assignment.role === "CLASS_TEACHER" && assignment.classId && !assignment.studentId && !byClass.has(assignment.classId)) {
+        byClass.set(assignment.classId, assignment);
+      }
+    }
+    return records.map((record) => {
+      if (record.responsibleTeacherId) return record;
+      const assignment = byStudent.get(record.id) ?? (record.classId ? byClass.get(record.classId) : undefined);
+      return assignment ? { ...record, assignedTeacherId: assignment.teacherId, assignedTeacherRole: assignment.role } : record;
+    });
   }
 
   async listRegistryPageForViewer(
@@ -306,7 +332,7 @@ export class StudentService {
 
     try {
       const page = await this.store.listRegistryPage(context.tenantId, registryQuery);
-      return withCursorListMeta(page.records.map(toPublicStudentRecord), page.meta);
+      return withCursorListMeta(await this.withAssignedTeachers(context, page.records.map(toPublicStudentRecord)), page.meta);
     } catch (error) {
       if (error instanceof Error && error.message === studentCursorInvalid) throw new BadRequestException(error.message);
       throw error;

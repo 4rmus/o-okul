@@ -271,8 +271,7 @@ export function StudentsPage() {
       key: "responsibleTeacher",
       header: "Sorumlu öğretmen",
       priority: "optional",
-      render: (student) =>
-        student.responsibleTeacherId ? (teacherNameById.get(student.responsibleTeacherId) ?? "—") : "—",
+      render: (student) => formatResponsibleTeacher(student, teacherNameById),
     },
     {
       key: "status",
@@ -1740,6 +1739,16 @@ function maskEmail(value: string) {
   if (!localPart || !domain) return "E-posta kayıtlı";
   const visiblePrefix = localPart.slice(0, 2);
   return `${visiblePrefix}${"•".repeat(Math.max(localPart.length - 2, 2))}@${domain}`;
+}
+
+// UAT F-22: the stored responsibleTeacherId wins; otherwise the API's read-model fallback (the active CLASS_TEACHER of
+// the student's class or a RESPONSIBLE_TEACHER assignment) is shown with its source, like the student detail lists it.
+function formatResponsibleTeacher(student: StudentRecord, teacherNameById: ReadonlyMap<string, string>): string {
+  if (student.responsibleTeacherId) return teacherNameById.get(student.responsibleTeacherId) ?? "—";
+  if (!student.assignedTeacherId) return "—";
+  const name = teacherNameById.get(student.assignedTeacherId);
+  if (!name) return "—";
+  return `${name} (${student.assignedTeacherRole === "CLASS_TEACHER" ? "sınıf öğretmeni" : "sorumlu ataması"})`;
 }
 
 function formatStudentStatus(status: StudentRecord["status"]) {

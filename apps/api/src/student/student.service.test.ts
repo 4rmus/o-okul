@@ -6,6 +6,7 @@ import { InMemoryGuardianStudentStore } from "../school/guardian-student-store.j
 import { InMemoryGuardianStore } from "../school/guardian-store.js";
 import { InMemoryClassStore } from "../school/class-store.js";
 import { InMemoryGradeLevelStore } from "../school/grade-level-store.js";
+import { InMemoryTeacherAssignmentStore } from "../school/teacher-assignment-store.js";
 import { InMemoryStudentStore, type StudentImportBatchInput, type StudentStore } from "./student-store.js";
 import { InMemoryStudentEnrollmentStore } from "./student-enrollment-store.js";
 import { InMemoryStudentContactStore } from "./student-contact-store.js";
@@ -697,6 +698,61 @@ describe("StudentService", () => {
       expect.objectContaining({ studentId: "student-a" }),
     ]);
   });
+
+  it("listede sorumlu öğretmen boşsa aktif sınıf/sorumlu atamasından çözer; açık alanı ve yazımı değiştirmez (UAT F-22)", async () => {
+    const setup = createService();
+    const classStudent = await setup.studentStore.create({
+      tenantId: "tenant-a",
+      firstName: "Bora",
+      lastName: "B",
+      gradeLevelId: "grade-8",
+      classId: "class-a",
+      status: "ACTIVE",
+    });
+    const individualStudent = await setup.studentStore.create({
+      tenantId: "tenant-a",
+      firstName: "Can",
+      lastName: "C",
+      gradeLevelId: "grade-8",
+      classId: "class-a",
+      status: "ACTIVE",
+    });
+    const unassignedStudent = await setup.studentStore.create({
+      tenantId: "tenant-a",
+      firstName: "Deniz",
+      lastName: "D",
+      gradeLevelId: "grade-8",
+      status: "ACTIVE",
+    });
+    await setup.teacherAssignmentStore.create({
+      tenantId: "tenant-a",
+      teacherId: "teacher-b",
+      studentId: individualStudent.id,
+      role: "RESPONSIBLE_TEACHER",
+    });
+    // Expired class assignment of another teacher must not win over the active demo CLASS_TEACHER row.
+    await setup.teacherAssignmentStore.create({
+      tenantId: "tenant-a",
+      teacherId: "teacher-expired",
+      classId: "class-a",
+      role: "CLASS_TEACHER",
+      endsAt: "2020-01-01",
+    });
+
+    const records = await setup.service.listForViewer(adminContext);
+    const byId = new Map(records.map((record) => [record.id, record]));
+    // Stored field wins; no fallback fields appear next to it.
+    expect(byId.get("student-a")).toMatchObject({ responsibleTeacherId: "teacher-a" });
+    expect(byId.get("student-a")).not.toHaveProperty("assignedTeacherId");
+    // 8-A student without the stored field resolves the active CLASS_TEACHER of class-a (demo teacher-a).
+    expect(byId.get(classStudent.id)).toMatchObject({ assignedTeacherId: "teacher-a", assignedTeacherRole: "CLASS_TEACHER" });
+    expect(byId.get(classStudent.id)?.responsibleTeacherId).toBeUndefined();
+    // Student-level RESPONSIBLE_TEACHER assignment takes precedence over the class teacher.
+    expect(byId.get(individualStudent.id)).toMatchObject({ assignedTeacherId: "teacher-b", assignedTeacherRole: "RESPONSIBLE_TEACHER" });
+    expect(byId.get(unassignedStudent.id)).not.toHaveProperty("assignedTeacherId");
+    // Read model only: the store row stays untouched.
+    await expect(setup.studentStore.findById(classStudent.id)).resolves.not.toHaveProperty("assignedTeacherId");
+  });
 });
 
 function createService(options: {
@@ -711,6 +767,7 @@ function createService(options: {
   const guardianStudentStore = new InMemoryGuardianStudentStore();
   const guardianStore = new InMemoryGuardianStore();
   const studentContactStore = new InMemoryStudentContactStore();
+  const teacherAssignmentStore = new InMemoryTeacherAssignmentStore();
   const invitations: unknown[] = [];
   const auditRecords: unknown[] = [];
   const provisionedSubjects: unknown[] = [];
@@ -771,7 +828,7 @@ function createService(options: {
     service: new StudentService(
       studentStore,
       guardianStudentStore,
-      {} as never,
+      teacherAssignmentStore,
       enrollmentStore,
       { listYears: async () => [], listTerms: async () => [] } as never,
       {} as never,
@@ -799,6 +856,7 @@ function createService(options: {
     classStore,
     gradeLevelStore,
     studentContactStore,
+    teacherAssignmentStore,
   };
 }
 

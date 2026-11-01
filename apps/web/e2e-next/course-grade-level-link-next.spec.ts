@@ -145,7 +145,7 @@ test("F-11 akademik yönetim yetkisi olmayan rol ders bağlama denetimini görme
 async function openAssignmentDialog(page: Page, state: MockState) {
   await installRoutes(page, state);
   await page.goto("/kurum/ogretmenler");
-  await page.getByRole("button", { name: "Ayşe düzenle" }).click();
+  await page.getByRole("button", { name: "Ayşe Demir düzenle" }).click();
   const dialog = page.getByRole("dialog", { name: "Öğretmen düzenle" });
   await expect(dialog.getByLabel("Atama sınıfı").locator("option")).toHaveCount(2);
   return dialog;

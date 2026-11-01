@@ -115,6 +115,17 @@ export function TeachersPage() {
   const studentNameById = new Map(students.map((student) => [student.id, `${student.firstName} ${student.lastName}`]));
   const branchReadyCount = rows.filter((teacher) => Boolean(teacher.branch)).length;
   const teacherPortalReadyCount = rows.filter((teacher) => Boolean(teacher.hasAccount)).length;
+  // UAT F-22: the assignment card sums the read-model counts GET /teachers carries (the same rows the detail lists),
+  // not the size of the class/course/student catalogs.
+  const assignmentTotals = rows.reduce(
+    (totals, teacher) => ({
+      total: totals.total + (teacher.assignmentSummary?.total ?? 0),
+      classCount: totals.classCount + (teacher.assignmentSummary?.classCount ?? 0),
+      courseCount: totals.courseCount + (teacher.assignmentSummary?.courseCount ?? 0),
+    }),
+    { total: 0, classCount: 0, courseCount: 0 },
+  );
+  const referencesUnavailable = referencesQuery.isError;
   const teacherSummaryItems: OperationSummaryItem[] = [
     {
       description: "Filtrelenmiş toplam kayıt",
@@ -137,10 +148,11 @@ export function TeachersPage() {
       value: `${teacherPortalReadyCount}/${rows.length}`,
     },
     {
-      description: "Sınıf/ders/öğrenci referansı",
+      description: referencesUnavailable ? "Sınıf/ders/öğrenci referansları alınamadı" : "Sınıf/ders/öğrenci referansı",
       key: "references",
       label: "Atama bağlamı",
-      value: `${classes.length}/${courses.length}/${students.length}`,
+      tone: referencesUnavailable ? "warning" : undefined,
+      value: referencesUnavailable ? "—" : `${classes.length}/${courses.length}/${students.length}`,
     },
   ];
   const teacherSummaryBadges: OperationSummaryBadge[] = [
@@ -168,12 +180,12 @@ export function TeachersPage() {
       value: `${teacherPortalReadyCount}/${rows.length}`,
     },
     {
-      detail: "Sınıf / ders / öğrenci",
+      detail: "Atama / sınıf bağı / ders bağı (bu sayfa)",
       key: "assignment-reference",
       label: "Atama referansı",
-      status: "Kapsam",
-      tone: "info",
-      value: `${classes.length}/${courses.length}/${students.length}`,
+      status: assignmentTotals.total > 0 ? "Bağlı" : "Atama yok",
+      tone: assignmentTotals.total > 0 ? "info" : "neutral",
+      value: `${assignmentTotals.total}/${assignmentTotals.classCount}/${assignmentTotals.courseCount}`,
     },
   ];
 
@@ -219,6 +231,12 @@ export function TeachersPage() {
       },
     },
     {
+      key: "assignments",
+      header: "Atama",
+      priority: "secondary",
+      render: (teacher) => formatAssignmentSummary(teacher.assignmentSummary),
+    },
+    {
       key: "actions",
       header: "İşlem",
       align: "center",
@@ -226,13 +244,14 @@ export function TeachersPage() {
       sticky: "right",
       render: (teacher) => (
         <span className="next-row-actions">
-          <Link href={`/kurum/ogretmenler/${encodeURIComponent(teacher.id)}`} aria-label={`${teacher.firstName} detay`}>
+          {/* UAT F-23: full name like the employees screen, so two teachers with the same first name stay distinct. */}
+          <Link href={`/kurum/ogretmenler/${encodeURIComponent(teacher.id)}`} aria-label={`${teacher.firstName} ${teacher.lastName} detay`}>
             <Eye size={17} aria-hidden="true" />
           </Link>
-          <Button size="icon" variant="ghost" type="button" onClick={() => openEditForm(teacher)} aria-label={`${teacher.firstName} düzenle`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => openEditForm(teacher)} aria-label={`${teacher.firstName} ${teacher.lastName} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
           </Button>
-          <Button size="icon" variant="ghost" type="button" onClick={() => void handleDelete(teacher)} aria-label={`${teacher.firstName} sil`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void handleDelete(teacher)} aria-label={`${teacher.firstName} ${teacher.lastName} sil`}>
             <Trash2 size={17} aria-hidden="true" />
           </Button>
         </span>
@@ -582,6 +601,13 @@ export function TeachersPage() {
       {confirmationDialog}
     </>
   );
+}
+
+// UAT F-22: same counting as the teacher detail ("Atama toplamı", "Sınıf kapsamı", "Ders kapsamı").
+function formatAssignmentSummary(summary: TeacherRecord["assignmentSummary"]) {
+  if (!summary) return "—";
+  if (summary.total === 0) return <StatusBadge tone="neutral">Atama yok</StatusBadge>;
+  return `${formatCount(summary.total)} atama · ${formatCount(summary.classCount)} sınıf · ${formatCount(summary.courseCount)} ders`;
 }
 
 const teacherSortOptions = [

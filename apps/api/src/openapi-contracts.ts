@@ -1211,6 +1211,13 @@ const teacherRecordSchema = objectSchema({
   phoneMasked: stringSchema(),
   hasAccount: { type: "boolean" },
   provisioning: { type: "string", enum: ["PROVISIONED", "INVITED", "SKIPPED"] },
+  // UAT F-22: GET /teachers read model; counts the rows GET /teachers/:id/assignments returns.
+  assignmentSummary: objectSchema({
+    total: integerSchema({ minimum: 0 }),
+    classCount: integerSchema({ minimum: 0 }),
+    courseCount: integerSchema({ minimum: 0 }),
+    studentCount: integerSchema({ minimum: 0 }),
+  }, ["total", "classCount", "courseCount", "studentCount"]),
 }, ["id", "tenantId", "firstName", "lastName"]);
 
 const teacherCreateRequestSchema = objectSchema({
@@ -1991,6 +1998,9 @@ const publicStudentRecordSchema = objectSchema({
   classId: stringSchema(),
   responsibleTeacherId: stringSchema(),
   status: studentStatusSchema,
+  // UAT F-22: list read model; set only when responsibleTeacherId is empty and an active assignment covers the student.
+  assignedTeacherId: stringSchema(),
+  assignedTeacherRole: teacherAssignmentRoleSchema,
 }, ["id", "tenantId", "firstName", "lastName", "status"]);
 
 const globalSearchResultRecordSchema = objectSchema({

@@ -367,6 +367,7 @@ export type {
   TeacherAssignmentCreateRequest,
   TeacherAssignmentRecord,
   TeacherAssignmentRole,
+  TeacherAssignmentSummary,
   TeacherAssignmentUpdateRequest,
   TeacherImportDryRunResult,
   TeacherImportError,
