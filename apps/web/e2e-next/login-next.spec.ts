@@ -4556,7 +4556,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await studentFilters.getByRole("combobox", { name: /^İletişim kişisi/ }).selectOption("");
   await expect(page.getByText("Ada A", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Ada düzenle" }).click();
+  await page.getByRole("button", { name: "Ada A düzenle" }).click();
   await expect(page.getByLabel("Öğrenci 360").getByText("Devamsızlık")).toBeVisible();
   await expect(page.getByLabel("Öğrenci 360").getByText("Aktif", { exact: true }).first()).toBeVisible();
   await expect(page.getByLabel("Öğrenci 360").getByText("Kayıt geçmişi")).toBeVisible();
@@ -4575,11 +4575,11 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByLabel("Kayıt durumu").selectOption("GRADUATED");
   await page.getByRole("button", { name: "Kaydet", exact: true }).click();
   await expect(page.getByRole("cell", { name: "Mezun" })).toBeVisible();
-  await page.getByRole("button", { name: "Ada düzenle" }).click();
+  await page.getByRole("button", { name: "Ada A düzenle" }).click();
   await page.getByLabel("Kayıt durumu").selectOption("ACTIVE");
   await page.getByRole("button", { name: "Kaydet", exact: true }).click();
 
-  await page.getByRole("link", { name: "Ada öğrenci özeti" }).click();
+  await page.getByRole("link", { name: "Ada A öğrenci özeti" }).click();
   await expect(page).toHaveURL(/\/kurum\/ogrenciler\/student-a$/);
   await expect(heading(page, { name: "Ada A" })).toBeVisible();
   const studentDashboard = page.getByLabel("Öğrenci özeti", { exact: true });
@@ -4664,13 +4664,13 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
   await expect(page.getByText("Deniz Demo")).toBeVisible();
 
-  await page.getByRole("button", { name: "Deniz düzenle" }).click();
+  await page.getByRole("button", { name: "Deniz Demo düzenle" }).click();
   await page.getByLabel("Soyad", { exact: true }).fill("Güncel");
   await page.getByRole("button", { name: "Kaydet", exact: true }).click();
   await expect(page.getByText("Deniz Güncel")).toBeVisible();
   await expect(page.getByText("Deniz Demo")).toBeHidden();
 
-  await page.getByRole("button", { name: "Deniz sil" }).click();
+  await page.getByRole("button", { name: "Deniz Güncel sil" }).click();
   await confirmDeleteDialog(page, "Öğrenciyi sil", "Deniz Güncel öğrencisi silinsin mi?");
   await expect(page.getByText("Deniz Güncel")).toHaveCount(0);
 

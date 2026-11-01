@@ -3460,6 +3460,12 @@
   table-layout: auto;
 }
 
+/* Yeniden yüklenirken önceki satırlar kalır; yeni yanıt gelene kadar soluk görünür. */
+.uh-data-table[aria-busy="true"] tbody {
+  opacity: 0.6;
+  transition: opacity var(--dur-short) var(--ease-standard);
+}
+
 .uh-data-table caption {
   caption-side: top;
   padding: 0 0 10px;

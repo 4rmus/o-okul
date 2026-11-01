@@ -258,7 +258,7 @@ export function StudentsPage() {
       // Ad Soyad başlığı adı sıralar; "Sırala" seçiminden soyad seçildiyse başlık soyad yönünü değiştirir.
       onSort: (direction) => sortByHeader(listQuery.sort.replace(/^-/, "") === "lastName" ? "lastName" : "firstName", direction),
       sortDirection: activeSort.columnKey === "name" ? activeSort.direction : undefined,
-      render: (student) => `${student.firstName} ${student.lastName}`,
+      render: (student) => <Link href={`/kurum/ogrenciler/${encodeURIComponent(student.id)}`}>{student.firstName} {student.lastName}</Link>,
       sticky: true,
     },
     {
@@ -295,13 +295,13 @@ export function StudentsPage() {
       priority: "primary",
       render: (student) => (
         <span className="next-row-actions">
-          <Link href={`/kurum/ogrenciler/${encodeURIComponent(student.id)}`} aria-label={`${student.firstName} öğrenci özeti`}>
+          <Link href={`/kurum/ogrenciler/${encodeURIComponent(student.id)}`} aria-label={`${student.firstName} ${student.lastName} öğrenci özeti`}>
             <Eye size={17} aria-hidden="true" />
           </Link>
-          <Button size="icon" variant="ghost" type="button" onClick={() => openEditForm(student)} aria-label={`${student.firstName} düzenle`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => openEditForm(student)} aria-label={`${student.firstName} ${student.lastName} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
           </Button>
-          <Button size="icon" variant="ghost" type="button" onClick={() => void handleDelete(student)} aria-label={`${student.firstName} sil`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void handleDelete(student)} aria-label={`${student.firstName} ${student.lastName} sil`}>
             <Trash2 size={17} aria-hidden="true" />
           </Button>
         </span>
@@ -590,7 +590,7 @@ export function StudentsPage() {
 
     const confirmed = await confirm({
       confirmLabel: "Geçir",
-      description: "Bu işlem mevcut filtrede listelenen öğrencilerin kayıt dönemini toplu günceller.",
+      description: "Bu işlem yalnız bu sayfada görünen öğrencilerin kayıt dönemini günceller; filtredeki diğer sayfalar ayrıca geçirilmelidir.",
       message: `${rows.length} öğrenci ${bulkEnrollmentAction.startsAt} tarihinden itibaren ${
         bulkEnrollmentAction.useAutomaticClassMapping
           ? "otomatik seviye yükseltme ile"

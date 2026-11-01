@@ -110,7 +110,7 @@ test.describe("Liste URL state", () => {
     const captured = createCapturedRequests();
     await openWithListMocks(page, captured, "/kurum/ogrenciler?cursor=stale-cursor&q=ada");
     const studentsRegion = page.getByLabel("Öğrenci yönetimi");
-    await expect(studentsRegion.getByRole("button", { name: "Ada düzenle" })).toBeVisible();
+    await expect(studentsRegion.getByRole("button", { name: "Ada Kaya düzenle" })).toBeVisible();
     await expect.poll(() => new URL(page.url()).searchParams.get("cursor")).toBeNull();
     await expect.poll(() => captured.students.at(-1)?.has("cursor")).toBe(false);
     expect(captured.students.some((params) => params.get("cursor") === "stale-cursor")).toBe(true);
@@ -482,9 +482,9 @@ test.describe("Liste URL state", () => {
       await expect(studentSummary).toContainText("Toplu geçiş: manuel");
       await expect(studentSummary).toContainText("Sınıf eşleştirme");
       await expect(studentsRegion.getByRole("table", { name: "Öğrenci listesi" })).toBeVisible();
-      await expect(studentsRegion.getByRole("link", { name: "Ada öğrenci özeti" })).toBeVisible();
-      await expect(studentsRegion.getByRole("button", { name: "Ada düzenle" })).toBeVisible();
-      await expect(studentsRegion.getByRole("button", { name: "Ada sil" })).toBeVisible();
+      await expect(studentsRegion.getByRole("link", { name: "Ada Kaya öğrenci özeti" })).toBeVisible();
+      await expect(studentsRegion.getByRole("button", { name: "Ada Kaya düzenle" })).toBeVisible();
+      await expect(studentsRegion.getByRole("button", { name: "Ada Kaya sil" })).toBeVisible();
       await expect(page.getByLabel("Öğrenci tablo görünümü").getByLabel("Görünüm")).toHaveValue("compact");
 
       await openWithListMocks(page, captured, "/kurum/veliler?page=1&limit=10&q=zeynep&sort=lastName");
@@ -702,7 +702,7 @@ test.describe("Liste URL state", () => {
     await openWithListMocks(page, captured, "/kurum/ogrenciler?limit=10&q=ada");
 
     const studentsRegion = page.getByLabel("Öğrenci yönetimi");
-    await studentsRegion.getByRole("button", { name: "Ada düzenle" }).click();
+    await studentsRegion.getByRole("button", { name: "Ada Kaya düzenle" }).click();
     const studentDialog = page.getByRole("dialog", { name: "Öğrenci düzenle" });
     await expect(studentDialog.getByRole("textbox", { name: /^Telefon\b/ })).toBeVisible();
     await expect(studentDialog.getByText("Kayıtlı: ••• ••• ••67")).toBeVisible();

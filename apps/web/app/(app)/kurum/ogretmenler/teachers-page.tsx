@@ -218,7 +218,7 @@ export function TeachersPage() {
       priority: "primary",
       sortDirection: activeSortField === "firstName" || activeSortField === "lastName" ? activeSortDirection : undefined,
       sticky: "left",
-      render: (teacher) => `${teacher.firstName} ${teacher.lastName}`,
+      render: (teacher) => <Link href={`/kurum/ogretmenler/${encodeURIComponent(teacher.id)}`}>{teacher.firstName} {teacher.lastName}</Link>,
     },
     {
       key: "branch",

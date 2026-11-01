@@ -135,7 +135,7 @@ export function GuardiansPage() {
       header: "Ad Soyad",
       priority: "primary",
       sticky: "left",
-      render: (guardian) => `${guardian.firstName} ${guardian.lastName}`,
+      render: (guardian) => <Link href={`/kurum/veliler/${encodeURIComponent(guardian.id)}`}>{guardian.firstName} {guardian.lastName}</Link>,
     },
     {
       key: "phone",

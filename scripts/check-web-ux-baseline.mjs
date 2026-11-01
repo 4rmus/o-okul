@@ -573,7 +573,7 @@ requireTokens("apps/web/e2e-next/list-url-state-next.spec.ts", [
   'getByRole("table", { name: "Öğrenci listesi" })',
   'getByRole("table", { name: "Veli kayıt listesi" })',
   'getByRole("table", { name: "Öğretmen operasyon listesi" })',
-  'getByRole("link", { name: "Ada öğrenci özeti" })',
+  'getByRole("link", { name: "Ada Kaya öğrenci özeti" })',
   "Branş kapsamı",
   "Atama bağlamı",
   "Telefon varsayılan maskeli",

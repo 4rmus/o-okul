@@ -1,4 +1,6 @@
-import type { HTMLAttributes, ReactNode } from "react";
+"use client";
+
+import { useEffect, useRef, type HTMLAttributes, type ReactNode } from "react";
 import { classNames } from "../class-names.js";
 import { Alert } from "./alert.js";
 import { DataTable, type DataTableColumn } from "./data-table.js";
@@ -55,6 +57,13 @@ export function CrudPage<TRow>({
         </p>
       )
     : emptyState;
+  // Arama, filtre veya sayfa değişince sorgu anahtarı değişir ve satırlar bir an boş gelir; tablo çökmesin diye
+  // yeni yanıt gelene kadar son başarılı satırlar aria-busy altında gösterilir.
+  const lastLoadedRowsRef = useRef<TRow[]>([]);
+  useEffect(() => {
+    if (!loading && !error) lastLoadedRowsRef.current = rows;
+  }, [error, loading, rows]);
+  const tableRows = loading && rows.length === 0 ? lastLoadedRowsRef.current : rows;
   const shouldRenderEmptyState = !loading && !error && rows.length === 0 && resolvedEmptyState;
   const shouldRenderTable = loading || (!error && !shouldRenderEmptyState);
 
@@ -87,7 +96,7 @@ export function CrudPage<TRow>({
             getRowKey={getRowKey}
             loading={loading}
             rowClassName={rowClassName}
-            rows={loading ? [] : rows}
+            rows={tableRows}
           />
         </div>
       ) : null}

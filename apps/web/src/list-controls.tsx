@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Field, FilterBar, Input, Pagination, Select } from "@o-okul/ui";
 import type { ListMeta } from "./api-client.js";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
@@ -26,6 +26,31 @@ interface UrlListStateOptions {
   defaultState?: ListQueryState;
   namespace?: string;
   sortOptions: SortOption[];
+}
+
+const listLimits = [5, 10, 20, 50];
+
+const searchCommitDelayMs = 300;
+
+/**
+ * Arama kutusu yazılanı hemen gösterir ama liste durumuna (URL + sorgu) yazmayı kısa bir duraksamaya kadar erteler;
+ * her tuş yeni bir istek ve tablo yenilemesi başlatmaz. Dışarıdan gelen değer (geri tuşu, filtre sıfırlama) taslağı ezer.
+ */
+export function useDebouncedSearchInput(value: string, commit: (next: string) => void) {
+  const [draft, setDraft] = useState(value);
+  const commitRef = useRef(commit);
+  useEffect(() => {
+    commitRef.current = commit;
+  });
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+  useEffect(() => {
+    if (draft === value) return;
+    const timer = window.setTimeout(() => commitRef.current(draft), searchCommitDelayMs);
+    return () => window.clearTimeout(timer);
+  }, [draft, value]);
+  return [draft, setDraft] as const;
 }
 
 export const initialListQuery: ListQueryState = {
@@ -95,6 +120,7 @@ export function ListControls({
     state.sort ? "Sıralama seçili" : "",
     state.limit !== initialListQuery.limit ? `${state.limit} kayıt` : "",
   ].filter(Boolean).join(" · ") || "Sıralama ve sayfalama";
+  const [searchDraft, setSearchDraft] = useDebouncedSearchInput(state.q, (q) => onChange({ ...state, page: 1, q }));
 
   return (
     <FilterBar className="next-list-controls" role="group" aria-label="Liste kontrolleri">
@@ -103,8 +129,8 @@ export function ListControls({
         <Input
           aria-label="Ara"
           placeholder={searchPlaceholder}
-          value={state.q}
-          onChange={(event) => onChange({ ...state, page: 1, q: event.target.value })}
+          value={searchDraft}
+          onChange={(event) => setSearchDraft(event.target.value)}
         />
       </Field>
       <details className="next-list-filter-details" open>
@@ -128,9 +154,9 @@ export function ListControls({
               value={state.limit}
               onChange={(event) => onChange({ ...state, page: 1, limit: Number(event.target.value) })}
             >
-              <option value={5}>5</option>
-              <option value={10}>10</option>
-              <option value={20}>20</option>
+              {listLimits.map((limit) => (
+                <option key={limit} value={limit}>{limit}</option>
+              ))}
             </Select>
           </Field>
           <span className="next-list-status" aria-live="polite" aria-atomic="true">
@@ -211,7 +237,7 @@ function readPositiveInteger(value: string | null) {
 
 function readListLimit(value: string | null) {
   const parsed = readPositiveInteger(value);
-  return parsed === 5 || parsed === 10 || parsed === 20 ? parsed : null;
+  return parsed !== null && listLimits.includes(parsed) ? parsed : null;
 }
 
 function isSameListQuery(left: ListQueryState, right: ListQueryState) {
