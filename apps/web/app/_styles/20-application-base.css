@@ -3549,6 +3549,65 @@
   white-space: nowrap;
 }
 
+/* UI/UX F12: sıralanabilir sütun başlığı. Düğme başlık hücresini kaplar; etiket th içinde tek kez kalır.
+   Yön işaretleri yalnız görseldir (durum aria-sort ile taşınır); `content: ... / ""` işareti erişilebilirlik ağacından çıkarır,
+   önceki düz bildirim bu sözdizimini bilmeyen motorlar için yedektir. */
+.uh-data-table th[data-sortable="true"]:not([data-sticky]) {
+  position: relative;
+}
+
+.uh-data-table th[data-sortable="true"]::after {
+  content: "\2195";
+  content: "\2195" / "";
+  display: inline-block;
+  margin-inline-start: var(--space-3xs);
+  color: var(--color-text-muted);
+}
+
+.uh-data-table th[data-sortable="true"][aria-sort="ascending"]::after {
+  content: "\2191";
+  content: "\2191" / "";
+  color: var(--color-accent-strong);
+}
+
+.uh-data-table th[data-sortable="true"][aria-sort="descending"]::after {
+  content: "\2193";
+  content: "\2193" / "";
+  color: var(--color-accent-strong);
+}
+
+.uh-data-table th[data-sortable="true"][aria-sort] {
+  color: var(--color-text);
+}
+
+.uh-data-table th[data-sortable="true"]:hover {
+  color: var(--color-accent-strong);
+}
+
+.uh-data-table__sort-button {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.uh-data-table__sort-button:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+@media (pointer: coarse) and (min-width: 761px) {
+  .uh-data-table th[data-sortable="true"] {
+    height: 44px;
+  }
+}
+
 .uh-data-table tr:last-child td {
   border-bottom: 0;
 }
@@ -6905,6 +6964,10 @@
   .uh-data-table td[data-sticky="right"] {
     position: static;
   }
+
+  .uh-data-table th[data-sortable="true"] {
+    position: relative;
+  }
 }
 
 @media (max-width: 760px) {
@@ -7257,6 +7320,17 @@
   .uh-data-table td[data-priority="optional"],
   .uh-data-table td[data-mobile-priority="hidden"] {
     display: none;
+  }
+
+  /* Telefonda sıralama liste kontrollerindeki "Sırala" seçiminden yapılır; başlık düz metin kalır. */
+  .uh-data-table__sort-button {
+    display: none;
+  }
+
+  /* Sıralı başlık kuralları (0,3,2) telefonda da ok göstermesin diye özgüllük eşitlenir. */
+  .uh-data-table th[data-sortable="true"]::after,
+  .uh-data-table th[data-sortable="true"][aria-sort]::after {
+    content: none;
   }
 
   .uh-data-table td[data-label]::before {

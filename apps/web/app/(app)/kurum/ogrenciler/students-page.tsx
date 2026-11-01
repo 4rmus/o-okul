@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Checkbox, CrudPage, DataTable, EmptyState, Field, FormModal, InfoGrid, InfoItem, Input, Select, type DataTableColumn, useConfirmDialog } from "@o-okul/ui";
+import { Button, Checkbox, CrudPage, DataTable, EmptyState, Field, FormModal, InfoGrid, InfoItem, Input, Select, type DataTableColumn, type DataTableSortDirection, useConfirmDialog } from "@o-okul/ui";
 import type {
   AttendanceSummaryRecord,
   ClassRecord,
@@ -237,10 +237,15 @@ export function StudentsPage() {
   }, [filters, listQuery, tableDensity, visibleColumnKeys]);
 
   const activeSort = resolveStudentSortDirection(listQuery.sort);
+  // Başlık tıklaması "Sırala" seçimiyle aynı URL sıralama durumunu yazar; imleç sıfırlanır (UI/UX F12).
+  const sortByHeader = (ascendingValue: string, direction: DataTableSortDirection) => {
+    setListQuery((current) => resetListCursor(current, { sort: direction === "descending" ? `-${ascendingValue}` : ascendingValue }));
+  };
   const columns: Array<DataTableColumn<StudentRecord> & { key: StudentColumnKey }> = [
     {
       key: "studentNo",
       header: "Okul No",
+      onSort: (direction) => sortByHeader("studentNo", direction),
       sortDirection: activeSort.columnKey === "studentNo" ? activeSort.direction : undefined,
       priority: "optional",
       render: (student) => student.studentNo ?? "—",
@@ -249,6 +254,8 @@ export function StudentsPage() {
       key: "name",
       header: "Ad Soyad",
       priority: "primary",
+      // Ad Soyad başlığı adı sıralar; "Sırala" seçiminden soyad seçildiyse başlık soyad yönünü değiştirir.
+      onSort: (direction) => sortByHeader(listQuery.sort.replace(/^-/, "") === "lastName" ? "lastName" : "firstName", direction),
       sortDirection: activeSort.columnKey === "name" ? activeSort.direction : undefined,
       render: (student) => `${student.firstName} ${student.lastName}`,
       sticky: true,
@@ -263,6 +270,7 @@ export function StudentsPage() {
     {
       key: "class",
       header: "Sınıf",
+      onSort: (direction) => sortByHeader("classId", direction),
       sortDirection: activeSort.columnKey === "class" ? activeSort.direction : undefined,
       priority: "secondary",
       render: (student) => (student.classId ? (classNameById.get(student.classId) ?? "—") : "—"),
@@ -1271,7 +1279,7 @@ function buildProfilePayload(form: StudentFormPayload): StudentProfilePayload | 
   return Object.keys(payload).length > 0 ? payload : null;
 }
 
-// Liste kontrolündeki sıralama seçimi tablo başlığına aria-sort olarak yansır (UI/UX F12).
+// Liste kontrolündeki sıralama seçimi tablo başlığına aria-sort olarak yansır; başlık tıklaması aynı değeri yazar (UI/UX F12).
 function resolveStudentSortDirection(sort: string): { columnKey?: StudentColumnKey; direction: "ascending" | "descending" } {
   const direction = sort.startsWith("-") ? "descending" : "ascending";
   const field = sort.replace(/^-/, "");

@@ -17,6 +17,7 @@ import {
   Select,
   StatusBadge,
   type DataTableColumn,
+  type DataTableSortDirection,
   useConfirmDialog,
 } from "@o-okul/ui";
 import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, TeacherAssignmentRecord, TeacherRecord } from "@o-okul/shared-types";
@@ -202,18 +203,29 @@ export function TeachersPage() {
     if (searchParams.get("new") === "1") openCreateForm();
   }, [searchParams]);
 
+  // Başlık tıklaması "Sırala" seçimiyle aynı URL sıralama durumunu yazar ve aria-sort ile yansır (UI/UX F12).
+  const activeSortField = listQuery.sort.replace(/^-/, "");
+  const activeSortDirection: DataTableSortDirection = listQuery.sort.startsWith("-") ? "descending" : "ascending";
+  const sortByHeader = (ascendingValue: string, direction: DataTableSortDirection) => {
+    setListQuery({ ...listQuery, page: 1, sort: direction === "descending" ? `-${ascendingValue}` : ascendingValue });
+  };
   const columns: Array<DataTableColumn<TeacherRecord>> = [
     {
       key: "name",
       header: "Ad Soyad",
+      // Ad Soyad başlığı adı sıralar; "Sırala" seçiminden soyad seçildiyse başlık soyad yönünü değiştirir.
+      onSort: (direction) => sortByHeader(activeSortField === "lastName" ? "lastName" : "firstName", direction),
       priority: "primary",
+      sortDirection: activeSortField === "firstName" || activeSortField === "lastName" ? activeSortDirection : undefined,
       sticky: "left",
       render: (teacher) => `${teacher.firstName} ${teacher.lastName}`,
     },
     {
       key: "branch",
       header: "Branş",
+      onSort: (direction) => sortByHeader("branch", direction),
       priority: "primary",
+      sortDirection: activeSortField === "branch" ? activeSortDirection : undefined,
       render: (teacher) =>
         teacher.branch ? (
           <StatusBadge tone="info">{teacher.branch}</StatusBadge>
