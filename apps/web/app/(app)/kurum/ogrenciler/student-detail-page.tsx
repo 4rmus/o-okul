@@ -39,7 +39,7 @@ import { hasCapabilityForRoles } from "../../_shared/access.js";
 import { formatCourseName, formatOutcomeCode, shortCourseName } from "../../_shared/academic-labels.js";
 import { ErrorBookletTable } from "../../_shared/error-booklet-table.js";
 import { ExamResultDonut, ProgressLineChart, TopicRadarChart } from "../../_shared/lazy-report-charts.js";
-import { formatNetNumber, OutcomeNetTable } from "../../_shared/outcome-net-table.js";
+import { formatNetNumber, OutcomeNetTable, sortOutcomesWeakestFirst } from "../../_shared/outcome-net-table.js";
 import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
 import { formatPercentNumber, formatStudentProgressSummary, isComparableStudentProgress, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import { readReportExamId } from "../../_shared/report-exam-selection.js";
@@ -1264,7 +1264,7 @@ function StudentExamDetails({
             <ReportChartPanel description="Rapor bazlı branş başarıları" title="Branş Başarıları">
               <TopicRadarChart branches={branchRadar} caption="Öğrenci branş başarıları" />
             </ReportChartPanel>
-            <ReportChartPanel description="Kazanım bazlı başarı ve net karşılaştırması" title="Kazanım Başarıları">
+            <ReportChartPanel description="En düşük başarılı kazanımlar önce; net ve soru bağlam olarak kalır" title="Kazanım Başarıları">
               <OutcomeNetTable caption="Öğrenci kazanım başarıları" rows={outcomeRows} />
             </ReportChartPanel>
             <ReportChartPanel
@@ -1715,9 +1715,7 @@ function toStudentBranchRadar(report: ReportStudentSnapshot | null) {
 }
 
 function toStudentOutcomeRows(report: ReportStudentSnapshot | null) {
-  return [...(report?.outcomes ?? [])]
-    .sort((first, second) => (reportSuccessRate(second) ?? Number.NEGATIVE_INFINITY) - (reportSuccessRate(first) ?? Number.NEGATIVE_INFINITY))
-    .slice(0, 12)
+  return sortOutcomesWeakestFirst(report?.outcomes ?? [], reportSuccessRate)
     .map((outcome, index) => ({
       courseName: formatCourseName(outcome.branch),
       id: `${outcome.branch}-${outcome.outcomeCode}-${index}`,

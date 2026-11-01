@@ -49,7 +49,7 @@ import { PageFrame } from "../_shared/page-frame.js";
 import { formatCourseName, formatOutcomeCode, shortCourseName } from "../../_shared/academic-labels.js";
 import { ErrorBookletTable } from "../../_shared/error-booklet-table.js";
 import { ClassCompareBar, PracticeScoreBar, TopicRadarChart } from "../../_shared/lazy-report-charts.js";
-import { formatNetNumber, OutcomeNetTable } from "../../_shared/outcome-net-table.js";
+import { formatNetNumber, OutcomeNetTable, sortOutcomesWeakestFirst } from "../../_shared/outcome-net-table.js";
 import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
 import { buildReportAnalysisRows, type ReportAnalysisRow } from "../../_shared/report-analysis.js";
 import { formatPercentDelta, formatPercentNumber, isComparableStudentProgress, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
@@ -1089,9 +1089,7 @@ function toBranchRadar(snapshot: ReportSnapshotRecord | null) {
 }
 
 function toOutcomeRows(snapshot: ReportSnapshotRecord | null) {
-  return [...(snapshot?.snapshotData?.outcomes ?? [])]
-    .sort((first, second) => (reportSuccessRate(second) ?? Number.NEGATIVE_INFINITY) - (reportSuccessRate(first) ?? Number.NEGATIVE_INFINITY))
-    .slice(0, 12)
+  return sortOutcomesWeakestFirst(snapshot?.snapshotData?.outcomes ?? [], reportSuccessRate)
     .map((outcome, index) => ({
       courseName: formatCourseName(outcome.branch),
       id: `${outcome.branch}-${outcome.outcomeCode}-${index}`,
@@ -1252,7 +1250,7 @@ function ReportAnalyticsPanel({
       <details className="next-report-outcome-details">
         <summary>
           <span>Kazanım ayrıntıları</span>
-          <small>{outcomeRows.length} kazanım · başarı ve net karşılaştırması</small>
+          <small>{outcomeRows.length} kazanım · en düşük başarı önce</small>
         </summary>
         <OutcomeNetTable caption="Rapor kazanım başarıları" rows={outcomeRows} />
       </details>

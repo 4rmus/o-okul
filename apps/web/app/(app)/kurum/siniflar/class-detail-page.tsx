@@ -10,6 +10,7 @@ import { useAuth } from "../../../providers.js";
 import { ApiRequestError, apiBaseUrl, apiListRequest, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { formatCourseName, formatOutcomeCode } from "../../_shared/academic-labels.js";
+import { OUTCOME_TABLE_INITIAL_LIMIT, OutcomeRowLimitToggle, sortOutcomesWeakestFirst } from "../../_shared/outcome-net-table.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
@@ -27,6 +28,7 @@ export function ClassDetailPage({ classId }: { classId: string }) {
   const [activeSection, setActiveSection] = useState<ClassDetailSection>("overview");
   const [selectedExamId, setSelectedExamId] = useState("");
   const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
+  const [showAllOutcomes, setShowAllOutcomes] = useState(false);
   const detailQuery = useQuery({
     queryKey: ["next-class-detail", auth?.session.tenantId ?? "anonymous", classId],
     queryFn: () => loadClassDetail(auth?.accessToken ?? "", classId),
@@ -297,19 +299,24 @@ export function ClassDetailPage({ classId }: { classId: string }) {
             </Panel> : null}
             {activeSection === "reports" ? <Panel
               aria-label="Sınıf kazanım kırılımı"
-              description="Kazanımlar başarı yüzdesine göre sıralanır; net ve soru sayısı bağlam olarak kalır."
+              description="Kazanımlar en düşük başarı yüzdesinden başlar; net ve soru sayısı bağlam olarak kalır."
               title="Kazanım kırılımı"
             >
               <DataTable
                 caption="Sınıf kazanım kırılımı"
                 columns={outcomeColumns}
                 density="compact"
-                description="Kazanımlar başarı yüzdesine göre sıralanır; net ve soru sayısı bağlam olarak kalır."
+                description="Kazanımlar en düşük başarı yüzdesinden başlar; net ve soru sayısı bağlam olarak kalır."
                 emptyText={reportQuery.isError ? "Kazanım verisi alınamadı" : "Kazanım verisi yok"}
                 error={reportQuery.isError ? "Kazanım verisi alınamadı" : undefined}
                 getRowKey={(outcome) => `${outcome.branch}-${outcome.outcomeCode}`}
                 loading={reportQuery.isPending}
-                rows={classOutcomeRows}
+                rows={showAllOutcomes ? classOutcomeRows : classOutcomeRows.slice(0, OUTCOME_TABLE_INITIAL_LIMIT)}
+              />
+              <OutcomeRowLimitToggle
+                expanded={showAllOutcomes}
+                onToggle={() => setShowAllOutcomes((current) => !current)}
+                total={classOutcomeRows.length}
               />
             </Panel> : null}
             </div>
@@ -442,7 +449,7 @@ function buildClassSummaryActions(
       value: `${formatCount(activeStudentCount)} aktif / ${formatCount(detail.students.length)} toplam`,
     },
     {
-      detail: "Başarı yüzdesine göre ilk kazanım kırılımları",
+      detail: "En düşük başarı yüzdesinden başlayan kazanım kırılımları",
       key: "outcomes",
       label: "Kazanım takibi",
       status: classOutcomeRows.length > 0 ? "İzleniyor" : "Veri yok",
@@ -510,16 +517,16 @@ function toClassOutcomeRows(snapshot: ReportSnapshotRecord | null, classId: stri
       totals.set(key, current);
     }
   }
-  return [...totals.values()]
-    .map((item) => ({
+  return sortOutcomesWeakestFirst(
+    [...totals.values()].map((item) => ({
       branch: item.branch,
       net: item.count ? item.net / item.count : undefined,
       outcomeCode: item.outcomeCode,
       questionCount: item.count ? item.questionCount / item.count : undefined,
       successRate: item.count ? item.successRate / item.count : undefined,
-    }))
-    .sort((first, second) => (second.successRate ?? -1) - (first.successRate ?? -1))
-    .slice(0, 12) satisfies ClassOutcomeRow[];
+    })),
+    (outcome) => outcome.successRate,
+  ) satisfies ClassOutcomeRow[];
 }
 
 function formatSnapshotLabel(snapshot: ReportSnapshotRecord) {

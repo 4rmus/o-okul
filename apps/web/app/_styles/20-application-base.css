@@ -6920,6 +6920,17 @@
   text-align: left;
 }
 
+.next-outcome-limit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
 @media (max-width: 900px) {
   .next-portal-brief .uh-panel__header,
   .next-portal-action-strip .uh-panel__header,
