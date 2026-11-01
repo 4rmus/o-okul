@@ -1,5 +1,7 @@
-import { Fragment, type HTMLAttributes, type ReactNode } from "react";
+import { Fragment, type HTMLAttributes, type ReactNode, useId } from "react";
 import { classNames } from "../class-names.js";
+
+export type DataTableSortDirection = "ascending" | "descending";
 
 export interface DataTableColumn<TRow> {
   align?: "left" | "center" | "right";
@@ -9,8 +11,15 @@ export interface DataTableColumn<TRow> {
   mobilePriority?: "hidden" | "primary" | "secondary";
   priority?: "primary" | "secondary" | "optional";
   render(row: TRow): ReactNode;
-  /** Etkin sıralama yönü; sütun başlığına aria-sort olarak yansır (sıralama liste kontrollerinden seçilir). */
-  sortDirection?: "ascending" | "descending";
+  /**
+   * Başlık tıklanınca istenen yeni yönle çağrılır; verildiğinde başlık bir sıralama düğmesi taşır (UI/UX F12).
+   * Sayfa bunu liste kontrollerindeki "Sırala" seçimiyle aynı URL sıralama durumuna bağlar.
+   * Yalnız metin (string/number) başlıkta etkindir: düğmenin erişilebilir adı görünen başlık metniyle aynı olmalıdır
+   * (WCAG 2.5.3). Zengin (ReactNode) başlıkta sıralama düğmesi çizilmez; sıralama "Sırala" seçiminde kalır.
+   */
+  onSort?(direction: DataTableSortDirection): void;
+  /** Etkin sıralama yönü; sütun başlığına aria-sort olarak yansır. */
+  sortDirection?: DataTableSortDirection;
   sticky?: boolean | "left" | "right";
 }
 
@@ -45,6 +54,8 @@ export function DataTable<TRow>({
   const state = error ? "error" : loading && rows.length === 0 ? "loading" : rows.length === 0 ? "empty" : undefined;
   const mobileDetailColumns = columns.filter(shouldRenderMobileDetailColumn);
   const scrollRegionLabel = resolveScrollRegionLabel(caption, props["aria-label"]);
+  const sortHintId = useId();
+  const hasSortableColumn = columns.some((column) => column.onSort && resolveCellLabel(column.header));
 
   return (
     <div aria-label={scrollRegionLabel} className="uh-data-table-scroll" role="region" tabIndex={0}>
@@ -61,20 +72,35 @@ export function DataTable<TRow>({
         ) : null}
         <thead>
           <tr>
-            {columns.map((column) => (
-              <th
-                aria-sort={column.sortDirection}
-                data-align={column.align}
-                data-column-key={column.key}
-                data-mobile-priority={column.mobilePriority}
-                data-priority={column.priority}
-                data-sticky={resolveStickySide(column.sticky)}
-                key={column.key}
-                scope="col"
-              >
-                {column.header}
-              </th>
-            ))}
+            {columns.map((column) => {
+              // Ad görünen başlık metninden gelir; mobileLabel veya genel "Detay" yedeği sütun adını ezmez.
+              const sortLabel = column.onSort ? resolveCellLabel(column.header) : undefined;
+              return (
+                <th
+                  aria-label={sortLabel}
+                  aria-sort={column.sortDirection}
+                  data-align={column.align}
+                  data-column-key={column.key}
+                  data-mobile-priority={column.mobilePriority}
+                  data-priority={column.priority}
+                  data-sortable={sortLabel ? "true" : undefined}
+                  data-sticky={resolveStickySide(column.sticky)}
+                  key={column.key}
+                  scope="col"
+                >
+                  {column.header}
+                  {sortLabel ? (
+                    <button
+                      aria-describedby={sortHintId}
+                      aria-label={sortLabel}
+                      className="uh-data-table__sort-button"
+                      onClick={() => column.onSort?.(resolveNextSortDirection(column.sortDirection))}
+                      type="button"
+                    />
+                  ) : null}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
@@ -127,8 +153,18 @@ export function DataTable<TRow>({
           ) : null}
         </tbody>
       </table>
+      {hasSortableColumn ? (
+        <span hidden id={sortHintId}>
+          Bu sütuna göre sırala; her basışta artan ve azalan arasında geçer.
+        </span>
+      ) : null}
     </div>
   );
+}
+
+/** İki durumlu geçiş: artan → azalan → artan. Varsayılan sıraya dönüş "Sırala" seçiminden yapılır. */
+function resolveNextSortDirection(current: DataTableSortDirection | undefined): DataTableSortDirection {
+  return current === "ascending" ? "descending" : "ascending";
 }
 
 function resolveScrollRegionLabel(caption: ReactNode, ariaLabel: string | undefined) {

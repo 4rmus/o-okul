@@ -667,7 +667,7 @@ test.describe("DataTable mobil sözleşmesi", () => {
   test("öğretmen atama modalı mobilde tablo sözleşmesini korur", async ({ page }) => {
     await openWithDataTableMocks(page, "/kurum/ogretmenler");
 
-    await page.getByRole("button", { name: "Deniz düzenle" }).click();
+    await page.getByRole("button", { name: "Deniz Arslan düzenle" }).click();
     const dialog = page.getByRole("dialog", { name: "Öğretmen düzenle" });
     const assignmentRegion = dialog.getByLabel("Öğretmen atamaları", { exact: true });
     const assignmentTable = assignmentRegion.getByRole("table", { name: "Öğretmen atamaları" });

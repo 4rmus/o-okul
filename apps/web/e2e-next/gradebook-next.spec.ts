@@ -130,11 +130,62 @@ test.describe("Not defteri", () => {
     await page.getByRole("button", { name: "Bora Yılmaz notunu düzelt" }).click();
     await expect(page.getByLabel("Bora Yılmaz notu", { exact: true })).toBeEditable();
   });
+
+  // UAT F-24: the disabled publish button explains itself, the draft save confirms visibly and the stale publish
+  // message is replaced. ADR-0011 is untouched: the correction is still a new draft version, never an in-place edit.
+  test("düzeltme akışında pasif yayın düğmesi nedenini söyler, taslak kaydı onay verir ve eski yayın mesajını kaldırır", async ({ page }) => {
+    const captured: Captured = { publish: [], saves: [] };
+    const publishedOnly = { assessment, entries: [entry("student-a", 1, 72.3, true), entry("student-b", 1, 60, true)] };
+    let serverDetail: typeof publishedOnly = publishedOnly;
+    await open(page, "teacher", "/ogretmen/not-defteri", captured, 1280, {
+      detail: () => serverDetail,
+      onSave: () => {
+        serverDetail = { assessment, entries: [...publishedOnly.entries, entry("student-b", 2, 65, false)] };
+      },
+    });
+    const panel = page.getByRole("region", { name: "Öğretmen not girişi" });
+    await panel.getByLabel("Değerlendirme").selectOption("ga-1");
+
+    // Everything is published: the correction button is disabled and the reason is next to it, linked for AT.
+    const publishButton = panel.getByRole("button", { name: "Düzeltmeyi yayınla" });
+    await expect(publishButton).toBeDisabled();
+    const hint = panel.locator("#teacher-gradebook-publish-hint");
+    await expect(hint).toContainText("Yayınlanacak düzeltme taslağı yok");
+    await expect(hint).toContainText("“Düzelt”e basın");
+    await expect(publishButton).toHaveAttribute("aria-describedby", "teacher-gradebook-publish-hint");
+    await expect(publishButton).toHaveAccessibleDescription(/Yayınlanacak düzeltme taslağı yok/);
+
+    // Simulate the stale state from staging: a previous publish message is on screen.
+    await page.getByRole("button", { name: "Bora Yılmaz notunu düzelt" }).click();
+    await page.getByLabel("Bora Yılmaz notu", { exact: true }).fill("65");
+    await page.getByRole("button", { name: "Taslağı kaydet" }).click();
+    await expect.poll(() => captured.saves.length).toBe(1);
+    expect(JSON.parse(captured.saves[0]!)).toEqual({ entries: [{ studentId: "student-b", score: 65, absent: false }] });
+
+    // Visible confirmation in the live region; the publish button opens and the hint goes away.
+    const status = panel.getByRole("status");
+    await expect(status).toContainText("1 not taslak olarak kaydedildi");
+    await expect(status).toContainText("“Düzeltmeyi yayınla”");
+    await expect(publishButton).toBeEnabled();
+    await expect(hint).toHaveCount(0);
+    await expect(publishButton).not.toHaveAttribute("aria-describedby", /.+/);
+
+    await publishButton.click();
+    await page.getByRole("dialog", { name: "Düzeltmeyi yayınla" }).getByRole("button", { name: "Düzeltmeyi yayınla" }).click();
+    await expect(status).toContainText("1 not yayınlandı (v2).");
+    await expect(status).not.toContainText("taslak olarak kaydedildi");
+    expect(captured.publish).toHaveLength(1);
+  });
 });
 
-async function open(page: Page, persona: "admin" | "teacher", path: string, captured: Captured, width = 1280) {
+interface Overrides {
+  detail?: () => unknown;
+  onSave?: () => void;
+}
+
+async function open(page: Page, persona: "admin" | "teacher", path: string, captured: Captured, width = 1280, overrides: Overrides = {}) {
   await page.setViewportSize({ width, height: 900 });
-  await page.route("**/api/v1/**", (route) => handle(route, persona, captured));
+  await page.route("**/api/v1/**", (route) => handle(route, persona, captured, overrides));
   await page.addInitScript(() => {
     document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
   });
@@ -142,7 +193,7 @@ async function open(page: Page, persona: "admin" | "teacher", path: string, capt
   await page.goto(path);
 }
 
-async function handle(route: Route, persona: "admin" | "teacher", captured: Captured) {
+async function handle(route: Route, persona: "admin" | "teacher", captured: Captured, overrides: Overrides = {}) {
   const request = route.request();
   if (request.method() === "OPTIONS") {
     await route.fulfill({ headers: corsFor(route), status: 204 });
@@ -161,6 +212,7 @@ async function handle(route: Route, persona: "admin" | "teacher", captured: Capt
   }
   if (path === "/grade-assessments/ga-1/entries" && request.method() === "PUT") {
     captured.saves.push(request.postData() ?? "");
+    overrides.onSave?.();
     await fulfill(route, detail.entries);
     return;
   }
@@ -170,7 +222,7 @@ async function handle(route: Route, persona: "admin" | "teacher", captured: Capt
     "/me/notification-devices": [],
     "/me/feature-rollouts": { enabledFeatureKeys: [] },
     "/grade-assessments": captured.creates?.length ? [assessment, createdAssessment] : [assessment],
-    "/grade-assessments/ga-1": detail,
+    "/grade-assessments/ga-1": overrides.detail ? overrides.detail() : detail,
     "/grade-assessments/ga-2": { assessment: createdAssessment, entries: [] },
     "/grade-assessments/teacher-scopes": [{ classId: "class-8a", courseId: "course-math", termId: "term-1" }],
     "/classes": classes,

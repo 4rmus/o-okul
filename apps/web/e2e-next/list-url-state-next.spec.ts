@@ -1,3 +1,4 @@
+import { AxeBuilder } from "@axe-core/playwright";
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
@@ -514,7 +515,7 @@ test.describe("Liste URL state", () => {
       const teachersTable = teachersRegion.getByRole("table", { name: "Öğretmen operasyon listesi" });
       await expect(teachersTable).toBeVisible();
       await expect(teachersTable.getByText("Hesap yok")).toBeVisible();
-      await expect(teachersRegion.getByRole("link", { name: "Zeynep detay" })).toBeVisible();
+      await expect(teachersRegion.getByRole("link", { name: "Zeynep Arslan detay" })).toBeVisible();
 
       for (const value of ["12345678901", "+905551234567", "ada.kaya@example.test", "5554443322"]) {
         await expect(page.locator("body")).not.toContainText(value);
@@ -842,6 +843,149 @@ test.describe("Liste URL state", () => {
       await expect(outcomeRegion).not.toContainText(value);
     }
   });
+
+  test("sütun başlığı tıklaması Sırala seçimiyle aynı URL sıralama durumunu yazar (UI/UX F12)", async ({ page }) => {
+    await page.setViewportSize({ height: 900, width: 1440 });
+    const captured = createCapturedRequests();
+    await openWithListMocks(page, captured, "/kurum/ogrenciler?cursor=students-cursor-2&limit=20");
+
+    const studentsRegion = page.getByLabel("Öğrenci yönetimi");
+    const sortSelect = studentsRegion.getByLabel("Sırala");
+    const studentsTable = studentsRegion.getByRole("table");
+    const studentNoHeader = studentsTable.getByRole("columnheader", { exact: true, name: "Okul No" });
+    const nameHeader = studentsTable.getByRole("columnheader", { exact: true, name: "Ad Soyad" });
+    const classHeader = studentsTable.getByRole("columnheader", { exact: true, name: "Sınıf" });
+    const statusHeader = studentsTable.getByRole("columnheader", { exact: true, name: "Durum" });
+    await expect(studentNoHeader).toBeVisible();
+    await expect(studentNoHeader).not.toHaveAttribute("aria-sort");
+    await expect(studentNoHeader).toHaveText("Okul No");
+    await expect(sortSelect).toHaveValue("");
+    // Sıralanamayan sütun düğme taşımaz.
+    await expect(statusHeader.getByRole("button")).toHaveCount(0);
+
+    const studentNoButton = studentNoHeader.getByRole("button", { exact: true, name: "Okul No" });
+    await expect(studentNoButton).toHaveAccessibleDescription(/sırala/);
+    await studentNoButton.click();
+    await expect.poll(() => new URL(page.url()).searchParams.get("sort")).toBe("studentNo");
+    await expect.poll(() => new URL(page.url()).searchParams.get("cursor")).toBeNull();
+    await expect.poll(() => captured.students.at(-1)?.get("sort")).toBe("studentNo");
+    await expect(sortSelect).toHaveValue("studentNo");
+    await expect(studentNoHeader).toHaveAttribute("aria-sort", "ascending");
+
+    await studentNoButton.click();
+    await expect.poll(() => new URL(page.url()).searchParams.get("sort")).toBe("-studentNo");
+    await expect(sortSelect).toHaveValue("-studentNo");
+    await expect(studentNoHeader).toHaveAttribute("aria-sort", "descending");
+    await expect(studentNoHeader).toHaveText("Okul No");
+    // Yön oku yalnız görseldir: başlığın erişilebilirlik ağacında ok metni yoktur, yalnız etiket ve düğme kalır.
+    await expect(studentNoHeader).toMatchAriaSnapshot(`
+      - columnheader "Okul No":
+        - /children: equal
+        - text: Okul No
+        - button "Okul No"
+    `);
+
+    // Sırala seçimi başlığa yansır; soyad seçiliyken Ad Soyad başlığı soyad yönünü değiştirir.
+    await sortSelect.selectOption("-lastName");
+    await expect(nameHeader).toHaveAttribute("aria-sort", "descending");
+    await expect(studentNoHeader).not.toHaveAttribute("aria-sort");
+    await nameHeader.getByRole("button", { exact: true, name: "Ad Soyad" }).click();
+    await expect.poll(() => new URL(page.url()).searchParams.get("sort")).toBe("lastName");
+    await expect(sortSelect).toHaveValue("lastName");
+    await expect(nameHeader).toHaveAttribute("aria-sort", "ascending");
+
+    // Klavye: Enter ve Space aynı geçişi yapar.
+    const classButton = classHeader.getByRole("button", { exact: true, name: "Sınıf" });
+    await classButton.focus();
+    await expect(classButton).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect.poll(() => new URL(page.url()).searchParams.get("sort")).toBe("classId");
+    await expect(classHeader).toHaveAttribute("aria-sort", "ascending");
+    await page.keyboard.press("Space");
+    await expect.poll(() => new URL(page.url()).searchParams.get("sort")).toBe("-classId");
+    await expect(sortSelect).toHaveValue("-classId");
+    await expect(classHeader).toHaveAttribute("aria-sort", "descending");
+
+    const axeResults = await new AxeBuilder({ page }).include(".uh-data-table-scroll").withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+    const highImpactViolations = axeResults.violations.filter((violation) => violation.impact === "critical" || violation.impact === "serious");
+    expect(highImpactViolations.map((violation) => `${violation.id}: ${violation.nodes.map((node) => node.target.join(" ")).join(", ")}`)).toEqual([]);
+  });
+
+  test("öğretmen ve finans başlıkları sayfa sıralama değerlerini yazar (UI/UX F12)", async ({ page }) => {
+    await page.setViewportSize({ height: 900, width: 1024 });
+    const captured = createCapturedRequests();
+    await openWithListMocks(page, captured, "/kurum/ogretmenler?page=2&limit=20&sort=-firstName");
+
+    const teachersRegion = page.getByLabel("Öğretmen yönetimi");
+    const teachersTable = teachersRegion.getByRole("table").first();
+    const teacherNameHeader = teachersTable.getByRole("columnheader", { exact: true, name: "Ad Soyad" });
+    const branchHeader = teachersTable.getByRole("columnheader", { exact: true, name: "Branş" });
+    await expect(teacherNameHeader).toHaveAttribute("aria-sort", "descending");
+    await teacherNameHeader.getByRole("button", { exact: true, name: "Ad Soyad" }).click();
+    await expect.poll(() => new URL(page.url()).searchParams.get("sort")).toBe("firstName");
+    await expect.poll(() => new URL(page.url()).searchParams.get("page")).toBe("1");
+    await expect(teachersRegion.getByLabel("Sırala")).toHaveValue("firstName");
+    await branchHeader.getByRole("button", { exact: true, name: "Branş" }).click();
+    await expect.poll(() => new URL(page.url()).searchParams.get("sort")).toBe("branch");
+    await expect(branchHeader).toHaveAttribute("aria-sort", "ascending");
+    await expect(teacherNameHeader).not.toHaveAttribute("aria-sort");
+
+    await openWithListMocks(page, captured, "/kurum/finans?page=2&limit=20&sort=-dueDate");
+    const financeRegion = page.getByLabel("Finans yönetimi");
+    const installmentsTable = financeRegion.getByRole("table", { name: "Ödeme taksitleri" });
+    const dueDateHeader = installmentsTable.getByRole("columnheader", { exact: true, name: "Vade" });
+    const studentHeader = installmentsTable.getByRole("columnheader", { exact: true, name: "Öğrenci" });
+    await expect(dueDateHeader).toHaveAttribute("aria-sort", "descending");
+    // Vade sıralaması plan düzeyindedir (ilk taksit); taksit satırlarında başlık düğmesi ve ok gösterilmez.
+    await expect(dueDateHeader.getByRole("button")).toHaveCount(0);
+    await expect(dueDateHeader).not.toHaveAttribute("data-sortable");
+    await financeRegion.getByLabel("Sırala").selectOption("dueDate");
+    await expect.poll(() => new URL(page.url()).searchParams.get("sort")).toBe("dueDate");
+    await expect.poll(() => captured.paymentPlans.at(-1)?.get("sort")).toBe("dueDate");
+    await expect(dueDateHeader).toHaveAttribute("aria-sort", "ascending");
+    await studentHeader.getByRole("button", { exact: true, name: "Öğrenci" }).click();
+    await expect.poll(() => new URL(page.url()).searchParams.get("sort")).toBe("studentName");
+    await expect(financeRegion.getByLabel("Sırala")).toHaveValue("studentName");
+    await expect(studentHeader).toHaveAttribute("aria-sort", "ascending");
+    // Taşma yok: sıralanamayan Tutar sütunu düz başlık kalır.
+    await expect(installmentsTable.getByRole("columnheader", { exact: true, name: "Tutar" }).getByRole("button")).toHaveCount(0);
+  });
+
+  test("tablette 768px başlık sıralama düğmesi görünür ve sayfa taşmaz (UI/UX F12)", async ({ page }) => {
+    await page.setViewportSize({ height: 1024, width: 768 });
+    const captured = createCapturedRequests();
+    await openWithListMocks(page, captured, "/kurum/ogrenciler?limit=20");
+
+    const studentsRegion = page.getByLabel("Öğrenci yönetimi");
+    const nameHeader = studentsRegion.getByRole("table").getByRole("columnheader", { exact: true, name: "Ad Soyad" });
+    await nameHeader.getByRole("button", { exact: true, name: "Ad Soyad" }).click();
+    await expect.poll(() => new URL(page.url()).searchParams.get("sort")).toBe("firstName");
+    await expect(nameHeader).toHaveAttribute("aria-sort", "ascending");
+    await expect(studentsRegion.getByLabel("Sırala")).toHaveValue("firstName");
+    await expectNoHorizontalOverflow(page, "ogrenciler-768");
+  });
+
+  for (const width of [320, 375]) {
+    test(`telefonda ${width}px başlık sıralama düğmesi göstermez, Sırala seçimi kalır (UI/UX F12)`, async ({ page }) => {
+      await page.setViewportSize({ height: 812, width });
+      const captured = createCapturedRequests();
+      await openWithListMocks(page, captured, "/kurum/ogrenciler?limit=20&sort=-lastName");
+
+      const studentsRegion = page.getByLabel("Öğrenci yönetimi");
+      const studentsTable = studentsRegion.getByRole("table");
+      const nameHeader = studentsTable.getByRole("columnheader", { exact: true, name: "Ad Soyad" });
+      await expect(nameHeader).toBeVisible();
+      await expect(nameHeader).toHaveAttribute("aria-sort", "descending");
+      await expect(studentsTable.locator(".uh-data-table__sort-button")).not.toHaveCount(0);
+      for (const button of await studentsTable.locator(".uh-data-table__sort-button").all()) {
+        await expect(button).toBeHidden();
+      }
+      // Etkin sıralamada da telefonda yön oku çizilmez.
+      expect(await nameHeader.evaluate((element) => getComputedStyle(element, "::after").content)).toBe("none");
+      await expect(studentsRegion.getByLabel("Sırala")).toHaveValue("-lastName");
+      await expectNoHorizontalOverflow(page, `ogrenciler-${width}`);
+    });
+  }
 });
 
 async function openWithListMocks(page: Page, captured: CapturedRequests, path: string) {

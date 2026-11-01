@@ -6,7 +6,7 @@ export { ConfirmDialog, useConfirmDialog, type ConfirmDialogProps, type ConfirmD
 export { LoadingState, type LoadingStateProps } from "./components/loading-state.js";
 export { EmptyState, type EmptyStateAction, type EmptyStateProps } from "./components/empty-state.js";
 export { ActionCard, type ActionCardProps } from "./components/action-card.js";
-export { DataTable, type DataTableColumn, type DataTableProps } from "./components/data-table.js";
+export { DataTable, type DataTableColumn, type DataTableProps, type DataTableSortDirection } from "./components/data-table.js";
 export { CrudPage, type CrudPageProps } from "./components/crud-page.js";
 export { FormModal, type FormModalProps } from "./components/form-modal.js";
 export { Alert, type AlertProps } from "./components/alert.js";

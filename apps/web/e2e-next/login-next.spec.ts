@@ -4428,7 +4428,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(heading(page, { name: "Öğretmenler" })).toBeVisible();
   await expect(page.getByText("Ayse Ogretmen")).toBeVisible();
 
-  await page.getByRole("button", { name: "Ayse düzenle" }).click();
+  await page.getByRole("button", { name: "Ayse Ogretmen düzenle" }).click();
   const teacherAssignmentsRegion = page.getByLabel("Öğretmen atamaları");
   const teacherAssignmentsTable = teacherAssignmentsRegion.getByRole("table", { name: "Öğretmen atamaları" });
   const classTeacherAssignment = teacherAssignmentsTable.getByRole("row", { name: /Sınıf öğretmeni/ });
@@ -4455,12 +4455,12 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
   await expect(page.getByText("Mert Hoca")).toBeVisible();
 
-  await page.getByRole("button", { name: "Mert düzenle" }).click();
+  await page.getByRole("button", { name: "Mert Hoca düzenle" }).click();
   await page.getByRole("textbox", { name: /^Branş / }).fill("Fizik");
   await page.getByRole("button", { name: "Kaydet", exact: true }).click();
   await expect(page.getByText("Fizik")).toBeVisible();
 
-  await page.getByRole("button", { name: "Mert sil" }).click();
+  await page.getByRole("button", { name: "Mert Hoca sil" }).click();
   await confirmDeleteDialog(page, "Öğretmeni sil", "Mert Hoca öğretmeni silinsin mi?");
   await expect(page.getByText("Mert Hoca")).toHaveCount(0);
 

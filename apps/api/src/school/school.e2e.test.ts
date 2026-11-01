@@ -203,6 +203,53 @@ describe("School management API", () => {
     await request(server).put(link).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
   });
 
+  it("öğretmen listesi ayrıntıdaki atama satırlarını sayar; öğrenci listesi sorumluyu aynı atamadan çözer (UAT F-22)", async () => {
+    const assignments = await request(server)
+      .get("/teachers/teacher-a/assignments")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200);
+    const rows = assignments.body as Array<{ classId?: string; courseId?: string; studentId?: string }>;
+    const distinct = (key: "classId" | "courseId" | "studentId") => new Set(rows.map((row) => row[key]).filter(Boolean)).size;
+
+    await request(server)
+      .get("/teachers")
+      .query({ page: "1", limit: "10" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const teacher = (body as Array<{ id: string; assignmentSummary?: unknown }>).find((record) => record.id === "teacher-a");
+        expect(teacher?.assignmentSummary).toEqual({
+          total: rows.length,
+          classCount: distinct("classId"),
+          courseCount: distinct("courseId"),
+          studentCount: distinct("studentId"),
+        });
+        expect(rows.length).toBeGreaterThan(0);
+      });
+
+    // A class-a student without the stored responsibleTeacherId resolves teacher-a from the active CLASS_TEACHER row.
+    const created = await request(server)
+      .post("/students")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Sinif", lastName: "Ogrencisi", gradeLevelId: "grade-8", classId: "class-a" })
+      .expect(201);
+    expect(created.body).not.toHaveProperty("responsibleTeacherId");
+    await request(server)
+      .get("/students")
+      .query({ classId: "class-a", limit: "20" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const student = (body as Array<{ id: string }>).find((record) => record.id === created.body.id);
+        expect(student).toMatchObject({ assignedTeacherId: "teacher-a", assignedTeacherRole: "CLASS_TEACHER" });
+        expect(student).not.toHaveProperty("responsibleTeacherId");
+        const ada = (body as Array<{ id: string }>).find((record) => record.id === "student-a");
+        expect(ada).toMatchObject({ responsibleTeacherId: "teacher-a" });
+        expect(ada).not.toHaveProperty("assignedTeacherId");
+      });
+    await request(server).delete(`/students/${created.body.id}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
+  });
+
   it("tenant A sadece kendi ders kayıtlarını listeler", async () => {
     const response = await request(server)
       .get("/courses")

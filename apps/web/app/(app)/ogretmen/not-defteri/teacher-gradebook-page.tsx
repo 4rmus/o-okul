@@ -110,6 +110,10 @@ export function TeacherGradebookPage() {
     try {
       await saveGradeEntries(accessToken, detail.assessment.id, entries);
       await queryClient.invalidateQueries({ queryKey: ["teacher-gradebook-assessment", sessionKey, detail.assessment.id] });
+      // UAT F-24: a visible confirmation that also replaces the previous publish message, which no longer describes
+      // the screen once a new draft exists.
+      const publishLabel = detail.assessment.publishedVersion ? "Düzeltmeyi yayınla" : "Yayınla";
+      setPublishMessage(`${entries.length} not taslak olarak kaydedildi. Veliye görünmesi için “${publishLabel}” düğmesini kullanın.`);
     } finally {
       setBusy(false);
     }
@@ -186,6 +190,12 @@ export function TeacherGradebookPage() {
 
   const openForm = () => { setForm(emptyForm); setFormError(""); setIsFormOpen(true); };
   const hasDrafts = Boolean(detail?.entries.some((entry) => !entry.publishedAt));
+  // UAT F-24: the publish button is disabled until a draft exists; say so next to it (F15 pattern: aria-describedby + visible hint).
+  const publishHintId = "teacher-gradebook-publish-hint";
+  const publishBlocked = Boolean(detail) && !busy && !hasDrafts;
+  const publishHint = detail?.assessment.publishedVersion
+    ? "Yayınlanacak düzeltme taslağı yok. Düzeltmek istediğiniz notun satırında “Düzelt”e basın, yeni notu girin ve “Taslağı kaydet” ile kaydedin; düğme sonra açılır."
+    : "Yayınlanacak taslak yok. Notları girip “Taslağı kaydet” ile kaydedin; düğme sonra açılır.";
 
   return (
     <PortalFrame title="Öğretmen Portalı" subtitle="Atandığın sınıf ve derslerin yazılı, performans ve proje notları">
@@ -223,10 +233,11 @@ export function TeacherGradebookPage() {
         {detail ? (
           <>
             <div className="next-form-actions">
-              <Button disabled={busy || !hasDrafts} onClick={() => void publish()}>
+              <Button aria-describedby={publishBlocked ? publishHintId : undefined} disabled={busy || !hasDrafts} onClick={() => void publish()}>
                 {detail.assessment.publishedVersion ? "Düzeltmeyi yayınla" : "Yayınla"}
               </Button>
             </div>
+            {publishBlocked ? <p className="next-status-note" id={publishHintId}>{publishHint}</p> : null}
             {publishMessage ? <p className="next-field-hint" role="status">{publishMessage}</p> : null}
             <GradeEntryGrid canEdit detail={detail} onSave={save} saving={busy} students={students} />
           </>

@@ -7,7 +7,7 @@ import type {
 } from "@o-okul/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
-import { applyListQuery, type ListQuery } from "../listing/list-query.js";
+import { applyListQuery, type ListQuery, readListMeta, withListMeta } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { hasCapability } from "../rbac/role-capabilities.js";
 import { maskContactPhone } from "../privacy/contact-mask.js";
@@ -37,7 +37,13 @@ export class TeachersController {
   @RequireCapability("staff:read-teachers")
   async list(@Query() query: ListQuery): Promise<TeacherRecord[]> {
     const context = getRequestContext();
-    return applyListQuery(await this.teachers.listTeachers(context), query, teacherListFields).map((record) => toTeacherResponse(record, context));
+    const page = applyListQuery(await this.teachers.listTeachers(context), query, teacherListFields);
+    // UAT F-22: the list carries the same assignment counts the detail shows (GET /teachers/:id/assignments).
+    const summaries = await this.teachers.summarizeTeacherAssignments(context, page.map((record) => record.id));
+    const records = page.map((record) => ({ ...toTeacherResponse(record, context), assignmentSummary: summaries.get(record.id) }));
+    // `.map` drops the non-enumerable list meta; put it back so page/limit/total reach the envelope.
+    const meta = readListMeta(page);
+    return meta && "totalPages" in meta ? withListMeta(records, meta) : records;
   }
 
   @Get(":id")

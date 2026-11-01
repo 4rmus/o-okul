@@ -792,6 +792,18 @@ export interface TeacherRecord {
   /** Read model only: true when a portal account is bound (the user id itself is not returned). */
   hasAccount?: boolean;
   provisioning?: IdentityProvisioningStatus;
+  /**
+   * Read model only (GET /teachers, UAT F-22): counts over the teacher's assignments, the same rows
+   * GET /teachers/:id/assignments returns, so the list card and the detail agree.
+   */
+  assignmentSummary?: TeacherAssignmentSummary;
+}
+
+export interface TeacherAssignmentSummary {
+  total: number;
+  classCount: number;
+  courseCount: number;
+  studentCount: number;
 }
 
 export interface TeacherCreateRequest {
@@ -971,6 +983,14 @@ export interface StudentRecord {
   responsibleTeacherId?: string;
   status: StudentStatus;
   userId?: string;
+  /**
+   * Read model only (GET /students lists, UAT F-22): when responsibleTeacherId is empty, the teacher whose active
+   * RESPONSIBLE_TEACHER (student) or CLASS_TEACHER (class) assignment covers the student — the same rows
+   * GET /students/:id/teacher-assignments returns. Not stored; writes ignore it.
+   */
+  assignedTeacherId?: string;
+  /** Read model only: the role of the assignment behind assignedTeacherId. */
+  assignedTeacherRole?: TeacherAssignmentRole;
 }
 
 export type PublicStudentRecord = Omit<StudentRecord, "userId">;

@@ -18,7 +18,7 @@ import type {
   PaymentTransactionRecord,
   StudentRecord,
 } from "@o-okul/shared-types";
-import { Button, CrudPage, DataTable, Dialog, EmptyState, Field, FilterBar, FormModal, Input, Select, StatusBadge, type DataTableColumn } from "@o-okul/ui";
+import { Button, CrudPage, DataTable, Dialog, EmptyState, Field, FilterBar, FormModal, Input, Select, StatusBadge, type DataTableColumn, type DataTableSortDirection } from "@o-okul/ui";
 import { Banknote, CheckCircle2, Pencil, Plus, Receipt, RotateCcw } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, withQueryParams, type ListMeta } from "../../../../src/api-client.js";
@@ -160,18 +160,25 @@ export function FinancePage() {
 
   const activeSortField = listQuery.sort.replace(/^-/, "");
   const activeSortDirection = listQuery.sort.startsWith("-") ? "descending" as const : "ascending" as const;
+  // Başlık tıklaması "Sırala" seçimiyle aynı URL sıralama durumunu yazar (UI/UX F12).
+  const sortByHeader = (ascendingValue: string, direction: DataTableSortDirection) => {
+    setListQuery({ ...listQuery, page: 1, sort: direction === "descending" ? `-${ascendingValue}` : ascendingValue });
+  };
   const columns: Array<DataTableColumn<InstallmentRow>> = [
     {
       key: "student",
       header: "Öğrenci",
       mobilePriority: "primary",
+      onSort: (direction) => sortByHeader("studentName", direction),
       priority: "primary",
       render: (row) => formatPlanStudent(row.plan),
+      sortDirection: activeSortField === "studentName" ? activeSortDirection : undefined,
       sticky: true,
     },
     {
       key: "plan",
       header: "Plan",
+      onSort: (direction) => sortByHeader("title", direction),
       sortDirection: activeSortField === "title" ? activeSortDirection : undefined,
       mobilePriority: "secondary",
       priority: "secondary",
@@ -201,6 +208,8 @@ export function FinancePage() {
     },
     {
       key: "dueDate",
+      // Başlık sıralama düğmesi yok: API vade sıralaması planın ilk taksitine göredir, satırlar ise taksit
+      // düzeyindedir; başlıkta tıklanabilir ok satır sırasıyla çelişirdi. Vade sıralaması "Sırala" seçiminde kalır (UI/UX F12).
       sortDirection: activeSortField === "dueDate" ? activeSortDirection : undefined,
       header: "Vade",
       mobilePriority: "secondary",

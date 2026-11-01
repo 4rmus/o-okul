@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Inject, Inj
 import type {
   TeacherAssignmentRecord,
   TeacherAssignmentRole,
+  TeacherAssignmentSummary,
   TeacherRecord as SharedTeacherRecord,
 } from "@o-okul/shared-types";
 import { AccountPiiPurgeService } from "../account-pii/account-pii-purge.service.js";
@@ -242,6 +243,37 @@ export class TeacherService {
   async listTeacherAssignments(context: RequestContext, teacherId: string): Promise<TeacherAssignmentRecord[]> {
     const teacher = await this.findTeacher(context, teacherId);
     return filterTenantResources(context, await this.teacherAssignmentStore.listByTeacher(teacher.id));
+  }
+
+  /**
+   * UAT F-22: the list read model counts the same tenant assignment rows the detail (`listTeacherAssignments`)
+   * returns, so the teachers screen and the teacher detail agree. Teachers without assignments get zero counts.
+   */
+  async summarizeTeacherAssignments(context: RequestContext, teacherIds: readonly string[]): Promise<Map<string, TeacherAssignmentSummary>> {
+    const summaries = new Map<string, TeacherAssignmentSummary>();
+    const scopes = new Map<string, { classIds: Set<string>; courseIds: Set<string>; studentIds: Set<string> }>();
+    for (const teacherId of teacherIds) {
+      summaries.set(teacherId, { total: 0, classCount: 0, courseCount: 0, studentCount: 0 });
+      scopes.set(teacherId, { classIds: new Set(), courseIds: new Set(), studentIds: new Set() });
+    }
+    if (summaries.size === 0) return summaries;
+
+    for (const assignment of filterTenantResources(context, await this.teacherAssignmentStore.list())) {
+      const summary = summaries.get(assignment.teacherId);
+      const scope = scopes.get(assignment.teacherId);
+      if (!summary || !scope) continue;
+      summary.total += 1;
+      if (assignment.classId) scope.classIds.add(assignment.classId);
+      if (assignment.courseId) scope.courseIds.add(assignment.courseId);
+      if (assignment.studentId) scope.studentIds.add(assignment.studentId);
+    }
+    for (const [teacherId, scope] of scopes) {
+      const summary = summaries.get(teacherId)!;
+      summary.classCount = scope.classIds.size;
+      summary.courseCount = scope.courseIds.size;
+      summary.studentCount = scope.studentIds.size;
+    }
+    return summaries;
   }
 
   async listStudentTeacherAssignments(context: RequestContext, studentId: string): Promise<TeacherAssignmentRecord[]> {
