@@ -24,6 +24,7 @@ import {
   saveGradeEntries,
 } from "../../_shared/gradebook/gradebook-api.js";
 import { discardUnsavedGradesRequest, GradeEntryGrid } from "../../_shared/gradebook/grade-entry-grid.js";
+import { useInAppNavigationGuard } from "../../_shell/navigation-guard.js";
 import { AccessPanel, PortalFrame } from "../../portals/_shared/portal-shell.js";
 
 interface AssessmentForm {
@@ -55,6 +56,7 @@ export function TeacherGradebookPage() {
   const [publishMessage, setPublishMessage] = useState("");
   const [unsavedCount, setUnsavedCount] = useState(0);
   const publishRequest = useRef<{ id: string; key: string } | null>(null);
+  useInAppNavigationGuard(unsavedCount > 0, () => confirm(discardUnsavedGradesRequest(unsavedCount)));
 
   const assessmentsQuery = useQuery({
     queryKey: ["teacher-gradebook", sessionKey],

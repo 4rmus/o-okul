@@ -8,6 +8,7 @@ import { apiBaseUrl, apiListRequest, withQueryParams } from "../../../src/api-cl
 import { hasCapabilityForRoles, hasInstitutionAccess, hasSystemAccess } from "../_shared/access.js";
 import { commandActions } from "../../../src/route-manifest.js";
 import type { NavigationGroup } from "./nav-sidebar.js";
+import { confirmInAppNavigation, hasInAppNavigationGuard } from "./navigation-guard.js";
 export interface CommandPaletteItem {
   group: string;
   href: string;
@@ -85,7 +86,19 @@ export function CommandPalette({
     }
 
     event.preventDefault();
-    onNavigate(href);
+    navigate(href);
+  }
+
+  /** Unsaved page work (e.g. typed grades) is confirmed after the palette closes, so the page's dialog is on top. */
+  function navigate(href: string) {
+    if (!hasInAppNavigationGuard()) {
+      onNavigate(href);
+      return;
+    }
+    onClose();
+    void confirmInAppNavigation().then((canNavigate) => {
+      if (canNavigate) onNavigate(href);
+    });
   }
 
   function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -100,7 +113,7 @@ export function CommandPalette({
       const activeOption = activeOptionIndex >= 0 ? options[activeOptionIndex] : undefined;
       if (!activeOption) return;
       event.preventDefault();
-      onNavigate(activeOption.href);
+      navigate(activeOption.href);
     }
   }
 
@@ -193,7 +206,14 @@ export function CommandPalette({
           />
         </Field>
         <p aria-live="polite" className="uh-visually-hidden" role="status">{resultStatus}</p>
-        <div aria-label="Komut sonuçları" className="next-command-results" id={listboxId} ref={listboxRef} role="listbox">
+        <div
+          aria-label="Komut sonuçları"
+          className="next-command-results"
+          data-navigation-guard="manual"
+          id={listboxId}
+          ref={listboxRef}
+          role="listbox"
+        >
           {filteredItems.length > 0 ? (
             <div aria-label="Komutlar" className="next-command-results" role="group">
               {filteredItems.map((item, index) => renderOption(item, index, item.group))}

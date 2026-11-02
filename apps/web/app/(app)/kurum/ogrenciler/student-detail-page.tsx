@@ -30,7 +30,7 @@ import type {
   TeacherNoteRecord,
   TeacherRecord,
 } from "@o-okul/shared-types";
-import { ArrowLeft, BarChart3, KeyRound, LayoutDashboard, NotebookTabs } from "lucide-react";
+import { ArrowLeft, BarChart3, KeyRound, LayoutDashboard, NotebookTabs, Pencil } from "lucide-react";
 import { Alert, Button, DataTable, Field, InfoGrid, InfoItem, Input, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn, type StatusBadgeProps, useConfirmDialog } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError, apiBaseUrl, apiRequest, withQueryParams } from "../../../../src/api-client.js";
@@ -47,6 +47,7 @@ import { formatPercentNumber, formatStudentProgressSummary, isComparableStudentP
 import { readReportExamId } from "../../_shared/report-exam-selection.js";
 import { GuardianLinkRetryAlert, isGuardianLinkConcurrentUpdate } from "../_shared/guardian-link-retry.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+import { StudentFormModal } from "./student-form-modal.js";
 
 interface StudentBaseDetail {
   attendanceSummary: AttendanceSummaryRecord | null;
@@ -142,6 +143,8 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
   const requestedReportExamId = readReportExamId(searchParams);
   const canViewFinance = hasCapabilityForRoles(auth?.session.roles ?? [], "finance:manage");
   const canManageStudent = hasCapabilityForRoles(auth?.session.roles ?? [], "student:manage");
+  const canRevealPhone = hasCapabilityForRoles(auth?.session.roles ?? [], "privacy:manage");
+  const [isEditOpen, setIsEditOpen] = useState(false);
   const canOpenNotes = canAccessHref(auth?.session.roles ?? [], "/kurum/notlar", auth?.session.activePersona);
   const canOpenPortalAccess = canAccessHref(auth?.session.roles ?? [], "/kurum/ogrenci-portal-erisimi", auth?.session.activePersona);
   const [selectedExamId, setSelectedExamId] = useState("");
@@ -212,6 +215,12 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
             <ArrowLeft size={17} aria-hidden="true" />
             Öğrencilere dön
           </Link>
+          {canManageStudent && detail ? (
+            <Button onClick={() => setIsEditOpen(true)} type="button" variant="secondary">
+              <Pencil size={17} aria-hidden="true" />
+              Düzenle
+            </Button>
+          ) : null}
           {mode === "exams" ? (
             <Link className="uh-button uh-button--secondary" href={studentDashboardHref}>
               <LayoutDashboard size={17} aria-hidden="true" />
@@ -280,6 +289,16 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
           studentId={studentId}
           termNameById={termNameById}
           teacherNameById={teacherNameById}
+        />
+      ) : null}
+      {canManageStudent && detail ? (
+        <StudentFormModal
+          canRevealPhone={canRevealPhone}
+          detail={detail}
+          detailLoading={pageDataQuery.isFetching}
+          onClose={() => setIsEditOpen(false)}
+          open={isEditOpen}
+          student={detail.profile}
         />
       ) : null}
     </PageFrame>
@@ -351,7 +370,7 @@ function StudentDashboard({
           </div>
         ) : undefined}
         aria-label="Öğrenci profil kartı"
-        description="Sınıfı veya kayıt durumunu değiştirmek için öğrenci listesinde Düzenle'yi kullanın."
+        description={canManageStudent ? "Sınıfı, kayıt durumunu veya iletişim bilgilerini değiştirmek için üstteki Düzenle'yi kullanın." : undefined}
         title="Öğrenci profili"
       >
         <InfoGrid className="next-student-profile-info" aria-label="Öğrenci profil özeti" role="region">
