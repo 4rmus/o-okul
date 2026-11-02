@@ -157,6 +157,9 @@ export const institutionRoutes = [
   navRoute("/kurum/ogretmenler", "Öğretmenler", "Kişiler", "UserRoundCog", { capability: "staff:manage", detailParent: true, hub: "/kurum/ogretmenler", menuLabel: "Personel" }),
   navRoute("/kurum/calisanlar", "Çalışanlar ve Yetkiler", "Kişiler", "UserRoundCog", { capability: "user:manage", hub: "/kurum/ogretmenler", tabLabel: "Çalışanlar ve yetkiler" }),
   navRoute("/kurum/ogrenci-portal-erisimi", "Öğrenci Portal Erişimi", "Kişiler", "GraduationCap", { capability: "user:manage", hub: "/kurum/ogrenciler", tabLabel: "Portal erişimi" }),
+  // DEC-20261102-01 (F-21): no hub tab and no rail entry. The entry stays only so the shell guard lets old links reach
+  // the page, whose redirect lands on Çalışanlar.
+  navRoute("/kurum/kullanicilar", "Kullanıcılar", "Kişiler", "Users", { capability: "user:manage", hiddenFromRail: true }),
   navRoute("/kurum/siniflar", "Sınıflar", "Akademik", "School", { capability: "class:manage", detailParent: true, hub: "/kurum/siniflar", menuLabel: "Sınıf yapısı" }),
   navRoute("/kurum/seviyeler", "Seviyeler", "Akademik", "ClipboardList", { capability: "class:manage", hub: "/kurum/siniflar" }),
   navRoute("/kurum/kampusler", "Kampüsler", "Akademik", "Building2", { capability: "class:manage", hub: "/kurum/siniflar" }),
