@@ -1,8 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button, Field, Panel, Select } from "@o-okul/ui";
+import { Field, Select } from "@o-okul/ui";
 import type {
   AcademicTermRecord,
   AnnouncementRecord,
@@ -40,6 +39,14 @@ import {
   type PortalActionItem,
   readRolePreviewToken,
 } from "./_shared/portal-shell.js";
+import {
+  PanelLoading,
+  PortalPanelGate,
+  allPanelsFailed,
+  emptyList,
+  retryFailedPanels,
+  usePortalPanelQuery,
+} from "./_shared/portal-panel-state.js";
 import { ProgressSeriesPanel } from "./_shared/progress-series-panel.js";
 import { ReportPanel } from "./_shared/report-panel.js";
 import { StudentHomeworkFeed, buildStudentHomeworkFeed, isOpenStudentHomeworkFeedItem, studentHomeworkFeedGroup } from "./_shared/student-homework-feed.js";
@@ -59,69 +66,133 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
   const reportExamId = readReportExamId(searchParams, "");
   const isRolePreview = Boolean(rolePreviewToken);
   const canReadPortal = Boolean(auth && (auth.session.subjectType === "STUDENT" || isRolePreview));
-  const queryKey = ["next-student-portal", auth?.session.userId ?? "anonymous", rolePreviewToken || "session", view, reportExamId];
-  const query = useQuery({
-    queryKey,
-    queryFn: () => loadStudentPortal(auth?.accessToken ?? "", rolePreviewToken, reportExamId, view),
-    enabled: canReadPortal,
-    refetchOnWindowFocus: false,
+  const accessToken = auth?.accessToken ?? "";
+  const panels = studentPortalPanels(view);
+  const panelKey = (panel: string, ...rest: string[]) =>
+    ["next-student-portal", auth?.session.userId ?? "anonymous", rolePreviewToken || "session", panel, ...rest];
+  const get = <T,>(path: string) => () => readOnlyRequest<T>(accessToken, `${apiBaseUrl}${path}`, rolePreviewToken);
+  // Her panel kendi sorgusudur; biri düşerse yalnız o panel hata ve "Tekrar dene" gösterir.
+  const profileQuery = usePortalPanelQuery(panelKey("profile"), canReadPortal, get<StudentProfileRecord>("/me/student/profile"));
+  const guardiansQuery = usePortalPanelQuery(panelKey("guardians"), canReadPortal && panels.profile, async () => {
+    const [guardians, links] = await Promise.all([
+      get<GuardianRecord[]>("/me/student/guardians")(),
+      get<GuardianStudentRecord[]>("/me/student/guardian-links")(),
+    ]);
+    return { guardians, links };
   });
+  const enrollmentsQuery = usePortalPanelQuery(panelKey("enrollments"), canReadPortal && panels.profile, get<StudentEnrollmentRecord[]>("/me/student/enrollments"));
+  const announcementsQuery = usePortalPanelQuery(panelKey("announcements"), canReadPortal && panels.announcements, get<AnnouncementRecord[]>("/me/student/announcements"));
+  const homeworkAssignmentsQuery = usePortalPanelQuery(
+    panelKey("homework-assignments"),
+    canReadPortal && panels.homework,
+    get<HomeworkMaterialAssignmentRecord[]>("/me/student/homework/material-assignments"),
+  );
+  const classHomeworkQuery = usePortalPanelQuery(panelKey("class-homework"), canReadPortal && panels.homework, get<StudentHomeworkRecord[]>("/me/student/homework"));
+  const supportTicketsQuery = usePortalPanelQuery(panelKey("support-tickets"), canReadPortal && panels.support, get<SupportTicketRecord[]>("/me/student/support-tickets"));
+  const attendanceQuery = usePortalPanelQuery(panelKey("attendance"), canReadPortal && panels.attendance, async () => {
+    const [records, summary] = await Promise.all([
+      get<AttendanceRecord[]>("/me/student/attendance")(),
+      get<AttendanceSummaryRecord>("/me/student/attendance/summary")(),
+    ]);
+    return { records, summary };
+  });
+  const teacherNotesQuery = usePortalPanelQuery(panelKey("teacher-notes"), canReadPortal && (panels.profile || panels.attendance), get<TeacherNoteRecord[]>("/me/student/teacher-notes"));
+  const developmentQuery = usePortalPanelQuery(panelKey("development"), canReadPortal && panels.profile, get<DevelopmentTrendItem[]>("/me/student/development-assessments"));
+  const overviewQuery = usePortalPanelQuery(panelKey("overview"), canReadPortal && panels.overview, get<StudentSelfOverview>("/me/student/overview"));
+  const reportQuery = usePortalPanelQuery(
+    panelKey("report", reportExamId),
+    canReadPortal && panels.reports,
+    () => loadStudentReport(accessToken, rolePreviewToken, reportExamId),
+  );
+  // Ders ve dönem adları yalnız etiket içindir; alınamazsa paneller "bilgi yok" yazar, hata paneli açılmaz.
+  const lookupsQuery = usePortalPanelQuery(panelKey("lookups"), canReadPortal && panels.lookups, async () => {
+    const [courses, terms] = await Promise.all([
+      get<CourseRecord[]>("/courses")().catch(() => [] as CourseRecord[]),
+      get<AcademicTermRecord[]>("/academic-terms")().catch(() => [] as AcademicTermRecord[]),
+    ]);
+    return { courses, terms };
+  });
+  const panelQueries = [
+    profileQuery,
+    guardiansQuery,
+    enrollmentsQuery,
+    announcementsQuery,
+    homeworkAssignmentsQuery,
+    classHomeworkQuery,
+    supportTicketsQuery,
+    attendanceQuery,
+    teacherNotesQuery,
+    developmentQuery,
+    overviewQuery,
+    reportQuery,
+  ];
 
   if (!canReadPortal) {
     return <AccessPanel title="Öğrenci Portalı" />;
   }
 
-  if (query.isPending) {
-    return (
-      <PortalFrame title="Öğrenci Portalı" subtitle="Öğrenci özeti">
-        <PortalStatePanel
-          state="loading"
-          title="Öğrenci portal verileri hazırlanıyor"
-          description="Devamsızlık, ödev, duyuru ve son sınav bilgilerin yükleniyor."
-        />
-      </PortalFrame>
-    );
-  }
-
-  if (query.isError) {
+  if (allPanelsFailed(panelQueries)) {
     return (
       <PortalFrame title="Öğrenci Portalı" subtitle="Öğrenci özeti">
         <PortalStatePanel
           state="error"
           title="Öğrenci portal verisi alınamadı"
           description="Bilgilerin şu anda gösterilemiyor. Bağlantını kontrol edip tekrar dene."
-          onRetry={() => void query.refetch()}
+          onRetry={() => retryFailedPanels(...panelQueries)}
         />
       </PortalFrame>
     );
   }
 
-  const data = query.data;
-  const courseNameById = new Map((data?.courses ?? []).map((course) => [course.id, course.name]));
-  const termNameById = new Map((data?.terms ?? []).map((term) => [term.id, term.name]));
-  const reportTotal = data?.report?.total;
+  const data = {
+    announcements: announcementsQuery.data ?? emptyList<AnnouncementRecord>(),
+    attendance: attendanceQuery.data?.records ?? emptyList<AttendanceRecord>(),
+    attendanceSummary: attendanceQuery.data?.summary ?? null,
+    classHomework: classHomeworkQuery.data ?? emptyList<StudentHomeworkRecord>(),
+    courses: lookupsQuery.data?.courses ?? emptyList<CourseRecord>(),
+    developmentAssessments: developmentQuery.data ?? emptyList<DevelopmentTrendItem>(),
+    enrollments: enrollmentsQuery.data ?? emptyList<StudentEnrollmentRecord>(),
+    errorBooklet: reportQuery.data?.errorBooklet ?? null,
+    guardianLinks: guardiansQuery.data?.links ?? emptyList<GuardianStudentRecord>(),
+    guardians: guardiansQuery.data?.guardians ?? emptyList<GuardianRecord>(),
+    homeworkAssignments: homeworkAssignmentsQuery.data ?? emptyList<HomeworkMaterialAssignmentRecord>(),
+    overview: overviewQuery.data ?? null,
+    profile: profileQuery.data ?? null,
+    progress: reportQuery.data?.progress ?? null,
+    report: reportQuery.data?.report ?? null,
+    reportIndex: reportQuery.data?.reportIndex ?? emptyList<PortalReportIndexItem>(),
+    selectedReportExamId: reportQuery.data?.selectedReportExamId ?? "",
+    supportTickets: supportTicketsQuery.data ?? emptyList<SupportTicketRecord>(),
+    teacherNotes: teacherNotesQuery.data ?? emptyList<TeacherNoteRecord>(),
+    terms: lookupsQuery.data?.terms ?? emptyList<AcademicTermRecord>(),
+  };
+  const courseNameById = new Map(data.courses.map((course) => [course.id, course.name]));
+  const termNameById = new Map(data.terms.map((term) => [term.id, term.name]));
+  const reportTotal = data.report?.total;
   const reportSuccess = reportSuccessRate(reportTotal);
-  const unreadAnnouncements = (data?.announcements ?? []).filter((announcement) => !announcement.readAt).length;
-  const openSupportTickets = (data?.supportTickets ?? []).filter(isOpenSupportTicket).length;
+  const unreadAnnouncements = data.announcements.filter((announcement) => !announcement.readAt).length;
+  const openSupportTickets = data.supportTickets.filter(isOpenSupportTicket).length;
   const announcementStatus = unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel";
   // Açık iş = teslim edilmemiş sınıf ödevi + materyal ataması; "Bugün teslim" iki kaynağı birlikte sayar.
   const now = new Date();
   const openHomework = buildStudentHomeworkFeed({
-    classHomework: data?.classHomework ?? [],
+    classHomework: data.classHomework,
     courseNames: courseNameById,
-    materialAssignments: data?.homeworkAssignments ?? [],
+    materialAssignments: data.homeworkAssignments,
     termNames: termNameById,
   }).filter(isOpenStudentHomeworkFeedItem);
   const openHomeworkCount = openHomework.length;
   const homeworkStatus = `${openHomeworkCount} atama`;
-  const attendanceStatus = formatAttendanceSummary(data?.attendanceSummary);
+  const attendanceStatus = formatAttendanceSummary(data.attendanceSummary);
   const supportStatus = openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok";
   const portalSubtitle = studentPortalSubtitle(view, "Öğrenci özeti");
   // Berrak §5: günlük özet "bugün teslimi olan ödevler → son sınav Başarı % (öncekiyle) → duyurular".
   const dueTodayCount = openHomework.filter((item) => studentHomeworkFeedGroup(item, now) === "today").length;
-  const failed = new Set(data?.failed ?? []);
-  const retry = () => void query.refetch();
-  const progressSummary = formatStudentProgressSummary(data?.progress ?? null);
+  // Özet ve aksiyon şeridi alt paneller yüklenirken de görünür; verisi gelmeyen kutu "Yükleniyor…" yazar.
+  const homeworkLoading = homeworkAssignmentsQuery.isLoading || classHomeworkQuery.isLoading;
+  const reportLoading = reportQuery.isLoading;
+  const announcementsLoading = announcementsQuery.isLoading;
+  const progressSummary = formatStudentProgressSummary(data.progress);
   function selectReportExam(examId: string) {
     const nextSearchParams = new URLSearchParams(searchParams.toString());
     if (examId) nextSearchParams.set("examId", examId);
@@ -138,7 +209,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
       label: "Duyuruları oku",
       statusLabel: unreadAnnouncements > 0 ? "Bekliyor" : "Güncel",
       tone: unreadAnnouncements > 0 ? "warning" : "success",
-      value: unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel",
+      value: announcementsLoading ? panelLoadingValue : unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel",
     },
     {
       actionLabel: openHomeworkCount > 0 ? "Tamamla" : "Hazır",
@@ -149,17 +220,17 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
       label: "Ödevi aç",
       statusLabel: openHomeworkCount > 0 ? "Çalışma var" : "Tamam",
       tone: openHomeworkCount > 0 ? "info" : "success",
-      value: `${openHomeworkCount} atama`,
+      value: homeworkLoading ? panelLoadingValue : `${openHomeworkCount} atama`,
     },
     {
       actionLabel: "Kontrol",
       contextLabel: "Devamsızlık",
-      detail: `${data?.attendanceSummary?.total ?? 0} yoklama kaydı`,
+      detail: `${data.attendanceSummary?.total ?? 0} yoklama kaydı`,
       href: studentPortalHref("/ogrenci/devamsizlik", isRolePreview),
       key: "attendance",
       label: "Devamsızlığı kontrol et",
-      statusLabel: (data?.attendanceSummary?.absent ?? 0) > 0 || (data?.attendanceSummary?.late ?? 0) > 0 ? "Dikkat" : "Düzenli",
-      tone: (data?.attendanceSummary?.absent ?? 0) > 0 || (data?.attendanceSummary?.late ?? 0) > 0 ? "warning" : "success",
+      statusLabel: (data.attendanceSummary?.absent ?? 0) > 0 || (data.attendanceSummary?.late ?? 0) > 0 ? "Dikkat" : "Düzenli",
+      tone: (data.attendanceSummary?.absent ?? 0) > 0 || (data.attendanceSummary?.late ?? 0) > 0 ? "warning" : "success",
       value: attendanceStatus,
     },
     {
@@ -182,7 +253,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
       label: "Son sınavı incele",
       statusLabel: "Başarı %",
       tone: (reportSuccess ?? 0) >= 75 ? "success" : "info",
-      value: formatPercentNumber(reportSuccess),
+      value: reportLoading ? panelLoadingValue : formatPercentNumber(reportSuccess),
     },
     {
       actionLabel: isRolePreview ? "Yalnızca görüntüleme" : "Canlı",
@@ -220,19 +291,19 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
             items={[
               {
                 label: "Bugün teslim",
-                value: `${dueTodayCount} ödev`,
+                value: homeworkLoading ? panelLoadingValue : `${dueTodayCount} ödev`,
                 detail: `${openHomeworkCount} atama içinde`,
                 tone: dueTodayCount > 0 ? "warning" : "neutral",
               },
               {
                 label: "Son sınav",
-                value: reportSuccess == null ? "Sonuç yok" : formatPercentNumber(reportSuccess),
+                value: reportLoading ? panelLoadingValue : reportSuccess == null ? "Sonuç yok" : formatPercentNumber(reportSuccess),
                 detail: `${progressSummary} · ${formatNumber(reportTotal?.net)} net / ${formatNumber(reportQuestionCount(reportTotal))} soru`,
                 tone: (reportSuccess ?? 0) >= 75 ? "success" : "info",
               },
               {
                 label: "Duyuru",
-                value: unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel",
+                value: announcementsLoading ? panelLoadingValue : unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel",
                 detail: unreadAnnouncements > 0 ? "Okunmamış okul duyurusu var" : "Okunmamış duyuru yok",
                 tone: unreadAnnouncements > 0 ? "warning" : "success",
               },
@@ -256,7 +327,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
           homeworkStatus={homeworkStatus}
           mode={isRolePreview ? "read-only" : "student"}
           net={formatNumber(reportTotal?.net)}
-          profile={data?.profile ?? undefined}
+          profile={data.profile ?? undefined}
           questionCount={formatNumber(reportQuestionCount(reportTotal))}
           scopeLabel="Öğrenci hesabı"
           successRate={formatPercentNumber(reportSuccess)}
@@ -268,123 +339,125 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
         main={
           <>
             {view === "overview" || view === "homework" ? <div id="portal-homework">
-              <StudentHomeworkFeed
-                classHomework={data?.classHomework ?? []}
-                classHomeworkFailed={failed.has("classHomework")}
+              {homeworkLoading ? <PanelLoading label="Ödevlerim" title="Ödevlerim" /> : <StudentHomeworkFeed
+                classHomework={data.classHomework}
+                classHomeworkFailed={classHomeworkQuery.isError}
                 courseNames={courseNameById}
                 limit={view === "overview" ? 3 : undefined}
-                materialAssignments={data?.homeworkAssignments ?? []}
-                materialAssignmentsFailed={failed.has("homeworkAssignments")}
+                materialAssignments={data.homeworkAssignments}
+                materialAssignmentsFailed={homeworkAssignmentsQuery.isError}
                 moreHref={view === "overview" ? studentPortalHref("/ogrenci/odevler", isRolePreview) : undefined}
-                onRetry={retry}
+                onRetry={() => retryFailedPanels(classHomeworkQuery, homeworkAssignmentsQuery)}
                 onSubmit={
                   view === "homework" && auth && !isRolePreview
-                    ? (homeworkId) => submitHomework(auth.accessToken, homeworkId).then(() => query.refetch())
+                    ? (homeworkId) => submitHomework(auth.accessToken, homeworkId).then(() => classHomeworkQuery.refetch())
                     : undefined
                 }
                 readOnly={isRolePreview}
                 showDone={view === "homework"}
                 termNames={termNameById}
-              />
+              />}
             </div> : null}
             {view === "overview" ? <div id="portal-progress-series">
-              <ProgressSeriesPanel
+              {overviewQuery.isLoading ? <PanelLoading label="Gelişimim" title="Gelişimim" /> : <ProgressSeriesPanel
                 ariaLabel="Gelişimim"
                 description="Deneme sınavlarındaki Başarı % ve yayınlanmış okul notların. Ölçekler farklı olduğu için iki seri ayrı tutulur."
-                examSeries={readArray(data?.overview?.examSeries)}
-                onRetry={retry}
-                schoolGrades={readArray(data?.overview?.schoolGrades)}
+                examSeries={readArray(data.overview?.examSeries)}
+                onRetry={() => void overviewQuery.refetch()}
+                schoolGrades={readArray(data.overview?.schoolGrades)}
                 title="Gelişimim"
-                unavailable={failed.has("overview")}
-              />
+                unavailable={overviewQuery.isError}
+              />}
             </div> : null}
             {view === "overview" || view === "reports" ? <div id="portal-report">
-              {failed.has("report") ? (
-                <PanelLoadError label="Portal rapor özeti" onRetry={retry} subject="Sınav raporu" title="Sınav Raporu" />
-              ) : (
-                <>
-                  {view === "reports" && (data?.reportIndex.length ?? 0) > 0 ? (
-                    <Field label="Sınav raporu">
-                      <Select value={data?.selectedReportExamId ?? ""} onChange={(event) => selectReportExam(event.target.value)}>
-                        {(data?.reportIndex ?? []).map((exam) => <option key={exam.examId} value={exam.examId}>{exam.title}</option>)}
-                      </Select>
-                    </Field>
-                  ) : null}
-                  <ReportPanel
-                    context={data?.report ?? undefined}
-                    courseNames={courseNameById}
-                    errorBooklet={data?.errorBooklet ?? null}
-                    progress={data?.progress ?? null}
-                    report={data?.report ?? null}
-                    termNames={termNameById}
-                  />
-                </>
-              )}
+              <PortalPanelGate label="Portal rapor özeti" queries={[reportQuery]} subject="Sınav raporu" title="Sınav Raporu">
+                {view === "reports" && data.reportIndex.length > 0 ? (
+                  <Field label="Sınav raporu">
+                    <Select value={data.selectedReportExamId} onChange={(event) => selectReportExam(event.target.value)}>
+                      {data.reportIndex.map((exam) => <option key={exam.examId} value={exam.examId}>{exam.title}</option>)}
+                    </Select>
+                  </Field>
+                ) : null}
+                <ReportPanel
+                  context={data.report ?? undefined}
+                  courseNames={courseNameById}
+                  errorBooklet={data.errorBooklet}
+                  progress={data.progress}
+                  report={data.report}
+                  termNames={termNameById}
+                />
+              </PortalPanelGate>
             </div> : null}
             {view === "overview" || view === "announcements" ? <div id="portal-announcements">
-              {failed.has("announcements") ? (
-                <PanelLoadError label="Duyurular" onRetry={retry} subject="Duyurular" title="Duyurular" />
-              ) : (
+              <PortalPanelGate label="Duyurular" queries={[announcementsQuery]} subject="Duyurular" title="Duyurular">
                 <AnnouncementsPanel
-                  announcements={data?.announcements ?? []}
+                  announcements={data.announcements}
                   limit={view === "overview" ? 3 : undefined}
                   moreHref={view === "overview" ? studentPortalHref("/ogrenci/duyurular", isRolePreview) : undefined}
                   readOnly={isRolePreview}
                   onMarkRead={(announcement) =>
-                    auth && !isRolePreview ? markAnnouncementRead(auth.accessToken, `me/student/announcements/${encodeURIComponent(announcement.id)}/read`).then(() => query.refetch()) : undefined
+                    auth && !isRolePreview ? markAnnouncementRead(auth.accessToken, `me/student/announcements/${encodeURIComponent(announcement.id)}/read`).then(() => announcementsQuery.refetch()) : undefined
                   }
                 />
-              )}
+              </PortalPanelGate>
             </div> : null}
             {view === "support" ? <div id="portal-support">
-              {failed.has("supportTickets") ? (
-                <PanelLoadError label="Destek talepleri" onRetry={retry} subject="Destek talepleri" title="Destek Talepleri" />
-              ) : (
+              <PortalPanelGate label="Destek talepleri" queries={[supportTicketsQuery]} subject="Destek talepleri" title="Destek Talepleri">
                 <SupportTicketsPanel
                   accessToken={auth?.accessToken}
                   commentsPath="me/student/support-tickets"
                   readOnly={isRolePreview}
-                  tickets={data?.supportTickets ?? []}
-                  onTicketChange={() => query.refetch()}
+                  tickets={data.supportTickets}
+                  onTicketChange={() => supportTicketsQuery.refetch()}
                   onCreate={(input) =>
-                    auth && !isRolePreview ? createPortalSupportTicket(auth.accessToken, "me/student/support-tickets", input).then(() => query.refetch()) : undefined
+                    auth && !isRolePreview ? createPortalSupportTicket(auth.accessToken, "me/student/support-tickets", input).then(() => supportTicketsQuery.refetch()) : undefined
                   }
                 />
-              )}
+              </PortalPanelGate>
             </div> : null}
             {/* Devamsızlık ve Profil görünümleri ana sütunu kullanır; yan sütun yalnız bağlam panellerini taşır. */}
             {view === "attendance" ? <div id="portal-attendance">
-              {failed.has("attendance") ? (
-                <PanelLoadError label="Devamsızlık" onRetry={retry} subject="Devamsızlık kayıtları" title="Devamsızlık" />
-              ) : (
-                <AttendancePanel records={data?.attendance ?? []} summary={data?.attendanceSummary} />
-              )}
+              <PortalPanelGate label="Devamsızlık" queries={[attendanceQuery]} subject="Devamsızlık kayıtları" title="Devamsızlık">
+                <AttendancePanel records={data.attendance} summary={data.attendanceSummary ?? undefined} />
+              </PortalPanelGate>
             </div> : null}
-            {view === "profile" ? (failed.has("profile") ? (
-              <PanelLoadError label="Profil" onRetry={retry} subject="Profil bilgileri" title="Profil" />
-            ) : <ProfilePanel profile={data?.profile ?? undefined} />) : null}
-            {view === "profile" ? (failed.has("enrollments") ? (
-              <PanelLoadError label="Sınıf ve kayıt geçmişi" onRetry={retry} subject="Kayıt geçmişi" title="Sınıf ve Kayıt Geçmişi" />
-            ) : <StudentHistoryPanel
-              enrollments={data?.enrollments ?? []}
-              termNames={termNameById}
-            />) : null}
-            {view === "profile" ? (failed.has("developmentAssessments") ? (
-              <PanelLoadError label="Gelişim trendi" onRetry={retry} subject="Gelişim değerlendirmeleri" title="Gelişim ve Mentorluk" />
-            ) : <DevelopmentTrendPanel assessments={data?.developmentAssessments ?? []} />) : null}
+            {view === "profile" ? (
+              <PortalPanelGate label="Profil" queries={[profileQuery]} subject="Profil bilgileri" title="Profil">
+                <ProfilePanel profile={data.profile ?? undefined} />
+              </PortalPanelGate>
+            ) : null}
+            {view === "profile" ? (
+              <PortalPanelGate label="Sınıf ve kayıt geçmişi" queries={[enrollmentsQuery]} subject="Kayıt geçmişi" title="Sınıf ve Kayıt Geçmişi">
+                <StudentHistoryPanel
+                  enrollments={data.enrollments}
+                  termNames={termNameById}
+                />
+              </PortalPanelGate>
+            ) : null}
+            {view === "profile" ? (
+              <PortalPanelGate label="Gelişim trendi" queries={[developmentQuery]} subject="Gelişim değerlendirmeleri" title="Gelişim ve Mentorluk">
+                <DevelopmentTrendPanel assessments={data.developmentAssessments} />
+              </PortalPanelGate>
+            ) : null}
           </>
         }
         side={
           <>
-            {view === "attendance" ? (failed.has("profile") ? (
-              <PanelLoadError label="Profil" onRetry={retry} subject="Profil bilgileri" title="Profil" />
-            ) : <ProfilePanel profile={data?.profile ?? undefined} />) : null}
-            {view === "profile" ? (failed.has("guardians") ? (
-              <PanelLoadError label="Veli ilişkileri" onRetry={retry} subject="Veli ilişkileri" title="Veliler" />
-            ) : <GuardianRelationsPanel guardians={data?.guardians ?? []} links={data?.guardianLinks ?? []} />) : null}
-            {view === "profile" || view === "attendance" ? (failed.has("teacherNotes") ? (
-              <PanelLoadError label="Öğretmen notları" onRetry={retry} subject="Öğretmen notları" title="Öğretmen Notları" />
-            ) : <TeacherNotesPanel notes={data?.teacherNotes ?? []} courseNames={courseNameById} termNames={termNameById} />) : null}
+            {view === "attendance" ? (
+              <PortalPanelGate label="Profil" queries={[profileQuery]} subject="Profil bilgileri" title="Profil">
+                <ProfilePanel profile={data.profile ?? undefined} />
+              </PortalPanelGate>
+            ) : null}
+            {view === "profile" ? (
+              <PortalPanelGate label="Veli ilişkileri" queries={[guardiansQuery]} subject="Veli ilişkileri" title="Veliler">
+                <GuardianRelationsPanel guardians={data.guardians} links={data.guardianLinks} />
+              </PortalPanelGate>
+            ) : null}
+            {view === "profile" || view === "attendance" ? (
+              <PortalPanelGate label="Öğretmen notları" queries={[teacherNotesQuery]} subject="Öğretmen notları" title="Öğretmen Notları">
+                <TeacherNotesPanel notes={data.teacherNotes} courseNames={courseNameById} termNames={termNameById} />
+              </PortalPanelGate>
+            ) : null}
           </>
         }
       />
@@ -392,100 +465,43 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
   );
 }
 
-type StudentPortalPanelKey =
-  | "announcements"
-  | "attendance"
-  | "classHomework"
-  | "developmentAssessments"
-  | "enrollments"
-  | "guardians"
-  | "homeworkAssignments"
-  | "overview"
-  | "profile"
-  | "report"
-  | "supportTickets"
-  | "teacherNotes";
+const panelLoadingValue = "Yükleniyor…";
 
-async function loadStudentPortal(
-  accessToken: string,
-  rolePreviewToken = "",
-  requestedReportExamId = "",
-  view: StudentPortalView = "overview",
-) {
-  const showOverview = view === "overview";
+function studentPortalPanels(view: StudentPortalView) {
+  const overview = view === "overview";
   // Günlük özet yalnız ödev, rapor ve duyuru okur. Profil sayfasındaki seçili öğrenci özeti tüm durumları
   // (Başarı %, duyuru, ödev, devamsızlık, destek) gösterdiği için o görünüm hepsini yükler.
-  const showProfile = view === "profile";
-  const showReports = showOverview || showProfile || view === "reports";
-  const showHomework = showOverview || showProfile || view === "homework";
-  const showAnnouncements = showOverview || showProfile || view === "announcements";
-  const showSupport = showProfile || view === "support";
-  const showAttendance = showProfile || view === "attendance";
-  // Bir GET düşerse yalnız onun paneli hata ve "Tekrar dene" gösterir; sayfanın geri kalanı yerinde kalır.
-  const failed: StudentPortalPanelKey[] = [];
-  function settle<T>(key: StudentPortalPanelKey | null, request: Promise<T>, fallback: T): Promise<T> {
-    return request.catch(() => {
-      if (key && !failed.includes(key)) failed.push(key);
-      return fallback;
-    });
-  }
-  const get = <T,>(path: string) => readOnlyRequest<T>(accessToken, `${apiBaseUrl}${path}`, rolePreviewToken);
+  const profile = view === "profile";
+  const reports = overview || profile || view === "reports";
+  const homework = overview || profile || view === "homework";
+  const announcements = overview || profile || view === "announcements";
+  const support = profile || view === "support";
+  const attendance = profile || view === "attendance";
+  return {
+    announcements,
+    attendance,
+    homework,
+    lookups: profile || reports || homework || attendance,
+    overview,
+    profile,
+    reports,
+    support,
+  };
+}
 
-  const reportIndex = showReports
-    ? await settle("report", apiRequestOrNull<PortalReportIndexItem[]>(accessToken, `${apiBaseUrl}/me/student/reports`, rolePreviewToken), null) ?? []
-    : [];
+async function loadStudentReport(accessToken: string, rolePreviewToken: string, requestedReportExamId: string) {
+  const reportIndex = await apiRequestOrNull<PortalReportIndexItem[]>(accessToken, `${apiBaseUrl}/me/student/reports`, rolePreviewToken) ?? [];
   const selectedReportExamId = reportIndex.some((record) => record.examId === requestedReportExamId)
     ? requestedReportExamId
     : reportIndex[0]?.examId ?? "";
-  const reportRequest = selectedReportExamId
-    ? settle("report", apiRequestOrNull<ReportStudentSnapshot>(accessToken, `${apiBaseUrl}/me/student/reports/${encodeURIComponent(selectedReportExamId)}/latest`, rolePreviewToken), null)
-    : Promise.resolve(null);
-  const errorBookletRequest = selectedReportExamId
-    ? settle("report", apiRequestOrNull<ReportErrorBooklet>(
-        accessToken,
-        `${apiBaseUrl}/me/student/reports/${encodeURIComponent(selectedReportExamId)}/latest/error-booklet`,
-        rolePreviewToken,
-      ), null)
-    : Promise.resolve(null);
-  const progressRequest = selectedReportExamId
-    ? settle("report", apiRequestOrNull<ReportStudentProgress>(accessToken, `${apiBaseUrl}/me/student/reports/${encodeURIComponent(selectedReportExamId)}/progress?scope=all`, rolePreviewToken), null)
-    : Promise.resolve(null);
-
-  const [profile, guardians, guardianLinks, enrollments, announcements, homeworkAssignments, classHomework, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, overview, report, errorBooklet, progress, courses, terms] = await Promise.all([
-    settle<StudentProfileRecord | null>("profile", get<StudentProfileRecord>("/me/student/profile"), null),
-    showProfile ? settle("guardians", get<GuardianRecord[]>("/me/student/guardians"), []) : Promise.resolve([]),
-    showProfile ? settle("guardians", get<GuardianStudentRecord[]>("/me/student/guardian-links"), []) : Promise.resolve([]),
-    showProfile ? settle("enrollments", get<StudentEnrollmentRecord[]>("/me/student/enrollments"), []) : Promise.resolve([]),
-    showAnnouncements ? settle("announcements", get<AnnouncementRecord[]>("/me/student/announcements"), []) : Promise.resolve([]),
-    showHomework ? settle("homeworkAssignments", get<HomeworkMaterialAssignmentRecord[]>("/me/student/homework/material-assignments"), []) : Promise.resolve([]),
-    showHomework ? settle("classHomework", get<StudentHomeworkRecord[]>("/me/student/homework"), []) : Promise.resolve([]),
-    showSupport ? settle("supportTickets", get<SupportTicketRecord[]>("/me/student/support-tickets"), []) : Promise.resolve([]),
-    showAttendance ? settle("attendance", get<AttendanceRecord[]>("/me/student/attendance"), []) : Promise.resolve([]),
-    showAttendance ? settle<AttendanceSummaryRecord | null>("attendance", get<AttendanceSummaryRecord>("/me/student/attendance/summary"), null) : Promise.resolve(null),
-    showProfile || showAttendance ? settle("teacherNotes", get<TeacherNoteRecord[]>("/me/student/teacher-notes"), []) : Promise.resolve([]),
-    showProfile ? settle("developmentAssessments", get<DevelopmentTrendItem[]>("/me/student/development-assessments"), []) : Promise.resolve([]),
-    showOverview ? settle<StudentSelfOverview | null>("overview", get<StudentSelfOverview>("/me/student/overview"), null) : Promise.resolve(null),
-    reportRequest,
-    errorBookletRequest,
-    progressRequest,
-    // Ders ve dönem adları yalnız etiket içindir; alınamazsa paneller "bilgi yok" yazar, hata paneli açılmaz.
-    showProfile || showReports || showHomework || showAttendance ? settle(null, get<CourseRecord[]>("/courses"), []) : Promise.resolve([]),
-    showProfile || showReports || showHomework || showAttendance ? settle(null, get<AcademicTermRecord[]>("/academic-terms"), []) : Promise.resolve([]),
+  if (!selectedReportExamId) return { errorBooklet: null, progress: null, report: null, reportIndex, selectedReportExamId };
+  const examPath = `${apiBaseUrl}/me/student/reports/${encodeURIComponent(selectedReportExamId)}`;
+  const [report, errorBooklet, progress] = await Promise.all([
+    apiRequestOrNull<ReportStudentSnapshot>(accessToken, `${examPath}/latest`, rolePreviewToken),
+    apiRequestOrNull<ReportErrorBooklet>(accessToken, `${examPath}/latest/error-booklet`, rolePreviewToken),
+    apiRequestOrNull<ReportStudentProgress>(accessToken, `${examPath}/progress?scope=all`, rolePreviewToken),
   ]);
-
-  return { profile, guardians, guardianLinks, enrollments, announcements, homeworkAssignments, classHomework, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, overview, report, errorBooklet, progress, courses, terms, reportIndex, selectedReportExamId, failed };
-}
-
-/** Bir panelin verisi alınamadığında yerine geçer; ikincil "Tekrar dene" yalnız portal verisini yeniden ister. */
-function PanelLoadError({ label, onRetry, subject, title }: { label: string; onRetry: () => void; subject: string; title: string }) {
-  return (
-    <Panel aria-label={label} title={title}>
-      <div role="alert">
-        <p className="next-form-error">{subject} şu an alınamadı. Bağlantını kontrol edip tekrar dene.</p>
-        <Button onClick={onRetry} variant="secondary">Tekrar dene</Button>
-      </div>
-    </Panel>
-  );
+  return { errorBooklet, progress, report, reportIndex, selectedReportExamId };
 }
 
 function readArray<T>(value: T[] | undefined): T[] {
