@@ -127,7 +127,7 @@ export function TeacherDevelopmentPage() {
       setMessage({
         tone: "alert",
         text: error instanceof ApiRequestError && error.status === 403
-          ? "Bu öğrenci için değerlendirme yazamazsın. Yalnız sınıf öğretmeni ve rehber öğretmen yazar."
+          ? "Bu öğrenci için değerlendirme yazamazsınız. Yalnız sınıf öğretmeni ve rehber öğretmen yazar."
           : "Değerlendirme kaydedilemedi. Bilgileri kontrol edip tekrar deneyin.",
       });
     } finally {
@@ -136,10 +136,10 @@ export function TeacherDevelopmentPage() {
   }
 
   return (
-    <PortalFrame title="Öğretmen Portalı" subtitle="Sınıf öğretmeni veya rehber öğretmen olduğun öğrencilerin gelişim değerlendirmeleri">
+    <PortalFrame title="Öğretmen Portalı" subtitle="Sınıf öğretmeni veya rehber öğretmen olduğunuz öğrencilerin gelişim değerlendirmeleri">
       <Panel
         aria-label="Gelişim değerlendirmesi yaz"
-        description="Kriterlere puan ver, görünürlüğü seç ve kısa bir mentör notu ekle. Kaydedilen değerlendirme değiştirilemez."
+        description="Kriterlere puan verin, görünürlüğü seçin ve kısa bir mentör notu ekleyin. Kaydedilen değerlendirme değiştirilemez."
         title="Gelişim değerlendirmesi"
       >
         {loading ? <p className="next-status-note" role="status">Yükleniyor…</p> : null}
@@ -161,14 +161,14 @@ export function TeacherDevelopmentPage() {
         ) : null}
         {!loading && !loadFailed && students.length === 0 ? (
           <EmptyState
-            title="Değerlendirme yazabileceğin öğrenci yok"
-            description="Gelişim değerlendirmesini sınıf öğretmeni ve rehber öğretmen yazar. Atama için kurum yöneticinle görüş."
+            title="Değerlendirme yazabileceğiniz öğrenci yok"
+            description="Gelişim değerlendirmesini sınıf öğretmeni ve rehber öğretmen yazar. Atama için kurum yöneticinizle görüşün."
           />
         ) : null}
         {!loading && !loadFailed && students.length > 0 && criteria.length === 0 ? (
           <EmptyState
             title="Gelişim kriteri tanımlı değil"
-            description="Kurum yöneticisi gelişim kriterlerini ekledikten sonra değerlendirme yazabilirsin."
+            description="Kurum yöneticisi gelişim kriterlerini ekledikten sonra değerlendirme yazabilirsiniz."
           />
         ) : null}
         {!loading && !loadFailed && students.length > 0 && criteria.length > 0 ? (
@@ -205,7 +205,7 @@ export function TeacherDevelopmentPage() {
             <Field
               label="Görünürlük"
               description={form.visibility === "INTERNAL"
-                ? "Yalnız sen, rehber öğretmen ve kurum yöneticileri görür."
+                ? "Yalnız siz, rehber öğretmen ve kurum yöneticileri görür."
                 : "Veli ve öğrenci portalında da görünür."}
             >
               <Select
@@ -220,7 +220,7 @@ export function TeacherDevelopmentPage() {
             <Field
               label="Mentör notu"
               description={`${noteLength}/${developmentMentorNoteMaxLength} karakter`}
-              error={noteLength > developmentMentorNoteMaxLength ? `En fazla ${developmentMentorNoteMaxLength} karakter yazabilirsin.` : undefined}
+              error={noteLength > developmentMentorNoteMaxLength ? `En fazla ${developmentMentorNoteMaxLength} karakter yazabilirsiniz.` : undefined}
             >
               <Textarea
                 maxLength={developmentMentorNoteMaxLength}
@@ -240,7 +240,7 @@ export function TeacherDevelopmentPage() {
         <Panel aria-label="Önceki gelişim değerlendirmeleri" title="Önceki değerlendirmeler">
           {historyQuery.isError ? <p className="next-form-error" role="alert">Önceki değerlendirmeler alınamadı.</p> : null}
           {historyQuery.isSuccess && historyQuery.data.length === 0 ? (
-            <p className="next-status-note">Bu öğrenci için gördüğün bir değerlendirme yok.</p>
+            <p className="next-status-note">Bu öğrenci için görebildiğiniz bir değerlendirme yok.</p>
           ) : null}
           {historyQuery.isSuccess && historyQuery.data.length > 0 ? (
             <div className="next-note-list">

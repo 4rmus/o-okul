@@ -191,7 +191,7 @@ export default function HomePage() {
 
         <section id="ogrenci-haftasi" className="next-marketing-section" aria-labelledby="week-title">
           <div className="next-marketing-section__header">
-            <div><p className="next-marketing-kicker">Öğrencinin haftası</p><h2 id="week-title">Haftanın her işi aynı öğrenci kaydında birleşir.</h2></div>
+            <div><p className="next-marketing-kicker">Öğrencinin haftası</p><h2 id="week-title">Yoklama, ödev, okul notu ve deneme aynı öğrenci kaydında.</h2></div>
             <p>Yoklama, ödev, okul notu ve deneme sonucu ayrı tablolarda kalmaz; öğretmen ve yönetici öğrencinin haftasını tek kayıttan izler.</p>
           </div>
           <div className="next-marketing-steps">

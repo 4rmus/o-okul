@@ -6,7 +6,7 @@ import { Button, Dialog, Field, Input } from "@o-okul/ui";
 import { type GlobalSearchResultRecord } from "@o-okul/shared-types";
 import { apiBaseUrl, apiListRequest, withQueryParams } from "../../../src/api-client.js";
 import { hasCapabilityForRoles, hasInstitutionAccess, hasSystemAccess } from "../_shared/access.js";
-import { commandActions } from "../../../src/route-manifest.js";
+import { commandActions, redirectOnlyHrefs } from "../../../src/route-manifest.js";
 import type { NavigationGroup } from "./nav-sidebar.js";
 import { confirmInAppNavigation, hasInAppNavigationGuard } from "./navigation-guard.js";
 export interface CommandPaletteItem {
@@ -17,6 +17,8 @@ export interface CommandPaletteItem {
 }
 
 const entitySearchLimit = 12;
+// Retired routes kept only so the shell guard lets their redirect run (e.g. /kurum/kullanicilar) are not commands.
+const redirectOnlyCommandHrefs = new Set(redirectOnlyHrefs());
 interface EntitySearchResult {
   group: string;
   href: string;
@@ -259,7 +261,7 @@ export function buildCommandItems(
     )
     .map((action) => commandItem(action.href, action.label, action.group));
 
-  return dedupeCommandItems([...navigationItems, ...actionItems]);
+  return dedupeCommandItems([...navigationItems.filter((item) => !redirectOnlyCommandHrefs.has(item.href)), ...actionItems]);
 }
 
 export function canUseEntitySearch(roles: readonly string[]) {

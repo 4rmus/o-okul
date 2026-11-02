@@ -86,13 +86,36 @@ test.describe("Portal okunmamış duyuru göstergesi", () => {
     const popover = page.getByRole("region", { exact: true, name: "Okunmamış duyurular" });
     await expect(popover.getByRole("listitem")).toHaveCount(3);
     await expect(popover.getByRole("link", { name: /Veli toplantısı/ })).toHaveCount(1);
-    await expect(popover.getByRole("link", { name: /6-B kulüp günü/ })).toHaveAttribute("href", "/veli/duyurular");
+    // Each item carries its own ward, so the list opens on the child the announcement came from.
+    await expect(popover.getByRole("link", { name: /6-B kulüp günü/ })).toHaveAttribute("href", "/veli/duyurular?studentId=student-b");
+    await expect(popover.getByRole("link", { name: /8-A gezi bilgisi/ })).toHaveAttribute("href", "/veli/duyurular?studentId=student-a");
+    await expect(popover.getByRole("link", { name: "Tüm duyurular" })).toHaveAttribute("href", "/veli/duyurular");
     await expect(popover).not.toContainText("Okunmuş duyuru");
     await expect(popover).not.toContainText("Gizli metin");
 
     await popover.getByRole("button", { name: "6-B kulüp günü okundu işaretle" }).click();
     await expect(page.getByRole("button", { name: "Okunmamış duyurular: 2" })).toBeVisible();
     expect(mock.postRequests).toEqual(["/me/guardian/students/student-b/announcements/announcement-ward-b/read"]);
+  });
+
+  test("veli: ikinci çocuğun duyurusu o çocuğun listesini açar, bağlı olmayan öğrenci kimliği yok sayılır", async ({ page }) => {
+    const mock = await openPortal(page, "GUARDIAN", "/veli/duyurular");
+    const picker = page.getByRole("group", { name: "Öğrenci seçimi" });
+    await expect(picker.getByRole("button", { name: "Ada Kaya" })).toHaveAttribute("aria-pressed", "true");
+
+    await page.getByRole("button", { name: "Okunmamış duyurular: 3" }).click();
+    const popover = page.getByRole("region", { exact: true, name: "Okunmamış duyurular" });
+    await popover.getByRole("link", { name: /6-B kulüp günü/ }).click();
+    await expect(page).toHaveURL(/\/veli\/duyurular\?studentId=student-b$/u);
+    await expect(picker.getByRole("button", { name: "Can Kaya" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("main")).toContainText("6-B kulüp günü");
+
+    // A manual choice still works after the seed, and a ward id the guardian is not linked to falls back to the first ward.
+    await picker.getByRole("button", { name: "Ada Kaya" }).click();
+    await expect(picker.getByRole("button", { name: "Ada Kaya" })).toHaveAttribute("aria-pressed", "true");
+    await page.goto("/veli/duyurular?studentId=student-other");
+    await expect(picker.getByRole("button", { name: "Ada Kaya" })).toHaveAttribute("aria-pressed", "true");
+    expect(mock.getRequests.some((path) => path.includes("student-other"))).toBe(false);
   });
 
   test("salt okunur lisans: sayı görünür kalır, okundu işaretleme sunulmaz", async ({ page }) => {

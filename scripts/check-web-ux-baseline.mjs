@@ -5380,7 +5380,7 @@ requireTokens("apps/web/app/page.tsx", [
   "next-marketing-workflow",
   'aria-label="Öğrenci kaydında toplanan bilgiler"',
   'id="ogrenci-haftasi"',
-  "Haftanın her işi aynı öğrenci kaydında birleşir.",
+  "Yoklama, ödev, okul notu ve deneme aynı öğrenci kaydında.",
   "Deneme sınavı yapan kurumlar için",
   "Dosyayı alın",
   "Eşleşmeleri kontrol edin",

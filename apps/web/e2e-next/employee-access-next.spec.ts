@@ -224,6 +224,16 @@ test("çalışan rolü, öğretmen çalışma alanı ve kampüs kapsamını tek 
   expect(employeeRequests.some((url) => url.searchParams.get("cursor") === "stale-cursor")).toBe(true);
   expect(employeeRequests.at(-1)?.searchParams.get("q")).toBe("ada");
   await expect(page.locator(".uh-crud-page__error")).toHaveCount(0);
+
+  // The retired Kullanıcılar route stays in the manifest only for its redirect; the command palette offers Çalışanlar.
+  await page.keyboard.press("ControlOrMeta+K");
+  const commandDialog = page.getByRole("dialog", { name: "Komut paleti" });
+  await expect(commandDialog).toBeVisible();
+  await commandDialog.getByLabel("Komut ara").fill("kullan");
+  await expect(commandDialog.getByRole("option", { name: /Kullanıcılar/ })).toHaveCount(0);
+  await commandDialog.getByLabel("Komut ara").fill("çalışan");
+  await expect(commandDialog.getByRole("option", { name: /Çalışanlar ve Yetkiler/ })).toHaveCount(1);
+  await commandDialog.getByRole("button", { name: "Kapat" }).click();
 });
 
 // UAT F-20: the 409 e-mail refusal of the same step reopens the invitation dialog with the field marked invalid.

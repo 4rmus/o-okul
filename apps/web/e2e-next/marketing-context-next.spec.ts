@@ -56,6 +56,8 @@ test.describe("Public marketing context", () => {
     await expect(page.getByText("TXT/DAT yükleme", { exact: false }).first()).toBeVisible();
     await expect(page.locator("#optik-akis article")).toHaveCount(5);
     await expect(page.locator("#ogrenci-haftasi article")).toHaveCount(5);
+    // docs/marketing-claims.md "Bütüncül öğrenci takibi": the section heading repeats that claim, not a wider one.
+    await expect(page.locator("#ogrenci-haftasi").getByRole("heading", { level: 2 })).toHaveText("Yoklama, ödev, okul notu ve deneme aynı öğrenci kaydında.");
     await expect(page.locator("#optik-akis .next-marketing-kicker")).toHaveText("Deneme sınavı yapan kurumlar için");
     // DEC-20261102-07: hero'dan sonra öğrencinin haftası, ardından optik akış gelir.
     expect(await page.locator("#main-content > section").evaluateAll((sections) => sections.slice(0, 3).map((section) => section.id || "hero"))).toEqual(["hero", "ogrenci-haftasi", "optik-akis"]);
