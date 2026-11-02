@@ -159,8 +159,8 @@ export const institutionRoutes = [
   navRoute("/kurum/calisanlar", "Çalışanlar ve Yetkiler", "Kişiler", "UserRoundCog", { capability: "user:manage", hub: "/kurum/ogretmenler", tabLabel: "Çalışanlar ve yetkiler" }),
   navRoute("/kurum/ogrenci-portal-erisimi", "Öğrenci Portal Erişimi", "Kişiler", "GraduationCap", { capability: "user:manage", hub: "/kurum/ogrenciler", tabLabel: "Portal erişimi" }),
   // DEC-20261102-01 (F-21): no hub tab and no rail entry. The entry stays only so the shell guard lets old links reach
-  // the page, whose redirect lands on Çalışanlar.
-  navRoute("/kurum/kullanicilar", "Kullanıcılar", "Kişiler", "Users", { capability: "user:manage", hiddenFromRail: true }),
+  // the page, whose redirect lands on Çalışanlar. `redirectTo` keeps it out of the command palette and breadcrumbs.
+  navRoute("/kurum/kullanicilar", "Kullanıcılar", "Kişiler", "Users", { capability: "user:manage", hiddenFromRail: true, redirectTo: "/kurum/calisanlar" }),
   navRoute("/kurum/siniflar", "Sınıflar", "Akademik", "School", { capability: "class:manage", detailParent: true, hub: "/kurum/siniflar", menuLabel: "Sınıf yapısı" }),
   navRoute("/kurum/seviyeler", "Seviyeler", "Akademik", "ClipboardList", { capability: "class:manage", hub: "/kurum/siniflar" }),
   navRoute("/kurum/kampusler", "Kampüsler", "Akademik", "Building2", { capability: "class:manage", hub: "/kurum/siniflar" }),
@@ -293,6 +293,11 @@ export const commandActions = [
   { ...commandAction("/sistem/kurumlar", "Kurum oluştur", "Hızlı işlem"), scope: "system" },
 ];
 
+// Yalnız yönlendirme için tutulan yollar: kabuk guard'ı için manifestte kalır, komut paleti ve breadcrumb'da görünmez.
+export function redirectOnlyHrefs() {
+  return navigationRoutes().filter((route) => route.redirectTo).map((route) => route.href);
+}
+
 export function navigationRoutes() {
   return [...systemRoutes, ...institutionRoutes, ...portalNavGroups.flatMap((group) => group.routes)];
 }
@@ -305,6 +310,9 @@ export function breadcrumbLabels() {
   }
   for (const route of navigationRoutes()) {
     if (route.breadcrumbLabel) labels[route.href] = route.breadcrumbLabel;
+  }
+  for (const route of navigationRoutes()) {
+    if (route.redirectTo) labels[route.href] = labels[route.redirectTo];
   }
   return { ...labels, ...pageLabels };
 }

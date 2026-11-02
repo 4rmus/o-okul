@@ -79,7 +79,16 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
   });
   const students = studentsQuery.data ?? [];
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
-  const resolvedStudentId = selectedStudentId ?? students[0]?.id;
+  // A link may name the ward (?studentId=, e.g. from the announcement bell). It seeds the selection only when it is one
+  // of the guardian's own wards; any other value is ignored. A new value replaces an earlier manual choice.
+  const requestedStudentId = searchParams.get("studentId") ?? "";
+  const [seededStudentId, setSeededStudentId] = useState(requestedStudentId);
+  if (seededStudentId !== requestedStudentId) {
+    setSeededStudentId(requestedStudentId);
+    setSelectedStudentId(null);
+  }
+  const requestedWardId = students.some((student) => student.id === requestedStudentId) ? requestedStudentId : undefined;
+  const resolvedStudentId = selectedStudentId ?? requestedWardId ?? students[0]?.id;
   const accessToken = auth?.accessToken ?? "";
   const panels = guardianPortalPanels(view);
   const studentReady = Boolean(canReadPortal && resolvedStudentId);

@@ -55,7 +55,7 @@ test.describe("Öğretmen gelişim değerlendirmesi (DEC-20261102-05)", () => {
     const studentSelect = form.getByRole("combobox", { name: /^Öğrenci/ });
     await expect(studentSelect.locator("option")).toHaveText(["Seçin", "Ada Kaya"]);
     await expect(form.getByLabel("Görünürlük")).toHaveValue("INTERNAL");
-    await expect(form).toContainText("Yalnız sen, rehber öğretmen ve kurum yöneticileri görür.");
+    await expect(form).toContainText("Yalnız siz, rehber öğretmen ve kurum yöneticileri görür.");
 
     await studentSelect.selectOption("student-a");
     const historyPanel = page.getByRole("region", { exact: true, name: "Önceki gelişim değerlendirmeleri" });
@@ -121,7 +121,7 @@ test.describe("Öğretmen gelişim değerlendirmesi (DEC-20261102-05)", () => {
 
     await form.getByLabel("Odaklanma (1–5)").selectOption("2");
     await form.getByRole("button", { name: "Değerlendirmeyi kaydet" }).click();
-    await expect(form.getByRole("alert")).toContainText("Yalnız sınıf öğretmeni ve rehber öğretmen yazar.");
+    await expect(form.getByRole("alert")).toContainText("Bu öğrenci için değerlendirme yazamazsınız. Yalnız sınıf öğretmeni ve rehber öğretmen yazar.");
   });
 
   test("yazabileceği öğrenci olmayan öğretmene nedeni söylenir", async ({ page }) => {
@@ -129,7 +129,7 @@ test.describe("Öğretmen gelişim değerlendirmesi (DEC-20261102-05)", () => {
     await open(page, "teacher", "/ogretmen/gelisim", captured, { writableStudentIds: [] });
 
     const panel = page.getByRole("region", { exact: true, name: "Gelişim değerlendirmesi yaz" });
-    await expect(panel).toContainText("Değerlendirme yazabileceğin öğrenci yok");
+    await expect(panel).toContainText("Değerlendirme yazabileceğiniz öğrenci yok");
     await expect(panel.getByRole("form")).toHaveCount(0);
   });
 });

@@ -104,6 +104,11 @@ function PortalAnnouncementBellView({ accessToken, persona, userId }: { accessTo
   const hasCount = !isLoading && !isError;
   const count = unread.length;
   const href = persona === "STUDENT" ? "/ogrenci/duyurular" : "/veli/duyurular";
+  // Velide her öğe kendi öğrencisinin duyuru listesine gider; portal sayfası kimliği bağlı öğrencilerle doğrular.
+  const itemHref = (announcement: PortalUnreadAnnouncement) =>
+    persona === "GUARDIAN" && announcement.studentId
+      ? `${href}?${new URLSearchParams({ studentId: announcement.studentId }).toString()}`
+      : href;
   const triggerLabel = hasCount ? `Okunmamış duyurular: ${count}` : "Okunmamış duyurular";
 
   function retry() {
@@ -190,7 +195,7 @@ function PortalAnnouncementBellView({ accessToken, persona, userId }: { accessTo
           <ul className="next-portal-bell__list">
             {visibleItems.map((announcement) => (
               <li key={announcement.id}>
-                <Link href={href} onClick={() => setOpen(false)}>
+                <Link href={itemHref(announcement)} onClick={() => setOpen(false)}>
                   <strong>{announcement.title}</strong>
                   <span>{formatDate(announcement.publishedAt)}</span>
                 </Link>

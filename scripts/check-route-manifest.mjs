@@ -8,6 +8,7 @@ import {
   moduleDecisions,
   navigationRoutes,
   portalHomeRoutes,
+  redirectOnlyHrefs,
   resolveRouteArchitecture,
   routeBoundaries,
   routeFamilies,
@@ -104,6 +105,18 @@ for (const route of institutionRoutes) {
     failures.push("hub kökü kendi hub'ını taşımalı: " + route.hub);
   }
 }
+// Redirect-only entries stay for the shell guard; they must point at a live route and borrow its breadcrumb label.
+const breadcrumbs = breadcrumbLabels();
+for (const route of navigationRoutes().filter((candidate) => candidate.redirectTo)) {
+  const target = navigationRoutes().find((candidate) => candidate.href === route.redirectTo);
+  if (!target || target.redirectTo) failures.push("redirectTo hedefi canlı bir manifest route'u olmalı: " + route.href + " -> " + route.redirectTo);
+  if (!route.hiddenFromRail) failures.push("redirectTo route'u menüde görünemez (hiddenFromRail): " + route.href);
+  if (route.hub) failures.push("redirectTo route'u hub sekmesi olamaz: " + route.href);
+  if (target && breadcrumbs[route.href] !== breadcrumbs[target.href]) failures.push("redirectTo route'u breadcrumb'da hedef etiketini taşımalı: " + route.href);
+}
+if (!redirectOnlyHrefs().includes("/kurum/kullanicilar")) failures.push("/kurum/kullanicilar yalnız yönlendirme (redirectTo) olarak işaretlenmeli");
+const palette = readFileSync("apps/web/app/(app)/_shell/command-palette.tsx", "utf8");
+if (!palette.includes("redirectOnlyCommandHrefs.has(item.href)")) failures.push("komut paleti redirectTo route'larını dışlamalı");
 for (const action of commandActions) {
   const actionPath = action.href.split("?")[0];
   if (!pageRoutes.includes(actionPath)) failures.push("komut paleti hedefi page.tsx envanterinde yok: " + action.href);

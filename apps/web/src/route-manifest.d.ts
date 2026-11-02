@@ -63,6 +63,8 @@ export interface NavRoute {
   menuLabel?: string;
   operationEvidence?: boolean;
   persona?: "STAFF";
+  /** Redirect-only entry: kept for the shell guard, excluded from the command palette and breadcrumbs. */
+  redirectTo?: string;
   requiresSms?: boolean;
   tabLabel?: string;
 }
@@ -95,6 +97,7 @@ export const portalNavGroups: readonly PortalNavGroup[];
 export const pageLabels: Readonly<Record<string, string>>;
 export const commandActions: readonly CommandAction[];
 export function navigationRoutes(): NavRoute[];
+export function redirectOnlyHrefs(): string[];
 export function breadcrumbLabels(): Record<string, string>;
 export function detailParentSegments(): string[];
 export function hubRoot(route: NavRoute): NavRoute | undefined;
