@@ -1430,8 +1430,11 @@ Gate C güvenlik sınırı bu kayıtla daralan biçimde güncellenir.
 Kaynak: Kapsam belgesi W2, seçenek A; çürütmenin eklediği iki karar (baypas yok, kampüs kısıtlı hariç).
 Kanıt: DEC-20260801-01 (OPERATIONS_STAFF: kayıt, öğrenci, sınıf, sınav, devam, duyuru); LOCAL_STATIC.
 Etkilenen ADR: Yok
-Açık soru: OPERATIONS_STAFF+TEACHER çift rollü kullanıcının STAFF personasında öğretmen atamasıyla
-daralan okumaları ayrı bir güvenlik diliminde ele alınır.
+Açık soru: Kapandı (2026-11-02, wave-2b incelemesi). STAFF personasında oturum rolleri yalnız üyeliğin
+`staffRole`'ünü taşır; üyeliği öğretmen personası da içeren tenant geneli OPERATIONS_STAFF, STAFF personasında
+bu kararın verdiği erişimi alır ve okumaları öğretmen atamasıyla daralmaz. TEACHER personasında çalışma alanı
+kapalıdır. Bu kullanıcıyı ayrıca dışarıda tutmak üyelik verisine dayalı yeni bir kural ister; gerekirse ayrı
+bir dilimde açılır.
 Son kontrol: 2026-11-02
 
 ### DEC-20261102-04 — Sınıf 360 ve dashboard akademik operasyon sayıları
@@ -1448,8 +1451,9 @@ Kaynak: Kapsam belgesi W5, önerilen seçenekler.
 Kanıt: LOCAL_STATIC.
 Etkilenen ADR: ADR-0011 (taslak yayın semantiği değişmez)
 Açık soru: Gate'in varsayılanları, ürün sahibi değiştirebilir: "yoklama alınmamış sınıf" yalnız o gün
-programında dersi olan sınıflar için sayılır; sınıf mevcudu yoklamadaki gibi aktif kayıt tarih aralığından
-alınır; silinmiş öğretmen ve süresi biten üyelik listede yer almaz.
+programında dersi olan sınıflar için sayılır; mevcudu boş sınıfta yoklama "Öğrenci yok" görünür; sınıf mevcudu
+yoklamadaki gibi aktif kayıt tarih aralığından alınır; silinmiş öğretmen ve süresi biten üyelik listede yer
+almaz; tarihi gelmemiş değerlendirme "eksik giriş" sayılmaz.
 Son kontrol: 2026-11-02
 
 ### DEC-20261102-05 — Dar gelişim değerlendirmesi yazma ekranı (G8)
@@ -1481,7 +1485,8 @@ Kaynak: Kapsam belgesi W8, seçenek A.
 Kanıt: LOCAL_STATIC.
 Etkilenen ADR: Yok
 Açık soru: Veli duyuru görünürlüğünün esas alanı (DEC-20261003-01'deki StudentContact ile GuardianStudent
-bayrağı) ayrı bir gizlilik incelemesinde netleşir; gösterge mevcut listeleme kuralını izler.
+bayrağı) ayrı bir gizlilik incelemesinde netleşir; gösterge mevcut listeleme kuralını izler. Portal oturumu
+lisans durumunu taşımadığı için salt okunur lisansta "Okundu" ilk reddedilen işaretlemeden sonra kapanır.
 Son kontrol: 2026-11-02
 
 ### DEC-20261102-07 — Landing ve fiyat sayfasında öğrenci odaklı sıra
