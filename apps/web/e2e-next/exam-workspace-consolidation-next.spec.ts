@@ -105,6 +105,29 @@ test.describe("Sınav çalışma alanı birleşimi", () => {
     expect(evidence.mutationRequests).toEqual([]);
   });
 
+  for (const workspaceStatus of [404, 403] as const) {
+    test(`sınav ${workspaceStatus} döndüğünde çerçeve nötr başlık çizer, bulunamadı mesajı yalnız alt sayfadadır`, async ({ page }) => {
+      const evidence = await installK1Api(page, { workspaceStatus });
+
+      for (const viewport of requiredViewports) {
+        await page.setViewportSize(viewport);
+        await page.goto(`/kurum/sinavlar/${examId}`, { waitUntil: "domcontentloaded" });
+
+        const main = page.locator("main:visible");
+        const frame = page.getByRole("region", { name: "Sınav çalışma alanı" });
+        await expect(main.getByRole("heading", { level: 1, name: "Sınav çalışma alanı" })).toBeVisible();
+        await expect(main.locator("h1:visible")).toHaveCount(1);
+        await expect(page.getByRole("region", { name: "Sınav çalışma alanı hatası" })).toContainText("Sınav bulunamadı veya erişilemiyor");
+        await expect(frame.locator(".next-status-note")).toHaveCount(0);
+        await expect(page.getByText("Sınav hazırlık durumu şu an alınamadı", { exact: false })).toHaveCount(0);
+        await expect(page.getByText("işlemlere aşağıdan devam", { exact: false })).toHaveCount(0);
+        await expect(page.getByRole("navigation", { name: "Sınav adımları" })).toHaveCount(0);
+        await expectNoHorizontalOverflow(page, `exam-unavailable-${workspaceStatus}-${viewport.width}`);
+      }
+      expect(evidence.mutationRequests).toEqual([]);
+    });
+  }
+
   test("listeye dönen adımlar sınavı seçer ve çalışma alanına dönüş bağlantısı sunar", async ({ page }) => {
     await installK1Api(page, { nextAction: "ADD_PARTICIPANTS" });
 
@@ -146,7 +169,7 @@ async function expectNoHorizontalOverflow(page: Page, label: string) {
 
 async function installK1Api(
   page: Page,
-  options: { evaluationRounds?: number; nextAction?: "OPEN_OPTICAL" | "ADD_PARTICIPANTS" } = {},
+  options: { evaluationRounds?: number; nextAction?: "OPEN_OPTICAL" | "ADD_PARTICIPANTS"; workspaceStatus?: 403 | 404 } = {},
 ) {
   const evidence = { mutationRequests: [] as string[], unknownRequests: [] as string[], workspaceRequests: 0 };
   await page.addInitScript(() => {
@@ -168,6 +191,10 @@ async function installK1Api(
     }
     if (pathName === `/exams/${examId}/workspace`) {
       evidence.workspaceRequests += 1;
+      if (options.workspaceStatus) {
+        await fulfillData(route, { code: options.workspaceStatus === 404 ? "EXAM_NOT_FOUND" : "FORBIDDEN" }, options.workspaceStatus);
+        return;
+      }
       await fulfillData(route, workspaceFor(evidence.workspaceRequests, options));
       return;
     }
