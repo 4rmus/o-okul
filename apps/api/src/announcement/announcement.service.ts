@@ -42,6 +42,7 @@ import { type CourseStore, courseStoreToken } from "../school/course-store.js";
 import { type GradeLevelStore, gradeLevelStoreToken } from "../school/grade-level-store.js";
 import { type GuardianStudentStore, guardianStudentStoreToken } from "../school/guardian-student-store.js";
 import { type GuardianStore, guardianStoreToken } from "../school/guardian-store.js";
+import { isAssignmentActive } from "../school/teacher-scope.js";
 import { type TeacherAssignmentStore, teacherAssignmentStoreToken } from "../school/teacher-assignment-store.js";
 import { type TeacherStore, teacherStoreToken } from "../school/teacher-store.js";
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
@@ -360,10 +361,14 @@ export class AnnouncementService {
     }
 
     const assignments = filterTenantResources(context, await this.teacherAssignmentStore.listByTeacher(context.subjectId));
+    const classesById = await this.liveClassesById(context);
     const announcements = (await this.listTenant(context)).filter((announcement) =>
       announcement.audience === "SCHOOL" || announcement.audience === "TEACHERS",
     );
-    return this.withReadStatus(context, announcements.filter((announcement) => this.matchesTeacherScope(announcement, assignments)));
+    return this.withReadStatus(
+      context,
+      announcements.filter((announcement) => this.matchesTeacherScope(announcement, assignments, classesById)),
+    );
   }
 
   async markCurrentStudentRead(context: RequestContext, id: string): Promise<AnnouncementRecord> {
@@ -508,10 +513,14 @@ export class AnnouncementService {
   }
 
   private async classCampusById(context: RequestContext): Promise<Map<string, string | undefined>> {
+    return new Map([...(await this.liveClassesById(context))].map(([id, schoolClass]) => [id, schoolClass.campusId]));
+  }
+
+  private async liveClassesById(context: RequestContext): Promise<Map<string, ClassRecord>> {
     return new Map(
       filterTenantResources(context, await this.classStore.list())
         .filter((schoolClass) => !schoolClass.deletedAt)
-        .map((schoolClass) => [schoolClass.id, schoolClass.campusId]),
+        .map((schoolClass) => [schoolClass.id, schoolClass]),
     );
   }
 
@@ -604,9 +613,14 @@ export class AnnouncementService {
 
   private async teacherRecipients(context: RequestContext, announcement: AnnouncementRecord): Promise<AnnouncementRecipientRecord[]> {
     const assignments = filterTenantResources(context, await this.teacherAssignmentStore.list());
+    const classesById = await this.liveClassesById(context);
     return filterTenantResources(context, await this.teacherStore.list())
       .filter((teacher) =>
-        this.matchesTeacherScope(announcement, assignments.filter((assignment) => assignment.teacherId === teacher.id)),
+        this.matchesTeacherScope(
+          announcement,
+          assignments.filter((assignment) => assignment.teacherId === teacher.id),
+          classesById,
+        ),
       )
       .map((teacher) => ({
         announcementId: announcement.id,
@@ -716,18 +730,32 @@ export class AnnouncementService {
     return true;
   }
 
+  // A school-wide announcement reaches every teacher. A targeted one reaches a teacher only through an active
+  // assignment that matches every target; a campus or grade-level target needs the assignment's class to sit on that
+  // campus or grade level, so another campus's teachers never appear in recipients, deliveries or the teacher feed.
   private matchesTeacherScope(
     announcement: AnnouncementRecord,
     assignments: TeacherAssignmentRecord[],
+    classesById: Map<string, ClassRecord>,
   ): boolean {
-    if (!announcement.classId && !announcement.courseId && !announcement.termId) {
+    if (
+      !announcement.classId && !announcement.courseId && !announcement.termId &&
+      !announcement.campusId && !announcement.gradeLevelId
+    ) {
       return true;
     }
 
     return assignments.some((assignment) => {
+      if (!isAssignmentActive(assignment)) return false;
       if (announcement.classId && announcement.classId !== assignment.classId) return false;
       if (announcement.courseId && announcement.courseId !== assignment.courseId) return false;
       if (announcement.termId && assignment.termId && announcement.termId !== assignment.termId) return false;
+      if (announcement.campusId || announcement.gradeLevelId) {
+        const schoolClass = assignment.classId ? classesById.get(assignment.classId) : undefined;
+        if (!schoolClass) return false;
+        if (announcement.campusId && schoolClass.campusId !== announcement.campusId) return false;
+        if (announcement.gradeLevelId && schoolClass.gradeLevelId !== announcement.gradeLevelId) return false;
+      }
       return true;
     });
   }

@@ -978,12 +978,26 @@ describe("Support ticket API", () => {
   });
 
   it("CAMPUSES kapsamlı personel yalnız kendi kampüsünün taleplerine ulaşır; kampüssüz talepler kapalı kalır", async () => {
-    const campusless = await request(server)
+    // Portal tickets are stamped with the student's class campus at create time, so the campus manager reaches them.
+    const portal = await request(server)
       .post("/me/student/support-tickets")
       .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .send({ subject: "Öğrenci talebi", message: "Kampüs yöneticisi görmeli." })
+      .expect(201);
+    const portalId = portal.body.id as string;
+    const guardianPortal = await request(server)
+      .post("/me/guardian/students/student-a/support-tickets")
+      .set("Authorization", `Bearer ${guardianAAccessToken}`)
+      .send({ subject: "Veli talebi", message: "Kampüs yöneticisi görmeli." })
+      .expect(201);
+    const guardianPortalId = guardianPortal.body.id as string;
+    const campusless = await request(server)
+      .post("/support-tickets")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({ subject: "Kampüssüz talep", message: "Yalnız kurum geneli personel görür." })
       .expect(201);
     const campuslessId = campusless.body.id as string;
+    expect(campusless.body).not.toHaveProperty("campusId");
 
     await request(server)
       .get("/support-tickets")
@@ -991,10 +1005,17 @@ describe("Support ticket API", () => {
       .expect(200)
       .expect(({ body }) => {
         const tickets = body as Array<{ id: string; campusId?: string }>;
-        expect(tickets.map((ticket) => ticket.id)).toContain("support-ticket-a");
+        expect(tickets.map((ticket) => ticket.id)).toEqual(expect.arrayContaining(["support-ticket-a", portalId, guardianPortalId]));
+        expect(tickets.map((ticket) => ticket.id)).not.toContain(campuslessId);
         expect(tickets.every((ticket) => ticket.campusId === "campus-main")).toBe(true);
       });
     await request(server).get("/support-tickets/support-ticket-a").set("Authorization", `Bearer ${mainCampusOperationsToken}`).expect(200);
+    await request(server)
+      .get(`/support-tickets/${portalId}`)
+      .set("Authorization", `Bearer ${mainCampusOperationsToken}`)
+      .expect(200)
+      .expect(({ body }) => expect(body).toMatchObject({ campusId: "campus-main", studentId: "student-a" }));
+    await request(server).get(`/support-tickets/${guardianPortalId}`).set("Authorization", `Bearer ${mainCampusOperationsToken}`).expect(200);
     await request(server).get(`/support-tickets/${campuslessId}`).set("Authorization", `Bearer ${mainCampusOperationsToken}`).expect(404);
 
     await request(server)
@@ -1002,7 +1023,9 @@ describe("Support ticket API", () => {
       .set("Authorization", `Bearer ${otherCampusOperationsToken}`)
       .expect(200)
       .expect(({ body }) => expect(body).toEqual([]));
-    await request(server).get("/support-tickets/support-ticket-a").set("Authorization", `Bearer ${otherCampusOperationsToken}`).expect(404);
+    for (const ticketId of ["support-ticket-a", portalId, guardianPortalId, campuslessId]) {
+      await request(server).get(`/support-tickets/${ticketId}`).set("Authorization", `Bearer ${otherCampusOperationsToken}`).expect(404);
+    }
     await request(server).get("/support-tickets/support-ticket-a/comments").set("Authorization", `Bearer ${otherCampusOperationsToken}`).expect(404);
     await request(server).get("/support-tickets/support-ticket-a/attachments").set("Authorization", `Bearer ${otherCampusOperationsToken}`).expect(404);
     await request(server)
@@ -1017,6 +1040,31 @@ describe("Support ticket API", () => {
       .expect(404);
 
     await request(server).get(`/support-tickets/${campuslessId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(200);
+  });
+
+  it("CAMPUSES kapsamlı personel kapsam dışı kampüs, sınıf veya öğrenciye talep açamaz", async () => {
+    for (const body of [{ classId: "class-a" }, { studentId: "student-a" }, { campusId: "campus-main" }]) {
+      const rejected = await request(server)
+        .post("/support-tickets")
+        .set("Authorization", `Bearer ${otherCampusOperationsToken}`)
+        .send({ subject: "Kapsam dışı", message: "Başka kampüs.", ...body })
+        .expect(403);
+      expect(rejected.body.error.code).toBe("SUPPORT_TICKET_CAMPUS_SCOPE_FORBIDDEN");
+    }
+
+    const inScope = await request(server)
+      .post("/support-tickets")
+      .set("Authorization", `Bearer ${mainCampusOperationsToken}`)
+      .send({ subject: "Kapsam içi", message: "Merkez kampüs.", classId: "class-a" })
+      .expect(201);
+    expect(inScope.body).toMatchObject({ classId: "class-a", campusId: "campus-main" });
+
+    // A campus-scoped creator may still open a ticket without context; only the requester and tenant-wide staff see it.
+    await request(server)
+      .post("/support-tickets")
+      .set("Authorization", `Bearer ${otherCampusOperationsToken}`)
+      .send({ subject: "Bağlamsız", message: "Genel soru." })
+      .expect(201);
   });
 
   it("yetkisiz request destek endpointine erişemez", async () => {

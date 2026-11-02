@@ -114,6 +114,43 @@ describe("kampüs kapsamlı çalışan erişimi", () => {
       .expect(201);
   });
 
+  it("toplu SMS: başka kampüsün velileri önizlemede yok, kapsam dışı duyuru, kampüs ve sınıf reddedilir", async () => {
+    const originalSmsEnabled = process.env.SMS_ENABLED;
+    process.env.SMS_ENABLED = "true";
+    try {
+      const preview = (token: string, body: Record<string, unknown>) => request(server)
+        .post("/sms-batches/recipients/preview")
+        .set("Authorization", `Bearer ${token}`)
+        .send(body);
+
+      const otherAll = await preview(otherToken, {}).expect(201);
+      expect(otherAll.body).toEqual({ recipients: [], recipientCount: 0 });
+      for (const [body, code] of [
+        [{ announcementId: "announcement-a" }, "ANNOUNCEMENT_CAMPUS_SCOPE_FORBIDDEN"],
+        [{ campusId: "campus-main" }, "SMS_BATCH_CAMPUS_SCOPE_FORBIDDEN"],
+        [{ classId: "class-a" }, "SMS_BATCH_CAMPUS_SCOPE_FORBIDDEN"],
+      ] as const) {
+        const rejected = await preview(otherToken, body).expect(403);
+        expect(rejected.body.error.code).toBe(code);
+      }
+
+      const adminClass = await preview(adminToken, { classId: "class-a" }).expect(201);
+      const mainClass = await preview(mainToken, { classId: "class-a" }).expect(201);
+      expect(mainClass.body).toEqual(adminClass.body);
+      await preview(mainToken, { announcementId: "announcement-a" }).expect(201);
+
+      const enqueue = await request(server)
+        .post("/sms-batches")
+        .set("Authorization", `Bearer ${otherToken}`)
+        .send({ recipientScope: { announcementId: "announcement-a" }, templateId: "message-template-a", recipients: [{ to: "5000000001" }] })
+        .expect(403);
+      expect(enqueue.body.error.code).toBe("ANNOUNCEMENT_CAMPUS_SCOPE_FORBIDDEN");
+    } finally {
+      if (originalSmsEnabled === undefined) delete process.env.SMS_ENABLED;
+      else process.env.SMS_ENABLED = originalSmsEnabled;
+    }
+  });
+
   it("yoklama: başka kampüsün kayıtları listede ve özette yok", async () => {
     const adminList = await get("/attendance", adminToken).expect(200);
     expect(ids(adminList.body)).toContain("attendance-a");
