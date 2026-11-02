@@ -61,14 +61,15 @@ export function CommandPalette({
   const baseId = useId();
   const listboxId = `${baseId}-listbox`;
   const showEntitySearch = enableEntitySearch && normalizeCommandText(query).length >= 2;
-  const visibleEntityResults = showEntitySearch ? entityResults : [];
+  // Sorgu değiştiği an (debounce başlamadan önce) da arama sürüyor sayılır; "Sonuç yok" erken görünmez.
+  const isSearching = showEntitySearch && (isEntitySearchLoading || searchedQuery !== query);
+  // Önceki sorgunun varlık sonuçları yeni arama bitene kadar listede kalmaz; Enter eski kaydı açamaz.
+  const visibleEntityResults = showEntitySearch && !isSearching ? entityResults : [];
   // Komutlar ve varlık sonuçları tek listbox içinde sıralanır; ok tuşları ikisini birlikte gezer.
   const options = [...filteredItems, ...visibleEntityResults];
   const optionCount = options.length;
   const activeOptionIndex = optionCount > 0 ? Math.min(activeIndex, optionCount - 1) : -1;
   const activeOptionId = activeOptionIndex >= 0 ? optionId(activeOptionIndex) : undefined;
-  // Sorgu değiştiği an (debounce başlamadan önce) da arama sürüyor sayılır; "Sonuç yok" erken görünmez.
-  const isSearching = showEntitySearch && (isEntitySearchLoading || searchedQuery !== query);
   const resultStatus = optionCount > 0
     ? `${optionCount} sonuç${isSearching ? ", varlık araması sürüyor" : ""}`
     : isSearching ? "Aranıyor..." : "Sonuç yok";

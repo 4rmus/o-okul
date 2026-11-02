@@ -40,8 +40,9 @@
   }
 }
 
-/* Başlık satırı kaydırma alanının içinde sabit kalır. Telefonda iç içe dikey kaydırma açılmaz; sayfa kayar. */
-@media (min-width: 761px) {
+/* Başlık satırı kaydırma alanının içinde sabit kalır. Telefonda iç içe dikey kaydırma açılmaz; sayfa kayar.
+   Yalnız ekranda: baskıda yükseklik sınırı tabloyu kesmesin. */
+@media screen and (min-width: 761px) {
   .uh-data-table-scroll[data-sticky-header="true"] {
     max-height: min(72vh, 48rem);
     overflow: auto;

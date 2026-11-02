@@ -50,13 +50,22 @@ test.describe("Öğrenci listesi toplu seçim", () => {
     await table.getByRole("checkbox", { name: "Ada Kaya seç" }).check();
     await table.getByRole("checkbox", { name: "Cem Yıldız seç" }).check();
     await expect(bulkBar).toContainText("2 öğrenci seçildi");
-    await bulkBar.getByRole("button", { name: "Dönem geçişi" }).click();
+    // Kapalı Toplu işlemler panelindeki ayarlar görünmeden geçiş başlamaz: ilk tıklama paneli açıp tarihe odaklanır.
     const renewDialog = page.getByRole("dialog", { name: "Toplu dönem geçişini onayla" });
+    const bulkTransition = page.getByLabel("Toplu dönem geçişi");
+    await expect(bulkTransition.getByLabel("Geçiş tarihi")).toBeHidden();
+    await bulkBar.getByRole("button", { name: "Dönem geçişi" }).click();
+    await expect(renewDialog).toHaveCount(0);
+    await expect(bulkTransition.getByLabel("Geçiş tarihi")).toBeFocused();
+    await expect(bulkTransition.getByLabel("Hedef sınıf")).toBeVisible();
+    expect(captured.bulkRenew).toHaveLength(0);
+    await bulkBar.getByRole("button", { name: "Dönem geçişi" }).click();
     await expect(renewDialog).toContainText(/2 seçili öğrenci \d{4}-\d{2}-\d{2} tarihinden itibaren sınıfsız hedefe geçirilsin mi\?/);
     await expect(renewDialog).toContainText("Bu işlem yalnız seçili öğrencilerin kayıt dönemini günceller.");
     await renewDialog.getByRole("button", { name: "Geçir" }).click();
     await expect.poll(() => captured.bulkRenew.length).toBe(1);
     expect(captured.bulkRenew[0]?.studentIds).toEqual(["student-a", "student-c"]);
+    expect(captured.bulkRenew[0]?.classId).toBe("");
     await expect(bulkBar).toHaveCount(0);
     await expect(table.getByRole("checkbox", { name: "Ada Kaya seç" })).not.toBeChecked();
 
@@ -107,6 +116,32 @@ test.describe("Öğrenci listesi toplu seçim", () => {
     await expect(page.getByLabel("Toplu veli daveti").getByRole("button", { name: "Velileri davet et (1)" })).toBeEnabled();
   });
 
+  test("geçiş tarihi boşken dönem geçişi başlamaz, çubuk tarihe odaklanır", async ({ page }) => {
+    const captured = createCaptured();
+    await page.setViewportSize({ height: 900, width: 1280 });
+    await openStudents(page, captured, ["TENANT_ADMIN"]);
+
+    const table = page.getByRole("table", { name: "Öğrenci listesi" });
+    const bulkBar = page.getByRole("region", { name: "Toplu işlem çubuğu" });
+    const bulkTransition = page.getByLabel("Toplu dönem geçişi");
+    await page.getByText("Toplu işlemler", { exact: true }).click();
+    await bulkTransition.getByLabel("Geçiş tarihi").fill("");
+    await table.getByRole("checkbox", { name: "Ada Kaya seç" }).check();
+    await expect(page.getByRole("button", { name: "Seçilenleri geçir (1)" })).toBeDisabled();
+    await bulkBar.getByRole("button", { name: "Dönem geçişi" }).click();
+    await expect(page.getByRole("dialog", { name: "Toplu dönem geçişini onayla" })).toHaveCount(0);
+    await expect(bulkTransition.getByLabel("Geçiş tarihi")).toBeFocused();
+
+    await bulkTransition.getByLabel("Geçiş tarihi").fill("2026-09-14");
+    await expect(page.getByRole("button", { name: "Seçilenleri geçir (1)" })).toBeEnabled();
+    await bulkBar.getByRole("button", { name: "Dönem geçişi" }).click();
+    const renewDialog = page.getByRole("dialog", { name: "Toplu dönem geçişini onayla" });
+    await expect(renewDialog).toContainText("1 seçili öğrenci 2026-09-14 tarihinden itibaren sınıfsız hedefe geçirilsin mi?");
+    await renewDialog.getByRole("button", { name: "Geçir" }).click();
+    await expect.poll(() => captured.bulkRenew.length).toBe(1);
+    expect(captured.bulkRenew[0]).toEqual({ classId: "", startsAt: "2026-09-14", studentIds: ["student-a"] });
+  });
+
   test("veli daveti yetkisi olmayan operasyon çalışanı seçip yalnız dönem geçişi yapar", async ({ page }) => {
     const captured = createCaptured();
     await page.setViewportSize({ height: 900, width: 1280 });
@@ -132,6 +167,19 @@ test.describe("Öğrenci listesi toplu seçim", () => {
     const header = page.getByRole("table", { name: "Öğrenci listesi" }).getByRole("columnheader", { exact: true, name: "Durum" });
     await expect.poll(() => header.evaluate((element) => getComputedStyle(element).position)).toBe("sticky");
     await expect.poll(() => scrollRegion.evaluate((element) => getComputedStyle(element).overflowY)).toBe("auto");
+
+    // Baskıda yükseklik sınırı kalkar (liste kesilmez); seçim sütunu ve toplu işlem çubuğu kâğıda çıkmaz.
+    await page.getByRole("table", { name: "Öğrenci listesi" }).getByRole("checkbox", { name: "Ada Kaya seç" }).check();
+    await expect(page.getByRole("region", { name: "Toplu işlem çubuğu" })).toBeVisible();
+    await page.emulateMedia({ media: "print" });
+    await expect.poll(() => scrollRegion.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return `${style.maxHeight} ${style.overflowY}`;
+    })).toBe("none visible");
+    expect(await header.evaluate((element) => getComputedStyle(element).position)).not.toBe("sticky");
+    expect(await page.locator(".uh-data-table__select-cell").evaluateAll((cells) => cells.filter((cell) => getComputedStyle(cell).display !== "none").length)).toBe(0);
+    await expect(page.locator(".next-bulk-selection")).toBeHidden();
+    await page.emulateMedia({ media: "screen" });
   });
 
   for (const width of [320, 375, 768, 1024]) {

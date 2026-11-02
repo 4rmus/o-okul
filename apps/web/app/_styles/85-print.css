@@ -26,7 +26,9 @@
   .uh-toolbar,
   .uh-hub-tabs,
   .uh-toast-region,
-  .uh-dialog__footer {
+  .uh-dialog__footer,
+  .uh-data-table__select-cell,
+  .next-bulk-selection {
     display: none !important;
   }
 

@@ -272,6 +272,80 @@ test.describe("Next erişilebilirlik smoke", () => {
     await expect(page).toHaveURL(/\/kurum\/kampusler\?new=1$/);
   });
 
+  test("komut paleti yeni arama bitmeden önceki sorgunun varlık sonucunu Enter ile açmaz", async ({ page }) => {
+    await openInstitutionDashboard(page);
+
+    await page.getByRole("button", { name: "Komut paleti" }).first().click();
+    const commandDialog = page.getByRole("dialog", { name: "Komut paleti" });
+    const combobox = commandDialog.getByRole("combobox", { name: "Komut ara" });
+    const listbox = commandDialog.getByRole("listbox", { name: "Komut sonuçları" });
+
+    await combobox.fill("zeynep");
+    await expect(listbox.getByRole("option", { name: /Zeynep Kaya/ })).toBeVisible();
+
+    // Yeniden yazıp hemen Enter: arama (180 ms gecikme) bitmeden eski "Zeynep Kaya" seçeneği açılmamalı.
+    await combobox.fill("zeyneb");
+    await page.keyboard.press("Enter");
+    await expect(commandDialog).toBeVisible();
+    await expect(page).toHaveURL(/\/kurum$/);
+    await expect(commandDialog.getByRole("status")).toHaveText("Sonuç yok");
+    await expect(listbox.getByRole("option")).toHaveCount(0);
+  });
+
+  // WCAG 2.2.1: bildirim süresi fare üzerindeyken veya odak bildirim bölgesindeyken durur, ayrılınca kalan süreden
+  // devam eder; en fazla üç bildirim görünür. Bildirimi uygulamanın lisans salt okunur uyarısı (warning) üretir.
+  test("bildirim bölgesi süreyi fare ve odakta durdurur, en fazla üç bildirim tutar", async ({ page }) => {
+    await page.clock.install();
+    await openInstitutionDashboard(page);
+    await page.clock.pauseAt(Date.now() + 60_000);
+
+    const region = page.locator('.uh-toast-region[aria-live="polite"]');
+    const toasts = region.locator(".uh-toast");
+    // Uygulama aynı uyarıyı 8 sn içinde tekrar göstermez; her tetiklemeden önce saat ileri alınır.
+    const raiseLicenseWarning = async () => {
+      await page.clock.fastForward(8_100);
+      await page.evaluate(() => window.dispatchEvent(new Event("o-okul:license-read-only")));
+    };
+
+    await raiseLicenseWarning();
+    await expect(toasts).toHaveCount(1);
+    await page.clock.fastForward(5_000);
+    await expect(toasts).toHaveCount(1);
+    await page.clock.fastForward(1_500);
+    await expect(toasts).toHaveCount(0);
+
+    await raiseLicenseWarning();
+    await expect(toasts).toHaveCount(1);
+    await page.clock.fastForward(2_000);
+    await toasts.first().hover();
+    await page.clock.fastForward(20_000);
+    await expect(toasts).toHaveCount(1);
+    await page.mouse.move(1, 1);
+    await page.clock.fastForward(3_500);
+    await expect(toasts).toHaveCount(1);
+    await page.clock.fastForward(1_000);
+    await expect(toasts).toHaveCount(0);
+
+    await raiseLicenseWarning();
+    await region.getByRole("button", { name: "Bildirimi kapat" }).focus();
+    await page.clock.fastForward(20_000);
+    await expect(toasts).toHaveCount(1);
+    // Odak bölgede kaldıkça yeni bildirimler de beklemede kalır; dördüncü bildirim en eskisini düşürür.
+    for (let index = 0; index < 3; index += 1) {
+      await raiseLicenseWarning();
+      await region.getByRole("button", { name: "Bildirimi kapat" }).last().focus();
+    }
+    await expect(toasts).toHaveCount(3);
+    await page.clock.fastForward(20_000);
+    await expect(toasts).toHaveCount(3);
+    await page.locator("body").evaluate((body) => {
+      (document.activeElement as HTMLElement | null)?.blur();
+      body.focus();
+    });
+    await page.clock.fastForward(6_500);
+    await expect(toasts).toHaveCount(0);
+  });
+
   test("mobil ana menü yüksek etkili axe ihlali olmadan açılıp kapanır", async ({ page }) => {
     await page.setViewportSize({ height: 844, width: 390 });
     await openInstitutionDashboard(page, { expectNavigationVisible: false });

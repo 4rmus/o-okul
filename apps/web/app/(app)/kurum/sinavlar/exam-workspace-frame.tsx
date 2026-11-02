@@ -12,7 +12,7 @@ import {
 } from "@o-okul/shared-types";
 import { PageHeader, StatusBadge, Stepper, type StepperStep } from "@o-okul/ui";
 import { ArrowRight } from "lucide-react";
-import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
+import { ApiRequestError, apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
 import { useAuth } from "../../../providers.js";
 import { examManagementHref, examWorkspaceHref, opticalWorkspaceHref, reportWorkspaceHref } from "./exam-workspace-routes.js";
 
@@ -44,6 +44,8 @@ export function ExamWorkspaceFrame({ children, examId }: { children: ReactNode; 
   const { eligible, query, workspace } = useExamWorkspace(examId, { pollEvaluation: true });
   const nextHref = workspace ? nextActionHref(workspace.nextAction, examId) : "";
   const isWaitingEvaluation = workspace?.nextAction === "WAIT_EVALUATION";
+  // Sınav yok veya erişilemiyorsa (404/403) çerçeve yalnız nötr başlığı çizer; bulunamadı mesajı alt sayfanındır.
+  const isExamUnavailable = query.error instanceof ApiRequestError && (query.error.status === 404 || query.error.status === 403);
 
   return (
     <div className="next-exam-workspace" data-exam-workspace-layout="stepper">
@@ -82,8 +84,8 @@ export function ExamWorkspaceFrame({ children, examId }: { children: ReactNode; 
               <PageHeader title="Sınav çalışma alanı" />
               {query.isPending ? (
                 <p className="next-status-note">Sınav hazırlığı yükleniyor.</p>
-              ) : (
-                <p className="next-status-note" role="status">Sınav hazırlık durumu şu an alınamadı; işlemlere aşağıdan devam edebilirsiniz.</p>
+              ) : isExamUnavailable ? null : (
+                <p className="next-status-note" role="status">Sınav hazırlık durumu şu an alınamadı.</p>
               )}
             </>
           )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -216,6 +216,7 @@ export function StudentsPage() {
     setSelectedStudentIds([]);
   }
   const selectedStudents = rows.filter((student) => selectedStudentIds.includes(student.id));
+  const bulkActionsPanelRef = useRef<HTMLDetailsElement>(null);
   const sourceClassIds = [...new Set(rows.map((student) => student.classId).filter((classId): classId is string => Boolean(classId)))].sort();
 
   const detailQuery = useQuery({
@@ -544,13 +545,33 @@ export function StudentsPage() {
     }
   }
 
+  function revealBulkEnrollmentSettings() {
+    const panel = bulkActionsPanelRef.current;
+    if (!panel) return;
+    panel.open = true;
+    panel.querySelector<HTMLInputElement>('input[type="date"]')?.focus();
+  }
+
+  // Çubuktaki düğme geçiş tarihi ve hedef sınıf görünmeden işlemi başlatmaz: kapalı panel önce açılır.
+  function handleBulkBarRenewEnrollment() {
+    if (!bulkActionsPanelRef.current?.open || !bulkEnrollmentAction.startsAt) {
+      revealBulkEnrollmentSettings();
+      return;
+    }
+    void handleBulkRenewEnrollment();
+  }
+
   async function handleBulkRenewEnrollment() {
     const studentIds = selectedStudents.map((student) => student.id);
     if (!auth || isBulkEnrollmentSaving || studentIds.length === 0) return;
+    if (!bulkEnrollmentAction.startsAt) {
+      revealBulkEnrollmentSettings();
+      return;
+    }
 
     const confirmed = await confirm({
       confirmLabel: "Geçir",
-      description: "Bu işlem yalnız seçili öğrencilerin kayıt dönemini günceller. Geçiş tarihi ve hedef sınıf Toplu işlemler bölümündeki ayarlardan alınır.",
+      description: "Bu işlem yalnız seçili öğrencilerin kayıt dönemini günceller. Tarihi veya hedefi değiştirmek için vazgeçip Toplu işlemler bölümünü düzenleyin.",
       message: `${studentIds.length} seçili öğrenci ${bulkEnrollmentAction.startsAt} tarihinden itibaren ${
         bulkEnrollmentAction.useAutomaticClassMapping
           ? "otomatik seviye yükseltme ile"
@@ -780,7 +801,7 @@ export function StudentsPage() {
                 </div>
               </div>
             </details>
-            <details className="next-list-disclosure">
+            <details className="next-list-disclosure" ref={bulkActionsPanelRef}>
               <summary>Toplu işlemler</summary>
               <div className="next-list-disclosure__content">
                 <p className="next-field-hint">
@@ -833,7 +854,7 @@ export function StudentsPage() {
                       </Select>
                     </Field>
                   ))}
-                  <Button type="button" variant="secondary" onClick={() => void handleBulkRenewEnrollment()} disabled={isBulkEnrollmentSaving || selectedStudents.length === 0}>
+                  <Button type="button" variant="secondary" onClick={() => void handleBulkRenewEnrollment()} disabled={isBulkEnrollmentSaving || selectedStudents.length === 0 || !bulkEnrollmentAction.startsAt}>
                     Seçilenleri geçir ({selectedStudents.length})
                   </Button>
                 </div>
@@ -914,7 +935,7 @@ export function StudentsPage() {
                     </Button>
                   ) : null}
                   {canManageStudents ? (
-                    <Button type="button" variant="secondary" onClick={() => void handleBulkRenewEnrollment()} disabled={isBulkEnrollmentSaving}>
+                    <Button type="button" variant="secondary" onClick={handleBulkBarRenewEnrollment} disabled={isBulkEnrollmentSaving}>
                       Dönem geçişi
                     </Button>
                   ) : null}

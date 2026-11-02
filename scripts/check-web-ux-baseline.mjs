@@ -123,6 +123,7 @@ const files = {
   "packages/ui/src/components/checkbox.tsx": readFileSync("packages/ui/src/components/checkbox.tsx", "utf8"),
   "packages/ui/src/components/data-table.tsx": readFileSync("packages/ui/src/components/data-table.tsx", "utf8"),
   "packages/ui/src/components/crud-page.tsx": readFileSync("packages/ui/src/components/crud-page.tsx", "utf8"),
+  "packages/ui/src/components/toast.tsx": readFileSync("packages/ui/src/components/toast.tsx", "utf8"),
   "packages/ui/src/components/info-grid.tsx": readFileSync("packages/ui/src/components/info-grid.tsx", "utf8"),
   "packages/ui/src/components/metric-card.tsx": readFileSync("packages/ui/src/components/metric-card.tsx", "utf8"),
   "packages/ui/src/components/tabs.tsx": readFileSync("packages/ui/src/components/tabs.tsx", "utf8"),
@@ -1698,6 +1699,21 @@ requireTokens("apps/web/app/globals.css", [
   '.uh-data-table-scroll[data-sticky-header="true"] > .uh-data-table > thead th',
   '.uh-data-table tr[data-selected="true"] td',
   ".next-bulk-selection {",
+  // Sabit başlığın yükseklik sınırı yalnız ekrandadır; baskıda seçim sütunu ve toplu işlem çubuğu çıkmaz.
+  "@media screen and (min-width: 761px) {",
+  "  .uh-data-table__select-cell,\n  .next-bulk-selection {\n    display: none !important;",
+]);
+requireNoTokens("apps/web/app/globals.css", [
+  '@media (min-width: 761px) {\n  .uh-data-table-scroll[data-sticky-header="true"] {',
+]);
+// Hata bildirimi kendiliğinden kapanmaz (çalışma zamanında tetikleyen ekran yok); süre fare/odakta durur.
+requireTokens("packages/ui/src/components/toast.tsx", [
+  "danger: null,",
+  "if (durationMs === null) return;",
+  'onMouseEnter={() => pause("hover")}',
+  'onFocus={() => pause("focus")}',
+  "const next = [...current.slice(-2), { id, message, tone }];",
+  "clearTimeout(timers.current.get(item.id)?.handle);",
 ]);
 requireTokens("apps/web/app/(app)/kurum/ogrenciler/students-page.tsx", [
   "selection={canSelectStudents ? {",
@@ -1709,6 +1725,9 @@ requireTokens("apps/web/app/(app)/kurum/ogrenciler/students-page.tsx", [
   "Seçimi temizle",
   "Seçilenleri geçir ({selectedStudents.length})",
   "${studentIds.length} seçili öğrenci ${bulkEnrollmentAction.startsAt}",
+  // Çubuktaki dönem geçişi kapalı paneldeki ayarlar görünmeden başlamaz.
+  "onClick={handleBulkBarRenewEnrollment}",
+  "if (!bulkActionsPanelRef.current?.open || !bulkEnrollmentAction.startsAt) {",
 ]);
 requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/students-page.tsx", [
   "Listelenenleri geçir",
