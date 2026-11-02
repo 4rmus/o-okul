@@ -82,7 +82,8 @@ test.describe("Öğrenci Gelişimim ve Ödevlerim (S1)", () => {
 
   test("bir GET düşerse yalnız o panel hata ve Tekrar dene gösterir, sayfa boşalmaz", async ({ page }) => {
     const failures: Failures = new Set(["/me/student/overview", "/me/student/homework"]);
-    await openStudentPortal(page, "/ogrenci", { failures });
+    const requestedPaths: string[] = [];
+    await openStudentPortal(page, "/ogrenci", { failures, requestedPaths });
 
     await expect(page.getByRole("heading", { level: 1, name: "Öğrenci Portalı" })).toBeVisible();
     await expect(page.getByRole("region", { exact: true, name: "Günlük durum" })).toBeVisible();
@@ -96,9 +97,14 @@ test.describe("Öğrenci Gelişimim ve Ödevlerim (S1)", () => {
     const gelisimim = page.getByRole("region", { exact: true, name: "Gelişimim" });
     await expect(gelisimim.getByRole("alert")).toContainText("Özet şu an alınamadı");
     failures.clear();
+    const homeworkRequestsBefore = requestedPaths.filter((path) => path === "/me/student/homework").length;
     await gelisimim.getByRole("button", { name: "Tekrar dene" }).click();
     await expect(gelisimim.getByRole("alert")).toHaveCount(0);
     await expect(gelisimim.getByRole("table", { name: "Okul notları: puan / tam puan" })).toContainText("42 / 50");
+    // Gelişimim'in Tekrar dene'si yalnız kendi isteğini yeniler; Ödevlerim hatası kendi düğmesine kadar kalır.
+    await expect(feed.getByRole("alert")).toContainText("Sınıf ödevleri şu an alınamadı");
+    expect(requestedPaths.filter((path) => path === "/me/student/homework")).toHaveLength(homeworkRequestsBefore);
+    await feed.getByRole("button", { name: "Tekrar dene" }).click();
     await expect(feed.getByRole("alert")).toHaveCount(0);
     await expect(feed).toContainText("Denklemler");
   });

@@ -469,6 +469,9 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
     failReadPaths.clear();
     await notes.getByRole("button", { name: "Tekrar dene" }).click();
     await expect(page.getByRole("table", { name: "Öğretmen notları" })).toBeVisible();
+    // Her bölümün Tekrar dene'si yalnız kendi isteğini yeniler.
+    await expect(attendance.getByRole("alert")).toContainText("Bu bölüm yüklenemedi");
+    await attendance.getByRole("button", { name: "Tekrar dene" }).click();
     await expect(page.getByRole("table", { name: "Öğretmen yoklama kayıtları" })).toBeVisible();
     await expect(page.getByText("Bu bölüm yüklenemedi")).toHaveCount(0);
 

@@ -34,6 +34,8 @@ const files = {
   "apps/web/app/manifest.ts": readFileSync("apps/web/app/manifest.ts", "utf8"),
   "apps/web/public/push-sw.js": readFileSync("apps/web/public/push-sw.js", "utf8"),
   "apps/web/app/(app)/portals/_shared/progress-series-panel.tsx": readFileSync("apps/web/app/(app)/portals/_shared/progress-series-panel.tsx", "utf8"),
+  "apps/web/app/(app)/portals/_shared/portal-panel-state.tsx": readFileSync("apps/web/app/(app)/portals/_shared/portal-panel-state.tsx", "utf8"),
+  "apps/web/e2e-next/portal-panel-isolation-next.spec.ts": readFileSync("apps/web/e2e-next/portal-panel-isolation-next.spec.ts", "utf8"),
   // Shell v3 (Berrak G5) app-shell.tsx + _shell/* dosyalarına bölündü; pin'ler shell kaynağının bütününe uygulanır.
   "apps/web/app/(app)/app-shell.tsx": ["apps/web/app/(app)/app-shell.tsx", ...readdirSync("apps/web/app/(app)/_shell").sort().map((name) => `apps/web/app/(app)/_shell/${name}`)]
     .map((path) => readFileSync(path, "utf8"))
@@ -4304,7 +4306,29 @@ requireTokens("apps/web/app/(app)/portals/student-portal-page.tsx", [
   'ariaLabel="Gelişimim"',
   "<StudentHomeworkFeed",
   'studentHomeworkFeedGroup(item, now) === "today"',
-  "function PanelLoadError(",
+  // Panel bazlı yükleme: her panel kendi sorgusu ve kendi "Tekrar dene"si.
+  "<PortalPanelGate",
+  "usePortalPanelQuery(",
+  "allPanelsFailed(panelQueries)",
+]);
+
+requireTokens("apps/web/app/(app)/portals/_shared/portal-panel-state.tsx", [
+  "export function usePortalPanelQuery<T>(",
+  "export function PanelLoadError(",
+  "export function PanelLoading(",
+  "export function PortalPanelGate(",
+  "export function retryFailedPanels(",
+  "export function allPanelsFailed(",
+  '<Panel aria-busy="true" aria-label={label} id={id} title={title}>',
+]);
+
+requireTokens("apps/web/e2e-next/portal-panel-isolation-next.spec.ts", [
+  "Portal panel yalıtımı",
+  'getByRole("button", { name: "Tekrar dene" })',
+  "yeniden istenmemeli",
+  "/me/student/announcements",
+  "/me/guardian/students/student-a/homework/material-assignments",
+  "/me/teacher/schedule",
 ]);
 
 requireTokens("apps/web/app/(app)/portals/_shared/student-homework-feed.tsx", [
@@ -4689,8 +4713,8 @@ requireTokens("apps/web/app/(app)/portals/teacher-portal-page.tsx", [
   "AttendanceRoster",
   'label="Öğretmen günlük yoklama listesi"',
   "TeacherSectionError",
-  "failedSections",
-  'if (attempted > 0 && failed === attempted) throw new Error("TEACHER_PORTAL_UNAVAILABLE");',
+  "sectionQueries",
+  "allPanelsFailed(Object.values(sectionQueries))",
   'id="portal-teacher-actions"',
   'className="next-teacher-action-grid"',
   'as="form"',
