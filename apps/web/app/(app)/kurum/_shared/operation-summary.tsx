@@ -67,12 +67,14 @@ export function OperationSummary({ actions = [], ariaLabel, badges = [], items }
               {linkActions.map((action) => (
                 <li className="next-operation-summary__action-item" key={action.key}>
                   <ActionCard
-                    as="a"
                     badge={action.status}
                     className="next-operation-summary__action"
                     detail={action.detail}
-                    href={action.href ?? ""}
-                    label={action.label}
+                    label={
+                      <a className="next-operation-summary__action-link" href={action.href ?? ""}>
+                        {action.label}
+                      </a>
+                    }
                     tone={action.tone ?? "neutral"}
                     value={action.value}
                   />
