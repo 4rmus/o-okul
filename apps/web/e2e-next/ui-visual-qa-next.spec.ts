@@ -777,12 +777,14 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(page.getByRole("table", { name: "Bugünkü dersler" }).getByRole("columnheader", { name: "Saat" })).toBeVisible();
     await expectUiStable(page, "faz9-teacher-today-desktop", consoleErrors);
 
-    await page.goto("/ogretmen/ders-akisi");
+    // Gate T1: seçili öğrenci özeti Öğrenci takibinde, program Ders akışındadır.
+    await page.goto("/ogretmen/ogrenci-takibi");
     const teacherFocusMetrics = page
       .getByRole("region", { exact: true, name: "Seçili sınıf ve öğrenci özeti" })
       .getByRole("region", { name: "Seçili sınıf ve öğrenci bilgileri" });
     await expect(teacherFocusMetrics).toHaveClass(/uh-info-grid/);
     await expect(teacherFocusMetrics.locator(".uh-info-item")).toHaveCount(8);
+    await page.goto("/ogretmen/ders-akisi");
     await expect(page.getByRole("table", { name: "Ders programı" }).getByRole("columnheader", { name: "Başlangıç" })).toBeVisible();
 
     await page.goto("/ogretmen/raporlar");

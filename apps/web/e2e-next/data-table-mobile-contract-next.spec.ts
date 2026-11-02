@@ -438,11 +438,22 @@ test.describe("DataTable mobil sözleşmesi", () => {
     const dailyAttendanceRegion = page.getByRole("region", { name: "Günlük sınıf yoklaması" });
     await expect(dailyAttendanceRegion.getByLabel("Yoklama sınıfı")).toHaveValue("class-8a");
     await dailyAttendanceRegion.getByLabel("Yoklama tarihi").fill("2026-06-18");
-    const dailyAttendanceTable = dailyAttendanceRegion.getByRole("table", { name: "Günlük sınıf yoklama listesi" });
-    await expect(dailyAttendanceTable).toContainText("Ada Kaya");
+    // Gate T1: öğrenci başına tek dokunuşla durum (radio grubu); kaydet yapışkan özet satırındadır.
+    const dailyAttendanceList = dailyAttendanceRegion.getByRole("list", { name: "Günlük sınıf yoklama listesi" });
+    await expect(dailyAttendanceList).toContainText("Ada Kaya");
+    const adaAttendance = dailyAttendanceList.getByRole("radiogroup", { name: "Ada Kaya yoklama durumu" });
+    await expect(adaAttendance.getByRole("radio")).toHaveCount(4);
+    await expect(adaAttendance.getByRole("radio", { checked: true })).toHaveCount(0);
+    const dailyAttendanceBar = dailyAttendanceRegion.locator(".next-attendance-roster__bar");
+    await expect(dailyAttendanceBar).toHaveText(/0 Var · 0 Yok · 0 Geç · 1 seçilmedi/);
+    await expect(dailyAttendanceBar.getByRole("button", { name: "Yoklamayı kaydet" })).toBeDisabled();
+    await adaAttendance.getByRole("radio", { exact: true, name: "Geç" }).check();
+    await expect(dailyAttendanceBar).toHaveText(/0 Var · 0 Yok · 1 Geç · 0 seçilmedi/);
     await expect(dailyAttendanceRegion.getByRole("button", { name: "Tümünü Var" })).toBeVisible();
     await dailyAttendanceRegion.getByRole("button", { name: "Tümünü Var" }).click();
-    await expect(dailyAttendanceRegion.getByLabel("Ada Kaya yoklama durumu")).toHaveValue("PRESENT");
+    await expect(adaAttendance.getByRole("radio", { exact: true, name: "Var" })).toBeChecked();
+    await expect(dailyAttendanceBar).toHaveText(/1 Var · 0 Yok · 0 Geç · 0 seçilmedi/);
+    await expect(dailyAttendanceRegion.getByRole("button", { name: "Yoklamayı kaydet" })).toHaveCount(1);
     const dailySaveRequest = page.waitForRequest(
       (request) => request.method() === "PUT" && new URL(request.url()).pathname === "/api/v1/attendance/daily",
     );
