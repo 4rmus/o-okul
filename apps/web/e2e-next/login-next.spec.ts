@@ -50,7 +50,7 @@ async function clickSidebarLink(page: Page, name: string, url: RegExp) {
   } else if (route?.hiddenFromRail) {
     const palette = await openCommandPalette(page);
     await palette.getByLabel("Komut ara").fill(route.label);
-    await palette.getByRole("link", { name: new RegExp(`^${route.label}`) }).first().click();
+    await palette.getByRole("option", { name: new RegExp(`^${route.label}`) }).first().click();
   } else {
     const link = menu.getByRole("link", { name: route?.menuLabel ?? name, exact: true });
     await expect(link).toBeVisible();
@@ -4042,7 +4042,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   expect(loginCount).toBe(1);
   const commandDialog = await openCommandPalette(page);
   await commandDialog.getByLabel("Komut ara").fill("finans");
-  await commandDialog.getByRole("link", { name: /Ödeme planları/ }).click();
+  await commandDialog.getByRole("option", { name: /Ödeme planları/ }).click();
   await expect(page).toHaveURL(/\/kurum\/finans$/);
   await expect(heading(page, { name: "Finans" })).toBeVisible();
   await expect(page.getByLabel("Son kullanılanlar")).toHaveCount(0);
@@ -4051,12 +4051,12 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(heading(page, { name: "DNA EĞİTİM KURUMU" })).toBeVisible();
   const workflowDialog = await openCommandPalette(page);
   await workflowDialog.getByLabel("Komut ara").fill("dönem");
-  await workflowDialog.getByRole("link", { name: /Yeni dönem açılışı/ }).click();
+  await workflowDialog.getByRole("option", { name: /Yeni dönem açılışı/ }).click();
   await expect(page).toHaveURL(/\/kurum\/kurulum$/);
   await expect(heading(page, { name: "Kurulum Sihirbazı" })).toBeVisible();
   const examCloseDialog = await openCommandPalette(page);
   await examCloseDialog.getByLabel("Komut ara").fill("sınav sonrası");
-  await examCloseDialog.getByRole("link", { name: /Sınav sonrası kapanış/ }).click();
+  await examCloseDialog.getByRole("option", { name: /Sınav sonrası kapanış/ }).click();
   await expect(page).toHaveURL(/\/kurum\/raporlar$/);
   await expect(heading(page, { name: "Sınav Raporu" })).toBeVisible();
   const emptyReportContext = page.getByLabel("Sayfa bilgileri");
@@ -4064,26 +4064,26 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(emptyReportContext).toContainText("Rapor sürümüHenüz oluşturulmadı");
   const governanceDialog = await openCommandPalette(page);
   await governanceDialog.getByLabel("Komut ara").fill("kvkk");
-  await expect(governanceDialog.getByRole("link", { name: /KVKK/ })).toBeVisible();
+  await expect(governanceDialog.getByRole("option", { name: /KVKK/ })).toBeVisible();
   await governanceDialog.getByLabel("Komut ara").fill("denetim");
   // TENANT_ADMIN + STAFF persona tenant-audit:read taşır; Denetim rail'de gizli ama palette'te bulunur.
-  await expect(governanceDialog.getByRole("link", { name: /^Denetim / })).toHaveAttribute("href", "/kurum/denetim");
+  await expect(governanceDialog.getByRole("option", { name: /^Denetim / })).toHaveAttribute("href", "/kurum/denetim");
   await governanceDialog.getByRole("button", { name: "Kapat" }).click();
   const entityDialog = await openCommandPalette(page);
   await entityDialog.getByLabel("Komut ara").fill("Ayse");
-  const teacherResult = entityDialog.getByLabel("Varlık araması").getByRole("link", { name: /Ayse Ogretmen/ });
+  const teacherResult = entityDialog.getByLabel("Varlık araması").getByRole("option", { name: /Ayse Ogretmen/ });
   await expect(teacherResult).toBeVisible();
   await Promise.all([page.waitForURL(/\/kurum\/ogretmenler\/teacher-a$/), teacherResult.click()]);
   await expect(heading(page, { name: "Ayse Ogretmen" })).toBeVisible();
   const studentEntityDialog = await openCommandPalette(page);
   await studentEntityDialog.getByLabel("Komut ara").fill("Ada");
-  const studentResult = studentEntityDialog.getByLabel("Varlık araması").getByRole("link", { name: /Ada A/ });
+  const studentResult = studentEntityDialog.getByLabel("Varlık araması").getByRole("option", { name: /Ada A/ });
   await expect(studentResult).toBeVisible();
   await Promise.all([page.waitForURL(/\/kurum\/ogrenciler\/student-a$/), studentResult.click()]);
   await expect(heading(page, { name: "Ada A" })).toBeVisible();
   const guardianEntityDialog = await openCommandPalette(page);
   await guardianEntityDialog.getByLabel("Komut ara").fill("Zeynep");
-  const guardianResult = guardianEntityDialog.getByLabel("Varlık araması").getByRole("link", { name: /Zeynep Veli/ });
+  const guardianResult = guardianEntityDialog.getByLabel("Varlık araması").getByRole("option", { name: /Zeynep Veli/ });
   await expect(guardianResult).toBeVisible();
   await Promise.all([page.waitForURL(/\/kurum\/veliler\/guardian-a$/), guardianResult.click()]);
   await expect(heading(page, { name: "Zeynep Veli" })).toBeVisible();
@@ -5964,9 +5964,9 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
   const assistantCommandDialog = page.getByRole("dialog", { name: "Komut paleti" });
   await expect(assistantCommandDialog).toBeVisible();
   await assistantCommandDialog.getByLabel("Komut ara").fill("ödeme");
-  await expect(assistantCommandDialog.getByRole("link", { name: /Ödeme planları/ })).toHaveCount(0);
+  await expect(assistantCommandDialog.getByRole("option", { name: /Ödeme planları/ })).toHaveCount(0);
   await assistantCommandDialog.getByLabel("Komut ara").fill("kullanıcı");
-  await expect(assistantCommandDialog.getByRole("link", { name: /Kullanıcılar/ })).toHaveCount(0);
+  await expect(assistantCommandDialog.getByRole("option", { name: /Kullanıcılar/ })).toHaveCount(0);
   await assistantCommandDialog.getByRole("button", { name: "Kapat" }).click();
   await page.goto("/kurum/finans");
   await expect(page).toHaveURL(/\/kurum$/);

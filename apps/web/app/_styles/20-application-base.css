@@ -752,6 +752,7 @@
 
 .next-command-results a:hover,
 .next-command-results a:focus-visible,
+.next-command-results a[aria-selected="true"],
 .next-command-results button:hover,
 .next-command-results button:focus-visible {
   border-color: var(--color-primary);
@@ -7927,6 +7928,7 @@
 
 .next-command-results a:hover,
 .next-command-results a:focus-visible,
+.next-command-results a[aria-selected="true"],
 .next-command-results button:hover,
 .next-command-results button:focus-visible {
   border-color: color-mix(in oklab, var(--color-primary) 38%, transparent);

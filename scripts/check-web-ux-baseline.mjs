@@ -1108,7 +1108,7 @@ requireTokens("apps/web/e2e-next/setup-wizard-contract-next.spec.ts", [
   'getByLabel("Öğretmen aktarım dosyası")).toBeVisible()',
   'getByLabel("Öğrenci aktarım dosyası")).toBeVisible()',
   'getByLabel("Veli aktarım dosyası")).toHaveCount(0)',
-  'getByRole("link", { name: /Yeni dönem açılışı|Kurulum/ }).first()).toBeVisible()',
+  'getByRole("option", { name: /Yeni dönem açılışı|Kurulum/ }).first()).toBeVisible()',
   "expect(unexpectedMutations).toEqual([])",
   "expectNoHorizontalOverflow",
   "expectNoUnlabeledControls",
@@ -4291,6 +4291,29 @@ for (const icon of ["icon-192.png", "icon-512.png", "icon-maskable-512.png", "ap
   if (!existsSync(`apps/web/public/icons/${icon}`)) failures.push(`apps/web/public/icons/${icon} missing`);
 }
 requireNoTokens("apps/web/public/push-sw.js", ["caches.", "addEventListener(\"fetch\"", "addEventListener('fetch'"]);
+// S2: PWA theme colour follows the Berrak accent (oklch(51% 0.230 277) in sRGB).
+requireTokens("apps/web/app/manifest.ts", ['theme_color: "#4f46e5"']);
+requireNoTokens("apps/web/app/manifest.ts", ['theme_color: "#155eef"']);
+
+// S2: command palette is a combobox/listbox (arrow keys, Enter, active descendant, polite result count, no 10-row cap).
+requireTokens("apps/web/app/(app)/app-shell.tsx", [
+  'role="combobox"',
+  'role="listbox"',
+  'role="option"',
+  "aria-activedescendant={activeOptionId}",
+  'event.key === "ArrowDown"',
+  'event.key === "Enter"',
+  'aria-live="polite" className="uh-visually-hidden" role="status"',
+  "optionCount === 0 && !isSearching",
+]);
+requireNoTokens("apps/web/app/(app)/app-shell.tsx", ["filterCommandItems(items, query).slice(0, 10)"]);
+
+// S2: app print layer hides shell chrome and prints an open dialog without its height cap.
+requireTokens("apps/web/app/globals.css", [
+  "/* Uygulama baskı katmanı.",
+  ".next-workspace:has(.uh-dialog) :not(.uh-dialog, .uh-dialog *, :has(.uh-dialog))",
+  ".uh-dialog__panel {\n    width: auto;\n    max-width: none;\n    max-height: none;",
+]);
 
 // KV-4: optical Başarı % and school grades are two separate, scale-labelled series.
 requireTokens("apps/web/app/(app)/portals/_shared/progress-series-panel.tsx", [

@@ -62,7 +62,7 @@ export default function ActivationPage() {
       return;
     }
     if (password.length < 8 || password.length > 128 || !/\p{Lu}/u.test(password) || !/\p{Ll}/u.test(password)) {
-      setError("Şifre 8-128 karakter olmalı, büyük ve küçük harf içermelidir.");
+      setError(passwordRule);
       return;
     }
     if (password !== passwordAgain) {
@@ -179,6 +179,7 @@ export default function ActivationPage() {
             <PasswordField>
               <Field label="Şifre">
                 <PasswordInput
+                  aria-describedby={passwordRuleId}
                   name="password"
                   type="password"
                   value={password}
@@ -190,6 +191,7 @@ export default function ActivationPage() {
                 />
               </Field>
             </PasswordField>
+            <p className="next-field-hint" id={passwordRuleId}>{passwordRule}</p>
             <PasswordField>
               <Field label="Şifre tekrar">
                 <PasswordInput
@@ -222,6 +224,10 @@ export default function ActivationPage() {
     </section>
   );
 }
+
+// The rule is shown before the first submit so the person does not learn it from a refusal.
+const passwordRule = "Şifre 8-128 karakter olmalı, en az bir büyük ve bir küçük harf içermelidir.";
+const passwordRuleId = "activation-password-rule";
 
 const askAdminForNewInvitation = "İşlem tamamlanamadı. Kurum yöneticinizden yeni davet isteyin.";
 

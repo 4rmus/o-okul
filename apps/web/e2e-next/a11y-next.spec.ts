@@ -231,6 +231,47 @@ test.describe("Next erişilebilirlik smoke", () => {
     await expect(commandDialog).toHaveCount(0);
   });
 
+  test("komut paleti combobox/listbox olarak ok tuşları ve Enter ile gezilir, varlık sonucu varken 'Sonuç yok' göstermez", async ({ page }) => {
+    await openInstitutionDashboard(page);
+
+    await page.getByRole("button", { name: "Komut paleti" }).first().click();
+    const commandDialog = page.getByRole("dialog", { name: "Komut paleti" });
+    const combobox = commandDialog.getByRole("combobox", { name: "Komut ara" });
+    const listbox = commandDialog.getByRole("listbox", { name: "Komut sonuçları" });
+    await expect(combobox).toBeFocused();
+    await expect(combobox).toHaveAttribute("aria-controls", (await listbox.getAttribute("id")) ?? "");
+
+    const options = listbox.getByRole("option");
+    expect(await options.count()).toBeGreaterThan(10);
+    await expect(options.first()).toHaveAttribute("aria-selected", "true");
+    await expect(combobox).toHaveAttribute("aria-activedescendant", (await options.first().getAttribute("id")) ?? "");
+
+    await page.keyboard.press("ArrowDown");
+    await expect(options.nth(1)).toHaveAttribute("aria-selected", "true");
+    await expect(options.first()).toHaveAttribute("aria-selected", "false");
+    await expect(combobox).toHaveAttribute("aria-activedescendant", (await options.nth(1).getAttribute("id")) ?? "");
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("ArrowUp");
+    await expect(options.last()).toHaveAttribute("aria-selected", "true");
+
+    await combobox.fill("zeynep");
+    await expect(listbox.getByRole("option", { name: /Zeynep Kaya/ })).toBeVisible();
+    await expect(commandDialog.getByRole("status")).toHaveText("1 sonuç");
+    await expect(commandDialog.getByText("Sonuç yok", { exact: true })).toHaveCount(0);
+
+    await combobox.fill("qqqxyz");
+    await expect(commandDialog.getByText("Sonuç yok", { exact: true }).first()).toBeVisible();
+    await expect(listbox.getByRole("option")).toHaveCount(0);
+    await expectNoHighImpactA11yViolations(page, "kurum-command-palette-empty");
+
+    await combobox.fill("kampus ekle");
+    const kampusOption = listbox.getByRole("option", { name: /Kampüs ekle/ });
+    await expect(kampusOption).toHaveAttribute("aria-selected", "true");
+    await page.keyboard.press("Enter");
+    await expect(commandDialog).toHaveCount(0);
+    await expect(page).toHaveURL(/\/kurum\/kampusler\?new=1$/);
+  });
+
   test("mobil ana menü yüksek etkili axe ihlali olmadan açılıp kapanır", async ({ page }) => {
     await page.setViewportSize({ height: 844, width: 390 });
     await openInstitutionDashboard(page, { expectNavigationVisible: false });
@@ -308,6 +349,14 @@ async function installInstitutionApiMocks(page: Page) {
 
     if (path === "/auth/refresh") {
       await fulfillData(route, createAuthResponse());
+      return;
+    }
+
+    if (path === "/search") {
+      const query = (url.searchParams.get("q") ?? "").toLocaleLowerCase("tr-TR");
+      await fulfillData(route, query.includes("zeynep")
+        ? [{ href: "/kurum/ogrenciler/student-zeynep", id: "student-zeynep", subtitle: "9-A", title: "Zeynep Kaya", type: "students" }]
+        : []);
       return;
     }
 
