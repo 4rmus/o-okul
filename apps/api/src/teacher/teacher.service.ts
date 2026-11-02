@@ -165,6 +165,12 @@ export class TeacherService {
       branch: input.branch,
       ...identity,
       phone: input.phone !== undefined ? optionalTurkishMobilePhone(input.phone, "TEACHER_PHONE_INVALID") : undefined,
+    }).catch((error: unknown) => {
+      // DEC-20261102-08: the linked Employee row mirrors the national ID, so another Employee holding it is a conflict.
+      if (error instanceof Error && error.message === "TEACHER_NATIONAL_ID_CONFLICT") {
+        throw new ConflictException("TEACHER_NATIONAL_ID_CONFLICT");
+      }
+      throw error;
     });
     if (!record) {
       throw new NotFoundException("TEACHER_NOT_FOUND");
@@ -187,6 +193,8 @@ export class TeacherService {
       throw new Error("PROFILE_LIFECYCLE_STORE_UNAVAILABLE");
     }
     const deletedAt = new Date().toISOString();
+    // DEC-20261102-08: the linked Employee row is ended first, so a delete retried after a failure still reaches it.
+    const linkedEmployee = await this.teacherStore.endLinkedEmployee(existing.tenantId, existing.id, deletedAt);
     const lifecycle = await this.identityProvisioning.deactivateProfile({
       tenantId: existing.tenantId,
       subjectType: "TEACHER",
@@ -208,16 +216,18 @@ export class TeacherService {
         roleRemoved: lifecycle.roleRemoved,
         sessionsClosed: lifecycle.sessionsClosed,
         invitationsRevoked: lifecycle.invitationsRevoked,
+        ...(linkedEmployee === "NO_EMPLOYEE" ? {} : { isLinkedEmployeeEnded: linkedEmployee !== "STAFF_ACCESS_KEPT" }),
       },
     });
   }
 
   async purgeTeacherPii(context: RequestContext, id: string): Promise<TeacherRecord> {
     const existing = await this.findTeacher(context, id);
-    const record = await this.teacherStore.purgePii(id);
-    if (!record) {
+    const purged = await this.teacherStore.purgePii(id);
+    if (!purged) {
       throw new NotFoundException("TEACHER_NOT_FOUND");
     }
+    const record = purged.teacher;
     // DEC-20261016-01: the bound login account is purged with the record unless it carries another identity.
     const linkedAccount = await this.accountPii?.purgeLinkedAccount(context, existing.userId, "TEACHER") ?? "NONE";
     await this.auditLogs?.record({
@@ -235,6 +245,8 @@ export class TeacherService {
           phonePresent: Boolean(existing.phone),
         },
         linkedAccount,
+        // DEC-20261102-08: the linked Employee row's personal fields are purged in the same transaction.
+        ...(purged.employeeId ? { linkedEmployeeId: purged.employeeId } : {}),
       },
     });
     return record;

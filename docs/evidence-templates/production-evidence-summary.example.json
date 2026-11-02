@@ -511,7 +511,13 @@
           "lastName",
           "nationalIdEncrypted",
           "nationalIdHash",
-          "phone"
+          "phone",
+          "employee.firstName",
+          "employee.lastName",
+          "employee.nationalIdEncrypted",
+          "employee.nationalIdHash",
+          "employee.phone",
+          "employee.workEmail"
         ],
         "guardian": [
           "firstName",

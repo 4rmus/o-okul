@@ -32,10 +32,29 @@ export interface TeacherStore {
   /** The live teacher linked to an Employee row (Teacher.employeeId), if any. */
   findByEmployeeId(tenantId: string, employeeId: string): Promise<TeacherRecord | undefined>;
   softDelete(id: string, deletedAt: string): Promise<TeacherRecord | undefined>;
-  purgePii(id: string): Promise<TeacherRecord | undefined>;
+  /**
+   * DEC-20261102-08: a deleted teacher's linked Employee row is ended (status ENDED, never deleted). An Employee whose
+   * account still holds a staff membership keeps its status: deleting the teacher profile cuts only the teacher persona
+   * (KV-3c rule B). Works on an already deleted teacher, so a retried delete stays idempotent.
+   */
+  endLinkedEmployee(tenantId: string, id: string, endedAt: string): Promise<TeacherEmployeeEndResult>;
+  /** Anonymises the teacher and, in the same transaction, the personal fields of its linked Employee row. */
+  purgePii(id: string): Promise<TeacherPiiPurgeResult | undefined>;
 }
 
 export type TeacherEmployeeLinkResult = "LINKED" | "ALREADY_LINKED" | "NO_EMPLOYEE" | "CONFLICT";
+export type TeacherEmployeeEndResult = "ENDED" | "ALREADY_ENDED" | "STAFF_ACCESS_KEPT" | "NO_EMPLOYEE";
+
+export interface TeacherPiiPurgeResult {
+  teacher: TeacherRecord;
+  /** The linked Employee row purged with the teacher, when the teacher has one. */
+  employeeId?: string;
+}
+
+/** Same id scheme as scripts/backfill-account-management.mjs, so a backfill rerun finds the row instead of adding one. */
+const teacherEmployeeIdSql = `'employee-' || md5($1::text || ':' || $2::text)`;
+const teacherAnonymousFirstName = "Anonim";
+const teacherAnonymousLastName = "Ogretmen";
 
 export const teacherStoreToken = Symbol("TeacherStore");
 
@@ -128,16 +147,21 @@ export class InMemoryTeacherStore implements TeacherStore {
     return record;
   }
 
-  async purgePii(id: string): Promise<TeacherRecord | undefined> {
+  // ponytail: like linkEmployeeUser, the Teacher -> Employee sync is owned by the PostgreSQL store.
+  async endLinkedEmployee(): Promise<TeacherEmployeeEndResult> {
+    return "NO_EMPLOYEE";
+  }
+
+  async purgePii(id: string): Promise<TeacherPiiPurgeResult | undefined> {
     const record = await this.findById(id);
     if (!record) return undefined;
 
-    record.firstName = "Anonim";
-    record.lastName = "Ogretmen";
+    record.firstName = teacherAnonymousFirstName;
+    record.lastName = teacherAnonymousLastName;
     record.nationalIdEncrypted = undefined;
     record.nationalIdHash = undefined;
     record.phone = undefined;
-    return record;
+    return { teacher: record };
   }
 }
 
@@ -207,6 +231,8 @@ export class PostgresTeacherStore implements TeacherStore {
       if (!record) {
         throw new Error("TEACHER_CREATE_FAILED");
       }
+      // DEC-20261102-08: the linked Employee row is found or created in the same transaction as the teacher.
+      await linkOrCreateTeacherEmployee(client, record, input.userId);
       return toTeacherRecord(record);
     });
   }
@@ -219,6 +245,9 @@ export class PostgresTeacherStore implements TeacherStore {
     if (!existing) return undefined;
 
     return withTenantQuery(this.pool, async (client) => {
+      if (input.nationalIdHash) {
+        await assertEmployeeNationalIdFree(client, existing.tenantId, id, input.nationalIdHash);
+      }
       const result = await client.query<TeacherRow>(
         `UPDATE "Teacher"
          SET "firstName" = COALESCE($2, "firstName"),
@@ -243,7 +272,10 @@ export class PostgresTeacherStore implements TeacherStore {
           input.phone ?? null,
         ],
       );
-      return result.rows[0] ? toTeacherRecord(result.rows[0]) : undefined;
+      const record = result.rows[0];
+      if (!record) return undefined;
+      await mirrorTeacherToEmployee(client, record, input);
+      return toTeacherRecord(record);
     });
   }
 
@@ -336,24 +368,77 @@ export class PostgresTeacherStore implements TeacherStore {
     });
   }
 
-  async purgePii(id: string): Promise<TeacherRecord | undefined> {
+  async endLinkedEmployee(tenantId: string, id: string, endedAt: string): Promise<TeacherEmployeeEndResult> {
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const result = await client.query<{ id: string; status: string; keepsStaffAccess: boolean }>(
+        `SELECT e."id", e."status",
+                EXISTS (
+                  SELECT 1 FROM "TenantMembership" m
+                  WHERE m."tenantId" = e."tenantId" AND m."userId" = e."userId"
+                    AND m."staffRole" IS NOT NULL AND m."status" <> 'ENDED'
+                ) AS "keepsStaffAccess"
+         FROM "Teacher" t
+         JOIN "Employee" e ON e."tenantId" = t."tenantId" AND e."id" = t."employeeId" AND e."deletedAt" IS NULL
+         WHERE t."tenantId" = $1 AND t."id" = $2
+         FOR UPDATE OF e`,
+        [tenantId, id],
+      );
+      const employee = result.rows[0];
+      if (!employee) return "NO_EMPLOYEE";
+      if (employee.status === "ENDED") return "ALREADY_ENDED";
+      if (employee.keepsStaffAccess) return "STAFF_ACCESS_KEPT";
+      // Employee_dates_check needs employmentStartsAt < employmentEndsAt: a start on or after the deletion day ends on
+      // the following day.
+      await client.query(
+        `UPDATE "Employee"
+         SET "status" = 'ENDED',
+             "employmentEndsAt" = GREATEST($3::date, COALESCE("employmentStartsAt" + 1, $3::date)),
+             "endedReason" = 'TEACHER_DELETED',
+             "updatedAt" = now()
+         WHERE "tenantId" = $1 AND "id" = $2`,
+        [tenantId, employee.id, endedAt.slice(0, 10)],
+      );
+      return "ENDED";
+    });
+  }
+
+  async purgePii(id: string): Promise<TeacherPiiPurgeResult | undefined> {
     const existing = await this.findById(id);
     if (!existing) return undefined;
 
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<TeacherRow>(
         `UPDATE "Teacher"
-         SET "firstName" = 'Anonim',
-             "lastName" = 'Ogretmen',
+         SET "firstName" = $2,
+             "lastName" = $3,
              "nationalIdEncrypted" = NULL,
              "nationalIdHash" = NULL,
              "phone" = NULL,
              "updatedAt" = now()
          WHERE "id" = $1
          RETURNING *`,
-        [id],
+        [id, teacherAnonymousFirstName, teacherAnonymousLastName],
       );
-      return result.rows[0] ? toTeacherRecord(result.rows[0]) : undefined;
+      const record = result.rows[0];
+      if (!record) return undefined;
+      // DEC-20261102-08: the linked Employee row is the same person. It is anonymised with the same values and its
+      // work e-mail is cleared; an ended or deleted Employee row is purged as well.
+      const employee = record.employeeId
+        ? await client.query<{ id: string }>(
+          `UPDATE "Employee"
+           SET "firstName" = $3,
+               "lastName" = $4,
+               "nationalIdEncrypted" = NULL,
+               "nationalIdHash" = NULL,
+               "phone" = NULL,
+               "workEmail" = NULL,
+               "updatedAt" = now()
+           WHERE "tenantId" = $1 AND "id" = $2
+           RETURNING "id"`,
+          [record.tenantId, record.employeeId, teacherAnonymousFirstName, teacherAnonymousLastName],
+        )
+        : undefined;
+      return { teacher: toTeacherRecord(record), employeeId: employee?.rows[0]?.id };
     });
   }
 }
@@ -372,6 +457,7 @@ interface TeacherRow {
   nationalIdHash: string | null;
   phone: string | null;
   userId: string | null;
+  employeeId?: string | null;
   deletedAt: Date | null;
 }
 
@@ -396,4 +482,99 @@ async function selectTeacherById(client: Queryable, id: string): Promise<Teacher
     [id],
   );
   return result.rows[0] ? toTeacherRecord(result.rows[0]) : undefined;
+}
+
+/**
+ * DEC-20261102-08: an existing Employee row is reused when it matches the teacher's account (userId) first, then its
+ * national ID hash; otherwise one is inserted with the backfill's id scheme. An Employee already linked to another
+ * teacher is never taken over, and a unique conflict leaves the teacher unlinked instead of failing the create (the
+ * deploy backfill reports unlinked teachers as TEACHER_EMPLOYEE_BACKFILL_INCOMPLETE).
+ */
+async function linkOrCreateTeacherEmployee(client: Queryable, teacher: TeacherRow, userId: string | undefined): Promise<void> {
+  const candidate = await client.query<{ id: string; linked: boolean }>(
+    `SELECT e."id",
+            EXISTS (SELECT 1 FROM "Teacher" other WHERE other."tenantId" = e."tenantId" AND other."employeeId" = e."id") AS "linked"
+     FROM "Employee" e
+     WHERE e."tenantId" = $1 AND e."deletedAt" IS NULL
+       AND (($2::text IS NOT NULL AND e."userId" = $2) OR ($3::text IS NOT NULL AND e."nationalIdHash" = $3))
+     ORDER BY CASE WHEN $2::text IS NOT NULL AND e."userId" = $2 THEN 0 ELSE 1 END, e."id"
+     LIMIT 1
+     FOR UPDATE OF e`,
+    [teacher.tenantId, userId ?? null, teacher.nationalIdHash ?? null],
+  );
+  let employeeId: string | undefined;
+  const match = candidate.rows[0];
+  if (match) {
+    employeeId = match.linked ? undefined : match.id;
+  } else {
+    const inserted = await client.query<{ id: string }>(
+      `INSERT INTO "Employee" (
+         "id", "tenantId", "firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "status", "updatedAt"
+       )
+       VALUES (${teacherEmployeeIdSql}, $1, $3, $4, $5, $6, $7, 'ACTIVE', now())
+       ON CONFLICT DO NOTHING
+       RETURNING "id"`,
+      [
+        teacher.tenantId, teacher.id, teacher.firstName, teacher.lastName,
+        teacher.nationalIdEncrypted ?? null, teacher.nationalIdHash ?? null, teacher.phone ?? null,
+      ],
+    );
+    employeeId = inserted.rows[0]?.id;
+  }
+  if (!employeeId) return;
+  await client.query(
+    `UPDATE "Teacher" SET "employeeId" = $3, "updatedAt" = now() WHERE "tenantId" = $1 AND "id" = $2`,
+    [teacher.tenantId, teacher.id, employeeId],
+  );
+  teacher.employeeId = employeeId;
+}
+
+/**
+ * The national ID is mirrored onto the linked Employee, and Employee's (tenantId, nationalIdHash) unique index covers
+ * every row, so another Employee holding it is a conflict. A teacher without a linked Employee mirrors nothing.
+ */
+async function assertEmployeeNationalIdFree(client: Queryable, tenantId: string, teacherId: string, nationalIdHash: string): Promise<void> {
+  const result = await client.query<{ id: string }>(
+    `SELECT e."id"
+     FROM "Teacher" t
+     JOIN "Employee" e ON e."tenantId" = t."tenantId" AND e."nationalIdHash" = $3 AND e."id" <> t."employeeId"
+     WHERE t."tenantId" = $1 AND t."id" = $2 AND t."employeeId" IS NOT NULL
+     LIMIT 1`,
+    [tenantId, teacherId, nationalIdHash],
+  );
+  if (result.rows[0]) throw new Error("TEACHER_NATIONAL_ID_CONFLICT");
+}
+
+/** DEC-20261102-08: the linked Employee follows the teacher's name, phone and national ID (only the fields sent). */
+async function mirrorTeacherToEmployee(
+  client: Queryable,
+  teacher: TeacherRow,
+  input: Partial<Pick<TeacherRecord, "firstName" | "lastName" | "nationalIdHash" | "phone">>,
+): Promise<void> {
+  const nameChanged = input.firstName !== undefined || input.lastName !== undefined;
+  const phoneChanged = input.phone !== undefined;
+  const nationalIdChanged = Boolean(input.nationalIdHash);
+  if (!teacher.employeeId || (!nameChanged && !phoneChanged && !nationalIdChanged)) return;
+  await client.query(
+    `UPDATE "Employee"
+     SET "firstName" = CASE WHEN $3 THEN $4 ELSE "firstName" END,
+         "lastName" = CASE WHEN $3 THEN $5 ELSE "lastName" END,
+         "phone" = CASE WHEN $6 THEN $7 ELSE "phone" END,
+         "nationalIdEncrypted" = CASE WHEN $8 THEN $9 ELSE "nationalIdEncrypted" END,
+         "nationalIdHash" = CASE WHEN $8 THEN $10 ELSE "nationalIdHash" END,
+         "updatedAt" = now()
+     WHERE "tenantId" = $1 AND "id" = $2 AND "deletedAt" IS NULL`,
+    [
+      teacher.tenantId,
+      teacher.employeeId,
+      nameChanged,
+      teacher.firstName,
+      teacher.lastName,
+      phoneChanged,
+      teacher.phone,
+      nationalIdChanged,
+      teacher.nationalIdEncrypted,
+      teacher.nationalIdHash,
+    ],
+  );
 }
