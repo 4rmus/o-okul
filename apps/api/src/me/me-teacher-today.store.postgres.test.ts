@@ -88,10 +88,15 @@ run("teacher Bugün inbox counts with restricted app role and RLS", () => {
           ["h-open", "s-moved", true, false], ["h-open", "s6", false, false], ["h-open", "s7", true, true],
           ["h-closed", "s1", true, false], ["h-deleted", "s1", true, false],
         ];
+        // HomeworkSubmission_checked_check pairs checkedAt with checkedById, which references a User of the same tenant.
+        await db.query(
+          'INSERT INTO "User" (id,"tenantId",name,"passwordHash","updatedAt") VALUES ($1,$2,\'Öğretmen\',\'fixture\',now())',
+          [t("checker"), tenant],
+        );
         for (const [homework, student, submitted, checked] of submissions) {
           await db.query(
-            'INSERT INTO "HomeworkSubmission" (id,"tenantId","homeworkId","studentId","submittedAt","checkedAt") VALUES ($1,$2,$3,$4,$5,$6)',
-            [t(`submission-${homework}-${student}`), tenant, t(homework), t(student), submitted ? new Date() : null, checked ? new Date() : null],
+            'INSERT INTO "HomeworkSubmission" (id,"tenantId","homeworkId","studentId","submittedAt","checkedAt","checkedById") VALUES ($1,$2,$3,$4,$5,$6,$7)',
+            [t(`submission-${homework}-${student}`), tenant, t(homework), t(student), submitted ? new Date() : null, checked ? new Date() : null, checked ? t("checker") : null],
           );
         }
         // a-draft: unpublished entries; a-published: v1 published only; a-corrected: v1 published plus a v2 draft
