@@ -38,6 +38,7 @@ import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
 import { loadPendingTeacherInvitations, teacherAccountLabels, teacherAccountState, teacherAccountTones } from "./teacher-account.js";
+import { formatDate } from "../../_shared/format.js";
 
 interface TeacherAssignmentReferences {
   classes: ClassRecord[];
@@ -791,10 +792,6 @@ function formatAssignmentDateRange(assignment: TeacherAssignmentRecord) {
     assignment.endsAt ? formatDate(assignment.endsAt) : undefined,
   ].filter(Boolean);
   return dates.length > 0 ? dates.join(" - ") : "Tarih sınırı yok";
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("tr-TR", { dateStyle: "short" }).format(new Date(value));
 }
 
 function formatCount(value: number) {

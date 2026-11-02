@@ -29,7 +29,7 @@ import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, withQueryParams } from "../../../../src/api-client.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
 import { AttendanceRoster } from "../../_shared/attendance-status-picker.js";
-import { formatDateKey } from "../../_shared/istanbul-date.js";
+import { formatDateKey, istanbulDateKey } from "../../_shared/format.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
@@ -39,7 +39,7 @@ export function AttendancePage() {
   const queryClient = useQueryClient();
   const [listQuery, setListQuery] = useUrlListState(searchParams, { sortOptions: attendanceSortOptions });
   const [classId, setClassId] = useState(() => searchParams.get("classId") ?? "");
-  const [attendanceDate, setAttendanceDate] = useState(todayInputValue);
+  const [attendanceDate, setAttendanceDate] = useState(() => istanbulDateKey());
   const queryKey = ["next-attendance", auth?.session.tenantId ?? "anonymous", listQuery, classId];
   const listQueryKey = ["next-attendance", auth?.session.tenantId ?? "anonymous"];
   const attendanceQuery = useQuery({
@@ -370,12 +370,6 @@ function formatAttendanceSort(sort: string) {
 
 function formatCount(value: number) {
   return new Intl.NumberFormat("tr-TR").format(value);
-}
-
-function todayInputValue() {
-  const today = new Date();
-  const offset = today.getTimezoneOffset() * 60_000;
-  return new Date(today.getTime() - offset).toISOString().slice(0, 10);
 }
 
 function writeBrowserQueryParam(name: string, value: string) {

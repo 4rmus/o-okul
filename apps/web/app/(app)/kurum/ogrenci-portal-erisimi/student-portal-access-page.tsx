@@ -25,6 +25,7 @@ import { ChevronLeft, ChevronRight, Copy, KeyRound, MailX, Search, ShieldCheck, 
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiCursorListRequest, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+import { formatDateTime } from "../../_shared/format.js";
 
 interface PortalQuery {
   cursor?: string;
@@ -315,7 +316,7 @@ export function StudentPortalAccessPage() {
             <Field label="Aktivasyon bağlantısı">
               <Input readOnly value={issuedInvitation.activationUrl} />
             </Field>
-            <p className="next-status-note">Son geçerlilik: {new Date(issuedInvitation.expiresAt).toLocaleString("tr-TR")}</p>
+            <p className="next-status-note">Son geçerlilik: {formatDateTime(issuedInvitation.expiresAt)}</p>
             <Button
               onClick={() => void navigator.clipboard.writeText(issuedInvitation.activationUrl)
                 .catch(() => setActionError("Bağlantı panoya kopyalanamadı."))}

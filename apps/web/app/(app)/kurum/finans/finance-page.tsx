@@ -27,6 +27,7 @@ import { formatCourseName } from "../../_shared/academic-labels.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 import { PaymentPlanFormModal } from "./payment-plan-form.js";
+import { formatDateTime } from "../../_shared/format.js";
 
 interface FinanceFilters {
   campusId: string;
@@ -1079,6 +1080,3 @@ function transactionMethodLabel(method: PaymentTransactionMethod) {
   return labels[method];
 }
 
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("tr-TR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
-}

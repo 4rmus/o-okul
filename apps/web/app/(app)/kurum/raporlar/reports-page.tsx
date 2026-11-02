@@ -54,6 +54,7 @@ import { formatNetNumber, OutcomeNetTable, sortOutcomesWeakestFirst } from "../.
 import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
 import { buildReportAnalysisRows, type ReportAnalysisRow } from "../../_shared/report-analysis.js";
 import { formatPercentDelta, formatPercentNumber, isComparableStudentProgress, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
+import { formatDateTime } from "../../_shared/format.js";
 
 interface ReportData {
   errorBooklet: ReportErrorBooklet | null;
@@ -183,7 +184,7 @@ export function ReportsPage({ routeExamId, routeTab }: { routeExamId?: string; r
     [campusNameById, classNameById, courseNameById, gradeLevelNameById, latestSnapshot, termNameById],
   );
   const isSnapshotReady = latestSnapshot?.status === "READY";
-  const snapshotGeneratedAt = formatSnapshotGeneratedAt(latestSnapshot);
+  const snapshotGeneratedAt = formatDateTime(latestSnapshot?.snapshotData?.generatedAt);
   const snapshotInputRefs = useMemo(() => latestSnapshot ? formatSnapshotInputRefs(latestSnapshot.inputRefs) : "Henüz girdi yok", [latestSnapshot]);
   const snapshotExportReadiness = latestSnapshot
     ? isSnapshotReady
@@ -1015,17 +1016,6 @@ function snapshotStatusTone(status: string | undefined) {
   if (status === "STALE" || status === "PENDING") return "warning";
   if (status === "FAILED") return "danger";
   return "neutral";
-}
-
-function formatSnapshotGeneratedAt(snapshot: ReportSnapshotRecord | null) {
-  const generatedAt = snapshot?.snapshotData?.generatedAt;
-  if (!generatedAt) return "-";
-  const parsedDate = new Date(generatedAt);
-  if (Number.isNaN(parsedDate.getTime())) return generatedAt;
-  return new Intl.DateTimeFormat("tr-TR", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(parsedDate);
 }
 
 function formatTrend(progress: ReportStudentProgress | null | undefined) {

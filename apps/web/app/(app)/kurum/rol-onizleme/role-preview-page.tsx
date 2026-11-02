@@ -21,6 +21,7 @@ import { OperationDecisionNotice, ReferenceBadge } from "../_shared/evidence-pan
 import { PageFrame } from "../_shared/page-frame.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 import { storeRolePreviewToken } from "../../portals/_shared/portal-shell.js";
+import { formatDateTime } from "../../_shared/format.js";
 
 type PreviewRole = TenantAssignableRoleName;
 
@@ -341,7 +342,7 @@ export function RolePreviewPage() {
             <p>Seçili rol: {tenantRoleLabel(session.targetRole)}</p>
             <p>Kişi kaydı: {subjectPrivacyLabel(session.targetRole)}</p>
             <p>Erişim: Yalnızca görüntüleme</p>
-            <p>Bitiş: {new Date(session.expiresAt).toLocaleString("tr-TR")}</p>
+            <p>Bitiş: {formatDateTime(session.expiresAt)}</p>
             {profile ? (
               <>
                 <p>Kişi erişimi doğrulandı</p>

@@ -14,6 +14,7 @@ import { PageHeader, StatusBadge, Stepper, type StepperStep } from "@o-okul/ui";
 import { ArrowRight } from "lucide-react";
 import { ApiRequestError, apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
 import { useAuth } from "../../../providers.js";
+import { formatDateTime as formatAppDateTime } from "../../_shared/format.js";
 import { examManagementHref, examWorkspaceHref, opticalWorkspaceHref, reportWorkspaceHref } from "./exam-workspace-routes.js";
 
 // Değerlendirme kuyrukta sürerken çalışma alanı 5 sn'de bir yenilenir; sonraki iş değişince yenileme durur.
@@ -216,9 +217,5 @@ export function examStatusLabel(status: string) {
 }
 
 export function formatDateTime(value: string | undefined) {
-  if (!value) return "Tarih belirtilmedi";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime())
-    ? value
-    : new Intl.DateTimeFormat("tr-TR", { dateStyle: "medium", timeStyle: "short" }).format(parsed);
+  return formatAppDateTime(value, { fallback: "Tarih belirtilmedi", style: "medium" });
 }

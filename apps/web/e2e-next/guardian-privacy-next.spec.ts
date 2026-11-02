@@ -52,12 +52,13 @@ test.describe("Veli gizlilik ve izin UX'i", () => {
     await expect(summary).toContainText("Finans görünürlüğü");
     await expect(summary).toContainText("0/1 açık");
     await expect(page.locator("body")).not.toContainText("5554443322");
+    await expect(page.locator("body")).not.toContainText("555 444 33 22");
     const profile = page.getByLabel("Veli profili");
     await expect(profile).toContainText("••• ••• ••22");
     await profile.getByRole("button", { name: "Telefonu aç" }).click();
-    await expect(profile).toContainText("5554443322");
+    await expect(profile).toContainText("+90 555 444 33 22");
     await profile.getByRole("button", { name: "Telefonu kapat" }).click();
-    await expect(profile).not.toContainText("5554443322");
+    await expect(profile).not.toContainText("555 444 33 22");
     const relationshipRegion = page.getByRole("table", { name: "Veli öğrenci bağlantıları" });
     await expect(relationshipRegion).toContainText("ham iletişim bilgisi");
     await expect(relationshipRegion).toContainText("Finans kapalı");
@@ -149,6 +150,7 @@ test.describe("Veli gizlilik ve izin UX'i", () => {
     await expect(profile).toContainText("••• ••• ••22");
     await expect(profile.getByRole("button", { name: "Telefonu aç" })).toHaveCount(0);
     await expect(page.locator("body")).not.toContainText("5554443322");
+    await expect(page.locator("body")).not.toContainText("555 444 33 22");
     await expect(page.getByRole("link", { name: "Portal daveti gönder" })).toHaveCount(0);
     await expect.poll(() => forbiddenBulkCalls).toEqual([]);
   });
