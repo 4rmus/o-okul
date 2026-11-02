@@ -36,7 +36,7 @@ test.describe("Portal panel yalıtımı", () => {
     await announcements.getByRole("button", { name: "Tekrar dene" }).click();
     await expect(announcements.getByRole("alert")).toHaveCount(0);
     await expect(announcements).toContainText("Veli toplantısı");
-    await expect.poll(() => countRequests(mock)["/me/student/announcements"]).toBe(before["/me/student/announcements"] + 1);
+    await expect.poll(() => countRequests(mock)["/me/student/announcements"]).toBe((before["/me/student/announcements"] ?? 0) + 1);
     const after = countRequests(mock);
     for (const path of ["/me/student/homework", "/me/student/homework/material-assignments", "/me/student/overview", "/me/student/reports", "/me/student/profile"]) {
       expect(after[path], `${path} yeniden istenmemeli`).toBe(before[path]);
@@ -60,7 +60,7 @@ test.describe("Portal panel yalıtımı", () => {
     await homework.getByRole("button", { name: "Tekrar dene" }).click();
     await expect(homework.getByRole("alert")).toHaveCount(0);
     await expect(homework).toContainText("Problemler föyü");
-    await expect.poll(() => countRequests(mock)[homeworkPath]).toBe(before[homeworkPath] + 1);
+    await expect.poll(() => countRequests(mock)[homeworkPath]).toBe((before[homeworkPath] ?? 0) + 1);
     const after = countRequests(mock);
     for (const path of [
       "/me/guardian/students",
@@ -91,7 +91,7 @@ test.describe("Portal panel yalıtımı", () => {
     await today.getByRole("button", { name: "Tekrar dene" }).click();
     await expect(page.getByText("Bu bölüm yüklenemedi")).toHaveCount(0);
     await expect(page.getByRole("table", { name: "Ders programı" })).toContainText("Matematik dersi");
-    await expect.poll(() => countRequests(mock)["/me/teacher/schedule"]).toBe(before["/me/teacher/schedule"] + 1);
+    await expect.poll(() => countRequests(mock)["/me/teacher/schedule"]).toBe((before["/me/teacher/schedule"] ?? 0) + 1);
     const after = countRequests(mock);
     for (const path of ["/me/teacher", "/me/teacher/students", "/me/teacher/lookups"]) {
       expect(after[path], `${path} yeniden istenmemeli`).toBe(before[path]);
