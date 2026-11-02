@@ -2456,14 +2456,35 @@ export interface ReportSnapshotRecord {
 }
 
 // Öğretmen günlük özeti read model'i (ADR-0007, Berrak §5). Yalnız öğretmenin kendi kapsamı; PII yok.
+/**
+ * T3: the teacher "Bugün" inbox. Fields after `latestReport` are additive and optional: each is omitted when its
+ * source could not be read, so a client shows "unknown" instead of a false zero.
+ */
 export interface TeacherTodaySummary {
   generatedAt: string;
   date: string;
   teacherName: string;
-  todayLessons: Array<{ id: string; classId: string; courseId?: string; title: string; startsAt: string; endsAt: string }>;
+  todayLessons: Array<{
+    id: string;
+    classId: string;
+    /** Class name from the tenant's class list; omitted when the class could not be resolved. */
+    className?: string;
+    courseId?: string;
+    title: string;
+    startsAt: string;
+    endsAt: string;
+    /** Daily attendance exists for the lesson's class on `date` (Europe/Istanbul). Omitted when unknown. */
+    attendanceTaken?: boolean;
+  }>;
   pendingHomework: Array<{ id: string; classId: string; title: string; dueAt?: string }>;
   pendingHomeworkCount: number;
   latestReport: { examId: string; title: string; startsAt?: string; latestGeneratedAt: string } | null;
+  /** Submitted and not yet checked homework submissions of current class members, in the teacher's homework scope. */
+  pendingSubmissionCount?: number;
+  /** Assessments in the teacher's gradebook scope that hold at least one saved, unpublished entry. */
+  unpublishedGradeDraftCount?: number;
+  /** Announcements visible to the teacher that the teacher has not marked read. */
+  unreadAnnouncementCount?: number;
 }
 
 export interface PortalReportIndexItem {

@@ -1293,7 +1293,13 @@ requireTokens("apps/web/e2e-next/teacher-portal-contract-next.spec.ts", [
   'focusMetrics).toHaveClass(/uh-info-grid/)',
   'focusMetrics.locator(".uh-info-item")).toHaveCount(8)',
   "Bugün yapılacaklar",
-  "3 iş",
+  // T3: öğretmen Bugün gelen kutusu; yeni sayaçlar ve sınıf/yoklama sütunları.
+  "6 iş",
+  'getByRole("link", { name: /Teslim kontrolü: 2 teslim/ })',
+  'getByRole("link", { name: /Not taslakları: 1 değerlendirme/ })',
+  'getByRole("link", { name: /Okunmamış duyurular: 1 duyuru/ })',
+  "12:30–13:30 · 8-A · Yoklama bekliyor",
+  'td[data-column-key="attendance"] .uh-status-badge',
   // Berrak G7: öğretmen aksiyon şeridi günlük özete (teacher-today-page.tsx) taşındı.
   'getByRole("link", { name: /Yoklama al: 1 ders/ })',
   'getByRole("link", { name: /Ödev kontrolü: 1 ödev/ })',
@@ -1333,7 +1339,7 @@ requireTokens("apps/web/e2e-next/teacher-portal-contract-next.spec.ts", [
   ".uh-metric-card__label",
   "toHaveText(labels)",
   'getByRole("group", { exact: true, name: "Bugün özeti" })',
-  '["Bugünkü ders", "Sıradaki ders", "Ödev kontrolü"]',
+  '["Bugünkü ders", "Yoklama", "Bekleyen iş"]',
   "next-portal-focus-target",
   'getByRole("region", { name: "Öğretmen günlük işlemleri" })',
   'getByRole("region", { exact: true, name: "Öğretmen öğrenci kapsamı" })',
@@ -4605,6 +4611,16 @@ requireTokens("apps/web/app/(app)/portals/teacher-today-page.tsx", [
   "/me/teacher/today",
   "x-role-preview-token",
   'title="Bugün"',
+  // T3: şimdi/sıradaki kartı, bekleyen işler kutusu ve ders akışındaki yoklama rozeti.
+  'title="Bekleyen işler"',
+  'label: "Teslim kontrolü"',
+  'label: "Not taslakları"',
+  'label: "Okunmamış duyurular"',
+  'href: href("/ogretmen/not-defteri")',
+  'href: href("/ogretmen/duyurular")',
+  'header: "Yoklama"',
+  'header: "Sınıf"',
+  'mobilePriority: "hidden"',
 ]);
 
 requireTokens("apps/web/app/(app)/portals/teacher-portal-page.tsx", [

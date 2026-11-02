@@ -211,10 +211,12 @@ const teacherTodaySummarySchema = objectSchema({
   todayLessons: arraySchema(objectSchema({
     id: stringSchema(),
     classId: stringSchema(),
+    className: stringSchema(),
     courseId: stringSchema(),
     title: stringSchema(),
     startsAt: stringSchema({ format: "date-time" }),
     endsAt: stringSchema({ format: "date-time" }),
+    attendanceTaken: { type: "boolean" },
   }, ["id", "classId", "title", "startsAt", "endsAt"])),
   pendingHomework: arraySchema(objectSchema({
     id: stringSchema(),
@@ -234,6 +236,10 @@ const teacherTodaySummarySchema = objectSchema({
       { type: "null" },
     ],
   },
+  // T3 gelen kutusu: kaynağı okunamayan sayaç yanıttan düşer (sıfır yerine "bilinmiyor").
+  pendingSubmissionCount: integerSchema({ minimum: 0 }),
+  unpublishedGradeDraftCount: integerSchema({ minimum: 0 }),
+  unreadAnnouncementCount: integerSchema({ minimum: 0 }),
 }, ["generatedAt", "date", "teacherName", "todayLessons", "pendingHomework", "pendingHomeworkCount", "latestReport"]);
 
 const institutionDashboardSummarySchema = objectSchema({
