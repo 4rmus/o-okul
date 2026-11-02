@@ -23,19 +23,21 @@ import type {
   StudentAuditSummaryRecord,
   StudentContactGuardianLinkResult,
   StudentContactRecord,
+  StudentOverviewLatestExamRecord,
   StudentOverviewRecord,
   StudentProfileRecord,
   TeacherAssignmentRecord,
   TeacherNoteRecord,
   TeacherRecord,
 } from "@o-okul/shared-types";
-import { ArrowLeft, BarChart3, ChevronRight, LayoutDashboard } from "lucide-react";
-import { ActionCard, Alert, Button, DataTable, Field, InfoGrid, InfoItem, Input, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn, type StatusBadgeProps, useConfirmDialog } from "@o-okul/ui";
+import { ArrowLeft, BarChart3, KeyRound, LayoutDashboard, NotebookTabs } from "lucide-react";
+import { Alert, Button, DataTable, Field, InfoGrid, InfoItem, Input, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn, type StatusBadgeProps, useConfirmDialog } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError, apiBaseUrl, apiRequest, withQueryParams } from "../../../../src/api-client.js";
 import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import { PageFrame } from "../_shared/page-frame.js";
-import { hasCapabilityForRoles } from "../../_shared/access.js";
+import { canAccessHref, hasCapabilityForRoles } from "../../_shared/access.js";
+import { formatAttendanceSummary } from "../../_shared/attendance-summary.js";
 import { formatCourseName, formatOutcomeCode, shortCourseName } from "../../_shared/academic-labels.js";
 import { ErrorBookletTable } from "../../_shared/error-booklet-table.js";
 import { ExamResultDonut, ProgressLineChart, TopicRadarChart } from "../../_shared/lazy-report-charts.js";
@@ -56,9 +58,12 @@ interface StudentBaseDetail {
   profile: StudentProfileRecord;
   guardians: GuardianRecord[];
   homeworkAssignments: HomeworkMaterialAssignmentRecord[];
+  latestExam?: StudentOverviewLatestExamRecord;
+  openHomeworkCount: number;
   paymentPlans: PaymentPlanWithInstallmentsRecord[];
   enrollments: StudentEnrollmentRecord[];
   teacherAssignments: TeacherAssignmentRecord[];
+  teacherNoteCount: number;
   teachers: TeacherRecord[];
   teacherNotes: TeacherNoteRecord[];
   terms: AcademicTermRecord[];
@@ -80,7 +85,7 @@ interface StudentReportData {
 type StudentDetailMode = "dashboard" | "exams";
 
 interface StudentDetailTableRow {
-  detail: ReactNode;
+  detail?: ReactNode;
   id: string;
   meta?: string;
   primary: string;
@@ -88,50 +93,48 @@ interface StudentDetailTableRow {
   tone?: StatusBadgeProps["tone"];
 }
 
-interface StudentRelationshipItem {
-  detail: string;
-  id: string;
-  label: string;
+interface StudentDetailTableHeaders {
+  detail?: string;
+  meta?: string;
+  primary: string;
+  status?: string;
 }
 
-interface StudentRelationshipData {
-  classNode: StudentRelationshipItem;
-  guardians: StudentRelationshipItem[];
-  student: StudentRelationshipItem;
-  teachers: StudentRelationshipItem[];
+// Her tablo kendi sütun adlarını taşır; genel "Kayıt/Durum/Bağlam/Tarih" seti kullanılmaz.
+function studentDetailTableColumns(headers: StudentDetailTableHeaders): Array<DataTableColumn<StudentDetailTableRow>> {
+  const columns: Array<DataTableColumn<StudentDetailTableRow> | undefined> = [
+    {
+      key: "primary",
+      header: headers.primary,
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (row) => row.primary,
+      sticky: "left",
+    },
+    headers.status ? {
+      key: "status",
+      header: headers.status,
+      mobilePriority: "secondary",
+      priority: "secondary",
+      render: (row) => row.status ? <StatusBadge tone={row.tone ?? "info"}>{row.status}</StatusBadge> : "-",
+    } : undefined,
+    headers.detail ? {
+      key: "detail",
+      header: headers.detail,
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (row) => row.detail ?? "-",
+    } : undefined,
+    headers.meta ? {
+      key: "meta",
+      header: headers.meta,
+      mobilePriority: "secondary",
+      priority: "optional",
+      render: (row) => row.meta ?? "-",
+    } : undefined,
+  ];
+  return columns.filter((column): column is DataTableColumn<StudentDetailTableRow> => Boolean(column));
 }
-
-const studentDetailTableColumns: Array<DataTableColumn<StudentDetailTableRow>> = [
-  {
-    key: "primary",
-    header: "Kayıt",
-    mobilePriority: "primary",
-    priority: "primary",
-    render: (row) => row.primary,
-    sticky: "left",
-  },
-  {
-    key: "status",
-    header: "Durum",
-    mobilePriority: "secondary",
-    priority: "secondary",
-    render: (row) => row.status ? <StatusBadge tone={row.tone ?? "info"}>{row.status}</StatusBadge> : "-",
-  },
-  {
-    key: "detail",
-    header: "Bağlam",
-    mobilePriority: "primary",
-    priority: "primary",
-    render: (row) => row.detail,
-  },
-  {
-    key: "meta",
-    header: "Tarih",
-    mobilePriority: "secondary",
-    priority: "optional",
-    render: (row) => row.meta ?? "-",
-  },
-];
 
 export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: StudentDetailMode; studentId: string }) {
   const { auth } = useAuth();
@@ -139,6 +142,8 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
   const requestedReportExamId = readReportExamId(searchParams);
   const canViewFinance = hasCapabilityForRoles(auth?.session.roles ?? [], "finance:manage");
   const canManageStudent = hasCapabilityForRoles(auth?.session.roles ?? [], "student:manage");
+  const canOpenNotes = canAccessHref(auth?.session.roles ?? [], "/kurum/notlar", auth?.session.activePersona);
+  const canOpenPortalAccess = canAccessHref(auth?.session.roles ?? [], "/kurum/ogrenci-portal-erisimi", auth?.session.activePersona);
   const [selectedExamId, setSelectedExamId] = useState("");
   const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
 
@@ -162,17 +167,19 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
   const classNameById = useMemo(() => new Map((detail?.classes ?? []).map((record) => [record.id, record.name])), [detail?.classes]);
   const courseNameById = useMemo(() => new Map((detail?.courses ?? []).map((record) => [record.id, formatCourseName(record.name)])), [detail?.courses]);
   const termNameById = useMemo(() => new Map((detail?.terms ?? []).map((record) => [record.id, record.name])), [detail?.terms]);
-  const exams = pageDataQuery.data?.exams ?? [];
-  const activeExamId = selectedExamId || preferredExamId(exams, requestedReportExamId);
+  const latestExamId = detail?.latestExam?.examId;
+  const exams = useMemo(() => sortExamsForStudent(pageDataQuery.data?.exams ?? [], latestExamId), [latestExamId, pageDataQuery.data?.exams]);
+  const activeExamId = selectedExamId || preferredExamId(exams, requestedReportExamId, latestExamId);
   const reportDataQuery = useQuery({
     queryKey: [
       "next-student-detail-report-data",
       auth?.session.tenantId ?? "anonymous",
+      mode,
       activeExamId,
       selectedSnapshotId || "auto",
       studentId,
     ],
-    queryFn: () => loadStudentReportData(auth?.accessToken ?? "", activeExamId, selectedSnapshotId, studentId),
+    queryFn: () => loadStudentReportData(auth?.accessToken ?? "", activeExamId, selectedSnapshotId, studentId, mode),
     enabled: Boolean(auth && activeExamId),
     refetchOnWindowFocus: false,
   });
@@ -242,6 +249,7 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
           errorBooklet={errorBooklet}
           examResult={examResult}
           exams={exams}
+          latestExamId={latestExamId}
           outcomeRows={outcomeRows}
           progress={progress}
           progressPoints={progressPoints}
@@ -260,17 +268,15 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
         <StudentDashboard
           classNameById={classNameById}
           canManageStudent={canManageStudent}
+          canOpenNotes={canOpenNotes}
+          canOpenPortalAccess={canOpenPortalAccess}
           canViewFinance={canViewFinance}
           courseNameById={courseNameById}
           detail={detail}
-          errorBooklet={errorBooklet}
           guardianNameById={guardianNameById}
           progress={progress}
           progressPoints={progressPoints}
-          report={report}
-          selectedSnapshot={selectedSnapshot}
           studentAuditLogs={studentAuditLogs}
-          studentExamsHref={studentExamsHref}
           studentId={studentId}
           termNameById={termNameById}
           teacherNameById={teacherNameById}
@@ -283,77 +289,69 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
 function StudentDashboard({
   classNameById,
   canManageStudent,
+  canOpenNotes,
+  canOpenPortalAccess,
   canViewFinance,
   courseNameById,
   detail,
-  errorBooklet,
   guardianNameById,
   progress,
   progressPoints,
-  report,
-  selectedSnapshot,
   studentAuditLogs,
-  studentExamsHref,
   studentId,
   teacherNameById,
   termNameById,
 }: {
   classNameById: ReadonlyMap<string, string>;
   canManageStudent: boolean;
+  canOpenNotes: boolean;
+  canOpenPortalAccess: boolean;
   canViewFinance: boolean;
   courseNameById: ReadonlyMap<string, string>;
   detail: StudentBaseDetail;
-  errorBooklet: ReportErrorBooklet | null;
   guardianNameById: ReadonlyMap<string, string>;
   progress: ReportStudentProgress | null;
   progressPoints: ReturnType<typeof toProgressPoints>;
-  report: ReportStudentSnapshot | null;
-  selectedSnapshot: ReportSnapshotRecord | null;
   studentAuditLogs: StudentAuditSummaryRecord[];
-  studentExamsHref: string;
   studentId: string;
   teacherNameById: ReadonlyMap<string, string>;
   termNameById: ReadonlyMap<string, string>;
 }) {
-  const [activeSection, setActiveSection] = useState<"overview" | "records">("records");
+  const [activeSection, setActiveSection] = useState<"overview" | "records">("overview");
   const progressIsComparable = isComparableStudentProgress(progress);
   const currentClass = formatCurrentClass(detail.profile.classId, classNameById);
-  const guardianLink = detail.guardianLinks[0];
-  const guardianLinkName = guardianLink ? guardianNameById.get(guardianLink.guardianId) ?? "Veli kaydı" : "Veli bağı yok";
   const activeEnrollment = resolveActiveEnrollment(detail.enrollments);
-  const studentDashboardSummaryItems = buildStudentDashboardSummaryItems(detail, report, progress, currentClass);
-  const studentDashboardSummaryBadges = buildStudentDashboardSummaryBadges(detail, report, guardianLink);
-  const studentDashboardSummaryActions = buildStudentDashboardSummaryActions({
-    detail,
-    errorBooklet,
-    canViewFinance,
-    primaryGuardianName: guardianLinkName,
-    progress,
-    report,
-    selectedSnapshot,
-  });
-  const relationshipData = buildStudentRelationshipData({
-    activeEnrollment,
-    classNameById,
-    courseNameById,
-    currentClass,
-    detail,
-    guardianNameById,
-    teacherNameById,
-    termNameById,
-  });
+  const studentDashboardSummaryItems = buildStudentDashboardSummaryItems(detail);
+  const studentDashboardSummaryBadges = buildStudentDashboardSummaryBadges(detail, canViewFinance);
+  // Not ve portal ekranları henüz öğrenci ön seçimi almaz; not ekranı öğrencinin sınıfına süzülmüş açılır.
+  const notesHref = detail.profile.classId ? `/kurum/notlar?classId=${encodeURIComponent(detail.profile.classId)}` : "/kurum/notlar";
 
   return (
     <section className="next-detail-workspace next-student-growth-workspace" aria-label="Öğrenci özeti">
       <OperationSummary
-        actions={studentDashboardSummaryActions}
         ariaLabel="Öğrenci detay özeti"
         badges={studentDashboardSummaryBadges}
         items={studentDashboardSummaryItems}
       />
       <Panel
+        actions={canOpenNotes || canOpenPortalAccess ? (
+          <div className="next-student-detail-actions" aria-label="Öğrenci hızlı işlemleri" role="group">
+            {canOpenNotes ? (
+              <Link className="uh-button uh-button--secondary uh-button--sm" href={notesHref}>
+                <NotebookTabs size={16} aria-hidden="true" />
+                Öğretmen notları
+              </Link>
+            ) : null}
+            {canOpenPortalAccess ? (
+              <Link className="uh-button uh-button--secondary uh-button--sm" href="/kurum/ogrenci-portal-erisimi">
+                <KeyRound size={16} aria-hidden="true" />
+                Portal erişimi
+              </Link>
+            ) : null}
+          </div>
+        ) : undefined}
         aria-label="Öğrenci profil kartı"
-        description="Kayıt durumu, sınıf, veli ve rapor bağlamı ham öğrenci anahtarı göstermeden tek yüzeyde okunur."
+        description="Sınıfı veya kayıt durumunu değiştirmek için öğrenci listesinde Düzenle'yi kullanın."
         title="Öğrenci profili"
       >
         <InfoGrid className="next-student-profile-info" aria-label="Öğrenci profil özeti" role="region">
@@ -361,14 +359,17 @@ function StudentDashboard({
             label="Kayıt durumu"
             value={<StatusBadge tone={studentStatusTone(detail.profile.status)}>{formatStudentStatus(detail.profile.status)}</StatusBadge>}
           />
-          <InfoItem label="Kurum sınıfı" value={currentClass} />
-          <InfoItem label="Veli bağlantısı" value={guardianLinkName} />
+          <InfoItem label="Sınıf" value={currentClass} />
           <InfoItem label="Öğrenci no" value={detail.profile.studentNo ?? "Öğrenci no yok"} />
+          <InfoItem
+            label="Kayıt"
+            value={activeEnrollment ? `${formatEnrollmentReason(activeEnrollment.reason)} · ${formatDate(activeEnrollment.startsAt)}` : "Aktif kayıt yok"}
+          />
         </InfoGrid>
       </Panel>
 
       <Tabs label="Öğrenci detay bölümleri">
-        <TabButton aria-controls="student-detail-panel-overview" id="student-detail-tab-overview" selected={activeSection === "overview"} onClick={() => setActiveSection("overview")}>Genel</TabButton>
+        <TabButton aria-controls="student-detail-panel-overview" id="student-detail-tab-overview" selected={activeSection === "overview"} onClick={() => setActiveSection("overview")}>Genel bakış</TabButton>
         <TabButton aria-controls="student-detail-panel-records" id="student-detail-tab-records" selected={activeSection === "records"} onClick={() => setActiveSection("records")}>İlişkiler ve kayıtlar</TabButton>
       </Tabs>
 
@@ -382,68 +383,66 @@ function StudentDashboard({
         >
           <ProgressLineChart caption={progressIsComparable ? "Öğrenci başarı gelişimi" : "Öğrenci sınav geçmişi"} points={progressPoints} />
         </ReportChartPanel>
+
+        <div className="next-student-detail-grid">
+          <Panel
+            aria-label="Öğretmen notları"
+            className="next-student-detail-panel"
+            description="Not içeriğini okumak veya yeni not eklemek için Öğretmen notları ekranını açın."
+            title="Öğretmen notları"
+          >
+            <StudentDetailRowsTable
+              caption="Öğretmen not kayıtları"
+              emptyText="Henüz not yok"
+              headers={{ primary: "Görünürlük", status: "Gelişim", meta: "Tarih" }}
+              rows={buildTeacherNoteRows(detail.teacherNotes)}
+            />
+          </Panel>
+
+          <Panel
+            aria-label="Ödevler"
+            className="next-student-detail-panel"
+            description="Öğrenciye atanan ödev ve materyaller; teslim tarihi olanları buradan izleyin."
+            title="Ödevler"
+          >
+            <StudentDetailRowsTable
+              caption="Öğrenci ödev kayıtları"
+              emptyText="Atanmış ödev yok"
+              headers={{ primary: "Materyal", detail: "Ders ve dönem", status: "Durum", meta: "Teslim" }}
+              rows={buildHomeworkRows(detail.homeworkAssignments, courseNameById, termNameById)}
+            />
+          </Panel>
+        </div>
       </div> : null}
 
       {activeSection === "records" ? <div aria-labelledby="student-detail-tab-records" id="student-detail-panel-records" role="tabpanel" tabIndex={0}>
-      <Panel
-        aria-label="Öğrenci ilişki haritası"
-        className="next-student-relationship-section"
-        description="Sınıf, veli ve öğretmen bağları öğrenci merkezli ve liste görünümünde gösterilir."
-        title="İlişki haritası"
-      >
-        <div className="next-student-relationship-fallback" aria-label="İlişki haritası liste görünümü">
-          <RelationshipList title="Öğrenci" items={[relationshipData.student]} />
-          <RelationshipList title="Sınıf" items={[relationshipData.classNode]} />
-          <RelationshipList title="Veliler" items={relationshipData.guardians} />
-          <RelationshipList title="Öğretmenler" items={relationshipData.teachers} />
-        </div>
-      </Panel>
-
-      <Panel
-        aria-label="Öğrenci karar kartları"
-        description="Raporlar, kayıtlar, veli bilgileri ve izlenecek konular tek yerde özetlenir."
-        title="Karar alanları"
-      >
-        <div className="next-student-decision-grid">
-          <ActionCard
-            as="a"
-            className="next-student-decision-card"
-            detail={
-              <>
-                {selectedSnapshot ? formatSnapshotLabel(selectedSnapshot, studentId) : "Hazır rapor bekleniyor"}
-                <ChevronRight size={15} aria-hidden="true" />
-              </>
-            }
-            href={studentExamsHref}
-            label="Sınav performansı"
-            tone="info"
-            value={formatPercentNumber(reportSuccessRate(report?.total))}
-          />
-          <ActionCard
-            className="next-student-decision-card"
-            detail={activeEnrollment ? `${formatEnrollmentReason(activeEnrollment.reason)} · ${formatDate(activeEnrollment.startsAt)}` : "Aktif kayıt bulunamadı"}
-            label="Kurum bağı"
-            tone="info"
-            value={currentClass}
-          />
-          <ActionCard
-            className="next-student-decision-card"
-            detail={guardianLink ? "İzinler veli bağlantısında kontrollü gösterilir" : "Veli izinleri tanımlı değil"}
-            label="Veli erişimi"
-            tone={guardianLink ? "success" : "warning"}
-            value={guardianLinkName}
-          />
-          <ActionCard
-            className="next-student-decision-card"
-            detail={formatTeacherNoteSummary(detail.teacherNotes)}
-            label="Takip odağı"
-            tone={errorBooklet ? "warning" : "success"}
-            value={errorBooklet ? `${errorBooklet.items.length} soru` : "Hata yok"}
-          />
-        </div>
-      </Panel>
-
       <div className="next-student-detail-grid">
+        <Panel
+          aria-label="Öğrenci ilişki haritası"
+          className="next-student-detail-panel next-student-detail-panel--wide"
+          description={
+            canViewFinance
+              ? "Veli izinleri (finans, duyuru, destek) ve öğretmen görevleri. Veli bağlamak için iletişim kişilerini kullanın."
+              : "Veli izinleri (duyuru, destek) ve öğretmen görevleri. Veli bağlamak için iletişim kişilerini kullanın."
+          }
+          title="İlişki haritası"
+        >
+          <div className="next-student-relationship-section">
+          <StudentDetailRowsTable
+            caption="Veli bağlantıları"
+            emptyText="Bağlı veli yok"
+            headers={{ primary: "Veli", detail: "İzinler", meta: "Bağlantı tarihi" }}
+            rows={buildGuardianRelationshipRows(detail.guardianLinks, guardianNameById, canViewFinance)}
+          />
+          <StudentDetailRowsTable
+            caption="Öğretmen görevleri"
+            emptyText="Atanmış öğretmen yok"
+            headers={{ primary: "Öğretmen", status: "Görev", detail: "Kapsam", meta: "Tarih" }}
+            rows={buildTeacherAssignmentRows(detail.teacherAssignments, teacherNameById, classNameById, courseNameById, termNameById)}
+          />
+          </div>
+        </Panel>
+
         <StudentContactPanel
           canManageStudent={canManageStudent}
           detail={detail}
@@ -451,83 +450,29 @@ function StudentDashboard({
         />
 
         <Panel
-          aria-label="İlişki geçmişi"
-          className="next-student-detail-panel next-student-detail-panel--wide"
-          description={
-            canViewFinance
-              ? "Finans görünürlüğü ve bildirim izinleri kontrollü özet diliyle gösterilir."
-              : "Bildirim ve destek izinleri kontrollü özet diliyle gösterilir."
-          }
-          title="İlişki geçmişi"
-        >
-          <StudentDetailRowsTable
-            caption="Veli ilişki geçmişi"
-            emptyText="Veli ilişkisi yok"
-            rows={buildGuardianRelationshipRows(detail.guardianLinks, guardianNameById, canViewFinance)}
-          />
-        </Panel>
-
-        <Panel
-          aria-label="Öğretmen ilişkileri"
-          className="next-student-detail-panel next-student-detail-panel--wide"
-          description="Sorumlu öğretmen, branş, sınıf ve dönem bağları güvenli referans metinleriyle okunur."
-          title="Öğretmen ilişkileri"
-        >
-          <StudentDetailRowsTable
-            caption="Öğretmen ilişki kayıtları"
-            emptyText="Öğretmen ilişkisi yok"
-            rows={buildTeacherAssignmentRows(detail.teacherAssignments, teacherNameById, classNameById, courseNameById, termNameById)}
-          />
-        </Panel>
-
-        <Panel
-          aria-label="Öğretmen notları"
-          className="next-student-detail-panel"
-          description="Not gövdesi açılmadan görünürlük, gelişim durumu ve tarih bağlamı verilir."
-          title="Öğretmen notları"
-        >
-          <StudentDetailRowsTable
-            caption="Öğretmen not kayıtları"
-            emptyText="Not yok"
-            rows={buildTeacherNoteRows(detail.teacherNotes)}
-          />
-        </Panel>
-
-        <Panel
           aria-label="Kayıt geçmişi"
           className="next-student-detail-panel next-student-detail-panel--wide"
-          description="Kayıt başlangıcı, durum ve akademik dönem geçmişi dönemlere göre listelenir."
+          description="Öğrencinin sınıf ve dönem geçmişi; her satır bir kayıt işlemini tarih aralığıyla gösterir."
           title="Kayıt geçmişi"
         >
           <StudentDetailRowsTable
             caption="Kayıt geçmişi kayıtları"
             emptyText="Kayıt geçmişi yok"
+            headers={{ primary: "İşlem", status: "Durum", detail: "Sınıf ve dönem", meta: "Tarih" }}
             rows={buildEnrollmentRows(detail.enrollments, classNameById, termNameById)}
-          />
-        </Panel>
-
-        <Panel
-          aria-label="Ödevler"
-          className="next-student-detail-panel"
-          description="Bu öğrenciye atanmış materyal ve ödev sayısı."
-          title="Ödevler"
-        >
-          <StudentDetailRowsTable
-            caption="Öğrenci ödev kayıtları"
-            emptyText="Ödev yok"
-            rows={buildHomeworkRows(detail.homeworkAssignments, courseNameById, termNameById)}
           />
         </Panel>
 
         <Panel
           aria-label="Denetim özeti"
           className="next-student-detail-panel next-student-detail-panel--wide"
-          description="Öğrenciye özel özet denetim kayıtları aksiyon etiketiyle gösterilir; ham denetim ayrıntıları açılmaz."
+          description="Bu öğrencinin kaydında yapılan son değişiklikler."
           title="Denetim özeti"
         >
           <StudentDetailRowsTable
             caption="Öğrenci denetim kayıtları"
             emptyText="Denetim kaydı yok"
+            headers={{ primary: "İşlem", meta: "Tarih" }}
             rows={buildAuditRows(studentAuditLogs)}
           />
         </Panel>
@@ -537,39 +482,21 @@ function StudentDashboard({
   );
 }
 
-function RelationshipList({ items, title }: { items: StudentRelationshipItem[]; title: string }) {
-  return (
-    <section>
-      <h3>{title}</h3>
-      {items.length > 0 ? (
-        <ul>
-          {items.map((item) => (
-            <li key={item.id}>
-              <strong>{item.label}</strong>
-              <span>{item.detail}</span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p>Tanımlı kayıt yok.</p>
-      )}
-    </section>
-  );
-}
-
 function StudentDetailRowsTable({
   caption,
   emptyText,
+  headers,
   rows,
 }: {
   caption: string;
   emptyText: string;
+  headers: StudentDetailTableHeaders;
   rows: StudentDetailTableRow[];
 }) {
   return (
     <DataTable
       caption={caption}
-      columns={studentDetailTableColumns}
+      columns={studentDetailTableColumns(headers)}
       density="compact"
       emptyText={emptyText}
       getRowKey={(row) => row.id}
@@ -633,12 +560,13 @@ function StudentContactPanel({
     <Panel
       aria-label="Öğrenci iletişim kişileri"
       className="next-student-detail-panel next-student-detail-panel--wide"
-      description="İletişim kişileri portal hesabı veya oturum üretmez; telefon ve e-posta sunucuda maskelenir."
+      description="İletişim kişisi eklemek portal hesabı açmaz. Yasal temsilciyi mevcut bir veliye bağlayarak veli portalını açabilirsiniz."
       title="İletişim kişileri"
     >
       <StudentDetailRowsTable
         caption="Öğrenci iletişim kişisi kayıtları"
         emptyText="İletişim kaydı yok"
+        headers={{ primary: "Kişi", status: "Durum", detail: "İletişim", meta: "İlişki" }}
         rows={buildContactRows(detail)}
       />
       {canLinkGuardian ? <StudentContactGuardianLinkControls detail={detail} studentId={studentId} /> : null}
@@ -913,8 +841,6 @@ function buildGuardianRelationshipRows(
     id: link.id,
     meta: link.createdAt ? `${formatDateTime(link.createdAt)} tarihinde bağlandı` : "Tarih yok",
     primary: guardianNameById.get(link.guardianId) ?? "Veli kaydı",
-    status: "Veli bağlantısı",
-    tone: "info",
   }));
 }
 
@@ -937,7 +863,6 @@ function buildTeacherAssignmentRows(
 
 function buildTeacherNoteRows(notes: TeacherNoteRecord[]): StudentDetailTableRow[] {
   return notes.map((note) => ({
-    detail: "Not gövdesi kapalı; yalnız görünürlük ve gelişim durumu gösterilir",
     id: note.id,
     meta: formatDate(note.createdAt),
     primary: formatTeacherNoteVisibility(note.visibility),
@@ -978,66 +903,61 @@ function buildHomeworkRows(
     id: assignment.id,
     meta: assignment.dueAt ? formatDate(assignment.dueAt) : formatDate(assignment.createdAt),
     primary: assignment.materialTitle ?? "Ödev kaydı",
-    status: assignment.dueAt ? "Teslim tarihi" : "Atandı",
+    status: assignment.dueAt ? "Teslim tarihli" : "Atandı",
     tone: assignment.dueAt ? "warning" : "info",
   }));
 }
 
 function buildAuditRows(records: StudentAuditSummaryRecord[]): StudentDetailTableRow[] {
   return records.map((record) => ({
-    detail: "Ham denetim alanları gizli",
     id: record.id,
     meta: formatDateTime(record.createdAt),
     primary: record.actionLabel,
-    status: "Özet",
-    tone: "info",
   }));
 }
 
-function buildStudentDashboardSummaryItems(
-  detail: StudentBaseDetail,
-  report: ReportStudentSnapshot | null,
-  progress: ReportStudentProgress | null,
-  currentClass: string,
-): OperationSummaryItem[] {
-  const successRate = reportSuccessRate(report?.total);
+function buildStudentDashboardSummaryItems(detail: StudentBaseDetail): OperationSummaryItem[] {
+  const attendance = detail.attendanceSummary;
+  const latestExam = detail.latestExam;
+  const latestSuccessRate = reportSuccessRate(latestExam?.total);
+  const watchNoteCount = detail.teacherNotes.filter((note) => note.developmentStatus === "WATCH").length;
   return [
     {
-      description: currentClass,
-      key: "status",
-      label: "Kayıt durumu",
-      tone: detail.profile.status === "ACTIVE" ? "success" : detail.profile.status === "PASSIVE" ? "warning" : "default",
-      value: formatStudentStatus(detail.profile.status),
+      description: attendance && attendance.total > 0 ? `${formatCount(attendance.total)} yoklama kaydı` : "Yoklama kaydı yok",
+      key: "attendance",
+      label: "Devamsızlık",
+      tone: attendance && attendance.absent > 0 ? "warning" : "default",
+      value: formatAttendanceSummary(attendance),
     },
     {
-      description: `Net ${formatNetNumber(report?.total?.net)} / Soru ${formatNumber(reportQuestionCount(report?.total))}`,
-      key: "success-rate",
-      label: "Başarı %",
-      tone: successRate === undefined ? "default" : "success",
-      value: formatPercentNumber(successRate),
+      description: latestExam
+        ? `Net ${formatNetNumber(latestExam.total.net)} / Soru ${formatNumber(reportQuestionCount(latestExam.total))}`
+        : "Hazır sınav raporu yok",
+      key: "latest-exam",
+      label: "Son sınav Başarı %",
+      tone: latestSuccessRate === undefined ? "default" : "success",
+      value: formatPercentNumber(latestSuccessRate),
     },
     {
-      description: `${formatCount(detail.guardians.length)} veli kaydı`,
-      key: "guardians",
-      label: "Veli bağı",
-      tone: detail.guardianLinks.length > 0 ? "info" : "warning",
-      value: formatCount(detail.guardianLinks.length),
+      description: "Öğrenciye atanan ödev ve materyal",
+      key: "homework",
+      label: "Açık ödev",
+      tone: detail.openHomeworkCount > 0 ? "info" : "default",
+      value: formatCount(detail.openHomeworkCount),
     },
     {
-      description: formatStudentProgressSummary(progress),
-      key: "follow-up",
-      label: "Takip odağı",
-      tone: detail.teacherNotes.length > 0 ? "info" : "default",
-      value: `${formatCount(detail.teacherNotes.length)} not`,
+      description: watchNoteCount > 0 ? `${formatCount(watchNoteCount)} not takipte` : formatTeacherNoteSummary(detail.teacherNotes),
+      key: "teacher-notes",
+      label: "Öğretmen notu",
+      tone: watchNoteCount > 0 ? "warning" : "default",
+      value: formatCount(detail.teacherNoteCount),
     },
   ];
 }
 
-function buildStudentDashboardSummaryBadges(
-  detail: StudentBaseDetail,
-  report: ReportStudentSnapshot | null,
-  primaryGuardian: GuardianStudentRecord | undefined,
-): OperationSummaryBadge[] {
+function buildStudentDashboardSummaryBadges(detail: StudentBaseDetail, canViewFinance: boolean): OperationSummaryBadge[] {
+  const latestExamTitle = detail.latestExam?.examTitle;
+  const hasPendingPayment = detail.paymentPlans.some((plan) => plan.installments.some((installment) => installment.status === "PENDING"));
   return [
     {
       key: "status",
@@ -1045,20 +965,14 @@ function buildStudentDashboardSummaryBadges(
       tone: studentStatusTone(detail.profile.status),
     },
     {
-      key: "report",
-      label: report ? "Rapor hazır" : "Hazır rapor bekleniyor",
-      tone: report ? "success" : "warning",
-    },
-    {
-      key: "audit",
-      label: detail.auditLogs.length > 0 ? "Denetim özeti var" : "Denetim kaydı yok",
-      tone: detail.auditLogs.length > 0 ? "info" : "neutral",
-    },
-    {
       key: "guardian",
-      label: primaryGuardian ? "Veli bağlantısı var" : "Veli bağlantısı yok",
-      tone: primaryGuardian ? "success" : "warning",
+      label: detail.guardianLinks.length > 0 ? `${formatCount(detail.guardianLinks.length)} veli bağlı` : "Veli bağlantısı yok",
+      tone: detail.guardianLinks.length > 0 ? "success" : "warning",
     },
+    ...(latestExamTitle ? [{ key: "latest-exam", label: `Son sınav: ${latestExamTitle}`, tone: "info" as const }] : []),
+    ...(canViewFinance && hasPendingPayment
+      ? [{ key: "finance", label: `${formatPendingPayment(detail.paymentPlans)} bekleyen ödeme`, tone: "warning" as const }]
+      : []),
     {
       key: "pii",
       label: "Kişisel bilgiler maskeli",
@@ -1067,109 +981,12 @@ function buildStudentDashboardSummaryBadges(
   ];
 }
 
-function buildStudentDashboardSummaryActions({
-  canViewFinance,
-  detail,
-  errorBooklet,
-  primaryGuardianName,
-  progress,
-  report,
-  selectedSnapshot,
-}: {
-  canViewFinance: boolean;
-  detail: StudentBaseDetail;
-  errorBooklet: ReportErrorBooklet | null;
-  primaryGuardianName: string;
-  progress: ReportStudentProgress | null;
-  report: ReportStudentSnapshot | null;
-  selectedSnapshot: ReportSnapshotRecord | null;
-}): OperationSummaryAction[] {
-  return [
-    {
-      detail: selectedSnapshot ? `${formatSnapshotLabel(selectedSnapshot, detail.profile.id)} raporu` : "Sınav detaylarında hazır rapor beklenir",
-      key: "exam-performance",
-      label: "Sınav performansı",
-      status: report ? "Hazır" : "Bekliyor",
-      tone: report ? "success" : "warning",
-      value: formatPercentNumber(reportSuccessRate(report?.total)),
-    },
-    {
-      detail: `${formatCount(detail.guardianLinks.length)} veli / ${formatCount(detail.teacherAssignments.length)} öğretmen`,
-      key: "relationship-map",
-      label: "İlişki kontrolü",
-      status: detail.guardianLinks.length > 0 && detail.teacherAssignments.length > 0 ? "Bağlı" : "Eksik",
-      tone: detail.guardianLinks.length > 0 && detail.teacherAssignments.length > 0 ? "info" : "warning",
-      value: primaryGuardianName,
-    },
-    {
-      detail: canViewFinance
-        ? `${formatPendingPayment(detail.paymentPlans)} bekleyen ödeme; ${formatStudentProgressSummary(progress)}`
-        : `Finans bilgisi yetkiye bağlı; ${formatStudentProgressSummary(progress)}`,
-      key: "finance-and-follow-up",
-      label: canViewFinance ? "Finans ve takip" : "Takip yetkisi",
-      status: errorBooklet ? "Takip" : "Normal",
-      tone: errorBooklet ? "warning" : "neutral",
-      value: errorBooklet ? `${formatCount(errorBooklet.items.length)} hata sorusu` : formatTeacherNoteSummary(detail.teacherNotes),
-    },
-  ];
-}
-
-function buildStudentRelationshipData({
-  activeEnrollment,
-  classNameById,
-  courseNameById,
-  currentClass,
-  detail,
-  guardianNameById,
-  teacherNameById,
-  termNameById,
-}: {
-  activeEnrollment: StudentEnrollmentRecord | undefined;
-  classNameById: ReadonlyMap<string, string>;
-  courseNameById: ReadonlyMap<string, string>;
-  currentClass: string;
-  detail: StudentBaseDetail;
-  guardianNameById: ReadonlyMap<string, string>;
-  teacherNameById: ReadonlyMap<string, string>;
-  termNameById: ReadonlyMap<string, string>;
-}): StudentRelationshipData {
-  return {
-    student: {
-      id: detail.profile.id,
-      label: `${detail.profile.firstName} ${detail.profile.lastName}`,
-      detail: formatStudentStatus(detail.profile.status),
-    },
-    classNode: {
-      id: detail.profile.classId ?? "no-class",
-      label: currentClass,
-      detail: activeEnrollment
-        ? `${formatEnrollmentReason(activeEnrollment.reason)} · ${formatDate(activeEnrollment.startsAt)}`
-        : "Aktif kayıt bulunamadı",
-    },
-    guardians: detail.guardianLinks.map((link) => ({
-      id: link.id,
-      label: guardianNameById.get(link.guardianId) ?? "Veli kaydı",
-      detail: [
-        "Veli bağlantısı",
-        "İzinler bağlantı kapsamında",
-      ].filter(Boolean).join(" · "),
-    })),
-    teachers: detail.teacherAssignments.map((assignment) => ({
-      id: assignment.id,
-      label: teacherNameById.get(assignment.teacherId) ?? "Öğretmen kaydı",
-      detail: [
-        formatTeacherAssignmentRole(assignment.role),
-        formatTeacherAssignmentScope(assignment, classNameById, courseNameById, termNameById).replace(/^ - /, ""),
-      ].filter(Boolean).join(" · "),
-    })),
-  };
-}
-
 function StudentExamDetails({
   branchRadar,
   errorBooklet,
   examResult,
   exams,
+  latestExamId,
   outcomeRows,
   progress,
   progressPoints,
@@ -1185,6 +1002,7 @@ function StudentExamDetails({
   errorBooklet: ReportErrorBooklet | null;
   examResult: ReturnType<typeof toStudentExamResult>;
   exams: ExamRecord[];
+  latestExamId: string | undefined;
   outcomeRows: ReturnType<typeof toStudentOutcomeRows>;
   progress: ReportStudentProgress | null;
   progressPoints: ReturnType<typeof toProgressPoints>;
@@ -1204,6 +1022,10 @@ function StudentExamDetails({
   const scoreView = report ? preferredScoreView(report) : undefined;
   const isModernReport = Boolean(report?.scoringProfileId || report?.scoreViews?.length);
   const score = scoreView?.practiceScore ?? (isModernReport ? undefined : legacyReportScore(report));
+  const latestExam = latestExamId ? exams.find((exam) => exam.id === latestExamId) : undefined;
+  const publishedExams = exams.filter((exam) => exam.id !== latestExamId && exam.status === "PUBLISHED");
+  const otherExams = exams.filter((exam) => exam.id !== latestExamId && exam.status !== "PUBLISHED");
+  const renderExamOption = (exam: ExamRecord) => <option key={exam.id} value={exam.id}>{exam.title}</option>;
 
   return (
     <section className="next-detail-workspace" aria-label="Öğrenci sınav detayları">
@@ -1216,42 +1038,45 @@ function StudentExamDetails({
       <Panel
         actions={<StatusBadge tone={report ? "success" : "warning"}>{report ? "Rapor hazır" : "Hazır rapor yok"}</StatusBadge>}
         aria-label="Öğrenci sınav rapor bağlamı"
-        description="Sınav ve hazır rapor seçimi başarı yüzdesi, net, soru ve hata kitapçığı bağlamını belirler."
+        description="İncelemek istediğiniz sınavı seçin; öğrencinin sonucu olan son sınav listenin başındadır."
         title="Rapor bağlamı"
       >
         <div className="next-detail-selects">
           <Field label="Sınav">
             <Select aria-label="Sınav" value={selectedExamId} onChange={(event) => onExamChange(event.target.value)}>
-              {exams.map((exam) => (
-                <option key={exam.id} value={exam.id}>
-                  {exam.title}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Sınav raporu">
-            <Select
-              aria-label="Sınav raporu"
-              disabled={snapshots.length === 0}
-              value={selectedSnapshot?.id ?? ""}
-              onChange={(event) => onSnapshotChange(event.target.value)}
-            >
-              {snapshots.length === 0 ? <option value="">Hazır rapor yok</option> : null}
-              {snapshots.map((snapshot) => (
-                <option key={snapshot.id} value={snapshot.id}>
-                  {formatSnapshotLabel(snapshot, studentId)}
-                </option>
-              ))}
+              {latestExam ? <optgroup label="Son sonucu olan sınav">{renderExamOption(latestExam)}</optgroup> : null}
+              {publishedExams.length > 0 ? <optgroup label="Yayımlanan sınavlar">{publishedExams.map(renderExamOption)}</optgroup> : null}
+              {otherExams.length > 0 ? <optgroup label="Taslak sınavlar">{otherExams.map(renderExamOption)}</optgroup> : null}
             </Select>
           </Field>
         </div>
+        {snapshots.length > 1 ? (
+          <details className="next-list-disclosure">
+            <summary>Önceki rapor sürümleri</summary>
+            <div className="next-list-disclosure__content next-detail-selects">
+              <Field label="Rapor sürümü" description="Varsayılan olarak en güncel rapor gösterilir.">
+                <Select
+                  aria-label="Rapor sürümü"
+                  value={selectedSnapshot?.id ?? ""}
+                  onChange={(event) => onSnapshotChange(event.target.value)}
+                >
+                  {snapshots.map((snapshot, index) => (
+                    <option key={snapshot.id} value={snapshot.id}>
+                      {formatSnapshotLabel(snapshot, studentId)}{index === 0 ? " (güncel)" : ""}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+          </details>
+        ) : null}
         <InfoGrid className="next-student-report-context" aria-label="Öğrenci rapor bağlam özeti" role="region">
           <InfoItem label="Sınav" value={selectedExam?.title ?? "Sınav seçilmedi"} />
           <InfoItem label="Rapor tarihi" value={selectedSnapshot ? formatSnapshotLabel(selectedSnapshot, studentId) : "Hazır rapor yok"} />
           <InfoItem label="Başarı %" value={formatPercentNumber(reportSuccessRate(report?.total))} />
           <InfoItem label="Net" value={formatNetNumber(report?.total?.net)} />
           <InfoItem label="Soru" value={formatNumber(reportQuestionCount(report?.total))} />
-          <InfoItem label={scoreView ? scoreViewLabel(scoreView) : isModernReport ? "Puan hesaplanamadı" : "Eski hesaplama"} value={formatNumber(score)} />
+          <InfoItem label={scoreView ? scoreViewLabel(scoreView) : isModernReport ? "Puan hesaplanamadı" : "Puan (eski biçim)"} value={formatNumber(score)} />
         </InfoGrid>
       </Panel>
 
@@ -1292,7 +1117,7 @@ function StudentExamDetails({
         </>
       ) : (
         <Panel aria-label="Hazır rapor durumu" title="Hazır rapor yok" tone="warning">
-          <p>Bu öğrenci için seçili sınava ait hazır rapor bulunamadı.</p>
+          <p>Bu öğrencinin seçili sınavda hazır raporu yok. Listenin başındaki son sonucu olan sınavı seçebilirsiniz.</p>
         </Panel>
       )}
     </section>
@@ -1333,7 +1158,7 @@ function buildStudentExamSummaryItems(
       value: errorBooklet ? `${formatCount(errorBooklet.items.length)} soru` : "-",
     },
     {
-      description: report && preferredScoreView(report) ? scoreViewLabel(preferredScoreView(report)!) : "Eski hesaplama",
+      description: report && preferredScoreView(report) ? scoreViewLabel(preferredScoreView(report)!) : "Puan (eski biçim)",
       key: "score",
       label: "Deneme puanı",
       value: formatNumber((report ? preferredScoreView(report)?.practiceScore : undefined) ?? (report?.scoringProfileId || report?.scoreViews?.length ? undefined : legacyReportScore(report))),
@@ -1352,14 +1177,12 @@ function buildStudentExamSummaryBadges(
       label: report ? "Rapor hazır" : "Hazır rapor yok",
       tone: report ? "success" : "warning",
     },
-    {
-      key: "snapshot",
-      label: selectedSnapshot ? "Rapor sürümü seçili" : "Rapor sürümü bekleniyor",
-      tone: selectedSnapshot ? "info" : "neutral",
-    },
+    ...(selectedSnapshot && snapshots.length > 1 && selectedSnapshot.id !== snapshots[0]?.id
+      ? [{ key: "snapshot", label: "Önceki rapor sürümü gösteriliyor", tone: "warning" as const }]
+      : []),
     {
       key: "history",
-      label: `${formatCount(snapshots.length)} hazır rapor`,
+      label: `${formatCount(snapshots.length)} rapor sürümü`,
       tone: snapshots.length > 0 ? "info" : "neutral",
     },
   ];
@@ -1432,10 +1255,13 @@ async function loadStudentBaseDetail(
     guardianLinks: overview.guardianLinks,
     guardians: overview.guardians,
     homeworkAssignments: overview.homeworkAssignments,
+    latestExam: overview.latestExam,
+    openHomeworkCount: overview.openHomeworkCount ?? overview.homeworkAssignments.length,
     paymentPlans,
     profile: overview.profile,
     enrollments: overview.enrollments,
     teacherAssignments: overview.teacherAssignments,
+    teacherNoteCount: overview.teacherNoteCount ?? overview.teacherNotes.length,
     teachers: overview.teachers,
     teacherNotes: overview.teacherNotes,
     terms: overview.terms,
@@ -1447,11 +1273,18 @@ async function loadExams(accessToken: string): Promise<ExamRecord[]> {
   return exams ?? [];
 }
 
-function preferredExamId(exams: ExamRecord[], requestedExamId = "") {
+function preferredExamId(exams: ExamRecord[], requestedExamId = "", latestExamId?: string) {
   return exams.find((exam) => exam.id === requestedExamId)?.id
+    ?? exams.find((exam) => exam.id === latestExamId)?.id
     ?? exams.find((exam) => exam.status === "PUBLISHED")?.id
     ?? exams[0]?.id
     ?? requestedExamId;
+}
+
+// Öğrencinin sonucu olan son sınav (overview.latestExam) önce, ardından yayımlanan sınavlar gelir.
+function sortExamsForStudent(exams: ExamRecord[], latestExamId: string | undefined): ExamRecord[] {
+  const rank = (exam: ExamRecord) => (exam.id === latestExamId ? 0 : exam.status === "PUBLISHED" ? 1 : 2);
+  return [...exams].sort((left, right) => rank(left) - rank(right));
 }
 
 async function loadStudentSnapshots(accessToken: string, examId: string, studentId: string) {
@@ -1467,7 +1300,16 @@ async function loadStudentReportData(
   examId: string,
   selectedSnapshotId: string,
   studentId: string,
+  mode: StudentDetailMode,
 ): Promise<StudentReportData> {
+  const progressRequest = apiRequestOrNull<ReportStudentProgress>(
+    accessToken,
+    `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/students/${encodeURIComponent(studentId)}/progress?scope=all`,
+  );
+  // Genel bakış yalnız gelişim grafiğini çizer; rapor sürümleri ve hata kitapçığı Sınav detaylarında yüklenir.
+  if (mode === "dashboard") {
+    return { errorBooklet: null, progress: await progressRequest, report: null, selectedSnapshot: null, snapshots: [] };
+  }
   const snapshots = await loadStudentSnapshots(accessToken, examId, studentId);
   const selectedSnapshot = snapshots.find((snapshot) => snapshot.id === selectedSnapshotId) ?? snapshots[0] ?? null;
   const [report, errorBooklet, progress] = await Promise.all([
@@ -1483,10 +1325,7 @@ async function loadStudentReportData(
           `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots/${encodeURIComponent(selectedSnapshot.id)}/students/${encodeURIComponent(studentId)}/error-booklet`,
         )
       : Promise.resolve(null),
-    apiRequestOrNull<ReportStudentProgress>(
-      accessToken,
-      `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/students/${encodeURIComponent(studentId)}/progress?scope=all`,
-    ),
+    progressRequest,
   ]);
   return { errorBooklet, progress, report, selectedSnapshot, snapshots };
 }

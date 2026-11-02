@@ -3657,6 +3657,13 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
           profile: readFixture("/students/student-a/profile"),
           enrollments: studentEnrollments.filter((record) => record.studentId === "student-a"),
           attendance: readFixture("/attendance/summary"),
+          // K2: "Son sınav Başarı %" kutusu overview.latestExam'den okunur (en güncel hazır rapor).
+          latestExam: {
+            examId: "exam-demo",
+            examTitle: "LGS Hazirlik Denemesi",
+            snapshotId: "snapshot-a",
+            total: { blank: 1, correct: 18, net: 17.5, questionCount: 20, successRate: 87.5, wrong: 1 },
+          },
           openHomeworkCount: 0,
           homeworkAssignments: [],
           teacherNoteCount: teacherNotes.length,
@@ -4584,29 +4591,34 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(heading(page, { name: "Ada A" })).toBeVisible();
   const studentDashboard = page.getByLabel("Öğrenci özeti", { exact: true });
   const studentSummaryMetrics = page.getByLabel("Öğrenci detay özeti metrikleri");
-  await expect(studentSummaryMetrics.getByText("Aktif", { exact: true })).toBeVisible();
-  await expect(studentSummaryMetrics.getByText("Başarı %", { exact: true })).toBeVisible();
+  await expect(studentSummaryMetrics.getByText("Son sınav Başarı %", { exact: true })).toBeVisible();
   await expect(studentSummaryMetrics.getByText("%87,5", { exact: true })).toBeVisible();
   await expect(studentSummaryMetrics.getByText("Net 17,50 / Soru 20", { exact: true })).toBeVisible();
-  await expect(studentSummaryMetrics.getByText("2 sınav sonucu", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Öğretmen notları").getByText("Veli/öğrenci görünür")).toBeVisible();
-  await expect(page.getByLabel("Öğretmen notları").getByText("Gelişim olumlu")).toBeVisible();
-  await expect(page.getByLabel("Öğretmen notları")).not.toContainText("Problem çözme rutini güçleniyor.");
-  await expect(page.getByLabel("İlişki geçmişi").getByText("Zeynep Veli")).toBeVisible();
-  await expect(page.getByLabel("İlişki geçmişi").getByText("Veli bağlantısı")).toBeVisible();
-  await expect(page.getByLabel("İlişki geçmişi").getByText("Finans görünürlüğü: açık")).toBeVisible();
+  await expect(studentSummaryMetrics.getByText("Devamsızlık", { exact: true })).toBeVisible();
+  await expect(studentSummaryMetrics.getByText("Öğretmen notu", { exact: true })).toBeVisible();
+  await expect(studentDashboard.getByLabel("Öğrenci profil kartı").getByText("Aktif", { exact: true })).toBeVisible();
+  await expect(studentDashboard.getByLabel("Öğrenci profil kartı").getByText("8-A", { exact: true })).toBeVisible();
+  await expect(studentDashboard.getByLabel("Öğrenci profil kartı")).not.toContainText("class-a");
+  await expect(page.getByLabel("Öğretmen notları", { exact: true }).getByText("Veli/öğrenci görünür")).toBeVisible();
+  await expect(page.getByLabel("Öğretmen notları", { exact: true }).getByText("Gelişim olumlu")).toBeVisible();
+  await expect(page.getByLabel("Öğretmen notları", { exact: true })).not.toContainText("Problem çözme rutini güçleniyor.");
+  await studentDashboard.getByRole("tab", { name: "İlişkiler ve kayıtlar" }).click();
+  const studentRelationships = page.getByLabel("Öğrenci ilişki haritası");
+  const guardianLinksTable = studentRelationships.getByRole("table", { name: "Veli bağlantıları" });
+  await expect(guardianLinksTable.getByText("Zeynep Veli")).toBeVisible();
+  await expect(guardianLinksTable.getByText("Finans görünürlüğü: açık")).toBeVisible();
   if (smsEnabled) {
-    await expect(page.getByLabel("İlişki geçmişi").getByText("SMS: açık")).toBeVisible();
+    await expect(guardianLinksTable.getByText("SMS: açık")).toBeVisible();
   } else {
-    await expect(page.getByLabel("İlişki geçmişi")).not.toContainText("SMS");
+    await expect(guardianLinksTable).not.toContainText("SMS");
   }
-  await expect(page.getByLabel("İlişki geçmişi").getByText("Destek: kapalı")).toBeVisible();
-  await expect(page.getByLabel("İlişki geçmişi")).not.toContainText("Ödeme görür");
-  await expect(page.getByLabel("Öğretmen ilişkileri").getByText("Ayse Ogretmen")).toBeVisible();
-  await expect(page.getByLabel("Öğretmen ilişkileri").getByText("Sınıf öğretmeni")).toBeVisible();
-  await expect(page.getByLabel("Öğretmen ilişkileri").getByText("8-A · Matematik · 2. Donem")).toBeVisible();
-  await expect(page.getByLabel("Öğrenci ilişki haritası").getByText("8-A", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Öğrenci ilişki haritası")).not.toContainText("class-a");
+  await expect(guardianLinksTable.getByText("Destek: kapalı")).toBeVisible();
+  await expect(guardianLinksTable).not.toContainText("Ödeme görür");
+  const studentTeacherAssignmentsTable = studentRelationships.getByRole("table", { name: "Öğretmen görevleri" });
+  await expect(studentTeacherAssignmentsTable.getByText("Ayse Ogretmen")).toBeVisible();
+  await expect(studentTeacherAssignmentsTable.getByText("Sınıf öğretmeni")).toBeVisible();
+  await expect(studentTeacherAssignmentsTable.getByText("8-A · Matematik · 2. Donem")).toBeVisible();
+  await expect(studentRelationships).not.toContainText("class-a");
   const enrollmentHistory = page.getByLabel("Kayıt geçmişi", { exact: true });
   await expect(enrollmentHistory.getByText("İlk kayıt")).toBeVisible();
   await expect(enrollmentHistory.getByText("Kayıt yenileme")).toBeVisible();
@@ -4619,7 +4631,8 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("link", { name: "Sınav detayları" }).click();
   await expect(page).toHaveURL(/\/kurum\/ogrenciler\/student-a\/sinavlar$/);
   const studentExamDetails = page.getByLabel("Öğrenci sınav detayları", { exact: true });
-  await studentExamDetails.getByLabel("Sınav raporu", { exact: true }).selectOption("snapshot-b");
+  await studentExamDetails.getByText("Önceki rapor sürümleri", { exact: true }).click();
+  await studentExamDetails.getByLabel("Rapor sürümü", { exact: true }).selectOption("snapshot-b");
   const studentReportContext = page.getByLabel("Öğrenci rapor bağlam özeti");
   await expect(studentReportContext.getByText("%83,7", { exact: true })).toBeVisible();
   await expect(studentReportContext.getByText("19,25", { exact: true })).toBeVisible();
