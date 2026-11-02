@@ -1,10 +1,19 @@
 import pg from "pg";
-import type { InstitutionDashboardSummary } from "@o-okul/shared-types";
+import type { InstitutionDashboardReportSummary, InstitutionDashboardSummary } from "@o-okul/shared-types";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
+/** campusIds set: only rows attributable to these campuses are counted; unattributable tenant-wide counters read 0. */
+export interface InstitutionDashboardScope {
+  campusIds?: readonly string[];
+}
+
 export interface InstitutionDashboardStore {
-  load(tenantId: string, attendanceDate: string): Promise<Omit<InstitutionDashboardSummary, "generatedAt">>;
+  load(
+    tenantId: string,
+    attendanceDate: string,
+    scope?: InstitutionDashboardScope,
+  ): Promise<Omit<InstitutionDashboardSummary, "generatedAt">>;
 }
 
 export const institutionDashboardStoreToken = Symbol("InstitutionDashboardStore");
@@ -25,10 +34,15 @@ interface InstitutionDashboardRow {
   attendedParticipantCount: number;
   absentParticipantCount: number;
   report: unknown;
+  scopedClassIds: string[] | null;
 }
 
 export class InMemoryInstitutionDashboardStore implements InstitutionDashboardStore {
-  async load(_tenantId: string, _attendanceDate: string): Promise<Omit<InstitutionDashboardSummary, "generatedAt">> {
+  async load(
+    _tenantId: string,
+    _attendanceDate: string,
+    _scope?: InstitutionDashboardScope,
+  ): Promise<Omit<InstitutionDashboardSummary, "generatedAt">> {
     return {
       institution: {
         name: "Kurum Paneli",
@@ -51,7 +65,12 @@ export class PostgresInstitutionDashboardStore implements InstitutionDashboardSt
     }),
   ) {}
 
-  async load(tenantId: string, attendanceDate: string): Promise<Omit<InstitutionDashboardSummary, "generatedAt">> {
+  async load(
+    tenantId: string,
+    attendanceDate: string,
+    scope: InstitutionDashboardScope = {},
+  ): Promise<Omit<InstitutionDashboardSummary, "generatedAt">> {
+    const campusIds = scope.campusIds ? [...new Set(scope.campusIds)] : null;
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<InstitutionDashboardRow>(
         `WITH "latestExam" AS (
@@ -79,6 +98,19 @@ export class PostgresInstitutionDashboardStore implements InstitutionDashboardSt
              AND snapshot."deletedAt" IS NULL
            ORDER BY snapshot."generatedAt" DESC NULLS LAST, snapshot."createdAt" DESC
            LIMIT 1
+         ),
+         "scopedClass" AS (
+           SELECT "id"
+           FROM "Class"
+           WHERE "tenantId" = $1
+             AND "deletedAt" IS NULL
+             AND "campusId" = ANY($3::text[])
+         ),
+         "scopedStudent" AS (
+           SELECT student."id"
+           FROM "Student" student
+           INNER JOIN "scopedClass" scoped_class ON scoped_class."id" = student."classId"
+           WHERE student."tenantId" = $1
          )
          SELECT
            tenant."name",
@@ -91,6 +123,7 @@ export class PostgresInstitutionDashboardStore implements InstitutionDashboardSt
              WHERE student."tenantId" = $1
                AND student."status" = 'ACTIVE'
                AND student."deletedAt" IS NULL
+               AND ($3::text[] IS NULL OR student."id" IN (SELECT "id" FROM "scopedStudent"))
            ) AS "activeStudentCount",
            (
              SELECT COUNT(*)::int
@@ -99,6 +132,7 @@ export class PostgresInstitutionDashboardStore implements InstitutionDashboardSt
                AND attendance."date" = $2::date
                AND attendance."status" IN ('ABSENT', 'LATE')
                AND attendance."deletedAt" IS NULL
+               AND ($3::text[] IS NULL OR attendance."studentId" IN (SELECT "id" FROM "scopedStudent"))
            ) AS "attendanceAlertCount",
            (
              SELECT COUNT(*)::int
@@ -106,6 +140,7 @@ export class PostgresInstitutionDashboardStore implements InstitutionDashboardSt
              WHERE quarantine."tenantId" = $1
                AND quarantine."status" = 'OPEN'
                AND quarantine."deletedAt" IS NULL
+               AND $3::text[] IS NULL
            ) AS "openImportQuarantineCount",
            (
              SELECT COUNT(*)::int
@@ -113,6 +148,18 @@ export class PostgresInstitutionDashboardStore implements InstitutionDashboardSt
              WHERE ticket."tenantId" = $1
                AND ticket."status" IN ('OPEN', 'IN_PROGRESS')
                AND ticket."deletedAt" IS NULL
+               AND (
+                 $3::text[] IS NULL
+                 OR COALESCE(
+                   ticket."campusId",
+                   (SELECT ticket_class."campusId" FROM "Class" ticket_class
+                     WHERE ticket_class."tenantId" = $1 AND ticket_class."id" = ticket."classId"),
+                   (SELECT student_class."campusId" FROM "Student" ticket_student
+                     INNER JOIN "Class" student_class
+                       ON student_class."tenantId" = ticket_student."tenantId" AND student_class."id" = ticket_student."classId"
+                     WHERE ticket_student."tenantId" = $1 AND ticket_student."id" = ticket."studentId")
+                 ) = ANY($3::text[])
+               )
            ) AS "openSupportTicketCount",
            exam."id" AS "examId",
            exam."title" AS "examTitle",
@@ -120,7 +167,10 @@ export class PostgresInstitutionDashboardStore implements InstitutionDashboardSt
            COALESCE(participants."registeredParticipantCount", 0)::int AS "registeredParticipantCount",
            COALESCE(participants."attendedParticipantCount", 0)::int AS "attendedParticipantCount",
            COALESCE(participants."absentParticipantCount", 0)::int AS "absentParticipantCount",
-           report."report"
+           report."report",
+           CASE WHEN $3::text[] IS NULL THEN NULL
+             ELSE ARRAY(SELECT "id" FROM "scopedClass" ORDER BY "id")
+           END AS "scopedClassIds"
          FROM "Tenant" tenant
          LEFT JOIN "latestExam" exam ON true
          LEFT JOIN LATERAL (
@@ -132,11 +182,12 @@ export class PostgresInstitutionDashboardStore implements InstitutionDashboardSt
            WHERE participant."tenantId" = $1
              AND participant."examId" = exam."id"
              AND participant."deletedAt" IS NULL
+             AND ($3::text[] IS NULL OR participant."studentId" IN (SELECT "id" FROM "scopedStudent"))
          ) participants ON exam."id" IS NOT NULL
          LEFT JOIN "latestReport" report ON true
          WHERE tenant."id" = $1
          LIMIT 1`,
-        [tenantId, attendanceDate],
+        [tenantId, attendanceDate, campusIds],
       );
       const row = result.rows[0];
       if (!row) throw new Error("INSTITUTION_DASHBOARD_NOT_FOUND");
@@ -161,7 +212,7 @@ function toInstitutionDashboard(row: InstitutionDashboardRow): Omit<InstitutionD
         attendedParticipantCount: row.attendedParticipantCount,
         absentParticipantCount: row.absentParticipantCount,
         reportStatus: isRecord(row.report) ? "READY" as const : "MISSING" as const,
-        ...(isRecord(row.report) ? { report: toReportSummary(row.report) } : {}),
+        ...(isRecord(row.report) ? { report: toReportSummary(row.report, row.scopedClassIds) } : {}),
       }
     : undefined;
 
@@ -182,35 +233,43 @@ function toInstitutionDashboard(row: InstitutionDashboardRow): Omit<InstitutionD
   };
 }
 
-function toReportSummary(report: Record<string, unknown>) {
-  const averages = isRecord(report.averages) ? report.averages : {};
+// scopedClassIds set: only those per-class rows survive, the tenant-wide averages are dropped, and resultCount is the
+// in-scope class total, so a campus-scoped viewer never sees another campus's numbers.
+function toReportSummary(report: Record<string, unknown>, scopedClassIds: string[] | null): InstitutionDashboardReportSummary {
+  const scoped = scopedClassIds ? new Set(scopedClassIds) : undefined;
+  const averages = !scoped && isRecord(report.averages) ? report.averages : {};
   const classes = Array.isArray(report.classes) ? report.classes : [];
   const questionCount = readQuestionCount(averages);
   const successRate = readSuccessRate(averages, questionCount);
   const net = readNumber(averages.net);
 
+  const classSummaries = classes.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    if (scoped && !scoped.has(readString(value.classId) ?? "")) return [];
+    const classAverages = isRecord(value.averages) ? value.averages : {};
+    const classQuestionCount = readQuestionCount(classAverages);
+    const classSuccessRate = readSuccessRate(classAverages, classQuestionCount);
+    const classNet = readNumber(classAverages.net);
+    return [{
+      ...(readString(value.classId) ? { classId: readString(value.classId) } : {}),
+      ...(readString(value.className) ? { className: readString(value.className) } : {}),
+      resultCount: readNumber(value.resultCount) ?? 0,
+      ...(classSuccessRate !== undefined ? { successRate: classSuccessRate } : {}),
+      ...(classNet !== undefined ? { net: classNet } : {}),
+      ...(classQuestionCount !== undefined ? { questionCount: classQuestionCount } : {}),
+    }];
+  });
+
   return {
     snapshotId: readString(report.snapshotId) ?? "",
     ...(readString(report.generatedAt) ? { generatedAt: readString(report.generatedAt) } : {}),
-    resultCount: readNumber(report.resultCount) ?? 0,
+    resultCount: scoped
+      ? classSummaries.reduce((total, summary) => total + summary.resultCount, 0)
+      : readNumber(report.resultCount) ?? 0,
     ...(successRate !== undefined ? { successRate } : {}),
     ...(net !== undefined ? { net } : {}),
     ...(questionCount !== undefined ? { questionCount } : {}),
-    classes: classes.flatMap((value) => {
-      if (!isRecord(value)) return [];
-      const classAverages = isRecord(value.averages) ? value.averages : {};
-      const classQuestionCount = readQuestionCount(classAverages);
-      const classSuccessRate = readSuccessRate(classAverages, classQuestionCount);
-      const classNet = readNumber(classAverages.net);
-      return [{
-        ...(readString(value.classId) ? { classId: readString(value.classId) } : {}),
-        ...(readString(value.className) ? { className: readString(value.className) } : {}),
-        resultCount: readNumber(value.resultCount) ?? 0,
-        ...(classSuccessRate !== undefined ? { successRate: classSuccessRate } : {}),
-        ...(classNet !== undefined ? { net: classNet } : {}),
-        ...(classQuestionCount !== undefined ? { questionCount: classQuestionCount } : {}),
-      }];
-    }),
+    classes: classSummaries,
   };
 }
 

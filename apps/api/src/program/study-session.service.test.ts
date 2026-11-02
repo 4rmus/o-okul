@@ -22,6 +22,21 @@ describe("StudySessionService", () => {
     await expect(service.findOne(createTeacherContext("teacher-a"), "study-other")).rejects.toBeInstanceOf(ForbiddenException);
   });
 
+  it("kampüs kapsamlı kullanıcı yalnız kampüs sınıflarının etütlerini görür", async () => {
+    const listClasses = async (context: RequestContext) =>
+      context.campusScope?.campusIds.includes("campus-main") ? [{ id: "class-a", tenantId: "tenant-a", name: "8-A" }] : [];
+    const school = { listClasses } as unknown as SchoolService;
+    const service = new StudySessionService(school, {} as TeacherService, {} as StudentService, createStudySessionStore());
+
+    await expect(service.list(createCampusContext("campus-other"))).resolves.toEqual([]);
+    await expect(service.findOne(createCampusContext("campus-other"), "study-a")).rejects.toMatchObject({
+      message: "STUDY_SESSION_CAMPUS_SCOPE_FORBIDDEN",
+    });
+    await expect(service.delete(createCampusContext("campus-other"), "study-a")).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.list(createCampusContext("campus-main"))).resolves.toHaveLength(2);
+    await expect(service.findOne(createCampusContext("campus-main"), "study-a")).resolves.toMatchObject({ id: "study-a" });
+  });
+
   it("kurum yöneticisi tenant içindeki tüm etütleri okuyabilir", async () => {
     const service = new StudySessionService({} as SchoolService, {} as TeacherService, {} as StudentService, createStudySessionStore());
 
@@ -81,6 +96,16 @@ function createTeacherContext(subjectId: string): RequestContext {
     bypassRls: false,
     subjectType: "TEACHER",
     subjectId,
+  };
+}
+
+function createCampusContext(campusId: string): RequestContext {
+  return {
+    userId: "assistant-a",
+    tenantId: "tenant-a",
+    roles: ["ASSISTANT_ADMIN"],
+    bypassRls: false,
+    campusScope: { scopeMode: "CAMPUSES", campusIds: [campusId] },
   };
 }
 

@@ -6,7 +6,12 @@ import { IdempotencyService } from "../http/idempotency.js";
 import { SchoolService } from "../school/school.service.js";
 import { TeacherService } from "../teacher/teacher.service.js";
 import { StudentService } from "../student/student.service.js";
-import { assertTenantResourceAccess, filterTenantResources, isTeacherSubjectContext } from "../tenant/tenant-access.js";
+import {
+  assertTenantResourceAccess,
+  filterTenantResources,
+  isTeacherSubjectContext,
+  resolveCampusRestriction,
+} from "../tenant/tenant-access.js";
 import { type StudySessionStore, studySessionStoreToken } from "./study-session-store.js";
 
 export interface StudySessionRecord extends SharedStudySessionRecord {
@@ -25,7 +30,9 @@ export class StudySessionService {
   ) {}
 
   async list(context: RequestContext): Promise<StudySessionRecord[]> {
-    return this.filterReadableSessions(context, filterTenantResources(context, await this.store.list()).filter((session) => !session.deletedAt));
+    const sessions = this.filterReadableSessions(context, await this.listTenant(context));
+    const allowedClassIds = await this.campusScopedClassIds(context);
+    return allowedClassIds ? sessions.filter((session) => allowedClassIds.has(session.classId)) : sessions;
   }
 
   async findOne(context: RequestContext, id: string): Promise<StudySessionRecord> {
@@ -38,6 +45,10 @@ export class StudySessionService {
     }
 
     this.assertReadAccess(context, session);
+    const allowedClassIds = await this.campusScopedClassIds(context);
+    if (allowedClassIds && !allowedClassIds.has(session.classId)) {
+      throw new ForbiddenException("STUDY_SESSION_CAMPUS_SCOPE_FORBIDDEN");
+    }
     return session;
   }
 
@@ -227,7 +238,7 @@ export class StudySessionService {
   ): Promise<void> {
     const startTime = Date.parse(startsAt);
     const endTime = Date.parse(endsAt);
-    const conflictingSession = (await this.list(context)).find(
+    const conflictingSession = this.filterReadableSessions(context, await this.listTenant(context)).find(
       (session) =>
         session.id !== excludedSessionId &&
         startTime < Date.parse(session.endsAt) &&
@@ -260,6 +271,20 @@ export class StudySessionService {
     if (isTeacherSubjectContext(context) && session.teacherId !== context.subjectId) {
       throw new ForbiddenException("FORBIDDEN_SUBJECT");
     }
+  }
+
+  private async listTenant(context: RequestContext): Promise<StudySessionRecord[]> {
+    return filterTenantResources(context, await this.store.list()).filter((session) => !session.deletedAt);
+  }
+
+  // Sessions belong to their class campus; undefined means the caller is not campus-restricted.
+  private async campusScopedClassIds(context: RequestContext): Promise<Set<string> | undefined> {
+    try {
+      if (!resolveCampusRestriction(context)) return undefined;
+    } catch {
+      throw new ForbiddenException("STUDY_SESSION_CAMPUS_SCOPE_MISSING");
+    }
+    return new Set((await this.school.listClasses(context)).map((schoolClass) => schoolClass.id));
   }
 
   private filterReadableSessions(context: RequestContext, sessions: StudySessionRecord[]): StudySessionRecord[] {

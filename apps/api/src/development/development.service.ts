@@ -4,6 +4,7 @@ import type { DevelopmentAssessmentVisibility, DevelopmentTrendItem } from "@o-o
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { assertTeacherAssigned } from "../school/assert-teacher-assigned.js";
+import { type ClassStore, classStoreToken } from "../school/class-store.js";
 import { requiredText } from "../shared/required-text.js";
 import {
   type GuardianStudentStore,
@@ -15,7 +16,14 @@ import {
 } from "../school/teacher-assignment-store.js";
 import { type TeacherStore, teacherStoreToken } from "../school/teacher-store.js";
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
-import { assertTenantResourceAccess, filterTenantResources, isTeacherSubjectContext } from "../tenant/tenant-access.js";
+import {
+  assertTenantResourceAccess,
+  campusScopedClassIds,
+  filterTenantResources,
+  isCampusInScope,
+  isTeacherSubjectContext,
+  resolveCampusRestriction,
+} from "../tenant/tenant-access.js";
 import {
   type DevelopmentAssessmentRecord,
   type DevelopmentCriterionRecord,
@@ -55,6 +63,7 @@ export class DevelopmentService {
     @Inject(guardianStudentStoreToken) private readonly guardianStudents: GuardianStudentStore,
     @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() private readonly idempotency?: IdempotencyService,
+    @Optional() @Inject(classStoreToken) private readonly classes?: ClassStore,
   ) {}
 
   async listCriteria(context: RequestContext): Promise<DevelopmentCriterionRecord[]> {
@@ -98,8 +107,11 @@ export class DevelopmentService {
   }
 
   async listAssessments(context: RequestContext, studentId?: string): Promise<DevelopmentAssessmentWithScores[]> {
-    const assessments = filterTenantResources(context, await this.store.listAssessments(studentId)).filter((assessment) =>
-      this.canReadAssessment(context, assessment),
+    const assessments = await this.filterForCampusScope(
+      context,
+      filterTenantResources(context, await this.store.listAssessments(studentId)).filter((assessment) =>
+        this.canReadAssessment(context, assessment),
+      ),
     );
     return Promise.all(assessments.map(async (assessment) => ({
       ...assessment,
@@ -148,6 +160,7 @@ export class DevelopmentService {
     if (!student || student.tenantId !== tenantId) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
+    await this.assertStudentInCampusScope(context, student);
 
     const teacherId = await this.resolveTeacherId(context, input.teacherId);
     const teacher = await this.teachers.findById(teacherId);
@@ -242,6 +255,51 @@ export class DevelopmentService {
         };
       }),
     })));
+  }
+
+  private campusRestriction(context: RequestContext): ReadonlySet<string> | undefined {
+    try {
+      return resolveCampusRestriction(context);
+    } catch {
+      throw new ForbiddenException("DEVELOPMENT_CAMPUS_SCOPE_MISSING");
+    }
+  }
+
+  // An assessment belongs to its student's current class campus; a student without a class fails closed.
+  private async filterForCampusScope(
+    context: RequestContext,
+    assessments: DevelopmentAssessmentRecord[],
+  ): Promise<DevelopmentAssessmentRecord[]> {
+    const restriction = this.campusRestriction(context);
+    if (!restriction) return assessments;
+
+    const allowedClassIds = this.classes
+      ? campusScopedClassIds(context, restriction, await this.classes.list())
+      : new Set<string>();
+    const allowedStudentIds = new Set(
+      filterTenantResources(context, await this.students.list())
+        .filter((student) => Boolean(student.classId && allowedClassIds.has(student.classId)))
+        .map((student) => student.id),
+    );
+    return assessments.filter((assessment) => allowedStudentIds.has(assessment.studentId));
+  }
+
+  private async assertStudentInCampusScope(
+    context: RequestContext,
+    student: { tenantId: string; classId?: string },
+  ): Promise<void> {
+    const restriction = this.campusRestriction(context);
+    if (!restriction) return;
+
+    const schoolClass = student.classId && this.classes ? await this.classes.findById(student.classId) : undefined;
+    if (
+      !schoolClass
+      || schoolClass.deletedAt
+      || schoolClass.tenantId !== student.tenantId
+      || !isCampusInScope(restriction, schoolClass.campusId)
+    ) {
+      throw new ForbiddenException("DEVELOPMENT_CAMPUS_SCOPE_FORBIDDEN");
+    }
   }
 
   private async requireCriterion(tenantId: string, id: string): Promise<DevelopmentCriterionRecord> {

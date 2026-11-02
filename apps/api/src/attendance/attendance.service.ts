@@ -14,6 +14,7 @@ import { GuardianAutoNotificationService } from "../guardian-notification/guardi
 import type { RequestContext } from "../context/request-context.js";
 import { requiredText } from "../shared/required-text.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
+import { type ClassStore, classStoreToken } from "../school/class-store.js";
 import { type GuardianStudentStore, guardianStudentStoreToken } from "../school/guardian-student-store.js";
 import {
   assertTeacherAssigned,
@@ -32,8 +33,10 @@ import {
 import {
   assertSubjectResourceAccess,
   assertTenantResourceAccess,
+  campusScopedClassIds,
   filterTenantResources,
   isTeacherSubjectContext,
+  resolveCampusRestriction,
 } from "../tenant/tenant-access.js";
 import { type AttendanceStore, attendanceStoreToken } from "./attendance-store.js";
 
@@ -58,6 +61,7 @@ export class AttendanceService {
     @Inject(teacherAssignmentStoreToken) private readonly teacherAssignmentStore: TeacherAssignmentStore,
     @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() private readonly guardianNotifications?: GuardianAutoNotificationService,
+    @Optional() @Inject(classStoreToken) private readonly classStore?: ClassStore,
   ) {}
 
   async list(context: RequestContext, filters: AttendanceListFilters = {}): Promise<AttendanceRecord[]> {
@@ -69,7 +73,11 @@ export class AttendanceService {
     const dateTo = optionalDate(filters.dateTo);
     if (dateFrom && dateTo && dateFrom > dateTo) throw new BadRequestException("ATTENDANCE_DATE_RANGE_INVALID");
     const enrollments = await this.listEnrollmentsForRecords(context, records);
-    const scopedRecords = await this.filterForTeacherScope(context, records, enrollments);
+    const scopedRecords = await this.filterForCampusScope(
+      context,
+      await this.filterForTeacherScope(context, records, enrollments),
+      enrollments,
+    );
     if (filters.studentId && isTeacherSubjectContext(context) && scopedRecords.length === 0) {
       const today = new Date().toISOString().slice(0, 10);
       const studentEnrollments = filterTenantResources(context, await this.studentEnrollmentStore.listByStudent(filters.studentId));
@@ -106,6 +114,7 @@ export class AttendanceService {
     if (!context.tenantId && !context.bypassRls) {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
     }
+    await this.assertClassInCampusScope(context, classId);
 
     const [allStudents, teacherAssignments] = await Promise.all([
       this.studentStore.list(),
@@ -170,6 +179,7 @@ export class AttendanceService {
     if (uniqueStudentIds.size !== input.entries.length) {
       throw new BadRequestException("ATTENDANCE_DAILY_STUDENT_DUPLICATE");
     }
+    await this.assertClassInCampusScope(context, classId);
 
     const [allStudents, allTerms, allAttendance, teacherAssignments] = await Promise.all([
       this.studentStore.list(),
@@ -370,6 +380,42 @@ export class AttendanceService {
         termId: record.termId,
       }, record.date));
     });
+  }
+
+  private campusRestriction(context: RequestContext): ReadonlySet<string> | undefined {
+    try {
+      return resolveCampusRestriction(context);
+    } catch {
+      throw new ForbiddenException("ATTENDANCE_CAMPUS_SCOPE_MISSING");
+    }
+  }
+
+  private async campusScopedClassIds(context: RequestContext, restriction: ReadonlySet<string>): Promise<Set<string>> {
+    return this.classStore ? campusScopedClassIds(context, restriction, await this.classStore.list()) : new Set();
+  }
+
+  // A record belongs to the class the student was enrolled in on that date; without one it fails closed.
+  private async filterForCampusScope(
+    context: RequestContext,
+    records: AttendanceRecord[],
+    enrollments: StudentEnrollmentRecord[],
+  ): Promise<AttendanceRecord[]> {
+    const restriction = this.campusRestriction(context);
+    if (!restriction) return records;
+
+    const allowedClassIds = await this.campusScopedClassIds(context, restriction);
+    return records.filter((record) => {
+      const classId = findEnrollmentAtDate(enrollments, record.studentId, record.date)?.classId;
+      return Boolean(classId && allowedClassIds.has(classId));
+    });
+  }
+
+  private async assertClassInCampusScope(context: RequestContext, classId: string): Promise<void> {
+    const restriction = this.campusRestriction(context);
+    if (!restriction) return;
+    if (!(await this.campusScopedClassIds(context, restriction)).has(classId)) {
+      throw new ForbiddenException("ATTENDANCE_CAMPUS_SCOPE_FORBIDDEN");
+    }
   }
 
   private filterByStudentClass(
