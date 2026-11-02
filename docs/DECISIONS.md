@@ -1504,6 +1504,51 @@ Etkilenen ADR: Yok
 Açık soru: Yok
 Son kontrol: 2026-11-02
 
+### DEC-20261102-08 — Ertelenen UI/UX ürün maddeleri açılır (wave-3)
+
+Durum: Onaylı (ürün sahibi, 2026-11-02: "ertelenen ürün maddelerini paralel ajanlarla eşzamanlı yap");
+DEC-20261102-01'in "Ertelenen" listesini kaldırır ve DEC-20261010-01'e ek sınırlı istisnadır
+Karar: Aşağıdaki maddeler wave-3'te açılır. Her maddede yanlış rapor veya KVKK riski taşıyan noktada güvenli
+seçenek esastır; "varsayılan" yazan kalemleri ürün sahibi değiştirebilir.
+- Dönem geçişi sihirbazı (`/kurum/donem-gecisi`): arayüz ve üç küçük uç (tek transaction'da yıl/dönem
+  aktivasyonu, toplu yenileme ön izlemesi, toplu durum değişikliği); yeni tablo ve migration yok. Mezuniyet
+  bugünkü GRADUATED davranışıdır (öğrenci portalı askıya alınır), açık bir "geri alınamaz" onayı ister ve
+  otomatik veri imhası yoktur. Mevcut yetkiler (setup:manage + student:manage + academic:manage) yeterlidir.
+  Aktif olmayan öğrenci içeren toplu yenileme 409 ile reddedilir; yenileme lisans kotasını kontrol eder.
+  Uygulama yalnız başlangıç tarihi bugün veya öncesi olan dönem için yapılır. Varsayılan: önce yenileme,
+  sonra mezuniyet, en son aktivasyon; her adım Idempotency-Key ile tekrarlanabilir ve yarıda kalan koşu
+  kaldığı yerden sürer. Geçen yılın sınıfa bağlı öğretmen atamaları otomatik değişmez; sihirbaz bunları
+  listeler ve sonlandırma önerir.
+- Seviye analitiği (G3): yalnız seviye süzgeçli (gradeLevelId = L), READY ve yayınlanmış (Exam.status
+  PUBLISHED) sınavların snapshot'ları kullanılır; süzgeçsiz snapshot seviye rakamı olarak gösterilmez, STALE
+  snapshot "rapor yenilenmeli" görünür. Sınav türü başına bir Başarı % çizgisi; Net/Soru bağlamdır. Görenler
+  tenant geneli academic:manage rolleridir; kampüs kısıtlı personel 403 alır. ReportSnapshot sözleşmesi ve
+  worker değişmez.
+- Öğretmen oluşturulunca bağlı Çalışan kaydı aynı transaction'da oluşur. Çalışan öğretmeni izler: öğretmen
+  güncellemesi ad, telefon ve ulusal kimliği Çalışan'a da yazar; öğretmen silinince Çalışan pasifleşir; öğretmen
+  kişisel veri imhası bağlı Çalışan'ın kişisel verisini de imha eder. Eşleşme önce userId, sonra ulusal kimlik
+  hash'iyle yapılır; mükerrer satır oluşmaz.
+- Tablo dışa aktarma (CSV): yalnız ekranda görünen sütunlar ve ekranda gösterildiği biçim (maskeli TC ve
+  telefon maskeli kalır, maskesiz değer hiç dışa aktarılmaz); listeyi görebilen rol dışa aktarabilir; her dışa
+  aktarma denetim kaydına (kullanıcı, liste, satır sayısı; içerik değil) yazılır. Varsayılan listeler:
+  öğrenciler, öğretmenler, sınıflar, devamsızlık. Portallarda dışa aktarma yoktur.
+- Devamsızlık takvimi: Öğrenci 360'ta ve öğrenci/veli portalında, kullanıcının zaten görebildiği devamsızlık
+  verisiyle aylık görünüm.
+- Öğrenci 360 zaman çizelgesi (yalnız personel): yoklama, yayınlanmış not, sınav sonucu, ödev ve teslim,
+  öğretmen notu ve gelişim değerlendirmesi olayları; her olay o olayı bugün okuyabilen role görünür
+  (INTERNAL gelişim kaydı RK-6'ya göre), finans olayları yalnız finans görünürlüğü olana.
+- Landing ürün görselleri: bu dalgada yalnız üretim hattı (kurgusal sentetik-v1 verisiyle yerel kurulumda
+  gerçek akıştan ekran görüntüsü) kurulur. Görseller `apps/web/public`'e girmez; yayın, staging UAT ve insan
+  PII incelemesinden sonra ayrı onayla yapılır.
+- CSS konsolidasyonu: diğer maddeler birleştikten sonra tek başına; piksel aynı, karne bölgesi hariç.
+Kaynak: Ürün sahibi talebi (2026-11-02); seçenekler `claudedocs/ui-ux-wave-2-kararlar-2026-11-02.md` W3,
+W4, W6, W9, W10 ve tamlık denetçisi bulguları, çürütmenin eklediği güvenlik ve KVKK kalemleriyle.
+Kanıt: LOCAL_STATIC (kapsam çalışması).
+Etkilenen ADR: ADR-0011 (değişmez)
+Açık soru: Dışa aktarılacak listeler ve zaman çizelgesindeki olay türleri ürün sahibiyle teyit edilir.
+Seviye analitiği seyrek başlar; seviye snapshot'ı üretilmeyen sınavlar "seviye raporu yok" görünür.
+Son kontrol: 2026-11-02
+
 ## Öneri Halindeki Kararlar
 
 Bu bölümdeki kayıtlar ürün sahibi onayı bekler ve yol haritasını değiştirmez. DEC-20261010-01 gereği
