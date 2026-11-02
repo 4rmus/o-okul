@@ -532,7 +532,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await page.getByRole("button", { name: "Komut paleti" }).click();
     const commandDialog = page.getByRole("dialog", { name: "Komut paleti" });
     await commandDialog.getByLabel("Komut ara").fill("kurulum");
-    await expect(commandDialog.getByRole("link", { name: /Yeni dönem açılışı|Kurulum/ }).first()).toBeVisible();
+    await expect(commandDialog.getByRole("option", { name: /Yeni dönem açılışı|Kurulum/ }).first()).toBeVisible();
     expect(unexpectedMutations).toEqual([]);
   });
 

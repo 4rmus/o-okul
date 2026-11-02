@@ -233,8 +233,9 @@ test.describe("Faz 9 UI görsel smoke", () => {
     const commandDialog = page.getByRole("dialog", { name: "Komut paleti" });
     await expect(commandDialog).toBeVisible();
     await commandDialog.getByLabel("Komut ara").fill("finans");
-    const paymentsResult = commandDialog.getByRole("link", { name: /Ödeme planları/ });
+    const paymentsResult = commandDialog.getByRole("option", { name: /Ödeme planları/ });
     await expect(paymentsResult).toBeVisible();
+    await expect(paymentsResult).toHaveAttribute("href", "/kurum/finans");
     await expect(commandDialog.getByRole("button", { name: /Ödeme planları/ })).toHaveCount(0);
     await expectUiStable(page, "faz9-command-palette", consoleErrors);
     await paymentsResult.click();

@@ -171,7 +171,7 @@ test.describe("Rol önizleme UI sözleşmesi", () => {
     await page.getByRole("button", { name: "Komut paleti" }).click();
     const commandPalette = page.getByRole("dialog", { name: "Komut paleti" });
     await commandPalette.getByLabel("Komut ara").fill("rol");
-    await expect(commandPalette.getByRole("link", { name: /Rol Önizleme/ })).toHaveCount(0);
+    await expect(commandPalette.getByRole("option", { name: /Rol Önizleme/ })).toHaveCount(0);
     await commandPalette.getByRole("button", { name: "Kapat" }).click();
     expect(unexpectedMutations.filter((mutation) => mutation.includes("/role-previews"))).toEqual([]);
   });
