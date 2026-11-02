@@ -198,6 +198,15 @@ requireTokens("apps/web/app/(app)/app-shell.tsx", [
   'aria-expanded={expanded}',
 ]);
 requireOccurrenceCount("apps/web/app/(app)/app-shell.tsx", 'className="next-command-open"', 2);
+// DEC-20261102-06: portal unread-announcement bell; one mount per top bar (desktop and mobile), student and guardian only.
+requireOccurrenceCount("apps/web/app/(app)/app-shell.tsx", "<PortalAnnouncementBell />", 2);
+requireTokens("apps/web/app/(app)/app-shell.tsx", [
+  'hasSubjectPortalAccess(session, "STUDENT", "STUDENT")',
+  'hasSubjectPortalAccess(session, "GUARDIAN", "GUARDIAN")',
+  'aria-label="Okunmamış duyurular"',
+  "collectPortalUnreadAnnouncements(sources)",
+  "{licenseReadOnly ? null : (",
+]);
 
 requireTokens("apps/web/app/(app)/kurum/_shared/revealable-phone.tsx", [
   'aria-label={revealed ? "Telefonu kapat" : "Telefonu aç"}',

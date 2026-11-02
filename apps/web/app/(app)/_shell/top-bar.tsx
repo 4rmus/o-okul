@@ -9,6 +9,7 @@ import { appBrand } from "../../../src/brand.js";
 import { hasInstitutionAccess, hasSystemAccess } from "../_shared/access.js";
 import { dynamicDetailParents, institutionNavGroups, rolePortalItems, rolePortalNavGroups, staticBreadcrumbLabels, systemNavGroups } from "../_shared/navigation.js";
 import { type ShellTenantBrand } from "./nav-sidebar.js";
+import { PortalAnnouncementBell } from "./portal-announcement-bell.js";
 import { ThemeToggle } from "./theme-toggle.js";
 import { examWorkspaceSegments } from "../../../src/route-manifest.js";
 const allNavigationItems = [
@@ -61,6 +62,7 @@ export function DesktopTopBar({
             {personaSwitch.label}
           </Button>
         ))}
+        <PortalAnnouncementBell />
         <ThemeToggle />
         <Button type="button" variant="secondary" onClick={onLogout}>
           <LogOut size={16} aria-hidden="true" />
