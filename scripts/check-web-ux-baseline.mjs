@@ -5360,11 +5360,22 @@ requireTokens("scripts/profile-web-performance.mjs", [
 requireTokens("apps/web/app/page.tsx", [
   "next-marketing-workflow",
   'aria-label="Öğrenci kaydında toplanan bilgiler"',
+  'id="ogrenci-haftasi"',
+  "Haftanın her işi aynı öğrenci kaydında birleşir.",
+  "Deneme sınavı yapan kurumlar için",
   "Dosyayı alın",
   "Eşleşmeleri kontrol edin",
   "Sonucu doğrulayın",
   "Raporu oluşturun",
   "Takibi planlayın",
+]);
+
+// DEC-20261102-07: hero'dan sonra öğrencinin haftası, ardından optik akış.
+requireTokensInOrder("apps/web/app/page.tsx", [
+  'className="next-marketing-hero"',
+  'id="ogrenci-haftasi"',
+  'id="optik-akis"',
+  'id="roller"',
 ]);
 
 requireTokens("apps/web/playwright.next.config.ts", [

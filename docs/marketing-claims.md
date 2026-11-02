@@ -15,10 +15,17 @@ durumu `docs/product-journeys-v1.md`, canlılık kanıtı `docs/phase-6-producti
 Yönetici, öğretmen ve öğrenci yalnızca yetkili olduğu bilgiyi görür.
 
 Birincil segment tek veya çok kampüslü özel K12 okuldur; dershane ve özel öğretim kurumu ikincil
-segmenttir ve optik TXT/DAT → rapor/karne akışı landing'de ikinci bölüm olarak kalır
-(DEC-20261004-03). Başlık metni KF-9 PR'ında kilitlenir: `scripts/check-ops-config.mjs`,
+segmenttir (DEC-20261004-03). Landing bölüm sırası DEC-20261102-07'dir: hero'dan sonra ikinci bölüm
+"Öğrencinin haftası" akışıdır (yoklama, ödev, okul notu, deneme, haftalık takip); optik TXT/DAT →
+rapor/karne akışı üçüncü bölümde "Deneme sınavı yapan kurumlar için" başlığıyla, kilitli adım
+metinleri değişmeden durur. Ürün görseli bu sırayla eklenmez; görseller staging UAT'tan sonra gelir. Başlık metni KF-9 PR'ında kilitlenir: `scripts/check-ops-config.mjs`,
 `scripts/check-prod-readiness.mjs`, `scripts/check-web-ux-baseline.mjs` ve landing e2e/golden aynı
 PR'da güncellenmeden değiştirilmez.
+
+**Fiyat sayfası "Her pakette" listesi:** sıra DEC-20261102-07'dir: önce `Öğrenci kaydı` (deneme
+sonuçları, okul notu, devamsızlık ve ödev aynı öğrenci kaydında), ardından `Kurum operasyonu`,
+`Finans takibi` ve `Rol tabanlı erişim`; `Deneme analizi` ile `Optik okuma ve karne` listenin sonunda
+kalır. Liste altı maddedir; fiyat ve kademe değişmez.
 
 **CTA:** `Demo talep et`, `Fiyatları gör` (`/fiyatlar`) ve mevcut kullanıcılar için `Giriş yap`.
 Fiyat sayfasında 3001+ için `Teklif talebi hazırla` `/iletisim#teklif` e-posta taslağına gider;

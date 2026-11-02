@@ -55,6 +55,10 @@ test.describe("Public marketing context", () => {
     await expect(page.getByRole("region", { name: "Öğrenci kaydında toplanan bilgiler" }).locator("li")).toHaveCount(5);
     await expect(page.getByText("TXT/DAT yükleme", { exact: false }).first()).toBeVisible();
     await expect(page.locator("#optik-akis article")).toHaveCount(5);
+    await expect(page.locator("#ogrenci-haftasi article")).toHaveCount(5);
+    await expect(page.locator("#optik-akis .next-marketing-kicker")).toHaveText("Deneme sınavı yapan kurumlar için");
+    // DEC-20261102-07: hero'dan sonra öğrencinin haftası, ardından optik akış gelir.
+    expect(await page.locator("#main-content > section").evaluateAll((sections) => sections.slice(0, 3).map((section) => section.id || "hero"))).toEqual(["hero", "ogrenci-haftasi", "optik-akis"]);
     await expect(page.getByText("Başarı %", { exact: false }).first()).toBeVisible();
     await expect(page.getByText("Net ve Soru", { exact: false }).first()).toBeVisible();
     await expect(page.getByText("Verileriniz Türkiye'deki sunucularda barındırılır.", { exact: true })).toBeVisible();
@@ -90,7 +94,10 @@ test.describe("Public marketing context", () => {
     }
     await expect(plans.getByText("1–100: 99 TL, 101–250: 95 TL, 251–500: 90 TL, 501–1.000: 85 TL, 1.001–2.000: 80 TL, 2.001–3.000: 75 TL", { exact: false })).toBeVisible();
     await expect(page.getByText("Kurulum ücreti yok, tüm modüller her pakette dahil", { exact: false })).toBeVisible();
-    await expect(page.getByRole("list", { name: "Her pakette bulunan modüller" }).getByRole("listitem")).toHaveCount(6);
+    const packageModules = page.getByRole("list", { name: "Her pakette bulunan modüller" }).getByRole("listitem");
+    await expect(packageModules).toHaveCount(6);
+    // DEC-20261102-07: liste öğrenci kaydıyla başlar; kurum operasyonu, finans ve roller ardından gelir.
+    await expect(packageModules.getByRole("heading", { level: 3 })).toHaveText(["Öğrenci kaydı", "Kurum operasyonu", "Finans takibi", "Rol tabanlı erişim", "Deneme analizi", "Optik okuma ve karne"]);
     await expect(page.getByText("En küçük paket 100 öğrencidir; daha az öğrencisi olan kurum 100 öğrenci üzerinden öder.", { exact: false })).toBeVisible();
     await expect(page.getByText("aylık ödeme seçeneği yoktur", { exact: false })).toBeVisible();
     await expect(page.getByText("Örnek, 1.000 öğrenci: 100 × 99 TL + 150 × 95 TL + 250 × 90 TL + 500 × 85 TL = 89.150 TL.", { exact: false })).toBeVisible();
