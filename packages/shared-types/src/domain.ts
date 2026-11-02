@@ -2481,7 +2481,7 @@ export interface TeacherTodaySummary {
   latestReport: { examId: string; title: string; startsAt?: string; latestGeneratedAt: string } | null;
   /** Submitted and not yet checked homework submissions of current class members, in the teacher's homework scope. */
   pendingSubmissionCount?: number;
-  /** Assessments in the teacher's gradebook scope that hold at least one saved, unpublished entry. */
+  /** Assessments the teacher may author (class-pinned CLASS_TEACHER/BRANCH_TEACHER) that hold at least one saved, unpublished entry. */
   unpublishedGradeDraftCount?: number;
   /** Announcements visible to the teacher that the teacher has not marked read. */
   unreadAnnouncementCount?: number;
