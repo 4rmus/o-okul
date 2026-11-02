@@ -302,6 +302,8 @@
 
 .next-portal-bell__trigger {
   position: relative;
+  /* Sayı rozeti düğmenin köşesinden taşar; düğme onu kırpmamalı. */
+  overflow: visible;
 }
 
 .next-desktop-topbar__account .next-portal-bell__count,
