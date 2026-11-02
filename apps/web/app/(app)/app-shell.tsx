@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { LifeBuoy, Menu, Search, ShieldCheck, X } from "lucide-react";
 import { Button } from "@o-okul/ui";
 import { isFinanceOnlyStaff, type ActivePersona, type MeProfileResponse, type TenantRecord } from "@o-okul/shared-types";
-import { apiBaseUrl, apiListRequest, apiRequest } from "../../src/api-client.js";
+import { apiBaseUrl, apiRequest } from "../../src/api-client.js";
 import { loginPathAfterLogout } from "../../src/logout-pending.js";
 import { browserSystemLoginPath } from "../../src/tenant-host.js";
 import { useAuth } from "../providers.js";
@@ -16,17 +16,12 @@ import { canAccessInstitutionPath, getInstitutionNavGroups, hasCapabilityForRole
 import { buildInstitutionRailGroups, institutionNavGroups, rolePortalNavGroups, systemNavGroups } from "./_shared/navigation.js";
 import { buildCommandItems, canUseEntitySearch, CommandPalette, focusCommandOpener } from "./_shell/command-palette.js";
 import { keepFocusInMobileNav, safeTenantBrand, ShellBrand, SidebarGroup, type NavigationGroup, type SidebarItem } from "./_shell/nav-sidebar.js";
-import { DesktopTopBar, RouteBreadcrumb, WorkContext } from "./_shell/top-bar.js";
+import { DesktopTopBar, RouteBreadcrumb } from "./_shell/top-bar.js";
 import { ThemeToggle } from "./_shell/theme-toggle.js";
 import { PortalBottomNav } from "./_shell/portal-bottom-nav.js";
 import { isWebPushCapabilityEnabled, PushDevicePanel } from "./_shell/push-devices.js";
 
 const sidebarGroupStorageKey = "des.sidebar.expandedGroups.v2";
-
-interface WorkContextOptions {
-  campuses: Array<{ id: string; name: string }>;
-  terms: Array<{ id: string; name: string }>;
-}
 
 export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -37,7 +32,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [commandQuery, setCommandQuery] = useState("");
   const [expandedSidebarGroups, setExpandedSidebarGroups] = useState<Record<string, boolean>>({});
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
-  const [isWorkContextActivated, setIsWorkContextActivated] = useState(false);
   const [isPersonaSwitching, setIsPersonaSwitching] = useState(false);
   const [personaSwitchError, setPersonaSwitchError] = useState("");
   const commandOpenerRef = useRef<HTMLButtonElement | null>(null);
@@ -77,26 +71,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       && ((hasInstitutionAccess(auth.session.roles) && !isFinanceOnlyStaff(auth.session.roles)) || visiblePortalNavGroups.length > 0)
     : false;
   const canUseShellSearch = auth?.session ? hasShellSearchAccess(auth.session) : false;
-  const workContextCampusId = pathname.startsWith("/kurum") ? searchParams.get("campusId") ?? "" : "";
-  const workContextTermId = pathname.startsWith("/kurum") ? searchParams.get("termId") ?? "" : "";
   const tenantBrandQuery = useQuery({
     queryKey: ["next-shell-tenant-brand", auth?.session.tenantId ?? "anonymous"],
     queryFn: () => loadShellTenant(auth?.accessToken ?? ""),
-    // /me/tenant ve çalışma bağlamı katalogları FINANCE_STAFF'a kapalı (KF-1); marka varsayılana düşer.
+    // /me/tenant FINANCE_STAFF'a kapalı (KF-1); marka varsayılana düşer.
     enabled: Boolean(auth && hasInstitutionAccess(auth.session.roles) && !isFinanceOnlyStaff(auth.session.roles) && !isRolePreviewRoute),
-    refetchOnWindowFocus: false,
-  });
-  const workContextQuery = useQuery({
-    queryKey: ["next-shell-work-context", auth?.session.tenantId ?? "anonymous"],
-    queryFn: () => loadWorkContextOptions(auth?.accessToken ?? ""),
-    enabled: Boolean(
-      auth
-      && hasInstitutionAccess(auth.session.roles)
-      && !isFinanceOnlyStaff(auth.session.roles)
-      && !isRolePreviewRoute
-      && pathname.startsWith("/kurum")
-      && (workContextCampusId || workContextTermId || isWorkContextActivated)
-    ),
     refetchOnWindowFocus: false,
   });
   const profileQuery = useQuery({
@@ -265,16 +244,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     router.push(href);
   }
 
-  // Bağlam URL'de tutulur (ADR-0006); campusId/termId okuyan sayfaların query key'leri değişir ve yeniden sorgular.
-  function updateWorkContext(key: "campusId" | "termId", value: string) {
-    const params = new URLSearchParams(searchParams.toString());
-    if (value) params.set(key, value);
-    else params.delete(key);
-    params.delete("page");
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname);
-  }
-
   function openCommandSearch(value: string) {
     setCommandQuery(value);
     setIsCommandOpen(true);
@@ -434,17 +403,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           tenantBrand={tenantBrand}
         />
         <RouteBreadcrumb pathname={pathname} />
-        {pathname.startsWith("/kurum") ? (
-          <WorkContext
-            campusId={workContextCampusId}
-            campuses={workContextQuery.data?.campuses ?? []}
-            onActivate={() => setIsWorkContextActivated(true)}
-            onChange={updateWorkContext}
-            termId={workContextTermId}
-            terms={workContextQuery.data?.terms ?? []}
-            tenantName={tenantBrand?.name}
-          />
-        ) : null}
         {children}
       </main>
       {portalBottomNavRoot ? <PortalBottomNav isActive={isActive} onMore={openMobileNav} root={portalBottomNavRoot} /> : null}
@@ -550,12 +508,4 @@ async function loadShellTenant(accessToken: string): Promise<TenantRecord | unde
   } catch {
     return undefined;
   }
-}
-
-async function loadWorkContextOptions(accessToken: string): Promise<WorkContextOptions> {
-  const [campuses, terms] = await Promise.all([
-    apiListRequest<{ id: string; name: string }>(accessToken, `${apiBaseUrl}/campuses`),
-    apiListRequest<{ id: string; name: string }>(accessToken, `${apiBaseUrl}/academic-terms`),
-  ]);
-  return { campuses: campuses.data, terms: terms.data };
 }

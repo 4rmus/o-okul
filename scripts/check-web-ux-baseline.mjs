@@ -1115,7 +1115,7 @@ requireTokens("apps/web/e2e-next/setup-wizard-contract-next.spec.ts", [
   'getByLabel("Öğretmen aktarım dosyası")).toBeVisible()',
   'getByLabel("Öğrenci aktarım dosyası")).toBeVisible()',
   'getByLabel("Veli aktarım dosyası")).toHaveCount(0)',
-  'getByRole("option", { name: /Yeni dönem açılışı|Kurulum/ }).first()).toBeVisible()',
+  'getByRole("option", { name: /Kurulum/ }).first()).toBeVisible()',
   "expect(unexpectedMutations).toEqual([])",
   "expectNoHorizontalOverflow",
   "expectNoUnlabeledControls",
@@ -1811,7 +1811,7 @@ requireTokens("apps/web/src/route-manifest.js", [
   'navRoute("/kurum/canli-yayin", "Yayın Hazırlığı", "Ayarlar", "Activity", { capability: operationEvidenceCapability, hiddenFromRail: true, hub: "/kurum/operasyon-ve-kanit", operationEvidence: true, tabLabel: "Yayın hazırlığı" })',
   'navRoute("/kurum/raporlar", "Sınav Raporları", "Sınav", "BarChart3", { capability: "academic:manage", keywords: ["karne"], menuLabel: "Raporlar" })',
   'navRoute("/kurum", "Özet", "Bugün", "LayoutDashboard", { breadcrumbLabel: "Kurum Özeti" })',
-  'commandAction("/kurum/kurulum", "Yeni dönem açılışı", "İş akışı", "setup:manage")',
+  'commandAction("/kurum/ogrenciler", "Öğrenci dönem geçişi", "İş akışı", "student:manage")',
 ]);
 
 requireTokens("apps/web/app/(app)/_shared/navigation.ts", [

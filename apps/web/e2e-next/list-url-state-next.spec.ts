@@ -238,9 +238,8 @@ test.describe("Liste URL state", () => {
     await expect(filters.getByLabel("Sınıf")).toHaveValue("class-11a");
     await expect(filters.getByLabel("Ders")).toHaveValue("course-math");
     await expect(filters.getByLabel("Dönem")).toHaveValue("term-2026-spring");
-    const workContext = page.getByLabel("Çalışma bilgileri");
-    await expect(workContext).toContainText("Merkez Kampüs");
-    await expect(workContext).toContainText("2. Donem");
+    // DEC-20261102-02: kabukta Kampüs/Dönem seçicisi yok; kampüs ve dönem yalnız sayfa filtresinden okunur.
+    await expect(page.getByLabel("Çalışma bilgileri")).toHaveCount(0);
     await expect(installmentsTable.locator('th[data-column-key="student"]')).toHaveAttribute("data-mobile-priority", "primary");
     await expect(installmentsTable.locator('th[data-column-key="context"]')).toHaveAttribute("data-mobile-priority", "hidden");
     await expect(installmentsTable.locator('th[data-column-key="actions"]')).toHaveAttribute("data-sticky", "right");

@@ -275,7 +275,8 @@ export const examWorkspaceSegments = {
 
 // Komut paletindeki iş akışı ve hızlı işlem girdileri.
 export const commandActions = [
-  commandAction("/kurum/kurulum", "Yeni dönem açılışı", "İş akışı", "setup:manage"),
+  // Toplu dönem geçişi Öğrenciler listesindeki "Toplu işlemler" bölümündedir; ilk kurulum sihirbazı menüdeki Kurulum girdisidir.
+  commandAction("/kurum/ogrenciler", "Öğrenci dönem geçişi", "İş akışı", "student:manage"),
   commandAction("/kurum/raporlar", "Sınav sonrası kapanış", "İş akışı", "academic:manage"),
   commandAction("/kurum/kampusler?new=1", "Kampüs ekle", "Hızlı işlem", "class:manage"),
   commandAction("/kurum/seviyeler?new=1", "Seviye ekle", "Hızlı işlem", "class:manage"),
