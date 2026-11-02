@@ -408,6 +408,13 @@ export interface EmployeeAccessRecord {
   employmentEndsAt?: string;
   userId?: string;
   accountStatus?: string;
+  /**
+   * Read model only (GET /employees, DEC-20261102-01 / F-21): the linked account's e-mail. Once an account is
+   * bound it is the contact of record; `workEmail` stays an HR field.
+   */
+  accountEmail?: string;
+  /** Read model only (GET /employees): the Teacher profile bound to this employee, when one exists. */
+  teacherId?: string;
   access?: {
     membershipId: string;
     staffRole?: "TENANT_OWNER" | "TENANT_ADMIN" | "OPERATIONS_STAFF" | "FINANCE_STAFF";

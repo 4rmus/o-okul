@@ -4101,18 +4101,11 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await Promise.all([page.waitForURL(/\/kurum\/siniflar\/class-a$/), classResult.click()]);
   await expect(heading(page, { name: "8-A" })).toBeVisible();
 
-  await clickSidebarLink(page, "Kullanıcılar", /\/kurum\/kullanicilar$/);
-  await expect(heading(page, { name: "Kullanıcılar" })).toBeVisible();
-  await expect(page.getByText("Admin A")).toBeVisible();
-  const userList = page.getByLabel("Kullanıcı ve rol yönetimi");
-  await expect(userList.getByText("ad••@•••.test")).toBeVisible();
-  await expect(userList.getByText("admin-a@example.test")).toHaveCount(0);
+  // DEC-20261102-01 (F-21): accounts and roles live on Çalışanlar; the "Kullanıcı hesapları" tab is retired.
+  await clickSidebarLink(page, "Çalışanlar ve Yetkiler", /\/kurum\/calisanlar$/);
+  await expect(heading(page, { name: "Çalışanlar ve Yetkiler" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Personel bölümleri" }).getByRole("link", { name: "Kullanıcı hesapları" })).toHaveCount(0);
   await expect(heading(page, { name: "Davetler" })).toHaveCount(0);
-
-  await expect(page.getByLabel("Admin A rolleri").getByRole("checkbox")).toHaveCount(0);
-  await expect(userList.getByText("Mevcut hesaplar", { exact: true })).toBeVisible();
-  await expect(userList.getByText("Roller Çalışanlar ekranında düzenlenir")).toBeVisible();
-  await expect(userList.getByRole("link", { name: "Çalışan erişimlerini yönet" })).toHaveAttribute("href", "/kurum/calisanlar");
   expect(rolePatchCount).toBe(0);
 
   await expandSidebarGroup(page, "Akademik");
@@ -5572,6 +5565,7 @@ test("Next sıfır-veri kurulum adımlarını ve yeni kayıt derin linkini göst
       "/message-templates",
       "/support-tickets",
       "/tenant-users",
+      "/employees",
       "/identity-invitations",
       "/exams",
       "/payment-plans",
@@ -5660,7 +5654,8 @@ test("Next sıfır-veri kurulum adımlarını ve yeni kayıt derin linkini göst
   await page.goto("/kurum/destek");
   await expect(page.getByText("Destek bildirimi yok")).toBeVisible();
   await page.goto("/kurum/kullanicilar");
-  await expect(page.getByText("Kullanıcı yok")).toBeVisible();
+  await expect(page).toHaveURL(/\/kurum\/calisanlar$/);
+  await expect(page.getByText("Çalışan yok")).toBeVisible();
   await page.goto("/kurum/devamsizlik");
   await expect(page.getByText("Devamsızlık kaydı yok")).toBeVisible();
   await page.goto("/kurum/notlar");

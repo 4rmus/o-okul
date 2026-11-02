@@ -27,6 +27,8 @@ describe("PostgresUserManagementStore", () => {
                   employmentEndsAt: null,
                   userId: "user-a",
                   accountStatus: "ACTIVE",
+                  accountEmail: "ada.hesap@example.test",
+                  teacherId: "teacher-a",
                   membershipId: "membership-a",
                   staffRole: "OPERATIONS_STAFF",
                   hasTeacherPersona: true,
@@ -50,12 +52,17 @@ describe("PostgresUserManagementStore", () => {
         id: "employee-a",
         tenantId: "tenant-a",
         employmentStartsAt: "2026-08-01T00:00:00.000Z",
+        accountEmail: "ada.hesap@example.test",
+        teacherId: "teacher-a",
         access: expect.objectContaining({ staffRole: "OPERATIONS_STAFF", campusIds: ["campus-a"] }),
       }),
     ]);
     const employeeQuery = queries.find((query) => query.sql.includes('FROM "Employee" e'));
     expect(employeeQuery?.values).toEqual(["tenant-a"]);
     expect(employeeQuery?.sql).toContain('u."tenantId" = e."tenantId"');
+    // DEC-20261102-01: the teacher cross-link join is tenant-qualified, not only keyed on employeeId.
+    expect(employeeQuery?.sql).toContain('t."tenantId" = e."tenantId" AND t."employeeId" = e."id" AND t."deletedAt" IS NULL');
+    expect(employeeQuery?.sql).toContain('u."email" AS "accountEmail"');
     expect(queries.some((query) => query.sql.includes("set_config('app.current_tenant_id'"))).toBe(true);
   });
 
@@ -118,6 +125,56 @@ describe("PostgresUserManagementStore", () => {
     expect(employeeQuery?.sql).toContain('LIKE $2 ESCAPE');
     expect(employeeQuery?.sql).toContain("lower(translate(");
     expect(employeeQuery?.sql).toContain('LIMIT $3');
+    // The search also covers the bound account's e-mail, and both joins stay inside the tenant.
+    expect(employeeQuery?.sql).toContain('coalesce(u."email", \'\')');
+    expect(employeeQuery?.sql).toContain('u."tenantId" = e."tenantId" AND u."id" = e."userId"');
+    expect(employeeQuery?.sql).toContain('t."tenantId" = e."tenantId" AND t."employeeId" = e."id"');
+  });
+
+  it("bağlı hesap yoksa satırda kalan hesap e-postasını döndürmez", async () => {
+    const pool = {
+      async query<T>() {
+        return { rows: [] as T[] };
+      },
+      async connect() {
+        return {
+          async query<T>(sql: string) {
+            if (sql.includes("pg_try_advisory_xact_lock_shared")) return { rows: [{ locked: true }] as T[] };
+            if (sql.includes('FROM "Employee" e')) {
+              return {
+                rows: [{
+                  id: "employee-b",
+                  tenantId: "tenant-a",
+                  employeeNo: null,
+                  firstName: "Can",
+                  lastName: "Ak",
+                  workEmail: null,
+                  status: "PLANNED",
+                  employmentStartsAt: null,
+                  employmentEndsAt: null,
+                  userId: null,
+                  accountStatus: null,
+                  accountEmail: "stale@example.test",
+                  teacherId: null,
+                  membershipId: null,
+                  staffRole: null,
+                  hasTeacherPersona: null,
+                  membershipStatus: null,
+                  version: null,
+                  scopeMode: null,
+                  campusIds: null,
+                }] as T[],
+              };
+            }
+            return { rows: [] as T[] };
+          },
+          release() {},
+        };
+      },
+    };
+    const [record] = await new PostgresUserManagementStore(pool).listEmployees("tenant-a");
+    expect(record?.accountEmail).toBeUndefined();
+    expect(record?.teacherId).toBeUndefined();
   });
 
   it("tenant kullanıcı listeleme, oluşturma ve rol güncelleme SQL parametrelerini kullanır", async () => {
@@ -624,6 +681,29 @@ describe("InMemoryUserManagementStore çalışan cursor listesi", () => {
     });
     await expect(store.listEmployeeAccessPage("tenant-a", { ...query, q: "ADMIN-A@EXAMPLE.TEST" })).resolves.toMatchObject({
       records: [expect.objectContaining({ id: "employee-admin-a" })],
+    });
+  });
+
+  it("bağlı hesabın e-postasını döndürür ve aramada eşler; başka kurumun hesabını eşlemez (DEC-20261102-01)", async () => {
+    const store = new InMemoryUserManagementStore();
+    // The work e-mail is an HR field and may differ from the account e-mail once an account is bound.
+    const employees = (store as unknown as { employees: Array<{ id: string; workEmail?: string }> }).employees;
+    employees.find((record) => record.id === "employee-admin-a")!.workEmail = "ik-kaydi@example.test";
+
+    const page = await store.listEmployeeAccessPage("tenant-a", { ...query, limit: 10 });
+    expect(page.records.find((record) => record.id === "employee-admin-a")).toMatchObject({
+      accountEmail: "admin-a@example.test",
+      workEmail: "ik-kaydi@example.test",
+    });
+    // No account bound in this tenant: no account e-mail.
+    expect(page.records.find((record) => record.id === "employee-operations-a")?.accountEmail).toBeUndefined();
+
+    await expect(store.listEmployeeAccessPage("tenant-a", { ...query, limit: 10, q: "ADMIN-A@example" })).resolves.toMatchObject({
+      records: [expect.objectContaining({ id: "employee-admin-a" })],
+    });
+    // Tenant B's account e-mail never matches a tenant A row.
+    await expect(store.listEmployeeAccessPage("tenant-a", { ...query, limit: 10, q: "admin-b@example.test" })).resolves.toMatchObject({
+      records: [],
     });
   });
 });

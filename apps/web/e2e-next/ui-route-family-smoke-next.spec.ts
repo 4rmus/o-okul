@@ -32,6 +32,8 @@ interface RouteCase {
   persona: Persona;
   primaryTask: PrimaryTask;
   query?: string;
+  /** Retired route that only redirects; the contract is checked on the destination page. */
+  redirectTo?: string;
   routeTemplate: string;
 }
 
@@ -69,7 +71,8 @@ const routeCases = [
   route("/kurum/guvenlik-denetimi", "Güvenlik Denetimi", "tenantAdmin", { role: "region", name: "Canlıya geçiş güvenlik kontrolleri" }),
   route("/kurum/kampusler", "Kampüsler", "assistantAdmin", { role: "region", name: "Kampüs yönetimi" }),
   route("/kurum/kazanimlar", "Kazanımlar", "assistantAdmin", { role: "region", name: "Kazanım yönetimi" }),
-  route("/kurum/kullanicilar", "Kullanıcılar", "tenantAdmin", { role: "region", name: "Kullanıcı ve rol yönetimi" }),
+  // DEC-20261102-01 (F-21): the "Kullanıcı hesapları" tab is retired; old links land on Çalışanlar.
+  route("/kurum/kullanicilar", "Çalışanlar ve Yetkiler", "tenantAdmin", { role: "region", name: "Çalışan ve yetki görünümü" }, { redirectTo: "/kurum/calisanlar" }),
   route("/kurum/lisans-donemleri", "Lisans Dönemleri", "tenantAdmin", { role: "region", name: "Lisans dönemleri" }),
   route("/kurum/kurulum", "Kurulum Sihirbazı", "assistantAdmin", { role: "region", name: "Kurulum formu" }),
   route("/kurum/kurulum/genel", "Kurulum Sihirbazı", "assistantAdmin", { role: "region", name: "Kurulum formu" }),
@@ -177,7 +180,7 @@ test.describe("UI route family smoke", () => {
 
         const featureRedirected = routeCase.feature === "sms" && process.env.NEXT_PUBLIC_SMS_ENABLED !== "true";
         await expect(page).toHaveURL((url) =>
-          url.pathname === (featureRedirected ? "/kurum" : resolvedPath)
+          url.pathname === (featureRedirected ? "/kurum" : routeCase.redirectTo ?? resolvedPath)
           && (featureRedirected || !routeCase.query || url.searchParams.toString() === routeCase.query),
         );
         await expect(page, contractLabel(routeCase, viewport, "document title")).toHaveTitle(/\S/);
@@ -371,7 +374,7 @@ function route(
   heading: string,
   persona: Persona,
   primaryTask: PrimaryTask,
-  options: Pick<RouteCase, "feature" | "query"> = {},
+  options: Pick<RouteCase, "feature" | "query" | "redirectTo"> = {},
 ): RouteCase {
   return { architecture: resolveRouteArchitecture(routeTemplate), ...options, heading, persona, primaryTask, routeTemplate };
 }

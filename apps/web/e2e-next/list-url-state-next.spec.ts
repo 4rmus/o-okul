@@ -34,6 +34,7 @@ interface CapturedRequests {
   studySessions: URLSearchParams[];
   supportTickets: URLSearchParams[];
   teachers: URLSearchParams[];
+  employees: URLSearchParams[];
   users: URLSearchParams[];
 }
 
@@ -63,7 +64,8 @@ test.describe("Liste URL state", () => {
     await expect.poll(() => new URL(page.url()).searchParams.get("sort")).toBe("lastName");
   });
 
-  test("kullanıcı ekranında URL state namespace ile ayrılır", async ({ page }) => {
+  // DEC-20261102-01 (F-21): the "Kullanıcı hesapları" tab is retired; old links keep their search on Çalışanlar.
+  test("emekli kullanıcı hesapları adresi aramayı koruyarak Çalışanlar'a yönlenir", async ({ page }) => {
     const captured = createCapturedRequests();
     await openWithListMocks(
       page,
@@ -71,39 +73,32 @@ test.describe("Liste URL state", () => {
       "/kurum/kullanicilar?usersCursor=users-cursor-2&usersLimit=20&usersQ=admin&usersSort=email",
     );
 
-    const usersRegion = page.getByLabel("Kullanıcı ve rol yönetimi");
-    await expect(usersRegion.getByLabel("Ara")).toHaveValue("admin");
-    await expect(usersRegion.getByLabel("Sırala")).toHaveValue("email");
-    await expect(usersRegion.getByLabel("Göster")).toHaveValue("20");
-    await expect.poll(() => captured.users.at(-1)?.get("q")).toBe("admin");
-    await expect.poll(() => captured.users.at(-1)?.get("cursor")).toBe("users-cursor-2");
-    expect(captured.users.some((params) => params.has("page"))).toBe(false);
-
-    await usersRegion.getByRole("button", { name: "Sonraki sayfa" }).click();
-    await expect.poll(() => new URL(page.url()).searchParams.get("usersCursor")).toBe("cursor-next");
-    await expect.poll(() => captured.users.at(-1)?.get("cursor")).toBe("cursor-next");
-    await usersRegion.getByRole("button", { name: "Önceki sayfa" }).click();
-    await expect.poll(() => new URL(page.url()).searchParams.get("usersDirection")).toBe("previous");
-    await expect.poll(() => captured.users.at(-1)?.get("direction")).toBe("previous");
-
-    await usersRegion.getByLabel("Ara").fill("yardımcı");
-    await expect.poll(() => new URL(page.url()).searchParams.get("usersQ")).toBe("yardımcı");
-    await expect.poll(() => new URL(page.url()).searchParams.get("usersCursor")).toBeNull();
-    await expect.poll(() => captured.users.at(-1)?.has("cursor")).toBe(false);
+    await expect(page).toHaveURL((url) => url.pathname === "/kurum/calisanlar" && url.searchParams.get("employeesQ") === "admin");
+    const employeesRegion = page.getByLabel("Çalışan ve yetki görünümü");
+    await expect(employeesRegion.getByLabel("Ara")).toHaveValue("admin");
+    await expect.poll(() => captured.employees.at(-1)?.get("q")).toBe("admin");
+    expect(captured.employees.some((params) => params.has("cursor"))).toBe(false);
+    expect(new URL(page.url()).searchParams.has("usersCursor")).toBe(false);
+    expect(captured.users).toEqual([]);
+    await expect(page.locator(".uh-crud-page__error")).toHaveCount(0);
   });
 
-  test("kullanıcı listesinde URL'deki geçersiz cursor düşürülür ve hata göstermeden ilk sayfa açılır", async ({ page }) => {
+  test("emekli kullanıcı hesapları sekmesi Personel bölümlerinde yer almaz", async ({ page }) => {
     const captured = createCapturedRequests();
-    await openWithListMocks(page, captured, "/kurum/kullanicilar?usersCursor=stale-cursor&usersQ=admin");
+    await openWithListMocks(page, captured, "/kurum/kullanicilar");
 
-    const usersRegion = page.getByLabel("Kullanıcı ve rol yönetimi");
-    await expect(usersRegion.getByLabel("Admin Kullanıcı rolleri", { exact: true })).toBeVisible();
-    await expect.poll(() => new URL(page.url()).searchParams.get("usersCursor")).toBeNull();
-    await expect.poll(() => captured.users.at(-1)?.has("cursor")).toBe(false);
-    expect(captured.users.at(-1)?.get("q")).toBe("admin");
-    expect(captured.users.some((params) => params.get("cursor") === "stale-cursor")).toBe(true);
-    await expect(page.locator(".uh-crud-page__error")).toHaveCount(0);
-    await expect(usersRegion.getByLabel("Ara")).toHaveValue("admin");
+    await expect(page).toHaveURL((url) => url.pathname === "/kurum/calisanlar" && url.search === "");
+    const staffTabs = page.getByRole("navigation", { name: "Personel bölümleri" });
+    await expect(staffTabs.getByRole("link", { name: "Çalışanlar ve yetkiler", exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(staffTabs.getByRole("link", { name: "Kullanıcı hesapları" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Kullanıcılar", exact: true })).toHaveCount(0);
+    expect(captured.users).toEqual([]);
+    expect(captured.roleUpdates).toEqual([]);
+    expect(captured.invitationCreates).toEqual([]);
+
+    for (const value of ["12345678901", "+905551234567", "guardian-private@example.test", "activation-token-created-secret"]) {
+      await expect(page.locator("body")).not.toContainText(value);
+    }
   });
 
   test("öğrenci listesinde URL'deki geçersiz cursor düşürülür ve ilk sayfa açılır", async ({ page }) => {
@@ -115,43 +110,6 @@ test.describe("Liste URL state", () => {
     await expect.poll(() => captured.students.at(-1)?.has("cursor")).toBe(false);
     expect(captured.students.some((params) => params.get("cursor") === "stale-cursor")).toBe(true);
     await expect(page.locator(".uh-crud-page__error")).toHaveCount(0);
-  });
-
-  test("mevcut kullanıcı listesini salt okunur tutup çalışan yönetimine yönlendirir", async ({ page }) => {
-    const captured = createCapturedRequests();
-    await openWithListMocks(page, captured, "/kurum/kullanicilar");
-
-    const usersRegion = page.getByLabel("Kullanıcı ve rol yönetimi");
-    const summary = usersRegion.getByRole("region", { exact: true, name: "Kullanıcı operasyon özeti" });
-    const adminRoles = usersRegion.getByLabel("Admin Kullanıcı rolleri", { exact: true });
-    await expect(summary).toContainText("Kullanıcı toplamı");
-    await expect(summary).toContainText("Yetki yönetimi");
-    await expect(summary).toContainText("Mevcut hesaplar");
-    await expect(summary).toContainText("Roller Çalışanlar ekranında düzenlenir");
-    await expect(summary).not.toContainText("Yazma kapalı");
-    await expect(adminRoles).toContainText("Öğretmen");
-    await expect(adminRoles.getByRole("checkbox")).toHaveCount(0);
-    expect(captured.roleUpdates).toEqual([]);
-    await expect(usersRegion.getByRole("button", { name: /rollerini kaydet/u })).toHaveCount(0);
-    await expect(usersRegion.getByRole("link", { name: "Çalışan erişimlerini yönet" })).toHaveAttribute("href", "/kurum/calisanlar");
-
-    for (const value of ["12345678901", "+905551234567", "guardian-private@example.test"]) {
-      await expect(page.locator("body")).not.toContainText(value);
-    }
-  });
-
-  test("kullanıcı ekranı davet tokenı göstermeden PII maskesini korur", async ({ page }) => {
-    const captured = createCapturedRequests();
-    await openWithListMocks(page, captured, "/kurum/kullanicilar");
-
-    await expect(page.getByRole("button", { name: "Davet oluştur" })).toHaveCount(0);
-    await expect(page.getByLabel("Son aktivasyon tokenı")).toHaveCount(0);
-    expect(captured.invitationCreates).toEqual([]);
-    expect(captured.invitationResends).toEqual([]);
-
-    for (const value of ["12345678901", "+905551234567", "guardian-private@example.test", "activation-token-created-secret", "activation-token-resent-secret"]) {
-      await expect(page.locator("body")).not.toContainText(value);
-    }
   });
 
   test("öğrenci listesi filtre, kolon ve yoğunluk state'ini URL'de korur", async ({ page }) => {
@@ -1019,6 +977,7 @@ function createCapturedRequests(): CapturedRequests {
     messageTemplates: [],
     paymentPlans: [],
     roleUpdates: [],
+    employees: [],
     scheduleLessons: [],
     students: [],
     studySessions: [],
@@ -1063,6 +1022,11 @@ async function installListApiMocks(page: Page, captured: CapturedRequests) {
     if (pathName === "/tenant-users" && route.request().method() === "POST") {
       const body = route.request().postDataJSON();
       await fulfillData(route, { ...createTenantUser(), ...body, id: "tenant-user-created" });
+      return;
+    }
+    if (pathName === "/employees" && route.request().method() === "GET") {
+      captured.employees.push(new URLSearchParams(url.search));
+      await fulfillCursorList(route, [], url.searchParams, false);
       return;
     }
     if (pathName === "/tenant-users") {
