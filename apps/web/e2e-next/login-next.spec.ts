@@ -4629,13 +4629,15 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByText("Toplu işlemler", { exact: true }).click();
   await page.getByLabel("Toplu dönem geçişi").getByLabel("Geçiş tarihi").fill("2026-06-08");
   await page.getByLabel("Toplu dönem geçişi").getByLabel("8-B hedefi").selectOption("class-a");
-  await page.getByRole("button", { name: "Listelenenleri geçir" }).click();
+  await page.getByRole("checkbox", { name: "Bu sayfadaki tüm öğrencileri seç" }).check();
+  await page.getByRole("button", { name: /^Seçilenleri geçir \(\d+\)$/ }).click();
   await page.getByRole("dialog", { name: "Toplu dönem geçişini onayla" }).getByRole("button", { name: "Geçir" }).click();
   await expect(page.getByRole("cell", { name: "8-A", exact: true }).first()).toBeVisible();
   expect(studentEnrollments.some((record) => record.studentId === "student-a" && record.reason === "RENEWED" && record.startsAt === "2026-06-08")).toBe(true);
   await page.getByLabel("Toplu dönem geçişi").getByLabel("Geçiş tarihi").fill("2026-06-09");
   await page.getByLabel("Otomatik seviye yükselt").check();
-  await page.getByRole("button", { name: "Listelenenleri geçir" }).click();
+  await page.getByRole("checkbox", { name: "Bu sayfadaki tüm öğrencileri seç" }).check();
+  await page.getByRole("region", { name: "Toplu işlem çubuğu" }).getByRole("button", { name: "Dönem geçişi" }).click();
   await page.getByRole("dialog", { name: "Toplu dönem geçişini onayla" }).getByRole("button", { name: "Geçir" }).click();
   await expect(page.getByRole("cell", { name: "9-A", exact: true }).first()).toBeVisible();
   expect(studentEnrollments.some((record) =>
@@ -4649,7 +4651,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("checkbox", { name: "Ada A seç" }).check();
   await guardianInvitation.getByRole("button", { name: "Velileri davet et (1)" }).click();
   await page.getByRole("dialog", { name: "Toplu veli davetini onayla" }).getByRole("button", { name: "Davet et" }).click();
-  await expect(guardianInvitation.getByRole("status")).toHaveText("Davet gönderildi: 1 · Zaten var: 0 · Atlandı: 1 (e-posta yok: 1)");
+  await expect(page.getByRole("region", { name: "Toplu işlem çubuğu" }).getByRole("status")).toHaveText("Davet gönderildi: 1 · Zaten var: 0 · Atlandı: 1 (e-posta yok: 1)");
   expect(guardianInvitationRequests).toEqual([{ idempotencyKey: expect.any(String), studentIds: ["student-a"] }]);
 
   await page.getByRole("button", { name: "Öğrenci ekle" }).click();

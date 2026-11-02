@@ -1672,6 +1672,44 @@ requireTokens("packages/ui/src/components/data-table.tsx", [
   "resolveScrollRegionLabel",
 ]);
 
+// S3: DataTable seçim API'si, sabit başlık satırı ve öğrenci listesinde seçime bağlı toplu işlemler.
+requireTokens("packages/ui/src/components/crud-page.tsx", [
+  "selection?: DataTableSelectionOptions<TRow>;",
+  "{...selection}",
+]);
+requireTokens("packages/ui/src/components/data-table.tsx", [
+  "export interface DataTableSelectionOptions<TRow>",
+  "selectedKeys?: readonly string[];",
+  "onSelectionChange?(keys: string[]): void;",
+  "getRowLabel?(row: TRow): string;",
+  'aria-label={selection.selectAllLabel ?? "Sayfadaki tüm satırları seç"}',
+  "input.indeterminate = somePageRowsSelected;",
+  "aria-label={`${selection.getRowLabel?.(row) ?? `Satır ${rowIndex + 1}`} seç`}",
+  'data-sticky-header={isStickyHeader ? "true" : undefined}',
+  'data-selected={isSelected ? "true" : undefined}',
+]);
+requireTokens("apps/web/app/globals.css", [
+  '.uh-data-table-scroll[data-sticky-header="true"] > .uh-data-table > thead th',
+  '.uh-data-table tr[data-selected="true"] td',
+  ".next-bulk-selection {",
+]);
+requireTokens("apps/web/app/(app)/kurum/ogrenciler/students-page.tsx", [
+  "selection={canSelectStudents ? {",
+  'selectAllLabel: "Bu sayfadaki tüm öğrencileri seç"',
+  "const canSelectStudents = canManageStudents || canInviteGuardians;",
+  "const selectionScopeKey = JSON.stringify([listQuery, filters]);",
+  'aria-label="Toplu işlem çubuğu"',
+  "{selectedStudents.length} öğrenci seçildi",
+  "Seçimi temizle",
+  "Seçilenleri geçir ({selectedStudents.length})",
+  "${studentIds.length} seçili öğrenci ${bulkEnrollmentAction.startsAt}",
+]);
+requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/students-page.tsx", [
+  "Listelenenleri geçir",
+  "studentIds: rows.map((student) => student.id)",
+  "const selectionColumn: DataTableColumn<StudentRecord>",
+]);
+
 requireTokens("packages/ui/src/components/crud-page.tsx", [
   "summary?: ReactNode",
   "filteredEmptyState?: ReactNode",
