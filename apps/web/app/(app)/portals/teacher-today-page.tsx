@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import type { TeacherTodaySummary } from "@o-okul/shared-types";
-import { DataTable, Panel, type DataTableColumn } from "@o-okul/ui";
+import { DataTable, Panel, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
 import { apiBaseUrl, apiRequest } from "../../../src/api-client.js";
 import { formatDateKey } from "../_shared/istanbul-date.js";
 import { useAuth } from "../../providers.js";
@@ -21,8 +21,8 @@ import {
 
 type TodayLesson = TeacherTodaySummary["todayLessons"][number];
 
-// Öğretmen günlük özeti (Berrak §5): bugün → 1–3 aksiyon → detay. Tek read model (/me/teacher/today);
-// yazma formları Ders akışı ve Öğrenci takibi sayfalarındadır.
+// Öğretmen günlük özeti (Berrak §5): bugün (şimdi/sıradaki ders) → bekleyen işler → günün ders akışı.
+// Tek read model (/me/teacher/today); yazma formları Ders akışı, Ödevler ve Not defteri sayfalarındadır.
 export function TeacherTodayPage() {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
@@ -60,27 +60,104 @@ export function TeacherTodayPage() {
   }
 
   const today = query.data;
+  const now = Date.now();
+  const lessons = today.todayLessons;
   // Biten ders "sıradaki" sayılmaz; günün dersleri bittiyse son ders bağlam olarak gösterilir.
-  const nextLesson = today.todayLessons.find((lesson) => new Date(lesson.endsAt).getTime() >= Date.now());
-  const lastLesson = today.todayLessons.at(-1);
+  const nextLesson = lessons.find((lesson) => new Date(lesson.endsAt).getTime() >= now);
+  const focusLesson = nextLesson ?? lessons.at(-1);
+  const focusLabel = !focusLesson ? undefined : !nextLesson ? "Son ders" : hasStarted(nextLesson, now) ? "Şimdi" : "Sıradaki ders";
   const todayLabel = formatDateKey(today.date);
   // Yoklama bağlantısı dersin sınıfını ve gününü taşır; Ders akışı yoklama formunu bu sınıfla açar.
   const attendanceHref = (lesson: TodayLesson) =>
     `${href(`/ogretmen/ders-akisi?classId=${encodeURIComponent(lesson.classId)}&date=${encodeURIComponent(today.date)}`)}#portal-teacher-attendance`;
-  const actions: PortalActionItem[] = [
-    {
-      actionLabel: isRolePreview ? "Yalnızca görüntüleme" : "Yoklama al",
-      detail: nextLesson ? `${nextLesson.title} · ${formatTime(nextLesson.startsAt)}` : lastLesson ? "Bugünkü dersler bitti" : "Bugün planlı ders yok",
-      href: nextLesson ? attendanceHref(nextLesson) : href("/ogretmen/ders-akisi"),
-      key: "attendance",
-      label: "Yoklama al",
-      statusLabel: "Bugün",
-      tone: nextLesson ? "info" : "neutral",
-      value: `${today.todayLessons.length} ders`,
-    },
+
+  // Eski API yanıtında yoklama durumu yoktur; o zaman sayaç ve rozetler "bilinmiyor" kalır, sıfır gösterilmez.
+  const attendanceKnown = lessons.some((lesson) => lesson.attendanceTaken !== undefined);
+  const lessonsWithoutAttendance = lessons.filter((lesson) => lesson.attendanceTaken === false);
+  const overdueAttendance = lessonsWithoutAttendance.some((lesson) => hasStarted(lesson, now));
+  const attendanceTarget = nextLesson?.attendanceTaken === false
+    ? nextLesson
+    : lessonsWithoutAttendance.find((lesson) => hasStarted(lesson, now)) ?? lessonsWithoutAttendance[0] ?? nextLesson;
+  const pendingSubmissionCount = today.pendingSubmissionCount ?? 0;
+  const unpublishedGradeDraftCount = today.unpublishedGradeDraftCount ?? 0;
+  const unreadAnnouncementCount = today.unreadAnnouncementCount ?? 0;
+  const nearestHomework = today.pendingHomework[0];
+
+  const attendanceAction: PortalActionItem = !attendanceKnown || lessons.length === 0
+    ? {
+        actionLabel: isRolePreview ? "Yalnızca görüntüleme" : "Yoklama al",
+        detail: nextLesson ? lessonDetail(nextLesson, now, { withTitle: true }) : lessons.length > 0 ? "Bugünkü dersler bitti" : "Bugün planlı ders yok",
+        href: nextLesson ? attendanceHref(nextLesson) : href("/ogretmen/ders-akisi"),
+        key: "attendance",
+        label: "Yoklama al",
+        statusLabel: "Bugün",
+        tone: nextLesson ? "info" : "neutral",
+        value: `${lessons.length} ders`,
+      }
+    : lessonsWithoutAttendance.length > 0 && attendanceTarget
+      ? {
+          actionLabel: isRolePreview ? "Yalnızca görüntüleme" : "Yoklama al",
+          detail: lessonDetail(attendanceTarget, now, { withTitle: true }),
+          href: attendanceHref(attendanceTarget),
+          key: "attendance",
+          label: "Yoklama al",
+          statusLabel: overdueAttendance ? "Yoklama alınmadı" : "Yoklama bekliyor",
+          tone: overdueAttendance ? "warning" : "info",
+          value: `${lessonsWithoutAttendance.length} ders`,
+        }
+      : {
+          actionLabel: isRolePreview ? "Yalnızca görüntüleme" : "Yoklamayı gör",
+          detail: "Bugünkü derslerin yoklaması alındı",
+          href: focusLesson ? attendanceHref(focusLesson) : href("/ogretmen/ders-akisi"),
+          key: "attendance",
+          label: "Yoklama al",
+          statusLabel: "Tamam",
+          tone: "success",
+          value: "Tümü alındı",
+        };
+
+  // Bekleyen işler: sayacı sıfır olan veya okunamayan yeni kalemler gösterilmez; yoklama, ödev ve rapor her zaman kalır.
+  const inbox: PortalActionItem[] = [
+    attendanceAction,
+    ...(pendingSubmissionCount > 0
+      ? [{
+          actionLabel: "Kontrol et",
+          detail: "Öğrencilerin teslim ettiği, kontrol bekleyen ödevler",
+          href: href("/ogretmen/odevler"),
+          key: "submissions",
+          label: "Teslim kontrolü",
+          statusLabel: "Bekliyor",
+          tone: "warning" as const,
+          value: `${pendingSubmissionCount} teslim`,
+        }]
+      : []),
+    ...(unpublishedGradeDraftCount > 0
+      ? [{
+          actionLabel: "Gözden geçir",
+          detail: "Kaydedilmiş, henüz yayımlanmamış notlar",
+          href: href("/ogretmen/not-defteri"),
+          key: "gradeDrafts",
+          label: "Not taslakları",
+          statusLabel: "Yayımlanmadı",
+          tone: "warning" as const,
+          value: `${unpublishedGradeDraftCount} değerlendirme`,
+        }]
+      : []),
+    ...(unreadAnnouncementCount > 0
+      ? [{
+          actionLabel: "Oku",
+          detail: "Öğretmenlere gönderilen duyurular",
+          href: href("/ogretmen/duyurular"),
+          key: "announcements",
+          label: "Okunmamış duyurular",
+          statusLabel: "Okunmadı",
+          tone: "info" as const,
+          value: `${unreadAnnouncementCount} duyuru`,
+        }]
+      : []),
     {
       actionLabel: "Kontrol et",
-      detail: "Kontrol edilmeyen ödevler",
+      detail: nearestHomework ? `En yakın: ${nearestHomework.title}` : "Kontrol edilmeyen ödevler",
       href: href("/ogretmen/odevler"),
       key: "homework",
       label: "Ödev kontrolü",
@@ -99,20 +176,44 @@ export function TeacherTodayPage() {
       value: today.latestReport ? formatDate(today.latestReport.latestGeneratedAt) : "-",
     },
   ];
+  const pendingWork = [
+    lessonsWithoutAttendance.length > 0 ? `${lessonsWithoutAttendance.length} yoklama` : "",
+    pendingSubmissionCount > 0 ? `${pendingSubmissionCount} teslim` : "",
+    unpublishedGradeDraftCount > 0 ? `${unpublishedGradeDraftCount} taslak` : "",
+    unreadAnnouncementCount > 0 ? `${unreadAnnouncementCount} duyuru` : "",
+    today.pendingHomeworkCount > 0 ? `${today.pendingHomeworkCount} ödev` : "",
+  ].filter(Boolean);
 
   const lessonColumns: Array<DataTableColumn<TodayLesson>> = [
     { key: "time", header: "Saat", mobilePriority: "primary", priority: "primary", render: (lesson) => `${formatTime(lesson.startsAt)}–${formatTime(lesson.endsAt)}` },
-    { key: "lesson", header: "Ders", mobilePriority: "primary", priority: "primary", render: (lesson) => lesson.title },
+    {
+      key: "lesson",
+      header: "Ders",
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (lesson) => (lesson === nextLesson && hasStarted(lesson, now) ? <>{lesson.title} <StatusBadge tone="info">Şimdi</StatusBadge></> : lesson.title),
+    },
+    { key: "class", header: "Sınıf", mobilePriority: "secondary", priority: "primary", render: (lesson) => lesson.className ?? "-" },
+    {
+      key: "attendance",
+      header: "Yoklama",
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (lesson) => {
+        const state = attendanceState(lesson, now);
+        return state ? <StatusBadge tone={state.tone}>{state.label}</StatusBadge> : "-";
+      },
+    },
     {
       // "actions" anahtarı mobil detay satırından düşürülür; bu bağlantılar telefonda detay satırında kalmalı.
       key: "lessonActions",
       header: "İşlem",
-      // Mobilde işlem bağlantıları detay satırına iner; saat ve ders adı tam genişlikte kalır.
+      // Mobilde işlem bağlantıları detay satırına iner; saat, ders ve yoklama durumu tam genişlikte kalır.
       mobilePriority: "hidden",
       priority: "primary",
       render: (lesson) => (
         <span className="next-row-actions next-row-actions--text">
-          <Link href={attendanceHref(lesson)}>Yoklama al</Link>
+          <Link href={attendanceHref(lesson)}>{lesson.attendanceTaken ? "Yoklamayı gör" : "Yoklama al"}</Link>
           <Link href={href("/ogretmen/odevler")}>Ödev ver</Link>
         </span>
       ),
@@ -124,57 +225,53 @@ export function TeacherTodayPage() {
       {isRolePreview ? <RolePreviewNotice /> : null}
       <PortalDailyBrief
         items={[
-          { label: "Bugünkü ders", value: `${today.todayLessons.length} ders`, detail: todayLabel, tone: today.todayLessons.length > 0 ? "info" : "neutral" },
+          { label: "Bugünkü ders", value: `${lessons.length} ders`, detail: todayLabel, tone: lessons.length > 0 ? "info" : "neutral" },
           {
-            label: "Sıradaki ders",
-            value: nextLesson?.title ?? (lastLesson ? "Bugünkü dersler bitti" : "Planlı ders yok"),
-            detail: nextLesson ? formatTime(nextLesson.startsAt) : lastLesson ? `Son ders: ${lastLesson.title}` : "-",
-            tone: nextLesson ? "info" : "neutral",
+            label: "Yoklama",
+            value: !attendanceKnown || lessons.length === 0 ? "-" : lessonsWithoutAttendance.length > 0 ? `${lessonsWithoutAttendance.length} ders bekliyor` : "Tamam",
+            detail: !attendanceKnown || lessons.length === 0
+              ? (lessons.length > 0 ? "Ders akışında görülür" : "Bugün planlı ders yok")
+              : `${lessons.length - lessonsWithoutAttendance.length}/${lessons.length} ders alındı`,
+            tone: !attendanceKnown || lessons.length === 0 ? "neutral" : overdueAttendance ? "warning" : lessonsWithoutAttendance.length > 0 ? "info" : "success",
           },
-          { label: "Ödev kontrolü", value: today.pendingHomeworkCount > 0 ? `${today.pendingHomeworkCount} bekliyor` : "Tamam", detail: "Kontrol edilmeyen ödevler", tone: today.pendingHomeworkCount > 0 ? "warning" : "success" },
+          {
+            label: "Bekleyen iş",
+            value: pendingWork.length > 0 ? `${pendingWork.length} iş` : "Tamam",
+            detail: pendingWork.length > 0 ? pendingWork.join(" · ") : "Bekleyen iş yok",
+            tone: pendingWork.length > 0 ? "warning" : "success",
+          },
         ]}
-        summary="Bugünkü dersler, bekleyen ödevler ve son sınav raporu."
+        scope={focusLesson && focusLabel ? { label: focusLabel, value: focusLesson.title, detail: lessonDetail(focusLesson, now, { withAttendance: true }) } : undefined}
+        summary="Şimdiki veya sıradaki ders, yoklama durumu ve bekleyen işler."
         title="Bugün"
       />
-      <PortalActionStrip ariaLabel="Öğretmen günlük aksiyonları" items={actions} />
+      <PortalActionStrip ariaLabel="Öğretmen günlük aksiyonları" eyebrow="Bugün yapılacaklar" items={inbox} title="Bekleyen işler" />
       <Panel aria-label="Bugünkü dersler" description={`${todayLabel} tarihli dersler.`} title="Bugünkü dersler">
-        <DataTable aria-label="Bugünkü dersler" columns={lessonColumns} density="comfortable" emptyText="Bugün planlı ders yok." getRowKey={(lesson) => lesson.id} rows={today.todayLessons} />
-      </Panel>
-      <Panel
-        actions={<Link href={href("/ogretmen/odevler")}>Ödev kontrolüne git</Link>}
-        aria-label="Kontrol bekleyen ödevler"
-        description={`${today.pendingHomeworkCount} ödev kontrol bekliyor.`}
-        title="Kontrol bekleyen ödevler"
-      >
-        {today.pendingHomework.length > 0 ? (
-          <ul className="next-portal-today-list">
-            {today.pendingHomework.map((item) => (
-              <li key={item.id}>
-                <strong>{item.title}</strong>
-                <span>{item.dueAt ? `Teslim: ${formatDate(item.dueAt)}` : "Teslim tarihi yok"}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="next-status-note">Kontrol bekleyen ödev yok.</p>
-        )}
-      </Panel>
-      <Panel
-        actions={<Link href={href("/ogretmen/raporlar")}>Sınav raporuna git</Link>}
-        aria-label="Son sınav raporu"
-        description="Başarı % ana metriktir; Net ve Soru bağlam olarak raporda gösterilir."
-        title="Son sınav raporu"
-      >
-        {today.latestReport ? (
-          <p>
-            <strong>{today.latestReport.title}</strong> · {formatDate(today.latestReport.latestGeneratedAt)} tarihli rapor hazır.
-          </p>
-        ) : (
-          <p className="next-status-note">Henüz hazır sınav raporu yok.</p>
-        )}
+        <DataTable aria-label="Bugünkü dersler" columns={lessonColumns} density="comfortable" emptyText="Bugün planlı ders yok." getRowKey={(lesson) => lesson.id} rows={lessons} />
       </Panel>
     </PortalFrame>
   );
+}
+
+function hasStarted(lesson: TodayLesson, now: number) {
+  return new Date(lesson.startsAt).getTime() <= now;
+}
+
+function attendanceState(lesson: TodayLesson, now: number): { label: string; tone: StatusBadgeProps["tone"] } | undefined {
+  if (lesson.attendanceTaken === undefined) return undefined;
+  if (lesson.attendanceTaken) return { label: "Alındı", tone: "success" };
+  return hasStarted(lesson, now) ? { label: "Alınmadı", tone: "warning" } : { label: "Bekliyor", tone: "neutral" };
+}
+
+// Şimdi/Sıradaki kartı yoklama durumunu da taşır; aksiyon kartı ders adıyla başlar.
+function lessonDetail(lesson: TodayLesson, now: number, options: { withAttendance?: boolean; withTitle?: boolean } = {}) {
+  const attendance = options.withAttendance ? attendanceState(lesson, now) : undefined;
+  return [
+    options.withTitle ? lesson.title : "",
+    `${formatTime(lesson.startsAt)}–${formatTime(lesson.endsAt)}`,
+    lesson.className ?? "",
+    attendance ? `Yoklama ${attendance.label.toLocaleLowerCase("tr-TR")}` : "",
+  ].filter(Boolean).join(" · ");
 }
 
 function formatTime(value: string) {

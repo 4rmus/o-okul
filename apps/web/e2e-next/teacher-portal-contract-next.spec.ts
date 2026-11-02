@@ -324,17 +324,26 @@ async function expectTeacherTodaySummary(page: Page, options: { rolePreview: boo
   const brief = page.getByRole("region", { exact: true, name: "Bugün" });
   await expectPortalSummaryMetrics(
     brief.getByRole("group", { exact: true, name: "Bugün özeti" }),
-    ["Bugünkü ders", "Sıradaki ders", "Ödev kontrolü"],
+    ["Bugünkü ders", "Yoklama", "Bekleyen iş"],
     rawInternalValues,
   );
+  // T3: Şimdi/Sıradaki kartı dersin saatini, sınıf adını ve yoklama durumunu taşır.
+  await expect(brief).toContainText("Sıradaki ders");
   await expect(brief).toContainText("Matematik problem çözümü");
-  await expect(brief).toContainText("1 bekliyor");
+  await expect(brief).toContainText("12:30–13:30 · 8-A · Yoklama bekliyor");
+  await expect(brief).toContainText("1 ders bekliyor");
+  await expect(brief).toContainText("5 iş");
+  await expect(brief).toContainText("1 yoklama · 2 teslim · 1 taslak · 1 duyuru · 1 ödev");
 
   const actionStrip = page.getByRole("region", { name: "Öğretmen günlük aksiyonları" });
   await expect(actionStrip).toBeVisible();
+  await expect(actionStrip.getByRole("heading", { name: "Bekleyen işler" })).toBeVisible();
   await expect(actionStrip).toContainText("Bugün yapılacaklar");
-  await expect(actionStrip).toContainText("3 iş");
+  await expect(actionStrip).toContainText("6 iş");
   await expect(actionStrip.getByRole("link", { name: /Yoklama al: 1 ders/ })).toHaveAttribute("href", attendanceHref);
+  await expect(actionStrip.getByRole("link", { name: /Teslim kontrolü: 2 teslim/ })).toHaveAttribute("href", `/ogretmen/odevler${suffix}`);
+  await expect(actionStrip.getByRole("link", { name: /Not taslakları: 1 değerlendirme/ })).toHaveAttribute("href", `/ogretmen/not-defteri${suffix}`);
+  await expect(actionStrip.getByRole("link", { name: /Okunmamış duyurular: 1 duyuru/ })).toHaveAttribute("href", `/ogretmen/duyurular${suffix}`);
   await expect(actionStrip.getByRole("link", { name: /Ödev kontrolü: 1 ödev/ })).toHaveAttribute("href", `/ogretmen/odevler${suffix}`);
   await expect(actionStrip.getByRole("link", { name: /Son sınav raporu/ })).toHaveAttribute(
     "href",
@@ -343,21 +352,29 @@ async function expectTeacherTodaySummary(page: Page, options: { rolePreview: boo
   await expectPortalActionHrefs(actionStrip, [
     attendanceHref,
     `/ogretmen/odevler${suffix}`,
+    `/ogretmen/not-defteri${suffix}`,
+    `/ogretmen/duyurular${suffix}`,
+    `/ogretmen/odevler${suffix}`,
     `/ogretmen/raporlar?examId=exam-demo-isem-lgs-1${options.rolePreview ? "&rolePreview=1" : ""}`,
   ]);
   if (options.rolePreview) await expect(actionStrip).toContainText("Yalnızca görüntüleme");
 
   const lessons = page.getByRole("region", { exact: true, name: "Bugünkü dersler" });
-  await expect(lessons.getByRole("table", { name: "Bugünkü dersler" })).toBeVisible();
+  const lessonTable = lessons.getByRole("table", { name: "Bugünkü dersler" });
+  await expect(lessonTable).toBeVisible();
   await expect(lessons).toContainText("Matematik problem çözümü");
   await expect(lessons).toContainText("17 Haz 2026 tarihli dersler.");
-  await expect(lessons.getByRole("link", { name: "Yoklama al" }).first()).toHaveAttribute("href", attendanceHref);
-  const homework = page.getByRole("region", { exact: true, name: "Kontrol bekleyen ödevler" });
-  await expect(homework).toContainText("Kesirler tekrar");
-  const report = page.getByRole("region", { exact: true, name: "Son sınav raporu" });
-  await expect(report).toContainText("İSEM LGS-1");
-  await expect(report).toContainText("tarihli rapor hazır");
-  for (const region of [brief, actionStrip, lessons, homework, report]) {
+  await expect(lessonTable.locator('td[data-column-key="class"]')).toHaveText(["8-A"]);
+  await expect(lessonTable.locator('td[data-column-key="attendance"] .uh-status-badge')).toHaveText(["Bekliyor"]);
+  // Yoklama ve ödev bağlantıları telefonda detay satırında görünür kalır.
+  const shownAttendanceLink = lessons.getByRole("link", { name: "Yoklama al" }).filter({ visible: true });
+  await expect(shownAttendanceLink).toHaveCount(1);
+  await expect(shownAttendanceLink).toHaveAttribute("href", attendanceHref);
+  await expect(lessons.getByRole("link", { name: "Ödev ver" }).filter({ visible: true })).toHaveCount(1);
+  // Eski üç ayrı detay paneli kalktı; aynı bilgiler Bekleyen işler kutusundadır.
+  await expect(page.getByRole("region", { exact: true, name: "Kontrol bekleyen ödevler" })).toHaveCount(0);
+  await expect(page.getByRole("region", { exact: true, name: "Son sınav raporu" })).toHaveCount(0);
+  for (const region of [brief, actionStrip, lessons]) {
     for (const value of rawInternalValues) {
       await expect(region).not.toContainText(value);
     }
@@ -705,8 +722,11 @@ function createTeacherToday() {
     latestReport: { examId: "exam-demo-isem-lgs-1", latestGeneratedAt: "2026-06-16T12:00:00.000Z", title: "İSEM LGS-1" },
     pendingHomework: [{ classId: "class-8a", dueAt: "2026-06-18T00:00:00.000Z", id: "homework-a", title: "Kesirler tekrar" }],
     pendingHomeworkCount: 1,
+    pendingSubmissionCount: 2,
     teacherName: "Ayşe Öğretmen",
-    todayLessons: [{ classId: "class-8a", courseId: "course-math", endsAt: "2026-06-17T10:30:00.000Z", id: "schedule-a", startsAt: "2026-06-17T09:30:00.000Z", title: "Matematik problem çözümü" }],
+    todayLessons: [{ attendanceTaken: false, classId: "class-8a", className: "8-A", courseId: "course-math", endsAt: "2026-06-17T10:30:00.000Z", id: "schedule-a", startsAt: "2026-06-17T09:30:00.000Z", title: "Matematik problem çözümü" }],
+    unpublishedGradeDraftCount: 1,
+    unreadAnnouncementCount: 1,
   };
 }
 

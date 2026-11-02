@@ -29,6 +29,7 @@ interface RolePortalActionStripCase {
   key: string;
   path: string;
   regionName: string;
+  title?: string;
 }
 
 const redesignViewports = [
@@ -41,6 +42,13 @@ const redesignViewports = [
 ];
 const landingViewports = [...redesignViewports, { height: 800, width: 1280 }];
 
+const teacherTodayInboxHrefs = [
+  { href: "/ogretmen/ders-akisi?classId=class-8a&date=2026-06-17#portal-teacher-attendance", name: /Yoklama al: 1 ders/ },
+  { href: "/ogretmen/odevler", name: /Teslim kontrolü: 2 teslim/ },
+  { href: "/ogretmen/duyurular", name: /Okunmamış duyurular: 1 duyuru/ },
+  { href: "/ogretmen/odevler", name: /Ödev kontrolü: 1 ödev/ },
+  { href: "/ogretmen/raporlar?examId=exam-demo-isem-lgs-1", name: /Son sınav raporu:/ },
+];
 const rolePortalActionStripCases: RolePortalActionStripCase[] = [
   {
     authProfile: "student",
@@ -72,15 +80,13 @@ const rolePortalActionStripCases: RolePortalActionStripCase[] = [
   },
   {
     authProfile: "teacher",
-    count: 3,
-    hrefs: [
-      { href: "/ogretmen/ders-akisi?classId=class-8a&date=2026-06-17#portal-teacher-attendance", name: /Yoklama al: 1 ders/ },
-      { href: "/ogretmen/odevler", name: /Ödev kontrolü: 1 ödev/ },
-      { href: "/ogretmen/raporlar?examId=exam-demo-isem-lgs-1", name: /Son sınav raporu:/ },
-    ],
+    // T3: bekleyen işler kutusu; sayacı sıfır olan not taslağı kalemi gösterilmez.
+    count: 5,
+    hrefs: teacherTodayInboxHrefs,
     key: "teacher",
     path: "/ogretmen",
     regionName: "Öğretmen günlük aksiyonları",
+    title: "Bekleyen işler",
   },
 ];
 const rolePortalViewportContractName =
@@ -769,12 +775,11 @@ test.describe("Faz 9 UI görsel smoke", () => {
 
     await expect(page.getByRole("heading", { level: 1, name: "Öğretmen Portalı" })).toBeVisible();
     await expectPortalDailyBrief(page.getByRole("region", { exact: true, name: "Bugün" }), 3);
-    await expectRolePortalActionStrip(page.getByRole("region", { name: "Öğretmen günlük aksiyonları" }), 3, [
-      { href: "/ogretmen/ders-akisi?classId=class-8a&date=2026-06-17#portal-teacher-attendance", name: /Yoklama al: 1 ders/ },
-      { href: "/ogretmen/odevler", name: /Ödev kontrolü: 1 ödev/ },
-      { href: "/ogretmen/raporlar?examId=exam-demo-isem-lgs-1", name: /Son sınav raporu:/ },
-    ]);
-    await expect(page.getByRole("table", { name: "Bugünkü dersler" }).getByRole("columnheader", { name: "Saat" })).toBeVisible();
+    await expectRolePortalActionStrip(page.getByRole("region", { name: "Öğretmen günlük aksiyonları" }), 5, teacherTodayInboxHrefs);
+    const teacherLessons = page.getByRole("table", { name: "Bugünkü dersler" });
+    await expect(teacherLessons.getByRole("columnheader", { name: "Saat" })).toBeVisible();
+    await expect(teacherLessons.getByRole("columnheader", { name: "Sınıf" })).toBeVisible();
+    await expect(teacherLessons.getByRole("columnheader", { name: "Yoklama" })).toBeVisible();
     await expectUiStable(page, "faz9-teacher-today-desktop", consoleErrors);
 
     await page.goto("/ogretmen/ders-akisi");
@@ -807,7 +812,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
         await openWithUiMocks(page, portalCase.path, viewport, { authProfile: portalCase.authProfile });
         const actionStrip = page.getByRole("region", { name: portalCase.regionName });
         await expectRolePortalActionStrip(actionStrip, portalCase.count, portalCase.hrefs);
-        await expect(actionStrip.getByRole("heading", { name: "Öncelikli işler" })).toBeVisible();
+        await expect(actionStrip.getByRole("heading", { name: portalCase.title ?? "Öncelikli işler" })).toBeVisible();
         await expectUiStable(page, `faz9-${portalCase.key}-action-strip-${viewport.width}`, consoleErrors);
         if (portalCase.key === "student" && viewport.width === 414) {
           await hideNextDevIndicator(page);
@@ -1079,8 +1084,20 @@ function mockUiApiResponse(pathName: string, searchParams: URLSearchParams, auth
         latestReport: { examId: "exam-demo-isem-lgs-1", latestGeneratedAt: "2026-06-16T12:00:00.000Z", title: "İSEM - LGS - 1" },
         pendingHomework: [{ classId: "class-8a", dueAt: "2026-06-18T00:00:00.000Z", id: "homework-a", title: "Kesirler tekrar" }],
         pendingHomeworkCount: 1,
+        pendingSubmissionCount: 2,
         teacherName: "Zeynep Arslan",
-        todayLessons: createScheduleLessons().map(({ classId, courseId, endsAt, id, startsAt, title }) => ({ classId, courseId, endsAt, id, startsAt, title })),
+        todayLessons: createScheduleLessons().map(({ classId, courseId, endsAt, id, startsAt, title }) => ({
+          attendanceTaken: false,
+          classId,
+          className: "8-A",
+          courseId,
+          endsAt,
+          id,
+          startsAt,
+          title,
+        })),
+        unpublishedGradeDraftCount: 0,
+        unreadAnnouncementCount: 1,
       },
     };
   }
