@@ -73,7 +73,7 @@ test.describe("Governance evidence sözleşmesi", () => {
     await page.getByRole("button", { name: "Öğrenci kaydı 1 kişisel bilgileri temizle" }).click();
     const purgeDialog = page.getByRole("dialog", { name: "Kişisel bilgileri temizlemeyi onayla" });
     await expect(purgeDialog).toContainText("Öğrenci kaydı 1 için geri alınamaz kişisel bilgi temizleme işlemi başlatılsın mı?");
-    await expect(purgeDialog).toContainText("panel kişisel bilgileri açık göstermez");
+    await expect(purgeDialog).toContainText("Temizlenen bilgiler geri getirilemez");
     await expect(purgeDialog.getByRole("button", { name: "Bilgileri temizle" })).toBeVisible();
     expect(kvkkPurgeRequests).toHaveLength(0);
     await purgeDialog.getByRole("button", { name: "Vazgeç" }).click();
@@ -257,7 +257,7 @@ test.describe("Governance evidence sözleşmesi", () => {
     await page.getByRole("button", { name: "Komut paleti" }).click();
     const auditCommandDialog = page.getByRole("dialog", { name: "Komut paleti" });
     await auditCommandDialog.getByLabel("Komut ara").fill("denetim");
-    await expect(auditCommandDialog.getByRole("link", { exact: true, name: "Denetim Ayarlar" })).toHaveAttribute("href", "/kurum/denetim");
+    await expect(auditCommandDialog.getByRole("option", { exact: true, name: "Denetim Ayarlar" })).toHaveAttribute("href", "/kurum/denetim");
     await auditCommandDialog.getByRole("button", { name: "Kapat" }).click();
     await page.getByRole("button", { name: "Ana menüyü aç" }).click();
     const auditNavigation = page.getByRole("navigation", { name: "Ana menü" });
@@ -282,9 +282,9 @@ test.describe("Governance evidence sözleşmesi", () => {
     await page.getByRole("button", { name: "Komut paleti" }).click();
     const assistantCommandDialog = page.getByRole("dialog", { name: "Komut paleti" });
     await assistantCommandDialog.getByLabel("Komut ara").fill("denetim");
-    await expect(assistantCommandDialog.getByRole("link", { name: /Denetim/ })).toHaveCount(0);
+    await expect(assistantCommandDialog.getByRole("option", { name: /Denetim/ })).toHaveCount(0);
     await assistantCommandDialog.getByLabel("Komut ara").fill("kvkk");
-    await expect(assistantCommandDialog.getByRole("link", { name: /KVKK/ })).toHaveCount(0);
+    await expect(assistantCommandDialog.getByRole("option", { name: /KVKK/ })).toHaveCount(0);
     await assistantCommandDialog.getByRole("button", { name: "Kapat" }).click();
     expect(assistantAuditLogRequests).toHaveLength(0);
   });
@@ -321,7 +321,7 @@ test.describe("Governance evidence sözleşmesi", () => {
     await page.getByRole("button", { name: "Komut paleti" }).click();
     const kvkkCommandDialog = page.getByRole("dialog", { name: "Komut paleti" });
     await kvkkCommandDialog.getByLabel("Komut ara").fill("kvkk");
-    await expect(kvkkCommandDialog.getByRole("link", { exact: true, name: "KVKK Ayarlar" })).toHaveAttribute("href", "/kurum/kvkk");
+    await expect(kvkkCommandDialog.getByRole("option", { exact: true, name: "KVKK Ayarlar" })).toHaveAttribute("href", "/kurum/kvkk");
     await kvkkCommandDialog.getByRole("button", { name: "Kapat" }).click();
     await page.getByRole("button", { name: "Ana menüyü aç" }).click();
     const kvkkNavigation = page.getByRole("navigation", { name: "Ana menü" });
@@ -338,7 +338,7 @@ test.describe("Governance evidence sözleşmesi", () => {
     await page.getByRole("button", { name: "Komut paleti" }).click();
     const assistantCommandDialog = page.getByRole("dialog", { name: "Komut paleti" });
     await assistantCommandDialog.getByLabel("Komut ara").fill("kvkk");
-    await expect(assistantCommandDialog.getByRole("link", { name: /KVKK/ })).toHaveCount(0);
+    await expect(assistantCommandDialog.getByRole("option", { name: /KVKK/ })).toHaveCount(0);
     await assistantCommandDialog.getByRole("button", { name: "Kapat" }).click();
     expect(kvkkPurgeRequests).toHaveLength(0);
   });

@@ -13,7 +13,8 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     display: "standalone",
     background_color: "#eef2ff",
-    theme_color: "#155eef",
+    // Berrak --color-accent oklch(51% 0.230 277) sRGB karşılığı (tokens.css).
+    theme_color: "#4f46e5",
     icons: [
       { src: "/icon.svg", sizes: "any", type: "image/svg+xml" },
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },

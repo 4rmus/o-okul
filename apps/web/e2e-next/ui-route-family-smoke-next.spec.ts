@@ -97,14 +97,14 @@ const routeCases = [
   route("/kurum/seviyeler", "Seviyeler", "assistantAdmin", { role: "region", name: "Seviye yönetimi" }),
   route("/kurum/sinavlar", "Sınavlar", "assistantAdmin", { role: "region", name: "Sınav yönetimi" }),
   route("/kurum/sinavlar/[examId]", "Gate C Denemesi", "assistantAdmin", { role: "region", name: "Sınav çalışma alanı özeti" }),
-  route("/kurum/sinavlar/[examId]/degerlendirme", "Değerlendirme", "assistantAdmin", { role: "region", name: "Değerlendirme durumu" }),
-  route("/kurum/sinavlar/[examId]/optik/duzen", "Optik İşlemleri", "assistantAdmin", { role: "region", name: "Optik iş akışı" }),
-  route("/kurum/sinavlar/[examId]/optik/eslesmeyenler", "Optik İşlemleri", "assistantAdmin", { role: "region", name: "Optik iş akışı" }),
-  route("/kurum/sinavlar/[examId]/optik/yukleme", "Optik İşlemleri", "assistantAdmin", { role: "region", name: "Optik iş akışı" }),
-  route("/kurum/sinavlar/[examId]/rapor/ciktilar", "Sınav Raporu", "assistantAdmin", { role: "region", name: "Rapor çalışma alanı" }),
-  route("/kurum/sinavlar/[examId]/rapor/genel", "Sınav Raporu", "assistantAdmin", { role: "region", name: "Rapor çalışma alanı" }),
-  route("/kurum/sinavlar/[examId]/rapor/karne", "Sınav Raporu", "assistantAdmin", { role: "region", name: "Rapor çalışma alanı" }),
-  route("/kurum/sinavlar/[examId]/rapor/ogrenciler", "Sınav Raporu", "assistantAdmin", { role: "region", name: "Rapor çalışma alanı" }),
+  route("/kurum/sinavlar/[examId]/degerlendirme", "Gate C Denemesi", "assistantAdmin", { role: "region", name: "Değerlendirme durumu" }),
+  route("/kurum/sinavlar/[examId]/optik/duzen", "Gate C Denemesi", "assistantAdmin", { role: "region", name: "Optik operasyon" }),
+  route("/kurum/sinavlar/[examId]/optik/eslesmeyenler", "Gate C Denemesi", "assistantAdmin", { role: "region", name: "Optik operasyon" }),
+  route("/kurum/sinavlar/[examId]/optik/yukleme", "Gate C Denemesi", "assistantAdmin", { role: "region", name: "Optik operasyon" }),
+  route("/kurum/sinavlar/[examId]/rapor/ciktilar", "Gate C Denemesi", "assistantAdmin", { role: "region", name: "Rapor çalışma alanı" }),
+  route("/kurum/sinavlar/[examId]/rapor/genel", "Gate C Denemesi", "assistantAdmin", { role: "region", name: "Rapor çalışma alanı" }),
+  route("/kurum/sinavlar/[examId]/rapor/karne", "Gate C Denemesi", "assistantAdmin", { role: "region", name: "Rapor çalışma alanı" }),
+  route("/kurum/sinavlar/[examId]/rapor/ogrenciler", "Gate C Denemesi", "assistantAdmin", { role: "region", name: "Rapor çalışma alanı" }),
   route("/kurum/siniflar", "Sınıflar", "assistantAdmin", { role: "region", name: "Sınıf yönetimi" }),
   route("/kurum/siniflar/[classId]", "8-A", "assistantAdmin", { role: "region", name: "Sınıf detayı" }),
   route("/kurum/veliler", "Veliler", "assistantAdmin", { role: "region", name: "Veli yönetimi" }),
@@ -122,7 +122,7 @@ const routeCases = [
   route("/ogrenci/destek", "Öğrenci Portalı", "student", { role: "region", name: "Destek talepleri" }),
   route("/ogrenci/devamsizlik", "Öğrenci Portalı", "student", { role: "region", name: "Devamsızlık" }),
   route("/ogrenci/duyurular", "Öğrenci Portalı", "student", { role: "region", name: "Duyurular" }),
-  route("/ogrenci/odevler", "Öğrenci Portalı", "student", { role: "region", name: "Ödevler" }),
+  route("/ogrenci/odevler", "Öğrenci Portalı", "student", { role: "region", name: "Ödevlerim" }),
   route("/ogrenci/profil", "Öğrenci Portalı", "student", { role: "region", name: "Profil" }),
   route("/ogrenci/raporlar", "Öğrenci Portalı", "student", { role: "region", name: "Portal rapor özeti" }, { query: "examId=exam-demo-isem-lgs-1&studentId=student-a" }),
 
@@ -701,6 +701,16 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
         attendance: { total: 0, present: 0, absent: 0, late: 0, excused: 0 },
         homework: { assignmentCount: 0, upcoming: [] },
         announcements: { unreadCount: 0 },
+        examSeries: [],
+        schoolGrades: [],
+      },
+    };
+  }
+  if (pathName === "/me/student/overview") {
+    return {
+      data: {
+        attendance: { total: 0, present: 0, absent: 0, late: 0, excused: 0 },
+        homework: { openClassHomeworkCount: 0, materialAssignmentCount: 0 },
         examSeries: [],
         schoolGrades: [],
       },

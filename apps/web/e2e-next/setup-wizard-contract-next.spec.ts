@@ -28,8 +28,8 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
       spoofCompletedCookie: true,
     });
 
-    await expect(page.getByLabel("Sunucu kurulum durumu")).toContainText("Aktif dönem");
-    await expect(page.getByLabel("Sunucu kurulum durumu")).toContainText("Eksik");
+    await expect(page.getByLabel("Kayıtlı kurulum durumu")).toContainText("Aktif dönem");
+    await expect(page.getByLabel("Kayıtlı kurulum durumu")).toContainText("Eksik");
     await expect(page.getByText("İlk giriş akışı")).toBeVisible();
     expect(requestedPaths).toContain("GET /setup/readiness");
     await expect(page.getByRole("tablist", { name: "Adım ilerlemesi" }).locator(".uh-tab-button")).toHaveCount(5);
@@ -145,11 +145,11 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
       mimeType: "text/csv",
       name: "ogrenci-ada-kaya-tckn-12345678901.csv",
     });
-    await expect(page.getByLabel("Öğretmen aktarım güven durumu")).toContainText("Sunucu ön kontrolü bekleniyor");
+    await expect(page.getByLabel("Öğretmen aktarım güven durumu")).toContainText("Ön kontrol bekleniyor");
     await expect(setupForm).toContainText("XLSX dosyası seçildi");
     await expect(setupForm).toContainText("CSV dosyası seçildi");
     await expect(studentUploadStatus).toContainText("Yerel kontrol tamam");
-    await expect(studentUploadStatus).toContainText("Sunucu ön kontrolü bekleniyor");
+    await expect(studentUploadStatus).toContainText("Ön kontrol bekleniyor");
     await expectNoVisibleTextValues(page, "setup-upload-filenames", hostileUploadValues);
     await expectDraftStorageDoesNotContain(page, "setup-upload-storage", hostileUploadValues);
     const storedDraft = await page.evaluate(() =>
@@ -484,7 +484,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
     await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
 
-    await expect(setupForm).toContainText("Sunucu kurulum durumu doğrulanamadı. Kayıt başlatılmadı");
+    await expect(setupForm).toContainText("Kurulum durumu doğrulanamadı. Kayıt başlatılmadı");
     expect(unexpectedMutations).toEqual([]);
   });
 
@@ -532,7 +532,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await page.getByRole("button", { name: "Komut paleti" }).click();
     const commandDialog = page.getByRole("dialog", { name: "Komut paleti" });
     await commandDialog.getByLabel("Komut ara").fill("kurulum");
-    await expect(commandDialog.getByRole("link", { name: /Yeni dönem açılışı|Kurulum/ }).first()).toBeVisible();
+    await expect(commandDialog.getByRole("option", { name: /Yeni dönem açılışı|Kurulum/ }).first()).toBeVisible();
     expect(unexpectedMutations).toEqual([]);
   });
 
@@ -549,7 +549,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     });
     await setupForm.getByRole("button", { name: "Dosyaları ön kontrol et" }).click();
 
-    await expect(setupForm).toContainText("Sunucu ön kontrolü geçti: 1 öğrenci. Henüz kayıt oluşturulmadı.");
+    await expect(setupForm).toContainText("Ön kontrol geçti: 1 öğrenci. Henüz kayıt oluşturulmadı.");
     await expect(page.getByLabel("Öğrenci aktarım güven durumu")).toContainText("Ön kontrol geçti");
     const setupPosts = requestedPaths.filter((path) => path.startsWith("POST ") && path !== "POST /auth/refresh");
     expect(setupPosts).toEqual(["POST /students/imports/dry-run"]);
@@ -602,7 +602,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
       name: "ogretmen-zeynep-5551112233.csv",
     });
     await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
-    await expect(setupForm).toContainText("Sunucudan kesin sonuç alınamadı.");
+    await expect(setupForm).toContainText("Kesin sonuç alınamadı.");
     await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
 
     await expect(setupForm).toContainText("2 sınıf, 6 ders, 1 öğretmen, 0 öğretmen ataması");
@@ -636,7 +636,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
       name: "ogrenci-ada-veli-5550000101.csv",
     });
     await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
-    await expect(setupForm).toContainText("Sunucudan kesin sonuç alınamadı.");
+    await expect(setupForm).toContainText("Kesin sonuç alınamadı.");
     const coreCreatesAfterFailure = coreSetupCreateRequests(requestedPaths);
     await installPersistedCoreSetupReads(page);
     await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
@@ -691,7 +691,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     });
     await expect(page.getByLabel("Kazanım aktarım güven durumu")).toContainText("Yerel kontrol tamam");
     await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
-    await expect(setupForm).toContainText("Sunucudan kesin sonuç alınamadı.");
+    await expect(setupForm).toContainText("Kesin sonuç alınamadı.");
     await setupForm.getByRole("button", { name: "Kaydet ve kontrol et" }).click();
 
     await expect(setupForm).toContainText("1 kazanım");

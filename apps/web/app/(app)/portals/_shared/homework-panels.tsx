@@ -97,21 +97,29 @@ export function StudentClassHomeworkPanel({
 
 /** Teacher view of one homework: each student of the class with a derived status; checking is one-way and needs a submission. */
 export function TeacherHomeworkSubmissionsPanel({
+  classNames,
   homework,
   loadSubmissions,
   onCheck,
+  onSelectHomework,
   readOnly = false,
+  selectedHomeworkId,
   students,
 }: {
+  classNames: ReadonlyMap<string, string>;
   homework: HomeworkRecord[];
   loadSubmissions(homeworkId: string): Promise<HomeworkSubmissionRecord[]>;
   onCheck(homeworkId: string, studentIds: string[]): Promise<unknown>;
+  /** Verildiğinde seçim üst bileşendedir; Ödev Kontrolü tablosundan yapılan seçim burada açılır. */
+  onSelectHomework?(homeworkId: string): void;
   readOnly?: boolean;
+  selectedHomeworkId?: string;
   students: StudentRecord[];
 }) {
-  const [selectedId, setSelectedId] = useState("");
+  const [localSelectedId, setLocalSelectedId] = useState("");
   const [error, setError] = useState("");
-  const homeworkId = selectedId || homework[0]?.id || "";
+  const homeworkId = resolveSubmissionHomeworkId(homework, selectedHomeworkId ?? localSelectedId);
+  const selectHomework = onSelectHomework ?? setLocalSelectedId;
   const query = useQuery({
     queryKey: ["teacher-homework-submissions", homeworkId],
     queryFn: () => loadSubmissions(homeworkId),
@@ -171,10 +179,15 @@ export function TeacherHomeworkSubmissionsPanel({
   ];
 
   return (
-    <Panel aria-label="Ödev teslim durumu" description="Seçili ödevde öğrenci bazında teslim ve kontrol durumu." title="Teslim Durumu">
+    <Panel
+      aria-label="Ödev teslim durumu"
+      description="Seçili ödevde öğrenci bazında teslim ve kontrol durumu."
+      id="portal-teacher-homework-submissions"
+      title="Teslim Durumu"
+    >
       <Field label="Ödev">
-        <Select value={homeworkId} onChange={(event) => setSelectedId(event.target.value)}>
-          {homework.map((record) => <option key={record.id} value={record.id}>{record.title}</option>)}
+        <Select value={homeworkId} onChange={(event) => selectHomework(event.target.value)}>
+          {homework.map((record) => <option key={record.id} value={record.id}>{formatHomeworkOption(record, classNames)}</option>)}
         </Select>
       </Field>
       {!readOnly && submittedIds.length > 0 ? (
@@ -260,21 +273,46 @@ export function HomeworkAssignmentsPanel({
 }
 
 export function TeacherHomeworkPanel({
+  classNames,
   homework,
+  onSelect,
   onToggle,
   readOnly = false,
+  selectedHomeworkId,
 }: {
+  classNames: ReadonlyMap<string, string>;
   homework: HomeworkRecord[];
+  /** Ödev başlığına dokunulunca Teslim Durumu paneli bu ödevle açılır. */
+  onSelect?(homework: HomeworkRecord): void;
   onToggle(homework: HomeworkRecord): void;
   readOnly?: boolean;
+  selectedHomeworkId?: string;
 }) {
   const columns: Array<DataTableColumn<HomeworkRecord>> = [
     {
       header: "Ödev",
       key: "title",
       priority: "primary",
-      render: (record) => record.title,
+      render: (record) =>
+        onSelect ? (
+          <Button
+            aria-pressed={record.id === selectedHomeworkId}
+            className="next-homework-select"
+            onClick={() => onSelect(record)}
+            variant="ghost"
+          >
+            {record.title}
+          </Button>
+        ) : (
+          record.title
+        ),
       sticky: "left",
+    },
+    {
+      header: "Sınıf",
+      key: "class",
+      priority: "primary",
+      render: (record) => classNames.get(record.classId) ?? "Sınıf bilgisi yok",
     },
     {
       header: "Materyal",
@@ -313,7 +351,7 @@ export function TeacherHomeworkPanel({
   return (
     <Panel
       aria-label="Öğretmen ödev kontrolü"
-      description="Ödev kontrol durumları ve öğretmen aksiyonları."
+      description={onSelect ? "Ödev başlığına dokunun; öğrenci teslimleri Teslim Durumu bölümünde açılır." : "Ödev kontrol durumları ve öğretmen aksiyonları."}
       title="Ödev Kontrolü"
     >
       <DataTable
@@ -323,6 +361,7 @@ export function TeacherHomeworkPanel({
         density="compact"
         emptyText="Kontrol edilecek ödev yok."
         getRowKey={(record) => record.id}
+        rowClassName={(record) => (record.id === selectedHomeworkId ? "next-homework-row--selected" : undefined)}
         rows={homework}
       />
     </Panel>
@@ -413,6 +452,16 @@ function formatAssignmentContext(
     assignment.termId ? termNames.get(assignment.termId) ?? "Dönem bilgisi yok" : undefined,
   ].filter((part): part is string => Boolean(part));
   return parts.length > 0 ? parts.join(" / ") : "-";
+}
+
+/** Seçim yoksa ya da listeden düştüyse kontrol bekleyen ilk ödev, o da yoksa ilk ödev açılır. */
+export function resolveSubmissionHomeworkId(homework: HomeworkRecord[], requestedId: string) {
+  if (requestedId && homework.some((record) => record.id === requestedId)) return requestedId;
+  return homework.find((record) => !record.checkedAt)?.id ?? homework[0]?.id ?? "";
+}
+
+function formatHomeworkOption(record: HomeworkRecord, classNames: ReadonlyMap<string, string>) {
+  return `${record.title} · ${classNames.get(record.classId) ?? "Sınıf bilgisi yok"}`;
 }
 
 function formatDateTime(value: string) {

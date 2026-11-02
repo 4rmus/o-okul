@@ -28,16 +28,29 @@ Claude Code reads `AGENTS.md` as project instructions only when there is no `CLA
 ```json
 {
   "env": {
-    "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS": "3",
-    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "1"
+    "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS": "6",
+    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "1",
+    "CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS": "6"
   }
 }
 ```
 
-- `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` caps running subagents per session (default 20); the Agent tool refuses the fourth spawn. The cap limits subagents and excludes the main agent, so concurrent participation is limited to the main agent and at most three subagents.
+- `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` caps running subagents per session (default 20); the Agent tool refuses the seventh spawn. The cap limits subagents and excludes the main agent. The cap is six so parallel worktree gates fit; in a shared checkout the governance rule still limits concurrent participation to the main agent and at most three subagents.
 - `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1` turns nesting off (default 3 since Claude Code 2.1.219); the Agent tool is withheld from subagents, so depth 1 is enforced by the tool, not only by prose.
-- Both variables require Claude Code 2.1.217 or later. The settings reference states that only telemetry export variables are ignored in a project `env` block, so these caps apply once each teammate trusts the folder. The runtime effect in this repo is `UNPROVEN` until a session with four spawn attempts is observed.
-- The governance rules stay in force regardless of the caps: the total subagent count may not exceed three, the main agent is the sole scope and integration owner, each active gate has one write-capable participant, and if one subagent writes, at most two read-only subagents may remain.
+- `CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS` caps how many agents one Workflow run keeps active; the run reads it when it starts. Without it a run allows min(16, CPU count − 2) concurrent agents (Workflow authoring reference; 8 on a 10-core workstation), so the repo pins six to match the parallel worktree rule.
+- `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` and `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` require Claude Code 2.1.217 or later. The settings reference states that only telemetry export variables are ignored in a project `env` block, so these caps apply once each teammate trusts the folder. On 2026-11-02 all three names and the spawn-depth default of 3 were read from the installed Claude Code 2.1.285 binary (`LOCAL_STATIC`). The runtime effect of the concurrency caps in this repo is `UNPROVEN` until a session with seven spawn attempts is observed.
+- Workflow gate agents did not receive the Agent tool: in the 2026-11-01 `ui-ux-gates-wave-1` run (Claude Code 2.1.285, local override depth 2) all four finished gate owners reported that the tool was missing, so helper subagents inside workflow gates never ran (`LOCAL_TEST`). The parallel worktree rule below therefore plans no helpers.
+- The governance rules stay in force regardless of the caps: in a shared checkout the total subagent count may not exceed three, the main agent is the sole scope and integration owner, each active gate has one write-capable participant, and if one subagent writes, at most two read-only subagents may remain.
+
+### Parallel worktree gates
+
+Independent gates of one milestone may run at once instead of one after another:
+
+- At most six write-capable subagents, one per gate, and no helper subagents. Each gate owner runs in its own git worktree (`isolation: "worktree"` on the Agent tool or a workflow `agent()` call) cut from the same milestone commit, with disjoint owned paths and a private `NEXT_E2E_PORT` (3021-3026).
+- A workflow `agent()` with `isolation: 'worktree'` cuts its worktree from `main`, not from the milestone branch (observed 2026-11-02: four of four gate worktrees started at `main`, `LOCAL_TEST`). Gate prompts therefore name the milestone commit and tell the owner to run `git reset --keep <commit>` on the clean worktree before any edit; the integrator checks each gate commit's parent before merging.
+- Gate owners commit on their worktree branch and never push, merge, run `pnpm run ci`, or collect the measurement baseline.
+- Heavy validation (web typecheck, Playwright builds that start their own Next.js server) runs in at most three worktrees at a time. Each worktree carries its own `node_modules` and `.next`, and six concurrent production builds on one workstation are untested.
+- Running the gates in parallel adds no merge conflicts compared with running them one after another, because every gate branches from the same commit either way. The main agent merges the gate branches into the milestone branch, resolves conflicts in shared files (`apps/web/app/globals.css` imports, `packages/shared-types`, `apps/api/src/openapi-contracts.ts`, `scripts/check-web-ux-baseline.mjs` pins, shared e2e specs), refreshes the Gate B baseline once on the clean tree, and then runs at most three read-only reviewers on the merged diff.
 
 ### Agent file format
 
@@ -118,7 +131,7 @@ Use the narrowest repo skill before spawning agents:
 2. Load the narrowest repo skill before spawning agents.
 3. Spawn subagents only when the user explicitly asks for agents/delegation/parallel work or when the task is large enough that isolated exploration prevents context overload.
 4. Each active gate may have only one write-capable participant. If the main agent writes, no subagent may write. If a subagent writes, the main agent changes no files except for integration.
-5. Use no more than three subagents total. If one subagent writes, at most two read-only subagents may remain.
+5. In a shared checkout, use no more than three subagents total. If one subagent writes, at most two read-only subagents may remain. Parallel worktree gates (see Subagent policy) allow at most six write-capable subagents and no helper subagents.
 6. Keep spawn depth at 1. Subagents should not create further subagent trees; the settings cap withholds the Agent tool from them.
 7. Before a gate starts, record its objective, owned paths, forbidden paths, acceptance criteria, and validation commands.
 8. Use small handoffs. Each agent gets a concrete objective, owned paths, forbidden paths, expected output, and validation commands.

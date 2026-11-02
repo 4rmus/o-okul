@@ -4,6 +4,7 @@ import { type FormEvent, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   GradeAssessmentKind,
+  GradeAssessmentRecord,
   GradeEntryDraftInput,
   StudentRecord,
   TeacherAuthoringScope,
@@ -22,7 +23,7 @@ import {
   publishGradeAssessment,
   saveGradeEntries,
 } from "../../_shared/gradebook/gradebook-api.js";
-import { GradeEntryGrid } from "../../_shared/gradebook/grade-entry-grid.js";
+import { discardUnsavedGradesRequest, GradeEntryGrid } from "../../_shared/gradebook/grade-entry-grid.js";
 import { AccessPanel, PortalFrame } from "../../portals/_shared/portal-shell.js";
 
 interface AssessmentForm {
@@ -52,6 +53,7 @@ export function TeacherGradebookPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [formError, setFormError] = useState("");
   const [publishMessage, setPublishMessage] = useState("");
+  const [unsavedCount, setUnsavedCount] = useState(0);
   const publishRequest = useRef<{ id: string; key: string } | null>(null);
 
   const assessmentsQuery = useQuery({
@@ -101,6 +103,7 @@ export function TeacherGradebookPage() {
     [studentsQuery.data, detail],
   );
   const assessments = assessmentsQuery.data ?? [];
+  const assessmentGroups = useMemo(() => groupByClass(assessments, classNames), [assessments, classNames]);
 
   if (!isTeacher) return <AccessPanel title="Öğretmen Portalı" />;
 
@@ -152,6 +155,17 @@ export function TeacherGradebookPage() {
     }
   }
 
+  /** Typed but unsaved grades are lost when the grid unmounts, so ask first. */
+  async function canDiscardUnsaved() {
+    return unsavedCount === 0 || confirm(discardUnsavedGradesRequest(unsavedCount));
+  }
+
+  async function selectAssessment(id: string) {
+    if (id === selectedId || !(await canDiscardUnsaved())) return;
+    setSelectedId(id);
+    setPublishMessage("");
+  }
+
   async function publish() {
     if (!detail) return;
     const isCorrection = Boolean(detail.assessment.publishedVersion);
@@ -164,6 +178,7 @@ export function TeacherGradebookPage() {
           <strong>Değerlendirme:</strong> {detail.assessment.title}<br />
           <strong>Sınıf:</strong> {classNames.get(detail.assessment.classId) ?? "-"}<br />
           <strong>Yayınlanacak taslak:</strong> {detail.entries.filter((entry) => !entry.publishedAt).length}
+          {unsavedCount > 0 ? <><br /><strong>Kaydedilmemiş:</strong> {`${unsavedCount} değişiklik yayına dahil edilmez`}</> : null}
         </span>
       ),
       title: isCorrection ? "Düzeltmeyi yayınla" : "Notları yayınla",
@@ -188,7 +203,12 @@ export function TeacherGradebookPage() {
     }
   }
 
-  const openForm = () => { setForm(emptyForm); setFormError(""); setIsFormOpen(true); };
+  const openForm = async () => {
+    if (!(await canDiscardUnsaved())) return;
+    setForm(emptyForm);
+    setFormError("");
+    setIsFormOpen(true);
+  };
   const hasDrafts = Boolean(detail?.entries.some((entry) => !entry.publishedAt));
   // UAT F-24: the publish button is disabled until a draft exists; say so next to it (F15 pattern: aria-describedby + visible hint).
   const publishHintId = "teacher-gradebook-publish-hint";
@@ -201,7 +221,7 @@ export function TeacherGradebookPage() {
     <PortalFrame title="Öğretmen Portalı" subtitle="Atandığın sınıf ve derslerin yazılı, performans ve proje notları">
       <Panel
         actions={scopes.length > 0 ? (
-          <Button onClick={openForm}>
+          <Button onClick={() => void openForm()}>
             <Plus size={17} aria-hidden="true" />
             Değerlendirme oluştur
           </Button>
@@ -220,26 +240,43 @@ export function TeacherGradebookPage() {
           />
         ) : (
           <Field label="Değerlendirme">
-            <Select value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setPublishMessage(""); }}>
+            <Select value={selectedId} onChange={(event) => void selectAssessment(event.target.value)}>
               <option value="">Seçin</option>
-              {assessments.map((record) => (
-                <option key={record.id} value={record.id}>
-                  {`${record.title} · ${classNames.get(record.classId) ?? "-"} · ${courseNames.get(record.courseId) ?? "-"} · ${gradeKindLabels[record.kind]}`}
-                </option>
+              {assessmentGroups.map((group) => (
+                <optgroup key={group.classId} label={group.label}>
+                  {group.records.map((record) => (
+                    <option key={record.id} value={record.id}>
+                      {`${record.title} · ${courseNames.get(record.courseId) ?? "-"} · ${gradeKindLabels[record.kind]}`}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </Select>
           </Field>
         )}
         {detail ? (
           <>
-            <div className="next-form-actions">
-              <Button aria-describedby={publishBlocked ? publishHintId : undefined} disabled={busy || !hasDrafts} onClick={() => void publish()}>
-                {detail.assessment.publishedVersion ? "Düzeltmeyi yayınla" : "Yayınla"}
-              </Button>
-            </div>
             {publishBlocked ? <p className="next-status-note" id={publishHintId}>{publishHint}</p> : null}
             {publishMessage ? <p className="next-field-hint" role="status">{publishMessage}</p> : null}
-            <GradeEntryGrid canEdit detail={detail} onSave={save} saving={busy} students={students} />
+            <GradeEntryGrid
+              actions={(state) => (
+                <Button
+                  aria-describedby={publishBlocked ? publishHintId : undefined}
+                  disabled={busy || !hasDrafts}
+                  onClick={() => void publish()}
+                  variant={state.unsavedCount > 0 ? "secondary" : "primary"}
+                >
+                  {detail.assessment.publishedVersion ? "Düzeltmeyi yayınla" : "Yayınla"}
+                </Button>
+              )}
+              canEdit
+              detail={detail}
+              key={detail.assessment.id}
+              onSave={save}
+              onUnsavedChange={setUnsavedCount}
+              saving={busy}
+              students={students}
+            />
           </>
         ) : null}
       </Panel>
@@ -290,6 +327,17 @@ export function TeacherGradebookPage() {
       {confirmationDialog}
     </PortalFrame>
   );
+}
+
+/** Picker groups: one optgroup per class, ordered by class name, so the option label can drop the class. */
+function groupByClass(assessments: readonly GradeAssessmentRecord[], classNames: ReadonlyMap<string, string>) {
+  const groups = new Map<string, { classId: string; label: string; records: GradeAssessmentRecord[] }>();
+  for (const record of assessments) {
+    const group = groups.get(record.classId) ?? { classId: record.classId, label: classNames.get(record.classId) ?? "Sınıf bilgisi yok", records: [] };
+    group.records.push(record);
+    groups.set(record.classId, group);
+  }
+  return [...groups.values()].sort((left, right) => left.label.localeCompare(right.label, "tr", { numeric: true }));
 }
 
 /** Class → course → term options from the teacher's authoring scopes; a scope without course/term covers all of them. */

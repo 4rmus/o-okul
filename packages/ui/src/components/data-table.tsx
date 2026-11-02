@@ -23,6 +23,20 @@ export interface DataTableColumn<TRow> {
   sticky?: boolean | "left" | "right";
 }
 
+/**
+ * Satır seçimi (S3). `onSelectionChange` verildiğinde tablo ilk sütunda satır onay kutuları ve başlıkta
+ * "sayfadaki tümünü seç" kutusu çizer. Anahtarlar `getRowKey` değerleridir; başlık kutusu yalnız görünen
+ * satırları ekler veya çıkarır, listede olmayan anahtarlara dokunmaz.
+ */
+export interface DataTableSelectionOptions<TRow> {
+  /** Satır kutusunun erişilebilir adı "<etiket> seç" olur; verilmezse "Satır N seç". */
+  getRowLabel?(row: TRow): string;
+  onSelectionChange(keys: string[]): void;
+  /** Başlık kutusunun erişilebilir adı. */
+  selectAllLabel?: string;
+  selectedKeys: readonly string[];
+}
+
 export interface DataTableProps<TRow> extends HTMLAttributes<HTMLTableElement> {
   caption?: ReactNode;
   columns: Array<DataTableColumn<TRow>>;
@@ -34,6 +48,12 @@ export interface DataTableProps<TRow> extends HTMLAttributes<HTMLTableElement> {
   loading?: boolean;
   rows: TRow[];
   rowClassName?(row: TRow): string | undefined;
+  getRowLabel?(row: TRow): string;
+  onSelectionChange?(keys: string[]): void;
+  selectAllLabel?: string;
+  selectedKeys?: readonly string[];
+  /** Başlık satırını kaydırma alanında sabitler; geniş ekranda alan yüksekliği sınırlanır. Seçim açıkken varsayılan açıktır. */
+  stickyHeader?: boolean;
 }
 
 export function DataTable<TRow>({
@@ -48,9 +68,24 @@ export function DataTable<TRow>({
   loading = false,
   rows,
   rowClassName,
+  getRowLabel,
+  onSelectionChange,
+  selectAllLabel,
+  selectedKeys,
+  stickyHeader,
   ...props
 }: DataTableProps<TRow>) {
-  const emptyColSpan = Math.max(columns.length, 1);
+  const selection: DataTableSelectionOptions<TRow> | null = onSelectionChange
+    ? { getRowLabel, onSelectionChange, selectAllLabel, selectedKeys: selectedKeys ?? [] }
+    : null;
+  const selectedKeySet = new Set(selection?.selectedKeys ?? []);
+  const pageRowKeys = selection ? rows.map(getRowKey) : [];
+  const selectedPageRowCount = pageRowKeys.filter((key) => selectedKeySet.has(key)).length;
+  const allPageRowsSelected = pageRowKeys.length > 0 && selectedPageRowCount === pageRowKeys.length;
+  const somePageRowsSelected = selectedPageRowCount > 0 && !allPageRowsSelected;
+  // Seçim açıkken başlık satırı varsayılan olarak sabittir; stickyHeader ile ayrıca açılıp kapatılabilir.
+  const isStickyHeader = stickyHeader ?? Boolean(selection);
+  const emptyColSpan = Math.max(columns.length + (selection ? 1 : 0), 1);
   const state = error ? "error" : loading && rows.length === 0 ? "loading" : rows.length === 0 ? "empty" : undefined;
   const mobileDetailColumns = columns.filter(shouldRenderMobileDetailColumn);
   const scrollRegionLabel = resolveScrollRegionLabel(caption, props["aria-label"]);
@@ -58,7 +93,13 @@ export function DataTable<TRow>({
   const hasSortableColumn = columns.some((column) => column.onSort && resolveCellLabel(column.header));
 
   return (
-    <div aria-label={scrollRegionLabel} className="uh-data-table-scroll" role="region" tabIndex={0}>
+    <div
+      aria-label={scrollRegionLabel}
+      className="uh-data-table-scroll"
+      data-sticky-header={isStickyHeader ? "true" : undefined}
+      role="region"
+      tabIndex={0}
+    >
       <table
         {...props}
         aria-busy={loading || props["aria-busy"] || undefined}
@@ -72,6 +113,27 @@ export function DataTable<TRow>({
         ) : null}
         <thead>
           <tr>
+            {selection ? (
+              <th className="uh-data-table__select-cell" data-column-key={selectColumnKey} scope="col">
+                <label className="uh-data-table__select">
+                  <input
+                    aria-label={selection.selectAllLabel ?? "Sayfadaki tüm satırları seç"}
+                    checked={allPageRowsSelected}
+                    className="uh-checkbox__input"
+                    disabled={pageRowKeys.length === 0}
+                    onChange={(event) => selection.onSelectionChange(
+                      event.target.checked
+                        ? [...selection.selectedKeys, ...pageRowKeys.filter((key) => !selectedKeySet.has(key))]
+                        : selection.selectedKeys.filter((key) => !pageRowKeys.includes(key)),
+                    )}
+                    ref={(input) => {
+                      if (input) input.indeterminate = somePageRowsSelected;
+                    }}
+                    type="checkbox"
+                  />
+                </label>
+              </th>
+            ) : null}
             {columns.map((column) => {
               // Ad görünen başlık metninden gelir; mobileLabel veya genel "Detay" yedeği sütun adını ezmez.
               const sortLabel = column.onSort ? resolveCellLabel(column.header) : undefined;
@@ -111,11 +173,29 @@ export function DataTable<TRow>({
               </td>
             </tr>
           ) : rows.length > 0 ? (
-            rows.map((row) => {
+            rows.map((row, rowIndex) => {
               const rowKey = getRowKey(row);
+              const isSelected = selection ? selectedKeySet.has(rowKey) : false;
               return (
                 <Fragment key={rowKey}>
-                  <tr className={rowClassName?.(row)}>
+                  <tr className={rowClassName?.(row)} data-selected={isSelected ? "true" : undefined}>
+                    {selection ? (
+                      <td className="uh-data-table__select-cell" data-column-key={selectColumnKey}>
+                        <label className="uh-data-table__select">
+                          <input
+                            aria-label={`${selection.getRowLabel?.(row) ?? `Satır ${rowIndex + 1}`} seç`}
+                            checked={isSelected}
+                            className="uh-checkbox__input"
+                            onChange={(event) => selection.onSelectionChange(
+                              event.target.checked
+                                ? [...selection.selectedKeys.filter((key) => key !== rowKey), rowKey]
+                                : selection.selectedKeys.filter((key) => key !== rowKey),
+                            )}
+                            type="checkbox"
+                          />
+                        </label>
+                      </td>
+                    ) : null}
                     {columns.map((column) => {
                       const cellLabel = column.mobileLabel ?? resolveCellLabel(column.header);
                       return (
@@ -134,7 +214,7 @@ export function DataTable<TRow>({
                     })}
                   </tr>
                   {mobileDetailColumns.length > 0 ? (
-                    <tr className="uh-data-table__mobile-detail-row" data-mobile-detail="true">
+                    <tr className="uh-data-table__mobile-detail-row" data-mobile-detail="true" data-selected={isSelected ? "true" : undefined}>
                       <td className="uh-data-table__mobile-detail" colSpan={emptyColSpan}>
                         <dl className="uh-data-table__mobile-detail-list">
                           {mobileDetailColumns.map((column) => (
@@ -161,6 +241,8 @@ export function DataTable<TRow>({
     </div>
   );
 }
+
+const selectColumnKey = "__select";
 
 /** İki durumlu geçiş: artan → azalan → artan. Varsayılan sıraya dönüş "Sırala" seçiminden yapılır. */
 function resolveNextSortDirection(current: DataTableSortDirection | undefined): DataTableSortDirection {

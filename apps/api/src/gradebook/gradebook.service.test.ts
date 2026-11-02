@@ -98,6 +98,41 @@ describe("GradebookService", () => {
     await expect(service.getAssessment(teacher("teacher-other-course"), assessment.id)).rejects.toMatchObject({ status: 403 });
   });
 
+  it.each([
+    ["branch teacher of the same course in another class", "teacher-other-class"],
+    ["student-bound assignment of the same course", "teacher-course-only"],
+  ])("%s cannot list or read the class's assessment or its entries", async (_name, teacherId) => {
+    const { service } = setup();
+    const assessment = await createAssessment(service);
+    await service.saveEntries(admin, assessment.id, { entries: [{ studentId: "student-a", score: 50, absent: false }] });
+
+    await expect(service.listAssessments(teacher(teacherId), {})).resolves.toEqual([]);
+    await expect(service.listAssessments(teacher(teacherId), { courseId: "course-math" })).resolves.toEqual([]);
+    await expect(service.getAssessment(teacher(teacherId), assessment.id))
+      .rejects.toMatchObject({ status: 403, response: { message: "FORBIDDEN_TEACHER_ASSIGNMENT_SCOPE" } });
+  });
+
+  it("guidance counsellor of the class still reads it; a course-wide assignment reads every class of the course", async () => {
+    const { service } = setup();
+    const assessment = await createAssessment(service);
+    await expect(service.listAssessments(teacher("teacher-counsellor"), {})).resolves.toEqual([expect.objectContaining({ id: assessment.id })]);
+    await expect(service.getAssessment(teacher("teacher-counsellor"), assessment.id)).resolves.toMatchObject({ assessment: { id: assessment.id } });
+
+    const courseWide = new GradebookService(
+      new InMemoryGradebookStore(),
+      new InMemoryClassStore(),
+      new InMemoryCourseStore(),
+      new InMemoryAcademicCalendarStore(),
+      new InMemoryStudentStore(),
+      { listByTeacher: async () => [assignment("teacher-course-wide", "BRANCH_TEACHER", { classId: undefined, courseId: "course-math" })] } as unknown as TeacherAssignmentStore,
+      new IdempotencyService(new InMemoryIdempotencyStore()),
+    );
+    const courseWideAssessment = await createAssessment(courseWide);
+    await expect(courseWide.listAssessments(teacher("teacher-course-wide"), {})).resolves.toEqual([expect.objectContaining({ id: courseWideAssessment.id })]);
+    await expect(courseWide.saveEntries(teacher("teacher-course-wide"), courseWideAssessment.id, { entries: [{ studentId: "student-a", score: 50, absent: false }] }))
+      .rejects.toMatchObject({ status: 403 });
+  });
+
   it("campus-scoped staff cannot see another campus's assessment", async () => {
     const { service } = setup();
     const assessment = await createAssessment(service);

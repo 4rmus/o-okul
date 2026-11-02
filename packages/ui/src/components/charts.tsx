@@ -500,6 +500,7 @@ export function PracticeScoreBar({
 
 export interface ProgressLineChartPoint {
   snapshotId?: string;
+  examTitle?: string;
   generatedAt?: string;
   total: {
     blank?: number;
@@ -528,14 +529,20 @@ export function ProgressLineChart({
   ...props
 }: ProgressLineChartProps) {
   const colors = useChartColors();
-  const rows = points.map((point, index) => ({
-    id: point.snapshotId ?? point.generatedAt ?? String(index),
-    label: point.generatedAt ? new Date(point.generatedAt).toLocaleDateString("tr-TR") : `Ölçüm ${index + 1}`,
-    net: point.total.net ?? 0,
-    questionCount: scoreQuestionCount(point.total),
-    standardScore: point.total.standardScore ?? 0,
-    successRate: scoreSuccessRate(point.total),
-  }));
+  // Ölçüm etiketi sınav adıdır; ad yoksa rapor tarihi, o da yoksa sıra numarası kullanılır.
+  const rows = points.map((point, index) => {
+    const examTitle = point.examTitle?.trim() || undefined;
+    const dateLabel = point.generatedAt ? new Date(point.generatedAt).toLocaleDateString("tr-TR") : undefined;
+    return {
+      dateLabel: examTitle ? dateLabel : undefined,
+      id: point.snapshotId ?? point.generatedAt ?? String(index),
+      label: examTitle ?? dateLabel ?? `Ölçüm ${index + 1}`,
+      net: point.total.net ?? 0,
+      questionCount: scoreQuestionCount(point.total),
+      standardScore: point.total.standardScore ?? 0,
+      successRate: scoreSuccessRate(point.total),
+    };
+  });
   const data: ChartData<"line", number[], string> = {
     labels: rows.map((point) => point.label),
     datasets: [
@@ -561,6 +568,8 @@ export function ProgressLineChart({
       },
       tooltip: {
         callbacks: {
+          title: (items: TooltipItem<"line">[]) => rows[items[0]?.dataIndex ?? -1]?.label ?? "",
+          afterTitle: (items: TooltipItem<"line">[]) => rows[items[0]?.dataIndex ?? -1]?.dateLabel ?? "",
           label: (item: TooltipItem<"line">) => `Başarı: ${typeof item.raw === "number" ? formatPercentNumber(item.raw) : tooltipNumber(item.raw)}`,
           afterLabel: (item: TooltipItem<"line">) => {
             const row = rows[item.dataIndex];
@@ -577,6 +586,7 @@ export function ProgressLineChart({
           display: false,
         },
         ticks: {
+          callback: (_value, index) => shortLabel(rows[index]?.label ?? "", 18),
           color: colors.text,
           maxRotation: 0,
         },
@@ -616,7 +626,7 @@ export function ProgressLineChart({
           {rows.length > 0 ? (
             rows.map((point) => (
               <tr key={point.id}>
-                <th scope="row">{point.label}</th>
+                <th scope="row">{point.dateLabel ? `${point.label} (${point.dateLabel})` : point.label}</th>
                 <td>{formatPercentNumber(point.successRate)}</td>
                 <td>{formatNetNumber(point.net)}</td>
                 <td>{formatQuestionCount(point.questionCount)}</td>

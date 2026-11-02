@@ -76,7 +76,7 @@ export function KvkkPage() {
     if (!auth) return;
     const confirmed = await confirm({
       confirmLabel: "Bilgileri temizle",
-      description: "Bu işlem sunucuda uygulanır ve denetim kaydı esas alınır; panel kişisel bilgileri açık göstermez.",
+      description: "Temizlenen bilgiler geri getirilemez; işlem denetim kaydına yazılır.",
       message: `${item.displayRef} için geri alınamaz kişisel bilgi temizleme işlemi başlatılsın mı?`,
       title: "Kişisel bilgileri temizlemeyi onayla",
     });
@@ -102,7 +102,7 @@ export function KvkkPage() {
       <EvidenceTrustPanel
         ariaLabel="KVKK güven durumu"
         title="Kişisel Bilgi Güvencesi"
-        description="KVKK ekranı kişisel bilgileri açık göstermeden kayıt türünü, riskini ve sunucuda yürütülen temizleme işlemini gösterir."
+        description="Hangi kayıtta hangi tür kişisel bilgi tutulduğunu görün; gerekirse onaylı temizleme başlatın."
         items={[
           {
             label: "İşlem türü",
@@ -116,7 +116,7 @@ export function KvkkPage() {
             value: "Sistem kaydı",
             tone: "info",
             scope: "server-audit",
-            detail: "Panel görünümünü günceller; nihai doğruluk sunucu sonucu ve denetim kaydındadır.",
+            detail: "Temizleme sonucunu denetim kaydından izleyebilirsiniz.",
           },
           {
             label: "Ekran verisi",
@@ -169,7 +169,7 @@ function buildKvkkSummaryItems(rows: KvkkInventoryRecord[], isLoading: boolean, 
       value: isLoading ? "Yükleniyor" : rows.length.toLocaleString("tr-TR"),
     },
     {
-      description: "Ham değer yerine kategori bilgisi",
+      description: "TC, telefon ve e-posta açık gösterilmez",
       key: "pii-scope",
       label: "Kişisel bilgi kapsamı",
       tone: "success",
@@ -183,7 +183,7 @@ function buildKvkkSummaryItems(rows: KvkkInventoryRecord[], isLoading: boolean, 
       value: "Zorunlu",
     },
     {
-      description: "Nihai doğruluk sunucu sonucu ve denetim kaydındadır",
+      description: "Temizleme sonucu denetim kaydında görünür",
       key: "authority",
       label: "Kanıt kaynağı",
       tone: "info",
@@ -226,23 +226,23 @@ function buildKvkkSummaryBadges(rows: KvkkInventoryRecord[]): OperationSummaryBa
 function buildKvkkSummaryActions(rows: KvkkInventoryRecord[]): OperationSummaryAction[] {
   return [
     {
-      detail: "Temizleme yalnız açık onaydan sonra başlatılır",
+      detail: "Satırdaki temizle düğmesi onay ister; işlem geri alınamaz",
       key: "confirmed-purge",
       label: "Temizleme akışı",
       status: "Onay gerekir",
       tone: "warning",
-      value: "Sunucu işlemi",
+      value: "Satırdan başlatılır",
     },
     {
-      detail: "Panel görünümünü günceller; sunucudaki denetim kaydı esas alınır",
+      detail: "Her temizleme işlemi denetim kaydında görünür",
       key: "audit",
       label: "Denetim doğruluğu",
-      status: "Sistem kaydı",
+      status: "Kayıt tutulur",
       tone: "info",
-      value: "Nihai kaynak",
+      value: "Denetim kaydı",
     },
     {
-      detail: "Tablo ham TC, telefon veya e-posta yerine veri kategorisi gösterir",
+      detail: "Tabloda TC, telefon ve e-posta yerine yalnız bilgi türü görünür",
       key: "ui-safe",
       label: "Ekran görünümü",
       status: "Güvenli",

@@ -1,0 +1,104 @@
+/* Uygulama baskı katmanı. Kabuk (menü, üst çubuk, alt gezinme, bağlam çubuğu) ve liste denetimleri
+   kâğıda çıkmaz; sayfanın içeriği tam genişlikte basılır. Açık bir diyalog varsa (ör. tahsilat kaydı)
+   yalnız diyalog içeriği, yükseklik sınırı olmadan basılır. Karne kâğıdı kendi ölçülerini korur:
+   .next-karne-sheet içine dokunulmaz. Renkler 01-theme-dark.css BERRAK-LIGHT-RESET ile açık kalır. */
+@media print {
+  html,
+  body {
+    height: auto;
+    overflow: visible !important;
+  }
+
+  .next-skip-link,
+  .next-mobile-topbar,
+  .next-sidebar,
+  .next-sidebar-backdrop,
+  .next-desktop-topbar,
+  .next-breadcrumb,
+  .next-work-context,
+  .next-portal-bottom-nav,
+  .next-push-prompt,
+  .next-command-palette,
+  .next-list-controls,
+  .next-row-actions,
+  .uh-filter-bar,
+  .uh-pagination,
+  .uh-toolbar,
+  .uh-hub-tabs,
+  .uh-toast-region,
+  .uh-dialog__footer,
+  .uh-data-table__select-cell,
+  .next-bulk-selection {
+    display: none !important;
+  }
+
+  /* Tablo başlığındaki sıralama düğmeleri sütun adını taşır; tablolar ve karne içi korunur. */
+  :where(button, .uh-button, [role="button"]):not(table *, .next-karne-sheet *) {
+    display: none !important;
+  }
+
+  .next-app-shell {
+    display: block;
+    min-height: auto;
+    background: none;
+  }
+
+  .next-workspace {
+    width: auto;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Açık diyalog: diyalog ve onu taşıyan atalar dışında çalışma alanı basılmaz. */
+  .next-workspace:has(.uh-dialog) :not(.uh-dialog, .uh-dialog *, :has(.uh-dialog)) {
+    display: none !important;
+  }
+
+  /* Diyaloğu taşıyan dar sütun/ızgara ataları kâğıt genişliğine açılır. */
+  .next-workspace :has(.uh-dialog):not(.uh-dialog, .uh-dialog *) {
+    display: block !important;
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    border: 0 !important;
+    padding: 0 !important;
+    background: none !important;
+    box-shadow: none !important;
+  }
+
+  .uh-dialog {
+    position: static;
+    display: block;
+    place-items: normal;
+    overflow: visible;
+    padding: 0;
+    background: none;
+    backdrop-filter: none;
+  }
+
+  .uh-dialog__panel {
+    width: auto;
+    max-width: none;
+    max-height: none;
+    overflow: visible;
+    border: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+
+  .uh-data-table-scroll {
+    max-height: none;
+    overflow: visible;
+  }
+
+  tr,
+  .next-receipt-print-card {
+    break-inside: avoid;
+  }
+
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+}

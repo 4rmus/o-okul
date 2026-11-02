@@ -98,7 +98,7 @@ const readinessStep = {
   path: "/kurum/kurulum/hazirlik",
   kicker: "Sonuç",
   title: "Hazırlık Kontrolü",
-  description: "Sunucudaki gerçek kurum kayıtlarını doğrula ve eksik adımları gör.",
+  description: "Kurumda kayıtlı dönem, sınıf, ders ve öğrencileri kontrol edin; eksik adımları tamamlayın.",
 };
 
 const initialDraft: OnboardingDraft = {
@@ -291,7 +291,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
   const progressPercent = Math.round((completedStepCount / steps.length) * 100);
   const isFinished = setupProgressQuery.data?.status === "READY";
   const readinessHeadline = setupProgressQuery.isPending
-    ? "Sunucu kayıtları kontrol ediliyor."
+    ? "Kurulum kayıtları kontrol ediliyor."
     : setupProgressQuery.isError
       ? "Kurulum durumu doğrulanamadı."
       : isFinished
@@ -558,7 +558,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
         checked.push(`${dryRun.validRows.length} kazanım`);
         setKazanimImportUploadStatus(markUploadStatusServerChecked);
       }
-      setSavedSummary(`Sunucu ön kontrolü geçti: ${checked.join(", ")}. Henüz kayıt oluşturulmadı.`);
+      setSavedSummary(`Ön kontrol geçti: ${checked.join(", ")}. Henüz kayıt oluşturulmadı.`);
     } catch (error) {
       setSaveError(
         error instanceof Error && error.message
@@ -653,7 +653,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
       if (accessCheck.isError) {
         setSaveError(accessCheck.error instanceof ApiRequestError && accessCheck.error.status === 403
           ? "Kurulum yalnız kurum genelinde yetkili bir hesapla tamamlanabilir."
-          : "Sunucu kurulum durumu doğrulanamadı. Kayıt başlatılmadı; lütfen tekrar deneyin.");
+          : "Kurulum durumu doğrulanamadı. Kayıt başlatılmadı; lütfen tekrar deneyin.");
         return;
       }
       const result = await saveSetup(
@@ -684,7 +684,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
       ]);
       const refreshedReadiness = await setupProgressQuery.refetch();
       if (refreshedReadiness.isError) {
-        setSaveError("Kayıtlar kaydedildi ancak sunucu kurulum durumu doğrulanamadı. Durumu yeniden kontrol edin.");
+        setSaveError("Kayıtlar kaydedildi ancak kurulum durumu doğrulanamadı. Durumu yeniden kontrol edin.");
       }
       const studentSummary =
         result.importedStudents > 0
@@ -705,7 +705,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
       } else if (error instanceof ApiRequestError && error.code === "STUDENT_NATIONAL_ID_CONFLICT") {
         setSaveError("Dosyadaki bir T.C. kimlik no kurumda daha önce kayıtlı (silinmiş öğrenci dahil). Ön izlemeyi yeniden çalıştırın.");
       } else if (error instanceof ApiRequestError) {
-        setSaveError("Sunucudan kesin sonuç alınamadı. Aynı bilgilerle tekrar deneyin; tamamlanan kayıtlar yeniden eklenmez.");
+        setSaveError("Kesin sonuç alınamadı. Aynı bilgilerle tekrar deneyin; tamamlanan kayıtlar yeniden eklenmez.");
       } else {
         setSaveError(error instanceof Error && error.message
           ? error.message
@@ -749,7 +749,7 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
           <MetricCard
             label={isReadinessStep ? "Çekirdek hazırlık" : "Form ilerlemesi"}
             value={isReadinessStep ? readinessMetricValue : `${progressPercent}%`}
-            description={isReadinessStep ? "Sunucu kayıtları" : `${completedStepCount} / ${steps.length} adım doğrulandı`}
+            description={isReadinessStep ? "Kurumdaki kayıtlara göre" : `${completedStepCount} / ${steps.length} adım doğrulandı`}
             tone={(isReadinessStep && isFinished) || (!isReadinessStep && progressPercent === 100) ? "success" : "info"}
           />
           <MetricCard label="Ders" value={courseCount} description="Seçili ders" />
@@ -918,8 +918,8 @@ export function SetupWizard({ initialStep = "general" }: { initialStep?: StepId 
             </div>
           </dl>
           {!isReadinessStep ? (
-            <div className="next-onboarding-done" aria-label="Sunucu kurulum durumu">
-              <strong>Sunucu doğrulaması</strong>
+            <div className="next-onboarding-done" aria-label="Kayıtlı kurulum durumu">
+              <strong>Kayıtlı kurulum durumu</strong>
               {setupProgressQuery.isPending ? <span>Kurulum kayıtları doğrulanıyor…</span> : null}
               {setupProgressQuery.isError ? (
                 <span>Kurulum durumu doğrulanamadı; tamamlandı kabul edilmiyor.</span>
@@ -1527,8 +1527,8 @@ function validateSetupImportFile(
     notice: formatSelectedUploadFileNotice(`upload.${extension.toLocaleLowerCase("tr-TR")}`),
     status: {
       badge: "Yerel kontrol",
-      detail: options.detail ?? "Ham dosya adı ve kişi bilgisi ekranda veya saklı taslakta gösterilmez.",
-      meta: `${extension} • ${formatUploadByteSize(file.size)} • ${options.suffix ?? "Sunucu ön kontrolü bekleniyor"}`,
+      detail: options.detail ?? "Dosya adı ve kişi bilgileri ekranda gösterilmez, taslağa yazılmaz.",
+      meta: `${extension} • ${formatUploadByteSize(file.size)} • ${options.suffix ?? "Ön kontrol bekleniyor"}`,
       state: "ready",
       title: "Yerel kontrol tamam",
       tone: "success",
@@ -1570,8 +1570,8 @@ function createErrorUploadStatus(file: File, detail: string): SetupUploadStatus 
 function markUploadStatusServerChecked(status: SetupUploadStatus): SetupUploadStatus {
   return {
     ...status,
-    badge: "Sunucu ön kontrolü",
-    meta: status.meta.replace("Sunucu ön kontrolü bekleniyor", "Sunucu ön kontrolü geçti"),
+    badge: "Ön kontrol",
+    meta: status.meta.replace("Ön kontrol bekleniyor", "Ön kontrol geçti"),
     title: "Ön kontrol geçti",
   };
 }

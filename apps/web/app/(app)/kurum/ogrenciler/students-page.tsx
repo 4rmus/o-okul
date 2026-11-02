@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -49,7 +49,7 @@ import { formatAttendanceSummary } from "../../_shared/attendance-summary.js";
 import { istanbulDateKey } from "../../_shared/istanbul-date.js";
 import { formatPercentNumber, formatStudentProgressSummary, isComparableStudentProgress, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import { readReportExamId } from "../../_shared/report-exam-selection.js";
-import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+import { OperationSummary, type OperationSummaryAction, type OperationSummaryItem } from "../_shared/operation-summary.js";
 import { RevealablePhone } from "../_shared/revealable-phone.js";
 
 interface StudentProfilePayload {
@@ -157,7 +157,10 @@ const emptyBulkEnrollmentAction: BulkEnrollmentActionState = {
 export function StudentsPage() {
   const { auth } = useAuth();
   const canRevealPhone = hasCapabilityForRoles(auth?.session.roles ?? [], "privacy:manage");
-  const canInviteGuardians = hasCapabilityForRoles(auth?.session.roles ?? [], "user:manage");
+  // API ile hizalı: dönem geçişi student:manage, veli daveti student:manage + user:manage ister.
+  const canManageStudents = hasCapabilityForRoles(auth?.session.roles ?? [], "student:manage");
+  const canInviteGuardians = canManageStudents && hasCapabilityForRoles(auth?.session.roles ?? [], "user:manage");
+  const canSelectStudents = canManageStudents || canInviteGuardians;
   const canManageClasses = hasCapabilityForRoles(auth?.session.roles ?? [], "class:manage");
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -205,6 +208,15 @@ export function StudentsPage() {
   const [error, setError] = useState("");
   const [formError, setFormError] = useState("");
   const rows = studentsQuery.data?.data ?? [];
+  // Seçim yalnız görünen listeye aittir: arama, filtre, sıralama veya sayfa değişince temizlenir.
+  const selectionScopeKey = JSON.stringify([listQuery, filters]);
+  const [selectionScope, setSelectionScope] = useState(selectionScopeKey);
+  if (selectionScope !== selectionScopeKey) {
+    setSelectionScope(selectionScopeKey);
+    setSelectedStudentIds([]);
+  }
+  const selectedStudents = rows.filter((student) => selectedStudentIds.includes(student.id));
+  const bulkActionsPanelRef = useRef<HTMLDetailsElement>(null);
   const sourceClassIds = [...new Set(rows.map((student) => student.classId).filter((classId): classId is string => Boolean(classId)))].sort();
 
   const detailQuery = useQuery({
@@ -310,30 +322,13 @@ export function StudentsPage() {
       ),
     },
   ];
-  const selectionColumn: DataTableColumn<StudentRecord> = {
-    key: "select",
-    header: "Seç",
-    priority: "primary",
-    render: (student) => (
-      <Checkbox
-        aria-label={`${student.firstName} ${student.lastName} seç`}
-        checked={selectedStudentIds.includes(student.id)}
-        label="Seç"
-        onChange={(event) => setSelectedStudentIds((current) => event.target.checked
-          ? [...current, student.id]
-          : current.filter((id) => id !== student.id))}
-      />
-    ),
-  };
-  const visibleColumns = [
-    ...(canInviteGuardians ? [selectionColumn] : []),
-    ...columns.filter((column) => visibleColumnKeys.includes(column.key)),
-  ];
+  const visibleColumns = columns.filter((column) => visibleColumnKeys.includes(column.key));
   const pageClassName = tableDensity === "compact"
     ? "next-students-page next-students-page--compact next-student-growth-list"
     : "next-students-page next-student-growth-list";
   const activeRowCount = rows.filter((student) => student.status === "ACTIVE").length;
   const classCoverageCount = new Set(rows.map((student) => student.classId).filter(Boolean)).size;
+  const unassignedClassCount = rows.filter((student) => !student.classId).length;
   const studentSummaryItems: OperationSummaryItem[] = [
     {
       description: "Filtrelenmiş toplam kayıt",
@@ -354,55 +349,15 @@ export function StudentsPage() {
       label: "Sınıf kapsamı",
       value: classCoverageCount > 0 ? `${classCoverageCount} sınıf` : "Sınıfsız",
     },
-    {
-      description: `${visibleColumns.length}/${studentColumnKeys.length} kolon`,
-      key: "view",
-      label: "Tablo görünümü",
-      tone: tableDensity === "compact" ? "info" : "default",
-      value: tableDensity === "compact" ? "Yoğun" : "Rahat",
-    },
   ];
-  const studentSummaryBadges: OperationSummaryBadge[] = [
+  const studentSummaryActions: OperationSummaryAction[] = rows.length === 0 ? [] : [
     {
-      key: "guardian",
-      label: `İletişim kişisi: ${formatGuardianLinkedFilter(filters.guardianLinked)}`,
-      tone: filters.guardianLinked === "true" ? "success" : filters.guardianLinked === "false" ? "warning" : "neutral",
-    },
-    {
-      key: "teacher",
-      label: filters.responsibleTeacherId ? "Sorumlu filtreli" : "Tüm sorumlular",
-      tone: filters.responsibleTeacherId ? "info" : "neutral",
-    },
-    {
-      key: "bulk",
-      label: bulkEnrollmentAction.useAutomaticClassMapping ? "Toplu geçiş: otomatik" : "Toplu geçiş: manuel",
-      tone: bulkEnrollmentAction.useAutomaticClassMapping ? "info" : "neutral",
-    },
-  ];
-  const studentSummaryActions: OperationSummaryAction[] = [
-    {
-      detail: filters.level ? `${levelLabel(filters.level, gradeLevels)} görünümü` : "Bu sayfadaki sınıf dağılımı",
+      detail: unassignedClassCount > 0 ? "Sınıfı olmayan öğrenciyi düzenleyip bir sınıfa bağlayın" : "Bu sayfadaki her öğrencinin sınıfı var",
       key: "class-mapping",
       label: "Sınıf eşleştirme",
-      status: classCoverageCount > 0 ? "İzleniyor" : "Kontrol",
-      tone: classCoverageCount > 0 ? "info" : "warning",
-      value: classCoverageCount > 0 ? `${classCoverageCount} sınıf` : "Sınıfsız",
-    },
-    {
-      detail: "Filtre ve tablo kolonu birlikte izlenir",
-      key: "responsible-teacher",
-      label: "Sorumlu öğretmen",
-      status: filters.responsibleTeacherId ? "Odak" : "Genel",
-      tone: filters.responsibleTeacherId ? "info" : "neutral",
-      value: filters.responsibleTeacherId ? "Filtreli" : "Tüm sorumlular",
-    },
-    {
-      detail: `${sourceClassIds.length} kaynak sınıf`,
-      key: "bulk-transition",
-      label: "Toplu dönem geçişi",
-      status: bulkEnrollmentAction.useAutomaticClassMapping ? "Hazır" : "Kontrol",
-      tone: bulkEnrollmentAction.useAutomaticClassMapping ? "success" : "neutral",
-      value: bulkEnrollmentAction.useAutomaticClassMapping ? "Otomatik" : "Manuel",
+      status: unassignedClassCount > 0 ? "Sınıf atayın" : "Tamam",
+      tone: unassignedClassCount > 0 ? "warning" : "success",
+      value: unassignedClassCount > 0 ? `${formatCount(unassignedClassCount)} öğrenci sınıfsız` : "Tümü sınıflı",
     },
   ];
 
@@ -590,13 +545,34 @@ export function StudentsPage() {
     }
   }
 
+  function revealBulkEnrollmentSettings() {
+    const panel = bulkActionsPanelRef.current;
+    if (!panel) return;
+    panel.open = true;
+    panel.querySelector<HTMLInputElement>('input[type="date"]')?.focus();
+  }
+
+  // Çubuktaki düğme geçiş tarihi ve hedef sınıf görünmeden işlemi başlatmaz: kapalı panel önce açılır.
+  function handleBulkBarRenewEnrollment() {
+    if (!bulkActionsPanelRef.current?.open || !bulkEnrollmentAction.startsAt) {
+      revealBulkEnrollmentSettings();
+      return;
+    }
+    void handleBulkRenewEnrollment();
+  }
+
   async function handleBulkRenewEnrollment() {
-    if (!auth || isBulkEnrollmentSaving || rows.length === 0) return;
+    const studentIds = selectedStudents.map((student) => student.id);
+    if (!auth || isBulkEnrollmentSaving || studentIds.length === 0) return;
+    if (!bulkEnrollmentAction.startsAt) {
+      revealBulkEnrollmentSettings();
+      return;
+    }
 
     const confirmed = await confirm({
       confirmLabel: "Geçir",
-      description: "Bu işlem yalnız bu sayfada görünen öğrencilerin kayıt dönemini günceller; filtredeki diğer sayfalar ayrıca geçirilmelidir.",
-      message: `${rows.length} öğrenci ${bulkEnrollmentAction.startsAt} tarihinden itibaren ${
+      description: "Bu işlem yalnız seçili öğrencilerin kayıt dönemini günceller. Tarihi veya hedefi değiştirmek için vazgeçip Toplu işlemler bölümünü düzenleyin.",
+      message: `${studentIds.length} seçili öğrenci ${bulkEnrollmentAction.startsAt} tarihinden itibaren ${
         bulkEnrollmentAction.useAutomaticClassMapping
           ? "otomatik seviye yükseltme ile"
           : bulkEnrollmentAction.classId
@@ -616,9 +592,10 @@ export function StudentsPage() {
           Object.entries(bulkEnrollmentAction.classIdBySourceClassId).filter(([, classId]) => Boolean(classId)),
         ),
         startsAt: bulkEnrollmentAction.startsAt,
-        studentIds: rows.map((student) => student.id),
+        studentIds,
         useAutomaticClassMapping: bulkEnrollmentAction.useAutomaticClassMapping,
       });
+      setSelectedStudentIds([]);
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       void queryClient.invalidateQueries({ queryKey: ["next-student-detail"] });
     } catch {
@@ -629,12 +606,13 @@ export function StudentsPage() {
   }
 
   async function handleBulkGuardianInvitation() {
-    if (!auth || isGuardianInviting || selectedStudentIds.length === 0) return;
+    const studentIds = selectedStudents.map((student) => student.id);
+    if (!auth || isGuardianInviting || studentIds.length === 0) return;
 
     const confirmed = await confirm({
       confirmLabel: "Davet et",
       description: "Seçili öğrencilerin yasal veli iletişim kayıtlarından veli hesabı açılır ve e-posta daveti gönderilir. Zaten bağlı veliye ikinci davet gönderilmez; SMS ve duyuru izinleri değişmez.",
-      message: `${selectedStudentIds.length} öğrencinin velisi davet edilsin mi?`,
+      message: `${studentIds.length} seçili öğrencinin velisi davet edilsin mi?`,
       title: "Toplu veli davetini onayla",
     });
     if (!confirmed) return;
@@ -643,7 +621,7 @@ export function StudentsPage() {
     setGuardianInvitationResult(null);
     setIsGuardianInviting(true);
     try {
-      setGuardianInvitationResult(await inviteStudentGuardians(auth.accessToken, selectedStudentIds, globalThis.crypto.randomUUID()));
+      setGuardianInvitationResult(await inviteStudentGuardians(auth.accessToken, studentIds, globalThis.crypto.randomUUID()));
       setSelectedStudentIds([]);
     } catch {
       setError("Toplu veli daveti yapılamadı.");
@@ -823,9 +801,12 @@ export function StudentsPage() {
                 </div>
               </div>
             </details>
-            <details className="next-list-disclosure">
+            <details className="next-list-disclosure" ref={bulkActionsPanelRef}>
               <summary>Toplu işlemler</summary>
               <div className="next-list-disclosure__content">
+                <p className="next-field-hint">
+                  Tablodan öğrenci seçin; seçili öğrenciler için işlem çubuğu listenin altında açılır.
+                </p>
                 <div className="next-list-controls" aria-label="Toplu dönem geçişi">
                   <Field label="Geçiş tarihi">
                     <Input
@@ -873,8 +854,8 @@ export function StudentsPage() {
                       </Select>
                     </Field>
                   ))}
-                  <Button type="button" variant="secondary" onClick={() => void handleBulkRenewEnrollment()} disabled={isBulkEnrollmentSaving || rows.length === 0}>
-                    Listelenenleri geçir
+                  <Button type="button" variant="secondary" onClick={() => void handleBulkRenewEnrollment()} disabled={isBulkEnrollmentSaving || selectedStudents.length === 0 || !bulkEnrollmentAction.startsAt}>
+                    Seçilenleri geçir ({selectedStudents.length})
                   </Button>
                 </div>
                 {canInviteGuardians ? (
@@ -883,13 +864,10 @@ export function StudentsPage() {
                       type="button"
                       variant="secondary"
                       onClick={() => void handleBulkGuardianInvitation()}
-                      disabled={isGuardianInviting || selectedStudentIds.length === 0}
+                      disabled={isGuardianInviting || selectedStudents.length === 0}
                     >
-                      Velileri davet et ({selectedStudentIds.length})
+                      Velileri davet et ({selectedStudents.length})
                     </Button>
-                    {guardianInvitationResult ? (
-                      <p role="status">{formatGuardianInvitationSummary(guardianInvitationResult)}</p>
-                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -923,17 +901,57 @@ export function StudentsPage() {
         hasActiveFilters={Boolean(listQuery.q.trim()) || Object.values(filters).some(Boolean)}
         loading={studentsQuery.isPending}
         rows={rows}
+        selection={canSelectStudents ? {
+          getRowLabel: (student) => `${student.firstName} ${student.lastName}`,
+          onSelectionChange: setSelectedStudentIds,
+          selectAllLabel: "Bu sayfadaki tüm öğrencileri seç",
+          selectedKeys: selectedStudentIds,
+        } : undefined}
         summary={
           <OperationSummary
             actions={studentSummaryActions}
             ariaLabel="Öğrenci operasyon özeti"
-            badges={studentSummaryBadges}
             items={studentSummaryItems}
           />
         }
         tableCaption="Öğrenci listesi"
         tableDescription="Sınıf ve kayıt durumu."
       />
+      {selectedStudents.length > 0 || guardianInvitationResult ? (
+        <section aria-label="Toplu işlem çubuğu" className="next-bulk-selection">
+          <div className="next-bulk-selection__bar">
+            {guardianInvitationResult ? (
+              <p className="next-bulk-selection__result" role="status">{formatGuardianInvitationSummary(guardianInvitationResult)}</p>
+            ) : null}
+            {selectedStudents.length > 0 ? (
+              <>
+                <p aria-live="polite" className="next-bulk-selection__count">
+                  {selectedStudents.length} öğrenci seçildi
+                </p>
+                <div className="next-bulk-selection__actions">
+                  {canInviteGuardians ? (
+                    <Button type="button" variant="secondary" onClick={() => void handleBulkGuardianInvitation()} disabled={isGuardianInviting}>
+                      Veli daveti
+                    </Button>
+                  ) : null}
+                  {canManageStudents ? (
+                    <Button type="button" variant="secondary" onClick={handleBulkBarRenewEnrollment} disabled={isBulkEnrollmentSaving}>
+                      Dönem geçişi
+                    </Button>
+                  ) : null}
+                  <Button type="button" variant="ghost" onClick={() => setSelectedStudentIds([])}>
+                    Seçimi temizle
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <Button type="button" variant="ghost" onClick={() => setGuardianInvitationResult(null)}>
+                Sonucu kapat
+              </Button>
+            )}
+          </div>
+        </section>
+      ) : null}
       <FormModal
         description="CSV veya XLSX dosyası seçildiğinde önce ön kontrol yapılır; hata yoksa aktarım tamamlanır."
         onCancel={closeImportModal}
@@ -1735,12 +1753,6 @@ async function readFileAsBase64(file: File): Promise<string> {
     };
     reader.readAsDataURL(file);
   });
-}
-
-function formatGuardianLinkedFilter(value: StudentListFilters["guardianLinked"]) {
-  if (value === "true") return "Var";
-  if (value === "false") return "Yok";
-  return "Tümü";
 }
 
 function maskPhoneNumber(value: string) {

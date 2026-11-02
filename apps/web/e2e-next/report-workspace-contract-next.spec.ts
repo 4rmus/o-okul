@@ -46,22 +46,24 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     const jobStatusRequests = trackApiRequests(page, (url, method) =>
       method === "GET" && url.pathname.endsWith("/reports/generation-jobs/job-report-a"),
     );
+    // Eski ?examId= bağlantısı çalışma alanına yönlenir; sınav route'tan gelir, gömülü raporda sınav seçici yoktur.
     await openWithReportMocks(page, "/kurum/raporlar?examId=exam-report-ready", { height: 960, width: 1440 });
 
-    await expect(page.getByRole("combobox", { name: "Sınav" })).toHaveValue("exam-report-ready");
+    await expect(page).toHaveURL((url) => url.pathname === "/kurum/sinavlar/exam-report-ready/rapor/genel");
+    await expect(page.getByRole("combobox", { name: "Sınav", exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "Raporu hazırla" }).click();
     await expect(page.getByRole("button", { name: "Hazırlanıyor" })).toBeDisabled();
     await expect(page.getByRole("button", { name: "Raporu getir" })).toBeDisabled();
-    await expect(page.getByRole("combobox", { name: "Sınav" })).toBeDisabled();
 
     await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
     await expect.poll(() => jobStatusRequests.length).toBeGreaterThanOrEqual(1);
     await expect(page.getByText("Rapor hazırlandı.", { exact: true })).toBeVisible();
-    await expect(page.getByRole("combobox", { name: "Sınav" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Raporu getir" })).toBeEnabled();
   });
 
   test("rapor yüklenirken sınav seçimini kilitleyip yanıt bağlamını korur", async ({ page }) => {
-    await openWithReportMocks(page, "/kurum/raporlar?examId=exam-report-ready", { height: 960, width: 1440 });
+    // Sınav seçici yalnız sınavlar arası /kurum/raporlar dizininde vardır.
+    await openWithReportMocks(page, "/kurum/raporlar", { height: 960, width: 1440 });
 
     let releaseSnapshotRequest = () => {};
     const snapshotRequestGate = new Promise<void>((resolve) => {
@@ -667,9 +669,10 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
       { label: "Oluşturulamadı", tone: "danger" },
     ] as const) {
       await page.getByRole("button", { name: "Raporu getir" }).click();
+      // Çalışma alanında "Seçim" rozeti yoktur (sınav route'tan gelir); rapor rozeti metniyle bulunur.
       const reportStatusBadge = workflowStrip
         .locator(".next-report-status-pills > span")
-        .nth(1)
+        .filter({ hasText: /^Rapor / })
         .locator(".uh-status-badge");
       await expect(reportStatusBadge).toHaveText(status.label);
       await expect(reportStatusBadge).toHaveClass(new RegExp(`uh-status-badge--${status.tone}`));

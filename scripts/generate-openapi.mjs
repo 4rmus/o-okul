@@ -273,6 +273,7 @@ const sharedTypeDriftContracts = [
   { interfaceName: "StudentPortalActivationResponse", method: "post", path: "/api/v1/auth/activate", schemaPath: ["responseData"] },
   { interfaceName: "StudentPortalInvitationIssueResponse", method: "post", path: "/api/v1/students/{id}/portal-invitations", schemaPath: ["responseData"] },
   { interfaceName: "MeProfileResponse", method: "get", path: "/api/v1/me/profile", schemaPath: ["responseData"] },
+  { interfaceName: "StudentSelfOverview", method: "get", path: "/api/v1/me/student/overview", schemaPath: ["responseData"] },
   { interfaceName: "MeSessionRecord", method: "get", path: "/api/v1/me/sessions", schemaPath: ["responseDataItem"] },
   { interfaceName: "MeSessionRevokeAllResponse", method: "delete", path: "/api/v1/me/sessions", schemaPath: ["responseData"] },
   { interfaceName: "TenantResetDiagnostics", method: "get", path: "/api/v1/tenants/{id}/reset-diagnostics", schemaPath: ["responseData"] },
@@ -680,6 +681,14 @@ const guardianStudentOverviewForbiddenDeep = [
   "teacherNotes",
   "token",
   "userId",
+];
+// Student 'Gelişimim' is self scope: the guardian allow-list rules plus no finance or guardian link data at all.
+const studentSelfOverviewForbiddenDeep = [
+  ...guardianStudentOverviewForbiddenDeep,
+  "canViewFinance",
+  "finance",
+  "guardianId",
+  "installments",
 ];
 const kvkkInventoryKinds = ["guardian", "student", "teacher", "user"];
 const kvkkInventoryRecordRequired = ["id", "kind", "displayRef", "piiCategories", "purgeAvailable"];
@@ -1544,6 +1553,13 @@ const requiredOperationContracts = [
     responseEnvelope: true,
     responseDataRequired: ["student", "attendance", "homework", "announcements", "examSeries", "schoolGrades"],
     responseDataForbiddenDeep: guardianStudentOverviewForbiddenDeep,
+  },
+  {
+    method: "get",
+    path: "/api/v1/me/student/overview",
+    responseEnvelope: true,
+    responseDataRequired: ["attendance", "homework", "examSeries", "schoolGrades"],
+    responseDataForbiddenDeep: studentSelfOverviewForbiddenDeep,
   },
   ...portalStudentProfilePaths.map((path) => ({
     method: "get",

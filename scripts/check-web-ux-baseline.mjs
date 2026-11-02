@@ -48,6 +48,7 @@ const files = {
   "apps/web/app/(app)/kurum/destek/support-tickets-page.tsx": readFileSync("apps/web/app/(app)/kurum/destek/support-tickets-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/denetim/audit-logs-page.tsx": readFileSync("apps/web/app/(app)/kurum/denetim/audit-logs-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/devamsizlik/attendance-page.tsx": readFileSync("apps/web/app/(app)/kurum/devamsizlik/attendance-page.tsx", "utf8"),
+  "apps/web/app/(app)/_shared/attendance-status-picker.tsx": readFileSync("apps/web/app/(app)/_shared/attendance-status-picker.tsx", "utf8"),
   "apps/web/app/(app)/kurum/duyurular/announcements-page.tsx": readFileSync("apps/web/app/(app)/kurum/duyurular/announcements-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/etutler/study-sessions-page.tsx": readFileSync("apps/web/app/(app)/kurum/etutler/study-sessions-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/finans/finance-page.tsx": readFileSync("apps/web/app/(app)/kurum/finans/finance-page.tsx", "utf8"),
@@ -98,6 +99,8 @@ const files = {
   "apps/web/app/(app)/portals/_shared/support-tickets-panel.tsx": readFileSync("apps/web/app/(app)/portals/_shared/support-tickets-panel.tsx", "utf8"),
   "apps/web/app/(app)/portals/_shared/teacher-panels.tsx": readFileSync("apps/web/app/(app)/portals/_shared/teacher-panels.tsx", "utf8"),
   "apps/web/app/(app)/portals/student-portal-page.tsx": readFileSync("apps/web/app/(app)/portals/student-portal-page.tsx", "utf8"),
+  "apps/web/app/(app)/portals/_shared/student-homework-feed.tsx": readFileSync("apps/web/app/(app)/portals/_shared/student-homework-feed.tsx", "utf8"),
+  "apps/web/e2e-next/student-portal-gelisimim-next.spec.ts": readFileSync("apps/web/e2e-next/student-portal-gelisimim-next.spec.ts", "utf8"),
   "apps/web/app/(app)/portals/teacher-portal-page.tsx": readFileSync("apps/web/app/(app)/portals/teacher-portal-page.tsx", "utf8"),
   "apps/web/app/(app)/portals/teacher-today-page.tsx": readFileSync("apps/web/app/(app)/portals/teacher-today-page.tsx", "utf8"),
   "apps/web/app/(auth)/login/page.tsx": readFileSync("apps/web/app/(auth)/login/page.tsx", "utf8"),
@@ -120,6 +123,7 @@ const files = {
   "packages/ui/src/components/checkbox.tsx": readFileSync("packages/ui/src/components/checkbox.tsx", "utf8"),
   "packages/ui/src/components/data-table.tsx": readFileSync("packages/ui/src/components/data-table.tsx", "utf8"),
   "packages/ui/src/components/crud-page.tsx": readFileSync("packages/ui/src/components/crud-page.tsx", "utf8"),
+  "packages/ui/src/components/toast.tsx": readFileSync("packages/ui/src/components/toast.tsx", "utf8"),
   "packages/ui/src/components/info-grid.tsx": readFileSync("packages/ui/src/components/info-grid.tsx", "utf8"),
   "packages/ui/src/components/metric-card.tsx": readFileSync("packages/ui/src/components/metric-card.tsx", "utf8"),
   "packages/ui/src/components/tabs.tsx": readFileSync("packages/ui/src/components/tabs.tsx", "utf8"),
@@ -263,7 +267,7 @@ if (webPackageJson.scripts?.a11y !== "playwright test -c playwright.next.config.
   failures.push("apps/web/package.json a11y script must run e2e-next/a11y-next.spec.ts.");
 }
 
-if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=2 e2e-next/ui-primitives-state-next.spec.ts e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/app-context-next.spec.ts e2e-next/marketing-context-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/employee-access-next.spec.ts e2e-next/teacher-account-invitation-next.spec.ts e2e-next/course-grade-level-link-next.spec.ts e2e-next/gradebook-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts e2e-next/gate-c-exam-workspace-next.spec.ts") {
+if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=2 e2e-next/ui-primitives-state-next.spec.ts e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/app-context-next.spec.ts e2e-next/marketing-context-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/employee-access-next.spec.ts e2e-next/teacher-account-invitation-next.spec.ts e2e-next/course-grade-level-link-next.spec.ts e2e-next/gradebook-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts e2e-next/gate-c-exam-workspace-next.spec.ts e2e-next/exam-workspace-consolidation-next.spec.ts e2e-next/gradebook-grid-next.spec.ts e2e-next/student-portal-gelisimim-next.spec.ts e2e-next/students-bulk-selection-next.spec.ts") {
   failures.push("apps/web/package.json ux-contract script must run the primitive state, no-artifact DataTable, portal report, and report workspace specs.");
 }
 if (!webPackageJson.scripts?.["ux-rc"]?.includes("--workers=2")) {
@@ -1084,7 +1088,7 @@ requireTokens("apps/web/e2e-next/setup-wizard-contract-next.spec.ts", [
   "CSV veya XLSX dosyası seçin.",
   "Dosya en fazla 5 MB olabilir.",
   "Dosya kabul edilmedi",
-  "Sunucu ön kontrolü bekleniyor",
+  "Ön kontrol bekleniyor",
   "dry-run hatasını import değerini açmadan gösterir",
   "Öğrenci dosyasında tekrar eden veya sistemde zaten kayıtlı okul no var. Satır: 2.",
   "hostileUploadValues",
@@ -1108,7 +1112,7 @@ requireTokens("apps/web/e2e-next/setup-wizard-contract-next.spec.ts", [
   'getByLabel("Öğretmen aktarım dosyası")).toBeVisible()',
   'getByLabel("Öğrenci aktarım dosyası")).toBeVisible()',
   'getByLabel("Veli aktarım dosyası")).toHaveCount(0)',
-  'getByRole("link", { name: /Yeni dönem açılışı|Kurulum/ }).first()).toBeVisible()',
+  'getByRole("option", { name: /Yeni dönem açılışı|Kurulum/ }).first()).toBeVisible()',
   "expect(unexpectedMutations).toEqual([])",
   "expectNoHorizontalOverflow",
   "expectNoUnlabeledControls",
@@ -1290,7 +1294,13 @@ requireTokens("apps/web/e2e-next/teacher-portal-contract-next.spec.ts", [
   'focusMetrics).toHaveClass(/uh-info-grid/)',
   'focusMetrics.locator(".uh-info-item")).toHaveCount(8)',
   "Bugün yapılacaklar",
-  "3 iş",
+  // T3: öğretmen Bugün gelen kutusu; yeni sayaçlar ve sınıf/yoklama sütunları.
+  "6 iş",
+  'getByRole("link", { name: /Teslim kontrolü: 2 teslim/ })',
+  'getByRole("link", { name: /Not taslakları: 1 değerlendirme/ })',
+  'getByRole("link", { name: /Okunmamış duyurular: 1 duyuru/ })',
+  "12:30–13:30 · 8-A · Yoklama bekliyor",
+  'td[data-column-key="attendance"] .uh-status-badge',
   // Berrak G7: öğretmen aksiyon şeridi günlük özete (teacher-today-page.tsx) taşındı.
   'getByRole("link", { name: /Yoklama al: 1 ders/ })',
   'getByRole("link", { name: /Ödev kontrolü: 1 ödev/ })',
@@ -1330,7 +1340,7 @@ requireTokens("apps/web/e2e-next/teacher-portal-contract-next.spec.ts", [
   ".uh-metric-card__label",
   "toHaveText(labels)",
   'getByRole("group", { exact: true, name: "Bugün özeti" })',
-  '["Bugünkü ders", "Sıradaki ders", "Ödev kontrolü"]',
+  '["Bugünkü ders", "Yoklama", "Bekleyen iş"]',
   "next-portal-focus-target",
   'getByRole("region", { name: "Öğretmen günlük işlemleri" })',
   'getByRole("region", { exact: true, name: "Öğretmen öğrenci kapsamı" })',
@@ -1364,7 +1374,18 @@ requireTokens("apps/web/e2e-next/teacher-portal-contract-next.spec.ts", [
   'getByRole("heading", { name: "Materyal Atamaları" })',
   'getByRole("table", { name: "Öğretmen ödev kontrol kayıtları" })',
   'getByRole("table", { name: "Öğretmen materyal atamaları" })',
-  'toHaveText(["Ödev", "Materyal", "Teslim", "Durum", "İşlem"])',
+  'toHaveText(["Ödev", "Sınıf", "Materyal", "Teslim", "Durum", "İşlem"])',
+  // Gate T1: tek dokunuşla yoklama, aranabilir öğrenci listesi, ödev seçimi ve bölüm bazlı hata.
+  "expectOneTapRollCall",
+  'getByRole("radiogroup", { name: "Ada Kaya yoklama durumu" })',
+  "1 Var · 0 Yok · 0 Geç · 1 seçilmedi",
+  'toHaveCSS("position", "sticky")',
+  'getByRole("searchbox", { name: "Öğrenci ara" })',
+  "Aramaya uyan öğrenci yok.",
+  "Oranlar · 8-B",
+  "failReadPaths",
+  "Bu bölüm yüklenemedi",
+  'getByRole("button", { name: "Tekrar dene" })',
   'toHaveText(["Öğrenci", "Materyal", "Branş", "Dönem", "Not", "Teslim"])',
   "Bilinmeyen materyal",
   "Bilinmeyen öğrenci",
@@ -1658,6 +1679,62 @@ requireTokens("packages/ui/src/components/data-table.tsx", [
   "resolveScrollRegionLabel",
 ]);
 
+// S3: DataTable seçim API'si, sabit başlık satırı ve öğrenci listesinde seçime bağlı toplu işlemler.
+requireTokens("packages/ui/src/components/crud-page.tsx", [
+  "selection?: DataTableSelectionOptions<TRow>;",
+  "{...selection}",
+]);
+requireTokens("packages/ui/src/components/data-table.tsx", [
+  "export interface DataTableSelectionOptions<TRow>",
+  "selectedKeys?: readonly string[];",
+  "onSelectionChange?(keys: string[]): void;",
+  "getRowLabel?(row: TRow): string;",
+  'aria-label={selection.selectAllLabel ?? "Sayfadaki tüm satırları seç"}',
+  "input.indeterminate = somePageRowsSelected;",
+  "aria-label={`${selection.getRowLabel?.(row) ?? `Satır ${rowIndex + 1}`} seç`}",
+  'data-sticky-header={isStickyHeader ? "true" : undefined}',
+  'data-selected={isSelected ? "true" : undefined}',
+]);
+requireTokens("apps/web/app/globals.css", [
+  '.uh-data-table-scroll[data-sticky-header="true"] > .uh-data-table > thead th',
+  '.uh-data-table tr[data-selected="true"] td',
+  ".next-bulk-selection {",
+  // Sabit başlığın yükseklik sınırı yalnız ekrandadır; baskıda seçim sütunu ve toplu işlem çubuğu çıkmaz.
+  "@media screen and (min-width: 761px) {",
+  "  .uh-data-table__select-cell,\n  .next-bulk-selection {\n    display: none !important;",
+]);
+requireNoTokens("apps/web/app/globals.css", [
+  '@media (min-width: 761px) {\n  .uh-data-table-scroll[data-sticky-header="true"] {',
+]);
+// Hata bildirimi kendiliğinden kapanmaz (çalışma zamanında tetikleyen ekran yok); süre fare/odakta durur.
+requireTokens("packages/ui/src/components/toast.tsx", [
+  "danger: null,",
+  "if (durationMs === null) return;",
+  'onMouseEnter={() => pause("hover")}',
+  'onFocus={() => pause("focus")}',
+  "const next = [...current.slice(-2), { id, message, tone }];",
+  "clearTimeout(timers.current.get(item.id)?.handle);",
+]);
+requireTokens("apps/web/app/(app)/kurum/ogrenciler/students-page.tsx", [
+  "selection={canSelectStudents ? {",
+  'selectAllLabel: "Bu sayfadaki tüm öğrencileri seç"',
+  "const canSelectStudents = canManageStudents || canInviteGuardians;",
+  "const selectionScopeKey = JSON.stringify([listQuery, filters]);",
+  'aria-label="Toplu işlem çubuğu"',
+  "{selectedStudents.length} öğrenci seçildi",
+  "Seçimi temizle",
+  "Seçilenleri geçir ({selectedStudents.length})",
+  "${studentIds.length} seçili öğrenci ${bulkEnrollmentAction.startsAt}",
+  // Çubuktaki dönem geçişi kapalı paneldeki ayarlar görünmeden başlamaz.
+  "onClick={handleBulkBarRenewEnrollment}",
+  "if (!bulkActionsPanelRef.current?.open || !bulkEnrollmentAction.startsAt) {",
+]);
+requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/students-page.tsx", [
+  "Listelenenleri geçir",
+  "studentIds: rows.map((student) => student.id)",
+  "const selectionColumn: DataTableColumn<StudentRecord>",
+]);
+
 requireTokens("packages/ui/src/components/crud-page.tsx", [
   "summary?: ReactNode",
   "filteredEmptyState?: ReactNode",
@@ -1687,10 +1764,14 @@ requireTokens("apps/web/app/(app)/kurum/_shared/operation-summary.tsx", [
   "next-operation-summary__badges",
   "next-operation-summary__actions",
   "<ActionCard",
-  'as="div"',
+  '<a className="next-operation-summary__action-link" href={action.href ?? ""}>',
+  "href?: string;",
+  "const linkActions = actions.filter((action) => Boolean(action.href));",
+  "const statusNotes = actions.filter((action) => !action.href);",
   "badge={action.status}",
   "next-operation-summary__action",
-  "role=\"listitem\"",
+  "next-operation-summary__notes",
+  "next-operation-summary__note-status",
   "tone={action.tone ?? \"neutral\"}",
   "${ariaLabel} önerilen işlemler",
   "StatusBadge",
@@ -1701,6 +1782,8 @@ requireNoTokens("apps/web/app/(app)/kurum/_shared/operation-summary.tsx", [
   "<dt>{item.label}</dt>",
   "<dd>{item.value}</dd>",
   "next-operation-summary__action-copy",
+  'as="div"',
+  'role="listitem"',
 ]);
 
 requireTokens("apps/web/app/(app)/kurum/_shared/import-template-panel.tsx", [
@@ -1798,7 +1881,7 @@ requireTokens("apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx", [
   "createErrorUploadStatus",
   "ImportTemplatePanel",
   "<ImportTemplatePanel />",
-  "Sunucu ön kontrolü bekleniyor",
+  "Ön kontrol bekleniyor",
   "Dosya kabul edilmedi",
   "CSV veya XLSX dosyası seçin.",
   'event.currentTarget.value = ""',
@@ -1834,7 +1917,6 @@ requireNoTokens("apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx", [
 requireTokens("apps/web/app/(app)/kurum/ogrenciler/students-page.tsx", [
   "OperationSummary",
   "studentSummaryItems",
-  "studentSummaryBadges",
   "studentSummaryActions",
   'ariaLabel="Öğrenci operasyon özeti"',
   "actions={studentSummaryActions}",
@@ -1855,11 +1937,10 @@ requireTokens("apps/web/app/(app)/kurum/ogrenciler/students-page.tsx", [
   'label="Otomatik seviye yükselt"',
   'label={`${classNameById.get(sourceClassId) ?? "Sınıf eşleşmedi"} hedefi`}',
   "Öğrenci toplamı",
-  "Tablo görünümü",
   "Sınıf eşleştirme",
+  "const unassignedClassCount = rows.filter((student) => !student.classId).length;",
   "Sorumlu öğretmen",
   "Toplu dönem geçişi",
-  "İletişim kişisi: ${formatGuardianLinkedFilter",
   "<RevealablePhone canReveal={canRevealPhone && Boolean(guardian.phone)} value={guardian.phone ?? guardian.phoneMasked} />",
   "detail.profile.phone ? maskPhoneNumber(detail.profile.phone) : detail.profile.phoneMasked",
   "detail.profile.email ? maskEmail(detail.profile.email) : detail.profile.emailMasked",
@@ -1876,6 +1957,10 @@ requireTokens("apps/web/app/(app)/kurum/ogrenciler/students-page.tsx", [
 ]);
 
 requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/students-page.tsx", [
+  "studentSummaryBadges",
+  'label: "Tablo görünümü"',
+  "Toplu geçiş: manuel",
+  "İletişim kişisi: ${formatGuardianLinkedFilter",
   "<label>\n                Sınıf",
   "<label>\n                Seviye",
   "<label>\n                Sorumlu",
@@ -1894,7 +1979,6 @@ requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/students-page.tsx", [
 ]);
 
 requireTokens("apps/web/app/(app)/kurum/ogrenciler/student-detail-page.tsx", [
-  "ActionCard,",
   "DataTable,",
   "DataTableColumn",
   "OperationSummary",
@@ -1915,14 +1999,20 @@ requireTokens("apps/web/app/(app)/kurum/ogrenciler/student-detail-page.tsx", [
   'aria-label="Öğrenci profil kartı"',
   '<InfoGrid className="next-student-profile-info" aria-label="Öğrenci profil özeti" role="region">',
   'label="Kayıt durumu"',
-  'aria-label="Öğrenci karar kartları"',
-  'className="next-student-decision-grid"',
-  "<ActionCard",
-  'as="a"',
-  'className="next-student-decision-card"',
-  '<ChevronRight size={15} aria-hidden="true" />',
-  'tone={guardianLink ? "success" : "warning"}',
-  'tone={errorBooklet ? "warning" : "success"}',
+  'label: "Devamsızlık"',
+  "formatAttendanceSummary(attendance)",
+  'label: "Son sınav Başarı %"',
+  "reportSuccessRate(latestExam?.total)",
+  'label: "Açık ödev"',
+  "detail.openHomeworkCount",
+  'label: "Öğretmen notu"',
+  "detail.teacherNoteCount",
+  'useState<"overview" | "records">("overview")',
+  'canAccessHref(auth?.session.roles ?? [], "/kurum/notlar", auth?.session.activePersona)',
+  'canAccessHref(auth?.session.roles ?? [], "/kurum/ogrenci-portal-erisimi", auth?.session.activePersona)',
+  "<summary>Önceki rapor sürümleri</summary>",
+  "sortExamsForStudent",
+  "exams.find((exam) => exam.id === latestExamId)?.id",
   'aria-label="Öğrenci sınav rapor bağlamı"',
   '<InfoGrid className="next-student-report-context" aria-label="Öğrenci rapor bağlam özeti" role="region">',
   '<InfoItem label="Başarı %" value={formatPercentNumber(reportSuccessRate(report?.total))} />',
@@ -1938,8 +2028,8 @@ requireTokens("apps/web/app/(app)/kurum/ogrenciler/student-detail-page.tsx", [
   "buildHomeworkRows",
   "buildAuditRows",
   'caption="Öğrenci iletişim kişisi kayıtları"',
-  'caption="Veli ilişki geçmişi"',
-  'caption="Öğretmen ilişki kayıtları"',
+  'caption="Veli bağlantıları"',
+  'caption="Öğretmen görevleri"',
   'caption="Kayıt geçmişi kayıtları"',
   'caption="Öğrenci denetim kayıtları"',
   'hasCapabilityForRoles(auth?.session.roles ?? [], "finance:manage")',
@@ -1950,7 +2040,6 @@ requireTokens("apps/web/app/(app)/kurum/ogrenciler/student-detail-page.tsx", [
   'reports/students/${encodeURIComponent(studentId)}/snapshots',
   "studentDashboardSummaryItems",
   "studentDashboardSummaryBadges",
-  "studentDashboardSummaryActions",
   "buildStudentExamSummaryItems",
   "buildStudentExamSummaryBadges",
   "buildStudentExamSummaryActions",
@@ -1958,17 +2047,15 @@ requireTokens("apps/web/app/(app)/kurum/ogrenciler/student-detail-page.tsx", [
   "Rapor bağlamı",
   "buildStudentDashboardSummaryItems",
   "buildStudentDashboardSummaryBadges",
-  "buildStudentDashboardSummaryActions",
   "Kişisel bilgiler maskeli",
   "Başarı %",
   "Net ${formatNetNumber",
   "Soru ${formatNumber",
   "Deneme puanı",
-  "Eski hesaplama",
+  "Puan (eski biçim)",
   "formatGuardianPermissionLabels",
   "Finans görünürlüğü:",
   "includeFinance ?",
-  "İzinler veli bağlantısında kontrollü gösterilir",
   "formatTeacherNoteSummary",
   "formatTeacherNoteDevelopmentStatus",
   "record.actionLabel",
@@ -2000,6 +2087,11 @@ requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/student-detail-page.tsx", [
   '<article className="next-student-decision-card"',
   "<span>Sınav performansı</span>",
   "<strong>{formatPercentNumber(reportSuccessRate(report?.total))}</strong>",
+  "Eski hesaplama",
+  "ham öğrenci anahtarı",
+  "güvenli referans metinleriyle",
+  'header: "Bağlam"',
+  'useState<"overview" | "records">("records")',
 ]);
 
 requireTokens("apps/web/app/(app)/kurum/ogrenciler/[studentId]/sinavlar/page.tsx", [
@@ -2014,9 +2106,16 @@ requireTokens("apps/web/e2e-next/student-relationship-flow-next.spec.ts", [
   'getByLabel("Öğrenci profil kartı")',
   'studentProfileInfo).toHaveClass(/uh-info-grid/)',
   'studentProfileInfo.locator(".uh-info-item")).toHaveCount(4)',
-  'getByLabel("Öğrenci karar kartları")',
-  'decisionCards.locator(".next-student-decision-card.uh-action-card")).toHaveCount(4)',
-  'decisionCards.locator(".next-dashboard-summary-card")).toHaveCount(0)',
+  'getByLabel("Öğrenci karar kartları")).toHaveCount(0)',
+  'getByRole("tab", { name: "Genel bakış" })).toHaveAttribute("aria-selected", "true")',
+  'summaryMetrics.locator(".next-operation-summary__item")).toHaveCount(4)',
+  'toContainText("1 yok · 1 geç")',
+  'toContainText("Son sınav Başarı %")',
+  'toHaveAttribute("href", "/kurum/notlar?classId=class-11a")',
+  'toHaveAttribute("href", "/kurum/ogrenci-portal-erisimi")',
+  'toHaveAttribute("label", "Son sonucu olan sınav")',
+  '"Önceki rapor sürümleri"',
+  'not.toContainText("Eski hesaplama")',
   'getByLabel("Öğrenci özeti")',
   '{ width: 768, height: 1024 }',
   "student-relationship-tablet",
@@ -2025,8 +2124,8 @@ requireTokens("apps/web/e2e-next/student-relationship-flow-next.spec.ts", [
   "expectNoVisibleTextValues",
   "rawStudentDetailPiiValues",
   'getByRole("table", { name: "Öğrenci iletişim kişisi kayıtları" })',
-  'getByRole("table", { name: "Veli ilişki geçmişi" })',
-  'getByRole("table", { name: "Öğretmen ilişki kayıtları" })',
+  'getByRole("table", { name: "Veli bağlantıları" })',
+  'getByRole("table", { name: "Öğretmen görevleri" })',
   'expect(requestedPaths.some((path) => path.includes("/reports/students/student-a/snapshots"))).toBe(false)',
   'expect(requestedPaths.some((path) => path.includes("/reports/snapshots"))).toBe(false)',
   'roles: ["ASSISTANT_ADMIN"]',
@@ -2407,16 +2506,17 @@ requireTokens("apps/web/app/(app)/kurum/kullanicilar/users-page.tsx", [
   'density="compact"',
   "next-role-checks",
   "Mevcut hesaplar",
-  "Yazma kapalı",
+  "Roller Çalışanlar ekranında düzenlenir",
   "Çalışan erişimlerini yönet",
   'href="/kurum/calisanlar"',
-  "Bu liste yalnız mevcut hesapları gösterir.",
+  "Kurumdaki giriş hesaplarını ve rollerini görün.",
   'mobilePriority: "primary"',
   'mobilePriority: "secondary"',
   "maskEmail(user.email)",
 ]);
 
 requireNoTokens("apps/web/app/(app)/kurum/kullanicilar/users-page.tsx", [
+  "Yazma kapalı",
   "<label key={role.value}>",
   'type="checkbox"',
   "current.roles.includes(role.value)",
@@ -2585,6 +2685,8 @@ requireNoTokens("apps/web/app/(app)/kurum/finans/finance-page.tsx", [
 ]);
 
 requireTokens("apps/web/app/(app)/kurum/devamsizlik/attendance-page.tsx", [
+  "AttendanceRoster",
+  'label="Günlük sınıf yoklama listesi"',
   "useUrlListState",
   "OperationSummary",
   "attendanceSummaryItems",
@@ -2604,7 +2706,22 @@ requireTokens("apps/web/app/(app)/kurum/devamsizlik/attendance-page.tsx", [
   "writeBrowserQueryParam",
 ]);
 
+// Gate T1: yoklama durumu öğrenci başına tek dokunuşluk radio grubudur; "Var" ilk seçenek, özet kaydet yanında.
+requireTokensInOrder("apps/web/app/(app)/_shared/attendance-status-picker.tsx", [
+  '{ label: "Var", value: "PRESENT" }',
+  '{ label: "Yok", value: "ABSENT" }',
+  '{ label: "Geç", value: "LATE" }',
+  '{ label: "İzinli", value: "EXCUSED" }',
+  'aria-label={`${studentName} yoklama durumu`}',
+  'role="radiogroup"',
+  'type="radio"',
+  ">Tümünü Var</Button>",
+  'className="next-attendance-roster__bar"',
+  "`${counts.unmarked} seçilmedi`",
+]);
+
 requireNoTokens("apps/web/app/(app)/kurum/devamsizlik/attendance-page.tsx", [
+  '<option value="">Seçiniz</option>',
   "studentNames.get(record.studentId) ?? record.studentId",
   "classNames.get(student.classId) ?? student.classId",
   "labels.get(id) ?? id",
@@ -4182,6 +4299,34 @@ requireTokens("apps/web/app/(app)/portals/student-portal-page.tsx", [
   "/me/student/profile",
   "/me/student/support-tickets",
   'ariaLabel="Öğrenci portal çalışma alanı"',
+  // S1: Gelişimim (KV-4 serileri, öğrencinin kendi kapsamı), tek ödev akışı ve panel bazlı yükleme hatası.
+  '"/me/student/overview"',
+  'ariaLabel="Gelişimim"',
+  "<StudentHomeworkFeed",
+  'studentHomeworkFeedGroup(item, now) === "today"',
+  "function PanelLoadError(",
+]);
+
+requireTokens("apps/web/app/(app)/portals/_shared/student-homework-feed.tsx", [
+  'aria-label="Ödevlerim"',
+  'overdue: "Gecikmiş"',
+  'today: "Bugün"',
+  'week: "Bu hafta"',
+  'later: "Sonra"',
+  'return item.kind === "material" || item.status === "NOT_SUBMITTED";',
+]);
+
+requireNoTokens("apps/web/app/(app)/portals/student-portal-page.tsx", [
+  "HomeworkAssignmentsPanel",
+  "StudentClassHomeworkPanel",
+]);
+
+requireTokens("apps/web/e2e-next/student-portal-gelisimim-next.spec.ts", [
+  "Özet bugün teslimi iki kaynaktan sayar",
+  'toContainText("2 ödev")',
+  'getByRole("table", { name: "Teslim edilenler" })',
+  "bir GET düşerse yalnız o panel hata ve Tekrar dene gösterir",
+  "Devamsızlık ve Profil görünümleri ana sütunu kullanır",
 ]);
 
 requireTokens("apps/web/app/(app)/portals/_shared/portal-shell.tsx", [
@@ -4291,6 +4436,29 @@ for (const icon of ["icon-192.png", "icon-512.png", "icon-maskable-512.png", "ap
   if (!existsSync(`apps/web/public/icons/${icon}`)) failures.push(`apps/web/public/icons/${icon} missing`);
 }
 requireNoTokens("apps/web/public/push-sw.js", ["caches.", "addEventListener(\"fetch\"", "addEventListener('fetch'"]);
+// S2: PWA theme colour follows the Berrak accent (oklch(51% 0.230 277) in sRGB).
+requireTokens("apps/web/app/manifest.ts", ['theme_color: "#4f46e5"']);
+requireNoTokens("apps/web/app/manifest.ts", ['theme_color: "#155eef"']);
+
+// S2: command palette is a combobox/listbox (arrow keys, Enter, active descendant, polite result count, no 10-row cap).
+requireTokens("apps/web/app/(app)/app-shell.tsx", [
+  'role="combobox"',
+  'role="listbox"',
+  'role="option"',
+  "aria-activedescendant={activeOptionId}",
+  'event.key === "ArrowDown"',
+  'event.key === "Enter"',
+  'aria-live="polite" className="uh-visually-hidden" role="status"',
+  "optionCount === 0 && !isSearching",
+]);
+requireNoTokens("apps/web/app/(app)/app-shell.tsx", ["filterCommandItems(items, query).slice(0, 10)"]);
+
+// S2: app print layer hides shell chrome and prints an open dialog without its height cap.
+requireTokens("apps/web/app/globals.css", [
+  "/* Uygulama baskı katmanı.",
+  ".next-workspace:has(.uh-dialog) :not(.uh-dialog, .uh-dialog *, :has(.uh-dialog))",
+  ".uh-dialog__panel {\n    width: auto;\n    max-width: none;\n    max-height: none;",
+]);
 
 // KV-4: optical Başarı % and school grades are two separate, scale-labelled series.
 requireTokens("apps/web/app/(app)/portals/_shared/progress-series-panel.tsx", [
@@ -4448,6 +4616,9 @@ requireNoTokens("apps/web/app/(app)/portals/_shared/development-panel.tsx", [
 ]);
 
 requireTokens("apps/web/app/(app)/portals/_shared/homework-panels.tsx", [
+  'header: "Sınıf"',
+  "resolveSubmissionHomeworkId",
+  'id="portal-teacher-homework-submissions"',
   "Panel,",
   "DataTable,",
   'aria-label="Ödevler"',
@@ -4491,6 +4662,16 @@ requireTokens("apps/web/app/(app)/portals/teacher-today-page.tsx", [
   "/me/teacher/today",
   "x-role-preview-token",
   'title="Bugün"',
+  // T3: şimdi/sıradaki kartı, bekleyen işler kutusu ve ders akışındaki yoklama rozeti.
+  'title="Bekleyen işler"',
+  'label: "Teslim kontrolü"',
+  'label: "Not taslakları"',
+  'label: "Okunmamış duyurular"',
+  'href: href("/ogretmen/not-defteri")',
+  'href: href("/ogretmen/duyurular")',
+  'header: "Yoklama"',
+  'header: "Sınıf"',
+  'mobilePriority: "hidden"',
 ]);
 
 requireTokens("apps/web/app/(app)/portals/teacher-portal-page.tsx", [
@@ -4502,7 +4683,14 @@ requireTokens("apps/web/app/(app)/portals/teacher-portal-page.tsx", [
   "Textarea,",
   'aria-label="Öğretmen öğrenci kapsamı"',
   'title="Öğrenciler"',
-  '<SegmentedControl className="next-segmented" label="Öğrenci seçimi">',
+  '<SegmentedControl className="next-teacher-roster__list" label="Öğrenci seçimi">',
+  '<Field label="Öğrenci ara">',
+  "filterTeacherStudents",
+  "AttendanceRoster",
+  'label="Öğretmen günlük yoklama listesi"',
+  "TeacherSectionError",
+  "failedSections",
+  'if (attempted > 0 && failed === attempted) throw new Error("TEACHER_PORTAL_UNAVAILABLE");',
   'id="portal-teacher-actions"',
   'className="next-teacher-action-grid"',
   'as="form"',
@@ -4518,7 +4706,6 @@ requireTokens("apps/web/app/(app)/portals/teacher-portal-page.tsx", [
   "<Textarea",
   'aria-label="Yoklama kaydet"',
   "Atandığınız sınıfın tam öğrenci listesini tarih için tek işlemde kaydedin.",
-  'caption="Öğretmen günlük yoklama listesi"',
   "entries: attendanceRoster.map",
   "AttendanceDailyUpsertResponse",
   "`${apiBaseUrl}/attendance/daily`",
@@ -4542,6 +4729,8 @@ requireTokens("apps/web/app/(app)/portals/teacher-portal-page.tsx", [
 ]);
 
 requireNoTokens("apps/web/app/(app)/portals/teacher-portal-page.tsx", [
+  '<option value="">Seçiniz</option>',
+  '<SegmentedControl className="next-segmented" label="Öğrenci seçimi">',
   '<div className="next-segmented">',
   '<div className="next-list-panel" aria-label="Öğretmen öğrenci kapsamı"',
   '<section className="next-list-panel" aria-label="Ders programı"',
@@ -4908,8 +5097,8 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   "faz9-dashboard-${viewport.width}",
   "`faz9-dashboard-${viewport.width}.png`",
   ".next-attention-item.uh-action-card",
-  'studentDecisionCards.locator(".next-student-decision-card.uh-action-card")).toHaveCount(4)',
-  'studentDecisionCards.locator(".next-dashboard-summary-card")).toHaveCount(0)',
+  'studentDashboard.getByLabel("Öğrenci karar kartları")).toHaveCount(0)',
+  'getByRole("tabpanel", { name: "Genel bakış" })',
   ".next-student-decision-card",
   "sistem dashboard ortak metrik grid sözleşmesini korur",
   'getByRole("heading", { level: 1, name: "Sistem Paneli" })',

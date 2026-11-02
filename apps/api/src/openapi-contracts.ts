@@ -211,10 +211,12 @@ const teacherTodaySummarySchema = objectSchema({
   todayLessons: arraySchema(objectSchema({
     id: stringSchema(),
     classId: stringSchema(),
+    className: stringSchema(),
     courseId: stringSchema(),
     title: stringSchema(),
     startsAt: stringSchema({ format: "date-time" }),
     endsAt: stringSchema({ format: "date-time" }),
+    attendanceTaken: { type: "boolean" },
   }, ["id", "classId", "title", "startsAt", "endsAt"])),
   pendingHomework: arraySchema(objectSchema({
     id: stringSchema(),
@@ -234,6 +236,10 @@ const teacherTodaySummarySchema = objectSchema({
       { type: "null" },
     ],
   },
+  // T3 gelen kutusu: kaynağı okunamayan sayaç yanıttan düşer (sıfır yerine "bilinmiyor").
+  pendingSubmissionCount: integerSchema({ minimum: 0 }),
+  unpublishedGradeDraftCount: integerSchema({ minimum: 0 }),
+  unreadAnnouncementCount: integerSchema({ minimum: 0 }),
 }, ["generatedAt", "date", "teacherName", "todayLessons", "pendingHomework", "pendingHomeworkCount", "latestReport"]);
 
 const institutionDashboardSummarySchema = objectSchema({
@@ -3225,6 +3231,28 @@ const gradeAssessmentRecordSchema = objectSchema({
   createdById: stringSchema(),
   createdAt: stringSchema({ format: "date-time" }),
 }, ["id", "tenantId", "classId", "courseId", "termId", "kind", "title", "heldOn", "maxScore", "createdById", "createdAt"]);
+const kv4ExamSeriesSchema = arraySchema(objectSchema({
+  snapshotId: stringSchema(),
+  generatedAt: stringSchema({ format: "date-time" }),
+  successRate: { type: "number", description: "Başarı % on a 0-100 scale." },
+  net: { type: "number" },
+  questionCount: { type: "number" },
+  correct: { type: "number" },
+  wrong: { type: "number" },
+  blank: { type: "number" },
+}, ["snapshotId"]));
+const kv4SchoolGradesSchema = arraySchema(objectSchema({
+  assessmentId: stringSchema(),
+  courseId: stringSchema(),
+  courseName: stringSchema(),
+  kind: gradeAssessmentKindSchema,
+  title: stringSchema(),
+  heldOn: stringSchema({ format: "date" }),
+  score: { type: "number", nullable: true, description: "On the assessment's own 0..maxScore scale; null when absent." },
+  absent: { type: "boolean" },
+  maxScore: { type: "number" },
+  version: integerSchema({ minimum: 1 }),
+}, ["assessmentId", "courseId", "kind", "title", "heldOn", "score", "absent", "maxScore", "version"]));
 const guardianStudentOverviewSchema = objectSchema({
   student: objectSchema({
     id: stringSchema(),
@@ -3256,29 +3284,25 @@ const guardianStudentOverviewSchema = objectSchema({
     overdueInstallmentCount: integerSchema({ minimum: 0 }),
     nextDueDate: stringSchema({ format: "date" }),
   }, ["currency", "pendingAmount", "overdueAmount", "overdueInstallmentCount"]),
-  examSeries: arraySchema(objectSchema({
-    snapshotId: stringSchema(),
-    generatedAt: stringSchema({ format: "date-time" }),
-    successRate: { type: "number", description: "Başarı % on a 0-100 scale." },
-    net: { type: "number" },
-    questionCount: { type: "number" },
-    correct: { type: "number" },
-    wrong: { type: "number" },
-    blank: { type: "number" },
-  }, ["snapshotId"])),
-  schoolGrades: arraySchema(objectSchema({
-    assessmentId: stringSchema(),
-    courseId: stringSchema(),
-    courseName: stringSchema(),
-    kind: gradeAssessmentKindSchema,
-    title: stringSchema(),
-    heldOn: stringSchema({ format: "date" }),
-    score: { type: "number", nullable: true, description: "On the assessment's own 0..maxScore scale; null when absent." },
-    absent: { type: "boolean" },
-    maxScore: { type: "number" },
-    version: integerSchema({ minimum: 1 }),
-  }, ["assessmentId", "courseId", "kind", "title", "heldOn", "score", "absent", "maxScore", "version"])),
+  examSeries: kv4ExamSeriesSchema,
+  schoolGrades: kv4SchoolGradesSchema,
 }, ["student", "attendance", "homework", "announcements", "examSeries", "schoolGrades"]);
+// Student 'Gelişimim' (self scope): same KV-4 series as the guardian overview, no guardian/finance/contact fields.
+const studentSelfOverviewSchema = objectSchema({
+  attendance: objectSchema({
+    total: integerSchema({ minimum: 0 }),
+    present: integerSchema({ minimum: 0 }),
+    absent: integerSchema({ minimum: 0 }),
+    late: integerSchema({ minimum: 0 }),
+    excused: integerSchema({ minimum: 0 }),
+  }, ["total", "present", "absent", "late", "excused"]),
+  homework: objectSchema({
+    openClassHomeworkCount: integerSchema({ minimum: 0 }),
+    materialAssignmentCount: integerSchema({ minimum: 0 }),
+  }, ["openClassHomeworkCount", "materialAssignmentCount"]),
+  examSeries: kv4ExamSeriesSchema,
+  schoolGrades: kv4SchoolGradesSchema,
+}, ["attendance", "homework", "examSeries", "schoolGrades"]);
 
 const gradeEntryRecordSchema = objectSchema({
   id: stringSchema(),
@@ -3682,6 +3706,9 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/me/student": {
     responseBody: publicStudentRecordSchema,
+  },
+  "get /api/v1/me/student/overview": {
+    responseBody: studentSelfOverviewSchema,
   },
   "get /api/v1/me/student/profile": {
     responseBody: publicStudentProfileRecordSchema,

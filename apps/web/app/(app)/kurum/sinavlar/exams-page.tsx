@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -30,8 +30,8 @@ import {
   type StatusBadgeProps,
   useConfirmDialog,
 } from "@o-okul/ui";
-import { ArrowRight, CheckCircle2, Pencil, Plus, Search, Trash2, Users, X } from "lucide-react";
-import { examWorkspaceHref } from "./exam-workspace-routes.js";
+import { ArrowLeft, ArrowRight, CheckCircle2, Pencil, Plus, Search, Trash2, Users, X } from "lucide-react";
+import { examWorkspaceHref, workspaceReturnParam, workspaceReturnValue } from "./exam-workspace-routes.js";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError, apiBaseUrl, apiErrorMessage, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import {
@@ -42,6 +42,8 @@ import {
 } from "../../../../src/form-validation.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+
+const selectedExamPanelId = "exam-selected-participants";
 
 const emptyForm: ExamWithClassFormState = {
   title: "",
@@ -90,6 +92,7 @@ export function ExamsPage() {
     refetchOnWindowFocus: false,
   });
   const requestedExamId = searchParams.get("examId") ?? "";
+  const returnToWorkspace = canOpenWorkspace && Boolean(requestedExamId) && searchParams.get(workspaceReturnParam) === workspaceReturnValue;
   const [form, setForm] = useState<ExamWithClassFormState>(emptyForm);
   const [editingExam, setEditingExam] = useState<ExamRecord | null>(null);
   const [classSearch, setClassSearch] = useState("");
@@ -102,6 +105,7 @@ export function ExamsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const rows = examsQuery.data ?? [];
   const selectedExam = rows.find((exam) => exam.id === selectedExamId) ?? rows[0];
+  const requestedExam = rows.find((exam) => exam.id === requestedExamId);
   const activeExamId = selectedExam?.id ?? "";
   const participantsQueryKey = ["next-exam-participants", auth?.session.tenantId ?? "anonymous", activeExamId];
   const participantsQuery = useQuery({
@@ -199,7 +203,8 @@ export function ExamsPage() {
       header: "Sınav",
       key: "title",
       priority: "primary",
-      render: (exam) => exam.title,
+      // Sınav adı çalışma alanının girişidir; çalışma alanı rolü yoksa düz metin kalır.
+      render: (exam) => (canOpenWorkspace ? <Link href={examWorkspaceHref(exam.id)}>{exam.title}</Link> : exam.title),
       sticky: "left",
     },
     {
@@ -316,6 +321,14 @@ export function ExamsPage() {
       setSelectedExamId(requestedExamId);
     }
   }, [requestedExamId, rows]);
+
+  // Çalışma alanından gelen bağlantı seçili sınavın katılımcı panelini görünür alana getirir.
+  const scrolledToRequestedExam = useRef(false);
+  useEffect(() => {
+    if (!returnToWorkspace || scrolledToRequestedExam.current || selectedExam?.id !== requestedExamId) return;
+    scrolledToRequestedExam.current = true;
+    document.getElementById(selectedExamPanelId)?.scrollIntoView({ block: "start" });
+  }, [requestedExamId, returnToWorkspace, selectedExam?.id]);
 
   useEffect(() => {
     if (!participantsNotFound || !auth) return;
@@ -488,6 +501,19 @@ export function ExamsPage() {
           Sınav ekle
         </Button>
       }
+      context={returnToWorkspace ? (
+        <div className="next-exam-workspace-actions" role="group" aria-label="Sınav çalışma alanı bağlamı">
+          <Link className="uh-button uh-button--secondary uh-button--md" href={examWorkspaceHref(requestedExamId)}>
+            <span className="uh-button__content">
+              <ArrowLeft size={17} aria-hidden="true" />
+              Çalışma alanına dön
+            </span>
+          </Link>
+          <span>
+            {requestedExam ? `${requestedExam.title}: ` : ""}katılımcılar, cevap anahtarı ve yayın bu ekranda yönetilir.
+          </span>
+        </div>
+      ) : undefined}
     >
       <OperationSummary ariaLabel="Sınav operasyon özeti" badges={examSummaryBadges} items={examSummaryItems} />
       <Panel
@@ -517,6 +543,7 @@ export function ExamsPage() {
         <Panel
           aria-label="Sınav katılımcıları"
           className="next-exam-selected-panel"
+          id={selectedExamPanelId}
           description="Katılımcılar sınav oluşturulurken seçilen sınıftan otomatik eklenir."
           title={`${selectedExam.title} katılımcıları`}
         >

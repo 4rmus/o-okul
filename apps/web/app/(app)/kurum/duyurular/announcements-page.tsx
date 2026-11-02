@@ -459,33 +459,6 @@ export function AnnouncementsPage() {
         hideTitle
         title="Duyurular"
       />
-      <Panel
-        aria-label="WhatsApp izin yaşam döngüsü"
-        title="WhatsApp bildirimleri"
-        description="Bu sürümde kapalıdır; duyurular WhatsApp kanalına gönderilmez."
-        tone="muted"
-      >
-        <MetricGrid aria-label="WhatsApp izin yaşam döngüsü özeti" role="region">
-          <MetricCard
-            label="Kanal"
-            value="Kapalı"
-            description="Aktivasyon yapılmadı"
-          />
-          <MetricCard
-            label="İzin kaydı"
-            value="Oluşturulmaz"
-            description="Kanal kapalıyken onay veya geri çekme kaydı yazılmaz"
-          />
-          <MetricCard
-            label="Gönderim"
-            value="Kapalı"
-            description="Uygulama içi duyuru akışı ayrı çalışır"
-          />
-        </MetricGrid>
-        <Alert title="Aktivasyon kanıtı bekleniyor">
-          İzin yönetimi, veri saklama kararı ve gerçek gönderim kanıtı tamamlanmadan WhatsApp açılamaz.
-        </Alert>
-      </Panel>
       {selectedReportId ? (
         <Panel
           aria-label="Duyuru alıcı raporu"
@@ -1099,7 +1072,8 @@ function buildAnnouncementSummaryActions({
   if (isSmsEnabled) {
     actions.push(
     {
-      detail: smsUnavailable ? "Öğretmen hedefinde SMS kapalı" : selectedSmsTemplate ? selectedSmsTemplate.name : "Önce SMS şablonu oluşturulmalı",
+      detail: smsUnavailable ? "Öğretmen hedefinde SMS kapalı" : selectedSmsTemplate ? selectedSmsTemplate.name : "Göndermek için önce bir SMS şablonu oluşturun",
+      ...(!smsUnavailable && !selectedSmsTemplate ? { href: "/kurum/sablonlar" } : {}),
       key: "sms-queue",
       label: "SMS gönderimi",
       status: smsDeliveryReportJobId ? "Gönderim başladı" : selectedSmsTemplate && !smsUnavailable ? "Hazır" : "Bekliyor",

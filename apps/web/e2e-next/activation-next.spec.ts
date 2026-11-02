@@ -220,3 +220,24 @@ for (const { status, code, message } of [
     if (code !== "IDENTITY_INVITATION_EXPIRED") await expect(alert).not.toContainText("süresi");
   });
 }
+
+test("şifre kuralı ilk gönderimden önce görünür ve şifre alanına bağlıdır", async ({ page }) => {
+  let acceptCalls = 0;
+  await page.route("**/api/v1/identity-invitations/accept", async (route) => {
+    acceptCalls += 1;
+    await route.fulfill({ contentType: "application/json", status: 200, body: JSON.stringify({ data: { status: "ACCEPTED" } }) });
+  });
+
+  await page.goto("/aktivasyon#token=activation-secret");
+  const rule = "Şifre 8-128 karakter olmalı, en az bir büyük ve bir küçük harf içermelidir.";
+  const passwordInput = page.getByRole("textbox", { name: "Şifre", exact: true });
+  await expect(page.getByText(rule, { exact: true })).toBeVisible();
+  await expect(passwordInput).toHaveAccessibleDescription(rule);
+  await expect(page.locator(".next-form-error")).toHaveCount(0);
+
+  await passwordInput.fill("yenisifre");
+  await page.getByRole("textbox", { name: "Şifre tekrar" }).fill("yenisifre");
+  await page.getByRole("button", { name: "Hesabı etkinleştir" }).click();
+  await expect(page.locator(".next-form-error")).toHaveText(rule);
+  expect(acceptCalls).toBe(0);
+});

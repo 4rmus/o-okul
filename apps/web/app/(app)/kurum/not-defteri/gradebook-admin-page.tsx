@@ -35,7 +35,7 @@ import {
   publishGradeAssessment,
   saveGradeEntries,
 } from "../../_shared/gradebook/gradebook-api.js";
-import { GradeEntryGrid } from "../../_shared/gradebook/grade-entry-grid.js";
+import { discardUnsavedGradesRequest, GradeEntryGrid } from "../../_shared/gradebook/grade-entry-grid.js";
 
 interface AssessmentForm {
   classId: string;
@@ -61,6 +61,7 @@ export function GradebookAdminPage() {
   const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState(false);
   const [publishMessage, setPublishMessage] = useState("");
+  const [unsavedCount, setUnsavedCount] = useState(0);
   const publishRequest = useRef<{ id: string; key: string } | null>(null);
 
   const assessmentsQuery = useQuery({
@@ -115,12 +116,23 @@ export function GradebookAdminPage() {
       key: "actions",
       header: "İşlem",
       render: (row) => (
-        <Button aria-label={`${row.title} notlarını aç`} onClick={() => { setSelectedId(row.id); setPublishMessage(""); }} size="sm" variant="secondary">
+        <Button aria-label={`${row.title} notlarını aç`} onClick={() => void selectAssessment(row.id)} size="sm" variant="secondary">
           Notları aç
         </Button>
       ),
     },
   ];
+
+  /** Typed but unsaved grades are lost when the grid unmounts, so ask first. */
+  async function canDiscardUnsaved() {
+    return unsavedCount === 0 || confirm(discardUnsavedGradesRequest(unsavedCount));
+  }
+
+  async function selectAssessment(id: string) {
+    if (id === selectedId || !(await canDiscardUnsaved())) return;
+    setSelectedId(id);
+    setPublishMessage("");
+  }
 
   async function submitForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -167,6 +179,7 @@ export function GradebookAdminPage() {
           <strong>Değerlendirme:</strong> {selected.assessment.title}<br />
           <strong>Sınıf:</strong> {classNames.get(selected.assessment.classId) ?? "-"}<br />
           <strong>Yayınlanacak taslak:</strong> {draftCount}
+          {unsavedCount > 0 ? <><br /><strong>Kaydedilmemiş:</strong> {`${unsavedCount} değişiklik yayına dahil edilmez`}</> : null}
         </span>
       ),
       title: "Notları yayınla",
@@ -202,13 +215,18 @@ export function GradebookAdminPage() {
     }
   }
 
-  const openForm = () => { setForm(emptyForm); setFormError(""); setIsFormOpen(true); };
+  const openForm = async () => {
+    if (!(await canDiscardUnsaved())) return;
+    setForm(emptyForm);
+    setFormError("");
+    setIsFormOpen(true);
+  };
 
   return (
     <>
       <CrudPage
         actions={(
-          <Button onClick={openForm}>
+          <Button onClick={() => void openForm()}>
             <Plus size={17} aria-hidden="true" />
             Değerlendirme ekle
           </Button>
@@ -220,7 +238,7 @@ export function GradebookAdminPage() {
           <EmptyState
             title="Değerlendirme yok"
             description="Not girişi için önce sınıf, ders ve dönem seçerek bir değerlendirme tanımla."
-            primaryAction={{ label: "Değerlendirme ekle", onClick: openForm }}
+            primaryAction={{ label: "Değerlendirme ekle", onClick: () => void openForm() }}
           />
         )}
         emptyText="Değerlendirme yok"
@@ -236,17 +254,29 @@ export function GradebookAdminPage() {
       />
       {selected ? (
         <Panel
-          actions={(
-            <Button disabled={busy || !selected.entries.some((entry) => !entry.publishedAt)} onClick={() => void publish()}>
-              Yayınla
-            </Button>
-          )}
           aria-label="Değerlendirme notları"
           description={`${classNames.get(selected.assessment.classId) ?? "-"} · ${courseNames.get(selected.assessment.courseId) ?? "-"} · ${gradeKindLabels[selected.assessment.kind]} · ${formatDay(selected.assessment.heldOn)}`}
           title={selected.assessment.title}
         >
           {publishMessage ? <p className="next-field-hint" role="status">{publishMessage}</p> : null}
-          <GradeEntryGrid canEdit detail={selected} onSave={saveEntries} saving={busy} students={students} />
+          <GradeEntryGrid
+            actions={(state) => (
+              <Button
+                disabled={busy || !selected.entries.some((entry) => !entry.publishedAt)}
+                onClick={() => void publish()}
+                variant={state.unsavedCount > 0 ? "secondary" : "primary"}
+              >
+                Yayınla
+              </Button>
+            )}
+            canEdit
+            detail={selected}
+            key={selected.assessment.id}
+            onSave={saveEntries}
+            onUnsavedChange={setUnsavedCount}
+            saving={busy}
+            students={students}
+          />
         </Panel>
       ) : null}
       <FormModal

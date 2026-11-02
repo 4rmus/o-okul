@@ -29,6 +29,7 @@ interface RolePortalActionStripCase {
   key: string;
   path: string;
   regionName: string;
+  title?: string;
 }
 
 const redesignViewports = [
@@ -41,6 +42,13 @@ const redesignViewports = [
 ];
 const landingViewports = [...redesignViewports, { height: 800, width: 1280 }];
 
+const teacherTodayInboxHrefs = [
+  { href: "/ogretmen/ders-akisi?classId=class-8a&date=2026-06-17#portal-teacher-attendance", name: /Yoklama al: 1 ders/ },
+  { href: "/ogretmen/odevler", name: /Teslim kontrolü: 2 teslim/ },
+  { href: "/ogretmen/duyurular", name: /Okunmamış duyurular: 1 duyuru/ },
+  { href: "/ogretmen/odevler", name: /Ödev kontrolü: 1 ödev/ },
+  { href: "/ogretmen/raporlar?examId=exam-demo-isem-lgs-1", name: /Son sınav raporu:/ },
+];
 const rolePortalActionStripCases: RolePortalActionStripCase[] = [
   {
     authProfile: "student",
@@ -72,15 +80,13 @@ const rolePortalActionStripCases: RolePortalActionStripCase[] = [
   },
   {
     authProfile: "teacher",
-    count: 3,
-    hrefs: [
-      { href: "/ogretmen/ders-akisi?classId=class-8a&date=2026-06-17#portal-teacher-attendance", name: /Yoklama al: 1 ders/ },
-      { href: "/ogretmen/odevler", name: /Ödev kontrolü: 1 ödev/ },
-      { href: "/ogretmen/raporlar?examId=exam-demo-isem-lgs-1", name: /Son sınav raporu:/ },
-    ],
+    // T3: bekleyen işler kutusu; sayacı sıfır olan not taslağı kalemi gösterilmez.
+    count: 5,
+    hrefs: teacherTodayInboxHrefs,
     key: "teacher",
     path: "/ogretmen",
     regionName: "Öğretmen günlük aksiyonları",
+    title: "Bekleyen işler",
   },
 ];
 const rolePortalViewportContractName =
@@ -227,8 +233,9 @@ test.describe("Faz 9 UI görsel smoke", () => {
     const commandDialog = page.getByRole("dialog", { name: "Komut paleti" });
     await expect(commandDialog).toBeVisible();
     await commandDialog.getByLabel("Komut ara").fill("finans");
-    const paymentsResult = commandDialog.getByRole("link", { name: /Ödeme planları/ });
+    const paymentsResult = commandDialog.getByRole("option", { name: /Ödeme planları/ });
     await expect(paymentsResult).toBeVisible();
+    await expect(paymentsResult).toHaveAttribute("href", "/kurum/finans");
     await expect(commandDialog.getByRole("button", { name: /Ödeme planları/ })).toHaveCount(0);
     await expectUiStable(page, "faz9-command-palette", consoleErrors);
     await paymentsResult.click();
@@ -568,21 +575,22 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(page.getByText("+905551110002")).toHaveCount(0);
     const studentDashboard = page.getByLabel("Öğrenci özeti");
     const studentSummary = studentDashboard.getByRole("region", { exact: true, name: "Öğrenci detay özeti" });
-    await expect(studentSummary).toContainText("Kayıt durumu");
-    await expect(studentSummary).toContainText("Başarı %");
+    await expect(studentSummary).toContainText("Devamsızlık");
+    await expect(studentSummary).toContainText("1 yok · 1 geç");
+    await expect(studentSummary).toContainText("Son sınav Başarı %");
     await expect(studentSummary).toContainText("%81,7");
     await expect(studentSummary).toContainText("Net 24,50 / Soru 30");
+    await expect(studentSummary).toContainText("Açık ödev");
+    await expect(studentSummary).toContainText("Öğretmen notu");
     await expect(studentSummary).toContainText("Kişisel bilgiler maskeli");
-    await expect(studentSummary.getByLabel("Öğrenci detay özeti önerilen işlemler")).toBeVisible();
+    await expect(studentSummary.getByLabel("Öğrenci detay özeti önerilen işlemler")).toHaveCount(0);
     const studentProfile = studentDashboard.getByLabel("Öğrenci profil kartı");
     await expect(studentProfile).toContainText("Aktif");
     const studentProfileInfo = studentProfile.getByRole("region", { name: "Öğrenci profil özeti" });
     await expect(studentProfileInfo).toHaveClass(/uh-info-grid/);
     await expect(studentProfileInfo.locator(".uh-info-item")).toHaveCount(4);
-    const studentDecisionCards = studentDashboard.getByLabel("Öğrenci karar kartları");
-    await expect(studentDecisionCards.locator(".next-student-decision-card.uh-action-card")).toHaveCount(4);
-    await expect(studentDecisionCards.locator(".next-dashboard-summary-card")).toHaveCount(0);
-    await expect(studentDecisionCards).toContainText("Sınav performansı");
+    await expect(studentDashboard.getByLabel("Öğrenci karar kartları")).toHaveCount(0);
+    await expect(studentDashboard.getByRole("tabpanel", { name: "Genel bakış" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Sınav detayları" })).toHaveAttribute("href", "/kurum/ogrenciler/student-a/sinavlar");
     await expectStudentDetailNoRawIds(page, "student-dashboard-desktop");
     await expectUiStable(page, "faz9-student-dashboard-desktop", consoleErrors);
@@ -594,8 +602,8 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
     await expect(page.getByRole("heading", { level: 1, name: "Ada Kaya" })).toBeVisible();
     await expect(studentDashboard).toBeVisible();
-    await studentDashboard.getByRole("tab", { name: "Genel" }).click();
-    await expect(studentDashboard.getByRole("tabpanel", { name: "Genel" })).toBeVisible();
+    await expect(studentDashboard.getByRole("tab", { name: "Genel bakış" })).toHaveAttribute("aria-selected", "true");
+    await expect(studentDashboard.getByRole("tabpanel", { name: "Genel bakış" })).toBeVisible();
     await expectUiStable(page, "route-family-student-detail-768", consoleErrors);
     await expectRouteFamilyGolden(page, studentDashboard, "route-family-student-detail-768.png");
 
@@ -612,11 +620,13 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(studentExamSummary).toContainText("Net 24,50 / Soru 30");
     await expect(studentExamSummary.getByLabel("Öğrenci sınav özeti önerilen işlemler")).toBeVisible();
     const examReportContext = studentExamDetails.getByLabel("Öğrenci sınav rapor bağlamı");
-    await expect(examReportContext.locator(".uh-select")).toHaveCount(2);
+    await expect(examReportContext.getByLabel("Sınav", { exact: true })).toHaveValue("exam-demo");
+    await expect(examReportContext.getByLabel("Sınav", { exact: true }).locator("optgroup").first()).toHaveAttribute("label", "Son sonucu olan sınav");
     const studentReportContext = examReportContext.getByRole("region", { name: "Öğrenci rapor bağlam özeti" });
     await expect(studentReportContext).toHaveClass(/uh-info-grid/);
     await expect(studentReportContext.locator(".uh-info-item")).toHaveCount(6);
-    await expect(examReportContext).toContainText("Eski hesaplama");
+    await expect(examReportContext).toContainText("Puan (eski biçim)");
+    await expect(examReportContext).not.toContainText("Eski hesaplama");
     await expect(examReportContext).not.toContainText("LGS puanı");
     await expect(examReportContext).not.toContainText("Standart puan");
     await expect(studentExamDetails.getByRole("region", { exact: true, name: "Hata kitapçığı" })).toContainText("Yanıt");
@@ -628,8 +638,9 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await page.goto("/kurum/ogrenciler/student-a");
     await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
     await expect(page.getByRole("region", { exact: true, name: "Öğrenci detay özeti" })).toBeVisible();
+    await page.getByRole("tab", { name: "İlişkiler ve kayıtlar" }).click();
     await expect(page.getByRole("heading", { name: "İlişki haritası" })).toBeVisible();
-    await expect(page.getByLabel("İlişki haritası liste görünümü")).toBeVisible();
+    await expect(page.getByLabel("Öğrenci ilişki haritası").getByRole("table", { name: "Veli bağlantıları" })).toBeVisible();
     await expectStudentDetailNoRawIds(page, "student-dashboard-mobile");
     await expectUiStable(page, "faz9-student-detail-mobile", consoleErrors);
     await saveScreenshot(page, "faz9-student-dashboard-mobile.png");
@@ -651,9 +662,9 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(studentExamSummary).toContainText("2 soru");
     await expect(studentExamSummary.getByLabel("Öğrenci sınav özeti önerilen işlemler")).toBeVisible();
     const reportContext = studentExamDetails.getByLabel("Öğrenci sınav rapor bağlamı");
-    await expect(reportContext.locator(".uh-select")).toHaveCount(2);
+    await expect(reportContext.getByLabel("Sınav", { exact: true })).toBeVisible();
     await expect(reportContext.getByRole("region", { name: "Öğrenci rapor bağlam özeti" })).toHaveClass(/uh-info-grid/);
-    await expect(reportContext).toContainText("Eski hesaplama");
+    await expect(reportContext).toContainText("Puan (eski biçim)");
     await expect(reportContext).not.toContainText("LGS puanı");
     await expect(reportContext).not.toContainText("Standart puan");
     await expect(studentExamDetails.getByRole("region", { exact: true, name: "Hata kitapçığı" })).toContainText("Yanıt");
@@ -675,9 +686,14 @@ test.describe("Faz 9 UI görsel smoke", () => {
       { href: "/ogrenci/raporlar", name: /Son sınavı incele: %81,7/ },
       { href: "/ogrenci/duyurular", name: /Duyuruları oku: 1 okunmamış/ },
     ]);
-    const homeworkTable = page.getByRole("table", { name: "Ödev ve materyal atamaları" });
-    await expect(homeworkTable.getByRole("columnheader", { name: "Materyal" })).toBeVisible();
+    // S1: sınıf ödevi ve materyal ataması tek "Ödevlerim" akışında; Gelişimim serileri ayrı ölçekle.
+    const homeworkTable = page.getByRole("region", { exact: true, name: "Ödevlerim" }).getByRole("table").first();
+    await expect(homeworkTable.getByRole("columnheader", { name: "Ödev" })).toBeVisible();
+    await expect(homeworkTable.getByRole("columnheader", { name: "Açıklama" })).toBeVisible();
     await expect(homeworkTable.getByRole("columnheader", { name: "Bağlam" })).toBeVisible();
+    const gelisimim = page.getByRole("region", { exact: true, name: "Gelişimim" });
+    await expect(gelisimim.getByRole("table", { name: "Deneme sınavları: Başarı %" })).toContainText("%81,7");
+    await expect(gelisimim.getByRole("table", { name: "Okul notları: puan / tam puan" })).toContainText("84 / 100");
     const studentReportSummary = page.getByRole("region", { name: "Portal rapor özeti" });
     await expect(studentReportSummary).toContainText("Başarı %");
     await expect(studentReportSummary).toContainText("%81,7");
@@ -709,7 +725,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
     const mobileStudentReportSummary = page.getByRole("region", { name: "Portal rapor özeti" });
     await expect(mobileStudentReportSummary).toContainText("Başarı %");
     await expect(page.getByRole("region", { name: "Sınav raporu özet sayfası" })).toHaveCount(0);
-    await expect(page.getByRole("table", { name: "Ödev ve materyal atamaları" })).toBeVisible();
+    await expect(page.getByRole("region", { exact: true, name: "Ödevlerim" }).getByRole("table").first()).toBeVisible();
     await mobileStudentReportSummary.getByRole("button", { name: "Karne detayını göster" }).click();
     const mobileKarneSummary = page.getByRole("region", { name: "Sınav raporu özet sayfası" });
     await expect(mobileKarneSummary).toBeVisible();
@@ -769,20 +785,21 @@ test.describe("Faz 9 UI görsel smoke", () => {
 
     await expect(page.getByRole("heading", { level: 1, name: "Öğretmen Portalı" })).toBeVisible();
     await expectPortalDailyBrief(page.getByRole("region", { exact: true, name: "Bugün" }), 3);
-    await expectRolePortalActionStrip(page.getByRole("region", { name: "Öğretmen günlük aksiyonları" }), 3, [
-      { href: "/ogretmen/ders-akisi?classId=class-8a&date=2026-06-17#portal-teacher-attendance", name: /Yoklama al: 1 ders/ },
-      { href: "/ogretmen/odevler", name: /Ödev kontrolü: 1 ödev/ },
-      { href: "/ogretmen/raporlar?examId=exam-demo-isem-lgs-1", name: /Son sınav raporu:/ },
-    ]);
-    await expect(page.getByRole("table", { name: "Bugünkü dersler" }).getByRole("columnheader", { name: "Saat" })).toBeVisible();
+    await expectRolePortalActionStrip(page.getByRole("region", { name: "Öğretmen günlük aksiyonları" }), 5, teacherTodayInboxHrefs);
+    const teacherLessons = page.getByRole("table", { name: "Bugünkü dersler" });
+    await expect(teacherLessons.getByRole("columnheader", { name: "Saat" })).toBeVisible();
+    await expect(teacherLessons.getByRole("columnheader", { name: "Sınıf" })).toBeVisible();
+    await expect(teacherLessons.getByRole("columnheader", { name: "Yoklama" })).toBeVisible();
     await expectUiStable(page, "faz9-teacher-today-desktop", consoleErrors);
 
-    await page.goto("/ogretmen/ders-akisi");
+    // Gate T1: seçili öğrenci özeti Öğrenci takibinde, program Ders akışındadır.
+    await page.goto("/ogretmen/ogrenci-takibi");
     const teacherFocusMetrics = page
       .getByRole("region", { exact: true, name: "Seçili sınıf ve öğrenci özeti" })
       .getByRole("region", { name: "Seçili sınıf ve öğrenci bilgileri" });
     await expect(teacherFocusMetrics).toHaveClass(/uh-info-grid/);
     await expect(teacherFocusMetrics.locator(".uh-info-item")).toHaveCount(8);
+    await page.goto("/ogretmen/ders-akisi");
     await expect(page.getByRole("table", { name: "Ders programı" }).getByRole("columnheader", { name: "Başlangıç" })).toBeVisible();
 
     await page.goto("/ogretmen/raporlar");
@@ -807,7 +824,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
         await openWithUiMocks(page, portalCase.path, viewport, { authProfile: portalCase.authProfile });
         const actionStrip = page.getByRole("region", { name: portalCase.regionName });
         await expectRolePortalActionStrip(actionStrip, portalCase.count, portalCase.hrefs);
-        await expect(actionStrip.getByRole("heading", { name: "Öncelikli işler" })).toBeVisible();
+        await expect(actionStrip.getByRole("heading", { name: portalCase.title ?? "Öncelikli işler" })).toBeVisible();
         await expectUiStable(page, `faz9-${portalCase.key}-action-strip-${viewport.width}`, consoleErrors);
         if (portalCase.key === "student" && viewport.width === 414) {
           await hideNextDevIndicator(page);
@@ -1056,6 +1073,7 @@ function mockUiApiResponse(pathName: string, searchParams: URLSearchParams, auth
   if (pathName === "/me/student/enrollments" || pathName === "/me/guardian/students/student-a/enrollments") return { data: createEnrollments() };
   if (pathName === "/me/student/announcements") return { data: createPortalAnnouncements("STUDENTS") };
   if (pathName === "/me/student/homework/material-assignments" || pathName === "/me/guardian/homework/material-assignments") return { data: createPortalHomeworkAssignments() };
+  if (pathName === "/me/student/overview") return { data: createStudentSelfOverview() };
   if (pathName === "/me/student/support-tickets" || pathName === "/me/teacher/support-tickets" || pathName === "/me/guardian/students/student-a/support-tickets") return { data: createPortalSupportTickets() };
   if (pathName === "/me/student/attendance" || pathName === "/me/guardian/students/student-a/attendance") return { data: createAttendanceRecords() };
   if (pathName === "/me/student/attendance/summary" || pathName === "/me/guardian/students/student-a/attendance/summary") return { data: { absent: 1, excused: 0, late: 1, present: 28, studentId: "student-a", total: 30 } };
@@ -1079,8 +1097,20 @@ function mockUiApiResponse(pathName: string, searchParams: URLSearchParams, auth
         latestReport: { examId: "exam-demo-isem-lgs-1", latestGeneratedAt: "2026-06-16T12:00:00.000Z", title: "İSEM - LGS - 1" },
         pendingHomework: [{ classId: "class-8a", dueAt: "2026-06-18T00:00:00.000Z", id: "homework-a", title: "Kesirler tekrar" }],
         pendingHomeworkCount: 1,
+        pendingSubmissionCount: 2,
         teacherName: "Zeynep Arslan",
-        todayLessons: createScheduleLessons().map(({ classId, courseId, endsAt, id, startsAt, title }) => ({ classId, courseId, endsAt, id, startsAt, title })),
+        todayLessons: createScheduleLessons().map(({ classId, courseId, endsAt, id, startsAt, title }) => ({
+          attendanceTaken: false,
+          classId,
+          className: "8-A",
+          courseId,
+          endsAt,
+          id,
+          startsAt,
+          title,
+        })),
+        unpublishedGradeDraftCount: 0,
+        unreadAnnouncementCount: 1,
       },
     };
   }
@@ -1136,6 +1166,13 @@ function mockUiApiResponse(pathName: string, searchParams: URLSearchParams, auth
         profile: createStudentProfile(),
         enrollments: createEnrollments(),
         attendance: { absent: 1, excused: 0, late: 1, present: 28, studentId: "student-a", total: 30 },
+        latestExam: {
+          examId: "exam-demo",
+          examTitle: "LGS Hazirlik Denemesi",
+          generatedAt: "2026-06-10T12:00:00.000Z",
+          snapshotId: "snapshot-a",
+          total: { blank: 1, correct: 26, net: 24.5, questionCount: 30, successRate: 81.7, wrong: 3 },
+        },
         openHomeworkCount: 0,
         homeworkAssignments: [],
         teacherNoteCount: 0,
@@ -1552,6 +1589,16 @@ function createPortalAnnouncements(audience: "GUARDIANS" | "STUDENTS" | "TEACHER
       updatedAt: "2026-06-16T09:00:00.000Z",
     },
   ];
+}
+
+// S1: öğrenci Gelişimim özeti Özet'in katlama çizgisinin altındadır; 414 golden çerçevesi değişmez.
+function createStudentSelfOverview() {
+  return {
+    attendance: { absent: 1, excused: 0, late: 1, present: 28, total: 30 },
+    examSeries: [{ generatedAt: "2026-06-17T08:00:00.000Z", net: 24.5, questionCount: 30, snapshotId: "snapshot-a", successRate: 81.7 }],
+    homework: { materialAssignmentCount: 1, openClassHomeworkCount: 0 },
+    schoolGrades: [{ absent: false, assessmentId: "assessment-a", courseId: "course-math", courseName: "Matematik", heldOn: "2026-06-10", kind: "WRITTEN", maxScore: 100, score: 84, title: "1. Yazılı", version: 1 }],
+  };
 }
 
 function createPortalHomeworkAssignments() {

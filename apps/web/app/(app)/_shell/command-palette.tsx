@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import Link from "next/link";
 import { Button, Dialog, Field, Input } from "@o-okul/ui";
 import { type GlobalSearchResultRecord } from "@o-okul/shared-types";
@@ -52,9 +52,31 @@ export function CommandPalette({
   query: string;
   setQuery(value: string): void;
 }) {
-  const filteredItems = filterCommandItems(items, query).slice(0, 10);
+  const filteredItems = filterCommandItems(items, query);
   const [entityResults, setEntityResults] = useState<EntitySearchResult[]>([]);
   const [isEntitySearchLoading, setIsEntitySearchLoading] = useState(false);
+  const [searchedQuery, setSearchedQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
+  const listboxRef = useRef<HTMLDivElement>(null);
+  const baseId = useId();
+  const listboxId = `${baseId}-listbox`;
+  const showEntitySearch = enableEntitySearch && normalizeCommandText(query).length >= 2;
+  // Sorgu değiştiği an (debounce başlamadan önce) da arama sürüyor sayılır; "Sonuç yok" erken görünmez.
+  const isSearching = showEntitySearch && (isEntitySearchLoading || searchedQuery !== query);
+  // Önceki sorgunun varlık sonuçları yeni arama bitene kadar listede kalmaz; Enter eski kaydı açamaz.
+  const visibleEntityResults = showEntitySearch && !isSearching ? entityResults : [];
+  // Komutlar ve varlık sonuçları tek listbox içinde sıralanır; ok tuşları ikisini birlikte gezer.
+  const options = [...filteredItems, ...visibleEntityResults];
+  const optionCount = options.length;
+  const activeOptionIndex = optionCount > 0 ? Math.min(activeIndex, optionCount - 1) : -1;
+  const activeOptionId = activeOptionIndex >= 0 ? optionId(activeOptionIndex) : undefined;
+  const resultStatus = optionCount > 0
+    ? `${optionCount} sonuç${isSearching ? ", varlık araması sürüyor" : ""}`
+    : isSearching ? "Aranıyor..." : "Sonuç yok";
+
+  function optionId(index: number) {
+    return `${baseId}-option-${index}`;
+  }
 
   function handleCommandItemClick(event: MouseEvent<HTMLAnchorElement>, href: string) {
     if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
@@ -66,10 +88,37 @@ export function CommandPalette({
     onNavigate(href);
   }
 
+  function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (optionCount === 0) return;
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      setActiveIndex((activeOptionIndex + step + optionCount) % optionCount);
+      return;
+    }
+    if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+      const activeOption = activeOptionIndex >= 0 ? options[activeOptionIndex] : undefined;
+      if (!activeOption) return;
+      event.preventDefault();
+      onNavigate(activeOption.href);
+    }
+  }
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [query]);
+
+  useEffect(() => {
+    if (!open || !activeOptionId) return;
+    const activeOption = listboxRef.current?.querySelector<HTMLElement>(`[id="${activeOptionId}"]`);
+    activeOption?.scrollIntoView?.({ block: "nearest" });
+  }, [activeOptionId, open]);
+
   useEffect(() => {
     const normalizedQuery = normalizeCommandText(query);
     if (!enableEntitySearch || normalizedQuery.length < 2) {
       setEntityResults([]);
+      setSearchedQuery("");
       setIsEntitySearchLoading(false);
       return;
     }
@@ -85,7 +134,10 @@ export function CommandPalette({
           if (!isStale) setEntityResults([]);
         })
         .finally(() => {
-          if (!isStale) setIsEntitySearchLoading(false);
+          if (!isStale) {
+            setSearchedQuery(query);
+            setIsEntitySearchLoading(false);
+          }
         });
     }, 180);
 
@@ -94,6 +146,27 @@ export function CommandPalette({
       window.clearTimeout(timeoutId);
     };
   }, [accessToken, enableEntitySearch, query]);
+
+  function renderOption(item: CommandPaletteItem | EntitySearchResult, index: number, detail: string) {
+    const isActive = index === activeOptionIndex;
+    return (
+      <Link
+        aria-selected={isActive}
+        href={item.href}
+        id={optionId(index)}
+        key={item.id}
+        onClick={(event) => handleCommandItemClick(event, item.href)}
+        onMouseMove={() => {
+          if (!isActive) setActiveIndex(index);
+        }}
+        role="option"
+        tabIndex={-1}
+      >
+        <span>{item.label}</span>
+        <small>{detail}</small>
+      </Link>
+    );
+  }
 
   return (
     <Dialog
@@ -106,31 +179,40 @@ export function CommandPalette({
     >
       <div className="next-command-panel">
         <Field className="next-command-search" label="Komut ara">
-          <Input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} />
+          <Input
+            aria-activedescendant={activeOptionId}
+            aria-autocomplete="list"
+            aria-controls={listboxId}
+            aria-expanded={optionCount > 0}
+            autoComplete="off"
+            autoFocus
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={handleSearchKeyDown}
+            role="combobox"
+            value={query}
+          />
         </Field>
-        <div className="next-command-results">
+        <p aria-live="polite" className="uh-visually-hidden" role="status">{resultStatus}</p>
+        <div aria-label="Komut sonuçları" className="next-command-results" id={listboxId} ref={listboxRef} role="listbox">
           {filteredItems.length > 0 ? (
-            filteredItems.map((item) => (
-              <Link key={item.id} href={item.href} onClick={(event) => handleCommandItemClick(event, item.href)}>
-                <span>{item.label}</span>
-                <small>{item.group}</small>
-              </Link>
-            ))
-          ) : (
-            <p>Sonuç yok</p>
-          )}
+            <div aria-label="Komutlar" className="next-command-results" role="group">
+              {filteredItems.map((item, index) => renderOption(item, index, item.group))}
+            </div>
+          ) : null}
+          {showEntitySearch && (isSearching || optionCount > 0) ? (
+            <div aria-label="Varlık araması" className="next-command-results" role="group">
+              <h3 aria-hidden="true">Varlık araması</h3>
+              {isSearching ? <p aria-hidden="true">Aranıyor...</p> : null}
+              {!isSearching && visibleEntityResults.length === 0 ? <p aria-hidden="true">Varlık sonucu yok</p> : null}
+              {visibleEntityResults.map((item, index) =>
+                renderOption(item, filteredItems.length + index, item.subtitle ? `${item.group} · ${item.subtitle}` : item.group),
+              )}
+            </div>
+          ) : null}
         </div>
-        {enableEntitySearch && normalizeCommandText(query).length >= 2 ? (
-          <div className="next-command-results" aria-label="Varlık araması">
-            <h3>Varlık araması</h3>
-            {isEntitySearchLoading ? <p>Aranıyor...</p> : null}
-            {!isEntitySearchLoading && entityResults.length === 0 ? <p>Varlık sonucu yok</p> : null}
-            {entityResults.map((item) => (
-              <Link key={item.id} href={item.href} onClick={(event) => handleCommandItemClick(event, item.href)}>
-                <span>{item.label}</span>
-                <small>{item.subtitle ? `${item.group} · ${item.subtitle}` : item.group}</small>
-              </Link>
-            ))}
+        {optionCount === 0 && !isSearching ? (
+          <div className="next-command-results">
+            <p>Sonuç yok</p>
           </div>
         ) : null}
       </div>

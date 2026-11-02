@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Alert, Button, DataTable, EmptyState, Field, InfoGrid, InfoItem, Input, MetricCard, MetricGrid, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn } from "@o-okul/ui";
+import { canAccessExamWorkspace } from "@o-okul/shared-types";
 import type {
   ExamRecord,
   OpticalFormTemplateRecord,
@@ -292,6 +293,8 @@ export function ParserConfigPage({ routeExamId, routeTab }: { routeExamId?: stri
   const [isQuarantineStudentSearching, setIsQuarantineStudentSearching] = useState(false);
   const [selectedStudentByQuarantine, setSelectedStudentByQuarantine] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
+  // Çalışma alanı çerçevesi yalnız bu rollere çizilir; diğer roller route modunda da tam sayfayı görür.
+  const embedded = Boolean(routeExamId && auth && canAccessExamWorkspace(auth.session.roles, auth.session.activePersona));
   const selectedExam = exams.find((exam) => exam.id === examId);
   const selectedPresetForm = opticalFormPresets.find((form) => form.preset === selectedPreset) ?? opticalFormPresets[0]!;
   const selectedPresetVersion = createPresetParserVersion(selectedPresetForm);
@@ -744,23 +747,14 @@ export function ParserConfigPage({ routeExamId, routeTab }: { routeExamId?: stri
     }
   }
 
-  return (
-    <PageFrame
-      title="Optik İşlemleri"
-      subtitle="Cevap anahtarı hazır sınavı seç, optik düzeni belirle ve dosya yüklemesini tek akışta kontrol et."
+  const opticalPanel = (
+    <Panel
+      aria-label="Optik operasyon"
+      className="next-optical-workspace"
+      description="Cevap anahtarı sınav oluşturulurken hazırlanır; bu ekran format, optik yükleme ve eşleşmeyen satır çözümünü yürütür."
+      title="Optik Operasyon Akışı"
     >
-      <OpticalExamSelector
-        examId={examId}
-        exams={exams}
-        selectedExam={selectedExam}
-        onExamChange={selectOpticalExam}
-      />
-      <Panel
-        aria-label="Optik operasyon"
-        className="next-optical-workspace"
-        description="Cevap anahtarı sınav oluşturulurken hazırlanır; bu ekran format, optik yükleme ve eşleşmeyen satır çözümünü yürütür."
-        title="Optik Operasyon Akışı"
-      >
+      {embedded ? null : (
         <InfoGrid aria-label="Optik iş akışı" className="next-optical-workflow-strip" role="region">
           <InfoItem
             description="Sınavda kullanılacak optik düzen"
@@ -783,107 +777,128 @@ export function ParserConfigPage({ routeExamId, routeTab }: { routeExamId?: stri
             value={<StatusBadge tone={outputStatusTone}>{outputStatusLabel}</StatusBadge>}
           />
         </InfoGrid>
-        <Tabs label="Optik sekmeleri" className="next-optical-tabs">
-          {tabs.map((tab) => (
-            <TabButton
-              key={tab.id}
-              aria-controls={activeTab === tab.id ? `optical-panel-${tab.id}` : undefined}
-              id={`optical-tab-${tab.id}`}
-              selected={activeTab === tab.id}
-              onClick={() => selectOpticalTab(tab.id)}
-            >
-              {tab.label}
-            </TabButton>
-          ))}
-        </Tabs>
-        {error ? <p className="uh-crud-page__error" role="alert">{error}</p> : null}
-        <div
-          aria-labelledby={`optical-tab-${activeTab}`}
-          className="next-optical-tab-panel"
-          id={`optical-panel-${activeTab}`}
-          role="tabpanel"
-          tabIndex={0}
-        >
-        {activeTab === "format" ? (
-          <OpticalFormatSetup
-            examId={examId}
-            examType={selectedExam?.examType}
-            fileName={fileName}
-            savedConfig={savedConfig}
-            selectedPreset={selectedPreset}
-            selectedPresetForm={selectedPresetForm}
-            selectedPresetVersion={selectedPresetVersion}
-            selectedTemplate={selectedTemplate}
-            selectedTemplateId={selectedTemplateId}
-            suggestion={suggestion}
-            templateApplyVersion={templateApplyVersion}
-            templateName={templateName}
-            templateVersion={templateVersion}
-            templates={templates}
-            version={version}
-            onFileChange={changeFile}
-            onPresetChange={(value) => {
-              const nextForm = opticalFormPresets.find((form) => form.preset === value) ?? opticalFormPresets[0]!;
-              setSelectedPreset(value);
-              setVersion(createPresetParserVersion(nextForm));
-              setTemplateApplyVersion(createPresetParserVersion(nextForm));
-              setSuggestion(null);
-              setSavedConfig(null);
-            }}
-            onPresetSubmit={submitPresetSuggestion}
-            onSuggestionSubmit={submitSuggestion}
-            onTemplateApplySubmit={submitTemplateApply}
-            onTemplateApplyVersionChange={setTemplateApplyVersion}
-            onTemplateCreate={submitTemplateCreate}
-            onTemplateIdChange={setSelectedTemplateId}
-            onTemplateNameChange={setTemplateName}
-            onTemplateVersionChange={setTemplateVersion}
-            onVersionChange={setVersion}
-          />
-        ) : null}
-        {activeTab === "upload" ? (
-          <OpticalUploadPanel
-            evaluationJobs={evaluationJobs}
-            evaluationStatus={evaluationStatus}
-            isEvaluationSubmitting={isEvaluationSubmitting}
-            isRawImportChecking={isRawImportChecking}
-            isRawImportSubmitting={isRawImportSubmitting}
-            rawImport={rawImport}
-            rawImportFileName={rawImportFileName}
-            rawImportParserVersion={rawImportParserVersion}
-            rawImportSummary={rawImportSummary}
-            onEvaluationStart={submitEvaluationJobs}
-            onFileChange={changeRawImportFile}
-            onParserVersionChange={setRawImportParserVersion}
-            onRefreshSummary={refreshRawImportSummary}
-            onSubmit={submitRawImport}
-          />
-        ) : null}
-        {activeTab === "quarantine" ? (
-          <section className="next-optical-report-workspace" aria-label="Eşleşmeyen satırlar">
-            <QuarantineResolutionPanel
-              quarantineRawImportId={quarantineRawImportId}
-              quarantines={quarantines}
-              selectedStudentByQuarantine={selectedStudentByQuarantine}
-              students={quarantineStudentOptions}
-              studentSearchQuery={quarantineStudentQuery}
-              isStudentSearchSubmitting={isQuarantineStudentSearching}
-              onLookupSubmit={submitQuarantineLookup}
-              onQuarantineRawImportIdChange={setQuarantineRawImportId}
-              onResolve={resolveQuarantine}
-              onResolveBulk={resolveSelectedQuarantines}
-              onSelectedStudentChange={setSelectedStudentByQuarantine}
-              onStudentSearchQueryChange={setQuarantineStudentQuery}
-              onStudentSearchSubmit={submitQuarantineStudentSearch}
-            />
-          </section>
-        ) : null}
-        <OpticalReportPanel
-          evaluationStatus={evaluationStatus}
+      )}
+      <Tabs label="Optik sekmeleri" className="next-optical-tabs">
+        {tabs.map((tab) => (
+          <TabButton
+            key={tab.id}
+            aria-controls={activeTab === tab.id ? `optical-panel-${tab.id}` : undefined}
+            id={`optical-tab-${tab.id}`}
+            selected={activeTab === tab.id}
+            onClick={() => selectOpticalTab(tab.id)}
+          >
+            {tab.label}
+          </TabButton>
+        ))}
+      </Tabs>
+      {error ? <p className="uh-crud-page__error" role="alert">{error}</p> : null}
+      <div
+        aria-labelledby={`optical-tab-${activeTab}`}
+        className="next-optical-tab-panel"
+        id={`optical-panel-${activeTab}`}
+        role="tabpanel"
+        tabIndex={0}
+      >
+      {activeTab === "format" ? (
+        <OpticalFormatSetup
           examId={examId}
+          examType={selectedExam?.examType}
+          fileName={fileName}
+          savedConfig={savedConfig}
+          selectedPreset={selectedPreset}
+          selectedPresetForm={selectedPresetForm}
+          selectedPresetVersion={selectedPresetVersion}
+          selectedTemplate={selectedTemplate}
+          selectedTemplateId={selectedTemplateId}
+          suggestion={suggestion}
+          templateApplyVersion={templateApplyVersion}
+          templateName={templateName}
+          templateVersion={templateVersion}
+          templates={templates}
+          version={version}
+          onFileChange={changeFile}
+          onPresetChange={(value) => {
+            const nextForm = opticalFormPresets.find((form) => form.preset === value) ?? opticalFormPresets[0]!;
+            setSelectedPreset(value);
+            setVersion(createPresetParserVersion(nextForm));
+            setTemplateApplyVersion(createPresetParserVersion(nextForm));
+            setSuggestion(null);
+            setSavedConfig(null);
+          }}
+          onPresetSubmit={submitPresetSuggestion}
+          onSuggestionSubmit={submitSuggestion}
+          onTemplateApplySubmit={submitTemplateApply}
+          onTemplateApplyVersionChange={setTemplateApplyVersion}
+          onTemplateCreate={submitTemplateCreate}
+          onTemplateIdChange={setSelectedTemplateId}
+          onTemplateNameChange={setTemplateName}
+          onTemplateVersionChange={setTemplateVersion}
+          onVersionChange={setVersion}
         />
-        </div>
-      </Panel>
+      ) : null}
+      {activeTab === "upload" ? (
+        <OpticalUploadPanel
+          evaluationJobs={evaluationJobs}
+          evaluationStatus={evaluationStatus}
+          isEvaluationSubmitting={isEvaluationSubmitting}
+          isRawImportChecking={isRawImportChecking}
+          isRawImportSubmitting={isRawImportSubmitting}
+          rawImport={rawImport}
+          rawImportFileName={rawImportFileName}
+          rawImportParserVersion={rawImportParserVersion}
+          rawImportSummary={rawImportSummary}
+          onEvaluationStart={submitEvaluationJobs}
+          onFileChange={changeRawImportFile}
+          onParserVersionChange={setRawImportParserVersion}
+          onRefreshSummary={refreshRawImportSummary}
+          onSubmit={submitRawImport}
+        />
+      ) : null}
+      {activeTab === "quarantine" ? (
+        <section className="next-optical-report-workspace" aria-label="Eşleşmeyen satırlar">
+          <QuarantineResolutionPanel
+            quarantineRawImportId={quarantineRawImportId}
+            quarantines={quarantines}
+            selectedStudentByQuarantine={selectedStudentByQuarantine}
+            students={quarantineStudentOptions}
+            studentSearchQuery={quarantineStudentQuery}
+            isStudentSearchSubmitting={isQuarantineStudentSearching}
+            onLookupSubmit={submitQuarantineLookup}
+            onQuarantineRawImportIdChange={setQuarantineRawImportId}
+            onResolve={resolveQuarantine}
+            onResolveBulk={resolveSelectedQuarantines}
+            onSelectedStudentChange={setSelectedStudentByQuarantine}
+            onStudentSearchQueryChange={setQuarantineStudentQuery}
+            onStudentSearchSubmit={submitQuarantineStudentSearch}
+          />
+        </section>
+      ) : null}
+      <OpticalReportPanel
+        embedded={embedded}
+        evaluationStatus={evaluationStatus}
+        examId={examId}
+      />
+      </div>
+    </Panel>
+  );
+
+  // Çalışma alanı içinde başlık, sınav bağlamı ve adım durumu üst çerçevededir; burada yalnız optik işi kalır.
+  if (embedded) {
+    return <div className="next-page-frame__body">{opticalPanel}</div>;
+  }
+
+  return (
+    <PageFrame
+      title="Optik İşlemleri"
+      subtitle="Cevap anahtarı hazır sınavı seç, optik düzeni belirle ve dosya yüklemesini tek akışta kontrol et."
+    >
+      <OpticalExamSelector
+        examId={examId}
+        exams={exams}
+        selectedExam={selectedExam}
+        onExamChange={selectOpticalExam}
+      />
+      {opticalPanel}
     </PageFrame>
   );
 }
@@ -1389,11 +1404,13 @@ function QuarantineResolutionPanel({
 }
 
 interface OpticalReportPanelProps {
+  embedded?: boolean;
   evaluationStatus: RawImportEvaluationStatus | null;
   examId: string;
 }
 
 function OpticalReportPanel({
+  embedded = false,
   evaluationStatus,
   examId,
 }: OpticalReportPanelProps) {
@@ -1425,7 +1442,8 @@ function OpticalReportPanel({
           <span>{reportMessage}</span>
         </div>
         {isReportReady ? (
-          <Link className="uh-button uh-button--primary uh-button--md" href={reportWorkspaceHref(examId)}>
+          // Çalışma alanında birincil sonraki iş çerçevededir; bu geçiş ikincil kalır.
+          <Link className={`uh-button ${embedded ? "uh-button--secondary" : "uh-button--primary"} uh-button--md`} href={reportWorkspaceHref(examId)}>
             Rapor çalışma alanına geç
           </Link>
         ) : (

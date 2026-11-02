@@ -102,7 +102,7 @@ export function GuardiansPage() {
   ];
   const guardianSummaryActions: OperationSummaryAction[] = [
     {
-      detail: "Liste telefonları varsayılan maskeli tutar",
+      detail: "Telefon kaydı olan veliler; eksik telefonu veli kaydından ekleyin",
       key: "masked-contact",
       label: "İletişim temizliği",
       status: guardianPhoneReadyCount === rows.length && rows.length > 0 ? "Hazır" : "Kontrol",
@@ -116,14 +116,6 @@ export function GuardiansPage() {
       status: guardianPortalReadyCount > 0 ? "Bağlı" : "Bekliyor",
       tone: guardianPortalReadyCount > 0 ? "success" : "neutral",
       value: `${guardianPortalReadyCount}/${rows.length}`,
-    },
-    {
-      detail: "Seçilen sıralama korunur",
-      key: "sort-context",
-      label: "Liste sırası",
-      status: "Liste",
-      tone: "neutral",
-      value: formatGuardianSort(listQuery.sort),
     },
   ];
 

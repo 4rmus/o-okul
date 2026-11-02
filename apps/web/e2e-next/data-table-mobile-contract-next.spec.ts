@@ -82,12 +82,8 @@ test.describe("DataTable mobil sözleşmesi", () => {
       await expect(announcementSummary).not.toContainText("SMS");
     }
     await expect(announcementSummary.getByLabel("Duyuru özeti önerilen işlemler")).toBeVisible();
-    const whatsappLifecycle = page.getByRole("region", { exact: true, name: "WhatsApp izin yaşam döngüsü" });
-    await expect(whatsappLifecycle).toContainText("Bu sürümde kapalıdır");
-    await expect(whatsappLifecycle.getByRole("region", { name: "WhatsApp izin yaşam döngüsü özeti" })).toContainText("İzin kaydı");
-    await expect(whatsappLifecycle).toContainText("Kanal kapalıyken onay veya geri çekme kaydı yazılmaz");
-    await expect(whatsappLifecycle).toContainText("Aktivasyon kanıtı bekleniyor");
-    await expect(whatsappLifecycle.getByRole("button")).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "WhatsApp izin yaşam döngüsü" })).toHaveCount(0);
+    await expect(page.getByText("Aktivasyon kanıtı bekleniyor")).toHaveCount(0);
     const announcementTable = page.getByRole("table", { name: "Duyuru yönetimi" });
     await expect(announcementTable.getByRole("columnheader", { name: "Başlık" })).toBeVisible();
     await expect(announcementTable.getByRole("columnheader", { name: "Kapsam" })).toHaveCount(0);
@@ -438,11 +434,22 @@ test.describe("DataTable mobil sözleşmesi", () => {
     const dailyAttendanceRegion = page.getByRole("region", { name: "Günlük sınıf yoklaması" });
     await expect(dailyAttendanceRegion.getByLabel("Yoklama sınıfı")).toHaveValue("class-8a");
     await dailyAttendanceRegion.getByLabel("Yoklama tarihi").fill("2026-06-18");
-    const dailyAttendanceTable = dailyAttendanceRegion.getByRole("table", { name: "Günlük sınıf yoklama listesi" });
-    await expect(dailyAttendanceTable).toContainText("Ada Kaya");
+    // Gate T1: öğrenci başına tek dokunuşla durum (radio grubu); kaydet yapışkan özet satırındadır.
+    const dailyAttendanceList = dailyAttendanceRegion.getByRole("list", { name: "Günlük sınıf yoklama listesi" });
+    await expect(dailyAttendanceList).toContainText("Ada Kaya");
+    const adaAttendance = dailyAttendanceList.getByRole("radiogroup", { name: "Ada Kaya yoklama durumu" });
+    await expect(adaAttendance.getByRole("radio")).toHaveCount(4);
+    await expect(adaAttendance.getByRole("radio", { checked: true })).toHaveCount(0);
+    const dailyAttendanceBar = dailyAttendanceRegion.locator(".next-attendance-roster__bar");
+    await expect(dailyAttendanceBar).toHaveText(/0 Var · 0 Yok · 0 Geç · 1 seçilmedi/);
+    await expect(dailyAttendanceBar.getByRole("button", { name: "Yoklamayı kaydet" })).toBeDisabled();
+    await adaAttendance.getByRole("radio", { exact: true, name: "Geç" }).check();
+    await expect(dailyAttendanceBar).toHaveText(/0 Var · 0 Yok · 1 Geç · 0 seçilmedi/);
     await expect(dailyAttendanceRegion.getByRole("button", { name: "Tümünü Var" })).toBeVisible();
     await dailyAttendanceRegion.getByRole("button", { name: "Tümünü Var" }).click();
-    await expect(dailyAttendanceRegion.getByLabel("Ada Kaya yoklama durumu")).toHaveValue("PRESENT");
+    await expect(adaAttendance.getByRole("radio", { exact: true, name: "Var" })).toBeChecked();
+    await expect(dailyAttendanceBar).toHaveText(/1 Var · 0 Yok · 0 Geç · 0 seçilmedi/);
+    await expect(dailyAttendanceRegion.getByRole("button", { name: "Yoklamayı kaydet" })).toHaveCount(1);
     const dailySaveRequest = page.waitForRequest(
       (request) => request.method() === "PUT" && new URL(request.url()).pathname === "/api/v1/attendance/daily",
     );
@@ -537,6 +544,8 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(programSummary).toContainText("Program toplamı");
     await expect(programSummary).toContainText("Saat planı");
     await expect(programSummary.getByLabel("Ders programı operasyon özeti önerilen işlemler")).toBeVisible();
+    await expect(programSummary.getByRole("link", { name: /Ders eşleşmesi/u })).toHaveAttribute("href", "/kurum/dersler");
+    await expect(programSummary.getByRole("link", { name: /Dönem bağı/u })).toHaveAttribute("href", "/kurum/akademik-takvim");
     const programControls = programRegion.getByRole("group", { name: "Liste kontrolleri" });
     await expect(programControls.getByRole("button", { name: "Ders ekle" })).toBeVisible();
     const programTable = programRegion.getByRole("table", { name: "Ders programı operasyon listesi" });
@@ -569,6 +578,8 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(studySummary).toContainText("Etüt toplamı");
     await expect(studySummary).toContainText("Kapasite kontrolü");
     await expect(studySummary.getByLabel("Etüt operasyon özeti önerilen işlemler")).toBeVisible();
+    await expect(studySummary.getByRole("link", { name: /Program bağı/u })).toHaveAttribute("href", "/kurum/program");
+    await expect(studySummary.locator(".next-operation-summary__note")).toContainText(["Kapasite"]);
     const studyTable = studyRegion.getByRole("table", { name: "Etüt operasyon listesi" });
     await expect(studyTable.getByRole("columnheader", { name: "Etüt" })).toBeVisible();
     await expect(studyTable.getByRole("columnheader", { name: "Öğrenci" })).toHaveCount(0);
@@ -832,6 +843,7 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(examSummary).toContainText("Taslak");
     await expect(examTable).toContainText("LGS Denemesi");
     await expect(examTable).toContainText("TYT Provasi");
+    await expect(examTable.getByRole("link", { name: "LGS Denemesi" })).toHaveAttribute("href", "/kurum/sinavlar/exam-lgs");
     await expect(selectedExamDetail.getByLabel("Seçili sınav durumu")).toContainText("Yayında");
     await expect(selectedExamDetail.getByLabel("Sınav hazırlık durumu")).toContainText("1 sınıf kapsamı");
     const selectedExamMetrics = selectedExamDetail.getByRole("region", { name: "Seçili sınav metrikleri" });

@@ -1,7 +1,8 @@
 import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
-import { assertTeacherAssigned } from "./assert-teacher-assigned.js";
+import type { TeacherAssignmentRecord } from "@o-okul/shared-types";
+import { assertTeacherAssigned, hasTeacherAssignmentForScope } from "./assert-teacher-assigned.js";
 import { InMemoryTeacherAssignmentStore } from "./teacher-assignment-store.js";
 
 describe("assertTeacherAssigned", () => {
@@ -49,6 +50,51 @@ describe("assertTeacherAssigned", () => {
     const store = new InMemoryTeacherAssignmentStore();
 
     await expect(assertTeacherAssigned(teacherContext, store, { tenantId: "tenant-a" })).rejects.toThrow(BadRequestException);
+  });
+});
+
+describe("hasTeacherAssignmentForScope", () => {
+  const today = "2026-10-01";
+  const record = (extra: Partial<TeacherAssignmentRecord>): TeacherAssignmentRecord => ({
+    id: "assignment", tenantId: "tenant-a", teacherId: "teacher-a", role: "BRANCH_TEACHER", ...extra,
+  });
+  const mathIn8A = { tenantId: "tenant-a", classId: "class-8a", courseId: "course-math", termId: "term-1" };
+
+  it("sinifa bagli atama ayni dersin baska sinifini kapsamaz", () => {
+    const pinned = [record({ classId: "class-8a", courseId: "course-math" })];
+
+    expect(hasTeacherAssignmentForScope(pinned, mathIn8A, today)).toBe(true);
+    expect(hasTeacherAssignmentForScope(pinned, { ...mathIn8A, classId: "class-8b" }, today)).toBe(false);
+    expect(hasTeacherAssignmentForScope(pinned, { tenantId: "tenant-a", courseId: "course-math" }, today)).toBe(false);
+    expect(hasTeacherAssignmentForScope(pinned, { ...mathIn8A, studentId: "student-8b", classId: "class-8b" }, today)).toBe(false);
+  });
+
+  it("ogrenciye bagli atama yalniz o ogrenciyi kapsar", () => {
+    const pinned = [record({ studentId: "student-z", courseId: "course-math" })];
+
+    expect(hasTeacherAssignmentForScope(pinned, { ...mathIn8A, studentId: "student-z" }, today)).toBe(true);
+    expect(hasTeacherAssignmentForScope(pinned, mathIn8A, today)).toBe(false);
+    expect(hasTeacherAssignmentForScope(pinned, { ...mathIn8A, studentId: "student-y" }, today)).toBe(false);
+  });
+
+  it("sinif ve ogrenci tasimayan ders atamasi dersin kapsamini acikca verir", () => {
+    const courseWide = [record({ courseId: "course-math", termId: "term-1" })];
+
+    expect(hasTeacherAssignmentForScope(courseWide, mathIn8A, today)).toBe(true);
+    expect(hasTeacherAssignmentForScope(courseWide, { ...mathIn8A, classId: "class-8b" }, today)).toBe(true);
+    expect(hasTeacherAssignmentForScope(courseWide, { ...mathIn8A, courseId: "course-fen" }, today)).toBe(false);
+    expect(hasTeacherAssignmentForScope(courseWide, { ...mathIn8A, termId: "term-2" }, today)).toBe(false);
+    expect(hasTeacherAssignmentForScope(courseWide, { tenantId: "tenant-a", classId: "class-8a" }, today)).toBe(false);
+    expect(hasTeacherAssignmentForScope(courseWide, { ...mathIn8A, tenantId: "tenant-b" }, today)).toBe(false);
+  });
+
+  it("rol filtresi ve tarih araligi ders kapsaminda da uygulanir", () => {
+    const counsellor = [record({ role: "GUIDANCE_COUNSELOR", classId: "class-8a" })];
+    const expired = [record({ courseId: "course-math", endsAt: "2026-09-30" })];
+
+    expect(hasTeacherAssignmentForScope(counsellor, { ...mathIn8A, roles: ["CLASS_TEACHER", "BRANCH_TEACHER"] }, today)).toBe(false);
+    expect(hasTeacherAssignmentForScope(counsellor, mathIn8A, today)).toBe(true);
+    expect(hasTeacherAssignmentForScope(expired, mathIn8A, today)).toBe(false);
   });
 });
 
