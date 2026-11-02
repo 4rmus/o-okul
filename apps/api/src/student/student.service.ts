@@ -82,6 +82,7 @@ import { decryptTcIdentity, encryptTcIdentity, hashTcIdentity, isValidTcIdentity
 import { buildStudentContactStorageInput } from "./student-contact-input.js";
 import { recordContactGuardianRemoval } from "../guardian/guardian-role-audit.js";
 import { type StudentContactStore, studentContactStoreToken } from "./student-contact-store.js";
+import { type DevelopmentStore, developmentStoreToken } from "../development/development-store.js";
 
 export interface StudentRecord extends SharedStudentRecord {
   deletedAt?: string;
@@ -175,6 +176,8 @@ export class StudentService {
     @Optional() @Inject(licenseTermStoreToken) private readonly licenseTerms?: LicenseTermStore,
     @Optional() private readonly studentPortalActivations?: StudentPortalActivationService,
     @Optional() @Inject(studentContactStoreToken) private readonly studentContactStore?: StudentContactStore,
+    // DEC-20261102-05: the KVKK purge also clears DevelopmentAssessment.mentorNote.
+    @Optional() @Inject(developmentStoreToken) private readonly developmentStore?: Pick<DevelopmentStore, "purgeMentorNotesByStudent">,
   ) {}
 
   async list(context: RequestContext): Promise<StudentRecord[]> {
@@ -1181,6 +1184,10 @@ export class StudentService {
       throw new Error("STUDENT_CONTACT_PURGE_UNAVAILABLE");
     }
     const { purged: studentContactsPurged, guardianUnlinks } = await this.studentContactStore.purgeByStudent(student.tenantId, student.id);
+    if (!this.developmentStore) {
+      throw new Error("DEVELOPMENT_MENTOR_NOTE_PURGE_UNAVAILABLE");
+    }
+    const developmentMentorNotesPurged = await this.developmentStore.purgeMentorNotesByStudent(student.tenantId, student.id);
     const purged = await this.store.purgePii(id);
     if (!purged) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
@@ -1199,6 +1206,14 @@ export class StudentService {
     for (const unlink of guardianUnlinks) {
       await recordContactGuardianRemoval(this.auditLogs, context, purged.tenantId, unlink, "kvkk.student_contact_pii_purged");
     }
+    await this.auditLogs?.record({
+      tenantId: purged.tenantId,
+      actorUserId: context.userId,
+      entityType: "DevelopmentAssessment",
+      entityId: purged.id,
+      action: "kvkk.development_mentor_note_purged",
+      diff: { studentId: purged.id, fieldsPurged: ["mentorNote"], recordCount: developmentMentorNotesPurged },
+    });
     await this.auditLogs?.record({
       tenantId: purged.tenantId,
       actorUserId: context.userId,

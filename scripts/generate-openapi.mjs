@@ -1368,6 +1368,12 @@ const requiredOperationContracts = [
   },
   {
     method: "get",
+    path: "/api/v1/development/authoring-scope",
+    responseEnvelope: true,
+    responseDataRequired: ["studentIds"],
+  },
+  {
+    method: "get",
     path: "/api/v1/me/student/development-assessments",
     responseListEnvelope: true,
     responseDataItemsRequired: developmentTrendItemRequired,

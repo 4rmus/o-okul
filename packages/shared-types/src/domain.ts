@@ -2006,6 +2006,48 @@ export interface TeacherNoteRecord {
 
 export type DevelopmentAssessmentVisibility = "INTERNAL" | "GUARDIAN";
 
+/** DEC-20261102-05: upper bound for the free-text mentor note on a development assessment. */
+export const developmentMentorNoteMaxLength = 1000;
+
+export interface DevelopmentCriterionRecord {
+  id: string;
+  tenantId: string;
+  name: string;
+  scaleMin: number;
+  scaleMax: number;
+  sortOrder: number;
+}
+
+export interface DevelopmentScoreRecord {
+  id: string;
+  tenantId: string;
+  assessmentId: string;
+  criterionId: string;
+  score: number;
+}
+
+/**
+ * Append-only (DEC-20261102-05): there is no update or delete route; a correction is a new record.
+ * INTERNAL records reach only admin and guidance readers and the author teacher.
+ */
+export interface DevelopmentAssessmentRecord {
+  id: string;
+  tenantId: string;
+  studentId: string;
+  teacherId: string;
+  termId?: string;
+  periodLabel: string;
+  mentorNote?: string;
+  visibility: DevelopmentAssessmentVisibility;
+  createdAt?: string;
+  scores: DevelopmentScoreRecord[];
+}
+
+/** Students the signed-in teacher may write development assessments for (CLASS_TEACHER or GUIDANCE_COUNSELOR). */
+export interface DevelopmentAuthoringScope {
+  studentIds: string[];
+}
+
 export interface DevelopmentCriterionCreateRequest {
   name: string;
   scaleMin?: number;
@@ -2020,10 +2062,13 @@ export interface DevelopmentAssessmentScoreInput {
 
 export interface DevelopmentAssessmentCreateRequest {
   studentId: string;
+  /** Required for admin writers; ignored for a teacher, who is always the author. */
   teacherId?: string;
   termId?: string;
   periodLabel: string;
+  /** At most developmentMentorNoteMaxLength characters. */
   mentorNote?: string;
+  /** Omitted means INTERNAL; GUARDIAN must be requested explicitly. */
   visibility?: DevelopmentAssessmentVisibility;
   scores: DevelopmentAssessmentScoreInput[];
 }

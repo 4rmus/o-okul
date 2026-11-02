@@ -214,7 +214,8 @@ describe("kampüs kapsamlı çalışan erişimi", () => {
       .send({ name: "Kampüs kapsamı ölçütü" })
       .expect(201);
     const criterionId = (criterion.body as { id: string }).id;
-    const input = { studentId: "student-a", teacherId: "teacher-a", periodLabel: "2026 Kasım", scores: [{ criterionId, score: 3 }] };
+    // GUARDIAN: OPERATIONS_STAFF never reads INTERNAL records (DEC-20261102-05, RK-6); this case checks campus scope.
+    const input = { studentId: "student-a", teacherId: "teacher-a", periodLabel: "2026 Kasım", visibility: "GUARDIAN", scores: [{ criterionId, score: 3 }] };
     const assessment = await request(server)
       .post("/development/assessments")
       .set("Authorization", `Bearer ${adminToken}`)

@@ -1,9 +1,15 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { IdempotencyService } from "../http/idempotency.js";
-import type { DevelopmentAssessmentVisibility, DevelopmentTrendItem } from "@o-okul/shared-types";
+import {
+  developmentMentorNoteMaxLength,
+  type DevelopmentAssessmentVisibility,
+  type DevelopmentAuthoringScope,
+  type DevelopmentTrendItem,
+  type TeacherAssignmentRole,
+} from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
-import { assertTeacherAssigned } from "../school/assert-teacher-assigned.js";
+import { assertTeacherAssigned, hasTeacherAssignmentForScope, type TeacherAssignmentScope } from "../school/assert-teacher-assigned.js";
 import { type ClassStore, classStoreToken } from "../school/class-store.js";
 import { requiredText } from "../shared/required-text.js";
 import {
@@ -14,7 +20,7 @@ import {
   type TeacherAssignmentStore,
   teacherAssignmentStoreToken,
 } from "../school/teacher-assignment-store.js";
-import { type TeacherStore, teacherStoreToken } from "../school/teacher-store.js";
+import { type TeacherRecord, type TeacherStore, teacherStoreToken } from "../school/teacher-store.js";
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
 import {
   assertTenantResourceAccess,
@@ -51,6 +57,22 @@ export interface DevelopmentAssessmentInput {
 
 export interface DevelopmentAssessmentWithScores extends DevelopmentAssessmentRecord {
   scores: DevelopmentScoreRecord[];
+}
+
+/**
+ * DEC-20261102-05: a teacher writes only through a CLASS_TEACHER or GUIDANCE_COUNSELOR assignment; BRANCH_TEACHER and
+ * RESPONSIBLE_TEACHER do not. Admin writers name an author teacher who holds one of these assignments.
+ */
+const developmentWriterAssignmentRoles: readonly TeacherAssignmentRole[] = ["CLASS_TEACHER", "GUIDANCE_COUNSELOR"];
+/** Staff roles that write on behalf of a teacher and read INTERNAL records (RK-6). OPERATIONS_STAFF is not one of them. */
+const developmentAdminRoles = ["TENANT_OWNER", "TENANT_ADMIN", "ASSISTANT_ADMIN"];
+
+/**
+ * What the idempotency store keeps for an assessment write: the id only, never the mentor note (DEC-20261102-05,
+ * KVKK). A replay reloads the record, so a purged note is not served back from the replay cache either.
+ */
+interface DevelopmentAssessmentReceipt {
+  assessmentId: string;
 }
 
 @Injectable()
@@ -107,16 +129,36 @@ export class DevelopmentService {
   }
 
   async listAssessments(context: RequestContext, studentId?: string): Promise<DevelopmentAssessmentWithScores[]> {
-    const assessments = await this.filterForCampusScope(
+    const assessments = await this.filterReadable(
       context,
-      filterTenantResources(context, await this.store.listAssessments(studentId)).filter((assessment) =>
-        this.canReadAssessment(context, assessment),
-      ),
+      await this.filterForCampusScope(context, filterTenantResources(context, await this.store.listAssessments(studentId))),
     );
     return Promise.all(assessments.map(async (assessment) => ({
       ...assessment,
       scores: await this.store.listScores(assessment.id),
     })));
+  }
+
+  /** The students the signed-in teacher may write for: CLASS_TEACHER or GUIDANCE_COUNSELOR assignment, in campus scope. */
+  async getAuthoringScope(context: RequestContext): Promise<DevelopmentAuthoringScope> {
+    if (!isTeacherSubjectContext(context)) {
+      throw new ForbiddenException("TEACHER_CONTEXT_REQUIRED");
+    }
+    const tenantId = requireTenantId(context);
+    const assignments = await this.teacherAssignments.listByTeacher(context.subjectId);
+    const campusStudentIds = await this.campusAllowedStudentIds(context);
+    const referenceDate = today();
+    const studentIds = filterTenantResources(context, await this.students.list())
+      .filter((student) => !student.deletedAt)
+      .filter((student) => !campusStudentIds || campusStudentIds.has(student.id))
+      .filter((student) => hasTeacherAssignmentForScope(assignments, {
+        tenantId,
+        studentId: student.id,
+        classId: student.classId,
+        roles: developmentWriterAssignmentRoles,
+      }, referenceDate))
+      .map((student) => student.id);
+    return { studentIds };
   }
 
   async listCurrentStudent(context: RequestContext): Promise<DevelopmentTrendItem[]> {
@@ -142,13 +184,19 @@ export class DevelopmentService {
     return this.listVisibleForStudent(context, student.id);
   }
 
+  /** Append-only: there is no update or delete; a correction is a new assessment (DEC-20261102-05). */
   async createAssessment(context: RequestContext, input: DevelopmentAssessmentInput, idempotencyKey?: string): Promise<DevelopmentAssessmentWithScores> {
     if (idempotencyKey && this.idempotency) {
-      return this.idempotency.run(
+      let created: DevelopmentAssessmentWithScores | undefined;
+      const receipt = await this.idempotency.run<DevelopmentAssessmentReceipt>(
         context,
         { key: idempotencyKey, operation: "development.assessment.create", request: { actorUserId: context.userId, input } },
-        () => this.createAssessmentOnce(context, input),
+        async () => {
+          created = await this.createAssessmentOnce(context, input);
+          return { assessmentId: created.id };
+        },
       );
+      return created ?? this.loadReplayedAssessment(context, receipt);
     }
     return this.createAssessmentOnce(context, input);
   }
@@ -162,29 +210,25 @@ export class DevelopmentService {
     }
     await this.assertStudentInCampusScope(context, student);
 
-    const teacherId = await this.resolveTeacherId(context, input.teacherId);
-    const teacher = await this.teachers.findById(teacherId);
-    if (!teacher || teacher.tenantId !== tenantId) {
-      throw new NotFoundException("TEACHER_NOT_FOUND");
-    }
-
-    await assertTeacherAssigned(context, this.teacherAssignments, {
+    const termId = optionalText(input.termId);
+    const teacher = await this.resolveAuthor(context, input.teacherId, {
       tenantId,
       studentId: student.id,
       classId: student.classId,
-      termId: optionalText(input.termId),
+      termId,
+      roles: developmentWriterAssignmentRoles,
     });
 
     const scoreInputs = input.scores ?? [];
     if (scoreInputs.length === 0) {
       throw new BadRequestException("DEVELOPMENT_ASSESSMENT_SCORES_REQUIRED");
     }
-
-    const criteria = await Promise.all(scoreInputs.map((score) =>
-      this.requireCriterion(tenantId, requiredText(score.criterionId, "DEVELOPMENT_SCORE_CRITERION_REQUIRED")),
-    ));
-    // Validate every score before the first write so an out-of-range score no longer leaves an
-    // assessment without scores behind.
+    const criterionIds = scoreInputs.map((score) => requiredText(score.criterionId, "DEVELOPMENT_SCORE_CRITERION_REQUIRED"));
+    if (new Set(criterionIds).size !== criterionIds.length) {
+      throw new BadRequestException("DEVELOPMENT_SCORE_CRITERION_DUPLICATE");
+    }
+    const criteria = await Promise.all(criterionIds.map((criterionId) => this.requireCriterion(tenantId, criterionId)));
+    // Every score is validated before the single atomic write, so a bad score never leaves a partial assessment.
     const validatedScores = scoreInputs.map((scoreInput, index) => {
       const criterion = criteria[index]!;
       const score = requiredInt(scoreInput.score, "DEVELOPMENT_SCORE_REQUIRED");
@@ -193,21 +237,20 @@ export class DevelopmentService {
       }
       return { criterionId: criterion.id, score };
     });
-    const assessment = await this.store.createAssessment({
+    const mentorNote = optionalText(input.mentorNote);
+    if (mentorNote && mentorNote.length > developmentMentorNoteMaxLength) {
+      throw new BadRequestException("DEVELOPMENT_MENTOR_NOTE_TOO_LONG");
+    }
+
+    const { assessment, scores } = await this.store.createAssessmentWithScores({
       tenantId,
       studentId: student.id,
       teacherId: teacher.id,
-      termId: optionalText(input.termId),
+      termId,
       periodLabel: requiredText(input.periodLabel, "DEVELOPMENT_ASSESSMENT_PERIOD_REQUIRED"),
-      mentorNote: optionalText(input.mentorNote),
+      mentorNote,
       visibility: resolveVisibility(input.visibility),
-    });
-    const scores = await Promise.all(validatedScores.map(({ criterionId, score }) => this.store.createScore({
-      tenantId,
-      assessmentId: assessment.id,
-      criterionId,
-      score,
-    })));
+    }, validatedScores);
 
     await this.auditLogs?.record({
       tenantId,
@@ -220,11 +263,46 @@ export class DevelopmentService {
     return { ...assessment, scores };
   }
 
-  private async resolveTeacherId(context: RequestContext, inputTeacherId: string | undefined): Promise<string> {
+  /**
+   * Teacher persona: the teacher is the author and needs a writer assignment for the student or the student's class.
+   * Admin persona: names the author, who must hold an active writer assignment there. Everyone else is refused.
+   */
+  private async resolveAuthor(
+    context: RequestContext,
+    inputTeacherId: string | undefined,
+    scope: TeacherAssignmentScope,
+  ): Promise<TeacherRecord> {
+    let teacherId: string;
     if (isTeacherSubjectContext(context)) {
-      return context.subjectId;
+      await assertTeacherAssigned(context, this.teacherAssignments, scope);
+      teacherId = context.subjectId;
+    } else if (isDevelopmentAdmin(context)) {
+      teacherId = requiredText(inputTeacherId, "DEVELOPMENT_ASSESSMENT_TEACHER_REQUIRED");
+    } else {
+      throw new ForbiddenException("DEVELOPMENT_ASSESSMENT_WRITER_FORBIDDEN");
     }
-    return requiredText(inputTeacherId, "DEVELOPMENT_ASSESSMENT_TEACHER_REQUIRED");
+
+    const teacher = await this.teachers.findById(teacherId);
+    if (!teacher || teacher.tenantId !== scope.tenantId) {
+      throw new NotFoundException("TEACHER_NOT_FOUND");
+    }
+    if (!isTeacherSubjectContext(context)) {
+      const assignments = await this.teacherAssignments.listByTeacher(teacher.id);
+      if (!hasTeacherAssignmentForScope(assignments, scope, today())) {
+        throw new ForbiddenException("DEVELOPMENT_ASSESSMENT_AUTHOR_NOT_ASSIGNED");
+      }
+    }
+    return teacher;
+  }
+
+  private async loadReplayedAssessment(context: RequestContext, receipt: unknown): Promise<DevelopmentAssessmentWithScores> {
+    const assessmentId = receiptAssessmentId(receipt);
+    const assessment = assessmentId ? await this.store.findAssessmentById(assessmentId) : undefined;
+    if (!assessment) {
+      throw new NotFoundException("DEVELOPMENT_ASSESSMENT_NOT_FOUND");
+    }
+    assertDevelopmentStudentTenantAccess(context, assessment);
+    return { ...assessment, scores: await this.store.listScores(assessment.id) };
   }
 
   private async listVisibleForStudent(context: RequestContext, studentId: string): Promise<DevelopmentTrendItem[]> {
@@ -265,23 +343,69 @@ export class DevelopmentService {
     }
   }
 
+  /** Students whose current class is in the caller's campus scope; undefined when the caller is tenant-wide. */
+  private async campusAllowedStudentIds(context: RequestContext): Promise<Set<string> | undefined> {
+    const restriction = this.campusRestriction(context);
+    if (!restriction) return undefined;
+
+    const allowedClassIds = this.classes
+      ? campusScopedClassIds(context, restriction, await this.classes.list())
+      : new Set<string>();
+    return new Set(
+      filterTenantResources(context, await this.students.list())
+        .filter((student) => Boolean(student.classId && allowedClassIds.has(student.classId)))
+        .map((student) => student.id),
+    );
+  }
+
   // An assessment belongs to its student's current class campus; a student without a class fails closed.
   private async filterForCampusScope(
     context: RequestContext,
     assessments: DevelopmentAssessmentRecord[],
   ): Promise<DevelopmentAssessmentRecord[]> {
-    const restriction = this.campusRestriction(context);
-    if (!restriction) return assessments;
-
-    const allowedClassIds = this.classes
-      ? campusScopedClassIds(context, restriction, await this.classes.list())
-      : new Set<string>();
-    const allowedStudentIds = new Set(
-      filterTenantResources(context, await this.students.list())
-        .filter((student) => Boolean(student.classId && allowedClassIds.has(student.classId)))
-        .map((student) => student.id),
-    );
+    const allowedStudentIds = await this.campusAllowedStudentIds(context);
+    if (!allowedStudentIds) return assessments;
     return assessments.filter((assessment) => allowedStudentIds.has(assessment.studentId));
+  }
+
+  /**
+   * RK-6: INTERNAL records reach admin roles, guidance counselors of the student and the author teacher only.
+   * A teacher reads what they wrote plus every record of a student they counsel; other staff read GUARDIAN only.
+   */
+  private async filterReadable(
+    context: RequestContext,
+    assessments: DevelopmentAssessmentRecord[],
+  ): Promise<DevelopmentAssessmentRecord[]> {
+    for (const assessment of assessments) {
+      assertDevelopmentStudentTenantAccess(context, assessment);
+    }
+    if (isTeacherSubjectContext(context)) {
+      const counselsStudent = await this.guidanceMatcher(context, assessments);
+      return assessments.filter((assessment) => assessment.teacherId === context.subjectId || counselsStudent(assessment.studentId));
+    }
+    if (isDevelopmentAdmin(context)) return assessments;
+    return assessments.filter((assessment) => assessment.visibility === "GUARDIAN");
+  }
+
+  private async guidanceMatcher(
+    context: RequestContext & { subjectId: string },
+    assessments: DevelopmentAssessmentRecord[],
+  ): Promise<(studentId: string) => boolean> {
+    const guidance = (await this.teacherAssignments.listByTeacher(context.subjectId))
+      .filter((assignment) => assignment.role === "GUIDANCE_COUNSELOR");
+    if (guidance.length === 0 || !context.tenantId) return () => false;
+
+    const tenantId = context.tenantId;
+    const referenceDate = today();
+    const studentIds = [...new Set(assessments.map((assessment) => assessment.studentId))];
+    const counseled = new Set<string>();
+    for (const studentId of studentIds) {
+      const student = await this.students.findById(studentId);
+      if (student && hasTeacherAssignmentForScope(guidance, { tenantId, studentId, classId: student.classId }, referenceDate)) {
+        counseled.add(studentId);
+      }
+    }
+    return (studentId) => counseled.has(studentId);
   }
 
   private async assertStudentInCampusScope(
@@ -309,16 +433,18 @@ export class DevelopmentService {
     }
     return criterion;
   }
+}
 
-  private canReadAssessment(context: RequestContext, assessment: DevelopmentAssessmentRecord): boolean {
-    try {
-      assertTenantResourceAccess(context, assessment);
-      if (!isTeacherSubjectContext(context)) return true;
-      return assessment.teacherId === context.subjectId;
-    } catch {
-      throw new ForbiddenException("FORBIDDEN_TENANT");
-    }
-  }
+function isDevelopmentAdmin(context: RequestContext): boolean {
+  return !isTeacherSubjectContext(context) && context.roles.some((role) => developmentAdminRoles.includes(role));
+}
+
+function receiptAssessmentId(receipt: unknown): string | undefined {
+  if (!receipt || typeof receipt !== "object") return undefined;
+  const record = receipt as Record<string, unknown>;
+  // Keys stored before DEC-20261102-05 hold the full assessment; only its id is used, the stored note is never served.
+  const id = record.assessmentId ?? record.id;
+  return typeof id === "string" && id ? id : undefined;
 }
 
 function assertDevelopmentStudentTenantAccess(context: RequestContext, student: { tenantId: string }): void {
@@ -334,6 +460,10 @@ function requireTenantId(context: RequestContext): string {
     throw new ForbiddenException("TENANT_CONTEXT_MISSING");
   }
   return context.tenantId;
+}
+
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function optionalText(value: string | undefined): string | undefined {
@@ -352,8 +482,9 @@ function requiredInt(value: number | undefined, errorCode: string): number {
   return value;
 }
 
-function resolveVisibility(value: "INTERNAL" | "GUARDIAN" | undefined): "INTERNAL" | "GUARDIAN" {
-  if (value === undefined) return "GUARDIAN";
+/** DEC-20261102-05: omitted visibility is INTERNAL; the API writes GUARDIAN only when it is requested. */
+function resolveVisibility(value: DevelopmentAssessmentVisibility | undefined): DevelopmentAssessmentVisibility {
+  if (value === undefined) return "INTERNAL";
   if (value === "INTERNAL" || value === "GUARDIAN") return value;
   throw new BadRequestException("DEVELOPMENT_ASSESSMENT_VISIBILITY_INVALID");
 }
