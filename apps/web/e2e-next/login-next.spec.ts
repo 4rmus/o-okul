@@ -3987,11 +3987,10 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
 
   await expect(page).toHaveURL(/\/kurum$/);
   await expect(heading(page, { name: "DNA EĞİTİM KURUMU" })).toBeVisible();
-  const workContext = page.getByLabel("Çalışma bilgileri");
-  await expect(workContext).toContainText("Tüm kampüsler");
-  await expect(workContext).toContainText("Tüm dönemler");
-  await expect(workContext).not.toContainText("Aktif dönem");
-  await expect(workContext).not.toContainText("Son hazır sürüm");
+  // DEC-20261102-02: kurum sayfalarında kabuk Kampüs/Dönem seçicisi gösterilmez.
+  await expect(page.getByLabel("Çalışma bilgileri")).toHaveCount(0);
+  await expect(page.getByLabel("Çalışma kampüsü")).toHaveCount(0);
+  await expect(page.getByLabel("Çalışma dönemi")).toHaveCount(0);
   const institutionSummary = page.getByRole("region", { name: "Kurum başarı görünümü" });
   await expect(institutionSummary).toContainText("Aktif öğrenci");
   await expect(institutionSummary).toContainText("3");
@@ -4058,9 +4057,10 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(heading(page, { name: "DNA EĞİTİM KURUMU" })).toBeVisible();
   const workflowDialog = await openCommandPalette(page);
   await workflowDialog.getByLabel("Komut ara").fill("dönem");
-  await workflowDialog.getByRole("option", { name: /Yeni dönem açılışı/ }).click();
-  await expect(page).toHaveURL(/\/kurum\/kurulum$/);
-  await expect(heading(page, { name: "Kurulum Sihirbazı" })).toBeVisible();
+  await expect(workflowDialog.getByRole("option", { name: /Yeni dönem açılışı/ })).toHaveCount(0);
+  await workflowDialog.getByRole("option", { name: /Öğrenci dönem geçişi/ }).click();
+  await expect(page).toHaveURL(/\/kurum\/ogrenciler$/);
+  await expect(heading(page, { name: "Öğrenciler" })).toBeVisible();
   const examCloseDialog = await openCommandPalette(page);
   await examCloseDialog.getByLabel("Komut ara").fill("sınav sonrası");
   await examCloseDialog.getByRole("option", { name: /Sınav sonrası kapanış/ }).click();
