@@ -82,12 +82,8 @@ test.describe("DataTable mobil sözleşmesi", () => {
       await expect(announcementSummary).not.toContainText("SMS");
     }
     await expect(announcementSummary.getByLabel("Duyuru özeti önerilen işlemler")).toBeVisible();
-    const whatsappLifecycle = page.getByRole("region", { exact: true, name: "WhatsApp izin yaşam döngüsü" });
-    await expect(whatsappLifecycle).toContainText("Bu sürümde kapalıdır");
-    await expect(whatsappLifecycle.getByRole("region", { name: "WhatsApp izin yaşam döngüsü özeti" })).toContainText("İzin kaydı");
-    await expect(whatsappLifecycle).toContainText("Kanal kapalıyken onay veya geri çekme kaydı yazılmaz");
-    await expect(whatsappLifecycle).toContainText("Aktivasyon kanıtı bekleniyor");
-    await expect(whatsappLifecycle.getByRole("button")).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "WhatsApp izin yaşam döngüsü" })).toHaveCount(0);
+    await expect(page.getByText("Aktivasyon kanıtı bekleniyor")).toHaveCount(0);
     const announcementTable = page.getByRole("table", { name: "Duyuru yönetimi" });
     await expect(announcementTable.getByRole("columnheader", { name: "Başlık" })).toBeVisible();
     await expect(announcementTable.getByRole("columnheader", { name: "Kapsam" })).toHaveCount(0);
@@ -548,6 +544,8 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(programSummary).toContainText("Program toplamı");
     await expect(programSummary).toContainText("Saat planı");
     await expect(programSummary.getByLabel("Ders programı operasyon özeti önerilen işlemler")).toBeVisible();
+    await expect(programSummary.getByRole("link", { name: /Ders eşleşmesi/u })).toHaveAttribute("href", "/kurum/dersler");
+    await expect(programSummary.getByRole("link", { name: /Dönem bağı/u })).toHaveAttribute("href", "/kurum/akademik-takvim");
     const programControls = programRegion.getByRole("group", { name: "Liste kontrolleri" });
     await expect(programControls.getByRole("button", { name: "Ders ekle" })).toBeVisible();
     const programTable = programRegion.getByRole("table", { name: "Ders programı operasyon listesi" });
@@ -580,6 +578,8 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(studySummary).toContainText("Etüt toplamı");
     await expect(studySummary).toContainText("Kapasite kontrolü");
     await expect(studySummary.getByLabel("Etüt operasyon özeti önerilen işlemler")).toBeVisible();
+    await expect(studySummary.getByRole("link", { name: /Program bağı/u })).toHaveAttribute("href", "/kurum/program");
+    await expect(studySummary.locator(".next-operation-summary__note")).toContainText(["Kapasite"]);
     const studyTable = studyRegion.getByRole("table", { name: "Etüt operasyon listesi" });
     await expect(studyTable.getByRole("columnheader", { name: "Etüt" })).toBeVisible();
     await expect(studyTable.getByRole("columnheader", { name: "Öğrenci" })).toHaveCount(0);

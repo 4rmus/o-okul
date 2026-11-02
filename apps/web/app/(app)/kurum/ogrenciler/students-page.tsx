@@ -49,7 +49,7 @@ import { formatAttendanceSummary } from "../../_shared/attendance-summary.js";
 import { istanbulDateKey } from "../../_shared/istanbul-date.js";
 import { formatPercentNumber, formatStudentProgressSummary, isComparableStudentProgress, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import { readReportExamId } from "../../_shared/report-exam-selection.js";
-import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+import { OperationSummary, type OperationSummaryAction, type OperationSummaryItem } from "../_shared/operation-summary.js";
 import { RevealablePhone } from "../_shared/revealable-phone.js";
 
 interface StudentProfilePayload {
@@ -327,6 +327,7 @@ export function StudentsPage() {
     : "next-students-page next-student-growth-list";
   const activeRowCount = rows.filter((student) => student.status === "ACTIVE").length;
   const classCoverageCount = new Set(rows.map((student) => student.classId).filter(Boolean)).size;
+  const unassignedClassCount = rows.filter((student) => !student.classId).length;
   const studentSummaryItems: OperationSummaryItem[] = [
     {
       description: "Filtrelenmiş toplam kayıt",
@@ -347,55 +348,15 @@ export function StudentsPage() {
       label: "Sınıf kapsamı",
       value: classCoverageCount > 0 ? `${classCoverageCount} sınıf` : "Sınıfsız",
     },
-    {
-      description: `${visibleColumns.length}/${studentColumnKeys.length} kolon`,
-      key: "view",
-      label: "Tablo görünümü",
-      tone: tableDensity === "compact" ? "info" : "default",
-      value: tableDensity === "compact" ? "Yoğun" : "Rahat",
-    },
   ];
-  const studentSummaryBadges: OperationSummaryBadge[] = [
+  const studentSummaryActions: OperationSummaryAction[] = rows.length === 0 ? [] : [
     {
-      key: "guardian",
-      label: `İletişim kişisi: ${formatGuardianLinkedFilter(filters.guardianLinked)}`,
-      tone: filters.guardianLinked === "true" ? "success" : filters.guardianLinked === "false" ? "warning" : "neutral",
-    },
-    {
-      key: "teacher",
-      label: filters.responsibleTeacherId ? "Sorumlu filtreli" : "Tüm sorumlular",
-      tone: filters.responsibleTeacherId ? "info" : "neutral",
-    },
-    {
-      key: "bulk",
-      label: bulkEnrollmentAction.useAutomaticClassMapping ? "Toplu geçiş: otomatik" : "Toplu geçiş: manuel",
-      tone: bulkEnrollmentAction.useAutomaticClassMapping ? "info" : "neutral",
-    },
-  ];
-  const studentSummaryActions: OperationSummaryAction[] = [
-    {
-      detail: filters.level ? `${levelLabel(filters.level, gradeLevels)} görünümü` : "Bu sayfadaki sınıf dağılımı",
+      detail: unassignedClassCount > 0 ? "Sınıfı olmayan öğrenciyi düzenleyip bir sınıfa bağlayın" : "Bu sayfadaki her öğrencinin sınıfı var",
       key: "class-mapping",
       label: "Sınıf eşleştirme",
-      status: classCoverageCount > 0 ? "İzleniyor" : "Kontrol",
-      tone: classCoverageCount > 0 ? "info" : "warning",
-      value: classCoverageCount > 0 ? `${classCoverageCount} sınıf` : "Sınıfsız",
-    },
-    {
-      detail: "Filtre ve tablo kolonu birlikte izlenir",
-      key: "responsible-teacher",
-      label: "Sorumlu öğretmen",
-      status: filters.responsibleTeacherId ? "Odak" : "Genel",
-      tone: filters.responsibleTeacherId ? "info" : "neutral",
-      value: filters.responsibleTeacherId ? "Filtreli" : "Tüm sorumlular",
-    },
-    {
-      detail: `${sourceClassIds.length} kaynak sınıf`,
-      key: "bulk-transition",
-      label: "Toplu dönem geçişi",
-      status: bulkEnrollmentAction.useAutomaticClassMapping ? "Hazır" : "Kontrol",
-      tone: bulkEnrollmentAction.useAutomaticClassMapping ? "success" : "neutral",
-      value: bulkEnrollmentAction.useAutomaticClassMapping ? "Otomatik" : "Manuel",
+      status: unassignedClassCount > 0 ? "Sınıf atayın" : "Tamam",
+      tone: unassignedClassCount > 0 ? "warning" : "success",
+      value: unassignedClassCount > 0 ? `${formatCount(unassignedClassCount)} öğrenci sınıfsız` : "Tümü sınıflı",
     },
   ];
 
@@ -929,7 +890,6 @@ export function StudentsPage() {
           <OperationSummary
             actions={studentSummaryActions}
             ariaLabel="Öğrenci operasyon özeti"
-            badges={studentSummaryBadges}
             items={studentSummaryItems}
           />
         }
@@ -1772,12 +1732,6 @@ async function readFileAsBase64(file: File): Promise<string> {
     };
     reader.readAsDataURL(file);
   });
-}
-
-function formatGuardianLinkedFilter(value: StudentListFilters["guardianLinked"]) {
-  if (value === "true") return "Var";
-  if (value === "false") return "Yok";
-  return "Tümü";
 }
 
 function maskPhoneNumber(value: string) {

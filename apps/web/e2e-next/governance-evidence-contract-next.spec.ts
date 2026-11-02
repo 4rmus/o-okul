@@ -73,7 +73,7 @@ test.describe("Governance evidence sözleşmesi", () => {
     await page.getByRole("button", { name: "Öğrenci kaydı 1 kişisel bilgileri temizle" }).click();
     const purgeDialog = page.getByRole("dialog", { name: "Kişisel bilgileri temizlemeyi onayla" });
     await expect(purgeDialog).toContainText("Öğrenci kaydı 1 için geri alınamaz kişisel bilgi temizleme işlemi başlatılsın mı?");
-    await expect(purgeDialog).toContainText("panel kişisel bilgileri açık göstermez");
+    await expect(purgeDialog).toContainText("Temizlenen bilgiler geri getirilemez");
     await expect(purgeDialog.getByRole("button", { name: "Bilgileri temizle" })).toBeVisible();
     expect(kvkkPurgeRequests).toHaveLength(0);
     await purgeDialog.getByRole("button", { name: "Vazgeç" }).click();
