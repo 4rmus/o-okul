@@ -1,6 +1,7 @@
 import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
 import type { InstitutionDashboardSummary } from "@o-okul/shared-types";
 import type { RequestContext } from "../context/request-context.js";
+import { hasCapability } from "../rbac/role-capabilities.js";
 import { resolveCampusRestriction } from "../tenant/tenant-access.js";
 import {
   institutionDashboardStoreToken,
@@ -20,6 +21,8 @@ export class MeInstitutionDashboardService {
       context.tenantId,
       istanbulDate(new Date()),
       restriction ? { campusIds: [...restriction] } : undefined,
+      // DEC-20261102-04: academic-ops counts only for academic:manage viewers, under the same campus scope.
+      { academicOps: hasCapability(context, "academic:manage") },
     );
     return {
       generatedAt: new Date().toISOString(),

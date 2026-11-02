@@ -258,7 +258,86 @@ const institutionDashboardSummarySchema = objectSchema({
   }, ["attendanceAlertCount", "openImportQuarantineCount", "openSupportTicketCount"]),
   latestExam: institutionDashboardExamSchema,
   campusScoped: { type: "boolean" },
+  // DEC-20261102-04: academic:manage viewers only, same campus scope; counts only (ADR-0011).
+  academicOps: objectSchema({
+    date: stringSchema({ format: "date" }),
+    rollCallMissingClassCount: integerSchema({ minimum: 0 }),
+    missingGradeEntryAssessmentCount: integerSchema({ minimum: 0 }),
+    unpublishedDraftAssessmentCount: integerSchema({ minimum: 0 }),
+  }, ["date", "rollCallMissingClassCount", "missingGradeEntryAssessmentCount", "unpublishedDraftAssessmentCount"]),
 }, ["generatedAt", "institution", "activeStudentCount", "attention"]);
+
+// DEC-20261102-04 Class 360: counts and the published version only; never draft scores or averages (ADR-0011).
+const classOverviewAssessmentStatusSchema = objectSchema({
+  assessmentId: stringSchema(),
+  title: stringSchema(),
+  kind: stringSchema(),
+  heldOn: stringSchema({ format: "date" }),
+  courseId: stringSchema(),
+  courseName: stringSchema(),
+  termId: stringSchema(),
+  enteredCount: integerSchema({ minimum: 0 }),
+  rosterCount: integerSchema({ minimum: 0 }),
+  missingEntries: { type: "boolean" },
+  hasUnpublishedDraft: { type: "boolean" },
+  publishedVersion: integerSchema({ minimum: 1 }),
+}, [
+  "assessmentId",
+  "title",
+  "kind",
+  "heldOn",
+  "courseId",
+  "termId",
+  "enteredCount",
+  "rosterCount",
+  "missingEntries",
+  "hasUnpublishedDraft",
+]);
+
+const classOverviewGradeEntrySummarySchema = objectSchema({
+  assessmentCount: integerSchema({ minimum: 0 }),
+  missingEntryAssessmentCount: integerSchema({ minimum: 0 }),
+  unpublishedDraftAssessmentCount: integerSchema({ minimum: 0 }),
+}, ["assessmentCount", "missingEntryAssessmentCount", "unpublishedDraftAssessmentCount"]);
+
+const classOverviewSchema = objectSchema({
+  classId: stringSchema(),
+  date: stringSchema({ format: "date" }),
+  generatedAt: stringSchema({ format: "date-time" }),
+  rosterCount: integerSchema({ minimum: 0 }),
+  rollCall: objectSchema({
+    state: { type: "string", enum: ["NOT_TAKEN", "PARTIAL", "TAKEN"] },
+    lessonCount: integerSchema({ minimum: 1 }),
+    markedCount: integerSchema({ minimum: 0 }),
+  }, ["state", "lessonCount", "markedCount"]),
+  homework: objectSchema({
+    openCount: integerSchema({ minimum: 0 }),
+    waitingSubmissionCount: integerSchema({ minimum: 0 }),
+  }, ["openCount", "waitingSubmissionCount"]),
+  gradeEntry: classOverviewGradeEntrySummarySchema,
+  teacherAssignments: arraySchema(objectSchema({
+    assignmentId: stringSchema(),
+    teacherId: stringSchema(),
+    teacherName: stringSchema(),
+    role: { type: "string", enum: ["CLASS_TEACHER", "BRANCH_TEACHER"] },
+    courseId: stringSchema(),
+    courseName: stringSchema(),
+    termId: stringSchema(),
+    assessmentCount: integerSchema({ minimum: 0 }),
+    missingEntryAssessmentCount: integerSchema({ minimum: 0 }),
+    unpublishedDraftAssessmentCount: integerSchema({ minimum: 0 }),
+    assessments: arraySchema(classOverviewAssessmentStatusSchema),
+  }, [
+    "assignmentId",
+    "teacherId",
+    "teacherName",
+    "role",
+    "assessmentCount",
+    "missingEntryAssessmentCount",
+    "unpublishedDraftAssessmentCount",
+    "assessments",
+  ])),
+}, ["classId", "date", "generatedAt", "rosterCount", "homework", "gradeEntry", "teacherAssignments"]);
 
 const tenantFirstOwnerCreateRequestSchema = objectSchema({
   email: stringSchema({ format: "email" }),
@@ -4322,6 +4401,9 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/classes/{id}": {
     responseBody: classRecordSchema,
+  },
+  "get /api/v1/classes/{classId}/overview": {
+    responseBody: classOverviewSchema,
   },
   "patch /api/v1/classes/{id}": {
     requestBody: classUpdateRequestSchema,

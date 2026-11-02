@@ -225,6 +225,45 @@ test.describe("Faz 9 UI görsel smoke", () => {
     }
   });
 
+  test("kurum dashboard akademik operasyon sayılarını bağlantılı dikkat kartlarında gösterir", async ({ page }) => {
+    const consoleErrors = collectConsoleErrors(page);
+    await page.setViewportSize({ height: 900, width: 1280 });
+    await page.clock.setFixedTime(new Date("2026-06-17T08:00:00.000Z"));
+    await installUiApiMocks(page);
+    // DEC-20261102-04: yoklama, eksik not girişi ve yayın bekleyen taslaklar; golden fixture'ı bu alanı taşımaz.
+    // Son kaydedilen route önce çalışır, bu yüzden genel mock'lardan sonra eklenir.
+    await page.route("**/api/v1/me/institution-dashboard", async (route) => {
+      if (route.request().method() === "OPTIONS") {
+        await route.fulfill({ headers: corsHeadersFor(route), status: 204 });
+        return;
+      }
+      await fulfillData(route, {
+        ...createInstitutionDashboardSummary(),
+        attention: { attendanceAlertCount: 0, openImportQuarantineCount: 0, openSupportTicketCount: 0 },
+        academicOps: {
+          date: "2026-06-17",
+          rollCallMissingClassCount: 2,
+          missingGradeEntryAssessmentCount: 3,
+          unpublishedDraftAssessmentCount: 1,
+        },
+      });
+    });
+    await page.addInitScript(() => {
+      document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
+    });
+    await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
+    await page.goto("/kurum");
+    await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+
+    await expect(page.getByRole("heading", { level: 1, name: "Faz 9 Akademi" })).toBeVisible();
+    const attentionRegion = page.getByRole("region", { exact: true, name: "Bugün ilgilenmeniz gerekenler" });
+    await expect(attentionRegion.locator(".next-attention-item.uh-action-card")).toHaveCount(3);
+    await expect(attentionRegion.getByRole("link", { name: /Yoklama alınmamış sınıflar 2/ })).toHaveAttribute("href", "/kurum/devamsizlik");
+    await expect(attentionRegion.getByRole("link", { name: /Eksik not girişi 3/ })).toHaveAttribute("href", "/kurum/not-defteri");
+    await expect(attentionRegion.getByRole("link", { name: /Yayınlanmamış notlar 1/ })).toHaveAttribute("href", "/kurum/not-defteri");
+    await expectUiStable(page, "faz9-dashboard-academic-ops", consoleErrors);
+  });
+
   test("komut paleti link semantiğiyle modül geçişini korur", async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page);
     await openWithUiMocks(page, "/kurum", { height: 900, width: 1280 });
@@ -493,6 +532,25 @@ test.describe("Faz 9 UI görsel smoke", () => {
     const classSummary = classDetail.getByRole("region", { exact: true, name: "Sınıf detay operasyon özeti" });
     await expect(classSummary).toContainText("Öğrenci toplamı");
     await expect(classSummary.getByLabel("Sınıf detay operasyon özeti önerilen işlemler")).toBeVisible();
+    // DEC-20261102-04 Sınıf 360: Genel sekmesi yoklama, ödev ve öğretmen başına not girişini sayı olarak gösterir.
+    const academicStatus = classDetail.getByRole("region", { exact: true, name: "Sınıf akademik durum özeti" });
+    await expect(academicStatus.locator(".uh-info-item")).toHaveCount(4);
+    await expect(academicStatus).toContainText("2 öğrenci");
+    await expect(academicStatus).toContainText("Eksik");
+    await expect(academicStatus).toContainText("1/2 öğrenci işaretlendi");
+    await expect(academicStatus).toContainText("2 teslim kontrol bekliyor");
+    await expect(classDetail.getByLabel("Sınıf akademik durumu").getByRole("link", { name: "Yoklamayı aç" }))
+      .toHaveAttribute("href", "/kurum/devamsizlik?classId=class-8a");
+    const teacherEntries = classDetail.getByRole("table", { name: "Öğretmen başına not girişi" });
+    await expect(teacherEntries).toContainText("Zeynep Arslan");
+    await expect(teacherEntries).toContainText("Tüm dersler");
+    await expect(teacherEntries).toContainText("Eksik giriş");
+    const assessmentEntries = classDetail.getByRole("table", { name: "Değerlendirme giriş durumu" });
+    await expect(assessmentEntries.locator("tbody tr")).toHaveCount(2);
+    await expect(assessmentEntries).toContainText("1/2");
+    await expect(assessmentEntries).toContainText("Yayında · sürüm 1");
+    await expect(assessmentEntries).toContainText("Yayınlanmadı");
+    await expectClassDetailNoRawIds(page, "class-detail-overview-desktop");
     await classDetail.getByRole("tab", { name: "Raporlar" }).click();
     await expect(classDetail.getByRole("tab", { name: "Raporlar" })).toHaveAttribute("aria-selected", "true");
     await expect(classSummary).toContainText("Rapor hazır");
@@ -1139,6 +1197,7 @@ function mockUiApiResponse(pathName: string, searchParams: URLSearchParams, auth
   if (pathName === "/homework/material-assignments") return { data: createPortalHomeworkAssignments() };
   if (pathName.startsWith("/homework/materials/") && pathName.endsWith("/assignments")) return { data: createPortalHomeworkAssignments() };
   if (pathName === "/classes/class-8a") return { data: createClasses()[0] };
+  if (pathName === "/classes/class-8a/overview") return { data: createClassOverview() };
   if (pathName === "/classes") return { data: createClasses() };
   if (pathName === "/teachers/teacher-math") return { data: createTeacherDetailTeacher() };
   if (pathName === "/teachers/teacher-math/assignments") return { data: createTeacherDetailAssignments() };
@@ -1327,6 +1386,73 @@ function createClasses() {
     { campusId: "campus-main", gradeLevelId: "grade-8", id: "class-8a", name: "8-A", section: "A", tenantId: "tenant-faz9" },
     { campusId: "campus-main", gradeLevelId: "grade-8", id: "class-8b", name: "8-B", section: "B", tenantId: "tenant-faz9" },
   ];
+}
+
+// DEC-20261102-04 Sınıf 360: yalnız sayılar ve yayın sürümü; taslak puan yok.
+function createClassOverview() {
+  const assessments = [
+    {
+      assessmentId: "assessment-quiz",
+      title: "Kısa sınav",
+      kind: "QUIZ",
+      heldOn: "2026-06-12",
+      courseId: "course-math",
+      courseName: "Matematik",
+      termId: "term-2026-fall",
+      enteredCount: 1,
+      rosterCount: 2,
+      missingEntries: true,
+      hasUnpublishedDraft: true,
+    },
+    {
+      assessmentId: "assessment-written",
+      title: "1. yazılı",
+      kind: "WRITTEN",
+      heldOn: "2026-06-05",
+      courseId: "course-math",
+      courseName: "Matematik",
+      termId: "term-2026-fall",
+      enteredCount: 2,
+      rosterCount: 2,
+      missingEntries: false,
+      hasUnpublishedDraft: false,
+      publishedVersion: 1,
+    },
+  ];
+  return {
+    classId: "class-8a",
+    date: "2026-06-17",
+    generatedAt: "2026-06-17T08:00:00.000Z",
+    rosterCount: 2,
+    rollCall: { state: "PARTIAL", lessonCount: 2, markedCount: 1 },
+    homework: { openCount: 3, waitingSubmissionCount: 2 },
+    gradeEntry: { assessmentCount: 2, missingEntryAssessmentCount: 1, unpublishedDraftAssessmentCount: 1 },
+    teacherAssignments: [
+      {
+        assignmentId: "assignment-math",
+        teacherId: "teacher-math",
+        teacherName: "Zeynep Arslan",
+        role: "BRANCH_TEACHER",
+        courseId: "course-math",
+        courseName: "Matematik",
+        termId: "term-2026-fall",
+        assessmentCount: 2,
+        missingEntryAssessmentCount: 1,
+        unpublishedDraftAssessmentCount: 1,
+        assessments,
+      },
+      {
+        assignmentId: "assignment-class",
+        teacherId: "teacher-class",
+        teacherName: "Mehmet Demir",
+        role: "CLASS_TEACHER",
+        assessmentCount: 2,
+        missingEntryAssessmentCount: 1,
+        unpublishedDraftAssessmentCount: 1,
+        assessments,
+      },
+    ],
+  };
 }
 
 function createTeachers() {

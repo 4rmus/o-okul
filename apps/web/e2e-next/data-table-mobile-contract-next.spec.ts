@@ -741,6 +741,15 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(detailSummary).toContainText("Başarı %");
     await expect(detailSummary.getByLabel("Sınıf detay operasyon özeti önerilen işlemler")).toBeVisible();
     expect(reportReadPaths).toEqual([]);
+    // DEC-20261102-04 Sınıf 360: öğretmen başına not girişi mobilde öncelikli hücrelerle okunur.
+    await expect(detailRegion.getByRole("region", { exact: true, name: "Sınıf akademik durum özeti" })).toContainText("Ders yok");
+    const teacherEntries = detailRegion.getByRole("table", { name: "Öğretmen başına not girişi" });
+    await expect(teacherEntries.locator('th[data-column-key="teacher"]')).toHaveAttribute("data-mobile-priority", "primary");
+    await expectMobileDataCells(teacherEntries, [
+      { key: "teacher", label: "Öğretmen", text: "Zeynep Arslan" },
+      { key: "course", label: "Ders", text: "Matematik" },
+      { key: "status", label: "Durum", text: "Tamam" },
+    ]);
 
     await detailRegion.getByRole("tab", { name: "Raporlar" }).click();
     await expect.poll(() => reportReadPaths).toEqual([
@@ -1160,6 +1169,7 @@ function mockApiResponse(pathName: string, method: string, url: URL): { data: un
   if (pathName === "/campuses") return { data: [{ id: "campus-main", name: "Ana Kampüs", tenantId: "tenant-datatable" }] };
   if (pathName === "/classes") return { data: createClasses() };
   if (pathName === "/classes/class-8a" && method === "GET") return { data: createClasses()[0] };
+  if (pathName === "/classes/class-8a/overview" && method === "GET") return { data: createClassOverview() };
   if (pathName === "/courses") return { data: [{ id: "course-math", name: "Matematik", tenantId: "tenant-datatable" }] };
   if (pathName === "/grade-levels") return { data: [
     { id: "grade-8", name: "8. Sınıf", tenantId: "tenant-datatable" },
@@ -1361,6 +1371,44 @@ function createClasses() {
     { campusId: "campus-main", gradeLevelId: "grade-8", id: "class-8a", name: "8-A", tenantId: "tenant-datatable" },
     { campusId: "campus-main", gradeLevelId: "grade-9", id: "class-9b", name: "9-B", tenantId: "tenant-datatable" },
   ];
+}
+
+// DEC-20261102-04 Sınıf 360: yalnız sayılar ve yayın sürümü.
+function createClassOverview() {
+  return {
+    classId: "class-8a",
+    date: "2026-06-10",
+    generatedAt: "2026-06-10T08:00:00.000Z",
+    rosterCount: 2,
+    homework: { openCount: 1, waitingSubmissionCount: 0 },
+    gradeEntry: { assessmentCount: 1, missingEntryAssessmentCount: 0, unpublishedDraftAssessmentCount: 0 },
+    teacherAssignments: [{
+      assignmentId: "assignment-math",
+      teacherId: "teacher-math",
+      teacherName: "Zeynep Arslan",
+      role: "BRANCH_TEACHER",
+      courseId: "course-math",
+      courseName: "Matematik",
+      termId: "term-2026",
+      assessmentCount: 1,
+      missingEntryAssessmentCount: 0,
+      unpublishedDraftAssessmentCount: 0,
+      assessments: [{
+        assessmentId: "assessment-written",
+        title: "1. yazılı",
+        kind: "WRITTEN",
+        heldOn: "2026-06-05",
+        courseId: "course-math",
+        courseName: "Matematik",
+        termId: "term-2026",
+        enteredCount: 2,
+        rosterCount: 2,
+        missingEntries: false,
+        hasUnpublishedDraft: false,
+        publishedVersion: 1,
+      }],
+    }],
+  };
 }
 
 function createStudents() {

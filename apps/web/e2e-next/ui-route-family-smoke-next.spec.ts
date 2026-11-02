@@ -636,6 +636,21 @@ function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFix
   }
 
   if (pathName === "/classes/class-8a") return { data: classFixture };
+  // DEC-20261102-04 Sınıf 360: yalnız sayılar.
+  if (pathName === "/classes/class-8a/overview") {
+    return {
+      data: {
+        classId: "class-8a",
+        date: "2026-07-30",
+        generatedAt: "2026-07-30T09:00:00.000Z",
+        rosterCount: 1,
+        rollCall: { state: "NOT_TAKEN", lessonCount: 1, markedCount: 0 },
+        homework: { openCount: 1, waitingSubmissionCount: 0 },
+        gradeEntry: { assessmentCount: 0, missingEntryAssessmentCount: 0, unpublishedDraftAssessmentCount: 0 },
+        teacherAssignments: [],
+      },
+    };
+  }
   if (pathName === "/teachers/teacher-math") return { data: teacherFixture };
   if (pathName === "/teachers/teacher-math/assignments") return { data: [] };
   if (pathName === "/guardians/guardian-mother") return { data: guardianFixture };
