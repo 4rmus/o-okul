@@ -88,20 +88,22 @@ export function CoursesPage() {
       value: `${codedCourseCount}/${rows.length}`,
     },
     {
-      detail: "Ders programı, öğretmen ataması ve yoklama",
+      detail: "Dersleri haftalık programa yerleştirin; yoklama programdan açılır",
+      href: "/kurum/program",
       key: "program-context",
       label: "Program bağı",
-      status: "Bağlam",
+      status: "Programı aç",
       tone: "info",
-      value: "Program",
+      value: "Haftalık program",
     },
     {
-      detail: "Sınav branşı ve kazanım raporu için kullanılır",
+      detail: "Derse kazanım ekleyin; sınav raporu kazanım kırılımı verir",
+      href: "/kurum/kazanimlar",
       key: "report-context",
       label: "Rapor eşleşmesi",
-      status: "İzleniyor",
+      status: "Kazanımları aç",
       tone: "neutral",
-      value: "Sınav/Kazanım",
+      value: "Kazanımlar",
     },
   ];
 

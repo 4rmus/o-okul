@@ -119,7 +119,7 @@ export function StudySessionsPage() {
       value: `${formatCount(openCapacityCount)} açık`,
     },
     {
-      detail: "Liste satırında öğrenci adı yerine operasyon sayısı gösterilir",
+      detail: "Etüde atanan öğrenci sayısı",
       key: "student-assignment",
       label: "Öğrenci ataması",
       status: assignedStudentCount > 0 ? "Bağlı" : "Bekliyor",
@@ -127,12 +127,13 @@ export function StudySessionsPage() {
       value: `${formatCount(assignedStudentCount)} öğrenci`,
     },
     {
-      detail: "Sınıf, ders, dönem ve öğretmen bağlamı programla aynı sözleşmede tutulur",
+      detail: "Etüt saatlerini haftalık programla çakışmadan planlayın",
+      href: "/kurum/program",
       key: "program-context",
       label: "Program bağı",
-      status: "Bağlam",
+      status: "Programı aç",
       tone: "neutral",
-      value: "Etüt",
+      value: "Haftalık program",
     },
   ];
 

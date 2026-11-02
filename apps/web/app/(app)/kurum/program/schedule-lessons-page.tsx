@@ -112,7 +112,8 @@ export function ScheduleLessonsPage() {
       value: `${formatCount(rows.length)} kayıt`,
     },
     {
-      detail: "Ders adı sınav, yoklama ve raporlarda kullanılır",
+      detail: "Eksik ders bağını dersler listesinden tamamlayın",
+      href: "/kurum/dersler",
       key: "course-context",
       label: "Ders eşleşmesi",
       status: courseLinkedCount === rows.length && rows.length > 0 ? "Hazır" : "Kontrol",
@@ -120,7 +121,8 @@ export function ScheduleLessonsPage() {
       value: `${formatCount(courseLinkedCount)} bağlı`,
     },
     {
-      detail: "Dönem alanı takvim ve rapor filtrelerini tutarlı tutar",
+      detail: "Dönemleri akademik takvimden tanımlayın",
+      href: "/kurum/akademik-takvim",
       key: "term-context",
       label: "Dönem bağı",
       status: termLinkedCount === rows.length && rows.length > 0 ? "Hazır" : "Opsiyonel",

@@ -2238,10 +2238,24 @@
   min-width: 0;
 }
 
+.next-operation-summary__followups {
+  display: grid;
+  gap: var(--space-2xs);
+  min-width: 0;
+}
+
 .next-operation-summary__actions {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: var(--space-2xs);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.next-operation-summary__action-item {
+  display: grid;
   min-width: 0;
 }
 
@@ -2249,6 +2263,72 @@
   border-color: var(--color-border);
   background: var(--color-surface);
   padding: 10px var(--space-xs);
+}
+
+.next-operation-summary__notes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-3xs) var(--space-sm);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.next-operation-summary__note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3xs) var(--space-2xs);
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+.next-operation-summary__note::before {
+  flex: none;
+  align-self: center;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--color-border-strong);
+  content: "";
+}
+
+.next-operation-summary__note[data-tone="success"]::before {
+  background: var(--color-success);
+}
+
+.next-operation-summary__note[data-tone="warning"]::before,
+.next-operation-summary__note[data-tone="danger"]::before {
+  background: var(--color-warning);
+}
+
+.next-operation-summary__note[data-tone="info"]::before {
+  background: var(--color-info);
+}
+
+.next-operation-summary__note-label {
+  font-weight: 800;
+}
+
+.next-operation-summary__note-value {
+  overflow-wrap: anywhere;
+  color: var(--color-text);
+  font-weight: 800;
+}
+
+.next-operation-summary__note-status::before {
+  margin-right: var(--space-3xs);
+  content: "·";
+}
+
+.next-operation-summary__note-detail {
+  flex-basis: 100%;
+  padding-left: var(--space-xs);
+  overflow-wrap: anywhere;
+  font-size: var(--text-xs);
 }
 
 .next-page-frame {

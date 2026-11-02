@@ -87,7 +87,7 @@ export function UsersPage() {
       value: formatCount(usersQuery.data?.meta?.total ?? users.length),
     },
     {
-      description: "Yeni çalışan ve yetki yönetimi",
+      description: "Hesap açma ve rol değişikliği Çalışanlar ekranında",
       key: "managementSurface",
       label: "Yetki yönetimi",
       tone: "success",
@@ -98,12 +98,12 @@ export function UsersPage() {
     {
       key: "login",
       label: "Mevcut hesaplar",
-      tone: "warning",
+      tone: "neutral",
     },
     {
       key: "state",
-      label: "Yazma kapalı",
-      tone: "neutral",
+      label: "Roller Çalışanlar ekranında düzenlenir",
+      tone: "info",
     },
   ];
 
@@ -126,11 +126,11 @@ export function UsersPage() {
         aria-label="Kullanıcı ve rol yönetimi"
         columns={userColumns}
         density="compact"
-        description="Bu liste yalnız mevcut hesapları gösterir. Görev, çalışma alanı ve erişim Çalışanlar ve Yetkiler ekranından yönetilir."
+        description="Kurumdaki giriş hesaplarını ve rollerini görün. Yeni hesap açmak, görev veya erişim değiştirmek için Çalışanlar ekranını kullanın."
         emptyState={
           <EmptyState
             title="Kullanıcı yok"
-            description="Yönetim hesabı bulunmuyor. Yeni hesap için güvenli davet akışını kullan."
+            description="Yönetim hesabı bulunmuyor. Yeni hesap açmak için Çalışanlar ekranından çalışan ekleyin."
           />
         }
         emptyText="Kullanıcı kaydı yok"

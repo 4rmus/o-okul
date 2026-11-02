@@ -131,7 +131,8 @@ export function ClassesPage() {
       value: `Kampüs ${campuses.length} / Seviye ${gradeLevels.length} / Alan ${alanlar.length}`,
     },
     {
-      detail: "Bu sayfadaki sınıf dağılımı",
+      detail: "Bu sayfadaki sınıfların bağlı olduğu kampüsler",
+      href: "/kurum/kampusler",
       key: "campus-distribution",
       label: "Kampüs dağılımı",
       status: campusCoverageCount > 0 ? "İzleniyor" : "Eksik",

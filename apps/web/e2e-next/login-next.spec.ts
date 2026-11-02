@@ -4104,7 +4104,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
 
   await expect(page.getByLabel("Admin A rolleri").getByRole("checkbox")).toHaveCount(0);
   await expect(userList.getByText("Mevcut hesaplar", { exact: true })).toBeVisible();
-  await expect(userList.getByText("Yazma kapalı")).toBeVisible();
+  await expect(userList.getByText("Roller Çalışanlar ekranında düzenlenir")).toBeVisible();
   await expect(userList.getByRole("link", { name: "Çalışan erişimlerini yönet" })).toHaveAttribute("href", "/kurum/calisanlar");
   expect(rolePatchCount).toBe(0);
 
