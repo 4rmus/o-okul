@@ -58,6 +58,10 @@ function assertTeacherContextAndScope(context: RequestContext, scope: TeacherAss
   }
 }
 
+/**
+ * An assignment pinned to a class or a student matches only that class or student; a course-wide match is
+ * reserved for assignments that name neither (otherwise a branch teacher of 8-A would reach every class of the course).
+ */
 export function hasTeacherAssignmentForScope(
   assignments: TeacherAssignmentRecord[],
   scope: TeacherAssignmentScope,
@@ -72,6 +76,7 @@ export function hasTeacherAssignmentForScope(
     if (scope.courseId && assignment.courseId && assignment.courseId !== scope.courseId) return false;
     if (scope.studentId && assignment.studentId === scope.studentId) return true;
     if (scope.classId && assignment.classId === scope.classId) return true;
+    if (assignment.classId || assignment.studentId) return false;
     return Boolean(scope.courseId && assignment.courseId === scope.courseId);
   });
 }

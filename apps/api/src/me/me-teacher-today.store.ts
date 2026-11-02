@@ -4,21 +4,23 @@ import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
 /**
  * T3 read helper for the teacher "Bugün" inbox. The caller passes ids that the owning services already filtered to the
- * teacher's scope (today's own lessons, scoped homework, scoped assessments); this store only aggregates over those ids
- * inside the tenant transaction, so it never widens what the teacher can see.
+ * teacher's scope (today's own lessons, open homework, teacher-visible students, authorable assessments); this store
+ * only aggregates over those ids inside the tenant transaction, so it never widens what the teacher can see.
  */
 export interface TeacherTodayInboxInput {
   tenantId: string;
   date: string;
   classIds: readonly string[];
   homeworkIds: readonly string[];
+  /** Students the teacher may see (StudentService.list); undefined when unreadable, the submission count is then left out. */
+  studentIds?: readonly string[];
   /** Undefined when the gradebook scope could not be read; the draft count is then left out. */
   assessmentIds?: readonly string[];
 }
 
 export interface TeacherTodayInboxCounts {
   attendanceClassIds: string[];
-  pendingSubmissionCount: number;
+  pendingSubmissionCount?: number;
   unpublishedGradeDraftCount?: number;
 }
 
@@ -62,8 +64,10 @@ export class PostgresTeacherTodayStore implements TeacherTodayStore {
             [input.tenantId, input.date, [...input.classIds]],
           )
         : { rows: [] };
-      // Same rule as HomeworkService.listSubmissions: only current, non-deleted members of the homework's class.
-      const submissions = input.homeworkIds.length > 0
+      // Same rule as HomeworkService.listSubmissions: students the teacher may see who are current, non-deleted members
+      // of the homework class. Homework already closed at the homework level (checkedAt) is not waiting any more.
+      const studentIds = input.studentIds;
+      const submissions = studentIds && studentIds.length > 0 && input.homeworkIds.length > 0
         ? await client.query<{ count: number }>(
             `SELECT COUNT(*)::int AS "count"
              FROM "HomeworkSubmission" submission
@@ -75,12 +79,14 @@ export class PostgresTeacherTodayStore implements TeacherTodayStore {
               AND student."id" = submission."studentId"
              WHERE submission."tenantId" = $1
                AND submission."homeworkId" = ANY($2::text[])
+               AND submission."studentId" = ANY($3::text[])
                AND submission."submittedAt" IS NOT NULL
                AND submission."checkedAt" IS NULL
                AND homework."deletedAt" IS NULL
+               AND homework."checkedAt" IS NULL
                AND student."deletedAt" IS NULL
                AND student."classId" = homework."classId"`,
-            [input.tenantId, [...input.homeworkIds]],
+            [input.tenantId, [...input.homeworkIds], [...studentIds]],
           )
         : { rows: [{ count: 0 }] };
       const assessmentIds = input.assessmentIds;
@@ -96,7 +102,7 @@ export class PostgresTeacherTodayStore implements TeacherTodayStore {
         : { rows: [{ count: 0 }] };
       return {
         attendanceClassIds: attendance.rows.map((row) => row.classId),
-        pendingSubmissionCount: Number(submissions.rows[0]?.count ?? 0),
+        ...(studentIds ? { pendingSubmissionCount: Number(submissions.rows[0]?.count ?? 0) } : {}),
         ...(assessmentIds ? { unpublishedGradeDraftCount: Number(drafts.rows[0]?.count ?? 0) } : {}),
       };
     });
