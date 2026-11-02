@@ -23,6 +23,7 @@ import {
   teacherInvitationErrorMessage,
   type TeacherAccountState,
 } from "./teacher-account.js";
+import { formatDate } from "../../_shared/format.js";
 
 const invitationSentMessage = "Davet gönderildi; kabul edilince öğretmen portalı açılır.";
 const invitationRevokedMessage = "Davet iptal edildi; bağlantı artık çalışmaz. Gerekirse yeni davet gönderin.";
@@ -423,10 +424,6 @@ function formatAssignmentDateRange(assignment: TeacherAssignmentRecord) {
     assignment.endsAt ? formatDate(assignment.endsAt) : undefined,
   ].filter(Boolean);
   return dates.length > 0 ? dates.join(" - ") : "Tarih sınırı yok";
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("tr-TR", { dateStyle: "short" }).format(new Date(value));
 }
 
 function formatCount(value: number) {

@@ -52,6 +52,7 @@ import {
 import { buildListUrl, initialListQuery, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 import { SmsDeliveryReportPanel, type SmsBatchDeliveryReportRecord } from "../_shared/sms-delivery-report-panel.js";
+import { formatDate, formatDateTime } from "../../_shared/format.js";
 
 const emptyForm: AnnouncementFormState = {
   title: "",
@@ -192,7 +193,7 @@ export function AnnouncementsPage() {
       header: "Yayın",
       mobilePriority: "secondary",
       priority: "optional",
-      render: (announcement) => new Date(announcement.publishedAt).toLocaleDateString("tr-TR"),
+      render: (announcement) => formatDate(announcement.publishedAt),
     },
     {
       key: "recipients",
@@ -921,7 +922,7 @@ function AnnouncementDeliveryReportTable({
       priority: "optional",
       render: (report) => {
         const time = deliveryReportTime(report);
-        return time ? new Date(time).toLocaleString("tr-TR") : "-";
+        return time ? formatDateTime(new Date(time)) : "-";
       },
     },
   ];
@@ -1163,7 +1164,7 @@ function AnnouncementRecipientReportPanel({ report }: { report: AnnouncementReci
       priority: "secondary",
       render: (recipient) => (
         <StatusBadge tone={recipientReadTone(recipient)}>
-          {recipient.readAt ? `Okundu ${new Date(recipient.readAt).toLocaleString("tr-TR")}` : "Bekliyor"}
+          {recipient.readAt ? `Okundu ${formatDateTime(recipient.readAt)}` : "Bekliyor"}
         </StatusBadge>
       ),
     },

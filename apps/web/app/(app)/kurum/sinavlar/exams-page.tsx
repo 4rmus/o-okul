@@ -42,6 +42,7 @@ import {
 } from "../../../../src/form-validation.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+import { formatDateTime } from "../../_shared/format.js";
 
 const selectedExamPanelId = "exam-selected-participants";
 
@@ -838,10 +839,6 @@ function examTypeLabel(value: string) {
 
 function toExamTypeFormValue(value: string | undefined): ExamWithClassFormState["examType"] {
   return value === "SCHOOL" || value === "LGS" || value === "TYT" || value === "AYT" || value === "KPSS" ? value : "";
-}
-
-function formatDateTime(value: string | undefined) {
-  return value ? new Date(value).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" }) : "-";
 }
 
 function studentName(student: StudentRecord | undefined) {

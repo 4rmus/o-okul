@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Button } from "@o-okul/ui";
 
+import { formatPhone, maskPhone } from "../../_shared/format.js";
+
 export function RevealablePhone({
   canReveal = false,
   emptyLabel = "Telefon yok",
@@ -19,7 +21,7 @@ export function RevealablePhone({
 
   return (
     <span className="next-revealable-phone" data-revealed={revealed ? "true" : "false"}>
-      <span>{revealed ? value : maskPhoneNumber(value)}</span>
+      <span>{revealed ? formatPhone(value) : maskPhone(value)}</span>
       {canReveal ? (
         <Button
           aria-label={revealed ? "Telefonu kapat" : "Telefonu aç"}
@@ -32,11 +34,4 @@ export function RevealablePhone({
       ) : null}
     </span>
   );
-}
-
-export function maskPhoneNumber(value: string | undefined) {
-  if (!value) return "-";
-  const digits = value.replace(/\D/g, "");
-  if (digits.length === 0) return "Telefon kayıtlı";
-  return `••• ••• ••${digits.slice(-2).padStart(2, "•")}`;
 }

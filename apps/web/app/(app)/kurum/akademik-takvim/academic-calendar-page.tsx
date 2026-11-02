@@ -32,6 +32,7 @@ import {
 } from "../../../../src/form-validation.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+import { formatDateKey } from "../../_shared/format.js";
 
 const emptyYearForm: AcademicYearFormState = {
   name: "",
@@ -235,8 +236,8 @@ export function AcademicCalendarPage() {
 
   const yearColumns: Array<DataTableColumn<AcademicYearRecord>> = [
     { key: "name", header: "Akademik yıl", priority: "primary", render: (record) => record.name, sticky: "left" },
-    { key: "startsAt", header: "Başlangıç", mobileLabel: "Başlangıç", priority: "secondary", render: (record) => record.startsAt },
-    { key: "endsAt", header: "Bitiş", mobileLabel: "Bitiş", priority: "optional", render: (record) => record.endsAt },
+    { key: "startsAt", header: "Başlangıç", mobileLabel: "Başlangıç", priority: "secondary", render: (record) => formatDateKey(record.startsAt) },
+    { key: "endsAt", header: "Bitiş", mobileLabel: "Bitiş", priority: "optional", render: (record) => formatDateKey(record.endsAt) },
     {
       key: "isActive",
       header: "Durum",
@@ -270,8 +271,8 @@ export function AcademicCalendarPage() {
       priority: "secondary",
       render: (record) => yearNames.get(record.academicYearId) ?? "Yıl eşleşmesi yok",
     },
-    { key: "startsAt", header: "Başlangıç", mobileLabel: "Başlangıç", priority: "secondary", render: (record) => record.startsAt },
-    { key: "endsAt", header: "Bitiş", mobileLabel: "Bitiş", priority: "optional", render: (record) => record.endsAt },
+    { key: "startsAt", header: "Başlangıç", mobileLabel: "Başlangıç", priority: "secondary", render: (record) => formatDateKey(record.startsAt) },
+    { key: "endsAt", header: "Bitiş", mobileLabel: "Bitiş", priority: "optional", render: (record) => formatDateKey(record.endsAt) },
     {
       key: "isActive",
       header: "Durum",

@@ -5,6 +5,7 @@ import type { TenantRecord } from "@o-okul/shared-types";
 import { Alert } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
+import { formatDate } from "../../_shared/format.js";
 
 const dayMs = 24 * 60 * 60 * 1000;
 
@@ -40,7 +41,7 @@ export function TrialStatusBanner() {
   });
   const status = trialStatus(tenantQuery.data);
   if (!status) return null;
-  const until = new Date(status.endsAt).toLocaleDateString("tr-TR");
+  const until = formatDate(status.endsAt);
   return status.kind === "active" ? (
     <Alert tone="info" title={`Deneme sürümü: ${status.daysLeft} gün kaldı`}>
       Deneme {until} tarihinde biter. Deneme bitince verileriniz silinmez; satın alırsanız aynı kayıtlarla devam edersiniz.

@@ -8,6 +8,7 @@ import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest } from "../../../../src/api-client.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+import { formatDateTime } from "../../_shared/format.js";
 
 export function AuditLogsPage() {
   const { auth } = useAuth();
@@ -85,7 +86,7 @@ export function AuditLogsPage() {
       key: "createdAt",
       header: "Zaman",
       priority: "secondary",
-      render: (record) => formatAuditDate(record.createdAt),
+      render: (record) => formatDateTime(record.createdAt, { style: "medium" }),
     },
   ];
 
@@ -142,16 +143,6 @@ function auditCategoryTone(category: AuditLogListItemRecord["category"]): Status
   if (category === "finance") return "danger";
   if (category === "academic" || category === "report") return "success";
   return "neutral";
-}
-
-function formatAuditDate(value: string) {
-  return new Intl.DateTimeFormat("tr-TR", {
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value));
 }
 
 function formatAuditSort(sort: string) {

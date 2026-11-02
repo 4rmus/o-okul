@@ -8,6 +8,7 @@ import { apiBaseUrl, apiListRequest, withQueryParams } from "../../../../src/api
 import { EvidenceTrustPanel, OperationDecisionNotice, ReferenceBadge } from "../_shared/evidence-panels.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+import { formatDate } from "../../_shared/format.js";
 
 const securityGates = [
   {
@@ -459,10 +460,6 @@ function formatSecurityActionLabel(record: AuditLogListItemRecord) {
 
 function formatSecurityEntityType(event: AuditLogListItemRecord) {
   return event.entityLabel;
-}
-
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString("tr-TR");
 }
 
 function formatCount(value: number) {

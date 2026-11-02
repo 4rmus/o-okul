@@ -17,6 +17,7 @@ import {
 } from "../../../../src/form-validation.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+import { formatWallClockDateTime } from "../../_shared/format.js";
 
 const emptyForm: StudySessionFormState = {
   classId: "",
@@ -145,7 +146,7 @@ export function StudySessionsPage() {
     { key: "teacherId", header: "Öğretmen", mobilePriority: "hidden", priority: "secondary", render: (record) => teacherLabel(record.teacherId, teacherNames) },
     { key: "studentIds", header: "Öğrenci", mobilePriority: "hidden", priority: "optional", render: (record) => studentCountLabel(record.studentIds, studentNames) },
     { key: "capacity", align: "right", header: "Kapasite", mobilePriority: "primary", priority: "secondary", render: (record) => `${formatCount(record.studentIds.length)}/${formatCount(record.capacity)}` },
-    { key: "startsAt", header: "Başlangıç", mobilePriority: "secondary", priority: "secondary", render: (record) => formatDateTime(record.startsAt) },
+    { key: "startsAt", header: "Başlangıç", mobilePriority: "secondary", priority: "secondary", render: (record) => formatWallClockDateTime(record.startsAt) },
     {
       key: "actions",
       align: "center",
@@ -484,10 +485,6 @@ function toDateTimeInput(value: string): string {
 
 function toIsoDateTime(value: string): string {
   return value.length === 16 ? `${value}:00.000Z` : new Date(value).toISOString();
-}
-
-function formatDateTime(value: string): string {
-  return value.slice(0, 16).replace("T", " ");
 }
 
 function formatCount(value: number) {
